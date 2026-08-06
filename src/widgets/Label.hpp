@@ -182,7 +182,7 @@ class Label : public Widget {
                 int wy = baseline + 1;
                 int px = x, py = wy;
                 bool up = false;
-                for (int dx = step; dx <= rw; dx += step) {
+                for (int dx = step; dx <= rw - step; dx += step) {
                     int nx = x + dx;
                     int ny = wy + (up ? -amp : amp);
                     OSData::frame->drawLine(px, py, nx, ny, this->color);

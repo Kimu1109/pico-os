@@ -22,7 +22,7 @@
 
 // インデックスの1エントリが表す辞書側の行数
 // (PC側の変換スクリプトでのブロック分割サイズと必ず一致させること)
-#define IME_INDEX_BLOCK_LINES   256
+#define IME_INDEX_BLOCK_LINES   320
 
 // 読みがなキーの最大バイト数(ひらがな語幹 + 送りマーカー1文字 + null)
 // ひらがなはUTF-8で1文字3バイト。長めの語幹でも十分な余裕を持たせる。
@@ -39,8 +39,8 @@
 #define IME_MAX_CANDIDATES      16
 
 // インデックスの最大エントリ数
-// 例: 辞書7974行 / 256行ブロック ≈ 32 → 余裕を見て64
-#define IME_MAX_INDEX_ENTRIES   64
+// Mは64, MLは151が目安
+#define IME_MAX_INDEX_ENTRIES   151
 
 // 一致継続スキャンの安全上限(ブロック境界をまたぐケースを考慮した余裕値)
 // これを超えて同一読みが続くことは通常想定しないための保険
@@ -78,22 +78,6 @@ public:
     // 戻り値: 見つかった候補数(0件ならヒットなし)
     int lookup(const char* key, char candidates[][IME_MAX_CAND_BYTES], int maxCandidates,
                bool prefixMatch = true);
-
-    // 「送りあり」キーを組み立てる補助ユーティリティ(任意使用)
-    //
-    // 注意: ここに載せているかな→マーカー対応表はサンプルです。
-    // すでにLua側で完成・検証済みの変換テーブル(よw特殊ケース等含む)が
-    // あるとのことなので、実運用では以下のどちらかを推奨します:
-    //   (a) Lua側でキー文字列を組み立てて、そのままlookup()に渡す
-    //       (テーブルの二重管理を避けられるためこちらを推奨)
-    //   (b) このテーブルをLua側の内容で置き換えてC++側に統一する
-    //
-    // stem: 語幹のひらがな(UTF-8、null終端) 例: "あゆ"
-    // okuriKanaUtf8: 送り仮名の先頭1文字(UTF-8、null終端) 例: "む"
-    // outKey: 出力バッファ(IME_MAX_KEY_BYTES以上を推奨)
-    // 戻り値: 変換に成功したらtrue(対応表にない文字はfalse)
-    static bool buildOkuriKey(const char* stem, const char* okuriKanaUtf8,
-                               char* outKey, size_t outKeySize);
 
 private:
     SdFat*  _sd;

@@ -19,12 +19,19 @@ class Keyboard : public Widget {
         const int START_KEY_Y = SCREEN_HEIGHT - SQUARE_H * 4;
         const int START_CANDIDATES_Y = START_KEY_Y - CANDIDATES_H;
 
-        const String keys[4 * 5] = {
+        const String keys_jpn[4 * 5] = {
             "123", "あ", "か", "さ", "X",
             "ABC", "た", "な", "は", "空白",
             "カナ", "ま", "や", "ら", "改",
             "送り", "゛゜", "わ", "､｡?!", "行"
         };
+        const String keys_num[4 * 5] = {
+            "あいう","1",  "2",  "3", "X",
+            "ABC", "4", "5", "6", "空白",
+            "",   "7", "8", "9", "改",
+            "", "()[]", "0", ".,-/", "行"
+        };
+
         const char keys_font_style[4 * 5] = {
             'S', 'M', 'M', 'M', 'M',
             'S', 'M', 'M', 'M', 'S',
@@ -52,6 +59,21 @@ class Keyboard : public Widget {
             "わ",   "を",   "ん",   "ー",   "NO",
             "、",   "。",   "?",    "!",   "NO"
         };
+        const String swipe_num[12 * 5] = {
+            "1", "←", "↑", "→", "↓",
+            "2", "¥", "$", "€", "NO",
+            "3", "%", "゜", "#", "NO",
+            "4", "○", "*", "・", "NO",
+            "5", "+", "×", "÷", "NO",
+            "6", "<", "=", ">", "NO",
+            "7", "「", "」", ":", "NO",
+            "8", "〒", "々", "〆", "NO",
+            "9", "^", "|", "\\", "NO",
+            "(", ")", "[", "]", "NO",
+            "0", "〜", "...", "NO", "NO",
+            ".", ",", "-", "/", "NO"
+        };
+
         const int swipe_directions[5 * 2] = {
             0, 0,
             -1, 0,
@@ -107,10 +129,17 @@ class Keyboard : public Widget {
         bool is_inputs_empty = true;
         String inputs = "";
         String inputs_done = "";
+        String okuri_hira = "";
         int candidates_scroll_index = 0;
 
+        bool keyboard_mode = false; //false -> jpn, true -> num
+
         void updateImeCandidates() {
-            IME_Functions::ime_lookup(inputs.c_str());
+            int candidates_counts = IME_Functions::ime_lookup(inputs.c_str());
+            if(okuri_hira.length() != 0){ //送りありの場合、送りをつけてあげる
+                IME_Functions::okuri_attach(okuri_hira.c_str());
+            }
+
             candidates_scroll_index = 0;
             drawCandidates();
         }
@@ -154,12 +183,35 @@ class Keyboard : public Widget {
         }
         String keysEnv(int key_index){
             if(key_index == 3 * 5 - 1){ //改
-                return (is_inputs_empty ? keys[key_index] : "確");
+                return (
+                    is_inputs_empty ?
+                        (!keyboard_mode ? keys_jpn[key_index] : keys_num[key_index]) :
+                        "確"
+                );
             }
             if(key_index == 4 * 5 - 1){ //行
-                return (is_inputs_empty ? keys[key_index] : "定");
+                return (
+                    is_inputs_empty ?
+                        (!keyboard_mode ? keys_jpn[key_index] : keys_num[key_index]) : 
+                        "定"
+                );
             }
-            return keys[key_index];
+            return (!keyboard_mode ? keys_jpn[key_index] : keys_num[key_index]);
+        }
+        String swipeEnv(int swipe_index){
+            if(!keyboard_mode){
+                return swipe_jpn[swipe_index];
+            }else{
+                return swipe_num[swipe_index];
+            }
+        }
+        void calcKeySize(){
+            //キーの横幅と高さを計算
+            for(int i = 0; i < 4 * 5; i++){
+                switch_font_style(keys_font_style[i]);
+                keys_w[i] = OSData::frame->textWidth(keysEnv(i));
+                keys_h[i] = OSData::frame->fontHeight();
+            }
         }
         void drawKey(int x, int y, bool is_redraw){
             int draw_x = x * SQUARE_W;
@@ -206,17 +258,13 @@ class Keyboard : public Widget {
             this->w = SCREEN_WIDTH;
             this->h = SCREEN_HEIGHT - this->y;
 
-            //キーの横幅と高さを計算
-            for(int i = 0; i < 4 * 5; i++){
-                switch_font_style(keys_font_style[i]);
-                keys_w[i] = OSData::frame->textWidth(keysEnv(i));
-                keys_h[i] = OSData::frame->fontHeight();
-            }
+            calcKeySize();
             OSData::frame->setFont(&lgfxJapanGothicP_24);
             
             this->needs_redraw = true;
 
             dev_label = new Label(""); //!TODO REMOVE
+            dev_label->MaxWidth(SCREEN_WIDTH);
         }
 
         void updateInputs(){
@@ -245,6 +293,10 @@ class Keyboard : public Widget {
                 return;
             }
 
+            if(okuri_hira.length() != 0){
+                okuri_hira = "";
+            }
+
             inputs = UTF8_Functions::removeLastChar(inputs);
             updateImeCandidates();
             updateInputs();
@@ -253,6 +305,7 @@ class Keyboard : public Widget {
         void commitAndClear() {
             inputs_done += inputs;
             inputs = "";
+            okuri_hira = "";
 
             updateInputs();
         }
@@ -299,7 +352,7 @@ class Keyboard : public Widget {
                 }
 
                 int cands_x = 0;
-                for(int i = 0; i < IME_Functions::candidatesCount; i++){
+                for(int i = candidates_scroll_index; i < IME_Functions::candidatesCount; i++){
                     int w = IME_Functions::candidates_width[i];
                     if(cands_x + w + CANDIDATES_MARGIN > 200) break;
 
@@ -318,6 +371,13 @@ class Keyboard : public Widget {
             swipe_x_index = floor((float)OSData::touchX / (float)SQUARE_W);
             swipe_y_index = floor((float)(OSData::touchY - START_KEY_Y) / (float)SQUARE_H);
 
+            //数字モードへ or ひらがなモードへ
+            if(swipe_x_index == 0 && swipe_y_index == 0){
+                keyboard_mode = !keyboard_mode;
+                calcKeySize();
+                this->needs_redraw = true;
+            }
+
             //1文字削除
             if(swipe_x_index == 4 && swipe_y_index == 0){
                 removeInput();
@@ -326,11 +386,6 @@ class Keyboard : public Widget {
             if(swipe_x_index == 4 && swipe_y_index == 1){
                 addInput(" ");
             }
-            //濁点、半濁点
-            if(swipe_x_index == 1 && swipe_y_index == 3){
-                switchDakuten();
-                return;
-            }
             //改行/確定
             if(swipe_x_index == 4 && swipe_y_index >= 2){
                 if(is_inputs_empty){
@@ -338,10 +393,34 @@ class Keyboard : public Widget {
                 }
                 commitAndClear();
             }
-            //カタカナへ
-            if(swipe_x_index == 0 && swipe_y_index == 2 && !is_inputs_empty){
-                inputs = UTF8_Functions::hiraganaToKatakana(inputs);
-                commitAndClear();
+            if(!keyboard_mode){ //ひらがなのときだけ
+                //濁点、半濁点
+                if(swipe_x_index == 1 && swipe_y_index == 3){
+                    switchDakuten();
+                    return;
+                }
+                //カタカナへ
+                if(swipe_x_index == 0 && swipe_y_index == 2 && !is_inputs_empty){
+                    inputs = UTF8_Functions::hiraganaToKatakana(inputs);
+                    commitAndClear();
+                }
+                //送りへ
+                if(swipe_x_index == 0 && swipe_y_index == 3 && !is_inputs_empty){
+                    if(okuri_hira.length() == 0){ //送り開始
+                        okuri_hira = UTF8_Functions::getLastChar(inputs);
+                        inputs = IME_Functions::buildOkuriKey(inputs, okuri_hira.c_str());
+
+                    }else if(okuri_hira == "い" && UTF8_Functions::getLastChar(inputs) == "w") { //形容詞に配慮
+                        inputs = UTF8_Functions::removeLastChar(inputs);
+                        inputs += "i";
+                    }else { //送り解除
+                        inputs = UTF8_Functions::removeLastChar(inputs);
+                        inputs += okuri_hira;
+                        okuri_hira = "";
+                    }
+                    updateInputs();
+                    updateImeCandidates();
+                }
             }
             
             is_swiping = false;
@@ -351,10 +430,10 @@ class Keyboard : public Widget {
                 is_swiping = true;
                 int FONT_H = OSData::frame->fontHeight();
                 for(int i = 1; i < 5; i++){
-                    if(swipe_jpn[swipe_index * 5 + i] == "NO") continue;
+                    if(swipeEnv(swipe_index * 5 + i) == "NO") continue;
 
                     //座標系
-                    int FONT_W = OSData::frame->textWidth(swipe_jpn[swipe_index * 5 + i]);
+                    int FONT_W = OSData::frame->textWidth(swipeEnv(swipe_index * 5 + i));
 
                     int BOX_X = SQUARE_W * (swipe_x_index + swipe_directions[i * 2]);
                     int BOX_Y = START_KEY_Y + SQUARE_H * (swipe_y_index + swipe_directions[i * 2 + 1]);
@@ -365,7 +444,7 @@ class Keyboard : public Widget {
 
                     //スワイプ用のテキストを表示
                     OSData::frame->setCursor(BOX_X + (SQUARE_W - FONT_W) / 2, BOX_Y + (SQUARE_H - FONT_H) / 2);
-                    OSData::frame->print(swipe_jpn[swipe_index * 5 + i]);
+                    OSData::frame->print(swipeEnv(swipe_index * 5 + i));
 
                     PICO_GFX::markDirty(BOX_X, BOX_Y, SQUARE_W, SQUARE_H);
                 }                
@@ -411,10 +490,11 @@ class Keyboard : public Widget {
 
                 //入力の確定
                 int input_swipe_index = ((swipe_x_index - 1) + (swipe_y_index * 3)) * 5 + input_relative_index;
-                addInput(swipe_jpn[input_swipe_index]);
+                if(swipeEnv(input_swipe_index) != "NO")
+                    addInput(swipeEnv(input_swipe_index));
 
                 for(int i = 1; i < 5; i++){
-                    if(swipe_jpn[swipe_index * 5 + i] == "NO") continue;
+                    if(swipeEnv(swipe_index * 5 + i) == "NO") continue;
 
                     //インデックス&座標
                     int x_index = swipe_x_index + swipe_directions[i * 2];

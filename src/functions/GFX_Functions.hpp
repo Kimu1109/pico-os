@@ -5,8 +5,8 @@
 #include <SPI.h>
 
 namespace PICO_GFX {
-    void markDirty(int x, int y, int w, int h);
-    const int COLORS[16] = {
+    inline void markDirty(int x, int y, int w, int h);
+    inline const static int COLORS[16] = {
         TFT_BLACK,
         TFT_NAVY,
         TFT_DARKGREEN,
@@ -24,10 +24,10 @@ namespace PICO_GFX {
         TFT_YELLOW,
         TFT_WHITE
     };
-    int16_t dirty_x1, dirty_y1, dirty_x2, dirty_y2;
-    bool has_dirty = false;
+    inline int16_t dirty_x1, dirty_y1, dirty_x2, dirty_y2;
+    inline bool has_dirty = false;
 
-    void Setup(){
+    inline void Setup(){
         OSData::lcd->init();
         OSData::lcd->setBaseColor(TFT_WHITE);
         OSData::lcd->clear(TFT_WHITE);
@@ -51,7 +51,7 @@ namespace PICO_GFX {
         digitalWrite(22, HIGH);
     }
 
-    void markDirty(int x, int y, int w, int h) {
+    inline void markDirty(int x, int y, int w, int h) {
         x = max(0, x);
         y = max(0, y);
         w = min(w, SCREEN_WIDTH - x);
@@ -70,7 +70,7 @@ namespace PICO_GFX {
         }
     }
 
-    void flushDirty() {
+    inline void flushDirty() {
         if (!has_dirty) return;
 
         // 画面外にはみ出さないようクリップ

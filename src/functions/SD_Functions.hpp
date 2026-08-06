@@ -9,9 +9,9 @@
 
 namespace PICO_SD
 {
-    SPIClassRP2040 SPI_SD(spi1, SD_MISO, SD_CS, SD_SCK, SD_MOSI);
+    inline SPIClassRP2040 SPI_SD(spi1, SD_MISO, SD_CS, SD_SCK, SD_MOSI);
 
-    bool Setup()
+    inline bool Setup()
     {
         SPI_SD.begin();
 
@@ -33,7 +33,7 @@ namespace PICO_SD
         return true;
     }
 
-    String ReadTextFile(const char *path)
+    inline String ReadTextFile(const char *path)
     {
         FsFile f = OSData::SD.open(path, O_RDONLY);
         if (!f)
@@ -54,7 +54,7 @@ namespace PICO_SD
         return content;
     }
 
-    String ReadTextFileFast(const char *path)
+    inline String ReadTextFileFast(const char *path)
     {
         FsFile f = OSData::SD.open(path, O_RDONLY);
         if (!f)

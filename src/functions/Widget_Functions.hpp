@@ -4,20 +4,22 @@
 
 namespace WidgetFunctions
 {
-    Widget *hitTest(int16_t x, int16_t y);
+    inline Widget *hitTest(int16_t x, int16_t y);
 
-    const int MAX_WIDGETS = 48;
-    Widget *widgets[MAX_WIDGETS];
-    int count = 0;
+    inline const int MAX_WIDGETS = 48;
+    inline Widget *widgets[MAX_WIDGETS];
+    inline int count = 0;
 
-    Widget *pressingWidget = nullptr;
+    inline Widget *pressingWidget = nullptr;
 
-    void add(Widget *w)
+    inline void add(Widget *w)
     {
-        widgets[count++] = w; // 追加順 = 描画順（後ろが上に乗る）
+        w->visitAll([](Widget* widget){
+            widgets[count++] = widget; // 追加順 = 描画順（後ろが上に乗る）
+        });
     }
 
-    void bringToFront(Widget *w)
+    inline void bringToFront(Widget *w)
     {
         int idx = -1;
         for (int i = 0; i < count; i++)
@@ -33,7 +35,7 @@ namespace WidgetFunctions
         widgets[count - 1] = w;
     }
 
-    void updateAll()
+    inline void updateAll()
     {
         if(OSData::isTouchStart){
             pressingWidget = hitTest(OSData::touchX, OSData::touchY);
@@ -53,11 +55,11 @@ namespace WidgetFunctions
     }
 
     // タッチは上（配列末尾）から順に判定
-    Widget *hitTest(int16_t x, int16_t y)
+    inline Widget *hitTest(int16_t x, int16_t y)
     {
         for (int i = count - 1; i >= 0; i--)
         {
-            if (widgets[i]->hitTest(x, y))
+            if (widgets[i]->Visible() && widgets[i]->hitTest(x, y))
                 return widgets[i];
         }
         return nullptr;

@@ -4,21 +4,27 @@
 #include <LovyanGFX.h>
 #include <SdFat.h>
 
+#include "widgets/Widget.hpp"
+
 namespace OSData {
     //タッチ系統
-    int touchX = 0;
-    int touchY = 0;
-    int touchZ = 0;
-    bool isTouched = false;
-    bool isTouchStart = false;
-    bool isTouchEnd = false;
-    bool isTouchMove = false;
+    inline int touchX = 0;
+    inline int touchY = 0;
+    inline int touchZ = 0;
+    inline bool isTouched = false;
+    inline bool isTouchStart = false;
+    inline bool isTouchEnd = false;
+    inline bool isTouchMove = false;
 
     //グラフィック系統
-    LGFX* lcd = new LGFX();
-    LGFX_Sprite* frame;
+    inline LGFX* lcd = new LGFX();
+    inline LGFX_Sprite* frame;
 
     //SD系統
-    bool SD_usable = false;
-    SdFat SD;
+    inline bool SD_usable = false;
+    inline SdFat SD;
+
+    //キーボード
+    inline Widget* keyboard_jpn;
+    inline Widget* keyboard_eng;
 }

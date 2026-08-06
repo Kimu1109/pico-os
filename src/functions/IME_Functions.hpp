@@ -5,29 +5,19 @@
 #include "functions/UTF8_Functions.hpp"
 
 namespace IME_Functions {
-    ImeDictionary ime;
-    char candidates[IME_MAX_CANDIDATES][IME_MAX_CAND_BYTES];
-    int candidates_width[IME_MAX_CANDIDATES];
-    int candidatesCount = 0;
+    inline ImeDictionary ime;
+    inline const int candidates_size = IME_MAX_CANDIDATES;
+    inline char candidates[IME_MAX_CANDIDATES][IME_MAX_CAND_BYTES];
+    inline int candidatesCount = 0;
 
     inline void setup(){
-        ime.begin(OSData::SD, "dict/skk_body.tsv", "dict/skk_index.tsv");
+        ime.begin("dict/skk_body.tsv", "dict/skk_index.tsv");
     }
     inline int ime_lookup(const char* key) {
         int n = ime.lookup(key, candidates, IME_MAX_CANDIDATES);
         candidatesCount = n;
 
-        for(int i = 0; i < n; i++){
-            candidates_width[i] = OSData::frame->textWidth(candidates[i], &lgfxJapanGothicP_16);
-        }
-
         return n;
-    }
-    inline void okuri_attach(const char* okuri_kana){
-        for(int i = 0; i < candidatesCount; i++){
-            strcat(candidates[i], okuri_kana);
-            candidates_width[i] = OSData::frame->textWidth(candidates[i], &lgfxJapanGothicP_16);
-        }
     }
 
     // ---- buildOkuriKey() サンプル実装 ----

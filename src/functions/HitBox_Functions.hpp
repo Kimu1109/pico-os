@@ -19,7 +19,7 @@ namespace HitBoxFunctions {
         float x, y;
     };
 
-    Region classifyPoint(const Point& p, const Rect& r) {
+    inline Region classifyPoint(const Point& p, const Rect& r) {
         // 1. 矩形内判定
         if (p.x >= r.minX && p.x <= r.maxX &&
             p.y >= r.minY && p.y <= r.maxY) {

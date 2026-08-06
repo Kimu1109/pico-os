@@ -56,11 +56,10 @@ class ImeDictionary {
 public:
     ImeDictionary();
 
-    // sd: 初期化済みのSdFatインスタンス
     // dictPath: 辞書tsvファイルパス(読みがなでソート済み、送りあり/なし統合済み)
     // indexPath: インデックスtsvファイルパス(256行毎の先頭読みがな＋バイト位置)
     // 戻り値: 成功したらtrue
-    bool begin(SdFat &sd, const char* dictPath, const char* indexPath);
+    bool begin(const char* dictPath, const char* indexPath);
 
     // key: 検索キー。
     //   送りありの場合は呼び出し側で「語幹＋子音マーカー」形式に変換済みで

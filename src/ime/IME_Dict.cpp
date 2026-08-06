@@ -4,14 +4,15 @@
 #include "IME_Dict.hpp"
 #include <string.h>
 #include <stdlib.h>
+#include "OS_Data.hpp"
 
 ImeDictionary::ImeDictionary()
     : _sd(nullptr), _indexCount(0) {
     _dictPath[0] = '\0';
 }
 
-bool ImeDictionary::begin(SdFat &sd, const char* dictPath, const char* indexPath) {
-    _sd = &sd;
+bool ImeDictionary::begin(const char* dictPath, const char* indexPath) {
+    _sd = &OSData::SD;
     strncpy(_dictPath, dictPath, sizeof(_dictPath) - 1);
     _dictPath[sizeof(_dictPath) - 1] = '\0';
 

@@ -6,7 +6,7 @@
 #include "functions/IME_Functions.hpp"
 #include "widgets/Label.hpp"
 #include "widgets/Button.hpp"
-//#include "widgets/Keyboard.hpp"
+#include "widgets/Keyboard.hpp"
 #include "widgets/KeyboardEng.hpp"
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -14,8 +14,6 @@
 //デバッグ用
 static Label* sd_label;
 static Button* hi_button;
-//static Keyboard* keyboard;
-static KeyboardEng* keyboardEng;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -25,19 +23,22 @@ void setup() {
 
     hi_button = new Button(160, 100, "HI!");
     sd_label = new Label(0, 50, "sd-failed");
-    //keyboard = new Keyboard();
-    keyboardEng = new KeyboardEng();
 
     WidgetFunctions::add(hi_button);
     WidgetFunctions::add(sd_label);
-    //WidgetFunctions::add(keyboard);
-    //WidgetFunctions::add(keyboard->dev_label); //!TODO REMOVE
-    WidgetFunctions::add(keyboardEng);
-    WidgetFunctions::add(keyboardEng->input_label);
+
+    OSData::keyboard_eng = new KeyboardEng();
+    OSData::keyboard_jpn = new Keyboard();
+    WidgetFunctions::add(OSData::keyboard_eng);
+    WidgetFunctions::add(OSData::keyboard_jpn);
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));
     }
+
+    hi_button->onPressStart([]() {
+        OSData::keyboard_jpn->Visible(true);
+    });
 
     IME_Functions::setup();
 

@@ -8,27 +8,27 @@
 
 namespace PICO_Touch
 {
-    SPIClassRP2040 touchSPI(spi0, TOUCH_MISO, TOUCH_CS, TOUCH_SCK, TOUCH_MOSI);
-    XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
+    inline SPIClassRP2040 touchSPI(spi0, TOUCH_MISO, TOUCH_CS, TOUCH_SCK, TOUCH_MOSI);
+    inline XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
 
-    const int TS_MINX = 300;
-    const int TS_MAXX = 3800;
-    const int TS_MINY = 300;
-    const int TS_MAXY = 3800;
+    inline const int TS_MINX = 300;
+    inline const int TS_MAXX = 3800;
+    inline const int TS_MINY = 300;
+    inline const int TS_MAXY = 3800;
 
-    const int SCREEN_W = 240;
-    const int SCREEN_H = 320;
+    inline const int SCREEN_W = 240;
+    inline const int SCREEN_H = 320;
 
-    int prev_x = 0;
-    int prev_y = 0;
+    inline int prev_x = 0;
+    inline int prev_y = 0;
 
-    void Setup(){
+    inline void Setup(){
         touchSPI.begin();
         ts.begin(touchSPI);
         ts.setRotation(1); // lcdのsetRotationと合わせる
     }
 
-    void Update(){
+    inline void Update(){
         if(OSData::isTouchStart)
             OSData::isTouchStart = false;
 

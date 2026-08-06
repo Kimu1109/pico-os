@@ -4,7 +4,7 @@
 
 namespace UTF8_Functions {
     // UTF-8文字列から最後の1文字を安全に切り出す関数
-    String getLastChar(String str) {
+    inline String getLastChar(String str) {
         int len = str.length();
         if (len == 0) return "";
 
@@ -25,7 +25,7 @@ namespace UTF8_Functions {
     }
 
     // UTF-8文字列から最後の1文字を削除する関数
-    String removeLastChar(String str) {
+    inline String removeLastChar(String str) {
         int len = str.length();
         if (len == 0) return "";
 
@@ -46,7 +46,7 @@ namespace UTF8_Functions {
     }
 
     // 文字列の先頭1文字（UTF-8考慮）を取得する
-    String getFirstChar(const String& str) {
+    inline String getFirstChar(const String& str) {
         if (str.length() == 0) return "";
 
         uint8_t firstByte = (uint8_t)str.charAt(0);
@@ -71,11 +71,11 @@ namespace UTF8_Functions {
     }
 
     // アルファベット1文字かどうかの判定
-    bool isAsciiAlpha(const String& firstChar) {
+    inline bool isAsciiAlpha(const String& firstChar) {
         return firstChar.length() == 1 && isAlpha(firstChar.charAt(0));
     }
 
-    String replaceLastChar(const String& str, const String& newText) {
+    inline String replaceLastChar(const String& str, const String& newText) {
         if (str.length() == 0) return str;
 
         int lastCharStart = str.length() - 1;
@@ -91,7 +91,7 @@ namespace UTF8_Functions {
         return str.substring(0, lastCharStart) + newText;
     }
 
-    static uint32_t utf8Decode(const uint8_t* s, int& len) {
+    inline static uint32_t utf8Decode(const uint8_t* s, int& len) {
         uint8_t c = s[0];
         if (c < 0x80) { len = 1; return c; }
         else if ((c & 0xE0) == 0xC0) { len = 2; return ((c & 0x1F) << 6) | (s[1] & 0x3F); }
@@ -101,14 +101,14 @@ namespace UTF8_Functions {
     }
 
     // codepoint を UTF-8 の3バイト（日本語の範囲は基本ここ）としてバッファに書き込む
-    static int utf8Encode3(uint32_t cp, uint8_t* out) {
+    inline static int utf8Encode3(uint32_t cp, uint8_t* out) {
         out[0] = 0xE0 | ((cp >> 12) & 0x0F);
         out[1] = 0x80 | ((cp >> 6) & 0x3F);
         out[2] = 0x80 | (cp & 0x3F);
         return 3;
     }
 
-    String hiraganaToKatakana(const String& input) {
+    inline String hiraganaToKatakana(const String& input) {
         String result;
         result.reserve(input.length());
 

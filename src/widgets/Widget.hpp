@@ -1,6 +1,7 @@
 #pragma once
 
-#include "OS_Data.hpp"
+#include <vector>
+#include <functional>
 
 class Widget {
     protected:
@@ -14,7 +15,8 @@ class Widget {
         int prev_w = 0;
         int prev_h = 0;
 
-        bool needs_redraw;
+        bool needs_redraw = true;
+        bool visible = true;
 
         std::function<void()> on_press_start = nullptr;
         std::function<void()> on_press_move = nullptr;
@@ -23,41 +25,37 @@ class Widget {
     public:
         bool is_pressing = false;
 
-        void update(){
-            if(OSData::isTouchMove && this->is_pressing){
-                this->onPressMove();
-            }
-            if(OSData::isTouchEnd && this->is_pressing){
-                this->onPressEnd();
-                is_pressing = false;
-            }
+        virtual const std::vector<Widget*>& getChildren() const {
+            static const std::vector<Widget*> empty;
+            return empty;
+        }
 
-            render();
-        };
+        template<typename F>
+        void visitAll(F&& visitor) {
+            visitor(this);
+            for (Widget* child : getChildren()) {
+                child->visitAll(visitor);
+            }
+        }
+
+        void update();
 
         virtual bool hitTest(int px, int py) {
             return px >= this->x && px < this->x + this->w &&
                 py >= this->y && py < this->y + this->h;
         }
 
-        virtual void onPressStart() {
-            if (on_press_start) on_press_start();
-        }
-        void onPressStart(std::function<void()> callback) {
-            this->on_press_start = callback;
-        }
-        virtual void onPressEnd(){
-            if (on_press_end) on_press_end();
-        }
-        void onPressEnd(std::function<void()> callback) {
-            this->on_press_end = callback;
-        }
-        virtual void onPressMove(){
-            if (on_press_move) on_press_move();
-        }
-        void onPressMove(std::function<void()> callback) {
-            this->on_press_move = callback;
-        }
+        virtual void onPressStart();
+        virtual void onPressStart(std::function<void()> callback);
+
+        virtual void onPressEnd();
+        virtual void onPressEnd(std::function<void()> callback);
+
+        virtual void onPressMove();
+        void onPressMove(std::function<void()> callback);
 
         virtual void render() = 0;
+
+        virtual bool Visible();
+        virtual void Visible(bool visible);
 };

@@ -4,20 +4,17 @@
 
 void KeyboardEng::Visible(bool visible) {
     this->visible = visible;
+    this->input_label->Visible(visible);
 
-    if(visible){
-        this->needs_redraw = true;
-    }else{
-        PICO_GFX::markDirty(this->x, this->y, this->w, this->h);
-        OSData::frame->fillRect(this->x, this->y, this->w, this->h, PICO_BACKGROUND);
-    }
+    this->needs_redraw = true;
+    PICO_GFX::markDirty(this->rect);
 }
 
 
 void KeyboardEng::onPressStart() {
     if(on_press_start) on_press_start();
 
-    int key_y = this->y;
+    int key_y = this->rect.y;
     int key_x = 0;
     for(int i = 0; i < keys_size; i++){
         Key key = keyEnv(i);
@@ -59,6 +56,7 @@ void KeyboardEng::onPressStart() {
                     if(!isNumMode && isUpperCase){
                         isUpperCase = false;
                         this->needs_redraw = true;
+                        PICO_GFX::markDirty(this->rect);
                     }
                 }
                 break;
@@ -74,9 +72,8 @@ void KeyboardEng::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    PICO_GFX::markDirty(this->x, this->y, this->w, this->h);
-    OSData::frame->fillRect(this->x, this->y, this->w, this->h, PICO_BACKGROUND);
-    int key_y = this->y;
+    PICO_GFX::fillBackground(this->rect);
+    int key_y = this->rect.y;
     int key_x = 0;
     for(int i = 0; i < keys_size; i++){
         Key key = keyEnv(i);

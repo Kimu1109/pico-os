@@ -37,7 +37,7 @@ void setup() {
     }
 
     hi_button->onPressStart([]() {
-        OSData::keyboard_jpn->Visible(true);
+        OSData::keyboard_jpn->Visible(!OSData::keyboard_jpn->Visible());
     });
 
     IME_Functions::setup();

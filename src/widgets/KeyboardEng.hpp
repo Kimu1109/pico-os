@@ -155,13 +155,15 @@ class KeyboardEng : public Widget {
         void Visible(bool visible) override;
 
         KeyboardEng(){
-            this->w = SCREEN_WIDTH;
-            this->h = key_h * 4;
+            this->rect.w = SCREEN_WIDTH;
+            this->rect.h = key_h * 4;
 
-            this->x = 0;
-            this->y = SCREEN_HEIGHT - this->h;
+            this->rect.x = 0;
+            this->rect.y = SCREEN_HEIGHT - this->rect.h;
 
             input_label = new Label("");
+            input_label->MaxWidth(SCREEN_WIDTH);
+            input_label->Visible(false);
             this->visible = false;
 
             children_.push_back(input_label);

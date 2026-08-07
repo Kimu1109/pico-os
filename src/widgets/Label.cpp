@@ -2,6 +2,11 @@
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
+void Label::needsRender(){
+    this->needs_redraw = true;
+    PICO_GFX::markDirty(this->rect);
+}
+
 // ---------- UTF-8 ----------
 int Label::utf8CharLen(uint8_t lead) {
     if ((lead & 0x80) == 0x00) return 1;
@@ -122,10 +127,10 @@ void Label::relayout() {
         if (lw > maxLineWidth) maxLineWidth = lw;
     }
 
-    this->w = (max_width > 0) ? max_width : maxLineWidth;
-    this->h = lines.empty() ? 0
+    this->rect.w = (max_width > 0) ? max_width : maxLineWidth;
+    this->rect.h = lines.empty() ? 0
             : (int)lines.size() * (line_height + line_spacing) - line_spacing + kDecorationMargin;
-    this->needs_redraw = true;
+    this->needsRender();
 }
 
 // ---------- 1つのRunを描画 ----------
@@ -168,13 +173,15 @@ void Label::renderRun(const TextRun& run, int x, int y) {
 
 // ---------- コンストラクタ ----------
 Label::Label(int x, int y, String text) {
-    this->x = x;
-    this->y = y;
+    this->rect.x = x;
+    this->rect.y = y;
     this->Text(text);
+    this->needs_redraw = true;
 }
 
 Label::Label(String text) {
     this->Text(text);
+    this->needs_redraw = true;
 }
 
 // ---------- render ----------
@@ -183,16 +190,15 @@ void Label::render() {
     if (!this->visible) return;
 
     // 前回の描画内容を消去
-    OSData::frame->fillRect(this->prev_x, this->prev_y, this->prev_w, this->prev_h, PICO_BACKGROUND);
-    PICO_GFX::markDirty(this->prev_x, this->prev_y, this->prev_w, this->prev_h);
+    PICO_GFX::markDirty(this->prev_rect);
 
     // print()側の自動折り返しを無効化
     OSData::frame->setTextWrap(false, false);
 
     // 新しく描画
-    int cy = this->y;
+    int cy = this->rect.y;
     for (auto& line : lines) {
-        int cx = this->x;
+        int cx = this->rect.x;
         for (auto& run : line) {
             renderRun(run, cx, cy);
             int rw = OSData::frame->textWidth(run.text);
@@ -201,10 +207,9 @@ void Label::render() {
         }
         cy += line_height + line_spacing;
     }
-    PICO_GFX::markDirty(this->x, this->y, this->w, this->h);
+    PICO_GFX::markDirty(this->rect);
 
-    this->prev_x = this->x; this->prev_y = this->y;
-    this->prev_w = this->w; this->prev_h = this->h;
+    this->prev_rect.copy(this->rect);
 
     this->needs_redraw = false;
 }
@@ -235,41 +240,36 @@ void Label::LineSpacing(int spacing) {
 
 void Label::Color(uint16_t c) {
     this->color = c;
-    this->needs_redraw = true;
+    this->needsRender();
 }
 
 void Label::X(int x) {
-    this->x = x;
-    this->needs_redraw = true;
+    this->rect.x = x;
+    this->needsRender();
 }
 
 int Label::X() {
-    return this->x;
+    return this->rect.x;
 }
 
 void Label::Y(int y) {
-    this->y = y;
-    this->needs_redraw = true;
+    this->rect.y = y;
+    this->needsRender();
 }
 
 int Label::Y() {
-    return this->y;
+    return this->rect.y;
 }
 
 int Label::W() {
-    return this->w;
+    return this->rect.w;
 }
 
 int Label::H() {
-    return this->h;
+    return this->rect.h;
 }
 
 void Label::Visible(bool visible){
     this->visible = visible;
-    if(visible){
-        this->needs_redraw = true;
-    }else{
-        OSData::frame->fillRect(this->x, this->y, this->w, this->h, PICO_BACKGROUND);
-        PICO_GFX::markDirty(this->x, this->y, this->w, this->h);
-    }
+    this->needsRender();
 }

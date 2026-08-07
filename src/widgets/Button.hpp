@@ -19,8 +19,8 @@ class Button : public Widget {
         using Widget::Visible;
 
         Button(int x, int y, String text){
-            this->x = x;
-            this->y = y;
+            this->rect.x = x;
+            this->rect.y = y;
             this->calcTextSize(text);
             this->text = text;
             this->needs_redraw = true;
@@ -31,29 +31,35 @@ class Button : public Widget {
             this->needs_redraw = true;
         }
 
-
         void onPressStart() override {
             if(this->on_press_start) this->on_press_start();
-            this->needs_redraw = true;
+            this->needsRender();
         }
         void onPressEnd() override {
             if(this->on_press_end) this->on_press_end();
-            this->needs_redraw = true;
+            this->needsRender();
         }
 
         void render() override;
+        void needsRender();
 
+        Rect getRect() const override { 
+            const int16_t BOX_W = this->rect.w + TEXT_SPACING + _3D_PIX_LEN + 1;
+            const int16_t BOX_H = this->rect.h + TEXT_SPACING + _3D_PIX_LEN + 1;
+    
+            return {
+                this->rect.x,
+                this->rect.y,
+                BOX_W,
+                BOX_H
+            };
+        }
+    
         bool hitTest(int px, int py) override {
-            int BOX_W = this->w + TEXT_SPACING;
-            int BOX_H = this->h + TEXT_SPACING;
-
-            if(is_pressing){
-                return px >= this->x + _3D_PIX_LEN && px < this->x + BOX_W + _3D_PIX_LEN &&
-                    py >= this->y + _3D_PIX_LEN && py < this->y + BOX_H + _3D_PIX_LEN;
-            }else{
-                return px >= this->x && px < this->x + BOX_W &&
-                    py >= this->y && py < this->y + BOX_H;
-            }
+            // getRect() 全体をタッチ有効領域とする
+            const Rect r = this->getRect();
+            return px >= r.x && px < r.x + r.w &&
+                py >= r.y && py < r.y + r.h;
         }
 
         void Visible(bool visible) override;

@@ -156,8 +156,7 @@ class Keyboard : public Widget {
             
             if(is_inputs_empty != is_inputs_empty_now){
                 is_inputs_empty = is_inputs_empty_now;
-                drawKey(4, 2, true); //改 | 確
-                drawKey(4, 3, true); //行 | 定
+                this->needsRender();
             }
 
             is_inputs_empty = is_inputs_empty_now;
@@ -219,11 +218,11 @@ class Keyboard : public Widget {
             updateInputs();
         }
 
+        void needsRender();
         void switch_font_style(char style);
         void updateImeCandidates();
         void drawCandidates();
         void calcKeySize();
-        void drawKey(int x, int y, bool is_redraw);
 
     public:
 
@@ -234,17 +233,19 @@ class Keyboard : public Widget {
         Label* dev_label; //!TODO REMOVE
 
         Keyboard(){
-            this->x = 0;
-            this->y = START_CANDIDATES_Y;
-            this->w = SCREEN_WIDTH;
-            this->h = SCREEN_HEIGHT - this->y;
+            this->rect.x = 0;
+            this->rect.y = START_CANDIDATES_Y;
+            this->rect.w = SCREEN_WIDTH;
+            this->rect.h = SCREEN_HEIGHT - this->rect.y;
 
             calcKeySize();
             
             this->visible = false;
 
-            dev_label = new Label(""); //!TODO REMOVE
+            dev_label = new Label(0, 0, ""); //!TODO REMOVE
             dev_label->MaxWidth(SCREEN_WIDTH);
+            dev_label->Visible(false);
+
             children_.push_back(dev_label);
         }
 
@@ -257,4 +258,16 @@ class Keyboard : public Widget {
         const std::vector<Widget*>& getChildren() const override {
             return children_;
         }
+        Rect getRect() const override { 
+            if(this->is_swiping){
+                return {
+                    0,
+                    (int16_t)(START_KEY_Y - SQUARE_H),
+                    SCREEN_WIDTH,
+                    (int16_t)(SCREEN_HEIGHT - (START_KEY_Y - SQUARE_H))
+                };
+            }
+            return this->rect;
+        }
+
 };

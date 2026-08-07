@@ -4,16 +4,18 @@
 #include "functions/HitBox_Functions.hpp"
 #include "OS_Data.hpp"
 
+//描画依頼を発行
+void Keyboard::needsRender(){
+    this->needs_redraw = true;
+    PICO_GFX::markDirty(this->getRect());
+}
+
 //表示の切り替え
 void Keyboard::Visible(bool visible) {
     this->visible = visible;
+    this->dev_label->Visible(visible);
 
-    if(visible){
-        this->needs_redraw = true;
-    }else{
-        PICO_GFX::markDirty(this->x, this->y, this->w, this->h);
-        OSData::frame->fillRect(this->x, this->y, this->w, this->h, PICO_BACKGROUND);
-    }
+    this->needsRender();
 }
 
 //フォントのスタイルの切り替え(主にキー用)
@@ -39,17 +41,17 @@ void Keyboard::updateImeCandidates() {
     }
 
     candidates_scroll_index = 0;
-    drawCandidates();
+    
+    this->needsRender(); //候補が更新されたため
 }
 
 //候補を描画
 void Keyboard::drawCandidates(){
 
     //区画を確保
-    OSData::frame->fillRect(0, START_CANDIDATES_Y + 1, SCREEN_WIDTH, CANDIDATES_H - 1, PICO_WHITE);
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y, SCREEN_WIDTH, PICO_BLACK);
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y + CANDIDATES_H, SCREEN_WIDTH, PICO_BLACK);
-    PICO_GFX::markDirty(0, START_CANDIDATES_Y + 1, SCREEN_WIDTH, CANDIDATES_H - 1);
+
 
     OSData::frame->setFont(&lgfxJapanGothicP_16);
 
@@ -96,43 +98,6 @@ void Keyboard::calcKeySize(){
     OSData::frame->setFont(&lgfxJapanGothicP_24);
 }
 
-//特定のキーを描画する。
-//is_redrawは描画範囲をクリアして描画するかどうか
-void Keyboard::drawKey(int x, int y, bool is_redraw){
-    int draw_x = x * SQUARE_W;
-    int draw_y = START_KEY_Y + y * SQUARE_H;
-
-    if(x < 0 || x > 4 || y < 0 || y > 3) {
-        if(is_redraw) {
-            PICO_GFX::markDirty(draw_x, draw_y, SQUARE_W, SQUARE_H);
-            OSData::frame->fillRect(draw_x, draw_y, SQUARE_W + 1, SQUARE_H + 1, PICO_BACKGROUND);
-        }
-        return;
-    }
-
-    PICO_GFX::markDirty(draw_x, draw_y, SQUARE_W, SQUARE_H);
-
-    if(is_redraw){
-        OSData::frame->fillRect(draw_x, draw_y, SQUARE_W + 1, SQUARE_H + 1, PICO_BACKGROUND);
-        OSData::frame->drawRect(draw_x, draw_y, SQUARE_W + 1, SQUARE_H + 1, PICO_BLACK);
-
-        //改行に線が入るのを対策
-        if(x == 4 && y == 2){
-            OSData::frame->drawFastHLine(draw_x + 1, draw_y + SQUARE_H, SQUARE_W, PICO_BACKGROUND);
-        }
-        if(x == 4 && y == 3){
-            OSData::frame->drawFastHLine(draw_x + 1, draw_y, SQUARE_W, PICO_BACKGROUND);
-        }
-    }
-
-    switch_font_style(keys_font_style[x + y * 5]);
-    OSData::frame->setCursor(
-        draw_x + (SQUARE_W - keys_w[x + y * 5]) / 2,
-        draw_y + (SQUARE_H - keys_h[x + y * 5]) / 2
-    );
-    OSData::frame->print(keysEnv(x + y * 5));
-}
-
 //タップ開始
 void Keyboard::onPressStart() {
     if(on_press_start) on_press_start();
@@ -146,7 +111,7 @@ void Keyboard::onPressStart() {
                 candidates_scroll_index += 1; //右へ
                 if(candidates_scroll_index == IME_Functions::candidatesCount) candidates_scroll_index -= 1;
             }
-            drawCandidates();
+            this->needsRender(); //候補が移動したため
             return;
         }
 
@@ -174,7 +139,7 @@ void Keyboard::onPressStart() {
     if(swipe_x_index == 0 && swipe_y_index == 0){
         keyboard_mode = !keyboard_mode;
         calcKeySize();
-        this->needs_redraw = true;
+        this->needsRender(); //モードが変わったため
     }
     //1文字削除
     if(swipe_x_index == 4 && swipe_y_index == 0){
@@ -232,26 +197,7 @@ void Keyboard::onPressStart() {
         swipe_index = (swipe_x_index - 1) + swipe_y_index * 3;
 
         is_swiping = true;
-        int FONT_H = OSData::frame->fontHeight();
-        for(int i = 1; i < 5; i++){
-            if(swipeEnv(swipe_index * 5 + i) == "NO") continue;
-
-            //座標系
-            int FONT_W = OSData::frame->textWidth(swipeEnv(swipe_index * 5 + i));
-
-            int BOX_X = SQUARE_W * (swipe_x_index + swipe_directions[i * 2]);
-            int BOX_Y = START_KEY_Y + SQUARE_H * (swipe_y_index + swipe_directions[i * 2 + 1]);
-
-            //塗りつぶし&矩形
-            OSData::frame->fillRect(BOX_X, BOX_Y, SQUARE_W, SQUARE_H, PICO_BACKGROUND);
-            OSData::frame->drawRect(BOX_X, BOX_Y, SQUARE_W, SQUARE_H, PICO_BLACK);
-
-            //スワイプ用のテキストを表示
-            OSData::frame->setCursor(BOX_X + (SQUARE_W - FONT_W) / 2, BOX_Y + (SQUARE_H - FONT_H) / 2);
-            OSData::frame->print(swipeEnv(swipe_index * 5 + i));
-
-            PICO_GFX::markDirty(BOX_X, BOX_Y, SQUARE_W, SQUARE_H);
-        }                
+        this->needsRender(); //フリックキーの描画のため       
     }
 }
 void Keyboard::onPressEnd() {
@@ -296,26 +242,7 @@ void Keyboard::onPressEnd() {
         if(swipeEnv(input_swipe_index) != "NO")
             addInput(swipeEnv(input_swipe_index));
 
-        //埋め立て
-        for(int i = 1; i < 5; i++){
-            if(swipeEnv(swipe_index * 5 + i) == "NO") continue;
-
-            //インデックス&座標
-            int x_index = swipe_x_index + swipe_directions[i * 2];
-            int y_index = swipe_y_index + swipe_directions[i * 2 + 1];
-
-            int BOX_X = SQUARE_W * x_index;
-            int BOX_Y = START_KEY_Y + SQUARE_H * y_index;
-
-            int keys_index = x_index + y_index * 5;
-
-            //キーの再描画
-            drawKey(x_index, y_index, true);
-        }
-
-        OSData::frame->setFont(&lgfxJapanGothicP_24);
-
-        if(swipe_y_index == 0) drawCandidates(); //候補を再描画
+        this->needsRender(); //フリックキーが消えるため
     }
     is_swiping = false;
 }
@@ -324,8 +251,7 @@ void Keyboard::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    PICO_GFX::markDirty(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y);
-    OSData::frame->fillRect(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y, PICO_BACKGROUND);
+    PICO_GFX::fillBackgroundXYWH(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y);
 
     //候補
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y, SCREEN_WIDTH, PICO_BLACK);
@@ -342,11 +268,41 @@ void Keyboard::render() {
     //キーの描画
     for(int x = 0; x < 5; x++){
         for(int y = 0; y < 4; y++){
-            drawKey(x, y, false);
+            int draw_x = x * SQUARE_W;
+            int draw_y = START_KEY_Y + y * SQUARE_H;
+
+            switch_font_style(keys_font_style[x + y * 5]);
+            OSData::frame->setCursor(
+                draw_x + (SQUARE_W - keys_w[x + y * 5]) / 2,
+                draw_y + (SQUARE_H - keys_h[x + y * 5]) / 2
+            );
+            OSData::frame->print(keysEnv(x + y * 5));
         }
     }
     OSData::frame->setFont(&lgfxJapanGothicP_24);
     drawCandidates();
+
+    //フリックキーの入力
+    if(is_swiping){
+        int FONT_H = OSData::frame->fontHeight();
+        for(int i = 1; i < 5; i++){
+            if(swipeEnv(swipe_index * 5 + i) == "NO") continue;
+
+            //座標系
+            int FONT_W = OSData::frame->textWidth(swipeEnv(swipe_index * 5 + i));
+
+            int BOX_X = SQUARE_W * (swipe_x_index + swipe_directions[i * 2]);
+            int BOX_Y = START_KEY_Y + SQUARE_H * (swipe_y_index + swipe_directions[i * 2 + 1]);
+
+            //塗りつぶし&矩形
+            PICO_GFX::fillBackgroundXYWH(BOX_X, BOX_Y, SQUARE_W, SQUARE_H);
+            OSData::frame->drawRect(BOX_X, BOX_Y, SQUARE_W, SQUARE_H, PICO_BLACK);
+
+            //スワイプ用のテキストを表示
+            OSData::frame->setCursor(BOX_X + (SQUARE_W - FONT_W) / 2, BOX_Y + (SQUARE_H - FONT_H) / 2);
+            OSData::frame->print(swipeEnv(swipe_index * 5 + i));
+        }  
+    }    
 
     this->needs_redraw = false;
 }

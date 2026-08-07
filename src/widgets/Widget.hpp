@@ -2,18 +2,12 @@
 
 #include <vector>
 #include <functional>
+#include "model/Rect.hpp"
 
 class Widget {
     protected:
-        int x = 0;
-        int y = 0;
-        int w = 0;
-        int h = 0;
-
-        int prev_x = 0;
-        int prev_y = 0;
-        int prev_w = 0;
-        int prev_h = 0;
+        Rect rect;
+        Rect prev_rect;
 
         bool needs_redraw = true;
         bool visible = true;
@@ -40,11 +34,6 @@ class Widget {
 
         void update();
 
-        virtual bool hitTest(int px, int py) {
-            return px >= this->x && px < this->x + this->w &&
-                py >= this->y && py < this->y + this->h;
-        }
-
         virtual void onPressStart();
         virtual void onPressStart(std::function<void()> callback);
 
@@ -55,7 +44,19 @@ class Widget {
         void onPressMove(std::function<void()> callback);
 
         virtual void render() = 0;
+        virtual void renderForce() {
+            this->needs_redraw = true;
+            this->render();
+        }
 
         virtual bool Visible();
         virtual void Visible(bool visible);
+
+        virtual Rect getRect() const { return rect; }
+        virtual bool isOpaque() const { return true; }
+
+        virtual bool hitTest(int px, int py) {
+            return px >= this->rect.x && px < this->rect.x + this->rect.w &&
+                py >= this->rect.y && py < this->rect.y + this->rect.h;
+        }
 };

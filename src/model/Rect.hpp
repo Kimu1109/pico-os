@@ -20,4 +20,11 @@ struct Rect {
         int16_t ny2 = std::min(y + h, o.y + o.h);
         return { nx, ny, (int16_t)std::max(0, nx2 - nx), (int16_t)std::max(0, ny2 - ny) };
     }
+    void copy(const Rect& o) {
+        x = o.x;
+        y = o.y;
+
+        w = o.w;
+        h = o.h;
+    }
 };

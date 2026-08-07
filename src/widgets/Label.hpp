@@ -39,6 +39,7 @@ class Label : public Widget {
         Label(String text);
         
         void render() override;
+        void needsRender();
 
         // ---------- setter / getter ----------
         void Text(String text);
@@ -61,5 +62,7 @@ class Label : public Widget {
         int H();
 
         void Visible(bool visible) override;
+
+        bool isOpaque() const override { return false; }
 };
 

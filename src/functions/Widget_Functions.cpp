@@ -4,7 +4,16 @@
 void WidgetFunctions::add(Widget *w)
 {
     w->visitAll([](Widget* widget){
-        widgets[count++] = widget; // 追加順 = 描画順（後ろが上に乗る）
+        bool validates = true;
+        for(int i = 0; i < count; i++){
+            if(widgets[i] && widgets[i] == widget){
+                validates = false;
+                break;
+            }
+        }
+        if(validates){
+            widgets[count++] = widget; // 追加順 = 描画順（後ろが上に乗る）
+        }
     });
 }
 

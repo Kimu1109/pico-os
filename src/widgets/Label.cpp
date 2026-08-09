@@ -5,6 +5,9 @@
 void Label::needsRender(){
     this->needs_redraw = true;
     PICO_GFX::markDirty(this->rect);
+    // カーソルの前回描画位置も消去対象に含める
+    // (本体rect外にカーソルがはみ出すケースの取りこぼし防止)
+    PICO_GFX::markDirty(this->prev_cursor_rect);
 }
 
 // ---------- UTF-8 ----------
@@ -71,6 +74,7 @@ std::vector<TextRun> Label::parseMarkup(const String& src) {
 // ---------- 折返し込みレイアウト計算 ----------
 void Label::relayout() {
     lines.clear();
+    cursor_slots.clear();
     line_height = OSData::frame->fontHeight();
 
     // \n で段落分割
@@ -84,8 +88,16 @@ void Label::relayout() {
         paragraphs.push_back(buf);
     }
 
-    for (auto& para : paragraphs) {
-        std::vector<TextRun> runs = parseMarkup(para);
+    // インデックス0（テキスト先頭）は常に1行目の左端
+    {
+        CursorSlot head;
+        head.line = 0;
+        head.x = 0;
+        cursor_slots.push_back(head);
+    }
+
+    for (size_t p = 0; p < paragraphs.size(); p++) {
+        std::vector<TextRun> runs = parseMarkup(paragraphs[p]);
 
         std::vector<TextRun> curLine;
         int curWidth = 0;
@@ -109,10 +121,27 @@ void Label::relayout() {
                 }
                 piece.text += ch;
                 curWidth += cw;
+
+                // この文字の直後を、カーソルが置ける位置として登録
+                // (折返しが起きた直後の文字は、既に更新済みのlines.size()を指すため
+                //  自動的に新しい行を指すようになる)
+                CursorSlot slot;
+                slot.line = (int)lines.size();
+                slot.x = curWidth;
+                cursor_slots.push_back(slot);
             }
             if (piece.text.length() > 0) { curLine.push_back(piece); piece.text = ""; }
         }
         lines.push_back(curLine);
+
+        // 段落の区切り(\n)自体もカーソルが止まれる位置として登録する。
+        // これにより空行("\n\n"など)にもカーソルを置けるようになる。
+        if (p + 1 < paragraphs.size()) {
+            CursorSlot slot;
+            slot.line = (int)lines.size();
+            slot.x = 0;
+            cursor_slots.push_back(slot);
+        }
     }
 
     // 全体サイズの再計算
@@ -130,6 +159,18 @@ void Label::relayout() {
     this->rect.w = (max_width > 0) ? max_width : maxLineWidth;
     this->rect.h = lines.empty() ? 0
             : (int)lines.size() * (line_height + line_spacing) - line_spacing + kDecorationMargin;
+
+    // 高さ上限が設定されていれば切り詰める。
+    // (実際の描画はwidget単位のクリップ矩形で自動的に切られるため、
+    //  ここではrectの高さを縮めるだけでよい)
+    if (this->max_height > 0 && this->rect.h > this->max_height) {
+        this->rect.h = this->max_height;
+    }
+
+    // テキスト変更でカーソル位置が範囲外になっていたら補正する
+    if (this->cursor_index >= (int)cursor_slots.size()) this->cursor_index = (int)cursor_slots.size() - 1;
+    if (this->cursor_index < 0) this->cursor_index = 0;
+
     this->needsRender();
 }
 
@@ -171,6 +212,77 @@ void Label::renderRun(const TextRun& run, int x, int y) {
     }
 }
 
+// ---------- 背景の描画 ----------
+void Label::renderBackground() {
+    if (!this->has_background) return; // 無指定時は何も描かない(透明)
+    OSData::frame->fillRect(this->rect.x, this->rect.y, this->rect.w, this->rect.h, this->background_color);
+}
+
+// ---------- ボーダーの描画 ----------
+// rect内側にborder_width分だけ塗る(CSSでいうborder-box方式)。
+// テキストと重なる場合があるので、太くする場合はMaxWidth等で余白を確保すること。
+void Label::renderBorder() {
+    if (this->border_width <= 0) return;
+
+    int bw = this->border_width;
+    int x = this->rect.x;
+    int y = this->rect.y;
+    int w = this->rect.w;
+    int h = this->rect.h;
+
+    // 上辺・下辺
+    OSData::frame->fillRect(x, y, w, bw, this->border_color);
+    OSData::frame->fillRect(x, y + h - bw, w, bw, this->border_color);
+    // 左辺・右辺
+    OSData::frame->fillRect(x, y, bw, h, this->border_color);
+    OSData::frame->fillRect(x + w - bw, y, bw, h, this->border_color);
+}
+
+// ---------- カーソル(挿入位置)の描画 ----------
+void Label::renderCursor() {
+    if (!this->cursor_visible || cursor_slots.empty()) {
+        // 非表示: 前回位置の記録もクリアしておく（次回のmarkDirtyで誤爆しないように）
+        this->prev_cursor_rect.x = 0;
+        this->prev_cursor_rect.y = 0;
+        this->prev_cursor_rect.w = 0;
+        this->prev_cursor_rect.h = 0;
+        return;
+    }
+
+    int idx = this->cursor_index;
+    if (idx < 0) idx = 0;
+    if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
+    const CursorSlot& slot = cursor_slots[idx];
+
+    int cx = this->rect.x + slot.x;
+    int cy = this->rect.y + slot.line * (line_height + line_spacing);
+
+    OSData::frame->fillRect(cx, cy, this->cursor_width, line_height, this->cursor_color);
+
+    Rect cRect;
+    cRect.x = cx;
+    cRect.y = cy;
+    cRect.w = this->cursor_width;
+    cRect.h = line_height;
+    PICO_GFX::markDirty(cRect);
+
+    this->prev_cursor_rect.copy(cRect);
+}
+
+// ---------- カーソル点滅タイマー ----------
+// render()の先頭で毎フレーム呼ばれる想定。needs_redrawの状態に関わらず
+// 時間経過をチェックし、必要ならcursor_visibleを切り替えてdirty化する。
+void Label::updateCursorBlink() {
+    if (!this->cursor_blink_enabled) return;
+
+    unsigned long now = millis();
+    if (now - this->cursor_last_blink_ms >= this->cursor_blink_interval_ms) {
+        this->cursor_last_blink_ms = now;
+        this->cursor_visible = !this->cursor_visible;
+        this->needsRender();
+    }
+}
+
 // ---------- コンストラクタ ----------
 Label::Label(int x, int y, String text) {
     this->rect.x = x;
@@ -186,6 +298,9 @@ Label::Label(String text) {
 
 // ---------- render ----------
 void Label::render() {
+    // 点滅タイマーはneeds_redrawに関わらず毎フレームチェックする
+    this->updateCursorBlink();
+
     if (!this->needs_redraw) return;
     if (!this->visible) return;
 
@@ -195,9 +310,17 @@ void Label::render() {
     // print()側の自動折り返しを無効化
     OSData::frame->setTextWrap(false, false);
 
+    // 背景・ボーダーはテキストより先に描画する
+    this->renderBackground();
+    this->renderBorder();
+
     // 新しく描画
     int cy = this->rect.y;
     for (auto& line : lines) {
+        // 高さ上限で見えない範囲まで来たら以降は描画不要
+        // (通常はwidget単位のクリップ矩形で切られるが、念のための防御)
+        if (this->max_height > 0 && cy >= this->rect.y + this->rect.h) break;
+
         int cx = this->rect.x;
         for (auto& run : line) {
             renderRun(run, cx, cy);
@@ -207,6 +330,10 @@ void Label::render() {
         }
         cy += line_height + line_spacing;
     }
+
+    // カーソル(挿入位置)の描画
+    this->renderCursor();
+
     PICO_GFX::markDirty(this->rect);
 
     this->prev_rect.copy(this->rect);
@@ -233,6 +360,15 @@ int Label::MaxWidth() {
     return this->max_width;
 }
 
+void Label::MaxHeight(int height) {
+    this->max_height = height;
+    relayout();
+}
+
+int Label::MaxHeight() {
+    return this->max_height;
+}
+
 void Label::LineSpacing(int spacing) {
     this->line_spacing = spacing;
     relayout();
@@ -243,33 +379,119 @@ void Label::Color(uint16_t c) {
     this->needsRender();
 }
 
-void Label::X(int x) {
-    this->rect.x = x;
+// ---------- 背景・ボーダー関連 ----------
+void Label::BackgroundColor(uint16_t c) {
+    this->background_color = c;
+    this->has_background = true;
     this->needsRender();
 }
 
-int Label::X() {
-    return this->rect.x;
+uint16_t Label::BackgroundColor() {
+    return this->background_color;
 }
 
-void Label::Y(int y) {
-    this->rect.y = y;
+bool Label::HasBackground() {
+    return this->has_background;
+}
+
+void Label::NoBackground() {
+    this->has_background = false;
     this->needsRender();
 }
 
-int Label::Y() {
-    return this->rect.y;
-}
-
-int Label::W() {
-    return this->rect.w;
-}
-
-int Label::H() {
-    return this->rect.h;
-}
-
-void Label::Visible(bool visible){
-    this->visible = visible;
+void Label::Border(uint16_t color, int width) {
+    this->border_color = color;
+    this->border_width = width;
     this->needsRender();
+}
+
+void Label::BorderColor(uint16_t color) {
+    this->border_color = color;
+    this->needsRender();
+}
+
+uint16_t Label::BorderColor() {
+    return this->border_color;
+}
+
+void Label::BorderWidth(int width) {
+    this->border_width = width;
+    this->needsRender();
+}
+
+int Label::BorderWidth() {
+    return this->border_width;
+}
+
+// ---------- カーソル(挿入位置)関連 ----------
+void Label::CursorPos(int index) {
+    if (cursor_slots.empty()) {
+        this->cursor_index = 0;
+    } else {
+        if (index < 0) index = 0;
+        if (index >= (int)cursor_slots.size()) index = (int)cursor_slots.size() - 1;
+        this->cursor_index = index;
+    }
+    this->needsRender();
+}
+
+int Label::CursorPos() {
+    return this->cursor_index;
+}
+
+void Label::CursorMove(int delta) {
+    this->CursorPos(this->cursor_index + delta);
+}
+
+void Label::CursorToEnd() {
+    this->CursorPos(this->TextLength());
+}
+
+void Label::CursorVisible(bool visible) {
+    this->cursor_visible = visible;
+    this->needsRender();
+}
+
+bool Label::CursorVisible() {
+    return this->cursor_visible;
+}
+
+void Label::CursorBlink(bool enabled, unsigned long interval_ms) {
+    this->cursor_blink_enabled = enabled;
+    this->cursor_blink_interval_ms = interval_ms;
+    this->cursor_last_blink_ms = millis();
+
+    // 有効化した瞬間は見える状態から開始、無効化時は消しておく
+    this->cursor_visible = enabled;
+
+    this->needsRender();
+}
+
+bool Label::CursorBlink() {
+    return this->cursor_blink_enabled;
+}
+
+void Label::CursorColor(uint16_t c) {
+    this->cursor_color = c;
+    this->needsRender();
+}
+
+int Label::TextLength() {
+    return cursor_slots.empty() ? 0 : (int)cursor_slots.size() - 1;
+}
+
+int Label::CursorScreenX() {
+    if (cursor_slots.empty()) return this->rect.x;
+    int idx = this->cursor_index;
+    if (idx < 0) idx = 0;
+    if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
+    return this->rect.x + cursor_slots[idx].x;
+}
+
+int Label::CursorScreenY() {
+    if (cursor_slots.empty()) return this->rect.y;
+    int idx = this->cursor_index;
+    if (idx < 0) idx = 0;
+    if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
+    return this->rect.y + cursor_slots[idx].line * (line_height + line_spacing);
 }

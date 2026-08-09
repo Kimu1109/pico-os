@@ -56,7 +56,24 @@ class Widget {
         virtual bool isOpaque() const { return true; }
 
         virtual bool hitTest(int px, int py) {
-            return px >= this->rect.x && px < this->rect.x + this->rect.w &&
-                py >= this->rect.y && py < this->rect.y + this->rect.h;
+            const Rect rect = this->getRect();
+            return px >= rect.x && px < rect.x + rect.w &&
+                py >= rect.y && py < rect.y + rect.h;
         }
+        virtual void needsRender();
+
+        virtual int X(){ return this->rect.x; }
+        virtual void X(int x){
+            this->rect.x = x;
+            this->needsRender();
+        }
+
+        virtual int Y() { return this->rect.y; }
+        virtual void Y(int y){
+            this->rect.y = y;
+            this->needsRender();
+        }
+
+        virtual int W() { return this->rect.w; }
+        virtual int H() { return this->rect.h; }
 };

@@ -1,5 +1,6 @@
 #include "widgets/Widget.hpp"
 #include "OS_Data.hpp"
+#include "functions/GFX_Functions.hpp"
 
 void Widget::update() {
     if (OSData::isTouchMove && this->is_pressing) {
@@ -34,7 +35,13 @@ void Widget::onPressMove(std::function<void()> callback) {
 
 void Widget::Visible(bool visible){
     this->visible = visible;
+    this->needsRender();
 }
 bool Widget::Visible(){
     return this->visible;
+}
+
+void Widget::needsRender(){
+    PICO_GFX::markDirty(this->getRect());
+    this->needs_redraw = true;
 }

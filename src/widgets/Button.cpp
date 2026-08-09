@@ -3,11 +3,6 @@
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
-void Button::needsRender(){
-    this->needs_redraw = true;
-    PICO_GFX::markDirty(this->getRect());
-}
-
 void Button::calcTextSize(String text){
     this->rect.w = OSData::frame->textWidth(text);
     this->rect.h = OSData::frame->fontHeight();
@@ -19,8 +14,6 @@ void Button::render() {
 
     //前回の描画内容の変更(削除)
     PICO_GFX::markDirty(this->prev_rect);
-
-    //!TODO 重なってるときウィジェットの再描画
 
     //描画で必要な定数共
     int BOX_W = this->rect.w + TEXT_SPACING; //ボタンのボックスの横幅
@@ -58,9 +51,4 @@ void Button::render() {
 
     this->prev_rect.copy(this->getRect());
     this->needs_redraw = false;
-}
-
-void Button::Visible(bool visible){
-    this->visible = visible;
-    this->needsRender();
 }

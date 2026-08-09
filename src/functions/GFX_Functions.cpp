@@ -93,3 +93,9 @@ void PICO_GFX::fillBackground(const Rect& rect){
     OSData::frame->fillRect(rect.x, rect.y, rect.w, rect.h, PICO_BACKGROUND);
     markDirty(rect);
 }
+
+
+void PICO_GFX::fillBorderRect(int16_t x, int16_t y, int16_t w, int16_t h, int background, int border){
+    OSData::frame->fillRect(x, y, w, h, background);
+    OSData::frame->drawRect(x, y, w, h, border);
+}

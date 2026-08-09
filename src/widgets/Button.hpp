@@ -16,7 +16,6 @@ class Button : public Widget {
     public:
         using Widget::onPressStart;
         using Widget::onPressMove;
-        using Widget::Visible;
 
         Button(int x, int y, String text){
             this->rect.x = x;
@@ -41,7 +40,6 @@ class Button : public Widget {
         }
 
         void render() override;
-        void needsRender();
 
         Rect getRect() const override { 
             const int16_t BOX_W = this->rect.w + TEXT_SPACING + _3D_PIX_LEN + 1;
@@ -54,13 +52,4 @@ class Button : public Widget {
                 BOX_H
             };
         }
-    
-        bool hitTest(int px, int py) override {
-            // getRect() 全体をタッチ有効領域とする
-            const Rect r = this->getRect();
-            return px >= r.x && px < r.x + r.w &&
-                py >= r.y && py < r.y + r.h;
-        }
-
-        void Visible(bool visible) override;
 };

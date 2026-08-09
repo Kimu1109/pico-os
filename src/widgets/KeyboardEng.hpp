@@ -127,6 +127,7 @@ class KeyboardEng : public Widget {
         void addInput(String str){
             inputs += str;
             input_label->Text(inputs);
+            input_label->CursorToEnd();
         }
         void removeInput(){
             if(inputs.length() == 0) return;
@@ -154,16 +155,15 @@ class KeyboardEng : public Widget {
 
         void Visible(bool visible) override;
 
-        KeyboardEng(){
+        KeyboardEng(Label* input_label){
             this->rect.w = SCREEN_WIDTH;
             this->rect.h = key_h * 4;
 
             this->rect.x = 0;
             this->rect.y = SCREEN_HEIGHT - this->rect.h;
 
-            input_label = new Label("");
-            input_label->MaxWidth(SCREEN_WIDTH);
-            input_label->Visible(false);
+            this->input_label = input_label;
+            this->input_label->Visible(false);
             this->visible = false;
 
             children_.push_back(input_label);
@@ -175,4 +175,7 @@ class KeyboardEng : public Widget {
         const std::vector<Widget*>& getChildren() const override {
             return children_;
         }
+
+        void X(int x) override {};
+        void Y(int y) override {};
 };

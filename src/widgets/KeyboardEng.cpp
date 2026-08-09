@@ -5,6 +5,11 @@
 void KeyboardEng::Visible(bool visible) {
     this->visible = visible;
     this->input_label->Visible(visible);
+    this->input_label->MaxHeight(SCREEN_HEIGHT - 10 * 2 - this->rect.h);
+
+    if(visible){
+        this->inputs = this->input_label->Text();
+    }
 
     this->needs_redraw = true;
     PICO_GFX::markDirty(this->rect);

@@ -160,7 +160,8 @@ class Keyboard : public Widget {
             }
 
             is_inputs_empty = is_inputs_empty_now;
-            dev_label->Text(inputs_done + "~" + inputs + "~");
+            input_label->Text(inputs_done + "~" + inputs + "~");
+            input_label->CursorToEnd();
         }
 
         void addInput(String input) {
@@ -218,7 +219,6 @@ class Keyboard : public Widget {
             updateInputs();
         }
 
-        void needsRender();
         void switch_font_style(char style);
         void updateImeCandidates();
         void drawCandidates();
@@ -230,9 +230,9 @@ class Keyboard : public Widget {
         using Widget::onPressEnd;
         using Widget::Visible;
 
-        Label* dev_label; //!TODO REMOVE
+        Label* input_label;
 
-        Keyboard(){
+        Keyboard(Label* input_label){
             this->rect.x = 0;
             this->rect.y = START_CANDIDATES_Y;
             this->rect.w = SCREEN_WIDTH;
@@ -242,11 +242,8 @@ class Keyboard : public Widget {
             
             this->visible = false;
 
-            dev_label = new Label(0, 0, ""); //!TODO REMOVE
-            dev_label->MaxWidth(SCREEN_WIDTH);
-            dev_label->Visible(false);
-
-            children_.push_back(dev_label);
+            this->input_label = input_label;
+            children_.push_back(input_label);
         }
 
         void Visible(bool visible) override;
@@ -270,4 +267,6 @@ class Keyboard : public Widget {
             return this->rect;
         }
 
+        void X(int x) override {};
+        void Y(int y) override {};
 };

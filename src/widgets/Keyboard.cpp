@@ -4,16 +4,19 @@
 #include "functions/HitBox_Functions.hpp"
 #include "OS_Data.hpp"
 
-//描画依頼を発行
-void Keyboard::needsRender(){
-    this->needs_redraw = true;
-    PICO_GFX::markDirty(this->getRect());
-}
-
 //表示の切り替え
 void Keyboard::Visible(bool visible) {
     this->visible = visible;
-    this->dev_label->Visible(visible);
+    this->input_label->Visible(visible);
+    this->input_label->MaxHeight(SCREEN_HEIGHT - 10 * 2 - this->rect.h);
+
+    if(!visible){
+        this->input_label->Text(this->inputs_done + this->inputs);
+    }else{
+        this->inputs_done = this->input_label->Text();
+        this->inputs = "";
+        this->updateInputs();
+    }
 
     this->needsRender();
 }

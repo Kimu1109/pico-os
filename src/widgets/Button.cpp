@@ -13,7 +13,8 @@ void Button::render() {
     if(!this->visible) return;
 
     //前回の描画内容の変更(削除)
-    PICO_GFX::markDirty(this->prev_rect);
+    if(this->prev_rect != this->rect)
+        PICO_GFX::markDirty(this->prev_rect);
 
     //描画で必要な定数共
     int BOX_W = this->rect.w + TEXT_SPACING; //ボタンのボックスの横幅

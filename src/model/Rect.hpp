@@ -27,4 +27,11 @@ struct Rect {
         w = o.w;
         h = o.h;
     }
+    
+    bool operator==(const Rect& other) const {
+        return x == other.x && y == other.y && w == other.w && h == other.h;
+    }
+    bool operator!=(const Rect& other) const {
+        return !(*this == other);
+    }
 };

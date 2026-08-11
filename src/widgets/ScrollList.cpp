@@ -61,6 +61,8 @@ void ScrollList::render(){
 }
 
 void ScrollList::onPressStart(){
+    if(this->on_press_start) this->on_press_start();
+
     if(OSData::touchX > this->rect.x + this->rect.w - SCROLL_BAR_W){
         this->is_scrolling = true;
         this->ref_touch_y = OSData::touchY;
@@ -85,6 +87,8 @@ void ScrollList::onPressStart(){
 }
 
 void ScrollList::onPressMove(){
+    if(this->on_press_move) this->on_press_move();
+
     if(this->is_scrolling){
         this->scrollY = min(
             max(this->ref_scroll_y + (OSData::touchY - this->ref_touch_y) * 1.3, 0),
@@ -95,5 +99,7 @@ void ScrollList::onPressMove(){
 }
 
 void ScrollList::onPressEnd(){
+    if(this->on_press_end) this->on_press_end();
+
     this->is_scrolling = false;
 }

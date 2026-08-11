@@ -52,4 +52,6 @@ class Button : public Widget {
                 BOX_H
             };
         }
+
+        bool isOpaque() const override { return true; }
 };

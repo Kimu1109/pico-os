@@ -86,7 +86,7 @@ class Label : public Widget {
 
         void Color(uint16_t c);
 
-        bool isOpaque() const override { return this->has_background; }
+        bool isOpaque() const override { return this->has_background; } //has→不透明, !has→透明
 
         // ---------- 背景・ボーダー関連 ----------
         // 背景色を設定して有効化する（指定しない場合はデフォルトで透明）

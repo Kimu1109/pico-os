@@ -22,6 +22,7 @@ class ScrollList : public Widget {
     public:
         using Widget::onPressStart;
         using Widget::onPressMove;
+        using Widget::onPressEnd;
 
         ScrollList(int16_t x, int16_t y, int16_t w, int16_t h, int16_t default_size = -1){
             this->rect = {x, y, w, h};
@@ -39,4 +40,6 @@ class ScrollList : public Widget {
         void onPressStart() override;
         void onPressMove() override;
         void onPressEnd() override;
+
+        bool isOpaque() const override { return true; }
 };

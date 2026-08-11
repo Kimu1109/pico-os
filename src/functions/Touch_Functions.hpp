@@ -54,6 +54,7 @@ namespace PICO_Touch
                 }
 
                 OSData::isTouched = false;
+                touchSPI.endTransaction();
                 return;
             }
 

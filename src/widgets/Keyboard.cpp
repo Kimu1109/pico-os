@@ -254,7 +254,7 @@ void Keyboard::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    PICO_GFX::fillBackgroundXYWH(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y);
+    PICO_GFX::markDirtyXYWH(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y);
 
     //候補
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y, SCREEN_WIDTH, PICO_BLACK);

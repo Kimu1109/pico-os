@@ -269,4 +269,6 @@ class Keyboard : public Widget {
 
         void X(int x) override {};
         void Y(int y) override {};
+
+        bool isOpaque() const override { return true; }
 };

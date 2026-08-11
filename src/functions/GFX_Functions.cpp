@@ -42,6 +42,7 @@ void PICO_GFX::Setup(){
     frame->clear(PICO_WHITE);
     frame->setFont(&lgfxJapanGothicP_24);
     frame->setTextColor(PICO_BLACK);
+    frame->setTextWrap(false, false);
     OSData::frame = frame;
     markDirtyXYWH(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
@@ -49,33 +50,43 @@ void PICO_GFX::Setup(){
     digitalWrite(22, HIGH);
 
     dirtyRects.reserve(48);
+    isDirtyDeactivates = false;
 }
 
 void PICO_GFX::markDirtyXYWH(int16_t x, int16_t y, int16_t w, int16_t h) {
-    dirtyRects.push_back({x, y, w, h});
+    if(!isDirtyDeactivates)
+        dirtyRects.push_back({x, y, w, h});
 }
 void PICO_GFX::markDirty(const Rect& rect) {
-    dirtyRects.push_back(rect);
+    if(!isDirtyDeactivates)
+        dirtyRects.push_back(rect);
 }
 
-void PICO_GFX::flushDirty() {                                                                                                                                                                                                                                                                                          
-    for (auto& d : dirtyRects) {                                                                                                                                                                                                                                                                                       
-        std::vector<Widget*> hit;                                                                                                                                                                                                                                                                                      
-        for (auto* w : WidgetFunctions::widgets) {                                                                                                                                                                                                                                                                     
-            if (w && w->Visible() && w->getRect().intersects(d)) hit.push_back(w);                                                                                                                                                                                                                                     
-        }                                                                                                                                                                                                                                                                                                              
-                                                                                                                                                                                                                                                                                                                        
-        // ★ 1. 描画前に、この Dirty 領域 d の背景を一度だけ白クリアする                                                                                                                                                                                                                                               
-        fillBackground(d);                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                                        
-        // ★ 2. 下から上へ Widget を重ね描きする (各 Widget は自分の文字/グラフィックのみを描く)                                                                                                                                                                                                                       
-        for (size_t i = 0; i < hit.size(); ++i) {                                                                                                                                                                                                                                                                      
-            Rect clip = hit[i]->getRect().intersection(d);                                                                                                                                                                                                                                                             
-            if (clip.w <= 0 || clip.h <= 0) continue;                                                                                                                                                                                                                                                                  
-            OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);                                                                                                                                                                                                                                                
-            hit[i]->renderForce();                                                                                                                                                                                                                                                                                     
-            OSData::frame->clearClipRect();                                                                                                                                                                                                                                                                            
+void PICO_GFX::flushDirty() {
+    if (dirtyRects.empty()) return;
+
+    Serial.printf("dirtyRects: %d\n", dirtyRects.size());
+
+    for (auto& d : dirtyRects) {
+        std::vector<Widget*> hit;
+        for (auto* w : WidgetFunctions::widgets) {
+            if (w && w->Visible() && w->getRect().intersects(d)) hit.push_back(w);
         }
+
+        // ★ 1. 描画前に、この Dirty 領域 d の背景を一度だけ白クリアする
+        fillBackgroundNoDirty(d);
+
+        // ★ 2. 下から上へ Widget を重ね描きする (各 Widget は自分の文字/グラフィックのみを描く)
+        isDirtyDeactivates = true;
+        for (size_t i = 0; i < hit.size(); ++i) {
+            Rect clip = hit[i]->getRect().intersection(d);
+            if (clip.w <= 0 || clip.h <= 0) continue;
+            OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
+            if(hit[i]->isOpaque()) fillBackgroundNoDirty(hit[i]->getRect());
+            hit[i]->renderForce();
+            OSData::frame->clearClipRect();
+        }
+        isDirtyDeactivates = false;
 
         // ★ 3. 液晶へ転送
         OSData::lcd->setClipRect(d.x, d.y, d.w, d.h);
@@ -98,4 +109,8 @@ void PICO_GFX::fillBackground(const Rect& rect){
 void PICO_GFX::fillBorderRect(int16_t x, int16_t y, int16_t w, int16_t h, int background, int border){
     OSData::frame->fillRect(x, y, w, h, background);
     OSData::frame->drawRect(x, y, w, h, border);
+}
+
+void PICO_GFX::fillBackgroundNoDirty(const Rect& rect){
+    OSData::frame->fillRect(rect.x, rect.y, rect.w, rect.h, PICO_BACKGROUND);
 }

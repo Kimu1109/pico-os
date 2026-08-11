@@ -273,6 +273,7 @@ void Label::renderCursor() {
 // render()の先頭で毎フレーム呼ばれる想定。needs_redrawの状態に関わらず
 // 時間経過をチェックし、必要ならcursor_visibleを切り替えてdirty化する。
 void Label::updateCursorBlink() {
+    if (!this->visible) return;
     if (!this->cursor_blink_enabled) return;
 
     unsigned long now = millis();
@@ -306,9 +307,6 @@ void Label::render() {
 
     // 前回の描画内容を消去
     PICO_GFX::markDirty(this->prev_rect);
-
-    // print()側の自動折り返しを無効化
-    OSData::frame->setTextWrap(false, false);
 
     // 背景・ボーダーはテキストより先に描画する
     this->renderBackground();

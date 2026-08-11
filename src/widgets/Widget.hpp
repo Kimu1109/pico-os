@@ -53,7 +53,7 @@ class Widget {
         virtual void Visible(bool visible);
 
         virtual Rect getRect() const { return rect; }
-        virtual bool isOpaque() const { return true; }
+        virtual bool isOpaque() const { return false; }
 
         virtual bool hitTest(int px, int py) {
             const Rect rect = this->getRect();

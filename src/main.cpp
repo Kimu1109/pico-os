@@ -12,6 +12,7 @@
 #include "widgets/ScrollList.hpp"
 #include "widgets/Icon.hpp"
 #include "widgets/Checkbox.hpp"
+#include "widgets/Image.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -26,6 +27,7 @@ static Icon* iconTest32;
 static Icon* iconTest48;
 static Icon* iconTest64;
 static Checkbox* checkedCheckbox;
+static Image* dolphin;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -65,6 +67,9 @@ void setup() {
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));
+
+        dolphin = new Image("dolphin.pimg", 0, 0);
+        WidgetFunctions::add(dolphin);
     }
 
     hi_button->onPressStart([]() {

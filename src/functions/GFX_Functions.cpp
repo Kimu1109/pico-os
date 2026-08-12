@@ -5,27 +5,7 @@
 
 #include "GFX_Functions.hpp"
 
-void PICO_GFX::Setup(){
-
-    const static int COLORS[16] = {
-        TFT_BLACK,
-        TFT_NAVY,
-        TFT_DARKGREEN,
-        TFT_DARKCYAN,
-        TFT_MAROON,
-        TFT_PURPLE,
-        TFT_OLIVE,
-        TFT_LIGHTGREY,
-        TFT_DARKGREY,
-        TFT_BLUE,
-        TFT_GREEN,
-        TFT_CYAN,
-        TFT_RED,
-        TFT_MAGENTA,
-        TFT_YELLOW,
-        TFT_WHITE
-    };
-
+void PICO_GFX::Setup() {
     OSData::lcd->init();
     OSData::lcd->setBaseColor(TFT_WHITE);
     OSData::lcd->clear(TFT_WHITE);

@@ -3,8 +3,22 @@
 #pragma once
 
 #include "icons_data.h"
+#include "SdFat.h"
+#include "LovyanGFX.h"
 
 namespace IconRender {
+
+struct PimgHeader {
+    uint16_t width;
+    uint16_t height;
+    uint8_t  flags;
+};
+
+struct PimgSprite {
+    LGFX_Sprite sprite;
+    uint16_t width = 0, height = 0;
+    bool transparent = false;
+};
 
 // IconID + IconSize を指定して描画する（通常はこちらを使う）。
 // fgColor: 前景色 (RGB565)。アイコンは単色前提。
@@ -15,6 +29,23 @@ bool DrawIcon(IconID id, IconSize size,
 // IconAssetを直接指定する低レベル版（テーブルを介さず使いたい場合）。
 bool DrawIconRaw(const IconAsset& asset,
                   int32_t x, int32_t y, uint8_t fgColor);
+
+static constexpr uint32_t kPimgHeaderSize = 5;
+
+void DrawImageRLE4bpp(FsFile& f, int x, int y);
+bool LoadPimgToSprite(FsFile& f, PimgSprite& out);
+
+static constexpr uint8_t kPimgFlagTransparent = 0x01;
+
+inline bool ReadPimgHeader(FsFile& f, PimgHeader& header) {
+    uint8_t buf[5];
+    f.seek(0);
+    if (f.read(buf, 5) != 5) return false;
+    header.width  = buf[0] | (static_cast<uint16_t>(buf[1]) << 8);
+    header.height = buf[2] | (static_cast<uint16_t>(buf[3]) << 8);
+    header.flags  = buf[4];
+    return true;
+}
 
 // IconSize -> 実ピクセルサイズ（正方形前提）。
 inline int32_t IconPixelSize(IconSize size) {

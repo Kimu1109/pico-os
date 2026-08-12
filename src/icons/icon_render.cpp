@@ -59,4 +59,52 @@ bool DrawIcon(IconID id, IconSize size,
     return DrawIconRaw(asset, x, y, fgColor);
 }
 
+void DrawImageRLE4bpp(FsFile& f, int x, int y) {
+    PimgHeader header;
+    if (!ReadPimgHeader(f, header)) return;
+
+    const bool transparent = header.flags & kPimgFlagTransparent;
+
+    uint16_t px = 0, py = 0;
+    uint8_t buf[2];
+    f.seek(kPimgHeaderSize);
+    while (py < header.height && f.read(buf, 2) == 2) {
+        uint8_t run = buf[0], idx = buf[1];
+        while (run--) {
+            if (!transparent || idx != 0) {
+                OSData::frame->writePixel(x + px, y + py, idx); // 4bit直書き
+            }
+            if (++px >= header.width) { px = 0; py++; }
+        }
+    }
+}
+
+bool LoadPimgToSprite(FsFile& f, PimgSprite& out) {
+    PimgHeader header;
+    f.seek(0);
+    if (!ReadPimgHeader(f, header)) return false;
+
+    out.width = header.width;
+    out.height = header.height;
+    out.transparent = header.flags & kPimgFlagTransparent;
+
+    out.sprite.setColorDepth(4);
+    out.sprite.createSprite(out.width, out.height);
+    for(int i = 0; i < 16; i++){
+        out.sprite.setPaletteColor(i, PICO_GFX::COLORS[i]);
+    }
+
+    // ロード時に一度だけRLEをデコード（以降このsprite上では発生しない）
+    uint16_t px = 0, py = 0;
+    uint8_t buf[2];
+    while (py < out.height && f.read(buf, 2) == 2) {
+        uint8_t run = buf[0], idx = buf[1];
+        while (run--) {
+            out.sprite.writePixel(px, py, idx);
+            if (++px >= out.width) { px = 0; py++; }
+        }
+    }
+    return true;
+}
+
 }  // namespace IconRender

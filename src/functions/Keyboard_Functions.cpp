@@ -21,3 +21,13 @@ void KeyboardFunctions::Setup(){
     WidgetFunctions::add(OSData::keyboard_eng);
     WidgetFunctions::add(OSData::keyboard_jpn);
 }
+
+void KeyboardFunctions::RegisterInputTarget(ITextInputTarget *target){
+    static_cast<KeyboardEng*>(OSData::keyboard_eng)->SetInputTarget(target);
+    static_cast<KeyboardEng*>(OSData::keyboard_jpn)->SetInputTarget(target);
+}
+
+void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget *target){
+    static_cast<KeyboardEng*>(OSData::keyboard_eng)->RemoveInputTarget(target);
+    static_cast<KeyboardEng*>(OSData::keyboard_jpn)->RemoveInputTarget(target);
+}

@@ -2,13 +2,16 @@
 
 #include "widgets/Widget.hpp"
 #include "widgets/Label.hpp"
+#include "widgets/interfaces/ITextInputTarget.hpp"
 #include "functions/UTF8_Functions.hpp"
 #include "functions/IME_Functions.hpp"
 #include "consts.hpp"
 
-class Keyboard : public Widget {
+
+class Keyboard : public Widget, public ITextInputWidget {
     protected:
         std::vector<Widget*> children_;
+        ITextInputTarget* target = nullptr;
 
     private:
         const int SQUARE_W = SCREEN_WIDTH / 5;
@@ -39,8 +42,8 @@ class Keyboard : public Widget {
             'S', 'M', 'M', 'M', 'M',
             'S', 'S', 'M', 'S', 'M'
         }; //M → medium, S → Small
-        int keys_w[4 * 5];
-        int keys_h[4 * 5];
+        //int keys_w[4 * 5];
+        //int keys_h[4 * 5];
 
         bool is_swiping = false;
         int swipe_index = 0;
@@ -126,20 +129,42 @@ class Keyboard : public Widget {
 
         bool keyboard_mode = false; //false -> jpn, true -> num
         
+        char keysFontStyleEnv(int key_index){
+            if(key_index == 3 * 5 - 1 || key_index == 4 * 5 - 1){ //改行
+                if(is_inputs_empty)
+                    if(this->target && !this->target->GetIsSingleLine())
+                        return 'S'; //決定or改行
+            }
+            return keys_font_style[key_index];
+        }
         String keysEnv(int key_index){
             if(key_index == 3 * 5 - 1){ //改
-                return (
-                    is_inputs_empty ?
-                        (!keyboard_mode ? keys_jpn[key_index] : keys_num[key_index]) :
-                        "確"
-                );
+                if(is_inputs_empty)
+                    if(this->target)
+                        if(this->target->GetIsSingleLine())
+                            return "決";
+                        else
+                            return "決定";
+                    else if(!keyboard_mode)
+                        return keys_jpn[key_index];
+                    else
+                        return keys_num[key_index];
+                else
+                    return "確";
             }
             if(key_index == 4 * 5 - 1){ //行
-                return (
-                    is_inputs_empty ?
-                        (!keyboard_mode ? keys_jpn[key_index] : keys_num[key_index]) : 
-                        "定"
-                );
+                if(is_inputs_empty)
+                    if(this->target)
+                        if(this->target->GetIsSingleLine())
+                            return "定";
+                        else
+                            return "改行";
+                    else if(!keyboard_mode)
+                        return keys_jpn[key_index];
+                    else
+                        return keys_num[key_index];
+                else
+                    return "定";
             }
             return (!keyboard_mode ? keys_jpn[key_index] : keys_num[key_index]);
         }
@@ -151,7 +176,7 @@ class Keyboard : public Widget {
             }
         }
 
-        void updateInputs(){
+        void updateInputs(bool notToCauseEvent){
             bool is_inputs_empty_now = inputs.length() == 0;
             
             if(is_inputs_empty != is_inputs_empty_now){
@@ -162,18 +187,22 @@ class Keyboard : public Widget {
             is_inputs_empty = is_inputs_empty_now;
             input_label->Text(inputs_done + "~" + inputs + "~");
             input_label->CursorToEnd();
+
+            if(!notToCauseEvent){
+                if(this->target) this->target->onTextChanged(this);
+            }
         }
 
         void addInput(String input) {
             inputs += input;
             updateImeCandidates();
-            updateInputs();
+            updateInputs(false);
         }
 
         void removeInput() {
             if(is_inputs_empty){
                 inputs_done = UTF8_Functions::removeLastChar(inputs_done);
-                updateInputs();
+                updateInputs(false);
                 return;
             }
 
@@ -183,7 +212,7 @@ class Keyboard : public Widget {
 
             inputs = UTF8_Functions::removeLastChar(inputs);
             updateImeCandidates();
-            updateInputs();
+            updateInputs(false);
         }
 
         void commitAndClear() {
@@ -191,7 +220,7 @@ class Keyboard : public Widget {
             inputs = "";
             okuri_hira = "";
 
-            updateInputs();
+            updateInputs(false);
         }
 
         void switchDakuten(){
@@ -216,13 +245,12 @@ class Keyboard : public Widget {
 
             inputs = UTF8_Functions::replaceLastChar(inputs, switched_char);
             updateImeCandidates();
-            updateInputs();
+            updateInputs(false);
         }
 
         void switch_font_style(char style);
         void updateImeCandidates();
         void drawCandidates();
-        void calcKeySize();
 
     public:
 
@@ -237,8 +265,6 @@ class Keyboard : public Widget {
             this->rect.y = START_CANDIDATES_Y;
             this->rect.w = SCREEN_WIDTH;
             this->rect.h = SCREEN_HEIGHT - this->rect.y;
-
-            calcKeySize();
             
             this->visible = false;
 
@@ -271,4 +297,27 @@ class Keyboard : public Widget {
         void Y(int y) override {};
 
         bool isOpaque() const override { return true; }
+
+        void SetInputTarget(ITextInputTarget* target) override {
+            this->target = target;
+            this->needsRender();
+        }
+        void RemoveInputTarget(ITextInputTarget* valid_target) override{
+            if(this->target == valid_target){
+                this->target = nullptr;
+            }
+            this->needsRender();
+        }
+        ITextInputTarget* GetInputTarget() override{
+            return this->target;
+        }
+
+        void SetText(String text) override {
+            this->inputs_done = text;
+            this->inputs = "";
+            this->updateInputs(true);
+        }
+        String GetText() override {
+            return this->inputs_done + this->inputs;
+        }
 };

@@ -9,6 +9,9 @@ void KeyboardEng::Visible(bool visible) {
 
     if(visible){
         this->inputs = this->input_label->Text();
+        if(this->target) this->target->onShow(this);
+    }else{
+        if(this->target) this->target->onHide(this);
     }
 
     this->needs_redraw = true;
@@ -21,6 +24,9 @@ void KeyboardEng::onPressStart() {
 
     int key_y = this->rect.y;
     int key_x = 0;
+
+    char mode = this->getMode();
+
     for(int i = 0; i < keys_size; i++){
         Key key = keyEnv(i);
 
@@ -33,6 +39,20 @@ void KeyboardEng::onPressStart() {
             key_x += key.w * key_w;
             continue;
         }
+        if(key.str == "\0"){
+            break;
+        }
+        switch(key.str_size){
+            case 'A':
+            case 'B':
+            case 'C':
+                if(mode != key.str_size){
+                    continue;
+                }
+                break;
+            default:
+                break;
+        }
 
         if(OSData::touchX >= key_x && OSData::touchX <= key_x + key.w * key_w){
             if(OSData::touchY >= key_y && OSData::touchY <= key_y + key_h){
@@ -40,6 +60,9 @@ void KeyboardEng::onPressStart() {
                     addInput(" ");
                 }else if(key.str == "return"){
                     addInput("\n");
+                }else if(key.str == "go" || key.str == "submit"){
+                    this->target->onHide(this);
+                    this->Visible(false);
                 }else if(key.str == "X"){
                     removeInput();
                 }else if(key.str == "↑" || key.str == "#+=") {
@@ -78,6 +101,9 @@ void KeyboardEng::render() {
     if(!this->visible) return;
 
     PICO_GFX::fillBackground(this->rect);
+
+    char mode = this->getMode();
+
     int key_y = this->rect.y;
     int key_x = 0;
     for(int i = 0; i < keys_size; i++){
@@ -92,10 +118,19 @@ void KeyboardEng::render() {
             key_x += key.w * key_w;
             continue;
         }
+        if(key.str == "\0"){
+            break;
+        }
         switch(key.str_size){
-            case 'S':
             case 'N':
                 OSData::frame->setFont(&lgfxJapanGothicP_16);
+                break;
+            case 'A':
+            case 'B':
+            case 'C':
+                if(mode != key.str_size){
+                    continue;
+                }
                 break;
             case 'Z':
             default:

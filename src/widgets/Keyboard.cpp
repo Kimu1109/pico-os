@@ -12,10 +12,12 @@ void Keyboard::Visible(bool visible) {
 
     if(!visible){
         this->input_label->Text(this->inputs_done + this->inputs);
+        if(this->target) this->target->onHide(this);
     }else{
         this->inputs_done = this->input_label->Text();
         this->inputs = "";
-        this->updateInputs();
+        if(this->target) this->target->onShow(this);
+        this->updateInputs(false);
     }
 
     this->needsRender();
@@ -90,17 +92,6 @@ void Keyboard::drawCandidates(){
     OSData::frame->setFont(&lgfxJapanGothicP_24);
 }
 
-
-//キーの横幅と高さを計算
-void Keyboard::calcKeySize(){
-    for(int i = 0; i < 4 * 5; i++){
-        switch_font_style(keys_font_style[i]);
-        keys_w[i] = OSData::frame->textWidth(keysEnv(i));
-        keys_h[i] = OSData::frame->fontHeight();
-    }
-    OSData::frame->setFont(&lgfxJapanGothicP_24);
-}
-
 //タップ開始
 void Keyboard::onPressStart() {
     if(on_press_start) on_press_start();
@@ -141,7 +132,6 @@ void Keyboard::onPressStart() {
     //数字モードへ or ひらがなモードへ
     if(swipe_x_index == 0 && swipe_y_index == 0){
         keyboard_mode = !keyboard_mode;
-        calcKeySize();
         this->needsRender(); //モードが変わったため
     }
     //1文字削除
@@ -155,10 +145,28 @@ void Keyboard::onPressStart() {
     //改行/確定
     if(swipe_x_index == 4 && swipe_y_index >= 2){
         if(is_inputs_empty){
-            inputs = "\n";
+            if(this->target){
+                if(this->target->GetIsSingleLine()){
+                    this->target->onHide(this);
+                    this->Visible(false);
+                }else{
+                    if(swipe_y_index == 2){
+                        this->target->onHide(this);
+                        this->Visible(false);
+                    }else if(swipe_y_index == 3){
+                        inputs = "\n";
+                        commitAndClear();
+                    }
+                }
+            }else{
+                inputs = "\n";
+                commitAndClear();
+            }
+        }else{
+            commitAndClear();
         }
-        commitAndClear();
     }
+
     if(!keyboard_mode){ //ひらがなのときだけ
         //濁点、半濁点
         if(swipe_x_index == 1 && swipe_y_index == 3){
@@ -189,7 +197,7 @@ void Keyboard::onPressStart() {
                 inputs += okuri_hira;
                 okuri_hira = "";
             }
-            updateInputs();
+            updateInputs(false);
             updateImeCandidates();
         }
     }
@@ -264,7 +272,14 @@ void Keyboard::render() {
         OSData::frame->drawFastVLine(i * SQUARE_W, START_KEY_Y, SQUARE_H * 4, PICO_BLACK); //縦線
     }
     for(int i = 0; i < 4; i++){
-        int LINE_WIDTH = i == 3 ? (SCREEN_WIDTH - SQUARE_W) : SCREEN_WIDTH;
+        int LINE_WIDTH = 0;
+        if(i == 3)
+            if(is_inputs_empty && this->target && !this->target->GetIsSingleLine())
+                LINE_WIDTH = SCREEN_WIDTH;
+            else
+                LINE_WIDTH = SCREEN_WIDTH - SQUARE_W;
+        else
+            LINE_WIDTH = SCREEN_WIDTH;
         OSData::frame->drawFastHLine(0, START_KEY_Y + SQUARE_H * i, LINE_WIDTH, PICO_BLACK); //横線
     }
 
@@ -274,10 +289,10 @@ void Keyboard::render() {
             int draw_x = x * SQUARE_W;
             int draw_y = START_KEY_Y + y * SQUARE_H;
 
-            switch_font_style(keys_font_style[x + y * 5]);
+            switch_font_style(keysFontStyleEnv(x + y * 5));
             OSData::frame->setCursor(
-                draw_x + (SQUARE_W - keys_w[x + y * 5]) / 2,
-                draw_y + (SQUARE_H - keys_h[x + y * 5]) / 2
+                draw_x + (SQUARE_W - OSData::frame->textWidth(keysEnv(x + y * 5))) / 2,
+                draw_y + (SQUARE_H - OSData::frame->fontHeight()) / 2
             );
             OSData::frame->print(keysEnv(x + y * 5));
         }

@@ -3,6 +3,7 @@
 #include "widgets/Widget.hpp"
 #include "widgets/Label.hpp"
 #include "functions/UTF8_Functions.hpp"
+#include "widgets/interfaces/ITextInputTarget.hpp"
 
 struct Key {
     String str;
@@ -15,17 +16,23 @@ struct KeyStrSize {
     int h;
 };
 
-class KeyboardEng : public Widget {
+class KeyboardEng : public Widget, public ITextInputWidget {
     protected:
         std::vector<Widget*> children_;
+        ITextInputTarget* target = nullptr;
 
     private:
 
         const static int key_h = 28;
         const static int key_w = 240 / (10 * 2);
 
-        const static int keys_size = 37;
+        const static int keys_size = 43;
 
+        //N→Normal
+        //Z→コマンド
+        //A→Aモード専用
+        //B→Bモード専用
+        //C→Cモード専用
         const Key keys_num[keys_size] = {
             { "1", "[", 2, 'N' },
             { "2", "]", 2, 'N' },
@@ -66,11 +73,22 @@ class KeyboardEng : public Widget {
 
             { "\n", "\n", 0, 'Z' },
 
-            { "ABC", "ABC", 3, 'S' },
-            { "あいう", "あいう", 4, 'S' },
-            { "space", "Space", 8, 'N' },
-            { "return", "Return", 5, 'N'}
+            { "ABC", "ABC", 3, 'N' },
+            { "あいう", "あいう", 4, 'N' },
+
+            { "space", "Space", 8, 'A' },
+            { "return", "Return", 5, 'A'},
+
+            { "space", "Space", 8, 'B'},
+            { "submit", "Submit", 5, 'B'},
+
+            { "space", "Space", 5, 'C'},
+            { "return", "Return", 5, 'C'},
+            { "go", "Go", 3, 'C'},
             //3 + 4 + 8 + 5 = 20spaces
+
+            { "\0", "\0", 0, 'Z'}
+            //end
         };
 
         const Key keys[keys_size] = {
@@ -116,11 +134,22 @@ class KeyboardEng : public Widget {
 
             { "\n", "\n", 0, 'Z' },
 
-            { "123", "123", 3, 'S' },
-            { "あいう", "あいう", 4, 'S' },
-            { "space", "Space", 8, 'N' },
-            { "return", "Return", 5, 'N'}
+            { "123", "123", 3, 'N' },
+            { "あいう", "あいう", 4, 'N' },
+            
+            { "space", "Space", 8, 'A' },
+            { "return", "Return", 5, 'A'},
+
+            { "space", "Space", 8, 'B'},
+            { "submit", "Submit", 5, 'B'},
+
+            { "space", "Space", 5, 'C'},
+            { "return", "Return", 5, 'C'},
+            { "go", "Go", 3, 'C'},
             //3 + 4 + 8 + 5 = 20spaces
+
+            { "\0", "\0", 0, 'Z'}
+            //end
         };
 
         String inputs = "";
@@ -128,12 +157,14 @@ class KeyboardEng : public Widget {
             inputs += str;
             input_label->Text(inputs);
             input_label->CursorToEnd();
+            if(this->target) this->target->onTextChanged(this);
         }
         void removeInput(){
             if(inputs.length() == 0) return;
 
             inputs = UTF8_Functions::removeLastChar(inputs);
             input_label->Text(inputs);
+            if(this->target) this->target->onTextChanged(this);
         }
         Key keyEnv(int index){
             if(isNumMode){ //123モード
@@ -141,6 +172,16 @@ class KeyboardEng : public Widget {
             }else{ //ABCモード
                 return keys[index];
             }
+        }
+        char getMode(){
+            if(this->target){
+                if(this->target->GetIsSingleLine()){
+                    return 'B';
+                }else{
+                    return 'C';
+                }
+            }
+            return 'A';
         }
         bool isUpperCase = false;
         bool isNumMode = false;
@@ -180,4 +221,25 @@ class KeyboardEng : public Widget {
         void Y(int y) override {};
 
         bool isOpaque() const override { return true; }
+
+        void SetInputTarget(ITextInputTarget* target) override {
+            this->target = target;
+        }
+        void RemoveInputTarget(ITextInputTarget* valid_target) override {
+            if(this->target == valid_target){
+                this->target = nullptr;
+            }
+        }
+        ITextInputTarget* GetInputTarget() override {
+            return this->target;
+        }
+
+        void SetText(String text) override {
+            this->inputs = text;
+            input_label->Text(inputs);
+            input_label->CursorToEnd();
+        }
+        String GetText() override {
+            return this->inputs;
+        }
 };

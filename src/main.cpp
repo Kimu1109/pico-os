@@ -13,6 +13,7 @@
 #include "widgets/Icon.hpp"
 #include "widgets/Checkbox.hpp"
 #include "widgets/Image.hpp"
+#include "widgets/Textbox.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -28,6 +29,7 @@ static Icon* iconTest48;
 static Icon* iconTest64;
 static Checkbox* checkedCheckbox;
 static Image* dolphin;
+static Textbox* textbox;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -54,6 +56,7 @@ void setup() {
     iconTest64 = new Icon(16 + 24 + 32 + 48 + 4 * 4, 200, IconID::AppBox, IconSize::Px64);
 
     checkedCheckbox = new Checkbox(0, 270, "二重確認した?");
+    textbox = new Textbox("hi!", 130, 10, 100, 64, false);
 
     WidgetFunctions::add(hi_button);
     WidgetFunctions::add(sd_label);
@@ -64,6 +67,7 @@ void setup() {
     WidgetFunctions::add(iconTest48);
     WidgetFunctions::add(iconTest64);
     WidgetFunctions::add(checkedCheckbox);
+    WidgetFunctions::add(textbox);
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));

@@ -4,7 +4,7 @@
 
 #include "icons_data.h"
 #include "SdFat.h"
-#include "LovyanGFX.h"
+#include <LovyanGFX.hpp>
 
 namespace IconRender {
 
@@ -18,6 +18,7 @@ struct PimgSprite {
     LGFX_Sprite sprite;
     uint16_t width = 0, height = 0;
     bool transparent = false;
+    bool usable = false;
 };
 
 // IconID + IconSize を指定して描画する（通常はこちらを使う）。
@@ -46,6 +47,8 @@ inline bool ReadPimgHeader(FsFile& f, PimgHeader& header) {
     header.flags  = buf[4];
     return true;
 }
+
+void DrawPimgSprite(PimgSprite& s, int x, int y);
 
 // IconSize -> 実ピクセルサイズ（正方形前提）。
 inline int32_t IconPixelSize(IconSize size) {

@@ -72,7 +72,7 @@ void setup() {
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));
 
-        dolphin = new Image("dolphin.pimg", 0, 0);
+        dolphin = new Image("dolphin.pimg", 0, 0, true);
         WidgetFunctions::add(dolphin);
     }
 

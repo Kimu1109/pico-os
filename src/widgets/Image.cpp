@@ -6,13 +6,20 @@
 void Image::render(){
     if(!this->needs_redraw) return;
     if(!this->visible) return;
-    if(!this->imgFile) return;
+    if(this->onRAM){
+        if(!this->sprite.usable) return;
+    }else{
+        if(!this->imgFile) return;
+    }
 
     if(this->rect != this->prev_rect)
         PICO_GFX::markDirty(this->prev_rect);
 
-    OSData::frame->fillRect(this->rect.x, this->rect.y, this->rect.w, this->rect.h, PICO_RED);
-    IconRender::DrawImageRLE4bpp(this->imgFile, this->rect.x, this->rect.y);
+    if(this->onRAM){
+        IconRender::DrawPimgSprite(this->sprite, this->rect.x, this->rect.y);
+    }else{
+        IconRender::DrawImageRLE4bpp(this->imgFile, this->rect.x, this->rect.y);
+    }
 
     PICO_GFX::markDirty(this->rect);
     this->prev_rect.copy(this->rect);
@@ -28,5 +35,17 @@ void Image::updatePath(){
             this->rect.w = head.width;
             this->rect.h = head.height;
         }
+    }
+}
+
+void Image::updateSprite(){
+    this->imgFile = OSData::SD.open(this->path);
+
+    if(this->imgFile){
+        if(IconRender::LoadPimgToSprite(this->imgFile, this->sprite)){
+            this->rect.w = this->sprite.width;
+            this->rect.h = this->sprite.height;
+        }
+        this->imgFile.close();
     }
 }

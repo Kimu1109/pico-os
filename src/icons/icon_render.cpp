@@ -82,7 +82,10 @@ void DrawImageRLE4bpp(FsFile& f, int x, int y) {
 bool LoadPimgToSprite(FsFile& f, PimgSprite& out) {
     PimgHeader header;
     f.seek(0);
-    if (!ReadPimgHeader(f, header)) return false;
+    if (!ReadPimgHeader(f, header)) {
+        out.usable = false;
+        return false;
+    }
 
     out.width = header.width;
     out.height = header.height;
@@ -93,6 +96,7 @@ bool LoadPimgToSprite(FsFile& f, PimgSprite& out) {
     for(int i = 0; i < 16; i++){
         out.sprite.setPaletteColor(i, PICO_GFX::COLORS[i]);
     }
+    out.usable = true;
 
     // ロード時に一度だけRLEをデコード（以降このsprite上では発生しない）
     uint16_t px = 0, py = 0;
@@ -105,6 +109,14 @@ bool LoadPimgToSprite(FsFile& f, PimgSprite& out) {
         }
     }
     return true;
+}
+
+void DrawPimgSprite(PimgSprite& s, int x, int y) {
+    if (s.transparent) {
+        s.sprite.pushSprite(OSData::frame, x, y, 0); // index0を透過キーとして使う
+    } else {
+        s.sprite.pushSprite(OSData::frame, x, y);
+    }
 }
 
 }  // namespace IconRender

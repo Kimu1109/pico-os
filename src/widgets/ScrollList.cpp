@@ -10,6 +10,7 @@ void ScrollList::render(){
     //前の描画分
     PICO_GFX::markDirty(this->prev_rect);
 
+    this->fontApply();
     this->font_h = OSData::frame->fontHeight();
 
     //現在の描画
@@ -31,7 +32,7 @@ void ScrollList::render(){
     //はみ出したテキストの切り取り用
     OSData::frame->setClipRect(this->rect.x, this->rect.y, this->rect.w - SCROLL_BAR_W, this->rect.h);
 
-    //テキスト描画(テスト)
+    //テキスト描画(本番)
     int start_index = this->scrollY / ITEM_HEIGHT;
     int draw_y = start_index * ITEM_HEIGHT - this->scrollY;
     for(int i = start_index; i < this->dataSource->size(); i++){
@@ -53,6 +54,7 @@ void ScrollList::render(){
 
     //枠
     OSData::frame->drawRect(this->rect.x, this->rect.y, this->rect.w, this->rect.h, PICO_BLACK);
+    this->fontDefault();
 
     //前の描画位置を記録
     this->prev_rect.copy(this->rect);

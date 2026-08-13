@@ -123,7 +123,7 @@ void KeyboardEng::render() {
         }
         switch(key.str_size){
             case 'N':
-                OSData::frame->setFont(&lgfxJapanGothicP_16);
+                FontFn::SetSmall();
                 break;
             case 'A':
             case 'B':
@@ -145,7 +145,7 @@ void KeyboardEng::render() {
 
         key_x += key.w * key_w;
     }
-    OSData::frame->setFont(&lgfxJapanGothicP_24);
+    FontFn::SetDefault();
 
     this->needs_redraw = false;
 }

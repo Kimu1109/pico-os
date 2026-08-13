@@ -4,6 +4,8 @@
 #include "widgets/Widget.hpp"
 #include "consts.hpp"
 #include "Arduino.h"
+#include "functions/Font_Functions.hpp"
+#include "widgets/interfaces/IFontImplementation.hpp"
 
 // 1つの書式区間（同じ太字/下線/波線設定を持つ文字列断片）
 struct TextRun {
@@ -20,7 +22,7 @@ struct CursorSlot {
     int x = 0;      // その行内でのX座標(rect.x からの相対値)
 };
 
-class Label : public Widget {
+class Label : public Widget, public IFontImplementation {
     private:
         String raw_text;                          // マークアップ込みの元テキスト
         std::vector<std::vector<TextRun>> lines;   // 解析・折返し後の行データ
@@ -134,4 +136,9 @@ class Label : public Widget {
         // 現在のカーソル位置の絶対画面座標（候補ウィンドウの位置決め等に利用可能）
         int CursorScreenX();
         int CursorScreenY();
+
+        void SetFontSize(FontFn::FontSize size) override {
+            this->f_size = size;
+            this->relayout();
+        }
 };

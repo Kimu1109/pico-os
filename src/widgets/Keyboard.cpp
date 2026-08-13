@@ -27,10 +27,10 @@ void Keyboard::Visible(bool visible) {
 void Keyboard::switch_font_style(char style){
     switch(style) {
         case 'S': //small
-            OSData::frame->setFont(&lgfxJapanGothicP_16);
+            FontFn::SetSmall();
             break;
         case 'M': //medium
-            OSData::frame->setFont(&lgfxJapanGothicP_24);
+            FontFn::SetNormal();
             break;
     }
 }
@@ -42,7 +42,7 @@ void Keyboard::updateImeCandidates() {
         if(okuri_hira.length() != 0){
             strcat(IME_Functions::candidates[i], okuri_hira.c_str());
         }
-        candidates_width[i] = OSData::frame->textWidth(IME_Functions::candidates[i], &lgfxJapanGothicP_16); //横幅の更新
+        candidates_width[i] = OSData::frame->textWidth(IME_Functions::candidates[i], FontFn::GetSmall()); //横幅の更新
     }
 
     candidates_scroll_index = 0;
@@ -58,7 +58,7 @@ void Keyboard::drawCandidates(){
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y + CANDIDATES_H, SCREEN_WIDTH, PICO_BLACK);
 
 
-    OSData::frame->setFont(&lgfxJapanGothicP_16);
+    FontFn::SetSmall();
 
     int cands_x = 0;
     int cands_y = START_CANDIDATES_Y + (CANDIDATES_H - OSData::frame->fontHeight()) / 2;
@@ -72,7 +72,7 @@ void Keyboard::drawCandidates(){
 
     int n = IME_Functions::candidatesCount;
     if(n == 0) { //候補がなかったら描画しない
-        OSData::frame->setFont(&lgfxJapanGothicP_24);
+        FontFn::SetDefault();
         return;
     }
 
@@ -89,7 +89,7 @@ void Keyboard::drawCandidates(){
         cands_x += w + CANDIDATES_MARGIN;
     }
 
-    OSData::frame->setFont(&lgfxJapanGothicP_24);
+    FontFn::SetDefault();
 }
 
 //タップ開始
@@ -297,7 +297,7 @@ void Keyboard::render() {
             OSData::frame->print(keysEnv(x + y * 5));
         }
     }
-    OSData::frame->setFont(&lgfxJapanGothicP_24);
+    FontFn::SetDefault();
     drawCandidates();
 
     //フリックキーの入力

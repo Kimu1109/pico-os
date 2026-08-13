@@ -11,9 +11,17 @@ void Checkbox::render(){
     if(this->prev_rect != this->rect)
         PICO_GFX::markDirty(this->prev_rect);
 
-    IconRender::DrawIcon(this->isChecked ? IconID::CheckboxOn : IconID::CheckboxOff, IconSize::Px24, this->rect.x, this->rect.y, PICO_BLACK);
-    OSData::frame->setCursor(this->rect.x + 24 + 2, this->rect.y);
+    int font_pix = FontFn::GetFontSize(this->f_size);
+
+    IconRender::DrawIcon(
+        this->isChecked ? IconID::CheckboxOn : IconID::CheckboxOff,
+        IconRender::GetIconSize(font_pix),
+        this->rect.x, this->rect.y, PICO_BLACK
+    );
+    OSData::frame->setCursor(this->rect.x + font_pix + 2, this->rect.y);
+    this->fontApply();
     OSData::frame->print(this->text);
+    this->fontDefault();
 
     PICO_GFX::markDirty(this->rect);
     this->prev_rect.copy(this->rect);
@@ -35,8 +43,16 @@ void Checkbox::onPressStart(){
 
 void Checkbox::setText(String text){
     this->text = text;
-    this->rect.w = OSData::frame->textWidth(text) + 24 + 2;
-    this->rect.h = 24;
+
+    this->fontApply();
+
+    int iconSize = FontFn::GetFontSize(this->f_size);
+
+    this->rect.w = OSData::frame->textWidth(text) + iconSize + 2;
+    this->rect.h = OSData::frame->fontHeight();
+
+    this->fontDefault();
+
     if(this->rect.x + this->rect.w > SCREEN_WIDTH){
         this->rect.w = SCREEN_WIDTH - this->rect.x;
     }

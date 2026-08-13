@@ -1,8 +1,9 @@
 #pragma once
 
 #include "widgets/Widget.hpp"
+#include "widgets/interfaces/IFontImplementation.hpp"
 
-class ScrollList : public Widget {
+class ScrollList : public Widget, public IFontImplementation {
 
     private:
         std::vector<String>* dataSource = new std::vector<String>();
@@ -42,4 +43,9 @@ class ScrollList : public Widget {
         void onPressEnd() override;
 
         bool isOpaque() const override { return true; }
+
+        void SetFontSize(FontFn::FontSize size) override {
+            this->f_size = size;
+            this->needsRender();
+        }
 };

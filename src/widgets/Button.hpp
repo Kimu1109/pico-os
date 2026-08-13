@@ -1,10 +1,11 @@
 #pragma once
 
 #include "widgets/Widget.hpp"
+#include "widgets/interfaces/IFontImplementation.hpp"
 #include "consts.hpp"
 #include "Arduino.h"
 
-class Button : public Widget {
+class Button : public Widget, public IFontImplementation {
     private:
         String text;
 
@@ -54,4 +55,10 @@ class Button : public Widget {
         }
 
         bool isOpaque() const override { return true; }
+
+        void SetFontSize(FontFn::FontSize size) override {
+            this->f_size = size;
+            this->calcTextSize(this->text);
+            this->needsRender();
+        }
 };

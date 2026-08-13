@@ -3,6 +3,7 @@
 #include "widgets/Widget.hpp"
 #include "widgets/Label.hpp"
 #include "functions/UTF8_Functions.hpp"
+#include "functions/Font_Functions.hpp"
 #include "widgets/interfaces/ITextInputTarget.hpp"
 
 struct Key {

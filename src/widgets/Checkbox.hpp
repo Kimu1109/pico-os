@@ -1,8 +1,9 @@
 #pragma once
 
-#include "functions/Widget_Functions.hpp"
+#include "widgets/Widget.hpp"
+#include "widgets/interfaces/IFontImplementation.hpp"
 
-class Checkbox : public Widget {
+class Checkbox : public Widget, public IFontImplementation {
     private:
         bool isChecked = false;
         String text = "";
@@ -30,6 +31,11 @@ class Checkbox : public Widget {
         bool IsChecked() { return this->isChecked; }
         void IsChecked(bool isChecked){
             this->isChecked = isChecked;
+            this->needsRender();
+        }
+
+        void SetFontSize(FontFn::FontSize size) override {
+            this->f_size = size;
             this->needsRender();
         }
 };

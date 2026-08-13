@@ -5,6 +5,7 @@
 #include "widgets/interfaces/ITextInputTarget.hpp"
 #include "functions/UTF8_Functions.hpp"
 #include "functions/IME_Functions.hpp"
+#include "functions/Font_Functions.hpp"
 #include "consts.hpp"
 
 

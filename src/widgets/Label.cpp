@@ -73,6 +73,8 @@ std::vector<TextRun> Label::parseMarkup(const String& src) {
 
 // ---------- 折返し込みレイアウト計算 ----------
 void Label::relayout() {
+    this->fontApply();
+
     lines.clear();
     cursor_slots.clear();
     line_height = OSData::frame->fontHeight();
@@ -171,6 +173,7 @@ void Label::relayout() {
     if (this->cursor_index >= (int)cursor_slots.size()) this->cursor_index = (int)cursor_slots.size() - 1;
     if (this->cursor_index < 0) this->cursor_index = 0;
 
+    this->fontDefault();
     this->needsRender();
 }
 
@@ -299,11 +302,12 @@ Label::Label(String text) {
 
 // ---------- render ----------
 void Label::render() {
+    if (!this->visible) return;
+
     // 点滅タイマーはneeds_redrawに関わらず毎フレームチェックする
     this->updateCursorBlink();
 
     if (!this->needs_redraw) return;
-    if (!this->visible) return;
 
     // 前回の描画内容を消去
     PICO_GFX::markDirty(this->prev_rect);
@@ -313,6 +317,7 @@ void Label::render() {
     this->renderBorder();
 
     // 新しく描画
+    this->fontApply();
     int cy = this->rect.y;
     for (auto& line : lines) {
         // 高さ上限で見えない範囲まで来たら以降は描画不要
@@ -328,6 +333,7 @@ void Label::render() {
         }
         cy += line_height + line_spacing;
     }
+    this->fontDefault();
 
     // カーソル(挿入位置)の描画
     this->renderCursor();

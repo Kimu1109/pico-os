@@ -4,8 +4,10 @@
 #include "OS_Data.hpp"
 
 void Button::calcTextSize(String text){
+    this->fontApply();
     this->rect.w = OSData::frame->textWidth(text);
     this->rect.h = OSData::frame->fontHeight();
+    this->fontDefault();
 }
 
 void Button::render() {
@@ -28,6 +30,7 @@ void Button::render() {
     //新しく描画
     PICO_GFX::markDirty(this->getRect());
 
+    this->fontApply();
     if(this->is_pressing){
         OSData::frame->drawRect(this->rect.x + _3D_PIX_LEN, this->rect.y + _3D_PIX_LEN, BOX_W, BOX_H, PICO_BLACK);
         OSData::frame->setCursor(this->rect.x + _3D_PIX_LEN + TEXT_SPACING * 0.5, this->rect.y + _3D_PIX_LEN + TEXT_SPACING * 0.5);
@@ -49,6 +52,7 @@ void Button::render() {
         OSData::frame->setCursor(this->rect.x + TEXT_SPACING * 0.5, this->rect.y + TEXT_SPACING * 0.5);
         OSData::frame->print(this->text);
     }
+    this->fontDefault();
 
     this->prev_rect.copy(this->getRect());
     this->needs_redraw = false;

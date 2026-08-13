@@ -62,4 +62,15 @@ inline int32_t IconPixelSize(IconSize size) {
     }
 }
 
+inline IconSize GetIconSize(int8_t size){
+    switch (size) {
+        case 16: return IconSize::Px16;
+        case 24: return IconSize::Px24;
+        case 32: return IconSize::Px32;
+        case 48: return IconSize::Px48;
+        case 64: return IconSize::Px64;
+        default: return IconSize::Px24;
+    }
+}
+
 }  // namespace IconRender

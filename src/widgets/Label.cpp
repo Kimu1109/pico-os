@@ -179,9 +179,11 @@ void Label::relayout() {
 
 // ---------- 1つのRunを描画 ----------
 void Label::renderRun(const TextRun& run, int x, int y) {
-    OSData::frame->setTextColor(this->color);
+    this->textColorApply();
     OSData::frame->setCursor(x, y);
     OSData::frame->print(run.text);
+    this->textColorDefault();
+    
 
     int rw = OSData::frame->textWidth(run.text);
 
@@ -195,7 +197,7 @@ void Label::renderRun(const TextRun& run, int x, int y) {
     int baseline = y + line_height - 1;
 
     if (run.underline) {
-        OSData::frame->drawFastHLine(x, baseline, rw, this->color);
+        OSData::frame->drawFastHLine(x, baseline, rw, this->text_color);
     }
 
     if (run.wavy) {
@@ -208,7 +210,7 @@ void Label::renderRun(const TextRun& run, int x, int y) {
         for (int dx = step; dx <= rw - step; dx += step) {
             int nx = x + dx;
             int ny = wy + (up ? -amp : amp);
-            OSData::frame->drawLine(px, py, nx, ny, this->color);
+            OSData::frame->drawLine(px, py, nx, ny, this->text_color);
             px = nx; py = ny;
             up = !up;
         }
@@ -378,20 +380,16 @@ void Label::LineSpacing(int spacing) {
     relayout();
 }
 
-void Label::Color(uint16_t c) {
-    this->color = c;
+void Label::SetTextColor(int8_t c) {
+    this->text_color = c;
     this->needsRender();
 }
 
 // ---------- 背景・ボーダー関連 ----------
-void Label::BackgroundColor(uint16_t c) {
-    this->background_color = c;
+void Label::BackgroundColor(int8_t palette_color) {
+    this->background_color = palette_color;
     this->has_background = true;
     this->needsRender();
-}
-
-uint16_t Label::BackgroundColor() {
-    return this->background_color;
 }
 
 bool Label::HasBackground() {
@@ -403,19 +401,10 @@ void Label::NoBackground() {
     this->needsRender();
 }
 
-void Label::Border(uint16_t color, int width) {
+void Label::Border(int8_t color, int width) {
     this->border_color = color;
     this->border_width = width;
     this->needsRender();
-}
-
-void Label::BorderColor(uint16_t color) {
-    this->border_color = color;
-    this->needsRender();
-}
-
-uint16_t Label::BorderColor() {
-    return this->border_color;
 }
 
 void Label::BorderWidth(int width) {

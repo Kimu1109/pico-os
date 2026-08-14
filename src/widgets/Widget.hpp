@@ -3,6 +3,7 @@
 #include <vector>
 #include <functional>
 #include "model/Rect.hpp"
+#include "consts.hpp"
 
 class Widget {
     protected:
@@ -11,6 +12,8 @@ class Widget {
 
         bool needs_redraw = true;
         bool visible = true;
+
+        int8_t background_color = PICO_BACKGROUND;
 
         std::function<void()> on_press_start = nullptr;
         std::function<void()> on_press_move = nullptr;
@@ -76,4 +79,10 @@ class Widget {
 
         virtual int W() { return this->rect.w; }
         virtual int H() { return this->rect.h; }
+
+        virtual int8_t BackgroundColor() { return this->background_color; }
+        virtual void BackgroundColor(int8_t palette_color) {
+            this->background_color = palette_color;
+            this->needsRender();
+        }
 };

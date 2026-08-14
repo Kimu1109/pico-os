@@ -6,6 +6,8 @@
 #include "Arduino.h"
 #include "functions/Font_Functions.hpp"
 #include "widgets/interfaces/IFontImplementation.hpp"
+#include "widgets/interfaces/IBorderColor.hpp"
+#include "widgets/interfaces/ITextColor.hpp"
 
 // 1つの書式区間（同じ太字/下線/波線設定を持つ文字列断片）
 struct TextRun {
@@ -22,7 +24,7 @@ struct CursorSlot {
     int x = 0;      // その行内でのX座標(rect.x からの相対値)
 };
 
-class Label : public Widget, public IFontImplementation {
+class Label : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
     private:
         String raw_text;                          // マークアップ込みの元テキスト
         std::vector<std::vector<TextRun>> lines;   // 解析・折返し後の行データ
@@ -30,13 +32,9 @@ class Label : public Widget, public IFontImplementation {
         int max_height = 0;                        // 0 = 高さ上限無効。超過分は切り詰めて非表示にする
         int line_height = 0;
         int line_spacing = 2;                      // 行間(px)
-        uint16_t color = PICO_BLACK;                // 文字色（下線・波線にも使用）
 
         // ---------- 背景・ボーダー関連 ----------
         bool has_background = false;                // 背景を描画するか（false = 透明）
-        uint16_t background_color = PICO_WHITE;      // 背景色
-
-        uint16_t border_color = PICO_BLACK;          // ボーダーの色
         int border_width = 0;                        // ボーダーの太さ(px)。0 = 非表示
 
         // 波線装飾用のマージン
@@ -67,6 +65,7 @@ class Label : public Widget, public IFontImplementation {
 
     public:
         using Widget::Visible;
+        using Widget::BackgroundColor;
 
         Label(int x, int y, String text);
         Label(String text);
@@ -86,21 +85,22 @@ class Label : public Widget, public IFontImplementation {
 
         void LineSpacing(int spacing);
 
-        void Color(uint16_t c);
+        void SetTextColor(int8_t palette_color) override;
 
         bool isOpaque() const override { return this->has_background; } //has→不透明, !has→透明
 
         // ---------- 背景・ボーダー関連 ----------
         // 背景色を設定して有効化する（指定しない場合はデフォルトで透明）
-        void BackgroundColor(uint16_t c);
-        uint16_t BackgroundColor();
+        void BackgroundColor(int8_t palette_color) override;
         bool HasBackground();
         void NoBackground();   // 背景を透明に戻す
 
         // ボーダー（色・太さ）。width=0でボーダー無し
-        void Border(uint16_t color, int width);
-        void BorderColor(uint16_t color);
-        uint16_t BorderColor();
+        void Border(int8_t color, int width);
+        void SetBorderColor(int8_t palette_color) override {
+            this->border_color = palette_color;
+            this->needsRender();
+        }
         void BorderWidth(int width);
         int BorderWidth();
 

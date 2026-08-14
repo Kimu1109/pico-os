@@ -45,8 +45,6 @@ void PICO_GFX::markDirty(const Rect& rect) {
 void PICO_GFX::flushDirty() {
     if (dirtyRects.empty()) return;
 
-    Serial.printf("dirtyRects: %d\n", dirtyRects.size());
-
     for (auto& d : dirtyRects) {
         std::vector<Widget*> hit;
         for (auto* w : WidgetFunctions::widgets) {
@@ -62,7 +60,7 @@ void PICO_GFX::flushDirty() {
             Rect clip = hit[i]->getRect().intersection(d);
             if (clip.w <= 0 || clip.h <= 0) continue;
             OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
-            if(hit[i]->isOpaque()) fillBackgroundNoDirty(hit[i]->getRect());
+            if(hit[i]->isOpaque()) fillBackgroundNoDirtyCC(hit[i]->getRect(), hit[i]->BackgroundColor());
             hit[i]->renderForce();
             OSData::frame->clearClipRect();
         }
@@ -93,4 +91,7 @@ void PICO_GFX::fillBorderRect(int16_t x, int16_t y, int16_t w, int16_t h, int ba
 
 void PICO_GFX::fillBackgroundNoDirty(const Rect& rect){
     OSData::frame->fillRect(rect.x, rect.y, rect.w, rect.h, PICO_BACKGROUND);
+}
+void PICO_GFX::fillBackgroundNoDirtyCC(const Rect& rect, int8_t color){
+    OSData::frame->fillRect(rect.x, rect.y, rect.w, rect.h, color);
 }

@@ -20,13 +20,13 @@ void ScrollList::render(){
     const int ITEMS_TOTAL_HEIGHT = ITEM_HEIGHT * this->dataSource->size();
 
     //スクロールバーの領域
-    OSData::frame->drawRect(this->rect.x + this->rect.w - SCROLL_BAR_W, this->rect.y, SCROLL_BAR_W, this->rect.h, PICO_BLACK);
+    OSData::frame->drawRect(this->rect.x + this->rect.w - SCROLL_BAR_W, this->rect.y, SCROLL_BAR_W, this->rect.h, this->border_color);
     OSData::frame->fillRect(
         this->rect.x + this->rect.w - SCROLL_BAR_W,
         this->rect.y + ((float)this->scrollY / (float)ITEMS_TOTAL_HEIGHT) * this->rect.h,
         SCROLL_BAR_W,
         ((float)this->rect.h / (float)ITEMS_TOTAL_HEIGHT) * this->rect.h,
-        PICO_BLACK
+        this->border_color
     );
 
     //はみ出したテキストの切り取り用
@@ -38,10 +38,10 @@ void ScrollList::render(){
     for(int i = start_index; i < this->dataSource->size(); i++){
 
         if(selected_index == i){
-            OSData::frame->fillRect(this->rect.x, this->rect.y + draw_y - MARGIN * 0.5, this->rect.w - SCROLL_BAR_W, ITEM_HEIGHT, PICO_BLACK);
-            OSData::frame->setTextColor(PICO_WHITE);
+            OSData::frame->fillRect(this->rect.x, this->rect.y + draw_y - MARGIN * 0.5, this->rect.w - SCROLL_BAR_W, ITEM_HEIGHT, this->text_color);
+            OSData::frame->setTextColor(this->background_color);
         }else{
-            OSData::frame->setTextColor(PICO_BLACK);
+            this->textColorApply();
         }
 
         OSData::frame->setCursor(this->rect.x + MARGIN, this->rect.y + draw_y);
@@ -50,10 +50,11 @@ void ScrollList::render(){
         draw_y += ITEM_HEIGHT;
         if(draw_y > this->rect.h) break;
     }
+    this->textColorDefault();
     OSData::frame->clearClipRect();
 
     //枠
-    OSData::frame->drawRect(this->rect.x, this->rect.y, this->rect.w, this->rect.h, PICO_BLACK);
+    OSData::frame->drawRect(this->rect.x, this->rect.y, this->rect.w, this->rect.h, this->border_color);
     this->fontDefault();
 
     //前の描画位置を記録

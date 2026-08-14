@@ -13,9 +13,9 @@ class Textbox : public Label, public ITextInputTarget {
 
             this->is_single_line = is_single_line;
 
-            BorderColor(PICO_BLACK);
+            SetBorderColor(this->border_color);
             BorderWidth(1);
-            BackgroundColor(PICO_BACKGROUND);
+            BackgroundColor(this->background_color);
         }
 
         using Widget::onPressStart;

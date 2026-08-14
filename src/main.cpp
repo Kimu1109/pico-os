@@ -39,6 +39,8 @@ void setup() {
 
     hi_button = new Button(160, 100, "HI!");
     hi_button->SetFontSize(FontFn::FontSize::Big);
+    hi_button->SetBorderColor(PICO_PURPLE);
+
     sd_label = new Label(0, 50, "sd-failed");
     scroll = new ScrollList(10, 80, 150, 100, 2);
     scroll->Add("こんにちは");
@@ -50,6 +52,9 @@ void setup() {
     scroll->Add("グーパンダック");
     scroll->Add("こんちくは!");
     scroll->SetFontSize(FontFn::FontSize::Small);
+    scroll->SetBorderColor(PICO_RED);
+    scroll->BackgroundColor(PICO_BLUE);
+    scroll->SetTextColor(PICO_GREEN);
 
     iconTest16 = new Icon(0, 200, IconID::AppBox, IconSize::Px16);
     iconTest24 = new Icon(16 + 4, 200, IconID::AppBox, IconSize::Px24);
@@ -61,6 +66,8 @@ void setup() {
     checkedCheckbox->SetFontSize(FontFn::FontSize::Small);
     textbox = new Textbox("hi!", 130, 10, 100, 64, false);
     textbox->SetFontSize(FontFn::FontSize::Small);
+    textbox->BackgroundColor(PICO_DARKGREEN);
+    textbox->SetBorderColor(PICO_DARKCYAN);
 
     WidgetFunctions::add(hi_button);
     WidgetFunctions::add(sd_label);

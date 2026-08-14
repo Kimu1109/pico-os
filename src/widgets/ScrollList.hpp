@@ -2,8 +2,10 @@
 
 #include "widgets/Widget.hpp"
 #include "widgets/interfaces/IFontImplementation.hpp"
+#include "widgets/interfaces/ITextColor.hpp"
+#include "widgets/interfaces/IBorderColor.hpp"
 
-class ScrollList : public Widget, public IFontImplementation {
+class ScrollList : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
 
     private:
         std::vector<String>* dataSource = new std::vector<String>();
@@ -46,6 +48,14 @@ class ScrollList : public Widget, public IFontImplementation {
 
         void SetFontSize(FontFn::FontSize size) override {
             this->f_size = size;
+            this->needsRender();
+        }
+        void SetBorderColor(int8_t palette_color){
+            this->border_color = palette_color;
+            this->needsRender();
+        }
+        void SetTextColor(int8_t palette_color){
+            this->text_color = palette_color;
             this->needsRender();
         }
 };

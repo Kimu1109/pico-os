@@ -12,7 +12,7 @@ void KeyboardFunctions::Setup(){
     label->CursorVisible(true);
     label->CursorBlink(true);
     label->BackgroundColor(PICO_WHITE);
-    label->BorderColor(PICO_BLACK);
+    label->SetBorderColor(PICO_BLACK);
     label->BorderWidth(1);
     label->Visible(false);
 

@@ -2,10 +2,17 @@
 
 #include "widgets/Widget.hpp"
 #include "widgets/interfaces/IFontImplementation.hpp"
+#include "widgets/interfaces/IBorderColor.hpp"
+#include "widgets/interfaces/ITextColor.hpp"
 #include "consts.hpp"
 #include "Arduino.h"
 
-class Button : public Widget, public IFontImplementation {
+class Button :
+    public Widget,
+    public IFontImplementation,
+    public IBorderColor,
+    public ITextColor
+{
     private:
         String text;
 
@@ -59,6 +66,14 @@ class Button : public Widget, public IFontImplementation {
         void SetFontSize(FontFn::FontSize size) override {
             this->f_size = size;
             this->calcTextSize(this->text);
+            this->needsRender();
+        }
+        void SetBorderColor(int8_t palette_color) override {
+            this->border_color = palette_color;
+            this->needsRender();
+        }
+        void SetTextColor(int8_t palette_color) override {
+            this->text_color = palette_color;
             this->needsRender();
         }
 };

@@ -31,27 +31,29 @@ void Button::render() {
     PICO_GFX::markDirty(this->getRect());
 
     this->fontApply();
+    this->textColorApply();
     if(this->is_pressing){
-        OSData::frame->drawRect(this->rect.x + _3D_PIX_LEN, this->rect.y + _3D_PIX_LEN, BOX_W, BOX_H, PICO_BLACK);
+        OSData::frame->drawRect(this->rect.x + _3D_PIX_LEN, this->rect.y + _3D_PIX_LEN, BOX_W, BOX_H, this->border_color);
         OSData::frame->setCursor(this->rect.x + _3D_PIX_LEN + TEXT_SPACING * 0.5, this->rect.y + _3D_PIX_LEN + TEXT_SPACING * 0.5);
         OSData::frame->print(this->text);
     }else{
         //ボタンの周り
-        OSData::frame->drawRect(this->rect.x, this->rect.y, BOX_W, BOX_H, PICO_BLACK);
+        OSData::frame->drawRect(this->rect.x, this->rect.y, BOX_W, BOX_H, this->border_color);
 
         //ボタン立体
-        OSData::frame->drawLine(BOX_L_X, BOX_D_Y, BOX_L_X + _3D_PIX_LEN, BOX_D_Y + _3D_PIX_LEN, PICO_BLACK); //左下
-        OSData::frame->drawLine(BOX_R_X, BOX_D_Y, BOX_R_X + _3D_PIX_LEN, BOX_D_Y + _3D_PIX_LEN, PICO_BLACK); //右下
-        OSData::frame->drawLine(BOX_R_X, this->rect.y, BOX_R_X + _3D_PIX_LEN, this->rect.y + _3D_PIX_LEN, PICO_BLACK); //右上
+        OSData::frame->drawLine(BOX_L_X, BOX_D_Y, BOX_L_X + _3D_PIX_LEN, BOX_D_Y + _3D_PIX_LEN, this->border_color); //左下
+        OSData::frame->drawLine(BOX_R_X, BOX_D_Y, BOX_R_X + _3D_PIX_LEN, BOX_D_Y + _3D_PIX_LEN, this->border_color); //右下
+        OSData::frame->drawLine(BOX_R_X, this->rect.y, BOX_R_X + _3D_PIX_LEN, this->rect.y + _3D_PIX_LEN, this->border_color); //右上
 
         //ボタン後ろ
-        OSData::frame->drawFastHLine(BOX_L_X + _3D_PIX_LEN, BOX_D_Y + _3D_PIX_LEN, BOX_W, PICO_BLACK);
-        OSData::frame->drawFastVLine(BOX_R_X + _3D_PIX_LEN, this->rect.y + _3D_PIX_LEN, BOX_H, PICO_BLACK);
+        OSData::frame->drawFastHLine(BOX_L_X + _3D_PIX_LEN, BOX_D_Y + _3D_PIX_LEN, BOX_W, this->border_color);
+        OSData::frame->drawFastVLine(BOX_R_X + _3D_PIX_LEN, this->rect.y + _3D_PIX_LEN, BOX_H, this->border_color);
 
         //テキスト
         OSData::frame->setCursor(this->rect.x + TEXT_SPACING * 0.5, this->rect.y + TEXT_SPACING * 0.5);
         OSData::frame->print(this->text);
     }
+    this->textColorDefault();
     this->fontDefault();
 
     this->prev_rect.copy(this->getRect());

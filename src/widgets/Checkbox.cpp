@@ -16,11 +16,13 @@ void Checkbox::render(){
     IconRender::DrawIcon(
         this->isChecked ? IconID::CheckboxOn : IconID::CheckboxOff,
         IconRender::GetIconSize(font_pix),
-        this->rect.x, this->rect.y, PICO_BLACK
+        this->rect.x, this->rect.y, this->text_color
     );
     OSData::frame->setCursor(this->rect.x + font_pix + 2, this->rect.y);
     this->fontApply();
+    this->textColorApply();
     OSData::frame->print(this->text);
+    this->textColorDefault();
     this->fontDefault();
 
     PICO_GFX::markDirty(this->rect);

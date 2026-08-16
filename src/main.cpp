@@ -14,7 +14,7 @@
 #include "widgets/Checkbox.hpp"
 #include "widgets/Image.hpp"
 #include "widgets/Textbox.hpp"
-#include "widgets/CanvasPixel.hpp"
+#include "widgets/CanvasRaster.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -31,7 +31,7 @@ static Icon* iconTest64;
 static Checkbox* checkedCheckbox;
 static Image* dolphin;
 static Textbox* textbox;
-static CanvasPixel* canvasPixel;
+static CanvasRaster* canvasPixel;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -71,7 +71,8 @@ void setup() {
     textbox->BackgroundColor(PICO_DARKGREEN);
     textbox->SetBorderColor(PICO_DARKCYAN);
 
-    canvasPixel = new CanvasPixel(0, 200, 240, 320 - 200);
+    canvasPixel = new CanvasRaster(0, 200, 240, 320 - 200);
+    canvasPixel->Mode(Canvas::Mode::Arrow);
 
     WidgetFunctions::add(hi_button);
     WidgetFunctions::add(sd_label);

@@ -14,7 +14,7 @@
 #include "widgets/Checkbox.hpp"
 #include "widgets/Image.hpp"
 #include "widgets/Textbox.hpp"
-#include "widgets/CanvasRaster.hpp"
+#include "widgets/NumberSlider.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -31,7 +31,7 @@ static Icon* iconTest64;
 static Checkbox* checkedCheckbox;
 static Image* dolphin;
 static Textbox* textbox;
-static CanvasRaster* canvasPixel;
+static NumberSlider* slider_w;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -71,8 +71,7 @@ void setup() {
     textbox->BackgroundColor(PICO_DARKGREEN);
     textbox->SetBorderColor(PICO_DARKCYAN);
 
-    canvasPixel = new CanvasRaster(0, 200, 240, 320 - 200);
-    canvasPixel->Mode(Canvas::Mode::Arrow);
+    slider_w = new NumberSlider(10, 320 - 30, 120);
 
     WidgetFunctions::add(hi_button);
     WidgetFunctions::add(sd_label);
@@ -84,7 +83,7 @@ void setup() {
     WidgetFunctions::add(iconTest64);
     WidgetFunctions::add(checkedCheckbox);
     WidgetFunctions::add(textbox);
-    WidgetFunctions::add(canvasPixel);
+    WidgetFunctions::add(slider_w);
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));
@@ -104,8 +103,6 @@ void setup() {
         iconTest32->SetIconId(iconId);
         iconTest48->SetIconId(iconId);
         iconTest64->SetIconId(iconId);
-
-        canvasPixel->CanvasClear();
     });
 
     KeyboardFunctions::Setup();

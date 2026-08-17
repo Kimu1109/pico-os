@@ -18,8 +18,8 @@ void KeyboardFunctions::Setup(){
 
     OSData::keyboard_eng = new KeyboardEng(label);
     OSData::keyboard_jpn = new Keyboard(label);
-    WidgetFunctions::add(OSData::keyboard_eng);
-    WidgetFunctions::add(OSData::keyboard_jpn);
+    WidgetFunctions::addDialog(OSData::keyboard_eng);
+    WidgetFunctions::addDialog(OSData::keyboard_jpn);
 }
 
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget *target){

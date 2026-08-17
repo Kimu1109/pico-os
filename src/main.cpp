@@ -75,7 +75,9 @@ void setup() {
 
     slider_w = new NumberSlider(10, 320 - 30, 120);
 
-    msgDialog = new MsgDialog("こんにちは", "いいえ", "はい");
+    msgDialog = new MsgDialog("こんにちは?", "いいえ", "はい");
+    msgDialog->IconId(IconID::InfoCircle);
+    msgDialog->VisibleIcon(true);
     msgDialog->Visible(true);
 
     WidgetFunctions::add(hi_button);
@@ -89,7 +91,7 @@ void setup() {
     WidgetFunctions::add(checkedCheckbox);
     WidgetFunctions::add(textbox);
     WidgetFunctions::add(slider_w);
-    WidgetFunctions::add(msgDialog);
+    WidgetFunctions::addDialog(msgDialog);
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));

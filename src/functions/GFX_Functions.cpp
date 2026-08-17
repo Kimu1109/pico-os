@@ -50,6 +50,13 @@ void PICO_GFX::flushDirty() {
         for (auto* w : WidgetFunctions::widgets) {
             if (w && w->Visible() && w->getRect().intersects(d)) hit.push_back(w);
         }
+        for (int k = WidgetFunctions::count_dialog - 1; k >= 0; k--) {
+            Widget* root = WidgetFunctions::dialog_roots[k];
+            if (!root || !root->Visible()) continue;
+            root->visitAll([&hit, &d](Widget* w) {
+                if (w && w->Visible() && w->getRect().intersects(d)) hit.push_back(w);
+            });
+        }
 
         // ★ 1. 描画前に、この Dirty 領域 d の背景を一度だけ白クリアする
         fillBackgroundNoDirty(d);

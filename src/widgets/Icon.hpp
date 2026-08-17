@@ -1,3 +1,5 @@
+#pragma once
+
 #include "widgets/Widget.hpp"
 #include "icons/icons_data.h"
 #include "icons/icon_render.h"

@@ -14,7 +14,7 @@ class NumberSlider : public Widget {
         bool visibleNum = true;
         int decimalPlacesNum = 2;
 
-        int8_t color;
+        int8_t color = PICO_BLACK;
 
         void updateTextW();
 

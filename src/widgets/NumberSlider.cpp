@@ -13,7 +13,12 @@ void NumberSlider::updateTextW(){
 void NumberSlider::onPressMove(){
     Widget::onPressMove();
 
-    this->value = this->minValue + ((float)(OSData::touchX - this->rect.x - text_max_w - 2) / (float)(this->rect.w - text_max_w - 2)) * (float)(this->maxValue - this->minValue);
+    int numW = 0;
+    if(this->visibleNum){
+        numW = text_max_w + 2;
+    }
+
+    this->value = this->minValue + ((float)(OSData::touchX - this->rect.x - numW) / (float)(this->rect.w - numW)) * (float)(this->maxValue - this->minValue);
     this->value = min(max(this->value, this->minValue), this->maxValue);
     this->needsRender();
 }
@@ -28,7 +33,9 @@ void NumberSlider::render(){
         String numStr = String(this->value, this->decimalPlacesNum);
         numW = text_max_w + 2;
         OSData::frame->setCursor(this->rect.x, this->rect.y + (this->rect.h - OSData::frame->fontHeight()) / 2);
+        OSData::frame->setTextColor(this->color);
         OSData::frame->print(numStr);
+        OSData::frame->setTextColor(PICO_FORECOLOR);
         FontFn::SetNormal();
     }
 

@@ -44,7 +44,7 @@ class Widget {
         virtual void onPressEnd(std::function<void()> callback);
 
         virtual void onPressMove();
-        void onPressMove(std::function<void()> callback);
+        virtual void onPressMove(std::function<void()> callback);
 
         virtual void render() = 0;
         virtual void renderForce() {

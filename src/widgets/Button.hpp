@@ -19,11 +19,19 @@ class Button :
         const int TEXT_SPACING = 6;
         const int _3D_PIX_LEN = 2;
 
+        int text_w;
+        int text_h;
+
+        bool allowTextSpacing = true;
+
         void calcTextSize(String text);
 
     public:
         using Widget::onPressStart;
         using Widget::onPressMove;
+
+        using Widget::W;
+        using Widget::H;
 
         Button(int x, int y, String text){
             this->rect.x = x;
@@ -50,8 +58,10 @@ class Button :
         void render() override;
 
         Rect getRect() const override { 
-            const int16_t BOX_W = this->rect.w + TEXT_SPACING + _3D_PIX_LEN + 1;
-            const int16_t BOX_H = this->rect.h + TEXT_SPACING + _3D_PIX_LEN + 1;
+            const int text_spacing = this->allowTextSpacing ? TEXT_SPACING : 0;
+
+            const int16_t BOX_W = this->rect.w + text_spacing + _3D_PIX_LEN + 1;
+            const int16_t BOX_H = this->rect.h + text_spacing + _3D_PIX_LEN + 1;
     
             return {
                 this->rect.x,
@@ -76,4 +86,17 @@ class Button :
             this->text_color = palette_color;
             this->needsRender();
         }
+
+        void W(int w){
+            this->rect.w = w;
+        }
+        void H(int h){
+            this->rect.h = h;
+        }
+
+        void AllowTextSpacing(bool v){
+            this->allowTextSpacing = v;
+            this->needsRender();
+        }
+        bool AllowTextSpacing() { return this->allowTextSpacing; }
 };

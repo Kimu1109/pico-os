@@ -15,7 +15,7 @@
 #include "widgets/Image.hpp"
 #include "widgets/Textbox.hpp"
 #include "widgets/NumberSlider.hpp"
-#include "widgets/MsgDialog.hpp"
+#include "widgets/InputDialog.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -33,7 +33,7 @@ static Checkbox* checkedCheckbox;
 static Image* dolphin;
 static Textbox* textbox;
 static NumberSlider* slider_w;
-static MsgDialog* msgDialog;
+static InputDialog* inputDialog;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -75,10 +75,8 @@ void setup() {
 
     slider_w = new NumberSlider(10, 320 - 30, 120);
 
-    msgDialog = new MsgDialog("こんにちは?", "いいえ", "はい");
-    msgDialog->IconId(IconID::InfoCircle);
-    msgDialog->VisibleIcon(true);
-    msgDialog->Visible(true);
+    inputDialog = new InputDialog("お名前は?");
+    inputDialog->Visible(true);
 
     WidgetFunctions::add(hi_button);
     WidgetFunctions::add(sd_label);
@@ -91,7 +89,7 @@ void setup() {
     WidgetFunctions::add(checkedCheckbox);
     WidgetFunctions::add(textbox);
     WidgetFunctions::add(slider_w);
-    WidgetFunctions::addDialog(msgDialog);
+    WidgetFunctions::addDialog(inputDialog);
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));

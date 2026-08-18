@@ -18,6 +18,8 @@ class Widget {
         std::function<void()> on_press_start = nullptr;
         std::function<void()> on_press_move = nullptr;
         std::function<void()> on_press_end = nullptr;
+
+        void draw_dialog_background();
     
     public:
         bool is_pressing = false;

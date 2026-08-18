@@ -1,8 +1,8 @@
-#include "widgets/MsgDialog.hpp"
-#include "OS_Data.hpp"
+#include "widgets/InputDialog.hpp"
 #include "functions/GFX_Functions.hpp"
+#include "OS_Data.hpp"
 
-void MsgDialog::render(){
+void InputDialog::render(){
     if(!needs_redraw) return;
     if(!visible) return;
 

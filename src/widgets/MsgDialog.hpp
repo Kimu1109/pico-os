@@ -31,6 +31,8 @@ class MsgDialog : public Widget {
         constexpr static int BUTTON_WIDTH = DIALOG_WIDTH - MARGIN * 2;
 
         void updateWidgets(){
+            this->rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+
             msg_icon->X(BASE_X + MARGIN + (DIALOG_WIDTH - MARGIN * 2 - ICON_SIZE) * 0.5);
             msg_icon->Y(BASE_Y + MARGIN);
             msg_icon->Visible(this->icon_visible);
@@ -84,7 +86,6 @@ class MsgDialog : public Widget {
         };
 
         void render() override;
-        bool isOpaque() const override { return true; };
 
         bool VisibleIcon() { return this->icon_visible; }
         void VisibleIcon(bool v){

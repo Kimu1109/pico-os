@@ -71,7 +71,7 @@ class Button :
             };
         }
 
-        bool isOpaque() const override { return true; }
+        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::OPAQUE; }
 
         void SetFontSize(FontFn::FontSize size) override {
             this->f_size = size;

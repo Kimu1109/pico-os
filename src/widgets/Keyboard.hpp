@@ -262,10 +262,7 @@ class Keyboard : public Widget, public ITextInputWidget {
         Label* input_label;
 
         Keyboard(Label* input_label){
-            this->rect.x = 0;
-            this->rect.y = START_CANDIDATES_Y;
-            this->rect.w = SCREEN_WIDTH;
-            this->rect.h = SCREEN_HEIGHT - this->rect.y;
+            this->rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
             
             this->visible = false;
 
@@ -279,25 +276,14 @@ class Keyboard : public Widget, public ITextInputWidget {
         void onPressEnd() override;
         void render() override;
 
+        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::TRANSLUCENT; }
+
         const std::vector<Widget*>& getChildren() const override {
             return children_;
-        }
-        Rect getRect() const override { 
-            if(this->is_swiping){
-                return {
-                    0,
-                    (int16_t)(START_KEY_Y - SQUARE_H),
-                    SCREEN_WIDTH,
-                    (int16_t)(SCREEN_HEIGHT - (START_KEY_Y - SQUARE_H))
-                };
-            }
-            return this->rect;
         }
 
         void X(int x) override {};
         void Y(int y) override {};
-
-        bool isOpaque() const override { return true; }
 
         void SetInputTarget(ITextInputTarget* target) override {
             this->target = target;

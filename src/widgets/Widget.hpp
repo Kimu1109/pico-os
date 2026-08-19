@@ -5,6 +5,14 @@
 #include "model/Rect.hpp"
 #include "consts.hpp"
 
+namespace WidgetTools {
+    enum RenderMode {
+        OPAQUE,        // 完全に不透明
+        CLEAR,         // 完全に透明、背景を再描画
+        TRANSLUCENT    // 部分的に透明、背景は再描画しない
+    };
+};
+
 class Widget {
     protected:
         Rect rect;
@@ -18,8 +26,6 @@ class Widget {
         std::function<void()> on_press_start = nullptr;
         std::function<void()> on_press_move = nullptr;
         std::function<void()> on_press_end = nullptr;
-
-        void draw_dialog_background();
     
     public:
         bool is_pressing = false;
@@ -58,7 +64,7 @@ class Widget {
         virtual void Visible(bool visible);
 
         virtual Rect getRect() const { return rect; }
-        virtual bool isOpaque() const { return false; }
+        virtual WidgetTools::RenderMode GetRenderMode() const { return WidgetTools::CLEAR; }
 
         virtual bool hitTest(int px, int py) {
             const Rect rect = this->getRect();

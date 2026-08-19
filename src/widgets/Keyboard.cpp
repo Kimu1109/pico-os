@@ -262,7 +262,9 @@ void Keyboard::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    PICO_GFX::markDirtyXYWH(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y);
+    PICO_GFX::drawDialogBackground();
+    OSData::frame->fillRect(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y, this->background_color);
+    PICO_GFX::markDirtyXYWH(0, START_KEY_Y - SQUARE_H, SCREEN_WIDTH, SCREEN_HEIGHT - START_KEY_Y + SQUARE_H);
 
     //候補
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y, SCREEN_WIDTH, PICO_BLACK);

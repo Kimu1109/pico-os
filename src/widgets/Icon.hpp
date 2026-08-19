@@ -29,7 +29,7 @@ class Icon : public Widget {
 
         void render() override;
 
-        bool isOpaque() const override { return this->opaque; };
+        WidgetTools::RenderMode GetRenderMode() const override { return this->opaque ? WidgetTools::OPAQUE : WidgetTools::CLEAR; };
         void setOpaque(bool opaque) { 
             this->opaque = opaque;
             this->needsRender();

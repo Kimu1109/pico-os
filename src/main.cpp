@@ -75,9 +75,6 @@ void setup() {
 
     slider_w = new NumberSlider(10, 320 - 30, 120);
 
-    inputDialog = new InputDialog("お名前は?");
-    inputDialog->Visible(true);
-
     WidgetFunctions::add(hi_button);
     WidgetFunctions::add(sd_label);
     WidgetFunctions::add(scroll);
@@ -89,7 +86,6 @@ void setup() {
     WidgetFunctions::add(checkedCheckbox);
     WidgetFunctions::add(textbox);
     WidgetFunctions::add(slider_w);
-    WidgetFunctions::addDialog(inputDialog);
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));
@@ -113,6 +109,11 @@ void setup() {
 
     KeyboardFunctions::Setup();
     IME_Functions::setup();
+
+    inputDialog = new InputDialog("お名前は?");
+    inputDialog->Visible(true);
+
+    WidgetFunctions::addDialog(inputDialog);
 
     pinMode(LED_BUILTIN, HIGH);
 }

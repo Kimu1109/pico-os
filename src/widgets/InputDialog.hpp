@@ -67,6 +67,8 @@ class InputDialog : public Widget {
 
         void render() override;
 
+        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::TRANSLUCENT; }
+
         const std::vector<Widget*>& getChildren() const override {
             return children_;
         }

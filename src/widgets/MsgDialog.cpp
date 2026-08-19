@@ -8,8 +8,8 @@ void MsgDialog::render(){
 
     PICO_GFX::markDirty(this->rect);
 
-    this->draw_dialog_background();
-
+    PICO_GFX::drawDialogBackground();
+    
     OSData::frame->fillRect(BASE_X, BASE_Y, DIALOG_WIDTH, DIALOG_HEIGHT, this->background_color);
     OSData::frame->drawRect(BASE_X, BASE_Y, DIALOG_WIDTH, DIALOG_HEIGHT, PICO_BLACK);
 

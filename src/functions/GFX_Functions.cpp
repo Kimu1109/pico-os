@@ -58,16 +58,42 @@ void PICO_GFX::flushDirty() {
             });
         }
 
-        // ★ 1. 描画前に、この Dirty 領域 d の背景を一度だけ白クリアする
-        fillBackgroundNoDirty(d);
+        // 描画開始インデックスと背景クリア要否の決定（手前から奥へスキャン）
+        size_t start_idx = 0;
+        bool clear_bg = true;
 
-        // ★ 2. 下から上へ Widget を重ね描きする (各 Widget は自分の文字/グラフィックのみを描く)
+        for (int i = (int)hit.size() - 1; i >= 0; --i) {
+            Widget* w = hit[i];
+            WidgetTools::RenderMode mode = w->GetRenderMode();
+
+            if (mode == WidgetTools::TRANSLUCENT) {
+                // TRANSLUCENT: 背景ウィジェットの更新を行わない
+                start_idx = i;
+                clear_bg = false;
+                break;
+            }
+            else if (mode == WidgetTools::OPAQUE && w->getRect().contains(d)) {
+                // OPAQUE かつ Dirty領域全体を覆っている場合、下位ウィジェット描画および背景白クリアをスキップ
+                start_idx = i;
+                clear_bg = false;
+                break;
+            }
+        }
+
+        // ★ 1. 必要な場合のみ背景を白クリア
+        if (clear_bg) {
+            fillBackgroundNoDirty(d);
+        }
+
+        // ★ 2. start_idx から上へ Widget を重ね描きする
         isDirtyDeactivates = true;
-        for (size_t i = 0; i < hit.size(); ++i) {
+        for (size_t i = start_idx; i < hit.size(); ++i) {
             Rect clip = hit[i]->getRect().intersection(d);
             if (clip.w <= 0 || clip.h <= 0) continue;
             OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
-            if(hit[i]->isOpaque()) fillBackgroundNoDirtyCC(hit[i]->getRect(), hit[i]->BackgroundColor());
+            if (hit[i]->GetRenderMode() == WidgetTools::OPAQUE) {
+                fillBackgroundNoDirtyCC(hit[i]->getRect(), hit[i]->BackgroundColor());
+            }
             hit[i]->renderForce();
             OSData::frame->clearClipRect();
         }
@@ -101,4 +127,18 @@ void PICO_GFX::fillBackgroundNoDirty(const Rect& rect){
 }
 void PICO_GFX::fillBackgroundNoDirtyCC(const Rect& rect, int8_t color){
     OSData::frame->fillRect(rect.x, rect.y, rect.w, rect.h, color);
+}
+
+void PICO_GFX::drawDialogBackground(){
+    constexpr int16_t kSpacing   = 6;  // 斜線の間隔(px)
+    constexpr uint8_t  kColor    = PICO_BLACK;
+
+    for (int16_t y = 0; y < SCREEN_HEIGHT; ++y) {
+        // このy行で最初にヒットするxオフセットを計算
+        int16_t offset = ((kSpacing - (y % kSpacing)) % kSpacing);
+        for (int16_t x = offset; x < SCREEN_WIDTH; x += kSpacing) {
+            OSData::frame->writePixel(x , y, kColor);
+            OSData::frame->writePixel(x, SCREEN_HEIGHT - y, kColor);
+        }
+    }
 }

@@ -221,7 +221,7 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         void X(int x) override {};
         void Y(int y) override {};
 
-        bool isOpaque() const override { return true; }
+        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
         void SetInputTarget(ITextInputTarget* target) override {
             this->target = target;

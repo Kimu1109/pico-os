@@ -87,7 +87,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
 
         void SetTextColor(int8_t palette_color) override;
 
-        bool isOpaque() const override { return this->has_background; } //has→不透明, !has→透明
+        WidgetTools::RenderMode GetRenderMode() const override { return this->has_background ? WidgetTools::OPAQUE : WidgetTools::CLEAR; } //has→不透明, !has→透明
 
         // ---------- 背景・ボーダー関連 ----------
         // 背景色を設定して有効化する（指定しない場合はデフォルトで透明）

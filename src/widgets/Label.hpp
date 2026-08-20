@@ -28,6 +28,11 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
     private:
         String raw_text;                          // マークアップ込みの元テキスト
         std::vector<std::vector<TextRun>> lines;   // 解析・折返し後の行データ
+        std::vector<std::vector<TextRun>> placeholder_lines;
+
+        String placeholder_text = "";
+        int8_t placeholder_color = PICO_LIGHTGREY;
+
         int max_width = 0;                         // 0 = 折り返し無効（\nのみ改行）
         int max_height = 0;                        // 0 = 高さ上限無効。超過分は切り詰めて非表示にする
         int default_height = 0;                     // 0 = 下限無効。行数由来の高さがこれより小さい場合はこちらを採用
@@ -58,6 +63,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         static std::vector<String> splitChars(const String& s);
         std::vector<TextRun> parseMarkup(const String& src);
         void relayout();
+        void relayoutPlaceholder();
         void renderRun(const TextRun& run, int x, int y);
         void renderBackground();
         void renderBorder();
@@ -77,6 +83,11 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         // ---------- setter / getter ----------
         void Text(String text);
         String Text();
+
+        void Placeholder(String text);
+        String Placeholder();
+
+        void PlaceholderColor(int8_t color);
 
         void MaxWidth(int width);
         int MaxWidth();

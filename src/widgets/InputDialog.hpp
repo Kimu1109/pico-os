@@ -67,6 +67,7 @@ class InputDialog : public Widget {
             this->label = new Label(label_content);
 
             this->input = new Textbox("", 0, 0, 0, 0, true);
+            this->input->Placeholder("ここに入力...");
 
             this->submit_button = new Button("決定");
             this->submit_button->onPressStart([this](){

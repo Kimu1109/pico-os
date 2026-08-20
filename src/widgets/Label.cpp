@@ -178,8 +178,45 @@ void Label::relayout() {
     if (this->cursor_index >= (int)cursor_slots.size()) this->cursor_index = (int)cursor_slots.size() - 1;
     if (this->cursor_index < 0) this->cursor_index = 0;
 
+    relayoutPlaceholder(); //プレスホルダー
+
     this->fontDefault();
     this->needsRender();
+}
+
+// ---------- プレースホルダーの折返し計算 ----------
+// raw_textとは独立して計算する。markupも通常テキストと同様に解釈される。
+void Label::relayoutPlaceholder() {
+    placeholder_lines.clear();
+    if (placeholder_text.length() == 0) return;
+
+    std::vector<TextRun> runs = parseMarkup(placeholder_text);
+    std::vector<TextRun> curLine;
+    int curWidth = 0;
+    TextRun piece;
+
+    for (auto& run : runs) {
+        piece.text = "";
+        piece.bold = run.bold;
+        piece.underline = run.underline;
+        piece.wavy = run.wavy;
+
+        for (auto& ch : splitChars(run.text)) {
+            int cw = OSData::frame->textWidth(ch);
+            if (run.bold) cw += 1;
+
+            if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
+                if (piece.text.length() > 0) { curLine.push_back(piece); piece.text = ""; }
+                placeholder_lines.push_back(curLine);
+                curLine.clear();
+                curWidth = 0;
+            }
+            piece.text += ch;
+            curWidth += cw;
+        }
+        if (piece.text.length() > 0) { curLine.push_back(piece); piece.text = ""; }
+    }
+    placeholder_lines.push_back(curLine);
 }
 
 // ---------- 1つのRunを描画 ----------
@@ -326,9 +363,16 @@ void Label::render() {
     // 新しく描画
     this->fontApply();
     int cy = this->rect.y;
-    for (auto& line : lines) {
-        // 高さ上限で見えない範囲まで来たら以降は描画不要
-        // (通常はwidget単位のクリップ矩形で切られるが、念のための防御)
+
+    // raw_textが空 かつ プレースホルダーが設定されていれば、そちらを描画対象にする
+    bool show_placeholder = this->raw_text.length() == 0 && this->placeholder_text.length() > 0;
+    auto& render_lines = show_placeholder ? this->placeholder_lines : this->lines;
+
+    // プレースホルダー描画中だけ一時的に色を差し替える(renderRunの実装はそのまま流用)
+    int8_t saved_text_color = this->text_color;
+    if (show_placeholder) this->text_color = this->placeholder_color;
+
+    for (auto& line : render_lines) {
         if (this->max_height > 0 && cy >= this->rect.y + this->rect.h) break;
 
         int cx = this->rect.x;
@@ -340,6 +384,8 @@ void Label::render() {
         }
         cy += line_height + line_spacing;
     }
+
+    if (show_placeholder) this->text_color = saved_text_color;
     this->fontDefault();
 
     // カーソル(挿入位置)の描画
@@ -360,6 +406,20 @@ void Label::Text(String text) {
 
 String Label::Text() {
     return this->raw_text;
+}
+
+void Label::Placeholder(String text) {
+    this->placeholder_text = text;
+    relayout();
+}
+
+String Label::Placeholder() {
+    return this->placeholder_text;
+}
+
+void Label::PlaceholderColor(int8_t color) {
+    this->placeholder_color = color;
+    this->needsRender();
 }
 
 void Label::MaxWidth(int width) {

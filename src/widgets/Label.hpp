@@ -30,6 +30,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         std::vector<std::vector<TextRun>> lines;   // 解析・折返し後の行データ
         int max_width = 0;                         // 0 = 折り返し無効（\nのみ改行）
         int max_height = 0;                        // 0 = 高さ上限無効。超過分は切り詰めて非表示にする
+        int default_height = 0;                     // 0 = 下限無効。行数由来の高さがこれより小さい場合はこちらを採用
         int line_height = 0;
         int line_spacing = 2;                      // 行間(px)
 
@@ -82,6 +83,9 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
 
         void MaxHeight(int height);
         int MaxHeight();
+
+        void DefaultHeight(int height);
+        int DefaultHeight();
 
         void LineSpacing(int spacing);
 

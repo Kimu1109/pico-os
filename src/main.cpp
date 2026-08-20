@@ -110,7 +110,7 @@ void setup() {
     KeyboardFunctions::Setup();
     IME_Functions::setup();
 
-    inputDialog = new InputDialog("お名前は?");
+    inputDialog = new InputDialog("お名前は?", false);
     inputDialog->Visible(true);
 
     WidgetFunctions::addDialog(inputDialog);

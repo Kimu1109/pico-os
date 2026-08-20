@@ -162,6 +162,11 @@ void Label::relayout() {
     this->rect.h = lines.empty() ? 0
             : (int)lines.size() * (line_height + line_spacing) - line_spacing + kDecorationMargin;
 
+    // デフォルト高さ(下限)より小さければデフォルト高さを採用
+    if (this->default_height > 0 && this->rect.h < this->default_height) {
+        this->rect.h = this->default_height;
+    }
+
     // 高さ上限が設定されていれば切り詰める。
     // (実際の描画はwidget単位のクリップ矩形で自動的に切られるため、
     //  ここではrectの高さを縮めるだけでよい)
@@ -373,6 +378,15 @@ void Label::MaxHeight(int height) {
 
 int Label::MaxHeight() {
     return this->max_height;
+}
+
+void Label::DefaultHeight(int height) {
+    this->default_height = height;
+    relayout();
+}
+
+int Label::DefaultHeight() {
+    return this->default_height;
 }
 
 void Label::LineSpacing(int spacing) {

@@ -22,7 +22,7 @@ void KeyboardEng::Visible(bool visible) {
 void KeyboardEng::onPressStart() {
     if(on_press_start) on_press_start();
 
-    int key_y = this->rect.y;
+    int key_y = SCREEN_HEIGHT - key_h * 4;
     int key_x = 0;
 
     char mode = this->getMode();
@@ -100,11 +100,13 @@ void KeyboardEng::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    PICO_GFX::fillBackground(this->rect);
+    PICO_GFX::markDirty(this->rect);
+    PICO_GFX::drawDialogBackground();
+    OSData::frame->fillRect(0, SCREEN_HEIGHT - key_h * 4, SCREEN_WIDTH, key_h * 4, this->background_color);
 
     char mode = this->getMode();
 
-    int key_y = this->rect.y;
+    int key_y = SCREEN_HEIGHT - key_h * 4;
     int key_x = 0;
     for(int i = 0; i < keys_size; i++){
         Key key = keyEnv(i);

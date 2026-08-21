@@ -26,6 +26,7 @@ class Widget {
         std::function<void()> on_press_start = nullptr;
         std::function<void()> on_press_move = nullptr;
         std::function<void()> on_press_end = nullptr;
+        std::function<void()> on_press_out = nullptr;
     
     public:
         bool is_pressing = false;
@@ -53,6 +54,9 @@ class Widget {
 
         virtual void onPressMove();
         virtual void onPressMove(std::function<void()> callback);
+
+        virtual void onPressOut();
+        virtual void onPressOut(std::function<void()> callback);
 
         virtual void render() = 0;
         virtual void renderForce() {

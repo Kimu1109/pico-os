@@ -22,10 +22,15 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
 
         int selected_index = -1;
 
+        std::function<void(int index)> on_selectitem = nullptr;
+
     public:
         using Widget::onPressStart;
         using Widget::onPressMove;
         using Widget::onPressEnd;
+
+        using Widget::W;
+        using Widget::H;
 
         ScrollList(int16_t x, int16_t y, int16_t w, int16_t h, int16_t default_size = -1){
             this->rect = {x, y, w, h};
@@ -44,6 +49,13 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         void onPressMove() override;
         void onPressEnd() override;
 
+        void onSelectItem(std::function<void(int index)> on_selectitem) {
+            this->on_selectitem = on_selectitem;
+        }
+        void onSelectItem(){
+            if(this->on_selectitem) this->on_selectitem(this->selected_index);
+        }
+
         WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::OPAQUE; }
 
         void SetFontSize(FontFn::FontSize size) override {
@@ -57,5 +69,33 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         void SetTextColor(int8_t palette_color){
             this->text_color = palette_color;
             this->needsRender();
+        }
+
+        void W(int w){
+            this->rect.w = w;
+            this->needsRender();
+        }
+        void H(int h){
+            this->rect.h = h;
+            this->needsRender();
+        }
+
+        void SelectedIndex(int index){
+            this->selected_index = index;
+            this->needsRender();
+        }
+        int SelectedIndex(){ return this->selected_index; }
+
+        String ItemAt(int index){
+            if(index == -1) return "";
+
+            return this->dataSource->at(index);
+        }
+
+        int getFittingHeight(){
+            if(this->font_h == 0){
+                this->font_h = FontFn::GetFontSize(GetFontSize());
+            }
+            return min(this->dataSource->size() * (this->font_h + MARGIN), SCREEN_HEIGHT - this->rect.y);
         }
 };

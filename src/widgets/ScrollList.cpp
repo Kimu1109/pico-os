@@ -79,6 +79,7 @@ void ScrollList::onPressStart(){
             const int draw_start_y = this->rect.y + draw_y - MARGIN * 0.5;
             if(OSData::touchY > draw_start_y && OSData::touchY <= draw_start_y + ITEM_HEIGHT){
                 this->selected_index = i;
+                this->onSelectItem();
                 this->needs_redraw = true;
                 break;
             }

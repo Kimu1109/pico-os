@@ -59,8 +59,9 @@ void WidgetFunctions::updateAll()
         pressingWidget = nullptr;
     }
 
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < count; i++){
         widgets[i]->update(); // 下から順に描画
+    }
 
     for (int d = count_dialog - 1; d >= 0; d--) {
         if (dialog_roots[d] && dialog_roots[d]->Visible()) {

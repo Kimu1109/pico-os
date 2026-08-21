@@ -16,6 +16,7 @@
 #include "widgets/Textbox.hpp"
 #include "widgets/NumberSlider.hpp"
 #include "widgets/InputDialog.hpp"
+#include "widgets/DropdownMenu.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -34,6 +35,7 @@ static Image* dolphin;
 static Textbox* textbox;
 static NumberSlider* slider_w;
 static InputDialog* inputDialog;
+static DropdownMenu* dropdown;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -74,6 +76,14 @@ void setup() {
     textbox->SetBorderColor(PICO_DARKCYAN);
 
     slider_w = new NumberSlider(10, 320 - 30, 120);
+    dropdown = new DropdownMenu(160, 150, 80);
+    dropdown->Add("Japan");
+    dropdown->Add("にほん");
+    dropdown->Add("日本");
+    dropdown->Add("jap");
+    dropdown->Add("JPN");
+    dropdown->Add(".jp");
+    dropdown->Add("japone");
 
     WidgetFunctions::add(hi_button);
     WidgetFunctions::add(sd_label);
@@ -86,6 +96,7 @@ void setup() {
     WidgetFunctions::add(checkedCheckbox);
     WidgetFunctions::add(textbox);
     WidgetFunctions::add(slider_w);
+    WidgetFunctions::add(dropdown);
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));

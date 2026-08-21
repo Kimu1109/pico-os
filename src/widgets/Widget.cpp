@@ -10,6 +10,9 @@ void Widget::update() {
         this->onPressEnd();
         is_pressing = false;
     }
+    if (OSData::isTouchStart && !this->is_pressing){
+        this->onPressOut();
+    }
 
     render();
 }
@@ -32,9 +35,17 @@ void Widget::onPressMove(){
 void Widget::onPressMove(std::function<void()> callback) {
     this->on_press_move = callback;
 }
+void Widget::onPressOut(){
+    if (on_press_out) on_press_out();
+}
+void Widget::onPressOut(std::function<void()> callback){
+    this->on_press_out = callback;
+}
 
 void Widget::Visible(bool visible){
-    this->visible = visible;
+    this->visitAll([&visible](Widget* w) {
+        w->visible = visible;
+    });
     this->needsRender();
 }
 bool Widget::Visible(){

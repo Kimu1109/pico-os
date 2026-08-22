@@ -15,7 +15,7 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
         using Widget::onPressStart;
 
         Checkbox(int16_t x, int16_t y, String text){
-            this->rect = {x, y, 0, 0};
+            this->l_rect = {x, y, 0, 0};
             this->setText(text);
         }
 

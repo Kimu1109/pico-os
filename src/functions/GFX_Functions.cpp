@@ -48,13 +48,13 @@ void PICO_GFX::flushDirty() {
     for (auto& d : dirtyRects) {
         std::vector<Widget*> hit;
         for (auto* w : WidgetFunctions::widgets) {
-            if (w && w->Visible() && w->getRect().intersects(d)) hit.push_back(w);
+            if (w && w->Visible() && w->getScreenRect().intersects(d)) hit.push_back(w);
         }
         for (int k = WidgetFunctions::count_dialog - 1; k >= 0; k--) {
             Widget* root = WidgetFunctions::dialog_roots[k];
             if (!root || !root->Visible()) continue;
             root->visitAll([&hit, &d](Widget* w) {
-                if (w && w->Visible() && w->getRect().intersects(d)) hit.push_back(w);
+                if (w && w->Visible() && w->getScreenRect().intersects(d)) hit.push_back(w);
             });
         }
 
@@ -72,7 +72,7 @@ void PICO_GFX::flushDirty() {
                 clear_bg = false;
                 break;
             }
-            else if (mode == WidgetTools::OPAQUE && w->getRect().contains(d)) {
+            else if (mode == WidgetTools::OPAQUE && w->getScreenRect().contains(d)) {
                 // OPAQUE かつ Dirty領域全体を覆っている場合、下位ウィジェット描画および背景白クリアをスキップ
                 start_idx = i;
                 clear_bg = false;
@@ -88,11 +88,11 @@ void PICO_GFX::flushDirty() {
         // ★ 2. start_idx から上へ Widget を重ね描きする
         isDirtyDeactivates = true;
         for (size_t i = start_idx; i < hit.size(); ++i) {
-            Rect clip = hit[i]->getRect().intersection(d);
+            Rect clip = hit[i]->getScreenRect().intersection(d);
             if (clip.w <= 0 || clip.h <= 0) continue;
             OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
             if (hit[i]->GetRenderMode() == WidgetTools::OPAQUE) {
-                fillBackgroundNoDirtyCC(hit[i]->getRect(), hit[i]->BackgroundColor());
+                fillBackgroundNoDirtyCC(hit[i]->getScreenRect(), hit[i]->BackgroundColor());
             }
             hit[i]->renderForce();
             OSData::frame->clearClipRect();

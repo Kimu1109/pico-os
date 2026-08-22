@@ -8,25 +8,27 @@ void Checkbox::render(){
     if(!this->visible) return;
     if(!this->needs_redraw) return;
 
-    if(this->prev_rect != this->rect)
-        PICO_GFX::markDirty(this->prev_rect);
+    if(this->prev_l_rect != this->l_rect)
+        PICO_GFX::markDirty(getScreenPrevRect());
 
     int font_pix = FontFn::GetFontSize(this->f_size);
+
+    const Rect g_rect = this->getScreenRect();
 
     IconRender::DrawIcon(
         this->isChecked ? IconID::CheckboxOn : IconID::CheckboxOff,
         IconRender::GetIconSize(font_pix),
-        this->rect.x, this->rect.y, this->text_color
+        g_rect.x, g_rect.y, this->text_color
     );
-    OSData::frame->setCursor(this->rect.x + font_pix + 2, this->rect.y);
+    OSData::frame->setCursor(g_rect.x + font_pix + 2, g_rect.y);
     this->fontApply();
     this->textColorApply();
     OSData::frame->print(this->text);
     this->textColorDefault();
     this->fontDefault();
 
-    PICO_GFX::markDirty(this->rect);
-    this->prev_rect.copy(this->rect);
+    PICO_GFX::markDirty(g_rect);
+    this->prev_l_rect.copy(this->l_rect);
 
     this->needs_redraw = false;
 }
@@ -34,9 +36,11 @@ void Checkbox::render(){
 void Checkbox::onPressStart(){
     if(this->on_press_start) this->on_press_start();
 
+    const Rect g_rect = getScreenRect();
+
     if(
-        OSData::touchX >= this->rect.x && OSData::touchX <= this->rect.x + 24 &&
-        OSData::touchY >= this->rect.y && OSData::touchY <= this->rect.y + this->rect.h
+        OSData::touchX >= g_rect.x && OSData::touchX <= g_rect.x + 24 &&
+        OSData::touchY >= g_rect.y && OSData::touchY <= g_rect.y + g_rect.h
     ){
         this->isChecked = !this->isChecked;
         this->needsRender();
@@ -50,12 +54,12 @@ void Checkbox::setText(String text){
 
     int iconSize = FontFn::GetFontSize(this->f_size);
 
-    this->rect.w = OSData::frame->textWidth(text) + iconSize + 2;
-    this->rect.h = OSData::frame->fontHeight();
+    this->l_rect.w = OSData::frame->textWidth(text) + iconSize + 2;
+    this->l_rect.h = OSData::frame->fontHeight();
 
     this->fontDefault();
 
-    if(this->rect.x + this->rect.w > SCREEN_WIDTH){
-        this->rect.w = SCREEN_WIDTH - this->rect.x;
+    if(this->getScreenX() + this->l_rect.w > SCREEN_WIDTH){
+        this->l_rect.w = SCREEN_WIDTH - this->getScreenX();
     }
 }

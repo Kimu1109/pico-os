@@ -33,7 +33,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         using Widget::H;
 
         ScrollList(int16_t x, int16_t y, int16_t w, int16_t h, int16_t default_size = -1){
-            this->rect = {x, y, w, h};
+            this->l_rect = {x, y, w, h};
             if(default_size != -1){
                 dataSource->reserve(default_size);
             }
@@ -72,11 +72,11 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         }
 
         void W(int w){
-            this->rect.w = w;
+            this->l_rect.w = w;
             this->needsRender();
         }
         void H(int h){
-            this->rect.h = h;
+            this->l_rect.h = h;
             this->needsRender();
         }
 
@@ -96,6 +96,6 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
             if(this->font_h == 0){
                 this->font_h = FontFn::GetFontSize(GetFontSize());
             }
-            return min(this->dataSource->size() * (this->font_h + MARGIN), SCREEN_HEIGHT - this->rect.y);
+            return min(this->dataSource->size() * (this->font_h + MARGIN), SCREEN_HEIGHT - this->getScreenY());
         }
 };

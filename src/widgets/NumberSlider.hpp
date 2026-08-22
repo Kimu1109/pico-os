@@ -24,7 +24,7 @@ class NumberSlider : public Widget {
         using Widget::H;
 
         NumberSlider(int16_t x, int16_t y, int16_t w){
-            this->rect = {x, y, w, 21};
+            this->l_rect = {x, y, w, 21};
             this->updateTextW();
         }
 
@@ -62,11 +62,11 @@ class NumberSlider : public Widget {
         }
 
         void W(int16_t w){
-            this->rect.w = w;
+            this->l_rect.w = w;
             this->needsRender();
         }
         void H(int16_t h){
-            this->rect.h = h;
+            this->l_rect.h = h;
             this->needsRender();
         }
 

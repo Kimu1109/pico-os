@@ -12,17 +12,19 @@ void Image::render(){
         if(!this->imgFile) return;
     }
 
-    if(this->rect != this->prev_rect)
-        PICO_GFX::markDirty(this->prev_rect);
+    if(this->l_rect != this->prev_l_rect)
+        PICO_GFX::markDirty(this->prev_l_rect);
+
+    const Rect g_rect = this->getScreenRect();
 
     if(this->onRAM){
-        IconRender::DrawPimgSprite(this->sprite, this->rect.x, this->rect.y);
+        IconRender::DrawPimgSprite(this->sprite, g_rect.x, g_rect.y);
     }else{
-        IconRender::DrawImageRLE4bpp(this->imgFile, this->rect.x, this->rect.y);
+        IconRender::DrawImageRLE4bpp(this->imgFile, g_rect.x, g_rect.y);
     }
 
-    PICO_GFX::markDirty(this->rect);
-    this->prev_rect.copy(this->rect);
+    PICO_GFX::markDirty(g_rect);
+    this->prev_l_rect.copy(this->l_rect);
 
     this->needs_redraw = false;
 }
@@ -32,8 +34,8 @@ void Image::updatePath(){
     if(this->imgFile){
         IconRender::PimgHeader head;
         if(IconRender::ReadPimgHeader(this->imgFile, head)){
-            this->rect.w = head.width;
-            this->rect.h = head.height;
+            this->l_rect.w = head.width;
+            this->l_rect.h = head.height;
         }
     }
 }
@@ -43,8 +45,8 @@ void Image::updateSprite(){
 
     if(this->imgFile){
         if(IconRender::LoadPimgToSprite(this->imgFile, this->sprite)){
-            this->rect.w = this->sprite.width;
-            this->rect.h = this->sprite.height;
+            this->l_rect.w = this->sprite.width;
+            this->l_rect.h = this->sprite.height;
         }
         this->imgFile.close();
     }

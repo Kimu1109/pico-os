@@ -8,7 +8,7 @@
 void Keyboard::Visible(bool visible) {
     this->visible = visible;
     this->input_label->Visible(visible);
-    this->input_label->MaxHeight(SCREEN_HEIGHT - 10 * 2 - this->rect.h);
+    this->input_label->MaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
 
     if(!visible){
         this->input_label->Text(this->inputs_done + this->inputs);

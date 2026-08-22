@@ -15,16 +15,17 @@ class Icon : public Widget {
     public:
 
         Icon(int16_t x, int16_t y, IconID iconId, IconSize iconSize){
-            this->rect.x = x;
-            this->rect.y = y;
-            this->rect.w = IconRender::IconPixelSize(iconSize);
-            this->rect.h = this->rect.w;
+            const int16_t size_px = IconRender::IconPixelSize(iconSize);
+            this->l_rect = {
+                x, y,
+                size_px, size_px
+            };
 
             this->iconId = iconId;
             this->iconSize = iconSize;
             this->color = PICO_BLACK;
 
-            this->prev_rect.copy(this->rect);
+            this->prev_l_rect.copy(this->l_rect);
         }
 
         void render() override;
@@ -45,8 +46,8 @@ class Icon : public Widget {
         void SetIconSize(IconSize iconSize){
             this->iconSize = iconSize;
 
-            this->rect.w = IconRender::IconPixelSize(iconSize);
-            this->rect.h = this->rect.w;
+            this->l_rect.w = IconRender::IconPixelSize(iconSize);
+            this->l_rect.h = this->l_rect.w;
 
             this->needsRender();
         }

@@ -4,7 +4,7 @@
 
 void Label::needsRender(){
     this->needs_redraw = true;
-    PICO_GFX::markDirty(this->rect);
+    PICO_GFX::markDirty(this->getScreenRect());
     // カーソルの前回描画位置も消去対象に含める
     // (本体rect外にカーソルがはみ出すケースの取りこぼし防止)
     PICO_GFX::markDirty(this->prev_cursor_rect);
@@ -158,20 +158,20 @@ void Label::relayout() {
         if (lw > maxLineWidth) maxLineWidth = lw;
     }
 
-    this->rect.w = (max_width > 0) ? max_width : maxLineWidth;
-    this->rect.h = lines.empty() ? 0
+    this->l_rect.w = (max_width > 0) ? max_width : maxLineWidth;
+    this->l_rect.h = lines.empty() ? 0
             : (int)lines.size() * (line_height + line_spacing) - line_spacing + kDecorationMargin;
 
     // デフォルト高さ(下限)より小さければデフォルト高さを採用
-    if (this->default_height > 0 && this->rect.h < this->default_height) {
-        this->rect.h = this->default_height;
+    if (this->default_height > 0 && this->l_rect.h < this->default_height) {
+        this->l_rect.h = this->default_height;
     }
 
     // 高さ上限が設定されていれば切り詰める。
     // (実際の描画はwidget単位のクリップ矩形で自動的に切られるため、
     //  ここではrectの高さを縮めるだけでよい)
-    if (this->max_height > 0 && this->rect.h > this->max_height) {
-        this->rect.h = this->max_height;
+    if (this->max_height > 0 && this->l_rect.h > this->max_height) {
+        this->l_rect.h = this->max_height;
     }
 
     // テキスト変更でカーソル位置が範囲外になっていたら補正する
@@ -262,7 +262,8 @@ void Label::renderRun(const TextRun& run, int x, int y) {
 // ---------- 背景の描画 ----------
 void Label::renderBackground() {
     if (!this->has_background) return; // 無指定時は何も描かない(透明)
-    OSData::frame->fillRect(this->rect.x, this->rect.y, this->rect.w, this->rect.h, this->background_color);
+    const Rect g_rect = this->getScreenRect();
+    OSData::frame->fillRect(g_rect.x, g_rect.y, g_rect.w, g_rect.h, this->background_color);
 }
 
 // ---------- ボーダーの描画 ----------
@@ -272,10 +273,12 @@ void Label::renderBorder() {
     if (this->border_width <= 0) return;
 
     int bw = this->border_width;
-    int x = this->rect.x;
-    int y = this->rect.y;
-    int w = this->rect.w;
-    int h = this->rect.h;
+
+    const Rect g_rect = this->getScreenRect();
+    int x = g_rect.x;
+    int y = g_rect.y;
+    int w = g_rect.w;
+    int h = g_rect.h;
 
     // 上辺・下辺
     OSData::frame->fillRect(x, y, w, bw, this->border_color);
@@ -301,8 +304,8 @@ void Label::renderCursor() {
     if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
     const CursorSlot& slot = cursor_slots[idx];
 
-    int cx = this->rect.x + slot.x;
-    int cy = this->rect.y + slot.line * (line_height + line_spacing);
+    int cx = this->getScreenRect().x + slot.x;
+    int cy = this->getScreenRect().y + slot.line * (line_height + line_spacing);
 
     OSData::frame->fillRect(cx, cy, this->cursor_width, line_height, this->cursor_color);
 
@@ -333,8 +336,8 @@ void Label::updateCursorBlink() {
 
 // ---------- コンストラクタ ----------
 Label::Label(int x, int y, String text) {
-    this->rect.x = x;
-    this->rect.y = y;
+    this->l_rect.x = x;
+    this->l_rect.y = y;
     this->Text(text);
     this->needs_redraw = true;
 }
@@ -354,7 +357,8 @@ void Label::render() {
     if (!this->needs_redraw) return;
 
     // 前回の描画内容を消去
-    PICO_GFX::markDirty(this->prev_rect);
+    if(prev_l_rect != l_rect)
+        PICO_GFX::markDirty(getScreenPrevRect());
 
     // 背景・ボーダーはテキストより先に描画する
     this->renderBackground();
@@ -362,7 +366,9 @@ void Label::render() {
 
     // 新しく描画
     this->fontApply();
-    int cy = this->rect.y;
+
+    const Rect g_rect = getScreenRect();
+    int cy = g_rect.y;
 
     // raw_textが空 かつ プレースホルダーが設定されていれば、そちらを描画対象にする
     bool show_placeholder = this->raw_text.length() == 0 && this->placeholder_text.length() > 0;
@@ -373,9 +379,9 @@ void Label::render() {
     if (show_placeholder) this->text_color = this->placeholder_color;
 
     for (auto& line : render_lines) {
-        if (this->max_height > 0 && cy >= this->rect.y + this->rect.h) break;
+        if (this->max_height > 0 && cy >= g_rect.y + g_rect.h) break;
 
-        int cx = this->rect.x;
+        int cx = g_rect.x;
         for (auto& run : line) {
             renderRun(run, cx, cy);
             int rw = OSData::frame->textWidth(run.text);
@@ -391,9 +397,9 @@ void Label::render() {
     // カーソル(挿入位置)の描画
     this->renderCursor();
 
-    PICO_GFX::markDirty(this->rect);
+    PICO_GFX::markDirty(g_rect);
 
-    this->prev_rect.copy(this->rect);
+    this->prev_l_rect.copy(this->l_rect);
 
     this->needs_redraw = false;
 }
@@ -548,17 +554,17 @@ int Label::TextLength() {
 }
 
 int Label::CursorScreenX() {
-    if (cursor_slots.empty()) return this->rect.x;
+    if (cursor_slots.empty()) return this->getScreenRect().x;
     int idx = this->cursor_index;
     if (idx < 0) idx = 0;
     if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
-    return this->rect.x + cursor_slots[idx].x;
+    return this->getScreenRect().x + cursor_slots[idx].x;
 }
 
 int Label::CursorScreenY() {
-    if (cursor_slots.empty()) return this->rect.y;
+    if (cursor_slots.empty()) return this->getScreenRect().y;
     int idx = this->cursor_index;
     if (idx < 0) idx = 0;
     if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
-    return this->rect.y + cursor_slots[idx].line * (line_height + line_spacing);
+    return this->getScreenRect().y + cursor_slots[idx].line * (line_height + line_spacing);
 }

@@ -6,7 +6,7 @@ void MsgDialog::render(){
     if(!needs_redraw) return;
     if(!visible) return;
 
-    PICO_GFX::markDirty(this->rect);
+    PICO_GFX::markDirty(this->getScreenRect());
 
     PICO_GFX::drawDialogBackground();
     

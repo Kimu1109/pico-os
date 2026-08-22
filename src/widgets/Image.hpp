@@ -18,8 +18,7 @@ class Image : public Widget {
     public:
         Image(String path, int16_t x, int16_t y, bool onRAM){
             this->path = path;
-            this->rect.x = x;
-            this->rect.y = y;
+            this->l_rect = {x, y, 0, 0};
             this->onRAM = onRAM;
             if(onRAM){
                 this->updateSprite();

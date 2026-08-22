@@ -8,21 +8,17 @@ class DropdownMenu : public Widget {
 
     private:
         std::vector<Widget*> children_;
-
+    
         ScrollList *dropdown;
         Label *value;
 
         bool open_state = false;
 
         void relayout(){
-            this->dropdown->X(this->rect.x);
-            this->dropdown->Y(this->rect.y);
-            this->dropdown->W(this->rect.w);
+            this->dropdown->W(this->l_rect.w);
             this->dropdown->H(this->dropdown->getFittingHeight());
 
-            this->value->X(this->rect.x);
-            this->value->Y(this->rect.y);
-            this->value->MaxWidth(this->rect.w);
+            this->value->MaxWidth(this->l_rect.w);
         }
 
         void applyOpenState(){
@@ -39,7 +35,7 @@ class DropdownMenu : public Widget {
         using Widget::onPressOut;
 
         DropdownMenu(int16_t x, int16_t y, int16_t w){
-            this->rect = {x, y, w, 30};
+            this->l_rect = {x, y, w, 30};
 
             this->dropdown = new ScrollList(0, 0, 0, 30);
             this->dropdown->Visible(false);
@@ -48,10 +44,13 @@ class DropdownMenu : public Widget {
                 this->value->Text(this->dropdown->ItemAt(index));
                 this->open_state = false;
                 this->applyOpenState();
-                this->rect.h = 30;
+                this->l_rect.h = 30;
             });
+            this->dropdown->SetParent(this);
 
             this->value = new Label("");
+            this->value->X(0);
+            this->value->Y(0);
             this->value->Placeholder("タップして選択...");
             this->value->BackgroundColor(PICO_BACKGROUND);
             this->value->BorderWidth(1);
@@ -61,8 +60,9 @@ class DropdownMenu : public Widget {
             this->value->onPressStart([this](){
                 this->open_state = true;
                 this->applyOpenState();
-                this->rect.h = this->dropdown->H();
+                this->l_rect.h = this->dropdown->H();
             });
+            this->value->SetParent(this);
 
             children_.push_back(this->dropdown);
             children_.push_back(this->value);
@@ -79,6 +79,7 @@ class DropdownMenu : public Widget {
             if(this->open_state){
                 this->open_state = false;
                 this->applyOpenState();
+                this->l_rect.h = 30;
             }
         };
 
@@ -90,17 +91,19 @@ class DropdownMenu : public Widget {
         };
 
         void X(int x) override {
-            this->rect.x = x;
-            this->relayout();
+            this->l_rect.x = x;
+            this->dropdown->needsRender();
+            this->value->needsRender();
         }
 
         void Y(int y) override {
-            this->rect.y = y;
-            this->relayout();
+            this->l_rect.y = y;
+            this->dropdown->needsRender();
+            this->value->needsRender();
         }
 
         void W(int w) {
-            this->rect.w = w;
+            this->l_rect.w = w;
             this->relayout();
         }
 

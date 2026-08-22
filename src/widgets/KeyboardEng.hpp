@@ -198,7 +198,7 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         void Visible(bool visible) override;
 
         KeyboardEng(Label* input_label){
-            this->rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+            this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
             this->input_label = input_label;
             this->input_label->Visible(false);

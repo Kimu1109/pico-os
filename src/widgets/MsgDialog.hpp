@@ -31,7 +31,7 @@ class MsgDialog : public Widget {
         constexpr static int BUTTON_WIDTH = DIALOG_WIDTH - MARGIN * 2;
 
         void updateWidgets(){
-            this->rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+            this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
             msg_icon->X(BASE_X + MARGIN + (DIALOG_WIDTH - MARGIN * 2 - ICON_SIZE) * 0.5);
             msg_icon->Y(BASE_Y + MARGIN);
@@ -59,21 +59,25 @@ class MsgDialog : public Widget {
     public:
 
         MsgDialog(String msg_text, String cancel_text, String ok_text){
-            this->rect = {BASE_X, BASE_Y, DIALOG_WIDTH, DIALOG_HEIGHT};
+            this->l_rect = {0, 0, DIALOG_WIDTH, DIALOG_HEIGHT};
 
             msg_icon = new Icon(0, 0, this->icon_id, IconSize::Px64);
+            msg_icon->SetParent(this);
 
             msg_label = new Label(0, 0, msg_text);
+            msg_label->SetParent(this);
 
             ok_button = new Button(0, 0, ok_text);
             ok_button->onPressStart([this](){
                 this->Visible(false);
             });
+            ok_button->SetParent(this);
 
             cancel_button = new Button(0, 0, cancel_text);
             cancel_button->onPressStart([this](){
                 this->Visible(false);
             });
+            cancel_button->SetParent(this);
 
             this->updateWidgets();
 

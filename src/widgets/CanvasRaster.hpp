@@ -25,16 +25,16 @@ class CanvasRaster : public Widget {
         float brush_radius = 1.5;
 
         int16_t relX(int16_t x){
-            return x - this->rect.x;
+            return x - this->getScreenX();
         }
         int16_t relY(int16_t y){
-            return y - this->rect.y;
+            return y - this->getScreenY();
         }
         int16_t absX(int16_t x){
-            return x + this->rect.x;
+            return x + this->getScreenX();
         }
         int16_t absY(int16_t y){
-            return y + this->rect.y;
+            return y + this->getScreenY();
         }
 
     public:

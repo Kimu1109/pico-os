@@ -262,7 +262,7 @@ class Keyboard : public Widget, public ITextInputWidget {
         Label* input_label;
 
         Keyboard(Label* input_label){
-            this->rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+            this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
             
             this->visible = false;
 

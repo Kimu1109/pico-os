@@ -62,22 +62,26 @@ class InputDialog : public Widget {
         InputDialog(String label_content, bool isSingleLine){
             this->isSingleLine = isSingleLine;
 
-            this->rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+            this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
             this->label = new Label(label_content);
+            this->label->SetParent(this);
 
             this->input = new Textbox("", 0, 0, 0, 0, true);
             this->input->Placeholder("ここに入力...");
+            this->input->SetParent(this);
 
             this->submit_button = new Button("決定");
             this->submit_button->onPressStart([this](){
                 this->Visible(false);
             });
+            this->submit_button->SetParent(this);
 
             this->cancel_button = new Button("キャンセル");
             this->cancel_button->onPressStart([this](){
                 this->Visible(false);
             });
+            this->cancel_button->SetParent(this);
 
             this->updatePlaces();
 

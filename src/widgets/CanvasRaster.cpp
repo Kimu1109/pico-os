@@ -4,7 +4,7 @@
 #include <cmath>
 
 CanvasRaster::CanvasRaster(int16_t x, int16_t y, int16_t w, int16_t h){
-    this->rect = {x, y, w, h};
+    this->l_rect = {x, y, w, h};
 
     sp = new LGFX_Sprite(OSData::frame);
     sp->setColorDepth(4);
@@ -23,7 +23,9 @@ void CanvasRaster::render(){
     if(!this->visible) return;
     if(!this->needs_redraw) return;
 
-    sp->pushSprite(OSData::frame, this->rect.x, this->rect.y);
+    const Rect g_rect = this->getScreenRect();
+
+    sp->pushSprite(OSData::frame, g_rect.x, g_rect.y);
 
     if(is_pressing) {
         int touchX = relX(OSData::touchX);
@@ -50,7 +52,7 @@ void CanvasRaster::render(){
         }
     }
 
-    PICO_GFX::markDirty(this->rect);
+    PICO_GFX::markDirty(g_rect);
 
     this->needs_redraw = false;
 }

@@ -8,29 +8,32 @@ void ScrollList::render(){
     if(!this->visible) return;
 
     //前の描画分
-    PICO_GFX::markDirty(this->prev_rect);
+    if(this->prev_l_rect != this->l_rect)
+        PICO_GFX::markDirty(this->getScreenPrevRect());
 
     this->fontApply();
     this->font_h = OSData::frame->fontHeight();
 
+    const Rect g_rect = this->getScreenRect();
+
     //現在の描画
-    PICO_GFX::markDirty(this->rect);
+    PICO_GFX::markDirty(g_rect);
 
     const int ITEM_HEIGHT = this->font_h + MARGIN;
     const int ITEMS_TOTAL_HEIGHT = ITEM_HEIGHT * this->dataSource->size();
 
     //スクロールバーの領域
-    OSData::frame->drawRect(this->rect.x + this->rect.w - SCROLL_BAR_W, this->rect.y, SCROLL_BAR_W, this->rect.h, this->border_color);
+    OSData::frame->drawRect(g_rect.x + g_rect.w - SCROLL_BAR_W, g_rect.y, SCROLL_BAR_W, g_rect.h, this->border_color);
     OSData::frame->fillRect(
-        this->rect.x + this->rect.w - SCROLL_BAR_W,
-        this->rect.y + ((float)this->scrollY / (float)ITEMS_TOTAL_HEIGHT) * this->rect.h,
+        g_rect.x + g_rect.w - SCROLL_BAR_W,
+        g_rect.y + ((float)this->scrollY / (float)ITEMS_TOTAL_HEIGHT) * g_rect.h,
         SCROLL_BAR_W,
-        ((float)this->rect.h / (float)ITEMS_TOTAL_HEIGHT) * this->rect.h,
+        ((float)g_rect.h / (float)ITEMS_TOTAL_HEIGHT) * g_rect.h,
         this->border_color
     );
 
     //はみ出したテキストの切り取り用
-    OSData::frame->setClipRect(this->rect.x, this->rect.y, this->rect.w - SCROLL_BAR_W, this->rect.h);
+    OSData::frame->setClipRect(g_rect.x, g_rect.y, g_rect.w - SCROLL_BAR_W, g_rect.h);
 
     //テキスト描画(本番)
     int start_index = this->scrollY / ITEM_HEIGHT;
@@ -38,27 +41,27 @@ void ScrollList::render(){
     for(int i = start_index; i < this->dataSource->size(); i++){
 
         if(selected_index == i){
-            OSData::frame->fillRect(this->rect.x, this->rect.y + draw_y - MARGIN * 0.5, this->rect.w - SCROLL_BAR_W, ITEM_HEIGHT, this->text_color);
+            OSData::frame->fillRect(g_rect.x, g_rect.y + draw_y - MARGIN * 0.5, g_rect.w - SCROLL_BAR_W, ITEM_HEIGHT, this->text_color);
             OSData::frame->setTextColor(this->background_color);
         }else{
             this->textColorApply();
         }
 
-        OSData::frame->setCursor(this->rect.x + MARGIN, this->rect.y + draw_y);
+        OSData::frame->setCursor(g_rect.x + MARGIN, g_rect.y + draw_y);
         OSData::frame->print(this->dataSource->at(i));
 
         draw_y += ITEM_HEIGHT;
-        if(draw_y > this->rect.h) break;
+        if(draw_y > g_rect.h) break;
     }
     this->textColorDefault();
     OSData::frame->clearClipRect();
 
     //枠
-    OSData::frame->drawRect(this->rect.x, this->rect.y, this->rect.w, this->rect.h, this->border_color);
+    OSData::frame->drawRect(g_rect.x, g_rect.y, g_rect.w, g_rect.h, this->border_color);
     this->fontDefault();
 
     //前の描画位置を記録
-    this->prev_rect.copy(this->rect);
+    this->prev_l_rect.copy(this->l_rect);
 
     this->needs_redraw = false;
 }
@@ -66,7 +69,9 @@ void ScrollList::render(){
 void ScrollList::onPressStart(){
     if(this->on_press_start) this->on_press_start();
 
-    if(OSData::touchX > this->rect.x + this->rect.w - SCROLL_BAR_W){
+    const Rect g_rect = this->getScreenRect();
+
+    if(OSData::touchX > g_rect.x + g_rect.w - SCROLL_BAR_W){
         this->is_scrolling = true;
         this->ref_touch_y = OSData::touchY;
         this->ref_scroll_y = this->scrollY;
@@ -76,7 +81,7 @@ void ScrollList::onPressStart(){
         int start_index = this->scrollY / ITEM_HEIGHT;
         int draw_y = start_index * ITEM_HEIGHT - this->scrollY;
         for(int i = start_index; i < this->dataSource->size(); i++){
-            const int draw_start_y = this->rect.y + draw_y - MARGIN * 0.5;
+            const int draw_start_y = g_rect.y + draw_y - MARGIN * 0.5;
             if(OSData::touchY > draw_start_y && OSData::touchY <= draw_start_y + ITEM_HEIGHT){
                 this->selected_index = i;
                 this->onSelectItem();
@@ -85,7 +90,7 @@ void ScrollList::onPressStart(){
             }
 
             draw_y += ITEM_HEIGHT;
-            if(draw_y > this->rect.h) break;
+            if(draw_y > g_rect.h) break;
         }
     }
 }
@@ -96,7 +101,7 @@ void ScrollList::onPressMove(){
     if(this->is_scrolling){
         this->scrollY = min(
             max(this->ref_scroll_y + (OSData::touchY - this->ref_touch_y) * 1.3, 0),
-            (this->font_h + MARGIN) * this->dataSource->size() - this->rect.h
+            (this->font_h + MARGIN) * this->dataSource->size() - this->getScreenRect().h
         );
         this->needs_redraw = true;
     }

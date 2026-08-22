@@ -34,8 +34,8 @@ class Button :
         using Widget::H;
 
         Button(int x, int y, String text){
-            this->rect.x = x;
-            this->rect.y = y;
+            this->l_rect.x = x;
+            this->l_rect.y = y;
             this->calcTextSize(text);
             this->text = text;
             this->needs_redraw = true;
@@ -57,15 +57,15 @@ class Button :
 
         void render() override;
 
-        Rect getRect() const override { 
+        Rect getLocalRect() const override { 
             const int text_spacing = this->allowTextSpacing ? TEXT_SPACING : 0;
 
-            const int16_t BOX_W = this->rect.w + text_spacing + _3D_PIX_LEN + 1;
-            const int16_t BOX_H = this->rect.h + text_spacing + _3D_PIX_LEN + 1;
+            const int16_t BOX_W = this->l_rect.w + text_spacing + _3D_PIX_LEN + 1;
+            const int16_t BOX_H = this->l_rect.h + text_spacing + _3D_PIX_LEN + 1;
     
             return {
-                this->rect.x,
-                this->rect.y,
+                this->l_rect.x,
+                this->l_rect.y,
                 BOX_W,
                 BOX_H
             };
@@ -88,10 +88,10 @@ class Button :
         }
 
         void W(int w){
-            this->rect.w = w;
+            this->l_rect.w = w;
         }
         void H(int h){
-            this->rect.h = h;
+            this->l_rect.h = h;
         }
 
         void AllowTextSpacing(bool v){

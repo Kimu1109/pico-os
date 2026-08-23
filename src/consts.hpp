@@ -20,6 +20,8 @@
 #define PICO_YELLOW     14
 #define PICO_WHITE      15
 
+#define PICO_SCROLL_EX  1.30f
+
 // --- スクリーンサイズ ---
 #define SCREEN_WIDTH    240
 #define SCREEN_HEIGHT   320

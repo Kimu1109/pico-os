@@ -17,6 +17,7 @@
 #include "widgets/NumberSlider.hpp"
 #include "widgets/InputDialog.hpp"
 #include "widgets/DropdownMenu.hpp"
+#include "widgets/ScrollContainer.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -37,18 +38,20 @@ static NumberSlider* slider_w;
 static InputDialog* inputDialog;
 static DropdownMenu* dropdown;
 
+static ScrollContainer* container;
+
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
 
     PICO_GFX::Setup();
     PICO_Touch::Setup();
 
-    hi_button = new Button(160, 100, "HI!");
+    hi_button = new Button(160, 130, "HI!");
     hi_button->SetFontSize(FontFn::FontSize::Big);
     hi_button->SetBorderColor(PICO_PURPLE);
 
-    sd_label = new Label(0, 50, "sd-failed");
-    scroll = new ScrollList(10, 80, 150, 100, 2);
+    sd_label = new Label(0, 300, "sd-failed");
+    scroll = new ScrollList(10, 130, 100, 100, 2);
     scroll->Add("こんにちは");
     scroll->Add("Hello!");
     scroll->Add("グーデンターク");
@@ -76,7 +79,7 @@ void setup() {
     textbox->SetBorderColor(PICO_DARKCYAN);
 
     slider_w = new NumberSlider(10, 320 - 30, 120);
-    dropdown = new DropdownMenu(160, 150, 80);
+    dropdown = new DropdownMenu(130, 100, 80);
     dropdown->Add("Japan");
     dropdown->Add("にほん");
     dropdown->Add("日本");
@@ -85,24 +88,27 @@ void setup() {
     dropdown->Add(".jp");
     dropdown->Add("japone");
 
-    WidgetFunctions::add(hi_button);
-    WidgetFunctions::add(sd_label);
-    WidgetFunctions::add(scroll);
+    container = new ScrollContainer(0, 0, 240, 200);
+    container->Add(hi_button);
+    container->Add(scroll);
+    container->Add(textbox);
+    container->Add(dropdown);
+    container->Add(sd_label);
+
     WidgetFunctions::add(iconTest16);
     WidgetFunctions::add(iconTest24);
     WidgetFunctions::add(iconTest32);
     WidgetFunctions::add(iconTest48);
     WidgetFunctions::add(iconTest64);
     WidgetFunctions::add(checkedCheckbox);
-    WidgetFunctions::add(textbox);
     WidgetFunctions::add(slider_w);
-    WidgetFunctions::add(dropdown);
+    WidgetFunctions::add(container);
 
     if(PICO_SD::Setup()){
         sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));
 
         dolphin = new Image("dolphin.pimg", 0, 0, true);
-        WidgetFunctions::add(dolphin);
+        container->Add(dolphin);
     }
 
     hi_button->onPressStart([]() {

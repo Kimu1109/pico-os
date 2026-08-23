@@ -22,6 +22,7 @@ class Widget {
 
         bool needs_redraw = true;
         bool visible = true;
+        bool needs_children_update = false;
 
         int8_t background_color = PICO_BACKGROUND;
 
@@ -75,13 +76,23 @@ class Widget {
         virtual bool Visible();
         virtual void Visible(bool visible);
 
-        //ローカル座標
+        //相対的なrect
         virtual Rect getLocalRect() const { return l_rect; }
+        //絶対的なrect
         virtual Rect getScreenRect() const {
             const Rect local_rect = this->getLocalRect();
             return { (int16_t)getScreenX(), (int16_t)getScreenY(), local_rect.w, local_rect.h };
         }
+        //絶対的なprev_rect
         virtual Rect getScreenPrevRect() const { return prev_l_rect; }
+        //小ウィジェットに対して描画可能範囲を与えるための関数(絶対座標)
+        virtual Rect getScreenClipRect() const {
+            const Rect my_rect = getScreenRect();
+            if (parent) {
+                return parent->getScreenClipRect().intersection(my_rect);
+            }
+            return my_rect;
+        }
 
         //描画モード
         virtual WidgetTools::RenderMode GetRenderMode() const { return WidgetTools::CLEAR; }
@@ -100,12 +111,12 @@ class Widget {
 
         virtual bool hitTest(int px, int py) {
             if (parent && !parent->isInsideViewport(px, py)) return false;
-            const Rect rect = this->getScreenRect();
+            const Rect rect = this->clippedScreenRect();
             return px >= rect.x && px < rect.x + rect.w &&
                 py >= rect.y && py < rect.y + rect.h;
         }
         virtual bool isInsideViewport(int px, int py) {
-            const Rect sr = this->getScreenRect();
+            const Rect sr = this->clippedScreenRect();
             bool inside = (px >= sr.x && px < sr.x + sr.w && py >= sr.y && py < sr.y + sr.h);
             if (!inside) return false;
             return parent ? parent->isInsideViewport(px, py) : true;
@@ -113,6 +124,14 @@ class Widget {
 
         //描画を要求
         virtual void needsRender();
+
+        //子ウィジェットの更新を要求
+        virtual void childrenUpdate(bool needs_update) {
+            this->needs_children_update = needs_update;
+        }
+        virtual bool childrenUpdate() const {
+            return this->needs_children_update;
+        }
 
         virtual int X(){ return this->l_rect.x; }
         virtual void X(int x){
@@ -140,5 +159,12 @@ class Widget {
         }
         virtual Widget* GetParent(){
             return this->parent;
+        }
+
+        Rect clippedScreenRect() const {
+            const Rect child_rect = this->getScreenRect();
+            if (!this->parent) return child_rect;
+    
+            return this->parent->getScreenClipRect().intersection(child_rect);
         }
 };

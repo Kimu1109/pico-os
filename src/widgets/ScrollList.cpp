@@ -25,15 +25,21 @@ void ScrollList::render(){
     //スクロールバーの領域
     OSData::frame->drawRect(g_rect.x + g_rect.w - SCROLL_BAR_W, g_rect.y, SCROLL_BAR_W, g_rect.h, this->border_color);
     OSData::frame->fillRect(
-        g_rect.x + g_rect.w - SCROLL_BAR_W,
-        g_rect.y + ((float)this->scrollY / (float)ITEMS_TOTAL_HEIGHT) * g_rect.h,
-        SCROLL_BAR_W,
-        ((float)g_rect.h / (float)ITEMS_TOTAL_HEIGHT) * g_rect.h,
+        g_rect.x + g_rect.w - SCROLL_BAR_W + 2,
+        g_rect.y + ((float)this->scrollY / (float)ITEMS_TOTAL_HEIGHT) * g_rect.h + 2,
+        SCROLL_BAR_W - 4,
+        ((float)g_rect.h / (float)ITEMS_TOTAL_HEIGHT) * g_rect.h - 4,
         this->border_color
     );
 
     //はみ出したテキストの切り取り用
-    OSData::frame->setClipRect(g_rect.x, g_rect.y, g_rect.w - SCROLL_BAR_W, g_rect.h);
+    int32_t orig_x, orig_y, orig_w, orig_h;
+    OSData::frame->getClipRect(&orig_x, &orig_y, &orig_w, &orig_h);
+    const Rect orig_clip = {(int16_t)orig_x, (int16_t)orig_y, (int16_t)orig_w, (int16_t)orig_h};
+    const Rect text_area = {g_rect.x, g_rect.y, (int16_t)(g_rect.w - SCROLL_BAR_W), g_rect.h};
+    const Rect text_clip = orig_clip.intersection(text_area);
+
+    OSData::frame->setClipRect(text_clip.x, text_clip.y, text_clip.w, text_clip.h);
 
     //テキスト描画(本番)
     int start_index = this->scrollY / ITEM_HEIGHT;
@@ -54,7 +60,7 @@ void ScrollList::render(){
         if(draw_y > g_rect.h) break;
     }
     this->textColorDefault();
-    OSData::frame->clearClipRect();
+    OSData::frame->setClipRect(orig_x, orig_y, orig_w, orig_h);
 
     //枠
     OSData::frame->drawRect(g_rect.x, g_rect.y, g_rect.w, g_rect.h, this->border_color);
@@ -100,7 +106,7 @@ void ScrollList::onPressMove(){
 
     if(this->is_scrolling){
         this->scrollY = min(
-            max(this->ref_scroll_y + (OSData::touchY - this->ref_touch_y) * 1.3, 0),
+            max(this->ref_scroll_y + (OSData::touchY - this->ref_touch_y) * PICO_SCROLL_EX, 0),
             (this->font_h + MARGIN) * this->dataSource->size() - this->getScreenRect().h
         );
         this->needs_redraw = true;

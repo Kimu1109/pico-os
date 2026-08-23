@@ -60,13 +60,23 @@ void WidgetFunctions::updateAll()
     }
 
     for (int i = 0; i < count; i++){
+        if(widgets[i]->childrenUpdate()){
+            add(widgets[i]);
+            widgets[i]->childrenUpdate(false);
+        }
+        const Rect clipped = widgets[i]->clippedScreenRect();
+        OSData::frame->setClipRect(clipped.x, clipped.y, clipped.w, clipped.h);
         widgets[i]->update(); // 下から順に描画
+        OSData::frame->clearClipRect();
     }
 
     for (int d = count_dialog - 1; d >= 0; d--) {
         if (dialog_roots[d] && dialog_roots[d]->Visible()) {
             dialog_roots[d]->visitAll([](Widget* w) {
+                const Rect clipped = w->clippedScreenRect();
+                OSData::frame->setClipRect(clipped.x, clipped.y, clipped.w, clipped.h);
                 w->update();
+                OSData::frame->clearClipRect();
             });
         }
     }

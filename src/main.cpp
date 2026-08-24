@@ -7,130 +7,27 @@
 #include "functions/IME_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 
-#include "widgets/Label.hpp"
-#include "widgets/Button.hpp"
-#include "widgets/ScrollList.hpp"
-#include "widgets/Icon.hpp"
-#include "widgets/Checkbox.hpp"
-#include "widgets/Image.hpp"
-#include "widgets/Textbox.hpp"
-#include "widgets/NumberSlider.hpp"
-#include "widgets/InputDialog.hpp"
-#include "widgets/DropdownMenu.hpp"
-#include "widgets/ScrollContainer.hpp"
+#include "widgets/MarkdownView.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
 
 //デバッグ用
-static Label* sd_label;
-static Button* hi_button;
-static ScrollList* scroll;
-static Icon* iconTest16;
-static Icon* iconTest24;
-static Icon* iconTest32;
-static Icon* iconTest48;
-static Icon* iconTest64;
-static Checkbox* checkedCheckbox;
-static Image* dolphin;
-static Textbox* textbox;
-static NumberSlider* slider_w;
-static InputDialog* inputDialog;
-static DropdownMenu* dropdown;
-
-static ScrollContainer* container;
+static MarkdownView* markdown;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
 
     PICO_GFX::Setup();
     PICO_Touch::Setup();
-
-    hi_button = new Button(160, 130, "HI!");
-    hi_button->SetFontSize(FontFn::FontSize::Big);
-    hi_button->SetBorderColor(PICO_PURPLE);
-
-    sd_label = new Label(0, 300, "sd-failed");
-    scroll = new ScrollList(10, 130, 100, 100, 2);
-    scroll->Add("こんにちは");
-    scroll->Add("Hello!");
-    scroll->Add("グーデンターク");
-    scroll->Add("コンギョサムニダ");
-    scroll->Add("ニーハオ");
-    scroll->Add("チマチョゴリ");
-    scroll->Add("グーパンダック");
-    scroll->Add("こんちくは!");
-    scroll->SetFontSize(FontFn::FontSize::Small);
-    scroll->SetBorderColor(PICO_RED);
-    scroll->BackgroundColor(PICO_BLUE);
-    scroll->SetTextColor(PICO_GREEN);
-
-    iconTest16 = new Icon(0, 200, IconID::AppBox, IconSize::Px16);
-    iconTest24 = new Icon(16 + 4, 200, IconID::AppBox, IconSize::Px24);
-    iconTest32 = new Icon(16 + 24 + 4 * 2, 200, IconID::AppBox, IconSize::Px32);
-    iconTest48 = new Icon(16 + 24 + 32 + 4 * 3, 200, IconID::AppBox, IconSize::Px48);
-    iconTest64 = new Icon(16 + 24 + 32 + 48 + 4 * 4, 200, IconID::AppBox, IconSize::Px64);
-
-    checkedCheckbox = new Checkbox(0, 270, "二重確認した?");
-    checkedCheckbox->SetFontSize(FontFn::FontSize::Small);
-    textbox = new Textbox("hi!", 130, 10, 100, 64, false);
-    textbox->SetFontSize(FontFn::FontSize::Small);
-    textbox->BackgroundColor(PICO_DARKGREEN);
-    textbox->SetBorderColor(PICO_DARKCYAN);
-
-    slider_w = new NumberSlider(10, 320 - 30, 120);
-    dropdown = new DropdownMenu(130, 100, 80);
-    dropdown->Add("Japan");
-    dropdown->Add("にほん");
-    dropdown->Add("日本");
-    dropdown->Add("jap");
-    dropdown->Add("JPN");
-    dropdown->Add(".jp");
-    dropdown->Add("japone");
-
-    container = new ScrollContainer(0, 0, 240, 200);
-    container->Add(hi_button);
-    container->Add(scroll);
-    container->Add(textbox);
-    container->Add(dropdown);
-    container->Add(sd_label);
-
-    WidgetFunctions::add(iconTest16);
-    WidgetFunctions::add(iconTest24);
-    WidgetFunctions::add(iconTest32);
-    WidgetFunctions::add(iconTest48);
-    WidgetFunctions::add(iconTest64);
-    WidgetFunctions::add(checkedCheckbox);
-    WidgetFunctions::add(slider_w);
-    WidgetFunctions::add(container);
-
-    if(PICO_SD::Setup()){
-        sd_label->Text(PICO_SD::ReadTextFileFast("/test.txt"));
-
-        dolphin = new Image("dolphin.pimg", 0, 0, true);
-        container->Add(dolphin);
-    }
-
-    hi_button->onPressStart([]() {
-        int iconIdInt = static_cast<int>(iconTest16->GetIconId());
-        iconIdInt++;
-        if(iconIdInt >= static_cast<int>(IconID::IconCount)) iconIdInt = 0;
-
-        const IconID iconId = static_cast<IconID>(iconIdInt);
-        iconTest16->SetIconId(iconId);
-        iconTest24->SetIconId(iconId);
-        iconTest32->SetIconId(iconId);
-        iconTest48->SetIconId(iconId);
-        iconTest64->SetIconId(iconId);
-    });
+    PICO_SD::Setup();
 
     KeyboardFunctions::Setup();
     IME_Functions::setup();
 
-    inputDialog = new InputDialog("お名前は?", false);
-    inputDialog->Visible(true);
-
-    WidgetFunctions::addDialog(inputDialog);
+    markdown = new MarkdownView(0, 0, 240, 320);
+    markdown->Load("doc/doc.md");
+    WidgetFunctions::add(markdown);
 
     pinMode(LED_BUILTIN, HIGH);
 }

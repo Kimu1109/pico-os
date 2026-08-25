@@ -6,11 +6,11 @@ void Icon::render() {
     if(!this->visible) return;
 
     if(this->prev_l_rect != this->l_rect)
-        PICO_GFX::markDirty(this->prev_l_rect);
+        markdirty(getScreenPrevRect());
 
     const Rect g_rect = this->getScreenRect();
 
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
     IconRender::DrawIcon(this->iconId, this->iconSize, g_rect.x, g_rect.y, this->color);
 
     this->prev_l_rect.copy(this->l_rect);

@@ -11,13 +11,15 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         labelPool[i] = new Label(kPadding, 0, "");
         labelPool[i]->SetParent(this);
         labelPool[i]->Visible(false);
+        labelPool[i]->SetDisableMarkdirty(true);
         boundLabelBlock[i] = -1;
         children_.push_back(labelPool[i]);
     }
     for (int i = 0; i < kImagePoolSize; i++) {
-        imagePool[i] = new Image("", kPadding, 0, false);
+        imagePool[i] = new Image("", kPadding, 0, true);
         imagePool[i]->SetParent(this);
         imagePool[i]->Visible(false);
+        imagePool[i]->SetDisableMarkdirty(true);
         boundImageBlock[i] = -1;
         children_.push_back(imagePool[i]);
     }
@@ -180,19 +182,6 @@ void MarkdownView::parseBlocks() {
 
 // ---------- レイアウト（高さ事前計算） ----------
 
-String MarkdownView::escapeCodeText(const String& raw) const {
-    String out;
-    out.reserve(raw.length() + 16);
-    for (size_t i = 0; i < raw.length(); i++) {
-        char c = raw[i];
-        out += c;
-        if (c == '*' || c == '_' || c == '~') {
-            out += "\xE2\x80\x8B"; // U+200B ゼロ幅スペース（UTF-8）
-        }
-    }
-    return out;
-}
-
 String MarkdownView::formatBlockText(const MdBlock& b) const {
     switch (b.type) {
         case MdBlockType::H1:
@@ -205,10 +194,7 @@ String MarkdownView::formatBlockText(const MdBlock& b) const {
             String text = doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
             return "_" + text + "_"; // 下線で視覚的に示す
         }
-        case MdBlockType::CodeBlock: {
-            String raw = doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
-            return escapeCodeText(raw);
-        }
+        case MdBlockType::CodeBlock:
         default:
             return doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
     }
@@ -309,6 +295,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
     lbl->SetTextColor(PICO_BLACK);
 
     if (b.type == MdBlockType::CodeBlock) {
+        lbl->SetDisableAutoTextDecoration(true);
         lbl->MaxWidth(this->l_rect.w - SCROLL_L - kPadding * 4);
         lbl->BackgroundColor(PICO_LIGHTGREY);
         lbl->Border(PICO_DARKGREY, 1);
@@ -316,12 +303,16 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         lbl->Text(formatBlockText(b));
         lbl->X(kPadding);
     } else if (b.type == MdBlockType::Link) {
+        if(lbl->GetDisableAutoTextDecoration())
+            lbl->SetDisableAutoTextDecoration(false);
         lbl->MaxWidth(this->l_rect.w - SCROLL_L - kPadding * 2);
         lbl->SetTextColor(PICO_BLUE);
         lbl->SetFontSize(FontFn::FontSize::Small);
         lbl->Text(formatBlockText(b));
         lbl->X(kPadding);
     } else {
+        if(lbl->GetDisableAutoTextDecoration())
+            lbl->SetDisableAutoTextDecoration(false);
         lbl->MaxWidth(this->l_rect.w - SCROLL_L - kPadding * 2);
         lbl->SetFontSize(fontSizeForBlock(b.type));
         lbl->Text(formatBlockText(b));
@@ -388,12 +379,12 @@ void MarkdownView::onPressMove() {
 
     if (!is_scrolling) return;
 
-    int new_y = s_scroll_y + (int)((ry - sy) * PICO_SCROLL_EX);
+    int new_y = s_scroll_y + ((float)(ry - sy) / (float)this->l_rect.h) * max_scroll_y;
     int old_scroll_y = scroll_y;
     scroll_y = constrain(new_y, 0, max_scroll_y);
 
     unsigned long now = millis();
-    if (now - last_scroll_render_ms < 50) return;
+    if (now - last_scroll_render_ms < 33) return;
     last_scroll_render_ms = now;
 
     bindVisibleBlocks(false);
@@ -434,7 +425,7 @@ void MarkdownView::onPressEnd() {
 
 void MarkdownView::render() {
     if (prev_l_rect != l_rect) {
-        PICO_GFX::markDirty(this->getScreenPrevRect());
+        markdirty(this->getScreenPrevRect());
     }
 
     const Rect g_rect = this->getScreenRect();
@@ -457,6 +448,6 @@ void MarkdownView::render() {
         OSData::frame->fillRect(bar_x + 2, thumb_y + 2, bar_w - 4, std::max(1, thumb_h - 4), PICO_BLACK);
     }
 
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
     prev_l_rect.copy(l_rect);
 }

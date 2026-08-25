@@ -6,7 +6,7 @@ void InputDialog::render(){
     if(!needs_redraw) return;
     if(!visible) return;
 
-    PICO_GFX::markDirty(this->getScreenRect());
+    markdirty(this->getScreenRect());
     PICO_GFX::drawDialogBackground();
 
     OSData::frame->fillRect(BASE_X, BASE_Y, DIALOG_WIDTH, DIALOG_HEIGHT, this->background_color);

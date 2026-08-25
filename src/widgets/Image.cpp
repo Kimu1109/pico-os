@@ -13,7 +13,7 @@ void Image::render(){
     }
 
     if(this->l_rect != this->prev_l_rect)
-        PICO_GFX::markDirty(this->prev_l_rect);
+        markdirty(getScreenPrevRect());
 
     const Rect g_rect = this->getScreenRect();
 
@@ -22,8 +22,9 @@ void Image::render(){
     }else{
         IconRender::DrawImageRLE4bpp(this->imgFile, g_rect.x, g_rect.y);
     }
+    Serial.println("Image widget render!");
 
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
     this->prev_l_rect.copy(this->l_rect);
 
     this->needs_redraw = false;

@@ -24,7 +24,7 @@ void PICO_GFX::Setup() {
     frame->setTextColor(PICO_BLACK);
     frame->setTextWrap(false, false);
     OSData::frame = frame;
-    markDirtyXYWH(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    markDirty({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
 
     pinMode(22, OUTPUT); //LED ON
     digitalWrite(22, HIGH);
@@ -33,10 +33,6 @@ void PICO_GFX::Setup() {
     isDirtyDeactivates = false;
 }
 
-void PICO_GFX::markDirtyXYWH(int16_t x, int16_t y, int16_t w, int16_t h) {
-    if(!isDirtyDeactivates)
-        dirtyRects.push_back({x, y, w, h});
-}
 void PICO_GFX::markDirty(const Rect& rect) {
     if(!isDirtyDeactivates)
         dirtyRects.push_back(rect);
@@ -45,7 +41,16 @@ void PICO_GFX::markDirty(const Rect& rect) {
 void PICO_GFX::flushDirty() {
     if (dirtyRects.empty()) return;
 
+    //! DEBUG !
+    unsigned long timer_start_ms = millis();
+    unsigned long buf_timer_ms = 0;
+    int draw_frame_total_ms = 0;
+    int push_frame_total_ms = 0;
+    //! DEBUG !
+
     for (auto& d : dirtyRects) {
+        buf_timer_ms = millis(); //! DEBUG !
+
         std::vector<Widget*> hit;
         for (auto* w : WidgetFunctions::widgets) {
             if (w && w->Visible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
@@ -82,7 +87,7 @@ void PICO_GFX::flushDirty() {
 
         // ★ 1. 必要な場合のみ背景を白クリア
         if (clear_bg) {
-            fillBackgroundNoDirty(d);
+            OSData::frame->fillRect(d.x, d.y, d.w, d.h, PICO_BACKGROUND);
         }
 
         // ★ 2. start_idx から上へ Widget を重ね描きする
@@ -92,41 +97,34 @@ void PICO_GFX::flushDirty() {
             if (clip.w <= 0 || clip.h <= 0) continue;
             OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
             if (hit[i]->GetRenderMode() == WidgetTools::OPAQUE) {
-                fillBackgroundNoDirtyCC(clip, hit[i]->BackgroundColor());
+                OSData::frame->fillRect(clip.x, clip.y, clip.w, clip.h, hit[i]->BackgroundColor());
             }
             hit[i]->renderForce();
             OSData::frame->clearClipRect();
         }
         isDirtyDeactivates = false;
 
+        draw_frame_total_ms += millis() - buf_timer_ms;
+        buf_timer_ms = millis();
+
         // ★ 3. 液晶へ転送
         OSData::lcd->setClipRect(d.x, d.y, d.w, d.h);
         OSData::frame->pushSprite(OSData::lcd, 0, 0);
         OSData::lcd->clearClipRect();
+
+        push_frame_total_ms += millis() - buf_timer_ms;
     }
+
+    Serial.printf(
+        "dirtyrects count: %d, draw average: %dms, push average: %dms, draw total: %dms, push total: %dms\n",
+        dirtyRects.size(),
+        draw_frame_total_ms / dirtyRects.size(),
+        push_frame_total_ms / dirtyRects.size(),
+        draw_frame_total_ms,
+        push_frame_total_ms
+    );
+
     dirtyRects.clear();
-}
-
-
-void PICO_GFX::fillBackgroundXYWH(int16_t x, int16_t y, int16_t w, int16_t h){
-    fillBackground({x, y, w, h});
-}
-void PICO_GFX::fillBackground(const Rect& rect){
-    OSData::frame->fillRect(rect.x, rect.y, rect.w, rect.h, PICO_BACKGROUND);
-    markDirty(rect);
-}
-
-
-void PICO_GFX::fillBorderRect(int16_t x, int16_t y, int16_t w, int16_t h, int background, int border){
-    OSData::frame->fillRect(x, y, w, h, background);
-    OSData::frame->drawRect(x, y, w, h, border);
-}
-
-void PICO_GFX::fillBackgroundNoDirty(const Rect& rect){
-    OSData::frame->fillRect(rect.x, rect.y, rect.w, rect.h, PICO_BACKGROUND);
-}
-void PICO_GFX::fillBackgroundNoDirtyCC(const Rect& rect, int8_t color){
-    OSData::frame->fillRect(rect.x, rect.y, rect.w, rect.h, color);
 }
 
 void PICO_GFX::drawDialogBackground(){

@@ -264,7 +264,10 @@ void Keyboard::render() {
 
     PICO_GFX::drawDialogBackground();
     OSData::frame->fillRect(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y, this->background_color);
-    PICO_GFX::markDirtyXYWH(0, START_KEY_Y - SQUARE_H, SCREEN_WIDTH, SCREEN_HEIGHT - START_KEY_Y + SQUARE_H);
+    markdirty({
+        0, (int16_t)(START_KEY_Y - SQUARE_H),
+        SCREEN_WIDTH, (int16_t)(SCREEN_HEIGHT - START_KEY_Y + SQUARE_H)
+    });
 
     //候補
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y, SCREEN_WIDTH, PICO_BLACK);
@@ -315,7 +318,6 @@ void Keyboard::render() {
             int BOX_Y = START_KEY_Y + SQUARE_H * (swipe_y_index + swipe_directions[i * 2 + 1]);
 
             //塗りつぶし&矩形
-            PICO_GFX::fillBackgroundXYWH(BOX_X, BOX_Y, SQUARE_W, SQUARE_H);
             OSData::frame->drawRect(BOX_X, BOX_Y, SQUARE_W, SQUARE_H, PICO_BLACK);
 
             //スワイプ用のテキストを表示

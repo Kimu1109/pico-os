@@ -24,6 +24,9 @@ class Widget {
         bool visible = true;
         bool needs_children_update = false;
 
+        //親ウィジェットが描画の反映のすべてを保証する場合に便利です
+        bool disable_markdirty = false;
+
         int8_t background_color = PICO_BACKGROUND;
 
         std::function<void()> on_press_start = nullptr;
@@ -124,6 +127,7 @@ class Widget {
 
         //描画を要求
         virtual void needsRender();
+        virtual void markdirty(Rect rect);
 
         //子ウィジェットの更新を要求
         virtual void childrenUpdate(bool needs_update) {
@@ -159,6 +163,14 @@ class Widget {
         }
         virtual Widget* GetParent(){
             return this->parent;
+        }
+
+        virtual bool GetDisableMarkdirty(){ return this->disable_markdirty; }
+        //markdirtyをしても実際にはマークしないかのフラグ
+        //親ウィジェットが描画の反映のすべてを保証する場合に便利です
+        //それ以外の場合は予想外の描画バグが連発するので使用は厳禁
+        virtual void SetDisableMarkdirty(bool value){
+            this->disable_markdirty = value;
         }
 
         Rect clippedScreenRect() const {

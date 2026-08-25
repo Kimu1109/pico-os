@@ -31,7 +31,7 @@ void NumberSlider::render(){
     if(!this->needs_redraw) return;
 
     if(this->prev_l_rect != this->l_rect)
-        PICO_GFX::markDirty(this->getScreenPrevRect());
+        markdirty(this->getScreenPrevRect());
 
     const Rect g_rect = this->getScreenRect();
 
@@ -71,7 +71,7 @@ void NumberSlider::render(){
         this->color
     );
 
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
     this->prev_l_rect.copy(this->l_rect);
 
     this->needs_redraw = false;

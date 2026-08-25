@@ -20,7 +20,7 @@ void Button::render() {
 
     //前回の描画内容の変更(削除)
     if(this->prev_l_rect != this->l_rect)
-        PICO_GFX::markDirty(this->prev_l_rect);
+        markdirty(getScreenPrevRect());
 
     //描画で必要な定数共
     const int text_spacing = this->allowTextSpacing ? TEXT_SPACING : 0;
@@ -36,7 +36,7 @@ void Button::render() {
     const int BOX_D_Y = g_rect.y + this->l_rect.h + text_spacing; //ボタンボックスの下のY
 
     //新しく描画
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
 
     this->fontApply();
     this->textColorApply();

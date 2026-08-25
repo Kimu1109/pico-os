@@ -53,6 +53,13 @@ bool Widget::Visible(){
 }
 
 void Widget::needsRender(){
+    if(disable_markdirty) return;
     PICO_GFX::markDirty(this->getScreenRect());
+    this->needs_redraw = true;
+}
+
+void Widget::markdirty(Rect rect){
+    if(disable_interrupts) return;
+    PICO_GFX::markDirty(rect);
     this->needs_redraw = true;
 }

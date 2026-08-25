@@ -9,7 +9,7 @@ void Checkbox::render(){
     if(!this->needs_redraw) return;
 
     if(this->prev_l_rect != this->l_rect)
-        PICO_GFX::markDirty(getScreenPrevRect());
+        markdirty(getScreenPrevRect());
 
     int font_pix = FontFn::GetFontSize(this->f_size);
 
@@ -27,7 +27,7 @@ void Checkbox::render(){
     this->textColorDefault();
     this->fontDefault();
 
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
     this->prev_l_rect.copy(this->l_rect);
 
     this->needs_redraw = false;

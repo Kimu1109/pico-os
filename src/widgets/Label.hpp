@@ -46,6 +46,9 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         // 波線装飾用のマージン
         static constexpr int kDecorationMargin = 2;
 
+        // 装飾の有無
+        bool disable_auto_text_decoration = false;
+
         // ---------- カーソル(挿入位置)関連 ----------
         std::vector<CursorSlot> cursor_slots;      // 文字境界(0文字目の手前〜末尾)ごとの座標一覧
         int cursor_index = 0;                      // 現在のカーソル位置(cursor_slotsのインデックス)
@@ -155,5 +158,13 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void SetFontSize(FontFn::FontSize size) override {
             this->f_size = size;
             this->relayout();
+        }
+
+        void SetDisableAutoTextDecoration(bool value){
+            this->disable_auto_text_decoration = value;
+            this->relayout();
+        }
+        bool GetDisableAutoTextDecoration(){
+            return this->disable_auto_text_decoration;
         }
 };

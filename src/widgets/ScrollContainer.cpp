@@ -73,7 +73,7 @@ void ScrollContainer::onPressMove(){
 
 void ScrollContainer::render() {
     if(prev_l_rect != l_rect){
-        PICO_GFX::markDirty(this->getScreenPrevRect());
+        markdirty(this->getScreenPrevRect());
     }
 
     const Rect g_rect = this->getScreenRect();
@@ -123,6 +123,6 @@ void ScrollContainer::render() {
         }
     }
 
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
     prev_l_rect.copy(l_rect);
 }

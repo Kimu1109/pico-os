@@ -52,7 +52,7 @@ void CanvasRaster::render(){
         }
     }
 
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
 
     this->needs_redraw = false;
 }

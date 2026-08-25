@@ -15,7 +15,7 @@ void KeyboardEng::Visible(bool visible) {
     }
 
     this->needs_redraw = true;
-    PICO_GFX::markDirty(this->getScreenRect());
+    markdirty(this->getScreenRect());
 }
 
 
@@ -84,7 +84,7 @@ void KeyboardEng::onPressStart() {
                     if(!isNumMode && isUpperCase){
                         isUpperCase = false;
                         this->needs_redraw = true;
-                        PICO_GFX::markDirty(this->getScreenRect());
+                        markdirty(this->getScreenRect());
                     }
                 }
                 break;
@@ -100,7 +100,7 @@ void KeyboardEng::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    PICO_GFX::markDirty(this->getScreenRect());
+    markdirty(this->getScreenRect());
     PICO_GFX::drawDialogBackground();
     OSData::frame->fillRect(0, SCREEN_HEIGHT - key_h * 4, SCREEN_WIDTH, key_h * 4, this->background_color);
 

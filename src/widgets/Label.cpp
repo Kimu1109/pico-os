@@ -4,10 +4,10 @@
 
 void Label::needsRender(){
     this->needs_redraw = true;
-    PICO_GFX::markDirty(this->getScreenRect());
+    markdirty(this->getScreenRect());
     // カーソルの前回描画位置も消去対象に含める
     // (本体rect外にカーソルがはみ出すケースの取りこぼし防止)
-    PICO_GFX::markDirty(this->prev_cursor_rect);
+    markdirty(this->prev_cursor_rect);
 }
 
 // ---------- UTF-8 ----------
@@ -45,27 +45,32 @@ std::vector<TextRun> Label::parseMarkup(const String& src) {
         }
     };
 
-    while (i < n) {
-        if (src[i] == '*' && i + 1 < n && src[i + 1] == '*') {
-            flush();
-            cur.bold = !cur.bold;
-            i += 2;
-            continue;
+    if(disable_auto_text_decoration){
+        cur.text = src;
+        flush();
+    }else{
+        while (i < n) {
+            if (src[i] == '*' && i + 1 < n && src[i + 1] == '*') {
+                flush();
+                cur.bold = !cur.bold;
+                i += 2;
+                continue;
+            }
+            if (src[i] == '_') {
+                flush();
+                cur.underline = !cur.underline;
+                i += 1;
+                continue;
+            }
+            if (src[i] == '~') {
+                flush();
+                cur.wavy = !cur.wavy;
+                i += 1;
+                continue;
+            }
+            int len = utf8CharLen((uint8_t)src[i]);
+            for (int k = 0; k < len && i < n; k++, i++) cur.text += src[i];
         }
-        if (src[i] == '_') {
-            flush();
-            cur.underline = !cur.underline;
-            i += 1;
-            continue;
-        }
-        if (src[i] == '~') {
-            flush();
-            cur.wavy = !cur.wavy;
-            i += 1;
-            continue;
-        }
-        int len = utf8CharLen((uint8_t)src[i]);
-        for (int k = 0; k < len && i < n; k++, i++) cur.text += src[i];
     }
     flush();
     return runs;
@@ -314,7 +319,7 @@ void Label::renderCursor() {
     cRect.y = cy;
     cRect.w = this->cursor_width;
     cRect.h = line_height;
-    PICO_GFX::markDirty(cRect);
+    markdirty(cRect);
 
     this->prev_cursor_rect.copy(cRect);
 }
@@ -358,7 +363,7 @@ void Label::render() {
 
     // 前回の描画内容を消去
     if(prev_l_rect != l_rect)
-        PICO_GFX::markDirty(getScreenPrevRect());
+        markdirty(getScreenPrevRect());
 
     // 背景・ボーダーはテキストより先に描画する
     this->renderBackground();
@@ -397,7 +402,7 @@ void Label::render() {
     // カーソル(挿入位置)の描画
     this->renderCursor();
 
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
 
     this->prev_l_rect.copy(this->l_rect);
 

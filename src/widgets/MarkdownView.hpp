@@ -74,7 +74,6 @@ class MarkdownView : public Widget {
         static constexpr int kTapThreshold = 6; // px
 
         String formatBlockText(const MdBlock& b) const;
-        String escapeCodeText(const String& raw) const; // 追加：マークアップ文字をエスケープ
         int findBlockAtScreenY(int screenY) const;       // 追加：タップ位置→ブロック特定
 
     public:

@@ -9,7 +9,7 @@ void ScrollList::render(){
 
     //前の描画分
     if(this->prev_l_rect != this->l_rect)
-        PICO_GFX::markDirty(this->getScreenPrevRect());
+        markdirty(this->getScreenPrevRect());
 
     this->fontApply();
     this->font_h = OSData::frame->fontHeight();
@@ -17,7 +17,7 @@ void ScrollList::render(){
     const Rect g_rect = this->getScreenRect();
 
     //現在の描画
-    PICO_GFX::markDirty(g_rect);
+    markdirty(g_rect);
 
     const int ITEM_HEIGHT = this->font_h + MARGIN;
     const int ITEMS_TOTAL_HEIGHT = ITEM_HEIGHT * this->dataSource->size();

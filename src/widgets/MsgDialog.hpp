@@ -17,6 +17,8 @@ class MsgDialog : public Widget {
         bool icon_visible = false;
         IconID icon_id = IconID::AppBox;
 
+        std::function<void(bool is_ok)> on_closed = nullptr;
+
         constexpr static int DIALOG_HEIGHT = 180;
         constexpr static int DIALOG_WIDTH = 180;
 
@@ -69,12 +71,14 @@ class MsgDialog : public Widget {
 
             ok_button = new Button(0, 0, ok_text);
             ok_button->setOnPressStart([this](){
+                this->causeOnClosed(true);
                 this->setVisible(false);
             });
             ok_button->setParent(this);
 
             cancel_button = new Button(0, 0, cancel_text);
             cancel_button->setOnPressStart([this](){
+                this->causeOnClosed(false);
                 this->setVisible(false);
             });
             cancel_button->setParent(this);
@@ -115,4 +119,13 @@ class MsgDialog : public Widget {
             delete cancel_button;
         }
 
+        void setOnClosed(std::function<void(bool is_ok)> callback){
+            this->on_closed = callback;
+        }
+        void clearOnClosed(){
+            this->on_closed = nullptr;
+        }
+        void causeOnClosed(bool is_ok){
+            if(this->on_closed) this->on_closed(is_ok);
+        }
 };

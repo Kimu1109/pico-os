@@ -119,9 +119,12 @@ class DropdownMenu : public Widget {
         void setSelectedIndex(int index){
             this->dropdown->setSelectedIndex(index);
         }
+        void clearSelectedIndex(){
+            this->dropdown->clearSelectedIndex();
+        }
         int getSelectedIndex(){ return this->dropdown->getSelectedIndex(); }
 
-        String ItemAt(int index){
+        String itemAt(int index){
             return this->dropdown->itemAt(index);
         }
 

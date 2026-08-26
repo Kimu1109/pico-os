@@ -30,6 +30,8 @@ class InputDialog : public Widget {
 
         Label* label;
 
+        std::function<void(bool is_submit)> on_closed = nullptr;
+
         void updatePlaces() {
             this->label->setX(BASE_X + MARGIN);
             this->label->setY(BASE_Y + MARGIN);
@@ -73,12 +75,14 @@ class InputDialog : public Widget {
 
             this->submit_button = new Button("決定");
             this->submit_button->setOnPressStart([this](){
+                this->causeOnClosed(true);
                 this->setVisible(false);
             });
             this->submit_button->setParent(this);
 
             this->cancel_button = new Button("キャンセル");
             this->cancel_button->setOnPressStart([this](){
+                this->causeOnClosed(false);
                 this->setVisible(false);
             });
             this->cancel_button->setParent(this);
@@ -100,6 +104,23 @@ class InputDialog : public Widget {
             this->isSingleLine = isSingleLine;
             this->updatePlaces();
             this->needsRender();
+        }
+
+        void setOnClosed(std::function<void(bool is_submit)> callback){
+            this->on_closed = callback;
+        }
+        void clearOnClosed(){
+            this->on_closed = nullptr;
+        }
+        void causeOnClosed(bool is_submit){
+            if(this->on_closed) this->on_closed(is_submit);
+        }
+
+        String getInput(){
+            return this->label->getText();
+        }
+        void setInput(String input){
+            this->label->setText(input);
         }
 
         void render() override;

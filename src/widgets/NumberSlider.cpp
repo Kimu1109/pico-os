@@ -21,8 +21,15 @@ void NumberSlider::causeOnPressMove(){
 
     const Rect g_rect = this->getScreenRect();
 
+    int before_value = this->value;
+
     this->value = this->minValue + ((float)(OSData::touchX - g_rect.x - numW) / (float)(g_rect.w - numW)) * (float)(this->maxValue - this->minValue);
     this->value = min(max(this->value, this->minValue), this->maxValue);
+
+    if(before_value != this->value){
+        this->causeOnValueChanged();
+    }
+
     this->needsRender();
 }
 

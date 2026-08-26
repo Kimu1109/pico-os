@@ -54,18 +54,22 @@ class Widget {
 
         //タッチ開始
         virtual void causeOnPressStart();
+        virtual void clearOnPressStart();
         virtual void setOnPressStart(std::function<void()> callback);
 
         //タッチ終了
         virtual void causeOnPressEnd();
+        virtual void clearOnPressEnd();
         virtual void setOnPressEnd(std::function<void()> callback);
 
         //タッチ中
         virtual void causeOnPressMove();
+        virtual void clearOnPressMove();
         virtual void setOnPressMove(std::function<void()> callback);
 
         //他ウィジェットをタッチ開始
         virtual void causeOnPressOut();
+        virtual void clearOnPressOut();
         virtual void setOnPressOut(std::function<void()> callback);
 
         //描画

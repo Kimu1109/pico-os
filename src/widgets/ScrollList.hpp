@@ -78,6 +78,9 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
             this->selected_index = index;
             this->needsRender();
         }
+        void clearSelectedIndex(){
+            this->selected_index = -1;
+        }
         int getSelectedIndex(){ return this->selected_index; }
 
         String itemAt(int index){

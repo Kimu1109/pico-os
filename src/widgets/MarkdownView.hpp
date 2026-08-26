@@ -114,6 +114,9 @@ class MarkdownView : public Widget {
         void setOnLinkTap(std::function<void(String)> callback) {
             this->on_link_tap = callback;
         }
+        void clearOnLinkTap(){
+            this->on_link_tap = nullptr;
+        }
 
         const std::vector<Widget*>& getChildren() const override {
             return children_;

@@ -18,6 +18,8 @@ class NumberSlider : public Widget {
 
         void updateTextW();
 
+        std::function<void()> on_value_changed = nullptr;
+
     public:
 
         NumberSlider(int16_t x, int16_t y, int16_t w){
@@ -31,6 +33,7 @@ class NumberSlider : public Widget {
 
         void setValue(float value){
             this->value = min(max(value, minValue), maxValue);
+            this->causeOnValueChanged();
             this->needsRender();
         }
         float getValue() { return this->value; }
@@ -80,5 +83,15 @@ class NumberSlider : public Widget {
         }
         int getDecimalPlacesNum(){
             return this->decimalPlacesNum;
+        }
+
+        void setOnValueChanged(std::function<void()> callback){
+            this->on_value_changed = callback;
+        }
+        void clearOnValueChanged(){
+            this->on_value_changed = nullptr;
+        }
+        void causeOnValueChanged(){
+            if(this->on_value_changed) this->on_value_changed();
         }
 };

@@ -20,23 +20,38 @@ void Widget::update() {
 void Widget::causeOnPressStart() {
     if (on_press_start) on_press_start();
 }
+void Widget::clearOnPressStart(){
+    on_press_start = nullptr;
+}
 void Widget::setOnPressStart(std::function<void()> callback) {
     this->on_press_start = callback;
 }
+
 void Widget::causeOnPressEnd(){
     if (on_press_end) on_press_end();
+}
+void Widget::clearOnPressEnd(){
+    on_press_end = nullptr;
 }
 void Widget::setOnPressEnd(std::function<void()> callback) {
     this->on_press_end = callback;
 }
+
 void Widget::causeOnPressMove(){
     if (on_press_move) on_press_move();
+}
+void Widget::clearOnPressMove(){
+    on_press_move = nullptr;
 }
 void Widget::setOnPressMove(std::function<void()> callback) {
     this->on_press_move = callback;
 }
+
 void Widget::causeOnPressOut(){
     if (on_press_out) on_press_out();
+}
+void Widget::clearOnPressOut(){
+    on_press_out = nullptr;
 }
 void Widget::setOnPressOut(std::function<void()> callback){
     this->on_press_out = callback;

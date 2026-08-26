@@ -11,6 +11,8 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
 
         void setTextAndCalc(String text);
 
+        std::function<void()> on_change_checked = nullptr;
+
     public:
 
         Checkbox(int16_t x, int16_t y, String text){
@@ -21,6 +23,13 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
         void render() override;
 
         void causeOnPressStart() override;
+
+        void causeOnChangeChecked() {
+            if(on_change_checked) on_change_checked();
+        }
+        void setOnChangeChecked(std::function<void()> callback){
+            on_change_checked = callback;
+        }
 
         String getText() { return this->text; }
         void setText(String text) {

@@ -10,10 +10,10 @@ namespace IME_Functions {
     inline char candidates[IME_MAX_CANDIDATES][IME_MAX_CAND_BYTES];
     inline int candidatesCount = 0;
 
-    inline void setup(){
+    inline void Setup(){
         ime.begin("dict/skk_body.tsv", "dict/skk_index.tsv");
     }
-    inline int ime_lookup(const char* key) {
+    inline int ImeLookup(const char* key) {
         int n = ime.lookup(key, candidates, IME_MAX_CANDIDATES);
         candidatesCount = n;
 
@@ -47,8 +47,8 @@ namespace IME_Functions {
     };
     static inline const int kKanaMarkerCount = sizeof(kKanaMarkerTable) / sizeof(kKanaMarkerTable[0]);
 
-    inline String buildOkuriKey(const String input, const char* okuriKanaUtf8) {
-        const String stem = UTF8_Functions::removeLastChar(input);
+    inline String BuildOkuriKey(const String input, const char* okuriKanaUtf8) {
+        const String stem = UTF8_Functions::RemoveLastChar(input);
         
         char marker = 0;
         for (int i = 0; i < kKanaMarkerCount; i++) {

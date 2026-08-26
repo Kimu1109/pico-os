@@ -23,7 +23,7 @@ namespace LogFunctions{
         UNKNOWN
     };
 
-    inline const char* getPrefix(LogType type)
+    inline const char* GetPrefix(LogType type)
     {
         switch (type)
         {
@@ -44,9 +44,9 @@ namespace LogFunctions{
         }
     }
 
-    inline void log(LogType type, const char* fmt, ...)
+    inline void Log(LogType type, const char* fmt, ...)
     {
-        Serial.printf("%s", getPrefix(type));
+        Serial.printf("%s", GetPrefix(type));
 
         char buf[256];
         va_list args;
@@ -58,15 +58,15 @@ namespace LogFunctions{
         Serial.println();
     }
 
-    #define LOG_SYS_OK(...)         LogFunctions::log(LogFunctions::LogType::SYS_OK, __VA_ARGS__)
-    #define LOG_SYS_WARN(...)       LogFunctions::log(LogFunctions::LogType::SYS_WARN, __VA_ARGS__)
-    #define LOG_SYS_FAIL(...)       LogFunctions::log(LogFunctions::LogType::SYS_FAIL, __VA_ARGS__)
-    #define LOG_SYS_DEBUG(...)      LogFunctions::log(LogFunctions::LogType::SYS_DBG, __VA_ARGS__)
-    #define LOG_SYS_MSG(...)        LogFunctions::log(LogFunctions::LogType::SYS_MSG, __VA_ARGS__)
+    #define LOG_SYS_OK(...)         LogFunctions::Log(LogFunctions::LogType::SYS_OK, __VA_ARGS__)
+    #define LOG_SYS_WARN(...)       LogFunctions::Log(LogFunctions::LogType::SYS_WARN, __VA_ARGS__)
+    #define LOG_SYS_FAIL(...)       LogFunctions::Log(LogFunctions::LogType::SYS_FAIL, __VA_ARGS__)
+    #define LOG_SYS_DEBUG(...)      LogFunctions::Log(LogFunctions::LogType::SYS_DBG, __VA_ARGS__)
+    #define LOG_SYS_MSG(...)        LogFunctions::Log(LogFunctions::LogType::SYS_MSG, __VA_ARGS__)
 
-    #define LOG_APP_OK(...)         LogFunctions::log(LogFunctions::LogType::APP_OK, __VA_ARGS__)
-    #define LOG_APP_WARN(...)       LogFunctions::log(LogFunctions::LogType::APP_WARN, __VA_ARGS__)
-    #define LOG_APP_FAIL(...)       LogFunctions::log(LogFunctions::LogType::APP_FAIL, __VA_ARGS__)
-    #define LOG_APP_DEBUG(...)      LogFunctions::log(LogFunctions::LogType::APP_DBG, __VA_ARGS__)
-    #define LOG_APP_MSG(...)        LogFunctions::log(LogFunctions::LogType::APP_MSG, __VA_ARGS__)
+    #define LOG_APP_OK(...)         LogFunctions::Log(LogFunctions::LogType::APP_OK, __VA_ARGS__)
+    #define LOG_APP_WARN(...)       LogFunctions::Log(LogFunctions::LogType::APP_WARN, __VA_ARGS__)
+    #define LOG_APP_FAIL(...)       LogFunctions::Log(LogFunctions::LogType::APP_FAIL, __VA_ARGS__)
+    #define LOG_APP_DEBUG(...)      LogFunctions::Log(LogFunctions::LogType::APP_DBG, __VA_ARGS__)
+    #define LOG_APP_MSG(...)        LogFunctions::Log(LogFunctions::LogType::APP_MSG, __VA_ARGS__)
 }

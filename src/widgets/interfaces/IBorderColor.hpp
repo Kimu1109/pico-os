@@ -8,8 +8,8 @@ class IBorderColor {
         int8_t border_color = PICO_BLACK;
 
     public:
-        int8_t GetBorderColor(){
+        int8_t getBorderColor(){
             return this->border_color;
         }
-        virtual void SetBorderColor(int8_t palette_color);
+        virtual void setBorderColor(int8_t palette_color);
 };

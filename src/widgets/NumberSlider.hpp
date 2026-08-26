@@ -19,69 +19,66 @@ class NumberSlider : public Widget {
         void updateTextW();
 
     public:
-        using Widget::onPressMove;
-        using Widget::W;
-        using Widget::H;
 
         NumberSlider(int16_t x, int16_t y, int16_t w){
             this->l_rect = {x, y, w, 21};
             this->updateTextW();
         }
 
-        void onPressMove() override;
+        void causeOnPressMove() override;
 
         void render() override;
 
-        void Value(float value){
+        void setValue(float value){
             this->value = min(max(value, minValue), maxValue);
             this->needsRender();
         }
-        float Value() { return this->value; }
+        float getValue() { return this->value; }
 
-        void MinValue(float value){
+        void setMinValue(float value){
             if(value > this->maxValue) return;
             this->minValue = value;
             this->updateTextW();
             this->needsRender();
         }
-        float MinValue() { return this->minValue; }
+        float getMinValue() { return this->minValue; }
 
-        void MaxValue(float value){
+        void setMaxValue(float value){
             if(value < this->minValue) return;
             this->maxValue = value;
             this->updateTextW();
             this->needsRender();
         }
-        float MaxValue() { return this->maxValue; }
+        float getMaxValue() { return this->maxValue; }
 
-        void Color(int8_t color){
+        void setColor(int8_t color){
             this->color = color;
         }
-        int8_t Color(){
+        int8_t getColor(){
             return this->color;
         }
 
-        void W(int16_t w){
+        void setW(int16_t w){
             this->l_rect.w = w;
             this->needsRender();
         }
-        void H(int16_t h){
+        void setH(int16_t h){
             this->l_rect.h = h;
             this->needsRender();
         }
 
-        void VisibleNum(bool visible){
+        void setVisibleNum(bool visible){
             this->visibleNum = visible;
             this->needsRender();
         }
-        bool VisibleNum(){
+        bool getVisibleNum(){
             return this->visibleNum;
         }
 
-        void DecimalPlacesNum(int num){
+        void setDecimalPlacesNum(int num){
             this->decimalPlacesNum = num;
         }
-        int DecimalPlacesNum(){
+        int getDecimalPlacesNum(){
             return this->decimalPlacesNum;
         }
 };

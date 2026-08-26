@@ -7,7 +7,7 @@ void ScrollContainer::updateContentBounds() {
     int max_y = 0;
 
     for (Widget* child : children_) {
-        if (!child->Visible()) continue;
+        if (!child->getVisible()) continue;
         const Rect r = child->getLocalRect();
         if (r.x + r.w > max_x) max_x = r.x + r.w;
         if (r.y + r.h > max_y) max_y = r.y + r.h;
@@ -20,8 +20,8 @@ void ScrollContainer::updateContentBounds() {
     max_scroll_y = std::max(0, max_y - view_h);
 }
 
-void ScrollContainer::onPressStart(){
-    Widget::onPressStart();
+void ScrollContainer::causeOnPressStart(){
+    Widget::causeOnPressStart();
 
     sx = OSData::touchX - getScreenX();
     sy = OSData::touchY - getScreenY();
@@ -42,8 +42,8 @@ void ScrollContainer::onPressStart(){
     s_scroll_y = scroll_y;
 }
 
-void ScrollContainer::onPressMove(){
-    Widget::onPressMove();
+void ScrollContainer::causeOnPressMove(){
+    Widget::causeOnPressMove();
 
     if(!is_scrolling) return;
 

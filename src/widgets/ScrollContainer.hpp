@@ -28,8 +28,6 @@ class ScrollContainer : public Widget {
         constexpr static int SCROLL_L = 15;
 
     public:
-        using Widget::onPressStart;
-        using Widget::onPressMove;
 
         ScrollContainer(int16_t x, int16_t y, int16_t w, int16_t h){
             this->l_rect = {x, y, w, h};
@@ -37,15 +35,15 @@ class ScrollContainer : public Widget {
 
         void render() override;
 
-        void onPressStart() override;
-        void onPressMove() override;
+        void causeOnPressStart() override;
+        void causeOnPressMove() override;
 
         const std::vector<Widget*>& getChildren() const override {
             return children_;
         }
 
-        void Add(Widget* w){
-            w->SetParent(this);
+        void add(Widget* w){
+            w->setParent(this);
             children_.push_back(w);
             this->needs_children_update = true;
             this->updateContentBounds();
@@ -66,7 +64,7 @@ class ScrollContainer : public Widget {
             return dst;
         }
 
-        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::OPAQUE; }
+        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 
         int getScrollOffsetX() const override { return scroll_x; }
         int getScrollOffsetY() const override { return scroll_y; }

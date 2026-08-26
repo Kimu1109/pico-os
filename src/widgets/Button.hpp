@@ -27,11 +27,6 @@ class Button :
         void calcTextSize(String text);
 
     public:
-        using Widget::onPressStart;
-        using Widget::onPressMove;
-
-        using Widget::W;
-        using Widget::H;
 
         Button(int x, int y, String text){
             this->l_rect.x = x;
@@ -46,11 +41,11 @@ class Button :
             this->needs_redraw = true;
         }
 
-        void onPressStart() override {
+        void causeOnPressStart() override {
             if(this->on_press_start) this->on_press_start();
             this->needsRender();
         }
-        void onPressEnd() override {
+        void causeOnPressEnd() override {
             if(this->on_press_end) this->on_press_end();
             this->needsRender();
         }
@@ -71,32 +66,32 @@ class Button :
             };
         }
 
-        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::OPAQUE; }
+        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 
-        void SetFontSize(FontFn::FontSize size) override {
+        void setFontSize(FontFn::FontSize size) override {
             this->f_size = size;
             this->calcTextSize(this->text);
             this->needsRender();
         }
-        void SetBorderColor(int8_t palette_color) override {
+        void setBorderColor(int8_t palette_color) override {
             this->border_color = palette_color;
             this->needsRender();
         }
-        void SetTextColor(int8_t palette_color) override {
+        void setTextColor(int8_t palette_color) override {
             this->text_color = palette_color;
             this->needsRender();
         }
 
-        void W(int w){
+        void setW(int w){
             this->l_rect.w = w;
         }
-        void H(int h){
+        void setH(int h){
             this->l_rect.h = h;
         }
 
-        void AllowTextSpacing(bool v){
+        void setAllowTextSpacing(bool v){
             this->allowTextSpacing = v;
             this->needsRender();
         }
-        bool AllowTextSpacing() { return this->allowTextSpacing; }
+        bool getAllowTextSpacing() { return this->allowTextSpacing; }
 };

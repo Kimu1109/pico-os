@@ -8,12 +8,12 @@ class ITextInputTarget;
 //入力したテキストを簡便に取得するために必要
 class ITextInputWidget {
     public:
-        virtual String GetText() = 0;
-        virtual void SetText(String text) = 0;
+        virtual String getText() = 0;
+        virtual void setText(String text) = 0;
 
-        virtual void SetInputTarget(ITextInputTarget* target) = 0;
-        virtual void RemoveInputTarget(ITextInputTarget* valid_target) = 0;
-        virtual ITextInputTarget* GetInputTarget() = 0;
+        virtual void setInputTarget(ITextInputTarget* target) = 0;
+        virtual void removeInputTarget(ITextInputTarget* valid_target) = 0;
+        virtual ITextInputTarget* getInputTarget() = 0;
 };
 
 //テキストの入力を受けるターゲットクラス
@@ -26,8 +26,8 @@ class ITextInputTarget {
         virtual void onTextChanged(ITextInputWidget* keyboard) = 0;
         virtual void onHide(ITextInputWidget* keyboard) = 0;
 
-        virtual bool GetIsSingleLine() = 0;
-        virtual void SetIsSingleLine(bool is_single_line) = 0;
+        virtual bool getIsSingleLine() = 0;
+        virtual void setIsSingleLine(bool is_single_line) = 0;
 
         virtual ~ITextInputTarget() = default;
 };

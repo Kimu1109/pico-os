@@ -11,8 +11,8 @@ void NumberSlider::updateTextW(){
     FontFn::SetDefault();
 }
 
-void NumberSlider::onPressMove(){
-    Widget::onPressMove();
+void NumberSlider::causeOnPressMove(){
+    Widget::causeOnPressMove();
 
     int numW = 0;
     if(this->visibleNum){

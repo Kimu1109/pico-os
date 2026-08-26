@@ -31,29 +31,29 @@ class InputDialog : public Widget {
         Label* label;
 
         void updatePlaces() {
-            this->label->X(BASE_X + MARGIN);
-            this->label->Y(BASE_Y + MARGIN);
-            this->label->MaxWidth(DIALOG_WIDTH - MARGIN * 2);
+            this->label->setX(BASE_X + MARGIN);
+            this->label->setY(BASE_Y + MARGIN);
+            this->label->setMaxWidth(DIALOG_WIDTH - MARGIN * 2);
 
-            this->submit_button->X(BASE_X + MARGIN - 2);
-            this->submit_button->Y(BASE_Y + DIALOG_HEIGHT - BUTTON_AREA_HEIGHT + MARGIN);
-            this->submit_button->W(BUTTON_WIDTH);
-            this->submit_button->AllowTextSpacing(false);
+            this->submit_button->setX(BASE_X + MARGIN - 2);
+            this->submit_button->setY(BASE_Y + DIALOG_HEIGHT - BUTTON_AREA_HEIGHT + MARGIN);
+            this->submit_button->setW(BUTTON_WIDTH);
+            this->submit_button->setAllowTextSpacing(false);
 
-            this->cancel_button->X(BASE_X + MARGIN - 2);
-            this->cancel_button->Y(BASE_Y + DIALOG_HEIGHT - BUTTON_HEIGHT - MARGIN);
-            this->cancel_button->W(BUTTON_WIDTH);
-            this->cancel_button->AllowTextSpacing(false);
+            this->cancel_button->setX(BASE_X + MARGIN - 2);
+            this->cancel_button->setY(BASE_Y + DIALOG_HEIGHT - BUTTON_HEIGHT - MARGIN);
+            this->cancel_button->setW(BUTTON_WIDTH);
+            this->cancel_button->setAllowTextSpacing(false);
 
-            this->input->X(BASE_X + MARGIN);
-            this->input->Y(this->label->Y() + this->label->H() + MARGIN);
-            this->input->MaxWidth(DIALOG_WIDTH - MARGIN * 2);
-            this->input->SetIsSingleLine(isSingleLine);
+            this->input->setX(BASE_X + MARGIN);
+            this->input->setY(this->label->getY() + this->label->getH() + MARGIN);
+            this->input->setMaxWidth(DIALOG_WIDTH - MARGIN * 2);
+            this->input->setIsSingleLine(isSingleLine);
             if(this->isSingleLine){
-                this->input->MaxHeight(30);
+                this->input->setMaxHeight(30);
             }else{
-                this->input->MaxHeight(this->submit_button->Y() - this->input->Y() - MARGIN);
-                this->input->DefaultHeight(this->input->MaxHeight());
+                this->input->setMaxHeight(this->submit_button->getY() - this->input->getY() - MARGIN);
+                this->input->setDefaultHeight(this->input->getMaxHeight());
             }
         }
 
@@ -65,23 +65,23 @@ class InputDialog : public Widget {
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
             this->label = new Label(label_content);
-            this->label->SetParent(this);
+            this->label->setParent(this);
 
             this->input = new Textbox("", 0, 0, 0, 0, true);
-            this->input->Placeholder("ここに入力...");
-            this->input->SetParent(this);
+            this->input->setPlaceholder("ここに入力...");
+            this->input->setParent(this);
 
             this->submit_button = new Button("決定");
-            this->submit_button->onPressStart([this](){
-                this->Visible(false);
+            this->submit_button->setOnPressStart([this](){
+                this->setVisible(false);
             });
-            this->submit_button->SetParent(this);
+            this->submit_button->setParent(this);
 
             this->cancel_button = new Button("キャンセル");
-            this->cancel_button->onPressStart([this](){
-                this->Visible(false);
+            this->cancel_button->setOnPressStart([this](){
+                this->setVisible(false);
             });
-            this->cancel_button->SetParent(this);
+            this->cancel_button->setParent(this);
 
             this->updatePlaces();
 
@@ -93,10 +93,10 @@ class InputDialog : public Widget {
             this->visible = false;
         }
 
-        bool IsSingleLine() {
+        bool getIsSingleLine() {
             return isSingleLine;
         }
-        void IsSingleLine(bool isSingleLine){
+        void setIsSingleLine(bool isSingleLine){
             this->isSingleLine = isSingleLine;
             this->updatePlaces();
             this->needsRender();
@@ -104,7 +104,7 @@ class InputDialog : public Widget {
 
         void render() override;
 
-        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::TRANSLUCENT; }
+        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
         const std::vector<Widget*>& getChildren() const override {
             return children_;

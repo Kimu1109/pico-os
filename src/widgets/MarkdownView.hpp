@@ -10,29 +10,38 @@ enum class MdBlockType : uint8_t {
     H1, H2, H3,
     Paragraph,
     Image,
-    Link,       // 追加：行全体がリンクのみのブロック
-    CodeBlock,  // 追加：```で囲まれたコードブロック
+    Link,       // 行全体が [text](url) のみのブロック
+    CodeBlock,  // ```で囲まれたコードブロック
+    ListItem,   // 追加：リスト項目（箇条書き / 番号付き、ネスト対応）
 };
 
 struct MdBlock {
     MdBlockType type;
     uint16_t srcOffset;
     uint16_t srcLength;
-    uint16_t urlOffset = 0;   // Link用：doc_text内のURL部分オフセット
-    uint16_t urlLength = 0;   // Link用：URL部分の長さ
+    uint16_t urlOffset = 0;   // Link用、および段落/見出し/リスト項目内に
+                              // インラインリンクが見つかった場合の1件目用
+    uint16_t urlLength = 0;   // 0 = リンク無し
+    uint8_t  listIndent = 0;  // ListItem用：ネストの深さ（0始まり）
+    bool     listOrdered = false; // ListItem用：番号付きリストかどうか
+    uint16_t listNumber = 0;      // ListItem用：番号付きの場合の表示番号
     int32_t  y;
     uint16_t height;
 };
 
 class MarkdownView : public Widget {
     private:
-        static constexpr int kLabelPoolSize = 8;
+        static constexpr int kLabelPoolSize = 16;
         static constexpr int kImagePoolSize = 2;
         static constexpr int kMaxBlocks     = 128;
         static constexpr int kMaxSourceBytes = 16384;
         static constexpr int kPadding       = 4;
         static constexpr int kBlockSpacing  = 6;
         static constexpr int SCROLL_L       = 15; // ScrollContainerと同じ見た目に揃える
+
+        // ---------- リスト関連 ----------
+        static constexpr int kMaxListLevels   = 6;  // ネストの最大段数（番号カウンタ配列のサイズ）
+        static constexpr int kListIndentWidth = 12; // 1段あたりのインデント幅(px)
 
         String doc_text;
         std::vector<MdBlock> blocks;
@@ -63,7 +72,21 @@ class MarkdownView : public Widget {
         void bindImageSlot(int slot, int blockIdx, bool force);
         void hideLabelSlot(int slot);
         void hideImageSlot(int slot);
-        FontFn::FontSize fontSizeForBlock(MdBlockType type) const; // ※要調整: 実際のenum値に合わせて
+        FontFn::FontSize fontSizeForBlock(MdBlockType type) const;
+
+        // ---------- インライン要素（コード/リンク）認識 ----------
+        // src中の `code` を Labelの波線(~)装飾へ、[text](url) を下線(_)装飾へ変換した
+        // 表示用テキストを生成する。改行をまたぐ組は無効として素通りさせる。
+        String applyInlineMarkdown(const String& src) const;
+        // doc_text の [start, end) 範囲内で最初に見つかった [text](url) の
+        // URL部分のオフセット/長さ(doc_text基準)を取得する。見つからなければfalse。
+        bool findFirstInlineLink(int start, int end, uint16_t& urlOffOut, uint16_t& urlLenOut) const;
+
+        // ---------- リスト行の判定 ----------
+        // 行がリスト項目(箇条書き/番号付き)かどうかを判定し、
+        // ネスト段数・順序付きかどうか・番号・内容の開始位置を返す。
+        bool tryParseListItem(int lineStart, int lineEnd, int& indentOut, bool& orderedOut,
+                               int& numberOut, int& contentStartOut) const;
 
         std::function<void(String)> on_link_tap = nullptr;
 
@@ -74,23 +97,21 @@ class MarkdownView : public Widget {
         static constexpr int kTapThreshold = 6; // px
 
         String formatBlockText(const MdBlock& b) const;
-        int findBlockAtScreenY(int screenY) const;       // 追加：タップ位置→ブロック特定
+        int findBlockAtScreenY(int screenY) const;       // タップ位置→ブロック特定
 
     public:
-        using Widget::onPressStart;
-        using Widget::onPressMove;
 
         MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h);
 
-        bool Load(const String& path);
+        bool load(const String& path);
 
         void render() override;
 
-        void onPressStart() override;
-        void onPressMove() override;
-        void onPressEnd() override;
+        void causeOnPressStart() override;
+        void causeOnPressMove() override;
+        void causeOnPressEnd() override;
 
-        void OnLinkTap(std::function<void(String)> callback) {
+        void setOnLinkTap(std::function<void(String)> callback) {
             this->on_link_tap = callback;
         }
 
@@ -107,7 +128,7 @@ class MarkdownView : public Widget {
             return dst;
         }
 
-        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::OPAQUE; }
+        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 
         int getScrollOffsetY() const override { return scroll_y; }
 };

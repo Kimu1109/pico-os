@@ -7,27 +7,27 @@
 
 void KeyboardFunctions::Setup(){
     Label* label = new Label(10, 10, "");
-    label->MaxWidth(SCREEN_WIDTH - 20);
+    label->setMaxWidth(SCREEN_WIDTH - 20);
 
-    label->CursorVisible(true);
-    label->CursorBlink(true);
-    label->BackgroundColor(PICO_WHITE);
-    label->SetBorderColor(PICO_BLACK);
-    label->BorderWidth(1);
-    label->Visible(false);
+    label->setCursorVisible(true);
+    label->setCursorBlink(true);
+    label->setBackgroundColor(PICO_WHITE);
+    label->setBorderColor(PICO_BLACK);
+    label->setBorderWidth(1);
+    label->setVisible(false);
 
     OSData::keyboard_eng = new KeyboardEng(label);
     OSData::keyboard_jpn = new Keyboard(label);
-    WidgetFunctions::addDialog(OSData::keyboard_eng);
-    WidgetFunctions::addDialog(OSData::keyboard_jpn);
+    WidgetFunctions::AddDialog(OSData::keyboard_eng);
+    WidgetFunctions::AddDialog(OSData::keyboard_jpn);
 }
 
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget *target){
-    static_cast<KeyboardEng*>(OSData::keyboard_eng)->SetInputTarget(target);
-    static_cast<KeyboardEng*>(OSData::keyboard_jpn)->SetInputTarget(target);
+    static_cast<KeyboardEng*>(OSData::keyboard_eng)->setInputTarget(target);
+    static_cast<KeyboardEng*>(OSData::keyboard_jpn)->setInputTarget(target);
 }
 
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget *target){
-    static_cast<KeyboardEng*>(OSData::keyboard_eng)->RemoveInputTarget(target);
-    static_cast<KeyboardEng*>(OSData::keyboard_jpn)->RemoveInputTarget(target);
+    static_cast<KeyboardEng*>(OSData::keyboard_eng)->removeInputTarget(target);
+    static_cast<KeyboardEng*>(OSData::keyboard_jpn)->removeInputTarget(target);
 }

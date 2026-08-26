@@ -29,8 +29,8 @@ class Image : public Widget {
 
         void render() override;
 
-        String Path() { return this->path; }
-        void Path(String path) {
+        String getPath() { return this->path; }
+        void setPath(String path) {
             this->path = path;
             if(this->onRAM){
                 this->updateSprite();

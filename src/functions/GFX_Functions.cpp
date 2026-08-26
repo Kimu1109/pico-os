@@ -24,7 +24,7 @@ void PICO_GFX::Setup() {
     frame->setTextColor(PICO_BLACK);
     frame->setTextWrap(false, false);
     OSData::frame = frame;
-    markDirty({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
+    MarkDirty({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
 
     pinMode(22, OUTPUT); //LED ON
     digitalWrite(22, HIGH);
@@ -33,12 +33,12 @@ void PICO_GFX::Setup() {
     isDirtyDeactivates = false;
 }
 
-void PICO_GFX::markDirty(const Rect& rect) {
+void PICO_GFX::MarkDirty(const Rect& rect) {
     if(!isDirtyDeactivates)
         dirtyRects.push_back(rect);
 }
 
-void PICO_GFX::flushDirty() {
+void PICO_GFX::FlushDirty() {
     if (dirtyRects.empty()) return;
 
     //! DEBUG !
@@ -53,13 +53,13 @@ void PICO_GFX::flushDirty() {
 
         std::vector<Widget*> hit;
         for (auto* w : WidgetFunctions::widgets) {
-            if (w && w->Visible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
+            if (w && w->getVisible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
         }
         for (int k = WidgetFunctions::count_dialog - 1; k >= 0; k--) {
             Widget* root = WidgetFunctions::dialog_roots[k];
-            if (!root || !root->Visible()) continue;
+            if (!root || !root->getVisible()) continue;
             root->visitAll([&hit, &d](Widget* w) {
-                if (w && w->Visible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
+                if (w && w->getVisible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
             });
         }
 
@@ -69,7 +69,7 @@ void PICO_GFX::flushDirty() {
 
         for (int i = (int)hit.size() - 1; i >= 0; --i) {
             Widget* w = hit[i];
-            WidgetTools::RenderMode mode = w->GetRenderMode();
+            WidgetTools::RenderMode mode = w->getRenderMode();
 
             if (mode == WidgetTools::TRANSLUCENT) {
                 // TRANSLUCENT: 背景ウィジェットの更新を行わない
@@ -96,8 +96,8 @@ void PICO_GFX::flushDirty() {
             Rect clip = hit[i]->clippedScreenRect().intersection(d);
             if (clip.w <= 0 || clip.h <= 0) continue;
             OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
-            if (hit[i]->GetRenderMode() == WidgetTools::OPAQUE) {
-                OSData::frame->fillRect(clip.x, clip.y, clip.w, clip.h, hit[i]->BackgroundColor());
+            if (hit[i]->getRenderMode() == WidgetTools::OPAQUE) {
+                OSData::frame->fillRect(clip.x, clip.y, clip.w, clip.h, hit[i]->getBackgroundColor());
             }
             hit[i]->renderForce();
             OSData::frame->clearClipRect();
@@ -127,7 +127,7 @@ void PICO_GFX::flushDirty() {
     dirtyRects.clear();
 }
 
-void PICO_GFX::drawDialogBackground(){
+void PICO_GFX::DrawDialogBackground(){
     constexpr int16_t kSpacing   = 6;  // 斜線の間隔(px)
     constexpr uint8_t  kColor    = PICO_BLACK;
 

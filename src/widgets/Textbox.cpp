@@ -2,21 +2,21 @@
 #include "OS_Data.hpp"
 #include "functions/Keyboard_Functions.hpp"
 
-void Textbox::onPressStart(){
-    if(this->on_press_start) this->on_press_start();
+void Textbox::causeOnPressStart(){
+    Widget::causeOnPressStart();
 
     KeyboardFunctions::RegisterInputTarget(this);
-    OSData::keyboard_jpn->Visible(true);
+    OSData::keyboard_jpn->setVisible(true);
 }
 
 void Textbox::onShow(ITextInputWidget* keyboard){
-    keyboard->SetText(this->Text());
+    keyboard->setText(this->getText());
 }
 void Textbox::onTextChanged(ITextInputWidget* keyboard){
     // 入力途中は背景のTextboxを更新せず、onHide(確定時)に反映する
 }
 void Textbox::onHide(ITextInputWidget* keyboard){
-    this->Text(keyboard->GetText());
+    this->setText(keyboard->getText());
 }
 
 Textbox::~Textbox(){

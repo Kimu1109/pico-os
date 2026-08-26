@@ -33,25 +33,25 @@ class MsgDialog : public Widget {
         void updateWidgets(){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
-            msg_icon->X(BASE_X + MARGIN + (DIALOG_WIDTH - MARGIN * 2 - ICON_SIZE) * 0.5);
-            msg_icon->Y(BASE_Y + MARGIN);
-            msg_icon->Visible(this->icon_visible);
-            msg_icon->SetIconId(this->icon_id);
+            msg_icon->setX(BASE_X + MARGIN + (DIALOG_WIDTH - MARGIN * 2 - ICON_SIZE) * 0.5);
+            msg_icon->setY(BASE_Y + MARGIN);
+            msg_icon->setVisible(this->icon_visible);
+            msg_icon->setIconId(this->icon_id);
 
-            msg_label->X(BASE_X + MARGIN);
-            msg_label->Y(BASE_Y + MARGIN + (this->icon_visible ? (ICON_SIZE + MARGIN) : 0));
-            msg_label->MaxWidth(DIALOG_WIDTH - MARGIN * 2);
-            msg_label->MaxHeight(DIALOG_HEIGHT - MARGIN * 2 - BUTTON_AREA_HEIGHT - (this->icon_visible ? ICON_SIZE : 0));
+            msg_label->setX(BASE_X + MARGIN);
+            msg_label->setY(BASE_Y + MARGIN + (this->icon_visible ? (ICON_SIZE + MARGIN) : 0));
+            msg_label->setMaxWidth(DIALOG_WIDTH - MARGIN * 2);
+            msg_label->setMaxHeight(DIALOG_HEIGHT - MARGIN * 2 - BUTTON_AREA_HEIGHT - (this->icon_visible ? ICON_SIZE : 0));
 
-            ok_button->X(BASE_X + MARGIN - 2);
-            ok_button->Y(BASE_Y + DIALOG_HEIGHT - BUTTON_AREA_HEIGHT + MARGIN);
-            ok_button->W(BUTTON_WIDTH);
-            ok_button->AllowTextSpacing(false);
+            ok_button->setX(BASE_X + MARGIN - 2);
+            ok_button->setY(BASE_Y + DIALOG_HEIGHT - BUTTON_AREA_HEIGHT + MARGIN);
+            ok_button->setW(BUTTON_WIDTH);
+            ok_button->setAllowTextSpacing(false);
 
-            cancel_button->X(BASE_X + MARGIN - 2);
-            cancel_button->Y(BASE_Y + DIALOG_HEIGHT - BUTTON_HEIGHT - MARGIN);
-            cancel_button->W(BUTTON_WIDTH);
-            cancel_button->AllowTextSpacing(false);
+            cancel_button->setX(BASE_X + MARGIN - 2);
+            cancel_button->setY(BASE_Y + DIALOG_HEIGHT - BUTTON_HEIGHT - MARGIN);
+            cancel_button->setW(BUTTON_WIDTH);
+            cancel_button->setAllowTextSpacing(false);
 
             this->needsRender();
         }
@@ -62,22 +62,22 @@ class MsgDialog : public Widget {
             this->l_rect = {0, 0, DIALOG_WIDTH, DIALOG_HEIGHT};
 
             msg_icon = new Icon(0, 0, this->icon_id, IconSize::Px64);
-            msg_icon->SetParent(this);
+            msg_icon->setParent(this);
 
             msg_label = new Label(0, 0, msg_text);
-            msg_label->SetParent(this);
+            msg_label->setParent(this);
 
             ok_button = new Button(0, 0, ok_text);
-            ok_button->onPressStart([this](){
-                this->Visible(false);
+            ok_button->setOnPressStart([this](){
+                this->setVisible(false);
             });
-            ok_button->SetParent(this);
+            ok_button->setParent(this);
 
             cancel_button = new Button(0, 0, cancel_text);
-            cancel_button->onPressStart([this](){
-                this->Visible(false);
+            cancel_button->setOnPressStart([this](){
+                this->setVisible(false);
             });
-            cancel_button->SetParent(this);
+            cancel_button->setParent(this);
 
             this->updateWidgets();
 
@@ -91,16 +91,16 @@ class MsgDialog : public Widget {
 
         void render() override;
 
-        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::TRANSLUCENT; }
+        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
-        bool VisibleIcon() { return this->icon_visible; }
-        void VisibleIcon(bool v){
+        bool getVisibleIcon() { return this->icon_visible; }
+        void setVisibleIcon(bool v){
             this->icon_visible = v;
             this->updateWidgets();
         }
 
-        IconID IconId(){ return icon_id; }
-        void IconId(IconID icon_id){
+        IconID getIconId(){ return icon_id; }
+        void setIconId(IconID icon_id){
             this->icon_id = icon_id;
             this->updateWidgets();
         }

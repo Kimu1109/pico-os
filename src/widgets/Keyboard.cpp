@@ -5,16 +5,16 @@
 #include "OS_Data.hpp"
 
 //表示の切り替え
-void Keyboard::Visible(bool visible) {
+void Keyboard::setVisible(bool visible) {
     this->visible = visible;
-    this->input_label->Visible(visible);
-    this->input_label->MaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
+    this->input_label->setVisible(visible);
+    this->input_label->setMaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
 
     if(!visible){
-        this->input_label->Text(this->inputs_done + this->inputs);
+        this->input_label->setText(this->inputs_done + this->inputs);
         if(this->target) this->target->onHide(this);
     }else{
-        this->inputs_done = this->input_label->Text();
+        this->inputs_done = this->input_label->getText();
         this->inputs = "";
         if(this->target) this->target->onShow(this);
         this->updateInputs(false);
@@ -37,7 +37,7 @@ void Keyboard::switch_font_style(char style){
 
 //候補を更新
 void Keyboard::updateImeCandidates() {
-    int candidates_counts = IME_Functions::ime_lookup(inputs.c_str());
+    int candidates_counts = IME_Functions::ImeLookup(inputs.c_str());
     for(int i = 0; i < candidates_counts; i++){
         if(okuri_hira.length() != 0){
             strcat(IME_Functions::candidates[i], okuri_hira.c_str());
@@ -93,8 +93,8 @@ void Keyboard::drawCandidates(){
 }
 
 //タップ開始
-void Keyboard::onPressStart() {
-    if(on_press_start) on_press_start();
+void Keyboard::causeOnPressStart() {
+    Widget::causeOnPressStart();
 
     if(OSData::touchY < START_KEY_Y){ //候補のタップ
         if(OSData::touchX > 200){ //候補のスクロール
@@ -146,13 +146,13 @@ void Keyboard::onPressStart() {
     if(swipe_x_index == 4 && swipe_y_index >= 2){
         if(is_inputs_empty){
             if(this->target){
-                if(this->target->GetIsSingleLine()){
+                if(this->target->getIsSingleLine()){
                     this->target->onHide(this);
-                    this->Visible(false);
+                    this->setVisible(false);
                 }else{
                     if(swipe_y_index == 2){
                         this->target->onHide(this);
-                        this->Visible(false);
+                        this->setVisible(false);
                     }else if(swipe_y_index == 3){
                         inputs = "\n";
                         commitAndClear();
@@ -175,25 +175,25 @@ void Keyboard::onPressStart() {
         }
         //英字へ
         if(swipe_x_index == 0 && swipe_y_index == 1){
-            this->Visible(false);
-            OSData::keyboard_eng->Visible(true);
+            this->setVisible(false);
+            OSData::keyboard_eng->setVisible(true);
         }
         //カタカナへ
         if(swipe_x_index == 0 && swipe_y_index == 2 && !is_inputs_empty){
-            inputs = UTF8_Functions::hiraganaToKatakana(inputs);
+            inputs = UTF8_Functions::HiraganaToKatakana(inputs);
             commitAndClear();
         }
         //送りへ
         if(swipe_x_index == 0 && swipe_y_index == 3 && !is_inputs_empty){
             if(okuri_hira.length() == 0){ //送り開始
-                okuri_hira = UTF8_Functions::getLastChar(inputs);
-                inputs = IME_Functions::buildOkuriKey(inputs, okuri_hira.c_str());
+                okuri_hira = UTF8_Functions::GetLastChar(inputs);
+                inputs = IME_Functions::BuildOkuriKey(inputs, okuri_hira.c_str());
 
-            }else if(okuri_hira == "い" && UTF8_Functions::getLastChar(inputs) == "w") { //形容詞に配慮
-                inputs = UTF8_Functions::removeLastChar(inputs);
+            }else if(okuri_hira == "い" && UTF8_Functions::GetLastChar(inputs) == "w") { //形容詞に配慮
+                inputs = UTF8_Functions::RemoveLastChar(inputs);
                 inputs += "i";
             }else { //送り解除
-                inputs = UTF8_Functions::removeLastChar(inputs);
+                inputs = UTF8_Functions::RemoveLastChar(inputs);
                 inputs += okuri_hira;
                 okuri_hira = "";
             }
@@ -211,8 +211,8 @@ void Keyboard::onPressStart() {
         this->needsRender(); //フリックキーの描画のため       
     }
 }
-void Keyboard::onPressEnd() {
-    if(on_press_end) on_press_end();
+void Keyboard::causeOnPressEnd() {
+    Widget::causeOnPressEnd();
 
     //すワイプしてたら
     if(is_swiping){
@@ -230,7 +230,7 @@ void Keyboard::onPressEnd() {
 
         //位置の確定
         int input_relative_index = 0;
-        switch (HitBoxFunctions::classifyPoint(point, rect)){
+        switch (HitBoxFunctions::ClassifyPoint(point, rect)){
             case HitBoxFunctions::Region::Inside:
                 input_relative_index = 0;
                 break;
@@ -262,7 +262,7 @@ void Keyboard::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    PICO_GFX::drawDialogBackground();
+    PICO_GFX::DrawDialogBackground();
     OSData::frame->fillRect(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y, this->background_color);
     markdirty({
         0, (int16_t)(START_KEY_Y - SQUARE_H),
@@ -279,7 +279,7 @@ void Keyboard::render() {
     for(int i = 0; i < 4; i++){
         int LINE_WIDTH = 0;
         if(i == 3)
-            if(is_inputs_empty && this->target && !this->target->GetIsSingleLine())
+            if(is_inputs_empty && this->target && !this->target->getIsSingleLine())
                 LINE_WIDTH = SCREEN_WIDTH;
             else
                 LINE_WIDTH = SCREEN_WIDTH - SQUARE_W;

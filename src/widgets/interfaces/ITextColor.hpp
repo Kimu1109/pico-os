@@ -11,8 +11,8 @@ class ITextColor {
         void textColorDefault();
 
     public:
-        int8_t GetTextColor(){
+        int8_t getTextColor(){
             return this->text_color;
         }
-        virtual void SetTextColor(int8_t palette_color);
+        virtual void setTextColor(int8_t palette_color);
 };

@@ -53,20 +53,20 @@ class Widget {
         void update();
 
         //タッチ開始
-        virtual void onPressStart();
-        virtual void onPressStart(std::function<void()> callback);
+        virtual void causeOnPressStart();
+        virtual void setOnPressStart(std::function<void()> callback);
 
         //タッチ終了
-        virtual void onPressEnd();
-        virtual void onPressEnd(std::function<void()> callback);
+        virtual void causeOnPressEnd();
+        virtual void setOnPressEnd(std::function<void()> callback);
 
         //タッチ中
-        virtual void onPressMove();
-        virtual void onPressMove(std::function<void()> callback);
+        virtual void causeOnPressMove();
+        virtual void setOnPressMove(std::function<void()> callback);
 
         //他ウィジェットをタッチ開始
-        virtual void onPressOut();
-        virtual void onPressOut(std::function<void()> callback);
+        virtual void causeOnPressOut();
+        virtual void setOnPressOut(std::function<void()> callback);
 
         //描画
         virtual void render() = 0;
@@ -76,8 +76,8 @@ class Widget {
         }
 
         //表示
-        virtual bool Visible();
-        virtual void Visible(bool visible);
+        virtual bool getVisible();
+        virtual void setVisible(bool visible);
 
         //相対的なrect
         virtual Rect getLocalRect() const { return l_rect; }
@@ -98,7 +98,7 @@ class Widget {
         }
 
         //描画モード
-        virtual WidgetTools::RenderMode GetRenderMode() const { return WidgetTools::CLEAR; }
+        virtual WidgetTools::RenderMode getRenderMode() const { return WidgetTools::CLEAR; }
 
         //絶対座標(スクリーン基点)
         virtual int getScreenX() const {
@@ -130,46 +130,46 @@ class Widget {
         virtual void markdirty(Rect rect);
 
         //子ウィジェットの更新を要求
-        virtual void childrenUpdate(bool needs_update) {
+        virtual void setChildrenUpdate(bool needs_update) {
             this->needs_children_update = needs_update;
         }
-        virtual bool childrenUpdate() const {
+        virtual bool getChildrenUpdate() const {
             return this->needs_children_update;
         }
 
-        virtual int X(){ return this->l_rect.x; }
-        virtual void X(int x){
+        virtual int getX(){ return this->l_rect.x; }
+        virtual void setX(int x){
             this->l_rect.x = x;
             this->needsRender();
         }
 
-        virtual int Y() { return this->l_rect.y; }
-        virtual void Y(int y){
+        virtual int getY() { return this->l_rect.y; }
+        virtual void setY(int y){
             this->l_rect.y = y;
             this->needsRender();
         }
 
-        virtual int W() { return this->l_rect.w; }
-        virtual int H() { return this->l_rect.h; }
+        virtual int getW() { return this->l_rect.w; }
+        virtual int getH() { return this->l_rect.h; }
 
-        virtual int8_t BackgroundColor() { return this->background_color; }
-        virtual void BackgroundColor(int8_t palette_color) {
+        virtual int8_t getBackgroundColor() { return this->background_color; }
+        virtual void setBackgroundColor(int8_t palette_color) {
             this->background_color = palette_color;
             this->needsRender();
         }
 
-        virtual void SetParent(Widget* parent){
+        virtual void setParent(Widget* parent){
             this->parent = parent;
         }
-        virtual Widget* GetParent(){
+        virtual Widget* getParent(){
             return this->parent;
         }
 
-        virtual bool GetDisableMarkdirty(){ return this->disable_markdirty; }
+        virtual bool getDisableMarkdirty(){ return this->disable_markdirty; }
         //markdirtyをしても実際にはマークしないかのフラグ
         //親ウィジェットが描画の反映のすべてを保証する場合に便利です
         //それ以外の場合は予想外の描画バグが連発するので使用は厳禁
-        virtual void SetDisableMarkdirty(bool value){
+        virtual void setDisableMarkdirty(bool value){
             this->disable_markdirty = value;
         }
 

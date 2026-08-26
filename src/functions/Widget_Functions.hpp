@@ -13,13 +13,13 @@ namespace WidgetFunctions
 
     inline Widget *pressingWidget = nullptr;
 
-    void add(Widget *w);
-    void addDialog(Widget *w);
+    void Add(Widget *w);
+    void AddDialog(Widget *w);
 
-    void bringToFront(Widget *w);
+    void BringToFront(Widget *w);
 
-    void updateAll();
+    void UpdateAll();
 
     // タッチは上から順に判定
-    Widget *hitTest(int16_t x, int16_t y);
+    Widget *HitTest(int16_t x, int16_t y);
 };

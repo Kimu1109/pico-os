@@ -23,11 +23,11 @@ void setup() {
     PICO_SD::Setup();
 
     KeyboardFunctions::Setup();
-    IME_Functions::setup();
+    IME_Functions::Setup();
 
     markdown = new MarkdownView(0, 0, 240, 320);
-    markdown->Load("doc/doc.md");
-    WidgetFunctions::add(markdown);
+    markdown->load("doc/doc.md");
+    WidgetFunctions::Add(markdown);
 
     pinMode(LED_BUILTIN, HIGH);
 }
@@ -35,7 +35,7 @@ void setup() {
 void loop() {
     PICO_Touch::Update();
     
-    WidgetFunctions::updateAll();
+    WidgetFunctions::UpdateAll();
 
-    PICO_GFX::flushDirty();
+    PICO_GFX::FlushDirty();
 }

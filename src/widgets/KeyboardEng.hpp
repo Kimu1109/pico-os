@@ -156,15 +156,15 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         String inputs = "";
         void addInput(String str){
             inputs += str;
-            input_label->Text(inputs);
-            input_label->CursorToEnd();
+            input_label->setText(inputs);
+            input_label->setCursorToEnd();
             if(this->target) this->target->onTextChanged(this);
         }
         void removeInput(){
             if(inputs.length() == 0) return;
 
-            inputs = UTF8_Functions::removeLastChar(inputs);
-            input_label->Text(inputs);
+            inputs = UTF8_Functions::RemoveLastChar(inputs);
+            input_label->setText(inputs);
             if(this->target) this->target->onTextChanged(this);
         }
         Key keyEnv(int index){
@@ -176,7 +176,7 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         }
         char getMode(){
             if(this->target){
-                if(this->target->GetIsSingleLine()){
+                if(this->target->getIsSingleLine()){
                     return 'B';
                 }else{
                     return 'C';
@@ -189,54 +189,50 @@ class KeyboardEng : public Widget, public ITextInputWidget {
 
     public:
 
-        using Widget::onPressStart;
-        using Widget::onPressEnd;
-        using Widget::Visible;
-
         Label* input_label;
 
-        void Visible(bool visible) override;
+        void setVisible(bool visible) override;
 
         KeyboardEng(Label* input_label){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
             this->input_label = input_label;
-            this->input_label->Visible(false);
+            this->input_label->setVisible(false);
             this->visible = false;
 
             children_.push_back(input_label);
         }
 
-        void onPressStart() override;
+        void causeOnPressStart() override;
         void render() override;
 
         const std::vector<Widget*>& getChildren() const override {
             return children_;
         }
 
-        void X(int x) override {};
-        void Y(int y) override {};
+        void setX(int x) override {};
+        void setY(int y) override {};
 
-        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::TRANSLUCENT; }
+        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
-        void SetInputTarget(ITextInputTarget* target) override {
+        void setInputTarget(ITextInputTarget* target) override {
             this->target = target;
         }
-        void RemoveInputTarget(ITextInputTarget* valid_target) override {
+        void removeInputTarget(ITextInputTarget* valid_target) override {
             if(this->target == valid_target){
                 this->target = nullptr;
             }
         }
-        ITextInputTarget* GetInputTarget() override {
+        ITextInputTarget* getInputTarget() override {
             return this->target;
         }
 
-        void SetText(String text) override {
+        void setText(String text) override {
             this->inputs = text;
-            input_label->Text(inputs);
-            input_label->CursorToEnd();
+            input_label->setText(inputs);
+            input_label->setCursorToEnd();
         }
-        String GetText() override {
+        String getText() override {
             return this->inputs;
         }
 };

@@ -57,15 +57,15 @@ void CanvasRaster::render(){
     this->needs_redraw = false;
 }
 
-void CanvasRaster::onPressStart(){
-    if(this->on_press_start) this->on_press_start();
+void CanvasRaster::causeOnPressStart(){
+    Widget::causeOnPressStart();
     
     sx = relX(OSData::touchX);
     sy = relY(OSData::touchY);
 }
 
-void CanvasRaster::onPressMove(){
-    if(this->on_press_move) this->on_press_move();
+void CanvasRaster::causeOnPressMove(){
+    Widget::causeOnPressMove();
 
     int touchX = relX(OSData::touchX);
     int touchY = relY(OSData::touchY);
@@ -92,7 +92,9 @@ void CanvasRaster::onPressMove(){
     }
 }
 
-void CanvasRaster::onPressEnd(){
+void CanvasRaster::causeOnPressEnd(){
+    Widget::causeOnPressEnd();
+
     int touchX = relX(OSData::touchX);
     int touchY = relY(OSData::touchY);
 
@@ -123,7 +125,7 @@ void CanvasRaster::onPressEnd(){
     }
 }
 
-void CanvasRaster::CanvasClear(){
+void CanvasRaster::canvasClear(){
     sp->clear(PICO_WHITE);
     this->needsRender();
 }

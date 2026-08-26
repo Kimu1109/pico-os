@@ -72,8 +72,8 @@ void ScrollList::render(){
     this->needs_redraw = false;
 }
 
-void ScrollList::onPressStart(){
-    if(this->on_press_start) this->on_press_start();
+void ScrollList::causeOnPressStart(){
+    Widget::causeOnPressStart();
 
     const Rect g_rect = this->getScreenRect();
 
@@ -90,7 +90,7 @@ void ScrollList::onPressStart(){
             const int draw_start_y = g_rect.y + draw_y - MARGIN * 0.5;
             if(OSData::touchY > draw_start_y && OSData::touchY <= draw_start_y + ITEM_HEIGHT){
                 this->selected_index = i;
-                this->onSelectItem();
+                this->causeOnSelectItem();
                 this->needs_redraw = true;
                 break;
             }
@@ -101,8 +101,8 @@ void ScrollList::onPressStart(){
     }
 }
 
-void ScrollList::onPressMove(){
-    if(this->on_press_move) this->on_press_move();
+void ScrollList::causeOnPressMove(){
+    Widget::causeOnPressMove();
 
     if(this->is_scrolling){
         this->scrollY = min(
@@ -113,8 +113,8 @@ void ScrollList::onPressMove(){
     }
 }
 
-void ScrollList::onPressEnd(){
-    if(this->on_press_end) this->on_press_end();
+void ScrollList::causeOnPressEnd(){
+    Widget::causeOnPressEnd();
 
     this->is_scrolling = false;
 }

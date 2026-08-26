@@ -4,62 +4,62 @@
 
 void Widget::update() {
     if (OSData::isTouchMove && this->is_pressing) {
-        this->onPressMove();
+        this->causeOnPressMove();
     }
     if (OSData::isTouchEnd && this->is_pressing) {
-        this->onPressEnd();
+        this->causeOnPressEnd();
         is_pressing = false;
     }
     if (OSData::isTouchStart && !this->is_pressing){
-        this->onPressOut();
+        this->causeOnPressOut();
     }
 
     render();
 }
 
-void Widget::onPressStart() {
+void Widget::causeOnPressStart() {
     if (on_press_start) on_press_start();
 }
-void Widget::onPressStart(std::function<void()> callback) {
+void Widget::setOnPressStart(std::function<void()> callback) {
     this->on_press_start = callback;
 }
-void Widget::onPressEnd(){
+void Widget::causeOnPressEnd(){
     if (on_press_end) on_press_end();
 }
-void Widget::onPressEnd(std::function<void()> callback) {
+void Widget::setOnPressEnd(std::function<void()> callback) {
     this->on_press_end = callback;
 }
-void Widget::onPressMove(){
+void Widget::causeOnPressMove(){
     if (on_press_move) on_press_move();
 }
-void Widget::onPressMove(std::function<void()> callback) {
+void Widget::setOnPressMove(std::function<void()> callback) {
     this->on_press_move = callback;
 }
-void Widget::onPressOut(){
+void Widget::causeOnPressOut(){
     if (on_press_out) on_press_out();
 }
-void Widget::onPressOut(std::function<void()> callback){
+void Widget::setOnPressOut(std::function<void()> callback){
     this->on_press_out = callback;
 }
 
-void Widget::Visible(bool visible){
+void Widget::setVisible(bool visible){
     this->visitAll([&visible](Widget* w) {
         w->visible = visible;
     });
     this->needsRender();
 }
-bool Widget::Visible(){
+bool Widget::getVisible(){
     return this->visible;
 }
 
 void Widget::needsRender(){
     if(disable_markdirty) return;
-    PICO_GFX::markDirty(this->getScreenRect());
+    PICO_GFX::MarkDirty(this->getScreenRect());
     this->needs_redraw = true;
 }
 
 void Widget::markdirty(Rect rect){
     if(disable_interrupts) return;
-    PICO_GFX::markDirty(rect);
+    PICO_GFX::MarkDirty(rect);
     this->needs_redraw = true;
 }

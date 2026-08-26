@@ -343,12 +343,12 @@ void Label::updateCursorBlink() {
 Label::Label(int x, int y, String text) {
     this->l_rect.x = x;
     this->l_rect.y = y;
-    this->Text(text);
+    this->setText(text);
     this->needs_redraw = true;
 }
 
 Label::Label(String text) {
-    this->Text(text);
+    this->setText(text);
     this->needs_redraw = true;
 }
 
@@ -410,99 +410,99 @@ void Label::render() {
 }
 
 // ---------- setter / getter ----------
-void Label::Text(String text) {
+void Label::setText(String text) {
     this->raw_text = text;
     relayout();
 }
 
-String Label::Text() {
+String Label::getText() {
     return this->raw_text;
 }
 
-void Label::Placeholder(String text) {
+void Label::setPlaceholder(String text) {
     this->placeholder_text = text;
     relayout();
 }
 
-String Label::Placeholder() {
+String Label::getPlaceholder() {
     return this->placeholder_text;
 }
 
-void Label::PlaceholderColor(int8_t color) {
+void Label::setPlaceholderColor(int8_t color) {
     this->placeholder_color = color;
     this->needsRender();
 }
 
-void Label::MaxWidth(int width) {
+void Label::setMaxWidth(int width) {
     this->max_width = width;
     relayout();
 }
 
-int Label::MaxWidth() {
+int Label::getMaxWidth() {
     return this->max_width;
 }
 
-void Label::MaxHeight(int height) {
+void Label::setMaxHeight(int height) {
     this->max_height = height;
     relayout();
 }
 
-int Label::MaxHeight() {
+int Label::getMaxHeight() {
     return this->max_height;
 }
 
-void Label::DefaultHeight(int height) {
+void Label::setDefaultHeight(int height) {
     this->default_height = height;
     relayout();
 }
 
-int Label::DefaultHeight() {
+int Label::getDefaultHeight() {
     return this->default_height;
 }
 
-void Label::LineSpacing(int spacing) {
+void Label::setLineSpacing(int spacing) {
     this->line_spacing = spacing;
     relayout();
 }
 
-void Label::SetTextColor(int8_t c) {
+void Label::setTextColor(int8_t c) {
     this->text_color = c;
     this->needsRender();
 }
 
 // ---------- 背景・ボーダー関連 ----------
-void Label::BackgroundColor(int8_t palette_color) {
+void Label::setBackgroundColor(int8_t palette_color) {
     this->background_color = palette_color;
     this->has_background = true;
     this->needsRender();
 }
 
-bool Label::HasBackground() {
+bool Label::hasBackground() {
     return this->has_background;
 }
 
-void Label::NoBackground() {
+void Label::setNoBackground() {
     this->has_background = false;
     this->needsRender();
 }
 
-void Label::Border(int8_t color, int width) {
+void Label::setBorder(int8_t color, int width) {
     this->border_color = color;
     this->border_width = width;
     this->needsRender();
 }
 
-void Label::BorderWidth(int width) {
+void Label::setBorderWidth(int width) {
     this->border_width = width;
     this->needsRender();
 }
 
-int Label::BorderWidth() {
+int Label::getBorderWidth() {
     return this->border_width;
 }
 
 // ---------- カーソル(挿入位置)関連 ----------
-void Label::CursorPos(int index) {
+void Label::setCursorPos(int index) {
     if (cursor_slots.empty()) {
         this->cursor_index = 0;
     } else {
@@ -513,28 +513,28 @@ void Label::CursorPos(int index) {
     this->needsRender();
 }
 
-int Label::CursorPos() {
+int Label::getCursorPos() {
     return this->cursor_index;
 }
 
-void Label::CursorMove(int delta) {
-    this->CursorPos(this->cursor_index + delta);
+void Label::setCursorMove(int delta) {
+    this->setCursorPos(this->cursor_index + delta);
 }
 
-void Label::CursorToEnd() {
-    this->CursorPos(this->TextLength());
+void Label::setCursorToEnd() {
+    this->setCursorPos(this->getTextLength());
 }
 
-void Label::CursorVisible(bool visible) {
+void Label::setCursorVisible(bool visible) {
     this->cursor_visible = visible;
     this->needsRender();
 }
 
-bool Label::CursorVisible() {
+bool Label::getCursorVisible() {
     return this->cursor_visible;
 }
 
-void Label::CursorBlink(bool enabled, unsigned long interval_ms) {
+void Label::setCursorBlink(bool enabled, unsigned long interval_ms) {
     this->cursor_blink_enabled = enabled;
     this->cursor_blink_interval_ms = interval_ms;
     this->cursor_last_blink_ms = millis();
@@ -545,20 +545,20 @@ void Label::CursorBlink(bool enabled, unsigned long interval_ms) {
     this->needsRender();
 }
 
-bool Label::CursorBlink() {
+bool Label::getCursorBlink() {
     return this->cursor_blink_enabled;
 }
 
-void Label::CursorColor(uint16_t c) {
+void Label::setCursorColor(uint16_t c) {
     this->cursor_color = c;
     this->needsRender();
 }
 
-int Label::TextLength() {
+int Label::getTextLength() {
     return cursor_slots.empty() ? 0 : (int)cursor_slots.size() - 1;
 }
 
-int Label::CursorScreenX() {
+int Label::getCursorScreenX() {
     if (cursor_slots.empty()) return this->getScreenRect().x;
     int idx = this->cursor_index;
     if (idx < 0) idx = 0;
@@ -566,7 +566,7 @@ int Label::CursorScreenX() {
     return this->getScreenRect().x + cursor_slots[idx].x;
 }
 
-int Label::CursorScreenY() {
+int Label::getCursorScreenY() {
     if (cursor_slots.empty()) return this->getScreenRect().y;
     int idx = this->cursor_index;
     if (idx < 0) idx = 0;

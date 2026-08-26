@@ -30,20 +30,20 @@ class Icon : public Widget {
 
         void render() override;
 
-        WidgetTools::RenderMode GetRenderMode() const override { return this->opaque ? WidgetTools::OPAQUE : WidgetTools::CLEAR; };
+        WidgetTools::RenderMode getRenderMode() const override { return this->opaque ? WidgetTools::OPAQUE : WidgetTools::CLEAR; };
         void setOpaque(bool opaque) { 
             this->opaque = opaque;
             this->needsRender();
         }
 
-        IconID GetIconId() { return this->iconId; }
-        void SetIconId(IconID iconId) {
+        IconID getIconId() { return this->iconId; }
+        void setIconId(IconID iconId) {
             this->iconId = iconId;
             this->needsRender();
         }
 
-        IconSize GetIconSize() { return this->iconSize; }
-        void SetIconSize(IconSize iconSize){
+        IconSize getIconSize() { return this->iconSize; }
+        void setIconSize(IconSize iconSize){
             this->iconSize = iconSize;
 
             this->l_rect.w = IconRender::IconPixelSize(iconSize);
@@ -52,8 +52,8 @@ class Icon : public Widget {
             this->needsRender();
         }
 
-        int8_t Color() { return this->color; }
-        void Color(int8_t color){
+        int8_t getColor() { return this->color; }
+        void setColor(int8_t color){
             this->color = color;
             this->needsRender();
         }

@@ -74,9 +74,6 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void updateCursorBlink();
 
     public:
-        using Widget::Visible;
-        using Widget::BackgroundColor;
-
         Label(int x, int y, String text);
         Label(String text);
         
@@ -84,87 +81,87 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void needsRender() override;
 
         // ---------- setter / getter ----------
-        void Text(String text);
-        String Text();
+        void setText(String text);
+        String getText();
 
-        void Placeholder(String text);
-        String Placeholder();
+        void setPlaceholder(String text);
+        String getPlaceholder();
 
-        void PlaceholderColor(int8_t color);
+        void setPlaceholderColor(int8_t color);
 
-        void MaxWidth(int width);
-        int MaxWidth();
+        void setMaxWidth(int width);
+        int getMaxWidth();
 
-        void MaxHeight(int height);
-        int MaxHeight();
+        void setMaxHeight(int height);
+        int getMaxHeight();
 
-        void DefaultHeight(int height);
-        int DefaultHeight();
+        void setDefaultHeight(int height);
+        int getDefaultHeight();
 
-        void LineSpacing(int spacing);
+        void setLineSpacing(int spacing);
 
-        void SetTextColor(int8_t palette_color) override;
+        void setTextColor(int8_t palette_color) override;
 
-        WidgetTools::RenderMode GetRenderMode() const override { return this->has_background ? WidgetTools::OPAQUE : WidgetTools::CLEAR; } //has→不透明, !has→透明
+        WidgetTools::RenderMode getRenderMode() const override { return this->has_background ? WidgetTools::OPAQUE : WidgetTools::CLEAR; } //has→不透明, !has→透明
 
         // ---------- 背景・ボーダー関連 ----------
         // 背景色を設定して有効化する（指定しない場合はデフォルトで透明）
-        void BackgroundColor(int8_t palette_color) override;
-        bool HasBackground();
-        void NoBackground();   // 背景を透明に戻す
+        void setBackgroundColor(int8_t palette_color) override;
+        bool hasBackground();
+        void setNoBackground();   // 背景を透明に戻す
 
         // ボーダー（色・太さ）。width=0でボーダー無し
-        void Border(int8_t color, int width);
-        void SetBorderColor(int8_t palette_color) override {
+        void setBorder(int8_t color, int width);
+        void setBorderColor(int8_t palette_color) override {
             this->border_color = palette_color;
             this->needsRender();
         }
-        void BorderWidth(int width);
-        int BorderWidth();
+        void setBorderWidth(int width);
+        int getBorderWidth();
 
         // ---------- カーソル(挿入位置)関連 ----------
         // index: 0 = 先頭。マークアップ記号(**, _, ~)は文字数に含まれない
-        void CursorPos(int index);
-        int CursorPos();
+        void setCursorPos(int index);
+        int getCursorPos();
 
         // 現在位置からの相対移動（+1で1文字右、-1で1文字左）
-        void CursorMove(int delta);
+        void setCursorMove(int delta);
 
         // カーソルを文字列の末尾に移動する
-        void CursorToEnd();
+        void setCursorToEnd();
 
         // 表示ON/OFF。手動で常時表示/非表示にしたい場合に使う
         // (CursorBlink()で自動点滅を有効にしている間は、ここでの指定は
         //  次の点滅タイミングで上書きされる点に注意)
-        void CursorVisible(bool visible);
-        bool CursorVisible();
+        void setCursorVisible(bool visible);
+        bool getCursorVisible();
 
         // カーソルの自動点滅をLabel内部で完結させる。
         // enabled=trueで有効化すると、まず表示状態から開始しinterval_msごとに
         // render()呼び出し内で自動的に表示/非表示が切り替わる。
         // enabled=falseで無効化すると同時にカーソルは非表示になる。
-        void CursorBlink(bool enabled, unsigned long interval_ms = 500);
-        bool CursorBlink();
+        void setCursorBlink(bool enabled, unsigned long interval_ms = 500);
+        bool getCursorBlink();
 
-        void CursorColor(uint16_t c);
+        void setCursorColor(uint16_t c);
 
         // カーソルが取り得る最大インデックス（＝現在挿入可能な文字数）
-        int TextLength();
+        int getTextLength();
 
         // 現在のカーソル位置の絶対画面座標（候補ウィンドウの位置決め等に利用可能）
-        int CursorScreenX();
-        int CursorScreenY();
+        int getCursorScreenX();
+        int getCursorScreenY();
 
-        void SetFontSize(FontFn::FontSize size) override {
+        void setFontSize(FontFn::FontSize size) override {
             this->f_size = size;
             this->relayout();
         }
 
-        void SetDisableAutoTextDecoration(bool value){
+        void setDisableAutoTextDecoration(bool value){
             this->disable_auto_text_decoration = value;
             this->relayout();
         }
-        bool GetDisableAutoTextDecoration(){
+        bool getDisableAutoTextDecoration(){
             return this->disable_auto_text_decoration;
         }
 };

@@ -22,7 +22,6 @@ void Image::render(){
     }else{
         IconRender::DrawImageRLE4bpp(this->imgFile, g_rect.x, g_rect.y);
     }
-    Serial.println("Image widget render!");
 
     markdirty(g_rect);
     this->prev_l_rect.copy(this->l_rect);

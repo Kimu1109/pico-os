@@ -28,9 +28,9 @@ namespace PICO_GFX {
     inline bool isDirtyDeactivates;
 
     void Setup();
-    void markDirty(const Rect& rect);
+    void MarkDirty(const Rect& rect);
 
-    void flushDirty();
+    void FlushDirty();
 
-    void drawDialogBackground();
+    void DrawDialogBackground();
 }

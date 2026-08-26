@@ -2,13 +2,13 @@
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
-void KeyboardEng::Visible(bool visible) {
+void KeyboardEng::setVisible(bool visible) {
     this->visible = visible;
-    this->input_label->Visible(visible);
-    this->input_label->MaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
+    this->input_label->setVisible(visible);
+    this->input_label->setMaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
 
     if(visible){
-        this->inputs = this->input_label->Text();
+        this->inputs = this->input_label->getText();
         if(this->target) this->target->onShow(this);
     }else{
         if(this->target) this->target->onHide(this);
@@ -19,8 +19,8 @@ void KeyboardEng::Visible(bool visible) {
 }
 
 
-void KeyboardEng::onPressStart() {
-    if(on_press_start) on_press_start();
+void KeyboardEng::causeOnPressStart() {
+    Widget::causeOnPressStart();
 
     int key_y = SCREEN_HEIGHT - key_h * 4;
     int key_x = 0;
@@ -62,7 +62,7 @@ void KeyboardEng::onPressStart() {
                     addInput("\n");
                 }else if(key.str == "go" || key.str == "submit"){
                     this->target->onHide(this);
-                    this->Visible(false);
+                    this->setVisible(false);
                 }else if(key.str == "X"){
                     removeInput();
                 }else if(key.str == "↑" || key.str == "#+=") {
@@ -77,8 +77,8 @@ void KeyboardEng::onPressStart() {
                     isUpperCase = false;
                     this->needs_redraw = true;
                 }else if(key.str == "あいう"){
-                    this->Visible(false);
-                    OSData::keyboard_jpn->Visible(true);
+                    this->setVisible(false);
+                    OSData::keyboard_jpn->setVisible(true);
                 }else{
                     addInput(isUpperCase ? key.str_upper : key.str);
                     if(!isNumMode && isUpperCase){
@@ -101,7 +101,7 @@ void KeyboardEng::render() {
     if(!this->visible) return;
 
     markdirty(this->getScreenRect());
-    PICO_GFX::drawDialogBackground();
+    PICO_GFX::DrawDialogBackground();
     OSData::frame->fillRect(0, SCREEN_HEIGHT - key_h * 4, SCREEN_WIDTH, key_h * 4, this->background_color);
 
     char mode = this->getMode();

@@ -133,7 +133,7 @@ class Keyboard : public Widget, public ITextInputWidget {
         char keysFontStyleEnv(int key_index){
             if(key_index == 3 * 5 - 1 || key_index == 4 * 5 - 1){ //改行
                 if(is_inputs_empty)
-                    if(this->target && !this->target->GetIsSingleLine())
+                    if(this->target && !this->target->getIsSingleLine())
                         return 'S'; //決定or改行
             }
             return keys_font_style[key_index];
@@ -142,7 +142,7 @@ class Keyboard : public Widget, public ITextInputWidget {
             if(key_index == 3 * 5 - 1){ //改
                 if(is_inputs_empty)
                     if(this->target)
-                        if(this->target->GetIsSingleLine())
+                        if(this->target->getIsSingleLine())
                             return "決";
                         else
                             return "決定";
@@ -156,7 +156,7 @@ class Keyboard : public Widget, public ITextInputWidget {
             if(key_index == 4 * 5 - 1){ //行
                 if(is_inputs_empty)
                     if(this->target)
-                        if(this->target->GetIsSingleLine())
+                        if(this->target->getIsSingleLine())
                             return "定";
                         else
                             return "改行";
@@ -186,8 +186,8 @@ class Keyboard : public Widget, public ITextInputWidget {
             }
 
             is_inputs_empty = is_inputs_empty_now;
-            input_label->Text(inputs_done + "~" + inputs + "~");
-            input_label->CursorToEnd();
+            input_label->setText(inputs_done + "~" + inputs + "~");
+            input_label->setCursorToEnd();
 
             if(!notToCauseEvent){
                 if(this->target) this->target->onTextChanged(this);
@@ -202,7 +202,7 @@ class Keyboard : public Widget, public ITextInputWidget {
 
         void removeInput() {
             if(is_inputs_empty){
-                inputs_done = UTF8_Functions::removeLastChar(inputs_done);
+                inputs_done = UTF8_Functions::RemoveLastChar(inputs_done);
                 updateInputs(false);
                 return;
             }
@@ -211,7 +211,7 @@ class Keyboard : public Widget, public ITextInputWidget {
                 okuri_hira = "";
             }
 
-            inputs = UTF8_Functions::removeLastChar(inputs);
+            inputs = UTF8_Functions::RemoveLastChar(inputs);
             updateImeCandidates();
             updateInputs(false);
         }
@@ -225,7 +225,7 @@ class Keyboard : public Widget, public ITextInputWidget {
         }
 
         void switchDakuten(){
-            String ch = UTF8_Functions::getLastChar(inputs);
+            String ch = UTF8_Functions::GetLastChar(inputs);
 
             String switched_char = "";
             for(int i = 0; i < HIRA_LIST_SIZE; i++){
@@ -244,7 +244,7 @@ class Keyboard : public Widget, public ITextInputWidget {
             }
             if(switched_char.length() == 0) return;
 
-            inputs = UTF8_Functions::replaceLastChar(inputs, switched_char);
+            inputs = UTF8_Functions::ReplaceLastChar(inputs, switched_char);
             updateImeCandidates();
             updateInputs(false);
         }
@@ -254,10 +254,6 @@ class Keyboard : public Widget, public ITextInputWidget {
         void drawCandidates();
 
     public:
-
-        using Widget::onPressStart;
-        using Widget::onPressEnd;
-        using Widget::Visible;
 
         Label* input_label;
 
@@ -270,41 +266,41 @@ class Keyboard : public Widget, public ITextInputWidget {
             children_.push_back(input_label);
         }
 
-        void Visible(bool visible) override;
+        void setVisible(bool visible) override;
 
-        void onPressStart() override;
-        void onPressEnd() override;
+        void causeOnPressStart() override;
+        void causeOnPressEnd() override;
         void render() override;
 
-        WidgetTools::RenderMode GetRenderMode() const override { return WidgetTools::TRANSLUCENT; }
+        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
         const std::vector<Widget*>& getChildren() const override {
             return children_;
         }
 
-        void X(int x) override {};
-        void Y(int y) override {};
+        void setX(int x) override {};
+        void setY(int y) override {};
 
-        void SetInputTarget(ITextInputTarget* target) override {
+        void setInputTarget(ITextInputTarget* target) override {
             this->target = target;
             this->needsRender();
         }
-        void RemoveInputTarget(ITextInputTarget* valid_target) override{
+        void removeInputTarget(ITextInputTarget* valid_target) override{
             if(this->target == valid_target){
                 this->target = nullptr;
             }
             this->needsRender();
         }
-        ITextInputTarget* GetInputTarget() override{
+        ITextInputTarget* getInputTarget() override{
             return this->target;
         }
 
-        void SetText(String text) override {
+        void setText(String text) override {
             this->inputs_done = text;
             this->inputs = "";
             this->updateInputs(true);
         }
-        String GetText() override {
+        String getText() override {
             return this->inputs_done + this->inputs;
         }
 };

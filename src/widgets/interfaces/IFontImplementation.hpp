@@ -14,6 +14,6 @@ class IFontImplementation {
         }
 
     public:
-        FontFn::FontSize GetFontSize() { return f_size; }
-        virtual void SetFontSize(FontFn::FontSize size);
+        FontFn::FontSize getFontSize() { return f_size; }
+        virtual void setFontSize(FontFn::FontSize size);
 };

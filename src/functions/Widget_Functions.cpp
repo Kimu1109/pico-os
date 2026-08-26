@@ -1,7 +1,7 @@
 #include "Widget_Functions.hpp"
 #include "OS_Data.hpp"
 
-void WidgetFunctions::add(Widget *w)
+void WidgetFunctions::Add(Widget *w)
 {
     w->visitAll([](Widget* widget){
         bool validates = true;
@@ -17,7 +17,7 @@ void WidgetFunctions::add(Widget *w)
     });
 }
 
-void WidgetFunctions::addDialog(Widget *w){
+void WidgetFunctions::AddDialog(Widget *w){
     for(int i = 0; i < count_dialog; i++){
         if(dialog_roots[i] && dialog_roots[i] == w){
             return;
@@ -28,7 +28,7 @@ void WidgetFunctions::addDialog(Widget *w){
     }
 }
 
-void WidgetFunctions::bringToFront(Widget *w)
+void WidgetFunctions::BringToFront(Widget *w)
 {
     int idx = -1;
     for (int i = 0; i < count; i++)
@@ -44,25 +44,25 @@ void WidgetFunctions::bringToFront(Widget *w)
     widgets[count - 1] = w;
 }
 
-void WidgetFunctions::updateAll()
+void WidgetFunctions::UpdateAll()
 {
     if(OSData::isTouchStart){
-        pressingWidget = hitTest(OSData::touchX, OSData::touchY);
+        pressingWidget = HitTest(OSData::touchX, OSData::touchY);
         if(pressingWidget){
             pressingWidget->is_pressing = true;
-            pressingWidget->onPressStart();
+            pressingWidget->causeOnPressStart();
         }
     }
     if(OSData::isTouchEnd && pressingWidget){
         pressingWidget->is_pressing = false;
-        pressingWidget->onPressEnd();
+        pressingWidget->causeOnPressEnd();
         pressingWidget = nullptr;
     }
 
     for (int i = 0; i < count; i++){
-        if(widgets[i]->childrenUpdate()){
-            add(widgets[i]);
-            widgets[i]->childrenUpdate(false);
+        if(widgets[i]->getChildrenUpdate()){
+            Add(widgets[i]);
+            widgets[i]->setChildrenUpdate(false);
         }
         const Rect clipped = widgets[i]->clippedScreenRect();
         OSData::frame->setClipRect(clipped.x, clipped.y, clipped.w, clipped.h);
@@ -71,7 +71,7 @@ void WidgetFunctions::updateAll()
     }
 
     for (int d = count_dialog - 1; d >= 0; d--) {
-        if (dialog_roots[d] && dialog_roots[d]->Visible()) {
+        if (dialog_roots[d] && dialog_roots[d]->getVisible()) {
             dialog_roots[d]->visitAll([](Widget* w) {
                 const Rect clipped = w->clippedScreenRect();
                 OSData::frame->setClipRect(clipped.x, clipped.y, clipped.w, clipped.h);
@@ -83,13 +83,13 @@ void WidgetFunctions::updateAll()
 }
 
 // タッチは上から順に判定
-Widget *WidgetFunctions::hitTest(int16_t x, int16_t y)
+Widget *WidgetFunctions::HitTest(int16_t x, int16_t y)
 {
     // 1. ダイアログのタッチ判定（最初に追加されたダイアログが最優先）
     for (int d = 0; d < count_dialog; d++)
     {
         Widget* root = dialog_roots[d];
-        if(!root || !root->Visible()) continue;
+        if(!root || !root->getVisible()) continue;
 
         std::vector<Widget*> list;
         root->visitAll([&list](Widget* w){
@@ -99,7 +99,7 @@ Widget *WidgetFunctions::hitTest(int16_t x, int16_t y)
         // ダイアログ内部は子（末尾）から親（先頭）の順で判定
         for (int i = (int)list.size() - 1; i >= 0; i--)
         {
-            if(list[i]->Visible() && list[i]->hitTest(x, y)){
+            if(list[i]->getVisible() && list[i]->hitTest(x, y)){
                 return list[i];
             }
         }
@@ -108,7 +108,7 @@ Widget *WidgetFunctions::hitTest(int16_t x, int16_t y)
     // 2. 通常ウィジェットの判定（末尾から逆順）
     for (int i = count - 1; i >= 0; i--)
     {
-        if (widgets[i]->Visible() && widgets[i]->hitTest(x, y))
+        if (widgets[i]->getVisible() && widgets[i]->hitTest(x, y))
             return widgets[i];
     }
     return nullptr;

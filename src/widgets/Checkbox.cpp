@@ -33,8 +33,8 @@ void Checkbox::render(){
     this->needs_redraw = false;
 }
 
-void Checkbox::onPressStart(){
-    if(this->on_press_start) this->on_press_start();
+void Checkbox::causeOnPressStart(){
+    Widget::causeOnPressStart();
 
     const Rect g_rect = getScreenRect();
 
@@ -47,7 +47,7 @@ void Checkbox::onPressStart(){
     }
 }
 
-void Checkbox::setText(String text){
+void Checkbox::setTextAndCalc(String text){
     this->text = text;
 
     this->fontApply();

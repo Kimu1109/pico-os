@@ -115,6 +115,15 @@ void PICO_GFX::FlushDirty() {
         push_frame_total_ms += millis() - buf_timer_ms;
     }
 
+    if(enableDirectRender){
+        OSData::lcd->setClipRect(
+            directRenderRect.x, directRenderRect.y,
+            directRenderRect.w, directRenderRect.h
+        );
+        OSData::frame->pushSprite(OSData::lcd, 0, 0);
+        OSData::lcd->clearClipRect();
+    }
+
     Serial.printf(
         "dirtyrects count: %d, draw average: %dms, push average: %dms, draw total: %dms, push total: %dms\n",
         dirtyRects.size(),

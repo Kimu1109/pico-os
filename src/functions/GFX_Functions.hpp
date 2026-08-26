@@ -24,6 +24,9 @@ namespace PICO_GFX {
         TFT_WHITE
     };
 
+    inline Rect directRenderRect = {0, 0, 0, 0};
+    inline bool enableDirectRender = false;
+
     inline std::vector<Rect> dirtyRects;
     inline bool isDirtyDeactivates;
 

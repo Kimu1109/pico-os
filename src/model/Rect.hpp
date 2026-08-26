@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Arduino.h"
+#include "consts.hpp"
 
 struct Rect {
     int16_t x, y, w, h;

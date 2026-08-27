@@ -1,9 +1,9 @@
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "OS_Data.hpp"
-#include "widgets/Label.hpp"
-#include "widgets/Keyboard.hpp"
-#include "widgets/KeyboardEng.hpp"
+#include "gui/widgets/Label.hpp"
+#include "gui/widgets/Keyboard.hpp"
+#include "gui/widgets/KeyboardEng.hpp"
 
 void KeyboardFunctions::Setup(){
     Label* label = new Label(10, 10, "");

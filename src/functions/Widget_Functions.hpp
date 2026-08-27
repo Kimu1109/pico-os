@@ -1,6 +1,6 @@
 #pragma once
 
-#include "widgets/Widget.hpp"
+#include "gui/widgets/Widget.hpp"
 
 namespace WidgetFunctions
 {

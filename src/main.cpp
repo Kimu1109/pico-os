@@ -7,7 +7,7 @@
 #include "functions/IME_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 
-#include "widgets/MarkdownView.hpp"
+#include "gui/widgets/MarkdownView.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>

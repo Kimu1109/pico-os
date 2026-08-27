@@ -1,6 +1,6 @@
 #pragma once
 
-#include "widgets/interfaces/ITextInputTarget.hpp"
+#include "gui/widgets/interfaces/ITextInputTarget.hpp"
 
 namespace KeyboardFunctions {
     void Setup();

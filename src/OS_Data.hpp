@@ -4,7 +4,7 @@
 #include <LovyanGFX.h>
 #include <SdFat.h>
 
-#include "widgets/Widget.hpp"
+#include "gui/widgets/Widget.hpp"
 
 namespace OSData {
     //タッチ系統

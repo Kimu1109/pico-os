@@ -31,16 +31,6 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         boundCheckboxIconBlock[i] = -1;
         children_.push_back(checkboxIconPool[i]);
     }
-    for (int i = 0; i < kTableCellPoolSize; i++) {
-        tableCellPool[i] = new Label(kPadding, 0, "");
-        tableCellPool[i]->setParent(this);
-        tableCellPool[i]->setVisible(false);
-        tableCellPool[i]->setDisableMarkdirty(true);
-        boundTableCellBlock[i] = -1;
-        boundTableCellCol[i] = -1;
-        children_.push_back(tableCellPool[i]);
-    }
-
     checkboxIconPx = IconRender::IconPixelSize(kCheckboxIconSize);
 
     measure_label = new Label(0, 0, ""); // レンダリングツリーには含めない（getChildren()に入れない）
@@ -70,7 +60,6 @@ bool MarkdownView::load(const String& path) {
     for (int i = 0; i < kLabelPoolSize; i++) boundLabelBlock[i] = -1;
     for (int i = 0; i < kImagePoolSize; i++) boundImageBlock[i] = -1;
     for (int i = 0; i < kCheckboxIconPoolSize; i++) boundCheckboxIconBlock[i] = -1;
-    for (int i = 0; i < kTableCellPoolSize; i++) { boundTableCellBlock[i] = -1; boundTableCellCol[i] = -1; }
     bindVisibleBlocks(true);
 
     this->needsRender();
@@ -426,6 +415,9 @@ void MarkdownView::splitTableRow(int lineStart, int lineEnd, uint16_t cellOffset
 
 // テーブルセル1つ分の表示用テキストを生成する。splitTableRow()が分割時に
 // 読み飛ばした`\|`はここでアンエスケープして`|`に戻す。
+// テーブルは装飾を持たない直接描画(frameへの直接print)で表示するため、
+// `code`や[text](url)等のインライン装飾はここでは変換しない
+// （変換すると`~`や`_`がそのまま文字として表示されてしまうため）。
 String MarkdownView::formatTableCellText(int offset, int length) const {
     String raw = doc_text.substring(offset, offset + length);
     String unescaped;
@@ -438,7 +430,7 @@ String MarkdownView::formatTableCellText(int offset, int length) const {
             unescaped += raw[i];
         }
     }
-    return applyInlineMarkdown(unescaped);
+    return unescaped;
 }
 
 void MarkdownView::parseBlocks() {
@@ -791,13 +783,13 @@ void MarkdownView::layoutBlocks() {
         }
         else if (b.type == MdBlockType::CodeBlock) {
             measure_label->setMaxWidth(viewport_w - kPadding * 2); // 内側に余白を持たせる
-            measure_label->setFontSize(FontFn::FontSize::Small);
+            measure_label->setFontSize(FontFn::Small);
             measure_label->setText(formatBlockText(b));
             b.height = measure_label->getH() + kPadding * 2; // 背景ボックス分の余白
         }
         else if (b.type == MdBlockType::Link) {
             measure_label->setMaxWidth(viewport_w);
-            measure_label->setFontSize(FontFn::FontSize::Small);
+            measure_label->setFontSize(FontFn::Small);
             measure_label->setText(formatBlockText(b));
             b.height = measure_label->getH();
         }
@@ -824,21 +816,10 @@ void MarkdownView::layoutBlocks() {
             b.height = measure_label->getH();
         }
         else if (b.type == MdBlockType::TableRow) {
-            int colCount = std::max<int>(1, (int)b.tableColCount);
-            int colWidth = viewport_w / colCount;
-            int cellW = colWidth - kTableCellPadding * 2;
-            if (cellW < 10) cellW = 10;
-
-            int maxH = kTableMinRowHeight;
-            for (int c = 0; c < b.tableColCount && c < kMdTableMaxCols; c++) {
-                measure_label->setMaxWidth(cellW);
-                measure_label->setFontSize(fontSizeForBlock(b.type));
-                String cellText = formatTableCellText(b.tableCellOffset[c], b.tableCellLength[c]);
-                measure_label->setText(b.tableIsHeader ? ("**" + cellText + "**") : cellText);
-                int h = measure_label->getH();
-                if (h > maxH) maxH = h;
-            }
-            b.height = maxH;
+            // Labelでの折返し測定は行わない（テーブルは1行のみの直接描画のため）。
+            // 行の高さはフォントの実サイズ(px) + 上下パディングで決まる固定値とする。
+            int lineH = FontFn::GetFontSize(fontSizeForBlock(b.type));
+            b.height = (uint16_t)std::max(kTableMinRowHeight, lineH + kTableCellPadding * 2);
         }
         else {
             measure_label->setMaxWidth(viewport_w);
@@ -875,13 +856,13 @@ void MarkdownView::layoutBlocks() {
 FontFn::FontSize MarkdownView::fontSizeForBlock(MdBlockType type) const {
     // ※ Font_Functions.hpp の実際のenum値に合わせて要調整（プレースホルダー）
     switch (type) {
-        case MdBlockType::H1:       return FontFn::FontSize::Bigger;
-        case MdBlockType::H2:       return FontFn::FontSize::Big;
-        case MdBlockType::H3:       return FontFn::FontSize::Normal;
-        case MdBlockType::ListItem: return FontFn::FontSize::Small;
-        case MdBlockType::Quote:    return FontFn::FontSize::Small;
-        case MdBlockType::TableRow: return FontFn::FontSize::Small;
-        default:                    return FontFn::FontSize::Small;
+        case MdBlockType::H1:       return FontFn::Bigger;
+        case MdBlockType::H2:       return FontFn::Big;
+        case MdBlockType::H3:       return FontFn::Normal;
+        case MdBlockType::ListItem: return FontFn::Small;
+        case MdBlockType::Quote:    return FontFn::Small;
+        case MdBlockType::TableRow: return FontFn::Small;
+        default:                    return FontFn::Small;
     }
 }
 
@@ -898,7 +879,7 @@ void MarkdownView::bindVisibleBlocks(bool force) {
         else hi = mid;
     }
 
-    int labelSlot = 0, imageSlot = 0, checkboxSlot = 0, tableCellSlot = 0;
+    int labelSlot = 0, imageSlot = 0, checkboxSlot = 0;
 
     for (int i = lo; i < (int)blocks.size() && blocks[i].y < viewport_bottom; i++) {
         const MdBlock& b = blocks[i];
@@ -906,13 +887,8 @@ void MarkdownView::bindVisibleBlocks(bool force) {
         if (b.type == MdBlockType::Image) {
             if (imageSlot >= kImagePoolSize) continue; // プール枯渇。TODO: 画像密度が高い文書向けにプール拡張を検討
             bindImageSlot(imageSlot++, i, force);
-        } else if (b.type == MdBlockType::HorizontalRule) {
+        } else if (b.type == MdBlockType::HorizontalRule || b.type == MdBlockType::TableRow) {
             continue; // Labelを持たない要素。renderDecorations()内で直接描画する
-        } else if (b.type == MdBlockType::TableRow) {
-            for (int c = 0; c < b.tableColCount && c < kMdTableMaxCols; c++) {
-                if (tableCellSlot >= kTableCellPoolSize) break; // プール枯渇。TODO: 大きな表向けにプール拡張を検討
-                bindTableCellSlot(tableCellSlot++, i, c, force);
-            }
         } else {
             if (labelSlot >= kLabelPoolSize) continue;
             bindLabelSlot(labelSlot++, i, force);
@@ -926,7 +902,6 @@ void MarkdownView::bindVisibleBlocks(bool force) {
     for (; labelSlot < kLabelPoolSize; labelSlot++) hideLabelSlot(labelSlot);
     for (; imageSlot < kImagePoolSize; imageSlot++) hideImageSlot(imageSlot);
     for (; checkboxSlot < kCheckboxIconPoolSize; checkboxSlot++) hideCheckboxIconSlot(checkboxSlot);
-    for (; tableCellSlot < kTableCellPoolSize; tableCellSlot++) hideTableCellSlot(tableCellSlot);
 }
 
 void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
@@ -946,7 +921,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         lbl->setMaxWidth(this->l_rect.w - SCROLL_L - kPadding * 4);
         lbl->setBackgroundColor(PICO_LIGHTGREY);
         lbl->setBorder(PICO_DARKGREY, 1);
-        lbl->setFontSize(FontFn::FontSize::Small);
+        lbl->setFontSize(FontFn::Small);
         lbl->setText(formatBlockText(b));
         lbl->setX(kPadding);
     } else if (b.type == MdBlockType::Link) {
@@ -954,7 +929,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
             lbl->setDisableAutoTextDecoration(false);
         lbl->setMaxWidth(this->l_rect.w - SCROLL_L - kPadding * 2);
         lbl->setTextColor(PICO_BLUE);
-        lbl->setFontSize(FontFn::FontSize::Small);
+        lbl->setFontSize(FontFn::Small);
         lbl->setText(formatBlockText(b));
         lbl->setX(kPadding);
     } else if (b.type == MdBlockType::ListItem) {
@@ -1030,45 +1005,6 @@ void MarkdownView::bindCheckboxIconSlot(int slot, int blockIdx, bool force) {
     boundCheckboxIconBlock[slot] = blockIdx;
 }
 
-// テーブルのセル1つ分をLabelにバインドする。列幅はビューポート幅を列数で均等割りし、
-// 前後にkTableCellPadding分の余白を設ける。文字寄せ(tableAlign)はLabel側が非対応のため
-// 現状は常に左寄せとなる。
-void MarkdownView::bindTableCellSlot(int slot, int blockIdx, int col, bool force) {
-    if (!force && boundTableCellBlock[slot] == blockIdx && boundTableCellCol[slot] == col) {
-        tableCellPool[slot]->setVisible(true);
-        return;
-    }
-    const MdBlock& b = blocks[blockIdx];
-    Label* lbl = tableCellPool[slot];
-
-    const int viewport_w = this->l_rect.w - SCROLL_L - kPadding * 2;
-    const int colCount = std::max<int>(1, (int)b.tableColCount);
-    const int colWidth = viewport_w / colCount;
-
-    int w = colWidth - kTableCellPadding * 2;
-    if (w < 10) w = 10;
-
-    lbl->setNoBackground();
-    lbl->setBorder(PICO_BLACK, 0);
-    lbl->setDisableAutoTextDecoration(false);
-    lbl->setTextColor(PICO_BLACK);
-    if (b.tableIsHeader) {
-        lbl->setBackgroundColor(PICO_LIGHTGREY); // ヘッダ行は背景色で強調
-    }
-    lbl->setMaxWidth(w);
-    lbl->setFontSize(fontSizeForBlock(b.type));
-
-    String cellText = formatTableCellText(b.tableCellOffset[col], b.tableCellLength[col]);
-    lbl->setText(b.tableIsHeader ? ("**" + cellText + "**") : cellText);
-
-    lbl->setX(kPadding + col * colWidth + kTableCellPadding);
-    lbl->setY(b.y);
-    lbl->setVisible(true);
-
-    boundTableCellBlock[slot] = blockIdx;
-    boundTableCellCol[slot] = col;
-}
-
 void MarkdownView::hideLabelSlot(int slot) {
     if (boundLabelBlock[slot] == -1) return;
     labelPool[slot]->setVisible(false);
@@ -1085,13 +1021,6 @@ void MarkdownView::hideCheckboxIconSlot(int slot) {
     if (boundCheckboxIconBlock[slot] == -1) return;
     checkboxIconPool[slot]->setVisible(false);
     boundCheckboxIconBlock[slot] = -1;
-}
-
-void MarkdownView::hideTableCellSlot(int slot) {
-    if (boundTableCellBlock[slot] == -1) return;
-    tableCellPool[slot]->setVisible(false);
-    boundTableCellBlock[slot] = -1;
-    boundTableCellCol[slot] = -1;
 }
 
 // ---------- 装飾の直接描画（水平線の罫線・引用の縦バー・テーブルの罫線） ----------
@@ -1116,6 +1045,12 @@ void MarkdownView::renderDecorations() {
     // 枠線(1px)を潰さないよう、描画可能な縦範囲を1pxずつ内側に絞る
     const int clipTop = g_rect.y + 1;
     const int clipBottom = g_rect.y + g_rect.h - 1;
+
+    // テーブルのセル文字を描画する際、フォントはセル単位ではなくテーブル単位で
+    // 1度だけ適用する（頻繁な切替を避けるため）。描画が1件でもあれば、
+    // 関数末尾でFontFn::SetDefault()により必ずデフォルトフォントへ戻す。
+    bool tableFontApplied = false;
+    const FontFn::FontSize tableFontSize = fontSizeForBlock(MdBlockType::TableRow);
 
     for (int i = lo; i < (int)blocks.size() && blocks[i].y < viewport_bottom; i++) {
         const MdBlock& b = blocks[i];
@@ -1147,6 +1082,11 @@ void MarkdownView::renderDecorations() {
             int colCount = std::max<int>(1, (int)b.tableColCount);
             int colWidth = viewport_w / colCount;
 
+            // ヘッダ行の背景（罫線・文字より先に塗る）
+            if (b.tableIsHeader && drawBottom > drawTop) {
+                OSData::frame->fillRect(g_rect.x + kPadding, drawTop, viewport_w, drawBottom - drawTop, kTableHeaderBgColor);
+            }
+
             // 上辺（先頭行なら表全体の上端、以降の行では前の行との境界線を兼ねる）
             if (rowTop >= clipTop && rowTop < clipBottom) {
                 OSData::frame->fillRect(g_rect.x + kPadding, rowTop, viewport_w, 1, kTableLineColor);
@@ -1165,7 +1105,53 @@ void MarkdownView::renderDecorations() {
                     OSData::frame->fillRect(lineX, drawTop, 1, drawBottom - drawTop, kTableLineColor);
                 }
             }
+
+            // セルのテキストをLabelを介さず直接frameへ描画する。マークアップ解釈・折返しは
+            // 行わない（1行のみ、列幅を超える分はclipRectで切り詰める）。
+            // 行の一部だけが縦方向にはみ出て見えている場合はテキストを描かない
+            // （文字が枠外へはみ出て描画されるのを避けるための簡易対策）。
+            bool rowFullyVisible = (rowTop >= clipTop) && (rowBottom <= clipBottom);
+            if (rowFullyVisible) {
+                if (!tableFontApplied) {
+                    FontFn::SetFontSize(tableFontSize);
+                    OSData::frame->setTextColor(kTableTextColor);
+                    tableFontApplied = true;
+                }
+
+                int textY = rowTop + kTableCellPadding;
+                for (int c = 0; c < b.tableColCount && c < kMdTableMaxCols; c++) {
+                    int cellW = colWidth - kTableCellPadding * 2;
+                    if (cellW < 4) continue;
+                    int cellBaseX = g_rect.x + kPadding + c * colWidth + kTableCellPadding;
+
+                    String cellText = formatTableCellText(b.tableCellOffset[c], b.tableCellLength[c]);
+
+                    // 列の寄せ(0=left,1=center,2=right)に応じて描画開始X座標を調整する。
+                    // clipRect自体はセル全体の範囲を使うので、はみ出した分は
+                    // 寄せの方向によらず正しく切り詰められる。
+                    int textW = OSData::frame->textWidth(cellText);
+                    int alignOffset = 0;
+                    if (b.tableAlign[c] == 1) {       // center
+                        alignOffset = (cellW - textW) / 2;
+                    } else if (b.tableAlign[c] == 2) { // right
+                        alignOffset = cellW - textW;
+                    }
+                    if (alignOffset < 0) alignOffset = 0;
+
+                    OSData::frame->setClipRect(cellBaseX, textY, cellW, (int)b.height);
+                    OSData::frame->setCursor(cellBaseX + alignOffset, textY);
+                    OSData::frame->print(cellText);
+                    OSData::frame->clearClipRect();
+                }
+            }
         }
+    }
+
+    // テーブルの描画で切り替えたフォント・文字色は、この関数を抜ける前に必ず
+    // デフォルトへ戻す（ITextColor::textColorDefault()相当）
+    if (tableFontApplied) {
+        FontFn::SetDefault();
+        OSData::frame->setTextColor(PICO_FORECOLOR);
     }
 }
 
@@ -1208,7 +1194,6 @@ void MarkdownView::causeOnPressMove() {
     for (int i = 0; i < kLabelPoolSize; i++) labelPool[i]->needsRender();
     for (int i = 0; i < kImagePoolSize; i++) imagePool[i]->needsRender();
     for (int i = 0; i < kCheckboxIconPoolSize; i++) checkboxIconPool[i]->needsRender();
-    for (int i = 0; i < kTableCellPoolSize; i++) tableCellPool[i]->needsRender();
 }
 int MarkdownView::findBlockAtScreenY(int screenY) const {
     int docY = screenY + scroll_y;
@@ -1245,6 +1230,9 @@ void MarkdownView::causeOnPressEnd() {
 // ---------- 描画（枠・スクロールバー・装飾のみ。背景/子はコンポジタが処理） ----------
 
 void MarkdownView::render() {
+    if(!this->visible) return;
+    if(!this->needs_redraw) return;
+
     if (prev_l_rect != l_rect) {
         markdirty(this->getScreenPrevRect());
     }
@@ -1273,4 +1261,6 @@ void MarkdownView::render() {
 
     markdirty(g_rect);
     prev_l_rect.copy(l_rect);
+
+    this->needs_redraw = false;
 }

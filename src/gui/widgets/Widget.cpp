@@ -74,7 +74,6 @@ void Widget::needsRender(){
 }
 
 void Widget::markdirty(Rect rect){
-    if(disable_interrupts) return;
+    if(disable_markdirty) return;
     PICO_GFX::MarkDirty(rect);
-    this->needs_redraw = true;
 }

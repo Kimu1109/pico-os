@@ -1,47 +1,35 @@
 #include "Widget_Functions.hpp"
 #include "OS_Data.hpp"
+#include <algorithm>
 
 void WidgetFunctions::Add(Widget *w)
 {
     w->visitAll([](Widget* widget){
-        bool validates = true;
-        for(int i = 0; i < count; i++){
-            if(widgets[i] && widgets[i] == widget){
-                validates = false;
-                break;
+        for(auto* existing : widgets){
+            if(existing == widget){
+                return;
             }
         }
-        if(validates){
-            widgets[count++] = widget; // 追加順 = 描画順（後ろが上に乗る）
-        }
+        widgets.push_back(widget); // 追加順 = 描画順（後ろが上に乗る）
     });
 }
 
 void WidgetFunctions::AddDialog(Widget *w){
-    for(int i = 0; i < count_dialog; i++){
-        if(dialog_roots[i] && dialog_roots[i] == w){
+    for(auto* existing : dialog_roots){
+        if(existing == w){
             return;
         }
     }
-    if(count_dialog < MAX_DIALOG_ROOTS){
-        dialog_roots[count_dialog++] = w;
-    }
+    dialog_roots.push_back(w);
 }
 
 void WidgetFunctions::BringToFront(Widget *w)
 {
-    int idx = -1;
-    for (int i = 0; i < count; i++)
-        if (widgets[i] == w)
-        {
-            idx = i;
-            break;
-        }
-    if (idx < 0)
-        return;
-    for (int i = idx; i < count - 1; i++)
-        widgets[i] = widgets[i + 1];
-    widgets[count - 1] = w;
+    auto it = std::find(widgets.begin(), widgets.end(), w);
+    if(it != widgets.end()){
+        widgets.erase(it);
+        widgets.push_back(w);
+    }
 }
 
 void WidgetFunctions::UpdateAll()
@@ -59,7 +47,7 @@ void WidgetFunctions::UpdateAll()
         pressingWidget = nullptr;
     }
 
-    for (int i = 0; i < count; i++){
+    for (size_t i = 0; i < widgets.size(); i++){
         if(widgets[i]->getChildrenUpdate()){
             Add(widgets[i]);
             widgets[i]->setChildrenUpdate(false);
@@ -70,7 +58,7 @@ void WidgetFunctions::UpdateAll()
         OSData::frame->clearClipRect();
     }
 
-    for (int d = count_dialog - 1; d >= 0; d--) {
+    for (int d = (int)dialog_roots.size() - 1; d >= 0; d--) {
         if (dialog_roots[d] && dialog_roots[d]->getVisible()) {
             dialog_roots[d]->visitAll([](Widget* w) {
                 const Rect clipped = w->clippedScreenRect();
@@ -86,7 +74,7 @@ void WidgetFunctions::UpdateAll()
 Widget *WidgetFunctions::HitTest(int16_t x, int16_t y)
 {
     // 1. ダイアログのタッチ判定（最初に追加されたダイアログが最優先）
-    for (int d = 0; d < count_dialog; d++)
+    for (size_t d = 0; d < dialog_roots.size(); d++)
     {
         Widget* root = dialog_roots[d];
         if(!root || !root->getVisible()) continue;
@@ -106,7 +94,7 @@ Widget *WidgetFunctions::HitTest(int16_t x, int16_t y)
     }
 
     // 2. 通常ウィジェットの判定（末尾から逆順）
-    for (int i = count - 1; i >= 0; i--)
+    for (int i = (int)widgets.size() - 1; i >= 0; i--)
     {
         if (widgets[i]->getVisible() && widgets[i]->hitTest(x, y))
             return widgets[i];

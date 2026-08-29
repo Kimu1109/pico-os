@@ -44,19 +44,14 @@ namespace LogFunctions{
         }
     }
 
-    inline void Log(LogType type, const char* fmt, ...)
-    {
-        Serial.printf("%s", GetPrefix(type));
+    void Setup();
+    void Log(LogType type, const char* fmt, ...);
 
-        char buf[256];
-        va_list args;
-        va_start(args, fmt);
-        vsnprintf(buf, sizeof(buf), fmt, args);
-        va_end(args);
+    // メインループから毎フレーム呼び出し、内部で時間判定してバッファをSDへフラッシュする
+    void Update();
 
-        Serial.print(buf);
-        Serial.println();
-    }
+    // 強制フラッシュ(電源断前や明示的な保存タイミングで使用)
+    void Flush();
 
     #define LOG_SYS_OK(...)         LogFunctions::Log(LogFunctions::LogType::SYS_OK, __VA_ARGS__)
     #define LOG_SYS_WARN(...)       LogFunctions::Log(LogFunctions::LogType::SYS_WARN, __VA_ARGS__)

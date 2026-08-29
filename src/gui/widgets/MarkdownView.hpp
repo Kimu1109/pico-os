@@ -42,8 +42,8 @@ struct MdBlock {
     // ---------- TableRow用 ----------
     uint8_t  tableColCount = 0;      // 実際の列数（kMdTableMaxCols以下）
     bool     tableIsHeader = false;  // ヘッダ行かどうか
-    // 列ごとの寄せ(0=left,1=center,2=right)。パース時に保持するが、
-    // 現状Labelウィジェットが左寄せ以外の指定に対応していないため描画には未使用（将来拡張用）。
+    // 列ごとの寄せ(0=left,1=center,2=right)。テーブルはLabelを介さずframeへ直接描画する
+    // ため、renderDecorations()内でこの値をもとに実際に寄せて描画する。
     uint8_t  tableAlign[kMdTableMaxCols] = {};
     uint16_t tableCellOffset[kMdTableMaxCols] = {};
     uint16_t tableCellLength[kMdTableMaxCols] = {};
@@ -83,10 +83,13 @@ class MarkdownView : public Widget {
         static constexpr int8_t kHrColor = PICO_DARKGREY;
 
         // ---------- テーブル関連 ----------
-        static constexpr int kTableCellPoolSize = 24;  // 同時に表示しうるセル数の上限（4列x6行相当）
-        static constexpr int kTableCellPadding  = 3;   // セル内左右の余白(px)
+        // ラベルウィジェットは使わず、罫線と同様にrender()内でframeへ直接描画する
+        // （マークアップ解釈や折返しといった装飾は行わない、1行のみの軽量描画）。
+        static constexpr int kTableCellPadding  = 3;   // セルの上下左右の余白(px)
         static constexpr int kTableMinRowHeight = 16;  // 行の最低高さ(px)
-        static constexpr int8_t kTableLineColor = PICO_BLACK; // 罫線の色
+        static constexpr int8_t kTableLineColor = PICO_BLACK;      // 罫線の色
+        static constexpr int8_t kTableHeaderBgColor = PICO_LIGHTGREY; // ヘッダ行の背景色
+        static constexpr int8_t kTableTextColor = PICO_BLACK;      // セル文字色
 
         String doc_text;
         std::vector<MdBlock> blocks;
@@ -96,13 +99,10 @@ class MarkdownView : public Widget {
         Label* labelPool[kLabelPoolSize];
         Image* imagePool[kImagePoolSize];
         Icon*  checkboxIconPool[kCheckboxIconPoolSize];
-        Label* tableCellPool[kTableCellPoolSize];
 
         int boundLabelBlock[kLabelPoolSize];   // 現在そのスロットが表示しているblockのindex(-1=未使用)
         int boundImageBlock[kImagePoolSize];
         int boundCheckboxIconBlock[kCheckboxIconPoolSize];
-        int boundTableCellBlock[kTableCellPoolSize];
-        int boundTableCellCol[kTableCellPoolSize];    // そのスロットが担当している列番号(-1=未使用)
 
         int checkboxIconPx = 0; // チェックボックスアイコン1辺のピクセルサイズ（起動時にキャッシュ）
 
@@ -124,11 +124,9 @@ class MarkdownView : public Widget {
         void bindLabelSlot(int slot, int blockIdx, bool force);
         void bindImageSlot(int slot, int blockIdx, bool force);
         void bindCheckboxIconSlot(int slot, int blockIdx, bool force);
-        void bindTableCellSlot(int slot, int blockIdx, int col, bool force);
         void hideLabelSlot(int slot);
         void hideImageSlot(int slot);
         void hideCheckboxIconSlot(int slot);
-        void hideTableCellSlot(int slot);
         FontFn::FontSize fontSizeForBlock(MdBlockType type) const;
 
         // ---------- インライン要素（コード/リンク）認識 ----------
@@ -181,7 +179,9 @@ class MarkdownView : public Widget {
         // （maxColsに満たない分はoffset/length共に0のままとなり、空セルとして扱われる）。
         void splitTableRow(int lineStart, int lineEnd, uint16_t cellOffsetOut[kMdTableMaxCols],
                             uint16_t cellLengthOut[kMdTableMaxCols], uint8_t maxCols, uint8_t& cellCountOut) const;
-        // テーブルセル1つ分の表示用テキストを生成する（`\|`のアンエスケープ + インライン装飾変換）。
+        // テーブルセル1つ分の表示用テキストを生成する。`\|`のアンエスケープのみを行い、
+        // `code`や[text](url)等のインライン装飾はそのまま素通しする（テーブルはLabelを介さず
+        // frameへ直接print()するため、マークアップは解釈されない）。
         String formatTableCellText(int offset, int length) const;
 
         String formatBlockText(const MdBlock& b) const;

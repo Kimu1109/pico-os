@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ime/IME_Dict.hpp"
+#include "storage/SD_Path.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/UTF8_Functions.hpp"
 
@@ -11,7 +12,7 @@ namespace IME_Functions {
     inline int candidatesCount = 0;
 
     inline void Setup(){
-        ime.begin("dict/skk_body.tsv", "dict/skk_index.tsv");
+        ime.begin(PICO_Path::FILE::IME_SKK_BODY, PICO_Path::FILE::IME_SKK_INDEX);
     }
     inline int ImeLookup(const char* key) {
         int n = ime.lookup(key, candidates, IME_MAX_CANDIDATES);

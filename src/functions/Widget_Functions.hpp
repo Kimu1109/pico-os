@@ -2,14 +2,12 @@
 
 #include "gui/widgets/Widget.hpp"
 
+#include <vector>
+
 namespace WidgetFunctions
 {
-    inline const int MAX_WIDGETS = 48;
-    inline const int MAX_DIALOG_ROOTS = 8;
-    inline Widget *widgets[MAX_WIDGETS];
-    inline Widget *dialog_roots[MAX_DIALOG_ROOTS];
-    inline int count = 0;
-    inline int count_dialog = 0;
+    inline std::vector<Widget*> widgets;
+    inline std::vector<Widget*> dialog_roots;
 
     inline Widget *pressingWidget = nullptr;
 

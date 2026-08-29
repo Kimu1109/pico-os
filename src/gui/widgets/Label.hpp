@@ -73,12 +73,32 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void renderCursor();
         void updateCursorBlink();
 
+        // DrawPlain()/GetLineHeight()が使い回す、遅延初期化された専用Labelインスタンス。
+        // 静的ローカル変数として実装することで、PICO_GFX::Setup()より前に
+        // グラフィック関連オブジェクトが構築されてしまう問題を避ける
+        // （「静的初期化順序」の既知の注意点に合わせた遅延初期化）。
+        static Label& utilityInstance();
+
     public:
         Label(int x, int y, String text);
         Label(String text);
         
         void render() override;
         void needsRender() override;
+
+        // ---------- 軽量な直接描画ユーティリティ ----------
+        // テーブルセルのような、マークアップ解釈・ワードラップ・カーソル/プレースホルダー等の
+        // 状態を一切持たない軽量描画が必要な用途向け。ウィジェットツリーには参加せず、
+        // 内部で使い回す専用のLabelインスタンス(utilityInstance())を介して
+        // fontApply()/fontDefault()/textColorApply()/textColorDefault()を呼び出すことで、
+        // 通常のLabelと全く同じフォント・色の適用ロジックを再利用しつつ、
+        // 太字/下線/波線などの装飾やマークアップ解釈、複数行折返しは一切行わない
+        // （1行分をそのままframeへ描画するのみ）。
+        // maxWidthを1以上指定すると、その幅でclipRectを設定してから描画し、
+        // 超過分を切り詰める（0以下でクリップ無効）。
+        static void DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const String& text);
+        // 指定フォントサイズの行の高さ(px)を取得する（実際にfontApply()した状態でfontHeight()を取得する）。
+        static int GetLineHeight(FontFn::FontSize size);
 
         // ---------- setter / getter ----------
         void setText(String text);

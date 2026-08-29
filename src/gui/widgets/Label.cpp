@@ -409,6 +409,51 @@ void Label::render() {
     this->needs_redraw = false;
 }
 
+// ---------- 軽量な直接描画ユーティリティ ----------
+
+// DrawPlain()/GetLineHeight()専用の使い回しインスタンス。
+// 関数内staticとして遅延初期化することで、PICO_GFX::Setup()（frameスプライトの初期化）
+// より前にコンストラクトされてしまう問題を避ける。
+Label& Label::utilityInstance() {
+    static Label instance(0, 0, "");
+    return instance;
+}
+
+// マークアップ解釈・折返し・カーソル等の状態を経由せず、既存のfontApply()/
+// textColorApply()（と、その解除であるfontDefault()/textColorDefault()）だけを
+// 借りて1行分をそのままframeへ描画する。
+void Label::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const String& text) {
+    Label& helper = utilityInstance();
+    helper.f_size = size;
+    helper.text_color = color;
+
+    helper.fontApply();
+    helper.textColorApply();
+
+    if (maxWidth > 0) {
+        OSData::frame->setClipRect(x, y, maxWidth, OSData::frame->fontHeight());
+    }
+    OSData::frame->setCursor(x, y);
+    OSData::frame->print(text);
+    if (maxWidth > 0) {
+        OSData::frame->clearClipRect();
+    }
+
+    helper.textColorDefault();
+    helper.fontDefault();
+}
+
+int Label::GetLineHeight(FontFn::FontSize size) {
+    Label& helper = utilityInstance();
+    helper.f_size = size;
+
+    helper.fontApply();
+    int h = OSData::frame->fontHeight();
+    helper.fontDefault();
+
+    return h;
+}
+
 // ---------- setter / getter ----------
 void Label::setText(String text) {
     this->raw_text = text;

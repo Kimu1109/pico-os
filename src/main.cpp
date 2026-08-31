@@ -11,13 +11,18 @@
 #include "functions/Time_Functions.hpp"
 
 #include "gui/widgets/MarkdownView.hpp"
+#include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/Button.hpp"
+#include "gui/widgets/systems/Statusbar.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
 
 //デバッグ用
+static Statusbar* status;
+
 static MarkdownView* markdown;
+static Textbox* textbox;
 static Button* wifi_test;
 
 void setup() {
@@ -34,15 +39,21 @@ void setup() {
     LogFunctions::Setup();
     TimeFunctions::Setup();
 
-    wifi_test = new Button(0, 0, "Wifi-scan");
+    wifi_test = new Button(0, 30, "Wifi-scan");
     wifi_test->setOnPressStart([](){
         NetworkFunctions::ScanAsync();
     });
 
     markdown = new MarkdownView(0, 100, 240, 220);
     markdown->load("tmp/doc.md");
+
+    status = new Statusbar();
+    textbox = new Textbox("", 0, 60, 100, 30, true);
+
+    WidgetFunctions::AddDialog(status);
     WidgetFunctions::Add(markdown);
     WidgetFunctions::Add(wifi_test);
+    WidgetFunctions::Add(textbox);
 
     pinMode(LED_BUILTIN, HIGH);
 }
@@ -57,4 +68,5 @@ void loop() {
     PICO_Task::Update();
     LogFunctions::Update();
     TimeFunctions::Update();
+    NetworkFunctions::Update();
 }

@@ -52,6 +52,14 @@ void Setup()
 
     // 事前確保でフラグメンテーションと都度のFAT拡張コストを避ける
     s_logFile.preAllocate(LOG_PREALLOC_SIZE);
+    // preAllocate()はvalidLength(見かけ上のファイルサイズ)を
+    // 即座にLOG_PREALLOC_SIZEまで拡張してしまうため、
+    // O_APPENDでの書き込み開始位置がオフセット0ではなく末尾(=予約サイズ分)に
+    // ズレてしまう。かつその未書き込み領域はゼロクリアされず、
+    // SDカード上の残留データがそのまま読めてしまう(実際に発生した事象)。
+    // truncate(0)でvalidLengthを0に戻し、予約クラスタは維持したまま
+    // 書き込み開始位置を先頭に正す。
+    s_logFile.truncate(0);
     s_lastFlushMs = millis();
 }
 

@@ -318,6 +318,7 @@ void Keyboard::render() {
             int BOX_Y = START_KEY_Y + SQUARE_H * (swipe_y_index + swipe_directions[i * 2 + 1]);
 
             //塗りつぶし&矩形
+            OSData::frame->fillRect(BOX_X, BOX_Y, SQUARE_W, SQUARE_H, PICO_BACKGROUND);
             OSData::frame->drawRect(BOX_X, BOX_Y, SQUARE_W, SQUARE_H, PICO_BLACK);
 
             //スワイプ用のテキストを表示

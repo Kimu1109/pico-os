@@ -9,6 +9,7 @@
 #include "functions/Network_Functions.hpp"
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
+#include "functions/Test_Functions.hpp"
 
 #include "gui/widgets/MarkdownView.hpp"
 #include "gui/widgets/Textbox.hpp"
@@ -29,15 +30,19 @@ void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
 
     PICO_GFX::Setup();
-    PICO_Touch::Setup();
     PICO_SD::Setup();
+
+    LogFunctions::Setup();
+
+    PICO_Touch::Setup();
     PICO_Task::Setup();
 
     NetworkFunctions::Setup();
     KeyboardFunctions::Setup();
     IME_Functions::Setup();
-    LogFunctions::Setup();
     TimeFunctions::Setup();
+    
+    TestFunctions::Setup();
 
     wifi_test = new Button(0, 30, "Wifi-scan");
     wifi_test->setOnPressStart([](){
@@ -56,6 +61,8 @@ void setup() {
     WidgetFunctions::Add(textbox);
 
     pinMode(LED_BUILTIN, HIGH);
+
+    LOG_SYS_OK("System setup has succeeded!");
 }
 
 void loop() {

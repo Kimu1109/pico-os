@@ -2,6 +2,7 @@
 // font_coverage_check.cpp
 //
 #include "font_coverage_check.hpp"
+#include "functions/Log_Functions.hpp"
 #include <set>
 #include <string.h>
 
@@ -65,9 +66,11 @@ static void utf8Encode(uint32_t cp, char out[5]) {
 
 void checkFontCoverage(SdFat &sd, const lgfx::IFont &font,
                         const char* dictBodyPath, const char* outputPath) {
+    LOG_SYS_MSG("Font coverage check starts!");
+
     FsFile dictFile = sd.open(dictBodyPath, O_RDONLY);
     if (!dictFile) {
-        Serial.printf("[font_check] 辞書ファイルを開けませんでした: %s\n", dictBodyPath);
+        LOG_SYS_FAIL("[font_check] 辞書ファイルを開けませんでした: %s", dictBodyPath);
         return;
     }
 
@@ -99,11 +102,11 @@ void checkFontCoverage(SdFat &sd, const lgfx::IFont &font,
     }
     dictFile.close();
 
-    Serial.printf("[font_check] 辞書中の異なり文字数: %u\n", (unsigned)seenCodepoints.size());
+    LOG_SYS_OK("[font_check] 辞書中の異なり文字数: %u", (unsigned)seenCodepoints.size());
 
     FsFile outFile = sd.open(outputPath, O_WRONLY | O_CREAT | O_TRUNC);
     if (!outFile) {
-        Serial.printf("[font_check] 出力ファイルを開けませんでした: %s\n", outputPath);
+        LOG_SYS_FAIL("[font_check] 出力ファイルを開けませんでした: %s", outputPath);
         return;
     }
 
@@ -128,6 +131,6 @@ void checkFontCoverage(SdFat &sd, const lgfx::IFont &font,
     }
     outFile.close();
 
-    Serial.printf("[font_check] フォント未対応文字数: %d件 (詳細: %s)\n",
+    LOG_SYS_OK("[font_check] フォント未対応文字数: %d件 (詳細: %s)\n",
                   missingCount, outputPath);
 }

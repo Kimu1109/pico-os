@@ -1,6 +1,14 @@
 #include "Widget_Functions.hpp"
+#include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 #include <algorithm>
+
+void WidgetFunctions::Setup(){
+    widgets.reserve(48);
+    dialog_roots.reserve(9);
+
+    LOG_SYS_OK("Widget Setup has succeeded!");
+}
 
 void WidgetFunctions::Add(Widget *w)
 {

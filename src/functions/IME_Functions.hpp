@@ -12,7 +12,9 @@ namespace IME_Functions {
     inline int candidatesCount = 0;
 
     inline void Setup(){
-        ime.begin(PICO_Path::FILE::IME_SKK_BODY, PICO_Path::FILE::IME_SKK_INDEX);
+        ime.begin(PICO_Path::FILE::IME::IME_SKK_BODY, PICO_Path::FILE::IME::IME_SKK_INDEX);
+
+        LOG_SYS_OK("IME Setup has succeeded!");
     }
     inline int ImeLookup(const char* key) {
         int n = ime.lookup(key, candidates, IME_MAX_CANDIDATES);

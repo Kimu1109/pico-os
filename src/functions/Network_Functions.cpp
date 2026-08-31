@@ -19,7 +19,7 @@ IconID NetworkFunctions::GetWifiStateIconID(){
 void NetworkFunctions::Setup(){
     char ssid[33] = "";
     char password[65] = "";
-    bool is_ok = PICO_Config::ParseFile(PICO_Path::FILE::SYS_NETWORK_CFG,
+    bool is_ok = PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "wifi-ssid") == 0){
                 strncpy(ssid, value, sizeof(ssid) - 1);
@@ -35,6 +35,8 @@ void NetworkFunctions::Setup(){
     if(is_ok){
         if(ssid[0] != '\0' && password[0] != '\0'){
             ConnectWiFiAsync(ssid, password);
+        }else{
+            LOG_SYS_WARN("Network Setup: To connect Wi-Fi, SSID & Password is essential.");
         }
     }
 };
@@ -43,7 +45,7 @@ void NetworkFunctions::Update(){
     switch(currentStatus){
         case NetStatus::TRYING_CONNECT:
             if(WiFi.status() == WL_CONNECTED){
-                LOG_SYS_OK("Succeeded To connect Wi-Fi!");
+                LOG_SYS_OK("Succeeded to connect Wi-Fi!");
                 currentStatus = NetStatus::SUCCESS;
                 NTP.begin(ntpServer1, ntpServer2);
                 break;
@@ -70,6 +72,7 @@ void NetworkFunctions::Update(){
 };
 
 void NetworkFunctions::ConnectWiFiAsync(const char* ssid, const char* password){
+    LOG_SYS_MSG("Network Service: Connecting to Wi-Fi.");
     strncpy(currentSSID, ssid, sizeof(currentSSID) - 1);
     WiFi.beginNoBlock(ssid, password);
     timer = millis();

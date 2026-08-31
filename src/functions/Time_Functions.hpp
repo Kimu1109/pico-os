@@ -20,7 +20,7 @@ namespace TimeFunctions {
     inline void Setup(){
         last_update = millis();
 
-        PICO_Config::ParseFile(PICO_Path::FILE::SYS_NETWORK_CFG,
+        PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
             [&](const char* key, const char* value){
                 if(strcmp(key, "timezone") == 0){
                     setenv("TZ", value, 1);
@@ -28,6 +28,8 @@ namespace TimeFunctions {
                 }
             }
         );
+
+        LOG_SYS_OK("Time Setup has succeeded!");
     };
     inline void Update(){
         changed_HH_mm = false;

@@ -11,6 +11,8 @@ namespace WidgetFunctions
 
     inline Widget *pressingWidget = nullptr;
 
+    void Setup();
+
     void Add(Widget *w);
     void AddDialog(Widget *w);
 

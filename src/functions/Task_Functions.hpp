@@ -9,6 +9,7 @@ namespace PICO_Task {
 
     inline void Setup(){
         tasks.reserve(16);
+        LOG_SYS_OK("Task setup has succeeded!");
     }
 
     inline void Add(Task* task){

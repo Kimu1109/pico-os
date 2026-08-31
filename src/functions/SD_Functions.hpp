@@ -23,12 +23,12 @@ namespace PICO_SD
 
         if (!OSData::SD.begin(config))
         {
-            LOG_SYS_FAIL("SD Init failed!");
+            LOG_SYS_FAIL("SD Setup has failed!");
             OSData::SD_usable = false;
             return false;
         }
 
-        LOG_SYS_OK("SD Init succeeded!");
+        LOG_SYS_OK("SD Setup has succeeded!");
         OSData::SD_usable = true;
         return true;
     }

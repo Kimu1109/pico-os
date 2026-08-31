@@ -39,14 +39,14 @@ namespace {
 void Setup()
 {
     if (!OSData::SD_usable) {
-        LOG_SYS_WARN("SD未初期化のためログ保存機能はSerial出力のみで動作します");
+        LOG_SYS_WARN("Log Setup: To init, SD Init should be finished.");
         return;
     }
 
     // O_APPENDで開いたままセッション中保持する(open/closeのたびのオーバーヘッド回避)
     s_fileOpen = s_logFile.open(PICO_Path::FILE::SYS_LOG_TXT, O_WRITE | O_CREAT | O_APPEND);
     if (!s_fileOpen) {
-        LOG_SYS_FAIL("log.txtのオープンに失敗しました");
+        LOG_SYS_FAIL("Log Setup: Failed to open log.txt");
         return;
     }
 
@@ -59,8 +59,11 @@ void Setup()
     // SDカード上の残留データがそのまま読めてしまう(実際に発生した事象)。
     // truncate(0)でvalidLengthを0に戻し、予約クラスタは維持したまま
     // 書き込み開始位置を先頭に正す。
+    // このバグが修正され次第、この行を消すつもり。
     s_logFile.truncate(0);
     s_lastFlushMs = millis();
+
+    LOG_SYS_OK("Log Setup has succeeded!");
 }
 
 void Log(LogType type, const char* fmt, ...)

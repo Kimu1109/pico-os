@@ -26,6 +26,8 @@ namespace PICO_Touch
         touchSPI.begin();
         ts.begin(touchSPI);
         ts.setRotation(1); // lcdのsetRotationと合わせる
+
+        LOG_SYS_OK("Touch Setup has succeeded!");
     }
 
     inline void Update(){

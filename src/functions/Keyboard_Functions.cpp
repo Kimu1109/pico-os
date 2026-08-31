@@ -20,6 +20,8 @@ void KeyboardFunctions::Setup(){
     OSData::keyboard_jpn = new Keyboard(label);
     WidgetFunctions::AddDialog(OSData::keyboard_eng);
     WidgetFunctions::AddDialog(OSData::keyboard_jpn);
+
+    LOG_SYS_OK("Keyboard Setup has succeeded!");
 }
 
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget *target){

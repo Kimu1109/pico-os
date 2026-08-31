@@ -1,4 +1,5 @@
 #include "functions/Widget_Functions.hpp"
+#include "functions/Log_Functions.hpp"
 #include "config/LGFX_Config.hpp"
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -31,6 +32,8 @@ void PICO_GFX::Setup() {
 
     dirtyRects.reserve(48);
     isDirtyDeactivates = false;
+
+    LOG_SYS_OK("GFX Setup has succeeded!");
 }
 
 void PICO_GFX::MarkDirty(const Rect& rect) {

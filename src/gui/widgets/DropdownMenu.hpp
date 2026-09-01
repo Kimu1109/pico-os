@@ -35,10 +35,13 @@ class DropdownMenu : public Widget {
             this->dropdown->setVisible(false);
             this->dropdown->setOnSelectItem([this](int index){
                 if(index == -1) return;
-                this->value->setText(this->dropdown->itemAt(index));
-                this->open_state = false;
-                this->applyOpenState();
-                this->l_rect.h = 30;
+                ScrollListTools::Item valueItem;
+                if(this->dropdown->itemAt(index, valueItem)){
+                    this->value->setText(valueItem.text);
+                    this->open_state = false;
+                    this->applyOpenState();
+                    this->l_rect.h = 30;
+                }
             });
             this->dropdown->setParent(this);
 
@@ -112,7 +115,7 @@ class DropdownMenu : public Widget {
         }
 
         void add(const String text){
-            this->dropdown->add(text);
+            this->dropdown->add({IconID::AppBox, text});
             this->relayout();
         }
 
@@ -124,8 +127,8 @@ class DropdownMenu : public Widget {
         }
         int getSelectedIndex(){ return this->dropdown->getSelectedIndex(); }
 
-        String itemAt(int index){
-            return this->dropdown->itemAt(index);
+        bool itemAt(int index, ScrollListTools::Item& out){
+            return this->dropdown->itemAt(index, out);
         }
 
         const std::vector<Widget*>& getChildren() const override {

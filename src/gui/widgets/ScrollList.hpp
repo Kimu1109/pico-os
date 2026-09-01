@@ -4,11 +4,19 @@
 #include "gui/widgets/interfaces/IFontImplementation.hpp"
 #include "gui/widgets/interfaces/ITextColor.hpp"
 #include "gui/widgets/interfaces/IBorderColor.hpp"
+#include "gui/icons/icon_render.h"
+
+namespace ScrollListTools {
+    struct Item {
+        IconID icon = IconID::AppBox;
+        String text;
+    };
+};
 
 class ScrollList : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
 
     private:
-        std::vector<String>* dataSource = new std::vector<String>();
+        std::vector<ScrollListTools::Item>* dataSource = new std::vector<ScrollListTools::Item>();
         int scrollY = 0;
 
         const static int MARGIN = 2;
@@ -21,6 +29,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         int font_h = 0;
 
         int selected_index = -1;
+        bool enable_icon = false;
 
         std::function<void(int index)> on_selectitem = nullptr;
 
@@ -33,8 +42,8 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
             }
         }
 
-        void add(const String text){
-            dataSource->push_back(text);
+        void add(const ScrollListTools::Item value){
+            dataSource->push_back(value);
         }
 
         void render() override;
@@ -83,10 +92,18 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         }
         int getSelectedIndex(){ return this->selected_index; }
 
-        String itemAt(int index){
-            if(index == -1) return "";
+        void setEnableIcon(bool value){
+            this->enable_icon = value;
+        }
+        bool getEnableIcon() { return this->enable_icon; }
 
-            return this->dataSource->at(index);
+        bool itemAt(int index, ScrollListTools::Item& out){
+            if (index < 0 || index >= this->dataSource->size()) {
+                return false;
+            }
+
+            out = this->dataSource->at(index);
+            return true;
         }
 
         int getFittingHeight(){

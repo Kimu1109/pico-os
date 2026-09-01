@@ -140,15 +140,31 @@ void PICO_GFX::FlushDirty() {
 }
 
 void PICO_GFX::DrawDialogBackground(){
-    constexpr int16_t kSpacing   = 6;  // 斜線の間隔(px)
-    constexpr uint8_t  kColor    = PICO_BLACK;
+    constexpr int16_t kSpacing = 6;
+    constexpr uint8_t kColor   = PICO_BLACK;
 
-    for (int16_t y = 0; y < SCREEN_HEIGHT; ++y) {
-        // このy行で最初にヒットするxオフセットを計算
-        int16_t offset = ((kSpacing - (y % kSpacing)) % kSpacing);
-        for (int16_t x = offset; x < SCREEN_WIDTH; x += kSpacing) {
-            OSData::frame->writePixel(x , y, kColor);
-            OSData::frame->writePixel(x, SCREEN_HEIGHT - y, kColor);
-        }
+    const int16_t x0 = 0, y0 = 0;
+    const int16_t x1 = SCREEN_WIDTH - 1, y1 = SCREEN_HEIGHT - 1;
+
+    auto floorToSpacing = [](int16_t v){
+        int16_t m = v % kSpacing;
+        return (m < 0) ? v - (m + kSpacing) : v - m;
+    };
+
+    // ---- \ 方向: x + y = 一定(6の倍数) ----
+    for (int16_t s = floorToSpacing(x0 + y0); s <= x1 + y1; s += kSpacing) {
+        int16_t lx0 = std::max<int16_t>(x0, s - y1);
+        int16_t lx1 = std::min<int16_t>(x1, s - y0);
+        if (lx0 > lx1) continue;
+        OSData::frame->drawLine(lx0, s - lx0, lx1, s - lx1, kColor);
+    }
+
+    // ---- / 方向: 元コードの SCREEN_HEIGHT - y を x - y の式に読み替え ----
+    for (int16_t d = floorToSpacing(x0 - (SCREEN_HEIGHT - y1)); 
+         d <= x1 - (SCREEN_HEIGHT - y0); d += kSpacing) {
+        int16_t lx0 = std::max<int16_t>(x0, d + (SCREEN_HEIGHT - y1));
+        int16_t lx1 = std::min<int16_t>(x1, d + (SCREEN_HEIGHT - y0));
+        if (lx0 > lx1) continue;
+        OSData::frame->drawLine(lx0, SCREEN_HEIGHT - (lx0 - d), lx1, SCREEN_HEIGHT - (lx1 - d), kColor);
     }
 }

@@ -44,6 +44,9 @@ void ScrollList::render(){
     //テキスト描画(本番)
     int start_index = this->scrollY / ITEM_HEIGHT;
     int draw_y = start_index * ITEM_HEIGHT - this->scrollY;
+
+    int icon_size = FontFn::GetFontSize(this->getFontSize());
+
     for(int i = start_index; i < this->dataSource->size(); i++){
 
         if(selected_index == i){
@@ -52,9 +55,11 @@ void ScrollList::render(){
         }else{
             this->textColorApply();
         }
+        if(this->enable_icon)
+            IconRender::DrawIcon(this->dataSource->at(i).icon, IconRender::GetIconSize(icon_size), g_rect.x + MARGIN, g_rect.y + draw_y, this->text_color);
 
-        OSData::frame->setCursor(g_rect.x + MARGIN, g_rect.y + draw_y);
-        OSData::frame->print(this->dataSource->at(i));
+        OSData::frame->setCursor(g_rect.x + MARGIN + (this->enable_icon ? (icon_size + MARGIN) : 0), g_rect.y + draw_y);
+        OSData::frame->print(this->dataSource->at(i).text);
 
         draw_y += ITEM_HEIGHT;
         if(draw_y > g_rect.h) break;

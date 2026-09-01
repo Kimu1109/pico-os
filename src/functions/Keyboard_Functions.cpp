@@ -2,8 +2,8 @@
 #include "functions/Widget_Functions.hpp"
 #include "OS_Data.hpp"
 #include "gui/widgets/Label.hpp"
-#include "gui/widgets/Keyboard.hpp"
-#include "gui/widgets/KeyboardEng.hpp"
+#include "gui/widgets/dialogs/Keyboard.hpp"
+#include "gui/widgets/dialogs/KeyboardEng.hpp"
 
 void KeyboardFunctions::Setup(){
     Label* label = new Label(10, 10, "");

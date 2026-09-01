@@ -1,4 +1,4 @@
-#include "gui/widgets/MsgDialog.hpp"
+#include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "OS_Data.hpp"
 #include "functions/GFX_Functions.hpp"
 

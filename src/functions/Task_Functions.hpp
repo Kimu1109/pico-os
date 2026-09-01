@@ -21,7 +21,9 @@ namespace PICO_Task {
             tasks[i]->update();
             if(tasks[i]->getStatus() != TaskTools::PROCESSING){
                 LOG_SYS_MSG("task[%d] finished. last status : %s\n", i, TaskTools::StatusToStr(tasks[i]->getStatus()));
+                Task* rm_task = tasks[i];
                 tasks.erase(tasks.begin() + i);
+                delete rm_task;
                 break;
             }
         }

@@ -1,4 +1,4 @@
-#include "gui/widgets/InputDialog.hpp"
+#include "gui/widgets/dialogs/InputDialog.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 

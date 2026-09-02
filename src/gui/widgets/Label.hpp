@@ -9,12 +9,19 @@
 #include "gui/widgets/interfaces/IBorderColor.hpp"
 #include "gui/widgets/interfaces/ITextColor.hpp"
 
-// 1つの書式区間（同じ太字/下線/波線設定を持つ文字列断片）
+// 1つの書式区間（同じ太字/下線/波線/取り消し線設定を持つ文字列断片）
+// マークアップ対応表:
+//   **text**  -> bold（太字）
+//   _text_ / *text* -> underline（直線下線。標準Markdownのイタリック相当だが
+//                       描画コストの都合でイタリックの代わりに直線下線を採用している）
+//   ~text~    -> wavy（波線下線。標準構文には存在しない独自の装飾）
+//   ~~text~~  -> strikethrough（取り消し線。標準Markdownの打ち消し線に対応）
 struct TextRun {
     String text;
     bool bold = false;
     bool underline = false;
     bool wavy = false;
+    bool strikethrough = false;
 };
 
 // カーソル(挿入位置)候補1つ分の描画座標
@@ -140,7 +147,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         int getBorderWidth();
 
         // ---------- カーソル(挿入位置)関連 ----------
-        // index: 0 = 先頭。マークアップ記号(**, _, ~)は文字数に含まれない
+        // index: 0 = 先頭。マークアップ記号(**, _, *, ~, ~~)は文字数に含まれない
         void setCursorPos(int index);
         int getCursorPos();
 

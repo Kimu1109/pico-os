@@ -9,7 +9,7 @@
 namespace ScrollListTools {
     struct Item {
         IconID icon = IconID::AppBox;
-        String text;
+        char text[128];
     };
 };
 
@@ -44,6 +44,11 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
 
         void add(const ScrollListTools::Item value){
             dataSource->push_back(value);
+            this->needsRender();
+        }
+        void clear(){
+            dataSource->clear();
+            this->needsRender();
         }
 
         void render() override;
@@ -97,13 +102,11 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         }
         bool getEnableIcon() { return this->enable_icon; }
 
-        bool itemAt(int index, ScrollListTools::Item& out){
+        ScrollListTools::Item* itemAt(int index){
             if (index < 0 || index >= this->dataSource->size()) {
-                return false;
+                return nullptr;
             }
-
-            out = this->dataSource->at(index);
-            return true;
+            return &this->dataSource->at(index);
         }
 
         int getFittingHeight(){

@@ -12,8 +12,7 @@
 #include "functions/Test_Functions.hpp"
 
 #include "gui/widgets/MarkdownView.hpp"
-#include "gui/widgets/Textbox.hpp"
-#include "gui/widgets/Button.hpp"
+#include "gui/widgets/FileExplorer.hpp"
 #include "gui/widgets/systems/Statusbar.hpp"
 
 #include "OS_Data.hpp"
@@ -23,8 +22,7 @@
 static Statusbar* status;
 
 static MarkdownView* markdown;
-static Textbox* textbox;
-static Button* wifi_test;
+static FileExplorer* explorer;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -44,21 +42,16 @@ void setup() {
     
     TestFunctions::Setup();
 
-    wifi_test = new Button(0, 30, "Wifi-scan");
-    wifi_test->setOnPressStart([](){
-        NetworkFunctions::ScanAsync();
-    });
-
-    markdown = new MarkdownView(0, 100, 240, 220);
-    markdown->load("tmp/doc.md");
-
     status = new Statusbar();
-    textbox = new Textbox("", 0, 60, 100, 30, true);
+
+    explorer = new FileExplorer(0, 20, 240, 120);
+
+    markdown = new MarkdownView(0, 150, 240, 170);
+    markdown->load("tmp/doc.md");
 
     WidgetFunctions::AddDialog(status);
     WidgetFunctions::Add(markdown);
-    WidgetFunctions::Add(wifi_test);
-    WidgetFunctions::Add(textbox);
+    WidgetFunctions::Add(explorer);
 
     pinMode(LED_BUILTIN, HIGH);
 

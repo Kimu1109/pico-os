@@ -48,17 +48,16 @@ void ScrollList::render(){
     int icon_size = FontFn::GetFontSize(this->getFontSize());
 
     for(int i = start_index; i < this->dataSource->size(); i++){
-
+        int8_t l_text_color = this->text_color;
         if(selected_index == i){
             OSData::frame->fillRect(g_rect.x, g_rect.y + draw_y - MARGIN * 0.5, g_rect.w - SCROLL_BAR_W, ITEM_HEIGHT, this->text_color);
-            OSData::frame->setTextColor(this->background_color);
-        }else{
-            this->textColorApply();
+            l_text_color = this->background_color;
         }
         if(this->enable_icon)
-            IconRender::DrawIcon(this->dataSource->at(i).icon, IconRender::GetIconSize(icon_size), g_rect.x + MARGIN, g_rect.y + draw_y, this->text_color);
+            IconRender::DrawIcon(this->dataSource->at(i).icon, IconRender::GetIconSize(icon_size), g_rect.x + MARGIN, g_rect.y + draw_y + (ITEM_HEIGHT - icon_size) / 2, l_text_color);
 
         OSData::frame->setCursor(g_rect.x + MARGIN + (this->enable_icon ? (icon_size + MARGIN) : 0), g_rect.y + draw_y);
+        OSData::frame->setTextColor(l_text_color);
         OSData::frame->print(this->dataSource->at(i).text);
 
         draw_y += ITEM_HEIGHT;

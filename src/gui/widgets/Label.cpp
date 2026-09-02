@@ -32,7 +32,12 @@ std::vector<String> Label::splitChars(const String& s) {
 }
 
 // ---------- マークアップ解析 ----------
-// **太字** / _下線_ / ~波線~ （入れ子非対応・単純トグル方式）
+// **太字** / _下線_ or *下線*（直線下線） / ~波線~（波線下線） / ~~取り消し線~~
+// （入れ子非対応・単純トグル方式）
+// 判定順序に注意: 2文字幅の記号(** / ~~)は、単体の記号(_ / * / ~)より
+// 必ず先に判定する。特に'*'は**（太字）と単体の*（下線）の両方で使われるため、
+// **を先にチェックしないと"**bold**"を下線トグル2回分と誤読してしまう。
+// 同様に'~'も~~（取り消し線）と単体の~（波線）の両方で使われる。
 std::vector<TextRun> Label::parseMarkup(const String& src) {
     std::vector<TextRun> runs;
     TextRun cur;
@@ -56,7 +61,13 @@ std::vector<TextRun> Label::parseMarkup(const String& src) {
                 i += 2;
                 continue;
             }
-            if (src[i] == '_') {
+            if (src[i] == '~' && i + 1 < n && src[i + 1] == '~') {
+                flush();
+                cur.strikethrough = !cur.strikethrough;
+                i += 2;
+                continue;
+            }
+            if (src[i] == '_' || src[i] == '*') {
                 flush();
                 cur.underline = !cur.underline;
                 i += 1;
@@ -115,6 +126,7 @@ void Label::relayout() {
             piece.bold = run.bold;
             piece.underline = run.underline;
             piece.wavy = run.wavy;
+            piece.strikethrough = run.strikethrough;
 
             for (auto& ch : splitChars(run.text)) {
                 int cw = OSData::frame->textWidth(ch);
@@ -205,6 +217,7 @@ void Label::relayoutPlaceholder() {
         piece.bold = run.bold;
         piece.underline = run.underline;
         piece.wavy = run.wavy;
+        piece.strikethrough = run.strikethrough;
 
         for (auto& ch : splitChars(run.text)) {
             int cw = OSData::frame->textWidth(ch);
@@ -261,6 +274,13 @@ void Label::renderRun(const TextRun& run, int x, int y) {
             px = nx; py = ny;
             up = !up;
         }
+    }
+
+    if (run.strikethrough) {
+        // 取り消し線: 下線/波線と違いbaseline基準ではなく、
+        // 文字の縦中央あたりを貫く直線にする
+        int midY = y + (line_height / 2);
+        OSData::frame->drawFastHLine(x, midY, rw, this->text_color);
     }
 }
 

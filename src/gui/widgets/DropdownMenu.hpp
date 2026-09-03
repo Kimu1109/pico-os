@@ -33,7 +33,7 @@ class DropdownMenu : public Widget {
 
             this->dropdown = new ScrollList(0, 0, 0, 30);
             this->dropdown->setVisible(false);
-            this->dropdown->setOnSelectItem([this](int index){
+            this->dropdown->setOnSelectItem([this](int index, bool already_selected){
                 if(index == -1) return;
                 ScrollListTools::Item* valueItem = this->dropdown->itemAt(index);
                 if(valueItem){

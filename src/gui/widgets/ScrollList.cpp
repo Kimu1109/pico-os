@@ -93,8 +93,9 @@ void ScrollList::causeOnPressStart(){
         for(int i = start_index; i < this->dataSource->size(); i++){
             const int draw_start_y = g_rect.y + draw_y - MARGIN * 0.5;
             if(OSData::touchY > draw_start_y && OSData::touchY <= draw_start_y + ITEM_HEIGHT){
+                bool already_selected = i == this->selected_index;
                 this->selected_index = i;
-                this->causeOnSelectItem();
+                this->causeOnSelectItem(already_selected);
                 this->needs_redraw = true;
                 break;
             }

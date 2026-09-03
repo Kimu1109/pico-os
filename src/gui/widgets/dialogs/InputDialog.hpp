@@ -117,10 +117,10 @@ class InputDialog : public Widget {
         }
 
         String getInput(){
-            return this->label->getText();
+            return this->input->getText();
         }
         void setInput(String input){
-            this->label->setText(input);
+            this->input->setText(input);
         }
 
         void render() override;

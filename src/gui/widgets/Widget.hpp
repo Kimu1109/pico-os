@@ -37,10 +37,14 @@ class Widget {
     public:
         bool is_pressing = false;
 
+        virtual ~Widget() = default;
+
         virtual const std::vector<Widget*>& getChildren() const {
             static const std::vector<Widget*> empty;
             return empty;
         }
+
+        virtual void removeChild(Widget* child) {}
 
         template<typename F>
         void visitAll(F&& visitor) {

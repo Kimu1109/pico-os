@@ -33,7 +33,7 @@ namespace PICO_Path {
      * 入力と出力に同じバッファを指定可能。
      */
     template <size_t N>
-    bool join(char (&buffer)[N], const char* base, const char* name)
+    inline bool join(char (&buffer)[N], const char* base, const char* name)
     {
         char temp[N];
 
@@ -94,7 +94,7 @@ namespace PICO_Path {
      * 入力と出力に同じバッファを指定可能。
      */
     template <size_t N>
-    bool parent(char (&buffer)[N], const char* path)
+    inline bool parent(char (&buffer)[N], const char* path)
     {
         char temp[N];
 
@@ -143,5 +143,31 @@ namespace PICO_Path {
         memcpy(buffer, temp, len + 1);
 
         return true;
+    }
+
+    /**
+     * パスから最後のファイル・フォルダ名を取得する
+     *
+     * 例:
+     *   filename("/test1/test2/test3") -> "test3"
+     *   filename("/test1/test2.txt")   -> "test2.txt"
+     *   filename("/test1")             -> "test1"
+     *   filename("/")                  -> ""
+     *
+     * 戻り値は path 内を指すため、path が有効な間だけ使用可能。
+     */
+    inline const char* filename(const char* path)
+    {
+        size_t len = strlen(path);
+
+        // 末尾の '/' を除去して考える
+        while (len > 1 && path[len - 1] == '/')
+            --len;
+
+        // 最後の '/' を探す
+        while (len > 0 && path[len - 1] != '/')
+            --len;
+
+        return path + len;
     }
 };

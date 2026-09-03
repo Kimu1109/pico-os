@@ -117,6 +117,7 @@ class MsgDialog : public Widget {
             delete msg_label;
             delete ok_button;
             delete cancel_button;
+            delete msg_icon;
         }
 
         void setOnClosed(std::function<void(bool is_ok)> callback){

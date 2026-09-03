@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gui/widgets/Widget.hpp"
+#include <algorithm>
 
 class ScrollContainer : public Widget {
     private:
@@ -47,6 +48,15 @@ class ScrollContainer : public Widget {
             children_.push_back(w);
             this->needs_children_update = true;
             this->updateContentBounds();
+        }
+
+        void removeChild(Widget* w) override {
+            auto it = std::find(children_.begin(), children_.end(), w);
+            if(it != children_.end()){
+                children_.erase(it);
+                this->updateContentBounds();
+                this->needsRender();
+            }
         }
 
         Rect getScreenClipRect() const override {

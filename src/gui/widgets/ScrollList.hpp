@@ -31,7 +31,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         int selected_index = -1;
         bool enable_icon = false;
 
-        std::function<void(int index)> on_selectitem = nullptr;
+        std::function<void(int index, bool already_selected)> on_selectitem = nullptr;
 
     public:
 
@@ -57,11 +57,11 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         void causeOnPressMove() override;
         void causeOnPressEnd() override;
 
-        void setOnSelectItem(std::function<void(int index)> on_selectitem) {
+        void setOnSelectItem(std::function<void(int index, bool already_selected)> on_selectitem) {
             this->on_selectitem = on_selectitem;
         }
-        void causeOnSelectItem(){
-            if(this->on_selectitem) this->on_selectitem(this->selected_index);
+        void causeOnSelectItem(bool already_selected){
+            if(this->on_selectitem) this->on_selectitem(this->selected_index, already_selected);
         }
 
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
@@ -114,5 +114,5 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
                 this->font_h = FontFn::GetFontSize(getFontSize());
             }
             return min(this->dataSource->size() * (this->font_h + MARGIN), SCREEN_HEIGHT - this->getScreenY());
-        }
+        }      
 };

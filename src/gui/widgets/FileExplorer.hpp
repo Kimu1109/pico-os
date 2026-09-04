@@ -17,15 +17,20 @@ class FileExplorer : public Widget {
             this->list->setH(this->l_rect.h - 20);
 
             this->currentFolder->setMaxWidth(this->l_rect.w - 20 * 2);
+            
+            this->createFolder->setX(this->l_rect.w - 20);
+            this->deleteFile->setX(this->l_rect.w - 20 * 2);
         }
         
         void on_press_back();
         void on_press_create();
+        void on_press_delete();
         void on_press_item(int index);
 
         ScrollList* list;
         Icon* backToParent;
         Icon* createFolder;
+        Icon* deleteFile;
         Label* currentFolder;
 
     public:
@@ -44,11 +49,18 @@ class FileExplorer : public Widget {
                 this->on_press_create();
             });
 
+            deleteFile = new Icon(w - 20 * 2, (20 - 16) / 2, IconID::Trash, IconSize::Px16);
+            deleteFile->setParent(this);
+            deleteFile->setOnPressStart([this](){
+                this->on_press_delete();
+            });
+
             currentFolder = new Label(20, 0, "");
             currentFolder->setParent(this);
-            currentFolder->setMaxWidth(w - 20 * 2);
+            currentFolder->setMaxWidth(w - 20 * 3);
             currentFolder->setMaxHeight(20);
             currentFolder->setFontSize(FontFn::Small);
+            currentFolder->setTextAlign(TextAlign::Center);
 
             list = new ScrollList(0, 20, w, h - 20);
             list->setParent(this);
@@ -61,6 +73,7 @@ class FileExplorer : public Widget {
 
             children_.push_back(backToParent);
             children_.push_back(createFolder);
+            children_.push_back(deleteFile);
             children_.push_back(list);
             children_.push_back(currentFolder);
 

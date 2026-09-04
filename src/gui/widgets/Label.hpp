@@ -31,6 +31,18 @@ struct CursorSlot {
     int x = 0;      // その行内でのX座標(rect.x からの相対値)
 };
 
+// テキストの水平方向の揃え位置
+// 注意: max_width未指定(=0)の場合、l_rect.wは最も長い行の幅に自動フィットするため、
+// 最長行に対してはCenter/Rightを指定しても見た目上の変化はない
+// (他の短い行だけが最長行の幅を基準に寄せられる)。
+// 単一行ラベルで視覚的な効果を出したい場合はsetMaxWidth()等で明示的に
+// 描画幅を確保すること。
+enum class TextAlign {
+    Left,
+    Center,
+    Right
+};
+
 class Label : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
     private:
         String raw_text;                          // マークアップ込みの元テキスト
@@ -45,6 +57,13 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         int default_height = 0;                     // 0 = 下限無効。行数由来の高さがこれより小さい場合はこちらを採用
         int line_height = 0;
         int line_spacing = 2;                      // 行間(px)
+
+        TextAlign text_align = TextAlign::Left;
+        // relayout()/relayoutPlaceholder()内で行ごとに事前計算される、
+        // 各行の描画開始X座標オフセット(rect.x からの相対値)。
+        // lines / placeholder_lines と同じインデックスで対応する。
+        std::vector<int> line_offsets;
+        std::vector<int> placeholder_line_offsets;
 
         // ---------- 背景・ボーダー関連 ----------
         bool has_background = false;                // 背景を描画するか（false = 透明）
@@ -74,6 +93,9 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         std::vector<TextRun> parseMarkup(const String& src);
         void relayout();
         void relayoutPlaceholder();
+        // linesの各行の実測幅からtext_alignに応じたオフセットを算出し、outに書き込む。
+        // box_widthは揃えの基準となる幅(通常はthis->l_rect.w)。
+        void computeLineOffsets(const std::vector<std::vector<TextRun>>& src_lines, int box_width, std::vector<int>& out);
         void renderRun(const TextRun& run, int x, int y);
         void renderBackground();
         void renderBorder();
@@ -126,6 +148,9 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         int getDefaultHeight();
 
         void setLineSpacing(int spacing);
+
+        void setTextAlign(TextAlign align);
+        TextAlign getTextAlign();
 
         void setTextColor(int8_t palette_color) override;
 

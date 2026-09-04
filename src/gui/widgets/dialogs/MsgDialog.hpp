@@ -37,8 +37,8 @@ class MsgDialog : public Widget {
 
             msg_icon->setX(BASE_X + MARGIN + (DIALOG_WIDTH - MARGIN * 2 - ICON_SIZE) * 0.5);
             msg_icon->setY(BASE_Y + MARGIN);
-            msg_icon->setVisible(this->icon_visible);
             msg_icon->setIconId(this->icon_id);
+            msg_icon->setVisible(this->icon_visible);
 
             msg_label->setX(BASE_X + MARGIN);
             msg_label->setY(BASE_Y + MARGIN + (this->icon_visible ? (ICON_SIZE + MARGIN) : 0));
@@ -129,4 +129,11 @@ class MsgDialog : public Widget {
         void causeOnClosed(bool is_ok){
             if(this->on_closed) this->on_closed(is_ok);
         }
+
+        void setVisible(bool visible) override {
+            Widget::setVisible(visible);
+            if(visible && !icon_visible){
+                msg_icon->setVisible(false);
+            }
+        };
 };

@@ -87,6 +87,33 @@ std::vector<TextRun> Label::parseMarkup(const String& src) {
     return runs;
 }
 
+// ---------- 行揃えオフセットの算出 ----------
+// src_linesの各行の実測幅を計算し、text_alignとbox_widthに応じた
+// 描画開始X座標オフセット(0 = 左端のまま)をoutに書き込む。
+// Left指定時は全行0のままにする(このループ自体を素通りさせるだけなので軽量)。
+void Label::computeLineOffsets(const std::vector<std::vector<TextRun>>& src_lines, int box_width, std::vector<int>& out) {
+    out.assign(src_lines.size(), 0);
+    if (this->text_align == TextAlign::Left) return;
+
+    for (size_t li = 0; li < src_lines.size(); li++) {
+        int lw = 0;
+        for (auto& run : src_lines[li]) {
+            int rw = OSData::frame->textWidth(run.text);
+            if (run.bold) rw += 1;
+            lw += rw;
+        }
+
+        int avail = box_width - lw;
+        if (avail < 0) avail = 0; // 行が箱より長い場合は左詰めのまま(はみ出し優先)
+
+        if (this->text_align == TextAlign::Center) {
+            out[li] = avail / 2;
+        } else { // TextAlign::Right
+            out[li] = avail;
+        }
+    }
+}
+
 // ---------- 折返し込みレイアウト計算 ----------
 void Label::relayout() {
     this->fontApply();
@@ -195,6 +222,11 @@ void Label::relayout() {
     if (this->cursor_index >= (int)cursor_slots.size()) this->cursor_index = (int)cursor_slots.size() - 1;
     if (this->cursor_index < 0) this->cursor_index = 0;
 
+    // 行揃え(Center/Right)のオフセットを、確定したl_rect.wを基準に算出する。
+    // カーソル描画もこのオフセットを参照するため、cursor_slotsの補正より後、
+    // renderCursorが呼ばれるより前であればどこでもよい。
+    computeLineOffsets(this->lines, this->l_rect.w, this->line_offsets);
+
     relayoutPlaceholder(); //プレスホルダー
 
     this->fontDefault();
@@ -205,6 +237,7 @@ void Label::relayout() {
 // raw_textとは独立して計算する。markupも通常テキストと同様に解釈される。
 void Label::relayoutPlaceholder() {
     placeholder_lines.clear();
+    placeholder_line_offsets.clear();
     if (placeholder_text.length() == 0) return;
 
     std::vector<TextRun> runs = parseMarkup(placeholder_text);
@@ -235,6 +268,10 @@ void Label::relayoutPlaceholder() {
         if (piece.text.length() > 0) { curLine.push_back(piece); piece.text = ""; }
     }
     placeholder_lines.push_back(curLine);
+
+    // プレースホルダーは通常テキストと同じl_rect.wを基準に揃える
+    // (relayoutPlaceholder()はrelayout()内でl_rect.w確定後に呼ばれる前提)
+    computeLineOffsets(this->placeholder_lines, this->l_rect.w, this->placeholder_line_offsets);
 }
 
 // ---------- 1つのRunを描画 ----------
@@ -329,7 +366,10 @@ void Label::renderCursor() {
     if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
     const CursorSlot& slot = cursor_slots[idx];
 
-    int cx = this->getScreenRect().x + slot.x;
+    // カーソルは常にraw_text(=lines/line_offsets)側の座標系で計算する。
+    // (プレースホルダー表示中はカーソル自体を表示しない運用が前提)
+    int line_offset = (slot.line >= 0 && slot.line < (int)line_offsets.size()) ? line_offsets[slot.line] : 0;
+    int cx = this->getScreenRect().x + line_offset + slot.x;
     int cy = this->getScreenRect().y + slot.line * (line_height + line_spacing);
 
     OSData::frame->fillRect(cx, cy, this->cursor_width, line_height, this->cursor_color);
@@ -398,15 +438,18 @@ void Label::render() {
     // raw_textが空 かつ プレースホルダーが設定されていれば、そちらを描画対象にする
     bool show_placeholder = this->raw_text.length() == 0 && this->placeholder_text.length() > 0;
     auto& render_lines = show_placeholder ? this->placeholder_lines : this->lines;
+    auto& render_offsets = show_placeholder ? this->placeholder_line_offsets : this->line_offsets;
 
     // プレースホルダー描画中だけ一時的に色を差し替える(renderRunの実装はそのまま流用)
     int8_t saved_text_color = this->text_color;
     if (show_placeholder) this->text_color = this->placeholder_color;
 
+    size_t line_idx = 0;
     for (auto& line : render_lines) {
         if (this->max_height > 0 && cy >= g_rect.y + g_rect.h) break;
 
-        int cx = g_rect.x;
+        int offset = (line_idx < render_offsets.size()) ? render_offsets[line_idx] : 0;
+        int cx = g_rect.x + offset;
         for (auto& run : line) {
             renderRun(run, cx, cy);
             int rw = OSData::frame->textWidth(run.text);
@@ -414,6 +457,7 @@ void Label::render() {
             cx += rw;
         }
         cy += line_height + line_spacing;
+        line_idx++;
     }
 
     if (show_placeholder) this->text_color = saved_text_color;
@@ -530,6 +574,18 @@ void Label::setLineSpacing(int spacing) {
     relayout();
 }
 
+void Label::setTextAlign(TextAlign align) {
+    this->text_align = align;
+    // 行揃えオフセットの再計算が必要なため、relayout()を通す。
+    // (マークアップ解析・折返し自体はtext_alignの影響を受けないため
+    //  冗長ではあるが、既存のsetter群と実装方針を揃えるためにこの形にしている)
+    relayout();
+}
+
+TextAlign Label::getTextAlign() {
+    return this->text_align;
+}
+
 void Label::setTextColor(int8_t c) {
     this->text_color = c;
     this->needsRender();
@@ -628,7 +684,9 @@ int Label::getCursorScreenX() {
     int idx = this->cursor_index;
     if (idx < 0) idx = 0;
     if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
-    return this->getScreenRect().x + cursor_slots[idx].x;
+    const CursorSlot& slot = cursor_slots[idx];
+    int line_offset = (slot.line >= 0 && slot.line < (int)line_offsets.size()) ? line_offsets[slot.line] : 0;
+    return this->getScreenRect().x + line_offset + slot.x;
 }
 
 int Label::getCursorScreenY() {

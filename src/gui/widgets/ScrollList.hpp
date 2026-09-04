@@ -48,6 +48,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         }
         void clear(){
             dataSource->clear();
+            this->selected_index = -1;
             this->needsRender();
         }
 

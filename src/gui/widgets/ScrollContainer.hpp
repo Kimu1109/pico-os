@@ -1,7 +1,6 @@
 #pragma once
 
 #include "gui/widgets/Widget.hpp"
-#include <algorithm>
 
 class ScrollContainer : public Widget {
     private:
@@ -50,13 +49,13 @@ class ScrollContainer : public Widget {
             this->updateContentBounds();
         }
 
-        void removeChild(Widget* w) override {
-            auto it = std::find(children_.begin(), children_.end(), w);
-            if(it != children_.end()){
-                children_.erase(it);
-                this->updateContentBounds();
-                this->needsRender();
-            }
+        // 横スクロール専用のナビバー等、縦横どちらのスクロールバーを
+        // 表示するかを構築時に切り替えたい用途向け。
+        // 呼び出し後、既に追加済みの子がある場合に備えてcontentBoundsを再計算する。
+        void setScrollAxes(bool horizontal, bool vertical){
+            this->horizontal_scroll = horizontal;
+            this->vertical_scroll = vertical;
+            this->updateContentBounds();
         }
 
         Rect getScreenClipRect() const override {

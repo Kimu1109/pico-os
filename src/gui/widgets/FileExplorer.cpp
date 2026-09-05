@@ -95,7 +95,7 @@ void FileExplorer::on_press_item(int index){
 const char* FileExplorer::getSelectedPath(){
     auto item = this->list->itemAt(this->list->getSelectedIndex());
     if(item){
-        char path[256];
+        static char path[256];
         if(PICO_IO::join(path, this->currentPath, item->text)){
             return path;
         }else{

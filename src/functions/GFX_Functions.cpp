@@ -58,8 +58,15 @@ void PICO_GFX::FlushDirty() {
         for (auto* w : WidgetFunctions::widgets) {
             if (w && w->getVisible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
         }
-        for (int k = (int)WidgetFunctions::dialog_roots.size() - 1; k >= 0; k--) {
+        for (size_t k = 0; k < WidgetFunctions::dialog_roots.size(); k++) {
             Widget* root = WidgetFunctions::dialog_roots[k];
+            if (!root || !root->getVisible()) continue;
+            root->visitAll([&hit, &d](Widget* w) {
+                if (w && w->getVisible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
+            });
+        }
+        for (size_t k = 0; k < WidgetFunctions::overlays.size(); k++) {
+            Widget* root = WidgetFunctions::overlays[k];
             if (!root || !root->getVisible()) continue;
             root->visitAll([&hit, &d](Widget* w) {
                 if (w && w->getVisible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);

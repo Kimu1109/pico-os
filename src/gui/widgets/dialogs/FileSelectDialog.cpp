@@ -1,9 +1,9 @@
-#include "gui/widgets/dialogs/FileSaveDialog.hpp"
+#include "gui/widgets/dialogs/FileSelectDialog.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_IO.hpp"
 
-void FileSaveDialog::render(){
+void FileSelectDialog::render(){
     if(!this->visible) return;
     if(!this->needs_redraw) return;
 
@@ -16,8 +16,6 @@ void FileSaveDialog::render(){
     this->needs_redraw = false;
 }
 
-const char* FileSaveDialog::getSavePath(){
-    static char path[256];
-    PICO_IO::join(path, this->explorer->getCurrentFolderPath(), this->textbox_filename->getText().c_str());
-    return path;
+const char* FileSelectDialog::getSelectedPath(){
+    return this->explorer->getSelectedPath();
 }

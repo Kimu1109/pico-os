@@ -15,7 +15,7 @@
 #include "gui/widgets/FileExplorer.hpp"
 #include "gui/widgets/systems/Statusbar.hpp"
 
-#include "gui/widgets/dialogs/FileSaveDialog.hpp"
+#include "gui/widgets/dialogs/FileSelectDialog.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -26,7 +26,7 @@ static Statusbar* status;
 static MarkdownView* markdown;
 static FileExplorer* explorer;
 
-static FileSaveDialog* fileSaveDialog;
+static FileSelectDialog* dia;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -39,6 +39,9 @@ void setup() {
     PICO_Touch::Setup();
     PICO_Task::Setup();
 
+    status = new Statusbar();
+    WidgetFunctions::AddOverlay(status);
+
     NetworkFunctions::Setup();
     KeyboardFunctions::Setup();
     IME_Functions::Setup();
@@ -46,17 +49,21 @@ void setup() {
     
     TestFunctions::Setup();
 
-    status = new Statusbar();
+    dia = new FileSelectDialog("/");
+    dia->setVisible(true);
+    dia->setOnClose([](bool is_ok){
+        if(is_ok){
+            Serial.println(dia->getSelectedPath());
+            WidgetFunctions::RemoveDialog(dia);
+        }
+    });
+    WidgetFunctions::AddDialog(dia);
 
     explorer = new FileExplorer(0, 20, 240, 120);
 
     markdown = new MarkdownView(0, 150, 240, 170);
     markdown->load("tmp/doc.md");
 
-    fileSaveDialog = new FileSaveDialog("/");
-
-    WidgetFunctions::AddDialog(status);
-    WidgetFunctions::AddDialog(fileSaveDialog);
     WidgetFunctions::Add(markdown);
     WidgetFunctions::Add(explorer);
 

@@ -84,5 +84,21 @@ class FileExplorer : public Widget {
             return children_;
         }
 
+        const char* getSelectedPath();
+        const char* getCurrentFolderPath();
+
+        void setCurrentFolderPath(const char* path){
+            strncpy(currentPath, path, sizeof(currentPath) - 1);
+            this->update_list();
+        }
+
         void render() override;
+
+        ~FileExplorer(){
+            delete backToParent;
+            delete createFolder;
+            delete deleteFile;
+            delete list;
+            delete currentFolder;
+        }
 };

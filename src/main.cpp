@@ -15,6 +15,8 @@
 #include "gui/widgets/FileExplorer.hpp"
 #include "gui/widgets/systems/Statusbar.hpp"
 
+#include "gui/widgets/dialogs/FileSaveDialog.hpp"
+
 #include "OS_Data.hpp"
 #include <SPI.h>
 
@@ -23,6 +25,8 @@ static Statusbar* status;
 
 static MarkdownView* markdown;
 static FileExplorer* explorer;
+
+static FileSaveDialog* fileSaveDialog;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -49,7 +53,10 @@ void setup() {
     markdown = new MarkdownView(0, 150, 240, 170);
     markdown->load("tmp/doc.md");
 
+    fileSaveDialog = new FileSaveDialog("/");
+
     WidgetFunctions::AddDialog(status);
+    WidgetFunctions::AddDialog(fileSaveDialog);
     WidgetFunctions::Add(markdown);
     WidgetFunctions::Add(explorer);
 

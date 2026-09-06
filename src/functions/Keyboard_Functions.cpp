@@ -4,6 +4,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/dialogs/Keyboard.hpp"
 #include "gui/widgets/dialogs/KeyboardEng.hpp"
+#include "gui/widgets/dialogs/KeyboardNum.hpp"
 
 void KeyboardFunctions::Setup(){
     Label* label = new Label(10, 10, "");
@@ -18,8 +19,10 @@ void KeyboardFunctions::Setup(){
 
     OSData::keyboard_eng = new KeyboardEng(label);
     OSData::keyboard_jpn = new Keyboard(label);
+    OSData::keyboard_num = new KeyboardNum(label);
     WidgetFunctions::AddOverlay(OSData::keyboard_eng);
     WidgetFunctions::AddOverlay(OSData::keyboard_jpn);
+    WidgetFunctions::AddOverlay(OSData::keyboard_num);
 
     LOG_SYS_OK("Keyboard Setup has succeeded!");
 }
@@ -27,9 +30,11 @@ void KeyboardFunctions::Setup(){
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget *target){
     static_cast<KeyboardEng*>(OSData::keyboard_eng)->setInputTarget(target);
     static_cast<KeyboardEng*>(OSData::keyboard_jpn)->setInputTarget(target);
+    static_cast<KeyboardEng*>(OSData::keyboard_num)->setInputTarget(target);
 }
 
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget *target){
     static_cast<KeyboardEng*>(OSData::keyboard_eng)->removeInputTarget(target);
     static_cast<KeyboardEng*>(OSData::keyboard_jpn)->removeInputTarget(target);
+    static_cast<KeyboardEng*>(OSData::keyboard_num)->removeInputTarget(target);
 }

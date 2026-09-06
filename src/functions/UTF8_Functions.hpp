@@ -108,6 +108,48 @@ namespace UTF8_Functions {
         return 3;
     }
 
+    // UTF-8文字列の「文字数」(バイト数ではない)を数える
+    inline int Utf8Length(const String& str) {
+        int count = 0;
+        int len = str.length();
+        for (int i = 0; i < len; ) {
+            uint8_t b = (uint8_t)str.charAt(i);
+            int charBytes;
+            if ((b & 0x80) == 0x00) charBytes = 1;
+            else if ((b & 0xE0) == 0xC0) charBytes = 2;
+            else if ((b & 0xF0) == 0xE0) charBytes = 3;
+            else if ((b & 0xF8) == 0xF0) charBytes = 4;
+            else charBytes = 1; // 不正なバイト列への保険
+            i += charBytes;
+            count++;
+        }
+        return count;
+    }
+
+    // 文字インデックス(0=先頭)から、対応するバイトオフセットを求める
+    // charIndexが文字列長を超える場合は末尾のバイトオフセットを返す
+    // (カーソル位置での挿入/削除に使用)
+    inline int Utf8ByteOffsetOfChar(const String& str, int charIndex) {
+        if (charIndex <= 0) return 0;
+
+        int count = 0;
+        int len = str.length();
+        for (int i = 0; i < len; ) {
+            if (count == charIndex) return i;
+
+            uint8_t b = (uint8_t)str.charAt(i);
+            int charBytes;
+            if ((b & 0x80) == 0x00) charBytes = 1;
+            else if ((b & 0xE0) == 0xC0) charBytes = 2;
+            else if ((b & 0xF0) == 0xE0) charBytes = 3;
+            else if ((b & 0xF8) == 0xF0) charBytes = 4;
+            else charBytes = 1;
+            i += charBytes;
+            count++;
+        }
+        return len;
+    }
+
     inline String HiraganaToKatakana(const String& input) {
         String result;
         result.reserve(input.length());

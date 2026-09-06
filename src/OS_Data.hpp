@@ -27,4 +27,5 @@ namespace OSData {
     //キーボード
     inline Widget* keyboard_jpn;
     inline Widget* keyboard_eng;
+    inline Widget* keyboard_num;
 }

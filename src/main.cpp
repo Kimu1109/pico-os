@@ -12,10 +12,8 @@
 #include "functions/Test_Functions.hpp"
 
 #include "gui/widgets/MarkdownView.hpp"
-#include "gui/widgets/FileExplorer.hpp"
 #include "gui/widgets/systems/Statusbar.hpp"
-
-#include "gui/widgets/dialogs/ColorDialog.hpp"
+#include "gui/widgets/NumberInput.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -24,9 +22,8 @@
 static Statusbar* status;
 
 static MarkdownView* markdown;
-static FileExplorer* explorer;
 
-static ColorDialog* dia;
+static NumberInput* num_i;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -49,23 +46,13 @@ void setup() {
     
     TestFunctions::Setup();
 
-    dia = new ColorDialog();
-    dia->setOnClose([](bool is_ok){
-        if(is_ok){
-            Serial.printf("color:%d\n", dia->getSelectedColor());
-            WidgetFunctions::RemoveDialog(dia);
-        }
-    });
-    dia->setVisible(true);
-    WidgetFunctions::AddDialog(dia);
-
-    explorer = new FileExplorer(0, 20, 240, 120);
+    num_i = new NumberInput(0, 25, 100);
 
     markdown = new MarkdownView(0, 150, 240, 170);
     markdown->load("tmp/doc.md");
 
     WidgetFunctions::Add(markdown);
-    WidgetFunctions::Add(explorer);
+    WidgetFunctions::Add(num_i);
 
     pinMode(LED_BUILTIN, HIGH);
 

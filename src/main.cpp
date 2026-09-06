@@ -15,7 +15,7 @@
 #include "gui/widgets/FileExplorer.hpp"
 #include "gui/widgets/systems/Statusbar.hpp"
 
-#include "gui/widgets/dialogs/FileSelectDialog.hpp"
+#include "gui/widgets/dialogs/ColorDialog.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -26,7 +26,7 @@ static Statusbar* status;
 static MarkdownView* markdown;
 static FileExplorer* explorer;
 
-static FileSelectDialog* dia;
+static ColorDialog* dia;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -49,14 +49,14 @@ void setup() {
     
     TestFunctions::Setup();
 
-    dia = new FileSelectDialog("/");
-    dia->setVisible(true);
+    dia = new ColorDialog();
     dia->setOnClose([](bool is_ok){
         if(is_ok){
-            Serial.println(dia->getSelectedPath());
+            Serial.printf("color:%d\n", dia->getSelectedColor());
             WidgetFunctions::RemoveDialog(dia);
         }
     });
+    dia->setVisible(true);
     WidgetFunctions::AddDialog(dia);
 
     explorer = new FileExplorer(0, 20, 240, 120);

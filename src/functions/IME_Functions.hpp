@@ -4,6 +4,7 @@
 #include "storage/SD_Path.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/UTF8_Functions.hpp"
+#include "util/FixedString.hpp"
 
 namespace IME_Functions {
     inline ImeDictionary ime;
@@ -50,8 +51,9 @@ namespace IME_Functions {
     };
     static inline const int kKanaMarkerCount = sizeof(kKanaMarkerTable) / sizeof(kKanaMarkerTable[0]);
 
-    inline String BuildOkuriKey(const String input, const char* okuriKanaUtf8) {
-        const String stem = UTF8_Functions::RemoveLastChar(input);
+    template<size_t M>
+    inline bool BuildOkuriKey(FixedString<M>& input, const char* okuriKanaUtf8) {
+        const FixedString<5> stem = input.lastChar();
         
         char marker = 0;
         for (int i = 0; i < kKanaMarkerCount; i++) {
@@ -61,9 +63,12 @@ namespace IME_Functions {
             }
         }
         if (marker == 0) {
-            return input;
+            return true;
         }
 
-        return stem + marker;
+        input.clear();
+        input.append(stem);
+        input.append(marker);
+        return true;
     }
 }

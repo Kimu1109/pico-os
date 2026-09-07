@@ -6,6 +6,7 @@
 #include "consts.hpp"
 #include "OS_Data.hpp"
 #include "functions/Log_Functions.hpp"
+#include "util/FixedString.hpp"
 
 namespace PICO_SD
 {
@@ -33,28 +34,31 @@ namespace PICO_SD
         return true;
     }
 
-    inline String ReadTextFile(const char *path)
+    template<size_t N>
+    inline bool ReadTextFile(FixedString<PICO_PATH_LEN> path, FixedString<N>& content)
     {
-        FsFile f = OSData::SD.open(path, O_RDONLY);
+        FsFile f = OSData::SD.open(path.c_str(), O_RDONLY);
         if (!f)
         {
             LOG_SYS_FAIL("Couldn't open a file: %s", path);
             return "";
         }
 
-        String content;
-        content.reserve(f.size());
-
         while (f.available())
         {
-            content += (char)f.read();
+            if(!content.append((char)f.read())){
+                content.clear();
+                f.close();
+                return false;
+            }
         }
 
         f.close();
-        return content;
+        return true;
     }
 
-    inline String ReadTextFileFast(const char *path)
+    template<size_t N>
+    inline bool ReadTextFileFast(FixedString<PICO_PATH_LEN> path, FixedString<N>& content)
     {
         FsFile f = OSData::SD.open(path, O_RDONLY);
         if (!f)
@@ -84,9 +88,13 @@ namespace PICO_SD
         buf[size] = '\0';
         f.close();
 
-        String content(buf);
-        free(buf);
-
-        return content;
+        if(content.assign(buf)){
+            free(buf);
+            return true;
+        }else{
+            content.clear();
+            free(buf);
+            return false;
+        }
     }
 }

@@ -4,6 +4,7 @@
 #include "gui/widgets/interfaces/IFontImplementation.hpp"
 #include "gui/widgets/interfaces/IBorderColor.hpp"
 #include "gui/widgets/interfaces/ITextColor.hpp"
+#include "util/FixedString.hpp"
 #include "consts.hpp"
 #include "Arduino.h"
 
@@ -14,7 +15,7 @@ class Button :
     public ITextColor
 {
     private:
-        String text;
+        FixedString<PICO_STR_M> text;
 
         const int TEXT_SPACING = 6;
         const int _3D_PIX_LEN = 2;
@@ -24,20 +25,22 @@ class Button :
 
         bool allowTextSpacing = true;
 
-        void calcTextSize(String text);
+        void calcTextSize(FixedString<PICO_STR_M> text);
 
     public:
 
-        Button(int x, int y, String text){
+        template<size_t N>
+        Button(int x, int y, FixedString<N> text){
             this->l_rect.x = x;
             this->l_rect.y = y;
             this->calcTextSize(text);
-            this->text = text;
+            this->text.assign(text);
             this->needs_redraw = true;
         }
-        Button(String text){
+        template<size_t N>
+        Button(FixedString<N> text){
             this->calcTextSize(text);
-            this->text = text;
+            this->text.assign(text);
             this->needs_redraw = true;
         }
 

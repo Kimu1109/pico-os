@@ -30,7 +30,7 @@ void Image::render(){
 }
 
 void Image::updatePath(){
-    this->imgFile = OSData::SD.open(this->path);
+    this->imgFile = OSData::SD.open(this->path.c_str());
     if(this->imgFile){
         IconRender::PimgHeader head;
         if(IconRender::ReadPimgHeader(this->imgFile, head)){
@@ -41,7 +41,7 @@ void Image::updatePath(){
 }
 
 void Image::updateSprite(){
-    this->imgFile = OSData::SD.open(this->path);
+    this->imgFile = OSData::SD.open(this->path.c_str());
 
     if(this->imgFile){
         if(IconRender::LoadPimgToSprite(this->imgFile, this->sprite)){

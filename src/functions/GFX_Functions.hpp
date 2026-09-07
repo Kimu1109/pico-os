@@ -1,6 +1,6 @@
 #pragma once
 
-#include "model/Rect.hpp"
+#include "util/Rect.hpp"
 #include "LovyanGFX.h"
 
 namespace PICO_GFX {

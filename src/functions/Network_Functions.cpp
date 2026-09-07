@@ -47,6 +47,9 @@ void NetworkFunctions::Update(){
             if(WiFi.status() == WL_CONNECTED){
                 LOG_SYS_OK("Succeeded to connect Wi-Fi!");
                 currentStatus = NetStatus::SUCCESS;
+                healthCheckTimer = millis();
+                // 初回接続・再接続どちらの経路でもここを通るので、
+                // 再接続時にもNTPを即座に再同期させて時刻ドリフトを補正する。
                 NTP.begin(ntpServer1, ntpServer2);
                 break;
             }
@@ -68,12 +71,29 @@ void NetworkFunctions::Update(){
                 }
             }
             break;
+
+        case NetStatus::SUCCESS:
+            // 定期的にWi-Fiの生存確認を行い、切断を検知したら再接続交渉を行う。
+            if(millis() - healthCheckTimer > HEALTH_CHECK_INTERVAL){
+                healthCheckTimer = millis();
+                if(WiFi.status() != WL_CONNECTED){
+                    LOG_SYS_WARN("Wi-Fi disconnected. Trying to reconnect.");
+                    ConnectWiFiAsync(currentSSID, currentPassword);
+                }
+            }
+            break;
+
+        // SSID_NOT_FOUND / FAILED / TIMEOUT は現状放置(自動リトライしない)。
+        // 必要になったら、ここに一定間隔でのConnectWiFiAsync再試行を追加する。
+        default:
+            break;
     };
 };
 
 void NetworkFunctions::ConnectWiFiAsync(const char* ssid, const char* password){
     LOG_SYS_MSG("Network Service: Connecting to Wi-Fi.");
     strncpy(currentSSID, ssid, sizeof(currentSSID) - 1);
+    strncpy(currentPassword, password, sizeof(currentPassword) - 1);
     WiFi.beginNoBlock(ssid, password);
     timer = millis();
     currentStatus = NetStatus::TRYING_CONNECT;

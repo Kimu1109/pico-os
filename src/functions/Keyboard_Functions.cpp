@@ -29,12 +29,12 @@ void KeyboardFunctions::Setup(){
 
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget *target){
     static_cast<KeyboardEng*>(OSData::keyboard_eng)->setInputTarget(target);
-    static_cast<KeyboardEng*>(OSData::keyboard_jpn)->setInputTarget(target);
-    static_cast<KeyboardEng*>(OSData::keyboard_num)->setInputTarget(target);
+    static_cast<Keyboard*>(OSData::keyboard_jpn)->setInputTarget(target);
+    static_cast<KeyboardNum*>(OSData::keyboard_num)->setInputTarget(target);
 }
 
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget *target){
     static_cast<KeyboardEng*>(OSData::keyboard_eng)->removeInputTarget(target);
-    static_cast<KeyboardEng*>(OSData::keyboard_jpn)->removeInputTarget(target);
-    static_cast<KeyboardEng*>(OSData::keyboard_num)->removeInputTarget(target);
+    static_cast<Keyboard*>(OSData::keyboard_jpn)->removeInputTarget(target);
+    static_cast<KeyboardNum*>(OSData::keyboard_num)->removeInputTarget(target);
 }

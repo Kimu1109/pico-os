@@ -1,97 +1,18 @@
-#pragma once
+// src/functions/UTF8_Functions.hpp
+//
+// UTF-8エンコード/デコード関連のユーティリティ関数群。
+// 文字数カウント、オフセット計算、部分切り出し、末尾削除・置換等の文字列操作機能は
+// util/FixedString.hpp に実装されています。
 
+#pragma once
 #include <Arduino.h>
+#include "util/FixedString.hpp"
 
 namespace UTF8_Functions {
-    // UTF-8文字列から最後の1文字を安全に切り出す関数
-    inline String GetLastChar(String str) {
-        int len = str.length();
-        if (len == 0) return "";
 
-        int lastCharBytes = 1;
-        
-        // 末尾から手前に向かって、UTF-8のマルチバイト文字の開始バイトを探す
-        // UTF-8の続行バイトは「10xxxxxx」の形（0x80〜0xBF）になります
-        for (int i = len - 1; i >= 0; i--) {
-            uint8_t b = str.charAt(i);
-            if ((b & 0xC0) != 0x80) { // 続行バイトではない＝文字の開始位置
-                lastCharBytes = len - i;
-                break;
-            }
-        }
-        
-        // 最後の1文字分を切り出す
-        return str.substring(len - lastCharBytes);
-    }
+    // ============ UTF-8 エンコード / デコード ============
 
-    // UTF-8文字列から最後の1文字を削除する関数
-    inline String RemoveLastChar(String str) {
-        int len = str.length();
-        if (len == 0) return "";
-
-        int lastCharBytes = 1;
-        
-        // 末尾から手前に向かって、UTF-8文字の開始バイト（10xxxxxx 以外）を探す
-        for (int i = len - 1; i >= 0; i--) {
-            uint8_t b = str.charAt(i);
-            // 0xC0（11000000）でAND演算し、結果が0x80（10000000）でなければ文字の先頭
-            if ((b & 0xC0) != 0x80) { 
-                lastCharBytes = len - i; // 最後の文字が何バイトだったかを計算
-                break;
-            }
-        }
-        
-        // 全体の長さから、最後の1文字分のバイト数を引いて切り出す
-        return str.substring(0, len - lastCharBytes);
-    }
-
-    // 文字列の先頭1文字（UTF-8考慮）を取得する
-    inline String GetFirstChar(const String& str) {
-        if (str.length() == 0) return "";
-
-        uint8_t firstByte = (uint8_t)str.charAt(0);
-        int charLen;
-
-        if ((firstByte & 0x80) == 0x00) {
-            charLen = 1;       // 0xxxxxxx → ASCII(アルファベット等)
-        } else if ((firstByte & 0xE0) == 0xC0) {
-            charLen = 2;       // 110xxxxx → 2バイト文字
-        } else if ((firstByte & 0xF0) == 0xE0) {
-            charLen = 3;       // 1110xxxx → 3バイト文字(日本語の大半)
-        } else if ((firstByte & 0xF8) == 0xF0) {
-            charLen = 4;       // 11110xxx → 4バイト文字(絵文字など)
-        } else {
-            charLen = 1;       // 不正なバイト列への保険
-        }
-
-        // 文字列長を超えないようにクリップ
-        charLen = min(charLen, (int)str.length());
-
-        return str.substring(0, charLen);
-    }
-
-    // アルファベット1文字かどうかの判定
-    inline bool IsAsciiAlpha(const String& firstChar) {
-        return firstChar.length() == 1 && isAlpha(firstChar.charAt(0));
-    }
-
-    inline String ReplaceLastChar(const String& str, const String& newText) {
-        if (str.length() == 0) return str;
-
-        int lastCharStart = str.length() - 1;
-        
-        while (lastCharStart > 0) {
-            uint8_t byte = (uint8_t)str.charAt(lastCharStart);
-            if ((byte & 0xC0) != 0x80) {
-                break;
-            }
-            lastCharStart--;
-        }
-
-        return str.substring(0, lastCharStart) + newText;
-    }
-
-    inline static uint32_t Utf8Decode(const uint8_t* s, int& len) {
+    inline uint32_t Utf8Decode(const uint8_t* s, int& len) {
         uint8_t c = s[0];
         if (c < 0x80) { len = 1; return c; }
         else if ((c & 0xE0) == 0xC0) { len = 2; return ((c & 0x1F) << 6) | (s[1] & 0x3F); }
@@ -100,81 +21,46 @@ namespace UTF8_Functions {
         len = 1; return c; // 不正なバイト列のフォールバック
     }
 
-    // codepoint を UTF-8 の3バイト（日本語の範囲は基本ここ）としてバッファに書き込む
-    inline static int Utf8Encode3(uint32_t cp, uint8_t* out) {
+    // codepoint を UTF-8 の3バイト(日本語の範囲は基本ここ)としてバッファに書き込む
+    // out には最低4バイト分の領域(3バイト+終端\0)を用意すること
+    inline int Utf8Encode3(uint32_t cp, uint8_t* out) {
         out[0] = 0xE0 | ((cp >> 12) & 0x0F);
         out[1] = 0x80 | ((cp >> 6) & 0x3F);
         out[2] = 0x80 | (cp & 0x3F);
         return 3;
     }
 
-    // UTF-8文字列の「文字数」(バイト数ではない)を数える
-    inline int Utf8Length(const String& str) {
-        int count = 0;
-        int len = str.length();
-        for (int i = 0; i < len; ) {
-            uint8_t b = (uint8_t)str.charAt(i);
-            int charBytes;
-            if ((b & 0x80) == 0x00) charBytes = 1;
-            else if ((b & 0xE0) == 0xC0) charBytes = 2;
-            else if ((b & 0xF0) == 0xE0) charBytes = 3;
-            else if ((b & 0xF8) == 0xF0) charBytes = 4;
-            else charBytes = 1; // 不正なバイト列への保険
-            i += charBytes;
-            count++;
-        }
-        return count;
-    }
-
-    // 文字インデックス(0=先頭)から、対応するバイトオフセットを求める
-    // charIndexが文字列長を超える場合は末尾のバイトオフセットを返す
-    // (カーソル位置での挿入/削除に使用)
-    inline int Utf8ByteOffsetOfChar(const String& str, int charIndex) {
-        if (charIndex <= 0) return 0;
-
-        int count = 0;
-        int len = str.length();
-        for (int i = 0; i < len; ) {
-            if (count == charIndex) return i;
-
-            uint8_t b = (uint8_t)str.charAt(i);
-            int charBytes;
-            if ((b & 0x80) == 0x00) charBytes = 1;
-            else if ((b & 0xE0) == 0xC0) charBytes = 2;
-            else if ((b & 0xF0) == 0xE0) charBytes = 3;
-            else if ((b & 0xF8) == 0xF0) charBytes = 4;
-            else charBytes = 1;
-            i += charBytes;
-            count++;
-        }
-        return len;
-    }
-
-    inline String HiraganaToKatakana(const String& input) {
-        String result;
-        result.reserve(input.length());
+    // ひらがな→カタカナ変換。result へ書き込む(破壊的、resultは事前にclearされる)。
+    // 戻り値は「容量内に収まりきったか」(falseなら途中で切り詰められている)。
+    template<size_t N, size_t M>
+    inline bool HiraganaToKatakana(const FixedString<N>& input, FixedString<M>& result) {
+        result.clear();
 
         const uint8_t* p = (const uint8_t*)input.c_str();
-        int total = input.length();
+        int total = (int)input.length();
         int i = 0;
+        bool ok = true;
 
         while (i < total) {
             int len;
             uint32_t cp = Utf8Decode(p + i, len);
 
+            char chunk[5];
             if (cp >= 0x3041 && cp <= 0x3096) {
-                // ひらがな範囲 → カタカナへ
-                uint8_t buf[3];
+                // ひらがな範囲 → カタカナへ(コードポイントを+0x60するとカタカナになる)
+                uint8_t buf[4];
                 int n = Utf8Encode3(cp + 0x60, buf);
-                result.concat((const char*)buf, n);
+                buf[n] = '\0';
+                memcpy(chunk, buf, n + 1);
             } else {
                 // それ以外はそのままコピー
-                result.concat((const char*)(p + i), len);
+                memcpy(chunk, p + i, len);
+                chunk[len] = '\0';
             }
 
+            if (!result.append(chunk)) ok = false;
             i += len;
         }
-
-        return result;
+        return ok;
     }
 }

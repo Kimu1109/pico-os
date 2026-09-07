@@ -1,5 +1,12 @@
 #pragma once
 
+#define PICO_STR_S      24
+#define PICO_STR_M      48
+#define PICO_STR_L      96
+#define PICO_STR_LL     192
+
+#define PICO_PATH_LEN   255
+
 #define PICO_BACKGROUND  15
 #define PICO_FORECOLOR   0
 

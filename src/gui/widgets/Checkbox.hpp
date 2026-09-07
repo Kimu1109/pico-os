@@ -3,19 +3,22 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/interfaces/IFontImplementation.hpp"
 #include "gui/widgets/interfaces/ITextColor.hpp"
+#include "util/FixedString.hpp"
 
 class Checkbox : public Widget, public IFontImplementation, public ITextColor {
     private:
         bool isChecked = false;
-        String text = "";
+        FixedString<PICO_STR_L> text;
 
-        void setTextAndCalc(String text);
+        template<size_t N>
+        void setTextAndCalc(FixedString<N> text);
 
         std::function<void()> on_change_checked = nullptr;
 
     public:
 
-        Checkbox(int16_t x, int16_t y, String text){
+        template<size_t N>
+        Checkbox(int16_t x, int16_t y, FixedString<N> text){
             this->l_rect = {x, y, 0, 0};
             this->setTextAndCalc(text);
         }
@@ -31,8 +34,9 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
             on_change_checked = callback;
         }
 
-        String getText() { return this->text; }
-        void setText(String text) {
+        const FixedString<PICO_STR_L>* getText() { return &this->text; }
+        template<size_t N>
+        void setText(FixedString<N> text) {
             this->setTextAndCalc(text);
             this->needsRender();
         }

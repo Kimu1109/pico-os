@@ -3,9 +3,9 @@
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
-void Button::calcTextSize(String text){
+void Button::calcTextSize(FixedString<PICO_STR_M> text){
     this->fontApply();
-    this->l_rect.w = OSData::frame->textWidth(text);
+    this->l_rect.w = OSData::frame->textWidth(text.c_str());
     this->l_rect.h = OSData::frame->fontHeight();
 
     this->text_w = this->l_rect.w;
@@ -50,7 +50,7 @@ void Button::render() {
             g_rect.x + _3D_PIX_LEN + text_spacing * 0.5 + (this->l_rect.w - this->text_w) * 0.5,
             g_rect.y + _3D_PIX_LEN + text_spacing * 0.5 + (this->l_rect.h - this->text_h) * 0.5
         );
-        OSData::frame->print(this->text);
+        OSData::frame->print(this->text.c_str());
     }else{
         //ボタンの周り
         OSData::frame->drawRect(g_rect.x, g_rect.y, BOX_W, BOX_H, this->border_color);
@@ -69,7 +69,7 @@ void Button::render() {
             g_rect.x + text_spacing * 0.5 + (this->l_rect.w - this->text_w) * 0.5,
             g_rect.y + text_spacing * 0.5 + (this->l_rect.h - this->text_h) * 0.5
         );
-        OSData::frame->print(this->text);
+        OSData::frame->print(this->text.c_str());
     }
     this->textColorDefault();
     this->fontDefault();

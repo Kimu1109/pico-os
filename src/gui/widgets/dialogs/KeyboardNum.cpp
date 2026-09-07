@@ -44,13 +44,11 @@ void KeyboardNum::causeOnPressStart() {
     const int px = OSData::touchX;
     const int py = OSData::touchY;
 
-    // --- タブ行 ---
-    if (py >= KB_TOP && py < KB_TOP + TAB_H) {
-        int col = px / TAB_W;
-        if (col >= 0 && col < TAB_COLS) {
-            SymbolMode newMode = (col == 0) ? SymbolMode::Digit
-                                : (col == 1) ? SymbolMode::Arith
-                                              : SymbolMode::Math;
+    // --- タブ行(許可モードが2つ以上ある時だけ存在する) ---
+    if (this->tab_h > 0 && py >= kb_top && py < kb_top + tab_h) {
+        int col = px / tab_w;
+        if (col >= 0 && col < tab_cols) {
+            SymbolMode newMode = visibleTabAt(col);
             if (newMode != this->mode) {
                 this->mode = newMode;
                 this->needs_redraw = true;
@@ -61,7 +59,7 @@ void KeyboardNum::causeOnPressStart() {
     }
 
     // --- 記号行(モード依存) ---
-    const int symbolTop = KB_TOP + TAB_H;
+    const int symbolTop = kb_top + tab_h;
     if (py >= symbolTop && py < symbolTop + SYMBOL_H) {
         int col = px / SYMBOL_W;
         if (col >= 0 && col < SYMBOL_COLS) {
@@ -110,35 +108,36 @@ void KeyboardNum::render() {
 
     markdirty(this->getScreenRect());
     PICO_GFX::DrawDialogBackground();
-    OSData::frame->fillRect(0, KB_TOP, SCREEN_WIDTH, KB_H, this->background_color);
+    OSData::frame->fillRect(0, kb_top, SCREEN_WIDTH, kb_h, this->background_color);
 
     FontFn::SetSmall();
 
-    // --- タブ行 ---
-    for (int col = 0; col < TAB_COLS; col++) {
-        int x = col * TAB_W;
-        int y = KB_TOP;
-        bool selected = (col == 0 && mode == SymbolMode::Digit)
-                      || (col == 1 && mode == SymbolMode::Arith)
-                      || (col == 2 && mode == SymbolMode::Math);
+    // --- タブ行(許可モードが2つ以上ある時だけ描画) ---
+    if (this->tab_h > 0) {
+        for (int col = 0; col < tab_cols; col++) {
+            SymbolMode tabMode = visibleTabAt(col);
+            int x = col * tab_w;
+            int y = kb_top;
+            bool selected = (tabMode == this->mode);
 
-        if (selected) {
-            OSData::frame->fillRect(x, y, TAB_W, TAB_H, PICO_BLACK);
+            if (selected) {
+                OSData::frame->fillRect(x, y, tab_w, tab_h, PICO_BLACK);
+            }
+            OSData::frame->drawRect(x, y, tab_w + 1, tab_h + 1, PICO_BLACK);
+
+            const char* label = labelFor(tabMode);
+            int str_w = OSData::frame->textWidth(label);
+            int str_h = OSData::frame->fontHeight();
+            OSData::frame->setTextColor(selected ? PICO_WHITE : PICO_BLACK);
+            OSData::frame->setCursor(x + (tab_w - str_w) / 2, y + (tab_h - str_h) / 2);
+            OSData::frame->print(label);
         }
-        OSData::frame->drawRect(x, y, TAB_W + 1, TAB_H + 1, PICO_BLACK);
-
-        const char* label = tab_labels[col];
-        int str_w = OSData::frame->textWidth(label);
-        int str_h = OSData::frame->fontHeight();
-        OSData::frame->setTextColor(selected ? PICO_WHITE : PICO_BLACK);
-        OSData::frame->setCursor(x + (TAB_W - str_w) / 2, y + (TAB_H - str_h) / 2);
-        OSData::frame->print(label);
+        OSData::frame->setTextColor(PICO_BLACK);
     }
-    OSData::frame->setTextColor(PICO_BLACK);
 
     // --- 記号行(モード依存) ---
     const SymbolKey* symbols = currentSymbols();
-    int symbolTop = KB_TOP + TAB_H;
+    int symbolTop = kb_top + tab_h;
     for (int col = 0; col < SYMBOL_COLS; col++) {
         int x = col * SYMBOL_W;
         int y = symbolTop;

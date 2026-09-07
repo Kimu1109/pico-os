@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <functional>
-#include "model/Rect.hpp"
+#include "util/Rect.hpp"
 #include "consts.hpp"
 
 namespace WidgetTools {

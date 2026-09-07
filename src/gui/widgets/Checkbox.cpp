@@ -23,7 +23,7 @@ void Checkbox::render(){
     OSData::frame->setCursor(g_rect.x + font_pix + 2, g_rect.y);
     this->fontApply();
     this->textColorApply();
-    OSData::frame->print(this->text);
+    OSData::frame->print(this->text.c_str());
     this->textColorDefault();
     this->fontDefault();
 
@@ -47,14 +47,15 @@ void Checkbox::causeOnPressStart(){
     }
 }
 
-void Checkbox::setTextAndCalc(String text){
-    this->text = text;
+template<size_t N>
+void Checkbox::setTextAndCalc(FixedString<N> text){
+    this->text.assign(text);
 
     this->fontApply();
 
     int iconSize = FontFn::GetFontSize(this->f_size);
 
-    this->l_rect.w = OSData::frame->textWidth(text) + iconSize + 2;
+    this->l_rect.w = OSData::frame->textWidth(this->text.c_str()) + iconSize + 2;
     this->l_rect.h = OSData::frame->fontHeight();
 
     this->fontDefault();

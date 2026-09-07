@@ -2,11 +2,12 @@
 
 #include "gui/widgets/Widget.hpp"
 #include "gui/icons/icon_render.h"
+#include "util/FixedString.hpp"
 #include "SdFat.h"
 
 class Image : public Widget {
     private:
-        String path;
+        FixedString<PICO_PATH_LEN> path;
         FsFile imgFile;
         bool onRAM;
 
@@ -16,8 +17,9 @@ class Image : public Widget {
         void updateSprite();
 
     public:
-        Image(String path, int16_t x, int16_t y, bool onRAM){
-            this->path = path;
+        template<size_t N>
+        Image(FixedString<N> path, int16_t x, int16_t y, bool onRAM){
+            this->path.assign(path);
             this->l_rect = {x, y, 0, 0};
             this->onRAM = onRAM;
             if(onRAM){
@@ -29,9 +31,10 @@ class Image : public Widget {
 
         void render() override;
 
-        String getPath() { return this->path; }
-        void setPath(String path) {
-            this->path = path;
+        const FixedString<PICO_PATH_LEN>* getPath() { return &this->path; }
+        template<size_t N>
+        void setPath(FixedString<N> path) {
+            this->path.assign(path);
             if(this->onRAM){
                 this->updateSprite();
             }else{

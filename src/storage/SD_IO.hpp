@@ -1,18 +1,19 @@
 #pragma once
 
 #include "Arduino.h"
+#include "util/FixedString.hpp"
 
 namespace PICO_IO {
-        /**
-     * パスを結合する
+    /**
+     * パスを結合する(生char配列版・従来実装)
      *
      * 例:
-     *   join(buf, "/test1", "test2")  -> "/test1/test2"
-     *   join(buf, "/test1/", "test2") -> "/test1/test2"
-     *   join(buf, "/test1", "/test2") -> "/test1/test2"
-     *   join(buf, "/", "test2")       -> "/test2"
+     *   join(buffer, "/test1", "test2")  -> "/test1/test2"
+     *   join(buffer, "/test1/", "test2") -> "/test1/test2"
+     *   join(buffer, "/test1", "/test2") -> "/test1/test2"
+     *   join(buffer, "/", "test2")       -> "/test2"
      *
-     * 入力と出力に同じバッファを指定可能。
+     * 入力(base)と出力(buffer)に同じ実体を指定可能(内部で一時バッファ経由するため)。
      */
     template <size_t N>
     inline bool join(char (&buffer)[N], const char* base, const char* name)
@@ -63,15 +64,34 @@ namespace PICO_IO {
         return true;
     }
 
+    /**
+     * パスを結合する(FixedString版)
+     *
+     * 実装はchar配列版へ委譲し、結果をbuffer.assign()で書き戻す。
+     * baseにbuffer自身(の.c_str())を渡すエイリアス呼び出しも従来通り安全。
+     */
+    template <size_t N>
+    inline bool join(FixedString<N>& buffer, const char* base, const char* name)
+    {
+        char temp[N];
+        if (!join(temp, base, name)) return false;
+        return buffer.assign(temp);
+    }
+
+    template <size_t N, size_t M>
+    inline bool join(FixedString<N>& buffer, const FixedString<M>& base, const char* name)
+    {
+        return join(buffer, base.c_str(), name);
+    }
 
     /**
-     * 親ディレクトリを取得する
+     * 親ディレクトリを取得する(生char配列版・従来実装)
      *
      * 例:
-     *   parent("/test1/test2/test3") -> "/test1/test2"
-     *   parent("/test1/test2")       -> "/test1"
-     *   parent("/test1")             -> "/"
-     *   parent("/")                  -> "/"
+     *   parent(buffer, "/test1/test2/test3") -> "/test1/test2"
+     *   parent(buffer, "/test1/test2")       -> "/test1"
+     *   parent(buffer, "/test1")             -> "/"
+     *   parent(buffer, "/")                  -> "/"
      *
      * 入力と出力に同じバッファを指定可能。
      */
@@ -128,7 +148,24 @@ namespace PICO_IO {
     }
 
     /**
-     * パスから最後のファイル・フォルダ名を取得する
+     * 親ディレクトリを取得する(FixedString版)
+     */
+    template <size_t N>
+    inline bool parent(FixedString<N>& buffer, const char* path)
+    {
+        char temp[N];
+        if (!parent(temp, path)) return false;
+        return buffer.assign(temp);
+    }
+
+    template <size_t N>
+    inline bool parent(FixedString<N>& buffer, const FixedString<N>& path)
+    {
+        return parent(buffer, path.c_str());
+    }
+
+    /**
+     * パスから最後のファイル・フォルダ名を取得する(生char*版・従来実装)
      *
      * 例:
      *   filename("/test1/test2/test3") -> "test3"
@@ -153,5 +190,25 @@ namespace PICO_IO {
         return path + len;
     }
 
+    /**
+     * パスから最後のファイル・フォルダ名を取得する(FixedString版)
+     *
+     * 戻り値は path の内部バッファを指すため、path が有効な間だけ使用可能。
+     */
+    template <size_t N>
+    inline const char* filename(const FixedString<N>& path)
+    {
+        return filename(path.c_str());
+    }
+
+    // 再帰的にファイル/フォルダを削除する。path は内部で256バイトのFixedStringを
+    // 組み立てながら再帰するため、パス階層の深さに実質的な制約はあるが、
+    // 通常のSDカード運用では十分な余裕がある。
     bool removeRecursive(const char* path);
+
+    template <size_t N>
+    inline bool removeRecursive(const FixedString<N>& path)
+    {
+        return removeRecursive(path.c_str());
+    }
 }

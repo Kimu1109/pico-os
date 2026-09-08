@@ -10,7 +10,20 @@ class Textbox : public Label, public ITextInputTarget {
         std::function<void()> on_text_changed = nullptr;
 
     public:
-        Textbox(String text, int16_t x, int16_t y, int16_t w, int16_t h, bool is_single_line) : Label(x, y, text) {
+        Textbox(const FixedString<PICO_STR_LL>& text, int16_t x, int16_t y, int16_t w, int16_t h, bool is_single_line) : Label(x, y, text) {
+            this->setMaxWidth(w);
+            this->setMaxHeight(h);
+
+            this->is_single_line = is_single_line;
+
+            setBorderColor(this->border_color);
+            setBorderWidth(1);
+            setBackgroundColor(this->background_color);
+        }
+        
+        // 任意の文字数を指定して Textbox を作成
+        template<size_t N>
+        Textbox(const FixedString<N>& text, int16_t x, int16_t y, int16_t w, int16_t h, bool is_single_line) : Label(x, y, text) {
             this->setMaxWidth(w);
             this->setMaxHeight(h);
 

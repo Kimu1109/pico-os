@@ -19,13 +19,13 @@ int Label::utf8CharLen(uint8_t lead) {
     return 1; // 不正バイト列へのフォールバック
 }
 
-std::vector<String> Label::splitChars(const String& s) {
-    std::vector<String> out;
+std::vector<FixedString<5>> Label::splitChars(const FixedString<PICO_STR_LL>& s) {
+    std::vector<FixedString<5>> out;
     size_t i = 0, n = s.length();
     while (i < n) {
         int len = utf8CharLen((uint8_t)s[i]);
-        String c;
-        for (int k = 0; k < len && i < n; k++, i++) c += s[i];
+        FixedString<5> c;
+        for (int k = 0; k < len && i < n; k++, i++) c.appendUtf8Char(s.c_str() + i, 1);
         out.push_back(c);
     }
     return out;
@@ -38,15 +38,15 @@ std::vector<String> Label::splitChars(const String& s) {
 // 必ず先に判定する。特に'*'は**（太字）と単体の*（下線）の両方で使われるため、
 // **を先にチェックしないと"**bold**"を下線トグル2回分と誤読してしまう。
 // 同様に'~'も~~（取り消し線）と単体の~（波線）の両方で使われる。
-std::vector<TextRun> Label::parseMarkup(const String& src) {
-    std::vector<TextRun> runs;
-    TextRun cur;
+std::vector<TextRun<>> Label::parseMarkup(const FixedString<PICO_STR_LL>& src) {
+    std::vector<TextRun<>> runs;
+    TextRun<> cur;
     size_t i = 0, n = src.length();
 
     auto flush = [&]() {
         if (cur.text.length() > 0) {
             runs.push_back(cur);
-            cur.text = "";
+            cur.text.clear();
         }
     };
 
@@ -80,7 +80,7 @@ std::vector<TextRun> Label::parseMarkup(const String& src) {
                 continue;
             }
             int len = utf8CharLen((uint8_t)src[i]);
-            for (int k = 0; k < len && i < n; k++, i++) cur.text += src[i];
+            for (int k = 0; k < len && i < n; k++, i++) cur.text.appendUtf8Char(src.c_str() + i, 1);
         }
     }
     flush();
@@ -478,15 +478,20 @@ void Label::render() {
 // DrawPlain()/GetLineHeight()専用の使い回しインスタンス。
 // 関数内staticとして遅延初期化することで、PICO_GFX::Setup()（frameスプライトの初期化）
 // より前にコンストラクトされてしまう問題を避ける。
+
+// DrawPlain()/GetLineHeight() 専用の使い回しインスタンス。
+// 関数内 static として遅延初期化することで、PICO_GFX::Setup()（frame スプライトの初期化）
+// より前にコンストラクトされてしまう問題を避ける。
 Label& Label::utilityInstance() {
-    static Label instance(0, 0, "");
+    static Label instance(0, 0, FixedString<PICO_STR_LL>(""));
     return instance;
 }
 
-// マークアップ解釈・折返し・カーソル等の状態を経由せず、既存のfontApply()/
-// textColorApply()（と、その解除であるfontDefault()/textColorDefault()）だけを
-// 借りて1行分をそのままframeへ描画する。
-void Label::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const String& text) {
+// マークアップ解釈・折返し・カーソル等の状態を経由せず、既存の fontApply()/
+// textColorApply()（と、その解除である fontDefault()/textColorDefault()）だけを
+// 借りて 1 行分をそのまま frame へ描画する。
+template<size_t N>
+void Label::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const FixedString<N>& text) {
     Label& helper = utilityInstance();
     helper.f_size = size;
     helper.text_color = color;
@@ -498,7 +503,7 @@ void Label::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int max
         OSData::frame->setClipRect(x, y, maxWidth, OSData::frame->fontHeight());
     }
     OSData::frame->setCursor(x, y);
-    OSData::frame->print(text);
+    OSData::frame->print(text.c_str());
     if (maxWidth > 0) {
         OSData::frame->clearClipRect();
     }
@@ -506,7 +511,6 @@ void Label::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int max
     helper.textColorDefault();
     helper.fontDefault();
 }
-
 int Label::GetLineHeight(FontFn::FontSize size) {
     Label& helper = utilityInstance();
     helper.f_size = size;
@@ -519,21 +523,21 @@ int Label::GetLineHeight(FontFn::FontSize size) {
 }
 
 // ---------- setter / getter ----------
-void Label::setText(String text) {
-    this->raw_text = text;
+void Label::setText(const FixedString<PICO_STR_LL>& text) {
+    this->raw_text = text.c_str();
     relayout();
 }
 
-String Label::getText() {
+FixedString<PICO_STR_LL> Label::getText() {
     return this->raw_text;
 }
 
-void Label::setPlaceholder(String text) {
-    this->placeholder_text = text;
+void Label::setPlaceholder(const FixedString<PICO_STR_LL>& text) {
+    this->placeholder_text = text.c_str();
     relayout();
 }
 
-String Label::getPlaceholder() {
+FixedString<PICO_STR_LL> Label::getPlaceholder() {
     return this->placeholder_text;
 }
 

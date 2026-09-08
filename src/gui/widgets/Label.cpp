@@ -123,12 +123,12 @@ void Label::relayout() {
     line_height = OSData::frame->fontHeight();
 
     // \n で段落分割
-    std::vector<String> paragraphs;
+    std::vector<FixedString<PICO_STR_LL>> paragraphs;
     {
-        String buf;
+        FixedString<PICO_STR_LL> buf;
         for (size_t i = 0; i < raw_text.length(); i++) {
-            if (raw_text[i] == '\n') { paragraphs.push_back(buf); buf = ""; }
-            else buf += raw_text[i];
+            if (raw_text[i] == '\n') { paragraphs.push_back(buf); buf.clear(); }
+            else buf.appendUtf8Char(raw_text.c_str() + i, 1);
         }
         paragraphs.push_back(buf);
     }

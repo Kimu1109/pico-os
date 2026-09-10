@@ -25,6 +25,10 @@ void CanvasRaster::render(){
 
     const Rect g_rect = this->getScreenRect();
 
+    //グローバル座標で前回位置と比較し、移動していれば旧位置を再描画対象にする
+    if(this->prev_screen_rect != g_rect)
+        markdirty(this->prev_screen_rect);
+
     sp->pushSprite(OSData::frame, g_rect.x, g_rect.y);
 
     if(is_pressing) {
@@ -53,6 +57,7 @@ void CanvasRaster::render(){
     }
 
     markdirty(g_rect);
+    this->prev_screen_rect = g_rect;
 
     this->needs_redraw = false;
 }

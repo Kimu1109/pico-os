@@ -1,8 +1,9 @@
 #pragma once
 
 #include "gui/widgets/Widget.hpp"
+#include "gui/widgets/interfaces/IBorderColor.hpp"
 
-class ScrollContainer : public Widget {
+class ScrollContainer : public Widget, public IBorderColor {
     private:
         std::vector<Widget*> children_;
 
@@ -74,6 +75,11 @@ class ScrollContainer : public Widget {
         }
 
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
+
+        void setBorderColor(int8_t palette_color) override {
+            this->border_color = palette_color;
+            this->needsRender();
+        }
 
         int getScrollOffsetX() const override { return scroll_x; }
         int getScrollOffsetY() const override { return scroll_y; }

@@ -6,6 +6,7 @@
 #include "gui/widgets/Image.hpp"
 #include "gui/widgets/Icon.hpp"
 #include "gui/icons/icons_data.h"
+#include "util/FixedString.hpp"
 #include "Arduino.h"
 
 // テーブルの最大列数。240px幅の画面で可読性を保てる範囲として4に制限しており、
@@ -91,12 +92,12 @@ class MarkdownView : public Widget {
         static constexpr int8_t kTableHeaderBgColor = PICO_LIGHTGREY; // ヘッダ行の背景色
         static constexpr int8_t kTableTextColor = PICO_BLACK;      // セル文字色
 
-        String doc_text;
+        FixedString<PICO_STR_16KiB> doc_text;
         std::vector<MdBlock> blocks;
         int32_t total_height = 0;
 
         // ウィジェットプール（固定長・起動時に一度だけ確保）
-        Label* labelPool[kLabelPoolSize];
+        Label<PICO_STR_1KiB>* labelPool[kLabelPoolSize];
         Image* imagePool[kImagePoolSize];
         Icon*  checkboxIconPool[kCheckboxIconPoolSize];
 
@@ -106,7 +107,7 @@ class MarkdownView : public Widget {
 
         int checkboxIconPx = 0; // チェックボックスアイコン1辺のピクセルサイズ（起動時にキャッシュ）
 
-        Label* measure_label; // レイアウト計算専用（レンダリングツリーには含めない）
+        Label<PICO_STR_LL>* measure_label; // レイアウト計算専用（レンダリングツリーには含めない）
 
         std::vector<Widget*> children_; // getChildren()用（プール全部への参照）
 
@@ -132,7 +133,7 @@ class MarkdownView : public Widget {
         // ---------- インライン要素（コード/リンク）認識 ----------
         // src中の `code` を Labelの波線(~)装飾へ、[text](url) を下線(_)装飾へ変換した
         // 表示用テキストを生成する。改行をまたぐ組は無効として素通りさせる。
-        String applyInlineMarkdown(const String& src) const;
+        String applyInlineMarkdown(const FixedString<PICO_STR_1KiB>& src) const;
         // doc_text の [start, end) 範囲内で最初に見つかった [text](url) の
         // URL部分のオフセット/長さ(doc_text基準)を取得する。見つからなければfalse。
         bool findFirstInlineLink(int start, int end, uint16_t& urlOffOut, uint16_t& urlLenOut) const;
@@ -182,9 +183,9 @@ class MarkdownView : public Widget {
         // テーブルセル1つ分の表示用テキストを生成する。`\|`のアンエスケープのみを行い、
         // `code`や[text](url)等のインライン装飾はそのまま素通しする（テーブルはLabelを介さず
         // frameへ直接print()するため、マークアップは解釈されない）。
-        String formatTableCellText(int offset, int length) const;
+        FixedString<PICO_STR_1KiB> formatTableCellText(int offset, int length) const;
 
-        String formatBlockText(const MdBlock& b) const;
+        FixedString<PICO_STR_1KiB> formatBlockText(const MdBlock& b) const;
         int findBlockAtScreenY(int screenY) const;       // タップ位置→ブロック特定
 
         // ---------- 装飾の直接描画 ----------
@@ -198,13 +199,13 @@ class MarkdownView : public Widget {
         bool moved_beyond_threshold = false;
         static constexpr int kTapThreshold = 6; // px
 
-        std::function<void(String)> on_link_tap = nullptr;
+        std::function<void(FixedString<PICO_PATH_LEN>)> on_link_tap = nullptr;
 
     public:
 
         MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h);
 
-        bool load(const String& path);
+        bool load(const FixedString<PICO_STR_16KiB>& path);
 
         void render() override;
 
@@ -212,7 +213,7 @@ class MarkdownView : public Widget {
         void causeOnPressMove() override;
         void causeOnPressEnd() override;
 
-        void setOnLinkTap(std::function<void(String)> callback) {
+        void setOnLinkTap(std::function<void(FixedString<PICO_PATH_LEN>)> callback) {
             this->on_link_tap = callback;
         }
         void clearOnLinkTap(){

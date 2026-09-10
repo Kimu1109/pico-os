@@ -182,6 +182,62 @@ public:
         return append(newText);
     }
 
+    // ============ 挿入 ============
+
+    // バイトオフセット位置に文字列を挿入する
+    bool insert(size_t byteOffset, const char* src) {
+        if (!src) return true;
+        size_t curLen = strlen(buf_);
+        if (byteOffset > curLen) byteOffset = curLen;
+        size_t srcLen = strlen(src);
+        size_t room = (curLen < N - 1) ? (N - 1 - curLen) : 0;
+        size_t addLen = (srcLen < room) ? srcLen : room;
+
+        while (addLen > 0 && ((static_cast<uint8_t>(src[addLen]) & 0xC0) == 0x80)) {
+            addLen--;
+        }
+
+        memmove(buf_ + byteOffset + addLen, buf_ + byteOffset, curLen - byteOffset + 1);
+        memcpy(buf_ + byteOffset, src, addLen);
+        return addLen == srcLen;
+    }
+
+    template<size_t M>
+    bool insert(size_t byteOffset, const FixedString<M>& other) {
+        return insert(byteOffset, other.c_str());
+    }
+
+    // 文字インデックス(0始まり)位置に文字列を挿入する
+    bool insertAtChar(int charIndex, const char* src) {
+        return insert(static_cast<size_t>(byteOffsetOfChar(charIndex)), src);
+    }
+
+    template<size_t M>
+    bool insertAtChar(int charIndex, const FixedString<M>& other) {
+        return insertAtChar(charIndex, other.c_str());
+    }
+
+    // ============ 演算子 ============
+
+    FixedString& operator=(const char* src) {
+        assign(src);
+        return *this;
+    }
+    template<size_t M>
+    FixedString& operator=(const FixedString<M>& other) {
+        assign(other.c_str());
+        return *this;
+    }
+    FixedString& operator+=(const char* src) {
+        append(src);
+        return *this;
+    }
+    template<size_t M>
+    FixedString& operator+=(const FixedString<M>& other) {
+        append(other.c_str());
+        return *this;
+    }
+
     void clear() { buf_[0] = '\0'; }
 
     // ============ 参照・切り出し ============

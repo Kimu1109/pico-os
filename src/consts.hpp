@@ -4,6 +4,13 @@
 #define PICO_STR_M      48
 #define PICO_STR_L      96
 #define PICO_STR_LL     192
+#define PICO_STR_256B   256
+#define PICO_STR_512B   512
+#define PICO_STR_1KiB   1024
+#define PICO_STR_2KiB   2048
+#define PICO_STR_4KiB   4096
+#define PICO_STR_16KiB  16384
+#define PICO_STR_32KiB  32768
 
 #define PICO_PATH_LEN   255
 

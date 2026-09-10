@@ -8,7 +8,7 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
     this->l_rect = {x, y, w, h};
 
     for (int i = 0; i < kLabelPoolSize; i++) {
-        labelPool[i] = new Label(kPadding, 0, "");
+        labelPool[i] = new Label<PICO_STR_1KiB>(kPadding, 0, "");
         labelPool[i]->setParent(this);
         labelPool[i]->setVisible(false);
         labelPool[i]->setDisableMarkdirty(true);
@@ -33,13 +33,13 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
     }
     checkboxIconPx = IconRender::IconPixelSize(kCheckboxIconSize);
 
-    measure_label = new Label(0, 0, ""); // レンダリングツリーには含めない（getChildren()に入れない）
+    measure_label = new Label<PICO_STR_LL>(0, 0, ""); // レンダリングツリーには含めない（getChildren()に入れない）
 }
 
 // ---------- ロード & パース ----------
 
-bool MarkdownView::load(const String& path) {
-    FsFile f = OSData::SD.open(path);
+bool MarkdownView::load(const FixedString<PICO_PATH_LEN>& path) {
+    FsFile f = OSData::SD.open(path.c_str());
     if (!f) return false;
 
     size_t size = f.fileSize();

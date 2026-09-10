@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Arduino.h"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
 
 class ITextInputTarget;
 
@@ -8,8 +10,8 @@ class ITextInputTarget;
 //入力したテキストを簡便に取得するために必要
 class ITextInputWidget {
     public:
-        virtual String getText() = 0;
-        virtual void setText(String text) = 0;
+        virtual FixedString<PICO_STR_LL> getText() = 0;
+        virtual void setText(const FixedString<PICO_STR_LL>& text) = 0;
 
         virtual void setInputTarget(ITextInputTarget* target) = 0;
         virtual void removeInputTarget(ITextInputTarget* valid_target) = 0;

@@ -133,7 +133,7 @@ class MarkdownView : public Widget {
         // ---------- インライン要素（コード/リンク）認識 ----------
         // src中の `code` を Labelの波線(~)装飾へ、[text](url) を下線(_)装飾へ変換した
         // 表示用テキストを生成する。改行をまたぐ組は無効として素通りさせる。
-        String applyInlineMarkdown(const FixedString<PICO_STR_1KiB>& src) const;
+        FixedString<PICO_STR_1KiB> applyInlineMarkdown(const FixedString<PICO_STR_1KiB>& src) const;
         // doc_text の [start, end) 範囲内で最初に見つかった [text](url) の
         // URL部分のオフセット/長さ(doc_text基準)を取得する。見つからなければfalse。
         bool findFirstInlineLink(int start, int end, uint16_t& urlOffOut, uint16_t& urlLenOut) const;
@@ -205,7 +205,7 @@ class MarkdownView : public Widget {
 
         MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h);
 
-        bool load(const FixedString<PICO_STR_16KiB>& path);
+        bool load(const char* path);
 
         void render() override;
 

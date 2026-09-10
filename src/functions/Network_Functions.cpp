@@ -17,24 +17,24 @@ IconID NetworkFunctions::GetWifiStateIconID(){
 }
 
 void NetworkFunctions::Setup(){
-    char ssid[33] = "";
-    char password[65] = "";
+    FixedString<PICO_STR_M> ssid;
+    FixedString<PICO_STR_L> password;
     bool is_ok = PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "wifi-ssid") == 0){
-                strncpy(ssid, value, sizeof(ssid) - 1);
+                ssid.assign(value);
             }else if(strcmp(key, "wifi-password") == 0){
-                strncpy(password, value, sizeof(password) - 1);
+                password.assign(value);
             }else if(strcmp(key, "ntp-server-1") == 0){
-                strncpy(ntpServer1, value, sizeof(ntpServer1) - 1);
+                ntpServer1.assign(value);
             }else if(strcmp(key, "ntp-server-2") == 0){
-                strncpy(ntpServer2, value, sizeof(ntpServer2) - 1);
+                ntpServer2.assign(value);
             }
         }
     );
     if(is_ok){
-        if(ssid[0] != '\0' && password[0] != '\0'){
-            ConnectWiFiAsync(ssid, password);
+        if(!ssid.empty() && !password.empty()){
+            ConnectWiFiAsync(ssid.c_str(), password.c_str());
         }else{
             LOG_SYS_WARN("Network Setup: To connect Wi-Fi, SSID & Password is essential.");
         }
@@ -50,7 +50,7 @@ void NetworkFunctions::Update(){
                 healthCheckTimer = millis();
                 // 初回接続・再接続どちらの経路でもここを通るので、
                 // 再接続時にもNTPを即座に再同期させて時刻ドリフトを補正する。
-                NTP.begin(ntpServer1, ntpServer2);
+                NTP.begin(ntpServer1.c_str(), ntpServer2.c_str());
                 break;
             }
 
@@ -78,7 +78,7 @@ void NetworkFunctions::Update(){
                 healthCheckTimer = millis();
                 if(WiFi.status() != WL_CONNECTED){
                     LOG_SYS_WARN("Wi-Fi disconnected. Trying to reconnect.");
-                    ConnectWiFiAsync(currentSSID, currentPassword);
+                    ConnectWiFiAsync(currentSSID.c_str(), currentPassword.c_str());
                 }
             }
             break;
@@ -92,8 +92,8 @@ void NetworkFunctions::Update(){
 
 void NetworkFunctions::ConnectWiFiAsync(const char* ssid, const char* password){
     LOG_SYS_MSG("Network Service: Connecting to Wi-Fi.");
-    strncpy(currentSSID, ssid, sizeof(currentSSID) - 1);
-    strncpy(currentPassword, password, sizeof(currentPassword) - 1);
+    currentSSID.assign(ssid);
+    currentPassword.assign(password);
     WiFi.beginNoBlock(ssid, password);
     timer = millis();
     currentStatus = NetStatus::TRYING_CONNECT;

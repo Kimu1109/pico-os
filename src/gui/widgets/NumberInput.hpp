@@ -5,10 +5,12 @@
 #include "gui/widgets/interfaces/ITextColor.hpp"
 #include "gui/widgets/interfaces/IBorderColor.hpp"
 #include "gui/widgets/interfaces/IFontImplementation.hpp"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
 
 class NumberInput : public Widget, public ITextInputTarget, public ITextColor, public IBorderColor, public IFontImplementation {
     private:
-        String num;
+        FixedString<PICO_STR_LL> num;
 
     public:
         NumberInput(int16_t x, int16_t y, int16_t w){

@@ -45,20 +45,15 @@ namespace UTF8_Functions {
             int len;
             uint32_t cp = Utf8Decode(p + i, len);
 
-            char chunk[5];
             if (cp >= 0x3041 && cp <= 0x3096) {
                 // ひらがな範囲 → カタカナへ(コードポイントを+0x60するとカタカナになる)
-                uint8_t buf[4];
+                uint8_t buf[3];
                 int n = Utf8Encode3(cp + 0x60, buf);
-                buf[n] = '\0';
-                memcpy(chunk, buf, n + 1);
+                if (!result.append(reinterpret_cast<const char*>(buf), (size_t)n)) ok = false;
             } else {
                 // それ以外はそのままコピー
-                memcpy(chunk, p + i, len);
-                chunk[len] = '\0';
+                if (!result.append(reinterpret_cast<const char*>(p) + i, (size_t)len)) ok = false;
             }
-
-            if (!result.append(chunk)) ok = false;
             i += len;
         }
         return ok;

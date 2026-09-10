@@ -7,7 +7,7 @@
 #include "gui/widgets/dialogs/KeyboardNum.hpp"
 
 void KeyboardFunctions::Setup(){
-    Label* label = new Label(10, 10, "");
+    Label<PICO_STR_LL>* label = new Label<PICO_STR_LL>(10, 10, "");
     label->setMaxWidth(SCREEN_WIDTH - 20);
 
     label->setCursorVisible(true);

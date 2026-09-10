@@ -28,6 +28,8 @@ class Image : public Widget {
                 this->updatePath();
             }
         }
+        Image(const char* path, int16_t x, int16_t y, bool onRAM)
+            : Image(FixedString<PICO_PATH_LEN>(path), x, y, onRAM) {}
 
         void render() override;
 
@@ -41,5 +43,8 @@ class Image : public Widget {
                 this->updatePath();
             }
             this->needsRender();
+        }
+        void setPath(const char* path) {
+            this->setPath(FixedString<PICO_PATH_LEN>(path));
         }
 };

@@ -28,7 +28,7 @@ void KeyboardNum::setVisible(bool visible) {
     this->input_label->setMaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
 
     if (visible) {
-        this->inputs = this->input_label->getText();
+        this->inputs = *this->input_label->getText();
         if (this->target) this->target->onShow(this);
     } else {
         if (this->target) this->target->onHide(this);
@@ -65,7 +65,7 @@ void KeyboardNum::causeOnPressStart() {
         if (col >= 0 && col < SYMBOL_COLS) {
             const char* str = currentSymbols()[col].str;
             if (str[0] != '\0') {
-                addInputAtCursor(String(str));
+                addInputAtCursor(str);
             }
         }
         return;
@@ -86,14 +86,14 @@ void KeyboardNum::causeOnPressStart() {
         int w = key.col_span * PAD_W;
         if (px < x || px >= x + w) continue;
 
-        String str = key.str;
-        if (str == "←") {
+        const char* str = key.str;
+        if (strcmp(str, "←") == 0) {
             moveCursor(-1);
-        } else if (str == "→") {
+        } else if (strcmp(str, "→") == 0) {
             moveCursor(1);
-        } else if (str == "X") {
+        } else if (strcmp(str, "X") == 0) {
             removeBeforeCursor();
-        } else if (str == "決定") {
+        } else if (strcmp(str, "決定") == 0) {
             submit();
         } else {
             addInputAtCursor(str);

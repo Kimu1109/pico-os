@@ -3,14 +3,15 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
 
-class Textbox : public Label, public ITextInputTarget {
+template<size_t N>
+class Textbox : public Label<N>, public ITextInputTarget {
     private:
         bool is_single_line = false;
 
         std::function<void()> on_text_changed = nullptr;
 
     public:
-        Textbox(String text, int16_t x, int16_t y, int16_t w, int16_t h, bool is_single_line) : Label(x, y, text) {
+        Textbox(const char* text, int16_t x, int16_t y, int16_t w, int16_t h, bool is_single_line) : Label<N>(x, y, text) {
             this->setMaxWidth(w);
             this->setMaxHeight(h);
 

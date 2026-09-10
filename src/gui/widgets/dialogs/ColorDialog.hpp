@@ -36,13 +36,13 @@ class ColorDialog : public Widget {
         Button* button_no;
         Button* button_ok;
 
-        Label* title;
+        Label<PICO_STR_S>* title;
 
     public:
         ColorDialog(){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
-            this->title = new Label(BASE_X, BASE_Y, "色を選択");
+            this->title = new Label<PICO_STR_S>(BASE_X, BASE_Y, "色を選択");
 
             this->button_ok = new Button(BASE_X + DIALOG_W / 2 + BUTTON_MARGIN, BUTTON_Y - 3, "OK");
             this->button_ok->setAllowTextSpacing(false);

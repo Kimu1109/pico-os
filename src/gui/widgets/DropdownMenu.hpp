@@ -10,7 +10,7 @@ class DropdownMenu : public Widget {
         std::vector<Widget*> children_;
     
         ScrollList *dropdown;
-        Label *value;
+        Label<PICO_STR_L> *value;
 
         bool open_state = false;
 
@@ -45,7 +45,7 @@ class DropdownMenu : public Widget {
             });
             this->dropdown->setParent(this);
 
-            this->value = new Label("");
+            this->value = new Label<PICO_STR_L>("");
             this->value->setX(0);
             this->value->setY(0);
             this->value->setPlaceholder("タップして選択...");
@@ -117,7 +117,7 @@ class DropdownMenu : public Widget {
         void add(const char* text){
             auto item = ScrollListTools::Item();
             item.icon = IconID::AppBox;
-            strncpy(item.text, text, sizeof(item.text) - 1);
+            item.text.assign(text);
 
             this->dropdown->add(item);
             this->relayout();

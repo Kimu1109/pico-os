@@ -38,8 +38,8 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
 
 // ---------- ロード & パース ----------
 
-bool MarkdownView::load(const FixedString<PICO_PATH_LEN>& path) {
-    FsFile f = OSData::SD.open(path.c_str());
+bool MarkdownView::load(const char* path) {
+    FsFile f = OSData::SD.open(path);
     if (!f) return false;
 
     size_t size = f.fileSize();
@@ -50,7 +50,7 @@ bool MarkdownView::load(const FixedString<PICO_PATH_LEN>& path) {
     buf[size] = '\0';
     f.close();
 
-    doc_text = String(buf);
+    doc_text.assign(buf);
     delete[] buf;
 
     parseBlocks();
@@ -78,9 +78,9 @@ bool MarkdownView::load(const FixedString<PICO_PATH_LEN>& path) {
 //     （Label側がバックスラッシュエスケープに対応していないための既知の制約）
 //   - 1ブロックに複数リンクがある場合、装飾自体は全リンクに適用されるが、
 //     タップで開けるのは findFirstInlineLink() が拾う最初の1件のみ
-String MarkdownView::applyInlineMarkdown(const String& src) const {
-    String out;
-    const int n = src.length();
+FixedString<PICO_STR_1KiB> MarkdownView::applyInlineMarkdown(const FixedString<PICO_STR_1KiB>& src) const {
+    FixedString<PICO_STR_1KiB> out;
+    const int n = (int)src.length();
 
     for (int i = 0; i < n; i++) {
         char c = src[i];
@@ -90,13 +90,13 @@ String MarkdownView::applyInlineMarkdown(const String& src) const {
             int close = src.indexOf('`', i + 1);
             int nl = src.indexOf('\n', i + 1);
             if (close != -1 && (nl == -1 || close < nl)) {
-                out += "~";
-                out += src.substring(i + 1, close);
-                out += "~";
+                out.append("~");
+                out.append(src.c_str() + i + 1, close - (i + 1));
+                out.append("~");
                 i = close;
                 continue;
             }
-            out += c;
+            out.append(c);
             continue;
         }
 
@@ -109,18 +109,18 @@ String MarkdownView::applyInlineMarkdown(const String& src) const {
                 int closeParen = src.indexOf(')', closeBracket + 2);
                 int nl2 = src.indexOf('\n', closeBracket + 2);
                 if (closeParen != -1 && (nl2 == -1 || closeParen < nl2)) {
-                    out += "_";
-                    out += src.substring(i + 1, closeBracket);
-                    out += "_";
+                    out.append("_");
+                    out.append(src.c_str() + i + 1, closeBracket - (i + 1));
+                    out.append("_");
                     i = closeParen;
                     continue;
                 }
             }
-            out += c;
+            out.append(c);
             continue;
         }
 
-        out += c;
+        out.append(c);
     }
     return out;
 }
@@ -274,21 +274,30 @@ bool MarkdownView::tryParseBlockquote(int lineStart, int lineEnd, int& depthOut,
 // 終端フェンスが見つからない場合は、誤検知で本文を消してしまわないよう
 // 何もスキップせずstartPosをそのまま返す。
 int MarkdownView::skipFrontMatter(int startPos, int len) const {
+    // 行の前後の空白を除いた中身が delim と一致するかどうかを判定する
+    auto isDelimLine = [&](int lineStart, int lineEnd, const char* delim) -> bool {
+        int s = lineStart, e = lineEnd;
+        while (s < e && doc_text[s] == ' ') s++;
+        while (e > s && doc_text[e - 1] == ' ') e--;
+        size_t dlen = strlen(delim);
+        if ((size_t)(e - s) != dlen) return false;
+        for (size_t k = 0; k < dlen; k++) {
+            if (doc_text[s + (int)k] != delim[k]) return false;
+        }
+        return true;
+    };
+
     int firstLineEnd = doc_text.indexOf('\n', startPos);
     if (firstLineEnd == -1) firstLineEnd = len;
 
-    String firstLine = doc_text.substring(startPos, firstLineEnd);
-    firstLine.trim();
-    if (firstLine != "---") return startPos;
+    if (!isDelimLine(startPos, firstLineEnd, "---")) return startPos;
 
     int searchPos = (firstLineEnd == len) ? len : firstLineEnd + 1;
     while (searchPos <= len) {
         int nl = doc_text.indexOf('\n', searchPos);
         int lineEnd = (nl == -1) ? len : nl;
 
-        String line = doc_text.substring(searchPos, lineEnd);
-        line.trim();
-        if (line == "---" || line == "...") {
+        if (isDelimLine(searchPos, lineEnd, "---") || isDelimLine(searchPos, lineEnd, "...")) {
             return (lineEnd == len) ? len : lineEnd + 1;
         }
         if (nl == -1) break; // 終端フェンスが見つからないまま文書末尾に到達
@@ -418,16 +427,18 @@ void MarkdownView::splitTableRow(int lineStart, int lineEnd, uint16_t cellOffset
 // テーブルは装飾を持たない直接描画(frameへの直接print)で表示するため、
 // `code`や[text](url)等のインライン装飾はここでは変換しない
 // （変換すると`~`や`_`がそのまま文字として表示されてしまうため）。
-String MarkdownView::formatTableCellText(int offset, int length) const {
-    String raw = doc_text.substring(offset, offset + length);
-    String unescaped;
-    const int n = raw.length();
+FixedString<PICO_STR_1KiB> MarkdownView::formatTableCellText(int offset, int length) const {
+    FixedString<PICO_STR_1KiB> raw;
+    raw.assign(doc_text.c_str() + offset, (size_t)length);
+
+    FixedString<PICO_STR_1KiB> unescaped;
+    const int n = (int)raw.length();
     for (int i = 0; i < n; i++) {
         if (raw[i] == '\\' && i + 1 < n && raw[i + 1] == '|') {
-            unescaped += '|';
+            unescaped.append('|');
             i++; // '|' は消費済み
         } else {
-            unescaped += raw[i];
+            unescaped.append(raw[i]);
         }
     }
     return unescaped;
@@ -716,46 +727,59 @@ void MarkdownView::parseBlocks() {
 
 // ---------- レイアウト（高さ事前計算） ----------
 
-String MarkdownView::formatBlockText(const MdBlock& b) const {
+FixedString<PICO_STR_1KiB> MarkdownView::formatBlockText(const MdBlock& b) const {
+    FixedString<PICO_STR_1KiB> raw;
     switch (b.type) {
         case MdBlockType::H1:
         case MdBlockType::H2:
         case MdBlockType::H3: {
-            String raw = doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
-            return "**" + applyInlineMarkdown(raw) + "**";
+            raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+            FixedString<PICO_STR_1KiB> result;
+            result.append("**");
+            result.append(applyInlineMarkdown(raw));
+            result.append("**");
+            return result;
         }
         case MdBlockType::Link: {
-            String text = doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
-            return "_" + text + "_"; // 下線で視覚的に示す
+            raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+            FixedString<PICO_STR_1KiB> result;
+            result.append("_");
+            result.append(raw);
+            result.append("_"); // 下線で視覚的に示す
+            return result;
         }
         case MdBlockType::ListItem: {
-            String content = doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
+            raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
             if (b.listIsCheckbox) {
                 // マーカーはアイコン(IconID::CheckboxOn/Off)側で表現するため、
                 // テキスト側には付与しない
-                return applyInlineMarkdown(content);
+                return applyInlineMarkdown(raw);
             }
-            String marker;
+            FixedString<PICO_STR_1KiB> result;
             if (b.listOrdered) {
-                marker = String(b.listNumber) + ".";
+                result.appendFormat("%u.", (unsigned)b.listNumber);
             } else {
                 // 記号自体はネスト段によらず統一（フォントの文字種カバレッジに配慮し、
                 // 絵文字的な行頭記号は使わずASCIIのみを使用）。段の深さはインデント幅で表現する。
-                marker = "-";
+                result.append("-");
             }
-            return marker + " " + applyInlineMarkdown(content);
+            result.append(" ");
+            result.append(applyInlineMarkdown(raw));
+            return result;
         }
         case MdBlockType::Quote: {
-            String content = doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
-            return applyInlineMarkdown(content);
+            raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+            return applyInlineMarkdown(raw);
         }
         case MdBlockType::HorizontalRule:
         case MdBlockType::TableRow:
-            return ""; // どちらもLabel1個には対応しない要素。専用のバインド処理で個別に描画する
+            return FixedString<PICO_STR_1KiB>(); // どちらもLabel1個には対応しない要素。専用のバインド処理で個別に描画する
         case MdBlockType::CodeBlock:
-            return doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
+            raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+            return raw;
         default: // Paragraph
-            return applyInlineMarkdown(doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength));
+            raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+            return applyInlineMarkdown(raw);
     }
 }
 
@@ -767,9 +791,10 @@ void MarkdownView::layoutBlocks() {
         MdBlock& b = blocks[idx];
 
         if (b.type == MdBlockType::Image) {
-            String path = doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength);
+            FixedString<PICO_PATH_LEN> path;
+            path.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
             uint16_t h = kPadding;
-            FsFile f = OSData::SD.open(path);
+            FsFile f = OSData::SD.open(path.c_str());
             if (f) {
                 IconRender::PimgHeader head;
                 if (IconRender::ReadPimgHeader(f, head)) h = head.height;
@@ -910,7 +935,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         return;
     }
     const MdBlock& b = blocks[blockIdx];
-    Label* lbl = labelPool[slot];
+    Label<PICO_STR_1KiB>* lbl = labelPool[slot];
 
     lbl->setNoBackground();
     lbl->setBorder(PICO_BLACK, 0);
@@ -976,7 +1001,9 @@ void MarkdownView::bindImageSlot(int slot, int blockIdx, bool force) {
     const MdBlock& b = blocks[blockIdx];
     Image* img = imagePool[slot];
 
-    img->setPath(doc_text.substring(b.srcOffset, b.srcOffset + b.srcLength));
+    FixedString<PICO_PATH_LEN> imgPath;
+    imgPath.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+    img->setPath(imgPath);
     img->setX(kPadding);
     img->setY(b.y);
     img->setVisible(true);
@@ -1124,12 +1151,12 @@ void MarkdownView::renderDecorations() {
                     if (cellW < 4) continue;
                     int cellBaseX = g_rect.x + kPadding + c * colWidth + kTableCellPadding;
 
-                    String cellText = formatTableCellText(b.tableCellOffset[c], b.tableCellLength[c]);
+                    FixedString<PICO_STR_1KiB> cellText = formatTableCellText(b.tableCellOffset[c], b.tableCellLength[c]);
 
                     // 列の寄せ(0=left,1=center,2=right)に応じて描画開始X座標を調整する。
                     // clipRect自体はセル全体の範囲を使うので、はみ出した分は
                     // 寄せの方向によらず正しく切り詰められる。
-                    int textW = OSData::frame->textWidth(cellText);
+                    int textW = OSData::frame->textWidth(cellText.c_str());
                     int alignOffset = 0;
                     if (b.tableAlign[c] == 1) {       // center
                         alignOffset = (cellW - textW) / 2;
@@ -1140,7 +1167,7 @@ void MarkdownView::renderDecorations() {
 
                     OSData::frame->setClipRect(cellBaseX, textY, cellW, (int)b.height);
                     OSData::frame->setCursor(cellBaseX + alignOffset, textY);
-                    OSData::frame->print(cellText);
+                    OSData::frame->print(cellText.c_str());
                     OSData::frame->clearClipRect();
                 }
             }
@@ -1219,7 +1246,8 @@ void MarkdownView::causeOnPressEnd() {
         // 見つかっている場合(urlLength > 0)もタップで開けるようにする。
         // 1ブロックに複数リンクがある場合は最初の1件のみが対象になる点に注意。
         if (idx >= 0 && blocks[idx].urlLength > 0 && on_link_tap) {
-            String url = doc_text.substring(blocks[idx].urlOffset, blocks[idx].urlOffset + blocks[idx].urlLength);
+            FixedString<PICO_PATH_LEN> url;
+            url.assign(doc_text.c_str() + blocks[idx].urlOffset, blocks[idx].urlLength);
             on_link_tap(url);
         }
     }

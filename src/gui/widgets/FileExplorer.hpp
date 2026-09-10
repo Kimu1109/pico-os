@@ -4,12 +4,13 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Icon.hpp"
 #include "gui/widgets/ScrollList.hpp"
+#include "util/FixedString.hpp"
 
 class FileExplorer : public Widget {
     private:
         std::vector<Widget*> children_;
 
-        char currentPath[128] = "/";
+        FixedString<PICO_PATH_LEN> currentPath{"/"};
 
         void update_list();
         void update_places(){
@@ -31,7 +32,7 @@ class FileExplorer : public Widget {
         Icon* backToParent;
         Icon* createFolder;
         Icon* deleteFile;
-        Label* currentFolder;
+        Label<PICO_PATH_LEN>* currentFolder;
 
     public:
         FileExplorer(int16_t x, int16_t y, int16_t w, int16_t h){
@@ -55,7 +56,7 @@ class FileExplorer : public Widget {
                 this->on_press_delete();
             });
 
-            currentFolder = new Label(20, 0, "");
+            currentFolder = new Label<PICO_PATH_LEN>(20, 0, "");
             currentFolder->setParent(this);
             currentFolder->setMaxWidth(w - 20 * 3);
             currentFolder->setMaxHeight(20);
@@ -88,7 +89,7 @@ class FileExplorer : public Widget {
         const char* getCurrentFolderPath();
 
         void setCurrentFolderPath(const char* path){
-            strncpy(currentPath, path, sizeof(currentPath) - 1);
+            currentPath.assign(path);
             this->update_list();
         }
 

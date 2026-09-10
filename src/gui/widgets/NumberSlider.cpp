@@ -2,11 +2,21 @@
 #include "OS_Data.hpp"
 #include "functions/Font_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
+
+namespace {
+    FixedString<PICO_STR_S> formatSliderNumber(float value, int decimalPlaces){
+        FixedString<PICO_STR_S> result;
+        result.appendFormat("%.*f", decimalPlaces, value);
+        return result;
+    }
+}
 
 void NumberSlider::updateTextW(){
     FontFn::SetSmall();
-    int maxV_W = OSData::frame->textWidth(String(this->maxValue, this->decimalPlacesNum));
-    int minV_W = OSData::frame->textWidth(String(this->minValue, this->decimalPlacesNum));
+    int maxV_W = OSData::frame->textWidth(formatSliderNumber(this->maxValue, this->decimalPlacesNum).c_str());
+    int minV_W = OSData::frame->textWidth(formatSliderNumber(this->minValue, this->decimalPlacesNum).c_str());
     text_max_w = max(maxV_W, minV_W);
     FontFn::SetDefault();
 }
@@ -45,11 +55,11 @@ void NumberSlider::render(){
     int numW = 0;
     if(this->visibleNum){
         FontFn::SetSmall();
-        String numStr = String(this->value, this->decimalPlacesNum);
+        FixedString<PICO_STR_S> numStr = formatSliderNumber(this->value, this->decimalPlacesNum);
         numW = text_max_w + 2;
         OSData::frame->setCursor(g_rect.x, g_rect.y + (g_rect.h - OSData::frame->fontHeight()) / 2);
         OSData::frame->setTextColor(this->color);
-        OSData::frame->print(numStr);
+        OSData::frame->print(numStr.c_str());
         OSData::frame->setTextColor(PICO_FORECOLOR);
         FontFn::SetNormal();
     }

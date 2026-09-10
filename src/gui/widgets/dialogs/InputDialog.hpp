@@ -26,9 +26,9 @@ class InputDialog : public Widget {
         Button* submit_button;
         Button* cancel_button;
 
-        Textbox* input;
+        Textbox<PICO_STR_LL>* input;
 
-        Label* label;
+        Label<PICO_STR_L>* label;
 
         std::function<void(bool is_submit)> on_closed = nullptr;
 
@@ -61,15 +61,15 @@ class InputDialog : public Widget {
 
     public:
 
-        InputDialog(String label_content, bool isSingleLine){
+        InputDialog(const char* label_content, bool isSingleLine){
             this->isSingleLine = isSingleLine;
 
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
-            this->label = new Label(label_content);
+            this->label = new Label<PICO_STR_L>(label_content);
             this->label->setParent(this);
 
-            this->input = new Textbox("", 0, 0, 0, 0, true);
+            this->input = new Textbox<PICO_STR_LL>("", 0, 0, 0, 0, true);
             this->input->setPlaceholder("ここに入力...");
             this->input->setParent(this);
 
@@ -116,10 +116,10 @@ class InputDialog : public Widget {
             if(this->on_closed) this->on_closed(is_submit);
         }
 
-        String getInput(){
-            return this->input->getText();
+        FixedString<PICO_STR_LL> getInput(){
+            return *this->input->getText();
         }
-        void setInput(String input){
+        void setInput(const char* input){
             this->input->setText(input);
         }
 

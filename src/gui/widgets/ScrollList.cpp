@@ -58,7 +58,7 @@ void ScrollList::render(){
 
         OSData::frame->setCursor(g_rect.x + MARGIN + (this->enable_icon ? (icon_size + MARGIN) : 0), g_rect.y + draw_y);
         OSData::frame->setTextColor(l_text_color);
-        OSData::frame->print(this->dataSource->at(i).text);
+        OSData::frame->print(this->dataSource->at(i).text.c_str());
 
         draw_y += ITEM_HEIGHT;
         if(draw_y > g_rect.h) break;

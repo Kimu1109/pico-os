@@ -9,7 +9,7 @@ class MsgDialog : public Widget {
     private:
         std::vector<Widget*> children_;
 
-        Label* msg_label;
+        Label<PICO_STR_L>* msg_label;
         Button* ok_button;
         Button* cancel_button;
         Icon* msg_icon;
@@ -60,13 +60,13 @@ class MsgDialog : public Widget {
 
     public:
 
-        MsgDialog(String msg_text, String cancel_text, String ok_text){
+        MsgDialog(const char* msg_text, const char* cancel_text, const char* ok_text){
             this->l_rect = {0, 0, DIALOG_WIDTH, DIALOG_HEIGHT};
 
             msg_icon = new Icon(0, 0, this->icon_id, IconSize::Px64);
             msg_icon->setParent(this);
 
-            msg_label = new Label(0, 0, msg_text);
+            msg_label = new Label<PICO_STR_L>(0, 0, msg_text);
             msg_label->setParent(this);
 
             ok_button = new Button(0, 0, ok_text);

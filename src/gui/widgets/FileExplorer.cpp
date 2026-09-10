@@ -10,7 +10,7 @@ void FileExplorer::update_list(){
 
     this->list->clear();
 
-    FsFile dir = OSData::SD.open(this->currentPath);
+    FsFile dir = OSData::SD.open(this->currentPath.c_str());
     FsFile file;
 
     const char* filename = PICO_IO::filename(this->currentPath);
@@ -29,7 +29,7 @@ void FileExplorer::update_list(){
             else
                 item.icon = IconID::File;
 
-            strncpy(item.text, name, sizeof(item.text) - 1);
+            item.text.assign(name);
 
             this->list->add(item);
         }
@@ -49,9 +49,9 @@ void FileExplorer::on_press_create(){
     folder_create->setVisible(true);
     folder_create->setOnClosed([this, folder_create](bool is_submit){
         if(is_submit){
-            char new_folder_path[256];
+            FixedString<PICO_PATH_LEN> new_folder_path;
             PICO_IO::join(new_folder_path, this->currentPath, folder_create->getInput().c_str());
-            OSData::SD.mkdir(new_folder_path);
+            OSData::SD.mkdir(new_folder_path.c_str());
             this->update_list();
         }
         WidgetFunctions::DestroyLater(folder_create);
@@ -65,16 +65,16 @@ void FileExplorer::on_press_delete(){
         sure_dialog->setVisible(true);
         sure_dialog->setOnClosed([this, sure_dialog, item](bool is_ok){
             if(is_ok){
-                char delete_file_path[256];
-                PICO_IO::join(delete_file_path, this->currentPath, item->text);
+                FixedString<PICO_PATH_LEN> delete_file_path;
+                PICO_IO::join(delete_file_path, this->currentPath, item->text.c_str());
 
-                FsFile file = OSData::SD.open(delete_file_path);
+                FsFile file = OSData::SD.open(delete_file_path.c_str());
                 if(file.isDir()){
                     file.close();
                     PICO_IO::removeRecursive(delete_file_path);
                 }else{
                     file.close();
-                    OSData::SD.remove(delete_file_path);
+                    OSData::SD.remove(delete_file_path.c_str());
                 }
 
                 this->update_list();
@@ -87,7 +87,7 @@ void FileExplorer::on_press_delete(){
 void FileExplorer::on_press_item(int index){
     auto item = this->list->itemAt(index);
     if(item && item->icon == IconID::Folder){
-        PICO_IO::join(this->currentPath, this->currentPath, item->text);
+        PICO_IO::join(this->currentPath, this->currentPath, item->text.c_str());
         this->update_list();
     }
 }
@@ -95,9 +95,9 @@ void FileExplorer::on_press_item(int index){
 const char* FileExplorer::getSelectedPath(){
     auto item = this->list->itemAt(this->list->getSelectedIndex());
     if(item){
-        static char path[256];
-        if(PICO_IO::join(path, this->currentPath, item->text)){
-            return path;
+        static FixedString<PICO_PATH_LEN> path;
+        if(PICO_IO::join(path, this->currentPath, item->text.c_str())){
+            return path.c_str();
         }else{
             return nullptr;
         }
@@ -107,7 +107,7 @@ const char* FileExplorer::getSelectedPath(){
 }
 
 const char* FileExplorer::getCurrentFolderPath(){
-    return this->currentPath;
+    return this->currentPath.c_str();
 }
 
 void FileExplorer::render(){

@@ -5,11 +5,12 @@
 #include "gui/widgets/interfaces/ITextColor.hpp"
 #include "gui/widgets/interfaces/IBorderColor.hpp"
 #include "gui/icons/icon_render.h"
+#include "util/FixedString.hpp"
 
 namespace ScrollListTools {
     struct Item {
         IconID icon = IconID::AppBox;
-        char text[128];
+        FixedString<PICO_PATH_LEN> text;
     };
 };
 

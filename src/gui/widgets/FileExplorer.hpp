@@ -4,12 +4,13 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Icon.hpp"
 #include "gui/widgets/ScrollList.hpp"
+#include "util/FixedString.hpp"
 
 class FileExplorer : public Widget {
     private:
         std::vector<Widget*> children_;
 
-        char currentPath[128] = "/";
+        FixedString<PICO_PATH_LEN> currentPath{"/"};
 
         void update_list();
         void update_places(){
@@ -88,7 +89,7 @@ class FileExplorer : public Widget {
         const char* getCurrentFolderPath();
 
         void setCurrentFolderPath(const char* path){
-            strncpy(currentPath, path, sizeof(currentPath) - 1);
+            currentPath.assign(path);
             this->update_list();
         }
 

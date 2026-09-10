@@ -1,6 +1,8 @@
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
 
 namespace LogFunctions {
 namespace {
@@ -68,27 +70,22 @@ void Setup()
 
 void Log(LogType type, const char* fmt, ...)
 {
-    char buf[256];
+    FixedString<PICO_STR_256B> buf;
 
     va_list args;
     va_start(args, fmt);
-    int written = vsnprintf(buf, sizeof(buf), fmt, args);
+    buf.appendFormatV(fmt, args);
     va_end(args);
 
-    if (written < 0) return;
-
     Serial.printf("%s", GetPrefix(type));
-    Serial.print(buf);
+    Serial.print(buf.c_str());
     Serial.println();
 
     // Serial出力用bufとは別に、プレフィックス込みの行をバッファに積む
-    char line[288];
-    int lineLen = snprintf(line, sizeof(line), "[%lu] %s%s",
-                            (unsigned long)millis(), GetPrefix(type), buf);
-    if (lineLen < 0) return;
-    if ((size_t)lineLen >= sizeof(line)) lineLen = sizeof(line) - 1;
+    FixedString<PICO_STR_512B> line;
+    line.appendFormat("[%lu] %s%s", (unsigned long)millis(), GetPrefix(type), buf.c_str());
 
-    AppendToBuffer(line, (size_t)lineLen);
+    AppendToBuffer(line.c_str(), line.length());
 }
 
 void Flush()

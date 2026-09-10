@@ -131,12 +131,7 @@ void Label<N>::relayout() {
     for (size_t i = 0; ; i++) {
         if (s[i] == '\n' || s[i] == '\0') {
             FixedString<N> buf;
-            size_t len = i - start;
-            if (len >= N) len = N - 1;
-            char temp[N];
-            memcpy(temp, s + start, len);
-            temp[len] = '\0';
-            buf.assign(temp);
+            buf.assign(s + start, i - start);
             paragraphs.push_back(buf);
             if (s[i] == '\0') break;
             start = i + 1;

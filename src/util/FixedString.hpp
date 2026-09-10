@@ -21,6 +21,8 @@
 #include <Arduino.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include "util/Utf8Byte.hpp"
 
 template<size_t N>
@@ -135,15 +137,20 @@ public:
     }
 
     // srcの先頭lenバイトだけを追記する(範囲指定でのsubstring切り出しに使う)。
-    // 容量超過時の切り詰め・UTF-8継続バイトの巻き戻しはappend(const char*)と同様。
+    // src は len バイト読めれば十分で、NUL終端されていなくてもよい
+    // (addLen == len、つまり切り詰めが発生しない場合は src[len] を読まない)。
+    // 容量超過で切り詰めが発生した場合のみ、UTF-8継続バイトの途中で
+    // 終わらないよう開始バイトまで巻き戻す。
     bool append(const char* src, size_t len) {
         if (!src) return true;
         size_t curLen = strlen(buf_);
         size_t room = (curLen < N - 1) ? (N - 1 - curLen) : 0;
         size_t addLen = (len < room) ? len : room;
 
-        while (addLen > 0 && ((static_cast<uint8_t>(src[addLen]) & 0xC0) == 0x80)) {
-            addLen--;
+        if (addLen < len) {
+            while (addLen > 0 && ((static_cast<uint8_t>(src[addLen]) & 0xC0) == 0x80)) {
+                addLen--;
+            }
         }
 
         memcpy(buf_ + curLen, src, addLen);
@@ -155,6 +162,28 @@ public:
     bool assign(const char* src, size_t len) {
         clear();
         return append(src, len);
+    }
+
+    // printf書式で末尾に追記する(vsnprintfでbuf_の残り容量へ直接書き込むため、
+    // sprintf用の一時バッファを呼び出し側で用意する必要がない)。
+    // 容量不足で切り詰められた場合はfalseを返す(errorまたは収まりきらない場合)。
+    bool appendFormatV(const char* fmt, va_list args) {
+        size_t curLen = strlen(buf_);
+        if (curLen >= N - 1) return false;
+        int written = vsnprintf(buf_ + curLen, N - curLen, fmt, args);
+        if (written < 0) {
+            buf_[curLen] = '\0';
+            return false;
+        }
+        return (size_t)written < (N - curLen);
+    }
+
+    bool appendFormat(const char* fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        bool ok = appendFormatV(fmt, args);
+        va_end(args);
+        return ok;
     }
 
     // UTF-8を1文字単位で安全に追記する(KeyboardNum/KeyboardEng等、

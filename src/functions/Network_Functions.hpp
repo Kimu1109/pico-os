@@ -2,6 +2,8 @@
 #include <WiFi.h>
 #include "task/Task.hpp"
 #include "gui/icons/icons_data.h"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
 
 namespace NetworkFunctions {
 
@@ -16,10 +18,10 @@ namespace NetworkFunctions {
 
     //NOT TO WRITE! READONLY!
     inline NetStatus currentStatus = NetStatus::FAILED;
-    inline char currentSSID[33] = "";
-    inline char currentPassword[65] = ""; // 再接続用に保持(SetupやConnectWiFiAsync経由で設定される)
-    inline char ntpServer1[33] = "ntp.nict.jp";
-    inline char ntpServer2[33] = "time.google.com";
+    inline FixedString<PICO_STR_M> currentSSID;
+    inline FixedString<PICO_STR_L> currentPassword; // 再接続用に保持(SetupやConnectWiFiAsync経由で設定される)
+    inline FixedString<PICO_STR_M> ntpServer1{"ntp.nict.jp"};
+    inline FixedString<PICO_STR_M> ntpServer2{"time.google.com"};
 
     inline unsigned long timer = 0;
 

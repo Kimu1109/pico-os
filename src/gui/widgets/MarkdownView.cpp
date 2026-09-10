@@ -757,9 +757,7 @@ FixedString<PICO_STR_1KiB> MarkdownView::formatBlockText(const MdBlock& b) const
             }
             FixedString<PICO_STR_1KiB> result;
             if (b.listOrdered) {
-                char numBuf[8];
-                snprintf(numBuf, sizeof(numBuf), "%u.", (unsigned)b.listNumber);
-                result.append(numBuf);
+                result.appendFormat("%u.", (unsigned)b.listNumber);
             } else {
                 // 記号自体はネスト段によらず統一（フォントの文字種カバレッジに配慮し、
                 // 絵文字的な行頭記号は使わずASCIIのみを使用）。段の深さはインデント幅で表現する。

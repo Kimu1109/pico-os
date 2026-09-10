@@ -117,7 +117,7 @@ class DropdownMenu : public Widget {
         void add(const char* text){
             auto item = ScrollListTools::Item();
             item.icon = IconID::AppBox;
-            strncpy(item.text, text, sizeof(item.text) - 1);
+            item.text.assign(text);
 
             this->dropdown->add(item);
             this->relayout();

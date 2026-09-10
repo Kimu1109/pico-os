@@ -2,6 +2,7 @@
 
 #include "OS_Data.hpp"
 #include "util/FixedString.hpp"
+#include "consts.hpp"
 
 bool PICO_IO::removeRecursive(const char* path){
     FsFile dir = OSData::SD.open(path);
@@ -18,12 +19,12 @@ bool PICO_IO::removeRecursive(const char* path){
     FsFile entry;
 
     while (entry.openNext(&dir, O_RDONLY)) {
-        FixedString<256> entryName;
-        char nameBuf[256];
+        FixedString<PICO_STR_256B> entryName;
+        char nameBuf[PICO_STR_256B];
         entry.getName(nameBuf, sizeof(nameBuf));
         entryName.assign(nameBuf);
 
-        FixedString<256> fullPath;
+        FixedString<PICO_PATH_LEN> fullPath;
         // "path/entryName" を組み立てる。PICO_IO::join同様の連結だが、
         // ここではSDライブラリの都合上単純結合で十分(先頭'/'の重複はSD側が許容)。
         fullPath.assign(path);

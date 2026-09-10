@@ -7,10 +7,8 @@
 
 namespace {
     FixedString<PICO_STR_S> formatSliderNumber(float value, int decimalPlaces){
-        char buf[24];
-        snprintf(buf, sizeof(buf), "%.*f", decimalPlaces, value);
         FixedString<PICO_STR_S> result;
-        result.assign(buf);
+        result.appendFormat("%.*f", decimalPlaces, value);
         return result;
     }
 }

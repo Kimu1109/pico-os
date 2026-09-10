@@ -17,7 +17,7 @@ void FileSaveDialog::render(){
 }
 
 const char* FileSaveDialog::getSavePath(){
-    static char path[256];
+    static FixedString<PICO_PATH_LEN> path;
     PICO_IO::join(path, this->explorer->getCurrentFolderPath(), this->textbox_filename->getText()->c_str());
-    return path;
+    return path.c_str();
 }

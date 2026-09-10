@@ -79,7 +79,7 @@ void ScrollContainer::render() {
     const Rect g_rect = this->getScreenRect();
 
     // 外枠
-    OSData::frame->drawRect(g_rect.x, g_rect.y, g_rect.w, g_rect.h, PICO_BLACK);
+    OSData::frame->drawRect(g_rect.x, g_rect.y, g_rect.w, g_rect.h, this->border_color);
 
     // 垂直スクロールバー
     if(vertical_scroll){
@@ -89,7 +89,7 @@ void ScrollContainer::render() {
         const int bar_h = g_rect.h - (horizontal_scroll ? SCROLL_L : 0);
 
         // トラック枠
-        OSData::frame->drawRect(bar_x, bar_y, bar_w, bar_h, PICO_BLACK);
+        OSData::frame->drawRect(bar_x, bar_y, bar_w, bar_h, this->border_color);
 
         // ツマミ
         if(max_scroll_y > 0){
@@ -98,7 +98,7 @@ void ScrollContainer::render() {
             if(thumb_h > bar_h) thumb_h = bar_h;
             const int thumb_y = bar_y + (scroll_y * (bar_h - thumb_h)) / max_scroll_y;
 
-            OSData::frame->fillRect(bar_x + 2, thumb_y + 2, bar_w - 4, std::max(1, thumb_h - 4), PICO_BLACK);
+            OSData::frame->fillRect(bar_x + 2, thumb_y + 2, bar_w - 4, std::max(1, thumb_h - 4), this->border_color);
         }
     }
 
@@ -110,7 +110,7 @@ void ScrollContainer::render() {
         const int bar_h = SCROLL_L;
 
         // トラック枠
-        OSData::frame->drawRect(bar_x, bar_y, bar_w, bar_h, PICO_BLACK);
+        OSData::frame->drawRect(bar_x, bar_y, bar_w, bar_h, this->border_color);
 
         // ツマミ
         if(max_scroll_x > 0){
@@ -119,7 +119,7 @@ void ScrollContainer::render() {
             if(thumb_w > bar_w) thumb_w = bar_w;
             const int thumb_x = bar_x + (scroll_x * (bar_w - thumb_w)) / max_scroll_x;
 
-            OSData::frame->fillRect(thumb_x + 2, bar_y + 2, std::max(1, thumb_w - 4), bar_h - 4, PICO_BLACK);
+            OSData::frame->fillRect(thumb_x + 2, bar_y + 2, std::max(1, thumb_w - 4), bar_h - 4, this->border_color);
         }
     }
 

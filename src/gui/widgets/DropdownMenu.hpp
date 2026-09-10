@@ -14,6 +14,9 @@ class DropdownMenu : public Widget {
 
         bool open_state = false;
 
+        //移動検出用の前回の絶対座標(グローバル座標)矩形
+        Rect prev_screen_rect{0, 0, 0, 0};
+
         void relayout(){
             this->dropdown->setW(this->l_rect.w);
             this->dropdown->setH(this->dropdown->getFittingHeight());
@@ -84,17 +87,25 @@ class DropdownMenu : public Widget {
             if(!this->needs_redraw) return;
             if(!this->visible) return;
 
+            //グローバル座標で前回位置と比較し、移動していれば旧位置を再描画対象にする
+            const Rect g_rect = this->getScreenRect();
+            if(this->prev_screen_rect != g_rect)
+                markdirty(this->prev_screen_rect);
+            this->prev_screen_rect = g_rect;
+
             this->needs_redraw = false;
         };
 
         void setX(int x) override {
             this->l_rect.x = x;
+            this->needsRender();
             this->dropdown->needsRender();
             this->value->needsRender();
         }
 
         void setY(int y) override {
             this->l_rect.y = y;
+            this->needsRender();
             this->dropdown->needsRender();
             this->value->needsRender();
         }

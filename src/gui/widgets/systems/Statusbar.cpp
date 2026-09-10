@@ -23,6 +23,7 @@ void Statusbar::render(){
     strftime(HH_mm, sizeof(HH_mm), "%H:%M", &TimeFunctions::timeinfo);
 
     OSData::frame->setCursor(g_rect.x, g_rect.y, FontFn::GetSmall());
+    OSData::frame->setTextColor(PICO_BLACK);
     int HH_mm_w = OSData::frame->textWidth(HH_mm);
     OSData::frame->print(HH_mm);
     FontFn::SetNormal();

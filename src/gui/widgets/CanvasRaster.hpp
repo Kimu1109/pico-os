@@ -21,6 +21,9 @@ class CanvasRaster : public Widget {
         int16_t sx;
         int16_t sy;
 
+        //移動検出用の前回の絶対座標(グローバル座標)矩形
+        Rect prev_screen_rect{0, 0, 0, 0};
+
         int8_t brush_color = PICO_BLACK;
         float brush_radius = 1.5;
 

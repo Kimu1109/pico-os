@@ -11,11 +11,14 @@ void Keyboard::setVisible(bool visible) {
     this->input_label->setMaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
 
     if(!visible){
-        this->input_label->setText(this->inputs_done + this->inputs);
+        FixedString<PICO_STR_LL> combined;
+        combined.assign(this->inputs_done);
+        combined.append(this->inputs);
+        this->input_label->setText(combined);
         if(this->target) this->target->onHide(this);
     }else{
-        this->inputs_done = this->input_label->getText();
-        this->inputs = "";
+        this->inputs_done = *this->input_label->getText();
+        this->inputs.clear();
         if(this->target) this->target->onShow(this);
         this->updateInputs(false);
     }
@@ -115,7 +118,7 @@ void Keyboard::causeOnPressStart() {
             if(cands_x + w + CANDIDATES_MARGIN > 200) break; //候補が領域を超えそうなときは停止
 
             if(OSData::touchX - 1 >= cands_x && OSData::touchX <= cands_x + w + 2){ //押されてるかどうか
-                inputs = IME_Functions::candidates[i];
+                inputs.assign(IME_Functions::candidates[i]);
                 commitAndClear();
                 return;
             }
@@ -154,12 +157,12 @@ void Keyboard::causeOnPressStart() {
                         this->target->onHide(this);
                         this->setVisible(false);
                     }else if(swipe_y_index == 3){
-                        inputs = "\n";
+                        inputs.assign("\n");
                         commitAndClear();
                     }
                 }
             }else{
-                inputs = "\n";
+                inputs.assign("\n");
                 commitAndClear();
             }
         }else{
@@ -180,22 +183,24 @@ void Keyboard::causeOnPressStart() {
         }
         //カタカナへ
         if(swipe_x_index == 0 && swipe_y_index == 2 && !is_inputs_empty){
-            inputs = UTF8_Functions::HiraganaToKatakana(inputs);
+            FixedString<PICO_STR_LL> katakana;
+            UTF8_Functions::HiraganaToKatakana(inputs, katakana);
+            inputs.assign(katakana);
             commitAndClear();
         }
         //送りへ
         if(swipe_x_index == 0 && swipe_y_index == 3 && !is_inputs_empty){
             if(okuri_hira.length() == 0){ //送り開始
-                okuri_hira = UTF8_Functions::GetLastChar(inputs);
-                inputs = IME_Functions::BuildOkuriKey(inputs, okuri_hira.c_str());
+                okuri_hira = inputs.lastChar();
+                IME_Functions::BuildOkuriKey(inputs, okuri_hira.c_str());
 
-            }else if(okuri_hira == "い" && UTF8_Functions::GetLastChar(inputs) == "w") { //形容詞に配慮
-                inputs = UTF8_Functions::RemoveLastChar(inputs);
-                inputs += "i";
+            }else if(strcmp(okuri_hira.c_str(), "い") == 0 && strcmp(inputs.lastChar().c_str(), "w") == 0) { //形容詞に配慮
+                inputs.removeLastChar();
+                inputs.append("i");
             }else { //送り解除
-                inputs = UTF8_Functions::RemoveLastChar(inputs);
-                inputs += okuri_hira;
-                okuri_hira = "";
+                inputs.removeLastChar();
+                inputs.append(okuri_hira);
+                okuri_hira.clear();
             }
             updateInputs(false);
             updateImeCandidates();
@@ -250,7 +255,7 @@ void Keyboard::causeOnPressEnd() {
 
         //入力の確定
         int input_swipe_index = ((swipe_x_index - 1) + (swipe_y_index * 3)) * 5 + input_relative_index;
-        if(swipeEnv(input_swipe_index) != "NO")
+        if(strcmp(swipeEnv(input_swipe_index), "NO") != 0)
             addInput(swipeEnv(input_swipe_index));
 
         this->needsRender(); //フリックキーが消えるため
@@ -309,7 +314,7 @@ void Keyboard::render() {
     if(is_swiping){
         int FONT_H = OSData::frame->fontHeight();
         for(int i = 1; i < 5; i++){
-            if(swipeEnv(swipe_index * 5 + i) == "NO") continue;
+            if(strcmp(swipeEnv(swipe_index * 5 + i), "NO") == 0) continue;
 
             //座標系
             int FONT_W = OSData::frame->textWidth(swipeEnv(swipe_index * 5 + i));

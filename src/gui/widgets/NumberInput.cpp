@@ -19,7 +19,7 @@ void NumberInput::render(){
     this->fontApply();
     this->textColorApply();
     OSData::frame->setCursor(g_rect.x, g_rect.y + 2);
-    OSData::frame->print(this->num);
+    OSData::frame->print(this->num.c_str());
     this->textColorDefault();
     this->fontDefault();
 

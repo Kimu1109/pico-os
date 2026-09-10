@@ -31,7 +31,7 @@ class FileExplorer : public Widget {
         Icon* backToParent;
         Icon* createFolder;
         Icon* deleteFile;
-        Label* currentFolder;
+        Label<PICO_PATH_LEN>* currentFolder;
 
     public:
         FileExplorer(int16_t x, int16_t y, int16_t w, int16_t h){
@@ -55,7 +55,7 @@ class FileExplorer : public Widget {
                 this->on_press_delete();
             });
 
-            currentFolder = new Label(20, 0, "");
+            currentFolder = new Label<PICO_PATH_LEN>(20, 0, "");
             currentFolder->setParent(this);
             currentFolder->setMaxWidth(w - 20 * 3);
             currentFolder->setMaxHeight(20);

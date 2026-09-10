@@ -128,6 +128,35 @@ public:
         return append(other.c_str());
     }
 
+    // 1文字(ASCII)を追記する
+    bool append(char c) {
+        const char tmp[2] = { c, '\0' };
+        return append(tmp);
+    }
+
+    // srcの先頭lenバイトだけを追記する(範囲指定でのsubstring切り出しに使う)。
+    // 容量超過時の切り詰め・UTF-8継続バイトの巻き戻しはappend(const char*)と同様。
+    bool append(const char* src, size_t len) {
+        if (!src) return true;
+        size_t curLen = strlen(buf_);
+        size_t room = (curLen < N - 1) ? (N - 1 - curLen) : 0;
+        size_t addLen = (len < room) ? len : room;
+
+        while (addLen > 0 && ((static_cast<uint8_t>(src[addLen]) & 0xC0) == 0x80)) {
+            addLen--;
+        }
+
+        memcpy(buf_ + curLen, src, addLen);
+        buf_[curLen + addLen] = '\0';
+        return addLen == len;
+    }
+
+    // 全置換版(srcの先頭lenバイトだけを使う)
+    bool assign(const char* src, size_t len) {
+        clear();
+        return append(src, len);
+    }
+
     // UTF-8を1文字単位で安全に追記する(KeyboardNum/KeyboardEng等、
     // カーソル位置への1文字ずつの入力を想定)。
     // 容量が足りない場合は1文字も追記せずfalseを返す(文字が半端に入るのを防ぐ)。
@@ -246,6 +275,21 @@ public:
     bool empty() const { return buf_[0] == '\0'; }
 
     size_t length() const { return strlen(buf_); } // バイト数
+
+    // 文字インデックスではなくバイトインデックスでの1バイト参照(範囲外は'\0')
+    char operator[](size_t byteIndex) const {
+        return (byteIndex < length()) ? buf_[byteIndex] : '\0';
+    }
+
+    // 文字cをfromIndex(バイト位置)以降から探し、見つかったバイト位置を返す(無ければ-1)
+    int indexOf(char c, int fromIndex = 0) const {
+        int len = static_cast<int>(length());
+        if (fromIndex < 0) fromIndex = 0;
+        for (int i = fromIndex; i < len; i++) {
+            if (buf_[i] == c) return i;
+        }
+        return -1;
+    }
 
     // UTF-8文字数(バイト数ではない)
     int charCount() const { return charCount(buf_); }

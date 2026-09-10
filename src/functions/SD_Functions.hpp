@@ -35,13 +35,13 @@ namespace PICO_SD
     }
 
     template<size_t N>
-    inline bool ReadTextFile(FixedString<PICO_PATH_LEN> path, FixedString<N>& content)
+    inline bool ReadTextFile(const FixedString<PICO_PATH_LEN>& path, FixedString<N>& content)
     {
         FsFile f = OSData::SD.open(path.c_str(), O_RDONLY);
         if (!f)
         {
-            LOG_SYS_FAIL("Couldn't open a file: %s", path);
-            return "";
+            LOG_SYS_FAIL("Couldn't open a file: %s", path.c_str());
+            return false;
         }
 
         while (f.available())
@@ -58,13 +58,13 @@ namespace PICO_SD
     }
 
     template<size_t N>
-    inline bool ReadTextFileFast(FixedString<PICO_PATH_LEN> path, FixedString<N>& content)
+    inline bool ReadTextFileFast(const FixedString<PICO_PATH_LEN>& path, FixedString<N>& content)
     {
-        FsFile f = OSData::SD.open(path, O_RDONLY);
+        FsFile f = OSData::SD.open(path.c_str(), O_RDONLY);
         if (!f)
         {
-            LOG_APP_FAIL("Couldn't open a file: %s", path);
-            return "";
+            LOG_APP_FAIL("Couldn't open a file: %s", path.c_str());
+            return false;
         }
 
         size_t size = f.size();
@@ -73,16 +73,16 @@ namespace PICO_SD
         if (!buf)
         {
             f.close();
-            LOG_APP_WARN("Couldn't allocate memory: %s", path);
-            return "";
+            LOG_APP_WARN("Couldn't allocate memory: %s", path.c_str());
+            return false;
         }
 
         if (f.read(buf, size) != (int)size)
         {
             free(buf);
             f.close();
-            LOG_APP_WARN("Couldn't read file: %s", path);
-            return "";
+            LOG_APP_WARN("Couldn't read file: %s", path.c_str());
+            return false;
         }
 
         buf[size] = '\0';

@@ -31,7 +31,7 @@ class FileSaveDialog : public Widget {
         FileExplorer* explorer;
         Button* button_ok;
         Button* button_no;
-        Textbox* textbox_filename;
+        Textbox<PICO_PATH_LEN>* textbox_filename;
 
     public:
         FileSaveDialog(const char* path){
@@ -40,7 +40,7 @@ class FileSaveDialog : public Widget {
             this->explorer = new FileExplorer(BASE_X, BASE_Y, DIALOG_W, EXPLORER_H);
             this->explorer->setCurrentFolderPath(path);
 
-            this->textbox_filename = new Textbox("", BASE_X, TEXTBOX_Y, DIALOG_W, TEXTBOX_H, true);
+            this->textbox_filename = new Textbox<PICO_PATH_LEN>("", BASE_X, TEXTBOX_Y, DIALOG_W, TEXTBOX_H, true);
             this->textbox_filename->setPlaceholder("ファイル名を入力...");
             this->textbox_filename->setFontSize(FontFn::Small);
             this->textbox_filename->setMaxHeight(TEXTBOX_H);

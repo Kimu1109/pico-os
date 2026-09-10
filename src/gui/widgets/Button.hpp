@@ -25,7 +25,7 @@ class Button :
 
         bool allowTextSpacing = true;
 
-        void calcTextSize(FixedString<PICO_STR_M> text);
+        void calcTextSize(const char* text);
 
     public:
 
@@ -33,16 +33,18 @@ class Button :
         Button(int x, int y, FixedString<N> text){
             this->l_rect.x = x;
             this->l_rect.y = y;
-            this->calcTextSize(text);
+            this->calcTextSize(text.c_str());
             this->text.assign(text);
             this->needs_redraw = true;
         }
+        Button(int x, int y, const char* text) : Button(x, y, FixedString<PICO_STR_M>(text)) {}
         template<size_t N>
         Button(FixedString<N> text){
-            this->calcTextSize(text);
+            this->calcTextSize(text.c_str());
             this->text.assign(text);
             this->needs_redraw = true;
         }
+        Button(const char* text) : Button(FixedString<PICO_STR_M>(text)) {}
 
         void causeOnPressStart() override {
             if(this->on_press_start) this->on_press_start();
@@ -73,7 +75,7 @@ class Button :
 
         void setFontSize(FontFn::FontSize size) override {
             this->f_size = size;
-            this->calcTextSize(this->text);
+            this->calcTextSize(this->text.c_str());
             this->needsRender();
         }
         void setBorderColor(int8_t palette_color) override {

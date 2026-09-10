@@ -8,7 +8,7 @@ void KeyboardEng::setVisible(bool visible) {
     this->input_label->setMaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
 
     if(visible){
-        this->inputs = this->input_label->getText();
+        this->inputs = *this->input_label->getText();
         if(this->target) this->target->onShow(this);
     }else{
         if(this->target) this->target->onHide(this);
@@ -30,16 +30,16 @@ void KeyboardEng::causeOnPressStart() {
     for(int i = 0; i < keys_size; i++){
         Key key = keyEnv(i);
 
-        if(key.str == "\n"){
+        if(strcmp(key.str, "\n") == 0){
             key_x = 0;
             key_y += key_h;
             continue;
         }
-        if(key.str == "\t"){
+        if(strcmp(key.str, "\t") == 0){
             key_x += key.w * key_w;
             continue;
         }
-        if(key.str == "\0"){
+        if(key.str[0] == '\0'){
             break;
         }
         switch(key.str_size){
@@ -56,27 +56,27 @@ void KeyboardEng::causeOnPressStart() {
 
         if(OSData::touchX >= key_x && OSData::touchX <= key_x + key.w * key_w){
             if(OSData::touchY >= key_y && OSData::touchY <= key_y + key_h){
-                if(key.str == "space"){
+                if(strcmp(key.str, "space") == 0){
                     addInput(" ");
-                }else if(key.str == "return"){
+                }else if(strcmp(key.str, "return") == 0){
                     addInput("\n");
-                }else if(key.str == "go" || key.str == "submit"){
+                }else if(strcmp(key.str, "go") == 0 || strcmp(key.str, "submit") == 0){
                     this->target->onHide(this);
                     this->setVisible(false);
-                }else if(key.str == "X"){
+                }else if(strcmp(key.str, "X") == 0){
                     removeInput();
-                }else if(key.str == "↑" || key.str == "#+=") {
+                }else if(strcmp(key.str, "↑") == 0 || strcmp(key.str, "#+=") == 0) {
                     isUpperCase = !isUpperCase;
                     this->needs_redraw = true;
-                }else if(key.str == "ABC"){
+                }else if(strcmp(key.str, "ABC") == 0){
                     isNumMode = false;
                     isUpperCase = false;
                     this->needs_redraw = true;
-                }else if(key.str == "123"){
+                }else if(strcmp(key.str, "123") == 0){
                     isNumMode = true;
                     isUpperCase = false;
                     this->needs_redraw = true;
-                }else if(key.str == "あいう"){
+                }else if(strcmp(key.str, "あいう") == 0){
                     this->setVisible(false);
                     OSData::keyboard_jpn->setVisible(true);
                 }else{
@@ -111,16 +111,16 @@ void KeyboardEng::render() {
     for(int i = 0; i < keys_size; i++){
         Key key = keyEnv(i);
 
-        if(key.str == "\n"){
+        if(strcmp(key.str, "\n") == 0){
             key_x = 0;
             key_y += key_h;
             continue;
         }
-        if(key.str == "\t"){
+        if(strcmp(key.str, "\t") == 0){
             key_x += key.w * key_w;
             continue;
         }
-        if(key.str == "\0"){
+        if(key.str[0] == '\0'){
             break;
         }
         switch(key.str_size){

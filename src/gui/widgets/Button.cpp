@@ -3,9 +3,9 @@
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
-void Button::calcTextSize(FixedString<PICO_STR_M> text){
+void Button::calcTextSize(const char* text){
     this->fontApply();
-    this->l_rect.w = OSData::frame->textWidth(text.c_str());
+    this->l_rect.w = OSData::frame->textWidth(text);
     this->l_rect.h = OSData::frame->fontHeight();
 
     this->text_w = this->l_rect.w;

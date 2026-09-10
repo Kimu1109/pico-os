@@ -700,6 +700,7 @@ template class Label<PICO_STR_S>;
 template class Label<PICO_STR_M>;
 template class Label<PICO_STR_L>;
 template class Label<PICO_STR_LL>;
+template class Label<PICO_PATH_LEN>;
 template class Label<PICO_STR_256B>;
 template class Label<PICO_STR_512B>;
 template class Label<PICO_STR_1KiB>;

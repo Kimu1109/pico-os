@@ -24,13 +24,13 @@ class Keyboard : public Widget, public ITextInputWidget {
         const int START_KEY_Y = SCREEN_HEIGHT - SQUARE_H * 4;
         const int START_CANDIDATES_Y = START_KEY_Y - CANDIDATES_H;
 
-        const String keys_jpn[4 * 5] = {
+        const char* const keys_jpn[4 * 5] = {
             "123", "あ", "か", "さ", "X",
             "ABC", "た", "な", "は", "空白",
             "カナ", "ま", "や", "ら", "改",
             "送り", "゛゜", "わ", "､｡?!", "行"
         };
-        const String keys_num[4 * 5] = {
+        const char* const keys_num[4 * 5] = {
             "あいう","1",  "2",  "3", "X",
             "ABC", "4", "5", "6", "空白",
             "",   "7", "8", "9", "改",
@@ -50,7 +50,7 @@ class Keyboard : public Widget, public ITextInputWidget {
         int swipe_index = 0;
         int swipe_x_index = 0;
         int swipe_y_index = 0;
-        const String swipe_jpn[12 * 5] = {
+        const char* const swipe_jpn[12 * 5] = {
             "あ",   "い",   "う",   "え",   "お",
             "か",   "き",   "く",   "け",   "こ",
             "さ",   "し",   "す",   "せ",   "そ",
@@ -64,7 +64,7 @@ class Keyboard : public Widget, public ITextInputWidget {
             "わ",   "を",   "ん",   "ー",   "NO",
             "、",   "。",   "?",    "!",   "NO"
         };
-        const String swipe_num[12 * 5] = {
+        const char* const swipe_num[12 * 5] = {
             "1", "←", "↑", "→", "↓",
             "2", "¥", "$", "€", "NO",
             "3", "%", "゜", "#", "NO",
@@ -87,7 +87,7 @@ class Keyboard : public Widget, public ITextInputWidget {
             0, 1
         };
         const static int HIRA_LIST_SIZE = 28 * 3 + 6;
-        const String hira_list[HIRA_LIST_SIZE] = {
+        const char* const hira_list[HIRA_LIST_SIZE] = {
             "あ", "ぁ", "AA",
             "い", "ぃ", "AA",
             "う", "ぅ", "AA",
@@ -117,13 +117,13 @@ class Keyboard : public Widget, public ITextInputWidget {
             "ゆ", "ゅ", "AA",
             "よ", "ょ", "AA"
         }; //AAは2文字戻り。 BBは3文字戻りを表す
-        const String hira_back_2 = "AA";
-        const String hira_back_3 = "BB";
+        const char* const hira_back_2 = "AA";
+        const char* const hira_back_3 = "BB";
 
         bool is_inputs_empty = true;
-        String inputs = "";
-        String inputs_done = "";
-        String okuri_hira = "";
+        FixedString<PICO_STR_LL> inputs;
+        FixedString<PICO_STR_LL> inputs_done;
+        FixedString<5> okuri_hira;
 
         int candidates_scroll_index = 0;
         int candidates_width[IME_Functions::candidates_size];
@@ -138,7 +138,7 @@ class Keyboard : public Widget, public ITextInputWidget {
             }
             return keys_font_style[key_index];
         }
-        String keysEnv(int key_index){
+        const char* keysEnv(int key_index){
             if(key_index == 3 * 5 - 1){ //改
                 if(is_inputs_empty)
                     if(this->target)
@@ -169,7 +169,7 @@ class Keyboard : public Widget, public ITextInputWidget {
             }
             return (!keyboard_mode ? keys_jpn[key_index] : keys_num[key_index]);
         }
-        String swipeEnv(int swipe_index){
+        const char* swipeEnv(int swipe_index){
             if(!keyboard_mode){
                 return swipe_jpn[swipe_index];
             }else{
@@ -179,14 +179,19 @@ class Keyboard : public Widget, public ITextInputWidget {
 
         void updateInputs(bool notToCauseEvent){
             bool is_inputs_empty_now = inputs.length() == 0;
-            
+
             if(is_inputs_empty != is_inputs_empty_now){
                 is_inputs_empty = is_inputs_empty_now;
                 this->needsRender();
             }
 
             is_inputs_empty = is_inputs_empty_now;
-            input_label->setText(inputs_done + "~" + inputs + "~");
+            FixedString<PICO_STR_LL> display;
+            display.assign(inputs_done);
+            display.append("~");
+            display.append(inputs);
+            display.append("~");
+            input_label->setText(display);
             input_label->setCursorToEnd();
 
             if(!notToCauseEvent){
@@ -194,57 +199,57 @@ class Keyboard : public Widget, public ITextInputWidget {
             }
         }
 
-        void addInput(String input) {
-            inputs += input;
+        void addInput(const char* input) {
+            inputs.append(input);
             updateImeCandidates();
             updateInputs(false);
         }
 
         void removeInput() {
             if(is_inputs_empty){
-                inputs_done = UTF8_Functions::RemoveLastChar(inputs_done);
+                inputs_done.removeLastChar();
                 updateInputs(false);
                 return;
             }
 
             if(okuri_hira.length() != 0){
-                okuri_hira = "";
+                okuri_hira.clear();
             }
 
-            inputs = UTF8_Functions::RemoveLastChar(inputs);
+            inputs.removeLastChar();
             updateImeCandidates();
             updateInputs(false);
         }
 
         void commitAndClear() {
-            inputs_done += inputs;
-            inputs = "";
-            okuri_hira = "";
+            inputs_done.append(inputs);
+            inputs.clear();
+            okuri_hira.clear();
 
             updateInputs(false);
         }
 
         void switchDakuten(){
-            String ch = UTF8_Functions::GetLastChar(inputs);
+            FixedString<5> ch = inputs.lastChar();
 
-            String switched_char = "";
+            FixedString<5> switched_char;
             for(int i = 0; i < HIRA_LIST_SIZE; i++){
-                if(hira_list[i] == ch){
-                    if(hira_list[i + 1] == hira_back_2){
-                        switched_char = hira_list[i - 1];
+                if(strcmp(hira_list[i], ch.c_str()) == 0){
+                    if(strcmp(hira_list[i + 1], hira_back_2) == 0){
+                        switched_char.assign(hira_list[i - 1]);
                         break;
-                    }else if(hira_list[i + 1] == hira_back_3){
-                        switched_char = hira_list[i - 2];
+                    }else if(strcmp(hira_list[i + 1], hira_back_3) == 0){
+                        switched_char.assign(hira_list[i - 2]);
                         break;
                     }else{
-                        switched_char = hira_list[i + 1];
+                        switched_char.assign(hira_list[i + 1]);
                         break;
                     }
                 }
             }
             if(switched_char.length() == 0) return;
 
-            inputs = UTF8_Functions::ReplaceLastChar(inputs, switched_char);
+            inputs.replaceLastChar(switched_char);
             updateImeCandidates();
             updateInputs(false);
         }
@@ -255,9 +260,9 @@ class Keyboard : public Widget, public ITextInputWidget {
 
     public:
 
-        Label* input_label;
+        Label<PICO_STR_LL>* input_label;
 
-        Keyboard(Label* input_label){
+        Keyboard(Label<PICO_STR_LL>* input_label){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
             
             this->visible = false;
@@ -295,12 +300,15 @@ class Keyboard : public Widget, public ITextInputWidget {
             return this->target;
         }
 
-        void setText(String text) override {
+        void setText(const FixedString<PICO_STR_LL>& text) override {
             this->inputs_done = text;
-            this->inputs = "";
+            this->inputs.clear();
             this->updateInputs(true);
         }
-        String getText() override {
-            return this->inputs_done + this->inputs;
+        FixedString<PICO_STR_LL> getText() override {
+            FixedString<PICO_STR_LL> result;
+            result.assign(inputs_done);
+            result.append(inputs);
+            return result;
         }
 };

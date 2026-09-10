@@ -2,13 +2,14 @@
 
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/Label.hpp"
-#include "functions/UTF8_Functions.hpp"
 #include "functions/Font_Functions.hpp"
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
 
 struct Key {
-    String str;
-    String str_upper;
+    const char* str;
+    const char* str_upper;
     int w;
     char str_size; //Small(S) or Normal(N) or Zero(Z)
 };
@@ -153,9 +154,9 @@ class KeyboardEng : public Widget, public ITextInputWidget {
             //end
         };
 
-        String inputs = "";
-        void addInput(String str){
-            inputs += str;
+        FixedString<PICO_STR_LL> inputs;
+        void addInput(const char* str){
+            inputs.append(str);
             input_label->setText(inputs);
             input_label->setCursorToEnd();
             if(this->target) this->target->onTextChanged(this);
@@ -163,7 +164,7 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         void removeInput(){
             if(inputs.length() == 0) return;
 
-            inputs = UTF8_Functions::RemoveLastChar(inputs);
+            inputs.removeLastChar();
             input_label->setText(inputs);
             if(this->target) this->target->onTextChanged(this);
         }
@@ -189,11 +190,11 @@ class KeyboardEng : public Widget, public ITextInputWidget {
 
     public:
 
-        Label* input_label;
+        Label<PICO_STR_LL>* input_label;
 
         void setVisible(bool visible) override;
 
-        KeyboardEng(Label* input_label){
+        KeyboardEng(Label<PICO_STR_LL>* input_label){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
             this->input_label = input_label;
@@ -227,12 +228,12 @@ class KeyboardEng : public Widget, public ITextInputWidget {
             return this->target;
         }
 
-        void setText(String text) override {
+        void setText(const FixedString<PICO_STR_LL>& text) override {
             this->inputs = text;
             input_label->setText(inputs);
             input_label->setCursorToEnd();
         }
-        String getText() override {
+        FixedString<PICO_STR_LL> getText() override {
             return this->inputs;
         }
 };

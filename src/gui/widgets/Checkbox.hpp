@@ -4,6 +4,7 @@
 #include "gui/widgets/interfaces/IFontImplementation.hpp"
 #include "gui/widgets/interfaces/ITextColor.hpp"
 #include "util/FixedString.hpp"
+#include "consts.hpp"
 
 class Checkbox : public Widget, public IFontImplementation, public ITextColor {
     private:
@@ -22,6 +23,7 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
             this->l_rect = {x, y, 0, 0};
             this->setTextAndCalc(text);
         }
+        Checkbox(int16_t x, int16_t y, const char* text) : Checkbox(x, y, FixedString<PICO_STR_L>(text)) {}
 
         void render() override;
 
@@ -38,6 +40,10 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
         template<size_t N>
         void setText(FixedString<N> text) {
             this->setTextAndCalc(text);
+            this->needsRender();
+        }
+        void setText(const char* text) {
+            this->setTextAndCalc(FixedString<PICO_STR_L>(text));
             this->needsRender();
         }
 

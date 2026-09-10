@@ -2,9 +2,10 @@
 
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/Label.hpp"
-#include "functions/UTF8_Functions.hpp"
 #include "functions/Font_Functions.hpp"
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
 
 // 電卓等で使う数字専用キーボード。
 // 「0〜9・カーソル移動・決定・削除」は常時固定で表示し、
@@ -148,17 +149,17 @@ class KeyboardNum : public Widget, public ITextInputWidget {
             this->kb_top = SCREEN_HEIGHT - this->kb_h;
         }
 
-        String inputs = "";
+        FixedString<PICO_STR_LL> inputs;
 
         // カーソル位置(input_labelのcursor_pos, 文字インデックス)に文字列を挿入する
-        void addInputAtCursor(String str) {
+        void addInputAtCursor(const char* str) {
             int cursorChar = input_label->getCursorPos();
-            int byteOffset = UTF8_Functions::Utf8ByteOffsetOfChar(inputs, cursorChar);
+            int byteOffset = inputs.byteOffsetOfChar(cursorChar);
 
-            inputs = inputs.substring(0, byteOffset) + str + inputs.substring(byteOffset);
+            inputs.insert(byteOffset, str);
 
             input_label->setText(inputs);
-            input_label->setCursorPos(cursorChar + UTF8_Functions::Utf8Length(str));
+            input_label->setCursorPos(cursorChar + FixedString<PICO_STR_LL>::charCount(str));
 
             if (this->target) this->target->onTextChanged(this);
         }
@@ -168,10 +169,7 @@ class KeyboardNum : public Widget, public ITextInputWidget {
             int cursorChar = input_label->getCursorPos();
             if (cursorChar <= 0 || inputs.length() == 0) return;
 
-            int byteOffsetEnd = UTF8_Functions::Utf8ByteOffsetOfChar(inputs, cursorChar);
-            int byteOffsetStart = UTF8_Functions::Utf8ByteOffsetOfChar(inputs, cursorChar - 1);
-
-            inputs = inputs.substring(0, byteOffsetStart) + inputs.substring(byteOffsetEnd);
+            inputs.removeCharAt(cursorChar - 1);
 
             input_label->setText(inputs);
             input_label->setCursorPos(cursorChar - 1);
@@ -190,12 +188,12 @@ class KeyboardNum : public Widget, public ITextInputWidget {
         }
 
     public:
-        Label* input_label;
+        Label<PICO_STR_LL>* input_label;
 
         void setVisible(bool visible) override;
 
         // allowed_modes: MODE_DIGIT/MODE_ARITH/MODE_MATHのビットOR。省略時は全モード許可。
-        KeyboardNum(Label* input_label, uint8_t allowed_modes = MODE_ALL) {
+        KeyboardNum(Label<PICO_STR_LL>* input_label, uint8_t allowed_modes = MODE_ALL) {
             this->l_rect = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 
             this->input_label = input_label;
@@ -253,12 +251,12 @@ class KeyboardNum : public Widget, public ITextInputWidget {
             return this->target;
         }
 
-        void setText(String text) override {
+        void setText(const FixedString<PICO_STR_LL>& text) override {
             this->inputs = text;
             input_label->setText(inputs);
             input_label->setCursorToEnd();
         }
-        String getText() override {
+        FixedString<PICO_STR_LL> getText() override {
             return this->inputs;
         }
 };

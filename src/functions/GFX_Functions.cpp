@@ -45,7 +45,6 @@ void PICO_GFX::FlushDirty() {
     if (dirtyRects.empty()) return;
 
     //! DEBUG !
-    unsigned long timer_start_ms = millis();
     unsigned long buf_timer_ms = 0;
     int draw_frame_total_ms = 0;
     int push_frame_total_ms = 0;
@@ -134,14 +133,43 @@ void PICO_GFX::FlushDirty() {
         OSData::lcd->clearClipRect();
     }
 
-    Serial.printf(
-        "dirtyrects count: %d, draw average: %dms, push average: %dms, draw total: %dms, push total: %dms\n",
-        dirtyRects.size(),
-        draw_frame_total_ms / dirtyRects.size(),
-        push_frame_total_ms / dirtyRects.size(),
-        draw_frame_total_ms,
-        push_frame_total_ms
-    );
+    //! DEBUG !
+    //レンダリングが発生したフレーム(dirtyRectsが空でない呼び出し)のみを対象に
+    //パフォーマンスを積算し、5秒に1回だけ平均をシリアルに出力する
+    static unsigned long perf_report_start_ms = millis();
+    static unsigned long perf_draw_total_ms = 0;
+    static unsigned long perf_push_total_ms = 0;
+    static unsigned long perf_dirtyrects_total = 0;
+    static unsigned long perf_frame_count = 0;
+
+    constexpr unsigned long PERF_REPORT_INTERVAL_MS = 5000;
+
+    perf_draw_total_ms += draw_frame_total_ms;
+    perf_push_total_ms += push_frame_total_ms;
+    perf_dirtyrects_total += dirtyRects.size();
+    perf_frame_count++;
+
+    const unsigned long now_ms = millis();
+    const unsigned long elapsed_ms = now_ms - perf_report_start_ms;
+
+    if (elapsed_ms >= PERF_REPORT_INTERVAL_MS) {
+        const float avg_fps = perf_frame_count * 1000.0f / elapsed_ms;
+
+        Serial.printf(
+            "fps: %.1f, dirtyrects average: %.1f, draw average: %lums, push average: %lums\n",
+            avg_fps,
+            (float)perf_dirtyrects_total / perf_frame_count,
+            perf_draw_total_ms / perf_dirtyrects_total,
+            perf_push_total_ms / perf_dirtyrects_total
+        );
+
+        perf_report_start_ms = now_ms;
+        perf_draw_total_ms = 0;
+        perf_push_total_ms = 0;
+        perf_dirtyrects_total = 0;
+        perf_frame_count = 0;
+    }
+    //! DEBUG !
 
     dirtyRects.clear();
 }

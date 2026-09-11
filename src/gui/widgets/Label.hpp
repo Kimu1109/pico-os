@@ -106,6 +106,8 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void render() override;
         void needsRender() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::Label; }
+
         template<size_t M>
         static void DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const FixedString<M>& text);
         static void DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const char* text);

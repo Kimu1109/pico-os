@@ -277,6 +277,8 @@ class Keyboard : public Widget, public ITextInputWidget {
         void causeOnPressEnd() override;
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::Keyboard; }
+
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
         const std::vector<Widget*>& getChildren() const override {

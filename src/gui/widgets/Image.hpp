@@ -33,6 +33,8 @@ class Image : public Widget {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::Image; }
+
         const FixedString<PICO_PATH_LEN>* getPath() { return &this->path; }
         template<size_t N>
         void setPath(FixedString<N> path) {

@@ -230,6 +230,8 @@ class KeyboardNum : public Widget, public ITextInputWidget {
         void causeOnPressStart() override;
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::KeyboardNum; }
+
         const std::vector<Widget*>& getChildren() const override {
             return children_;
         }

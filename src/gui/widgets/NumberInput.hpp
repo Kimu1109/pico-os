@@ -42,6 +42,8 @@ class NumberInput : public Widget, public ITextInputTarget, public ITextColor, p
         void setIsSingleLine(bool is_single_line){};
 
         void render() override;
+
+        WidgetType getWidgetType() const override { return WidgetType::NumberInput; }
         
         ~NumberInput() override;
 };

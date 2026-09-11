@@ -36,4 +36,6 @@ class Textbox : public Label<N>, public ITextInputTarget {
         }
 
         ~Textbox() override;
+
+        WidgetType getWidgetType() const override { return WidgetType::Textbox; }
 };

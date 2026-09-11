@@ -4,6 +4,7 @@
 #include <functional>
 #include "util/Rect.hpp"
 #include "consts.hpp"
+#include "gui/widgets/WidgetID.hpp"
 
 namespace WidgetTools {
     enum RenderMode {
@@ -29,6 +30,9 @@ class Widget {
 
         int8_t background_color = PICO_BACKGROUND;
 
+        //Luaなど外部から参照するためのID。getId()呼び出し時に遅延発行する(未使用なら発行しない)
+        mutable WidgetId cached_id = WidgetIdTools::Invalid();
+
         std::function<void()> on_press_start = nullptr;
         std::function<void()> on_press_move = nullptr;
         std::function<void()> on_press_end = nullptr;
@@ -37,7 +41,13 @@ class Widget {
     public:
         bool is_pressing = false;
 
-        virtual ~Widget() = default;
+        virtual ~Widget();
+
+        //このウィジェットの種類(WidgetIdのtypeビットに埋め込む)。具象クラスは必ず実装すること
+        virtual WidgetType getWidgetType() const = 0;
+
+        //外部(Luaなど)から参照するためのID。初回呼び出し時にWidgetRegistryへ登録する
+        WidgetId getId() const;
 
         virtual const std::vector<Widget*>& getChildren() const {
             static const std::vector<Widget*> empty;

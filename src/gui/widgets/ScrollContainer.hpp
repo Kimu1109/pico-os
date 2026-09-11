@@ -36,6 +36,8 @@ class ScrollContainer : public Widget, public IBorderColor {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::ScrollContainer; }
+
         void causeOnPressStart() override;
         void causeOnPressMove() override;
 

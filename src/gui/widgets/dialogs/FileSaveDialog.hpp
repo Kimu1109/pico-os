@@ -85,6 +85,8 @@ class FileSaveDialog : public Widget {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::FileSaveDialog; }
+
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
         ~FileSaveDialog(){

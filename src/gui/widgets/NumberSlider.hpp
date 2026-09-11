@@ -31,6 +31,8 @@ class NumberSlider : public Widget {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::NumberSlider; }
+
         void setValue(float value){
             this->value = min(max(value, minValue), maxValue);
             this->causeOnValueChanged();

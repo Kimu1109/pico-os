@@ -1,6 +1,20 @@
 #include "gui/widgets/Widget.hpp"
+#include "gui/widgets/WidgetRegistry.hpp"
 #include "OS_Data.hpp"
 #include "functions/GFX_Functions.hpp"
+
+Widget::~Widget() {
+    if (WidgetIdTools::IsValid(cached_id)) {
+        WidgetRegistry::Unregister(cached_id);
+    }
+}
+
+WidgetId Widget::getId() const {
+    if (!WidgetIdTools::IsValid(cached_id)) {
+        cached_id = WidgetRegistry::Register(getWidgetType(), const_cast<Widget*>(this));
+    }
+    return cached_id;
+}
 
 void Widget::update() {
     if (OSData::isTouchMove && this->is_pressing) {

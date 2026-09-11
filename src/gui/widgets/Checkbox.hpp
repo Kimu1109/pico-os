@@ -27,6 +27,8 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::Checkbox; }
+
         void causeOnPressStart() override;
 
         void causeOnChangeChecked() {

@@ -55,6 +55,8 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::ScrollList; }
+
         void causeOnPressStart() override;
         void causeOnPressMove() override;
         void causeOnPressEnd() override;

@@ -95,6 +95,8 @@ class MsgDialog : public Widget {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::MsgDialog; }
+
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
         bool getVisibleIcon() { return this->icon_visible; }

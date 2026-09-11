@@ -209,6 +209,8 @@ class MarkdownView : public Widget {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::MarkdownView; }
+
         void causeOnPressStart() override;
         void causeOnPressMove() override;
         void causeOnPressEnd() override;

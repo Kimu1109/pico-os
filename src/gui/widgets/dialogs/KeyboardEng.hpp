@@ -207,6 +207,8 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         void causeOnPressStart() override;
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::KeyboardEng; }
+
         const std::vector<Widget*>& getChildren() const override {
             return children_;
         }

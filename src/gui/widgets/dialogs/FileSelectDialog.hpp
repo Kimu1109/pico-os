@@ -75,6 +75,8 @@ class FileSelectDialog : public Widget {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::FileSelectDialog; }
+
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
         ~FileSelectDialog(){

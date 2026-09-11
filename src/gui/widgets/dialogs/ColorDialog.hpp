@@ -82,6 +82,8 @@ class ColorDialog : public Widget {
         void causeOnPressStart() override;
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::ColorDialog; }
+
         void setOnClose(std::function<void(bool is_ok)> callback){
             this->on_close = callback;
         }

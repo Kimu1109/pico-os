@@ -95,6 +95,8 @@ class FileExplorer : public Widget {
 
         void render() override;
 
+        WidgetType getWidgetType() const override { return WidgetType::FileExplorer; }
+
         ~FileExplorer(){
             delete backToParent;
             delete createFolder;

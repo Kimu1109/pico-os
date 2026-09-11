@@ -96,6 +96,8 @@ class DropdownMenu : public Widget {
             this->needs_redraw = false;
         };
 
+        WidgetType getWidgetType() const override { return WidgetType::DropdownMenu; }
+
         void setX(int x) override {
             this->l_rect.x = x;
             this->needsRender();

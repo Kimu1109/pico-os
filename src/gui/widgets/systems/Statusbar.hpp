@@ -25,4 +25,6 @@ class Statusbar : public Widget {
 
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
         void render() override;
+
+        WidgetType getWidgetType() const override { return WidgetType::Statusbar; }
 };

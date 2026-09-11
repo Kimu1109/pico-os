@@ -17,9 +17,9 @@ class Textbox : public Label<N>, public ITextInputTarget {
 
             this->is_single_line = is_single_line;
 
-            setBorderColor(this->border_color);
-            setBorderWidth(1);
-            setBackgroundColor(this->background_color);
+            this->setBorderColor(this->border_color);
+            this->setBorderWidth(1);
+            this->setBackgroundColor(this->background_color);
         }
 
         void causeOnPressStart() override;

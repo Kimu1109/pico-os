@@ -368,15 +368,7 @@ void Label<N>::updateCursorBlink() {
 }
 
 // コンストラクタ
-template<size_t N>
-template<size_t M>
-Label<N>::Label(int x, int y, const FixedString<M>& text) {
-    this->l_rect.x = x;
-    this->l_rect.y = y;
-    this->setText(text);
-    this->needs_redraw = true;
-}
-
+// FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
 template<size_t N>
 Label<N>::Label(int x, int y, const char* text) {
     this->l_rect.x = x;
@@ -384,10 +376,6 @@ Label<N>::Label(int x, int y, const char* text) {
     this->setText(text);
     this->needs_redraw = true;
 }
-
-template<size_t N>
-template<size_t M>
-Label<N>::Label(const FixedString<M>& text) : Label(0, 0, text) {}
 
 template<size_t N>
 Label<N>::Label(const char* text) : Label(0, 0, text) {}
@@ -452,12 +440,7 @@ Label<PICO_STR_LL>& Label<N>::utilityInstance() {
     return instance;
 }
 
-template<size_t N>
-template<size_t M>
-void Label<N>::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const FixedString<M>& text) {
-    DrawPlain(size, color, x, y, maxWidth, text.c_str());
-}
-
+// FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
 template<size_t N>
 void Label<N>::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const char* text) {
     Label<PICO_STR_LL>& helper = utilityInstance();
@@ -492,23 +475,10 @@ int Label<N>::GetLineHeight(FontFn::FontSize size) {
     return h;
 }
 
-template<size_t N>
-template<size_t M>
-void Label<N>::setText(const FixedString<M>& text) {
-    this->raw_text.assign(text);
-    relayout();
-}
-
+// FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
 template<size_t N>
 void Label<N>::setText(const char* text) {
     this->raw_text.assign(text);
-    relayout();
-}
-
-template<size_t N>
-template<size_t M>
-void Label<N>::setPlaceholder(const FixedString<M>& text) {
-    this->placeholder_text.assign(text);
     relayout();
 }
 
@@ -595,6 +565,12 @@ bool Label<N>::hasBackground() {
 template<size_t N>
 void Label<N>::setNoBackground() {
     this->has_background = false;
+    this->needsRender();
+}
+
+template<size_t N>
+void Label<N>::setBorderColor(int8_t palette_color) {
+    this->border_color = palette_color;
     this->needsRender();
 }
 

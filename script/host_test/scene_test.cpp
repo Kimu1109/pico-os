@@ -4,6 +4,7 @@
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "OS_Data.hpp"
 #include <cstdio>
 #include <vector>
 #include <string>
@@ -80,6 +81,26 @@ class TestScene : public Scene {
         void onExit() override { exit_count++; root = nullptr; }
 };
 
+// ボタンのコールバックから遷移を要求するシーン(遅延適用が効いているかの検証用)
+class CallbackScene : public Scene {
+    public:
+        int enter_count = 0;
+        TestWidget* button = nullptr;
+
+        CallbackScene(){ scene_alive++; }
+        ~CallbackScene() override { scene_alive--; }
+
+        const char* getName() const override { return "Callback"; }
+        void onEnter() override {
+            enter_count++;
+            button = new TestWidget();
+            //押し終わりに自分自身を含むシーンを破棄する要求を出す
+            button->setOnPressEnd([](){ SceneFunctions::Change(new TestScene("next", 0)); });
+            WidgetFunctions::Add(button);
+        }
+        void onExit() override { button = nullptr; }
+};
+
 static int failures = 0;
 static void check(bool cond, const char* label){
     printf("%s %s\n", cond ? "[ OK ]" : "[FAIL]", label);
@@ -97,6 +118,7 @@ int main(){
 
     // 常駐ウィジェット(オーバーレイ)を1つ置き、遷移で残ることを確認する
     TestWidget* overlay = new TestWidget();
+    overlay->setY(300); //タッチ判定はオーバーレイが最優先なので、後段のテストの当たり判定から外しておく
     WidgetFunctions::AddOverlay(overlay);
 
     // Push要求は即時実行されない
@@ -153,6 +175,41 @@ int main(){
     SceneFunctions::Update();
     check(scene_alive == before && SceneFunctions::Depth() == SceneFunctions::kMaxSceneDepth,
           "上限超過のPushは破棄され、現シーンは維持される");
+
+    // ボタンのコールバック内から遷移を要求しても、実行中のウィジェットをdeleteしない
+    while(SceneFunctions::CanPop()){
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+    }
+    CallbackScene* cb = new CallbackScene();
+    SceneFunctions::Change(cb);
+    SceneFunctions::Update();
+    check(SceneFunctions::Current() == cb && WidgetFunctions::widgets.size() == 1,
+          "コールバック検証: シーンを入れ替え");
+
+    //フレーム1: タッチ開始
+    OSData::touchX = 5; OSData::touchY = 5;
+    OSData::isTouchStart = true; OSData::isTouched = true; OSData::isTouchEnd = false;
+    SceneFunctions::Update();
+    WidgetFunctions::UpdateAll();
+    check(WidgetFunctions::pressingWidget == cb->button, "コールバック検証: 押下中のウィジェットが確定");
+
+    //フレーム2: タッチ終了 -> on_press_endからChange()が呼ばれる
+    Widget* pressed = cb->button;
+    OSData::isTouchStart = false; OSData::isTouchEnd = true; OSData::isTouched = false;
+    SceneFunctions::Update();
+    WidgetFunctions::UpdateAll();
+    check(SceneFunctions::Current() == cb, "コールバック内のChangeは即時実行されない");
+    check(widget_alive == 2 && WidgetFunctions::widgets.size() == 1 && WidgetFunctions::widgets[0] == pressed,
+          "コールバック実行中のウィジェットは生存したまま(use-after-freeしない)");
+
+    //フレーム3: 遷移が適用される
+    OSData::isTouchEnd = false;
+    SceneFunctions::Update();
+    check(SceneFunctions::Current() != cb && scene_alive == 1, "次フレームで遷移が適用され、前シーンは破棄される");
+    check(WidgetFunctions::pressingWidget == nullptr, "遷移後にpressingWidgetがクリアされる");
+    WidgetFunctions::UpdateAll();
+    check(widget_alive == 2, "遷移後のUpdateAllでダングリング参照を踏まない");
 
     // 後片付け(リーク確認)
     while(SceneFunctions::CanPop()){

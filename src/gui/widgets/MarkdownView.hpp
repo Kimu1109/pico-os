@@ -186,6 +186,24 @@ class MarkdownView : public Widget {
         FixedString<PICO_STR_1KiB> formatTableCellText(int offset, int length) const;
 
         FixedString<PICO_STR_1KiB> formatBlockText(const MdBlock& b) const;
+
+        // ---------- layoutBlocks()時点の整形結果の一時キャッシュ ----------
+        // layoutBlocks()は高さ計算のため全ブロックに対しformatBlockText()を呼び、
+        // load()の直後に呼ばれるbindVisibleBlocks(true)は初期表示に入るブロックに対して
+        // 同じformatBlockText()をもう一度呼んでいる(＝同一ブロックへの二重変換)。
+        // scroll_y=0で開いた直後は表示ブロックがドキュメント先頭側に集中するため、
+        // layoutBlocks()が先頭から処理する際に最初にラベル化されるkLabelPoolSize件分だけ
+        // (最大16件×1KB≒16KB。128ブロック分をすべて保持するのはRAM的に不可)を
+        // 一時的に保持しておき、直後のbindLabelSlot()からはそれを再利用する。
+        // スクロールで新たに現れるブロックはこのキャッシュに無い(容量超過時は素通し)ため、
+        // 従来通りbindLabelSlot()側で都度formatBlockText()を呼ぶ(挙動としては変わらない)。
+        FixedString<PICO_STR_1KiB> loadFormatCacheText[kLabelPoolSize];
+        int16_t loadFormatCacheBlockIdx[kLabelPoolSize];
+        int loadFormatCacheCount = 0;
+        // blockIdxに対応する整形済みテキストを返す。キャッシュに無ければformatBlockText()で
+        // 計算し、layoutBlocks()実行中(＝まだ枠に空きがある間)であればキャッシュへ格納する。
+        FixedString<PICO_STR_1KiB> getFormattedBlockText(int blockIdx, const MdBlock& b);
+
         int findBlockAtScreenY(int screenY) const;       // タップ位置→ブロック特定
 
         // ---------- 装飾の直接描画 ----------

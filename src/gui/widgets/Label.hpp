@@ -23,6 +23,10 @@ struct TextRun {
     bool underline = false;
     bool wavy = false;
     bool strikethrough = false;
+    // text (bold分の+1を含まない素の文字幅)をpx単位でrelayout()時に一度だけ計算しておく。
+    // computeLineOffsets()やrender()で毎回 frame->textWidth(text.c_str()) を再計算すると
+    // 同じ文字列を1つのLabelにつき最大3〜4回測定することになるため、ここにキャッシュして使い回す。
+    int width = 0;
 };
 
 // カーソル(挿入位置)候補1つ分の描画座標

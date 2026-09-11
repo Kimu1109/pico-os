@@ -85,4 +85,10 @@ class ScrollContainer : public Widget, public IBorderColor {
 
         int getScrollOffsetX() const override { return scroll_x; }
         int getScrollOffsetY() const override { return scroll_y; }
+
+        ~ScrollContainer(){
+            for(Widget* child : children_){
+                delete child;
+            }
+        }
 };

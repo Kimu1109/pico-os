@@ -21,6 +21,7 @@ enum class WidgetType : uint8_t {
     KeyboardEng,
     KeyboardNum,
     Label,
+    LayoutContainer,
     MarkdownView,
     MsgDialog,
     NumberInput,

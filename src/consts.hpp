@@ -52,7 +52,7 @@
 #define TOUCH_MISO 16
 #define TOUCH_CS   13
 #define TOUCH_IRQ  9
-#define TFT_MAX_SPEED   80000000
+#define TFT_MAX_SPEED   60000000
 
 // --- SPI1: SD専用 ---
 #define SD_CS     15

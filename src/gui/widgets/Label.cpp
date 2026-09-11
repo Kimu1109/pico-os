@@ -405,6 +405,7 @@ void Label<N>::render() {
 
     int8_t saved_text_color = this->text_color;
     if (show_placeholder) this->text_color = this->placeholder_color;
+    this->textColorApply();
 
     size_t line_idx = 0;
     for (auto& line : render_lines) {
@@ -423,6 +424,7 @@ void Label<N>::render() {
     }
 
     if (show_placeholder) this->text_color = saved_text_color;
+    this->textColorDefault();
     this->fontDefault();
 
     this->renderCursor();

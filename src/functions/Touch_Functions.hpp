@@ -23,11 +23,19 @@ namespace PICO_Touch
     inline int prev_y = 0;
 
     inline void Setup(){
-        pinMode(TOUCH_IRQ, INPUT);
+        pinMode(TOUCH_IRQ, INPUT_PULLUP);
 
         touchSPI.begin();
         ts.begin(touchSPI);
         ts.setRotation(1); // lcdのsetRotationと合わせる
+
+        // XPT2046は起動直後、一度も変換コマンドを受け取っていない状態だと
+        // PENIRQ(IRQピン)の生成回路が正しくアクティブ化されず、HIGH固定のまま
+        // 動かないことがある。IRQゲート越しにしかSPI通信しないUpdate()だけでは
+        // このデッドロックを抜けられないため、起動時に一度だけ強制的に叩いて起こす。
+        touchSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+        ts.touched();
+        touchSPI.endTransaction();
 
         LOG_SYS_OK("Touch Setup has succeeded!");
     }

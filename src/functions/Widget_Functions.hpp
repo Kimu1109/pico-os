@@ -29,6 +29,12 @@ namespace WidgetFunctions
 
     void ProcessPendingDeletes();
 
+    // シーンが所有するウィジェット(通常レイヤ + ダイアログ層)を全て破棄する。
+    // オーバーレイ層(ステータスバー/キーボード)は常駐なので触らない。
+    // フレーム途中(ウィジェットのコールバック内)から呼ぶと自分自身を破棄しかねないため、
+    // 呼び出しはSceneFunctions::Update()のフレーム境界からのみとする
+    void ClearSceneWidgets();
+
     void BringToFront(Widget *w);
 
     void UpdateAll();

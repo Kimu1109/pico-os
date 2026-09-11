@@ -89,6 +89,7 @@ examples/doc.md                MarkdownView動作確認用サンプル文書
 | Keyboard_Functions | 日/英オンスクリーンキーボードの入力ルーティング |
 | Font_Functions | U8g2フォントサイズ切替(Small16px/Normal24px/Big32px/Bigger48px) |
 | SD_Functions | SDカード初期化 |
+| Scene_Functions | シーン(画面)の遷移管理。Change/Push/Popをフレーム境界まで保留して適用 |
 | Config_Functions | `key=value`形式の設定ファイルパーサ |
 | Log_Functions | システムログ(LOG_SYS_OK/WARN/FAIL/MSG) |
 | Time_Functions | 時刻管理(NTP同期後) |
@@ -96,7 +97,9 @@ examples/doc.md                MarkdownView動作確認用サンプル文書
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Touch→Task→Network→Keyboard→IME→Time→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
-`loop()`: Touch更新 → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network更新、という単純なポーリングループ。**画面遷移やシーン管理の仕組みは無く、全ウィジェットをフラットにmain.cppで直接newして常駐させている。**
+`loop()`: Touch更新 → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network更新、という単純なポーリングループ。
+
+`main.cpp`が直接newするのは**常駐ウィジェット(Statusbar)と最初のシーンだけ**で、画面ごとのウィジェットは各`Scene`の`onEnter()`が生成する。
 
 ## Widgetシステム
 
@@ -111,6 +114,17 @@ examples/doc.md                MarkdownView動作確認用サンプル文書
 
 ### ウィジェットカタログ
 Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`はchar[128]) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
+
+### シーン (`src/gui/scenes/`)
+`Scene`基底クラス(`getName()`/`onEnter()`/`onExit()`/`onUpdate()`/`contentRect()`)と`SceneFunctions`による画面遷移。
+
+- **レイヤとシーンの対応**: `widgets`(通常レイヤ)と`dialog_roots`(ダイアログ層)は**シーンの所有物**で遷移時に一括破棄。`overlays`(Statusbar/キーボード3種)はOS常駐でシーンをまたいで生き続ける。→ 「常駐させたいものは`AddOverlay()`に置く」が唯一のルール。
+- **遷移API**: `SceneFunctions::Change/Push/Pop`。いずれも要求を登録するだけで、実際の遷移は`SceneFunctions::Update()`(フレーム境界)で実行される。ボタンのコールバック内から呼んでも自分自身をdeleteしない(`DestroyLater`と同じ発想)。1フレーム1遷移で、2件目以降の要求は却下して即delete。
+- **ウィジェットの寿命**: シーンがアクティブな間のみ。`Push`でスタックへ退避されたシーンもウィジェットは解放済みで、`Pop`で戻った時に`onEnter()`から作り直される(シーンオブジェクト本体は数十バイト)。スタック上限は`kMaxSceneDepth=4`の固定長配列。
+- **`onExit()`でdeleteしてはいけない**: ウィジェット本体の破棄は`WidgetFunctions::ClearSceneWidgets()`が行う。`onExit()`は自分の生ポインタのnull化と、次回復元したい状態の退避のみ。
+- 遷移時は`isDirtyDeactivates`で破棄/生成中のdirtyを抑止し、最後に全画面1枚だけを`MarkDirty`する。
+- 実装例: `HomeScene`(ランチャ) / `MarkdownScene` / `InputTestScene`。
+- ホスト側の検証: `sh script/host_test/run.sh`(実コードをPCのg+++ASanで動かし解放漏れを検出。実機ビルドとは独立)。
 
 ### ダイアログ (`src/gui/widgets/dialogs/`)
 `WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`ベクタで子を保持」「`setOnClose(std::function<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
@@ -152,7 +166,7 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 | # | 旧TODO大項目 | 状況 |
 |---|---|---|
 | 1 | ダイアログ(ファイル選択・保存・色選択) | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用キーボードのみ別TODOとして未着手。 |
-| 2 | スクリーン管理 | 一部進展(`DestroyLater`等のメモリ解放は実装済み)。**シーン遷移・画面スタック・パネル/グリッドレイアウト・メモリプール化は未着手**。ゼロから設計相談になる。 |
+| 2 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。残りは**メモリプール化(汎用)のみ未着手**。 |
 | 3 | Wi-Fi管理強化 | 基礎は実装済み(非ブロッキング接続・スキャン・NTP同期・電波強度アイコン)。**定期的再接続交渉・確実な時刻同期の強化は未着手**。 |
 | 4 | Luaアプリ/API | **未着手**。Lua関連コード皆無。ゼロから統合方針(実装選定、C++バインディング設計)を相談する必要あり。PCエミュレーション環境(LovyanGFX/タッチ操作代替)も未着手。 |
 | 5 | 標準/セカンダリアプリ開発 | **未着手**。設定アプリ・時計・辞書・電卓・チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし(部品は存在)。 |
@@ -172,7 +186,8 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - 組み込み制約(RAM/Flash)を常に意識し、PC向けC++の常識をそのまま持ち込まない。
 - 固定長バッファ/オブジェクトプール志向を優先し、安易な`new`/`delete`追加は避ける(MarkdownViewパターンを参照)。
 - ダイアログ系(ファイル選択/保存/色選択)は実装済みなので車輪の再発明をせず、既存クラス(`FileSaveDialog`/`FileSelectDialog`/`FileExplorer`)を拡張する形で提案する。
-- Lua組み込み・スクリーン管理・GBエミュ・外部コントローラ・Chiptune再生は土台が無いため、ゼロから設計相談する前提で臨む。
+- Lua組み込み・GBエミュ・外部コントローラ・Chiptune再生は土台が無いため、ゼロから設計相談する前提で臨む。
+- 新しい画面を追加する話は`Scene`を継承して`onEnter()`でウィジェットを生成する形に寄せる。常駐させたいウィジェットは`AddOverlay()`。
 - 新規ダイアログ/ウィジェットは既存の骨格(`children_`保持、`setOnClose`コールバック、`setVisible(false)`終了)にトーンを合わせる。
 - コメント・ログは日本語、識別子は英語という言語使い分けを踏襲する。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。

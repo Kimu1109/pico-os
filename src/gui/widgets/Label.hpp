@@ -55,7 +55,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         std::vector<std::vector<TextRun>> lines;   // 解析・折返し後の行データ
         std::vector<std::vector<TextRun>> placeholder_lines;
 
-        FixedString<N> placeholder_text = "";
+        FixedString<N> placeholder_text;
         int8_t placeholder_color = PICO_LIGHTGREY;
 
         int max_width = 0;                         // 0 = 折り返し無効（\nのみ改行）
@@ -69,6 +69,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
 
         bool disable_auto_text_decoration = false; // マークアップ自動装飾の無効化フラグ
         bool has_background = false;
+        int border_width = 0;                       // ボーダーの太さ(px)。0 = 非表示
 
         // ---------- カーソル（挿入位置）管理 ----------
         int cursor_index = 0;                      // 現在のカーソル位置（0 = テキスト先頭、N = N文字目の直後）
@@ -100,32 +101,48 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         static Label<PICO_STR_LL>& utilityInstance();
 
     public:
+        // 注意: メンバテンプレート(template<size_t M>)はLabel.cpp側で個別インスタンス化していないため、
+        // クラス本体内でインライン定義しておく(呼び出し側で使われた組み合わせごとに暗黙インスタンス化させる)。
+        // Label.cpp末尾の`template class Label<N>;`はメンバテンプレートまでは実体化しない点に注意。
         template<size_t M>
-        Label(int x, int y, const FixedString<M>& text);
+        Label(int x, int y, const FixedString<M>& text) {
+            this->l_rect.x = x;
+            this->l_rect.y = y;
+            this->setText(text);
+            this->needs_redraw = true;
+        }
         Label(int x, int y, const char* text = "");
         template<size_t M>
-        Label(const FixedString<M>& text);
+        Label(const FixedString<M>& text) : Label(0, 0, text) {}
         Label(const char* text);
-        
+
         void render() override;
         void needsRender() override;
 
         WidgetType getWidgetType() const override { return WidgetType::Label; }
 
         template<size_t M>
-        static void DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const FixedString<M>& text);
+        static void DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const FixedString<M>& text) {
+            DrawPlain(size, color, x, y, maxWidth, text.c_str());
+        }
         static void DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const char* text);
         static int GetLineHeight(FontFn::FontSize size);
 
         // ---------- setter / getter ----------
         template<size_t M>
-        void setText(const FixedString<M>& text);
+        void setText(const FixedString<M>& text) {
+            this->raw_text.assign(text);
+            relayout();
+        }
         void setText(const char* text);
         const FixedString<N>* getText() const { return &this->raw_text; }
         FixedString<N>* getText() { return &this->raw_text; }
 
         template<size_t M>
-        void setPlaceholder(const FixedString<M>& text);
+        void setPlaceholder(const FixedString<M>& text) {
+            this->placeholder_text.assign(text);
+            relayout();
+        }
         void setPlaceholder(const char* text);
         const FixedString<N>* getPlaceholder() const { return &this->placeholder_text; }
         FixedString<N>* getPlaceholder() { return &this->placeholder_text; }
@@ -152,6 +169,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         bool hasBackground();
         void setNoBackground();
 
+        void setBorderColor(int8_t palette_color) override;
         void setBorder(int8_t color, int width = 1);
         void setBorderWidth(int width);
         int getBorderWidth();

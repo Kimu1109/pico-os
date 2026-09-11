@@ -783,9 +783,27 @@ FixedString<PICO_STR_1KiB> MarkdownView::formatBlockText(const MdBlock& b) const
     }
 }
 
+FixedString<PICO_STR_1KiB> MarkdownView::getFormattedBlockText(int blockIdx, const MdBlock& b) {
+    for (int i = 0; i < loadFormatCacheCount; i++) {
+        if (loadFormatCacheBlockIdx[i] == blockIdx) return loadFormatCacheText[i];
+    }
+    FixedString<PICO_STR_1KiB> text = formatBlockText(b);
+    if (loadFormatCacheCount < kLabelPoolSize) {
+        loadFormatCacheText[loadFormatCacheCount] = text;
+        loadFormatCacheBlockIdx[loadFormatCacheCount] = (int16_t)blockIdx;
+        loadFormatCacheCount++;
+    }
+    return text;
+}
+
 void MarkdownView::layoutBlocks() {
     const int viewport_w = this->l_rect.w - SCROLL_L - kPadding * 2;
     int32_t y = kPadding;
+
+    // layoutBlocks()はここから全ブロックを先頭順に処理する。直後にload()から呼ばれる
+    // bindVisibleBlocks(true)は同じ先頭側のブロックを再度整形することになるため、
+    // ここで新しくキャッシュを積み直す(前回のload()分は破棄してよい)。
+    loadFormatCacheCount = 0;
 
     for (size_t idx = 0; idx < blocks.size(); idx++) {
         MdBlock& b = blocks[idx];
@@ -809,13 +827,13 @@ void MarkdownView::layoutBlocks() {
         else if (b.type == MdBlockType::CodeBlock) {
             measure_label->setMaxWidth(viewport_w - kPadding * 2); // 内側に余白を持たせる
             measure_label->setFontSize(FontFn::Small);
-            measure_label->setText(formatBlockText(b));
+            measure_label->setText(getFormattedBlockText((int)idx, b));
             b.height = measure_label->getH() + kPadding * 2; // 背景ボックス分の余白
         }
         else if (b.type == MdBlockType::Link) {
             measure_label->setMaxWidth(viewport_w);
             measure_label->setFontSize(FontFn::Small);
-            measure_label->setText(formatBlockText(b));
+            measure_label->setText(getFormattedBlockText((int)idx, b));
             b.height = measure_label->getH();
         }
         else if (b.type == MdBlockType::ListItem) {
@@ -825,7 +843,7 @@ void MarkdownView::layoutBlocks() {
             if (w < 20) w = 20; // 極端なネストでも最低限の幅を確保
             measure_label->setMaxWidth(w);
             measure_label->setFontSize(fontSizeForBlock(b.type));
-            measure_label->setText(formatBlockText(b));
+            measure_label->setText(getFormattedBlockText((int)idx, b));
             int textH = measure_label->getH();
             // チェックボックス項目はアイコンの縦幅もブロック高さに含める
             b.height = b.listIsCheckbox ? (uint16_t)std::max<int>(textH, checkboxIconPx) : textH;
@@ -837,7 +855,7 @@ void MarkdownView::layoutBlocks() {
             if (w < 20) w = 20;
             measure_label->setMaxWidth(w);
             measure_label->setFontSize(fontSizeForBlock(b.type));
-            measure_label->setText(formatBlockText(b));
+            measure_label->setText(getFormattedBlockText((int)idx, b));
             b.height = measure_label->getH();
         }
         else if (b.type == MdBlockType::TableRow) {
@@ -849,7 +867,7 @@ void MarkdownView::layoutBlocks() {
         else {
             measure_label->setMaxWidth(viewport_w);
             measure_label->setFontSize(fontSizeForBlock(b.type));
-            measure_label->setText(formatBlockText(b));
+            measure_label->setText(getFormattedBlockText((int)idx, b));
             b.height = measure_label->getH();
         }
 
@@ -947,7 +965,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         lbl->setBackgroundColor(PICO_LIGHTGREY);
         lbl->setBorder(PICO_DARKGREY, 1);
         lbl->setFontSize(FontFn::Small);
-        lbl->setText(formatBlockText(b));
+        lbl->setText(getFormattedBlockText(blockIdx, b));
         lbl->setX(kPadding);
     } else if (b.type == MdBlockType::Link) {
         if(lbl->getDisableAutoTextDecoration())
@@ -955,7 +973,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         lbl->setMaxWidth(this->l_rect.w - SCROLL_L - kPadding * 2);
         lbl->setTextColor(PICO_BLUE);
         lbl->setFontSize(FontFn::Small);
-        lbl->setText(formatBlockText(b));
+        lbl->setText(getFormattedBlockText(blockIdx, b));
         lbl->setX(kPadding);
     } else if (b.type == MdBlockType::ListItem) {
         if(lbl->getDisableAutoTextDecoration())
@@ -966,7 +984,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         if (w < 20) w = 20;
         lbl->setMaxWidth(w);
         lbl->setFontSize(fontSizeForBlock(b.type));
-        lbl->setText(formatBlockText(b));
+        lbl->setText(getFormattedBlockText(blockIdx, b));
         lbl->setX(kPadding + indentPx + extra);
     } else if (b.type == MdBlockType::Quote) {
         if(lbl->getDisableAutoTextDecoration())
@@ -977,14 +995,14 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         lbl->setMaxWidth(w);
         lbl->setTextColor(kQuoteTextColor); // 引用であることを視覚的に区別するため、やや薄い色にする
         lbl->setFontSize(fontSizeForBlock(b.type));
-        lbl->setText(formatBlockText(b));
+        lbl->setText(getFormattedBlockText(blockIdx, b));
         lbl->setX(kPadding + indentPx);
     } else {
         if(lbl->getDisableAutoTextDecoration())
             lbl->setDisableAutoTextDecoration(false);
         lbl->setMaxWidth(this->l_rect.w - SCROLL_L - kPadding * 2);
         lbl->setFontSize(fontSizeForBlock(b.type));
-        lbl->setText(formatBlockText(b));
+        lbl->setText(getFormattedBlockText(blockIdx, b));
         lbl->setX(kPadding);
     }
 

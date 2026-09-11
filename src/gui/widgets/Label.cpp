@@ -100,7 +100,7 @@ void Label<N>::computeLineOffsets(const std::vector<std::vector<TextRun>>& src_l
     for (size_t li = 0; li < src_lines.size(); li++) {
         int lw = 0;
         for (auto& run : src_lines[li]) {
-            int rw = OSData::frame->textWidth(run.text.c_str());
+            int rw = run.width; // relayout()側で計算済みの幅を再利用(再計測しない)
             if (run.bold) rw += 1;
             lw += rw;
         }
@@ -154,22 +154,28 @@ void Label<N>::relayout() {
 
         for (auto& run : runs) {
             piece.text.clear();
+            piece.width = 0;
             piece.bold = run.bold;
             piece.underline = run.underline;
             piece.wavy = run.wavy;
             piece.strikethrough = run.strikethrough;
 
             for (auto& ch : splitChars(run.text.c_str())) {
-                int cw = OSData::frame->textWidth(ch.c_str());
-                if (run.bold) cw += 1;
+                // chWは太字加算を含まない素の文字幅。piece.widthにはこちらを積算し、
+                // computeLineOffsets()/render()側でtextWidth(run.text.c_str())を
+                // 呼んだ場合と同じ値になるようにする(太字分の+1はそれらの呼び出し側で
+                // 1回だけ加算される想定のため、ここで重ねて加算しない)。
+                int chW = OSData::frame->textWidth(ch.c_str());
+                int cw = chW + (run.bold ? 1 : 0); // 折り返し判定用(太字は従来通り1文字ごとに+1)
 
                 if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
-                    if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); }
+                    if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
                     lines.push_back(curLine);
                     curLine.clear();
                     curWidth = 0;
                 }
                 piece.text.append(ch);
+                piece.width += chW;
                 curWidth += cw;
 
                 CursorSlot slot;
@@ -177,7 +183,7 @@ void Label<N>::relayout() {
                 slot.x = curWidth;
                 cursor_slots.push_back(slot);
             }
-            if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); }
+            if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
         }
         lines.push_back(curLine);
 
@@ -193,7 +199,7 @@ void Label<N>::relayout() {
     for (auto& line : lines) {
         int lw = 0;
         for (auto& run : line) {
-            int rw = OSData::frame->textWidth(run.text.c_str());
+            int rw = run.width; // 上のループで積算済みの幅を再利用(再計測しない)
             if (run.bold) rw += 1;
             lw += rw;
         }
@@ -236,25 +242,27 @@ void Label<N>::relayoutPlaceholder() {
 
     for (auto& run : runs) {
         piece.text.clear();
+        piece.width = 0;
         piece.bold = run.bold;
         piece.underline = run.underline;
         piece.wavy = run.wavy;
         piece.strikethrough = run.strikethrough;
 
         for (auto& ch : splitChars(run.text.c_str())) {
-            int cw = OSData::frame->textWidth(ch.c_str());
-            if (run.bold) cw += 1;
+            int chW = OSData::frame->textWidth(ch.c_str());
+            int cw = chW + (run.bold ? 1 : 0);
 
             if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
-                if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); }
+                if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
                 placeholder_lines.push_back(curLine);
                 curLine.clear();
                 curWidth = 0;
             }
             piece.text.append(ch);
+            piece.width += chW;
             curWidth += cw;
         }
-        if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); }
+        if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
     }
     placeholder_lines.push_back(curLine);
 
@@ -268,7 +276,7 @@ void Label<N>::renderRun(const TextRun& run, int x, int y) {
     OSData::frame->setCursor(x, y);
     OSData::frame->print(run.text.c_str());
 
-    int w = OSData::frame->textWidth(run.text.c_str());
+    int w = run.width; // relayout()側で計算済みの幅を再利用(再計測しない)
 
     if (run.bold) {
         OSData::frame->setCursor(x + 1, y);
@@ -418,7 +426,7 @@ void Label<N>::render() {
         int cx = g_rect.x + offset;
         for (auto& run : line) {
             renderRun(run, cx, cy);
-            int rw = OSData::frame->textWidth(run.text.c_str());
+            int rw = run.width; // relayout()側で計算済みの幅を再利用(再計測しない)
             if (run.bold) rw += 1;
             cx += rw;
         }

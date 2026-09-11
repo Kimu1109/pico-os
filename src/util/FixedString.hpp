@@ -33,6 +33,14 @@ public:
     FixedString() { buf_[0] = '\0'; }
     explicit FixedString(const char* src) { assign(src); }
 
+    // ============ 長さキャッシュについて ============
+    // length()はホットパス(1文字ずつのappendループ等)で毎回呼ばれるため、
+    // 呼び出しの都度 strlen(buf_) していると蓄積済みバイト数に比例して
+    // コストが増え、1文字ずつのappendループ全体がO(n^2)になってしまう。
+    // そのため現在のバイト長をlen_としてメンバに保持し、バッファを変更する
+    // 全メソッド(append/assign/insert/remove系)で追従更新する。
+    // 「len_はbuf_の実際のNUL終端位置と常に一致する」という不変条件を破らないこと。
+
     // ============ static UTF-8 ヘルパー ============
 
     // 生バッファに対するUTF-8「文字数」(バイト数ではない)を数える
@@ -109,7 +117,7 @@ public:
     // 文字の開始バイトまで巻き戻してから切り詰める(文字を欠けさせない)。
     bool append(const char* src) {
         if (!src) return true;
-        size_t curLen = strlen(buf_);
+        size_t curLen = len_;
         size_t room = (curLen < N - 1) ? (N - 1 - curLen) : 0;
         size_t srcLen = strlen(src);
         size_t addLen = (srcLen < room) ? srcLen : room;
@@ -121,6 +129,7 @@ public:
 
         memcpy(buf_ + curLen, src, addLen);
         buf_[curLen + addLen] = '\0';
+        len_ = curLen + addLen;
         return addLen == srcLen;
     }
 
@@ -143,7 +152,7 @@ public:
     // 終わらないよう開始バイトまで巻き戻す。
     bool append(const char* src, size_t len) {
         if (!src) return true;
-        size_t curLen = strlen(buf_);
+        size_t curLen = len_;
         size_t room = (curLen < N - 1) ? (N - 1 - curLen) : 0;
         size_t addLen = (len < room) ? len : room;
 
@@ -155,6 +164,7 @@ public:
 
         memcpy(buf_ + curLen, src, addLen);
         buf_[curLen + addLen] = '\0';
+        len_ = curLen + addLen;
         return addLen == len;
     }
 
@@ -168,14 +178,19 @@ public:
     // sprintf用の一時バッファを呼び出し側で用意する必要がない)。
     // 容量不足で切り詰められた場合はfalseを返す(errorまたは収まりきらない場合)。
     bool appendFormatV(const char* fmt, va_list args) {
-        size_t curLen = strlen(buf_);
+        size_t curLen = len_;
         if (curLen >= N - 1) return false;
         int written = vsnprintf(buf_ + curLen, N - curLen, fmt, args);
         if (written < 0) {
             buf_[curLen] = '\0';
             return false;
         }
-        return (size_t)written < (N - curLen);
+        size_t avail = N - curLen; // NUL終端分込みの残り容量
+        bool ok = (size_t)written < avail;
+        // vsnprintfは切り詰め時、収まりきらなかった分もNUL込みで書き込まないため、
+        // 実際に書き込まれたバイト数はok時はwritten、切り詰め時はavail-1(NUL手前まで)
+        len_ = curLen + (ok ? (size_t)written : (avail - 1));
+        return ok;
     }
 
     bool appendFormat(const char* fmt, ...) {
@@ -191,10 +206,11 @@ public:
     // 容量が足りない場合は1文字も追記せずfalseを返す(文字が半端に入るのを防ぐ)。
     bool appendUtf8Char(const char* utf8Bytes, int byteLen) {
         if (!utf8Bytes || byteLen <= 0) return true;
-        size_t curLen = strlen(buf_);
+        size_t curLen = len_;
         if (curLen + static_cast<size_t>(byteLen) >= N) return false;
         memcpy(buf_ + curLen, utf8Bytes, byteLen);
         buf_[curLen + byteLen] = '\0';
+        len_ = curLen + static_cast<size_t>(byteLen);
         return true;
     }
 
@@ -211,6 +227,7 @@ public:
 
         int byteEnd = byteOffsetOfChar(charIndex + 1);
         memmove(buf_ + byteStart, buf_ + byteEnd, totalBytes - byteEnd + 1); // +1で終端\0も込みで移動
+        len_ -= static_cast<size_t>(byteEnd - byteStart);
         return true;
     }
 
@@ -225,6 +242,7 @@ public:
             lastCharStart--;
         }
         buf_[lastCharStart] = '\0';
+        len_ = static_cast<size_t>(lastCharStart);
         return true;
     }
 
@@ -245,7 +263,7 @@ public:
     // バイトオフセット位置に文字列を挿入する
     bool insert(size_t byteOffset, const char* src) {
         if (!src) return true;
-        size_t curLen = strlen(buf_);
+        size_t curLen = len_;
         if (byteOffset > curLen) byteOffset = curLen;
         size_t srcLen = strlen(src);
         size_t room = (curLen < N - 1) ? (N - 1 - curLen) : 0;
@@ -257,6 +275,7 @@ public:
 
         memmove(buf_ + byteOffset + addLen, buf_ + byteOffset, curLen - byteOffset + 1);
         memcpy(buf_ + byteOffset, src, addLen);
+        len_ = curLen + addLen;
         return addLen == srcLen;
     }
 
@@ -296,14 +315,14 @@ public:
         return *this;
     }
 
-    void clear() { buf_[0] = '\0'; }
+    void clear() { buf_[0] = '\0'; len_ = 0; }
 
     // ============ 参照・切り出し ============
 
     const char* c_str() const { return buf_; }
     bool empty() const { return buf_[0] == '\0'; }
 
-    size_t length() const { return strlen(buf_); } // バイト数
+    size_t length() const { return len_; } // バイト数(キャッシュ済みなのでO(1))
 
     // 文字インデックスではなくバイトインデックスでの1バイト参照(範囲外は'\0')
     char operator[](size_t byteIndex) const {
@@ -356,4 +375,5 @@ public:
 
 private:
     char buf_[N];
+    size_t len_ = 0; // buf_の現在のバイト長(strlen(buf_)と常に一致するキャッシュ)
 };

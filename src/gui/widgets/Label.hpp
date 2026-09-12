@@ -18,7 +18,17 @@
 //   ~text~    -> wavy（波線下線。標準構文には存在しない独自の装飾）
 //   ~~text~~  -> strikethrough（取り消し線。標準Markdownの打ち消し線に対応）
 struct TextRun {
-    FixedString<PICO_STR_LL> text;
+    // 文字列を持たず、元テキスト(Labelのraw_text / placeholder_text)上の範囲を参照する。
+    //
+    // 以前は FixedString<PICO_STR_LL> を埋め込んでいたため、中身が1文字でも
+    // 1ランあたり208Bを占めていた。ランは行数×ラン数ぶん作られるので、
+    // 折り返しの多いLabelではここが確保量の大半になっていた。
+    // 参照方式にできるのは、マークアップ記号はラン境界にしか現れず、
+    // 1つのランは必ず元テキストの連続した範囲になるため。
+    uint16_t srcOffset = 0; // 元テキスト先頭からのバイト位置
+    uint16_t srcLength = 0; // バイト数
+    uint16_t line = 0;      // このランが属する行番号
+
     bool bold = false;
     bool underline = false;
     bool wavy = false;
@@ -32,7 +42,7 @@ struct TextRun {
 // カーソル(挿入位置)候補1つ分の描画座標
 // relayout()時に、文字境界ごとの「そこにカーソルを置いたときの座標」を記録しておく
 struct CursorSlot {
-    int line = 0;   // 対応する行番号(lines配列のインデックス)
+    int line = 0;   // 対応する行番号(line_startsのインデックス)
     int x = 0;      // その行内でのX座標(rect.x からの相対値)
 };
 
@@ -52,8 +62,16 @@ template<size_t N>
 class Label : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
     private:
         FixedString<N> raw_text;                          // マークアップ込みの元テキスト
-        std::vector<std::vector<TextRun>> lines;   // 解析・折返し後の行データ
-        std::vector<std::vector<TextRun>> placeholder_lines;
+        // 解析・折返し後の行データ。
+        //
+        // 以前は std::vector<std::vector<TextRun>> で行ごとにvectorを持っていたため、
+        // 行数ぶん確保が走っていた。全ランを1本に連結し、行番号はTextRun側に持たせる。
+        // ランは行番号の昇順に並ぶので、描画は先頭から舐めながら行が変わったら改行すればよい。
+        // 空行(空段落)はランを持たないため、行数は別に数える必要がある。
+        std::vector<TextRun> runs_flat;
+        uint16_t line_count = 0;
+        std::vector<TextRun> placeholder_runs_flat;
+        uint16_t placeholder_line_count = 0;
 
         FixedString<N> placeholder_text;
         int8_t placeholder_color = PICO_LIGHTGREY;
@@ -85,20 +103,58 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         static constexpr int kDecorationMargin = 2;// 下線・波線が文字の下にはみ出す余白(px)
 
         // ---------- 内部ヘルパー関数 ----------
-        static int utf8CharLen(uint8_t lead);
-        static std::vector<FixedString<5>> splitChars(const char* s);
-        std::vector<TextRun> parseMarkup(const char* src);
+        // srcはNUL終端でなくてよい(raw_textの部分文字列をコピーせず渡すため、長さを明示する)。
+        // base_offsetは src が元テキストの何バイト目を指しているか。
+        // TextRunのsrcOffsetは元テキスト先頭からの絶対位置で持つ
+        std::vector<TextRun> parseMarkup(const char* src, size_t n, uint16_t base_offset);
         void relayout();
         void relayoutPlaceholder();
-        void computeLineOffsets(const std::vector<std::vector<TextRun>>& src_lines, int box_width, std::vector<int>& out);
 
-        void renderRun(const TextRun& run, int x, int y);
+        // ---------- レイアウトの遅延解決 ----------
+        // レイアウトに影響するsetterはこのフラグを立てるだけにして、実際のrelayout()は
+        // レイアウト結果が必要になった時点(ensureLayout)で1回だけ走らせる。
+        //
+        // 以前はsetterごとに毎回relayout()していたため、例えばMarkdownView::bindLabelSlot()は
+        // setMaxWidth -> setFontSize -> setText と呼ぶだけで3回フルレイアウトが走り、
+        // しかも最初の2回は更新前のテキストに対する計算なので全部捨てられていた。
+        // relayout()は1文字ごとにtextWidth()を呼ぶので、回数はそのままCPUに効く。
+        mutable bool needs_relayout = true;
+
+        // カーソル位置テーブル(cursor_slots)を作るかどうか。
+        // 1文字につき1エントリ積むため日本語120字で約2KBかかるが、必要なのは
+        // 入力欄として使われるLabelだけ。MarkdownViewのラベルプールやStatusbarの
+        // ラベルはカーソルを一生使わないので、その分の確保と計算をまるごと省く。
+        // カーソル系のAPIが呼ばれた時点で自動的に有効化される
+        bool cursor_tracking = false;
+
+        // レイアウトが古ければ計算し直す。const getterからも呼ぶためconstにしてある
+        void ensureLayout() const;
+
+        // レイアウト結果を無効化する(レイアウトに影響するsetterから呼ぶ)
+        void invalidateLayout();
+
+        // ensureLayout()を通さずに、再計算前の(=いま画面に出ている)スクリーン矩形を返す。
+        // invalidateLayout()が「消すべき古い領域」をdirty登録するために使う。
+        // ここでgetScreenRect()を使うとensureLayout()が走ってしまい遅延の意味が無くなる
+        Rect staleScreenRect() const;
+        void computeLineOffsets(const std::vector<TextRun>& src_runs, int src_line_count,
+                                 int box_width, std::vector<int>& out);
+
+        // src_bufはrunが参照している元テキストのバッファ(raw_text または placeholder_text)。
+        // 非constなのは、print()がNUL終端を要求するため描画の間だけ終端を差し替えるから
+        void renderRun(char* src_buf, const TextRun& run, int x, int y);
         void renderBackground();
         void renderBorder();
         void renderCursor();
         void updateCursorBlink();
 
         static Label<PICO_STR_LL>& utilityInstance();
+
+    protected:
+        // カーソル位置テーブルの構築を有効にする。
+        // 入力欄として使うことが分かっている場合(Textbox)はコンストラクタで呼んでおくと、
+        // 描画中に有効化されてレイアウトがやり直しになるのを避けられる
+        void enableCursorTracking();
 
     public:
         // 注意: メンバテンプレート(template<size_t M>)はLabel.cpp側で個別インスタンス化していないため、
@@ -119,6 +175,12 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void render() override;
         void needsRender() override;
 
+        // レイアウト結果(l_rect.w/h)を読む経路。遅延した再計算をここで解決する。
+        // getScreenRect()/hitTest()も基底経由でgetLocalRect()を呼ぶのでまとめて効く
+        Rect getLocalRect() const override;
+        int getW() override;
+        int getH() override;
+
         WidgetType getWidgetType() const override { return WidgetType::Label; }
 
         template<size_t M>
@@ -132,7 +194,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         template<size_t M>
         void setText(const FixedString<M>& text) {
             this->raw_text.assign(text);
-            relayout();
+            invalidateLayout();
         }
         void setText(const char* text);
         const FixedString<N>* getText() const { return &this->raw_text; }
@@ -141,7 +203,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         template<size_t M>
         void setPlaceholder(const FixedString<M>& text) {
             this->placeholder_text.assign(text);
-            relayout();
+            invalidateLayout();
         }
         void setPlaceholder(const char* text);
         const FixedString<N>* getPlaceholder() const { return &this->placeholder_text; }
@@ -193,12 +255,12 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
 
         void setFontSize(FontFn::FontSize size) override {
             this->f_size = size;
-            this->relayout();
+            this->invalidateLayout();
         }
 
         void setDisableAutoTextDecoration(bool value){
             this->disable_auto_text_decoration = value;
-            this->relayout();
+            this->invalidateLayout();
         }
         bool getDisableAutoTextDecoration(){
             return this->disable_auto_text_decoration;

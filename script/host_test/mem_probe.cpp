@@ -182,6 +182,15 @@ struct Case {
 static Case cases[32];
 static int case_count = 0;
 
+// レイアウトを確定させる。
+// Labelはsetterではレイアウトせず、結果が必要になった時点(render/getW/getH)で
+// 1回だけ計算する。計測でこれを呼ばないと「まだ誰も結果を要求していない」状態のまま
+// 破棄することになり、実際には描画時に走るはずの仕事が数字から抜け落ちる
+static void ForceLayout(Widget* w){
+    (void)w->getH();
+    (void)w->getW();
+}
+
 // ウィジェットの生成から破棄までを1ケースとして計測する
 template<typename F>
 static void Measure(const char* name, size_t object_bytes, F&& body){
@@ -296,14 +305,17 @@ int main(){
     Measure("Button", sizeof(Button), [](){
         auto* w = new Button(0, 0, "ボタン");
         w->setOnPressEnd([](){});
+        ForceLayout(w);
         delete w;
     });
     Measure("Label<M> 短文", sizeof(Label<PICO_STR_M>), [](){
         auto* w = new Label<PICO_STR_M>(0, 0, "pico-os");
+        ForceLayout(w);
         delete w;
     });
     Measure("Label<M> 装飾つき", sizeof(Label<PICO_STR_M>), [](){
         auto* w = new Label<PICO_STR_M>(0, 0, "**太字**と_下線_と~~打消~~");
+        ForceLayout(w);
         delete w;
     });
     Measure("Label<1KiB> 折返しあり", sizeof(Label<PICO_STR_1KiB>), [](){
@@ -311,14 +323,17 @@ int main(){
             "これは折り返しの発生する長めの日本語テキストです。"
             "Labelは行ごとにvectorを確保するため、行数が増えるほど確保回数も増えます。");
         w->setMaxWidth(200);
+        ForceLayout(w);
         delete w;
     });
     Measure("Textbox<LL>", sizeof(Textbox<PICO_STR_LL>), [](){
         auto* w = new Textbox<PICO_STR_LL>("入力欄", 0, 0, 200, 60, false);
+        ForceLayout(w);
         delete w;
     });
     Measure("Icon", sizeof(Icon), [](){
         auto* w = new Icon(0, 0, IconID::Folder, IconSize::Px16);
+        ForceLayout(w);
         delete w;
     });
 
@@ -351,6 +366,18 @@ int main(){
     });
 
     // --- (2) 既存ウィジェットへの再設定(スクロールや入力で毎回走る経路) ---
+    //MarkdownView::bindLabelSlot()と同じ順でプロパティを設定するケース。
+    //遅延が効いていればレイアウトは3回ではなく1回で済む
+    Measure("Label<512B> bind相当", sizeof(Label<PICO_STR_512B>), [](){
+        auto* w = new Label<PICO_STR_512B>(0, 0, "");
+        w->setMaxWidth(200);
+        w->setFontSize(FontFn::Small);
+        w->setText("これは折り返しの発生する日本語のテキストです。"
+                   "Labelは1文字ずつ折返し位置を決めています。");
+        ForceLayout(w);
+        delete w;
+    });
+
     Measure("Label<M> setText x10", sizeof(Label<PICO_STR_M>), [](){
         auto* w = new Label<PICO_STR_M>(0, 0, "");
         for(int i = 0; i < 10; i++){
@@ -358,6 +385,8 @@ int main(){
             snprintf(buf, sizeof(buf), "行%d: テキスト更新", i);
             w->setText(buf);
         }
+        //10回まとめて更新した後に1回だけレイアウトが走るのが期待値
+        ForceLayout(w);
         delete w;
     });
 

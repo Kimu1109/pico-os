@@ -40,6 +40,8 @@ g++ -std=gnu++17 -g -Os -fno-rtti \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
     "$ROOT/src/gui/widgets/MarkdownView.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
     -o "$OUT/mem_probe"
 

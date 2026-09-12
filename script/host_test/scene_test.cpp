@@ -229,16 +229,6 @@ int main(){
         //シーンAは Setup() と Pop()で戻った時の計2回enterしている
         check(stat_a && stat_a->visits == 2, "計測フック: 同名シーンの訪問回数が積算される");
     }
-    {
-        //遷移のたびに1行出ること。まとめレポートだけだと最初の10回まで何も見えず、
-        //「計測が動いていない」ようにしか見えない
-        int enter_logs = 0;
-        for(const std::string& line : logs){
-            if(line.find("[MEM] シーン生成:") != std::string::npos) enter_logs++;
-        }
-        check(enter_logs == (int)MemFunctions::transition_count,
-              "計測フック: シーン生成のログが遷移のたびに出る");
-    }
 
     // 後片付け(リーク確認)
     while(SceneFunctions::CanPop()){

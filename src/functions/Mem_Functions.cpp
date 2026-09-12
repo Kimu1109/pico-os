@@ -226,14 +226,7 @@ void MemFunctions::OnSceneExit(){
 
         //全部破棄したのにシーン開始前より増えていれば、その差分は解放漏れの候補
         if(used > scene_baseline_used){
-            const uint32_t residue = used - scene_baseline_used;
-            stat.residue_bytes += residue;
-
-            //正常なら何も出ない。出た時点で解放漏れなので、レポートを待たずに知らせる
-            LOG_SYS_DEBUG("[MEM] シーン破棄: %s 解放後も%luB残留 (累計%luB)",
-                stat.name.c_str(),
-                (unsigned long)residue,
-                (unsigned long)stat.residue_bytes);
+            stat.residue_bytes += (used - scene_baseline_used);
         }
     }
 
@@ -265,20 +258,6 @@ void MemFunctions::AfterSceneEnter(const char* scene_name){
     scene_active = true;
 
     transition_count++;
-
-    //遷移のたびに1行だけ出す(mallinfoのみ。max_allocの実測はレポート側に任せる)。
-    //これが無いと最初のレポートが出る10回目まで、シーンの数字が一切見えない
-    LOG_SYS_DEBUG("[MEM] シーン生成: %s +%luB (used=%luB 空き塊=%lu)",
-        stat->name.c_str(),
-        (unsigned long)enter_delta,
-        (unsigned long)used,
-        (unsigned long)ReadMallocInfo().free_blocks);
-
-    //1回目は表の書式を確認できるようレポートも出しておく
-    if(transition_count == 1){
-        LogReport();
-        return;
-    }
     if(kAutoReportInterval > 0 && (transition_count % kAutoReportInterval) == 0){
         LogReport();
     }

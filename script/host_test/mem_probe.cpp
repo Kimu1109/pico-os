@@ -141,6 +141,7 @@ void operator delete[](void* p, size_t) noexcept { operator delete(p); }
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/Icon.hpp"
+#include "gui/widgets/Checkbox.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/CanvasRaster.hpp"
 #include "gui/widgets/MarkdownView.hpp"
@@ -328,6 +329,13 @@ int main(){
     });
     Measure("Textbox<LL>", sizeof(Textbox<PICO_STR_LL>), [](){
         auto* w = new Textbox<PICO_STR_LL>("入力欄", 0, 0, 200, 60, false);
+        ForceLayout(w);
+        delete w;
+    });
+    //Checkboxはメンバテンプレートの実体化漏れで他の翻訳単位から使えなかった時期があり、
+    //その間このケースを外していた。ここに置くこと自体がリンクの回帰検出になる
+    Measure("Checkbox", sizeof(Checkbox), [](){
+        auto* w = new Checkbox(0, 0, "チェック");
         ForceLayout(w);
         delete w;
     });

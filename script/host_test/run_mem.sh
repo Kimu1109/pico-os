@@ -35,6 +35,7 @@ g++ -std=gnu++17 -g -Os -fno-rtti \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
     "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Checkbox.cpp" \
     "$ROOT/src/gui/widgets/Image.cpp" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \

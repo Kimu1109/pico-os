@@ -11,8 +11,22 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
         bool isChecked = false;
         FixedString<PICO_STR_L> text;
 
+        // テキストを設定し、アイコン込みの表示サイズを計算し直す。
+        //
+        // 注意: メンバテンプレート(template<size_t N>)は呼び出し側で使われた組み合わせごとに
+        // 暗黙インスタンス化させる必要があるため、クラス本体内でインライン定義しておく。
+        // Checkbox.cppに定義を置くと、そのファイルの中で使われた特殊化しか実体化されず、
+        // 他の翻訳単位から new Checkbox(...) するとリンクエラーになる(Label.hppと同じ理由)。
+        // 実際の計算は非テンプレートのrecalcSize()に寄せてあるので、
+        // ヘッダ側にOS_Data等を持ち込まずに済む。
         template<size_t N>
-        void setTextAndCalc(FixedString<N> text);
+        void setTextAndCalc(const FixedString<N>& text){
+            this->text.assign(text);
+            this->recalcSize();
+        }
+
+        // 現在のtextとフォント設定から l_rect のサイズを決める
+        void recalcSize();
 
         std::function<void()> on_change_checked = nullptr;
 

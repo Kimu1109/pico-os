@@ -16,6 +16,7 @@
 #include <cstring>
 #include <cstdint>
 #include <new>
+#include <string>
 
 // ---- 確保カウンタ(operator new/delete を差し替えて集計する) ----
 namespace Probe {
@@ -234,7 +235,29 @@ class ProbeScene : public Scene {
         }
 };
 
+// 計測用のダミー文書。SDスタブ(HostSd::files)へ登録して load() に読ませる
+static const char* kProbeDocPath = "probe/doc.md";
+
+static void RegisterProbeDoc(){
+    std::string doc;
+    doc += "# 見出し1\n\n";
+    doc += "これは段落です。**太字**と_下線_を含みます。\n\n";
+    doc += "## 見出し2\n\n";
+    for(int i = 0; i < 12; i++){
+        doc += "- リスト項目";
+        doc += std::to_string(i);
+        doc += " 折り返しが起きる程度の長さの日本語テキストを入れておきます。\n";
+    }
+    doc += "\n> 引用文\n\n";
+    doc += "| 列A | 列B |\n| --- | --- |\n| 値1 | 値2 |\n\n";
+    doc += "---\n\n";
+    doc += "最後の段落です。\n";
+    HostSd::files[kProbeDocPath] = doc;
+}
+
 int main(){
+    RegisterProbeDoc();
+
     //以降の確保をすべて集計対象にする
     Probe::enabled = true;
 
@@ -290,6 +313,13 @@ int main(){
     Measure("MarkdownView", sizeof(MarkdownView), [](){
         //Label16 + Image2 + Icon16 + measure_label をコンストラクタで確保する
         auto* w = new MarkdownView(0, 0, 240, 240);
+        delete w;
+    });
+    Measure("MarkdownView + load()", sizeof(MarkdownView), [](){
+        //実機に近い値を得るため、文書を読み込んでレイアウトまで済ませた状態で測る。
+        //コンストラクタだけの行と比べると、doc_textの中身とLabelの行データが乗る
+        auto* w = new MarkdownView(0, 0, 240, 240);
+        w->load(kProbeDocPath);
         delete w;
     });
 
@@ -354,6 +384,25 @@ int main(){
         SceneFunctions::Update();
     }
     WidgetFunctions::ClearSceneWidgets();
+
+    // load()が読み込み・パース・レイアウト・バインドまで通っているかの確認。
+    // SDスタブが空ファイルしか返さなかった頃はこの経路が一度も実行されておらず、
+    // チャンク読み込みへの書き換えが検証できていなかった
+    {
+        MarkdownView view(0, 0, 240, 240);
+        const bool loaded = view.load(kProbeDocPath);
+        int visible_children = 0;
+        for(Widget* c : view.getChildren()){
+            if(c->getVisible()) visible_children++;
+        }
+        PrintHeader("load()の経路確認");
+        printf("load()=%s / 表示状態になった子ウィジェット=%d個\n",
+            loaded ? "true" : "false", visible_children);
+        if(!loaded || visible_children == 0){
+            printf("load()が文書を読めていません(SDスタブの登録漏れか読み込み処理の不具合)\n");
+            return 1;
+        }
+    }
 
     if(leaking_cases > 0){
         printf("\n解放漏れのあるウィジェットが%d件あります(上の表のresidue列)\n", leaking_cases);

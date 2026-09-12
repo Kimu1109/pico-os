@@ -14,6 +14,25 @@
 // クラス外に定義する）。
 static constexpr int kMdTableMaxCols = 4;
 
+// 1ブロック(段落/見出し/リスト項目/テーブルセル)あたりの表示テキスト上限。
+// UTF-8の日本語(3バイト/文字)で約170文字。
+// Labelプール・整形結果キャッシュ・整形関数の戻り値がすべてこのサイズで
+// 揃っている必要があるため、直接リテラルを書かずこの定数を参照すること。
+//
+// 1KiBから512Bへ落とした経緯: Labelは raw_text と placeholder_text の
+// 2本のFixedStringを持つため、1スロットあたり2倍のバイト数が効く。
+// 16スロット分で16KiB、整形結果キャッシュと合わせて24KiBの削減になる。
+//
+// kMdTableMaxColsと同じくクラス外に置いている。クラス外に書くメンバ関数定義の
+// 戻り値型はクラススコープより前に解決されるため、クラス内のstatic constexprでは
+// 戻り値型として使えないため。
+static constexpr size_t kMdBlockTextBytes = PICO_STR_512B;
+
+// 読み込むMarkdownソースの上限。MarkdownView::doc_textのサイズと必ず一致させること。
+// load()がこのサイズの一時バッファをnewするため、大きいほど
+// 断片化しやすい塊を一度に要求することになる。
+static constexpr size_t kMdMaxSourceBytes = PICO_STR_8KiB;
+
 enum class MdBlockType : uint8_t {
     H1, H2, H3,
     Paragraph,
@@ -58,7 +77,7 @@ class MarkdownView : public Widget {
         static constexpr int kLabelPoolSize = 16;
         static constexpr int kImagePoolSize = 2;
         static constexpr int kMaxBlocks     = 128;
-        static constexpr int kMaxSourceBytes = 16384;
+
         static constexpr int kPadding       = 4;
         static constexpr int kBlockSpacing  = 6;
         static constexpr int SCROLL_L       = 15; // ScrollContainerと同じ見た目に揃える
@@ -92,12 +111,12 @@ class MarkdownView : public Widget {
         static constexpr int8_t kTableHeaderBgColor = PICO_LIGHTGREY; // ヘッダ行の背景色
         static constexpr int8_t kTableTextColor = PICO_BLACK;      // セル文字色
 
-        FixedString<PICO_STR_16KiB> doc_text;
+        FixedString<kMdMaxSourceBytes> doc_text;
         std::vector<MdBlock> blocks;
         int32_t total_height = 0;
 
         // ウィジェットプール（固定長・起動時に一度だけ確保）
-        Label<PICO_STR_1KiB>* labelPool[kLabelPoolSize];
+        Label<kMdBlockTextBytes>* labelPool[kLabelPoolSize];
         Image* imagePool[kImagePoolSize];
         Icon*  checkboxIconPool[kCheckboxIconPoolSize];
 
@@ -133,7 +152,7 @@ class MarkdownView : public Widget {
         // ---------- インライン要素（コード/リンク）認識 ----------
         // src中の `code` を Labelの波線(~)装飾へ、[text](url) を下線(_)装飾へ変換した
         // 表示用テキストを生成する。改行をまたぐ組は無効として素通りさせる。
-        FixedString<PICO_STR_1KiB> applyInlineMarkdown(const FixedString<PICO_STR_1KiB>& src) const;
+        FixedString<kMdBlockTextBytes> applyInlineMarkdown(const FixedString<kMdBlockTextBytes>& src) const;
         // doc_text の [start, end) 範囲内で最初に見つかった [text](url) の
         // URL部分のオフセット/長さ(doc_text基準)を取得する。見つからなければfalse。
         bool findFirstInlineLink(int start, int end, uint16_t& urlOffOut, uint16_t& urlLenOut) const;
@@ -183,9 +202,9 @@ class MarkdownView : public Widget {
         // テーブルセル1つ分の表示用テキストを生成する。`\|`のアンエスケープのみを行い、
         // `code`や[text](url)等のインライン装飾はそのまま素通しする（テーブルはLabelを介さず
         // frameへ直接print()するため、マークアップは解釈されない）。
-        FixedString<PICO_STR_1KiB> formatTableCellText(int offset, int length) const;
+        FixedString<kMdBlockTextBytes> formatTableCellText(int offset, int length) const;
 
-        FixedString<PICO_STR_1KiB> formatBlockText(const MdBlock& b) const;
+        FixedString<kMdBlockTextBytes> formatBlockText(const MdBlock& b) const;
 
         // ---------- layoutBlocks()時点の整形結果の一時キャッシュ ----------
         // layoutBlocks()は高さ計算のため全ブロックに対しformatBlockText()を呼び、
@@ -197,12 +216,12 @@ class MarkdownView : public Widget {
         // 一時的に保持しておき、直後のbindLabelSlot()からはそれを再利用する。
         // スクロールで新たに現れるブロックはこのキャッシュに無い(容量超過時は素通し)ため、
         // 従来通りbindLabelSlot()側で都度formatBlockText()を呼ぶ(挙動としては変わらない)。
-        FixedString<PICO_STR_1KiB> loadFormatCacheText[kLabelPoolSize];
+        FixedString<kMdBlockTextBytes> loadFormatCacheText[kLabelPoolSize];
         int16_t loadFormatCacheBlockIdx[kLabelPoolSize];
         int loadFormatCacheCount = 0;
         // blockIdxに対応する整形済みテキストを返す。キャッシュに無ければformatBlockText()で
         // 計算し、layoutBlocks()実行中(＝まだ枠に空きがある間)であればキャッシュへ格納する。
-        FixedString<PICO_STR_1KiB> getFormattedBlockText(int blockIdx, const MdBlock& b);
+        FixedString<kMdBlockTextBytes> getFormattedBlockText(int blockIdx, const MdBlock& b);
 
         int findBlockAtScreenY(int screenY) const;       // タップ位置→ブロック特定
 

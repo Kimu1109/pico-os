@@ -43,6 +43,18 @@ class Widget {
 
         virtual ~Widget();
 
+        // 全ウィジェットの確保をここへ集約する。
+        // 現状は計測(MemFunctions)へ通知するだけでグローバルヒープをそのまま使うが、
+        // シーンアリーナを導入する際はこの2つの実装をアリーナへ差し替えるだけで済む。
+        // 派生クラスも継承するので new Button(...) のような既存コードは書き換え不要。
+        //
+        // sized deallocation版のoperator deleteを使うことで、仮想デストラクタ経由の
+        // delete時に「最も派生したクラスのサイズ」がそのまま渡ってくる
+        // noexceptにしてあるのは、確保失敗時に例外ではなくnullptrを返すため
+        // (組み込みでは例外を使わない)
+        static void* operator new(size_t bytes) noexcept;
+        static void operator delete(void* ptr, size_t bytes) noexcept;
+
         //このウィジェットの種類(WidgetIdのtypeビットに埋め込む)。具象クラスは必ず実装すること
         virtual WidgetType getWidgetType() const = 0;
 

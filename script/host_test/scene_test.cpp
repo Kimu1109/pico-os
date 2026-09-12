@@ -255,6 +255,11 @@ int main(){
     WidgetFunctions::Destroy(overlay);
     check(widget_alive == 0, "最終状態: ウィジェットのリークなし");
 
+    //Widget::operator new/delete による実バイト数の集計。
+    //mallinfoと違い自前で数えているのでASan環境でも正しく動く
+    check(MemFunctions::widget_live_bytes == 0 && MemFunctions::widget_live_count == 0,
+          "最終状態: ウィジェット本体の確保量が0に戻る");
+
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

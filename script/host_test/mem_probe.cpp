@@ -89,6 +89,25 @@ namespace Probe {
         Remember(p, n);
     }
 
+    // Widget::operator new のようにグローバルoperator newを経由しない確保を、
+    // サイズだけ受け取って同じカウンタへ積む
+    inline void RecordExternal(size_t n){
+        if(!enabled) return;
+        alloc_count++;
+        alloc_bytes += (long long)n;
+        live_bytes += (long long)n;
+        if(live_bytes > peak_live) peak_live = live_bytes;
+        for(int i = 0; i < kBucketCount; i++){
+            if(n <= kBucketMax[i]){ buckets[i]++; break; }
+        }
+    }
+
+    inline void ReleaseExternal(size_t n){
+        if(!enabled) return;
+        free_count++;
+        live_bytes -= (long long)n;
+    }
+
     inline void Release(void* p){
         if(!p) return;
         const size_t n = Forget(p);
@@ -117,6 +136,7 @@ void operator delete[](void* p, size_t) noexcept { operator delete(p); }
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Font_Functions.hpp"
+#include "functions/Mem_Functions.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Textbox.hpp"
@@ -255,8 +275,15 @@ static void RegisterProbeDoc(){
     HostSd::files[kProbeDocPath] = doc;
 }
 
+// Widget::operator new/delete をProbeのカウンタへ流し込む
+static void ObserveWidgetAlloc(size_t bytes, bool is_alloc){
+    if(is_alloc) Probe::RecordExternal(bytes);
+    else         Probe::ReleaseExternal(bytes);
+}
+
 int main(){
     RegisterProbeDoc();
+    MemFunctions::widget_alloc_observer = &ObserveWidgetAlloc;
 
     //以降の確保をすべて集計対象にする
     Probe::enabled = true;
@@ -384,6 +411,31 @@ int main(){
         SceneFunctions::Update();
     }
     WidgetFunctions::ClearSceneWidgets();
+
+    // シーンアリーナが実際に抱えることになる量(= ウィジェット本体だけ)を出す。
+    // シーン全体のピークには内部のstd::vector/std::functionも含まれており、
+    // そちらを枠の根拠にすると倍近く過大になる
+    {
+        const uint32_t widget_before = MemFunctions::widget_live_bytes;
+        const long long live_before = Probe::live_bytes;
+
+        MarkdownView* view = new MarkdownView(0, 0, 240, 240);
+        view->load(kProbeDocPath);
+
+        const uint32_t widget_bytes = MemFunctions::widget_live_bytes - widget_before;
+        const uint32_t widget_count = MemFunctions::widget_live_count;
+        const long long total = Probe::live_bytes - live_before;
+
+        delete view;
+
+        PrintHeader("シーンアリーナが抱える量(MarkdownView + load())");
+        printf("ウィジェット本体   %8uB (%u個)\n", widget_bytes, widget_count);
+        printf("内部のvector等     %8lldB\n", total - (long long)widget_bytes);
+        printf("合計               %8lldB\n", total);
+        printf("-> アリーナ枠の根拠にできるのは上段だけ(%.0f%%)。\n",
+            widget_bytes * 100.0 / (double)(total ? total : 1));
+        printf("   下段はグローバルヒープに残るので、枠に足しても無駄になる。\n");
+    }
 
     // load()が読み込み・パース・レイアウト・バインドまで通っているかの確認。
     // SDスタブが空ファイルしか返さなかった頃はこの経路が一度も実行されておらず、

@@ -100,6 +100,7 @@ namespace {
     // --- 現シーン滞在中の追跡状態 ---
     int current_stat_index = -1;
     uint32_t scene_baseline_used = 0; //onEnter()直前(ウィジェット生成前)のused
+    uint32_t scene_baseline_widget = 0; //同、ウィジェット本体の生存バイト数
     bool scene_active = false;
     bool baseline_valid = false;
 
@@ -122,6 +123,31 @@ namespace {
         overflow->name.assign("(overflow)");
         return overflow;
     }
+}
+
+void MemFunctions::OnWidgetAlloc(size_t bytes){
+    widget_live_bytes += (uint32_t)bytes;
+    widget_live_count++;
+
+    if(widget_alloc_observer) widget_alloc_observer(bytes, true);
+
+    //現シーンが抱えているウィジェット本体のピークを追う
+    if(scene_active && current_stat_index >= 0 && widget_live_bytes > scene_baseline_widget){
+        const uint32_t delta = widget_live_bytes - scene_baseline_widget;
+        SceneStat& stat = scene_stats[current_stat_index];
+        if(delta > stat.widget_bytes) stat.widget_bytes = delta;
+    }
+}
+
+void MemFunctions::OnWidgetFree(size_t bytes){
+    if(widget_alloc_observer) widget_alloc_observer(bytes, false);
+
+    if(widget_live_bytes >= (uint32_t)bytes){
+        widget_live_bytes -= (uint32_t)bytes;
+    }else{
+        widget_live_bytes = 0;
+    }
+    if(widget_live_count > 0) widget_live_count--;
 }
 
 MemFunctions::Snapshot MemFunctions::Take(bool probe_largest){
@@ -202,9 +228,13 @@ void MemFunctions::SealPermanentBaseline(){
     const uint32_t permanent_bytes = (permanent_snapshot.used > boot_snapshot.used)
         ? (permanent_snapshot.used - boot_snapshot.used) : 0;
 
+    widget_permanent_bytes = widget_live_bytes;
+
     Log("常駐層の確保完了");
-    LOG_SYS_DEBUG("[MEM] -> 常駐ウィジェット等が%luB。アリーナを分割する場合これが永続領域の目安",
-        (unsigned long)permanent_bytes);
+    LOG_SYS_DEBUG("[MEM] -> 常駐層は計%luB。うちウィジェット本体が%luB(%lu個)",
+        (unsigned long)permanent_bytes,
+        (unsigned long)widget_permanent_bytes,
+        (unsigned long)widget_live_count);
 }
 
 void MemFunctions::Update(){
@@ -220,8 +250,18 @@ void MemFunctions::Update(){
 }
 
 void MemFunctions::OnSceneExit(){
+    const uint32_t used = ReadMallocInfo().used;
+
+    //シーンのウィジェットが1つも生きていない瞬間。リーク判定の一次情報になる
+    if(floor_samples == 0){
+        floor_first_used = used;
+        floor_max_used = used;
+    }
+    floor_last_used = used;
+    if(used > floor_max_used) floor_max_used = used;
+    floor_samples++;
+
     if(scene_active && current_stat_index >= 0 && baseline_valid){
-        const uint32_t used = ReadMallocInfo().used;
         SceneStat& stat = scene_stats[current_stat_index];
 
         //全部破棄したのにシーン開始前より増えていれば、その差分は解放漏れの候補
@@ -229,11 +269,13 @@ void MemFunctions::OnSceneExit(){
             const uint32_t residue = used - scene_baseline_used;
             stat.residue_bytes += residue;
 
-            //正常なら何も出ない。出た時点で解放漏れなので、レポートを待たずに知らせる
-            LOG_SYS_DEBUG("[MEM] シーン破棄: %s 解放後も%luB残留 (累計%luB)",
-                stat.name.c_str(),
-                (unsigned long)residue,
-                (unsigned long)stat.residue_bytes);
+            //閾値以下は背景処理の一時確保に埋もれるので即時ログには出さない
+            if(residue >= kResidueLogThreshold){
+                LOG_SYS_DEBUG("[MEM] シーン破棄: %s 解放後も%luB残留 (累計%luB)",
+                    stat.name.c_str(),
+                    (unsigned long)residue,
+                    (unsigned long)stat.residue_bytes);
+            }
         }
     }
 
@@ -243,6 +285,8 @@ void MemFunctions::OnSceneExit(){
 
 void MemFunctions::BeforeSceneEnter(){
     scene_baseline_used = ReadMallocInfo().used;
+    //この時点で生きているのは常駐ウィジェットだけ。以降の増分がシーンの取り分
+    scene_baseline_widget = widget_live_bytes;
     baseline_valid = true;
 }
 
@@ -256,10 +300,14 @@ void MemFunctions::AfterSceneEnter(const char* scene_name){
     const uint32_t used = ReadMallocInfo().used;
     const uint32_t enter_delta = (used > scene_baseline_used) ? (used - scene_baseline_used) : 0;
 
+    const uint32_t widget_delta = (widget_live_bytes > scene_baseline_widget)
+        ? (widget_live_bytes - scene_baseline_widget) : 0;
+
     SceneStat* stat = FindOrCreateStat(scene_name);
     stat->visits++;
     if(enter_delta > stat->enter_bytes) stat->enter_bytes = enter_delta;
     if(enter_delta > stat->peak_bytes)  stat->peak_bytes = enter_delta;
+    if(widget_delta > stat->widget_bytes) stat->widget_bytes = widget_delta;
 
     current_stat_index = (int)(stat - &scene_stats[0]);
     scene_active = true;
@@ -290,35 +338,53 @@ void MemFunctions::LogReport(){
     LOG_SYS_DEBUG("[MEM] ===== シーン別メモリレポート (遷移%lu回目) =====",
         (unsigned long)transition_count);
     //列がずれないよう見出しはASCIIで揃える
-    LOG_SYS_DEBUG("[MEM] %-12s %9s %9s %9s %7s", "scene", "enter", "peak", "residue", "visits");
+    LOG_SYS_DEBUG("[MEM] %-12s %9s %9s %9s %9s %7s",
+        "scene", "enter", "peak", "widget", "residue", "visits");
 
     uint32_t worst_peak = 0;
+    uint32_t worst_widget = 0;
     for(int i = 0; i < scene_stat_count; i++){
         const SceneStat& stat = scene_stats[i];
-        LOG_SYS_DEBUG("[MEM] %-12s %8luB %8luB %8luB %7lu",
+        LOG_SYS_DEBUG("[MEM] %-12s %8luB %8luB %8luB %8luB %7lu",
             stat.name.c_str(),
             (unsigned long)stat.enter_bytes,
             (unsigned long)stat.peak_bytes,
+            (unsigned long)stat.widget_bytes,
             (unsigned long)stat.residue_bytes,
             (unsigned long)stat.visits);
         if(stat.peak_bytes > worst_peak) worst_peak = stat.peak_bytes;
+        if(stat.widget_bytes > worst_widget) worst_widget = stat.widget_bytes;
     }
 
     LOG_SYS_DEBUG("[MEM] enter=onEnter()での増分 / peak=滞在中の最大増分 / residue=破棄後も戻らなかった累計");
+    LOG_SYS_DEBUG("[MEM] widget=そのうちウィジェット本体ぶん(= シーンアリーナが抱える量)");
+    LOG_SYS_DEBUG("[MEM] ※residueは滞在中ずっとを窓にするため、背景処理の一時確保も拾う。");
+    LOG_SYS_DEBUG("[MEM] 　リークの有無は下の「ヒープ下限」で判断すること");
 
     Log("現在");
     if(s.probe_grew_arena){
         LOG_SYS_DEBUG("[MEM] ※max_allocの実測中にヒープが伸びたため、実際の空き連続域はこれより大きい可能性あり");
     }
 
-    //アリーナ枠の見積もり。実測の最大ピークに5割の余裕を持たせる
-    LOG_SYS_DEBUG("[MEM] -> シーン領域の最大ピーク=%luB / 推奨アリーナ枠=%luB (x1.5)",
+    //アリーナが抱えるのはウィジェット本体だけ。peakには内部のvector等も含まれるので
+    //そちらを枠の根拠にすると倍近く過大になる
+    LOG_SYS_DEBUG("[MEM] -> シーン領域の最大ピーク=%luB (うちウィジェット本体=%luB)",
         (unsigned long)worst_peak,
-        (unsigned long)(worst_peak + worst_peak / 2));
+        (unsigned long)worst_widget);
+    LOG_SYS_DEBUG("[MEM] -> アリーナ枠の目安: 永続%luB + シーン%luB (x1.3で%luB)",
+        (unsigned long)widget_permanent_bytes,
+        (unsigned long)worst_widget,
+        (unsigned long)(worst_widget + worst_widget * 3 / 10));
 
-    if(permanent_sealed){
-        LOG_SYS_DEBUG("[MEM] -> 常駐確保完了時からのused増分=%+ldB (遷移を繰り返して単調増加ならリーク)",
-            (long)s.used - (long)permanent_snapshot.used);
+    //リーク判定の本命。シーンのウィジェットが無い瞬間のusedを毎回同じ条件で比べる
+    if(floor_samples > 0){
+        LOG_SYS_DEBUG("[MEM] ヒープ下限(シーン破棄直後/%lu回): 初回=%luB 最新=%luB 最大=%luB 差%+ldB",
+            (unsigned long)floor_samples,
+            (unsigned long)floor_first_used,
+            (unsigned long)floor_last_used,
+            (unsigned long)floor_max_used,
+            (long)floor_last_used - (long)floor_first_used);
+        LOG_SYS_DEBUG("[MEM] -> 差が回数に比例して増えるならリーク。横ばいならリーク無し");
     }
 }
 
@@ -328,6 +394,8 @@ MemFunctions::Snapshot MemFunctions::Take(bool){ return Snapshot(); }
 uint16_t MemFunctions::FragmentationPermil(const Snapshot&){ return 0; }
 void MemFunctions::Log(const char*, bool){}
 void MemFunctions::LogDelta(const char*, const Snapshot&, bool){}
+void MemFunctions::OnWidgetAlloc(size_t){}
+void MemFunctions::OnWidgetFree(size_t){}
 void MemFunctions::Setup(){}
 void MemFunctions::SealPermanentBaseline(){}
 void MemFunctions::Update(){}

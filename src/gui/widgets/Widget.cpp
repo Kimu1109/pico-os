@@ -2,6 +2,23 @@
 #include "gui/widgets/WidgetRegistry.hpp"
 #include "OS_Data.hpp"
 #include "functions/GFX_Functions.hpp"
+#include "functions/Mem_Functions.hpp"
+
+#include <cstdlib>
+#include <new>
+
+void* Widget::operator new(size_t bytes) noexcept {
+    void* ptr = malloc(bytes ? bytes : 1);
+    if(!ptr) return nullptr; //組み込みでは例外を投げずnullptrを返す(呼び出し側で落ちる)
+    MemFunctions::OnWidgetAlloc(bytes);
+    return ptr;
+}
+
+void Widget::operator delete(void* ptr, size_t bytes) noexcept {
+    if(!ptr) return;
+    MemFunctions::OnWidgetFree(bytes);
+    free(ptr);
+}
 
 Widget::~Widget() {
     if (WidgetIdTools::IsValid(cached_id)) {

@@ -16,6 +16,7 @@
 #include <cstring>
 #include <cstdint>
 #include <new>
+#include <string>
 
 // ---- 確保カウンタ(operator new/delete を差し替えて集計する) ----
 namespace Probe {
@@ -88,6 +89,25 @@ namespace Probe {
         Remember(p, n);
     }
 
+    // Widget::operator new のようにグローバルoperator newを経由しない確保を、
+    // サイズだけ受け取って同じカウンタへ積む
+    inline void RecordExternal(size_t n){
+        if(!enabled) return;
+        alloc_count++;
+        alloc_bytes += (long long)n;
+        live_bytes += (long long)n;
+        if(live_bytes > peak_live) peak_live = live_bytes;
+        for(int i = 0; i < kBucketCount; i++){
+            if(n <= kBucketMax[i]){ buckets[i]++; break; }
+        }
+    }
+
+    inline void ReleaseExternal(size_t n){
+        if(!enabled) return;
+        free_count++;
+        live_bytes -= (long long)n;
+    }
+
     inline void Release(void* p){
         if(!p) return;
         const size_t n = Forget(p);
@@ -116,10 +136,14 @@ void operator delete[](void* p, size_t) noexcept { operator delete(p); }
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Font_Functions.hpp"
+#include "functions/Mem_Functions.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/Icon.hpp"
+#include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/CanvasRaster.hpp"
+#include "gui/widgets/MarkdownView.hpp"
 #include "gui/scenes/Scene.hpp"
 #include "OS_Data.hpp"
 
@@ -175,6 +199,9 @@ static void Measure(const char* name, size_t object_bytes, F&& body){
     c.residue = Probe::live_bytes - live_at_start;
 }
 
+// residueが残っているケースの件数
+static int leaking_cases = 0;
+
 static void PrintCaseTable(){
     PrintHeader("ウィジェット1個あたりの確保パターン(生成->破棄)");
     //列見出しはASCIIで揃える(日本語は幅指定とバイト数がずれて崩れるため)
@@ -186,6 +213,7 @@ static void PrintCaseTable(){
             c.name, c.object_bytes, c.alloc_count, c.alloc_count - 1,
             c.alloc_bytes, c.peak_bytes, c.residue,
             c.residue ? "  <- 解放漏れ" : "");
+        if(c.residue != 0) leaking_cases++;
     }
     printf("\nallocs=生成〜破棄で走った確保回数 / inner=そのうちオブジェクト本体以外\n");
     printf("innerが0でない = 本体をプールへ移してもその回数ぶんの小確保はヒープに残る。\n");
@@ -227,7 +255,36 @@ class ProbeScene : public Scene {
         }
 };
 
+// 計測用のダミー文書。SDスタブ(HostSd::files)へ登録して load() に読ませる
+static const char* kProbeDocPath = "probe/doc.md";
+
+static void RegisterProbeDoc(){
+    std::string doc;
+    doc += "# 見出し1\n\n";
+    doc += "これは段落です。**太字**と_下線_を含みます。\n\n";
+    doc += "## 見出し2\n\n";
+    for(int i = 0; i < 12; i++){
+        doc += "- リスト項目";
+        doc += std::to_string(i);
+        doc += " 折り返しが起きる程度の長さの日本語テキストを入れておきます。\n";
+    }
+    doc += "\n> 引用文\n\n";
+    doc += "| 列A | 列B |\n| --- | --- |\n| 値1 | 値2 |\n\n";
+    doc += "---\n\n";
+    doc += "最後の段落です。\n";
+    HostSd::files[kProbeDocPath] = doc;
+}
+
+// Widget::operator new/delete をProbeのカウンタへ流し込む
+static void ObserveWidgetAlloc(size_t bytes, bool is_alloc){
+    if(is_alloc) Probe::RecordExternal(bytes);
+    else         Probe::ReleaseExternal(bytes);
+}
+
 int main(){
+    RegisterProbeDoc();
+    MemFunctions::widget_alloc_observer = &ObserveWidgetAlloc;
+
     //以降の確保をすべて集計対象にする
     Probe::enabled = true;
 
@@ -262,6 +319,34 @@ int main(){
     });
     Measure("Icon", sizeof(Icon), [](){
         auto* w = new Icon(0, 0, IconID::Folder, IconSize::Px16);
+        delete w;
+    });
+
+    // 子ウィジェットや内部バッファを自前で確保する重量級。
+    // デストラクタで解放し損ねるとここのresidueが0でなくなる
+    Measure("ScrollList", sizeof(ScrollList), [](){
+        auto* w = new ScrollList(0, 0, 200, 100, 8);
+        for(int i = 0; i < 8; i++){
+            ScrollListTools::Item item;
+            item.text.assign("項目");
+            w->add(item);
+        }
+        delete w;
+    });
+    Measure("CanvasRaster", sizeof(CanvasRaster), [](){
+        auto* w = new CanvasRaster(0, 0, 120, 80);
+        delete w;
+    });
+    Measure("MarkdownView", sizeof(MarkdownView), [](){
+        //Label16 + Image2 + Icon16 + measure_label をコンストラクタで確保する
+        auto* w = new MarkdownView(0, 0, 240, 240);
+        delete w;
+    });
+    Measure("MarkdownView + load()", sizeof(MarkdownView), [](){
+        //実機に近い値を得るため、文書を読み込んでレイアウトまで済ませた状態で測る。
+        //コンストラクタだけの行と比べると、doc_textの中身とLabelの行データが乗る
+        auto* w = new MarkdownView(0, 0, 240, 240);
+        w->load(kProbeDocPath);
         delete w;
     });
 
@@ -327,6 +412,55 @@ int main(){
     }
     WidgetFunctions::ClearSceneWidgets();
 
-    printf("\n計測完了\n");
+    // シーンアリーナが実際に抱えることになる量(= ウィジェット本体だけ)を出す。
+    // シーン全体のピークには内部のstd::vector/std::functionも含まれており、
+    // そちらを枠の根拠にすると倍近く過大になる
+    {
+        const uint32_t widget_before = MemFunctions::widget_live_bytes;
+        const long long live_before = Probe::live_bytes;
+
+        MarkdownView* view = new MarkdownView(0, 0, 240, 240);
+        view->load(kProbeDocPath);
+
+        const uint32_t widget_bytes = MemFunctions::widget_live_bytes - widget_before;
+        const uint32_t widget_count = MemFunctions::widget_live_count;
+        const long long total = Probe::live_bytes - live_before;
+
+        delete view;
+
+        PrintHeader("シーンアリーナが抱える量(MarkdownView + load())");
+        printf("ウィジェット本体   %8uB (%u個)\n", widget_bytes, widget_count);
+        printf("内部のvector等     %8lldB\n", total - (long long)widget_bytes);
+        printf("合計               %8lldB\n", total);
+        printf("-> アリーナ枠の根拠にできるのは上段だけ(%.0f%%)。\n",
+            widget_bytes * 100.0 / (double)(total ? total : 1));
+        printf("   下段はグローバルヒープに残るので、枠に足しても無駄になる。\n");
+    }
+
+    // load()が読み込み・パース・レイアウト・バインドまで通っているかの確認。
+    // SDスタブが空ファイルしか返さなかった頃はこの経路が一度も実行されておらず、
+    // チャンク読み込みへの書き換えが検証できていなかった
+    {
+        MarkdownView view(0, 0, 240, 240);
+        const bool loaded = view.load(kProbeDocPath);
+        int visible_children = 0;
+        for(Widget* c : view.getChildren()){
+            if(c->getVisible()) visible_children++;
+        }
+        PrintHeader("load()の経路確認");
+        printf("load()=%s / 表示状態になった子ウィジェット=%d個\n",
+            loaded ? "true" : "false", visible_children);
+        if(!loaded || visible_children == 0){
+            printf("load()が文書を読めていません(SDスタブの登録漏れか読み込み処理の不具合)\n");
+            return 1;
+        }
+    }
+
+    if(leaking_cases > 0){
+        printf("\n解放漏れのあるウィジェットが%d件あります(上の表のresidue列)\n", leaking_cases);
+        return 1;
+    }
+
+    printf("\n計測完了(解放漏れなし)\n");
     return 0;
 }

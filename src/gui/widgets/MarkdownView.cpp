@@ -2,13 +2,14 @@
 #include "OS_Data.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "gui/icons/icon_render.h"
+#include "functions/Log_Functions.hpp"
 #include "SdFat.h"
 
 MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
     this->l_rect = {x, y, w, h};
 
     for (int i = 0; i < kLabelPoolSize; i++) {
-        labelPool[i] = new Label<PICO_STR_1KiB>(kPadding, 0, "");
+        labelPool[i] = new Label<kMdBlockTextBytes>(kPadding, 0, "");
         labelPool[i]->setParent(this);
         labelPool[i]->setVisible(false);
         labelPool[i]->setDisableMarkdirty(true);
@@ -16,7 +17,10 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         children_.push_back(labelPool[i]);
     }
     for (int i = 0; i < kImagePoolSize; i++) {
-        imagePool[i] = new Image("", kPadding, 0, true);
+        //onRAM=false: SDから都度ストリーミングして描画する。
+        //RAMに載せるとスプライトのピクセルバッファが画像サイズぶん必要になり、
+        //MarkdownViewの占有量が「開いた文書次第」で青天井になってしまう
+        imagePool[i] = new Image("", kPadding, 0, false);
         imagePool[i]->setParent(this);
         imagePool[i]->setVisible(false);
         imagePool[i]->setDisableMarkdirty(true);
@@ -36,24 +40,62 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
     measure_label = new Label<PICO_STR_LL>(0, 0, ""); // レンダリングツリーには含めない（getChildren()に入れない）
 }
 
+MarkdownView::~MarkdownView() {
+    //コンストラクタで確保したプールを全て解放する。
+    //measure_labelはchildren_に入れていないので個別に解放が要る
+    for (int i = 0; i < kLabelPoolSize; i++) delete labelPool[i];
+    for (int i = 0; i < kImagePoolSize; i++) delete imagePool[i];
+    for (int i = 0; i < kCheckboxIconPoolSize; i++) delete checkboxIconPool[i];
+    delete measure_label;
+
+    children_.clear();
+}
+
 // ---------- ロード & パース ----------
 
 bool MarkdownView::load(const char* path) {
     FsFile f = OSData::SD.open(path);
     if (!f) return false;
 
-    size_t size = f.fileSize();
-    if (size > kMaxSourceBytes) size = kMaxSourceBytes;
+    const size_t file_size = f.fileSize();
+    size_t size = file_size;
+    if (size > kMdMaxSourceBytes) {
+        size = kMdMaxSourceBytes;
+        //黙って切るとドキュメントの後半が消えた理由が分からなくなる
+        LOG_SYS_WARN("MarkdownView: %s が上限(%uB)を超えているため %uB で打ち切りました",
+            path, (unsigned)kMdMaxSourceBytes, (unsigned)file_size);
+    }
 
-    char* buf = new char[size + 1];
-    f.read((uint8_t*)buf, size);
-    buf[size] = '\0';
+    //以前はnew char[size+1]でファイル全体ぶんの一時バッファを取っていたが、
+    //ドキュメント全体と同じ大きさ(最大8KiB)の塊をヒープへ一度に要求することになり、
+    //断片化の原因として一番大きかった。スタック上の小さなチャンクで読み進めて
+    //doc_textへ追記する形にして、ヒープを一切使わないようにする
+    doc_text.clear();
+    char chunk[256];
+    size_t remaining = size;
+    while (remaining > 0) {
+        const size_t want = (remaining < sizeof(chunk)) ? remaining : sizeof(chunk);
+        const int got = f.read((uint8_t*)chunk, want);
+        if (got <= 0) break; //読み取り失敗。読めたところまでで打ち切る
+        doc_text.append(chunk, (size_t)got);
+        remaining -= (size_t)got;
+    }
     f.close();
 
-    doc_text.assign(buf);
-    delete[] buf;
-
     parseBlocks();
+
+    //1ブロックがkMdBlockTextBytesを超えるとLabelへ入れる時点で切り詰められる。
+    //srcLengthでの概算判定(インライン記法の変換で増減するため厳密ではない)だが、
+    //上限に当たっていること自体に気付けるようにしておく
+    int oversized = 0;
+    for (const MdBlock& b : blocks) {
+        if (b.srcLength >= kMdBlockTextBytes) oversized++;
+    }
+    if (oversized > 0) {
+        LOG_SYS_WARN("MarkdownView: %s に1ブロック上限(%uB)を超える段落が%d件あります(表示が途中で切れます)",
+            path, (unsigned)kMdBlockTextBytes, oversized);
+    }
+
     layoutBlocks();
 
     scroll_y = 0;
@@ -78,8 +120,8 @@ bool MarkdownView::load(const char* path) {
 //     （Label側がバックスラッシュエスケープに対応していないための既知の制約）
 //   - 1ブロックに複数リンクがある場合、装飾自体は全リンクに適用されるが、
 //     タップで開けるのは findFirstInlineLink() が拾う最初の1件のみ
-FixedString<PICO_STR_1KiB> MarkdownView::applyInlineMarkdown(const FixedString<PICO_STR_1KiB>& src) const {
-    FixedString<PICO_STR_1KiB> out;
+FixedString<kMdBlockTextBytes> MarkdownView::applyInlineMarkdown(const FixedString<kMdBlockTextBytes>& src) const {
+    FixedString<kMdBlockTextBytes> out;
     const int n = (int)src.length();
 
     for (int i = 0; i < n; i++) {
@@ -427,11 +469,11 @@ void MarkdownView::splitTableRow(int lineStart, int lineEnd, uint16_t cellOffset
 // テーブルは装飾を持たない直接描画(frameへの直接print)で表示するため、
 // `code`や[text](url)等のインライン装飾はここでは変換しない
 // （変換すると`~`や`_`がそのまま文字として表示されてしまうため）。
-FixedString<PICO_STR_1KiB> MarkdownView::formatTableCellText(int offset, int length) const {
-    FixedString<PICO_STR_1KiB> raw;
+FixedString<kMdBlockTextBytes> MarkdownView::formatTableCellText(int offset, int length) const {
+    FixedString<kMdBlockTextBytes> raw;
     raw.assign(doc_text.c_str() + offset, (size_t)length);
 
-    FixedString<PICO_STR_1KiB> unescaped;
+    FixedString<kMdBlockTextBytes> unescaped;
     const int n = (int)raw.length();
     for (int i = 0; i < n; i++) {
         if (raw[i] == '\\' && i + 1 < n && raw[i + 1] == '|') {
@@ -727,14 +769,14 @@ void MarkdownView::parseBlocks() {
 
 // ---------- レイアウト（高さ事前計算） ----------
 
-FixedString<PICO_STR_1KiB> MarkdownView::formatBlockText(const MdBlock& b) const {
-    FixedString<PICO_STR_1KiB> raw;
+FixedString<kMdBlockTextBytes> MarkdownView::formatBlockText(const MdBlock& b) const {
+    FixedString<kMdBlockTextBytes> raw;
     switch (b.type) {
         case MdBlockType::H1:
         case MdBlockType::H2:
         case MdBlockType::H3: {
             raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
-            FixedString<PICO_STR_1KiB> result;
+            FixedString<kMdBlockTextBytes> result;
             result.append("**");
             result.append(applyInlineMarkdown(raw));
             result.append("**");
@@ -742,7 +784,7 @@ FixedString<PICO_STR_1KiB> MarkdownView::formatBlockText(const MdBlock& b) const
         }
         case MdBlockType::Link: {
             raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
-            FixedString<PICO_STR_1KiB> result;
+            FixedString<kMdBlockTextBytes> result;
             result.append("_");
             result.append(raw);
             result.append("_"); // 下線で視覚的に示す
@@ -755,7 +797,7 @@ FixedString<PICO_STR_1KiB> MarkdownView::formatBlockText(const MdBlock& b) const
                 // テキスト側には付与しない
                 return applyInlineMarkdown(raw);
             }
-            FixedString<PICO_STR_1KiB> result;
+            FixedString<kMdBlockTextBytes> result;
             if (b.listOrdered) {
                 result.appendFormat("%u.", (unsigned)b.listNumber);
             } else {
@@ -773,7 +815,7 @@ FixedString<PICO_STR_1KiB> MarkdownView::formatBlockText(const MdBlock& b) const
         }
         case MdBlockType::HorizontalRule:
         case MdBlockType::TableRow:
-            return FixedString<PICO_STR_1KiB>(); // どちらもLabel1個には対応しない要素。専用のバインド処理で個別に描画する
+            return FixedString<kMdBlockTextBytes>(); // どちらもLabel1個には対応しない要素。専用のバインド処理で個別に描画する
         case MdBlockType::CodeBlock:
             raw.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
             return raw;
@@ -783,11 +825,11 @@ FixedString<PICO_STR_1KiB> MarkdownView::formatBlockText(const MdBlock& b) const
     }
 }
 
-FixedString<PICO_STR_1KiB> MarkdownView::getFormattedBlockText(int blockIdx, const MdBlock& b) {
+FixedString<kMdBlockTextBytes> MarkdownView::getFormattedBlockText(int blockIdx, const MdBlock& b) {
     for (int i = 0; i < loadFormatCacheCount; i++) {
         if (loadFormatCacheBlockIdx[i] == blockIdx) return loadFormatCacheText[i];
     }
-    FixedString<PICO_STR_1KiB> text = formatBlockText(b);
+    FixedString<kMdBlockTextBytes> text = formatBlockText(b);
     if (loadFormatCacheCount < kLabelPoolSize) {
         loadFormatCacheText[loadFormatCacheCount] = text;
         loadFormatCacheBlockIdx[loadFormatCacheCount] = (int16_t)blockIdx;
@@ -953,7 +995,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         return;
     }
     const MdBlock& b = blocks[blockIdx];
-    Label<PICO_STR_1KiB>* lbl = labelPool[slot];
+    Label<kMdBlockTextBytes>* lbl = labelPool[slot];
 
     lbl->setNoBackground();
     lbl->setBorder(PICO_BLACK, 0);
@@ -1169,7 +1211,7 @@ void MarkdownView::renderDecorations() {
                     if (cellW < 4) continue;
                     int cellBaseX = g_rect.x + kPadding + c * colWidth + kTableCellPadding;
 
-                    FixedString<PICO_STR_1KiB> cellText = formatTableCellText(b.tableCellOffset[c], b.tableCellLength[c]);
+                    FixedString<kMdBlockTextBytes> cellText = formatTableCellText(b.tableCellOffset[c], b.tableCellLength[c]);
 
                     // 列の寄せ(0=left,1=center,2=right)に応じて描画開始X座標を調整する。
                     // clipRect自体はセル全体の範囲を使うので、はみ出した分は

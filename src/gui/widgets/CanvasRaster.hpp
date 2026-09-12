@@ -44,6 +44,13 @@ class CanvasRaster : public Widget {
 
         CanvasRaster(int16_t x, int16_t y, int16_t w, int16_t h);
 
+
+        // spはコンストラクタでnewし、createSprite()でピクセルバッファも確保している。
+
+        // 解放しないとCanvasRasterを破棄するたびに画面1枚分のバッファがリークする
+
+        ~CanvasRaster() override;
+
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::CanvasRaster; }

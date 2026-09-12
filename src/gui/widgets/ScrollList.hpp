@@ -17,7 +17,9 @@ namespace ScrollListTools {
 class ScrollList : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
 
     private:
-        std::vector<ScrollListTools::Item>* dataSource = new std::vector<ScrollListTools::Item>();
+        // 実体で持つ(以前はnewしたポインタだったが、デストラクタが無く
+        // ScrollListを破棄するたびにリークしていた)。ヒープ確保も1回減る
+        std::vector<ScrollListTools::Item> dataSource;
         int scrollY = 0;
 
         const static int MARGIN = 2;
@@ -39,16 +41,16 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         ScrollList(int16_t x, int16_t y, int16_t w, int16_t h, int16_t default_size = -1){
             this->l_rect = {x, y, w, h};
             if(default_size != -1){
-                dataSource->reserve(default_size);
+                dataSource.reserve(default_size);
             }
         }
 
         void add(const ScrollListTools::Item value){
-            dataSource->push_back(value);
+            dataSource.push_back(value);
             this->needsRender();
         }
         void clear(){
-            dataSource->clear();
+            dataSource.clear();
             this->selected_index = -1;
             this->needsRender();
         }
@@ -107,16 +109,16 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         bool getEnableIcon() { return this->enable_icon; }
 
         ScrollListTools::Item* itemAt(int index){
-            if (index < 0 || index >= this->dataSource->size()) {
+            if (index < 0 || index >= this->dataSource.size()) {
                 return nullptr;
             }
-            return &this->dataSource->at(index);
+            return &this->dataSource.at(index);
         }
 
         int getFittingHeight(){
             if(this->font_h == 0){
                 this->font_h = FontFn::GetFontSize(getFontSize());
             }
-            return min(this->dataSource->size() * (this->font_h + MARGIN), SCREEN_HEIGHT - this->getScreenY());
+            return min(this->dataSource.size() * (this->font_h + MARGIN), SCREEN_HEIGHT - this->getScreenY());
         }      
 };

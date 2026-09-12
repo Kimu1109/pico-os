@@ -20,7 +20,7 @@ void ScrollList::render(){
     markdirty(g_rect);
 
     const int ITEM_HEIGHT = this->font_h + MARGIN;
-    const int ITEMS_TOTAL_HEIGHT = ITEM_HEIGHT * this->dataSource->size();
+    const int ITEMS_TOTAL_HEIGHT = ITEM_HEIGHT * this->dataSource.size();
 
     //スクロールバーの領域
     OSData::frame->drawRect(g_rect.x + g_rect.w - SCROLL_BAR_W, g_rect.y, SCROLL_BAR_W, g_rect.h, this->border_color);
@@ -47,18 +47,18 @@ void ScrollList::render(){
 
     int icon_size = FontFn::GetFontSize(this->getFontSize());
 
-    for(int i = start_index; i < this->dataSource->size(); i++){
+    for(int i = start_index; i < this->dataSource.size(); i++){
         int8_t l_text_color = this->text_color;
         if(selected_index == i){
             OSData::frame->fillRect(g_rect.x, g_rect.y + draw_y - MARGIN * 0.5, g_rect.w - SCROLL_BAR_W, ITEM_HEIGHT, this->text_color);
             l_text_color = this->background_color;
         }
         if(this->enable_icon)
-            IconRender::DrawIcon(this->dataSource->at(i).icon, IconRender::GetIconSize(icon_size), g_rect.x + MARGIN, g_rect.y + draw_y + (ITEM_HEIGHT - icon_size) / 2, l_text_color);
+            IconRender::DrawIcon(this->dataSource.at(i).icon, IconRender::GetIconSize(icon_size), g_rect.x + MARGIN, g_rect.y + draw_y + (ITEM_HEIGHT - icon_size) / 2, l_text_color);
 
         OSData::frame->setCursor(g_rect.x + MARGIN + (this->enable_icon ? (icon_size + MARGIN) : 0), g_rect.y + draw_y);
         OSData::frame->setTextColor(l_text_color);
-        OSData::frame->print(this->dataSource->at(i).text.c_str());
+        OSData::frame->print(this->dataSource.at(i).text.c_str());
 
         draw_y += ITEM_HEIGHT;
         if(draw_y > g_rect.h) break;
@@ -90,7 +90,7 @@ void ScrollList::causeOnPressStart(){
 
         int start_index = this->scrollY / ITEM_HEIGHT;
         int draw_y = start_index * ITEM_HEIGHT - this->scrollY;
-        for(int i = start_index; i < this->dataSource->size(); i++){
+        for(int i = start_index; i < this->dataSource.size(); i++){
             const int draw_start_y = g_rect.y + draw_y - MARGIN * 0.5;
             if(OSData::touchY > draw_start_y && OSData::touchY <= draw_start_y + ITEM_HEIGHT){
                 bool already_selected = i == this->selected_index;
@@ -112,7 +112,7 @@ void ScrollList::causeOnPressMove(){
     if(this->is_scrolling){
         this->scrollY = min(
             max(this->ref_scroll_y + (OSData::touchY - this->ref_touch_y) * PICO_SCROLL_EX, 0),
-            (this->font_h + MARGIN) * this->dataSource->size() - this->getScreenRect().h
+            (this->font_h + MARGIN) * this->dataSource.size() - this->getScreenRect().h
         );
         this->needs_redraw = true;
     }

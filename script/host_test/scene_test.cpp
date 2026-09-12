@@ -239,6 +239,11 @@ int main(){
         check(enter_logs == (int)MemFunctions::transition_count,
               "計測フック: シーン生成のログが遷移のたびに出る");
     }
+    {
+        //リーク判定の一次情報となるヒープ下限が、シーン破棄のたびに採れていること。
+        //(バイト数自体はASan環境では常に0に見えるので、採取回数だけを確認する)
+        check(MemFunctions::floor_samples > 0, "計測フック: ヒープ下限が記録されている");
+    }
 
     // 後片付け(リーク確認)
     while(SceneFunctions::CanPop()){
@@ -249,6 +254,11 @@ int main(){
     check(widget_alive == 1, "最終状態: 残るウィジェットはオーバーレイのみ");
     WidgetFunctions::Destroy(overlay);
     check(widget_alive == 0, "最終状態: ウィジェットのリークなし");
+
+    //Widget::operator new/delete による実バイト数の集計。
+    //mallinfoと違い自前で数えているのでASan環境でも正しく動く
+    check(MemFunctions::widget_live_bytes == 0 && MemFunctions::widget_live_count == 0,
+          "最終状態: ウィジェット本体の確保量が0に戻る");
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

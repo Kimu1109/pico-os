@@ -9,6 +9,7 @@
 #define PICO_STR_1KiB   1024
 #define PICO_STR_2KiB   2048
 #define PICO_STR_4KiB   4096
+#define PICO_STR_8KiB   8192
 #define PICO_STR_16KiB  16384
 #define PICO_STR_32KiB  32768
 

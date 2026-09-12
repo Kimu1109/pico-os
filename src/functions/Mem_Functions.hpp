@@ -32,6 +32,14 @@ namespace MemFunctions {
     // 実機では「遷移を50回繰り返す」操作を手で行うので、途中経過が自動で出たほうが都合が良い
     constexpr int kAutoReportInterval = 10;
 
+    // シーン破棄の即時ログを出す残留の下限値。
+    //
+    // residue(= used(破棄時) - used(onEnter前))はシーン滞在中の全時間を含む窓なので、
+    // 背景サブシステム(Wi-Fi再接続/タスク/ログバッファ)がその瞬間に確保中だった分まで
+    // 拾ってしまう。数百バイト程度で毎回警告を出すと本物のリークが埋もれるため、
+    // 即時ログはこの閾値以上のときだけにする(累計はレポートのresidue列で見る)
+    constexpr uint32_t kResidueLogThreshold = 1024;
+
     // largest_freeの探索上限。
     // 上限を設けないと、探索中のmallocがヒープ末尾を大きく伸ばして
     // スタック側の余裕を削ってしまう(伸ばした分は解放してもarenaに残る)。
@@ -69,6 +77,24 @@ namespace MemFunctions {
     // 0 = 空きが1塊に繋がっている、1000に近い = 空きはあるが細切れで使えない。
     // 探索が上限で頭打ちになった場合(largest_free_capped)は実害なしとみなして0を返す
     uint16_t FragmentationPermil(const Snapshot& s);
+
+    // --- ウィジェット本体の確保量 ---
+    //
+    // Widget::operator new/delete から呼ばれ、ウィジェットのオブジェクト本体だけを
+    // 積算する。シーンアリーナ(Widget::operator newをアリーナへ差し替える方式)が
+    // 抱えるのはこの部分だけなので、アリーナの枠はこの数字から決める。
+    //
+    // 注意: シーン全体のused増分(SceneStat::peak_bytes)にはウィジェット内部の
+    // std::vector/std::functionも含まれる。それらはグローバルヒープに残り続けるため、
+    // アリーナの枠の根拠にしてはいけない(倍近く過大になる)。
+    void OnWidgetAlloc(size_t bytes);
+    void OnWidgetFree(size_t bytes);
+
+    // ホスト側の計測(script/host_test/mem_probe.cpp)がウィジェットの確保を
+    // 横取りするためのフック。Widget::operator newはグローバルのoperator newを
+    // 経由せずmallocを直接呼ぶため、これが無いとホストの確保カウンタから漏れる。
+    // 実機では未設定(nullptr)なのでnullチェック1回ぶんのコストしかかからない
+    inline void (*widget_alloc_observer)(size_t bytes, bool is_alloc) = nullptr;
 
     // 1行のログとして現在のヒープ状態を出す
     void Log(const char* label, bool probe_largest = true);
@@ -110,6 +136,7 @@ namespace MemFunctions {
         FixedString<PICO_STR_S> name;
         uint32_t enter_bytes = 0;   // onEnter()での増分の最大値(= ウィジェット生成に要した量)
         uint32_t peak_bytes = 0;    // 滞在中のピーク増分(ダイアログ等を開いた瞬間を含む)
+        uint32_t widget_bytes = 0;  // うちウィジェット本体のピーク(= シーンアリーナが抱える量)
         uint32_t residue_bytes = 0; // 退出後に戻らなかった量の累計(リーク候補)
         uint32_t visits = 0;
     };
@@ -122,4 +149,21 @@ namespace MemFunctions {
     inline Snapshot boot_snapshot;
     inline Snapshot permanent_snapshot;
     inline bool permanent_sealed = false;
+
+    // --- ヒープ下限(シーン破棄直後のused) ---
+    //
+    // リークがあるかどうかの一次情報はこちら。
+    // シーンのウィジェットが1つも生きていない瞬間なので、毎回ほぼ同じ値になるはず。
+    // 遷移回数に比例して増えるなら本物のリーク、横ばいならシーン滞在中の
+    // 一時確保を residue が拾っているだけ、と判断できる
+    inline uint32_t floor_first_used = 0;
+    inline uint32_t floor_last_used = 0;
+    inline uint32_t floor_max_used = 0;
+    inline uint32_t floor_samples = 0;
+
+    // --- ウィジェット本体の確保量(Widget::operator newが積算する) ---
+    inline uint32_t widget_live_bytes = 0;  // 現在生存しているウィジェット本体の合計
+    inline uint32_t widget_live_count = 0;
+    // 常駐ウィジェット(Statusbar/キーボード)ぶん。アリーナを分割する場合の永続領域
+    inline uint32_t widget_permanent_bytes = 0;
 }

@@ -4,6 +4,7 @@
 // -------------------------------------------------------------------
 
 #include "gui/widgets/Label.hpp"
+#include <utility>
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
@@ -15,36 +16,72 @@ void Label<N>::needsRender() {
 }
 
 template<size_t N>
-int Label<N>::utf8CharLen(uint8_t lead) {
-    if ((lead & 0x80) == 0x00) return 1;
-    if ((lead & 0xE0) == 0xC0) return 2;
-    if ((lead & 0xF0) == 0xE0) return 3;
-    if ((lead & 0xF8) == 0xF0) return 4;
-    return 1;
+void Label<N>::ensureLayout() const {
+    if (!this->needs_relayout) return;
+    //relayout()はレイアウト結果(可視状態ではない)を更新するだけなので、
+    //const getterから呼んでも観測できる振る舞いは変わらない
+    const_cast<Label<N>*>(this)->relayout();
 }
 
 template<size_t N>
-std::vector<FixedString<5>> Label<N>::splitChars(const char* s) {
-    std::vector<FixedString<5>> out;
-    if (!s) return out;
-    size_t i = 0, n = strlen(s);
-    while (i < n) {
-        int len = utf8CharLen((uint8_t)s[i]);
-        if (i + len > n) len = n - i;
-        FixedString<5> c;
-        c.appendUtf8Char(&s[i], len);
-        out.push_back(c);
-        i += len;
-    }
-    return out;
+Rect Label<N>::staleScreenRect() const {
+    const int sx = (parent ? parent->getScreenX() - parent->getScrollOffsetX() : 0) + l_rect.x;
+    const int sy = (parent ? parent->getScreenY() - parent->getScrollOffsetY() : 0) + l_rect.y;
+    return { (int16_t)sx, (int16_t)sy, l_rect.w, l_rect.h };
 }
 
 template<size_t N>
-std::vector<TextRun> Label<N>::parseMarkup(const char* src) {
+void Label<N>::invalidateLayout() {
+    //ここでdirty登録するのは「消すべき古い領域」なので、再計算前の矩形を使う。
+    //needsRender()はgetScreenRect()経由でensureLayout()を呼んでしまい、
+    //せっかく遅延させた再計算がその場で走ってしまう
+    this->needs_redraw = true;
+    markdirty(this->staleScreenRect());
+    markdirty(this->prev_cursor_rect);
+
+    this->needs_relayout = true;
+}
+
+template<size_t N>
+Rect Label<N>::getLocalRect() const {
+    this->ensureLayout();
+    return l_rect;
+}
+
+template<size_t N>
+int Label<N>::getW() {
+    this->ensureLayout();
+    return this->l_rect.w;
+}
+
+template<size_t N>
+int Label<N>::getH() {
+    this->ensureLayout();
+    return this->l_rect.h;
+}
+
+// 文字列中の位置iから1文字ぶんを取り出してNUL終端でoutへ書き、次の位置を返す。
+// (バイト数判定は util/Utf8Byte.hpp の Utf8CharBytesFromLeadByte() を使う。
+//  以前はLabel内にutf8CharLen()という同一実装の重複があったので削除した)
+//
+// 以前は splitChars() が「1文字につきFixedString<5>を1要素」のvectorを組み立てていたが、
+// 呼び出し側は1文字ずつしか使わないので、その分の確保(日本語120字で8回4080B)は丸ごと無駄だった。
+// その場でUTF-8境界を進めることで確保はゼロになる。
+static inline size_t nextUtf8Char(const char* s, size_t n, size_t i, char out[5], int& outLen) {
+    int len = Utf8CharBytesFromLeadByte((uint8_t)s[i]);
+    if (i + (size_t)len > n) len = (int)(n - i);
+    memcpy(out, s + i, (size_t)len);
+    out[len] = '\0';
+    outLen = len;
+    return i + (size_t)len;
+}
+
+template<size_t N>
+std::vector<TextRun> Label<N>::parseMarkup(const char* src, size_t n) {
     std::vector<TextRun> runs;
     TextRun cur;
     if (!src) return runs;
-    size_t i = 0, n = strlen(src);
+    size_t i = 0;
 
     auto flush = [&]() {
         if (cur.text.length() > 0) {
@@ -82,7 +119,7 @@ std::vector<TextRun> Label<N>::parseMarkup(const char* src) {
                 i += 1;
                 continue;
             }
-            int len = utf8CharLen((uint8_t)src[i]);
+            int len = Utf8CharBytesFromLeadByte((uint8_t)src[i]);
             if (i + len > n) len = n - i;
             cur.text.appendUtf8Char(&src[i], len);
             i += len;
@@ -118,25 +155,23 @@ void Label<N>::computeLineOffsets(const std::vector<std::vector<TextRun>>& src_l
 
 template<size_t N>
 void Label<N>::relayout() {
+    //先に下ろしておく。この関数の末尾のneedsRender()がgetScreenRect()経由で
+    //ensureLayout()を呼び返すため、ここを立てたままだと再入する
+    this->needs_relayout = false;
+
     this->fontApply();
 
     lines.clear();
     cursor_slots.clear();
     line_height = OSData::frame->fontHeight();
 
-    // \n で段落分割
-    std::vector<FixedString<N>> paragraphs;
+    // 段落(\n区切り)はraw_textの部分文字列なので、コピーせず(offset,length)で参照する。
+    //
+    // 以前は std::vector<FixedString<N>> へ丸ごとコピーしていた。この要素サイズは
+    // テキストの長さではなくテンプレート引数Nに比例するため、7文字のLabel<1KiB>でも
+    // 1段落あたり1032B、3段落なら3640Bをrelayout()のたびに確保していた。
     const char* s = raw_text.c_str();
-    size_t start = 0;
-    for (size_t i = 0; ; i++) {
-        if (s[i] == '\n' || s[i] == '\0') {
-            FixedString<N> buf;
-            buf.assign(s + start, i - start);
-            paragraphs.push_back(buf);
-            if (s[i] == '\0') break;
-            start = i + 1;
-        }
-    }
+    const size_t total = raw_text.length();
 
     {
         CursorSlot head;
@@ -145,8 +180,14 @@ void Label<N>::relayout() {
         cursor_slots.push_back(head);
     }
 
-    for (size_t p = 0; p < paragraphs.size(); p++) {
-        std::vector<TextRun> runs = parseMarkup(paragraphs[p].c_str());
+    size_t para_start = 0;
+    bool last_paragraph = false;
+    while (!last_paragraph) {
+        size_t para_end = para_start;
+        while (para_end < total && s[para_end] != '\n') para_end++;
+        last_paragraph = (para_end >= total);
+
+        std::vector<TextRun> runs = parseMarkup(s + para_start, para_end - para_start);
 
         std::vector<TextRun> curLine;
         int curWidth = 0;
@@ -160,21 +201,28 @@ void Label<N>::relayout() {
             piece.wavy = run.wavy;
             piece.strikethrough = run.strikethrough;
 
-            for (auto& ch : splitChars(run.text.c_str())) {
+            const char* rp = run.text.c_str();
+            const size_t rn = run.text.length();
+            char ch[5];
+            int chLen = 0;
+            for (size_t ci = 0; ci < rn; ) {
+                ci = nextUtf8Char(rp, rn, ci, ch, chLen);
+
                 // chWは太字加算を含まない素の文字幅。piece.widthにはこちらを積算し、
                 // computeLineOffsets()/render()側でtextWidth(run.text.c_str())を
                 // 呼んだ場合と同じ値になるようにする(太字分の+1はそれらの呼び出し側で
                 // 1回だけ加算される想定のため、ここで重ねて加算しない)。
-                int chW = OSData::frame->textWidth(ch.c_str());
+                int chW = OSData::frame->textWidth(ch);
                 int cw = chW + (run.bold ? 1 : 0); // 折り返し判定用(太字は従来通り1文字ごとに+1)
 
                 if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
                     if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
-                    lines.push_back(curLine);
+                    //moveでバッファごと渡す(以前はTextRun(1個208B)を行ごとにコピーしていた)
+                    lines.push_back(std::move(curLine));
                     curLine.clear();
                     curWidth = 0;
                 }
-                piece.text.append(ch);
+                piece.text.appendUtf8Char(ch, chLen);
                 piece.width += chW;
                 curWidth += cw;
 
@@ -185,14 +233,16 @@ void Label<N>::relayout() {
             }
             if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
         }
-        lines.push_back(curLine);
+        lines.push_back(std::move(curLine));
 
-        if (p + 1 < paragraphs.size()) {
+        if (!last_paragraph) {
             CursorSlot slot;
             slot.line = (int)lines.size();
             slot.x = 0;
             cursor_slots.push_back(slot);
         }
+
+        para_start = para_end + 1;
     }
 
     int maxLineWidth = 0;
@@ -235,7 +285,7 @@ void Label<N>::relayoutPlaceholder() {
     placeholder_line_offsets.clear();
     if (placeholder_text.length() == 0) return;
 
-    std::vector<TextRun> runs = parseMarkup(placeholder_text.c_str());
+    std::vector<TextRun> runs = parseMarkup(placeholder_text.c_str(), placeholder_text.length());
     std::vector<TextRun> curLine;
     int curWidth = 0;
     TextRun piece;
@@ -248,23 +298,29 @@ void Label<N>::relayoutPlaceholder() {
         piece.wavy = run.wavy;
         piece.strikethrough = run.strikethrough;
 
-        for (auto& ch : splitChars(run.text.c_str())) {
-            int chW = OSData::frame->textWidth(ch.c_str());
+        const char* rp = run.text.c_str();
+        const size_t rn = run.text.length();
+        char ch[5];
+        int chLen = 0;
+        for (size_t ci = 0; ci < rn; ) {
+            ci = nextUtf8Char(rp, rn, ci, ch, chLen);
+
+            int chW = OSData::frame->textWidth(ch);
             int cw = chW + (run.bold ? 1 : 0);
 
             if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
                 if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
-                placeholder_lines.push_back(curLine);
+                placeholder_lines.push_back(std::move(curLine));
                 curLine.clear();
                 curWidth = 0;
             }
-            piece.text.append(ch);
+            piece.text.appendUtf8Char(ch, chLen);
             piece.width += chW;
             curWidth += cw;
         }
         if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
     }
-    placeholder_lines.push_back(curLine);
+    placeholder_lines.push_back(std::move(curLine));
 
     computeLineOffsets(this->placeholder_lines, this->l_rect.w, this->placeholder_line_offsets);
 }
@@ -384,6 +440,9 @@ template<size_t N>
 void Label<N>::render() {
     if (!this->visible) return;
 
+    //描画は最新のレイアウトを前提にするので、遅延していればここで解決する
+    this->ensureLayout();
+
     this->updateCursorBlink();
 
     if (!this->needs_redraw) return;
@@ -481,13 +540,13 @@ int Label<N>::GetLineHeight(FontFn::FontSize size) {
 template<size_t N>
 void Label<N>::setText(const char* text) {
     this->raw_text.assign(text);
-    relayout();
+    invalidateLayout();
 }
 
 template<size_t N>
 void Label<N>::setPlaceholder(const char* text) {
     this->placeholder_text.assign(text);
-    relayout();
+    invalidateLayout();
 }
 
 template<size_t N>
@@ -499,7 +558,7 @@ void Label<N>::setPlaceholderColor(int8_t color) {
 template<size_t N>
 void Label<N>::setMaxWidth(int width) {
     this->max_width = width;
-    relayout();
+    invalidateLayout();
 }
 
 template<size_t N>
@@ -510,7 +569,7 @@ int Label<N>::getMaxWidth() {
 template<size_t N>
 void Label<N>::setMaxHeight(int height) {
     this->max_height = height;
-    relayout();
+    invalidateLayout();
 }
 
 template<size_t N>
@@ -521,7 +580,7 @@ int Label<N>::getMaxHeight() {
 template<size_t N>
 void Label<N>::setDefaultHeight(int height) {
     this->default_height = height;
-    relayout();
+    invalidateLayout();
 }
 
 template<size_t N>
@@ -532,13 +591,13 @@ int Label<N>::getDefaultHeight() {
 template<size_t N>
 void Label<N>::setLineSpacing(int spacing) {
     this->line_spacing = spacing;
-    relayout();
+    invalidateLayout();
 }
 
 template<size_t N>
 void Label<N>::setTextAlign(TextAlign align) {
     this->text_align = align;
-    relayout();
+    invalidateLayout();
 }
 
 template<size_t N>
@@ -596,6 +655,7 @@ int Label<N>::getBorderWidth() {
 
 template<size_t N>
 void Label<N>::setCursorPos(int index) {
+    this->ensureLayout();
     if (cursor_slots.empty()) {
         this->cursor_index = 0;
     } else {
@@ -654,11 +714,13 @@ void Label<N>::setCursorColor(uint16_t c) {
 
 template<size_t N>
 int Label<N>::getTextLength() {
+    this->ensureLayout();
     return cursor_slots.empty() ? 0 : (int)cursor_slots.size() - 1;
 }
 
 template<size_t N>
 int Label<N>::getCursorScreenX() {
+    this->ensureLayout();
     if (cursor_slots.empty()) return this->getScreenRect().x;
     int idx = this->cursor_index;
     if (idx < 0) idx = 0;
@@ -670,6 +732,7 @@ int Label<N>::getCursorScreenX() {
 
 template<size_t N>
 int Label<N>::getCursorScreenY() {
+    this->ensureLayout();
     if (cursor_slots.empty()) return this->getScreenRect().y;
     int idx = this->cursor_index;
     if (idx < 0) idx = 0;

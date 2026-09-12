@@ -85,11 +85,31 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         static constexpr int kDecorationMargin = 2;// 下線・波線が文字の下にはみ出す余白(px)
 
         // ---------- 内部ヘルパー関数 ----------
-        static int utf8CharLen(uint8_t lead);
-        static std::vector<FixedString<5>> splitChars(const char* s);
-        std::vector<TextRun> parseMarkup(const char* src);
+        // srcはNUL終端でなくてよい(raw_textの部分文字列をコピーせず渡すため、長さを明示する)
+        std::vector<TextRun> parseMarkup(const char* src, size_t n);
         void relayout();
         void relayoutPlaceholder();
+
+        // ---------- レイアウトの遅延解決 ----------
+        // レイアウトに影響するsetterはこのフラグを立てるだけにして、実際のrelayout()は
+        // レイアウト結果が必要になった時点(ensureLayout)で1回だけ走らせる。
+        //
+        // 以前はsetterごとに毎回relayout()していたため、例えばMarkdownView::bindLabelSlot()は
+        // setMaxWidth -> setFontSize -> setText と呼ぶだけで3回フルレイアウトが走り、
+        // しかも最初の2回は更新前のテキストに対する計算なので全部捨てられていた。
+        // relayout()は1文字ごとにtextWidth()を呼ぶので、回数はそのままCPUに効く。
+        mutable bool needs_relayout = true;
+
+        // レイアウトが古ければ計算し直す。const getterからも呼ぶためconstにしてある
+        void ensureLayout() const;
+
+        // レイアウト結果を無効化する(レイアウトに影響するsetterから呼ぶ)
+        void invalidateLayout();
+
+        // ensureLayout()を通さずに、再計算前の(=いま画面に出ている)スクリーン矩形を返す。
+        // invalidateLayout()が「消すべき古い領域」をdirty登録するために使う。
+        // ここでgetScreenRect()を使うとensureLayout()が走ってしまい遅延の意味が無くなる
+        Rect staleScreenRect() const;
         void computeLineOffsets(const std::vector<std::vector<TextRun>>& src_lines, int box_width, std::vector<int>& out);
 
         void renderRun(const TextRun& run, int x, int y);
@@ -119,6 +139,12 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void render() override;
         void needsRender() override;
 
+        // レイアウト結果(l_rect.w/h)を読む経路。遅延した再計算をここで解決する。
+        // getScreenRect()/hitTest()も基底経由でgetLocalRect()を呼ぶのでまとめて効く
+        Rect getLocalRect() const override;
+        int getW() override;
+        int getH() override;
+
         WidgetType getWidgetType() const override { return WidgetType::Label; }
 
         template<size_t M>
@@ -132,7 +158,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         template<size_t M>
         void setText(const FixedString<M>& text) {
             this->raw_text.assign(text);
-            relayout();
+            invalidateLayout();
         }
         void setText(const char* text);
         const FixedString<N>* getText() const { return &this->raw_text; }
@@ -141,7 +167,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         template<size_t M>
         void setPlaceholder(const FixedString<M>& text) {
             this->placeholder_text.assign(text);
-            relayout();
+            invalidateLayout();
         }
         void setPlaceholder(const char* text);
         const FixedString<N>* getPlaceholder() const { return &this->placeholder_text; }
@@ -193,12 +219,12 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
 
         void setFontSize(FontFn::FontSize size) override {
             this->f_size = size;
-            this->relayout();
+            this->invalidateLayout();
         }
 
         void setDisableAutoTextDecoration(bool value){
             this->disable_auto_text_decoration = value;
-            this->relayout();
+            this->invalidateLayout();
         }
         bool getDisableAutoTextDecoration(){
             return this->disable_auto_text_decoration;

@@ -8,6 +8,7 @@
 # 収録テスト:
 #   scene_test … シーン遷移(SceneFunctions / WidgetFunctions)とメモリ計測フックの配線
 #   label_test … Labelのテキストレイアウト結果(幅/高さ/文字数/カーソル座標)の固定
+#   markdown_test … MarkdownViewのブロック高さとLabelの実高さの整合(重なり検出)
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -50,3 +51,25 @@ g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== label_test ====="
 "$OUT/label_test"
+
+# --- MarkdownViewのブロックレイアウト ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/markdown_test.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Image.cpp" \
+    "$ROOT/src/gui/widgets/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    -o "$OUT/markdown_test"
+
+echo ""
+echo "===== markdown_test ====="
+"$OUT/markdown_test"

@@ -91,7 +91,9 @@ std::vector<TextRun> Label<N>::parseMarkup(const char* src, size_t n) {
     };
 
     if (disable_auto_text_decoration) {
-        cur.text.assign(src);
+        //srcはNUL終端とは限らない(raw_textの途中を指す)ので、必ず長さで切ること。
+        //assign(src)にすると以降の段落まで1つの段落として取り込んでしまう
+        cur.text.assign(src, n);
         flush();
     } else {
         while (i < n) {

@@ -131,6 +131,27 @@ int main(){
         l.setText("**あい**");
         eq(l.getTextLength(), 6, "自動装飾オフなら記号も1文字として数える");
     }
+    {
+        //自動装飾オフ + 複数段落。
+        //parseMarkup()のこの分岐は長さではなくNUL終端まで読む実装だったため、
+        //段落をコピーせず参照で渡すようにした際に、以降の段落まで
+        //1段落として取り込んでしまうバグを踏んだ(MarkdownViewのコードブロックで顕在化)
+        Label<PICO_STR_L> l(0, 0, "");
+        l.setDisableAutoTextDecoration(true);
+        l.setText("あい\nうえ\nおか");
+        eq(l.getTextLength(), 8, "自動装飾オフ3段落の文字数(改行2つを含む)");
+        eq(l.getH(), expectH(3), "自動装飾オフ3段落の高さ");
+        eq(l.getW(), 2 * 24, "自動装飾オフ3段落の幅(1段落ぶんの幅に収まる)");
+    }
+    {
+        //折り返しも伴うケース
+        Label<PICO_STR_L> l(0, 0, "");
+        l.setDisableAutoTextDecoration(true);
+        l.setMaxWidth(100);
+        l.setText("あいうえおか\nきく");
+        eq(l.getH(), expectH(3), "自動装飾オフ+折返しの高さ");
+        eq(l.getTextLength(), 9, "自動装飾オフ+折返しの文字数");
+    }
 
     // ---- カーソル座標 ----
     {

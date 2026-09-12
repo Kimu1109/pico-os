@@ -15,6 +15,7 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
     "$ROOT/script/host_test/scene_test.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \

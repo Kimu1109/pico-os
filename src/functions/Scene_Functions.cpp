@@ -3,6 +3,7 @@
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Mem_Functions.hpp"
 #include "consts.hpp"
 
 namespace {
@@ -18,6 +19,9 @@ namespace {
 
         // 通常レイヤ・ダイアログ層はシーンの所有物なので一括破棄する
         WidgetFunctions::ClearSceneWidgets();
+
+        //破棄しきった直後のヒープを見て、戻らなかった分をリーク候補として記録する
+        MemFunctions::OnSceneExit();
     }
 
     // 遷移要求を1件だけ受け付ける
@@ -47,7 +51,9 @@ void SceneFunctions::Setup(Scene* first_scene){
     }
 
     current = first_scene;
+    MemFunctions::BeforeSceneEnter();
     current->onEnter();
+    MemFunctions::AfterSceneEnter(current->getName());
 
     LOG_SYS_OK("Scene Setup has succeeded! (%s)", current->getName());
 }
@@ -141,7 +147,10 @@ void SceneFunctions::Update(){
 
         if(entering){
             current = entering;
+            //onEnter()を挟んで計測することで「このシーンのウィジェットが要求するバイト数」が取れる
+            MemFunctions::BeforeSceneEnter();
             current->onEnter();
+            MemFunctions::AfterSceneEnter(current->getName());
             LOG_SYS_MSG("シーン遷移: %s (depth=%d)", current->getName(), stack_depth);
         }
 

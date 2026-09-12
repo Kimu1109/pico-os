@@ -4,6 +4,7 @@
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Mem_Functions.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
 #include <vector>
@@ -210,6 +211,24 @@ int main(){
     check(WidgetFunctions::pressingWidget == nullptr, "遷移後にpressingWidgetがクリアされる");
     WidgetFunctions::UpdateAll();
     check(widget_alive == 2, "遷移後のUpdateAllでダングリング参照を踏まない");
+
+    // 計測フック(Mem_Functions)の配線確認。
+    // BeforeSceneEnter -> onEnter -> AfterSceneEnter の順で呼ばれていないと、
+    // シーンごとの必要バイト数が取れずアリーナの枠を決められない。
+    //
+    // なおバイト数そのものはここでは検証できない。ASanはmallocごと差し替えるため
+    // mallinfo()が実際の確保を反映せず、常に0バイトに見える。
+    // 確保量の妥当性は script/host_test/run_mem.sh (ASan無し)側で確認する
+    check(MemFunctions::transition_count >= 5, "計測フック: シーン遷移が記録されている");
+    check(MemFunctions::scene_stat_count > 0, "計測フック: シーン別統計が作られている");
+    {
+        const MemFunctions::SceneStat* stat_a = nullptr;
+        for(int i = 0; i < MemFunctions::scene_stat_count; i++){
+            if(MemFunctions::scene_stats[i].name == "A") stat_a = &MemFunctions::scene_stats[i];
+        }
+        //シーンAは Setup() と Pop()で戻った時の計2回enterしている
+        check(stat_a && stat_a->visits == 2, "計測フック: 同名シーンの訪問回数が積算される");
+    }
 
     // 後片付け(リーク確認)
     while(SceneFunctions::CanPop()){

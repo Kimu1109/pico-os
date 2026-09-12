@@ -36,6 +36,17 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
     measure_label = new Label<PICO_STR_LL>(0, 0, ""); // レンダリングツリーには含めない（getChildren()に入れない）
 }
 
+MarkdownView::~MarkdownView() {
+    //コンストラクタで確保したプールを全て解放する。
+    //measure_labelはchildren_に入れていないので個別に解放が要る
+    for (int i = 0; i < kLabelPoolSize; i++) delete labelPool[i];
+    for (int i = 0; i < kImagePoolSize; i++) delete imagePool[i];
+    for (int i = 0; i < kCheckboxIconPoolSize; i++) delete checkboxIconPool[i];
+    delete measure_label;
+
+    children_.clear();
+}
+
 // ---------- ロード & パース ----------
 
 bool MarkdownView::load(const char* path) {

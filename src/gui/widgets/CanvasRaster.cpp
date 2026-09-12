@@ -19,6 +19,14 @@ CanvasRaster::CanvasRaster(int16_t x, int16_t y, int16_t w, int16_t h){
     sp->setTextWrap(false, false);
 }
 
+CanvasRaster::~CanvasRaster(){
+    if(sp){
+        sp->deleteSprite(); //ピクセルバッファを先に解放する
+        delete sp;
+        sp = nullptr;
+    }
+}
+
 void CanvasRaster::render(){
     if(!this->visible) return;
     if(!this->needs_redraw) return;

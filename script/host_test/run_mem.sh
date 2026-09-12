@@ -35,6 +35,10 @@ g++ -std=gnu++17 -g -Os -fno-rtti \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
     "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Image.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/MarkdownView.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
     -o "$OUT/mem_probe"

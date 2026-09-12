@@ -10,6 +10,7 @@ struct FsFile {
     int read(void*, size_t){ return 0; }
     int available(){ return 0; }
     size_t size(){ return 0; }
+    size_t fileSize(){ return 0; }
     bool seek(uint32_t){ return false; }
     size_t position(){ return 0; }
     bool getName(char*, size_t){ return false; }

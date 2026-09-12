@@ -60,6 +60,12 @@ struct LGFX_Sprite {
     void drawPixel(int, int, int){}
     void fillCircle(int, int, int, int){}
     void drawCircle(int, int, int, int){}
+    void drawEllipse(int, int, int, int, int){}
+    void fillEllipse(int, int, int, int, int){}
+    void drawWideLine(int, int, int, int, float, int){}
+    void getClipRect(int32_t* x, int32_t* y, int32_t* w, int32_t* h){
+        if(x) *x = 0; if(y) *y = 0; if(w) *w = 0; if(h) *h = 0;
+    }
     void fillTriangle(int, int, int, int, int, int, int){}
     void drawFastHLine(int, int, int, int){}
     void drawFastVLine(int, int, int, int){}

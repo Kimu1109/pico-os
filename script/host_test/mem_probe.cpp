@@ -120,6 +120,9 @@ void operator delete[](void* p, size_t) noexcept { operator delete(p); }
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/Icon.hpp"
+#include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/CanvasRaster.hpp"
+#include "gui/widgets/MarkdownView.hpp"
 #include "gui/scenes/Scene.hpp"
 #include "OS_Data.hpp"
 
@@ -175,6 +178,9 @@ static void Measure(const char* name, size_t object_bytes, F&& body){
     c.residue = Probe::live_bytes - live_at_start;
 }
 
+// residueが残っているケースの件数
+static int leaking_cases = 0;
+
 static void PrintCaseTable(){
     PrintHeader("ウィジェット1個あたりの確保パターン(生成->破棄)");
     //列見出しはASCIIで揃える(日本語は幅指定とバイト数がずれて崩れるため)
@@ -186,6 +192,7 @@ static void PrintCaseTable(){
             c.name, c.object_bytes, c.alloc_count, c.alloc_count - 1,
             c.alloc_bytes, c.peak_bytes, c.residue,
             c.residue ? "  <- 解放漏れ" : "");
+        if(c.residue != 0) leaking_cases++;
     }
     printf("\nallocs=生成〜破棄で走った確保回数 / inner=そのうちオブジェクト本体以外\n");
     printf("innerが0でない = 本体をプールへ移してもその回数ぶんの小確保はヒープに残る。\n");
@@ -265,6 +272,27 @@ int main(){
         delete w;
     });
 
+    // 子ウィジェットや内部バッファを自前で確保する重量級。
+    // デストラクタで解放し損ねるとここのresidueが0でなくなる
+    Measure("ScrollList", sizeof(ScrollList), [](){
+        auto* w = new ScrollList(0, 0, 200, 100, 8);
+        for(int i = 0; i < 8; i++){
+            ScrollListTools::Item item;
+            item.text.assign("項目");
+            w->add(item);
+        }
+        delete w;
+    });
+    Measure("CanvasRaster", sizeof(CanvasRaster), [](){
+        auto* w = new CanvasRaster(0, 0, 120, 80);
+        delete w;
+    });
+    Measure("MarkdownView", sizeof(MarkdownView), [](){
+        //Label16 + Image2 + Icon16 + measure_label をコンストラクタで確保する
+        auto* w = new MarkdownView(0, 0, 240, 240);
+        delete w;
+    });
+
     // --- (2) 既存ウィジェットへの再設定(スクロールや入力で毎回走る経路) ---
     Measure("Label<M> setText x10", sizeof(Label<PICO_STR_M>), [](){
         auto* w = new Label<PICO_STR_M>(0, 0, "");
@@ -327,6 +355,11 @@ int main(){
     }
     WidgetFunctions::ClearSceneWidgets();
 
-    printf("\n計測完了\n");
+    if(leaking_cases > 0){
+        printf("\n解放漏れのあるウィジェットが%d件あります(上の表のresidue列)\n", leaking_cases);
+        return 1;
+    }
+
+    printf("\n計測完了(解放漏れなし)\n");
     return 0;
 }

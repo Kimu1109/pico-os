@@ -11,6 +11,7 @@
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Test_Functions.hpp"
+#include "functions/Mem_Functions.hpp"
 
 #include "gui/widgets/systems/Statusbar.hpp"
 #include "gui/scenes/HomeScene.hpp"
@@ -29,6 +30,9 @@ void setup() {
 
     LogFunctions::Setup();
 
+    //以降のSetupがどれだけヒープを食うかを見るための基準点
+    MemFunctions::Setup();
+
     PICO_Touch::Setup();
     PICO_Task::Setup();
     WidgetFunctions::Setup();
@@ -43,6 +47,9 @@ void setup() {
     TimeFunctions::Setup();
 
     TestFunctions::Setup();
+
+    //ここまでの確保は全てOS常駐。シーンアリーナを導入する際の「永続領域」に相当する
+    MemFunctions::SealPermanentBaseline();
 
     //--- ここから先はシーンの所有物 ---
     SceneFunctions::Setup(new HomeScene());
@@ -61,6 +68,9 @@ void loop() {
     WidgetFunctions::UpdateAll();
 
     PICO_GFX::FlushDirty();
+
+    //現シーン滞在中のピーク使用量を追う(mallinfoを読むだけ)
+    MemFunctions::Update();
 
     PICO_Task::Update();
     LogFunctions::Update();

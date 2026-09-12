@@ -239,6 +239,11 @@ int main(){
         check(enter_logs == (int)MemFunctions::transition_count,
               "計測フック: シーン生成のログが遷移のたびに出る");
     }
+    {
+        //リーク判定の一次情報となるヒープ下限が、シーン破棄のたびに採れていること。
+        //(バイト数自体はASan環境では常に0に見えるので、採取回数だけを確認する)
+        check(MemFunctions::floor_samples > 0, "計測フック: ヒープ下限が記録されている");
+    }
 
     // 後片付け(リーク確認)
     while(SceneFunctions::CanPop()){

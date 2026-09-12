@@ -32,6 +32,14 @@ namespace MemFunctions {
     // 実機では「遷移を50回繰り返す」操作を手で行うので、途中経過が自動で出たほうが都合が良い
     constexpr int kAutoReportInterval = 10;
 
+    // シーン破棄の即時ログを出す残留の下限値。
+    //
+    // residue(= used(破棄時) - used(onEnter前))はシーン滞在中の全時間を含む窓なので、
+    // 背景サブシステム(Wi-Fi再接続/タスク/ログバッファ)がその瞬間に確保中だった分まで
+    // 拾ってしまう。数百バイト程度で毎回警告を出すと本物のリークが埋もれるため、
+    // 即時ログはこの閾値以上のときだけにする(累計はレポートのresidue列で見る)
+    constexpr uint32_t kResidueLogThreshold = 1024;
+
     // largest_freeの探索上限。
     // 上限を設けないと、探索中のmallocがヒープ末尾を大きく伸ばして
     // スタック側の余裕を削ってしまう(伸ばした分は解放してもarenaに残る)。
@@ -122,4 +130,15 @@ namespace MemFunctions {
     inline Snapshot boot_snapshot;
     inline Snapshot permanent_snapshot;
     inline bool permanent_sealed = false;
+
+    // --- ヒープ下限(シーン破棄直後のused) ---
+    //
+    // リークがあるかどうかの一次情報はこちら。
+    // シーンのウィジェットが1つも生きていない瞬間なので、毎回ほぼ同じ値になるはず。
+    // 遷移回数に比例して増えるなら本物のリーク、横ばいならシーン滞在中の
+    // 一時確保を residue が拾っているだけ、と判断できる
+    inline uint32_t floor_first_used = 0;
+    inline uint32_t floor_last_used = 0;
+    inline uint32_t floor_max_used = 0;
+    inline uint32_t floor_samples = 0;
 }

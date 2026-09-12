@@ -220,8 +220,18 @@ void MemFunctions::Update(){
 }
 
 void MemFunctions::OnSceneExit(){
+    const uint32_t used = ReadMallocInfo().used;
+
+    //シーンのウィジェットが1つも生きていない瞬間。リーク判定の一次情報になる
+    if(floor_samples == 0){
+        floor_first_used = used;
+        floor_max_used = used;
+    }
+    floor_last_used = used;
+    if(used > floor_max_used) floor_max_used = used;
+    floor_samples++;
+
     if(scene_active && current_stat_index >= 0 && baseline_valid){
-        const uint32_t used = ReadMallocInfo().used;
         SceneStat& stat = scene_stats[current_stat_index];
 
         //全部破棄したのにシーン開始前より増えていれば、その差分は解放漏れの候補
@@ -229,11 +239,13 @@ void MemFunctions::OnSceneExit(){
             const uint32_t residue = used - scene_baseline_used;
             stat.residue_bytes += residue;
 
-            //正常なら何も出ない。出た時点で解放漏れなので、レポートを待たずに知らせる
-            LOG_SYS_DEBUG("[MEM] シーン破棄: %s 解放後も%luB残留 (累計%luB)",
-                stat.name.c_str(),
-                (unsigned long)residue,
-                (unsigned long)stat.residue_bytes);
+            //閾値以下は背景処理の一時確保に埋もれるので即時ログには出さない
+            if(residue >= kResidueLogThreshold){
+                LOG_SYS_DEBUG("[MEM] シーン破棄: %s 解放後も%luB残留 (累計%luB)",
+                    stat.name.c_str(),
+                    (unsigned long)residue,
+                    (unsigned long)stat.residue_bytes);
+            }
         }
     }
 
@@ -305,6 +317,8 @@ void MemFunctions::LogReport(){
     }
 
     LOG_SYS_DEBUG("[MEM] enter=onEnter()での増分 / peak=滞在中の最大増分 / residue=破棄後も戻らなかった累計");
+    LOG_SYS_DEBUG("[MEM] ※residueは滞在中ずっとを窓にするため、背景処理の一時確保も拾う。");
+    LOG_SYS_DEBUG("[MEM] 　リークの有無は下の「ヒープ下限」で判断すること");
 
     Log("現在");
     if(s.probe_grew_arena){
@@ -316,9 +330,15 @@ void MemFunctions::LogReport(){
         (unsigned long)worst_peak,
         (unsigned long)(worst_peak + worst_peak / 2));
 
-    if(permanent_sealed){
-        LOG_SYS_DEBUG("[MEM] -> 常駐確保完了時からのused増分=%+ldB (遷移を繰り返して単調増加ならリーク)",
-            (long)s.used - (long)permanent_snapshot.used);
+    //リーク判定の本命。シーンのウィジェットが無い瞬間のusedを毎回同じ条件で比べる
+    if(floor_samples > 0){
+        LOG_SYS_DEBUG("[MEM] ヒープ下限(シーン破棄直後/%lu回): 初回=%luB 最新=%luB 最大=%luB 差%+ldB",
+            (unsigned long)floor_samples,
+            (unsigned long)floor_first_used,
+            (unsigned long)floor_last_used,
+            (unsigned long)floor_max_used,
+            (long)floor_last_used - (long)floor_first_used);
+        LOG_SYS_DEBUG("[MEM] -> 差が回数に比例して増えるならリーク。横ばいならリーク無し");
     }
 }
 

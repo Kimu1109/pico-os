@@ -40,6 +40,10 @@
 #define SCREEN_WIDTH    240
 #define SCREEN_HEIGHT   320
 
+// --- 常駐UI(オーバーレイ)のサイズ ---
+// シーンが使える領域はステータスバーの下から画面下端まで(Scene::contentRect()参照)
+#define STATUSBAR_HEIGHT 20
+
 // --- SPI0: LCD + タッチ 共有 ---
 #define TFT_SCK   18
 #define TFT_MOSI  19

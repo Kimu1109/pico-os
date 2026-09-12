@@ -33,6 +33,15 @@ void KeyboardFunctions::RegisterInputTarget(ITextInputTarget *target){
     static_cast<KeyboardNum*>(OSData::keyboard_num)->setInputTarget(target);
 }
 
+void KeyboardFunctions::HideAll(){
+    Widget* keyboards[] = { OSData::keyboard_eng, OSData::keyboard_jpn, OSData::keyboard_num };
+    for(Widget* keyboard : keyboards){
+        if(keyboard && keyboard->getVisible()){
+            keyboard->setVisible(false); //内部でtarget->onHide()が呼ばれる
+        }
+    }
+}
+
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget *target){
     static_cast<KeyboardEng*>(OSData::keyboard_eng)->removeInputTarget(target);
     static_cast<Keyboard*>(OSData::keyboard_jpn)->removeInputTarget(target);

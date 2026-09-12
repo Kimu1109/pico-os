@@ -4,6 +4,7 @@
 #include "functions/Touch_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
+#include "functions/Scene_Functions.hpp"
 #include "functions/IME_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Network_Functions.hpp"
@@ -11,19 +12,14 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Test_Functions.hpp"
 
-#include "gui/widgets/MarkdownView.hpp"
 #include "gui/widgets/systems/Statusbar.hpp"
-#include "gui/widgets/NumberInput.hpp"
+#include "gui/scenes/HomeScene.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
 
-//デバッグ用
+//シーンをまたいで常駐させるウィジェットはオーバーレイ層に置く
 static Statusbar* status;
-
-static MarkdownView* markdown;
-
-static NumberInput* num_i;
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -35,24 +31,21 @@ void setup() {
 
     PICO_Touch::Setup();
     PICO_Task::Setup();
+    WidgetFunctions::Setup();
 
+    //--- 常駐(オーバーレイ層): シーン遷移で破棄されない ---
     status = new Statusbar();
     WidgetFunctions::AddOverlay(status);
 
     NetworkFunctions::Setup();
-    KeyboardFunctions::Setup();
+    KeyboardFunctions::Setup(); //キーボード3種もAddOverlay()される
     IME_Functions::Setup();
     TimeFunctions::Setup();
-    
+
     TestFunctions::Setup();
 
-    num_i = new NumberInput(0, 25, 100);
-
-    markdown = new MarkdownView(0, 150, 240, 170);
-    markdown->load("tmp/doc.md");
-
-    WidgetFunctions::Add(markdown);
-    WidgetFunctions::Add(num_i);
+    //--- ここから先はシーンの所有物 ---
+    SceneFunctions::Setup(new HomeScene());
 
     pinMode(LED_BUILTIN, HIGH);
 
@@ -61,7 +54,10 @@ void setup() {
 
 void loop() {
     PICO_Touch::Update();
-    
+
+    //保留中のシーン遷移をフレーム境界で適用する(ウィジェット更新より前)
+    SceneFunctions::Update();
+
     WidgetFunctions::UpdateAll();
 
     PICO_GFX::FlushDirty();

@@ -170,6 +170,44 @@ void WidgetFunctions::ProcessPendingDeletes()
     }
 }
 
+void WidgetFunctions::ClearSceneWidgets()
+{
+    // 先に予約済みのdeleteを消化しておく(二重管理を防ぐ)
+    ProcessPendingDeletes();
+
+    // ダイアログはシーン内ウィジェットのthisをコールバックに捕捉しているため、
+    // 通常レイヤより先に破棄する
+    while (!dialog_roots.empty()) {
+        Destroy(dialog_roots.back());
+    }
+
+    // widgetsにはルートと子孫が混在している。子孫は親のデストラクタが解放するので、
+    // 親を持たないルートのみを破棄する。
+    // Destroy() -> RemoveAny() が子孫をwidgetsから取り除くのでループ中にvectorが縮む。
+    // そのため毎回先頭から探し直す(遷移時のみの処理なのでコストは問題にならない)
+    bool found_root = true;
+    while (found_root) {
+        found_root = false;
+        for (Widget* w : widgets) {
+            if (w && !w->getParent()) {
+                Destroy(w);
+                found_root = true;
+                break;
+            }
+        }
+    }
+
+    // ここに残るのは「ルートがwidgetsに登録されていない子ウィジェット」だけで、
+    // 本来は発生しない。残っていた場合は解放責任が持てないので、
+    // ダングリング参照を避けるためリストからのみ外して警告を出す
+    if (!widgets.empty()) {
+        LOG_SYS_WARN("シーン破棄後に親不明のウィジェットが%d件残りました", (int)widgets.size());
+        widgets.clear();
+    }
+
+    pressingWidget = nullptr;
+}
+
 void WidgetFunctions::BringToFront(Widget *w)
 {
     auto it = std::find(widgets.begin(), widgets.end(), w);

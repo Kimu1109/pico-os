@@ -142,10 +142,12 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - **例外: `MarkdownView`だけは既にオブジェクトプール方式**: `labelPool`/`imagePool`/`checkboxIconPool`という固定長配列を起動時に一度だけ確保し、`boundXxxBlock[]`でスロット使用状況(-1=未使用)を管理、スクロールに応じて使い回す。→ 「事前確保→使い回し、全消去時は中身クリアのみ」構想の**実例プロトタイプ**。
 - `WidgetFunctions::DestroyLater()` + `pending_deletes`: 非表示化→次フレーム末尾で`ProcessPendingDeletes()`によりまとめてdelete(フレーム途中delete事故防止)。SUMMARY.md「ウィジェットのメモリ解放」チェック済み項目に相当。
 - **開発者はRAM断片化回避のため固定長バッファ/オブジェクトプールを志向している。新規実装で`new`/`delete`を安易に増やす提案より、MarkdownViewのプールパターンに寄せた提案を優先すること。**
+- **`Widget::operator new/delete`が全ウィジェットの確保の唯一の入口**(`src/gui/widgets/Widget.cpp`)。現状は`malloc`を呼ぶだけで`MemFunctions`へ量を通知する。将来アリーナを入れる場合はここの実装を差し替えるだけで済み、`new Button(...)`のような既存コードは書き換え不要。
+- **子ウィジェットの解放は親のデストラクタの責任**。`WidgetFunctions::ClearSceneWidgets()`は親を持たないルートしか`delete`しないので、子を`new`するウィジェットにデストラクタが無いと丸ごとリークする(過去に`MarkdownView`/`ScrollList`/`CanvasRaster`で発生)。
 - ウィジェットIDベース管理(32bit: 種別enum/generation/index)は未実装。現状は`std::vector<Widget*>`+生ポインタ直接参照。
 
 ### MarkdownView 実装詳細
-`MdBlockType`: H1/H2/H3/Paragraph/Image/Link/CodeBlock/ListItem/HorizontalRule/Quote/TableRow。`MdBlock`はオフセット/長さ参照方式(`srcOffset`/`srcLength`、Stringをコピーせず範囲参照)。固定上限: `kMaxBlocks=128`, `kMaxSourceBytes=16384`, `kLabelPoolSize=16`, `kImagePoolSize=2`, `kMaxListLevels=6`, テーブル最大列`kMdTableMaxCols=4`。テーブル/水平線/引用バーは`Label`を介さず`frame`へ直接描画(`renderDecorations()`)。リンクタップ用`on_link_tap`あり。フロントマターは`skipFrontMatter()`で読み飛ばし。**ヘッダー/フッター機能は現状なし。**
+`MdBlockType`: H1/H2/H3/Paragraph/Image/Link/CodeBlock/ListItem/HorizontalRule/Quote/TableRow。`MdBlock`はオフセット/長さ参照方式(`srcOffset`/`srcLength`、Stringをコピーせず範囲参照)。固定上限: `kMaxBlocks=128`, `kMdMaxSourceBytes=8192`, `kMdBlockTextBytes=512`(1ブロックの表示テキスト上限。日本語で約170文字), `kLabelPoolSize=16`, `kImagePoolSize=2`, `kMaxListLevels=6`, テーブル最大列`kMdTableMaxCols=4`。`kMdBlockTextBytes`と`kMdMaxSourceBytes`はクラス外定義(クラス外に書くメンバ関数定義の戻り値型はクラススコープより前に解決されるため)。上限に当たった場合は`load()`が警告ログを出す。画像は`onRAM=false`でSDからストリーミング描画する(RAMに載せると占有量が開いた文書次第で青天井になるため)。テーブル/水平線/引用バーは`Label`を介さず`frame`へ直接描画(`renderDecorations()`)。リンクタップ用`on_link_tap`あり。フロントマターは`skipFrontMatter()`で読み飛ばし。**ヘッダー/フッター機能は現状なし。**
 
 ### 文字列の扱い
 `Label`/`Textbox`/`MarkdownView::doc_text`はArduino `String`(可変長)。一方`Network_Functions::currentSSID`(char[33])、`IME_Functions::candidates[][IME_MAX_CAND_BYTES]`、`FileExplorer::currentPath`(char[128])はCスタイル固定長`char`配列。**共通の`FixedString`的クラスはまだ存在しない**(テンプレートで長さ指定、`strncpy`ベースの安全な代入/比較演算子などが構想段階)。
@@ -166,7 +168,7 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 | # | 旧TODO大項目 | 状況 |
 |---|---|---|
 | 1 | ダイアログ(ファイル選択・保存・色選択) | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用キーボードのみ別TODOとして未着手。 |
-| 2 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。残りは**メモリプール化(汎用)のみ未着手**。 |
+| 2 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
 | 3 | Wi-Fi管理強化 | 基礎は実装済み(非ブロッキング接続・スキャン・NTP同期・電波強度アイコン)。**定期的再接続交渉・確実な時刻同期の強化は未着手**。 |
 | 4 | Luaアプリ/API | **未着手**。Lua関連コード皆無。ゼロから統合方針(実装選定、C++バインディング設計)を相談する必要あり。PCエミュレーション環境(LovyanGFX/タッチ操作代替)も未着手。 |
 | 5 | 標準/セカンダリアプリ開発 | **未着手**。設定アプリ・時計・辞書・電卓・チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし(部品は存在)。 |
@@ -177,9 +179,25 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 ## 未実装の設計アイデア(旧pico-osからの持ち越し議論)
 
 - **固定長文字列クラス**: `char[N]`をラップし`strncpy`ベースの安全な代入/比較演算子を持つテンプレートクラス。既存の生`char[]`箇所(SSID/パス/辞書候補等)を置き換える用途。
-- **ウィジェットのメモリプール化(汎用)**: `MarkdownView`のプール実装を`WidgetFunctions`本体や他ダイアログにも一般化する方向性。placement newベースの汎用プールアロケータが今後のテーマ。
+- **ウィジェットのメモリプール化(汎用)**: 実測の結果、現時点では保留と判断した(下記「メモリ計測の結論」)。再開する場合は`Widget::operator new/delete`をアリーナへ差し替えるところから。
 - **Markdownブラウザのヘッダー/フッター**: `l_rect`内でのヘッダー/フッター分の高さ控除、スクロール対象外の固定描画領域追加が論点。
 - **LuaでのウィジェットID管理**: 32bit整数ID(上位バイトから ウィジェット種類(enum)/generation/index)でLua側から実体へ安全アクセス。Lua統合自体が未着手のため、種類enum整理・generationカウンタ追加・index⇔ポインタ変換テーブルの新設が必要。Lua組み込み設計と合わせて相談されることが多い。
+
+## メモリ計測の結論 (2026-09-12時点、実機RP2350で20回の遷移を計測)
+
+`src/functions/Mem_Functions.hpp` と `script/host_test/run_mem.sh` で実測した結果と判断。
+**同じ議論を繰り返さないために、アリーナを提案する前に必ずここを読むこと。**
+
+- **断片化は起きていない**。`frag=0%` / `max_alloc=65536B以上` / 空きブロック数5〜12で推移し、20回の遷移で増加傾向なし。
+- **リークも無い**。「ヒープ下限」(シーン破棄直後のused。シーンのウィジェットが1つも生きていない瞬間)は9回時点で+248B、19回時点で+192Bと、回数を倍にしても増えない。
+- 当初observedしていた使用量の増加は断片化ではなく解放漏れで、`MarkdownView`/`ScrollList`/`CanvasRaster`のデストラクタ修正で解消済み(Markdownは1訪問あたり約57KBリークしていた)。
+- **アリーナの枠を決めるなら根拠は「ウィジェット本体のバイト数」だけ**。レポートの`widget`列がそれ。シーン全体の`peak`には内部の`std::vector`/`std::function`が含まれるが、それらはアリーナではなくグローバルヒープに残るため、枠の根拠にすると3割ほど過大になる。
+- 実測値: 永続(Statusbar+キーボード3種)=4,600B / Markdown=41,668B / InputTest=1,552B / Home=756B。
+  **プールが全部固定長なので、開く文書が変わっても`Markdown`の41,668Bは動かない(決定論的)**。
+  → 入れる場合の推奨枠は「永続8KiB + シーン56KiB = 64KiB」。
+- アリーナが捕まえるのは Markdown の全841回の確保のうち**36回(バイトでは79%、回数では4.3%)**。残り805回は`Label`の行データ(`vector<vector<TextRun>>`)と`Widget`基底の`std::function`×4で、これはアリーナでは消えない。
+- **判断: 断片化もリークも観測されていない以上、64KBを常時占有する対価に見合わないため保留**。アプリが増えて断片化が実際に観測された時点で再検討する。
+  先に効くのは`std::function`の自前Delegate化と`Label::lines`の共有テンポラリ化(固定枠を払わずに確保回数とピークを下げられる)。
 
 ## Claude Codeへの申し送り
 

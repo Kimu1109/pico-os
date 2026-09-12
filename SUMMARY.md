@@ -17,11 +17,16 @@
   - [x] ウィジェットのメモリ解放
   - [x] シーン遷移
   - [x] 並び方について: パネル、グリッド
-  - [ ] メモリ断片化対策: メモリプール
+  - [ ] メモリ断片化対策: メモリプール(計測の結果いったん保留。詳細はCLAUDE.md「メモリ計測の結論」)
     - [x] ヒープ使用量・断片化の計測 (src/functions/Mem_Functions.hpp, script/host_test/run_mem.sh)
-    - [ ] シーンアリーナ(bump allocator) + Widget::operator new の差し替え
-    - [ ] mid-sceneで生成/破棄されるダイアログ(MsgDialog/InputDialog)の使い回し化
+    - [x] ウィジェットの解放漏れ修正 (MarkdownView / ScrollList / CanvasRaster)
+    - [x] MarkdownViewの占有量削減 (実機で93KB -> 52KB)
+    - [x] アリーナの差し込み口を用意 (Widget::operator new/delete)
+    - [ ] シーンアリーナ本体 … 断片化(frag=0%)もリークも観測されないため保留。
+          入れる場合の枠は「永続8KiB + シーン56KiB = 64KiB」(実測根拠あり)
     - [ ] ウィジェット内部のstd::vector / std::functionの確保削減
+          … アリーナより費用対効果が高い。Markdownの確保841回中805回がここ
+    - [ ] mid-sceneで生成/破棄されるダイアログ(MsgDialog/InputDialog)の使い回し化
 - [x] Wi-Fiの管理強化
   - [x] 定期的再接続交渉
   - [x] 確実な時刻同期

@@ -31,6 +31,11 @@ void LogFunctions::Update(){}
 void LogFunctions::Flush(){}
 
 static int failures = 0;
+// 落ちずに通ったこと自体を結果とするケース(ASanが範囲外アクセスを検出する)
+static void ok(const char* label){
+    printf("[ OK ] %s\n", label);
+}
+
 static void eq(int actual, int expected, const char* label){
     const bool ok = (actual == expected);
     printf("%s %-52s 実測=%d 期待=%d\n", ok ? "[ OK ]" : "[FAIL]", label, actual, expected);
@@ -206,6 +211,79 @@ int main(){
         l.setFontSize(FontFn::Small);
         eq(l.getW(), 2 * 16, "Smallフォントの幅");
         eq(l.getH(), 16 + 2, "Smallフォントの高さ");
+    }
+
+    // ---- 空段落を挟む ----
+    // ランは行番号を持ち、行ごとのvectorは持たない。空行はランが1つも無い行なので、
+    // 描画側が「その行のランが無い」ことを正しく飛ばせるかを確認する
+    {
+        Label<PICO_STR_M> l(0, 0, "あ\n\nい");
+        eq(l.getH(), expectH(3), "空段落を挟むと3行になる");
+        eq(l.getTextLength(), 4, "空段落を挟んだ文字数(改行2つを含む)");
+    }
+    {
+        Label<PICO_STR_M> l(0, 0, "\n\n");
+        eq(l.getH(), expectH(3), "空段落だけでも行数は数えられる");
+    }
+
+    // ---- 行揃え ----
+    // 左揃えではオフセットテーブルを作らない(確保を省く)ので、
+    // 中央/右揃えに切り替えたときに正しく効くかを見る
+    {
+        Label<PICO_STR_L> l(0, 0, "あ\nあいうえお");
+        l.setMaxWidth(200);
+        l.setCursorPos(0);
+        const int left_x = l.getCursorScreenX();
+        eq(left_x, 0, "左揃え: 1行目先頭のX");
+
+        l.setTextAlign(TextAlign::Center);
+        l.setCursorPos(0);
+        //1行目は24px、箱は200pxなので (200-24)/2 = 88 ずれる
+        eq(l.getCursorScreenX(), (200 - 24) / 2, "中央揃え: 1行目先頭のX");
+
+        l.setTextAlign(TextAlign::Right);
+        l.setCursorPos(0);
+        eq(l.getCursorScreenX(), 200 - 24, "右揃え: 1行目先頭のX");
+
+        l.setTextAlign(TextAlign::Left);
+        l.setCursorPos(0);
+        eq(l.getCursorScreenX(), 0, "左揃えへ戻すとオフセットが消える");
+    }
+
+    // ---- 描画経路 ----
+    // 行番号でランをたどるループに範囲外アクセスが無いことをASanの下で確認する。
+    // 表示結果は検証しない(スタブは何も描かない)が、添字の誤りはここで落ちる
+    {
+        const char* texts[] = {
+            "", "pico-os", "あ\n\nい", "**太字**と_下線_と~~打消~~と~波線~",
+            "これは折り返しが発生する長さの日本語テキストです。複数行になります。",
+        };
+        for (const char* t : texts) {
+            Label<PICO_STR_L> l(0, 0, t);
+            l.setMaxWidth(120);
+            l.render();
+            l.setTextAlign(TextAlign::Center);
+            l.render();
+            l.setTextAlign(TextAlign::Right);
+            l.render();
+        }
+        ok("描画経路: 各種テキスト・揃えで範囲外アクセスなし");
+    }
+    {
+        //プレースホルダ表示(raw_textが空のときだけ出る)も別の行データを使う
+        Label<PICO_STR_L> l(0, 0, "");
+        l.setMaxWidth(120);
+        l.setPlaceholder("入力してください。折り返すくらい長いプレースホルダです。");
+        l.render();
+        ok("描画経路: プレースホルダでも範囲外アクセスなし");
+    }
+    {
+        //max_heightで途中打ち切りする経路
+        Label<PICO_STR_L> l(0, 0, "あいうえおかきくけこさしすせそたちつてと");
+        l.setMaxWidth(100);
+        l.setMaxHeight(40);
+        l.render();
+        ok("描画経路: max_heightでの打ち切りでも範囲外アクセスなし");
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

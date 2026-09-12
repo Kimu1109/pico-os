@@ -31,6 +31,14 @@ Rect Label<N>::staleScreenRect() const {
 }
 
 template<size_t N>
+void Label<N>::enableCursorTracking() {
+    if (this->cursor_tracking) return;
+    this->cursor_tracking = true;
+    //テーブルはrelayout()の中でしか作れないので、作り直しを要求する
+    this->invalidateLayout();
+}
+
+template<size_t N>
 void Label<N>::invalidateLayout() {
     //ここでdirty登録するのは「消すべき古い領域」なので、再計算前の矩形を使う。
     //needsRender()はgetScreenRect()経由でensureLayout()を呼んでしまい、
@@ -77,53 +85,60 @@ static inline size_t nextUtf8Char(const char* s, size_t n, size_t i, char out[5]
 }
 
 template<size_t N>
-std::vector<TextRun> Label<N>::parseMarkup(const char* src, size_t n) {
+std::vector<TextRun> Label<N>::parseMarkup(const char* src, size_t n, uint16_t base_offset) {
     std::vector<TextRun> runs;
     TextRun cur;
     if (!src) return runs;
-    size_t i = 0;
 
+    size_t i = 0;
+    size_t run_start = 0; // 今の区間がsrcの何バイト目から始まっているか
+
+    // [run_start, i) を1つのランとして積む。文字列はコピーせず位置だけ記録する
     auto flush = [&]() {
-        if (cur.text.length() > 0) {
+        if (i > run_start) {
+            cur.srcOffset = (uint16_t)(base_offset + run_start);
+            cur.srcLength = (uint16_t)(i - run_start);
             runs.push_back(cur);
-            cur.text.clear();
         }
+        run_start = i;
+    };
+
+    // マークアップ記号はランに含めないので、飛ばした先から次の区間を始める
+    auto skipMarker = [&](size_t bytes) {
+        flush();
+        i += bytes;
+        run_start = i;
     };
 
     if (disable_auto_text_decoration) {
-        //srcはNUL終端とは限らない(raw_textの途中を指す)ので、必ず長さで切ること。
-        //assign(src)にすると以降の段落まで1つの段落として取り込んでしまう
-        cur.text.assign(src, n);
+        // 記号を解釈せず全体を1ランにする。
+        // srcはNUL終端とは限らない(raw_textの途中を指す)ので必ずnで切ること
+        i = n;
         flush();
     } else {
         while (i < n) {
             if (src[i] == '*' && i + 1 < n && src[i + 1] == '*') {
-                flush();
+                skipMarker(2);
                 cur.bold = !cur.bold;
-                i += 2;
                 continue;
             }
             if (src[i] == '~' && i + 1 < n && src[i + 1] == '~') {
-                flush();
+                skipMarker(2);
                 cur.strikethrough = !cur.strikethrough;
-                i += 2;
                 continue;
             }
             if (src[i] == '_' || src[i] == '*') {
-                flush();
+                skipMarker(1);
                 cur.underline = !cur.underline;
-                i += 1;
                 continue;
             }
             if (src[i] == '~') {
-                flush();
+                skipMarker(1);
                 cur.wavy = !cur.wavy;
-                i += 1;
                 continue;
             }
             int len = Utf8CharBytesFromLeadByte((uint8_t)src[i]);
             if (i + len > n) len = n - i;
-            cur.text.appendUtf8Char(&src[i], len);
             i += len;
         }
     }
@@ -132,13 +147,19 @@ std::vector<TextRun> Label<N>::parseMarkup(const char* src, size_t n) {
 }
 
 template<size_t N>
-void Label<N>::computeLineOffsets(const std::vector<std::vector<TextRun>>& src_lines, int box_width, std::vector<int>& out) {
-    out.assign(src_lines.size(), 0);
+void Label<N>::computeLineOffsets(const std::vector<TextRun>& src_runs, int src_line_count,
+                                   int box_width, std::vector<int>& out) {
+    //左揃えならオフセットは全て0なので、テーブル自体を作らない。
+    //描画側は範囲外を0として扱うので、空のままで支障がない(既定の左揃えで1確保減る)
+    out.clear();
     if (this->text_align == TextAlign::Left) return;
 
-    for (size_t li = 0; li < src_lines.size(); li++) {
+    out.assign(src_line_count > 0 ? (size_t)src_line_count : 0, 0);
+
+    for (int li = 0; li < src_line_count; li++) {
         int lw = 0;
-        for (auto& run : src_lines[li]) {
+        for (const TextRun& run : src_runs) {
+            if (run.line != (uint16_t)li) continue;
             int rw = run.width; // relayout()側で計算済みの幅を再利用(再計測しない)
             if (run.bold) rw += 1;
             lw += rw;
@@ -163,7 +184,8 @@ void Label<N>::relayout() {
 
     this->fontApply();
 
-    lines.clear();
+    runs_flat.clear();
+    uint16_t cur_line = 0; //いま書き込んでいる行番号
     cursor_slots.clear();
     line_height = OSData::frame->fontHeight();
 
@@ -175,7 +197,7 @@ void Label<N>::relayout() {
     const char* s = raw_text.c_str();
     const size_t total = raw_text.length();
 
-    {
+    if (cursor_tracking) {
         CursorSlot head;
         head.line = 0;
         head.x = 0;
@@ -189,25 +211,26 @@ void Label<N>::relayout() {
         while (para_end < total && s[para_end] != '\n') para_end++;
         last_paragraph = (para_end >= total);
 
-        std::vector<TextRun> runs = parseMarkup(s + para_start, para_end - para_start);
+        std::vector<TextRun> runs = parseMarkup(s + para_start, para_end - para_start, (uint16_t)para_start);
 
-        std::vector<TextRun> curLine;
         int curWidth = 0;
         TextRun piece;
 
         for (auto& run : runs) {
-            piece.text.clear();
+            piece.srcOffset = run.srcOffset;
+            piece.srcLength = 0;
             piece.width = 0;
             piece.bold = run.bold;
             piece.underline = run.underline;
             piece.wavy = run.wavy;
             piece.strikethrough = run.strikethrough;
 
-            const char* rp = run.text.c_str();
-            const size_t rn = run.text.length();
+            const char* rp = s + run.srcOffset;
+            const size_t rn = run.srcLength;
             char ch[5];
             int chLen = 0;
             for (size_t ci = 0; ci < rn; ) {
+                const size_t char_start = ci;
                 ci = nextUtf8Char(rp, rn, ci, ch, chLen);
 
                 // chWは太字加算を含まない素の文字幅。piece.widthにはこちらを積算し、
@@ -218,28 +241,32 @@ void Label<N>::relayout() {
                 int cw = chW + (run.bold ? 1 : 0); // 折り返し判定用(太字は従来通り1文字ごとに+1)
 
                 if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
-                    if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
-                    //moveでバッファごと渡す(以前はTextRun(1個208B)を行ごとにコピーしていた)
-                    lines.push_back(std::move(curLine));
-                    curLine.clear();
+                    if (piece.srcLength > 0) { piece.line = cur_line; runs_flat.push_back(piece); }
+                    //折り返した先の区間はこの文字から始まる
+                    piece.srcOffset = (uint16_t)(run.srcOffset + char_start);
+                    piece.srcLength = 0;
+                    piece.width = 0;
+                    cur_line++; //ここで1行閉じる
                     curWidth = 0;
                 }
-                piece.text.appendUtf8Char(ch, chLen);
+                piece.srcLength += (uint16_t)chLen;
                 piece.width += chW;
                 curWidth += cw;
 
-                CursorSlot slot;
-                slot.line = (int)lines.size();
-                slot.x = curWidth;
-                cursor_slots.push_back(slot);
+                if (cursor_tracking) {
+                    CursorSlot slot;
+                    slot.line = cur_line;
+                    slot.x = curWidth;
+                    cursor_slots.push_back(slot);
+                }
             }
-            if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
+            if (piece.srcLength > 0) { piece.line = cur_line; runs_flat.push_back(piece); piece.srcLength = 0; piece.width = 0; }
         }
-        lines.push_back(std::move(curLine));
+        cur_line++; //段落の終わりで1行閉じる
 
-        if (!last_paragraph) {
+        if (!last_paragraph && cursor_tracking) {
             CursorSlot slot;
-            slot.line = (int)lines.size();
+            slot.line = cur_line;
             slot.x = 0;
             cursor_slots.push_back(slot);
         }
@@ -247,10 +274,19 @@ void Label<N>::relayout() {
         para_start = para_end + 1;
     }
 
+    this->line_count = cur_line;
+
+    //ランは行番号の昇順に並ぶので、行が変わったところで幅を締める
     int maxLineWidth = 0;
-    for (auto& line : lines) {
+    {
         int lw = 0;
-        for (auto& run : line) {
+        uint16_t li = 0;
+        for (const TextRun& run : runs_flat) {
+            if (run.line != li) {
+                if (lw > maxLineWidth) maxLineWidth = lw;
+                lw = 0;
+                li = run.line;
+            }
             int rw = run.width; // 上のループで積算済みの幅を再利用(再計測しない)
             if (run.bold) rw += 1;
             lw += rw;
@@ -259,8 +295,8 @@ void Label<N>::relayout() {
     }
 
     this->l_rect.w = (max_width > 0) ? max_width : maxLineWidth;
-    this->l_rect.h = lines.empty() ? 0
-            : (int)lines.size() * (line_height + line_spacing) - line_spacing + kDecorationMargin;
+    this->l_rect.h = (this->line_count == 0) ? 0
+            : (int)this->line_count * (line_height + line_spacing) - line_spacing + kDecorationMargin;
 
     if (this->default_height > 0 && this->l_rect.h < this->default_height) {
         this->l_rect.h = this->default_height;
@@ -273,7 +309,7 @@ void Label<N>::relayout() {
     if (this->cursor_index >= (int)cursor_slots.size()) this->cursor_index = (int)cursor_slots.size() - 1;
     if (this->cursor_index < 0) this->cursor_index = 0;
 
-    computeLineOffsets(this->lines, this->l_rect.w, this->line_offsets);
+    computeLineOffsets(this->runs_flat, this->line_count, this->l_rect.w, this->line_offsets);
 
     relayoutPlaceholder();
 
@@ -283,64 +319,84 @@ void Label<N>::relayout() {
 
 template<size_t N>
 void Label<N>::relayoutPlaceholder() {
-    placeholder_lines.clear();
+    placeholder_runs_flat.clear();
+    placeholder_line_count = 0;
     placeholder_line_offsets.clear();
     if (placeholder_text.length() == 0) return;
 
-    std::vector<TextRun> runs = parseMarkup(placeholder_text.c_str(), placeholder_text.length());
-    std::vector<TextRun> curLine;
+    uint16_t cur_line = 0;
+
+    const char* ps = placeholder_text.c_str();
+    std::vector<TextRun> runs = parseMarkup(ps, placeholder_text.length(), 0);
     int curWidth = 0;
     TextRun piece;
 
     for (auto& run : runs) {
-        piece.text.clear();
+        piece.srcOffset = run.srcOffset;
+        piece.srcLength = 0;
         piece.width = 0;
         piece.bold = run.bold;
         piece.underline = run.underline;
         piece.wavy = run.wavy;
         piece.strikethrough = run.strikethrough;
 
-        const char* rp = run.text.c_str();
-        const size_t rn = run.text.length();
+        const char* rp = ps + run.srcOffset;
+        const size_t rn = run.srcLength;
         char ch[5];
         int chLen = 0;
         for (size_t ci = 0; ci < rn; ) {
+            const size_t char_start = ci;
             ci = nextUtf8Char(rp, rn, ci, ch, chLen);
 
             int chW = OSData::frame->textWidth(ch);
             int cw = chW + (run.bold ? 1 : 0);
 
             if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
-                if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
-                placeholder_lines.push_back(std::move(curLine));
-                curLine.clear();
+                if (piece.srcLength > 0) { piece.line = cur_line; placeholder_runs_flat.push_back(piece); }
+                piece.srcOffset = (uint16_t)(run.srcOffset + char_start);
+                piece.srcLength = 0;
+                piece.width = 0;
+                cur_line++;
                 curWidth = 0;
             }
-            piece.text.appendUtf8Char(ch, chLen);
+            piece.srcLength += (uint16_t)chLen;
             piece.width += chW;
             curWidth += cw;
         }
-        if (piece.text.length() > 0) { curLine.push_back(piece); piece.text.clear(); piece.width = 0; }
+        if (piece.srcLength > 0) { piece.line = cur_line; placeholder_runs_flat.push_back(piece); piece.srcLength = 0; piece.width = 0; }
     }
-    placeholder_lines.push_back(std::move(curLine));
+    cur_line++;
+    placeholder_line_count = cur_line;
 
-    computeLineOffsets(this->placeholder_lines, this->l_rect.w, this->placeholder_line_offsets);
+    computeLineOffsets(this->placeholder_runs_flat, this->placeholder_line_count,
+                       this->l_rect.w, this->placeholder_line_offsets);
 }
 
 template<size_t N>
-void Label<N>::renderRun(const TextRun& run, int x, int y) {
-    if (run.text.length() == 0) return;
+void Label<N>::renderRun(char* src_buf, const TextRun& run, int x, int y) {
+    if (run.srcLength == 0) return;
+
+    // runは元テキスト上の範囲参照なので、print()が要求するNUL終端を一時的に作る。
+    // 元の文字を退避して描画直後に必ず戻す。このOSはシングルスレッドのポーリング
+    // ループで、この間に他所からテキストが読まれることはない。
+    // (区間の終端が文字列末尾と一致する場合はもともと'\0'なので実質何もしない)
+    char* head = src_buf + run.srcOffset;
+    char& tail = src_buf[run.srcOffset + run.srcLength];
+    const char saved = tail;
+    tail = '\0';
 
     OSData::frame->setCursor(x, y);
-    OSData::frame->print(run.text.c_str());
+    OSData::frame->print(head);
 
     int w = run.width; // relayout()側で計算済みの幅を再利用(再計測しない)
 
     if (run.bold) {
         OSData::frame->setCursor(x + 1, y);
-        OSData::frame->print(run.text.c_str());
+        OSData::frame->print(head);
         w += 1;
     }
+
+    tail = saved;
 
     if (run.strikethrough) {
         int strikeY = y + line_height / 2;
@@ -461,27 +517,34 @@ void Label<N>::render() {
     int cy = g_rect.y;
 
     bool show_placeholder = this->raw_text.length() == 0 && this->placeholder_text.length() > 0;
-    auto& render_lines = show_placeholder ? this->placeholder_lines : this->lines;
+    auto& render_runs = show_placeholder ? this->placeholder_runs_flat : this->runs_flat;
+    const int render_line_count = show_placeholder ? this->placeholder_line_count : this->line_count;
     auto& render_offsets = show_placeholder ? this->placeholder_line_offsets : this->line_offsets;
+    //runが参照している元テキスト。renderRun()が終端を一時的に差し替えるので非constで持つ
+    char* render_src = const_cast<char*>(show_placeholder
+        ? this->placeholder_text.c_str() : this->raw_text.c_str());
 
     int8_t saved_text_color = this->text_color;
     if (show_placeholder) this->text_color = this->placeholder_color;
     this->textColorApply();
 
-    size_t line_idx = 0;
-    for (auto& line : render_lines) {
+    //ランは行番号の昇順。先頭から舐めつつ、行番号が変わったら改行する
+    size_t ri = 0;
+    for (int line_idx = 0; line_idx < render_line_count; line_idx++) {
         if (this->max_height > 0 && cy >= g_rect.y + g_rect.h) break;
 
-        int offset = (line_idx < render_offsets.size()) ? render_offsets[line_idx] : 0;
+        //左揃えではオフセットテーブルを作らないので、範囲外は0として扱う
+        int offset = ((size_t)line_idx < render_offsets.size()) ? render_offsets[line_idx] : 0;
         int cx = g_rect.x + offset;
-        for (auto& run : line) {
-            renderRun(run, cx, cy);
+        while (ri < render_runs.size() && render_runs[ri].line == (uint16_t)line_idx) {
+            const TextRun& run = render_runs[ri];
+            renderRun(render_src, run, cx, cy);
             int rw = run.width; // relayout()側で計算済みの幅を再利用(再計測しない)
             if (run.bold) rw += 1;
             cx += rw;
+            ri++;
         }
         cy += line_height + line_spacing;
-        line_idx++;
     }
 
     if (show_placeholder) this->text_color = saved_text_color;
@@ -657,6 +720,7 @@ int Label<N>::getBorderWidth() {
 
 template<size_t N>
 void Label<N>::setCursorPos(int index) {
+    this->enableCursorTracking();
     this->ensureLayout();
     if (cursor_slots.empty()) {
         this->cursor_index = 0;
@@ -685,6 +749,7 @@ void Label<N>::setCursorToEnd() {
 
 template<size_t N>
 void Label<N>::setCursorVisible(bool visible) {
+    if (visible) this->enableCursorTracking();
     this->cursor_visible = visible;
     this->needsRender();
 }
@@ -696,6 +761,7 @@ bool Label<N>::getCursorVisible() {
 
 template<size_t N>
 void Label<N>::setCursorBlink(bool enabled, unsigned long interval_ms) {
+    if (enabled) this->enableCursorTracking();
     this->cursor_blink_enabled = enabled;
     this->cursor_blink_interval_ms = interval_ms;
     this->cursor_last_blink_ms = millis();
@@ -716,12 +782,14 @@ void Label<N>::setCursorColor(uint16_t c) {
 
 template<size_t N>
 int Label<N>::getTextLength() {
+    this->enableCursorTracking();
     this->ensureLayout();
     return cursor_slots.empty() ? 0 : (int)cursor_slots.size() - 1;
 }
 
 template<size_t N>
 int Label<N>::getCursorScreenX() {
+    this->enableCursorTracking();
     this->ensureLayout();
     if (cursor_slots.empty()) return this->getScreenRect().x;
     int idx = this->cursor_index;
@@ -734,6 +802,7 @@ int Label<N>::getCursorScreenX() {
 
 template<size_t N>
 int Label<N>::getCursorScreenY() {
+    this->enableCursorTracking();
     this->ensureLayout();
     if (cursor_slots.empty()) return this->getScreenRect().y;
     int idx = this->cursor_index;

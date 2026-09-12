@@ -20,6 +20,10 @@ class Textbox : public Label<N>, public ITextInputTarget {
             this->setBorderColor(this->border_color);
             this->setBorderWidth(1);
             this->setBackgroundColor(this->background_color);
+
+            //入力欄なのでカーソル位置テーブルは必ず要る。ここで有効にしておくと、
+            //描画中にカーソルAPIが初めて呼ばれてレイアウトがやり直しになるのを避けられる
+            this->enableCursorTracking();
         }
 
         void causeOnPressStart() override;

@@ -113,7 +113,16 @@ examples/doc.md                MarkdownView動作確認用サンプル文書
 - `disable_markdirty`: 親が描画反映を一括保証する場合の子markdirty無効化フラグ(**乱用厳禁、バグりやすい**)。
 
 ### ウィジェットカタログ
-Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`はchar[128]) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
+Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / AppGrid(ランチャのアプリタイル) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`はchar[128]) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
+
+### アプリの枠組み (`src/functions/App_Functions.hpp`)
+`AppEntry`(名前/アイコン/シーン生成関数)の固定長テーブルに登録し、`HomeScene`の`AppGrid`がそれを並べる。
+
+- **アプリを増やすときに触るのは `src/functions/App_List.cpp` の `Setup()` に1行足すだけ**。シーン側にも`HomeScene`にも手を入れない。
+- 仕組み(`Register`/`Launch`/`Get`)は`App_Functions.cpp`、載せるアプリの一覧は`App_List.cpp`に分けてある(前者はシーン実装に依存しないのでホストテストが軽い)。
+- 生成関数は`std::function`ではなく素の関数ポインタ。`&AppFunctions::MakeScene<XxxScene>`の形で渡す(登録簿を確保ゼロの静的テーブルに保つため)。
+- `Launch()`は`SceneFunctions::Push`なので、アプリ側から`Pop()`すればランチャへ戻る。
+- `AppGrid`はタイルごとに子ウィジェットを作らず、`render()`で直接描いてタップ位置から逆算する(`ColorDialog`の色グリッドと同じ方式)。`WidgetFunctions::HitTest()`は子から先に判定するため、タイルをIcon+Labelの親として作ると子がタップを奪ってしまう。
 
 ### シーン (`src/gui/scenes/`)
 `Scene`基底クラス(`getName()`/`onEnter()`/`onExit()`/`onUpdate()`/`contentRect()`)と`SceneFunctions`による画面遷移。

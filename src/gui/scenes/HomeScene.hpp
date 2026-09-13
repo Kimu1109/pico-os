@@ -1,20 +1,32 @@
 #pragma once
 
 #include "gui/scenes/Scene.hpp"
+#include "gui/widgets/AppGrid.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Button.hpp"
 
-// 起動直後のシーン。各シーンへの入口を並べるだけのランチャ
+// 起動直後のシーン。登録簿(AppFunctions)に並んだアプリをグリッドで見せるランチャ。
+//
+// 以前はアプリごとのButtonをメンバとして持っていたため、アプリを1つ足すたびに
+// このファイルの .hpp と .cpp の両方を編集する必要があった。
+// 今はどのアプリを載せるかを一切知らず、App_List.cpp の一覧をそのまま表示する。
 class HomeScene : public Scene {
     private:
-        Label<PICO_STR_M>* title = nullptr;
-        Button* markdown_button = nullptr;
-        Button* input_button = nullptr;
+        AppGrid* grid = nullptr;
 
-        constexpr static int MARGIN = 10;
-        constexpr static int BUTTON_WIDTH = SCREEN_WIDTH - MARGIN * 2 - 10;
-        constexpr static int BUTTON_HEIGHT = 30;
-        constexpr static int BUTTON_GAP = 8;
+        //アプリが1ページに収まらない時だけ出すページ送り
+        Button* prev_button = nullptr;
+        Button* next_button = nullptr;
+        Label<PICO_STR_S>* page_label = nullptr;
+
+        //アプリが1つも登録されていない時の案内
+        Label<PICO_STR_L>* empty_label = nullptr;
+
+        constexpr static int MARGIN = 6;
+        constexpr static int PAGER_H = 28;
+        constexpr static int PAGER_BUTTON_W = 44;
+
+        void updatePageLabel();
 
     public:
         const char* getName() const override { return "Home"; }

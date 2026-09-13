@@ -10,6 +10,7 @@
 #   label_test … Labelのテキストレイアウト結果(幅/高さ/文字数/カーソル座標)の固定
 #   markdown_test … MarkdownViewのブロック高さとLabelの実高さの整合(重なり検出)
 #   config_test   … 設定ファイル(key=value)の読み書き
+#   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -83,3 +84,23 @@ g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== config_test ====="
 "$OUT/config_test"
+
+# --- アプリ登録簿とランチャ ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/app_test.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/gui/widgets/AppGrid.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    -o "$OUT/app_test"
+
+echo ""
+echo "===== app_test ====="
+"$OUT/app_test"

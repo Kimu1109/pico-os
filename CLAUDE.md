@@ -123,6 +123,7 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - 生成関数は`std::function`ではなく素の関数ポインタ。`&AppFunctions::MakeScene<XxxScene>`の形で渡す(登録簿を確保ゼロの静的テーブルに保つため)。
 - `Launch()`は`SceneFunctions::Push`なので、アプリ側から`Pop()`すればランチャへ戻る。
 - `AppGrid`はタイルごとに子ウィジェットを作らず、`render()`で直接描いてタップ位置から逆算する(`ColorDialog`の色グリッドと同じ方式)。`WidgetFunctions::HitTest()`は子から先に判定するため、タイルをIcon+Labelの親として作ると子がタップを奪ってしまう。
+- レイアウトは2列×3行=6個/ページ(タイル111x78px)。3列だとタイル幅72px=日本語4文字しか入らず大半のアプリ名がはみ出したため2列にした。名前は`drawName()`がUTF-8の文字境界で切って最大2行へ折り返す(`DrawPlain()`は折り返さないため自前)。
 
 ### シーン (`src/gui/scenes/`)
 `Scene`基底クラス(`getName()`/`onEnter()`/`onExit()`/`onUpdate()`/`contentRect()`)と`SceneFunctions`による画面遷移。

@@ -3,7 +3,10 @@
 #include "gui/icons/icon_render.h"
 #include "functions/Font_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
+#include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
+
+#include <cstring>
 
 int AppGrid::tileW() const {
     const int avail = this->l_rect.w - kPadding * 2 - kGap * (kCols - 1);
@@ -92,6 +95,83 @@ bool AppGrid::prevPage() {
     return true;
 }
 
+void AppGrid::drawName(const char* name, int x, int y, int w) {
+    if (!name || name[0] == '\0' || w <= 0) return;
+
+    const int line_h = Label<PICO_STR_M>::GetLineHeight(FontFn::Small);
+
+    // 行の切れ目を先に全部決めてから描く。
+    // DrawPlain()は内部でフォントを既定へ戻してしまうので、
+    // 幅の測定(Smallを適用した状態が要る)と描画を混ぜられない
+    size_t line_start[kNameLines] = {0};
+    size_t line_end[kNameLines]   = {0};
+    int    line_w[kNameLines]     = {0};
+    int    line_count = 0;
+
+    {
+        FontFn::SetFontSize(FontFn::Small);
+
+        const size_t total = strlen(name);
+        size_t pos = 0;
+
+        for (int i = 0; i < kNameLines && pos < total; i++) {
+            const bool is_last = (i == kNameLines - 1);
+
+            size_t end = pos;
+            int acc = 0;
+            while (end < total) {
+                int clen = Utf8CharBytesFromLeadByte((uint8_t)name[end]);
+                if (end + (size_t)clen > total) clen = (int)(total - end);
+
+                char ch[5];
+                memcpy(ch, name + end, (size_t)clen);
+                ch[clen] = '\0';
+
+                const int cw = OSData::frame->textWidth(ch);
+                //1文字も入らない幅でも、最低1文字は進めないと無限ループになる
+                if (acc + cw > w && end > pos) break;
+
+                acc += cw;
+                end += (size_t)clen;
+            }
+
+            //最終行は残り全部を渡し、はみ出した分はDrawPlain()のクリップに任せる
+            line_start[line_count] = pos;
+            line_end[line_count]   = is_last ? total : end;
+            line_w[line_count]     = is_last ? 0 : acc; //最終行の幅は下で測り直す
+            line_count++;
+
+            pos = end;
+        }
+
+        //最終行だけは範囲が変わり得るので、確定した範囲で測り直す
+        if (line_count > 0) {
+            const int last = line_count - 1;
+            char buf[kMaxNameBytes];
+            size_t len = line_end[last] - line_start[last];
+            if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+            memcpy(buf, name + line_start[last], len);
+            buf[len] = '\0';
+            line_w[last] = OSData::frame->textWidth(buf);
+        }
+
+        FontFn::SetDefault();
+    }
+
+    for (int i = 0; i < line_count; i++) {
+        char buf[kMaxNameBytes];
+        size_t len = line_end[i] - line_start[i];
+        if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+        memcpy(buf, name + line_start[i], len);
+        buf[len] = '\0';
+
+        int tx = x + (w - line_w[i]) / 2;
+        if (tx < x) tx = x; //行がタイルより広い場合は左寄せ+DrawPlain側で切り詰め
+
+        Label<PICO_STR_M>::DrawPlain(FontFn::Small, PICO_BLACK, tx, y + i * line_h, w, buf);
+    }
+}
+
 void AppGrid::render() {
     if (!this->visible) return;
     if (!this->needs_redraw) return;
@@ -118,17 +198,7 @@ void AppGrid::render() {
         IconRender::DrawIcon(entry->icon, kIconSize,
                              tx + (t.w - kIconPx) / 2, ty + kPadding, PICO_BLACK);
 
-        //名前はアイコンの下へ中央揃え。幅の測定にはフォントの適用が要る
-        FontFn::SetFontSize(FontFn::Small);
-        const int text_w = OSData::frame->textWidth(entry->name);
-        FontFn::SetDefault();
-
-        int text_x = tx + (t.w - text_w) / 2;
-        if (text_x < tx) text_x = tx; //名前がタイルより広い場合は左寄せ+DrawPlain側で切り詰め
-
-        Label<PICO_STR_M>::DrawPlain(FontFn::Small, PICO_BLACK,
-                                      text_x, ty + kPadding + kIconPx + kLabelGap,
-                                      t.w, entry->name);
+        drawName(entry->name, tx, ty + kPadding + kIconPx + kLabelGap, t.w);
     }
 
     markdirty(g);

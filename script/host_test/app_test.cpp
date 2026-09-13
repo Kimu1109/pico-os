@@ -35,6 +35,11 @@ static void check(bool cond, const char* label){
     printf("%s %s\n", cond ? "[ OK ]" : "[FAIL]", label);
     if(!cond) failures++;
 }
+// 落ちずに通ったこと自体を結果とするケース(ASanが範囲外アクセスを検出する)
+static void ok(const char* label){
+    printf("[ OK ] %s\n", label);
+}
+
 static void eq(int actual, int expected, const char* label){
     const bool ok = (actual == expected);
     printf("%s %-46s 実測=%d 期待=%d\n", ok ? "[ OK ]" : "[FAIL]", label, actual, expected);
@@ -104,7 +109,7 @@ int main(){
         registerApps(0);
         AppGrid g(0, STATUSBAR_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - STATUSBAR_HEIGHT);
         const int per_page = g.tilesPerPage();
-        check(per_page >= 6, "1ページに6個以上並ぶ");
+        check(per_page >= 4, "1ページに4個以上並ぶ");
         eq(g.pageCount(), 1, "アプリ0件でもページ数は1");
 
         registerApps(1);
@@ -123,35 +128,42 @@ int main(){
         const int per_page = g.tilesPerPage();
         registerApps(per_page);
 
-        //各タイルの中心を叩くと、そのタイルのindexが返ること。
-        //描画と当たり判定が同じ矩形を使っているかの確認になる
+        //render()が使うタイル矩形の中心を叩いて、そのタイルのindexが返ること。
+        //「描く位置」と「当たり判定の位置」が同じ矩形から来ていることの確認になる
         bool all_hit = true;
+        bool no_overlap = true;
         for(int slot = 0; slot < per_page; slot++){
-            //タイル配置はhitTileと同じ規則(行優先)で組み立てて中心を出す
-            const int cols = 3, padding = 6, gap = 6, tile_h = 58;
-            const int tile_w = (SCREEN_WIDTH - padding * 2 - gap * (cols - 1)) / cols;
-            const int col = slot % cols, row = slot / cols;
-            const int cx = padding + col * (tile_w + gap) + tile_w / 2;
-            const int cy = padding + row * (tile_h + gap) + tile_h / 2;
-            if(g.hitTile(cx, cy) != slot) all_hit = false;
+            const Rect t = g.tileRect(slot);
+            if(g.hitTile(t.x + t.w / 2, t.y + t.h / 2) != slot) all_hit = false;
+
+            //4隅の内側も同じタイルに入ること(矩形どうしが重なっていないことの裏取り)
+            if(g.hitTile(t.x, t.y) != slot) no_overlap = false;
+            if(g.hitTile(t.x + t.w - 1, t.y + t.h - 1) != slot) no_overlap = false;
         }
         check(all_hit, "各タイルの中心を叩くとそのindexが返る");
+        check(no_overlap, "各タイルの隅も自分のindexになる(矩形が重なっていない)");
 
         eq(g.hitTile(-5, 10), -1, "左外は-1");
         eq(g.hitTile(10, -5), -1, "上外は-1");
         eq(g.hitTile(SCREEN_WIDTH + 10, 10), -1, "右外は-1");
         eq(g.hitTile(10, SCREEN_HEIGHT * 2), -1, "下外は-1");
         eq(g.hitTile(0, 0), -1, "外周の余白は-1(タイルの外)");
+
+        //名前がはみ出さないよう2列へ広げた経緯があるので、幅を下限として固定しておく。
+        //Smallフォントの日本語は1文字16pxなので、96pxあれば1行6文字入る
+        const Rect t = g.tileRect(0);
+        check(t.w >= 96, "タイル幅は日本語6文字ぶん(96px)以上ある");
     }
 
     // ---- 空きスロットは起動しない ----
     {
         AppGrid g(0, STATUSBAR_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - STATUSBAR_HEIGHT);
         registerApps(1); //1ページに空きが大量に出る状態
-        const int tile_w = (SCREEN_WIDTH - 6 * 2 - 6 * 2) / 3;
-        eq(g.hitTile(6 + tile_w / 2, 6 + 58 / 2), 0, "先頭タイルは引ける");
+        const Rect t0 = g.tileRect(0);
+        const Rect t1 = g.tileRect(1);
+        eq(g.hitTile(t0.x + t0.w / 2, t0.y + t0.h / 2), 0, "先頭タイルは引ける");
         //2つ目のタイルの位置には何も登録されていない
-        eq(g.hitTile(6 + (tile_w + 6) + tile_w / 2, 6 + 58 / 2), -1, "空きスロットは-1");
+        eq(g.hitTile(t1.x + t1.w / 2, t1.y + t1.h / 2), -1, "空きスロットは-1");
     }
 
     // ---- ページ送り ----
@@ -167,11 +179,13 @@ int main(){
         check(!g.nextPage(), "最終ページでは次へ行けない");
 
         //2ページ目の先頭タイルは per_page 番目のアプリ
-        const int tile_w = (SCREEN_WIDTH - 6 * 2 - 6 * 2) / 3;
-        eq(g.hitTile(6 + tile_w / 2, 6 + 58 / 2), per_page, "2ページ目の先頭タイルのindex");
+        const Rect t0 = g.tileRect(0);
+        const int cx = t0.x + t0.w / 2;
+        const int cy = t0.y + t0.h / 2;
+        eq(g.hitTile(cx, cy), per_page, "2ページ目の先頭タイルのindex");
 
         check(g.prevPage(), "前ページへ戻れる");
-        eq(g.hitTile(6 + tile_w / 2, 6 + 58 / 2), 0, "戻ると先頭アプリに戻る");
+        eq(g.hitTile(cx, cy), 0, "戻ると先頭アプリに戻る");
     }
 
     // ---- 高さを変えるとページの数え直しが要る ----
@@ -205,10 +219,10 @@ int main(){
         int got = -1;
         g.setOnLaunch([&got](int index){ got = index; });
 
-        const int tile_w = (SCREEN_WIDTH - 6 * 2 - 6 * 2) / 3;
-        //2つ目のタイルの中心を押して離す
-        OSData::touchX = 6 + (tile_w + 6) + tile_w / 2;
-        OSData::touchY = STATUSBAR_HEIGHT + 6 + 58 / 2;
+        //2つ目のタイルの中心を押して離す(スクリーン座標なのでグリッドのY起点を足す)
+        const Rect t1 = g.tileRect(1);
+        OSData::touchX = t1.x + t1.w / 2;
+        OSData::touchY = STATUSBAR_HEIGHT + t1.y + t1.h / 2;
         g.causeOnPressStart();
         g.causeOnPressEnd();
         eq(got, 1, "押して離したタイルのアプリが起動される");
@@ -220,6 +234,34 @@ int main(){
         g.causeOnPressStart();
         g.causeOnPressEnd();
         eq(got, -1, "タイルの外を押しても起動しない");
+    }
+
+    // ---- 名前の描画 ----
+    // 名前は最大2行へ自前で折り返している。UTF-8の文字境界で切る処理と
+    // 固定長バッファへのコピーがあるので、ASanの下で実際に描いて確かめる。
+    // 幅が極端に狭い場合に1文字も進まず無限ループしないことも兼ねる
+    {
+        AppFunctions::Clear();
+        static const char* kHardNames[] = {
+            "",                              // 空
+            "a",                             // 1文字
+            "入力テスト",                     // 3列だとはみ出していた長さ
+            "ファイルエクスプローラー",       // 2行でちょうど収まるくらい
+            "とても長い名前のアプリケーション名テスト", // 2行でも収まらない
+            "Mixed 日本語 and ASCII 混在",    // 混在
+        };
+        for (const char* n : kHardNames) {
+            AppFunctions::Register(n, IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        }
+
+        AppGrid g(0, STATUSBAR_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - STATUSBAR_HEIGHT);
+        g.render();
+        ok("名前の描画: 長短/混在の名前で範囲外アクセスなし");
+
+        //タイルが極端に狭い場合(1文字も入らない幅)でも進む
+        AppGrid narrow(0, STATUSBAR_HEIGHT, 40, 120);
+        narrow.render();
+        ok("名前の描画: 極端に狭いタイルでも止まらない");
     }
 
     // ---- Launch()が登録簿のシーンを作ってPushする ----

@@ -12,6 +12,7 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Test_Functions.hpp"
 #include "functions/Mem_Functions.hpp"
+#include "functions/App_Functions.hpp"
 
 #include "gui/widgets/systems/Statusbar.hpp"
 #include "gui/scenes/HomeScene.hpp"
@@ -47,6 +48,9 @@ void setup() {
     TimeFunctions::Setup();
 
     TestFunctions::Setup();
+
+    //ランチャに並べるアプリを登録する(一覧は App_List.cpp)
+    AppFunctions::Setup();
 
     //ここまでの確保は全てOS常駐。シーンアリーナを導入する際の「永続領域」に相当する
     MemFunctions::SealPermanentBaseline();

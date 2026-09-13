@@ -60,6 +60,38 @@ PICOOS_SD_ROOT=/path/to/sd ./pc/build/picoos_pc
 IMEの辞書(`sys/ime/skk_*.tsv`)はサイズが大きいのでリポジトリには入れていない。
 無くても起動する(変換候補が出ないだけ)。
 
+## Wi-Fi
+
+**母艦のWi-Fi設定は変更しない。** `ConnectWiFiAsync()` が来ても実際にSSIDへ繋ぎに行くことは
+せず、次のどちらかで状態を決める。
+
+1. **疎通判定(既定)** — 母艦にインターネットへの経路があるかを見て接続/切断を返す。
+   UDPソケットを `connect()` するだけなので**パケットは一切飛ばない**
+   (`connect(2)` は経路表を引くだけで、UDPにはハンドシェイクが無い)。
+2. **設定ファイル/環境変数による上書き** — 「切断」「電波が弱い」「SSIDが見つからない」を
+   狙って再現できる。UIの各状態を確認したいときはこちら。
+
+設定は `pc/sdcard/sys/network.cfg` に `pc-` 始まりのキーで書く(実機のパーサは知らないキーを
+無視するので、同じファイルを実機と共有しても害はない)。
+
+| キー | 意味 |
+|---|---|
+| `pc-wifi-state` | `auto`(既定) / `connected` / `disconnected` / `ssid-not-found` / `failed` |
+| `pc-wifi-rssi` | 電波強度(dBm)。ステータスバーのアイコンの本数がこれで決まる |
+| `pc-wifi-ssid` | `WiFi.SSID()` が返す名前 |
+| `pc-wifi-scan` | スキャンで返す一覧(`SSID:RSSI` のカンマ区切り) |
+
+環境変数のほうが設定ファイルより優先される。一時的に切り替えたいときに便利:
+
+```sh
+PICOOS_WIFI_STATE=disconnected ./pc/build/picoos_pc    # 切断アイコンの確認
+PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
+```
+
+なお `NetworkFunctions::Setup()` は **`wifi-ssid` と `wifi-password` が両方空でないとき**しか
+接続を開始しない。PCでも同じなので、両方に何か入れておくこと(同梱の `network.cfg` は
+埋めてある)。
+
 ## 実機と違うところ
 
 | 項目 | PCでの扱い |
@@ -67,8 +99,8 @@ IMEの辞書(`sys/ime/skk_*.tsv`)はサイズが大きいのでリポジトリ�
 | 画面 | LovyanGFX の `Panel_sdl`。既定は2倍表示(`PICOOS_PC_SCALE`) |
 | タッチ | SDLのマウス。座標はSDL側でパネル座標へ戻されるので拡大率の影響を受けない |
 | SDカード | `pc/sdcard/` を実ファイルシステムとして読む |
-| Wi-Fi | 常に切断状態。スキャン結果は0件を返す |
-| NTP / 時刻 | 同期しない(`00:00` のまま) |
+| Wi-Fi | 母艦の疎通を見て接続/切断を返す。設定で任意の状態に固定もできる(下記) |
+| NTP / 時刻 | 同期しない。**必要ない** — PCの時計をそのまま使うので最初から正しい時刻が出る |
 | GPIO / SPI | 何もしない空実装 |
 
 ## 構成
@@ -80,7 +112,7 @@ pc/
   compat/                   実機ライブラリの代替ヘッダ(src/ より先にインクルードされる)
     Arduino.h               millis/delay/GPIO/Serial
     SPI.h                   SPIClassRP2040 の空実装
-    WiFi.h                  常に切断状態のWiFi + NTP
+    WiFi.h                  疎通判定ベースのWiFi + NTP(同期不要)
     SdFat.h                 実ファイルシステムを SdFat/FsFile として見せる
     XPT2046_Touchscreen.h   使わないが includeが通るように置いてある
     config/LGFX_Config_PC.hpp        SDLパネル設定

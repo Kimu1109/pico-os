@@ -243,7 +243,17 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
   戻されるため、拡大率はタッチに影響しない。
 - SDカードは `pc/sdcard/` を実ファイルシステムとして読む(`PICOOS_SD_ROOT` 環境変数で差し替え可)。
   IME辞書は大きいのでリポジトリには含めていない(無くても起動する)。
-- Wi-Fiは常に切断・スキャン0件、NTPは同期しない。GPIO/SPIは空実装。
+- **Wi-Fiは母艦の疎通を見て接続/切断を返す**(既定`pc-wifi-state=auto`)。UDPソケットを
+  `connect()`して経路の有無を見るだけで、パケットは飛ばさない。
+  **母艦のWi-Fi設定は変更しない** — `ConnectWiFiAsync()`が来ても実際にSSIDへは繋ぎに行かない。
+  `pc/sdcard/sys/network.cfg` の`pc-`始まりのキー(`pc-wifi-state`/`pc-wifi-rssi`/
+  `pc-wifi-ssid`/`pc-wifi-scan`)か、同名の環境変数(`PICOOS_WIFI_STATE`等、環境変数が優先)で
+  「切断」「電波1本」「SSID未検出」などを狙って再現できる。UIの状態確認にはこちらが早い。
+- **時刻はPCのOSの時計がそのまま出るのでNTPは要らない**。`TimeFunctions`が読む`time(nullptr)`が
+  最初から実時刻を返すため。表示タイムゾーンは`network.cfg`の`timezone`(例`JST-9`)で決まる。
+  ※`TimeFunctions::Update()`は333msごとにしか更新しないので、`--shot`のフレーム数が少ないと
+  初期値の`00:00`が写る。時刻を確認したいときは200フレーム以上回すこと。
+- GPIO/SPIは空実装。
 - LovyanGFXはCMakeが取得する(1.2.28)。`-DLOVYANGFX_DIR=...` で手元のソースも使える。
   **`platformio.ini` の版を上げたら `pc/CMakeLists.txt` の `GIT_TAG` も追随させること。**
 - `pc/build/` は `.gitignore` 済み。

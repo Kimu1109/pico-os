@@ -59,13 +59,23 @@ class IconSpec:
 
 ICON_DIR = Path("tabler_icons")
 
+# 自作アイコン置き場。
+# tablerに手頃な絵が無い、または24pxグリッド前提の絵柄が16pxで破綻する場合はここへ置く。
+CUSTOM_DIR = Path("custom_icons")
+
 ICONS: list[IconSpec] = [
     # --- ステータス ---
-    IconSpec("wifi_signal_1",    str(ICON_DIR / "wifi-0.svg")),
-    IconSpec("wifi_signal_2",    str(ICON_DIR / "wifi-1.svg")),
-    IconSpec("wifi_signal_3",    str(ICON_DIR / "wifi-2.svg")),
-    IconSpec("wifi_signal_4",    str(ICON_DIR / "wifi.svg")),
-    IconSpec("wifi_off",         str(ICON_DIR / "wifi-off.svg")),
+    # 電波強度は自作(custom_icons/)。
+    # tablerのwifi-0/1/2/wifiは「点のみ/弧1本/弧2本/弧3本」で、16pxだと
+    # wifi-0が0ピクセル・wifi-1が6ピクセルにしかならず下2段階が判別できなかった。
+    # そもそも弧の本数が3種類しか無いので4段階を作れない。
+    # 16pxグリッドに整合した棒グラフ形式へ差し替えてある(script/custom_icons/README.md)。
+    # 圏外専用のアイコンは持たない。SDカードと同じく、最弱(signal-bars-1)の上へ
+    # IconID::Xを重ねて表現する(Statusbar::render)。
+    IconSpec("wifi_signal_1",    str(CUSTOM_DIR / "signal-bars-1.svg")),
+    IconSpec("wifi_signal_2",    str(CUSTOM_DIR / "signal-bars-2.svg")),
+    IconSpec("wifi_signal_3",    str(CUSTOM_DIR / "signal-bars-3.svg")),
+    IconSpec("wifi_signal_4",    str(CUSTOM_DIR / "signal-bars-4.svg")),
     IconSpec("battery_0",        str(ICON_DIR / "battery.svg")),
     IconSpec("battery_1",        str(ICON_DIR / "battery-1.svg")),
     IconSpec("battery_2",        str(ICON_DIR / "battery-2.svg")),
@@ -365,7 +375,7 @@ def generate_header(icons: list, sizes: list, out_path: Path):
 
 
 def main():
-    out_path = Path("../src/icons/icons_data.h")
+    out_path = Path("../src/gui/icons/icons_data.h")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     generate_header(ICONS, ALL_SIZES, out_path)
 

@@ -5,15 +5,14 @@
 #include "storage/SD_Path.hpp"
 
 IconID NetworkFunctions::GetWifiStateIconID(){
-    if(currentStatus == NetStatus::SUCCESS){
-        int32_t rssi = WiFi.RSSI();
-        if (rssi >= -50) return IconID::WifiSignal4;
-        if (rssi >= -65) return IconID::WifiSignal3;
-        if (rssi >= -80) return IconID::WifiSignal2;
-        return IconID::WifiSignal1;
-    }else{
-        return IconID::WifiOff;
-    }
+    //圏外でも最弱の棒を返す。バツ印は呼び出し側が重ねる
+    if(!IsConnected()) return IconID::WifiSignal1;
+
+    int32_t rssi = WiFi.RSSI();
+    if (rssi >= -50) return IconID::WifiSignal4;
+    if (rssi >= -65) return IconID::WifiSignal3;
+    if (rssi >= -80) return IconID::WifiSignal2;
+    return IconID::WifiSignal1;
 }
 
 void NetworkFunctions::Setup(){

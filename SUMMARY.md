@@ -36,10 +36,10 @@
   - [ ] Luaソースの動作
   - [ ] LuaとC++をつなぐAPIの設計
   - [ ] APIの実装、検証
-- [ ] PC動作対応（Luaアプリ開発を便利に）
-  - [ ] LovyanGFX対応
-  - [ ] タッチ操作対応
-  - [ ] ネイティブ関数の代替関数
+- [x] PC動作対応（Luaアプリ開発を便利に）… `pc/` (CMake + SDL2)
+  - [x] LovyanGFX対応 … `lgfx::Panel_sdl`。`src/`は実機と同一のまま
+  - [x] タッチ操作対応 … SDLのマウスをタッチとして読む
+  - [x] ネイティブ関数の代替関数 … `pc/compat/` (Arduino/SPI/WiFi/SdFat)
   - [ ] その他あれば
 - [ ] 標準アプリ開発
   - [ ] 設定アプリ

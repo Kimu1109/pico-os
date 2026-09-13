@@ -56,16 +56,24 @@ src/
   functions/                 「Xxx_Functions」名前空間群
   gui/
     icons/                  アイコンデータ(tabler_iconsから生成)
+    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/InputTestScene)
     widgets/                各ウィジェット実装
       dialogs/              モーダルダイアログ
       interfaces/            ミックスイン的インターフェース
       systems/               Statusbar等システムウィジェット
   ime/                       SKK方式かな漢字変換辞書エンジン
   model/Rect.hpp              矩形構造体
+  util/                       FixedString(固定長文字列) / Utf8Byte(UTF-8リードバイト判定)
   storage/                    SDカードI/O・パス定数
   task/                       非同期タスク基底 + NetworkScanタスク
   test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
+  tabler_icons/               アイコン元データ(tabler由来のSVG)
+  custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出 / run_mem.sh=確保回数の計測)
+pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
+  compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
+  sdcard/                     SDカードとして読まれるディレクトリ
 examples/doc.md                MarkdownView動作確認用サンプル文書
 ```
 `include/`, `lib/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
@@ -93,6 +101,11 @@ examples/doc.md                MarkdownView動作確認用サンプル文書
 | Config_Functions | `key=value`形式の設定ファイルパーサ |
 | Log_Functions | システムログ(LOG_SYS_OK/WARN/FAIL/MSG) |
 | Time_Functions | 時刻管理(NTP同期後) |
+| App_Functions | アプリ登録簿(`App_List.cpp`が一覧、`App_Functions.cpp`が仕組み) |
+| Mem_Functions | ヒープ計測(`mallinfo`ベース)。シーンごとの使用量レポート |
+| UTF8_Functions | UTF-8のエンコード/デコード(文字列操作は`FixedString`側の担当) |
+| HitBox_Functions | 当たり判定のヘルパ |
+| Test_Functions | フォントカバレッジ等の起動時セルフチェック |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Touch→Task→Network→Keyboard→IME→Time→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
@@ -157,10 +170,32 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - ウィジェットIDベース管理(32bit: 種別enum/generation/index)は未実装。現状は`std::vector<Widget*>`+生ポインタ直接参照。
 
 ### MarkdownView 実装詳細
-`MdBlockType`: H1/H2/H3/Paragraph/Image/Link/CodeBlock/ListItem/HorizontalRule/Quote/TableRow。`MdBlock`はオフセット/長さ参照方式(`srcOffset`/`srcLength`、Stringをコピーせず範囲参照)。固定上限: `kMaxBlocks=128`, `kMdMaxSourceBytes=8192`, `kMdBlockTextBytes=512`(1ブロックの表示テキスト上限。日本語で約170文字), `kLabelPoolSize=16`, `kImagePoolSize=2`, `kMaxListLevels=6`, テーブル最大列`kMdTableMaxCols=4`。`kMdBlockTextBytes`と`kMdMaxSourceBytes`はクラス外定義(クラス外に書くメンバ関数定義の戻り値型はクラススコープより前に解決されるため)。上限に当たった場合は`load()`が警告ログを出す。画像は`onRAM=false`でSDからストリーミング描画する(RAMに載せると占有量が開いた文書次第で青天井になるため)。テーブル/水平線/引用バーは`Label`を介さず`frame`へ直接描画(`renderDecorations()`)。リンクタップ用`on_link_tap`あり。フロントマターは`skipFrontMatter()`で読み飛ばし。**ヘッダー/フッター機能は現状なし。**
+`MdBlockType`: H1/H2/H3/Paragraph/Image/Link/CodeBlock/ListItem/HorizontalRule/Quote/TableRow。`MdBlock`はオフセット/長さ参照方式(`srcOffset`/`srcLength`、`doc_text`をコピーせず範囲参照)。固定上限: `kMaxBlocks=128`, `kMdMaxSourceBytes=8192`, `kMdBlockTextBytes=512`(1ブロックの表示テキスト上限。日本語で約170文字), `kLabelPoolSize=16`, `kImagePoolSize=2`, `kMaxListLevels=6`, テーブル最大列`kMdTableMaxCols=4`。`kMdBlockTextBytes`と`kMdMaxSourceBytes`はクラス外定義(クラス外に書くメンバ関数定義の戻り値型はクラススコープより前に解決されるため)。上限に当たった場合は`load()`が警告ログを出す。画像は`onRAM=false`でSDからストリーミング描画する(RAMに載せると占有量が開いた文書次第で青天井になるため)。テーブル/水平線/引用バーは`Label`を介さず`frame`へ直接描画(`renderDecorations()`)。リンクタップ用`on_link_tap`あり。フロントマターは`skipFrontMatter()`で読み飛ばし。**ヘッダー/フッター機能は現状なし。**
 
 ### 文字列の扱い
-`Label`/`Textbox`/`MarkdownView::doc_text`はArduino `String`(可変長)。一方`Network_Functions::currentSSID`(char[33])、`IME_Functions::candidates[][IME_MAX_CAND_BYTES]`、`FileExplorer::currentPath`(char[128])はCスタイル固定長`char`配列。**共通の`FixedString`的クラスはまだ存在しない**(テンプレートで長さ指定、`strncpy`ベースの安全な代入/比較演算子などが構想段階)。
+**Arduino `String` は現在どこでも使っていない。** 文字列はすべて `src/util/FixedString.hpp` の
+`FixedString<N>`(固定長・ヒープ非使用)に統一されている。**新規実装でも `String` を持ち込まないこと。**
+
+- 実体は `char buf_[N]` のみ。`new`/`delete` を一切しないので断片化しない。
+- `length()` はホットパス(1文字ずつのappendループ等)で毎回呼ばれるため、バイト長を `len_` に
+  キャッシュしている。**`buf_` を変更するメソッドは必ず `len_` を追従更新すること**(不変条件)。
+- `assign`/`append` は**切り詰めが起きたかを`bool`で返す**。戻り値を無視しないこと(黙って
+  切れるとバグの温床になる)。
+- UTF-8境界を跨いで文字が欠けないよう、バイト単位の操作はすべて継続バイト(`10xxxxxx`)を
+  巻き戻すガードが入っている。`charCount()`/`byteOffsetOfChar()`/`removeCharAt()`/
+  `insertAtChar()` など「文字単位」のAPIを持つ。
+- UTF-8の**文字列操作はFixedStringの担当**、`functions/UTF8_Functions.hpp` は
+  **エンコード/デコードのみ**。`FixedString.hpp` から `UTF8_Functions.hpp` を
+  includeしてはいけない(循環include回避)。最下層の `util/Utf8Byte.hpp` だけを使う。
+- 長さは `consts.hpp` のプリセットから選ぶ:
+  `PICO_STR_S=24` / `M=48` / `L=96` / `LL=192` / `256B` / `512B` / `1KiB` … `32KiB`、
+  パスは `PICO_PATH_LEN=255`。
+- 使用例: `Label::raw_text`(`FixedString<N>`、Nはテンプレート引数) /
+  `MarkdownView::doc_text`(`FixedString<kMdMaxSourceBytes>`) /
+  `FileExplorer::currentPath`(`FixedString<PICO_PATH_LEN>`) /
+  `NetworkFunctions::currentSSID`(`FixedString<PICO_STR_M>`)。
+- **まだ生`char[]`のまま残っているのは `IME_Functions::candidates[][IME_MAX_CAND_BYTES]` だけ**
+  (2次元配列なので置き換えが機械的でない)。
 
 ## コーディング上の慣習
 
@@ -168,10 +203,75 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - 機能単位は「`XxxFunctions`」名前空間+`inline`変数/関数(クラス化せずシングルトン的に扱う)。
 - get/setアクセサ+`needsRender()`呼び出しの定型パターンが各ウィジェットで繰り返される。
 - 定数は「クラス内`constexpr static int`」と「`consts.hpp`に`#define`集約」の二系統が混在。
-- アイコンは`script/generate_icons.py`でtabler_iconsから`icons_data.h`を事前生成(ビルド前処理)。
+- アイコンは`script/generate_icons.py`で`script/tabler_icons/`(tabler)と`script/custom_icons/`(自作)から
+  `src/gui/icons/icons_data.h`を事前生成(ビルド前処理)。
+  **tablerの絵柄は24pxグリッド前提なので16pxで破綻することがある**。細い要素が丸ごと消えるため、
+  16pxで使うアイコンは生成後に必ず目視すること。破綻する場合は`custom_icons/`へ
+  `viewBox="0 0 16 16"`・整数座標・`fill`の矩形で描き起こす(判断基準は`script/custom_icons/README.md`)。
+  電波強度アイコンがこの理由で自作に差し替わっている(tablerの`wifi-0`は16pxで0ピクセルだった)。
+- **「状態の否定」は専用アイコンを作らず、基底アイコンの上に`IconID::X`を`PICO_RED`で重ねて表す。**
+  SD無しが`SdCard`+`X`、Wi-Fi圏外が`WifiSignal1`+`X`(`Statusbar::render()`)。
+  そのため`GetWifiStateIconID()`は**圏外でも最弱の棒を返す**(判定は`NetworkFunctions::IsConnected()`)。
 - 日本語IMEはSKK辞書方式、`script/convert_skk_dict.py`で辞書データ(`skk_body.tsv`/`skk_index.tsv`)をSD収録用に変換。
 
-## ロードマップ・TODO状況(2026-09-06時点)
+## PC実行環境 (`pc/`)
+
+実機に書き込まずにPC上のウィンドウでpico-osを動かせる。詳細は `pc/README.md`。
+
+```sh
+sudo apt-get install libsdl2-dev      # 前提: SDL2開発パッケージ
+cmake -S pc -B pc/build && cmake --build pc/build -j
+./pc/build/picoos_pc                  # マウス左ドラッグ = タッチ
+SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレス確認
+```
+
+- **`src/` のコードは実機とまったく同じものを使う**。差し替えているのは実機ライブラリだけで、
+  `pc/compat/` をインクルードパスの先頭に置いて `Arduino.h`/`SPI.h`/`WiFi.h`/`SdFat.h`/
+  `XPT2046_Touchscreen.h` を置き換える(`script/host_test/stubs` と同じ考え方)。
+- **例外は2ファイルだけ**: `src/config/LGFX_Config.hpp` と `src/functions/Touch_Functions.hpp` が
+  `#if defined(PICOOS_PC)` で `pc/compat/` 側(`<config/LGFX_Config_PC.hpp>` /
+  `<functions/Touch_Functions_PC.hpp>`)を取り込む。
+  **山かっこで書くこと** — `"config/..."` だとインクルード元(`src/`)のディレクトリが優先され、
+  自分自身を読んで多重定義になる。
+- **ネイティブ関数(`millis`等)はPCビルドのときだけ上書きされる**。`pc/compat/Arduino.h` が
+  実機の`Arduino.h`の代わりに拾われるだけで、**呼び出し側(`src/`)は一切書き換えていない**。
+  `src/`が実際に使っているのは以下だけ(`micros`/`delay`/`analogWrite`/`random`は未使用):
+
+  | API | `src/`での使用箇所 | PCでの実装 |
+  |---|---|---|
+  | `millis()` | 26 | `steady_clock`の経過ms(起動時刻を原点にする) |
+  | `constrain()` | 5 | テンプレート関数 |
+  | `Serial.*` | 5 | 標準出力へ |
+  | `pinMode()` | 4 | 空実装 |
+  | `map()` | 2 | そのまま計算 |
+  | `digitalWrite()`/`digitalRead()` | 各1 | 空実装 / 常に`HIGH` |
+
+  **`min`/`max`/`constrain`はマクロではなくテンプレート関数にしてある。** 実機のArduinoは
+  マクロだが、マクロのままだと`std::min`や標準ライブラリ内部の`min`を食い荒らして
+  LovyanGFXと標準ライブラリのビルドが壊れる。
+- 画面は `lgfx::Panel_sdl`。既定で2倍表示(`PICOOS_PC_SCALE`)。マウス座標はSDL側でパネル座標へ
+  戻されるため、拡大率はタッチに影響しない。
+- SDカードは `pc/sdcard/` を実ファイルシステムとして読む(`PICOOS_SD_ROOT` 環境変数で差し替え可)。
+  IME辞書は大きいのでリポジトリには含めていない(無くても起動する)。
+- **Wi-Fiは母艦の疎通を見て接続/切断を返す**(既定`pc-wifi-state=auto`)。UDPソケットを
+  `connect()`して経路の有無を見るだけで、パケットは飛ばさない。
+  **母艦のWi-Fi設定は変更しない** — `ConnectWiFiAsync()`が来ても実際にSSIDへは繋ぎに行かない。
+  `pc/sdcard/sys/network.cfg` の`pc-`始まりのキー(`pc-wifi-state`/`pc-wifi-rssi`/
+  `pc-wifi-ssid`/`pc-wifi-scan`)か、同名の環境変数(`PICOOS_WIFI_STATE`等、環境変数が優先)で
+  「切断」「電波1本」「SSID未検出」などを狙って再現できる。UIの状態確認にはこちらが早い。
+- **時刻はPCのOSの時計がそのまま出るのでNTPは要らない**。`TimeFunctions`が読む`time(nullptr)`が
+  最初から実時刻を返すため。表示タイムゾーンは`network.cfg`の`timezone`(例`JST-9`)で決まる。
+  ※`TimeFunctions::Update()`は333msごとにしか更新しないので、`--shot`のフレーム数が少ないと
+  初期値の`00:00`が写る。時刻を確認したいときは200フレーム以上回すこと。
+- GPIO/SPIは空実装。
+- LovyanGFXはCMakeが取得する(1.2.28)。`-DLOVYANGFX_DIR=...` で手元のソースも使える。
+  **`platformio.ini` の版を上げたら `pc/CMakeLists.txt` の `GIT_TAG` も追随させること。**
+- `pc/build/` は `.gitignore` 済み。
+- **漏れはビルドで検出できる**。`src/*.cpp` を全部リンクするので、代替を用意し忘れた実機APIが
+  あれば未定義参照になる。逆に言えば、`src/`へ新しい実機依存(`analogRead`/I2C等)を足すと
+  PCビルドが即座に壊れて気づける。
+
+## ロードマップ・TODO状況(2026-09-13時点)
 
 相談が来た際はまず本表を見て、「既存機能の拡張」か「ゼロから設計する新機能」かを見分けること。**都度 `SUMMARY.md` をfetchして最新状況を確認するのが望ましい。**
 
@@ -179,8 +279,8 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 |---|---|---|
 | 1 | ダイアログ(ファイル選択・保存・色選択) | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用キーボードのみ別TODOとして未着手。 |
 | 2 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
-| 3 | Wi-Fi管理強化 | 基礎は実装済み(非ブロッキング接続・スキャン・NTP同期・電波強度アイコン)。**定期的再接続交渉・確実な時刻同期の強化は未着手**。 |
-| 4 | Luaアプリ/API | **未着手**。Lua関連コード皆無。ゼロから統合方針(実装選定、C++バインディング設計)を相談する必要あり。PCエミュレーション環境(LovyanGFX/タッチ操作代替)も未着手。 |
+| 3 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
+| 4 | Luaアプリ/API | **未着手**。Lua関連コード皆無。ゼロから統合方針(実装選定、C++バインディング設計)を相談する必要あり。**PC実行環境は実装済み(`pc/`、下記参照)**。 |
 | 5 | 標準/セカンダリアプリ開発 | **未着手**。設定アプリ・時計・辞書・電卓・チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし(部品は存在)。 |
 | 6 | GBエミュ | **未着手**。 |
 | 7 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
@@ -188,7 +288,6 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 
 ## 未実装の設計アイデア(旧pico-osからの持ち越し議論)
 
-- **固定長文字列クラス**: `char[N]`をラップし`strncpy`ベースの安全な代入/比較演算子を持つテンプレートクラス。既存の生`char[]`箇所(SSID/パス/辞書候補等)を置き換える用途。
 - **ウィジェットのメモリプール化(汎用)**: 実測の結果、現時点では保留と判断した(下記「メモリ計測の結論」)。再開する場合は`Widget::operator new/delete`をアリーナへ差し替えるところから。
 - **Markdownブラウザのヘッダー/フッター**: `l_rect`内でのヘッダー/フッター分の高さ控除、スクロール対象外の固定描画領域追加が論点。
 - **LuaでのウィジェットID管理**: 32bit整数ID(上位バイトから ウィジェット種類(enum)/generation/index)でLua側から実体へ安全アクセス。Lua統合自体が未着手のため、種類enum整理・generationカウンタ追加・index⇔ポインタ変換テーブルの新設が必要。Lua組み込み設計と合わせて相談されることが多い。
@@ -206,8 +305,13 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
   **プールが全部固定長なので、開く文書が変わっても`Markdown`の41,668Bは動かない(決定論的)**。
   → 入れる場合の推奨枠は「永続8KiB + シーン56KiB = 64KiB」。
 - アリーナが捕まえるのは Markdown の全841回の確保のうち**36回(バイトでは79%、回数では4.3%)**。残り805回は`Label`の行データ(`vector<vector<TextRun>>`)と`Widget`基底の`std::function`×4で、これはアリーナでは消えない。
+  - **※この805回のうち`Label`ぶんはその後の改修で潰した**(行データを`vector<vector<TextRun>>`から
+    `runs_flat`+`TextRun::line`へ平坦化し、レイアウトを`needs_relayout`で遅延評価に変更)。
+    現在は `MarkdownView + load()` で**88回**(`sh script/host_test/run_mem.sh` で再現できる)。
+    残りは`Widget`基底の`std::function`×4。
 - **判断: 断片化もリークも観測されていない以上、64KBを常時占有する対価に見合わないため保留**。アプリが増えて断片化が実際に観測された時点で再検討する。
-  先に効くのは`std::function`の自前Delegate化と`Label::lines`の共有テンポラリ化(固定枠を払わずに確保回数とピークを下げられる)。
+  先に効くのは`std::function`の自前Delegate化(固定枠を払わずに確保回数とピークを下げられる)。
+  `Label::lines`の件は上記のとおり対処済み。
 
 ## Claude Codeへの申し送り
 
@@ -218,4 +322,7 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - 新しい画面を追加する話は`Scene`を継承して`onEnter()`でウィジェットを生成する形に寄せる。常駐させたいウィジェットは`AddOverlay()`。
 - 新規ダイアログ/ウィジェットは既存の骨格(`children_`保持、`setOnClose`コールバック、`setVisible(false)`終了)にトーンを合わせる。
 - コメント・ログは日本語、識別子は英語という言語使い分けを踏襲する。
+- 文字列は`FixedString<N>`を使う。**Arduino `String`は現在どこでも使っていないので復活させないこと。**
+- GUIの挙動を確かめたいときは実機ビルドの前にPCビルド(`pc/`)で回すのが速い。`src/`へ実機ライブラリ依存を
+  足すときは `pc/compat/` 側にも代替を用意すること(PCビルドが壊れる)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。

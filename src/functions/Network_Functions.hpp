@@ -34,6 +34,12 @@ namespace NetworkFunctions {
     void Setup();
     void Update();
 
+    //接続中か。アイコンの選択と、ステータスバーのバツ印の出し分けに使う
+    inline bool IsConnected(){ return currentStatus == NetStatus::SUCCESS; }
+
+    // 電波強度アイコン。圏外でも「最弱の棒」を返す点に注意。
+    // 圏外専用のアイコンは持たず、SDカードと同じく呼び出し側がバツ印を重ねる
+    // (Statusbar::render を参照)。
     IconID GetWifiStateIconID();
     
     void ConnectWiFiAsync(const char* ssid, const char* password);

@@ -37,7 +37,11 @@ void Statusbar::render(){
     draw_pos += 16 + MARGIN;
 
     //Wi-Fiステート
+    //圏外は「最弱の棒 + バツ」で表す(SDカードと同じ組み立て方)
     IconRender::DrawIcon(NetworkFunctions::GetWifiStateIconID(), IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+    if(!NetworkFunctions::IsConnected()){
+        IconRender::DrawIcon(IconID::X, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_RED);
+    }
     draw_pos += 16 + MARGIN;
     
     OSData::frame->drawFastHLine(g_rect.x, g_rect.y + g_rect.h - 1, g_rect.w, PICO_BLACK);

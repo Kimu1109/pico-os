@@ -2,6 +2,7 @@
 
 > このファイルは `Kimu1109/pico-os` リポジトリ直下に置く、Claude Code向けのプロジェクト背景資料。
 > 元はClaude.aiのProject knowledgeとして管理されていた内容(2026-09-06時点情報)を統合したもの。
+> **最終同期: 2026-09-13(実コードと突き合わせ済み)。**
 > **一次情報源は常にこのリポジトリのコードと `SUMMARY.md`。このファイルは「相談の前提を素早く掴むための地図」であり、
 > 実装と乖離があれば実コード側を信じること。**
 
@@ -57,20 +58,19 @@ src/
   gui/
     icons/                  アイコンデータ(tabler_iconsから生成)
     scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/InputTestScene)
-    widgets/                各ウィジェット実装
+    widgets/                各ウィジェット実装 (WidgetID.hpp / WidgetRegistryも同居)
       dialogs/              モーダルダイアログ
       interfaces/            ミックスイン的インターフェース
       systems/               Statusbar等システムウィジェット
   ime/                       SKK方式かな漢字変換辞書エンジン
-  model/Rect.hpp              矩形構造体
-  util/                       FixedString(固定長文字列) / Utf8Byte(UTF-8リードバイト判定)
+  util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte(UTF-8リードバイト判定)
   storage/                    SDカードI/O・パス定数
   task/                       非同期タスク基底 + NetworkScanタスク
   test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出 / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/appの5本 / run_mem.sh=確保回数の計測)
 pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   sdcard/                     SDカードとして読まれるディレクトリ
@@ -81,7 +81,7 @@ examples/doc.md                MarkdownView動作確認用サンプル文書
 ## コアアーキテクチャ
 
 ### OSData (`src/OS_Data.hpp`)
-グローバル状態ハブ。`inline`変数として: タッチ状態(touchX/Y/Z, isTouched, isTouchStart/End/Move)、グラフィック(`LGFX* lcd`, `LGFX_Sprite* frame`)、SD(`SdFat SD`, SD_usable)、日本語/英語キーボードへのポインタ(keyboard_jpn, keyboard_eng)を保持。
+グローバル状態ハブ。`inline`変数として: タッチ状態(touchX/Y/Z, isTouched, isTouchStart/End/Move)、グラフィック(`LGFX* lcd`, `LGFX_Sprite* frame`)、SD(`SdFat SD`, SD_usable)、キーボード3種へのポインタ(keyboard_jpn / keyboard_eng / keyboard_num)を保持。
 
 ### `Xxx_Functions` サブシステム (`src/functions/`)
 各機能は名前空間+`inline`変数/関数のシングルトン的パターン(クラス化しない)。
@@ -98,7 +98,7 @@ examples/doc.md                MarkdownView動作確認用サンプル文書
 | Font_Functions | U8g2フォントサイズ切替(Small16px/Normal24px/Big32px/Bigger48px) |
 | SD_Functions | SDカード初期化 |
 | Scene_Functions | シーン(画面)の遷移管理。Change/Push/Popをフレーム境界まで保留して適用 |
-| Config_Functions | `key=value`形式の設定ファイルパーサ |
+| Config_Functions | `key=value`形式の設定ファイルパーサ + 書き込み(`SetValue()`は一時ファイル経由で1キーだけ差し替え) |
 | Log_Functions | システムログ(LOG_SYS_OK/WARN/FAIL/MSG) |
 | Time_Functions | 時刻管理(NTP同期後) |
 | App_Functions | アプリ登録簿(`App_List.cpp`が一覧、`App_Functions.cpp`が仕組み) |
@@ -126,7 +126,19 @@ examples/doc.md                MarkdownView動作確認用サンプル文書
 - `disable_markdirty`: 親が描画反映を一括保証する場合の子markdirty無効化フラグ(**乱用厳禁、バグりやすい**)。
 
 ### ウィジェットカタログ
-Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / AppGrid(ランチャのアプリタイル) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`はchar[128]) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
+Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
+
+`LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
+
+### ウィジェットID (`src/gui/widgets/WidgetID.hpp` / `WidgetRegistry.hpp`)
+Lua等の外部から安全にウィジェットを指すための32bit ID。**発行側は実装済み、消費側はまだ空。**
+
+- ビット配分は `[31:26] type(6bit, WidgetType)` / `[25:10] generation(16bit)` / `[9:0] index(10bit)`。`generation==0`は未割り当ての予約値なので**ID 0は常に無効**。
+- 具象ウィジェットは`getWidgetType()`の実装が必須(純粋仮想)。種類を足すときは`WidgetType`へ追記する(64種を超えると`static_assert`で落ちる)。
+- **IDは`getId()`の初回呼び出し時に遅延発行**する。外部から触られないウィジェットはスロットを消費しない。解放は`~Widget()`が`WidgetRegistry::Unregister()`を呼び、スロットのgenerationを進める。
+- `WidgetRegistry::Resolve(id)`はindex範囲・generation・typeの3点を検証して`Widget*`を返す(不一致ならnullptr)。**破棄済みIDの誤参照(use-after-free)はここで弾かれる。**
+- **ただし`Resolve()`の呼び出し元はまだコード中に1つも無く、ホストテストも無い。** 実際に使われるのはLua統合から。
+- `WidgetType`から実体を作るファクトリ(`WidgetType` → `new Xxx`)も未整備で、外部からウィジェットを生成する口はまだ存在しない。
 
 ### アプリの枠組み (`src/functions/App_Functions.hpp`)
 `AppEntry`(名前/アイコン/シーン生成関数)の固定長テーブルに登録し、`HomeScene`の`AppGrid`がそれを並べる。
@@ -158,7 +170,9 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - `FileSelectDialog`: `FileExplorer`+OK/キャンセルのみ。**選択専用**(ファイル名欄なし)。
   - ※旧設計では1クラスで兼用予定だったが、実装では保存/選択で別クラスに分離された。
 - `ColorDialog`: 実装済み(直近コミット)。4×4=16色グリッド(`getIndexToColor(x,y)=x+y*4`)+OK/キャンセル。`selected_color`(未選択-1)、`getSelectedColor()`。
-- `Keyboard` / `KeyboardEng`: オンスクリーンキーボード。**数字専用(電卓用)キーボードは未実装**。
+- `Keyboard` / `KeyboardEng` / `KeyboardNum`: オンスクリーンキーボード3種。いずれも`KeyboardFunctions::Setup()`が`AddOverlay()`でOS常駐させる。
+  - `KeyboardNum`は電卓向けの数字専用。「0〜9・カーソル移動・決定・削除」を常時固定で表示し、その上に`Digit`(数値入力の補助記号)/`Arith`(四則演算)/`Math`(√π e ^ % ±)の3タブで切り替わる記号行を載せる。`MODE_DIGIT | MODE_ARITH`のようなビットマスクで**使えるタブを呼び出し側から制限できる**(1つだけ許可ならタブ行自体が消えて1行詰まる)。
+  - キー1つごとに`Button`を`new`せず、配列テーブル + `causeOnPressStart()`での座標判定で処理する(ヒープ節約。`AppGrid`/`ColorDialog`と同じ方式)。
 
 ### メモリ管理方針(重要・相談時の大前提)
 - **基本は各ウィジェットが`new`で子生成、デストラクタで`delete`する素朴な方式。**
@@ -167,7 +181,7 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - **開発者はRAM断片化回避のため固定長バッファ/オブジェクトプールを志向している。新規実装で`new`/`delete`を安易に増やす提案より、MarkdownViewのプールパターンに寄せた提案を優先すること。**
 - **`Widget::operator new/delete`が全ウィジェットの確保の唯一の入口**(`src/gui/widgets/Widget.cpp`)。現状は`malloc`を呼ぶだけで`MemFunctions`へ量を通知する。将来アリーナを入れる場合はここの実装を差し替えるだけで済み、`new Button(...)`のような既存コードは書き換え不要。
 - **子ウィジェットの解放は親のデストラクタの責任**。`WidgetFunctions::ClearSceneWidgets()`は親を持たないルートしか`delete`しないので、子を`new`するウィジェットにデストラクタが無いと丸ごとリークする(過去に`MarkdownView`/`ScrollList`/`CanvasRaster`で発生)。
-- ウィジェットIDベース管理(32bit: 種別enum/generation/index)は未実装。現状は`std::vector<Widget*>`+生ポインタ直接参照。
+- ウィジェットIDベース管理(32bit: 種別enum/generation/index)は**発行側のみ実装済み**(`WidgetID.hpp`/`WidgetRegistry`、上記「ウィジェットID」参照)。OS内部のウィジェット間参照は従来どおり`std::vector<Widget*>`+生ポインタで、IDはあくまでLua等の外部向け。
 
 ### MarkdownView 実装詳細
 `MdBlockType`: H1/H2/H3/Paragraph/Image/Link/CodeBlock/ListItem/HorizontalRule/Quote/TableRow。`MdBlock`はオフセット/長さ参照方式(`srcOffset`/`srcLength`、`doc_text`をコピーせず範囲参照)。固定上限: `kMaxBlocks=128`, `kMdMaxSourceBytes=8192`, `kMdBlockTextBytes=512`(1ブロックの表示テキスト上限。日本語で約170文字), `kLabelPoolSize=16`, `kImagePoolSize=2`, `kMaxListLevels=6`, テーブル最大列`kMdTableMaxCols=4`。`kMdBlockTextBytes`と`kMdMaxSourceBytes`はクラス外定義(クラス外に書くメンバ関数定義の戻り値型はクラススコープより前に解決されるため)。上限に当たった場合は`load()`が警告ログを出す。画像は`onRAM=false`でSDからストリーミング描画する(RAMに載せると占有量が開いた文書次第で青天井になるため)。テーブル/水平線/引用バーは`Label`を介さず`frame`へ直接描画(`renderDecorations()`)。リンクタップ用`on_link_tap`あり。フロントマターは`skipFrontMatter()`で読み飛ばし。**ヘッダー/フッター機能は現状なし。**
@@ -277,10 +291,10 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 
 | # | 旧TODO大項目 | 状況 |
 |---|---|---|
-| 1 | ダイアログ(ファイル選択・保存・色選択) | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用キーボードのみ別TODOとして未着手。 |
+| 1 | ダイアログ(ファイル選択・保存・色選択) | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用(電卓用)キーボード`KeyboardNum`も実装済み。 |
 | 2 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
 | 3 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 4 | Luaアプリ/API | **未着手**。Lua関連コード皆無。ゼロから統合方針(実装選定、C++バインディング設計)を相談する必要あり。**PC実行環境は実装済み(`pc/`、下記参照)**。 |
+| 4 | Luaアプリ/API | **未着手**(Lua本体のコードは皆無)。ただし受け皿の一部は先行して入っている: ウィジェットID発行(`WidgetID`/`WidgetRegistry`)、`LayoutContainer`/`GridContainer`、**PC実行環境(`pc/`)**。残っている穴は下記「Lua着手前の受け皿の状態」を参照。 |
 | 5 | 標準/セカンダリアプリ開発 | **未着手**。設定アプリ・時計・辞書・電卓・チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし(部品は存在)。 |
 | 6 | GBエミュ | **未着手**。 |
 | 7 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
@@ -290,7 +304,7 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 
 - **ウィジェットのメモリプール化(汎用)**: 実測の結果、現時点では保留と判断した(下記「メモリ計測の結論」)。再開する場合は`Widget::operator new/delete`をアリーナへ差し替えるところから。
 - **Markdownブラウザのヘッダー/フッター**: `l_rect`内でのヘッダー/フッター分の高さ控除、スクロール対象外の固定描画領域追加が論点。
-- **LuaでのウィジェットID管理**: 32bit整数ID(上位バイトから ウィジェット種類(enum)/generation/index)でLua側から実体へ安全アクセス。Lua統合自体が未着手のため、種類enum整理・generationカウンタ追加・index⇔ポインタ変換テーブルの新設が必要。Lua組み込み設計と合わせて相談されることが多い。
+- **LuaでのウィジェットID管理**: 32bit整数IDの**発行側は実装済み**(`WidgetID.hpp`/`WidgetRegistry`)。残るのは消費側 — `Resolve()`を叩くバインディング、`WidgetType`→実体のファクトリ、プロパティのget/setをLuaへ通す共通の口。Lua組み込み設計と一緒に決める部分。
 
 ## メモリ計測の結論 (2026-09-12時点、実機RP2350で20回の遷移を計測)
 
@@ -304,14 +318,37 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 - 実測値: 永続(Statusbar+キーボード3種)=4,600B / Markdown=41,668B / InputTest=1,552B / Home=756B。
   **プールが全部固定長なので、開く文書が変わっても`Markdown`の41,668Bは動かない(決定論的)**。
   → 入れる場合の推奨枠は「永続8KiB + シーン56KiB = 64KiB」。
-- アリーナが捕まえるのは Markdown の全841回の確保のうち**36回(バイトでは79%、回数では4.3%)**。残り805回は`Label`の行データ(`vector<vector<TextRun>>`)と`Widget`基底の`std::function`×4で、これはアリーナでは消えない。
+- アリーナが捕まえるのは Markdown の全841回の確保のうち**36回(バイトでは79%、回数では4.3%)**だった。残り805回は`Label`の行データ(`vector<vector<TextRun>>`)と`Widget`基底の`std::function`×4で、これはアリーナでは消えない。
   - **※この805回のうち`Label`ぶんはその後の改修で潰した**(行データを`vector<vector<TextRun>>`から
     `runs_flat`+`TextRun::line`へ平坦化し、レイアウトを`needs_relayout`で遅延評価に変更)。
-    現在は `MarkdownView + load()` で**88回**(`sh script/host_test/run_mem.sh` で再現できる)。
-    残りは`Widget`基底の`std::function`×4。
+    **現在は `MarkdownView + load()` で88回**(うち本体以外が87回)、**通常のシーン遷移は1回あたり8回**。
+    `sh script/host_test/run_mem.sh` で再現できる。**TODOに残る「841回中805回」は既に古い数字**。
+  - **残りの実害は「確保回数」ではなく「sizeof」のほう**。`std::function`は32Bで`Widget`基底に4本あるため、
+    **1ウィジェットあたり128Bが固定で乗る**(`Button`のsizeof 312Bのうち128B)。関数ポインタ+`void*`の
+    Delegate(16B)へ替えれば1個あたり64B減るが、Markdownシーン36個でも約2.3KB/46KB(5%)。
+    **単体では旨味が薄い。** Luaのコールバック(`lua_State*`+registry refのキャプチャは16B超え=貼るたびに
+    ヒープ確保)を大量に貼るようになって初めて費用対効果が出る。
 - **判断: 断片化もリークも観測されていない以上、64KBを常時占有する対価に見合わないため保留**。アプリが増えて断片化が実際に観測された時点で再検討する。
-  先に効くのは`std::function`の自前Delegate化(固定枠を払わずに確保回数とピークを下げられる)。
-  `Label::lines`の件は上記のとおり対処済み。
+  `Label::lines`の件は上記のとおり対処済みで、残る`std::function`のDelegate化も単体では5%程度の効果しかない
+  (上記)。**次に手を入れる価値が出るのはLuaのコールバックを大量に貼るようになってから。**
+
+## Lua着手前の受け皿の状態 (2026-09-13時点)
+
+Lua向けの土台は「発行側だけ入って消費側が空」の状態。着手時に必ず当たる穴を列挙しておく。
+
+| 箇所 | 状態 |
+|---|---|
+| `WidgetRegistry::Resolve()` | 実装済みだが**呼び出し元ゼロ・テストゼロ**。実際に使った時点で仕様の穴が出る想定 |
+| ウィジェットのファクトリ | **無い**。`WidgetType` enumはあるが `WidgetType` → `new Xxx` の対応表が無く、Luaから生成する口が存在しない |
+| `AppEntry`(`App_Functions.hpp`) | `Scene* (*create)()` の**引数なし関数ポインタ**。「同じ`LuaScene`型 + 別スクリプトパス」を表現できない。`name`も「静的寿命のリテラル必須」なのでSDから読んだアプリ名を載せられず、`Setup()`もコンパイル時固定で**SDを走査して動的登録する口が無い**。Lua着手初日に当たる |
+| コールバック | `std::function<void()>` で引数もコンテキストも無し。Lua側は `lua_State*` + registry ref を持たせる必要があり、そのキャプチャは16B超え=貼るたびにヒープ確保になる |
+| 実行時間の制御 | **無い**。`loop()`は単純ポーリングなので、重い/無限ループのLuaはタッチごと固める。`lua_sethook`での命令数バジェットか、`Task`へ載せてコルーチン化するかの判断が要る(`Task`基盤は既にある) |
+| 確保失敗(OOM) | `Widget::operator new`はnullptrを返す仕様だが、**呼び出し側は誰もnullチェックしていない**。Luaは「ユーザーのコードがRAMを食う」世界なので、`lua_newstate`のカスタムallocで**Luaに上限枠を切る**必要がある。※シーンアリーナ不要の結論(上記)とは別の話 |
+| エラーの見せ方 | Luaのエラーを`pcall`で拾った後に出す先が無い(`LOG_SYS_FAIL`止まり)。「アプリが落ちた」をMsgDialogで見せる導線が要る |
+| RAM/Flash予算 | **現状の空きRAMの絶対値を実機で測っていない**(`MemFunctions`のレポートは差分中心)。Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダーなので、入れる前に一度測っておくと判断が早い |
+| ビルドの二重管理 | `platformio.ini` と `pc/CMakeLists.txt` の両方にLuaを足す必要がある(LovyanGFXの版追随が既に手動なのと同じ状況) |
+
+**API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算するのが確実。** 現状アプリは`MarkdownScene`(開く文書が`tmp/doc.md`固定)と`InputTestScene`(部品の動作確認用)しかなく、バインディング設計の実例が足りていない。
 
 ## Claude Codeへの申し送り
 
@@ -326,3 +363,4 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 - GUIの挙動を確かめたいときは実機ビルドの前にPCビルド(`pc/`)で回すのが速い。`src/`へ実機ライブラリ依存を
   足すときは `pc/compat/` 側にも代替を用意すること(PCビルドが壊れる)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。
+- **テストは全て手動**。`.github/`が無くCIは存在しないので、`sh script/host_test/run.sh`(ASan、5本)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは変更のたびに自分で回すこと。

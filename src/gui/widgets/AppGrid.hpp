@@ -23,8 +23,8 @@ class AppGrid : public Widget {
         static constexpr int kPadding   = 6;  // グリッド外周の余白
         static constexpr int kGap       = 6;  // タイル同士の間隔
         static constexpr int kTileH     = 78;
-        static constexpr int kIconPx    = 32;
-        static constexpr IconSize kIconSize = IconSize::Px32;
+        static constexpr int kIconPx    = 48;
+        static constexpr IconSize kIconSize = IconSize::Px48;
         static constexpr int kLabelGap  = 2;  // アイコンと名前の間隔
 
         // 名前は最大この行数まで折り返す。長いアプリ名を1行に押し込むと
@@ -46,7 +46,7 @@ class AppGrid : public Widget {
 
         // 名前をタイル幅に合わせて最大kNameLines行で中央揃え描画する。
         // DrawPlain()は折り返さないので、UTF-8の文字境界で切って自前で行を分ける
-        void drawName(const char* name, int x, int y, int w);
+        void drawName(const char* name, int x, int y, int w, int color);
 
     public:
         AppGrid(int16_t x, int16_t y, int16_t w, int16_t h){

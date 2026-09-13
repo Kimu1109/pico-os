@@ -95,7 +95,7 @@ bool AppGrid::prevPage() {
     return true;
 }
 
-void AppGrid::drawName(const char* name, int x, int y, int w) {
+void AppGrid::drawName(const char* name, int x, int y, int w, int color) {
     if (!name || name[0] == '\0' || w <= 0) return;
 
     const int line_h = Label<PICO_STR_M>::GetLineHeight(FontFn::Small);
@@ -168,7 +168,7 @@ void AppGrid::drawName(const char* name, int x, int y, int w) {
         int tx = x + (w - line_w[i]) / 2;
         if (tx < x) tx = x; //行がタイルより広い場合は左寄せ+DrawPlain側で切り詰め
 
-        Label<PICO_STR_M>::DrawPlain(FontFn::Small, PICO_BLACK, tx, y + i * line_h, w, buf);
+        Label<PICO_STR_M>::DrawPlain(FontFn::Small, color, tx, y + i * line_h, w, buf);
     }
 }
 
@@ -190,15 +190,18 @@ void AppGrid::render() {
         const int tx = g.x + t.x;
         const int ty = g.y + t.y;
 
+        const bool is_pressed = (first + slot == pressed_index_);
+        const int fore_color = is_pressed ? PICO_WHITE : PICO_BLACK;
+
         //押下中のタイルは背景を敷いて押し込みを表す
-        if (first + slot == pressed_index_) {
-            OSData::frame->fillRect(tx, ty, t.w, t.h, PICO_LIGHTGREY);
+        if (is_pressed) {
+            OSData::frame->fillRect(tx, ty, t.w, t.h, PICO_BLACK);
         }
 
         IconRender::DrawIcon(entry->icon, kIconSize,
-                             tx + (t.w - kIconPx) / 2, ty + kPadding, PICO_BLACK);
+                             tx + (t.w - kIconPx) / 2, ty + kPadding, fore_color);
 
-        drawName(entry->name, tx, ty + kPadding + kIconPx + kLabelGap, t.w);
+        drawName(entry->name, tx, ty + kPadding + kIconPx + kLabelGap, t.w, fore_color);
     }
 
     markdirty(g);

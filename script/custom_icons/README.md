@@ -17,7 +17,7 @@ tablerのアイコンは24pxグリッド・`stroke-width="2"`・丸キャップ�
 - `wifi-1` も6ピクセルしか残らず、lv1とlv2が見分けられなかった
 - そもそもtablerのwifiは弧が1/2/3本の3種類しか無いので、**4段階を作れない**
 
-そのため `signal-bars-1〜4` / `signal-bars-off` を自作して差し替えた。
+そのため `signal-bars-1〜4` を自作して差し替えた。
 
 ## 自作するときの決めごと
 
@@ -37,7 +37,22 @@ tablerのアイコンは24pxグリッド・`stroke-width="2"`・丸キャップ�
 | ファイル | C++側のenum | 用途 |
 |---|---|---|
 | `signal-bars-1.svg` 〜 `signal-bars-4.svg` | `IconID::WifiSignal1` 〜 `WifiSignal4` | 電波強度。棒 x=1,5,9,13 / 幅2 / 高さ4,7,10,13 |
-| `signal-bars-off.svg` | `IconID::WifiOff` | 圏外。4本とも足元ドット + 斜線 |
 
 enum名が `WifiSignal*` のままなのは、意味(Wi-Fiの電波強度)が変わっておらず、
-絵柄だけを差し替えたため。参照箇所(`NetworkFunctions::GetWifiStateIconID()`)は無変更。
+絵柄だけを差し替えたため。
+
+## 圏外は専用アイコンを持たない
+
+**組み合わせで表す**方針にしてある。`NetworkFunctions::GetWifiStateIconID()` は圏外でも
+`WifiSignal1`(最弱)を返し、`Statusbar::render()` がその上へ `IconID::X` を `PICO_RED` で
+重ねる。SDカードが `SdCard` + `X` で「SD無し」を表しているのと同じ組み立て方。
+
+```cpp
+IconRender::DrawIcon(NetworkFunctions::GetWifiStateIconID(), IconSize::Px16, x, y, PICO_BLACK);
+if(!NetworkFunctions::IsConnected()){
+    IconRender::DrawIcon(IconID::X, IconSize::Px16, x, y, PICO_RED);
+}
+```
+
+以前は `signal-bars-off.svg`(足元ドット + 斜線)を持っていたが、斜線が細く
+他のアイコンから浮いていたため削除した。**状態の否定はバツの重ね描きで統一する。**

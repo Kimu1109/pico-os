@@ -70,11 +70,12 @@ ICONS: list[IconSpec] = [
     # wifi-0が0ピクセル・wifi-1が6ピクセルにしかならず下2段階が判別できなかった。
     # そもそも弧の本数が3種類しか無いので4段階を作れない。
     # 16pxグリッドに整合した棒グラフ形式へ差し替えてある(script/custom_icons/README.md)。
+    # 圏外専用のアイコンは持たない。SDカードと同じく、最弱(signal-bars-1)の上へ
+    # IconID::Xを重ねて表現する(Statusbar::render)。
     IconSpec("wifi_signal_1",    str(CUSTOM_DIR / "signal-bars-1.svg")),
     IconSpec("wifi_signal_2",    str(CUSTOM_DIR / "signal-bars-2.svg")),
     IconSpec("wifi_signal_3",    str(CUSTOM_DIR / "signal-bars-3.svg")),
     IconSpec("wifi_signal_4",    str(CUSTOM_DIR / "signal-bars-4.svg")),
-    IconSpec("wifi_off",         str(CUSTOM_DIR / "signal-bars-off.svg")),
     IconSpec("battery_0",        str(ICON_DIR / "battery.svg")),
     IconSpec("battery_1",        str(ICON_DIR / "battery-1.svg")),
     IconSpec("battery_2",        str(ICON_DIR / "battery-2.svg")),

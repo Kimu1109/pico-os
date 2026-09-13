@@ -31,12 +31,16 @@ namespace {
     int         g_shot_frames = 60;
 
     // 画面をPPM(P6)として書き出す。
-    // RGB565で読み出してRGB888へ広げる
+    //
+    // readRectにrgb888_tのバッファを渡してLovyanGFX側で変換させる。
+    // uint16_tで受けてRGB565を自前で展開すると、パネル内部のバイト順の都合で
+    // 赤と青が入れ替わる(0xF800が0x00F8として読める)。白黒だけ見ていると
+    // 左右対称なビット列なので気づけない
     bool writeScreenshot(const char* path)
     {
         if (!OSData::lcd) return false;
 
-        std::vector<uint16_t> pixels((size_t)SCREEN_WIDTH * SCREEN_HEIGHT, 0);
+        std::vector<lgfx::rgb888_t> pixels((size_t)SCREEN_WIDTH * SCREEN_HEIGHT);
         OSData::lcd->readRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, pixels.data());
 
         FILE* fp = fopen(path, "wb");
@@ -46,12 +50,8 @@ namespace {
         }
 
         fprintf(fp, "P6\n%d %d\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT);
-        for (uint16_t c : pixels) {
-            //RGB565 -> RGB888(下位ビットを複製して明るさの範囲を合わせる)
-            const uint8_t r = (uint8_t)(((c >> 11) & 0x1F) * 255 / 31);
-            const uint8_t g = (uint8_t)(((c >> 5)  & 0x3F) * 255 / 63);
-            const uint8_t b = (uint8_t)(( c        & 0x1F) * 255 / 31);
-            fputc(r, fp); fputc(g, fp); fputc(b, fp);
+        for (const auto& c : pixels) {
+            fputc(c.R8(), fp); fputc(c.G8(), fp); fputc(c.B8(), fp);
         }
         fclose(fp);
 

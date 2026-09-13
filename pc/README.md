@@ -20,11 +20,17 @@ sudo apt-get install build-essential cmake libsdl2-dev
 brew install cmake sdl2
 ```
 
-LovyanGFX は CMake が自動で取得する(`platformio.ini` の `^1.2.26` に合わせて 1.2.28)。
-手元にソースがあるならそれを使わせてもよい:
+LovyanGFX は CMake が自動で取得する。**版は `platformio.ini` の `lib_deps` を読んで決める**ので、
+実機ビルドとPCビルドで必ず同じ版になる(上げるときは `platformio.ini` の1行だけ直せばよい)。
+
+`platformio.ini` 側が `^1.2.26` のような範囲指定だと「実際に落ちてくる版」が確定せず
+PC側と食い違うため、その場合は configure がその旨を出して止まる。完全固定にすること。
+
+手元にソースがあるならそれを使わせてもよい。取得するタグだけを差し替えることもできる:
 
 ```sh
 cmake -S pc -B pc/build -DLOVYANGFX_DIR=/path/to/LovyanGFX
+cmake -S pc -B pc/build -DLOVYANGFX_TAG=1.2.29
 ```
 
 ## ビルドと実行

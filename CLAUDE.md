@@ -40,11 +40,15 @@ platform = raspberrypi
 board = rpipico2w
 framework = arduino
 lib_deps =
-    lovyan03/LovyanGFX@^1.2.26
+    lovyan03/LovyanGFX@1.2.28
     https://github.com/PaulStoffregen/XPT2046_Touchscreen.git#v1.4
 monitor_speed = 115200
 ```
 モニタはUTF-8。
+
+**LovyanGFXの版はこの`lib_deps`が唯一の情報源**で、`pc/CMakeLists.txt`がこの行を読んで同じタグを取得する。
+範囲指定(`^1.2.26`等)だとPlatformIOが実際に落とす版が確定せずPCビルドと食い違うため、**完全固定にしてある**
+(範囲指定へ戻すとPCビルドのconfigureがその旨を出して止まる)。
 
 ## ディレクトリ構成
 
@@ -285,8 +289,11 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
   ※`TimeFunctions::Update()`は333msごとにしか更新しないので、`--shot`のフレーム数が少ないと
   初期値の`00:00`が写る。時刻を確認したいときは200フレーム以上回すこと。
 - GPIO/SPIは空実装。
-- LovyanGFXはCMakeが取得する(1.2.28)。`-DLOVYANGFX_DIR=...` で手元のソースも使える。
-  **`platformio.ini` の版を上げたら `pc/CMakeLists.txt` の `GIT_TAG` も追随させること。**
+- **LovyanGFXの版は`platformio.ini`の`lib_deps`から読む**(`pc/CMakeLists.txt`が正規表現で拾う)ので、
+  上げるときに直すのは`platformio.ini`の1行だけ。以前はCMake側にも`GIT_TAG`を直書きしていて
+  追随が人間の記憶頼みだった。`CMAKE_CONFIGURE_DEPENDS`に入れてあるので、`platformio.ini`を
+  書き換えれば次のビルドでconfigureが走り直す。
+  `-DLOVYANGFX_DIR=...`(手元のソース) / `-DLOVYANGFX_TAG=...`(タグだけ差し替え)で上書きもできる。
 - `pc/build/` は `.gitignore` 済み。
 - **漏れはビルドで検出できる**。`src/*.cpp` を全部リンクするので、代替を用意し忘れた実機APIが
   あれば未定義参照になる。逆に言えば、`src/`へ新しい実機依存(`analogRead`/I2C等)を足すと

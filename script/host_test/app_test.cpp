@@ -11,6 +11,7 @@
 #include "gui/scenes/Scene.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
+#include <cstring>
 
 // ---- モック ----
 void PICO_GFX::MarkDirty(const Rect&){}
@@ -53,15 +54,25 @@ class DummyScene : public Scene {
         void onEnter() override {}
 };
 
+// 引数(AppEntry::arg)を受け取るダミーシーン。
+// 生成時に渡された文字列をここへ控えて、登録簿が引数を運べているかを確かめる
+static FixedString<PICO_STR_L> last_arg;
+
+class ArgScene : public Scene {
+    public:
+        explicit ArgScene(const char* path){ (void)last_arg.assign(path); }
+        const char* getName() const override { return "Arg"; }
+        void onEnter() override {}
+};
+
 static void registerApps(int n){
     AppFunctions::Clear();
-    //名前は静的寿命が要るので固定のテーブルから配る
-    static const char* kNames[] = {
-        "a01","a02","a03","a04","a05","a06","a07","a08","a09","a10","a11","a12",
-        "a13","a14","a15","a16","a17","a18","a19","a20","a21","a22","a23","a24",
-    };
+    //名前はRegister()がコピーして持つので、スタック上の一時バッファから登録してよい
+    //(以前は静的寿命のリテラルが必須だった。ASanの下で寿命切れ参照も検出できる)
     for(int i = 0; i < n; i++){
-        AppFunctions::Register(kNames[i], IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        char name[16];
+        snprintf(name, sizeof(name), "a%02d", i + 1);
+        AppFunctions::Register(name, IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
     }
 }
 
@@ -80,10 +91,12 @@ int main(){
         const AppEntry* e = AppFunctions::Get(0);
         check(e != nullptr && e->create != nullptr, "登録簿: 生成関数が引ける");
         if(e && e->create){
-            Scene* s = e->create();
+            Scene* s = e->create(*e);
             check(s != nullptr, "登録簿: 生成関数がシーンを返す");
             delete s;
         }
+        check(e != nullptr && strcmp(e->name.c_str(), "テスト") == 0,
+              "登録簿: 名前がコピーされている");
 
         check(!AppFunctions::Register(nullptr, IconID::AppBox,
                                       &AppFunctions::MakeScene<DummyScene>),
@@ -91,6 +104,66 @@ int main(){
         check(!AppFunctions::Register("x", IconID::AppBox, nullptr),
               "登録簿: 生成関数なしは拒否する");
         eq(AppFunctions::Count(), 1, "登録簿: 拒否された分は増えない");
+    }
+
+    // ---- 引数つきの登録(同じシーン型を別の中身で並べる) ----
+    // Luaアプリが「同じLuaScene型 + 別スクリプトパス」で増える形の土台になる部分
+    {
+        AppFunctions::Clear();
+
+        //パスも寿命の短いバッファから渡せること
+        char path[32];
+        snprintf(path, sizeof(path), "tmp/doc.md");
+        check(AppFunctions::Register("文書A", IconID::File,
+                                     &AppFunctions::MakeSceneWithArg<ArgScene>, path),
+              "引数つき: 登録できる");
+
+        snprintf(path, sizeof(path), "tmp/other.md");
+        check(AppFunctions::Register("文書B", IconID::File,
+                                     &AppFunctions::MakeSceneWithArg<ArgScene>, path),
+              "引数つき: 同じ生成関数を別のargで登録できる");
+        eq(AppFunctions::Count(), 2, "引数つき: 2件とも登録される");
+
+        const AppEntry* a = AppFunctions::Get(0);
+        const AppEntry* b = AppFunctions::Get(1);
+        check(a && strcmp(a->arg.c_str(), "tmp/doc.md") == 0, "引数つき: argがコピーされている");
+        check(b && strcmp(b->arg.c_str(), "tmp/other.md") == 0, "引数つき: 2件目のargも独立している");
+        check(a && b && a->create == b->create, "引数つき: 生成関数は共有されている");
+
+        //生成関数までargが届くこと
+        last_arg.clear();
+        Scene* s = a->create(*a);
+        check(strcmp(last_arg.c_str(), "tmp/doc.md") == 0, "引数つき: 生成関数へargが渡る");
+        delete s;
+
+        //argを使わないアプリは空のまま
+        AppFunctions::Register("引数なし", IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        const AppEntry* c = AppFunctions::Get(2);
+        check(c && c->arg.empty(), "引数つき: argを省いた登録では空になる");
+    }
+
+    // ---- 長すぎる名前/引数 ----
+    {
+        AppFunctions::Clear();
+
+        //名前は表示が縮むだけなので、切り詰めた上で登録は通す
+        char long_name[PICO_STR_M * 2];
+        memset(long_name, 'n', sizeof(long_name) - 1);
+        long_name[sizeof(long_name) - 1] = '\0';
+        check(AppFunctions::Register(long_name, IconID::AppBox,
+                                     &AppFunctions::MakeScene<DummyScene>),
+              "長さ: 長すぎる名前でも登録は通る");
+        const AppEntry* e = AppFunctions::Get(0);
+        check(e && e->name.length() < PICO_STR_M, "長さ: 名前は切り詰められている");
+
+        //argはパスなので、切り詰まると別物を指す。登録ごと拒否する
+        char long_arg[PICO_STR_L * 2];
+        memset(long_arg, 'p', sizeof(long_arg) - 1);
+        long_arg[sizeof(long_arg) - 1] = '\0';
+        check(!AppFunctions::Register("長い引数", IconID::AppBox,
+                                      &AppFunctions::MakeSceneWithArg<ArgScene>, long_arg),
+              "長さ: 長すぎる引数は登録を拒否する");
+        eq(AppFunctions::Count(), 1, "長さ: 拒否された分は増えない");
     }
 
     // ---- 上限 ----
@@ -269,8 +342,23 @@ int main(){
         registerApps(2);
         AppFunctions::Launch(1);
         check(pushed_scene != nullptr, "Launch: シーンが生成されてPushされる");
+
+        //Push()側のモックは渡された物をそのまま持つので、nullへ戻してから叩けば
+        //「何もPushされなかった」ことを実際に確かめられる
+        delete pushed_scene;
+        pushed_scene = nullptr;
         AppFunctions::Launch(99);
-        check(pushed_scene != nullptr, "Launch: 範囲外indexでは何もPushしない");
+        check(pushed_scene == nullptr, "Launch: 範囲外indexでは何もPushしない");
+
+        //argつきのアプリを起動すると、生成関数を経由してargがシーンへ届く
+        AppFunctions::Clear();
+        AppFunctions::Register("文書", IconID::File,
+                               &AppFunctions::MakeSceneWithArg<ArgScene>, "tmp/launched.md");
+        last_arg.clear();
+        AppFunctions::Launch(0);
+        check(pushed_scene != nullptr, "Launch: argつきのアプリも起動できる");
+        check(strcmp(last_arg.c_str(), "tmp/launched.md") == 0,
+              "Launch: 起動時にargがシーンへ渡る");
     }
     delete pushed_scene;
     pushed_scene = nullptr;

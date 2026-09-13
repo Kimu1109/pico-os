@@ -201,7 +201,7 @@ void AppGrid::render() {
         IconRender::DrawIcon(entry->icon, kIconSize,
                              tx + (t.w - kIconPx) / 2, ty + kPadding, fore_color);
 
-        drawName(entry->name, tx, ty + kPadding + kIconPx + kLabelGap, t.w, fore_color);
+        drawName(entry->name.c_str(), tx, ty + kPadding + kIconPx + kLabelGap, t.w, fore_color);
     }
 
     markdirty(g);

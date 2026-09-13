@@ -141,11 +141,18 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - `WidgetType`から実体を作るファクトリ(`WidgetType` → `new Xxx`)も未整備で、外部からウィジェットを生成する口はまだ存在しない。
 
 ### アプリの枠組み (`src/functions/App_Functions.hpp`)
-`AppEntry`(名前/アイコン/シーン生成関数)の固定長テーブルに登録し、`HomeScene`の`AppGrid`がそれを並べる。
+`AppEntry`(名前/アイコン/引数/シーン生成関数)の固定長テーブルに登録し、`HomeScene`の`AppGrid`がそれを並べる。
 
 - **アプリを増やすときに触るのは `src/functions/App_List.cpp` の `Setup()` に1行足すだけ**。シーン側にも`HomeScene`にも手を入れない。
 - 仕組み(`Register`/`Launch`/`Get`)は`App_Functions.cpp`、載せるアプリの一覧は`App_List.cpp`に分けてある(前者はシーン実装に依存しないのでホストテストが軽い)。
-- 生成関数は`std::function`ではなく素の関数ポインタ。`&AppFunctions::MakeScene<XxxScene>`の形で渡す(登録簿を確保ゼロの静的テーブルに保つため)。
+- 生成関数は`std::function`ではなく素の関数ポインタで、シグネチャは`Scene* (*)(const AppEntry&)`。登録簿を確保ゼロの静的テーブルに保つため。
+  - `&AppFunctions::MakeScene<XxxScene>` … 引数なしで生成する
+  - `&AppFunctions::MakeSceneWithArg<XxxScene>` + `Register()`の第4引数 … `entry.arg`をコンストラクタ(`const char*`1つ)へ渡す。**同じシーン型を別のargで何件でも登録できる**ので、「文書ごとに1タイル」「Luaスクリプトごとに1タイル」が作れる
+- **`name`と`arg`は`FixedString`でコピーして持つ**(以前は`const char*`で静的寿命のリテラル必須だった)。SDを走査して見つけたアプリのように、寿命の短い文字列からそのまま登録できる。
+  - `name`は`FixedString<PICO_STR_M>`(48B)。切り詰めは表示が縮むだけなので警告のみで登録は通す。
+  - `arg`は`FixedString<PICO_STR_L>`(96B)。切り詰まるとパスが別物を指すので、**長すぎる場合は登録ごと拒否**する(`Register()`が`false`)。
+  - 代償として`apps[24]`が**約3.8KBのstatic RAM**を常時占める(1件160B。以前は288B)。上限や文字列長を動かすときはここを意識する。
+- 実行中に登録簿を書き換えてもよい(Luaアプリのスキャン等)。ただしランチャの再描画までは面倒を見ないので、表示中に増減させたら`AppGrid`へ`needsRender()`すること。
 - `Launch()`は`SceneFunctions::Push`なので、アプリ側から`Pop()`すればランチャへ戻る。
 - `AppGrid`はタイルごとに子ウィジェットを作らず、`render()`で直接描いてタップ位置から逆算する(`ColorDialog`の色グリッドと同じ方式)。`WidgetFunctions::HitTest()`は子から先に判定するため、タイルをIcon+Labelの親として作ると子がタップを奪ってしまう。
 - レイアウトは2列×3行=6個/ページ(タイル111x78px)。3列だとタイル幅72px=日本語4文字しか入らず大半のアプリ名がはみ出したため2列にした。名前は`drawName()`がUTF-8の文字境界で切って最大2行へ折り返す(`DrawPlain()`は折り返さないため自前)。
@@ -340,7 +347,7 @@ Lua向けの土台は「発行側だけ入って消費側が空」の状態。�
 |---|---|
 | `WidgetRegistry::Resolve()` | 実装済みだが**呼び出し元ゼロ・テストゼロ**。実際に使った時点で仕様の穴が出る想定 |
 | ウィジェットのファクトリ | **無い**。`WidgetType` enumはあるが `WidgetType` → `new Xxx` の対応表が無く、Luaから生成する口が存在しない |
-| `AppEntry`(`App_Functions.hpp`) | `Scene* (*create)()` の**引数なし関数ポインタ**。「同じ`LuaScene`型 + 別スクリプトパス」を表現できない。`name`も「静的寿命のリテラル必須」なのでSDから読んだアプリ名を載せられず、`Setup()`もコンパイル時固定で**SDを走査して動的登録する口が無い**。Lua着手初日に当たる |
+| ~~`AppEntry`(`App_Functions.hpp`)~~ | **解消済み(2026-09-13)**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`は`FixedString`でコピー保持するようになった。「同じ`LuaScene`型 + 別スクリプトパス」も、寿命の短い文字列からの動的登録も表現できる。残りは**SDを走査してLuaアプリを見つける側**(スキャン処理そのもの)だけ |
 | コールバック | `std::function<void()>` で引数もコンテキストも無し。Lua側は `lua_State*` + registry ref を持たせる必要があり、そのキャプチャは16B超え=貼るたびにヒープ確保になる |
 | 実行時間の制御 | **無い**。`loop()`は単純ポーリングなので、重い/無限ループのLuaはタッチごと固める。`lua_sethook`での命令数バジェットか、`Task`へ載せてコルーチン化するかの判断が要る(`Task`基盤は既にある) |
 | 確保失敗(OOM) | `Widget::operator new`はnullptrを返す仕様だが、**呼び出し側は誰もnullチェックしていない**。Luaは「ユーザーのコードがRAMを食う」世界なので、`lua_newstate`のカスタムallocで**Luaに上限枠を切る**必要がある。※シーンアリーナ不要の結論(上記)とは別の話 |

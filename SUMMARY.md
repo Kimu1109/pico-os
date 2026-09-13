@@ -42,8 +42,10 @@
   - [x] 確実な時刻同期
 - [ ] Luaアプリ
   - [ ] 着手前に塞ぐ穴 (詳細は CLAUDE.md「Lua着手前の受け皿の状態」)
-    - [ ] AppEntryの動的化 … create()が引数なし関数ポインタ、nameが静的リテラル必須で、
-          「同じLuaScene型+別スクリプトパス」を登録できない。SD走査での動的登録の口も無い
+    - [x] AppEntryの動的化 … create()が AppEntry& を受け取り、name/argをFixedStringで
+          コピー保持するようになった。同じシーン型を別argで複数登録でき、寿命の短い
+          文字列からも登録できる (MakeSceneWithArg<T>)
+    - [ ] SDを走査してLuaアプリを見つける処理 (登録簿側の受け入れ準備は上記で完了)
     - [ ] ウィジェットのファクトリ (WidgetType → new Xxx) とプロパティのget/set共通口
     - [ ] Lua用allocatorでのRAM上限 … Widget::operator newのnullptrを誰もチェックしていない
     - [ ] 実行時間バジェット (lua_sethook or Taskへ載せてコルーチン化)

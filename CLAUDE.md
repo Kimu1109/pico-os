@@ -68,6 +68,8 @@ src/
   task/                       非同期タスク基底 + NetworkScanタスク
   test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
+  tabler_icons/               アイコン元データ(tabler由来のSVG)
+  custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
   host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出 / run_mem.sh=確保回数の計測)
 pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
@@ -201,7 +203,12 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - 機能単位は「`XxxFunctions`」名前空間+`inline`変数/関数(クラス化せずシングルトン的に扱う)。
 - get/setアクセサ+`needsRender()`呼び出しの定型パターンが各ウィジェットで繰り返される。
 - 定数は「クラス内`constexpr static int`」と「`consts.hpp`に`#define`集約」の二系統が混在。
-- アイコンは`script/generate_icons.py`でtabler_iconsから`icons_data.h`を事前生成(ビルド前処理)。
+- アイコンは`script/generate_icons.py`で`script/tabler_icons/`(tabler)と`script/custom_icons/`(自作)から
+  `src/gui/icons/icons_data.h`を事前生成(ビルド前処理)。
+  **tablerの絵柄は24pxグリッド前提なので16pxで破綻することがある**。細い要素が丸ごと消えるため、
+  16pxで使うアイコンは生成後に必ず目視すること。破綻する場合は`custom_icons/`へ
+  `viewBox="0 0 16 16"`・整数座標・`fill`の矩形で描き起こす(判断基準は`script/custom_icons/README.md`)。
+  電波強度アイコンがこの理由で自作に差し替わっている(tablerの`wifi-0`は16pxで0ピクセルだった)。
 - 日本語IMEはSKK辞書方式、`script/convert_skk_dict.py`で辞書データ(`skk_body.tsv`/`skk_index.tsv`)をSD収録用に変換。
 
 ## PC実行環境 (`pc/`)

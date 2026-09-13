@@ -1,6 +1,12 @@
 
 #pragma once
 
+// タッチ入力の取得はハードウェアそのものなので、PCビルドでは丸ごと差し替える
+// (PC版はSDLのマウスをタッチとして扱う)。理由はLGFX_Config.hppと同じ。
+#if defined(PICOOS_PC)
+    #include <functions/Touch_Functions_PC.hpp>
+#else
+
 #include <XPT2046_Touchscreen.h>
 #include <SPI.h>
 #include "consts.hpp"
@@ -95,3 +101,5 @@ namespace PICO_Touch
         OSData::isTouched = true;
     }
 }
+
+#endif // PICOOS_PC

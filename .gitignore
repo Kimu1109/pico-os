@@ -4,3 +4,6 @@
 .vscode/launch.json
 .vscode/ipch
 .venv
+# PCビルド(pc/CMakeLists.txt)の生成物
+pc/build/
+pc/sdcard/sys/log.txt

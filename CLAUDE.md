@@ -66,6 +66,9 @@ src/
   task/                       非同期タスク基底 + NetworkScanタスク
   test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
+pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
+  compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
+  sdcard/                     SDカードとして読まれるディレクトリ
 examples/doc.md                MarkdownView動作確認用サンプル文書
 ```
 `include/`, `lib/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
@@ -171,6 +174,34 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - アイコンは`script/generate_icons.py`でtabler_iconsから`icons_data.h`を事前生成(ビルド前処理)。
 - 日本語IMEはSKK辞書方式、`script/convert_skk_dict.py`で辞書データ(`skk_body.tsv`/`skk_index.tsv`)をSD収録用に変換。
 
+## PC実行環境 (`pc/`)
+
+実機に書き込まずにPC上のウィンドウでpico-osを動かせる。詳細は `pc/README.md`。
+
+```sh
+sudo apt-get install libsdl2-dev      # 前提: SDL2開発パッケージ
+cmake -S pc -B pc/build && cmake --build pc/build -j
+./pc/build/picoos_pc                  # マウス左ドラッグ = タッチ
+SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレス確認
+```
+
+- **`src/` のコードは実機とまったく同じものを使う**。差し替えているのは実機ライブラリだけで、
+  `pc/compat/` をインクルードパスの先頭に置いて `Arduino.h`/`SPI.h`/`WiFi.h`/`SdFat.h`/
+  `XPT2046_Touchscreen.h` を置き換える(`script/host_test/stubs` と同じ考え方)。
+- **例外は2ファイルだけ**: `src/config/LGFX_Config.hpp` と `src/functions/Touch_Functions.hpp` が
+  `#if defined(PICOOS_PC)` で `pc/compat/` 側(`<config/LGFX_Config_PC.hpp>` /
+  `<functions/Touch_Functions_PC.hpp>`)を取り込む。
+  **山かっこで書くこと** — `"config/..."` だとインクルード元(`src/`)のディレクトリが優先され、
+  自分自身を読んで多重定義になる。
+- 画面は `lgfx::Panel_sdl`。既定で2倍表示(`PICOOS_PC_SCALE`)。マウス座標はSDL側でパネル座標へ
+  戻されるため、拡大率はタッチに影響しない。
+- SDカードは `pc/sdcard/` を実ファイルシステムとして読む(`PICOOS_SD_ROOT` 環境変数で差し替え可)。
+  IME辞書は大きいのでリポジトリには含めていない(無くても起動する)。
+- Wi-Fiは常に切断・スキャン0件、NTPは同期しない。GPIO/SPIは空実装。
+- LovyanGFXはCMakeが取得する(1.2.28)。`-DLOVYANGFX_DIR=...` で手元のソースも使える。
+  **`platformio.ini` の版を上げたら `pc/CMakeLists.txt` の `GIT_TAG` も追随させること。**
+- `pc/build/` は `.gitignore` 済み。
+
 ## ロードマップ・TODO状況(2026-09-06時点)
 
 相談が来た際はまず本表を見て、「既存機能の拡張」か「ゼロから設計する新機能」かを見分けること。**都度 `SUMMARY.md` をfetchして最新状況を確認するのが望ましい。**
@@ -180,7 +211,7 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 | 1 | ダイアログ(ファイル選択・保存・色選択) | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用キーボードのみ別TODOとして未着手。 |
 | 2 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
 | 3 | Wi-Fi管理強化 | 基礎は実装済み(非ブロッキング接続・スキャン・NTP同期・電波強度アイコン)。**定期的再接続交渉・確実な時刻同期の強化は未着手**。 |
-| 4 | Luaアプリ/API | **未着手**。Lua関連コード皆無。ゼロから統合方針(実装選定、C++バインディング設計)を相談する必要あり。PCエミュレーション環境(LovyanGFX/タッチ操作代替)も未着手。 |
+| 4 | Luaアプリ/API | **未着手**。Lua関連コード皆無。ゼロから統合方針(実装選定、C++バインディング設計)を相談する必要あり。**PC実行環境は実装済み(`pc/`、下記参照)**。 |
 | 5 | 標準/セカンダリアプリ開発 | **未着手**。設定アプリ・時計・辞書・電卓・チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし(部品は存在)。 |
 | 6 | GBエミュ | **未着手**。 |
 | 7 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
@@ -218,4 +249,6 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 - 新しい画面を追加する話は`Scene`を継承して`onEnter()`でウィジェットを生成する形に寄せる。常駐させたいウィジェットは`AddOverlay()`。
 - 新規ダイアログ/ウィジェットは既存の骨格(`children_`保持、`setOnClose`コールバック、`setVisible(false)`終了)にトーンを合わせる。
 - コメント・ログは日本語、識別子は英語という言語使い分けを踏襲する。
+- GUIの挙動を確かめたいときは実機ビルドの前にPCビルド(`pc/`)で回すのが速い。`src/`へ実機ライブラリ依存を
+  足すときは `pc/compat/` 側にも代替を用意すること(PCビルドが壊れる)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。

@@ -1,5 +1,13 @@
 #pragma once
 
+// パネル構成の選択。
+// PCビルド(pc/CMakeLists.txt)ではPICOOS_PCが定義され、SDLパネル版を使う。
+// 山かっこincludeにしているのは、"..."だとこのファイルのあるディレクトリが
+// 優先され、pc/compat側の実装が拾われないため。
+#if defined(PICOOS_PC)
+    #include <config/LGFX_Config_PC.hpp>
+#else
+
 #include <LovyanGFX.hpp>
 #include <SPI.h>
 #include <XPT2046_Touchscreen.h>
@@ -32,3 +40,5 @@ public:
     setPanel(&_panel_instance);
   }
 };
+
+#endif // PICOOS_PC

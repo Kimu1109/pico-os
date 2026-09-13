@@ -3,7 +3,9 @@
 #include <SdFat.h>
 #include <cstring>
 #include <cstdlib>
+#include <cstdio>
 
+#include "consts.hpp"
 #include "OS_Data.hpp"
 #include "functions/Log_Functions.hpp"
 
@@ -189,6 +191,135 @@ namespace PICO_Config
     }
 
     // --------------------------------------------------------------------
+    // 書き込み
+    //
+    // 読み込みと同じく1行ずつ処理し、一時ファイルへ書き出してから差し替える。
+    // 元ファイルを直接書き換えないので、途中で電源が落ちても設定が壊れない。
+    // (removeとrenameの間で落ちた場合は .tmp が残る。その場合は設定が
+    //  前回値のまま残るだけで、読み込み側に影響はない)
+    // --------------------------------------------------------------------
+    namespace Detail
+    {
+        // 元の行をそのまま書き戻す。末尾に改行が無い行(ファイル最終行)には補う。
+        // 補わないと、この後ろにエントリを追記したときに連結してしまう
+        inline bool WriteRawLine(FsFile &f, const char *line)
+        {
+            const size_t len = strlen(line);
+            if (len > 0 && f.write(line, len) != len) return false;
+            if (len == 0 || line[len - 1] != '\n')
+            {
+                if (f.write("\n", 1) != 1) return false;
+            }
+            return true;
+        }
+
+        inline bool WriteEntry(FsFile &f, const char *key, const char *value)
+        {
+            char buf[kConfigMaxKeyLen + kConfigMaxValueLen + 4];
+            const int n = snprintf(buf, sizeof(buf), "%s=%s\n", key, value);
+            if (n <= 0 || n >= (int)sizeof(buf)) return false;
+            return f.write(buf, (size_t)n) == (size_t)n;
+        }
+    }
+
+    // --------------------------------------------------------------------
+    // keyの値を書き換える。コメント行と行順はそのまま保たれる。
+    //
+    // - keyがファイルに無ければ末尾へ追記する
+    // - ファイル自体が無ければ新規作成する
+    // - 同じkeyが複数行ある場合は最初の1行を書き換え、以降の重複行は削除する
+    //   (読み込み側が「後勝ち」なので、残すと書き換えたはずの値が上書きされてしまう)
+    //
+    // 戻り値: 書き換えが完了したら true
+    // --------------------------------------------------------------------
+    inline bool SetValue(const char *path, const char *key, const char *value)
+    {
+        if (!path || !key || !value) return false;
+        if (key[0] == '\0')
+        {
+            LOG_SYS_WARN("Config SetValue: キーが空です (%s)", path);
+            return false;
+        }
+        if (strlen(key) >= kConfigMaxKeyLen || strlen(value) >= kConfigMaxValueLen)
+        {
+            LOG_SYS_WARN("Config SetValue: キーか値が長すぎます (%s: %s)", path, key);
+            return false;
+        }
+
+        char tmpPath[PICO_PATH_LEN];
+        const int pathLen = snprintf(tmpPath, sizeof(tmpPath), "%s.tmp", path);
+        if (pathLen <= 0 || pathLen >= (int)sizeof(tmpPath))
+        {
+            LOG_SYS_WARN("Config SetValue: パスが長すぎます (%s)", path);
+            return false;
+        }
+
+        FsFile dst = OSData::SD.open(tmpPath, O_WRONLY | O_CREAT | O_TRUNC);
+        if (!dst)
+        {
+            LOG_SYS_FAIL("Config SetValue: 一時ファイルを作成できません (%s)", tmpPath);
+            return false;
+        }
+
+        bool ok = true;
+        bool replaced = false;
+
+        FsFile src = OSData::SD.open(path, O_RDONLY);
+        if (src)
+        {
+            char lineBuf[kConfigMaxLineLen];
+            char keyBuf[kConfigMaxKeyLen];
+            char valueBuf[kConfigMaxValueLen];
+
+            while (ok)
+            {
+                const int n = src.fgets(lineBuf, sizeof(lineBuf));
+                if (n <= 0) break;
+
+                const ConfigLineResult result =
+                    ParseLine(lineBuf, keyBuf, sizeof(keyBuf), valueBuf, sizeof(valueBuf));
+
+                if (result == ConfigLineResult::Entry && strcmp(keyBuf, key) == 0)
+                {
+                    if (!replaced)
+                    {
+                        ok = Detail::WriteEntry(dst, key, value);
+                        replaced = true;
+                    }
+                    continue; // 2件目以降の重複行は落とす
+                }
+
+                ok = Detail::WriteRawLine(dst, lineBuf);
+            }
+            src.close();
+        }
+
+        if (ok && !replaced) ok = Detail::WriteEntry(dst, key, value);
+        dst.close();
+
+        if (!ok)
+        {
+            LOG_SYS_FAIL("Config SetValue: 書き込みに失敗しました (%s)", path);
+            OSData::SD.remove(tmpPath);
+            return false;
+        }
+
+        if (OSData::SD.exists(path) && !OSData::SD.remove(path))
+        {
+            LOG_SYS_FAIL("Config SetValue: 元ファイルを削除できません (%s)", path);
+            OSData::SD.remove(tmpPath);
+            return false;
+        }
+        if (!OSData::SD.rename(tmpPath, path))
+        {
+            LOG_SYS_FAIL("Config SetValue: 一時ファイルを差し替えられません (%s)", path);
+            return false;
+        }
+
+        return true;
+    }
+
+    // --------------------------------------------------------------------
     // 値の型変換ヘルパー(15章: 「取得API呼び出し時にパース失敗ならエラーを返す」の実装)
     // すべて成功時 true / 失敗時 false を返し、out引数には成功時のみ書き込む。
     // --------------------------------------------------------------------
@@ -244,6 +375,30 @@ namespace PICO_Config
 
             out = (float)v;
             return true;
+        }
+
+        // ------------------------------------------------------------
+        // 書き込み用の逆変換。SetValue()へ渡す文字列を作る。
+        // AsXxx()で読み戻せる表記になっていること(往復できること)が条件
+        // ------------------------------------------------------------
+        inline const char *FromBool(bool value)
+        {
+            return value ? "true" : "false";
+        }
+
+        inline bool FromInt(int value, char *out, size_t cap)
+        {
+            if (!out || cap == 0) return false;
+            const int n = snprintf(out, cap, "%d", value);
+            return n > 0 && (size_t)n < cap;
+        }
+
+        // 小数は既定で3桁。AsFloat()はstrtofなのでそのまま読み戻せる
+        inline bool FromFloat(float value, char *out, size_t cap, int decimals = 3)
+        {
+            if (!out || cap == 0) return false;
+            const int n = snprintf(out, cap, "%.*f", decimals, (double)value);
+            return n > 0 && (size_t)n < cap;
         }
     }
 }

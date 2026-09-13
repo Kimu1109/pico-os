@@ -47,10 +47,7 @@ void Checkbox::causeOnPressStart(){
     }
 }
 
-template<size_t N>
-void Checkbox::setTextAndCalc(FixedString<N> text){
-    this->text.assign(text);
-
+void Checkbox::recalcSize(){
     this->fontApply();
 
     int iconSize = FontFn::GetFontSize(this->f_size);

@@ -9,6 +9,7 @@
 #   scene_test … シーン遷移(SceneFunctions / WidgetFunctions)とメモリ計測フックの配線
 #   label_test … Labelのテキストレイアウト結果(幅/高さ/文字数/カーソル座標)の固定
 #   markdown_test … MarkdownViewのブロック高さとLabelの実高さの整合(重なり検出)
+#   config_test   … 設定ファイル(key=value)の読み書き
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -73,3 +74,12 @@ g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== markdown_test ====="
 "$OUT/markdown_test"
+
+# --- 設定ファイルの読み書き ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/config_test.cpp" \
+    -o "$OUT/config_test"
+
+echo ""
+echo "===== config_test ====="
+"$OUT/config_test"

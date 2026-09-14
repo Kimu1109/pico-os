@@ -10,6 +10,8 @@
 #include "net/Doc_Fetch.hpp"
 #include "storage/Doc_Cache.hpp"
 #include "storage/SD_Path.hpp"
+#include "storage/SD_IO.hpp"
+#include "util/Md_Scan.hpp"
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
@@ -297,6 +299,76 @@ int main(int argc, char** argv){
             if(kv.first.size() >= 5 && kv.first.compare(kv.first.size() - 5, 5, ".part") == 0) leftover++;
         }
         eq_int(leftover, 0, "失敗しても一時ファイルが残らない");
+    }
+
+    // ---- 画像: 文書を取る -> 走査 -> 画像も取る ----
+    // MarkdownSceneが表示前にやる手順をそのままなぞる。
+    // **最後の1件が肝** — 取ってきた画像の置き場所と、MarkdownViewが
+    // 文書基準で解決するパスが一致していること。ここが噛み合っていないと
+    // 「取ってきたのに表示されない」になる
+    {
+        printf("\n---- 画像の先読み ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/doc.md", base);
+
+        Url docUrl;
+        UrlTools::Parse(docUrl, urlText);
+
+        //1. 文書を取る
+        DocFetch docFetch;
+        docFetch.begin(docUrl);
+        for(int i = 0; i < 20000 && docFetch.state() == DocFetch::State::Fetching; i++) docFetch.update();
+        check(docFetch.state() == DocFetch::State::Ready, "文書を取得できる");
+
+        const std::string docCachePath = docFetch.path().c_str();
+
+        //2. 走査して画像参照を集める(MarkdownScene::collectMissingImages と同じ規則)
+        FixedString<PICO_STR_L> imageRef;
+        {
+            const std::string& text = HostSd::files[docCachePath];
+            size_t start = 0;
+            while(start < text.size()){
+                size_t end = text.find('\n', start);
+                if(end == std::string::npos) end = text.size();
+
+                const char* ref = nullptr;
+                size_t refLen = 0;
+                if(MdScan::ImageRefInLine(text.data() + start, end - start, ref, refLen)){
+                    imageRef.assign(ref, refLen);
+                    break;
+                }
+                start = end + 1;
+            }
+        }
+        eq_str(imageRef.c_str(), "img/sample.pimg", "文書から画像参照を見つけられる");
+
+        //3. 文書のURLを基準に解決して取りに行く
+        Url imageUrl;
+        check(UrlTools::Resolve(imageUrl, docUrl, imageRef.c_str()), "画像URLを解決できる");
+        eq_str(imageUrl.path.c_str(), "/img/sample.pimg", "画像のパスが文書基準で解決される");
+
+        DocFetch imgFetch;
+        imgFetch.begin(imageUrl);
+        for(int i = 0; i < 20000 && imgFetch.state() == DocFetch::State::Fetching; i++) imgFetch.update();
+
+        check(imgFetch.state() == DocFetch::State::Ready, "画像を取得できる");
+        check(HostSd::files.count(imgFetch.path().c_str()) > 0, "画像がSDへ書かれている");
+        eq_int((long)HostSd::files[imgFetch.path().c_str()].size(), 53, "画像のバイト数が一致する");
+
+        //4. MarkdownViewが文書基準で解決するパスと、画像の置き場所が一致すること
+        FixedString<PICO_PATH_LEN> resolvedByView;
+        check(PICO_IO::resolve(resolvedByView, docCachePath.c_str(), imageRef.c_str()),
+              "View側の解決が成功する");
+        eq_str(resolvedByView.c_str(), imgFetch.path().c_str(),
+               "View側の解決先と画像の置き場所が一致する");
+
+        //5. 2回目は取りに行かない(キャッシュ済み)
+        FixedString<PICO_STR_M> host;
+        UrlTools::HostHeader(host, docUrl);
+        check(PICO_DocCache::Exists(host.c_str(), imageUrl.path.c_str()),
+              "2回目以降はキャッシュ済みと判定される");
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

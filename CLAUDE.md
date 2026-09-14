@@ -68,7 +68,7 @@ src/
       systems/               Statusbar等システムウィジェット
   ime/                       SKK方式かな漢字変換辞書エンジン
   net/                        HTTPレスポンスの解釈 + 取得〜キャッシュの配線(Doc_Fetch)
-  util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte(UTF-8リードバイト判定)
+  util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScan / HttpGet タスク
   test/                       フォントカバレッジチェック等
@@ -199,6 +199,8 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 
 ### MarkdownView 実装詳細
 `MdBlockType`: H1/H2/H3/Paragraph/Image/Link/CodeBlock/ListItem/HorizontalRule/Quote/TableRow。`MdBlock`はオフセット/長さ参照方式(`srcOffset`/`srcLength`、`doc_text`をコピーせず範囲参照)。固定上限: `kMaxBlocks=128`, `kMdMaxSourceBytes=8192`, `kMdBlockTextBytes=512`(1ブロックの表示テキスト上限。日本語で約170文字), `kLabelPoolSize=16`, `kImagePoolSize=2`, `kMaxListLevels=6`, テーブル最大列`kMdTableMaxCols=4`。`kMdBlockTextBytes`と`kMdMaxSourceBytes`はクラス外定義(クラス外に書くメンバ関数定義の戻り値型はクラススコープより前に解決されるため)。上限に当たった場合は`load()`が警告ログを出す。画像は`onRAM=false`でSDからストリーミング描画する(RAMに載せると占有量が開いた文書次第で青天井になるため)。テーブル/水平線/引用バーは`Label`を介さず`frame`へ直接描画(`renderDecorations()`)。リンクタップ用`on_link_tap`あり。フロントマターは`skipFrontMatter()`で読み飛ばし。**ヘッダー/フッター機能は現状なし。**
+
+**文書内の参照(画像)は`doc_path`基準で解決する**(`resolveRef()`)。`load(path)`が`doc_path`を覚え、`layoutBlocks()`(画像ヘッダを読んで**ブロックの高さ**を決める)と`bindImageSlot()`(**表示用のパス**)の**2箇所**で使う。片方だけ直すと「高さは合うが表示されない」類のずれ方をするので必ず両方を通すこと。キャッシュがサーバのパスをミラーしているため、この1つの規則でローカルもリモートも足りる(View側にネットワークの知識は不要)。
 
 ### 文書キャッシュ (`src/storage/Doc_Cache.hpp`)
 サーバから取った文書をSDへ書き、次回以降はSDから読むための層(`PROTOCOL.md`)。
@@ -365,7 +367,10 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
   **残りは未着手**: discovery(`/.well-known/pico-os`) → 検索、の順。
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
   - `MarkdownScene`の履歴に載るのは**「場所」でSDパスとURLのどちらもあり得る**。見分けは`UrlTools::Parse()`が通るかどうかの**1箇所だけ**で、`"http://"`の判定を各所へ撒いていない。
-  - 既知の穴: **画像のパスは文書基準で解決していない**(`bindImageSlot()`が`doc_text`の値をそのままSDパスとして使う)。サブディレクトリの文書から画像を参照すると開けない。**リモート文書の画像も取得しない**(既にキャッシュにある場合だけ表示される)。まとめて直すのが自然。
+  - **画像は「表示前に」取りに行く**(第5段)。`MarkdownView::layoutBlocks()`が画像ファイルのヘッダを読んでブロックの高さを決めているため、表示してから届けると再レイアウト(全ブロックの整形やり直し)が要る。`MarkdownScene`が文書取得後に`MdScan::ImageRefInLine()`で走査し、キャッシュに無いものを**1フレーム1枚ずつ**取ってから`load()`する。表示は全部揃ってからだが**ループは止まらない**(フッタに「画像を取得中 2/5」が出る)。
+    - **1枚失敗したら残りは諦める**。相手へ届いていないので残りも同じで、諦めないと接続待ち(最大3秒)を枚数ぶん繰り返す。
+    - 1ページ`kMaxPrefetchImages=8`枚まで。既にキャッシュにある画像は取りに行かない(2回目の訪問は取得ゼロ)。ローカル文書は走査ごと飛ばす。
+    - `MdScan::ImageRefInLine()`の判定規則は**`parseBlocks()`の画像ブロックと必ず一致させること**。ずれると「取ってきたのに表示されない」「表示されるのに取ってこない」が起きる。
 - **Markdownブラウザのヘッダー/フッター**: ナビゲーション用(戻る/進む/パス/検索)ならScene側にウィジェットを並べるだけで**View改修は不要**。文書由来(タイトル固定表示等)をやる場合のみ、`l_rect`内での高さ控除が論点になる — その際は「ビューポート=`l_rect`全体」という前提が7〜8箇所に直書きされているので、`viewportRect()`へ集約するのが先。
 - **LuaでのウィジェットID管理**: 32bit整数IDの**発行側は実装済み**(`WidgetID.hpp`/`WidgetRegistry`)。残るのは消費側 — `Resolve()`を叩くバインディング、`WidgetType`→実体のファクトリ、プロパティのget/setをLuaへ通す共通の口。Lua組み込み設計と一緒に決める部分。
 

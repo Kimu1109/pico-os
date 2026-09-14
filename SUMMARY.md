@@ -86,6 +86,9 @@
           古いキャッシュで代用(オフライン表示)。MarkdownSceneの履歴はSDパスとURLの
           どちらも載る。network.cfg の browser-home でホームを指定できる。
           **ここまででサーバ上の文書を読めるようになった**
+    - [x] 画像の解決と先読み … 文書基準でパスを解決(MarkdownView::resolveRef、
+          レイアウトと表示の2箇所)。リモート文書では表示前に1フレーム1枚ずつ取得し、
+          1枚失敗したら残りは諦める。1ページ8枚まで、キャッシュ済みは取りに行かない
     - [ ] discovery(/.well-known/pico-os) + 条件付きGET(ETag) + リロード
     - [ ] 検索(TSV) + ScrollListの結果画面
 - [ ] セカンダリアプリ開発

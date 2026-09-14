@@ -5,8 +5,11 @@
 #include "functions/Log_Functions.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
+#include "storage/Doc_Cache.hpp"
+#include "util/Md_Scan.hpp"
 #include "OS_Data.hpp"
 
+#include <cstdio>
 #include <cstring>
 
 namespace {
@@ -95,7 +98,7 @@ void MarkdownScene::onEnter(){
 void MarkdownScene::onExit(){
     //取得中に抜けると、書きかけの一時ファイルが残ったままになる
     this->fetch.cancel();
-    this->fetching = false;
+    this->phase = Phase::Idle;
 
     this->rememberScroll();
 
@@ -107,13 +110,32 @@ void MarkdownScene::onExit(){
 }
 
 void MarkdownScene::onUpdate(){
-    if(!fetching) return;
+    if(phase == Phase::Idle) return;
 
     fetch.update();
     if(fetch.state() == DocFetch::State::Fetching) return;
 
-    fetching = false;
-    this->onFetchFinished();
+    if(phase == Phase::Document){
+        this->onFetchFinished();
+        return;
+    }
+
+    // ---- 画像を1枚取り終えた ----
+    if(fetch.state() != DocFetch::State::Ready){
+        //1枚落ちたということは相手へ届いていない。残りも同じなので打ち切る。
+        //ここで諦めないと、接続待ち(最大3秒)を画像の枚数ぶん繰り返すことになる
+        LOG_SYS_WARN("Markdown: 画像を取得できないため残りを諦めます (%s)", fetch.message());
+        this->showDocument();
+        return;
+    }
+
+    pending_index++;
+    if(pending_index >= pending_count){
+        this->showDocument();
+        return;
+    }
+
+    if(!this->startNextImage()) this->showDocument();
 }
 
 // ---------- 履歴 ----------
@@ -160,16 +182,20 @@ bool MarkdownScene::openCurrent(){
 
     Url url;
     if(currentAsUrl(url)){
-        //リモート: まず取りに行く。結果はonUpdate()経由でonFetchFinished()へ
+        //リモート: まず文書を取りに行く。結果はonUpdate()経由で処理する
         this->showStatus("読み込み中...", PICO_DARKGREY);
         this->refreshChrome();
 
+        doc_url = url;
+        doc_cache_path.clear();
+        pending_count = 0;
+        pending_index = 0;
+
+        phase = Phase::Document;
         if(!fetch.begin(url)){
-            fetching = false;
             this->onFetchFinished(); //begin()の時点で確定した失敗を表示する
             return false;
         }
-        fetching = true;
         return true;
     }
 
@@ -187,6 +213,8 @@ bool MarkdownScene::openCurrent(){
 }
 
 void MarkdownScene::onFetchFinished(){
+    phase = Phase::Idle;
+
     if(!view || history_pos < 0) return;
 
     if(fetch.state() != DocFetch::State::Ready){
@@ -194,25 +222,109 @@ void MarkdownScene::onFetchFinished(){
         return;
     }
 
-    if(!view->load(fetch.path().c_str())){
+    //本文の置き場所を控える(この後fetchは画像の取得に使い回すため)
+    if(!doc_cache_path.assign(fetch.path())){
+        this->showStatus("パスが長すぎます", PICO_RED);
+        return;
+    }
+
+    //取得できず古いキャッシュで代用した場合は、画像も取りに行かない
+    //(同じ相手へ繋がらないため)
+    if(fetch.source() == DocFetch::Source::CacheAfterError){
+        this->showDocument();
+        this->showStatus("オフライン表示(保存済み)", PICO_OLIVE);
+        return;
+    }
+
+    this->collectMissingImages();
+
+    if(pending_count == 0){
+        this->showDocument();
+        return;
+    }
+
+    phase = Phase::Images;
+    if(!this->startNextImage()) this->showDocument();
+}
+
+// ---------- 画像 ----------
+
+void MarkdownScene::collectMissingImages(){
+    pending_count = 0;
+    pending_index = 0;
+
+    FixedString<PICO_STR_M> host;
+    if(!UrlTools::HostHeader(host, doc_url)) return;
+
+    FsFile f = OSData::SD.open(doc_cache_path.c_str());
+    if(!f) return;
+
+    //画像ブロックの判定は行単位なので、行ごとに読めば足りる。
+    //文書全体をRAMへ載せないで済む(MarkdownViewのdoc_textとは別物なので、
+    // 8KiBのバッファをもう1つ抱えたくない)
+    char line[PICO_STR_512B];
+
+    while(pending_count < kMaxPrefetchImages && f.fgets(line, sizeof(line)) > 0){
+        size_t n = strlen(line);
+        while(n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = '\0';
+
+        const char* ref = nullptr;
+        size_t refLen = 0;
+        if(!MdScan::ImageRefInLine(line, n, ref, refLen)) continue;
+
+        FixedString<PICO_STR_L> value;
+        //収まらない参照は取りに行けない(表示側も同じ理由で開けない)
+        if(!value.assign(ref, refLen)) continue;
+
+        //既にキャッシュにあるものは取りに行かない(2回目の訪問は取得ゼロ)
+        Url image_url;
+        if(!UrlTools::Resolve(image_url, doc_url, value.c_str())) continue;
+        if(PICO_DocCache::Exists(host.c_str(), image_url.path.c_str())) continue;
+
+        //同じ画像が何度も出てくる文書で枠を無駄にしない
+        bool duplicated = false;
+        for(int i = 0; i < pending_count; i++){
+            if(pending_images[i] == value){ duplicated = true; break; }
+        }
+        if(duplicated) continue;
+
+        pending_images[pending_count++] = value;
+    }
+
+    f.close();
+}
+
+bool MarkdownScene::startNextImage(){
+    if(pending_index < 0 || pending_index >= pending_count) return false;
+
+    Url image_url;
+    if(!UrlTools::Resolve(image_url, doc_url, pending_images[pending_index].c_str())) return false;
+
+    char buf[48];
+    snprintf(buf, sizeof(buf), "画像を取得中 %d/%d", pending_index + 1, pending_count);
+    this->showStatus(buf, PICO_DARKGREY);
+
+    return fetch.begin(image_url);
+}
+
+void MarkdownScene::showDocument(){
+    phase = Phase::Idle;
+
+    if(!view || history_pos < 0 || doc_cache_path.empty()) return;
+
+    if(!view->load(doc_cache_path.c_str())){
         this->showStatus("開けませんでした", PICO_RED);
         return;
     }
     view->setScrollY(history[history_pos].scroll_y);
     this->refreshChrome();
-
-    //取得できなかったが古いキャッシュで代用した場合は、そのことを伝える。
-    //黙って古い内容を出すと、更新したのに反映されていないように見える
-    if(fetch.source() == DocFetch::Source::CacheAfterError){
-        this->showStatus("オフライン表示(保存済み)", PICO_OLIVE);
-    }
 }
 
 void MarkdownScene::goBack(){
     if(!canGoBack()) return;
     this->rememberScroll();
     fetch.cancel();
-    fetching = false;
+    phase = Phase::Idle;
     history_pos--;
     this->openCurrent();
 }
@@ -221,7 +333,7 @@ void MarkdownScene::goForward(){
     if(!canGoForward()) return;
     this->rememberScroll();
     fetch.cancel();
-    fetching = false;
+    phase = Phase::Idle;
     history_pos++;
     this->openCurrent();
 }

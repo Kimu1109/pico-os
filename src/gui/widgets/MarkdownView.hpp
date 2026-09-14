@@ -112,6 +112,11 @@ class MarkdownView : public Widget {
         static constexpr int8_t kTableTextColor = PICO_BLACK;      // セル文字色
 
         FixedString<kMdMaxSourceBytes> doc_text;
+
+        // 今開いている文書のパス。画像など文書内の参照を解決する基準になる。
+        // これが無いと "img/x.pimg" をSDのルート基準で探してしまい、
+        // サブディレクトリに置いた文書から画像を開けない
+        FixedString<PICO_PATH_LEN> doc_path;
         std::vector<MdBlock> blocks;
         int32_t total_height = 0;
 
@@ -148,6 +153,11 @@ class MarkdownView : public Widget {
         void hideImageSlot(int slot);
         void hideCheckboxIconSlot(int slot);
         FontFn::FontSize fontSizeForBlock(MdBlockType type) const;
+
+        // 文書内の参照(画像のパス等)を doc_path 基準の絶対パスへ解決する。
+        // layoutBlocks()(高さの算出)と bindImageSlot()(表示)の両方から使う —
+        // 片方だけ直すと「高さは合うが表示されない」類のずれ方をする
+        bool resolveRef(const char* ref, size_t len, FixedString<PICO_PATH_LEN>& out) const;
 
         // ---------- インライン要素（コード/リンク）認識 ----------
         // src中の `code` を Labelの波線(~)装飾へ、[text](url) を下線(_)装飾へ変換した

@@ -9,7 +9,7 @@ pico-osへようこそ。
 
 ### 画像のテスト
 
-![テスト画像](doc/dolphin.pimg)
+![テスト画像](img/sample.pimg)
 
 ### リストのテスト
 

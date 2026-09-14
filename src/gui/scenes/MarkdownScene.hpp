@@ -53,8 +53,38 @@ class MarkdownScene : public Scene {
         int history_pos = -1;
 
         // ---------- 取得 ----------
+        // 文書を取り、続けて**表示前に**画像を取る。
+        //
+        // 画像を先に揃えるのは、MarkdownView::layoutBlocks()が画像ファイルの
+        // ヘッダを読んでブロックの高さを決めているため。表示してから届けると
+        // 再レイアウトが要る(全ブロックの整形をやり直すことになる)。
+        //
+        // ただし「表示前」であって「固まる」ではない。1フレーム1枚ずつ進めるので
+        // ループは回り続け、フッタに進捗を出せる。
+        enum class Phase : uint8_t {
+            Idle,
+            Document,  // 文書そのものを取得中
+            Images,    // 画像を取得中
+        };
+
+        // 1ページで取りに行く画像の上限。病的な文書で延々と待たされないため
+        constexpr static int kMaxPrefetchImages = 8;
+
         DocFetch fetch;
-        bool fetching = false;
+        Phase phase = Phase::Idle;
+
+        Url doc_url;                                  // 画像の解決基準
+        FixedString<PICO_PATH_LEN> doc_cache_path;    // 最後にload()するパス
+        FixedString<PICO_STR_L> pending_images[kMaxPrefetchImages];
+        int pending_count = 0;
+        int pending_index = 0;
+
+        // 文書を走査して、まだキャッシュに無い画像参照を pending_images へ積む
+        void collectMissingImages();
+        // pending_index の画像の取得を始める。始められなければ false
+        bool startNextImage();
+        // 画像をあきらめて(あるいは全部揃って)本文を表示する
+        void showDocument();
 
         constexpr static int MARGIN = 5;
         constexpr static int HEADER_H = 28;

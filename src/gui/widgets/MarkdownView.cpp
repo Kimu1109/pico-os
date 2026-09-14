@@ -1,5 +1,6 @@
 #include "gui/widgets/MarkdownView.hpp"
 #include "OS_Data.hpp"
+#include "storage/SD_IO.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "gui/icons/icon_render.h"
 #include "functions/Log_Functions.hpp"
@@ -57,6 +58,10 @@ bool MarkdownView::load(const char* path) {
     FsFile f = OSData::SD.open(path);
     if (!f) return false;
 
+    //文書内の参照(画像)を解決する基準。パスが長すぎて収まらない場合は
+    //基準を持たない扱いにする(ルート基準へ退避する)
+    if (!doc_path.assign(path)) doc_path.clear();
+
     const size_t file_size = f.fileSize();
     size_t size = file_size;
     if (size > kMdMaxSourceBytes) {
@@ -106,6 +111,29 @@ bool MarkdownView::load(const char* path) {
 
     this->needsRender();
     return true;
+}
+
+// 文書内の参照を doc_path 基準で解決する。
+//
+// キャッシュはサーバ上のパスをそのままミラーしているので、リモート文書でも
+// この1つの規則で足りる:
+//   /cache/host/docs/a.md から "img/x.pimg" -> /cache/host/docs/img/x.pimg
+//   これは http://host/docs/img/x.pimg を取ってきたときの置き場所と一致する
+// そのためMarkdownView側にネットワークの知識は要らない。
+bool MarkdownView::resolveRef(const char* ref, size_t len, FixedString<PICO_PATH_LEN>& out) const {
+    FixedString<PICO_PATH_LEN> raw;
+    if (!raw.assign(ref, len)) {
+        out.clear();
+        return false;
+    }
+
+    //基準が無い(load前/パスが長すぎた)場合は、従来どおりそのまま使う
+    if (doc_path.empty()) return out.assign(raw);
+
+    if (PICO_IO::resolve(out, doc_path.c_str(), raw.c_str())) return true;
+
+    //解決できなければ素のまま試す(絶対パスで書かれている場合など)
+    return out.assign(raw);
 }
 
 // ---------- インライン要素（コード/リンク）認識 ----------
@@ -852,7 +880,7 @@ void MarkdownView::layoutBlocks() {
 
         if (b.type == MdBlockType::Image) {
             FixedString<PICO_PATH_LEN> path;
-            path.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+            resolveRef(doc_text.c_str() + b.srcOffset, b.srcLength, path);
             uint16_t h = kPadding;
             FsFile f = OSData::SD.open(path.c_str());
             if (f) {
@@ -1062,7 +1090,7 @@ void MarkdownView::bindImageSlot(int slot, int blockIdx, bool force) {
     Image* img = imagePool[slot];
 
     FixedString<PICO_PATH_LEN> imgPath;
-    imgPath.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+    resolveRef(doc_text.c_str() + b.srcOffset, b.srcLength, imgPath);
     img->setPath(imgPath);
     img->setX(kPadding);
     img->setY(b.y);

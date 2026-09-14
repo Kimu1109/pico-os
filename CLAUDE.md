@@ -67,7 +67,7 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               Statusbar等システムウィジェット
   ime/                       SKK方式かな漢字変換辞書エンジン
-  net/                        HTTPレスポンスの解釈(ソケットを持たないのでホストテスト可)
+  net/                        HTTPレスポンスの解釈 + 取得〜キャッシュの配線(Doc_Fetch)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte(UTF-8リードバイト判定)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScan / HttpGet タスク
@@ -220,7 +220,16 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - **`HttpResponse`**: **ソケットを持たない**増分パーサ。受信したバイト列を`feed()`へ渡すだけなので、ネットワーク無しに全経路をホストテストできる(`http_test.cpp`は1バイトずつ食わせた場合も同じ結果になることまで見ている)。見るヘッダは`Content-Length`/`ETag`/`Last-Modified`/`Location`/`Transfer-Encoding`だけ。**chunkedは検出したらエラー**にする(黙って本文として書くと壊れたファイルが正常なキャッシュとして残るため)。本文の行き先は`IHttpSink`で差し替える。
 - **`HttpGet`**: `Task`派生。`Connection: close`を送り、`Accept-Encoding`は送らない。リダイレクト最大3回、全体10秒で打ち切り。手元の検証子を渡すと条件付きGETになる(`GMT`を含むかで`If-None-Match`と`If-Modified-Since`を出し分ける — 目録が「どちらのヘッダで来たか」を覚えていないための割り切り)。**3xx/4xxの本文はシンクへ流さない**(`BodyGate`が200を見てから開く)のでキャッシュが汚れない。
 - **接続(`connect`)だけは同期的**。到達しない相手を指すと最大`kConnectTimeoutMs=3000`ぶん画面が止まる。受信は全てポーリングなので、繋がってしまえばフレームは止まらない。非同期接続にはlwIPを直に叩く必要があり、別の段の仕事。
-- PC側の`WiFiClient`は`pc/compat/WiFi.h`にある。**Wi-Fiの「状態」は偽物のままだが、通信そのものは本物のソケット**。母艦で`script/reference_server.py`を立てれば実機へ焼かずにプロトコルごとデバッグできる(`sh script/host_test/run_net.sh`がそれを自動でやる)。
+- PC側の`WiFiClient`は`pc/compat/WiFiClient_PC.h`にある。**Wi-Fiの「状態」(`pc/compat/WiFi.h`)は偽物のままだが、通信そのものは本物のソケット**。SDにもLovyanGFXにも依存しないので、ホストテスト(`script/host_test/stubs/WiFi.h`)からも**同じ実装**を使う(通信経路のテストで別物を使っては意味が無いため)。
+
+### 取得〜表示の配線 (`src/net/Doc_Fetch.hpp`)
+「URLを1本取ってきて、SD上の開けるパスにする」係。`Http_Get`(取得)と`Doc_Cache`(保存)を繋ぐだけの薄い層だが、**ブラウザとして必要な判断はここに集めてある**。
+
+- 手元にキャッシュがあれば検証子を添えて条件付きGETし、**304ならそのまま使う**(`Writer`は`abort()`するので本体に触らない)
+- 200なら一時ファイル経由でキャッシュを差し替えてから使う
+- **取得に失敗しても、古いキャッシュがあればそれを開く**(圏外でも読める)。黙って古い内容を出すと更新が反映されていないように見えるので、`Source::CacheAfterError`で呼び出し側へ伝え、`MarkdownScene`はフッタへ「オフライン表示(保存済み)」と出す
+- キャッシュのキーは**ポートまで含めたホスト**(`host:port`)。ポートが違えば別のサーバとして扱う
+- `MarkdownView`へ渡すのは常にSD上のパスなので、**View側はネットワークの存在を知らない**
 
 ### 文字列の扱い
 **Arduino `String` は現在どこでも使っていない。** 文字列はすべて `src/util/FixedString.hpp` の
@@ -351,10 +360,12 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
   第1段: `MarkdownScene`が履歴を自前で持ち、`MarkdownView::setOnLinkTap()`から`PICO_IO::resolve()`で相対パスを解決して同じシーンのまま開き直す。
   第2段: `storage/Doc_Cache.hpp`(下記)。
   第3段(HTTPクライアント): `util/Url.hpp` / `net/Http_Response` / `task/Http_Get`(下記)。
-  **第2段・第3段ともまだ呼び出し元が無い** — 繋ぐのは次段(取得→キャッシュ→表示の配線)。
-  **残りは未着手**: 取得の配線 → discovery → 検索、の順。
+  第4段(取得→キャッシュ→表示の配線): `net/Doc_Fetch`(下記)。**ここまでで「サーバ上の文書を読む」が成立している。**
+  `network.cfg` の `browser-home` にURLを書くと、Markdownアプリがそこを開く。
+  **残りは未着手**: discovery(`/.well-known/pico-os`) → 検索、の順。
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
-  - 既知の穴: **画像のパスは文書基準で解決していない**(`bindImageSlot()`が`doc_text`の値をそのままSDパスとして使う)。サブディレクトリの文書から画像を参照すると開けない。キャッシュ層を入れるときに一緒に直すのが自然。
+  - `MarkdownScene`の履歴に載るのは**「場所」でSDパスとURLのどちらもあり得る**。見分けは`UrlTools::Parse()`が通るかどうかの**1箇所だけ**で、`"http://"`の判定を各所へ撒いていない。
+  - 既知の穴: **画像のパスは文書基準で解決していない**(`bindImageSlot()`が`doc_text`の値をそのままSDパスとして使う)。サブディレクトリの文書から画像を参照すると開けない。**リモート文書の画像も取得しない**(既にキャッシュにある場合だけ表示される)。まとめて直すのが自然。
 - **Markdownブラウザのヘッダー/フッター**: ナビゲーション用(戻る/進む/パス/検索)ならScene側にウィジェットを並べるだけで**View改修は不要**。文書由来(タイトル固定表示等)をやる場合のみ、`l_rect`内での高さ控除が論点になる — その際は「ビューポート=`l_rect`全体」という前提が7〜8箇所に直書きされているので、`viewportRect()`へ集約するのが先。
 - **LuaでのウィジェットID管理**: 32bit整数IDの**発行側は実装済み**(`WidgetID.hpp`/`WidgetRegistry`)。残るのは消費側 — `Resolve()`を叩くバインディング、`WidgetType`→実体のファクトリ、プロパティのget/setをLuaへ通す共通の口。Lua組み込み設計と一緒に決める部分。
 

@@ -22,7 +22,9 @@ void AppFunctions::Setup(){
     Clear();
 
     // ---- ここへ1行足すとランチャに並ぶ ----
-    Register("Markdown",   IconID::File,     &MakeSceneWithArg<MarkdownScene>, "tmp/doc.md");
+    //引数を渡さないと network.cfg の browser-home を開く(無ければ同梱のサンプル)。
+    //特定の文書を固定で開くタイルにしたい場合は MakeSceneWithArg + パス/URL を渡す
+    Register("Markdown",   IconID::File,     &MakeScene<MarkdownScene>);
     Register("入力テスト", IconID::Keyboard, &MakeScene<InputTestScene>);
 
     LOG_SYS_OK("App Setup has succeeded! (%d apps)", Count());

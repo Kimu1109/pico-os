@@ -153,6 +153,21 @@ namespace UrlTools {
         return out.append(buf);
     }
 
+    // 履歴などへ保存して後で Parse() し直せる完全な形("http://host:port/path?query")
+    template<size_t N>
+    inline bool FormatFull(FixedString<N>& out, const Url& url)
+    {
+        FixedString<PICO_STR_M> hostPart;
+        if (!HostHeader(hostPart, url)) return false;
+
+        if (!out.assign(url.secure ? "https://" : "http://")) return false;
+        if (!out.append(hostPart)) return false;
+        if (!out.append(url.path)) return false;
+        if (url.query.empty()) return true;
+        if (!out.append("?")) return false;
+        return out.append(url.query);
+    }
+
     // 表示・ログ用。キャッシュのキーにも使えるよう scheme は含めない
     // (http時代のキャッシュがhttps移行後も生きるように。PROTOCOL.md参照)
     inline bool Format(FixedString<PICO_PATH_LEN>& out, const Url& url)

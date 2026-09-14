@@ -7,7 +7,11 @@
 //   - リダイレクトを追えること
 //   - 404や、繋がらない相手で正しく失敗すること
 #include "task/Http_Get.hpp"
+#include "net/Doc_Fetch.hpp"
+#include "storage/Doc_Cache.hpp"
+#include "storage/SD_Path.hpp"
 #include "functions/Log_Functions.hpp"
+#include "OS_Data.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -23,6 +27,11 @@ static int failures = 0;
 static void check(bool cond, const char* label){
     printf("%s %s\n", cond ? "[ OK ]" : "[FAIL]", label);
     if(!cond) failures++;
+}
+static void eq_str(const char* a, const char* e, const char* label){
+    const bool ok = (strcmp(a, e) == 0);
+    printf("%s %-46s 実測=%-30s 期待=%s\n", ok ? "[ OK ]" : "[FAIL]", label, a, e);
+    if(!ok) failures++;
 }
 static void eq_int(long a, long e, const char* label){
     const bool ok = (a == e);
@@ -181,6 +190,113 @@ int main(int argc, char** argv){
 
         eq_int(task.getStatus(), TaskTools::FAILED, "httpsは失敗する");
         check(task.failure() == HttpGet::Fail::NotHttp, "未対応として分かる(接続はしない)");
+    }
+
+    // ---- DocFetch: 取得 -> キャッシュ -> 開けるパス ----
+    // ここが繋がって初めて「サーバ上の文書を読む」が成立する
+    {
+        printf("\n---- DocFetch ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/doc.md", base);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        //1回目: サーバから取ってキャッシュへ
+        DocFetch fetch;
+        check(fetch.begin(url), "取得を開始できる");
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Ready, "Readyになる");
+        check(fetch.source() == DocFetch::Source::Network, "サーバから取ってきたと分かる");
+
+        //キャッシュの配置がPROTOCOL.mdどおりか
+        char expected[256];
+        snprintf(expected, sizeof(expected), "/cache/127.0.0.1_%u/doc.md", (unsigned)port);
+        eq_str(fetch.path().c_str(), expected, "サーバ上のパスをミラーした場所になる");
+        check(HostSd::files.count(fetch.path().c_str()) > 0, "本体がSDへ書かれている");
+        check(HostSd::files[fetch.path().c_str()].find("pico-os") != std::string::npos,
+              "内容が正しい");
+
+        //目録に検証子が入っているか
+        char hostKey[64];
+        snprintf(hostKey, sizeof(hostKey), "127.0.0.1:%u", (unsigned)port);
+        PICO_DocCache::Entry entry;
+        check(PICO_DocCache::Lookup(hostKey, "/doc.md", entry), "目録から引ける");
+        check(!entry.validator.empty(), "検証子(ETag)が保存されている");
+
+        const std::string firstBody = HostSd::files[fetch.path().c_str()];
+
+        //2回目: 条件付きGETで304になり、本文を取り直さない
+        DocFetch again;
+        again.begin(url);
+        for(int i = 0; i < 20000 && again.state() == DocFetch::State::Fetching; i++) again.update();
+
+        check(again.state() == DocFetch::State::Ready, "2回目もReadyになる");
+        check(again.source() == DocFetch::Source::NotModified,
+              "304でキャッシュがそのまま使われる");
+        check(HostSd::files[again.path().c_str()] == firstBody, "本体は書き換わらない");
+
+        //一時ファイルが残っていないこと(304のときwriterをabortしている)
+        int leftover = 0;
+        for(const auto& kv : HostSd::files){
+            if(kv.first.size() >= 5 && kv.first.compare(kv.first.size() - 5, 5, ".part") == 0) leftover++;
+        }
+        eq_int(leftover, 0, "一時ファイルが残らない");
+    }
+
+    // ---- DocFetch: 取れないときは古いキャッシュで代用する ----
+    {
+        HostSd::files.clear();
+
+        //閉じているポートのサーバのキャッシュを先に作っておく
+        {
+            PICO_DocCache::Writer w;
+            check(w.begin("127.0.0.1:9", "/offline.md"), "キャッシュを用意する");
+            const char* body = "# 保存済みの内容\n";
+            w.write(body, strlen(body));
+            check(w.commit("etag-old", 1000), "キャッシュを確定する");
+        }
+
+        Url url;
+        UrlTools::Parse(url, "http://127.0.0.1:9/offline.md");
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Ready, "繋がらなくてもReadyになる");
+        check(fetch.source() == DocFetch::Source::CacheAfterError,
+              "古いキャッシュを開いたと分かる(オフライン表示)");
+        check(HostSd::files[fetch.path().c_str()].find("保存済み") != std::string::npos,
+              "保存済みの内容がそのまま残っている");
+        check(fetch.message()[0] != '\0', "理由が伝わる");
+    }
+
+    // ---- DocFetch: キャッシュも無ければ失敗する ----
+    {
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/no-such-file.md", base);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Failed, "404かつキャッシュ無しは失敗する");
+        check(fetch.message()[0] != '\0', "理由が伝わる");
+
+        int leftover = 0;
+        for(const auto& kv : HostSd::files){
+            if(kv.first.size() >= 5 && kv.first.compare(kv.first.size() - 5, 5, ".part") == 0) leftover++;
+        }
+        eq_int(leftover, 0, "失敗しても一時ファイルが残らない");
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

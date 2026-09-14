@@ -15,11 +15,16 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=$(mktemp -d)
 PORT=${PICOOS_TEST_PORT:-8137}
 
-g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
-    -I"$ROOT/pc/compat" -I"$ROOT/src" \
+# SDは stubs/ のメモリ上のもの(何が書かれたかをそのまま検査できる)、
+# TCPクライアントは stubs/WiFi.h 経由で pc/compat の本物のソケット実装を使う
+g++ -std=gnu++17 -g -fsanitize=address,undefined \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
     "$ROOT/script/host_test/net_test.cpp" \
     "$ROOT/src/task/Http_Get.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/net/Doc_Fetch.cpp" \
+    "$ROOT/src/storage/Doc_Cache.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
     -o "$OUT/net_test"
 
 echo "参照実装サーバを起動します (port $PORT)"

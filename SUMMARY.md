@@ -81,7 +81,11 @@
           chunkedは検出してエラー) / task/Http_Get(Task派生、リダイレクト3回・10秒打ち切り・
           条件付きGET・3xx/4xxの本文はシンクへ流さない)。
           run_net.sh が参照実装サーバ相手に実通信で検証する。**まだ呼び出し元は無い**
-    - [ ] 取得→キャッシュ→表示の配線 (Http_Get と Doc_Cache を繋ぎ、MarkdownSceneから使う)
+    - [x] 取得→キャッシュ→表示の配線 (net/Doc_Fetch)
+          … 条件付きGET→304ならキャッシュ据え置き/200なら差し替え、取得失敗時は
+          古いキャッシュで代用(オフライン表示)。MarkdownSceneの履歴はSDパスとURLの
+          どちらも載る。network.cfg の browser-home でホームを指定できる。
+          **ここまででサーバ上の文書を読めるようになった**
     - [ ] discovery(/.well-known/pico-os) + 条件付きGET(ETag) + リロード
     - [ ] 検索(TSV) + ScrollListの結果画面
 - [ ] セカンダリアプリ開発

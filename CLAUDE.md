@@ -75,6 +75,7 @@ script/                       開発補助スクリプト(アイコン生成/SKK
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
   host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/appの5本 / run_mem.sh=確保回数の計測)
+  reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
 pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   sdcard/                     SDカードとして読まれるディレクトリ

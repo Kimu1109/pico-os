@@ -3,6 +3,7 @@
 #include "OS_Data.hpp"
 #include "functions/Log_Functions.hpp"
 
+#include <cstring>
 #include <ctime>
 
 bool DocFetch::begin(const Url& target){
@@ -13,6 +14,14 @@ bool DocFetch::begin(const Url& target){
     //キャッシュのキーはポートまで含めた形。ポートが違えば別のサーバとして扱う
     if(!UrlTools::HostHeader(host, url)){
         finish(State::Failed, Source::None, "URLが長すぎます");
+        return false;
+    }
+    //ディレクトリを指すURL("http://host/" や "http://host/docs/")には開くべき
+    //文書が無い。PROTOCOL.mdは既定の文書名(index.md等)を決めていないので、
+    //こちらで勝手に補わずに断る。PathFor()と同じ理由で弾かれるが、
+    //「パスが長すぎます」と出ると原因が分からなくなるため先に見ている
+    if(strcmp(url.path.c_str(), "/") == 0){
+        finish(State::Failed, Source::None, "文書を指していないURLです");
         return false;
     }
     if(!PICO_DocCache::PathFor(cache_path, host.c_str(), url.path.c_str())){

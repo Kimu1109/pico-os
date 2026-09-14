@@ -304,6 +304,26 @@ int main(int argc, char** argv){
         eq_int(leftover, 0, "失敗しても一時ファイルが残らない");
     }
 
+    // ---- DocFetch: ディレクトリを指すURLは接続前に断る ----
+    // 文書中の "[foo](http://example.org)" のような、ホストだけのリンクがこれ。
+    // パスが "/" になるためキャッシュ上のファイル名が決まらない。
+    // ここで断らずに PathFor() まで流すと「パスが長すぎます」という
+    // 見当違いの理由が出て、原因を追えなくなる
+    {
+        HostSd::files.clear();
+
+        Url url;
+        UrlTools::Parse(url, "http://127.0.0.1:9/");
+
+        DocFetch fetch;
+        const bool started = fetch.begin(url);
+
+        check(!started, "ディレクトリのURLはbegin()の時点で断る");
+        check(fetch.state() == DocFetch::State::Failed, "Failedになる");
+        eq_str(fetch.message(), "文書を指していないURLです", "理由が具体的に伝わる");
+        eq_int((long)HostSd::files.size(), 0, "SDへは何も書かない");
+    }
+
     // ---- 画像: 文書を取る -> 走査 -> 画像も取る ----
     // MarkdownSceneが表示前にやる手順をそのままなぞる。
     // **最後の1件が肝** — 取ってきた画像の置き場所と、MarkdownViewが

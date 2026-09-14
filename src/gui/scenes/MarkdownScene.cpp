@@ -173,7 +173,10 @@ bool MarkdownScene::pushHistory(const char* location){
     if(!stored.assign(location)) return false;
 
     //同じ場所を続けて開いた場合は積み直さない
-    if(history_pos >= 0 && history[history_pos].location == stored) return true;
+    if(history_pos >= 0 && history[history_pos].location == stored){
+        pushed_for_nav = false;
+        return true;
+    }
 
     //前方履歴を捨てる(戻ってから別のリンクを踏んだ場合)
     history_count = history_pos + 1;
@@ -183,13 +186,47 @@ bool MarkdownScene::pushHistory(const char* location){
             history[i] = history[i + 1];
         }
         history_count = kMaxHistory - 1;
+        //最古を押し出したぶん、表示中の位置も1つ手前へずれる
+        //(押し出されたのが表示中の文書なら -1 = 履歴に無い、になる)
+        if(shown_pos >= 0) shown_pos--;
     }
 
     history[history_count].location = stored;
     history[history_count].scroll_y = 0;
     history_count++;
     history_pos = history_count - 1;
+    pushed_for_nav = true;
     return true;
+}
+
+void MarkdownScene::commitNavigation(){
+    shown_pos = history_pos;
+    pushed_for_nav = false;
+}
+
+void MarkdownScene::abortNavigation(){
+    //開けなかった場所を履歴へ残さない(この遷移で積んだぶんだけ捨てる)
+    if(pushed_for_nav && history_count > 0 && history_pos == history_count - 1){
+        history_count--;
+    }
+    pushed_for_nav = false;
+
+    //現在地を「表示中の文書」へ戻す。ここを戻さないと、画面には前の文書が
+    //出ているのに、次に踏んだ相対リンクが開けなかった場所を基準に解決される
+    history_pos = (shown_pos < history_count) ? shown_pos : history_count - 1;
+
+    //サーバ情報も「開けなかった場所」のものになっている。表示中の文書と
+    //ホストが違えば捨てて、次の遷移で引き直させる(ホームボタンの行き先が
+    //別のサーバの申告した home のままになるのを防ぐ)
+    Url restored;
+    FixedString<PICO_STR_M> restored_host;
+    if(!currentAsUrl(restored) || !UrlTools::HostHeader(restored_host, restored)
+        || server_info.host != restored_host){
+        server_info.clear();
+    }
+
+    //フッタには失敗の理由が出ているので、ボタンの色だけ更新する
+    this->refreshNavButtons();
 }
 
 void MarkdownScene::rememberScroll(){
@@ -244,10 +281,12 @@ bool MarkdownScene::openCurrent(){
     if(!view->load(entry.location.c_str())){
         LOG_SYS_WARN("Markdown: 読み込みに失敗しました (%s)", entry.location.c_str());
         this->showStatus("開けませんでした", PICO_RED);
+        this->abortNavigation();
         return false;
     }
 
     view->setScrollY(entry.scroll_y);
+    this->commitNavigation();
     this->refreshChrome();
     return true;
 }
@@ -259,12 +298,14 @@ void MarkdownScene::onFetchFinished(){
 
     if(fetch.state() != DocFetch::State::Ready){
         this->showStatus(fetch.message()[0] ? fetch.message() : "取得できませんでした", PICO_RED);
+        this->abortNavigation();
         return;
     }
 
     //本文の置き場所を控える(この後fetchは画像の取得に使い回すため)
     if(!doc_cache_path.assign(fetch.path())){
         this->showStatus("パスが長すぎます", PICO_RED);
+        this->abortNavigation();
         return;
     }
 
@@ -396,13 +437,15 @@ bool MarkdownScene::startNextImage(){
 void MarkdownScene::showDocument(){
     phase = Phase::Idle;
 
-    if(!view || history_pos < 0 || doc_cache_path.empty()) return;
+    if(!view || history_pos < 0) return;
 
-    if(!view->load(doc_cache_path.c_str())){
+    if(doc_cache_path.empty() || !view->load(doc_cache_path.c_str())){
         this->showStatus("開けませんでした", PICO_RED);
+        this->abortNavigation();
         return;
     }
     view->setScrollY(history[history_pos].scroll_y);
+    this->commitNavigation();
     this->refreshChrome();
 }
 
@@ -411,6 +454,8 @@ void MarkdownScene::goBack(){
     this->rememberScroll();
     fetch.cancel();
     phase = Phase::Idle;
+    //この遷移は履歴を積まない(取得中だった遷移の積み分もここで手放す)
+    pushed_for_nav = false;
     history_pos--;
     this->openCurrent();
 }
@@ -420,6 +465,8 @@ void MarkdownScene::goForward(){
     this->rememberScroll();
     fetch.cancel();
     phase = Phase::Idle;
+    //この遷移は履歴を積まない(取得中だった遷移の積み分もここで手放す)
+    pushed_for_nav = false;
     history_pos++;
     this->openCurrent();
 }
@@ -491,7 +538,7 @@ void MarkdownScene::onLinkTap(const FixedString<PICO_PATH_LEN>& ref){
 
 // ---------- 見た目の更新 ----------
 
-void MarkdownScene::refreshChrome(){
+void MarkdownScene::refreshNavButtons(){
     //辿れない方向のボタンは灰色にする(押しても無視される)
     if(back_button){
         back_button->setTextColor(canGoBack() ? PICO_BLACK : PICO_LIGHTGREY);
@@ -503,6 +550,10 @@ void MarkdownScene::refreshChrome(){
         FixedString<PICO_STR_LL> target;
         home_button->setTextColor(homeTarget(target) ? PICO_BLACK : PICO_LIGHTGREY);
     }
+}
+
+void MarkdownScene::refreshChrome(){
+    this->refreshNavButtons();
 
     if(status_label && history_pos >= 0){
         status_label->setTextColor(PICO_DARKGREY);

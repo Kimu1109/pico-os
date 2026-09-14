@@ -54,6 +54,15 @@ class MarkdownScene : public Scene {
         int history_count = 0;
         int history_pos = -1;
 
+        // 履歴の現在地(history_pos)は**相対リンクを解決する基準**でもあるため、
+        // 「表示中の文書」と食い違わせてはいけない。開けなかった場所を現在地の
+        // まま残すと、画面には前の文書が出ているのに次に踏んだリンクだけが
+        // 開けなかった場所を基準に解決される、という状態になる。
+        //   → 遷移が失敗したら commitNavigation() ではなく abortNavigation() を
+        //      通して、表示中の位置まで巻き戻すこと。
+        int shown_pos = -1;        // 実際に表示できている履歴の位置
+        bool pushed_for_nav = false; // 今の遷移で履歴を1つ積んだか(失敗時に捨てる)
+
         // ---------- 取得 ----------
         // 文書を取り、続けて**表示前に**画像を取る。
         //
@@ -114,7 +123,15 @@ class MarkdownScene : public Scene {
 
         bool pushHistory(const char* location);
         bool openCurrent();
+
+        // 表示できたので、履歴の現在地を「表示中の位置」として確定する
+        void commitNavigation();
+        // 遷移に失敗したので、表示中の文書の位置まで巻き戻す
+        void abortNavigation();
+
         void refreshChrome();
+        // ヘッダのボタンの色だけ更新する(フッタに出した失敗の理由は消さない)
+        void refreshNavButtons();
         void showStatus(const char* message, int8_t color);
         void rememberScroll();
 

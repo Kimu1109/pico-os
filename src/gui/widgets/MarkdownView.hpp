@@ -281,4 +281,10 @@ class MarkdownView : public Widget {
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 
         int getScrollOffsetY() const override { return scroll_y; }
+
+        // ---------- スクロール位置の直接指定 ----------
+        // 履歴を戻ったときに元の位置へ復元するために使う。
+        // 将来の scrollToOffset() (検索結果やアンカーへ飛ぶ) の土台でもある。
+        int getScrollY() const { return scroll_y; }
+        void setScrollY(int y);
 };

@@ -33,9 +33,13 @@ pico-osへようこそ。
 
 ### リンクのテスト
 
-[リンク1](demo-demo-link1)
+[2ページ目へ](page2.md)
 
-[リンク2](demo-demo-link2)
+[サブディレクトリの文書へ](sub/page3.md)
+
+[存在しないリンク](missing.md)
+
+[外部リンク](http://example.com/)
 
 ### コードブロックのテスト
 

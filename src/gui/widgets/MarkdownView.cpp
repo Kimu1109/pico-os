@@ -1282,6 +1282,22 @@ void MarkdownView::causeOnPressMove() {
     for (int i = 0; i < kImagePoolSize; i++) imagePool[i]->needsRender();
     for (int i = 0; i < kCheckboxIconPoolSize; i++) checkboxIconPool[i]->needsRender();
 }
+// スクロール位置を直接指定する。範囲外は端で止める。
+// ドラッグ時(causeOnPressMove)と同じ後始末 — 表示ブロックの貼り直しと、
+// プールのウィジェットへの再描画要求 — をまとめて行う。
+void MarkdownView::setScrollY(int y) {
+    const int clamped = constrain(y, 0, max_scroll_y);
+    if (clamped == scroll_y) return;
+
+    scroll_y = clamped;
+
+    bindVisibleBlocks(false);
+    this->needsRender();
+    for (int i = 0; i < kLabelPoolSize; i++) labelPool[i]->needsRender();
+    for (int i = 0; i < kImagePoolSize; i++) imagePool[i]->needsRender();
+    for (int i = 0; i < kCheckboxIconPoolSize; i++) checkboxIconPool[i]->needsRender();
+}
+
 int MarkdownView::findBlockAtScreenY(int screenY) const {
     int docY = screenY + scroll_y;
     int lo = 0, hi = (int)blocks.size();

@@ -2,6 +2,7 @@
 
 #include "Arduino.h"
 #include "util/FixedString.hpp"
+#include "consts.hpp"
 
 namespace PICO_IO {
     /**
@@ -205,6 +206,101 @@ namespace PICO_IO {
     // 組み立てながら再帰するため、パス階層の深さに実質的な制約はあるが、
     // 通常のSDカード運用では十分な余裕がある。
     bool removeRecursive(const char* path);
+
+    /**
+     * パスを正規化する
+     *
+     * "docs/./a/../b.md" -> "/docs/b.md" のように "." と ".." を畳み、
+     * 連続するスラッシュを1つにまとめる。結果は必ず "/" で始まる。
+     *
+     * ルートを超える ".." は捨てる(ブラウザと同じ安全側の扱い。
+     * "/../../etc" のような参照でSDのルート外へ出させないため)。
+     *
+     * セグメント数が上限を超える場合や、bufferへ収まらない場合はfalseを返す。
+     */
+    inline bool normalize(FixedString<PICO_PATH_LEN>& buffer, const char* path)
+    {
+        if (!path) return false;
+
+        // 畳んだ後に残るセグメントの最大数。パス長の上限(255B)に対して十分な数で、
+        // 1セグメント1文字("/a/b/c...")でも足りる範囲に収めてある
+        constexpr int kMaxSegments = 32;
+
+        const char* segStart[kMaxSegments];
+        int segLen[kMaxSegments];
+        int segCount = 0;
+
+        const char* p = path;
+        while (*p)
+        {
+            // 連続するスラッシュはまとめて読み飛ばす
+            while (*p == '/') p++;
+            if (!*p) break;
+
+            const char* start = p;
+            while (*p && *p != '/') p++;
+            const int len = (int)(p - start);
+
+            // "." は現在位置なので捨てる
+            if (len == 1 && start[0] == '.') continue;
+
+            // ".." は1つ戻る。戻る先が無い(ルート)場合は捨てる
+            if (len == 2 && start[0] == '.' && start[1] == '.')
+            {
+                if (segCount > 0) segCount--;
+                continue;
+            }
+
+            if (segCount >= kMaxSegments) return false;
+
+            segStart[segCount] = start;
+            segLen[segCount] = len;
+            segCount++;
+        }
+
+        buffer.clear();
+
+        // 全部消えた場合はルート
+        if (segCount == 0) return buffer.assign("/");
+
+        for (int i = 0; i < segCount; i++)
+        {
+            if (!buffer.append("/")) return false;
+            if (!buffer.append(segStart[i], (size_t)segLen[i])) return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 文書base_docから見た参照refを絶対パスへ解決する(一般的なブラウザと同じ規則)
+     *
+     *   resolve(out, "/docs/pico/intro.md", "gpio.md")     -> "/docs/pico/gpio.md"
+     *   resolve(out, "/docs/pico/intro.md", "../setup.md") -> "/docs/setup.md"
+     *   resolve(out, "/docs/pico/intro.md", "/index.md")   -> "/index.md"
+     *
+     * refが "/" 始まりならルート基準、それ以外はbase_docのあるディレクトリ基準。
+     * base_docにはディレクトリではなく「文書自身のパス」を渡すこと。
+     */
+    inline bool resolve(FixedString<PICO_PATH_LEN>& buffer, const char* base_doc, const char* ref)
+    {
+        if (!ref || ref[0] == '\0') return false;
+
+        // ルート基準の参照はそのまま畳むだけでよい
+        if (ref[0] == '/') return normalize(buffer, ref);
+
+        // 相対参照は「base_docが置かれているディレクトリ」を基準にする。
+        // base_docは文書自身のパスなので、まず親ディレクトリを取る
+        char dir[PICO_PATH_LEN];
+        if (!parent(dir, (base_doc && base_doc[0] != '\0') ? base_doc : "/")) return false;
+
+        // join()は ".." をそのまま繋ぐだけなので、この時点では "/docs/pico/../a.md" の
+        // ような形になっている。畳むのは下のnormalize()の仕事
+        char joined[PICO_PATH_LEN];
+        if (!join(joined, dir, ref)) return false;
+
+        return normalize(buffer, joined);
+    }
 
     template <size_t N>
     inline bool removeRecursive(const FixedString<N>& path)

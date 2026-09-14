@@ -74,7 +74,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/appの5本 / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/pathの6本 / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
 pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
@@ -171,11 +171,11 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - **ウィジェットの寿命**: シーンがアクティブな間のみ。`Push`でスタックへ退避されたシーンもウィジェットは解放済みで、`Pop`で戻った時に`onEnter()`から作り直される(シーンオブジェクト本体は数十バイト)。スタック上限は`kMaxSceneDepth=4`の固定長配列。
 - **`onExit()`でdeleteしてはいけない**: ウィジェット本体の破棄は`WidgetFunctions::ClearSceneWidgets()`が行う。`onExit()`は自分の生ポインタのnull化と、次回復元したい状態の退避のみ。
 - 遷移時は`isDirtyDeactivates`で破棄/生成中のdirtyを抑止し、最後に全画面1枚だけを`MarkDirty`する。
-- 実装例: `HomeScene`(ランチャ) / `MarkdownScene` / `InputTestScene`。
+- 実装例: `HomeScene`(ランチャ) / `MarkdownScene`(Markdownブラウザ。下記) / `InputTestScene`。
 - ホスト側の検証: `sh script/host_test/run.sh`(実コードをPCのg+++ASanで動かし解放漏れを検出。実機ビルドとは独立)。
 
 ### ダイアログ (`src/gui/widgets/dialogs/`)
-`WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`ベクタで子を保持」「`setOnClose(std::function<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
+`WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`ベクタで子を保持」「`setOnClosed(std::function<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
 
 - `MsgDialog`: メッセージ+アイコン+OK/キャンセル。`RenderMode::TRANSLUCENT`。
 - `InputDialog`: ラベル+テキスト入力+決定/キャンセル(単一行/複数行切替可)。
@@ -223,6 +223,10 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
   `NetworkFunctions::currentSSID`(`FixedString<PICO_STR_M>`)。
 - **まだ生`char[]`のまま残っているのは `IME_Functions::candidates[][IME_MAX_CAND_BYTES]` だけ**
   (2次元配列なので置き換えが機械的でない)。
+- パスの組み立ては `storage/SD_IO.hpp`(全て`inline`、SdFatに依存しないので単体でテストできる):
+  `join()` / `parent()` / `filename()` に加え、**`normalize()`(`.`と`..`を畳む)と
+  `resolve()`(文書基準の相対リンクを絶対パスへ)** がある。`resolve()`はルートを超える`..`を
+  捨てるので、リンク先がSDのルート外を指すことはない。挙動は `script/host_test/path_test.cpp` で固定。
 
 ## コーディング上の慣習
 
@@ -319,7 +323,11 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 ## 未実装の設計アイデア(旧pico-osからの持ち越し議論)
 
 - **ウィジェットのメモリプール化(汎用)**: 実測の結果、現時点では保留と判断した(下記「メモリ計測の結論」)。再開する場合は`Widget::operator new/delete`をアリーナへ差し替えるところから。
-- **Markdownブラウザのブラウザ化**: 仕様は `PROTOCOL.md` に草案がある(HTTP/行指向TSV/SDをキャッシュにする方式)。**実装は未着手**で、`MarkdownView::setOnLinkTap()`は呼び出し元がゼロ=リンクをタップしても何も起きない状態。着手順は「リンク配線+履歴+ナビゲーションヘッダー(ネット不要) → キャッシュ層 → HTTPクライアント → discovery/条件付きGET → 検索」。
+- **Markdownブラウザのブラウザ化**: 仕様は `PROTOCOL.md`(HTTP/行指向TSV/SDをキャッシュにする方式)、サーバの参照実装は `script/reference_server.py`。
+  **第1段(リンク追従・履歴・ナビゲーションヘッダー)は実装済み** — `MarkdownScene`が履歴を自前で持ち、`MarkdownView::setOnLinkTap()`から`PICO_IO::resolve()`で相対パスを解決して同じシーンのまま開き直す。
+  **残りは未着手**: キャッシュ層 → HTTPクライアント → discovery/条件付きGET → 検索、の順。
+  - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
+  - 既知の穴: **画像のパスは文書基準で解決していない**(`bindImageSlot()`が`doc_text`の値をそのままSDパスとして使う)。サブディレクトリの文書から画像を参照すると開けない。キャッシュ層を入れるときに一緒に直すのが自然。
 - **Markdownブラウザのヘッダー/フッター**: ナビゲーション用(戻る/進む/パス/検索)ならScene側にウィジェットを並べるだけで**View改修は不要**。文書由来(タイトル固定表示等)をやる場合のみ、`l_rect`内での高さ控除が論点になる — その際は「ビューポート=`l_rect`全体」という前提が7〜8箇所に直書きされているので、`viewportRect()`へ集約するのが先。
 - **LuaでのウィジェットID管理**: 32bit整数IDの**発行側は実装済み**(`WidgetID.hpp`/`WidgetRegistry`)。残るのは消費側 — `Resolve()`を叩くバインディング、`WidgetType`→実体のファクトリ、プロパティのget/setをLuaへ通す共通の口。Lua組み込み設計と一緒に決める部分。
 
@@ -380,4 +388,4 @@ Lua向けの土台は「発行側だけ入って消費側が空」の状態。�
 - GUIの挙動を確かめたいときは実機ビルドの前にPCビルド(`pc/`)で回すのが速い。`src/`へ実機ライブラリ依存を
   足すときは `pc/compat/` 側にも代替を用意すること(PCビルドが壊れる)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。
-- **テストは全て手動**。`.github/`が無くCIは存在しないので、`sh script/host_test/run.sh`(ASan、5本)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは変更のたびに自分で回すこと。
+- **テストは全て手動**。`.github/`が無くCIは存在しないので、`sh script/host_test/run.sh`(ASan、6本)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは変更のたびに自分で回すこと。

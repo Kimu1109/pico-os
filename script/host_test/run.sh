@@ -11,6 +11,7 @@
 #   markdown_test … MarkdownViewのブロック高さとLabelの実高さの整合(重なり検出)
 #   config_test   … 設定ファイル(key=value)の読み書き
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
+#   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -104,3 +105,12 @@ g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== app_test ====="
 "$OUT/app_test"
+
+# --- パスの正規化と相対解決 ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/path_test.cpp" \
+    -o "$OUT/path_test"
+
+echo ""
+echo "===== path_test ====="
+"$OUT/path_test"

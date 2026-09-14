@@ -68,8 +68,10 @@
   - [ ] 電卓 … 部品: KeyboardNum / NumberInput が既にある(最小コストで1本書ける)
   - [ ] ファイルエクスプローラー … FileExplorerウィジェットは実装済み。アプリ(Scene+App_List登録)が無い
   - [ ] Markdownブラウザ … 「mdのウェブブラウザ」にする方針。通信仕様の草案は PROTOCOL.md
-    - [ ] リンク配線 + 履歴 + ナビゲーションヘッダー … setOnLinkTap()の呼び出し元が無く、
-          今はリンクをタップしても何も起きない。ここはネット不要で進められる
+    - [x] リンク配線 + 履歴 + ナビゲーションヘッダー
+          … MarkdownSceneが履歴(8件、パス+スクロール位置)を自前で持ち、
+          PICO_IO::resolve()で相対リンクを解決して同じシーンのまま開き直す。
+          ヘッダに戻る/進む/終了、フッタに現在のパス(エラー時はメッセージ)
     - [ ] キャッシュ層 … サーバから取ってSDへ書き、SDから読む。一時ファイル→rename で
           半端なファイルを残さない(Config_Functions::SetValueと同じ手順)
     - [ ] HttpGetTask(平文HTTP) + pc/compat の WiFiClient + 参照実装サーバ

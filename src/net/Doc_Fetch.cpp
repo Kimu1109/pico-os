@@ -6,7 +6,7 @@
 #include <cstring>
 #include <ctime>
 
-bool DocFetch::begin(const Url& target){
+bool DocFetch::begin(const Url& target, bool bypass_cache){
     this->cancel();
 
     url = target;
@@ -29,9 +29,11 @@ bool DocFetch::begin(const Url& target){
         return false;
     }
 
-    //手元にあるなら検証子を添えて条件付きGETにする。変更が無ければ304で済む
+    //手元にあるなら検証子を添えて条件付きGETにする。変更が無ければ304で済む。
+    //取り直し(リロード)のときだけは検証子を送らず、必ず本文を貰う
     PICO_DocCache::Entry entry;
-    const bool cached = PICO_DocCache::Lookup(host.c_str(), url.path.c_str(), entry);
+    const bool cached = !bypass_cache
+        && PICO_DocCache::Lookup(host.c_str(), url.path.c_str(), entry);
 
     if(!writer.begin(host.c_str(), url.path.c_str())){
         //書き込み先を用意できない(SDが無い等)。取得しても置き場所が無いので、

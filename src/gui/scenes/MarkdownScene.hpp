@@ -5,7 +5,9 @@
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "net/Doc_Fetch.hpp"
+#include "net/Doc_Search.hpp"
 #include "net/Discovery.hpp"
+#include "gui/widgets/dialogs/SearchDialog.hpp"
 #include "util/Url.hpp"
 #include "util/FixedString.hpp"
 
@@ -25,7 +27,7 @@
 // シーンスタックの上限が kMaxSceneDepth=4 しかなく、リンクを4回たどると詰むため。
 //
 // 画面の構成:
-//   [<] [>]                 [終了]   ← ヘッダ
+//   [<] [>] [ホーム] [更新] [検索]  [終了]   ← ヘッダ
 //   --------------------------------
 //              MarkdownView          ← 本文(ここだけスクロールする)
 //   --------------------------------
@@ -36,6 +38,8 @@ class MarkdownScene : public Scene {
         Button* back_button = nullptr;
         Button* forward_button = nullptr;
         Button* home_button = nullptr;
+        Button* reload_button = nullptr;
+        Button* search_button = nullptr;
         Button* exit_button = nullptr;
         Label<PICO_PATH_LEN>* status_label = nullptr;
 
@@ -93,11 +97,50 @@ class MarkdownScene : public Scene {
         // リモートではサーバが申告したhomeを優先する
         FixedString<PICO_STR_LL> initial_home;
 
+        // 次に開くときキャッシュを無視するか(更新ボタン)。文書だけでなく
+        // 挿絵も引き直す。commit/abortNavigation() で下ろす
+        bool bypass_cache = false;
+
         Url doc_url;                                  // 画像の解決基準
         FixedString<PICO_PATH_LEN> doc_cache_path;    // 最後にload()するパス
         FixedString<PICO_STR_L> pending_images[kMaxPrefetchImages];
         int pending_count = 0;
         int pending_index = 0;
+
+        // ---- 検索 ----
+        // 検索は**キャッシュを通さない**ので、文書の取得(fetch)とは別口で回す。
+        // 理由は Doc_Search.hpp を参照(キャッシュのキーがクエリを見ないため)
+        DocSearch search;
+        SearchDialog* search_dialog = nullptr;
+        FixedString<PICO_STR_L> search_query; // 再検索/次へで使い回す
+        bool searching = false;               // search.update() を回すか
+
+        // ダイアログからダイアログへ移るときは、**1フレーム空けてから**開く。
+        // 同じフレームで開くと、閉じたキーボードや前のダイアログの跡が新しい
+        // ダイアログ(TRANSLUCENT)に覆われたまま残る
+        // (PICO_GFX::FlushDirty()は半透明ウィジェットの下を描き直さないため)。
+        // 1フレーム空ければ、跡は「ダイアログが何も無い状態」で描き直される
+        enum class Pending : uint8_t {
+            None,
+            SearchInput, // 検索語の入力を開く
+            SearchStart, // 入力された語で検索を始める
+        };
+        Pending pending = Pending::None;
+
+        // 検索語を尋ねる(InputDialogを使い回す)
+        void openSearchInput();
+        // offset件目から検索を始める。結果はonUpdate()経由で表示される
+        void startSearch(int offset);
+        // 取得できた結果をダイアログへ流し込む
+        void showSearchResults();
+        // 結果が選ばれた
+        void onSearchSelect(int index);
+        void closeSearchDialog();
+        // 今いるサーバが検索に対応しているか(ローカル文書なら常にfalse)
+        bool currentServerCanSearch() const;
+
+        // キャッシュを無視して今の場所を取り直す
+        void reloadCurrent();
 
         // 文書の取得を始める(discoveryの後、または最初から)
         bool startDocumentFetch();
@@ -116,9 +159,8 @@ class MarkdownScene : public Scene {
         constexpr static int MARGIN = 5;
         constexpr static int HEADER_H = 28;
         constexpr static int FOOTER_H = 18;
-        constexpr static int NAV_BUTTON_W = 24;
-        constexpr static int HOME_BUTTON_W = 48;
-        constexpr static int EXIT_BUTTON_W = 40;
+        constexpr static int NAV_BUTTON_W = 24; // 「<」「>」は字が細いので押しやすさで決める
+        constexpr static int BUTTON_GAP = 4;
         constexpr static int BUTTON_H = 18;
 
         bool pushHistory(const char* location);

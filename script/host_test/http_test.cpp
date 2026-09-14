@@ -118,10 +118,34 @@ int main(){
         check(out.query.empty(), "相対参照すると元のクエリは消える");
     }
 
+    printf("\n---- クエリのパーセントエンコード ----\n");
+    {
+        //検索語はそのままではリクエスト行へ書けない(PROTOCOL.md「3. 検索」)
+        FixedString<PICO_STR_LL> encoded;
+
+        UrlTools::EncodeComponent(encoded, "pico-os_2.0~x");
+        eq_str(encoded.c_str(), "pico-os_2.0~x", "unreservedはそのまま通す");
+
+        UrlTools::EncodeComponent(encoded, "a b&c=d/e?f");
+        eq_str(encoded.c_str(), "a%20b%26c%3Dd%2Fe%3Ff", "区切り文字は全て%XXにする");
+
+        //日本語は1文字3バイト = %XXが3つ。バイト数を手で数えると間違えるので
+        //期待値も見た目で書き下す
+        UrlTools::EncodeComponent(encoded, "画像");
+        eq_str(encoded.c_str(), "%E7%94%BB%E5%83%8F", "UTF-8はバイト単位で%XXにする");
+
+        UrlTools::EncodeComponent(encoded, "");
+        eq_str(encoded.c_str(), "", "空文字は空のまま");
+
+        //収まらない場合は黙って切らずに失敗させる
+        FixedString<PICO_STR_S> small;
+        check(!UrlTools::EncodeComponent(small, "あいうえおかきくけこ"), "収まらなければ失敗する");
+    }
+
     printf("\n---- リクエスト行とHostヘッダ ----\n");
     {
         Url u;
-        FixedString<PICO_STR_L> target;
+        FixedString<PICO_STR_256B> target;
         FixedString<PICO_STR_M> hostHeader;
 
         UrlTools::Parse(u, "http://example.test/a/b.md?q=1");

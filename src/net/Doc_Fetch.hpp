@@ -33,7 +33,11 @@ class DocFetch {
             CacheAfterError,  // 取得に失敗したので古いキャッシュを開いた
         };
 
-        bool begin(const Url& url);
+        // bypass_cache … 手元のキャッシュを無視して取り直す(リロードボタン)。
+        // 検証子を送らないので304ではなく200が返り、キャッシュごと差し替わる。
+        // 取得に失敗したときに古いキャッシュを開く挙動はそのまま残す
+        // (取り直せなかっただけで、読めるものが手元にあるなら読ませたい)
+        bool begin(const Url& url, bool bypass_cache = false);
         void update();
         void cancel();
 

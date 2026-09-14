@@ -67,7 +67,7 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               Statusbar等システムウィジェット
   ime/                       SKK方式かな漢字変換辞書エンジン
-  net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery)
+  net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScan / HttpGet タスク
@@ -82,7 +82,7 @@ pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   sdcard/                     SDカードとして読まれるディレクトリ
 examples/doc.md                MarkdownView動作確認用サンプル文書
-PROTOCOL.md                    ドキュメントサーバとの通信仕様(Markdownブラウザのネットワーク対応用。実装は未着手)
+PROTOCOL.md                    ドキュメントサーバとの通信仕様(マニフェスト以外は実装済み)
 ```
 `include/`, `lib/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
 
@@ -182,9 +182,12 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 
 - `MsgDialog`: メッセージ+アイコン+OK/キャンセル。`RenderMode::TRANSLUCENT`。
 - `InputDialog`: ラベル+テキスト入力+決定/キャンセル(単一行/複数行切替可)。
+  決定/キャンセルの時点で`KeyboardFunctions::HideAll()`を呼ぶ(入力対象がこの後消えるため)。
 - `FileSaveDialog`: `FileExplorer`+ファイル名`Textbox`+OK/キャンセル。**保存専用**。
 - `FileSelectDialog`: `FileExplorer`+OK/キャンセルのみ。**選択専用**(ファイル名欄なし)。
   - ※旧設計では1クラスで兼用予定だったが、実装では保存/選択で別クラスに分離された。
+- `SearchDialog`: Markdownブラウザの検索結果。状態1行 + `ScrollList` + 再検索/次へ/閉じる。
+  **通信はしない**(判断は`MarkdownScene`側)。結果は2回タップで開く。
 - `ColorDialog`: 実装済み(直近コミット)。4×4=16色グリッド(`getIndexToColor(x,y)=x+y*4`)+OK/キャンセル。`selected_color`(未選択-1)、`getSelectedColor()`。
 - `Keyboard` / `KeyboardEng` / `KeyboardNum`: オンスクリーンキーボード3種。いずれも`KeyboardFunctions::Setup()`が`AddOverlay()`でOS常駐させる。
   - `KeyboardNum`は電卓向けの数字専用。「0〜9・カーソル移動・決定・削除」を常時固定で表示し、その上に`Digit`(数値入力の補助記号)/`Arith`(四則演算)/`Math`(√π e ^ % ±)の3タブで切り替わる記号行を載せる。`MODE_DIGIT | MODE_ARITH`のようなビットマスクで**使えるタブを呼び出し側から制限できる**(1つだけ許可ならタブ行自体が消えて1行詰まる)。
@@ -243,6 +246,43 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - **`search`の行が無い = 検索非対応**。`hasSearch()`で判定し、対応していないサーバでは検索UIを無効にする。
 - **404は正常な結果**。「素の静的ファイルサーバと分かった」という確定した答えなので、`checked`を立ててページごとに問い合わせ直さない。
 - `MarkdownScene`は**ホストが変わったときだけ**問い合わせる。`home`が申告されていればヘッダの「ホーム」ボタンの行き先になる(無ければ`network.cfg`の`browser-home`)。
+
+### 検索 (`src/net/Doc_Search.hpp`)
+`GET <discoveryのsearch>?q=...&limit=10&offset=N` の応答(1行1件のTSV)を読む。`PROTOCOL.md`「3. 検索」参照。
+
+- **検索だけは`Doc_Cache`を通さない。** キャッシュ上の置き場所は**URLのパスだけで決まりクエリを見ない**ため、
+  通すと検索語違いの応答が同じファイルへ重なり、条件付きGETで別の検索語の304まで起きる。
+  応答は高々20行なのでRAMへ載せる(`SearchHit`が1件160B × `kMaxHits=10`)。
+- 読むのは**1列目(path)と2列目(title)だけ**。`version`/`snippet`は画面で使わないので読み飛ばす(前方互換)。
+  **pathは`/`始まりのサーバ絶対パスでなければ捨てる**(何を基準に解決するか決まらないため)。
+  pathが収まらない行も捨てる(別の文書を指してしまう)。titleは表示専用なので切り詰まってよい。
+- 検索語は`UrlTools::EncodeComponent()`でパーセントエンコードする。**日本語1文字が9バイトになる**ので、
+  `Url::query`は`PICO_STR_L`ではなく`PICO_STR_LL`にしてある(`RequestTarget()`の受けも`PICO_STR_256B`)。
+- 総件数は返ってこないので、**要求ちょうどの件数が返ったら「続きがあるかもしれない」**と見なす
+  (`mayHaveMore()`)。「次へ」は`offset += kMaxHits`で引き直す。
+- **404は失敗**(discoveryは404が正常な結果だったが、こちらは違う)。
+  `search`の行が無いサーバへは`begin()`が接続すら試さない。
+
+UI側は`gui/widgets/dialogs/SearchDialog`(状態1行 + `ScrollList` + 再検索/次へ/閉じる)。
+**通信は一切せず**、何件目から取るかの判断も含めて`MarkdownScene`が持つ。結果は**2回タップで開く**
+(`ScrollList`の流儀。1回目は選択)。
+
+### ブラウザのヘッダー
+
+`[<][>][ホーム][更新][検索]` … [終了]。左側は**各ボタンの実測幅で左から詰めて並べる**
+(日本語の文字幅はフォント任せなので、`<`/`>`のように字が細いものへ最低幅を与えるだけにしてある)。
+「終了」だけ右端。
+
+- **更新** = キャッシュを無視して取り直す。検証子を送らないので200が返り、キャッシュごと差し替わる。
+  **挿絵も引き直す**(文書だけ新しくて絵が古いままにならないように)。履歴は積まず、スクロール位置も保つ。
+  `bypass_cache`フラグが`DocFetch::begin(url, bypass_cache)`まで届く仕組みで、`commit/abortNavigation()`で下りる。
+- **検索** = 押せるのは「リモートの文書を開いていて、そのサーバがsearchを申告している」ときだけ
+  (`currentServerCanSearch()`)。
+
+**ダイアログからダイアログへ移るときは1フレーム空けること**(`MarkdownScene::Pending`)。
+`PICO_GFX::FlushDirty()`は**TRANSLUCENTなウィジェットの下を描き直さない**(半透明の下は変わらない前提の最適化)
+ため、同じフレームで次のダイアログを開くと、閉じたキーボードや前のダイアログの跡がその下に残ったままになる。
+1フレーム空ければ「ダイアログが何も無い状態」で描き直される。
 
 ### 文字列の扱い
 **Arduino `String` は現在どこでも使っていない。** 文字列はすべて `src/util/FixedString.hpp` の
@@ -390,10 +430,13 @@ python3 script/ppm2png.py md.ppm md.png 2     # PPMは見づらいのでPNGへ(2
   第3段(HTTPクライアント): `util/Url.hpp` / `net/Http_Response` / `task/Http_Get`(下記)。
   第4段(取得→キャッシュ→表示の配線): `net/Doc_Fetch`(下記)。**ここまでで「サーバ上の文書を読む」が成立している。**
   `network.cfg` の `browser-home` にURLを書くと、Markdownアプリがそこを開く。
-  第5段(画像の解決と先読み)・第6段(discovery)も実装済み。
-  **残りは検索のみ。**
+  第7段(検索・リロード): `net/Doc_Search` + `dialogs/SearchDialog`(下記「検索」)。
+  第5段(画像の解決と先読み)・第6段(discovery)・第7段(検索とリロード)も実装済み。
+  **残っているのはマニフェスト(`/v1/manifest`)によるキャッシュの一括再検証だけ。**
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
   - `MarkdownScene`の履歴に載るのは**「場所」でSDパスとURLのどちらもあり得る**。見分けは`UrlTools::Parse()`が通るかどうかの**1箇所だけ**で、`"http://"`の判定を各所へ撒いていない。
+  - **`MarkdownScene`のオブジェクトは数KBある**(`DocFetch`2.4KB + `DocSearch`2.9KB + 履歴1.6KB等)。
+    他のシーンと違い「シーン本体は数十バイト」ではないので、シーンスタックへ積んだままの間も乗り続ける。
   - **履歴の現在地(`history_pos`)は「表示中の文書」と必ず一致させる**。ここは相対リンクを解決する
     基準でもあるため、開けなかった場所を現在地のまま残すと、**画面には前の文書が出ているのに
     次に踏んだリンクだけが開けなかった場所を基準に解決される**(実際に出たバグ)。

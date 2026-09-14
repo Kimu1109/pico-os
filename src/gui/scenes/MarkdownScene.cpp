@@ -3,6 +3,7 @@
 #include "functions/Widget_Functions.hpp"
 #include "functions/Config_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "gui/widgets/dialogs/InputDialog.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
 #include "storage/Doc_Cache.hpp"
@@ -47,37 +48,49 @@ void MarkdownScene::onEnter(){
     const int view_h   = content.h - HEADER_H - FOOTER_H;
 
     // ---- ヘッダ ----
+    //ボタンは左から詰めて並べる。日本語の文字幅はフォント任せなので、幅は
+    //「<」「>」のように字が細いものへ下限を与えるだけにして、あとは実測に従う
+    //(Buttonは生成時に文字列の幅をl_rect.wへ入れている)
+    int button_x = MARGIN;
+    auto placeButton = [&](Button* b, int min_w){
+        b->setFontSize(FontFn::Small);
+        b->setAllowTextSpacing(false);
+        if(b->getLocalRect().w < min_w) b->setW(min_w);
+        b->setH(BUTTON_H);
+        b->setX(button_x);
+        b->setY(header_y);
+        button_x += b->getLocalRect().w + BUTTON_GAP;
+        WidgetFunctions::Add(b);
+    };
+
     //「<」「>」はHomeSceneのページ送りと同じ流儀(Buttonはアイコンを持てないため、
     // フォントに確実に含まれるASCIIで済ませている)
-    this->back_button = new Button(MARGIN, header_y, "<");
-    this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setAllowTextSpacing(false);
-    this->back_button->setW(NAV_BUTTON_W);
-    this->back_button->setH(BUTTON_H);
+    this->back_button = new Button(0, header_y, "<");
     this->back_button->setOnPressEnd([this](){ this->goBack(); });
-    WidgetFunctions::Add(this->back_button);
+    placeButton(this->back_button, NAV_BUTTON_W);
 
-    this->forward_button = new Button(MARGIN + NAV_BUTTON_W + 8, header_y, ">");
-    this->forward_button->setFontSize(FontFn::Small);
-    this->forward_button->setAllowTextSpacing(false);
-    this->forward_button->setW(NAV_BUTTON_W);
-    this->forward_button->setH(BUTTON_H);
+    this->forward_button = new Button(0, header_y, ">");
     this->forward_button->setOnPressEnd([this](){ this->goForward(); });
-    WidgetFunctions::Add(this->forward_button);
+    placeButton(this->forward_button, NAV_BUTTON_W);
 
-    this->home_button = new Button(MARGIN + (NAV_BUTTON_W + 8) * 2, header_y, "ホーム");
-    this->home_button->setFontSize(FontFn::Small);
-    this->home_button->setAllowTextSpacing(false);
-    this->home_button->setW(HOME_BUTTON_W);
-    this->home_button->setH(BUTTON_H);
+    this->home_button = new Button(0, header_y, "ホーム");
     this->home_button->setOnPressEnd([this](){ this->goHome(); });
-    WidgetFunctions::Add(this->home_button);
+    placeButton(this->home_button, 0);
 
-    this->exit_button = new Button(content.w - MARGIN - EXIT_BUTTON_W, header_y, "終了");
+    this->reload_button = new Button(0, header_y, "更新");
+    this->reload_button->setOnPressEnd([this](){ this->reloadCurrent(); });
+    placeButton(this->reload_button, 0);
+
+    this->search_button = new Button(0, header_y, "検索");
+    this->search_button->setOnPressEnd([this](){ this->openSearchInput(); });
+    placeButton(this->search_button, 0);
+
+    //「終了」だけは右端に寄せる(並びの端で、他と用途が違うため)
+    this->exit_button = new Button(0, header_y, "終了");
     this->exit_button->setFontSize(FontFn::Small);
     this->exit_button->setAllowTextSpacing(false);
-    this->exit_button->setW(EXIT_BUTTON_W);
     this->exit_button->setH(BUTTON_H);
+    this->exit_button->setX(content.w - MARGIN - this->exit_button->getLocalRect().w);
     this->exit_button->setOnPressEnd([](){
         //ここでのPopはアプリ終了(ランチャへ戻る)。文書の履歴とは別物
         SceneFunctions::Pop();
@@ -111,15 +124,37 @@ void MarkdownScene::onExit(){
 
     this->rememberScroll();
 
+    //検索もシーンと一緒に終わる(ダイアログはClearSceneWidgetsが破棄する)
+    this->search.cancel();
+    this->searching = false;
+    this->pending = Pending::None;
+
     this->view = nullptr;
     this->back_button = nullptr;
     this->forward_button = nullptr;
     this->home_button = nullptr;
+    this->reload_button = nullptr;
+    this->search_button = nullptr;
     this->exit_button = nullptr;
     this->status_label = nullptr;
+    this->search_dialog = nullptr;
 }
 
 void MarkdownScene::onUpdate(){
+    //前のフレームで閉じたダイアログの跡を描き直させてから次を開く(Pendingの説明を参照)
+    if(pending != Pending::None){
+        const Pending todo = pending;
+        pending = Pending::None;
+        if(todo == Pending::SearchInput) this->openSearchInput();
+        else this->startSearch(0);
+    }
+
+    //検索は文書の取得とは別の口なので、phaseとは独立に進める
+    if(searching){
+        search.update();
+        if(search.state() != DocSearch::State::Fetching) this->showSearchResults();
+    }
+
     if(phase == Phase::Idle) return;
 
     fetch.update();
@@ -202,6 +237,7 @@ bool MarkdownScene::pushHistory(const char* location){
 void MarkdownScene::commitNavigation(){
     shown_pos = history_pos;
     pushed_for_nav = false;
+    bypass_cache = false;
 }
 
 void MarkdownScene::abortNavigation(){
@@ -224,6 +260,8 @@ void MarkdownScene::abortNavigation(){
         || server_info.host != restored_host){
         server_info.clear();
     }
+
+    bypass_cache = false;
 
     //フッタには失敗の理由が出ているので、ボタンの色だけ更新する
     this->refreshNavButtons();
@@ -330,7 +368,7 @@ void MarkdownScene::onFetchFinished(){
 
 bool MarkdownScene::startDocumentFetch(){
     phase = Phase::Document;
-    if(!fetch.begin(doc_url)){
+    if(!fetch.begin(doc_url, bypass_cache)){
         this->onFetchFinished(); //begin()の時点で確定した失敗を表示する
         return false;
     }
@@ -403,10 +441,12 @@ void MarkdownScene::collectMissingImages(){
         //収まらない参照は取りに行けない(表示側も同じ理由で開けない)
         if(!value.assign(ref, refLen)) continue;
 
-        //既にキャッシュにあるものは取りに行かない(2回目の訪問は取得ゼロ)
+        //既にキャッシュにあるものは取りに行かない(2回目の訪問は取得ゼロ)。
+        //取り直し(更新ボタン)のときだけは、文書だけ新しくて挿絵が古いまま
+        //にならないよう挿絵も引き直す
         Url image_url;
         if(!UrlTools::Resolve(image_url, doc_url, value.c_str())) continue;
-        if(PICO_DocCache::Exists(host.c_str(), image_url.path.c_str())) continue;
+        if(!bypass_cache && PICO_DocCache::Exists(host.c_str(), image_url.path.c_str())) continue;
 
         //同じ画像が何度も出てくる文書で枠を無駄にしない
         bool duplicated = false;
@@ -431,7 +471,7 @@ bool MarkdownScene::startNextImage(){
     snprintf(buf, sizeof(buf), "画像を取得中 %d/%d", pending_index + 1, pending_count);
     this->showStatus(buf, PICO_DARKGREY);
 
-    return fetch.begin(image_url);
+    return fetch.begin(image_url, bypass_cache);
 }
 
 void MarkdownScene::showDocument(){
@@ -469,6 +509,163 @@ void MarkdownScene::goForward(){
     pushed_for_nav = false;
     history_pos++;
     this->openCurrent();
+}
+
+// ---------- 取り直し ----------
+
+void MarkdownScene::reloadCurrent(){
+    if(history_pos < 0) return;
+
+    //スクロール位置は保ったまま取り直す(ブラウザのリロードと同じ)
+    this->rememberScroll();
+
+    fetch.cancel();
+    phase = Phase::Idle;
+    //取り直しは同じ場所を開くだけなので履歴を積まない
+    pushed_for_nav = false;
+
+    bypass_cache = true;
+    this->openCurrent();
+}
+
+// ---------- 検索 ----------
+
+bool MarkdownScene::currentServerCanSearch() const {
+    Url url;
+    //ローカル文書には検索してくれる相手がいない
+    if(!currentAsUrl(url)) return false;
+
+    FixedString<PICO_STR_M> host;
+    if(!UrlTools::HostHeader(host, url)) return false;
+
+    //server_infoが今いるサーバのものだと確かめてから見る
+    return server_info.checked && server_info.host == host && server_info.hasSearch();
+}
+
+void MarkdownScene::openSearchInput(){
+    if(!this->currentServerCanSearch()){
+        this->showStatus("このサーバは検索に対応していません", PICO_RED);
+        return;
+    }
+    if(phase != Phase::Idle){
+        //文書の取得と同時には走らせない(同じ相手へ2本繋ぎに行かないため)
+        this->showStatus("読み込み中です", PICO_OLIVE);
+        return;
+    }
+
+    auto* input = new InputDialog("検索語:", true);
+    WidgetFunctions::AddDialog(input);
+    input->setInput(this->search_query.c_str()); //前回の語から直せるようにしておく
+    input->setVisible(true);
+    input->setOnClosed([this, input](bool is_submit){
+        if(is_submit){
+            //ダイアログはこの後破棄されるので、語だけ控えて次のフレームで始める
+            this->search_query.assign(input->getInput().c_str());
+            this->pending = Pending::SearchStart;
+        }
+        WidgetFunctions::DestroyLater(input);
+    });
+}
+
+void MarkdownScene::startSearch(int offset){
+    if(search_query.empty()) return;
+
+    Url url;
+    if(!currentAsUrl(url)) return;
+
+    if(!search_dialog){
+        search_dialog = new SearchDialog();
+        WidgetFunctions::AddDialog(search_dialog);
+
+        search_dialog->setOnSelect([this](int index){ this->onSearchSelect(index); });
+        search_dialog->setOnNext([this](){
+            this->startSearch(this->search.offset() + DocSearch::kMaxHits);
+        });
+        search_dialog->setOnResearch([this](){
+            this->closeSearchDialog();
+            this->pending = Pending::SearchInput;
+        });
+        search_dialog->setOnClosed([this](bool){ this->closeSearchDialog(); });
+
+        search_dialog->setVisible(true);
+    }
+
+    search_dialog->clearResults();
+    search_dialog->setHasNext(false);
+    search_dialog->setMessage("検索中...");
+
+    if(!search.begin(url, server_info.search.c_str(), search_query.c_str(), offset)){
+        //begin()の時点で確定した失敗をそのまま出す
+        this->showSearchResults();
+        return;
+    }
+    searching = true;
+}
+
+void MarkdownScene::showSearchResults(){
+    searching = false;
+    if(!search_dialog) return;
+
+    search_dialog->clearResults();
+    search_dialog->setHasNext(false);
+
+    if(search.state() != DocSearch::State::Ready){
+        search_dialog->setMessage(search.message()[0] ? search.message() : "検索できませんでした");
+        return;
+    }
+
+    for(int i = 0; i < search.count(); i++){
+        search_dialog->addResult(search.hit(i).title.c_str());
+    }
+
+    if(search.count() == 0){
+        search_dialog->setMessage("見つかりませんでした");
+        return;
+    }
+
+    //総件数は返ってこないので「何件目から何件」としか言えない(PROTOCOL.md)
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%d件目から%d件", search.offset() + 1, search.count());
+    search_dialog->setMessage(buf);
+    search_dialog->setHasNext(search.mayHaveMore());
+}
+
+void MarkdownScene::onSearchSelect(int index){
+    if(index < 0 || index >= search.count()) return;
+
+    Url base;
+    if(!currentAsUrl(base)) return;
+
+    //結果のパスはサーバ絶対パス(PROTOCOL.md)。今のサーバ基準で絶対URLへ直す。
+    //閉じるとsearchの中身が消えるので、先に行き先を作っておく
+    Url target;
+    FixedString<PICO_STR_LL> location;
+    const bool ok = UrlTools::Resolve(target, base, search.hit(index).path.c_str())
+        && UrlTools::FormatFull(location, target);
+
+    this->closeSearchDialog();
+
+    if(!ok){
+        this->showStatus("結果を開けません", PICO_RED);
+        return;
+    }
+
+    this->rememberScroll();
+    if(!this->pushHistory(location.c_str())){
+        this->showStatus("場所が長すぎます", PICO_RED);
+        return;
+    }
+    this->openCurrent();
+}
+
+void MarkdownScene::closeSearchDialog(){
+    searching = false;
+    search.cancel();
+
+    if(!search_dialog) return;
+    search_dialog->setVisible(false);
+    WidgetFunctions::DestroyLater(search_dialog);
+    search_dialog = nullptr;
 }
 
 // ---------- リンク ----------
@@ -549,6 +746,13 @@ void MarkdownScene::refreshNavButtons(){
     if(home_button){
         FixedString<PICO_STR_LL> target;
         home_button->setTextColor(homeTarget(target) ? PICO_BLACK : PICO_LIGHTGREY);
+    }
+    if(reload_button){
+        reload_button->setTextColor(history_pos >= 0 ? PICO_BLACK : PICO_LIGHTGREY);
+    }
+    if(search_button){
+        //検索に対応しているサーバの文書を開いているときだけ押せる
+        search_button->setTextColor(currentServerCanSearch() ? PICO_BLACK : PICO_LIGHTGREY);
     }
 }
 

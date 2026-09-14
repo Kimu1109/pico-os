@@ -13,6 +13,7 @@
 #include "storage/SD_IO.hpp"
 #include "util/Md_Scan.hpp"
 #include "net/Discovery.hpp"
+#include "net/Doc_Search.hpp"
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
@@ -426,6 +427,48 @@ int main(int argc, char** argv){
         for(int i = 0; i < 20000 && again.state() == DocFetch::State::Fetching; i++) again.update();
         check(again.source() == DocFetch::Source::NotModified,
               "2回目は304でキャッシュが使われる");
+    }
+
+    // ---- 検索 ----
+    // 検索は Doc_Fetch ではなく Doc_Search を通る(キャッシュのキーがクエリを
+    // 見ないため、通すと検索語違いの応答が同じファイルへ重なる)。
+    // ここで見たいのは、検索語のパーセントエンコードと応答のTSV解釈
+    {
+        printf("\n---- 検索 ----\n");
+        HostSd::files.clear();
+
+        Url server;
+        UrlTools::Parse(server, base);
+
+        //日本語の検索語。エンコードを間違えるとリクエスト行が壊れて応答が返らない
+        DocSearch search;
+        check(search.begin(server, "/v1/search", "画像"), "検索を始められる");
+        for(int i = 0; i < 20000 && search.state() == DocSearch::State::Fetching; i++) search.update();
+
+        check(search.state() == DocSearch::State::Ready, "結果を受け取れる");
+        eq_int(search.count(), 1, "1件見つかる");
+        if(search.count() > 0){
+            eq_str(search.hit(0).path.c_str(), "/doc.md", "1列目のパスを読める");
+            eq_str(search.hit(0).title.c_str(), "pico-os", "2列目のタイトルを読める");
+        }
+        check(!search.mayHaveMore(), "要求より少なければ続きは無いと判断する");
+
+        //検索はキャッシュを通らない = SDへ何も書かない。
+        //ここが破れると検索語違いの結果が同じファイルへ重なる
+        eq_int((long)HostSd::files.size(), 0, "検索の応答はSDへ書かない");
+
+        //一致が無くても200 + 空の本文で返る(404にしない。PROTOCOL.md)
+        DocSearch empty;
+        empty.begin(server, "/v1/search", "みつからないはずのことば");
+        for(int i = 0; i < 20000 && empty.state() == DocSearch::State::Fetching; i++) empty.update();
+
+        check(empty.state() == DocSearch::State::Ready, "一致が無くても失敗扱いにしない");
+        eq_int(empty.count(), 0, "0件として扱う");
+
+        //search行が無いサーバへは問い合わせに行かない(接続すら試さない)
+        DocSearch unsupported;
+        check(!unsupported.begin(server, "", "画像"), "検索非対応なら始めない");
+        check(unsupported.state() == DocSearch::State::Failed, "失敗として伝わる");
     }
 
     // ---- discoveryを持たないサーバ(素の静的ファイルサーバ) ----

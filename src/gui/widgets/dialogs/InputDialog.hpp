@@ -4,6 +4,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Textbox.hpp"
+#include "functions/Keyboard_Functions.hpp"
 
 class InputDialog : public Widget {
 
@@ -75,6 +76,8 @@ class InputDialog : public Widget {
 
             this->submit_button = new Button("決定");
             this->submit_button->setOnPressStart([this](){
+                //入力対象がこの後消えるので、出しっぱなしのキーボードを閉じる
+                KeyboardFunctions::HideAll();
                 this->causeOnClosed(true);
                 this->setVisible(false);
             });
@@ -82,6 +85,7 @@ class InputDialog : public Widget {
 
             this->cancel_button = new Button("キャンセル");
             this->cancel_button->setOnPressStart([this](){
+                KeyboardFunctions::HideAll();
                 this->causeOnClosed(false);
                 this->setVisible(false);
             });

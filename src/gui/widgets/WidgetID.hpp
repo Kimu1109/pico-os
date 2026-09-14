@@ -30,6 +30,7 @@ enum class WidgetType : uint8_t {
     NumberSlider,
     ScrollContainer,
     ScrollList,
+    SearchDialog,
     Statusbar,
     Textbox,
     Count // 番兵。実際の種類としては使わない

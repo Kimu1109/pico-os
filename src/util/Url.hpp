@@ -21,7 +21,9 @@ struct Url {
     bool secure = false;           // https かどうか。現状 Http_Get は false のみ受け付ける
 
     FixedString<PICO_STR_L> path;  // "/" 始まり
-    FixedString<PICO_STR_L> query; // "?" を含まない。空なら無し
+    //"?" を含まない。空なら無し。パスより長いのは、検索語を
+    //パーセントエンコードすると日本語1文字が9バイトになるため
+    FixedString<PICO_STR_LL> query;
 
     bool empty() const { return host.empty(); }
 };
@@ -108,7 +110,7 @@ namespace UrlTools {
 
         // クエリは相対解決の対象外なので、先に切り離す
         FixedString<PICO_STR_L> refPath;
-        FixedString<PICO_STR_L> refQuery;
+        FixedString<PICO_STR_LL> refQuery;
         const char* q = strchr(ref, '?');
         if (q) {
             if (!refPath.assign(ref, (size_t)(q - ref))) return false;
@@ -132,7 +134,7 @@ namespace UrlTools {
     }
 
     // リクエストラインへ書く形("/path" または "/path?query")
-    inline bool RequestTarget(FixedString<PICO_STR_L>& out, const Url& url)
+    inline bool RequestTarget(FixedString<PICO_STR_256B>& out, const Url& url)
     {
         if (!out.assign(url.path)) return false;
         if (url.query.empty()) return true;
@@ -166,6 +168,34 @@ namespace UrlTools {
         if (url.query.empty()) return true;
         if (!out.append("?")) return false;
         return out.append(url.query);
+    }
+
+    // クエリの値をパーセントエンコードする。
+    // 検索語は日本語なので、そのままではリクエストラインへ書けない
+    // (PROTOCOL.md「3. 検索」の `q` はURLエンコードされたUTF-8)。
+    // 無変換で通すのは RFC3986 の unreserved(A-Za-z0-9 と - . _ ~)だけにしてある。
+    template<size_t N>
+    inline bool EncodeComponent(FixedString<N>& out, const char* text)
+    {
+        out.clear();
+        if (!text) return true;
+
+        for (const unsigned char* p = (const unsigned char*)text; *p; p++) {
+            const unsigned char c = *p;
+            const bool unreserved =
+                (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9') ||
+                c == '-' || c == '.' || c == '_' || c == '~';
+
+            if (unreserved) {
+                if (!out.append((char)c)) return false;
+            } else {
+                char escaped[4];
+                snprintf(escaped, sizeof(escaped), "%%%02X", (unsigned)c);
+                if (!out.append(escaped)) return false;
+            }
+        }
+        return true;
     }
 
     // 表示・ログ用。キャッシュのキーにも使えるよう scheme は含めない

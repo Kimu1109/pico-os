@@ -59,7 +59,7 @@ bool HttpGet::startRequest(){
 }
 
 bool HttpGet::sendRequestLine(){
-    FixedString<PICO_STR_L> target;
+    FixedString<PICO_STR_256B> target;
     FixedString<PICO_STR_M> hostHeader;
     if(!UrlTools::RequestTarget(target, url)) return false;
     if(!UrlTools::HostHeader(hostHeader, url)) return false;

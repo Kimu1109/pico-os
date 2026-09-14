@@ -1,17 +1,29 @@
-// PCビルドのエントリポイント。
+// PC / Web(WebAssembly)ビルドのエントリポイント。
 //
-// 実機ではArduinoフレームワークが setup()/loop() を回すが、PCでは
-// LovyanGFXのSDLパネルがその役を担う。Panel_sdl::main() がSDLのイベントループを
-// 持ち、渡した関数を別スレッドで回してくれるので、そこから src/main.cpp の
-// setup()/loop() をそのまま呼ぶ(src/main.cpp には手を入れない)。
+// 実機ではArduinoフレームワークが setup()/loop() を回すが、ここではSDLパネルが
+// その役を担う。src/main.cpp の setup()/loop() をそのまま呼ぶ(src/には手を入れない)。
 //
-// 使い方:
+// **ネイティブとWebでループの回し方だけが違う。**
+//
+//   ネイティブ … Panel_sdl::main() がSDLのイベントループを持ち、渡した関数を
+//                別スレッドで回してくれる。そこで setup()→loop() を回す。
+//   Web        … ブラウザのメインスレッドは止められない(止めた分だけ描画も入力も
+//                丸ごと止まる)ので、スレッドを使わず emscripten_set_main_loop() に
+//                「1フレーム分」を渡して requestAnimationFrame で刻んでもらう。
+//                Panel_sdl は setup()/loop()/close() が公開されているので、
+//                Panel_sdl::main() を使わずに自前で回せる。
+//
+// 使い方(ネイティブ):
 //   picoos_pc                       通常起動(ウィンドウが開く)
 //   picoos_pc --shot out.ppm [N]    Nフレーム回してから画面をPPMへ書き出して終了
 //                                   (既定60フレーム。CIやヘッドレスでの確認用)
+//
+// 使い方(Web): index.html を開くだけ。環境変数の代わりにURLのクエリで状態を指定する
+//   index.html?wifi=disconnected&rssi=-85
 #include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
 #include <SDL2/SDL.h>
 
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -19,12 +31,19 @@
 #include <thread>
 #include <vector>
 
+#if defined(__EMSCRIPTEN__)
+    #include <emscripten.h>
+#endif
+
 #include "consts.hpp"
 #include "OS_Data.hpp"
 
 // src/main.cpp が提供する
 void setup(void);
 void loop(void);
+
+//---- ここからネイティブ専用(--shot とユーザコード用スレッド) ----
+#if !defined(__EMSCRIPTEN__)
 
 namespace {
     const char* g_shot_path = nullptr;
@@ -93,6 +112,117 @@ namespace {
     }
 }
 
+#endif  // !__EMSCRIPTEN__
+
+#if defined(__EMSCRIPTEN__)
+
+namespace {
+    // ブラウザに環境変数は無いので、URLのクエリを環境変数として置き直す。
+    // こうしておけば pc/compat/ 側(WiFi.h / SdFat.h)の getenv をそのまま使える。
+    //
+    //   index.html?wifi=disconnected&rssi=-85&ssid=cafe-wifi
+    //
+    // PICOOS_ で始まるキーはそのまま環境変数名として扱う(将来増えた分も拾える)。
+    struct QueryAlias { const char* key; const char* env; };
+    const QueryAlias kQueryAliases[] = {
+        { "wifi", "PICOOS_WIFI_STATE" },
+        { "rssi", "PICOOS_WIFI_RSSI"  },
+        { "ssid", "PICOOS_WIFI_SSID"  },
+        { "scan", "PICOOS_WIFI_SCAN"  },
+        { "sd",   "PICOOS_SD_ROOT"    },
+    };
+
+    // application/x-www-form-urlencoded をほどく(%XX と '+' だけ)
+    void urlDecode(const char* src, char* dst, size_t dst_size)
+    {
+        size_t o = 0;
+        for (size_t i = 0; src[i] && o + 1 < dst_size; i++) {
+            if (src[i] == '+') {
+                dst[o++] = ' ';
+            } else if (src[i] == '%' && isxdigit((unsigned char)src[i + 1])
+                                     && isxdigit((unsigned char)src[i + 2])) {
+                char hex[3] = { src[i + 1], src[i + 2], '\0' };
+                dst[o++] = (char)strtol(hex, nullptr, 16);
+                i += 2;
+            } else {
+                dst[o++] = src[i];
+            }
+        }
+        dst[o] = '\0';
+    }
+
+    void applyQueryParams()
+    {
+        char query[512];
+        query[0] = '\0';
+        EM_ASM({ stringToUTF8(location.search || "", $0, $1); }, query, (int)sizeof(query));
+
+        char* p = query;
+        if (*p == '?') p++;
+
+        while (*p) {
+            char* amp = strchr(p, '&');
+            if (amp) *amp = '\0';
+
+            char* eq = strchr(p, '=');
+            if (eq) {
+                *eq = '\0';
+                char key[64], value[256];
+                urlDecode(p, key, sizeof(key));
+                urlDecode(eq + 1, value, sizeof(value));
+
+                const char* env = nullptr;
+                if (strncmp(key, "PICOOS_", 7) == 0) {
+                    env = key;
+                } else {
+                    for (const auto& a : kQueryAliases) {
+                        if (strcmp(key, a.key) == 0) { env = a.env; break; }
+                    }
+                }
+
+                if (env) {
+                    setenv(env, value, 1);
+                    printf("[WEB] %s=%s (URLのクエリ %s より)\n", env, value, key);
+                } else {
+                    printf("[WEB] 知らないクエリなので無視します: %s\n", key);
+                }
+            }
+
+            if (!amp) break;
+            p = amp + 1;
+        }
+    }
+
+    // 1フレーム分。requestAnimationFrame から呼ばれるので、
+    // ここで待ったり回し続けたりしてはいけない(タブが固まる)
+    void webFrame()
+    {
+        loop();
+
+        //SDLのイベント取り込みとウィンドウへの反映(ネイティブではSDL側スレッドの仕事)
+        if (0 != lgfx::Panel_sdl::loop()) {
+            //ウィンドウが閉じられた
+            emscripten_cancel_main_loop();
+            lgfx::Panel_sdl::close();
+        }
+    }
+}
+
+int main(int, char**)
+{
+    applyQueryParams();
+
+    if (0 != lgfx::Panel_sdl::setup()) return 1;
+
+    setup();
+
+    //第2引数0 = requestAnimationFrame任せ、第3引数1 = ここで抜けずにループへ入る
+    emscripten_set_main_loop(webFrame, 0, 1);
+    return 0;
+}
+
+#else
+
 int main(int argc, char** argv)
 {
     for (int i = 1; i < argc; i++) {
@@ -107,3 +237,5 @@ int main(int argc, char** argv)
 
     return lgfx::Panel_sdl::main(picoosMain);
 }
+
+#endif

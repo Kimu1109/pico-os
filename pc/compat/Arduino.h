@@ -25,8 +25,16 @@ inline unsigned long micros() {
     static const auto start = steady_clock::now();
     return (unsigned long)duration_cast<microseconds>(steady_clock::now() - start).count();
 }
+// Webビルドではメインスレッドを止められない(止めた分だけタブが固まり、
+// 描画もイベントも進まない)ので、待たずに戻る。
+// src/ は delay() を使っていないので実害は無いが、使うときは
+// 「ブラウザでは効かない」と思って組むこと
 inline void delay(unsigned long ms) {
+#if defined(__EMSCRIPTEN__)
+    (void)ms;
+#else
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+#endif
 }
 
 // ---- GPIO(PCでは意味を持たないので受け流す) ----

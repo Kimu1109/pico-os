@@ -26,6 +26,10 @@
 // 環境変数が設定ファイルより優先される(一時的に切り替えたいとき用):
 //
 //   PICOOS_WIFI_STATE=disconnected ./pc/build/picoos_pc
+//
+// Webビルドでは環境変数の代わりにURLのクエリで指定する(main_pc.cpp が setenv する):
+//
+//   index.html?wifi=disconnected&rssi=-85
 #pragma once
 
 #include <cstdint>
@@ -35,10 +39,15 @@
 #include <string>
 #include <vector>
 
-#include <errno.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#if defined(__EMSCRIPTEN__)
+    //ブラウザには生ソケットが無いので疎通判定はJS側(navigator.onLine)に任せる
+    #include <emscripten.h>
+#else
+    #include <errno.h>
+    #include <netinet/in.h>
+    #include <sys/socket.h>
+    #include <unistd.h>
+#endif
 
 #include "Arduino.h"  // millis()
 #include "SdFat.h"    // PicoOsSdHost::root (SDのルートから network.cfg を読むため)
@@ -167,7 +176,14 @@ namespace PicoOsWifiHost {
     // 母艦にインターネットへの経路があるか。
     // UDPソケットをconnect()すると経路表が引かれるだけで、パケットは飛ばない。
     // 経路が無ければ ENETUNREACH / EHOSTUNREACH で即座に失敗する。
+    //
+    // Webビルドではソケットが使えないので、ブラウザの navigator.onLine を見る。
+    // 「LANに繋がっているか」しか分からない大雑把な値だが、UIの接続/切断表示を
+    // 確かめるには十分(厳密に試したいなら ?wifi=disconnected で固定する)。
     inline bool HasRouteToInternet(){
+#if defined(__EMSCRIPTEN__)
+        return EM_ASM_INT({ return (navigator.onLine === false) ? 0 : 1; }) != 0;
+#else
         int fd = socket(AF_INET, SOCK_DGRAM, 0);
         if(fd < 0) return false;
 
@@ -179,6 +195,7 @@ namespace PicoOsWifiHost {
         const bool ok = (::connect(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
         ::close(fd);
         return ok;
+#endif
     }
 
     // 疎通判定は毎フレームやるほどのものではないので間隔を空ける

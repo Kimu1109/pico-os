@@ -71,8 +71,9 @@ script/                       開発補助スクリプト(アイコン生成/SKK
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
   host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出 / run_mem.sh=確保回数の計測)
-pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
+pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripten)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
+  web/shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
   sdcard/                     SDカードとして読まれるディレクトリ
 examples/doc.md                MarkdownView動作確認用サンプル文書
 ```
@@ -214,15 +215,21 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
   そのため`GetWifiStateIconID()`は**圏外でも最弱の棒を返す**(判定は`NetworkFunctions::IsConnected()`)。
 - 日本語IMEはSKK辞書方式、`script/convert_skk_dict.py`で辞書データ(`skk_body.tsv`/`skk_index.tsv`)をSD収録用に変換。
 
-## PC実行環境 (`pc/`)
+## PC / Web実行環境 (`pc/`)
 
-実機に書き込まずにPC上のウィンドウでpico-osを動かせる。詳細は `pc/README.md`。
+実機に書き込まずに、PC上のウィンドウでもブラウザでもpico-osを動かせる。詳細は `pc/README.md`。
 
 ```sh
+# ネイティブ(SDL2のウィンドウ)
 sudo apt-get install libsdl2-dev      # 前提: SDL2開発パッケージ
 cmake -S pc -B pc/build && cmake --build pc/build -j
 ./pc/build/picoos_pc                  # マウス左ドラッグ = タッチ
 SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレス確認
+
+# Web(WebAssembly)。前提: emsdk(SDL2はemscriptenのportsが持つので不要)
+emcmake cmake -S pc -B pc/build-web -DCMAKE_BUILD_TYPE=Release
+cmake --build pc/build-web -j
+emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index.html
 ```
 
 - **`src/` のコードは実機とまったく同じものを使う**。差し替えているのは実機ライブラリだけで、
@@ -270,6 +277,27 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 - **漏れはビルドで検出できる**。`src/*.cpp` を全部リンクするので、代替を用意し忘れた実機APIが
   あれば未定義参照になる。逆に言えば、`src/`へ新しい実機依存(`analogRead`/I2C等)を足すと
   PCビルドが即座に壊れて気づける。
+
+### Webビルド (WebAssembly)
+
+**ネイティブとの差はループの回し方(`main_pc.cpp`)とビルド設定だけ**で、`src/` も `compat/` も
+共有している(`compat/` 内の分岐は `__EMSCRIPTEN__` で3か所のみ)。
+
+- **ループ**: ブラウザのメインスレッドは止められないので、`Panel_sdl::main()`(別スレッドで
+  ユーザコードを回す)は使えない。`Panel_sdl::setup()/loop()/close()` が公開されているので、
+  `emscripten_set_main_loop()` から「`loop()` 1回 + `Panel_sdl::loop()` 1回」を刻む。
+  **実測60fps**(pico-os側のループ負荷は120フレームで数ms)。
+- **SDカード**: `pc/sdcard/` を `--preload-file` で `index.data` へ焼き込み、仮想FS(MEMFS)の
+  `/sdcard` に載せる。POSIXのまま読めるので `compat/SdFat.h` は無改造。
+  **中身を変えたら再ビルドが必要**で、書き込みはリロードで消える。
+- **設定**: ブラウザに環境変数が無いので、`main_pc.cpp` が起動時にURLのクエリを `setenv()` する
+  (`?wifi=disconnected&rssi=-85`)。`compat/` 側はいつもどおり `getenv` を読むだけ。
+- **Wi-Fiの疎通判定**: ソケットが無いので `navigator.onLine` を見る(`compat/WiFi.h`)。
+- **`delay()`**: 待つとタブが固まるのでWebでは即座に戻る(`src/` は使っていない)。
+- **ページの外枠**: `pc/web/shell.html`(emscriptenの `--shell-file`)。canvas・ログ欄・
+  Wi-Fi状態の切替・画面のPNG保存ボタンを持つ。デバッグ用の道具を足すならここ。
+- **`src/`へ新しい依存を足すときはWebビルドも通すこと**。ネイティブが通ってもemscriptenで
+  落ちる依存(生ソケット/スレッド/ブロッキング待ち)があるため。
 
 ## ロードマップ・TODO状況(2026-09-13時点)
 
@@ -324,5 +352,6 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 - コメント・ログは日本語、識別子は英語という言語使い分けを踏襲する。
 - 文字列は`FixedString<N>`を使う。**Arduino `String`は現在どこでも使っていないので復活させないこと。**
 - GUIの挙動を確かめたいときは実機ビルドの前にPCビルド(`pc/`)で回すのが速い。`src/`へ実機ライブラリ依存を
-  足すときは `pc/compat/` 側にも代替を用意すること(PCビルドが壊れる)。
+  足すときは `pc/compat/` 側にも代替を用意すること(PC/Webビルドが壊れる)。ブラウザで動かす場合は
+  スレッド・生ソケット・ブロッキング待ちが使えない点にも注意。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。

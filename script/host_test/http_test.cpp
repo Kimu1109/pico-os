@@ -272,6 +272,55 @@ int main(){
         }
     }
 
+    // ---- 本文のゲート(HttpBodyGate) ----
+    // **回帰テスト**: ヘッダの終わりと本文の先頭が同じ受信で届くと、本文の先頭を
+    // 取りこぼしていた(サーバ情報の先頭36バイトが欠けた)。原因は「feed()が
+    // 終わってからゲートを開ける」順序で、その回に渡った本文が捨てられていたこと。
+    // 判定を書き込みの瞬間に移したので、1回のfeedで全部渡しても欠けない。
+    printf("\n---- 本文のゲート ----\n");
+    {
+        //200: 本文がそのまま通る(ヘッダと本文を1回で渡す)
+        BufferSink sink;
+        HttpResponse res;
+        HttpBodyGate gate;
+        gate.attach(&res, &sink);
+        res.reset(&gate);
+
+        const char* raw = "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nhello world";
+        res.feed(raw, strlen(raw));
+        eq_str(sink.data.c_str(), "hello world",
+               "ヘッダと本文が同じ受信で届いても欠けない");
+        eq_int((long)res.bodyBytes(), (long)sink.data.size(),
+               "受信バイト数とシンクへ渡った量が一致する");
+    }
+    {
+        //404: エラーページをキャッシュへ書かせない
+        BufferSink sink;
+        HttpResponse res;
+        HttpBodyGate gate;
+        gate.attach(&res, &sink);
+        res.reset(&gate);
+
+        const char* raw = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found";
+        res.feed(raw, strlen(raw));
+        check(res.isDone(), "404でも最後まで読み切る");
+        check(sink.data.empty(), "404の本文は書き込み先へ流さない");
+    }
+    {
+        //302: 転送先の案内文をキャッシュへ書かせない
+        BufferSink sink;
+        HttpResponse res;
+        HttpBodyGate gate;
+        gate.attach(&res, &sink);
+        res.reset(&gate);
+
+        const char* raw = "HTTP/1.1 302 Found\r\nLocation: /x.md\r\nContent-Length: 4\r\n\r\nmove";
+        res.feed(raw, strlen(raw));
+        check(res.isRedirect(), "3xxと判定できる");
+        check(sink.data.empty(), "3xxの本文は書き込み先へ流さない");
+        eq_str(res.location().c_str(), "/x.md", "Locationは読める");
+    }
+
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

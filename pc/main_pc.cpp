@@ -9,6 +9,10 @@
 //   picoos_pc                       通常起動(ウィンドウが開く)
 //   picoos_pc --shot out.ppm [N]    Nフレーム回してから画面をPPMへ書き出して終了
 //                                   (既定60フレーム。CIやヘッドレスでの確認用)
+//   picoos_pc --tap X,Y@F[:H]       Fフレーム目に(X,Y)をHフレーム押す(既定H=3)
+//                                   ヘッドレスではSDLへマウスが来ないので、
+//                                   撮りたい画面まで操作を進めるために使う。
+//                                   複数回指定できる(最大16件)
 #include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
 #include <SDL2/SDL.h>
 
@@ -21,6 +25,7 @@
 
 #include "consts.hpp"
 #include "OS_Data.hpp"
+#include <functions/Touch_Functions_PC.hpp>  // PicoOsTouchScript
 
 // src/main.cpp が提供する
 void setup(void);
@@ -96,6 +101,21 @@ namespace {
 int main(int argc, char** argv)
 {
     for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--tap") == 0 && i + 1 < argc) {
+            //"X,Y@FRAME[:HOLD]" を読む
+            const char* spec = argv[++i];
+            int x = 0, y = 0, frame = 0, hold = 3;
+            const int got = sscanf(spec, "%d,%d@%d:%d", &x, &y, &frame, &hold);
+            if (got < 3) {
+                printf("[PC] --tap の書式は X,Y@FRAME[:HOLD] です: %s\n", spec);
+                return 1;
+            }
+            if (!PicoOsTouchScript::Add(x, y, frame, hold)) {
+                printf("[PC] --tap が多すぎます(最大%d件)\n", PicoOsTouchScript::kMaxTaps);
+                return 1;
+            }
+            continue;
+        }
         if (strcmp(argv[i], "--shot") == 0 && i + 1 < argc) {
             g_shot_path = argv[++i];
             if (i + 1 < argc && argv[i + 1][0] != '-') {

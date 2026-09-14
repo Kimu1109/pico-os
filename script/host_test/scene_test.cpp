@@ -255,6 +255,37 @@ int main(){
     WidgetFunctions::Destroy(overlay);
     check(widget_alive == 0, "最終状態: ウィジェットのリークなし");
 
+    // ---- 当たり判定を素通りさせる子(hit_transparent) ----
+    // **回帰テスト**: WidgetFunctions::Add()はvisitAll()で子孫も全てwidgetsへ積むため、
+    // 子は親とは別の「根」としてHitTest()の対象になる。表示のために置いただけの子が
+    // 親のタップを奪う問題があり、MarkdownViewのリンクが反応しなかった。
+    {
+        WidgetFunctions::widgets.clear();
+
+        TestWidget* parent = new TestWidget();
+        TestWidget* child = new TestWidget();
+        parent->addChild(child);
+        WidgetFunctions::Add(parent);
+
+        //Add()は子孫も積むので、両方がHitTestの対象になっている
+        check(WidgetFunctions::widgets.size() == 2, "Add()は子も積む");
+
+        //既定では後から積まれた子が拾う(従来の挙動)
+        check(WidgetFunctions::HitTest(5, 5) == child, "既定では子がタップを拾う");
+
+        //素通りさせると親が拾う
+        child->setHitTransparent(true);
+        check(WidgetFunctions::HitTest(5, 5) == parent,
+              "hit_transparentな子は素通りし、親がタップを拾う");
+
+        //親まで素通りさせれば誰も拾わない
+        parent->setHitTransparent(true);
+        check(WidgetFunctions::HitTest(5, 5) == nullptr, "全部素通りなら誰も拾わない");
+
+        WidgetFunctions::widgets.clear();
+        delete parent;
+    }
+
     //Widget::operator new/delete による実バイト数の集計。
     //mallinfoと違い自前で数えているのでASan環境でも正しく動く
     check(MemFunctions::widget_live_bytes == 0 && MemFunctions::widget_live_count == 0,

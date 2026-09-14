@@ -14,6 +14,10 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         labelPool[i]->setParent(this);
         labelPool[i]->setVisible(false);
         labelPool[i]->setDisableMarkdirty(true);
+        //表示のために置いているだけなので、タップは親(MarkdownView)へ通す。
+        //WidgetFunctions::Add()は子孫も全てwidgetsへ積むため、これが無いと
+        //子が別の「根」として当たり判定に混ざり、リンクのタップを奪ってしまう
+        labelPool[i]->setHitTransparent(true);
         boundLabelBlock[i] = -1;
         children_.push_back(labelPool[i]);
     }
@@ -25,6 +29,10 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         imagePool[i]->setParent(this);
         imagePool[i]->setVisible(false);
         imagePool[i]->setDisableMarkdirty(true);
+        //表示のために置いているだけなので、タップは親(MarkdownView)へ通す。
+        //WidgetFunctions::Add()は子孫も全てwidgetsへ積むため、これが無いと
+        //子が別の「根」として当たり判定に混ざり、リンクのタップを奪ってしまう
+        imagePool[i]->setHitTransparent(true);
         boundImageBlock[i] = -1;
         children_.push_back(imagePool[i]);
     }
@@ -33,6 +41,10 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         checkboxIconPool[i]->setParent(this);
         checkboxIconPool[i]->setVisible(false);
         checkboxIconPool[i]->setDisableMarkdirty(true);
+        //表示のために置いているだけなので、タップは親(MarkdownView)へ通す。
+        //WidgetFunctions::Add()は子孫も全てwidgetsへ積むため、これが無いと
+        //子が別の「根」として当たり判定に混ざり、リンクのタップを奪ってしまう
+        checkboxIconPool[i]->setHitTransparent(true);
         boundCheckboxIconBlock[i] = -1;
         children_.push_back(checkboxIconPool[i]);
     }
@@ -104,9 +116,14 @@ bool MarkdownView::load(const char* path) {
     layoutBlocks();
 
     scroll_y = 0;
-    for (int i = 0; i < kLabelPoolSize; i++) boundLabelBlock[i] = -1;
-    for (int i = 0; i < kImagePoolSize; i++) boundImageBlock[i] = -1;
-    for (int i = 0; i < kCheckboxIconPoolSize; i++) boundCheckboxIconBlock[i] = -1;
+
+    //前の文書のスロットは「非表示にしてから」外す。
+    //boundを-1にするだけだと、hideXxxSlot()が「既に未使用」と見て早期リターンし、
+    //古いテキストが表示されたまま残る(短い文書を開いたとき下部に前の内容が出る)
+    for (int i = 0; i < kLabelPoolSize; i++) hideLabelSlot(i);
+    for (int i = 0; i < kImagePoolSize; i++) hideImageSlot(i);
+    for (int i = 0; i < kCheckboxIconPoolSize; i++) hideCheckboxIconSlot(i);
+
     bindVisibleBlocks(true);
 
     this->needsRender();

@@ -105,8 +105,42 @@ class HttpResponse {
         bool has_etag = false;
 
         bool fail(HttpTools::Error e);
+        friend class HttpBodyGate;
         bool pushLineChar(char c);
         bool handleStatusLine();
         bool handleHeaderLine();
         bool consumeBody(const uint8_t* data, size_t len, size_t& consumed);
+};
+
+
+// 200以外の本文を書き込み先へ流さないための中継。
+// 3xxの案内文や404のエラーページがキャッシュへ入るのを防ぐ。
+//
+// **判定は「書き込みの瞬間」に行うこと。**
+// ヘッダの終わりと本文の先頭が同じ受信で届くことがあり、
+// 「feed()が終わってからゲートを開ける」やり方だと、その回に含まれていた
+// 本文の先頭を取りこぼす。実際にサーバ情報の先頭36バイトが欠けた
+// (小さいファイルほどヘッダと一緒に届くので当たりやすい)。
+// write()が呼ばれる時点ではヘッダの解釈は必ず終わっているので、
+// ここでstatusCode()を見れば取りこぼしようがない。
+class HttpBodyGate : public IHttpSink {
+    public:
+        void attach(const HttpResponse* res, IHttpSink* inner){
+            res_ = res;
+            inner_ = inner;
+        }
+        void detach(){
+            res_ = nullptr;
+            inner_ = nullptr;
+        }
+
+        bool write(const void* data, size_t len) override {
+            //捨てるだけで、受信そのものは続ける(接続を最後まで読み切る)
+            if(!res_ || res_->statusCode() != 200) return true;
+            return inner_ ? inner_->write(data, len) : true;
+        }
+
+    private:
+        const HttpResponse* res_ = nullptr;
+        IHttpSink* inner_ = nullptr;
 };

@@ -21,9 +21,8 @@ bool HttpGet::begin(const Url& target, IHttpSink* sink, const char* validator_in
     this->cancel();
 
     url = target;
-    gate.inner = sink;
-    gate.open = false;
-    gate_decided = false;
+    sink_ = sink;
+    gate.attach(&res, sink);
 
     validator.clear();
     if(validator_in && *validator_in){
@@ -49,8 +48,8 @@ bool HttpGet::startRequest(){
     }
 
     res.reset(&gate);
-    gate.open = false;
-    gate_decided = false;
+    //リダイレクトで作り直したresへ繋ぎ直す
+    gate.attach(&res, sink_);
 
     client.stop();
     client.setTimeout(kConnectTimeoutMs);
@@ -173,13 +172,6 @@ void HttpGet::update(){
             return;
         }
 
-        //ヘッダが揃った時点で、本文をシンクへ流してよいかを決める。
-        //3xxや4xxの本文をキャッシュへ書き込まないためのゲート
-        if(!gate_decided && res.headersDone()){
-            gate.open = (res.statusCode() == 200);
-            gate_decided = true;
-        }
-
         if(res.isDone()) break;
     }
 
@@ -214,9 +206,8 @@ void HttpGet::cancel(){
     phase = Phase::Idle;
     fail_ = Fail::None;
     redirects = 0;
-    gate.inner = nullptr;
-    gate.open = false;
-    gate_decided = false;
+    gate.detach();
+    sink_ = nullptr;
     status = TaskTools::PROCESSING;
 }
 

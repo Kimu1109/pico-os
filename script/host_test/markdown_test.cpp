@@ -19,6 +19,7 @@
 #include "functions/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -188,6 +189,45 @@ int main(){
             }
         }
         check(found, "画像パスが文書基準で解決されている");
+    }
+
+    // ---- 短い文書を開き直すと前の内容が残らない ----
+    // **回帰テスト**: load()がboundXxxBlockを-1にしてからhideXxxSlot()を呼んでいたため、
+    // 「既に未使用」と見なされて早期リターンし、古いLabelが表示されたまま残っていた。
+    // 長い文書のあとに短い文書を開くと、下部に前のページの文字が出る形で現れる
+    {
+        MarkdownView v(0, 0, 240, 260);
+        load(v, "段落1\n\n段落2\n\n段落3\n\n段落4\n\n段落5\n\n段落6\n\n段落7\n\n段落8\n");
+        const int many = (int)visibleInOrder(v).size();
+        check(many >= 5, "長い文書では複数の要素が表示される");
+
+        load(v, "ひとつだけ\n");
+        const int few = (int)visibleInOrder(v).size();
+        eq(few, 1, "短い文書を開き直すと前の要素が残らない");
+    }
+
+    // ---- リンクのタップがコールバックまで届く ----
+    {
+        MarkdownView v(0, 0, 240, 260);
+        load(v, "[リンク](target.md)\n\n本文\n");
+
+        FixedString<PICO_PATH_LEN> got;
+        int called = 0;
+        v.setOnLinkTap([&got, &called](FixedString<PICO_PATH_LEN> url){
+            got = url;
+            called++;
+        });
+
+        //リンクブロックの位置は文書次第なので、上から順に叩いて最初に反応した所を見る
+        for(int y = 0; y < 260 && called == 0; y += 4){
+            OSData::touchX = 10;
+            OSData::touchY = y;
+            v.causeOnPressStart();
+            v.causeOnPressEnd();
+        }
+
+        eq(called, 1, "リンクのタップでコールバックが1回呼ばれる");
+        check(strcmp(got.c_str(), "target.md") == 0, "コールバックへURLが渡る");
     }
 
     // ---- 空文書 ----

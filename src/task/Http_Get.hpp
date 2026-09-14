@@ -67,23 +67,13 @@ class HttpGet : public Task {
         bool isNotModified() const { return res.isNotModified(); }
 
     private:
-        // 3xxの本文をシンクへ流さないための中継。
-        // status 200 を見た時点で初めて開ける
-        class BodyGate : public IHttpSink {
-            public:
-                IHttpSink* inner = nullptr;
-                bool open = false;
-                bool write(const void* data, size_t len) override {
-                    if(!open) return true; //捨てるが、受信自体は続ける
-                    return inner ? inner->write(data, len) : true;
-                }
-        };
-
         enum class Phase : uint8_t { Idle, Connecting, Sending, Receiving, Ended };
 
         WiFiClient client;
         HttpResponse res;
-        BodyGate gate;
+        //3xx/4xxの本文をシンクへ流さないための中継(判定は書き込みの瞬間に行う)
+        HttpBodyGate gate;
+        IHttpSink* sink_ = nullptr;
 
         Url url;
         FixedString<PICO_STR_M> validator;
@@ -92,7 +82,6 @@ class HttpGet : public Task {
         Fail fail_ = Fail::None;
         int redirects = 0;
         unsigned long started_ms = 0;
-        bool gate_decided = false;
 
         bool startRequest();          // 接続〜送信までを仕掛け直す
         bool sendRequestLine();

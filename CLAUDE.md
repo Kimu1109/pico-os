@@ -77,6 +77,7 @@ script/                       開発補助スクリプト(アイコン生成/SKK
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
   host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discoveryの9本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
+  ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   sdcard/                     SDカードとして読まれるディレクトリ
@@ -131,6 +132,7 @@ PROTOCOL.md                    ドキュメントサーバとの通信仕様(Mar
 - タッチ: `hitTest(px,py)`、`causeOnPress{Start,Move,End,Out}` コールバック(`std::function<void()>`)。
 - 再描画: `needsRender()` / `markdirty(Rect)`。
 - `disable_markdirty`: 親が描画反映を一括保証する場合の子markdirty無効化フラグ(**乱用厳禁、バグりやすい**)。
+- `hit_transparent`: **当たり判定を素通りさせるフラグ**。`WidgetFunctions::Add()`は`visitAll()`で**子孫も全て`widgets`へ積む**ため、子は親とは別の「根」として`HitTest()`の対象になる。つまり**親が自分でタップを処理したい場合、表示のために置いただけの子がタップを奪う**。`MarkdownView`のプール(Label/Image/Icon)がこれで、リンクのタップが一切反応しなかった。表示専用の子にはこれを立てる。
 
 ### ウィジェットカタログ
 Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
@@ -297,7 +299,18 @@ sudo apt-get install libsdl2-dev      # 前提: SDL2開発パッケージ
 cmake -S pc -B pc/build && cmake --build pc/build -j
 ./pc/build/picoos_pc                  # マウス左ドラッグ = タッチ
 SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレス確認
+
+# ヘッドレスではSDLへマウスが来ないので、撮りたい画面まで --tap で操作を進める
+#   --tap X,Y@FRAME[:HOLD]   FRAMEフレーム目に(X,Y)をHOLDフレーム押す(既定3、最大16件)
+SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc \
+    --tap 61,65@30:5 --shot md.ppm 250        # ランチャの1枚目のアプリを開いて撮る
+
+python3 script/ppm2png.py md.ppm md.png 2     # PPMは見づらいのでPNGへ(2倍)
 ```
+
+**画面の確認はこの2つで完結する。** `--tap`はヘッドレスでの動作確認のために用意した
+もので、実際にこれで「リンクをタップしても反応しない」「短い文書を開き直すと前の内容が
+下部に残る」という2つのバグが見つかっている(いずれもホストテストでは出ない類のもの)。
 
 - **`src/` のコードは実機とまったく同じものを使う**。差し替えているのは実機ライブラリだけで、
   `pc/compat/` をインクルードパスの先頭に置いて `Arduino.h`/`SPI.h`/`WiFi.h`/`SdFat.h`/
@@ -347,6 +360,10 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 - **漏れはビルドで検出できる**。`src/*.cpp` を全部リンクするので、代替を用意し忘れた実機APIが
   あれば未定義参照になる。逆に言えば、`src/`へ新しい実機依存(`analogRead`/I2C等)を足すと
   PCビルドが即座に壊れて気づける。
+- **ネットワーク越しの確認もPCで完結する**。母艦で`python3 script/reference_server.py`を立て、
+  `pc/sdcard/sys/network.cfg`の`browser-home`へそのURLを書けば、Markdownブラウザが実際に
+  取りに行く。`PICOOS_SD_ROOT`でSDのルートを一時ディレクトリへ向ければ、
+  リポジトリの`pc/sdcard/`を汚さずに試せる。
 
 ## ロードマップ・TODO状況(2026-09-13時点)
 

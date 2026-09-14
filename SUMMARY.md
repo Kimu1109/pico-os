@@ -67,8 +67,14 @@
   - [ ] 辞書 … 部品: IME_Functions(SKK辞書)
   - [ ] 電卓 … 部品: KeyboardNum / NumberInput が既にある(最小コストで1本書ける)
   - [ ] ファイルエクスプローラー … FileExplorerウィジェットは実装済み。アプリ(Scene+App_List登録)が無い
-  - [ ] Markdownブラウザ … MarkdownScene は登録済みだが開く文書が tmp/doc.md 固定。
-        FileSelectDialog との接続が未了
+  - [ ] Markdownブラウザ … 「mdのウェブブラウザ」にする方針。通信仕様の草案は PROTOCOL.md
+    - [ ] リンク配線 + 履歴 + ナビゲーションヘッダー … setOnLinkTap()の呼び出し元が無く、
+          今はリンクをタップしても何も起きない。ここはネット不要で進められる
+    - [ ] キャッシュ層 … サーバから取ってSDへ書き、SDから読む。一時ファイル→rename で
+          半端なファイルを残さない(Config_Functions::SetValueと同じ手順)
+    - [ ] HttpGetTask(平文HTTP) + pc/compat の WiFiClient + 参照実装サーバ
+    - [ ] discovery(/.well-known/pico-os) + 条件付きGET(ETag) + リロード
+    - [ ] 検索(TSV) + ScrollListの結果画面
 - [ ] セカンダリアプリ開発
   - [ ] チャットツール
   - [ ] オセロ風

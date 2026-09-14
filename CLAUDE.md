@@ -79,6 +79,7 @@ pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   sdcard/                     SDカードとして読まれるディレクトリ
 examples/doc.md                MarkdownView動作確認用サンプル文書
+PROTOCOL.md                    ドキュメントサーバとの通信仕様(Markdownブラウザのネットワーク対応用。実装は未着手)
 ```
 `include/`, `lib/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
 
@@ -317,7 +318,8 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 ## 未実装の設計アイデア(旧pico-osからの持ち越し議論)
 
 - **ウィジェットのメモリプール化(汎用)**: 実測の結果、現時点では保留と判断した(下記「メモリ計測の結論」)。再開する場合は`Widget::operator new/delete`をアリーナへ差し替えるところから。
-- **Markdownブラウザのヘッダー/フッター**: `l_rect`内でのヘッダー/フッター分の高さ控除、スクロール対象外の固定描画領域追加が論点。
+- **Markdownブラウザのブラウザ化**: 仕様は `PROTOCOL.md` に草案がある(HTTP/行指向TSV/SDをキャッシュにする方式)。**実装は未着手**で、`MarkdownView::setOnLinkTap()`は呼び出し元がゼロ=リンクをタップしても何も起きない状態。着手順は「リンク配線+履歴+ナビゲーションヘッダー(ネット不要) → キャッシュ層 → HTTPクライアント → discovery/条件付きGET → 検索」。
+- **Markdownブラウザのヘッダー/フッター**: ナビゲーション用(戻る/進む/パス/検索)ならScene側にウィジェットを並べるだけで**View改修は不要**。文書由来(タイトル固定表示等)をやる場合のみ、`l_rect`内での高さ控除が論点になる — その際は「ビューポート=`l_rect`全体」という前提が7〜8箇所に直書きされているので、`viewportRect()`へ集約するのが先。
 - **LuaでのウィジェットID管理**: 32bit整数IDの**発行側は実装済み**(`WidgetID.hpp`/`WidgetRegistry`)。残るのは消費側 — `Resolve()`を叩くバインディング、`WidgetType`→実体のファクトリ、プロパティのget/setをLuaへ通す共通の口。Lua組み込み設計と一緒に決める部分。
 
 ## メモリ計測の結論 (2026-09-12時点、実機RP2350で20回の遷移を計測)

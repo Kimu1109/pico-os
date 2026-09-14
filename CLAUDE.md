@@ -68,13 +68,13 @@ src/
       systems/               Statusbar等システムウィジェット
   ime/                       SKK方式かな漢字変換辞書エンジン
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte(UTF-8リードバイト判定)
-  storage/                    SDカードI/O・パス定数
+  storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScanタスク
   test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/pathの6本 / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cacheの7本 / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
 pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
@@ -198,6 +198,19 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 
 ### MarkdownView 実装詳細
 `MdBlockType`: H1/H2/H3/Paragraph/Image/Link/CodeBlock/ListItem/HorizontalRule/Quote/TableRow。`MdBlock`はオフセット/長さ参照方式(`srcOffset`/`srcLength`、`doc_text`をコピーせず範囲参照)。固定上限: `kMaxBlocks=128`, `kMdMaxSourceBytes=8192`, `kMdBlockTextBytes=512`(1ブロックの表示テキスト上限。日本語で約170文字), `kLabelPoolSize=16`, `kImagePoolSize=2`, `kMaxListLevels=6`, テーブル最大列`kMdTableMaxCols=4`。`kMdBlockTextBytes`と`kMdMaxSourceBytes`はクラス外定義(クラス外に書くメンバ関数定義の戻り値型はクラススコープより前に解決されるため)。上限に当たった場合は`load()`が警告ログを出す。画像は`onRAM=false`でSDからストリーミング描画する(RAMに載せると占有量が開いた文書次第で青天井になるため)。テーブル/水平線/引用バーは`Label`を介さず`frame`へ直接描画(`renderDecorations()`)。リンクタップ用`on_link_tap`あり。フロントマターは`skipFrontMatter()`で読み飛ばし。**ヘッダー/フッター機能は現状なし。**
+
+### 文書キャッシュ (`src/storage/Doc_Cache.hpp`)
+サーバから取った文書をSDへ書き、次回以降はSDから読むための層(`PROTOCOL.md`)。
+**MarkdownViewは「SD上のファイルを開く」ことしか知らないままでよく、ネットワークとの境界がファイルシステムで切れる**のが狙い。
+
+- 配置は `/cache/<正規化したホスト>/<サーバ上のパス>`。ハッシュ名にせずミラーするのは**FileExplorerでそのまま中身を覗ける**ようにするため。
+- **ホスト名は`SanitizeHost()`で正規化してから使う**。FATでは`:`が使えず(ポート番号!)大小も区別しないため、小文字化して`: * ? < > | " \ /`と制御文字を`_`へ潰す。
+- **`Writer`が本体**: 一時ファイル(`.part`)へ書き、`commit()`で初めて本来の名前へ差し替える。`commit()`せずに破棄されるとデストラクタが一時ファイルごと消す。**通信が途中で切れた半端なファイルを「正常なキャッシュ」として残さない**ためで、これがこのモジュールの存在理由。
+- `kMaxEntryBytes=64KiB`で頭打ち。相手のサーバが何を返してきてもSDを埋め尽くさないようにする(`PROTOCOL.md`の「巨大なレスポンス」対策)。
+- 目録は `/cache/index.tsv`(行指向TSV、1行1文書): `host / path / validator / fetched_epoch / size`。書き換えは**元を読みながら一時ファイルへ書き写して最後に差し替える**ので、目録全体をRAMへ載せない(`Config_Functions::SetValue()`と同じ手順)。
+- `fetched_epoch`は**参考値**。NTP同期前の時計は当てにならないので、鮮度の判断は`validator`(ETag)で行う。
+- **追い出し(LRU等)は実装しない。** 1文書8KiBに対しSDはGB単位あり、1000件貯めても8MB程度なので枠を管理する対価に見合わない。全消去の`Clear()`だけ用意してある。
+- **`Clear()`だけはホストテストで検証できていない**。ディレクトリの再帰削除に`isDir()`/`openNext()`が要るが、`script/host_test/stubs/SdFat.h`はパス→内容のフラットな`map`でディレクトリの実体が無いため。PCビルド(`pc/compat/SdFat.h`は実ファイルシステム)側で確かめること。
 
 ### 文字列の扱い
 **Arduino `String` は現在どこでも使っていない。** 文字列はすべて `src/util/FixedString.hpp` の
@@ -324,8 +337,10 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 
 - **ウィジェットのメモリプール化(汎用)**: 実測の結果、現時点では保留と判断した(下記「メモリ計測の結論」)。再開する場合は`Widget::operator new/delete`をアリーナへ差し替えるところから。
 - **Markdownブラウザのブラウザ化**: 仕様は `PROTOCOL.md`(HTTP/行指向TSV/SDをキャッシュにする方式)、サーバの参照実装は `script/reference_server.py`。
-  **第1段(リンク追従・履歴・ナビゲーションヘッダー)は実装済み** — `MarkdownScene`が履歴を自前で持ち、`MarkdownView::setOnLinkTap()`から`PICO_IO::resolve()`で相対パスを解決して同じシーンのまま開き直す。
-  **残りは未着手**: キャッシュ層 → HTTPクライアント → discovery/条件付きGET → 検索、の順。
+  **第1段(リンク追従・履歴・ナビゲーションヘッダー)と第2段(キャッシュ層)は実装済み。**
+  第1段: `MarkdownScene`が履歴を自前で持ち、`MarkdownView::setOnLinkTap()`から`PICO_IO::resolve()`で相対パスを解決して同じシーンのまま開き直す。
+  第2段: `storage/Doc_Cache.hpp`(下記)。**ただしまだ呼び出し元が無い** — 繋ぐのはHTTPクライアントを入れる第3段。
+  **残りは未着手**: HTTPクライアント → discovery/条件付きGET → 検索、の順。
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
   - 既知の穴: **画像のパスは文書基準で解決していない**(`bindImageSlot()`が`doc_text`の値をそのままSDパスとして使う)。サブディレクトリの文書から画像を参照すると開けない。キャッシュ層を入れるときに一緒に直すのが自然。
 - **Markdownブラウザのヘッダー/フッター**: ナビゲーション用(戻る/進む/パス/検索)ならScene側にウィジェットを並べるだけで**View改修は不要**。文書由来(タイトル固定表示等)をやる場合のみ、`l_rect`内での高さ控除が論点になる — その際は「ビューポート=`l_rect`全体」という前提が7〜8箇所に直書きされているので、`viewportRect()`へ集約するのが先。
@@ -388,4 +403,4 @@ Lua向けの土台は「発行側だけ入って消費側が空」の状態。�
 - GUIの挙動を確かめたいときは実機ビルドの前にPCビルド(`pc/`)で回すのが速い。`src/`へ実機ライブラリ依存を
   足すときは `pc/compat/` 側にも代替を用意すること(PCビルドが壊れる)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。
-- **テストは全て手動**。`.github/`が無くCIは存在しないので、`sh script/host_test/run.sh`(ASan、6本)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは変更のたびに自分で回すこと。
+- **テストは全て手動**。`.github/`が無くCIは存在しないので、`sh script/host_test/run.sh`(ASan、7本)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは変更のたびに自分で回すこと。

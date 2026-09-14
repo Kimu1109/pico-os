@@ -12,6 +12,7 @@
 #   config_test   … 設定ファイル(key=value)の読み書き
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
+#   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -114,3 +115,14 @@ g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== path_test ====="
 "$OUT/path_test"
+
+# --- 文書キャッシュ ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/cache_test.cpp" \
+    "$ROOT/src/storage/Doc_Cache.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    -o "$OUT/cache_test"
+
+echo ""
+echo "===== cache_test ====="
+"$OUT/cache_test"

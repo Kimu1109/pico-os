@@ -72,8 +72,10 @@
           … MarkdownSceneが履歴(8件、パス+スクロール位置)を自前で持ち、
           PICO_IO::resolve()で相対リンクを解決して同じシーンのまま開き直す。
           ヘッダに戻る/進む/終了、フッタに現在のパス(エラー時はメッセージ)
-    - [ ] キャッシュ層 … サーバから取ってSDへ書き、SDから読む。一時ファイル→rename で
-          半端なファイルを残さない(Config_Functions::SetValueと同じ手順)
+    - [x] キャッシュ層 (storage/Doc_Cache) … /cache/<ホスト>/<パス> へミラーし、
+          目録は /cache/index.tsv。Writerが一時ファイル(.part)→renameで差し替えるので
+          通信が途中で切れた半端なファイルが残らない。1件64KiBで頭打ち。
+          追い出しは作らない(全消去のClear()だけ)。**まだ呼び出し元は無く、繋ぐのは次の段**
     - [ ] HttpGetTask(平文HTTP) + pc/compat の WiFiClient + 参照実装サーバ
     - [ ] discovery(/.well-known/pico-os) + 条件付きGET(ETag) + リロード
     - [ ] 検索(TSV) + ScrollListの結果画面

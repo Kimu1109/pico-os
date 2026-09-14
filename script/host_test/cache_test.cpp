@@ -6,6 +6,7 @@
 // SDはstubs/SdFat.hのパス->内容のmapなので、HostSd::filesを直接覗いて
 // 「何が残ったか」をそのまま検査できる。
 #include "storage/Doc_Cache.hpp"
+#include "net/Manifest.hpp"
 #include "storage/SD_Path.hpp"
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
@@ -300,6 +301,56 @@ int main(){
 
         eq_str(sdGet("/cache/a.example/same.md").c_str(), "A", "複数サーバ: 別々に保存される");
         eq_str(sdGet("/cache/b.example/same.md").c_str(), "B", "複数サーバ: 互いに上書きしない");
+    }
+
+    // ---- マニフェストの引き当て(PROTOCOL.md「4. マニフェスト」) ----
+    // ここを間違えると「古い内容を最新と信じて出す」という一番まずい壊れ方をする。
+    // 特に、部分一致や切り詰めで別の文書に当たらないことを見ている
+    {
+        reset();
+        HostSd::files["/cache/m.example/v1/manifest"] =
+            "/a.md\tv-a\n"
+            "/docs/intro.md\tv-intro\tおまけの列\n"
+            "/docs/intro.md.bak\tv-bak\n"
+            "/z.md\tv-z\n";
+
+        const char* kFile = "/cache/m.example/v1/manifest";
+        FixedString<PICO_STR_M> v;
+
+        check(Manifest::VersionOf(kFile, "/a.md", v), "マニフェスト: 先頭の行を引ける");
+        eq_str(v.c_str(), "v-a", "マニフェスト: 先頭の行の検証子");
+
+        check(Manifest::VersionOf(kFile, "/z.md", v), "マニフェスト: 末尾の行を引ける");
+        eq_str(v.c_str(), "v-z", "マニフェスト: 末尾の行の検証子");
+
+        //3列目以降(将来の拡張)は読み飛ばす
+        check(Manifest::VersionOf(kFile, "/docs/intro.md", v), "マニフェスト: 途中の行を引ける");
+        eq_str(v.c_str(), "v-intro", "マニフェスト: 知らない列は読み飛ばす");
+
+        //前方一致する別の文書に当たらないこと
+        check(Manifest::VersionOf(kFile, "/docs/intro.md.bak", v), "マニフェスト: 似た名前も正しく引ける");
+        eq_str(v.c_str(), "v-bak", "マニフェスト: 前方一致で取り違えない");
+
+        check(!Manifest::VersionOf(kFile, "/b.md", v), "マニフェスト: 載っていなければ失敗する");
+        eq_str(v.c_str(), "", "マニフェスト: 失敗時は空になる");
+
+        check(!Manifest::VersionOf(kFile, "", v), "マニフェスト: 空のパスは失敗する");
+        check(!Manifest::VersionOf("/cache/m.example/none", "/a.md", v),
+              "マニフェスト: ファイルが無ければ失敗する");
+
+        //検証子が収まらない行は「分からなかった」扱い。
+        //切り詰めて比べると別物を同じと見なしてしまう
+        std::string longVersion(PICO_STR_M + 8, 'x');
+        HostSd::files["/cache/m.example/long"] = std::string("/a.md\t") + longVersion + "\n";
+        check(!Manifest::VersionOf("/cache/m.example/long", "/a.md", v),
+              "マニフェスト: 収まらない検証子は切り詰めずに諦める");
+
+        //versionの無い行は突き合わせようがないので飛ばす
+        HostSd::files["/cache/m.example/broken"] = "/a.md\n/b.md\tv-b\n";
+        check(!Manifest::VersionOf("/cache/m.example/broken", "/a.md", v),
+              "マニフェスト: 検証子の無い行は使わない");
+        check(Manifest::VersionOf("/cache/m.example/broken", "/b.md", v),
+              "マニフェスト: 壊れた行の後ろも読める");
     }
 
     // 注記: Clear()はディレクトリを再帰的に消すためisDir()が要るが、

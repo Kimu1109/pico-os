@@ -67,7 +67,7 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               Statusbar等システムウィジェット
   ime/                       SKK方式かな漢字変換辞書エンジン
-  net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search)
+  net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScan / HttpGet タスク
@@ -82,7 +82,7 @@ pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   sdcard/                     SDカードとして読まれるディレクトリ
 examples/doc.md                MarkdownView動作確認用サンプル文書
-PROTOCOL.md                    ドキュメントサーバとの通信仕様(マニフェスト以外は実装済み)
+PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
 ```
 `include/`, `lib/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
 
@@ -267,6 +267,23 @@ UI側は`gui/widgets/dialogs/SearchDialog`(状態1行 + `ScrollList` + 再検索
 **通信は一切せず**、何件目から取るかの判断も含めて`MarkdownScene`が持つ。結果は**2回タップで開く**
 (`ScrollList`の流儀。1回目は選択)。
 
+### マニフェスト (`src/net/Manifest.hpp`)
+`GET <discoveryのmanifest>` の中身(1行 `path<TAB>version`、**pathの昇順**)。`PROTOCOL.md`「4. マニフェスト」参照。
+
+- **狙いは「開くたびの条件付きGETを省く」こと。** 手元の検証子とマニフェストのversionが一致すれば、
+  その文書は**サーバへ何も聞かずに開ける**(304の往復すら要らない)。
+  `DocFetch::begin()`が`Source::Manifest`で即`Ready`になる。
+- 取得と保存はdiscoveryと同じく`Doc_Fetch`/`Doc_Cache`をそのまま通すので、**マニフェスト自体も304になる**。
+  `MarkdownScene`はdiscoveryの直後(=ホストが変わったとき)と、**更新ボタンを押したとき**に引く。
+- **一致しない/載っていない/サーバが非対応なら、今までどおり条件付きGETへ落ちる。**
+  つまり**あれば速くなるだけ**で、無くても挙動は変わらない。
+- 引き当ては`Manifest::VersionOf()`が**pathを追い越した時点で打ち切る**(昇順という取り決めの使いどころ)。
+  **検証子が`FixedString`に収まらない行は「分からなかった」扱い**にする — 切り詰めて比べると別物を同じと見なす。
+- **滞在中にサーバ側が更新されても気づけない**(次にそのホストへ来るまで引き直さないため)。
+  そこを埋めるのが更新ボタンで、押すと`manifest_stale`が立ってマニフェストごと引き直す。
+- `DocFetch::setManifest()`は**ホストごとの設定**なので`begin()`/`cancel()`では消えない。
+  ホストが変わったとき(`openCurrent()`/`abortNavigation()`)に明示的に捨てる。
+
 ### ブラウザのヘッダー
 
 `[<][>][ホーム][更新][検索]` … [終了]。左側は**各ボタンの実測幅で左から詰めて並べる**
@@ -431,11 +448,12 @@ python3 script/ppm2png.py md.ppm md.png 2     # PPMは見づらいのでPNGへ(2
   第4段(取得→キャッシュ→表示の配線): `net/Doc_Fetch`(下記)。**ここまでで「サーバ上の文書を読む」が成立している。**
   `network.cfg` の `browser-home` にURLを書くと、Markdownアプリがそこを開く。
   第7段(検索・リロード): `net/Doc_Search` + `dialogs/SearchDialog`(下記「検索」)。
-  第5段(画像の解決と先読み)・第6段(discovery)・第7段(検索とリロード)も実装済み。
-  **残っているのはマニフェスト(`/v1/manifest`)によるキャッシュの一括再検証だけ。**
+  第8段(マニフェスト): `net/Manifest`(下記「マニフェスト」)。
+  第5段(画像の解決と先読み)・第6段(discovery)も実装済み。
+  **`PROTOCOL.md`のv1はこれで一通り実装できている。**
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
   - `MarkdownScene`の履歴に載るのは**「場所」でSDパスとURLのどちらもあり得る**。見分けは`UrlTools::Parse()`が通るかどうかの**1箇所だけ**で、`"http://"`の判定を各所へ撒いていない。
-  - **`MarkdownScene`のオブジェクトは数KBある**(`DocFetch`2.4KB + `DocSearch`2.9KB + 履歴1.6KB等)。
+  - **`MarkdownScene`のオブジェクトは数KBある**(`DocFetch`2.7KB + `DocSearch`2.9KB + 履歴1.6KB等)。
     他のシーンと違い「シーン本体は数十バイト」ではないので、シーンスタックへ積んだままの間も乗り続ける。
   - **履歴の現在地(`history_pos`)は「表示中の文書」と必ず一致させる**。ここは相対リンクを解決する
     基準でもあるため、開けなかった場所を現在地のまま残すと、**画面には前の文書が出ているのに

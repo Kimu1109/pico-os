@@ -28,6 +28,7 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/net/Doc_Fetch.cpp" \
     "$ROOT/src/net/Discovery.cpp" \
     "$ROOT/src/net/Doc_Search.cpp" \
+    "$ROOT/src/net/Manifest.cpp" \
     "$ROOT/src/storage/Doc_Cache.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     -o "$OUT/net_test"

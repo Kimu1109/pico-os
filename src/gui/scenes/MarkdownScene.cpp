@@ -173,6 +173,20 @@ void MarkdownScene::onUpdate(){
         }
         server_info.checked = true;
 
+        //マニフェストがあるなら先に引いておく。これがあると、以降の文書は
+        //「手元のものが最新」と分かった時点で通信せずに開ける
+        if(this->startManifestFetch()) return;
+
+        this->startDocumentFetch();
+        return;
+    }
+
+    if(phase == Phase::Manifest){
+        //取れなくても文書は普通に読める(条件付きGETへ落ちるだけ)
+        const bool ok = (fetch.state() == DocFetch::State::Ready);
+        fetch.setManifest(ok ? fetch.path().c_str() : nullptr);
+        if(ok) LOG_SYS_MSG("Markdown: マニフェストを取得しました (%s)", fetch.path().c_str());
+
         this->startDocumentFetch();
         return;
     }
@@ -259,6 +273,7 @@ void MarkdownScene::abortNavigation(){
     if(!currentAsUrl(restored) || !UrlTools::HostHeader(restored_host, restored)
         || server_info.host != restored_host){
         server_info.clear();
+        fetch.setManifest(nullptr);
     }
 
     bypass_cache = false;
@@ -300,6 +315,8 @@ bool MarkdownScene::openCurrent(){
         if(UrlTools::HostHeader(host, url) && !(server_info.checked && server_info.host == host)){
             server_info.clear();
             server_info.host.assign(host);
+            //前のサーバのマニフェストを持ち越さない
+            fetch.setManifest(nullptr);
 
             Url discovery_url = url;
             discovery_url.query.clear();
@@ -310,6 +327,9 @@ bool MarkdownScene::openCurrent(){
             //問い合わせを始められない場合は、検索非対応として先へ進む
             server_info.checked = true;
         }
+
+        //更新ボタンの後は、マニフェストも引き直してから文書を取りに行く
+        if(manifest_stale && this->startManifestFetch()) return true;
 
         return this->startDocumentFetch();
     }
@@ -364,6 +384,28 @@ void MarkdownScene::onFetchFinished(){
 
     phase = Phase::Images;
     if(!this->startNextImage()) this->showDocument();
+}
+
+bool MarkdownScene::startManifestFetch(){
+    manifest_stale = false;
+
+    if(server_info.manifest.empty()) return false;
+
+    Url manifest_url;
+    if(!currentAsUrl(manifest_url)) return false;
+
+    //引き直す前に一旦忘れる(古いマニフェストで新しいマニフェストの取得を
+    //素通ししてしまわないように)
+    fetch.setManifest(nullptr);
+
+    manifest_url.query.clear();
+    if(!manifest_url.path.assign(server_info.manifest.c_str())) return false;
+
+    phase = Phase::Manifest;
+    if(fetch.begin(manifest_url)) return true;
+
+    //始められなければマニフェスト無しとして先へ進む
+    return false;
 }
 
 bool MarkdownScene::startDocumentFetch(){
@@ -525,6 +567,7 @@ void MarkdownScene::reloadCurrent(){
     pushed_for_nav = false;
 
     bypass_cache = true;
+    manifest_stale = true;
     this->openCurrent();
 }
 

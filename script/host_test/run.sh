@@ -12,7 +12,7 @@
 #   config_test   … 設定ファイル(key=value)の読み書き
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
-#   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)
+#   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)とマニフェストの引き当て
 #   http_test     … URLの分解/解決と、HTTPレスポンスの解釈(ソケット抜きで検証)
 #   discovery_test… サーバ情報(/.well-known/pico-os)の解釈と前方互換
 #
@@ -123,6 +123,7 @@ g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/cache_test.cpp" \
     "$ROOT/src/storage/Doc_Cache.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/net/Manifest.cpp" \
     -o "$OUT/cache_test"
 
 echo ""

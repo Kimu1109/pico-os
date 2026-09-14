@@ -79,6 +79,7 @@ class MarkdownScene : public Scene {
         enum class Phase : uint8_t {
             Idle,
             Discovery, // サーバ情報(/.well-known/pico-os)を問い合わせ中
+            Manifest,  // マニフェスト(全文書の検証子一覧)を取得中
             Document,  // 文書そのものを取得中
             Images,    // 画像を取得中
         };
@@ -100,6 +101,10 @@ class MarkdownScene : public Scene {
         // 次に開くときキャッシュを無視するか(更新ボタン)。文書だけでなく
         // 挿絵も引き直す。commit/abortNavigation() で下ろす
         bool bypass_cache = false;
+
+        // 更新ボタンの後はマニフェストも引き直す。そうしないと
+        // 「マニフェストが古いまま = 変わった他の文書を最新と誤認する」窓が残る
+        bool manifest_stale = false;
 
         Url doc_url;                                  // 画像の解決基準
         FixedString<PICO_PATH_LEN> doc_cache_path;    // 最後にload()するパス
@@ -142,7 +147,14 @@ class MarkdownScene : public Scene {
         // キャッシュを無視して今の場所を取り直す
         void reloadCurrent();
 
-        // 文書の取得を始める(discoveryの後、または最初から)
+        // マニフェストの取得を始める。始めなければfalse(サーバが非対応等)。
+        // **discoveryの直後に1回だけ**引く。以降このホストの文書は、手元の
+        // 検証子とマニフェストのversionが一致していれば通信せずに開ける。
+        // 逆に言うと、滞在中にサーバ側が更新されても気づけない
+        // (それに気づきたいときのための「更新」ボタン)
+        bool startManifestFetch();
+
+        // 文書の取得を始める(discovery/マニフェストの後、または最初から)
         bool startDocumentFetch();
         // ホームへ移動する
         void goHome();

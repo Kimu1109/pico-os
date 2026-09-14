@@ -14,6 +14,7 @@
 #include "util/Md_Scan.hpp"
 #include "net/Discovery.hpp"
 #include "net/Doc_Search.hpp"
+#include "net/Manifest.hpp"
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
@@ -427,6 +428,78 @@ int main(int argc, char** argv){
         for(int i = 0; i < 20000 && again.state() == DocFetch::State::Fetching; i++) again.update();
         check(again.source() == DocFetch::Source::NotModified,
               "2回目は304でキャッシュが使われる");
+    }
+
+    // ---- マニフェスト ----
+    // 狙いは「開くたびの条件付きGETを省く」こと。ここが効いていないと
+    // マニフェストを取った意味が無いので、**通信していないこと**まで見る
+    {
+        printf("\n---- マニフェスト ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+
+        //1. マニフェストを取る(ただの文書として取れる)
+        snprintf(urlText, sizeof(urlText), "%s/v1/manifest", base);
+        Url manifestUrl;
+        UrlTools::Parse(manifestUrl, urlText);
+
+        DocFetch manifestFetch;
+        manifestFetch.begin(manifestUrl);
+        for(int i = 0; i < 20000 && manifestFetch.state() == DocFetch::State::Fetching; i++){
+            manifestFetch.update();
+        }
+        check(manifestFetch.state() == DocFetch::State::Ready, "マニフェストを取得できる");
+
+        FixedString<PICO_PATH_LEN> manifestPath;
+        manifestPath.assign(manifestFetch.path());
+
+        //2. 文書を1本取ってキャッシュを作る
+        snprintf(urlText, sizeof(urlText), "%s/doc.md", base);
+        Url docUrl;
+        UrlTools::Parse(docUrl, urlText);
+
+        DocFetch fetch;
+        fetch.begin(docUrl);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+        check(fetch.source() == DocFetch::Source::Network, "1回目はサーバから取る");
+
+        //3. マニフェストのversionと手元の検証子が一致するので、2回目は何も聞かない
+        FixedString<PICO_STR_M> listed;
+        check(Manifest::VersionOf(manifestPath.c_str(), "/doc.md", listed),
+              "マニフェストに文書が載っている");
+
+        fetch.setManifest(manifestPath.c_str());
+        fetch.begin(docUrl);
+        check(fetch.state() == DocFetch::State::Ready, "2回目はbegin()の時点でReadyになる");
+        check(fetch.source() == DocFetch::Source::Manifest, "通信せずキャッシュを開いたと分かる");
+
+        //4. 取り直し(リロード)はマニフェストを無視して本当に取りに行く
+        fetch.begin(docUrl, true);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+        check(fetch.source() == DocFetch::Source::Network,
+              "更新ボタンはマニフェストを無視して取り直す");
+
+        //5. 検証子が食い違えば素通りしない(条件付きGETへ落ちる)。
+        //   ここが破れると「古い内容を最新と信じて出す」ことになる
+        HostSd::files["/cache/fake-manifest"] = "/doc.md\tずれた検証子\n";
+        fetch.setManifest("/cache/fake-manifest");
+        fetch.begin(docUrl);
+        check(fetch.state() == DocFetch::State::Fetching,
+              "versionが食い違えば取りに行く");
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+        check(fetch.state() == DocFetch::State::Ready, "取り直せる");
+
+        //6. マニフェストに載っていない文書は今までどおり
+        snprintf(urlText, sizeof(urlText), "%s/no-such-file.md", base);
+        Url missing;
+        UrlTools::Parse(missing, urlText);
+        DocFetch other;
+        other.setManifest(manifestPath.c_str());
+        other.begin(missing);
+        check(other.state() == DocFetch::State::Fetching,
+              "載っていない文書は通常どおり取りに行く");
+        for(int i = 0; i < 20000 && other.state() == DocFetch::State::Fetching; i++) other.update();
     }
 
     // ---- 検索 ----

@@ -35,6 +35,13 @@ bool DocFetch::begin(const Url& target, bool bypass_cache){
     const bool cached = !bypass_cache
         && PICO_DocCache::Lookup(host.c_str(), url.path.c_str(), entry);
 
+    //マニフェストが「手元のものが最新」と言っているなら、聞きに行く必要が無い。
+    //これがマニフェストの存在理由(PROTOCOL.md「4. マニフェスト」)
+    if(cached && this->servableFromManifest(entry.validator.c_str())){
+        finish(State::Ready, Source::Manifest, "");
+        return true;
+    }
+
     if(!writer.begin(host.c_str(), url.path.c_str())){
         //書き込み先を用意できない(SDが無い等)。取得しても置き場所が無いので、
         //キャッシュがあればそれを開く
@@ -100,6 +107,27 @@ void DocFetch::update(){
     }
 
     finish(State::Ready, Source::Network, "");
+}
+
+bool DocFetch::servableFromManifest(const char* validator) const {
+    if(manifest_path.empty()) return false;
+    if(!validator || validator[0] == '\0') return false;
+
+    FixedString<PICO_STR_M> listed;
+    if(!Manifest::VersionOf(manifest_path.c_str(), url.path.c_str(), listed)) return false;
+    if(listed != FixedString<PICO_STR_M>(validator)) return false;
+
+    //目録にあっても本体が消えていることはある(手で消された等)。
+    //ここで確かめておかないと、開けないパスをReadyとして返してしまう
+    return OSData::SD.exists(cache_path.c_str());
+}
+
+void DocFetch::setManifest(const char* path){
+    if(path && path[0] != '\0'){
+        manifest_path.assign(path);
+    }else{
+        manifest_path.clear();
+    }
 }
 
 bool DocFetch::fallbackToCache(const char* why){

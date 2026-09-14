@@ -3,6 +3,7 @@
 #include "net/Http_Response.hpp"
 #include "task/Http_Get.hpp"
 #include "storage/Doc_Cache.hpp"
+#include "net/Manifest.hpp"
 #include "util/Url.hpp"
 #include "util/FixedString.hpp"
 
@@ -14,6 +15,8 @@
 //   - 手元にキャッシュがあれば検証子を添えて条件付きGETし、304ならそのまま使う
 //   - 200なら一時ファイル経由でキャッシュを差し替えてから使う
 //   - **取得に失敗しても、古いキャッシュがあればそれを開く**(圏外でも読める)
+//   - マニフェストを渡されていて、そこのversionが手元の検証子と一致していれば
+//     **何も聞かずにキャッシュを開く**(条件付きGETの往復すら省く)
 //
 // MarkdownViewへ渡すのは常にSD上のパスなので、View側はネットワークの存在を知らない。
 class DocFetch {
@@ -30,6 +33,7 @@ class DocFetch {
             None,
             Network,          // 取ってきた
             NotModified,      // 304。キャッシュがそのまま使えた
+            Manifest,         // マニフェストで最新と分かったので通信していない
             CacheAfterError,  // 取得に失敗したので古いキャッシュを開いた
         };
 
@@ -40,6 +44,12 @@ class DocFetch {
         bool begin(const Url& url, bool bypass_cache = false);
         void update();
         void cancel();
+
+        // このサーバのマニフェスト(SD上のパス)を教える。空文字/nullptrで忘れる。
+        // **ホストごとの設定なので begin()/cancel() では消えない。**
+        // 以降の begin() は、ここのversionと手元の検証子が一致する文書について
+        // 通信せずに Ready(Source::Manifest)になる
+        void setManifest(const char* cache_path);
 
         State state() const { return state_; }
         Source source() const { return source_; }
@@ -67,11 +77,14 @@ class DocFetch {
         Url url;
         FixedString<PICO_STR_M> host;          // "host" または "host:port"
         FixedString<PICO_PATH_LEN> cache_path;
+        FixedString<PICO_PATH_LEN> manifest_path; // 空なら突き合わせをしない
 
         State state_ = State::Idle;
         Source source_ = Source::None;
         const char* message_ = "";
 
+        // マニフェストと突き合わせて、通信せずに済むかを見る
+        bool servableFromManifest(const char* validator) const;
         // 取得に失敗したときの逃げ道。古いキャッシュがあればそれを開く
         bool fallbackToCache(const char* why);
         void finish(State s, Source src, const char* msg);

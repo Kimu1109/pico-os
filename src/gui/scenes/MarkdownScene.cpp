@@ -28,14 +28,15 @@ namespace {
 }
 
 MarkdownScene::MarkdownScene(const char* location){
+    //ホームボタンの行き先。サーバがhomeを申告していればそちらを優先する
+    readHome(this->initial_home);
+    if(this->initial_home.empty()) this->initial_home.assign(kFallbackHome);
+
     if(location && location[0] != '\0'){
         this->pushHistory(location);
         return;
     }
-
-    FixedString<PICO_STR_LL> home;
-    readHome(home);
-    this->pushHistory(home.empty() ? kFallbackHome : home.c_str());
+    this->pushHistory(this->initial_home.c_str());
 }
 
 void MarkdownScene::onEnter(){
@@ -63,6 +64,14 @@ void MarkdownScene::onEnter(){
     this->forward_button->setH(BUTTON_H);
     this->forward_button->setOnPressEnd([this](){ this->goForward(); });
     WidgetFunctions::Add(this->forward_button);
+
+    this->home_button = new Button(MARGIN + (NAV_BUTTON_W + 8) * 2, header_y, "ホーム");
+    this->home_button->setFontSize(FontFn::Small);
+    this->home_button->setAllowTextSpacing(false);
+    this->home_button->setW(HOME_BUTTON_W);
+    this->home_button->setH(BUTTON_H);
+    this->home_button->setOnPressEnd([this](){ this->goHome(); });
+    WidgetFunctions::Add(this->home_button);
 
     this->exit_button = new Button(content.w - MARGIN - EXIT_BUTTON_W, header_y, "終了");
     this->exit_button->setFontSize(FontFn::Small);
@@ -105,6 +114,7 @@ void MarkdownScene::onExit(){
     this->view = nullptr;
     this->back_button = nullptr;
     this->forward_button = nullptr;
+    this->home_button = nullptr;
     this->exit_button = nullptr;
     this->status_label = nullptr;
 }
@@ -114,6 +124,23 @@ void MarkdownScene::onUpdate(){
 
     fetch.update();
     if(fetch.state() == DocFetch::State::Fetching) return;
+
+    if(phase == Phase::Discovery){
+        //404でも「素の静的サーバと分かった」という確定した結果なので、
+        //ページを開くたびに問い合わせ直さないようcheckedを立てる
+        if(fetch.state() == DocFetch::State::Ready){
+            Discovery::ParseFile(fetch.path().c_str(), server_info);
+            if(!server_info.name.empty()){
+                LOG_SYS_MSG("Markdown: %s (protocol v%d, 検索%s)",
+                    server_info.name.c_str(), server_info.version,
+                    server_info.hasSearch() ? "対応" : "非対応");
+            }
+        }
+        server_info.checked = true;
+
+        this->startDocumentFetch();
+        return;
+    }
 
     if(phase == Phase::Document){
         this->onFetchFinished();
@@ -191,12 +218,25 @@ bool MarkdownScene::openCurrent(){
         pending_count = 0;
         pending_index = 0;
 
-        phase = Phase::Document;
-        if(!fetch.begin(url)){
-            this->onFetchFinished(); //begin()の時点で確定した失敗を表示する
-            return false;
+        //別のサーバへ来たら、先にサーバ情報を問い合わせる。
+        //discoveryもただの文書として取るので、条件付きGETも圏外時の据え置きも
+        //Doc_Fetch側の仕組みがそのまま効く
+        FixedString<PICO_STR_M> host;
+        if(UrlTools::HostHeader(host, url) && !(server_info.checked && server_info.host == host)){
+            server_info.clear();
+            server_info.host.assign(host);
+
+            Url discovery_url = url;
+            discovery_url.query.clear();
+            if(discovery_url.path.assign(Discovery::kPath)){
+                phase = Phase::Discovery;
+                if(fetch.begin(discovery_url)) return true;
+            }
+            //問い合わせを始められない場合は、検索非対応として先へ進む
+            server_info.checked = true;
         }
-        return true;
+
+        return this->startDocumentFetch();
     }
 
     //ローカル: そのまま開く
@@ -245,6 +285,52 @@ void MarkdownScene::onFetchFinished(){
 
     phase = Phase::Images;
     if(!this->startNextImage()) this->showDocument();
+}
+
+bool MarkdownScene::startDocumentFetch(){
+    phase = Phase::Document;
+    if(!fetch.begin(doc_url)){
+        this->onFetchFinished(); //begin()の時点で確定した失敗を表示する
+        return false;
+    }
+    return true;
+}
+
+// ---------- ホーム ----------
+
+bool MarkdownScene::homeTarget(FixedString<PICO_STR_LL>& out) const {
+    out.clear();
+
+    //リモートで、そのサーバがhomeを申告していればそちらを優先する
+    Url url;
+    if(history_pos >= 0 && UrlTools::Parse(url, history[history_pos].location.c_str())
+        && !server_info.home.empty()){
+        Url target;
+        if(UrlTools::Resolve(target, url, server_info.home.c_str())){
+            return UrlTools::FormatFull(out, target);
+        }
+    }
+
+    if(initial_home.empty()) return false;
+    return out.assign(initial_home);
+}
+
+void MarkdownScene::goHome(){
+    FixedString<PICO_STR_LL> target;
+    if(!homeTarget(target)) return;
+
+    //既にホームなら何もしない(履歴が同じ場所で埋まるのを防ぐ)
+    if(history_pos >= 0 && history[history_pos].location == target) return;
+
+    this->rememberScroll();
+    fetch.cancel();
+    phase = Phase::Idle;
+
+    if(!this->pushHistory(target.c_str())){
+        this->showStatus("場所が長すぎます", PICO_RED);
+        return;
+    }
+    this->openCurrent();
 }
 
 // ---------- 画像 ----------
@@ -412,6 +498,10 @@ void MarkdownScene::refreshChrome(){
     }
     if(forward_button){
         forward_button->setTextColor(canGoForward() ? PICO_BLACK : PICO_LIGHTGREY);
+    }
+    if(home_button){
+        FixedString<PICO_STR_LL> target;
+        home_button->setTextColor(homeTarget(target) ? PICO_BLACK : PICO_LIGHTGREY);
     }
 
     if(status_label && history_pos >= 0){

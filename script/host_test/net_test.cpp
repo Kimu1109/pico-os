@@ -12,6 +12,7 @@
 #include "storage/SD_Path.hpp"
 #include "storage/SD_IO.hpp"
 #include "util/Md_Scan.hpp"
+#include "net/Discovery.hpp"
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
@@ -61,6 +62,8 @@ static void pump(HttpGet& task, int max_iterations = 20000){
 int main(int argc, char** argv){
     const char* host = "127.0.0.1";
     const uint16_t port = (argc > 1) ? (uint16_t)atoi(argv[1]) : 8080;
+    //discoveryを持たないサーバ(素の静的ファイルサーバ)の再現用
+    const uint16_t bare_port = (argc > 2) ? (uint16_t)atoi(argv[2]) : (uint16_t)(port + 1);
 
     char base[128];
     snprintf(base, sizeof(base), "http://%s:%u", host, (unsigned)port);
@@ -369,6 +372,73 @@ int main(int argc, char** argv){
         UrlTools::HostHeader(host, docUrl);
         check(PICO_DocCache::Exists(host.c_str(), imageUrl.path.c_str()),
               "2回目以降はキャッシュ済みと判定される");
+    }
+
+    // ---- サーバ情報(discovery) ----
+    // discoveryもただの文書として取るので、経路はDoc_Fetchと同じ。
+    // ここで見たいのは「対応しているサーバ」と「していないサーバ」の見分け
+    {
+        printf("\n---- discovery ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s%s", base, Discovery::kPath);
+
+        Url url;
+        check(UrlTools::Parse(url, urlText), "discoveryのURLを組み立てられる");
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Ready, "サーバ情報を取得できる");
+
+        ServerInfo info;
+        check(Discovery::ParseFile(fetch.path().c_str(), info), "取得した内容を解釈できる");
+        eq_int(info.version, 1, "プロトコルの版を読める");
+        check(!info.name.empty(), "サーバ名を読める");
+        check(info.hasSearch(), "検索対応と分かる");
+        eq_str(info.search.c_str(), "/v1/search", "検索エンドポイントの場所を読める");
+
+        //2回目は条件付きGETで304になる(discoveryも同じ仕組みに乗っている)
+        DocFetch again;
+        again.begin(url);
+        for(int i = 0; i < 20000 && again.state() == DocFetch::State::Fetching; i++) again.update();
+        check(again.source() == DocFetch::Source::NotModified,
+              "2回目は304でキャッシュが使われる");
+    }
+
+    // ---- discoveryを持たないサーバ(素の静的ファイルサーバ) ----
+    // PROTOCOL.mdで「404を返してもよい。クライアントは検索を無効化して続行する」
+    // と決めている経路。ここが壊れると、対応していないサーバでブラウザが止まる
+    {
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "http://%s:%u%s", host, (unsigned)bare_port, Discovery::kPath);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Failed, "discovery非対応なら取得は失敗する");
+
+        //それでも文書そのものは読める = ブラウザとしては動き続ける
+        ServerInfo info;
+        info.checked = true; //呼び出し側は「確定した結果」として扱う
+        check(!info.hasSearch(), "検索は無効になる");
+
+        snprintf(urlText, sizeof(urlText), "http://%s:%u/doc.md", host, (unsigned)bare_port);
+        UrlTools::Parse(url, urlText);
+
+        DocFetch docFetch;
+        docFetch.begin(url);
+        for(int i = 0; i < 20000 && docFetch.state() == DocFetch::State::Fetching; i++) docFetch.update();
+        check(docFetch.state() == DocFetch::State::Ready,
+              "discovery非対応でも文書は普通に読める");
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

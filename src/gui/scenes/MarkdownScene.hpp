@@ -5,6 +5,7 @@
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "net/Doc_Fetch.hpp"
+#include "net/Discovery.hpp"
 #include "util/Url.hpp"
 #include "util/FixedString.hpp"
 
@@ -34,6 +35,7 @@ class MarkdownScene : public Scene {
         MarkdownView* view = nullptr;
         Button* back_button = nullptr;
         Button* forward_button = nullptr;
+        Button* home_button = nullptr;
         Button* exit_button = nullptr;
         Label<PICO_PATH_LEN>* status_label = nullptr;
 
@@ -63,6 +65,7 @@ class MarkdownScene : public Scene {
         // ループは回り続け、フッタに進捗を出せる。
         enum class Phase : uint8_t {
             Idle,
+            Discovery, // サーバ情報(/.well-known/pico-os)を問い合わせ中
             Document,  // 文書そのものを取得中
             Images,    // 画像を取得中
         };
@@ -73,11 +76,26 @@ class MarkdownScene : public Scene {
         DocFetch fetch;
         Phase phase = Phase::Idle;
 
+        // 今のサーバの情報。ホストが変わったときだけ問い合わせ直す
+        // (404でもcheckedが立つので、ページごとに問い合わせ直さない)
+        ServerInfo server_info;
+
+        // ホームボタンの行き先(network.cfgのbrowser-home、または開始時の場所)。
+        // リモートではサーバが申告したhomeを優先する
+        FixedString<PICO_STR_LL> initial_home;
+
         Url doc_url;                                  // 画像の解決基準
         FixedString<PICO_PATH_LEN> doc_cache_path;    // 最後にload()するパス
         FixedString<PICO_STR_L> pending_images[kMaxPrefetchImages];
         int pending_count = 0;
         int pending_index = 0;
+
+        // 文書の取得を始める(discoveryの後、または最初から)
+        bool startDocumentFetch();
+        // ホームへ移動する
+        void goHome();
+        // ホームボタンの行き先。無ければ空
+        bool homeTarget(FixedString<PICO_STR_LL>& out) const;
 
         // 文書を走査して、まだキャッシュに無い画像参照を pending_images へ積む
         void collectMissingImages();
@@ -90,6 +108,7 @@ class MarkdownScene : public Scene {
         constexpr static int HEADER_H = 28;
         constexpr static int FOOTER_H = 18;
         constexpr static int NAV_BUTTON_W = 24;
+        constexpr static int HOME_BUTTON_W = 48;
         constexpr static int EXIT_BUTTON_W = 40;
         constexpr static int BUTTON_H = 18;
 

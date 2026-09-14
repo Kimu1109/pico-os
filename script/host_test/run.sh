@@ -14,6 +14,7 @@
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
 #   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)
 #   http_test     … URLの分解/解決と、HTTPレスポンスの解釈(ソケット抜きで検証)
+#   discovery_test… サーバ情報(/.well-known/pico-os)の解釈と前方互換
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -137,3 +138,13 @@ g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== http_test ====="
 "$OUT/http_test"
+
+# --- サーバ情報(discovery) ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/discovery_test.cpp" \
+    "$ROOT/src/net/Discovery.cpp" \
+    -o "$OUT/discovery_test"
+
+echo ""
+echo "===== discovery_test ====="
+"$OUT/discovery_test"

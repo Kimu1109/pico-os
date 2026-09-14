@@ -67,14 +67,15 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               Statusbar等システムウィジェット
   ime/                       SKK方式かな漢字変換辞書エンジン
+  net/                        HTTPレスポンスの解釈(ソケットを持たないのでホストテスト可)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte(UTF-8リードバイト判定)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
-  task/                       非同期タスク基底 + NetworkScanタスク
+  task/                       非同期タスク基底 + NetworkScan / HttpGet タスク
   test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cacheの7本 / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/httpの8本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
 pc/                            PC実行用ビルド(CMake + SDL2)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
@@ -212,6 +213,15 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - **追い出し(LRU等)は実装しない。** 1文書8KiBに対しSDはGB単位あり、1000件貯めても8MB程度なので枠を管理する対価に見合わない。全消去の`Clear()`だけ用意してある。
 - **`Clear()`だけはホストテストで検証できていない**。ディレクトリの再帰削除に`isDir()`/`openNext()`が要るが、`script/host_test/stubs/SdFat.h`はパス→内容のフラットな`map`でディレクトリの実体が無いため。PCビルド(`pc/compat/SdFat.h`は実ファイルシステム)側で確かめること。
 
+### HTTPクライアント (`util/Url.hpp` / `net/Http_Response` / `task/Http_Get`)
+`PROTOCOL.md` の平文HTTPを喋る側。3つに割ってあるのは**テストできる形にするため**。
+
+- **`Url`**: `http://host:port/path?query` を分解して持つ型。`"http://"` を各所で`strncmp`しないための入れ物で、**schemeをここに閉じ込めてある**ので将来HTTPS対応で触るのは`Http_Get`の接続処理だけで済む。パスとクエリを分けて持つのは、相対解決(`PICO_IO::resolve`を再利用)がクエリ内の`/`まで畳んでしまわないようにするため。
+- **`HttpResponse`**: **ソケットを持たない**増分パーサ。受信したバイト列を`feed()`へ渡すだけなので、ネットワーク無しに全経路をホストテストできる(`http_test.cpp`は1バイトずつ食わせた場合も同じ結果になることまで見ている)。見るヘッダは`Content-Length`/`ETag`/`Last-Modified`/`Location`/`Transfer-Encoding`だけ。**chunkedは検出したらエラー**にする(黙って本文として書くと壊れたファイルが正常なキャッシュとして残るため)。本文の行き先は`IHttpSink`で差し替える。
+- **`HttpGet`**: `Task`派生。`Connection: close`を送り、`Accept-Encoding`は送らない。リダイレクト最大3回、全体10秒で打ち切り。手元の検証子を渡すと条件付きGETになる(`GMT`を含むかで`If-None-Match`と`If-Modified-Since`を出し分ける — 目録が「どちらのヘッダで来たか」を覚えていないための割り切り)。**3xx/4xxの本文はシンクへ流さない**(`BodyGate`が200を見てから開く)のでキャッシュが汚れない。
+- **接続(`connect`)だけは同期的**。到達しない相手を指すと最大`kConnectTimeoutMs=3000`ぶん画面が止まる。受信は全てポーリングなので、繋がってしまえばフレームは止まらない。非同期接続にはlwIPを直に叩く必要があり、別の段の仕事。
+- PC側の`WiFiClient`は`pc/compat/WiFi.h`にある。**Wi-Fiの「状態」は偽物のままだが、通信そのものは本物のソケット**。母艦で`script/reference_server.py`を立てれば実機へ焼かずにプロトコルごとデバッグできる(`sh script/host_test/run_net.sh`がそれを自動でやる)。
+
 ### 文字列の扱い
 **Arduino `String` は現在どこでも使っていない。** 文字列はすべて `src/util/FixedString.hpp` の
 `FixedString<N>`(固定長・ヒープ非使用)に統一されている。**新規実装でも `String` を持ち込まないこと。**
@@ -339,8 +349,10 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレ�
 - **Markdownブラウザのブラウザ化**: 仕様は `PROTOCOL.md`(HTTP/行指向TSV/SDをキャッシュにする方式)、サーバの参照実装は `script/reference_server.py`。
   **第1段(リンク追従・履歴・ナビゲーションヘッダー)と第2段(キャッシュ層)は実装済み。**
   第1段: `MarkdownScene`が履歴を自前で持ち、`MarkdownView::setOnLinkTap()`から`PICO_IO::resolve()`で相対パスを解決して同じシーンのまま開き直す。
-  第2段: `storage/Doc_Cache.hpp`(下記)。**ただしまだ呼び出し元が無い** — 繋ぐのはHTTPクライアントを入れる第3段。
-  **残りは未着手**: HTTPクライアント → discovery/条件付きGET → 検索、の順。
+  第2段: `storage/Doc_Cache.hpp`(下記)。
+  第3段(HTTPクライアント): `util/Url.hpp` / `net/Http_Response` / `task/Http_Get`(下記)。
+  **第2段・第3段ともまだ呼び出し元が無い** — 繋ぐのは次段(取得→キャッシュ→表示の配線)。
+  **残りは未着手**: 取得の配線 → discovery → 検索、の順。
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
   - 既知の穴: **画像のパスは文書基準で解決していない**(`bindImageSlot()`が`doc_text`の値をそのままSDパスとして使う)。サブディレクトリの文書から画像を参照すると開けない。キャッシュ層を入れるときに一緒に直すのが自然。
 - **Markdownブラウザのヘッダー/フッター**: ナビゲーション用(戻る/進む/パス/検索)ならScene側にウィジェットを並べるだけで**View改修は不要**。文書由来(タイトル固定表示等)をやる場合のみ、`l_rect`内での高さ控除が論点になる — その際は「ビューポート=`l_rect`全体」という前提が7〜8箇所に直書きされているので、`viewportRect()`へ集約するのが先。
@@ -403,4 +415,4 @@ Lua向けの土台は「発行側だけ入って消費側が空」の状態。�
 - GUIの挙動を確かめたいときは実機ビルドの前にPCビルド(`pc/`)で回すのが速い。`src/`へ実機ライブラリ依存を
   足すときは `pc/compat/` 側にも代替を用意すること(PCビルドが壊れる)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。
-- **テストは全て手動**。`.github/`が無くCIは存在しないので、`sh script/host_test/run.sh`(ASan、7本)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは変更のたびに自分で回すこと。
+- **テストは全て手動**。`.github/`が無くCIは存在しないので、`sh script/host_test/run.sh`(ASan、8本)/ `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは変更のたびに自分で回すこと。

@@ -1,0 +1,47 @@
+#!/bin/sh
+# HttpGet の結合テスト。**実際にソケットで通信する**ので run.sh とは分けてある。
+#
+# script/reference_server.py を一時的に立ち上げ、pc/compat の WiFiClient から
+# 本当に取得できるかを確かめる。SDL2もSDカードも要らない。
+#
+# run.sh との違い:
+#   run.sh     … stubs/ を使い、ネットワークもSDも無い状態で純粋なロジックを見る
+#   run_net.sh … pc/compat/ を使い、本物のソケットでプロトコルの往復を見る
+#
+# 使い方: sh script/host_test/run_net.sh
+set -e
+
+ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+OUT=$(mktemp -d)
+PORT=${PICOOS_TEST_PORT:-8137}
+
+g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
+    -I"$ROOT/pc/compat" -I"$ROOT/src" \
+    "$ROOT/script/host_test/net_test.cpp" \
+    "$ROOT/src/task/Http_Get.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    -o "$OUT/net_test"
+
+echo "参照実装サーバを起動します (port $PORT)"
+python3 "$ROOT/script/reference_server.py" \
+    --root "$ROOT/examples" --port "$PORT" --home /doc.md \
+    > "$OUT/server.log" 2>&1 &
+SERVER_PID=$!
+
+# サーバの起動を待つ(最大5秒)
+i=0
+while [ $i -lt 50 ]; do
+    if grep -q "終了" "$OUT/server.log" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+cleanup(){
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+echo ""
+echo "===== net_test ====="
+"$OUT/net_test" "$PORT"

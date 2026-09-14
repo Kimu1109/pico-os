@@ -76,7 +76,12 @@
           目録は /cache/index.tsv。Writerが一時ファイル(.part)→renameで差し替えるので
           通信が途中で切れた半端なファイルが残らない。1件64KiBで頭打ち。
           追い出しは作らない(全消去のClear()だけ)。**まだ呼び出し元は無く、繋ぐのは次の段**
-    - [ ] HttpGetTask(平文HTTP) + pc/compat の WiFiClient + 参照実装サーバ
+    - [x] HttpGet(平文HTTP) + pc/compat の WiFiClient + 参照実装サーバ
+          … util/Url(URL分解・相対解決) / net/Http_Response(ソケット非依存の増分パーサ、
+          chunkedは検出してエラー) / task/Http_Get(Task派生、リダイレクト3回・10秒打ち切り・
+          条件付きGET・3xx/4xxの本文はシンクへ流さない)。
+          run_net.sh が参照実装サーバ相手に実通信で検証する。**まだ呼び出し元は無い**
+    - [ ] 取得→キャッシュ→表示の配線 (Http_Get と Doc_Cache を繋ぎ、MarkdownSceneから使う)
     - [ ] discovery(/.well-known/pico-os) + 条件付きGET(ETag) + リロード
     - [ ] 検索(TSV) + ScrollListの結果画面
 - [ ] セカンダリアプリ開発

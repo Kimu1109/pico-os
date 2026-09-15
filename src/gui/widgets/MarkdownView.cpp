@@ -1,5 +1,6 @@
 #include "gui/widgets/MarkdownView.hpp"
 #include "OS_Data.hpp"
+#include "storage/SD_IO.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "gui/icons/icon_render.h"
 #include "functions/Log_Functions.hpp"
@@ -13,6 +14,10 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         labelPool[i]->setParent(this);
         labelPool[i]->setVisible(false);
         labelPool[i]->setDisableMarkdirty(true);
+        //表示のために置いているだけなので、タップは親(MarkdownView)へ通す。
+        //WidgetFunctions::Add()は子孫も全てwidgetsへ積むため、これが無いと
+        //子が別の「根」として当たり判定に混ざり、リンクのタップを奪ってしまう
+        labelPool[i]->setHitTransparent(true);
         boundLabelBlock[i] = -1;
         children_.push_back(labelPool[i]);
     }
@@ -24,6 +29,10 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         imagePool[i]->setParent(this);
         imagePool[i]->setVisible(false);
         imagePool[i]->setDisableMarkdirty(true);
+        //表示のために置いているだけなので、タップは親(MarkdownView)へ通す。
+        //WidgetFunctions::Add()は子孫も全てwidgetsへ積むため、これが無いと
+        //子が別の「根」として当たり判定に混ざり、リンクのタップを奪ってしまう
+        imagePool[i]->setHitTransparent(true);
         boundImageBlock[i] = -1;
         children_.push_back(imagePool[i]);
     }
@@ -32,6 +41,10 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         checkboxIconPool[i]->setParent(this);
         checkboxIconPool[i]->setVisible(false);
         checkboxIconPool[i]->setDisableMarkdirty(true);
+        //表示のために置いているだけなので、タップは親(MarkdownView)へ通す。
+        //WidgetFunctions::Add()は子孫も全てwidgetsへ積むため、これが無いと
+        //子が別の「根」として当たり判定に混ざり、リンクのタップを奪ってしまう
+        checkboxIconPool[i]->setHitTransparent(true);
         boundCheckboxIconBlock[i] = -1;
         children_.push_back(checkboxIconPool[i]);
     }
@@ -56,6 +69,10 @@ MarkdownView::~MarkdownView() {
 bool MarkdownView::load(const char* path) {
     FsFile f = OSData::SD.open(path);
     if (!f) return false;
+
+    //文書内の参照(画像)を解決する基準。パスが長すぎて収まらない場合は
+    //基準を持たない扱いにする(ルート基準へ退避する)
+    if (!doc_path.assign(path)) doc_path.clear();
 
     const size_t file_size = f.fileSize();
     size_t size = file_size;
@@ -99,13 +116,41 @@ bool MarkdownView::load(const char* path) {
     layoutBlocks();
 
     scroll_y = 0;
-    for (int i = 0; i < kLabelPoolSize; i++) boundLabelBlock[i] = -1;
-    for (int i = 0; i < kImagePoolSize; i++) boundImageBlock[i] = -1;
-    for (int i = 0; i < kCheckboxIconPoolSize; i++) boundCheckboxIconBlock[i] = -1;
+
+    //前の文書のスロットは「非表示にしてから」外す。
+    //boundを-1にするだけだと、hideXxxSlot()が「既に未使用」と見て早期リターンし、
+    //古いテキストが表示されたまま残る(短い文書を開いたとき下部に前の内容が出る)
+    for (int i = 0; i < kLabelPoolSize; i++) hideLabelSlot(i);
+    for (int i = 0; i < kImagePoolSize; i++) hideImageSlot(i);
+    for (int i = 0; i < kCheckboxIconPoolSize; i++) hideCheckboxIconSlot(i);
+
     bindVisibleBlocks(true);
 
     this->needsRender();
     return true;
+}
+
+// 文書内の参照を doc_path 基準で解決する。
+//
+// キャッシュはサーバ上のパスをそのままミラーしているので、リモート文書でも
+// この1つの規則で足りる:
+//   /cache/host/docs/a.md から "img/x.pimg" -> /cache/host/docs/img/x.pimg
+//   これは http://host/docs/img/x.pimg を取ってきたときの置き場所と一致する
+// そのためMarkdownView側にネットワークの知識は要らない。
+bool MarkdownView::resolveRef(const char* ref, size_t len, FixedString<PICO_PATH_LEN>& out) const {
+    FixedString<PICO_PATH_LEN> raw;
+    if (!raw.assign(ref, len)) {
+        out.clear();
+        return false;
+    }
+
+    //基準が無い(load前/パスが長すぎた)場合は、従来どおりそのまま使う
+    if (doc_path.empty()) return out.assign(raw);
+
+    if (PICO_IO::resolve(out, doc_path.c_str(), raw.c_str())) return true;
+
+    //解決できなければ素のまま試す(絶対パスで書かれている場合など)
+    return out.assign(raw);
 }
 
 // ---------- インライン要素（コード/リンク）認識 ----------
@@ -852,7 +897,7 @@ void MarkdownView::layoutBlocks() {
 
         if (b.type == MdBlockType::Image) {
             FixedString<PICO_PATH_LEN> path;
-            path.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+            resolveRef(doc_text.c_str() + b.srcOffset, b.srcLength, path);
             uint16_t h = kPadding;
             FsFile f = OSData::SD.open(path.c_str());
             if (f) {
@@ -1062,7 +1107,7 @@ void MarkdownView::bindImageSlot(int slot, int blockIdx, bool force) {
     Image* img = imagePool[slot];
 
     FixedString<PICO_PATH_LEN> imgPath;
-    imgPath.assign(doc_text.c_str() + b.srcOffset, b.srcLength);
+    resolveRef(doc_text.c_str() + b.srcOffset, b.srcLength, imgPath);
     img->setPath(imgPath);
     img->setX(kPadding);
     img->setY(b.y);
@@ -1282,6 +1327,22 @@ void MarkdownView::causeOnPressMove() {
     for (int i = 0; i < kImagePoolSize; i++) imagePool[i]->needsRender();
     for (int i = 0; i < kCheckboxIconPoolSize; i++) checkboxIconPool[i]->needsRender();
 }
+// スクロール位置を直接指定する。範囲外は端で止める。
+// ドラッグ時(causeOnPressMove)と同じ後始末 — 表示ブロックの貼り直しと、
+// プールのウィジェットへの再描画要求 — をまとめて行う。
+void MarkdownView::setScrollY(int y) {
+    const int clamped = constrain(y, 0, max_scroll_y);
+    if (clamped == scroll_y) return;
+
+    scroll_y = clamped;
+
+    bindVisibleBlocks(false);
+    this->needsRender();
+    for (int i = 0; i < kLabelPoolSize; i++) labelPool[i]->needsRender();
+    for (int i = 0; i < kImagePoolSize; i++) imagePool[i]->needsRender();
+    for (int i = 0; i < kCheckboxIconPoolSize; i++) checkboxIconPool[i]->needsRender();
+}
+
 int MarkdownView::findBlockAtScreenY(int screenY) const {
     int docY = screenY + scroll_y;
     int lo = 0, hi = (int)blocks.size();

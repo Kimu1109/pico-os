@@ -28,6 +28,15 @@ class Widget {
         //親ウィジェットが描画の反映のすべてを保証する場合に便利です
         bool disable_markdirty = false;
 
+        // 当たり判定を素通りさせるフラグ。
+        //
+        // WidgetFunctions::Add()はvisitAll()で子孫も全てwidgetsへ積むため、
+        // 子は親とは別の「根」としてHitTest()の対象になる。つまり親が自分で
+        // タップを処理したい場合(MarkdownViewのリンク追従など)、表示のために
+        // 置いただけの子がタップを奪ってしまう。
+        // そういう子にこれを立てると、当たり判定だけ素通りして親が拾える。
+        bool hit_transparent = false;
+
         int8_t background_color = PICO_BACKGROUND;
 
         //Luaなど外部から参照するためのID。getId()呼び出し時に遅延発行する(未使用なら発行しない)
@@ -143,6 +152,7 @@ class Widget {
         virtual int getScrollOffsetY() const { return 0; }
 
         virtual bool hitTest(int px, int py) {
+            if (hit_transparent) return false;
             if (parent && !parent->isInsideViewport(px, py)) return false;
             const Rect rect = this->clippedScreenRect();
             return px >= rect.x && px < rect.x + rect.w &&
@@ -194,6 +204,10 @@ class Widget {
         virtual Widget* getParent(){
             return this->parent;
         }
+
+        //当たり判定を素通りさせるか(上のhit_transparentを参照)
+        virtual bool getHitTransparent() const { return this->hit_transparent; }
+        virtual void setHitTransparent(bool value){ this->hit_transparent = value; }
 
         virtual bool getDisableMarkdirty(){ return this->disable_markdirty; }
         //markdirtyをしても実際にはマークしないかのフラグ

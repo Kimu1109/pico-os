@@ -3,28 +3,212 @@
 #include "gui/scenes/Scene.hpp"
 #include "gui/widgets/MarkdownView.hpp"
 #include "gui/widgets/Button.hpp"
+#include "gui/widgets/Label.hpp"
+#include "net/Doc_Fetch.hpp"
+#include "net/Doc_Search.hpp"
+#include "net/Discovery.hpp"
+#include "gui/widgets/dialogs/SearchDialog.hpp"
+#include "util/Url.hpp"
+#include "util/FixedString.hpp"
 
-// MarkdownViewを1枚だけ載せたシーン。
-// 遷移して抜けた時点でMarkdownViewのプールごと解放されるため、
-// 「重いウィジェットをシーンの寿命に縛る」例になっている
+// Markdownブラウザ。
+//
+// 履歴に載るのは「場所(location)」で、**SD上のパスとURLのどちらもあり得る**。
+// 見分けは `UrlTools::Parse()` が通るかどうかの1箇所だけで、
+// "http://" の判定を各所へ撒かないようにしてある。
+//
+//   ローカル: "/tmp/doc.md"                  → そのままMarkdownViewへ渡す
+//   リモート: "http://host/docs/intro.md"    → DocFetchでSDのキャッシュへ落としてから渡す
+//
+// どちらの場合もMarkdownViewが受け取るのはSD上のパスなので、**View側は
+// ネットワークの存在を知らない**。
+//
+// **シーンを積み上げない**(リンクごとに SceneFunctions::Push しない)のは、
+// シーンスタックの上限が kMaxSceneDepth=4 しかなく、リンクを4回たどると詰むため。
+//
+// 画面の構成:
+//   [<] [>] [ホーム] [更新] [検索]  [終了]   ← ヘッダ
+//   --------------------------------
+//              MarkdownView          ← 本文(ここだけスクロールする)
+//   --------------------------------
+//   http://host/docs/intro.md        ← フッタ(現在地。取得中やエラーはここへ出す)
 class MarkdownScene : public Scene {
     private:
         MarkdownView* view = nullptr;
         Button* back_button = nullptr;
+        Button* forward_button = nullptr;
+        Button* home_button = nullptr;
+        Button* reload_button = nullptr;
+        Button* search_button = nullptr;
+        Button* exit_button = nullptr;
+        Label<PICO_PATH_LEN>* status_label = nullptr;
 
-        //Pop()で戻ってきた時に同じ文書を開き直すため、パスはシーン側に持っておく
-        FixedString<PICO_PATH_LEN> doc_path;
+        // ---------- 履歴 ----------
+        // ブラウザと同じ扱い: 前方履歴は捨てる / 上限で最古を押し出す /
+        // 離れるときのスクロール位置を控えて戻ったら復元する
+        struct HistoryEntry {
+            //URLは "http://" + host:port + path で96Bを超えうるのでLLを使う
+            FixedString<PICO_STR_LL> location;
+            int32_t scroll_y = 0;
+        };
+
+        constexpr static int kMaxHistory = 8;
+
+        HistoryEntry history[kMaxHistory];
+        int history_count = 0;
+        int history_pos = -1;
+
+        // 履歴の現在地(history_pos)は**相対リンクを解決する基準**でもあるため、
+        // 「表示中の文書」と食い違わせてはいけない。開けなかった場所を現在地の
+        // まま残すと、画面には前の文書が出ているのに次に踏んだリンクだけが
+        // 開けなかった場所を基準に解決される、という状態になる。
+        //   → 遷移が失敗したら commitNavigation() ではなく abortNavigation() を
+        //      通して、表示中の位置まで巻き戻すこと。
+        int shown_pos = -1;        // 実際に表示できている履歴の位置
+        bool pushed_for_nav = false; // 今の遷移で履歴を1つ積んだか(失敗時に捨てる)
+
+        // ---------- 取得 ----------
+        // 文書を取り、続けて**表示前に**画像を取る。
+        //
+        // 画像を先に揃えるのは、MarkdownView::layoutBlocks()が画像ファイルの
+        // ヘッダを読んでブロックの高さを決めているため。表示してから届けると
+        // 再レイアウトが要る(全ブロックの整形をやり直すことになる)。
+        //
+        // ただし「表示前」であって「固まる」ではない。1フレーム1枚ずつ進めるので
+        // ループは回り続け、フッタに進捗を出せる。
+        enum class Phase : uint8_t {
+            Idle,
+            Discovery, // サーバ情報(/.well-known/pico-os)を問い合わせ中
+            Manifest,  // マニフェスト(全文書の検証子一覧)を取得中
+            Document,  // 文書そのものを取得中
+            Images,    // 画像を取得中
+        };
+
+        // 1ページで取りに行く画像の上限。病的な文書で延々と待たされないため
+        constexpr static int kMaxPrefetchImages = 8;
+
+        DocFetch fetch;
+        Phase phase = Phase::Idle;
+
+        // 今のサーバの情報。ホストが変わったときだけ問い合わせ直す
+        // (404でもcheckedが立つので、ページごとに問い合わせ直さない)
+        ServerInfo server_info;
+
+        // ホームボタンの行き先(network.cfgのbrowser-home、または開始時の場所)。
+        // リモートではサーバが申告したhomeを優先する
+        FixedString<PICO_STR_LL> initial_home;
+
+        // 次に開くときキャッシュを無視するか(更新ボタン)。文書だけでなく
+        // 挿絵も引き直す。commit/abortNavigation() で下ろす
+        bool bypass_cache = false;
+
+        // 更新ボタンの後はマニフェストも引き直す。そうしないと
+        // 「マニフェストが古いまま = 変わった他の文書を最新と誤認する」窓が残る
+        bool manifest_stale = false;
+
+        Url doc_url;                                  // 画像の解決基準
+        FixedString<PICO_PATH_LEN> doc_cache_path;    // 最後にload()するパス
+        FixedString<PICO_STR_L> pending_images[kMaxPrefetchImages];
+        int pending_count = 0;
+        int pending_index = 0;
+
+        // ---- 検索 ----
+        // 検索は**キャッシュを通さない**ので、文書の取得(fetch)とは別口で回す。
+        // 理由は Doc_Search.hpp を参照(キャッシュのキーがクエリを見ないため)
+        DocSearch search;
+        SearchDialog* search_dialog = nullptr;
+        FixedString<PICO_STR_L> search_query; // 再検索/次へで使い回す
+        bool searching = false;               // search.update() を回すか
+
+        // ダイアログからダイアログへ移るときは、**1フレーム空けてから**開く。
+        // 同じフレームで開くと、閉じたキーボードや前のダイアログの跡が新しい
+        // ダイアログ(TRANSLUCENT)に覆われたまま残る
+        // (PICO_GFX::FlushDirty()は半透明ウィジェットの下を描き直さないため)。
+        // 1フレーム空ければ、跡は「ダイアログが何も無い状態」で描き直される
+        enum class Pending : uint8_t {
+            None,
+            SearchInput, // 検索語の入力を開く
+            SearchStart, // 入力された語で検索を始める
+        };
+        Pending pending = Pending::None;
+
+        // 検索語を尋ねる(InputDialogを使い回す)
+        void openSearchInput();
+        // offset件目から検索を始める。結果はonUpdate()経由で表示される
+        void startSearch(int offset);
+        // 取得できた結果をダイアログへ流し込む
+        void showSearchResults();
+        // 結果が選ばれた
+        void onSearchSelect(int index);
+        void closeSearchDialog();
+        // 今いるサーバが検索に対応しているか(ローカル文書なら常にfalse)
+        bool currentServerCanSearch() const;
+
+        // キャッシュを無視して今の場所を取り直す
+        void reloadCurrent();
+
+        // マニフェストの取得を始める。始めなければfalse(サーバが非対応等)。
+        // **discoveryの直後に1回だけ**引く。以降このホストの文書は、手元の
+        // 検証子とマニフェストのversionが一致していれば通信せずに開ける。
+        // 逆に言うと、滞在中にサーバ側が更新されても気づけない
+        // (それに気づきたいときのための「更新」ボタン)
+        bool startManifestFetch();
+
+        // 文書の取得を始める(discovery/マニフェストの後、または最初から)
+        bool startDocumentFetch();
+        // ホームへ移動する
+        void goHome();
+        // ホームボタンの行き先。無ければ空
+        bool homeTarget(FixedString<PICO_STR_LL>& out) const;
+
+        // 文書を走査して、まだキャッシュに無い画像参照を pending_images へ積む
+        void collectMissingImages();
+        // pending_index の画像の取得を始める。始められなければ false
+        bool startNextImage();
+        // 画像をあきらめて(あるいは全部揃って)本文を表示する
+        void showDocument();
 
         constexpr static int MARGIN = 5;
-        constexpr static int BUTTON_HEIGHT = 30;
+        constexpr static int HEADER_H = 28;
+        constexpr static int FOOTER_H = 18;
+        constexpr static int NAV_BUTTON_W = 24; // 「<」「>」は字が細いので押しやすさで決める
+        constexpr static int BUTTON_GAP = 4;
+        constexpr static int BUTTON_H = 18;
+
+        bool pushHistory(const char* location);
+        bool openCurrent();
+
+        // 表示できたので、履歴の現在地を「表示中の位置」として確定する
+        void commitNavigation();
+        // 遷移に失敗したので、表示中の文書の位置まで巻き戻す
+        void abortNavigation();
+
+        void refreshChrome();
+        // ヘッダのボタンの色だけ更新する(フッタに出した失敗の理由は消さない)
+        void refreshNavButtons();
+        void showStatus(const char* message, int8_t color);
+        void rememberScroll();
+
+        // 現在地がリモートなら out へ入れて true
+        bool currentAsUrl(Url& out) const;
+        // 取得が終わったキャッシュを表示する
+        void onFetchFinished();
+
+        bool canGoBack() const { return history_pos > 0; }
+        bool canGoForward() const { return history_pos >= 0 && history_pos + 1 < history_count; }
+
+        void goBack();
+        void goForward();
+        void onLinkTap(const FixedString<PICO_PATH_LEN>& ref);
 
     public:
-        MarkdownScene(const char* path = "tmp/doc.md"){
-            this->doc_path.assign(path);
-        }
+        // 開始する場所。nullptr/空なら network.cfg の browser-home、
+        // それも無ければ同梱のサンプル文書を開く
+        explicit MarkdownScene(const char* location = nullptr);
 
         const char* getName() const override { return "Markdown"; }
 
         void onEnter() override;
         void onExit() override;
+        void onUpdate() override;
 };

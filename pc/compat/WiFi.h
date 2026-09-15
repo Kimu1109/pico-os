@@ -278,3 +278,9 @@ public:
     bool running(){ return true; }
 };
 inline NTPClassPC NTP;
+
+// TCPクライアントは別ヘッダへ切り出してある。
+// ホストテスト(script/host_test/stubs/WiFi.h)からも同じ実装を使いたいが、
+// このファイルはSDのルート(PicoOsSdHost::root)から network.cfg を読むため
+// SdFat.h に依存していて、そのまま取り込めないため。
+#include "WiFiClient_PC.h"

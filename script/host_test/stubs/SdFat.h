@@ -10,13 +10,29 @@
 #include <map>
 #include <string>
 
-#define O_RDONLY 0
-#define O_WRONLY 1
-#define O_RDWR 2
-#define O_CREAT 4
-#define O_TRUNC 8
-#define O_APPEND 16
-#define O_AT_END 32
+// <fcntl.h> が先に取り込まれている場合(WiFiClient_PC.h経由など)は
+// そちらの定義をそのまま使う
+#ifndef O_RDONLY
+    #define O_RDONLY 0
+#endif
+#ifndef O_WRONLY
+    #define O_WRONLY 1
+#endif
+#ifndef O_RDWR
+    #define O_RDWR 2
+#endif
+#ifndef O_CREAT
+    #define O_CREAT 4
+#endif
+#ifndef O_TRUNC
+    #define O_TRUNC 8
+#endif
+#ifndef O_APPEND
+    #define O_APPEND 16
+#endif
+#ifndef O_AT_END
+    #define O_AT_END 32
+#endif
 // SdFatが使っている別名
 #define O_READ  O_RDONLY
 #define O_WRITE O_WRONLY
@@ -58,6 +74,11 @@ struct FsFile {
     size_t position(){ return pos_; }
     bool getName(char*, size_t){ return false; }
     FsFile openNextFile(){ return FsFile(); }
+    // このスタブはパス->内容のフラットなmapで、ディレクトリという実体が無い。
+    // ディレクトリの走査(PICO_IO::removeRecursiveが使う)は再現できないので、
+    // 「中身が無い」ことにして常にfalseを返す。
+    // ディレクトリ操作を伴う経路はPCビルド(pc/compat/SdFat.hは実ファイルシステム)で確かめること
+    bool openNext(FsFile*, int = O_RDONLY){ return false; }
     void rewindDirectory(){}
     operator bool() const { return data_ != nullptr || wdata_ != nullptr; }
 
@@ -110,7 +131,10 @@ struct SdFat {
     bool exists(const char* path){
         return path && HostSd::files.count(path) > 0;
     }
-    bool mkdir(const char*){ return false; }
+    // このスタブはパスをキーにしたフラットなmapなので、ディレクトリという実体が無い。
+    // 「作った」ことにしておけば、その配下のファイルはそのまま開けるため成功を返す
+    // (実機のSdFat::mkdirは既定で親ディレクトリも作る)
+    bool mkdir(const char*){ return true; }
     bool remove(const char* path){
         return path && HostSd::files.erase(path) > 0;
     }

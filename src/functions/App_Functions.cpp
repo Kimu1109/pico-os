@@ -2,7 +2,8 @@
 #include "functions/Scene_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 
-bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)()){
+bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(const AppEntry&),
+                            const char* arg){
     if(!name || !create){
         LOG_SYS_WARN("App Register: 名前か生成関数が未指定です");
         return false;
@@ -13,9 +14,24 @@ bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)()){
         return false;
     }
 
-    apps[app_count].name = name;
-    apps[app_count].icon = icon;
-    apps[app_count].create = create;
+    AppEntry& entry = apps[app_count];
+    entry = AppEntry{};
+
+    //名前は切り詰められても表示が縮むだけなので、警告を出した上で登録は通す
+    if(!entry.name.assign(name)){
+        LOG_SYS_WARN("App Register: 名前が長いため切り詰めました (%s)", name);
+    }
+
+    //argは大半がパスで、切り詰まると別のファイルを指してしまう。こちらは登録ごと拒否する
+    if(arg && !entry.arg.assign(arg)){
+        LOG_SYS_WARN("App Register: 引数が長すぎるため \"%s\" を登録できません (%s)",
+            entry.name.c_str(), arg);
+        entry = AppEntry{};
+        return false;
+    }
+
+    entry.icon = icon;
+    entry.create = create;
     app_count++;
     return true;
 }
@@ -36,10 +52,18 @@ void AppFunctions::Launch(int index){
         return;
     }
 
+    //生成関数には登録簿の情報(特にarg)をそのまま渡す。
+    //同じ生成関数でもargが違えば別の中身のシーンになる
+    Scene* scene = entry->create(*entry);
+    if(!scene){
+        LOG_SYS_FAIL("App Launch: シーンを生成できませんでした (%s)", entry->name.c_str());
+        return;
+    }
+
     //Pushなので、アプリ側からPop()すればランチャへ戻れる。
     //SceneFunctionsは要求を登録するだけで、実際の遷移はフレーム境界で起きる
-    SceneFunctions::Push(entry->create());
-    LOG_SYS_MSG("アプリ起動: %s", entry->name);
+    SceneFunctions::Push(scene);
+    LOG_SYS_MSG("アプリ起動: %s", entry->name.c_str());
 }
 
 void AppFunctions::Clear(){

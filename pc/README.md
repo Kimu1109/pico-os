@@ -128,6 +128,7 @@ index.html?wifi=disconnected&rssi=-85
 |---|---|
 | ループ | `emscripten_set_main_loop()`。ブラウザのメインスレッドは止められないので、`Panel_sdl::main()`(別スレッド)は使わず1フレームずつ刻む |
 | SDカード | `pc/sdcard/` を**ビルド時に**`index.data`へ焼き込む。**中身を変えたら再ビルドが必要**で、アプリ側からの書き込みはメモリ上だけ(リロードで消える) |
+| 描画 | WebGLがあればSDLのGLES2レンダラ、**無ければソフトウェアレンダラへ自動で切り替える**(下記)。どちらでも実測60fps |
 | Wi-Fi | 疎通判定は `navigator.onLine`(ソケットが無いため)。固定したいときは `?wifi=...` |
 | **Markdownブラウザのオンライン機能** | **使えない。** ブラウザには生のTCPソケットが無いので、`browser-home` を設定したりツールバーの「更新」「検索」を押してもサーバへ繋がらない。同梱のサンプル(`/tmp/doc.md`)を読む分にはそのまま動く |
 | `delay()` | 何もせず即座に戻る(待つとタブが固まるため)。`src/` は使っていない |
@@ -136,6 +137,28 @@ index.html?wifi=disconnected&rssi=-85
 
 IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイズがそのまま
 `index.data` に乗る**(初回ロードで全部ダウンロードされる)。Webで配る際は要注意。
+
+### WebGLが無い環境について
+
+**WebGLが使えないブラウザでは、何もしないと画面が真っ黒になる。** LovyanGFXの
+`sdl_create()` が `SDL_CreateRenderer(..., SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)`
+を要求するため、アクセラレータが無いとレンダラが `nullptr` になり、テクスチャも作られず
+**以後一切描かれない**。C++側は何事もなく動き続ける(ログも出る)ので原因が見えにくい。
+
+`main_pc.cpp` が起動時にWebGLの有無を確かめ、無ければ
+`SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software")` でソフトウェアレンダラを名指しする。
+SDLはヒントで名指ししたドライバを `SDL_RENDERER_ACCELERATED` の要求と突き合わせずに使うので、
+**LovyanGFX側を変えずに済む**。切り替わったときはログに出る。
+
+- WebGLが無い環境は珍しくない: GPUが無い / ドライバがブロックリスト入り / 会社の設定で無効。
+  加えて**Chromeは「GPUが無いときの自動ソフトウェアWebGL」を廃止しつつある**。
+- 速度はどちらも実測60fps(240x320を2倍で出す程度なら差が出ない)。
+- 手元で再現するには Chromium を `--disable-3d-apis` で起動する。
+
+ページ側にも見張りを入れてある。読み込み4秒後に**まだ1フレームも描かれていなければ**、
+フレーム数・canvasの大きさ・WebGLの有無・UserAgentをログ欄へ書き出す。
+「画面をPNGで保存」も、canvasが未生成なら**壊れたファイルを落とさずに理由を出す**
+(以前は無効なPNGが保存されていた)。
 
 ### ブラウザでC++をデバッグする
 
@@ -154,8 +177,11 @@ IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイ�
 | プルリクエスト | ビルドが通るかだけ確認(公開はしない) |
 | 手動 | Actionsタブの「Run workflow」 |
 
-- **初回だけリポジトリの Settings > Pages で Source を「GitHub Actions」にする**
-  (ワークフロー内の `configure-pages` が自動設定を試みるので、たいていは何もしなくてよい)。
+- **初回だけリポジトリの Settings > Pages で Source を「GitHub Actions」にする。**
+  ここは手作業が要る。ワークフローから自動で有効化することはできない
+  (`GITHUB_TOKEN` にPagesサイトを作る権限が無く、
+  `Create Pages site failed: Resource not accessible by integration` で落ちる)。
+  設定前に走らせると公開ジョブだけが失敗する(ビルドと成果物のアップロードは成功する)。
 - emsdkの版はワークフロー先頭の `EMSDK_VERSION` で固定している。
   **上げるときは手元で同じ版を通してから**にすること。
 - emsdkは丸ごとキャッシュされる(SDL2のportsのビルド結果も同じ場所に溜まるため)。

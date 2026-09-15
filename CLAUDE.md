@@ -443,6 +443,13 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   **中身を変えたら再ビルドが必要**で、書き込みはリロードで消える。
 - **設定**: ブラウザに環境変数が無いので、`main_pc.cpp` が起動時にURLのクエリを `setenv()` する
   (`?wifi=disconnected&rssi=-85`)。`compat/` 側はいつもどおり `getenv` を読むだけ。
+- **WebGLが無い環境ではソフトウェア描画へ自動で落とす**。LovyanGFXの`sdl_create()`が
+  `SDL_CreateRenderer(..., ACCELERATED|PRESENTVSYNC)`を要求するため、WebGLが無いと
+  レンダラが`nullptr`になり**画面が真っ黒のまま何も描かれない**(C++側は動き続けるので
+  気づきにくい)。`main_pc.cpp`が起動時にWebGLの有無を見て、無ければ
+  `SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software")`を立てる。SDLはヒントで名指しした
+  ドライバをACCELERATEDの要求と突き合わせないので、**LovyanGFXを改造せずに回避できる**。
+  再現は `chromium --disable-3d-apis`。速度はどちらも60fps。
 - **Wi-Fiの疎通判定**: ソケットが無いので `navigator.onLine` を見る(`compat/WiFi.h`)。
 - **Markdownブラウザのオンライン機能はWebでは動かない**。`compat/WiFiClient_PC.h` は生のTCP
   ソケットを使うが、ブラウザにはそれが無い(emscriptenはWebSocket経由へ流すので中継サーバが要る)。
@@ -455,6 +462,8 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   落ちる依存(生ソケット/スレッド/ブロッキング待ち)があるため。
 - **公開**: `.github/workflows/web-pages.yml` が `main` へのpushで
   https://kimu1109.github.io/pico-os/ へ自動デプロイする(プルリクではビルド確認のみ)。
+  **リポジトリの Settings > Pages で Source を「GitHub Actions」にしておくことが前提**
+  (ワークフローからの自動有効化は`GITHUB_TOKEN`の権限ではできない)。
   emsdkの版はワークフローの `EMSDK_VERSION` で固定。公開中のコミットはページのログ先頭の
   `[WEB] pico-os build: <hash>` で分かる。
 

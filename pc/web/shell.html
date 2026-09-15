@@ -175,12 +175,61 @@
     logEl.textContent = '';
   });
 
+  // canvasが未生成(0x0)やコンテキストの都合でtoDataURLが失敗することがある。
+  // 黙って壊れたファイルを落とすと「画像ビューワが開けない」形で症状が化けるので、
+  // ここで止めて理由をログへ出す
   document.getElementById('btn-shot').addEventListener('click', function () {
+    if (!canvasEl.width || !canvasEl.height) {
+      appendLog('[PAGE] 画面がまだ作られていないので保存できません'
+                + ' (canvas ' + canvasEl.width + 'x' + canvasEl.height + ')', true);
+      return;
+    }
+    var url;
+    try {
+      url = canvasEl.toDataURL('image/png');
+    } catch (e) {
+      appendLog('[PAGE] 画面を取り出せませんでした: ' + e.message, true);
+      return;
+    }
+    if (!url || url.indexOf('data:image/png') !== 0) {
+      appendLog('[PAGE] 画面を取り出せませんでした(PNGになりませんでした)', true);
+      return;
+    }
     var a = document.createElement('a');
     a.download = 'picoos-' + Date.now() + '.png';
-    a.href = canvasEl.toDataURL('image/png');
+    a.href = url;
     a.click();
   });
+
+  // ---- 描画まわりの見張り ----
+  // 「C++は動いているのに画面だけ出ない」という状態は原因が見えにくいので、
+  // WebGLの有無と、C++のメインループが回っているかをページ側から確かめて報告する。
+  function webglAvailable() {
+    try {
+      var probe = document.createElement('canvas');
+      return !!(probe.getContext('webgl2') || probe.getContext('webgl')
+             || probe.getContext('experimental-webgl'));
+    } catch (e) { return false; }
+  }
+
+  // C++側(main_pc.cpp)がWebGL無しを検出したときに呼ぶ
+  window.picoosOnSoftwareRender = function () {
+    appendLog('[PAGE] WebGLが使えないため、ソフトウェア描画で動いています(表示は出ます)', false);
+  };
+
+  setTimeout(function () {
+    var frames = window.picoosFrames | 0;
+    if (frames > 0 && canvasEl.width > 0) return;   // 正常
+
+    appendLog('[PAGE] 画面が出ていないようなので、状態を書き出します:', true);
+    appendLog('       フレーム数=' + frames
+              + ' / canvas=' + canvasEl.width + 'x' + canvasEl.height
+              + ' / WebGL=' + (webglAvailable() ? 'あり' : 'なし'), true);
+    appendLog('       ' + navigator.userAgent, true);
+    Module.setStatus(frames === 0
+      ? '描画ループが始まっていません(上のログを開発者へ)'
+      : '画面が作られていません(上のログを開発者へ)');
+  }, 4000);
 
   var Module = {
     canvas: canvasEl,

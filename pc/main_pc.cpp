@@ -199,15 +199,65 @@ namespace {
         }
     }
 
+    // ブラウザでWebGLが使えるか。
+    //
+    // 使えないと画面が真っ黒になる。LovyanGFXの sdl_create() が
+    // SDL_CreateRenderer(..., SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC) を
+    // 要求するため、アクセラレータが無いとレンダラがnullptrになり、
+    // テクスチャも作られず**以後一切描かれない**(C++側は普通に動き続けるので気づきにくい)。
+    //
+    // WebGLが無い環境は珍しくない: GPUが無い/ドライバがブロックリスト入り/
+    // 会社の設定で無効、加えてChromeは「GPUが無いときの自動ソフトウェアWebGL」を
+    // 廃止しつつある。
+    bool hasWebGL()
+    {
+        return 0 != EM_ASM_INT({
+            try {
+                //本番のcanvasには触らない(コンテキストは1つしか持てないため)
+                var probe = document.createElement('canvas');
+                var gl = probe.getContext('webgl2') || probe.getContext('webgl')
+                      || probe.getContext('experimental-webgl');
+                if (!gl) return 0;
+                //確かめるだけなので即座に手放す
+                var lose = gl.getExtension('WEBGL_lose_context');
+                if (lose) lose.loseContext();
+                return 1;
+            } catch (e) { return 0; }
+        });
+    }
+
+    // WebGLが無いときはSDLのソフトウェアレンダラを名指しする。
+    // SDLはヒントで名指しされたドライバを SDL_RENDERER_ACCELERATED の要求と
+    // 突き合わせずにそのまま使うので、LovyanGFX側を変えずに済む
+    // (SW_CreateRenderer は ACCELERATED を拒否せず、PRESENTVSYNC だけ見る)。
+    void selectRenderDriver()
+    {
+        if (hasWebGL()) return;
+
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+        printf("[WEB] WebGLが使えないため、描画をソフトウェアへ切り替えます"
+               "(遅くなりますが表示はされます)\n");
+        EM_ASM({ if (window.picoosOnSoftwareRender) window.picoosOnSoftwareRender(); });
+    }
+
     // 1フレーム分。requestAnimationFrame から呼ばれるので、
     // ここで待ったり回し続けたりしてはいけない(タブが固まる)
     void webFrame()
     {
+        // 「C++は動いているのに画面だけ出ない」を切り分けられるよう、
+        // 最初の数秒だけフレーム数をJSへ渡す(ページ側の見張りが読む)
+        static int frames = 0;
+        if (frames < 180) {
+            ++frames;
+            EM_ASM({ window.picoosFrames = $0; }, frames);
+        }
+
         loop();
 
         //SDLのイベント取り込みとウィンドウへの反映(ネイティブではSDL側スレッドの仕事)
         if (0 != lgfx::Panel_sdl::loop()) {
-            //ウィンドウが閉じられた
+            //ウィンドウが閉じられた。ブラウザでは普通起きないので、黙って止まらず残す
+            printf("[WEB] SDLのウィンドウが閉じられたため描画を終了します\n");
             emscripten_cancel_main_loop();
             lgfx::Panel_sdl::close();
         }
@@ -224,6 +274,9 @@ int main(int, char**)
     printf("[WEB] pico-os build: %s\n", PICOOS_WEB_REV);
 
     applyQueryParams();
+
+    //SDLを起こす前に決めること(ヒントはSDL_Initより先に立てる必要がある)
+    selectRenderDriver();
 
     if (0 != lgfx::Panel_sdl::setup()) return 1;
 

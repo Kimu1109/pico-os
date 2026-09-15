@@ -3,6 +3,7 @@
 
 #include "gui/scenes/MarkdownScene.hpp"
 #include "gui/scenes/InputTestScene.hpp"
+#include "gui/scenes/ClocksScene.hpp"
 
 // このOSに載せるアプリの一覧。
 //
@@ -26,6 +27,7 @@ void AppFunctions::Setup(){
     //特定の文書を固定で開くタイルにしたい場合は MakeSceneWithArg + パス/URL を渡す
     Register("Markdown",   IconID::File,     &MakeScene<MarkdownScene>);
     Register("入力テスト", IconID::Keyboard, &MakeScene<InputTestScene>);
+    Register("時計", IconID::AlertTriangle, &MakeScene<ClocksScene>);
 
     LOG_SYS_OK("App Setup has succeeded! (%d apps)", Count());
 }

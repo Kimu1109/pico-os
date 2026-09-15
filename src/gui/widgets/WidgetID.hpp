@@ -6,6 +6,7 @@
 // Luaカスタムアプリ側でIDから型を判別するために使う(WidgetIdのtypeビットにそのまま埋め込む)。
 // 6bit(最大64種)まで許容。増やす場合はWidgetID.hppのstatic_assertで検知される。
 enum class WidgetType : uint8_t {
+    AnalogClock,
     AppGrid,
     Button,
     CanvasRaster,
@@ -32,6 +33,7 @@ enum class WidgetType : uint8_t {
     ScrollList,
     SearchDialog,
     Statusbar,
+    TabBar,
     Textbox,
     Count // 番兵。実際の種類としては使わない
 };

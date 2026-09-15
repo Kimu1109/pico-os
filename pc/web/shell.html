@@ -1,0 +1,219 @@
+<!doctype html>
+<!--
+  pico-os Webビルドの外枠(emscriptenの --shell-file に渡すHTML)。
+
+  {{{ SCRIPT }}} の行がビルド時に生成JSの読み込みに置き換わる。
+  その他の部分は素のHTML/CSS/JSなので、デバッグ用の道具を足したいときはここへ書く。
+
+  画面は pc/compat/config/LGFX_Config_PC.hpp の PICOOS_PC_SCALE 倍で作られるので、
+  canvasの実サイズはC++側が決める(ここでは触らない)。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pico-os (Web)</title>
+<style>
+  :root {
+    --bg: #1b1d21;
+    --panel: #24272c;
+    --line: #3a3f46;
+    --text: #e6e8ea;
+    --muted: #9aa1a9;
+    --accent: #6cb6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.6 system-ui, "Noto Sans JP", sans-serif;
+  }
+  h1 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+  h1 .sub { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 12px; }
+
+  .layout { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+
+  .screen {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+  }
+  /* canvasの大きさはSDL側(C++)が決める。ここでは余白と見た目だけ整える */
+  canvas#canvas {
+    display: block;
+    background: #000;
+    border-radius: 4px;
+    /* 画面からはみ出すときだけ縮める。座標はemscripten側が実サイズへ戻す */
+    max-width: 100%;
+    height: auto;
+    /* ドットをぼかさない(240x320の拡大なので) */
+    image-rendering: pixelated;
+    /* スマホで画面ごとスクロールしてしまうのを防ぐ */
+    touch-action: none;
+    outline: none;
+  }
+
+  .side { flex: 1 1 340px; min-width: 300px; display: flex; flex-direction: column; gap: 12px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+  }
+  .card h2 { font-size: 12px; margin: 0 0 8px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+
+  #status { color: var(--accent); min-height: 1.6em; }
+  progress { width: 100%; height: 6px; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  button, .linkbtn {
+    background: #2f343b;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  button:hover, .linkbtn:hover { border-color: var(--accent); color: var(--accent); }
+
+  #log {
+    margin: 0;
+    height: 260px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #cfd4da;
+    background: #16181c;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px;
+  }
+  #log .err { color: #ff9a8a; }
+  .hint { color: var(--muted); font-size: 11.5px; margin: 8px 0 0; }
+  code { background: #16181c; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+</style>
+</head>
+<body>
+
+<h1>pico-os <span class="sub">Web (WebAssembly) ビルド — マウスのドラッグがタッチになる</span></h1>
+
+<div class="layout">
+  <div class="screen">
+    <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>状態</h2>
+      <div id="status">読み込み中…</div>
+      <progress id="progress" value="0" max="100"></progress>
+    </div>
+
+    <div class="card">
+      <h2>Wi-Fi の状態を差し替えて再読み込み</h2>
+      <div class="row" id="wifi-buttons"></div>
+      <p class="hint">
+        URLのクエリがそのまま環境変数になる(<code>?wifi=disconnected&amp;rssi=-85</code>)。
+        使えるキーは <code>wifi</code> / <code>rssi</code> / <code>ssid</code> / <code>scan</code>。
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>ログ(Serial の出力先)</h2>
+      <pre id="log"></pre>
+      <div class="row" style="margin-top:8px">
+        <button type="button" id="btn-clear">ログを消す</button>
+        <button type="button" id="btn-shot">画面をPNGで保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var logEl = document.getElementById('log');
+  var statusEl = document.getElementById('status');
+  var progressEl = document.getElementById('progress');
+  var canvasEl = document.getElementById('canvas');
+
+  function appendLog(text, isError) {
+    var atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 24;
+    var line = document.createElement('span');
+    if (isError) line.className = 'err';
+    line.textContent = text + '\n';
+    logEl.appendChild(line);
+    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // Wi-Fi状態の切り替えはURLのクエリ経由(C++側が起動時にsetenvする)なので、
+  // ボタンはクエリを差し替えて再読み込みするだけ
+  var wifiPresets = [
+    { label: '疎通で判定(既定)', query: '' },
+    { label: '接続',             query: '?wifi=connected' },
+    { label: '切断',             query: '?wifi=disconnected' },
+    { label: 'SSIDなし',         query: '?wifi=ssid-not-found' },
+    { label: '電波1本',          query: '?wifi=connected&rssi=-88' },
+  ];
+  var wifiRow = document.getElementById('wifi-buttons');
+  wifiPresets.forEach(function (p) {
+    var a = document.createElement('a');
+    a.className = 'linkbtn';
+    a.href = location.pathname + p.query;
+    a.textContent = p.label;
+    wifiRow.appendChild(a);
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', function () {
+    logEl.textContent = '';
+  });
+
+  document.getElementById('btn-shot').addEventListener('click', function () {
+    var a = document.createElement('a');
+    a.download = 'picoos-' + Date.now() + '.png';
+    a.href = canvasEl.toDataURL('image/png');
+    a.click();
+  });
+
+  var Module = {
+    canvas: canvasEl,
+    print: function (text) { console.log(text); appendLog(text, false); },
+    printErr: function (text) { console.error(text); appendLog(text, true); },
+    setStatus: function (text) {
+      statusEl.textContent = text || '実行中';
+      // "... (12/34)" の形なら進捗として読む
+      var m = /([0-9.]+)\/([0-9.]+)/.exec(text);
+      if (m) {
+        progressEl.hidden = false;
+        progressEl.value = parseInt(m[1], 10);
+        progressEl.max = parseInt(m[2], 10);
+      } else {
+        progressEl.hidden = true;
+      }
+    },
+    totalDependencies: 0,
+    monitorRunDependencies: function (left) {
+      this.totalDependencies = Math.max(this.totalDependencies, left);
+      Module.setStatus(left
+        ? '準備中… (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
+        : '');
+    },
+  };
+
+  window.onerror = function (message) {
+    Module.setStatus('エラー: 詳細はブラウザのコンソールを見てください');
+    appendLog(String(message), true);
+  };
+</script>
+
+{{{ SCRIPT }}}
+
+</body>
+</html>

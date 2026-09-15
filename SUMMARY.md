@@ -58,6 +58,11 @@
   - [x] LovyanGFX対応 … `lgfx::Panel_sdl`。`src/`は実機と同一のまま
   - [x] タッチ操作対応 … SDLのマウスをタッチとして読む
   - [x] ネイティブ関数の代替関数 … `pc/compat/` (Arduino/SPI/WiFi/SdFat)
+  - [x] ブラウザ動作対応(WebAssembly) … `emcmake cmake -S pc -B pc/build-web`。
+        `emscripten_set_main_loop`で1フレームずつ回す。SDカードは`index.data`へ同梱、
+        設定はURLのクエリ(`?wifi=disconnected`)
+  - [x] Webビルドの自動公開 … `main`へのpushでGitHub Pagesへ
+        (https://kimu1109.github.io/pico-os/)。`.github/workflows/web-pages.yml`
   - [ ] その他あれば
 - [ ] 標準アプリ開発 … 部品は揃っているがアプリ本体は未着手。
       現状ランチャに載っているのは MarkdownScene と InputTestScene(部品の動作確認用)だけで、

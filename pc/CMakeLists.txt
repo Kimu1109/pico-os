@@ -1,7 +1,12 @@
-# pico-os を PC 上で動かすためのビルド。
+# pico-os を PC / ブラウザ上で動かすためのビルド。
 #
-#   cmake -S pc -B pc/build && cmake --build pc/build -j
-#   ./pc/build/picoos_pc
+#   ネイティブ(SDL2のウィンドウ):
+#     cmake -S pc -B pc/build && cmake --build pc/build -j
+#     ./pc/build/picoos_pc
+#
+#   Web(WebAssembly):
+#     emcmake cmake -S pc -B pc/build-web && cmake --build pc/build-web -j
+#     emrun --no_browser --port 8080 pc/build-web   # → http://localhost:8080/index.html
 #
 # 実機のライブラリ(Arduino / SdFat / SPI / XPT2046 / WiFi)は pc/compat/ の
 # 代替ヘッダで置き換える。src/ 側には一切手を入れず、インクルードパスの
@@ -73,7 +78,10 @@ endif()
 message(STATUS "LovyanGFX: ${LOVYANGFX_DIR}")
 
 # ---- SDL2 ----
-find_package(SDL2 REQUIRED)
+# Emscriptenでは -sUSE_SDL=2 でportsのSDL2が使われるので find_package はしない
+if(NOT EMSCRIPTEN)
+    find_package(SDL2 REQUIRED)
+endif()
 
 # ---- ソース ----
 
@@ -99,17 +107,55 @@ add_executable(picoos_pc
 
 # LGFX_SDL … LovyanGFX側がSDLパネルを有効にするためのフラグ
 # PICOOS_PC  … pico-os側がPC向けの実装(パネル設定/タッチ取得)へ切り替えるためのフラグ
-target_compile_definitions(picoos_pc PRIVATE
-    LGFX_SDL
-    PICOOS_PC
-    # SDカードとして読むディレクトリ。実行時は PICOOS_SD_ROOT で差し替えられる
-    PICOOS_SD_ROOT_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/sdcard")
+target_compile_definitions(picoos_pc PRIVATE LGFX_SDL PICOOS_PC)
 
 # pc/compat を src より前に置くことで、実機ライブラリのヘッダを差し替える
 target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"
     "${PICOOS_ROOT}/src"
-    "${LOVYANGFX_DIR}/src"
-    ${SDL2_INCLUDE_DIRS})
+    "${LOVYANGFX_DIR}/src")
 
-target_link_libraries(picoos_pc PRIVATE ${SDL2_LIBRARIES} pthread)
+if(EMSCRIPTEN)
+    # ---- Web(WebAssembly)ビルド ----
+    # SDカードは pc/sdcard/ を丸ごとパッケージしてブラウザの仮想FS(MEMFS)へ載せる。
+    # 実行時に差し替えられないので、ネイティブと違ってパスは固定
+    target_compile_definitions(picoos_pc PRIVATE PICOOS_SD_ROOT_DEFAULT="/sdcard")
+
+    # SDL2はemscriptenのportsを使う(コンパイル時にもヘッダのパスとして必要)
+    target_compile_options(picoos_pc PRIVATE "-sUSE_SDL=2")
+
+    # どのコミットのビルドが公開されているかをページのログで分かるようにする。
+    # CI(.github/workflows/web-pages.yml)がコミットハッシュを渡す
+    set(PICOOS_WEB_REV "dev" CACHE STRING "Webビルドに刻むリビジョン表記")
+    target_compile_definitions(picoos_pc PRIVATE PICOOS_WEB_REV="${PICOOS_WEB_REV}")
+
+    # index.html / index.js / index.wasm / index.data を吐く。
+    # ディレクトリをそのまま静的配信すればトップページで動く
+    set_target_properties(picoos_pc PROPERTIES OUTPUT_NAME "index" SUFFIX ".html")
+
+    target_link_options(picoos_pc PRIVATE
+        "-sUSE_SDL=2"
+        # ヒープはシーン遷移で伸び縮みするので成長を許可する
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sINITIAL_MEMORY=64MB"
+        # ウィジェットツリーの再帰(visitAll)が深くなるので既定の64KiBから広げる
+        "-sSTACK_SIZE=4MB"
+        # emscripten_set_main_loop で回すので main() を抜けてもランタイムは残す
+        "-sEXIT_RUNTIME=0"
+        # クエリ文字列の取り出し(main_pc.cpp の EM_ASM)で使う
+        "-sEXPORTED_RUNTIME_METHODS=stringToUTF8,UTF8ToString"
+        "--preload-file" "${CMAKE_CURRENT_SOURCE_DIR}/sdcard@/sdcard"
+        "--shell-file" "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
+
+    # シェルとSDの中身を変えたらリンクし直す
+    set_property(TARGET picoos_pc APPEND PROPERTY LINK_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
+else()
+    # ---- ネイティブビルド ----
+    # SDカードとして読むディレクトリ。実行時は PICOOS_SD_ROOT で差し替えられる
+    target_compile_definitions(picoos_pc PRIVATE
+        PICOOS_SD_ROOT_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/sdcard")
+
+    target_include_directories(picoos_pc PRIVATE ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(picoos_pc PRIVATE ${SDL2_LIBRARIES} pthread)
+endif()

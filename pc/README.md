@@ -1,12 +1,18 @@
-# pico-os を PC で動かす
+# pico-os を PC / ブラウザで動かす
 
-実機(RP2350)に書き込まずに、PC上のウィンドウで pico-os をそのまま動かすためのビルド。
-デバッガもプロファイラも使えるので、GUI周りの試行錯誤はこちらが速い。
+実機(RP2350)に書き込まずに、pico-os をそのまま動かすためのビルド。出口が2つある。
 
-**`src/` のコードは実機とまったく同じものを使う。** 実機のライブラリだけを
+| | 出力 | 用途 |
+|---|---|---|
+| **ネイティブ** | SDL2のウィンドウ(`picoos_pc`) | 普段の開発。デバッガもプロファイラも使える |
+| **Web** | WebAssembly(`index.html` + `.wasm`) | ブラウザで動かす。URLを渡すだけで他人にも触ってもらえる |
+
+**`src/` のコードは実機ともWebとも同じものを使う。** 実機のライブラリだけを
 `pc/compat/` の代替ヘッダへ差し替えている(`script/host_test/stubs` と同じ考え方)。
+ネイティブとWebの違いは**ループの回し方(`main_pc.cpp`)とビルド設定だけ**で、
+`compat/` の中身もほぼ共通。
 
-## 必要なもの
+## 必要なもの(ネイティブ)
 
 - CMake 3.16 以降
 - C++17 が通るコンパイラ(g++ / clang++)
@@ -33,7 +39,7 @@ cmake -S pc -B pc/build -DLOVYANGFX_DIR=/path/to/LovyanGFX
 cmake -S pc -B pc/build -DLOVYANGFX_TAG=1.2.29
 ```
 
-## ビルドと実行
+## ビルドと実行(ネイティブ)
 
 ```sh
 cmake -S pc -B pc/build
@@ -53,6 +59,112 @@ CIや画面のないマシンでは、Nフレーム回してPPMへ書き出し�
 ```sh
 SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40
 ```
+
+## ブラウザで動かす (WebAssembly)
+
+### 必要なもの
+
+[Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html) だけ。
+SDL2はemscriptenのportsが持っているので、`libsdl2-dev` は要らない。
+
+```sh
+git clone https://github.com/emscripten-core/emsdk.git
+cd emsdk && ./emsdk install latest && ./emsdk activate latest
+source ./emsdk_env.sh        # このシェルで emcc / emcmake が使えるようになる
+```
+
+### ビルドと配信
+
+```sh
+emcmake cmake -S pc -B pc/build-web -DCMAKE_BUILD_TYPE=Release
+cmake --build pc/build-web -j
+
+emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index.html
+# emrunが無ければ: python3 -m http.server -d pc/build-web 8080
+```
+
+**`file://` で開いても動かない。** `.wasm` を `fetch` で読むので、必ずHTTPで配信すること。
+
+出力は `pc/build-web/` に4つ。丸ごと静的ホスティングへ置けばそのまま公開できる
+(GitHub Pages等。サーバ側の設定もCORSも要らない)。
+
+| ファイル | 中身 |
+|---|---|
+| `index.html` | ページの外枠。`pc/web/shell.html` から作られる |
+| `index.js` | emscriptenのグルーコード |
+| `index.wasm` | pico-os本体(既定で約1.7MB、`Release`で約1.3MB) |
+| `index.data` | `pc/sdcard/` を固めたもの(仮想FSへ展開される) |
+
+### ページでできること
+
+- **マウスの左ドラッグがタッチ**(ネイティブと同じ)。スマホの指タッチも効く。
+- `Serial` の出力がページ内のログ欄とブラウザのコンソールの両方に出る。
+- 「画面をPNGで保存」ボタンで今の画面を落とせる(不具合の報告用)。
+- Wi-Fiの状態はボタン(＝URLのクエリ)で差し替える。下記参照。
+- 見た目や道具立てを足したいときは `pc/web/shell.html` を書き換える。
+
+### 設定(環境変数の代わりにURLのクエリ)
+
+ブラウザには環境変数が無いので、`main_pc.cpp` が起動時にURLのクエリを `setenv()` する。
+**`compat/` 側は何も変わらない**(いつもどおり `getenv` を読むだけ)。
+
+```
+index.html?wifi=disconnected&rssi=-85
+```
+
+| クエリ | 対応する環境変数 |
+|---|---|
+| `wifi` | `PICOOS_WIFI_STATE` (`auto` / `connected` / `disconnected` / `ssid-not-found` / `failed`) |
+| `rssi` | `PICOOS_WIFI_RSSI` |
+| `ssid` | `PICOOS_WIFI_SSID` |
+| `scan` | `PICOOS_WIFI_SCAN` |
+
+`PICOOS_` で始まるキーはそのまま環境変数名として扱われるので、
+将来増えたものは表に足さなくても `?PICOOS_XXX=...` で渡せる。
+
+### ネイティブとの違い
+
+| 項目 | Webでの扱い |
+|---|---|
+| ループ | `emscripten_set_main_loop()`。ブラウザのメインスレッドは止められないので、`Panel_sdl::main()`(別スレッド)は使わず1フレームずつ刻む |
+| SDカード | `pc/sdcard/` を**ビルド時に**`index.data`へ焼き込む。**中身を変えたら再ビルドが必要**で、アプリ側からの書き込みはメモリ上だけ(リロードで消える) |
+| Wi-Fi | 疎通判定は `navigator.onLine`(ソケットが無いため)。固定したいときは `?wifi=...` |
+| **Markdownブラウザのオンライン機能** | **使えない。** ブラウザには生のTCPソケットが無いので、`browser-home` を設定したりツールバーの「更新」「検索」を押してもサーバへ繋がらない。同梱のサンプル(`/tmp/doc.md`)を読む分にはそのまま動く |
+| `delay()` | 何もせず即座に戻る(待つとタブが固まるため)。`src/` は使っていない |
+| スレッド | 無し。`Panel_sdl` のデバッガ検出スレッドも起動しないが、動作に影響は無い |
+| 速度 | 実測60fps(メインループ自体の負荷は数ms/120フレーム)。描画はWebGL経由 |
+
+IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイズがそのまま
+`index.data` に乗る**(初回ロードで全部ダウンロードされる)。Webで配る際は要注意。
+
+### ブラウザでC++をデバッグする
+
+`-DCMAKE_BUILD_TYPE=Debug` でビルドするとDWARF情報が `.wasm` に入り、Chromeの
+[C/C++ DevTools Support (DWARF)](https://chromewebstore.google.com/detail/cc++-devtools-support-dwarf/pdcpmagijalfljmkmjngeonclgbbannb)
+拡張を入れればDevTools上でC++のソースのままブレークポイントを張れる。
+ビルドは遅く `.wasm` も大きくなるので、普段は `Release` でよい。
+
+### GitHub Pages へ自動公開
+
+`.github/workflows/web-pages.yml` が面倒を見る。
+
+| きっかけ | すること |
+|---|---|
+| `main` へpush | Webビルド → **https://kimu1109.github.io/pico-os/ へ公開** |
+| プルリクエスト | ビルドが通るかだけ確認(公開はしない) |
+| 手動 | Actionsタブの「Run workflow」 |
+
+- **初回だけリポジトリの Settings > Pages で Source を「GitHub Actions」にする**
+  (ワークフロー内の `configure-pages` が自動設定を試みるので、たいていは何もしなくてよい)。
+- emsdkの版はワークフロー先頭の `EMSDK_VERSION` で固定している。
+  **上げるときは手元で同じ版を通してから**にすること。
+- emsdkは丸ごとキャッシュされる(SDL2のportsのビルド結果も同じ場所に溜まるため)。
+  初回は数分かかるが、2回目以降は短い。
+- **公開されているのがどのコミットか**は、ページのログの先頭に出る:
+  `[WEB] pico-os build: 1a2b3c4`。手元のビルドは `dev` と出る
+  (`-DPICOOS_WEB_REV=...` で変えられる)。
+- 公開するのは `index.html` / `index.js` / `index.wasm` / `index.data` の4つだけ。
+  ビルドディレクトリのCMakeの中間物は含めない。
 
 ## SDカード
 
@@ -113,8 +225,10 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 
 ```
 pc/
-  CMakeLists.txt            ビルド定義
-  main_pc.cpp               エントリポイント(Panel_sdl::main から setup()/loop() を回す)
+  CMakeLists.txt            ビルド定義(ネイティブ / Emscripten を分岐)
+  main_pc.cpp               エントリポイント(ネイティブ=Panel_sdl::main / Web=emscripten_set_main_loop)
+  web/
+    shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
   compat/                   実機ライブラリの代替ヘッダ(src/ より先にインクルードされる)
     Arduino.h               millis/delay/GPIO/Serial
     SPI.h                   SPIClassRP2040 の空実装

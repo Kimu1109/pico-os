@@ -1,0 +1,97 @@
+# Webビルド(WebAssembly)をGitHub Pagesへ自動公開する。
+#
+#   main へのpush      … ビルドして公開する
+#   プルリクエスト     … ビルドだけして壊れていないかを見る(公開はしない)
+#   手動実行           … Actionsタブの「Run workflow」から
+#
+# 公開先: https://kimu1109.github.io/pico-os/
+#
+# 初回だけリポジトリの Settings > Pages で Source を「GitHub Actions」にする必要がある
+# (下の configure-pages が自動で設定を試みるが、権限で弾かれたときは手で設定すること)。
+name: Web を GitHub Pages へ公開
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # ここを上げるときは手元でも同じ版で通してから(pc/README.md 参照)
+  EMSDK_VERSION: "6.0.9"
+
+jobs:
+  build:
+    name: WebAssemblyをビルドする
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # emsdkは1GB近くあるうえ、SDL2のportsのビルド結果も同じ場所に溜まるので丸ごとキャッシュする
+      - name: emsdk をキャッシュから戻す
+        id: emsdk-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}
+
+      - name: emsdk を用意する
+        if: steps.emsdk-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          cd ~/emsdk
+          ./emsdk install "$EMSDK_VERSION"
+          ./emsdk activate "$EMSDK_VERSION"
+
+      - name: ビルドする
+        run: |
+          . ~/emsdk/emsdk_env.sh
+          emcmake cmake -S pc -B pc/build-web \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPICOOS_WEB_REV="${GITHUB_SHA::7}"
+          cmake --build pc/build-web -j"$(nproc)"
+
+      # ビルドディレクトリにはCMakeの中間物も入っているので、配るものだけを集める
+      - name: 公開するファイルを集める
+        run: |
+          mkdir -p _site
+          cp pc/build-web/index.html pc/build-web/index.js \
+             pc/build-web/index.wasm pc/build-web/index.data _site/
+          ls -la _site
+
+      - name: 成果物をアップロードする
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: GitHub Pages へ公開する
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write      # 公開そのもの
+      id-token: write   # deploy-pages が使うOIDCトークン
+
+    # 公開は同時に1つだけ。走っている公開は最後まで終わらせる(中断すると中途半端に配られる)
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # Pagesが未設定のリポジトリでは enablement: true が設定まで面倒を見てくれる
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

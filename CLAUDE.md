@@ -298,6 +298,10 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   Wi-Fi状態の切替・画面のPNG保存ボタンを持つ。デバッグ用の道具を足すならここ。
 - **`src/`へ新しい依存を足すときはWebビルドも通すこと**。ネイティブが通ってもemscriptenで
   落ちる依存(生ソケット/スレッド/ブロッキング待ち)があるため。
+- **公開**: `.github/workflows/web-pages.yml` が `main` へのpushで
+  https://kimu1109.github.io/pico-os/ へ自動デプロイする(プルリクではビルド確認のみ)。
+  emsdkの版はワークフローの `EMSDK_VERSION` で固定。公開中のコミットはページのログ先頭の
+  `[WEB] pico-os build: <hash>` で分かる。
 
 ## ロードマップ・TODO状況(2026-09-13時点)
 

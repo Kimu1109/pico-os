@@ -43,6 +43,8 @@
   - [x] ブラウザ動作対応(WebAssembly) … `emcmake cmake -S pc -B pc/build-web`。
         `emscripten_set_main_loop`で1フレームずつ回す。SDカードは`index.data`へ同梱、
         設定はURLのクエリ(`?wifi=disconnected`)
+  - [x] Webビルドの自動公開 … `main`へのpushでGitHub Pagesへ
+        (https://kimu1109.github.io/pico-os/)。`.github/workflows/web-pages.yml`
   - [ ] その他あれば
 - [ ] 標準アプリ開発
   - [ ] 設定アプリ

@@ -88,6 +88,11 @@ if(EMSCRIPTEN)
     # SDL2はemscriptenのportsを使う(コンパイル時にもヘッダのパスとして必要)
     target_compile_options(picoos_pc PRIVATE "-sUSE_SDL=2")
 
+    # どのコミットのビルドが公開されているかをページのログで分かるようにする。
+    # CI(.github/workflows/web-pages.yml)がコミットハッシュを渡す
+    set(PICOOS_WEB_REV "dev" CACHE STRING "Webビルドに刻むリビジョン表記")
+    target_compile_definitions(picoos_pc PRIVATE PICOOS_WEB_REV="${PICOOS_WEB_REV}")
+
     # index.html / index.js / index.wasm / index.data を吐く。
     # ディレクトリをそのまま静的配信すればトップページで動く
     set_target_properties(picoos_pc PROPERTIES OUTPUT_NAME "index" SUFFIX ".html")

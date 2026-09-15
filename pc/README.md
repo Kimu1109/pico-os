@@ -137,6 +137,28 @@ IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイ�
 拡張を入れればDevTools上でC++のソースのままブレークポイントを張れる。
 ビルドは遅く `.wasm` も大きくなるので、普段は `Release` でよい。
 
+### GitHub Pages へ自動公開
+
+`.github/workflows/web-pages.yml` が面倒を見る。
+
+| きっかけ | すること |
+|---|---|
+| `main` へpush | Webビルド → **https://kimu1109.github.io/pico-os/ へ公開** |
+| プルリクエスト | ビルドが通るかだけ確認(公開はしない) |
+| 手動 | Actionsタブの「Run workflow」 |
+
+- **初回だけリポジトリの Settings > Pages で Source を「GitHub Actions」にする**
+  (ワークフロー内の `configure-pages` が自動設定を試みるので、たいていは何もしなくてよい)。
+- emsdkの版はワークフロー先頭の `EMSDK_VERSION` で固定している。
+  **上げるときは手元で同じ版を通してから**にすること。
+- emsdkは丸ごとキャッシュされる(SDL2のportsのビルド結果も同じ場所に溜まるため)。
+  初回は数分かかるが、2回目以降は短い。
+- **公開されているのがどのコミットか**は、ページのログの先頭に出る:
+  `[WEB] pico-os build: 1a2b3c4`。手元のビルドは `dev` と出る
+  (`-DPICOOS_WEB_REV=...` で変えられる)。
+- 公開するのは `index.html` / `index.js` / `index.wasm` / `index.data` の4つだけ。
+  ビルドディレクトリのCMakeの中間物は含めない。
+
 ## SDカード
 
 `pc/sdcard/` を実機のSDカードとして読む。実機のSDに置くファイルを同じ構成で置けば、

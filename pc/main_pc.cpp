@@ -208,8 +208,15 @@ namespace {
     }
 }
 
+//公開ビルドがどのコミットのものかを見分けるための表記(CIが -DPICOOS_WEB_REV=... で渡す)
+#if !defined(PICOOS_WEB_REV)
+    #define PICOOS_WEB_REV "dev"
+#endif
+
 int main(int, char**)
 {
+    printf("[WEB] pico-os build: %s\n", PICOOS_WEB_REV);
+
     applyQueryParams();
 
     if (0 != lgfx::Panel_sdl::setup()) return 1;

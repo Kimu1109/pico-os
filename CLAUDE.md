@@ -455,6 +455,8 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   落ちる依存(生ソケット/スレッド/ブロッキング待ち)があるため。
 - **公開**: `.github/workflows/web-pages.yml` が `main` へのpushで
   https://kimu1109.github.io/pico-os/ へ自動デプロイする(プルリクではビルド確認のみ)。
+  **リポジトリの Settings > Pages で Source を「GitHub Actions」にしておくことが前提**
+  (ワークフローからの自動有効化は`GITHUB_TOKEN`の権限ではできない)。
   emsdkの版はワークフローの `EMSDK_VERSION` で固定。公開中のコミットはページのログ先頭の
   `[WEB] pico-os build: <hash>` で分かる。
 

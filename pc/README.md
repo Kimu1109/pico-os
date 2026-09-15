@@ -154,8 +154,11 @@ IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイ�
 | プルリクエスト | ビルドが通るかだけ確認(公開はしない) |
 | 手動 | Actionsタブの「Run workflow」 |
 
-- **初回だけリポジトリの Settings > Pages で Source を「GitHub Actions」にする**
-  (ワークフロー内の `configure-pages` が自動設定を試みるので、たいていは何もしなくてよい)。
+- **初回だけリポジトリの Settings > Pages で Source を「GitHub Actions」にする。**
+  ここは手作業が要る。ワークフローから自動で有効化することはできない
+  (`GITHUB_TOKEN` にPagesサイトを作る権限が無く、
+  `Create Pages site failed: Resource not accessible by integration` で落ちる)。
+  設定前に走らせると公開ジョブだけが失敗する(ビルドと成果物のアップロードは成功する)。
 - emsdkの版はワークフロー先頭の `EMSDK_VERSION` で固定している。
   **上げるときは手元で同じ版を通してから**にすること。
 - emsdkは丸ごとキャッシュされる(SDL2のportsのビルド結果も同じ場所に溜まるため)。

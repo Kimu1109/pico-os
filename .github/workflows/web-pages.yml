@@ -6,8 +6,9 @@
 #
 # 公開先: https://kimu1109.github.io/pico-os/
 #
-# 初回だけリポジトリの Settings > Pages で Source を「GitHub Actions」にする必要がある
-# (下の configure-pages が自動で設定を試みるが、権限で弾かれたときは手で設定すること)。
+# **初回だけ、リポジトリの Settings > Pages で Source を「GitHub Actions」にすること。**
+# ワークフローからの自動有効化(configure-pages の enablement)は GITHUB_TOKEN の権限では
+# できない("Create Pages site failed: Resource not accessible by integration" で落ちる)。
 name: Web を GitHub Pages へ公開
 
 on:
@@ -88,10 +89,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      # Pagesが未設定のリポジトリでは enablement: true が設定まで面倒を見てくれる
+      # Pagesの設定を読む。未設定ならここで落ちるので、原因がすぐ分かる
+      # (enablement: true での自動有効化はトークンの権限不足でできないため付けない)
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - id: deployment
         uses: actions/deploy-pages@v4

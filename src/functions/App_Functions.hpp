@@ -1,19 +1,37 @@
 #pragma once
 
 #include "gui/icons/icons_data.h"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
 
 class Scene;
 
 // ランチャに並ぶアプリ1つぶんの情報。
-// 静的なテーブルへ積むので、nameには必ず静的寿命の文字列(リテラル)を渡すこと。
+//
+// 名前と引数は`const char*`ではなく`FixedString`で**コピーして持つ**。
+// 以前は静的寿命のリテラルしか渡せず、「SDを走査して見つけたLuaアプリを登録する」
+// といった動的な登録ができなかったため。呼び出し側の文字列は寿命が短くてよい。
 struct AppEntry {
-    const char* name = nullptr;
+    // 表示名。ランチャは2行で12文字程度しか出せないので、48B(日本語16文字)あれば足りる
+    FixedString<PICO_STR_M> name;
+
     IconID icon = IconID::AppBox;
 
+    // 生成関数へ渡す引数。Luaアプリならスクリプトのパス、文書ビューアなら
+    // 開くファイルのパスといった用途。使わないアプリは空のままでよい。
+    // パス全長(PICO_PATH_LEN=255)ではなく96Bなのは、登録簿が固定長テーブルで
+    // 常時RAMを占めるため(下のkMaxAppsのコメント参照)。
+    FixedString<PICO_STR_L> arg;
+
     // シーンを1つ生成する。生成したシーンの所有権はSceneFunctionsへ渡る。
+    //
+    // 引数として自分自身(AppEntry)を受け取るので、**同じ生成関数へ別のargを持たせて
+    // 「同じシーン型・違う中身」のアプリを何個でも登録できる**。
+    // (Luaアプリが「同じLuaScene型 + 別スクリプトパス」で増えるのがこの形)
+    //
     // std::functionではなく素の関数ポインタにしてあるのは、
     // 登録簿を静的テーブル(確保ゼロ)のままにしたいため
-    Scene* (*create)() = nullptr;
+    Scene* (*create)(const AppEntry& entry) = nullptr;
 };
 
 // アプリの登録簿。
@@ -26,19 +44,39 @@ struct AppEntry {
 // 仕組み(Register/Launch等)は App_Functions.cpp に、
 // 実際に載せるアプリの一覧は App_List.cpp の Setup() にある。
 // アプリを増やすときは App_List.cpp へ1行足すだけでよい。
+//
+// 起動後に登録簿を書き換えることもできる(Luaアプリのスキャン等)。
+// ただしランチャ(AppGrid)は再描画の指示までは面倒を見ないので、
+// 表示中に増減させた場合は呼び出し側でAppGridへneedsRender()すること。
 namespace AppFunctions {
-    // 登録できるアプリ数の上限。固定長配列で持つので、超えた分は警告して捨てる
+    // 登録できるアプリ数の上限。固定長配列で持つので、超えた分は警告して捨てる。
+    // AppEntry1件が約160B(名前48B + 引数96B + アイコン + 関数ポインタ)なので、
+    // この配列だけで常時4KB弱のstatic RAMを占める。上限や文字列長を増やすときは
+    // その点に注意すること
     constexpr int kMaxApps = 24;
 
     inline AppEntry apps[kMaxApps];
     inline int app_count = 0;
 
-    // 型Tのシーンを作るファクトリ。Register()へ &MakeScene<XxxScene> の形で渡す
+    // 型Tのシーンを作るファクトリ。引数を使わないアプリ向け。
+    // Register()へ &MakeScene<XxxScene> の形で渡す
     template<typename T>
-    Scene* MakeScene(){ return new T(); }
+    Scene* MakeScene(const AppEntry&){ return new T(); }
 
-    // 登録に成功したらtrue。名前/生成関数が未指定、または上限超過でfalse
-    bool Register(const char* name, IconID icon, Scene* (*create)());
+    // 型Tのシーンを entry.arg 付きで作るファクトリ。
+    // Tは const char* を1つ取るコンストラクタを持つこと。
+    // Register()へ &MakeSceneWithArg<XxxScene> と arg をセットで渡す
+    template<typename T>
+    Scene* MakeSceneWithArg(const AppEntry& entry){ return new T(entry.arg.c_str()); }
+
+    // 登録に成功したらtrue。nameとargはこの場でコピーされる。
+    // 以下の場合はfalse:
+    //   - 名前か生成関数が未指定
+    //   - 登録上限に達している
+    //   - argが長すぎて切り詰められる(パスとして別物になるため登録ごと拒否する)
+    // 名前のほうは切り詰めても表示が縮むだけなので、警告を出した上で登録は通す
+    bool Register(const char* name, IconID icon, Scene* (*create)(const AppEntry&),
+                  const char* arg = nullptr);
 
     int Count();
 

@@ -17,18 +17,55 @@ project(picoos_pc CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(PICOOS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+
 # ---- LovyanGFX ----
 # 既定ではここで取得する。手元にある物を使う場合は
 #   cmake -S pc -B pc/build -DLOVYANGFX_DIR=/path/to/LovyanGFX
 set(LOVYANGFX_DIR "" CACHE PATH "既存のLovyanGFXソースのパス(空なら自動で取得する)")
+# 取得するタグ。空なら platformio.ini の lib_deps から読む
+set(LOVYANGFX_TAG "" CACHE STRING "取得するLovyanGFXのタグ(空ならplatformio.iniから読む)")
+
+# 版は platformio.ini を唯一の情報源とする。
+# 以前はここへ GIT_TAG を直書きしていたため、実機側を上げてもPCビルドが古い版の
+# ままになりうる二重管理だった(追随は人間の記憶頼み)。
+if(LOVYANGFX_DIR STREQUAL "" AND LOVYANGFX_TAG STREQUAL "")
+    set(PICOOS_PIO_INI "${PICOOS_ROOT}/platformio.ini")
+    if(NOT EXISTS "${PICOOS_PIO_INI}")
+        message(FATAL_ERROR "platformio.ini が見つかりません: ${PICOOS_PIO_INI}")
+    endif()
+
+    # platformio.ini を書き換えたらconfigureをやり直させる(版の変更を拾うため)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${PICOOS_PIO_INI}")
+
+    file(READ "${PICOOS_PIO_INI}" PICOOS_PIO_INI_TEXT)
+    if(NOT PICOOS_PIO_INI_TEXT MATCHES "lovyan03/LovyanGFX[ \t]*@[ \t]*([^\r\n \t;]+)")
+        message(FATAL_ERROR
+            "platformio.ini の lib_deps から LovyanGFX の版を読めませんでした。\n"
+            "'lovyan03/LovyanGFX@1.2.28' の形式で書くか、"
+            "-DLOVYANGFX_TAG=<タグ> で明示してください。")
+    endif()
+    set(LOVYANGFX_TAG "${CMAKE_MATCH_1}")
+
+    # ^1.2.26 や ~1.2.26 のような範囲指定だと、PlatformIOが実際に落としてくる版が
+    # 確定しない。PC側だけ別の版になっては同期する意味が無いので、ここで止めて
+    # 完全固定を促す(どうしても範囲指定のままにしたい場合は -DLOVYANGFX_TAG=)
+    if(NOT LOVYANGFX_TAG MATCHES "^[0-9]")
+        message(FATAL_ERROR
+            "platformio.ini の LovyanGFX が範囲指定(${LOVYANGFX_TAG})になっています。\n"
+            "実機とPCで違う版になりうるため、'lovyan03/LovyanGFX@1.2.28' のように"
+            "完全固定してください。\n"
+            "範囲指定のままにする場合は -DLOVYANGFX_TAG=1.2.28 のように明示してください。")
+    endif()
+
+    message(STATUS "LovyanGFX: platformio.ini の指定は ${LOVYANGFX_TAG}")
+endif()
 
 if(LOVYANGFX_DIR STREQUAL "")
     include(FetchContent)
     FetchContent_Declare(lovyangfx
         GIT_REPOSITORY https://github.com/lovyan03/LovyanGFX.git
-        # platformio.ini の ^1.2.26 が解決する版に合わせる。
-        # 実機側を上げたらここも追随させること
-        GIT_TAG        1.2.28
+        GIT_TAG        ${LOVYANGFX_TAG}
         GIT_SHALLOW    TRUE)
     FetchContent_GetProperties(lovyangfx)
     if(NOT lovyangfx_POPULATED)
@@ -47,7 +84,6 @@ if(NOT EMSCRIPTEN)
 endif()
 
 # ---- ソース ----
-set(PICOOS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
 file(GLOB_RECURSE PICOOS_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/src/*.cpp")
 

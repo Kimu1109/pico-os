@@ -1,0 +1,582 @@
+// HttpGet の結合テスト。**実際にソケットで通信する**ので、run.sh(ネットワーク不要の
+// スタブ環境)ではなく run_net.sh から動かす。相手は script/reference_server.py。
+//
+// 確かめたいのは、単体テスト(http_test)では触れない以下の経路:
+//   - pc/compat の WiFiClient で本当に繋がって受信できること
+//   - 条件付きGETでサーバが304を返し、こちらがそれを304として扱えること
+//   - リダイレクトを追えること
+//   - 404や、繋がらない相手で正しく失敗すること
+#include "task/Http_Get.hpp"
+#include "net/Doc_Fetch.hpp"
+#include "storage/Doc_Cache.hpp"
+#include "storage/SD_Path.hpp"
+#include "storage/SD_IO.hpp"
+#include "util/Md_Scan.hpp"
+#include "net/Discovery.hpp"
+#include "net/Doc_Search.hpp"
+#include "net/Manifest.hpp"
+#include "functions/Log_Functions.hpp"
+#include "OS_Data.hpp"
+
+#include <cstdio>
+#include <cstring>
+#include <string>
+
+// ---- モック ----
+void LogFunctions::Log(LogType, const char*, ...){}
+void LogFunctions::Setup(){}
+void LogFunctions::Update(){}
+void LogFunctions::Flush(){}
+
+static int failures = 0;
+static void check(bool cond, const char* label){
+    printf("%s %s\n", cond ? "[ OK ]" : "[FAIL]", label);
+    if(!cond) failures++;
+}
+static void eq_str(const char* a, const char* e, const char* label){
+    const bool ok = (strcmp(a, e) == 0);
+    printf("%s %-46s 実測=%-30s 期待=%s\n", ok ? "[ OK ]" : "[FAIL]", label, a, e);
+    if(!ok) failures++;
+}
+static void eq_int(long a, long e, const char* label){
+    const bool ok = (a == e);
+    printf("%s %-46s 実測=%ld 期待=%ld\n", ok ? "[ OK ]" : "[FAIL]", label, a, e);
+    if(!ok) failures++;
+}
+
+class BufferSink : public IHttpSink {
+    public:
+        std::string data;
+        bool write(const void* p, size_t n) override {
+            data.append((const char*)p, n);
+            return true;
+        }
+};
+
+// タスクが終わるまでupdate()を回す(実機のloop()の代わり)
+static void pump(HttpGet& task, int max_iterations = 20000){
+    for(int i = 0; i < max_iterations; i++){
+        if(task.getStatus() != TaskTools::PROCESSING) return;
+        task.update();
+    }
+}
+
+int main(int argc, char** argv){
+    const char* host = "127.0.0.1";
+    const uint16_t port = (argc > 1) ? (uint16_t)atoi(argv[1]) : 8080;
+    //discoveryを持たないサーバ(素の静的ファイルサーバ)の再現用
+    const uint16_t bare_port = (argc > 2) ? (uint16_t)atoi(argv[2]) : (uint16_t)(port + 1);
+
+    char base[128];
+    snprintf(base, sizeof(base), "http://%s:%u", host, (unsigned)port);
+
+    std::string etag;
+
+    // ---- 文書の取得 ----
+    {
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/doc.md", base);
+
+        Url url;
+        check(UrlTools::Parse(url, urlText), "URLを解釈できる");
+
+        BufferSink sink;
+        HttpGet task;
+        check(task.begin(url, &sink), "取得を開始できる");
+        pump(task);
+
+        eq_int(task.getStatus(), TaskTools::SUCCESS, "成功で終わる");
+        eq_int(task.response().statusCode(), 200, "200が返る");
+        check(!sink.data.empty(), "本文を受け取れる");
+        check(sink.data.find("pico-os") != std::string::npos, "本文の中身が期待どおり");
+        check(!task.response().validator().empty(), "ETagを受け取れる");
+        eq_int((long)task.response().bodyBytes(), (long)sink.data.size(),
+               "受信バイト数とシンクへ渡った量が一致する");
+
+        etag = task.response().validator().c_str();
+    }
+
+    // ---- 条件付きGET(変更が無ければ304) ----
+    {
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/doc.md", base);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        BufferSink sink;
+        HttpGet task;
+        task.begin(url, &sink, etag.c_str());
+        pump(task);
+
+        eq_int(task.getStatus(), TaskTools::SUCCESS, "条件付きGETも成功で終わる");
+        eq_int(task.response().statusCode(), 304, "304が返る");
+        check(task.isNotModified(), "304と判定できる");
+        check(sink.data.empty(), "本文は受け取らない(キャッシュをそのまま使える)");
+    }
+
+    // ---- 検索API(TSV) ----
+    {
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/v1/search?q=pico", base);
+
+        Url url;
+        check(UrlTools::Parse(url, urlText), "検索URLを解釈できる");
+
+        BufferSink sink;
+        HttpGet task;
+        task.begin(url, &sink);
+        pump(task);
+
+        eq_int(task.response().statusCode(), 200, "検索は200が返る");
+        check(sink.data.find('\t') != std::string::npos, "TSVが返る");
+        check(sink.data.find("/doc.md") != std::string::npos, "パスが1列目に入っている");
+    }
+
+    // ---- リダイレクト(サーバは / をホームへ302する) ----
+    {
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/", base);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        BufferSink sink;
+        HttpGet task;
+        task.begin(url, &sink);
+        pump(task);
+
+        eq_int(task.getStatus(), TaskTools::SUCCESS, "リダイレクトを追って成功する");
+        eq_int(task.response().statusCode(), 200, "最終的に200になる");
+        check(!sink.data.empty(), "転送先の本文を受け取れる");
+        check(sink.data.find("pico-os") != std::string::npos, "転送先の中身が期待どおり");
+    }
+
+    // ---- 見つからない ----
+    {
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/no-such-file.md", base);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        BufferSink sink;
+        HttpGet task;
+        task.begin(url, &sink);
+        pump(task);
+
+        eq_int(task.getStatus(), TaskTools::FAILED, "404は失敗として終わる");
+        eq_int(task.response().statusCode(), 404, "404が読める");
+        check(sink.data.empty(), "404の本文はシンクへ流さない(キャッシュを汚さない)");
+    }
+
+    // ---- 繋がらない相手 ----
+    {
+        Url url;
+        //閉じているポートを狙う
+        UrlTools::Parse(url, "http://127.0.0.1:9/x.md");
+
+        BufferSink sink;
+        HttpGet task;
+        task.begin(url, &sink);
+        pump(task);
+
+        eq_int(task.getStatus(), TaskTools::FAILED, "繋がらない相手は失敗する");
+        check(task.failure() == HttpGet::Fail::ConnectFailed, "接続失敗として分かる");
+    }
+
+    // ---- httpsは接続前に弾く ----
+    {
+        Url url;
+        UrlTools::Parse(url, "https://example.test/x.md");
+
+        BufferSink sink;
+        HttpGet task;
+        task.begin(url, &sink);
+        pump(task);
+
+        eq_int(task.getStatus(), TaskTools::FAILED, "httpsは失敗する");
+        check(task.failure() == HttpGet::Fail::NotHttp, "未対応として分かる(接続はしない)");
+    }
+
+    // ---- DocFetch: 取得 -> キャッシュ -> 開けるパス ----
+    // ここが繋がって初めて「サーバ上の文書を読む」が成立する
+    {
+        printf("\n---- DocFetch ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/doc.md", base);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        //1回目: サーバから取ってキャッシュへ
+        DocFetch fetch;
+        check(fetch.begin(url), "取得を開始できる");
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Ready, "Readyになる");
+        check(fetch.source() == DocFetch::Source::Network, "サーバから取ってきたと分かる");
+
+        //キャッシュの配置がPROTOCOL.mdどおりか
+        char expected[256];
+        snprintf(expected, sizeof(expected), "/cache/127.0.0.1_%u/doc.md", (unsigned)port);
+        eq_str(fetch.path().c_str(), expected, "サーバ上のパスをミラーした場所になる");
+        check(HostSd::files.count(fetch.path().c_str()) > 0, "本体がSDへ書かれている");
+        check(HostSd::files[fetch.path().c_str()].find("pico-os") != std::string::npos,
+              "内容が正しい");
+
+        //目録に検証子が入っているか
+        char hostKey[64];
+        snprintf(hostKey, sizeof(hostKey), "127.0.0.1:%u", (unsigned)port);
+        PICO_DocCache::Entry entry;
+        check(PICO_DocCache::Lookup(hostKey, "/doc.md", entry), "目録から引ける");
+        check(!entry.validator.empty(), "検証子(ETag)が保存されている");
+
+        const std::string firstBody = HostSd::files[fetch.path().c_str()];
+
+        //2回目: 条件付きGETで304になり、本文を取り直さない
+        DocFetch again;
+        again.begin(url);
+        for(int i = 0; i < 20000 && again.state() == DocFetch::State::Fetching; i++) again.update();
+
+        check(again.state() == DocFetch::State::Ready, "2回目もReadyになる");
+        check(again.source() == DocFetch::Source::NotModified,
+              "304でキャッシュがそのまま使われる");
+        check(HostSd::files[again.path().c_str()] == firstBody, "本体は書き換わらない");
+
+        //一時ファイルが残っていないこと(304のときwriterをabortしている)
+        int leftover = 0;
+        for(const auto& kv : HostSd::files){
+            if(kv.first.size() >= 5 && kv.first.compare(kv.first.size() - 5, 5, ".part") == 0) leftover++;
+        }
+        eq_int(leftover, 0, "一時ファイルが残らない");
+    }
+
+    // ---- DocFetch: 取れないときは古いキャッシュで代用する ----
+    {
+        HostSd::files.clear();
+
+        //閉じているポートのサーバのキャッシュを先に作っておく
+        {
+            PICO_DocCache::Writer w;
+            check(w.begin("127.0.0.1:9", "/offline.md"), "キャッシュを用意する");
+            const char* body = "# 保存済みの内容\n";
+            w.write(body, strlen(body));
+            check(w.commit("etag-old", 1000), "キャッシュを確定する");
+        }
+
+        Url url;
+        UrlTools::Parse(url, "http://127.0.0.1:9/offline.md");
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Ready, "繋がらなくてもReadyになる");
+        check(fetch.source() == DocFetch::Source::CacheAfterError,
+              "古いキャッシュを開いたと分かる(オフライン表示)");
+        check(HostSd::files[fetch.path().c_str()].find("保存済み") != std::string::npos,
+              "保存済みの内容がそのまま残っている");
+        check(fetch.message()[0] != '\0', "理由が伝わる");
+    }
+
+    // ---- DocFetch: キャッシュも無ければ失敗する ----
+    {
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/no-such-file.md", base);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Failed, "404かつキャッシュ無しは失敗する");
+        check(fetch.message()[0] != '\0', "理由が伝わる");
+
+        int leftover = 0;
+        for(const auto& kv : HostSd::files){
+            if(kv.first.size() >= 5 && kv.first.compare(kv.first.size() - 5, 5, ".part") == 0) leftover++;
+        }
+        eq_int(leftover, 0, "失敗しても一時ファイルが残らない");
+    }
+
+    // ---- DocFetch: ディレクトリを指すURLは接続前に断る ----
+    // 文書中の "[foo](http://example.org)" のような、ホストだけのリンクがこれ。
+    // パスが "/" になるためキャッシュ上のファイル名が決まらない。
+    // ここで断らずに PathFor() まで流すと「パスが長すぎます」という
+    // 見当違いの理由が出て、原因を追えなくなる
+    {
+        HostSd::files.clear();
+
+        Url url;
+        UrlTools::Parse(url, "http://127.0.0.1:9/");
+
+        DocFetch fetch;
+        const bool started = fetch.begin(url);
+
+        check(!started, "ディレクトリのURLはbegin()の時点で断る");
+        check(fetch.state() == DocFetch::State::Failed, "Failedになる");
+        eq_str(fetch.message(), "文書を指していないURLです", "理由が具体的に伝わる");
+        eq_int((long)HostSd::files.size(), 0, "SDへは何も書かない");
+    }
+
+    // ---- 画像: 文書を取る -> 走査 -> 画像も取る ----
+    // MarkdownSceneが表示前にやる手順をそのままなぞる。
+    // **最後の1件が肝** — 取ってきた画像の置き場所と、MarkdownViewが
+    // 文書基準で解決するパスが一致していること。ここが噛み合っていないと
+    // 「取ってきたのに表示されない」になる
+    {
+        printf("\n---- 画像の先読み ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s/doc.md", base);
+
+        Url docUrl;
+        UrlTools::Parse(docUrl, urlText);
+
+        //1. 文書を取る
+        DocFetch docFetch;
+        docFetch.begin(docUrl);
+        for(int i = 0; i < 20000 && docFetch.state() == DocFetch::State::Fetching; i++) docFetch.update();
+        check(docFetch.state() == DocFetch::State::Ready, "文書を取得できる");
+
+        const std::string docCachePath = docFetch.path().c_str();
+
+        //2. 走査して画像参照を集める(MarkdownScene::collectMissingImages と同じ規則)
+        FixedString<PICO_STR_L> imageRef;
+        {
+            const std::string& text = HostSd::files[docCachePath];
+            size_t start = 0;
+            while(start < text.size()){
+                size_t end = text.find('\n', start);
+                if(end == std::string::npos) end = text.size();
+
+                const char* ref = nullptr;
+                size_t refLen = 0;
+                if(MdScan::ImageRefInLine(text.data() + start, end - start, ref, refLen)){
+                    imageRef.assign(ref, refLen);
+                    break;
+                }
+                start = end + 1;
+            }
+        }
+        eq_str(imageRef.c_str(), "img/sample.pimg", "文書から画像参照を見つけられる");
+
+        //3. 文書のURLを基準に解決して取りに行く
+        Url imageUrl;
+        check(UrlTools::Resolve(imageUrl, docUrl, imageRef.c_str()), "画像URLを解決できる");
+        eq_str(imageUrl.path.c_str(), "/img/sample.pimg", "画像のパスが文書基準で解決される");
+
+        DocFetch imgFetch;
+        imgFetch.begin(imageUrl);
+        for(int i = 0; i < 20000 && imgFetch.state() == DocFetch::State::Fetching; i++) imgFetch.update();
+
+        check(imgFetch.state() == DocFetch::State::Ready, "画像を取得できる");
+        check(HostSd::files.count(imgFetch.path().c_str()) > 0, "画像がSDへ書かれている");
+        eq_int((long)HostSd::files[imgFetch.path().c_str()].size(), 53, "画像のバイト数が一致する");
+
+        //4. MarkdownViewが文書基準で解決するパスと、画像の置き場所が一致すること
+        FixedString<PICO_PATH_LEN> resolvedByView;
+        check(PICO_IO::resolve(resolvedByView, docCachePath.c_str(), imageRef.c_str()),
+              "View側の解決が成功する");
+        eq_str(resolvedByView.c_str(), imgFetch.path().c_str(),
+               "View側の解決先と画像の置き場所が一致する");
+
+        //5. 2回目は取りに行かない(キャッシュ済み)
+        FixedString<PICO_STR_M> host;
+        UrlTools::HostHeader(host, docUrl);
+        check(PICO_DocCache::Exists(host.c_str(), imageUrl.path.c_str()),
+              "2回目以降はキャッシュ済みと判定される");
+    }
+
+    // ---- サーバ情報(discovery) ----
+    // discoveryもただの文書として取るので、経路はDoc_Fetchと同じ。
+    // ここで見たいのは「対応しているサーバ」と「していないサーバ」の見分け
+    {
+        printf("\n---- discovery ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "%s%s", base, Discovery::kPath);
+
+        Url url;
+        check(UrlTools::Parse(url, urlText), "discoveryのURLを組み立てられる");
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Ready, "サーバ情報を取得できる");
+
+        ServerInfo info;
+        check(Discovery::ParseFile(fetch.path().c_str(), info), "取得した内容を解釈できる");
+        eq_int(info.version, 1, "プロトコルの版を読める");
+        check(!info.name.empty(), "サーバ名を読める");
+        check(info.hasSearch(), "検索対応と分かる");
+        eq_str(info.search.c_str(), "/v1/search", "検索エンドポイントの場所を読める");
+
+        //2回目は条件付きGETで304になる(discoveryも同じ仕組みに乗っている)
+        DocFetch again;
+        again.begin(url);
+        for(int i = 0; i < 20000 && again.state() == DocFetch::State::Fetching; i++) again.update();
+        check(again.source() == DocFetch::Source::NotModified,
+              "2回目は304でキャッシュが使われる");
+    }
+
+    // ---- マニフェスト ----
+    // 狙いは「開くたびの条件付きGETを省く」こと。ここが効いていないと
+    // マニフェストを取った意味が無いので、**通信していないこと**まで見る
+    {
+        printf("\n---- マニフェスト ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+
+        //1. マニフェストを取る(ただの文書として取れる)
+        snprintf(urlText, sizeof(urlText), "%s/v1/manifest", base);
+        Url manifestUrl;
+        UrlTools::Parse(manifestUrl, urlText);
+
+        DocFetch manifestFetch;
+        manifestFetch.begin(manifestUrl);
+        for(int i = 0; i < 20000 && manifestFetch.state() == DocFetch::State::Fetching; i++){
+            manifestFetch.update();
+        }
+        check(manifestFetch.state() == DocFetch::State::Ready, "マニフェストを取得できる");
+
+        FixedString<PICO_PATH_LEN> manifestPath;
+        manifestPath.assign(manifestFetch.path());
+
+        //2. 文書を1本取ってキャッシュを作る
+        snprintf(urlText, sizeof(urlText), "%s/doc.md", base);
+        Url docUrl;
+        UrlTools::Parse(docUrl, urlText);
+
+        DocFetch fetch;
+        fetch.begin(docUrl);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+        check(fetch.source() == DocFetch::Source::Network, "1回目はサーバから取る");
+
+        //3. マニフェストのversionと手元の検証子が一致するので、2回目は何も聞かない
+        FixedString<PICO_STR_M> listed;
+        check(Manifest::VersionOf(manifestPath.c_str(), "/doc.md", listed),
+              "マニフェストに文書が載っている");
+
+        fetch.setManifest(manifestPath.c_str());
+        fetch.begin(docUrl);
+        check(fetch.state() == DocFetch::State::Ready, "2回目はbegin()の時点でReadyになる");
+        check(fetch.source() == DocFetch::Source::Manifest, "通信せずキャッシュを開いたと分かる");
+
+        //4. 取り直し(リロード)はマニフェストを無視して本当に取りに行く
+        fetch.begin(docUrl, true);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+        check(fetch.source() == DocFetch::Source::Network,
+              "更新ボタンはマニフェストを無視して取り直す");
+
+        //5. 検証子が食い違えば素通りしない(条件付きGETへ落ちる)。
+        //   ここが破れると「古い内容を最新と信じて出す」ことになる
+        HostSd::files["/cache/fake-manifest"] = "/doc.md\tずれた検証子\n";
+        fetch.setManifest("/cache/fake-manifest");
+        fetch.begin(docUrl);
+        check(fetch.state() == DocFetch::State::Fetching,
+              "versionが食い違えば取りに行く");
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+        check(fetch.state() == DocFetch::State::Ready, "取り直せる");
+
+        //6. マニフェストに載っていない文書は今までどおり
+        snprintf(urlText, sizeof(urlText), "%s/no-such-file.md", base);
+        Url missing;
+        UrlTools::Parse(missing, urlText);
+        DocFetch other;
+        other.setManifest(manifestPath.c_str());
+        other.begin(missing);
+        check(other.state() == DocFetch::State::Fetching,
+              "載っていない文書は通常どおり取りに行く");
+        for(int i = 0; i < 20000 && other.state() == DocFetch::State::Fetching; i++) other.update();
+    }
+
+    // ---- 検索 ----
+    // 検索は Doc_Fetch ではなく Doc_Search を通る(キャッシュのキーがクエリを
+    // 見ないため、通すと検索語違いの応答が同じファイルへ重なる)。
+    // ここで見たいのは、検索語のパーセントエンコードと応答のTSV解釈
+    {
+        printf("\n---- 検索 ----\n");
+        HostSd::files.clear();
+
+        Url server;
+        UrlTools::Parse(server, base);
+
+        //日本語の検索語。エンコードを間違えるとリクエスト行が壊れて応答が返らない
+        DocSearch search;
+        check(search.begin(server, "/v1/search", "画像"), "検索を始められる");
+        for(int i = 0; i < 20000 && search.state() == DocSearch::State::Fetching; i++) search.update();
+
+        check(search.state() == DocSearch::State::Ready, "結果を受け取れる");
+        eq_int(search.count(), 1, "1件見つかる");
+        if(search.count() > 0){
+            eq_str(search.hit(0).path.c_str(), "/doc.md", "1列目のパスを読める");
+            eq_str(search.hit(0).title.c_str(), "pico-os", "2列目のタイトルを読める");
+        }
+        check(!search.mayHaveMore(), "要求より少なければ続きは無いと判断する");
+
+        //検索はキャッシュを通らない = SDへ何も書かない。
+        //ここが破れると検索語違いの結果が同じファイルへ重なる
+        eq_int((long)HostSd::files.size(), 0, "検索の応答はSDへ書かない");
+
+        //一致が無くても200 + 空の本文で返る(404にしない。PROTOCOL.md)
+        DocSearch empty;
+        empty.begin(server, "/v1/search", "みつからないはずのことば");
+        for(int i = 0; i < 20000 && empty.state() == DocSearch::State::Fetching; i++) empty.update();
+
+        check(empty.state() == DocSearch::State::Ready, "一致が無くても失敗扱いにしない");
+        eq_int(empty.count(), 0, "0件として扱う");
+
+        //search行が無いサーバへは問い合わせに行かない(接続すら試さない)
+        DocSearch unsupported;
+        check(!unsupported.begin(server, "", "画像"), "検索非対応なら始めない");
+        check(unsupported.state() == DocSearch::State::Failed, "失敗として伝わる");
+    }
+
+    // ---- discoveryを持たないサーバ(素の静的ファイルサーバ) ----
+    // PROTOCOL.mdで「404を返してもよい。クライアントは検索を無効化して続行する」
+    // と決めている経路。ここが壊れると、対応していないサーバでブラウザが止まる
+    {
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "http://%s:%u%s", host, (unsigned)bare_port, Discovery::kPath);
+
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+
+        check(fetch.state() == DocFetch::State::Failed, "discovery非対応なら取得は失敗する");
+
+        //それでも文書そのものは読める = ブラウザとしては動き続ける
+        ServerInfo info;
+        info.checked = true; //呼び出し側は「確定した結果」として扱う
+        check(!info.hasSearch(), "検索は無効になる");
+
+        snprintf(urlText, sizeof(urlText), "http://%s:%u/doc.md", host, (unsigned)bare_port);
+        UrlTools::Parse(url, urlText);
+
+        DocFetch docFetch;
+        docFetch.begin(url);
+        for(int i = 0; i < 20000 && docFetch.state() == DocFetch::State::Fetching; i++) docFetch.update();
+        check(docFetch.state() == DocFetch::State::Ready,
+              "discovery非対応でも文書は普通に読める");
+    }
+
+    printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
+    return failures == 0 ? 0 : 1;
+}

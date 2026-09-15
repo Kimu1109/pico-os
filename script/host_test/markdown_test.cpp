@@ -11,12 +11,15 @@
 //   以降の段落まで取り込んで高さが倍近くになった(自動装飾オフはコードブロック専用の
 //   経路なので、他のブロック種別では再現しない)。
 #include "gui/widgets/MarkdownView.hpp"
+#include "gui/widgets/Image.hpp"
+#include "util/Md_Scan.hpp"
 #include "functions/Font_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -128,6 +131,103 @@ int main(){
                 "複数行に分かれた場合でも、次のブロックと重ならないことを確認します。\n\n"
                 "最後の段落。\n");
         checkNoOverlap(v, "折り返す段落があっても重ならない");
+    }
+
+    // ---- 画像参照の走査(MdScan) ----
+    // Markdownブラウザが「表示する前に取りに行く画像」を見つけるための判定。
+    // **parseBlocks()の画像ブロックと同じ規則でなければならない** —
+    // ずれると「取ってきたのに表示されない」「表示されるのに取ってこない」が起きる
+    {
+        const char* ref = nullptr;
+        size_t len = 0;
+
+        check(MdScan::ImageRefInLine("![図](img/x.pimg)", 20, ref, len)
+              && std::string(ref, len) == "img/x.pimg", "MdScan: 画像行から参照を取れる");
+
+        check(MdScan::ImageRefInLine("![](a.pimg)", 11, ref, len)
+              && std::string(ref, len) == "a.pimg", "MdScan: 代替テキストが空でも取れる");
+
+        check(!MdScan::ImageRefInLine("[リンク](a.md)", 16, ref, len),
+              "MdScan: リンク(先頭の!が無い)は画像ではない");
+        check(!MdScan::ImageRefInLine("普通の段落です", 21, ref, len),
+              "MdScan: 段落は画像ではない");
+        check(!MdScan::ImageRefInLine("![壊れた](", 12, ref, len),
+              "MdScan: 閉じ括弧が無ければ画像ではない");
+        check(!MdScan::ImageRefInLine("![空]()", 8, ref, len),
+              "MdScan: 参照が空なら画像ではない");
+        check(!MdScan::ImageRefInLine("", 0, ref, len), "MdScan: 空行は画像ではない");
+        check(!MdScan::ImageRefInLine(nullptr, 10, ref, len), "MdScan: nullptrは画像ではない");
+    }
+
+    // ---- 画像パスは文書の位置を基準に解決される ----
+    // サブディレクトリに置いた文書から "img/x.pimg" を参照した場合、
+    // SDのルートではなく文書のあるディレクトリから探す必要がある。
+    // 解決はレイアウト(高さの算出)と表示の2箇所で使われるので、両方を見る
+    {
+        //16x8の.pimg(ヘッダ: width u16, height u16, flags u8)を置く
+        std::string pimg;
+        pimg += (char)16; pimg += (char)0;   // width  = 16
+        pimg += (char)8;  pimg += (char)0;   // height = 8
+        pimg += (char)0;                     // flags
+        pimg += (char)1; pimg += (char)1;    // ラン1つ
+        HostSd::files["/docs/sub/img/x.pimg"] = pimg;
+        HostSd::files["/docs/sub/page.md"] = "# 見出し\n\n![図](img/x.pimg)\n";
+
+        MarkdownView v(0, 0, 240, 260);
+        check(v.load("/docs/sub/page.md"), "サブディレクトリの文書を開ける");
+
+        //表示側: Imageウィジェットへ解決済みのパスが渡っていること
+        bool found = false;
+        for(Widget* c : v.getChildren()){
+            if(c->getWidgetType() != WidgetType::Image) continue;
+            if(!c->getVisible()) continue;
+            Image* img = static_cast<Image*>(c);
+            if(std::string(img->getPath()->c_str()) == "/docs/sub/img/x.pimg"){
+                found = true;
+                //レイアウト側: ヘッダを読めているなら高さが8pxになる
+                eq(img->getH(), 8, "画像の高さがヘッダから取れている");
+            }
+        }
+        check(found, "画像パスが文書基準で解決されている");
+    }
+
+    // ---- 短い文書を開き直すと前の内容が残らない ----
+    // **回帰テスト**: load()がboundXxxBlockを-1にしてからhideXxxSlot()を呼んでいたため、
+    // 「既に未使用」と見なされて早期リターンし、古いLabelが表示されたまま残っていた。
+    // 長い文書のあとに短い文書を開くと、下部に前のページの文字が出る形で現れる
+    {
+        MarkdownView v(0, 0, 240, 260);
+        load(v, "段落1\n\n段落2\n\n段落3\n\n段落4\n\n段落5\n\n段落6\n\n段落7\n\n段落8\n");
+        const int many = (int)visibleInOrder(v).size();
+        check(many >= 5, "長い文書では複数の要素が表示される");
+
+        load(v, "ひとつだけ\n");
+        const int few = (int)visibleInOrder(v).size();
+        eq(few, 1, "短い文書を開き直すと前の要素が残らない");
+    }
+
+    // ---- リンクのタップがコールバックまで届く ----
+    {
+        MarkdownView v(0, 0, 240, 260);
+        load(v, "[リンク](target.md)\n\n本文\n");
+
+        FixedString<PICO_PATH_LEN> got;
+        int called = 0;
+        v.setOnLinkTap([&got, &called](FixedString<PICO_PATH_LEN> url){
+            got = url;
+            called++;
+        });
+
+        //リンクブロックの位置は文書次第なので、上から順に叩いて最初に反応した所を見る
+        for(int y = 0; y < 260 && called == 0; y += 4){
+            OSData::touchX = 10;
+            OSData::touchY = y;
+            v.causeOnPressStart();
+            v.causeOnPressEnd();
+        }
+
+        eq(called, 1, "リンクのタップでコールバックが1回呼ばれる");
+        check(strcmp(got.c_str(), "target.md") == 0, "コールバックへURLが渡る");
     }
 
     // ---- 空文書 ----

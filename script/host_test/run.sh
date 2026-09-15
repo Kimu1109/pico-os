@@ -11,6 +11,10 @@
 #   markdown_test … MarkdownViewのブロック高さとLabelの実高さの整合(重なり検出)
 #   config_test   … 設定ファイル(key=value)の読み書き
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
+#   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
+#   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)とマニフェストの引き当て
+#   http_test     … URLの分解/解決と、HTTPレスポンスの解釈(ソケット抜きで検証)
+#   discovery_test… サーバ情報(/.well-known/pico-os)の解釈と前方互換
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -104,3 +108,44 @@ g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== app_test ====="
 "$OUT/app_test"
+
+# --- パスの正規化と相対解決 ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/path_test.cpp" \
+    -o "$OUT/path_test"
+
+echo ""
+echo "===== path_test ====="
+"$OUT/path_test"
+
+# --- 文書キャッシュ ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/cache_test.cpp" \
+    "$ROOT/src/storage/Doc_Cache.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/net/Manifest.cpp" \
+    -o "$OUT/cache_test"
+
+echo ""
+echo "===== cache_test ====="
+"$OUT/cache_test"
+
+# --- URLとHTTPレスポンスの解釈 ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/http_test.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    -o "$OUT/http_test"
+
+echo ""
+echo "===== http_test ====="
+"$OUT/http_test"
+
+# --- サーバ情報(discovery) ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/discovery_test.cpp" \
+    "$ROOT/src/net/Discovery.cpp" \
+    -o "$OUT/discovery_test"
+
+echo ""
+echo "===== discovery_test ====="
+"$OUT/discovery_test"

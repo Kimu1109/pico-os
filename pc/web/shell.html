@@ -40,15 +40,20 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 12px;
+    /* 窓が狭いときは画面を縮めずに、枠の側をスクロールさせる(下記の理由) */
+    max-width: 100%;
+    overflow: auto;
   }
-  /* canvasの大きさはSDL側(C++)が決める。ここでは余白と見た目だけ整える */
+  /* canvasの大きさは **C++側(main_pc.cpp の applyCanvasCssSize)が決める**。
+     **ここで width / height / max-width を掛けないこと。**
+     SDLはウィンドウを作る前にcanvasのCSS上の実測値を見て画面の大きさを決めるので、
+     ページ側で上書きするとそれがそのまま解像度になる。端数や0に潰れると
+     ウィンドウごと0x0になり、何も映らなくなる(pc/README.md「Webで画面が出ない場合」)。
+     ここでは色と見た目だけ整える */
   canvas#canvas {
     display: block;
     background: #000;
     border-radius: 4px;
-    /* 画面からはみ出すときだけ縮める。座標はemscripten側が実サイズへ戻す */
-    max-width: 100%;
-    height: auto;
     /* ドットをぼかさない(240x320の拡大なので) */
     image-rendering: pixelated;
     /* スマホで画面ごとスクロールしてしまうのを防ぐ */
@@ -220,10 +225,13 @@
     if (frames > 0 && canvasEl.width > 0) return;   // 正常
 
     appendLog('[PAGE] 画面が出ていないようなので、状態を書き出します:', true);
+    var box = canvasEl.getBoundingClientRect();
     appendLog('       フレーム数=' + frames
               + ' / canvas=' + canvasEl.width + 'x' + canvasEl.height
+              + ' / CSS上は' + box.width.toFixed(4) + 'x' + box.height.toFixed(4)
               + ' / 描画=' + (window.picoosRenderDriver || '(未設定)')
-              + ' / WebGL=' + (webglAvailable() ? 'あり' : 'なし'), true);
+              + ' / WebGL=' + (webglAvailable() ? 'あり' : 'なし')
+              + ' / dpr=' + window.devicePixelRatio, true);
     appendLog('       ' + navigator.userAgent, true);
     // canvasが0x0ならSDLのウィンドウが作られていない。C++側のログ([WEB]の行)に
     // SDLのエラーが出ているので、そこまで含めて開発者へ渡してもらう

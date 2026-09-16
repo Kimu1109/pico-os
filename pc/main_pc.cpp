@@ -43,6 +43,7 @@
 
 #include "consts.hpp"
 #include "OS_Data.hpp"
+#include <config/LGFX_Config_PC.hpp>         // PICOOS_PC_SCALE(画面の拡大率)
 #include <functions/Touch_Functions_PC.hpp>  // PicoOsTouchScript
 
 // src/main.cpp が提供する
@@ -204,6 +205,47 @@ namespace {
     //選んだ描画ドライバ("software" か "gl")。起動後の自己チェックのログで使う
     const char* g_render_driver = "software";
 
+    //canvasのCSS上の大きさ。SDLがウィンドウを作る前にこの値で固定する
+    constexpr int kCanvasCssW = SCREEN_WIDTH  * PICOOS_PC_SCALE;
+    constexpr int kCanvasCssH = SCREEN_HEIGHT * PICOOS_PC_SCALE;
+
+    //canvasの大きさが決まるのを待つ上限(60フレーム≒1秒)。
+    //待っても決まらない場合は、そのまま進めて自己チェックのログに任せる
+    constexpr int kMaxLayoutWaitFrames = 60;
+
+    // **SDLがウィンドウを作る前に、canvasのCSS上の大きさを明示しておく。**
+    //
+    // emscriptenのSDLは Emscripten_CreateWindow() で毎回こうする:
+    //   1. canvasの属性を 1x1 にする
+    //   2. CSS上の大きさ(getBoundingClientRect)を測る
+    //   3. **floor(実測値) != 1 なら「CSSが大きさを決めている」と見なし、実測値をそのまま採用する**
+    //
+    // CSSが何も指定していなければ 2. は 1x1 を返す……はずが、ページズームや端数の都合で
+    // **0.9999998 のように1をわずかに下回る値**が返ることがある。するとfloorで0になり、
+    // 「CSSが0を指定している」と解釈されて **canvasもSDLのウィンドウも 0x0 で作られる**。
+    // そうなるとソフトウェア描画が createImageData(0, 0) で例外を投げ、
+    // **メインループが1フレーム目で止まる**(画面は出ず、C++のログだけが残る)。
+    // 実際に「canvas=0x0 / フレーム数=1 / createImageDataのIndexSizeError」という報告が出た。
+    //
+    // 大きさを明示しておけば 2. の実測値は 480x640 付近になり、端数が出ても0にはならない。
+    // 3. の「CSSが決めている」側へ入るが、その値はこちらが望む大きさそのものなので問題ない。
+    //
+    // **ページ側(shell.html)でcanvasへ max-width / width / height を掛けないこと。**
+    // ここの指定を上書きして、また実測値しだいの挙動に戻ってしまう。
+    void applyCanvasCssSize()
+    {
+        emscripten_set_element_css_size("#canvas", kCanvasCssW, kCanvasCssH);
+    }
+
+    // canvasのCSS上の大きさが測れる状態か。
+    // レイアウト前は0が返るので、その状態でウィンドウを作らせると上記の 0x0 になる
+    bool canvasBoxReady()
+    {
+        double w = 0, h = 0;
+        emscripten_get_element_css_size("#canvas", &w, &h);
+        return w >= 1.0 && h >= 1.0;
+    }
+
     // 描画ドライバを決める。**Webでは既定でSDLのソフトウェア描画(canvas 2D)を使う。**
     //
     // LovyanGFXの sdl_create() は
@@ -288,14 +330,19 @@ namespace {
         int w = 0, h = 0;
         emscripten_get_canvas_element_size("#canvas", &w, &h);
 
+        double css_w = 0, css_h = 0;
+        emscripten_get_element_css_size("#canvas", &css_w, &css_h);
+
         if (w > 0 && h > 0) {
-            printf("[WEB] 画面を用意しました: canvas %dx%d (描画=%s)\n", w, h, g_render_driver);
+            printf("[WEB] 画面を用意しました: canvas %dx%d (CSS上は%.1fx%.1f / 描画=%s)\n",
+                   w, h, css_w, css_h, g_render_driver);
             return;
         }
 
         const char* err = SDL_GetError();
-        printf("[WEB] 画面(canvas)が作られていません: %dx%d / 描画=%s / SDLのエラー: %s\n",
-               w, h, g_render_driver, (err && *err) ? err : "(なし)");
+        printf("[WEB] 画面(canvas)が作られていません: %dx%d / CSS上は%.4fx%.4f / 描画=%s"
+               " / SDLのエラー: %s\n",
+               w, h, css_w, css_h, g_render_driver, (err && *err) ? err : "(なし)");
         printf("[WEB] SDLのウィンドウ作成に失敗しています。"
                "?render=gl を付けている場合は外して読み込み直してください\n");
     }
@@ -310,6 +357,23 @@ namespace {
         if (frames < 180) {
             ++frames;
             EM_ASM({ window.picoosFrames = $0; }, frames);
+        }
+
+        //ウィンドウが作られるのは最初の Panel_sdl::loop() の中。その前に、canvasの
+        //CSS上の大きさが確定しているのを確かめる(レイアウト前だと0が返り、0x0のウィンドウが
+        //できてしまう。applyCanvasCssSize() のコメント参照)
+        static bool layout_ready = false;
+        if (!layout_ready) {
+            static int waited = 0;
+            if (!canvasBoxReady() && waited < kMaxLayoutWaitFrames) {
+                ++waited;
+                applyCanvasCssSize();  //まだ効いていない可能性があるので掛け直す
+                return;
+            }
+            layout_ready = true;
+            if (waited > 0) {
+                printf("[WEB] canvasの大きさが決まるまで%dフレーム待ちました\n", waited);
+            }
         }
 
         loop();
@@ -346,6 +410,9 @@ int main(int, char**)
 
     //SDLを起こす前に決めること(ヒントはSDL_Initより先に立てる必要がある)
     selectRenderDriver();
+
+    //ウィンドウが作られるより前にcanvasの大きさを固定する(0x0のウィンドウを防ぐ)
+    applyCanvasCssSize();
 
     if (0 != lgfx::Panel_sdl::setup()) return 1;
 

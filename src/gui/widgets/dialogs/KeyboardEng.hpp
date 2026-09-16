@@ -75,23 +75,34 @@ class KeyboardEng : public Widget, public ITextInputWidget {
 
             { "\n", "\n", 0, 'Z' },
 
-            { "ABC", "ABC", 3, 'N' },
+            { "abc", "abc", 3, 'N' },
             { "かな", "かな", 3, 'N' },
             { "←", "←", 2, 'N' },
 
-            { "space", "Space", 5, 'A' },
+            { "space", "space", 5, 'A' },
             { "→", "→", 2, 'A' },
-            { "return", "Return", 5, 'A'},
+            { "enter", "enter", 5, 'A'},
 
-            { "space", "Space", 5, 'B'},
+            { "space", "space", 5, 'B'},
             { "→", "→", 2, 'B'},
-            { "submit", "Submit", 5, 'B'},
+            { "submit", "submit", 5, 'B'},
 
-            { "space", "Space", 3, 'C'},
+            { "space", "space", 4, 'C'},
             { "→", "→", 2, 'C'},
-            { "return", "Return", 4, 'C'},
-            { "go", "Go", 3, 'C'},
-            //3 + 3 + 2 + 5 + 2 + 5 = 20spaces
+            { "enter", "enter", 4, 'C'},
+            { "go", "go", 2, 'C'},
+            //A/B: 3 + 3 + 2 + 5 + 2 + 5 = 20spaces
+            //C  : 3 + 3 + 2 + 4 + 2 + 4 + 2 = 20spaces
+            //
+            //最下段は20セルを使い切っていて幅の余りが無い。1セル=12pxに対し
+            //文字の実寸(16pxフォント)は 123/abc=28px / かな=30px / ←→=16px /
+            //space=42px / enter=40px / go=18px で、どのセルも1つ削ると枠線に文字が重なる。
+            //ラベルや幅を変えるときはPCビルドの--shotで実際の描画を見て確かめること
+            //(ホストテストはフォントがスタブなので幅を検証できない)。
+            //幅に合わせて短くしたラベルが3つある:
+            //  「Return」46px → 「enter」    (Cモードの4セル=48pxで枠線に接していた)
+            //  「ABC」  34px → 「abc」       (3セル=36pxで左の枠線に接していた)
+            //  シフト中の大文字表記をやめた   (Space/Return/Submitは小文字より数px太い)
 
             { "\0", "\0", 0, 'Z'}
             //end
@@ -144,19 +155,30 @@ class KeyboardEng : public Widget, public ITextInputWidget {
             { "かな", "かな", 3, 'N' },
             { "←", "←", 2, 'N' },
 
-            { "space", "Space", 5, 'A' },
+            { "space", "space", 5, 'A' },
             { "→", "→", 2, 'A' },
-            { "return", "Return", 5, 'A'},
+            { "enter", "enter", 5, 'A'},
 
-            { "space", "Space", 5, 'B'},
+            { "space", "space", 5, 'B'},
             { "→", "→", 2, 'B'},
-            { "submit", "Submit", 5, 'B'},
+            { "submit", "submit", 5, 'B'},
 
-            { "space", "Space", 3, 'C'},
+            { "space", "space", 4, 'C'},
             { "→", "→", 2, 'C'},
-            { "return", "Return", 4, 'C'},
-            { "go", "Go", 3, 'C'},
-            //3 + 3 + 2 + 5 + 2 + 5 = 20spaces
+            { "enter", "enter", 4, 'C'},
+            { "go", "go", 2, 'C'},
+            //A/B: 3 + 3 + 2 + 5 + 2 + 5 = 20spaces
+            //C  : 3 + 3 + 2 + 4 + 2 + 4 + 2 = 20spaces
+            //
+            //最下段は20セルを使い切っていて幅の余りが無い。1セル=12pxに対し
+            //文字の実寸(16pxフォント)は 123/abc=28px / かな=30px / ←→=16px /
+            //space=42px / enter=40px / go=18px で、どのセルも1つ削ると枠線に文字が重なる。
+            //ラベルや幅を変えるときはPCビルドの--shotで実際の描画を見て確かめること
+            //(ホストテストはフォントがスタブなので幅を検証できない)。
+            //幅に合わせて短くしたラベルが3つある:
+            //  「Return」46px → 「enter」    (Cモードの4セル=48pxで枠線に接していた)
+            //  「ABC」  34px → 「abc」       (3セル=36pxで左の枠線に接していた)
+            //  シフト中の大文字表記をやめた   (Space/Return/Submitは小文字より数px太い)
 
             { "\0", "\0", 0, 'Z'}
             //end

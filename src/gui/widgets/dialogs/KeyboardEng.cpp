@@ -59,7 +59,7 @@ void KeyboardEng::causeOnPressStart() {
             if(OSData::touchY >= key_y && OSData::touchY <= key_y + key_h){
                 if(strcmp(key.str, "space") == 0){
                     addInput(" ");
-                }else if(strcmp(key.str, "return") == 0){
+                }else if(strcmp(key.str, "enter") == 0){
                     addInput("\n");
                 }else if(strcmp(key.str, "go") == 0 || strcmp(key.str, "submit") == 0){
                     this->target->onHide(this);
@@ -73,7 +73,7 @@ void KeyboardEng::causeOnPressStart() {
                 }else if(strcmp(key.str, "↑") == 0 || strcmp(key.str, "#+=") == 0) {
                     isUpperCase = !isUpperCase;
                     this->needs_redraw = true;
-                }else if(strcmp(key.str, "ABC") == 0){
+                }else if(strcmp(key.str, "abc") == 0){
                     isNumMode = false;
                     isUpperCase = false;
                     this->needs_redraw = true;

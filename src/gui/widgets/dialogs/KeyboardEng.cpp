@@ -59,7 +59,7 @@ void KeyboardEng::causeOnPressStart() {
             if(OSData::touchY >= key_y && OSData::touchY <= key_y + key_h){
                 if(strcmp(key.str, "space") == 0){
                     addInput(" ");
-                }else if(strcmp(key.str, "return") == 0){
+                }else if(strcmp(key.str, "enter") == 0){
                     addInput("\n");
                 }else if(strcmp(key.str, "go") == 0 || strcmp(key.str, "submit") == 0){
                     this->target->onHide(this);

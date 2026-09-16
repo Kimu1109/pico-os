@@ -19,7 +19,11 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
         constexpr static int kMaxTabs = 4;
 
     private:
-        FixedString<PICO_STR_S> labels[kMaxTabs];
+        // 文字と罫線の間に最低限空ける余白。折返し位置の判定にも使う
+        constexpr static int kTextPadding = 2;
+
+        // 「ストップウォッチ」(UTF-8で24B)が収まらないのでPICO_STR_S(24B)では足りない
+        FixedString<PICO_STR_M> labels[kMaxTabs];
         int tab_count = 0;
         int selected = 0;
 
@@ -30,6 +34,10 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
         // 均等割りのまま切り捨てると右端に隙間が残り、罫線が1本浮いて見えるため
         int tabX(int index) const;
         int tabW(int index) const;
+
+        // ラベルが1行に収まらない場合の折返し位置(先頭からのバイト数)を返す。0 = 折り返さない。
+        // フォントが適用済みであること(render()の中からしか呼ばない)
+        int wrapOffset(const FixedString<PICO_STR_M>& label, int budget_w) const;
 
     public:
         TabBar(int x, int y, int w, int h){

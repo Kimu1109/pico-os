@@ -201,6 +201,9 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         // ---------- setter / getter ----------
         template<size_t M>
         void setText(const FixedString<M>& text) {
+            //const char*版と同じ理由で、変化が無ければ再レイアウトしない
+            if(this->raw_text == text) return;
+
             this->raw_text.assign(text);
             invalidateLayout();
         }

@@ -13,6 +13,7 @@ enum class WidgetType : uint8_t {
     Checkbox,
     ColorDialog,
     DropdownMenu,
+    DurationPicker,
     FileExplorer,
     FileSaveDialog,
     FileSelectDialog,

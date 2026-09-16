@@ -608,6 +608,11 @@ int Label<N>::GetLineHeight(FontFn::FontSize size) {
 // FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
 template<size_t N>
 void Label<N>::setText(const char* text) {
+    //中身が同じなら何もしない。invalidateLayout()はdirty登録2件と再レイアウトを
+    //無条件で起こすので、毎フレーム同じ文字列を流し込む呼び出し元(時計やタイマーの
+    //状態表示など)があると、変化が無くても画面全体の合成が走り続けてしまう
+    if(this->raw_text == text) return;
+
     this->raw_text.assign(text);
     invalidateLayout();
 }

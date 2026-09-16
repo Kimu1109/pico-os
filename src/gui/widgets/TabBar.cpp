@@ -50,6 +50,29 @@ void TabBar::causeOnPressStart(){
     }
 }
 
+int TabBar::wrapOffset(const FixedString<PICO_STR_M>& label, int budget_w) const {
+    //フォントはfontApply()済みである前提(呼び出し元のrender()が一度だけ適用する)
+    if(OSData::frame->textWidth(label.c_str()) <= budget_w) return 0;
+
+    const int chars = FixedString<PICO_STR_M>::charCount(label.c_str());
+    if(chars <= 1) return 0; //1文字で溢れるなら折り返しても意味が無い
+
+    //収まる最大の文字数を探す。バイトではなく文字単位で刻むのは、
+    //UTF-8の途中で切ると文字が丸ごと化けるため
+    FixedString<PICO_STR_M> head;
+    int last_fit = 0;
+
+    for(int i = 1; i < chars; i++){
+        const int bytes = FixedString<PICO_STR_M>::byteOffsetOfChar(label.c_str(), i);
+        head.assign(label.c_str(), (size_t)bytes);
+        if(OSData::frame->textWidth(head.c_str()) > budget_w) break;
+        last_fit = bytes;
+    }
+
+    //先頭1文字すら入らない場合は諦めて1行のまま(はみ出させる)
+    return last_fit;
+}
+
 void TabBar::render(){
     if(!this->needs_redraw) return;
     if(!this->visible) return;
@@ -74,13 +97,32 @@ void TabBar::render(){
         }
         OSData::frame->drawRect(x, g_rect.y, w, g_rect.h, this->border_color);
 
-        const char* label = this->labels[i].c_str();
-        const int str_w = OSData::frame->textWidth(label);
+        OSData::frame->setTextColor(is_selected ? this->background_color : this->border_color);
+
         const int str_h = OSData::frame->fontHeight();
 
-        OSData::frame->setTextColor(is_selected ? this->background_color : this->border_color);
-        OSData::frame->setCursor(x + (w - str_w) / 2, g_rect.y + (g_rect.h - str_h) / 2);
-        OSData::frame->print(label);
+        // 1行に収まらないラベルは2行へ折り返す。
+        // 「ストップウォッチ」のような長い機能名でも、タブを広げずに全部見せるため
+        // (高さが足りない場合は上下がはみ出すので、呼び出し側でhを確保しておくこと)
+        const int split = this->wrapOffset(this->labels[i], w - kTextPadding * 2);
+
+        if(split == 0){
+            const char* label = this->labels[i].c_str();
+            const int str_w = OSData::frame->textWidth(label);
+            OSData::frame->setCursor(x + (w - str_w) / 2, g_rect.y + (g_rect.h - str_h) / 2);
+            OSData::frame->print(label);
+        }else{
+            FixedString<PICO_STR_M> line;
+            const int top = g_rect.y + (g_rect.h - str_h * 2) / 2;
+
+            line.assign(this->labels[i].c_str(), (size_t)split);
+            OSData::frame->setCursor(x + (w - OSData::frame->textWidth(line.c_str())) / 2, top);
+            OSData::frame->print(line.c_str());
+
+            line.assign(this->labels[i].c_str() + split);
+            OSData::frame->setCursor(x + (w - OSData::frame->textWidth(line.c_str())) / 2, top + str_h);
+            OSData::frame->print(line.c_str());
+        }
     }
 
     OSData::frame->setTextColor(PICO_BLACK);

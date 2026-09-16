@@ -23,6 +23,12 @@ class Button :
         int text_w;
         int text_h;
 
+        // setW()/setH()で明示的に指定された箱の大きさ(0 = 文字の実寸に合わせる)。
+        // setText()やsetFontSize()で文字を測り直した時に指定を上書きしないよう覚えておく
+        // — ラベルが変わるたびに幅が伸び縮みすると、並べたボタンの位置がずれてしまうため。
+        int fixed_w = 0;
+        int fixed_h = 0;
+
         bool allowTextSpacing = true;
 
         void calcTextSize(const char* text);
@@ -89,10 +95,19 @@ class Button :
             this->needsRender();
         }
 
+        // ボタンの文字列を差し替える。setW()/setH()で与えた大きさは保たれる
+        void setText(const char* text);
+        template<size_t N>
+        void setText(const FixedString<N>& text){ this->setText(text.c_str()); }
+
+        const FixedString<PICO_STR_M>& getText() const { return this->text; }
+
         void setW(int w){
+            this->fixed_w = w;
             this->l_rect.w = w;
         }
         void setH(int h){
+            this->fixed_h = h;
             this->l_rect.h = h;
         }
 

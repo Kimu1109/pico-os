@@ -37,8 +37,14 @@ void PICO_GFX::Setup() {
 }
 
 void PICO_GFX::MarkDirty(const Rect& rect) {
-    if(!isDirtyDeactivates)
-        dirtyRects.push_back(rect);
+    if(isDirtyDeactivates) return;
+
+    //面積ゼロの矩形は描くものが無いのに、FlushDirty()で全ウィジェットの当たり判定と
+    //pushSprite()を1周ぶん走らせてしまう。Labelは「消すべき古い領域」として
+    //未使用のカーソル矩形({0,0,0,0})を毎回markdirtyするので、ここで落とす
+    if(rect.w <= 0 || rect.h <= 0) return;
+
+    dirtyRects.push_back(rect);
 }
 
 void PICO_GFX::FlushDirty() {

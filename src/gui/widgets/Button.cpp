@@ -5,13 +5,26 @@
 
 void Button::calcTextSize(const char* text){
     this->fontApply();
-    this->l_rect.w = OSData::frame->textWidth(text);
-    this->l_rect.h = OSData::frame->fontHeight();
-
-    this->text_w = this->l_rect.w;
-    this->text_h = this->l_rect.h;
-
+    this->text_w = OSData::frame->textWidth(text);
+    this->text_h = OSData::frame->fontHeight();
     this->fontDefault();
+
+    //setW()/setH()で明示的に指定されている場合はそちらを優先する。
+    //文字を測り直すたびに箱が伸び縮みすると、並べたボタンの位置がずれるため
+    this->l_rect.w = this->fixed_w ? this->fixed_w : this->text_w;
+    this->l_rect.h = this->fixed_h ? this->fixed_h : this->text_h;
+}
+
+void Button::setText(const char* text){
+    if(this->text == text) return;
+
+    //先に「今の大きさ」で消させておく。文字が短くなると箱も縮むので、
+    //needsRender()(=新しい箱の分だけdirtyにする)だけでは右側が消え残る
+    this->markdirty(this->getScreenRect());
+
+    this->calcTextSize(text);
+    this->text.assign(text);
+    this->needsRender();
 }
 
 void Button::render() {

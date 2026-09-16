@@ -69,7 +69,13 @@
       現状ランチャに載っているのは MarkdownScene と InputTestScene(部品の動作確認用)だけで、
       **Lua APIの仕様を逆算するための実例が足りていない**
   - [ ] 設定アプリ … 部品: Config_Functions(読み書き) / Checkbox / DropdownMenu
-  - [ ] 時計 … 部品: TimeFunctions(NTP同期済み)
+  - [x] 時計 … ClocksScene。画面下部のTabBarで「時計/タイマー/ストップウォッチ」を切り替える。
+        時計はデジタル(Label)とアナログ(AnalogClockウィジェット)の2表示。
+        タイマーはDurationPickerウィジェット(▲▼で時/分/秒、長押しで連続加算)で設定し、
+        鳴ったら数字が赤で点滅する(音が出せないため)。別のタブを見ていても時間は進み、
+        鳴った時点でタイマーのタブへ引き戻す。
+        計測はいずれもmillis()の差分で積む — TimeFunctionsは333msごとの更新な上に
+        NTP同期で時刻が飛ぶため使えない
   - [ ] 辞書 … 部品: IME_Functions(SKK辞書)
   - [ ] 電卓 … 部品: KeyboardNum / NumberInput が既にある(最小コストで1本書ける)
   - [ ] ファイルエクスプローラー … FileExplorerウィジェットは実装済み。アプリ(Scene+App_List登録)が無い

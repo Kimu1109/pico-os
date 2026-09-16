@@ -4,8 +4,8 @@
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/TabBar.hpp"
-#include "gui/widgets/AnalogClock.hpp"
-#include "gui/widgets/DurationPicker.hpp"
+#include "gui/widgets/apps/AnalogClock.hpp"
+#include "gui/widgets/apps/DurationPicker.hpp"
 
 #include <cstdint>
 

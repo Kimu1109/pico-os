@@ -10,7 +10,7 @@
 //   自動装飾オフ分岐が長さではなくNUL終端まで読んでいたため、コードブロックが
 //   以降の段落まで取り込んで高さが倍近くになった(自動装飾オフはコードブロック専用の
 //   経路なので、他のブロック種別では再現しない)。
-#include "gui/widgets/MarkdownView.hpp"
+#include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/widgets/Image.hpp"
 #include "util/Md_Scan.hpp"
 #include "functions/Font_Functions.hpp"

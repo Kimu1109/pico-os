@@ -67,7 +67,7 @@ g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
     "$ROOT/src/gui/widgets/Icon.cpp" \
     "$ROOT/src/gui/widgets/Image.cpp" \
-    "$ROOT/src/gui/widgets/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
@@ -93,7 +93,7 @@ echo "===== config_test ====="
 g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/app_test.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
-    "$ROOT/src/gui/widgets/AppGrid.cpp" \
+    "$ROOT/src/gui/widgets/systems/AppGrid.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \

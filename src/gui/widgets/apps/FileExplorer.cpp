@@ -1,4 +1,4 @@
-#include "gui/widgets/FileExplorer.hpp"
+#include "gui/widgets/apps/FileExplorer.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "functions/Widget_Functions.hpp"

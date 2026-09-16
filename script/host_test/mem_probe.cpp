@@ -144,7 +144,7 @@ void operator delete[](void* p, size_t) noexcept { operator delete(p); }
 #include "gui/widgets/Checkbox.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/CanvasRaster.hpp"
-#include "gui/widgets/MarkdownView.hpp"
+#include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/scenes/Scene.hpp"
 #include "OS_Data.hpp"
 

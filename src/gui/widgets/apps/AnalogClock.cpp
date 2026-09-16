@@ -1,4 +1,4 @@
-#include "gui/widgets/AnalogClock.hpp"
+#include "gui/widgets/apps/AnalogClock.hpp"
 
 #include "functions/GFX_Functions.hpp"
 #include "functions/Font_Functions.hpp"

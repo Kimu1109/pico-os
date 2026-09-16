@@ -73,7 +73,7 @@ void KeyboardEng::causeOnPressStart() {
                 }else if(strcmp(key.str, "↑") == 0 || strcmp(key.str, "#+=") == 0) {
                     isUpperCase = !isUpperCase;
                     this->needs_redraw = true;
-                }else if(strcmp(key.str, "ABC") == 0){
+                }else if(strcmp(key.str, "abc") == 0){
                     isNumMode = false;
                     isUpperCase = false;
                     this->needs_redraw = true;

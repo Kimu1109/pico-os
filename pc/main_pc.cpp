@@ -205,36 +205,61 @@ namespace {
     //選んだ描画ドライバ("software" か "gl")。起動後の自己チェックのログで使う
     const char* g_render_driver = "software";
 
-    //canvasのCSS上の大きさ。SDLがウィンドウを作る前にこの値で固定する
-    constexpr int kCanvasCssW = SCREEN_WIDTH  * PICOOS_PC_SCALE;
-    constexpr int kCanvasCssH = SCREEN_HEIGHT * PICOOS_PC_SCALE;
+    //ウィンドウを作る間だけcanvasへ入れておくCSS上の大きさ(px)。
+    //1.5pxなのは「floorすると1になる範囲」(1以上2未満)のちょうど真ん中だから。理由は下記
+    constexpr double kProbeCssPx = 1.5;
 
     //canvasの大きさが決まるのを待つ上限(60フレーム≒1秒)。
     //待っても決まらない場合は、そのまま進めて自己チェックのログに任せる
     constexpr int kMaxLayoutWaitFrames = 60;
 
-    // **SDLがウィンドウを作る前に、canvasのCSS上の大きさを明示しておく。**
+    // **SDLがウィンドウを作る間だけ、canvasのCSS上の大きさを1.5pxに固定する。**
     //
     // emscriptenのSDLは Emscripten_CreateWindow() で毎回こうする:
     //   1. canvasの属性を 1x1 にする
     //   2. CSS上の大きさ(getBoundingClientRect)を測る
-    //   3. **floor(実測値) != 1 なら「CSSが大きさを決めている」と見なし、実測値をそのまま採用する**
+    //   3. **floor(実測値) != 1 なら「CSSが大きさを決めている」(external_size)と見なし、
+    //      実測値をそのまま画面の大きさに採用する**
     //
     // CSSが何も指定していなければ 2. は 1x1 を返す……はずが、ページズームや端数の都合で
-    // **0.9999998 のように1をわずかに下回る値**が返ることがある。するとfloorで0になり、
+    // **0.9999998 のように1をわずかに下回る値**が返ることがある。すると floor で0になり、
     // 「CSSが0を指定している」と解釈されて **canvasもSDLのウィンドウも 0x0 で作られる**。
     // そうなるとソフトウェア描画が createImageData(0, 0) で例外を投げ、
     // **メインループが1フレーム目で止まる**(画面は出ず、C++のログだけが残る)。
     // 実際に「canvas=0x0 / フレーム数=1 / createImageDataのIndexSizeError」という報告が出た。
     //
-    // 大きさを明示しておけば 2. の実測値は 480x640 付近になり、端数が出ても0にはならない。
-    // 3. の「CSSが決めている」側へ入るが、その値はこちらが望む大きさそのものなので問題ない。
+    // 1.5pxを入れておけば、端数が出ても実測値は1以上2未満に収まり floor は必ず1になる。
+    // つまり **3. の判定を「CSSは大きさを決めていない」側へ確実に倒せる**。
     //
-    // **ページ側(shell.html)でcanvasへ max-width / width / height を掛けないこと。**
-    // ここの指定を上書きして、また実測値しだいの挙動に戻ってしまう。
-    void applyCanvasCssSize()
+    // **external_size側へ倒してはいけない。** そちらへ入るとSDLはCSS上の大きさを画面の
+    // 大きさとして採用し、以後ウィンドウの内部サイズとCSSの箱を同期しなくなる。
+    // LovyanGFXのSDLパネルは「ウィンドウの大きさは自分が決める」前提で拡大率
+    // (`_update_scaling`)とタッチ座標の換算を組み立てているので、この組み合わせでは
+    // **初期表示の縦横比が崩れ、タップ位置もずれる**(実際にその報告が出た)。
+    // 480x640のように正しい値を明示しても、値が正しいだけでモードは同じなので同様に崩れる。
+    //
+    // 固定するのは判定の間だけで、ウィンドウができたら releaseCanvasCssPin() で外す。
+    // 以後の見た目はページのCSS(`pc/web/shell.html`)に任せてよい —
+    // SDLはマウス座標をCSS上の大きさで割り戻すので、縮小表示されていてもタップはずれない。
+    void pinCanvasCssSizeForProbe()
     {
-        emscripten_set_element_css_size("#canvas", kCanvasCssW, kCanvasCssH);
+        emscripten_set_element_css_size("#canvas", kProbeCssPx, kProbeCssPx);
+    }
+
+    // 判定用に入れた1.5pxを外し、見た目をページのCSSへ返す。
+    // dprが1以外のときはSDL自身がCSS上の大きさ(=ウィンドウの大きさ)を入れているので、
+    // そちらは正しい値なのでそのまま残す
+    void releaseCanvasCssPin()
+    {
+        EM_ASM({
+            var c = Module['canvas'] || document.querySelector('#canvas');
+            if (!c) return;
+            //判定用の値(2px未満)がまだ残っていれば外す
+            if (parseFloat(c.style.width) < 2) {
+                c.style.width = "";
+                c.style.height = "";
+            }
+        });
     }
 
     // canvasのCSS上の大きさが測れる状態か。
@@ -361,13 +386,13 @@ namespace {
 
         //ウィンドウが作られるのは最初の Panel_sdl::loop() の中。その前に、canvasの
         //CSS上の大きさが確定しているのを確かめる(レイアウト前だと0が返り、0x0のウィンドウが
-        //できてしまう。applyCanvasCssSize() のコメント参照)
+        //できてしまう。pinCanvasCssSizeForProbe() のコメント参照)
         static bool layout_ready = false;
         if (!layout_ready) {
             static int waited = 0;
             if (!canvasBoxReady() && waited < kMaxLayoutWaitFrames) {
                 ++waited;
-                applyCanvasCssSize();  //まだ効いていない可能性があるので掛け直す
+                pinCanvasCssSizeForProbe();  //まだ効いていない可能性があるので掛け直す
                 return;
             }
             layout_ready = true;
@@ -381,10 +406,12 @@ namespace {
         //SDLのイベント取り込みとウィンドウへの反映(ネイティブではSDL側スレッドの仕事)
         const int sdl_state = lgfx::Panel_sdl::loop();
 
-        //ウィンドウはこの最初の Panel_sdl::loop() の中で作られる。直後に一度だけ確認する
+        //ウィンドウはこの最初の Panel_sdl::loop() の中で作られる。
+        //判定用の固定をここで外し、大きさが取れているかを一度だけ確認する
         static bool canvas_checked = false;
         if (!canvas_checked) {
             canvas_checked = true;
+            releaseCanvasCssPin();
             checkCanvasReady();
         }
 
@@ -411,8 +438,8 @@ int main(int, char**)
     //SDLを起こす前に決めること(ヒントはSDL_Initより先に立てる必要がある)
     selectRenderDriver();
 
-    //ウィンドウが作られるより前にcanvasの大きさを固定する(0x0のウィンドウを防ぐ)
-    applyCanvasCssSize();
+    //ウィンドウが作られるより前に、大きさの判定が通るようcanvasを固定する(0x0を防ぐ)
+    pinCanvasCssSizeForProbe();
 
     if (0 != lgfx::Panel_sdl::setup()) return 1;
 

@@ -2,7 +2,7 @@
 
 > このファイルは `Kimu1109/pico-os` リポジトリ直下に置く、Claude Code向けのプロジェクト背景資料。
 > 元はClaude.aiのProject knowledgeとして管理されていた内容(2026-09-06時点情報)を統合したもの。
-> **最終同期: 2026-09-13(実コードと突き合わせ済み)。**
+> **最終同期: 2026-09-16(実コードと突き合わせ済み)。**
 > **一次情報源は常にこのリポジトリのコードと `SUMMARY.md`。このファイルは「相談の前提を素早く掴むための地図」であり、
 > 実装と乖離があれば実コード側を信じること。**
 
@@ -12,7 +12,9 @@ Raspberry Pi Pico 2 W (RP2350, `rpipico2w`) 上で動く自作タッチGUI OS。
 過去に一度スクラップ&リビルドしており、現行版はSerenityOS的な設計思想を参考にしつつ、タッチ操作の組み込みGUIフレームワークを自前実装している。
 
 - リポジトリ: https://github.com/Kimu1109/pico-os/tree/main
-- TODO一次情報源(チェックボックス形式): https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md
+- TODO一次情報源: https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md
+  (「TODO」= 項目名だけのチェックボックス一覧 / 「詳細」= 補足が要る項目の説明、の2部構成。
+  項目の**有無と進捗**はSUMMARY.md、**設計の背景**はこのファイルが持つ)
 - コメント・ログメッセージは日本語、コード自体(識別子)は標準的な英語命名。
 
 ## ハードウェア構成
@@ -61,7 +63,7 @@ src/
   functions/                 「Xxx_Functions」名前空間群
   gui/
     icons/                  アイコンデータ(tabler_iconsから生成)
-    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/InputTestScene)
+    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene)
     widgets/                各ウィジェット実装 (WidgetID.hpp / WidgetRegistryも同居)
       dialogs/              モーダルダイアログ
       interfaces/            ミックスイン的インターフェース
@@ -136,9 +138,27 @@ PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1�
 - `hit_transparent`: **当たり判定を素通りさせるフラグ**。`WidgetFunctions::Add()`は`visitAll()`で**子孫も全て`widgets`へ積む**ため、子は親とは別の「根」として`HitTest()`の対象になる。つまり**親が自分でタップを処理したい場合、表示のために置いただけの子がタップを奪う**。`MarkdownView`のプール(Label/Image/Icon)がこれで、リンクのタップが一切反応しなかった。表示専用の子にはこれを立てる。
 
 ### ウィジェットカタログ
-Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
+Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
 
 `LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
+
+**「子を持たず`render()`で直接描き、タップ位置から逆算する」型のウィジェット**が増えている:
+`AppGrid` / `ColorDialog` / `KeyboardNum` / `TabBar` / `AnalogClock` / `DurationPicker`。
+部品1つごとに`Button`を`new`しないのでヒープを食わず、上記`hit_transparent`の問題(表示用の子がタップを奪う)とも
+無縁になる。**格子状・多ボタンのUIを新設するときはまずこの型を検討すること。**
+
+- `TabBar`: ラベルの固定長配列(`kMaxTabs=4`)。選択中は黒塗り+白抜き。`setOnChanged()`は**選択が変わったときだけ**
+  呼ばれる。幅をタブ数で割った余りは最後のタブへ足す(切り捨てると右端の罫線が1本浮く)。
+  1行に収まらないラベルは`wrapOffset()`が2行へ折り返す(「ストップウォッチ」がこれに当たる)。
+- `AnalogClock` / `DurationPicker`: **時刻を自分では取りに行かず、シーン側が`setTime()`/`setTotalMs()`で流し込む**
+  (`TimeFunctions`への依存をウィジェットに持たせないため)。どちらも値が変わったフレームだけ再描画するので、
+  毎フレーム呼んでよい。`setTotalMs()`では`on_changed`を**飛ばさない** — 飛ばすとシーン側の流し込みで再入する。
+- `AnalogClock`の針は「先端+根元」の三角形で描く。1pxの線は細すぎ、LovyanGFXの`drawWideLine()`は
+  アンチエイリアスのため**4bitパレットに無い中間色を要求する**ので使えない。
+- `DurationPicker`は総ミリ秒だけを保持し、時/分/秒は描くときに割り出す(タイマーの「設定値」と「残り時間」を
+  同じウィジェットで見せるため)。カウントダウン中は`setEditable(false)`で▲▼が消える。
+  ▲▼は**長押しで連続加算**(450ms後に110ms間隔)— 25分を1タップずつ積むのは現実的でないため。
+  桁は繰り上がらず、その桁だけが巡回する。上限は`23:59:59`。
 
 ### ウィジェットID (`src/gui/widgets/WidgetID.hpp` / `WidgetRegistry.hpp`)
 Lua等の外部から安全にウィジェットを指すための32bit ID。**発行側は実装済み、消費側はまだ空。**
@@ -175,7 +195,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - **ウィジェットの寿命**: シーンがアクティブな間のみ。`Push`でスタックへ退避されたシーンもウィジェットは解放済みで、`Pop`で戻った時に`onEnter()`から作り直される(シーンオブジェクト本体は数十バイト)。スタック上限は`kMaxSceneDepth=4`の固定長配列。
 - **`onExit()`でdeleteしてはいけない**: ウィジェット本体の破棄は`WidgetFunctions::ClearSceneWidgets()`が行う。`onExit()`は自分の生ポインタのnull化と、次回復元したい状態の退避のみ。
 - 遷移時は`isDirtyDeactivates`で破棄/生成中のdirtyを抑止し、最後に全画面1枚だけを`MarkDirty`する。
-- 実装例: `HomeScene`(ランチャ) / `MarkdownScene`(Markdownブラウザ。下記) / `InputTestScene`。
+- 実装例: `HomeScene`(ランチャ) / `MarkdownScene`(Markdownブラウザ。下記) / `ClocksScene`(時計。下記) / `InputTestScene`。
 - ホスト側の検証: `sh script/host_test/run.sh`(実コードをPCのg+++ASanで動かし解放漏れを検出。実機ビルドとは独立)。
 
 ### ダイアログ (`src/gui/widgets/dialogs/`)
@@ -320,6 +340,42 @@ UI側は`gui/widgets/dialogs/SearchDialog`(状態1行 + `ScrollList` + 再検索
 `PICO_GFX::FlushDirty()`は**TRANSLUCENTなウィジェットの下を描き直さない**(半透明の下は変わらない前提の最適化)
 ため、同じフレームで次のダイアログを開くと、閉じたキーボードや前のダイアログの跡がその下に残ったままになる。
 1フレーム空ければ「ダイアログが何も無い状態」で描き直される。
+
+### ClocksScene 実装詳細
+
+画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える1画面のアプリ
+(`Feature` enumとタブのindexを一致させてある)。**新しく画面を足すときの手本として一番新しい。**
+
+- **計測は全て`millis()`の差分で積む。** `TimeFunctions`は333msごとにしか更新されない上に、
+  **NTP同期で時刻がいきなり飛ぶ**ため計測には使えない。時計の表示だけが`TimeFunctions::timeinfo`を読む。
+- **別のタブを見ていてもタイマー/ストップウォッチは進む**(`onUpdate()`が常に両方を回す)。
+  タイマーが鳴ったらタイマーのタブへ引き戻す。音が出せないので、鳴った合図は**数字を赤で点滅**させて出す。
+- **`Push()`で別のシーンへ移っている間は`onUpdate()`が来ない**ので、その間の経過は積めない。
+  `onEnter()`で`timer_last_tick_ms`等の基準を今へ取り直し、復帰時に止まっていた時間を一気に差し引かないようにする。
+- **表示/非表示を決めるのは`applyVisibility()`の1箇所だけ**。feature/modeから全ウィジェットの`setVisible()`を
+  まとめて決める。隠れている間は値を流し込まないので、**表に出した側は`before_sec`/`before_mday`を`-1`へ戻して
+  埋め直す**(`applyFeature()`/`applyMode()`)。
+- **見えていないウィジェットを更新しない**のは必須。`needsRender()`は表示状態を見ないため、
+  隠れたウィジェットを毎秒更新すると無駄なdirty矩形が積まれ続ける。
+- **「毎ティック動かすもの(数字)」と「状態が変わったときだけ動かすもの(ボタンの文字・状態の1行)」を
+  関数ごと分けてある**(`refreshXxxDigits()` / `refreshXxxControls()`)。まとめて毎ティック呼ぶと、
+  文字が同じでもLabel/Buttonがdirty登録するぶんだけ画面の合成が走り続ける。
+- ストップウォッチは1/100秒まで出すが、**書き換えは50ms間隔へ間引く**(毎フレームだと`Label`の再レイアウトが重い)。
+- 上部の行の高さ(`top_row_h` / `action_row_h`)は`onEnter()`で**Buttonの実測値**を入れる。
+  定数で持つとフォントを変えたときにずれる。表示領域の計算は`bodyRect()`の1箇所へ集約。
+- feature/modeはシーンのメンバなので`onExit()`を跨いで残る(上へ別のシーンを`Push()`して戻ると復元される)。
+  ただし**ランチャから開き直すとシーンごと作り直されるので既定値へ戻る**。起動をまたいで覚えるなら
+  `Config_Functions`で保存する話になる。
+
+このシーンの実装に伴って入った、ウィジェット側の地味な修正:
+
+- `PICO_GFX::MarkDirty()`が**面積ゼロの矩形を捨てる**ようになった。`Label`は「消すべき古い領域」として
+  未使用のカーソル矩形(`{0,0,0,0}`)を毎回`markdirty`するので、捨てないと`FlushDirty()`が
+  全ウィジェットの当たり判定と`pushSprite()`を1周ぶん空回りする。
+- `Button::setText()`を追加し、`setW()`/`setH()`で与えた大きさを`fixed_w`/`fixed_h`に覚えるようにした。
+  **押すたびにラベルが変わるボタン**(開始/一時停止/再開)で箱の大きさが伸び縮みすると、並べたボタンの
+  位置がずれてしまうため。
+- `Label::setText()`の`FixedString`版も、`const char*`版と同じく**変化が無ければ再レイアウトしない**。
 
 ### 文字列の扱い
 **Arduino `String` は現在どこでも使っていない。** 文字列はすべて `src/util/FixedString.hpp` の
@@ -504,20 +560,30 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   emsdkの版はワークフローの `EMSDK_VERSION` で固定。公開中のコミットはページのログ先頭の
   `[WEB] pico-os build: <hash>` で分かる。
 
-## ロードマップ・TODO状況(2026-09-13時点)
+## ロードマップ・TODO状況(2026-09-16時点)
 
-相談が来た際はまず本表を見て、「既存機能の拡張」か「ゼロから設計する新機能」かを見分けること。**都度 `SUMMARY.md` をfetchして最新状況を確認するのが望ましい。**
+相談が来た際はまず本表を見て、「既存機能の拡張」か「ゼロから設計する新機能」かを見分けること。
+**進捗の一次情報源は`SUMMARY.md`**(番号は同ファイルの大項目と揃えてある)。
+本表は**そこへ判断のための一言を足しただけ**なので、**都度 `SUMMARY.md` をfetchして最新状況を確認すること。**
 
-| # | 旧TODO大項目 | 状況 |
+| # | 大項目 | 状況 |
 |---|---|---|
-| 1 | ダイアログ(ファイル選択・保存・色選択) | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用(電卓用)キーボード`KeyboardNum`も実装済み。 |
-| 2 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
-| 3 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 4 | Luaアプリ/API | **未着手**(Lua本体のコードは皆無)。ただし受け皿の一部は先行して入っている: ウィジェットID発行(`WidgetID`/`WidgetRegistry`)、`LayoutContainer`/`GridContainer`、**PC実行環境(`pc/`)**。残っている穴は下記「Lua着手前の受け皿の状態」を参照。 |
-| 5 | 標準/セカンダリアプリ開発 | **未着手**。設定アプリ・時計・辞書・電卓・チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし(部品は存在)。 |
-| 6 | GBエミュ | **未着手**。 |
-| 7 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
-| 8 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
+| 1 | ダイアログ系統 | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用(電卓用)キーボード`KeyboardNum`も実装済み。 |
+| 2 | 汎用基盤 | **ほぼ実装済み**。残るのはウィジェットIDの**消費側**(`Resolve()`の呼び出し元・ファクトリ)だけで、これは実質#5の一部。 |
+| 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
+| 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
+| 5 | Luaアプリ/API | **未着手**(Lua本体のコードは皆無)。ただし受け皿の一部は先行して入っている: ウィジェットID発行(`WidgetID`/`WidgetRegistry`)、`LayoutContainer`/`GridContainer`、**PC実行環境(`pc/`)**。残っている穴は下記「Lua着手前の受け皿の状態」を参照。 |
+| 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
+| 7 | 標準アプリ開発 | **Markdownブラウザ**(`PROTOCOL.md` v1を一通り)と**時計**(`ClocksScene`)の2本が実装済み。設定/辞書/電卓/ファイルエクスプローラーは**アプリ本体が無い**(部品は揃っている)。 |
+| 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
+| 9 | GBエミュ | **未着手**。 |
+| 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
+| 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
+
+**#7が#5の前提になっている。** Lua APIの仕様は「C++で標準アプリを書いてみて必要になったもの」から
+逆算するのが確実で、実例はまだ`MarkdownScene`と`ClocksScene`の2本しかない。
+電卓は`KeyboardNum`/`NumberInput`が、ファイルエクスプローラーは`FileExplorer`ウィジェットが既にあるので、
+**次の1本を足すコストが一番低いのはこの2つ**。
 
 ## 未実装の設計アイデア(旧pico-osからの持ち越し議論)
 
@@ -591,7 +657,7 @@ Lua向けの土台は「発行側だけ入って消費側が空」の状態。�
 | RAM/Flash予算 | **現状の空きRAMの絶対値を実機で測っていない**(`MemFunctions`のレポートは差分中心)。Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダーなので、入れる前に一度測っておくと判断が早い |
 | ビルドの二重管理 | `platformio.ini` と `pc/CMakeLists.txt` の両方にLuaを足す必要がある(LovyanGFXの版追随が既に手動なのと同じ状況) |
 
-**API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算するのが確実。** 現状アプリは`MarkdownScene`(開く文書が`tmp/doc.md`固定)と`InputTestScene`(部品の動作確認用)しかなく、バインディング設計の実例が足りていない。
+**API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算するのが確実。** ランチャに載っているのは`MarkdownScene`(引数なしなら`network.cfg`の`browser-home`を開く)/ `ClocksScene`(時計・タイマー・ストップウォッチ)/ `InputTestScene`(部品の動作確認用)の3本で、バインディング設計の実例としてはまだ足りていない。
 
 ## Claude Codeへの申し送り
 
@@ -606,5 +672,13 @@ Lua向けの土台は「発行側だけ入って消費側が空」の状態。�
 - GUIの挙動を確かめたいときは実機ビルドの前にPCビルド(`pc/`)で回すのが速い。`src/`へ実機ライブラリ依存を
   足すときは `pc/compat/` 側にも代替を用意すること(PC/Webビルドが壊れる)。ブラウザで動かす場合は
   スレッド・生ソケット・ブロッキング待ちが使えない点にも注意。
+- 格子状・多ボタンのUIは、部品ごとに`Button`を`new`せず「`render()`で直接描いてタップ位置から逆算する」型へ寄せる
+  (`AppGrid`/`ColorDialog`/`KeyboardNum`/`TabBar`/`DurationPicker`)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。
-- **テストは全て手動**。`.github/`が無くCIは存在しないので、`sh script/host_test/run.sh`(ASan、9本)/ `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは変更のたびに自分で回すこと。
+- **`SUMMARY.md`を書き換えるときは体裁を崩さないこと**。「TODO」は**項目名だけ**の一覧に保ち、
+  説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
+  この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
+- **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、9本)/
+  `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
+  変更のたびに自分で回すこと。

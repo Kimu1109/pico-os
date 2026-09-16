@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gui/widgets/Widget.hpp"
-#include "gui/widgets/FileExplorer.hpp"
+#include "gui/widgets/apps/FileExplorer.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Textbox.hpp"
 

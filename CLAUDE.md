@@ -64,10 +64,11 @@ src/
   gui/
     icons/                  アイコンデータ(tabler_iconsから生成)
     scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene)
-    widgets/                各ウィジェット実装 (WidgetID.hpp / WidgetRegistryも同居)
+    widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
+      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker)
       dialogs/              モーダルダイアログ
       interfaces/            ミックスイン的インターフェース
-      systems/               Statusbar等システムウィジェット
+      systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
   net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
@@ -136,6 +137,25 @@ PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1�
 - 再描画: `needsRender()` / `markdirty(Rect)`。
 - `disable_markdirty`: 親が描画反映を一括保証する場合の子markdirty無効化フラグ(**乱用厳禁、バグりやすい**)。
 - `hit_transparent`: **当たり判定を素通りさせるフラグ**。`WidgetFunctions::Add()`は`visitAll()`で**子孫も全て`widgets`へ積む**ため、子は親とは別の「根」として`HitTest()`の対象になる。つまり**親が自分でタップを処理したい場合、表示のために置いただけの子がタップを奪う**。`MarkdownView`のプール(Label/Image/Icon)がこれで、リンクのタップが一切反応しなかった。表示専用の子にはこれを立てる。
+
+### ウィジェットの置き場所
+**`widgets/`直下に置けるのは「どのアプリからでも使える汎用部品」だけ**。専用のものはサブフォルダへ入れる。
+
+| 置き場所 | 何を入れるか | 中身 |
+|---|---|---|
+| `widgets/` | 汎用部品と基底 | `Widget` / `WidgetID` / `WidgetRegistry` + 下のカタログのうち専用でないもの |
+| `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` |
+| `widgets/systems/` | **OSのシェル部品**(特定アプリのものではない) | `Statusbar`(常駐オーバーレイ) / `AppGrid`(ランチャのタイル) |
+| `widgets/dialogs/` | モーダルダイアログ + オンスクリーンキーボード3種 | 下記「ダイアログ」参照 |
+| `widgets/interfaces/` | ミックスイン的インターフェース | `IBorderColor` / `IFontImplementation` / `ITextColor` / `ITextInputTarget` |
+
+- **includeは常に`src/`起点の絶対パス**(`#include "gui/widgets/apps/MarkdownView.hpp"`)。
+  相対includeは使っていないので、フォルダを移してもファイル自身の中身は書き換え不要。
+- **PlatformIOもPCビルドも`src/**.cpp`を再帰的に拾う**ので、ファイルを移動してもビルド定義に触る必要はない。
+  ただし**`script/host_test/*.sh`はソースを1本ずつ明示列挙している**ので、移動したらここだけ直すこと。
+- `FileExplorer`が`apps/`なのは、`FileSaveDialog`/`FileSelectDialog`から使われていても
+  **「SD上のファイルを見せる」という用途に特化した部品**だから。汎用部品の定義は「役割が特定の
+  画面に紐付いていないこと」で、「複数箇所から使われていること」ではない。
 
 ### ウィジェットカタログ
 Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
@@ -674,6 +694,9 @@ Lua向けの土台は「発行側だけ入って消費側が空」の状態。�
   スレッド・生ソケット・ブロッキング待ちが使えない点にも注意。
 - 格子状・多ボタンのUIは、部品ごとに`Button`を`new`せず「`render()`で直接描いてタップ位置から逆算する」型へ寄せる
   (`AppGrid`/`ColorDialog`/`KeyboardNum`/`TabBar`/`DurationPicker`)。
+- **新しいウィジェットの置き場所は上記「ウィジェットの置き場所」に従う**。`widgets/`直下は汎用部品専用で、
+  特定のアプリのために作ったものは`widgets/apps/`へ。**汎用かどうか迷ったら`apps/`へ置く**
+  (後で汎用と分かって上げるのは簡単だが、直下に溜まると分類し直す手間が大きい)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。
 - **`SUMMARY.md`を書き換えるときは体裁を崩さないこと**。「TODO」は**項目名だけ**の一覧に保ち、
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、

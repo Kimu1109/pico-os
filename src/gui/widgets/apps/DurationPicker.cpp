@@ -1,4 +1,4 @@
-#include "gui/widgets/DurationPicker.hpp"
+#include "gui/widgets/apps/DurationPicker.hpp"
 
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"

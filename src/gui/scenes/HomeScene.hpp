@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gui/scenes/Scene.hpp"
-#include "gui/widgets/AppGrid.hpp"
+#include "gui/widgets/systems/AppGrid.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Button.hpp"
 

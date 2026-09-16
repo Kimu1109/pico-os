@@ -139,6 +139,46 @@ index.html?wifi=disconnected&rssi=-85
 IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイズがそのまま
 `index.data` に乗る**(初回ロードで全部ダウンロードされる)。Webで配る際は要注意。
 
+### Webで画面が出ない場合(canvasの大きさ)
+
+**canvasのCSS上の大きさは `main_pc.cpp` の `applyCanvasCssSize()` が決める。
+`pc/web/shell.html` 側でcanvasへ `width` / `height` / `max-width` を掛けてはいけない。**
+
+emscriptenのSDLは `Emscripten_CreateWindow()` で毎回こうする:
+
+1. canvasの属性を **1x1** にする
+2. CSS上の大きさ(`getBoundingClientRect`)を測る
+3. **`floor(実測値) != 1` なら「CSSが大きさを決めている」と見なし、実測値をそのまま採用する**
+
+CSSが何も指定していなければ 2. は 1x1 を返す……はずだが、**ページズームや端数の都合で
+`0.9999998` のように1をわずかに下回る値が返ることがある**。すると `floor` で0になり、
+「CSSが0を指定している」と解釈されて **canvasもSDLのウィンドウも 0x0 で作られる**。
+こうなるとソフトウェア描画が `createImageData(0, 0)` で例外を投げ、**メインループが
+1フレーム目で止まる**。画面は出ないのにC++のログだけ普通に出るので原因が見えにくい。
+
+実際に出た報告がこれで、症状はこうだった:
+
+```
+Uncaught IndexSizeError: Failed to execute 'createImageData' ... The source width is zero
+[PAGE] フレーム数=1 / canvas=0x0 / 描画=software
+```
+
+そこで**ウィンドウが作られる前に大きさを明示する**ようにした(`SCREEN_WIDTH`x`SCREEN_HEIGHT`の
+`PICOOS_PC_SCALE`倍)。実測値が480x640付近になるので、端数が出ても0にはならない。
+3. の「CSSが決めている」側へ入るが、その値は元々こちらが望む大きさなので問題ない。
+あわせて、**レイアウト前(実測値が0)の間はウィンドウを作らせずに待つ**
+(最大60フレーム。`canvasBoxReady()`)。
+
+手元で再現するには、`getBoundingClientRect` が真の値をわずかに下回って返すようにすればよい
+(Playwrightの `addInitScript` で `width * (1 - 2e-7)` を返す。修正前は1フレーム目で落ち、
+修正後は落ちない)。
+
+- **副作用**: canvasは常に480x640のまま。窓が狭いときは縮小せず、枠(`.screen`)の側が
+  スクロールする。以前の `max-width: 100%` による縮小は、**「CSSがcanvasの大きさを決める」
+  経路そのもの**なので戻さないこと。
+- 起動時の自己チェックはCSS上の大きさも出す:
+  `[WEB] 画面を用意しました: canvas 480x640 (CSS上は480.0x640.0 / 描画=software)`
+
 ### Webの描画をソフトウェアに固定してある理由
 
 **Webビルドは既定でSDLのソフトウェアレンダラ(canvas 2D)を使う。** GPU(WebGL)描画は

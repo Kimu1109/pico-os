@@ -456,6 +456,17 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   要求しないので作り直しごと起きない。比較用に`?render=gl`でGPU描画に戻せる。
   速度はどちらも60fps。起動直後にcanvasの大きさをC++側で1回確認し、0x0なら
   `SDL_GetError()`ごとログへ出す。
+- **canvasの大きさはC++側が決める**(`main_pc.cpp`の`applyCanvasCssSize()`が
+  `SCREEN_WIDTH`x`SCREEN_HEIGHT`の`PICOOS_PC_SCALE`倍をCSSへ明示)。
+  **`pc/web/shell.html`でcanvasへ`width`/`height`/`max-width`を掛けないこと。**
+  emscriptenのSDLは`Emscripten_CreateWindow()`でcanvasを1x1にしてCSS上の実測値を測り、
+  **`floor(実測値) != 1`ならその実測値を画面の大きさに採用する**。CSS無指定でも
+  ズームや端数で`0.9999998`が返ることがあり、`floor`で0→**canvasもウィンドウも0x0**→
+  ソフトウェア描画が`createImageData(0,0)`で例外→**1フレーム目でループが止まる**
+  (「canvas=0x0 / フレーム数=1」の実報告あり)。大きさを明示しておけば実測値が
+  480x640付近になり端数が出ても0にならない。レイアウト前(実測値0)の間は
+  ウィンドウを作らせず待つ(最大60フレーム)。副作用として窓が狭くてもcanvasは縮まず、
+  枠の側がスクロールする。詳細は`pc/README.md`「Webで画面が出ない場合」。
 - **Wi-Fiの疎通判定**: ソケットが無いので `navigator.onLine` を見る(`compat/WiFi.h`)。
 - **Markdownブラウザのオンライン機能はWebでは動かない**。`compat/WiFiClient_PC.h` は生のTCP
   ソケットを使うが、ブラウザにはそれが無い(emscriptenはWebSocket経由へ流すので中継サーバが要る)。

@@ -118,6 +118,7 @@ index.html?wifi=disconnected&rssi=-85
 | `rssi` | `PICOOS_WIFI_RSSI` |
 | `ssid` | `PICOOS_WIFI_SSID` |
 | `scan` | `PICOOS_WIFI_SCAN` |
+| `render` | `PICOOS_RENDER_DRIVER` (`gl` を指定するとGPU描画。既定はソフトウェア描画。下記) |
 
 `PICOOS_` で始まるキーはそのまま環境変数名として扱われるので、
 将来増えたものは表に足さなくても `?PICOOS_XXX=...` で渡せる。
@@ -128,37 +129,59 @@ index.html?wifi=disconnected&rssi=-85
 |---|---|
 | ループ | `emscripten_set_main_loop()`。ブラウザのメインスレッドは止められないので、`Panel_sdl::main()`(別スレッド)は使わず1フレームずつ刻む |
 | SDカード | `pc/sdcard/` を**ビルド時に**`index.data`へ焼き込む。**中身を変えたら再ビルドが必要**で、アプリ側からの書き込みはメモリ上だけ(リロードで消える) |
-| 描画 | WebGLがあればSDLのGLES2レンダラ、**無ければソフトウェアレンダラへ自動で切り替える**(下記)。どちらでも実測60fps |
+| 描画 | **SDLのソフトウェアレンダラ(canvas 2D)に固定**(下記)。GPU描画は `?render=gl` で試せる。どちらでも実測60fps |
 | Wi-Fi | 疎通判定は `navigator.onLine`(ソケットが無いため)。固定したいときは `?wifi=...` |
 | **Markdownブラウザのオンライン機能** | **使えない。** ブラウザには生のTCPソケットが無いので、`browser-home` を設定したりツールバーの「更新」「検索」を押してもサーバへ繋がらない。同梱のサンプル(`/tmp/doc.md`)を読む分にはそのまま動く |
 | `delay()` | 何もせず即座に戻る(待つとタブが固まるため)。`src/` は使っていない |
 | スレッド | 無し。`Panel_sdl` のデバッガ検出スレッドも起動しないが、動作に影響は無い |
-| 速度 | 実測60fps(メインループ自体の負荷は数ms/120フレーム)。描画はWebGL経由 |
+| 速度 | 実測60fps(メインループ自体の負荷は数ms/120フレーム)。240x320を2倍で出す程度ではGPUを使っても差が出ない |
 
 IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイズがそのまま
 `index.data` に乗る**(初回ロードで全部ダウンロードされる)。Webで配る際は要注意。
 
-### WebGLが無い環境について
+### Webの描画をソフトウェアに固定してある理由
 
-**WebGLが使えないブラウザでは、何もしないと画面が真っ黒になる。** LovyanGFXの
-`sdl_create()` が `SDL_CreateRenderer(..., SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)`
-を要求するため、アクセラレータが無いとレンダラが `nullptr` になり、テクスチャも作られず
-**以後一切描かれない**。C++側は何事もなく動き続ける(ログも出る)ので原因が見えにくい。
+**Webビルドは既定でSDLのソフトウェアレンダラ(canvas 2D)を使う。** GPU(WebGL)描画は
+`?render=gl` を付けたときだけ。速度のためではなく、**GPU描画では「フレームは進んでいるのに
+画面が出ない」状態になりうる**ため。
 
-`main_pc.cpp` が起動時にWebGLの有無を確かめ、無ければ
-`SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software")` でソフトウェアレンダラを名指しする。
-SDLはヒントで名指ししたドライバを `SDL_RENDERER_ACCELERATED` の要求と突き合わせずに使うので、
-**LovyanGFX側を変えずに済む**。切り替わったときはログに出る。
+LovyanGFXの `sdl_create()` は
+`SDL_CreateRenderer(..., SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)` を要求する。
+SDLのGLES2レンダラは、ウィンドウに `SDL_WINDOW_OPENGL` が立っていないと
+**`SDL_RecreateWindow()` でウィンドウを作り直す**。そしてemscriptenのSDLは、ウィンドウを
+壊すときcanvasそのものは壊せないので **0x0へ縮める**
+(`SDL_emscriptenvideo.c`: "We can't destroy the canvas, so resize it to zero instead")。
 
-- WebGLが無い環境は珍しくない: GPUが無い / ドライバがブロックリスト入り / 会社の設定で無効。
-  加えて**Chromeは「GPUが無いときの自動ソフトウェアWebGL」を廃止しつつある**。
-- 速度はどちらも実測60fps(240x320を2倍で出す程度なら差が出ない)。
-- 手元で再現するには Chromium を `--disable-3d-apis` で起動する。
+つまり**GPU描画では起動のたびにcanvasが必ず一度 0x0 を通る**。作り直しに失敗すると
+canvasは **0x0のまま**になり、C++側は何事もなく回り続けるのでログも普通に出る。
+これが「画面だけ出ない」の正体で、`?render=gl` で実際にcanvasが一度0x0になるのは
+DevToolsでも確認できる。
 
-ページ側にも見張りを入れてある。読み込み4秒後に**まだ1フレームも描かれていなければ**、
-フレーム数・canvasの大きさ・WebGLの有無・UserAgentをログ欄へ書き出す。
-「画面をPNGで保存」も、canvasが未生成なら**壊れたファイルを落とさずに理由を出す**
-(以前は無効なPNGが保存されていた)。
+- **作り直しが失敗する条件はこちらからは予測できない**: SDLが要求するEGL/WebGLサーフェスの
+  属性が通らない、GPUがブロックリスト入り、WebGLコンテキスト数の上限、など。
+- **捨てcanvasへ `getContext('webgl')` が通ることは何の保証にもならない。**
+  以前はWebGLの有無で切り替えていたが、**「WebGLあり・canvas 0x0」という報告**が出た。
+- ソフトウェア描画では `SW_CreateRenderer` が `SDL_WINDOW_OPENGL` を要求しないため
+  **ウィンドウの作り直しが起きない**。canvasは作成時の1回だけ設定され、0x0を通らない。
+- SDLはヒント(`SDL_HINT_RENDER_DRIVER`)で名指ししたドライバを `SDL_RENDERER_ACCELERATED` の
+  要求と突き合わせずに使うので、**LovyanGFX側は無改造でよい**。
+- 速度はどちらも実測60fps。`?render=gl` は比較用で、WebGLが無い環境で指定した場合は
+  警告を出してソフトウェア描画へ戻す(確実に真っ黒になるため)。
+
+起動直後に**canvasが本当に作られたかをC++側で1回確認**し、ログへ出す:
+
+```
+[WEB] 描画=ソフトウェア(canvas 2D)。GPU描画を試すなら ?render=gl
+[WEB] 画面を用意しました: canvas 480x640 (描画=software)
+```
+
+0x0だった場合は `SDL_GetError()` ごと書き出すので、次に同じことが起きたときは
+**どこで失敗したかがログに残る**。
+
+ページ側にも見張りを入れてある。読み込み4秒後に**まだ1フレームも描かれていない**か
+**canvasが未生成**なら、フレーム数・canvasの大きさ・描画ドライバ・WebGLの有無(参考値)・
+UserAgentをログ欄へ書き出す。
+「画面をPNGで保存」も、canvasが未生成なら**壊れたファイルを落とさずに理由を出す**。
 
 ### ブラウザでC++をデバッグする
 

@@ -443,13 +443,19 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   **中身を変えたら再ビルドが必要**で、書き込みはリロードで消える。
 - **設定**: ブラウザに環境変数が無いので、`main_pc.cpp` が起動時にURLのクエリを `setenv()` する
   (`?wifi=disconnected&rssi=-85`)。`compat/` 側はいつもどおり `getenv` を読むだけ。
-- **WebGLが無い環境ではソフトウェア描画へ自動で落とす**。LovyanGFXの`sdl_create()`が
-  `SDL_CreateRenderer(..., ACCELERATED|PRESENTVSYNC)`を要求するため、WebGLが無いと
-  レンダラが`nullptr`になり**画面が真っ黒のまま何も描かれない**(C++側は動き続けるので
-  気づきにくい)。`main_pc.cpp`が起動時にWebGLの有無を見て、無ければ
-  `SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software")`を立てる。SDLはヒントで名指しした
-  ドライバをACCELERATEDの要求と突き合わせないので、**LovyanGFXを改造せずに回避できる**。
-  再現は `chromium --disable-3d-apis`。速度はどちらも60fps。
+- **描画はソフトウェア(canvas 2D)に固定**。`main_pc.cpp`が起動時に
+  `SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software")`を立てる(SDLはヒントで名指しした
+  ドライバをACCELERATEDの要求と突き合わせないので、**LovyanGFXは無改造でよい**)。
+  理由は速度ではなく**GPU描画だと「フレームは進んでいるのに画面が出ない」状態になりうる**こと:
+  LovyanGFXの`sdl_create()`が`ACCELERATED|PRESENTVSYNC`を要求する→SDLのGLES2レンダラが
+  `SDL_WINDOW_OPENGL`を足すため**`SDL_RecreateWindow()`でウィンドウを作り直す**→
+  emscriptenのSDLはウィンドウを壊すとき**canvasを0x0へ縮める**
+  (canvasそのものは壊せないため)。つまり**GPU描画は起動のたびにcanvasが0x0を通り**、
+  作り直しに失敗すると0x0のまま残る。**WebGLの有無では判別できない**
+  (「WebGLあり・canvas 0x0」の実報告あり)。ソフトウェア描画は`SDL_WINDOW_OPENGL`を
+  要求しないので作り直しごと起きない。比較用に`?render=gl`でGPU描画に戻せる。
+  速度はどちらも60fps。起動直後にcanvasの大きさをC++側で1回確認し、0x0なら
+  `SDL_GetError()`ごとログへ出す。
 - **Wi-Fiの疎通判定**: ソケットが無いので `navigator.onLine` を見る(`compat/WiFi.h`)。
 - **Markdownブラウザのオンライン機能はWebでは動かない**。`compat/WiFiClient_PC.h` は生のTCP
   ソケットを使うが、ブラウザにはそれが無い(emscriptenはWebSocket経由へ流すので中継サーバが要る)。

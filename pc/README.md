@@ -141,14 +141,15 @@ IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイ�
 
 ### Webで画面が出ない場合(canvasの大きさ)
 
-**canvasのCSS上の大きさは `main_pc.cpp` の `applyCanvasCssSize()` が決める。
-`pc/web/shell.html` 側でcanvasへ `width` / `height` / `max-width` を掛けてはいけない。**
+**SDLがウィンドウを作る間だけ、`main_pc.cpp` がcanvasのCSS上の大きさを1.5pxに固定する。**
+`pinCanvasCssSizeForProbe()` / `releaseCanvasCssPin()` がそれで、**消さないこと**。
 
 emscriptenのSDLは `Emscripten_CreateWindow()` で毎回こうする:
 
 1. canvasの属性を **1x1** にする
 2. CSS上の大きさ(`getBoundingClientRect`)を測る
-3. **`floor(実測値) != 1` なら「CSSが大きさを決めている」と見なし、実測値をそのまま採用する**
+3. **`floor(実測値) != 1` なら「CSSが大きさを決めている」(external_size)と見なし、
+   実測値をそのまま画面の大きさに採用する**
 
 CSSが何も指定していなければ 2. は 1x1 を返す……はずだが、**ページズームや端数の都合で
 `0.9999998` のように1をわずかに下回る値が返ることがある**。すると `floor` で0になり、
@@ -163,21 +164,31 @@ Uncaught IndexSizeError: Failed to execute 'createImageData' ... The source widt
 [PAGE] フレーム数=1 / canvas=0x0 / 描画=software
 ```
 
-そこで**ウィンドウが作られる前に大きさを明示する**ようにした(`SCREEN_WIDTH`x`SCREEN_HEIGHT`の
-`PICOOS_PC_SCALE`倍)。実測値が480x640付近になるので、端数が出ても0にはならない。
-3. の「CSSが決めている」側へ入るが、その値は元々こちらが望む大きさなので問題ない。
+1.5pxを入れておけば、端数が出ても実測値は**1以上2未満**に収まり `floor` は必ず1になる。
+つまり 3. の判定を「CSSは大きさを決めていない」側へ確実に倒せる。
 あわせて、**レイアウト前(実測値が0)の間はウィンドウを作らせずに待つ**
 (最大60フレーム。`canvasBoxReady()`)。
 
-手元で再現するには、`getBoundingClientRect` が真の値をわずかに下回って返すようにすればよい
-(Playwrightの `addInitScript` で `width * (1 - 2e-7)` を返す。修正前は1フレーム目で落ち、
-修正後は落ちない)。
+**external_size側へ倒してはいけない。** 一度は「480x640と明示すれば0にならない」と考えて
+そうしたが、それだとSDLはCSS上の大きさを画面の大きさとして採用し、**以後ウィンドウの
+内部サイズとCSSの箱を同期しなくなる**。LovyanGFXのSDLパネルは「ウィンドウの大きさは自分が
+決める」前提で拡大率(`_update_scaling`)とタッチ座標の換算を組み立てているため、
+**初期表示の縦横比が崩れ、タップ位置もずれる**(こちらも報告が出た)。値が正しくても
+モードが変わってしまうのが問題なので、**判定を通したら固定は外す**。
 
-- **副作用**: canvasは常に480x640のまま。窓が狭いときは縮小せず、枠(`.screen`)の側が
-  スクロールする。以前の `max-width: 100%` による縮小は、**「CSSがcanvasの大きさを決める」
-  経路そのもの**なので戻さないこと。
+- ページ側(`pc/web/shell.html`)は **canvasに `max-width` などを普通に書いてよい**。
+  固定が外れたあとに効くだけで、SDLはマウス座標をCSS上の大きさで割り戻すため、
+  縮小表示してもタップはずれない。
 - 起動時の自己チェックはCSS上の大きさも出す:
   `[WEB] 画面を用意しました: canvas 480x640 (CSS上は480.0x640.0 / 描画=software)`
+
+手元での再現(Playwrightの `addInitScript`):
+
+- **端数** … `getBoundingClientRect` が `width * (1 - 2e-7)` を返すようにする
+- **レイアウト前** … 最初の十数回の `getBoundingClientRect` が0を返すようにする
+
+どちらも修正前は1フレーム目で落ち、修正後は落ちない。縦横比とタップ位置は
+**不具合が出る前のビルド(8c06644)と一致すること**を、dpr 1 / 1.25 / 2 × 窓幅2種で確かめる。
 
 ### Webの描画をソフトウェアに固定してある理由
 

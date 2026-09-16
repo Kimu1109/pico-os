@@ -201,6 +201,7 @@ void Label<N>::relayout() {
         CursorSlot head;
         head.line = 0;
         head.x = 0;
+        head.src_offset = 0;
         cursor_slots.push_back(head);
     }
 
@@ -256,7 +257,9 @@ void Label<N>::relayout() {
                 if (cursor_tracking) {
                     CursorSlot slot;
                     slot.line = cur_line;
-                    slot.x = curWidth;
+                    slot.x = (int16_t)curWidth;
+                    //「この文字の直後」が挿入位置なので、元テキスト上でも文字の終端を指す
+                    slot.src_offset = (uint16_t)(run.srcOffset + ci);
                     cursor_slots.push_back(slot);
                 }
             }
@@ -268,6 +271,7 @@ void Label<N>::relayout() {
             CursorSlot slot;
             slot.line = cur_line;
             slot.x = 0;
+            slot.src_offset = (uint16_t)(para_end + 1); //'\n'の直後
             cursor_slots.push_back(slot);
         }
 
@@ -745,6 +749,40 @@ void Label<N>::setCursorMove(int delta) {
 template<size_t N>
 void Label<N>::setCursorToEnd() {
     this->setCursorPos(this->getTextLength());
+}
+
+template<size_t N>
+void Label<N>::setCursorToByteOffset(size_t byte_offset) {
+    this->enableCursorTracking();
+    this->ensureLayout();
+    if (cursor_slots.empty()) {
+        this->cursor_index = 0;
+        this->needsRender();
+        return;
+    }
+
+    //src_offsetは昇順に並ぶので、指定位置を超えない最後のスロットを選べばよい。
+    //マークアップ記号の位置を指されてもスロットが無いだけで、その記号は
+    //描画もされないため見た目のカーソル位置は一致する
+    int found = 0;
+    for (int i = 0; i < (int)cursor_slots.size(); i++) {
+        if ((size_t)cursor_slots[i].src_offset > byte_offset) break;
+        found = i;
+    }
+    this->cursor_index = found;
+    this->needsRender();
+}
+
+template<size_t N>
+size_t Label<N>::getCursorByteOffset() {
+    this->enableCursorTracking();
+    this->ensureLayout();
+    if (cursor_slots.empty()) return 0;
+
+    int idx = this->cursor_index;
+    if (idx < 0) idx = 0;
+    if (idx >= (int)cursor_slots.size()) idx = (int)cursor_slots.size() - 1;
+    return (size_t)cursor_slots[idx].src_offset;
 }
 
 template<size_t N>

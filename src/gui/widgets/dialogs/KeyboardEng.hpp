@@ -28,7 +28,7 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         const static int key_h = 28;
         const static int key_w = 240 / (10 * 2);
 
-        const static int keys_size = 43;
+        const static int keys_size = 47;
 
         //N→Normal
         //Z→コマンド
@@ -76,18 +76,22 @@ class KeyboardEng : public Widget, public ITextInputWidget {
             { "\n", "\n", 0, 'Z' },
 
             { "ABC", "ABC", 3, 'N' },
-            { "あいう", "あいう", 4, 'N' },
+            { "かな", "かな", 3, 'N' },
+            { "←", "←", 2, 'N' },
 
-            { "space", "Space", 8, 'A' },
+            { "space", "Space", 5, 'A' },
+            { "→", "→", 2, 'A' },
             { "return", "Return", 5, 'A'},
 
-            { "space", "Space", 8, 'B'},
+            { "space", "Space", 5, 'B'},
+            { "→", "→", 2, 'B'},
             { "submit", "Submit", 5, 'B'},
 
-            { "space", "Space", 5, 'C'},
-            { "return", "Return", 5, 'C'},
+            { "space", "Space", 3, 'C'},
+            { "→", "→", 2, 'C'},
+            { "return", "Return", 4, 'C'},
             { "go", "Go", 3, 'C'},
-            //3 + 4 + 8 + 5 = 20spaces
+            //3 + 3 + 2 + 5 + 2 + 5 = 20spaces
 
             { "\0", "\0", 0, 'Z'}
             //end
@@ -137,36 +141,69 @@ class KeyboardEng : public Widget, public ITextInputWidget {
             { "\n", "\n", 0, 'Z' },
 
             { "123", "123", 3, 'N' },
-            { "あいう", "あいう", 4, 'N' },
-            
-            { "space", "Space", 8, 'A' },
+            { "かな", "かな", 3, 'N' },
+            { "←", "←", 2, 'N' },
+
+            { "space", "Space", 5, 'A' },
+            { "→", "→", 2, 'A' },
             { "return", "Return", 5, 'A'},
 
-            { "space", "Space", 8, 'B'},
+            { "space", "Space", 5, 'B'},
+            { "→", "→", 2, 'B'},
             { "submit", "Submit", 5, 'B'},
 
-            { "space", "Space", 5, 'C'},
-            { "return", "Return", 5, 'C'},
+            { "space", "Space", 3, 'C'},
+            { "→", "→", 2, 'C'},
+            { "return", "Return", 4, 'C'},
             { "go", "Go", 3, 'C'},
-            //3 + 4 + 8 + 5 = 20spaces
+            //3 + 3 + 2 + 5 + 2 + 5 = 20spaces
 
             { "\0", "\0", 0, 'Z'}
             //end
         };
 
         FixedString<PICO_STR_LL> inputs;
-        void addInput(const char* str){
-            inputs.append(str);
+
+        // inputs内の挿入位置(UTF-8文字単位)。
+        // 位置の真はこちらが持ち、input_label側へはバイト位置に直して渡す。
+        // Labelのカーソルスロットはマークアップ記号(**や~)のぶんだけ
+        // 文字数とずれるため、スロット番号をそのまま位置として使えない
+        int cursor_char = 0;
+
+        //inputsとカーソル位置をinput_labelへ反映する
+        void syncInputLabel(){
             input_label->setText(inputs);
-            input_label->setCursorToEnd();
+            input_label->setCursorToByteOffset((size_t)inputs.byteOffsetOfChar(cursor_char));
+        }
+        void addInput(const char* str){
+            //半端に入ると壊れた文字が残るので、入り切らないときは何もしない
+            if(inputs.length() + strlen(str) > FixedString<PICO_STR_LL>::capacity()) return;
+
+            inputs.insertAtChar(cursor_char, str);
+            cursor_char += FixedString<PICO_STR_LL>::charCount(str);
+
+            syncInputLabel();
             if(this->target) this->target->onTextChanged(this);
         }
         void removeInput(){
-            if(inputs.length() == 0) return;
+            if(cursor_char <= 0) return; //カーソルより前に文字が無い
 
-            inputs.removeLastChar();
-            input_label->setText(inputs);
+            inputs.removeCharAt(cursor_char - 1);
+            cursor_char--;
+
+            syncInputLabel();
             if(this->target) this->target->onTextChanged(this);
+        }
+        //カーソルをdelta文字ぶん動かす(テキストは変えないのでonTextChangedは飛ばさない)
+        void moveCursor(int delta){
+            int next = cursor_char + delta;
+            int last = inputs.charCount();
+            if(next < 0) next = 0;
+            if(next > last) next = last;
+            if(next == cursor_char) return;
+
+            cursor_char = next;
+            input_label->setCursorToByteOffset((size_t)inputs.byteOffsetOfChar(cursor_char));
         }
         Key keyEnv(int index){
             if(isNumMode){ //123モード
@@ -232,8 +269,8 @@ class KeyboardEng : public Widget, public ITextInputWidget {
 
         void setText(const FixedString<PICO_STR_LL>& text) override {
             this->inputs = text;
-            input_label->setText(inputs);
-            input_label->setCursorToEnd();
+            this->cursor_char = this->inputs.charCount(); //受け取った直後は末尾から書き足せるようにする
+            syncInputLabel();
         }
         FixedString<PICO_STR_LL> getText() override {
             return this->inputs;

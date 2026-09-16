@@ -176,6 +176,46 @@ int main(){
         eq(l.getCursorScreenY(), 24, "折返し2行目のカーソルY");
     }
 
+    // ---- バイト位置でのカーソル指定 ----
+    // キーボード側は自分のテキスト上のバイト位置でカーソルを持つので、
+    // スロット番号(装飾記号のぶんだけ文字数とずれる)ではなくこちらで受け渡す
+    {
+        Label<PICO_STR_M> l(0, 0, "あいう");
+        l.setCursorToByteOffset(0);
+        eq(l.getCursorPos(), 0, "バイト0は先頭");
+        eq((int)l.getCursorByteOffset(), 0, "先頭のバイト位置");
+        l.setCursorToByteOffset(3); //"あ"の直後
+        eq(l.getCursorPos(), 1, "1文字目の直後");
+        eq(l.getCursorScreenX(), 24, "1文字目の直後のX");
+        l.setCursorToByteOffset(9); //末尾
+        eq(l.getCursorPos(), 3, "末尾");
+        eq((int)l.getCursorByteOffset(), 9, "末尾のバイト位置");
+        l.setCursorToByteOffset(100); //範囲外は末尾へ丸める
+        eq(l.getCursorPos(), 3, "範囲外は末尾へ丸まる");
+    }
+    {
+        //マークアップ記号はスロットを持たないので、文字数とスロット番号がずれる。
+        //"あ~い~う" は表示3文字(スロット4個)だが、元テキストは5文字
+        Label<PICO_STR_M> l(0, 0, "あ~い~う");
+        eq(l.getTextLength(), 3, "装飾記号はカーソル位置に数えない");
+
+        l.setCursorToByteOffset(4); //"あ~"の直後 = 波線の中身の手前
+        eq(l.getCursorPos(), 1, "記号を跨いでも文字の切れ目に乗る");
+        eq(l.getCursorScreenX(), 24, "記号は描かれないのでXは1文字ぶん");
+
+        l.setCursorToByteOffset(8); //"あ~い~"の直後(閉じ記号は飛ばされる)
+        eq(l.getCursorPos(), 2, "閉じ記号の位置は直前の文字の後ろへ寄る");
+        eq((int)l.getCursorByteOffset(), 7, "寄った先のバイト位置は文字の終端");
+    }
+    {
+        //改行はスロットを1つ持ち、その位置は'\n'の直後を指す
+        Label<PICO_STR_M> l(0, 0, "あ\nい");
+        l.setCursorToByteOffset(4); //'\n'の直後 = 2行目の先頭
+        eq(l.getCursorPos(), 2, "改行の直後");
+        eq(l.getCursorScreenX(), 0, "2行目先頭のX");
+        eq(l.getCursorScreenY(), 24, "2行目先頭のY");
+    }
+
     // ---- setterの順序でレイアウト結果が変わらないこと ----
     // (レイアウトを遅延させているため、setterをどの順で呼んでも
     //  最後に解決した結果が一致していなければならない)

@@ -42,8 +42,16 @@ struct TextRun {
 // カーソル(挿入位置)候補1つ分の描画座標
 // relayout()時に、文字境界ごとの「そこにカーソルを置いたときの座標」を記録しておく
 struct CursorSlot {
-    int line = 0;   // 対応する行番号(line_startsのインデックス)
-    int x = 0;      // その行内でのX座標(rect.x からの相対値)
+    uint16_t line = 0;      // 対応する行番号(line_startsのインデックス)
+    int16_t x = 0;          // その行内でのX座標(rect.x からの相対値)
+    // このスロットが指す挿入位置の、元テキスト(raw_text)先頭からのバイト位置。
+    //
+    // スロットの並び順(cursor_index)と元テキストの文字位置は一致しない。
+    // マークアップ記号(**や~)はparseMarkup()が読み飛ばすためスロットを持たず、
+    // 「元テキストのn文字目」と「n番目のスロット」がずれるため。
+    // 入力欄のように元テキスト側の位置でカーソルを扱いたい呼び出し元のために、
+    // 変換の基準をここへ持たせてある(setCursorToByteOffset/getCursorByteOffset)。
+    uint16_t src_offset = 0;
 };
 
 // テキストの水平方向の揃え位置
@@ -238,6 +246,13 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
 
         void setCursorPos(int index);
         int getCursorPos();
+
+        // 元テキスト(getText())上のバイト位置でカーソルを置く / 読み出す。
+        // マークアップ記号は表示されずスロットを持たないので、指定位置に
+        // 対応するスロットが無い場合は「その位置を超えない最後のスロット」に寄せる
+        // (記号自体は描画されないため、見た目の位置は一致する)。
+        void setCursorToByteOffset(size_t byte_offset);
+        size_t getCursorByteOffset();
         void setCursorMove(int delta);
         void setCursorToEnd();
 

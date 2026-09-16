@@ -9,7 +9,8 @@ void KeyboardEng::setVisible(bool visible) {
 
     if(visible){
         this->inputs = *this->input_label->getText();
-        if(this->target) this->target->onShow(this);
+        this->cursor_char = this->inputs.charCount();
+        if(this->target) this->target->onShow(this); //targetがいればsetText()でカーソルごと引き直される
     }else{
         if(this->target) this->target->onHide(this);
     }
@@ -65,6 +66,10 @@ void KeyboardEng::causeOnPressStart() {
                     this->setVisible(false);
                 }else if(strcmp(key.str, "X") == 0){
                     removeInput();
+                }else if(strcmp(key.str, "←") == 0){
+                    moveCursor(-1);
+                }else if(strcmp(key.str, "→") == 0){
+                    moveCursor(1);
                 }else if(strcmp(key.str, "↑") == 0 || strcmp(key.str, "#+=") == 0) {
                     isUpperCase = !isUpperCase;
                     this->needs_redraw = true;
@@ -76,7 +81,7 @@ void KeyboardEng::causeOnPressStart() {
                     isNumMode = true;
                     isUpperCase = false;
                     this->needs_redraw = true;
-                }else if(strcmp(key.str, "あいう") == 0){
+                }else if(strcmp(key.str, "かな") == 0){
                     this->setVisible(false);
                     OSData::keyboard_jpn->setVisible(true);
                 }else{

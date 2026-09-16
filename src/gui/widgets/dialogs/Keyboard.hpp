@@ -125,12 +125,27 @@ class Keyboard : public Widget, public ITextInputWidget {
         FixedString<PICO_STR_LL> inputs_done;
         FixedString<5> okuri_hira;
 
+        // 確定済みテキスト(inputs_done)上の挿入位置(UTF-8文字単位)。
+        // 変換中の読み(inputs)は常にこの位置へ挟まる形で表示・確定される。
+        //
+        // 位置の真はこちらが持ち、input_labelへはバイト位置に直して渡す。
+        // Labelのカーソルスロットは読みを囲む`~`(波線のマークアップ)のぶんだけ
+        // 文字数とずれるため、スロット番号をそのまま位置として使えない
+        int done_cursor = 0;
+
         int candidates_scroll_index = 0;
         int candidates_width[IME_Functions::candidates_size];
 
         bool keyboard_mode = false; //false -> jpn, true -> num
         
+        //カナ/送りは変換中にしか働かないので、働かない場面ではカーソル移動キーとして使う
+        bool isCursorKeyCell(int key_index) const {
+            if(key_index != 2 * 5 + 0 && key_index != 3 * 5 + 0) return false;
+            return keyboard_mode || is_inputs_empty;
+        }
+
         char keysFontStyleEnv(int key_index){
+            if(isCursorKeyCell(key_index)) return 'M'; //矢印は1文字なので中サイズで出す
             if(key_index == 3 * 5 - 1 || key_index == 4 * 5 - 1){ //改行
                 if(is_inputs_empty)
                     if(this->target && !this->target->getIsSingleLine())
@@ -139,6 +154,9 @@ class Keyboard : public Widget, public ITextInputWidget {
             return keys_font_style[key_index];
         }
         const char* keysEnv(int key_index){
+            if(isCursorKeyCell(key_index)){ //カナ/送り → カーソル左/右
+                return (key_index == 2 * 5 + 0) ? "←" : "→";
+            }
             if(key_index == 3 * 5 - 1){ //改
                 if(is_inputs_empty)
                     if(this->target)
@@ -186,13 +204,27 @@ class Keyboard : public Widget, public ITextInputWidget {
             }
 
             is_inputs_empty = is_inputs_empty_now;
+
+            //確定済みテキストをカーソル位置で割り、そこへ変換中の読みを挟んで表示する。
+            //読みを囲む`~`は波線のマークアップで、記号自体は描画されない。
+            //変換中でないときに囲みを出さないのは、空の`~~`が取り消し線の開始として
+            //解釈され、カーソル以降の確定済みテキストに線が入ってしまうため
+            const size_t split = (size_t)inputs_done.byteOffsetOfChar(done_cursor);
+
             FixedString<PICO_STR_LL> display;
-            display.assign(inputs_done);
-            display.append("~");
-            display.append(inputs);
-            display.append("~");
+            display.assign(inputs_done.c_str(), split);
+            if(!is_inputs_empty_now){
+                display.append("~");
+                display.append(inputs);
+                display.append("~");
+            }
+            display.append(inputs_done.c_str() + split);
+
             input_label->setText(display);
-            input_label->setCursorToEnd();
+            //変換中は読みの直後、そうでなければカーソル位置そのものへ置く
+            input_label->setCursorToByteOffset(
+                is_inputs_empty_now ? split : split + 1 + inputs.length()
+            );
 
             if(!notToCauseEvent){
                 if(this->target) this->target->onTextChanged(this);
@@ -207,7 +239,11 @@ class Keyboard : public Widget, public ITextInputWidget {
 
         void removeInput() {
             if(is_inputs_empty){
-                inputs_done.removeLastChar();
+                //確定済みテキストからカーソルの直前の1文字を消す
+                if(done_cursor <= 0) return;
+
+                inputs_done.removeCharAt(done_cursor - 1);
+                done_cursor--;
                 updateInputs(false);
                 return;
             }
@@ -222,11 +258,31 @@ class Keyboard : public Widget, public ITextInputWidget {
         }
 
         void commitAndClear() {
-            inputs_done.append(inputs);
+            if(inputs.length() != 0){
+                //入り切らないときは確定せず読みのまま残す(半端に挿すと壊れた文字が残るため)
+                if(inputs_done.length() + inputs.length() > FixedString<PICO_STR_LL>::capacity()) return;
+
+                inputs_done.insertAtChar(done_cursor, inputs);
+                done_cursor += inputs.charCount();
+            }
             inputs.clear();
             okuri_hira.clear();
 
             updateInputs(false);
+        }
+
+        //カーソルをdelta文字ぶん動かす。変換中の読みがあれば先に確定させる
+        void moveCursor(int delta) {
+            if(!is_inputs_empty) commitAndClear();
+
+            int next = done_cursor + delta;
+            int last = inputs_done.charCount();
+            if(next < 0) next = 0;
+            if(next > last) next = last;
+            if(next == done_cursor) return;
+
+            done_cursor = next;
+            updateInputs(true); //テキストは変えていないのでonTextChangedは飛ばさない
         }
 
         void switchDakuten(){
@@ -305,12 +361,17 @@ class Keyboard : public Widget, public ITextInputWidget {
         void setText(const FixedString<PICO_STR_LL>& text) override {
             this->inputs_done = text;
             this->inputs.clear();
+            this->done_cursor = this->inputs_done.charCount(); //受け取った直後は末尾から書き足せるようにする
             this->updateInputs(true);
         }
         FixedString<PICO_STR_LL> getText() override {
+            //表示と同じく、変換中の読みはカーソル位置へ挟んで返す
+            const size_t split = (size_t)inputs_done.byteOffsetOfChar(done_cursor);
+
             FixedString<PICO_STR_LL> result;
-            result.assign(inputs_done);
+            result.assign(inputs_done.c_str(), split);
             result.append(inputs);
+            result.append(inputs_done.c_str() + split);
             return result;
         }
 };

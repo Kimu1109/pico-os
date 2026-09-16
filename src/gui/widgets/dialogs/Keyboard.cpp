@@ -11,15 +11,13 @@ void Keyboard::setVisible(bool visible) {
     this->input_label->setMaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
 
     if(!visible){
-        FixedString<PICO_STR_LL> combined;
-        combined.assign(this->inputs_done);
-        combined.append(this->inputs);
-        this->input_label->setText(combined);
+        this->input_label->setText(this->getText()); //読みを挟んだ確定形(表示用の`~`は含まない)
         if(this->target) this->target->onHide(this);
     }else{
         this->inputs_done = *this->input_label->getText();
         this->inputs.clear();
-        if(this->target) this->target->onShow(this);
+        this->done_cursor = this->inputs_done.charCount();
+        if(this->target) this->target->onShow(this); //targetがいればsetText()でカーソルごと引き直される
         this->updateInputs(false);
     }
 
@@ -167,6 +165,14 @@ void Keyboard::causeOnPressStart() {
             }
         }else{
             commitAndClear();
+        }
+    }
+
+    //カーソル移動(カナ/送りが働かない場面では、その2キーが←→になっている)
+    if(swipe_x_index == 0 && swipe_y_index >= 2){
+        if(keyboard_mode || is_inputs_empty){
+            moveCursor(swipe_y_index == 2 ? -1 : 1);
+            return;
         }
     }
 

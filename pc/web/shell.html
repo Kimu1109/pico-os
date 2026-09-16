@@ -203,7 +203,10 @@
 
   // ---- 描画まわりの見張り ----
   // 「C++は動いているのに画面だけ出ない」という状態は原因が見えにくいので、
-  // WebGLの有無と、C++のメインループが回っているかをページ側から確かめて報告する。
+  // メインループが回っているか・canvasが作られたか・どの描画ドライバかを報告する。
+  // ※WebGLの有無は参考値。**あっても画面が出ないことがある**(SDLがウィンドウを
+  //   作り直す際にcanvasを0x0へ縮めるため。pc/README.md 参照)ので、
+  //   これだけで原因を決めないこと。
   function webglAvailable() {
     try {
       var probe = document.createElement('canvas');
@@ -212,11 +215,6 @@
     } catch (e) { return false; }
   }
 
-  // C++側(main_pc.cpp)がWebGL無しを検出したときに呼ぶ
-  window.picoosOnSoftwareRender = function () {
-    appendLog('[PAGE] WebGLが使えないため、ソフトウェア描画で動いています(表示は出ます)', false);
-  };
-
   setTimeout(function () {
     var frames = window.picoosFrames | 0;
     if (frames > 0 && canvasEl.width > 0) return;   // 正常
@@ -224,8 +222,15 @@
     appendLog('[PAGE] 画面が出ていないようなので、状態を書き出します:', true);
     appendLog('       フレーム数=' + frames
               + ' / canvas=' + canvasEl.width + 'x' + canvasEl.height
+              + ' / 描画=' + (window.picoosRenderDriver || '(未設定)')
               + ' / WebGL=' + (webglAvailable() ? 'あり' : 'なし'), true);
     appendLog('       ' + navigator.userAgent, true);
+    // canvasが0x0ならSDLのウィンドウが作られていない。C++側のログ([WEB]の行)に
+    // SDLのエラーが出ているので、そこまで含めて開発者へ渡してもらう
+    if (canvasEl.width === 0 && window.picoosRenderDriver === 'gl') {
+      appendLog('       GPU描画(?render=gl)で失敗しています。'
+                + 'クエリを外して読み込み直すと既定のソフトウェア描画になります', true);
+    }
     Module.setStatus(frames === 0
       ? '描画ループが始まっていません(上のログを開発者へ)'
       : '画面が作られていません(上のログを開発者へ)');

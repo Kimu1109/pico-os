@@ -38,6 +38,7 @@
 
 #if defined(__EMSCRIPTEN__)
     #include <emscripten.h>
+    #include <emscripten/html5.h>  // emscripten_get_canvas_element_size
 #endif
 
 #include "consts.hpp"
@@ -136,6 +137,7 @@ namespace {
         { "ssid", "PICOOS_WIFI_SSID"  },
         { "scan", "PICOOS_WIFI_SCAN"  },
         { "sd",   "PICOOS_SD_ROOT"    },
+        { "render", "PICOOS_RENDER_DRIVER" },
     };
 
     // application/x-www-form-urlencoded をほどく(%XX と '+' だけ)
@@ -199,16 +201,40 @@ namespace {
         }
     }
 
-    // ブラウザでWebGLが使えるか。
+    //選んだ描画ドライバ("software" か "gl")。起動後の自己チェックのログで使う
+    const char* g_render_driver = "software";
+
+    // 描画ドライバを決める。**Webでは既定でSDLのソフトウェア描画(canvas 2D)を使う。**
     //
-    // 使えないと画面が真っ黒になる。LovyanGFXの sdl_create() が
-    // SDL_CreateRenderer(..., SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC) を
-    // 要求するため、アクセラレータが無いとレンダラがnullptrになり、
-    // テクスチャも作られず**以後一切描かれない**(C++側は普通に動き続けるので気づきにくい)。
+    // LovyanGFXの sdl_create() は
+    // SDL_CreateRenderer(..., SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC) を要求する。
+    // SDLのGLES2レンダラは、ウィンドウに SDL_WINDOW_OPENGL が立っていないと
+    // **SDL_RecreateWindow() でウィンドウを作り直す**。そしてemscriptenのSDLは
+    // ウィンドウを壊すときcanvasそのものは壊せないので **0x0へ縮める**
+    // (SDL_emscriptenvideo.c の "We can't destroy the canvas, so resize it to zero instead")。
+    // つまりGPU描画では、起動のたびにcanvasが必ず一度 0x0 を通る。
+    // 作り直しに失敗するとcanvasは **0x0のまま**になり、C++側は何事もなく回り続けるため
+    // 「フレームは進んでいるのに画面が出ない」という形になる。
     //
-    // WebGLが無い環境は珍しくない: GPUが無い/ドライバがブロックリスト入り/
-    // 会社の設定で無効、加えてChromeは「GPUが無いときの自動ソフトウェアWebGL」を
-    // 廃止しつつある。
+    // 作り直しが失敗する条件はブラウザ任せで、こちらからは予測できない:
+    // SDLが要求するEGL/WebGLサーフェスの属性が通らない、GPUがブロックリスト入り、
+    // WebGLコンテキスト数の上限、など。**捨てcanvasへ getContext('webgl') が通ることは
+    // 何の保証にもならない** — 実際に「WebGLあり・canvas 0x0・フレームは180」という
+    // 報告が出ており、以前のWebGL有無での切り替えではこれを防げなかった。
+    //
+    // ソフトウェア描画ならウィンドウの作り直しが起きない(SW_CreateRendererは
+    // SDL_WINDOW_OPENGL を要求しない)ので、この経路ごと消える。SDLはヒントで名指しした
+    // ドライバを SDL_RENDERER_ACCELERATED の要求と突き合わせないため、LovyanGFX側は無改造でよい。
+    // 240x320を2倍で出す程度では速度差も出ない(どちらも実測60fps)。
+    //
+    // 比較したいときは ?render=gl で従来のGPU描画に戻せる。
+    //
+    // (以下 hasWebGL() → selectRenderDriver() の順に定義する)
+
+    // ブラウザでWebGLが使えるか。**?render=gl を指定されたときだけ確かめる。**
+    // 無い環境でGPU描画を選ぶとレンダラがnullptrになり確実に何も描かれないので、
+    // その場合はソフトウェア描画へ戻す。
+    // (「あれば映る」保証は無いので、既定の判断材料には使わない)
     bool hasWebGL()
     {
         return 0 != EM_ASM_INT({
@@ -226,18 +252,52 @@ namespace {
         });
     }
 
-    // WebGLが無いときはSDLのソフトウェアレンダラを名指しする。
-    // SDLはヒントで名指しされたドライバを SDL_RENDERER_ACCELERATED の要求と
-    // 突き合わせずにそのまま使うので、LovyanGFX側を変えずに済む
-    // (SW_CreateRenderer は ACCELERATED を拒否せず、PRESENTVSYNC だけ見る)。
     void selectRenderDriver()
     {
-        if (hasWebGL()) return;
+        const char* req = getenv("PICOOS_RENDER_DRIVER");
+        bool use_gl = req && (strcmp(req, "gl") == 0 || strcmp(req, "webgl") == 0
+                           || strcmp(req, "gpu") == 0);
 
-        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
-        printf("[WEB] WebGLが使えないため、描画をソフトウェアへ切り替えます"
-               "(遅くなりますが表示はされます)\n");
-        EM_ASM({ if (window.picoosOnSoftwareRender) window.picoosOnSoftwareRender(); });
+        if (use_gl && !hasWebGL()) {
+            use_gl = false;
+            printf("[WEB] ?render=gl を指定されましたが、このブラウザではWebGLが使えません。"
+                   "ソフトウェア描画で動かします\n");
+        }
+
+        if (use_gl) {
+            g_render_driver = "gl";
+            printf("[WEB] 描画=GPU(?render=gl の指定)。"
+                   "画面が出ない場合はクエリを外してください\n");
+        } else {
+            g_render_driver = "software";
+            SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
+            printf("[WEB] 描画=ソフトウェア(canvas 2D)。GPU描画を試すなら ?render=gl\n");
+        }
+
+        //ページ側の見張りが「どちらで動いているか」を報告できるようにする
+        EM_ASM({ window.picoosRenderDriver = UTF8ToString($0); }, g_render_driver);
+    }
+
+    // ウィンドウ(canvas)が本当に用意できたかを起動直後に一度だけ確かめる。
+    //
+    // canvasが0x0なら、SDLのウィンドウ作成/作り直しが失敗したということで、
+    // 「画面が出ない」の原因はまずこれ。黙って回り続けさせるとログに何も残らず
+    // 原因が見えないので、SDLのエラー文字列ごと書き出す
+    void checkCanvasReady()
+    {
+        int w = 0, h = 0;
+        emscripten_get_canvas_element_size("#canvas", &w, &h);
+
+        if (w > 0 && h > 0) {
+            printf("[WEB] 画面を用意しました: canvas %dx%d (描画=%s)\n", w, h, g_render_driver);
+            return;
+        }
+
+        const char* err = SDL_GetError();
+        printf("[WEB] 画面(canvas)が作られていません: %dx%d / 描画=%s / SDLのエラー: %s\n",
+               w, h, g_render_driver, (err && *err) ? err : "(なし)");
+        printf("[WEB] SDLのウィンドウ作成に失敗しています。"
+               "?render=gl を付けている場合は外して読み込み直してください\n");
     }
 
     // 1フレーム分。requestAnimationFrame から呼ばれるので、
@@ -255,7 +315,16 @@ namespace {
         loop();
 
         //SDLのイベント取り込みとウィンドウへの反映(ネイティブではSDL側スレッドの仕事)
-        if (0 != lgfx::Panel_sdl::loop()) {
+        const int sdl_state = lgfx::Panel_sdl::loop();
+
+        //ウィンドウはこの最初の Panel_sdl::loop() の中で作られる。直後に一度だけ確認する
+        static bool canvas_checked = false;
+        if (!canvas_checked) {
+            canvas_checked = true;
+            checkCanvasReady();
+        }
+
+        if (0 != sdl_state) {
             //ウィンドウが閉じられた。ブラウザでは普通起きないので、黙って止まらず残す
             printf("[WEB] SDLのウィンドウが閉じられたため描画を終了します\n");
             emscripten_cancel_main_loop();

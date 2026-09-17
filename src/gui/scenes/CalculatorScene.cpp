@@ -66,6 +66,10 @@ void CalculatorScene::refreshDisplays(){
 
     if(!this->result_label) return;
 
+    //入力中のプレビューは「まだ確定していない」ことが分かるよう灰色にする
+    //("="で確定した答えは黒くはっきり出す。commitCalculation()側を参照)
+    this->result_label->setTextColor(PICO_DARKGREY);
+
     //空、または不完全な式(例: "3+")は評価に失敗して当然なので、エラー扱いにせず
     //黙って前のプレビューを消すだけにする。エラーとして出すのは"="を押した時だけ
     if(this->expression.empty()){
@@ -89,7 +93,12 @@ void CalculatorScene::commitCalculation(){
 
     const CalcEval::Result r = CalcEval::Evaluate(this->expression.c_str());
     if(!r.ok()){
-        if(this->result_label) this->result_label->setText(ErrorMessage(r.error));
+        if(this->result_label){
+            //構文エラー等は結果ではないので、灰色のプレビューとは別に赤で区別する
+            //(ACキーの赤字と同じく、状態否定にPICO_REDを使う既存の慣習に揃える)
+            this->result_label->setTextColor(PICO_RED);
+            this->result_label->setText(ErrorMessage(r.error));
+        }
         LOG_SYS_WARN("電卓: 式の評価に失敗しました (%s)", this->expression.c_str());
         return;
     }
@@ -100,7 +109,11 @@ void CalculatorScene::commitCalculation(){
     this->pushHistory(this->expression, text);
 
     if(this->expr_label)   this->expr_label->setText(this->expression.c_str());
-    if(this->result_label) this->result_label->setText(text);
+    if(this->result_label){
+        //"="で確定した答えは灰色のプレビューと区別できるよう黒ではっきり出す
+        this->result_label->setTextColor(PICO_FORECOLOR);
+        this->result_label->setText(text);
+    }
 
     this->result_value_text = text;
     this->last_was_result   = true;
@@ -114,9 +127,9 @@ void CalculatorScene::onKey(const char* key){
         return;
     }
 
-    if(strcmp(key, "⌫") == 0){
+    if(strcmp(key, "X") == 0){
         if(this->last_was_result){
-            //確定結果を見ている状態での⌫は、新しい式を打ち直す合図として扱う
+            //確定結果を見ている状態でのXは、新しい式を打ち直す合図として扱う
             this->expression.clear();
             this->last_was_result = false;
         }else{
@@ -233,7 +246,7 @@ void CalculatorScene::onEnter(){
     this->result_label->setMaxWidth(body.w - MARGIN * 2);
     this->result_label->setMaxHeight(result_h);
     this->result_label->setTextAlign(TextAlign::Right);
-    this->result_label->setTextColor(PICO_DARKGREY);
+    //色はrefreshDisplays()/commitCalculation()が状況に応じて都度設定する
     WidgetFunctions::Add(this->result_label);
 
     this->keypad = new CalculatorKeypad(body.x, body.y + display_h, body.w, body.h - display_h);

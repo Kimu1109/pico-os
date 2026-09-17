@@ -9,6 +9,7 @@ enum class WidgetType : uint8_t {
     AnalogClock,
     AppGrid,
     Button,
+    CalculatorKeypad,
     CanvasRaster,
     Checkbox,
     ColorDialog,

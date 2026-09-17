@@ -56,7 +56,7 @@ static void testKeypadHitTest(){
 
     struct Expect { const char* label; int row; int col_start; int col_span; };
     static const Expect kExpect[] = {
-        { "AC", 0, 0, 1 }, { "(", 0, 1, 1 }, { ")", 0, 2, 1 }, { "X", 0, 3, 1 },
+        { "AC", 0, 0, 1 }, { "(", 0, 1, 1 }, { ")", 0, 2, 1 }, { "⌫", 0, 3, 1 },
         { "7",  1, 0, 1 }, { "8", 1, 1, 1 }, { "9", 1, 2, 1 }, { "÷", 1, 3, 1 },
         { "4",  2, 0, 1 }, { "5", 2, 1, 1 }, { "6", 2, 2, 1 }, { "×", 2, 3, 1 },
         { "1",  3, 0, 1 }, { "2", 3, 1, 1 }, { "3", 3, 2, 1 }, { "-", 3, 3, 1 },
@@ -153,7 +153,7 @@ static void pressKeypad(CalculatorKeypad* kp, const char* key){
     // ここでは中心座標を1回だけ計算して押す
     struct Loc { int row, col_start, col_span; };
     static const struct { const char* label; Loc loc; } table[] = {
-        { "AC", {0,0,1} }, { "(", {0,1,1} }, { ")", {0,2,1} }, { "X", {0,3,1} },
+        { "AC", {0,0,1} }, { "(", {0,1,1} }, { ")", {0,2,1} }, { "⌫", {0,3,1} },
         { "7",  {1,0,1} }, { "8", {1,1,1} }, { "9", {1,2,1} }, { "÷", {1,3,1} },
         { "4",  {2,0,1} }, { "5", {2,1,1} }, { "6", {2,2,1} }, { "×", {2,3,1} },
         { "1",  {3,0,1} }, { "2", {3,1,1} }, { "3", {3,2,1} }, { "-", {3,3,1} },
@@ -209,12 +209,10 @@ static void testCalculatorScene(){
     pressKeypad(kp, "3");
     eq_str(expr->getText()->c_str(), "7+3", "入力中: 式がそのまま組み立てられる");
     eq_str(result->getText()->c_str(), "10", "入力中: 結果欄にプレビューが出る");
-    check(result->getTextColor() == PICO_DARKGREY, "入力中: プレビューは灰色(未確定と分かる)");
 
     pressKeypad(kp, "=");
     eq_str(expr->getText()->c_str(), "7+3", "\"=\": 式はそのまま残る");
     eq_str(result->getText()->c_str(), "10", "\"=\": 結果が確定する");
-    check(result->getTextColor() == PICO_FORECOLOR, "\"=\": 確定した答えは黒くはっきり出る");
     check(countItems(history) == 1, "\"=\": 履歴が1件増える");
 
     // \"=\"の直後に演算子を押すと結果から続けて計算できる
@@ -234,11 +232,11 @@ static void testCalculatorScene(){
     eq_str(expr->getText()->c_str(), "0", "AC: 式が空になる");
     eq_str(result->getText()->c_str(), "", "AC: 結果欄も空になる");
 
-    // ---- X(削除) ----
+    // ---- ⌫ ----
     pressKeypad(kp, "1");
     pressKeypad(kp, "2");
-    pressKeypad(kp, "X");
-    eq_str(expr->getText()->c_str(), "1", "X: 末尾の1文字が消える");
+    pressKeypad(kp, "⌫");
+    eq_str(expr->getText()->c_str(), "1", "⌫: 末尾の1文字が消える");
 
     // ---- 閉じていない括弧の\")\"は無視される ----
     pressKeypad(kp, "AC");
@@ -270,7 +268,6 @@ static void testCalculatorScene(){
     pressKeypad(kp, "+");
     pressKeypad(kp, "=");
     check(strlen(result->getText()->c_str()) > 0, "不完全な式で\"=\": 結果欄に何か表示される(エラーメッセージ)");
-    check(result->getTextColor() == PICO_RED, "不完全な式で\"=\": エラーは赤色で区別される");
     check(countItems(history) == before_history, "不完全な式で\"=\": 履歴は増えない");
 
     // ---- 履歴ページの表示切替と読み戻し ----

@@ -22,6 +22,12 @@ namespace PICO_Touch
     inline const int TS_MINY = 300;
     inline const int TS_MAXY = 3800;
 
+    // ライブラリ内部のZ_THRESHOLD(400)はごく僅かな接触でも真になり敏感すぎるため、
+    // アプリ側でさらに高い閾値を要求する。ライブラリはこれ未満だと座標そのものを
+    // 更新せずz=0を返す仕様なので、getPoint().zをこの値と比較するだけで済む。
+    // 実機で様子を見ながら調整すること。
+    inline const int16_t TOUCH_Z_THRESHOLD = 500;
+
     inline const int SCREEN_W = 240;
     inline const int SCREEN_H = 320;
 
@@ -64,10 +70,9 @@ namespace PICO_Touch
         bool touched = false;
         if(digitalRead(TOUCH_IRQ) == LOW){
             touchSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-            touched = ts.touched();
+            TS_Point p = ts.getPoint();
+            touched = (p.z >= TOUCH_Z_THRESHOLD);
             if(touched){
-                TS_Point p = ts.getPoint();
-
                 // p.x と p.y を入れ替え、横方向(x)は反転してマッピング
                 int16_t x = map(p.y, TS_MINY, TS_MAXY, SCREEN_W - 1, 0);
                 int16_t y = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_H - 1);

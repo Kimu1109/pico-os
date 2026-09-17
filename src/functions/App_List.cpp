@@ -6,6 +6,7 @@
 #include "gui/scenes/ClocksScene.hpp"
 #include "gui/scenes/CalculatorScene.hpp"
 #include "gui/scenes/FileExplorerScene.hpp"
+#include "gui/scenes/SettingsScene.hpp"
 
 // このOSに載せるアプリの一覧。
 //
@@ -32,6 +33,7 @@ void AppFunctions::Setup(){
     Register("時計", IconID::Clock, &MakeScene<ClocksScene>);
     Register("電卓", IconID::Calculator, &MakeScene<CalculatorScene>);
     Register("ファイル", IconID::Folder, &MakeScene<FileExplorerScene>);
+    Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
 
     LOG_SYS_OK("App Setup has succeeded! (%d apps)", Count());
 }

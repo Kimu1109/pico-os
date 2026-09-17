@@ -44,6 +44,7 @@ void Checkbox::causeOnPressStart(){
     ){
         this->isChecked = !this->isChecked;
         this->needsRender();
+        this->causeOnChangeChecked();
     }
 }
 

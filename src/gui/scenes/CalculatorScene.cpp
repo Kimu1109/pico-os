@@ -67,8 +67,11 @@ void CalculatorScene::refreshDisplays(){
     if(!this->result_label) return;
 
     //入力中のプレビューは「まだ確定していない」ことが分かるよう灰色にする
-    //("="で確定した答えは黒くはっきり出す。commitCalculation()側を参照)
+    //("="で確定した答えは黒くはっきり出す。commitCalculation()側を参照)。
+    //ここに来るのは常に数値のプレビューなので、エラー文言用に縮めたフォント
+    //(下記commitCalculation()参照)を戻しておく
     this->result_label->setTextColor(PICO_DARKGREY);
+    this->result_label->setFontSize(FontFn::Bigger);
 
     //空、または不完全な式(例: "3+")は評価に失敗して当然なので、エラー扱いにせず
     //黙って前のプレビューを消すだけにする。エラーとして出すのは"="を押した時だけ
@@ -95,8 +98,11 @@ void CalculatorScene::commitCalculation(){
     if(!r.ok()){
         if(this->result_label){
             //構文エラー等は結果ではないので、灰色のプレビューとは別に赤で区別する
-            //(ACキーの赤字と同じく、状態否定にPICO_REDを使う既存の慣習に揃える)
+            //(ACキーの赤字と同じく、状態否定にPICO_REDを使う既存の慣習に揃える)。
+            //数値結果と同じBigger(48px)のままだとメッセージが画面幅を超えてしまうため、
+            //エラー文言のときだけSmallへ縮める(数値に戻る時はrefreshDisplays()が戻す)
             this->result_label->setTextColor(PICO_RED);
+            this->result_label->setFontSize(FontFn::Small);
             this->result_label->setText(ErrorMessage(r.error));
         }
         LOG_SYS_WARN("電卓: 式の評価に失敗しました (%s)", this->expression.c_str());
@@ -110,8 +116,10 @@ void CalculatorScene::commitCalculation(){
 
     if(this->expr_label)   this->expr_label->setText(this->expression.c_str());
     if(this->result_label){
-        //"="で確定した答えは灰色のプレビューと区別できるよう黒ではっきり出す
+        //"="で確定した答えは灰色のプレビューと区別できるよう黒ではっきり出す。
+        //直前がエラー表示(Smallへ縮めてある)だった場合に備えてBiggerへ戻す
         this->result_label->setTextColor(PICO_FORECOLOR);
+        this->result_label->setFontSize(FontFn::Bigger);
         this->result_label->setText(text);
     }
 

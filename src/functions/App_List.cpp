@@ -25,7 +25,7 @@ void AppFunctions::Setup(){
     // ---- ここへ1行足すとランチャに並ぶ ----
     //引数を渡さないと network.cfg の browser-home を開く(無ければ同梱のサンプル)。
     //特定の文書を固定で開くタイルにしたい場合は MakeSceneWithArg + パス/URL を渡す
-    Register("Markdown",   IconID::File,     &MakeScene<MarkdownScene>);
+    Register("Markdown",   IconID::Browser,  &MakeScene<MarkdownScene>);
     Register("入力テスト", IconID::Keyboard, &MakeScene<InputTestScene>);
     Register("時計", IconID::Clock, &MakeScene<ClocksScene>);
 

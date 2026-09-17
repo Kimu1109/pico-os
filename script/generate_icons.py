@@ -140,6 +140,9 @@ ICONS: list[IconSpec] = [
     IconSpec("clock",             str(ICON_DIR / "clock.svg")),
     IconSpec("calculator",        str(ICON_DIR / "calculator.svg")),
     IconSpec("language_hiragana", str(ICON_DIR / "language-hiragana.svg")),
+    # Markdownブラウザはファイル1個ではなくブラウザ(ナビゲーションヘッダー付きの
+    # 文書ビューア)なので、素の File ではなくウィンドウ枠のアイコンにする。
+    IconSpec("browser",           str(ICON_DIR / "browser.svg")),
 
     # --- ファイル ---
     IconSpec("edit",   str(ICON_DIR / "edit.svg")),

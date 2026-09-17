@@ -17,14 +17,20 @@ namespace TimeFunctions {
 
     inline unsigned long last_update;
 
+    // POSIX TZ文字列を今すぐ反映する。Setup()と設定アプリ(タイムゾーン変更時)の
+    // 両方から呼ぶための共通口
+    inline void ApplyTimezone(const char* tz){
+        setenv("TZ", tz, 1);
+        tzset();
+    }
+
     inline void Setup(){
         last_update = millis();
 
         PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
             [&](const char* key, const char* value){
                 if(strcmp(key, "timezone") == 0){
-                    setenv("TZ", value, 1);
-                    tzset();
+                    ApplyTimezone(value);
                 }
             }
         );

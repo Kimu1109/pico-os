@@ -136,8 +136,15 @@ class DropdownMenu : public Widget {
             this->relayout();
         }
 
+        // 呼び出し側から選択状態を設定する(設定アプリ等が「今の値」を初期表示するために使う)。
+        // タップ選択時のonSelectItemコールバックは表示ラベルの更新も兼ねているため、
+        // ここから設定した場合もvalueラベルへ同じように反映しておく
+        // (でないと選択自体は効くのに、閉じた時の表示だけプレースホルダのまま残る)
         void setSelectedIndex(int index){
             this->dropdown->setSelectedIndex(index);
+
+            ScrollListTools::Item* item = this->dropdown->itemAt(index);
+            if(item) this->value->setText(item->text.c_str());
         }
         void clearSelectedIndex(){
             this->dropdown->clearSelectedIndex();

@@ -7,6 +7,7 @@
 #include "gui/scenes/CalculatorScene.hpp"
 #include "gui/scenes/FileExplorerScene.hpp"
 #include "gui/scenes/SettingsScene.hpp"
+#include "gui/scenes/DictScene.hpp"
 
 // このOSに載せるアプリの一覧。
 //
@@ -34,6 +35,7 @@ void AppFunctions::Setup(){
     Register("電卓", IconID::Calculator, &MakeScene<CalculatorScene>);
     Register("ファイル", IconID::Folder, &MakeScene<FileExplorerScene>);
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
+    Register("辞書", IconID::Language, &MakeScene<DictScene>);
 
     LOG_SYS_OK("App Setup has succeeded! (%d apps)", Count());
 }

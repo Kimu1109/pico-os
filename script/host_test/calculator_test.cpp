@@ -271,7 +271,24 @@ static void testCalculatorScene(){
     pressKeypad(kp, "=");
     check(strlen(result->getText()->c_str()) > 0, "不完全な式で\"=\": 結果欄に何か表示される(エラーメッセージ)");
     check(result->getTextColor() == PICO_RED, "不完全な式で\"=\": エラーは赤色で区別される");
+    check(result->getFontSize() == FontFn::Small,
+          "不完全な式で\"=\": エラー文言はBigger(48px)だと画面に収まらないためSmallへ縮む");
+    //Smallなら日本語1文字16pxなので、最長のエラー文言でも表示幅(maxWidth)に収まる。
+    //textWidth()はOSData::frameへ最後に適用したフォントに依存するため、明示的にSmallへ
+    //してから測る(Labelのrelayout()自身がfontApply()/fontDefault()で行うのと同じ手順)
+    FontFn::SetSmall();
+    const int error_text_w = OSData::frame->textWidth(result->getText()->c_str());
+    FontFn::SetDefault();
+    check(error_text_w <= result->getMaxWidth(),
+          "不完全な式で\"=\": エラー文言の実測幅が表示領域に収まる");
     check(countItems(history) == before_history, "不完全な式で\"=\": 履歴は増えない");
+
+    // ---- エラーの後に数字を打つとBigger(48px)のプレビューへ戻る ----
+    pressKeypad(kp, "AC");
+    pressKeypad(kp, "5");
+    check(result->getFontSize() == FontFn::Bigger, "エラーの後でも数字を打てばプレビューは通常のフォントへ戻る");
+    pressKeypad(kp, "=");
+    check(result->getFontSize() == FontFn::Bigger, "確定した数値の答えは通常のフォントで出る");
 
     // ---- 履歴ページの表示切替と読み戻し ----
     page_tab->setSelected(1, true); // 「履歴」タブへ切り替え(実際のタップと同じくnotify=trueで呼ぶ)
@@ -280,7 +297,7 @@ static void testCalculatorScene(){
     history->setSelectedIndex(0);
     history->causeOnSelectItem(true); // 選択済みの項目をもう一度タップした状態を再現(2回タップの流儀)
     check(page_tab->getSelected() == 0, "履歴の再選択: 電卓ページへ自動的に戻る");
-    eq_str(expr->getText()->c_str(), "π", "履歴の再選択: 直近の式が読み戻される");
+    eq_str(expr->getText()->c_str(), "5", "履歴の再選択: 直近の式が読み戻される");
 
     // ---- 履歴の消去 ----
     clear_button->causeOnPressEnd();

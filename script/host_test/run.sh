@@ -15,6 +15,8 @@
 #   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)とマニフェストの引き当て
 #   http_test     … URLの分解/解決と、HTTPレスポンスの解釈(ソケット抜きで検証)
 #   discovery_test… サーバ情報(/.well-known/pico-os)の解釈と前方互換
+#   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
+#   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -149,3 +151,36 @@ g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== discovery_test ====="
 "$OUT/discovery_test"
+
+# --- 電卓の式評価 ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/calc_eval_test.cpp" \
+    -o "$OUT/calc_eval_test"
+
+echo ""
+echo "===== calc_eval_test ====="
+"$OUT/calc_eval_test"
+
+# --- 電卓のGUI配線(キーパッドの当たり判定/画面/履歴) ---
+g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/calculator_test.cpp" \
+    "$ROOT/src/gui/scenes/CalculatorScene.cpp" \
+    "$ROOT/src/gui/widgets/apps/CalculatorKeypad.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    -o "$OUT/calculator_test"
+
+echo ""
+echo "===== calculator_test ====="
+"$OUT/calculator_test"

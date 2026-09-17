@@ -240,7 +240,7 @@ Web公開版で試せるのはSD上のローカル文書まで。
 | 時計 | ✅ 下記 |
 | 電卓 | ✅ 下記 |
 | 設定アプリ | ✅ 下記 |
-| 辞書 | ⬜ 部品: `IME_Functions`(SKK辞書) |
+| 辞書 | ⬜ 部品: `IME_Functions`(SKK辞書) / `WordDictionary`(`src/dict/`。en-ja-and-ja-en.tsv形式の部分一致検索。前方一致は即時、語の途中の一致はupdate()で少しずつ)。アプリ本体(Scene/UI)はまだ無い |
 | ファイルエクスプローラー | ✅ 下記 |
 
 ### 時計(`ClocksScene`)

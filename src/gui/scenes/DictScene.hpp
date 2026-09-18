@@ -32,11 +32,22 @@ class DictScene : public Scene {
         Button* search_button     = nullptr;
         Label<PICO_STR_L>* status_label = nullptr;
         ScrollList* result_list   = nullptr;
+        // 表示用語句だけの見出し(スクロールしない固定行)。太字マークアップ
+        // (**term**)を使うが、表示用語句(2列目)は実データを見ても
+        // マークアップ記号を含まない(検索用語句・説明と違い機械的に生成された
+        // 短い見出し語のため)ので、ここだけは自動装飾を有効なままにしてよい
+        Label<PICO_STR_L>* detail_title = nullptr;
         // 説明文の長さは実データでかなりばらつく(短い1文〜1KiB近い長文まで)。
         // 高さを決め打ちして溢れた分を切り詰める(以前の実装)と、長い説明の
         // 途中で見えなくなってしまう。ScrollContainerで包んでスクロール可能に
         // することで、決め打ちの高さを持たずに全文へたどり着けるようにする
         // (detail_scrollが親でdetail_labelはその子。所有権はdetail_scroll側)。
+        //
+        // **説明文(3列目)は辞書側の自由記述で、"~"等のマークアップ記号として
+        // 解釈されると困る文字を普通に含む**(実データで836行が該当。例:
+        // 「《the ~》」「…でも~でもある」のような辞書独自の表記)。
+        // detail_labelはsetDisableAutoTextDecoration(true)でマークアップ解釈
+        // そのものを止め、常に生テキストとして表示する。
         ScrollContainer* detail_scroll = nullptr;
         Label<PICO_STR_2KiB>* detail_label = nullptr;
 
@@ -61,6 +72,7 @@ class DictScene : public Scene {
         constexpr static int SEARCH_BUTTON_OVERHEAD = 3;
         constexpr static int STATUS_H = 16;
         constexpr static int LIST_H = 108;
+        constexpr static int DETAIL_TITLE_H = 16;
         constexpr static int DETAIL_PADDING = 2;
         // ScrollContainer::SCROLL_Lはprivateなので数値をここで見込む。
         // detail_labelのmaxWidth計算にだけ使う(ずれても表示が数px余る/詰まる

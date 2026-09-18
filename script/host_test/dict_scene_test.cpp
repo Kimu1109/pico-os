@@ -114,17 +114,33 @@ static void deleteSceneWidgets(){
     WidgetFunctions::widgets.clear();
 }
 
-// status_label(Label<PICO_STR_L>)とdetail_label(Label<PICO_STR_2KiB>)は
-// どちらもWidgetType::Labelを名乗るため型だけでは区別できない
-// (異なるNへstatic_castするのはUB)。レイアウト上detail_labelが必ず
-// 一番下にあることを使ってY座標最大のものを選ぶ
-static Label<PICO_STR_2KiB>* findDetailLabel(){
-    Widget* bottom = nullptr;
+// status_label/detail_title(どちらもLabel<PICO_STR_L>)とdetail_label
+// (Label<PICO_STR_2KiB>)は、どれもWidgetType::Labelを名乗るため型だけでは
+// 区別できない(異なるNへstatic_castするのはUB)。レイアウト上、上から
+// status_label→detail_title→detail_labelの順に並ぶことを使い、
+// Y座標でソートして位置で見分ける(calculator_test.cppのfindDisplays()と同じ発想)
+static std::vector<Widget*> findLabelsSortedByY(){
+    std::vector<Widget*> labels;
     for(Widget* w : WidgetFunctions::widgets){
-        if(w->getWidgetType() != WidgetType::Label) continue;
-        if(!bottom || w->getScreenRect().y > bottom->getScreenRect().y) bottom = w;
+        if(w->getWidgetType() == WidgetType::Label) labels.push_back(w);
     }
-    return static_cast<Label<PICO_STR_2KiB>*>(bottom);
+    std::sort(labels.begin(), labels.end(), [](Widget* a, Widget* b){
+        return a->getScreenRect().y < b->getScreenRect().y;
+    });
+    return labels;
+}
+// 一番下(=Y座標最大)が必ずdetail_label
+static Label<PICO_STR_2KiB>* findDetailLabel(){
+    std::vector<Widget*> labels = findLabelsSortedByY();
+    if(labels.empty()) return nullptr;
+    return static_cast<Label<PICO_STR_2KiB>*>(labels.back());
+}
+// 下から2番目が必ずdetail_title(status_label, detail_title, detail_labelの3つが
+// 揃っている前提。onEnter()直後は常にこの3つが存在する)
+static Label<PICO_STR_L>* findDetailTitle(){
+    std::vector<Widget*> labels = findLabelsSortedByY();
+    if(labels.size() < 2) return nullptr;
+    return static_cast<Label<PICO_STR_L>*>(labels[labels.size() - 2]);
 }
 
 int main(){
@@ -134,6 +150,10 @@ int main(){
         {"cat",         "cat",         "a small domesticated animal"},
         {"category",    "category",    "a class or division"},
         {"concatenate", "concatenate", "to link together"},
+        // 辞書の説明文は"~"や"**"をマークアップ記号ではなく生の文字として
+        // 普通に使う(実データで836行該当)。ここでは意図的にそれらを含む
+        // 説明文を用意し、Labelのマークアップとして解釈されないことを確かめる
+        {"tildetest",   "tildetest",   "abc~def **not bold** _not underline_"},
     }, /*block_size=*/2);
 
     WidgetFunctions::widgets.clear();
@@ -146,11 +166,12 @@ int main(){
     Button* search_button  = findButtonByText("検索");
     Textbox<PICO_STR_LL>* search_box = findByType<Textbox<PICO_STR_LL>>(WidgetType::Textbox);
     ScrollList* result_list = findByType<ScrollList>(WidgetType::ScrollList);
+    Label<PICO_STR_L>* detail_title = findDetailTitle();
     Label<PICO_STR_2KiB>* detail_label = findDetailLabel();
 
-    check(back_button && search_button && search_box && result_list && detail_label,
-          "onEnter(): 想定した5種のウィジェットが揃っている");
-    if(!back_button || !search_button || !search_box || !result_list || !detail_label) return 1;
+    check(back_button && search_button && search_box && result_list && detail_title && detail_label,
+          "onEnter(): 想定した6種のウィジェットが揃っている");
+    if(!back_button || !search_button || !search_box || !result_list || !detail_title || !detail_label) return 1;
 
     // ---- 検索語を入れずに検索: 案内文が出るだけで一覧は空のまま ----
     search_button->causeOnPressEnd();
@@ -185,9 +206,27 @@ int main(){
     // DictScene側の配線(on_selectitem→詳細欄への反映)だけを確かめる
     result_list->setSelectedIndex(0);
     result_list->causeOnSelectItem(true);
+    const char* title = detail_title->getText()->c_str();
     const char* detail = detail_label->getText()->c_str();
-    check(strstr(detail, "**") != nullptr, "一覧タップ: 詳細欄の表示用語句が太字マークアップで始まる");
-    check(strlen(detail) > 0, "一覧タップ: 詳細欄が空でなくなる");
+    check(strstr(title, "**") != nullptr, "一覧タップ: 見出し(表示用語句)が太字マークアップで始まる");
+    check(strlen(detail) > 0, "一覧タップ: 詳細欄(説明文)が空でなくなる");
+    check(detail_label->getDisableAutoTextDecoration(),
+          "一覧タップ: 詳細欄はマークアップ解釈を無効化している(説明文の\"~\"等をそのまま出すため)");
+
+    // ---- 説明文に"~"や"**"が入っていてもマークアップとして解釈されず、
+    //      生の文字としてそのまま保持される ----
+    search_box->setText("tildetest");
+    search_button->causeOnPressEnd();
+    eq_int(countItems(result_list), 1, "'tildetest'検索: 1件見つかる");
+    result_list->setSelectedIndex(0);
+    result_list->causeOnSelectItem(true);
+    const char* tilde_detail = detail_label->getText()->c_str();
+    check(strstr(tilde_detail, "abc~def **not bold** _not underline_") != nullptr,
+          "説明文の\"~\"/\"**\"/\"_\"が変換・除去されず生のまま詳細欄に残る");
+
+    // 以降のPop→再onEnter()の確認は検索語"cat"の復元を見るので、
+    // ここで書き戻しておく(直前のtildetest検索で上書きされているため)
+    search_box->setText("cat");
 
     // ---- onExit()→再onEnter(): 検索語が復元される ----
     // onExit()自体はウィジェットを破棄しない(フレームワーク側=ClearSceneWidgetsの責務)ので、

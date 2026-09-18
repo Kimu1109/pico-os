@@ -312,6 +312,22 @@ CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォ
   スクロール範囲を引き直す。追加時とドラッグ開始時にしか再計算しない元の実装のままだと
   中身を書き換えるだけの呼び出し元はスクロール範囲が古いままになる)と
   `scrollToTop()`(表示内容が別物に変わった時に先頭へ戻す)。
+- **辞書データ(`script/en-ja-and-ja-en.tsv`)はフォントが描画できない文字(豆腐)を
+  含む行を除いてある。** `script/filter_dict_tofu.py`が`script/dict_tofu_chars.txt`
+  (この辞書専用の豆腐文字リスト。**`script/tofu-chars.txt`とは別物** —
+  そちらはSKK辞書(`skk_body.tsv`、MLサイズ)向けに`checkFontCoverage()`を
+  かけた結果で、対象辞書が違うため流用すると豆腐を網羅できない。実際、最初
+  `tofu-chars.txt`(162文字)で試みたところ1,827行しか落とせず、この辞書自身を
+  `checkFontCoverage()`にかけ直すと未対応文字は2,086文字・10,572行あった)を使い、
+  検索用語句・表示用語句・説明のどこか1文字でも豆腐化する行を丸ごと落とす
+  (SKK側の変換(`convert_skk_dict.py --exclude-chars-file`)は候補単位で間引いて
+  読みは残すが、こちらは1行=1エントリで部分的に伏せ字にする方法が無いため行ごと落とす)。
+  行を間引くだけなので検索用語句のバイト順ソートは崩れず、`build_dict_index.py`側の
+  再ソートは不要。`dict_tofu_chars.txt`自体の作り方(PCビルドで`checkFontCoverage()`を
+  一時的に呼ぶ手順)は`filter_dict_tofu.py`のモジュールdocstringを参照。辞書を
+  更新するたびに
+  `python3 script/filter_dict_tofu.py <素の辞書> script/dict_tofu_chars.txt --out script/en-ja-and-ja-en.tsv`
+  → `python3 script/build_dict_index.py script/en-ja-and-ja-en.tsv` の順で通すこと。
 
 ### 設定(`SettingsScene`)
 

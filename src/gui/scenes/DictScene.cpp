@@ -8,7 +8,9 @@ void DictScene::onEnter(){
 
     const bool dict_ready = this->dict_.begin(
         PICO_Path::FILE::DICT::DICT_BODY,
-        PICO_Path::FILE::DICT::DICT_INDEX
+        PICO_Path::FILE::DICT::DICT_INDEX,
+        PICO_Path::FILE::DICT::DICT_SUFFIX_BODY,
+        PICO_Path::FILE::DICT::DICT_SUFFIX_INDEX
     );
 
     int y = content.y + MARGIN;
@@ -114,7 +116,8 @@ void DictScene::onExit(){
 }
 
 void DictScene::onUpdate(){
-    if(this->dict_.state() == WordDictionary::State::Scanning){
+    const WordDictionary::State st = this->dict_.state();
+    if(st == WordDictionary::State::Scanning || st == WordDictionary::State::ScanningSuffix){
         this->dict_.update();
         this->refreshResults();
     }
@@ -161,6 +164,7 @@ void DictScene::refreshResults(){
     FixedString<PICO_STR_L> status;
     switch(this->dict_.state()){
         case WordDictionary::State::Scanning:
+        case WordDictionary::State::ScanningSuffix:
             status.appendFormat("検索中… %d%%(%d件)",
                 (int)(this->dict_.progress() * 100.0f), this->dict_.count());
             break;

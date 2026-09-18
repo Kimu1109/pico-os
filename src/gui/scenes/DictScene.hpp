@@ -14,14 +14,20 @@
 // 「入力欄+検索ボタン+状態表示+結果一覧+詳細表示」を並べるだけの薄い皮
 // (ClocksScene/FileExplorerSceneと同じ形)。
 //
-// **前方一致はsearch()が同期的に即返すが、語の途中の一致はupdate()を
-// 毎フレーム呼んで少しずつ拾う**ため、onUpdate()でdict_.update()を回し、
-// 新しく見つかった分だけ一覧へ追記する(全部揃うまで画面が止まらない)。
+// **前方一致はsearch()が同期的に即返すが、語の途中の一致(部分一致)は
+// State::Scanning/ScanningSuffixとしてupdate()を毎フレーム呼んで少しずつ
+// 拾う**ため、onUpdate()でdict_.update()を回し、新しく見つかった分だけ
+// 一覧へ追記する(全部揃うまで画面が止まらない)。部分一致は通常
+// サフィックスインデックス(dict_suffixes.tsv、script/build_dict_suffix_index.py
+// が生成)経由のScanningSuffixで高速に拾えるが、インデックスが無い/壊れて
+// いる場合のみ旧来のScanning(ファイル全体走査)へ自動フォールバックする
+// (詳細はWord_Dict.hppの設計コメント参照)。
 //
 // MarkdownSceneと同じく、このシーンのオブジェクトは「数十バイト」の
-// 他シーンと違いWordDictionary(~43KB)を持つため大きい。辞書アプリは
-// 自分の上へ別シーンをPushしないので実害は無いが、将来詳細表示を
-// 別シーンに分けるような変更をする場合は思い出すこと。
+// 他シーンと違いWordDictionary(実測約53KB。サフィックス索引の分だけ
+// 従来の~43KBより増えている)を持つため大きい。辞書アプリは自分の上へ
+// 別シーンをPushしないので実害は無いが、将来詳細表示を別シーンに
+// 分けるような変更をする場合は思い出すこと。
 class DictScene : public Scene {
     private:
         Button* back_button       = nullptr;

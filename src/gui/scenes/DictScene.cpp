@@ -62,6 +62,14 @@ void DictScene::onEnter(){
     WidgetFunctions::Add(this->result_list);
     y += LIST_H + MARGIN;
 
+    // 見出し(表示用語句、太字)はスクロールしない固定行。長い説明を
+    // スクロールしている間も「今読んでいるのは何の語か」が見えるようにする
+    this->detail_title = new Label<PICO_STR_L>(content.x + MARGIN, y, "");
+    this->detail_title->setFontSize(FontFn::Small);
+    this->detail_title->setMaxWidth(content.w - MARGIN * 2);
+    WidgetFunctions::Add(this->detail_title);
+    y += DETAIL_TITLE_H + MARGIN;
+
     // 詳細欄はScrollContainerで包み、説明文の長さに関わらず全文を
     // スクロールして読めるようにする(固定の高さで切り詰めていた以前の実装だと
     // 長い説明が途中で見えなくなっていた)。detail_labelの座標は
@@ -72,6 +80,10 @@ void DictScene::onEnter(){
     );
     this->detail_label = new Label<PICO_STR_2KiB>(DETAIL_PADDING, DETAIL_PADDING, "");
     this->detail_label->setFontSize(FontFn::Small);
+    // 辞書の説明文(3列目)は自由記述で"~"等をマークアップ記号ではなく
+    // そのままの文字として使っている(実データで836行)。マークアップとして
+    // 解釈させず常に生テキストとして表示する
+    this->detail_label->setDisableAutoTextDecoration(true);
     // ScrollContainerの縦スクロールバー(private定数のためここでは数値で
     // 見込むしかない。ScrollContainer::SCROLL_Lと必ず一致させること)ぶん
     // 幅を狭める
@@ -92,6 +104,7 @@ void DictScene::onExit(){
     this->search_button = nullptr;
     this->status_label  = nullptr;
     this->result_list   = nullptr;
+    this->detail_title  = nullptr;
     this->detail_scroll = nullptr;
     this->detail_label  = nullptr;
 }
@@ -108,6 +121,7 @@ void DictScene::startSearch(){
     query.assign(*this->search_box->getText());
 
     this->result_list->clear();
+    this->detail_title->setText("");
     this->detail_label->setText("");
     this->detail_scroll->scrollToTop();
     this->shown_count_ = 0;
@@ -171,13 +185,16 @@ void DictScene::showDetail(int index){
     }
     if(!hit) return;
 
-    FixedString<PICO_STR_2KiB> detail;
-    detail.assign("**");
-    detail.append(hit->term);
-    detail.append("**\n");
-    detail.append(hit->desc);
+    FixedString<PICO_STR_L> title;
+    title.assign("**");
+    title.append(hit->term);
+    title.append("**");
+    this->detail_title->setText(title);
 
-    this->detail_label->setText(detail);
+    // 説明文(3列目)はマークアップとして解釈させたくない生テキストなので、
+    // 見出しの太字マークアップとは別のLabel(setDisableAutoTextDecoration済み)へ
+    // そのまま渡す
+    this->detail_label->setText(hit->desc);
     // 表示内容が変わったので、スクロール範囲を新しい高さへ引き直し、
     // 前に選んでいた項目のスクロール位置を引きずらないよう先頭へ戻す
     this->detail_scroll->refreshContentBounds();

@@ -1,6 +1,6 @@
 # pico-os 開発状況
 
-> 最終同期: 2026-09-16(実コードと突き合わせ済み)。
+> 最終同期: 2026-09-18(実コードと突き合わせ済み)。
 > このファイルは**何が終わって何が残っているか**の一覧。設計の背景や実装の詳細は `CLAUDE.md` を参照。
 >
 > - **TODO** … 項目名だけの一覧。全体像を掴む用。
@@ -11,7 +11,7 @@
 | # | 項目 | 状況 |
 |---|---|---|
 | 1 | [ダイアログ系統](#1-ダイアログ系統) | ✅ 完了(betaレベル) |
-| 2 | [汎用基盤](#2-汎用基盤) | 🔨 ウィジェットIDの消費側だけ残り |
+| 2 | [汎用基盤](#2-汎用基盤) | 🔨 ウィジェットIDはファクトリまで完了、Resolve()の実利用(Lua統合)だけ残り |
 | 3 | [スクリーン管理](#3-スクリーン管理) | 🔨 メモリプールは計測の結果いったん保留 |
 | 4 | [Wi-Fiの管理強化](#4-wi-fiの管理強化) | ✅ 完了 |
 | 5 | [Luaアプリ](#5-luaアプリ) | ⬜ 未着手(受け皿の一部のみ先行) |
@@ -43,7 +43,8 @@
 - [x] 新規ウィジェットの汎用化
 - [x] 固定長文字列クラス
 - [x] ウィジェットの固有ID
-  - [ ] 消費側(Resolve()の呼び出し元 / ファクトリ)
+  - [x] 消費側: ファクトリ(WidgetType→new Xxxの対応表)
+  - [ ] 消費側: Resolve()の実際の呼び出し元(Lua統合本体。ホストテストでの検証は完了)
 - [x] 設定ファイルの書き込み
 - [x] アプリの枠組み
 
@@ -71,7 +72,8 @@
 - [ ] 着手前に塞ぐ穴
   - [x] AppEntryの動的化
   - [ ] SDを走査してLuaアプリを見つける処理
-  - [ ] ウィジェットのファクトリとプロパティのget/set共通口
+  - [x] ウィジェットのファクトリ
+  - [ ] プロパティのget/set共通口
   - [ ] Lua用allocatorでのRAM上限
   - [ ] 実行時間バジェット
   - [ ] pcallで拾ったエラーの表示導線
@@ -162,8 +164,19 @@
 `WidgetID.hpp` / `WidgetRegistry`。32bitで `type(6bit) / generation(16bit) / index(10bit)`。
 
 - **発行側は実装済み**。`getId()`の初回呼び出しで遅延発行し、`~Widget()`でgenerationを進める。
-- **消費側が空**。`Resolve()`の呼び出し元がコード中に1つも無く、ホストテストも無い。
-  `WidgetType` → `new Xxx` のファクトリも未整備で、外部からウィジェットを生成する口が存在しない。
+- **ファクトリを追加**(`WidgetFactory.hpp/.cpp`)。`WidgetType` → `new Xxx` の対応表で、
+  widgets/直下の汎用部品15種(Button/Label/Textbox/NumberInput/Checkbox/Icon/Image/
+  NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/
+  TabBar/DropdownMenu)を生成できる。widgets/apps・systems・dialogsの専用ウィジェットは
+  対象外(SD走査やシーン固有状態への依存が強いため)。
+- **`Resolve()`はホストテスト(`widget_factory_test.cpp`)で初めて検証された**:
+  発行済みIDからの解決、type不一致の検出、破棄済みID(use-after-free)の検出、
+  スロット再利用時のgeneration不一致検出を確認済み。ただし**実コード中の呼び出し元は
+  まだテストのみ**で、実際の利用はLua統合を待つ。
+- Widget::operator newがnullptr(確保失敗)を返した際、以前は無言で失敗していたが、
+  唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。
+  個々の`new Xxx(...)`呼び出し元のnullチェックが無い問題自体は残っている
+  (Lua用allocatorの話と合わせて[5. Luaアプリ](#5-luaアプリ-1)を参照)。
 - 実際に使われるのはLua統合から。→ [5. Luaアプリ](#5-luaアプリ-1)
 
 ## 3. スクリーン管理
@@ -203,8 +216,9 @@ Lua本体のコードは皆無。ただし受け皿の一部は先行して入�
 |---|---|
 | AppEntryの動的化 | ✅ **解消済み**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`を`FixedString`でコピー保持する。同じシーン型を別argで何件でも登録でき、寿命の短い文字列からも登録できる(`MakeSceneWithArg<T>`) |
 | SDの走査 | ⬜ 登録簿側の受け入れ準備は上記で完了。スキャン処理そのものが無い |
-| ウィジェットのファクトリ | ⬜ `WidgetType` → `new Xxx` の対応表と、プロパティのget/setをLuaへ通す共通の口 |
-| RAM上限 | ⬜ `lua_newstate`のカスタムallocで枠を切る。`Widget::operator new`のnullptrを**誰もチェックしていない**問題も同時に出る |
+| ウィジェットのファクトリ | ✅ **解消済み**。`WidgetFactory::Create(WidgetType)`が widgets/直下の汎用部品15種を生成する。`Resolve()`と合わせてホストテスト(`widget_factory_test`)で検証済み |
+| プロパティのget/set共通口 | ⬜ ウィジェットのプロパティをLuaへ通す共通の口(get/setのバインディング設計)。ファクトリとは別に残っている |
+| RAM上限 | ⬜ `lua_newstate`のカスタムallocで枠を切る話は未着手。ただし`Widget::operator new`の確保失敗(nullptr)は、以前は無言で失敗していたのをLOG_SYS_FAILで見えるようにした(呼び出し元ごとのnullチェックが無い問題そのものは残る) |
 | 実行時間バジェット | ⬜ `lua_sethook`での命令数バジェットか、`Task`へ載せてコルーチン化するかの判断が要る |
 | エラーの表示導線 | ⬜ `pcall`で拾った後の出し先が`LOG_SYS_FAIL`止まり。「アプリが落ちた」をMsgDialogで見せたい |
 | 空きRAM/Flashの実測 | ⬜ Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダー。入れる前に一度測る |

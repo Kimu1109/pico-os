@@ -61,15 +61,19 @@ class DictScene : public Scene {
         FixedString<PICO_STR_LL> saved_query_;
 
         constexpr static int MARGIN = 4;
-        constexpr static int BACK_BUTTON_H = 20;
         constexpr static int SEARCH_ROW_H = 22;
+        // 「戻る」はアイコン(IconID::ArrowLeft, 16px)のみのボタンにして
+        // 検索欄と同じ行へ置く。以前はテキストの「戻る」ボタンだけで1行
+        // (BACK_BUTTON_H+MARGIN=24px)使っていたが、そのぶんを詳細欄(説明文)へ回す
+        constexpr static int BACK_BUTTON_W = 24;
         constexpr static int SEARCH_BUTTON_W = 40;
         // Button::getLocalRect()はsetW()で指定した幅に
         // _3D_PIX_LEN(2)+1を必ず足して描く(setAllowTextSpacing(false)で
         // 文字間の余白ぶんは消せるが、立体の縁取りぶんは消せない)。
-        // ここを見込んでおかないと検索ボタンの右端が画面をはみ出す
-        // (--shotで実際にはみ出すのを確認して気付いた)
-        constexpr static int SEARCH_BUTTON_OVERHEAD = 3;
+        // ここを見込んでおかないとボタンの右端が画面をはみ出す
+        // (--shotで実際にはみ出すのを確認して気付いた)。戻る/検索どちらの
+        // ボタンもsetAllowTextSpacing(false)にするのでこの分だけ共通で見込む
+        constexpr static int BUTTON_OVERHEAD = 3;
         constexpr static int STATUS_H = 16;
         constexpr static int LIST_H = 108;
         constexpr static int DETAIL_TITLE_H = 16;

@@ -45,7 +45,13 @@ class DictScene : public Scene {
         constexpr static int MARGIN = 4;
         constexpr static int BACK_BUTTON_H = 20;
         constexpr static int SEARCH_ROW_H = 22;
-        constexpr static int SEARCH_BUTTON_W = 44;
+        constexpr static int SEARCH_BUTTON_W = 40;
+        // Button::getLocalRect()はsetW()で指定した幅に
+        // _3D_PIX_LEN(2)+1を必ず足して描く(setAllowTextSpacing(false)で
+        // 文字間の余白ぶんは消せるが、立体の縁取りぶんは消せない)。
+        // ここを見込んでおかないと検索ボタンの右端が画面をはみ出す
+        // (--shotで実際にはみ出すのを確認して気付いた)
+        constexpr static int SEARCH_BUTTON_OVERHEAD = 3;
         constexpr static int STATUS_H = 16;
         constexpr static int LIST_H = 108;
 

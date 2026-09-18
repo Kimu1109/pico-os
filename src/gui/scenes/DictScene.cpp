@@ -20,7 +20,7 @@ void DictScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
     y += BACK_BUTTON_H + MARGIN;
 
-    const int box_w = content.w - MARGIN * 3 - SEARCH_BUTTON_W;
+    const int box_w = content.w - MARGIN * 3 - (SEARCH_BUTTON_W + SEARCH_BUTTON_OVERHEAD);
 
     this->search_box = new Textbox<PICO_STR_LL>(
         this->saved_query_.c_str(),
@@ -33,14 +33,18 @@ void DictScene::onEnter(){
 
     this->search_button = new Button(content.x + MARGIN * 2 + box_w, y, "検索");
     this->search_button->setFontSize(FontFn::Small);
+    this->search_button->setAllowTextSpacing(false);
     this->search_button->setW(SEARCH_BUTTON_W);
     this->search_button->setH(SEARCH_ROW_H);
     this->search_button->setOnPressEnd([this](){ this->startSearch(); });
     WidgetFunctions::Add(this->search_button);
     y += SEARCH_ROW_H + MARGIN;
 
+    // 状態表示は1行に収まる長さへ切り詰めてある(Label自体は折り返せるが、
+    // 2行になった分の高さをこの下のresult_listの位置計算が見込んでいないため、
+    // はみ出した2行目がresult_listの背景で隠れてしまう。--shotで実際に確認して気付いた)
     this->status_label = new Label<PICO_STR_L>(content.x + MARGIN, y,
-        dict_ready ? "語句を入力して「検索」を押してください" : "辞書ファイルが見つかりません(SD確認)");
+        dict_ready ? "語句を入力し検索を押す" : "辞書ファイルが開けません");
     this->status_label->setFontSize(FontFn::Small);
     this->status_label->setMaxWidth(content.w - MARGIN * 2);
     WidgetFunctions::Add(this->status_label);
@@ -99,6 +103,7 @@ void DictScene::startSearch(){
         this->status_label->setText("語句を入力してください");
         return;
     }
+    // ↑これも1行に収まる長さ(status_labelのコメント参照)。以下の各状態文言も同様
 
     this->dict_.search(query.c_str());
     this->refreshResults();
@@ -133,7 +138,7 @@ void DictScene::refreshResults(){
             if(this->dict_.count() == 0){
                 status.assign("見つかりませんでした");
             } else if(this->dict_.mayHaveMore()){
-                status.appendFormat("%d件(他にもあるかも。語句を絞ってください)", this->dict_.count());
+                status.appendFormat("%d件以上(絞り込み推奨)", this->dict_.count());
             } else {
                 status.appendFormat("%d件見つかりました", this->dict_.count());
             }

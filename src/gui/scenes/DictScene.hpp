@@ -5,6 +5,7 @@
 #include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/ScrollContainer.hpp"
 #include "dict/Word_Dict.hpp"
 
 // 標準アプリの辞書(英和/和英)。
@@ -31,6 +32,12 @@ class DictScene : public Scene {
         Button* search_button     = nullptr;
         Label<PICO_STR_L>* status_label = nullptr;
         ScrollList* result_list   = nullptr;
+        // 説明文の長さは実データでかなりばらつく(短い1文〜1KiB近い長文まで)。
+        // 高さを決め打ちして溢れた分を切り詰める(以前の実装)と、長い説明の
+        // 途中で見えなくなってしまう。ScrollContainerで包んでスクロール可能に
+        // することで、決め打ちの高さを持たずに全文へたどり着けるようにする
+        // (detail_scrollが親でdetail_labelはその子。所有権はdetail_scroll側)。
+        ScrollContainer* detail_scroll = nullptr;
         Label<PICO_STR_2KiB>* detail_label = nullptr;
 
         WordDictionary dict_;
@@ -54,6 +61,12 @@ class DictScene : public Scene {
         constexpr static int SEARCH_BUTTON_OVERHEAD = 3;
         constexpr static int STATUS_H = 16;
         constexpr static int LIST_H = 108;
+        constexpr static int DETAIL_PADDING = 2;
+        // ScrollContainer::SCROLL_Lはprivateなので数値をここで見込む。
+        // detail_labelのmaxWidth計算にだけ使う(ずれても表示が数px余る/詰まる
+        // だけで、ScrollContainer自身の当たり判定やスクロールバー位置は
+        // 向こうの定数をそのまま使うので壊れない)
+        constexpr static int DETAIL_SCROLLBAR_W = 15;
 
         void startSearch();
         void refreshResults();

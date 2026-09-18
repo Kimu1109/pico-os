@@ -62,11 +62,22 @@ void DictScene::onEnter(){
     WidgetFunctions::Add(this->result_list);
     y += LIST_H + MARGIN;
 
-    this->detail_label = new Label<PICO_STR_2KiB>(content.x + MARGIN, y, "");
+    // 詳細欄はScrollContainerで包み、説明文の長さに関わらず全文を
+    // スクロールして読めるようにする(固定の高さで切り詰めていた以前の実装だと
+    // 長い説明が途中で見えなくなっていた)。detail_labelの座標は
+    // ScrollContainerを親とするローカル座標(=container内で(0,0)起点)になる。
+    this->detail_scroll = new ScrollContainer(
+        content.x + MARGIN, (int16_t)y,
+        (int16_t)(content.w - MARGIN * 2), (int16_t)(content.y + content.h - y - MARGIN)
+    );
+    this->detail_label = new Label<PICO_STR_2KiB>(DETAIL_PADDING, DETAIL_PADDING, "");
     this->detail_label->setFontSize(FontFn::Small);
-    this->detail_label->setMaxWidth(content.w - MARGIN * 2);
-    this->detail_label->setMaxHeight(content.y + content.h - y - MARGIN);
-    WidgetFunctions::Add(this->detail_label);
+    // ScrollContainerの縦スクロールバー(private定数のためここでは数値で
+    // 見込むしかない。ScrollContainer::SCROLL_Lと必ず一致させること)ぶん
+    // 幅を狭める
+    this->detail_label->setMaxWidth(content.w - MARGIN * 2 - DETAIL_SCROLLBAR_W - DETAIL_PADDING * 2);
+    this->detail_scroll->add(this->detail_label); // 所有権はdetail_scrollへ移る
+    WidgetFunctions::Add(this->detail_scroll); // visitAll()で子(detail_label)もまとめて登録される
 
     this->shown_count_ = 0;
 }
@@ -81,6 +92,7 @@ void DictScene::onExit(){
     this->search_button = nullptr;
     this->status_label  = nullptr;
     this->result_list   = nullptr;
+    this->detail_scroll = nullptr;
     this->detail_label  = nullptr;
 }
 
@@ -97,6 +109,7 @@ void DictScene::startSearch(){
 
     this->result_list->clear();
     this->detail_label->setText("");
+    this->detail_scroll->scrollToTop();
     this->shown_count_ = 0;
 
     if(query.length() == 0){
@@ -165,4 +178,8 @@ void DictScene::showDetail(int index){
     detail.append(hit->desc);
 
     this->detail_label->setText(detail);
+    // 表示内容が変わったので、スクロール範囲を新しい高さへ引き直し、
+    // 前に選んでいた項目のスクロール位置を引きずらないよう先頭へ戻す
+    this->detail_scroll->refreshContentBounds();
+    this->detail_scroll->scrollToTop();
 }

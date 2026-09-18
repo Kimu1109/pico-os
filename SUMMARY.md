@@ -312,6 +312,16 @@ CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォ
   スクロール範囲を引き直す。追加時とドラッグ開始時にしか再計算しない元の実装のままだと
   中身を書き換えるだけの呼び出し元はスクロール範囲が古いままになる)と
   `scrollToTop()`(表示内容が別物に変わった時に先頭へ戻す)。
+- **辞書データ(`script/en-ja-and-ja-en.tsv`)はフォントが描画できない文字(豆腐)を
+  含む行を除いてある。** `script/filter_dict_tofu.py`が`script/tofu-chars.txt`
+  (`font_coverage_check`の出力。IME辞書の変換(`convert_skk_dict.py`
+  `--exclude-chars-file`)と同じ入力形式)を使い、検索用語句・表示用語句・説明の
+  どこか1文字でも豆腐化する行を丸ごと落とす(SKK側は候補単位で間引いて読みは残すが、
+  こちらは1行=1エントリで部分的に伏せ字にする方法が無いため行ごと落とす)。
+  行を間引くだけなので検索用語句のバイト順ソートは崩れず、`build_dict_index.py`側の
+  再ソートは不要。辞書を更新するたびに
+  `python3 script/filter_dict_tofu.py <素の辞書> script/tofu-chars.txt --out script/en-ja-and-ja-en.tsv`
+  → `python3 script/build_dict_index.py script/en-ja-and-ja-en.tsv` の順で通すこと。
 
 ### 設定(`SettingsScene`)
 

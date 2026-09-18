@@ -47,6 +47,17 @@ jobs:
           ./emsdk install "$EMSDK_VERSION"
           ./emsdk activate "$EMSDK_VERSION"
 
+      # 辞書(script/en-ja-and-ja-en.tsv + dict_index.tsv)はサイズの都合で
+      # pc/sdcard/ には常設していない(IME辞書と同じ扱い。pc/README.md参照)。
+      # Webビルドは pc/sdcard/ を丸ごと --preload-file で index.data へ焼き込む
+      # (pc/CMakeLists.txt参照)ので、ビルド前にここへ置いて初めて辞書アプリが
+      # ブラウザ版でも動く。リポジトリ本体の pc/sdcard/ は汚さない
+      - name: 辞書をpc/sdcard/へ配置する
+        run: |
+          mkdir -p pc/sdcard/sys/dict
+          cp script/en-ja-and-ja-en.tsv pc/sdcard/sys/dict/en-ja-and-ja-en.tsv
+          cp script/dict_index.tsv pc/sdcard/sys/dict/dict_index.tsv
+
       - name: ビルドする
         run: |
           . ~/emsdk/emsdk_env.sh

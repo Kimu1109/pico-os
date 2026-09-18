@@ -3,11 +3,18 @@
 """
 filter_dict_tofu.py
 
-script/en-ja-and-ja-en.tsv から、フォントが描画できない文字(いわゆる豆腐。
-script/tofu-chars.txt = font_coverage_check の出力)を1文字でも含む行を
-丸ごと除いて書き出す。
+script/en-ja-and-ja-en.tsv から、フォントが描画できない文字(いわゆる豆腐)を
+1文字でも含む行を丸ごと除いて書き出す。
 
-convert_skk_dict.py の --exclude-chars-file と同じ入力形式
+**豆腐文字リストは script/dict_tofu_chars.txt を使うこと。**
+script/tofu-chars.txt は SKK辞書(skk_body.tsv、MLサイズ)向けに
+checkFontCoverage() を実行した結果で、対象の辞書が違うため
+en-ja-and-ja-en.tsv側の豆腐文字を網羅できない(実際、2086件中162件しか
+拾えていなかった)。dict_tofu_chars.txt は en-ja-and-ja-en.tsv 自身を
+checkFontCoverage() にかけて作った、この辞書専用のリスト
+(生成手順は下記「dict_tofu_chars.txtの作り方」を参照)。
+
+入力形式はconvert_skk_dict.pyの--exclude-chars-fileと同じ
 (「U+XXXX<TAB>該当文字」または、2列目が無い行は「U+XXXX」からコードポイントを
 復元)を使うが、SKK側は「候補ごとに」フィルタして読みは残すのに対し、
 こちらは検索用語句・表示用語句・説明のどこに豆腐が出ても検索結果として
@@ -18,7 +25,20 @@ convert_skk_dict.py の --exclude-chars-file と同じ入力形式
 (build_dict_index.py が前提にする不変条件はそのまま保たれる)。
 
 使い方:
-    python3 filter_dict_tofu.py en-ja-and-ja-en.tsv tofu-chars.txt --out en-ja-and-ja-en.filtered.tsv
+    python3 filter_dict_tofu.py en-ja-and-ja-en.tsv dict_tofu_chars.txt --out en-ja-and-ja-en.filtered.tsv
+
+---- dict_tofu_chars.txtの作り方 ----
+checkFontCoverage()(src/test/font_coverage_check.hpp)はSD越しにしか
+呼べないC++の関数(LovyanGFXの実フォントに対してグリフの有無を1文字ずつ
+問い合わせる)なので、Python単体では作れない。PCビルド(pc/)を使い、
+一時的に src/functions/Test_Functions.hpp の RunAll() へ
+    checkFontCoverage(OSData::SD, lgfxJapanGothicP_16,
+        PICO_Path::FILE::DICT::DICT_BODY, "/tmp/dict_tofu_missing.txt");
+を足してビルドし直し、user.cfgのrun-test=trueで1回起動すれば
+(PICOOS_SD_ROOT配下の)tmp/dict_tofu_missing.txt に出力される。
+確認が済んだら Test_Functions.hpp への追記は元に戻すこと
+(常時実行する処理ではないため)。DictSceneが使うフォントは常時
+FontFn::Small(=lgfxJapanGothicP_16)なので、このフォント1つだけ見れば足りる。
 """
 
 import argparse

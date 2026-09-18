@@ -27,6 +27,24 @@ void Button::setText(const char* text){
     this->needsRender();
 }
 
+void Button::drawContent(const Rect& g_rect, int text_spacing, int pressOffset) {
+    if(this->has_icon){
+        const int icon_px = IconRender::IconPixelSize(this->icon_size);
+        IconRender::DrawIcon(
+            this->icon_id, this->icon_size,
+            g_rect.x + pressOffset + text_spacing * 0.5 + (this->l_rect.w - icon_px) * 0.5,
+            g_rect.y + pressOffset + text_spacing * 0.5 + (this->l_rect.h - icon_px) * 0.5,
+            this->text_color
+        );
+    }else{
+        OSData::frame->setCursor(
+            g_rect.x + pressOffset + text_spacing * 0.5 + (this->l_rect.w - this->text_w) * 0.5,
+            g_rect.y + pressOffset + text_spacing * 0.5 + (this->l_rect.h - this->text_h) * 0.5
+        );
+        OSData::frame->print(this->text.c_str());
+    }
+}
+
 void Button::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
@@ -59,11 +77,7 @@ void Button::render() {
             BOX_W, BOX_H,
             this->border_color
         );
-        OSData::frame->setCursor(
-            g_rect.x + _3D_PIX_LEN + text_spacing * 0.5 + (this->l_rect.w - this->text_w) * 0.5,
-            g_rect.y + _3D_PIX_LEN + text_spacing * 0.5 + (this->l_rect.h - this->text_h) * 0.5
-        );
-        OSData::frame->print(this->text.c_str());
+        this->drawContent(g_rect, text_spacing, _3D_PIX_LEN);
     }else{
         //ボタンの周り
         OSData::frame->drawRect(g_rect.x, g_rect.y, BOX_W, BOX_H, this->border_color);
@@ -77,12 +91,7 @@ void Button::render() {
         OSData::frame->drawFastHLine(BOX_L_X + _3D_PIX_LEN, BOX_D_Y + _3D_PIX_LEN, BOX_W, this->border_color);
         OSData::frame->drawFastVLine(BOX_R_X + _3D_PIX_LEN, BOX_U_Y + _3D_PIX_LEN, BOX_H, this->border_color);
 
-        //テキスト
-        OSData::frame->setCursor(
-            g_rect.x + text_spacing * 0.5 + (this->l_rect.w - this->text_w) * 0.5,
-            g_rect.y + text_spacing * 0.5 + (this->l_rect.h - this->text_h) * 0.5
-        );
-        OSData::frame->print(this->text.c_str());
+        this->drawContent(g_rect, text_spacing, 0);
     }
     this->textColorDefault();
     this->fontDefault();

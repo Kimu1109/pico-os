@@ -13,25 +13,29 @@ void DictScene::onEnter(){
 
     int y = content.y + MARGIN;
 
-    this->back_button = new Button(content.x + MARGIN, y, "戻る");
-    this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(BACK_BUTTON_H);
+    // 「戻る」は検索欄と同じ行に置くアイコンボタン(1行分節約して詳細欄へ回す)
+    this->back_button = new Button(content.x + MARGIN, y, "");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
+    this->back_button->setAllowTextSpacing(false);
+    this->back_button->setW(BACK_BUTTON_W);
+    this->back_button->setH(SEARCH_ROW_H);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
-    y += BACK_BUTTON_H + MARGIN;
 
-    const int box_w = content.w - MARGIN * 3 - (SEARCH_BUTTON_W + SEARCH_BUTTON_OVERHEAD);
+    const int box_w = content.w - MARGIN * 4
+        - (BACK_BUTTON_W + BUTTON_OVERHEAD) - (SEARCH_BUTTON_W + BUTTON_OVERHEAD);
+    const int box_x = content.x + MARGIN * 2 + (BACK_BUTTON_W + BUTTON_OVERHEAD);
 
     this->search_box = new Textbox<PICO_STR_LL>(
         this->saved_query_.c_str(),
-        content.x + MARGIN, (int16_t)y,
+        (int16_t)box_x, (int16_t)y,
         (int16_t)box_w, SEARCH_ROW_H,
         /*is_single_line=*/true
     );
     this->search_box->setFontSize(FontFn::Small);
     WidgetFunctions::Add(this->search_box);
 
-    this->search_button = new Button(content.x + MARGIN * 2 + box_w, y, "検索");
+    this->search_button = new Button(box_x + box_w + MARGIN, y, "検索");
     this->search_button->setFontSize(FontFn::Small);
     this->search_button->setAllowTextSpacing(false);
     this->search_button->setW(SEARCH_BUTTON_W);

@@ -4,6 +4,7 @@
 #include "gui/widgets/interfaces/IFontImplementation.hpp"
 #include "gui/widgets/interfaces/IBorderColor.hpp"
 #include "gui/widgets/interfaces/ITextColor.hpp"
+#include "gui/icons/icon_render.h"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 #include "Arduino.h"
@@ -31,7 +32,17 @@ class Button :
 
         bool allowTextSpacing = true;
 
+        // アイコンボタン(文字の代わりにアイコンを描く)。戻るボタンのように
+        // 「1行使うのがもったいない」場所向け。setIcon()を呼ぶまでは
+        // 従来通りテキストのボタンとして振る舞う
+        bool has_icon = false;
+        IconID icon_id = IconID::AppBox;
+        IconSize icon_size = IconSize::Px16;
+
         void calcTextSize(const char* text);
+        // 中身(テキストまたはアイコン)を箱の中央へ描く。pressOffsetは
+        // 押し込み表示時の見た目のずれ分(_3D_PIX_LEN、非押下時は0)
+        void drawContent(const Rect& g_rect, int text_spacing, int pressOffset);
 
     public:
 
@@ -116,4 +127,21 @@ class Button :
             this->needsRender();
         }
         bool getAllowTextSpacing() { return this->allowTextSpacing; }
+
+        // 文字の代わりにアイコンを描くボタンにする。setW()/setH()を別途
+        // 呼んでいなければ箱の大きさもアイコンぴったりへ合わせる
+        // (呼んだ後にsetIcon()しても、既に指定済みの大きさは上書きしない)
+        void setIcon(IconID id, IconSize size){
+            this->has_icon = true;
+            this->icon_id = id;
+            this->icon_size = size;
+
+            const int icon_px = IconRender::IconPixelSize(size);
+            if(!this->fixed_w) this->l_rect.w = icon_px;
+            if(!this->fixed_h) this->l_rect.h = icon_px;
+
+            this->needsRender();
+        }
+        bool getHasIcon() { return this->has_icon; }
+        IconID getIconId() { return this->icon_id; }
 };

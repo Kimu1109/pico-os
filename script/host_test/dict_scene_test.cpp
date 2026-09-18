@@ -87,6 +87,16 @@ static Button* findButtonByText(const char* text){
     }
     return nullptr;
 }
+// 「戻る」はテキストの代わりにアイコン(IconID::ArrowLeft)を持つボタンに
+// なったので、テキストではなくアイコンで探す
+static Button* findButtonByIcon(IconID icon){
+    for(Widget* w : WidgetFunctions::widgets){
+        if(w->getWidgetType() != WidgetType::Button) continue;
+        Button* b = static_cast<Button*>(w);
+        if(b->getHasIcon() && b->getIconId() == icon) return b;
+    }
+    return nullptr;
+}
 static int countItems(ScrollList* list){
     int n = 0;
     while(list->itemAt(n)) n++;
@@ -162,7 +172,7 @@ int main(){
     DictScene* scene = new DictScene();
     scene->onEnter();
 
-    Button* back_button    = findButtonByText("戻る");
+    Button* back_button    = findButtonByIcon(IconID::ArrowLeft);
     Button* search_button  = findButtonByText("検索");
     Textbox<PICO_STR_LL>* search_box = findByType<Textbox<PICO_STR_LL>>(WidgetType::Textbox);
     ScrollList* result_list = findByType<ScrollList>(WidgetType::ScrollList);

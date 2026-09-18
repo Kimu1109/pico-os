@@ -93,6 +93,27 @@ static int countItems(ScrollList* list){
     return n;
 }
 
+// WidgetFunctions::Add()はvisitAll()で子孫も含めて全部widgetsへ積むため、
+// 素朴に「widgetsを1つずつdelete」すると、detail_scroll(親)のデストラクタが
+// 子のdetail_labelを道連れに解放した後、そのdetail_labelを別枠でもう一度
+// deleteする二重解放になる。本物のWidgetFunctions::ClearSceneWidgets()は
+// 親を持たないルートしかdeleteしない(子は親のデストラクタに任せる)ので、
+// ここでも同じ流儀に揃える
+static void deleteSceneWidgets(){
+    // 先に「親を持たないもの」を全部集めてから delete する(2パスに分ける)。
+    // 1パスで回しながらdeleteすると、あるルートの delete が子孫を道連れに
+    // 解放した直後、その子孫をこの同じループが(まだ生きているつもりで)
+    // 次の要素として読みに行ってしまい使用済みメモリの参照になる
+    std::vector<Widget*> roots;
+    for(Widget* w : WidgetFunctions::widgets){
+        if(!w->getParent()) roots.push_back(w);
+    }
+    for(Widget* w : roots){
+        delete w;
+    }
+    WidgetFunctions::widgets.clear();
+}
+
 // status_label(Label<PICO_STR_L>)とdetail_label(Label<PICO_STR_2KiB>)は
 // どちらもWidgetType::Labelを名乗るため型だけでは区別できない
 // (異なるNへstatic_castするのはUB)。レイアウト上detail_labelが必ず
@@ -172,8 +193,7 @@ int main(){
     // onExit()自体はウィジェットを破棄しない(フレームワーク側=ClearSceneWidgetsの責務)ので、
     // 実機と同じ順序(onExit→ウィジェット破棄→次のonEnter)をここで模す
     scene->onExit();
-    for(Widget* w : WidgetFunctions::widgets) delete w;
-    WidgetFunctions::widgets.clear();
+    deleteSceneWidgets();
     WidgetFunctions::dialog_roots.clear();
 
     scene->onEnter();
@@ -183,10 +203,61 @@ int main(){
 
     // ---- 後片付け ----
     scene->onExit();
-    for(Widget* w : WidgetFunctions::widgets) delete w;
-    WidgetFunctions::widgets.clear();
+    deleteSceneWidgets();
     WidgetFunctions::dialog_roots.clear();
     delete scene;
+
+    // ---- 説明文が長くても切り詰めずスクロールで全文へたどり着ける ----
+    // (以前はdetail_labelにsetMaxHeight()で固定高さを持たせて溢れた分を
+    // 切り詰めていたが、それだと長い説明の途中で見えなくなっていた。
+    // ScrollContainerへ包んだことで、labelの高さは箱に収まる必要が無くなった
+    // はず — それをここで確かめる)
+    {
+        HostSd::files.clear();
+        std::vector<Entry> entries = {
+            {"book", "book", "a written work"},
+            {"longword", "longword", std::string(2000, 'x')}, // 器の高さを大きく超える説明
+        };
+        writeDict(entries, /*block_size=*/2);
+
+        WidgetFunctions::widgets.clear();
+        WidgetFunctions::dialog_roots.clear();
+
+        DictScene* scene2 = new DictScene();
+        scene2->onEnter();
+
+        Button* search_button2 = findButtonByText("検索");
+        Textbox<PICO_STR_LL>* search_box2 = findByType<Textbox<PICO_STR_LL>>(WidgetType::Textbox);
+        ScrollList* result_list2 = findByType<ScrollList>(WidgetType::ScrollList);
+        ScrollContainer* detail_scroll2 = findByType<ScrollContainer>(WidgetType::ScrollContainer);
+
+        check(search_button2 && search_box2 && result_list2 && detail_scroll2,
+              "長文説明テスト: 想定したウィジェットが揃っている");
+        if(search_button2 && search_box2 && result_list2 && detail_scroll2){
+            search_box2->setText("longword");
+            search_button2->causeOnPressEnd();
+            eq_int(countItems(result_list2), 1, "長文説明テスト: 前方一致1件(longword)");
+
+            result_list2->setSelectedIndex(0);
+            result_list2->causeOnSelectItem(true);
+
+            Label<PICO_STR_2KiB>* detail_label2 = findDetailLabel();
+            check(detail_label2 != nullptr, "長文説明テスト: 詳細欄が見つかる");
+            if(detail_label2){
+                const int container_h = detail_scroll2->getH();
+                const int label_h = detail_label2->getH();
+                check(label_h > container_h,
+                      "長文説明テスト: 詳細欄の実際の高さが箱の高さを超えている"
+                      "(=setMaxHeightで切り詰めなくなった。値は下記参照)");
+                printf("       container_h=%d label_h=%d\n", container_h, label_h);
+            }
+        }
+
+        scene2->onExit();
+        deleteSceneWidgets();
+        WidgetFunctions::dialog_roots.clear();
+        delete scene2;
+    }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASS" : "SOME FAILED", failures);
     return failures == 0 ? 0 : 1;

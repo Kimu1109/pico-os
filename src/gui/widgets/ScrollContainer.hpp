@@ -61,6 +61,34 @@ class ScrollContainer : public Widget, public IBorderColor {
             this->updateContentBounds();
         }
 
+        // 子(Label等)のテキストを差し替えて大きさが変わった場合に呼ぶ。
+        // updateContentBounds()は追加時とドラッグ開始時にしか呼ばれないため、
+        // 中身を書き換えるだけの呼び出し元はこれを呼ばないとスクロール範囲が
+        // 古いままになる(スクロールし過ぎて空白しか見えない/逆に短くなった
+        // のにスクロールできない、のどちらも起こり得る)。既存のスクロール位置は
+        // 新しい範囲へ収まるよう詰めるだけで、0へは戻さない
+        // (戻したい場合はscrollToTop()と組み合わせて呼ぶこと)。
+        void refreshContentBounds(){
+            this->updateContentBounds();
+            const int new_scroll_x = constrain(this->scroll_x, 0, this->max_scroll_x);
+            const int new_scroll_y = constrain(this->scroll_y, 0, this->max_scroll_y);
+            if(new_scroll_x != this->scroll_x || new_scroll_y != this->scroll_y){
+                this->scroll_x = new_scroll_x;
+                this->scroll_y = new_scroll_y;
+            }
+            this->needsRender();
+            for(Widget* child : children_) child->needsRender();
+        }
+
+        // 表示中の中身が別物に変わった(=前回のスクロール位置に意味が無い)
+        // ときに、先頭へ戻す。
+        void scrollToTop(){
+            this->scroll_x = 0;
+            this->scroll_y = 0;
+            this->needsRender();
+            for(Widget* child : children_) child->needsRender();
+        }
+
         Rect getScreenClipRect() const override {
             Rect dst = this->getScreenRect();
             if(horizontal_scroll){

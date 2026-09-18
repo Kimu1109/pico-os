@@ -208,6 +208,7 @@ g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \

@@ -16,6 +16,7 @@
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
 #include "consts.hpp"
+#include <cstring>
 
 Widget* WidgetFactory::Create(WidgetType type) {
     switch (type) {
@@ -78,4 +79,35 @@ bool WidgetFactory::IsCreatable(WidgetType type) {
         default:
             return false;
     }
+}
+
+bool WidgetFactory::TypeFromName(const char* name, WidgetType& out) {
+    if (!name) return false;
+
+    // WidgetType列挙子と同じ表記(PascalCase)。IsCreatable()の一覧と必ず揃えること
+    static const struct { const char* name; WidgetType type; } kTable[] = {
+        {"Button", WidgetType::Button},
+        {"Label", WidgetType::Label},
+        {"Textbox", WidgetType::Textbox},
+        {"NumberInput", WidgetType::NumberInput},
+        {"Checkbox", WidgetType::Checkbox},
+        {"Icon", WidgetType::Icon},
+        {"Image", WidgetType::Image},
+        {"NumberSlider", WidgetType::NumberSlider},
+        {"ScrollContainer", WidgetType::ScrollContainer},
+        {"ScrollList", WidgetType::ScrollList},
+        {"CanvasRaster", WidgetType::CanvasRaster},
+        {"LayoutContainer", WidgetType::LayoutContainer},
+        {"GridContainer", WidgetType::GridContainer},
+        {"TabBar", WidgetType::TabBar},
+        {"DropdownMenu", WidgetType::DropdownMenu},
+    };
+
+    for (const auto& entry : kTable) {
+        if (std::strcmp(entry.name, name) == 0) {
+            out = entry.type;
+            return true;
+        }
+    }
+    return false;
 }

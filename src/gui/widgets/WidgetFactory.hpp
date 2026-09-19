@@ -30,4 +30,9 @@ namespace WidgetFactory {
 
     // typeがCreate()で生成できる汎用部品かどうか(生成前の事前チェック用)。
     bool IsCreatable(WidgetType type);
+
+    // Lua等、種別を文字列で指定したい呼び出し元向け。WidgetType列挙子と
+    // 同じ表記(例: "Button")。IsCreatable()がtrueを返す15種のみ対応し、
+    // 一致しなければfalseを返す(outは書き換えない)。
+    bool TypeFromName(const char* name, WidgetType& out);
 };

@@ -70,6 +70,7 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
+  lua/                        Lua<->C++バインディング本体(LuaEngine)
   net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
@@ -78,7 +79,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budgetの20本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engineの21本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
@@ -597,7 +598,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 2 | 汎用基盤 | **ほぼ実装済み**。ウィジェットIDはファクトリまで実装され`Resolve()`もホストテストで検証済み。残るのは**`Resolve()`の実際の呼び出し元**(Lua統合本体)だけで、これは実質#5の一部。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **Luaバインディング本体は未着手だが、着手前の受け皿はほぼ埋まった(2026-09-19)**。ウィジェットID発行+ファクトリ+プロパティ共通口(`WidgetID`/`WidgetRegistry`/`WidgetFactory`/`WidgetProperty`)、`LayoutContainer`/`GridContainer`、エラー表示導線(`ErrorFunctions`)、実行時間制御の土台(`StepBudget`)、Lua本体のビルド組み込み(`lib/lua`)、**PC実行環境(`pc/`)**まで用意済み。残りは`lua_State`を実際に生成してsrc/へ繋ぐバインディング本体そのもの。詳細・残課題は下記「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **バインディング本体(`LuaEngine`)に着手し、ホストテストで動作確認済み(2026-09-19)**。`pico.create/destroy/set/get/on/add_child/log/show_error`がWidgetFactory/WidgetRegistry/WidgetProperty/ErrorFunctionsを実際に橋渡しし、ウィジェット生成・プロパティ読み書き・タップコールバック・コンテナへの動的追加・エラー時のダイアログ表示まで一通り動く(`script/host_test/lua_engine_test.cpp`)。**残っているのはSDからスクリプトを読んで実行する`LuaScene`(まだ無い)と、命令単位の実行時間制御、ウィジェット固有コールバックへの対応拡大**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
@@ -660,11 +661,114 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   - **残りの実害は「確保回数」ではなく「sizeof」のほう**。`std::function`は32Bで`Widget`基底に4本あるため、
     **1ウィジェットあたり128Bが固定で乗る**(`Button`のsizeof 312Bのうち128B)。関数ポインタ+`void*`の
     Delegate(16B)へ替えれば1個あたり64B減るが、Markdownシーン36個でも約2.3KB/46KB(5%)。
-    **単体では旨味が薄い。** Luaのコールバック(`lua_State*`+registry refのキャプチャは16B超え=貼るたびに
-    ヒープ確保)を大量に貼るようになって初めて費用対効果が出る。
+    **単体では旨味が薄い。**
+    ~~Luaのコールバック(`lua_State*`+registry refのキャプチャは16B超え=貼るたびにヒープ確保)を
+    大量に貼るようになって初めて費用対効果が出る~~ →
+    **この前提は実装時に回避できた(2026-09-19、下記「Luaバインディング」参照)**。
+    `lua_State*`やregistry refをウィジェット側のstd::functionへ直接キャプチャさせず、
+    「`LuaEngine*`(1ポインタ)+`WidgetId`(4B)」だけをキャプチャする中継関数を挟むことで、
+    小バッファ最適化の範囲(概ね16B)に収まりヒープ確保が起きないようにした。
+    そのためコールバックのDelegate化は今後も「単体では5%程度」の効果しかなく、優先度は低いまま。
 - **判断: 断片化もリークも観測されていない以上、64KBを常時占有する対価に見合わないため保留**。アプリが増えて断片化が実際に観測された時点で再検討する。
   `Label::lines`の件は上記のとおり対処済みで、残る`std::function`のDelegate化も単体では5%程度の効果しかない
-  (上記)。**次に手を入れる価値が出るのはLuaのコールバックを大量に貼るようになってから。**
+  (上記)。
+
+## Luaバインディング (`src/lua/LuaEngine`) (2026-09-19着手)
+
+Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1つのLuaアプリ**という対応で、
+既存の受け皿(`WidgetFactory`/`WidgetRegistry`/`WidgetProperty`/`ErrorFunctions`)を
+薄く橋渡しするだけの設計にしてある(新規に持つ状態は「pico.*」というAPI表と、
+コールバック中継用の小さな対応表だけ)。**まだSDからスクリプトを読んで実行する
+`LuaScene`は無く、`LuaEngine`単体をホストテスト(`script/host_test/lua_engine_test.cpp`)
+から動かして検証した段階。**
+
+### ライフサイクルとメモリ
+
+- コンストラクタで`lua_newstate()`にカスタムアロケータ(`BudgetAlloc`)を渡し、
+  確保量に`budget_bytes`の上限を課す。超過時は`lua_newstate`自体がnullptrを返すか、
+  `LUA_ERRMEM`として安全に失敗する(`lua_alloc_budget_test.cpp`で確認済みの挙動)。
+  **`luaL_openlibs()`とAPI登録は`InitTrampoline`という1つのC関数へまとめ、必ず`lua_pcall`
+  越しに呼ぶ**。保護せずに直接呼ぶと、初期化中のOOMがLuaの仕様上そのまま`abort()`する
+  ため(これも`lua_alloc_budget_test.cpp`で踏んで学んだ)。
+- `valid()`が`false`の場合、構築失敗(予算不足)なので呼び出し側はアプリの起動自体を諦める。
+- `Run(script, chunkname)`: 読み込み(`luaL_loadbuffer`)と実行(`lua_pcall`)の両方を1関数でこなし、
+  構文エラー・実行時エラーはどちらも捕捉して`ErrorFunctions::ShowFatal()`へ渡してから`false`を返す。
+  呼び出し側は追加のエラー処理をしなくてよい。
+
+### `pico.*` API(Lua側から見える面)
+
+| 関数 | 内容 |
+|---|---|
+| `pico.create(type_name)` | `WidgetFactory::TypeFromName()`→`Create()`。生成物は即`WidgetFunctions::Add()`で登録し、`WidgetId`(整数)を返す |
+| `pico.destroy(id)` | コールバック登録を`PruneCallbacksFor()`で外してから`WidgetFunctions::DestroyLater()`(フレーム境界での遅延削除) |
+| `pico.set(id, name, value)` / `pico.get(id, name)` | `WidgetProperty::IdFromName()`→`Set()`/`Get()`。プロパティ名は`snake_case`の文字列 |
+| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)のみ対応(下記) |
+| `pico.add_child(container_id, child_id)` | `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応 |
+| `pico.log(msg)` | `LOG_APP_MSG` |
+| `pico.show_error(msg)` | `ErrorFunctions::ShowFatal()` |
+
+- **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
+  Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
+  対応表は`WidgetProperty::IdFromName()`/`WidgetFactory::TypeFromName()`に集約してあるので、
+  プロパティ/種別を増やす際はそこへ1行足すだけでよい(片方だけ更新すると「Luaから見えない」
+  というずれ方をするので、`WidgetProperty.cpp`のコメントで注意喚起してある)。
+- **数値プロパティはLua側の1/1.0の書き分けを吸収する**(`l_set`)。`WidgetProperty`側は
+  プロパティごとに期待する型(Int/Float)が固定だが、Lua側に「整数リテラルで書け」
+  「浮動小数点数で書け」を強制するとミスの元になるため、整数値に見えるならまずIntとして試し、
+  ダメならFloatとして試す。
+- **未対応の値(型不一致・非対応プロパティ)は`pico.set`側はエラー、`pico.get`側はプロパティ名が
+  有効ならnil**(名前自体が無効ならどちらもエラー)。「setは黙って失敗させない」
+  「getは無ければnilというLuaの慣習に合わせる」を使い分けてある。
+
+### コールバック中継の設計(ヒープを使わない理由)
+
+`Widget::on_press_start`等は`std::function<void()>`のままシグネチャを変えていない
+(前回のセッションでは再設計を見送ると決めていた箇所)。素朴に`lua_State*`とLuaの
+registry ref(関数への参照)をラムダへキャプチャすると16Bを超え、`std::function`の
+小バッファ最適化(SBO)からあふれてヒープ確保が起きる。
+
+代わりに、`LuaEngine`が「`WidgetId`+イベント種別 → Lua registry ref」という対応表
+(`callbacks_`、単純な`std::vector`の線形探索。1ウィジェットあたり高々4イベントなので
+十分速い)を自分で持ち、ウィジェット側へ設定するラムダは**`this`(`LuaEngine*`)と
+`WidgetId`(4B)だけをキャプチャする**ようにした。これなら合計12B程度でSBOに収まり、
+`pico.on()`を何回呼んでもヒープ確保は増えない。実際に鳴らす際は
+`Dispatch(id, kind)`が対応表からrefを引き、`lua_pcall`越しにLua関数を呼ぶ
+(失敗時は`ErrorFunctions::ShowFatal()`)。
+
+### 実装中に見つけて直した既存のバグ2件
+
+Luaバインディングを実際に動かして初めて踏んだ、`LayoutContainer`/`GridContainer`が
+「Luaアプリ向けに用意したが実コードでは一度も使われていなかった」ことに起因する
+潜在バグ。どちらも`lua_engine_test.cpp`がASanで検出し、修正して回帰確認済み。
+
+- **`pico.add_child`の重なり順**: `WidgetFunctions::widgets`は追加順=描画順(後が上)のフラットな
+  配列で、`Widget::needs_children_update`が立った次のフレームにコンテナ経由で子孫を再スイープする
+  仕組みは既にあった(`Widget_Functions.cpp::UpdateAll()`)。しかし生成順が「子→親」だと、
+  子が配列内で親より手前(=下)の位置に残ったままになり、親の描画に隠れてしまう。
+  対策: `pico.add_child()`は`container->add(child)`する前に一度`WidgetFunctions::Remove(child)`で
+  フラットリストから外す。こうすると次フレームの再スイープで「まだ登録されていない子」として
+  親の直後(=上)へ正しく入り直す。
+- **`ScrollContainer`に`removeChild()`が無かった**: `LayoutContainer`/`GridContainer`は
+  `removeChild()`をoverrideして`children_`から取り除くが、`ScrollContainer`だけ無く、
+  基底の空実装のままだった。そのため子を`WidgetFunctions::Destroy()`等で個別に破棄すると、
+  `children_`に残った破棄済みポインタを`~ScrollContainer()`がもう一度`delete`し二重解放になる。
+  `pico.destroy(child_of_scroll_container)`で実際に踏める経路だったため、
+  `LayoutContainer`と同じ形の`removeChild()`を追加した。
+
+### 現時点のスコープ外(次回以降)
+
+- **`LuaScene`(SDからスクリプトを読んで実行する画面)は未実装**。`AppEntry`の
+  `MakeSceneWithArg<LuaScene>`パターンでスクリプトパスを`arg`に渡し、
+  `onEnter()`で`LuaEngine`を`new`、`onExit()`で`delete`という対応が自然だが、まだ書いていない。
+- **コールバックは共通4種(press_start/end/move/out)のみ**。`Checkbox::on_change_checked`、
+  `NumberSlider::on_value_changed`、`ScrollList::on_selectitem`、`TabBar::on_changed`等
+  ウィジェット固有のコールバックは未対応(`WidgetProperty`と同じ「まず共通部分だけ」の考え方)。
+- **命令単位の実行時間制御(`lua_sethook`)は無い**。`StepBudget`との組み合わせ含め、
+  実際に重い/無限ループするLuaアプリを書いてみてから決める。
+- **1フレームごとにLua側の「update」関数を呼ぶ仕組みは無い**。`ClocksScene`のような
+  「毎フレーム状態を進める」Luaアプリを書く場合に必要になる。
+- コンテナからの明示的な子の取り外し(`pico.remove_child`)は無い(`pico.destroy`で
+  子ごと破棄する経路しか無い)。
 
 ## Lua着手前の受け皿の状態 (2026-09-19時点)
 
@@ -687,7 +791,15 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 
 **API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算するのが確実。** ランチャに載っているのは`MarkdownScene`(引数なしなら`network.cfg`の`browser-home`を開く)/ `ClocksScene`(時計・タイマー・ストップウォッチ)/ `InputTestScene`(部品の動作確認用)の3本で、バインディング設計の実例としてはまだ足りていない。
 
-**次にLuaへ着手する回でやること(上表を踏まえた残りの穴)**: ①実際に`lua_newstate`を呼ぶ場所(おそらく新設する`LuaScene`または`Task`派生の`LuaTask`)を決め、カスタムallocで200KB枠を切る、②コールバックのシグネチャ(引数無し`std::function<void()>`のままで良いか、`Widget*`や`WidgetId`を渡すDelegateに替えるか)をここで最終決定する、③命令単位の実行時間制御(`lua_sethook`)をStepBudgetと組み合わせるかどうかを決める、④`WidgetRegistry::Resolve()`と`WidgetProperty`をLuaのCラッパー関数(`lua_pushcfunction`で登録するget/set)から実際に呼ぶ、⑤Luaのエラーを`pcall`で受けて`ErrorFunctions::ShowFatal()`へ渡す。
+**2026-09-19追記: 上記②④⑤は`src/lua/LuaEngine`として実装・検証済み**(詳細は上の
+「Luaバインディング」参照)。コールバックは結局シグネチャを変えずに済み、
+`WidgetRegistry::Resolve()`/`WidgetProperty`は`pico.get`/`pico.set`/`pico.on`から
+実際に呼ばれ、Luaのエラーは`pcall`で受けて`ErrorFunctions::ShowFatal()`へ渡るところまで
+ホストテスト(`lua_engine_test.cpp`)で確認済み。**残っているのは①(`lua_newstate`を
+`budget_bytes`付きで呼ぶ場所自体は`LuaEngine`のコンストラクタに決まったが、
+「どの`Scene`/`Task`がいつ`LuaEngine`を`new`/`delete`するか」という置き場所はまだ無い
+=`LuaScene`が無い)と③(命令単位の実行時間制御)**、および「Luaバインディング」章末尾の
+「現時点のスコープ外」に挙げた項目(ウィジェット固有コールバック、毎フレームのupdate呼び出し等)。
 
 ## Claude Codeへの申し送り
 

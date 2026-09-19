@@ -38,6 +38,12 @@
 #                           課しても安全に動く(予算超過でabortせずLUA_ERRMEM、
 #                           lua_close後は必ずused=0)ことの確認。RAM/Flash予算(200KB枠)の
 #                           実現方式の裏付け
+#   lua_engine_test… LuaEngine(Lua<->C++バインディング本体、src/lua/)を実際の
+#                     ウィジェット層と繋げて動かす結合テスト。pico.create/set/get/on/
+#                     add_child/destroyの一連の導線、コールバックの発火、コンテナへの
+#                     動的追加の重なり順、ScrollContainerの子を個別destroyしても
+#                     二重解放しないこと、スクリプトエラー時にErrorFunctions経由で
+#                     ダイアログが出ることまでを確認する
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -377,3 +383,42 @@ g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
 echo ""
 echo "===== lua_alloc_budget_test ====="
 "$OUT/lua_alloc_budget_test"
+
+# --- LuaEngine(Lua<->C++バインディング本体)をウィジェット層と繋げた結合テスト ---
+g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/lua_engine_test.cpp" \
+    "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/NumberInput.cpp" \
+    "$ROOT/src/gui/widgets/Checkbox.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Image.cpp" \
+    "$ROOT/src/gui/widgets/NumberSlider.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
+    "$ROOT/src/gui/widgets/GridContainer.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/functions/Error_Functions.cpp" \
+    "$OUT"/lua_obj/*.o \
+    -o "$OUT/lua_engine_test"
+
+echo ""
+echo "===== lua_engine_test ====="
+"$OUT/lua_engine_test"

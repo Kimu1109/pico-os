@@ -82,4 +82,11 @@ namespace WidgetProperty {
 
     // widgetがnullptr、idが非対応、valueのtypeが期待と不一致、のいずれかならfalseを返す。
     bool Set(Widget* widget, Id id, const Value& value);
+
+    // Lua等、プロパティを文字列で指定したい呼び出し元向け(snake_case)。
+    // 一致しなければfalseを返す(outは書き換えない)。
+    bool IdFromName(const char* name, Id& out);
+
+    // ログ/エラーメッセージ表示用。対応する名前が無ければ"?"を返す
+    const char* NameFromId(Id id);
 };

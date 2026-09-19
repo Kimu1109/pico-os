@@ -677,7 +677,7 @@ Lua向けの土台は「発行側・ファクトリまで入って、Luaバイ�
 | 実行時間の制御 | **無い**。`loop()`は単純ポーリングなので、重い/無限ループのLuaはタッチごと固める。`lua_sethook`での命令数バジェットか、`Task`へ載せてコルーチン化するかの判断が要る(`Task`基盤は既にある) |
 | 確保失敗(OOM) | `Widget::operator new`はnullptrを返す仕様。**唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした(2026-09-18)ので、失敗自体はログで見えるようになった**が、**個々の呼び出し元は依然としてnullチェックしていない**。Luaは「ユーザーのコードがRAMを食う」世界なので、`lua_newstate`のカスタムallocで**Luaに上限枠を切る**必要がある(未着手)。※シーンアリーナ不要の結論(上記)とは別の話 |
 | エラーの見せ方 | Luaのエラーを`pcall`で拾った後に出す先が無い(`LOG_SYS_FAIL`止まり)。「アプリが落ちた」をMsgDialogで見せる導線が要る |
-| RAM/Flash予算 | **現状の空きRAMの絶対値を実機で測れていない**(`MemFunctions`のレポートは差分中心)。このリポジトリのリモート実行環境には実機もPlatformIOのRP2350ボード定義も無く測定できなかった(`platform = raspberrypi`のPlatformIO公式パッケージ1.20.0にはrpipico2wのボード定義が同梱されていない)。Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダーなので、実機かPlatformIOが揃う環境で一度測っておくと判断が早い |
+| RAM/Flash予算 | **暫定枠: Lua用に200KBを割り当てる方針(2026-09-19決定、`lua_newstate`のカスタムallocへ渡す上限)**。開発者が実機で計測した「OS側のヒープ使用量はピークでも150KB程度」を根拠に、RP2350の総SRAM 520KBから逆算した(150KB+200KB=350KBでも170KBの余裕)。**ただし2点未確認**: ①その150KBが`Mem_Functions`(mallinfoベースのヒープ)の値かどうか(フレームバッファ`frame`スプライトやWi-Fi/lwIPスタックがヒープ計測に乗らない確保だと実際の総使用量はもう少し上振れし得る)、②このリモート実行環境には実機もPlatformIOのRP2350ボード定義も無く追試できていない(`platform = raspberrypi`のPlatformIO公式パッケージ1.20.0にはrpipico2wのボード定義が同梱されていない)。**実機が使える時に、Wi-Fi接続中+一番重いシーン(Markdown/Dict)を開いた状態で`MemFunctions`のレポートを取り、200KB確保後も安全か確認すること。** Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダーなので、200KB枠はstate+ユーザースクリプト+ウィジェットツリー分の余裕を見込んだ値。 |
 | ビルドの二重管理 | `platformio.ini` と `pc/CMakeLists.txt` の両方にLuaを足す必要がある(LovyanGFXの版追随が既に手動なのと同じ状況) |
 
 **API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算するのが確実。** ランチャに載っているのは`MarkdownScene`(引数なしなら`network.cfg`の`browser-home`を開く)/ `ClocksScene`(時計・タイマー・ストップウォッチ)/ `InputTestScene`(部品の動作確認用)の3本で、バインディング設計の実例としてはまだ足りていない。

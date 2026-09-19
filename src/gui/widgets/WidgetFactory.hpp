@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include "gui/widgets/WidgetID.hpp"
+#include "consts.hpp"
 
 class Widget;
 
@@ -15,6 +17,13 @@ class Widget;
 // 生成直後は仮の位置・大きさで置かれるだけなので、呼び出し側がsetX/setY/setW/setH等で
 // 実際の配置へ整えること。
 namespace WidgetFactory {
+    // Create()が生成するLabel/Textboxの文字容量(テンプレート引数N)。
+    // WidgetProperty側がstatic_castで実体型(Label<kLabelTextCapacity>等)へ
+    // 戻す際にも同じ値を使う必要があるため、ここへ出して1箇所にまとめてある
+    // (Create()の実装と食い違うと不正なテンプレート特殊化へキャストしてしまう)。
+    constexpr size_t kLabelTextCapacity = PICO_STR_L;
+    constexpr size_t kTextboxCapacity = PICO_STR_LL;
+
     // typeが非対応、またはWidget::operator newの確保失敗時はnullptrを返す。
     // 呼び出し側は必ずnullptrを確認すること(Widget.cpp内のoperator newのコメント参照)。
     Widget* Create(WidgetType type);

@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <type_traits>
 static inline unsigned long millis(){ return 0; }
+static inline unsigned long micros(){ return 0; }
 #define LED_BUILTIN 0
 
 // Arduinoコアが提供している min/max/constrain。実機側のコードがそのまま使っているので用意する。

@@ -22,6 +22,11 @@ namespace TaskTools {
     }
 };
 
+// update()は毎フレームPICO_Task::Update()から呼ばれるので、長時間戻らないと
+// タッチごと画面が固まる(loop()は単純なポーリングのため)。1回のupdate()が
+// どれだけ働くか予測できない処理(将来のLuaスクリプト実行が代表例)をTask化
+// する場合は、作業ループを task/StepBudget.hpp のStepBudgetで区切り、
+// 時間切れの続きを次のupdate()へ持ち越すこと。
 class Task {
 
     protected:

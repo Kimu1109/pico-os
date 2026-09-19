@@ -2,7 +2,7 @@
 
 > このファイルは `Kimu1109/pico-os` リポジトリ直下に置く、Claude Code向けのプロジェクト背景資料。
 > 元はClaude.aiのProject knowledgeとして管理されていた内容(2026-09-06時点情報)を統合したもの。
-> **最終同期: 2026-09-18(実コードと突き合わせ済み)。**
+> **最終同期: 2026-09-19(実コードと突き合わせ済み)。**
 > **一次情報源は常にこのリポジトリのコードと `SUMMARY.md`。このファイルは「相談の前提を素早く掴むための地図」であり、
 > 実装と乖離があれば実コード側を信じること。**
 
@@ -73,14 +73,15 @@ src/
   net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
-  task/                       非同期タスク基底 + NetworkScan / HttpGet タスク
+  task/                       非同期タスク基底 + NetworkScan / HttpGet タスク + StepBudget(実行時間の区切り)
   test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discoveryの9本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/widget_factory/widget_property/step_budget/error_functions/lua_smokeの14本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
+lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
 pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripten)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   web/shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
@@ -88,7 +89,8 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
 ```
-`include/`, `lib/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
+`include/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
+`lib/`はLua本体のvendor先として使い始めた(上記参照。従来は未使用だった)。
 
 ## コアアーキテクチャ
 
@@ -118,6 +120,7 @@ PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1�
 | UTF8_Functions | UTF-8のエンコード/デコード(文字列操作は`FixedString`側の担当) |
 | HitBox_Functions | 当たり判定のヘルパ |
 | Test_Functions | フォントカバレッジ等の起動時セルフチェック |
+| Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Touch→Task→Network→Keyboard→IME→Time→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
@@ -189,7 +192,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - `WidgetRegistry::Resolve(id)`はindex範囲・generation・typeの3点を検証して`Widget*`を返す(不一致ならnullptr)。**破棄済みIDの誤参照(use-after-free)はここで弾かれる。**
 - **`Resolve()`はホストテスト(`script/host_test/widget_factory_test.cpp`)で初めて検証された**: 発行済みIDからの解決、type改ざんの検出、破棄済みID(use-after-free)の検出、スロット再利用時のgeneration不一致検出を確認済み。ただし**実コード中の呼び出し元はまだテストのみ**で、実際に使われるのはLua統合から。
 - **`WidgetType` → `new Xxx` のファクトリを追加した**(`src/gui/widgets/WidgetFactory.hpp/.cpp`)。`WidgetFactory::Create(WidgetType)`がwidgets/直下の汎用部品15種(Button/Label/Textbox/NumberInput/Checkbox/Icon/Image/NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/TabBar/DropdownMenu)を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外(SD走査やシーン固有状態への依存が強いため)。生成直後は仮の位置・大きさなので、呼び出し側がsetX/setY/setW/setH等で整える前提。Textboxは`Textbox.cpp`が明示インスタンス化済みの`N`(`PICO_STR_LL`)に合わせてあり、任意のNは使えない(未使用の組み合わせを増やすには明示インスタンス化をもう1行足す必要がある)。
-- **プロパティのget/setをLuaへ通す共通口はまだ無い**。ファクトリは「生成できる」だけで、生成後の値の読み書きをどう外へ橋渡しするかはLua組み込み設計と一緒に決める部分。
+- **プロパティのget/setをLuaへ通す共通口(`WidgetProperty.hpp/.cpp`)を追加した(2026-09-19)**。`WidgetProperty::Get/Set(Widget*, Id, Value)`が`WidgetFactory::Create()`対応15種それぞれの代表的なプロパティ(Text/Value/Checked/FontSize/BorderColor等)を読み書きする。Widget基底の仮想関数にはしていない(`setW()`/`setH()`が基底に無く型ごとに意味が違うため。`WidgetFactory`と同じ「WidgetType→switch」形式)。値は`Value{type, i, f, b, FixedString<PICO_PATH_LEN> s}`という固定長のタグ付き共用体もどきで、ヒープを使わない。一部のプロパティ(NumberInputの入力値、Icon::opaqueのget、GridContainerのHAlign/VAlignのget等)はウィジェット側に対応するgetter/setterが元々無いため未対応(該当箇所にコメントで明記)。ホストテストは`script/host_test/widget_property_test.cpp`。**ここまでで「共通口」自体は揃ったが、Lua側からこれを叩くバインディング本体はまだ無い。**
 - `Widget::operator new`が確保失敗(nullptr)した際、以前は無言で失敗していたが、唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。個々の`new Xxx(...)`呼び出し元がnullチェックしていない問題そのものは残っている(下記「Lua着手前の受け皿の状態」の「確保失敗(OOM)」参照)。
 
 ### アプリの枠組み (`src/functions/App_Functions.hpp`)
@@ -594,7 +597,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 2 | 汎用基盤 | **ほぼ実装済み**。ウィジェットIDはファクトリまで実装され`Resolve()`もホストテストで検証済み。残るのは**`Resolve()`の実際の呼び出し元**(Lua統合本体)だけで、これは実質#5の一部。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **未着手**(Lua本体のコードは皆無)。ただし受け皿の一部は先行して入っている: ウィジェットID発行+ファクトリ(`WidgetID`/`WidgetRegistry`/`WidgetFactory`)、`LayoutContainer`/`GridContainer`、**PC実行環境(`pc/`)**。残っている穴は下記「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **Luaバインディング本体は未着手だが、着手前の受け皿はほぼ埋まった(2026-09-19)**。ウィジェットID発行+ファクトリ+プロパティ共通口(`WidgetID`/`WidgetRegistry`/`WidgetFactory`/`WidgetProperty`)、`LayoutContainer`/`GridContainer`、エラー表示導線(`ErrorFunctions`)、実行時間制御の土台(`StepBudget`)、Lua本体のビルド組み込み(`lib/lua`)、**PC実行環境(`pc/`)**まで用意済み。残りは`lua_State`を実際に生成してsrc/へ繋ぐバインディング本体そのもの。詳細・残課題は下記「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
@@ -663,24 +666,28 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   `Label::lines`の件は上記のとおり対処済みで、残る`std::function`のDelegate化も単体では5%程度の効果しかない
   (上記)。**次に手を入れる価値が出るのはLuaのコールバックを大量に貼るようになってから。**
 
-## Lua着手前の受け皿の状態 (2026-09-18時点)
+## Lua着手前の受け皿の状態 (2026-09-19時点)
 
-Lua向けの土台は「発行側・ファクトリまで入って、Luaバインディング本体だけが空」の状態。着手時に必ず当たる穴を列挙しておく。
+Lua向けの土台は「発行側・ファクトリ・プロパティ共通口・実行時間制御の土台・エラー表示導線・
+ビルドへの組み込みまでは入って、Luaバインディング本体(`lua_State`を実際に生成してsrc/へ繋ぐ部分)
+だけが空」の状態。着手時に必ず当たる穴を列挙しておく。
 
 | 箇所 | 状態 |
 |---|---|
 | ~~`WidgetRegistry::Resolve()`~~ | **ホストテストで検証済み(2026-09-18)**。発行済みIDからの解決・type改ざん検出・破棄済みID(use-after-free)検出・スロット再利用時のgeneration不一致検出を`script/host_test/widget_factory_test.cpp`で確認。ただし**実コード中の呼び出し元はまだテストのみ**で、Luaバインディングを書いた時点で初めて実利用される |
 | ~~ウィジェットのファクトリ~~ | **解消済み(2026-09-18)**。`WidgetFactory::Create(WidgetType)`(`src/gui/widgets/WidgetFactory.hpp/.cpp`)がwidgets/直下の汎用部品15種を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外 |
-| プロパティのget/set共通口 | **無い**。ファクトリで生成した後、値の読み書きをどうLuaへ橋渡しするかは未設計。Lua組み込み設計と一緒に決める部分 |
+| ~~プロパティのget/set共通口~~ | **解消済み(2026-09-19)**。`WidgetProperty::Get/Set()`(`src/gui/widgets/WidgetProperty.hpp/.cpp`)を参照。Lua側が「WidgetIdを`Resolve()`で引く→`WidgetProperty`で値を読み書きする」という2段構えを、Lua本体無しで既にホストテストまで確認できている |
 | ~~`AppEntry`(`App_Functions.hpp`)~~ | **解消済み(2026-09-13)**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`は`FixedString`でコピー保持するようになった。「同じ`LuaScene`型 + 別スクリプトパス」も、寿命の短い文字列からの動的登録も表現できる。残りは**SDを走査してLuaアプリを見つける側**(スキャン処理そのもの)だけ |
-| コールバック | `std::function<void()>` で引数もコンテキストも無し。Lua側は `lua_State*` + registry ref を持たせる必要があり、そのキャプチャは16B超え=貼るたびにヒープ確保になる |
-| 実行時間の制御 | **無い**。`loop()`は単純ポーリングなので、重い/無限ループのLuaはタッチごと固める。`lua_sethook`での命令数バジェットか、`Task`へ載せてコルーチン化するかの判断が要る(`Task`基盤は既にある) |
-| 確保失敗(OOM) | `Widget::operator new`はnullptrを返す仕様。**唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした(2026-09-18)ので、失敗自体はログで見えるようになった**が、**個々の呼び出し元は依然としてnullチェックしていない**。Luaは「ユーザーのコードがRAMを食う」世界なので、`lua_newstate`のカスタムallocで**Luaに上限枠を切る**必要がある(未着手)。※シーンアリーナ不要の結論(上記)とは別の話 |
-| エラーの見せ方 | Luaのエラーを`pcall`で拾った後に出す先が無い(`LOG_SYS_FAIL`止まり)。「アプリが落ちた」をMsgDialogで見せる導線が要る |
-| RAM/Flash予算 | **暫定枠: Lua用に200KBを割り当てる方針(2026-09-19決定、`lua_newstate`のカスタムallocへ渡す上限)**。開発者が実機で計測した「OS側のヒープ使用量はピークでも150KB程度」を根拠に、RP2350の総SRAM 520KBから逆算した(150KB+200KB=350KBでも170KBの余裕)。**ただし2点未確認**: ①その150KBが`Mem_Functions`(mallinfoベースのヒープ)の値かどうか(フレームバッファ`frame`スプライトやWi-Fi/lwIPスタックがヒープ計測に乗らない確保だと実際の総使用量はもう少し上振れし得る)、②このリモート実行環境には実機もPlatformIOのRP2350ボード定義も無く追試できていない(`platform = raspberrypi`のPlatformIO公式パッケージ1.20.0にはrpipico2wのボード定義が同梱されていない)。**実機が使える時に、Wi-Fi接続中+一番重いシーン(Markdown/Dict)を開いた状態で`MemFunctions`のレポートを取り、200KB確保後も安全か確認すること。** Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダーなので、200KB枠はstate+ユーザースクリプト+ウィジェットツリー分の余裕を見込んだ値。 |
-| ビルドの二重管理 | `platformio.ini` と `pc/CMakeLists.txt` の両方にLuaを足す必要がある(LovyanGFXの版追随が既に手動なのと同じ状況) |
+| コールバック | **意図的に見送り(2026-09-19)**。`std::function<void()>`のまま。上記「メモリ計測の結論」が既に出している判断(「関数ポインタ+`void*`のDelegateへ替える効果は単体では5%程度、旨味が出るのはLuaのコールバックを大量に貼るようになってから」)をそのまま踏襲し、今回は手を入れなかった。今のシグネチャには「引数もコンテキストも無い」という実害(誰が押したか・どのウィジェットのIDかをコールバック側へ渡せない)もあるため、**再設計するならLuaバインディング本体を書く回でシグネチャを一度に決める**(引数無しのまま先にDelegate化だけ済ませても、Lua側の要求で結局signature変更が要る可能性が高く、二度手間になるため) |
+| ~~実行時間の制御~~ | **土台のみ解消(2026-09-19)**。`task/StepBudget.hpp`が「一定時間(マイクロ秒)働いたら次のフレームへ回す」ための時間区切りプリミティブを提供する(`Task::update()`内の作業ループを`StepBudget::ShouldContinue()`で区切る)。ホストテストは`script/host_test/step_budget_test.cpp`(`pc/compat/`の実時間`micros()`を使う点が他と違う)。**命令単位の制御(`lua_sethook`でNバイトコードごとに打ち切る等)はまだ無く**、実際にLuaスクリプトをTask化する回で、このStepBudgetと組み合わせるか独自のフック粒度を足すかを決める |
+| ~~確保失敗(OOM)~~ | **Lua向けの経路は解消、内部90箇所は対象外と決定(2026-09-19)**。`WidgetFactory::Create()`はtype非対応時もWidget::operator new失敗時も一貫してnullptrを返す設計になっており(ヘッダのコメントで明記済み)、**Luaが実際に触る唯一の生成経路はこの時点で既に安全**。一方、Scene/Dialog等OS内部の`new Button(...)`等(約90箇所)は個々にnullチェックしていないが、これらは実行時に増減しない固定・既知個数の生成で、「メモリ計測の結論」が示す通り実測で断片化もリークも無く十分な余裕がある。ここへ90箇所分のnullチェックを機械的に足す投資対効果は低いと判断し、**対象外とする**(Luaスクリプトが暴走してウィジェットを大量生成する経路は`WidgetFactory::Create()`1箇所に絞られているため、そこが安全なら実害は無い)。`lua_newstate`のカスタムallocでLuaに上限枠を切る話(下記RAM/Flash予算)は引き続き未着手 |
+| ~~エラーの見せ方~~ | **解消済み(2026-09-19)**。`ErrorFunctions::ShowFatal(message)`(`src/functions/Error_Functions.hpp/.cpp`)がログ(`LOG_APP_FAIL`)とMsgDialog表示の両方を1呼び出しでこなす。`FileExplorer::on_press_delete()`等と同じ「生成→`AddDialog`→`setVisible`→`setOnClosed`で`DestroyLater`」の作法を関数内に閉じ込めてあるので、将来Luaの`pcall`エラーを拾った先はこれを呼ぶだけでよい。ホストテストは`script/host_test/error_functions_test.cpp` |
+| RAM/Flash予算 | **暫定枠: Lua用に200KBを割り当てる方針(2026-09-19決定、`lua_newstate`のカスタムallocへ渡す上限)**。開発者が実機で計測した「OS側のヒープ使用量はピークでも150KB程度」を根拠に、RP2350の総SRAM 520KBから逆算した(150KB+200KB=350KBでも170KBの余裕)。**ただし2点未確認**: ①その150KBが`Mem_Functions`(mallinfoベースのヒープ)の値かどうか(フレームバッファ`frame`スプライトやWi-Fi/lwIPスタックがヒープ計測に乗らない確保だと実際の総使用量はもう少し上振れし得る)、②このリモート実行環境には実機もPlatformIOのRP2350ボード定義も無く追試できていない(`platform = raspberrypi`のPlatformIO公式パッケージ1.20.0にはrpipico2wのボード定義が同梱されていない)。**実機が使える時に、Wi-Fi接続中+一番重いシーン(Markdown/Dict)を開いた状態で`MemFunctions`のレポートを取り、200KB確保後も安全か確認すること。** Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダーなので、200KB枠はstate+ユーザースクリプト+ウィジェットツリー分の余裕を見込んだ値。`lua_newstate`のカスタムalloc自体もまだ書いていない |
+| ~~ビルドの二重管理~~ | **LovyanGFXとは別方式で解消済み(2026-09-19)**。Lua 5.4.7本体(`lua.c`/`luac.c`を除く)を`lib/lua/`へvendorした(`lib/lua/README-pico-os.md`に経緯あり: Lua本体の`src/`には`main()`を持つ`lua.c`/`luac.c`が混在しており、`lib_deps`へ生のgit/tarballを指定するとPlatformIOの自動収集がそれも拾ってArduinoコア自身の`main()`と衝突するため、LovyanGFX方式(`lib_deps`+`pc/CMakeLists.txt`が同じタグをそれぞれ取得)は使えなかった)。vendor後は`lib/`配下がPlatformIOの「プロジェクト専用ライブラリ」として自動的にビルドされる(`platformio.ini`への追記は不要)ので、`pc/CMakeLists.txt`もこの同じ`lib/lua/src/`を参照するようにし、**実質1箇所の情報源**に落ち着いた。PCビルドで実際にリンクし、`lua_newstate`/`luaL_openlibs`/`luaL_dostring`/`lua_close`が動くことまで確認済み(`script/host_test/lua_smoke_test.cpp`、PC実行バイナリ`pc/build/picoos_pc`でも起動確認済み)。**PlatformIO側(実機)は引き続き未検証**(このリモート実行環境にRP2350のボード定義が無いため。上記RAM/Flash予算の未確認点と同種の制約) |
 
 **API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算するのが確実。** ランチャに載っているのは`MarkdownScene`(引数なしなら`network.cfg`の`browser-home`を開く)/ `ClocksScene`(時計・タイマー・ストップウォッチ)/ `InputTestScene`(部品の動作確認用)の3本で、バインディング設計の実例としてはまだ足りていない。
+
+**次にLuaへ着手する回でやること(上表を踏まえた残りの穴)**: ①実際に`lua_newstate`を呼ぶ場所(おそらく新設する`LuaScene`または`Task`派生の`LuaTask`)を決め、カスタムallocで200KB枠を切る、②コールバックのシグネチャ(引数無し`std::function<void()>`のままで良いか、`Widget*`や`WidgetId`を渡すDelegateに替えるか)をここで最終決定する、③命令単位の実行時間制御(`lua_sethook`)をStepBudgetと組み合わせるかどうかを決める、④`WidgetRegistry::Resolve()`と`WidgetProperty`をLuaのCラッパー関数(`lua_pushcfunction`で登録するget/set)から実際に呼ぶ、⑤Luaのエラーを`pcall`で受けて`ErrorFunctions::ShowFatal()`へ渡す。
 
 ## Claude Codeへの申し送り
 

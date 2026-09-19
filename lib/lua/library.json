@@ -1,0 +1,13 @@
+{
+    "name": "lua",
+    "version": "5.4.7",
+    "description": "Lua 5.4.7 (vendored, lua.c/luac.c excluded to avoid a duplicate main()). See README-pico-os.md for why this is vendored instead of fetched via lib_deps.",
+    "keywords": ["lua", "scripting"],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/lua/lua.git"
+    },
+    "license": "MIT",
+    "frameworks": "arduino",
+    "platforms": "*"
+}

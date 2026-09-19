@@ -2,7 +2,7 @@
 
 > このファイルは `Kimu1109/pico-os` リポジトリ直下に置く、Claude Code向けのプロジェクト背景資料。
 > 元はClaude.aiのProject knowledgeとして管理されていた内容(2026-09-06時点情報)を統合したもの。
-> **最終同期: 2026-09-16(実コードと突き合わせ済み)。**
+> **最終同期: 2026-09-18(実コードと突き合わせ済み)。**
 > **一次情報源は常にこのリポジトリのコードと `SUMMARY.md`。このファイルは「相談の前提を素早く掴むための地図」であり、
 > 実装と乖離があれば実コード側を信じること。**
 
@@ -180,15 +180,17 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
   ▲▼は**長押しで連続加算**(450ms後に110ms間隔)— 25分を1タップずつ積むのは現実的でないため。
   桁は繰り上がらず、その桁だけが巡回する。上限は`23:59:59`。
 
-### ウィジェットID (`src/gui/widgets/WidgetID.hpp` / `WidgetRegistry.hpp`)
-Lua等の外部から安全にウィジェットを指すための32bit ID。**発行側は実装済み、消費側はまだ空。**
+### ウィジェットID (`src/gui/widgets/WidgetID.hpp` / `WidgetRegistry.hpp` / `WidgetFactory.hpp`)
+Lua等の外部から安全にウィジェットを指すための32bit ID。**発行側・ファクトリは実装済み、Resolve()の実利用(Lua統合本体)だけが残っている。**
 
 - ビット配分は `[31:26] type(6bit, WidgetType)` / `[25:10] generation(16bit)` / `[9:0] index(10bit)`。`generation==0`は未割り当ての予約値なので**ID 0は常に無効**。
 - 具象ウィジェットは`getWidgetType()`の実装が必須(純粋仮想)。種類を足すときは`WidgetType`へ追記する(64種を超えると`static_assert`で落ちる)。
 - **IDは`getId()`の初回呼び出し時に遅延発行**する。外部から触られないウィジェットはスロットを消費しない。解放は`~Widget()`が`WidgetRegistry::Unregister()`を呼び、スロットのgenerationを進める。
 - `WidgetRegistry::Resolve(id)`はindex範囲・generation・typeの3点を検証して`Widget*`を返す(不一致ならnullptr)。**破棄済みIDの誤参照(use-after-free)はここで弾かれる。**
-- **ただし`Resolve()`の呼び出し元はまだコード中に1つも無く、ホストテストも無い。** 実際に使われるのはLua統合から。
-- `WidgetType`から実体を作るファクトリ(`WidgetType` → `new Xxx`)も未整備で、外部からウィジェットを生成する口はまだ存在しない。
+- **`Resolve()`はホストテスト(`script/host_test/widget_factory_test.cpp`)で初めて検証された**: 発行済みIDからの解決、type改ざんの検出、破棄済みID(use-after-free)の検出、スロット再利用時のgeneration不一致検出を確認済み。ただし**実コード中の呼び出し元はまだテストのみ**で、実際に使われるのはLua統合から。
+- **`WidgetType` → `new Xxx` のファクトリを追加した**(`src/gui/widgets/WidgetFactory.hpp/.cpp`)。`WidgetFactory::Create(WidgetType)`がwidgets/直下の汎用部品15種(Button/Label/Textbox/NumberInput/Checkbox/Icon/Image/NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/TabBar/DropdownMenu)を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外(SD走査やシーン固有状態への依存が強いため)。生成直後は仮の位置・大きさなので、呼び出し側がsetX/setY/setW/setH等で整える前提。Textboxは`Textbox.cpp`が明示インスタンス化済みの`N`(`PICO_STR_LL`)に合わせてあり、任意のNは使えない(未使用の組み合わせを増やすには明示インスタンス化をもう1行足す必要がある)。
+- **プロパティのget/setをLuaへ通す共通口はまだ無い**。ファクトリは「生成できる」だけで、生成後の値の読み書きをどう外へ橋渡しするかはLua組み込み設計と一緒に決める部分。
+- `Widget::operator new`が確保失敗(nullptr)した際、以前は無言で失敗していたが、唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。個々の`new Xxx(...)`呼び出し元がnullチェックしていない問題そのものは残っている(下記「Lua着手前の受け皿の状態」の「確保失敗(OOM)」参照)。
 
 ### アプリの枠組み (`src/functions/App_Functions.hpp`)
 `AppEntry`(名前/アイコン/引数/シーン生成関数)の固定長テーブルに登録し、`HomeScene`の`AppGrid`がそれを並べる。
@@ -589,21 +591,21 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | # | 大項目 | 状況 |
 |---|---|---|
 | 1 | ダイアログ系統 | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用(電卓用)キーボード`KeyboardNum`も実装済み。 |
-| 2 | 汎用基盤 | **ほぼ実装済み**。残るのはウィジェットIDの**消費側**(`Resolve()`の呼び出し元・ファクトリ)だけで、これは実質#5の一部。 |
+| 2 | 汎用基盤 | **ほぼ実装済み**。ウィジェットIDはファクトリまで実装され`Resolve()`もホストテストで検証済み。残るのは**`Resolve()`の実際の呼び出し元**(Lua統合本体)だけで、これは実質#5の一部。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **未着手**(Lua本体のコードは皆無)。ただし受け皿の一部は先行して入っている: ウィジェットID発行(`WidgetID`/`WidgetRegistry`)、`LayoutContainer`/`GridContainer`、**PC実行環境(`pc/`)**。残っている穴は下記「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **未着手**(Lua本体のコードは皆無)。ただし受け皿の一部は先行して入っている: ウィジェットID発行+ファクトリ(`WidgetID`/`WidgetRegistry`/`WidgetFactory`)、`LayoutContainer`/`GridContainer`、**PC実行環境(`pc/`)**。残っている穴は下記「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
-| 7 | 標準アプリ開発 | **Markdownブラウザ**(`PROTOCOL.md` v1を一通り)と**時計**(`ClocksScene`)の2本が実装済み。設定/辞書/電卓/ファイルエクスプローラーは**アプリ本体が無い**(部品は揃っている)。 |
+| 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
 | 9 | GBエミュ | **未着手**。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
 | 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
 
-**#7が#5の前提になっている。** Lua APIの仕様は「C++で標準アプリを書いてみて必要になったもの」から
-逆算するのが確実で、実例はまだ`MarkdownScene`と`ClocksScene`の2本しかない。
-電卓は`KeyboardNum`/`NumberInput`が、ファイルエクスプローラーは`FileExplorer`ウィジェットが既にあるので、
-**次の1本を足すコストが一番低いのはこの2つ**。
+**#7は完了しており、#5(Lua)の前提として十分な実例が揃った。** Lua APIの仕様は「C++で標準アプリを
+書いてみて必要になったもの」から逆算するのが確実で、`MarkdownScene`/`ClocksScene`/`CalculatorScene`/
+`FileExplorerScene`/`DictScene`/`SettingsScene`の6本が実装済み。`AppGrid`/`ColorDialog`/`KeyboardNum`型の
+「render()直描き」パターンや`ClocksScene`のvisibility管理パターンなど、バインディング設計の材料はこれで揃った。
 
 ## 未実装の設計アイデア(旧pico-osからの持ち越し議論)
 
@@ -633,7 +635,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
     - 1ページ`kMaxPrefetchImages=8`枚まで。既にキャッシュにある画像は取りに行かない(2回目の訪問は取得ゼロ)。ローカル文書は走査ごと飛ばす。
     - `MdScan::ImageRefInLine()`の判定規則は**`parseBlocks()`の画像ブロックと必ず一致させること**。ずれると「取ってきたのに表示されない」「表示されるのに取ってこない」が起きる。
 - **Markdownブラウザのヘッダー/フッター**: ナビゲーション用(戻る/進む/パス/検索)ならScene側にウィジェットを並べるだけで**View改修は不要**。文書由来(タイトル固定表示等)をやる場合のみ、`l_rect`内での高さ控除が論点になる — その際は「ビューポート=`l_rect`全体」という前提が7〜8箇所に直書きされているので、`viewportRect()`へ集約するのが先。
-- **LuaでのウィジェットID管理**: 32bit整数IDの**発行側は実装済み**(`WidgetID.hpp`/`WidgetRegistry`)。残るのは消費側 — `Resolve()`を叩くバインディング、`WidgetType`→実体のファクトリ、プロパティのget/setをLuaへ通す共通の口。Lua組み込み設計と一緒に決める部分。
+- **LuaでのウィジェットID管理**: 32bit整数IDの**発行側・ファクトリは実装済み**(`WidgetID.hpp`/`WidgetRegistry`/`WidgetFactory`)。残るのは`Resolve()`を叩くバインディングと、プロパティのget/setをLuaへ通す共通の口。Lua組み込み設計と一緒に決める部分。
 
 ## メモリ計測の結論 (2026-09-12時点、実機RP2350で20回の遷移を計測)
 
@@ -661,20 +663,21 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   `Label::lines`の件は上記のとおり対処済みで、残る`std::function`のDelegate化も単体では5%程度の効果しかない
   (上記)。**次に手を入れる価値が出るのはLuaのコールバックを大量に貼るようになってから。**
 
-## Lua着手前の受け皿の状態 (2026-09-13時点)
+## Lua着手前の受け皿の状態 (2026-09-18時点)
 
-Lua向けの土台は「発行側だけ入って消費側が空」の状態。着手時に必ず当たる穴を列挙しておく。
+Lua向けの土台は「発行側・ファクトリまで入って、Luaバインディング本体だけが空」の状態。着手時に必ず当たる穴を列挙しておく。
 
 | 箇所 | 状態 |
 |---|---|
-| `WidgetRegistry::Resolve()` | 実装済みだが**呼び出し元ゼロ・テストゼロ**。実際に使った時点で仕様の穴が出る想定 |
-| ウィジェットのファクトリ | **無い**。`WidgetType` enumはあるが `WidgetType` → `new Xxx` の対応表が無く、Luaから生成する口が存在しない |
+| ~~`WidgetRegistry::Resolve()`~~ | **ホストテストで検証済み(2026-09-18)**。発行済みIDからの解決・type改ざん検出・破棄済みID(use-after-free)検出・スロット再利用時のgeneration不一致検出を`script/host_test/widget_factory_test.cpp`で確認。ただし**実コード中の呼び出し元はまだテストのみ**で、Luaバインディングを書いた時点で初めて実利用される |
+| ~~ウィジェットのファクトリ~~ | **解消済み(2026-09-18)**。`WidgetFactory::Create(WidgetType)`(`src/gui/widgets/WidgetFactory.hpp/.cpp`)がwidgets/直下の汎用部品15種を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外 |
+| プロパティのget/set共通口 | **無い**。ファクトリで生成した後、値の読み書きをどうLuaへ橋渡しするかは未設計。Lua組み込み設計と一緒に決める部分 |
 | ~~`AppEntry`(`App_Functions.hpp`)~~ | **解消済み(2026-09-13)**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`は`FixedString`でコピー保持するようになった。「同じ`LuaScene`型 + 別スクリプトパス」も、寿命の短い文字列からの動的登録も表現できる。残りは**SDを走査してLuaアプリを見つける側**(スキャン処理そのもの)だけ |
 | コールバック | `std::function<void()>` で引数もコンテキストも無し。Lua側は `lua_State*` + registry ref を持たせる必要があり、そのキャプチャは16B超え=貼るたびにヒープ確保になる |
 | 実行時間の制御 | **無い**。`loop()`は単純ポーリングなので、重い/無限ループのLuaはタッチごと固める。`lua_sethook`での命令数バジェットか、`Task`へ載せてコルーチン化するかの判断が要る(`Task`基盤は既にある) |
-| 確保失敗(OOM) | `Widget::operator new`はnullptrを返す仕様だが、**呼び出し側は誰もnullチェックしていない**。Luaは「ユーザーのコードがRAMを食う」世界なので、`lua_newstate`のカスタムallocで**Luaに上限枠を切る**必要がある。※シーンアリーナ不要の結論(上記)とは別の話 |
+| 確保失敗(OOM) | `Widget::operator new`はnullptrを返す仕様。**唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした(2026-09-18)ので、失敗自体はログで見えるようになった**が、**個々の呼び出し元は依然としてnullチェックしていない**。Luaは「ユーザーのコードがRAMを食う」世界なので、`lua_newstate`のカスタムallocで**Luaに上限枠を切る**必要がある(未着手)。※シーンアリーナ不要の結論(上記)とは別の話 |
 | エラーの見せ方 | Luaのエラーを`pcall`で拾った後に出す先が無い(`LOG_SYS_FAIL`止まり)。「アプリが落ちた」をMsgDialogで見せる導線が要る |
-| RAM/Flash予算 | **現状の空きRAMの絶対値を実機で測っていない**(`MemFunctions`のレポートは差分中心)。Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダーなので、入れる前に一度測っておくと判断が早い |
+| RAM/Flash予算 | **暫定枠: Lua用に200KBを割り当てる方針(2026-09-19決定、`lua_newstate`のカスタムallocへ渡す上限)**。開発者が実機で計測した「OS側のヒープ使用量はピークでも150KB程度」を根拠に、RP2350の総SRAM 520KBから逆算した(150KB+200KB=350KBでも170KBの余裕)。**ただし2点未確認**: ①その150KBが`Mem_Functions`(mallinfoベースのヒープ)の値かどうか(フレームバッファ`frame`スプライトやWi-Fi/lwIPスタックがヒープ計測に乗らない確保だと実際の総使用量はもう少し上振れし得る)、②このリモート実行環境には実機もPlatformIOのRP2350ボード定義も無く追試できていない(`platform = raspberrypi`のPlatformIO公式パッケージ1.20.0にはrpipico2wのボード定義が同梱されていない)。**実機が使える時に、Wi-Fi接続中+一番重いシーン(Markdown/Dict)を開いた状態で`MemFunctions`のレポートを取り、200KB確保後も安全か確認すること。** Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダーなので、200KB枠はstate+ユーザースクリプト+ウィジェットツリー分の余裕を見込んだ値。 |
 | ビルドの二重管理 | `platformio.ini` と `pc/CMakeLists.txt` の両方にLuaを足す必要がある(LovyanGFXの版追随が既に手動なのと同じ状況) |
 
 **API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算するのが確実。** ランチャに載っているのは`MarkdownScene`(引数なしなら`network.cfg`の`browser-home`を開く)/ `ClocksScene`(時計・タイマー・ストップウォッチ)/ `InputTestScene`(部品の動作確認用)の3本で、バインディング設計の実例としてはまだ足りていない。

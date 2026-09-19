@@ -3,13 +3,20 @@
 #include "OS_Data.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Mem_Functions.hpp"
+#include "functions/Log_Functions.hpp"
 
 #include <cstdlib>
 #include <new>
 
 void* Widget::operator new(size_t bytes) noexcept {
     void* ptr = malloc(bytes ? bytes : 1);
-    if(!ptr) return nullptr; //組み込みでは例外を投げずnullptrを返す(呼び出し側で落ちる)
+    if(!ptr) {
+        // 組み込みでは例外を投げずnullptrを返す(呼び出し側で落ちる)。
+        // 全ウィジェットの確保がここを通る唯一の入口なので、失敗を1箇所でログしておく
+        // — 個々のnew Xxx(...)側にnullチェックが無くても、原因がここだと分かるようにする。
+        LOG_SYS_FAIL("Widget::operator new: %luバイトの確保に失敗", (unsigned long)bytes);
+        return nullptr;
+    }
     MemFunctions::OnWidgetAlloc(bytes);
     return ptr;
 }

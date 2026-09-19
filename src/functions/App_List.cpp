@@ -8,6 +8,7 @@
 #include "gui/scenes/FileExplorerScene.hpp"
 #include "gui/scenes/SettingsScene.hpp"
 #include "gui/scenes/DictScene.hpp"
+#include "gui/scenes/LuaScene.hpp"
 
 // このOSに載せるアプリの一覧。
 //
@@ -36,6 +37,10 @@ void AppFunctions::Setup(){
     Register("ファイル", IconID::Folder, &MakeScene<FileExplorerScene>);
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
     Register("辞書", IconID::Language, &MakeScene<DictScene>);
+    // Luaバインディングの動作サンプル(pc/sdcard/lua/hello.lua参照)。
+    // 同じMakeSceneWithArg<LuaScene>にargだけ変えて登録すれば、
+    // 「Luaスクリプトごとに1タイル」を何個でも増やせる
+    Register("Lua Hello", IconID::AppBox, &MakeSceneWithArg<LuaScene>, "/lua/hello.lua");
 
     LOG_SYS_OK("App Setup has succeeded! (%d apps)", Count());
 }

@@ -13,6 +13,8 @@
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Scene_Functions.hpp"
+#include "gui/scenes/Scene.hpp"
 
 namespace {
     // WidgetIdは32bitで符号無しだが、Luaのlua_Integerは64bit符号付きなので
@@ -128,6 +130,8 @@ void LuaEngine::registerApi() {
     registerFn("add_child", l_add_child);
     registerFn("log", l_log);
     registerFn("show_error", l_show_error);
+    registerFn("pop", l_pop);
+    registerFn("content_rect", l_content_rect);
     lua_setglobal(L, "pico");
 }
 
@@ -370,4 +374,23 @@ int LuaEngine::l_show_error(lua_State* L) {
     const char* msg = luaL_checkstring(L, 1);
     ErrorFunctions::ShowFatal(msg);
     return 0;
+}
+
+int LuaEngine::l_pop(lua_State*) {
+    // LuaSceneがアプリを起動する際はSceneFunctions::Pushなので、Popでランチャへ戻れる
+    // (ClocksScene/CalculatorScene等、他のアプリの「戻る」ボタンと同じ仕組み)。
+    // 要求を登録するだけで実際の遷移はフレーム境界(SceneFunctions::Update())まで保留される
+    SceneFunctions::Pop();
+    return 0;
+}
+
+int LuaEngine::l_content_rect(lua_State* L) {
+    // ステータスバーを除いた、シーンが自由に使える領域。他のC++製アプリと同じ
+    // Scene::contentRect()を使うので、Luaアプリだけ位置がずれることはない
+    const Rect r = Scene::contentRect();
+    lua_pushinteger(L, r.x);
+    lua_pushinteger(L, r.y);
+    lua_pushinteger(L, r.w);
+    lua_pushinteger(L, r.h);
+    return 4;
 }

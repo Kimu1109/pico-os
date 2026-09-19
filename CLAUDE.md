@@ -63,7 +63,7 @@ src/
   functions/                 「Xxx_Functions」名前空間群
   gui/
     icons/                  アイコンデータ(tabler_iconsから生成)
-    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene)
+    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene)
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
       apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker)
       dialogs/              モーダルダイアログ
@@ -79,7 +79,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engineの21本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_sceneの22本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
@@ -87,6 +87,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   web/shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
   sdcard/                     SDカードとして読まれるディレクトリ
+    lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
 ```
@@ -598,7 +599,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 2 | 汎用基盤 | **ほぼ実装済み**。ウィジェットIDはファクトリまで実装され`Resolve()`もホストテストで検証済み。残るのは**`Resolve()`の実際の呼び出し元**(Lua統合本体)だけで、これは実質#5の一部。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **バインディング本体(`LuaEngine`)に着手し、ホストテストで動作確認済み(2026-09-19)**。`pico.create/destroy/set/get/on/add_child/log/show_error`がWidgetFactory/WidgetRegistry/WidgetProperty/ErrorFunctionsを実際に橋渡しし、ウィジェット生成・プロパティ読み書き・タップコールバック・コンテナへの動的追加・エラー時のダイアログ表示まで一通り動く(`script/host_test/lua_engine_test.cpp`)。**残っているのはSDからスクリプトを読んで実行する`LuaScene`(まだ無い)と、命令単位の実行時間制御、ウィジェット固有コールバックへの対応拡大**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19)**。`pico.create/destroy/set/get/on/add_child/pop/content_rect/log/show_error`がWidgetFactory/WidgetRegistry/WidgetProperty/ErrorFunctions/SceneFunctionsを橋渡しし、SD上のスクリプト読み込み→ウィジェット生成→タップコールバック→戻るボタンでランチャ復帰、までPCビルドで実機さながらに動作確認済み(`pc/sdcard/lua/hello.lua`、ランチャに「Lua Hello」タイルあり)。**残っているのは命令単位の実行時間制御、ウィジェット固有コールバックへの対応拡大、毎フレームupdate呼び出しの仕組み**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
@@ -670,6 +671,47 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
     小バッファ最適化の範囲(概ね16B)に収まりヒープ確保が起きないようにした。
     そのためコールバックのDelegate化は今後も「単体では5%程度」の効果しかなく、優先度は低いまま。
 - **判断: 断片化もリークも観測されていない以上、64KBを常時占有する対価に見合わないため保留**。アプリが増えて断片化が実際に観測された時点で再検討する。
+
+### ⚠️ 未解決: PCビルドでシーン遷移を繰り返すと「ヒープ下限」が際限なく増える(2026-09-19発見)
+
+上の結論は**実機RP2350での計測**に基づくが、`LuaScene`の動作確認中、**PCビルド
+(`pc/build/picoos_pc`)で`--tap`により同じ画面遷移を繰り返すと、上と同じ「ヒープ下限」
+指標が回数に比例して際限なく増え続ける**ことを見つけた。**Luaとは無関係の、既存の
+`InputTestScene`だけでも再現する**(検証方法・結果は次の通り):
+
+```sh
+SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc \
+  --tap 178,65@10:5  --tap 40,215@30:5  \
+  --tap 178,65@60:5  --tap 40,215@80:5  \
+  --tap 178,65@110:5 --tap 40,215@130:5 \
+  --tap 178,65@160:5 --tap 40,215@180:5 \
+  --tap 178,65@210:5 --tap 40,215@230:5 \
+  --shot /tmp/probe.ppm 260
+# (178,65)=ランチャの「入力テスト」タイル、(40,215)=InputTestSceneの「戻る」ボタン。
+# ランチャ→InputTestScene→ランチャ を5回繰り返すだけ
+```
+結果: `ヒープ下限(シーン破棄直後/9回): 初回=188032B 最新=478256B 最大=478256B 差+290224B`
+(9サンプルで約290KB増加。1往復あたり約30〜40KB)。
+
+**この現象がLua着手より前から存在することも確認済み**: このセッションでの変更を一切含まない
+`git worktree`(コミット`4f8310a`、Lua関連の作業を始める直前)でも全く同じ手順・ほぼ同じ数値
+(`初回=188320B 最新=480848B 差+292528B`)が再現した。つまり**`LuaEngine`/`LuaScene`が
+原因ではない**(`script/host_test/lua_engine_test.cpp`/`lua_scene_test.cpp`はASan付きの
+ホストテストで、Push/Pop相当のシナリオを含めて一切のリークを検出していない。今回の増加は
+ASanの通らないPCビルドのGUI経路——実際のLovyanGFX描画・フォント処理・Task/Networkの
+どこか——で起きている)。
+
+**実機での20回計測(2026-09-12、上記)と矛盾しているように見える点に注意**: 実機計測は
+`sh script/host_test/run_mem.sh`(ASan相当ではないがWi-Fi/描画も含めた実機実行)による
+もので、その時は増加傾向が無かった。今回の再現条件(同一シーンの往復を`--tap`で機械的に
+繰り返す/PCビルド固有のSDL・glibc・LovyanGFX_SDLパネル経路)との違いが原因の可能性があり、
+**実機で同じ「同一画面の往復を10回以上」というシナリオを踏んだことは無い**(実機計測は
+「シーンを跨いだ複数回の遷移」であり、「同じ2画面の往復」ではなかった)。
+
+**未着手**: 原因の特定(候補: LovyanGFXのフォント/グリフキャッシュ、Task_Functions、
+Network_Functionsの再接続チェック、SDL側のイベント処理)、実機での再現確認、修正。
+次にこの周辺(Scene/Widget基盤、PCビルド)を触る回で必ず引き継ぐこと。
+再現用の`--tap`コマンドは上記の通りなので、まずそれで実機/PCの両方を確認するのが早い。
   `Label::lines`の件は上記のとおり対処済みで、残る`std::function`のDelegate化も単体では5%程度の効果しかない
   (上記)。
 
@@ -706,6 +748,8 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.add_child(container_id, child_id)` | `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応 |
 | `pico.log(msg)` | `LOG_APP_MSG` |
 | `pico.show_error(msg)` | `ErrorFunctions::ShowFatal()` |
+| `pico.pop()` | `SceneFunctions::Pop()`。`LuaScene`から起動されたアプリがランチャへ戻るためのもの(2026-09-19追加) |
+| `pico.content_rect()` | `Scene::contentRect()`を`x,y,w,h`の4値で返す。ステータスバー分を避けた配置に使う(2026-09-19追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -755,11 +799,40 @@ Luaバインディングを実際に動かして初めて踏んだ、`LayoutCont
   `pico.destroy(child_of_scroll_container)`で実際に踏める経路だったため、
   `LayoutContainer`と同じ形の`removeChild()`を追加した。
 
+### `LuaScene`(`src/gui/scenes/LuaScene.hpp/.cpp`)(2026-09-19実装)
+
+SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`MakeSceneWithArg<LuaScene>`パターンで
+スクリプトパス("/lua/hello.lua"のようなSD絶対パス)を`arg`に渡して登録する
+(同じ`LuaScene`型を別のargで何個でも登録できるので「Luaスクリプトごとに1タイル」が作れる)。
+
+- **ライフサイクル**: `onEnter()`で`LuaEngine`を`new`(予算`kLuaBudgetBytes=200KB`)、
+  スクリプトをSDから読んで`Run()`する。`onExit()`で`delete`。**Push()で背後へ退避される場合も
+  `onExit()`は呼ばれる**(`Scene`のレイヤ説明通り)ので、Lua stateもウィジェットと同じく
+  「シーンがアクティブな間だけ」の寿命にした。他のシーンのように状態をメンバへ退避して
+  `onEnter()`で復元する形にはできない(Luaアプリの状態はスクリプト内のLua変数にあり、
+  C++側から見えないため)ので、**`Pop()`で戻ってきたらスクリプトを最初から実行し直す**。
+- **スクリプトの読み込み**は`MarkdownView::load()`と全く同じ手順(256Bのスタックチャンクで
+  読み進めてメンバの`FixedString`へ追記。ヒープを使わない)。上限は`kMaxScriptBytes=16KiB`
+  (`MarkdownView`の8KiBより大きくしてあるのは、`pico.*`呼び出しの羅列は文書より冗長になりがちなため)。
+  超過分は警告ログを出して打ち切る。このバッファは`LuaScene`のメンバなので、`LuaScene`自体が
+  `MarkdownScene`と同じく「シーン本体は数十バイト」の例外になる。
+- **ランチャへ戻る手段はスクリプト側が自前で用意する**(`pico.create("Button")`+
+  `pico.on(id, "press_start", ...)`で`pico.pop()`を呼ぶ。`ClocksScene`/`CalculatorScene`等、
+  他のアプリの「戻る」ボタンと同じ考え方)。これに伴い`LuaEngine`へ2関数を追加した:
+  - `pico.pop()`: `SceneFunctions::Pop()`を呼ぶだけ
+  - `pico.content_rect()`: `Scene::contentRect()`を`x,y,w,h`の4値で返す。
+    Luaアプリだけステータスバーの下に潜り込む、といったズレを防ぐ
+- **動作サンプル**: `pc/sdcard/lua/hello.lua`(ボタンでカウンタが増える最小限の画面)を
+  `App_List.cpp`に`Register("Lua Hello", IconID::AppBox, &MakeSceneWithArg<LuaScene>, "/lua/hello.lua")`
+  として登録済み。PCビルドで`--tap`により実際にタップ→カウンタ更新→戻るまで動作確認済み
+  (`pc/build/picoos_pc`)。
+- ホストテストは`script/host_test/lua_scene_test.cpp`。`Scene_Functions.cpp`と組み合わせた
+  結合テストで、SDからの読み込み・`pico.pop()`での実際のランチャ復帰・ファイル不在時の
+  ダイアログ表示・大きすぎるスクリプトの打ち切り警告を確認している
+  (`script/host_test/stubs/SdFat.h`の`HostSd::files`にスクリプトを登録して読ませる)。
+
 ### 現時点のスコープ外(次回以降)
 
-- **`LuaScene`(SDからスクリプトを読んで実行する画面)は未実装**。`AppEntry`の
-  `MakeSceneWithArg<LuaScene>`パターンでスクリプトパスを`arg`に渡し、
-  `onEnter()`で`LuaEngine`を`new`、`onExit()`で`delete`という対応が自然だが、まだ書いていない。
 - **コールバックは共通4種(press_start/end/move/out)のみ**。`Checkbox::on_change_checked`、
   `NumberSlider::on_value_changed`、`ScrollList::on_selectitem`、`TabBar::on_changed`等
   ウィジェット固有のコールバックは未対応(`WidgetProperty`と同じ「まず共通部分だけ」の考え方)。

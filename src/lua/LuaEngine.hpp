@@ -92,4 +92,6 @@ class LuaEngine {
         static int l_add_child(lua_State* L);
         static int l_log(lua_State* L);
         static int l_show_error(lua_State* L);
+        static int l_pop(lua_State* L);
+        static int l_content_rect(lua_State* L);
 };

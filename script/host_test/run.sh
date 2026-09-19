@@ -31,6 +31,13 @@
 #   lua_smoke_test… vendorしたLua本体(lib/lua)が実際にビルド・リンクでき、
 #                    lua_newstate/luaL_dostring/lua_closeが動くことの確認
 #                    (「ビルドの二重管理」の解消。他と違いsrc/を丸ごとASan付きでコンパイルする)
+#   lua_stdlib_test… Lua本体の言語機能・標準ライブラリ(数値/文字列/テーブル/
+#                     クロージャ/メタテーブル/pcall/コルーチン/GC)が一通り動くことの確認。
+#                     LuaからCの関数(check())を呼べることも兼ねて確認する
+#   lua_alloc_budget_test… lua_newstateへカスタムアロケータを渡し、確保量に上限を
+#                           課しても安全に動く(予算超過でabortせずLUA_ERRMEM、
+#                           lua_close後は必ずused=0)ことの確認。RAM/Flash予算(200KB枠)の
+#                           実現方式の裏付け
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -335,16 +342,38 @@ echo "===== error_functions_test ====="
 "$OUT/error_functions_test"
 
 # --- lib/lua(vendorしたLua本体)が実際にビルド・リンクできること ---
+# pc/CMakeLists.txtと同じくLUA_USE_LINUX等は定義しない(実機は
+# dlopen等のPOSIX機能を持たないため、ANSI構成で確認する。-ldlも不要になる)。
+# 3本のLuaテストで同じオブジェクトを使い回す
 mkdir -p "$OUT/lua_obj"
 for f in "$ROOT"/lib/lua/src/*.c; do
-    gcc -std=gnu99 -g -fsanitize=address,undefined -DLUA_USE_LINUX \
+    gcc -std=gnu99 -g -fsanitize=address,undefined \
         -I "$ROOT/lib/lua/src" -c "$f" -o "$OUT/lua_obj/$(basename "$f" .c).o"
 done
+
 g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_smoke_test.cpp" \
-    "$OUT"/lua_obj/*.o -ldl \
+    "$OUT"/lua_obj/*.o \
     -o "$OUT/lua_smoke_test"
 
 echo ""
 echo "===== lua_smoke_test ====="
 "$OUT/lua_smoke_test"
+
+g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/lua_stdlib_test.cpp" \
+    "$OUT"/lua_obj/*.o \
+    -o "$OUT/lua_stdlib_test"
+
+echo ""
+echo "===== lua_stdlib_test ====="
+"$OUT/lua_stdlib_test"
+
+g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/lua_alloc_budget_test.cpp" \
+    "$OUT"/lua_obj/*.o \
+    -o "$OUT/lua_alloc_budget_test"
+
+echo ""
+echo "===== lua_alloc_budget_test ====="
+"$OUT/lua_alloc_budget_test"

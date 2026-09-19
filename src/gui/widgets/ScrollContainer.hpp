@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/interfaces/IBorderColor.hpp"
 
@@ -49,6 +50,18 @@ class ScrollContainer : public Widget, public IBorderColor {
             w->setParent(this);
             children_.push_back(w);
             this->needs_children_update = true;
+            this->updateContentBounds();
+        }
+
+        // LayoutContainer/GridContainerと同じ理由でoverrideが必要:
+        // 基底のremoveChild()は何もしないため、これが無いままWidgetFunctions::Destroy()等で
+        // 子を個別に破棄すると、children_に残った破棄済みポインタをこのデストラクタが
+        // もう一度deleteして二重解放になる(Lua側からpico.destroy()で子だけ消す経路で
+        // 実際に踏みうる)。
+        void removeChild(Widget* child) override {
+            auto it = std::find(children_.begin(), children_.end(), child);
+            if(it == children_.end()) return;
+            children_.erase(it);
             this->updateContentBounds();
         }
 

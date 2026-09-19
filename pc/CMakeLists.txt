@@ -100,10 +100,23 @@ file(GLOB LGFX_SOURCES CONFIGURE_DEPENDS
     "${LOVYANGFX_DIR}/src/lgfx/v1/panel/Panel_FrameBufferBase.cpp"
     "${LOVYANGFX_DIR}/src/lgfx/v1/platforms/sdl/*.cpp")
 
+# ---- Lua ----
+# git/tarballをFetchContentで取得せず、lib/lua/にvendorした本体をそのままビルドする。
+# 理由はlib/lua/README-pico-os.md参照(要約: Lua本体のsrc/にはmain()を持つ
+# lua.c/luac.cが混在しており、PlatformIOの自動収集にそのまま渡すと実機ビルドで
+# Arduinoコア自身のmain()と衝突する。vendor時点で2ファイルを除いてあるので、
+# PlatformIO(lib/配下の自動収集)とこのCMakeの両方が常に同じソースを見る)。
+#
+# LUA_USE_LINUX等は定義しない。RP2350実機はdlopen等のPOSIX動的ロードを持たないため、
+# PC/WebビルドもLuaの既定(ANSI)構成に揃えて実機と同じ経路にする
+# (dlopenが要る`require`でのCモジュール読み込みは元々使わない)。
+file(GLOB LUA_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/lua/src/*.c")
+
 add_executable(picoos_pc
     "${CMAKE_CURRENT_SOURCE_DIR}/main_pc.cpp"
     ${PICOOS_SOURCES}
-    ${LGFX_SOURCES})
+    ${LGFX_SOURCES}
+    ${LUA_SOURCES})
 
 # LGFX_SDL … LovyanGFX側がSDLパネルを有効にするためのフラグ
 # PICOOS_PC  … pico-os側がPC向けの実装(パネル設定/タッチ取得)へ切り替えるためのフラグ
@@ -113,7 +126,13 @@ target_compile_definitions(picoos_pc PRIVATE LGFX_SDL PICOOS_PC)
 target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"
     "${PICOOS_ROOT}/src"
+    "${PICOOS_ROOT}/lib/lua/src"
     "${LOVYANGFX_DIR}/src")
+
+# LuaのCソースをC++コード([-fpermissive]無しで]警告無く混在ビルドできるよう、
+# 拡張子で明示的に「Cとしてコンパイルする」設定を入れる
+# (CMAKE_CXX_STANDARDがCソースへ波及しないよう、LANGUAGE Cを明示する)
+set_source_files_properties(${LUA_SOURCES} PROPERTIES LANGUAGE C)
 
 if(EMSCRIPTEN)
     # ---- Web(WebAssembly)ビルド ----

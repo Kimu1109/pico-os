@@ -16,28 +16,16 @@
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
 #include "consts.hpp"
-
-namespace {
-    // Lua等から生成する汎用ウィジェットのテキスト容量。
-    // widgets/直下の他の汎用部品(Checkbox/DropdownMenu内部Label等)が既に使っている
-    // PICO_STR_Lと揃えてある。収まらない場合はFixedStringの切り詰めルールに従う。
-    constexpr size_t kDefaultLabelTextCapacity = PICO_STR_L;
-
-    // TextboxはLabel<N>::cppと違い、実際に使われているNの組み合わせ(PICO_STR_LL /
-    // PICO_PATH_LEN)しかTextbox.cpp末尾で明示インスタンス化されていない。
-    // 入力欄用途の汎用Textboxは既存のInputDialog/DictScene検索欄と同じPICO_STR_LLに揃える
-    // (未使用の組み合わせを増やすと明示インスタンス化をもう1行足す必要が出るため)。
-    constexpr size_t kDefaultTextboxCapacity = PICO_STR_LL;
-}
+#include <cstring>
 
 Widget* WidgetFactory::Create(WidgetType type) {
     switch (type) {
         case WidgetType::Button:
             return new Button(0, 0, "");
         case WidgetType::Label:
-            return new Label<kDefaultLabelTextCapacity>(0, 0, "");
+            return new Label<kLabelTextCapacity>(0, 0, "");
         case WidgetType::Textbox:
-            return new Textbox<kDefaultTextboxCapacity>("", 0, 0, 100, 24, true);
+            return new Textbox<kTextboxCapacity>("", 0, 0, 100, 24, true);
         case WidgetType::NumberInput:
             return new NumberInput(0, 0, 60);
         case WidgetType::Checkbox:
@@ -91,4 +79,35 @@ bool WidgetFactory::IsCreatable(WidgetType type) {
         default:
             return false;
     }
+}
+
+bool WidgetFactory::TypeFromName(const char* name, WidgetType& out) {
+    if (!name) return false;
+
+    // WidgetType列挙子と同じ表記(PascalCase)。IsCreatable()の一覧と必ず揃えること
+    static const struct { const char* name; WidgetType type; } kTable[] = {
+        {"Button", WidgetType::Button},
+        {"Label", WidgetType::Label},
+        {"Textbox", WidgetType::Textbox},
+        {"NumberInput", WidgetType::NumberInput},
+        {"Checkbox", WidgetType::Checkbox},
+        {"Icon", WidgetType::Icon},
+        {"Image", WidgetType::Image},
+        {"NumberSlider", WidgetType::NumberSlider},
+        {"ScrollContainer", WidgetType::ScrollContainer},
+        {"ScrollList", WidgetType::ScrollList},
+        {"CanvasRaster", WidgetType::CanvasRaster},
+        {"LayoutContainer", WidgetType::LayoutContainer},
+        {"GridContainer", WidgetType::GridContainer},
+        {"TabBar", WidgetType::TabBar},
+        {"DropdownMenu", WidgetType::DropdownMenu},
+    };
+
+    for (const auto& entry : kTable) {
+        if (std::strcmp(entry.name, name) == 0) {
+            out = entry.type;
+            return true;
+        }
+    }
+    return false;
 }

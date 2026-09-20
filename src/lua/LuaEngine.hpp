@@ -5,6 +5,7 @@
 #include <vector>
 #include "lua.hpp"
 #include "gui/widgets/WidgetID.hpp"
+#include "consts.hpp"
 
 // LuaスクリプトとC++(ウィジェット層)を繋ぐ実行エンジン。1インスタンスが
 // 1つのlua_Stateを持つ(1つのLuaアプリ=1つのLuaEngine、という対応を想定)。
@@ -155,4 +156,37 @@ class LuaEngine {
         static int l_fill_circle(lua_State* L);
         static int l_clear_rect(lua_State* L);
         static int l_draw_text(lua_State* L);
+
+        // 直接描画エリア(クリップ矩形)。OSData::frameへのpico.draw_*/draw_text呼び出しを
+        // この矩形の内側だけに制限する。set_draw_areaを呼びっぱなしでrenderコールバックを
+        // 抜けると、以降そのCanvas以外の描画(他ウィジェットのrender()を含む)まで
+        // 同じ矩形に切り詰められてしまう(OSData::frameは全ウィジェット共有のスプライトで、
+        // クリップ矩形もその1個しか無いため)。この事故を防ぐため、LuaCanvas::render()が
+        // renderコールバックから戻った直後に必ずclearClipRect()する安全弁を入れてある
+        // (LuaCanvas.cpp参照)。スクリプト側がclear_draw_area()を呼び忘れても、
+        // 少なくとも「そのCanvas以外を巻き込む」事故には至らない。
+        static int l_set_draw_area(lua_State* L);
+        static int l_clear_draw_area(lua_State* L);
+
+        // SDカードアクセス。パスはSD_Functions/FileExplorerと同じくSD絶対パス。
+        // OSData::SD_usable==falseの間はどれも「失敗」(false/nil)を返すだけで、
+        // luaL_errorにはしない(SD無しはプログラマの誤りではなく実行時の状態のため)。
+        // sd_read/sd_writeはFsFileを開いたままLuaのAPI(luaL_Buffer/テーブル構築等)を
+        // 呼ぶため、その最中にLua側がメモリ予算超過でエラー(longjmp)するとFsFileの
+        // 後始末(close())が飛ばされ得る。ANSI Cのsetjmp/longjmpベースなので
+        // C++デストラクタも呼ばれない。ごく小さな読み書きの最中に限られる稀な
+        // エッジケースであり、OS内部の90箇所のOOM未対応(CLAUDE.md参照)と同じ
+        // 割り切りで対象外とする。
+        static int l_sd_exists(lua_State* L);
+        static int l_sd_read(lua_State* L);
+        static int l_sd_write(lua_State* L);
+        static int l_sd_remove(lua_State* L);
+        static int l_sd_mkdir(lua_State* L);
+        static int l_sd_list(lua_State* L);
+
+        // pico.sd_read()が1回で読む上限。LuaScene::kMaxScriptBytesと同じ考え方
+        // (Lua state全体の予算(通常200KB)を1ファイルで食い潰さないための頭打ち)。
+        // スクリプト読み込みと違い「打ち切って使う」のは壊れたデータを黙って
+        // 渡すことになるため、超過時は切り詰めずnilを返す(呼び出し側で判別可能)。
+        static constexpr size_t kMaxSdReadBytes = PICO_STR_16KiB;
 };

@@ -19,6 +19,7 @@
 #include "functions/Scene_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "gui/scenes/Scene.hpp"
+#include "storage/SD_IO.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
 
@@ -187,6 +188,14 @@ void LuaEngine::registerApi() {
     registerFn("fill_circle", l_fill_circle);
     registerFn("clear_rect", l_clear_rect);
     registerFn("draw_text", l_draw_text);
+    registerFn("set_draw_area", l_set_draw_area);
+    registerFn("clear_draw_area", l_clear_draw_area);
+    registerFn("sd_exists", l_sd_exists);
+    registerFn("sd_read", l_sd_read);
+    registerFn("sd_write", l_sd_write);
+    registerFn("sd_remove", l_sd_remove);
+    registerFn("sd_mkdir", l_sd_mkdir);
+    registerFn("sd_list", l_sd_list);
     lua_setglobal(L, "pico");
 }
 
@@ -590,4 +599,151 @@ int LuaEngine::l_draw_text(lua_State* L) {
     const int16_t line_h = (int16_t)Label<PICO_STR_M>::GetLineHeight(size);
     PICO_GFX::MarkDirty({x, y, max_w, line_h});
     return 0;
+}
+
+// ---------------- 直接描画エリア ----------------
+// クラスコメント(ヘッダ)参照。OSData::frameのクリップ矩形を差し替えるだけの薄いラッパー。
+
+int LuaEngine::l_set_draw_area(lua_State* L) {
+    const int32_t x = (int32_t)luaL_checkinteger(L, 1);
+    const int32_t y = (int32_t)luaL_checkinteger(L, 2);
+    const int32_t w = (int32_t)luaL_checkinteger(L, 3);
+    const int32_t h = (int32_t)luaL_checkinteger(L, 4);
+
+    OSData::frame->setClipRect(x, y, w, h);
+    return 0;
+}
+
+int LuaEngine::l_clear_draw_area(lua_State*) {
+    OSData::frame->clearClipRect();
+    return 0;
+}
+
+// ---------------- SDカードアクセス ----------------
+// ヘッダのクラスコメント参照。OSData::SD_usable==falseの間はどれも失敗(false/nil)を
+// 返すだけでluaL_errorにはしない。
+
+int LuaEngine::l_sd_exists(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+    lua_pushboolean(L, OSData::SD_usable && OSData::SD.exists(path));
+    return 1;
+}
+
+int LuaEngine::l_sd_read(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+    if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+
+    FsFile f = OSData::SD.open(path, O_RDONLY);
+    if (!f) { lua_pushnil(L); return 1; }
+
+    const size_t file_size = f.fileSize();
+    if (file_size > kMaxSdReadBytes) {
+        f.close();
+        LOG_APP_WARN("pico.sd_read: %s が上限(%uB)を超えています(%uB)",
+            path, (unsigned)kMaxSdReadBytes, (unsigned)file_size);
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // MarkdownView::load()/LuaScene::loadAndRun()と同じく、ファイル全体ぶんの
+    // 一時バッファをヒープへ一度に確保せず、スタック上の小さなチャンクで読み進める
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+    char chunk[256];
+    size_t remaining = file_size;
+    bool ok = true;
+    while (remaining > 0) {
+        const size_t want = (remaining < sizeof(chunk)) ? remaining : sizeof(chunk);
+        const int got = f.read((uint8_t*)chunk, want);
+        if (got <= 0) { ok = false; break; } // 読み取り失敗。読めたところまでで打ち切る
+        luaL_addlstring(&b, chunk, (size_t)got);
+        remaining -= (size_t)got;
+    }
+    f.close();
+
+    if (!ok) {
+        // luaL_Bufferへ積んだ分は使わず捨てる(luaL_pushresultしないままリターンして良い。
+        // Luaのスタック上のuserdataはGCが回収する)
+        lua_pushnil(L);
+        return 1;
+    }
+
+    luaL_pushresult(&b);
+    return 1;
+}
+
+int LuaEngine::l_sd_write(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+    size_t len = 0;
+    const char* data = luaL_checklstring(L, 2, &len);
+    const bool append = lua_toboolean(L, 3);
+
+    if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+
+    FsFile f = OSData::SD.open(path, O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC));
+    if (!f) { lua_pushboolean(L, false); return 1; }
+
+    const bool ok = (len == 0) || (f.write(data, len) == len);
+    f.close();
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+int LuaEngine::l_sd_remove(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+    if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+
+    // FileExplorer::on_press_delete()と同じ判断(ディレクトリなら再帰削除)
+    FsFile f = OSData::SD.open(path);
+    bool ok;
+    if (!f) {
+        ok = false;
+    } else if (f.isDir()) {
+        f.close();
+        ok = PICO_IO::removeRecursive(path);
+    } else {
+        f.close();
+        ok = OSData::SD.remove(path);
+    }
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+int LuaEngine::l_sd_mkdir(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+    if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+
+    lua_pushboolean(L, OSData::SD.mkdir(path));
+    return 1;
+}
+
+int LuaEngine::l_sd_list(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+    if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+
+    FsFile dir = OSData::SD.open(path, O_RDONLY);
+    if (!dir || !dir.isDir()) {
+        if (dir) dir.close();
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // FileExplorer::update_list()と同じ走査方法。{name=..., is_dir=...}の配列を返す
+    lua_newtable(L);
+    int idx = 1;
+    FsFile file;
+    char name[128];
+    while (file.openNext(&dir, O_RDONLY)) {
+        if (file.getName(name, sizeof(name))) {
+            lua_newtable(L);
+            lua_pushstring(L, name);
+            lua_setfield(L, -2, "name");
+            lua_pushboolean(L, file.isDir());
+            lua_setfield(L, -2, "is_dir");
+            lua_rawseti(L, -2, idx++);
+        }
+        file.close();
+    }
+    dir.close();
+    return 1;
 }

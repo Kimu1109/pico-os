@@ -753,6 +753,13 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.draw_pixel(x,y,color)` / `draw_line(x0,y0,x1,y1,color)` / `draw_rect(x,y,w,h,color)` / `fill_rect(...)` / `draw_circle(x,y,r,color)` / `fill_circle(...)` / `clear_rect(x,y,w,h[,color])` / `draw_text(x,y,text[,color[,font_size]])` | `OSData::frame`へ直接描く。**`Canvas`の`render`コールバック内で使うこと**(下記「直接描画」参照)(2026-09-20追加) |
 | `pico.invalidate(id)` | 対象ウィジェットの画面矩形を`needsRender()`でdirty化(次のFlushDirty()で`render()`が呼ばれる)。`Canvas`に限らず任意のウィジェットに使える汎用API(2026-09-20追加) |
 | `pico.mark_dirty(x,y,w,h)` | `PICO_GFX::MarkDirty()`の生の下請け。任意の矩形を直接dirty化したいとき向けの低レベルAPI(2026-09-20追加) |
+| `pico.set_draw_area(x,y,w,h)` / `pico.clear_draw_area()` | `OSData::frame->setClipRect()`/`clearClipRect()`。以降の`pico.draw_*`をこの矩形の内側だけに制限する/解除する(下記「直接描画エリア」参照)(2026-09-20追加) |
+| `pico.sd_exists(path)` | `OSData::SD.exists()`。`bool`を返す(2026-09-20追加) |
+| `pico.sd_read(path)` | ファイル全体を文字列で返す。無い/開けない/上限超過は`nil`(下記「SDカードアクセス」参照)(2026-09-20追加) |
+| `pico.sd_write(path, content[, append])` | 新規作成+上書き(既定)、または`append=true`で追記。成否を`bool`で返す(2026-09-20追加) |
+| `pico.sd_remove(path)` | ファイルなら`SD.remove()`、ディレクトリなら`PICO_IO::removeRecursive()`(`FileExplorer`の削除と同じ判断)(2026-09-20追加) |
+| `pico.sd_mkdir(path)` | `OSData::SD.mkdir()`(2026-09-20追加) |
+| `pico.sd_list(path)` | ディレクトリを列挙し`{ {name=..., is_dir=...}, ... }`の配列を返す。パスが無い/ディレクトリでないなら`nil`(2026-09-20追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -843,6 +850,60 @@ dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ
   期待通りの矩形を`PICO_GFX::MarkDirty()`へ渡すこと」まで(見た目の確認は
   PCビルドの`--shot`で行った。`pc/sdcard/lua/hello.lua`に`Canvas`で顔アイコンを
   描く実例がある)。
+
+### 直接描画エリア(2026-09-20実装)
+
+`pico.set_draw_area(x,y,w,h)`/`pico.clear_draw_area()`は`OSData::frame`の
+クリップ矩形(`setClipRect`/`clearClipRect`、`Label`/`ScrollList`/`MarkdownView`の
+表描画等が既に使っている仕組み)をそのままLuaへ橋渡ししただけの薄いラッパー。
+用途は「`Canvas`の`render`コールバック内で、ウィジェット自身の矩形からはみ出す
+描画を防ぐ」こと(例: 円グラフの角度計算やスクロールする描画内容が、意図せず
+`Canvas`の外まで塗ってしまうのを防ぐガード)。
+
+**`OSData::frame`は全ウィジェット共有の1枚のスプライトで、クリップ矩形も1個しか
+持たない。** そのため`set_draw_area()`を呼んだままLua側の`render`コールバックを
+抜けると、次にそのクリップ矩形が有効なまま他のウィジェットの`render()`が呼ばれ、
+**そのCanvas以外の描画まで巻き込んで切り詰められてしまう**(1フレームだけでなく
+`clearClipRect()`されるまでずっと)。これを防ぐため、`LuaCanvas::render()`が
+`on_render()`(=Luaのrenderコールバック)から戻った直後に無条件で`clearClipRect()`
+する安全弁を入れてある(`LuaCanvas.cpp`)。スクリプト側が`clear_draw_area()`を
+呼び忘れても、「そのフレーム内で他のウィジェットまで巻き込む」事故だけは防げる
+(呼び忘れたスクリプト自身の後続描画がその場で変な形に切り詰まることまでは
+面倒を見ない——そこはスクリプトの責任)。
+
+### SDカードアクセス(2026-09-20実装)
+
+`pico.sd_exists/read/write/remove/mkdir/list`は`SD_Functions`/`FileExplorer`/
+`PICO_IO`が既に持っている操作をLuaへ薄く橋渡ししただけで、新しい判断はほぼ無い。
+
+- **`OSData::SD_usable == false`の間はどれも例外にせず失敗値(`false`/`nil`)を返す**。
+  SD無しは配線の状態であってスクリプトの書き方の誤りではないため、
+  `pico.create`の未知種別のような「プログラマの誤り」枠(`luaL_error`)には入れなかった。
+- **`pico.sd_read`には上限(`kMaxSdReadBytes` = 16KiB、`LuaScene::kMaxScriptBytes`と
+  同じ値)がある。** スクリプト読み込み(`LuaScene`)は上限超過時に「切り詰めて使う」
+  判断をしているが、任意のデータファイルを同じように黙って切り詰めると、
+  スクリプトが壊れたJSON/セーブデータを気付かずに使ってしまう恐れがあるため、
+  **`sd_read`は切り詰めずに`nil`を返して失敗させる**設計にした(スクリプト読み込みとは
+  意図的に判断を変えた点)。
+  読み込み自体は`MarkdownView::load()`/`LuaScene::loadAndRun()`と同じく、
+  ファイル全体ぶんの一時バッファをヒープへ一度に確保せず、256Bのスタックチャンクで
+  `luaL_Buffer`へ読み進める(Lua文字列自体はLua側の確保になるので、
+  `LuaEngine`のメモリ予算(既定200KB)がそのまま上限としても効く)。
+- **`sd_remove`はディレクトリと判明したら`PICO_IO::removeRecursive()`を使う**
+  (`FileExplorer::on_press_delete()`と同じ判断)。
+- **`sd_list`は`{name=..., is_dir=...}`の配列を返す**(`FileExplorer::update_list()`と
+  同じ`openNext()`の走査。ファイル名バッファも同じ128B)。
+  ディレクトリという概念を持たないホストテストのSdFatスタブでは空配列しか返らない
+  ため、`lua_engine_test.cpp`では「クラッシュしないこと」までしか確認できておらず、
+  実際の列挙結果はPCビルド(`pc/compat/SdFat.hは実ファイルシステム`)の`--shot`で
+  確認した(`sd_write`→`sd_read`→`sd_exists`→追記→`sd_list`→`sd_remove`→
+  再度`sd_exists`の一連が期待通りに動くことを確認済み)。
+- **`sd_read`/`sd_write`等はFsFileを開いたままLuaのC API(`luaL_Buffer`/テーブル構築)を
+  呼ぶ。** その最中にLua側のメモリ予算超過でエラー(`longjmp`。ANSI Cのsetjmp/longjmp
+  ベースなのでC++デストラクタは呼ばれない)が起きると、開いたままの`FsFile`の
+  `close()`が飛ばされ得る。ごく小さな読み書きの最中に限られる稀なエッジケースであり、
+  「Lua着手前の受け皿の状態」表にある**OS内部90箇所のOOM未対応と同じ割り切りで
+  対象外**とした(そこまで手を入れる投資対効果は低いと判断)。
 
 ### 実装中に見つけて直した既存のバグ2件
 

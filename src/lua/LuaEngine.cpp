@@ -1,5 +1,6 @@
 #include "lua/LuaEngine.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
@@ -10,11 +11,16 @@
 #include "gui/widgets/LayoutContainer.hpp"
 #include "gui/widgets/GridContainer.hpp"
 #include "gui/widgets/ScrollContainer.hpp"
+#include "gui/widgets/Label.hpp"
+#include "gui/widgets/LuaCanvas.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
+#include "functions/GFX_Functions.hpp"
 #include "gui/scenes/Scene.hpp"
+#include "OS_Data.hpp"
+#include "consts.hpp"
 
 namespace {
     // WidgetIdは32bitで符号無しだが、Luaのlua_Integerは64bit符号付きなので
@@ -112,6 +118,45 @@ bool LuaEngine::Run(const char* script, const char* chunkname) {
     return true;
 }
 
+void LuaEngine::callGlobalNoArgs(const char* name) {
+    if (!L) return;
+
+    lua_getglobal(L, name);
+    if (!lua_isfunction(L, -1)) {
+        lua_pop(L, 1);
+        return;
+    }
+
+    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+        const char* msg = lua_tostring(L, -1);
+        ErrorFunctions::ShowFatal(msg ? msg : "Luaスクリプトの実行時エラー");
+        lua_pop(L, 1);
+    }
+}
+
+void LuaEngine::CallSetup() {
+    callGlobalNoArgs("setup");
+}
+
+void LuaEngine::CallLoop(uint32_t dt_ms) {
+    if (!L || loop_broken_) return;
+
+    lua_getglobal(L, "loop");
+    if (!lua_isfunction(L, -1)) {
+        lua_pop(L, 1);
+        return;
+    }
+
+    lua_pushinteger(L, (lua_Integer)dt_ms);
+    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+        // 毎フレーム同じエラーダイアログが積まれ続けないよう、以降はloop()を呼ばない
+        loop_broken_ = true;
+        const char* msg = lua_tostring(L, -1);
+        ErrorFunctions::ShowFatal(msg ? msg : "loop()の実行時エラー");
+        lua_pop(L, 1);
+    }
+}
+
 // ---------------- pico.* API登録 ----------------
 
 void LuaEngine::registerFn(const char* name, lua_CFunction fn) {
@@ -132,6 +177,16 @@ void LuaEngine::registerApi() {
     registerFn("show_error", l_show_error);
     registerFn("pop", l_pop);
     registerFn("content_rect", l_content_rect);
+    registerFn("invalidate", l_invalidate);
+    registerFn("mark_dirty", l_mark_dirty);
+    registerFn("draw_pixel", l_draw_pixel);
+    registerFn("draw_line", l_draw_line);
+    registerFn("draw_rect", l_draw_rect);
+    registerFn("fill_rect", l_fill_rect);
+    registerFn("draw_circle", l_draw_circle);
+    registerFn("fill_circle", l_fill_circle);
+    registerFn("clear_rect", l_clear_rect);
+    registerFn("draw_text", l_draw_text);
     lua_setglobal(L, "pico");
 }
 
@@ -143,6 +198,7 @@ bool LuaEngine::EventKindFromName(const char* name, EventKind& out) {
         {"press_end", EventKind::PressEnd},
         {"press_move", EventKind::PressMove},
         {"press_out", EventKind::PressOut},
+        {"render", EventKind::Render},
     };
     for (const auto& e : kTable) {
         if (strcmp(e.name, name) == 0) { out = e.kind; return true; }
@@ -176,6 +232,10 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
             break;
         case EventKind::PressOut:
             w->setOnPressOut([this, id]() { this->Dispatch(id, EventKind::PressOut); });
+            break;
+        case EventKind::Render:
+            // l_on()側でLuaCanvasにしか許していないので安全にstatic_castできる
+            static_cast<LuaCanvas*>(w)->setOnRender([this, id]() { this->Dispatch(id, EventKind::Render); });
             break;
     }
 }
@@ -318,6 +378,10 @@ int LuaEngine::l_on(lua_State* L) {
         return luaL_error(L, "pico.on: 未知のイベント '%s'", ev);
     }
 
+    if (kind == EventKind::Render && w->getWidgetType() != WidgetType::LuaCanvas) {
+        return luaL_error(L, "pico.on: 'render'イベントはCanvas(pico.create(\"Canvas\"))のみ対応");
+    }
+
     lua_pushvalue(L, 3);
     const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
@@ -393,4 +457,137 @@ int LuaEngine::l_content_rect(lua_State* L) {
     lua_pushinteger(L, r.w);
     lua_pushinteger(L, r.h);
     return 4;
+}
+
+int LuaEngine::l_invalidate(lua_State* L) {
+    const WidgetId id = (WidgetId)luaL_checkinteger(L, 1);
+
+    Widget* w = WidgetRegistry::Resolve(id);
+    if (!w) return luaL_error(L, "pico.invalidate: 無効なID");
+
+    // needsRender()はそのウィジェットの画面矩形をPICO_GFX::MarkDirty()し、
+    // 次のFlushDirty()でrenderForce()(=LuaCanvasならrenderコールバック)が
+    // 呼ばれるようにする。LuaCanvas以外の任意のウィジェットにも使える汎用API
+    w->needsRender();
+    return 0;
+}
+
+int LuaEngine::l_mark_dirty(lua_State* L) {
+    const int16_t x = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 2);
+    const int16_t w = (int16_t)luaL_checkinteger(L, 3);
+    const int16_t h = (int16_t)luaL_checkinteger(L, 4);
+
+    // PICO_GFX::MarkDirty()の生の下請け。ウィジェットを介さず任意の矩形を
+    // 直接dirty化したい場合向けの低レベルAPI(クラスコメント「直接描画」参照)
+    PICO_GFX::MarkDirty({x, y, w, h});
+    return 0;
+}
+
+// ---------------- 直接描画 ----------------
+// クラスコメント「直接描画」参照。ウィジェットを介さずOSData::frameへ直接描き、
+// 描いた範囲だけPICO_GFX::MarkDirty()する(既存の各種render()実装と同じ流儀)。
+// 色は既存プロパティと同じくPICO 4bitパレット番号をそのままint8_tへキャストするだけで、
+// 範囲チェックはしない(WidgetProperty::Setの色プロパティと同じ)。
+
+int LuaEngine::l_draw_pixel(lua_State* L) {
+    const int16_t x = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 2);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 3);
+
+    OSData::frame->drawPixel(x, y, color);
+    PICO_GFX::MarkDirty({x, y, 1, 1});
+    return 0;
+}
+
+int LuaEngine::l_draw_line(lua_State* L) {
+    const int16_t x0 = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y0 = (int16_t)luaL_checkinteger(L, 2);
+    const int16_t x1 = (int16_t)luaL_checkinteger(L, 3);
+    const int16_t y1 = (int16_t)luaL_checkinteger(L, 4);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 5);
+
+    OSData::frame->drawLine(x0, y0, x1, y1, color);
+    PICO_GFX::MarkDirty({
+        (int16_t)std::min(x0, x1), (int16_t)std::min(y0, y1),
+        (int16_t)(std::abs(x1 - x0) + 1), (int16_t)(std::abs(y1 - y0) + 1)
+    });
+    return 0;
+}
+
+int LuaEngine::l_draw_rect(lua_State* L) {
+    const int16_t x = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 2);
+    const int16_t w = (int16_t)luaL_checkinteger(L, 3);
+    const int16_t h = (int16_t)luaL_checkinteger(L, 4);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 5);
+
+    OSData::frame->drawRect(x, y, w, h, color);
+    PICO_GFX::MarkDirty({x, y, w, h});
+    return 0;
+}
+
+int LuaEngine::l_fill_rect(lua_State* L) {
+    const int16_t x = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 2);
+    const int16_t w = (int16_t)luaL_checkinteger(L, 3);
+    const int16_t h = (int16_t)luaL_checkinteger(L, 4);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 5);
+
+    OSData::frame->fillRect(x, y, w, h, color);
+    PICO_GFX::MarkDirty({x, y, w, h});
+    return 0;
+}
+
+int LuaEngine::l_draw_circle(lua_State* L) {
+    const int16_t x = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 2);
+    const int16_t r = (int16_t)luaL_checkinteger(L, 3);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 4);
+
+    OSData::frame->drawCircle(x, y, r, color);
+    PICO_GFX::MarkDirty({(int16_t)(x - r), (int16_t)(y - r), (int16_t)(r * 2 + 1), (int16_t)(r * 2 + 1)});
+    return 0;
+}
+
+int LuaEngine::l_fill_circle(lua_State* L) {
+    const int16_t x = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 2);
+    const int16_t r = (int16_t)luaL_checkinteger(L, 3);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 4);
+
+    OSData::frame->fillCircle(x, y, r, color);
+    PICO_GFX::MarkDirty({(int16_t)(x - r), (int16_t)(y - r), (int16_t)(r * 2 + 1), (int16_t)(r * 2 + 1)});
+    return 0;
+}
+
+int LuaEngine::l_clear_rect(lua_State* L) {
+    const int16_t x = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 2);
+    const int16_t w = (int16_t)luaL_checkinteger(L, 3);
+    const int16_t h = (int16_t)luaL_checkinteger(L, 4);
+    const int8_t color = (int8_t)luaL_optinteger(L, 5, PICO_BACKGROUND);
+
+    OSData::frame->fillRect(x, y, w, h, color);
+    PICO_GFX::MarkDirty({x, y, w, h});
+    return 0;
+}
+
+int LuaEngine::l_draw_text(lua_State* L) {
+    const int16_t x = (int16_t)luaL_checkinteger(L, 1);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 2);
+    const char* text = luaL_checkstring(L, 3);
+    const int8_t color = (int8_t)luaL_optinteger(L, 4, PICO_FORECOLOR);
+    const FontFn::FontSize size = (FontFn::FontSize)luaL_optinteger(L, 5, (lua_Integer)FontFn::Normal);
+
+    // 右端をはみ出さないよう、幅は残りスクリーン幅に自動で収める(AppGrid::drawName()等と
+    // 同じ理由でmaxWidth=0以下はDrawPlain側がクリップ無しとして扱ってしまうため先に弾く)
+    const int16_t max_w = (int16_t)(SCREEN_WIDTH - x);
+    if (max_w <= 0) return 0;
+
+    Label<PICO_STR_M>::DrawPlain(size, color, x, y, max_w, text);
+
+    const int16_t line_h = (int16_t)Label<PICO_STR_M>::GetLineHeight(size);
+    PICO_GFX::MarkDirty({x, y, max_w, line_h});
+    return 0;
 }

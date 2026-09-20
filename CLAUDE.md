@@ -163,7 +163,7 @@ PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1�
   画面に紐付いていないこと」で、「複数箇所から使われていること」ではない。
 
 ### ウィジェットカタログ
-Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar。
+Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照)。
 
 `LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
 
@@ -744,12 +744,15 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.create(type_name)` | `WidgetFactory::TypeFromName()`→`Create()`。生成物は即`WidgetFunctions::Add()`で登録し、`WidgetId`(整数)を返す |
 | `pico.destroy(id)` | コールバック登録を`PruneCallbacksFor()`で外してから`WidgetFunctions::DestroyLater()`(フレーム境界での遅延削除) |
 | `pico.set(id, name, value)` / `pico.get(id, name)` | `WidgetProperty::IdFromName()`→`Set()`/`Get()`。プロパティ名は`snake_case`の文字列 |
-| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)のみ対応(下記) |
+| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)+`render`(`Canvas`限定、下記「直接描画」参照)に対応(下記) |
 | `pico.add_child(container_id, child_id)` | `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応 |
 | `pico.log(msg)` | `LOG_APP_MSG` |
 | `pico.show_error(msg)` | `ErrorFunctions::ShowFatal()` |
 | `pico.pop()` | `SceneFunctions::Pop()`。`LuaScene`から起動されたアプリがランチャへ戻るためのもの(2026-09-19追加) |
 | `pico.content_rect()` | `Scene::contentRect()`を`x,y,w,h`の4値で返す。ステータスバー分を避けた配置に使う(2026-09-19追加) |
+| `pico.draw_pixel(x,y,color)` / `draw_line(x0,y0,x1,y1,color)` / `draw_rect(x,y,w,h,color)` / `fill_rect(...)` / `draw_circle(x,y,r,color)` / `fill_circle(...)` / `clear_rect(x,y,w,h[,color])` / `draw_text(x,y,text[,color[,font_size]])` | `OSData::frame`へ直接描く。**`Canvas`の`render`コールバック内で使うこと**(下記「直接描画」参照)(2026-09-20追加) |
+| `pico.invalidate(id)` | 対象ウィジェットの画面矩形を`needsRender()`でdirty化(次のFlushDirty()で`render()`が呼ばれる)。`Canvas`に限らず任意のウィジェットに使える汎用API(2026-09-20追加) |
+| `pico.mark_dirty(x,y,w,h)` | `PICO_GFX::MarkDirty()`の生の下請け。任意の矩形を直接dirty化したいとき向けの低レベルAPI(2026-09-20追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -778,6 +781,68 @@ registry ref(関数への参照)をラムダへキャプチャすると16Bを超
 `pico.on()`を何回呼んでもヒープ確保は増えない。実際に鳴らす際は
 `Dispatch(id, kind)`が対応表からrefを引き、`lua_pcall`越しにLua関数を呼ぶ
 (失敗時は`ErrorFunctions::ShowFatal()`)。
+
+### 直接描画(2026-09-20実装、設計を1度やり直した)
+
+**最初の実装(`pico.draw_*`をloop()/コールバックから素で呼ぶだけ)は動かなかった。**
+PCビルドの`--shot`で実際に確認したところ、`pico.fill_rect()`で塗った矩形が
+跡形もなく消えた。原因は`PICO_GFX::FlushDirty()`(`src/functions/GFX_Functions.cpp`)の
+合成方式: dirty矩形ごとに「それを覆うウィジェットが無ければ背景色で塗りつぶし
+(`clear_bg`)、そこに重なるウィジェットだけを`renderForce()`で再描画する」。
+つまり`OSData::frame`はウィジェットが毎回描き直す前提の合成先であって、単純な
+永続キャンバスではない。ウィジェットに属さない場所への直接描画は、次にその領域が
+dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ必ず起きる)に消え、
+誰も描き直さないので二度と戻らない。しかも自分自身の`MarkDirty()`呼び出しが
+その場でこの消去を引き起こすため、「1フレームだけ映って消える」のではなく
+**最初から一切映らない**。
+
+**正しい実装: `LuaCanvas`ウィジェット(`src/gui/widgets/LuaCanvas.hpp/.cpp`)。**
+中身を持たない最小限のウィジェットで、`render()`はLua側が`pico.on(id,"render",fn)`で
+登録したコールバックを呼ぶだけ。`render()`は`FlushDirty()`の合成サイクルの**中**
+(`clear_bg`の後、`pushSprite`の前)で呼ばれるので、そこで`pico.draw_*`を使えば
+正しく合成に参加できる(`CanvasRaster`が自前スプライト+`render()`内`pushSprite`で
+同じ問題を解決しているのと同じ理屈。こちらは私有スプライトを持たず直接
+`OSData::frame`へ描く分だけ軽い)。`RenderMode::OPAQUE`にしてあるので、
+`FlushDirty()`が`render()`を呼ぶ前に自分の矩形を`background_color`で塗りつぶして
+くれる(前景だけ描けばよい)。
+
+- **クラス名は`Canvas`ではなく`LuaCanvas`**(`CanvasRaster.hpp`が既に
+  `namespace Canvas`(`Canvas::Mode`)を使っており衝突するため)。Lua側からは
+  `WidgetFactory::TypeFromName()`で`"Canvas"`として見せている
+  (`pico.create("Canvas")`)。`WidgetType`の一覧・`WidgetFactory`(`Create`/`IsCreatable`/
+  `TypeFromName`)・`WidgetProperty::Set()`(`w`/`h`)の3箇所に登録してある
+  (他の汎用ウィジェットと同じ追加パターン)。
+- **`pico.on(id, "render", fn)`は`Canvas`にしか登録できない**(`l_on()`が
+  `w->getWidgetType() != WidgetType::LuaCanvas`なら`pico.set`と同様エラーにする)。
+  コールバックの配線自体は既存の`press_start`等と同じ「`LuaEngine*`+`WidgetId`だけ
+  キャプチャ」方式(`EventKind::Render`を追加しただけ)。
+- **再描画のリクエストは2段構え**:
+  - `pico.invalidate(id)` — そのウィジェットの`needsRender()`を呼ぶ(画面矩形を
+    まるごとdirty化)。`Canvas`に限らず任意のウィジェットに使える汎用API。
+  - `pico.mark_dirty(x,y,w,h)` — `PICO_GFX::MarkDirty()`の生の下請け。`Canvas`の
+    一部だけ再描画したい等、細かい制御が要る場合向けの低レベルAPI。
+  静的な内容は**生成直後のウィジェットが初期状態でdirty**なので、追加の
+  呼び出し無しで次の`FlushDirty()`に自動で1回`render()`が呼ばれる。アニメーション等
+  毎フレーム描き直したい場合だけ`loop(dt)`から`pico.invalidate()`すればよい
+  (「変化が無ければ再描画しない」という他ウィジェットと同じ省エネ方針)。
+- **座標は`pico.content_rect()`と同じ絶対スクリーン座標、色は既存プロパティ
+  (`border_color`等)と同じPICO 4bitパレット番号(0〜15)**。範囲チェックはせず
+  `int8_t`へキャストするだけ(`WidgetProperty::Set()`の色プロパティと同じ割り切り)。
+- `draw_text`だけは幅が要る(dirty矩形の計算とはみ出し防止のため)。専用の幅計算APIを
+  足す代わりに、**残りスクリーン幅(`SCREEN_WIDTH - x`)へ自動で収める**簡易な実装にした
+  (`AppGrid::drawName()`のmaxWidthクリップと同じ考え方)。
+- **`pico.draw_*`系が呼ぶ`MarkDirty()`は、`render`コールバック内では実質no-op**
+  (`FlushDirty()`が合成中`isDirtyDeactivates=true`にしているため)。無害だが
+  意味も無いので、`Canvas`の外(loop()等)から`pico.draw_*`を単独で呼んでも
+  表示は持続しない点は変わらない——**`pico.draw_*`は必ず`render`コールバックの
+  中で使うこと**。
+- ホストテストは`lua_engine_test.cpp`。`OSData::frame`はホストテスト用スタブ
+  (実際には描画しないダミー実装)で、`canvas->renderForce()`を直接呼んで
+  `FlushDirty()`の呼び出しを模している。確認できるのは「クラッシュしないこと」
+  「`render`コールバックが実際に呼ばれること」「`pico.invalidate`/`mark_dirty`が
+  期待通りの矩形を`PICO_GFX::MarkDirty()`へ渡すこと」まで(見た目の確認は
+  PCビルドの`--shot`で行った。`pc/sdcard/lua/hello.lua`に`Canvas`で顔アイコンを
+  描く実例がある)。
 
 ### 実装中に見つけて直した既存のバグ2件
 
@@ -838,8 +903,16 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   ウィジェット固有のコールバックは未対応(`WidgetProperty`と同じ「まず共通部分だけ」の考え方)。
 - **命令単位の実行時間制御(`lua_sethook`)は無い**。`StepBudget`との組み合わせ含め、
   実際に重い/無限ループするLuaアプリを書いてみてから決める。
-- **1フレームごとにLua側の「update」関数を呼ぶ仕組みは無い**。`ClocksScene`のような
-  「毎フレーム状態を進める」Luaアプリを書く場合に必要になる。
+- ~~1フレームごとにLua側の「update」関数を呼ぶ仕組みは無い~~ → **解消済み(2026-09-20)**。
+  `LuaEngine::CallSetup()`/`CallLoop(dt_ms)`がArduino風の`setup()`/`loop(dt)`を
+  呼ぶ(どちらも定義は任意)。`LuaScene::onEnter()`がRun()成功後に`CallSetup()`を
+  1回、新設した`LuaScene::onUpdate()`が毎フレーム`CallLoop(dt)`を呼ぶ
+  (dtは`millis()`差分。`ClocksScene`と同じ計測方法)。**loop()が一度エラーを
+  出すと以降は自動的に呼ばれなくなる**(`LuaEngine`内の`loop_broken_`フラグ。
+  毎フレーム同じエラーダイアログが積まれるのを防ぐ安全弁で、setup()側はRun()と
+  同じく1回きりなので不要)。ホストテストは`lua_engine_test.cpp`(CallSetup/CallLoop単体)
+  と`lua_scene_test.cpp`(LuaScene経由の結合テスト)。サンプル`pc/sdcard/lua/hello.lua`に
+  経過秒数を表示するloop()の実例を追加した。
 - コンテナからの明示的な子の取り外し(`pico.remove_child`)は無い(`pico.destroy`で
   子ごと破棄する経路しか無い)。
 

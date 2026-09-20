@@ -15,6 +15,7 @@
 #include "gui/widgets/GridContainer.hpp"
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
+#include "gui/widgets/LuaCanvas.hpp"
 #include "consts.hpp"
 #include <cstring>
 
@@ -52,6 +53,8 @@ Widget* WidgetFactory::Create(WidgetType type) {
             return new TabBar(0, 0, 100, 24);
         case WidgetType::DropdownMenu:
             return new DropdownMenu(0, 0, 100);
+        case WidgetType::LuaCanvas:
+            return new LuaCanvas(0, 0, 50, 50);
         default:
             // アプリ/OS専用ウィジェットとダイアログはここでは作らない
             return nullptr;
@@ -75,6 +78,7 @@ bool WidgetFactory::IsCreatable(WidgetType type) {
         case WidgetType::GridContainer:
         case WidgetType::TabBar:
         case WidgetType::DropdownMenu:
+        case WidgetType::LuaCanvas:
             return true;
         default:
             return false;
@@ -101,6 +105,9 @@ bool WidgetFactory::TypeFromName(const char* name, WidgetType& out) {
         {"GridContainer", WidgetType::GridContainer},
         {"TabBar", WidgetType::TabBar},
         {"DropdownMenu", WidgetType::DropdownMenu},
+        // C++側のクラス名はLuaCanvas(CanvasRaster.hppの`namespace Canvas`との
+        // 衝突回避)だが、Lua側からは単に"Canvas"として見せる
+        {"Canvas", WidgetType::LuaCanvas},
     };
 
     for (const auto& entry : kTable) {

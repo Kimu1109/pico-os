@@ -269,6 +269,7 @@ g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
@@ -303,6 +304,7 @@ g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
@@ -408,6 +410,7 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
@@ -454,6 +457,7 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \

@@ -27,6 +27,7 @@ enum class WidgetType : uint8_t {
     KeyboardNum,
     Label,
     LayoutContainer,
+    LuaCanvas,
     MarkdownView,
     MsgDialog,
     NumberInput,

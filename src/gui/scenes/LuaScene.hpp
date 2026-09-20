@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "gui/scenes/Scene.hpp"
 #include "lua/LuaEngine.hpp"
 #include "util/FixedString.hpp"
@@ -13,6 +15,12 @@
 // ウィジェットの生成・削除・イベント配線は全てスクリプト側がpico.*を呼んで行うため、
 // このシーン自身が直接newするウィジェットは無い。onEnter/onExitはLuaEngineの
 // 生成/破棄と、スクリプトのSDからの読み込みだけを見る。
+//
+// Arduino風のsetup()/loop(dt)にも対応する。onEnter()でRun()(トップレベルの
+// チャンク実行)が成功した場合のみsetup()を1回呼び、以降onUpdate()から毎フレーム
+// loop(dt)を呼ぶ(dtは前フレームからの経過ミリ秒)。どちらも定義されていなければ
+// 何もしない(必須ではない)。loop()がエラーを出した場合はLuaEngine側の安全弁で
+// 以降自動的に呼ばれなくなる(毎フレームのエラーダイアログを防ぐため)。
 //
 // ランチャへ戻る手段(戻るボタン等)はスクリプト側がpico.create("Button")+
 // pico.on(id, "press_start", ...)でpico.pop()を呼ぶ形で自前で用意する
@@ -35,10 +43,17 @@ class LuaScene : public Scene {
         FixedString<PICO_PATH_LEN> script_path;
         LuaEngine* engine = nullptr;
 
-        // スクリプトをSDから読み込み、engineへ渡して実行する。
-        // 読み込み失敗(ファイルが無い等)やLuaEngine::Run()の失敗はErrorFunctions側で
-        // 既にダイアログ表示済みなので、ここでは追加のエラー表示をしない
-        void loadAndRun();
+        // Run()(トップレベルのチャンク実行)が成功したかどうか。失敗時はsetup()/loop()を
+        // 呼ばない(engineの状態が中途半端な可能性があり、追加のエラーダイアログも避けたい)
+        bool script_ok = false;
+
+        // loop()へ渡す経過時間(ms)の計算用。ClocksScene等と同じくmillis()の差分で積む
+        unsigned long last_tick_ms = 0;
+
+        // スクリプトをSDから読み込み、engineへ渡して実行する。戻り値はRun()の成否
+        // (=setup()を呼んでよいか)。読み込み失敗(ファイルが無い等)やLuaEngine::Run()の
+        // 失敗はErrorFunctions側で既にダイアログ表示済みなので、ここでは追加のエラー表示をしない
+        bool loadAndRun();
 
     public:
         explicit LuaScene(const char* path) { script_path.assign(path); }
@@ -47,6 +62,7 @@ class LuaScene : public Scene {
 
         void onEnter() override;
         void onExit() override;
+        void onUpdate() override;
 
         // テスト・デバッグ用の脱出口(LuaEngine::raw()と同じ位置づけ)。
         // アクティブでない間(onExit()後)はnullptr

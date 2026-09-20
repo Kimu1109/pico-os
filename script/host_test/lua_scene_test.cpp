@@ -136,6 +136,10 @@ int main(){
     check(WidgetProperty::Get(count_label, WidgetProperty::Id::Text, v) && v.s == "2",
           "タップに応じてpico.set()経由でラベルの表示も更新される");
 
+    // setup()/loop()を定義していないスクリプトでも、onUpdate()は安全にno-opであること
+    lua_scene->onUpdate();
+    check(true, "onUpdate(): setup/loop未定義でもクラッシュしない(no-op)");
+
     // ---- 戻るボタン: pico.pop()で実際にランチャへ戻れること ----
     lua_getglobal(L, "back_button");
     const WidgetId back_id = (WidgetId)lua_tointeger(L, -1);
@@ -185,6 +189,52 @@ int main(){
     }
 
     check(SceneFunctions::Current() == launcher, "最終的にランチャへ戻っている");
+
+    // ---- Arduino風 setup()/loop(): onEnter()後にsetup()が1回、onUpdate()毎にloop()が呼ばれる ----
+    {
+        static const char* kSetupLoopScript = R"LUA(
+            setup_calls = 0
+            loop_calls = 0
+            function setup()
+                setup_calls = setup_calls + 1
+            end
+            function loop(dt)
+                loop_calls = loop_calls + 1
+            end
+        )LUA";
+        HostSd::files["/lua/setup_loop.lua"] = kSetupLoopScript;
+        SceneFunctions::Push(new LuaScene("/lua/setup_loop.lua"));
+        SceneFunctions::Update();
+
+        LuaScene* sl_scene = static_cast<LuaScene*>(SceneFunctions::Current());
+        check(sl_scene != nullptr && sl_scene->getEngine() != nullptr,
+              "setup/loop: LuaSceneへ遷移しengineが生成される");
+        lua_State* sl_L = sl_scene->getEngine()->raw();
+
+        lua_getglobal(sl_L, "setup_calls");
+        check(lua_tointeger(sl_L, -1) == 1, "onEnter(): setup()が1回呼ばれる");
+        lua_pop(sl_L, 1);
+
+        // SceneFunctions::Update()は保留中の遷移適用に続けて、その場でcurrent->onUpdate()も
+        // 呼ぶ(Push直後のUpdate()内で既にloop()が1回呼ばれている点に注意)。
+        // 実機のmain.cpp本流と同じ経路(SceneFunctions::Update()を毎フレーム呼ぶ)で
+        // 追加の3フレーム分を進める
+        lua_getglobal(sl_L, "loop_calls");
+        check(lua_tointeger(sl_L, -1) == 1,
+              "Push直後のUpdate(): 遷移適用と同じ呼び出しでloop()も1回実行される");
+        lua_pop(sl_L, 1);
+
+        SceneFunctions::Update();
+        SceneFunctions::Update();
+        SceneFunctions::Update();
+        lua_getglobal(sl_L, "loop_calls");
+        check(lua_tointeger(sl_L, -1) == 4, "Update(): 毎フレーム呼ぶたびにloop()が実行される");
+        lua_pop(sl_L, 1);
+
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+        check(SceneFunctions::Current() == launcher, "setup/loopテスト後: ランチャへ戻っている");
+    }
 
     // ---- 後片付け ----
     WidgetFunctions::ClearSceneWidgets();

@@ -3,6 +3,8 @@
 #include "functions/Log_Functions.hpp"
 #include "functions/Error_Functions.hpp"
 
+#include "Arduino.h"
+
 void LuaScene::onEnter() {
     // 通常はonExit()で必ずnullptrへ戻るが、念のための保険(前回の後始末漏れがあっても
     // 二重確保のままにしない)
@@ -10,6 +12,8 @@ void LuaScene::onEnter() {
         delete engine;
         engine = nullptr;
     }
+
+    script_ok = false;
 
     engine = new LuaEngine(kLuaBudgetBytes);
     if (!engine || !engine->valid()) {
@@ -19,14 +23,19 @@ void LuaScene::onEnter() {
         return;
     }
 
-    loadAndRun();
+    script_ok = loadAndRun();
+    if (script_ok) {
+        engine->CallSetup();
+    }
+
+    last_tick_ms = millis();
 }
 
-void LuaScene::loadAndRun() {
+bool LuaScene::loadAndRun() {
     FsFile f = OSData::SD.open(script_path.c_str());
     if (!f) {
         ErrorFunctions::ShowFatal("スクリプトを開けません(パスを確認してください)");
-        return;
+        return false;
     }
 
     const size_t file_size = f.fileSize();
@@ -51,7 +60,18 @@ void LuaScene::loadAndRun() {
     }
     f.close();
 
-    engine->Run(script_source.c_str(), script_path.c_str());
+    return engine->Run(script_source.c_str(), script_path.c_str());
+}
+
+void LuaScene::onUpdate() {
+    if (!engine || !script_ok) return;
+
+    const unsigned long now = millis();
+    // 符号なしの引き算なのでmillis()の一周(約49日)をまたいでも正しい差になる
+    const unsigned long dt = now - last_tick_ms;
+    last_tick_ms = now;
+
+    engine->CallLoop((uint32_t)dt);
 }
 
 void LuaScene::onExit() {

@@ -17,6 +17,29 @@
 // このクラス自体が新しく持つのは「pico.*」というLua向けAPI表と、
 // タップ等のコールバックをLuaの関数へ中継するための小さな対応表だけ。
 //
+// 直接描画(pico.draw_*/fill_*/clear_rect): ウィジェットを介さず、全ウィジェットが
+// 描いている共有フレーム(OSData::frame)へ直接描く。座標はpico.content_rect()と同じ
+// 絶対スクリーン座標、色は既存プロパティ(border_color等)と同じPICO 4bitパレット番号(0〜15)。
+//
+// 【重要】loop()/コールバックから素で呼んでも表示は持続しない。PICO_GFX::FlushDirty()は
+// dirty矩形ごとに「それを覆うウィジェットが無ければ背景色で塗りつぶしてから、
+// そこに重なるウィジェットだけを再描画する」ため、ウィジェットに属さない場所への
+// 直接描画は次にその領域がdirtyになった瞬間(シーン遷移時の全画面dirty化を含め、
+// ほぼ必ず起きる)に消え、誰も描き直さないので二度と戻らない(PCビルドの--shotで
+// fill_rectが跡形もなく消えることを確認済み)。
+//
+// 正しく持続させるには LuaCanvas(pico.create("Canvas")) に乗せ、
+// pico.on(canvas_id, "render", fn) で登録したコールバックの中からpico.draw_*を
+// 呼ぶこと。render()はFlushDirty()の合成サイクルの中で呼ばれるので、そのたび
+// 全部を描き直せば正しく生き残る(CanvasRasterが自前スプライトで同じ問題を
+// 解決しているのと同じ理屈)。再描画のリクエストは:
+//   - pico.invalidate(id)      … そのウィジェットの矩形をdirty化(次のFlushDirty()で
+//                                 render()経由のコールバックが呼ばれる)
+//   - pico.mark_dirty(x,y,w,h) … PICO_GFX::MarkDirty()の生の下請け。Canvasに限らず
+//                                 任意の矩形を直接dirty化したいとき向けの低レベルAPI
+// 静的な内容は生成直後の自動描画(新規ウィジェットは初期状態でdirty)だけで映るので、
+// 毎フレーム描き直す必要が無い。アニメーションはloop()から都度invalidate()すればよい。
+//
 // メモリ予算: コンストラクタへ渡すbudget_bytesがこのLua state全体(state本体+
 // 標準ライブラリ+スクリプト+スクリプトが確保する全テーブル等)の上限になる
 // (script/host_test/lua_alloc_budget_test.cppで安全性を検証済み)。
@@ -53,8 +76,23 @@ class LuaEngine {
         // (呼び出し元は追加のエラー表示をしなくてよい)。
         bool Run(const char* script, const char* chunkname = "script");
 
+        // Arduino風のsetup()/loop()呼び出し。グローバル関数として定義されていなければ
+        // 何もしない(必須ではない)。
+        //
+        // CallSetup(): Run()成功後に1回だけ呼ぶ想定。setup()自体がエラーだった場合は
+        // Run()と同じくErrorFunctions::ShowFatal()で表示するだけで、以降loop()を
+        // 呼び続けるかどうかは呼び出し側(LuaScene)の判断に委ねる。
+        //
+        // CallLoop(): 毎フレーム呼ぶ想定。setup()と違い「毎フレーム同じエラーが
+        // 出続ける」ことがあり得るため、一度エラーになったら内部で以降のloop()
+        // 呼び出しを自動的に止める(でなければMsgDialogが毎フレーム積まれて画面が壊れる)。
+        // dt_msは前回の呼び出しからの経過ミリ秒で、loop(dt)としてLua側へ渡す。
+        void CallSetup();
+        void CallLoop(uint32_t dt_ms);
+
     private:
-        enum class EventKind : uint8_t { PressStart, PressEnd, PressMove, PressOut };
+        // Render: LuaCanvas限定。他4種はWidget基底が全種別共通で持つ(BindCallback参照)
+        enum class EventKind : uint8_t { PressStart, PressEnd, PressMove, PressOut, Render };
 
         struct CallbackBinding {
             WidgetId id;
@@ -66,7 +104,15 @@ class LuaEngine {
         size_t budget_;
         size_t used_ = 0;
 
+        // loop()が一度エラーを出したら以降は呼ばない(毎フレーム同じエラーダイアログが
+        // 積まれるのを防ぐ安全弁)。setup()側はRun()と同じく1回きりなので不要
+        bool loop_broken_ = false;
+
         std::vector<CallbackBinding> callbacks_;
+
+        // グローバル関数nameを引数無しで呼ぶ(setup()向け)。定義されていなければ何もしない。
+        // エラー時はErrorFunctions::ShowFatal()で表示する
+        void callGlobalNoArgs(const char* name);
 
         static void* Alloc(void* ud, void* ptr, size_t osize, size_t nsize);
         static int InitTrampoline(lua_State* L);
@@ -94,4 +140,19 @@ class LuaEngine {
         static int l_show_error(lua_State* L);
         static int l_pop(lua_State* L);
         static int l_content_rect(lua_State* L);
+        static int l_invalidate(lua_State* L);
+        static int l_mark_dirty(lua_State* L);
+
+        // 直接描画。クラスコメント「直接描画」参照。いずれも描画後に自分の描いた
+        // 範囲をPICO_GFX::MarkDirty()する(LuaCanvasのrenderコールバック内で呼ぶ
+        // 場合はFlushDirty()側がisDirtyDeactivates=trueにしている最中なので無害な
+        // no-opになる。loop()等から素で呼んだ場合は表示が持続しない点に注意)
+        static int l_draw_pixel(lua_State* L);
+        static int l_draw_line(lua_State* L);
+        static int l_draw_rect(lua_State* L);
+        static int l_fill_rect(lua_State* L);
+        static int l_draw_circle(lua_State* L);
+        static int l_fill_circle(lua_State* L);
+        static int l_clear_rect(lua_State* L);
+        static int l_draw_text(lua_State* L);
 };

@@ -10,6 +10,16 @@
 //                  (ScrollContainer::removeChild()追加の回帰確認)
 //   スクリプトの構文/実行時エラー → ErrorFunctions::ShowFatal()でダイアログが出る
 //   極小メモリ予算 → LuaEngineの構築自体が安全に失敗する(クラッシュしない)
+//   CallSetup/CallLoop → Arduino風setup()/loop(dt)の呼び出しと、
+//                         loop()のエラー後は以降呼ばれなくなる安全弁
+//   pico.draw_*/fill_*/clear_rect/draw_text → OSData::frame(スタブ)への呼び出しが
+//                         クラッシュしないことと、描いた範囲がPICO_GFX::MarkDirty()
+//                         へ正しく渡ることの確認
+//   pico.create("Canvas") + pico.on(id,"render",fn) → render()経由でLuaの
+//                         renderコールバックが呼ばれること、Canvas以外への
+//                         "render"登録はエラーになること
+//   pico.invalidate/pico.mark_dirty → 前者はウィジェットの画面矩形を、後者は
+//                         指定した矩形をそのままPICO_GFX::MarkDirty()へ渡すこと
 #include "lua/LuaEngine.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
@@ -22,7 +32,10 @@
 #include <cstdio>
 
 // ---- モック(widget_factory_test.cppと同じ方針) ----
-void PICO_GFX::MarkDirty(const Rect&){}
+// MarkDirty()だけは直接描画テストのために最後に渡された矩形を記録する(他のテストは
+// 呼び出し回数/中身を見ないのでNoOpのままでも影響しない)
+static Rect g_last_dirty{0, 0, 0, 0};
+void PICO_GFX::MarkDirty(const Rect& r){ g_last_dirty = r; }
 void PICO_GFX::Setup(){}
 void PICO_GFX::FlushDirty(){}
 void PICO_GFX::DrawDialogBackground(){}
@@ -208,6 +221,181 @@ int main(){
         dialog->causeOnClosed(true);
     }
     WidgetFunctions::ProcessPendingDeletes();
+
+    // ---- Arduino風 setup()/loop(dt) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            setup_called = 0
+            loop_called = 0
+            last_dt = -1
+            function setup()
+                setup_called = setup_called + 1
+            end
+            function loop(dt)
+                loop_called = loop_called + 1
+                last_dt = dt
+            end
+        )LUA", "setup_loop_def");
+        check(ok, "setup/loop: 定義スクリプトの実行が成功する");
+
+        engine.CallSetup();
+        lua_getglobal(L, "setup_called");
+        check((int)lua_tointeger(L, -1) == 1, "CallSetup: setup()が1回呼ばれる");
+        lua_pop(L, 1);
+
+        engine.CallLoop(16);
+        engine.CallLoop(17);
+        lua_getglobal(L, "loop_called");
+        check((int)lua_tointeger(L, -1) == 2, "CallLoop: 呼ぶたびにloop()が実行される");
+        lua_pop(L, 1);
+        lua_getglobal(L, "last_dt");
+        check((int)lua_tointeger(L, -1) == 17, "CallLoop: dt引数がLua側へ渡る");
+        lua_pop(L, 1);
+
+        // setup/loopが定義されていなくてもno-op(クラッシュしない)であることを別のengineで確認
+        LuaEngine engine2(64 * 1024);
+        check(engine2.valid(), "setup/loop無し確認用: 2つ目のLuaEngineを構築");
+        if (engine2.valid()) {
+            const bool ok2 = engine2.Run("x = 1", "no_setup_loop");
+            check(ok2, "setup/loop無しスクリプトの実行成功");
+            engine2.CallSetup();
+            engine2.CallLoop(10);
+            check(true, "CallSetup/CallLoop: 未定義でもクラッシュしない(no-op)");
+        }
+    }
+
+    // ---- loop()のエラーは1回で以降呼ばれなくなる(毎フレームダイアログ防止の安全弁) ----
+    {
+        const size_t dialogs_before2 = WidgetFunctions::dialog_roots.size();
+        const bool ok = engine.Run(R"LUA(
+            loop_err_calls = 0
+            function loop(dt)
+                loop_err_calls = loop_err_calls + 1
+                error("わざとのloopエラー")
+            end
+        )LUA", "loop_err_def");
+        check(ok, "loop()エラー用スクリプトの定義自体は成功する");
+
+        engine.CallLoop(1);
+        check(WidgetFunctions::dialog_roots.size() == dialogs_before2 + 1,
+              "CallLoop: エラー時にErrorFunctions::ShowFatal()でダイアログが出る");
+        engine.CallLoop(1);
+        engine.CallLoop(1);
+        lua_getglobal(L, "loop_err_calls");
+        check((int)lua_tointeger(L, -1) == 1,
+              "CallLoop: 一度エラーになったら以降呼ばれない(毎フレームダイアログ防止の安全弁)");
+        lua_pop(L, 1);
+
+        while (WidgetFunctions::dialog_roots.size() > dialogs_before2) {
+            MsgDialog* dialog = static_cast<MsgDialog*>(WidgetFunctions::dialog_roots.back());
+            dialog->causeOnClosed(true);
+            WidgetFunctions::ProcessPendingDeletes();
+        }
+    }
+
+    // ---- 直接描画: OSData::frame(スタブ)への呼び出しと、描いた範囲のMarkDirty()を確認 ----
+    {
+        bool ok = engine.Run("pico.draw_pixel(10, 20, 5)", "draw_pixel_test");
+        check(ok, "pico.draw_pixel: エラーなく実行できる");
+        check(g_last_dirty.x == 10 && g_last_dirty.y == 20 && g_last_dirty.w == 1 && g_last_dirty.h == 1,
+              "pico.draw_pixel: 1x1のdirty矩形が登録される");
+
+        ok = engine.Run("pico.draw_line(0, 0, 10, 20, 5)", "draw_line_test");
+        check(ok, "pico.draw_line: エラーなく実行できる");
+        check(g_last_dirty.x == 0 && g_last_dirty.y == 0 && g_last_dirty.w == 11 && g_last_dirty.h == 21,
+              "pico.draw_line: 始点・終点のバウンディングボックスがdirty矩形になる");
+
+        ok = engine.Run("pico.draw_rect(1, 2, 30, 40, 5)", "draw_rect_test");
+        check(ok, "pico.draw_rect: エラーなく実行できる");
+        check(g_last_dirty.x == 1 && g_last_dirty.y == 2 && g_last_dirty.w == 30 && g_last_dirty.h == 40,
+              "pico.draw_rect: 指定した矩形がそのままdirtyになる");
+
+        ok = engine.Run("pico.fill_rect(1, 2, 30, 40, 5)", "fill_rect_test");
+        check(ok, "pico.fill_rect: エラーなく実行できる");
+
+        ok = engine.Run("pico.draw_circle(50, 60, 10, 5)", "draw_circle_test");
+        check(ok, "pico.draw_circle: エラーなく実行できる");
+        check(g_last_dirty.x == 40 && g_last_dirty.y == 50 && g_last_dirty.w == 21 && g_last_dirty.h == 21,
+              "pico.draw_circle: 半径ぶん広げた矩形がdirtyになる");
+
+        ok = engine.Run("pico.fill_circle(50, 60, 10, 5)", "fill_circle_test");
+        check(ok, "pico.fill_circle: エラーなく実行できる");
+
+        ok = engine.Run("pico.clear_rect(1, 2, 30, 40)", "clear_rect_test");
+        check(ok, "pico.clear_rect: 色を省略してもエラーなく実行できる(既定色PICO_BACKGROUND)");
+
+        ok = engine.Run("pico.draw_text(5, 6, 'hi')", "draw_text_test");
+        check(ok, "pico.draw_text: エラーなく実行できる(色/フォントサイズも省略可)");
+        check(g_last_dirty.x == 5 && g_last_dirty.y == 6 && g_last_dirty.h > 0,
+              "pico.draw_text: 描画位置を起点にした矩形がdirtyになる");
+
+        // 右端ぎりぎり/画面外のx指定でも安全に何もしない(maxWidth<=0を弾く経路)
+        ok = engine.Run("pico.draw_text(1000, 6, 'off screen')", "draw_text_offscreen_test");
+        check(ok, "pico.draw_text: 画面外のx指定でもクラッシュせず何もしない");
+    }
+
+    // ---- LuaCanvas: pico.create("Canvas") + pico.on(id,"render",fn) ----
+    WidgetId canvas_id = WidgetIdTools::Invalid();
+    {
+        const bool ok = engine.Run(R"LUA(
+            canvas_id = pico.create("Canvas")
+            pico.set(canvas_id, "x", 5)
+            pico.set(canvas_id, "y", 6)
+            pico.set(canvas_id, "w", 40)
+            pico.set(canvas_id, "h", 30)
+            render_calls = 0
+            pico.on(canvas_id, "render", function(id)
+                render_calls = render_calls + 1
+                pico.fill_rect(0, 0, 1, 1, 0) -- renderコールバック内でも直接描画APIを呼べる
+            end)
+        )LUA", "canvas_setup_test");
+        check(ok, "pico.create(\"Canvas\") + pico.on(...,\"render\",...)の登録が成功する");
+
+        lua_getglobal(L, "canvas_id");
+        canvas_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        Widget* canvas = WidgetRegistry::Resolve(canvas_id);
+        check(canvas != nullptr, "pico.create(\"Canvas\"): 実体が引ける");
+        check(canvas != nullptr && canvas->getWidgetType() == WidgetType::LuaCanvas,
+              "pico.create(\"Canvas\"): WidgetType::LuaCanvasとして生成される");
+        check(canvas != nullptr && canvas->getX() == 5 && canvas->getY() == 6 &&
+                  canvas->getW() == 40 && canvas->getH() == 30,
+              "pico.set: x/y/w/hがCanvasにも効く");
+
+        if (canvas) canvas->renderForce(); // FlushDirty()がdirty矩形に重なるウィジェットへ行うforce呼び出しを模す
+        lua_getglobal(L, "render_calls");
+        check((int)lua_tointeger(L, -1) == 1, "render()経由でLuaのrenderコールバックが呼ばれる");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn2 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn2, "render", function() end) end)
+            check(bound == false, "pico.on: 'render'イベントはCanvas以外だとエラー")
+        )LUA", "render_on_non_canvas_test");
+        check(guard_ok, "render非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- pico.invalidate / pico.mark_dirty ----
+    {
+        Widget* canvas = WidgetRegistry::Resolve(canvas_id);
+        const Rect canvas_screen = canvas ? canvas->getScreenRect() : Rect{0, 0, 0, 0};
+
+        const bool ok = engine.Run("pico.invalidate(canvas_id)", "invalidate_test");
+        check(ok, "pico.invalidate: エラーなく実行できる");
+        check(canvas != nullptr &&
+                  g_last_dirty.x == canvas_screen.x && g_last_dirty.y == canvas_screen.y &&
+                  g_last_dirty.w == canvas_screen.w && g_last_dirty.h == canvas_screen.h,
+              "pico.invalidate: 対象ウィジェットの画面矩形がdirtyになる");
+
+        const bool ok2 = engine.Run("pico.mark_dirty(11, 22, 33, 44)", "mark_dirty_test");
+        check(ok2, "pico.mark_dirty: エラーなく実行できる");
+        check(g_last_dirty.x == 11 && g_last_dirty.y == 22 && g_last_dirty.w == 33 && g_last_dirty.h == 44,
+              "pico.mark_dirty: 指定した矩形がそのままPICO_GFX::MarkDirty()へ渡る");
+
+        const bool bad_id = engine.Run("pico.invalidate(999999)", "invalidate_bad_id_test");
+        check(!bad_id, "pico.invalidate: 無効なIDはエラー");
+    }
 
     // ---- 後片付け(残りのウィジェットも解放し、ASanのリーク検出を素通りさせない) ----
     // 自前でループを回すとDestroy()が子孫ごと解放した後のダングリングポインタを

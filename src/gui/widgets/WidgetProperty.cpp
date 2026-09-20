@@ -18,6 +18,7 @@
 #include "gui/widgets/GridContainer.hpp"
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
+#include "gui/widgets/LuaCanvas.hpp"
 
 using WidgetProperty::Id;
 using WidgetProperty::Type;
@@ -540,6 +541,18 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
                 case Id::SelectedIndex:
                     if (value.type != Type::Int) return false;
                     dm->setSelectedIndex(value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::LuaCanvas: {
+            LuaCanvas* c = static_cast<LuaCanvas*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    c->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    c->setH(value.i); return true;
                 default: return false;
             }
         }

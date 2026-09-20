@@ -29,13 +29,3 @@ PlatformIOの自動ソース収集(Library Dependency Finder)は`src/`以下の`
 2. `src/`の中身を、`lua.c`と`luac.c`を除いて`lib/lua/src/`へ丸ごと置き換え
 3. `library.json`の`version`を更新
 4. `sh script/host_test/run.sh`とPCビルド(`pc/README.md`)で問題ないか確認
-
-## 実機ビルド(PlatformIO)未検証について
-
-このリモート実行環境にはRP2350向けのPlatformIOボード定義が同梱されておらず、
-`lib/lua`が実際に`pio run`でビルド・リンクできることを確認できていない
-(CLAUDE.md「RAM/Flash予算」の実機未確認事項と同種の制約)。
-PC/Webビルド(`pc/CMakeLists.txt`)側では同じソースを実際にビルド・リンクし、
-`lua_newstate`/`luaL_openlibs`/`lua_close`が動くことまで確認済み。
-実機で最初にビルドする際は、`lib_deps`のLovyanGFX/XPT2046と一緒にLuaも
-リンクが通ることを確認すること。

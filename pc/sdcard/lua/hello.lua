@@ -33,6 +33,27 @@ pico.on(inc_button, "press_start", function()
     pico.set(count_label, "text", "count: " .. count)
 end)
 
+-- 画像のデモ: pico.image_load()は`.pimg`をこのLuaアプリ専用の固定長スロットへ
+-- デコードして整数ハンドルを返す(ウィジェットではないのでpico.destroyの対象外)。
+-- 描画は他のpico.draw_*と同じくCanvasのrenderコールバックの中で行うこと
+-- (そうしないと次にその領域がdirtyになった瞬間に消える)。
+local hello_img = pico.image_load("/img/hello.pimg")
+local img_w, img_h = 48, 24 -- 読み込みに失敗した場合のフォールバック値
+if hello_img then
+    img_w, img_h = pico.image_size(hello_img)
+end
+
+local image_canvas = pico.create("Canvas")
+pico.set(image_canvas, "x", x + margin)
+pico.set(image_canvas, "y", y + margin + 190)
+pico.set(image_canvas, "w", img_w)
+pico.set(image_canvas, "h", img_h)
+pico.on(image_canvas, "render", function()
+    if hello_img then
+        pico.draw_image(hello_img, x + margin, y + margin + 190)
+    end
+end)
+
 local back_button = pico.create("Button")
 pico.set(back_button, "x", x + margin)
 pico.set(back_button, "y", y + margin + 120)
@@ -40,7 +61,26 @@ pico.set(back_button, "w", 80)
 pico.set(back_button, "h", 30)
 pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function()
+    -- 呼び忘れてもLuaEngine破棄(onExit())で自動回収されるが、使い終わった
+    -- タイミングが分かっているならこうして早めに解放できる、という例
+    if hello_img then
+        pico.image_free(hello_img)
+        hello_img = nil
+    end
     pico.pop()
+end)
+
+-- シーン制御のデモ: pico.push_scene()は別のLuaスクリプトへ画面遷移する
+-- (SceneFunctions::Pushの薄いラッパー。戻り先はスタックへ積まれるのでpico.pop()で戻れる)。
+-- 続きはhello_sub.lua/hello_sub2.lua(pico.change_scene()/pico.launch_app()の実演)へ
+local sub_button = pico.create("Button")
+pico.set(sub_button, "x", x + margin)
+pico.set(sub_button, "y", y + margin + 230)
+pico.set(sub_button, "w", 100)
+pico.set(sub_button, "h", 30)
+pico.set(sub_button, "text", "サブ画面へ")
+pico.on(sub_button, "press_start", function()
+    pico.push_scene("/lua/hello_sub.lua")
 end)
 
 local elapsed_ms = 0

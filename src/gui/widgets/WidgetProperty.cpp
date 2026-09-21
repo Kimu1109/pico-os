@@ -19,6 +19,10 @@
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/widgets/dialogs/InputDialog.hpp"
+#include "gui/widgets/dialogs/FileSaveDialog.hpp"
+#include "gui/widgets/dialogs/FileSelectDialog.hpp"
+#include "gui/widgets/dialogs/ColorDialog.hpp"
 
 using WidgetProperty::Id;
 using WidgetProperty::Type;
@@ -221,6 +225,45 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
             DropdownMenu* dm = static_cast<DropdownMenu*>(widget);
             switch (id) {
                 case Id::SelectedIndex: out = Value::MakeInt(dm->getSelectedIndex()); return true;
+                default: return false;
+            }
+        }
+        // 以下4種はWidgetFactory非対応(ダイアログ。コンストラクタが必須引数を取るため
+        // pico.show_xxx()経由でのみ生成される。上のクラスコメント参照)だが、
+        // 閉じた結果をpico.get()で読めるようにするためGet/Set両方の対象にしてある
+        case WidgetType::InputDialog: {
+            InputDialog* d = static_cast<InputDialog*>(widget);
+            switch (id) {
+                // pico.show_input()で開いたダイアログの入力文字列(is_ok==trueのときのみ
+                // 意味を持つ。setOnClosed()のbool単体では読めないためこちらで受け取る)
+                case Id::Text: out = Value::MakeStr(d->getInput().c_str()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::FileSaveDialog: {
+            FileSaveDialog* d = static_cast<FileSaveDialog*>(widget);
+            switch (id) {
+                case Id::Path: out = Value::MakeStr(d->getSavePath()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::FileSelectDialog: {
+            FileSelectDialog* d = static_cast<FileSelectDialog*>(widget);
+            switch (id) {
+                case Id::Path: {
+                    const char* p = d->getSelectedPath();
+                    if (!p) return false; // 未選択のままOKされた場合はnil(Luaの慣習)
+                    out = Value::MakeStr(p);
+                    return true;
+                }
+                default: return false;
+            }
+        }
+        case WidgetType::ColorDialog: {
+            ColorDialog* d = static_cast<ColorDialog*>(widget);
+            switch (id) {
+                // 未選択は-1(ColorDialog側の仕様通りそのまま返す)
+                case Id::Value: out = Value::MakeInt(d->getSelectedColor()); return true;
                 default: return false;
             }
         }
@@ -556,6 +599,21 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
                 default: return false;
             }
         }
+        case WidgetType::InputDialog: {
+            InputDialog* d = static_cast<InputDialog*>(widget);
+            switch (id) {
+                case Id::Text:
+                    if (value.type != Type::Str) return false;
+                    d->setInput(value.s.c_str()); return true;
+                case Id::IsSingleLine:
+                    if (value.type != Type::Bool) return false;
+                    d->setIsSingleLine(value.b); return true;
+                default: return false;
+            }
+        }
+        // FileSaveDialog/FileSelectDialog/ColorDialogは開始ディレクトリ/選択色を
+        // 生成後に差し替えるsetterを持たない(コンストラクタでのみ決まる)ため、
+        // Set()側の対応は無し(Get()参照)。
         default:
             return false;
     }

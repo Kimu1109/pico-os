@@ -66,6 +66,20 @@ void AppFunctions::Launch(int index){
     LOG_SYS_MSG("アプリ起動: %s", entry->name.c_str());
 }
 
+bool AppFunctions::LaunchByName(const char* name){
+    if(!name) return false;
+
+    for(int i = 0; i < app_count; i++){
+        if(apps[i].name == name){
+            Launch(i);
+            return true;
+        }
+    }
+
+    LOG_SYS_WARN("App LaunchByName: 該当するアプリが見つかりません (%s)", name);
+    return false;
+}
+
 void AppFunctions::Clear(){
     for(int i = 0; i < kMaxApps; i++){
         apps[i] = AppEntry{};

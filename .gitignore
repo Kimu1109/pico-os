@@ -8,3 +8,5 @@
 pc/build/
 pc/build-web/
 pc/sdcard/sys/log.txt
+# Claude Codeのworktree隔離エージェント(isolation: "worktree")が作る一時チェックアウト
+.claude/worktrees/

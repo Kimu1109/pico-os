@@ -760,6 +760,18 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.sd_remove(path)` | ファイルなら`SD.remove()`、ディレクトリなら`PICO_IO::removeRecursive()`(`FileExplorer`の削除と同じ判断)(2026-09-20追加) |
 | `pico.sd_mkdir(path)` | `OSData::SD.mkdir()`(2026-09-20追加) |
 | `pico.sd_list(path)` | ディレクトリを列挙し`{ {name=..., is_dir=...}, ... }`の配列を返す。パスが無い/ディレクトリでないなら`nil`(2026-09-20追加) |
+| `pico.image_load(path)` | `.pimg`をデコードして整数ハンドルを返す。失敗(SD無し/パス不正/不正な`.pimg`/上限超過)は`nil`(下記「画像」参照)(2026-09-21追加) |
+| `pico.image_size(handle)` | 読み込んだ画像の`width, height`を返す。無効なハンドルはエラー(2026-09-21追加) |
+| `pico.draw_image(handle, x, y)` | 画像を描く。他の`pico.draw_*`と同じく**`Canvas`の`render`コールバック内で使うこと**。無効なハンドルはエラー(2026-09-21追加) |
+| `pico.image_free(handle)` | 画像を明示的に解放する。無効/解放済みハンドルは`pico.destroy`と同じく黙って無視(2026-09-21追加) |
+| `pico.push_scene(path)` / `pico.change_scene(path)` | 別のLuaスクリプトへ`SceneFunctions::Push/Change`する(下記「シーン制御」参照)(2026-09-21追加) |
+| `pico.launch_app(name)` | `AppFunctions::LaunchByName()`経由で登録簿の任意のアプリ(C++製含む)へ`Push`する。見つかれば`true`、無ければ`false`(下記「シーン制御」参照)(2026-09-21追加) |
+| `pico.show_message(text, cancel_text, ok_text)` | `MsgDialog`を表示する。閉じた結果は`pico.on(id,"closed",fn)`で受ける(下記「ダイアログ」参照)(2026-09-21追加) |
+| `pico.show_input(label, initial_text, is_single_line)` | `InputDialog`を表示する。入力文字列は`pico.get(id,"text")`で読む(2026-09-21追加) |
+| `pico.show_file_save(start_dir)` / `pico.show_file_select(start_dir)` | `FileSaveDialog`/`FileSelectDialog`を表示する。選択パスは`pico.get(id,"path")`で読む(未選択は`nil`)(2026-09-21追加) |
+| `pico.show_color()` | `ColorDialog`(4×4パレット)を表示する。選択色は`pico.get(id,"value")`で読む(未選択は`-1`)(2026-09-21追加) |
+| `pico.http_request(method, url, body, content_type, callback)` | 非同期HTTPリクエスト(GET/POST/PUT/PATCH/DELETE)。同時に1本まで。`callback(ok, status_code, body_or_nil, error_or_nil)`(下記「ネットワーク」参照)(2026-09-21追加) |
+| `pico.http_cancel()` | 進行中の`pico.http_request()`を取り消す(2026-09-21追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -904,6 +916,222 @@ dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ
   `close()`が飛ばされ得る。ごく小さな読み書きの最中に限られる稀なエッジケースであり、
   「Lua着手前の受け皿の状態」表にある**OS内部90箇所のOOM未対応と同じ割り切りで
   対象外**とした(そこまで手を入れる投資対効果は低いと判断)。
+
+### 画像(2026-09-21実装)
+
+`pico.image_load/image_size/draw_image/image_free`。ウィジェット(`Image`)を介さず、
+`.pimg`(`script/generate_pimg.py`生成の4bpp+RLE独自形式。詳細は上の「MarkdownView実装詳細」
+「文書内の参照(画像)」参照)をLuaスクリプトが直接デコードして持ち、描いて、解放できるようにした。
+
+- **デコードは新規実装せず、既存の`IconRender::LoadPimgToSprite()`/`DrawPimgSprite()`
+  (`src/gui/icons/icon_render.h/.cpp`)をそのまま呼ぶ。** `Image`ウィジェットの
+  `onRAM=true`のとき(`Image::updateSprite()`)と全く同じ経路で、`.pimg`以外の画像形式
+  (PNG/BMP等)は最初から対象外(このOSでは`.pimg`だけが唯一の画像形式)。
+- **ウィジェットではないので`WidgetRegistry`は使わず、`LuaEngine`インスタンスごとの
+  固定長スロット配列(`images_`、上限`kMaxLuaImages=4`)を持つ。** MarkdownViewの
+  `labelPool`/`imagePool`と同じ「固定長配列」志向で、任意個数の`std::vector<Widget*>`的な
+  管理はしていない。ハンドルは`WidgetId`と同じ発想の
+  「generation(上位)+index(下位、1始まり)」パック整数だが、この配列専用のスコープなので
+  `WidgetId`のような32bit全体を型ビットまで使う配分は真似ていない。
+- **generationは`WidgetRegistry`と同じく、解放(`pico.image_free`)のたびに1つ進める
+  (使用中かどうかは別の`ImageSlot::used`フラグで見る)。** 実装時に一度、
+  「解放時にgenerationを0(未使用)へ戻し、次のロード時に1から数え直す」という誤った
+  設計で書いてしまい、解放直後に同じスロットを再利用すると**前回発行分と全く同じ
+  ハンドル値を再発行してしまう**(解放済みの古いハンドルが新しい画像を指してしまう
+  use-after-free相当のバグ)ことに気づいて直した。`WidgetRegistry::Unregister()`が
+  「`widget=nullptr`にするがgenerationは戻さず進める」設計にしている理由と同じ。
+  `script/host_test/lua_engine_test.cpp`に「解放→再利用→古いハンドルがエラーのまま」
+  の回帰テストを入れてある。
+- **デコード後のピクセルバッファ(`LGFX_Sprite::createSprite()`)は`LuaEngine`の
+  `budget_bytes`(Lua自体のアロケータ予算)には乗らない、素のOSヒープ確保**
+  (`WidgetFactory::Create()`が作るウィジェット本体と同じ扱い)。そのため画像専用に
+  別枠の上限を設けた: 同時に保持できる枚数(`kMaxLuaImages=4`)と合計バイト数
+  (`kMaxLuaImageBytes=64KiB`、4bppなので`width*height/2`で概算)の両方。
+  超過時は`pico.image_load`が`nil`を返すだけ(`pico.sd_read`等と同じく、SD絡みの
+  失敗は`luaL_error`にしない方針を踏襲)。
+- **`LGFX_Sprite`は`images_`配列の値メンバなので、`pico.image_free()`を呼び忘れて
+  スクリプトが終了しても、`LuaEngine`自体の破棄(`LuaScene::onExit()`)で
+  デストラクタが確保分を回収する(リークしない)。** `pico.image_free()`はそれを
+  待たず即座に解放したい場合向けの明示API(`pc/sdcard/lua/hello.lua`の「戻る」
+  ボタンでの呼び出しがその実例)。
+- **`draw_image`は他の`pico.draw_*`と同じ「直接描画」の一種**で、`Canvas`
+  (`pico.create("Canvas")`)の`render`コールバック内で使うこと(そうしないと
+  次にその領域がdirtyになった瞬間に消える。詳細は「直接描画」参照)。描画後は
+  画像サイズぶんを`PICO_GFX::MarkDirty()`する。
+- ホストテストは`lua_engine_test.cpp`に追加(SD無し時のnil、正常系のハンドル発行・
+  サイズ取得・描画・dirty矩形、存在しないパス/壊れたヘッダのnil、スロット枯渇、
+  解放→再利用→古いハンドルの無効化、二重解放の無害化、合計バイト数上限)。
+  実際の見た目は`pc/sdcard/lua/hello.lua`に画像描画のデモを追加し、PCビルドの
+  `--shot`で`.pimg`(`pc/sdcard/img/hello.pimg`、`examples/img/sample.pimg`と同じ
+  48x24の色帯サンプル)が実際に描けることを確認済み。
+
+### シーン制御(2026-09-21実装)
+
+`pico.push_scene/change_scene/launch_app`。それまで`pico.pop()`(`SceneFunctions::Pop()`)
+しか無く、Luaスクリプトは「自分を起動した画面へ戻る」以外の画面遷移ができなかった。
+C++側の`SceneFunctions::Change/Push/Pop`に相当する3つを揃え、Lua同士の複数画面アプリと、
+Luaから既存アプリ(C++製含む)へ飛ぶことの両方をカバーした。
+
+- **`pico.push_scene(path)` / `pico.change_scene(path)`**: `new LuaScene(path)`を
+  `SceneFunctions::Push()`/`Change()`へそのまま渡すだけ。Lua側が構築できるScene型は
+  `LuaScene`(パス文字列1つのコンストラクタ)だけなので、この2つは**Lua同士の画面遷移**
+  (複数画面のLuaアプリを組む)専用になる。`LuaScene(path)`のコンストラクタは
+  `FixedString`へパスをコピーするだけで失敗し得ないため、`pico.pop()`と同じく戻り値なし
+  (要求を登録するだけで、実際の遷移・エラー表示(ファイル不在等)は次のフレーム境界の
+  `LuaScene::onEnter()`まで保留される。呼び出し中の今のLuaEngine自身がその場で
+  破棄されることはない)。
+- **`pico.launch_app(name)`**: 新設した`AppFunctions::LaunchByName(name)`
+  (`App_Functions.hpp/.cpp`、完全一致で登録簿を線形探索して見つかれば`Launch(index)`を
+  呼ぶだけの薄いラッパー)経由で、ランチャの登録簿にある**任意のアプリ(C++製含む)**へ
+  `Push`する。名前が見つからなければ`false`(呼び出し元がスクリプト側のtypoに気づける
+  ようにするための戻り値。他は`AppFunctions::Launch()`をC++コードが直接呼ぶ場合と同じで、
+  実際のPush自体が成功するか(スタック上限等)までは見ていない)。
+- **`push_scene`は新しいシーンをスタックへ退避するのでPop()で戻れる。`change_scene`は
+  スタックを消費せず現在のシーンを置き換えるだけ**(`SceneFunctions::Change`と同じ)。
+  そのため`change_scene`で入った画面から`pop()`すると、`change_scene`を呼んだ側の画面を
+  飛び越して、**その手前**(スタックの先頭)へ直接戻る。PCビルドの`--shot`で
+  「push_scene→change_scene→pop」の一連を実際に確認済み(下記サンプル参照)。
+- **LuaSceneはPop()で戻ってきたときスクリプトを最初から実行し直す**(既存の仕様、上の
+  「`LuaScene`」参照)。そのため`pico.launch_app()`をスクリプトのトップレベルで
+  無条件に呼ぶと、そのシーンへPop()で戻ってくるたびに再度発火してしまう
+  (実装時にホストテストでこれを踏んだ。ボタンの`press_start`等のイベント越しに
+  呼ぶ分には問題ない。`push_scene`/`change_scene`も同じ理由でボタン経由が無難)。
+- ホストテストは`lua_scene_test.cpp`に追加(`lua_engine_test.cpp`ではなくこちら。
+  実際にシーン遷移まで起こす必要があるため、既存の`FakeLauncherScene`+
+  `SceneFunctions::Setup/Update`の結合テスト環境にそのまま乗せた)。
+  push_scene/change_sceneは別のLuaスクリプトへ実際に遷移すること・要求がフレーム境界まで
+  保留されること・スタック深さの増減(push_sceneは+1、change_sceneは変化なし)、
+  launch_appは登録簿のC++製アプリ(テスト用の`OtherAppScene`)へ実際に遷移すること・
+  未登録名は`false`を返すことを確認している。
+  実際の見た目はPCビルドの`--shot`で確認した:
+  `pc/sdcard/lua/hello.lua`に追加した「サブ画面へ」ボタンから`pc/sdcard/lua/hello_sub.lua`
+  (`pico.push_scene()`の飛び先。「電卓を開く」で`pico.launch_app("電卓")`、
+  「置き換えへ」で`pico.change_scene()`)→`pc/sdcard/lua/hello_sub2.lua`
+  (`pico.change_scene()`の飛び先)という3ファイル構成のデモ一式を作り、
+  push_scene→launch_app(電卓が実際に開く)、push_scene→change_scene→pop
+  (hello_sub.luaを飛び越してhello.luaへ直接戻る)の両方を確認した。
+
+### ダイアログ(2026-09-21実装)
+
+`pico.show_message/show_input/show_file_save/show_file_select/show_color`。
+`MsgDialog`/`InputDialog`/`FileSaveDialog`/`FileSelectDialog`/`ColorDialog`を
+Luaスクリプトから表示できるようにした(`SearchDialog`はMarkdownブラウザの検索フロー
+専用の状態を前提にしているため対象外)。
+
+- **`WidgetFactory`は経由しない。** 上記5種は`WidgetFactory::Create()`が対応する
+  汎用部品15種の対象外で(コンストラクタが型ごとに必須の引数を取り、「位置0,0・
+  空文字列」といった無難な既定値では作れない)、代わりに各ダイアログ専用の
+  `pico.show_xxx()`を用意した。中身は`new Xxx(...)`→`WidgetFunctions::AddDialog()`
+  →`setVisible(true)`→`WireDialogClosed()`という同じ手順で、生成した`WidgetId`を返す。
+  `WidgetId`の発行自体(`Widget::getId()`の初回呼び出しで`WidgetRegistry::Register()`)は
+  どの`Widget`サブクラスでも汎用に効くため、`WidgetFactory`を経由しなくても
+  `pico.on()`/`pico.get()`から安全に参照できる。
+- **閉じた通知は共通の`pico.on(id, "closed", function(id, is_ok) ... end)`で受ける。**
+  新設した`EventKind::Closed`は既存の`callbacks_`(WidgetId+種別→Lua registry ref)に
+  そのまま乗せたが、**実際のC++側コールバック配線(`setOnClosed`/`setOnClose`)は
+  生成時点(`WireDialogClosed()`)で済ませてしまう**点が他の4イベントと違う。
+  理由: ダイアログはモーダルなので、`pico.on()`を呼び忘れても画面に居座り続けては
+  いけない。生成時に必ず配線しておくことで、**`pico.on()`の有無に関わらず閉じたら
+  `WidgetFunctions::DestroyLater()`されることを保証**し、`pico.on()`は「あれば
+  追加でLuaへも通知する」という上乗せの位置づけにした(`BindCallback()`の
+  `EventKind::Closed`ケースは`callbacks_`への登録だけ行い、ウィジェット側の配線はしない)。
+  `DispatchClosed(id, is_ok)`は`Dispatch(id, kind)`と別メソッドにしてある
+  (`is_ok`を2つ目のLua引数として渡す必要があり、既存の「WidgetId 1引数固定」の
+  `Dispatch()`とは呼び出し規約が違うため)。
+- **`MsgDialog`/`InputDialog`は`setOnClosed()`、`FileSaveDialog`/`FileSelectDialog`/
+  `ColorDialog`は`setOnClose()`と、綴りが割れている**(実装時に気づいた既存コードの
+  不統一。直さず`WireDialogClosed()`側の`switch`で吸収した)。
+- **`InputDialog`の入力文字列/`FileSaveDialog`・`FileSelectDialog`の選択パス/
+  `ColorDialog`の選択色は、`Dispatch`の引数に積まず`WidgetProperty`経由で読む設計**
+  にした(`pico.get(id, "text"/"path"/"value")`)。`Dispatch`をダイアログの具象型に
+  依存させたくなかったため。`WidgetProperty::Get/Set()`はこれまで
+  `WidgetFactory::IsCreatable()`の15種だけが対象だったが、この4種(`MsgDialog`は
+  `is_ok`だけで完結するので追加のプロパティ無し)を相乗りさせた。`text`プロパティは
+  既存のButton/Label/Textbox等と同じId(`InputDialog::getInput()`/`setInput()`に
+  マップ)、`path`は既存のImage用Id(`FileSaveDialog::getSavePath()`/
+  `FileSelectDialog::getSelectedPath()`。後者は未選択なら`nullptr`→Lua側は`nil`)、
+  `value`は既存のNumberSlider用Id(`ColorDialog::getSelectedColor()`。未選択は`-1`、
+  型はNumberSliderと違いInt)を流用しており、新規のプロパティId追加は無し。
+- ホストテストは`lua_engine_test.cpp`に追加(ハンドル発行・`dialog_roots`登録・
+  `closed`のis_ok往復・`pico.get()`での結果読み出し・`pico.on()`を呼ばなくても
+  自動的に破棄されること・`closed`イベントがダイアログ以外だとエラーになること)。
+  `FileSaveDialog`/`FileSelectDialog`はホストテストのSdFatスタブがディレクトリの
+  実体を持たない(パス→内容のフラットな`map`)ため`getSavePath()`/`getSelectedPath()`の
+  中身までは確認できず、生成・キャンセル・自動破棄までに留めた。実際の選択結果と
+  見た目はPCビルドの`--shot`で確認済み(`show_message`/`show_input`(初期値の
+  プレフィル込み)/`show_color`(実際にスワイプ相当のタップでスウォッチ→OKを押し、
+  `pico.get(id,"value")`で選択色が読めることまで)。
+  なお、この作業でFileExplorerを初めてホストテストへリンクすることになり、
+  `script/host_test/stubs/SdFat.h`に`isDirectory()`(`isDir()`とは別綴りのSdFat API。
+  `pc/compat/SdFat.h`には両方あるがスタブは`isDir()`だけだった)が無いことに気づいて追加した。
+
+### ネットワーク(2026-09-21実装)
+
+`pico.http_request(method, url, body, content_type, callback)` / `pico.http_cancel()`。
+既存の`Http_Get`(`src/task/Http_Get.hpp`)はMarkdownブラウザのキャッシュ用途に
+特化していて汎用のHTTPクライアントとしては使えなかった(GET専用でメソッドが
+`sendRequestLine()`にリテラル`"GET "`で埋め込まれている/送信ボディの概念が無い/
+`HttpBodyGate`が`statusCode()==200`以外の本文を黙って捨てる/200・304以外を
+一律`FAILED`扱いにする)ため、新設の`HttpRequest`(`src/task/Http_Request.hpp/.cpp`)を
+別クラスとして用意した。
+
+- **`HttpGet`とコード骨格(接続/送信/受信ループ・タイムアウト・リダイレクト追跡)は
+  ほぼ同じにしてある**(実績のある形をそのまま踏襲。差分だけ抜き出す共通基底への
+  リファクタは、Markdownブラウザの動いているHTTP経路を壊すリスクの方が大きいと
+  判断して見送った)。**違うのは以下3点だけ**:
+  1. メソッドが`enum class Method { GET, POST, PUT, PATCH, Delete }`で選べる
+  2. 送信ボディ+`Content-Type`を指定でき、`Content-Length`ヘッダを自分で付けて
+     ボディを送る(`HttpResponse`が読む*応答*の`Content-Length`とは別物)
+  3. **`HttpBodyGate`を挟まない**(`res.reset(sink_)`で直結)ため、
+     ステータスコードによらず本文がsinkへ渡る。Task自体の成功/失敗も「応答を
+     最後まで読めたか」だけで判定し、ステータスコードの意味(2xx/4xx/5xx)は
+     呼び出し側(Luaスクリプト)へ渡す。**Markdownブラウザ側の判断(200/304だけ
+     成功、他は本文を捨てる)はそのまま`HttpGet`に残しており、この変更の影響は
+     受けない**
+- **GETだけリダイレクトを自動で追う。** POST等はボディを送り直すべきか
+  (RFCの解釈も一律ではない)を決め打ちせず、3xxが返ってきてもそのまま
+  呼び出し側(Luaスクリプト)へ渡す判断にした。
+- **`HttpGet`/`HttpRequest`はどちらも`PICO_Task`の全体リストには登録されない。**
+  実際の利用者(`DocFetch`/`DocSearch`)は`HttpGet`を値メンバとして持ち、
+  自分の`update()`から毎フレーム`http.update()`を呼ぶ設計になっている
+  (`NetworkScan`だけが`PICO_Task::Add()`でグローバルリストに乗る例外)。
+  同じ流儀で、`LuaEngine`が`HttpRequest`を1本(`http_`、後述の理由で遅延`new`)
+  保持し、**`LuaScene::onUpdate()`から毎フレーム`engine->UpdateHttp()`を呼んで
+  進める**(`setup()`/`loop()`の定義有無に関わらず無条件に呼ぶ。`CallLoop()`
+  とは別の独立した呼び出しにしてあり、`pico.*`のネットワーク進行を
+  Arduino風`loop(dt)`の意味論と混ぜていない)。
+- **同時に実行できるリクエストは1本まで。** `HttpState::callback_ref`が
+  `LUA_NOREF`かどうかで「進行中か」を判定する。進行中に`pico.http_request()`を
+  呼んでも`luaL_error`にはせず`false`を返すだけ(SD無し等と同じ「実行時の状態」
+  枠)。完了時は**Lua側コールバックを呼ぶ前に`callback_ref`を`LUA_NOREF`へ戻す**
+  ことで、コールバック自身の中から次の`pico.http_request()`を呼べるようにしてある
+  (チェイン可能)。
+- **`http_`(`HttpRequest`+受信バッファ+送信ボディの控え。受信/送信とも
+  `kMaxHttpResponseBytes`/`kMaxHttpBodyBytes`=16KiBで頭打ち)は初回の
+  `pico.http_request()`呼び出しまで`new`しない。** ネットワークを使わない
+  Lua アプリ(大半を占める見込み)に32KiB(16KiB×2)の固定バッファを常時
+  負担させたくないための遅延生成(`struct HttpState`はヘッダでは前方宣言のみ)。
+- **送信ボディ/Content-Typeは呼び出し時にLuaEngine側の`FixedString`へコピーする。**
+  `HttpRequest::begin()`は`const void* body`/`const char* content_type`を
+  非所有ポインタ(`IHttpSink*`と同じ約束)で受け取るが、Luaスタック上の一時的な
+  文字列をそのまま渡すと、`Connecting`フェーズが次のフレームへ回る(`HttpGet`と
+  同じ設計。フレーム時間をならすため)間にポインタが無効になりかねない。
+  `HttpState::body_buf`/`content_type_buf`へ一度コピーしてから渡すことで解決した。
+- **受信本文はNULを含み得るため、Luaへ渡す際は`lua_pushlstring()`(長さ明示)を使い、
+  `lua_pushstring()`(strlen前提)にしていない。**
+- ホストテストは`lua_engine_test.cpp`に追加。**実ソケットに一切触れない範囲
+  (未知のメソッド/不正なURL/https/送信ボディの上限超過/同時実行数の上限)での
+  早期拒否がすべて`false`(またはpcall経由でエラー)になることだけを確認**しており
+  (`HttpGet`と同様、実際の通信を伴う検証は`run.sh`(ASan、ネットワーク無し)の
+  対象外。`run_net.sh`と同じ「本物のソケット」区分に属する)、送信ボディの上限
+  テストで16KiB超の文字列を作る都合上、それまでの全テストで積み上がった共有
+  `engine`の予算と衝突しないよう専用の`LuaEngine`を使っている。
+  **実際の通信はPCビルドで、使い捨てのローカルHTTPサーバ(`http.server`)を相手に
+  動作確認した**(このリポジトリには含めていない検証用スクリプト): GET成功
+  (status=200、本文が読める)、POST(送信ボディ+Content-Typeが実際にサーバへ届き、
+  エコーされた応答本文が読める)、**404応答でも本文が読めること**
+  (`HttpGet`の`HttpBodyGate`なら本文が捨てられていたはずの経路で、`HttpRequest`が
+  正しく本文を渡せていることの確認)の3パターンを確認済み。
 
 ### 実装中に見つけて直した既存のバグ2件
 

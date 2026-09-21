@@ -4,8 +4,15 @@
 // LuaEngine自体の動作はlua_engine_test.cppで検証済みなので、ここではLuaScene固有の
 // 配線(SDからの読み込み、シーンのライフサイクルに合わせたLuaEngineの生成/破棄、
 // pico.pop()で実際にランチャへ戻れること)に絞って確認する。
+//
+// pico.push_scene/change_scene/launch_app(シーン制御。2026-09-21追加)も、
+// SceneFunctions::Push/Change/AppFunctions::LaunchByName経由で実際のシーン遷移まで
+// 起こすため、ここで検証する(push_scene/change_scene: 別のLuaスクリプトへ実際に
+// 遷移すること・スタック深さの増減・要求がフレーム境界まで保留されること。
+// launch_app: 登録簿のC++製アプリへ実際に遷移すること・未登録名はfalseを返すこと)。
 #include "gui/scenes/LuaScene.hpp"
 #include "functions/Scene_Functions.hpp"
+#include "functions/App_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -50,6 +57,14 @@ class FakeLauncherScene : public Scene {
         int enter_count = 0;
         const char* getName() const override { return "FakeLauncher"; }
         void onEnter() override { enter_count++; }
+};
+
+// ---- pico.launch_app()の飛び先役(C++製アプリを模した最小限のシーン) ----
+static int other_app_enter_count = 0;
+class OtherAppScene : public Scene {
+    public:
+        const char* getName() const override { return "OtherApp"; }
+        void onEnter() override { other_app_enter_count++; }
 };
 
 static int failures = 0;
@@ -234,6 +249,141 @@ int main(){
         SceneFunctions::Pop();
         SceneFunctions::Update();
         check(SceneFunctions::Current() == launcher, "setup/loopテスト後: ランチャへ戻っている");
+    }
+
+    // ---- シーン制御: pico.push_scene() / pico.change_scene() ----
+    {
+        static const char* kPushSourceScript = R"LUA(
+            push_trigger = pico.create("Button")
+            pico.on(push_trigger, "press_start", function()
+                pico.push_scene("/lua/sub_a.lua")
+            end)
+        )LUA";
+        static const char* kSubAScript = R"LUA(
+            sub_a_marker = "sub_a_ran"
+            change_trigger = pico.create("Button")
+            pico.on(change_trigger, "press_start", function()
+                pico.change_scene("/lua/sub_b.lua")
+            end)
+        )LUA";
+        static const char* kSubBScript = R"LUA(
+            sub_b_marker = "sub_b_ran"
+        )LUA";
+        HostSd::files["/lua/push_source.lua"] = kPushSourceScript;
+        HostSd::files["/lua/sub_a.lua"] = kSubAScript;
+        HostSd::files["/lua/sub_b.lua"] = kSubBScript;
+
+        SceneFunctions::Push(new LuaScene("/lua/push_source.lua"));
+        SceneFunctions::Update();
+        LuaScene* push_source_scene = static_cast<LuaScene*>(SceneFunctions::Current());
+        check(push_source_scene != nullptr && SceneFunctions::Depth() == 1,
+              "シーン制御準備: push_source.luaへ遷移");
+
+        lua_State* ps_L = push_source_scene->getEngine()->raw();
+        lua_getglobal(ps_L, "push_trigger");
+        const WidgetId push_trigger_id = (WidgetId)lua_tointeger(ps_L, -1);
+        lua_pop(ps_L, 1);
+        Widget* push_trigger = WidgetRegistry::Resolve(push_trigger_id);
+        check(push_trigger != nullptr, "push_scene準備: トリガーボタンが生成されている");
+
+        if(push_trigger) push_trigger->causeOnPressStart();
+        check(SceneFunctions::pending_type == SceneFunctions::RequestType::Push,
+              "pico.push_scene(): Push要求が登録される(即時には遷移しない)");
+
+        SceneFunctions::Update();
+        LuaScene* sub_a_scene = static_cast<LuaScene*>(SceneFunctions::Current());
+        check(sub_a_scene != nullptr && sub_a_scene != push_source_scene && SceneFunctions::Depth() == 2,
+              "pico.push_scene(): 別のLuaスクリプトへPushで遷移する(スタックが1段伸びる)");
+
+        lua_State* a_L = sub_a_scene->getEngine()->raw();
+        lua_getglobal(a_L, "sub_a_marker");
+        check(std::string(lua_tostring(a_L, -1)) == "sub_a_ran",
+              "pico.push_scene(): 指定したスクリプトが実際に実行される");
+        lua_pop(a_L, 1);
+
+        lua_getglobal(a_L, "change_trigger");
+        const WidgetId change_trigger_id = (WidgetId)lua_tointeger(a_L, -1);
+        lua_pop(a_L, 1);
+        Widget* change_trigger = WidgetRegistry::Resolve(change_trigger_id);
+        check(change_trigger != nullptr, "change_scene準備: トリガーボタンが生成されている");
+
+        if(change_trigger) change_trigger->causeOnPressStart();
+        check(SceneFunctions::pending_type == SceneFunctions::RequestType::Change,
+              "pico.change_scene(): Change要求が登録される(即時には遷移しない)");
+
+        SceneFunctions::Update();
+        LuaScene* sub_b_scene = static_cast<LuaScene*>(SceneFunctions::Current());
+        check(sub_b_scene != nullptr && SceneFunctions::Depth() == 2,
+              "pico.change_scene(): スタックを消費せずに置き換わる(depthは変わらない)");
+
+        lua_State* b_L = sub_b_scene->getEngine()->raw();
+        lua_getglobal(b_L, "sub_b_marker");
+        check(std::string(lua_tostring(b_L, -1)) == "sub_b_ran",
+              "pico.change_scene(): 指定したスクリプトが実際に実行される(前のsub_a側の状態は残らない)");
+        lua_pop(b_L, 1);
+
+        // 積んだ分(push_source, sub_b)だけPopしてランチャへ戻る
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+        check(SceneFunctions::Current() == launcher, "シーン制御テスト後: ランチャへ戻っている");
+    }
+
+    // ---- シーン制御: pico.launch_app() ----
+    {
+        check(AppFunctions::Register("Other App", IconID::AppBox, &AppFunctions::MakeScene<OtherAppScene>),
+              "launch_app準備: 別アプリ(C++製)を登録簿へ登録");
+
+        // ボタン押下で発火する形にする(トップレベルで直接呼ぶと、Pop()で戻ってきた際に
+        // スクリプトが最初から実行し直されるたびpico.launch_app()も再発火してしまい、
+        // 後片付けのPopと競合するため。push_scene/change_scene側も同じ理由でボタン経由にしてある)
+        static const char* kLaunchAppScript = R"LUA(
+            launch_trigger = pico.create("Button")
+            pico.on(launch_trigger, "press_start", function()
+                ok_result = pico.launch_app("Other App")
+                bad_result = pico.launch_app("No Such App")
+            end)
+        )LUA";
+        HostSd::files["/lua/launch_app.lua"] = kLaunchAppScript;
+
+        SceneFunctions::Push(new LuaScene("/lua/launch_app.lua"));
+        SceneFunctions::Update();
+        LuaScene* launch_app_scene = static_cast<LuaScene*>(SceneFunctions::Current());
+        check(launch_app_scene != nullptr, "launch_app準備: launch_app.luaへ遷移");
+
+        lua_State* la_L = launch_app_scene->getEngine()->raw();
+        lua_getglobal(la_L, "launch_trigger");
+        const WidgetId launch_trigger_id = (WidgetId)lua_tointeger(la_L, -1);
+        lua_pop(la_L, 1);
+        Widget* launch_trigger = WidgetRegistry::Resolve(launch_trigger_id);
+        check(launch_trigger != nullptr, "launch_app準備: トリガーボタンが生成されている");
+        if(launch_trigger) launch_trigger->causeOnPressStart();
+
+        lua_getglobal(la_L, "ok_result");
+        check(lua_toboolean(la_L, -1), "pico.launch_app(): 登録済みの名前ならtrueを返す");
+        lua_pop(la_L, 1);
+        lua_getglobal(la_L, "bad_result");
+        check(!lua_toboolean(la_L, -1), "pico.launch_app(): 未登録の名前はfalseを返す");
+        lua_pop(la_L, 1);
+
+        check(SceneFunctions::pending_type == SceneFunctions::RequestType::Push,
+              "pico.launch_app(): 成功時はPush要求が登録される(即時には遷移しない)");
+
+        const int before_enter = other_app_enter_count;
+        SceneFunctions::Update();
+        check(SceneFunctions::Current() != nullptr &&
+                  std::string(SceneFunctions::Current()->getName()) == "OtherApp",
+              "pico.launch_app(): 登録簿のC++製アプリへ実際に遷移する");
+        check(other_app_enter_count == before_enter + 1,
+              "pico.launch_app(): 飛び先のonEnter()が呼ばれる");
+
+        // launcher -> launch_app.lua(LuaScene) -> OtherAppScene の2段積みなので2回Popする
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+        check(SceneFunctions::Current() == launcher, "launch_appテスト後: ランチャへ戻っている");
     }
 
     // ---- 後片付け ----

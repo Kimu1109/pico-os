@@ -87,6 +87,11 @@ namespace AppFunctions {
     // Pushで進むので、アプリ側からPop()すればランチャへ戻れる
     void Launch(int index);
 
+    // nameで登録されたアプリを探してLaunch()する(完全一致)。
+    // 見つからなければ何もせずfalseを返す(Lua側のpico.launch_appのように、
+    // 名前の綴りミスを呼び出し側で検知できるようにするための戻り値)
+    bool LaunchByName(const char* name);
+
     // 登録簿を空にする(主にテスト用。Setup()の冒頭でも呼ばれる)
     void Clear();
 

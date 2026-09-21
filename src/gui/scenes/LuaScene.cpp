@@ -66,6 +66,11 @@ bool LuaScene::loadAndRun() {
 void LuaScene::onUpdate() {
     if (!engine || !script_ok) return;
 
+    // 進行中のpico.http_request()を1フレーム分進める。setup()/loop()の有無に
+    // 関わらず毎フレーム呼ぶ(HttpRequestはPICO_Taskの全体リストに乗らず、
+    // 所有側が自分でupdate()する設計のため。LuaEngineクラスコメント「ネットワーク」参照)
+    engine->UpdateHttp();
+
     const unsigned long now = millis();
     // 符号なしの引き算なのでmillis()の一周(約49日)をまたいでも正しい差になる
     const unsigned long dt = now - last_tick_ms;

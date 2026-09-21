@@ -46,6 +46,8 @@
 //                         種別への登録はエラーになることを確認する
 //   pico.get_time() → TimeFunctions::timeinfoを直接書き換えて、返るテーブルの
 //                      各フィールドが一致することを確認する
+//   pico.get_touch() → OSData::touchX/Y/isTouchedを直接書き換えてからcauseOnPressStart()
+//                      を発火させ、press_startコールバックの中で同じ値が読めることを確認する
 //   実行時間の安全網(lua_sethook) → 終わらないループ(while true do end)を含む
 //                      スクリプトがRun()/CallLoop()をハングさせずfalseで戻ること、
 //                      打ち切り時もErrorFunctions経由でダイアログが出ること、
@@ -843,6 +845,44 @@ int main(){
             check(t.wday == 1, "pico.get_time: wday")
         )LUA", "get_time_test");
         check(ok, "pico.get_time(): スクリプトの実行が成功する");
+    }
+
+    // ---- pico.get_touch() ----
+    {
+        // OSData::touchX/Y/isTouchedを直接書き換えてから、実際のタップ相当
+        // (causeOnPressStart())を発火させ、press_startコールバックの中で
+        // pico.get_touch()が同じ値を読めることを確認する(WidgetFunctions::HitTest()
+        // が当たり判定に使う値と同じであることの裏付け。src/functions/Widget_Functions.cpp参照)
+        const bool setup_ok = engine.Run(R"LUA(
+            touch_btn = pico.create("Button")
+            touch_seen_x, touch_seen_y, touch_seen_touched = nil, nil, nil
+            pico.on(touch_btn, "press_start", function(id)
+                touch_seen_x, touch_seen_y, touch_seen_touched = pico.get_touch()
+            end)
+        )LUA", "get_touch_setup_test");
+        check(setup_ok, "pico.get_touch(): 準備スクリプトの実行が成功する");
+
+        lua_State* L2 = engine.raw();
+        lua_getglobal(L2, "touch_btn");
+        const WidgetId touch_btn_id = (WidgetId)lua_tointeger(L2, -1);
+        lua_pop(L2, 1);
+        Widget* touch_btn = WidgetRegistry::Resolve(touch_btn_id);
+
+        OSData::touchX = 123;
+        OSData::touchY = 45;
+        OSData::isTouched = true;
+        if (touch_btn) touch_btn->causeOnPressStart();
+        OSData::isTouched = false; // 後続のテストへ影響しないよう戻す
+
+        lua_getglobal(L2, "touch_seen_x");
+        check((int)lua_tointeger(L2, -1) == 123, "pico.get_touch: press_start内でxが読める");
+        lua_pop(L2, 1);
+        lua_getglobal(L2, "touch_seen_y");
+        check((int)lua_tointeger(L2, -1) == 45, "pico.get_touch: press_start内でyが読める");
+        lua_pop(L2, 1);
+        lua_getglobal(L2, "touch_seen_touched");
+        check(lua_toboolean(L2, -1) == 1, "pico.get_touch: press_start内でis_touchedがtrue");
+        lua_pop(L2, 1);
     }
 
     // ---- pico.list_add / pico.list_clear(ScrollList/DropdownMenu) / pico.tab_add(TabBar) ----

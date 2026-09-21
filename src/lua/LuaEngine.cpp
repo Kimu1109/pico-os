@@ -281,6 +281,7 @@ void LuaEngine::registerApi() {
     registerFn("launch_app", l_launch_app);
     registerFn("content_rect", l_content_rect);
     registerFn("get_time", l_get_time);
+    registerFn("get_touch", l_get_touch);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
     registerFn("draw_pixel", l_draw_pixel);
@@ -901,6 +902,18 @@ int LuaEngine::l_get_time(lua_State* L) {
     lua_pushinteger(L, t.tm_sec);  lua_setfield(L, -2, "sec");
     lua_pushinteger(L, t.tm_wday); lua_setfield(L, -2, "wday"); // 0=日曜〜6=土曜(tm_wdayそのまま)
     return 1;
+}
+
+int LuaEngine::l_get_touch(lua_State* L) {
+    // OSData::touchX/touchYはWidgetFunctions::HitTest()(src/functions/Widget_Functions.cpp)
+    // が当たり判定にそのまま使っている絶対スクリーン座標。pico.draw_*やpico.content_rect()
+    // と同じ座標系なので、press_start等のコールバック内でそのまま使える。
+    // isTouchEnd(離した瞬間)でも座標はリセットされず最後の値を保持したままなので
+    // (Touch_Functions*.hppのUpdate()参照)、press_endの中で読んでも問題ない。
+    lua_pushinteger(L, OSData::touchX);
+    lua_pushinteger(L, OSData::touchY);
+    lua_pushboolean(L, OSData::isTouched);
+    return 3;
 }
 
 int LuaEngine::l_invalidate(lua_State* L) {

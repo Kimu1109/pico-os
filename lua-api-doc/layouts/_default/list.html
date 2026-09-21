@@ -1,0 +1,20 @@
+{{ define "main" }}
+<article class="doc">
+  <div class="doc-body doc-body-wide">
+    <nav class="breadcrumb"><span>{{ .Title }}</span></nav>
+    <h1>{{ .Title }}</h1>
+    {{ if .Description }}<p class="lead">{{ .Description }}</p>{{ end }}
+    {{ .Content }}
+    {{ if .Pages }}
+    <div class="card-grid">
+      {{ range .Pages.ByWeight }}
+      <a class="card" href="{{ .RelPermalink }}">
+        <div class="card-title">{{ .LinkTitle }}</div>
+        {{ if .Description }}<div class="card-desc">{{ .Description }}</div>{{ end }}
+      </a>
+      {{ end }}
+    </div>
+    {{ end }}
+  </div>
+</article>
+{{ end }}

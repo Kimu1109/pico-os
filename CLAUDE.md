@@ -781,6 +781,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.http_request(method, url, body, content_type, callback)` | 非同期HTTPリクエスト(GET/POST/PUT/PATCH/DELETE)。同時に1本まで。`callback(ok, status_code, body_or_nil, error_or_nil)`(下記「ネットワーク」参照)(2026-09-21追加) |
 | `pico.http_cancel()` | 進行中の`pico.http_request()`を取り消す(2026-09-21追加) |
 | `pico.get_time()` | `TimeFunctions::timeinfo`を`{year, month, day, hour, min, sec, wday}`のテーブルで返す(下記「時刻取得」参照)(2026-09-21追加) |
+| `pico.get_touch()` | 現在(直近)のタッチ位置を`x, y, is_touched`の3値で返す。`pico.draw_*`と同じ絶対スクリーン座標(下記「タップ位置の取得」参照)(2026-09-21追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -1312,6 +1313,44 @@ Luaから使えるようにした:
   テストから直接書き換え、`pico.get_time()`が返すテーブルの各フィールドと一致することを
   確認している(`Setup()`/`Update()`はNTP同期や`millis()`に依存するため呼ばず、`struct tm`を
   直接埋める)。
+
+### タップ位置の取得(pico.get_touch、2026-09-21実装)
+
+Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際に踏んだ穴を埋めた。
+`pico.on(id, "press_start", fn)`等の共通4イベントはWidgetIdしか渡さない(「コールバックの
+引数は多くの場合WidgetIdのみ」という既存の設計方針。イベントごとに引数の型・個数を
+変える複雑さを避けるための意図的な判断で、これ自体は変えていない)。そのため「盤面全体を
+1枚の`Canvas`にして、押された座標からマス目を逆算する」というC++側の`AppGrid`/
+`ColorDialog`と同じパターンがLuaからは組めず、オセロの初版はマスの数(8×8=64個)だけ
+小さな`Canvas`を敷き詰めて、それぞれの`press_start`で「どのマスが押されたか」を判定する
+遠回りをしていた。
+
+- **`pico.get_touch() -> x, y, is_touched`を追加した。** 中身は`OSData::touchX/touchY/
+  isTouched`をそのまま返すだけの薄いAPI(`pico.get_time()`と同じく、既存のグローバル状態を
+  橋渡しするだけで新しい状態は持たない)。`WidgetFunctions::HitTest()`
+  (`src/functions/Widget_Functions.cpp`)が当たり判定に使っているのと同じ値なので、
+  `press_start`等のコールバックの中で読めば「そのタップが当たったウィジェットの外側から見た
+  絶対スクリーン座標」と一致する(`pico.draw_*`/`pico.content_rect()`と同じ座標系)。
+- **戻り値は`pico.get_time()`のようなテーブルではなく、`pico.content_rect()`と同じ複数戻り値**
+  (`x, y, is_touched`)にした。名前付きのフィールドが3つだけで意味も自明なため
+  (`get_time`がテーブルにした基準「複数の名前付き値」に該当するほど多くない)。
+- **`isTouchEnd`(離した瞬間)でも座標はリセットされず最後の値を保持したまま**なので
+  (`Touch_Functions.hpp`/`Touch_Functions_PC.hpp`の`Update()`、`if(!touched){ ... }`の枝を
+  参照。`touched=false`の間`OSData::touchX/touchY`へは一切書き込まない)、`press_end`の中で
+  呼んでも問題なく使える。
+- **イベント引数のシグネチャ自体(`Dispatch(id, kind)`)には一切手を入れていない。**
+  座標を「その場で起きたイベントの引数」として渡す設計にはせず、「今の状態を問い合わせる
+  別関数」にしたことで、既存の8種類のイベント(共通4種+ウィジェット固有4種+render+closed)の
+  ディスパッチ経路・コールバック中継の仕組み(`LuaEngine*`+`WidgetId`だけをキャプチャする
+  設計、上記「コールバック中継の設計」参照)を一切変更せずに済んだ。
+- ホストテストは`lua_engine_test.cpp`。`OSData::touchX/Y/isTouched`を直接書き換えてから
+  `Widget::causeOnPressStart()`(実際のタップ相当)を発火させ、`press_start`コールバックの
+  中で`pico.get_touch()`が同じ値を読めることを確認している。
+- ドキュメント(`lua-api-doc/`)にも[タッチ](../../api/touch/)ページを新設し、
+  [イベント](../../guide/events/)と[Canvasと直接描画](../../guide/drawing/)の両方から
+  相互参照するようにした。オセロアプリ自体は(既に動いていたため)このAPI追加に合わせた
+  書き換えはしていない——マス目ごとに`Canvas`を敷き詰める方式も引き続き有効で、
+  マスごとに全く違う描画をしたい場合はむしろこちらのほうが素直なことがある。
 
 ### 実装中に見つけて直した既存のバグ2件
 

@@ -168,6 +168,28 @@
 // テーブルで返す」という使い分け)。NTP未同期の場合の値の妥当性はOS側でも保証していない
 // (ClocksScene等、既存のTimeFunctions利用箇所と同じ割り切り)。
 //
+// タップ位置の取得(pico.get_touch()、2026-09-21実装): `pico.on(id, "press_start", fn)`
+// 等の共通4イベントはWidgetIdしか渡さない(「コールバックの引数は多くの場合WidgetId
+// のみ」という既存の設計方針。イベントごとに引数の型・個数を変える複雑さを避けるため)。
+// これは維持したまま、「今まさに起きているタッチの座標」を別途問い合わせられる
+// 薄いAPIとして追加した。中身は`OSData::touchX/touchY/isTouched`をそのまま返すだけ
+// (`WidgetFunctions::HitTest()`(`src/functions/Widget_Functions.cpp`)が当たり判定に
+// 使っているのと同じ値なので、press_start等のコールバック内で読めば「そのタップが
+// 当たったウィジェットの外側から見た絶対スクリーン座標」と一致する。pico.draw_*や
+// pico.content_rect()と同じ座標系)。isTouchEnd(離した瞬間)でも座標はリセットされず
+// 最後にタッチしていた位置を保持したままなので(`Touch_Functions*.hpp`のUpdate()参照)、
+// press_endの中で読んでも問題ない。戻り値は`pico.content_rect()`と同じ複数戻り値
+// (x, y, is_touched)にした——名前付きのフィールドが3つだけで意味も自明なため、
+// `pico.get_time()`のような専用テーブルを作るほどではないと判断した。
+//
+// 用途の主眼は、Canvas1枚を大きな盤面として使い、`press_start`の中で
+// `pico.get_touch()`からタップ座標を読んでマス目を逆算するようなUI
+// (`AppGrid`/`ColorDialog`と同じ「render()で直接描いてタップ位置から逆算する」
+// C++側パターンのLua版)。これが無かった間は、盤面をButtonではなく自前描画
+// にしたいアプリでも「マスの数だけ小さなCanvasを敷き詰めて、それぞれの
+// press_startで判定する」という遠回りが必要だった(オセロアプリ
+// `pc/sdcard/lua/apps/オセロ/main.lua`が実例)。
+//
 // ネットワーク(pico.http_request/http_cancel): 既存の`Http_Get`はMarkdownブラウザの
 // キャッシュ用途(GET専用、200/304以外は本文を捨てて一律失敗扱い)に特化しているため、
 // 汎用のHTTPクライアントとしては使えない。新設した`HttpRequest`
@@ -458,6 +480,8 @@ class LuaEngine {
         static int l_content_rect(lua_State* L);
         // 時刻。クラスコメント「時刻取得」参照
         static int l_get_time(lua_State* L);
+        // タッチ位置。クラスコメント「タップ位置の取得」参照
+        static int l_get_touch(lua_State* L);
 
         // ダイアログ。クラスコメント「ダイアログ」参照。いずれも生成した
         // WidgetId(整数)を返す。閉じたときの結果はpico.on(id,"closed",fn)

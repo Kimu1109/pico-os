@@ -1,0 +1,37 @@
+baseURL = "/"
+languageCode = "ja"
+title = "pico-os Lua API"
+theme = []
+enableRobotsTXT = true
+
+# プロジェクト直下の layouts/ をそのまま使う(外部テーマ不要・自己完結)。
+disableKinds = ["taxonomy", "term", "RSS", "sitemap"]
+
+[params]
+  description = "pico-os (Raspberry Pi Pico 2 W向け自作タッチGUI OS) のLuaアプリ開発者向けAPIリファレンス"
+  repo = "https://github.com/Kimu1109/pico-os"
+  editBranch = "main"
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+  [markup.highlight]
+    style = "github"
+    lineNos = false
+    codeFences = true
+    guessSyntax = false
+    tabWidth = 4
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 3
+    ordered = false
+
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  page = ["HTML"]
+
+[caches]
+  [caches.images]
+    dir = ":cacheDir/images"

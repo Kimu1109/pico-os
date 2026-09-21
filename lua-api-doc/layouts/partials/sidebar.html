@@ -1,0 +1,31 @@
+{{ $current := . }}
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <a href="{{ "/" | relLangURL }}">pico-os <span>Lua API</span></a>
+  </div>
+  <div class="sidebar-search">
+    <input type="search" id="nav-filter" placeholder="ページを検索" autocomplete="off">
+  </div>
+  <ul class="nav-tree">
+    <li class="nav-page top{{ if $current.IsHome }} active{{ end }}">
+      <a href="{{ "/" | relLangURL }}">ホーム</a>
+    </li>
+    {{ range .Site.Sections.ByWeight }}
+    <li class="nav-section">
+      <div class="nav-section-title">
+        <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+      </div>
+      <ul>
+        {{ range .Pages.ByWeight }}
+        <li class="nav-page{{ if eq $current.RelPermalink .RelPermalink }} active{{ end }}">
+          <a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a>
+        </li>
+        {{ end }}
+      </ul>
+    </li>
+    {{ end }}
+  </ul>
+  <div class="sidebar-footer">
+    <a href="{{ .Site.Params.repo }}" target="_blank" rel="noopener">GitHub リポジトリ ↗</a>
+  </div>
+</nav>

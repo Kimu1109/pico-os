@@ -1,0 +1,20 @@
+{{ define "main" }}
+<article class="doc">
+  <div class="doc-body">
+    <nav class="breadcrumb">
+      {{ if .CurrentSection }}<a href="{{ .CurrentSection.RelPermalink }}">{{ .CurrentSection.Title }}</a> / {{ end }}<span>{{ .Title }}</span>
+    </nav>
+    <h1>{{ .Title }}</h1>
+    {{ if .Description }}<p class="lead">{{ .Description }}</p>{{ end }}
+    {{ .Content }}
+    {{ with .NextInSection }}<div class="next-page">次へ: <a href="{{ .RelPermalink }}">{{ .Title }} →</a></div>{{ end }}
+  </div>
+  {{ $toc := .TableOfContents }}
+  {{ if ne (len (printf "%s" $toc)) 0 }}
+  <aside class="doc-toc">
+    <div class="doc-toc-title">この項目</div>
+    {{ $toc }}
+  </aside>
+  {{ end }}
+</article>
+{{ end }}

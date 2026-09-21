@@ -1,6 +1,6 @@
 # pico-os 開発状況
 
-> 最終同期: 2026-09-18(実コードと突き合わせ済み)。
+> 最終同期: 2026-09-21(実コードと突き合わせ済み)。
 > このファイルは**何が終わって何が残っているか**の一覧。設計の背景や実装の詳細は `CLAUDE.md` を参照。
 >
 > - **TODO** … 項目名だけの一覧。全体像を掴む用。
@@ -11,10 +11,10 @@
 | # | 項目 | 状況 |
 |---|---|---|
 | 1 | [ダイアログ系統](#1-ダイアログ系統) | ✅ 完了(betaレベル) |
-| 2 | [汎用基盤](#2-汎用基盤) | 🔨 ウィジェットIDはファクトリまで完了、Resolve()の実利用(Lua統合)だけ残り |
+| 2 | [汎用基盤](#2-汎用基盤) | ✅ 完了(Resolve()もLua統合から実利用済み) |
 | 3 | [スクリーン管理](#3-スクリーン管理) | 🔨 メモリプールは計測の結果いったん保留 |
 | 4 | [Wi-Fiの管理強化](#4-wi-fiの管理強化) | ✅ 完了 |
-| 5 | [Luaアプリ](#5-luaアプリ) | ⬜ 未着手(受け皿の一部のみ先行) |
+| 5 | [Luaアプリ](#5-luaアプリ) | 🔨 LuaEngine/LuaSceneが動作しウィジェット・ダイアログ・SD・画像・ネットワーク・シーン制御・権限管理まで実装済み。命令単位の実行時間制御等が残り |
 | 6 | [PC/Web動作対応](#6-pcweb動作対応) | ✅ 完了 |
 | 7 | [標準アプリ開発](#7-標準アプリ開発) | ✅ Markdownブラウザ / 時計 / 電卓 / ファイルエクスプローラー / 設定 / 辞書が完了 |
 | 8 | [セカンダリアプリ開発](#8-セカンダリアプリ開発) | ⬜ 未着手 |
@@ -44,7 +44,7 @@
 - [x] 固定長文字列クラス
 - [x] ウィジェットの固有ID
   - [x] 消費側: ファクトリ(WidgetType→new Xxxの対応表)
-  - [ ] 消費側: Resolve()の実際の呼び出し元(Lua統合本体。ホストテストでの検証は完了)
+  - [x] 消費側: Resolve()の実際の呼び出し元(Lua統合本体から実利用)
 - [x] 設定ファイルの書き込み
 - [x] アプリの枠組み
 
@@ -61,6 +61,7 @@
   - [ ] シーンアリーナ本体
   - [ ] ウィジェット内部のstd::vector / std::functionの確保削減
   - [ ] mid-sceneで生成/破棄されるダイアログの使い回し化
+  - [ ] ⚠ PCビルドでのヒープ下限際限増加(未解決)の原因特定・実機での再現確認
 
 ### 4. [Wi-Fiの管理強化](#4-wi-fiの管理強化-1)
 
@@ -69,18 +70,30 @@
 
 ### 5. [Luaアプリ](#5-luaアプリ-1)
 
-- [ ] 着手前に塞ぐ穴
+- [x] 着手前に塞ぐ穴
   - [x] AppEntryの動的化
-  - [ ] SDを走査してLuaアプリを見つける処理
   - [x] ウィジェットのファクトリ
-  - [ ] プロパティのget/set共通口
-  - [ ] Lua用allocatorでのRAM上限
-  - [ ] 実行時間バジェット
-  - [ ] pcallで拾ったエラーの表示導線
+  - [x] プロパティのget/set共通口
+  - [x] Lua用allocatorでのRAM上限
+  - [x] pcallで拾ったエラーの表示導線
+  - [x] ビルドの二重管理解消(Lua本体のvendor)
+- [x] Luaソースの動作(LuaScene)
+- [x] LuaとC++をつなぐAPIの設計(pico.* API)
+- [x] APIの実装、検証
+  - [x] ウィジェットの生成/破棄/プロパティ/共通コールバック
+  - [x] setup()/loop(dt)呼び出し
+  - [x] 直接描画(Canvas)
+  - [x] SDカードアクセス
+  - [x] 画像(.pimg)
+  - [x] シーン制御(push_scene/change_scene/launch_app)
+  - [x] ダイアログ
+  - [x] ネットワーク(HTTPリクエスト)
+  - [x] 権限管理(ネットワーク/app_dir外SDアクセス、粗いフラグ)
+- [ ] 残タスク
+  - [ ] ウィジェット固有コールバック(Checkbox/NumberSlider/ScrollList/TabBar等)
+  - [ ] 命令単位の実行時間制御(lua_sethook等)
+  - [ ] SDを走査してLuaアプリを見つける処理
   - [ ] 実機の空きRAM/Flashの実測
-- [ ] Luaソースの動作
-- [ ] LuaとC++をつなぐAPIの設計
-- [ ] APIの実装、検証
 
 ### 6. [PC/Web動作対応](#6-pcweb動作対応-1)
 
@@ -169,15 +182,15 @@
   NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/
   TabBar/DropdownMenu)を生成できる。widgets/apps・systems・dialogsの専用ウィジェットは
   対象外(SD走査やシーン固有状態への依存が強いため)。
-- **`Resolve()`はホストテスト(`widget_factory_test.cpp`)で初めて検証された**:
-  発行済みIDからの解決、type不一致の検出、破棄済みID(use-after-free)の検出、
-  スロット再利用時のgeneration不一致検出を確認済み。ただし**実コード中の呼び出し元は
-  まだテストのみ**で、実際の利用はLua統合を待つ。
+- **`Resolve()`はホストテスト(`widget_factory_test.cpp`)で発行済みIDからの解決・
+  type不一致の検出・破棄済みID(use-after-free)の検出・スロット再利用時のgeneration
+  不一致検出を確認済み**。**その後`LuaEngine`(`pico.set/get/on/destroy/add_child`等)
+  から実際に呼ばれるようになり、実コードでの利用も確立した**。
 - Widget::operator newがnullptr(確保失敗)を返した際、以前は無言で失敗していたが、
   唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。
   個々の`new Xxx(...)`呼び出し元のnullチェックが無い問題自体は残っている
   (Lua用allocatorの話と合わせて[5. Luaアプリ](#5-luaアプリ-1)を参照)。
-- 実際に使われるのはLua統合から。→ [5. Luaアプリ](#5-luaアプリ-1)
+- 詳細は[5. Luaアプリ](#5-luaアプリ-1)。
 
 ## 3. スクリーン管理
 
@@ -199,6 +212,7 @@
 | シーンアリーナ本体 | ⏸ 断片化もリークも観測されないため保留。入れる場合の枠は「永続8KiB + シーン56KiB = 64KiB」(実測根拠あり) |
 | vector/functionの確保削減 | ⏸ **「841回中805回」は既に古い数字**。Labelの平坦化後は `MarkdownView + load()` で88回、通常のシーン遷移は1回あたり8回。残る実害は回数ではなく`sizeof`(`std::function`が32B×4本=1ウィジェット128B)で、Delegate化してもMarkdownシーン36個で約2.3KB/46KB。**Luaのコールバックを大量に貼るようになって初めて効く** |
 | ダイアログの使い回し化 | ⏸ 現状の生成箇所は`FileExplorer`の2箇所のみ。効果が測れる規模になってから |
+| PCビルドでのヒープ下限際限増加 | ⚠ **未解決(2026-09-19発見)**。実機の計測では増加傾向が無かったが、PCビルド(`pc/build/picoos_pc`)で同一2画面を`--tap`で機械的に往復させると「ヒープ下限」が回数に比例して際限なく増える(1往復あたり約30〜40KB)。**Luaとは無関係**(`InputTestScene`だけで再現し、Lua関連の変更を含まないコミットでも同じ数値が出た)。原因未特定(候補: LovyanGFXのフォント/グリフキャッシュ、Task/Network_Functions、SDLのイベント処理)。再現手順は`CLAUDE.md`の該当節を参照。次にScene/Widget基盤・PCビルド周りを触る回で必ず引き継ぐこと |
 
 ## 4. Wi-Fiの管理強化
 
@@ -208,23 +222,32 @@
 
 ## 5. Luaアプリ
 
-Lua本体のコードは皆無。ただし受け皿の一部は先行して入っている
-(ウィジェットID発行 / `LayoutContainer`・`GridContainer` / PC実行環境)。
-着手時に必ず当たる穴の一覧は`CLAUDE.md`の「Lua着手前の受け皿の状態」。
+`src/lua/LuaEngine`(1インスタンス=1つの`lua_State`=1つのLuaアプリ)と`LuaScene`
+(SD上のスクリプトを読んで実行する画面)が動き、**ランチャから実際にLuaアプリを
+起動できる**(`pc/sdcard/lua/hello.lua`、ランチャに「Lua Hello」タイルあり)。
+設計の背景・各APIの詳細は`CLAUDE.md`の「Luaバインディング」を参照。
 
-| 穴 | 状況 |
+| 穴/項目 | 状況 |
 |---|---|
-| AppEntryの動的化 | ✅ **解消済み**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`を`FixedString`でコピー保持する。同じシーン型を別argで何件でも登録でき、寿命の短い文字列からも登録できる(`MakeSceneWithArg<T>`) |
-| SDの走査 | ⬜ 登録簿側の受け入れ準備は上記で完了。スキャン処理そのものが無い |
-| ウィジェットのファクトリ | ✅ **解消済み**。`WidgetFactory::Create(WidgetType)`が widgets/直下の汎用部品15種を生成する。`Resolve()`と合わせてホストテスト(`widget_factory_test`)で検証済み |
-| プロパティのget/set共通口 | ⬜ ウィジェットのプロパティをLuaへ通す共通の口(get/setのバインディング設計)。ファクトリとは別に残っている |
-| RAM上限 | ⬜ `lua_newstate`のカスタムallocで枠を切る話は未着手。ただし`Widget::operator new`の確保失敗(nullptr)は、以前は無言で失敗していたのをLOG_SYS_FAILで見えるようにした(呼び出し元ごとのnullチェックが無い問題そのものは残る) |
-| 実行時間バジェット | ⬜ `lua_sethook`での命令数バジェットか、`Task`へ載せてコルーチン化するかの判断が要る |
-| エラーの表示導線 | ⬜ `pcall`で拾った後の出し先が`LOG_SYS_FAIL`止まり。「アプリが落ちた」をMsgDialogで見せたい |
-| 空きRAM/Flashの実測 | ⬜ Lua本体はflash 100KB超・stateだけでRAM 20〜30KBのオーダー。入れる前に一度測る |
-| ビルドの二重管理 | ⬜ `platformio.ini` と `pc/CMakeLists.txt` の両方へ足す必要がある |
+| AppEntryの動的化 | ✅ `create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`を`FixedString`でコピー保持する。同じシーン型を別argで何件でも登録でき、寿命の短い文字列からも登録できる(`MakeSceneWithArg<T>`) |
+| ウィジェットのファクトリ | ✅ `WidgetFactory::Create(WidgetType)`。`Resolve()`と合わせて`pico.create/get/set/on`から実際に使われている |
+| プロパティのget/set共通口 | ✅ `WidgetProperty::Get/Set()`。`pico.set/get`から実際に叩かれる |
+| Lua用allocatorでのRAM上限 | ✅ `lua_newstate`へ`budget_bytes`付きカスタムallocを渡す。暫定枠200KB(`LuaScene::kLuaBudgetBytes`) |
+| pcallで拾ったエラーの表示導線 | ✅ `ErrorFunctions::ShowFatal()`。構文/実行時エラーをログ+MsgDialogの両方で見せる |
+| ビルドの二重管理 | ✅ Lua 5.4.7本体を`lib/lua/`へvendor。`platformio.ini`への追記は不要になり、PCビルドも同じ`lib/lua/src/`を参照する実質1箇所の情報源に |
+| 実行時間バジェット | 🔨 `task/StepBudget.hpp`(時間で区切る土台)のみ実装済み。**命令単位(`lua_sethook`)の制御はまだ無い** |
+| SDを走査してLuaアプリを見つける処理 | ⬜ 未着手。登録簿側(AppEntryの動的化)は受け入れ準備済み |
+| ウィジェット固有コールバック | ⬜ `press_start/end/move/out`の共通4種のみ対応。`Checkbox::on_change_checked`等ウィジェット固有のコールバックは未対応 |
+| 実機の空きRAM/Flashの実測 | ⬜ 200KB枠はPC上の見積もり(空stateのみで約19.5KB)からの逆算。実機RP2350での追試は未実施(このリモート実行環境にRP2350のボード定義が無いため) |
 
-**API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算するのが確実。**
+**実装済みのAPI**: ウィジェットの生成/破棄/プロパティ/共通コールバック・`setup()`/`loop(dt)`呼び出し・
+直接描画(`Canvas`)・SDカードアクセス・画像(`.pimg`)・シーン制御(`push_scene`/`change_scene`/
+`launch_app`)・ダイアログ(`show_message`/`show_input`/`show_file_save`/`show_file_select`/
+`show_color`)・ネットワーク(`http_request`/`http_cancel`)・**権限管理**(`network`/
+`sd_outside_app_dir`の2値フラグ、既定はどちらも拒否。`LuaScene`がスクリプト自身の
+ディレクトリを基準に`pico.sd_*`/`pico.image_load`を閉じ込める)。
+
+**API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算した。**
 → [7. 標準アプリ開発](#7-標準アプリ開発-1)
 
 ## 6. PC/Web動作対応

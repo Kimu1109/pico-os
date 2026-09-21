@@ -92,6 +92,39 @@
 // 戻り値なし(pico.pop()と同じ)。launch_appだけは「名前が見つかったか」を
 // その場で判定できるので、bool を返す(実際のPush自体の成否までは見ていない点は
 // AppFunctions::Launch()を直接呼ぶC++コードと同じ)。
+//
+// ダイアログ(pico.show_message/show_input/show_file_save/show_file_select/show_color):
+// `MsgDialog`/`InputDialog`/`FileSaveDialog`/`FileSelectDialog`/`ColorDialog`は
+// `WidgetFactory::Create()`の対象外(コンストラクタが型ごとに必須の引数を取り、
+// 15種の汎用部品のような「位置0,0・空文字列」といった無難な既定値で作れないため)。
+// 代わりに各ダイアログ専用の生成関数を用意し、内部で`new Xxx(...)`→
+// `WidgetFunctions::AddDialog()`→`setVisible(true)`まで済ませて`WidgetId`を返す
+// (`WidgetId`の発行自体はどのWidgetサブクラスでも`getId()`初回呼び出しで汎用に効くので、
+// `WidgetFactory`を経由しなくても問題ない)。
+// 閉じたときの通知は共通の`pico.on(id, "closed", function(id, is_ok) ... end)`で受ける
+// (`EventKind::Closed`。他の4イベントと同じ`callbacks_`の対応表に乗せるが、
+// 実際のC++側コールバック配線は生成時点(show_xxx内)で済ませてしまう —
+// ダイアログは`pico.on()`を呼び忘れても画面に residual として残り続けてはいけない
+// モーダルなので、「閉じたら`WidgetFunctions::DestroyLater()`する」までを生成時に
+// 保証し、`pico.on()`は「あれば追加でLuaへも通知する」という上乗せの位置づけにしてある)。
+// `InputDialog`の入力文字列/`FileSaveDialog`・`FileSelectDialog`の選択パス/
+// `ColorDialog`の選択色は、専用の戻り値をコールバックへ積むのではなく、
+// 既存の`pico.get(id, "text"/"path"/"value")`(`WidgetProperty`)経由で読む設計にした
+// (`Dispatch()`をダイアログの具象型に依存させたくないため。`MsgDialog`は
+// `is_ok`だけで完結するので追加のプロパティは無い)。
+//
+// ネットワーク(pico.http_request/http_cancel): 既存の`Http_Get`はMarkdownブラウザの
+// キャッシュ用途(GET専用、200/304以外は本文を捨てて一律失敗扱い)に特化しているため、
+// 汎用のHTTPクライアントとしては使えない。新設した`HttpRequest`
+// (`src/task/Http_Request.hpp`。メソッド・送信ボディを指定でき、ステータスコードに
+// よらず本文を渡す)をこのLuaEngineインスタンスが1本だけ(`http_`、遅延`new`)保持し、
+// `LuaScene::onUpdate()`から毎フレーム`UpdateHttp()`で進める(`HttpGet`/`HttpRequest`は
+// どちらも`PICO_Task`の全体リストには登録されず、所有側が自分で`update()`を呼ぶ設計の
+// ため)。**同時に実行できるリクエストは1本まで**で、完了(成功/失敗)すると
+// `pico.http_request()`に渡したLua関数を`(ok, status_code, body_or_nil, error_or_nil)`
+// で呼んでから後片付けする。`http_`はLuaScene内でネットワークを使わないアプリに
+// 16KiB×2の固定バッファを常時負担させたくないため、初回の`pico.http_request()`呼び出し
+// まで確保しない(遅延生成。使わないLuaアプリのメモリコストはゼロのまま)。
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
@@ -131,9 +164,15 @@ class LuaEngine {
         void CallSetup();
         void CallLoop(uint32_t dt_ms);
 
+        // 進行中のpico.http_request()を1フレーム分進める。LuaScene::onUpdate()から
+        // 毎フレーム呼ぶ想定(クラスコメント「ネットワーク」参照)。リクエストが
+        // 無ければ何もしない
+        void UpdateHttp();
+
     private:
-        // Render: LuaCanvas限定。他4種はWidget基底が全種別共通で持つ(BindCallback参照)
-        enum class EventKind : uint8_t { PressStart, PressEnd, PressMove, PressOut, Render };
+        // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
+        // 全種別共通で持つ(BindCallback参照)
+        enum class EventKind : uint8_t { PressStart, PressEnd, PressMove, PressOut, Render, Closed };
 
         struct CallbackBinding {
             WidgetId id;
@@ -180,6 +219,20 @@ class LuaEngine {
         static uint32_t MakeImageHandle(size_t index, uint32_t generation);
         bool ResolveImageHandle(uint32_t handle, size_t& out_index) const;
 
+        // pico.http_request()用の状態(進行中のHttpRequest+受信バッファ+完了コールバック)。
+        // 使わないLuaアプリのメモリコストをゼロに保つため、初回のpico.http_request()まで
+        // newしない(完全な定義は.cppのみ。クラスコメント「ネットワーク」参照)
+        struct HttpState;
+        HttpState* http_ = nullptr;
+
+        // ダイアログが閉じたときのC++側コールバック配線(pico.show_xxx()内で生成直後に
+        // 必ず呼ぶ。pico.on()の有無に関わらずDestroyLater()までを保証する。
+        // クラスコメント「ダイアログ」参照)
+        void WireDialogClosed(class Widget* dialog, WidgetId id);
+        // EventKind::Closed専用のDispatch。is_okを2つ目の引数としてLua関数へ渡す点だけ
+        // 通常のDispatch(id, kind)と異なる(そちらはWidgetIdの1引数固定のまま変えていない)
+        void DispatchClosed(WidgetId id, bool is_ok);
+
         // グローバル関数nameを引数無しで呼ぶ(setup()向け)。定義されていなければ何もしない。
         // エラー時はErrorFunctions::ShowFatal()で表示する
         void callGlobalNoArgs(const char* name);
@@ -215,6 +268,19 @@ class LuaEngine {
         static int l_change_scene(lua_State* L);
         static int l_launch_app(lua_State* L);
         static int l_content_rect(lua_State* L);
+
+        // ダイアログ。クラスコメント「ダイアログ」参照。いずれも生成した
+        // WidgetId(整数)を返す。閉じたときの結果はpico.on(id,"closed",fn)
+        // (is_okのbool)と、必要ならpico.get(id, "text"/"path"/"value")で受け取る
+        static int l_show_message(lua_State* L);
+        static int l_show_input(lua_State* L);
+        static int l_show_file_save(lua_State* L);
+        static int l_show_file_select(lua_State* L);
+        static int l_show_color(lua_State* L);
+
+        // ネットワーク。クラスコメント「ネットワーク」参照
+        static int l_http_request(lua_State* L);
+        static int l_http_cancel(lua_State* L);
         static int l_invalidate(lua_State* L);
         static int l_mark_dirty(lua_State* L);
 

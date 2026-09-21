@@ -48,6 +48,7 @@ struct FsFile {
     size_t pos_ = 0;
 
     bool isDir(){ return false; }
+    bool isDirectory(){ return false; } // SdFatには両方の綴りがある(pc/compat/SdFat.hと同じ)
     bool isOpen(){ return data_ != nullptr || wdata_ != nullptr; }
     void close(){ data_ = nullptr; wdata_ = nullptr; pos_ = 0; }
 

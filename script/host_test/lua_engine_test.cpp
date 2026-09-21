@@ -26,10 +26,24 @@
 //                         使い回しで古いハンドルが新しい画像を指さないこと)、
 //                         スロット数/合計バイト数の上限、SD無し・不正な`.pimg`の
 //                         失敗経路(nil)を確認する
+//   pico.show_message/show_input/show_file_save/show_file_select/show_color →
+//                         ダイアログが実際に生成されdialog_rootsへ乗ること、
+//                         pico.on(id,"closed",fn)がis_okを伴って呼ばれること、
+//                         pico.get(id,"text"/"path"/"value")で結果が読めること、
+//                         pico.on()を呼ばなくても閉じたら自動的にDestroyLater
+//                         されること、"closed"イベントがダイアログ以外だと
+//                         エラーになることを確認する
+//   pico.http_request/http_cancel → 実ソケットに触れない範囲(不正なメソッド/URL/
+//                         https/送信ボディの上限超過/同時実行数の上限)での
+//                         早期拒否がすべてfalseで返ること(luaL_errorにしない)
 #include "lua/LuaEngine.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
+#include "gui/widgets/dialogs/InputDialog.hpp"
+#include "gui/widgets/dialogs/FileSaveDialog.hpp"
+#include "gui/widgets/dialogs/FileSelectDialog.hpp"
+#include "gui/widgets/dialogs/ColorDialog.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -511,6 +525,218 @@ int main(){
                 "'pico.image_load: 合計バイト数の上限を超える場合はnil')",
                 "image_budget_test");
             check(ok, "pico.image_load: バイト予算テストの実行が成功する");
+        }
+    }
+
+    // ---- ダイアログ(pico.show_message/show_input/show_file_save/show_file_select/show_color) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            msg_id = pico.show_message("本当に削除しますか?", "いいえ", "はい")
+            check(msg_id ~= nil, "pico.show_message: ハンドルを返す")
+            msg_closed_ok = nil
+            pico.on(msg_id, "closed", function(id, is_ok)
+                check(id == msg_id, "pico.show_message: closedコールバックへ自分のIDが渡る")
+                msg_closed_ok = is_ok
+            end)
+        )LUA", "show_message_test");
+        check(ok, "pico.show_message: セットアップの実行が成功する");
+
+        lua_getglobal(L, "msg_id");
+        const WidgetId msg_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        Widget* msg_widget = WidgetRegistry::Resolve(msg_id);
+        check(msg_widget != nullptr && msg_widget->getWidgetType() == WidgetType::MsgDialog,
+              "pico.show_message: MsgDialogとして生成される");
+        check(std::find(WidgetFunctions::dialog_roots.begin(), WidgetFunctions::dialog_roots.end(), msg_widget)
+                  != WidgetFunctions::dialog_roots.end(),
+              "pico.show_message: dialog_rootsへ登録される");
+
+        if (msg_widget) static_cast<MsgDialog*>(msg_widget)->causeOnClosed(true);
+
+        lua_getglobal(L, "msg_closed_ok");
+        check(lua_toboolean(L, -1) == 1, "pico.show_message: closedコールバックがis_ok=trueで呼ばれる");
+        lua_pop(L, 1);
+
+        WidgetFunctions::ProcessPendingDeletes();
+        check(std::find(WidgetFunctions::dialog_roots.begin(), WidgetFunctions::dialog_roots.end(), msg_widget)
+                  == WidgetFunctions::dialog_roots.end(),
+              "pico.show_message: 閉じると自動的にDestroyLaterされ、dialog_rootsから消える");
+    }
+
+    // ---- pico.on()を呼ばなくても、閉じたら自動的に片付くこと ----
+    {
+        const bool ok = engine.Run(
+            "no_listener_id = pico.show_message('通知のみ', 'キャンセル', 'OK')",
+            "show_message_no_listener_test");
+        check(ok, "pico.show_message: pico.onを呼ばない場合の実行も成功する");
+
+        lua_getglobal(L, "no_listener_id");
+        const WidgetId no_listener_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        Widget* w = WidgetRegistry::Resolve(no_listener_id);
+        check(w != nullptr, "pico.show_message: pico.on無しでも生成はできる");
+
+        if (w) static_cast<MsgDialog*>(w)->causeOnClosed(false);
+        WidgetFunctions::ProcessPendingDeletes();
+        check(WidgetRegistry::Resolve(no_listener_id) == nullptr,
+              "pico.show_message: pico.on(\"closed\")を呼んでいなくても閉じたら自動的に破棄される");
+    }
+
+    // ---- 'closed'イベントはダイアログ以外だとエラー ----
+    {
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn3 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn3, "closed", function() end) end)
+            check(bound == false, "pico.on: 'closed'イベントはダイアログ以外だとエラー")
+        )LUA", "closed_on_non_dialog_test");
+        check(guard_ok, "'closed'ゲートテストの実行自体は成功する");
+    }
+
+    // ---- pico.show_input: 初期テキストの反映とpico.get(\"text\")での読み出し ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            input_id = pico.show_input("お名前", "太郎", true)
+            check(input_id ~= nil, "pico.show_input: ハンドルを返す")
+            check(pico.get(input_id, "text") == "太郎",
+                  "pico.show_input: 初期テキストがpico.get(\"text\")で読める")
+            input_closed_ok = nil
+            pico.on(input_id, "closed", function(id, is_ok) input_closed_ok = is_ok end)
+        )LUA", "show_input_test");
+        check(ok, "pico.show_input: セットアップの実行が成功する");
+
+        lua_getglobal(L, "input_id");
+        const WidgetId input_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        Widget* input_widget = WidgetRegistry::Resolve(input_id);
+        check(input_widget != nullptr && input_widget->getWidgetType() == WidgetType::InputDialog,
+              "pico.show_input: InputDialogとして生成される");
+
+        if (input_widget) static_cast<InputDialog*>(input_widget)->causeOnClosed(true);
+
+        lua_getglobal(L, "input_closed_ok");
+        check(lua_toboolean(L, -1) == 1, "pico.show_input: closedコールバックがis_ok=trueで呼ばれる");
+        lua_pop(L, 1);
+
+        WidgetFunctions::ProcessPendingDeletes();
+    }
+
+    // ---- pico.show_color: 未選択のままOKするとpico.get(\"value\")が-1 ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            color_id = pico.show_color()
+            check(color_id ~= nil, "pico.show_color: ハンドルを返す")
+            check(pico.get(color_id, "value") == -1, "pico.show_color: 何も選ばなければ-1")
+            color_closed_ok = nil
+            pico.on(color_id, "closed", function(id, is_ok) color_closed_ok = is_ok end)
+        )LUA", "show_color_test");
+        check(ok, "pico.show_color: セットアップの実行が成功する");
+
+        lua_getglobal(L, "color_id");
+        const WidgetId color_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        Widget* color_widget = WidgetRegistry::Resolve(color_id);
+        check(color_widget != nullptr && color_widget->getWidgetType() == WidgetType::ColorDialog,
+              "pico.show_color: ColorDialogとして生成される");
+
+        // ColorDialogはcauseOnClosed()相当を公開していないので、実際のタップと同じ経路
+        // (children_[1]=button_ok)からcauseOnPressStart()して閉じる
+        if (color_widget) {
+            const auto& children = color_widget->getChildren();
+            check(children.size() >= 2, "pico.show_color: OKボタンを含む子構成");
+            if (children.size() >= 2) children[1]->causeOnPressStart();
+        }
+
+        lua_getglobal(L, "color_closed_ok");
+        check(lua_toboolean(L, -1) == 1, "pico.show_color: closedコールバックがis_ok=trueで呼ばれる");
+        lua_pop(L, 1);
+
+        WidgetFunctions::ProcessPendingDeletes();
+    }
+
+    // ---- pico.show_file_save / pico.show_file_select ----
+    // ホストテストのSdFatスタブはパス→内容のフラットなmapでディレクトリの実体が
+    // 無いため(script/host_test/stubs/SdFat.h参照)、getSavePath()/getSelectedPath()の
+    // 実際の中身までは確認できない。ここでは生成・dialog_roots登録・closedの配線
+    // (is_okの往復)・自動破棄までを見る。実際の選択結果はPCビルドの--shotで確認する
+    {
+        const bool ok = engine.Run(R"LUA(
+            save_id = pico.show_file_save("/")
+            check(save_id ~= nil, "pico.show_file_save: ハンドルを返す")
+            select_id = pico.show_file_select("/")
+            check(select_id ~= nil, "pico.show_file_select: ハンドルを返す")
+        )LUA", "show_file_dialogs_test");
+        check(ok, "pico.show_file_save/show_file_select: セットアップの実行が成功する");
+
+        lua_getglobal(L, "save_id");
+        const WidgetId save_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        lua_getglobal(L, "select_id");
+        const WidgetId select_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        Widget* save_widget = WidgetRegistry::Resolve(save_id);
+        Widget* select_widget = WidgetRegistry::Resolve(select_id);
+        check(save_widget != nullptr && save_widget->getWidgetType() == WidgetType::FileSaveDialog,
+              "pico.show_file_save: FileSaveDialogとして生成される");
+        check(select_widget != nullptr && select_widget->getWidgetType() == WidgetType::FileSelectDialog,
+              "pico.show_file_select: FileSelectDialogとして生成される");
+
+        // 実際のタップと同じ経路(children_の末尾から2つ目=button_no)で「キャンセル」する
+        if (save_widget) {
+            const auto& children = save_widget->getChildren();
+            if (children.size() >= 1) children.back()->causeOnPressStart();
+        }
+        if (select_widget) {
+            const auto& children = select_widget->getChildren();
+            if (children.size() >= 1) children.back()->causeOnPressStart();
+        }
+
+        WidgetFunctions::ProcessPendingDeletes();
+        check(WidgetRegistry::Resolve(save_id) == nullptr && WidgetRegistry::Resolve(select_id) == nullptr,
+              "pico.show_file_save/show_file_select: キャンセルでも自動的に破棄される");
+    }
+
+    // ---- ネットワーク(pico.http_request/http_cancel): 実ソケットに触れない早期拒否経路 ----
+    // 送信ボディの上限テストで16KiB超の文字列を作るため、それまでの全テストで
+    // 積み上がった共有engineの64KiB予算と衝突しないよう、専用の新しいLuaEngineを使う
+    // (「画像: 合計バイト数の上限」テストと同じ理由)
+    {
+        LuaEngine http_engine(128 * 1024);
+        check(http_engine.valid(), "ネットワーク早期拒否テスト用にLuaEngineを構築");
+        if (http_engine.valid()) {
+            lua_pushcfunction(http_engine.raw(), l_check);
+            lua_setglobal(http_engine.raw(), "check");
+
+            const bool ok = http_engine.Run(R"LUA(
+                check(pcall(pico.http_request, "FOO", "http://127.0.0.1:1/", nil, nil, function() end) == false,
+                      "pico.http_request: 未知のメソッドはエラー")
+
+                check(pico.http_request("GET", "not a url", nil, nil, function() end) == false,
+                      "pico.http_request: 不正なURLはfalseを返す")
+
+                check(pico.http_request("GET", "https://example.com/", nil, nil, function() end) == false,
+                      "pico.http_request: httpsはfalseを返す(未対応)")
+
+                local huge_body = string.rep("a", 20000) -- kMaxHttpBodyBytes(16KiB)超え
+                check(pico.http_request("POST", "http://127.0.0.1:1/", huge_body, "text/plain", function() end) == false,
+                      "pico.http_request: 送信ボディが上限を超える場合はfalse")
+
+                local started = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end)
+                check(started == true, "pico.http_request: 正常な呼び出しはtrue(開始した)を返す")
+
+                local started2 = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end)
+                check(started2 == false, "pico.http_request: 進行中に2本目を開始しようとするとfalse")
+
+                pico.http_cancel()
+                local started3 = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end)
+                check(started3 == true, "pico.http_cancel(): 取り消し後は新しいリクエストを開始できる")
+                pico.http_cancel() -- 後片付け(接続を試みる前に取り消すので実ソケットには触れない)
+            )LUA", "http_request_reject_test");
+            check(ok, "pico.http_request: 早期拒否テストの実行が成功する");
         }
     }
 

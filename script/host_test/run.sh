@@ -309,12 +309,20 @@ g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
     "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
     -o "$OUT/widget_property_test"
 
 echo ""
@@ -416,7 +424,12 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
     "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
@@ -428,6 +441,8 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
     "$OUT"/lua_obj/*.o \
     -o "$OUT/lua_engine_test"
 
@@ -467,11 +482,18 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
     "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
     "$OUT"/lua_obj/*.o \
     -o "$OUT/lua_scene_test"
 

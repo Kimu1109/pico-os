@@ -13,6 +13,11 @@
 #include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/widgets/dialogs/MsgDialog.hpp"
+#include "gui/widgets/dialogs/InputDialog.hpp"
+#include "gui/widgets/dialogs/FileSaveDialog.hpp"
+#include "gui/widgets/dialogs/FileSelectDialog.hpp"
+#include "gui/widgets/dialogs/ColorDialog.hpp"
 #include "gui/icons/icon_render.h"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
@@ -23,6 +28,8 @@
 #include "gui/scenes/Scene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "storage/SD_IO.hpp"
+#include "task/Http_Request.hpp"
+#include "util/Url.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
 
@@ -42,7 +49,48 @@ namespace {
             case WidgetProperty::Type::Str:   lua_pushstring(L, v.s.c_str()); break;
         }
     }
+
+    // pico.http_request()の送信ボディ/受信本文の上限。pico.sd_read等の
+    // kMaxSdReadBytesと同じ考え方(Lua state全体の予算を1回のリクエストで
+    // 食い潰さないための頭打ち)。HttpEngine::HttpState越しにしか使わないため
+    // LuaEngineのメンバにはせずここへ置く
+    constexpr size_t kMaxHttpBodyBytes = PICO_STR_16KiB;
+    constexpr size_t kMaxHttpResponseBytes = PICO_STR_16KiB;
+
+    bool HttpMethodFromName(const char* name, HttpRequest::Method& out) {
+        if (!name) return false;
+        if (strcmp(name, "GET") == 0)    { out = HttpRequest::Method::GET;    return true; }
+        if (strcmp(name, "POST") == 0)   { out = HttpRequest::Method::POST;   return true; }
+        if (strcmp(name, "PUT") == 0)    { out = HttpRequest::Method::PUT;    return true; }
+        if (strcmp(name, "PATCH") == 0)  { out = HttpRequest::Method::PATCH;  return true; }
+        if (strcmp(name, "DELETE") == 0) { out = HttpRequest::Method::Delete; return true; }
+        return false;
+    }
+
+    // pico.http_request()の受信本文の行き先。上限を超える分は書き込みを拒否して
+    // 応答全体を失敗させる(pico.sd_readと同じく黙って切り詰めない方針)
+    struct LuaHttpSink : IHttpSink {
+        FixedString<kMaxHttpResponseBytes> body;
+        bool write(const void* data, size_t len) override {
+            if (body.length() + len > kMaxHttpResponseBytes) return false;
+            return body.append((const char*)data, len);
+        }
+    };
 }
+
+// pico.http_request()用の状態一式。ヘッダでは前方宣言のみにしてポインタで持ち、
+// 使わないLuaアプリのメモリコストをゼロに保つ(クラスコメント「ネットワーク」参照)
+struct LuaEngine::HttpState {
+    HttpRequest request;
+    LuaHttpSink sink;
+    // HttpRequestは送信ボディ/Content-Typeを非所有ポインタで受け取る(IHttpSinkと
+    // 同じ約束)ため、Luaスタック上の一時的な文字列をそのまま渡すのではなく、
+    // リクエストが終わるまで生きているこのバッファへ一度コピーしてから渡す
+    FixedString<kMaxHttpBodyBytes> body_buf;
+    FixedString<PICO_STR_M> content_type_buf;
+    // 進行中のリクエストが無ければLUA_NOREF。「同時に1本まで」の判定にも使う
+    int callback_ref = LUA_NOREF;
+};
 
 // ---------------- メモリ予算 ----------------
 
@@ -99,6 +147,7 @@ LuaEngine::LuaEngine(size_t budget_bytes) : budget_(budget_bytes) {
 }
 
 LuaEngine::~LuaEngine() {
+    delete http_; // lua_close()より前でも後でも問題ない(HttpStateはLuaと無関係のC++側の状態)
     if (L) lua_close(L);
 }
 
@@ -206,6 +255,13 @@ void LuaEngine::registerApi() {
     registerFn("sd_remove", l_sd_remove);
     registerFn("sd_mkdir", l_sd_mkdir);
     registerFn("sd_list", l_sd_list);
+    registerFn("show_message", l_show_message);
+    registerFn("show_input", l_show_input);
+    registerFn("show_file_save", l_show_file_save);
+    registerFn("show_file_select", l_show_file_select);
+    registerFn("show_color", l_show_color);
+    registerFn("http_request", l_http_request);
+    registerFn("http_cancel", l_http_cancel);
     lua_setglobal(L, "pico");
 }
 
@@ -218,6 +274,7 @@ bool LuaEngine::EventKindFromName(const char* name, EventKind& out) {
         {"press_move", EventKind::PressMove},
         {"press_out", EventKind::PressOut},
         {"render", EventKind::Render},
+        {"closed", EventKind::Closed},
     };
     for (const auto& e : kTable) {
         if (strcmp(e.name, name) == 0) { out = e.kind; return true; }
@@ -255,6 +312,11 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
         case EventKind::Render:
             // l_on()側でLuaCanvasにしか許していないので安全にstatic_castできる
             static_cast<LuaCanvas*>(w)->setOnRender([this, id]() { this->Dispatch(id, EventKind::Render); });
+            break;
+        case EventKind::Closed:
+            // ここでは何もしない: ダイアログのsetOnClosed/setOnClose配線自体は
+            // 生成時点(pico.show_xxx() → WireDialogClosed())で既に済んでいる。
+            // pico.on()はcallbacks_への登録(Dispatch()が引くref)だけを担う
             break;
     }
 }
@@ -308,6 +370,53 @@ void LuaEngine::Dispatch(WidgetId id, EventKind kind) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
         lua_pop(L, 1);
+    }
+}
+
+void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
+    int ref = LUA_NOREF;
+    for (const auto& e : callbacks_) {
+        if (e.id == id && e.kind == EventKind::Closed) { ref = e.ref; break; }
+    }
+    if (ref != LUA_NOREF) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+        lua_pushinteger(L, (lua_Integer)id);
+        lua_pushboolean(L, is_ok);
+        if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+            const char* msg = lua_tostring(L, -1);
+            ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
+            lua_pop(L, 1);
+        }
+    }
+    // pico.on(id,"closed",fn)を呼んでいなくても、ダイアログは必ずここで片付ける
+    // (呼び忘れがモーダルの居座りにならないようにするための保証。クラスコメント
+    // 「ダイアログ」参照)
+    Widget* w = WidgetRegistry::Resolve(id);
+    if (w) WidgetFunctions::DestroyLater(w);
+}
+
+void LuaEngine::WireDialogClosed(Widget* dialog, WidgetId id) {
+    // キャプチャはthis(LuaEngine*)+id(WidgetId)だけなので、他のBindCallback同様
+    // std::functionの小バッファに収まる
+    auto handler = [this, id](bool is_ok) { this->DispatchClosed(id, is_ok); };
+    switch (dialog->getWidgetType()) {
+        case WidgetType::MsgDialog:
+            static_cast<MsgDialog*>(dialog)->setOnClosed(handler);
+            break;
+        case WidgetType::InputDialog:
+            static_cast<InputDialog*>(dialog)->setOnClosed(handler);
+            break;
+        case WidgetType::FileSaveDialog:
+            static_cast<FileSaveDialog*>(dialog)->setOnClose(handler);
+            break;
+        case WidgetType::FileSelectDialog:
+            static_cast<FileSelectDialog*>(dialog)->setOnClose(handler);
+            break;
+        case WidgetType::ColorDialog:
+            static_cast<ColorDialog*>(dialog)->setOnClose(handler);
+            break;
+        default:
+            break; // pico.show_xxx()から渡される型は上の5種のみ
     }
 }
 
@@ -424,6 +533,19 @@ int LuaEngine::l_on(lua_State* L) {
 
     if (kind == EventKind::Render && w->getWidgetType() != WidgetType::LuaCanvas) {
         return luaL_error(L, "pico.on: 'render'イベントはCanvas(pico.create(\"Canvas\"))のみ対応");
+    }
+
+    if (kind == EventKind::Closed) {
+        switch (w->getWidgetType()) {
+            case WidgetType::MsgDialog:
+            case WidgetType::InputDialog:
+            case WidgetType::FileSaveDialog:
+            case WidgetType::FileSelectDialog:
+            case WidgetType::ColorDialog:
+                break;
+            default:
+                return luaL_error(L, "pico.on: 'closed'イベントはダイアログ(pico.show_*が返すID)のみ対応");
+        }
     }
 
     lua_pushvalue(L, 3);
@@ -929,4 +1051,209 @@ int LuaEngine::l_sd_list(lua_State* L) {
     }
     dir.close();
     return 1;
+}
+
+// ---------------- ダイアログ ----------------
+// ヘッダのクラスコメント「ダイアログ」参照。いずれも
+// new Xxx(...) → WidgetFunctions::AddDialog() → setVisible(true) → WireDialogClosed()
+// という同じ手順を踏み、生成したWidgetIdを返す。
+
+int LuaEngine::l_show_message(lua_State* L) {
+    const char* text = luaL_checkstring(L, 1);
+    const char* cancel_text = luaL_checkstring(L, 2);
+    const char* ok_text = luaL_checkstring(L, 3);
+
+    MsgDialog* dialog = new MsgDialog(text, cancel_text, ok_text);
+    if (!dialog) return luaL_error(L, "pico.show_message: 生成に失敗しました(メモリ不足の可能性)");
+
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    const WidgetId id = dialog->getId();
+    Self(L)->WireDialogClosed(dialog, id);
+
+    lua_pushinteger(L, (lua_Integer)id);
+    return 1;
+}
+
+int LuaEngine::l_show_input(lua_State* L) {
+    const char* label = luaL_checkstring(L, 1);
+    const char* initial_text = luaL_optstring(L, 2, "");
+    // 省略時はtrue(単一行)。lua_toboolean()は未指定/nilをfalseとして返すため、
+    // 「複数行を明示的に指定しない限り単一行」にするには先にnoneornilを見る必要がある
+    const bool is_single_line = lua_isnoneornil(L, 3) ? true : (bool)lua_toboolean(L, 3);
+
+    InputDialog* dialog = new InputDialog(label, is_single_line);
+    if (!dialog) return luaL_error(L, "pico.show_input: 生成に失敗しました(メモリ不足の可能性)");
+    if (initial_text && *initial_text) dialog->setInput(initial_text);
+
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    const WidgetId id = dialog->getId();
+    Self(L)->WireDialogClosed(dialog, id);
+
+    lua_pushinteger(L, (lua_Integer)id);
+    return 1;
+}
+
+int LuaEngine::l_show_file_save(lua_State* L) {
+    const char* start_dir = luaL_optstring(L, 1, "/");
+
+    FileSaveDialog* dialog = new FileSaveDialog(start_dir);
+    if (!dialog) return luaL_error(L, "pico.show_file_save: 生成に失敗しました(メモリ不足の可能性)");
+
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    const WidgetId id = dialog->getId();
+    Self(L)->WireDialogClosed(dialog, id);
+
+    lua_pushinteger(L, (lua_Integer)id);
+    return 1;
+}
+
+int LuaEngine::l_show_file_select(lua_State* L) {
+    const char* start_dir = luaL_optstring(L, 1, "/");
+
+    FileSelectDialog* dialog = new FileSelectDialog(start_dir);
+    if (!dialog) return luaL_error(L, "pico.show_file_select: 生成に失敗しました(メモリ不足の可能性)");
+
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    const WidgetId id = dialog->getId();
+    Self(L)->WireDialogClosed(dialog, id);
+
+    lua_pushinteger(L, (lua_Integer)id);
+    return 1;
+}
+
+int LuaEngine::l_show_color(lua_State* L) {
+    ColorDialog* dialog = new ColorDialog();
+    if (!dialog) return luaL_error(L, "pico.show_color: 生成に失敗しました(メモリ不足の可能性)");
+
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    const WidgetId id = dialog->getId();
+    Self(L)->WireDialogClosed(dialog, id);
+
+    lua_pushinteger(L, (lua_Integer)id);
+    return 1;
+}
+
+// ---------------- ネットワーク ----------------
+// ヘッダのクラスコメント「ネットワーク」参照。
+
+int LuaEngine::l_http_request(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const char* method_str = luaL_checkstring(L, 1);
+    const char* url_str = luaL_checkstring(L, 2);
+    size_t body_len = 0;
+    const char* body = lua_isnoneornil(L, 3) ? nullptr : luaL_checklstring(L, 3, &body_len);
+    const char* content_type = lua_isnoneornil(L, 4) ? nullptr : luaL_checkstring(L, 4);
+    luaL_checktype(L, 5, LUA_TFUNCTION);
+
+    HttpRequest::Method method;
+    if (!HttpMethodFromName(method_str, method)) {
+        return luaL_error(L, "pico.http_request: 未知のメソッド '%s'(GET/POST/PUT/PATCH/DELETEのいずれか)", method_str);
+    }
+
+    // 同時に1本まで。前のリクエストが完了していなければ黙って拒否する
+    // (SD無し等と同じ「実行時の状態」枠として扱い、luaL_errorにはしない)
+    if (self->http_ && self->http_->callback_ref != LUA_NOREF) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    Url url;
+    if (!UrlTools::Parse(url, url_str) || url.secure) {
+        lua_pushboolean(L, false); // 不正なURL、またはhttps(未対応)
+        return 1;
+    }
+
+    if (body_len > kMaxHttpBodyBytes) {
+        LOG_APP_WARN("pico.http_request: リクエストボディが上限(%uB)を超えています",
+            (unsigned)kMaxHttpBodyBytes);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    if (!self->http_) self->http_ = new HttpState();
+    HttpState* st = self->http_;
+
+    st->sink.body.clear();
+    st->body_buf.clear();
+    st->content_type_buf.clear();
+
+    // HttpRequestは送信ボディ/Content-Typeを非所有ポインタで受け取るため、
+    // Luaスタック上の一時的な文字列をそのまま渡さず、リクエストが終わるまで
+    // 生きているst->body_buf/content_type_bufへ一度コピーしてから渡す
+    const void* body_ptr = nullptr;
+    if (body && body_len > 0) {
+        st->body_buf.assign(body, body_len);
+        body_ptr = st->body_buf.c_str();
+        body_len = st->body_buf.length();
+    }
+    const char* content_type_ptr = nullptr;
+    if (content_type && *content_type) {
+        st->content_type_buf.assign(content_type);
+        content_type_ptr = st->content_type_buf.c_str();
+    }
+
+    if (!st->request.begin(url, method, &st->sink, body_ptr, body_len, content_type_ptr)) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    lua_pushvalue(L, 5);
+    st->callback_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+int LuaEngine::l_http_cancel(lua_State* L) {
+    LuaEngine* self = Self(L);
+    if (self->http_ && self->http_->callback_ref != LUA_NOREF) {
+        self->http_->request.cancel();
+        luaL_unref(L, LUA_REGISTRYINDEX, self->http_->callback_ref);
+        self->http_->callback_ref = LUA_NOREF;
+    }
+    return 0;
+}
+
+void LuaEngine::UpdateHttp() {
+    if (!http_ || http_->callback_ref == LUA_NOREF) return;
+
+    http_->request.update();
+    if (http_->request.getStatus() == TaskTools::PROCESSING) return;
+
+    const bool ok = (http_->request.getStatus() == TaskTools::SUCCESS);
+    const int status_code = ok ? http_->request.response().statusCode() : 0;
+
+    // 先に外しておく: コールバック内からpico.http_request()を再度呼べるようにするため
+    // (LuaEngine::l_http_requestの「同時に1本まで」判定はcallback_refを見ている)
+    const int ref = http_->callback_ref;
+    http_->callback_ref = LUA_NOREF;
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+    lua_pushboolean(L, ok);
+    lua_pushinteger(L, status_code);
+    if (ok && !http_->sink.body.empty()) {
+        // 本文にNULが混じり得るため、strlen前提のlua_pushstring()ではなく
+        // 長さ明示のlua_pushlstring()を使う
+        lua_pushlstring(L, http_->sink.body.c_str(), http_->sink.body.length());
+    } else {
+        lua_pushnil(L);
+    }
+    if (!ok) {
+        lua_pushstring(L, http_->request.failureToStr());
+    } else {
+        lua_pushnil(L);
+    }
+
+    if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+        const char* msg = lua_tostring(L, -1);
+        ErrorFunctions::ShowFatal(msg ? msg : "pico.http_requestのコールバックでエラーが発生しました");
+        lua_pop(L, 1);
+    }
+
+    luaL_unref(L, LUA_REGISTRYINDEX, ref);
 }

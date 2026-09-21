@@ -1538,6 +1538,15 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、9本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、23本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
+  **`run.sh`はコンパイル・テスト実行の各ステップに`timeout`を掛けてある(2026-09-21追加)**。
+  「まれにrun.shが終わらない」という報告を受けて入れた安全網で、コンパイル1ステップ
+  180秒・テスト実行1本60秒を超えると`[FATAL]`ログを出して明示的にexitする
+  (`timeout -k 10`でSIGTERM無視にも備え、猶予後SIGKILLする)。**`if ! cmd; then rc=$?`や
+  `if cmd; then ... fi; rc=$?`ではPOSIX上`$?`にcmdの本当の終了コードが乗らない
+  (前者は`!`による論理反転、後者は「条件が偽で分岐未実行のifは exit status 0」という
+  規定のため)ので、`rc=0; cmd || rc=$?`の形を使うこと**(`run.sh`の
+  `compile_or_die`/`run_or_die`参照。一度この罠を踏んで学んだ教訓なので、
+  同種のラッパーを足す際は再現しないこと)。

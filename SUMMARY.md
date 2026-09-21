@@ -404,9 +404,12 @@ CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォ
   再起動なしで新しい設定へ繋ぎ直す(分からなければ次に両方揃った時点で繋がる)。
 - **タイムゾーンは`DropdownMenu`のプリセット選択**(`JST-9`等のPOSIX TZ文字列そのものを項目名に
   使う)。設定ファイルの値がプリセットのどれとも一致しない場合は、その値自体を末尾に追加して
-  選択する(独自設定を黒く上書きしないため)。`DropdownMenu`は選択変更を通知するコールバックを
-  持たないため、`onUpdate()`で`getSelectedIndex()`を毎フレーム見て変化を検出する
-  (`ClocksScene`の`before_sec`等と同じ「変化検出」の流儀)。
+  選択する(独自設定を黒く上書きしないため)。`SettingsScene`実装当時の`DropdownMenu`は選択変更を
+  通知するコールバックを持たなかったため、`onUpdate()`で`getSelectedIndex()`を毎フレーム見て
+  変化を検出している(`ClocksScene`の`before_sec`等と同じ「変化検出」の流儀)。
+  ※`DropdownMenu`自体は2026-09-21のLua API穴埋めで`setOnChanged()`
+  (Lua側`dropdown_changed`イベント)を持つようになったが、`SettingsScene.cpp`はこの
+  ポーリング実装のまま未移行(上記「5. Luaアプリ」の`dropdown_changed`参照)。
 - ブラウザのホームは空欄も許可する(空にすると`MarkdownScene`が同梱サンプル文書を開く)。
   他のテキスト項目は空欄のまま決定しても変更しない。
 - 実装に伴い部品側の欠けを2つ埋めた: `Checkbox::causeOnPressStart()`がタップ後に

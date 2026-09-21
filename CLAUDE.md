@@ -79,7 +79,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_sceneの22本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scannerの23本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
@@ -187,15 +187,17 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
   桁は繰り上がらず、その桁だけが巡回する。上限は`23:59:59`。
 
 ### ウィジェットID (`src/gui/widgets/WidgetID.hpp` / `WidgetRegistry.hpp` / `WidgetFactory.hpp`)
-Lua等の外部から安全にウィジェットを指すための32bit ID。**発行側・ファクトリは実装済み、Resolve()の実利用(Lua統合本体)だけが残っている。**
+Lua等の外部から安全にウィジェットを指すための32bit ID。**発行側・ファクトリ・`Resolve()`の実利用(Lua統合本体)まで実装済み**(2026-09-19、下記「Luaバインディング」参照)。
 
 - ビット配分は `[31:26] type(6bit, WidgetType)` / `[25:10] generation(16bit)` / `[9:0] index(10bit)`。`generation==0`は未割り当ての予約値なので**ID 0は常に無効**。
 - 具象ウィジェットは`getWidgetType()`の実装が必須(純粋仮想)。種類を足すときは`WidgetType`へ追記する(64種を超えると`static_assert`で落ちる)。
 - **IDは`getId()`の初回呼び出し時に遅延発行**する。外部から触られないウィジェットはスロットを消費しない。解放は`~Widget()`が`WidgetRegistry::Unregister()`を呼び、スロットのgenerationを進める。
 - `WidgetRegistry::Resolve(id)`はindex範囲・generation・typeの3点を検証して`Widget*`を返す(不一致ならnullptr)。**破棄済みIDの誤参照(use-after-free)はここで弾かれる。**
-- **`Resolve()`はホストテスト(`script/host_test/widget_factory_test.cpp`)で初めて検証された**: 発行済みIDからの解決、type改ざんの検出、破棄済みID(use-after-free)の検出、スロット再利用時のgeneration不一致検出を確認済み。ただし**実コード中の呼び出し元はまだテストのみ**で、実際に使われるのはLua統合から。
+- **`Resolve()`はホストテスト(`script/host_test/widget_factory_test.cpp`)で初めて検証された**: 発行済みIDからの解決、type改ざんの検出、破棄済みID(use-after-free)の検出、スロット再利用時のgeneration不一致検出を確認済み。(2026-09-19追記: 実コード側の呼び出し元も`LuaEngine`(`pico.set/get/on/destroy/add_child`等)として実装済み)
 - **`WidgetType` → `new Xxx` のファクトリを追加した**(`src/gui/widgets/WidgetFactory.hpp/.cpp`)。`WidgetFactory::Create(WidgetType)`がwidgets/直下の汎用部品15種(Button/Label/Textbox/NumberInput/Checkbox/Icon/Image/NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/TabBar/DropdownMenu)を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外(SD走査やシーン固有状態への依存が強いため)。生成直後は仮の位置・大きさなので、呼び出し側がsetX/setY/setW/setH等で整える前提。Textboxは`Textbox.cpp`が明示インスタンス化済みの`N`(`PICO_STR_LL`)に合わせてあり、任意のNは使えない(未使用の組み合わせを増やすには明示インスタンス化をもう1行足す必要がある)。
-- **プロパティのget/setをLuaへ通す共通口(`WidgetProperty.hpp/.cpp`)を追加した(2026-09-19)**。`WidgetProperty::Get/Set(Widget*, Id, Value)`が`WidgetFactory::Create()`対応15種それぞれの代表的なプロパティ(Text/Value/Checked/FontSize/BorderColor等)を読み書きする。Widget基底の仮想関数にはしていない(`setW()`/`setH()`が基底に無く型ごとに意味が違うため。`WidgetFactory`と同じ「WidgetType→switch」形式)。値は`Value{type, i, f, b, FixedString<PICO_PATH_LEN> s}`という固定長のタグ付き共用体もどきで、ヒープを使わない。ホストテストは`script/host_test/widget_property_test.cpp`。**ここまでで「共通口」自体は揃ったが、Lua側からこれを叩くバインディング本体はまだ無い。**
+- **プロパティのget/setをLuaへ通す共通口(`WidgetProperty.hpp/.cpp`)を追加した(2026-09-19)**。`WidgetProperty::Get/Set(Widget*, Id, Value)`が`WidgetFactory::Create()`対応15種それぞれの代表的なプロパティ(Text/Value/Checked/FontSize/BorderColor等)を読み書きする。Widget基底の仮想関数にはしていない(`setW()`/`setH()`が基底に無く型ごとに意味が違うため。`WidgetFactory`と同じ「WidgetType→switch」形式)。値は`Value{type, i, f, b, FixedString<PICO_PATH_LEN> s}`という固定長のタグ付き共用体もどきで、ヒープを使わない。ホストテストは`script/host_test/widget_property_test.cpp`。
+  (2026-09-19追記: この時点では「共通口」自体は揃ったが、Lua側からこれを叩くバインディング本体は
+  まだ無かった。`LuaEngine`実装により`pico.set/get`から実際に呼ばれるようになった)
   (2026-09-21追記: 当初「NumberInputの入力値、Icon::opaqueのget、GridContainerのHAlign/VAlignのget等はウィジェット側に対応するgetter/setterが元々無いため未対応」だったが、Lua APIの細部の穴埋めで`NumberInput::getNum/setNum()`・`Icon::getOpaque()`・`GridContainer::getHAlign/getVAlign()`を追加し全て解消した。`ScrollList`/`DropdownMenu`には新たに`item_count`プロパティ(読み取り専用)も足した。詳細は「Luaバインディング」の「コンテナからの取り外し / リストへの項目追加」参照)
 - `Widget::operator new`が確保失敗(nullptr)した際、以前は無言で失敗していたが、唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。個々の`new Xxx(...)`呼び出し元がnullチェックしていない問題そのものは残っている(下記「Lua着手前の受け皿の状態」の「確保失敗(OOM)」参照)。
 
@@ -602,7 +604,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**まで実装済み。**残っているのは`pico.remove_child`(コンテナから子を明示的に外すAPI)程度の細部のみ**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
@@ -1511,9 +1513,9 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 
 **2026-09-21追記: ①③とも解消済み。** ①は`LuaScene`(上記)、③は`LuaEngine`の
 `lua_sethook`ベースの安全網(上記「実行時間の安全網(暴走防止)」)。ウィジェット固有
-コールバックも同日解消(上記「ウィジェット固有イベント」)。この節が挙げていた穴は
-`pico.remove_child`(コンテナからの子の明示的取り外し。今のところ`pico.destroy`で
-子ごと破棄する経路しか無い)を除いて埋まった。
+コールバックも同日解消(上記「ウィジェット固有イベント」)。この節が挙げていた
+`pico.remove_child`(コンテナからの子の明示的取り外し)も同日の細部穴埋めで追加し、
+挙げていた穴は全て埋まった(詳細は上の「コンテナからの取り外し / リストへの項目追加」参照)。
 
 ## Claude Codeへの申し送り
 

@@ -4,6 +4,7 @@
 
 #include "gui/scenes/Scene.hpp"
 #include "lua/LuaEngine.hpp"
+#include "lua/LuaPermissions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -41,6 +42,13 @@ class LuaScene : public Scene {
         FixedString<kMaxScriptBytes> script_source;
 
         FixedString<PICO_PATH_LEN> script_path;
+
+        // このアプリに許す権限(既定は両方false=最小権限)。LuaEngineのapp_dirは
+        // ここではなくonEnter()でscript_pathから毎回計算し直す(pico.push_scene/
+        // change_sceneで別ファイルへ移った場合、そのファイル自身の親ディレクトリを
+        // 見るのが正しいため。CLAUDE.md「Luaバインディング」「権限」参照)
+        LuaPermissions permissions;
+
         LuaEngine* engine = nullptr;
 
         // Run()(トップレベルのチャンク実行)が成功したかどうか。失敗時はsetup()/loop()を
@@ -56,7 +64,10 @@ class LuaScene : public Scene {
         bool loadAndRun();
 
     public:
-        explicit LuaScene(const char* path) { script_path.assign(path); }
+        explicit LuaScene(const char* path, const LuaPermissions& permissions = LuaPermissions{})
+            : permissions(permissions) {
+            script_path.assign(path);
+        }
 
         const char* getName() const override { return "Lua"; }
 

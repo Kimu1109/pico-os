@@ -2,7 +2,7 @@
 
 > このファイルは `Kimu1109/pico-os` リポジトリ直下に置く、Claude Code向けのプロジェクト背景資料。
 > 元はClaude.aiのProject knowledgeとして管理されていた内容(2026-09-06時点情報)を統合したもの。
-> **最終同期: 2026-09-19(実コードと突き合わせ済み)。**
+> **最終同期: 2026-09-21(実コードと突き合わせ済み)。**
 > **一次情報源は常にこのリポジトリのコードと `SUMMARY.md`。このファイルは「相談の前提を素早く掴むための地図」であり、
 > 実装と乖離があれば実コード側を信じること。**
 
@@ -587,7 +587,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   emsdkの版はワークフローの `EMSDK_VERSION` で固定。公開中のコミットはページのログ先頭の
   `[WEB] pico-os build: <hash>` で分かる。
 
-## ロードマップ・TODO状況(2026-09-16時点)
+## ロードマップ・TODO状況(2026-09-21時点)
 
 相談が来た際はまず本表を見て、「既存機能の拡張」か「ゼロから設計する新機能」かを見分けること。
 **進捗の一次情報源は`SUMMARY.md`**(番号は同ファイルの大項目と揃えてある)。
@@ -596,10 +596,10 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | # | 大項目 | 状況 |
 |---|---|---|
 | 1 | ダイアログ系統 | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用(電卓用)キーボード`KeyboardNum`も実装済み。 |
-| 2 | 汎用基盤 | **ほぼ実装済み**。ウィジェットIDはファクトリまで実装され`Resolve()`もホストテストで検証済み。残るのは**`Resolve()`の実際の呼び出し元**(Lua統合本体)だけで、これは実質#5の一部。 |
-| 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。 |
+| 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
+| 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19)**。`pico.create/destroy/set/get/on/add_child/pop/content_rect/log/show_error`がWidgetFactory/WidgetRegistry/WidgetProperty/ErrorFunctions/SceneFunctionsを橋渡しし、SD上のスクリプト読み込み→ウィジェット生成→タップコールバック→戻るボタンでランチャ復帰、までPCビルドで実機さながらに動作確認済み(`pc/sdcard/lua/hello.lua`、ランチャに「Lua Hello」タイルあり)。**残っているのは命令単位の実行時間制御、ウィジェット固有コールバックへの対応拡大、毎フレームupdate呼び出しの仕組み**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**まで実装済み。**残っているのは命令単位の実行時間制御、ウィジェット固有コールバックへの対応拡大、SDを走査してLuaアプリを見つける処理**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
@@ -640,7 +640,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
     - 1ページ`kMaxPrefetchImages=8`枚まで。既にキャッシュにある画像は取りに行かない(2回目の訪問は取得ゼロ)。ローカル文書は走査ごと飛ばす。
     - `MdScan::ImageRefInLine()`の判定規則は**`parseBlocks()`の画像ブロックと必ず一致させること**。ずれると「取ってきたのに表示されない」「表示されるのに取ってこない」が起きる。
 - **Markdownブラウザのヘッダー/フッター**: ナビゲーション用(戻る/進む/パス/検索)ならScene側にウィジェットを並べるだけで**View改修は不要**。文書由来(タイトル固定表示等)をやる場合のみ、`l_rect`内での高さ控除が論点になる — その際は「ビューポート=`l_rect`全体」という前提が7〜8箇所に直書きされているので、`viewportRect()`へ集約するのが先。
-- **LuaでのウィジェットID管理**: 32bit整数IDの**発行側・ファクトリは実装済み**(`WidgetID.hpp`/`WidgetRegistry`/`WidgetFactory`)。残るのは`Resolve()`を叩くバインディングと、プロパティのget/setをLuaへ通す共通の口。Lua組み込み設計と一緒に決める部分。
+- ~~**LuaでのウィジェットID管理**~~: **解消済み(2026-09-19)**。32bit整数IDの発行側・ファクトリ(`WidgetID.hpp`/`WidgetRegistry`/`WidgetFactory`)に加え、`Resolve()`を叩くバインディングと、プロパティのget/setをLuaへ通す共通の口(`WidgetProperty`)も実装され、`LuaEngine`から実際に使われている。詳細は下記「Luaバインディング」参照。
 
 ## メモリ計測の結論 (2026-09-12時点、実機RP2350で20回の遷移を計測)
 
@@ -785,6 +785,52 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 - **未対応の値(型不一致・非対応プロパティ)は`pico.set`側はエラー、`pico.get`側はプロパティ名が
   有効ならnil**(名前自体が無効ならどちらもエラー)。「setは黙って失敗させない」
   「getは無ければnilというLuaの慣習に合わせる」を使い分けてある。
+
+### 権限(LuaPermissions、2026-09-21実装)
+
+Luaアプリの権限管理の第一歩として、`network`/`sd_outside_app_dir`の2値(`src/lua/LuaPermissions.hpp`)
+だけを見る粗い実装にした。パスのホワイトリストやホスト単位の制限のような細かい制御はまだ無い。
+
+- **`LuaEngine`のコンストラクタが`LuaPermissions`と`app_dir`(文字列)を追加で受け取る**
+  (どちらもデフォルト引数があるので、権限を意識しない既存の呼び出し元
+  (ホストテスト等)は今まで通り`LuaEngine(budget)`のままで良い)。`app_dir`は
+  `PICO_IO::normalize()`して`app_dir_`へ持つ。**既定値の`"/"`は「制限なし」に相当する**
+  (ルート配下=あらゆる絶対パスが該当するため)。`LuaScene`を介さず`LuaEngine`を
+  直接使う場面(ホストテスト等)はこの既定のままなので、今回の変更で挙動は変わらない。
+- **実際に効くのは`LuaScene`経由の場合だけ**。`LuaScene::onEnter()`が
+  `PICO_IO::parent(script_path)`でスクリプト自身の親ディレクトリを毎回計算し直して
+  `app_dir`として渡す(`push_scene`/`change_scene`で別ファイルへ移った場合、
+  そのファイル自身の場所を見るのが正しいため、`LuaScene`のメンバへ固定して
+  持ち回したりはしない)。
+- **ゲートしているのは`pico.http_request`(network)と、`pico.sd_exists/read/write/remove/mkdir/list`
+  +`pico.image_load`(sd_outside_app_dir)**。いずれも拒否時は`luaL_error`にはせず
+  `false`/`nil`を返すだけ(SD無し等、既存の「実行時の状態」枠と同じ扱い。
+  プログラマの書き間違いだけでなく、想定通り動くスクリプトが試しうる経路でもあるため)。
+  ただし`LOG_APP_WARN`は出す(SD無しのような日常的な状態とは違い、権限の壁に
+  当たったことは開発者が気づけるようにしておきたいため)。
+  判定は`LuaEngine::SdPathAllowed()`の1箇所に集約してある:
+  `sd_outside_app_dir==true`なら常に許可、`false`なら`path`を`PICO_IO::normalize()`した
+  上で`app_dir_`自身か`app_dir_+"/"`始まりかを見る(`normalize()`が`..`によるルート越え
+  自体は既に防いでいるので、ここでは「どのディレクトリ配下か」だけを見ればよい)。
+- **権限は「スクリプトファイル単位」ではなく「アプリ単位」で決まるモデルにした**。
+  `pico.push_scene()`/`pico.change_scene()`は呼び出し元の`LuaEngine`が持つ
+  `LuaPermissions`をそのまま新しい`LuaScene`へ引き継ぐ(`LuaEngine::permissions()`)。
+  複数画面のLuaアプリで2画面目以降だけ権限が既定値(最小権限)へ落ちてしまうと
+  分かりにくいバグの元になるため。一方`pico.launch_app()`は対象アプリ自身の
+  `AppEntry::create()`(=その`Register()`呼び出しが決めた権限)へ委ねるので、
+  ここでは何も引き継がない(別アプリへの遷移なので独立した権限であるべき)。
+- **権限の割り当ては現状、アプリ登録側(`App_List.cpp`)が`Register()`呼び出しごとに
+  手書きする**。`AppFunctions::MakeSceneWithArg<LuaScene>`は`entry.arg`(パス)しか
+  `LuaScene`へ渡さない汎用テンプレートのままにしてあり(他の`MakeSceneWithArg<T>`
+  利用者に影響を与えたくないため)、権限が必要なアプリは専用の生成関数を書く
+  (`App_List.cpp`の`MakeLuaHelloScene()`が実例。同梱デモ`hello.lua`は`/lua/`の外
+  (`/img/hello.pimg`)を読むため`sd_outside_app_dir=true`を明示的に与えている)。
+  **Luaアプリが増えて権限の組み合わせも増えたら、`AppEntry`へ権限フィールドを
+  持たせる形へ一般化することを検討する**(今は登録されているLuaアプリが1つだけなので、
+  汎用化は時期尚早と判断した)。**SDを走査して動的にLuaアプリを登録する仕組み
+  (下記「Lua着手前の受け皿の状態」参照)ができた際は、その時点でこの割り当て方法を
+  再設計する必要がある**(スキャンで見つけたスクリプトに対し、誰が何を根拠に
+  権限を決めるかがまだ無い)。
 
 ### コールバック中継の設計(ヒープを使わない理由)
 

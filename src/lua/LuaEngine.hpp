@@ -6,6 +6,8 @@
 #include "lua.hpp"
 #include "gui/widgets/WidgetID.hpp"
 #include "gui/icons/icon_render.h"
+#include "lua/LuaPermissions.hpp"
+#include "util/FixedString.hpp"
 #include "consts.hpp"
 
 // LuaスクリプトとC++(ウィジェット層)を繋ぐ実行エンジン。1インスタンスが
@@ -80,9 +82,11 @@
 // しか無かったため、Luaスクリプトは「自分を起動した画面へ戻る」以外の画面遷移が
 // できなかった。C++側のSceneFunctions::Change/Push/Popに相当する3つを揃えた:
 //   - push_scene(path) / change_scene(path) … 別のLuaスクリプトへ`SceneFunctions::Push/Change`
-//     する。`new LuaScene(path)`を渡すだけで、Lua側が構築できる唯一のScene型が
-//     LuaScene(パス文字列1つのコンストラクタ)であるため、この2つはLua同士の
-//     画面遷移(複数画面のLuaアプリを作る)専用になる
+//     する。`new LuaScene(path, permissions())`を渡すだけで、Lua側が構築できる
+//     唯一のScene型がLuaScene(パス文字列+LuaPermissionsのコンストラクタ)であるため、
+//     この2つはLua同士の画面遷移(複数画面のLuaアプリを作る)専用になる。
+//     権限(LuaPermissions)は今のLuaEngineが持つものをそのまま引き継ぐ
+//     (下記「権限」参照)
 //   - launch_app(name) … `AppFunctions::LaunchByName()`経由でランチャの登録簿を
 //     名前引きし、C++製アプリも含め任意の既存アプリへ`Push`する。ランチャのタイルを
 //     タップするのと同じ経路なので、Luaアプリから他のアプリへジャンプできる
@@ -113,6 +117,15 @@
 // (`Dispatch()`をダイアログの具象型に依存させたくないため。`MsgDialog`は
 // `is_ok`だけで完結するので追加のプロパティは無い)。
 //
+// 権限(LuaPermissions、2026-09-21実装): `pico.http_request`(ネットワーク)と
+// `pico.sd_*`/`pico.image_load`(app_dir外のSDアクセス)は、コンストラクタで渡された
+// `LuaPermissions`次第で早期に拒否できるようにした。既定はどちらもfalse(最小権限)。
+// `sd_outside_app_dir`のfalseは「`app_dir`(通常はスクリプト自身の親ディレクトリ。
+// `LuaScene`が渡す)の配下だけに閉じる」という意味で、`app_dir`自体を渡さず
+// 既定値("/")のまま構築した場合はルート配下=実質無制限になる(ホストテスト等、
+// `LuaScene`を介さず直接`LuaEngine`を使う場合の互換動作)。許可は構築時の1回きりで、
+// 実行中にスクリプト側から変更する手段は無い。詳細は`LuaPermissions.hpp`参照。
+//
 // ネットワーク(pico.http_request/http_cancel): 既存の`Http_Get`はMarkdownブラウザの
 // キャッシュ用途(GET専用、200/304以外は本文を捨てて一律失敗扱い)に特化しているため、
 // 汎用のHTTPクライアントとしては使えない。新設した`HttpRequest`
@@ -128,8 +141,14 @@
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
+        // permissions: ネットワーク/app_dir外SDアクセスの許可(既定は両方false)。
+        // app_dir: sd_outside_app_dir==falseの間、pico.sd_*/pico.image_loadを
+        //          この配下だけに閉じる(PICO_IO::normalize()で正規化して持つ)。
+        //          既定の"/"は「制限なし」に相当する(LuaSceneは自分のスクリプトの
+        //          親ディレクトリを渡すが、それ以外の呼び出し元は省略してよい)。
         // 構築に失敗した場合(予算不足でstate本体すら作れない等)はvalid()がfalseになる。
-        explicit LuaEngine(size_t budget_bytes);
+        explicit LuaEngine(size_t budget_bytes, const LuaPermissions& permissions = LuaPermissions{},
+                            const char* app_dir = "/");
         ~LuaEngine();
 
         // コピー・ムーブ不可(lua_State*と登録済みコールバックの対応が複雑になるため。
@@ -140,6 +159,11 @@ class LuaEngine {
         bool valid() const { return L != nullptr; }
         size_t usedBytes() const { return used_; }
         size_t budgetBytes() const { return budget_; }
+
+        // pico.push_scene/change_sceneが同じ持ち場(app_dir)へ遷移する新しいLuaSceneへ
+        // そのまま引き継ぐための読み出し口(「権限はスクリプトファイル単位ではなく
+        // アプリ単位」というモデル。l_push_scene/l_change_scene参照)
+        const LuaPermissions& permissions() const { return permissions_; }
 
         // 生のlua_State*が要る場面(テスト、将来の高度な相互運用)向けの脱出口。
         // アプリ側のコードは基本的にこれを使わずRun()/pico.*経由で完結させること。
@@ -183,6 +207,11 @@ class LuaEngine {
         lua_State* L = nullptr;
         size_t budget_;
         size_t used_ = 0;
+
+        LuaPermissions permissions_;
+        // sd_outside_app_dir==falseの間、pico.sd_*/pico.image_loadを閉じ込める先
+        // (PICO_IO::normalize()済み)。コンストラクタのapp_dir引数参照
+        FixedString<PICO_PATH_LEN> app_dir_;
 
         // loop()が一度エラーを出したら以降は呼ばない(毎フレーム同じエラーダイアログが
         // 積まれるのを防ぐ安全弁)。setup()側はRun()と同じく1回きりなので不要
@@ -239,6 +268,12 @@ class LuaEngine {
 
         static void* Alloc(void* ud, void* ptr, size_t osize, size_t nsize);
         static int InitTrampoline(lua_State* L);
+
+        // pico.sd_*/pico.image_loadの共通ガード。permissions_.sd_outside_app_dirが
+        // trueなら常にtrue。falseの間はpathを正規化した上でapp_dir_の配下
+        // (app_dir_自身、またはapp_dir_+"/"で始まる)かどうかを見る。
+        // app_dir_=="/"(既定値)の場合は常にtrue(「制限なし」)。
+        bool SdPathAllowed(const char* path) const;
 
         void registerApi();
         void registerFn(const char* name, lua_CFunction fn);

@@ -2,6 +2,7 @@
 #include "OS_Data.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Error_Functions.hpp"
+#include "storage/SD_IO.hpp"
 
 #include "Arduino.h"
 
@@ -15,7 +16,13 @@ void LuaScene::onEnter() {
 
     script_ok = false;
 
-    engine = new LuaEngine(kLuaBudgetBytes);
+    // sd_outside_app_dir==falseの間、pico.sd_*/pico.image_loadをこの配下だけに閉じる。
+    // スクリプト自身の親ディレクトリを毎回ここで計算し直す(push_scene/change_sceneで
+    // 別ファイルへ移った場合、そのファイル自身の場所を見るのが正しいため)
+    FixedString<PICO_PATH_LEN> app_dir;
+    PICO_IO::parent(app_dir, script_path.c_str());
+
+    engine = new LuaEngine(kLuaBudgetBytes, permissions, app_dir.c_str());
     if (!engine || !engine->valid()) {
         // LuaEngineのコンストラクタ内で既にLOG_APP_FAILは出ている。
         // 画面側にも見える形で伝える

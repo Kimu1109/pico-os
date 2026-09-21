@@ -703,9 +703,15 @@ int main(){
     // ---- ネットワーク(pico.http_request/http_cancel): 実ソケットに触れない早期拒否経路 ----
     // 送信ボディの上限テストで16KiB超の文字列を作るため、それまでの全テストで
     // 積み上がった共有engineの64KiB予算と衝突しないよう、専用の新しいLuaEngineを使う
-    // (「画像: 合計バイト数の上限」テストと同じ理由)
+    // (「画像: 合計バイト数の上限」テストと同じ理由)。
+    // ここで見たいのはhttp_request自体の引数チェック等の早期拒否経路なので、
+    // LuaPermissions.network=trueを明示的に与える(既定のfalseだと権限自体で
+    // 弾かれてしまい、この経路を検証できないため。権限が無い場合の拒否は
+    // 下の「権限(LuaPermissions)」ブロックで別途確認する)
     {
-        LuaEngine http_engine(128 * 1024);
+        LuaPermissions http_perm;
+        http_perm.network = true;
+        LuaEngine http_engine(128 * 1024, http_perm);
         check(http_engine.valid(), "ネットワーク早期拒否テスト用にLuaEngineを構築");
         if (http_engine.valid()) {
             lua_pushcfunction(http_engine.raw(), l_check);
@@ -737,6 +743,72 @@ int main(){
                 pico.http_cancel() -- 後片付け(接続を試みる前に取り消すので実ソケットには触れない)
             )LUA", "http_request_reject_test");
             check(ok, "pico.http_request: 早期拒否テストの実行が成功する");
+        }
+    }
+
+    // ---- 権限(LuaPermissions): ネットワーク拒否 / app_dir外SDアクセスの拒否 ----
+    // ここまでのengine/img_budget_engine/http_engineはいずれもapp_dirを省略("/"=
+    // 無制限)で構築しており、image_loadのテストが/img/配下を問題なく読めていたのが
+    // その証左。ここでは権限の効果そのものを専用のLuaEngineで確認する
+    // (LOG_APP_WARNが出ること自体は見ず、戻り値がluaL_errorではなくfalse/nilに
+    // なること、app_dir外には実際にI/Oが起きないことを見る)
+    {
+        // network=false(既定)の間はpico.http_requestが早期にfalseを返す
+        LuaEngine no_network_engine(64 * 1024);
+        check(no_network_engine.valid(), "権限テスト用にLuaEngineを構築(ネットワーク権限無し)");
+        if (no_network_engine.valid()) {
+            lua_pushcfunction(no_network_engine.raw(), l_check);
+            lua_setglobal(no_network_engine.raw(), "check");
+            const bool ok = no_network_engine.Run(
+                "check(pico.http_request('GET', 'http://127.0.0.1:1/', nil, nil, function() end) == false, "
+                "'pico.http_request: network権限が無ければfalse')",
+                "no_network_test");
+            check(ok, "LuaPermissions: ネットワーク拒否テストの実行が成功する");
+        }
+
+        // sd_outside_app_dir=false(既定)+ app_dir="/lua" の間は、その配下だけ許可される
+        LuaEngine confined_engine(64 * 1024, LuaPermissions{}, "/lua");
+        check(confined_engine.valid(), "権限テスト用にLuaEngineを構築(app_dir=/lua)");
+        if (confined_engine.valid()) {
+            lua_pushcfunction(confined_engine.raw(), l_check);
+            lua_setglobal(confined_engine.raw(), "check");
+
+            HostSd::files["/lua/inside.txt"] = "ok";
+            HostSd::files["/other/outside.txt"] = "ng"; // app_dir外に実在するファイル
+
+            const bool ok = confined_engine.Run(R"LUA(
+                check(pico.sd_read('/lua/inside.txt') == 'ok',
+                      'pico.sd_read: app_dir配下は読める')
+                check(pico.sd_read('/other/outside.txt') == nil,
+                      'pico.sd_read: app_dir外はnil')
+                check(pico.sd_exists('/other/outside.txt') == false,
+                      'pico.sd_exists: app_dir外は実在してもfalse')
+                check(pico.sd_write('/other/outside2.txt', 'x') == false,
+                      'pico.sd_write: app_dir外への書き込みはfalse')
+                check(pico.sd_write('/lua/inside2.txt', 'new') == true,
+                      'pico.sd_write: app_dir配下への書き込みはtrue')
+                check(pico.sd_read('/lua/inside2.txt') == 'new',
+                      'pico.sd_write→pico.sd_read: 書いた内容が読み返せる')
+            )LUA", "confined_sd_test");
+            check(ok, "LuaPermissions: app_dir配下への閉じ込めテストの実行が成功する");
+
+            check(HostSd::files.count("/other/outside2.txt") == 0,
+                  "pico.sd_write: app_dir外への書き込みは拒否時に実際のファイルを作らない");
+        }
+
+        // sd_outside_app_dir=trueならapp_dirを指定していてもすり抜けて読み書きできる
+        LuaPermissions unrestricted_perm;
+        unrestricted_perm.sd_outside_app_dir = true;
+        LuaEngine unrestricted_engine(64 * 1024, unrestricted_perm, "/lua");
+        check(unrestricted_engine.valid(), "権限テスト用にLuaEngineを構築(sd_outside_app_dir=true)");
+        if (unrestricted_engine.valid()) {
+            lua_pushcfunction(unrestricted_engine.raw(), l_check);
+            lua_setglobal(unrestricted_engine.raw(), "check");
+            const bool ok = unrestricted_engine.Run(
+                "check(pico.sd_read('/other/outside.txt') == 'ng', "
+                "'pico.sd_read: sd_outside_app_dir=trueならapp_dir外も読める')",
+                "unrestricted_sd_test");
+            check(ok, "LuaPermissions: sd_outside_app_dir=trueテストの実行が成功する");
         }
     }
 

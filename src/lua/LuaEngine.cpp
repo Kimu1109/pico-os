@@ -124,7 +124,10 @@ int LuaEngine::InitTrampoline(lua_State* L) {
     return 0;
 }
 
-LuaEngine::LuaEngine(size_t budget_bytes) : budget_(budget_bytes) {
+LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, const char* app_dir)
+    : budget_(budget_bytes), permissions_(permissions) {
+    if (!PICO_IO::normalize(app_dir_, app_dir)) app_dir_.assign("/");
+
     L = lua_newstate(Alloc, this);
     if (!L) {
         LOG_APP_FAIL("LuaEngine: lua_newstateに失敗しました(予算%zuB)", budget_bytes);
@@ -615,21 +618,31 @@ int LuaEngine::l_pop(lua_State*) {
 }
 
 int LuaEngine::l_push_scene(lua_State* L) {
+    LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
 
-    // LuaScene(path)のコンストラクタはFixedStringへパスをコピーするだけなので、
+    // LuaScene(path, permissions)のコンストラクタはFixedStringへコピーするだけなので、
     // ここで即座に構築してよい(SDを開くのはSceneFunctions::Update()経由のonEnter()から)。
     // pico.pop()と同じく要求を登録するだけで、実際の遷移・エラー表示(ファイル不在等)は
     // 次のフレーム境界(LuaScene::onEnter())まで保留される。今のスクリプト(=このLuaEngine)は
-    // その時点でonExit()経由で破棄されるので、この呼び出し自体は安全に戻ってこられる
-    SceneFunctions::Push(new LuaScene(path));
+    // その時点でonExit()経由で破棄されるので、この呼び出し自体は安全に戻ってこられる。
+    //
+    // 権限は「スクリプトファイル単位」ではなく「アプリ単位」で決まるものとして、
+    // 今のLuaEngineが持つLuaPermissionsをそのまま引き継ぐ(push_scene/change_sceneは
+    // 同じアプリの内部で別の画面へ移るためのAPIなので、遷移のたびに権限が既定値
+    // (最小権限)へ戻ってしまうと、複数画面のLuaアプリで2画面目以降だけ権限が
+    // 落ちるという分かりにくい挙動になる)。app_dir自体は遷移先スクリプト自身の
+    // 親ディレクトリから改めて計算し直す(LuaScene::onEnter()側)
+    SceneFunctions::Push(new LuaScene(path, self->permissions_));
     return 0;
 }
 
 int LuaEngine::l_change_scene(lua_State* L) {
+    LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
     // push_sceneと違いスタックを消費しない(戻れなくなる)版。l_push_sceneのコメント参照
-    SceneFunctions::Change(new LuaScene(path));
+    // (権限の引き継ぎ方も同じ)
+    SceneFunctions::Change(new LuaScene(path, self->permissions_));
     return 0;
 }
 
@@ -833,6 +846,11 @@ int LuaEngine::l_image_load(lua_State* L) {
     const char* path = luaL_checkstring(L, 1);
 
     if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.image_load: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushnil(L);
+        return 1;
+    }
 
     size_t index = kMaxLuaImages;
     for (size_t i = 0; i < kMaxLuaImages; ++i) {
@@ -926,17 +944,45 @@ int LuaEngine::l_image_free(lua_State* L) {
 
 // ---------------- SDカードアクセス ----------------
 // ヘッダのクラスコメント参照。OSData::SD_usable==falseの間はどれも失敗(false/nil)を
-// 返すだけでluaL_errorにはしない。
+// 返すだけでluaL_errorにはしない。app_dir_の外を指すパスも同じ扱い(SdPathAllowed()参照。
+// プログラマの書き間違いだけでなく、悪意あるスクリプトが試す経路でもあるため
+// luaL_errorで詳細を返さず、SD無し等と同じ「実行時の状態」枠にまとめてある)。
+
+bool LuaEngine::SdPathAllowed(const char* path) const {
+    if (permissions_.sd_outside_app_dir) return true;
+
+    FixedString<PICO_PATH_LEN> normalized;
+    if (!PICO_IO::normalize(normalized, path)) return false;
+
+    const size_t dir_len = app_dir_.length();
+    // app_dir_=="/"(既定値。LuaScene以外がapp_dirを指定せずLuaEngineを直接使う場合)は
+    // 「制限なし」に相当する
+    if (dir_len <= 1) return true;
+
+    const char* p = normalized.c_str();
+    const char* dir = app_dir_.c_str();
+    if (strncmp(p, dir, dir_len) != 0) return false;
+    // "/lua/foo"は"/lua"の配下だが、"/luaxxx"のような別ディレクトリを誤って配下と
+    // 判定しないよう、続きがパス終端か'/'であることまで確認する
+    return p[dir_len] == '\0' || p[dir_len] == '/';
+}
 
 int LuaEngine::l_sd_exists(lua_State* L) {
+    LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
-    lua_pushboolean(L, OSData::SD_usable && OSData::SD.exists(path));
+    lua_pushboolean(L, OSData::SD_usable && self->SdPathAllowed(path) && OSData::SD.exists(path));
     return 1;
 }
 
 int LuaEngine::l_sd_read(lua_State* L) {
+    LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
     if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.sd_read: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushnil(L);
+        return 1;
+    }
 
     FsFile f = OSData::SD.open(path, O_RDONLY);
     if (!f) { lua_pushnil(L); return 1; }
@@ -978,12 +1024,18 @@ int LuaEngine::l_sd_read(lua_State* L) {
 }
 
 int LuaEngine::l_sd_write(lua_State* L) {
+    LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
     size_t len = 0;
     const char* data = luaL_checklstring(L, 2, &len);
     const bool append = lua_toboolean(L, 3);
 
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.sd_write: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushboolean(L, false);
+        return 1;
+    }
 
     FsFile f = OSData::SD.open(path, O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC));
     if (!f) { lua_pushboolean(L, false); return 1; }
@@ -995,8 +1047,14 @@ int LuaEngine::l_sd_write(lua_State* L) {
 }
 
 int LuaEngine::l_sd_remove(lua_State* L) {
+    LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.sd_remove: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushboolean(L, false);
+        return 1;
+    }
 
     // FileExplorer::on_press_delete()と同じ判断(ディレクトリなら再帰削除)
     FsFile f = OSData::SD.open(path);
@@ -1015,16 +1073,28 @@ int LuaEngine::l_sd_remove(lua_State* L) {
 }
 
 int LuaEngine::l_sd_mkdir(lua_State* L) {
+    LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.sd_mkdir: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushboolean(L, false);
+        return 1;
+    }
 
     lua_pushboolean(L, OSData::SD.mkdir(path));
     return 1;
 }
 
 int LuaEngine::l_sd_list(lua_State* L) {
+    LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
     if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.sd_list: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushnil(L);
+        return 1;
+    }
 
     FsFile dir = OSData::SD.open(path, O_RDONLY);
     if (!dir || !dir.isDir()) {
@@ -1153,6 +1223,12 @@ int LuaEngine::l_http_request(lua_State* L) {
     HttpRequest::Method method;
     if (!HttpMethodFromName(method_str, method)) {
         return luaL_error(L, "pico.http_request: 未知のメソッド '%s'(GET/POST/PUT/PATCH/DELETEのいずれか)", method_str);
+    }
+
+    if (!self->permissions_.network) {
+        LOG_APP_WARN("pico.http_request: このアプリにはネットワーク権限がありません");
+        lua_pushboolean(L, false);
+        return 1;
     }
 
     // 同時に1本まで。前のリクエストが完了していなければ黙って拒否する

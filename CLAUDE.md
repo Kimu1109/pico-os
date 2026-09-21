@@ -786,6 +786,52 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
   有効ならnil**(名前自体が無効ならどちらもエラー)。「setは黙って失敗させない」
   「getは無ければnilというLuaの慣習に合わせる」を使い分けてある。
 
+### 権限(LuaPermissions、2026-09-21実装)
+
+Luaアプリの権限管理の第一歩として、`network`/`sd_outside_app_dir`の2値(`src/lua/LuaPermissions.hpp`)
+だけを見る粗い実装にした。パスのホワイトリストやホスト単位の制限のような細かい制御はまだ無い。
+
+- **`LuaEngine`のコンストラクタが`LuaPermissions`と`app_dir`(文字列)を追加で受け取る**
+  (どちらもデフォルト引数があるので、権限を意識しない既存の呼び出し元
+  (ホストテスト等)は今まで通り`LuaEngine(budget)`のままで良い)。`app_dir`は
+  `PICO_IO::normalize()`して`app_dir_`へ持つ。**既定値の`"/"`は「制限なし」に相当する**
+  (ルート配下=あらゆる絶対パスが該当するため)。`LuaScene`を介さず`LuaEngine`を
+  直接使う場面(ホストテスト等)はこの既定のままなので、今回の変更で挙動は変わらない。
+- **実際に効くのは`LuaScene`経由の場合だけ**。`LuaScene::onEnter()`が
+  `PICO_IO::parent(script_path)`でスクリプト自身の親ディレクトリを毎回計算し直して
+  `app_dir`として渡す(`push_scene`/`change_scene`で別ファイルへ移った場合、
+  そのファイル自身の場所を見るのが正しいため、`LuaScene`のメンバへ固定して
+  持ち回したりはしない)。
+- **ゲートしているのは`pico.http_request`(network)と、`pico.sd_exists/read/write/remove/mkdir/list`
+  +`pico.image_load`(sd_outside_app_dir)**。いずれも拒否時は`luaL_error`にはせず
+  `false`/`nil`を返すだけ(SD無し等、既存の「実行時の状態」枠と同じ扱い。
+  プログラマの書き間違いだけでなく、想定通り動くスクリプトが試しうる経路でもあるため)。
+  ただし`LOG_APP_WARN`は出す(SD無しのような日常的な状態とは違い、権限の壁に
+  当たったことは開発者が気づけるようにしておきたいため)。
+  判定は`LuaEngine::SdPathAllowed()`の1箇所に集約してある:
+  `sd_outside_app_dir==true`なら常に許可、`false`なら`path`を`PICO_IO::normalize()`した
+  上で`app_dir_`自身か`app_dir_+"/"`始まりかを見る(`normalize()`が`..`によるルート越え
+  自体は既に防いでいるので、ここでは「どのディレクトリ配下か」だけを見ればよい)。
+- **権限は「スクリプトファイル単位」ではなく「アプリ単位」で決まるモデルにした**。
+  `pico.push_scene()`/`pico.change_scene()`は呼び出し元の`LuaEngine`が持つ
+  `LuaPermissions`をそのまま新しい`LuaScene`へ引き継ぐ(`LuaEngine::permissions()`)。
+  複数画面のLuaアプリで2画面目以降だけ権限が既定値(最小権限)へ落ちてしまうと
+  分かりにくいバグの元になるため。一方`pico.launch_app()`は対象アプリ自身の
+  `AppEntry::create()`(=その`Register()`呼び出しが決めた権限)へ委ねるので、
+  ここでは何も引き継がない(別アプリへの遷移なので独立した権限であるべき)。
+- **権限の割り当ては現状、アプリ登録側(`App_List.cpp`)が`Register()`呼び出しごとに
+  手書きする**。`AppFunctions::MakeSceneWithArg<LuaScene>`は`entry.arg`(パス)しか
+  `LuaScene`へ渡さない汎用テンプレートのままにしてあり(他の`MakeSceneWithArg<T>`
+  利用者に影響を与えたくないため)、権限が必要なアプリは専用の生成関数を書く
+  (`App_List.cpp`の`MakeLuaHelloScene()`が実例。同梱デモ`hello.lua`は`/lua/`の外
+  (`/img/hello.pimg`)を読むため`sd_outside_app_dir=true`を明示的に与えている)。
+  **Luaアプリが増えて権限の組み合わせも増えたら、`AppEntry`へ権限フィールドを
+  持たせる形へ一般化することを検討する**(今は登録されているLuaアプリが1つだけなので、
+  汎用化は時期尚早と判断した)。**SDを走査して動的にLuaアプリを登録する仕組み
+  (下記「Lua着手前の受け皿の状態」参照)ができた際は、その時点でこの割り当て方法を
+  再設計する必要がある**(スキャンで見つけたスクリプトに対し、誰が何を根拠に
+  権限を決めるかがまだ無い)。
+
 ### コールバック中継の設計(ヒープを使わない理由)
 
 `Widget::on_press_start`等は`std::function<void()>`のままシグネチャを変えていない

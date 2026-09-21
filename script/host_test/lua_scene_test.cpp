@@ -273,7 +273,13 @@ int main(){
         HostSd::files["/lua/sub_a.lua"] = kSubAScript;
         HostSd::files["/lua/sub_b.lua"] = kSubBScript;
 
-        SceneFunctions::Push(new LuaScene("/lua/push_source.lua"));
+        // push_source.luaへ意図的に権限を与え、push_scene/change_sceneで移った先でも
+        // 同じ権限が引き継がれる(権限は「スクリプトファイル単位」ではなく
+        // 「アプリ単位」で決まる、というLuaEngine::l_push_scene/l_change_sceneの
+        // 設計の回帰確認)
+        LuaPermissions push_source_perm;
+        push_source_perm.network = true;
+        SceneFunctions::Push(new LuaScene("/lua/push_source.lua", push_source_perm));
         SceneFunctions::Update();
         LuaScene* push_source_scene = static_cast<LuaScene*>(SceneFunctions::Current());
         check(push_source_scene != nullptr && SceneFunctions::Depth() == 1,
@@ -301,6 +307,9 @@ int main(){
               "pico.push_scene(): 指定したスクリプトが実際に実行される");
         lua_pop(a_L, 1);
 
+        check(sub_a_scene->getEngine()->permissions().network,
+              "pico.push_scene(): 呼び出し元の権限(LuaPermissions)が遷移先へ引き継がれる");
+
         lua_getglobal(a_L, "change_trigger");
         const WidgetId change_trigger_id = (WidgetId)lua_tointeger(a_L, -1);
         lua_pop(a_L, 1);
@@ -321,6 +330,9 @@ int main(){
         check(std::string(lua_tostring(b_L, -1)) == "sub_b_ran",
               "pico.change_scene(): 指定したスクリプトが実際に実行される(前のsub_a側の状態は残らない)");
         lua_pop(b_L, 1);
+
+        check(sub_b_scene->getEngine()->permissions().network,
+              "pico.change_scene(): 呼び出し元の権限(LuaPermissions)が遷移先へ引き継がれる");
 
         // 積んだ分(push_source, sub_b)だけPopしてランチャへ戻る
         SceneFunctions::Pop();

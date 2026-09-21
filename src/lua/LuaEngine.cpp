@@ -18,8 +18,10 @@
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
+#include "functions/App_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "gui/scenes/Scene.hpp"
+#include "gui/scenes/LuaScene.hpp"
 #include "storage/SD_IO.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
@@ -178,6 +180,9 @@ void LuaEngine::registerApi() {
     registerFn("log", l_log);
     registerFn("show_error", l_show_error);
     registerFn("pop", l_pop);
+    registerFn("push_scene", l_push_scene);
+    registerFn("change_scene", l_change_scene);
+    registerFn("launch_app", l_launch_app);
     registerFn("content_rect", l_content_rect);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
@@ -485,6 +490,36 @@ int LuaEngine::l_pop(lua_State*) {
     // 要求を登録するだけで実際の遷移はフレーム境界(SceneFunctions::Update())まで保留される
     SceneFunctions::Pop();
     return 0;
+}
+
+int LuaEngine::l_push_scene(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+
+    // LuaScene(path)のコンストラクタはFixedStringへパスをコピーするだけなので、
+    // ここで即座に構築してよい(SDを開くのはSceneFunctions::Update()経由のonEnter()から)。
+    // pico.pop()と同じく要求を登録するだけで、実際の遷移・エラー表示(ファイル不在等)は
+    // 次のフレーム境界(LuaScene::onEnter())まで保留される。今のスクリプト(=このLuaEngine)は
+    // その時点でonExit()経由で破棄されるので、この呼び出し自体は安全に戻ってこられる
+    SceneFunctions::Push(new LuaScene(path));
+    return 0;
+}
+
+int LuaEngine::l_change_scene(lua_State* L) {
+    const char* path = luaL_checkstring(L, 1);
+    // push_sceneと違いスタックを消費しない(戻れなくなる)版。l_push_sceneのコメント参照
+    SceneFunctions::Change(new LuaScene(path));
+    return 0;
+}
+
+int LuaEngine::l_launch_app(lua_State* L) {
+    const char* name = luaL_checkstring(L, 1);
+
+    // AppFunctions::Launch()と同じPush経路(C++製アプリ含め登録簿の全アプリへ飛べる)。
+    // 名前の綴りミス等その場で判定できる失敗だけbool falseで返す
+    // (実際のシーン遷移自体はpico.pop()/push_scene同様フレーム境界まで保留される)
+    const bool ok = AppFunctions::LaunchByName(name);
+    lua_pushboolean(L, ok);
+    return 1;
 }
 
 int LuaEngine::l_content_rect(lua_State* L) {

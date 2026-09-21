@@ -426,6 +426,8 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
     "$ROOT/src/functions/Error_Functions.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$OUT"/lua_obj/*.o \
     -o "$OUT/lua_engine_test"
 
@@ -440,6 +442,7 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Error_Functions.cpp" \

@@ -70,6 +70,19 @@ pico.on(back_button, "press_start", function()
     pico.pop()
 end)
 
+-- シーン制御のデモ: pico.push_scene()は別のLuaスクリプトへ画面遷移する
+-- (SceneFunctions::Pushの薄いラッパー。戻り先はスタックへ積まれるのでpico.pop()で戻れる)。
+-- 続きはhello_sub.lua/hello_sub2.lua(pico.change_scene()/pico.launch_app()の実演)へ
+local sub_button = pico.create("Button")
+pico.set(sub_button, "x", x + margin)
+pico.set(sub_button, "y", y + margin + 230)
+pico.set(sub_button, "w", 100)
+pico.set(sub_button, "h", 30)
+pico.set(sub_button, "text", "サブ画面へ")
+pico.on(sub_button, "press_start", function()
+    pico.push_scene("/lua/hello_sub.lua")
+end)
+
 local elapsed_ms = 0
 local last_shown_sec = -1
 local elapsed_label = pico.create("Label")

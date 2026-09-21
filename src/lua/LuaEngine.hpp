@@ -75,6 +75,23 @@
 // (WidgetFactory::Create()が作るウィジェット本体と同じ扱い)。Luaのメモリ予算とは
 // 別に「同時に保持できる枚数」と「合計バイト数」の両方に頭打ちを設けてあるのは
 // これが理由(kMaxLuaImages/kMaxLuaImageBytes参照)。
+//
+// シーン制御(pico.push_scene/change_scene/launch_app): pico.pop()(SceneFunctions::Pop())
+// しか無かったため、Luaスクリプトは「自分を起動した画面へ戻る」以外の画面遷移が
+// できなかった。C++側のSceneFunctions::Change/Push/Popに相当する3つを揃えた:
+//   - push_scene(path) / change_scene(path) … 別のLuaスクリプトへ`SceneFunctions::Push/Change`
+//     する。`new LuaScene(path)`を渡すだけで、Lua側が構築できる唯一のScene型が
+//     LuaScene(パス文字列1つのコンストラクタ)であるため、この2つはLua同士の
+//     画面遷移(複数画面のLuaアプリを作る)専用になる
+//   - launch_app(name) … `AppFunctions::LaunchByName()`経由でランチャの登録簿を
+//     名前引きし、C++製アプリも含め任意の既存アプリへ`Push`する。ランチャのタイルを
+//     タップするのと同じ経路なので、Luaアプリから他のアプリへジャンプできる
+// いずれも他のpico.pop()同様、要求を登録するだけでフレーム境界まで実行が保留される
+// (SceneFunctions::Update()参照)。呼び出し中に今のLuaEngine自身が破棄されることはない。
+// push_scene/change_sceneはLuaScene構築(パス文字列のコピーのみ)が失敗し得ないため
+// 戻り値なし(pico.pop()と同じ)。launch_appだけは「名前が見つかったか」を
+// その場で判定できるので、bool を返す(実際のPush自体の成否までは見ていない点は
+// AppFunctions::Launch()を直接呼ぶC++コードと同じ)。
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
@@ -192,6 +209,11 @@ class LuaEngine {
         static int l_log(lua_State* L);
         static int l_show_error(lua_State* L);
         static int l_pop(lua_State* L);
+        // シーン制御。クラスコメント「シーン制御」参照。push_scene/change_sceneは
+        // 別のLuaスクリプトへ、launch_appは登録簿の任意のアプリ(C++製含む)へ飛ぶ
+        static int l_push_scene(lua_State* L);
+        static int l_change_scene(lua_State* L);
+        static int l_launch_app(lua_State* L);
         static int l_content_rect(lua_State* L);
         static int l_invalidate(lua_State* L);
         static int l_mark_dirty(lua_State* L);

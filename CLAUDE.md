@@ -764,6 +764,8 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.image_size(handle)` | 読み込んだ画像の`width, height`を返す。無効なハンドルはエラー(2026-09-21追加) |
 | `pico.draw_image(handle, x, y)` | 画像を描く。他の`pico.draw_*`と同じく**`Canvas`の`render`コールバック内で使うこと**。無効なハンドルはエラー(2026-09-21追加) |
 | `pico.image_free(handle)` | 画像を明示的に解放する。無効/解放済みハンドルは`pico.destroy`と同じく黙って無視(2026-09-21追加) |
+| `pico.push_scene(path)` / `pico.change_scene(path)` | 別のLuaスクリプトへ`SceneFunctions::Push/Change`する(下記「シーン制御」参照)(2026-09-21追加) |
+| `pico.launch_app(name)` | `AppFunctions::LaunchByName()`経由で登録簿の任意のアプリ(C++製含む)へ`Push`する。見つかれば`true`、無ければ`false`(下記「シーン制御」参照)(2026-09-21追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -956,6 +958,52 @@ dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ
   実際の見た目は`pc/sdcard/lua/hello.lua`に画像描画のデモを追加し、PCビルドの
   `--shot`で`.pimg`(`pc/sdcard/img/hello.pimg`、`examples/img/sample.pimg`と同じ
   48x24の色帯サンプル)が実際に描けることを確認済み。
+
+### シーン制御(2026-09-21実装)
+
+`pico.push_scene/change_scene/launch_app`。それまで`pico.pop()`(`SceneFunctions::Pop()`)
+しか無く、Luaスクリプトは「自分を起動した画面へ戻る」以外の画面遷移ができなかった。
+C++側の`SceneFunctions::Change/Push/Pop`に相当する3つを揃え、Lua同士の複数画面アプリと、
+Luaから既存アプリ(C++製含む)へ飛ぶことの両方をカバーした。
+
+- **`pico.push_scene(path)` / `pico.change_scene(path)`**: `new LuaScene(path)`を
+  `SceneFunctions::Push()`/`Change()`へそのまま渡すだけ。Lua側が構築できるScene型は
+  `LuaScene`(パス文字列1つのコンストラクタ)だけなので、この2つは**Lua同士の画面遷移**
+  (複数画面のLuaアプリを組む)専用になる。`LuaScene(path)`のコンストラクタは
+  `FixedString`へパスをコピーするだけで失敗し得ないため、`pico.pop()`と同じく戻り値なし
+  (要求を登録するだけで、実際の遷移・エラー表示(ファイル不在等)は次のフレーム境界の
+  `LuaScene::onEnter()`まで保留される。呼び出し中の今のLuaEngine自身がその場で
+  破棄されることはない)。
+- **`pico.launch_app(name)`**: 新設した`AppFunctions::LaunchByName(name)`
+  (`App_Functions.hpp/.cpp`、完全一致で登録簿を線形探索して見つかれば`Launch(index)`を
+  呼ぶだけの薄いラッパー)経由で、ランチャの登録簿にある**任意のアプリ(C++製含む)**へ
+  `Push`する。名前が見つからなければ`false`(呼び出し元がスクリプト側のtypoに気づける
+  ようにするための戻り値。他は`AppFunctions::Launch()`をC++コードが直接呼ぶ場合と同じで、
+  実際のPush自体が成功するか(スタック上限等)までは見ていない)。
+- **`push_scene`は新しいシーンをスタックへ退避するのでPop()で戻れる。`change_scene`は
+  スタックを消費せず現在のシーンを置き換えるだけ**(`SceneFunctions::Change`と同じ)。
+  そのため`change_scene`で入った画面から`pop()`すると、`change_scene`を呼んだ側の画面を
+  飛び越して、**その手前**(スタックの先頭)へ直接戻る。PCビルドの`--shot`で
+  「push_scene→change_scene→pop」の一連を実際に確認済み(下記サンプル参照)。
+- **LuaSceneはPop()で戻ってきたときスクリプトを最初から実行し直す**(既存の仕様、上の
+  「`LuaScene`」参照)。そのため`pico.launch_app()`をスクリプトのトップレベルで
+  無条件に呼ぶと、そのシーンへPop()で戻ってくるたびに再度発火してしまう
+  (実装時にホストテストでこれを踏んだ。ボタンの`press_start`等のイベント越しに
+  呼ぶ分には問題ない。`push_scene`/`change_scene`も同じ理由でボタン経由が無難)。
+- ホストテストは`lua_scene_test.cpp`に追加(`lua_engine_test.cpp`ではなくこちら。
+  実際にシーン遷移まで起こす必要があるため、既存の`FakeLauncherScene`+
+  `SceneFunctions::Setup/Update`の結合テスト環境にそのまま乗せた)。
+  push_scene/change_sceneは別のLuaスクリプトへ実際に遷移すること・要求がフレーム境界まで
+  保留されること・スタック深さの増減(push_sceneは+1、change_sceneは変化なし)、
+  launch_appは登録簿のC++製アプリ(テスト用の`OtherAppScene`)へ実際に遷移すること・
+  未登録名は`false`を返すことを確認している。
+  実際の見た目はPCビルドの`--shot`で確認した:
+  `pc/sdcard/lua/hello.lua`に追加した「サブ画面へ」ボタンから`pc/sdcard/lua/hello_sub.lua`
+  (`pico.push_scene()`の飛び先。「電卓を開く」で`pico.launch_app("電卓")`、
+  「置き換えへ」で`pico.change_scene()`)→`pc/sdcard/lua/hello_sub2.lua`
+  (`pico.change_scene()`の飛び先)という3ファイル構成のデモ一式を作り、
+  push_scene→launch_app(電卓が実際に開く)、push_scene→change_scene→pop
+  (hello_sub.luaを飛び越してhello.luaへ直接戻る)の両方を確認した。
 
 ### 実装中に見つけて直した既存のバグ2件
 

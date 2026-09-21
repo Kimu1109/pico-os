@@ -8,6 +8,13 @@ namespace PICO_Path {
         // Markdownブラウザがサーバから取った文書を貯める場所。
         // 配下は /cache/<ホスト>/<サーバ上のパス> でミラーする(PROTOCOL.md)
         constexpr const char* CACHE = "/cache/";
+        // ランチャへ自動登録されるLuaアプリの置き場所(LuaAppScanner参照)。
+        // 直下の「サブディレクトリ1つ = アプリ1つ」で、<名前>/main.lua が
+        // あればその<名前>をそのままタイル名として登録する。
+        // 動作サンプル(hello.lua等)を置く /lua/ 直下とは別にしてあるのは、
+        // "/lua/"直下を走査するとhello_sub.lua等のサブ画面スクリプトまで
+        // 誤って1タイルずつ登録してしまうため
+        constexpr const char* LUA_APPS = "/lua/apps/";
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";

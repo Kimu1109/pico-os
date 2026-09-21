@@ -169,6 +169,47 @@
 // で呼んでから後片付けする。`http_`はLuaScene内でネットワークを使わないアプリに
 // 16KiB×2の固定バッファを常時負担させたくないため、初回の`pico.http_request()`呼び出し
 // まで確保しない(遅延生成。使わないLuaアプリのメモリコストはゼロのまま)。
+//
+// 実行時間の安全網(暴走防止、2026-09-21実装): OSは単一スレッドのポーリングループ
+// (`main.cpp`の`loop()`)なので、Luaのコールバック(loop(dt)/press_start/…)の中に
+// `while true do end`のような終わらないループがあると、`lua_pcall()`が戻ってこず
+// OS全体が固まる。C++側の新規コードにはレビューがあるが、Luaスクリプトは
+// (将来「SDを走査して見つけたアプリを誰でも置ける」形を目指すほど)書く人を
+// 選ばないため、この種の事故を検出できる仕組みが要る。
+//
+// `lua_sethook(L, InstructionHook, LUA_MASKCOUNT, kHookInstructionInterval)`を
+// コンストラクタで1回だけ設定し、**Luaバイトコードを`kHookInstructionInterval`命令
+// 実行するたびに**`InstructionHook()`を呼ぶ。外部から見える呼び出し(Run/CallSetup/
+// CallLoop/各種Dispatch/HTTPコールバック)は共通のprivateヘルパー`ProtectedCall()`を
+// 必ず経由し、そこで「この1回の呼び出しで消費してよい命令数」の残高
+// (`instructions_remaining_`)を`kMaxInstructionsPerCall`へ積み直してから
+// `lua_pcall()`する。`InstructionHook()`は毎回この残高を減らし、尽きたら
+// `luaL_error()`でLuaのエラー機構(内部はlongjmp)経由に処理を戻す。これは
+// `lua_pcall()`から見れば通常の実行時エラーと区別が付かないため、`Run()`等の
+// 既存のエラーハンドリング(`ErrorFunctions::ShowFatal()`でログ+ダイアログ)を
+// そのまま使い回せる。**Lua自身のバイトコード実行だけを数える**ため、`pico.sd_read`
+// 等のC関数の中(ファイルI/O等)ではフックは発火しない——C関数呼び出し中は
+// インタプリタがバイトコードを進めていないため(`InstructionHook`のコメントも参照)。
+//
+// **命令数(時間ではない)で打ち切る。** `millis()`ベースの時間打ち切りも検討したが、
+// ホストテスト環境の`millis()`スタブが常に0を返すため時間ベースでは検証できず、
+// 実機の処理速度にも依存して閾値の意味が変わってしまう。命令数なら
+// ホストテストでも`while true do end`を実際に実行してエラーになることを確認でき、
+// 「何がどれだけ実行されたら打ち切るか」がハードウェアに依存しない決定的な基準になる。
+// `kMaxInstructionsPerCall=200万`は暫定値(実機RP2350での実測は未実施。CLAUDE.mdの
+// 「RAM/Flash予算」と同種の「後で実機で確かめる」枠)。
+//
+// **既知の限界: Lua側で`pcall`により自前でエラーを握り潰して繰り返す
+// 敵対的なスクリプトまでは防げない。** 例えば
+// `while true do pcall(function() while true do end end) end`のように、
+// 内側の無限ループを毎回自前の`pcall`で包んで再試行し続けると、打ち切りエラーは
+// その内側`pcall`に毎回捕まり、外側のスクリプト自身は(そのループを抜けようとしない限り)
+// 止まらない。`instructions_remaining_`は`ProtectedCall()`の入口でしかリセットされない
+// ため個々の打ち切りエラー自体は連続発生し続けるが、`ProtectedCall()`(=C++側の
+// `lua_pcall`)自体は戻ってこない。`lua_sethook`が提供できるのは「Luaの通常のエラーと
+// 同じ形の割り込み」までで、Luaレベルの`pcall`より強い(握り潰せない)中断手段は
+// 標準APIには無い。想定しているのは悪意ある攻撃者ではなく「うっかり無限ループを
+// 書いてしまった開発者」で、その場合はこの仕組みで確実に止まる。
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
@@ -254,6 +295,17 @@ class LuaEngine {
 
         std::vector<CallbackBinding> callbacks_;
 
+        // 実行時間の安全網(暴走防止)。クラスコメント参照。
+        // kHookInstructionInterval: lua_sethook(LUA_MASKCOUNT)へ渡す間隔
+        // (この命令数ごとにInstructionHook()が呼ばれる)。
+        // kMaxInstructionsPerCall: ProtectedCall()1回あたりに許すLuaバイトコード命令数の上限。
+        static constexpr int kHookInstructionInterval = 1000;
+        static constexpr uint32_t kMaxInstructionsPerCall = 2'000'000;
+        // 今の外部呼び出し(ProtectedCall())で消費してよい残り命令数。
+        // InstructionHook()が発火するたびkHookInstructionIntervalぶん減らし、
+        // 0になったらluaL_error()で打ち切る。ProtectedCall()の入口でのみリセットする
+        uint32_t instructions_remaining_ = 0;
+
         // pico.image_* が使う画像スロット。ウィジェットの生成数のように実行時に
         // 増減する必要が無い(1つのLuaアプリが同時に扱う画像は少数の見込み)ため、
         // MarkdownViewのプールと同じ「固定長配列」志向で、std::vector等は使わない。
@@ -307,6 +359,16 @@ class LuaEngine {
 
         static void* Alloc(void* ud, void* ptr, size_t osize, size_t nsize);
         static int InitTrampoline(lua_State* L);
+
+        // lua_sethook(LUA_MASKCOUNT)から呼ばれる。kHookInstructionInterval命令ごとに
+        // instructions_remaining_を減らし、尽きたらluaL_error()で打ち切る
+        // (クラスコメント「実行時間の安全網」参照)。lua_getallocf()でthisを取り出すので
+        // (Alloc()へ渡したudをそのまま再利用)、コールバック配線用の追加の状態を持たない
+        static void InstructionHook(lua_State* L, lua_Debug* ar);
+
+        // 外部から見えるLua呼び出し(Run/setup/loop/各種コールバック)は必ずこれを経由する。
+        // instructions_remaining_をkMaxInstructionsPerCallへ積み直してからlua_pcall()する
+        int ProtectedCall(int nargs);
 
         // pico.sd_*/pico.image_loadの共通ガード。permissions_.sd_outside_app_dirが
         // trueなら常にtrue。falseの間はpathを正規化した上でapp_dir_の配下

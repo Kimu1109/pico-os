@@ -49,6 +49,12 @@
 #                    SDからの読み込み・pico.pop()での実際のランチャ復帰・
 #                    ファイル不在時のダイアログ表示・大きすぎるスクリプトの
 #                    打ち切り警告までを確認する
+#   lua_app_scanner_test… LuaAppScanner(SD上の"/lua/apps/<名前>/main.lua"を走査して
+#                    ランチャの登録簿へ自動登録する)。ディレクトリの走査自体は
+#                    ホストのSdFatスタブでは再現できないため、SD無し/ディレクトリ
+#                    が無い場合に安全に0件を返すことまでを確認する
+#                    (完全な走査結果はPCビルドの--shotで確認済み。CLAUDE.md
+#                    「SDを走査してLuaアプリを見つける処理」参照)
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -500,3 +506,55 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
 echo ""
 echo "===== lua_scene_test ====="
 "$OUT/lua_scene_test"
+
+# --- LuaAppScanner(SD走査によるLuaアプリの自動登録) ---
+g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/lua_app_scanner_test.cpp" \
+    "$ROOT/src/lua/LuaAppScanner.cpp" \
+    "$ROOT/src/gui/scenes/LuaScene.cpp" \
+    "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/functions/Scene_Functions.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Error_Functions.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/NumberInput.cpp" \
+    "$ROOT/src/gui/widgets/Checkbox.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Image.cpp" \
+    "$ROOT/src/gui/widgets/NumberSlider.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
+    "$ROOT/src/gui/widgets/GridContainer.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    "$OUT"/lua_obj/*.o \
+    -o "$OUT/lua_app_scanner_test"
+
+echo ""
+echo "===== lua_app_scanner_test ====="
+"$OUT/lua_app_scanner_test"

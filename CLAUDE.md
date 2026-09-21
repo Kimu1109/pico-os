@@ -70,7 +70,7 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
-  lua/                        Lua<->C++バインディング本体(LuaEngine)
+  lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
@@ -88,6 +88,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
   web/shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
   sdcard/                     SDカードとして読まれるディレクトリ
     lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
+    lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
 ```
@@ -210,6 +211,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
   - `arg`は`FixedString<PICO_STR_L>`(96B)。切り詰まるとパスが別物を指すので、**長すぎる場合は登録ごと拒否**する(`Register()`が`false`)。
   - 代償として`apps[24]`が**約3.8KBのstatic RAM**を常時占める(1件160B。以前は288B)。上限や文字列長を動かすときはここを意識する。
 - 実行中に登録簿を書き換えてもよい(Luaアプリのスキャン等)。ただしランチャの再描画までは面倒を見ないので、表示中に増減させたら`AppGrid`へ`needsRender()`すること。
+  実例: `src/lua/LuaAppScanner.cpp`が`/lua/apps/<名前>/main.lua`を走査して`Register()`する(詳細は「Luaバインディング」の「SDを走査したLuaアプリの自動登録」参照)。今のところ`App_List.cpp::Setup()`の起動時1回のみ呼んでおり、起動後の再スキャンには対応していない。
 - `Launch()`は`SceneFunctions::Push`なので、アプリ側から`Pop()`すればランチャへ戻る。
 - `AppGrid`はタイルごとに子ウィジェットを作らず、`render()`で直接描いてタップ位置から逆算する(`ColorDialog`の色グリッドと同じ方式)。`WidgetFunctions::HitTest()`は子から先に判定するため、タイルをIcon+Labelの親として作ると子がタップを奪ってしまう。
 - レイアウトは2列×3行=6個/ページ(タイル111x78px)。3列だとタイル幅72px=日本語4文字しか入らず大半のアプリ名がはみ出したため2列にした。名前は`drawName()`がUTF-8の文字境界で切って最大2行へ折り返す(`DrawPlain()`は折り返さないため自前)。
@@ -599,7 +601,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**まで実装済み。**残っているのは命令単位の実行時間制御、SDを走査してLuaアプリを見つける処理**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**まで実装済み。**残っているのは`pico.remove_child`(コンテナから子を明示的に外すAPI)程度の細部のみ**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
@@ -1290,14 +1292,106 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   ダイアログ表示・大きすぎるスクリプトの打ち切り警告を確認している
   (`script/host_test/stubs/SdFat.h`の`HostSd::files`にスクリプトを登録して読ませる)。
 
+### 実行時間の安全網(暴走防止、2026-09-21実装)
+
+OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なので、Luaのコールバック
+(`loop(dt)`/`press_start`/…)の中に`while true do end`のような終わらないループが
+あると、`lua_pcall()`が戻ってこずOS全体が固まる。C++側の新規コードにはレビューが
+あるが、Luaスクリプトは(このあとの「SDを走査したLuaアプリの自動登録」でますます)
+書く人を選ばなくなるため、この種の事故を検出できる仕組みを入れた。
+
+- **`lua_sethook(L, InstructionHook, LUA_MASKCOUNT, kHookInstructionInterval)`を
+  コンストラクタで1回だけ設定**し、Luaバイトコードを`kHookInstructionInterval`
+  (=1000)命令実行するたびに`InstructionHook()`を呼ぶ。外部から見える呼び出し
+  (`Run`/`CallSetup`/`CallLoop`/各種`Dispatch`/HTTPコールバック、合計8箇所)は
+  共通のprivateヘルパー`ProtectedCall(nargs)`を必ず経由し、そこで
+  「この1回の呼び出しで消費してよい命令数」の残高(`instructions_remaining_`)を
+  `kMaxInstructionsPerCall`(=200万、暫定値)へ積み直してから`lua_pcall()`する。
+  `InstructionHook()`は毎回この残高を減らし、尽きたら`luaL_error()`で
+  Luaのエラー機構(内部はlongjmp)経由に処理を戻す。
+- **`lua_pcall()`から見れば通常の実行時エラーと区別が付かない**ため、`Run()`等の
+  既存のエラーハンドリング(`ErrorFunctions::ShowFatal()`でログ+ダイアログ)を
+  そのまま使い回せる。新しい状態は`instructions_remaining_`(1個のuint32_t)だけ。
+- **Lua自身のバイトコード実行だけを数える。** `pico.sd_read`等のC関数の中
+  (ファイルI/O等)ではフックは発火しない——C関数呼び出し中はインタプリタが
+  バイトコードを進めていないため。「うっかり書いた無限ループ」を捕まえる用途に
+  対し、C++側の正当な処理を巻き込まない。
+- **時間ではなく命令数で打ち切る。** `millis()`ベースの時間打ち切りも検討したが、
+  ホストテスト環境の`millis()`スタブが常に0を返すため時間ベースでは検証できず、
+  実機の処理速度にも依存して閾値の意味が変わってしまう。命令数ならホストテストでも
+  `while true do end`を実際に実行してエラーになることを確認でき(実測: ASan+UBSan
+  付きでも約50ms程度で打ち切りに達する)、ハードウェアに依存しない決定的な基準になる。
+  `kMaxInstructionsPerCall=200万`は暫定値(実機RP2350での実測は未実施。RAM/Flash予算の
+  「200KB」と同種の「後で実機で確かめる」枠)。
+- **既知の限界: Luaの`pcall`で自前でエラーを握り潰して繰り返す敵対的なスクリプトまでは
+  防げない。** 例えば`while true do pcall(function() while true do end end) end`の
+  ように、内側の無限ループを毎回自前の`pcall`で包んで再試行し続けると、打ち切りエラーは
+  その内側`pcall`に毎回捕まり、外側のスクリプト自身は止まらない
+  (`instructions_remaining_`は`ProtectedCall()`の入口でしかリセットされないため
+  打ち切りエラー自体は連続発生し続けるが、`ProtectedCall()`(=C++側の`lua_pcall`)自体は
+  戻ってこない)。`lua_sethook`が提供できるのは「Luaの通常のエラーと同じ形の割り込み」
+  までで、Luaレベルの`pcall`より強い(握り潰せない)中断手段は標準APIには無い。
+  想定しているのは悪意ある攻撃者ではなく「うっかり無限ループを書いてしまった開発者」で、
+  その場合はこの仕組みで確実に止まる。
+- ホストテストは`lua_engine_test.cpp`に追加。終わらないループを含むスクリプトが
+  `Run()`/`CallLoop()`をハングさせず`false`で戻ること(テストプロセス自体がハング
+  しないことが最大の確認点)、打ち切り時もダイアログが出ること、Lua側の`pcall`で
+  捕まえれば普通に続行できること、上限内のループは邪魔されないこと、`loop()`内で
+  打ち切られた場合は既存の`loop_broken_`安全弁と重ねて効く(以降`loop()`自体が
+  呼ばれなくなる)ことを確認している。
+
+### SDを走査したLuaアプリの自動登録(LuaAppScanner、2026-09-21実装)
+
+`AppFunctions::Register()`はC++からしか呼べず、「SDにスクリプトを置くだけでランチャに
+タイルが出る」というLua版の"アプリストア"的な使い方の土台が無かった
+(`AppEntry`が`FixedString`で動的な名前/argを持てるようになった時点(2026-09-13)で
+下地はできていたが、実際に走査してRegister()を呼ぶ側が無かった)。
+
+- **`src/lua/LuaAppScanner.hpp/.cpp`が新設した唯一の関数は`LuaAppScanner::Scan()`。**
+  `/lua/apps/<名前>/main.lua`という「サブディレクトリ1つ=アプリ1つ」の構成で
+  `/lua/apps/`直下を走査し、`main.lua`があるサブディレクトリを見つけるたびその
+  ディレクトリ名をそのままタイル名として`AppFunctions::Register()`する。
+  `App_List.cpp::Setup()`の末尾(静的登録の後)で1回呼ぶだけで配線は完了する。
+- **なぜサブディレクトリ単位か(`/lua/apps/`直下へフラットに`*.lua`を置く案は不採用)**:
+  `LuaScene::onEnter()`はスクリプト自身の親ディレクトリを`app_dir`(SDアクセスの
+  閉じ込め先)として使う。フラットに置くと複数アプリのapp_dirが全部`/lua/apps/`
+  自身になり、見つかった複数のアプリが互いのファイルを読み書きできてしまう。
+  サブディレクトリ単位にすることで、各アプリが自分の`main.lua`の親ディレクトリ
+  (=自分専用のサブディレクトリ)だけに閉じ込められる。
+- **権限は既定値(`LuaPermissions{}`、`network`/`sd_outside_app_dir`ともfalse)固定。**
+  SDに置かれているだけで中身を検証していないスクリプトへ、走査した側が勝手に
+  強い権限を与えないための判断。ネットワークやapp_dir外のSDアクセスがどうしても
+  要るLuaアプリは、従来通り`App_List.cpp`へ専用の生成関数(`MakeLuaHelloScene()`と
+  同じ形)を書いて手動登録する(このパスはスキャン対象外のまま)。
+- **`/lua/`直下(`hello.lua`等の動作サンプル)とは別ディレクトリにしてある。**
+  `/lua/`直下を走査すると、`hello_sub.lua`/`hello_sub2.lua`のような
+  「他のスクリプトから`push_scene`/`change_scene`で遷移するためだけのサブ画面」まで
+  誤って1タイルずつ登録してしまうため。
+- **`App_Functions.cpp`自体は変更していない。** `LuaAppScanner.cpp`は`App_List.cpp`と
+  同じ立ち位置(`AppFunctions::Register()`の1利用者)で、シーン実装
+  (`LuaScene`)に依存するコードを`App_Functions.cpp`へ持ち込まない、という既存の
+  分離方針(CLAUDE.md「アプリの枠組み」参照)をそのまま踏襲している。
+- **名前の重複チェックはしていない。** 静的登録とスキャンで同名のアプリがあれば
+  単純に2タイル並ぶ(後勝ちで上書きはしない)。今のところ登録されるLuaアプリの
+  絶対数が少ないため、重複解決の優先度は低いと判断した。
+- 動作サンプル: `pc/sdcard/lua/apps/スキャン確認/main.lua`。`App_List.cpp`には
+  一切手を加えず、PCビルドの`--shot`でランチャに「スキャン確認」タイルが実際に
+  現れてタップで起動できることを確認済み。
+- ホストテストは`script/host_test/lua_app_scanner_test.cpp`。**完全な走査結果は
+  ホストのSdFatスタブでは検証できない**(パス→内容のフラットな`map`でディレクトリの
+  実体も`openNext()`の走査も無いため。`pico.sd_list`/`Doc_Cache::Clear()`と同じ制約)。
+  SD無し/ディレクトリが存在しない場合に安全に0件を返すことのみASanで確認し、
+  実際の走査結果はPCビルドの`--shot`(上記)で確認する、という役割分担にした。
+
 ### 現時点のスコープ外(次回以降)
 
 - ~~コールバックは共通4種(press_start/end/move/out)のみ~~ → **解消済み(2026-09-21)**。
   `Checkbox::on_change_checked`/`NumberSlider::on_value_changed`/`ScrollList::on_selectitem`/
   `TabBar::on_changed`を`checked_changed`/`value_changed`/`select_item`/`tab_changed`として
   `pico.on()`から使えるようにした(詳細は上の「ウィジェット固有イベント」参照)。
-- **命令単位の実行時間制御(`lua_sethook`)は無い**。`StepBudget`との組み合わせ含め、
-  実際に重い/無限ループするLuaアプリを書いてみてから決める。
+- ~~命令単位の実行時間制御(`lua_sethook`)は無い~~ → **解消済み(2026-09-21)**。
+  詳細は上の「実行時間の安全網(暴走防止)」参照。`StepBudget`(時間で区切る土台)とは
+  別物のまま(こちらはLua命令数、StepBudgetはTaskのフレーム分割用)で、統合はしていない。
 - ~~1フレームごとにLua側の「update」関数を呼ぶ仕組みは無い~~ → **解消済み(2026-09-20)**。
   `LuaEngine::CallSetup()`/`CallLoop(dt_ms)`がArduino風の`setup()`/`loop(dt)`を
   呼ぶ(どちらも定義は任意)。`LuaScene::onEnter()`がRun()成功後に`CallSetup()`を
@@ -1322,9 +1416,9 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 | ~~`WidgetRegistry::Resolve()`~~ | **ホストテストで検証済み(2026-09-18)**。発行済みIDからの解決・type改ざん検出・破棄済みID(use-after-free)検出・スロット再利用時のgeneration不一致検出を`script/host_test/widget_factory_test.cpp`で確認。ただし**実コード中の呼び出し元はまだテストのみ**で、Luaバインディングを書いた時点で初めて実利用される |
 | ~~ウィジェットのファクトリ~~ | **解消済み(2026-09-18)**。`WidgetFactory::Create(WidgetType)`(`src/gui/widgets/WidgetFactory.hpp/.cpp`)がwidgets/直下の汎用部品15種を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外 |
 | ~~プロパティのget/set共通口~~ | **解消済み(2026-09-19)**。`WidgetProperty::Get/Set()`(`src/gui/widgets/WidgetProperty.hpp/.cpp`)を参照。Lua側が「WidgetIdを`Resolve()`で引く→`WidgetProperty`で値を読み書きする」という2段構えを、Lua本体無しで既にホストテストまで確認できている |
-| ~~`AppEntry`(`App_Functions.hpp`)~~ | **解消済み(2026-09-13)**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`は`FixedString`でコピー保持するようになった。「同じ`LuaScene`型 + 別スクリプトパス」も、寿命の短い文字列からの動的登録も表現できる。残りは**SDを走査してLuaアプリを見つける側**(スキャン処理そのもの)だけ |
+| ~~`AppEntry`(`App_Functions.hpp`)~~ | **解消済み(2026-09-13、スキャン側も2026-09-21で解消)**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`は`FixedString`でコピー保持するようになった。「同じ`LuaScene`型 + 別スクリプトパス」も、寿命の短い文字列からの動的登録も表現できる。**スキャン処理そのもの(`LuaAppScanner::Scan()`)も実装済み**(下記「SDを走査したLuaアプリの自動登録」参照) |
 | コールバック | **意図的に見送り(2026-09-19)**。`std::function<void()>`のまま。上記「メモリ計測の結論」が既に出している判断(「関数ポインタ+`void*`のDelegateへ替える効果は単体では5%程度、旨味が出るのはLuaのコールバックを大量に貼るようになってから」)をそのまま踏襲し、今回は手を入れなかった。今のシグネチャには「引数もコンテキストも無い」という実害(誰が押したか・どのウィジェットのIDかをコールバック側へ渡せない)もあるため、**再設計するならLuaバインディング本体を書く回でシグネチャを一度に決める**(引数無しのまま先にDelegate化だけ済ませても、Lua側の要求で結局signature変更が要る可能性が高く、二度手間になるため) |
-| ~~実行時間の制御~~ | **土台のみ解消(2026-09-19)**。`task/StepBudget.hpp`が「一定時間(マイクロ秒)働いたら次のフレームへ回す」ための時間区切りプリミティブを提供する(`Task::update()`内の作業ループを`StepBudget::ShouldContinue()`で区切る)。ホストテストは`script/host_test/step_budget_test.cpp`(`pc/compat/`の実時間`micros()`を使う点が他と違う)。**命令単位の制御(`lua_sethook`でNバイトコードごとに打ち切る等)はまだ無く**、実際にLuaスクリプトをTask化する回で、このStepBudgetと組み合わせるか独自のフック粒度を足すかを決める |
+| ~~実行時間の制御~~ | **解消済み(土台2026-09-19、命令単位の打ち切りは2026-09-21)**。`task/StepBudget.hpp`が「一定時間(マイクロ秒)働いたら次のフレームへ回す」ための時間区切りプリミティブを提供する(`Task::update()`内の作業ループを`StepBudget::ShouldContinue()`で区切る。ホストテストは`script/host_test/step_budget_test.cpp`)。**`LuaEngine`側は`lua_sethook(LUA_MASKCOUNT)`でLuaバイトコード命令数を数え、1回の外部呼び出しあたりの上限を超えたら`luaL_error()`で打ち切る**(`StepBudget`とは別物のまま、統合はしていない。詳細は上の「実行時間の安全網(暴走防止)」参照) |
 | ~~確保失敗(OOM)~~ | **Lua向けの経路は解消、内部90箇所は対象外と決定(2026-09-19)**。`WidgetFactory::Create()`はtype非対応時もWidget::operator new失敗時も一貫してnullptrを返す設計になっており(ヘッダのコメントで明記済み)、**Luaが実際に触る唯一の生成経路はこの時点で既に安全**。一方、Scene/Dialog等OS内部の`new Button(...)`等(約90箇所)は個々にnullチェックしていないが、これらは実行時に増減しない固定・既知個数の生成で、「メモリ計測の結論」が示す通り実測で断片化もリークも無く十分な余裕がある。ここへ90箇所分のnullチェックを機械的に足す投資対効果は低いと判断し、**対象外とする**(Luaスクリプトが暴走してウィジェットを大量生成する経路は`WidgetFactory::Create()`1箇所に絞られているため、そこが安全なら実害は無い)。`lua_newstate`のカスタムallocでLuaに上限枠を切る話(下記RAM/Flash予算)は引き続き未着手 |
 | ~~エラーの見せ方~~ | **解消済み(2026-09-19)**。`ErrorFunctions::ShowFatal(message)`(`src/functions/Error_Functions.hpp/.cpp`)がログ(`LOG_APP_FAIL`)とMsgDialog表示の両方を1呼び出しでこなす。`FileExplorer::on_press_delete()`等と同じ「生成→`AddDialog`→`setVisible`→`setOnClosed`で`DestroyLater`」の作法を関数内に閉じ込めてあるので、将来Luaの`pcall`エラーを拾った先はこれを呼ぶだけでよい。ホストテストは`script/host_test/error_functions_test.cpp` |
 | RAM/Flash予算 | **暫定枠: Lua用に200KBを割り当てる方針(2026-09-19決定、`lua_newstate`のカスタムallocへ渡す上限)**。開発者が実機で計測した「OS側のヒープ使用量はピークでも150KB程度」を根拠に、RP2350の総SRAM 520KBから逆算した(150KB+200KB=350KBでも170KBの余裕)。**ただし2点未確認**: ①その150KBが`Mem_Functions`(mallinfoベースのヒープ)の値かどうか(フレームバッファ`frame`スプライトやWi-Fi/lwIPスタックがヒープ計測に乗らない確保だと実際の総使用量はもう少し上振れし得る)、②このリモート実行環境には実機もPlatformIOのRP2350ボード定義も無く追試できていない(`platform = raspberrypi`のPlatformIO公式パッケージ1.20.0にはrpipico2wのボード定義が同梱されていない)。**実機が使える時に、Wi-Fi接続中+一番重いシーン(Markdown/Dict)を開いた状態で`MemFunctions`のレポートを取り、200KB確保後も安全か確認すること。** Lua本体はflash 100KB超で、**stateだけでRAM 20〜30KBのオーダーという見積もりはPC上で実測して裏付けた**(空のstate+`luaL_openlibs()`一式でピーク約19.5KB。`script/host_test/lua_alloc_budget_test.cpp`のBudgetAlloc計測)。200KB枠はそこにユーザースクリプト+ウィジェットツリー分の余裕を見込んだ値。**カスタムallocによる予算制御そのものの安全性もPCで確認済み**(下記「ビルドの二重管理」参照)。実機での絶対値(mallinfoの150KBが本当に正しいか)はやはり未確認 |
@@ -1341,6 +1435,12 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 「どの`Scene`/`Task`がいつ`LuaEngine`を`new`/`delete`するか」という置き場所はまだ無い
 =`LuaScene`が無い)と③(命令単位の実行時間制御)**、および「Luaバインディング」章末尾の
 「現時点のスコープ外」に挙げた項目(ウィジェット固有コールバック、毎フレームのupdate呼び出し等)。
+
+**2026-09-21追記: ①③とも解消済み。** ①は`LuaScene`(上記)、③は`LuaEngine`の
+`lua_sethook`ベースの安全網(上記「実行時間の安全網(暴走防止)」)。ウィジェット固有
+コールバックも同日解消(上記「ウィジェット固有イベント」)。この節が挙げていた穴は
+`pico.remove_child`(コンテナからの子の明示的取り外し。今のところ`pico.destroy`で
+子ごと破棄する経路しか無い)を除いて埋まった。
 
 ## Claude Codeへの申し送り
 

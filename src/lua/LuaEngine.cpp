@@ -129,6 +129,32 @@ int LuaEngine::InitTrampoline(lua_State* L) {
     return 0;
 }
 
+// ---------------- 実行時間の安全網(暴走防止) ----------------
+// クラスコメント「実行時間の安全網」参照。
+
+void LuaEngine::InstructionHook(lua_State* L, lua_Debug*) {
+    // Alloc()へlua_newstate(Alloc, this)で渡したudをlua_getallocf()経由で取り戻す。
+    // フック専用の状態をLuaEngine以外に持たずに済む
+    void* ud = nullptr;
+    lua_getallocf(L, &ud);
+    LuaEngine* self = static_cast<LuaEngine*>(ud);
+
+    if (self->instructions_remaining_ <= (uint32_t)kHookInstructionInterval) {
+        // luaL_error()は内部でlongjmpするため、この関数はここで戻らない。
+        // lua_pcall()から見れば通常の実行時エラーと区別が付かないので、
+        // 呼び出し元(ProtectedCall()の呼び出し元)の既存エラー処理がそのまま効く
+        luaL_error(L, "スクリプトの実行が命令数の上限(%u)を超えたため打ち切りました"
+                      "(無限ループの可能性があります)", (unsigned)kMaxInstructionsPerCall);
+        return; // 到達しないが、"呼んだら戻らない"ことを読み手へ明示するため書いておく
+    }
+    self->instructions_remaining_ -= kHookInstructionInterval;
+}
+
+int LuaEngine::ProtectedCall(int nargs) {
+    instructions_remaining_ = kMaxInstructionsPerCall;
+    return lua_pcall(L, nargs, 0, 0);
+}
+
 LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, const char* app_dir)
     : budget_(budget_bytes), permissions_(permissions) {
     if (!PICO_IO::normalize(app_dir_, app_dir)) app_dir_.assign("/");
@@ -139,13 +165,16 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
         return;
     }
 
+    // 以降の全てのLua実行(luaL_openlibs()含む)に効かせるため、pcallより前に設定する
+    lua_sethook(L, InstructionHook, LUA_MASKCOUNT, kHookInstructionInterval);
+
     // luaL_openlibs()やregisterApi()の途中でOOMになった場合、pcallで保護せずに
     // 直接呼ぶとLuaは(保護フレームが無いため)abort()してしまう
     // (script/host_test/lua_alloc_budget_test.cppで確認済み)。
     // 必ずpcall越しに呼ぶことでLUA_ERRMEMとして安全に失敗させる。
     lua_pushcfunction(L, InitTrampoline);
     lua_pushlightuserdata(L, this);
-    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+    if (ProtectedCall(1) != LUA_OK) {
         LOG_APP_FAIL("LuaEngine: 初期化に失敗しました(予算%zuB): %s",
                      budget_bytes, lua_tostring(L, -1));
         lua_close(L);
@@ -169,7 +198,7 @@ bool LuaEngine::Run(const char* script, const char* chunkname) {
         return false;
     }
 
-    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+    if (ProtectedCall(0) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "Luaスクリプトの実行時エラー");
         lua_pop(L, 1);
@@ -188,7 +217,7 @@ void LuaEngine::callGlobalNoArgs(const char* name) {
         return;
     }
 
-    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+    if (ProtectedCall(0) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "Luaスクリプトの実行時エラー");
         lua_pop(L, 1);
@@ -209,7 +238,7 @@ void LuaEngine::CallLoop(uint32_t dt_ms) {
     }
 
     lua_pushinteger(L, (lua_Integer)dt_ms);
-    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+    if (ProtectedCall(1) != LUA_OK) {
         // 毎フレーム同じエラーダイアログが積まれ続けないよう、以降はloop()を呼ばない
         loop_broken_ = true;
         const char* msg = lua_tostring(L, -1);
@@ -402,7 +431,7 @@ void LuaEngine::Dispatch(WidgetId id, EventKind kind) {
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     lua_pushinteger(L, (lua_Integer)id);
-    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+    if (ProtectedCall(1) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
         lua_pop(L, 1);
@@ -418,7 +447,7 @@ void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
         lua_pushinteger(L, (lua_Integer)id);
         lua_pushboolean(L, is_ok);
-        if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+        if (ProtectedCall(2) != LUA_OK) {
             const char* msg = lua_tostring(L, -1);
             ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
             lua_pop(L, 1);
@@ -441,7 +470,7 @@ void LuaEngine::DispatchSelectItem(WidgetId id, bool already_selected) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     lua_pushinteger(L, (lua_Integer)id);
     lua_pushboolean(L, already_selected);
-    if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+    if (ProtectedCall(2) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
         lua_pop(L, 1);
@@ -1406,7 +1435,7 @@ void LuaEngine::UpdateHttp() {
         lua_pushnil(L);
     }
 
-    if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+    if (ProtectedCall(4) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "pico.http_requestのコールバックでエラーが発生しました");
         lua_pop(L, 1);

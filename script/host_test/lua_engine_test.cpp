@@ -44,6 +44,12 @@
 //                         対応しないウィジェット種別への登録はエラーになることを確認する
 //   pico.get_time() → TimeFunctions::timeinfoを直接書き換えて、返るテーブルの
 //                      各フィールドが一致することを確認する
+//   実行時間の安全網(lua_sethook) → 終わらないループ(while true do end)を含む
+//                      スクリプトがRun()/CallLoop()をハングさせずfalseで戻ること、
+//                      打ち切り時もErrorFunctions経由でダイアログが出ること、
+//                      Lua側のpcallで捕まえれば普通に続行できること、上限内の
+//                      ループは邪魔されないこと、loop()内で打ち切られた場合は
+//                      既存のloop_broken_安全弁と重ねて効くことを確認する
 #include "lua/LuaEngine.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
@@ -276,6 +282,68 @@ int main(){
         dialog->causeOnClosed(true);
     }
     WidgetFunctions::ProcessPendingDeletes();
+
+    // ---- 実行時間の安全網(暴走防止): 命令数の上限で打ち切る ----
+    {
+        // 終わらないループはlua_sethook(LUA_MASKCOUNT)経由で打ち切られ、
+        // Run()は(構文/実行時エラーと同じ形で)falseを返す。テストプロセス自体が
+        // ハングしないことそのものが最大の確認点(ハングすればこのテストは
+        // 永遠に戻ってこない)
+        const size_t dialogs_before = WidgetFunctions::dialog_roots.size();
+        const bool infinite_ok = engine.Run("while true do end", "infinite_loop_test");
+        check(!infinite_ok, "実行時間の安全網: 終わらないループはRun()をfalseで戻す(ハングしない)");
+        check(WidgetFunctions::dialog_roots.size() == dialogs_before + 1,
+              "実行時間の安全網: 打ち切り時もErrorFunctions::ShowFatal()経由でダイアログが出る");
+        if (WidgetFunctions::dialog_roots.size() > dialogs_before) {
+            MsgDialog* dialog = static_cast<MsgDialog*>(WidgetFunctions::dialog_roots.back());
+            dialog->causeOnClosed(true);
+        }
+        WidgetFunctions::ProcessPendingDeletes();
+
+        // 見た目は無限ループでも、Lua自身のpcallで内側の打ち切りエラーを捕まえてから
+        // 素直に抜けるスクリプトは正常終了する(打ち切りエラーはLuaの通常のエラーと
+        // 区別が付かないため、pcallで捕まえれば普通に処理を続けられる。
+        // クラスコメント「実行時間の安全網」の「既知の限界」参照)
+        const bool caught_ok = engine.Run(R"LUA(
+            local ok, err = pcall(function() while true do end end)
+            check(ok == false, "実行時間の安全網: 打ち切りは通常のLuaエラーとしてpcallで捕まえられる")
+        )LUA", "caught_infinite_loop_test");
+        check(caught_ok, "実行時間の安全網: pcallで打ち切りを捕まえた後のスクリプト自体は正常終了する");
+
+        // 妥当な範囲のループは打ち切られず最後まで実行できる
+        const bool bounded_ok = engine.Run(R"LUA(
+            local sum = 0
+            for i = 1, 10000 do sum = sum + i end
+            check(sum == 50005000, "実行時間の安全網: 上限内のループは邪魔されず最後まで実行できる")
+        )LUA", "bounded_loop_test");
+        check(bounded_ok, "実行時間の安全網: 上限内のループを含むスクリプトはRun()がtrueを返す");
+
+        // loop(dt)内の終わらないループも同様に打ち切られ、既存のloop_broken_安全弁により
+        // 以降loop()が呼ばれなくなる(2つの安全網が重ねて効く)。loop_broken_は一度
+        // 立ったら戻らないラッチなので、この後の「Arduino風 setup()/loop(dt)」テストを
+        // 巻き込まないよう、共有のengineではなく専用のLuaEngineを使う
+        LuaEngine loop_engine(64 * 1024);
+        check(loop_engine.valid(), "実行時間の安全網: loop()テスト用に専用のLuaEngineを構築");
+        if (loop_engine.valid()) {
+            const bool loop_setup_ok = loop_engine.Run(
+                "function loop(dt) while true do end end",
+                "infinite_loop_in_loop_test");
+            check(loop_setup_ok, "実行時間の安全網: loop()自体の定義(まだ呼んでいない)は正常に読み込める");
+            const size_t dialogs_before2 = WidgetFunctions::dialog_roots.size();
+            loop_engine.CallLoop(16);
+            check(WidgetFunctions::dialog_roots.size() == dialogs_before2 + 1,
+                  "実行時間の安全網: loop(dt)内の終わらないループも打ち切られダイアログが出る");
+            if (WidgetFunctions::dialog_roots.size() > dialogs_before2) {
+                MsgDialog* dialog = static_cast<MsgDialog*>(WidgetFunctions::dialog_roots.back());
+                dialog->causeOnClosed(true);
+            }
+            WidgetFunctions::ProcessPendingDeletes();
+            const size_t dialogs_before3 = WidgetFunctions::dialog_roots.size();
+            loop_engine.CallLoop(16); // loop_broken_によりもう呼ばれないはず(ダイアログが増えない)
+            check(WidgetFunctions::dialog_roots.size() == dialogs_before3,
+                  "実行時間の安全網: 打ち切り後はloop_broken_により以降loop()自体が呼ばれない");
+        }
+    }
 
     // ---- Arduino風 setup()/loop(dt) ----
     {

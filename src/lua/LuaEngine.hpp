@@ -5,6 +5,7 @@
 #include <vector>
 #include "lua.hpp"
 #include "gui/widgets/WidgetID.hpp"
+#include "gui/icons/icon_render.h"
 #include "consts.hpp"
 
 // LuaスクリプトとC++(ウィジェット層)を繋ぐ実行エンジン。1インスタンスが
@@ -52,6 +53,28 @@
 // 引数もコンテキストも持てないが、キャプチャするのは「LuaEngine* + WidgetId」
 // (12B程度)だけなのでstd::functionの小バッファに収まりヒープ確保は起きない
 // (lua_State*やregistry refをウィジェット側へ持たせない設計にしたため)。
+//
+// 画像(pico.image_load/draw_image/image_size/image_free): ウィジェット(Image)を
+// 介さず、`.pimg`(IconRender参照)を直接デコードしてこのLuaEngineインスタンスが
+// 保持する。ウィジェットではないのでWidgetRegistryは使わず、固定長スロット配列
+// (images_、上限kMaxLuaImages枚)を自分で持つ。ハンドルはWidgetIdと同じ発想の
+// 「generation(上位)+index(下位)」パック整数だが、この配列専用のスコープなので
+// 32bit全体を使う本家の配分(type/generation/index)は真似ず単純化してある。
+// generationはWidgetRegistryと同じく解放(pico.image_free)のたびに1つ進める
+// (使用中かどうかは別途ImageSlot::usedで見る。generationを未使用の合図に
+// 使い回すと、解放直後に同じスロットを再利用したとき前回と同じハンドル値を
+// 発行してしまい、古い(解放済みの)ハンドルが新しい画像を指す事故になるため)。
+// generation==0は「一度もimage_loadに使われていないスロット」を表す予約値で、
+// handle==0は常に無効。LGFX_Sprite(PimgSprite::sprite)はimages_の値メンバなので、
+// pico.image_free()を呼び忘れてスクリプトが終了しても、LuaEngine自体の破棄
+// (images_配列の破棄)でデストラクタが確保分を回収する(リークしない)。
+// pico.image_free()はそれを待たず即座に解放したい場合向けの明示API。
+//
+// デコード後のピクセルバッファ(LGFX_Sprite::createSprite())はこのLuaEngineの
+// budget_bytes(Alloc経由のLua自体の確保量)には乗らない、素のOSヒープ確保
+// (WidgetFactory::Create()が作るウィジェット本体と同じ扱い)。Luaのメモリ予算とは
+// 別に「同時に保持できる枚数」と「合計バイト数」の両方に頭打ちを設けてあるのは
+// これが理由(kMaxLuaImages/kMaxLuaImageBytes参照)。
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
@@ -111,6 +134,35 @@ class LuaEngine {
 
         std::vector<CallbackBinding> callbacks_;
 
+        // pico.image_* が使う画像スロット。ウィジェットの生成数のように実行時に
+        // 増減する必要が無い(1つのLuaアプリが同時に扱う画像は少数の見込み)ため、
+        // MarkdownViewのプールと同じ「固定長配列」志向で、std::vector等は使わない。
+        struct ImageSlot {
+            IconRender::PimgSprite sprite;
+            bool used = false;
+            // WidgetRegistryと同じ「解放のたびに進める」方式。usedがfalseの間も
+            // 値は保持したままにする(次にこのスロットを使い回したときのハンドルを
+            // 前回発行分と別物にするため。generation==0は「一度も使われていないスロット」
+            // を表す予約値で、初回使用時に1へ進める)
+            uint32_t generation = 0;
+            size_t bytes = 0; // 使用中のバイト数(image_bytes_used_の増減用に覚えておく)
+        };
+
+        // 同時に保持できる画像の枚数と合計バイト数の上限。前者はスロット数の頭打ち、
+        // 後者は「小さい画像を大量に」でも予算を使い切れるようにするための頭打ち
+        // (LGFX_Sprite側の確保はLuaEngineのbudget_/Alloc経由の予算に乗らないため、
+        // ここで別枠として管理する。上のクラスコメント参照)。
+        static constexpr size_t kMaxLuaImages = 4;
+        static constexpr size_t kMaxLuaImageBytes = 64 * 1024;
+
+        ImageSlot images_[kMaxLuaImages];
+        size_t image_bytes_used_ = 0;
+
+        // generation(上位24bit)+index(下位8bit、1始まり。0は無効値)のパック整数。
+        // WidgetIdと違いこの配列専用のスコープなので32bit全体を型ビットまで使う必要はない
+        static uint32_t MakeImageHandle(size_t index, uint32_t generation);
+        bool ResolveImageHandle(uint32_t handle, size_t& out_index) const;
+
         // グローバル関数nameを引数無しで呼ぶ(setup()向け)。定義されていなければ何もしない。
         // エラー時はErrorFunctions::ShowFatal()で表示する
         void callGlobalNoArgs(const char* name);
@@ -156,6 +208,10 @@ class LuaEngine {
         static int l_fill_circle(lua_State* L);
         static int l_clear_rect(lua_State* L);
         static int l_draw_text(lua_State* L);
+        // pico.draw_image()も他のpico.draw_*と同じく直接描画の一種(LuaCanvasの
+        // renderコールバックの中で使うこと)なのでここに置くが、ハンドルの発行・
+        // 解放自体はrenderコールバックの外(setup()等)で自由に呼んでよい
+        static int l_draw_image(lua_State* L);
 
         // 直接描画エリア(クリップ矩形)。OSData::frameへのpico.draw_*/draw_text呼び出しを
         // この矩形の内側だけに制限する。set_draw_areaを呼びっぱなしでrenderコールバックを
@@ -167,6 +223,18 @@ class LuaEngine {
         // 少なくとも「そのCanvas以外を巻き込む」事故には至らない。
         static int l_set_draw_area(lua_State* L);
         static int l_clear_draw_area(lua_State* L);
+
+        // 画像(pico.image_load/image_size/image_free)。クラスコメント「画像」参照。
+        // `.pimg`をこのLuaEngineインスタンスの固定長スロットへデコードして持ち、
+        // 整数ハンドルで扱う(WidgetIdと違いWidgetRegistryは経由しない)。
+        // 読み込み失敗(パス不正・SD無し・スロット/バイト予算超過・不正な.pimg)は
+        // pico.sd_read等と同じくnilを返すだけでluaL_errorにはしない。
+        // 一方、無効なハンドルをdraw_image/image_sizeへ渡すのはプログラマの誤りとして
+        // pico.set/pico.get同様luaL_errorにする(image_freeだけはpico.destroyと同じく
+        // 二重解放を黙って許容する)。
+        static int l_image_load(lua_State* L);
+        static int l_image_size(lua_State* L);
+        static int l_image_free(lua_State* L);
 
         // SDカードアクセス。パスはSD_Functions/FileExplorerと同じくSD絶対パス。
         // OSData::SD_usable==falseの間はどれも「失敗」(false/nil)を返すだけで、

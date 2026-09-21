@@ -760,6 +760,10 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.sd_remove(path)` | ファイルなら`SD.remove()`、ディレクトリなら`PICO_IO::removeRecursive()`(`FileExplorer`の削除と同じ判断)(2026-09-20追加) |
 | `pico.sd_mkdir(path)` | `OSData::SD.mkdir()`(2026-09-20追加) |
 | `pico.sd_list(path)` | ディレクトリを列挙し`{ {name=..., is_dir=...}, ... }`の配列を返す。パスが無い/ディレクトリでないなら`nil`(2026-09-20追加) |
+| `pico.image_load(path)` | `.pimg`をデコードして整数ハンドルを返す。失敗(SD無し/パス不正/不正な`.pimg`/上限超過)は`nil`(下記「画像」参照)(2026-09-21追加) |
+| `pico.image_size(handle)` | 読み込んだ画像の`width, height`を返す。無効なハンドルはエラー(2026-09-21追加) |
+| `pico.draw_image(handle, x, y)` | 画像を描く。他の`pico.draw_*`と同じく**`Canvas`の`render`コールバック内で使うこと**。無効なハンドルはエラー(2026-09-21追加) |
+| `pico.image_free(handle)` | 画像を明示的に解放する。無効/解放済みハンドルは`pico.destroy`と同じく黙って無視(2026-09-21追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -904,6 +908,54 @@ dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ
   `close()`が飛ばされ得る。ごく小さな読み書きの最中に限られる稀なエッジケースであり、
   「Lua着手前の受け皿の状態」表にある**OS内部90箇所のOOM未対応と同じ割り切りで
   対象外**とした(そこまで手を入れる投資対効果は低いと判断)。
+
+### 画像(2026-09-21実装)
+
+`pico.image_load/image_size/draw_image/image_free`。ウィジェット(`Image`)を介さず、
+`.pimg`(`script/generate_pimg.py`生成の4bpp+RLE独自形式。詳細は上の「MarkdownView実装詳細」
+「文書内の参照(画像)」参照)をLuaスクリプトが直接デコードして持ち、描いて、解放できるようにした。
+
+- **デコードは新規実装せず、既存の`IconRender::LoadPimgToSprite()`/`DrawPimgSprite()`
+  (`src/gui/icons/icon_render.h/.cpp`)をそのまま呼ぶ。** `Image`ウィジェットの
+  `onRAM=true`のとき(`Image::updateSprite()`)と全く同じ経路で、`.pimg`以外の画像形式
+  (PNG/BMP等)は最初から対象外(このOSでは`.pimg`だけが唯一の画像形式)。
+- **ウィジェットではないので`WidgetRegistry`は使わず、`LuaEngine`インスタンスごとの
+  固定長スロット配列(`images_`、上限`kMaxLuaImages=4`)を持つ。** MarkdownViewの
+  `labelPool`/`imagePool`と同じ「固定長配列」志向で、任意個数の`std::vector<Widget*>`的な
+  管理はしていない。ハンドルは`WidgetId`と同じ発想の
+  「generation(上位)+index(下位、1始まり)」パック整数だが、この配列専用のスコープなので
+  `WidgetId`のような32bit全体を型ビットまで使う配分は真似ていない。
+- **generationは`WidgetRegistry`と同じく、解放(`pico.image_free`)のたびに1つ進める
+  (使用中かどうかは別の`ImageSlot::used`フラグで見る)。** 実装時に一度、
+  「解放時にgenerationを0(未使用)へ戻し、次のロード時に1から数え直す」という誤った
+  設計で書いてしまい、解放直後に同じスロットを再利用すると**前回発行分と全く同じ
+  ハンドル値を再発行してしまう**(解放済みの古いハンドルが新しい画像を指してしまう
+  use-after-free相当のバグ)ことに気づいて直した。`WidgetRegistry::Unregister()`が
+  「`widget=nullptr`にするがgenerationは戻さず進める」設計にしている理由と同じ。
+  `script/host_test/lua_engine_test.cpp`に「解放→再利用→古いハンドルがエラーのまま」
+  の回帰テストを入れてある。
+- **デコード後のピクセルバッファ(`LGFX_Sprite::createSprite()`)は`LuaEngine`の
+  `budget_bytes`(Lua自体のアロケータ予算)には乗らない、素のOSヒープ確保**
+  (`WidgetFactory::Create()`が作るウィジェット本体と同じ扱い)。そのため画像専用に
+  別枠の上限を設けた: 同時に保持できる枚数(`kMaxLuaImages=4`)と合計バイト数
+  (`kMaxLuaImageBytes=64KiB`、4bppなので`width*height/2`で概算)の両方。
+  超過時は`pico.image_load`が`nil`を返すだけ(`pico.sd_read`等と同じく、SD絡みの
+  失敗は`luaL_error`にしない方針を踏襲)。
+- **`LGFX_Sprite`は`images_`配列の値メンバなので、`pico.image_free()`を呼び忘れて
+  スクリプトが終了しても、`LuaEngine`自体の破棄(`LuaScene::onExit()`)で
+  デストラクタが確保分を回収する(リークしない)。** `pico.image_free()`はそれを
+  待たず即座に解放したい場合向けの明示API(`pc/sdcard/lua/hello.lua`の「戻る」
+  ボタンでの呼び出しがその実例)。
+- **`draw_image`は他の`pico.draw_*`と同じ「直接描画」の一種**で、`Canvas`
+  (`pico.create("Canvas")`)の`render`コールバック内で使うこと(そうしないと
+  次にその領域がdirtyになった瞬間に消える。詳細は「直接描画」参照)。描画後は
+  画像サイズぶんを`PICO_GFX::MarkDirty()`する。
+- ホストテストは`lua_engine_test.cpp`に追加(SD無し時のnil、正常系のハンドル発行・
+  サイズ取得・描画・dirty矩形、存在しないパス/壊れたヘッダのnil、スロット枯渇、
+  解放→再利用→古いハンドルの無効化、二重解放の無害化、合計バイト数上限)。
+  実際の見た目は`pc/sdcard/lua/hello.lua`に画像描画のデモを追加し、PCビルドの
+  `--shot`で`.pimg`(`pc/sdcard/img/hello.pimg`、`examples/img/sample.pimg`と同じ
+  48x24の色帯サンプル)が実際に描けることを確認済み。
 
 ### 実装中に見つけて直した既存のバグ2件
 

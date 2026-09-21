@@ -20,6 +20,12 @@
 //                         "render"登録はエラーになること
 //   pico.invalidate/pico.mark_dirty → 前者はウィジェットの画面矩形を、後者は
 //                         指定した矩形をそのままPICO_GFX::MarkDirty()へ渡すこと
+//   pico.image_load/draw_image/image_size/image_free → `.pimg`を固定長スロットへ
+//                         デコードして持つ、ウィジェットを介さない画像ハンドルの
+//                         発行・描画・解放。ハンドルのgeneration方式(解放後の
+//                         使い回しで古いハンドルが新しい画像を指さないこと)、
+//                         スロット数/合計バイト数の上限、SD無し・不正な`.pimg`の
+//                         失敗経路(nil)を確認する
 #include "lua/LuaEngine.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
@@ -28,8 +34,10 @@
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
+#include "OS_Data.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <string>
 
 // ---- モック(widget_factory_test.cppと同じ方針) ----
 // MarkDirty()だけは直接描画テストのために最後に渡された矩形を記録する(他のテストは
@@ -51,6 +59,26 @@ static int failures = 0;
 static void check(bool cond, const char* label) {
     printf("%s %s\n", cond ? "[ OK ]" : "[FAIL]", label);
     if (!cond) failures++;
+}
+
+// テスト用の最小`.pimg`を組み立てる(script/generate_pimg.pyのフォーマット参照)。
+// 全ピクセルを単一の色indexで塗りつぶすだけの最小ボディを1ランで表現する
+static std::string MakePimgBytes(uint16_t width, uint16_t height, bool transparent, uint8_t color_index) {
+    std::string bytes;
+    bytes += (char)(width & 0xFF);
+    bytes += (char)((width >> 8) & 0xFF);
+    bytes += (char)(height & 0xFF);
+    bytes += (char)((height >> 8) & 0xFF);
+    bytes += (char)(transparent ? 0x01 : 0x00);
+
+    uint32_t remaining = (uint32_t)width * height;
+    while (remaining > 0) {
+        const uint8_t run = (remaining > 255) ? 255 : (uint8_t)remaining;
+        bytes += (char)run;
+        bytes += (char)color_index;
+        remaining -= run;
+    }
+    return bytes;
 }
 
 // Luaスクリプト側からのcheck()。C++側のcheck()と同じくfailuresへ積む
@@ -395,6 +423,95 @@ int main(){
 
         const bool bad_id = engine.Run("pico.invalidate(999999)", "invalidate_bad_id_test");
         check(!bad_id, "pico.invalidate: 無効なIDはエラー");
+    }
+
+    // ---- 画像(pico.image_load/draw_image/image_size/image_free) ----
+    {
+        // SD無しの間は失敗値(nil)を返すだけ(luaL_errorにはしない)
+        OSData::SD_usable = false;
+        const bool sd_off_ok = engine.Run(
+            "check(pico.image_load('/img/a.pimg') == nil, 'pico.image_load: SD無しの間はnil')",
+            "image_sd_off_test");
+        check(sd_off_ok, "pico.image_load: SD無しテストの実行自体は成功する");
+
+        OSData::SD_usable = true;
+        HostSd::files["/img/a.pimg"] = MakePimgBytes(2, 2, false, 5);
+        HostSd::files["/img/b.pimg"] = MakePimgBytes(3, 4, false, 1);
+        HostSd::files["/img/c.pimg"] = MakePimgBytes(5, 6, false, 2);
+        HostSd::files["/img/d.pimg"] = MakePimgBytes(7, 8, false, 3);
+        HostSd::files["/img/e.pimg"] = MakePimgBytes(1, 1, false, 4); // スロット枯渇後の追加分
+        HostSd::files["/img/missing_body.pimg"] = std::string(); // 5バイトのヘッダすら無い不正ファイル
+
+        const bool load_ok = engine.Run(R"LUA(
+            img_a = pico.image_load('/img/a.pimg')
+            check(img_a ~= nil, 'pico.image_load: 有効な.pimgはハンドルを返す')
+
+            local w, h = pico.image_size(img_a)
+            check(w == 2 and h == 2, 'pico.image_size: 読み込んだ画像の幅・高さが取れる')
+
+            check(pico.image_load('/img/no_such_file.pimg') == nil,
+                  'pico.image_load: 存在しないパスはnil')
+            check(pico.image_load('/img/missing_body.pimg') == nil,
+                  'pico.image_load: ヘッダも読めない不正な.pimgはnil')
+        )LUA", "image_load_basic_test");
+        check(load_ok, "pico.image_load: 基本テストの実行が成功する");
+
+        const bool draw_ok = engine.Run("pico.draw_image(img_a, 10, 20)", "draw_image_test");
+        check(draw_ok, "pico.draw_image: エラーなく実行できる");
+        check(g_last_dirty.x == 10 && g_last_dirty.y == 20 && g_last_dirty.w == 2 && g_last_dirty.h == 2,
+              "pico.draw_image: 画像サイズ分のdirty矩形が登録される");
+
+        const bool bad_handle_ok = engine.Run(
+            "check(pcall(pico.draw_image, 999999, 0, 0) == false, 'pico.draw_image: 無効なハンドルはエラー')",
+            "draw_image_bad_handle_test");
+        check(bad_handle_ok, "pico.draw_image: 無効ハンドルテストの実行自体は成功する");
+
+        // 残り3スロット(kMaxLuaImages=4のうち1つはimg_aが使用中)を埋めてスロット枯渇を確認する
+        const bool fill_ok = engine.Run(R"LUA(
+            img_b = pico.image_load('/img/b.pimg')
+            img_c = pico.image_load('/img/c.pimg')
+            img_d = pico.image_load('/img/d.pimg')
+            check(img_b ~= nil and img_c ~= nil and img_d ~= nil,
+                  'pico.image_load: 上限枚数までは読み込める')
+            check(pico.image_load('/img/e.pimg') == nil,
+                  'pico.image_load: スロット上限に達すると以降はnil')
+        )LUA", "image_load_fill_test");
+        check(fill_ok, "pico.image_load: スロット枯渇テストの実行が成功する");
+
+        // img_bを解放してスロットを1つ空け、再利用後は前回のハンドルが無効化されることを確認する
+        // (WidgetRegistryと同じgenerational indexの考え方の回帰確認)
+        const bool reuse_ok = engine.Run(R"LUA(
+            old_img_b = img_b
+            pico.image_free(img_b)
+            img_e = pico.image_load('/img/e.pimg')
+            check(img_e ~= nil, 'pico.image_free: 解放したスロットは再利用できる')
+            check(img_e ~= old_img_b, 'pico.image_free: 再利用後のハンドルは前回発行分と別物になる')
+            check(pcall(pico.draw_image, old_img_b, 0, 0) == false,
+                  'pico.image_free: 解放済みの古いハンドルはスロット再利用後もエラーのまま(use-after-free検出)')
+            pico.image_free(old_img_b) -- 二重解放。pico.destroyと同じく黙って無視されること
+            check(true, 'pico.image_free: 二重解放してもエラーにならない')
+        )LUA", "image_free_reuse_test");
+        check(reuse_ok, "pico.image_free: 再利用/二重解放テストの実行が成功する");
+    }
+
+    // ---- 画像: 合計バイト数の上限(kMaxLuaImageBytes) ----
+    {
+        LuaEngine img_budget_engine(64 * 1024);
+        check(img_budget_engine.valid(), "画像バイト予算テスト用にLuaEngineを構築");
+        if (img_budget_engine.valid()) {
+            lua_pushcfunction(img_budget_engine.raw(), l_check);
+            lua_setglobal(img_budget_engine.raw(), "check");
+
+            OSData::SD_usable = true;
+            // ヘッダだけ有効(400x400 = 4bppで80000B相当。予算判定はヘッダを読んだ
+            // 直後、実ピクセルのデコードより前に行われるのでボディは無くてよい)
+            HostSd::files["/img/huge.pimg"] = MakePimgBytes(400, 400, false, 0).substr(0, 5);
+            const bool ok = img_budget_engine.Run(
+                "check(pico.image_load('/img/huge.pimg') == nil, "
+                "'pico.image_load: 合計バイト数の上限を超える場合はnil')",
+                "image_budget_test");
+            check(ok, "pico.image_load: バイト予算テストの実行が成功する");
+        }
     }
 
     // ---- 後片付け(残りのウィジェットも解放し、ASanのリーク検出を素通りさせない) ----

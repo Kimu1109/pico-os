@@ -13,6 +13,7 @@
 #include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/icons/icon_render.h"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -190,6 +191,10 @@ void LuaEngine::registerApi() {
     registerFn("draw_text", l_draw_text);
     registerFn("set_draw_area", l_set_draw_area);
     registerFn("clear_draw_area", l_clear_draw_area);
+    registerFn("draw_image", l_draw_image);
+    registerFn("image_load", l_image_load);
+    registerFn("image_size", l_image_size);
+    registerFn("image_free", l_image_free);
     registerFn("sd_exists", l_sd_exists);
     registerFn("sd_read", l_sd_read);
     registerFn("sd_write", l_sd_write);
@@ -247,6 +252,31 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
             static_cast<LuaCanvas*>(w)->setOnRender([this, id]() { this->Dispatch(id, EventKind::Render); });
             break;
     }
+}
+
+// ---------------- 画像ハンドル ----------------
+
+uint32_t LuaEngine::MakeImageHandle(size_t index, uint32_t generation) {
+    // 下位8bit=index+1(1始まり。0はhandle全体を無効値にするため使わない)、
+    // 上位24bit=generation。kMaxLuaImagesは4なので8bitで十分過ぎるほど余裕がある
+    return (generation << 8) | static_cast<uint32_t>(index + 1);
+}
+
+bool LuaEngine::ResolveImageHandle(uint32_t handle, size_t& out_index) const {
+    const uint32_t index1 = handle & 0xFF;
+    if (index1 == 0 || index1 > kMaxLuaImages) return false;
+
+    const size_t index = index1 - 1;
+    const ImageSlot& slot = images_[index];
+    const uint32_t generation = handle >> 8;
+    // usedを見ずgenerationだけで判定すると、解放直後(まだ再利用されていない)スロットの
+    // 「今のgeneration」と「解放された側のhandleが持つ古いgeneration」がたまたま
+    // 一致するケースは無い(Unregister相当で必ず1つ進めるため)が、それとは別に
+    // 「そもそも今使用中か」も見ておく方が安全なので両方チェックする
+    if (!slot.used || slot.generation == 0 || slot.generation != generation) return false;
+
+    out_index = index;
+    return true;
 }
 
 void LuaEngine::PruneCallbacksFor(WidgetId id) {
@@ -601,6 +631,23 @@ int LuaEngine::l_draw_text(lua_State* L) {
     return 0;
 }
 
+int LuaEngine::l_draw_image(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+    const int16_t x = (int16_t)luaL_checkinteger(L, 2);
+    const int16_t y = (int16_t)luaL_checkinteger(L, 3);
+
+    size_t index;
+    if (!self->ResolveImageHandle(handle, index)) {
+        return luaL_error(L, "pico.draw_image: 無効なイメージハンドル");
+    }
+
+    ImageSlot& slot = self->images_[index];
+    IconRender::DrawPimgSprite(slot.sprite, x, y);
+    PICO_GFX::MarkDirty({x, y, (int16_t)slot.sprite.width, (int16_t)slot.sprite.height});
+    return 0;
+}
+
 // ---------------- 直接描画エリア ----------------
 // クラスコメント(ヘッダ)参照。OSData::frameのクリップ矩形を差し替えるだけの薄いラッパー。
 
@@ -616,6 +663,107 @@ int LuaEngine::l_set_draw_area(lua_State* L) {
 
 int LuaEngine::l_clear_draw_area(lua_State*) {
     OSData::frame->clearClipRect();
+    return 0;
+}
+
+// ---------------- 画像 ----------------
+// ヘッダのクラスコメント「画像」参照。`.pimg`のデコードそのものは
+// IconRender::LoadPimgToSprite()(Imageウィジェットのonram=trueと同じ経路)を
+// そのまま使い、このLuaEngineインスタンスの固定長スロットで持つだけ。
+
+int LuaEngine::l_image_load(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const char* path = luaL_checkstring(L, 1);
+
+    if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+
+    size_t index = kMaxLuaImages;
+    for (size_t i = 0; i < kMaxLuaImages; ++i) {
+        if (!self->images_[i].used) { index = i; break; }
+    }
+    if (index == kMaxLuaImages) {
+        LOG_APP_WARN("pico.image_load: 同時に保持できる画像数の上限(%zu枚)に達しています: %s",
+            kMaxLuaImages, path);
+        lua_pushnil(L);
+        return 1;
+    }
+
+    FsFile f = OSData::SD.open(path, O_RDONLY);
+    if (!f) { lua_pushnil(L); return 1; }
+
+    IconRender::PimgHeader header;
+    if (!IconRender::ReadPimgHeader(f, header)) {
+        f.close();
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // 4bpp(1ピクセル半バイト)なので端数切り上げでバイト数を見積もる。
+    // LGFX_Sprite側の実際の確保量は多少前後し得るが、予算チェックとしては十分な精度
+    const size_t need_bytes = (static_cast<size_t>(header.width) * header.height + 1) / 2;
+    if (self->image_bytes_used_ + need_bytes > kMaxLuaImageBytes) {
+        f.close();
+        LOG_APP_WARN("pico.image_load: %s の読み込みで画像用メモリの上限(%uB)を超えます",
+            path, (unsigned)kMaxLuaImageBytes);
+        lua_pushnil(L);
+        return 1;
+    }
+
+    ImageSlot& slot = self->images_[index];
+    const bool ok = IconRender::LoadPimgToSprite(f, slot.sprite);
+    f.close();
+    if (!ok) { lua_pushnil(L); return 1; }
+
+    slot.used = true;
+    slot.bytes = need_bytes;
+    self->image_bytes_used_ += need_bytes;
+
+    // generation 0 は「一度も使われていないスロット」の予約値なので、初回使用時だけ
+    // 1へ進める。2回目以降はimage_free()側で既に進めてあるのでそのまま使う
+    // (WidgetRegistry::Register()と同じ考え方)
+    if (slot.generation == 0) slot.generation = 1;
+
+    lua_pushinteger(L, (lua_Integer)MakeImageHandle(index, slot.generation));
+    return 1;
+}
+
+int LuaEngine::l_image_size(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+
+    size_t index;
+    if (!self->ResolveImageHandle(handle, index)) {
+        return luaL_error(L, "pico.image_size: 無効なイメージハンドル");
+    }
+
+    const ImageSlot& slot = self->images_[index];
+    lua_pushinteger(L, slot.sprite.width);
+    lua_pushinteger(L, slot.sprite.height);
+    return 2;
+}
+
+int LuaEngine::l_image_free(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+
+    size_t index;
+    // 既に無効なハンドル(未割り当て/解放済み)はpico.destroyと同じく黙って無視し、
+    // 二重解放をエラーにしない
+    if (!self->ResolveImageHandle(handle, index)) return 0;
+
+    ImageSlot& slot = self->images_[index];
+    slot.sprite.sprite.deleteSprite();
+    slot.sprite.usable = false;
+    self->image_bytes_used_ -= slot.bytes;
+    slot.bytes = 0;
+    slot.used = false;
+
+    // WidgetRegistry::Unregister()と同じく、ここでgenerationを進めておく
+    // (次にこのスロットが再利用されたとき、解放済みの古いハンドルが新しい画像を
+    // 指してしまわないようにするため。generationを0へ戻すだけだと「初回使用」と
+    // 区別できず同じハンドル値を再発行してしまう)
+    slot.generation++;
+    if (slot.generation == 0) slot.generation = 1; // 0は予約値なのでwrapしたら1へ飛ばす
     return 0;
 }
 

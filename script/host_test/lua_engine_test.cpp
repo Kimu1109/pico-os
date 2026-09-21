@@ -36,9 +36,45 @@
 //   pico.http_request/http_cancel → 実ソケットに触れない範囲(不正なメソッド/URL/
 //                         https/送信ボディの上限超過/同時実行数の上限)での
 //                         早期拒否がすべてfalseで返ること(luaL_errorにしない)
+//   pico.on(id,"checked_changed"/"value_changed"/"select_item"/"tab_changed"/
+//           "dropdown_changed"/"text_changed",fn) →
+//                         Checkbox/NumberSlider/ScrollList/TabBar/DropdownMenu/Textbox
+//                         それぞれの既存のC++側コールバック(causeOnChangeChecked等。
+//                         text_changedはTextbox::onHide())を実際に鳴らしてLuaへ届くこと、
+//                         値そのものはpico.get()で読めること(select_itemの
+//                         already_selectedだけは引数で渡ること)、対応しないウィジェット
+//                         種別への登録はエラーになることを確認する
+//   pico.get_time() → TimeFunctions::timeinfoを直接書き換えて、返るテーブルの
+//                      各フィールドが一致することを確認する
+//   実行時間の安全網(lua_sethook) → 終わらないループ(while true do end)を含む
+//                      スクリプトがRun()/CallLoop()をハングさせずfalseで戻ること、
+//                      打ち切り時もErrorFunctions経由でダイアログが出ること、
+//                      Lua側のpcallで捕まえれば普通に続行できること、上限内の
+//                      ループは邪魔されないこと、loop()内で打ち切られた場合は
+//                      既存のloop_broken_安全弁と重ねて効くことを確認する
+//   pico.remove_child → add_child()の逆。破棄せず取り外せること(parentがnullになる・
+//                      コンテナのchildren_から外れる・フラットリストへ独立したルート
+//                      として戻ること・WidgetIdはまだ有効なこと)、コンテナ以外や
+//                      既に子でないウィジェットを指定するとエラーになることを確認する
+//   pico.list_add/list_clear/pico.tab_add → ScrollList/DropdownMenuへ項目を足す/
+//                      全消しできること、TabBarへタブを足せること(kMaxTabs超過時は
+//                      luaL_errorではなくfalseで返ること)、対応しないウィジェット
+//                      種別へ呼ぶとエラーになることを確認する
+//   細部のプロパティ → NumberInputのtext(setNum/getNum)・Iconのicon_opaque
+//                      (getOpaque)・GridContainerのh_align/v_align(getHAlign/
+//                      getVAlign)がget/set往復できることを確認する(以前はsetのみ
+//                      対応でgetterが無かった)
 #include "lua/LuaEngine.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
+#include "gui/widgets/Checkbox.hpp"
+#include "gui/widgets/NumberSlider.hpp"
+#include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/TabBar.hpp"
+#include "gui/widgets/DropdownMenu.hpp"
+#include "gui/widgets/Textbox.hpp"
+#include "gui/widgets/WidgetFactory.hpp"
+#include "gui/widgets/interfaces/ITextInputTarget.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
@@ -48,6 +84,7 @@
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
+#include "functions/Time_Functions.hpp"
 #include "OS_Data.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -68,6 +105,19 @@ void LogFunctions::Flush(){}
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget*){}
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget*){}
 void KeyboardFunctions::HideAll(){}
+
+// text_changedイベントのテスト用: 実機のオンスクリーンキーボード無しに
+// Textbox::onHide()(キーボードを閉じて確定した相当)を直接呼ぶための最小限の
+// ITextInputWidget実装(widget_factory_test.cppのフェイクと同じ方針)
+class FakeKeyboard : public ITextInputWidget {
+    public:
+        FixedString<PICO_STR_LL> text;
+        FixedString<PICO_STR_LL> getText() override { return text; }
+        void setText(const FixedString<PICO_STR_LL>& t) override { text = t; }
+        void setInputTarget(ITextInputTarget*) override {}
+        void removeInputTarget(ITextInputTarget*) override {}
+        ITextInputTarget* getInputTarget() override { return nullptr; }
+};
 
 static int failures = 0;
 static void check(bool cond, const char* label) {
@@ -229,6 +279,38 @@ int main(){
     check(child_it > container_it,
           "pico.add_child: 子は親より後ろ(=上)に描かれる位置に入る(生成順が子→親でも直る)");
 
+    // ---- pico.remove_child: add_childの逆。破棄せずに取り外す ----
+    {
+        const bool ok = engine.Run("pico.remove_child(container_id, child_id)", "remove_child_test");
+        check(ok, "pico.remove_child: 実行が成功する");
+
+        check(child->getParent() == nullptr,
+              "pico.remove_child: 取り外した子のparentはnullになる");
+        check(std::find(container->getChildren().begin(), container->getChildren().end(), child)
+                  == container->getChildren().end(),
+              "pico.remove_child: コンテナのchildren_からも外れる");
+        check(std::find(WidgetFunctions::widgets.begin(), WidgetFunctions::widgets.end(), child)
+                  != WidgetFunctions::widgets.end(),
+              "pico.remove_child: 破棄されず、独立したルートとしてフラットリストへ戻る");
+        check(WidgetRegistry::Resolve(child_id) == child,
+              "pico.remove_child: WidgetIdはまだ有効(破棄されていない)");
+
+        // 対応外のウィジェット種別(コンテナではない)へのremove_childはエラー
+        const bool guard1_ok = engine.Run(R"LUA(
+            local btn = pico.create("Button")
+            local bound = pcall(function() pico.remove_child(btn, child_id) end)
+            check(bound == false, "pico.remove_child: コンテナ以外を第1引数にするとエラー")
+        )LUA", "remove_child_non_container_test");
+        check(guard1_ok, "remove_child非対応ウィジェットへの呼び出しが例外として正しく捕捉される");
+
+        // 指定したコンテナの子ではない(既に取り外し済み)場合もエラー
+        const bool guard2_ok = engine.Run(R"LUA(
+            local bound = pcall(function() pico.remove_child(container_id, child_id) end)
+            check(bound == false, "pico.remove_child: 既に子でないウィジェットを指定するとエラー")
+        )LUA", "remove_child_not_a_child_test");
+        check(guard2_ok, "remove_child: 子でない場合の例外が正しく捕捉される");
+    }
+
     // ---- ScrollContainerの子を個別にdestroy → 二重解放しないこと ----
     lua_getglobal(L, "scroll_id");
     const WidgetId scroll_id = (WidgetId)lua_tointeger(L, -1);
@@ -263,6 +345,68 @@ int main(){
         dialog->causeOnClosed(true);
     }
     WidgetFunctions::ProcessPendingDeletes();
+
+    // ---- 実行時間の安全網(暴走防止): 命令数の上限で打ち切る ----
+    {
+        // 終わらないループはlua_sethook(LUA_MASKCOUNT)経由で打ち切られ、
+        // Run()は(構文/実行時エラーと同じ形で)falseを返す。テストプロセス自体が
+        // ハングしないことそのものが最大の確認点(ハングすればこのテストは
+        // 永遠に戻ってこない)
+        const size_t dialogs_before = WidgetFunctions::dialog_roots.size();
+        const bool infinite_ok = engine.Run("while true do end", "infinite_loop_test");
+        check(!infinite_ok, "実行時間の安全網: 終わらないループはRun()をfalseで戻す(ハングしない)");
+        check(WidgetFunctions::dialog_roots.size() == dialogs_before + 1,
+              "実行時間の安全網: 打ち切り時もErrorFunctions::ShowFatal()経由でダイアログが出る");
+        if (WidgetFunctions::dialog_roots.size() > dialogs_before) {
+            MsgDialog* dialog = static_cast<MsgDialog*>(WidgetFunctions::dialog_roots.back());
+            dialog->causeOnClosed(true);
+        }
+        WidgetFunctions::ProcessPendingDeletes();
+
+        // 見た目は無限ループでも、Lua自身のpcallで内側の打ち切りエラーを捕まえてから
+        // 素直に抜けるスクリプトは正常終了する(打ち切りエラーはLuaの通常のエラーと
+        // 区別が付かないため、pcallで捕まえれば普通に処理を続けられる。
+        // クラスコメント「実行時間の安全網」の「既知の限界」参照)
+        const bool caught_ok = engine.Run(R"LUA(
+            local ok, err = pcall(function() while true do end end)
+            check(ok == false, "実行時間の安全網: 打ち切りは通常のLuaエラーとしてpcallで捕まえられる")
+        )LUA", "caught_infinite_loop_test");
+        check(caught_ok, "実行時間の安全網: pcallで打ち切りを捕まえた後のスクリプト自体は正常終了する");
+
+        // 妥当な範囲のループは打ち切られず最後まで実行できる
+        const bool bounded_ok = engine.Run(R"LUA(
+            local sum = 0
+            for i = 1, 10000 do sum = sum + i end
+            check(sum == 50005000, "実行時間の安全網: 上限内のループは邪魔されず最後まで実行できる")
+        )LUA", "bounded_loop_test");
+        check(bounded_ok, "実行時間の安全網: 上限内のループを含むスクリプトはRun()がtrueを返す");
+
+        // loop(dt)内の終わらないループも同様に打ち切られ、既存のloop_broken_安全弁により
+        // 以降loop()が呼ばれなくなる(2つの安全網が重ねて効く)。loop_broken_は一度
+        // 立ったら戻らないラッチなので、この後の「Arduino風 setup()/loop(dt)」テストを
+        // 巻き込まないよう、共有のengineではなく専用のLuaEngineを使う
+        LuaEngine loop_engine(64 * 1024);
+        check(loop_engine.valid(), "実行時間の安全網: loop()テスト用に専用のLuaEngineを構築");
+        if (loop_engine.valid()) {
+            const bool loop_setup_ok = loop_engine.Run(
+                "function loop(dt) while true do end end",
+                "infinite_loop_in_loop_test");
+            check(loop_setup_ok, "実行時間の安全網: loop()自体の定義(まだ呼んでいない)は正常に読み込める");
+            const size_t dialogs_before2 = WidgetFunctions::dialog_roots.size();
+            loop_engine.CallLoop(16);
+            check(WidgetFunctions::dialog_roots.size() == dialogs_before2 + 1,
+                  "実行時間の安全網: loop(dt)内の終わらないループも打ち切られダイアログが出る");
+            if (WidgetFunctions::dialog_roots.size() > dialogs_before2) {
+                MsgDialog* dialog = static_cast<MsgDialog*>(WidgetFunctions::dialog_roots.back());
+                dialog->causeOnClosed(true);
+            }
+            WidgetFunctions::ProcessPendingDeletes();
+            const size_t dialogs_before3 = WidgetFunctions::dialog_roots.size();
+            loop_engine.CallLoop(16); // loop_broken_によりもう呼ばれないはず(ダイアログが増えない)
+            check(WidgetFunctions::dialog_roots.size() == dialogs_before3,
+                  "実行時間の安全網: 打ち切り後はloop_broken_により以降loop()自体が呼ばれない");
+        }
+    }
 
     // ---- Arduino風 setup()/loop(dt) ----
     {
@@ -416,6 +560,347 @@ int main(){
             check(bound == false, "pico.on: 'render'イベントはCanvas以外だとエラー")
         )LUA", "render_on_non_canvas_test");
         check(guard_ok, "render非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: checked_changed(Checkbox) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            cb_id = pico.create("Checkbox")
+            cb_changed_count = 0
+            cb_last_checked = nil
+            pico.on(cb_id, "checked_changed", function(id)
+                cb_changed_count = cb_changed_count + 1
+                cb_last_checked = pico.get(id, "checked")
+            end)
+        )LUA", "checkbox_setup_test");
+        check(ok, "pico.on(...,\"checked_changed\",...)の登録が成功する");
+
+        lua_getglobal(L, "cb_id");
+        const WidgetId cb_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        Checkbox* cb = static_cast<Checkbox*>(WidgetRegistry::Resolve(cb_id));
+        check(cb != nullptr, "pico.create(\"Checkbox\"): 実体が引ける");
+
+        // Checkbox::causeOnPressStart()が実際のチェック状態反転+causeOnChangeChecked()を行う
+        // (タップ相当)。値そのものはコールバック引数ではなくpico.get()で読む設計を確認する
+        if (cb) cb->causeOnPressStart();
+        lua_getglobal(L, "cb_changed_count");
+        check((int)lua_tointeger(L, -1) == 1, "checked_changed: タップで1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "cb_last_checked");
+        check(lua_toboolean(L, -1) == true,
+              "checked_changed: pico.get(id,\"checked\")で変更後の値が読める");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn3 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn3, "checked_changed", function() end) end)
+            check(bound == false, "pico.on: 'checked_changed'イベントはCheckbox以外だとエラー")
+        )LUA", "checked_changed_guard_test");
+        check(guard_ok, "checked_changed非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: value_changed(NumberSlider) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            ns_id = pico.create("NumberSlider")
+            pico.set(ns_id, "min_value", 0)
+            pico.set(ns_id, "max_value", 100)
+            ns_changed_count = 0
+            ns_last_value = nil
+            pico.on(ns_id, "value_changed", function(id)
+                ns_changed_count = ns_changed_count + 1
+                ns_last_value = pico.get(id, "value")
+            end)
+        )LUA", "number_slider_setup_test");
+        check(ok, "pico.on(...,\"value_changed\",...)の登録が成功する");
+
+        lua_getglobal(L, "ns_id");
+        const WidgetId ns_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        NumberSlider* ns = static_cast<NumberSlider*>(WidgetRegistry::Resolve(ns_id));
+        check(ns != nullptr, "pico.create(\"NumberSlider\"): 実体が引ける");
+
+        // setValue()がcauseOnValueChanged()を呼ぶ(NumberSlider.hppのsetValue参照)
+        if (ns) ns->setValue(42);
+        lua_getglobal(L, "ns_changed_count");
+        check((int)lua_tointeger(L, -1) == 1, "value_changed: 値変更で1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "ns_last_value");
+        check(lua_tonumber(L, -1) == 42, "value_changed: pico.get(id,\"value\")で変更後の値が読める");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn4 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn4, "value_changed", function() end) end)
+            check(bound == false, "pico.on: 'value_changed'イベントはNumberSlider以外だとエラー")
+        )LUA", "value_changed_guard_test");
+        check(guard_ok, "value_changed非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: select_item(ScrollList) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            sl_id = pico.create("ScrollList")
+            sl_select_count = 0
+            sl_last_index = nil
+            sl_last_already_selected = nil
+            pico.on(sl_id, "select_item", function(id, already_selected)
+                sl_select_count = sl_select_count + 1
+                sl_last_index = pico.get(id, "selected_index")
+                sl_last_already_selected = already_selected
+            end)
+        )LUA", "scroll_list_setup_test");
+        check(ok, "pico.on(...,\"select_item\",...)の登録が成功する");
+
+        lua_getglobal(L, "sl_id");
+        const WidgetId sl_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        ScrollList* sl = static_cast<ScrollList*>(WidgetRegistry::Resolve(sl_id));
+        check(sl != nullptr, "pico.create(\"ScrollList\"): 実体が引ける");
+
+        if (sl) {
+            ScrollListTools::Item item;
+            item.text.assign("item0");
+            sl->add(item);
+            sl->setSelectedIndex(0);
+            sl->causeOnSelectItem(false); // 新規選択(2回目のタップではない)
+        }
+        lua_getglobal(L, "sl_select_count");
+        check((int)lua_tointeger(L, -1) == 1, "select_item: 選択で1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "sl_last_index");
+        check((int)lua_tointeger(L, -1) == 0, "select_item: pico.get(id,\"selected_index\")で選択indexが読める");
+        lua_pop(L, 1);
+        lua_getglobal(L, "sl_last_already_selected");
+        check(lua_toboolean(L, -1) == false,
+              "select_item: already_selectedはpermanentプロパティではなく引数で渡る(false)");
+        lua_pop(L, 1);
+
+        // 同じ項目を選び直す(already_selected=true)経路も確認する
+        if (sl) sl->causeOnSelectItem(true);
+        lua_getglobal(L, "sl_last_already_selected");
+        check(lua_toboolean(L, -1) == true, "select_item: already_selected=trueも正しく渡る");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn5 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn5, "select_item", function() end) end)
+            check(bound == false, "pico.on: 'select_item'イベントはScrollList以外だとエラー")
+        )LUA", "select_item_guard_test");
+        check(guard_ok, "select_item非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: tab_changed(TabBar) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            tb_id = pico.create("TabBar")
+            tb_changed_count = 0
+            tb_last_selected = nil
+            pico.on(tb_id, "tab_changed", function(id)
+                tb_changed_count = tb_changed_count + 1
+                tb_last_selected = pico.get(id, "tab_selected")
+            end)
+        )LUA", "tab_bar_setup_test");
+        check(ok, "pico.on(...,\"tab_changed\",...)の登録が成功する");
+
+        lua_getglobal(L, "tb_id");
+        const WidgetId tb_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        TabBar* tb = static_cast<TabBar*>(WidgetRegistry::Resolve(tb_id));
+        check(tb != nullptr, "pico.create(\"TabBar\"): 実体が引ける");
+
+        if (tb) {
+            tb->addTab("A");
+            tb->addTab("B");
+            tb->setSelected(1, true); // notify=trueでon_changedも鳴らす(タップ経由と同じ扱い)
+        }
+        lua_getglobal(L, "tb_changed_count");
+        check((int)lua_tointeger(L, -1) == 1, "tab_changed: 選択変更で1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "tb_last_selected");
+        check((int)lua_tointeger(L, -1) == 1, "tab_changed: pico.get(id,\"tab_selected\")で選択indexが読める");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn6 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn6, "tab_changed", function() end) end)
+            check(bound == false, "pico.on: 'tab_changed'イベントはTabBar以外だとエラー")
+        )LUA", "tab_changed_guard_test");
+        check(guard_ok, "tab_changed非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: dropdown_changed(DropdownMenu) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            dd_id = pico.create("DropdownMenu")
+            pico.list_add(dd_id, "A")
+            pico.list_add(dd_id, "B")
+            dd_changed_count = 0
+            dd_last_selected = nil
+            pico.on(dd_id, "dropdown_changed", function(id)
+                dd_changed_count = dd_changed_count + 1
+                dd_last_selected = pico.get(id, "selected_index")
+            end)
+        )LUA", "dropdown_setup_test");
+        check(ok, "pico.on(...,\"dropdown_changed\",...)の登録が成功する(list_addで項目追加込み)");
+
+        lua_getglobal(L, "dd_id");
+        const WidgetId dd_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        DropdownMenu* dd = static_cast<DropdownMenu*>(WidgetRegistry::Resolve(dd_id));
+        check(dd != nullptr, "pico.create(\"DropdownMenu\"): 実体が引ける");
+
+        // DropdownMenuは子(内部のScrollList)を経由してしかタップ選択を再現できない
+        // (setSelectedIndex()は表示の初期化用で、on_changedを意図的に飛ばす設計のため)
+        if (dd) {
+            ScrollList* inner = static_cast<ScrollList*>(dd->getChildren()[0]);
+            inner->setSelectedIndex(0);
+            inner->causeOnSelectItem(false); // 実際のタップ確定と同じ経路
+        }
+        lua_getglobal(L, "dd_changed_count");
+        check((int)lua_tointeger(L, -1) == 1, "dropdown_changed: 選択確定で1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "dd_last_selected");
+        check((int)lua_tointeger(L, -1) == 0,
+              "dropdown_changed: pico.get(id,\"selected_index\")で選択indexが読める");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn7 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn7, "dropdown_changed", function() end) end)
+            check(bound == false, "pico.on: 'dropdown_changed'イベントはDropdownMenu以外だとエラー")
+        )LUA", "dropdown_changed_guard_test");
+        check(guard_ok, "dropdown_changed非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: text_changed(Textbox) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            tx_id = pico.create("Textbox")
+            tx_changed_count = 0
+            tx_last_text = nil
+            pico.on(tx_id, "text_changed", function(id)
+                tx_changed_count = tx_changed_count + 1
+                tx_last_text = pico.get(id, "text")
+            end)
+        )LUA", "textbox_setup_test");
+        check(ok, "pico.on(...,\"text_changed\",...)の登録が成功する");
+
+        lua_getglobal(L, "tx_id");
+        const WidgetId tx_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        using TextboxT = Textbox<WidgetFactory::kTextboxCapacity>;
+        TextboxT* tx = static_cast<TextboxT*>(WidgetRegistry::Resolve(tx_id));
+        check(tx != nullptr, "pico.create(\"Textbox\"): 実体が引ける");
+
+        // 実機のオンスクリーンキーボードを介さず、「キーボードを閉じて確定した」
+        // 相当のonHide()を直接呼ぶ(on_text_changed()の発火場所そのもの)
+        if (tx) {
+            FakeKeyboard kb;
+            kb.text.assign("hello");
+            tx->onHide(&kb);
+        }
+        lua_getglobal(L, "tx_changed_count");
+        check((int)lua_tointeger(L, -1) == 1, "text_changed: onHide()確定で1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "tx_last_text");
+        check(std::string(lua_tostring(L, -1)) == "hello",
+              "text_changed: pico.get(id,\"text\")で確定後の値が読める");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn8 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn8, "text_changed", function() end) end)
+            check(bound == false, "pico.on: 'text_changed'イベントはTextbox以外だとエラー")
+        )LUA", "text_changed_guard_test");
+        check(guard_ok, "text_changed非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- pico.get_time() ----
+    {
+        // TimeFunctions::timeinfoを直接書き換えて、返る値がそのまま反映されることを確認する
+        // (Setup()/Update()はNTP同期やmillis()に依存するためここでは呼ばず、
+        // struct tmを直接埋める)
+        TimeFunctions::timeinfo.tm_year = 2026 - 1900;
+        TimeFunctions::timeinfo.tm_mon = 9 - 1; // 0始まり(0=1月)
+        TimeFunctions::timeinfo.tm_mday = 21;
+        TimeFunctions::timeinfo.tm_hour = 13;
+        TimeFunctions::timeinfo.tm_min = 45;
+        TimeFunctions::timeinfo.tm_sec = 6;
+        TimeFunctions::timeinfo.tm_wday = 1; // 月曜
+        TimeFunctions::year = 2026;
+        TimeFunctions::month = 9;
+
+        const bool ok = engine.Run(R"LUA(
+            local t = pico.get_time()
+            check(t.year == 2026, "pico.get_time: year")
+            check(t.month == 9, "pico.get_time: month")
+            check(t.day == 21, "pico.get_time: day")
+            check(t.hour == 13, "pico.get_time: hour")
+            check(t.min == 45, "pico.get_time: min")
+            check(t.sec == 6, "pico.get_time: sec")
+            check(t.wday == 1, "pico.get_time: wday")
+        )LUA", "get_time_test");
+        check(ok, "pico.get_time(): スクリプトの実行が成功する");
+    }
+
+    // ---- pico.list_add / pico.list_clear(ScrollList/DropdownMenu) / pico.tab_add(TabBar) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            sl_pop = pico.create("ScrollList")
+            pico.list_add(sl_pop, "one")
+            pico.list_add(sl_pop, "two")
+            check(pico.get(sl_pop, "item_count") == 2, "pico.list_add: ScrollListへ2件追加")
+            pico.list_clear(sl_pop)
+            check(pico.get(sl_pop, "item_count") == 0, "pico.list_clear: ScrollListが空になる")
+
+            dd_pop = pico.create("DropdownMenu")
+            pico.list_add(dd_pop, "a")
+            pico.list_add(dd_pop, "b")
+            pico.list_add(dd_pop, "c")
+            check(pico.get(dd_pop, "item_count") == 3, "pico.list_add: DropdownMenuへ3件追加")
+            pico.list_clear(dd_pop)
+            check(pico.get(dd_pop, "item_count") == 0, "pico.list_clear: DropdownMenuが空になる")
+
+            tabbar = pico.create("TabBar")
+            check(pico.tab_add(tabbar, "A") == true, "pico.tab_add: 1本目は成功")
+            check(pico.tab_add(tabbar, "B") == true, "pico.tab_add: 2本目は成功")
+            check(pico.tab_add(tabbar, "C") == true, "pico.tab_add: 3本目は成功")
+            check(pico.tab_add(tabbar, "D") == true, "pico.tab_add: 4本目(kMaxTabs)は成功")
+            check(pico.tab_add(tabbar, "E") == false,
+                  "pico.tab_add: 5本目はkMaxTabs超過でfalse(luaL_errorにはしない)")
+            check(pico.get(tabbar, "tab_count") == 4, "pico.tab_add: tab_countが4のまま")
+
+            local other = pico.create("Button")
+            check(pcall(function() pico.list_add(other, "x") end) == false,
+                  "pico.list_add: ScrollList/DropdownMenu以外はエラー")
+            check(pcall(function() pico.list_clear(other) end) == false,
+                  "pico.list_clear: ScrollList/DropdownMenu以外はエラー")
+            check(pcall(function() pico.tab_add(other, "x") end) == false,
+                  "pico.tab_add: TabBar以外はエラー")
+        )LUA", "list_tab_test");
+        check(ok, "pico.list_add/list_clear/tab_add: スクリプトの実行が成功する");
+    }
+
+    // ---- 細部のプロパティ: NumberInputのtext / Iconのicon_opaque / GridContainerのh_align・v_align ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            ni = pico.create("NumberInput")
+            pico.set(ni, "text", "123")
+            check(pico.get(ni, "text") == "123", "NumberInput: textの往復(setNum/getNum)")
+
+            ic2 = pico.create("Icon")
+            pico.set(ic2, "icon_opaque", true)
+            check(pico.get(ic2, "icon_opaque") == true, "Icon: icon_opaqueの往復(getOpaque追加)")
+
+            gc2 = pico.create("GridContainer")
+            pico.set(gc2, "h_align", 1)
+            pico.set(gc2, "v_align", 2)
+            check(pico.get(gc2, "h_align") == 1, "GridContainer: h_alignの往復(getHAlign追加)")
+            check(pico.get(gc2, "v_align") == 2, "GridContainer: v_alignの往復(getVAlign追加)")
+        )LUA", "property_gap_test");
+        check(ok, "細部のプロパティ: スクリプトの実行が成功する");
     }
 
     // ---- pico.invalidate / pico.mark_dirty ----

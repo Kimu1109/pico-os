@@ -62,6 +62,8 @@ class ScrollContainer : public Widget, public IBorderColor {
             auto it = std::find(children_.begin(), children_.end(), child);
             if(it == children_.end()) return;
             children_.erase(it);
+            // LayoutContainer::removeChild()と同じ理由(コメント参照)
+            child->setParent(nullptr);
             this->updateContentBounds();
         }
 

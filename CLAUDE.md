@@ -70,7 +70,7 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
-  lua/                        Lua<->C++バインディング本体(LuaEngine)
+  lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
@@ -79,7 +79,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_sceneの22本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scannerの23本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
@@ -88,6 +88,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
   web/shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
   sdcard/                     SDカードとして読まれるディレクトリ
     lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
+    lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
 ```
@@ -186,15 +187,18 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
   桁は繰り上がらず、その桁だけが巡回する。上限は`23:59:59`。
 
 ### ウィジェットID (`src/gui/widgets/WidgetID.hpp` / `WidgetRegistry.hpp` / `WidgetFactory.hpp`)
-Lua等の外部から安全にウィジェットを指すための32bit ID。**発行側・ファクトリは実装済み、Resolve()の実利用(Lua統合本体)だけが残っている。**
+Lua等の外部から安全にウィジェットを指すための32bit ID。**発行側・ファクトリ・`Resolve()`の実利用(Lua統合本体)まで実装済み**(2026-09-19、下記「Luaバインディング」参照)。
 
 - ビット配分は `[31:26] type(6bit, WidgetType)` / `[25:10] generation(16bit)` / `[9:0] index(10bit)`。`generation==0`は未割り当ての予約値なので**ID 0は常に無効**。
 - 具象ウィジェットは`getWidgetType()`の実装が必須(純粋仮想)。種類を足すときは`WidgetType`へ追記する(64種を超えると`static_assert`で落ちる)。
 - **IDは`getId()`の初回呼び出し時に遅延発行**する。外部から触られないウィジェットはスロットを消費しない。解放は`~Widget()`が`WidgetRegistry::Unregister()`を呼び、スロットのgenerationを進める。
 - `WidgetRegistry::Resolve(id)`はindex範囲・generation・typeの3点を検証して`Widget*`を返す(不一致ならnullptr)。**破棄済みIDの誤参照(use-after-free)はここで弾かれる。**
-- **`Resolve()`はホストテスト(`script/host_test/widget_factory_test.cpp`)で初めて検証された**: 発行済みIDからの解決、type改ざんの検出、破棄済みID(use-after-free)の検出、スロット再利用時のgeneration不一致検出を確認済み。ただし**実コード中の呼び出し元はまだテストのみ**で、実際に使われるのはLua統合から。
+- **`Resolve()`はホストテスト(`script/host_test/widget_factory_test.cpp`)で初めて検証された**: 発行済みIDからの解決、type改ざんの検出、破棄済みID(use-after-free)の検出、スロット再利用時のgeneration不一致検出を確認済み。(2026-09-19追記: 実コード側の呼び出し元も`LuaEngine`(`pico.set/get/on/destroy/add_child`等)として実装済み)
 - **`WidgetType` → `new Xxx` のファクトリを追加した**(`src/gui/widgets/WidgetFactory.hpp/.cpp`)。`WidgetFactory::Create(WidgetType)`がwidgets/直下の汎用部品15種(Button/Label/Textbox/NumberInput/Checkbox/Icon/Image/NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/TabBar/DropdownMenu)を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外(SD走査やシーン固有状態への依存が強いため)。生成直後は仮の位置・大きさなので、呼び出し側がsetX/setY/setW/setH等で整える前提。Textboxは`Textbox.cpp`が明示インスタンス化済みの`N`(`PICO_STR_LL`)に合わせてあり、任意のNは使えない(未使用の組み合わせを増やすには明示インスタンス化をもう1行足す必要がある)。
-- **プロパティのget/setをLuaへ通す共通口(`WidgetProperty.hpp/.cpp`)を追加した(2026-09-19)**。`WidgetProperty::Get/Set(Widget*, Id, Value)`が`WidgetFactory::Create()`対応15種それぞれの代表的なプロパティ(Text/Value/Checked/FontSize/BorderColor等)を読み書きする。Widget基底の仮想関数にはしていない(`setW()`/`setH()`が基底に無く型ごとに意味が違うため。`WidgetFactory`と同じ「WidgetType→switch」形式)。値は`Value{type, i, f, b, FixedString<PICO_PATH_LEN> s}`という固定長のタグ付き共用体もどきで、ヒープを使わない。一部のプロパティ(NumberInputの入力値、Icon::opaqueのget、GridContainerのHAlign/VAlignのget等)はウィジェット側に対応するgetter/setterが元々無いため未対応(該当箇所にコメントで明記)。ホストテストは`script/host_test/widget_property_test.cpp`。**ここまでで「共通口」自体は揃ったが、Lua側からこれを叩くバインディング本体はまだ無い。**
+- **プロパティのget/setをLuaへ通す共通口(`WidgetProperty.hpp/.cpp`)を追加した(2026-09-19)**。`WidgetProperty::Get/Set(Widget*, Id, Value)`が`WidgetFactory::Create()`対応15種それぞれの代表的なプロパティ(Text/Value/Checked/FontSize/BorderColor等)を読み書きする。Widget基底の仮想関数にはしていない(`setW()`/`setH()`が基底に無く型ごとに意味が違うため。`WidgetFactory`と同じ「WidgetType→switch」形式)。値は`Value{type, i, f, b, FixedString<PICO_PATH_LEN> s}`という固定長のタグ付き共用体もどきで、ヒープを使わない。ホストテストは`script/host_test/widget_property_test.cpp`。
+  (2026-09-19追記: この時点では「共通口」自体は揃ったが、Lua側からこれを叩くバインディング本体は
+  まだ無かった。`LuaEngine`実装により`pico.set/get`から実際に呼ばれるようになった)
+  (2026-09-21追記: 当初「NumberInputの入力値、Icon::opaqueのget、GridContainerのHAlign/VAlignのget等はウィジェット側に対応するgetter/setterが元々無いため未対応」だったが、Lua APIの細部の穴埋めで`NumberInput::getNum/setNum()`・`Icon::getOpaque()`・`GridContainer::getHAlign/getVAlign()`を追加し全て解消した。`ScrollList`/`DropdownMenu`には新たに`item_count`プロパティ(読み取り専用)も足した。詳細は「Luaバインディング」の「コンテナからの取り外し / リストへの項目追加」参照)
 - `Widget::operator new`が確保失敗(nullptr)した際、以前は無言で失敗していたが、唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。個々の`new Xxx(...)`呼び出し元がnullチェックしていない問題そのものは残っている(下記「Lua着手前の受け皿の状態」の「確保失敗(OOM)」参照)。
 
 ### アプリの枠組み (`src/functions/App_Functions.hpp`)
@@ -210,6 +214,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
   - `arg`は`FixedString<PICO_STR_L>`(96B)。切り詰まるとパスが別物を指すので、**長すぎる場合は登録ごと拒否**する(`Register()`が`false`)。
   - 代償として`apps[24]`が**約3.8KBのstatic RAM**を常時占める(1件160B。以前は288B)。上限や文字列長を動かすときはここを意識する。
 - 実行中に登録簿を書き換えてもよい(Luaアプリのスキャン等)。ただしランチャの再描画までは面倒を見ないので、表示中に増減させたら`AppGrid`へ`needsRender()`すること。
+  実例: `src/lua/LuaAppScanner.cpp`が`/lua/apps/<名前>/main.lua`を走査して`Register()`する(詳細は「Luaバインディング」の「SDを走査したLuaアプリの自動登録」参照)。今のところ`App_List.cpp::Setup()`の起動時1回のみ呼んでおり、起動後の再スキャンには対応していない。
 - `Launch()`は`SceneFunctions::Push`なので、アプリ側から`Pop()`すればランチャへ戻る。
 - `AppGrid`はタイルごとに子ウィジェットを作らず、`render()`で直接描いてタップ位置から逆算する(`ColorDialog`の色グリッドと同じ方式)。`WidgetFunctions::HitTest()`は子から先に判定するため、タイルをIcon+Labelの親として作ると子がタップを奪ってしまう。
 - レイアウトは2列×3行=6個/ページ(タイル111x78px)。3列だとタイル幅72px=日本語4文字しか入らず大半のアプリ名がはみ出したため2列にした。名前は`drawName()`がUTF-8の文字境界で切って最大2行へ折り返す(`DrawPlain()`は折り返さないため自前)。
@@ -599,7 +604,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**まで実装済み。**残っているのは命令単位の実行時間制御、ウィジェット固有コールバックへの対応拡大、SDを走査してLuaアプリを見つける処理**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
@@ -744,8 +749,11 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.create(type_name)` | `WidgetFactory::TypeFromName()`→`Create()`。生成物は即`WidgetFunctions::Add()`で登録し、`WidgetId`(整数)を返す |
 | `pico.destroy(id)` | コールバック登録を`PruneCallbacksFor()`で外してから`WidgetFunctions::DestroyLater()`(フレーム境界での遅延削除) |
 | `pico.set(id, name, value)` / `pico.get(id, name)` | `WidgetProperty::IdFromName()`→`Set()`/`Get()`。プロパティ名は`snake_case`の文字列 |
-| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)+`render`(`Canvas`限定、下記「直接描画」参照)に対応(下記) |
+| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)+`render`(`Canvas`限定、下記「直接描画」参照)+ウィジェット固有4種(`checked_changed`/`value_changed`/`select_item`/`tab_changed`、下記「ウィジェット固有イベント」参照)+`closed`(ダイアログ限定)に対応(下記) |
 | `pico.add_child(container_id, child_id)` | `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応 |
+| `pico.remove_child(container_id, child_id)` | `add_child`の逆。破棄せず取り外す。取り外した子はフラットリストへ独立したルートとして戻る(下記「コンテナからの取り外し」参照)(2026-09-21追加) |
+| `pico.list_add(id, text)` / `pico.list_clear(id)` | `ScrollList`/`DropdownMenu`へ項目を足す/全消しする(下記「リストへの項目追加」参照)(2026-09-21追加) |
+| `pico.tab_add(id, label)` | `TabBar`へタブを足す。`kMaxTabs`(4)超過なら`false`(下記「リストへの項目追加」参照)(2026-09-21追加) |
 | `pico.log(msg)` | `LOG_APP_MSG` |
 | `pico.show_error(msg)` | `ErrorFunctions::ShowFatal()` |
 | `pico.pop()` | `SceneFunctions::Pop()`。`LuaScene`から起動されたアプリがランチャへ戻るためのもの(2026-09-19追加) |
@@ -772,6 +780,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.show_color()` | `ColorDialog`(4×4パレット)を表示する。選択色は`pico.get(id,"value")`で読む(未選択は`-1`)(2026-09-21追加) |
 | `pico.http_request(method, url, body, content_type, callback)` | 非同期HTTPリクエスト(GET/POST/PUT/PATCH/DELETE)。同時に1本まで。`callback(ok, status_code, body_or_nil, error_or_nil)`(下記「ネットワーク」参照)(2026-09-21追加) |
 | `pico.http_cancel()` | 進行中の`pico.http_request()`を取り消す(2026-09-21追加) |
+| `pico.get_time()` | `TimeFunctions::timeinfo`を`{year, month, day, hour, min, sec, wday}`のテーブルで返す(下記「時刻取得」参照)(2026-09-21追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -1179,6 +1188,131 @@ Luaスクリプトから表示できるようにした(`SearchDialog`はMarkdown
   (`HttpGet`の`HttpBodyGate`なら本文が捨てられていたはずの経路で、`HttpRequest`が
   正しく本文を渡せていることの確認)の3パターンを確認済み。
 
+### ウィジェット固有イベント(2026-09-21実装)
+
+`pico.on(id, event_name, fn)`の共通4種(press_start/end/move/out)+`render`(Canvas限定)+
+`closed`(ダイアログ限定)に加え、一部のウィジェットが元々持っていた専用コールバックも
+Luaから使えるようにした:
+
+| イベント名 | 対象ウィジェット | 元のC++コールバック |
+|---|---|---|
+| `checked_changed` | `Checkbox` | `setOnChangeChecked()` |
+| `value_changed` | `NumberSlider` | `setOnValueChanged()` |
+| `select_item` | `ScrollList` | `setOnSelectItem()` |
+| `tab_changed` | `TabBar` | `setOnChanged()` |
+| `dropdown_changed` | `DropdownMenu` | `setOnChanged()`(2026-09-21追加。細部の穴埋め) |
+| `text_changed` | `Textbox` | `setOnTextChanged()`(2026-09-21追加。細部の穴埋め) |
+
+- **対応するウィジェット種別以外へ登録しようとすると`"render"`/`"closed"`と同じく
+  `luaL_error`になる**(`l_on()`側で`getWidgetType()`を見て弾く)。
+- **`checked_changed`/`value_changed`/`tab_changed`の3つは、変わった後の値そのものを
+  コールバック引数として渡さず、既存の共通`Dispatch(id, kind)`(idのみ渡す)にそのまま乗せた。**
+  Checked/Value/TabSelectedはいずれも`pico.get(id, "checked"/"value"/"tab_selected")`で
+  読める永続プロパティ(`WidgetProperty`)なので、Lua側はコールバック内でそれを読めば足りる。
+  値の型・個数をイベントごとに変える専用Dispatchを増やすより、既存の「値はpico.getで読む」
+  という約束に寄せた方が単純だと判断した。
+- **`select_item`だけは例外で、`already_selected`(同じ項目を2回連続でタップしたか。
+  `SearchDialog`等の「2回タップで開く」判定に使う値)をコールバックの第2引数として渡す
+  専用の`DispatchSelectItem(id, already_selected)`を用意した。** これは`ScrollList::on_selectitem`が
+  渡す一時的な値で、`selected_index`のような永続プロパティとして持てないため
+  (`DispatchClosed(id, is_ok)`と同じ理由づけ)。選択後のindex自体は"select_item"の中で
+  `pico.get(id, "selected_index")`を読めばよい。
+- コールバックの配線方式(`this`(`LuaEngine*`)+`WidgetId`だけをキャプチャしてヒープ確保を
+  起こさない)は共通4種と同じ(`BindCallback()`参照)。
+- ホストテストは`lua_engine_test.cpp`に追加。6イベントそれぞれについて、対応するC++側の
+  トリガ(`Checkbox::causeOnPressStart()`でのタップ相当/`NumberSlider::setValue()`/
+  `ScrollList::causeOnSelectItem()`/`TabBar::setSelected(index, true)`/
+  内部`ScrollList`経由の`DropdownMenu`選択/`Textbox::onHide()`)を直接呼んで
+  Luaコールバックが実際に発火すること、`pico.get()`で変更後の値が読めること、
+  `select_item`の`already_selected`が引数で渡ること、対応外のウィジェットへの登録が
+  エラーになることを確認している。
+
+**追加分(2026-09-21、細部の穴埋め): `dropdown_changed`(DropdownMenu)と
+`text_changed`(Textbox)。** どちらも元々「作れるのに変化を知る手段が無い」状態だった:
+- `DropdownMenu`は元々選択されたことを外へ知らせる仕組み自体が無く(内部で
+  `value`ラベルの表示更新だけを完結させていた)、`DropdownMenu::on_changed`
+  (`std::function<void()>`。`TabBar::on_changed`と同じ「引数無し、値は
+  `pico.get(id,"selected_index")`で読む」形)を新設して`setOnSelectItem()`の
+  ラムダ内(表示更新の直後)から呼ぶようにした。`ScrollList`と違い「同じ項目の
+  選び直し」がそのまま2回目の確定として飛ぶことは無い(開き直しにしかならない)ため、
+  `already_selected`に相当する概念自体が要らず、共通Dispatch組にそのまま入る。
+- `Textbox::on_text_changed`(`std::function<void()>`)は**以前からヘッダに宣言だけ
+  あったが、setterも発火する場所も無い死んだメンバだった**(実装時に見つけた)。
+  `setOnTextChanged()`を追加し、`onHide()`(オンスクリーンキーボードを閉じて
+  入力が確定したタイミング。`onTextChanged()`が「入力途中は背景を更新しない」
+  方針なのに合わせ、1文字ごとには発火させない)から呼ぶよう配線した。
+  ホストテストは実機のオンスクリーンキーボードを介さず、最小限の`ITextInputWidget`
+  実装(`FakeKeyboard`)を使って`Textbox::onHide()`を直接呼ぶことで検証している。
+
+### コンテナからの取り外し / リストへの項目追加(2026-09-21実装、細部の穴埋め)
+
+`pico.remove_child(container_id, child_id)`: `pico.add_child`の逆。`pico.destroy(child)`は
+子ごと破棄する経路しか無く、「親から外して別のコンテナへ移す」「一旦フリーにして後で
+作り直す」といった用途に使えなかった。
+
+- `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応(それ以外は`luaL_error`)。
+  指定した`child`が実際にその`container`の子でない場合もエラーにする。
+- 手順は`WidgetFunctions::Remove(child)`相当: `container->removeChild(child)`(仮想関数、
+  各コンテナのoverrideがそのまま呼ばれる)→フラットリスト(`WidgetFunctions::widgets`)へ
+  `Add()`し直す。取り外した子は次フレームから独立したルートウィジェットとして
+  描画・当たり判定の対象になる。
+- **`Widget::removeChild()`の3つのoverride(`LayoutContainer`/`GridContainer`/
+  `ScrollContainer`)全てに`child->setParent(nullptr)`を足した(実装の副産物)。**
+  以前は`children_`から外すだけで親ポインタが残ったままになっており、
+  `WidgetFunctions::Destroy()`経由(直後に`delete`するので実害が無い)でしか
+  呼ばれていなかったため問題が顕在化していなかった。`pico.remove_child`で
+  子を**生かしたまま**取り外す経路ができたことで、親ポインタを残すと
+  取り外し後も旧コンテナ基準で`getScreenRect()`等を計算してしまうバグになるため、
+  必須の修正として一緒に入れた。
+- **取り外し後もx/y座標はコンテナ内での相対値のまま残る**(コンテナが管理していたのは
+  位置決めだけで、子自身の`l_rect`はコンテナ座標系の値を持ち続ける)。`pico.create()`
+  直後と同じく、呼び出し側が`pico.set(id,"x"/"y",...)`で置き直す前提。
+- ホストテストは`lua_engine_test.cpp`(既存の`add_child`テストの続きとして追加)。
+  取り外し後に親が`nullptr`になること・コンテナの`children_`から外れること・
+  破棄されずフラットリストへ独立したルートとして戻ること・`WidgetId`がまだ有効な
+  ことを確認している。
+
+`pico.list_add(id, text)` / `pico.list_clear(id)` / `pico.tab_add(id, label)`:
+`ScrollList`/`DropdownMenu`/`TabBar`は`pico.create()`で生成できるのに、中身を
+増やす手段が無かった(C++側は`ScrollList::add()`/`DropdownMenu::add()`/
+`TabBar::addTab()`を直接呼べるが、Luaから叩く経路が無かった)。
+
+- `pico.list_add`はアイコンを指定できず既定(`IconID::AppBox`)固定
+  (`ScrollList`は`enable_icon`がfalseの間そもそも描かれない)。名前→`IconID`の
+  変換表を足す話は将来の拡張として残し、今回は「文字列を足せる」ことを優先した。
+- `pico.list_clear`で`DropdownMenu`を空にする場合、項目を消すだけでなく表示ラベルも
+  プレースホルダへ戻す(`DropdownMenu::clear()`新設)。選択済みの表示だけが
+  残ってしまわないようにするため。
+- `pico.tab_add`は`TabBar::addTab()`の戻り値(`kMaxTabs=4`超過で`false`)をそのまま返す。
+  呼び出し側がタブ数の上限に達したことを検知できるよう、`luaL_error`にはしていない。
+- 副産物として`ScrollList::getItemCount()`/`DropdownMenu::getItemCount()`を追加し、
+  `WidgetProperty`へ`item_count`プロパティ(`pico.get(id,"item_count")`)として
+  乗せた(読み取り専用。`list_add`/`list_clear`後の件数確認に使う)。
+- ホストテストは`lua_engine_test.cpp`。2種のウィジェットへの追加・全消し・件数確認、
+  `TabBar`の上限到達、対応外ウィジェットへの呼び出しがエラーになることを確認している。
+
+### 時刻取得(2026-09-21実装)
+
+`pico.get_time()`。`TimeFunctions::timeinfo`(NTP同期後に妥当な値になる。`Setup()`呼び出し
+自体はLuaEngineの責務ではなく、main.cppが起動時に済ませている)をLuaへ橋渡しするだけの
+薄いAPI。
+
+- 年/月は`TimeFunctions::year`/`month`(`tm_year`/`tm_mon`から1900年オフセット/0始まり月を
+  補正済みの値。`ClocksScene`等と同じものを使う)をそのまま使い、残り(日/時/分/秒/曜日)は
+  `struct tm`のフィールドをそのまま渡す。`wday`は`tm_wday`そのまま(0=日曜〜6=土曜)。
+- **戻り値は`pico.content_rect()`のような複数戻り値ではなく、フィールド名付きの1個の
+  テーブル**(`{year=.., month=.., day=.., hour=.., min=.., sec=.., wday=..}`)にした。
+  `pico.sd_list()`が`{name=.., is_dir=..}`の配列を返すのと同じ「複数の名前付き値は
+  テーブルで返す」という使い分け(`content_rect`はx/y/w/hの4値のみで意味も自明なため
+  複数戻り値のままにしてある)。
+- **NTP未同期の場合の値の妥当性はこのAPI側では保証しない**(`ClocksScene`等、既存の
+  `TimeFunctions`利用箇所と同じ割り切り。`main.cpp`起動時点、あるいはWi-Fi未接続のままの
+  場合は同期前の初期値がそのまま返る)。
+- ホストテストは`lua_engine_test.cpp`に追加。`TimeFunctions::timeinfo`/`year`/`month`を
+  テストから直接書き換え、`pico.get_time()`が返すテーブルの各フィールドと一致することを
+  確認している(`Setup()`/`Update()`はNTP同期や`millis()`に依存するため呼ばず、`struct tm`を
+  直接埋める)。
+
 ### 実装中に見つけて直した既存のバグ2件
 
 Luaバインディングを実際に動かして初めて踏んだ、`LayoutContainer`/`GridContainer`が
@@ -1231,13 +1365,106 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   ダイアログ表示・大きすぎるスクリプトの打ち切り警告を確認している
   (`script/host_test/stubs/SdFat.h`の`HostSd::files`にスクリプトを登録して読ませる)。
 
+### 実行時間の安全網(暴走防止、2026-09-21実装)
+
+OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なので、Luaのコールバック
+(`loop(dt)`/`press_start`/…)の中に`while true do end`のような終わらないループが
+あると、`lua_pcall()`が戻ってこずOS全体が固まる。C++側の新規コードにはレビューが
+あるが、Luaスクリプトは(このあとの「SDを走査したLuaアプリの自動登録」でますます)
+書く人を選ばなくなるため、この種の事故を検出できる仕組みを入れた。
+
+- **`lua_sethook(L, InstructionHook, LUA_MASKCOUNT, kHookInstructionInterval)`を
+  コンストラクタで1回だけ設定**し、Luaバイトコードを`kHookInstructionInterval`
+  (=1000)命令実行するたびに`InstructionHook()`を呼ぶ。外部から見える呼び出し
+  (`Run`/`CallSetup`/`CallLoop`/各種`Dispatch`/HTTPコールバック、合計8箇所)は
+  共通のprivateヘルパー`ProtectedCall(nargs)`を必ず経由し、そこで
+  「この1回の呼び出しで消費してよい命令数」の残高(`instructions_remaining_`)を
+  `kMaxInstructionsPerCall`(=200万、暫定値)へ積み直してから`lua_pcall()`する。
+  `InstructionHook()`は毎回この残高を減らし、尽きたら`luaL_error()`で
+  Luaのエラー機構(内部はlongjmp)経由に処理を戻す。
+- **`lua_pcall()`から見れば通常の実行時エラーと区別が付かない**ため、`Run()`等の
+  既存のエラーハンドリング(`ErrorFunctions::ShowFatal()`でログ+ダイアログ)を
+  そのまま使い回せる。新しい状態は`instructions_remaining_`(1個のuint32_t)だけ。
+- **Lua自身のバイトコード実行だけを数える。** `pico.sd_read`等のC関数の中
+  (ファイルI/O等)ではフックは発火しない——C関数呼び出し中はインタプリタが
+  バイトコードを進めていないため。「うっかり書いた無限ループ」を捕まえる用途に
+  対し、C++側の正当な処理を巻き込まない。
+- **時間ではなく命令数で打ち切る。** `millis()`ベースの時間打ち切りも検討したが、
+  ホストテスト環境の`millis()`スタブが常に0を返すため時間ベースでは検証できず、
+  実機の処理速度にも依存して閾値の意味が変わってしまう。命令数ならホストテストでも
+  `while true do end`を実際に実行してエラーになることを確認でき(実測: ASan+UBSan
+  付きでも約50ms程度で打ち切りに達する)、ハードウェアに依存しない決定的な基準になる。
+  `kMaxInstructionsPerCall=200万`は暫定値(実機RP2350での実測は未実施。RAM/Flash予算の
+  「200KB」と同種の「後で実機で確かめる」枠)。
+- **既知の限界: Luaの`pcall`で自前でエラーを握り潰して繰り返す敵対的なスクリプトまでは
+  防げない。** 例えば`while true do pcall(function() while true do end end) end`の
+  ように、内側の無限ループを毎回自前の`pcall`で包んで再試行し続けると、打ち切りエラーは
+  その内側`pcall`に毎回捕まり、外側のスクリプト自身は止まらない
+  (`instructions_remaining_`は`ProtectedCall()`の入口でしかリセットされないため
+  打ち切りエラー自体は連続発生し続けるが、`ProtectedCall()`(=C++側の`lua_pcall`)自体は
+  戻ってこない)。`lua_sethook`が提供できるのは「Luaの通常のエラーと同じ形の割り込み」
+  までで、Luaレベルの`pcall`より強い(握り潰せない)中断手段は標準APIには無い。
+  想定しているのは悪意ある攻撃者ではなく「うっかり無限ループを書いてしまった開発者」で、
+  その場合はこの仕組みで確実に止まる。
+- ホストテストは`lua_engine_test.cpp`に追加。終わらないループを含むスクリプトが
+  `Run()`/`CallLoop()`をハングさせず`false`で戻ること(テストプロセス自体がハング
+  しないことが最大の確認点)、打ち切り時もダイアログが出ること、Lua側の`pcall`で
+  捕まえれば普通に続行できること、上限内のループは邪魔されないこと、`loop()`内で
+  打ち切られた場合は既存の`loop_broken_`安全弁と重ねて効く(以降`loop()`自体が
+  呼ばれなくなる)ことを確認している。
+
+### SDを走査したLuaアプリの自動登録(LuaAppScanner、2026-09-21実装)
+
+`AppFunctions::Register()`はC++からしか呼べず、「SDにスクリプトを置くだけでランチャに
+タイルが出る」というLua版の"アプリストア"的な使い方の土台が無かった
+(`AppEntry`が`FixedString`で動的な名前/argを持てるようになった時点(2026-09-13)で
+下地はできていたが、実際に走査してRegister()を呼ぶ側が無かった)。
+
+- **`src/lua/LuaAppScanner.hpp/.cpp`が新設した唯一の関数は`LuaAppScanner::Scan()`。**
+  `/lua/apps/<名前>/main.lua`という「サブディレクトリ1つ=アプリ1つ」の構成で
+  `/lua/apps/`直下を走査し、`main.lua`があるサブディレクトリを見つけるたびその
+  ディレクトリ名をそのままタイル名として`AppFunctions::Register()`する。
+  `App_List.cpp::Setup()`の末尾(静的登録の後)で1回呼ぶだけで配線は完了する。
+- **なぜサブディレクトリ単位か(`/lua/apps/`直下へフラットに`*.lua`を置く案は不採用)**:
+  `LuaScene::onEnter()`はスクリプト自身の親ディレクトリを`app_dir`(SDアクセスの
+  閉じ込め先)として使う。フラットに置くと複数アプリのapp_dirが全部`/lua/apps/`
+  自身になり、見つかった複数のアプリが互いのファイルを読み書きできてしまう。
+  サブディレクトリ単位にすることで、各アプリが自分の`main.lua`の親ディレクトリ
+  (=自分専用のサブディレクトリ)だけに閉じ込められる。
+- **権限は既定値(`LuaPermissions{}`、`network`/`sd_outside_app_dir`ともfalse)固定。**
+  SDに置かれているだけで中身を検証していないスクリプトへ、走査した側が勝手に
+  強い権限を与えないための判断。ネットワークやapp_dir外のSDアクセスがどうしても
+  要るLuaアプリは、従来通り`App_List.cpp`へ専用の生成関数(`MakeLuaHelloScene()`と
+  同じ形)を書いて手動登録する(このパスはスキャン対象外のまま)。
+- **`/lua/`直下(`hello.lua`等の動作サンプル)とは別ディレクトリにしてある。**
+  `/lua/`直下を走査すると、`hello_sub.lua`/`hello_sub2.lua`のような
+  「他のスクリプトから`push_scene`/`change_scene`で遷移するためだけのサブ画面」まで
+  誤って1タイルずつ登録してしまうため。
+- **`App_Functions.cpp`自体は変更していない。** `LuaAppScanner.cpp`は`App_List.cpp`と
+  同じ立ち位置(`AppFunctions::Register()`の1利用者)で、シーン実装
+  (`LuaScene`)に依存するコードを`App_Functions.cpp`へ持ち込まない、という既存の
+  分離方針(CLAUDE.md「アプリの枠組み」参照)をそのまま踏襲している。
+- **名前の重複チェックはしていない。** 静的登録とスキャンで同名のアプリがあれば
+  単純に2タイル並ぶ(後勝ちで上書きはしない)。今のところ登録されるLuaアプリの
+  絶対数が少ないため、重複解決の優先度は低いと判断した。
+- 動作サンプル: `pc/sdcard/lua/apps/スキャン確認/main.lua`。`App_List.cpp`には
+  一切手を加えず、PCビルドの`--shot`でランチャに「スキャン確認」タイルが実際に
+  現れてタップで起動できることを確認済み。
+- ホストテストは`script/host_test/lua_app_scanner_test.cpp`。**完全な走査結果は
+  ホストのSdFatスタブでは検証できない**(パス→内容のフラットな`map`でディレクトリの
+  実体も`openNext()`の走査も無いため。`pico.sd_list`/`Doc_Cache::Clear()`と同じ制約)。
+  SD無し/ディレクトリが存在しない場合に安全に0件を返すことのみASanで確認し、
+  実際の走査結果はPCビルドの`--shot`(上記)で確認する、という役割分担にした。
+
 ### 現時点のスコープ外(次回以降)
 
-- **コールバックは共通4種(press_start/end/move/out)のみ**。`Checkbox::on_change_checked`、
-  `NumberSlider::on_value_changed`、`ScrollList::on_selectitem`、`TabBar::on_changed`等
-  ウィジェット固有のコールバックは未対応(`WidgetProperty`と同じ「まず共通部分だけ」の考え方)。
-- **命令単位の実行時間制御(`lua_sethook`)は無い**。`StepBudget`との組み合わせ含め、
-  実際に重い/無限ループするLuaアプリを書いてみてから決める。
+- ~~コールバックは共通4種(press_start/end/move/out)のみ~~ → **解消済み(2026-09-21)**。
+  `Checkbox::on_change_checked`/`NumberSlider::on_value_changed`/`ScrollList::on_selectitem`/
+  `TabBar::on_changed`を`checked_changed`/`value_changed`/`select_item`/`tab_changed`として
+  `pico.on()`から使えるようにした(詳細は上の「ウィジェット固有イベント」参照)。
+- ~~命令単位の実行時間制御(`lua_sethook`)は無い~~ → **解消済み(2026-09-21)**。
+  詳細は上の「実行時間の安全網(暴走防止)」参照。`StepBudget`(時間で区切る土台)とは
+  別物のまま(こちらはLua命令数、StepBudgetはTaskのフレーム分割用)で、統合はしていない。
 - ~~1フレームごとにLua側の「update」関数を呼ぶ仕組みは無い~~ → **解消済み(2026-09-20)**。
   `LuaEngine::CallSetup()`/`CallLoop(dt_ms)`がArduino風の`setup()`/`loop(dt)`を
   呼ぶ(どちらも定義は任意)。`LuaScene::onEnter()`がRun()成功後に`CallSetup()`を
@@ -1248,8 +1475,10 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   同じく1回きりなので不要)。ホストテストは`lua_engine_test.cpp`(CallSetup/CallLoop単体)
   と`lua_scene_test.cpp`(LuaScene経由の結合テスト)。サンプル`pc/sdcard/lua/hello.lua`に
   経過秒数を表示するloop()の実例を追加した。
-- コンテナからの明示的な子の取り外し(`pico.remove_child`)は無い(`pico.destroy`で
-  子ごと破棄する経路しか無い)。
+- ~~コンテナからの明示的な子の取り外し(`pico.remove_child`)は無い~~ → **解消済み
+  (2026-09-21)**。詳細は上の「コンテナからの取り外し」参照。この節に挙げていた
+  Lua APIの既知の穴はこれで全て埋まった(残るのはHTTPS非対応・OS内部90箇所の
+  OOM未対応など、コストに見合わないと判断して対象外にしたものだけ)。
 
 ## Lua着手前の受け皿の状態 (2026-09-19時点)
 
@@ -1262,9 +1491,9 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 | ~~`WidgetRegistry::Resolve()`~~ | **ホストテストで検証済み(2026-09-18)**。発行済みIDからの解決・type改ざん検出・破棄済みID(use-after-free)検出・スロット再利用時のgeneration不一致検出を`script/host_test/widget_factory_test.cpp`で確認。ただし**実コード中の呼び出し元はまだテストのみ**で、Luaバインディングを書いた時点で初めて実利用される |
 | ~~ウィジェットのファクトリ~~ | **解消済み(2026-09-18)**。`WidgetFactory::Create(WidgetType)`(`src/gui/widgets/WidgetFactory.hpp/.cpp`)がwidgets/直下の汎用部品15種を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外 |
 | ~~プロパティのget/set共通口~~ | **解消済み(2026-09-19)**。`WidgetProperty::Get/Set()`(`src/gui/widgets/WidgetProperty.hpp/.cpp`)を参照。Lua側が「WidgetIdを`Resolve()`で引く→`WidgetProperty`で値を読み書きする」という2段構えを、Lua本体無しで既にホストテストまで確認できている |
-| ~~`AppEntry`(`App_Functions.hpp`)~~ | **解消済み(2026-09-13)**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`は`FixedString`でコピー保持するようになった。「同じ`LuaScene`型 + 別スクリプトパス」も、寿命の短い文字列からの動的登録も表現できる。残りは**SDを走査してLuaアプリを見つける側**(スキャン処理そのもの)だけ |
+| ~~`AppEntry`(`App_Functions.hpp`)~~ | **解消済み(2026-09-13、スキャン側も2026-09-21で解消)**。`create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`は`FixedString`でコピー保持するようになった。「同じ`LuaScene`型 + 別スクリプトパス」も、寿命の短い文字列からの動的登録も表現できる。**スキャン処理そのもの(`LuaAppScanner::Scan()`)も実装済み**(下記「SDを走査したLuaアプリの自動登録」参照) |
 | コールバック | **意図的に見送り(2026-09-19)**。`std::function<void()>`のまま。上記「メモリ計測の結論」が既に出している判断(「関数ポインタ+`void*`のDelegateへ替える効果は単体では5%程度、旨味が出るのはLuaのコールバックを大量に貼るようになってから」)をそのまま踏襲し、今回は手を入れなかった。今のシグネチャには「引数もコンテキストも無い」という実害(誰が押したか・どのウィジェットのIDかをコールバック側へ渡せない)もあるため、**再設計するならLuaバインディング本体を書く回でシグネチャを一度に決める**(引数無しのまま先にDelegate化だけ済ませても、Lua側の要求で結局signature変更が要る可能性が高く、二度手間になるため) |
-| ~~実行時間の制御~~ | **土台のみ解消(2026-09-19)**。`task/StepBudget.hpp`が「一定時間(マイクロ秒)働いたら次のフレームへ回す」ための時間区切りプリミティブを提供する(`Task::update()`内の作業ループを`StepBudget::ShouldContinue()`で区切る)。ホストテストは`script/host_test/step_budget_test.cpp`(`pc/compat/`の実時間`micros()`を使う点が他と違う)。**命令単位の制御(`lua_sethook`でNバイトコードごとに打ち切る等)はまだ無く**、実際にLuaスクリプトをTask化する回で、このStepBudgetと組み合わせるか独自のフック粒度を足すかを決める |
+| ~~実行時間の制御~~ | **解消済み(土台2026-09-19、命令単位の打ち切りは2026-09-21)**。`task/StepBudget.hpp`が「一定時間(マイクロ秒)働いたら次のフレームへ回す」ための時間区切りプリミティブを提供する(`Task::update()`内の作業ループを`StepBudget::ShouldContinue()`で区切る。ホストテストは`script/host_test/step_budget_test.cpp`)。**`LuaEngine`側は`lua_sethook(LUA_MASKCOUNT)`でLuaバイトコード命令数を数え、1回の外部呼び出しあたりの上限を超えたら`luaL_error()`で打ち切る**(`StepBudget`とは別物のまま、統合はしていない。詳細は上の「実行時間の安全網(暴走防止)」参照) |
 | ~~確保失敗(OOM)~~ | **Lua向けの経路は解消、内部90箇所は対象外と決定(2026-09-19)**。`WidgetFactory::Create()`はtype非対応時もWidget::operator new失敗時も一貫してnullptrを返す設計になっており(ヘッダのコメントで明記済み)、**Luaが実際に触る唯一の生成経路はこの時点で既に安全**。一方、Scene/Dialog等OS内部の`new Button(...)`等(約90箇所)は個々にnullチェックしていないが、これらは実行時に増減しない固定・既知個数の生成で、「メモリ計測の結論」が示す通り実測で断片化もリークも無く十分な余裕がある。ここへ90箇所分のnullチェックを機械的に足す投資対効果は低いと判断し、**対象外とする**(Luaスクリプトが暴走してウィジェットを大量生成する経路は`WidgetFactory::Create()`1箇所に絞られているため、そこが安全なら実害は無い)。`lua_newstate`のカスタムallocでLuaに上限枠を切る話(下記RAM/Flash予算)は引き続き未着手 |
 | ~~エラーの見せ方~~ | **解消済み(2026-09-19)**。`ErrorFunctions::ShowFatal(message)`(`src/functions/Error_Functions.hpp/.cpp`)がログ(`LOG_APP_FAIL`)とMsgDialog表示の両方を1呼び出しでこなす。`FileExplorer::on_press_delete()`等と同じ「生成→`AddDialog`→`setVisible`→`setOnClosed`で`DestroyLater`」の作法を関数内に閉じ込めてあるので、将来Luaの`pcall`エラーを拾った先はこれを呼ぶだけでよい。ホストテストは`script/host_test/error_functions_test.cpp` |
 | RAM/Flash予算 | **暫定枠: Lua用に200KBを割り当てる方針(2026-09-19決定、`lua_newstate`のカスタムallocへ渡す上限)**。開発者が実機で計測した「OS側のヒープ使用量はピークでも150KB程度」を根拠に、RP2350の総SRAM 520KBから逆算した(150KB+200KB=350KBでも170KBの余裕)。**ただし2点未確認**: ①その150KBが`Mem_Functions`(mallinfoベースのヒープ)の値かどうか(フレームバッファ`frame`スプライトやWi-Fi/lwIPスタックがヒープ計測に乗らない確保だと実際の総使用量はもう少し上振れし得る)、②このリモート実行環境には実機もPlatformIOのRP2350ボード定義も無く追試できていない(`platform = raspberrypi`のPlatformIO公式パッケージ1.20.0にはrpipico2wのボード定義が同梱されていない)。**実機が使える時に、Wi-Fi接続中+一番重いシーン(Markdown/Dict)を開いた状態で`MemFunctions`のレポートを取り、200KB確保後も安全か確認すること。** Lua本体はflash 100KB超で、**stateだけでRAM 20〜30KBのオーダーという見積もりはPC上で実測して裏付けた**(空のstate+`luaL_openlibs()`一式でピーク約19.5KB。`script/host_test/lua_alloc_budget_test.cpp`のBudgetAlloc計測)。200KB枠はそこにユーザースクリプト+ウィジェットツリー分の余裕を見込んだ値。**カスタムallocによる予算制御そのものの安全性もPCで確認済み**(下記「ビルドの二重管理」参照)。実機での絶対値(mallinfoの150KBが本当に正しいか)はやはり未確認 |
@@ -1281,6 +1510,12 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 「どの`Scene`/`Task`がいつ`LuaEngine`を`new`/`delete`するか」という置き場所はまだ無い
 =`LuaScene`が無い)と③(命令単位の実行時間制御)**、および「Luaバインディング」章末尾の
 「現時点のスコープ外」に挙げた項目(ウィジェット固有コールバック、毎フレームのupdate呼び出し等)。
+
+**2026-09-21追記: ①③とも解消済み。** ①は`LuaScene`(上記)、③は`LuaEngine`の
+`lua_sethook`ベースの安全網(上記「実行時間の安全網(暴走防止)」)。ウィジェット固有
+コールバックも同日解消(上記「ウィジェット固有イベント」)。この節が挙げていた
+`pico.remove_child`(コンテナからの子の明示的取り外し)も同日の細部穴埋めで追加し、
+挙げていた穴は全て埋まった(詳細は上の「コンテナからの取り外し / リストへの項目追加」参照)。
 
 ## Claude Codeへの申し送り
 
@@ -1305,6 +1540,15 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、9本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、23本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
+  **`run.sh`はコンパイル・テスト実行の各ステップに`timeout`を掛けてある(2026-09-21追加)**。
+  「まれにrun.shが終わらない」という報告を受けて入れた安全網で、コンパイル1ステップ
+  180秒・テスト実行1本60秒を超えると`[FATAL]`ログを出して明示的にexitする
+  (`timeout -k 10`でSIGTERM無視にも備え、猶予後SIGKILLする)。**`if ! cmd; then rc=$?`や
+  `if cmd; then ... fi; rc=$?`ではPOSIX上`$?`にcmdの本当の終了コードが乗らない
+  (前者は`!`による論理反転、後者は「条件が偽で分岐未実行のifは exit status 0」という
+  規定のため)ので、`rc=0; cmd || rc=$?`の形を使うこと**(`run.sh`の
+  `compile_or_die`/`run_or_die`参照。一度この罠を踏んで学んだ教訓なので、
+  同種のラッパーを足す際は再現しないこと)。

@@ -126,6 +126,48 @@
 // `LuaScene`を介さず直接`LuaEngine`を使う場合の互換動作)。許可は構築時の1回きりで、
 // 実行中にスクリプト側から変更する手段は無い。詳細は`LuaPermissions.hpp`参照。
 //
+// ウィジェット固有イベント(2026-09-21実装): 共通4種(press_start/end/move/out)に加え、
+// 一部のウィジェットが元々持っていた専用コールバック(Checkbox::setOnChangeChecked等)も
+// `pico.on(id, event_name, fn)`から使えるようにした:
+//   - "checked_changed"   (Checkbox)     … チェック状態が変わった
+//   - "value_changed"     (NumberSlider) … 値が変わった(ドラッグ中は毎フレーム)
+//   - "select_item"       (ScrollList)   … 一覧の項目をタップした
+//   - "tab_changed"       (TabBar)       … 選択タブが変わった(同じタブの押し直しでは飛ばない)
+//   - "dropdown_changed"  (DropdownMenu) … 項目を選んで確定した(細部の穴埋めとして追加。
+//     元々は選択結果を知る手段が無く、pico.create("DropdownMenu")で作っても
+//     `pico.get(id,"selected_index")`をloop()で毎フレームポーリングする以外に
+//     変化を知れなかった)
+//   - "text_changed"      (Textbox)      … オンスクリーンキーボードを閉じてテキストが
+//     確定した(細部の穴埋めとして追加。`Textbox::on_text_changed`自体はC++側に元から
+//     宣言されていたが、setterも発火する場所も無い死んだメンバだった。1文字ごとには
+//     発火しない — `onTextChanged()`が「入力途中は背景を更新しない」方針なのに合わせてある)
+// 対応するウィジェット種別以外へ登録しようとした場合は"render"/"closed"と同じく
+// luaL_errorになる(EventKindFromName()で名前→種別を引いた後、l_on()側でwidgetTypeを見る)。
+// "checked_changed"/"value_changed"/"tab_changed"/"dropdown_changed"/"text_changed"の
+// 5つは、変わった後の値そのものを引数として渡さず、既存の共通Dispatch(id, kind)
+// (idのみ渡す)に乗せている。Checked/Value/TabSelected/SelectedIndex/Textはいずれも
+// `pico.get(id, "checked"/"value"/"tab_selected"/"selected_index"/"text")`で読める
+// 永続プロパティ(WidgetProperty)なので、Lua側はコールバック内でそれを読めば足り、
+// 引数の型・個数をイベントごとに変える複雑さを避けられる。`DropdownMenu`は`ScrollList`と
+// 違い「同じ項目の選び直し」が開き直しにしかならず確定として2回続けて飛ぶことが無いため、
+// `already_selected`に相当する概念自体が無く、共通Dispatch組へ素直に入る。
+// "select_item"だけは例外で、C++側のon_selectitemが渡す`already_selected`
+// (同じ項目を2回連続でタップしたか。SearchDialog等の「2回タップで開く」判定に使う)が
+// 永続プロパティとして持てない一時的な値のため、専用のDispatchSelectItem(id, kind)で
+// (id, already_selected)の2引数を渡す(選択後のindex自体は"select_item"の中で
+// `pico.get(id, "selected_index")`を読めばよい)。
+//
+// 時刻取得(pico.get_time()、2026-09-21実装): `TimeFunctions::timeinfo`(NTP同期後に
+// 妥当な値になる。Setup()呼び出し自体はLuaEngineの責務ではなく、main.cppが起動時に
+// 済ませている)をLuaへ橋渡しするだけの薄いAPI。年/月は`TimeFunctions::year/month`
+// (tm_year/tm_monから1900年オフセット/0始まり月を補正済みの値)をそのまま使い、
+// 残り(日/時/分/秒/曜日)は`struct tm`のフィールドをそのまま渡す。1回の呼び出しで
+// 複数のフィールドを返す都合上、`pico.content_rect()`のような複数戻り値ではなく
+// フィールド名付きのテーブル({year=.., month=.., day=.., hour=.., min=.., sec=.., wday=..})
+// にした(`pico.sd_list()`が{name=.., is_dir=..}の配列を返すのと同じ「複数の名前付き値は
+// テーブルで返す」という使い分け)。NTP未同期の場合の値の妥当性はOS側でも保証していない
+// (ClocksScene等、既存のTimeFunctions利用箇所と同じ割り切り)。
+//
 // ネットワーク(pico.http_request/http_cancel): 既存の`Http_Get`はMarkdownブラウザの
 // キャッシュ用途(GET専用、200/304以外は本文を捨てて一律失敗扱い)に特化しているため、
 // 汎用のHTTPクライアントとしては使えない。新設した`HttpRequest`
@@ -138,6 +180,77 @@
 // で呼んでから後片付けする。`http_`はLuaScene内でネットワークを使わないアプリに
 // 16KiB×2の固定バッファを常時負担させたくないため、初回の`pico.http_request()`呼び出し
 // まで確保しない(遅延生成。使わないLuaアプリのメモリコストはゼロのまま)。
+//
+// 実行時間の安全網(暴走防止、2026-09-21実装): OSは単一スレッドのポーリングループ
+// (`main.cpp`の`loop()`)なので、Luaのコールバック(loop(dt)/press_start/…)の中に
+// `while true do end`のような終わらないループがあると、`lua_pcall()`が戻ってこず
+// OS全体が固まる。C++側の新規コードにはレビューがあるが、Luaスクリプトは
+// (将来「SDを走査して見つけたアプリを誰でも置ける」形を目指すほど)書く人を
+// 選ばないため、この種の事故を検出できる仕組みが要る。
+//
+// `lua_sethook(L, InstructionHook, LUA_MASKCOUNT, kHookInstructionInterval)`を
+// コンストラクタで1回だけ設定し、**Luaバイトコードを`kHookInstructionInterval`命令
+// 実行するたびに**`InstructionHook()`を呼ぶ。外部から見える呼び出し(Run/CallSetup/
+// CallLoop/各種Dispatch/HTTPコールバック)は共通のprivateヘルパー`ProtectedCall()`を
+// 必ず経由し、そこで「この1回の呼び出しで消費してよい命令数」の残高
+// (`instructions_remaining_`)を`kMaxInstructionsPerCall`へ積み直してから
+// `lua_pcall()`する。`InstructionHook()`は毎回この残高を減らし、尽きたら
+// `luaL_error()`でLuaのエラー機構(内部はlongjmp)経由に処理を戻す。これは
+// `lua_pcall()`から見れば通常の実行時エラーと区別が付かないため、`Run()`等の
+// 既存のエラーハンドリング(`ErrorFunctions::ShowFatal()`でログ+ダイアログ)を
+// そのまま使い回せる。**Lua自身のバイトコード実行だけを数える**ため、`pico.sd_read`
+// 等のC関数の中(ファイルI/O等)ではフックは発火しない——C関数呼び出し中は
+// インタプリタがバイトコードを進めていないため(`InstructionHook`のコメントも参照)。
+//
+// **命令数(時間ではない)で打ち切る。** `millis()`ベースの時間打ち切りも検討したが、
+// ホストテスト環境の`millis()`スタブが常に0を返すため時間ベースでは検証できず、
+// 実機の処理速度にも依存して閾値の意味が変わってしまう。命令数なら
+// ホストテストでも`while true do end`を実際に実行してエラーになることを確認でき、
+// 「何がどれだけ実行されたら打ち切るか」がハードウェアに依存しない決定的な基準になる。
+// `kMaxInstructionsPerCall=200万`は暫定値(実機RP2350での実測は未実施。CLAUDE.mdの
+// 「RAM/Flash予算」と同種の「後で実機で確かめる」枠)。
+//
+// **既知の限界: Lua側で`pcall`により自前でエラーを握り潰して繰り返す
+// 敵対的なスクリプトまでは防げない。** 例えば
+// `while true do pcall(function() while true do end end) end`のように、
+// 内側の無限ループを毎回自前の`pcall`で包んで再試行し続けると、打ち切りエラーは
+// その内側`pcall`に毎回捕まり、外側のスクリプト自身は(そのループを抜けようとしない限り)
+// 止まらない。`instructions_remaining_`は`ProtectedCall()`の入口でしかリセットされない
+// ため個々の打ち切りエラー自体は連続発生し続けるが、`ProtectedCall()`(=C++側の
+// `lua_pcall`)自体は戻ってこない。`lua_sethook`が提供できるのは「Luaの通常のエラーと
+// 同じ形の割り込み」までで、Luaレベルの`pcall`より強い(握り潰せない)中断手段は
+// 標準APIには無い。想定しているのは悪意ある攻撃者ではなく「うっかり無限ループを
+// 書いてしまった開発者」で、その場合はこの仕組みで確実に止まる。
+//
+// コンテナからの取り外し(pico.remove_child、細部の穴埋めとして追加): `pico.add_child`
+// の逆で、`LayoutContainer`/`GridContainer`/`ScrollContainer`から子を**破棄せず**
+// 取り外す。`pico.destroy(child)`は子ごと破棄する経路しか無かった(親に付けたままの
+// 子を「別のコンテナへ移したい」「一旦フリーにして後で作り直す」といった用途に使えない)
+// ための追加。`WidgetFunctions::Remove(child)`と同じ手順(コンテナの`removeChild()`
+// →フラットリストへ`Add()`し直す)で、取り外した子は次のフレームから独立したルートの
+// ウィジェットとして描画・当たり判定の対象になる。**取り外し後のx/y座標はコンテナ内での
+// 相対座標のまま残る**(コンテナが管理していたのはあくまで位置決めだけで、子自身の
+// `l_rect`はコンテナ座標系の値を持ち続ける)。`pico.create()`直後と同じく、
+// 呼び出し側が`pico.set(id,"x"/"y",...)`で改めて置き直す前提(この点はクラスの先頭で
+// 触れている「生成直後は仮の位置」という約束と同じ扱いにしてある)。
+//
+// リストへの項目追加(pico.list_add/list_clear/tab_add、細部の穴埋めとして追加):
+// `ScrollList`/`DropdownMenu`/`TabBar`は`pico.create()`で生成できるのに、中身を
+// 増やす手段が無かった(C++側は`ScrollList::add()`/`DropdownMenu::add()`/
+// `TabBar::addTab()`を直接呼べるが、Luaからは経路が無かった)。
+//   - `pico.list_add(id, text)`: `ScrollList`/`DropdownMenu`のみ対応。アイコンは
+//     指定できず既定(`IconID::AppBox`)固定(`ScrollList`は`enable_icon`が
+//     falseの間そもそも描かれない)。アイコンを選ばせたい場合は将来
+//     名前→`IconID`の変換表を足す話になるが、今回はまず「文字列を足せる」ことを
+//     優先した
+//   - `pico.list_clear(id)`: 同じく`ScrollList`/`DropdownMenu`のみ。`DropdownMenu`は
+//     項目を消すだけでなく表示ラベルもプレースホルダへ戻す(`DropdownMenu::clear()`
+//     新設。選択済みの表示だけが残ってしまわないように)
+//   - `pico.tab_add(id, label)`: `TabBar`のみ対応。`TabBar::addTab()`は
+//     `kMaxTabs`(4)の固定長配列が埋まっていると`false`を返す設計なので、そのまま
+//     Luaへ返す(呼び出し側がタブ数の上限を検知できるようにするため)
+// いずれも対象外のウィジェット種別へ呼ぶとエラーになる(`pico.on`の`render`/`closed`
+// と同じ「対応する種別以外はluaL_error」という約束)。
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
@@ -195,8 +308,13 @@ class LuaEngine {
 
     private:
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
-        // 全種別共通で持つ(BindCallback参照)
-        enum class EventKind : uint8_t { PressStart, PressEnd, PressMove, PressOut, Render, Closed };
+        // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
+        // TabChangedはウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)
+        enum class EventKind : uint8_t {
+            PressStart, PressEnd, PressMove, PressOut, Render, Closed,
+            CheckedChanged, ValueChanged, SelectItem, TabChanged, DropdownChanged,
+            TextChanged,
+        };
 
         struct CallbackBinding {
             WidgetId id;
@@ -218,6 +336,17 @@ class LuaEngine {
         bool loop_broken_ = false;
 
         std::vector<CallbackBinding> callbacks_;
+
+        // 実行時間の安全網(暴走防止)。クラスコメント参照。
+        // kHookInstructionInterval: lua_sethook(LUA_MASKCOUNT)へ渡す間隔
+        // (この命令数ごとにInstructionHook()が呼ばれる)。
+        // kMaxInstructionsPerCall: ProtectedCall()1回あたりに許すLuaバイトコード命令数の上限。
+        static constexpr int kHookInstructionInterval = 1000;
+        static constexpr uint32_t kMaxInstructionsPerCall = 2'000'000;
+        // 今の外部呼び出し(ProtectedCall())で消費してよい残り命令数。
+        // InstructionHook()が発火するたびkHookInstructionIntervalぶん減らし、
+        // 0になったらluaL_error()で打ち切る。ProtectedCall()の入口でのみリセットする
+        uint32_t instructions_remaining_ = 0;
 
         // pico.image_* が使う画像スロット。ウィジェットの生成数のように実行時に
         // 増減する必要が無い(1つのLuaアプリが同時に扱う画像は少数の見込み)ため、
@@ -261,6 +390,10 @@ class LuaEngine {
         // EventKind::Closed専用のDispatch。is_okを2つ目の引数としてLua関数へ渡す点だけ
         // 通常のDispatch(id, kind)と異なる(そちらはWidgetIdの1引数固定のまま変えていない)
         void DispatchClosed(WidgetId id, bool is_ok);
+        // EventKind::SelectItem専用のDispatch。already_selectedは永続プロパティとして
+        // 持てない一時的な値なので、Closedと同じく2つ目の引数として渡す
+        // (クラスコメント「ウィジェット固有イベント」参照)
+        void DispatchSelectItem(WidgetId id, bool already_selected);
 
         // グローバル関数nameを引数無しで呼ぶ(setup()向け)。定義されていなければ何もしない。
         // エラー時はErrorFunctions::ShowFatal()で表示する
@@ -268,6 +401,16 @@ class LuaEngine {
 
         static void* Alloc(void* ud, void* ptr, size_t osize, size_t nsize);
         static int InitTrampoline(lua_State* L);
+
+        // lua_sethook(LUA_MASKCOUNT)から呼ばれる。kHookInstructionInterval命令ごとに
+        // instructions_remaining_を減らし、尽きたらluaL_error()で打ち切る
+        // (クラスコメント「実行時間の安全網」参照)。lua_getallocf()でthisを取り出すので
+        // (Alloc()へ渡したudをそのまま再利用)、コールバック配線用の追加の状態を持たない
+        static void InstructionHook(lua_State* L, lua_Debug* ar);
+
+        // 外部から見えるLua呼び出し(Run/setup/loop/各種コールバック)は必ずこれを経由する。
+        // instructions_remaining_をkMaxInstructionsPerCallへ積み直してからlua_pcall()する
+        int ProtectedCall(int nargs);
 
         // pico.sd_*/pico.image_loadの共通ガード。permissions_.sd_outside_app_dirが
         // trueなら常にtrue。falseの間はpathを正規化した上でapp_dir_の配下
@@ -294,6 +437,16 @@ class LuaEngine {
         static int l_get(lua_State* L);
         static int l_on(lua_State* L);
         static int l_add_child(lua_State* L);
+        // add_childの逆。LayoutContainer/GridContainer/ScrollContainerから子を
+        // 破棄せず取り外す(クラスコメント「コンテナからの取り外し」参照)
+        static int l_remove_child(lua_State* L);
+        // ScrollList/DropdownMenuへ項目を足す/全消しする(クラスコメント
+        // 「リストへの項目追加」参照)
+        static int l_list_add(lua_State* L);
+        static int l_list_clear(lua_State* L);
+        // TabBarへタブを足す(クラスコメント「リストへの項目追加」参照)。
+        // kMaxTabs(4)を超えるとfalseを返す(TabBar::addTab()の戻り値そのまま)
+        static int l_tab_add(lua_State* L);
         static int l_log(lua_State* L);
         static int l_show_error(lua_State* L);
         static int l_pop(lua_State* L);
@@ -303,6 +456,8 @@ class LuaEngine {
         static int l_change_scene(lua_State* L);
         static int l_launch_app(lua_State* L);
         static int l_content_rect(lua_State* L);
+        // 時刻。クラスコメント「時刻取得」参照
+        static int l_get_time(lua_State* L);
 
         // ダイアログ。クラスコメント「ダイアログ」参照。いずれも生成した
         // WidgetId(整数)を返す。閉じたときの結果はpico.on(id,"closed",fn)

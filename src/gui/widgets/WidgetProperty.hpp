@@ -54,8 +54,8 @@ namespace WidgetProperty {
         // TabBar
         TabSelected, TabCount,
 
-        // ScrollList
-        EnableIcon,
+        // ScrollList / DropdownMenu
+        EnableIcon, ItemCount,
 
         Count
     };

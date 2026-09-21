@@ -23,7 +23,10 @@
 #                         (Lua統合向けの発行側/消費側で、以前は呼び出し元・テストとも無かった)
 #   widget_property_test… WidgetProperty(WidgetType非依存のget/set共通口)。
 #                          WidgetFactory対応15種それぞれの代表プロパティの読み書きと、
-#                          型不一致/非対応id/nullptrがfalseで安全に弾かれることを確認
+#                          型不一致/非対応id/nullptrがfalseで安全に弾かれることを確認。
+#                          Icon::IconOpaque/GridContainer::HAlign・VAlignのget、
+#                          NumberInput::Text(setNum/getNum)、ScrollList/DropdownMenuの
+#                          ItemCountは元々getterが無く未対応だった項目(2026-09-21解消)
 #   step_budget_test… Task::update()内の作業ループを時間で区切るStepBudgetの検証。
 #                      他と違いstubs/ではなくpc/compat/を使う(実時間のmicros()が要るため)
 #   error_functions_test… ErrorFunctions::ShowFatal()(エラーの見せ方の共通口)。
@@ -49,11 +52,60 @@
 #                    SDからの読み込み・pico.pop()での実際のランチャ復帰・
 #                    ファイル不在時のダイアログ表示・大きすぎるスクリプトの
 #                    打ち切り警告までを確認する
+#   lua_app_scanner_test… LuaAppScanner(SD上の"/lua/apps/<名前>/main.lua"を走査して
+#                    ランチャの登録簿へ自動登録する)。ディレクトリの走査自体は
+#                    ホストのSdFatスタブでは再現できないため、SD無し/ディレクトリ
+#                    が無い場合に安全に0件を返すことまでを確認する
+#                    (完全な走査結果はPCビルドの--shotで確認済み。CLAUDE.md
+#                    「SDを走査してLuaアプリを見つける処理」参照)
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
 # 使い方: sh script/host_test/run.sh
 set -e
+
+# 「run.shが一生終わらない」事故の対策(2026-09-21追加)。
+# コンパイル・テスト実行のどちらも、正常なら数秒〜数十秒で終わる軽量なものばかりだが、
+# 実行環境側の要因(共有サンドボックスの資源競合等)や、将来ここへ足すテストが万一
+# 無限ループを埋め込んでしまった場合に、run.sh自体は必ず有限時間で終わるようにする。
+# timeout(1)で区切り、124(タイムアウト)の場合だけ明示的なメッセージを出してから
+# 終了する(通常のコンパイルエラー/テスト失敗は今まで通りset -eにそのまま任せる)。
+# 秒数はこの環境での実測(最も重いテストでも数秒〜十数秒)に対して十分な余裕を持たせた値。
+COMPILE_TIMEOUT_SEC=180
+RUN_TIMEOUT_SEC=60
+
+# -k/--kill-after: SIGTERMで終了しない(I/O待ち等でD-stateに入っている等)プロセスに
+# 備え、猶予時間後にSIGKILLで強制終了する。これが無いとtimeout自体がSIGTERM無視に
+# よって固まってしまい、対策の意味が無くなる。
+#
+# 「cmd || rc=$?」の形で終了コードを取る(if cmd; then/elseや if ! cmd; thenは
+# 使わない): POSIXでは「ifの条件が偽で、実行された分岐が無い場合、if文自体の
+# 終了コードは0になる」「! cmdの終了コードはcmdの実際の値ではなく0/1への論理反転」
+# と定義されているため、どちらの書き方でも$?でtimeoutの実際の終了コード(124等)を
+# 取り出せない(このバグを一度実際に踏んで学んだ)。「cmd || rc=$?」なら、cmdが
+# 失敗した場合のみ右辺が実行されその時点の$?(=cmdの終了コードそのもの)を拾える。
+# `||`の左側なので、この行自体はset -eの即終了対象にもならない
+compile_or_die() {
+    rc=0
+    timeout -k 10 "$COMPILE_TIMEOUT_SEC" "$@" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        if [ "$rc" -eq 124 ]; then
+            echo "[FATAL] コンパイルが${COMPILE_TIMEOUT_SEC}秒を超えて応答しませんでした: $*" >&2
+        fi
+        exit "$rc"
+    fi
+}
+
+run_or_die() {
+    rc=0
+    timeout -k 10 "$RUN_TIMEOUT_SEC" "$1" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        if [ "$rc" -eq 124 ]; then
+            echo "[FATAL] $1 が${RUN_TIMEOUT_SEC}秒を超えて応答しませんでした(無限ループの疑いあり)" >&2
+        fi
+        exit "$rc"
+    fi
+}
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=$(mktemp -d)
@@ -62,7 +114,7 @@ CXXFLAGS="-std=gnu++17 -g -fsanitize=address,undefined"
 INCLUDES="-I$ROOT/script/host_test/stubs -I$ROOT/src"
 
 # --- シーン遷移 ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/scene_test.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
@@ -72,10 +124,10 @@ g++ $CXXFLAGS $INCLUDES \
     -o "$OUT/scene_test"
 
 echo "===== scene_test ====="
-"$OUT/scene_test"
+run_or_die "$OUT/scene_test"
 
 # --- Labelのレイアウト ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/label_test.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -90,10 +142,10 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== label_test ====="
-"$OUT/label_test"
+run_or_die "$OUT/label_test"
 
 # --- MarkdownViewのブロックレイアウト ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/markdown_test.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -112,19 +164,19 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== markdown_test ====="
-"$OUT/markdown_test"
+run_or_die "$OUT/markdown_test"
 
 # --- 設定ファイルの読み書き ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/config_test.cpp" \
     -o "$OUT/config_test"
 
 echo ""
 echo "===== config_test ====="
-"$OUT/config_test"
+run_or_die "$OUT/config_test"
 
 # --- アプリ登録簿とランチャ ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/app_test.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
     "$ROOT/src/gui/widgets/systems/AppGrid.cpp" \
@@ -141,19 +193,19 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== app_test ====="
-"$OUT/app_test"
+run_or_die "$OUT/app_test"
 
 # --- パスの正規化と相対解決 ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/path_test.cpp" \
     -o "$OUT/path_test"
 
 echo ""
 echo "===== path_test ====="
-"$OUT/path_test"
+run_or_die "$OUT/path_test"
 
 # --- 文書キャッシュ ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/cache_test.cpp" \
     "$ROOT/src/storage/Doc_Cache.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
@@ -162,39 +214,39 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== cache_test ====="
-"$OUT/cache_test"
+run_or_die "$OUT/cache_test"
 
 # --- URLとHTTPレスポンスの解釈 ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/http_test.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     -o "$OUT/http_test"
 
 echo ""
 echo "===== http_test ====="
-"$OUT/http_test"
+run_or_die "$OUT/http_test"
 
 # --- サーバ情報(discovery) ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/discovery_test.cpp" \
     "$ROOT/src/net/Discovery.cpp" \
     -o "$OUT/discovery_test"
 
 echo ""
 echo "===== discovery_test ====="
-"$OUT/discovery_test"
+run_or_die "$OUT/discovery_test"
 
 # --- 電卓の式評価 ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calc_eval_test.cpp" \
     -o "$OUT/calc_eval_test"
 
 echo ""
 echo "===== calc_eval_test ====="
-"$OUT/calc_eval_test"
+run_or_die "$OUT/calc_eval_test"
 
 # --- 電卓のGUI配線(キーパッドの当たり判定/画面/履歴) ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calculator_test.cpp" \
     "$ROOT/src/gui/scenes/CalculatorScene.cpp" \
     "$ROOT/src/gui/widgets/apps/CalculatorKeypad.cpp" \
@@ -215,20 +267,20 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== calculator_test ====="
-"$OUT/calculator_test"
+run_or_die "$OUT/calculator_test"
 
 # --- 単語辞書(部分一致検索) ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/dict_test.cpp" \
     "$ROOT/src/dict/Word_Dict.cpp" \
     -o "$OUT/dict_test"
 
 echo ""
 echo "===== dict_test ====="
-"$OUT/dict_test"
+run_or_die "$OUT/dict_test"
 
 # --- 辞書アプリ(DictScene)のGUI配線 ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/dict_scene_test.cpp" \
     "$ROOT/src/gui/scenes/DictScene.cpp" \
     "$ROOT/src/dict/Word_Dict.cpp" \
@@ -250,10 +302,10 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== dict_scene_test ====="
-"$OUT/dict_scene_test"
+run_or_die "$OUT/dict_scene_test"
 
 # --- WidgetFactory / WidgetRegistry::Resolve()(Lua統合の受け皿) ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/widget_factory_test.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -284,10 +336,10 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== widget_factory_test ====="
-"$OUT/widget_factory_test"
+run_or_die "$OUT/widget_factory_test"
 
 # --- WidgetProperty(プロパティのget/set共通口) ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/widget_property_test.cpp" \
     "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
@@ -327,20 +379,20 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== widget_property_test ====="
-"$OUT/widget_property_test"
+run_or_die "$OUT/widget_property_test"
 
 # --- StepBudget(実時間のmicros()が要るためstubs/ではなくpc/compat/を使う) ---
-g++ -std=gnu++17 -g -fsanitize=address,undefined -pthread \
+compile_or_die g++ -std=gnu++17 -g -fsanitize=address,undefined -pthread \
     -I "$ROOT/pc/compat" -I "$ROOT/src" \
     "$ROOT/script/host_test/step_budget_test.cpp" \
     -o "$OUT/step_budget_test"
 
 echo ""
 echo "===== step_budget_test ====="
-"$OUT/step_budget_test"
+run_or_die "$OUT/step_budget_test"
 
 # --- ErrorFunctions(エラーの見せ方の共通口) ---
-g++ $CXXFLAGS $INCLUDES \
+compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/error_functions_test.cpp" \
     "$ROOT/src/functions/Error_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -360,7 +412,7 @@ g++ $CXXFLAGS $INCLUDES \
 
 echo ""
 echo "===== error_functions_test ====="
-"$OUT/error_functions_test"
+run_or_die "$OUT/error_functions_test"
 
 # --- lib/lua(vendorしたLua本体)が実際にビルド・リンクできること ---
 # pc/CMakeLists.txtと同じくLUA_USE_LINUX等は定義しない(実機は
@@ -368,39 +420,39 @@ echo "===== error_functions_test ====="
 # 3本のLuaテストで同じオブジェクトを使い回す
 mkdir -p "$OUT/lua_obj"
 for f in "$ROOT"/lib/lua/src/*.c; do
-    gcc -std=gnu99 -g -fsanitize=address,undefined \
+    compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
         -I "$ROOT/lib/lua/src" -c "$f" -o "$OUT/lua_obj/$(basename "$f" .c).o"
 done
 
-g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
+compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_smoke_test.cpp" \
     "$OUT"/lua_obj/*.o \
     -o "$OUT/lua_smoke_test"
 
 echo ""
 echo "===== lua_smoke_test ====="
-"$OUT/lua_smoke_test"
+run_or_die "$OUT/lua_smoke_test"
 
-g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
+compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_stdlib_test.cpp" \
     "$OUT"/lua_obj/*.o \
     -o "$OUT/lua_stdlib_test"
 
 echo ""
 echo "===== lua_stdlib_test ====="
-"$OUT/lua_stdlib_test"
+run_or_die "$OUT/lua_stdlib_test"
 
-g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
+compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_alloc_budget_test.cpp" \
     "$OUT"/lua_obj/*.o \
     -o "$OUT/lua_alloc_budget_test"
 
 echo ""
 echo "===== lua_alloc_budget_test ====="
-"$OUT/lua_alloc_budget_test"
+run_or_die "$OUT/lua_alloc_budget_test"
 
 # --- LuaEngine(Lua<->C++バインディング本体)をウィジェット層と繋げた結合テスト ---
-g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
@@ -448,10 +500,10 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
 
 echo ""
 echo "===== lua_engine_test ====="
-"$OUT/lua_engine_test"
+run_or_die "$OUT/lua_engine_test"
 
 # --- LuaScene(SD上のLuaスクリプトを読んで実行する画面)をシーン遷移と組み合わせた結合テスト ---
-g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_scene_test.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
@@ -499,4 +551,56 @@ g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
 
 echo ""
 echo "===== lua_scene_test ====="
-"$OUT/lua_scene_test"
+run_or_die "$OUT/lua_scene_test"
+
+# --- LuaAppScanner(SD走査によるLuaアプリの自動登録) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/lua_app_scanner_test.cpp" \
+    "$ROOT/src/lua/LuaAppScanner.cpp" \
+    "$ROOT/src/gui/scenes/LuaScene.cpp" \
+    "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/functions/Scene_Functions.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Error_Functions.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/NumberInput.cpp" \
+    "$ROOT/src/gui/widgets/Checkbox.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Image.cpp" \
+    "$ROOT/src/gui/widgets/NumberSlider.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
+    "$ROOT/src/gui/widgets/GridContainer.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    "$OUT"/lua_obj/*.o \
+    -o "$OUT/lua_app_scanner_test"
+
+echo ""
+echo "===== lua_app_scanner_test ====="
+run_or_die "$OUT/lua_app_scanner_test"

@@ -116,13 +116,13 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
         case WidgetType::NumberInput: {
             NumberInput* n = static_cast<NumberInput*>(widget);
             switch (id) {
+                // 数字専用キーボードで入力された文字列そのもの(数値への変換は
+                // 呼び出し側の責任)。他の入力系ウィジェットと同じ"text"の名で読む
+                case Id::Text: out = Value::MakeStr(n->getNum()->c_str()); return true;
                 case Id::FontSize: out = Value::MakeInt((int32_t)n->getFontSize()); return true;
                 case Id::TextColor: out = Value::MakeInt(n->getTextColor()); return true;
                 case Id::BorderColor: out = Value::MakeInt(n->getBorderColor()); return true;
                 default: return false;
-                // 注意: NumberInputは入力値(num)そのものを読み書きする公開APIを持たない
-                // (onShow/onHide経由でITextInputWidget側とやり取りするだけ)。
-                // Valueプロパティは既存ウィジェット側の対応がないため未対応。
             }
         }
         case WidgetType::Checkbox: {
@@ -141,8 +141,8 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
                 case Id::IconId: out = Value::MakeInt((int32_t)ic->getIconId()); return true;
                 case Id::IconSize: out = Value::MakeInt((int32_t)ic->getIconSize()); return true;
                 case Id::Color: out = Value::MakeInt(ic->getColor()); return true;
+                case Id::IconOpaque: out = Value::MakeBool(ic->getOpaque()); return true;
                 default: return false;
-                // IconOpaqueはIcon側にgetterが無いため未対応(setのみ)。
             }
         }
         case WidgetType::Image: {
@@ -179,6 +179,7 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
                 case Id::BorderColor: out = Value::MakeInt(sl->getBorderColor()); return true;
                 case Id::SelectedIndex: out = Value::MakeInt(sl->getSelectedIndex()); return true;
                 case Id::EnableIcon: out = Value::MakeBool(sl->getEnableIcon()); return true;
+                case Id::ItemCount: out = Value::MakeInt(sl->getItemCount()); return true;
                 default: return false;
             }
         }
@@ -207,8 +208,9 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
                 case Id::Cols: out = Value::MakeInt(gc->getCols()); return true;
                 case Id::Gap: out = Value::MakeInt(gc->getGap()); return true;
                 case Id::Padding: out = Value::MakeInt(gc->getPadding()); return true;
+                case Id::HAlign: out = Value::MakeInt((int32_t)gc->getHAlign()); return true;
+                case Id::VAlign: out = Value::MakeInt((int32_t)gc->getVAlign()); return true;
                 default: return false;
-                // HAlign/VAlignはGridContainer側にgetterが無いため未対応(setのみ)。
             }
         }
         case WidgetType::TabBar: {
@@ -225,6 +227,7 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
             DropdownMenu* dm = static_cast<DropdownMenu*>(widget);
             switch (id) {
                 case Id::SelectedIndex: out = Value::MakeInt(dm->getSelectedIndex()); return true;
+                case Id::ItemCount: out = Value::MakeInt(dm->getItemCount()); return true;
                 default: return false;
             }
         }
@@ -364,6 +367,9 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
         case WidgetType::NumberInput: {
             NumberInput* n = static_cast<NumberInput*>(widget);
             switch (id) {
+                case Id::Text:
+                    if (value.type != Type::Str) return false;
+                    n->setNum(value.s.c_str()); return true;
                 case Id::FontSize:
                     if (value.type != Type::Int) return false;
                     n->setFontSize((FontFn::FontSize)value.i); return true;
@@ -650,7 +656,7 @@ namespace {
 
         {"tab_selected", Id::TabSelected}, {"tab_count", Id::TabCount},
 
-        {"enable_icon", Id::EnableIcon},
+        {"enable_icon", Id::EnableIcon}, {"item_count", Id::ItemCount},
     };
 }
 

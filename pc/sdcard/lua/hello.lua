@@ -115,6 +115,33 @@ end)
 -- 追加の操作なしで次のFlushDirty()で一度呼ばれる(静的な内容はこれで十分)。
 -- 内容を変えて描き直したい場合は pico.invalidate(canvas) を呼ぶ。
 
+-- 時刻取得のデモ: pico.get_time()はTimeFunctions::timeinfoを
+-- {year, month, day, hour, min, sec, wday}のテーブルで返す。
+-- loop(dt)から毎フレーム呼んでも安く、秒が変わったときだけ表示を更新する
+local time_label = pico.create("Label")
+pico.set(time_label, "x", x + w - 100)
+pico.set(time_label, "y", y + margin + 100)
+pico.set(time_label, "text", "--:--:--")
+local last_shown_time_sec = -1
+
+-- ウィジェット固有イベントのデモ: Checkbox::checked_changedは変わった後の値そのものを
+-- コールバック引数として渡さず、pico.get(id,"checked")で読む設計になっている
+-- (NumberSlider::value_changed/TabBar::tab_changedも同じ考え方。
+-- ScrollList::select_itemだけはalready_selectedを引数で渡す)
+local check_label = pico.create("Label")
+pico.set(check_label, "x", x + w - 100)
+pico.set(check_label, "y", y + margin + 150)
+pico.set(check_label, "font_size", 0) -- FontFn::Small(16px)。右カラムが100px幅しかなく収まらないため
+pico.set(check_label, "text", "checked: false")
+
+local checkbox = pico.create("Checkbox")
+pico.set(checkbox, "x", x + w - 100)
+pico.set(checkbox, "y", y + margin + 175)
+pico.set(checkbox, "text", "test")
+pico.on(checkbox, "checked_changed", function(id)
+    pico.set(check_label, "text", "checked: " .. tostring(pico.get(id, "checked")))
+end)
+
 function setup()
     pico.log("hello.lua: setup()実行")
 end
@@ -127,6 +154,12 @@ function loop(dt)
         -- 変化なしガード)、1秒に1回だけ計算すれば十分なのでここで間引く
         last_shown_sec = sec
         pico.set(elapsed_label, "text", "loop: " .. sec .. "s")
+    end
+
+    local t = pico.get_time()
+    if t.sec ~= last_shown_time_sec then
+        last_shown_time_sec = t.sec
+        pico.set(time_label, "text", string.format("%02d:%02d:%02d", t.hour, t.min, t.sec))
     end
 end
 

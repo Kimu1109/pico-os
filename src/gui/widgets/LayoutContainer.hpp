@@ -66,6 +66,12 @@ class LayoutContainer : public Widget {
             auto it = std::find(children_.begin(), children_.end(), child);
             if(it == children_.end()) return;
             children_.erase(it);
+            // 呼び出し元がpico.destroy()で消すにせよpico.remove_child()で生かしたまま
+            // 取り外すにせよ、「もうこのコンテナの子ではない」ことをparentへ反映しておく。
+            // 前者は直後にdeleteされるので実害は無いが、後者は生き続けるため必須
+            // (残したままだと、取り外した後もgetScreenRect()等がこのコンテナ基準で
+            // 座標計算してしまう)
+            child->setParent(nullptr);
             this->relayout();
         }
 

@@ -8,6 +8,9 @@ class Textbox : public Label<N>, public ITextInputTarget {
     private:
         bool is_single_line = false;
 
+        // 入力欄がキーボードを閉じて確定した(onHide())ときに呼ばれる。
+        // 1文字ごとには呼ばない(onTextChanged()自体が「入力途中は背景を更新しない」
+        // 方針なのでそれに合わせてある。負荷とLua側の扱いやすさの両面で妥当)
         std::function<void()> on_text_changed = nullptr;
 
     public:
@@ -37,6 +40,10 @@ class Textbox : public Label<N>, public ITextInputTarget {
         }
         void setIsSingleLine(bool is_single_line) override {
             this->is_single_line = is_single_line;
+        }
+
+        void setOnTextChanged(std::function<void()> callback){
+            this->on_text_changed = callback;
         }
 
         ~Textbox() override;

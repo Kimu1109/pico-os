@@ -10,6 +10,7 @@
 #include "gui/scenes/DictScene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "lua/LuaPermissions.hpp"
+#include "lua/LuaAppScanner.hpp"
 
 namespace {
     // "Lua Hello"デモ用の生成関数。MakeSceneWithArg<LuaScene>を使わず専用の関数に
@@ -56,6 +57,14 @@ void AppFunctions::Setup(){
     // (/img/hello.pimgを読むため)。権限が要らないLuaアプリなら
     // MakeSceneWithArg<LuaScene>にargだけ変えて登録すればよい
     Register("Lua Hello", IconID::AppBox, &MakeLuaHelloScene, "/lua/hello.lua");
+
+    // "/lua/apps/<名前>/main.lua" を走査し、見つかった分をここまでの静的登録へ
+    // 追加する(LuaAppScanner.hppのクラスコメント参照)。SD無し/ディレクトリが
+    // 無い場合は何もしない。静的登録の後に置くことで、同名のLuaアプリが
+    // SD側にもあった場合、後勝ちでSD側が優先される(登録簿は先勝ちではなく
+    // 単純追記なので、実際には2タイル並ぶ点に注意。今のところ名前の重複チェックは
+    // していない)
+    LuaAppScanner::Scan();
 
     LOG_SYS_OK("App Setup has succeeded! (%d apps)", Count());
 }

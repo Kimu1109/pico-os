@@ -12,7 +12,13 @@
 #include "gui/widgets/GridContainer.hpp"
 #include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/Label.hpp"
+#include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/widgets/Checkbox.hpp"
+#include "gui/widgets/NumberSlider.hpp"
+#include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/TabBar.hpp"
+#include "gui/widgets/DropdownMenu.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
@@ -30,10 +36,15 @@
 #include "storage/SD_IO.hpp"
 #include "task/Http_Request.hpp"
 #include "util/Url.hpp"
+#include "functions/Time_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
 
 namespace {
+    // WidgetFactory::Create()が実際に生成する特殊化と揃える(WidgetProperty.cppの
+    // 同名エイリアスと同じ理由。食い違うと不正なstatic_castになる)
+    using TextboxT = Textbox<WidgetFactory::kTextboxCapacity>;
+
     // WidgetIdは32bitで符号無しだが、Luaのlua_Integerは64bit符号付きなので
     // そのまま行き来させて問題ない(桁が全く足りている)。
     LuaEngine* Self(lua_State* L) {
@@ -124,6 +135,32 @@ int LuaEngine::InitTrampoline(lua_State* L) {
     return 0;
 }
 
+// ---------------- 実行時間の安全網(暴走防止) ----------------
+// クラスコメント「実行時間の安全網」参照。
+
+void LuaEngine::InstructionHook(lua_State* L, lua_Debug*) {
+    // Alloc()へlua_newstate(Alloc, this)で渡したudをlua_getallocf()経由で取り戻す。
+    // フック専用の状態をLuaEngine以外に持たずに済む
+    void* ud = nullptr;
+    lua_getallocf(L, &ud);
+    LuaEngine* self = static_cast<LuaEngine*>(ud);
+
+    if (self->instructions_remaining_ <= (uint32_t)kHookInstructionInterval) {
+        // luaL_error()は内部でlongjmpするため、この関数はここで戻らない。
+        // lua_pcall()から見れば通常の実行時エラーと区別が付かないので、
+        // 呼び出し元(ProtectedCall()の呼び出し元)の既存エラー処理がそのまま効く
+        luaL_error(L, "スクリプトの実行が命令数の上限(%u)を超えたため打ち切りました"
+                      "(無限ループの可能性があります)", (unsigned)kMaxInstructionsPerCall);
+        return; // 到達しないが、"呼んだら戻らない"ことを読み手へ明示するため書いておく
+    }
+    self->instructions_remaining_ -= kHookInstructionInterval;
+}
+
+int LuaEngine::ProtectedCall(int nargs) {
+    instructions_remaining_ = kMaxInstructionsPerCall;
+    return lua_pcall(L, nargs, 0, 0);
+}
+
 LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, const char* app_dir)
     : budget_(budget_bytes), permissions_(permissions) {
     if (!PICO_IO::normalize(app_dir_, app_dir)) app_dir_.assign("/");
@@ -134,13 +171,16 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
         return;
     }
 
+    // 以降の全てのLua実行(luaL_openlibs()含む)に効かせるため、pcallより前に設定する
+    lua_sethook(L, InstructionHook, LUA_MASKCOUNT, kHookInstructionInterval);
+
     // luaL_openlibs()やregisterApi()の途中でOOMになった場合、pcallで保護せずに
     // 直接呼ぶとLuaは(保護フレームが無いため)abort()してしまう
     // (script/host_test/lua_alloc_budget_test.cppで確認済み)。
     // 必ずpcall越しに呼ぶことでLUA_ERRMEMとして安全に失敗させる。
     lua_pushcfunction(L, InitTrampoline);
     lua_pushlightuserdata(L, this);
-    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+    if (ProtectedCall(1) != LUA_OK) {
         LOG_APP_FAIL("LuaEngine: 初期化に失敗しました(予算%zuB): %s",
                      budget_bytes, lua_tostring(L, -1));
         lua_close(L);
@@ -164,7 +204,7 @@ bool LuaEngine::Run(const char* script, const char* chunkname) {
         return false;
     }
 
-    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+    if (ProtectedCall(0) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "Luaスクリプトの実行時エラー");
         lua_pop(L, 1);
@@ -183,7 +223,7 @@ void LuaEngine::callGlobalNoArgs(const char* name) {
         return;
     }
 
-    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+    if (ProtectedCall(0) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "Luaスクリプトの実行時エラー");
         lua_pop(L, 1);
@@ -204,7 +244,7 @@ void LuaEngine::CallLoop(uint32_t dt_ms) {
     }
 
     lua_pushinteger(L, (lua_Integer)dt_ms);
-    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+    if (ProtectedCall(1) != LUA_OK) {
         // 毎フレーム同じエラーダイアログが積まれ続けないよう、以降はloop()を呼ばない
         loop_broken_ = true;
         const char* msg = lua_tostring(L, -1);
@@ -229,6 +269,10 @@ void LuaEngine::registerApi() {
     registerFn("get", l_get);
     registerFn("on", l_on);
     registerFn("add_child", l_add_child);
+    registerFn("remove_child", l_remove_child);
+    registerFn("list_add", l_list_add);
+    registerFn("list_clear", l_list_clear);
+    registerFn("tab_add", l_tab_add);
     registerFn("log", l_log);
     registerFn("show_error", l_show_error);
     registerFn("pop", l_pop);
@@ -236,6 +280,7 @@ void LuaEngine::registerApi() {
     registerFn("change_scene", l_change_scene);
     registerFn("launch_app", l_launch_app);
     registerFn("content_rect", l_content_rect);
+    registerFn("get_time", l_get_time);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
     registerFn("draw_pixel", l_draw_pixel);
@@ -278,6 +323,12 @@ bool LuaEngine::EventKindFromName(const char* name, EventKind& out) {
         {"press_out", EventKind::PressOut},
         {"render", EventKind::Render},
         {"closed", EventKind::Closed},
+        {"checked_changed", EventKind::CheckedChanged},
+        {"value_changed", EventKind::ValueChanged},
+        {"select_item", EventKind::SelectItem},
+        {"tab_changed", EventKind::TabChanged},
+        {"dropdown_changed", EventKind::DropdownChanged},
+        {"text_changed", EventKind::TextChanged},
     };
     for (const auto& e : kTable) {
         if (strcmp(e.name, name) == 0) { out = e.kind; return true; }
@@ -320,6 +371,37 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
             // ここでは何もしない: ダイアログのsetOnClosed/setOnClose配線自体は
             // 生成時点(pico.show_xxx() → WireDialogClosed())で既に済んでいる。
             // pico.on()はcallbacks_への登録(Dispatch()が引くref)だけを担う
+            break;
+        // ウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)。
+        // l_on()側で対応するWidgetTypeであることを確認済みなので安全にstatic_castできる。
+        // CheckedChanged/ValueChanged/TabChangedは変わった後の値そのものを渡さず、
+        // 既存の共通Dispatch(id, kind)(idのみ)に乗せる(値はpico.get()で読む)
+        case EventKind::CheckedChanged:
+            static_cast<Checkbox*>(w)->setOnChangeChecked(
+                [this, id]() { this->Dispatch(id, EventKind::CheckedChanged); });
+            break;
+        case EventKind::ValueChanged:
+            static_cast<NumberSlider*>(w)->setOnValueChanged(
+                [this, id]() { this->Dispatch(id, EventKind::ValueChanged); });
+            break;
+        case EventKind::TabChanged:
+            static_cast<TabBar*>(w)->setOnChanged(
+                [this, id](int) { this->Dispatch(id, EventKind::TabChanged); });
+            break;
+        case EventKind::DropdownChanged:
+            static_cast<DropdownMenu*>(w)->setOnChanged(
+                [this, id]() { this->Dispatch(id, EventKind::DropdownChanged); });
+            break;
+        case EventKind::TextChanged:
+            static_cast<TextboxT*>(w)->setOnTextChanged(
+                [this, id]() { this->Dispatch(id, EventKind::TextChanged); });
+            break;
+        case EventKind::SelectItem:
+            // already_selectedは永続プロパティとして持てない一時的な値なので、
+            // DispatchClosedと同じ形の専用Dispatchで2引数目として渡す
+            // (indexは"selected_index"プロパティとして既に読めるので渡さない)
+            static_cast<ScrollList*>(w)->setOnSelectItem(
+                [this, id](int, bool already_selected) { this->DispatchSelectItem(id, already_selected); });
             break;
     }
 }
@@ -369,7 +451,7 @@ void LuaEngine::Dispatch(WidgetId id, EventKind kind) {
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     lua_pushinteger(L, (lua_Integer)id);
-    if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+    if (ProtectedCall(1) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
         lua_pop(L, 1);
@@ -385,7 +467,7 @@ void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
         lua_pushinteger(L, (lua_Integer)id);
         lua_pushboolean(L, is_ok);
-        if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+        if (ProtectedCall(2) != LUA_OK) {
             const char* msg = lua_tostring(L, -1);
             ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
             lua_pop(L, 1);
@@ -396,6 +478,23 @@ void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
     // 「ダイアログ」参照)
     Widget* w = WidgetRegistry::Resolve(id);
     if (w) WidgetFunctions::DestroyLater(w);
+}
+
+void LuaEngine::DispatchSelectItem(WidgetId id, bool already_selected) {
+    int ref = LUA_NOREF;
+    for (const auto& e : callbacks_) {
+        if (e.id == id && e.kind == EventKind::SelectItem) { ref = e.ref; break; }
+    }
+    if (ref == LUA_NOREF) return;
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+    lua_pushinteger(L, (lua_Integer)id);
+    lua_pushboolean(L, already_selected);
+    if (ProtectedCall(2) != LUA_OK) {
+        const char* msg = lua_tostring(L, -1);
+        ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
+        lua_pop(L, 1);
+    }
 }
 
 void LuaEngine::WireDialogClosed(Widget* dialog, WidgetId id) {
@@ -551,6 +650,26 @@ int LuaEngine::l_on(lua_State* L) {
         }
     }
 
+    // ウィジェット固有イベントは対応する種別以外へ登録できない("render"/"closed"と同じ考え方)
+    if (kind == EventKind::CheckedChanged && w->getWidgetType() != WidgetType::Checkbox) {
+        return luaL_error(L, "pico.on: 'checked_changed'イベントはCheckboxのみ対応");
+    }
+    if (kind == EventKind::ValueChanged && w->getWidgetType() != WidgetType::NumberSlider) {
+        return luaL_error(L, "pico.on: 'value_changed'イベントはNumberSliderのみ対応");
+    }
+    if (kind == EventKind::SelectItem && w->getWidgetType() != WidgetType::ScrollList) {
+        return luaL_error(L, "pico.on: 'select_item'イベントはScrollListのみ対応");
+    }
+    if (kind == EventKind::TabChanged && w->getWidgetType() != WidgetType::TabBar) {
+        return luaL_error(L, "pico.on: 'tab_changed'イベントはTabBarのみ対応");
+    }
+    if (kind == EventKind::DropdownChanged && w->getWidgetType() != WidgetType::DropdownMenu) {
+        return luaL_error(L, "pico.on: 'dropdown_changed'イベントはDropdownMenuのみ対応");
+    }
+    if (kind == EventKind::TextChanged && w->getWidgetType() != WidgetType::Textbox) {
+        return luaL_error(L, "pico.on: 'text_changed'イベントはTextboxのみ対応");
+    }
+
     lua_pushvalue(L, 3);
     const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
@@ -595,6 +714,105 @@ int LuaEngine::l_add_child(lua_State* L) {
         return luaL_error(L, "pico.add_child: このウィジェット種別は子を追加できません");
     }
     return 0;
+}
+
+// ---------------- コンテナからの取り外し / リストへの項目追加 ----------------
+// クラスコメント参照。細部の穴埋め(2026-09-21追加)。
+
+int LuaEngine::l_remove_child(lua_State* L) {
+    const WidgetId container_id = (WidgetId)luaL_checkinteger(L, 1);
+    const WidgetId child_id = (WidgetId)luaL_checkinteger(L, 2);
+
+    Widget* container = WidgetRegistry::Resolve(container_id);
+    Widget* child = WidgetRegistry::Resolve(child_id);
+    if (!container || !child) return luaL_error(L, "pico.remove_child: 無効なID");
+
+    switch (container->getWidgetType()) {
+        case WidgetType::LayoutContainer:
+        case WidgetType::GridContainer:
+        case WidgetType::ScrollContainer:
+            break;
+        default:
+            return luaL_error(L, "pico.remove_child: このウィジェット種別から子を取り外せません");
+    }
+
+    if (child->getParent() != container) {
+        return luaL_error(L, "pico.remove_child: 指定したコンテナの子ではありません");
+    }
+
+    // removeChild()を境に親がnullへ変わり、getScreenRect()の基準(コンテナ座標→
+    // 画面座標)が変わってしまうので、コンテナに属していた間の画面矩形は
+    // 今のうちにdirty化しておく(後からでは同じ場所を指せない)
+    PICO_GFX::MarkDirty(child->getScreenRect());
+
+    // Widget::removeChild()は仮想関数なので、この時点で型ごとのoverride
+    // (children_からの除去+setParent(nullptr))がそのまま呼ばれる
+    container->removeChild(child);
+
+    // pico.add_child()がフラットリスト(WidgetFunctions::widgets)から外した分を
+    // ここで元に戻す。取り外した子は次フレームから独立したルートウィジェットとして
+    // 描画・当たり判定の対象になる(座標はコンテナ内での相対値のまま残るので、
+    // 必要なら呼び出し側がpico.set(id,"x"/"y",...)で置き直すこと)
+    WidgetFunctions::Add(child);
+    child->needsRender();
+    return 0;
+}
+
+int LuaEngine::l_list_add(lua_State* L) {
+    const WidgetId id = (WidgetId)luaL_checkinteger(L, 1);
+    const char* text = luaL_checkstring(L, 2);
+
+    Widget* w = WidgetRegistry::Resolve(id);
+    if (!w) return luaL_error(L, "pico.list_add: 無効なID");
+
+    switch (w->getWidgetType()) {
+        case WidgetType::ScrollList: {
+            ScrollListTools::Item item;
+            item.text.assign(text);
+            static_cast<ScrollList*>(w)->add(item);
+            return 0;
+        }
+        case WidgetType::DropdownMenu:
+            static_cast<DropdownMenu*>(w)->add(text);
+            return 0;
+        default:
+            return luaL_error(L, "pico.list_add: ScrollList/DropdownMenuのみ対応");
+    }
+}
+
+int LuaEngine::l_list_clear(lua_State* L) {
+    const WidgetId id = (WidgetId)luaL_checkinteger(L, 1);
+
+    Widget* w = WidgetRegistry::Resolve(id);
+    if (!w) return luaL_error(L, "pico.list_clear: 無効なID");
+
+    switch (w->getWidgetType()) {
+        case WidgetType::ScrollList:
+            static_cast<ScrollList*>(w)->clear();
+            return 0;
+        case WidgetType::DropdownMenu:
+            static_cast<DropdownMenu*>(w)->clear();
+            return 0;
+        default:
+            return luaL_error(L, "pico.list_clear: ScrollList/DropdownMenuのみ対応");
+    }
+}
+
+int LuaEngine::l_tab_add(lua_State* L) {
+    const WidgetId id = (WidgetId)luaL_checkinteger(L, 1);
+    const char* label = luaL_checkstring(L, 2);
+
+    Widget* w = WidgetRegistry::Resolve(id);
+    if (!w) return luaL_error(L, "pico.tab_add: 無効なID");
+    if (w->getWidgetType() != WidgetType::TabBar) {
+        return luaL_error(L, "pico.tab_add: TabBarのみ対応");
+    }
+
+    // TabBar::addTab()はkMaxTabs(4)に達しているとfalseを返す。呼び出し側が
+    // タブ数の上限を検知できるよう、そのままLuaへ返す
+    const bool ok = static_cast<TabBar*>(w)->addTab(label);
+    lua_pushboolean(L, ok);
+    return 1;
 }
 
 int LuaEngine::l_log(lua_State* L) {
@@ -666,6 +884,23 @@ int LuaEngine::l_content_rect(lua_State* L) {
     lua_pushinteger(L, r.w);
     lua_pushinteger(L, r.h);
     return 4;
+}
+
+int LuaEngine::l_get_time(lua_State* L) {
+    // TimeFunctions::timeinfoはmain.cpp起動時のTimeFunctions::Setup()以降、333msごとに
+    // 更新される(クラスコメント「時刻取得」参照)。NTP未同期の間の値の妥当性は
+    // 呼び出し元(このAPI)では保証しない(ClocksScene等、既存の利用箇所と同じ割り切り)
+    const struct tm& t = TimeFunctions::timeinfo;
+
+    lua_newtable(L);
+    lua_pushinteger(L, TimeFunctions::year);  lua_setfield(L, -2, "year");
+    lua_pushinteger(L, TimeFunctions::month); lua_setfield(L, -2, "month");
+    lua_pushinteger(L, t.tm_mday); lua_setfield(L, -2, "day");
+    lua_pushinteger(L, t.tm_hour); lua_setfield(L, -2, "hour");
+    lua_pushinteger(L, t.tm_min);  lua_setfield(L, -2, "min");
+    lua_pushinteger(L, t.tm_sec);  lua_setfield(L, -2, "sec");
+    lua_pushinteger(L, t.tm_wday); lua_setfield(L, -2, "wday"); // 0=日曜〜6=土曜(tm_wdayそのまま)
+    return 1;
 }
 
 int LuaEngine::l_invalidate(lua_State* L) {
@@ -1325,7 +1560,7 @@ void LuaEngine::UpdateHttp() {
         lua_pushnil(L);
     }
 
-    if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+    if (ProtectedCall(4) != LUA_OK) {
         const char* msg = lua_tostring(L, -1);
         ErrorFunctions::ShowFatal(msg ? msg : "pico.http_requestのコールバックでエラーが発生しました");
         lua_pop(L, 1);

@@ -23,7 +23,10 @@
 #                         (Lua統合向けの発行側/消費側で、以前は呼び出し元・テストとも無かった)
 #   widget_property_test… WidgetProperty(WidgetType非依存のget/set共通口)。
 #                          WidgetFactory対応15種それぞれの代表プロパティの読み書きと、
-#                          型不一致/非対応id/nullptrがfalseで安全に弾かれることを確認
+#                          型不一致/非対応id/nullptrがfalseで安全に弾かれることを確認。
+#                          Icon::IconOpaque/GridContainer::HAlign・VAlignのget、
+#                          NumberInput::Text(setNum/getNum)、ScrollList/DropdownMenuの
+#                          ItemCountは元々getterが無く未対応だった項目(2026-09-21解消)
 #   step_budget_test… Task::update()内の作業ループを時間で区切るStepBudgetの検証。
 #                      他と違いstubs/ではなくpc/compat/を使う(実時間のmicros()が要るため)
 #   error_functions_test… ErrorFunctions::ShowFatal()(エラーの見せ方の共通口)。

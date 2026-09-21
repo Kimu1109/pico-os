@@ -14,7 +14,7 @@
 | 2 | [汎用基盤](#2-汎用基盤) | ✅ 完了(Resolve()もLua統合から実利用済み) |
 | 3 | [スクリーン管理](#3-スクリーン管理) | 🔨 メモリプールは計測の結果いったん保留 |
 | 4 | [Wi-Fiの管理強化](#4-wi-fiの管理強化) | ✅ 完了 |
-| 5 | [Luaアプリ](#5-luaアプリ) | 🔨 LuaEngine/LuaSceneが動作しウィジェット・ダイアログ・SD・画像・ネットワーク・シーン制御・権限管理・実行時間の安全網・SDスキャンによるアプリ自動登録まで実装済み。残りは細部(pico.remove_child等)のみ |
+| 5 | [Luaアプリ](#5-luaアプリ) | ✅ LuaEngine/LuaSceneが動作しウィジェット・ダイアログ・SD・画像・ネットワーク・シーン制御・権限管理・実行時間の安全網・SDスキャンによるアプリ自動登録まで実装済み。細部の穴(pico.remove_child/list_add等)も埋まり、既知の欠けは無い |
 | 6 | [PC/Web動作対応](#6-pcweb動作対応) | ✅ 完了 |
 | 7 | [標準アプリ開発](#7-標準アプリ開発) | ✅ Markdownブラウザ / 時計 / 電卓 / ファイルエクスプローラー / 設定 / 辞書が完了 |
 | 8 | [セカンダリアプリ開発](#8-セカンダリアプリ開発) | ⬜ 未着手 |
@@ -89,8 +89,10 @@
   - [x] ダイアログ
   - [x] ネットワーク(HTTPリクエスト)
   - [x] 権限管理(ネットワーク/app_dir外SDアクセス、粗いフラグ)
-  - [x] ウィジェット固有コールバック(Checkbox/NumberSlider/ScrollList/TabBar)
+  - [x] ウィジェット固有コールバック(Checkbox/NumberSlider/ScrollList/TabBar/DropdownMenu/Textbox)
   - [x] 時刻取得(pico.get_time())
+  - [x] コンテナからの子の取り外し(pico.remove_child)
+  - [x] リストへの項目追加(pico.list_add/list_clear/pico.tab_add)
 - [ ] 残タスク
   - [x] 命令単位の実行時間制御(lua_sethook等)
   - [x] SDを走査してLuaアプリを見つける処理
@@ -238,13 +240,16 @@
 | ビルドの二重管理 | ✅ Lua 5.4.7本体を`lib/lua/`へvendor。`platformio.ini`への追記は不要になり、PCビルドも同じ`lib/lua/src/`を参照する実質1箇所の情報源に |
 | 実行時間バジェット | ✅ `task/StepBudget.hpp`(時間で区切る土台)に加え、`LuaEngine`が`lua_sethook(LUA_MASKCOUNT)`でLuaバイトコード命令数を数え、1回の外部呼び出しあたりの上限(暫定200万命令)を超えたら`luaL_error()`で打ち切る。終わらないループを含むLuaコールバックでOS全体が固まる事故を防ぐ(既知の限界: Lua側の`pcall`で握り潰して再試行し続ける敵対的スクリプトまでは防げない) |
 | SDを走査してLuaアプリを見つける処理 | ✅ `src/lua/LuaAppScanner`。`/lua/apps/<名前>/main.lua`を走査し、ディレクトリ名をそのままタイル名として`AppFunctions::Register()`する。権限は既定(両方false)固定。`App_List.cpp::Setup()`の末尾で1回呼ぶだけ |
-| ウィジェット固有コールバック | ✅ `checked_changed`(Checkbox)/`value_changed`(NumberSlider)/`select_item`(ScrollList)/`tab_changed`(TabBar)を`pico.on()`から追加。値自体は既存の`pico.get()`(プロパティ共通口)で読む設計にし、`select_item`の`already_selected`(永続プロパティではない一時値)だけコールバック引数で渡す |
+| ウィジェット固有コールバック | ✅ `checked_changed`(Checkbox)/`value_changed`(NumberSlider)/`select_item`(ScrollList)/`tab_changed`(TabBar)/`dropdown_changed`(DropdownMenu)/`text_changed`(Textbox)を`pico.on()`から追加。値自体は既存の`pico.get()`(プロパティ共通口)で読む設計にし、`select_item`の`already_selected`(永続プロパティではない一時値)だけコールバック引数で渡す |
 | 時刻取得 | ✅ `pico.get_time()`。`TimeFunctions::timeinfo`を`{year,month,day,hour,min,sec,wday}`のテーブルで返す薄いラッパー |
+| コンテナからの取り外し/リストへの項目追加 | ✅ `pico.remove_child()`(add_childの逆、破棄せず取り外す)/`pico.list_add()`・`pico.list_clear()`(ScrollList/DropdownMenu)/`pico.tab_add()`(TabBar)。細部の穴埋めとして2026-09-21追加 |
 | 実機の空きRAM/Flashの実測 | ⬜ 200KB枠はPC上の見積もり(空stateのみで約19.5KB)からの逆算。実機RP2350での追試は未実施(このリモート実行環境にRP2350のボード定義が無いため) |
 
 **実装済みのAPI**: ウィジェットの生成/破棄/プロパティ/共通コールバック・ウィジェット固有
-コールバック(`checked_changed`/`value_changed`/`select_item`/`tab_changed`)・`setup()`/
-`loop(dt)`呼び出し・直接描画(`Canvas`)・SDカードアクセス・画像(`.pimg`)・シーン制御
+コールバック(`checked_changed`/`value_changed`/`select_item`/`tab_changed`/
+`dropdown_changed`/`text_changed`)・コンテナ操作(`add_child`/`remove_child`)・
+リスト操作(`list_add`/`list_clear`/`tab_add`)・`setup()`/`loop(dt)`呼び出し・
+直接描画(`Canvas`)・SDカードアクセス・画像(`.pimg`)・シーン制御
 (`push_scene`/`change_scene`/`launch_app`)・ダイアログ(`show_message`/`show_input`/
 `show_file_save`/`show_file_select`/`show_color`)・ネットワーク(`http_request`/`http_cancel`)・
 時刻取得(`get_time`)・**権限管理**(`network`/`sd_outside_app_dir`の2値フラグ、既定はどちらも

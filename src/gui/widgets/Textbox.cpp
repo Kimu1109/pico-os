@@ -24,6 +24,7 @@ void Textbox<N>::onTextChanged(ITextInputWidget* keyboard){
 template<size_t N>
 void Textbox<N>::onHide(ITextInputWidget* keyboard){
     this->setText(keyboard->getText());
+    if(this->on_text_changed) this->on_text_changed();
 }
 
 template<size_t N>

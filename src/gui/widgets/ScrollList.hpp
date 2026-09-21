@@ -115,6 +115,8 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
             return &this->dataSource.at(index);
         }
 
+        int getItemCount() const { return (int)this->dataSource.size(); }
+
         int getFittingHeight(){
             if(this->font_h == 0){
                 this->font_h = FontFn::GetFontSize(getFontSize());

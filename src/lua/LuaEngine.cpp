@@ -12,11 +12,13 @@
 #include "gui/widgets/GridContainer.hpp"
 #include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/Label.hpp"
+#include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
 #include "gui/widgets/Checkbox.hpp"
 #include "gui/widgets/NumberSlider.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/TabBar.hpp"
+#include "gui/widgets/DropdownMenu.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
@@ -39,6 +41,10 @@
 #include "consts.hpp"
 
 namespace {
+    // WidgetFactory::Create()が実際に生成する特殊化と揃える(WidgetProperty.cppの
+    // 同名エイリアスと同じ理由。食い違うと不正なstatic_castになる)
+    using TextboxT = Textbox<WidgetFactory::kTextboxCapacity>;
+
     // WidgetIdは32bitで符号無しだが、Luaのlua_Integerは64bit符号付きなので
     // そのまま行き来させて問題ない(桁が全く足りている)。
     LuaEngine* Self(lua_State* L) {
@@ -263,6 +269,10 @@ void LuaEngine::registerApi() {
     registerFn("get", l_get);
     registerFn("on", l_on);
     registerFn("add_child", l_add_child);
+    registerFn("remove_child", l_remove_child);
+    registerFn("list_add", l_list_add);
+    registerFn("list_clear", l_list_clear);
+    registerFn("tab_add", l_tab_add);
     registerFn("log", l_log);
     registerFn("show_error", l_show_error);
     registerFn("pop", l_pop);
@@ -317,6 +327,8 @@ bool LuaEngine::EventKindFromName(const char* name, EventKind& out) {
         {"value_changed", EventKind::ValueChanged},
         {"select_item", EventKind::SelectItem},
         {"tab_changed", EventKind::TabChanged},
+        {"dropdown_changed", EventKind::DropdownChanged},
+        {"text_changed", EventKind::TextChanged},
     };
     for (const auto& e : kTable) {
         if (strcmp(e.name, name) == 0) { out = e.kind; return true; }
@@ -375,6 +387,14 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
         case EventKind::TabChanged:
             static_cast<TabBar*>(w)->setOnChanged(
                 [this, id](int) { this->Dispatch(id, EventKind::TabChanged); });
+            break;
+        case EventKind::DropdownChanged:
+            static_cast<DropdownMenu*>(w)->setOnChanged(
+                [this, id]() { this->Dispatch(id, EventKind::DropdownChanged); });
+            break;
+        case EventKind::TextChanged:
+            static_cast<TextboxT*>(w)->setOnTextChanged(
+                [this, id]() { this->Dispatch(id, EventKind::TextChanged); });
             break;
         case EventKind::SelectItem:
             // already_selectedは永続プロパティとして持てない一時的な値なので、
@@ -643,6 +663,12 @@ int LuaEngine::l_on(lua_State* L) {
     if (kind == EventKind::TabChanged && w->getWidgetType() != WidgetType::TabBar) {
         return luaL_error(L, "pico.on: 'tab_changed'イベントはTabBarのみ対応");
     }
+    if (kind == EventKind::DropdownChanged && w->getWidgetType() != WidgetType::DropdownMenu) {
+        return luaL_error(L, "pico.on: 'dropdown_changed'イベントはDropdownMenuのみ対応");
+    }
+    if (kind == EventKind::TextChanged && w->getWidgetType() != WidgetType::Textbox) {
+        return luaL_error(L, "pico.on: 'text_changed'イベントはTextboxのみ対応");
+    }
 
     lua_pushvalue(L, 3);
     const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -688,6 +714,105 @@ int LuaEngine::l_add_child(lua_State* L) {
         return luaL_error(L, "pico.add_child: このウィジェット種別は子を追加できません");
     }
     return 0;
+}
+
+// ---------------- コンテナからの取り外し / リストへの項目追加 ----------------
+// クラスコメント参照。細部の穴埋め(2026-09-21追加)。
+
+int LuaEngine::l_remove_child(lua_State* L) {
+    const WidgetId container_id = (WidgetId)luaL_checkinteger(L, 1);
+    const WidgetId child_id = (WidgetId)luaL_checkinteger(L, 2);
+
+    Widget* container = WidgetRegistry::Resolve(container_id);
+    Widget* child = WidgetRegistry::Resolve(child_id);
+    if (!container || !child) return luaL_error(L, "pico.remove_child: 無効なID");
+
+    switch (container->getWidgetType()) {
+        case WidgetType::LayoutContainer:
+        case WidgetType::GridContainer:
+        case WidgetType::ScrollContainer:
+            break;
+        default:
+            return luaL_error(L, "pico.remove_child: このウィジェット種別から子を取り外せません");
+    }
+
+    if (child->getParent() != container) {
+        return luaL_error(L, "pico.remove_child: 指定したコンテナの子ではありません");
+    }
+
+    // removeChild()を境に親がnullへ変わり、getScreenRect()の基準(コンテナ座標→
+    // 画面座標)が変わってしまうので、コンテナに属していた間の画面矩形は
+    // 今のうちにdirty化しておく(後からでは同じ場所を指せない)
+    PICO_GFX::MarkDirty(child->getScreenRect());
+
+    // Widget::removeChild()は仮想関数なので、この時点で型ごとのoverride
+    // (children_からの除去+setParent(nullptr))がそのまま呼ばれる
+    container->removeChild(child);
+
+    // pico.add_child()がフラットリスト(WidgetFunctions::widgets)から外した分を
+    // ここで元に戻す。取り外した子は次フレームから独立したルートウィジェットとして
+    // 描画・当たり判定の対象になる(座標はコンテナ内での相対値のまま残るので、
+    // 必要なら呼び出し側がpico.set(id,"x"/"y",...)で置き直すこと)
+    WidgetFunctions::Add(child);
+    child->needsRender();
+    return 0;
+}
+
+int LuaEngine::l_list_add(lua_State* L) {
+    const WidgetId id = (WidgetId)luaL_checkinteger(L, 1);
+    const char* text = luaL_checkstring(L, 2);
+
+    Widget* w = WidgetRegistry::Resolve(id);
+    if (!w) return luaL_error(L, "pico.list_add: 無効なID");
+
+    switch (w->getWidgetType()) {
+        case WidgetType::ScrollList: {
+            ScrollListTools::Item item;
+            item.text.assign(text);
+            static_cast<ScrollList*>(w)->add(item);
+            return 0;
+        }
+        case WidgetType::DropdownMenu:
+            static_cast<DropdownMenu*>(w)->add(text);
+            return 0;
+        default:
+            return luaL_error(L, "pico.list_add: ScrollList/DropdownMenuのみ対応");
+    }
+}
+
+int LuaEngine::l_list_clear(lua_State* L) {
+    const WidgetId id = (WidgetId)luaL_checkinteger(L, 1);
+
+    Widget* w = WidgetRegistry::Resolve(id);
+    if (!w) return luaL_error(L, "pico.list_clear: 無効なID");
+
+    switch (w->getWidgetType()) {
+        case WidgetType::ScrollList:
+            static_cast<ScrollList*>(w)->clear();
+            return 0;
+        case WidgetType::DropdownMenu:
+            static_cast<DropdownMenu*>(w)->clear();
+            return 0;
+        default:
+            return luaL_error(L, "pico.list_clear: ScrollList/DropdownMenuのみ対応");
+    }
+}
+
+int LuaEngine::l_tab_add(lua_State* L) {
+    const WidgetId id = (WidgetId)luaL_checkinteger(L, 1);
+    const char* label = luaL_checkstring(L, 2);
+
+    Widget* w = WidgetRegistry::Resolve(id);
+    if (!w) return luaL_error(L, "pico.tab_add: 無効なID");
+    if (w->getWidgetType() != WidgetType::TabBar) {
+        return luaL_error(L, "pico.tab_add: TabBarのみ対応");
+    }
+
+    // TabBar::addTab()はkMaxTabs(4)に達しているとfalseを返す。呼び出し側が
+    // タブ数の上限を検知できるよう、そのままLuaへ返す
+    const bool ok = static_cast<TabBar*>(w)->addTab(label);
+    lua_pushboolean(L, ok);
+    return 1;
 }
 
 int LuaEngine::l_log(lua_State* L) {

@@ -8,6 +8,8 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
+#include "gui/widgets/NumberInput.hpp"
+#include "gui/widgets/ScrollList.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
@@ -126,7 +128,17 @@ int main(){
         check(WP::Set(w, WP::Id::IconId, WP::Value::MakeInt((int)IconID::File)), "Icon: IconId set");
         WP::Value v;
         check(WP::Get(w, WP::Id::IconId, v) && v.i == (int)IconID::File, "Icon: IconId get");
-        check(WP::Set(w, WP::Id::IconOpaque, WP::Value::MakeBool(true)), "Icon: IconOpaque set(getterなし)");
+        check(WP::Set(w, WP::Id::IconOpaque, WP::Value::MakeBool(true)), "Icon: IconOpaque set");
+        check(WP::Get(w, WP::Id::IconOpaque, v) && v.b == true, "Icon: IconOpaque get(getOpaque()追加で解消)");
+        delete w;
+    }
+
+    // ---- NumberInput ----
+    {
+        Widget* w = WidgetFactory::Create(WidgetType::NumberInput);
+        check(WP::Set(w, WP::Id::Text, WP::Value::MakeStr("42")), "NumberInput: Text set(setNum()追加で解消)");
+        WP::Value v;
+        check(WP::Get(w, WP::Id::Text, v) && v.s == "42", "NumberInput: Text get(getNum()追加で解消)");
         delete w;
     }
 
@@ -142,11 +154,21 @@ int main(){
     // ---- ScrollList ----
     {
         Widget* w = WidgetFactory::Create(WidgetType::ScrollList);
+        ScrollList* sl = static_cast<ScrollList*>(w);
         check(WP::Set(w, WP::Id::SelectedIndex, WP::Value::MakeInt(2)), "ScrollList: SelectedIndex set");
         WP::Value v;
         check(WP::Get(w, WP::Id::SelectedIndex, v) && v.i == 2, "ScrollList: SelectedIndex get");
         check(WP::Set(w, WP::Id::EnableIcon, WP::Value::MakeBool(true)), "ScrollList: EnableIcon set");
         check(WP::Get(w, WP::Id::EnableIcon, v) && v.b == true, "ScrollList: EnableIcon get");
+
+        // pico.list_add(LuaEngine)が実際に叩くadd()/clear()と、新設のItemCountプロパティ
+        ScrollListTools::Item item;
+        item.text.assign("one");
+        sl->add(item);
+        sl->add(item);
+        check(WP::Get(w, WP::Id::ItemCount, v) && v.i == 2, "ScrollList: ItemCount get(add()2回で2)");
+        sl->clear();
+        check(WP::Get(w, WP::Id::ItemCount, v) && v.i == 0, "ScrollList: ItemCount get(clear()後は0)");
         delete w;
     }
 
@@ -161,7 +183,10 @@ int main(){
         Widget* g = WidgetFactory::Create(WidgetType::GridContainer);
         check(WP::Set(g, WP::Id::Cols, WP::Value::MakeInt(3)), "GridContainer: Cols set");
         check(WP::Get(g, WP::Id::Cols, v) && v.i == 3, "GridContainer: Cols get");
-        check(WP::Set(g, WP::Id::HAlign, WP::Value::MakeInt(1)), "GridContainer: HAlign set(getterなし)");
+        check(WP::Set(g, WP::Id::HAlign, WP::Value::MakeInt(1)), "GridContainer: HAlign set");
+        check(WP::Get(g, WP::Id::HAlign, v) && v.i == 1, "GridContainer: HAlign get(getHAlign()追加で解消)");
+        check(WP::Set(g, WP::Id::VAlign, WP::Value::MakeInt(2)), "GridContainer: VAlign set");
+        check(WP::Get(g, WP::Id::VAlign, v) && v.i == 2, "GridContainer: VAlign get(getVAlign()追加で解消)");
         delete g;
     }
 
@@ -187,6 +212,9 @@ int main(){
         check(WP::Set(w, WP::Id::SelectedIndex, WP::Value::MakeInt(1)), "DropdownMenu: SelectedIndex set");
         WP::Value v;
         check(WP::Get(w, WP::Id::SelectedIndex, v) && v.i == 1, "DropdownMenu: SelectedIndex get");
+        check(WP::Get(w, WP::Id::ItemCount, v) && v.i == 2, "DropdownMenu: ItemCount get(add()2回で2)");
+        dm->clear();
+        check(WP::Get(w, WP::Id::ItemCount, v) && v.i == 0, "DropdownMenu: ItemCount get(clear()新設、0に戻る)");
         delete w;
     }
 

@@ -3,12 +3,13 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/Label.hpp"
+#include <functional>
 
 class DropdownMenu : public Widget {
 
     private:
         std::vector<Widget*> children_;
-    
+
         ScrollList *dropdown;
         Label<PICO_STR_L> *value;
 
@@ -16,6 +17,12 @@ class DropdownMenu : public Widget {
 
         //移動検出用の前回の絶対座標(グローバル座標)矩形
         Rect prev_screen_rect{0, 0, 0, 0};
+
+        // 選択が変わった(タップで確定した)ときに呼ばれる。ScrollListと違い
+        // 「同じ項目をもう一度タップ」は開き直しでしかなく確定にならないため、
+        // TabBar::on_changedと同じ「引数無しで変化を知らせるだけ」の形にしてある
+        // (選ばれた中身はpico.get(id,"selected_index")で読む)
+        std::function<void()> on_changed = nullptr;
 
         void relayout(){
             this->dropdown->setW(this->l_rect.w);
@@ -44,6 +51,7 @@ class DropdownMenu : public Widget {
                     this->open_state = false;
                     this->applyOpenState();
                     this->l_rect.h = 30;
+                    if(this->on_changed) this->on_changed();
                 }
             });
             this->dropdown->setParent(this);
@@ -134,6 +142,20 @@ class DropdownMenu : public Widget {
 
             this->dropdown->add(item);
             this->relayout();
+        }
+
+        // 項目を全て消し、表示もプレースホルダへ戻す(選択済みの表示だけが
+        // 残ってしまわないよう、setSelectedIndex()と同じく表示ラベルまで面倒を見る)
+        void clear(){
+            this->dropdown->clear();
+            this->value->setText("");
+            this->l_rect.h = 30;
+        }
+
+        int getItemCount() const { return this->dropdown->getItemCount(); }
+
+        void setOnChanged(std::function<void()> callback){
+            this->on_changed = callback;
         }
 
         // 呼び出し側から選択状態を設定する(設定アプリ等が「今の値」を初期表示するために使う)。

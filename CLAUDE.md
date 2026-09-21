@@ -195,7 +195,8 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - `WidgetRegistry::Resolve(id)`はindex範囲・generation・typeの3点を検証して`Widget*`を返す(不一致ならnullptr)。**破棄済みIDの誤参照(use-after-free)はここで弾かれる。**
 - **`Resolve()`はホストテスト(`script/host_test/widget_factory_test.cpp`)で初めて検証された**: 発行済みIDからの解決、type改ざんの検出、破棄済みID(use-after-free)の検出、スロット再利用時のgeneration不一致検出を確認済み。ただし**実コード中の呼び出し元はまだテストのみ**で、実際に使われるのはLua統合から。
 - **`WidgetType` → `new Xxx` のファクトリを追加した**(`src/gui/widgets/WidgetFactory.hpp/.cpp`)。`WidgetFactory::Create(WidgetType)`がwidgets/直下の汎用部品15種(Button/Label/Textbox/NumberInput/Checkbox/Icon/Image/NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/TabBar/DropdownMenu)を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外(SD走査やシーン固有状態への依存が強いため)。生成直後は仮の位置・大きさなので、呼び出し側がsetX/setY/setW/setH等で整える前提。Textboxは`Textbox.cpp`が明示インスタンス化済みの`N`(`PICO_STR_LL`)に合わせてあり、任意のNは使えない(未使用の組み合わせを増やすには明示インスタンス化をもう1行足す必要がある)。
-- **プロパティのget/setをLuaへ通す共通口(`WidgetProperty.hpp/.cpp`)を追加した(2026-09-19)**。`WidgetProperty::Get/Set(Widget*, Id, Value)`が`WidgetFactory::Create()`対応15種それぞれの代表的なプロパティ(Text/Value/Checked/FontSize/BorderColor等)を読み書きする。Widget基底の仮想関数にはしていない(`setW()`/`setH()`が基底に無く型ごとに意味が違うため。`WidgetFactory`と同じ「WidgetType→switch」形式)。値は`Value{type, i, f, b, FixedString<PICO_PATH_LEN> s}`という固定長のタグ付き共用体もどきで、ヒープを使わない。一部のプロパティ(NumberInputの入力値、Icon::opaqueのget、GridContainerのHAlign/VAlignのget等)はウィジェット側に対応するgetter/setterが元々無いため未対応(該当箇所にコメントで明記)。ホストテストは`script/host_test/widget_property_test.cpp`。**ここまでで「共通口」自体は揃ったが、Lua側からこれを叩くバインディング本体はまだ無い。**
+- **プロパティのget/setをLuaへ通す共通口(`WidgetProperty.hpp/.cpp`)を追加した(2026-09-19)**。`WidgetProperty::Get/Set(Widget*, Id, Value)`が`WidgetFactory::Create()`対応15種それぞれの代表的なプロパティ(Text/Value/Checked/FontSize/BorderColor等)を読み書きする。Widget基底の仮想関数にはしていない(`setW()`/`setH()`が基底に無く型ごとに意味が違うため。`WidgetFactory`と同じ「WidgetType→switch」形式)。値は`Value{type, i, f, b, FixedString<PICO_PATH_LEN> s}`という固定長のタグ付き共用体もどきで、ヒープを使わない。ホストテストは`script/host_test/widget_property_test.cpp`。**ここまでで「共通口」自体は揃ったが、Lua側からこれを叩くバインディング本体はまだ無い。**
+  (2026-09-21追記: 当初「NumberInputの入力値、Icon::opaqueのget、GridContainerのHAlign/VAlignのget等はウィジェット側に対応するgetter/setterが元々無いため未対応」だったが、Lua APIの細部の穴埋めで`NumberInput::getNum/setNum()`・`Icon::getOpaque()`・`GridContainer::getHAlign/getVAlign()`を追加し全て解消した。`ScrollList`/`DropdownMenu`には新たに`item_count`プロパティ(読み取り専用)も足した。詳細は「Luaバインディング」の「コンテナからの取り外し / リストへの項目追加」参照)
 - `Widget::operator new`が確保失敗(nullptr)した際、以前は無言で失敗していたが、唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。個々の`new Xxx(...)`呼び出し元がnullチェックしていない問題そのものは残っている(下記「Lua着手前の受け皿の状態」の「確保失敗(OOM)」参照)。
 
 ### アプリの枠組み (`src/functions/App_Functions.hpp`)
@@ -748,6 +749,9 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.set(id, name, value)` / `pico.get(id, name)` | `WidgetProperty::IdFromName()`→`Set()`/`Get()`。プロパティ名は`snake_case`の文字列 |
 | `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)+`render`(`Canvas`限定、下記「直接描画」参照)+ウィジェット固有4種(`checked_changed`/`value_changed`/`select_item`/`tab_changed`、下記「ウィジェット固有イベント」参照)+`closed`(ダイアログ限定)に対応(下記) |
 | `pico.add_child(container_id, child_id)` | `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応 |
+| `pico.remove_child(container_id, child_id)` | `add_child`の逆。破棄せず取り外す。取り外した子はフラットリストへ独立したルートとして戻る(下記「コンテナからの取り外し」参照)(2026-09-21追加) |
+| `pico.list_add(id, text)` / `pico.list_clear(id)` | `ScrollList`/`DropdownMenu`へ項目を足す/全消しする(下記「リストへの項目追加」参照)(2026-09-21追加) |
+| `pico.tab_add(id, label)` | `TabBar`へタブを足す。`kMaxTabs`(4)超過なら`false`(下記「リストへの項目追加」参照)(2026-09-21追加) |
 | `pico.log(msg)` | `LOG_APP_MSG` |
 | `pico.show_error(msg)` | `ErrorFunctions::ShowFatal()` |
 | `pico.pop()` | `SceneFunctions::Pop()`。`LuaScene`から起動されたアプリがランチャへ戻るためのもの(2026-09-19追加) |
@@ -1194,6 +1198,8 @@ Luaから使えるようにした:
 | `value_changed` | `NumberSlider` | `setOnValueChanged()` |
 | `select_item` | `ScrollList` | `setOnSelectItem()` |
 | `tab_changed` | `TabBar` | `setOnChanged()` |
+| `dropdown_changed` | `DropdownMenu` | `setOnChanged()`(2026-09-21追加。細部の穴埋め) |
+| `text_changed` | `Textbox` | `setOnTextChanged()`(2026-09-21追加。細部の穴埋め) |
 
 - **対応するウィジェット種別以外へ登録しようとすると`"render"`/`"closed"`と同じく
   `luaL_error`になる**(`l_on()`側で`getWidgetType()`を見て弾く)。
@@ -1211,12 +1217,77 @@ Luaから使えるようにした:
   `pico.get(id, "selected_index")`を読めばよい。
 - コールバックの配線方式(`this`(`LuaEngine*`)+`WidgetId`だけをキャプチャしてヒープ確保を
   起こさない)は共通4種と同じ(`BindCallback()`参照)。
-- ホストテストは`lua_engine_test.cpp`に追加。4イベントそれぞれについて、対応するC++側の
+- ホストテストは`lua_engine_test.cpp`に追加。6イベントそれぞれについて、対応するC++側の
   トリガ(`Checkbox::causeOnPressStart()`でのタップ相当/`NumberSlider::setValue()`/
-  `ScrollList::causeOnSelectItem()`/`TabBar::setSelected(index, true)`)を直接呼んで
+  `ScrollList::causeOnSelectItem()`/`TabBar::setSelected(index, true)`/
+  内部`ScrollList`経由の`DropdownMenu`選択/`Textbox::onHide()`)を直接呼んで
   Luaコールバックが実際に発火すること、`pico.get()`で変更後の値が読めること、
   `select_item`の`already_selected`が引数で渡ること、対応外のウィジェットへの登録が
   エラーになることを確認している。
+
+**追加分(2026-09-21、細部の穴埋め): `dropdown_changed`(DropdownMenu)と
+`text_changed`(Textbox)。** どちらも元々「作れるのに変化を知る手段が無い」状態だった:
+- `DropdownMenu`は元々選択されたことを外へ知らせる仕組み自体が無く(内部で
+  `value`ラベルの表示更新だけを完結させていた)、`DropdownMenu::on_changed`
+  (`std::function<void()>`。`TabBar::on_changed`と同じ「引数無し、値は
+  `pico.get(id,"selected_index")`で読む」形)を新設して`setOnSelectItem()`の
+  ラムダ内(表示更新の直後)から呼ぶようにした。`ScrollList`と違い「同じ項目の
+  選び直し」がそのまま2回目の確定として飛ぶことは無い(開き直しにしかならない)ため、
+  `already_selected`に相当する概念自体が要らず、共通Dispatch組にそのまま入る。
+- `Textbox::on_text_changed`(`std::function<void()>`)は**以前からヘッダに宣言だけ
+  あったが、setterも発火する場所も無い死んだメンバだった**(実装時に見つけた)。
+  `setOnTextChanged()`を追加し、`onHide()`(オンスクリーンキーボードを閉じて
+  入力が確定したタイミング。`onTextChanged()`が「入力途中は背景を更新しない」
+  方針なのに合わせ、1文字ごとには発火させない)から呼ぶよう配線した。
+  ホストテストは実機のオンスクリーンキーボードを介さず、最小限の`ITextInputWidget`
+  実装(`FakeKeyboard`)を使って`Textbox::onHide()`を直接呼ぶことで検証している。
+
+### コンテナからの取り外し / リストへの項目追加(2026-09-21実装、細部の穴埋め)
+
+`pico.remove_child(container_id, child_id)`: `pico.add_child`の逆。`pico.destroy(child)`は
+子ごと破棄する経路しか無く、「親から外して別のコンテナへ移す」「一旦フリーにして後で
+作り直す」といった用途に使えなかった。
+
+- `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応(それ以外は`luaL_error`)。
+  指定した`child`が実際にその`container`の子でない場合もエラーにする。
+- 手順は`WidgetFunctions::Remove(child)`相当: `container->removeChild(child)`(仮想関数、
+  各コンテナのoverrideがそのまま呼ばれる)→フラットリスト(`WidgetFunctions::widgets`)へ
+  `Add()`し直す。取り外した子は次フレームから独立したルートウィジェットとして
+  描画・当たり判定の対象になる。
+- **`Widget::removeChild()`の3つのoverride(`LayoutContainer`/`GridContainer`/
+  `ScrollContainer`)全てに`child->setParent(nullptr)`を足した(実装の副産物)。**
+  以前は`children_`から外すだけで親ポインタが残ったままになっており、
+  `WidgetFunctions::Destroy()`経由(直後に`delete`するので実害が無い)でしか
+  呼ばれていなかったため問題が顕在化していなかった。`pico.remove_child`で
+  子を**生かしたまま**取り外す経路ができたことで、親ポインタを残すと
+  取り外し後も旧コンテナ基準で`getScreenRect()`等を計算してしまうバグになるため、
+  必須の修正として一緒に入れた。
+- **取り外し後もx/y座標はコンテナ内での相対値のまま残る**(コンテナが管理していたのは
+  位置決めだけで、子自身の`l_rect`はコンテナ座標系の値を持ち続ける)。`pico.create()`
+  直後と同じく、呼び出し側が`pico.set(id,"x"/"y",...)`で置き直す前提。
+- ホストテストは`lua_engine_test.cpp`(既存の`add_child`テストの続きとして追加)。
+  取り外し後に親が`nullptr`になること・コンテナの`children_`から外れること・
+  破棄されずフラットリストへ独立したルートとして戻ること・`WidgetId`がまだ有効な
+  ことを確認している。
+
+`pico.list_add(id, text)` / `pico.list_clear(id)` / `pico.tab_add(id, label)`:
+`ScrollList`/`DropdownMenu`/`TabBar`は`pico.create()`で生成できるのに、中身を
+増やす手段が無かった(C++側は`ScrollList::add()`/`DropdownMenu::add()`/
+`TabBar::addTab()`を直接呼べるが、Luaから叩く経路が無かった)。
+
+- `pico.list_add`はアイコンを指定できず既定(`IconID::AppBox`)固定
+  (`ScrollList`は`enable_icon`がfalseの間そもそも描かれない)。名前→`IconID`の
+  変換表を足す話は将来の拡張として残し、今回は「文字列を足せる」ことを優先した。
+- `pico.list_clear`で`DropdownMenu`を空にする場合、項目を消すだけでなく表示ラベルも
+  プレースホルダへ戻す(`DropdownMenu::clear()`新設)。選択済みの表示だけが
+  残ってしまわないようにするため。
+- `pico.tab_add`は`TabBar::addTab()`の戻り値(`kMaxTabs=4`超過で`false`)をそのまま返す。
+  呼び出し側がタブ数の上限に達したことを検知できるよう、`luaL_error`にはしていない。
+- 副産物として`ScrollList::getItemCount()`/`DropdownMenu::getItemCount()`を追加し、
+  `WidgetProperty`へ`item_count`プロパティ(`pico.get(id,"item_count")`)として
+  乗せた(読み取り専用。`list_add`/`list_clear`後の件数確認に使う)。
+- ホストテストは`lua_engine_test.cpp`。2種のウィジェットへの追加・全消し・件数確認、
+  `TabBar`の上限到達、対応外ウィジェットへの呼び出しがエラーになることを確認している。
 
 ### 時刻取得(2026-09-21実装)
 
@@ -1402,8 +1473,10 @@ OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なの�
   同じく1回きりなので不要)。ホストテストは`lua_engine_test.cpp`(CallSetup/CallLoop単体)
   と`lua_scene_test.cpp`(LuaScene経由の結合テスト)。サンプル`pc/sdcard/lua/hello.lua`に
   経過秒数を表示するloop()の実例を追加した。
-- コンテナからの明示的な子の取り外し(`pico.remove_child`)は無い(`pico.destroy`で
-  子ごと破棄する経路しか無い)。
+- ~~コンテナからの明示的な子の取り外し(`pico.remove_child`)は無い~~ → **解消済み
+  (2026-09-21)**。詳細は上の「コンテナからの取り外し」参照。この節に挙げていた
+  Lua APIの既知の穴はこれで全て埋まった(残るのはHTTPS非対応・OS内部90箇所の
+  OOM未対応など、コストに見合わないと判断して対象外にしたものだけ)。
 
 ## Lua着手前の受け皿の状態 (2026-09-19時点)
 

@@ -62,6 +62,8 @@ class GridContainer : public Widget {
             auto it = std::find(children_.begin(), children_.end(), child);
             if(it == children_.end()) return;
             children_.erase(it);
+            // LayoutContainer::removeChild()と同じ理由(コメント参照)
+            child->setParent(nullptr);
             this->relayout();
         }
 
@@ -87,10 +89,12 @@ class GridContainer : public Widget {
             this->h_align_ = align;
             this->relayout();
         }
+        GridContainerTools::Align getHAlign() const { return this->h_align_; }
         void setVAlign(GridContainerTools::Align align){
             this->v_align_ = align;
             this->relayout();
         }
+        GridContainerTools::Align getVAlign() const { return this->v_align_; }
 
         void setW(int w){
             this->l_rect.w = w;

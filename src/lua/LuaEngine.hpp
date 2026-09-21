@@ -129,17 +129,28 @@
 // ウィジェット固有イベント(2026-09-21実装): 共通4種(press_start/end/move/out)に加え、
 // 一部のウィジェットが元々持っていた専用コールバック(Checkbox::setOnChangeChecked等)も
 // `pico.on(id, event_name, fn)`から使えるようにした:
-//   - "checked_changed" (Checkbox)    … チェック状態が変わった
-//   - "value_changed"   (NumberSlider)… 値が変わった(ドラッグ中は毎フレーム)
-//   - "select_item"     (ScrollList)  … 一覧の項目をタップした
-//   - "tab_changed"     (TabBar)      … 選択タブが変わった(同じタブの押し直しでは飛ばない)
+//   - "checked_changed"   (Checkbox)     … チェック状態が変わった
+//   - "value_changed"     (NumberSlider) … 値が変わった(ドラッグ中は毎フレーム)
+//   - "select_item"       (ScrollList)   … 一覧の項目をタップした
+//   - "tab_changed"       (TabBar)       … 選択タブが変わった(同じタブの押し直しでは飛ばない)
+//   - "dropdown_changed"  (DropdownMenu) … 項目を選んで確定した(細部の穴埋めとして追加。
+//     元々は選択結果を知る手段が無く、pico.create("DropdownMenu")で作っても
+//     `pico.get(id,"selected_index")`をloop()で毎フレームポーリングする以外に
+//     変化を知れなかった)
+//   - "text_changed"      (Textbox)      … オンスクリーンキーボードを閉じてテキストが
+//     確定した(細部の穴埋めとして追加。`Textbox::on_text_changed`自体はC++側に元から
+//     宣言されていたが、setterも発火する場所も無い死んだメンバだった。1文字ごとには
+//     発火しない — `onTextChanged()`が「入力途中は背景を更新しない」方針なのに合わせてある)
 // 対応するウィジェット種別以外へ登録しようとした場合は"render"/"closed"と同じく
 // luaL_errorになる(EventKindFromName()で名前→種別を引いた後、l_on()側でwidgetTypeを見る)。
-// "checked_changed"/"value_changed"/"tab_changed"の3つは、変わった後の値そのものを
-// 引数として渡さず、既存の共通Dispatch(id, kind)(idのみ渡す)に乗せている。
-// Checked/Value/TabSelectedはいずれも`pico.get(id, "checked"/"value"/"tab_selected")`で
-// 読める永続プロパティ(WidgetProperty)なので、Lua側はコールバック内でそれを読めば足り、
-// 引数の型・個数をイベントごとに変える複雑さを避けられる。
+// "checked_changed"/"value_changed"/"tab_changed"/"dropdown_changed"/"text_changed"の
+// 5つは、変わった後の値そのものを引数として渡さず、既存の共通Dispatch(id, kind)
+// (idのみ渡す)に乗せている。Checked/Value/TabSelected/SelectedIndex/Textはいずれも
+// `pico.get(id, "checked"/"value"/"tab_selected"/"selected_index"/"text")`で読める
+// 永続プロパティ(WidgetProperty)なので、Lua側はコールバック内でそれを読めば足り、
+// 引数の型・個数をイベントごとに変える複雑さを避けられる。`DropdownMenu`は`ScrollList`と
+// 違い「同じ項目の選び直し」が開き直しにしかならず確定として2回続けて飛ぶことが無いため、
+// `already_selected`に相当する概念自体が無く、共通Dispatch組へ素直に入る。
 // "select_item"だけは例外で、C++側のon_selectitemが渡す`already_selected`
 // (同じ項目を2回連続でタップしたか。SearchDialog等の「2回タップで開く」判定に使う)が
 // 永続プロパティとして持てない一時的な値のため、専用のDispatchSelectItem(id, kind)で
@@ -210,6 +221,36 @@
 // 同じ形の割り込み」までで、Luaレベルの`pcall`より強い(握り潰せない)中断手段は
 // 標準APIには無い。想定しているのは悪意ある攻撃者ではなく「うっかり無限ループを
 // 書いてしまった開発者」で、その場合はこの仕組みで確実に止まる。
+//
+// コンテナからの取り外し(pico.remove_child、細部の穴埋めとして追加): `pico.add_child`
+// の逆で、`LayoutContainer`/`GridContainer`/`ScrollContainer`から子を**破棄せず**
+// 取り外す。`pico.destroy(child)`は子ごと破棄する経路しか無かった(親に付けたままの
+// 子を「別のコンテナへ移したい」「一旦フリーにして後で作り直す」といった用途に使えない)
+// ための追加。`WidgetFunctions::Remove(child)`と同じ手順(コンテナの`removeChild()`
+// →フラットリストへ`Add()`し直す)で、取り外した子は次のフレームから独立したルートの
+// ウィジェットとして描画・当たり判定の対象になる。**取り外し後のx/y座標はコンテナ内での
+// 相対座標のまま残る**(コンテナが管理していたのはあくまで位置決めだけで、子自身の
+// `l_rect`はコンテナ座標系の値を持ち続ける)。`pico.create()`直後と同じく、
+// 呼び出し側が`pico.set(id,"x"/"y",...)`で改めて置き直す前提(この点はクラスの先頭で
+// 触れている「生成直後は仮の位置」という約束と同じ扱いにしてある)。
+//
+// リストへの項目追加(pico.list_add/list_clear/tab_add、細部の穴埋めとして追加):
+// `ScrollList`/`DropdownMenu`/`TabBar`は`pico.create()`で生成できるのに、中身を
+// 増やす手段が無かった(C++側は`ScrollList::add()`/`DropdownMenu::add()`/
+// `TabBar::addTab()`を直接呼べるが、Luaからは経路が無かった)。
+//   - `pico.list_add(id, text)`: `ScrollList`/`DropdownMenu`のみ対応。アイコンは
+//     指定できず既定(`IconID::AppBox`)固定(`ScrollList`は`enable_icon`が
+//     falseの間そもそも描かれない)。アイコンを選ばせたい場合は将来
+//     名前→`IconID`の変換表を足す話になるが、今回はまず「文字列を足せる」ことを
+//     優先した
+//   - `pico.list_clear(id)`: 同じく`ScrollList`/`DropdownMenu`のみ。`DropdownMenu`は
+//     項目を消すだけでなく表示ラベルもプレースホルダへ戻す(`DropdownMenu::clear()`
+//     新設。選択済みの表示だけが残ってしまわないように)
+//   - `pico.tab_add(id, label)`: `TabBar`のみ対応。`TabBar::addTab()`は
+//     `kMaxTabs`(4)の固定長配列が埋まっていると`false`を返す設計なので、そのまま
+//     Luaへ返す(呼び出し側がタブ数の上限を検知できるようにするため)
+// いずれも対象外のウィジェット種別へ呼ぶとエラーになる(`pico.on`の`render`/`closed`
+// と同じ「対応する種別以外はluaL_error」という約束)。
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
@@ -271,7 +312,8 @@ class LuaEngine {
         // TabChangedはウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)
         enum class EventKind : uint8_t {
             PressStart, PressEnd, PressMove, PressOut, Render, Closed,
-            CheckedChanged, ValueChanged, SelectItem, TabChanged,
+            CheckedChanged, ValueChanged, SelectItem, TabChanged, DropdownChanged,
+            TextChanged,
         };
 
         struct CallbackBinding {
@@ -395,6 +437,16 @@ class LuaEngine {
         static int l_get(lua_State* L);
         static int l_on(lua_State* L);
         static int l_add_child(lua_State* L);
+        // add_childの逆。LayoutContainer/GridContainer/ScrollContainerから子を
+        // 破棄せず取り外す(クラスコメント「コンテナからの取り外し」参照)
+        static int l_remove_child(lua_State* L);
+        // ScrollList/DropdownMenuへ項目を足す/全消しする(クラスコメント
+        // 「リストへの項目追加」参照)
+        static int l_list_add(lua_State* L);
+        static int l_list_clear(lua_State* L);
+        // TabBarへタブを足す(クラスコメント「リストへの項目追加」参照)。
+        // kMaxTabs(4)を超えるとfalseを返す(TabBar::addTab()の戻り値そのまま)
+        static int l_tab_add(lua_State* L);
         static int l_log(lua_State* L);
         static int l_show_error(lua_State* L);
         static int l_pop(lua_State* L);

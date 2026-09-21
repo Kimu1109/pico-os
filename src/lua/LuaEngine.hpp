@@ -126,6 +126,37 @@
 // `LuaScene`を介さず直接`LuaEngine`を使う場合の互換動作)。許可は構築時の1回きりで、
 // 実行中にスクリプト側から変更する手段は無い。詳細は`LuaPermissions.hpp`参照。
 //
+// ウィジェット固有イベント(2026-09-21実装): 共通4種(press_start/end/move/out)に加え、
+// 一部のウィジェットが元々持っていた専用コールバック(Checkbox::setOnChangeChecked等)も
+// `pico.on(id, event_name, fn)`から使えるようにした:
+//   - "checked_changed" (Checkbox)    … チェック状態が変わった
+//   - "value_changed"   (NumberSlider)… 値が変わった(ドラッグ中は毎フレーム)
+//   - "select_item"     (ScrollList)  … 一覧の項目をタップした
+//   - "tab_changed"     (TabBar)      … 選択タブが変わった(同じタブの押し直しでは飛ばない)
+// 対応するウィジェット種別以外へ登録しようとした場合は"render"/"closed"と同じく
+// luaL_errorになる(EventKindFromName()で名前→種別を引いた後、l_on()側でwidgetTypeを見る)。
+// "checked_changed"/"value_changed"/"tab_changed"の3つは、変わった後の値そのものを
+// 引数として渡さず、既存の共通Dispatch(id, kind)(idのみ渡す)に乗せている。
+// Checked/Value/TabSelectedはいずれも`pico.get(id, "checked"/"value"/"tab_selected")`で
+// 読める永続プロパティ(WidgetProperty)なので、Lua側はコールバック内でそれを読めば足り、
+// 引数の型・個数をイベントごとに変える複雑さを避けられる。
+// "select_item"だけは例外で、C++側のon_selectitemが渡す`already_selected`
+// (同じ項目を2回連続でタップしたか。SearchDialog等の「2回タップで開く」判定に使う)が
+// 永続プロパティとして持てない一時的な値のため、専用のDispatchSelectItem(id, kind)で
+// (id, already_selected)の2引数を渡す(選択後のindex自体は"select_item"の中で
+// `pico.get(id, "selected_index")`を読めばよい)。
+//
+// 時刻取得(pico.get_time()、2026-09-21実装): `TimeFunctions::timeinfo`(NTP同期後に
+// 妥当な値になる。Setup()呼び出し自体はLuaEngineの責務ではなく、main.cppが起動時に
+// 済ませている)をLuaへ橋渡しするだけの薄いAPI。年/月は`TimeFunctions::year/month`
+// (tm_year/tm_monから1900年オフセット/0始まり月を補正済みの値)をそのまま使い、
+// 残り(日/時/分/秒/曜日)は`struct tm`のフィールドをそのまま渡す。1回の呼び出しで
+// 複数のフィールドを返す都合上、`pico.content_rect()`のような複数戻り値ではなく
+// フィールド名付きのテーブル({year=.., month=.., day=.., hour=.., min=.., sec=.., wday=..})
+// にした(`pico.sd_list()`が{name=.., is_dir=..}の配列を返すのと同じ「複数の名前付き値は
+// テーブルで返す」という使い分け)。NTP未同期の場合の値の妥当性はOS側でも保証していない
+// (ClocksScene等、既存のTimeFunctions利用箇所と同じ割り切り)。
+//
 // ネットワーク(pico.http_request/http_cancel): 既存の`Http_Get`はMarkdownブラウザの
 // キャッシュ用途(GET専用、200/304以外は本文を捨てて一律失敗扱い)に特化しているため、
 // 汎用のHTTPクライアントとしては使えない。新設した`HttpRequest`
@@ -195,8 +226,12 @@ class LuaEngine {
 
     private:
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
-        // 全種別共通で持つ(BindCallback参照)
-        enum class EventKind : uint8_t { PressStart, PressEnd, PressMove, PressOut, Render, Closed };
+        // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
+        // TabChangedはウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)
+        enum class EventKind : uint8_t {
+            PressStart, PressEnd, PressMove, PressOut, Render, Closed,
+            CheckedChanged, ValueChanged, SelectItem, TabChanged,
+        };
 
         struct CallbackBinding {
             WidgetId id;
@@ -261,6 +296,10 @@ class LuaEngine {
         // EventKind::Closed専用のDispatch。is_okを2つ目の引数としてLua関数へ渡す点だけ
         // 通常のDispatch(id, kind)と異なる(そちらはWidgetIdの1引数固定のまま変えていない)
         void DispatchClosed(WidgetId id, bool is_ok);
+        // EventKind::SelectItem専用のDispatch。already_selectedは永続プロパティとして
+        // 持てない一時的な値なので、Closedと同じく2つ目の引数として渡す
+        // (クラスコメント「ウィジェット固有イベント」参照)
+        void DispatchSelectItem(WidgetId id, bool already_selected);
 
         // グローバル関数nameを引数無しで呼ぶ(setup()向け)。定義されていなければ何もしない。
         // エラー時はErrorFunctions::ShowFatal()で表示する
@@ -303,6 +342,8 @@ class LuaEngine {
         static int l_change_scene(lua_State* L);
         static int l_launch_app(lua_State* L);
         static int l_content_rect(lua_State* L);
+        // 時刻。クラスコメント「時刻取得」参照
+        static int l_get_time(lua_State* L);
 
         // ダイアログ。クラスコメント「ダイアログ」参照。いずれも生成した
         // WidgetId(整数)を返す。閉じたときの結果はpico.on(id,"closed",fn)

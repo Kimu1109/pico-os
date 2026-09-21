@@ -89,8 +89,9 @@
   - [x] ダイアログ
   - [x] ネットワーク(HTTPリクエスト)
   - [x] 権限管理(ネットワーク/app_dir外SDアクセス、粗いフラグ)
+  - [x] ウィジェット固有コールバック(Checkbox/NumberSlider/ScrollList/TabBar)
+  - [x] 時刻取得(pico.get_time())
 - [ ] 残タスク
-  - [ ] ウィジェット固有コールバック(Checkbox/NumberSlider/ScrollList/TabBar等)
   - [ ] 命令単位の実行時間制御(lua_sethook等)
   - [ ] SDを走査してLuaアプリを見つける処理
   - [ ] 実機の空きRAM/Flashの実測
@@ -237,15 +238,17 @@
 | ビルドの二重管理 | ✅ Lua 5.4.7本体を`lib/lua/`へvendor。`platformio.ini`への追記は不要になり、PCビルドも同じ`lib/lua/src/`を参照する実質1箇所の情報源に |
 | 実行時間バジェット | 🔨 `task/StepBudget.hpp`(時間で区切る土台)のみ実装済み。**命令単位(`lua_sethook`)の制御はまだ無い** |
 | SDを走査してLuaアプリを見つける処理 | ⬜ 未着手。登録簿側(AppEntryの動的化)は受け入れ準備済み |
-| ウィジェット固有コールバック | ⬜ `press_start/end/move/out`の共通4種のみ対応。`Checkbox::on_change_checked`等ウィジェット固有のコールバックは未対応 |
+| ウィジェット固有コールバック | ✅ `checked_changed`(Checkbox)/`value_changed`(NumberSlider)/`select_item`(ScrollList)/`tab_changed`(TabBar)を`pico.on()`から追加。値自体は既存の`pico.get()`(プロパティ共通口)で読む設計にし、`select_item`の`already_selected`(永続プロパティではない一時値)だけコールバック引数で渡す |
+| 時刻取得 | ✅ `pico.get_time()`。`TimeFunctions::timeinfo`を`{year,month,day,hour,min,sec,wday}`のテーブルで返す薄いラッパー |
 | 実機の空きRAM/Flashの実測 | ⬜ 200KB枠はPC上の見積もり(空stateのみで約19.5KB)からの逆算。実機RP2350での追試は未実施(このリモート実行環境にRP2350のボード定義が無いため) |
 
-**実装済みのAPI**: ウィジェットの生成/破棄/プロパティ/共通コールバック・`setup()`/`loop(dt)`呼び出し・
-直接描画(`Canvas`)・SDカードアクセス・画像(`.pimg`)・シーン制御(`push_scene`/`change_scene`/
-`launch_app`)・ダイアログ(`show_message`/`show_input`/`show_file_save`/`show_file_select`/
-`show_color`)・ネットワーク(`http_request`/`http_cancel`)・**権限管理**(`network`/
-`sd_outside_app_dir`の2値フラグ、既定はどちらも拒否。`LuaScene`がスクリプト自身の
-ディレクトリを基準に`pico.sd_*`/`pico.image_load`を閉じ込める)。
+**実装済みのAPI**: ウィジェットの生成/破棄/プロパティ/共通コールバック・ウィジェット固有
+コールバック(`checked_changed`/`value_changed`/`select_item`/`tab_changed`)・`setup()`/
+`loop(dt)`呼び出し・直接描画(`Canvas`)・SDカードアクセス・画像(`.pimg`)・シーン制御
+(`push_scene`/`change_scene`/`launch_app`)・ダイアログ(`show_message`/`show_input`/
+`show_file_save`/`show_file_select`/`show_color`)・ネットワーク(`http_request`/`http_cancel`)・
+時刻取得(`get_time`)・**権限管理**(`network`/`sd_outside_app_dir`の2値フラグ、既定はどちらも
+拒否。`LuaScene`がスクリプト自身のディレクトリを基準に`pico.sd_*`/`pico.image_load`を閉じ込める)。
 
 **API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算した。**
 → [7. 標準アプリ開発](#7-標準アプリ開発-1)

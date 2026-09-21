@@ -13,6 +13,10 @@
 #include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/widgets/Checkbox.hpp"
+#include "gui/widgets/NumberSlider.hpp"
+#include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
@@ -30,6 +34,7 @@
 #include "storage/SD_IO.hpp"
 #include "task/Http_Request.hpp"
 #include "util/Url.hpp"
+#include "functions/Time_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
 
@@ -236,6 +241,7 @@ void LuaEngine::registerApi() {
     registerFn("change_scene", l_change_scene);
     registerFn("launch_app", l_launch_app);
     registerFn("content_rect", l_content_rect);
+    registerFn("get_time", l_get_time);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
     registerFn("draw_pixel", l_draw_pixel);
@@ -278,6 +284,10 @@ bool LuaEngine::EventKindFromName(const char* name, EventKind& out) {
         {"press_out", EventKind::PressOut},
         {"render", EventKind::Render},
         {"closed", EventKind::Closed},
+        {"checked_changed", EventKind::CheckedChanged},
+        {"value_changed", EventKind::ValueChanged},
+        {"select_item", EventKind::SelectItem},
+        {"tab_changed", EventKind::TabChanged},
     };
     for (const auto& e : kTable) {
         if (strcmp(e.name, name) == 0) { out = e.kind; return true; }
@@ -320,6 +330,29 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
             // ここでは何もしない: ダイアログのsetOnClosed/setOnClose配線自体は
             // 生成時点(pico.show_xxx() → WireDialogClosed())で既に済んでいる。
             // pico.on()はcallbacks_への登録(Dispatch()が引くref)だけを担う
+            break;
+        // ウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)。
+        // l_on()側で対応するWidgetTypeであることを確認済みなので安全にstatic_castできる。
+        // CheckedChanged/ValueChanged/TabChangedは変わった後の値そのものを渡さず、
+        // 既存の共通Dispatch(id, kind)(idのみ)に乗せる(値はpico.get()で読む)
+        case EventKind::CheckedChanged:
+            static_cast<Checkbox*>(w)->setOnChangeChecked(
+                [this, id]() { this->Dispatch(id, EventKind::CheckedChanged); });
+            break;
+        case EventKind::ValueChanged:
+            static_cast<NumberSlider*>(w)->setOnValueChanged(
+                [this, id]() { this->Dispatch(id, EventKind::ValueChanged); });
+            break;
+        case EventKind::TabChanged:
+            static_cast<TabBar*>(w)->setOnChanged(
+                [this, id](int) { this->Dispatch(id, EventKind::TabChanged); });
+            break;
+        case EventKind::SelectItem:
+            // already_selectedは永続プロパティとして持てない一時的な値なので、
+            // DispatchClosedと同じ形の専用Dispatchで2引数目として渡す
+            // (indexは"selected_index"プロパティとして既に読めるので渡さない)
+            static_cast<ScrollList*>(w)->setOnSelectItem(
+                [this, id](int, bool already_selected) { this->DispatchSelectItem(id, already_selected); });
             break;
     }
 }
@@ -396,6 +429,23 @@ void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
     // 「ダイアログ」参照)
     Widget* w = WidgetRegistry::Resolve(id);
     if (w) WidgetFunctions::DestroyLater(w);
+}
+
+void LuaEngine::DispatchSelectItem(WidgetId id, bool already_selected) {
+    int ref = LUA_NOREF;
+    for (const auto& e : callbacks_) {
+        if (e.id == id && e.kind == EventKind::SelectItem) { ref = e.ref; break; }
+    }
+    if (ref == LUA_NOREF) return;
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+    lua_pushinteger(L, (lua_Integer)id);
+    lua_pushboolean(L, already_selected);
+    if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+        const char* msg = lua_tostring(L, -1);
+        ErrorFunctions::ShowFatal(msg ? msg : "Luaコールバックでエラーが発生しました");
+        lua_pop(L, 1);
+    }
 }
 
 void LuaEngine::WireDialogClosed(Widget* dialog, WidgetId id) {
@@ -551,6 +601,20 @@ int LuaEngine::l_on(lua_State* L) {
         }
     }
 
+    // ウィジェット固有イベントは対応する種別以外へ登録できない("render"/"closed"と同じ考え方)
+    if (kind == EventKind::CheckedChanged && w->getWidgetType() != WidgetType::Checkbox) {
+        return luaL_error(L, "pico.on: 'checked_changed'イベントはCheckboxのみ対応");
+    }
+    if (kind == EventKind::ValueChanged && w->getWidgetType() != WidgetType::NumberSlider) {
+        return luaL_error(L, "pico.on: 'value_changed'イベントはNumberSliderのみ対応");
+    }
+    if (kind == EventKind::SelectItem && w->getWidgetType() != WidgetType::ScrollList) {
+        return luaL_error(L, "pico.on: 'select_item'イベントはScrollListのみ対応");
+    }
+    if (kind == EventKind::TabChanged && w->getWidgetType() != WidgetType::TabBar) {
+        return luaL_error(L, "pico.on: 'tab_changed'イベントはTabBarのみ対応");
+    }
+
     lua_pushvalue(L, 3);
     const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
@@ -666,6 +730,23 @@ int LuaEngine::l_content_rect(lua_State* L) {
     lua_pushinteger(L, r.w);
     lua_pushinteger(L, r.h);
     return 4;
+}
+
+int LuaEngine::l_get_time(lua_State* L) {
+    // TimeFunctions::timeinfoはmain.cpp起動時のTimeFunctions::Setup()以降、333msごとに
+    // 更新される(クラスコメント「時刻取得」参照)。NTP未同期の間の値の妥当性は
+    // 呼び出し元(このAPI)では保証しない(ClocksScene等、既存の利用箇所と同じ割り切り)
+    const struct tm& t = TimeFunctions::timeinfo;
+
+    lua_newtable(L);
+    lua_pushinteger(L, TimeFunctions::year);  lua_setfield(L, -2, "year");
+    lua_pushinteger(L, TimeFunctions::month); lua_setfield(L, -2, "month");
+    lua_pushinteger(L, t.tm_mday); lua_setfield(L, -2, "day");
+    lua_pushinteger(L, t.tm_hour); lua_setfield(L, -2, "hour");
+    lua_pushinteger(L, t.tm_min);  lua_setfield(L, -2, "min");
+    lua_pushinteger(L, t.tm_sec);  lua_setfield(L, -2, "sec");
+    lua_pushinteger(L, t.tm_wday); lua_setfield(L, -2, "wday"); // 0=日曜〜6=土曜(tm_wdayそのまま)
+    return 1;
 }
 
 int LuaEngine::l_invalidate(lua_State* L) {

@@ -599,7 +599,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
-| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**まで実装済み。**残っているのは命令単位の実行時間制御、ウィジェット固有コールバックへの対応拡大、SDを走査してLuaアプリを見つける処理**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**まで実装済み。**残っているのは命令単位の実行時間制御、SDを走査してLuaアプリを見つける処理**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
@@ -744,7 +744,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.create(type_name)` | `WidgetFactory::TypeFromName()`→`Create()`。生成物は即`WidgetFunctions::Add()`で登録し、`WidgetId`(整数)を返す |
 | `pico.destroy(id)` | コールバック登録を`PruneCallbacksFor()`で外してから`WidgetFunctions::DestroyLater()`(フレーム境界での遅延削除) |
 | `pico.set(id, name, value)` / `pico.get(id, name)` | `WidgetProperty::IdFromName()`→`Set()`/`Get()`。プロパティ名は`snake_case`の文字列 |
-| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)+`render`(`Canvas`限定、下記「直接描画」参照)に対応(下記) |
+| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)+`render`(`Canvas`限定、下記「直接描画」参照)+ウィジェット固有4種(`checked_changed`/`value_changed`/`select_item`/`tab_changed`、下記「ウィジェット固有イベント」参照)+`closed`(ダイアログ限定)に対応(下記) |
 | `pico.add_child(container_id, child_id)` | `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応 |
 | `pico.log(msg)` | `LOG_APP_MSG` |
 | `pico.show_error(msg)` | `ErrorFunctions::ShowFatal()` |
@@ -772,6 +772,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.show_color()` | `ColorDialog`(4×4パレット)を表示する。選択色は`pico.get(id,"value")`で読む(未選択は`-1`)(2026-09-21追加) |
 | `pico.http_request(method, url, body, content_type, callback)` | 非同期HTTPリクエスト(GET/POST/PUT/PATCH/DELETE)。同時に1本まで。`callback(ok, status_code, body_or_nil, error_or_nil)`(下記「ネットワーク」参照)(2026-09-21追加) |
 | `pico.http_cancel()` | 進行中の`pico.http_request()`を取り消す(2026-09-21追加) |
+| `pico.get_time()` | `TimeFunctions::timeinfo`を`{year, month, day, hour, min, sec, wday}`のテーブルで返す(下記「時刻取得」参照)(2026-09-21追加) |
 
 - **プロパティ名・種別名は文字列(snake_case/PascalCase)にした**(数値定数にしなかった)。
   Lua側の書きやすさを優先した判断で、毎回文字列比較が挟まるが、UI操作程度の頻度なら実害は無いはず。
@@ -1179,6 +1180,64 @@ Luaスクリプトから表示できるようにした(`SearchDialog`はMarkdown
   (`HttpGet`の`HttpBodyGate`なら本文が捨てられていたはずの経路で、`HttpRequest`が
   正しく本文を渡せていることの確認)の3パターンを確認済み。
 
+### ウィジェット固有イベント(2026-09-21実装)
+
+`pico.on(id, event_name, fn)`の共通4種(press_start/end/move/out)+`render`(Canvas限定)+
+`closed`(ダイアログ限定)に加え、一部のウィジェットが元々持っていた専用コールバックも
+Luaから使えるようにした:
+
+| イベント名 | 対象ウィジェット | 元のC++コールバック |
+|---|---|---|
+| `checked_changed` | `Checkbox` | `setOnChangeChecked()` |
+| `value_changed` | `NumberSlider` | `setOnValueChanged()` |
+| `select_item` | `ScrollList` | `setOnSelectItem()` |
+| `tab_changed` | `TabBar` | `setOnChanged()` |
+
+- **対応するウィジェット種別以外へ登録しようとすると`"render"`/`"closed"`と同じく
+  `luaL_error`になる**(`l_on()`側で`getWidgetType()`を見て弾く)。
+- **`checked_changed`/`value_changed`/`tab_changed`の3つは、変わった後の値そのものを
+  コールバック引数として渡さず、既存の共通`Dispatch(id, kind)`(idのみ渡す)にそのまま乗せた。**
+  Checked/Value/TabSelectedはいずれも`pico.get(id, "checked"/"value"/"tab_selected")`で
+  読める永続プロパティ(`WidgetProperty`)なので、Lua側はコールバック内でそれを読めば足りる。
+  値の型・個数をイベントごとに変える専用Dispatchを増やすより、既存の「値はpico.getで読む」
+  という約束に寄せた方が単純だと判断した。
+- **`select_item`だけは例外で、`already_selected`(同じ項目を2回連続でタップしたか。
+  `SearchDialog`等の「2回タップで開く」判定に使う値)をコールバックの第2引数として渡す
+  専用の`DispatchSelectItem(id, already_selected)`を用意した。** これは`ScrollList::on_selectitem`が
+  渡す一時的な値で、`selected_index`のような永続プロパティとして持てないため
+  (`DispatchClosed(id, is_ok)`と同じ理由づけ)。選択後のindex自体は"select_item"の中で
+  `pico.get(id, "selected_index")`を読めばよい。
+- コールバックの配線方式(`this`(`LuaEngine*`)+`WidgetId`だけをキャプチャしてヒープ確保を
+  起こさない)は共通4種と同じ(`BindCallback()`参照)。
+- ホストテストは`lua_engine_test.cpp`に追加。4イベントそれぞれについて、対応するC++側の
+  トリガ(`Checkbox::causeOnPressStart()`でのタップ相当/`NumberSlider::setValue()`/
+  `ScrollList::causeOnSelectItem()`/`TabBar::setSelected(index, true)`)を直接呼んで
+  Luaコールバックが実際に発火すること、`pico.get()`で変更後の値が読めること、
+  `select_item`の`already_selected`が引数で渡ること、対応外のウィジェットへの登録が
+  エラーになることを確認している。
+
+### 時刻取得(2026-09-21実装)
+
+`pico.get_time()`。`TimeFunctions::timeinfo`(NTP同期後に妥当な値になる。`Setup()`呼び出し
+自体はLuaEngineの責務ではなく、main.cppが起動時に済ませている)をLuaへ橋渡しするだけの
+薄いAPI。
+
+- 年/月は`TimeFunctions::year`/`month`(`tm_year`/`tm_mon`から1900年オフセット/0始まり月を
+  補正済みの値。`ClocksScene`等と同じものを使う)をそのまま使い、残り(日/時/分/秒/曜日)は
+  `struct tm`のフィールドをそのまま渡す。`wday`は`tm_wday`そのまま(0=日曜〜6=土曜)。
+- **戻り値は`pico.content_rect()`のような複数戻り値ではなく、フィールド名付きの1個の
+  テーブル**(`{year=.., month=.., day=.., hour=.., min=.., sec=.., wday=..}`)にした。
+  `pico.sd_list()`が`{name=.., is_dir=..}`の配列を返すのと同じ「複数の名前付き値は
+  テーブルで返す」という使い分け(`content_rect`はx/y/w/hの4値のみで意味も自明なため
+  複数戻り値のままにしてある)。
+- **NTP未同期の場合の値の妥当性はこのAPI側では保証しない**(`ClocksScene`等、既存の
+  `TimeFunctions`利用箇所と同じ割り切り。`main.cpp`起動時点、あるいはWi-Fi未接続のままの
+  場合は同期前の初期値がそのまま返る)。
+- ホストテストは`lua_engine_test.cpp`に追加。`TimeFunctions::timeinfo`/`year`/`month`を
+  テストから直接書き換え、`pico.get_time()`が返すテーブルの各フィールドと一致することを
+  確認している(`Setup()`/`Update()`はNTP同期や`millis()`に依存するため呼ばず、`struct tm`を
+  直接埋める)。
+
 ### 実装中に見つけて直した既存のバグ2件
 
 Luaバインディングを実際に動かして初めて踏んだ、`LayoutContainer`/`GridContainer`が
@@ -1233,9 +1292,10 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
 
 ### 現時点のスコープ外(次回以降)
 
-- **コールバックは共通4種(press_start/end/move/out)のみ**。`Checkbox::on_change_checked`、
-  `NumberSlider::on_value_changed`、`ScrollList::on_selectitem`、`TabBar::on_changed`等
-  ウィジェット固有のコールバックは未対応(`WidgetProperty`と同じ「まず共通部分だけ」の考え方)。
+- ~~コールバックは共通4種(press_start/end/move/out)のみ~~ → **解消済み(2026-09-21)**。
+  `Checkbox::on_change_checked`/`NumberSlider::on_value_changed`/`ScrollList::on_selectitem`/
+  `TabBar::on_changed`を`checked_changed`/`value_changed`/`select_item`/`tab_changed`として
+  `pico.on()`から使えるようにした(詳細は上の「ウィジェット固有イベント」参照)。
 - **命令単位の実行時間制御(`lua_sethook`)は無い**。`StepBudget`との組み合わせ含め、
   実際に重い/無限ループするLuaアプリを書いてみてから決める。
 - ~~1フレームごとにLua側の「update」関数を呼ぶ仕組みは無い~~ → **解消済み(2026-09-20)**。

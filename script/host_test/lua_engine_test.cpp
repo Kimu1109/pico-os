@@ -36,9 +36,21 @@
 //   pico.http_request/http_cancel → 実ソケットに触れない範囲(不正なメソッド/URL/
 //                         https/送信ボディの上限超過/同時実行数の上限)での
 //                         早期拒否がすべてfalseで返ること(luaL_errorにしない)
+//   pico.on(id,"checked_changed"/"value_changed"/"select_item"/"tab_changed",fn) →
+//                         Checkbox/NumberSlider/ScrollList/TabBarそれぞれの既存の
+//                         C++側コールバック(causeOnChangeChecked等)を実際に鳴らして
+//                         Luaへ届くこと、値そのものはpico.get()で読めること
+//                         (select_itemのalready_selectedだけは引数で渡ること)、
+//                         対応しないウィジェット種別への登録はエラーになることを確認する
+//   pico.get_time() → TimeFunctions::timeinfoを直接書き換えて、返るテーブルの
+//                      各フィールドが一致することを確認する
 #include "lua/LuaEngine.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
+#include "gui/widgets/Checkbox.hpp"
+#include "gui/widgets/NumberSlider.hpp"
+#include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
@@ -48,6 +60,7 @@
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
+#include "functions/Time_Functions.hpp"
 #include "OS_Data.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -416,6 +429,202 @@ int main(){
             check(bound == false, "pico.on: 'render'イベントはCanvas以外だとエラー")
         )LUA", "render_on_non_canvas_test");
         check(guard_ok, "render非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: checked_changed(Checkbox) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            cb_id = pico.create("Checkbox")
+            cb_changed_count = 0
+            cb_last_checked = nil
+            pico.on(cb_id, "checked_changed", function(id)
+                cb_changed_count = cb_changed_count + 1
+                cb_last_checked = pico.get(id, "checked")
+            end)
+        )LUA", "checkbox_setup_test");
+        check(ok, "pico.on(...,\"checked_changed\",...)の登録が成功する");
+
+        lua_getglobal(L, "cb_id");
+        const WidgetId cb_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        Checkbox* cb = static_cast<Checkbox*>(WidgetRegistry::Resolve(cb_id));
+        check(cb != nullptr, "pico.create(\"Checkbox\"): 実体が引ける");
+
+        // Checkbox::causeOnPressStart()が実際のチェック状態反転+causeOnChangeChecked()を行う
+        // (タップ相当)。値そのものはコールバック引数ではなくpico.get()で読む設計を確認する
+        if (cb) cb->causeOnPressStart();
+        lua_getglobal(L, "cb_changed_count");
+        check((int)lua_tointeger(L, -1) == 1, "checked_changed: タップで1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "cb_last_checked");
+        check(lua_toboolean(L, -1) == true,
+              "checked_changed: pico.get(id,\"checked\")で変更後の値が読める");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn3 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn3, "checked_changed", function() end) end)
+            check(bound == false, "pico.on: 'checked_changed'イベントはCheckbox以外だとエラー")
+        )LUA", "checked_changed_guard_test");
+        check(guard_ok, "checked_changed非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: value_changed(NumberSlider) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            ns_id = pico.create("NumberSlider")
+            pico.set(ns_id, "min_value", 0)
+            pico.set(ns_id, "max_value", 100)
+            ns_changed_count = 0
+            ns_last_value = nil
+            pico.on(ns_id, "value_changed", function(id)
+                ns_changed_count = ns_changed_count + 1
+                ns_last_value = pico.get(id, "value")
+            end)
+        )LUA", "number_slider_setup_test");
+        check(ok, "pico.on(...,\"value_changed\",...)の登録が成功する");
+
+        lua_getglobal(L, "ns_id");
+        const WidgetId ns_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        NumberSlider* ns = static_cast<NumberSlider*>(WidgetRegistry::Resolve(ns_id));
+        check(ns != nullptr, "pico.create(\"NumberSlider\"): 実体が引ける");
+
+        // setValue()がcauseOnValueChanged()を呼ぶ(NumberSlider.hppのsetValue参照)
+        if (ns) ns->setValue(42);
+        lua_getglobal(L, "ns_changed_count");
+        check((int)lua_tointeger(L, -1) == 1, "value_changed: 値変更で1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "ns_last_value");
+        check(lua_tonumber(L, -1) == 42, "value_changed: pico.get(id,\"value\")で変更後の値が読める");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn4 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn4, "value_changed", function() end) end)
+            check(bound == false, "pico.on: 'value_changed'イベントはNumberSlider以外だとエラー")
+        )LUA", "value_changed_guard_test");
+        check(guard_ok, "value_changed非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: select_item(ScrollList) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            sl_id = pico.create("ScrollList")
+            sl_select_count = 0
+            sl_last_index = nil
+            sl_last_already_selected = nil
+            pico.on(sl_id, "select_item", function(id, already_selected)
+                sl_select_count = sl_select_count + 1
+                sl_last_index = pico.get(id, "selected_index")
+                sl_last_already_selected = already_selected
+            end)
+        )LUA", "scroll_list_setup_test");
+        check(ok, "pico.on(...,\"select_item\",...)の登録が成功する");
+
+        lua_getglobal(L, "sl_id");
+        const WidgetId sl_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        ScrollList* sl = static_cast<ScrollList*>(WidgetRegistry::Resolve(sl_id));
+        check(sl != nullptr, "pico.create(\"ScrollList\"): 実体が引ける");
+
+        if (sl) {
+            ScrollListTools::Item item;
+            item.text.assign("item0");
+            sl->add(item);
+            sl->setSelectedIndex(0);
+            sl->causeOnSelectItem(false); // 新規選択(2回目のタップではない)
+        }
+        lua_getglobal(L, "sl_select_count");
+        check((int)lua_tointeger(L, -1) == 1, "select_item: 選択で1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "sl_last_index");
+        check((int)lua_tointeger(L, -1) == 0, "select_item: pico.get(id,\"selected_index\")で選択indexが読める");
+        lua_pop(L, 1);
+        lua_getglobal(L, "sl_last_already_selected");
+        check(lua_toboolean(L, -1) == false,
+              "select_item: already_selectedはpermanentプロパティではなく引数で渡る(false)");
+        lua_pop(L, 1);
+
+        // 同じ項目を選び直す(already_selected=true)経路も確認する
+        if (sl) sl->causeOnSelectItem(true);
+        lua_getglobal(L, "sl_last_already_selected");
+        check(lua_toboolean(L, -1) == true, "select_item: already_selected=trueも正しく渡る");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn5 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn5, "select_item", function() end) end)
+            check(bound == false, "pico.on: 'select_item'イベントはScrollList以外だとエラー")
+        )LUA", "select_item_guard_test");
+        check(guard_ok, "select_item非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- ウィジェット固有イベント: tab_changed(TabBar) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            tb_id = pico.create("TabBar")
+            tb_changed_count = 0
+            tb_last_selected = nil
+            pico.on(tb_id, "tab_changed", function(id)
+                tb_changed_count = tb_changed_count + 1
+                tb_last_selected = pico.get(id, "tab_selected")
+            end)
+        )LUA", "tab_bar_setup_test");
+        check(ok, "pico.on(...,\"tab_changed\",...)の登録が成功する");
+
+        lua_getglobal(L, "tb_id");
+        const WidgetId tb_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        TabBar* tb = static_cast<TabBar*>(WidgetRegistry::Resolve(tb_id));
+        check(tb != nullptr, "pico.create(\"TabBar\"): 実体が引ける");
+
+        if (tb) {
+            tb->addTab("A");
+            tb->addTab("B");
+            tb->setSelected(1, true); // notify=trueでon_changedも鳴らす(タップ経由と同じ扱い)
+        }
+        lua_getglobal(L, "tb_changed_count");
+        check((int)lua_tointeger(L, -1) == 1, "tab_changed: 選択変更で1回呼ばれる");
+        lua_pop(L, 1);
+        lua_getglobal(L, "tb_last_selected");
+        check((int)lua_tointeger(L, -1) == 1, "tab_changed: pico.get(id,\"tab_selected\")で選択indexが読める");
+        lua_pop(L, 1);
+
+        const bool guard_ok = engine.Run(R"LUA(
+            local btn6 = pico.create("Button")
+            local bound = pcall(function() pico.on(btn6, "tab_changed", function() end) end)
+            check(bound == false, "pico.on: 'tab_changed'イベントはTabBar以外だとエラー")
+        )LUA", "tab_changed_guard_test");
+        check(guard_ok, "tab_changed非対応ウィジェットへのpico.onが例外として正しく捕捉される");
+    }
+
+    // ---- pico.get_time() ----
+    {
+        // TimeFunctions::timeinfoを直接書き換えて、返る値がそのまま反映されることを確認する
+        // (Setup()/Update()はNTP同期やmillis()に依存するためここでは呼ばず、
+        // struct tmを直接埋める)
+        TimeFunctions::timeinfo.tm_year = 2026 - 1900;
+        TimeFunctions::timeinfo.tm_mon = 9 - 1; // 0始まり(0=1月)
+        TimeFunctions::timeinfo.tm_mday = 21;
+        TimeFunctions::timeinfo.tm_hour = 13;
+        TimeFunctions::timeinfo.tm_min = 45;
+        TimeFunctions::timeinfo.tm_sec = 6;
+        TimeFunctions::timeinfo.tm_wday = 1; // 月曜
+        TimeFunctions::year = 2026;
+        TimeFunctions::month = 9;
+
+        const bool ok = engine.Run(R"LUA(
+            local t = pico.get_time()
+            check(t.year == 2026, "pico.get_time: year")
+            check(t.month == 9, "pico.get_time: month")
+            check(t.day == 21, "pico.get_time: day")
+            check(t.hour == 13, "pico.get_time: hour")
+            check(t.min == 45, "pico.get_time: min")
+            check(t.sec == 6, "pico.get_time: sec")
+            check(t.wday == 1, "pico.get_time: wday")
+        )LUA", "get_time_test");
+        check(ok, "pico.get_time(): スクリプトの実行が成功する");
     }
 
     // ---- pico.invalidate / pico.mark_dirty ----

@@ -4,6 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 .venv
+__pycache__/
 # PC/Webビルド(pc/CMakeLists.txt)の生成物
 pc/build/
 pc/build-web/

@@ -32,13 +32,21 @@ end
 
 -- 色(=速度)のtier。1が最速(赤)、6が最遅(青)。元祖ブロック崩しの「上段ほど速い」に寄せた配色
 local TIER_COLOR = { 12, 13, 14, 10, 11, 9 }
-local TIER_MULT = { 1.5, 1.3, 1.15, 1.0, 0.85, 0.7 }
+local TIER_MULT = { 2.0, 1.6, 1.35, 1.25, 1.0, 0.7 }
 local TIER_POINTS = { 60, 50, 40, 30, 20, 10 }
-local function baseSpeed(stage) return 84 + stage * 4 end -- px/秒
+local WALL_TIER = -1 -- 壊せないブロック(灰色)。stages.luaのaddWalls()が挿入する
+local WALL_COLOR = 8 -- PICO_DARKGREY
+local function baseSpeed(stage) return 110 + stage * 5 end -- px/秒。旧式(84+stage*4)の約1.3倍
 
 local BLOCK_GAP, ROW_GAP, BLOCK_H = 2, 2, 12
 local BALL_R = 4
-local PADDLE_W, PADDLE_H = 40, 8
+local PADDLE_H = 8
+-- パドル幅はステージが進むほど狭くする(5ステージごとに4px、最小28px)
+local PADDLE_W_MAX, PADDLE_W_MIN, PADDLE_W_STEP, PADDLE_W_STAGE_SPAN = 40, 28, 4, 5
+local function paddleWidthForStage(stage)
+    local w = PADDLE_W_MAX - math.floor((stage - 1) / PADDLE_W_STAGE_SPAN) * PADDLE_W_STEP
+    return math.max(PADDLE_W_MIN, w)
+end
 local ITEM_SIZE = 10
 local ITEM_TRIBALL, ITEM_DOUBLE, ITEM_SLOW = 1, 2, 3
 local ITEM_FALL_SPEED = 70 -- px/秒
@@ -95,8 +103,9 @@ for i = 1, MAX_ITEMS do
     itemSlots[i] = { rect = r, ell = e, tri = t, active = false, type = 0, x = 0, y = 0 }
 end
 
+local paddle_w = paddleWidthForStage(1)
 local paddle_id = pico.create("Rect")
-pico.set(paddle_id, "w", PADDLE_W); pico.set(paddle_id, "h", PADDLE_H)
+pico.set(paddle_id, "w", paddle_w); pico.set(paddle_id, "h", PADDLE_H)
 pico.set(paddle_id, "color", 1); pico.set(paddle_id, "y", paddle_y)
 
 local border_id = pico.create("Rect")
@@ -112,7 +121,7 @@ pico.on(back_button, "press_start", function() pico.pop() end)
 
 local status_label = pico.create("Label")
 pico.set(status_label, "font_size", 0)
-pico.set(status_label, "x", cx + 42); pico.set(status_label, "y", cy + 4)
+pico.set(status_label, "x", cx + 48); pico.set(status_label, "y", cy + 4)
 
 local score, lives, stage_idx = 0, 3, 1
 local blocks, blocks_remaining = {}, 0
@@ -147,19 +156,21 @@ local function loadStage(idx)
             local slot = (r - 1) * COLS + c
             local wid = blockWidgets[slot]
             local tier = (r <= data.rows) and data.cell(r, c) or 0
-            if tier > 0 then
+            if tier ~= 0 then
                 local bx = blockOffsetX + (c - 1) * (BLOCK_W + BLOCK_GAP)
                 local by = BLOCK_TOP + (r - 1) * (BLOCK_H + ROW_GAP)
                 blocks[slot] = { x = bx, y = by, tier = tier }
-                blocks_remaining = blocks_remaining + 1
+                if tier ~= WALL_TIER then blocks_remaining = blocks_remaining + 1 end
                 pico.set(wid, "x", bx); pico.set(wid, "y", by)
-                pico.set(wid, "color", TIER_COLOR[tier])
+                pico.set(wid, "color", (tier == WALL_TIER) and WALL_COLOR or TIER_COLOR[tier])
                 pico.set(wid, "visible", true)
             else
                 pico.set(wid, "visible", false)
             end
         end
     end
+    paddle_w = paddleWidthForStage(idx)
+    pico.set(paddle_id, "w", paddle_w)
     updateHud()
 end
 
@@ -171,7 +182,7 @@ local function readyBall()
         syncItemSlot(i)
     end
     paddle_cx = field_x + field_w / 2
-    pico.set(paddle_id, "x", math.floor(paddle_cx - PADDLE_W / 2))
+    pico.set(paddle_id, "x", math.floor(paddle_cx - paddle_w / 2))
     game_state = "ready"
 end
 
@@ -237,8 +248,12 @@ local function collideBlocks(b)
                 else
                     b.y = blk.y + BLOCK_H + BALL_R; b.vy = math.abs(b.vy)
                 end
-                applyTierSpeed(b, blk.tier)
-                destroyBlock(slot)
+                if blk.tier == WALL_TIER then
+                    -- 壊せないブロック: 反射のみ行い、速度もスコアも変えない
+                else
+                    applyTierSpeed(b, blk.tier)
+                    destroyBlock(slot)
+                end
                 return
             end
         end
@@ -246,10 +261,10 @@ local function collideBlocks(b)
 end
 
 local function collidePaddle(b)
-    local px = paddle_cx - PADDLE_W / 2
-    if b.x + BALL_R >= px and b.x - BALL_R <= px + PADDLE_W
+    local px = paddle_cx - paddle_w / 2
+    if b.x + BALL_R >= px and b.x - BALL_R <= px + paddle_w
         and b.y + BALL_R >= paddle_y and b.y - BALL_R <= paddle_y + PADDLE_H then
-        local offset = clamp((b.x - paddle_cx) / (PADDLE_W / 2), -1, 1)
+        local offset = clamp((b.x - paddle_cx) / (paddle_w / 2), -1, 1)
         local speed = math.sqrt(b.vx * b.vx + b.vy * b.vy)
         local angle = offset * MAX_ANGLE
         b.vx = speed * math.sin(angle)
@@ -334,8 +349,8 @@ local function updateItems(dtSec)
         local s = itemSlots[i]
         if s.active then
             s.y = s.y + ITEM_FALL_SPEED * dtSec
-            local px = paddle_cx - PADDLE_W / 2
-            if s.x + ITEM_SIZE >= px and s.x <= px + PADDLE_W
+            local px = paddle_cx - paddle_w / 2
+            if s.x + ITEM_SIZE >= px and s.x <= px + paddle_w
                 and s.y + ITEM_SIZE >= paddle_y and s.y <= paddle_y + PADDLE_H then
                 s.active = false
                 syncItemSlot(i)
@@ -400,8 +415,8 @@ end
 
 local function updatePaddle(tx, touched)
     if touched then
-        paddle_cx = clamp(tx, field_x + PADDLE_W / 2, field_x + field_w - PADDLE_W / 2)
-        pico.set(paddle_id, "x", math.floor(paddle_cx - PADDLE_W / 2))
+        paddle_cx = clamp(tx, field_x + paddle_w / 2, field_x + field_w - paddle_w / 2)
+        pico.set(paddle_id, "x", math.floor(paddle_cx - paddle_w / 2))
     end
 end
 

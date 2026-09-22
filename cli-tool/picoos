@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+picoos - pico-os の script/ 配下に散らばった開発用スクリプトを、
+まとまったCLIツールとして使えるようにする薄いディスパッチャ。
+
+設計方針:
+  - 各スクリプト自体のロジック・引数仕様は一切再実装しない。
+    「どのスクリプトを」「どの作業ディレクトリで」「どのPythonで」
+    実行すべきかを覚えておき、そのまま引数を転送するだけ。
+    (元スクリプトが仕様変更されても、picoos側の変更は基本不要)
+  - generate_icons.py だけは "tabler_icons/" 等のscript/相対パスを
+    ハードコードしているため、そのコマンド(icons)だけ作業ディレクトリを
+    script/へ固定する。それ以外は入出力パスを引数で明示する作りなので、
+    呼び出し元(ユーザーの現在のシェル)のcwdをそのまま継承し、他の
+    普通のCLIツールと同じ感覚でパスを指定できるようにしてある。
+  - アイコン生成・pimg変換は script/.venv (cairosvg/pillow) が要る。
+    存在すればそちらのpythonを、無ければ実行中のpython3にフォールバックする。
+
+使い方の一覧は `picoos --help`、各カテゴリの詳細は
+`picoos <category> --help` を参照。転送系のサブコマンド
+(pimg/ppm2png/dict skk 等)は `--help` も元スクリプトへそのまま渡すので、
+実際に使えるオプションは元スクリプトの --help がそのまま表示される。
+"""
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SCRIPT_DIR = REPO_ROOT / "script"
+HOST_TEST_DIR = SCRIPT_DIR / "host_test"
+PC_DIR = REPO_ROOT / "pc"
+
+
+def venv_python() -> str:
+    """script/.venv があればそのpython3を、無ければ実行中のpython3を使う。"""
+    for candidate in (SCRIPT_DIR / ".venv" / "bin" / "python3", SCRIPT_DIR / ".venv" / "bin" / "python"):
+        if candidate.exists():
+            return str(candidate)
+    return sys.executable
+
+
+def run(cmd, cwd=None, env=None) -> int:
+    shown_cwd = f"  (cwd={cwd})" if cwd is not None else ""
+    print(f"[picoos] $ {' '.join(str(c) for c in cmd)}{shown_cwd}", file=sys.stderr)
+    try:
+        return subprocess.run(cmd, cwd=cwd, env=env).returncode
+    except FileNotFoundError as e:
+        print(f"[picoos] コマンドが見つかりません: {e.filename}", file=sys.stderr)
+        return 127
+    except KeyboardInterrupt:
+        return 130
+
+
+def run_py(script_name: str, args, cwd=None) -> int:
+    """cwd未指定なら呼び出し元(ユーザーの現在のシェル)のcwdをそのまま継承する。
+    generate_icons.py 以外は「tabler_icons/」のような相対パス前提を持たず、
+    入出力パスは全て引数で明示するので、cwdを固定しない方が他の一般的な
+    CLIツール(cp/pythonスクリプト実行等)と同じ素直な挙動になる。"""
+    return run([venv_python(), str(SCRIPT_DIR / script_name), *args], cwd=cwd)
+
+
+# ---- 素通し転送系コマンド ----
+#
+# argparseのREMAINDERはサブパーサと組み合わせると、転送する引数の先頭が
+# "-"始まり(典型例: --help)のときにパース段階で「認識できない引数」として
+# 弾かれてしまう(CPython argparseの既知の癖。REMAINDER用の positional に
+# 到達する前に、オプションらしき文字列だけを外側のパーサが先に処理しようと
+# して失敗する)。回避策として、これらのコマンドはargparseで解析させず、
+# サブコマンド名の一致だけをここで素朴にチェックして、残りの引数を丸ごと
+# 元スクリプトへ渡す。「--help」も含めて元スクリプト自身の解釈にそのまま
+# 委ねられるのはこの方式でこそ実現できる。
+PASSTHROUGH_PY = {
+    ("pimg",): "generate_pimg.py",
+    ("pimg2png",): "pimg2png.py",
+    ("ppm2png",): "ppm2png.py",
+    ("serve",): "reference_server.py",
+    ("dict", "skk"): "convert_skk_dict.py",
+    ("dict", "index"): "build_dict_index.py",
+    ("dict", "suffix-index"): "build_dict_suffix_index.py",
+    ("dict", "filter-tofu"): "filter_dict_tofu.py",
+}
+
+
+def try_dispatch_passthrough(argv):
+    """先頭トークン列が既知のルートに一致すれば実行してreturncodeを返す。
+    一致しなければNone(=argparse側の通常処理へフォールバック)。"""
+    for prefix, script in PASSTHROUGH_PY.items():
+        n = len(prefix)
+        if tuple(argv[:n]) == prefix:
+            return run_py(script, argv[n:])
+    if tuple(argv[:2]) == ("pc", "run"):
+        return cmd_pc_run_raw(argv[2:])
+    return None
+
+
+# ---- サブコマンドの実装(argparseで引数を定義しているもの) ----
+
+def cmd_icons(args) -> int:
+    # generate_icons.py だけは "tabler_icons/" 等のscript/相対パスを
+    # ハードコードしているので、ここだけはcwdをscript/へ固定する。
+    return run_py("generate_icons.py", [], cwd=SCRIPT_DIR)
+
+
+def cmd_dict_build_ml(args) -> int:
+    # build_ML.sh は script/ をcwdとした相対パス("dic/SKK-JISYO.ML"等)前提。
+    return run(["sh", str(SCRIPT_DIR / "build_ML.sh")], cwd=SCRIPT_DIR)
+
+
+_TEST_SCRIPTS = {
+    "unit": "run.sh",   # ASan付きホストテスト23本(stubs/、ネットワーク無し)
+    "net": "run_net.sh",  # HttpGetの結合テスト(本物のソケット)
+    "mem": "run_mem.sh",  # ウィジェットのヒープ確保回数の計測
+}
+
+
+def cmd_test(args) -> int:
+    return run(["sh", str(HOST_TEST_DIR / _TEST_SCRIPTS[args.target])], cwd=REPO_ROOT)
+
+
+def _pc_build_dir(web: bool) -> Path:
+    return PC_DIR / ("build-web" if web else "build")
+
+
+def cmd_pc_build(args) -> int:
+    build_dir = _pc_build_dir(args.web)
+    if args.clean and build_dir.exists():
+        print(f"[picoos] 既存のビルドディレクトリを削除します: {build_dir}", file=sys.stderr)
+        shutil.rmtree(build_dir)
+
+    rel_build_dir = build_dir.relative_to(REPO_ROOT)
+    if args.web:
+        configure_cmd = ["emcmake", "cmake", "-S", "pc", "-B", str(rel_build_dir),
+                          "-DCMAKE_BUILD_TYPE=Release"]
+    else:
+        configure_cmd = ["cmake", "-S", "pc", "-B", str(rel_build_dir)]
+
+    rc = run(configure_cmd, cwd=REPO_ROOT)
+    if rc != 0:
+        if args.web:
+            print("[picoos] emcmake が無い場合は emsdk を source してください"
+                  " (source /path/to/emsdk/emsdk_env.sh)。詳細は pc/README.md 参照。",
+                  file=sys.stderr)
+        return rc
+
+    return run(["cmake", "--build", str(rel_build_dir), "-j", str(args.jobs)], cwd=REPO_ROOT)
+
+
+def cmd_pc_run_raw(rest) -> int:
+    binary = _pc_build_dir(web=False) / "picoos_pc"
+    if not binary.exists():
+        print(f"[picoos] {binary} がありません。先に `picoos pc build` を実行してください。",
+              file=sys.stderr)
+        return 1
+    return run([str(binary), *rest], cwd=REPO_ROOT)
+
+
+def cmd_pc_shot(args) -> int:
+    binary = _pc_build_dir(web=False) / "picoos_pc"
+    if not binary.exists():
+        print(f"[picoos] {binary} がありません。先に `picoos pc build` を実行してください。",
+              file=sys.stderr)
+        return 1
+
+    cmd = [str(binary)]
+    for tap in args.tap:
+        cmd += ["--tap", tap]
+    cmd += ["--shot", args.out_ppm]
+    if args.frames is not None:
+        cmd += [str(args.frames)]
+
+    env = dict(os.environ)
+    env["SDL_VIDEODRIVER"] = "dummy"
+    rc = run(cmd, cwd=REPO_ROOT, env=env)
+    if rc != 0 or not args.png:
+        return rc
+
+    return run_py("ppm2png.py", [args.out_ppm, args.png, str(args.scale)])
+
+
+def cmd_pc_web_serve(args) -> int:
+    return run(["emrun", "--no_browser", "--port", str(args.port), args.dir], cwd=REPO_ROOT)
+
+
+# ---- パーサ構築 ----
+#
+# pimg/ppm2png/serve/dict skk/dict index/dict suffix-index/dict filter-tofu/pc run は
+# try_dispatch_passthrough() が実際の引数解析より先に横取りするため、ここで登録する
+# 対応するサブパーサは「picoos --help」等での一覧表示専用(実引数は持たない)。
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="picoos",
+        description="pico-os の script/ 配下の開発用スクリプトをまとめたCLIツール。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+よく使う例:
+  picoos icons                                   アイコンヘッダ(icons_data.h)を再生成
+  picoos pimg photo.png out.pimg --transparent    画像を.pimgへ変換
+  picoos pimg2png out.pimg check.png --scale 4    .pimgをPNGへ戻して目視確認
+  picoos ppm2png shot.ppm shot.png 2              --shotのPPMをPNGへ(2倍)
+  picoos dict skk dic/SKK-JISYO.M                 SKK辞書をIME用tsvへ変換
+  picoos serve --root ~/docs --port 8080          Markdownブラウザ用の参照サーバを起動
+  picoos test                                     ホストテスト一式(ASan)を実行
+  picoos test net                                 HTTP結合テストを実行
+  picoos pc build                                 PC(SDL2)版をビルド
+  picoos pc run -- --shot shot.ppm 40             ネイティブ版を実行(引数はそのまま転送)
+  picoos pc shot shot.ppm 40 --png shot.png       ヘッドレスで撮ってPNGまで変換
+
+転送系のサブコマンドは `picoos <サブコマンド> --help` で元スクリプト自身の
+ヘルプが表示される(picoos側でオプションを再定義していないため)。
+""",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    p = sub.add_parser("icons", help="アイコンヘッダ(icons_data.h)を生成 (generate_icons.py)")
+    p.set_defaults(func=cmd_icons)
+
+    sub.add_parser("pimg", help="PNG/JPG等を.pimgへ変換 (generate_pimg.py、引数は転送)")
+    sub.add_parser("pimg2png", help=".pimgをPNGへ変換(逆変換、目視確認用) (pimg2png.py、引数は転送)")
+    sub.add_parser("ppm2png", help="--shot が出すPPMをPNGへ変換 (ppm2png.py、引数は転送)")
+    sub.add_parser("serve", help="PROTOCOL.md参照実装サーバを起動 (reference_server.py、引数は転送)")
+
+    dict_parser = sub.add_parser("dict", help="辞書データ関連 (script/dic, en-ja-and-ja-en.tsv 等)")
+    dict_sub = dict_parser.add_subparsers(dest="dict_command", required=True)
+
+    dict_sub.add_parser("skk", help="SKK-JISYOをIME用tsvへ変換 (convert_skk_dict.py、引数は転送)")
+    dict_sub.add_parser("index", help="単語辞書tsvの前方一致インデックスを生成 (build_dict_index.py、引数は転送)")
+    dict_sub.add_parser("suffix-index", help="部分一致用サフィックスコーパスを生成 (build_dict_suffix_index.py、引数は転送)")
+    dict_sub.add_parser("filter-tofu", help="フォント非対応文字を含む行を除去 (filter_dict_tofu.py、引数は転送)")
+
+    p = dict_sub.add_parser("build-ml", help="SKK-JISYO.MLをIME用tsvへ変換 (build_ML.sh)")
+    p.set_defaults(func=cmd_dict_build_ml)
+
+    p = sub.add_parser("test", help="ホストテストを実行 (script/host_test/run*.sh のラッパー)")
+    p.add_argument("target", nargs="?", choices=list(_TEST_SCRIPTS.keys()), default="unit",
+                    help="unit=ASan本体テスト(既定) / net=HTTP結合テスト / mem=ヒープ確保計測")
+    p.set_defaults(func=cmd_test)
+
+    pc_parser = sub.add_parser("pc", help="PC/Webビルド (pc/、SDL2ネイティブ or WebAssembly)")
+    pc_sub = pc_parser.add_subparsers(dest="pc_command", required=True)
+
+    p = pc_sub.add_parser("build", help="ビルドする(既定はネイティブ、--webでWeb版)")
+    p.add_argument("--web", action="store_true", help="WebAssembly版をビルドする(要emsdk)")
+    p.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
+    p.add_argument("--clean", action="store_true", help="ビルドディレクトリを削除してから構成し直す")
+    p.set_defaults(func=cmd_pc_build)
+
+    pc_sub.add_parser("run", help="ネイティブ版(picoos_pc)を実行。引数はそのまま転送")
+
+    p = pc_sub.add_parser("shot", help="ヘッドレスでNフレーム回してPPM(+任意でPNG)を書き出す")
+    p.add_argument("out_ppm", metavar="OUT.ppm")
+    p.add_argument("frames", nargs="?", type=int, default=None)
+    p.add_argument("--tap", action="append", default=[], metavar="X,Y@FRAME[:HOLD]",
+                    help="指定フレームで(X,Y)をタップする。複数回指定可(最大16件)")
+    p.add_argument("--png", metavar="OUT.png", help="指定するとPPMをPNGへも変換する")
+    p.add_argument("--scale", type=int, default=2, help="--png指定時の拡大率(既定2)")
+    p.set_defaults(func=cmd_pc_shot)
+
+    p = pc_sub.add_parser("web-serve", help="Web版をローカルで配信する(emrun)")
+    p.add_argument("--port", type=int, default=8080)
+    p.add_argument("--dir", default=str(_pc_build_dir(web=True)))
+    p.set_defaults(func=cmd_pc_web_serve)
+
+    return parser
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+
+    rc = try_dispatch_passthrough(argv)
+    if rc is not None:
+        return rc
+
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not hasattr(args, "func"):
+        parser.print_help()
+        return 1
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

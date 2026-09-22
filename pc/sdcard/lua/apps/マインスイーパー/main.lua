@@ -137,7 +137,7 @@ pico.set(reset_button, "x", x + margin + 34 + 4)
 pico.set(reset_button, "y", row1_y)
 pico.set(flag_button, "x", x + margin + 34 + 4 + 58 + 4)
 pico.set(flag_button, "y", row1_y)
-pico.set(status_label, "x", x + margin + 34 + 4 + 58 + 4 + 52 + 4)
+pico.set(status_label, "x", x + margin + 34 + 4 + 58 + 4 + 52 + 4 + 5)
 pico.set(status_label, "y", row1_y + 3)
 
 pico.set(diff_tabs, "x", x + margin)

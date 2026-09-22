@@ -87,12 +87,16 @@ def quantize_image(img: Image.Image, palette, use_transparency: bool):
 
     indices = [[0] * w for _ in range(h)]
     transparent_index = 0 if use_transparency else None
+    # --transparent無しで透過ピクセルに当たった場合、その下地RGB(ツールによっては
+    # 未定義のゴミ値が入っている)を最近傍マッチングに使うと予期しない色を拾うため、
+    # 白を明示的に割り当てる(PICO_WHITE、consts.hppのPICO_BACKGROUNDと一致)。
+    white_index = nearest_palette_index((0xFF, 0xFF, 0xFF), palette)
 
     for y in range(h):
         for x in range(w):
             r, g, b, a = pixels[x, y]
-            if use_transparency and a < ALPHA_THRESHOLD:
-                indices[y][x] = 0  # 透過スロット
+            if a < ALPHA_THRESHOLD:
+                indices[y][x] = 0 if use_transparency else white_index
             else:
                 indices[y][x] = nearest_palette_index(
                     (r, g, b), palette, skip_index=transparent_index

@@ -2,27 +2,29 @@
 -- src/lua/LuaAppScanner.cppがこのディレクトリを走査してランチャへ登録するので
 -- App_List.cppには一切手を加えていない。
 --
--- 盤面はButtonではなく、1枚の"Canvas"(pico.create("Canvas"))へpico.draw_*で
--- 自前描画している(リバーシと同じ方式)。タップ判定は"press_start"の中で
--- pico.get_touch()が返す絶対スクリーン座標から、盤面の左上位置(grid_x/grid_y)を
--- 引いてマス目を逆算する(lua-api-doc「Canvasと直接描画」の「タップ位置の取得」参照)。
--- 旧版(9x9固定)は81個のButtonを敷き詰めていたが、pico.get_touch()が無かった
--- 頃の名残りで、座標を直接読める今は不要な遠回りだった上に、難易度ごとに
--- マス数が変わる今回の書き換えとも相性が悪いため、Canvas 1枚へ統合した。
+-- 盤面はButtonではなく、1枚の"Canvas"へpico.draw_*で自前描画している
+-- (リバーシと同じ方式)。タップ判定はpico.get_touch()の絶対座標から
+-- grid_x/grid_yを引いてマス目を逆算する。
 --
--- 地雷/旗は自作の.pimg(14x14、透過あり。mine.pimg/flag.pimg、本ディレクトリ直下)を
--- pico.image_load()で読み、Canvasのrenderコールバックからpico.draw_image()で描く。
--- 生成には script/generate_pimg.py を使った(元のPNGはリポジトリに含めていない)。
--- 権限が既定値(sd_outside_app_dir=false)のスキャン登録アプリなので、画像は
--- 自分のapp_dir(このディレクトリ)配下に置く必要がある。
+-- 地雷/旗/数字は自作の.pimg(14x14、透過あり。mine.pimg/flag.pimg/digits.pimg、
+-- 本ディレクトリ直下)をpico.image_load()で読み、Canvasのrenderコールバックから
+-- pico.draw_image()で描く。生成には script/generate_pimg.py を使った。
+-- 権限が既定値(sd_outside_app_dir=false)なので、画像は自分のapp_dir
+-- (このディレクトリ)配下に置く必要がある。
 --
--- 難易度が変わるとマス数(ROWS/COLS)もセルの大きさ(CELL)も変わるため、
--- 盤面のCanvasは難易度切替のたびpico.destroy()して作り直す(サイズ変更できる
--- setW/setHはあるが、位置の再センタリングも含めて作り直した方が単純なため)。
--- 地雷/旗の画像は14x14固定で、どの難易度のセルにも収まるよう最小のCELL(14)を
--- 下限にしてある(CELLがそれより小さい難易度は用意しない)。
+-- 数字はpico.draw_text()ではなく画像にした: Smallフォント(行高16px)は上級の
+-- セル(14px)より背が高く、セルへクリップしても「はみ出た分が削れる」だけで
+-- 見やすさは改善しなかった。セルに合わせて書き出した画像なら、はみ出しそのものが
+-- 起きない。digits.pimgは1〜8(各14x14、隣接数の定番配色)を横に並べた
+-- 112x14のシートで、pico.draw_image()に部分描画の引数が無いため、
+-- pico.set_draw_area()で1コマぶんの窓を開けてシート全体をずらして描く
+-- (下のdrawDigit()参照)。
+--
+-- 難易度が変わるとマス数もセルの大きさ(CELL)も変わるため、盤面のCanvasは
+-- 切替のたびpico.destroy()して作り直す。画像は14x14固定であらゆる難易度の
+-- 最小CELL(14)に合わせてあるので、それより小さい難易度は用意しない。
 
-local ICON = 14 -- mine.pimg/flag.pimgのネイティブサイズ
+local ICON = 14 -- mine.pimg/flag.pimg/digits.pimg(1コマぶん)のネイティブサイズ
 
 local DIFFICULTIES = {
     { name = "初級", rows = 9,  cols = 9,  mines = 10, cell = 20, gap = 2 },
@@ -52,6 +54,7 @@ local canvas = nil
 -- 本ディレクトリ配下の.pimgのみ許可(既定権限)なので絶対パスで直に指定する
 local mine_img = pico.image_load("/lua/apps/マインスイーパー/mine.pimg")
 local flag_img = pico.image_load("/lua/apps/マインスイーパー/flag.pimg")
+local digits_img = pico.image_load("/lua/apps/マインスイーパー/digits.pimg")
 
 local COLOR_UNREVEALED = 7  -- PICO_LIGHTGREY
 local COLOR_REVEALED = 15   -- PICO_WHITE
@@ -144,9 +147,7 @@ pico.set(diff_tabs, "h", 22)
 
 local function setStatusLabel()
     if game_over then
-        -- 右カラムの残り幅(画面幅240pxからstatus_labelのx=160pxを引いた約80px)に
-        -- 収める必要があるため、"GAME OVER"/"GAMEOVER"は画面端からはみ出た
-        -- (半角1文字が8pxより広いフォントらしく、詰めても収まらなかった)。
+        -- 右カラムの残り幅(約80px)に収まらず"GAME OVER"は画面端からはみ出た。
         -- 漢字2文字(32px相当)なら確実に収まる
         pico.set(status_label, "text", win and "クリア!" or "失敗")
         return
@@ -255,15 +256,22 @@ local function onFlag(r, c)
     setStatusLabel()
 end
 
+-- digits_imgからn番目(1始まり)のコマだけをtarget_x,target_yへ描く。
+-- 窓をICON(=1コマの大きさ)ちょうどにすること — CELLの方が大きい初級/中級で
+-- CELL幅の窓にすると隣のコマの端が覗いてしまう
+local function drawDigit(n, target_x, target_y)
+    pico.set_draw_area(target_x, target_y, ICON, ICON)
+    pico.draw_image(digits_img, target_x - (n - 1) * ICON, target_y)
+    pico.clear_draw_area()
+end
+
 -- 盤面全体を毎回描き直す(リバーシのboard_canvasと同じ方式)。差分だけ塗る
 -- 最適化はせず、pico.invalidate()を呼んだ側が「状態が変わった」ことだけ
 -- 保証すればよい単純な作りにしてある
 local function renderBoard()
     local icon_off = math.floor((CELL - ICON) / 2)
-    local text_off_x = math.floor((CELL - 8) / 2)  -- 半角1文字は8px(Small=16pxフォント)
-    -- Smallフォントの行高16px。CELLがそれより小さい上級では負値になるが、
-    -- 文字を上へ押し出すとクリップで頭が欠けるグリフが出うるため0で止める
-    -- (クリップ自体はset_draw_area()が別途保証するので、はみ出た下端側だけ切られる)
+    -- 画像が読めなかった場合だけのフォールバック。セルへクリップして描く
+    local text_off_x = math.floor((CELL - 8) / 2)
     local text_off_y = math.max(0, math.floor((CELL - 16) / 2))
 
     for r = 1, ROWS do
@@ -271,18 +279,14 @@ local function renderBoard()
             local cx = grid_x + (c - 1) * (CELL + GAP)
             local cy = grid_y + (r - 1) * (CELL + GAP)
 
-            -- Smallフォントは行高16pxあり、上級(CELL=14)では数字がセルより
-            -- 縦に大きくはみ出して隣のマス/格子線へ被っていた。セル自身の矩形へ
-            -- クリップしてから描けば、フォントの実測値に関わらずセル内へ収まる
-            -- (CLAUDE.md「直接描画エリア」参照)
-            pico.set_draw_area(cx, cy, CELL, CELL)
-
             if flagged[r][c] and not revealed[r][c] then
                 pico.fill_rect(cx, cy, CELL, CELL, COLOR_UNREVEALED)
                 if flag_img then
                     pico.draw_image(flag_img, cx + icon_off, cy + icon_off)
                 else
+                    pico.set_draw_area(cx, cy, CELL, CELL)
                     pico.draw_text(cx + text_off_x, cy + text_off_y, "F", COLOR_TEXT_FLAG)
+                    pico.clear_draw_area()
                 end
             elseif not revealed[r][c] then
                 pico.fill_rect(cx, cy, CELL, CELL, COLOR_UNREVEALED)
@@ -291,17 +295,23 @@ local function renderBoard()
                 if mine_img then
                     pico.draw_image(mine_img, cx + icon_off, cy + icon_off)
                 else
+                    pico.set_draw_area(cx, cy, CELL, CELL)
                     pico.draw_text(cx + text_off_x, cy + text_off_y, "*", COLOR_TEXT_MINE)
+                    pico.clear_draw_area()
                 end
             else
                 pico.fill_rect(cx, cy, CELL, CELL, COLOR_REVEALED)
                 local n = adjacent[r][c]
                 if n > 0 then
-                    pico.draw_text(cx + text_off_x, cy + text_off_y, tostring(n), NUM_COLORS[n] or COLOR_TEXT_MINE)
+                    if digits_img then
+                        drawDigit(n, cx + icon_off, cy + icon_off)
+                    else
+                        pico.set_draw_area(cx, cy, CELL, CELL)
+                        pico.draw_text(cx + text_off_x, cy + text_off_y, tostring(n), NUM_COLORS[n] or COLOR_TEXT_MINE)
+                        pico.clear_draw_area()
+                    end
                 end
             end
-
-            pico.clear_draw_area()
         end
     end
 end

@@ -15,6 +15,7 @@ enum class WidgetType : uint8_t {
     ColorDialog,
     DropdownMenu,
     DurationPicker,
+    EllipseShape,
     FileExplorer,
     FileSaveDialog,
     FileSelectDialog,
@@ -27,17 +28,20 @@ enum class WidgetType : uint8_t {
     KeyboardNum,
     Label,
     LayoutContainer,
+    LineShape,
     LuaCanvas,
     MarkdownView,
     MsgDialog,
     NumberInput,
     NumberSlider,
+    RectShape,
     ScrollContainer,
     ScrollList,
     SearchDialog,
     Statusbar,
     TabBar,
     Textbox,
+    TriangleShape,
     Count // 番兵。実際の種類としては使わない
 };
 

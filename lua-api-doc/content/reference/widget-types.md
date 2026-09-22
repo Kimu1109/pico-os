@@ -4,7 +4,7 @@ weight: 10
 description: "pico.createで生成できる種別と、生成直後の初期値"
 ---
 
-## pico.create() で生成できる16種別
+## pico.create() で生成できる20種別
 
 生成直後の位置・大きさは仮の値です。実際に配置する前に `pico.set()` で `x`/`y`/`w`/`h` 等を設定してください。
 
@@ -26,6 +26,12 @@ description: "pico.createで生成できる種別と、生成直後の初期値"
 | `"TabBar"` | x=0, y=0, w=100, h=24, タブ0個 | w, h, tab_selected, tab_count(読み取り専用), font_size, border_color |
 | `"DropdownMenu"` | x=0, y=0, w=100, 項目0個 | w, selected_index, item_count(読み取り専用) |
 | `"Canvas"` | x=0, y=0, 50×50(内部クラス名は`LuaCanvas`) | w, h(描画は`render`イベントで行う) |
+| `"Rect"` | x=0, y=0, 40×24(内部クラス名は`RectShape`) | w, h, color, filled, thickness |
+| `"Ellipse"` | x=0, y=0, 40×24(内部クラス名は`EllipseShape`) | w, h, color, filled, thickness |
+| `"Line"` | (0,0)-(40,24)(内部クラス名は`LineShape`) | color, thickness, x1, y1, x2, y2 |
+| `"Triangle"` | (0,20)/(20,0)/(40,20)(内部クラス名は`TriangleShape`) | color, filled, thickness, x1, y1, x2, y2, x3, y3 |
+
+図形ウィジェット4種(`Rect`/`Ellipse`/`Line`/`Triangle`)の詳しい使い方は [図形ウィジェット](../../guide/shapes/) を参照してください。
 
 全プロパティの詳細は [プロパティ対応表](../widget-properties/) を、共通/固有イベントは [イベント対応表](../widget-events/) を参照してください。
 

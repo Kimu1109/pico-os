@@ -52,6 +52,10 @@ static const WidgetType kCreatableTypes[] = {
     WidgetType::GridContainer,
     WidgetType::TabBar,
     WidgetType::DropdownMenu,
+    WidgetType::RectShape,
+    WidgetType::EllipseShape,
+    WidgetType::LineShape,
+    WidgetType::TriangleShape,
 };
 
 // アプリ/OS専用で、Create()が対応しない側の代表例

@@ -19,7 +19,9 @@ local id = pico.create(type_name)
 
 `type_name` は次のいずれかの文字列です(大文字小文字を区別します)。
 
-`Button` / `Label` / `Textbox` / `NumberInput` / `Checkbox` / `Icon` / `Image` / `NumberSlider` / `ScrollContainer` / `ScrollList` / `CanvasRaster` / `LayoutContainer` / `GridContainer` / `TabBar` / `DropdownMenu` / `Canvas`
+`Button` / `Label` / `Textbox` / `NumberInput` / `Checkbox` / `Icon` / `Image` / `NumberSlider` / `ScrollContainer` / `ScrollList` / `CanvasRaster` / `LayoutContainer` / `GridContainer` / `TabBar` / `DropdownMenu` / `Canvas` / `Rect` / `Ellipse` / `Line` / `Triangle`
+
+`Rect` / `Ellipse` / `Line` / `Triangle` は矩形・楕円(円)・線分・三角形を描く図形ウィジェットです。詳しい使い方は [図形ウィジェット](../shapes/) を参照してください。
 
 全種別の詳細(生成直後の初期値・対応プロパティ)は [ウィジェット種別一覧](../../reference/widget-types/) を参照してください。
 

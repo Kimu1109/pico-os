@@ -193,6 +193,57 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 これ以外の固有プロパティはありません。内容は `pico.on(id, "render", fn)` で描きます([Canvasと直接描画](../../guide/drawing/) 参照)。
 
+## Rect(`RectShape`)
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `w` | Int | ✓ | ✓ |
+| `h` | Int | ✓ | ✓ |
+| `color` | Int | ✓ | ✓ |
+| `filled` | Bool(既定`true`) | ✓ | ✓ |
+| `thickness` | Int(既定`1`。`filled=false`のときの枠線の太さ) | ✓ | ✓ |
+
+## Ellipse(`EllipseShape`)
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `w` | Int | ✓ | ✓ |
+| `h` | Int | ✓ | ✓ |
+| `color` | Int | ✓ | ✓ |
+| `filled` | Bool(既定`true`) | ✓ | ✓ |
+| `thickness` | Int(既定`1`。`filled=false`のときの輪郭の太さ) | ✓ | ✓ |
+
+`w`/`h`に内接する楕円(`w==h`なら円)を描きます。
+
+## Line(`LineShape`)
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `color` | Int | ✓ | ✓ |
+| `thickness` | Int(既定`1`) | ✓ | ✓ |
+| `x1` | Int(始点) | ✓ | ✓ |
+| `y1` | Int(始点) | ✓ | ✓ |
+| `x2` | Int(終点) | ✓ | ✓ |
+| `y2` | Int(終点) | ✓ | ✓ |
+
+`w`/`h`の**設定**には対応していません(`x1`/`y1`/`x2`/`y2`と`thickness`から外接矩形として自動計算されます)。共通プロパティの`x`/`y`は外接矩形の左上を指し、**setすると2点をまとめて平行移動**します(線の向き・長さは変わりません)。線の形そのものを変えたい場合は`x1`/`y1`/`x2`/`y2`を個別に設定してください。
+
+## Triangle(`TriangleShape`)
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `color` | Int | ✓ | ✓ |
+| `filled` | Bool(既定`true`) | ✓ | ✓ |
+| `thickness` | Int(既定`1`。`filled=false`のときの輪郭の太さ) | ✓ | ✓ |
+| `x1` | Int(頂点1) | ✓ | ✓ |
+| `y1` | Int(頂点1) | ✓ | ✓ |
+| `x2` | Int(頂点2) | ✓ | ✓ |
+| `y2` | Int(頂点2) | ✓ | ✓ |
+| `x3` | Int(頂点3) | ✓ | ✓ |
+| `y3` | Int(頂点3) | ✓ | ✓ |
+
+`Line`と同じく`w`/`h`の設定には対応していません(3頂点+`thickness`から自動計算)。共通プロパティの`x`/`y`は外接矩形の左上を指し、**setすると3頂点をまとめて平行移動**します。
+
 ## ダイアログ
 
 `pico.show_xxx()` が返すIDに対しては、共通プロパティに加えて次だけ使えます。

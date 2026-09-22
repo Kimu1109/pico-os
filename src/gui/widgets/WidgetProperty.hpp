@@ -16,11 +16,12 @@ class Widget;
 // 意味も異なる。無理に共通の仮想I/Fへ揃えると基底が汚れるため、WidgetFactoryと
 // 同じ「WidgetType→switch」の形にしてある。
 //
-// 対応範囲: WidgetFactory::IsCreatable()がtrueを返す汎用部品15種、および
-// pico.show_xxx()(LuaEngine)が生成するダイアログ4種(InputDialog/FileSaveDialog/
-// FileSelectDialog/ColorDialog)。後者はコンストラクタが必須引数を取るため
-// WidgetFactory非対応だが、閉じた結果(入力文字列/選択パス/選択色)をLua側が
-// pico.get()で読めるようにする窓口としてここへ相乗りさせてある。
+// 対応範囲: WidgetFactory::IsCreatable()がtrueを返す汎用部品(Rect/Ellipse/Line/
+// Triangleの図形ウィジェット4種を含む)、および pico.show_xxx()(LuaEngine)が
+// 生成するダイアログ4種(InputDialog/FileSaveDialog/FileSelectDialog/ColorDialog)。
+// 後者はコンストラクタが必須引数を取るためWidgetFactory非対応だが、閉じた結果
+// (入力文字列/選択パス/選択色)をLua側がpico.get()で読めるようにする窓口として
+// ここへ相乗りさせてある。
 // widgets/apps・systems・上記以外のdialogsは対象外(そちらはOS内部のC++コードが
 // 直接メンバ関数を呼べるので、共通口を必要としない)。
 namespace WidgetProperty {
@@ -56,6 +57,9 @@ namespace WidgetProperty {
 
         // ScrollList / DropdownMenu
         EnableIcon, ItemCount,
+
+        // RectShape / EllipseShape / LineShape / TriangleShape(図形ウィジェット)
+        Filled, Thickness, X1, Y1, X2, Y2, X3, Y3,
 
         Count
     };

@@ -218,6 +218,73 @@ int main(){
         delete w;
     }
 
+    // ---- RectShape ----
+    {
+        Widget* w = WidgetFactory::Create(WidgetType::RectShape);
+        check(WP::Set(w, WP::Id::W, WP::Value::MakeInt(60)), "RectShape: W set");
+        check(WP::Set(w, WP::Id::H, WP::Value::MakeInt(30)), "RectShape: H set");
+        check(WP::Set(w, WP::Id::Color, WP::Value::MakeInt(3)), "RectShape: Color set");
+        check(WP::Set(w, WP::Id::Filled, WP::Value::MakeBool(false)), "RectShape: Filled set");
+        check(WP::Set(w, WP::Id::Thickness, WP::Value::MakeInt(2)), "RectShape: Thickness set");
+        WP::Value v;
+        check(WP::Get(w, WP::Id::W, v) && v.i == 60, "RectShape: W get");
+        check(WP::Get(w, WP::Id::Color, v) && v.i == 3, "RectShape: Color get");
+        check(WP::Get(w, WP::Id::Filled, v) && v.b == false, "RectShape: Filled get");
+        check(WP::Get(w, WP::Id::Thickness, v) && v.i == 2, "RectShape: Thickness get");
+        delete w;
+    }
+
+    // ---- EllipseShape ----
+    {
+        Widget* w = WidgetFactory::Create(WidgetType::EllipseShape);
+        check(WP::Set(w, WP::Id::W, WP::Value::MakeInt(50)), "EllipseShape: W set");
+        check(WP::Set(w, WP::Id::Filled, WP::Value::MakeBool(true)), "EllipseShape: Filled set");
+        WP::Value v;
+        check(WP::Get(w, WP::Id::W, v) && v.i == 50, "EllipseShape: W get");
+        check(WP::Get(w, WP::Id::Filled, v) && v.b == true, "EllipseShape: Filled get");
+        delete w;
+    }
+
+    // ---- LineShape ----
+    {
+        Widget* w = WidgetFactory::Create(WidgetType::LineShape);
+        check(WP::Set(w, WP::Id::X1, WP::Value::MakeInt(0)), "LineShape: X1 set");
+        check(WP::Set(w, WP::Id::Y1, WP::Value::MakeInt(0)), "LineShape: Y1 set");
+        check(WP::Set(w, WP::Id::X2, WP::Value::MakeInt(30)), "LineShape: X2 set");
+        check(WP::Set(w, WP::Id::Y2, WP::Value::MakeInt(40)), "LineShape: Y2 set");
+        check(WP::Set(w, WP::Id::Thickness, WP::Value::MakeInt(3)), "LineShape: Thickness set");
+        WP::Value v;
+        check(WP::Get(w, WP::Id::X2, v) && v.i == 30, "LineShape: X2 get");
+        check(WP::Get(w, WP::Id::Y2, v) && v.i == 40, "LineShape: Y2 get");
+        check(WP::Get(w, WP::Id::Thickness, v) && v.i == 3, "LineShape: Thickness get");
+        // 外接矩形はx1/y1/x2/y2+余白から自動計算される(setW/setHは非対応)
+        check(!WP::Set(w, WP::Id::W, WP::Value::MakeInt(10)), "LineShape: Wの直接設定は非対応");
+        // x/yは2点をまとめて平行移動する(点の個別位置はx1/y1/x2/y2で変える)
+        check(WP::Get(w, WP::Id::X, v), "LineShape: X get(外接矩形の左上)");
+        const int before_x = v.i;
+        check(WP::Set(w, WP::Id::X, WP::Value::MakeInt(before_x + 5)), "LineShape: X set(平行移動)");
+        check(WP::Get(w, WP::Id::X1, v) && v.i == 5, "LineShape: X1が平行移動で追従する");
+        check(WP::Get(w, WP::Id::X2, v) && v.i == 35, "LineShape: X2も平行移動で追従する");
+        delete w;
+    }
+
+    // ---- TriangleShape ----
+    {
+        Widget* w = WidgetFactory::Create(WidgetType::TriangleShape);
+        check(WP::Set(w, WP::Id::X1, WP::Value::MakeInt(0)), "TriangleShape: X1 set");
+        check(WP::Set(w, WP::Id::Y1, WP::Value::MakeInt(20)), "TriangleShape: Y1 set");
+        check(WP::Set(w, WP::Id::X2, WP::Value::MakeInt(20)), "TriangleShape: X2 set");
+        check(WP::Set(w, WP::Id::Y2, WP::Value::MakeInt(0)), "TriangleShape: Y2 set");
+        check(WP::Set(w, WP::Id::X3, WP::Value::MakeInt(40)), "TriangleShape: X3 set");
+        check(WP::Set(w, WP::Id::Y3, WP::Value::MakeInt(20)), "TriangleShape: Y3 set");
+        check(WP::Set(w, WP::Id::Filled, WP::Value::MakeBool(false)), "TriangleShape: Filled set");
+        WP::Value v;
+        check(WP::Get(w, WP::Id::X3, v) && v.i == 40, "TriangleShape: X3 get");
+        check(WP::Get(w, WP::Id::Y3, v) && v.i == 20, "TriangleShape: Y3 get");
+        check(WP::Get(w, WP::Id::Filled, v) && v.b == false, "TriangleShape: Filled get");
+        delete w;
+    }
+
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

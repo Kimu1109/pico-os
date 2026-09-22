@@ -261,12 +261,21 @@ end
 local function renderBoard()
     local icon_off = math.floor((CELL - ICON) / 2)
     local text_off_x = math.floor((CELL - 8) / 2)  -- 半角1文字は8px(Small=16pxフォント)
-    local text_off_y = math.floor((CELL - 16) / 2) -- Smallフォントの行高16px
+    -- Smallフォントの行高16px。CELLがそれより小さい上級では負値になるが、
+    -- 文字を上へ押し出すとクリップで頭が欠けるグリフが出うるため0で止める
+    -- (クリップ自体はset_draw_area()が別途保証するので、はみ出た下端側だけ切られる)
+    local text_off_y = math.max(0, math.floor((CELL - 16) / 2))
 
     for r = 1, ROWS do
         for c = 1, COLS do
             local cx = grid_x + (c - 1) * (CELL + GAP)
             local cy = grid_y + (r - 1) * (CELL + GAP)
+
+            -- Smallフォントは行高16pxあり、上級(CELL=14)では数字がセルより
+            -- 縦に大きくはみ出して隣のマス/格子線へ被っていた。セル自身の矩形へ
+            -- クリップしてから描けば、フォントの実測値に関わらずセル内へ収まる
+            -- (CLAUDE.md「直接描画エリア」参照)
+            pico.set_draw_area(cx, cy, CELL, CELL)
 
             if flagged[r][c] and not revealed[r][c] then
                 pico.fill_rect(cx, cy, CELL, CELL, COLOR_UNREVEALED)
@@ -291,6 +300,8 @@ local function renderBoard()
                     pico.draw_text(cx + text_off_x, cy + text_off_y, tostring(n), NUM_COLORS[n] or COLOR_TEXT_MINE)
                 end
             end
+
+            pico.clear_draw_area()
         end
     end
 end

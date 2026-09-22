@@ -8,6 +8,8 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
+struct AppEntry;
+
 // SD上のLuaスクリプトを1本読んで実行する画面。
 // AppEntry::argへスクリプトパス("/lua/hello.lua"のようなSD絶対パス)を渡し、
 // AppFunctions::MakeSceneWithArg<LuaScene>で登録する(同じLuaScene型を別のargで
@@ -79,3 +81,10 @@ class LuaScene : public Scene {
         // アクティブでない間(onExit()後)はnullptr
         LuaEngine* getEngine() const { return engine; }
 };
+
+// AppEntry(name/arg/permissionsを保持する登録簿の1件)からLuaSceneを作る、
+// AppFunctions::Register()の第3引数へ渡せる汎用の生成関数。entry.argをスクリプトパス、
+// entry.permissionsをそのままLuaSceneへ渡すだけ。静的登録(App_List.cpp)とSDスキャン
+// (LuaAppScanner)の両方が共有する。以前はアプリごとに専用の生成関数(MakeLuaHelloScene等)
+// を書いて権限を手書きしていたが、AppEntryが権限を持てるようになったことでここへ一本化した
+Scene* MakeLuaAppScene(const AppEntry& entry);

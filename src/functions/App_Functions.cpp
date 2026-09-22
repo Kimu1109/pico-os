@@ -3,7 +3,8 @@
 #include "functions/Log_Functions.hpp"
 
 bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(const AppEntry&),
-                            const char* arg){
+                            const char* arg, const LuaPermissions& permissions,
+                            const char* icon_path){
     if(!name || !create){
         LOG_SYS_WARN("App Register: 名前か生成関数が未指定です");
         return false;
@@ -30,7 +31,16 @@ bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(cons
         return false;
     }
 
+    //icon_pathはargと違い、失敗してもアプリ自体は動く(既定アイコンへ落とすだけ)ので
+    //登録ごとは拒否しない
+    if(icon_path && icon_path[0] != '\0' && !entry.icon_path.assign(icon_path)){
+        LOG_SYS_WARN("App Register: アイコンパスが長すぎるため既定アイコンにします (%s: %s)",
+            entry.name.c_str(), icon_path);
+        entry.icon_path.clear();
+    }
+
     entry.icon = icon;
+    entry.permissions = permissions;
     entry.create = create;
     app_count++;
     return true;

@@ -12,19 +12,6 @@
 #include "lua/LuaPermissions.hpp"
 #include "lua/LuaAppScanner.hpp"
 
-namespace {
-    // "Lua Hello"デモ用の生成関数。MakeSceneWithArg<LuaScene>を使わず専用の関数に
-    // してあるのは、このアプリだけ"/lua/"の外(/img/hello.pimg)を読むための
-    // sd_outside_app_dir権限が要るため(既定はLuaScene同様、両方false=最小権限)。
-    // Luaアプリが増えて権限の組み合わせも増えてきたら、AppEntryへ権限を持たせる形へ
-    // 一般化することを検討する(CLAUDE.md「Luaバインディング」「権限」参照)
-    Scene* MakeLuaHelloScene(const AppEntry& entry) {
-        LuaPermissions permissions;
-        permissions.sd_outside_app_dir = true;
-        return new LuaScene(entry.arg.c_str(), permissions);
-    }
-}
-
 // このOSに載せるアプリの一覧。
 //
 // アプリを増やすときは、シーンのヘッダをincludeして下の並びへ1行足すだけでよい。
@@ -53,10 +40,11 @@ void AppFunctions::Setup(){
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
     Register("辞書", IconID::Language, &MakeScene<DictScene>);
     // Luaバインディングの動作サンプル(pc/sdcard/lua/hello.lua参照)。
-    // MakeLuaHelloScene()(上記)がsd_outside_app_dir権限付きでLuaSceneを生成する
-    // (/img/hello.pimgを読むため)。権限が要らないLuaアプリなら
-    // MakeSceneWithArg<LuaScene>にargだけ変えて登録すればよい
-    Register("Lua Hello", IconID::AppBox, &MakeLuaHelloScene, "/lua/hello.lua");
+    // MakeLuaAppScene(LuaScene.hpp)がentry.permissionsをそのままLuaSceneへ渡すので、
+    // ここでsd_outside_app_dirを立てるだけで済む(/img/hello.pimgを読むため)。
+    // 権限が要らないLuaアプリなら第5引数(permissions)を省略すればよい
+    Register("Lua Hello", IconID::AppBox, &MakeLuaAppScene, "/lua/hello.lua",
+             LuaPermissions{false, true});
 
     // "/lua/apps/<名前>/main.lua" を走査し、見つかった分をここまでの静的登録へ
     // 追加する(LuaAppScanner.hppのクラスコメント参照)。SD無し/ディレクトリが

@@ -8,7 +8,8 @@
 // レイアウト: `/lua/apps/<名前>/main.lua` という「サブディレクトリ1つ=アプリ1つ」
 // の構成にしてある。理由は2つ:
 //   - AppEntry::nameにそのまま使える表示名を、ファイル名の拡張子を弄るような
-//     加工無しで得られる(SDのファイル名がそのままタイル名になる)
+//     加工無しで得られる(SDのファイル名がそのままタイル名になる。ただし下記
+//     app.cfgのnameが優先される)
 //   - LuaScene::onEnter()はスクリプト自身の親ディレクトリをapp_dir(SDアクセスの
 //     閉じ込め先)として使う。サブディレクトリを分けておけば、権限が既定
 //     (sd_outside_app_dir=false)のままでも、アプリごとに別のapp_dirを持て、
@@ -16,11 +17,21 @@
 //     (仮に全部を/lua/apps/直下へフラットに置くと、app_dirが全アプリ共通の
 //     /lua/apps/になってしまい、この分離ができない)
 //
-// **権限は既定値(LuaPermissions{}、network/sd_outside_app_dirとも false)固定。**
-// SDに置かれているだけで中身を検証していないスクリプトへ、走査した側が
-// 勝手に強い権限を与えないための判断(CLAUDE.md「権限」参照)。ネットワークや
-// app_dir外のSDアクセスがどうしても要るLuaアプリは、従来通りApp_List.cppへ
-// 専用の生成関数(MakeLuaHelloScene()と同じ形)を書いて手動登録すること。
+// 【設定ファイル(app.cfg、任意)】 `/lua/apps/<名前>/app.cfg` があれば
+// PICO_Config(key=value形式)として読み、以下のキーを認識する(全て省略可):
+//   name                          … 表示名。指定があればディレクトリ名より優先する
+//   description / version         … 説明文・バージョン表記。現状はスキャン時に
+//                                    ログへ出すだけで、AppEntryへは保持しない
+//                                    (表示先のUIがまだ無いため。将来アプリ情報画面を
+//                                    作る際は、app_dirから再度app.cfgを読み直す形でよい)
+//   icon                          … アプリディレクトリ内の相対パス(.pimg形式)。
+//                                    指定があればランチャのタイルアイコンとして使う
+//                                    (無指定/読み込み失敗時はIconID::AppBoxへ落ちる)
+//   permission_network            … pico.http_request/http_cancelを許すか(true/false)
+//   permission_sd_outside_app_dir … pico.sd_*/image_loadでapp_dirの外を触れるか
+// **どちらの権限も未指定なら既定でfalse(最小権限)。** SDに置かれているだけで
+// 中身を検証していないスクリプトへ、勝手に強い権限を与えないための判断
+// (CLAUDE.md「権限」参照)。app.cfg自体が無いアプリも同様に両方falseで登録される。
 namespace LuaAppScanner {
     // `/lua/apps/` 直下の各サブディレクトリについて、`main.lua` があれば
     // `AppFunctions::Register()` でランチャへ登録する。

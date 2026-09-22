@@ -172,6 +172,32 @@ void AppGrid::drawName(const char* name, int x, int y, int w, int color) {
     }
 }
 
+void AppGrid::drawIcon(const AppEntry& entry, int x, int y, int color) {
+    if (!entry.icon_path.empty() && OSData::SD_usable) {
+        FsFile f = OSData::SD.open(entry.icon_path.c_str(), O_RDONLY);
+        if (f) {
+            IconRender::PimgHeader header;
+            if (IconRender::ReadPimgHeader(f, header) && header.width > 0 && header.height > 0) {
+                // kIconPx四方の枠内で中央に置く。読み込みと同じFsFileを続けて渡す
+                // ことでヘッダの再読み込みを避ける(DrawImageRLE4bppは自分でseekし直す)
+                const int ix = x + (kIconPx - (int)header.width) / 2;
+                const int iy = y + (kIconPx - (int)header.height) / 2;
+                //枠をはみ出すサイズの.pimgが置かれても隣のタイルを侵さないための安全策
+                //(IconRender::DrawIconRawが組み込みアイコンで同じことをしているのと同じ理由)
+                OSData::frame->setClipRect(x, y, kIconPx, kIconPx);
+                IconRender::DrawImageRLE4bpp(f, ix, iy);
+                OSData::frame->clearClipRect();
+                f.close();
+                return;
+            }
+            f.close();
+        }
+        // ファイルが開けない/ヘッダが壊れている場合は下の既定アイコンへフォールバックする
+    }
+
+    IconRender::DrawIcon(entry.icon, kIconSize, x, y, color);
+}
+
 void AppGrid::render() {
     if (!this->visible) return;
     if (!this->needs_redraw) return;
@@ -198,8 +224,7 @@ void AppGrid::render() {
             OSData::frame->fillRect(tx, ty, t.w, t.h, PICO_BLACK);
         }
 
-        IconRender::DrawIcon(entry->icon, kIconSize,
-                             tx + (t.w - kIconPx) / 2, ty + kPadding, fore_color);
+        drawIcon(*entry, tx + (t.w - kIconPx) / 2, ty + kPadding, fore_color);
 
         drawName(entry->name.c_str(), tx, ty + kPadding + kIconPx + kLabelGap, t.w, fore_color);
     }

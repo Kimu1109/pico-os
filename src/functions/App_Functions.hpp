@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gui/icons/icons_data.h"
+#include "lua/LuaPermissions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -22,6 +23,17 @@ struct AppEntry {
     // パス全長(PICO_PATH_LEN=255)ではなく96Bなのは、登録簿が固定長テーブルで
     // 常時RAMを占めるため(下のkMaxAppsのコメント参照)。
     FixedString<PICO_STR_L> arg;
+
+    // SD上の.pimgをタイルアイコンとして使う場合の絶対パス。空文字なら上のiconを使う。
+    // argと同じ理由でPICO_PATH_LEN(255)ではなくPICO_STR_L(96)に留めてある
+    // (AppGridが描画時に読みに行くだけで、このパス自体をRAMへ載せておく必要は無い)
+    FixedString<PICO_STR_L> icon_path;
+
+    // このアプリ(主にLuaアプリ)に許す権限。C++製アプリは既定(両方false)のまま無視してよい。
+    // 元はLuaScene生成側(App_List.cpp)が生成関数ごとに手書きしていたが、SDスキャンで
+    // 見つけたアプリごとに設定ファイル(app.cfg)から読んだ値を渡せるよう、登録簿側へ
+    // 一般化した(CLAUDE.md「Luaバインディング」「権限」参照)
+    LuaPermissions permissions;
 
     // シーンを1つ生成する。生成したシーンの所有権はSceneFunctionsへ渡る。
     //
@@ -50,9 +62,9 @@ struct AppEntry {
 // 表示中に増減させた場合は呼び出し側でAppGridへneedsRender()すること。
 namespace AppFunctions {
     // 登録できるアプリ数の上限。固定長配列で持つので、超えた分は警告して捨てる。
-    // AppEntry1件が約160B(名前48B + 引数96B + アイコン + 関数ポインタ)なので、
-    // この配列だけで常時4KB弱のstatic RAMを占める。上限や文字列長を増やすときは
-    // その点に注意すること
+    // AppEntry1件が約260B(名前48B + 引数96B + アイコンパス96B + 権限2B + アイコン種別
+    // + 関数ポインタ)なので、この配列だけで常時6KB強のstatic RAMを占める。
+    // 上限や文字列長を増やすときはその点に注意すること
     constexpr int kMaxApps = 24;
 
     inline AppEntry apps[kMaxApps];
@@ -69,14 +81,20 @@ namespace AppFunctions {
     template<typename T>
     Scene* MakeSceneWithArg(const AppEntry& entry){ return new T(entry.arg.c_str()); }
 
-    // 登録に成功したらtrue。nameとargはこの場でコピーされる。
+    // 登録に成功したらtrue。name/arg/icon_pathはこの場でコピーされる。
     // 以下の場合はfalse:
     //   - 名前か生成関数が未指定
     //   - 登録上限に達している
     //   - argが長すぎて切り詰められる(パスとして別物になるため登録ごと拒否する)
-    // 名前のほうは切り詰めても表示が縮むだけなので、警告を出した上で登録は通す
+    // 名前のほうは切り詰めても表示が縮むだけなので、警告を出した上で登録は通す。
+    // icon_pathが長すぎる場合もargほど致命的ではない(アプリ自体は動く)ため、
+    // 登録は拒否せず既定アイコンへフォールバックする。
+    // permissions/icon_pathは省略時の既定(両方false / アイコン無し)で、
+    // 従来通りC++製アプリの呼び出し側は変更不要
     bool Register(const char* name, IconID icon, Scene* (*create)(const AppEntry&),
-                  const char* arg = nullptr);
+                  const char* arg = nullptr,
+                  const LuaPermissions& permissions = LuaPermissions{},
+                  const char* icon_path = nullptr);
 
     int Count();
 

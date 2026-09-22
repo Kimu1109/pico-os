@@ -1,10 +1,15 @@
 #include "gui/scenes/LuaScene.hpp"
 #include "OS_Data.hpp"
+#include "functions/App_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Error_Functions.hpp"
 #include "storage/SD_IO.hpp"
 
 #include "Arduino.h"
+
+Scene* MakeLuaAppScene(const AppEntry& entry) {
+    return new LuaScene(entry.arg.c_str(), entry.permissions);
+}
 
 void LuaScene::onEnter() {
     // 通常はonExit()で必ずnullptrへ戻るが、念のための保険(前回の後始末漏れがあっても

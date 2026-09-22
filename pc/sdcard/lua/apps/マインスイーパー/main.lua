@@ -1,32 +1,44 @@
--- マインスイーパー(Minesweeper)。9x9マス・地雷10個の初級相当。
+-- マインスイーパー(Minesweeper)。難易度3段階(初級/中級/上級)。
 -- src/lua/LuaAppScanner.cppがこのディレクトリを走査してランチャへ登録するので
 -- App_List.cppには一切手を加えていない。
 --
--- タップ位置の座標をLuaへ渡すpico.* APIは無い(pico.onのコールバックは
--- WidgetIdしか受け取らない)ため、マス目1つ1つを別々のButtonウィジェットにして
--- 「どのボタンが押されたか」でどのマスかを判定する構成にした。81個のButtonは
--- OSヒープを食う(1個あたり約300B強)が、CLAUDE.mdの実測(Markdownシーン単体で
--- 40KB超)と比べても妥当な範囲。
+-- 盤面はButtonではなく、1枚の"Canvas"(pico.create("Canvas"))へpico.draw_*で
+-- 自前描画している(リバーシと同じ方式)。タップ判定は"press_start"の中で
+-- pico.get_touch()が返す絶対スクリーン座標から、盤面の左上位置(grid_x/grid_y)を
+-- 引いてマス目を逆算する(lua-api-doc「Canvasと直接描画」の「タップ位置の取得」参照)。
+-- 旧版(9x9固定)は81個のButtonを敷き詰めていたが、pico.get_touch()が無かった
+-- 頃の名残りで、座標を直接読める今は不要な遠回りだった上に、難易度ごとに
+-- マス数が変わる今回の書き換えとも相性が悪いため、Canvas 1枚へ統合した。
 --
--- Button::getLocalRect()は文字まわりの余白(TEXT_SPACING)ぶんl_rectより
--- 右・下に大きく描画/当たり判定される。GridContainerのgapをその分より
--- 小さく詰めると隣のマスの見た目が欠けて見えることがあるため、gap=2で
--- 実際に描画/タップして確認しながら調整した値を使っている。
+-- 地雷/旗は自作の.pimg(14x14、透過あり。mine.pimg/flag.pimg、本ディレクトリ直下)を
+-- pico.image_load()で読み、Canvasのrenderコールバックからpico.draw_image()で描く。
+-- 生成には script/generate_pimg.py を使った(元のPNGはリポジトリに含めていない)。
+-- 権限が既定値(sd_outside_app_dir=false)のスキャン登録アプリなので、画像は
+-- 自分のapp_dir(このディレクトリ)配下に置く必要がある。
+--
+-- 難易度が変わるとマス数(ROWS/COLS)もセルの大きさ(CELL)も変わるため、
+-- 盤面のCanvasは難易度切替のたびpico.destroy()して作り直す(サイズ変更できる
+-- setW/setHはあるが、位置の再センタリングも含めて作り直した方が単純なため)。
+-- 地雷/旗の画像は14x14固定で、どの難易度のセルにも収まるよう最小のCELL(14)を
+-- 下限にしてある(CELLがそれより小さい難易度は用意しない)。
 
-local ROWS, COLS = 9, 9
-local MINES = 10
-local CELL = 22
-local GAP = 2
+local ICON = 14 -- mine.pimg/flag.pimgのネイティブサイズ
+
+local DIFFICULTIES = {
+    { name = "初級", rows = 9,  cols = 9,  mines = 10, cell = 20, gap = 2 },
+    { name = "中級", rows = 12, cols = 12, mines = 22, cell = 16, gap = 1 },
+    { name = "上級", rows = 16, cols = 15, mines = 45, cell = 14, gap = 1 },
+}
 
 local x, y, w, h = pico.content_rect()
-local margin = 6
+local margin = 4
 
--- ゲーム状態(1始まりの2次元配列)
-local mine = {}
-local revealed = {}
-local flagged = {}
-local adjacent = {}
-local buttons = {}
+-- 難易度ごとに差し替わる盤面パラメータ(applyDifficulty()が埋める)
+local diff_index = 1
+local ROWS, COLS, MINES, CELL, GAP
+
+-- ゲーム状態(1始まりの2次元配列。resetGame()が難易度に合わせて作り直す)
+local mine, revealed, flagged, adjacent = {}, {}, {}, {}
 
 local started = false -- 最初の一手でここから地雷を配置する(最初のマスは必ず安全)
 local game_over = false
@@ -34,71 +46,19 @@ local win = false
 local flag_mode = false
 local elapsed_ms = 0
 
-for r = 1, ROWS do
-    mine[r] = {}
-    revealed[r] = {}
-    flagged[r] = {}
-    adjacent[r] = {}
-    for c = 1, COLS do
-        mine[r][c] = false
-        revealed[r][c] = false
-        flagged[r][c] = false
-        adjacent[r][c] = 0
-    end
-end
+local grid_x, grid_y, grid_w, grid_h
+local canvas = nil
 
--- ヘッダー: 状態表示 + 操作ボタン
-local status_label = pico.create("Label")
-pico.set(status_label, "x", x + margin)
-pico.set(status_label, "y", y + margin)
-pico.set(status_label, "font_size", 0)
-pico.set(status_label, "text", "残り地雷: " .. MINES)
-
-local button_row_y = y + margin + 20
-
-local back_button = pico.create("Button")
-pico.set(back_button, "x", x + margin)
-pico.set(back_button, "y", button_row_y)
-pico.set(back_button, "w", 40)
-pico.set(back_button, "h", 22)
-pico.set(back_button, "font_size", 0)
-pico.set(back_button, "text", "戻る")
-pico.on(back_button, "press_start", function()
-    pico.pop()
-end)
-
-local reset_button = pico.create("Button")
-pico.set(reset_button, "x", x + margin + 44)
-pico.set(reset_button, "y", button_row_y)
-pico.set(reset_button, "w", 54)
-pico.set(reset_button, "h", 22)
-pico.set(reset_button, "font_size", 0)
-pico.set(reset_button, "text", "リセット")
-
-local flag_button = pico.create("Button")
-pico.set(flag_button, "x", x + margin + 44 + 58)
-pico.set(flag_button, "y", button_row_y)
-pico.set(flag_button, "w", 66)
-pico.set(flag_button, "h", 22)
-pico.set(flag_button, "font_size", 0)
-pico.set(flag_button, "text", "旗:OFF")
-pico.on(flag_button, "press_start", function()
-    flag_mode = not flag_mode
-    pico.set(flag_button, "text", flag_mode and "旗:ON" or "旗:OFF")
-end)
-
--- グリッド
-local grid_w = COLS * CELL + (COLS - 1) * GAP
-local grid_h = ROWS * CELL + (ROWS - 1) * GAP
-local grid_x = x + math.floor((w - grid_w) / 2)
-local grid_y = button_row_y + 22 + 8
+-- 本ディレクトリ配下の.pimgのみ許可(既定権限)なので絶対パスで直に指定する
+local mine_img = pico.image_load("/lua/apps/マインスイーパー/mine.pimg")
+local flag_img = pico.image_load("/lua/apps/マインスイーパー/flag.pimg")
 
 local COLOR_UNREVEALED = 7  -- PICO_LIGHTGREY
 local COLOR_REVEALED = 15   -- PICO_WHITE
-local COLOR_FLAGGED = 14    -- PICO_YELLOW
 local COLOR_MINE_HIT = 12   -- PICO_RED
-local COLOR_TEXT_FLAG = 12  -- PICO_RED
-local COLOR_TEXT_MINE = 0   -- PICO_BLACK
+local COLOR_GRID_LINE = 8   -- PICO_DARKGREY(セル間の隙間に透けて格子線に見える)
+local COLOR_TEXT_FLAG = 12  -- PICO_RED(画像が読めなかった場合のフォールバック文字用)
+local COLOR_TEXT_MINE = 0   -- PICO_BLACK(同上)
 
 -- 隣接数ごとの文字色(定番配色)
 local NUM_COLORS = {
@@ -127,9 +87,68 @@ local function neighbors(r, c)
     return list
 end
 
+-- ヘッダー: 状態表示 + 操作ボタン(1行に収める都合で短縮表記にしてある)
+local status_label = pico.create("Label")
+pico.set(status_label, "font_size", 0)
+
+local back_button = pico.create("Button")
+pico.set(back_button, "w", 34)
+pico.set(back_button, "h", 22)
+pico.set(back_button, "font_size", 0)
+pico.set(back_button, "text", "戻る")
+pico.on(back_button, "press_start", function()
+    pico.pop()
+end)
+
+local reset_button = pico.create("Button")
+pico.set(reset_button, "w", 58)
+pico.set(reset_button, "h", 22)
+pico.set(reset_button, "font_size", 0)
+pico.set(reset_button, "text", "リセット")
+
+local flag_button = pico.create("Button")
+pico.set(flag_button, "w", 52)
+pico.set(flag_button, "h", 22)
+pico.set(flag_button, "font_size", 0)
+pico.set(flag_button, "text", "旗:OFF")
+pico.on(flag_button, "press_start", function()
+    flag_mode = not flag_mode
+    pico.set(flag_button, "text", flag_mode and "旗:ON" or "旗:OFF")
+end)
+
+-- 難易度切替タブ。3段階なのでkMaxTabs(4)に収まる
+local diff_tabs = pico.create("TabBar")
+pico.tab_add(diff_tabs, DIFFICULTIES[1].name)
+pico.tab_add(diff_tabs, DIFFICULTIES[2].name)
+pico.tab_add(diff_tabs, DIFFICULTIES[3].name)
+
+-- 行の高さはボタン実測値ではなく固定値で決め打ち(ClocksSceneのような可変フォント
+-- 環境ではないので、22px固定で足りることを--shotで確認しながら詰めた)
+local row1_y = y + margin           -- ボタン + 状態表示
+local row2_y = row1_y + 22 + 4      -- 難易度タブ
+local grid_y_base = row2_y + 22 + 6 -- 盤面の開始y(難易度が変わっても固定)
+
+pico.set(back_button, "x", x + margin)
+pico.set(back_button, "y", row1_y)
+pico.set(reset_button, "x", x + margin + 34 + 4)
+pico.set(reset_button, "y", row1_y)
+pico.set(flag_button, "x", x + margin + 34 + 4 + 58 + 4)
+pico.set(flag_button, "y", row1_y)
+pico.set(status_label, "x", x + margin + 34 + 4 + 58 + 4 + 52 + 4)
+pico.set(status_label, "y", row1_y + 3)
+
+pico.set(diff_tabs, "x", x + margin)
+pico.set(diff_tabs, "y", row2_y)
+pico.set(diff_tabs, "w", w - margin * 2)
+pico.set(diff_tabs, "h", 22)
+
 local function setStatusLabel()
     if game_over then
-        pico.set(status_label, "text", win and "クリア!" or "GAME OVER")
+        -- 右カラムの残り幅(画面幅240pxからstatus_labelのx=160pxを引いた約80px)に
+        -- 収める必要があるため、"GAME OVER"/"GAMEOVER"は画面端からはみ出た
+        -- (半角1文字が8pxより広いフォントらしく、詰めても収まらなかった)。
+        -- 漢字2文字(32px相当)なら確実に収まる
+        pico.set(status_label, "text", win and "クリア!" or "失敗")
         return
     end
     local flagged_count = 0
@@ -138,36 +157,7 @@ local function setStatusLabel()
             if flagged[r][c] then flagged_count = flagged_count + 1 end
         end
     end
-    pico.set(status_label, "text", "残り地雷: " .. (MINES - flagged_count))
-end
-
-local function drawCell(r, c)
-    local id = buttons[r][c]
-    if flagged[r][c] and not revealed[r][c] then
-        pico.set(id, "background_color", COLOR_FLAGGED)
-        pico.set(id, "text_color", COLOR_TEXT_FLAG)
-        pico.set(id, "text", "F")
-        return
-    end
-    if not revealed[r][c] then
-        pico.set(id, "background_color", COLOR_UNREVEALED)
-        pico.set(id, "text", "")
-        return
-    end
-    if mine[r][c] then
-        pico.set(id, "background_color", COLOR_MINE_HIT)
-        pico.set(id, "text_color", COLOR_TEXT_MINE)
-        pico.set(id, "text", "*")
-        return
-    end
-    pico.set(id, "background_color", COLOR_REVEALED)
-    local n = adjacent[r][c]
-    if n == 0 then
-        pico.set(id, "text", "")
-    else
-        pico.set(id, "text_color", NUM_COLORS[n] or 0)
-        pico.set(id, "text", tostring(n))
-    end
+    pico.set(status_label, "text", "残り:" .. (MINES - flagged_count))
 end
 
 -- 最初にタップしたマス(safe_r, safe_c)を避けて地雷を配置する
@@ -197,10 +187,7 @@ end
 local function revealAllMines()
     for r = 1, ROWS do
         for c = 1, COLS do
-            if mine[r][c] then
-                revealed[r][c] = true
-                drawCell(r, c)
-            end
+            if mine[r][c] then revealed[r][c] = true end
         end
     end
 end
@@ -219,20 +206,16 @@ local function checkWin()
     -- 地雷マスへ自動で旗を立てて見せる
     for r = 1, ROWS do
         for c = 1, COLS do
-            if mine[r][c] and not flagged[r][c] then
-                flagged[r][c] = true
-                drawCell(r, c)
-            end
+            if mine[r][c] and not flagged[r][c] then flagged[r][c] = true end
         end
     end
     setStatusLabel()
 end
 
--- 0マスは繋がっている限り自動で開く(盤面は9x9=81マスなので再帰深さの心配は無い)
+-- 0マスは繋がっている限り自動で開く(上級でも16x15=240マスなので再帰深さの心配は無い)
 local function floodReveal(r, c)
     if revealed[r][c] or flagged[r][c] then return end
     revealed[r][c] = true
-    drawCell(r, c)
     if adjacent[r][c] == 0 then
         for _, n in ipairs(neighbors(r, c)) do
             floodReveal(n[1], n[2])
@@ -256,7 +239,6 @@ local function onReveal(r, c)
         revealed[r][c] = true
         game_over = true
         win = false
-        drawCell(r, c)
         revealAllMines()
         setStatusLabel()
         return
@@ -270,62 +252,127 @@ end
 local function onFlag(r, c)
     if game_over or revealed[r][c] then return end
     flagged[r][c] = not flagged[r][c]
-    drawCell(r, c)
     setStatusLabel()
 end
 
-for r = 1, ROWS do
-    buttons[r] = {}
-    for c = 1, COLS do
-        local btn = pico.create("Button")
-        pico.set(btn, "w", CELL)
-        pico.set(btn, "h", CELL)
-        pico.set(btn, "font_size", 0)
-        pico.set(btn, "background_color", COLOR_UNREVEALED)
-        buttons[r][c] = btn
-        pico.on(btn, "press_start", function()
-            if flag_mode then
-                onFlag(r, c)
+-- 盤面全体を毎回描き直す(リバーシのboard_canvasと同じ方式)。差分だけ塗る
+-- 最適化はせず、pico.invalidate()を呼んだ側が「状態が変わった」ことだけ
+-- 保証すればよい単純な作りにしてある
+local function renderBoard()
+    local icon_off = math.floor((CELL - ICON) / 2)
+    local text_off_x = math.floor((CELL - 8) / 2)  -- 半角1文字は8px(Small=16pxフォント)
+    local text_off_y = math.floor((CELL - 16) / 2) -- Smallフォントの行高16px
+
+    for r = 1, ROWS do
+        for c = 1, COLS do
+            local cx = grid_x + (c - 1) * (CELL + GAP)
+            local cy = grid_y + (r - 1) * (CELL + GAP)
+
+            if flagged[r][c] and not revealed[r][c] then
+                pico.fill_rect(cx, cy, CELL, CELL, COLOR_UNREVEALED)
+                if flag_img then
+                    pico.draw_image(flag_img, cx + icon_off, cy + icon_off)
+                else
+                    pico.draw_text(cx + text_off_x, cy + text_off_y, "F", COLOR_TEXT_FLAG)
+                end
+            elseif not revealed[r][c] then
+                pico.fill_rect(cx, cy, CELL, CELL, COLOR_UNREVEALED)
+            elseif mine[r][c] then
+                pico.fill_rect(cx, cy, CELL, CELL, COLOR_MINE_HIT)
+                if mine_img then
+                    pico.draw_image(mine_img, cx + icon_off, cy + icon_off)
+                else
+                    pico.draw_text(cx + text_off_x, cy + text_off_y, "*", COLOR_TEXT_MINE)
+                end
             else
-                onReveal(r, c)
+                pico.fill_rect(cx, cy, CELL, CELL, COLOR_REVEALED)
+                local n = adjacent[r][c]
+                if n > 0 then
+                    pico.draw_text(cx + text_off_x, cy + text_off_y, tostring(n), NUM_COLORS[n] or COLOR_TEXT_MINE)
+                end
             end
-        end)
+        end
     end
 end
 
--- GridContainerへ行優先(add_childした順)で流し込む。1行9列固定
-local grid = pico.create("GridContainer")
-pico.set(grid, "x", grid_x)
-pico.set(grid, "y", grid_y)
-pico.set(grid, "w", grid_w)
-pico.set(grid, "h", grid_h)
-pico.set(grid, "cols", COLS)
-pico.set(grid, "gap", GAP)
-for r = 1, ROWS do
-    for c = 1, COLS do
-        pico.add_child(grid, buttons[r][c])
+local function onCanvasPress()
+    local tx, ty, touched = pico.get_touch()
+    if not touched then return end
+
+    local c = math.floor((tx - grid_x) / (CELL + GAP)) + 1
+    local r = math.floor((ty - grid_y) / (CELL + GAP)) + 1
+    if r < 1 or r > ROWS or c < 1 or c > COLS then return end
+
+    if flag_mode then
+        onFlag(r, c)
+    else
+        onReveal(r, c)
     end
+    pico.invalidate(canvas)
 end
 
+-- 難易度に合わせて盤面配列を作り直し、最初の状態へ戻す(同じ難易度のままの
+-- 「リセット」からも、難易度切替からも呼ばれる)
 local function resetGame()
     started = false
     game_over = false
     win = false
+
+    mine, revealed, flagged, adjacent = {}, {}, {}, {}
     for r = 1, ROWS do
+        mine[r], revealed[r], flagged[r], adjacent[r] = {}, {}, {}, {}
         for c = 1, COLS do
             mine[r][c] = false
             revealed[r][c] = false
             flagged[r][c] = false
             adjacent[r][c] = 0
-            drawCell(r, c)
         end
     end
+
     setStatusLabel()
+    if canvas then pico.invalidate(canvas) end
 end
+
+-- 難易度を切り替える。マス数・セルの大きさが変わるので盤面のCanvasを
+-- 作り直す(setW/setHで済ませず作り直すのは、中心寄せのx位置も
+-- 一緒に計算し直したいため)
+local function applyDifficulty(index)
+    diff_index = index
+    local d = DIFFICULTIES[index]
+    ROWS, COLS, MINES, CELL, GAP = d.rows, d.cols, d.mines, d.cell, d.gap
+
+    grid_w = COLS * CELL + (COLS - 1) * GAP
+    grid_h = ROWS * CELL + (ROWS - 1) * GAP
+    grid_x = x + math.floor((w - grid_w) / 2)
+    grid_y = grid_y_base
+
+    if canvas then
+        pico.destroy(canvas)
+        canvas = nil
+    end
+
+    canvas = pico.create("Canvas")
+    pico.set(canvas, "x", grid_x)
+    pico.set(canvas, "y", grid_y)
+    pico.set(canvas, "w", grid_w)
+    pico.set(canvas, "h", grid_h)
+    pico.set(canvas, "background_color", COLOR_GRID_LINE)
+    pico.on(canvas, "render", renderBoard)
+    pico.on(canvas, "press_start", onCanvasPress)
+
+    resetGame()
+end
+
+pico.on(diff_tabs, "tab_changed", function(id)
+    -- tab_selectedは0始まり(TabBar::getSelected()そのまま)なので+1する
+    applyDifficulty(pico.get(id, "tab_selected") + 1)
+end)
 
 pico.on(reset_button, "press_start", function()
     resetGame()
 end)
+
+applyDifficulty(diff_index)
 
 function loop(dt)
     elapsed_ms = elapsed_ms + dt

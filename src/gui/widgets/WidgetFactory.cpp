@@ -16,6 +16,10 @@
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/widgets/RectShape.hpp"
+#include "gui/widgets/EllipseShape.hpp"
+#include "gui/widgets/LineShape.hpp"
+#include "gui/widgets/TriangleShape.hpp"
 #include "consts.hpp"
 #include <cstring>
 
@@ -55,6 +59,14 @@ Widget* WidgetFactory::Create(WidgetType type) {
             return new DropdownMenu(0, 0, 100);
         case WidgetType::LuaCanvas:
             return new LuaCanvas(0, 0, 50, 50);
+        case WidgetType::RectShape:
+            return new RectShape(0, 0, 40, 24);
+        case WidgetType::EllipseShape:
+            return new EllipseShape(0, 0, 40, 24);
+        case WidgetType::LineShape:
+            return new LineShape(0, 0, 40, 24);
+        case WidgetType::TriangleShape:
+            return new TriangleShape(0, 20, 20, 0, 40, 20);
         default:
             // アプリ/OS専用ウィジェットとダイアログはここでは作らない
             return nullptr;
@@ -79,6 +91,10 @@ bool WidgetFactory::IsCreatable(WidgetType type) {
         case WidgetType::TabBar:
         case WidgetType::DropdownMenu:
         case WidgetType::LuaCanvas:
+        case WidgetType::RectShape:
+        case WidgetType::EllipseShape:
+        case WidgetType::LineShape:
+        case WidgetType::TriangleShape:
             return true;
         default:
             return false;
@@ -108,6 +124,12 @@ bool WidgetFactory::TypeFromName(const char* name, WidgetType& out) {
         // C++側のクラス名はLuaCanvas(CanvasRaster.hppの`namespace Canvas`との
         // 衝突回避)だが、Lua側からは単に"Canvas"として見せる
         {"Canvas", WidgetType::LuaCanvas},
+        // 図形ウィジェット。RectShapeはutil/Rect.hppのstruct Rectとの衝突回避で
+        // C++側クラス名をずらしてあるが、Lua側からは単に"Rect"として見せる
+        {"Rect", WidgetType::RectShape},
+        {"Ellipse", WidgetType::EllipseShape},
+        {"Line", WidgetType::LineShape},
+        {"Triangle", WidgetType::TriangleShape},
     };
 
     for (const auto& entry : kTable) {

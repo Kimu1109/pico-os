@@ -22,7 +22,7 @@
 #   widget_factory_test… WidgetFactory(WidgetType→new Xxx)とWidgetRegistry::Resolve()
 #                         (Lua統合向けの発行側/消費側で、以前は呼び出し元・テストとも無かった)
 #   widget_property_test… WidgetProperty(WidgetType非依存のget/set共通口)。
-#                          WidgetFactory対応15種それぞれの代表プロパティの読み書きと、
+#                          WidgetFactory対応20種それぞれの代表プロパティの読み書きと、
 #                          型不一致/非対応id/nullptrがfalseで安全に弾かれることを確認。
 #                          Icon::IconOpaque/GridContainer::HAlign・VAlignのget、
 #                          NumberInput::Text(setNum/getNum)、ScrollList/DropdownMenuの
@@ -322,6 +322,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
     "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/RectShape.cpp" \
+    "$ROOT/src/gui/widgets/EllipseShape.cpp" \
+    "$ROOT/src/gui/widgets/LineShape.cpp" \
+    "$ROOT/src/gui/widgets/TriangleShape.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
@@ -357,6 +361,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
     "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/RectShape.cpp" \
+    "$ROOT/src/gui/widgets/EllipseShape.cpp" \
+    "$ROOT/src/gui/widgets/LineShape.cpp" \
+    "$ROOT/src/gui/widgets/TriangleShape.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
@@ -472,6 +480,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
     "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/RectShape.cpp" \
+    "$ROOT/src/gui/widgets/EllipseShape.cpp" \
+    "$ROOT/src/gui/widgets/LineShape.cpp" \
+    "$ROOT/src/gui/widgets/TriangleShape.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
@@ -530,6 +542,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
     "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/RectShape.cpp" \
+    "$ROOT/src/gui/widgets/EllipseShape.cpp" \
+    "$ROOT/src/gui/widgets/LineShape.cpp" \
+    "$ROOT/src/gui/widgets/TriangleShape.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
@@ -582,6 +598,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
     "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/RectShape.cpp" \
+    "$ROOT/src/gui/widgets/EllipseShape.cpp" \
+    "$ROOT/src/gui/widgets/LineShape.cpp" \
+    "$ROOT/src/gui/widgets/TriangleShape.cpp" \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \

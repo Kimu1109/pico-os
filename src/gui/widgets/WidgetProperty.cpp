@@ -19,6 +19,10 @@
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/widgets/RectShape.hpp"
+#include "gui/widgets/EllipseShape.hpp"
+#include "gui/widgets/LineShape.hpp"
+#include "gui/widgets/TriangleShape.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
@@ -228,6 +232,51 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
             switch (id) {
                 case Id::SelectedIndex: out = Value::MakeInt(dm->getSelectedIndex()); return true;
                 case Id::ItemCount: out = Value::MakeInt(dm->getItemCount()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::RectShape: {
+            RectShape* rs = static_cast<RectShape*>(widget);
+            switch (id) {
+                case Id::Color: out = Value::MakeInt(rs->getColor()); return true;
+                case Id::Filled: out = Value::MakeBool(rs->getFilled()); return true;
+                case Id::Thickness: out = Value::MakeInt(rs->getThickness()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::EllipseShape: {
+            EllipseShape* es = static_cast<EllipseShape*>(widget);
+            switch (id) {
+                case Id::Color: out = Value::MakeInt(es->getColor()); return true;
+                case Id::Filled: out = Value::MakeBool(es->getFilled()); return true;
+                case Id::Thickness: out = Value::MakeInt(es->getThickness()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::LineShape: {
+            LineShape* ls = static_cast<LineShape*>(widget);
+            switch (id) {
+                case Id::Color: out = Value::MakeInt(ls->getColor()); return true;
+                case Id::Thickness: out = Value::MakeInt(ls->getThickness()); return true;
+                case Id::X1: out = Value::MakeInt(ls->getX1()); return true;
+                case Id::Y1: out = Value::MakeInt(ls->getY1()); return true;
+                case Id::X2: out = Value::MakeInt(ls->getX2()); return true;
+                case Id::Y2: out = Value::MakeInt(ls->getY2()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::TriangleShape: {
+            TriangleShape* ts = static_cast<TriangleShape*>(widget);
+            switch (id) {
+                case Id::Color: out = Value::MakeInt(ts->getColor()); return true;
+                case Id::Filled: out = Value::MakeBool(ts->getFilled()); return true;
+                case Id::Thickness: out = Value::MakeInt(ts->getThickness()); return true;
+                case Id::X1: out = Value::MakeInt(ts->getX1()); return true;
+                case Id::Y1: out = Value::MakeInt(ts->getY1()); return true;
+                case Id::X2: out = Value::MakeInt(ts->getX2()); return true;
+                case Id::Y2: out = Value::MakeInt(ts->getY2()); return true;
+                case Id::X3: out = Value::MakeInt(ts->getX3()); return true;
+                case Id::Y3: out = Value::MakeInt(ts->getY3()); return true;
                 default: return false;
             }
         }
@@ -605,6 +654,105 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
                 default: return false;
             }
         }
+        case WidgetType::RectShape: {
+            RectShape* rs = static_cast<RectShape*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    rs->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    rs->setH(value.i); return true;
+                case Id::Color:
+                    if (value.type != Type::Int) return false;
+                    rs->setColor((int8_t)value.i); return true;
+                case Id::Filled:
+                    if (value.type != Type::Bool) return false;
+                    rs->setFilled(value.b); return true;
+                case Id::Thickness:
+                    if (value.type != Type::Int) return false;
+                    rs->setThickness(value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::EllipseShape: {
+            EllipseShape* es = static_cast<EllipseShape*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    es->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    es->setH(value.i); return true;
+                case Id::Color:
+                    if (value.type != Type::Int) return false;
+                    es->setColor((int8_t)value.i); return true;
+                case Id::Filled:
+                    if (value.type != Type::Bool) return false;
+                    es->setFilled(value.b); return true;
+                case Id::Thickness:
+                    if (value.type != Type::Int) return false;
+                    es->setThickness(value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::LineShape: {
+            LineShape* ls = static_cast<LineShape*>(widget);
+            switch (id) {
+                case Id::Color:
+                    if (value.type != Type::Int) return false;
+                    ls->setColor((int8_t)value.i); return true;
+                case Id::Thickness:
+                    if (value.type != Type::Int) return false;
+                    ls->setThickness(value.i); return true;
+                case Id::X1:
+                    if (value.type != Type::Int) return false;
+                    ls->setX1(value.i); return true;
+                case Id::Y1:
+                    if (value.type != Type::Int) return false;
+                    ls->setY1(value.i); return true;
+                case Id::X2:
+                    if (value.type != Type::Int) return false;
+                    ls->setX2(value.i); return true;
+                case Id::Y2:
+                    if (value.type != Type::Int) return false;
+                    ls->setY2(value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::TriangleShape: {
+            TriangleShape* ts = static_cast<TriangleShape*>(widget);
+            switch (id) {
+                case Id::Color:
+                    if (value.type != Type::Int) return false;
+                    ts->setColor((int8_t)value.i); return true;
+                case Id::Filled:
+                    if (value.type != Type::Bool) return false;
+                    ts->setFilled(value.b); return true;
+                case Id::Thickness:
+                    if (value.type != Type::Int) return false;
+                    ts->setThickness(value.i); return true;
+                case Id::X1:
+                    if (value.type != Type::Int) return false;
+                    ts->setX1(value.i); return true;
+                case Id::Y1:
+                    if (value.type != Type::Int) return false;
+                    ts->setY1(value.i); return true;
+                case Id::X2:
+                    if (value.type != Type::Int) return false;
+                    ts->setX2(value.i); return true;
+                case Id::Y2:
+                    if (value.type != Type::Int) return false;
+                    ts->setY2(value.i); return true;
+                case Id::X3:
+                    if (value.type != Type::Int) return false;
+                    ts->setX3(value.i); return true;
+                case Id::Y3:
+                    if (value.type != Type::Int) return false;
+                    ts->setY3(value.i); return true;
+                default: return false;
+            }
+        }
         case WidgetType::InputDialog: {
             InputDialog* d = static_cast<InputDialog*>(widget);
             switch (id) {
@@ -657,6 +805,10 @@ namespace {
         {"tab_selected", Id::TabSelected}, {"tab_count", Id::TabCount},
 
         {"enable_icon", Id::EnableIcon}, {"item_count", Id::ItemCount},
+
+        {"filled", Id::Filled}, {"thickness", Id::Thickness},
+        {"x1", Id::X1}, {"y1", Id::Y1}, {"x2", Id::X2}, {"y2", Id::Y2},
+        {"x3", Id::X3}, {"y3", Id::Y3},
     };
 }
 

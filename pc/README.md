@@ -120,6 +120,7 @@ index.html?wifi=disconnected&rssi=-85
 | `ssid` | `PICOOS_WIFI_SSID` |
 | `scan` | `PICOOS_WIFI_SCAN` |
 | `render` | `PICOOS_RENDER_DRIVER` (`gl` を指定するとGPU描画。既定はソフトウェア描画。下記) |
+| `spi_wait` | `PICOOS_SPI_WAIT` (`on` / `off`。液晶転送の待ち。Webの既定は`off`。下記「実機と違うところ」) |
 
 `PICOOS_` で始まるキーはそのまま環境変数名として扱われるので、
 将来増えたものは表に足さなくても `?PICOOS_XXX=...` で渡せる。
@@ -133,6 +134,7 @@ index.html?wifi=disconnected&rssi=-85
 | 描画 | **SDLのソフトウェアレンダラ(canvas 2D)に固定**(下記)。GPU描画は `?render=gl` で試せる。どちらでも実測60fps |
 | Wi-Fi | 疎通判定は `navigator.onLine`(ソケットが無いため)。固定したいときは `?wifi=...` |
 | **Markdownブラウザのオンライン機能** | **使えない。** ブラウザには生のTCPソケットが無いので、`browser-home` を設定したりツールバーの「更新」「検索」を押してもサーバへ繋がらない。同梱のサンプル(`/tmp/doc.md`)を読む分にはそのまま動く |
+| 液晶転送の待ち | 既定で**無効**(メインスレッドを空回りで止めることになるため)。`?spi_wait=on` で有効にできる |
 | `delay()` | 何もせず即座に戻る(待つとタブが固まるため)。`src/` は使っていない |
 | スレッド | 無し。`Panel_sdl` のデバッガ検出スレッドも起動しないが、動作に影響は無い |
 | 速度 | 実測60fps(メインループ自体の負荷は数ms/120フレーム)。240x320を2倍で出す程度ではGPUを使っても差が出ない |
@@ -316,6 +318,7 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 | 項目 | PCでの扱い |
 |---|---|
 | 画面 | LovyanGFX の `Panel_sdl`。既定は2倍表示(`PICOOS_PC_SCALE`) |
+| 液晶への転送時間 | **実機のSPI転送にかかる理論上の時間だけ待つ**(`Panel_sdl_SpiWait`)。SPIは75MHz相当(`TFT_MAX_SPEED`=80MHzを要求しても、RP2350のclk_peri 150MHzを2分周した75MHzが上限)、1ピクセル16bitで、**画面1枚で16.4ms**。4bpp→RGB565の変換にかかるCPU時間は含まないので、実機はこれより少し遅い。`PICOOS_SPI_WAIT=off` で無効にできる |
 | タッチ | SDLのマウス。座標はSDL側でパネル座標へ戻されるので拡大率の影響を受けない |
 | SDカード | `pc/sdcard/` を実ファイルシステムとして読む |
 | Wi-Fi | 母艦の疎通を見て接続/切断を返す。設定で任意の状態に固定もできる(下記) |
@@ -337,6 +340,7 @@ pc/
     SdFat.h                 実ファイルシステムを SdFat/FsFile として見せる
     XPT2046_Touchscreen.h   使わないが includeが通るように置いてある
     config/LGFX_Config_PC.hpp        SDLパネル設定
+    config/Panel_sdl_SpiWait.hpp     液晶への書き込みに実機のSPI転送時間ぶんの待ちを入れるSDLパネル
     functions/Touch_Functions_PC.hpp マウスをタッチとして読む
   sdcard/                   SDカードとして読まれるディレクトリ
 ```

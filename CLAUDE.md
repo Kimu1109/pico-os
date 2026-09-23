@@ -635,6 +635,14 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   最初から実時刻を返すため。表示タイムゾーンは`network.cfg`の`timezone`(例`JST-9`)で決まる。
   ※`TimeFunctions::Update()`は333msごとにしか更新しないので、`--shot`のフレーム数が少ないと
   初期値の`00:00`が写る。時刻を確認したいときは200フレーム以上回すこと。
+- **液晶への書き込みは、実機のSPI転送にかかる理論上の時間だけ待つ**(`pc/compat/config/Panel_sdl_SpiWait.hpp`)。
+  SDLパネルへの書き込みはメモリのコピーで一瞬なので、放っておくと「液晶へ送る量が多すぎて重い」問題が
+  PCでは見えない(スクラッチパッドでキャンバス全体を毎回送っていた件がまさにそれで、実機でしか気づけなかった)。
+  SPIのクロックはLovyanGFX(rp2040)の`FreqToClockDiv()`と同じ計算で求める: CPSR=2固定・clk_peri=150MHzなので、
+  `TFT_MAX_SPEED`=80MHzを要求しても**実際は75MHz**。1ピクセル16bit+範囲指定88bitで、**画面1枚16.4ms**。
+  書き込みの呼び出し元をその時間だけ止める(残り200µsまではsleep、最後は空回りで合わせる)。
+  **4bpp→RGB565変換のCPU時間は含まない**ので実機より少し速い(=下限)。`PICOOS_SPI_WAIT=off`で無効、
+  Webは既定で無効(メインスレッドを止めるため。`?spi_wait=on`で有効)。
 - GPIO/SPIは空実装。
 - **LovyanGFXの版は`platformio.ini`の`lib_deps`から読む**(`pc/CMakeLists.txt`が正規表現で拾う)ので、
   上げるときに直すのは`platformio.ini`の1行だけ。以前はCMake側にも`GIT_TAG`を直書きしていて
@@ -1212,14 +1220,16 @@ Luaバインディング着手より前から存在したコードだが、実�
   要求するので使えない」)と全く同じ制約**だが、AnalogClockでは単なる色化けとして
   現れていたのに対し、こちらは実際のクラッシュとして表面化した(用途・入力経路の
   違いによるものと見られ、根本原因は同一)。
-- **対処**: `drawWideLine()`を使わず、`CanvasRaster::drawThickLine()`(新設)が
-  `fillCircle()`(アルファブレンド無し。`writeFastHLine`/`writeFillRect`の単純な
-  塗りつぶしのみで`readRect()`を経由しない)を線分に沿って半径の半分間隔で
-  重ね塗りする「スタンプ式」の太線描画に置き換えた。`causeOnPressMove()`と
+- **対処**: `drawWideLine()`を使わず、`CanvasRaster::DrawThickLine()`が
+  「両端の`fillCircle()` + 胴体の`fillTriangle()`2枚」で太線を塗る(アルファブレンド無し。
+  単純な塗りつぶしのみで`readRect()`を経由しない)。`causeOnPressMove()`と
   `drawArrow()`の両方の呼び出し箇所を差し替えた(後者は`Canvas::Mode::Arrow`の
   軸線部分。矢じり自体は元々`fillTriangle()`でアルファブレンド無しだったので無傷)。
   `Rect`/`Ellipse`モード(`drawRect()`/`drawEllipse()`/`fillEllipse()`)は
   `readRect()`を経由しないため元から安全で、変更していない。
+  (2026-09-23追記: 当初この節は「`fillCircle()`を半径の半分間隔で重ね塗りする`drawThickLine()`へ
+  置き換えた」と書いていたが、**実際にリポジトリへ入ったコードは`drawWideLine()`のまま**だった。
+  下の「ドラッグ描画が重い」の修正で実際に置き換えた)
 - **見つけ方**: ホストテスト(ASan)はここを検出できない
   (`script/host_test/stubs/LovyanGFX.h`の`drawWideLine`相当は元から未実装/no-opで、
   実際のLovyanGFXコードパスを一切通らないため)。PCビルドの`--shot`で実際に
@@ -1228,6 +1238,33 @@ Luaバインディング着手より前から存在したコードだが、実�
   実装で改めて踏んだ形になる。
 - 修正後、スクラッチパッドで実際に描画→保存→クリア→読み込みの一連が
   PCビルドの`--shot`で正しく動くことを確認済み。
+
+### CanvasRasterのドラッグ描画が重い(線がカクカク・短い線が引けない、2026-09-23修正)
+
+実機のスクラッチパッドで「線がカクカクで滑らかでなく、ある程度長く引かないと線にならない」と
+報告された。原因は描画1回あたりの仕事量で、タッチは`loop()`1周につき1回しか読まないため、
+1周が重いほど線は少ない点を結んだ折れ線になる。
+
+- **指が動くたびにキャンバス全体(スクラッチパッドで約234x235px)を作り直していた**:
+  `causeOnPressMove()`が`needsRender()`(=画面矩形まるごとdirty)を呼び、さらに`render()`が
+  毎回`markdirty(g_rect)`を積み直していたので、**同じ全体矩形が1フレームに2枚**積まれた。
+  結果、1回の移動ごとに「キャンバス→`frame`の複製」が3回(`update()`内の`render()`+
+  `FlushDirty()`の2枚ぶん)、**液晶への転送(4bpp→RGB565変換+SPI)が画面ほぼ1枚×2回**走っていた。
+  → 線分の外接矩形(ブラシ半径ぶん広げる)だけを`MarkDirty()`する(`strokeTo()`)。
+  `render()`は移動したときしか`g_rect`を積まない。1回の移動の転送量は数百px程度まで減る。
+- **`drawWideLine()`**: アンチエイリアスのため既存ピクセルを`readRect()`で読み戻してアルファ合成する
+  重い経路(しかも4bppパレットではPCビルドでSEGVする。上の節参照)。`DrawThickLine()`へ置き換えた。
+- **CLEARだった**: `FlushDirty()`が毎回背景の白塗り+下の枠線`Rect`の再描画をしてから上書きしていた。
+  スプライトで自分の矩形を隙間なく覆うので`OPAQUE`にした。
+- **短い線が消えていた理由**: 触れた瞬間には何も描かず、2px以上動いて初めて線を引いていた。
+  さらに**指を離したフレームは`WidgetFunctions::UpdateAll()`が`update()`より先に`causeOnPressEnd()`を
+  呼んで`is_pressing`を下ろすため、そのフレームの`causeOnPressMove()`は来ない**(最後の区間が落ちる)。
+  → 触れた瞬間に点を打ち、1pxでも動けば繋ぎ、離した瞬間にも最後の区間を繋ぐ。
+- `Rect`/`Ellipse`/`Arrow`モードのプレビューは今も移動ごとに全体を`needsRender()`する
+  (スクラッチパッドはLineモードしか使わないので手を付けていない)。
+- ホストテストは`lua_engine_test.cpp`(点・線分・離した瞬間のdirty矩形がキャンバス全体ではなく
+  線分の周りだけになること)。見た目はPCビルドの`--tap`連打で確認した。**実機での速度は未計測**
+  (`FlushDirty()`が5秒ごとにシリアルへ出す`fps`/`push average`で確かめられる)。
 
 ### Buttonのアイコン化(`pico.set(id,"icon_id"/"icon_size",...)`、2026-09-23実装)
 

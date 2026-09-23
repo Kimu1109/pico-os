@@ -265,6 +265,73 @@ int main(){
         check(Ical::OccursOn(cal.events[0], D(2026, 10, 1)), "上書き予定は移動先に出る");
     }
 
+    // ---- 例外は窓の近くのものだけ覚える ----
+    // Googleは何年分もの例外(EXDATE/上書き予定)を全部書いてくる。窓と関係ない昔の例外で
+    // kMaxExDates を使い切ると、窓の中の例外が効かなくなって消した回が出てしまう
+    {
+        std::string exdates = "EXDATE:";
+        for(int i = 0; i < 12; i++){ // 2021年の12回ぶん(kMaxExDates=8 を超える)
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%s202101%02dT090000", i ? "," : "", 6 + i * 2);
+            exdates += buf;
+        }
+        exdates += ",20261007T090000\r\n";
+        std::string old_overrides;
+        for(int i = 0; i < 40; i++){ // 上書き予定の控え(kMaxOverrides=32)も昔の分で埋めない
+            char buf[160];
+            snprintf(buf, sizeof(buf),
+                "UID:w@x\r\nRECURRENCE-ID:2022%02d%02dT090000\r\nDTSTART:2022%02d%02dT100000\r\n",
+                1 + i / 28, 1 + i % 28, 1 + i / 28, 1 + i % 28);
+            old_overrides += ev(buf);
+        }
+        Ical::Options opt;
+        opt.window_from_day = D(2026, 8, 30);
+        opt.window_to_day = D(2026, 10, 11);
+        cal.clear();
+        Ical::Parser p(cal, opt);
+        const std::string ics = wrap(old_overrides +
+            ev("UID:w@x\r\nDTSTART:20200101T090000\r\nRRULE:FREQ=WEEKLY\r\n" + exdates) +
+            ev("UID:w@x\r\nRECURRENCE-ID:20260930T090000\r\nDTSTART:20260930T150000\r\n"));
+        p.feed(ics.data(), ics.size());
+        p.finish();
+        eq_int(p.lostExceptions(), 0, "窓から遠い例外は数えもしない(あふれない)");
+        const IcalEvent* master = nullptr;
+        for(int i = 0; i < cal.count; i++) if(cal.events[i].rule.freq != IcalRule::Freq::None) master = &cal.events[i];
+        check(master != nullptr, "親が読める");
+        if(master){
+            eq_int(master->exdate_count, 2, "覚えるのは窓の近くのEXDATEと上書き予定だけ");
+            eq_str(starts(*master, D(2026, 9, 1), D(2026, 10, 10)).c_str(),
+                   "9/2 9/9 9/16 9/23", "窓の中の例外(9/30の移動と10/7の削除)が効く");
+        }
+    }
+
+    // ---- どこから読んだか(file_index/ordinal)と説明文の読み直し ----
+    {
+        Ical::Options opt;
+        opt.file_index = 3;
+        opt.window_from_day = D(2026, 9, 1);
+        parse(wrap(ev("DTSTART;VALUE=DATE:20200101\r\nSUMMARY:窓の外\r\n") +
+                   ev("DTSTART;VALUE=DATE:20260923\r\nSUMMARY:一\r\n") +
+                   ev("DTSTART;VALUE=DATE:20260924\r\nSUMMARY:二\r\n")), opt);
+        eq_int(cal.count, 2, "窓の外は読み捨てる");
+        eq_int(cal.events[0].file_index, 3, "file_index を写す");
+        eq_int(cal.events[0].ordinal, 1, "ordinal は読み捨てたVEVENTも数える");
+        eq_int(cal.events[1].ordinal, 2, "2件目のordinal");
+
+        HostSd::files["/cal/desc.ics"] = wrap(
+            ev("DTSTART;VALUE=DATE:20260923\r\nSUMMARY:説明なし\r\n") +
+            ev("DTSTART;VALUE=DATE:20260924\r\nSUMMARY:説明あり\r\n"
+               "DESCRIPTION:1行目\\n2行目\\, カンマ\r\n 折り返しの続き\r\n"
+               "BEGIN:VALARM\r\nDESCRIPTION:通知の文\r\nEND:VALARM\r\n") +
+            ev("DTSTART;VALUE=DATE:20260925\r\nDESCRIPTION:3件目\r\n"));
+        Ical::Description d;
+        check(Ical::ReadDescription("/cal/desc.ics", 1, d), "説明文を読み直せる");
+        eq_str(d.c_str(), "1行目\n2行目, カンマ折り返しの続き", "改行は改行のまま、エスケープと折り返しを戻す");
+        check(!Ical::ReadDescription("/cal/desc.ics", 0, d) && d.empty(), "説明の無い予定はfalse");
+        check(Ical::ReadDescription("/cal/desc.ics", 2, d) && d == Ical::Description("3件目"), "3件目も引ける");
+        check(!Ical::ReadDescription("/cal/none.ics", 0, d), "無いファイルはfalse");
+    }
+
     // ---- 対応していない規則は初回だけ ----
     {
         parse(wrap(ev("DTSTART;VALUE=DATE:20260930\r\nRRULE:FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1\r\n") +

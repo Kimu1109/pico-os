@@ -8,6 +8,7 @@
 // ディレクトリの走査(openNext)を持たないので、PCビルドの --shot で確認する。
 #include "gui/scenes/CalendarScene.hpp"
 #include "gui/widgets/apps/MonthGrid.hpp"
+#include "gui/widgets/dialogs/EventDetailDialog.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -17,6 +18,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 // ---- モック ----
 void PICO_GFX::MarkDirty(const Rect&){}
@@ -143,9 +145,52 @@ static void testScene(){
     delete scene;
 }
 
+// ---- EventDetailDialog: 生成・中身の差し替え・閉じる・解放(ASan) ----
+static void testDetailDialog(){
+    auto* dialog = new EventDetailDialog();
+    std::string body;
+    for(int i = 0; i < 40; i++) body += "説明文の行\n"; //スクロールが要る長さ
+    dialog->setContent("定例ミーティング", body.c_str());
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+
+    bool closed = false;
+    dialog->setOnClosed([&](bool is_ok){ closed = !is_ok; WidgetFunctions::DestroyLater(dialog); });
+
+    //「閉じる」ボタンを押したことにする(子のうちButtonを探す)
+    Button* close = nullptr;
+    for(Widget* w : dialog->getChildren()) if(w->getWidgetType() == WidgetType::Button) close = static_cast<Button*>(w);
+    check(close != nullptr, "詳細: 閉じるボタンがある");
+    if(close) close->causeOnPressStart();
+    check(closed, "詳細: 閉じると on_closed(false) が呼ばれる");
+    check(!dialog->getVisible(), "詳細: 閉じると見えなくなる");
+    WidgetFunctions::ProcessPendingDeletes();
+    WidgetFunctions::ClearSceneWidgets();
+    check(true, "詳細: 解放で落ちない(漏れはASanが見る)");
+
+    // MonthGrid::setDots: 同じ中身なら描き直さない(needs_redrawはprotectedなので覗き窓を作る)
+    struct GridProbe : MonthGrid {
+        using MonthGrid::MonthGrid;
+        bool dirty() const { return needs_redraw; }
+    };
+    GridProbe grid(0, 0, 238, 162);
+    grid.setMonth(2026, 9);
+    MonthGrid::DayDots dots[32];
+    dots[23].count = 2;
+    dots[23].colors[0] = PICO_RED;
+    dots[23].colors[1] = PICO_BLUE;
+    grid.render();
+    grid.setDots(dots);
+    check(grid.dirty(), "点が変われば描き直しを求める");
+    grid.render();
+    grid.setDots(dots);
+    check(!grid.dirty(), "点が同じなら描き直さない");
+}
+
 int main(){
     testGridHitTest();
     testScene();
+    testDetailDialog();
 
     printf("\n%s (失敗 %d件)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

@@ -9,6 +9,8 @@ DTEND;TZID=Asia/Tokyo:20260105T110000
 RRULE:FREQ=WEEKLY;BYDAY=MO,TH
 SUMMARY:定例ミーティング
 LOCATION:会議室A
+DESCRIPTION:議題\n・先週の振り返り\n・今週の予定\n・その他\n\n資料は共有フォルダの「定例」に置いて
+ ください。
 END:VEVENT
 BEGIN:VEVENT
 UID:month-end@pico-os

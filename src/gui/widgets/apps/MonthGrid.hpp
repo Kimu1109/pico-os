@@ -12,20 +12,28 @@
 // 子ウィジェットは持たずrender()でframeへ直接描き、タップ位置から日付を逆算する
 // (AppGrid / TabBar / DurationPicker と同じ方式)。42マスぶんButtonをnewしないため。
 //
-// 予定そのものは知らない。シーン側が setMonth() で月を、setCounts() で
-// 「日ごとの予定の件数」を流し込む(AnalogClock が時刻を自分で取りに行かないのと同じ理由。
+// 予定そのものは知らない。シーン側が setMonth() で月を、setDots() で
+// 「日ごとの点(数と色)」を流し込む(AnalogClock が時刻を自分で取りに行かないのと同じ理由。
 // Ical への依存をウィジェットへ持たせない)。
 //
 // 見た目:
 //   - 日曜は赤、土曜は青
 //   - 今日は赤の二重枠、選択中の日は黒塗り+白抜き文字
-//   - 予定のある日は数字の下に点(最大3つ。件数がそれ以上でも3つ)
+//   - 予定のある日は数字の下に点(最大3つ)。点の色はシーンが決める(カレンダーごとの色)
 class MonthGrid : public Widget, public IBorderColor {
     public:
         constexpr static int kRows = 6;
         constexpr static int kCols = 7;
         // 曜日の見出しの行の高さ(16pxフォント + 余白)
         constexpr static int kHeaderH = 18;
+        // 1マスに描く点の数の上限
+        constexpr static int kMaxDots = 3;
+
+        // 1日ぶんの点。colors[0..count-1] を左から描く
+        struct DayDots {
+            uint8_t count = 0;
+            int8_t colors[kMaxDots] = {};
+        };
 
     private:
         int year = 1970;
@@ -36,7 +44,7 @@ class MonthGrid : public Widget, public IBorderColor {
         int today = 0;         // 表示中の月の中での今日(1始まり)。0 = この月には無い
         int selected = 0;      // 選択中の日(1始まり)。0 = 選択なし
 
-        uint8_t counts[32] = {}; // [日] = 予定の件数。[0]は使わない
+        DayDots dots[32];        // [日] = 描く点。[0]は使わない
 
         std::function<void(int day)> on_select_day = nullptr;
 
@@ -62,8 +70,8 @@ class MonthGrid : public Widget, public IBorderColor {
         void setSelected(int day);
         int getSelected() const { return this->selected; }
 
-        // counts[1..days_in_month] を写す(counts[0]は見ない)
-        void setCounts(const uint8_t* counts_by_day);
+        // dots_by_day[1..days_in_month] を写す([0]は見ない)。変わっていなければ描き直さない
+        void setDots(const DayDots* dots_by_day);
 
         // タップで日付が選ばれたとき(同じ日を押し直しても呼ぶ)
         void setOnSelectDay(std::function<void(int day)> callback){

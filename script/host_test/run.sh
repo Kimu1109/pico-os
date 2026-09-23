@@ -255,6 +255,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calendar_scene_test.cpp" \
     "$ROOT/src/gui/scenes/CalendarScene.cpp" \
     "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/EventDetailDialog.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/calendar/Ical.cpp" \
     "$ROOT/src/calendar/Calendar_Sync.cpp" \
     "$ROOT/src/task/Http_Get.cpp" \

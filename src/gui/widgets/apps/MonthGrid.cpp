@@ -9,10 +9,9 @@
 
 static const char* const WDAY_JP[7] = { "日", "月", "火", "水", "木", "金", "土" };
 
-// 予定の点の大きさと、1マスに描く最大数
+// 予定の点の大きさ
 static constexpr int kDotSize = 3;
 static constexpr int kDotGap = 2;
-static constexpr int kMaxDots = 3;
 
 // 幅を7で割った余りは最後の列(土曜)へ足す。TabBarと同じく、右端の罫線を浮かせないため
 int MonthGrid::cellX(int col) const {
@@ -54,12 +53,18 @@ void MonthGrid::setSelected(int day){
     this->needsRender();
 }
 
-void MonthGrid::setCounts(const uint8_t* counts_by_day){
-    uint8_t next[32] = {};
-    for(int d = 1; d <= this->days_in_month; d++) next[d] = counts_by_day[d];
-    if(memcmp(next, this->counts, sizeof(next)) == 0) return;
-    memcpy(this->counts, next, sizeof(next));
-    this->needsRender();
+void MonthGrid::setDots(const DayDots* dots_by_day){
+    bool changed = false;
+    for(int d = 1; d < 32; d++){
+        DayDots next;
+        if(d <= this->days_in_month) next = dots_by_day[d];
+        DayDots& cur = this->dots[d];
+        if(cur.count != next.count || memcmp(cur.colors, next.colors, sizeof(cur.colors)) != 0){
+            cur = next;
+            changed = true;
+        }
+    }
+    if(changed) this->needsRender();
 }
 
 int MonthGrid::dayAt(int sx, int sy) const {
@@ -153,13 +158,14 @@ void MonthGrid::render(){
         OSData::frame->setCursor(x + (w - OSData::frame->textWidth(buf)) / 2, y + 2);
         OSData::frame->print(buf);
 
-        const int dots = (this->counts[day] < kMaxDots) ? this->counts[day] : kMaxDots;
+        const DayDots& dd = this->dots[day];
+        const int dots = (dd.count < kMaxDots) ? dd.count : kMaxDots;
         if(dots > 0){
             const int dots_w = dots * kDotSize + (dots - 1) * kDotGap;
             const int dot_y = y + 2 + str_h + 1;
-            //選択中は黒地なので点を白抜きにする(同じ色だと消える)
-            const int8_t dot_color = is_selected ? this->background_color : PICO_DARKGREEN;
             for(int k = 0; k < dots; k++){
+                //選択中は黒地なので点を白抜きにする(暗い色の点は黒地で見えない)
+                const int8_t dot_color = is_selected ? this->background_color : dd.colors[k];
                 OSData::frame->fillRect(x + (w - dots_w) / 2 + k * (kDotSize + kDotGap), dot_y,
                                         kDotSize, kDotSize, dot_color);
             }

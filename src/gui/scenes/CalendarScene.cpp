@@ -66,22 +66,35 @@ namespace {
     }
 }
 
+// 複数のカレンダーを重ねたときの色(ファイル名順に割り当てる)。白地で読める濃い色だけ
+static const int8_t kCalendarColors[] = {
+    PICO_DARKGREEN, PICO_BLUE, PICO_RED, PICO_PURPLE,
+    PICO_DARKCYAN, PICO_MAROON, PICO_NAVY, PICO_OLIVE,
+};
+static constexpr int kCalendarColorCount = sizeof(kCalendarColors) / sizeof(kCalendarColors[0]);
+
+int8_t CalendarScene::colorOf(const IcalEvent& ev) const {
+    if(this->file_count <= 1) return -1;
+    return kCalendarColors[ev.file_index % kCalendarColorCount];
+}
+
+bool CalendarScene::filePath(int file_index, FixedString<PICO_PATH_LEN>& out) const {
+    if(file_index < 0 || file_index >= this->file_count) return false;
+    return PICO_IO::join(out, PICO_Path::DIR::CALENDAR, this->file_names[file_index].c_str());
+}
+
 void CalendarScene::reload(){
     this->cal.clear();
     this->loaded_files = 0;
-    memset(this->counts, 0, sizeof(this->counts));
+    this->file_count = 0;
+    for(auto& d : this->day_dots) d = MonthGrid::DayDots{};
 
     if(!OSData::SD_usable) return;
 
     const int32_t first = Ical::DaysFromCivil(this->view_year, this->view_month, 1);
     const int dim = Ical::DaysInMonth(this->view_year, this->view_month);
 
-    //格子に見えている範囲(前後の月の空きマスを含む6週間)だけを読む
-    Ical::Options opt;
-    opt.utc_offset_sec = LocalUtcOffsetSec();
-    opt.window_from_day = first - Ical::Weekday(first);
-    opt.window_to_day = opt.window_from_day + MonthGrid::kRows * MonthGrid::kCols;
-
+    // ---- /calendar/*.ics を名前順に並べる(色とfile_indexを取得のたびに変えないため) ----
     FsFile dir = OSData::SD.open(PICO_Path::DIR::CALENDAR);
     if(!dir) return;
 
@@ -89,23 +102,61 @@ void CalendarScene::reload(){
     while(file.openNext(&dir, O_RDONLY)){
         char name[128];
         const bool ok = file.getName(name, sizeof(name)) && !file.isDirectory() && EndsWithIcs(name);
-        //ParseFile()が同じファイルを開き直すので、先に閉じておく
         file.close();
         if(!ok) continue;
 
-        FixedString<PICO_PATH_LEN> path;
-        PICO_IO::join(path, PICO_Path::DIR::CALENDAR, name);
-        if(Ical::ParseFile(path.c_str(), this->cal, opt)) this->loaded_files++;
+        if(this->file_count >= kMaxFiles){
+            LOG_APP_WARN("カレンダー: .ics が多すぎるため %s を読みません(上限%d)", name, kMaxFiles);
+            continue;
+        }
+        FixedString<PICO_STR_M> n;
+        if(!n.assign(name)){
+            LOG_APP_WARN("カレンダー: ファイル名が長すぎるため読みません: %s", name);
+            continue;
+        }
+        //挿入ソート(高々8件)
+        int i = this->file_count++;
+        while(i > 0 && strcmp(this->file_names[i - 1].c_str(), n.c_str()) > 0){
+            this->file_names[i] = this->file_names[i - 1];
+            i--;
+        }
+        this->file_names[i] = n;
     }
     dir.close();
 
+    // ---- 読む。格子に見えている範囲(前後の月の空きマスを含む6週間)だけ ----
+    Ical::Options opt;
+    opt.utc_offset_sec = LocalUtcOffsetSec();
+    opt.window_from_day = first - Ical::Weekday(first);
+    opt.window_to_day = opt.window_from_day + MonthGrid::kRows * MonthGrid::kCols;
+
+    for(int i = 0; i < this->file_count; i++){
+        FixedString<PICO_PATH_LEN> path;
+        if(!this->filePath(i, path)) continue;
+        opt.file_index = (uint8_t)i;
+        if(Ical::ParseFile(path.c_str(), this->cal, opt)) this->loaded_files++;
+    }
+
+    // ---- 格子の点 ----
+    //点の数は予定の数(3つまで)。色は「違うカレンダーの色」を先に並べ、余った点は同じ色を繰り返す
+    //(カレンダーAの予定3件とBの予定1件なら、Aだけの3点ではなくA,B,Aにして両方あると分かるように)
     for(int d = 1; d <= dim; d++){
         const int32_t day = first + (d - 1);
-        int n = 0;
+        int8_t distinct[MonthGrid::kMaxDots];
+        int nd = 0;
+        int total = 0;
         for(int i = 0; i < this->cal.count; i++){
-            if(Ical::OccursOn(this->cal.events[i], day)) n++;
+            const IcalEvent& ev = this->cal.events[i];
+            if(!Ical::OccursOn(ev, day)) continue;
+            total++;
+            const int8_t c = (this->file_count > 1) ? this->colorOf(ev) : PICO_DARKGREEN;
+            bool seen = false;
+            for(int k = 0; k < nd; k++) if(distinct[k] == c) seen = true;
+            if(!seen && nd < MonthGrid::kMaxDots) distinct[nd++] = c;
         }
-        this->counts[d] = (uint8_t)(n > 255 ? 255 : n);
+        MonthGrid::DayDots& dd = this->day_dots[d];
+        dd.count = (uint8_t)((total < MonthGrid::kMaxDots) ? total : MonthGrid::kMaxDots);
+        for(int k = 0; k < dd.count; k++) dd.colors[k] = distinct[k % nd];
     }
 
     LOG_APP_MSG("カレンダー: %d年%d月 %d件 (%dファイル, 捨てた%d件, 繰り返し未対応%d件)",
@@ -127,16 +178,48 @@ void CalendarScene::refreshView(){
         const bool this_month = (this->today_year == this->view_year && this->today_month == this->view_month);
         this->grid->setToday(this_month ? this->today_day : 0);
         this->grid->setSelected(this->selected_day);
-        this->grid->setCounts(this->counts);
+        this->grid->setDots(this->day_dots);
     }
 
     this->refreshDayList();
+}
+
+void CalendarScene::formatTime(const IcalEvent& ev, int32_t day, FixedString<PICO_STR_M>& out) const {
+    //「終日」「09:30-10:30」「22:00-」(翌日へまたぐ)「02:00まで」(前日からの続きが今日終わる)「(続き)」。
+    //「~02:00」にしないのは、16pxフォントの「~」が上線のような形で読めないため
+    out.clear();
+    if(ev.start.isAllDay()){
+        out.append("終日");
+        return;
+    }
+
+    //繰り返しでも各回の長さは同じなので、その回の開始日から数えて今日が何日目かで終わりが分かる
+    const bool starts_today = Ical::StartsOn(ev, day);
+    const int32_t span = ev.end.day - ev.start.day;
+    int32_t nth_day = 0;
+    if(!starts_today){
+        for(int32_t back = 1; back <= span; back++){
+            if(Ical::StartsOn(ev, day - back)){ nth_day = back; break; }
+        }
+    }
+    const bool ends_today = (nth_day == span);
+
+    if(starts_today){
+        out.appendFormat("%02d:%02d", (int)(ev.start.sec / 3600), (int)(ev.start.sec / 60 % 60));
+        if(!ends_today)                     out.append("-");
+        else if(ev.end.sec != ev.start.sec) out.appendFormat("-%02d:%02d", (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
+    }else if(ends_today){
+        out.appendFormat("%02d:%02dまで", (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
+    }else{
+        out.append("(続き)");
+    }
 }
 
 void CalendarScene::refreshDayList(){
     if(!this->day_label || !this->event_list) return;
 
     this->event_list->clear();
+    this->list_count = 0;
 
     if(!OSData::SD_usable){
         this->day_label->setText("SDカードがありません");
@@ -149,8 +232,9 @@ void CalendarScene::refreshDayList(){
 
     const int32_t day = Ical::DaysFromCivil(this->view_year, this->view_month, this->selected_day);
 
-    uint8_t idx[kMaxEventsPerDay];
-    const int n = Ical::EventsOn(this->cal, day, idx, kMaxEventsPerDay);
+    static_assert(sizeof(list_events) == kMaxEventsPerDay, "list_events と kMaxEventsPerDay を揃える");
+    const int n = Ical::EventsOn(this->cal, day, this->list_events, kMaxEventsPerDay);
+    this->list_count = n;
 
     char head[PICO_STR_M];
     if(n == 0){
@@ -163,45 +247,106 @@ void CalendarScene::refreshDayList(){
     this->day_label->setText(head);
 
     for(int i = 0; i < n; i++){
-        const IcalEvent& ev = this->cal.events[idx[i]];
+        const IcalEvent& ev = this->cal.events[this->list_events[i]];
         ScrollListTools::Item item;
 
-        //時刻の欄: 「終日」「09:30-10:30」「22:00-」(翌日へまたぐ)「02:00まで」(前日からの続きが今日終わる)「(続き)」。
-        //「~02:00」にしないのは、16pxフォントの「~」が上線のような形で読めないため
-        const bool starts_today = Ical::StartsOn(ev, day);
-        if(ev.start.isAllDay()){
-            item.text.append("終日");
-        }else{
-            //繰り返しでも各回の長さは同じなので、その回の開始日から数えて今日が何日目かで終わりが分かる
-            const int32_t span = ev.end.day - ev.start.day;
-            int32_t nth_day = 0;
-            if(!starts_today){
-                for(int32_t back = 1; back <= span; back++){
-                    if(Ical::StartsOn(ev, day - back)){ nth_day = back; break; }
-                }
-            }
-            const bool ends_today = (nth_day == span);
-
-            if(starts_today){
-                item.text.appendFormat("%02d:%02d", (int)(ev.start.sec / 3600), (int)(ev.start.sec / 60 % 60));
-                if(!ends_today)                     item.text.append("-");
-                else if(ev.end.sec != ev.start.sec) item.text.appendFormat("-%02d:%02d", (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
-            }else if(ends_today){
-                item.text.appendFormat("%02d:%02dまで", (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
-            }else{
-                item.text.append("(続き)");
-            }
-        }
-
+        FixedString<PICO_STR_M> time;
+        this->formatTime(ev, day, time);
+        item.text.append(time);
         item.text.append(" ");
         item.text.append(ev.summary.empty() ? "(無題)" : ev.summary.c_str());
         if(!ev.location.empty()){
             item.text.append(" @");
             item.text.append(ev.location.c_str());
         }
+        //複数のカレンダーを重ねているときは、格子の点と同じ色で書く
+        item.color = this->colorOf(ev);
 
         this->event_list->add(item);
     }
+}
+
+void CalendarScene::showDetail(int index){
+    if(index < 0 || index >= this->list_count) return;
+    if(this->detail_dialog) return; //開いているものがあればそちらを先に閉じてもらう
+
+    const IcalEvent& ev = this->cal.events[this->list_events[index]];
+    const int32_t day = Ical::DaysFromCivil(this->view_year, this->view_month, this->selected_day);
+
+    EventDetailDialog::Body body;
+
+    //日時。1日で終わる予定は「9月23日(水) 09:30-10:30」、
+    //日をまたぐ予定はその回の始まりと終わりを両方出す(一覧の「(続き)」だけでは分からないので)
+    const int32_t span = ev.end.day - ev.start.day - (ev.end.isAllDay() ? 1 : 0);
+    auto append_date = [&](int32_t d){
+        int y, m, dd;
+        Ical::CivilFromDays(d, y, m, dd);
+        body.appendFormat("%d月%d日(%s)", m, dd, WDAY_JP[Ical::Weekday(d)]);
+    };
+    if(span <= 0 || (!ev.start.isAllDay() && span == 1 && ev.end.sec == 0)){
+        FixedString<PICO_STR_M> time;
+        this->formatTime(ev, day, time);
+        append_date(day);
+        body.append(" ");
+        body.append(time);
+    }else{
+        //この日にかかっている回が何日に始まったか(繰り返しでも各回の長さは同じ)
+        int32_t occ = day;
+        for(int32_t back = 0; back <= span; back++){
+            if(Ical::StartsOn(ev, day - back)){ occ = day - back; break; }
+        }
+        append_date(occ);
+        if(!ev.start.isAllDay()) body.appendFormat(" %02d:%02d", (int)(ev.start.sec / 3600), (int)(ev.start.sec / 60 % 60));
+        body.append(" から\n");
+        append_date(occ + span);
+        if(!ev.end.isAllDay()) body.appendFormat(" %02d:%02d", (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
+        body.append(" まで");
+    }
+    body.append("\n");
+
+    if(!ev.location.empty()){
+        body.append("場所: ");
+        body.append(ev.location.c_str());
+        body.append("\n");
+    }
+
+    if(ev.rule.freq != IcalRule::Freq::None){
+        static const char* const kFreq[] = { "", "毎日", "毎週", "毎月", "毎年" };
+        body.append("繰り返し: ");
+        body.append(kFreq[(int)ev.rule.freq]);
+        if(ev.rule.interval > 1) body.appendFormat("(%d回に1回)", (int)ev.rule.interval);
+        body.append("\n");
+    }else if(!ev.rule.supported){
+        body.append("繰り返し: 未対応の規則のため初回だけ表示しています\n");
+    }
+
+    //どのカレンダーの予定か(ファイル名から .ics を落としたもの)
+    if(ev.file_index < this->file_count){
+        const FixedString<PICO_STR_M>& fname = this->file_names[ev.file_index];
+        FixedString<PICO_STR_M> cal_name;
+        cal_name.assign(fname.c_str(), fname.length() >= 4 ? fname.length() - 4 : fname.length());
+        body.append("カレンダー: ");
+        body.append(cal_name);
+        body.append("\n");
+    }
+
+    //説明文は持っていないので、ここで読み直す(1件ぶんだけ。先頭のほうの予定ほど早い)
+    FixedString<PICO_PATH_LEN> path;
+    Ical::Description desc;
+    if(this->filePath(ev.file_index, path) && Ical::ReadDescription(path.c_str(), ev.ordinal, desc)){
+        body.append("\n");
+        body.append(desc);
+    }
+
+    this->detail_dialog = new EventDetailDialog();
+    this->detail_dialog->setContent(ev.summary.empty() ? "(無題)" : ev.summary.c_str(), body.c_str());
+    WidgetFunctions::AddDialog(this->detail_dialog);
+    this->detail_dialog->setVisible(true);
+    EventDetailDialog* dialog = this->detail_dialog;
+    this->detail_dialog->setOnClosed([this, dialog](bool){
+        if(this->detail_dialog == dialog) this->detail_dialog = nullptr;
+        WidgetFunctions::DestroyLater(dialog);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +488,10 @@ void CalendarScene::onEnter(){
         kMaxEventsPerDay
     );
     this->event_list->setFontSize(FontFn::Small);
+    //1回目のタップで選択、2回目で詳細を開く(ScrollListの流儀。SearchDialogと同じ)
+    this->event_list->setOnSelectItem([this](int index, bool already_selected){
+        if(already_selected) this->showDetail(index);
+    });
     WidgetFunctions::Add(this->event_list);
 
     this->frames_since_enter = 0;
@@ -424,6 +573,7 @@ void CalendarScene::onExit(){
 
     this->back_button = nullptr;
     this->sync_button = nullptr;
+    this->detail_dialog = nullptr; //ダイアログ層ごとフレームワークが片付ける
     this->prev_button = nullptr;
     this->next_button = nullptr;
     this->today_button = nullptr;

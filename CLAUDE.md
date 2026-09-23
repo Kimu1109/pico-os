@@ -240,6 +240,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - `FileSaveDialog`: `FileExplorer`+ファイル名`Textbox`+OK/キャンセル。**保存専用**。
 - `FileSelectDialog`: `FileExplorer`+OK/キャンセルのみ。**選択専用**(ファイル名欄なし)。
   - ※旧設計では1クラスで兼用予定だったが、実装では保存/選択で別クラスに分離された。
+- `EventDetailDialog`: カレンダーの予定1件の詳細。題名 + `ScrollContainer`で包んだ本文 + 閉じる。中身は`CalendarScene`が作る。
 - `SearchDialog`: Markdownブラウザの検索結果。状態1行 + `ScrollList` + 再検索/次へ/閉じる。
   **通信はしない**(判断は`MarkdownScene`側)。結果は2回タップで開く。
 - `ColorDialog`: 実装済み(直近コミット)。4×4=16色グリッド(`getIndexToColor(x,y)=x+y*4`)+OK/キャンセル。`selected_color`(未選択-1)、`getSelectedColor()`。
@@ -424,10 +425,17 @@ iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で
 - **例外**: EXDATEと、RECURRENCE-ID付きの上書き予定。後者は`finish()`で親(同じUIDの32bitハッシュ)の
   `exdates`へ畳み込み、上書き側は単発の予定として残す(STATUS:CANCELLEDなら残さない)。
   除外は「日」で持つ(対応する繰り返しは1日1回までなので足りる)。1件あたり`kMaxExDates=8`まで。
+  **覚えるのは読み込みの窓(の`kMaxSpanScan`日前から)にかかる例外だけ**(2026-09-23)。Googleは何年分もの
+  例外を全部書いてくるので、以前は長く続く定例の`exdates`が昔の分で埋まり、窓の中の「削除した回/移動した回」が
+  元の日にも出ていた。上書き予定の控え(`kMaxOverrides=32`)も同じ理由で窓の近くだけ。
 - VEVENTの**直下だけ**を読む。VALARMにもSUMMARYがあり、拾うと予定名が通知文で上書きされる。
 - ホストテストは`script/host_test/ical_test.cpp`(RFC 5545のWKSTの例、第n曜日、31日/2/29の飛ばし、
   1バイトずつ食わせた場合、UTF-8の途中での折り返し等)。
 - `EventsOn(cal, day, out, max)`が1日ぶんの予定を「終日と前日からの続きが先、残りは開始時刻順」で並べる(一覧の表示順)。
+- **説明文(DESCRIPTION)は持たない**(64件ぶん持つとRAMを食う)。各予定は`file_index`(どの.icsか)と
+  `ordinal`(そのファイルで何番目のVEVENTか。読み捨てた分も数える)だけを持ち、詳細を開くときに
+  `ReadDescription(path, ordinal, out)`でその1件だけ読み直す(`Parser`の「予定を集めず説明文だけ拾う」読み方。
+  目当てのVEVENTを読み終えたらファイルの残りは読まない)。説明文は1論理行の上限(512B)で切れる。
 - 取得は`calendar/Calendar_Sync`(下の「CalendarScene 実装詳細」参照)。
 
 ### CalendarScene 実装詳細 (2026-09-23)
@@ -447,7 +455,14 @@ iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で
   時点で今日の月へ飛ぶ(PCビルドでも起動直後の数フレームはこの状態を通る)。0時を回ったら今日の印だけ動かす。
 - 一覧の時刻欄は「終日」「09:30-10:30」「22:00-」(翌日へまたぐ)「02:00まで」(前日からの続きが今日終わる)「(続き)」。
   **`~02:00`にしないのは、16pxフォントの`~`が上線のような形で読めないため**(PCビルドの`--shot`で気づいた)。
-- 一覧は`ScrollList`なので**長い予定名は右で切れる**(折り返さない)。詳細画面はまだ無い。
+- 一覧は`ScrollList`なので**長い予定名は右で切れる**(折り返さない)。**2回タップで詳細**(`dialogs/EventDetailDialog`)が開き、
+  題名・日時(日をまたぐ回は始まりと終わり)・場所・繰り返し・カレンダー名・説明文を全文スクロールで読める
+  (本文は`DictScene`の詳細欄と同じく`ScrollContainer`+`Label`)。
+- **複数のカレンダーを重ねると色分けする**。`/calendar/*.ics`を**ファイル名順**に並べて`file_index`を振り、
+  `kCalendarColors`(白地で読める濃い8色)から色を決める。**名前順にするのは、SdFatの列挙順が「作った順」で、
+  取得のたびにファイルを差し替えると入れ替わる(=色が変わる)ため**。格子の点(`MonthGrid::setDots()`。
+  違うカレンダーの色を先に並べ、余った点は同じ色を繰り返す)と一覧の文字色(`ScrollListTools::Item::color`)に使う。
+  .icsが1つだけなら今までどおり(緑の点・黒い文字)。読む.icsは8つまで。
 - **取得(`calendar/Calendar_Sync`)**: `/calendar/sources.cfg`の「名前 = URL」を1件ずつ取り、`/calendar/<名前>.ics`へ置く
   (`webcal://`は`https://`として扱う)。**`Doc_Fetch`/`Doc_Cache`は通さない** — キャッシュは1件64KiBで頭打ちなのに
   Googleの非公開URLは過去の予定を全部返して数百KBになる上、`/cache/<ホスト>/<パス>`へミラーすると非公開URLの
@@ -462,6 +477,7 @@ iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で
     表示は前回の`.ics`のまま。中身が変わったものがあったときだけ読み直す(全部304なら何もしない)。
   - `onExit()`で取得は打ち切る(`onUpdate()`が来なくなるため)。
   - Web版は取りに行けない(HTTPSのスタブが常に失敗する)。
+- `ScrollListTools::Item`に**項目ごとの文字色`color`(-1で一覧の色)**を足した(カレンダーの色分けのため。汎用の拡張で、選択中の反転表示が優先)。
 
 `MonthGrid`(`widgets/apps/`)は「子を持たずrender()で直接描き、タップ位置から逆算する」型。
 日曜赤・土曜青、今日は赤の二重枠、選択中は黒塗り+白抜き、予定のある日は数字の下に点(最大3つ)。

@@ -9,6 +9,7 @@ IMEの辞書(`sys/ime/skk_body.tsv` / `sys/ime/skk_index.tsv`)は大きいため
 
 `calendar/sample.ics` はカレンダーアプリの動作サンプル。毎週/隔週/毎月最終金曜/毎年の
 繰り返し、1回だけ時間を変えた回、UTCで書いた日をまたぐ予定などを含む。
+`calendar/family.ics` は2つ目のカレンダーの例(複数のカレンダーを重ねると色分けされる)。
 `calendar/` 直下の `*.ics` は全部読まれるので、手元の .ics(Googleカレンダーの
 「iCal形式の非公開URL」から落としたもの等)を置けばそれも重ねて表示される。
 

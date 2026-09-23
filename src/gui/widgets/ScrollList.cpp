@@ -59,7 +59,8 @@ void ScrollList::render(){
     int icon_size = FontFn::GetFontSize(this->getFontSize());
 
     for(int i = start_index; i < this->dataSource.size(); i++){
-        int8_t l_text_color = this->text_color;
+        const int8_t item_color = this->dataSource.at(i).color;
+        int8_t l_text_color = (item_color >= 0) ? item_color : this->text_color;
         if(selected_index == i){
             OSData::frame->fillRect(g_rect.x, g_rect.y + draw_y - MARGIN * 0.5, g_rect.w - SCROLL_BAR_W, ITEM_HEIGHT, this->text_color);
             l_text_color = this->background_color;

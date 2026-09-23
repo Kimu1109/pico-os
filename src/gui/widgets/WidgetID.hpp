@@ -16,6 +16,7 @@ enum class WidgetType : uint8_t {
     DropdownMenu,
     DurationPicker,
     EllipseShape,
+    EventDetailDialog,
     FileExplorer,
     FileSaveDialog,
     FileSelectDialog,

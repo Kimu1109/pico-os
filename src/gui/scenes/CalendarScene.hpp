@@ -5,6 +5,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/apps/MonthGrid.hpp"
+#include "gui/widgets/dialogs/EventDetailDialog.hpp"
 #include "calendar/Ical.hpp"
 #include "calendar/Calendar_Sync.hpp"
 
@@ -34,6 +35,7 @@ class CalendarScene : public Scene {
         Label<PICO_STR_M>* day_label = nullptr;   // 「9月23日(水) 2件」/ 読めなかった理由
         Button* sync_button = nullptr;            // 「更新」/「取得中」/「再試行」
         ScrollList* event_list = nullptr;
+        EventDetailDialog* detail_dialog = nullptr; // 開いている間だけ
 
         // 表示中の月と選択中の日。onExit()を跨いで残る(上へPush()して戻ると復元される)
         int view_year = 0;
@@ -46,8 +48,20 @@ class CalendarScene : public Scene {
         int today_day = 0;
 
         IcalCalendar cal;
-        uint8_t counts[32] = {};  // [日] = その日にかかる予定の件数
+        MonthGrid::DayDots day_dots[32]; // [日] = 格子に描く点(数とカレンダーごとの色)
         int loaded_files = 0;     // 読めた .ics の数(0なら案内を出す)
+
+        // 読んだ .ics のファイル名(名前順)。IcalEvent::file_index はこの添字で、
+        // 色(kCalendarColors)とカレンダー名(詳細画面)と説明文の読み直し先を引く。
+        // 名前順に並べ直すのは、SdFatの列挙順が「作った順」で、取得のたびに
+        // ファイルを差し替えると入れ替わってしまう(=色が変わる)ため
+        constexpr static int kMaxFiles = 8;
+        FixedString<PICO_STR_M> file_names[kMaxFiles];
+        int file_count = 0;
+
+        // 一覧の行 → cal.events[] の添字(詳細を開くときに使う)
+        uint8_t list_events[16] = {};
+        int list_count = 0;
 
         // ---- 取得(sources.cfg に書かれたURLから) ----
         // 取得はフレームをまたいで進む。onExit()で打ち切る(onUpdateが来なくなるため)
@@ -61,7 +75,7 @@ class CalendarScene : public Scene {
         bool last_sync_failed = false;
 
         // 1日に並べる予定の上限。EventsOn() の out の大きさ
-        constexpr static int kMaxEventsPerDay = 16;
+        constexpr static int kMaxEventsPerDay = 16; // list_events の大きさと揃える
 
         constexpr static int MARGIN = 3;
 
@@ -78,6 +92,15 @@ class CalendarScene : public Scene {
         // タイトル・格子・一覧を今の状態へ合わせる
         void refreshView();
         void refreshDayList();
+
+        // 一覧の index 行目の予定の詳細を開く
+        void showDetail(int index);
+        // その日の予定の時刻の欄(「終日」「09:30-10:30」等)
+        void formatTime(const IcalEvent& ev, int32_t day, FixedString<PICO_STR_M>& out) const;
+        // file_index 番目の .ics のSD上のパス
+        bool filePath(int file_index, FixedString<PICO_PATH_LEN>& out) const;
+        // 複数のカレンダーを重ねているときだけ色分けする(1つなら今までどおりの見た目)
+        int8_t colorOf(const IcalEvent& ev) const;
 
         void startSync();
         void refreshSyncButton();

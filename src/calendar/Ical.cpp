@@ -121,14 +121,14 @@ namespace {
     }
 
     // TEXT値のエスケープをその場で戻す(縮む一方なので同じバッファで足りる)。
-    // 改行は1行表示なので空白にする
-    void UnescapeInPlace(char* s){
+    // 一覧は1行表示なので既定では改行を空白にする。説明文は改行のまま残す
+    void UnescapeInPlace(char* s, bool keep_newlines = false){
         char* dst = s;
         while(*s){
             char c = *s++;
             if(c == '\\' && *s){
                 const char e = *s++;
-                c = (e == 'n' || e == 'N') ? ' ' : e;
+                c = (e == 'n' || e == 'N') ? (keep_newlines ? '\n' : ' ') : e;
             }
             *dst++ = c;
         }
@@ -306,7 +306,18 @@ int Ical::DaysInMonth(int y, int m){
 
 // ---------------------------------------------------------------- パーサ
 
-Ical::Parser::Parser(IcalCalendar& out, const Options& opt) : out_(out), opt_(opt){}
+Ical::Parser::Parser(IcalCalendar& out, const Options& opt) : out_(&out), opt_(opt){}
+
+Ical::Parser::Parser(const Options& opt, uint16_t ordinal, Description& description_out)
+    : out_(nullptr), opt_(opt), capture_(&description_out), capture_ordinal_(ordinal){
+    capture_->clear();
+}
+
+bool Ical::Parser::exceptionNearWindow(int32_t day) const {
+    //複数日にまたがる回は、窓より前に始まっていても窓にかかる(OccursOn()と同じだけ遡る)
+    return (int64_t)day >= (int64_t)opt_.window_from_day - kMaxSpanScan
+        && day < opt_.window_to_day;
+}
 
 void Ical::Parser::feed(const char* data, size_t len){
     for(size_t i = 0; i < len; i++) pushByte(data[i]);
@@ -342,11 +353,16 @@ void Ical::Parser::finish(){
     after_newline_ = false;
     endLine();
 
+    if(!out_){
+        override_count_ = 0;
+        return;
+    }
+
     //上書き予定を親のEXDATEへ畳み込む
     for(int i = 0; i < override_count_; i++){
         const Override& o = overrides_[i];
-        for(int e = 0; e < out_.count; e++){
-            IcalEvent& ev = out_.events[e];
+        for(int e = 0; e < out_->count; e++){
+            IcalEvent& ev = out_->events[e];
             if(ev.uid_hash != o.uid || ev.has_recurrence_id || ev.rule.freq == IcalRule::Freq::None) continue;
             if(ev.exdate_count < IcalEvent::kMaxExDates){
                 ev.exdates[ev.exdate_count++] = o.day;
@@ -394,6 +410,9 @@ void Ical::Parser::handleLine(char* line, size_t len){
         if(event_depth_ == 0 && IEq(value, "VEVENT")){
             event_depth_ = depth_;
             cur_ = IcalEvent{};
+            cur_.file_index = opt_.file_index;
+            cur_.ordinal = vevent_count_;
+            if(vevent_count_ < 0xFFFF) vevent_count_++;
             has_start_ = false;
             has_end_ = false;
             duration_sec_ = -1;
@@ -404,6 +423,7 @@ void Ical::Parser::handleLine(char* line, size_t len){
     if(IEq(name, "END")){
         if(line_overflow_) return;
         if(event_depth_ != 0 && depth_ == event_depth_ && IEq(value, "VEVENT")){
+            if(capture_ && cur_.ordinal == capture_ordinal_) capture_done_ = true;
             commitEvent();
             event_depth_ = 0;
         }
@@ -417,6 +437,15 @@ void Ical::Parser::handleLine(char* line, size_t len){
 }
 
 void Ical::Parser::handleEventProperty(const char* name, const char* params, char* value, bool truncated){
+    //説明文を拾う読み方では、目当てのVEVENTのDESCRIPTIONだけを見る(他は読まない)
+    if(capture_){
+        if(cur_.ordinal == capture_ordinal_ && IEq(name, "DESCRIPTION")){
+            UnescapeInPlace(value, true);
+            capture_->assign(value); //長すぎれば文字の境目で切れる。表示専用なので構わない
+        }
+        return;
+    }
+
     const bool is_text = IEq(name, "SUMMARY") || IEq(name, "LOCATION");
     //切れた行は、表示専用の文字列以外は使わない(日付や規則を途中までで読むと別物になる)
     if(truncated && !is_text) return;
@@ -468,8 +497,12 @@ void Ical::Parser::handleEventProperty(const char* name, const char* params, cha
             char* comma = strchr(p, ',');
             if(comma) *comma = '\0';
             IcalTime t;
-            if(ParseTime(p, value_date, off, t) && cur_.exdate_count < IcalEvent::kMaxExDates){
-                cur_.exdates[cur_.exdate_count++] = t.day;
+            if(ParseTime(p, value_date, off, t) && this->exceptionNearWindow(t.day)){
+                if(cur_.exdate_count < IcalEvent::kMaxExDates){
+                    cur_.exdates[cur_.exdate_count++] = t.day;
+                }else{
+                    override_lost_++;
+                }
             }
             p = comma ? comma + 1 : nullptr;
         }
@@ -596,12 +629,12 @@ void Ical::Parser::commitEvent(){
         if(bad){
             r = IcalRule{};
             r.supported = false;
-            out_.unsupported_rules++;
+            if(out_) out_->unsupported_rules++;
         }
     }
 
-    //上書き予定: 親の該当回を消す控えは、自分が読み捨てられても残す
-    if(cur_.has_recurrence_id && cur_.uid_hash != 0){
+    //上書き予定: 親の該当回を消す控えは、自分が読み捨てられても残す(窓から遠い回は要らない)
+    if(cur_.has_recurrence_id && cur_.uid_hash != 0 && this->exceptionNearWindow(cur_.recurrence_id.day)){
         if(override_count_ < kMaxOverrides){
             overrides_[override_count_++] = Override{cur_.uid_hash, cur_.recurrence_id.day};
         }else{
@@ -620,11 +653,12 @@ void Ical::Parser::commitEvent(){
         if((int64_t)last_start + SpanDays(cur_) < opt_.window_from_day) return;
     }
 
-    if(out_.count >= IcalCalendar::kMaxEvents){
-        out_.dropped++;
+    if(!out_) return;
+    if(out_->count >= IcalCalendar::kMaxEvents){
+        out_->dropped++;
         return;
     }
-    out_.events[out_.count++] = cur_;
+    out_->events[out_->count++] = cur_;
 }
 
 // ---------------------------------------------------------------- SDから読む
@@ -653,6 +687,25 @@ bool Ical::ParseFile(const char* path, IcalCalendar& out, const Options& opt){
                      parser.lostExceptions(), path);
     }
     return true;
+}
+
+bool Ical::ReadDescription(const char* path, uint16_t ordinal, Description& out){
+    out.clear();
+    if(!path || path[0] == '\0') return false;
+
+    FsFile f = OSData::SD.open(path, O_RDONLY);
+    if(!f) return false;
+
+    Parser parser(Options{}, ordinal, out);
+    char chunk[256];
+    int n = 0;
+    //目当てのVEVENTを読み終えたら、残りは読まない(ファイルの頭のほうの予定ほど早い)
+    while(!parser.captureDone() && (n = f.read(chunk, sizeof(chunk))) > 0){
+        parser.feed(chunk, (size_t)n);
+    }
+    if(!parser.captureDone()) parser.finish();
+    f.close();
+    return !out.empty();
 }
 
 // ---------------------------------------------------------------- 引き当て

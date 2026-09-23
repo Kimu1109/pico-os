@@ -75,6 +75,11 @@ struct IcalEvent {
     bool     cancelled = false;
     uint8_t  exdate_count = 0;
     int32_t  exdates[kMaxExDates];     // 除外する回の「日」。対応する繰り返しは1日1回までなので日で足りる
+                                       // 読み込みの窓の近くにあるものだけを持つ(Parser参照)
+
+    // どこから読んだか。詳細(DESCRIPTION)は持たず、見るときに ReadDescription() で読み直す
+    uint8_t  file_index = 0;           // Options::file_index をそのまま写す(呼び出し側の数え方)
+    uint16_t ordinal = 0;              // そのファイルの中で何番目のVEVENTか(0始まり、読み捨てた分も数える)
 };
 
 struct IcalCalendar {
@@ -99,7 +104,12 @@ namespace Ical {
         // kMaxEvents がすぐ昔の予定で埋まる。繰り返しは UNTIL で判断できるものだけ捨てる
         int32_t window_from_day = INT32_MIN;
         int32_t window_to_day   = INT32_MAX;
+        // 読んだ予定の IcalEvent::file_index に入れる値(複数の .ics を重ねるときの目印)
+        uint8_t file_index = 0;
     };
+
+    // 詳細画面で見せる説明文(DESCRIPTION)の上限。1論理行の上限(Parser::kMaxLineBytes)で先に切れる
+    using Description = FixedString<PICO_STR_512B>;
 
     // ---- 日付の計算(Howard Hinnantのdays_from_civil。グレゴリオ暦) ----
     int32_t DaysFromCivil(int year, int month, int day);
@@ -119,6 +129,8 @@ namespace Ical {
         static constexpr size_t kMaxLineBytes = 512;
 
         Parser(IcalCalendar& out, const Options& opt);
+        // 予定を集めず、ordinal 番目のVEVENTの説明文だけを拾う(ReadDescription()用)
+        Parser(const Options& opt, uint16_t ordinal, Description& description_out);
 
         void feed(const char* data, size_t len);
         // 最後の行を処理し、上書き予定を親へ畳み込む。必ず最後に1回呼ぶこと
@@ -126,6 +138,8 @@ namespace Ical {
 
         // 繰り返しの例外(EXDATE/上書き予定)が上限に当たって反映できなかった数
         int lostExceptions() const { return override_lost_; }
+        // 説明文を拾う読み方で、目当てのVEVENTを読み終えた(以降は読まなくてよい)
+        bool captureDone() const { return capture_done_; }
 
         // 上書き予定(RECURRENCE-ID)の控えを finish() まで貯めておく数。
         // 上書き予定そのものが窓の外で読み捨てられても、親の回は消さなければならないため別に持つ
@@ -137,9 +151,17 @@ namespace Ical {
         void handleLine(char* line, size_t len);
         void handleEventProperty(const char* name, const char* params, char* value, bool truncated);
         void commitEvent();
+        // 窓の外の例外(EXDATE/上書き予定)は覚えない。Googleは何年分もの例外を全部書いてくるので、
+        // 覚えると kMaxExDates がすぐ昔の分で埋まり、窓の中の例外が効かなくなる
+        bool exceptionNearWindow(int32_t day) const;
 
-        IcalCalendar& out_;
+        IcalCalendar* out_ = nullptr;   // nullptrなら予定を集めない(説明文を拾うだけ)
         Options opt_;
+
+        uint16_t vevent_count_ = 0;     // これまでに始まったVEVENTの数(ordinalの採番)
+        Description* capture_ = nullptr;
+        uint16_t capture_ordinal_ = 0;
+        bool capture_done_ = false;
 
         char   line_[kMaxLineBytes];
         size_t line_len_ = 0;
@@ -181,6 +203,10 @@ namespace Ical {
     bool StartsOn(const IcalEvent& ev, int32_t day);
     // その日にかかっているか(複数日にまたがる予定も含む)。月表示の印はこちら
     bool OccursOn(const IcalEvent& ev, int32_t day);
+
+    // path の ordinal 番目のVEVENTの説明文(DESCRIPTION)を読む。エスケープは戻し、改行は改行のまま。
+    // 見つからない/説明が無ければ false(out は空)
+    bool ReadDescription(const char* path, uint16_t ordinal, Description& out);
 
     // その日にかかっている予定の添字(cal.events[])を out へ並べ、件数を返す。
     // 並びは「終日と前日からの続き」が先、残りは開始時刻順(同時刻は読んだ順)。

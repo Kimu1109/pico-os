@@ -139,6 +139,7 @@ namespace {
         { "scan", "PICOOS_WIFI_SCAN"  },
         { "sd",   "PICOOS_SD_ROOT"    },
         { "render", "PICOOS_RENDER_DRIVER" },
+        { "spi_wait", "PICOOS_SPI_WAIT" },
     };
 
     // application/x-www-form-urlencoded をほどく(%XX と '+' だけ)

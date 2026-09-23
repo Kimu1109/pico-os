@@ -7,6 +7,7 @@
 
 #include <LovyanGFX.hpp>
 #include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
+#include "config/Panel_sdl_SpiWait.hpp"
 #include "consts.hpp"
 
 // PCの画面上での拡大率。240x320は実寸だと小さいので既定で2倍にする
@@ -15,7 +16,8 @@
 #endif
 
 class LGFX : public lgfx::LGFX_Device {
-    lgfx::Panel_sdl _panel_instance;
+    // 実機のSPI転送時間ぶんだけ書き込みを待たせるSDLパネル(Panel_sdl_SpiWait.hpp参照)
+    Panel_sdl_SpiWait _panel_instance;
 
 public:
     LGFX(void) {

@@ -635,6 +635,14 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   最初から実時刻を返すため。表示タイムゾーンは`network.cfg`の`timezone`(例`JST-9`)で決まる。
   ※`TimeFunctions::Update()`は333msごとにしか更新しないので、`--shot`のフレーム数が少ないと
   初期値の`00:00`が写る。時刻を確認したいときは200フレーム以上回すこと。
+- **液晶への書き込みは、実機のSPI転送にかかる理論上の時間だけ待つ**(`pc/compat/config/Panel_sdl_SpiWait.hpp`)。
+  SDLパネルへの書き込みはメモリのコピーで一瞬なので、放っておくと「液晶へ送る量が多すぎて重い」問題が
+  PCでは見えない(スクラッチパッドでキャンバス全体を毎回送っていた件がまさにそれで、実機でしか気づけなかった)。
+  SPIのクロックはLovyanGFX(rp2040)の`FreqToClockDiv()`と同じ計算で求める: CPSR=2固定・clk_peri=150MHzなので、
+  `TFT_MAX_SPEED`=80MHzを要求しても**実際は75MHz**。1ピクセル16bit+範囲指定88bitで、**画面1枚16.4ms**。
+  書き込みの呼び出し元をその時間だけ止める(残り200µsまではsleep、最後は空回りで合わせる)。
+  **4bpp→RGB565変換のCPU時間は含まない**ので実機より少し速い(=下限)。`PICOOS_SPI_WAIT=off`で無効、
+  Webは既定で無効(メインスレッドを止めるため。`?spi_wait=on`で有効)。
 - GPIO/SPIは空実装。
 - **LovyanGFXの版は`platformio.ini`の`lib_deps`から読む**(`pc/CMakeLists.txt`が正規表現で拾う)ので、
   上げるときに直すのは`platformio.ini`の1行だけ。以前はCMake側にも`GIT_TAG`を直書きしていて

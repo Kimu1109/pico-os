@@ -1108,6 +1108,46 @@ int main(){
         CanvasRaster* cr = static_cast<CanvasRaster*>(WidgetRegistry::Resolve(canvas_id));
         check(cr != nullptr, "pico.create(\"CanvasRaster\"): 実体が引ける");
 
+        // ドラッグ中の再描画範囲: 1回動くごとにキャンバス全体をdirtyにすると、実機では
+        // 合成(スプライト複製)と液晶への転送が画面ほぼ1枚ぶん走り、線がカクカクになった。
+        // 描いた線分の周り(ブラシ半径ぶん広げた外接矩形)だけがdirtyになることを固定する
+        if (cr) {
+            cr->resize(60, 60); // 6x4では線分の範囲がキャンバス全体と区別できないため一時的に広げる
+            const Rect g = cr->getScreenRect();
+            cr->setBrushRadius(2.0f);
+            OSData::touchX = g.x + 1;
+            OSData::touchY = g.y + 1;
+            g_last_dirty = Rect{0, 0, 0, 0};
+            cr->causeOnPressStart();
+            check(g_last_dirty.x == g.x && g_last_dirty.y == g.y &&
+                  g_last_dirty.w == 5 && g_last_dirty.h == 5,
+                  "CanvasRaster: 触れた瞬間に点を打ち、その周り(キャンバス内に切り詰め)だけをdirtyにする");
+
+            OSData::touchX = g.x + 4;
+            OSData::touchY = g.y + 3;
+            g_last_dirty = Rect{0, 0, 0, 0};
+            cr->causeOnPressMove();
+            check(g_last_dirty.x == g.x && g_last_dirty.y == g.y &&
+                  g_last_dirty.w == 8 && g_last_dirty.h == 7,
+                  "CanvasRaster: ドラッグは線分の外接矩形+半径ぶんだけをdirtyにする(キャンバス全体ではない)");
+
+            // 1px未満でも動けば繋ぐ(以前は2px未満の動きを捨てていた)
+            OSData::touchX = g.x + 5;
+            g_last_dirty = Rect{0, 0, 0, 0};
+            cr->causeOnPressMove();
+            check(g_last_dirty.w > 0, "CanvasRaster: 1pxの動きでも線を繋ぐ");
+
+            // 指を離したフレームはcauseOnPressMove()が来ないので、最後の区間は離した時に繋ぐ
+            OSData::touchX = g.x + 9;
+            g_last_dirty = Rect{0, 0, 0, 0};
+            cr->causeOnPressEnd();
+            check(g_last_dirty.w > 0 && g_last_dirty.w < g.w,
+                  "CanvasRaster: 離した瞬間に最後の区間を繋ぐ");
+            OSData::touchX = 0;
+            OSData::touchY = 0;
+            cr->resize(6, 4);
+        }
+
         // 全ピクセルを既知の色(9=PICO_BLUE)で塗る。タッチのドラッグ(causeOnPressMove)
         // を模すより単純なため直接スプライトへ書き込む(ドラッグでの自由線描画自体は
         // CanvasRaster既存の機能で、今回追加した保存/読み込みの対象ではない)

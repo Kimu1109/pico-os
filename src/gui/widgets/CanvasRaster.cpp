@@ -2,6 +2,7 @@
 #include "OS_Data.hpp"
 #include "functions/GFX_Functions.hpp"
 #include <cmath>
+#include <algorithm>
 
 CanvasRaster::CanvasRaster(int16_t x, int16_t y, int16_t w, int16_t h){
     this->l_rect = {x, y, w, h};
@@ -64,7 +65,12 @@ void CanvasRaster::render(){
         }
     }
 
-    markdirty(g_rect);
+    //移動したときだけ新しい位置もdirtyにする。移動していなければ、
+    //ここへ来る前にneedsRender()(または描いた範囲だけのMarkDirty())が
+    //既にdirtyを積んでいる。以前は毎回g_rectを積み直していたため、
+    //needsRender()ぶんと合わせてキャンバス全体が1フレームに2回合成・転送されていた
+    if(this->prev_screen_rect != g_rect)
+        markdirty(g_rect);
     this->prev_screen_rect = g_rect;
 
     this->needs_redraw = false;
@@ -75,6 +81,12 @@ void CanvasRaster::causeOnPressStart(){
     
     sx = relX(OSData::touchX);
     sy = relY(OSData::touchY);
+
+    //触れた瞬間に点を打つ。以前は動いて初めて線を引いていたため、
+    //短いストローク(点・読点・短い払い)が一切残らなかった
+    if(mode == Canvas::Mode::Line){
+        this->strokeTo(sx, sy);
+    }
 }
 
 void CanvasRaster::causeOnPressMove(){
@@ -84,14 +96,9 @@ void CanvasRaster::causeOnPressMove(){
     int touchY = relY(OSData::touchY);
 
     if(mode == Canvas::Mode::Line){
-        if(
-            abs(sx - touchX) >= 2 ||
-            abs(sy - touchY) >= 2
-        ){
-            sp->drawWideLine(sx, sy, touchX, touchY, brush_radius, brush_color);
-            sx = touchX;
-            sy = touchY;
-            this->needsRender();
+        //描いた線分の周りだけを合成・転送する(needsRender()だとキャンバス全体になる)
+        if(sx != touchX || sy != touchY){
+            this->strokeTo(touchX, touchY);
         }
     }else{
         this->needsRender();
@@ -106,6 +113,14 @@ void CanvasRaster::causeOnPressEnd(){
 
     switch (mode)
     {
+        case Canvas::Mode::Line:
+            //指を離したフレームは、WidgetFunctions::UpdateAll()がupdate()より先に
+            //causeOnPressEnd()を呼んでis_pressingを下ろすため、そのフレームの
+            //causeOnPressMove()は来ない。最後の区間はここで繋ぐ
+            if(sx != touchX || sy != touchY){
+                this->strokeTo(touchX, touchY);
+            }
+            break;
         case Canvas::Mode::Rect:
             sp->drawRect(
                 sx, sy,
@@ -159,6 +174,53 @@ void CanvasRaster::resize(int16_t w, int16_t h){
     this->needsRender();
 }
 
+void CanvasRaster::strokeTo(int16_t x, int16_t y){
+    DrawThickLine(sp, sx, sy, x, y, brush_radius, brush_color);
+
+    //線分の外接矩形(太さぶん広げる)だけをdirtyにする。スプライト座標→画面座標
+    const int16_t r = (int16_t)lroundf(brush_radius) + 1;
+    const int16_t x0 = std::min(sx, x) - r;
+    const int16_t y0 = std::min(sy, y) - r;
+    const int16_t x1 = std::max(sx, x) + r;
+    const int16_t y1 = std::max(sy, y) + r;
+    const Rect g_rect = this->getScreenRect();
+    const Rect stroke{
+        (int16_t)(g_rect.x + x0), (int16_t)(g_rect.y + y0),
+        (int16_t)(x1 - x0 + 1), (int16_t)(y1 - y0 + 1)
+    };
+    markdirty(stroke.intersection(g_rect));
+
+    sx = x;
+    sy = y;
+}
+
+// 太さのある線分を「両端の円 + 胴体の四角形(三角形2枚)」で塗る。
+// drawWideLine()は使わない: アンチエイリアスのためreadRect()で既存ピクセルを読み戻して
+// アルファ合成する経路を通り、4bppパレットのスプライトでは遅い上にPCビルドではSEGVする
+// (AnalogClockの針をfillTriangle()で描いているのと同じ理由)。
+// fillCircle()/fillTriangle()は単純な塗りつぶしだけで済む
+void CanvasRaster::DrawThickLine(LGFX_Sprite* canvas, int x0, int y0, int x1, int y1, float radius, int8_t color){
+    const int r = (int)lroundf(radius);
+    if(r < 1){
+        canvas->drawLine(x0, y0, x1, y1, color);
+        return;
+    }
+
+    canvas->fillCircle(x0, y0, r, color);
+    if(x0 == x1 && y0 == y1) return;
+    canvas->fillCircle(x1, y1, r, color);
+
+    const float dx = (float)(x1 - x0);
+    const float dy = (float)(y1 - y0);
+    const float len = sqrtf(dx * dx + dy * dy);
+    //進行方向に垂直で長さrのベクトル
+    const int px = (int)lroundf(-dy / len * r);
+    const int py = (int)lroundf( dx / len * r);
+
+    canvas->fillTriangle(x0 + px, y0 + py, x1 + px, y1 + py, x1 - px, y1 - py, color);
+    canvas->fillTriangle(x0 + px, y0 + py, x1 - px, y1 - py, x0 - px, y0 - py, color);
+}
+
 // 矢印描画: 始点(x0,y0) → 終点(x1,y1)、先端は三角形の矢じり
 // canvas       : 描画先スプライト(LGFX_Sprite)
 // head_len     : 矢じりの長さ(px)
@@ -183,7 +245,7 @@ void CanvasRaster::drawArrow(LGFX_Sprite *canvas, int x0, int y0, int x1, int y1
     float bx = x1 - ux * hl;
     float by = y1 - uy * hl;
 
-    canvas->drawWideLine(x0, y0, bx, by, this->brush_radius, this->brush_color);
+    DrawThickLine(canvas, x0, y0, lroundf(bx), lroundf(by), this->brush_radius, this->brush_color);
 
     // --- 矢じり(三角形) ---
     float rad = head_angle_deg * (float)M_PI / 180.0f;

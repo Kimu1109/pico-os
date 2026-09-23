@@ -27,6 +27,10 @@ class CanvasRaster : public Widget {
         int8_t brush_color = PICO_BLACK;
         float brush_radius = 1.5;
 
+        //(sx,sy)から(x,y)まで現在のブラシで線を焼き込み、描いた範囲だけをdirtyにする。
+        //終わると(sx,sy)は(x,y)へ進む
+        void strokeTo(int16_t x, int16_t y);
+
         int16_t relX(int16_t x){
             return x - this->getScreenX();
         }
@@ -67,6 +71,11 @@ class CanvasRaster : public Widget {
         void setH(int16_t h){ this->resize(this->l_rect.w, h); }
 
         WidgetType getWidgetType() const override { return WidgetType::CanvasRaster; }
+
+        // 自分の矩形をスプライトで隙間なく覆うのでOPAQUE。CLEARのままだと
+        // FlushDirty()が毎回、背景の白塗り+下に重なるウィジェット(スクラッチパッドの
+        // 枠線Rect等)の再描画をしてから上書きすることになる
+        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
         
         void causeOnPressStart() override;
         void causeOnPressMove() override;
@@ -97,4 +106,6 @@ class CanvasRaster : public Widget {
         }
 
         void drawArrow(LGFX_Sprite *canvas, int x0, int y0, int x1, int y1);
+
+        static void DrawThickLine(LGFX_Sprite* canvas, int x0, int y0, int x1, int y1, float radius, int8_t color);
 };

@@ -18,9 +18,12 @@
 struct Url {
     FixedString<PICO_STR_M> host;  // ポートを含まないホスト名
     uint16_t port = 80;
-    bool secure = false;           // https かどうか。現状 Http_Get は false のみ受け付ける
+    bool secure = false;           // https かどうか(接続の仕方は net/Http_Transport が決める)
 
-    FixedString<PICO_STR_L> path;  // "/" 始まり
+    //"/" 始まり。96Bでは足りない: Googleカレンダーの非公開iCal URLのパスは
+    //「/calendar/ical/<メールアドレスをエンコードしたもの>/private-<32桁>/basic.ics」で
+    //グループカレンダーだと120B前後になる
+    FixedString<PICO_STR_LL> path;
     //"?" を含まない。空なら無し。パスより長いのは、検索語を
     //パーセントエンコードすると日本語1文字が9バイトになるため
     FixedString<PICO_STR_LL> query;

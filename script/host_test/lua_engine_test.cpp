@@ -34,7 +34,7 @@
 //                         されること、"closed"イベントがダイアログ以外だと
 //                         エラーになることを確認する
 //   pico.http_request/http_cancel → 実ソケットに触れない範囲(不正なメソッド/URL/
-//                         https/送信ボディの上限超過/同時実行数の上限)での
+//                         送信ボディの上限超過/同時実行数の上限)での
 //                         早期拒否がすべてfalseで返ること(luaL_errorにしない)
 //   pico.on(id,"checked_changed"/"value_changed"/"select_item"/"tab_changed"/
 //           "dropdown_changed"/"text_changed",fn) →
@@ -1249,8 +1249,10 @@ int main(){
                 check(pico.http_request("GET", "not a url", nil, nil, function() end) == false,
                       "pico.http_request: 不正なURLはfalseを返す")
 
-                check(pico.http_request("GET", "https://example.com/", nil, nil, function() end) == false,
-                      "pico.http_request: httpsはfalseを返す(未対応)")
+                -- httpsも受け付ける(接続はHttp_Transportが担う)。接続を試みる前に取り消すので実ソケットには触れない
+                check(pico.http_request("GET", "https://127.0.0.1:1/", nil, nil, function() end) == true,
+                      "pico.http_request: httpsも開始できる")
+                pico.http_cancel()
 
                 local huge_body = string.rep("a", 20000) -- kMaxHttpBodyBytes(16KiB)超え
                 check(pico.http_request("POST", "http://127.0.0.1:1/", huge_body, "text/plain", function() end) == false,

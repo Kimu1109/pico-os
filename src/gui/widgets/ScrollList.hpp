@@ -11,6 +11,8 @@ namespace ScrollListTools {
     struct Item {
         IconID icon = IconID::AppBox;
         FixedString<PICO_PATH_LEN> text;
+        // この項目だけの文字色(パレット番号)。-1なら一覧の text_color。選択中は反転色が優先
+        int8_t color = -1;
     };
 };
 

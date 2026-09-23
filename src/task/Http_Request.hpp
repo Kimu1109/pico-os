@@ -2,10 +2,9 @@
 
 #include "task/Task.hpp"
 #include "net/Http_Response.hpp"
+#include "net/Http_Transport.hpp"
 #include "util/Url.hpp"
 #include "util/FixedString.hpp"
-
-#include "WiFi.h"
 
 // メソッド・任意の送信ボディを指定できる汎用の非ブロッキングHTTPリクエスト。
 //
@@ -37,7 +36,8 @@ class HttpRequest : public Task {
 
         enum class Fail : uint8_t {
             None,
-            NotHttp,        // httpsは未対応
+            ClockNotSet,    // httpsなのに時計が合っていない(証明書の期限を確かめられない)
+            TlsFailed,      // 証明書が信頼できない等(詳細はfailureToStr())
             ConnectFailed,
             SendFailed,
             Timeout,
@@ -68,7 +68,7 @@ class HttpRequest : public Task {
     private:
         enum class Phase : uint8_t { Idle, Connecting, Sending, Receiving, Ended };
 
-        WiFiClient client;
+        HttpTransport client;
         HttpResponse res;
         IHttpSink* sink_ = nullptr;
 

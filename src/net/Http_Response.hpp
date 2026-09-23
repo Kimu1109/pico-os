@@ -22,8 +22,9 @@ namespace HttpTools {
     enum class Error : uint8_t {
         None,
         BadStatusLine,   // ステータス行が "HTTP/x.y NNN" の形ではない
-        LineTooLong,     // ヘッダ1行が長すぎる
-        Chunked,         // chunked転送。PROTOCOL.mdで禁止しているので対応しない
+        LineTooLong,     // 読む必要のあるヘッダ(Location等)やステータス行が長すぎる
+        BadChunk,        // chunked転送のサイズ行/区切りが壊れている
+        Encoding,        // chunked以外の転送符号化(gzip等)。展開の手段が無い
         Truncated,       // Content-Lengthに満たないまま接続が切れた
         SinkFailed,      // 書き込み先が受け取りを拒否した(上限超過など)
     };
@@ -33,7 +34,8 @@ namespace HttpTools {
             case Error::None:          return "なし";
             case Error::BadStatusLine: return "ステータス行が不正";
             case Error::LineTooLong:   return "ヘッダ行が長すぎる";
-            case Error::Chunked:       return "chunked転送は未対応";
+            case Error::BadChunk:      return "chunked転送が壊れている";
+            case Error::Encoding:      return "未対応の転送符号化";
             case Error::Truncated:     return "本文が途中で切れた";
             case Error::SinkFailed:    return "書き込みに失敗";
             default:                   return "不明";
@@ -46,10 +48,14 @@ namespace HttpTools {
 // **ソケットを持たない**のが要点。受信したバイト列をfeed()へ渡すだけなので、
 // ネットワーク無しでホストテストから全経路を検証できる(script/host_test/http_test.cpp)。
 //
-// PROTOCOL.mdの取り決めに合わせてあるところ:
-//   - chunked転送は解釈せず、検出したらエラーにする(黙って壊れた本文を書かないため)
-//   - Content-Lengthがあればその長さで終端、無ければ接続が閉じるまでを本文とする
-//   - 見るヘッダは Content-Length / ETag / Last-Modified / Location / Transfer-Encoding だけ
+// 本文の終わりの決め方:
+//   - `Transfer-Encoding: chunked` なら chunk を解いて本文だけをシンクへ渡す
+//     (PROTOCOL.mdの参照サーバは使わないが、HTTPSで繋ぐ一般のサーバ(Googleのカレンダー等)は
+//     動的な応答をchunkedで返すため)。chunked以外の転送符号化(gzip等)はエラーにする
+//   - そうでなければ Content-Length があればその長さで終端、無ければ接続が閉じるまで
+//   - 見るヘッダは Content-Length / ETag / Last-Modified / Location / Transfer-Encoding だけ。
+//     **それ以外のヘッダは長すぎても読み飛ばす**(Set-Cookie や Content-Security-Policy は
+//     kMaxLineLen を平気で超える。読みもしない行で失敗させない)
 class HttpResponse {
     public:
         // ヘッダ1行の上限。これを超える行を送ってくるサーバは相手にしない
@@ -87,6 +93,15 @@ class HttpResponse {
     private:
         enum class State : uint8_t { Status = 0, Headers = 1, Body = 2, Done = 3, Failed = 4 };
 
+        // chunked転送の中のどこを読んでいるか
+        enum class Chunk : uint8_t {
+            Size,       // "1a2b[;拡張]\r\n" のサイズ行
+            SizeExt,    // サイズ行の ';' 以降(読み捨てる)
+            Data,       // chunk_left バイトの本文
+            DataEnd,    // 本文の直後の "\r\n"
+            Trailer,    // サイズ0の後のトレーラ行(空行で終わり)
+        };
+
         State state = State::Status;
         HttpTools::Error err = HttpTools::Error::None;
 
@@ -104,12 +119,20 @@ class HttpResponse {
         FixedString<PICO_STR_L> location_;
         bool has_etag = false;
 
+        bool chunked = false;
+        Chunk chunk = Chunk::Size;
+        uint32_t chunk_left = 0;
+        int chunk_digits = 0;         // サイズ行の16進の桁数(0桁のサイズ行は壊れている)
+        bool trailer_line_empty = true;
+
         bool fail(HttpTools::Error e);
         friend class HttpBodyGate;
         bool pushLineChar(char c);
         bool handleStatusLine();
         bool handleHeaderLine();
         bool consumeBody(const uint8_t* data, size_t len, size_t& consumed);
+        bool consumeChunked(const uint8_t* data, size_t len, size_t& consumed);
+        bool deliver(const uint8_t* data, size_t len);
 };
 
 

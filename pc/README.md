@@ -17,13 +17,14 @@
 - CMake 3.16 以降
 - C++17 が通るコンパイラ(g++ / clang++)
 - SDL2 の開発パッケージ
+- OpenSSL の開発パッケージ(HTTPS用。実機はarduino-pico同梱のBearSSLを使うので、PCだけの依存)
 
 ```sh
 # Debian / Ubuntu
-sudo apt-get install build-essential cmake libsdl2-dev
+sudo apt-get install build-essential cmake libsdl2-dev libssl-dev
 
 # macOS (Homebrew)
-brew install cmake sdl2
+brew install cmake sdl2 openssl
 ```
 
 LovyanGFX は CMake が自動で取得する。**版は `platformio.ini` の `lib_deps` を読んで決める**ので、

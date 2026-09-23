@@ -22,7 +22,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
     build-essential cmake ninja-build \
-    libsdl2-dev \
+    libsdl2-dev libssl-dev \
     pipx
 
 # --- PlatformIO CLI (実機ビルド env:rpipico2w 用) ---

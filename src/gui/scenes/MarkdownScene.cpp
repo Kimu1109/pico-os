@@ -724,10 +724,6 @@ void MarkdownScene::onLinkTap(const FixedString<PICO_PATH_LEN>& ref){
             this->showStatus("リンクを解決できません", PICO_RED);
             return;
         }
-        if(target.secure){
-            this->showStatus("httpsはまだ開けません", PICO_RED);
-            return;
-        }
         if(!UrlTools::FormatFull(next, target)){
             this->showStatus("URLが長すぎます", PICO_RED);
             return;
@@ -736,10 +732,6 @@ void MarkdownScene::onLinkTap(const FixedString<PICO_PATH_LEN>& ref){
         //ローカルからの参照。絶対URLならそのままリモートへ移る
         Url absolute;
         if(UrlTools::Parse(absolute, ref.c_str())){
-            if(absolute.secure){
-                this->showStatus("httpsはまだ開けません", PICO_RED);
-                return;
-            }
             if(!next.assign(ref.c_str())){
                 this->showStatus("URLが長すぎます", PICO_RED);
                 return;

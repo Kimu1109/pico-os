@@ -2,7 +2,7 @@
 
 > このファイルは `Kimu1109/pico-os` リポジトリ直下に置く、Claude Code向けのプロジェクト背景資料。
 > 元はClaude.aiのProject knowledgeとして管理されていた内容(2026-09-06時点情報)を統合したもの。
-> **最終同期: 2026-09-21(実コードと突き合わせ済み)。**
+> **最終同期: 2026-09-23(実コードと突き合わせ済み)。**
 > **一次情報源は常にこのリポジトリのコードと `SUMMARY.md`。このファイルは「相談の前提を素早く掴むための地図」であり、
 > 実装と乖離があれば実コード側を信じること。**
 
@@ -63,15 +63,16 @@ src/
   functions/                 「Xxx_Functions」名前空間群
   gui/
     icons/                  アイコンデータ(tabler_iconsから生成)
-    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene)
+    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene/CalendarScene等)
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
-      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker)
+      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid等)
       dialogs/              モーダルダイアログ
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
+  calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
-  net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
+  net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScan / HttpGet タスク + StepBudget(実行時間の区切り)
@@ -79,7 +80,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scannerの23本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_sceneの25本 / run_net.sh=参照実装サーバとテスト用TLSサーバ相手の結合テスト(net/calendar_sync) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
@@ -150,7 +151,7 @@ PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1�
 | 置き場所 | 何を入れるか | 中身 |
 |---|---|---|
 | `widgets/` | 汎用部品と基底 | `Widget` / `WidgetID` / `WidgetRegistry` + 下のカタログのうち専用でないもの |
-| `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` |
+| `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` |
 | `widgets/systems/` | **OSのシェル部品**(特定アプリのものではない) | `Statusbar`(常駐オーバーレイ) / `AppGrid`(ランチャのタイル) |
 | `widgets/dialogs/` | モーダルダイアログ + オンスクリーンキーボード3種 | 下記「ダイアログ」参照 |
 | `widgets/interfaces/` | ミックスイン的インターフェース | `IBorderColor` / `IFontImplementation` / `ITextColor` / `ITextInputTarget` |
@@ -169,7 +170,7 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 `LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
 
 **「子を持たず`render()`で直接描き、タップ位置から逆算する」型のウィジェット**が増えている:
-`AppGrid` / `ColorDialog` / `KeyboardNum` / `TabBar` / `AnalogClock` / `DurationPicker`。
+`AppGrid` / `ColorDialog` / `KeyboardNum` / `TabBar` / `AnalogClock` / `DurationPicker` / `MonthGrid`。
 部品1つごとに`Button`を`new`しないのでヒープを食わず、上記`hit_transparent`の問題(表示用の子がタップを奪う)とも
 無縁になる。**格子状・多ボタンのUIを新設するときはまずこの型を検討すること。**
 
@@ -239,6 +240,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - `FileSaveDialog`: `FileExplorer`+ファイル名`Textbox`+OK/キャンセル。**保存専用**。
 - `FileSelectDialog`: `FileExplorer`+OK/キャンセルのみ。**選択専用**(ファイル名欄なし)。
   - ※旧設計では1クラスで兼用予定だったが、実装では保存/選択で別クラスに分離された。
+- `EventDetailDialog`: カレンダーの予定1件の詳細。題名 + `ScrollContainer`で包んだ本文 + 閉じる。中身は`CalendarScene`が作る。
 - `SearchDialog`: Markdownブラウザの検索結果。状態1行 + `ScrollList` + 再検索/次へ/閉じる。
   **通信はしない**(判断は`MarkdownScene`側)。結果は2回タップで開く。
 - `ColorDialog`: 実装済み(直近コミット)。4×4=16色グリッド(`getIndexToColor(x,y)=x+y*4`)+OK/キャンセル。`selected_color`(未選択-1)、`getSelectedColor()`。
@@ -293,13 +295,40 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - **`Clear()`だけはホストテストで検証できていない**。ディレクトリの再帰削除に`isDir()`/`openNext()`が要るが、`script/host_test/stubs/SdFat.h`はパス→内容のフラットな`map`でディレクトリの実体が無いため。PCビルド(`pc/compat/SdFat.h`は実ファイルシステム)側で確かめること。
 
 ### HTTPクライアント (`util/Url.hpp` / `net/Http_Response` / `task/Http_Get`)
-`PROTOCOL.md` の平文HTTPを喋る側。3つに割ってあるのは**テストできる形にするため**。
+`PROTOCOL.md` のHTTPを喋る側(http/https。HTTPSは下の「HTTPS」参照)。3つに割ってあるのは**テストできる形にするため**。
 
-- **`Url`**: `http://host:port/path?query` を分解して持つ型。`"http://"` を各所で`strncmp`しないための入れ物で、**schemeをここに閉じ込めてある**ので将来HTTPS対応で触るのは`Http_Get`の接続処理だけで済む。パスとクエリを分けて持つのは、相対解決(`PICO_IO::resolve`を再利用)がクエリ内の`/`まで畳んでしまわないようにするため。
-- **`HttpResponse`**: **ソケットを持たない**増分パーサ。受信したバイト列を`feed()`へ渡すだけなので、ネットワーク無しに全経路をホストテストできる(`http_test.cpp`は1バイトずつ食わせた場合も同じ結果になることまで見ている)。見るヘッダは`Content-Length`/`ETag`/`Last-Modified`/`Location`/`Transfer-Encoding`だけ。**chunkedは検出したらエラー**にする(黙って本文として書くと壊れたファイルが正常なキャッシュとして残るため)。本文の行き先は`IHttpSink`で差し替える。
+- **`Url`**: `http://host:port/path?query` を分解して持つ型。`"http://"` を各所で`strncmp`しないための入れ物で、**schemeをここに閉じ込めてある**(実際にHTTPS対応で触ったのは接続処理=`net/Http_Transport`だけで済んだ)。`path`は`PICO_STR_LL`(Googleカレンダーの非公開URLのパスが96Bを超えるため)。パスとクエリを分けて持つのは、相対解決(`PICO_IO::resolve`を再利用)がクエリ内の`/`まで畳んでしまわないようにするため。
+- **`HttpResponse`**: **ソケットを持たない**増分パーサ。受信したバイト列を`feed()`へ渡すだけなので、ネットワーク無しに全経路をホストテストできる(`http_test.cpp`は1バイトずつ食わせた場合も同じ結果になることまで見ている)。見るヘッダは`Content-Length`/`ETag`/`Last-Modified`/`Location`/`Transfer-Encoding`だけ。**chunkedは解いて本文だけをシンクへ渡す**(2026-09-23。以前は検出したらエラーにしていたが、HTTPSで繋ぐ一般のサーバは動的な応答をchunkedで返す)。chunked以外の転送符号化(gzip等)はエラー。**読まないヘッダは長すぎても読み飛ばす**(Googleは`Set-Cookie`/CSPで`kMaxLineLen=256`を平気で超える)。中身を使うヘッダ(Location等)とステータス行だけは切れていたら失敗にする。本文の行き先は`IHttpSink`で差し替える。
 - **`HttpGet`**: `Task`派生。`Connection: close`を送り、`Accept-Encoding`は送らない。リダイレクト最大3回、全体10秒で打ち切り。手元の検証子を渡すと条件付きGETになる(`GMT`を含むかで`If-None-Match`と`If-Modified-Since`を出し分ける — 目録が「どちらのヘッダで来たか」を覚えていないための割り切り)。**3xx/4xxの本文はシンクへ流さない**(`BodyGate`が200を見てから開く)のでキャッシュが汚れない。
 - **接続(`connect`)だけは同期的**。到達しない相手を指すと最大`kConnectTimeoutMs=3000`ぶん画面が止まる。受信は全てポーリングなので、繋がってしまえばフレームは止まらない。非同期接続にはlwIPを直に叩く必要があり、別の段の仕事。
-- PC側の`WiFiClient`は`pc/compat/WiFiClient_PC.h`にある。**Wi-Fiの「状態」(`pc/compat/WiFi.h`)は偽物のままだが、通信そのものは本物のソケット**。SDにもLovyanGFXにも依存しないので、ホストテスト(`script/host_test/stubs/WiFi.h`)からも**同じ実装**を使う(通信経路のテストで別物を使っては意味が無いため)。
+- PC側の`WiFiClient`は`pc/compat/WiFiClient_PC.h`にある(TLS版`WiFiClientSecure`はその派生で`WiFiClientSecure_PC.h`。そのため主要メソッドは仮想関数)。**Wi-Fiの「状態」(`pc/compat/WiFi.h`)は偽物のままだが、通信そのものは本物のソケット**。SDにもLovyanGFXにも依存しないので、ホストテスト(`script/host_test/stubs/WiFi.h`)からも**同じ実装**を使う(通信経路のテストで別物を使っては意味が無いため)。
+
+### HTTPS (`src/net/Http_Transport` / `Tls_Roots_Data.hpp`) (2026-09-23)
+
+`HttpGet`(文書/カレンダー)と`HttpRequest`(Luaの`pico.http_request`)の下の「繋ぐ」部分を
+`HttpTransport`へ切り出し、URLが`https://`ならTLSで繋ぐ。schemeを見て分岐するのはここだけ。
+Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`を扱える
+(以前は`url.secure`を見て各所で「httpsは未対応」と断っていた)。
+
+- **実機はarduino-pico同梱のBearSSL**(`BearSSL::WiFiClientSecure`/`X509List`)。新しいライブラリは足していない。
+  **TLS 1.2まで**(BearSSLの上限)なので、TLS 1.3だけを受け付けるサーバには繋がらない。
+- **PCはOpenSSL**(`pc/compat/WiFiClientSecure_PC.h`)。実機と同じ呼び方に揃え、**わざとTLS 1.2に固定**し、
+  **信頼するのも同じルートだけ**(OSの証明書ストアを見ない)。「PCでは繋がるのに実機では繋がらない」を防ぐため。
+  PCビルドは`libssl-dev`が要る(`find_package(OpenSSL)`)。**Webビルドは常に繋がらないスタブ**
+  (生のソケットが無いので、そもそもTLSも無い)。
+- **信頼するルート**は`script/generate_tls_roots.py`が母艦の`/etc/ssl/certs`から`src/net/Tls_Roots_Data.hpp`へ焼き込む
+  (GTS Root R1/R4=Google、ISRG Root X1/X2=Let's Encrypt、DigiCert Global Root G2/CA、USERTrust RSA=Sectigoの7枚)。
+  足りない相手(自己署名の自前サーバ等)はSDの**`/sys/tls/ca.pem`**へPEMを置けば足される。
+  **フラッシュに置くだけで、RAMへ展開するのは接続中だけ**(1枚あたり約1.5KB)。
+- **TLSの道具一式は`connect()`で確保し`close()`で返す**。BearSSLは受信バッファ16KB+専用スタック6.4KB+
+  ルートの展開等で**接続中だけ約40KB**を使う。常駐させると使わないアプリにまで負担させるため。
+- **時計が合っていない(NTP同期前、2020年より前)と繋がない**(`Error::ClockNotSet`)。証明書の有効期限を
+  確かめられず、実機では全ての証明書が「まだ有効でない」になって理由が分かりにくいため。
+- **TLSのハンドシェイクは`connect()`の中で同期的に進む**(素のTCPの接続と同じ制約)。実機で1〜2秒程度の見込みで、
+  その間は画面が止まる。**実機での実測はまだ**(このリモート環境にはRP2350のボード定義が無く、実機ビルドもできない)。
+- 失敗の理由は`HttpGet::Fail::ClockNotSet`/`TlsFailed`で分かり、`failureToStr()`はTLSライブラリの理由も付けて返す。
+- 検証は`run_net.sh`の`calendar_sync_test`(使い捨てのCAを`openssl`で作り、`script/host_test/tls_test_server.py`を
+  相手に、chunked転送・ETag→304・信頼していないCA・名前の違う証明書を本物のTLSで確かめる)。
 
 ### 取得〜表示の配線 (`src/net/Doc_Fetch.hpp`)
 「URLを1本取ってきて、SD上の開けるパスにする」係。`Http_Get`(取得)と`Doc_Cache`(保存)を繋ぐだけの薄い層だが、**ブラウザとして必要な判断はここに集めてある**。
@@ -372,6 +401,88 @@ UI側は`gui/widgets/dialogs/SearchDialog`(状態1行 + `ScrollList` + 再検索
 `PICO_GFX::FlushDirty()`は**TRANSLUCENTなウィジェットの下を描き直さない**(半透明の下は変わらない前提の最適化)
 ため、同じフレームで次のダイアログを開くと、閉じたキーボードや前のダイアログの跡がその下に残ったままになる。
 1フレーム空ければ「ダイアログが何も無い状態」で描き直される。
+
+### iCalendarの読み取り (`src/calendar/Ical.hpp`) (2026-09-23)
+
+カレンダーアプリの第1段。**Google CalendarのOAuth/APIではなくiCal(.ics)を選んだ**
+(OAuthはHTTPS・トークン管理・JSONパーサが全て要り、いずれも今のコードに無い。
+iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で同じものを出す)。
+当初は「Google側のURLはHTTPSなので母艦のサーバがHTTPで中継する」予定だったが、**arduino-picoにBearSSL(`WiFiClientSecure`)が同梱されていると分かり、本体でHTTPSに対応した**(2026-09-23。下の「HTTPS」参照。取得は`CalendarSync`)。
+
+- **`Ical::Parser`はバイト列を好きな切れ目で受け取る**(`HttpResponse`と同じ増分方式)。
+  行の折り返し(次の行頭の空白)もここで畳む。`ParseFile()`はSDから256Bずつ読んで食わせるだけ。
+  **`IcalCalendar`へ追記する**(clearしない)ので、複数の.icsを1つへ合成できる。
+- **時刻は全て現地時刻へ揃えて持つ**(`IcalTime{day=1970-01-01からの通算日数, sec=0時からの秒/-1で終日}`)。
+  `...Z`は`Options::utc_offset_sec`でずらし、`TZID=`付きは現地時刻とみなす(VTIMEZONEは解釈しない。サマータイムも無視)。
+- **`Options::window_from_day/to_day`で窓の外の予定を読み捨てる。** Googleの非公開URLは**過去の予定を全部**
+  返すので、窓を切らないと`kMaxEvents=64`(約16KB)がすぐ昔の予定で埋まる。
+- **RRULEは一部対応**: DAILY/WEEKLY/MONTHLY/YEARLY + INTERVAL/COUNT/UNTIL/BYDAY/WKST、
+  MONTHLYの「第n曜日」(1〜5, -1)、DTSTARTと食い違わないBYMONTHDAY/BYMONTH。
+  **それ以外(BYSETPOS等)は`rule.supported=false`にして初回だけ出す**(間違った日に出すよりまし)。
+- **引き当て(`StartsOn()`/`OccursOn()`)は日ごとの算術で、回を1つずつ展開しない。** 月表示の42マス×64件を
+  毎回引いても軽いように。COUNTが絡み、かつ「存在しない日」(31日の無い月・2/29・第5週)が
+  あり得る場合だけ周期をループで数える(RFC 5545どおり存在しない日はCOUNTに数えない)。
+- **例外**: EXDATEと、RECURRENCE-ID付きの上書き予定。後者は`finish()`で親(同じUIDの32bitハッシュ)の
+  `exdates`へ畳み込み、上書き側は単発の予定として残す(STATUS:CANCELLEDなら残さない)。
+  除外は「日」で持つ(対応する繰り返しは1日1回までなので足りる)。1件あたり`kMaxExDates=8`まで。
+  **覚えるのは読み込みの窓(の`kMaxSpanScan`日前から)にかかる例外だけ**(2026-09-23)。Googleは何年分もの
+  例外を全部書いてくるので、以前は長く続く定例の`exdates`が昔の分で埋まり、窓の中の「削除した回/移動した回」が
+  元の日にも出ていた。上書き予定の控え(`kMaxOverrides=32`)も同じ理由で窓の近くだけ。
+- VEVENTの**直下だけ**を読む。VALARMにもSUMMARYがあり、拾うと予定名が通知文で上書きされる。
+- ホストテストは`script/host_test/ical_test.cpp`(RFC 5545のWKSTの例、第n曜日、31日/2/29の飛ばし、
+  1バイトずつ食わせた場合、UTF-8の途中での折り返し等)。
+- `EventsOn(cal, day, out, max)`が1日ぶんの予定を「終日と前日からの続きが先、残りは開始時刻順」で並べる(一覧の表示順)。
+- **説明文(DESCRIPTION)は持たない**(64件ぶん持つとRAMを食う)。各予定は`file_index`(どの.icsか)と
+  `ordinal`(そのファイルで何番目のVEVENTか。読み捨てた分も数える)だけを持ち、詳細を開くときに
+  `ReadDescription(path, ordinal, out)`でその1件だけ読み直す(`Parser`の「予定を集めず説明文だけ拾う」読み方。
+  目当てのVEVENTを読み終えたらファイルの残りは読まない)。説明文は1論理行の上限(512B)で切れる。
+- 取得は`calendar/Calendar_Sync`(下の「CalendarScene 実装詳細」参照)。
+
+### CalendarScene 実装詳細 (2026-09-23)
+
+`[戻る] … [<] 2026年9月 [>] [今日]` + 月の格子(`MonthGrid`) + 選んだ日の予定一覧(`ScrollList`)の1画面。
+
+- **SDの`/calendar/`直下の`*.ics`を全部読んで1つの`IcalCalendar`へ重ねる**(`PICO_Path::DIR::CALENDAR`)。
+  Googleのカレンダーごとの非公開URLを1ファイルずつ置く想定。
+- **読むのは表示中の格子(前後の月の空きマスを含む6週間)にかかる予定だけで、月を移るたびに読み直す**
+  (窓を切らないと`kMaxEvents`が過去の予定で埋まるため)。`onEnter()`でも毎回読み直す
+  (別のアプリで書き換わっているかもしれないので)。読み直しは同期で、大きな.icsだと一瞬止まる。
+  重くなったら`Word_Dict`のようにフレーム分割する。
+- **シーン本体は約18KB**(`IcalCalendar`約16KB + 取得用の`CalendarSync`約2.4KB をメンバに持つ)。`MarkdownScene`と同じく「シーン本体は数十バイト」の例外。
+- **`utc_offset_sec`は`LocalUtcOffsetSec()`が`localtime_r`と`gmtime_r`の差から求める**(newlibに`tm_gmtoff`が無いため)。
+  TZは`network.cfg`の`timezone`(`TimeFunctions`が`setenv("TZ")`済み)。
+- **NTP同期前(2020年より前)は「今日」が分からない扱い**で、仮に1970年1月を出す。`onUpdate()`が時計が合った
+  時点で今日の月へ飛ぶ(PCビルドでも起動直後の数フレームはこの状態を通る)。0時を回ったら今日の印だけ動かす。
+- 一覧の時刻欄は「終日」「09:30-10:30」「22:00-」(翌日へまたぐ)「02:00まで」(前日からの続きが今日終わる)「(続き)」。
+  **`~02:00`にしないのは、16pxフォントの`~`が上線のような形で読めないため**(PCビルドの`--shot`で気づいた)。
+- 一覧は`ScrollList`なので**長い予定名は右で切れる**(折り返さない)。**2回タップで詳細**(`dialogs/EventDetailDialog`)が開き、
+  題名・日時(日をまたぐ回は始まりと終わり)・場所・繰り返し・カレンダー名・説明文を全文スクロールで読める
+  (本文は`DictScene`の詳細欄と同じく`ScrollContainer`+`Label`)。
+- **複数のカレンダーを重ねると色分けする**。`/calendar/*.ics`を**ファイル名順**に並べて`file_index`を振り、
+  `kCalendarColors`(白地で読める濃い8色)から色を決める。**名前順にするのは、SdFatの列挙順が「作った順」で、
+  取得のたびにファイルを差し替えると入れ替わる(=色が変わる)ため**。格子の点(`MonthGrid::setDots()`。
+  違うカレンダーの色を先に並べ、余った点は同じ色を繰り返す)と一覧の文字色(`ScrollListTools::Item::color`)に使う。
+  .icsが1つだけなら今までどおり(緑の点・黒い文字)。読む.icsは8つまで。
+- **取得(`calendar/Calendar_Sync`)**: `/calendar/sources.cfg`の「名前 = URL」を1件ずつ取り、`/calendar/<名前>.ics`へ置く
+  (`webcal://`は`https://`として扱う)。**`Doc_Fetch`/`Doc_Cache`は通さない** — キャッシュは1件64KiBで頭打ちなのに
+  Googleの非公開URLは過去の予定を全部返して数百KBになる上、`/cache/<ホスト>/<パス>`へミラーすると非公開URLの
+  秘密の部分がディレクトリ名としてSDに散らばるため。上限は1件1MB。
+  - **取得に失敗しても手元の`.ics`は壊さない**: `.ics.part`へ書き、200で最後まで読めて**先頭が`BEGIN:VCALENDAR`**のとき
+    だけ差し替える(ログイン画面のHTMLを返されても上書きしない)。ETagは`<名前>.etag`に覚えて次から条件付きGET(304)。
+  - 名前はファイル名になるので英数字と`_ -`だけ(20文字まで)。値が`Config_Functions`の上限(128B)を超えるので
+    `ParseLine()`だけを借りて自前の512Bバッファで読む。
+  - `CalendarScene`は**ランチャから開いたとき1回だけ自動で取りに行く**(Wi-Fiに繋がっているときだけ。
+    `Push()`から戻っただけでは取り直さない)。**1回描いてから**始めるので、TLSのハンドシェイクで止まる前に
+    ボタンの「取得中」が見える。[更新]ボタンで手動でも取れる。失敗が残ればボタンが赤の「再試行」になり、
+    表示は前回の`.ics`のまま。中身が変わったものがあったときだけ読み直す(全部304なら何もしない)。
+  - `onExit()`で取得は打ち切る(`onUpdate()`が来なくなるため)。
+  - Web版は取りに行けない(HTTPSのスタブが常に失敗する)。
+- `ScrollListTools::Item`に**項目ごとの文字色`color`(-1で一覧の色)**を足した(カレンダーの色分けのため。汎用の拡張で、選択中の反転表示が優先)。
+
+`MonthGrid`(`widgets/apps/`)は「子を持たずrender()で直接描き、タップ位置から逆算する」型。
+日曜赤・土曜青、今日は赤の二重枠、選択中は黒塗り+白抜き、予定のある日は数字の下に点(最大3つ)。
+**予定そのものは知らず、シーンが`setMonth()`/`setCounts()`で流し込む**(`AnalogClock`と同じ理由)。
+幅を7で割った余りは土曜の列へ足す(`TabBar`と同じ)。「2026年10月」は84pxで2行へ折り返したのでタイトル幅は100px。
 
 ### ClocksScene 実装詳細
 
@@ -580,6 +691,8 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   ソケットを使うが、ブラウザにはそれが無い(emscriptenはWebSocket経由へ流すので中継サーバが要る)。
   コンパイルは通り、SDから読む分(`/tmp/doc.md`)は普通に動くが、`browser-home` を設定したり
   「更新」「検索」を押してもサーバへは繋がらない。**Web公開版で試せるのはローカル文書まで。**
+  HTTPSも同じ理由で持たない(`compat/WiFiClientSecure.h`が常に失敗するスタブになる)ので、
+  カレンダーの取得もWebでは動かない(SDに焼き込んだ`.ics`の表示はできる)。
 - **`delay()`**: 待つとタブが固まるのでWebでは即座に戻る(`src/` は使っていない)。
 - **ページの外枠**: `pc/web/shell.html`(emscriptenの `--shell-file`)。canvas・ログ欄・
   Wi-Fi状態の切替・画面のPNG保存ボタンを持つ。デバッグ用の道具を足すならここ。
@@ -607,7 +720,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
+| 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。 |
 | 9 | GBエミュ | **未着手**。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
 | 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
@@ -633,7 +746,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   **`PROTOCOL.md`のv1はこれで一通り実装できている。**
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
   - `MarkdownScene`の履歴に載るのは**「場所」でSDパスとURLのどちらもあり得る**。見分けは`UrlTools::Parse()`が通るかどうかの**1箇所だけ**で、`"http://"`の判定を各所へ撒いていない。
-  - **`MarkdownScene`のオブジェクトは数KBある**(`DocFetch`2.7KB + `DocSearch`2.9KB + 履歴1.6KB等)。
+  - **`MarkdownScene`のオブジェクトは数KBある**(`DocFetch`約3KB + `DocSearch`2.9KB + 履歴1.6KB等。`Url::path`を192Bへ広げたぶん少し増えた)。
     他のシーンと違い「シーン本体は数十バイト」ではないので、シーンスタックへ積んだままの間も乗り続ける。
   - **履歴の現在地(`history_pos`)は「表示中の文書」と必ず一致させる**。ここは相対リンクを解決する
     基準でもあるため、開けなかった場所を現在地のまま残すと、**画面には前の文書が出ているのに
@@ -1176,7 +1289,7 @@ Luaスクリプトから表示できるようにした(`SearchDialog`はMarkdown
 - **受信本文はNULを含み得るため、Luaへ渡す際は`lua_pushlstring()`(長さ明示)を使い、
   `lua_pushstring()`(strlen前提)にしていない。**
 - ホストテストは`lua_engine_test.cpp`に追加。**実ソケットに一切触れない範囲
-  (未知のメソッド/不正なURL/https/送信ボディの上限超過/同時実行数の上限)での
+  (未知のメソッド/不正なURL/送信ボディの上限超過/同時実行数の上限)での
   早期拒否がすべて`false`(またはpcall経由でエラー)になることだけを確認**しており
   (`HttpGet`と同様、実際の通信を伴う検証は`run.sh`(ASan、ネットワーク無し)の
   対象外。`run_net.sh`と同じ「本物のソケット」区分に属する)、送信ボディの上限
@@ -1516,7 +1629,7 @@ OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なの�
   経過秒数を表示するloop()の実例を追加した。
 - ~~コンテナからの明示的な子の取り外し(`pico.remove_child`)は無い~~ → **解消済み
   (2026-09-21)**。詳細は上の「コンテナからの取り外し」参照。この節に挙げていた
-  Lua APIの既知の穴はこれで全て埋まった(残るのはHTTPS非対応・OS内部90箇所の
+  Lua APIの既知の穴はこれで全て埋まった(残るのはOS内部90箇所の
   OOM未対応など、コストに見合わないと判断して対象外にしたものだけ)。
 
 ## Lua着手前の受け皿の状態 (2026-09-19時点)
@@ -1579,9 +1692,13 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、23本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、25本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
+  **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば
+  そちら、無ければ自前の値」で、翻訳単位ごとに値が変わり、inlineの`open()`がどちらの値でリンクされるか次第で
+  「書き込み用に開けない」ことがあった(TLSのヘッダ経由で`<fcntl.h>`を取り込むファイルが増えて`run_net.sh`で踏んだ)。
+  スタブで`#ifndef`して定数を足すときは同じ罠に注意すること。
   **`run.sh`はコンパイル・テスト実行の各ステップに`timeout`を掛けてある(2026-09-21追加)**。
   「まれにrun.shが終わらない」という報告を受けて入れた安全網で、コンパイル1ステップ
   180秒・テスト実行1本60秒を超えると`[FATAL]`ログを出して明示的にexitする

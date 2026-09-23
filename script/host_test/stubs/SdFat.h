@@ -10,8 +10,11 @@
 #include <map>
 #include <string>
 
-// <fcntl.h> が先に取り込まれている場合(WiFiClient_PC.h経由など)は
-// そちらの定義をそのまま使う
+// 常に <fcntl.h> の値を使う。以前は「先に取り込まれていればそちら、無ければ自前の値」
+// にしていたが、それだと翻訳単位ごとに O_CREAT 等の値が変わり、inline の open() が
+// どちらの値で作られたものがリンクされるか次第で「書き込み用に開けない」ことがあった
+// (TLSのヘッダ経由で <fcntl.h> を取り込むファイルが増えて実際に踏んだ)
+#include <fcntl.h>
 #ifndef O_RDONLY
     #define O_RDONLY 0
 #endif

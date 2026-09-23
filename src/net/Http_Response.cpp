@@ -43,6 +43,12 @@ void HttpResponse::reset(IHttpSink* s){
     validator_.clear();
     location_.clear();
     has_etag = false;
+
+    chunked = false;
+    chunk = Chunk::Size;
+    chunk_left = 0;
+    chunk_digits = 0;
+    trailer_line_empty = true;
 }
 
 bool HttpResponse::fail(HttpTools::Error e){
@@ -82,7 +88,7 @@ bool HttpResponse::handleHeaderLine(){
     //空行 = ヘッダの終わり
     if(line_len == 0){
         //本文を持たない応答は、ここで終わり
-        if(status_code == 304 || status_code == 204 || content_length == 0){
+        if(status_code == 304 || status_code == 204 || (!chunked && content_length == 0)){
             state = State::Done;
         }else{
             state = State::Body;
@@ -97,10 +103,11 @@ bool HttpResponse::handleHeaderLine(){
             content_length = (n < 0) ? -1 : (int32_t)n;
         }
     }else if(headerIs(line, "Transfer-Encoding")){
-        //PROTOCOL.mdでchunkedを禁止しているのは、ここを実装しないため。
-        //黙って本文としてchunkのサイズ行まで書き込むと、壊れたファイルが
-        //「正常なキャッシュ」として残ってしまう
-        return fail(HttpTools::Error::Chunked);
+        //chunkedだけ解く。gzip等が混ざっていたら展開できないので断る
+        //(Accept-Encodingを送っていないので、普通は来ない)
+        char* value = headerValue(line);
+        if(!value || strcasecmp(value, "chunked") != 0) return fail(HttpTools::Error::Encoding);
+        chunked = true;
     }else if(headerIs(line, "ETag")){
         char* value = headerValue(line);
         if(value){
@@ -128,7 +135,101 @@ bool HttpResponse::handleHeaderLine(){
     return true;
 }
 
+bool HttpResponse::deliver(const uint8_t* data, size_t len){
+    if(len == 0) return true;
+    if(sink && !sink->write(data, len)) return fail(HttpTools::Error::SinkFailed);
+    body_bytes += (uint32_t)len;
+    return true;
+}
+
+// chunked転送を解く。サイズ行・区切りのCRLF・トレーラはシンクへ渡さない
+bool HttpResponse::consumeChunked(const uint8_t* data, size_t len, size_t& consumed){
+    size_t i = 0;
+    while(i < len && state == State::Body){
+        if(chunk == Chunk::Data){
+            size_t n = len - i;
+            if(n > chunk_left) n = chunk_left;
+            if(!deliver(data + i, n)) return false;
+            i += n;
+            chunk_left -= (uint32_t)n;
+            if(chunk_left == 0) chunk = Chunk::DataEnd;
+            continue;
+        }
+
+        const char c = (char)data[i++];
+        switch(chunk){
+            case Chunk::Size: {
+                int v = -1;
+                if(c >= '0' && c <= '9') v = c - '0';
+                else if(c >= 'a' && c <= 'f') v = c - 'a' + 10;
+                else if(c >= 'A' && c <= 'F') v = c - 'A' + 10;
+
+                if(v >= 0){
+                    //1チャンク256MB超えは壊れているとみなす(桁あふれの防止)
+                    if(chunk_left > 0x0FFFFFFFu) return fail(HttpTools::Error::BadChunk);
+                    chunk_left = chunk_left * 16 + (uint32_t)v;
+                    chunk_digits++;
+                }else if(c == ';' || c == ' ' || c == '\t'){
+                    chunk = Chunk::SizeExt;
+                }else if(c == '\r'){
+                    //LFを待つ
+                }else if(c == '\n'){
+                    if(chunk_digits == 0) return fail(HttpTools::Error::BadChunk);
+                    chunk_digits = 0;
+                    if(chunk_left == 0){
+                        chunk = Chunk::Trailer;
+                        trailer_line_empty = true;
+                    }else{
+                        chunk = Chunk::Data;
+                    }
+                }else{
+                    return fail(HttpTools::Error::BadChunk);
+                }
+                break;
+            }
+            case Chunk::SizeExt:
+                if(c == '\n'){
+                    if(chunk_digits == 0) return fail(HttpTools::Error::BadChunk);
+                    chunk_digits = 0;
+                    if(chunk_left == 0){
+                        chunk = Chunk::Trailer;
+                        trailer_line_empty = true;
+                    }else{
+                        chunk = Chunk::Data;
+                    }
+                }
+                break;
+            case Chunk::DataEnd:
+                //本文の直後はCRLF(LFだけのサーバも受ける)。それ以外は区切りが壊れている
+                if(c == '\r') break;
+                if(c != '\n') return fail(HttpTools::Error::BadChunk);
+                chunk = Chunk::Size;
+                chunk_left = 0;
+                break;
+            case Chunk::Trailer:
+                //トレーラは読まない。空行が来たら本文の終わり
+                if(c == '\r') break;
+                if(c == '\n'){
+                    if(trailer_line_empty){
+                        state = State::Done;
+                        break;
+                    }
+                    trailer_line_empty = true;
+                }else{
+                    trailer_line_empty = false;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    consumed = i;
+    return true;
+}
+
 bool HttpResponse::consumeBody(const uint8_t* data, size_t len, size_t& consumed){
+    if(chunked) return consumeChunked(data, len, consumed);
+
     consumed = len;
 
     if(content_length >= 0){
@@ -136,10 +237,7 @@ bool HttpResponse::consumeBody(const uint8_t* data, size_t len, size_t& consumed
         if((uint32_t)len > remaining) consumed = remaining;
     }
 
-    if(consumed > 0){
-        if(sink && !sink->write(data, consumed)) return fail(HttpTools::Error::SinkFailed);
-        body_bytes += (uint32_t)consumed;
-    }
+    if(!deliver(data, consumed)) return false;
 
     if(content_length >= 0 && body_bytes >= (uint32_t)content_length){
         state = State::Done;
@@ -161,6 +259,7 @@ bool HttpResponse::feed(const void* data, size_t len){
             if(!consumeBody(p + i, len - i, consumed)) return false;
             i += consumed;
             if(state != State::Body) break; //本文を読み切った
+            if(consumed == 0) break;
             continue;
         }
 
@@ -175,8 +274,19 @@ bool HttpResponse::feed(const void* data, size_t len){
         }
 
         //行が揃った
-        if(line_overflow) return fail(HttpTools::Error::LineTooLong);
         line[line_len] = '\0';
+        if(line_overflow){
+            //読まないヘッダなら長くても構わない(Set-Cookie/CSP等)。
+            //ステータス行と、中身を使うヘッダだけは途中で切れた値を信じられないので断る
+            const bool needed = (state == State::Status)
+                || headerIs(line, "Content-Length") || headerIs(line, "Transfer-Encoding")
+                || headerIs(line, "ETag") || headerIs(line, "Last-Modified")
+                || headerIs(line, "Location");
+            if(needed) return fail(HttpTools::Error::LineTooLong);
+            line_len = 0;
+            line_overflow = false;
+            continue;
+        }
 
         const bool ok = (state == State::Status) ? handleStatusLine() : handleHeaderLine();
 
@@ -192,8 +302,9 @@ bool HttpResponse::finish(){
     if(state == State::Failed) return false;
     if(state == State::Done) return true;
 
-    //Content-Length未指定なら、接続が閉じた時点が本文の終わり
-    if(state == State::Body && content_length < 0){
+    //Content-Length未指定なら、接続が閉じた時点が本文の終わり。
+    //chunkedはサイズ0のチャンクで終わるので、その前に閉じたら途中で切れている
+    if(state == State::Body && content_length < 0 && !chunked){
         state = State::Done;
         return true;
     }

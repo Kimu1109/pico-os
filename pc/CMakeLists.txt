@@ -81,6 +81,9 @@ message(STATUS "LovyanGFX: ${LOVYANGFX_DIR}")
 # Emscriptenでは -sUSE_SDL=2 でportsのSDL2が使われるので find_package はしない
 if(NOT EMSCRIPTEN)
     find_package(SDL2 REQUIRED)
+    # HTTPS(pc/compat/WiFiClientSecure_PC.h)。実機はarduino-pico同梱のBearSSLを使う。
+    # Webビルドは生のソケットが無いので、そもそもTLSも持たない(compat側でスタブになる)
+    find_package(OpenSSL REQUIRED)
 endif()
 
 # ---- ソース ----
@@ -176,5 +179,5 @@ else()
         PICOOS_SD_ROOT_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/sdcard")
 
     target_include_directories(picoos_pc PRIVATE ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(picoos_pc PRIVATE ${SDL2_LIBRARIES} pthread)
+    target_link_libraries(picoos_pc PRIVATE ${SDL2_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto pthread)
 endif()

@@ -242,14 +242,52 @@ int main(){
             check(res.isDone(), "Content-Length:0で完了する");
         }
         {
-            //PROTOCOL.mdで禁止している形。黙って本文として書かずにエラーにする
+            //chunked転送は解いて本文だけを渡す(HTTPSで繋ぐ一般のサーバが使う)
             BufferSink sink;
             HttpResponse res;
             res.reset(&sink);
-            feedAll(res, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n", byteByByte);
-            check(res.hasFailed(), "chunkedは失敗にする");
-            check(res.error() == HttpTools::Error::Chunked, "Chunkedと分かる");
-            check(sink.data.empty(), "本文を1バイトも書かない");
+            feedAll(res,
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nETag: \"c1\"\r\n\r\n"
+                "5\r\nhello\r\n"
+                "7;name=ext\r\n, world\r\n"          // チャンク拡張は読み捨てる
+                "A\r\n0123456789\r\n"                 // 大文字の16進
+                "0\r\nX-Trailer: t\r\n\r\n"
+                "余分", byteByByte);
+            check(res.isDone(), "chunked: サイズ0とトレーラの後の空行で完了する");
+            eq_str(sink.data.c_str(), "hello, world0123456789", "chunked: サイズ行と区切りは本文に入らない");
+            eq_int(res.bodyBytes(), 22, "chunked: 本文のバイト数");
+            eq_str(res.validator().c_str(), "c1", "chunked: ヘッダはそのまま読める");
+        }
+        {
+            //チャンクの途中で切れたら失敗(Content-Length未指定でも「閉じたら終わり」にしない)
+            BufferSink sink;
+            HttpResponse res;
+            res.reset(&sink);
+            feedAll(res, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhel", byteByByte);
+            check(!res.finish(), "chunked: 途中で閉じたら失敗する");
+            check(res.error() == HttpTools::Error::Truncated, "chunked: Truncatedと分かる");
+        }
+        {
+            BufferSink sink;
+            HttpResponse res;
+            res.reset(&sink);
+            feedAll(res, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\nhello\r\n", byteByByte);
+            check(res.hasFailed() && res.error() == HttpTools::Error::BadChunk, "chunked: 16進でないサイズ行は失敗する");
+
+            BufferSink sink2;
+            HttpResponse res2;
+            res2.reset(&sink2);
+            feedAll(res2, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabcX\r\n", byteByByte);
+            check(res2.hasFailed() && res2.error() == HttpTools::Error::BadChunk, "chunked: 本文の後にCRLFが無ければ失敗する");
+        }
+        {
+            //gzip等は展開できないので断る
+            BufferSink sink;
+            HttpResponse res;
+            res.reset(&sink);
+            feedAll(res, "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n", byteByByte);
+            check(res.hasFailed() && res.error() == HttpTools::Error::Encoding, "chunked以外の転送符号化は失敗する");
+            check(sink.data.empty(), "その場合は本文を1バイトも書かない");
         }
         {
             BufferSink sink;
@@ -263,12 +301,23 @@ int main(){
             BufferSink sink;
             HttpResponse res;
             res.reset(&sink);
+            //読まないヘッダ(Set-Cookie/CSP等)は長くても読み飛ばす
             std::string raw = "HTTP/1.1 200 OK\r\nX-Long: ";
             raw.append(HttpResponse::kMaxLineLen + 50, 'a');
-            raw += "\r\n\r\n";
+            raw += "\r\nContent-Length: 2\r\n\r\nok";
             feedAll(res, raw, byteByByte);
-            check(res.hasFailed(), "長すぎるヘッダ行は失敗する");
-            check(res.error() == HttpTools::Error::LineTooLong, "LineTooLongと分かる");
+            check(res.isDone() && sink.data == "ok", "読まないヘッダは長すぎても読み飛ばす");
+
+            //中身を使うヘッダ(Location等)が切れていたら、切れた値を信じずに失敗する
+            BufferSink sink2;
+            HttpResponse res2;
+            res2.reset(&sink2);
+            std::string raw2 = "HTTP/1.1 302 Found\r\nLocation: /";
+            raw2.append(HttpResponse::kMaxLineLen + 50, 'a');
+            raw2 += "\r\n\r\n";
+            feedAll(res2, raw2, byteByByte);
+            check(res2.hasFailed(), "長すぎるLocationは失敗する");
+            check(res2.error() == HttpTools::Error::LineTooLong, "LineTooLongと分かる");
         }
         {
             //書き込み先(キャッシュ)が受け取りを拒否した場合

@@ -8,6 +8,7 @@
 #include "gui/scenes/FileExplorerScene.hpp"
 #include "gui/scenes/SettingsScene.hpp"
 #include "gui/scenes/DictScene.hpp"
+#include "gui/scenes/CalendarScene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "lua/LuaPermissions.hpp"
 #include "lua/LuaAppScanner.hpp"
@@ -39,6 +40,7 @@ void AppFunctions::Setup(){
     Register("ファイル", IconID::Folder, &MakeScene<FileExplorerScene>);
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
     Register("辞書", IconID::Language, &MakeScene<DictScene>);
+    Register("カレンダー", IconID::Calendar, &MakeScene<CalendarScene>);
     // Luaバインディングの動作サンプル(pc/sdcard/lua/hello.lua参照)。
     // MakeLuaAppScene(LuaScene.hpp)がentry.permissionsをそのままLuaSceneへ渡すので、
     // ここでsd_outside_app_dirを立てるだけで済む(/img/hello.pimgを読むため)。

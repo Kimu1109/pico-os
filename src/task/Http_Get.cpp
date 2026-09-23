@@ -40,19 +40,11 @@ bool HttpGet::begin(const Url& target, IHttpSink* sink, const char* validator_in
 }
 
 bool HttpGet::startRequest(){
-    //httpsは接続する手前で弾く。URLのschemeを見て判断できるのが
-    //Url型を用意した理由(各所でstrncmpしない)
-    if(url.secure){
-        finishWith(TaskTools::FAILED, Fail::NotHttp);
-        return false;
-    }
-
     res.reset(&gate);
     //リダイレクトで作り直したresへ繋ぎ直す
     gate.attach(&res, sink_);
 
-    client.stop();
-    client.setTimeout(kConnectTimeoutMs);
+    client.close();
 
     phase = Phase::Connecting;
     return true;
@@ -97,7 +89,7 @@ void HttpGet::finishWith(TaskTools::Status s, Fail f){
     phase = Phase::Ended;
     fail_ = f;
     status = s;
-    client.stop();
+    client.close();
 }
 
 bool HttpGet::followRedirect(){
@@ -132,9 +124,15 @@ void HttpGet::update(){
 
     if(phase == Phase::Connecting){
         //ここだけ同期的に待つ(クラスのコメント参照)
-        if(client.connect(url.host.c_str(), url.port) != 1){
-            LOG_SYS_WARN("HttpGet: 接続できません (%s:%u)", url.host.c_str(), (unsigned)url.port);
-            finishWith(TaskTools::FAILED, Fail::ConnectFailed);
+        if(!client.connect(url, kConnectTimeoutMs)){
+            LOG_SYS_WARN("HttpGet: 接続できません (%s:%u, %s)",
+                         url.host.c_str(), (unsigned)url.port, client.errorText());
+            switch(client.error()){
+                case HttpTransport::Error::ClockNotSet: finishWith(TaskTools::FAILED, Fail::ClockNotSet); break;
+                case HttpTransport::Error::Tls:
+                case HttpTransport::Error::NoMemory:    finishWith(TaskTools::FAILED, Fail::TlsFailed); break;
+                default:                                finishWith(TaskTools::FAILED, Fail::ConnectFailed); break;
+            }
             return;
         }
         phase = Phase::Sending;
@@ -202,7 +200,7 @@ void HttpGet::update(){
 }
 
 void HttpGet::cancel(){
-    client.stop();
+    client.close();
     phase = Phase::Idle;
     fail_ = Fail::None;
     redirects = 0;
@@ -214,8 +212,9 @@ void HttpGet::cancel(){
 const char* HttpGet::failureToStr() const {
     switch(fail_){
         case Fail::None:             return "なし";
-        case Fail::NotHttp:          return "httpsは未対応";
         case Fail::ConnectFailed:    return "接続できない";
+        case Fail::ClockNotSet:      return "時計が合っていない(NTP同期前)";
+        case Fail::TlsFailed:        return client.errorText();
         case Fail::SendFailed:       return "リクエストを送れない";
         case Fail::Timeout:          return "応答がない";
         case Fail::TooManyRedirects: return "リダイレクトが多すぎる";

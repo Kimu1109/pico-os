@@ -10,7 +10,7 @@ description: "http_request / http_cancel"
 
 <div class="sig">pico.http_request(
     method: string,       -- "GET" / "POST" / "PUT" / "PATCH" / "DELETE"
-    url: string,          -- "http://..." のみ(httpsは未対応)
+    url: string,          -- "http://..." または "https://..."
     body: string | nil,
     content_type: string | nil,
     callback: function
@@ -25,7 +25,7 @@ description: "http_request / http_cancel"
     error: string | nil
 )</div>
 
-- `accepted`(呼び出し自体の戻り値)が `false` になる条件: 権限なし / 未知のメソッド(エラーではなく `false`) / 同時実行数の上限(進行中のリクエストがある) / 不正なURLまたはhttps / 送信ボディが16KiB超。
+- `accepted`(呼び出し自体の戻り値)が `false` になる条件: 権限なし / 未知のメソッド(エラーではなく `false`) / 同時実行数の上限(進行中のリクエストがある) / 不正なURL / 送信ボディが16KiB超。
 - `ok` が `false` の場合、`body` は `nil`、`error` に失敗理由の文字列が入ります。
 - `ok` が `true` の場合、`status_code` はサーバの応答コード(2xx/4xx/5xxを問わず本文が渡ります)。応答本文が空なら `body` は `nil`。
 - 受信本文の上限は16KiBです(超過分はコネクションごと失敗扱い)。

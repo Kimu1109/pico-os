@@ -28,7 +28,9 @@
 class WiFiClientPC {
 public:
     WiFiClientPC() = default;
-    ~WiFiClientPC(){ stop(); }
+    // TLS版(WiFiClientSecure_PC.h)が派生するので仮想にしてある
+    // (実機のWiFiClientSecureもWiFiClientの派生で、同じ呼び方で使える)
+    virtual ~WiFiClientPC(){ WiFiClientPC::stop(); }
 
     //コピーすると同じfdを二重にcloseするので禁止する
     WiFiClientPC(const WiFiClientPC&) = delete;
@@ -39,7 +41,7 @@ public:
     // 実機と同じく成功で1、失敗で0を返す。
     // connect(2)を非ブロッキングで開始しselect()で待つことで、到達しない相手でも
     // timeout_ms_ で必ず戻る(実機側の接続も同程度で切り上がる想定)
-    int connect(const char* host, uint16_t port){
+    virtual int connect(const char* host, uint16_t port){
         stop();
         if(!host || !*host) return 0;
 
@@ -79,7 +81,7 @@ public:
         return 1;
     }
 
-    bool connected(){
+    virtual bool connected(){
         if(fd_ < 0) return false;
         //相手が閉じていても、まだ読めるデータが残っていれば「接続中」として扱う
         //(実機のWiFiClientと同じ振る舞い。取りこぼしを防ぐため)
@@ -92,21 +94,21 @@ public:
         return (errno == EAGAIN || errno == EWOULDBLOCK);
     }
 
-    int available(){
+    virtual int available(){
         if(fd_ < 0) return 0;
         int count = 0;
         if(::ioctl(fd_, FIONREAD, &count) != 0) return 0;
         return count;
     }
 
-    int read(uint8_t* buf, size_t size){
+    virtual int read(uint8_t* buf, size_t size){
         if(fd_ < 0 || !buf || size == 0) return 0;
         const ssize_t n = ::recv(fd_, buf, size, MSG_DONTWAIT);
         if(n < 0) return (errno == EAGAIN || errno == EWOULDBLOCK) ? 0 : -1;
         return (int)n;
     }
 
-    size_t write(const uint8_t* buf, size_t size){
+    virtual size_t write(const uint8_t* buf, size_t size){
         if(fd_ < 0 || !buf) return 0;
 
         size_t sent = 0;
@@ -124,7 +126,7 @@ public:
     size_t write(const char* s){ return s ? write((const uint8_t*)s, strlen(s)) : 0; }
     size_t print(const char* s){ return write(s); }
 
-    void stop(){
+    virtual void stop(){
         if(fd_ >= 0){
             ::close(fd_);
             fd_ = -1;
@@ -133,7 +135,22 @@ public:
 
     operator bool() const { return fd_ >= 0; }
 
-private:
+protected:
+    int fd() const { return fd_; }
+    unsigned long timeoutMs() const { return timeout_ms_; }
+
+    bool waitReadable(int fd){
+        fd_set set;
+        FD_ZERO(&set);
+        FD_SET(fd, &set);
+
+        timeval tv;
+        tv.tv_sec = (time_t)(timeout_ms_ / 1000);
+        tv.tv_usec = (suseconds_t)((timeout_ms_ % 1000) * 1000);
+
+        return ::select(fd + 1, &set, nullptr, nullptr, &tv) > 0;
+    }
+
     bool waitWritable(int fd){
         fd_set set;
         FD_ZERO(&set);
@@ -146,6 +163,7 @@ private:
         return ::select(fd + 1, nullptr, &set, nullptr, &tv) > 0;
     }
 
+private:
     int fd_ = -1;
     unsigned long timeout_ms_ = 3000;
 };

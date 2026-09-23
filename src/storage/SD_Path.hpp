@@ -27,6 +27,13 @@ namespace PICO_Path {
         // キャッシュの目録(行指向TSV)。1行1文書
         constexpr const char* CACHE_INDEX_TSV = "/cache/index.tsv";
 
+        // HTTPSで追加で信頼するルート証明書(PEM、複数連結可)。
+        // 焼き込みのルート(net/Tls_Roots_Data.hpp)に無い相手や、自己署名の自前サーバ向け
+        constexpr const char* TLS_EXTRA_CA_PEM = "/sys/tls/ca.pem";
+
+        // カレンダーの取得元の一覧("名前 = URL" の行)。CalendarSync参照
+        constexpr const char* CALENDAR_SOURCES = "/calendar/sources.cfg";
+
         namespace CFG {
             constexpr const char* SYS_NETWORK_CFG = "/sys/network.cfg";
             constexpr const char* SYS_USER_CFG = "/sys/user.cfg";

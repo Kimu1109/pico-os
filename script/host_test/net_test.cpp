@@ -185,18 +185,21 @@ int main(int argc, char** argv){
         check(task.failure() == HttpGet::Fail::ConnectFailed, "接続失敗として分かる");
     }
 
-    // ---- httpsは接続前に弾く ----
+    // ---- TLSを喋らない相手へ https で繋ぐと、TLSの失敗として分かる ----
+    // (HTTPSの正常系は calendar_sync_test が本物のTLSサーバ相手に見る)
     {
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "https%s/doc.md", base + 4); // "http://..." -> "https://..."
         Url url;
-        UrlTools::Parse(url, "https://example.test/x.md");
+        UrlTools::Parse(url, urlText);
 
         BufferSink sink;
         HttpGet task;
         task.begin(url, &sink);
         pump(task);
 
-        eq_int(task.getStatus(), TaskTools::FAILED, "httpsは失敗する");
-        check(task.failure() == HttpGet::Fail::NotHttp, "未対応として分かる(接続はしない)");
+        eq_int(task.getStatus(), TaskTools::FAILED, "平文のサーバへhttpsで繋ぐと失敗する");
+        check(task.failure() == HttpGet::Fail::TlsFailed, "TLSの失敗として分かる");
     }
 
     // ---- DocFetch: 取得 -> キャッシュ -> 開けるパス ----

@@ -105,5 +105,5 @@ description: "メモリ予算・実行時間・各種サイズ上限・列挙型
 ## HTTPメソッド・プロトコルの制約
 
 - 対応メソッド: `GET` / `POST` / `PUT` / `PATCH` / `DELETE`
-- `https://` は未対応です(`http://` のみ)。
+- `https://` も使えます。信頼するルート証明書は本体に焼き込まれたもの(Google / Let's Encrypt / DigiCert / Sectigo)と、SDの `/sys/tls/ca.pem` です。時計が合う(NTP同期)前は繋がりません。
 - 自動リダイレクト追跡は `GET` のみです。

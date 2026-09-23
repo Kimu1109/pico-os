@@ -2,10 +2,9 @@
 
 #include "task/Task.hpp"
 #include "net/Http_Response.hpp"
+#include "net/Http_Transport.hpp"
 #include "util/Url.hpp"
 #include "util/FixedString.hpp"
-
-#include "WiFi.h"
 
 // 1本のHTTP GETを非ブロッキングで回すタスク。
 //
@@ -13,7 +12,7 @@
 // NetworkScanと同じく「開始してからupdate()で進捗を見る」形にしてある。
 //
 // PROTOCOL.mdの取り決めのうち、ここが担当するもの:
-//   - 平文HTTPのみ(httpsのURLは接続前に弾く)
+//   - http/https のどちらでも繋ぐ(接続の仕方は net/Http_Transport が決める)
 //   - `Connection: close` を送る。`Accept-Encoding` は送らない(圧縮させない)
 //   - リダイレクト(301/302/307/308)を最大3回まで追う
 //   - 10秒で打ち切る
@@ -21,6 +20,7 @@
 //
 // **接続(connect)だけは同期的**な点に注意。arduino-picoのWiFiClient::connect()が
 // 戻るまで待つため、到達しない相手を指すと最大で接続タイムアウトぶん画面が止まる。
+// httpsではTLSのハンドシェイクもここに含まれる(Http_Transport.hpp参照)。
 // 受信は全てポーリングなので、繋がってしまえば以降フレームを止めない。
 // (非同期接続にするにはlwIPを直に叩く必要があり、それは別の段の仕事)
 class HttpGet : public Task {
@@ -38,8 +38,9 @@ class HttpGet : public Task {
 
         enum class Fail : uint8_t {
             None,
-            NotHttp,        // httpsは未対応
             ConnectFailed,  // 繋がらない
+            ClockNotSet,    // httpsなのに時計が合っていない(証明書の期限を確かめられない)
+            TlsFailed,      // 証明書が信頼できない等(詳細はfailureToStr())
             SendFailed,     // リクエストを送れない
             Timeout,
             TooManyRedirects,
@@ -69,7 +70,7 @@ class HttpGet : public Task {
     private:
         enum class Phase : uint8_t { Idle, Connecting, Sending, Receiving, Ended };
 
-        WiFiClient client;
+        HttpTransport client;
         HttpResponse res;
         //3xx/4xxの本文をシンクへ流さないための中継(判定は書き込みの瞬間に行う)
         HttpBodyGate gate;

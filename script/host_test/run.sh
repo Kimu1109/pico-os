@@ -256,6 +256,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/scenes/CalendarScene.cpp" \
     "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
     "$ROOT/src/calendar/Ical.cpp" \
+    "$ROOT/src/calendar/Calendar_Sync.cpp" \
+    "$ROOT/src/task/Http_Get.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
@@ -268,7 +272,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
-    -o "$OUT/calendar_scene_test"
+    -o "$OUT/calendar_scene_test" -lssl -lcrypto
 
 echo ""
 echo "===== calendar_scene_test ====="
@@ -544,9 +548,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/functions/App_Functions.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     "$OUT"/lua_obj/*.o \
-    -o "$OUT/lua_engine_test"
+    -o "$OUT/lua_engine_test" -lssl -lcrypto
 
 echo ""
 echo "===== lua_engine_test ====="
@@ -599,9 +604,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
     "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     "$OUT"/lua_obj/*.o \
-    -o "$OUT/lua_scene_test"
+    -o "$OUT/lua_scene_test" -lssl -lcrypto
 
 echo ""
 echo "===== lua_scene_test ====="
@@ -655,9 +661,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
     "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     "$OUT"/lua_obj/*.o \
-    -o "$OUT/lua_app_scanner_test"
+    -o "$OUT/lua_app_scanner_test" -lssl -lcrypto
 
 echo ""
 echo "===== lua_app_scanner_test ====="

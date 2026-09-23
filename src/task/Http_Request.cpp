@@ -39,16 +39,10 @@ bool HttpRequest::begin(const Url& target, Method method, IHttpSink* sink,
 }
 
 bool HttpRequest::startRequest(){
-    if(url.secure){
-        finishWith(TaskTools::FAILED, Fail::NotHttp);
-        return false;
-    }
-
     // Http_Getと違いゲートを挟まない: statusCodeによらずsink_へ本文を渡す
     res.reset(sink_);
 
-    client.stop();
-    client.setTimeout(kConnectTimeoutMs);
+    client.close();
 
     phase = Phase::Connecting;
     return true;
@@ -100,7 +94,7 @@ void HttpRequest::finishWith(TaskTools::Status s, Fail f){
     phase = Phase::Ended;
     fail_ = f;
     status = s;
-    client.stop();
+    client.close();
 }
 
 bool HttpRequest::followRedirect(){
@@ -134,9 +128,15 @@ void HttpRequest::update(){
 
     if(phase == Phase::Connecting){
         //ここだけ同期的に待つ(Http_Getと同じ制約)
-        if(client.connect(url.host.c_str(), url.port) != 1){
-            LOG_SYS_WARN("HttpRequest: 接続できません (%s:%u)", url.host.c_str(), (unsigned)url.port);
-            finishWith(TaskTools::FAILED, Fail::ConnectFailed);
+        if(!client.connect(url, kConnectTimeoutMs)){
+            LOG_SYS_WARN("HttpRequest: 接続できません (%s:%u, %s)",
+                         url.host.c_str(), (unsigned)url.port, client.errorText());
+            switch(client.error()){
+                case HttpTransport::Error::ClockNotSet: finishWith(TaskTools::FAILED, Fail::ClockNotSet); break;
+                case HttpTransport::Error::Tls:
+                case HttpTransport::Error::NoMemory:    finishWith(TaskTools::FAILED, Fail::TlsFailed); break;
+                default:                                finishWith(TaskTools::FAILED, Fail::ConnectFailed); break;
+            }
             return;
         }
         phase = Phase::Sending;
@@ -205,7 +205,7 @@ void HttpRequest::update(){
 }
 
 void HttpRequest::cancel(){
-    client.stop();
+    client.close();
     phase = Phase::Idle;
     fail_ = Fail::None;
     redirects = 0;
@@ -218,7 +218,8 @@ void HttpRequest::cancel(){
 const char* HttpRequest::failureToStr() const {
     switch(fail_){
         case Fail::None:             return "なし";
-        case Fail::NotHttp:          return "httpsは未対応";
+        case Fail::ClockNotSet:      return "時計が合っていない(NTP同期前)";
+        case Fail::TlsFailed:        return client.errorText();
         case Fail::ConnectFailed:    return "接続できない";
         case Fail::SendFailed:       return "リクエストを送れない";
         case Fail::Timeout:          return "応答がない";

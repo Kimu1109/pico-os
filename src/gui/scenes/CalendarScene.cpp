@@ -3,6 +3,7 @@
 #include "functions/Widget_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Network_Functions.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
@@ -311,13 +312,31 @@ void CalendarScene::onEnter(){
     });
     WidgetFunctions::Add(this->grid);
 
-    // ---- 選んだ日の予定 ----
-    this->day_label = new Label<PICO_STR_M>(content.x + MARGIN, grid_y + grid_h + MARGIN, "");
+    // ---- 選んだ日の見出し + [更新] ----
+    const int day_row_y = grid_y + grid_h + MARGIN;
+
+    //押すたびに文字が変わる(更新/取得中/再試行)ので、一番長い文字で幅を固定する
+    this->sync_button = make_button("取得中");
+    this->sync_button->setW(this->sync_button->getLocalRect().w);
+    this->sync_button->setX(content.x + content.w - MARGIN - this->sync_button->getLocalRect().w);
+    this->sync_button->setY(day_row_y);
+    this->sync_button->setOnPressEnd([this](){ this->startSync(); });
+    WidgetFunctions::Add(this->sync_button);
+
+    this->source_count = CalendarSync::CountSources();
+    //取得元が無ければボタンは出さず、見出しに幅を全部使う
+    this->sync_button->setVisible(this->source_count > 0);
+    const int day_label_w = (this->source_count > 0)
+        ? this->sync_button->getLocalRect().x - MARGIN - (content.x + MARGIN)
+        : content.w - MARGIN * 2;
+
+    this->day_label = new Label<PICO_STR_M>(content.x + MARGIN, day_row_y, "");
     this->day_label->setFontSize(FontFn::Small);
-    this->day_label->setMaxWidth(content.w - MARGIN * 2);
+    this->day_label->setMaxWidth(day_label_w);
+    this->day_label->setY(day_row_y + (row_h - FontFn::GetFontSize(FontFn::Small)) / 2);
     WidgetFunctions::Add(this->day_label);
 
-    const int list_y = grid_y + grid_h + MARGIN + 16 + 2;
+    const int list_y = day_row_y + row_h + MARGIN;
     this->event_list = new ScrollList(
         content.x + MARGIN, list_y,
         content.w - MARGIN * 2, content.y + content.h - MARGIN - list_y,
@@ -326,12 +345,63 @@ void CalendarScene::onEnter(){
     this->event_list->setFontSize(FontFn::Small);
     WidgetFunctions::Add(this->event_list);
 
+    this->frames_since_enter = 0;
+    this->refreshSyncButton();
+
     //ファイルが別のアプリで書き換わっているかもしれないので、戻ってきたときも読み直す
     this->reload();
     this->refreshView();
 }
 
+// ---------------------------------------------------------------------------
+// 取得
+// ---------------------------------------------------------------------------
+
+void CalendarScene::startSync(){
+    if(this->sync.state() == CalendarSync::State::Running) return;
+    this->auto_synced = true;
+    if(!this->sync.begin()){
+        this->source_count = 0;
+        if(this->sync_button) this->sync_button->setVisible(false);
+        return;
+    }
+    this->refreshSyncButton();
+}
+
+void CalendarScene::refreshSyncButton(){
+    if(!this->sync_button) return;
+    const char* text = "更新";
+    if(this->sync.state() == CalendarSync::State::Running) text = "取得中";
+    else if(this->last_sync_failed)                        text = "再試行";
+    this->sync_button->setText(text);
+    this->sync_button->setTextColor(this->last_sync_failed ? PICO_RED : PICO_BLACK);
+}
+
 void CalendarScene::onUpdate(){
+    // ---- 取得 ----
+    if(this->frames_since_enter < 1000) this->frames_since_enter++;
+
+    //ランチャから開いたときは、1回描いてから自動で取りに行く。
+    //Wi-Fiが無いのに行くと、名前解決の待ちで画面が止まるだけなので行かない
+    if(!this->auto_synced && this->source_count > 0 && this->frames_since_enter >= 2
+       && NetworkFunctions::IsConnected()){
+        this->startSync();
+    }
+
+    if(this->sync.state() == CalendarSync::State::Running){
+        this->sync.update();
+        if(this->sync.state() != CalendarSync::State::Running){
+            this->last_sync_failed = (this->sync.failedCount() > 0);
+            this->refreshSyncButton();
+            //中身が変わったものがあれば読み直す。304ばかりなら今の表示のままでよい
+            if(this->sync.updatedCount() > 0){
+                this->reload();
+                this->refreshView();
+            }
+        }
+    }
+
+    // ---- 今日 ----
     if(!this->refreshToday()) return;
 
     //時計が合ったばかりで、まだ仮の月(1970年1月)を出しているなら今日へ飛ぶ
@@ -348,7 +418,12 @@ void CalendarScene::onUpdate(){
 }
 
 void CalendarScene::onExit(){
+    //onUpdate()が来なくなるので取得は打ち切る(手元の .ics はそのまま)。
+    //戻ってきたら「更新」で取り直せる
+    this->sync.cancel();
+
     this->back_button = nullptr;
+    this->sync_button = nullptr;
     this->prev_button = nullptr;
     this->next_button = nullptr;
     this->today_button = nullptr;

@@ -1487,8 +1487,8 @@ int LuaEngine::l_http_request(lua_State* L) {
     }
 
     Url url;
-    if (!UrlTools::Parse(url, url_str) || url.secure) {
-        lua_pushboolean(L, false); // 不正なURL、またはhttps(未対応)
+    if (!UrlTools::Parse(url, url_str)) {
+        lua_pushboolean(L, false); // 不正なURL(httpsも通る。接続はHttp_Transportが担う)
         return 1;
     }
 

@@ -120,18 +120,19 @@ namespace {
         return -1;
     }
 
-    // TEXT値のエスケープを戻す。改行は1行表示なので空白にする
-    void Unescape(const char* src, char* dst, size_t dst_size){
-        size_t n = 0;
-        while(*src && n + 1 < dst_size){
-            char c = *src++;
-            if(c == '\\' && *src){
-                const char e = *src++;
+    // TEXT値のエスケープをその場で戻す(縮む一方なので同じバッファで足りる)。
+    // 改行は1行表示なので空白にする
+    void UnescapeInPlace(char* s){
+        char* dst = s;
+        while(*s){
+            char c = *s++;
+            if(c == '\\' && *s){
+                const char e = *s++;
                 c = (e == 'n' || e == 'N') ? ' ' : e;
             }
-            dst[n++] = c;
+            *dst++ = c;
         }
-        dst[n] = '\0';
+        *dst = '\0';
     }
 
     uint32_t HashUid(const char* s){
@@ -421,10 +422,9 @@ void Ical::Parser::handleEventProperty(const char* name, const char* params, cha
     if(truncated && !is_text) return;
 
     if(is_text){
-        char buf[kMaxLineBytes];
-        Unescape(value, buf, sizeof(buf));
-        if(IEq(name, "SUMMARY")) cur_.summary.assign(buf);
-        else                     cur_.location.assign(buf);
+        UnescapeInPlace(value);
+        if(IEq(name, "SUMMARY")) cur_.summary.assign(value);
+        else                     cur_.location.assign(value);
         return;
     }
 
@@ -693,4 +693,29 @@ bool Ical::OccursOn(const IcalEvent& ev, int32_t day){
         if(StartsOn(ev, x)) return true;
     }
     return false;
+}
+
+int Ical::EventsOn(const IcalCalendar& cal, int32_t day, uint8_t* out, int max_out){
+    int n = 0;
+    for(int i = 0; i < cal.count && n < max_out; i++){
+        if(OccursOn(cal.events[i], day)) out[n++] = (uint8_t)i;
+    }
+
+    //終日と前日からの続きを先頭に、残りは開始時刻順。件数は高々数件なので挿入ソートで足りる
+    auto key = [&](uint8_t idx){
+        const IcalEvent& ev = cal.events[idx];
+        if(ev.start.isAllDay() || !StartsOn(ev, day)) return (int32_t)-1;
+        return ev.start.sec;
+    };
+    for(int i = 1; i < n; i++){
+        const uint8_t v = out[i];
+        const int32_t k = key(v);
+        int j = i - 1;
+        while(j >= 0 && key(out[j]) > k){
+            out[j + 1] = out[j];
+            j--;
+        }
+        out[j + 1] = v;
+    }
+    return n;
 }

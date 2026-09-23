@@ -181,4 +181,9 @@ namespace Ical {
     bool StartsOn(const IcalEvent& ev, int32_t day);
     // その日にかかっているか(複数日にまたがる予定も含む)。月表示の印はこちら
     bool OccursOn(const IcalEvent& ev, int32_t day);
+
+    // その日にかかっている予定の添字(cal.events[])を out へ並べ、件数を返す。
+    // 並びは「終日と前日からの続き」が先、残りは開始時刻順(同時刻は読んだ順)。
+    // max_out を超えた分は数えない
+    int EventsOn(const IcalCalendar& cal, int32_t day, uint8_t* out, int max_out);
 }

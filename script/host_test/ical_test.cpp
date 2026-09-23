@@ -309,6 +309,25 @@ int main(){
         eq_int((long)cal.events[0].summary.length(), PICO_STR_L - 1, "長いSUMMARYは切り詰めて使う");
     }
 
+    // ---- その日の予定の並び(一覧の表示順) ----
+    {
+        parse(wrap(ev("DTSTART:20260923T150000\r\nSUMMARY:午後\r\n") +
+                   ev("DTSTART:20260923T090000\r\nSUMMARY:朝\r\n") +
+                   ev("DTSTART;VALUE=DATE:20260923\r\nSUMMARY:終日\r\n") +
+                   ev("DTSTART:20260922T220000\r\nDTEND:20260923T020000\r\nSUMMARY:前夜から\r\n") +
+                   ev("DTSTART:20260924T090000\r\nSUMMARY:翌日\r\n") +
+                   ev("DTSTART:20260902T120000\r\nRRULE:FREQ=WEEKLY\r\nSUMMARY:昼の繰り返し\r\n")));
+        uint8_t idx[8];
+        const int n = Ical::EventsOn(cal, D(2026, 9, 23), idx, 8);
+        std::string order;
+        for(int i = 0; i < n; i++){
+            if(i) order += ",";
+            order += cal.events[idx[i]].summary.c_str();
+        }
+        eq_str(order.c_str(), "終日,前夜から,朝,昼の繰り返し,午後", "終日と続きが先、残りは開始時刻順");
+        eq_int(Ical::EventsOn(cal, D(2026, 9, 23), idx, 2), 2, "max_outで打ち切る");
+    }
+
     // ---- SDから読む ----
     {
         HostSd::files["/cal/test.ics"] = basic;

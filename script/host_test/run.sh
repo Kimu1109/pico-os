@@ -17,6 +17,8 @@
 #   discovery_test… サーバ情報(/.well-known/pico-os)の解釈と前方互換
 #   ical_test     … iCalendar(.ics)の読み取り(折り返し/エスケープ/UTC→現地時刻)と
 #                   繰り返し(RRULE/EXDATE/上書き予定)がどの日に出るか
+#   calendar_scene_test… カレンダーアプリのGUI配線(MonthGridのタップ位置→日付、
+#                   CalendarSceneの生成/解放、SDや.icsが無いときの案内)
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -247,6 +249,30 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== ical_test ====="
 run_or_die "$OUT/ical_test"
+
+# --- カレンダーアプリのGUI配線 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/calendar_scene_test.cpp" \
+    "$ROOT/src/gui/scenes/CalendarScene.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    -o "$OUT/calendar_scene_test"
+
+echo ""
+echo "===== calendar_scene_test ====="
+run_or_die "$OUT/calendar_scene_test"
 
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

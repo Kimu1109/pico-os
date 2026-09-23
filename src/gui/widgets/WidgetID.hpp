@@ -31,6 +31,7 @@ enum class WidgetType : uint8_t {
     LineShape,
     LuaCanvas,
     MarkdownView,
+    MonthGrid,
     MsgDialog,
     NumberInput,
     NumberSlider,

@@ -15,6 +15,9 @@ namespace PICO_Path {
         // "/lua/"直下を走査するとhello_sub.lua等のサブ画面スクリプトまで
         // 誤って1タイルずつ登録してしまうため
         constexpr const char* LUA_APPS = "/lua/apps/";
+        // カレンダーアプリが読む .ics の置き場所。直下の *.ics を全部読んで1つに重ねる
+        // (Googleのカレンダーごとの非公開URLを1ファイルずつ置く想定。CalendarScene参照)
+        constexpr const char* CALENDAR = "/calendar/";
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";

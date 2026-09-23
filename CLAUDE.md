@@ -70,6 +70,7 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
+  calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical)。カレンダーアプリの第1段
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
@@ -79,7 +80,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scannerの23本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/icalの24本 / run_net.sh=参照実装サーバ相手の結合テスト / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
@@ -373,6 +374,35 @@ UI側は`gui/widgets/dialogs/SearchDialog`(状態1行 + `ScrollList` + 再検索
 ため、同じフレームで次のダイアログを開くと、閉じたキーボードや前のダイアログの跡がその下に残ったままになる。
 1フレーム空ければ「ダイアログが何も無い状態」で描き直される。
 
+### iCalendarの読み取り (`src/calendar/Ical.hpp`) (2026-09-23)
+
+カレンダーアプリの第1段。**Google CalendarのOAuth/APIではなくiCal(.ics)を選んだ**
+(OAuthはHTTPS・トークン管理・JSONパーサが全て要り、いずれも今のコードに無い。
+iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で同じものを出す)。
+Google側のURLもHTTPSなので、**取得は母艦のサーバがHTTPで中継する前提**(`reference_server.py`の拡張。未着手)。
+
+- **`Ical::Parser`はバイト列を好きな切れ目で受け取る**(`HttpResponse`と同じ増分方式)。
+  行の折り返し(次の行頭の空白)もここで畳む。`ParseFile()`はSDから256Bずつ読んで食わせるだけ。
+  **`IcalCalendar`へ追記する**(clearしない)ので、複数の.icsを1つへ合成できる。
+- **時刻は全て現地時刻へ揃えて持つ**(`IcalTime{day=1970-01-01からの通算日数, sec=0時からの秒/-1で終日}`)。
+  `...Z`は`Options::utc_offset_sec`でずらし、`TZID=`付きは現地時刻とみなす(VTIMEZONEは解釈しない。サマータイムも無視)。
+- **`Options::window_from_day/to_day`で窓の外の予定を読み捨てる。** Googleの非公開URLは**過去の予定を全部**
+  返すので、窓を切らないと`kMaxEvents=64`(約16KB)がすぐ昔の予定で埋まる。
+- **RRULEは一部対応**: DAILY/WEEKLY/MONTHLY/YEARLY + INTERVAL/COUNT/UNTIL/BYDAY/WKST、
+  MONTHLYの「第n曜日」(1〜5, -1)、DTSTARTと食い違わないBYMONTHDAY/BYMONTH。
+  **それ以外(BYSETPOS等)は`rule.supported=false`にして初回だけ出す**(間違った日に出すよりまし)。
+- **引き当て(`StartsOn()`/`OccursOn()`)は日ごとの算術で、回を1つずつ展開しない。** 月表示の42マス×64件を
+  毎回引いても軽いように。COUNTが絡み、かつ「存在しない日」(31日の無い月・2/29・第5週)が
+  あり得る場合だけ周期をループで数える(RFC 5545どおり存在しない日はCOUNTに数えない)。
+- **例外**: EXDATEと、RECURRENCE-ID付きの上書き予定。後者は`finish()`で親(同じUIDの32bitハッシュ)の
+  `exdates`へ畳み込み、上書き側は単発の予定として残す(STATUS:CANCELLEDなら残さない)。
+  除外は「日」で持つ(対応する繰り返しは1日1回までなので足りる)。1件あたり`kMaxExDates=8`まで。
+- VEVENTの**直下だけ**を読む。VALARMにもSUMMARYがあり、拾うと予定名が通知文で上書きされる。
+- ホストテストは`script/host_test/ical_test.cpp`(RFC 5545のWKSTの例、第n曜日、31日/2/29の飛ばし、
+  1バイトずつ食わせた場合、UTF-8の途中での折り返し等)。
+- 次の段: `CalendarScene`(月表示は`AppGrid`型の「render()直描き」で)、サーバ経由の取得(`Doc_Fetch`に乗せる)。
+  `utc_offset_sec`はシーン側で`TimeFunctions`のTZから求める。
+
 ### ClocksScene 実装詳細
 
 画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える1画面のアプリ
@@ -607,7 +637,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。 |
+| 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)だけ先に入った**(下記「iCalendarの読み取り」参照)。 |
 | 9 | GBエミュ | **未着手**。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
 | 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
@@ -1579,7 +1609,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、23本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、24本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`run.sh`はコンパイル・テスト実行の各ステップに`timeout`を掛けてある(2026-09-21追加)**。

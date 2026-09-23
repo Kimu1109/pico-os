@@ -15,6 +15,8 @@
 #   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)とマニフェストの引き当て
 #   http_test     … URLの分解/解決と、HTTPレスポンスの解釈(ソケット抜きで検証)
 #   discovery_test… サーバ情報(/.well-known/pico-os)の解釈と前方互換
+#   ical_test     … iCalendar(.ics)の読み取り(折り返し/エスケープ/UTC→現地時刻)と
+#                   繰り返し(RRULE/EXDATE/上書き予定)がどの日に出るか
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -235,6 +237,16 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== discovery_test ====="
 run_or_die "$OUT/discovery_test"
+
+# --- iCalendar(.ics)の読み取り ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/ical_test.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
+    -o "$OUT/ical_test"
+
+echo ""
+echo "===== ical_test ====="
+run_or_die "$OUT/ical_test"
 
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

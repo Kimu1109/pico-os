@@ -21,6 +21,7 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | [直接描画](drawing/) | `draw_pixel` `draw_line` `draw_rect` `fill_rect` `draw_circle` `fill_circle` `clear_rect` `draw_text` `invalidate` `mark_dirty` `set_draw_area` `clear_draw_area` |
 | [タッチ](touch/) | `get_touch` |
 | [画像](images/) | `image_load` `image_size` `draw_image` `image_free` |
+| [ラスタキャンバス](canvas/) | `canvas_clear` `canvas_save` `canvas_load` |
 | [SDカード](sdcard/) | `sd_exists` `sd_read` `sd_write` `sd_remove` `sd_mkdir` `sd_list` |
 | [シーン制御](scenes/) | `pop` `push_scene` `change_scene` `launch_app` `content_rect` |
 | [ダイアログ](dialogs/) | `show_message` `show_input` `show_file_save` `show_file_select` `show_color` |

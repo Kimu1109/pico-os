@@ -10,7 +10,7 @@ description: "pico.createで生成できる種別と、生成直後の初期値"
 
 | `type_name` | 生成直後の状態 | 対応プロパティ(抜粋) |
 |---|---|---|
-| `"Button"` | x=0, y=0, text="" | text, w, h, font_size, text_color, border_color |
+| `"Button"` | x=0, y=0, text="" | text, w, h, font_size, text_color, border_color, icon_id, icon_size(アイコンボタン化) |
 | `"Label"` | x=0, y=0, text="" | text, placeholder, font_size, text_color, border_color, max_width, max_height, text_align |
 | `"Textbox"` | x=0, y=0, w=100, h=24, 単一行 | text, placeholder, font_size, text_color, border_color, max_width, max_height, is_single_line |
 | `"NumberInput"` | x=0, y=0, w=60 | text(入力された数字文字列), font_size, text_color, border_color |
@@ -20,7 +20,7 @@ description: "pico.createで生成できる種別と、生成直後の初期値"
 | `"NumberSlider"` | x=0, y=0, w=100 | value, min_value, max_value, w, h, color, visible_num, decimal_places |
 | `"ScrollContainer"` | x=0, y=0, 100×100 | border_color(のみ。w/hは変更不可) |
 | `"ScrollList"` | x=0, y=0, 100×100 | w, h, font_size, text_color, border_color, selected_index, enable_icon, item_count(読み取り専用) |
-| `"CanvasRaster"` | x=0, y=0, 100×100 | color, brush_radius, canvas_mode |
+| `"CanvasRaster"` | x=0, y=0, 100×100 | w, h, color, brush_radius, canvas_mode |
 | `"LayoutContainer"` | x=0, y=0, 100×100 | w, h, direction, cross_align, gap, padding |
 | `"GridContainer"` | x=0, y=0, 100×100, 2列 | w, h, cols, gap, padding, h_align, v_align |
 | `"TabBar"` | x=0, y=0, w=100, h=24, タブ0個 | w, h, tab_selected, tab_count(読み取り専用), font_size, border_color |

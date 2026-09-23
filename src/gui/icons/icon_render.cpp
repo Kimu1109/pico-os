@@ -119,4 +119,64 @@ void DrawPimgSprite(PimgSprite& s, int x, int y) {
     }
 }
 
+bool DecodePimgBody(FsFile& f, LGFX_Sprite& sprite, uint16_t width, uint16_t height) {
+    f.seek(kPimgHeaderSize);
+
+    uint16_t px = 0, py = 0;
+    uint8_t buf[2];
+    while (py < height && f.read(buf, 2) == 2) {
+        uint8_t run = buf[0], idx = buf[1];
+        while (run--) {
+            sprite.writePixel(px, py, idx);
+            if (++px >= width) { px = 0; py++; }
+        }
+    }
+    return py >= height; // 全ピクセルが埋まっていなければ壊れたファイル
+}
+
+bool EncodePimg(LGFX_Sprite& sprite, uint16_t width, uint16_t height, FsFile& f, bool transparent) {
+    if (width == 0 || height == 0) return false;
+
+    uint8_t header[kPimgHeaderSize] = {
+        (uint8_t)(width & 0xFF), (uint8_t)((width >> 8) & 0xFF),
+        (uint8_t)(height & 0xFF), (uint8_t)((height >> 8) & 0xFF),
+        (uint8_t)(transparent ? kPimgFlagTransparent : 0),
+    };
+    if (f.write(header, kPimgHeaderSize) != kPimgHeaderSize) return false;
+
+    // 1回のf.write()呼び出しを減らすため、(run,idx)ペアを小さなバッファへ
+    // ためてからまとめて書き出す(generate_pimg.pyと同じRLE規則: run=1〜255)
+    uint8_t out_buf[256];
+    size_t out_len = 0;
+    auto flush = [&](void) -> bool {
+        if (out_len == 0) return true;
+        const bool ok = (f.write(out_buf, out_len) == out_len);
+        out_len = 0;
+        return ok;
+    };
+    auto emit = [&](uint8_t run, uint8_t idx) -> bool {
+        if (out_len + 2 > sizeof(out_buf) && !flush()) return false;
+        out_buf[out_len++] = run;
+        out_buf[out_len++] = idx;
+        return true;
+    };
+
+    uint8_t run = 0;
+    uint8_t prev_idx = 0;
+    for (uint16_t y = 0; y < height; ++y) {
+        for (uint16_t x = 0; x < width; ++x) {
+            const uint8_t idx = (uint8_t)(sprite.readPixelValue(x, y) & 0x0F);
+            if (run > 0 && idx == prev_idx && run < 255) {
+                run++;
+                continue;
+            }
+            if (run > 0 && !emit(run, prev_idx)) return false;
+            prev_idx = idx;
+            run = 1;
+        }
+    }
+    if (run > 0 && !emit(run, prev_idx)) return false;
+    return flush();
+}
+
 }  // namespace IconRender

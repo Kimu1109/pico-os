@@ -88,14 +88,7 @@ void CanvasRaster::causeOnPressMove(){
             abs(sx - touchX) >= 2 ||
             abs(sy - touchY) >= 2
         ){
-            sp->drawWideLine(
-                sx,
-                sy,
-                touchX,
-                touchY,
-                this->brush_radius,
-                this->brush_color
-            );
+            sp->drawWideLine(sx, sy, touchX, touchY, brush_radius, brush_color);
             sx = touchX;
             sy = touchY;
             this->needsRender();
@@ -140,6 +133,29 @@ void CanvasRaster::causeOnPressEnd(){
 
 void CanvasRaster::canvasClear(){
     sp->clear(PICO_WHITE);
+    this->needsRender();
+}
+
+void CanvasRaster::resize(int16_t w, int16_t h){
+    if(w == this->l_rect.w && h == this->l_rect.h) return;
+    if(w <= 0 || h <= 0) return;
+
+    this->l_rect.w = w;
+    this->l_rect.h = h;
+
+    // createSprite()を同じspriteへ呼び直すと、内部が古いバッファを解放してから
+    // 新しいサイズで確保し直す(コンストラクタと同じ手順を丸ごとやり直す必要がある —
+    // パレット/基準色/フォント設定はスプライトを作り直すたびに失われるため)
+    sp->createSprite(w, h);
+    for(int i = 0; i < 16; i++){
+        sp->setPaletteColor(i, PICO_GFX::COLORS[i]);
+    }
+    sp->setBaseColor(PICO_WHITE);
+    sp->clear(PICO_WHITE);
+    sp->setFont(&lgfxJapanGothicP_24);
+    sp->setTextColor(PICO_BLACK);
+    sp->setTextWrap(false, false);
+
     this->needsRender();
 }
 

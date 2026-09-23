@@ -78,6 +78,33 @@
 // 別に「同時に保持できる枚数」と「合計バイト数」の両方に頭打ちを設けてあるのは
 // これが理由(kMaxLuaImages/kMaxLuaImageBytes参照)。
 //
+// ラスタキャンバスの保存/読み込み(pico.canvas_clear/canvas_save/canvas_load、
+// 2026-09-23実装): `CanvasRaster`(`pico.create("CanvasRaster")`)は`Widget`同様
+// 自分専用の`LGFX_Sprite`を持ち続ける「置いたら描いた内容が自動的に維持される」
+// ウィジェットで、`causeOnPressMove()`がタッチのドラッグをそのまま線として
+// 焼き込む(手書きメモアプリのような自由線描画の土台)。ただし元々は
+// 「クリア」「保存」「読み込み」の手段が無く、`w`/`h`も`WidgetFactory::Create()`が
+// 決め打ちする100×100固定でリサイズもできなかった(全画面のスクラッチパッドを
+// 作ろうとして初めて踏んだ穴)。この3点を追加した:
+//   - `CanvasRaster::setW/setH`(`WidgetProperty`経由で`pico.set(id,"w"/"h",...)`
+//     からも使える)が`LGFX_Sprite::createSprite()`を呼び直してサイズを変える。
+//     **既存の描画内容は消える**(コンストラクタと同じ手順をやり直すため)ので、
+//     生成直後に一度だけ呼ぶ使い方を想定している
+//   - `pico.canvas_clear(id)`: `CanvasRaster::canvasClear()`(元々あった、
+//     白で塗りつぶすだけのメソッド)を橋渡しするだけ
+//   - `pico.canvas_save(id, path)` / `pico.canvas_load(id, path)`: `CanvasRaster`の
+//     スプライトを`.pimg`(`IconRender`参照。4bpp+RLE、`script/generate_pimg.py`と
+//     同じ形式)としてSDへ書き出す/読み込む。エンコーダ(`IconRender::EncodePimg()`)は
+//     このLuaバインディングのために新設した(元々`.pimg`はPython側で作る前提で
+//     C++側はデコード専任だったが、実行中に描いた内容をその場で保存する用途は
+//     デコードだけでは足りない)。`canvas_load`は読み込んだ`.pimg`のwidth/height
+//     へ`CanvasRaster::resize()`で合わせ直すので、画面サイズや呼び出し側の
+//     `w`/`h`と保存時のサイズが食い違っていても読み込める。
+//   - 対象を`CanvasRaster`以外に渡すと(`render`/`closed`と同じ理屈で)
+//     `luaL_error`。`canvas_save`/`canvas_load`のSD絡みの失敗(SD無し・
+//     `sd_outside_app_dir`権限無しでapp_dir外・ファイル不正)は`pico.sd_*`と
+//     同じく`false`を返すだけでエラーにはしない
+//
 // シーン制御(pico.push_scene/change_scene/launch_app): pico.pop()(SceneFunctions::Pop())
 // しか無かったため、Luaスクリプトは「自分を起動した画面へ戻る」以外の画面遷移が
 // できなかった。C++側のSceneFunctions::Change/Push/Popに相当する3つを揃えた:
@@ -537,6 +564,14 @@ class LuaEngine {
         static int l_image_load(lua_State* L);
         static int l_image_size(lua_State* L);
         static int l_image_free(lua_State* L);
+
+        // CanvasRaster(pico.create("CanvasRaster"))専用の3つ。クラスコメント
+        // 「ラスタキャンバスの保存/読み込み」参照。対象がCanvasRaster以外なら
+        // pico.on(render/closed)と同じくluaL_errorにする(プログラマの誤り扱い)。
+        // canvas_save/canvas_loadのSD周りの失敗はpico.sd_*と同じくfalseを返すだけ
+        static int l_canvas_clear(lua_State* L);
+        static int l_canvas_save(lua_State* L);
+        static int l_canvas_load(lua_State* L);
 
         // SDカードアクセス。パスはSD_Functions/FileExplorerと同じくSD絶対パス。
         // OSData::SD_usable==falseの間はどれも「失敗」(false/nil)を返すだけで、

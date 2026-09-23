@@ -5,6 +5,7 @@
 // 「常に1行」になってしまい、確保パターンの計測(mem_probe)が実機とかけ離れてしまう。
 #pragma once
 #include <vector>
+#include <algorithm>
 #define TFT_BLACK 0
 #define TFT_NAVY 1
 #define TFT_DARKGREEN 2
@@ -39,13 +40,25 @@ struct LGFX_Sprite {
     int font_px = 24;   //現在のフォントの1文字高(px)
     int text_size = 1;  //拡大率
 
+    // writePixel/readPixelValueだけは実際にバッファへ読み書きする(1byte/pixelの
+    // 簡略版。実機/PCビルドは4bppだが、ここではパレット番号0〜15を素直に格納できれば
+    // 十分)。IconRender::EncodePimg/DecodePimgBody(pico.canvas_save/canvas_load)を
+    // ホストテストで検証するために追加した。他のメソッドは元々どおり無描画のまま
+    int sp_w_ = 0, sp_h_ = 0;
+    std::vector<uint8_t> pixels_;
+
     LGFX_Sprite(void* = nullptr){}
     void setColorDepth(int){}
-    void* createSprite(int, int){ return nullptr; }
-    void deleteSprite(){}
+    void* createSprite(int w, int h){
+        sp_w_ = (w > 0) ? w : 0;
+        sp_h_ = (h > 0) ? h : 0;
+        pixels_.assign((size_t)sp_w_ * (size_t)sp_h_, 0);
+        return pixels_.empty() ? nullptr : pixels_.data();
+    }
+    void deleteSprite(){ pixels_.clear(); sp_w_ = 0; sp_h_ = 0; }
     void setPaletteColor(int, int){}
     void setBaseColor(int){}
-    void clear(int = 0){}
+    void clear(int color = 0){ std::fill(pixels_.begin(), pixels_.end(), (uint8_t)color); }
     void setFont(const void* font){
         if(font) font_px = ((const lgfx::v1::U8g2font*)font)->px;
     }
@@ -71,7 +84,14 @@ struct LGFX_Sprite {
     void drawFastVLine(int, int, int, int){}
     void pushSprite(void*, int, int){}
     void pushSprite(void*, int, int, int){} //透過色つき
-    void writePixel(int, int, int){}
+    void writePixel(int x, int y, int color){
+        if(x < 0 || y < 0 || x >= sp_w_ || y >= sp_h_) return;
+        pixels_[(size_t)y * sp_w_ + (size_t)x] = (uint8_t)color;
+    }
+    uint32_t readPixelValue(int x, int y){
+        if(x < 0 || y < 0 || x >= sp_w_ || y >= sp_h_) return 0;
+        return pixels_[(size_t)y * sp_w_ + (size_t)x];
+    }
     void startWrite(){}
     void endWrite(){}
     void pushImage(int, int, int, int, const void*){}
@@ -91,7 +111,7 @@ struct LGFX_Sprite {
     int drawString(const char*, int, int){ return 0; }
     void setCursor(int, int){}
     int print(const char*){ return 0; }
-    int width(){ return 0; }
-    int height(){ return 0; }
-    void* getBuffer(){ return nullptr; }
+    int width(){ return sp_w_; }
+    int height(){ return sp_h_; }
+    void* getBuffer(){ return pixels_.empty() ? nullptr : pixels_.data(); }
 };

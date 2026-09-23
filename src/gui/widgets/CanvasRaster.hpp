@@ -53,6 +53,19 @@ class CanvasRaster : public Widget {
 
         void render() override;
 
+        // pico.image_save/loadが直接スプライトへ触れられるようにする生の口。
+        // 中身を書き換える側(IconRender::EncodePimg/DecodePimgBody)は
+        // このクラスの外に置いてあるので、非constの生ポインタで貸す
+        LGFX_Sprite* getSprite() { return sp; }
+
+        // w/hを変更する。LGFX_Sprite::createSprite()を呼び直す都合上、
+        // 既存の描画内容は消える(白紙に戻る)。生成直後(pico.create()の直後)に
+        // 一度だけ呼ぶ使い方を想定しており、描き始めた後に呼ぶ用途ではない。
+        // pico.canvas_load()が画像サイズへ合わせる際にも使う
+        void resize(int16_t w, int16_t h);
+        void setW(int16_t w){ this->resize(w, this->l_rect.h); }
+        void setH(int16_t h){ this->resize(this->l_rect.w, h); }
+
         WidgetType getWidgetType() const override { return WidgetType::CanvasRaster; }
         
         void causeOnPressStart() override;

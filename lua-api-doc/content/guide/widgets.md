@@ -23,6 +23,8 @@ local id = pico.create(type_name)
 
 `Rect` / `Ellipse` / `Line` / `Triangle` は矩形・楕円(円)・線分・三角形を描く図形ウィジェットです。詳しい使い方は [図形ウィジェット](../shapes/) を参照してください。
 
+`CanvasRaster` はタッチのドラッグをそのまま自由線として焼き込む、自分専用のピクセルバッファを持つウィジェットです。手書きメモのような用途には [手書き入力(CanvasRaster)](../freehand-drawing/) を参照してください。
+
 全種別の詳細(生成直後の初期値・対応プロパティ)は [ウィジェット種別一覧](../../reference/widget-types/) を参照してください。
 
 未知の種別名を渡す、またはメモリ不足でウィジェット本体の確保に失敗すると `pico.create()` はエラー(`luaL_error`)になります。

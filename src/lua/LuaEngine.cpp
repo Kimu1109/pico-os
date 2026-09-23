@@ -14,6 +14,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/widgets/CanvasRaster.hpp"
 #include "gui/widgets/Checkbox.hpp"
 #include "gui/widgets/NumberSlider.hpp"
 #include "gui/widgets/ScrollList.hpp"
@@ -298,6 +299,9 @@ void LuaEngine::registerApi() {
     registerFn("image_load", l_image_load);
     registerFn("image_size", l_image_size);
     registerFn("image_free", l_image_free);
+    registerFn("canvas_clear", l_canvas_clear);
+    registerFn("canvas_save", l_canvas_save);
+    registerFn("canvas_load", l_canvas_load);
     registerFn("sd_exists", l_sd_exists);
     registerFn("sd_read", l_sd_read);
     registerFn("sd_write", l_sd_write);
@@ -1188,6 +1192,95 @@ int LuaEngine::l_image_free(lua_State* L) {
     slot.generation++;
     if (slot.generation == 0) slot.generation = 1; // 0は予約値なのでwrapしたら1へ飛ばす
     return 0;
+}
+
+// ---------------- ラスタキャンバス(CanvasRaster) ----------------
+// ヘッダのクラスコメント「ラスタキャンバスの保存/読み込み」参照。
+
+namespace {
+    // 3関数共通: idを解決し、CanvasRaster以外ならluaL_error。
+    // 呼び出し側は戻り値nullptrをチェックする必要は無い(エラーはここで飛ぶ)
+    CanvasRaster* ResolveCanvasRasterOrError(lua_State* L, int arg_index, const char* fn_name) {
+        const WidgetId id = (WidgetId)luaL_checkinteger(L, arg_index);
+        Widget* w = WidgetRegistry::Resolve(id);
+        if (!w) {
+            luaL_error(L, "%s: 無効なID", fn_name);
+            return nullptr; // 到達しない(luaL_errorはlongjmpする)
+        }
+        if (w->getWidgetType() != WidgetType::CanvasRaster) {
+            luaL_error(L, "%s: CanvasRaster以外には使えません", fn_name);
+            return nullptr;
+        }
+        return static_cast<CanvasRaster*>(w);
+    }
+
+    // 実機の上限に関わらず「画面に収まらないサイズを.pimgから復元して確保する」
+    // 事故を防ぐための上限(SCREEN_WIDTH/HEIGHT基準)。不正/悪意あるファイルが
+    // 巨大なwidth/heightを名乗っていても、ここで弾けばcreateSprite()の
+    // 大量確保まで進まない
+    bool CanvasSizeSane(uint16_t w, uint16_t h) {
+        return w > 0 && h > 0 && w <= SCREEN_WIDTH && h <= SCREEN_HEIGHT;
+    }
+}
+
+int LuaEngine::l_canvas_clear(lua_State* L) {
+    CanvasRaster* cr = ResolveCanvasRasterOrError(L, 1, "pico.canvas_clear");
+    cr->canvasClear();
+    return 0;
+}
+
+int LuaEngine::l_canvas_save(lua_State* L) {
+    LuaEngine* self = Self(L);
+    CanvasRaster* cr = ResolveCanvasRasterOrError(L, 1, "pico.canvas_save");
+    const char* path = luaL_checkstring(L, 2);
+
+    if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.canvas_save: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    FsFile f = OSData::SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
+    if (!f) { lua_pushboolean(L, false); return 1; }
+
+    const bool ok = IconRender::EncodePimg(*cr->getSprite(), (uint16_t)cr->getW(), (uint16_t)cr->getH(), f);
+    f.close();
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+int LuaEngine::l_canvas_load(lua_State* L) {
+    LuaEngine* self = Self(L);
+    CanvasRaster* cr = ResolveCanvasRasterOrError(L, 1, "pico.canvas_load");
+    const char* path = luaL_checkstring(L, 2);
+
+    if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.canvas_load: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    FsFile f = OSData::SD.open(path, O_RDONLY);
+    if (!f) { lua_pushboolean(L, false); return 1; }
+
+    IconRender::PimgHeader header;
+    if (!IconRender::ReadPimgHeader(f, header) || !CanvasSizeSane(header.width, header.height)) {
+        f.close();
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    // 保存時と現在のw/hが食い違っていても読み込めるよう、先にキャンバス自体を
+    // 画像のサイズへ合わせる(CanvasRaster::resize()。この時点で旧内容は消える)
+    cr->resize((int16_t)header.width, (int16_t)header.height);
+
+    const bool ok = IconRender::DecodePimgBody(f, *cr->getSprite(), header.width, header.height);
+    f.close();
+    if (ok) cr->needsRender();
+    lua_pushboolean(L, ok);
+    return 1;
 }
 
 // ---------------- SDカードアクセス ----------------

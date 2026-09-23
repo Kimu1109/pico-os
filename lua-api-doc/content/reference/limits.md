@@ -57,6 +57,50 @@ description: "メモリ予算・実行時間・各種サイズ上限・列挙型
 | `3` | 48px |
 | `4` | 64px |
 
+### icon_id(IconID)
+
+`Icon`(`pico.create("Icon")`)と、アイコンボタン化した`Button`(`icon_id`を設定した状態)の`icon_id`に渡す値です。`src/gui/icons/icons_data.h`の`enum class IconID`の並び順(0始まりの連番、明示値なし)そのままです。
+
+> **並び順は将来変わり得ます。** 新しいアイコンは必ず末尾に追加する運用になっていますが、この表はある時点のスナップショットです。数値を確実に合わせたい場合は`src/gui/icons/icons_data.h`(または生成元の`script/generate_icons.py`の`ICONS`リスト)を直接確認してください。
+
+| 値 | 名前 | 値 | 名前 |
+|---|---|---|---|
+| 0 | `WifiSignal1` | 35 | `CheckboxOff` |
+| 1 | `WifiSignal2` | 36 | `CircleDashedPlus` |
+| 2 | `WifiSignal3` | 37 | `Refresh` |
+| 3 | `WifiSignal4` | 38 | `Power` |
+| 4 | `Battery0` | 39 | `Menu` |
+| 5 | `Battery1` | 40 | `DotsVertical` |
+| 6 | `Battery2` | 41 | `ChevronDown` |
+| 7 | `Battery3` | 42 | `ChevronUp` |
+| 8 | `Battery4` | 43 | `Star` |
+| 9 | `BatteryCharging` | 44 | `Share` |
+| 10 | `SdCard` | 45 | `User` |
+| 11 | `VolumeHigh` | 46 | `Send` |
+| 12 | `VolumeLow` | 47 | `Keyboard` |
+| 13 | `VolumeOff` | 48 | `Language` |
+| 14 | `Sun0` | 49 | `Link` |
+| 15 | `Sun1` | 50 | `Save` |
+| 16 | `Sun2` | 51 | `StackPop` |
+| 17 | `Sun3` | 52 | `StackPush` |
+| 18 | `Bell` | 53 | `Brush` |
+| 19 | `BellOff` | 54 | `Eraser` |
+| 20 | `BellRinging` | 55 | `AlertTriangle` |
+| 21 | `Lock` | 56 | `InfoCircle` |
+| 22 | `LockOff` | 57 | `Help` |
+| 23 | `Eye` | 58 | `AppBox` |
+| 24 | `EyeOff` | 59 | `AppStore` |
+| 25 | `Home` | 60 | `Calendar` |
+| 26 | `Search` | 61 | `Game` |
+| 27 | `Settings` | 62 | `Clock` |
+| 28 | `Trash` | 63 | `Calculator` |
+| 29 | `ArrowUp` | 64 | `LanguageHiragana` |
+| 30 | `ArrowLeft` | 65 | `Browser` |
+| 31 | `ArrowDown` | 66 | `Edit` |
+| 32 | `ArrowRight` | 67 | `File` |
+| 33 | `X` | 68 | `Folder` |
+| 34 | `CheckboxOn` | 69 | `Copy` |
+
 ### text_align(Label / Textbox)
 
 | 値 | 意味 |

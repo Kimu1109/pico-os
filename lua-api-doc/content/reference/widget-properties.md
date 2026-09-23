@@ -31,7 +31,10 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `font_size` | Int | ✓ | ✓ |
 | `text_color` | Int | ✓ | ✓ |
 | `border_color` | Int | ✓ | ✓ |
-| `icon_id` | Int | ✓ | ✗(**読み取り専用**) |
+| `icon_id` | Int(`IconID`) | ✓ | ✓ |
+| `icon_size` | Int(`0`=16px/`1`=24px/`2`=32px/`3`=48px/`4`=64px) | ✓ | ✓ |
+
+`icon_id`を設定すると、文字の代わりにアイコンを描く「アイコンボタン」になります(`text`は無視されます)。アイコンの色は`text_color`に従います。`w`/`h`を明示的に設定していなければ、箱の大きさも`icon_size`のピクセルサイズへ自動的に合います。
 
 ## Label
 
@@ -134,11 +137,15 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 | name | 型 | get | set |
 |---|---|---|---|
+| `w` | Int | ✓ | ✓ |
+| `h` | Int | ✓ | ✓ |
 | `color` | Int(ブラシ色) | ✓ | ✓ |
 | `brush_radius` | Float | ✓ | ✓(Int/Floatどちらでも可) |
 | `canvas_mode` | Int(`0`=Line/`1`=Rect/`2`=Ellipse/`3`=Arrow) | ✓ | ✓ |
 
-`w` / `h` の設定には対応していません(生成時の100×100固定)。
+`w`/`h`を設定すると内部のスプライトを作り直すため、**それまで描いた内容は消えます**(白紙に戻ります)。生成直後に一度だけ呼ぶ使い方を想定しており、描き始めた後にリサイズする用途には向きません。
+
+保存・読み込み・全消去は `pico.canvas_save()` / `pico.canvas_load()` / `pico.canvas_clear()` を使います。詳細は [ラスタキャンバス](../../api/canvas/) を参照してください。
 
 ## LayoutContainer
 

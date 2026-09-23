@@ -63,6 +63,13 @@ ICON_DIR = Path("tabler_icons")
 # tablerに手頃な絵が無い、または24pxグリッド前提の絵柄が16pxで破綻する場合はここへ置く。
 CUSTOM_DIR = Path("custom_icons")
 
+
+# 【重要】このリストの並び順がそのままC++側の`enum class IconID`の値(0始まり、
+# 明示値なしの連番)になる。pico.set(id,"icon_id",N)のようにLuaスクリプトが
+# 数値のIconIDを直接埋め込むようになった(2026-09-23、スクラッチパッド)ため、
+# **途中への挿入は既存スクリプトが表示するアイコンを黙って別物にすり替えてしまう**。
+# 新しいアイコンは必ずこのリストの末尾に追加すること(削除も同様に、既存スクリプトが
+# 使っている可能性があるものは安易に取り除かない)。
 ICONS: list[IconSpec] = [
     # --- ステータス ---
     # 電波強度は自作(custom_icons/)。
@@ -124,6 +131,11 @@ ICONS: list[IconSpec] = [
     IconSpec("keyboard",           str(ICON_DIR / "keyboard.svg")),
     IconSpec("language",           str(ICON_DIR / "language.svg")),
     IconSpec("link",               str(ICON_DIR / "link.svg")),
+    IconSpec("save",                str(ICON_DIR / "device-floppy.svg")),
+    IconSpec("stack_pop",          str(ICON_DIR / "stack-pop.svg")),
+    IconSpec("stack_push",         str(ICON_DIR / "stack-push.svg")),
+    IconSpec("brush",               str(ICON_DIR / "brush.svg")),
+    IconSpec("eraser",              str(ICON_DIR / "eraser.svg")),
 
     # --- ダイアログ ---
     IconSpec("alert_triangle", str(ICON_DIR / "alert-triangle.svg")),

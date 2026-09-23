@@ -182,6 +182,9 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
   毎フレーム呼んでよい。`setTotalMs()`では`on_changed`を**飛ばさない** — 飛ばすとシーン側の流し込みで再入する。
 - `AnalogClock`の針は「先端+根元」の三角形で描く。1pxの線は細すぎ、LovyanGFXの`drawWideLine()`は
   アンチエイリアスのため**4bitパレットに無い中間色を要求する**ので使えない。
+  (2026-09-23追記: `CanvasRaster`では単なる色化けでは済まず、`readRect()`経由のアルファブレンドが
+  実際に**SEGVする**ことが判明した。`drawWideLine`/`drawWedgeLine`/`drawSpot`/`drawSmoothLine`系は
+  4bppパレットスプライトへは一切使わないこと。詳細は下記「実機未検証だったCanvasRasterの潜在クラッシュ」参照)
 - `DurationPicker`は総ミリ秒だけを保持し、時/分/秒は描くときに割り出す(タイマーの「設定値」と「残り時間」を
   同じウィジェットで見せるため)。カウントダウン中は`setEditable(false)`で▲▼が消える。
   ▲▼は**長押しで連続加算**(450ms後に110ms間隔)— 25分を1タップずつ積むのは現実的でないため。
@@ -720,7 +723,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **未着手**。チャット・オセロ/テトリス風・シューティング・ブロック崩し・リマインダー・カレンダー等、アプリ本体コードなし。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。 |
+| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(チャット・テトリス風・シューティング・リマインダー・ペイント等)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッドはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **未着手**。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
 | 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
@@ -885,6 +888,9 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.image_size(handle)` | 読み込んだ画像の`width, height`を返す。無効なハンドルはエラー(2026-09-21追加) |
 | `pico.draw_image(handle, x, y)` | 画像を描く。他の`pico.draw_*`と同じく**`Canvas`の`render`コールバック内で使うこと**。無効なハンドルはエラー(2026-09-21追加) |
 | `pico.image_free(handle)` | 画像を明示的に解放する。無効/解放済みハンドルは`pico.destroy`と同じく黙って無視(2026-09-21追加) |
+| `pico.canvas_clear(id)` | `CanvasRaster`(`pico.create("CanvasRaster")`)を白紙(`PICO_WHITE`)へ戻す。対象がCanvasRaster以外/無効なIDはエラー(下記「ラスタキャンバスの保存/読み込み」参照)(2026-09-23追加) |
+| `pico.canvas_save(id, path)` | `CanvasRaster`の中身を`.pimg`としてSDへ書き出す。成否を`bool`で返す(SD無し/権限外/書き込み失敗はfalse。対象種別/IDが不正ならエラー)(2026-09-23追加) |
+| `pico.canvas_load(id, path)` | `.pimg`を読み込み`CanvasRaster`へ反映する。**読み込んだ画像のサイズへキャンバス自体もリサイズされる**(内容は消える)。成否を`bool`で返す(2026-09-23追加) |
 | `pico.push_scene(path)` / `pico.change_scene(path)` | 別のLuaスクリプトへ`SceneFunctions::Push/Change`する(下記「シーン制御」参照)(2026-09-21追加) |
 | `pico.launch_app(name)` | `AppFunctions::LaunchByName()`経由で登録簿の任意のアプリ(C++製含む)へ`Push`する。見つかれば`true`、無ければ`false`(下記「シーン制御」参照)(2026-09-21追加) |
 | `pico.show_message(text, cancel_text, ok_text)` | `MsgDialog`を表示する。閉じた結果は`pico.on(id,"closed",fn)`で受ける(下記「ダイアログ」参照)(2026-09-21追加) |
@@ -1133,6 +1139,128 @@ dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ
   実際の見た目は`pc/sdcard/lua/hello.lua`に画像描画のデモを追加し、PCビルドの
   `--shot`で`.pimg`(`pc/sdcard/img/hello.pimg`、`examples/img/sample.pimg`と同じ
   48x24の色帯サンプル)が実際に描けることを確認済み。
+
+### ラスタキャンバスの保存/読み込み(CanvasRasterのリサイズ・`pico.canvas_clear/save/load`、2026-09-23実装)
+
+「スクラッチパッド」(黒/青ペン+消しゴムの手書きメモアプリ。`pc/sdcard/lua/apps/スクラッチパッド/main.lua`)を
+作る過程で見つかった2つの穴を埋めた。`CanvasRaster`(`pico.create("CanvasRaster")`)は自分専用の
+`LGFX_Sprite`を持ち続け、`causeOnPressMove()`がタッチのドラッグをそのまま線として焼き込む
+ウィジェットで、手書き入力の土台としては元から使えた。しかし:
+
+1. **`WidgetFactory::Create()`が100×100固定で、`w`/`h`をリサイズする手段が無かった**
+   (`WidgetProperty::Set()`のCanvasRaster caseにW/Hが無かった)。全画面に近いスクラッチパッドを
+   作ろうとして初めて踏んだ。
+2. **クリア・保存・読み込みの手段が無かった**(`CanvasRaster::canvasClear()`自体はC++側に
+   元からあったが、Luaへ橋渡ししていなかった。保存/読み込みは影も形も無かった)。
+
+対応:
+
+- **`CanvasRaster::setW/setH`**(内部の`resize(int16_t,int16_t)`)が`LGFX_Sprite::createSprite()`を
+  呼び直してサイズを変える。**既存の描画内容は消える**(コンストラクタと同じ手順をやり直す
+  ため)ので、生成直後に一度だけ呼ぶ使い方を想定している。`WidgetProperty::Set()`のCanvasRaster
+  caseへ`Id::W`/`Id::H`を足しただけで、`pico.set(id,"w"/"h",...)`から使える(`Id::W`/`Id::H`の
+  **取得**は元々`GetCommon()`が全ウィジェット共通で処理しているので、Get側の変更は不要だった)。
+- **`pico.canvas_clear(id)`**: `CanvasRaster::canvasClear()`を橋渡しするだけ。
+- **`pico.canvas_save(id, path)` / `pico.canvas_load(id, path)`**: `CanvasRaster`のスプライトを
+  `.pimg`(4bpp+RLE、`script/generate_pimg.py`と同じ形式。上の「画像」参照)としてSDへ書き出す/
+  読み込む。**`.pimg`は元々デコード専任(C++側にエンコーダが無かった)**だったが、
+  実行中に描いた内容をその場で保存する用途はデコードだけでは足りないため、
+  `IconRender::EncodePimg()`(`src/gui/icons/icon_render.h/.cpp`)を新設した。
+  行優先(ラスタスキャン)で`sprite.readPixelValue(x,y)`を読みRLE符号化する、
+  `generate_pimg.py`のC++版エンコーダ。読み込み側も`LoadPimgToSprite()`(新規に
+  スプライトを確保する)とは別に`IconRender::DecodePimgBody()`を新設し、**呼び出し側が
+  既にサイズを合わせたスプライトへ直接デコードする**(`pico.canvas_load()`が
+  `CanvasRaster`自前のスプライトへそのまま読み込むための版)。
+- **`pico.canvas_load()`は読み込んだ`.pimg`のwidth/heightへ`CanvasRaster::resize()`で
+  合わせ直す。** 保存時と現在のキャンバスサイズが食い違っていても読み込める
+  (=`w`/`h`も画像のサイズへ変わる)。**不正/悪意のあるファイルが画面サイズを超える
+  width/heightを名乗っていても、`resize()`を呼ぶ前(=大量確保が起きる前)に
+  `SCREEN_WIDTH`/`SCREEN_HEIGHT`基準の上限チェックで弾く**安全策を入れてある。
+- 3関数とも対象が`CanvasRaster`以外(または無効なID)だと`luaL_error`
+  (`pico.on(render/closed)`と同じ「対応する種別以外はエラー」という約束)。
+  `canvas_save`/`canvas_load`のSD絡みの失敗(SD無し・`sd_outside_app_dir`権限無しで
+  app_dir外・ファイル不正)は`pico.sd_*`と同じく`false`を返すだけでエラーにはしない。
+- **ホストテスト(`lua_engine_test.cpp`)でRLEバイト列の完全一致まで検証するため、
+  `script/host_test/stubs/LovyanGFX.h`の`LGFX_Sprite`スタブを「実際にピクセルを
+  読み書きする」よう拡張した**(以前は`writePixel`/`clear`が完全な無描画no-opで、
+  `readPixelValue`自体が無かった)。他のメソッド(`drawRect`等)は従来どおり無描画のまま。
+- ホストテストは`lua_engine_test.cpp`に追加(生成直後100×100・リサイズの往復、
+  SD無しの失敗、保存したバイト列が`script/generate_pimg.py`と同じRLE形式になることの
+  完全一致比較、クリア後に白へ戻ること、保存→クリア→読み込みの往復、保存時と異なる
+  サイズの`.pimg`を読み込むとキャンバス自体がリサイズされること、画面サイズ超過の
+  width/heightを拒否すること、対象種別/ID検証、`app_dir`配下への閉じ込め)。
+  実際の見た目・操作性はPCビルドの`--shot`(`--tap`でボタンを押しての動作確認)で
+  確認した。
+
+### 実機未検証だったCanvasRasterの潜在クラッシュ(`drawWideLine`、2026-09-23発見・修正)
+
+スクラッチパッドを実際にドラッグ操作(`--tap`を連続で細かく打ち、フレーム間で
+座標が変わることで`isTouchMove`を発生させる。CLAUDE.md「PC / Web実行環境」の
+`--tap`仕様参照)で試して**初めて踏んだクラッシュ**。`CanvasRaster`自体は
+Luaバインディング着手より前から存在したコードだが、実際に触れて描画するアプリが
+これまで一つも無く(`widget_factory_test.cpp`は生成のみ、`lua_engine_test.cpp`は
+`writePixel()`で直接ピクセルを書くだけ)、`causeOnPressMove()`の描画経路が
+**本物のLovyanGFXバックエンドに対して一度も実行されたことが無かった**。
+
+- **原因**: `causeOnPressMove()`(Lineモード)と`drawArrow()`(Arrowモードの軸線)が
+  `LGFX_Sprite::drawWideLine()`を呼んでいたが、これは内部で`draw_gradient_wedgeline()`
+  →`fillRectAlpha()`→`readRect()`という、**アンチエイリアスのため既存ピクセルを
+  読み戻すアルファブレンド経路**を通る。`CanvasRaster`のスプライトは4bppの
+  パレットモード(`setColorDepth(4)`)で、この読み戻し(`copy_palette_affine`→
+  `bgr888_t::get()`)がSEGVした。**AnalogClockの針が`drawWideLine()`を避けて
+  `fillTriangle()`で描いている注記(「4bitパレットに無い中間色をアンチエイリアスで
+  要求するので使えない」)と全く同じ制約**だが、AnalogClockでは単なる色化けとして
+  現れていたのに対し、こちらは実際のクラッシュとして表面化した(用途・入力経路の
+  違いによるものと見られ、根本原因は同一)。
+- **対処**: `drawWideLine()`を使わず、`CanvasRaster::drawThickLine()`(新設)が
+  `fillCircle()`(アルファブレンド無し。`writeFastHLine`/`writeFillRect`の単純な
+  塗りつぶしのみで`readRect()`を経由しない)を線分に沿って半径の半分間隔で
+  重ね塗りする「スタンプ式」の太線描画に置き換えた。`causeOnPressMove()`と
+  `drawArrow()`の両方の呼び出し箇所を差し替えた(後者は`Canvas::Mode::Arrow`の
+  軸線部分。矢じり自体は元々`fillTriangle()`でアルファブレンド無しだったので無傷)。
+  `Rect`/`Ellipse`モード(`drawRect()`/`drawEllipse()`/`fillEllipse()`)は
+  `readRect()`を経由しないため元から安全で、変更していない。
+- **見つけ方**: ホストテスト(ASan)はここを検出できない
+  (`script/host_test/stubs/LovyanGFX.h`の`drawWideLine`相当は元から未実装/no-opで、
+  実際のLovyanGFXコードパスを一切通らないため)。PCビルドの`--shot`で実際に
+  ドラッグを模した`--tap`連打を試して初めて再現できた。**「ホストテストが全部
+  通る」ことと「実機/PCビルドで実際に動く」ことは別物**という教訓を、この機能の
+  実装で改めて踏んだ形になる。
+- 修正後、スクラッチパッドで実際に描画→保存→クリア→読み込みの一連が
+  PCビルドの`--shot`で正しく動くことを確認済み。
+
+### Buttonのアイコン化(`pico.set(id,"icon_id"/"icon_size",...)`、2026-09-23実装)
+
+スクラッチパッドのツールバーをテキストボタンからアイコンボタンへ差し替えて
+描画領域を広げる過程で見つけた穴。`Button::setIcon(IconID, IconSize)`
+(文字の代わりにアイコンを描く。`getIconId()`はLua側から既に読めていた)自体は
+C++側に元からあったが、**`WidgetProperty::Set()`のButtonケースに`Id::IconId`/
+`Id::IconSize`が無く、Luaからは`icon_id`が読み取り専用だった**
+(`Id::IconSize`はGetすら無かった)。
+
+- `Button::getIconSize()`を追加(既存の`getIconId()`と対になる読み出し口)。
+- `WidgetProperty.cpp`のButtonケースへ`Id::IconId`/`Id::IconSize`のGet/Setを追加。
+  Setはどちらも`b->setIcon(id, size)`を呼び直す(もう片方は現在値のまま渡す)だけの
+  薄い橋渡しで、C++側に新しいロジックは無い。
+- アイコンの色は`text_color`(既存プロパティ)に従う(`Button::drawContent()`が
+  `IconRender::DrawIcon()`へ渡す前景色がそのまま`text_color`のため)。ボタンの
+  背景色を使った状態表現(ペンの色を背景色そのものにする、等)と組み合わせやすい。
+- **アイコンボタンにしても`text`プロパティは無効化されない**(`has_icon`が
+  trueの間`drawContent()`がtextを無視して読まないだけ)。`icon_id`を設定した後に
+  `text`を読み書きしても実害は無いが、画面には出ない。
+- `pico.set(id,"icon_id",N)`のNは`src/gui/icons/icons_data.h`の`IconID`の並び順
+  そのまま(明示値なしの連番)。**この並びへ新しいアイコンを追加する際は必ず
+  末尾(`script/generate_icons.py`の`ICONS`リストの末尾)へ足すこと** —
+  途中へ挿入すると、既存のLuaスクリプトが数値で指定しているアイコンが黙って
+  別物にすり替わる(この制約自体は`generate_icons.py`にコメントで明記した。
+  今回`Save`/`StackPop`/`StackPush`/`Brush`/`Eraser`の5種が追加されているが、
+  この時点ではまだLua側が数値のIconIDに依存していなかったため実害は無かった。
+  以降は要注意)。ordinal一覧は`lua-api-doc/content/reference/limits.md`の
+  「icon_id(IconID)」に載せてある(スナップショットである旨を明記)。
+- ホストテストは`lua_engine_test.cpp`の「細部のプロパティ」ブロックへ追加
+  (icon_id/icon_sizeのget/set往復、`setIcon()`経由で`has_icon=true`になること、
+  `w`/`h`未指定なら箱の大きさが`icon_size`へ追従すること)。実際の見た目は
+  スクラッチパッドのPCビルド`--shot`で確認した。
 
 ### シーン制御(2026-09-21実装)
 

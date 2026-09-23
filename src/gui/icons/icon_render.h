@@ -50,6 +50,21 @@ inline bool ReadPimgHeader(FsFile& f, PimgHeader& header) {
 
 void DrawPimgSprite(PimgSprite& s, int x, int y);
 
+// LoadPimgToSprite()は新規にスプライトを確保するが、こちらは呼び出し側が既に
+// width×heightでcreateSprite()済みのspriteへ、ファイルのヘッダ以降(RLE本体)を
+// そのままデコードして書き込む(pico.canvas_load()がCanvasRasterの自前スプライトへ
+// 直接読み込みたい場合向け。新規にスプライトを作らないのでImageウィジェット同様
+// 二重確保しない)。fはあらかじめヘッダを読める位置(seek不要、内部でseekする)。
+// ピクセルがheight行ぶん埋まらなかった場合(壊れたファイル)はfalseを返す。
+bool DecodePimgBody(FsFile& f, LGFX_Sprite& sprite, uint16_t width, uint16_t height);
+
+// sprite(4bpp、readPixelValue()でパレット番号0〜15を読める前提)の中身を
+// 行優先(ラスタスキャン)でRLE符号化し、.pimg形式でfへ書き出す
+// (script/generate_pimg.pyのC++版エンコーダ)。width/heightは呼び出し側が
+// 把握しているサイズ(通常はspriteを作った時のサイズ)をそのまま渡す。
+// 書き込みに失敗した場合(SD容量不足等)はfalseを返す。
+bool EncodePimg(LGFX_Sprite& sprite, uint16_t width, uint16_t height, FsFile& f, bool transparent = false);
+
 // IconSize -> 実ピクセルサイズ（正方形前提）。
 inline int32_t IconPixelSize(IconSize size) {
     switch (size) {

@@ -144,4 +144,5 @@ class Button :
         }
         bool getHasIcon() { return this->has_icon; }
         IconID getIconId() { return this->icon_id; }
+        IconSize getIconSize() { return this->icon_size; }
 };

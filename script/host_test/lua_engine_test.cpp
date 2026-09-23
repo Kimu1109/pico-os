@@ -62,10 +62,20 @@
 //                      全消しできること、TabBarへタブを足せること(kMaxTabs超過時は
 //                      luaL_errorではなくfalseで返ること)、対応しないウィジェット
 //                      種別へ呼ぶとエラーになることを確認する
+//   pico.canvas_clear/canvas_save/canvas_load → CanvasRasterのw/hリサイズ
+//                      (pico.set経由。以前は100x100固定だった)、白紙化、
+//                      `.pimg`としての保存/読み込み(script/generate_pimg.pyと
+//                      同じRLE形式でSDへ書き出されること)、保存時と異なるサイズの
+//                      .pimgを読み込むとキャンバス自体がそのサイズへ合わせ直される
+//                      こと、画面サイズを超えるwidth/heightを名乗るファイルは
+//                      拒否すること、CanvasRaster以外・無効IDはエラーになることを
+//                      確認する
 //   細部のプロパティ → NumberInputのtext(setNum/getNum)・Iconのicon_opaque
 //                      (getOpaque)・GridContainerのh_align/v_align(getHAlign/
-//                      getVAlign)がget/set往復できることを確認する(以前はsetのみ
-//                      対応でgetterが無かった)
+//                      getVAlign)・Buttonのicon_id/icon_size(setIcon()。以前は
+//                      icon_idがget専用でicon_sizeはgetすら無かった)がget/set
+//                      往復できること、icon_size変更でw/h未指定なら箱の大きさも
+//                      追従することを確認する
 #include "lua/LuaEngine.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
@@ -75,6 +85,8 @@
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
 #include "gui/widgets/Textbox.hpp"
+#include "gui/widgets/CanvasRaster.hpp"
+#include "gui/widgets/Button.hpp"
 #include "gui/widgets/WidgetFactory.hpp"
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
@@ -924,6 +936,7 @@ int main(){
     }
 
     // ---- 細部のプロパティ: NumberInputのtext / Iconのicon_opaque / GridContainerのh_align・v_align ----
+    //                        / Buttonのicon_id・icon_size(アイコンボタン化) ----
     {
         const bool ok = engine.Run(R"LUA(
             ni = pico.create("NumberInput")
@@ -939,8 +952,27 @@ int main(){
             pico.set(gc2, "v_align", 2)
             check(pico.get(gc2, "h_align") == 1, "GridContainer: h_alignの往復(getHAlign追加)")
             check(pico.get(gc2, "v_align") == 2, "GridContainer: v_alignの往復(getVAlign追加)")
+
+            -- スクラッチパッド実装時の細部の穴埋め: Buttonのicon_id/icon_sizeは
+            -- 元々getIconId()経由の読み取りしかできず、setは非対応(icon_sizeは
+            -- getすら無かった)だった
+            btn_icon = pico.create("Button")
+            pico.set(btn_icon, "icon_id", 53) -- Brush
+            pico.set(btn_icon, "icon_size", 2) -- Px32
+            check(pico.get(btn_icon, "icon_id") == 53, "Button: icon_idの往復(setIcon追加)")
+            check(pico.get(btn_icon, "icon_size") == 2, "Button: icon_sizeの往復(get/set追加)")
         )LUA", "property_gap_test");
         check(ok, "細部のプロパティ: スクリプトの実行が成功する");
+
+        lua_getglobal(L, "btn_icon");
+        const WidgetId btn_icon_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        Button* btn_icon_w = static_cast<Button*>(WidgetRegistry::Resolve(btn_icon_id));
+        check(btn_icon_w != nullptr && btn_icon_w->getHasIcon(),
+              "Button: setIcon()経由でhas_icon=trueになりアイコンボタンとして描かれる");
+        // w/hを明示指定していないので、icon_size=Px32(32px)へ箱の大きさも追従する
+        check(btn_icon_w != nullptr && btn_icon_w->getW() == 32 && btn_icon_w->getH() == 32,
+              "Button: icon_size変更で(w/h未指定なら)箱の大きさも追従する");
     }
 
     // ---- pico.invalidate / pico.mark_dirty ----
@@ -1051,6 +1083,115 @@ int main(){
                 "image_budget_test");
             check(ok, "pico.image_load: バイト予算テストの実行が成功する");
         }
+    }
+
+    // ---- ラスタキャンバス(pico.canvas_clear/canvas_save/canvas_load) ----
+    // CanvasRasterは元々w/hが100x100固定でリサイズできず、クリア/保存/読み込みの
+    // 手段も無かった(LuaEngine.hppの「ラスタキャンバスの保存/読み込み」参照)。
+    {
+        WidgetId canvas_id = WidgetIdTools::Invalid();
+        const bool resize_ok = engine.Run(R"LUA(
+            canvas_id = pico.create("CanvasRaster")
+            check(pico.get(canvas_id, "w") == 100 and pico.get(canvas_id, "h") == 100,
+                  "pico.create(\"CanvasRaster\"): 生成直後は100x100")
+            pico.set(canvas_id, "w", 6)
+            pico.set(canvas_id, "h", 4)
+            check(pico.get(canvas_id, "w") == 6 and pico.get(canvas_id, "h") == 4,
+                  "pico.set: CanvasRasterのw/hがリサイズできる(以前は非対応だった)")
+        )LUA", "canvas_resize_test");
+        check(resize_ok, "CanvasRasterのリサイズテストの実行が成功する");
+
+        lua_getglobal(L, "canvas_id");
+        canvas_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        CanvasRaster* cr = static_cast<CanvasRaster*>(WidgetRegistry::Resolve(canvas_id));
+        check(cr != nullptr, "pico.create(\"CanvasRaster\"): 実体が引ける");
+
+        // 全ピクセルを既知の色(9=PICO_BLUE)で塗る。タッチのドラッグ(causeOnPressMove)
+        // を模すより単純なため直接スプライトへ書き込む(ドラッグでの自由線描画自体は
+        // CanvasRaster既存の機能で、今回追加した保存/読み込みの対象ではない)
+        if (cr) {
+            for (int py = 0; py < cr->getH(); ++py)
+                for (int px = 0; px < cr->getW(); ++px)
+                    cr->getSprite()->writePixel(px, py, 9);
+        }
+
+        OSData::SD_usable = false;
+        const bool sd_off_ok = engine.Run(R"LUA(
+            check(pico.canvas_save(canvas_id, '/canvas/a.pimg') == false,
+                  'pico.canvas_save: SD無しの間はfalse')
+            check(pico.canvas_load(canvas_id, '/canvas/a.pimg') == false,
+                  'pico.canvas_load: SD無しの間はfalse')
+        )LUA", "canvas_sd_off_test");
+        check(sd_off_ok, "pico.canvas_save/load: SD無しテストの実行自体は成功する");
+        OSData::SD_usable = true;
+
+        const bool save_ok = engine.Run(
+            "check(pico.canvas_save(canvas_id, '/canvas/a.pimg') == true, "
+            "'pico.canvas_save: 保存が成功する')",
+            "canvas_save_test");
+        check(save_ok, "pico.canvas_save: テストの実行が成功する");
+        check(HostSd::files.count("/canvas/a.pimg") == 1,
+              "pico.canvas_save: SDへ実際にファイルができる");
+        check(HostSd::files["/canvas/a.pimg"] == MakePimgBytes(6, 4, false, 9),
+              "pico.canvas_save: 書き出したバイト列がscript/generate_pimg.pyと同じRLE形式になる");
+
+        const bool clear_ok = engine.Run("pico.canvas_clear(canvas_id)", "canvas_clear_test");
+        check(clear_ok, "pico.canvas_clear: エラーなく実行できる");
+        check(cr != nullptr && cr->getSprite()->readPixelValue(0, 0) == 15,
+              "pico.canvas_clear: 白(PICO_WHITE)へ戻る");
+
+        const bool load_ok = engine.Run(
+            "check(pico.canvas_load(canvas_id, '/canvas/a.pimg') == true, "
+            "'pico.canvas_load: 読み込みが成功する')",
+            "canvas_load_test");
+        check(load_ok, "pico.canvas_load: テストの実行が成功する");
+        check(cr != nullptr && cr->getSprite()->readPixelValue(0, 0) == 9 &&
+                  cr->getSprite()->readPixelValue(5, 3) == 9,
+              "pico.canvas_load: 保存した内容が読み戻せる");
+
+        // 保存時と違うサイズの.pimgを読み込むと、キャンバス自体がそのサイズへ
+        // 合わせ直される(CanvasRaster::resize()。この時点で旧内容は消える)
+        HostSd::files["/canvas/small.pimg"] = MakePimgBytes(3, 2, false, 1);
+        const bool resize_load_ok = engine.Run(R"LUA(
+            check(pico.canvas_load(canvas_id, '/canvas/small.pimg') == true,
+                  'pico.canvas_load: 異なるサイズの.pimgも読み込める')
+            check(pico.get(canvas_id, "w") == 3 and pico.get(canvas_id, "h") == 2,
+                  'pico.canvas_load: キャンバス自体が画像サイズへリサイズされる')
+        )LUA", "canvas_load_resize_test");
+        check(resize_load_ok, "pico.canvas_load: サイズ違いの読み込みテストの実行が成功する");
+        check(cr != nullptr && cr->getSprite()->readPixelValue(0, 0) == 1,
+              "pico.canvas_load: リサイズ後の内容も正しくデコードされる");
+
+        // 画面サイズを超える(壊れた/悪意のある)width/heightを名乗るファイルは
+        // ヘッダを読んだ直後、デコードより前に拒否する(ボディが無くてもここで弾かれる)
+        std::string huge_header;
+        huge_header += (char)0xFF; huge_header += (char)0xFF; // width=65535
+        huge_header += (char)0xFF; huge_header += (char)0xFF; // height=65535
+        huge_header += (char)0x00;
+        HostSd::files["/canvas/huge.pimg"] = huge_header;
+        const bool huge_ok = engine.Run(R"LUA(
+            check(pico.canvas_load(canvas_id, '/canvas/huge.pimg') == false,
+                  'pico.canvas_load: 画面サイズを超えるwidth/heightは拒否する')
+            check(pico.get(canvas_id, "w") == 3 and pico.get(canvas_id, "h") == 2,
+                  'pico.canvas_load: 拒否時はキャンバスのサイズも変わらない')
+        )LUA", "canvas_load_oversize_test");
+        check(huge_ok, "pico.canvas_load: サイズ超過拒否テストの実行が成功する");
+
+        // 対象がCanvasRaster以外、または無効なIDだとエラー(pico.on(render/closed)と同じ扱い)
+        const bool wrong_type_ok = engine.Run(R"LUA(
+            local btn = pico.create("Button")
+            check(pcall(pico.canvas_clear, btn) == false,
+                  'pico.canvas_clear: CanvasRaster以外はエラー')
+            check(pcall(pico.canvas_save, btn, '/tmp/x.pimg') == false,
+                  'pico.canvas_save: CanvasRaster以外はエラー')
+            check(pcall(pico.canvas_load, btn, '/tmp/x.pimg') == false,
+                  'pico.canvas_load: CanvasRaster以外はエラー')
+            check(pcall(pico.canvas_clear, 999999) == false,
+                  'pico.canvas_clear: 無効なIDはエラー')
+        )LUA", "canvas_wrong_type_test");
+        check(wrong_type_ok, "pico.canvas_*: 対象種別/ID検証テストの実行が成功する");
     }
 
     // ---- ダイアログ(pico.show_message/show_input/show_file_save/show_file_select/show_color) ----
@@ -1316,11 +1457,23 @@ int main(){
                       'pico.sd_write: app_dir配下への書き込みはtrue')
                 check(pico.sd_read('/lua/inside2.txt') == 'new',
                       'pico.sd_write→pico.sd_read: 書いた内容が読み返せる')
+
+                -- pico.canvas_save/canvas_loadもpico.sd_*と同じくapp_dir_の
+                -- 配下だけに閉じる(SdPathAllowed()を共通で通るため)
+                perm_canvas_id = pico.create("CanvasRaster")
+                check(pico.canvas_save(perm_canvas_id, '/other/outside_canvas.pimg') == false,
+                      'pico.canvas_save: app_dir外への保存はfalse')
+                check(pico.canvas_save(perm_canvas_id, '/lua/inside_canvas.pimg') == true,
+                      'pico.canvas_save: app_dir配下への保存はtrue')
+                check(pico.canvas_load(perm_canvas_id, '/other/outside.txt') == false,
+                      'pico.canvas_load: app_dir外からの読み込みはfalse')
             )LUA", "confined_sd_test");
             check(ok, "LuaPermissions: app_dir配下への閉じ込めテストの実行が成功する");
 
             check(HostSd::files.count("/other/outside2.txt") == 0,
                   "pico.sd_write: app_dir外への書き込みは拒否時に実際のファイルを作らない");
+            check(HostSd::files.count("/other/outside_canvas.pimg") == 0,
+                  "pico.canvas_save: app_dir外への保存は拒否時に実際のファイルを作らない");
         }
 
         // sd_outside_app_dir=trueならapp_dirを指定していてもすり抜けて読み書きできる

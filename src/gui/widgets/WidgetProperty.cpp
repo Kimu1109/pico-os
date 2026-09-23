@@ -86,6 +86,7 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
                 case Id::TextColor: out = Value::MakeInt(b->getTextColor()); return true;
                 case Id::BorderColor: out = Value::MakeInt(b->getBorderColor()); return true;
                 case Id::IconId: out = Value::MakeInt((int32_t)b->getIconId()); return true;
+                case Id::IconSize: out = Value::MakeInt((int32_t)b->getIconSize()); return true;
                 default: return false;
             }
         }
@@ -350,6 +351,16 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
                 case Id::BorderColor:
                     if (value.type != Type::Int) return false;
                     b->setBorderColor((int8_t)value.i); return true;
+                // アイコンボタン化(スクラッチパッド実装時の細部の穴埋め、2026-09-23追加)。
+                // Button::setIcon(id, size)は元々C++側にあったが、id/sizeの片方だけを
+                // 差し替えたい場合もあるので、それぞれ「もう片方は現在値のまま」で
+                // setIcon()を呼び直す(初回呼び出し時、icon_sizeは既定Px16のまま)
+                case Id::IconId:
+                    if (value.type != Type::Int) return false;
+                    b->setIcon((IconID)value.i, b->getIconSize()); return true;
+                case Id::IconSize:
+                    if (value.type != Type::Int) return false;
+                    b->setIcon(b->getIconId(), (IconSize)value.i); return true;
                 default: return false;
             }
         }
@@ -545,6 +556,15 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
         case WidgetType::CanvasRaster: {
             CanvasRaster* cr = static_cast<CanvasRaster*>(widget);
             switch (id) {
+                // w/hを変えるとcreateSprite()を呼び直すため、これまでの描画内容は
+                // 消える(CanvasRaster::resize()参照)。生成直後にサイズを決める
+                // 用途を想定しており、描き始めた後のリサイズには向かない
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    cr->setW((int16_t)value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    cr->setH((int16_t)value.i); return true;
                 case Id::Color:
                     if (value.type != Type::Int) return false;
                     cr->setBrushColor((int8_t)value.i); return true;

@@ -101,6 +101,16 @@ description: "メモリ予算・実行時間・各種サイズ上限・列挙型
 | 33 | `X` | 68 | `Folder` |
 | 34 | `CheckboxOn` | 69 | `Copy` |
 
+| 値 | 名前 | 値 | 名前 |
+|---|---|---|---|
+| 70 | `Pencil` | 75 | `Bucket` |
+| 71 | `Line` | 76 | `Palette` |
+| 72 | `Circle` | 77 | `Undo` |
+| 73 | `SquareFilled` | 78 | `FolderOpen` |
+| 74 | `CircleFilled` | 79 | `FilePlus` |
+
+`35`(`CheckboxOff`)はtablerの`square`(白抜きの四角)なので、四角形の道具のアイコンにも使えます。
+
 ### text_align(Label / Textbox)
 
 | 値 | 意味 |

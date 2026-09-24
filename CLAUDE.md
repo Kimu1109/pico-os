@@ -2,7 +2,7 @@
 
 > このファイルは `Kimu1109/pico-os` リポジトリ直下に置く、Claude Code向けのプロジェクト背景資料。
 > 元はClaude.aiのProject knowledgeとして管理されていた内容(2026-09-06時点情報)を統合したもの。
-> **最終同期: 2026-09-23(実コードと突き合わせ済み)。**
+> **最終同期: 2026-09-24(実コードと突き合わせ済み)。**
 > **一次情報源は常にこのリポジトリのコードと `SUMMARY.md`。このファイルは「相談の前提を素早く掴むための地図」であり、
 > 実装と乖離があれば実コード側を信じること。**
 
@@ -731,7 +731,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(チャット・テトリス風・シューティング・リマインダー・ペイント等)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッドはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
+| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(チャット・テトリス風・シューティング・リマインダー・ペイント等)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **未着手**。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
 | 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
@@ -898,12 +898,13 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.image_free(handle)` | 画像を明示的に解放する。無効/解放済みハンドルは`pico.destroy`と同じく黙って無視(2026-09-21追加) |
 | `pico.canvas_clear(id)` | `CanvasRaster`(`pico.create("CanvasRaster")`)を白紙(`PICO_WHITE`)へ戻す。対象がCanvasRaster以外/無効なIDはエラー(下記「ラスタキャンバスの保存/読み込み」参照)(2026-09-23追加) |
 | `pico.canvas_save(id, path)` | `CanvasRaster`の中身を`.pimg`としてSDへ書き出す。成否を`bool`で返す(SD無し/権限外/書き込み失敗はfalse。対象種別/IDが不正ならエラー)(2026-09-23追加) |
-| `pico.canvas_load(id, path)` | `.pimg`を読み込み`CanvasRaster`へ反映する。**読み込んだ画像のサイズへキャンバス自体もリサイズされる**(内容は消える)。成否を`bool`で返す(2026-09-23追加) |
+| `pico.canvas_load(id, path[, keep_size])` | `.pimg`を読み込み`CanvasRaster`へ反映する。**読み込んだ画像のサイズへキャンバス自体もリサイズされる**(内容は消える)。`keep_size=true`なら大きさを変えず白紙にしてから左上に合わせて読む(2026-09-24追加)。成否を`bool`で返す(2026-09-23追加) |
+| `pico.canvas_undo(id)` | 1段だけの「元に戻す」(もう一度でやり直し)。`undo_enabled`が有効なときだけ効く(下記「ペイント」参照)(2026-09-24追加) |
 | `pico.push_scene(path)` / `pico.change_scene(path)` | 別のLuaスクリプトへ`SceneFunctions::Push/Change`する(下記「シーン制御」参照)(2026-09-21追加) |
 | `pico.launch_app(name)` | `AppFunctions::LaunchByName()`経由で登録簿の任意のアプリ(C++製含む)へ`Push`する。見つかれば`true`、無ければ`false`(下記「シーン制御」参照)(2026-09-21追加) |
 | `pico.show_message(text, cancel_text, ok_text)` | `MsgDialog`を表示する。閉じた結果は`pico.on(id,"closed",fn)`で受ける(下記「ダイアログ」参照)(2026-09-21追加) |
 | `pico.show_input(label, initial_text, is_single_line)` | `InputDialog`を表示する。入力文字列は`pico.get(id,"text")`で読む(2026-09-21追加) |
-| `pico.show_file_save(start_dir)` / `pico.show_file_select(start_dir)` | `FileSaveDialog`/`FileSelectDialog`を表示する。選択パスは`pico.get(id,"path")`で読む(未選択は`nil`)(2026-09-21追加) |
+| `pico.show_file_save(start_dir[, default_name])` / `pico.show_file_select(start_dir)` | `FileSaveDialog`/`FileSelectDialog`を表示する。選択パスは`pico.get(id,"path")`で読む(未選択は`nil`)(2026-09-21追加) |
 | `pico.show_color()` | `ColorDialog`(4×4パレット)を表示する。選択色は`pico.get(id,"value")`で読む(未選択は`-1`)(2026-09-21追加) |
 | `pico.http_request(method, url, body, content_type, callback)` | 非同期HTTPリクエスト(GET/POST/PUT/PATCH/DELETE)。同時に1本まで。`callback(ok, status_code, body_or_nil, error_or_nil)`(下記「ネットワーク」参照)(2026-09-21追加) |
 | `pico.http_cancel()` | 進行中の`pico.http_request()`を取り消す(2026-09-21追加) |
@@ -1260,11 +1261,61 @@ Luaバインディング着手より前から存在したコードだが、実�
   さらに**指を離したフレームは`WidgetFunctions::UpdateAll()`が`update()`より先に`causeOnPressEnd()`を
   呼んで`is_pressing`を下ろすため、そのフレームの`causeOnPressMove()`は来ない**(最後の区間が落ちる)。
   → 触れた瞬間に点を打ち、1pxでも動けば繋ぎ、離した瞬間にも最後の区間を繋ぐ。
-- `Rect`/`Ellipse`/`Arrow`モードのプレビューは今も移動ごとに全体を`needsRender()`する
-  (スクラッチパッドはLineモードしか使わないので手を付けていない)。
+- ~~`Rect`/`Ellipse`/`Arrow`モードのプレビューは今も移動ごとに全体を`needsRender()`する~~ →
+  ペイントで解消(2026-09-24)。「前回+今回のプレビューの外接矩形」だけをdirtyにする(下記「ペイント」参照)。
 - ホストテストは`lua_engine_test.cpp`(点・線分・離した瞬間のdirty矩形がキャンバス全体ではなく
   線分の周りだけになること)。見た目はPCビルドの`--tap`連打で確認した。**実機での速度は未計測**
   (`FlushDirty()`が5秒ごとにシリアルへ出す`fps`/`push average`で確かめられる)。
+
+### ペイント(`pc/sdcard/lua/apps/ペイント/`、2026-09-24実装)
+
+SUMMARY.md #8の「ペイント」。**Luaアプリ**で、描画の中身は全て`CanvasRaster`(C++)に足した
+(Luaにはピクセルを読む口が無く、塗りつぶしをLuaで書くと遅すぎるため)。スクリプトは道具の切り替えと
+ダイアログ(色=`ColorDialog`、保存=`FileSaveDialog`+上書き確認`MsgDialog`、開く=`FileSelectDialog`、
+新規/未保存での終了=`MsgDialog`)の配線だけ。ツールバーはアイコンボタン2段
+(道具: 戻る/ペン/消しゴム/直線/四角/楕円/バケツ、操作: 色/太さ/元に戻す/新規/開く/保存)。
+**四角/楕円は選択中にもう一度押すと輪郭⇔塗りつぶし**(アイコンも塗りつぶし版に変わる)。
+
+`CanvasRaster`へ足したもの:
+
+- **`Canvas::Mode`に`Straight`(4)と`Fill`(5)を末尾へ追加**(Luaは数値で指定するので既存値は動かさない。
+  `WidgetProperty`は範囲外の`canvas_mode`をエラーにする)。
+- **図形は`drawShape()`の1箇所で描く**(ドラッグ中の`frame`へのプレビューと、離したときのスプライトへの
+  焼き込みが同じ関数)。四角形は左上/右下へ揃えるので**どちら向きにドラッグしても同じ**(以前は右下へ
+  ドラッグした場合しか正しくなかった)。輪郭は`brush_radius`の太さで、四角は4辺を`DrawThickLine()`、
+  楕円は周を折れ線で近似して各辺を`DrawThickLine()`(`drawEllipse()`を半径をずらして重ねると縞状の
+  隙間が残る)。`filled`プロパティで`fillRect()`/`fillEllipse()`。
+- **プレビューのdirtyは「前回+今回の外接矩形」だけ**(`preview_rect`)。以前は動くたびに全体を
+  `needsRender()`していた。プレビューは`frame`へ直接描くので、今のクリップ(FlushDirty()が掛けた
+  dirty矩形)と自分の矩形の重なりへ絞ってから描く(`getClipRect()`で退避・復元)。
+- **塗りつぶし(`floodFill()`)**: スキャンライン方式。種(シード)の置き場は固定長256件で、溢れたら
+  「塗った画素に隣接する、まだ塗っていない同色の画素」を全面走査して拾い直す。**塗ったかどうかは色では
+  判定できない**(元から塗り色だった画素と区別できない)ので1bit/画素の印を持つ。種と印は塗る間だけの
+  一時確保(全面キャンバスで約7KB)。塗った範囲だけをdirtyにする。
+  溢れる形(格子状の点等)は全面走査を何周かするので重い。実機での速度は未計測。
+- **元に戻す(1段)**: `undo_enabled=true`の間だけ、スプライトと同じ大きさ(`bufferLength()`。4bppで
+  `w*h/2`、ペイントの234x194で約23KB)の控えを`malloc`で持つ。描き込む直前(ペンは触れた瞬間、図形は
+  離した瞬間、塗りつぶしは実際に色が変わるときだけ、`canvasClear()`、`keep_size`の読み込み)に
+  `memcpy`で控え、`undo()`は**控えと中身を入れ替える**(2回目はやり直しになる。2枚持たずに済む)。
+  既定は無効(スクラッチパッド等に負担させない)。`resize()`で控えは捨てて取り直す。
+- **`pico.canvas_load(id, path, keep_size)`**: `keep_size=true`なら`resize()`せず白紙にしてから
+  `DecodePimgBody()`する。**`writePixel()`はクリップされるので、大きい画像は右/下が切れるだけ**。
+- `pico.show_file_save(start_dir, default_name)`(`FileSaveDialog::setFileName()`)。
+- アイコン10種(pencil/line/circle/square-filled/circle-filled/bucket-droplet/palette/arrow-back-up/
+  folder-open/file-plus)を**`ICONS`の末尾へ**足した(IconID 70〜79)。四角形の道具は既存の
+  `CheckboxOff`(35、tablerの`square`)を流用している。
+
+気づいたこと:
+
+- **`LuaScene`が読むスクリプトは16KiBまで**(超えると切り詰めて構文エラー)。日本語コメントは1文字3Bで、
+  ペイントは最初16.3KBあって踏んだ。`main.lua`冒頭に注意書きを残してある。
+- **`Label`では`*`がマークアップとして消える**ので、未保存の印は「(未保存)」と書いている。
+- ダイアログを閉じた直後に次のダイアログを開く流れ(保存→上書き確認、等)は、`closed`の中で直接開かず
+  `loop()`で2フレーム待つ(`MarkdownScene::Pending`と同じ理由)。
+- ホストテストのスタブ(`stubs/LovyanGFX.h`)は`fillRect`/`drawFastHLine`も実際に書き込むようにし、
+  `bufferLength()`を足した。塗りつぶし(種あふれを含む)・元に戻す・塗りつぶしの四角形・`keep_size`は
+  `lua_engine_test.cpp`で確認。輪郭の図形は`fillCircle`/`fillTriangle`がスタブで無描画なので、見た目は
+  PCビルドの`--tap`で確認した。
 
 ### Buttonのアイコン化(`pico.set(id,"icon_id"/"icon_size",...)`、2026-09-23実装)
 

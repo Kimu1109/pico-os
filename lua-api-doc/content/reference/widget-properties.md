@@ -141,11 +141,13 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `h` | Int | ✓ | ✓ |
 | `color` | Int(ブラシ色) | ✓ | ✓ |
 | `brush_radius` | Float | ✓ | ✓(Int/Floatどちらでも可) |
-| `canvas_mode` | Int(`0`=Line/`1`=Rect/`2`=Ellipse/`3`=Arrow) | ✓ | ✓ |
+| `canvas_mode` | Int(`0`=Line/`1`=Rect/`2`=Ellipse/`3`=Arrow/`4`=Straight/`5`=Fill) | ✓ | ✓(範囲外はエラー) |
+| `filled` | Bool(四角形/楕円を塗りつぶすか) | ✓ | ✓ |
+| `undo_enabled` | Bool(`pico.canvas_undo`用の控えを持つか) | ✓ | ✓(確保できたかはgetで確認) |
 
 `w`/`h`を設定すると内部のスプライトを作り直すため、**それまで描いた内容は消えます**(白紙に戻ります)。生成直後に一度だけ呼ぶ使い方を想定しており、描き始めた後にリサイズする用途には向きません。
 
-保存・読み込み・全消去は `pico.canvas_save()` / `pico.canvas_load()` / `pico.canvas_clear()` を使います。詳細は [ラスタキャンバス](../../api/canvas/) を参照してください。
+保存・読み込み・全消去・元に戻すは `pico.canvas_save()` / `pico.canvas_load()` / `pico.canvas_clear()` / `pico.canvas_undo()` を使います。詳細は [ラスタキャンバス](../../api/canvas/) を参照してください。
 
 ## LayoutContainer
 

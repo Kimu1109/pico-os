@@ -194,6 +194,8 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
                 case Id::Color: out = Value::MakeInt(cr->getBrushColor()); return true;
                 case Id::BrushRadius: out = Value::MakeFloat(cr->getBrushRadius()); return true;
                 case Id::CanvasMode: out = Value::MakeInt((int32_t)cr->getMode()); return true;
+                case Id::Filled: out = Value::MakeBool(cr->getFillShape()); return true;
+                case Id::UndoEnabled: out = Value::MakeBool(cr->getUndoEnabled()); return true;
                 default: return false;
             }
         }
@@ -573,7 +575,19 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
                     cr->setBrushRadius(value.type == Type::Float ? value.f : (float)value.i); return true;
                 case Id::CanvasMode:
                     if (value.type != Type::Int) return false;
+                    if (value.i < Canvas::Mode::Line || value.i > Canvas::Mode::Fill) return false;
                     cr->setMode((Canvas::Mode)value.i); return true;
+                // 四角形/楕円を塗りつぶしで描くか
+                case Id::Filled:
+                    if (value.type != Type::Bool) return false;
+                    cr->setFillShape(value.b); return true;
+                // 「元に戻す」(pico.canvas_undo)用のバッファを持つか。
+                // 有効にするとキャンバスと同じ大きさ(4bppでw*h/2バイト)をヒープから取る
+                case Id::UndoEnabled:
+                    if (value.type != Type::Bool) return false;
+                    // 確保に失敗しても設定の書き間違いではないのでtrueを返す
+                    // (pico.setがエラーにする)。確保できたかはgetで確かめる
+                    cr->setUndoEnabled(value.b); return true;
                 default: return false;
             }
         }
@@ -817,6 +831,7 @@ namespace {
         {"path", Id::Path},
 
         {"brush_radius", Id::BrushRadius}, {"canvas_mode", Id::CanvasMode},
+        {"undo_enabled", Id::UndoEnabled},
 
         {"gap", Id::Gap}, {"padding", Id::Padding}, {"direction", Id::Direction},
         {"cross_align", Id::CrossAlign}, {"cols", Id::Cols},

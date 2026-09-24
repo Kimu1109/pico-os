@@ -22,9 +22,10 @@ description: "show_message / show_input / show_file_save / show_file_select / sh
 
 ## pico.show_file_save
 
-<div class="sig">pico.show_file_save(start_dir?: string) <span class="ret">-> id: integer</span></div>
+<div class="sig">pico.show_file_save(start_dir?: string, default_name?: string) <span class="ret">-> id: integer</span></div>
 
 - `start_dir` の既定値は `"/"`。
+- `default_name` を渡すとファイル名欄の初期値になる(開いているファイルへ上書き保存する流れ等に)。
 - 選択された保存先パスは `pico.get(id, "path")` で読む。
 
 ## pico.show_file_select

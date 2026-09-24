@@ -161,6 +161,18 @@ ICONS: list[IconSpec] = [
     IconSpec("file",   str(ICON_DIR / "file.svg")),
     IconSpec("folder", str(ICON_DIR / "folder.svg")),
     IconSpec("copy",   str(ICON_DIR / "copy.svg")),
+
+    # --- ペイント(2026-09-24)。末尾へ足すこと(上の【重要】参照) ---
+    IconSpec("pencil",         str(ICON_DIR / "pencil.svg")),
+    IconSpec("line",           str(ICON_DIR / "line.svg")),
+    IconSpec("circle",         str(ICON_DIR / "circle.svg")),
+    IconSpec("square_filled",  str(ICON_DIR / "square-filled.svg")),
+    IconSpec("circle_filled",  str(ICON_DIR / "circle-filled.svg")),
+    IconSpec("bucket",         str(ICON_DIR / "bucket-droplet.svg")),
+    IconSpec("palette",        str(ICON_DIR / "palette.svg")),
+    IconSpec("undo",           str(ICON_DIR / "arrow-back-up.svg")),
+    IconSpec("folder_open",    str(ICON_DIR / "folder-open.svg")),
+    IconSpec("file_plus",      str(ICON_DIR / "file-plus.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

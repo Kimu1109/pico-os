@@ -12,7 +12,7 @@ description: "メッセージ・入力・ファイル選択・色選択のモー
 |---|---|---|
 | `pico.show_message(text, cancel_text, ok_text)` | メッセージ+OK/キャンセル | `is_ok`(`closed`イベントの第2引数) |
 | `pico.show_input(label, initial_text, is_single_line)` | ラベル+テキスト入力 | `pico.get(id, "text")` |
-| `pico.show_file_save(start_dir)` | ファイル保存 | `pico.get(id, "path")` |
+| `pico.show_file_save(start_dir, default_name)` | ファイル保存 | `pico.get(id, "path")` |
 | `pico.show_file_select(start_dir)` | ファイル選択 | `pico.get(id, "path")`(未選択は`nil`) |
 | `pico.show_color()` | 16色パレット選択 | `pico.get(id, "value")`(未選択は`-1`) |
 

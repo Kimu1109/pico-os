@@ -302,6 +302,7 @@ void LuaEngine::registerApi() {
     registerFn("canvas_clear", l_canvas_clear);
     registerFn("canvas_save", l_canvas_save);
     registerFn("canvas_load", l_canvas_load);
+    registerFn("canvas_undo", l_canvas_undo);
     registerFn("sd_exists", l_sd_exists);
     registerFn("sd_read", l_sd_read);
     registerFn("sd_write", l_sd_write);
@@ -1254,6 +1255,7 @@ int LuaEngine::l_canvas_load(lua_State* L) {
     LuaEngine* self = Self(L);
     CanvasRaster* cr = ResolveCanvasRasterOrError(L, 1, "pico.canvas_load");
     const char* path = luaL_checkstring(L, 2);
+    const bool keep_size = lua_toboolean(L, 3);
 
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
     if (!self->SdPathAllowed(path)) {
@@ -1272,14 +1274,28 @@ int LuaEngine::l_canvas_load(lua_State* L) {
         return 1;
     }
 
-    // 保存時と現在のw/hが食い違っていても読み込めるよう、先にキャンバス自体を
-    // 画像のサイズへ合わせる(CanvasRaster::resize()。この時点で旧内容は消える)
-    cr->resize((int16_t)header.width, (int16_t)header.height);
+    if (keep_size) {
+        // 大きさは変えず、白紙にしてから左上に合わせて読む。DecodePimgBody()は
+        // 画像の幅で行を折り返し、スプライトの外へ出た画素はwritePixel()のクリップで
+        // 捨てられるので、大きい画像は右/下が切れ、小さい画像は余白が白で残る
+        cr->saveUndoPoint();
+        cr->getSprite()->clear(PICO_WHITE);
+    } else {
+        // 保存時と現在のw/hが食い違っていても読み込めるよう、先にキャンバス自体を
+        // 画像のサイズへ合わせる(CanvasRaster::resize()。この時点で旧内容は消える)
+        cr->resize((int16_t)header.width, (int16_t)header.height);
+    }
 
     const bool ok = IconRender::DecodePimgBody(f, *cr->getSprite(), header.width, header.height);
     f.close();
     if (ok) cr->needsRender();
     lua_pushboolean(L, ok);
+    return 1;
+}
+
+int LuaEngine::l_canvas_undo(lua_State* L) {
+    CanvasRaster* cr = ResolveCanvasRasterOrError(L, 1, "pico.canvas_undo");
+    lua_pushboolean(L, cr->undo());
     return 1;
 }
 
@@ -1508,9 +1524,11 @@ int LuaEngine::l_show_input(lua_State* L) {
 
 int LuaEngine::l_show_file_save(lua_State* L) {
     const char* start_dir = luaL_optstring(L, 1, "/");
+    const char* default_name = luaL_optstring(L, 2, nullptr);
 
     FileSaveDialog* dialog = new FileSaveDialog(start_dir);
     if (!dialog) return luaL_error(L, "pico.show_file_save: 生成に失敗しました(メモリ不足の可能性)");
+    if (default_name) dialog->setFileName(default_name);
 
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);

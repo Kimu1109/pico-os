@@ -83,6 +83,11 @@ class FileSaveDialog : public Widget {
 
         const char* getSavePath();
 
+        //ファイル名欄へ初期値を入れる(開いているファイルへ上書き保存する流れを作るため)
+        void setFileName(const char* name){
+            this->textbox_filename->setText(name ? name : "");
+        }
+
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::FileSaveDialog; }

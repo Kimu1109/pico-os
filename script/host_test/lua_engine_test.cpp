@@ -1234,6 +1234,155 @@ int main(){
         check(wrong_type_ok, "pico.canvas_*: 対象種別/ID検証テストの実行が成功する");
     }
 
+    // ---- ペイント向けの追加(直線/塗りつぶしモード・filled・元に戻す・keep_size読込) ----
+    {
+        const bool setup_ok = engine.Run(R"LUA(
+            paint_id = pico.create("CanvasRaster")
+            pico.set(paint_id, "w", 20)
+            pico.set(paint_id, "h", 12)
+            pico.set(paint_id, "canvas_mode", 4)
+            check(pico.get(paint_id, "canvas_mode") == 4, "canvas_mode: 4(直線)を受け付ける")
+            pico.set(paint_id, "canvas_mode", 5)
+            check(pico.get(paint_id, "canvas_mode") == 5, "canvas_mode: 5(塗りつぶし)を受け付ける")
+            check(pcall(pico.set, paint_id, "canvas_mode", 6) == false,
+                  "canvas_mode: 範囲外はエラー")
+            check(pico.get(paint_id, "canvas_mode") == 5, "canvas_mode: 範囲外を渡しても変わらない")
+            check(pico.get(paint_id, "filled") == false, "filled: 既定は輪郭のみ")
+            check(pico.get(paint_id, "undo_enabled") == false, "undo_enabled: 既定は無効")
+            check(pico.canvas_undo(paint_id) == false, "pico.canvas_undo: 無効の間はfalse")
+            pico.set(paint_id, "undo_enabled", true)
+            check(pico.get(paint_id, "undo_enabled") == true, "undo_enabled: 有効にできる")
+            check(pico.canvas_undo(paint_id) == false, "pico.canvas_undo: まだ何も描いていなければfalse")
+            pico.set(paint_id, "color", 12)
+        )LUA", "paint_setup_test");
+        check(setup_ok, "ペイント向けの設定テストの実行が成功する");
+
+        lua_getglobal(L, "paint_id");
+        const WidgetId paint_id = (WidgetId)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        CanvasRaster* pc = static_cast<CanvasRaster*>(WidgetRegistry::Resolve(paint_id));
+        check(pc != nullptr, "ペイント用のCanvasRasterが引ける");
+
+        if (pc) {
+            LGFX_Sprite* sp = pc->getSprite();
+            const Rect g = pc->getScreenRect();
+
+            // 黒(0)の枠 x=2..10, y=2..8 を描き、その内側を塗りつぶす
+            for (int x = 2; x <= 10; x++) { sp->writePixel(x, 2, 0); sp->writePixel(x, 8, 0); }
+            for (int y = 2; y <= 8; y++) { sp->writePixel(2, y, 0); sp->writePixel(10, y, 0); }
+
+            OSData::touchX = g.x + 5;
+            OSData::touchY = g.y + 5;
+            g_last_dirty = Rect{0, 0, 0, 0};
+            pc->causeOnPressStart();
+            pc->causeOnPressEnd();
+
+            bool inside = true, border = true, outside = true;
+            for (int y = 0; y < 12; y++) {
+                for (int x = 0; x < 20; x++) {
+                    const uint32_t v = sp->readPixelValue(x, y);
+                    const bool on_border = (x >= 2 && x <= 10 && (y == 2 || y == 8)) ||
+                                           (y >= 2 && y <= 8 && (x == 2 || x == 10));
+                    const bool in = x > 2 && x < 10 && y > 2 && y < 8;
+                    if (on_border && v != 0) border = false;
+                    else if (in && v != 12) inside = false;
+                    else if (!on_border && !in && v != 15) outside = false;
+                }
+            }
+            check(inside, "塗りつぶし: 枠の内側が塗られる");
+            check(border && outside, "塗りつぶし: 枠と枠の外へは漏れない");
+            check(g_last_dirty.x == g.x + 3 && g_last_dirty.y == g.y + 3 &&
+                  g_last_dirty.w == 7 && g_last_dirty.h == 5,
+                  "塗りつぶし: 塗った範囲だけをdirtyにする");
+
+            // 元に戻す: 1回目で塗る前へ、2回目でやり直し
+            const bool undo_ok = engine.Run(R"LUA(
+                check(pico.canvas_undo(paint_id) == true, "pico.canvas_undo: 塗りつぶしを戻せる")
+            )LUA", "paint_undo_test");
+            check(undo_ok && sp->readPixelValue(5, 5) == 15 && sp->readPixelValue(2, 2) == 0,
+                  "pico.canvas_undo: 塗る前の状態に戻る");
+            engine.Run("pico.canvas_undo(paint_id)", "paint_redo_test");
+            check(sp->readPixelValue(5, 5) == 12, "pico.canvas_undo: もう一度呼ぶとやり直しになる");
+
+            // 同じ色の所を塗っても何も変わらない(元に戻すの控えも取り直さない)
+            pc->causeOnPressStart();
+            pc->causeOnPressEnd();
+            engine.Run("pico.canvas_undo(paint_id)", "paint_undo_again_test");
+            check(sp->readPixelValue(5, 5) == 15,
+                  "塗りつぶし: 同色を塗っても控えを上書きしない(直前の塗りつぶしを戻せる)");
+
+            // 塗りつぶしの四角形は、左上へ向かってドラッグしても同じ範囲になる
+            pc->canvasClear();
+            engine.Run(R"LUA(
+                pico.set(paint_id, "canvas_mode", 1)
+                pico.set(paint_id, "filled", true)
+                pico.set(paint_id, "color", 9)
+            )LUA", "paint_rect_setup");
+            OSData::touchX = g.x + 8; OSData::touchY = g.y + 6;
+            pc->causeOnPressStart();
+            OSData::touchX = g.x + 2; OSData::touchY = g.y + 2;
+            pc->causeOnPressMove();
+            pc->causeOnPressEnd();
+            bool rect_ok = true;
+            for (int y = 0; y < 12; y++)
+                for (int x = 0; x < 20; x++) {
+                    const bool in = x >= 2 && x <= 8 && y >= 2 && y <= 6;
+                    if (sp->readPixelValue(x, y) != (uint32_t)(in ? 9 : 15)) rect_ok = false;
+                }
+            check(rect_ok, "四角形(塗りつぶし): 逆向きのドラッグでも始点と終点を対角とする範囲を塗る");
+
+            // 種(シード)の置き場が溢れても取りこぼさない: 白地に黒い点を格子状に置くと
+            // 1行ごとに多数の連なりができ、固定長(256)の種の置き場を超える
+            pc->resize(120, 120);
+            sp = pc->getSprite();
+            for (int y = 1; y < 120; y += 2)
+                for (int x = 1; x < 120; x += 2) sp->writePixel(x, y, 0);
+            engine.Run(R"LUA(
+                pico.set(paint_id, "canvas_mode", 5)
+                pico.set(paint_id, "color", 10)
+            )LUA", "paint_overflow_setup");
+            const Rect g2 = pc->getScreenRect();
+            OSData::touchX = g2.x; OSData::touchY = g2.y;
+            pc->causeOnPressStart();
+            pc->causeOnPressEnd();
+            bool all_filled = true;
+            for (int y = 0; y < 120; y++)
+                for (int x = 0; x < 120; x++) {
+                    const bool dot = (x % 2 == 1) && (y % 2 == 1);
+                    if (sp->readPixelValue(x, y) != (uint32_t)(dot ? 0 : 10)) all_filled = false;
+                }
+            check(all_filled, "塗りつぶし: 種の置き場が溢れる形でも全域を塗り、黒い点は残す");
+            OSData::touchX = 0; OSData::touchY = 0;
+
+            // keep_size: 大きさを変えず、白紙にしてから左上に合わせて読む
+            pc->resize(20, 12);
+            sp = pc->getSprite();
+            for (int y = 0; y < 12; y++)
+                for (int x = 0; x < 20; x++) sp->writePixel(x, y, 9);
+            HostSd::files["/canvas/tiny.pimg"] = MakePimgBytes(3, 2, false, 1);
+            const bool keep_ok = engine.Run(R"LUA(
+                check(pico.canvas_load(paint_id, '/canvas/tiny.pimg', true) == true,
+                      'pico.canvas_load(keep_size): 読み込める')
+                check(pico.get(paint_id, "w") == 20 and pico.get(paint_id, "h") == 12,
+                      'pico.canvas_load(keep_size): キャンバスの大きさは変わらない')
+            )LUA", "paint_keep_size_test");
+            check(keep_ok, "pico.canvas_load(keep_size): テストの実行が成功する");
+            check(sp->readPixelValue(0, 0) == 1 && sp->readPixelValue(2, 1) == 1 &&
+                      sp->readPixelValue(3, 0) == 15 && sp->readPixelValue(0, 2) == 15,
+                  "pico.canvas_load(keep_size): 左上に画像、残りは白");
+            engine.Run("pico.canvas_undo(paint_id)", "paint_undo_load_test");
+            check(sp->readPixelValue(5, 5) == 9, "pico.canvas_load(keep_size): 読み込みも元に戻せる");
+
+            engine.Run(R"LUA(
+                pico.set(paint_id, "undo_enabled", false)
+                check(pico.get(paint_id, "undo_enabled") == false, "undo_enabled: 無効に戻すとバッファを手放す")
+                check(pico.canvas_undo(paint_id) == false, "pico.canvas_undo: 無効に戻した後はfalse")
+                check(pcall(pico.canvas_undo, pico.create("Button")) == false,
+                      "pico.canvas_undo: CanvasRaster以外はエラー")
+            )LUA", "paint_undo_disable_test");
+        }
+    }
+
     // ---- ダイアログ(pico.show_message/show_input/show_file_save/show_file_select/show_color) ----
     {
         const bool ok = engine.Run(R"LUA(
@@ -1370,8 +1519,10 @@ int main(){
     // (is_okの往復)・自動破棄までを見る。実際の選択結果はPCビルドの--shotで確認する
     {
         const bool ok = engine.Run(R"LUA(
-            save_id = pico.show_file_save("/")
+            save_id = pico.show_file_save("/", "memo.pimg")
             check(save_id ~= nil, "pico.show_file_save: ハンドルを返す")
+            check(pico.get(save_id, "path") == "/memo.pimg",
+                  "pico.show_file_save: 第2引数がファイル名欄の初期値になる")
             select_id = pico.show_file_select("/")
             check(select_id ~= nil, "pico.show_file_select: ハンドルを返す")
         )LUA", "show_file_dialogs_test");

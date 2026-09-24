@@ -105,6 +105,16 @@
 //     `sd_outside_app_dir`権限無しでapp_dir外・ファイル不正)は`pico.sd_*`と
 //     同じく`false`を返すだけでエラーにはしない
 //
+// ペイント(2026-09-24): `pc/sdcard/lua/apps/ペイント/`のために次を足した:
+//   - `canvas_mode`に4=直線・5=塗りつぶし(バケツ)を追加。四角形/楕円は
+//     `filled`プロパティで塗りつぶし版になり、輪郭は`brush_radius`の太さで描く
+//   - `pico.canvas_undo(id)`: 1段だけの「元に戻す」(もう一度呼ぶとやり直し)。
+//     `pico.set(id,"undo_enabled",true)`で有効にした間だけ、キャンバスと同じ大きさの
+//     控えをヒープに持つ(使わないアプリに負担させないため既定は無効)
+//   - `pico.canvas_load(id, path, keep_size)`: `keep_size=true`ならキャンバスの大きさを
+//     変えず、白紙にしてから左上に合わせて読み込む(はみ出した分は切れる)。
+//     画面の配置が決まっているアプリで、大きさの違う画像を開いても配置を崩さないため
+//
 // シーン制御(pico.push_scene/change_scene/launch_app): pico.pop()(SceneFunctions::Pop())
 // しか無かったため、Luaスクリプトは「自分を起動した画面へ戻る」以外の画面遷移が
 // できなかった。C++側のSceneFunctions::Change/Push/Popに相当する3つを揃えた:
@@ -572,6 +582,7 @@ class LuaEngine {
         static int l_canvas_clear(lua_State* L);
         static int l_canvas_save(lua_State* L);
         static int l_canvas_load(lua_State* L);
+        static int l_canvas_undo(lua_State* L);
 
         // SDカードアクセス。パスはSD_Functions/FileExplorerと同じくSD絶対パス。
         // OSData::SD_usable==falseの間はどれも「失敗」(false/nil)を返すだけで、

@@ -47,7 +47,7 @@ namespace WidgetProperty {
         Path,
 
         // CanvasRaster
-        BrushRadius, CanvasMode,
+        BrushRadius, CanvasMode, UndoEnabled,
 
         // LayoutContainer / GridContainer
         Gap, Padding, Direction, CrossAlign, Cols, HAlign, VAlign,

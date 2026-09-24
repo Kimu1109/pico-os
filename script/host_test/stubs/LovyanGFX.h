@@ -67,7 +67,12 @@ struct LGFX_Sprite {
     void setTextWrap(bool, bool = false){}
     void setClipRect(int, int, int, int){}
     void clearClipRect(){}
-    void fillRect(int, int, int, int, int){}
+    // fillRect/drawFastHLineも実際に書き込む(CanvasRasterの塗りつぶし・四角形の
+    // 焼き込みをホストテストで検証するため)。範囲外はwritePixel()と同じく捨てる
+    void fillRect(int x, int y, int w, int h, int color){
+        for(int yy = y; yy < y + h; yy++)
+            for(int xx = x; xx < x + w; xx++) writePixel(xx, yy, color);
+    }
     void drawRect(int, int, int, int, int){}
     void drawLine(int, int, int, int, int){}
     void drawPixel(int, int, int){}
@@ -80,7 +85,7 @@ struct LGFX_Sprite {
         if(x) *x = 0; if(y) *y = 0; if(w) *w = 0; if(h) *h = 0;
     }
     void fillTriangle(int, int, int, int, int, int, int){}
-    void drawFastHLine(int, int, int, int){}
+    void drawFastHLine(int x, int y, int w, int color){ fillRect(x, y, w, 1, color); }
     void drawFastVLine(int, int, int, int){}
     void pushSprite(void*, int, int){}
     void pushSprite(void*, int, int, int){} //透過色つき
@@ -114,4 +119,5 @@ struct LGFX_Sprite {
     int width(){ return sp_w_; }
     int height(){ return sp_h_; }
     void* getBuffer(){ return pixels_.empty() ? nullptr : pixels_.data(); }
+    uint32_t bufferLength() const { return (uint32_t)pixels_.size(); }
 };

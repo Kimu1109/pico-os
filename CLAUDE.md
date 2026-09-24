@@ -65,12 +65,13 @@ src/
     icons/                  アイコンデータ(tabler_iconsから生成)
     scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene/CalendarScene等)
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
-      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid等)
+      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView等)
       dialogs/              モーダルダイアログ
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
+  chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
@@ -80,7 +81,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_sceneの25本 / run_net.sh=参照実装サーバとテスト用TLSサーバ相手の結合テスト(net/calendar_sync) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_sceneの27本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
@@ -92,6 +93,8 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
     lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
+CHAT_PROTOCOL.md               チャットサーバとの通信仕様(下記「チャット」参照)
+server/chat/                   自前のチャットサーバ(chat_server.py、標準ライブラリのみ)+ Webクライアント + Raspberry Pi/Let's Encryptの設置手順(README.md)
 ```
 `include/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
 `lib/`はLua本体のvendor先として使い始めた(上記参照。従来は未使用だった)。
@@ -487,6 +490,43 @@ iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で
 **予定そのものは知らず、シーンが`setMonth()`/`setCounts()`で流し込む**(`AnalogClock`と同じ理由)。
 幅を7で割った余りは土曜の列へ足す(`TabBar`と同じ)。「2026年10月」は84pxで2行へ折り返したのでタイトル幅は100px。
 
+### チャット (`src/chat/` / `ChatScene` / `server/chat/`) (2026-09-24)
+
+SUMMARY.md #8の「チャットツール」。**Discordとの連携は見送り、自前のサーバにした。**
+Discordは自分のアカウントでの自動操作(self-bot)が規約違反で、Bot名義での発言にしかならない上、
+Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自前なら`PROTOCOL.md`と同じく
+「pico-osが苦手なことは全部サーバでやる」設計にできる。仕様は`CHAT_PROTOCOL.md`。
+
+- **サーバ**: `server/chat/chat_server.py`(Python標準ライブラリのみ、SQLite)。Raspberry Piで動かし、
+  **Let's Encryptの証明書でHTTPS化**する(手順は`server/chat/README.md`)。
+  - 80番でACME(http-01)の確認ファイルを配り、それ以外はhttpsへ転送する(`--http-port`/`--acme-root`)。
+    **証明書がまだ無ければ置かれるまで80番だけで待つ**ので、初回もcertbotの`--webroot`で取れる
+  - **証明書はファイルの更新時刻を見て、次の接続から読み直す**(certbotの自動更新後に再起動が要らない)。
+    certbotの`--deploy-hook`(`certbot-deploy-hook.sh`)が`/etc/pico-chat/tls/`へ写す
+  - 認証は、pico-osは`Authorization: Bearer <トークン>`、WebはCookie + 書き込みに`X-Pico-Chat`ヘッダ必須。
+    トークン/セッションはハッシュだけを保存。トークンはWebの「pico-os の設定」で発行し直せる
+  - 未読の数は人ごと・部屋ごとにサーバが覚える(発言を取った分が既読になる。Picoとで共通)
+- **Webクライアント**: `server/chat/web/index.html`(1ファイル、同じサーバが配る)。ロングポーリング(`wait=25`)で即時受信
+- **pico-os側**: `ChatScene`(部屋の一覧 ⇔ 部屋の中を1シーンで切り替え、`applyMode()`)。設定は`/sys/chat.cfg`
+  (`server = ...` / `token = ...` / 任意で`poll-ms`)
+  - `chat/Chat_Proto`: 1行1件のTSVの読み取り(本文だけ`\n` `\t` `\\`をエスケープして送る)と行の切り出し(`LineSink`)。ソケットを持たない
+  - `chat/Chat_Client`: `HttpRequest`で問い合わせる係。**同時に1本、優先順は送信 > 開いている部屋の新着(3秒ごと) > 部屋の一覧(10秒ごと)**。
+    **ロングポーリングにしない**のは、接続が1本しか無く、待っている間は送信できなくなるため。失敗は5秒→60秒で取り直し、401は取り直さない
+  - **`HttpRequest`にkeep-alive(`setKeepAlive()`)と任意のヘッダ1行(`setExtraHeader()`)を足した**。HTTPSはハンドシェイクで
+    1〜2秒画面が止まるので、使い回さないと数秒ごとに固まる。**使い回している間はTLSの約40KBを持ち続ける**(`ChatScene::onExit()`で閉じる)。
+    使い回すのは、応答が長さ付きで`Connection: close`でない場合だけ(`HttpResponse::canReuseConnection()`)。
+    接続が死んでいたら(`begin()`での`connected()`確認、または1バイトも来ずに閉じた場合)1回だけ繋ぎ直す。既定は無効なので、
+    Luaの`pico.http_request`やMarkdownブラウザの挙動は変わらない
+  - `widgets/apps/ChatLogView`: 発言の一覧。**「子を持たずrender()で直接描く」型**。折り返しの計算(1文字ごとの`textWidth`)は
+    **発言1件につき1回だけ**で、高さをidごとに覚える(新着1件で全件を測り直さない)。一番下を見ている間だけ新着に付いていく
+  - **シーン本体は約25KB**(`ChatClient`が発言30件ぶん約17.5KB + 部屋の一覧 + 行バッファ + `HttpRequest`約2KBを持つ)。`MarkdownScene`/`CalendarScene`と同じ例外
+  - **Picoから送れるのは1回に約60文字**(オンスクリーンキーボードの入力欄が`Label<PICO_STR_LL>`=191バイトのため)。
+    受け取るのは500バイトまで
+  - 本文は`Label`を通さず直接描くので、`*`や`~`がマークアップとして消えることは無い
+- 検証: `chat_proto_test`/`chat_scene_test`(run.sh)、`chat_net_test`(run_net.sh。本物の`chat_server.py`を平文と使い捨てCAのHTTPSで立て、
+  送受信・未読・keep-alive・無通信で切られた後の繋ぎ直し・401を確かめる)、PCビルドの`--tap`で一覧→部屋→キーボード入力→送信まで確認した。
+  **実機(RP2350 + BearSSL)とLet's Encryptの本物の証明書での接続は未確認**
+
 ### ClocksScene 実装詳細
 
 画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える1画面のアプリ
@@ -731,7 +771,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(チャット・テトリス風・シューティング・リマインダー・ペイント等)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
+| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **未着手**。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
 | 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
@@ -1908,7 +1948,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、25本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、27本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

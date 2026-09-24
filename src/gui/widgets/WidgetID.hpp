@@ -11,6 +11,7 @@ enum class WidgetType : uint8_t {
     Button,
     CalculatorKeypad,
     CanvasRaster,
+    ChatLogView,
     Checkbox,
     ColorDialog,
     DropdownMenu,

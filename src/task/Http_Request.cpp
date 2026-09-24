@@ -3,6 +3,8 @@
 #include "Arduino.h"
 
 #include <cstdio>
+#include <cstring>
+#include <strings.h>
 
 const char* HttpRequest::MethodToStr(Method m){
     switch(m){
@@ -15,9 +17,49 @@ const char* HttpRequest::MethodToStr(Method m){
     }
 }
 
+bool HttpRequest::SameEndpoint(const Url& a, const Url& b){
+    return a.secure == b.secure && a.port == b.port && strcasecmp(a.host.c_str(), b.host.c_str()) == 0;
+}
+
+void HttpRequest::setKeepAlive(bool on){
+    keep_alive_ = on;
+    if(!on && phase != Phase::Connecting && phase != Phase::Sending && phase != Phase::Receiving){
+        closeConnection();
+    }
+}
+
+bool HttpRequest::setExtraHeader(const char* line){
+    extra_header_.clear();
+    if(!line || !*line) return true;
+    //ヘッダの区切りを混ぜられると別のヘッダ(や別の要求)を差し込めてしまう
+    for(const char* p = line; *p; p++){
+        if(*p == '\r' || *p == '\n') return false;
+    }
+    if(!extra_header_.assign(line)){
+        extra_header_.clear();
+        return false;
+    }
+    return true;
+}
+
+void HttpRequest::closeConnection(){
+    client.close();
+    conn_reusable_ = false;
+}
+
 bool HttpRequest::begin(const Url& target, Method method, IHttpSink* sink,
                          const void* body, size_t body_len, const char* content_type){
-    this->cancel();
+    //前の応答の後に持っておいた接続が、同じ相手へそのまま使えるか。
+    //受信待ちのバイトが残っている接続は、前の応答との境目が狂っているので使わない
+    const bool reuse = keep_alive_ && conn_reusable_ && phase == Phase::Ended
+                    && SameEndpoint(conn_url_, target)
+                    && client.connected() && client.available() <= 0;
+    if(reuse){
+        conn_reusable_ = false;
+        phase = Phase::Idle;
+    }else{
+        this->cancel();
+    }
 
     url = target;
     method_ = method;
@@ -35,16 +77,32 @@ bool HttpRequest::begin(const Url& target, Method method, IHttpSink* sink,
     status = TaskTools::PROCESSING;
     started_ms = millis();
 
-    return startRequest();
+    return startRequest(reuse);
 }
 
-bool HttpRequest::startRequest(){
+bool HttpRequest::startRequest(bool reuse){
     // Http_Getと違いゲートを挟まない: statusCodeによらずsink_へ本文を渡す
     res.reset(sink_);
+    got_bytes_ = false;
+    conn_reusable_ = false;
 
+    if(reuse){
+        reused_ = true;
+        phase = Phase::Sending;
+        return true;
+    }
+
+    reused_ = false;
     client.close();
 
     phase = Phase::Connecting;
+    return true;
+}
+
+bool HttpRequest::retryOnFreshConnection(){
+    if(!reused_) return false;
+    LOG_SYS_MSG("HttpRequest: 使い回した接続が切れていたので接続し直します (%s)", url.host.c_str());
+    startRequest(false);
     return true;
 }
 
@@ -62,8 +120,12 @@ bool HttpRequest::sendRequestLine(){
     ok = req.append(" HTTP/1.1\r\nHost: ") && ok;
     ok = req.append(hostHeader) && ok;
     ok = req.append("\r\nUser-Agent: pico-os/1\r\n") && ok;
-    //圧縮させない(展開の手段が無い)。Connection: closeで応答後に閉じてもらう
-    ok = req.append("Connection: close\r\n") && ok;
+    //圧縮させない(展開の手段が無い)。使い回さないならConnection: closeで応答後に閉じてもらう
+    ok = req.append(keep_alive_ ? "Connection: keep-alive\r\n" : "Connection: close\r\n") && ok;
+    if(!extra_header_.empty()){
+        ok = req.append(extra_header_) && ok;
+        ok = req.append("\r\n") && ok;
+    }
 
     if(body_ && body_len_ > 0){
         if(!content_type_.empty()){
@@ -94,7 +156,13 @@ void HttpRequest::finishWith(TaskTools::Status s, Fail f){
     phase = Phase::Ended;
     fail_ = f;
     status = s;
-    client.close();
+    //成功して、相手も続けてよいと言っているときだけ接続を持っておく
+    conn_reusable_ = keep_alive_ && s == TaskTools::SUCCESS && res.canReuseConnection();
+    if(conn_reusable_){
+        conn_url_ = url;
+    }else{
+        client.close();
+    }
 }
 
 bool HttpRequest::followRedirect(){
@@ -145,6 +213,7 @@ void HttpRequest::update(){
 
     if(phase == Phase::Sending){
         if(!sendRequestLine()){
+            if(retryOnFreshConnection()) return;
             finishWith(TaskTools::FAILED, Fail::SendFailed);
             return;
         }
@@ -168,6 +237,7 @@ void HttpRequest::update(){
         if(got <= 0) break;
 
         readTotal += (size_t)got;
+        got_bytes_ = true;
 
         if(!res.feed(buf, (size_t)got)){
             finishWith(TaskTools::FAILED, Fail::Response);
@@ -192,6 +262,8 @@ void HttpRequest::update(){
 
     //相手が閉じた かつ 読むものが無い = 応答の終わり
     if(!client.connected() && client.available() <= 0){
+        //使い回した接続で1バイトも来ないまま閉じた = 送る前から死んでいた
+        if(!got_bytes_ && retryOnFreshConnection()) return;
         if(!res.finish()){
             finishWith(TaskTools::FAILED, Fail::Response);
             return;
@@ -206,6 +278,8 @@ void HttpRequest::update(){
 
 void HttpRequest::cancel(){
     client.close();
+    conn_reusable_ = false;
+    reused_ = false;
     phase = Phase::Idle;
     fail_ = Fail::None;
     redirects = 0;

@@ -81,6 +81,12 @@ class HttpResponse {
         const FixedString<PICO_STR_L>& location() const { return location_; }
 
         int32_t contentLength() const { return content_length; }
+
+        // 応答の後も同じ接続で次の要求を送ってよいか(keep-alive)。
+        // 本文の終わりが接続の切断でしか分からない応答や、相手が閉じると言っている場合はfalse
+        bool canReuseConnection() const {
+            return state == State::Done && !connection_close && (chunked || content_length >= 0);
+        }
         uint32_t bodyBytes() const { return body_bytes; }
 
         // 本文を伴わない応答(304や、3xxで転送先だけ見たい場合)
@@ -118,6 +124,8 @@ class HttpResponse {
         FixedString<PICO_STR_M> validator_;
         FixedString<PICO_STR_L> location_;
         bool has_etag = false;
+
+        bool connection_close = false; // "Connection: close" か HTTP/1.0
 
         bool chunked = false;
         Chunk chunk = Chunk::Size;

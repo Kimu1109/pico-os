@@ -37,6 +37,8 @@ namespace PICO_Path {
         namespace CFG {
             constexpr const char* SYS_NETWORK_CFG = "/sys/network.cfg";
             constexpr const char* SYS_USER_CFG = "/sys/user.cfg";
+            // チャットアプリの接続先("server = https://..." と "token = ...")。ChatClient参照
+            constexpr const char* SYS_CHAT_CFG = "/sys/chat.cfg";
         }
 
         namespace IME {

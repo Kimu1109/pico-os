@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pico-chat</title>
+<style>
+  :root {
+    --bg: #fff1e8; --panel: #ffffff; --fg: #1d2b53; --muted: #5f574f; --line: #c2c3c7;
+    --accent: #29adff; --accent-fg: #ffffff; --unread: #ff004d; --me: #e8f6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #13151a; --panel: #1d2028; --fg: #e8e8ea; --muted: #9a9ca5; --line: #343844;
+      --accent: #29adff; --accent-fg: #0b0d12; --unread: #ff4d7a; --me: #1e2a38;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.5 system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  button {
+    background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 6px;
+    padding: 6px 12px; cursor: pointer;
+  }
+  button.plain { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  input, textarea {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+  }
+  .hidden { display: none !important; }
+
+  #login { max-width: 320px; margin: 15vh auto 0; padding: 0 16px; display: grid; gap: 10px; }
+  #login h1 { margin: 0 0 8px; font-size: 22px; }
+  .error { color: var(--unread); min-height: 1.5em; }
+
+  #app { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+  #side { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  #side header { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  #me { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #rooms { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; flex: 1; }
+  #rooms li { padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  #rooms li.active { background: var(--me); font-weight: 600; }
+  .badge { background: var(--unread); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 12px; align-self: center; }
+  #side footer { padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+
+  #main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #main header { padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+  #roomTitle { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #back { display: none; }
+  #log { flex: 1; overflow-y: auto; padding: 8px 16px; }
+  #older { display: block; margin: 4px auto 8px; }
+  .msg { padding: 4px 0; }
+  .msg .who { font-weight: 600; margin-right: 8px; }
+  .msg .when { color: var(--muted); font-size: 12px; }
+  .msg .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .day { text-align: center; color: var(--muted); font-size: 12px; margin: 10px 0 4px; }
+  #compose { border-top: 1px solid var(--line); padding: 8px 16px; display: flex; gap: 8px; align-items: flex-end; }
+  #text { flex: 1; resize: none; min-height: 40px; max-height: 40vh; }
+  #count { color: var(--muted); font-size: 12px; }
+  #status { color: var(--muted); font-size: 12px; padding: 0 16px 6px; min-height: 1em; }
+  #empty { color: var(--muted); padding: 24px 16px; }
+
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--fg); max-width: min(520px, 92vw); }
+  dialog pre { background: var(--bg); padding: 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; }
+
+  @media (max-width: 640px) {
+    #app { grid-template-columns: 1fr; }
+    #app.in-room #side { display: none; }
+    #app:not(.in-room) #main { display: none; }
+    #back { display: inline-block; }
+  }
+</style>
+</head>
+<body>
+
+<form id="login" class="hidden">
+  <h1>pico-chat</h1>
+  <input id="loginName" autocomplete="username" placeholder="ログイン名" required>
+  <input id="loginPass" type="password" autocomplete="current-password" placeholder="パスワード" required>
+  <button type="submit">ログイン</button>
+  <div class="error" id="loginError"></div>
+</form>
+
+<div id="app" class="hidden">
+  <aside id="side">
+    <header><span id="me"></span><button class="plain" id="logout">ログアウト</button></header>
+    <ul id="rooms"></ul>
+    <footer>
+      <button class="plain" id="newRoom">部屋を作る</button>
+      <button class="plain" id="picoToken">pico-os の設定</button>
+    </footer>
+  </aside>
+  <main id="main">
+    <header><button class="plain" id="back">←</button><span id="roomTitle">部屋を選んでください</span></header>
+    <div id="log"><div id="empty">左の一覧から部屋を選んでください。</div></div>
+    <div id="status"></div>
+    <form id="compose" class="hidden">
+      <textarea id="text" rows="1" placeholder="メッセージ(Enterで送信、Shift+Enterで改行)"></textarea>
+      <div><div id="count"></div><button type="submit">送信</button></div>
+    </form>
+  </main>
+</div>
+
+<dialog id="tokenDialog">
+  <p>pico-os の SD カードの <code>/sys/chat.cfg</code> へ次の内容を書いてください。<br>
+     <b>トークンはこの画面でしか表示されません</b>。発行し直すと前のトークンは使えなくなります。</p>
+  <pre id="tokenCfg"></pre>
+  <p><button id="tokenCopy">コピー</button> <button class="plain" id="tokenClose">閉じる</button></p>
+</dialog>
+
+<script>
+"use strict";
+const MAX_TEXT_BYTES = 500;
+const $ = (id) => document.getElementById(id);
+const enc = new TextEncoder();
+
+let rooms = [];          // {id, name, last, unread}
+let current = null;      // 開いている部屋のid
+let lastId = 0;          // 開いている部屋で受け取った最後の発言id
+let firstId = 0;         // 読み込んだ中で一番古い発言id
+let lastDay = "";        // 最後に描いた日付の区切り
+let firstDay = "";
+let pollAbort = null;
+let pollGen = 0;
+
+// ---- 通信 ----
+async function api(method, path, body) {
+  const opt = { method, headers: { "X-Pico-Chat": "1" }, credentials: "same-origin" };
+  if (body !== undefined) {
+    opt.body = body;
+    opt.headers["Content-Type"] = typeof body === "string" ? "text/plain; charset=utf-8"
+                                                           : "application/x-www-form-urlencoded";
+  }
+  return fetch(path, opt);
+}
+
+async function text(res) {
+  const t = await res.text();
+  if (!res.ok) {
+    const err = new Error(t.split("\n")[0] || ("HTTP " + res.status));
+    err.status = res.status;
+    throw err;
+  }
+  return t;
+}
+
+function lines(t) { return t.split("\n").filter((l) => l.length > 0).map((l) => l.split("\t")); }
+
+function unescapeText(s) {
+  return s.replace(/\\(.)/g, (_, c) => c === "n" ? "\n" : c === "t" ? "\t" : c);
+}
+
+// ---- ログイン ----
+async function start() {
+  try {
+    const me = lines(await text(await api("GET", "/api/v1/me")))[0];
+    $("me").textContent = me[1] + " (" + me[0] + ")";
+    $("login").classList.add("hidden");
+    $("app").classList.remove("hidden");
+    await loadRooms();
+    const saved = Number(localStorage.getItem("room") || 0);
+    if (saved && rooms.some((r) => r.id === saved) && window.innerWidth > 640) openRoom(saved);
+    setInterval(loadRooms, 15000);
+  } catch (e) {
+    if (e.status === 401) {
+      $("app").classList.add("hidden");
+      $("login").classList.remove("hidden");
+      $("loginName").focus();
+    } else {
+      document.body.textContent = "サーバへ繋がりません: " + e.message;
+    }
+  }
+}
+
+$("login").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  $("loginError").textContent = "";
+  const body = new URLSearchParams({ login: $("loginName").value, password: $("loginPass").value });
+  try {
+    await text(await api("POST", "/api/v1/login", body));
+    location.reload();
+  } catch (e) {
+    $("loginError").textContent = e.message;
+  }
+});
+
+$("logout").addEventListener("click", async () => {
+  await api("POST", "/api/v1/logout", "");
+  location.reload();
+});
+
+// ---- 部屋 ----
+async function loadRooms() {
+  try {
+    rooms = lines(await text(await api("GET", "/api/v1/rooms"))).map((f) => ({
+      id: Number(f[0]), name: f[1], last: Number(f[2]), unread: Number(f[3]),
+    }));
+  } catch (e) {
+    return;
+  }
+  const ul = $("rooms");
+  ul.textContent = "";
+  for (const r of rooms) {
+    const li = document.createElement("li");
+    li.className = r.id === current ? "active" : "";
+    const name = document.createElement("span");
+    name.textContent = "# " + r.name;
+    li.appendChild(name);
+    if (r.unread > 0 && r.id !== current) {
+      const b = document.createElement("span");
+      b.className = "badge";
+      b.textContent = r.unread;
+      li.appendChild(b);
+    }
+    li.addEventListener("click", () => openRoom(r.id));
+    ul.appendChild(li);
+  }
+  const total = rooms.reduce((n, r) => n + (r.id === current ? 0 : r.unread), 0);
+  document.title = (total > 0 ? "(" + total + ") " : "") + "pico-chat";
+}
+
+$("newRoom").addEventListener("click", async () => {
+  const name = prompt("部屋の名前");
+  if (!name) return;
+  try {
+    const row = lines(await text(await api("POST", "/api/v1/rooms", name)))[0];
+    await loadRooms();
+    openRoom(Number(row[0]));
+  } catch (e) {
+    alert(e.message);
+  }
+});
+
+$("back").addEventListener("click", () => {
+  stopPoll();
+  current = null;
+  $("app").classList.remove("in-room");
+  loadRooms();
+});
+
+// ---- 発言 ----
+function fmtDay(d) { return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate(); }
+function fmtTime(d) { return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+
+function makeMsg(f) {
+  const d = new Date(Number(f[1]) * 1000);
+  const div = document.createElement("div");
+  div.className = "msg";
+  const who = document.createElement("span");
+  who.className = "who";
+  who.textContent = f[2];
+  const when = document.createElement("span");
+  when.className = "when";
+  when.textContent = fmtTime(d);
+  const body = document.createElement("div");
+  body.className = "text";
+  body.textContent = unescapeText(f[3] || "");
+  div.append(who, when, body);
+  return { div, day: fmtDay(d) };
+}
+
+function dayDiv(day) {
+  const div = document.createElement("div");
+  div.className = "day";
+  div.textContent = day;
+  return div;
+}
+
+function appendMessages(rows) {
+  const log = $("log");
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  for (const f of rows) {
+    const id = Number(f[0]);
+    if (id <= lastId) continue;
+    const m = makeMsg(f);
+    if (m.day !== lastDay) { log.appendChild(dayDiv(m.day)); lastDay = m.day; }
+    if (!firstDay) firstDay = m.day;
+    log.appendChild(m.div);
+    lastId = id;
+    if (!firstId) firstId = id;
+  }
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+function prependMessages(rows) {
+  const log = $("log");
+  const anchor = log.children[1] || null; // [0]は「さらに読む」ボタン
+  const before = log.scrollHeight;
+  let day = "";
+  const frag = document.createDocumentFragment();
+  for (const f of rows) {
+    const m = makeMsg(f);
+    if (m.day !== day) { frag.appendChild(dayDiv(m.day)); day = m.day; }
+    frag.appendChild(m.div);
+  }
+  // 続きの先頭の日付区切りが同じ日なら消す
+  if (anchor && anchor.className === "day" && anchor.textContent === day) anchor.remove();
+  log.insertBefore(frag, log.children[1] || null);
+  if (rows.length) { firstId = Number(rows[0][0]); firstDay = fmtDay(new Date(Number(rows[0][1]) * 1000)); }
+  log.scrollTop += log.scrollHeight - before;
+}
+
+function stopPoll() {
+  pollGen++;
+  if (pollAbort) pollAbort.abort();
+  pollAbort = null;
+}
+
+async function openRoom(id) {
+  stopPoll();
+  current = id;
+  localStorage.setItem("room", String(id));
+  const room = rooms.find((r) => r.id === id);
+  $("roomTitle").textContent = room ? "# " + room.name : "";
+  $("app").classList.add("in-room");
+  $("compose").classList.remove("hidden");
+  lastId = 0; firstId = 0; lastDay = ""; firstDay = "";
+  const log = $("log");
+  log.textContent = "";
+  const older = document.createElement("button");
+  older.id = "older";
+  older.className = "plain";
+  older.textContent = "さらに前を読む";
+  older.addEventListener("click", loadOlder);
+  log.appendChild(older);
+
+  try {
+    const rows = lines(await text(await api("GET", `/api/v1/rooms/${id}/messages?limit=50`)));
+    if (current !== id) return;
+    appendMessages(rows);
+    older.classList.toggle("hidden", rows.length < 50);
+    log.scrollTop = log.scrollHeight;
+  } catch (e) {
+    $("status").textContent = e.message;
+  }
+  loadRooms();
+  poll(id, ++pollGen);
+  $("text").focus();
+}
+
+async function loadOlder() {
+  if (!current || !firstId) return;
+  try {
+    const rows = lines(await text(await api("GET", `/api/v1/rooms/${current}/messages?before=${firstId}&limit=50`)));
+    prependMessages(rows);
+    if (rows.length < 50) $("older").classList.add("hidden");
+  } catch (e) {
+    $("status").textContent = e.message;
+  }
+}
+
+async function poll(id, gen) {
+  let delay = 1000;
+  while (gen === pollGen) {
+    pollAbort = new AbortController();
+    try {
+      const res = await fetch(`/api/v1/rooms/${id}/messages?after=${lastId}&wait=25&limit=50`,
+                              { signal: pollAbort.signal, credentials: "same-origin" });
+      const rows = lines(await text(res));
+      if (gen !== pollGen) return;
+      appendMessages(rows);
+      $("status").textContent = "";
+      delay = 1000;
+    } catch (e) {
+      if (gen !== pollGen) return;
+      $("status").textContent = "再接続中… (" + e.message + ")";
+      await new Promise((r) => setTimeout(r, delay));
+      delay = Math.min(delay * 2, 30000);
+    }
+  }
+}
+
+function updateCount() {
+  const n = enc.encode($("text").value).length;
+  $("count").textContent = n > MAX_TEXT_BYTES * 0.8 ? n + "/" + MAX_TEXT_BYTES : "";
+  const t = $("text");
+  t.style.height = "auto";
+  t.style.height = Math.min(t.scrollHeight + 2, window.innerHeight * 0.4) + "px";
+}
+$("text").addEventListener("input", updateCount);
+
+$("text").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) {
+    ev.preventDefault();
+    $("compose").requestSubmit();
+  }
+});
+
+$("compose").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const value = $("text").value.trim();
+  if (!value || !current) return;
+  if (enc.encode(value).length > MAX_TEXT_BYTES) {
+    $("status").textContent = "長すぎます(" + MAX_TEXT_BYTES + "バイトまで)";
+    return;
+  }
+  try {
+    await text(await api("POST", `/api/v1/rooms/${current}/messages`, value));
+    $("text").value = "";
+    updateCount();
+    $("status").textContent = "";
+    $("log").scrollTop = $("log").scrollHeight;
+  } catch (e) {
+    $("status").textContent = "送れませんでした: " + e.message;
+  }
+});
+
+// ---- pico-os の設定 ----
+$("picoToken").addEventListener("click", async () => {
+  if (!confirm("pico-os 用のトークンを発行します。前に発行したトークンは使えなくなります。よろしいですか?")) return;
+  try {
+    const token = (await text(await api("POST", "/api/v1/token", ""))).trim();
+    $("tokenCfg").textContent = "server = " + location.origin + "\ntoken = " + token + "\n";
+    $("tokenDialog").showModal();
+  } catch (e) {
+    alert(e.message);
+  }
+});
+$("tokenCopy").addEventListener("click", () => navigator.clipboard.writeText($("tokenCfg").textContent));
+$("tokenClose").addEventListener("click", () => $("tokenDialog").close());
+
+start();
+</script>
+</body>
+</html>

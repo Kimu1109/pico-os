@@ -25,6 +25,15 @@
 //
 // 本文の行き先はHttp_Getと同じくIHttpSink*(非所有。寿命は呼び出し側が保証)。
 // ゲートを挟まないので、statusCodeによらずsink->write()が呼ばれる。
+//
+// **keep-alive(接続の使い回し)に対応する(既定は無効)。** setKeepAlive(true)にすると、
+// 応答の後も接続を閉じずに持っておき、次のbegin()が同じ相手(ホスト・ポート・http/https)なら
+// 接続とTLSのハンドシェイクを飛ばしてすぐ送る。HTTPSはハンドシェイクで1〜2秒画面が止まるので、
+// 数秒ごとに問い合わせるチャットのような使い方ではこれが無いと固まり続ける。
+//   - 持っている間はTLSの道具一式(約40KB)も持ち続ける。要らなくなったらcloseConnection()
+//   - 相手が黙って閉じていた場合(アイドルのタイムアウト等)は、何も受け取れなかった時点で
+//     1回だけ繋ぎ直して送り直す。**POSTも送り直す**ので、相手が処理した直後に閉じた
+//     ごくまれな場合は二重に届き得る(チャット程度なら許容する割り切り)
 class HttpRequest : public Task {
     public:
         enum class Method : uint8_t { GET, POST, PUT, PATCH, Delete };
@@ -56,7 +65,18 @@ class HttpRequest : public Task {
                    const char* content_type = nullptr);
 
         void update() override;
+        // 進行中の要求をやめる。持っている接続も閉じる
         void cancel();
+
+        // 接続を使い回すか(既定false = 毎回 Connection: close)
+        void setKeepAlive(bool on);
+        // 要求ごとに足すヘッダ1行("Authorization: Bearer xxx" のようにCRLF抜きで)。
+        // nullptr/空で消す。入りきらなければfalse(消えた状態になる)
+        bool setExtraHeader(const char* line);
+        // 使い回すために持っている接続を閉じる(TLSの約40KBを返す)
+        void closeConnection();
+        // 次のbegin()で使い回せる接続を持っているか
+        bool hasIdleConnection() const { return conn_reusable_; }
 
         const HttpResponse& response() const { return res; }
         const Url& currentUrl() const { return url; }
@@ -78,12 +98,23 @@ class HttpRequest : public Task {
         size_t body_len_ = 0;
         FixedString<PICO_STR_M> content_type_;
 
+        // ---- keep-alive ----
+        bool keep_alive_ = false;
+        FixedString<PICO_STR_LL> extra_header_;
+        bool conn_reusable_ = false; // 前の応答の後、接続を開けたまま持っている
+        Url conn_url_;               // その接続の相手(ホスト・ポート・schemeだけを見る)
+        bool reused_ = false;        // 今の要求は持っていた接続で送った
+        bool got_bytes_ = false;     // 今の要求で1バイトでも受け取った
+
         Phase phase = Phase::Idle;
         Fail fail_ = Fail::None;
         int redirects = 0;
         unsigned long started_ms = 0;
 
-        bool startRequest();
+        bool startRequest(bool reuse = false);
+        static bool SameEndpoint(const Url& a, const Url& b);
+        // 使い回した接続が死んでいたとき、1回だけ繋ぎ直して送り直す
+        bool retryOnFreshConnection();
         bool sendRequestLine();
         void finishWith(TaskTools::Status s, Fail f);
         bool followRedirect();

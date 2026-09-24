@@ -44,6 +44,8 @@ void HttpResponse::reset(IHttpSink* s){
     location_.clear();
     has_etag = false;
 
+    connection_close = false;
+
     chunked = false;
     chunk = Chunk::Size;
     chunk_left = 0;
@@ -79,6 +81,9 @@ bool HttpResponse::handleStatusLine(){
 
     status_code = (int)strtol(space, nullptr, 10);
     if(status_code < 100 || status_code > 599) return fail(HttpTools::Error::BadStatusLine);
+
+    //HTTP/1.0 は既定で接続を閉じる(keep-aliveの使い回しの判断に使う)
+    if(strncmp(line, "HTTP/1.0", 8) == 0) connection_close = true;
 
     state = State::Headers;
     return true;
@@ -127,6 +132,9 @@ bool HttpResponse::handleHeaderLine(){
             char* value = headerValue(line);
             if(value) validator_.assign(value);
         }
+    }else if(headerIs(line, "Connection")){
+        char* value = headerValue(line);
+        if(value && strcasecmp(value, "close") == 0) connection_close = true;
     }else if(headerIs(line, "Location")){
         char* value = headerValue(line);
         if(value) location_.assign(value);

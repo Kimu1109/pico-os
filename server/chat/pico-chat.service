@@ -1,0 +1,43 @@
+# pico-os チャットサーバの systemd ユニット(Raspberry Pi 用)。
+# 置き場所と手順は server/chat/README.md を参照。
+#
+#   sudo cp pico-chat.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pico-chat
+#
+# chat.example.com の部分は書き換えなくてよい(証明書のパスは certbot-deploy-hook.sh が
+# ドメインに関係なく /etc/pico-chat/tls/ へ置く)。
+
+[Unit]
+Description=pico-os chat server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pico-chat
+Group=pico-chat
+ExecStart=/usr/bin/python3 /opt/pico-chat/chat_server.py \
+    --db /var/lib/pico-chat/chat.db serve \
+    --port 443 --http-port 80 --acme-root /var/lib/pico-chat/acme \
+    --tls-cert /etc/pico-chat/tls/fullchain.pem \
+    --tls-key /etc/pico-chat/tls/privkey.pem
+Restart=on-failure
+RestartSec=5
+
+# rootにせず、80/443番だけ使えるようにする
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+# 書けるのはDBとACMEの置き場所だけ
+ProtectSystem=strict
+ReadWritePaths=/var/lib/pico-chat
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

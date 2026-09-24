@@ -394,6 +394,32 @@ int main(){
         eq_str(res.location().c_str(), "/x.md", "Locationは読める");
     }
 
+    printf("\n---- 接続の使い回し(keep-alive) ----\n");
+    {
+        auto reusable = [](const std::string& raw, bool close_after){
+            BufferSink sink;
+            HttpResponse res;
+            res.reset(&sink);
+            feedAll(res, raw, false);
+            if(close_after) res.finish();
+            return res.canReuseConnection();
+        };
+        check(reusable("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok", false),
+              "長さ付きの応答なら使い回せる");
+        check(reusable("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n", false),
+              "chunkedの応答も使い回せる");
+        check(!reusable("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok", false),
+              "Connection: close なら使い回さない");
+        check(!reusable("HTTP/1.1 200 OK\r\nconnection: Close\r\nContent-Length: 2\r\n\r\nok", false),
+              "Connection: close は大文字小文字を問わない");
+        check(!reusable("HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nok", false),
+              "HTTP/1.0 の応答は使い回さない");
+        check(!reusable("HTTP/1.1 200 OK\r\n\r\nok", true),
+              "長さが無い(切断で終わる)応答は使い回さない");
+        check(!reusable("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nok", false),
+              "読み終わっていなければ使い回さない");
+    }
+
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

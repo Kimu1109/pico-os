@@ -11,6 +11,9 @@
 # HTTPS(calendar_sync_test)は、ここで使い捨てのCAとサーバ証明書を openssl コマンドで作り、
 # script/host_test/tls_test_server.py を立てて確かめる(外のサーバへは行かない)。
 #
+# チャット(chat_net_test)は server/chat/chat_server.py を使い捨てのDBで、平文とHTTPS
+# (上と同じ使い捨ての証明書)の2つ立てて確かめる。
+#
 # 使い方: sh script/host_test/run_net.sh
 set -e
 
@@ -58,8 +61,9 @@ while [ $i -lt 50 ]; do
 done
 
 TLS_PID=""
+CHAT_PIDS=""
 cleanup(){
-    kill "$SERVER_PID" "$BARE_PID" $TLS_PID 2>/dev/null || true
+    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     wait "$BARE_PID" 2>/dev/null || true
     [ -n "$TLS_PID" ] && wait "$TLS_PID" 2>/dev/null || true
@@ -104,3 +108,45 @@ done
 echo ""
 echo "===== calendar_sync_test ====="
 "$OUT/calendar_sync_test" "$TLS_PORT" "$OUT/ca.pem"
+
+# ---- チャット(ChatClient)。本物のチャットサーバを平文とHTTPSで立てる ----
+CHAT_PORT=$((PORT + 3))
+CHAT_TLS_PORT=$((PORT + 4))
+CHAT="$ROOT/server/chat/chat_server.py"
+CHAT_DB="$OUT/chat.db"
+
+g++ -std=gnu++17 -g -fsanitize=address,undefined \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
+    "$ROOT/script/host_test/chat_net_test.cpp" \
+    "$ROOT/src/chat/Chat_Client.cpp" \
+    "$ROOT/src/chat/Chat_Proto.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    -o "$OUT/chat_net_test" -lssl -lcrypto
+
+ALICE=$(python3 "$CHAT" --db "$CHAT_DB" adduser alice --display ありす --password password1 | tail -1 | tr -d ' ')
+BOB=$(python3 "$CHAT" --db "$CHAT_DB" adduser bob --display ぼぶ --password password2 | tail -1 | tr -d ' ')
+python3 "$CHAT" --db "$CHAT_DB" addroom 雑談 > /dev/null
+python3 "$CHAT" --db "$CHAT_DB" addroom 連絡 > /dev/null
+
+# 無通信の接続を1秒で閉じさせる(使い回した接続が死んでいた場合の繋ぎ直しを確かめるため)
+python3 "$CHAT" --db "$CHAT_DB" serve --host 127.0.0.1 --port "$CHAT_PORT" --idle-timeout 1 \
+    > "$OUT/chat_server.log" 2>&1 &
+CHAT_PIDS="$!"
+python3 "$CHAT" --db "$CHAT_DB" serve --host 127.0.0.1 --port "$CHAT_TLS_PORT" \
+    --tls-cert "$OUT/server.pem" --tls-key "$OUT/server.key" \
+    > "$OUT/chat_tls_server.log" 2>&1 &
+CHAT_PIDS="$CHAT_PIDS $!"
+
+i=0
+while [ $i -lt 50 ]; do
+    if grep -q "起動しました" "$OUT/chat_server.log" 2>/dev/null \
+       && grep -q "起動しました" "$OUT/chat_tls_server.log" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+echo ""
+echo "===== chat_net_test ====="
+"$OUT/chat_net_test" "$CHAT_PORT" "$CHAT_TLS_PORT" "$OUT/ca.pem" "$ALICE" "$BOB"

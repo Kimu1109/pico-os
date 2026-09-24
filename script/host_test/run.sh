@@ -22,6 +22,9 @@
 #   chat_proto_test… チャットの応答(1行1件のTSV)の読み取りと本文のエスケープ
 #   chat_scene_test… チャットアプリのGUI配線(ChatLogViewの折り返し/スクロール、
 #                   ChatSceneの生成/解放、chat.cfgが無い/足りないときの案内)
+#   gb_emu_test   … Game Boyエミュ(GbEmu/GameBoyPad/GameBoyView)。テスト内で組み立てたROMで、
+#                   読み込みの断り方・セーブ(.sav)の往復・ボタン・不正な命令で落ちないこと・
+#                   変わった行だけdirtyにすること・操作パッドのタップ位置→ボタンを確認する
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -321,6 +324,22 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== chat_scene_test ====="
 run_or_die "$OUT/chat_scene_test"
+
+# --- Game Boyエミュ ---
+compile_or_die g++ $CXXFLAGS $INCLUDES -I"$ROOT/lib/peanut_gb/src" \
+    "$ROOT/script/host_test/gb_emu_test.cpp" \
+    "$ROOT/src/gb/Gb_Emu.cpp" \
+    "$ROOT/src/gui/widgets/apps/GameBoyPad.cpp" \
+    "$ROOT/src/gui/widgets/apps/GameBoyView.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    -o "$OUT/gb_emu_test"
+
+echo ""
+echo "===== gb_emu_test ====="
+run_or_die "$OUT/gb_emu_test"
 
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

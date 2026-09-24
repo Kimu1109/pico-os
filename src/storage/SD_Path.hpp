@@ -18,6 +18,9 @@ namespace PICO_Path {
         // カレンダーアプリが読む .ics の置き場所。直下の *.ics を全部読んで1つに重ねる
         // (Googleのカレンダーごとの非公開URLを1ファイルずつ置く想定。CalendarScene参照)
         constexpr const char* CALENDAR = "/calendar/";
+        // Game Boyエミュ(GameBoyScene)がROM選択の最初に開く場所。
+        // セーブ(.sav)はROMと同じ場所に「拡張子だけ変えた名前」で置く
+        constexpr const char* GB_ROMS = "/gb/";
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";

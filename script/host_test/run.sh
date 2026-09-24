@@ -19,6 +19,9 @@
 #                   繰り返し(RRULE/EXDATE/上書き予定)がどの日に出るか
 #   calendar_scene_test… カレンダーアプリのGUI配線(MonthGridのタップ位置→日付、
 #                   CalendarSceneの生成/解放、SDや.icsが無いときの案内)
+#   chat_proto_test… チャットの応答(1行1件のTSV)の読み取りと本文のエスケープ
+#   chat_scene_test… チャットアプリのGUI配線(ChatLogViewの折り返し/スクロール、
+#                   ChatSceneの生成/解放、chat.cfgが無い/足りないときの案内)
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -279,6 +282,45 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== calendar_scene_test ====="
 run_or_die "$OUT/calendar_scene_test"
+
+# --- チャット: 応答の読み取り ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/chat_proto_test.cpp" \
+    "$ROOT/src/chat/Chat_Proto.cpp" \
+    -o "$OUT/chat_proto_test"
+
+echo ""
+echo "===== chat_proto_test ====="
+run_or_die "$OUT/chat_proto_test"
+
+# --- チャットアプリのGUI配線 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/chat_scene_test.cpp" \
+    "$ROOT/src/gui/scenes/ChatScene.cpp" \
+    "$ROOT/src/gui/widgets/apps/ChatLogView.cpp" \
+    "$ROOT/src/chat/Chat_Proto.cpp" \
+    "$ROOT/src/chat/Chat_Client.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    -o "$OUT/chat_scene_test" -lssl -lcrypto
+
+echo ""
+echo "===== chat_scene_test ====="
+run_or_die "$OUT/chat_scene_test"
 
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

@@ -131,7 +131,10 @@
 
 - [x] ペイント
 - [x] スクラッチパッド
-- [ ] チャットツール
+- [x] チャットツール
+  - [x] 自前のチャットサーバ(Raspberry Pi、Let's EncryptでHTTPS)
+  - [x] Webクライアント
+  - [x] pico-osのアプリ(部屋の一覧/発言/送信)
 - [x] マインスイーパー
 - [x] オセロ風
 - [ ] テトリス風
@@ -449,7 +452,7 @@ CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォ
 
 | # | 項目 | 現状 |
 |---|---|---|
-| 8 | セカンダリアプリ開発 | 部品は存在するが、アプリ本体のコードは無い。[7](#7-標準アプリ開発-1)が一巡してから。カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示(`CalendarScene`、SDの`/calendar/*.ics`を読む)・取得元URLからの取得(`Calendar_Sync`、`/calendar/sources.cfg`、HTTPS対応)まで入った(Google CalendarはOAuthではなく非公開のiCal URLで読む方針。`CLAUDE.md`参照)。ペイントはLuaアプリ(`pc/sdcard/lua/apps/ペイント/`)として実装済み: ペン/消しゴム/直線/四角形・楕円(輪郭/塗りつぶし)/塗りつぶし(バケツ)/色(`ColorDialog`)/太さ/元に戻す/新規/`.pimg`の保存(`FileSaveDialog`)・読込(`FileSelectDialog`)。描画の中身は`CanvasRaster`(C++)側に足した |
+| 8 | セカンダリアプリ開発 | 部品は存在するが、アプリ本体のコードは無い。[7](#7-標準アプリ開発-1)が一巡してから。カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示(`CalendarScene`、SDの`/calendar/*.ics`を読む)・取得元URLからの取得(`Calendar_Sync`、`/calendar/sources.cfg`、HTTPS対応)まで入った(Google CalendarはOAuthではなく非公開のiCal URLで読む方針。`CLAUDE.md`参照)。ペイントはLuaアプリ(`pc/sdcard/lua/apps/ペイント/`)として実装済み: ペン/消しゴム/直線/四角形・楕円(輪郭/塗りつぶし)/塗りつぶし(バケツ)/色(`ColorDialog`)/太さ/元に戻す/新規/`.pimg`の保存(`FileSaveDialog`)・読込(`FileSelectDialog`)。描画の中身は`CanvasRaster`(C++)側に足した。チャットは自前のサーバ(`server/chat/`、Python標準ライブラリのみ、仕様は`CHAT_PROTOCOL.md`)+ Webクライアント + `ChatScene`(`/sys/chat.cfg`)として実装済み。Discordは自分のアカウントでの自動操作が規約違反でBot名義になるため見送った(`CLAUDE.md`「チャット」参照) |
 | 9 | GameBoyエミュ | コードなし |
 | 10 | 外部コントローラー | GPIO/UART連携のコードは無く、入力はタッチのみ |
 | 11 | Chiptuneを再生 | 音声出力・PWM/I2S関連のコードは無い |

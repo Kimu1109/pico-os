@@ -173,6 +173,9 @@ ICONS: list[IconSpec] = [
     IconSpec("undo",           str(ICON_DIR / "arrow-back-up.svg")),
     IconSpec("folder_open",    str(ICON_DIR / "folder-open.svg")),
     IconSpec("file_plus",      str(ICON_DIR / "file-plus.svg")),
+
+    # --- チャット(2026-09-24)。末尾へ足すこと(上の【重要】参照) ---
+    IconSpec("messages",       str(ICON_DIR / "messages.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

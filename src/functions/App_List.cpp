@@ -9,6 +9,7 @@
 #include "gui/scenes/SettingsScene.hpp"
 #include "gui/scenes/DictScene.hpp"
 #include "gui/scenes/CalendarScene.hpp"
+#include "gui/scenes/ChatScene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "lua/LuaPermissions.hpp"
 #include "lua/LuaAppScanner.hpp"
@@ -41,6 +42,8 @@ void AppFunctions::Setup(){
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
     Register("辞書", IconID::Language, &MakeScene<DictScene>);
     Register("カレンダー", IconID::Calendar, &MakeScene<CalendarScene>);
+    //自前のチャットサーバ(server/chat/)へ繋ぐ。接続先は /sys/chat.cfg
+    Register("チャット", IconID::Messages, &MakeScene<ChatScene>);
     // Luaバインディングの動作サンプル(pc/sdcard/lua/hello.lua参照)。
     // MakeLuaAppScene(LuaScene.hpp)がentry.permissionsをそのままLuaSceneへ渡すので、
     // ここでsd_outside_app_dirを立てるだけで済む(/img/hello.pimgを読むため)。

@@ -63,15 +63,16 @@ src/
   functions/                 「Xxx_Functions」名前空間群
   gui/
     icons/                  アイコンデータ(tabler_iconsから生成)
-    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene/CalendarScene等)
+    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene/CalendarScene/GameBoyScene等)
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
-      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView等)
+      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView/GameBoyView/GameBoyPad等)
       dialogs/              モーダルダイアログ
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
+  gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)。下記「ゲームボーイ」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
@@ -81,14 +82,16 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_sceneの27本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emuの28本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
+lib/peanut_gb/                 vendorしたPeanut-GB(Game Boyエミュ、ヘッダ1本・無改造)。詳細はlib/peanut_gb/README-pico-os.md
 pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripten)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
   web/shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
   sdcard/                     SDカードとして読まれるディレクトリ
+    gb/dmg-acid2.gb           ゲームボーイエミュの描画を確かめるテストROM(MIT。ライセンスはpc/sdcard/README.md)
     lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
     lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
 examples/doc.md                MarkdownView動作確認用サンプル文書
@@ -154,7 +157,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | 置き場所 | 何を入れるか | 中身 |
 |---|---|---|
 | `widgets/` | 汎用部品と基底 | `Widget` / `WidgetID` / `WidgetRegistry` + 下のカタログのうち専用でないもの |
-| `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` |
+| `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` / `ChatLogView` / `GameBoyView` / `GameBoyPad` 等 |
 | `widgets/systems/` | **OSのシェル部品**(特定アプリのものではない) | `Statusbar`(常駐オーバーレイ) / `AppGrid`(ランチャのタイル) |
 | `widgets/dialogs/` | モーダルダイアログ + オンスクリーンキーボード3種 | 下記「ダイアログ」参照 |
 | `widgets/interfaces/` | ミックスイン的インターフェース | `IBorderColor` / `IFontImplementation` / `ITextColor` / `ITextInputTarget` |
@@ -173,7 +176,7 @@ Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄)
 `LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
 
 **「子を持たず`render()`で直接描き、タップ位置から逆算する」型のウィジェット**が増えている:
-`AppGrid` / `ColorDialog` / `KeyboardNum` / `TabBar` / `AnalogClock` / `DurationPicker` / `MonthGrid`。
+`AppGrid` / `ColorDialog` / `KeyboardNum` / `TabBar` / `AnalogClock` / `DurationPicker` / `MonthGrid` / `GameBoyPad`。
 部品1つごとに`Button`を`new`しないのでヒープを食わず、上記`hit_transparent`の問題(表示用の子がタップを奪う)とも
 無縁になる。**格子状・多ボタンのUIを新設するときはまずこの型を検討すること。**
 
@@ -527,6 +530,58 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   送受信・未読・keep-alive・無通信で切られた後の繋ぎ直し・401を確かめる)、PCビルドの`--tap`で一覧→部屋→キーボード入力→送信まで確認した。
   **実機(RP2350 + BearSSL)とLet's Encryptの本物の証明書での接続は未確認**
 
+### ゲームボーイ (`src/gb/` / `GameBoyScene` / `lib/peanut_gb/`) (2026-09-24)
+
+SUMMARY.md #9。**エミュ本体は[Peanut-GB](https://github.com/deltabeard/Peanut-GB)**(MIT、C99のヘッダ1本、DMG専用)を
+`lib/peanut_gb/src/peanut_gb.h`へ無改造でvendorした(Luaと同じ`lib/<名前>/src/`の形なのでPlatformIOが自動で拾う。
+PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただけ。C++のままコンパイルできる)。
+
+- **選んだ理由**: ROMの読み出しがコールバック(置き場所をOS側で決められる)・1行ずつ描画を渡す(画面全体のバッファが要らない)・
+  RP2040でもフルスピード・MIT。比べたもの: Pico-GB(YouMakeTech、MIT。Peanut-GB+SPI液晶+SDで一番近い参考例、ROMはFlashへ書く)、
+  pico-peanutGB(GBC対応だがGPL-3でHDMI出力)、gb-rp2350(Rust)、gnuboy(GPL・重い)、SameBoy/Gambatte/mGBA(正確だが重すぎる)。
+- **`peanut_gb.h`の実装を取り込むのは`src/gb/Gb_Emu.cpp`だけ**(2箇所で取り込むと多重定義)。他は`GbEmu`クラスだけを見る。
+  `ENABLE_SOUND=0`(音はまだ出せない)、`PEANUT_GB_12_COLOUR=0`(4段階だけ)。
+- **ROMの置き場所は段階を分ける**。Peanut-GBはROMを1バイトずつコールバックで読むので、SDから都度読むことはできない。
+  - **第1段(実装済み)**: 256KB(`GbEmu::kMaxRomBytes`)までを**RAMへ丸ごと`malloc`**。ROMの大きさは2のべき乗なので、
+    境目は実質「256KBまで入る、512KB以上は入らない」(テトリス・Dr.マリオ32KB、マリオランド64KB、カービィ256KB)。
+    **実機で256KBを確保できるかは未確認**(OSのピーク約150KB + ROM + エミュ約23KB + セーブ最大32KBで、RP2350の520KBの中で際どい)。
+    確保できなければ`OutOfMemory`で断るだけで落ちない
+  - 第2段(未): 先頭16KB+直近のバンク数枚だけをRAMに持ち、無いバンクに当たったらSDから読む(1フレーム程度引っかかる)
+  - 第3段(未): SDからFlashの空き領域へ書き、XIPで読む(Pico-GBの方式)。ファームの実サイズとWi-Fi動作中のFlash書き込みの確認が要る
+- **エミュの状態・ROM・セーブは`load()`で確保し`unload()`で全部返す**。`GameBoyScene`は`onExit()`で`unload()`するので、
+  使っていない間は1バイトも持たない(シーン本体は約1.3KB、パス2本ぶん)。上へ別のシーンが載って戻ると同じROMを最初から起動し直す。
+- **Peanut-GBの誤り通知(`gb_error`)から戻ってはいけない**(戻ると`__builtin_unreachable()`へ落ちる)。
+  `GbEmu::runFrame()`の入口で`setjmp`し、`onError()`が`longjmp`で戻る。以降は`crashed()`で止まったまま
+  (シーンがエラーダイアログを1回出す)。ホストテストで不正な命令`0xD3`を踏ませて確認している。
+- **セーブ**: カートリッジRAMは`<ROM名>.sav`(拡張子だけ差し替え)。起動時に大きさが一致すれば読み、
+  **書き込みがあったときだけ**終了時(`unload()`)に一時ファイル→差し替えで書く。大きさの違う`.sav`は読まず上書きもしない。
+  **遊んでいる途中では保存しない**(SDへの書き込みでゲームが引っかかるため)。電源を落とす前に「戻る」を押す必要がある。
+  MBC3の時計(RTC)は合わせていない。
+- **画面(`GameBoyView`)**: 160x144を**1.5倍の240x216**(横幅ちょうど)で描く。最近傍で「2画素→3画素」。
+  - エミュ側は1画素2bitで詰めて持ち(5760B)、**行ごとに前回と比べて変わった行の範囲だけをdirtyにする**(静止画面なら液晶へ何も送らない)
+  - `writePixel()`を5万回呼ぶと実機で数十msかかるので、**`OSData::frame`(4bpp)のバッファへ直接書く**。
+    元の1バイト(4画素)→6画素(3バイト)の対応表を先に作り、1行は表を40回引いて`memcpy`するだけ。
+    4bppは左の画素が上位4bit、1行120バイト(LovyanGFXの`Panel_Sprite::drawPixelPreclipped`で確認)
+  - **描くのは`FlushDirty()`の合成の中(`PICO_GFX::isDirtyDeactivates`中)だけ**。`UpdateAll()`経由のrender()ではdirtyを積むだけで描かない
+    (描いても直後の合成でもう一度描くため)。合成の中でも**今のクリップ(`getClipRect()`)の内側しか書かない** —
+    バッファ直書きには`setClipRect()`が効かず、はみ出すと上に重なったダイアログの下を塗ってしまう
+  - 色は白/薄灰(7)/濃灰(8)/黒。パレットに緑は無いので本物の液晶の色にはしていない
+- **操作パッド(`GameBoyPad`)**: 下の84px。render()直描き型。十字キー(中心からの角度で8方向、tan22.5°≒5/12で斜めを判定、中心6pxは無反応)/
+  SELECT/START/A/B(近いほう)/ROM(別のROMを選ぶ)/戻る。**XPT2046は1点しか取れないので同時押しはできない**
+  (「十字キー+A」のようなジャンプ操作が要るゲームは厳しい。#10の外部コントローラーで解消する見込み)。
+  指を滑らせると押しているボタンが切り替わる。ROM/戻るはその上で離したときだけ反応する。
+- **速さ**: `onUpdate()`で`millis()`の差を積み、16.743msごとに1フレーム(1回に最大2フレーム、追いつけないぶんは捨てる=遅く動く)。
+  **5秒ごとに「実行したフレーム数/捨てたフレーム数」を`LOG_APP_DEBUG`へ出す**ので、実機の速さはこれで分かる。
+  PCビルドでは約299フレーム/5秒(=59.7フレーム/秒)で捨てはゼロ。**実機での速さは未計測**
+  (RP2040をオーバークロックした実例でフルスピードなので、RP2350の150MHzでも届く見込みだが、液晶への転送が
+  1.5倍表示で最大約11ms/フレームかかる点が効くかもしれない。足りなければ等倍表示・フレームスキップ・2コア目での転送を検討)。
+- **ROMの選択は開いた次のフレームで出す**(`Pending::OpenPicker`)。シーンの切り替えと同じフレームで半透明のダイアログを出すと、
+  ランチャの絵がダイアログの下に残る(「ブラウザのヘッダー」節の「ダイアログからダイアログへは1フレーム空ける」と同じ理由)。
+- 検証: `gb_emu_test`(run.sh。テストの中でヘッダと数命令だけのROMを組み立てる。読み込みの断り方・セーブの往復・JOYPでAが読めること・
+  不正な命令で落ちないこと・変わった行だけdirty・パッドの当たり判定)、PCビルドで`pc/sdcard/gb/dmg-acid2.gb`(描画のテストROM。正しければ笑顔)と
+  Blargg氏の`cpu_instrs`(リポジトリには含めていない)が正しく動くことを`--tap`/`--shot`で確認。
+  **市販ゲームのROMはリポジトリに含めない。**
+
 ### ClocksScene 実装詳細
 
 画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える1画面のアプリ
@@ -772,7 +827,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
-| 9 | GBエミュ | **未着手**。 |
+| 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
 | 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
 
@@ -876,6 +931,12 @@ ASanの通らないPCビルドのGUI経路——実際のLovyanGFX描画・フ�
 繰り返す/PCビルド固有のSDL・glibc・LovyanGFX_SDLパネル経路)との違いが原因の可能性があり、
 **実機で同じ「同一画面の往復を10回以上」というシナリオを踏んだことは無い**(実機計測は
 「シーンを跨いだ複数回の遷移」であり、「同じ2画面の往復」ではなかった)。
+
+**手がかり(2026-09-24)**: 増え方は**往復の回数ではなく、シーンに滞在したフレーム数に比例する**
+(1フレームあたり約1.3〜1.4KB)。同じ`InputTestScene`で「戻る」を押すまでを40フレーム→400フレームに
+延ばすと、残留が約49KB→約523KBになった。`GameBoyScene`でも、ROMを読まずにROM選択のダイアログを
+開いたままにしているだけで同じ割合で増える。**どの画面でも毎フレーム何かが確保されて返っていない**
+(= シーン遷移そのものではなく、毎フレームの処理のどこか)と見てよい。
 
 **未着手**: 原因の特定(候補: LovyanGFXのフォント/グリフキャッシュ、Task_Functions、
 Network_Functionsの再接続チェック、SDL側のイベント処理)、実機での再現確認、修正。
@@ -1930,7 +1991,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 - 組み込み制約(RAM/Flash)を常に意識し、PC向けC++の常識をそのまま持ち込まない。
 - 固定長バッファ/オブジェクトプール志向を優先し、安易な`new`/`delete`追加は避ける(MarkdownViewパターンを参照)。
 - ダイアログ系(ファイル選択/保存/色選択)は実装済みなので車輪の再発明をせず、既存クラス(`FileSaveDialog`/`FileSelectDialog`/`FileExplorer`)を拡張する形で提案する。
-- Lua組み込み・GBエミュ・外部コントローラ・Chiptune再生は土台が無いため、ゼロから設計相談する前提で臨む。
+- 外部コントローラ・Chiptune再生は土台が無いため、ゼロから設計相談する前提で臨む(Lua組み込みとGBエミュは着手済み。各節参照)。
 - 新しい画面を追加する話は`Scene`を継承して`onEnter()`でウィジェットを生成する形に寄せる。常駐させたいウィジェットは`AddOverlay()`。
 - 新規ダイアログ/ウィジェットは既存の骨格(`children_`保持、`setOnClose`コールバック、`setVisible(false)`終了)にトーンを合わせる。
 - コメント・ログは日本語、識別子は英語という言語使い分けを踏襲する。
@@ -1948,7 +2009,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、27本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、28本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

@@ -1,0 +1,13 @@
+{
+    "name": "peanut_gb",
+    "version": "0.0.0+d0bcca7",
+    "description": "Peanut-GB (single header Game Boy DMG emulator, vendored unmodified at commit d0bcca771c83a2638c93a9ae61f3d51f226dc905). See README-pico-os.md.",
+    "keywords": ["gameboy", "emulator"],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deltabeard/Peanut-GB.git"
+    },
+    "license": "MIT",
+    "frameworks": "arduino",
+    "platforms": "*"
+}

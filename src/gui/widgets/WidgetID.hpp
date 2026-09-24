@@ -21,6 +21,8 @@ enum class WidgetType : uint8_t {
     FileExplorer,
     FileSaveDialog,
     FileSelectDialog,
+    GameBoyPad,
+    GameBoyView,
     GridContainer,
     Icon,
     Image,

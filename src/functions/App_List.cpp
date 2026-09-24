@@ -10,6 +10,7 @@
 #include "gui/scenes/DictScene.hpp"
 #include "gui/scenes/CalendarScene.hpp"
 #include "gui/scenes/ChatScene.hpp"
+#include "gui/scenes/GameBoyScene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "lua/LuaPermissions.hpp"
 #include "lua/LuaAppScanner.hpp"
@@ -44,6 +45,8 @@ void AppFunctions::Setup(){
     Register("カレンダー", IconID::Calendar, &MakeScene<CalendarScene>);
     //自前のチャットサーバ(server/chat/)へ繋ぐ。接続先は /sys/chat.cfg
     Register("チャット", IconID::Messages, &MakeScene<ChatScene>);
+    //Game Boy(DMG)エミュ。ROMはSDの /gb/ に置く(256KBまで。SUMMARY.md #9)
+    Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
     // Luaバインディングの動作サンプル(pc/sdcard/lua/hello.lua参照)。
     // MakeLuaAppScene(LuaScene.hpp)がentry.permissionsをそのままLuaSceneへ渡すので、
     // ここでsd_outside_app_dirを立てるだけで済む(/img/hello.pimgを読むため)。

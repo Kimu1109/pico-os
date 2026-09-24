@@ -130,6 +130,8 @@ target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"
     "${PICOOS_ROOT}/src"
     "${PICOOS_ROOT}/lib/lua/src"
+    # Peanut-GB(ヘッダ1本。実装の取り込みはsrc/gb/Gb_Emu.cppだけ。lib/peanut_gb/README-pico-os.md)
+    "${PICOOS_ROOT}/lib/peanut_gb/src"
     "${LOVYANGFX_DIR}/src")
 
 # LuaのCソースをC++コード([-fpermissive]無しで]警告無く混在ビルドできるよう、

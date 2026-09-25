@@ -1,6 +1,7 @@
 -- チップチューン音源の動作確認。
 -- 鍵盤(1オクターブ+1音)を押すとチャンネル1で鳴る。波形と減衰はボタンで切り替え。
--- 「デモ曲」は4チャンネル(メロディ/アルペジオ/ベース/ドラム)の短いループをloop(dt)で並べて鳴らす。
+-- 「デモ曲」は同じフォルダの demo.mml(pico-os MML、MUSIC_FORMAT.md)を pico.music_play で鳴らす。
+-- 曲を鳴らしながら鍵盤を押すと、鍵盤の音(効果音)がチャンネル1を借り、離すと曲へ返す。
 -- アンプがつながっていなくても同じように動く(音が出ないだけ。上の1行で分かる)。
 
 local cx, cy, cw, ch = pico.content_rect()
@@ -120,62 +121,19 @@ pico.on(keys, "press_end", function() playKey(nil) end)
 pico.on(keys, "press_out", function() playKey(nil) end)
 
 -- ---- デモ曲 ----
--- 1文字=8分音符(150ms)。音名=鳴らす、"-"=前の音を伸ばす、"."=休み
-local STEP_MS = 150
-local TRACKS = {
-    { ch = 1, opts = { wave = "pulse25", volume = 12, envelope = -6 },
-      notes = "E5 - G5 - A5 - G5 E5 D5 - E5 - C5 - - - E5 - G5 - A5 - C6 - B5 - G5 - A5 - - -" },
-    { ch = 2, opts = { wave = "pulse12", volume = 6, envelope = -2 },
-      notes = "C4 E4 G4 E4 A3 C4 E4 C4 F3 A3 C4 A3 G3 B3 D4 B3 C4 E4 G4 E4 A3 C4 E4 C4 F3 A3 G3 B3 C4 E4 G4 E4" },
-    { ch = 3, opts = { wave = "triangle", volume = 15 },
-      notes = "C3 - C3 - A2 - A2 - F2 - F2 - G2 - G2 - C3 - C3 - A2 - A2 - F2 - G2 - C3 - - -" },
-    { ch = 4, drums = true,
-      notes = "K h S h K h S h K h S h K h S h K h S h K h S h K h S h K K S S" },
-}
--- ドラム: ノイズの粗さ(周波数)と長さで叩き分ける
-local DRUMS = {
-    K = { 600,  120, { wave = "noise", volume = 13, envelope = -1 } },
-    S = { 5000, 140, { wave = "noise", volume = 10, envelope = -1 } },
-    h = { 12000, 30, { wave = "noise_short", volume = 4 } },
-}
-
-for _, t in ipairs(TRACKS) do
-    t.steps = {}
-    for tok in t.notes:gmatch("%S+") do t.steps[#t.steps + 1] = tok end
-end
-local SONG_LEN = #TRACKS[1].steps
-
-local playing = false
-local step = 0
-local elapsed = 0
-
-local function playStep(s)
-    for _, t in ipairs(TRACKS) do
-        local tok = t.steps[s]
-        if t.drums then
-            local d = DRUMS[tok]
-            if d then pico.sound_play(t.ch, d[1], d[2], d[3]) end
-        elseif tok == "." then
-            pico.sound_stop(t.ch)
-        elseif tok ~= "-" then
-            -- 後ろに続く"-"の数だけ伸ばす(最後は少し切って音の粒を立てる)
-            local len = 1
-            while t.steps[s + len] == "-" do len = len + 1 end
-            pico.sound_play(t.ch, pico.note_freq(tok), len * STEP_MS - 20, t.opts)
-        end
-    end
-end
-
+-- 曲は2コア目のシーケンサーが鳴らすので、ここでは始めて/止めるだけ(テンポも揺れない)
 local song_btn
+local function refreshSongButton()
+    pico.set(song_btn, "text", pico.music_playing() and "デモ曲を止める" or "デモ曲を再生")
+end
 song_btn = button(cx + 2, KEY_TOP + KEY_H + 26, 130, "デモ曲を再生", function()
-    playing = not playing
-    if playing then
-        step, elapsed = 0, STEP_MS   -- 次のloop()ですぐ1拍目を鳴らす
-        pico.set(song_btn, "text", "デモ曲を止める")
+    if pico.music_playing() then
+        pico.music_stop()
     else
-        pico.sound_stop()
-        pico.set(song_btn, "text", "デモ曲を再生")
+        local ok, err = pico.music_play("/lua/apps/チップチューン/demo.mml")
+        if not ok then pico.show_error("デモ曲を読めません\n" .. err) end
     end
+    refreshSongButton()
 end)
 
 local status_timer = 1000
@@ -185,13 +143,6 @@ function loop(dt)
         status_timer = 0
         pico.set(status, "text", pico.sound_available() and "音: 鳴らせます"
                                    or "音: アンプ未接続(鳴りません)")
-    end
-
-    if not playing then return end
-    elapsed = elapsed + dt
-    while elapsed >= STEP_MS do
-        elapsed = elapsed - STEP_MS
-        step = step % SONG_LEN + 1
-        playStep(step)
+        refreshSongButton()
     end
 end

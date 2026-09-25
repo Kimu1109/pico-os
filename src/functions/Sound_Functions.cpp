@@ -2,13 +2,17 @@
 #include "functions/Config_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
+#include "sound/Mml_Compiler.hpp"
+#include "sound/Music_Player.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
 
 #include <Arduino.h>
 #include <I2S.h>
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
+#include <new>
 
 using namespace SoundFunctions;
 
@@ -26,13 +30,16 @@ namespace {
     std::atomic<bool>     core1_failed{false};  // 2コア目→1コア目: begin()に失敗した
     std::atomic<uint8_t>  core1_active{0};      // 2コア目→1コア目: 鳴っているチャンネル
     std::atomic<uint32_t> core1_processed{0};   // 2コア目→1コア目: 音源へ渡し終えたコマンドの数
+    std::atomic<bool>     core1_music{false};   // 2コア目→1コア目: 曲が鳴っている
 
     // --- コマンドの列(1コア目が積み、2コア目が取り出す。1対1なのでロック無しで足りる) ---
-    enum class CmdType : uint8_t { Play, Stop, StopAll };
+    enum class CmdType : uint8_t { Play, Stop, StopAll, MusicPlay, MusicStop };
     struct Command {
         CmdType type;
         uint8_t ch;
         ChipSynth::Note note;
+        const uint8_t* music = nullptr;     // MusicPlay: 演奏データ(置き場の片方)
+        uint16_t music_size = 0;
     };
     Command queue[kCommandQueueSize];
     std::atomic<uint32_t> q_head{0};    // 積んだ数(1コア目だけが書く)
@@ -61,6 +68,20 @@ namespace {
     unsigned long last_detect_ms = 0;
     bool logged_running = false;        // ログを出した時点の core1_running
     bool logged_failed = false;
+
+    // --- 曲(1コア目側) ---
+    // 演奏データの置き場は2つ。2コア目が片方を読んでいる間に、もう片方へ次の曲を書く。
+    // 最初に曲を鳴らすときに確保し、以降は持ち続ける(曲を使わないならRAMを使わない)
+    struct MusicWork {
+        uint8_t slots[2][kMusicDataBytes];
+        MmlCompiler compiler;
+    };
+    MusicWork* music_work = nullptr;
+    int music_current = -1;                 // 2コア目へ最後に渡した置き場(止めたら-1)
+    uint32_t slot_release_seq[2] = {0, 0};  // この数のコマンドが処理されたら、その置き場は空く
+    uint32_t music_cmd_seq = 0;             // 最後に積んだ曲のコマンドが何番目か
+    bool music_cmd_play = false;            // それが「鳴らす」だったか
+    FixedString<PICO_STR_M> music_title;
 
     bool ReadDetectPin(){
         return digitalRead(AUDIO_DETECT) == LOW;
@@ -135,6 +156,8 @@ namespace {
 
     I2S i2s(OUTPUT);
     ChipSynth::Engine engine(kSampleRate);
+    MusicPlayer player(kSampleRate);
+    uint8_t borrowed = 0;               // 効果音が借りているチャンネル(曲はここに触らない)
 
     bool running = false;
     bool failed = false;
@@ -208,9 +231,30 @@ namespace {
             t++;
             q_tail.store(t, std::memory_order_release);
             switch(cmd.type){
-                case CmdType::Play:    engine.play(cmd.ch, cmd.note); break;
-                case CmdType::Stop:    engine.stop(cmd.ch); break;
-                case CmdType::StopAll: engine.stopAll(); break;
+                case CmdType::Play:
+                    //効果音。曲が鳴っていても、このチャンネルを借りて鳴らす
+                    engine.play(cmd.ch, cmd.note);
+                    borrowed |= (uint8_t)(1u << cmd.ch);
+                    break;
+                case CmdType::Stop:
+                    //効果音を止める。曲が使っているチャンネルは止めない
+                    if((borrowed & (1u << cmd.ch)) || !player.playing()) engine.stop(cmd.ch);
+                    borrowed &= (uint8_t)~(1u << cmd.ch);
+                    break;
+                case CmdType::StopAll:
+                    //効果音を全部止める。曲が鳴っていなければ全チャンネル
+                    if(!player.playing()) engine.stopAll();
+                    else for(int ch = 0; ch < kChannels; ch++) if(borrowed & (1u << ch)) engine.stop((uint8_t)ch);
+                    borrowed = 0;
+                    break;
+                case CmdType::MusicPlay:
+                    player.setBorrowed(borrowed);
+                    player.start(engine, cmd.music, cmd.music_size);
+                    break;
+                case CmdType::MusicStop:
+                    player.setBorrowed(borrowed);
+                    player.stop(engine);
+                    break;
             }
             processed++;
             any = true;
@@ -225,7 +269,7 @@ namespace {
         const uint32_t kMaxPerCall = (uint32_t)kBufferWords * kBufferCount;
         for(uint32_t i = 0; i < kMaxPerCall; i++){
             if(chunk_pos == chunk_len){
-                engine.render(chunk, kChunk);
+                player.render(engine, chunk, kChunk);
                 chunk_pos = 0;
                 chunk_len = kChunk;
             }
@@ -241,7 +285,7 @@ namespace {
         const uint64_t acc = (uint64_t)(now_ms - last_step_ms) * kSampleRate + sample_frac;
         last_step_ms = now_ms;
         sample_frac = (uint32_t)(acc % 1000);
-        engine.render(nullptr, (size_t)(acc / 1000));
+        player.render(engine, nullptr, (size_t)(acc / 1000));
     }
 }
 
@@ -343,6 +387,88 @@ bool SoundFunctions::IsPlaying(){
 uint8_t SoundFunctions::ActiveChannels(){ return core1_active.load(std::memory_order_acquire); }
 uint32_t SoundFunctions::DroppedCommands(){ return dropped.load(std::memory_order_relaxed); }
 
+// ---- 曲 ----
+
+namespace {
+    bool SetError(MmlResult* result, const char* msg){
+        if(result){
+            *result = MmlResult();
+            result->message.assign(msg);
+        }
+        return false;
+    }
+
+    bool CompileAndPlay(MmlLineSource& src, MmlResult* result, const char* fallback_title){
+        if(!music_work){
+            music_work = (MusicWork*)malloc(sizeof(MusicWork));
+            if(!music_work) return SetError(result, "曲を読むためのメモリが足りません");
+            new (&music_work->compiler) MmlCompiler();
+        }
+
+        //2コア目が読んでいない置き場を選ぶ
+        const uint32_t done = core1_processed.load(std::memory_order_acquire);
+        int slot = -1;
+        for(int s = 0; s < 2; s++){
+            if(s == music_current) continue;
+            if((int32_t)(done - slot_release_seq[s]) >= 0){ slot = s; break; }
+        }
+        if(slot < 0) return SetError(result, "前の曲の片付けが済んでいません。少し待ってから試してください");
+
+        MmlResult local;
+        MmlResult& r = result ? *result : local;
+        if(!music_work->compiler.compile(src, music_work->slots[slot], kMusicDataBytes, r)) return false;
+
+        Command cmd{CmdType::MusicPlay, 0, {}};
+        cmd.music = music_work->slots[slot];
+        cmd.music_size = r.size;
+        if(!Push(cmd)){
+            r.ok = false;
+            r.message.assign("要求が多すぎて曲を鳴らせませんでした");
+            return false;
+        }
+        const uint32_t seq = q_head.load(std::memory_order_relaxed);
+        if(music_current >= 0) slot_release_seq[music_current] = seq;
+        music_current = slot;
+        //使っている置き場は music_current で除外する。空く時期は止めるか差し替えたときに決まる
+        music_cmd_seq = seq;
+        music_cmd_play = true;
+
+        music_title.assign(r.title.empty() ? fallback_title : r.title.c_str());
+        if(!r.warning.empty()) LOG_SYS_WARN("Sound: %s", r.warning.c_str());
+        return true;
+    }
+}
+
+bool SoundFunctions::MusicPlayFile(const char* path, MmlResult* result){
+    MmlFileSource src(path);
+    if(!src.ok()) return SetError(result, "曲のファイルを開けません");
+    const char* slash = strrchr(path, '/');
+    return CompileAndPlay(src, result, slash ? slash + 1 : path);
+}
+
+bool SoundFunctions::MusicPlayText(const char* text, size_t len, MmlResult* result){
+    MmlTextSource src(text, len);
+    return CompileAndPlay(src, result, "");
+}
+
+void SoundFunctions::MusicStop(){
+    if(music_current < 0) return;
+    if(!Push(Command{CmdType::MusicStop, 0, {}})) return;
+    const uint32_t seq = q_head.load(std::memory_order_relaxed);
+    slot_release_seq[music_current] = seq;
+    music_current = -1;
+    music_cmd_seq = seq;
+    music_cmd_play = false;
+}
+
+bool SoundFunctions::MusicPlaying(){
+    const uint32_t done = core1_processed.load(std::memory_order_acquire);
+    if((int32_t)(done - music_cmd_seq) < 0) return music_cmd_play;
+    return core1_music.load(std::memory_order_acquire);
+}
+
+const char* SoundFunctions::MusicTitle(){ return music_title.c_str(); }
+
 // ================================================================
 // 2コア目
 // ================================================================
@@ -362,6 +488,9 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     if(!running) AdvanceByTime(now_ms);
 
     bool busy = DrainCommands();
+    //効果音が鳴り終わったチャンネルは曲へ返す(曲は次の音符から鳴らす)
+    borrowed &= engine.activeMask();
+    player.setBorrowed(borrowed);
     const uint8_t vol = master_volume.load(std::memory_order_acquire);
     if(vol != engine.masterVolume()) engine.setMasterVolume(vol);
 
@@ -374,6 +503,7 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
 
     //この順(チャンネル→渡し終えた数)で書く。IsPlaying()参照
     core1_active.store(engine.activeMask(), std::memory_order_release);
+    core1_music.store(player.playing(), std::memory_order_release);
     core1_processed.store(processed, std::memory_order_release);
     return busy;
 }

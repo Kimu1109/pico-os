@@ -945,6 +945,29 @@ int main(){
               "音: 音を使ったアプリを閉じると全部止まる");
     }
 
+    // ---- 曲(pico.music_play_text / music_play / music_stop / music_playing) ----
+    {
+        {
+            LuaEngine mus(200 * 1024);
+            lua_register(mus.raw(), "check", l_check);
+            const bool ok = mus.Run(R"LUA(
+                local ok, err = pico.music_play_text("A c v99")
+                check(ok == nil and err == "1行5列: v の後ろは0〜15です", "pico.music_play_text: 誤りは nil, 行列つきの理由")
+                check(pico.music_playing() == false, "pico.music_playing: 読めなかったときは鳴らない")
+                check(pico.music_play_text("A L l8 c d e f") == true, "pico.music_play_text: 読めたら true")
+                check(pico.music_playing() == true, "pico.music_playing: 頼んだ直後から true")
+                local ok2, err2 = pico.music_play("/music/nothing.mml")
+                check(ok2 == nil and type(err2) == "string", "pico.music_play: 開けなければ nil, 理由")
+            )LUA", "music_test");
+            check(ok, "曲: スクリプトの実行が成功する");
+            SoundFunctions::Core1StepAt(0);
+            check(SoundFunctions::MusicPlaying(), "曲: 2コア目が鳴らしている");
+        }
+        //アプリを閉じると曲も止まる
+        SoundFunctions::Core1StepAt(0);
+        check(!SoundFunctions::MusicPlaying(), "曲: 曲を使ったアプリを閉じると止まる");
+    }
+
     // ---- pico.list_add / pico.list_clear(ScrollList/DropdownMenu) / pico.tab_add(TabBar) ----
     {
         const bool ok = engine.Run(R"LUA(

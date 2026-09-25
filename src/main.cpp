@@ -8,6 +8,7 @@
 #include "functions/IME_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Network_Functions.hpp"
+#include "functions/Sound_Functions.hpp"
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Test_Functions.hpp"
@@ -46,6 +47,7 @@ void setup() {
     KeyboardFunctions::Setup(); //キーボード3種もAddOverlay()される
     IME_Functions::Setup();
     TimeFunctions::Setup();
+    SoundFunctions::Setup(); //sound.cfgを読むのでSDより後
 
     TestFunctions::Setup();
 
@@ -80,4 +82,6 @@ void loop() {
     LogFunctions::Update();
     TimeFunctions::Update();
     NetworkFunctions::Update();
+    //I2Sのバッファ(約90ms)へ次のサンプルを足す。これより長くloop()が止まると音が途切れる
+    SoundFunctions::Update();
 }

@@ -25,6 +25,9 @@
 #   gb_emu_test   … Game Boyエミュ(GbEmu/GameBoyPad/GameBoyView)。テスト内で組み立てたROMで、
 #                   読み込みの断り方・セーブ(.sav)の往復・ボタン・不正な命令で落ちないこと・
 #                   変わった行だけdirtyにすること・操作パッドのタップ位置→ボタンを確認する
+#   sound_test    … 音声出力(SoundFunctions)。アンプの検出(ばたつきを採らない)、刺さっている間だけ
+#                   I2Sを動かすこと、未接続の間も音が時間どおりに進み刺し直すと続きから鳴ること、
+#                   矩形波の中身、sound.cfg(output=off/volume)、I2Sを開始できなかったとき
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -341,6 +344,16 @@ echo ""
 echo "===== gb_emu_test ====="
 run_or_die "$OUT/gb_emu_test"
 
+# --- 音声出力 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/sound_test.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
+    -o "$OUT/sound_test"
+
+echo ""
+echo "===== sound_test ====="
+run_or_die "$OUT/sound_test"
+
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calc_eval_test.cpp" \
@@ -568,6 +581,7 @@ run_or_die "$OUT/lua_alloc_budget_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -625,6 +639,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_scene_test.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
@@ -682,6 +697,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaAppScanner.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \

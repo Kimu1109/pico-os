@@ -2,7 +2,7 @@
 
 > このファイルは `Kimu1109/pico-os` リポジトリ直下に置く、Claude Code向けのプロジェクト背景資料。
 > 元はClaude.aiのProject knowledgeとして管理されていた内容(2026-09-06時点情報)を統合したもの。
-> **最終同期: 2026-09-24(実コードと突き合わせ済み)。**
+> **最終同期: 2026-09-25(実コードと突き合わせ済み)。**
 > **一次情報源は常にこのリポジトリのコードと `SUMMARY.md`。このファイルは「相談の前提を素早く掴むための地図」であり、
 > 実装と乖離があれば実コード側を信じること。**
 
@@ -28,6 +28,7 @@ Raspberry Pi Pico 2 W (RP2350, `rpipico2w`) 上で動く自作タッチGUI OS。
 | SPI0(TFT+タッチ共有) | SCK=18, MOSI=19, MISO=16 / TFT: CS=17, DC=20, RST=21 / TOUCH: CS=13, IRQ=9 |
 | SPI1(SD専用) | CS=15, SCK=10, MOSI=11, MISO=12, 10MHz |
 | バックライト | TFT_LED=22 |
+| 音声(I2S) | MAX98357A: BCLK=2, LRCLK=3(=BCLK+1固定), DIN=4 / 検出=5(アンプ側でGND、内部プルアップ) / 休止(SD)=6(任意)。VINは5V(VBUS/VSYS) |
 | TFT_MAX_SPEED | 80MHz |
 
 画面/カラー定数は `src/consts.hpp` に集約(`SCREEN_WIDTH=240`, `SCREEN_HEIGHT=320`, PICO-8風16色パレット `PICO_BLACK`〜`PICO_WHITE`、既定は `PICO_BACKGROUND=15` / `PICO_FORECOLOR=0`)。
@@ -82,13 +83,13 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emuの28本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/soundの29本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
 lib/peanut_gb/                 vendorしたPeanut-GB(Game Boyエミュ、ヘッダ1本・無改造)。詳細はlib/peanut_gb/README-pico-os.md
 pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripten)。`src/`は実機と同一のまま使う
-  compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/LGFX設定/タッチ)
+  compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/I2S/LGFX設定/タッチ)
   web/shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
   sdcard/                     SDカードとして読まれるディレクトリ
     gb/dmg-acid2.gb           ゲームボーイエミュの描画を確かめるテストROM(MIT。ライセンスはpc/sdcard/README.md)
@@ -130,10 +131,11 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | UTF8_Functions | UTF-8のエンコード/デコード(文字列操作は`FixedString`側の担当) |
 | HitBox_Functions | 当たり判定のヘルパ |
 | Test_Functions | フォントカバレッジ等の起動時セルフチェック |
+| Sound_Functions | 音声出力(I2S)。アンプの抜き差しの検出・刺さっている間だけI2Sを動かす・動作確認用の矩形波。下記「音声出力」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
 
 ### 起動・ループ (`main.cpp`)
-`setup()`: GFX→SD→Log→Touch→Task→Network→Keyboard→IME→Time→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
+`setup()`: GFX→SD→Log→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
 `loop()`: Touch更新 → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network更新、という単純なポーリングループ。
 
@@ -582,6 +584,44 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
   Blargg氏の`cpu_instrs`(リポジトリには含めていない)が正しく動くことを`--tap`/`--shot`で確認。
   **市販ゲームのROMはリポジトリに含めない。**
 
+### 音声出力 (`src/functions/Sound_Functions`) (2026-09-25)
+
+SUMMARY.md #11の第1段。**出力の土台だけ**で、音源(チップチューンの合成)はまだ無い(動作確認用の矩形波`Beep()`のみ)。
+
+- **配線はI2SのD級アンプ MAX98357A**(ピンは上の「ハードウェア構成」)。PWM+RCフィルタも検討したが、
+  3.3Vの電源ノイズ(Wi-FiとSPIの液晶が同じ基板で動いている)がそのまま音に乗るため見送った。
+  アンプの電源は**3V3ではなく5V**(スピーカーの電流の揺れを液晶/Wi-Fiの電源へ乗せないため)。
+  - arduino-picoの`I2S`はPIOで動き、**LRCLKはBCLK+1に固定**。GP14/15はGP15がSDのCSなので使えず、
+    ADCの使えるGP26〜28は外部コントローラー(#10)用に残して GP2/3/4 にした。
+- **I2Sは一方通行なので、アンプの有無は信号線からは分からない**。検出用に1本(GP5)足し、アンプ側でGNDへ落とす。
+  内部プルアップで読んで LOW=接続。MAX98357AのSD端子の電圧で見分ける案は、チップ内部の100kΩと基板の1MΩの
+  分圧で刺さっていても外れていてもLOW付近になるため使えない。
+  - 100msごとに読み、**3回続けて同じ値のときだけ採用**(抜き差しの瞬間のばたつき)。起動時だけは待たずに採用する。
+- **つながっていないときは「鳴らさないだけ」で、呼び出しは全て受け付ける**(アプリやLuaは分岐しなくてよい)。
+  鳴っていることになっている音は`millis()`で進むので、**途中で刺すとその時点の続きから鳴る**。
+  鳴らせる間は**I2Sが引き取ったサンプル数**が時計になる(時間では進めない)。
+- **I2Sのバッファ(256ワード×8本 = 約93ms / 8KB)とPIOは、鳴らせる間だけ持つ**。未接続や`output = off`の間は
+  `end()`で返し、休止端子(GP6)もLOWにする。`begin()`に失敗したら刺し直すまで試し直さない。
+- 流すのは`loop()`の`SoundFunctions::Update()`から(`write(int32_t, false)`で空いた分だけ)。
+  **約93msより長く`loop()`が止まると途切れる**(TLSのハンドシェイク等)。合成を2コア目(`setup1()/loop1()`)へ
+  移すのは音源を入れる段で。
+- 22050Hz / 16bit / 左右同値。音量100の振幅は`kMaxAmplitude = 12000`(チャンネルを重ねる余地を残してある)。
+- 設定は`/sys/sound.cfg`(無くてよい): `output = auto | off`、`volume = 0〜100`(既定50)。`SetOutput()`/`SetVolume()`は
+  今だけ切り替える(ファイルへは書かない。設定画面から変える話は未)。
+- ステータスバー: 鳴らせる=スピーカー、`off`=消音のスピーカー、未接続=スピーカー+赤のX(SD/Wi-Fiと同じ組み立て方)。
+  アイコンは元から`icons_data.h`にあった`VolumeHigh`/`VolumeOff`を使った(新規追加なし)。
+- 動作確認: 入力テスト画面の「テスト音」(880Hz 300ms)、Luaの`pico.beep(freq, ms)`/`pico.sound_available()`。
+- **PC/Webビルド**: `pc/compat/I2S.h`がSDLの音声出力で置き換える(`src/`は同じ)。アンプの検出ピンは、
+  `pc/compat/Arduino.h`の`digitalRead()`へ差し込めるようにした`PicoPcGpio::read_hook`で代わりに答える
+  (音声デバイスを開けたら「刺さっている」)。`/sys/sound.cfg`の`pc-sound-state = auto | connected | disconnected`
+  か環境変数`PICOOS_SOUND_STATE`(Webは`?sound=`)で固定できる。ヘッドレスなら`SDL_AUDIODRIVER=disk`で
+  `SDL_DISKAUDIOFILE`へ生の音(22050Hz/16bit/ステレオ)を書き出せるので、波形を数値で確かめられる。
+  Webはブラウザが利用者の操作までAudioContextを止めるので、`shell.html`が最初の操作で`resume()`する。
+- 検証: `sound_test`(run.sh。`stubs/I2S.h`は書かれたワードを溜めるだけ、`consume()`で「送った」ことにする)、
+  PCビルドで`SDL_AUDIODRIVER=disk`の出力が300ms・約880Hz・左右同値になることを確認。
+  **実機(arduino-picoのI2S・MAX98357A)では未確認**(このリモート環境には実機もRP2350のボード定義も無い)。
+  **Webビルドも未確認**(emsdkが無い)。
+
 ### ClocksScene 実装詳細
 
 画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える1画面のアプリ
@@ -694,7 +734,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 
 - **`src/` のコードは実機とまったく同じものを使う**。差し替えているのは実機ライブラリだけで、
   `pc/compat/` をインクルードパスの先頭に置いて `Arduino.h`/`SPI.h`/`WiFi.h`/`SdFat.h`/
-  `XPT2046_Touchscreen.h` を置き換える(`script/host_test/stubs` と同じ考え方)。
+  `XPT2046_Touchscreen.h`/`I2S.h` を置き換える(`script/host_test/stubs` と同じ考え方)。
 - **例外は2ファイルだけ**: `src/config/LGFX_Config.hpp` と `src/functions/Touch_Functions.hpp` が
   `#if defined(PICOOS_PC)` で `pc/compat/` 側(`<config/LGFX_Config_PC.hpp>` /
   `<functions/Touch_Functions_PC.hpp>`)を取り込む。
@@ -709,9 +749,9 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   | `millis()` | 26 | `steady_clock`の経過ms(起動時刻を原点にする) |
   | `constrain()` | 5 | テンプレート関数 |
   | `Serial.*` | 5 | 標準出力へ |
-  | `pinMode()` | 4 | 空実装 |
+  | `pinMode()` | 6 | 空実装 |
   | `map()` | 2 | そのまま計算 |
-  | `digitalWrite()`/`digitalRead()` | 各1 | 空実装 / 常に`HIGH` |
+  | `digitalWrite()`/`digitalRead()` | 4 / 2 | 空実装 / 既定は`HIGH`(`PicoPcGpio::read_hook`で差し込める。音声のアンプ検出が使う) |
 
   **`min`/`max`/`constrain`はマクロではなくテンプレート関数にしてある。** 実機のArduinoは
   マクロだが、マクロのままだと`std::min`や標準ライブラリ内部の`min`を食い荒らして
@@ -829,7 +869,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
-| 11 | Chiptune音声再生 | **未着手**。音声出力・PWM/I2S関連コードなし。 |
+| 11 | Chiptune音声再生 | **第1段(出力の土台)まで**: I2S(MAX98357A)への出力・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_available/beep`。**音源(チップチューンの合成・シーケンサー)・2コア目での合成・曲の形式は未**(下記「音声出力」参照)。 |
 
 **#7は完了しており、#5(Lua)の前提として十分な実例が揃った。** Lua APIの仕様は「C++で標準アプリを
 書いてみて必要になったもの」から逆算するのが確実で、`MarkdownScene`/`ClocksScene`/`CalculatorScene`/
@@ -1991,7 +2031,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 - 組み込み制約(RAM/Flash)を常に意識し、PC向けC++の常識をそのまま持ち込まない。
 - 固定長バッファ/オブジェクトプール志向を優先し、安易な`new`/`delete`追加は避ける(MarkdownViewパターンを参照)。
 - ダイアログ系(ファイル選択/保存/色選択)は実装済みなので車輪の再発明をせず、既存クラス(`FileSaveDialog`/`FileSelectDialog`/`FileExplorer`)を拡張する形で提案する。
-- 外部コントローラ・Chiptune再生は土台が無いため、ゼロから設計相談する前提で臨む(Lua組み込みとGBエミュは着手済み。各節参照)。
+- 外部コントローラは土台が無いため、ゼロから設計相談する前提で臨む(Lua組み込み・GBエミュ・音声出力は着手済み。各節参照)。
 - 新しい画面を追加する話は`Scene`を継承して`onEnter()`でウィジェットを生成する形に寄せる。常駐させたいウィジェットは`AddOverlay()`。
 - 新規ダイアログ/ウィジェットは既存の骨格(`children_`保持、`setOnClose`コールバック、`setVisible(false)`終了)にトーンを合わせる。
 - コメント・ログは日本語、識別子は英語という言語使い分けを踏襲する。
@@ -2009,7 +2049,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、28本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、29本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

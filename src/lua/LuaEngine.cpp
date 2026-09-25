@@ -38,6 +38,7 @@
 #include "task/Http_Request.hpp"
 #include "util/Url.hpp"
 #include "functions/Time_Functions.hpp"
+#include "functions/Sound_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
 
@@ -283,6 +284,8 @@ void LuaEngine::registerApi() {
     registerFn("content_rect", l_content_rect);
     registerFn("get_time", l_get_time);
     registerFn("get_touch", l_get_touch);
+    registerFn("sound_available", l_sound_available);
+    registerFn("beep", l_beep);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
     registerFn("draw_pixel", l_draw_pixel);
@@ -919,6 +922,25 @@ int LuaEngine::l_get_touch(lua_State* L) {
     lua_pushinteger(L, OSData::touchY);
     lua_pushboolean(L, OSData::isTouched);
     return 3;
+}
+
+int LuaEngine::l_sound_available(lua_State* L) {
+    // アンプが刺さっていて、かつsound.cfgでoffにされていないとき(=実際に音が出るとき)だけtrue。
+    // falseでもpico.beep()等は呼んでよい(黙って鳴ったことになる)。音で知らせる代わりに
+    // 画面でも知らせたいアプリが見分けるためのもの
+    lua_pushboolean(L, SoundFunctions::IsAvailable());
+    return 1;
+}
+
+int LuaEngine::l_beep(lua_State* L) {
+    // 動作確認用の矩形波。音源(チップチューンの合成)が入るまでの仮のAPI。
+    // 長さは10秒で頭打ち(アプリを閉じても鳴り続けるので、うっかり長い値を渡しても困らないように)
+    const lua_Integer freq = luaL_checkinteger(L, 1);
+    const lua_Integer ms   = luaL_checkinteger(L, 2);
+    const uint16_t f = (uint16_t)std::clamp<lua_Integer>(freq, 0, 20000);
+    const uint16_t d = (uint16_t)std::clamp<lua_Integer>(ms, 0, 10000);
+    SoundFunctions::Beep(f, d);
+    return 0;
 }
 
 int LuaEngine::l_invalidate(lua_State* L) {

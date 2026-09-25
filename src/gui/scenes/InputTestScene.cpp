@@ -1,6 +1,7 @@
 #include "gui/scenes/InputTestScene.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
+#include "functions/Sound_Functions.hpp"
 
 void InputTestScene::onEnter(){
     const Rect content = Scene::contentRect();
@@ -30,6 +31,14 @@ void InputTestScene::onEnter(){
         SceneFunctions::Pop();
     });
     WidgetFunctions::Add(this->back_button);
+
+    //音声出力の確認用(アンプが無ければ鳴らないだけ)
+    this->beep_button = new Button(this->back_button->getX() + this->back_button->getW() + MARGIN, y, "テスト音");
+    this->beep_button->setH(BUTTON_HEIGHT);
+    this->beep_button->setOnPressEnd([](){
+        SoundFunctions::Beep(880, 300);
+    });
+    WidgetFunctions::Add(this->beep_button);
 }
 
 void InputTestScene::onExit(){
@@ -40,4 +49,5 @@ void InputTestScene::onExit(){
     this->textbox = nullptr;
     this->number = nullptr;
     this->back_button = nullptr;
+    this->beep_button = nullptr;
 }

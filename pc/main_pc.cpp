@@ -140,6 +140,7 @@ namespace {
         { "sd",   "PICOOS_SD_ROOT"    },
         { "render", "PICOOS_RENDER_DRIVER" },
         { "spi_wait", "PICOOS_SPI_WAIT" },
+        { "sound", "PICOOS_SOUND_STATE" },
     };
 
     // application/x-www-form-urlencoded をほどく(%XX と '+' だけ)

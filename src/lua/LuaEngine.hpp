@@ -519,6 +519,9 @@ class LuaEngine {
         static int l_get_time(lua_State* L);
         // タッチ位置。クラスコメント「タップ位置の取得」参照
         static int l_get_touch(lua_State* L);
+        // 音声出力(pico.sound_available/beep)。SoundFunctions参照
+        static int l_sound_available(lua_State* L);
+        static int l_beep(lua_State* L);
 
         // ダイアログ。クラスコメント「ダイアログ」参照。いずれも生成した
         // WidgetId(整数)を返す。閉じたときの結果はpico.on(id,"closed",fn)

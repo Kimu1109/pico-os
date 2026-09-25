@@ -3,12 +3,18 @@
 #include "functions/Font_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Network_Functions.hpp"
+#include "functions/Sound_Functions.hpp"
 
 #include "OS_Data.hpp"
 
 void Statusbar::render(){
     if(TimeFunctions::changed_HH_mm || millis() - this->update_interval_time >= 5000){
         this->update_interval_time = millis();
+        this->needsRender();
+    }
+    const uint8_t sound_state = (uint8_t)SoundFunctions::GetState();
+    if(sound_state != this->last_sound_state){
+        this->last_sound_state = sound_state;
         this->needsRender();
     }
 
@@ -43,7 +49,23 @@ void Statusbar::render(){
         IconRender::DrawIcon(IconID::X, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_RED);
     }
     draw_pos += 16 + MARGIN;
-    
+
+    //音声出力
+    //未接続は「スピーカー + バツ」(SD/Wi-Fiと同じ組み立て方)、output=offは消音のスピーカー
+    switch((SoundFunctions::State)sound_state){
+        case SoundFunctions::State::Active:
+            IconRender::DrawIcon(IconID::VolumeHigh, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+            break;
+        case SoundFunctions::State::Muted:
+            IconRender::DrawIcon(IconID::VolumeOff, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+            break;
+        case SoundFunctions::State::Disconnected:
+            IconRender::DrawIcon(IconID::VolumeHigh, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+            IconRender::DrawIcon(IconID::X, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_RED);
+            break;
+    }
+    draw_pos += 16 + MARGIN;
+
     OSData::frame->drawFastHLine(g_rect.x, g_rect.y + g_rect.h - 1, g_rect.w, PICO_BLACK);
 
     this->needs_redraw = false;

@@ -523,6 +523,10 @@ class LuaEngine {
         static int l_get_time(lua_State* L);
         // タッチ位置。クラスコメント「タップ位置の取得」参照
         static int l_get_touch(lua_State* L);
+        static int l_pad_connected(lua_State* L);
+        static int l_pad_down(lua_State* L);
+        static int l_pad_pressed(lua_State* L);
+        static int l_pad_released(lua_State* L);
         // 音声出力(pico.sound_available/beep)。SoundFunctions参照
         static int l_sound_available(lua_State* L);
         static int l_beep(lua_State* L);

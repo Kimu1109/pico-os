@@ -29,6 +29,7 @@ Raspberry Pi Pico 2 W (RP2350, `rpipico2w`) 上で動く自作タッチGUI OS。
 | SPI1(SD専用) | CS=15, SCK=10, MOSI=11, MISO=12, 10MHz |
 | バックライト | TFT_LED=22 |
 | 音声(I2S) | MAX98357A: BCLK=2, LRCLK=3(=BCLK+1固定), DIN=4 / 検出=5(アンプ側でGND、内部プルアップ) / 休止(SD)=6(任意)。VINは5V(VBUS/VSYS) |
+| 外部コントローラー(予定) | Wiiクラシックコントローラー(I2C0: SDA=GP0, SCL=GP1、3.3V)。**まだ配線もコードも無い**。今はUSBシリアル経由のPCのキーボードで代用(下記「外部コントローラー」) |
 | TFT_MAX_SPEED | 80MHz |
 
 画面/カラー定数は `src/consts.hpp` に集約(`SCREEN_WIDTH=240`, `SCREEN_HEIGHT=320`, PICO-8風16色パレット `PICO_BLACK`〜`PICO_WHITE`、既定は `PICO_BACKGROUND=15` / `PICO_FORECOLOR=0`)。
@@ -73,7 +74,7 @@ src/
   ime/                       SKK方式かな漢字変換辞書エンジン
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
-  gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)。下記「ゲームボーイ」参照
+  gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)。下記「音声出力」「曲データ」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
@@ -84,9 +85,10 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/sound/musicの30本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/sound/music/padの31本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
+  pad_serial.py               PCのキーボードを外部コントローラーにする(USBシリアルへ送る。tkinter + pyserial)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
 lib/peanut_gb/                 vendorしたPeanut-GB(Game Boyエミュ、ヘッダ1本・無改造)。詳細はlib/peanut_gb/README-pico-os.md
 pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripten)。`src/`は実機と同一のまま使う
@@ -96,6 +98,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
     gb/dmg-acid2.gb           ゲームボーイエミュの描画を確かめるテストROM(MIT。ライセンスはpc/sdcard/README.md)
     lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
     lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
+    lua/apps/コントローラー確認/ 外部コントローラーの動作確認(押しているボタンを図で出す)
     music/*.mml               ミュージックアプリが並べる曲(demo.mml / sample.mml。MUSIC_FORMAT.md)
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
@@ -135,12 +138,13 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | HitBox_Functions | 当たり判定のヘルパ |
 | Test_Functions | フォントカバレッジ等の起動時セルフチェック |
 | Sound_Functions | 音声出力(I2S)と音源の窓口。1コア目はアンプの抜き差しの検出と要求の受付、2コア目(`loop1()`)が音源を回してI2Sへ流す。下記「音声出力」参照 |
+| Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。今の入力元はUSBシリアル(PCのキーボード)。下記「外部コントローラー」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
-`loop()`: Touch更新 → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound更新、という単純なポーリングループ。
+`loop()`: Touch更新 → Pad更新(外部コントローラー) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound更新、という単純なポーリングループ。
 
 **2コア目(`setup1()`/`loop1()`)は音声専用**(`SoundFunctions::LoopCore1()`だけを回す)。1コア目とは`std::atomic`とロック無しのコマンドの列だけでやり取りする。
 **2コア目からログを出したり、ウィジェット/SD/`OSData`に触ったりしないこと**(どれもロックを持たない1コア目専用の作り)。
@@ -576,7 +580,8 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
   - 色は白/薄灰(7)/濃灰(8)/黒。パレットに緑は無いので本物の液晶の色にはしていない
 - **操作パッド(`GameBoyPad`)**: 下の84px。render()直描き型。十字キー(中心からの角度で8方向、tan22.5°≒5/12で斜めを判定、中心6pxは無反応)/
   SELECT/START/A/B(近いほう)/ROM(別のROMを選ぶ)/戻る。**XPT2046は1点しか取れないので同時押しはできない**
-  (「十字キー+A」のようなジャンプ操作が要るゲームは厳しい。#10の外部コントローラーで解消する見込み)。
+  (「十字キー+A」のようなジャンプ操作が要るゲームは厳しい。外部コントローラー(`PadFunctions`)の入力を**ORで重ねる**ので、そちらでなら同時押しできる。
+  コントローラーのHOMEは「戻る」。下記「外部コントローラー」参照)。
   指を滑らせると押しているボタンが切り替わる。ROM/戻るはその上で離したときだけ反応する。
 - **速さ**: `onUpdate()`で`millis()`の差を積み、16.743msごとに1フレーム(1回に最大2フレーム、追いつけないぶんは捨てる=遅く動く)。
   **5秒ごとに「実行したフレーム数/捨てたフレーム数」を`LOG_APP_DEBUG`へ出す**ので、実機の速さはこれで分かる。
@@ -708,6 +713,44 @@ SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML
   `lua_engine_test`(Lua API)、PCビルドの`--tap`でミュージックアプリの再生・誤りの表示、チップチューンアプリで曲+鍵盤(借用)を確認。
   **実機では未確認**。
 
+### 外部コントローラー (`src/functions/Pad_Functions` / `script/pad_serial.py`) (2026-09-25)
+
+SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I2C0のGP0/GP1、アドレス0x52。抜き差しはACKの有無で分かるので
+検出用のピンが要らない。十字キー/ABXY/L R ZL ZR/START SELECT HOMEが揃い3.3Vで動く)に決めたが、**実物がまだ無い**。
+そこで先に「アプリが読む窓口」と、**USBシリアル経由でPCのキーボードを代わりにする入力元**を作った。
+比べた方式(GPIO直結=ピン不足、SFCパッド=5V・独自コネクタ、UART=相手のファームが要る、Bluetooth=RAMとWi-Fi同居の負担)は
+会話の記録なので割愛する。空きピンはGP0/1/7/8/14/26/27/28の8本(GP23〜25/29は無線チップが使う)。
+
+- **窓口(`PadFunctions`)**: 状態は`uint16_t`のビットマスク1つ(`Button`: 十字4 + ABXY + L R ZL ZR + START SELECT HOME の15個)。
+  **`loop()`の頭(`PICO_Touch::Update()`の直後、シーンの`onUpdate()`より前)で1回だけ更新**するので、1フレームの間は
+  `IsDown()`/`Pressed()`/`Released()`の答えが変わらない(`Pressed`/`Released`はそのフレームだけtrue)。
+  **ビットの並びはシリアルの取り決め・`pad_serial.py`・Luaの名前表に直結しているので変えないこと。**
+- **USBシリアルの取り決め**: PC→pico-osへ1行`pad XXXX\n`(押しているボタンの16進数、1〜4桁)。ログと同じ`Serial`の逆向き。
+  - PC側は**状態が変わったときと、変わらなくても100msごとに**送る。pico-os側は**`kSerialTimeoutMs`(500ms)届かなければ外れた扱いにして全部離す**
+    (スクリプトを止めた・ケーブルを抜いた・離した瞬間の行が落ちた、のどれでも押しっぱなしにならない)
+  - 形式に合わない行は黙って捨てる(シリアルモニタで`pad 10`と打てばAを押したことになる)。1行は32Bまで、長い行は改行まで読み捨てる。
+    1回の`Update()`で読むのは256Bまで(送り付けられてもフレームが止まらない)
+  - **キーの割り当てはPC側(`pad_serial.py`)が持つ**。pico-osが受け取るのはボタンの状態だけなので、実物のコントローラーに替えても
+    アプリ側は何も変わらない。キーの押下/離しを1件ずつ送る方式にしなかったのは、離した行が1つ落ちるだけで押しっぱなしになるため
+- **`script/pad_serial.py`**: tkinterの小窓でキーの押下/離しを拾い、上の行を送る。
+  - シリアルはpyserialで開く(Windowsは必須)。無ければLinux/macOSだけ`termios`で開く
+  - **ポートは同時に1つのプログラムしか開けない**のでシリアルモニタとは併用できない。代わりに**pico-osのログをそのままターミナルへ出す**
+  - ポートが消えても(書き込みでの再起動等)1秒ごとに開き直す。フォーカスが外れたら全部離す
+  - X11のキーの自動リピートは「離した→押した」を連続で送ってくるので、離したのは30ms待ってから採る
+  - `--stdout`でPCビルドの標準入力へパイプできる
+- **使っている所**: `GameBoyScene`(画面の`GameBoyPad`とORで重ねる。対応は`gb/Gb_PadMap.hpp`、BはYでも押せる。HOMEで戻る)、
+  Lua(`pico.pad_connected/pad_down/pad_pressed/pad_released`、ボタンは小文字の名前。知らない名前はエラー)、
+  ステータスバー(つながっている間だけゲームパッドのアイコン。無いのが普通なのでバツは付けない)、
+  動作確認アプリ「コントローラー確認」(`pc/sdcard/lua/apps/コントローラー確認/`)。
+  **通常の画面をコントローラーで操作する(フォーカス移動)のは対象外**(ウィジェットにフォーカスの概念が無い。別の大きな仕事)。
+- **PCビルド**: `pc/compat/Arduino.h`の`Serial.available()/read()`が**標準入力**を別スレッドで読む(`PICOOS_SERIAL_STDIN=off`で無効、Webは常に空)。
+  `python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc`、ヘッドレスなら`echo "pad 0011"`を100msごとに流し込めばよい。
+- 検証: `pad_test`(run.sh。行の読み取り、押した/離したはそのフレームだけ、途切れたら外れる、行が分かれて届く、長すぎる行、1回に読む量、GBの対応)、
+  `lua_engine_test`(Lua API)、PCビルドで`pad_serial.py --stdout`→`picoos_pc`をXvfb+xdotoolで通し(十字キー斜め+Bの同時押しで点が斜めに動く)、
+  擬似端末を相手にシリアルの経路(pyserial有り/無し、ログの折り返し)。**実機のUSBシリアル(arduino-picoのCDC)では未確認**。
+- 次: Wiiクラシックコントローラーのドライバ(`Source::WiiClassic`。I2Cで6バイト読むだけ、見つからない間は500msごとに探す)。
+  PCビルドにSDLのキーボード/ゲームパッドを直接つなぐのも手軽な追加候補。
+
 ### ClocksScene 実装詳細
 
 画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える1画面のアプリ
@@ -834,7 +877,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   |---|---|---|
   | `millis()` | 26 | `steady_clock`の経過ms(起動時刻を原点にする) |
   | `constrain()` | 5 | テンプレート関数 |
-  | `Serial.*` | 5 | 標準出力へ |
+  | `Serial.*` | 7 | 書き込みは標準出力へ、`available()`/`read()`は標準入力から(外部コントローラーの代用入力) |
   | `pinMode()` | 6 | 空実装 |
   | `map()` | 2 | そのまま計算 |
   | `digitalWrite()`/`digitalRead()` | 4 / 2 | 空実装 / 既定は`HIGH`(`PicoPcGpio::read_hook`で差し込める。音声のアンプ検出が使う) |
@@ -954,7 +997,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
-| 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
+| 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
 | 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。**MIDIからの変換・GB対応・実機での確認は未**(下記「音声出力」「曲データ」参照)。 |
 
 **#7は完了しており、#5(Lua)の前提として十分な実例が揃った。** Lua APIの仕様は「C++で標準アプリを
@@ -2117,7 +2160,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 - 組み込み制約(RAM/Flash)を常に意識し、PC向けC++の常識をそのまま持ち込まない。
 - 固定長バッファ/オブジェクトプール志向を優先し、安易な`new`/`delete`追加は避ける(MarkdownViewパターンを参照)。
 - ダイアログ系(ファイル選択/保存/色選択)は実装済みなので車輪の再発明をせず、既存クラス(`FileSaveDialog`/`FileSelectDialog`/`FileExplorer`)を拡張する形で提案する。
-- 外部コントローラは土台が無いため、ゼロから設計相談する前提で臨む(Lua組み込み・GBエミュ・音声出力は着手済み。各節参照)。
+- 外部コントローラーは窓口(`PadFunctions`)とUSBシリアルの代用入力まで入っている。実物(Wiiクラシック)のドライバは`Source`を1つ足す形で書く(「外部コントローラー」参照)。
 - 新しい画面を追加する話は`Scene`を継承して`onEnter()`でウィジェットを生成する形に寄せる。常駐させたいウィジェットは`AddOverlay()`。
 - 新規ダイアログ/ウィジェットは既存の骨格(`children_`保持、`setOnClose`コールバック、`setVisible(false)`終了)にトーンを合わせる。
 - コメント・ログは日本語、識別子は英語という言語使い分けを踏襲する。
@@ -2135,7 +2178,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、30本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、31本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

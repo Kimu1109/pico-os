@@ -325,6 +325,7 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 | Wi-Fi | 母艦の疎通を見て接続/切断を返す。設定で任意の状態に固定もできる(下記) |
 | NTP / 時刻 | 同期しない。**必要ない** — PCの時計をそのまま使うので最初から正しい時刻が出る |
 | 音声 | `pc/compat/I2S.h` がSDLの音声出力へ流す。実機の2コア目(`setup1()`/`loop1()`)は、ネイティブでは別スレッド、Webではフレームごとに`loop1()`を1回呼んで代わりにする(`main_pc.cpp`)。アンプ(MAX98357A)の検出ピンは「音声デバイスを開けたら刺さっている」として答える。`/sys/sound.cfg` の `pc-sound-state`(`auto`/`connected`/`disconnected`)か `PICOOS_SOUND_STATE` で固定できる。ヘッドレスで音の中身を確かめるなら `SDL_AUDIODRIVER=disk SDL_DISKAUDIOFILE=out.raw`(22050Hz/16bit/ステレオの生データ)。Webはブラウザの自動再生の制限で、最初にクリック等をするまで鳴らない |
+| USBシリアルの受信 | `Serial.available()`/`read()`は**標準入力**を読む(別スレッドで読んで溜める。`pc/compat/Arduino.h`)。外部コントローラー(`PadFunctions`)がこれを使うので、`python3 script/pad_serial.py --stdout \| ./pc/build/picoos_pc` でPCのキーボードがコントローラーになる。ヘッドレスなら `( sleep 1; while :; do echo "pad 0011"; sleep 0.1; done ) \| ./pc/build/picoos_pc ...` のように行を流し込めばよい(`pad XXXX` は押しているボタンの16進数。`src/functions/Pad_Functions.hpp`)。`PICOOS_SERIAL_STDIN=off` で読まない。Webは常に空 |
 | GPIO / SPI | 何もしない空実装(`digitalRead()`は既定でHIGH。音声の検出ピンだけ上のとおり) |
 
 ## 構成

@@ -75,7 +75,42 @@ inline long map(long x, long in_min, long in_max, long out_min, long out_max) {
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-// ---- Serial(標準出力へ流す) ----
+// ---- Serial(書き込みは標準出力へ、読み込みは標準入力から) ----
+// 実機のUSBシリアルの代わり。読み込みは外部コントローラー(PadFunctions)が使う:
+//   python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc
+// 標準入力は最初に available() を呼んだときから別スレッドで読み、溜めたものを read() で返す
+// (read(0)はブロックするので、ループのスレッドでは読めない)。
+// PICOOS_SERIAL_STDIN=off で読まない。Webは標準入力が無いので常に空
+#if !defined(__EMSCRIPTEN__)
+#include <cstdlib>
+#include <mutex>
+#include <string>
+#include <unistd.h>
+namespace PicoPcSerial {
+    inline std::mutex mutex;
+    inline std::string buffer;     // まだread()されていないバイト
+    inline bool started = false;
+
+    inline void Start() {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (started) return;
+        started = true;
+        const char* env = getenv("PICOOS_SERIAL_STDIN");
+        if (env && strcmp(env, "off") == 0) return;
+        std::thread([] {
+            char chunk[256];
+            for (;;) {
+                const ssize_t n = ::read(0, chunk, sizeof(chunk));
+                if (n <= 0) return;     // EOF(パイプの相手が終わった)/エラー
+                std::lock_guard<std::mutex> l(mutex);
+                // 誰も読まないまま溜まり続けないよう頭打ちにする(実機のUSBの受信バッファ相当)
+                if (buffer.size() < 4096) buffer.append(chunk, (size_t)n);
+            }
+        }).detach();
+    }
+}
+#endif
+
 class SerialClass {
 public:
     void begin(unsigned long = 0){}
@@ -88,5 +123,22 @@ public:
     }
     void print(const char* s){ if(s) fputs(s, stdout); }
     void println(const char* s = ""){ if(s) fputs(s, stdout); fputc('\n', stdout); fflush(stdout); }
+#if defined(__EMSCRIPTEN__)
+    int available(){ return 0; }
+    int read(){ return -1; }
+#else
+    int available(){
+        PicoPcSerial::Start();
+        std::lock_guard<std::mutex> lock(PicoPcSerial::mutex);
+        return (int)PicoPcSerial::buffer.size();
+    }
+    int read(){
+        std::lock_guard<std::mutex> lock(PicoPcSerial::mutex);
+        if (PicoPcSerial::buffer.empty()) return -1;
+        const unsigned char c = (unsigned char)PicoPcSerial::buffer[0];
+        PicoPcSerial::buffer.erase(0, 1);
+        return c;
+    }
+#endif
 };
 inline SerialClass Serial;

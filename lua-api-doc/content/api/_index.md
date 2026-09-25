@@ -27,5 +27,5 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | [ダイアログ](dialogs/) | `show_message` `show_input` `show_file_save` `show_file_select` `show_color` |
 | [ネットワーク](network/) | `http_request` `http_cancel` |
 | [時刻](time/) | `get_time` |
-| [音](sound/) | `sound_play` `sound_stop` `sound_playing` `note_freq` `beep` `sound_available` |
+| [音](sound/) | `sound_play` `sound_stop` `sound_playing` `note_freq` `beep` `sound_available` `music_play` `music_play_text` `music_stop` `music_playing` |
 | [その他](misc/) | `log` `show_error` |

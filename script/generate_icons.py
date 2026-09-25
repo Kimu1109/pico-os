@@ -176,6 +176,9 @@ ICONS: list[IconSpec] = [
 
     # --- チャット(2026-09-24)。末尾へ足すこと(上の【重要】参照) ---
     IconSpec("messages",       str(ICON_DIR / "messages.svg")),
+
+    # --- 音楽(2026-09-25)。末尾へ足すこと(上の【重要】参照) ---
+    IconSpec("music",          str(ICON_DIR / "music.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

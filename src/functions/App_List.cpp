@@ -11,6 +11,7 @@
 #include "gui/scenes/CalendarScene.hpp"
 #include "gui/scenes/ChatScene.hpp"
 #include "gui/scenes/GameBoyScene.hpp"
+#include "gui/scenes/MusicScene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "lua/LuaPermissions.hpp"
 #include "lua/LuaAppScanner.hpp"
@@ -47,6 +48,8 @@ void AppFunctions::Setup(){
     Register("チャット", IconID::Messages, &MakeScene<ChatScene>);
     //Game Boy(DMG)エミュ。ROMはSDの /gb/ に置く(256KBまで。SUMMARY.md #9)
     Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
+    //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(MUSIC_FORMAT.md)
+    Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
     // Luaバインディングの動作サンプル(pc/sdcard/lua/hello.lua参照)。
     // MakeLuaAppScene(LuaScene.hpp)がentry.permissionsをそのままLuaSceneへ渡すので、
     // ここでsd_outside_app_dirを立てるだけで済む(/img/hello.pimgを読むため)。

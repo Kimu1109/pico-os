@@ -2,6 +2,8 @@
 #include <cstdint>
 #include "sound/Chip_Synth.hpp"
 
+struct MmlResult;
+
 // 音声出力(I2S + MAX98357A)とチップチューン音源(SUMMARY.md #11)。
 //
 // **1コア目と2コア目で役割を分けてある。**
@@ -48,6 +50,9 @@ namespace SoundFunctions {
     // 1コア目→2コア目のコマンドの列。溢れた要求は捨てる(DroppedCommands()で数える)
     constexpr uint8_t       kCommandQueueSize  = 32;
     constexpr uint8_t       kDefaultVolume     = 50;
+    // 演奏データの置き場1つの大きさ。置き場は2つ(鳴らしている曲と、次に読む曲)で、
+    // 最初に曲を鳴らすときに読み取り係(約3.5KB)と一緒に確保し、以降は持ち続ける
+    constexpr uint16_t      kMusicDataBytes    = 6144;
 
     // ===== 1コア目から使う =====
 
@@ -77,6 +82,17 @@ namespace SoundFunctions {
     uint8_t ActiveChannels();
     // 列が満杯で捨てた要求の数
     uint32_t DroppedCommands();
+
+    // ---- 曲(MUSIC_FORMAT.md) ----
+    // MMLを読んで鳴らす(鳴っている曲は差し替え)。読めなければfalseで、今の曲はそのまま。
+    // result を渡すと、誤りの位置・理由・警告・曲名が入る
+    bool MusicPlayFile(const char* path, MmlResult* result = nullptr);
+    bool MusicPlayText(const char* text, size_t len, MmlResult* result = nullptr);
+    void MusicStop();
+    // 曲が鳴っているか(鳴らす/止めるを頼んだ直後から、その結果の扱い)
+    bool MusicPlaying();
+    // 最後に鳴らした曲の名前(#title。無ければファイル名)
+    const char* MusicTitle();
 
     // ===== 2コア目から使う =====
 

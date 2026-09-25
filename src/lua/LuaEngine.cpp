@@ -40,6 +40,7 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "sound/Note_Name.hpp"
+#include "sound/Mml_Compiler.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
 
@@ -196,6 +197,7 @@ LuaEngine::~LuaEngine() {
     // 鳴らしっぱなし(長さ0)の音を残したままアプリを閉じると鳴り止まないので、
     // 音を使ったアプリは閉じるときに全部止める
     if (used_sound_) SoundFunctions::StopAll();
+    if (used_music_) SoundFunctions::MusicStop();
     delete http_; // lua_close()より前でも後でも問題ない(HttpStateはLuaと無関係のC++側の状態)
     if (L) lua_close(L);
 }
@@ -294,6 +296,10 @@ void LuaEngine::registerApi() {
     registerFn("sound_stop", l_sound_stop);
     registerFn("sound_playing", l_sound_playing);
     registerFn("note_freq", l_note_freq);
+    registerFn("music_play", l_music_play);
+    registerFn("music_play_text", l_music_play_text);
+    registerFn("music_stop", l_music_stop);
+    registerFn("music_playing", l_music_playing);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
     registerFn("draw_pixel", l_draw_pixel);
@@ -1034,6 +1040,60 @@ int LuaEngine::l_sound_playing(lua_State* L) {
         const uint8_t ch = CheckChannel(L, 1);
         lua_pushboolean(L, (SoundFunctions::ActiveChannels() >> ch) & 1);
     }
+    return 1;
+}
+
+namespace {
+    // 曲の読み込み結果をLuaへ返す: 成功なら true、失敗なら nil, "3行12列: 理由"
+    int PushMusicResult(lua_State* L, bool ok, const MmlResult& r) {
+        if (ok) {
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+        lua_pushnil(L);
+        if (r.line > 0) lua_pushfstring(L, "%d行%d列: %s", r.line, r.col, r.message.c_str());
+        else lua_pushstring(L, r.message.c_str());
+        return 2;
+    }
+}
+
+int LuaEngine::l_music_play(lua_State* L) {
+    // pico.music_play(path) -> true | nil, 理由
+    LuaEngine* self = Self(L);
+    const char* path = luaL_checkstring(L, 1);
+    MmlResult r;
+    if (!OSData::SD_usable) {
+        r.message.assign("SDカードが使えません");
+        return PushMusicResult(L, false, r);
+    }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.music_play: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        r.message.assign("このアプリからは読めない場所です");
+        return PushMusicResult(L, false, r);
+    }
+    self->used_music_ = true;
+    const bool ok = SoundFunctions::MusicPlayFile(path, &r);
+    return PushMusicResult(L, ok, r);
+}
+
+int LuaEngine::l_music_play_text(lua_State* L) {
+    // pico.music_play_text(mml) -> true | nil, 理由
+    size_t len = 0;
+    const char* text = luaL_checklstring(L, 1, &len);
+    Self(L)->used_music_ = true;
+    MmlResult r;
+    const bool ok = SoundFunctions::MusicPlayText(text, len, &r);
+    return PushMusicResult(L, ok, r);
+}
+
+int LuaEngine::l_music_stop(lua_State* L) {
+    (void)L;
+    SoundFunctions::MusicStop();
+    return 0;
+}
+
+int LuaEngine::l_music_playing(lua_State* L) {
+    lua_pushboolean(L, SoundFunctions::MusicPlaying());
     return 1;
 }
 

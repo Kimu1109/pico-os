@@ -28,6 +28,9 @@
 #   sound_test    … 音声出力(SoundFunctions)。アンプの検出(ばたつきを採らない)、刺さっている間だけ
 #                   I2Sを動かすこと、未接続の間も音が時間どおりに進み刺し直すと続きから鳴ること、
 #                   矩形波の中身、sound.cfg(output=off/volume)、I2Sを開始できなかったとき
+#   music_test    … 曲データ(pico-os MML、MUSIC_FORMAT.md)。読み取り(音の高さ/長さ/繰り返し/マクロ/
+#                   誤りの行・列/警告)、シーケンサー(サンプル単位の音の位置・テンポ・繰り返し・ループ・
+#                   効果音への貸し出し)、SoundFunctionsの配線(置き場の入れ替え・効果音との同居)
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -349,11 +352,26 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/sound_test.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
     -o "$OUT/sound_test"
 
 echo ""
 echo "===== sound_test ====="
 run_or_die "$OUT/sound_test"
+
+# --- 曲データ(MML)の読み取りとシーケンサー ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/music_test.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
+    -o "$OUT/music_test"
+
+echo ""
+echo "===== music_test ====="
+run_or_die "$OUT/music_test"
 
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -584,6 +602,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -643,6 +663,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
@@ -702,6 +724,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \

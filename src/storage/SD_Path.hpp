@@ -21,6 +21,8 @@ namespace PICO_Path {
         // Game Boyエミュ(GameBoyScene)がROM選択の最初に開く場所。
         // セーブ(.sav)はROMと同じ場所に「拡張子だけ変えた名前」で置く
         constexpr const char* GB_ROMS = "/gb/";
+        // 曲(pico-os MML、MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下の *.mml を並べる
+        constexpr const char* MUSIC = "/music/";
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";

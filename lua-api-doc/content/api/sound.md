@@ -1,7 +1,7 @@
 ---
 title: "音"
 weight: 85
-description: "sound_play / sound_stop / sound_playing / note_freq / beep / sound_available"
+description: "sound_play / sound_stop / sound_playing / note_freq / beep / sound_available / music_play / music_play_text / music_stop / music_playing"
 ---
 
 音はI2Sのアンプ(MAX98357A)から出ます。**アンプがつながっていない本体でも、以下の関数はエラーにならず普通に呼べます**(音が出ないだけで、音の長さや「鳴っているか」は時間どおりに進みます)。アンプの有無でスクリプトを書き分ける必要はありません。
@@ -50,11 +50,13 @@ pico.sound_play(4, 600, 120, { wave = "noise", volume = 13, envelope = -1 })
 
 チャンネル `ch` の音を止めます。`ch` を省略すると全チャンネルを止めます。
 
+曲(`pico.music_play`)が鳴っている間は、**効果音だけ**を止めます(曲の音は止めません)。曲を止めるのは `pico.music_stop()` です。
+
 ## pico.sound_playing
 
 <div class="sig">pico.sound_playing([ch]) <span class="ret">-> boolean</span></div>
 
-チャンネル `ch` が鳴っていれば `true`。`ch` を省略すると、どれか1つでも鳴っていれば `true` です。長さを指定した音や、減衰して消えた音は、終わった時点で `false` になります。
+チャンネル `ch` が鳴っていれば `true`。`ch` を省略すると、どれか1つでも鳴っていれば `true` です(曲の音も含みます)。長さを指定した音や、減衰して消えた音は、終わった時点で `false` になります。
 
 `ch` を指定した場合は音源が最後に知らせた状態なので、`pico.sound_play()` の直後だけは数ミリ秒遅れて `true` になることがあります(`ch` を省略した場合は直後から `true`)。
 
@@ -93,9 +95,64 @@ end
 pico.beep(880, 500)
 ```
 
-## 例: 曲を鳴らす
+## 曲を鳴らす(pico-os MML)
 
-音を並べる仕組み(シーケンサー)は無いので、`loop(dt)` で時間を数えて1拍ずつ `pico.sound_play()` します。実例は同梱の「チップチューン」アプリ(`/lua/apps/チップチューン/main.lua`)のデモ曲です。
+曲は **MML(テキスト)** で書き、`pico.music_play()` で鳴らします。書き方は [`MUSIC_FORMAT.md`](https://github.com/Kimu1109/pico-os/blob/main/MUSIC_FORMAT.md) を見てください。曲は2コア目で鳴るので、`loop()` が重くてもテンポは揺れません。
+
+```
+; demo.mml
+#title デモ
+#tempo 150
+A @pulse25 v12 E-4 o5 l8  L c e g e  c e g4
+C @triangle        o3 l4  L c   c    g   g
+```
+
+### pico.music_play
+
+<div class="sig">pico.music_play(path) <span class="ret">-> true | nil, err</span></div>
+
+SDの `.mml` を読んで鳴らします。鳴っている曲は差し替えます。読めなければ `nil` と理由(`"3行12列: v の後ろは0〜15です"` のような、行・列つきの文字列)を返し、鳴っている曲はそのまま鳴り続けます。
+
+SDの権限に従います。`sd_outside_app_dir` の無いアプリは、自分のフォルダの中の曲だけを鳴らせます。
+
+```lua
+local ok, err = pico.music_play("/lua/apps/わたしのゲーム/bgm.mml")
+if not ok then pico.show_error("BGMを読めません\n" .. err) end
+```
+
+### pico.music_play_text
+
+<div class="sig">pico.music_play_text(mml) <span class="ret">-> true | nil, err</span></div>
+
+文字列に書いたMMLをそのまま鳴らします(アプリに短い曲を埋め込む用)。戻り値は `pico.music_play` と同じです。
+
+```lua
+pico.music_play_text([[
+A @pulse50 v12 E-3 o5 l16 c e g > c
+]])
+```
+
+### pico.music_stop
+
+<div class="sig">pico.music_stop() <span class="ret">-> (なし)</span></div>
+
+曲を止めます。効果音は止めません。
+
+### pico.music_playing
+
+<div class="sig">pico.music_playing() <span class="ret">-> boolean</span></div>
+
+曲が鳴っていれば `true`。`pico.music_play()` / `pico.music_stop()` の直後から、その結果の値を返します。`L`(ループ位置)の無い曲は、最後まで行くと `false` になります。
+
+### 効果音との同居
+
+曲を鳴らしている間に `pico.sound_play()` や `pico.beep()` を呼ぶと、**効果音がそのチャンネルを借ります**。借りている間、曲のそのチャンネルは黙りますが進行は止まらず、効果音が終わったら次の音符から曲へ戻ります。BGMと効果音を同時に使うゲームでは、効果音を曲があまり使わないチャンネル(例えば4)で鳴らすと、曲が途切れにくくなります。
+
+アプリを閉じると、曲も効果音も止まります。
+
+## 例: 1拍ずつ鳴らす
+
+曲の形式を使わずに、`loop(dt)` で時間を数えて1拍ずつ `pico.sound_play()` することもできます(自動で作る音や、画面の動きに合わせる音向け)。こちらは1コア目で数えるので、`loop()` が重いとテンポが揺れます。
 
 ```lua
 local STEP_MS = 150

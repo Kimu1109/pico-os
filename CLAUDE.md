@@ -74,7 +74,7 @@ src/
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)。下記「ゲームボーイ」参照
-  sound/                     チップチューン音源(Chip_Synth)と音名→周波数(Note_Name)。下記「音声出力」参照
+  sound/                     チップチューン音源(Chip_Synth)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)。下記「音声出力」「曲データ」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
@@ -84,7 +84,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/soundの29本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/sound/musicの30本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
@@ -96,10 +96,11 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
     gb/dmg-acid2.gb           ゲームボーイエミュの描画を確かめるテストROM(MIT。ライセンスはpc/sdcard/README.md)
     lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
     lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
+    music/*.mml               ミュージックアプリが並べる曲(demo.mml / sample.mml。MUSIC_FORMAT.md)
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
 CHAT_PROTOCOL.md               チャットサーバとの通信仕様(下記「チャット」参照)
-MUSIC_FORMAT.md                曲データ形式(pico-os MML)の仕様の案(下記「音声出力」参照。まだ実装は無い)
+MUSIC_FORMAT.md                曲データ形式(pico-os MML)の仕様(下記「曲データ」参照)
 server/chat/                   自前のチャットサーバ(chat_server.py、標準ライブラリのみ)+ Webクライアント + Raspberry Pi/Let's Encryptの設置手順(README.md)
 ```
 `include/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
@@ -645,12 +646,8 @@ SUMMARY.md #11。**出力の土台 + 4チャンネルのチップチューン音
   `beep(freq, ms)`/`sound_available()`。**チャンネルはLuaでは1始まり**。音を使った`LuaEngine`は壊れるとき(=アプリを閉じるとき)に`StopAll()`する
   (長さ0の音が鳴り止まなくなるため)。
 - 動作確認アプリ「チップチューン」(`pc/sdcard/lua/apps/チップチューン/main.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
-  波形/減衰の切り替え、4チャンネルのデモ曲(自作。`loop(dt)`で150msごとに1拍)。
-- **曲の形式はまだ無い**(今はLuaで1拍ずつ`sound_play`する)。SUMMARY.mdの「標準ファイル形式を探す/考える」がこれ。
-  **MMLを標準にすると決めた**(2026-09-25)。仕様の案は`MUSIC_FORMAT.md`。方針: 読み取りは1コア目で曲を開いたときに1回、
-  結果は固定長の「演奏データ」(繰り返しは展開しない)、鳴らすのは2コア目のシーケンサー(サンプル数で時間を数えるのでテンポが揺れない)。
-  MIDIはPC側の変換(`midi2mml.py`)で取り込み、VGM/GBSはゲームボーイの音源チップを再現した後。効果音は曲のチャンネルを一時的に借りる
-  (曲は黙って進み、効果音が終わったら次の音符から戻る)。
+  波形/減衰の切り替え、デモ曲(同じフォルダの`demo.mml`を`pico.music_play`で鳴らす。鍵盤の音は効果音として曲のチャンネル1を借りる)。
+- 曲(MML)は下の「曲データ」。
 
 **設定・表示**:
 - `/sys/sound.cfg`(無くてよい): `output = auto | off`、`volume = 0〜100`(既定50)。`SetOutput()`/`SetVolume()`は今だけ切り替える。
@@ -672,6 +669,44 @@ SUMMARY.md #11。**出力の土台 + 4チャンネルのチップチューン音
 抜き差しで続きから鳴る、sound.cfg、begin()失敗)、`lua_engine_test`(Lua API)。PCビルドで`SDL_AUDIODRIVER=disk`の出力を確認
 (テスト音: 300ms・約880Hz、デモ曲: 4ch足して最大約12000で音割れなし)。
 **実機(arduino-picoのI2S・2コア目・MAX98357A)では未確認**(このリモート環境には実機もRP2350のボード定義も無い)。**Webビルドも未確認**(emsdkが無い)。
+
+### 曲データ (`MUSIC_FORMAT.md` / `src/sound/Mml_Compiler` / `Music_Player` / `MusicScene`) (2026-09-25)
+
+SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML**(pico-os向けの方言。書き方は`MUSIC_FORMAT.md`)。
+他の形式(MIDI=PC側の`midi2mml.py`で変換、VGM/GBS=ゲームボーイの音源チップの再現後)は、どれも同じ「演奏データ」へ
+変換してから鳴らす方針で、2コア目は形式を知らない。
+
+- **流れ**: `.mml`(テキスト)→ 1コア目の`MmlCompiler`が「演奏データ」(`Music_Data.hpp`の小さなバイト列。音符1つ4バイト)へ →
+  コマンドの列で2コア目へ渡す → 2コア目の`MusicPlayer`がティックを数えて`ChipSynth::Engine`を叩く。
+- **読み取り(`MmlCompiler`)**: 1行ずつ読む(`MmlLineSource`。SDのファイル版`MmlFileSource`とメモリ上の文字列版`MmlTextSource`)。
+  1周目でヘッダ/マクロ、**チャンネルごとに頭から読み直して**命令列を書く(ファイル全体をRAMへ載せない。1行512バイトまで)。
+  繰り返しは展開せず`LoopBegin/LoopBreak/LoopEnd`のまま(飛び先は後から書き込む)、マクロは展開して前後を`SaveState/RestoreState`で挟む
+  (波形/音量/減衰/qは再生側で戻す。**繰り返しの中では1周目と2周目で状態が違いうるので、読み取り側の記憶で戻すと間違う**)。
+  オクターブ/既定の長さ/移調は読み取り側だけの状態(`[c >]2`は2回とも同じ高さ。警告を出す)。
+  **誤りは最初の1つで止め、行・列・理由を返す**(マクロの中の誤りは呼んだ`$`の位置で)。長さの帳尻はティックで数え、
+  `L`から後ろの長さがチャンネルで違えば警告する(`[ ]`の回数と`:`も計算に入れる)。`L`の後ろが0ティックなら無限ループになるので誤り。
+- **`e`は音符のミなので、減衰は大文字の`E`**(案の段階では`e`だったが、`e-6`が「ミ♭の6分音符」と区別できないと実装時に気づいた)。
+- **シーケンサー(`MusicPlayer`、2コア目だけ)**: 1ティック = 22050×60/(テンポ×48) サンプルを**整数の積み上げ**で数える(端数が消えないので
+  長く鳴らしてもずれない。テストで2304ティック先の音符が1サンプル以内)。`render()`は「次のティックの境目」で音源の計算を区切るので、
+  音符はサンプル単位の位置で鳴る。`q`は「長さ×q/8 ティックで止める」(音源へは長さ0で渡し、止めるのはシーケンサー)。
+  1回のティックで1トラックが読む命令は256個まで(壊れたデータで固まらないため)。
+- **効果音との同居**: `SoundFunctions::Play()`(=Luaの`sound_play`/`beep`)はそのチャンネルを**借りる**(2コア目の`borrowed`)。
+  借りている間`MusicPlayer`はそのチャンネルの音源に触らず、曲は進み続ける。効果音の音が消えたら(長さ切れ・減衰し切り・Stop)
+  毎回の`Core1StepAt`で返し、曲は**次の音符から**鳴らす。`Stop(ch)`/`StopAll()`は効果音だけを止める(曲が鳴っていなければ全部)。
+- **置き場(`SoundFunctions`、1コア目)**: 演奏データの置き場は**6KiB×2**。2コア目が読んでいる方には書かない
+  (置き場ごとに「このコマンド番号が処理されたら空く」を覚え、`core1_processed`と比べる)。3曲目を2コア目が前の曲を手放す前に
+  頼むと断る。置き場2つと`MmlCompiler`(約3.5KB)は**最初に曲を鳴らすときに1回`malloc`**して持ち続ける(曲を使わないアプリにRAMを負担させない)。
+  読めなかったときは今の曲はそのまま。`MusicPlaying()`は頼んだ直後から結果の扱い(`IsPlaying()`と同じ考え方)。
+- **Lua**: `pico.music_play(path)`(SDの権限に従う)/`music_play_text(mml)`/`music_stop()`/`music_playing()`。
+  失敗は`nil, "3行12列: 理由"`。曲を使った`LuaEngine`は壊れるとき`MusicStop()`する。
+- **ミュージックアプリ(`MusicScene`)**: `/music/`直下の`*.mml`を名前順に並べ、2回タップで鳴らす。読めない曲は理由を**状態の欄へ赤で**出す
+  (`MsgDialog`は大きい文字の1行しか見せられず、行・列が切れた)。状態の欄は`setDisableAutoTextDecoration(true)`
+  (ファイル名の`_`が下線のマークアップとして消えた)。**アプリを閉じると曲も止める**(外から止める手段が無いため)。
+  アイコンはtablerの`music`(`IconID::Music`、81番。末尾へ追加)。
+- サンプル: `pc/sdcard/music/demo.mml`(チップチューンアプリのデモ曲)、`sample.mml`(1番/2番かっこ・3連・タイ・途中のテンポ変更・マクロ)。
+- 検証: `music_test`(run.sh。読み取り・誤りの行列・警告・シーケンサーのサンプル単位の位置/テンポ/繰り返し/ループ/借用・置き場の入れ替え)、
+  `lua_engine_test`(Lua API)、PCビルドの`--tap`でミュージックアプリの再生・誤りの表示、チップチューンアプリで曲+鍵盤(借用)を確認。
+  **実機では未確認**。
 
 ### ClocksScene 実装詳細
 
@@ -920,7 +955,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
-| 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_play/stop/playing/note_freq`・動作確認アプリ「チップチューン」。**曲の形式(シーケンサー)・GB対応・実機での確認は未**(下記「音声出力」参照)。 |
+| 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。**MIDIからの変換・GB対応・実機での確認は未**(下記「音声出力」「曲データ」参照)。 |
 
 **#7は完了しており、#5(Lua)の前提として十分な実例が揃った。** Lua APIの仕様は「C++で標準アプリを
 書いてみて必要になったもの」から逆算するのが確実で、`MarkdownScene`/`ClocksScene`/`CalculatorScene`/
@@ -2100,7 +2135,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、29本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、30本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

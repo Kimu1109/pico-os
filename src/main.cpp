@@ -82,6 +82,17 @@ void loop() {
     LogFunctions::Update();
     TimeFunctions::Update();
     NetworkFunctions::Update();
-    //I2Sのバッファ(約90ms)へ次のサンプルを足す。これより長くloop()が止まると音が途切れる
+    //アンプの抜き差しの検出(音そのものは2コア目が作って流す)
     SoundFunctions::Update();
+}
+
+//--- 2コア目: 音声専用 ---
+//音源の計算とI2Sへの書き込みだけをする。1コア目の描画やTLSのハンドシェイクで音が途切れないように
+void setup1() {
+    SoundFunctions::SetupCore1();
+}
+
+void loop1() {
+    //I2Sのバッファが埋まっていて何もすることが無ければ少し休む(バッファは約23ms分ある)
+    if(!SoundFunctions::LoopCore1()) delay(1);
 }

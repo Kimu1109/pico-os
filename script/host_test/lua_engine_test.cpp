@@ -77,6 +77,7 @@
 //                      往復できること、icon_size変更でw/h未指定なら箱の大きさも
 //                      追従することを確認する
 #include "lua/LuaEngine.hpp"
+#include "functions/Sound_Functions.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
 #include "gui/widgets/Checkbox.hpp"
@@ -895,6 +896,53 @@ int main(){
         lua_getglobal(L2, "touch_seen_touched");
         check(lua_toboolean(L2, -1) == 1, "pico.get_touch: press_start内でis_touchedがtrue");
         lua_pop(L2, 1);
+    }
+
+    // ---- 音(pico.sound_play / sound_stop / sound_playing / note_freq / beep) ----
+    {
+        // 2コア目の代わりにCore1StepAt()をここで回す(アンプは未接続=時間で進むだけ)
+        SoundFunctions::SetupAt(0);
+        {
+            LuaEngine snd(200 * 1024);
+            lua_register(snd.raw(), "check", l_check);
+            const bool ok = snd.Run(R"LUA(
+                check(math.abs(pico.note_freq("A4") - 440) < 0.01, "pico.note_freq: A4 = 440Hz")
+                check(math.abs(pico.note_freq(60) - 261.63) < 0.01, "pico.note_freq: 60 = C4")
+                check(pico.note_freq("H4") == nil, "pico.note_freq: 読めない音名はnil")
+                check(pico.note_freq(200) == nil, "pico.note_freq: 範囲外はnil")
+                check(pico.sound_play(2, 220, 0, {wave = "triangle", volume = 10, envelope = -3}) == true,
+                      "pico.sound_play: 積めたらtrue")
+                check(pico.sound_playing() == true, "pico.sound_playing: 積んだ直後から鳴っている扱い")
+                check(not pcall(pico.sound_play, 0, 440, 100), "pico.sound_play: チャンネル0はエラー(1始まり)")
+                check(not pcall(pico.sound_play, 5, 440, 100), "pico.sound_play: チャンネル5はエラー")
+                check(not pcall(pico.sound_play, 1, 440, 100, {wave = "sine"}), "pico.sound_play: 不明な波形はエラー")
+                check(not pcall(pico.sound_play, 1, 440, 100, "pulse50"), "pico.sound_play: 4番目は表")
+            )LUA", "sound_test");
+            check(ok, "音: スクリプトの実行が成功する");
+            SoundFunctions::Core1StepAt(0);
+            check(SoundFunctions::ActiveChannels() == 0x2, "pico.sound_play: 2コア目が受け取るとチャンネル2(ch1)が鳴る");
+
+            snd.Run(R"LUA(
+                pico.sound_play(2, 0, 100)
+            )LUA", "sound_rest_test");
+            SoundFunctions::Core1StepAt(0);
+            check(SoundFunctions::ActiveChannels() == 0, "pico.sound_play: 周波数0は止める(休符)");
+
+            snd.Run(R"LUA(
+                pico.sound_play(4, 110, 0, {wave = "noise"})
+            )LUA", "sound_sustain_test");
+            SoundFunctions::Core1StepAt(0);
+            lua_getglobal(snd.raw(), "pico");
+            lua_getfield(snd.raw(), -1, "sound_playing");
+            lua_pushinteger(snd.raw(), 4);
+            lua_call(snd.raw(), 1, 1);
+            check(lua_toboolean(snd.raw(), -1) == 1, "pico.sound_playing(4): 鳴っているチャンネルはtrue");
+            lua_pop(snd.raw(), 2);
+        }
+        //LuaEngineを壊すと(=アプリを閉じると)鳴らしっぱなしの音も止まる
+        SoundFunctions::Core1StepAt(0);
+        check(SoundFunctions::ActiveChannels() == 0 && !SoundFunctions::IsPlaying(),
+              "音: 音を使ったアプリを閉じると全部止まる");
     }
 
     // ---- pico.list_add / pico.list_clear(ScrollList/DropdownMenu) / pico.tab_add(TabBar) ----

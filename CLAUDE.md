@@ -74,6 +74,7 @@ src/
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)。下記「ゲームボーイ」参照
+  sound/                     チップチューン音源(Chip_Synth)と音名→周波数(Note_Name)。下記「音声出力」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
@@ -131,13 +132,16 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | UTF8_Functions | UTF-8のエンコード/デコード(文字列操作は`FixedString`側の担当) |
 | HitBox_Functions | 当たり判定のヘルパ |
 | Test_Functions | フォントカバレッジ等の起動時セルフチェック |
-| Sound_Functions | 音声出力(I2S)。アンプの抜き差しの検出・刺さっている間だけI2Sを動かす・動作確認用の矩形波。下記「音声出力」参照 |
+| Sound_Functions | 音声出力(I2S)と音源の窓口。1コア目はアンプの抜き差しの検出と要求の受付、2コア目(`loop1()`)が音源を回してI2Sへ流す。下記「音声出力」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
-`loop()`: Touch更新 → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network更新、という単純なポーリングループ。
+`loop()`: Touch更新 → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound更新、という単純なポーリングループ。
+
+**2コア目(`setup1()`/`loop1()`)は音声専用**(`SoundFunctions::LoopCore1()`だけを回す)。1コア目とは`std::atomic`とロック無しのコマンドの列だけでやり取りする。
+**2コア目からログを出したり、ウィジェット/SD/`OSData`に触ったりしないこと**(どれもロックを持たない1コア目専用の作り)。
 
 `main.cpp`が直接newするのは**常駐ウィジェット(Statusbar)と最初のシーンだけ**で、画面ごとのウィジェットは各`Scene`の`onEnter()`が生成する。
 
@@ -584,9 +588,9 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
   Blargg氏の`cpu_instrs`(リポジトリには含めていない)が正しく動くことを`--tap`/`--shot`で確認。
   **市販ゲームのROMはリポジトリに含めない。**
 
-### 音声出力 (`src/functions/Sound_Functions`) (2026-09-25)
+### 音声出力 (`src/functions/Sound_Functions` / `src/sound/`) (2026-09-25)
 
-SUMMARY.md #11の第1段。**出力の土台だけ**で、音源(チップチューンの合成)はまだ無い(動作確認用の矩形波`Beep()`のみ)。
+SUMMARY.md #11。**出力の土台 + 4チャンネルのチップチューン音源 + 2コア目での合成**まで。曲の形式(シーケンサー)とGB対応はまだ。
 
 - **配線はI2SのD級アンプ MAX98357A**(ピンは上の「ハードウェア構成」)。PWM+RCフィルタも検討したが、
   3.3Vの電源ノイズ(Wi-FiとSPIの液晶が同じ基板で動いている)がそのまま音に乗るため見送った。
@@ -597,30 +601,72 @@ SUMMARY.md #11の第1段。**出力の土台だけ**で、音源(チップチュ
   内部プルアップで読んで LOW=接続。MAX98357AのSD端子の電圧で見分ける案は、チップ内部の100kΩと基板の1MΩの
   分圧で刺さっていても外れていてもLOW付近になるため使えない。
   - 100msごとに読み、**3回続けて同じ値のときだけ採用**(抜き差しの瞬間のばたつき)。起動時だけは待たずに採用する。
-- **つながっていないときは「鳴らさないだけ」で、呼び出しは全て受け付ける**(アプリやLuaは分岐しなくてよい)。
-  鳴っていることになっている音は`millis()`で進むので、**途中で刺すとその時点の続きから鳴る**。
-  鳴らせる間は**I2Sが引き取ったサンプル数**が時計になる(時間では進めない)。
-- **I2Sのバッファ(256ワード×8本 = 約93ms / 8KB)とPIOは、鳴らせる間だけ持つ**。未接続や`output = off`の間は
-  `end()`で返し、休止端子(GP6)もLOWにする。`begin()`に失敗したら刺し直すまで試し直さない。
-- 流すのは`loop()`の`SoundFunctions::Update()`から(`write(int32_t, false)`で空いた分だけ)。
-  **約93msより長く`loop()`が止まると途切れる**(TLSのハンドシェイク等)。合成を2コア目(`setup1()/loop1()`)へ
-  移すのは音源を入れる段で。
-- 22050Hz / 16bit / 左右同値。音量100の振幅は`kMaxAmplitude = 12000`(チャンネルを重ねる余地を残してある)。
-- 設定は`/sys/sound.cfg`(無くてよい): `output = auto | off`、`volume = 0〜100`(既定50)。`SetOutput()`/`SetVolume()`は
-  今だけ切り替える(ファイルへは書かない。設定画面から変える話は未)。
+
+**2つのコアの分担**(`Sound_Functions.cpp`の中で「共有」「1コア目だけ」「2コア目だけ」の3区画に分けてある):
+
+| | 1コア目(`loop()` → `Update()`) | 2コア目(`loop1()` → `LoopCore1()`) |
+|---|---|---|
+| 持つもの | 検出の状態・`output`・ログ | `I2S`・`ChipSynth::Engine`・書き込み前の一時置き場(64サンプル) |
+| 仕事 | ピンを読んで`want_run`を出す、`Play()/Stop()`をコマンドの列へ積む、2コア目の状態をログへ出す | コマンドを取り出して音源へ渡す、I2Sの開始/終了、波形を作ってI2Sへ書く、未接続の間は時間で進める |
+
+- やり取りは**`std::atomic`だけ**(ロック無し)。1コア目→2コア目: `want_run`/`retry_epoch`/`master_volume`/コマンドの列(32件の固定長リング、
+  1対1なので`head`/`tail`の2つのatomicで足りる。溢れたら捨てて`DroppedCommands()`で数え、1コア目がWARNを出す)。
+  2コア目→1コア目: `core1_running`/`core1_failed`/`core1_active`(鳴っているチャンネル)/`core1_processed`(音源へ渡し終えた数)。
+- **I2Sの`begin()`/`end()`は2コア目で呼ぶ**(DMA割り込みが呼んだコアに付くため)。休止端子(GP6)も2コア目が上げ下げする。
+- **2コア目はログを出さない**(`LogFunctions`はロックを持たない)。I2Sの開始/停止/失敗は`core1_*`を1コア目が見てログへ出す。
+- `IsPlaying()`は「積んだ数 != 渡し終えた数 なら鳴っている扱い、追いついていれば`core1_active`」。2コア目は
+  `core1_active`→`core1_processed`の順に書くので、追いついた後に読むチャンネルは必ずその後の状態。
+  `Play()`した直後から`true`になる(チャンネル単位の`ActiveChannels()`は2コア目が受け取るまで数ms遅れる)。
+- 1コア目の`Setup()`が済むまで(`ready`)2コア目は何もしない。arduino-picoは`setup()`と`setup1()`を同時に走らせるため。
+- `loop1()`は仕事が無ければ(I2Sのバッファが満杯、または未接続で何も鳴っていない)`delay(1)`で休む。
+- **I2Sのバッファは64ワード×8本 = 512サンプル ≒ 23ms / 2KB**(2コア目が専任で流すので短くした。要求から音が出るまでの遅れもこの程度)。
+  鳴らせる間だけ持ち、未接続や`output = off`の間は`end()`で返す。`begin()`に失敗したら刺し直すまで試し直さない。
+- **つながっていないときは「鳴らさないだけ」**: 2コア目が`millis()`の差の分だけ音源を空回し(`render(nullptr, n)`)して進めるので、
+  長さ/エンベロープは時間どおりに進み、**途中で刺すとその時点の続きから鳴る**。鳴らせる間は**I2Sが引き取ったサンプル数**が時計。
+  I2Sを開始する回も、開始する時刻までの分を先に進めてから開始する(逆にすると最後の1回分が抜ける。テストで踏んだ)。
+
+**音源(`src/sound/Chip_Synth`)**:
+- 4チャンネル、22050Hz、モノラル(I2Sへは左右同値で送る)。ゲームボーイのAPUが手本だが**チャンネルごとの波形は固定しない**:
+  矩形(デューティ12.5/25/50/75%)・三角・のこぎり・ノイズ(15bitのLFSR)・短いノイズ(7bit、127段で一巡)をどのチャンネルでも選べる。
+- 1音 = `ChipSynth::Note{wave, freq_x16(Hzの16倍), volume 0〜15, envelope -7〜7, length_ms(0=止めるまで)}`。
+  エンベロープはゲームボーイと同じ「|env|/64秒ごとに1段上げ下げ」だけで、下げて0になったら音が終わる。
+- 位相は32bit(2^32で1周期)。ノイズだけは「1サンプルで何段進めるか」を16.16で持つ(1サンプルに1段が上限)。
+  32bitの位相の増分を`0xFFFFFFFF`で頭打ちにする書き方だと最初の1段がずれて周期が崩れた(テストで踏んだ)。
+- 振幅: 1チャンネルの最大は`kChannelAmplitude = 7800`(音量15・全体100)。**4チャンネル全部を最大で鳴らしても16bitに収まる**。
+  全体の音量(`sound.cfg`の`volume`、既定50)が最後に掛かる。
+- 状態は全て固定長の配列で、確保は一切しない。帯域制限はしない(高い音は折り返しで濁るが、チップチューンの味の内)。
+- `sound/Note_Name.hpp`: 音名("C4" "A#3" "Eb5")/MIDIノート番号 → 周波数(平均律、A4=440Hz)。
+
+**外から使う口**:
+- C++: `SoundFunctions::Play(ch, Note)`/`Stop(ch)`/`StopAll()`/`Beep(freq, ms)`(ch0の矩形波)/`IsPlaying()`/`ActiveChannels()`。
+  入力テスト画面の「テスト音」がBeep(880Hz 300ms)。
+- Lua: `pico.sound_play(ch 1〜4, freq, ms, {wave=, volume=, envelope=})`/`sound_stop([ch])`/`sound_playing([ch])`/`note_freq(音名|番号)`/
+  `beep(freq, ms)`/`sound_available()`。**チャンネルはLuaでは1始まり**。音を使った`LuaEngine`は壊れるとき(=アプリを閉じるとき)に`StopAll()`する
+  (長さ0の音が鳴り止まなくなるため)。
+- 動作確認アプリ「チップチューン」(`pc/sdcard/lua/apps/チップチューン/main.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
+  波形/減衰の切り替え、4チャンネルのデモ曲(自作。`loop(dt)`で150msごとに1拍)。
+- **曲の形式はまだ無い**(今はLuaで1拍ずつ`sound_play`する)。SUMMARY.mdの「標準ファイル形式を探す/考える」がこれ。
+
+**設定・表示**:
+- `/sys/sound.cfg`(無くてよい): `output = auto | off`、`volume = 0〜100`(既定50)。`SetOutput()`/`SetVolume()`は今だけ切り替える。
 - ステータスバー: 鳴らせる=スピーカー、`off`=消音のスピーカー、未接続=スピーカー+赤のX(SD/Wi-Fiと同じ組み立て方)。
-  アイコンは元から`icons_data.h`にあった`VolumeHigh`/`VolumeOff`を使った(新規追加なし)。
-- 動作確認: 入力テスト画面の「テスト音」(880Hz 300ms)、Luaの`pico.beep(freq, ms)`/`pico.sound_available()`。
-- **PC/Webビルド**: `pc/compat/I2S.h`がSDLの音声出力で置き換える(`src/`は同じ)。アンプの検出ピンは、
-  `pc/compat/Arduino.h`の`digitalRead()`へ差し込めるようにした`PicoPcGpio::read_hook`で代わりに答える
-  (音声デバイスを開けたら「刺さっている」)。`/sys/sound.cfg`の`pc-sound-state = auto | connected | disconnected`
-  か環境変数`PICOOS_SOUND_STATE`(Webは`?sound=`)で固定できる。ヘッドレスなら`SDL_AUDIODRIVER=disk`で
-  `SDL_DISKAUDIOFILE`へ生の音(22050Hz/16bit/ステレオ)を書き出せるので、波形を数値で確かめられる。
+  `Active`になるのは**2コア目がI2Sを開始した後**(1コア目が接続を採用しただけではまだ`Disconnected`)。
+
+**PC/Webビルド**:
+- `pc/compat/I2S.h`がSDLの音声出力で置き換える(`src/`は同じ)。アンプの検出ピンは`pc/compat/Arduino.h`の
+  `PicoPcGpio::read_hook`で代わりに答える(音声デバイスを開けたら「刺さっている」)。`/sys/sound.cfg`の
+  `pc-sound-state = auto | connected | disconnected`か環境変数`PICOOS_SOUND_STATE`(Webは`?sound=`)で固定できる。
+- **2コア目の代わり**: ネイティブは`pc/main_pc.cpp`が別スレッドで`setup1()`→`loop1()`を回し続ける(終了時は止めて`join`)。
+  Webはスレッドが無いので、フレームごとに`loop()`の後で`loop1()`を1回呼ぶ(1回で最大512サンプル書けるので60fpsで足りる。
+  フレームのぶれで途切れないよう、Webだけリングを2048サンプルにしてある)。
+- ヘッドレスなら`SDL_AUDIODRIVER=disk`で`SDL_DISKAUDIOFILE`へ生の音(22050Hz/16bit/ステレオ)を書き出せるので、波形を数値で確かめられる。
   Webはブラウザが利用者の操作までAudioContextを止めるので、`shell.html`が最初の操作で`resume()`する。
-- 検証: `sound_test`(run.sh。`stubs/I2S.h`は書かれたワードを溜めるだけ、`consume()`で「送った」ことにする)、
-  PCビルドで`SDL_AUDIODRIVER=disk`の出力が300ms・約880Hz・左右同値になることを確認。
-  **実機(arduino-picoのI2S・MAX98357A)では未確認**(このリモート環境には実機もRP2350のボード定義も無い)。
-  **Webビルドも未確認**(emsdkが無い)。
+
+**検証**: `sound_test`(run.sh。前半は音源: デューティ比・三角/のこぎりの形・ノイズの周期(127/32767)・長さ・エンベロープ・4ch足し合わせ・音名。
+後半はSoundFunctionsで、1コア目と2コア目を1本のスレッドで交互に呼ぶ: 検出のばたつき、I2Sの開始は2コア目、コマンドの列の溢れ、
+抜き差しで続きから鳴る、sound.cfg、begin()失敗)、`lua_engine_test`(Lua API)。PCビルドで`SDL_AUDIODRIVER=disk`の出力を確認
+(テスト音: 300ms・約880Hz、デモ曲: 4ch足して最大約12000で音割れなし)。
+**実機(arduino-picoのI2S・2コア目・MAX98357A)では未確認**(このリモート環境には実機もRP2350のボード定義も無い)。**Webビルドも未確認**(emsdkが無い)。
 
 ### ClocksScene 実装詳細
 
@@ -869,7 +915,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **未着手**。GPIO/UART連携コードなし(タッチのみ)。 |
-| 11 | Chiptune音声再生 | **第1段(出力の土台)まで**: I2S(MAX98357A)への出力・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_available/beep`。**音源(チップチューンの合成・シーケンサー)・2コア目での合成・曲の形式は未**(下記「音声出力」参照)。 |
+| 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_play/stop/playing/note_freq`・動作確認アプリ「チップチューン」。**曲の形式(シーケンサー)・GB対応・実機での確認は未**(下記「音声出力」参照)。 |
 
 **#7は完了しており、#5(Lua)の前提として十分な実例が揃った。** Lua APIの仕様は「C++で標準アプリを
 書いてみて必要になったもの」から逆算するのが確実で、`MarkdownScene`/`ClocksScene`/`CalculatorScene`/

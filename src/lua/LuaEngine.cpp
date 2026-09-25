@@ -39,6 +39,7 @@
 #include "util/Url.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "sound/Note_Name.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
 
@@ -192,6 +193,9 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
 }
 
 LuaEngine::~LuaEngine() {
+    // 鳴らしっぱなし(長さ0)の音を残したままアプリを閉じると鳴り止まないので、
+    // 音を使ったアプリは閉じるときに全部止める
+    if (used_sound_) SoundFunctions::StopAll();
     delete http_; // lua_close()より前でも後でも問題ない(HttpStateはLuaと無関係のC++側の状態)
     if (L) lua_close(L);
 }
@@ -286,6 +290,10 @@ void LuaEngine::registerApi() {
     registerFn("get_touch", l_get_touch);
     registerFn("sound_available", l_sound_available);
     registerFn("beep", l_beep);
+    registerFn("sound_play", l_sound_play);
+    registerFn("sound_stop", l_sound_stop);
+    registerFn("sound_playing", l_sound_playing);
+    registerFn("note_freq", l_note_freq);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
     registerFn("draw_pixel", l_draw_pixel);
@@ -933,14 +941,118 @@ int LuaEngine::l_sound_available(lua_State* L) {
 }
 
 int LuaEngine::l_beep(lua_State* L) {
-    // 動作確認用の矩形波。音源(チップチューンの合成)が入るまでの仮のAPI。
-    // 長さは10秒で頭打ち(アプリを閉じても鳴り続けるので、うっかり長い値を渡しても困らないように)
+    // チャンネル1で矩形波を鳴らすだけの簡易版(pico.sound_playの省略形)。
+    // 長さは10秒で頭打ち(うっかり長い値を渡しても困らないように)
     const lua_Integer freq = luaL_checkinteger(L, 1);
     const lua_Integer ms   = luaL_checkinteger(L, 2);
     const uint16_t f = (uint16_t)std::clamp<lua_Integer>(freq, 0, 20000);
     const uint16_t d = (uint16_t)std::clamp<lua_Integer>(ms, 0, 10000);
+    Self(L)->used_sound_ = true;
     SoundFunctions::Beep(f, d);
     return 0;
+}
+
+namespace {
+    // pico.sound_play の wave に書ける名前(ChipSynth::Waveの並びと同じ順)
+    const char* const kWaveNames[] = {
+        "pulse12", "pulse25", "pulse50", "pulse75", "triangle", "saw", "noise", "noise_short",
+    };
+    static_assert(sizeof(kWaveNames) / sizeof(kWaveNames[0]) == (size_t)ChipSynth::Wave::kCount,
+                  "kWaveNamesをChipSynth::Waveと揃えること");
+
+    // Luaのチャンネル番号(1始まり)→ 0始まり。範囲外はエラー
+    uint8_t CheckChannel(lua_State* L, int arg){
+        const lua_Integer ch = luaL_checkinteger(L, arg);
+        if (ch < 1 || ch > SoundFunctions::kChannels) {
+            luaL_error(L, "チャンネルは1〜%dです(%d)", SoundFunctions::kChannels, (int)ch);
+        }
+        return (uint8_t)(ch - 1);
+    }
+}
+
+int LuaEngine::l_sound_play(lua_State* L) {
+    // pico.sound_play(ch, freq, ms [, {wave=, volume=, envelope=}]) -> bool
+    const uint8_t ch = CheckChannel(L, 1);
+    const lua_Number freq = luaL_checknumber(L, 2);
+    const lua_Integer ms = luaL_checkinteger(L, 3);
+
+    ChipSynth::Note note;
+    note.freq_x16 = (freq <= 0) ? 0 : (uint32_t)std::min<lua_Number>(freq * 16.0 + 0.5, 1e9);
+    //長さは1分で頭打ち。0は「止めるまで鳴らし続ける」
+    note.length_ms = (uint32_t)std::clamp<lua_Integer>(ms, 0, 60000);
+
+    if (!lua_isnoneornil(L, 4)) {
+        luaL_checktype(L, 4, LUA_TTABLE);
+
+        lua_getfield(L, 4, "wave");
+        if (!lua_isnil(L, -1)) {
+            const char* name = luaL_checkstring(L, -1);
+            bool found = false;
+            for (size_t i = 0; i < (size_t)ChipSynth::Wave::kCount; i++) {
+                if (strcmp(name, kWaveNames[i]) == 0) {
+                    note.wave = (ChipSynth::Wave)i;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return luaL_error(L, "pico.sound_play: 不明な波形です(%s)", name);
+        }
+        lua_pop(L, 1);
+
+        lua_getfield(L, 4, "volume");
+        if (!lua_isnil(L, -1)) note.volume = (uint8_t)std::clamp<lua_Integer>(luaL_checkinteger(L, -1), 0, 15);
+        lua_pop(L, 1);
+
+        lua_getfield(L, 4, "envelope");
+        if (!lua_isnil(L, -1)) note.envelope = (int8_t)std::clamp<lua_Integer>(luaL_checkinteger(L, -1), -7, 7);
+        lua_pop(L, 1);
+    }
+
+    //周波数0は「止める」と同じ扱い(休符を書きやすいように)
+    Self(L)->used_sound_ = true;
+    if (note.freq_x16 == 0) {
+        SoundFunctions::Stop(ch);
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    lua_pushboolean(L, SoundFunctions::Play(ch, note));
+    return 1;
+}
+
+int LuaEngine::l_sound_stop(lua_State* L) {
+    // pico.sound_stop([ch]) chを省略すると全部
+    if (lua_isnoneornil(L, 1)) SoundFunctions::StopAll();
+    else SoundFunctions::Stop(CheckChannel(L, 1));
+    return 0;
+}
+
+int LuaEngine::l_sound_playing(lua_State* L) {
+    // pico.sound_playing([ch]) -> bool。chを省略するとどれか1つでも
+    if (lua_isnoneornil(L, 1)) {
+        lua_pushboolean(L, SoundFunctions::IsPlaying());
+    } else {
+        const uint8_t ch = CheckChannel(L, 1);
+        lua_pushboolean(L, (SoundFunctions::ActiveChannels() >> ch) & 1);
+    }
+    return 1;
+}
+
+int LuaEngine::l_note_freq(lua_State* L) {
+    // pico.note_freq("C4" | 60) -> number | nil
+    int note = -1;
+    if (lua_type(L, 1) == LUA_TNUMBER) {
+        if (!lua_isinteger(L, 1)) return luaL_error(L, "pico.note_freq: ノート番号は整数です");
+        note = (int)std::clamp<lua_Integer>(lua_tointeger(L, 1), -1, 128);
+    } else {
+        note = NoteName::Parse(luaL_checkstring(L, 1));
+    }
+    const float f = NoteName::MidiToFreq(note);
+    if (f <= 0.0f) {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushnumber(L, f);
+    return 1;
 }
 
 int LuaEngine::l_invalidate(lua_State* L) {

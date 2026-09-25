@@ -86,7 +86,7 @@ namespace PicoPcAudio {
         want.freq = rate;
         want.format = AUDIO_S16SYS;
         want.channels = 2;
-        want.samples = 512;
+        want.samples = 256;     //リング(実機と同じ512サンプル)より小さく取る
         return want;
     }
 
@@ -140,6 +140,11 @@ public:
     bool setBitsPerSample(int bps){ return bps == 16; }
     bool setBuffers(size_t buffers, size_t words, int32_t = 0){
         capacity_ = buffers * words;
+#if defined(__EMSCRIPTEN__)
+        //Webは2コア目の代わりにフレームごと(約16ms、ぶれあり)にしか書けないので、
+        //実機より多めに溜めて途切れにくくする(その分、音が出るまで少し遅れる)
+        if(capacity_ < 2048) capacity_ = 2048;
+#endif
         return capacity_ > 0;
     }
 

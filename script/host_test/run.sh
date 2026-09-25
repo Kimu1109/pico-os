@@ -348,6 +348,7 @@ run_or_die "$OUT/gb_emu_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/sound_test.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
     -o "$OUT/sound_test"
 
 echo ""
@@ -582,6 +583,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -640,6 +642,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
@@ -698,6 +701,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \

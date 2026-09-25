@@ -29,3 +29,27 @@ template<typename T, typename L, typename H>
 constexpr T constrain(T v, L lo, H hi) {
     return (v < lo) ? (T)lo : ((v > hi) ? (T)hi : v);
 }
+
+// ---- GPIO ----
+// 読み取りは既定でHIGH(内部プルアップのまま何もつながっていない状態)。
+// テストが「その先に何かがつながっている」状態を作りたいときだけ read_hook を差し込む
+// (pc/compat/Arduino.h と同じ形。sound_testがアンプの検出ピンに使う)。
+// 負を返したピンは既定のHIGHになる
+#define INPUT        0
+#define OUTPUT       1
+#define INPUT_PULLUP 2
+#define LOW          0
+#define HIGH         1
+namespace HostGpio {
+    inline int (*read_hook)(int pin) = nullptr;
+    inline int last_written[64] = {};    //digitalWrite()の最後の値(ピンごと)
+}
+static inline void pinMode(int, int){}
+static inline void digitalWrite(int pin, int v){ if(pin >= 0 && pin < 64) HostGpio::last_written[pin] = v; }
+static inline int  digitalRead(int pin){
+    if(HostGpio::read_hook){
+        const int v = HostGpio::read_hook(pin);
+        if(v >= 0) return v;
+    }
+    return HIGH;
+}

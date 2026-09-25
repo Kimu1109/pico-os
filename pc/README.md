@@ -121,6 +121,7 @@ index.html?wifi=disconnected&rssi=-85
 | `scan` | `PICOOS_WIFI_SCAN` |
 | `render` | `PICOOS_RENDER_DRIVER` (`gl` を指定するとGPU描画。既定はソフトウェア描画。下記) |
 | `spi_wait` | `PICOOS_SPI_WAIT` (`on` / `off`。液晶転送の待ち。Webの既定は`off`。下記「実機と違うところ」) |
+| `sound` | `PICOOS_SOUND_STATE` (`auto` / `connected` / `disconnected`。音声のアンプの有無。下記「実機と違うところ」) |
 
 `PICOOS_` で始まるキーはそのまま環境変数名として扱われるので、
 将来増えたものは表に足さなくても `?PICOOS_XXX=...` で渡せる。
@@ -323,7 +324,8 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 | SDカード | `pc/sdcard/` を実ファイルシステムとして読む |
 | Wi-Fi | 母艦の疎通を見て接続/切断を返す。設定で任意の状態に固定もできる(下記) |
 | NTP / 時刻 | 同期しない。**必要ない** — PCの時計をそのまま使うので最初から正しい時刻が出る |
-| GPIO / SPI | 何もしない空実装 |
+| 音声 | `pc/compat/I2S.h` がSDLの音声出力へ流す。実機の2コア目(`setup1()`/`loop1()`)は、ネイティブでは別スレッド、Webではフレームごとに`loop1()`を1回呼んで代わりにする(`main_pc.cpp`)。アンプ(MAX98357A)の検出ピンは「音声デバイスを開けたら刺さっている」として答える。`/sys/sound.cfg` の `pc-sound-state`(`auto`/`connected`/`disconnected`)か `PICOOS_SOUND_STATE` で固定できる。ヘッドレスで音の中身を確かめるなら `SDL_AUDIODRIVER=disk SDL_DISKAUDIOFILE=out.raw`(22050Hz/16bit/ステレオの生データ)。Webはブラウザの自動再生の制限で、最初にクリック等をするまで鳴らない |
+| GPIO / SPI | 何もしない空実装(`digitalRead()`は既定でHIGH。音声の検出ピンだけ上のとおり) |
 
 ## 構成
 

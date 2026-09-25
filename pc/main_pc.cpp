@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <atomic>
 #include <thread>
 #include <vector>
 
@@ -49,6 +50,10 @@
 // src/main.cpp が提供する
 void setup(void);
 void loop(void);
+// 2コア目(実機ではarduino-picoが別のコアで回す)。音声専用。
+// ネイティブは別スレッド、Webはフレームごとに1回呼ぶ
+void setup1(void);
+void loop1(void);
 
 //---- ここからネイティブ専用(--shot とユーザコード用スレッド) ----
 #if !defined(__EMSCRIPTEN__)
@@ -97,8 +102,24 @@ namespace {
         SDL_PushEvent(&ev);
     }
 
+    // 2コア目の代わりのスレッド。実機のloop1()と同じく回し続ける
+    // (loop1()は仕事が無ければdelay(1)で休むので、CPUを食い潰さない)
+    std::atomic<bool> g_core1_run{true};
+    void core1Thread()
+    {
+        setup1();
+        while (g_core1_run.load()) loop1();
+    }
+
     int picoosMain(bool* running)
     {
+        std::thread core1(core1Thread);
+        //どの道から抜けても、SDLが片付く前に2コア目を止めて待つ
+        struct Core1Joiner {
+            std::thread& t;
+            ~Core1Joiner() { g_core1_run.store(false); t.join(); }
+        } joiner{core1};
+
         setup();
 
         int frame = 0;
@@ -140,6 +161,7 @@ namespace {
         { "sd",   "PICOOS_SD_ROOT"    },
         { "render", "PICOOS_RENDER_DRIVER" },
         { "spi_wait", "PICOOS_SPI_WAIT" },
+        { "sound", "PICOOS_SOUND_STATE" },
     };
 
     // application/x-www-form-urlencoded をほどく(%XX と '+' だけ)
@@ -403,6 +425,8 @@ namespace {
         }
 
         loop();
+        //2コア目の代わり(Webにはスレッドが無い)。1回で最大512サンプル(約23ms)まで作る
+        loop1();
 
         //SDLのイベント取り込みとウィンドウへの反映(ネイティブではSDL側スレッドの仕事)
         const int sdl_state = lgfx::Panel_sdl::loop();
@@ -445,6 +469,7 @@ int main(int, char**)
     if (0 != lgfx::Panel_sdl::setup()) return 1;
 
     setup();
+    setup1();
 
     //第2引数0 = requestAnimationFrame任せ、第3引数1 = ここで抜けずにループへ入る
     emscripten_set_main_loop(webFrame, 0, 1);

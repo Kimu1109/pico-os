@@ -47,7 +47,19 @@ inline void delay(unsigned long ms) {
 
 inline void pinMode(int, int){}
 inline void digitalWrite(int, int){}
-inline int  digitalRead(int){ return HIGH; }
+// 読み取りは既定でHIGH(内部プルアップのまま何もつながっていない状態)。
+// 「その先に何かがつながっている」ことを代替側で表したいときだけ read_hook を差し込む
+// (compat/I2S.h がアンプの検出ピンに使う)。フックが負を返したピンは既定のHIGHになる
+namespace PicoPcGpio {
+    inline int (*read_hook)(int pin) = nullptr;
+}
+inline int  digitalRead(int pin){
+    if(PicoPcGpio::read_hook){
+        const int v = PicoPcGpio::read_hook(pin);
+        if(v >= 0) return v;
+    }
+    return HIGH;
+}
 
 // ---- Arduinoの定番マクロ(実機はマクロだが、標準ライブラリと衝突しないよう関数にする) ----
 template<typename T, typename U>

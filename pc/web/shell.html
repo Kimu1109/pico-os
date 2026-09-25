@@ -269,6 +269,16 @@
     },
   };
 
+  // 音声: ブラウザは利用者の操作があるまでAudioContextを止めておく(自動再生の制限)。
+  // SDL(emscriptenのports)も操作で再開させるはずだが、念のためこちらでも最初の操作で起こす。
+  // 音声デバイスを開けなければpico-osは「アンプ未接続」として扱う(?sound=disconnectedで固定も可)
+  ['pointerdown', 'keydown', 'touchend'].forEach(function (type) {
+    window.addEventListener(type, function () {
+      var ctx = Module.SDL2 && Module.SDL2.audioContext;
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+    }, true);
+  });
+
   window.onerror = function (message) {
     Module.setStatus('エラー: 詳細はブラウザのコンソールを見てください');
     appendLog(String(message), true);

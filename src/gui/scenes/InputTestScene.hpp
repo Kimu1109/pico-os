@@ -15,6 +15,7 @@ class InputTestScene : public Scene {
         Textbox<PICO_STR_LL>* textbox = nullptr;
         NumberInput* number = nullptr;
         Button* back_button = nullptr;
+        Button* beep_button = nullptr;
 
         //Pop()で戻ってきた時に入力内容を復元するための退避先
         FixedString<PICO_STR_LL> saved_text;

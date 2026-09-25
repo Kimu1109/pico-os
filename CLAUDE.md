@@ -99,6 +99,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
 CHAT_PROTOCOL.md               チャットサーバとの通信仕様(下記「チャット」参照)
+MUSIC_FORMAT.md                曲データ形式(pico-os MML)の仕様の案(下記「音声出力」参照。まだ実装は無い)
 server/chat/                   自前のチャットサーバ(chat_server.py、標準ライブラリのみ)+ Webクライアント + Raspberry Pi/Let's Encryptの設置手順(README.md)
 ```
 `include/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
@@ -646,6 +647,10 @@ SUMMARY.md #11。**出力の土台 + 4チャンネルのチップチューン音
 - 動作確認アプリ「チップチューン」(`pc/sdcard/lua/apps/チップチューン/main.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
   波形/減衰の切り替え、4チャンネルのデモ曲(自作。`loop(dt)`で150msごとに1拍)。
 - **曲の形式はまだ無い**(今はLuaで1拍ずつ`sound_play`する)。SUMMARY.mdの「標準ファイル形式を探す/考える」がこれ。
+  **MMLを標準にすると決めた**(2026-09-25)。仕様の案は`MUSIC_FORMAT.md`。方針: 読み取りは1コア目で曲を開いたときに1回、
+  結果は固定長の「演奏データ」(繰り返しは展開しない)、鳴らすのは2コア目のシーケンサー(サンプル数で時間を数えるのでテンポが揺れない)。
+  MIDIはPC側の変換(`midi2mml.py`)で取り込み、VGM/GBSはゲームボーイの音源チップを再現した後。効果音は曲のチャンネルを一時的に借りる
+  (曲は黙って進み、効果音が終わったら次の音符から戻る)。
 
 **設定・表示**:
 - `/sys/sound.cfg`(無くてよい): `output = auto | off`、`volume = 0〜100`(既定50)。`SetOutput()`/`SetVolume()`は今だけ切り替える。

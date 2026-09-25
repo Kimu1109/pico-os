@@ -168,6 +168,10 @@
   - [x] 2コア目での合成
 - [ ] GB対応
 - [ ] 標準ファイル形式を探す/考える
+  - [x] 形式を選ぶ(MML)
+  - [ ] 仕様を固める(MUSIC_FORMAT.md)
+  - [ ] 読み取りと2コア目のシーケンサー
+  - [ ] MIDIからの変換
 - [ ] アプリ対応
   - [x] Lua API
   - [x] 動作確認アプリ(チップチューン)
@@ -461,4 +465,4 @@ CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォ
 | 8 | セカンダリアプリ開発 | 部品は存在するが、アプリ本体のコードは無い。[7](#7-標準アプリ開発-1)が一巡してから。カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示(`CalendarScene`、SDの`/calendar/*.ics`を読む)・取得元URLからの取得(`Calendar_Sync`、`/calendar/sources.cfg`、HTTPS対応)まで入った(Google CalendarはOAuthではなく非公開のiCal URLで読む方針。`CLAUDE.md`参照)。ペイントはLuaアプリ(`pc/sdcard/lua/apps/ペイント/`)として実装済み: ペン/消しゴム/直線/四角形・楕円(輪郭/塗りつぶし)/塗りつぶし(バケツ)/色(`ColorDialog`)/太さ/元に戻す/新規/`.pimg`の保存(`FileSaveDialog`)・読込(`FileSelectDialog`)。描画の中身は`CanvasRaster`(C++)側に足した。チャットは自前のサーバ(`server/chat/`、Python標準ライブラリのみ、仕様は`CHAT_PROTOCOL.md`)+ Webクライアント + `ChatScene`(`/sys/chat.cfg`)として実装済み。Discordは自分のアカウントでの自動操作が規約違反でBot名義になるため見送った(`CLAUDE.md`「チャット」参照) |
 | 9 | GameBoyエミュ | **[Peanut-GB](https://github.com/deltabeard/Peanut-GB)を採用**(MIT・C99のヘッダ1本・ROMの読み出しがコールバック・1行ずつ描画を渡す・RP2040でもフルスピード。`lib/peanut_gb/`へ無改造でvendor)。Pico-GB/pico-peanutGB(GPL-3・HDMI出力)/gnuboy/SameBoy等と比べた経緯は`CLAUDE.md`「ゲームボーイ」参照。**第1段 = ROMをRAMへ丸ごと読む(256KBまで)**が`GameBoyScene`(ランチャの「ゲームボーイ」)として入った: SDの`/gb/`からROMを選び、240x216(1.5倍)で表示、タッチの操作パッド(十字キー8方向/A/B/SELECT/START)、カートリッジRAMは終了時に`<ROM名>.sav`へ保存。音は無し(#11が未着手のため)。PCビルドでdmg-acid2・cpu_instrsが正しく動き、59.7フレーム/秒が出ることを確認。**残り**: 実機での速さの計測(5秒ごとに実行/捨てたフレーム数をログへ出す)、256KBを超えるROM(第2段=SDからバンク単位で読む/第3段=Flashへ書く)、タッチが1点しか取れないため「十字キー+A」の同時押しができない(#10の外部コントローラーで解消する見込み)、GBC |
 | 10 | 外部コントローラー | GPIO/UART連携のコードは無く、入力はタッチのみ |
-| 11 | Chiptuneを再生 | **出力の土台**(`SoundFunctions`): I2S(MAX98357A、BCLK=GP2/LRCLK=GP3/DIN=GP4)、アンプの有無を検出線(GP5、アンプ側でGND)で見て**刺さっている間だけI2Sを動かす**(未接続でも呼び出しは受け付け、音は時間どおりに進むので刺し直すと続きから鳴る)、`/sys/sound.cfg`(`output = auto / off`、`volume`)、ステータスバーのアイコン、PC/Web版(SDL)。**音源**(`src/sound/Chip_Synth`): 4チャンネル、波形は矩形(12.5/25/50/75%)・三角・のこぎり・ノイズ2種をどのチャンネルでも選べる、ゲームボーイ風の音量エンベロープと長さ。**2コア目(`setup1()/loop1()`)で合成してI2Sへ流す**ので、1コア目の描画やTLSで途切れない(1コア目からは固定長のコマンドの列で渡す)。Luaの`pico.sound_play/sound_stop/sound_playing/note_freq`と、動作確認アプリ「チップチューン」(鍵盤とデモ曲、`pc/sdcard/lua/apps/チップチューン/`)。**残り**: 曲の形式(今はLuaの`loop(dt)`で1拍ずつ鳴らす)、GB対応(Peanut-GBの`ENABLE_SOUND`)、既存アプリへの効果音、実機での確認 |
+| 11 | Chiptuneを再生 | **出力の土台**(`SoundFunctions`): I2S(MAX98357A、BCLK=GP2/LRCLK=GP3/DIN=GP4)、アンプの有無を検出線(GP5、アンプ側でGND)で見て**刺さっている間だけI2Sを動かす**(未接続でも呼び出しは受け付け、音は時間どおりに進むので刺し直すと続きから鳴る)、`/sys/sound.cfg`(`output = auto / off`、`volume`)、ステータスバーのアイコン、PC/Web版(SDL)。**音源**(`src/sound/Chip_Synth`): 4チャンネル、波形は矩形(12.5/25/50/75%)・三角・のこぎり・ノイズ2種をどのチャンネルでも選べる、ゲームボーイ風の音量エンベロープと長さ。**2コア目(`setup1()/loop1()`)で合成してI2Sへ流す**ので、1コア目の描画やTLSで途切れない(1コア目からは固定長のコマンドの列で渡す)。Luaの`pico.sound_play/sound_stop/sound_playing/note_freq`と、動作確認アプリ「チップチューン」(鍵盤とデモ曲、`pc/sdcard/lua/apps/チップチューン/`)。**残り**: 曲の形式(MMLを標準にすると決め、仕様の案が`MUSIC_FORMAT.md`。今はLuaの`loop(dt)`で1拍ずつ鳴らす)、GB対応(Peanut-GBの`ENABLE_SOUND`)、既存アプリへの効果音、実機での確認 |

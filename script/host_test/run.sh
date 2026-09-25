@@ -31,6 +31,9 @@
 #   music_test    … 曲データ(pico-os MML、MUSIC_FORMAT.md)。読み取り(音の高さ/長さ/繰り返し/マクロ/
 #                   誤りの行・列/警告)、シーケンサー(サンプル単位の音の位置・テンポ・繰り返し・ループ・
 #                   効果音への貸し出し)、SoundFunctionsの配線(置き場の入れ替え・効果音との同居)
+#   pad_test      … 外部コントローラーの窓口(PadFunctions)。USBシリアルの行("pad XXXX")の読み取り、
+#                   押した/離したのはそのフレームだけ、行が途切れたら外れて押しっぱなしにならないこと、
+#                   Game Boyのボタンへの対応
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -373,6 +376,16 @@ echo ""
 echo "===== music_test ====="
 run_or_die "$OUT/music_test"
 
+# --- 外部コントローラー ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/pad_test.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
+    -o "$OUT/pad_test"
+
+echo ""
+echo "===== pad_test ====="
+run_or_die "$OUT/pad_test"
+
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calc_eval_test.cpp" \
@@ -600,6 +613,7 @@ run_or_die "$OUT/lua_alloc_budget_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
@@ -661,6 +675,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_scene_test.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
@@ -722,6 +737,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaAppScanner.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \

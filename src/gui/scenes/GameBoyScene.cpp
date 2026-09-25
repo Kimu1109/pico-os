@@ -7,6 +7,8 @@
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Pad_Functions.hpp"
+#include "gb/Gb_PadMap.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
@@ -153,7 +155,15 @@ void GameBoyScene::onUpdate(){
         return;
     }
 
-    this->emu.setButtons(this->pad->getPressed());
+    // 外部コントローラーのHOMEは「戻る」(画面の「戻る」と同じ。セーブはonExit()で書かれる)
+    if(PadFunctions::Pressed(PadFunctions::Home)){
+        SceneFunctions::Pop();
+        return;
+    }
+
+    // 画面の操作パッドと外部コントローラーを重ねる。
+    // タッチは1点しか取れないので、同時押し(十字キー+A等)は外部コントローラーでしかできない
+    this->emu.setButtons(this->pad->getPressed() | GbPadMap::ToGb(PadFunctions::Buttons()));
 
     this->acc_us += elapsed * 1000u;
     int frames = 0;

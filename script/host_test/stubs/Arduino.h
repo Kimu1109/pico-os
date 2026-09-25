@@ -53,3 +53,26 @@ static inline int  digitalRead(int pin){
     }
     return HIGH;
 }
+
+// ---- Serial ----
+// 書き込みは標準出力へ。読み込みは HostSerial::input に積んだバイト列を先頭から返す
+// (pad_test がUSBシリアル経由のコントローラー入力を流し込むのに使う)
+#include <string>
+namespace HostSerial {
+    inline std::string input;
+    inline size_t pos = 0;
+    inline void Feed(const char* s){ input.append(s); }
+}
+class HostSerialClass {
+public:
+    void begin(unsigned long = 0){}
+    int available(){ return (int)(HostSerial::input.size() - HostSerial::pos); }
+    int read(){
+        if(HostSerial::pos >= HostSerial::input.size()) return -1;
+        return (unsigned char)HostSerial::input[HostSerial::pos++];
+    }
+    void printf(const char* fmt, ...){ va_list ap; va_start(ap, fmt); vprintf(fmt, ap); va_end(ap); }
+    void print(const char* s){ if(s) fputs(s, stdout); }
+    void println(const char* s = ""){ if(s) fputs(s, stdout); fputc('\n', stdout); }
+};
+inline HostSerialClass Serial;

@@ -39,6 +39,7 @@
 #include "util/Url.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Pad_Functions.hpp"
 #include "sound/Note_Name.hpp"
 #include "sound/Mml_Compiler.hpp"
 #include "OS_Data.hpp"
@@ -290,6 +291,10 @@ void LuaEngine::registerApi() {
     registerFn("content_rect", l_content_rect);
     registerFn("get_time", l_get_time);
     registerFn("get_touch", l_get_touch);
+    registerFn("pad_connected", l_pad_connected);
+    registerFn("pad_down", l_pad_down);
+    registerFn("pad_pressed", l_pad_pressed);
+    registerFn("pad_released", l_pad_released);
     registerFn("sound_available", l_sound_available);
     registerFn("beep", l_beep);
     registerFn("sound_play", l_sound_play);
@@ -936,6 +941,38 @@ int LuaEngine::l_get_touch(lua_State* L) {
     lua_pushinteger(L, OSData::touchY);
     lua_pushboolean(L, OSData::isTouched);
     return 3;
+}
+
+// ---- 外部コントローラー ----
+// 状態はloop()の先頭で1回だけ更新される(PadFunctions)ので、1フレームの中では何度読んでも同じ答え。
+// 名前はPadFunctions::ButtonFromName()の小文字("up" "a" "start" …)。知らない名前はエラー
+// (綴りの間違いで「押しても反応しない」と悩まないように)
+
+static uint16_t CheckPadButton(lua_State* L, int arg) {
+    const char* name = luaL_checkstring(L, arg);
+    const uint16_t b = PadFunctions::ButtonFromName(name);
+    if (b == 0) luaL_error(L, "知らないボタン名です: %s", name);
+    return b;
+}
+
+int LuaEngine::l_pad_connected(lua_State* L) {
+    lua_pushboolean(L, PadFunctions::IsConnected());
+    return 1;
+}
+
+int LuaEngine::l_pad_down(lua_State* L) {
+    lua_pushboolean(L, PadFunctions::IsDown(CheckPadButton(L, 1)));
+    return 1;
+}
+
+int LuaEngine::l_pad_pressed(lua_State* L) {
+    lua_pushboolean(L, PadFunctions::Pressed(CheckPadButton(L, 1)));
+    return 1;
+}
+
+int LuaEngine::l_pad_released(lua_State* L) {
+    lua_pushboolean(L, PadFunctions::Released(CheckPadButton(L, 1)));
+    return 1;
 }
 
 int LuaEngine::l_sound_available(lua_State* L) {

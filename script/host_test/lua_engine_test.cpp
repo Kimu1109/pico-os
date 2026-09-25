@@ -78,6 +78,7 @@
 //                      追従することを確認する
 #include "lua/LuaEngine.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Pad_Functions.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
 #include "gui/widgets/Checkbox.hpp"
@@ -896,6 +897,41 @@ int main(){
         lua_getglobal(L2, "touch_seen_touched");
         check(lua_toboolean(L2, -1) == 1, "pico.get_touch: press_start内でis_touchedがtrue");
         lua_pop(L2, 1);
+    }
+
+    // ---- 外部コントローラー(pico.pad_connected / pad_down / pad_pressed / pad_released) ----
+    {
+        // USBシリアルの代わりにHostSerialへ行を流し、PadFunctions::UpdateAt()でフレームを進める
+        PadFunctions::Setup();
+        PadFunctions::UpdateAt(10000);
+        bool ok = engine.Run(R"LUA(
+            if pico.pad_connected() then error("最初はつながっていないはず") end
+            if pico.pad_down("a") then error("押していないはず") end
+        )LUA", "pad_idle_test");
+        check(ok, "pico.pad_*: 何もつながっていなければfalse");
+
+        HostSerial::Feed("pad 0011\n"); // 上 + A
+        PadFunctions::UpdateAt(10016);
+        ok = engine.Run(R"LUA(
+            if not pico.pad_connected() then error("つながったはず") end
+            if not (pico.pad_down("a") and pico.pad_down("up")) then error("上とAを押しているはず") end
+            if not pico.pad_pressed("a") then error("このフレームで押したはず") end
+            if pico.pad_down("b") or pico.pad_released("a") then error("Bは押していない/Aは離していない") end
+        )LUA", "pad_down_test");
+        check(ok, "pico.pad_*: 同時押しと押した瞬間が読める");
+
+        HostSerial::Feed("pad 0001\n");
+        PadFunctions::UpdateAt(10032);
+        ok = engine.Run(R"LUA(
+            if not pico.pad_released("a") then error("Aを離したはず") end
+            if pico.pad_pressed("up") then error("上は押し続けているだけ") end
+        )LUA", "pad_released_test");
+        check(ok, "pico.pad_*: 離した瞬間が読める");
+
+        ok = engine.Run("pico.pad_down('jump')", "pad_bad_name_test");
+        check(!ok, "pico.pad_down: 知らないボタン名はエラー");
+
+        PadFunctions::Setup(); // 後続のテストへ影響しないよう戻す
     }
 
     // ---- 音(pico.sound_play / sound_stop / sound_playing / note_freq / beep) ----

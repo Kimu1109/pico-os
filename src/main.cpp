@@ -9,6 +9,7 @@
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Network_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Pad_Functions.hpp"
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Test_Functions.hpp"
@@ -36,6 +37,7 @@ void setup() {
     MemFunctions::Setup();
 
     PICO_Touch::Setup();
+    PadFunctions::Setup();
     PICO_Task::Setup();
     WidgetFunctions::Setup();
 
@@ -67,6 +69,9 @@ void setup() {
 
 void loop() {
     PICO_Touch::Update();
+    //外部コントローラー(今はUSBシリアル経由のPCのキーボード)。
+    //シーンのonUpdate()より前に読み、1フレームの間は同じ答えを返す
+    PadFunctions::Update();
 
     //保留中のシーン遷移をフレーム境界で適用する(ウィジェット更新より前)
     SceneFunctions::Update();

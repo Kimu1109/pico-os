@@ -4,6 +4,7 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Network_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Pad_Functions.hpp"
 
 #include "OS_Data.hpp"
 
@@ -15,6 +16,12 @@ void Statusbar::render(){
     const uint8_t sound_state = (uint8_t)SoundFunctions::GetState();
     if(sound_state != this->last_sound_state){
         this->last_sound_state = sound_state;
+        this->needsRender();
+    }
+
+    const bool pad_connected = PadFunctions::IsConnected();
+    if(pad_connected != this->last_pad_connected){
+        this->last_pad_connected = pad_connected;
         this->needsRender();
     }
 
@@ -65,6 +72,12 @@ void Statusbar::render(){
             break;
     }
     draw_pos += 16 + MARGIN;
+
+    //外部コントローラー: つながっているときだけ出す(無いのが普通なのでバツは付けない)
+    if(pad_connected){
+        IconRender::DrawIcon(IconID::Game, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+        draw_pos += 16 + MARGIN;
+    }
 
     OSData::frame->drawFastHLine(g_rect.x, g_rect.y + g_rect.h - 1, g_rect.w, PICO_BLACK);
 

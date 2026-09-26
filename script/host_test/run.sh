@@ -24,7 +24,11 @@
 #                   ChatSceneの生成/解放、chat.cfgが無い/足りないときの案内)
 #   gb_emu_test   … Game Boyエミュ(GbEmu/GameBoyPad/GameBoyView)。テスト内で組み立てたROMで、
 #                   読み込みの断り方・セーブ(.sav)の往復・ボタン・不正な命令で落ちないこと・
-#                   変わった行だけdirtyにすること・操作パッドのタップ位置→ボタンを確認する
+#                   変わった行だけdirtyにすること・操作パッドのタップ位置→ボタン・
+#                   音源チップへの書き込みが時刻付きで渡ること/読み出しの答え方を確認する
+#   gb_apu_test   … ゲームボーイの音源チップ(GbApu)と時刻付きの列(GbAudioLink)。矩形波の高さ/デューティ・
+#                   長さ・エンベロープ・スイープ・波形メモリ・ノイズ・電源・振り分け、フレームの中の位置どおりに
+#                   効くこと・エミュが止まったら無音・溜まりすぎたら追いつく
 #   sound_test    … 音声出力(SoundFunctions)。アンプの検出(ばたつきを採らない)、刺さっている間だけ
 #                   I2Sを動かすこと、未接続の間も音が時間どおりに進み刺し直すと続きから鳴ること、
 #                   矩形波の中身、sound.cfg(output=off/volume)、I2Sを開始できなかったとき
@@ -352,6 +356,17 @@ echo ""
 echo "===== gb_emu_test ====="
 run_or_die "$OUT/gb_emu_test"
 
+# --- ゲームボーイの音源チップ ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/gb_apu_test.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    -o "$OUT/gb_apu_test"
+
+echo ""
+echo "===== gb_apu_test ====="
+run_or_die "$OUT/gb_apu_test"
+
 # --- 音声出力 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/sound_test.cpp" \
@@ -359,6 +374,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
     -o "$OUT/sound_test"
 
 echo ""
@@ -372,6 +389,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
     -o "$OUT/music_test"
 
 echo ""
@@ -637,6 +656,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -699,6 +720,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
@@ -761,6 +784,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \

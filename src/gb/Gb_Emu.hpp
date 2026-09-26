@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "util/FixedString.hpp"
+#include "gb/Gb_Audio_Sink.hpp"
 #include "consts.hpp"
 
 // Game Boy(DMG)エミュの本体。lib/peanut_gb(Peanut-GB)を包むだけの薄い層。
@@ -30,6 +31,13 @@
 // 160x144を1画素2bit(白/薄灰/濃灰/黒の4段階)で詰めて持つ(1行40バイト、全体5760バイト)。
 // 1行の中は左の画素ほど上位ビット。描画のたびに前回の内容と比べ、
 // 変わった行の範囲だけを takeChangedRows() で渡す(静止画面なら液晶へ何も送らずに済む)。
+//
+// ---- 音 ----
+// 音源チップ(0xFF10〜0xFF3F)への書き込みは、フレームの頭からのクロック数を付けて GbAudioSink へ渡す
+// (setAudioSink()。実物は SoundFunctions::GbAudio() で、2コア目の GbApu が時刻どおりに鳴らす)。
+// ゲームが読むときは、書かれた値の控えに「読むと常に1のビット」を足して答える(音源は2コア目にあって
+// その場では聞けないため)。NR52の「鳴っているチャンネル」だけは音源が知らせた値(約1フレーム遅れ)と、
+// このフレームにトリガーしたチャンネルを合わせて答える。
 class GbEmu {
     public:
         constexpr static int kWidth = 160;
@@ -84,6 +92,9 @@ class GbEmu {
         // 1フレームぶん進める。エミュが止まっている(未読み込み/エラー)なら何もしない
         void runFrame();
 
+        // 音の渡し先。load()より前に設定する(nullptrなら音を出さない。書き込みの控えだけ持つ)
+        void setAudioSink(GbAudioSink* sink){ this->audio_sink = sink; }
+
         // 押しているボタン(Button のOR)を渡す
         void setButtons(uint8_t pressed);
 
@@ -114,6 +125,8 @@ class GbEmu {
         void writeCartRam(uint32_t addr, uint8_t val);
         void drawLine(const uint8_t* pixels, int line);
         void onError(int error, uint16_t addr);
+        uint8_t audioRead(uint16_t addr) const;
+        void audioWrite(uint16_t addr, uint8_t val);
 
     private:
         Impl* impl = nullptr;
@@ -130,6 +143,15 @@ class GbEmu {
 
         FixedString<PICO_STR_S> title_;
         FixedString<PICO_PATH_LEN> save_path;
+
+        // 音源チップのレジスタの控え(0xFF10〜0xFF3F)
+        GbAudioSink* audio_sink = nullptr;
+        bool audio_started = false;
+        uint8_t apu_regs[0x30] = {};
+        uint8_t apu_triggered = 0;      // このフレームにトリガーしたチャンネル
+        uint32_t apu_last_cycle = 0;    // このフレームで最後に書いた時刻(戻らないように)
+        uint32_t frameCycle() const;
+        void audioStop();
 
         int changed_first = -1;
         int changed_last = -1;

@@ -8,8 +8,11 @@
 #include <cstdlib>
 #include <cstring>
 
-// 音はまだ出せない(SUMMARY.md #11)ので、APUは持たない。そのぶん軽い
-#define ENABLE_SOUND 0
+// 音源チップ(0xFF10〜0xFF3F)の読み書きは audio_read()/audio_write() で受け取る(GbEmu::audioRead/audioWrite)。
+// 音そのものは2コア目の GbApu が作る(GbAudioSink経由)
+#define ENABLE_SOUND 1
+static uint8_t audio_read(const uint16_t addr);
+static void audio_write(const uint16_t addr, const uint8_t val);
 #define ENABLE_LCD 1
 // DMGの4段階だけで描く(物体/背景のパレットの区別は使わない)
 #define PEANUT_GB_12_COLOUR 0
@@ -23,6 +26,17 @@ struct GbEmu::Impl {
     // (戻ると__builtin_unreachable()へ落ちる)ので、runFrame()の入口へ跳んで戻る
     jmp_buf on_error;
 };
+
+// audio_read/audio_write には gb_s が渡されないので、今動かしているエミュを覚えておく
+// (load()の中のgb_init()と、runFrame()の間だけ)
+static GbEmu* g_audio_emu = nullptr;
+
+static uint8_t audio_read(const uint16_t addr){
+    return g_audio_emu ? g_audio_emu->audioRead(addr) : 0xFF;
+}
+static void audio_write(const uint16_t addr, const uint8_t val){
+    if(g_audio_emu) g_audio_emu->audioWrite(addr, val);
+}
 
 static GbEmu* SelfOf(struct gb_s* gb){
     return static_cast<GbEmu*>(gb->direct.priv);
@@ -81,8 +95,18 @@ GbEmu::LoadError GbEmu::load(const char* rom_path){
     }
     memset(this->impl, 0, sizeof(Impl));
 
+    //gb_init()の中でNR52へ書くので、音はその前に始める
+    memset(this->apu_regs, 0, sizeof(this->apu_regs));
+    this->apu_triggered = 0;
+    this->apu_last_cycle = 0;
+    if(this->audio_sink){
+        this->audio_sink->begin();
+        this->audio_started = true;
+    }
+    g_audio_emu = this;
     const enum gb_init_error_e init_err = gb_init(&this->impl->gb,
         &CbRomRead, &CbCartRamRead, &CbCartRamWrite, &CbError, this);
+    g_audio_emu = nullptr;
     if(init_err != GB_INIT_NO_ERROR){
         this->unload();
         return (init_err == GB_INIT_INVALID_CHECKSUM)
@@ -124,6 +148,13 @@ GbEmu::LoadError GbEmu::load(const char* rom_path){
     char title_buf[17];
     gb_get_rom_name(&this->impl->gb, title_buf);
     this->title_.assign(title_buf);
+
+    //起動ROM(ここでは飛ばしている)が終わった直後の値にしておく。左右の音量(NR50)と振り分け(NR51)を
+    //自分で書かないゲームがあるため。トリガーはしないので音は出ない
+    this->audioWrite(0xFF11, 0x80);
+    this->audioWrite(0xFF12, 0xF3);
+    this->audioWrite(0xFF24, 0x77);
+    this->audioWrite(0xFF25, 0xF3);
 
     memset(this->impl->fb, 0, sizeof(this->impl->fb));
     gb_init_lcd(&this->impl->gb, &CbDrawLine);
@@ -237,8 +268,15 @@ bool GbEmu::writeSave(){
     return true;
 }
 
+void GbEmu::audioStop(){
+    if(this->audio_started && this->audio_sink) this->audio_sink->end();
+    this->audio_started = false;
+}
+
 void GbEmu::unload(){
     if(this->cart_ram_dirty) this->writeSave();
+    this->audioStop();
+    if(g_audio_emu == this) g_audio_emu = nullptr;
 
     free(this->impl);
     this->impl = nullptr;
@@ -263,8 +301,90 @@ void GbEmu::runFrame(){
 
     // CbError()→onError()からここへ跳んで戻る。Peanut-GBの状態は途中のままなので、
     // 以降は二度と進めない(crashed_で止める)
-    if(setjmp(this->impl->on_error) != 0) return;
+    if(setjmp(this->impl->on_error) != 0){
+        g_audio_emu = nullptr;
+        this->audioStop();      //止まったエミュの最後の音を鳴らし続けない
+        return;
+    }
+    g_audio_emu = this;
     gb_run_frame(&this->impl->gb);
+    g_audio_emu = nullptr;
+
+    if(this->audio_started && this->audio_sink) this->audio_sink->endFrame();
+    this->apu_triggered = 0;
+    this->apu_last_cycle = 0;
+}
+
+uint32_t GbEmu::frameCycle() const {
+    //Peanut-GBの1フレームはLYが144(VBlankの始まり)になったところで区切られる
+    const struct gb_s& gb = this->impl->gb;
+    uint32_t c;
+    if(gb.hram_io[IO_LCDC] & LCDC_ENABLE){
+        const uint32_t line = (uint32_t)(gb.hram_io[IO_LY] + LCD_VERT_LINES - LCD_HEIGHT) % LCD_VERT_LINES;
+        c = line * LCD_LINE_CYCLES + (uint32_t)gb.counter.lcd_count;
+    }else{
+        c = (uint32_t)gb.counter.lcd_off_count;
+    }
+    if(c >= LCD_FRAME_CYCLES) c = LCD_FRAME_CYCLES - 1;
+    return c;
+}
+
+uint8_t GbEmu::audioRead(uint16_t addr) const {
+    //読むと常に1が返るビット(未使用のビット・書き込み専用のレジスタ)
+    static const uint8_t kOr[0x30] = {
+        0x80, 0x3F, 0x00, 0xFF, 0xBF,
+        0xFF, 0x3F, 0x00, 0xFF, 0xBF,
+        0x7F, 0xFF, 0x9F, 0xFF, 0xBF,
+        0xFF, 0xFF, 0x00, 0x00, 0xBF,
+        0x00, 0x00, 0x70,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    if(addr < 0xFF10 || addr > 0xFF3F) return 0xFF;
+    const uint8_t off = (uint8_t)(addr - 0xFF10);
+    if(off == 0x16){
+        if(!(this->apu_regs[0x16] & 0x80)) return 0x70;
+        const uint8_t active = this->audio_sink ? this->audio_sink->activeChannels() : 0;
+        return (uint8_t)(0xF0 | ((active | this->apu_triggered) & 0x0F));
+    }
+    return (uint8_t)(this->apu_regs[off] | kOr[off]);
+}
+
+void GbEmu::audioWrite(uint16_t addr, uint8_t val){
+    if(addr < 0xFF10 || addr > 0xFF3F) return;
+    const uint8_t off = (uint8_t)(addr - 0xFF10);
+    const bool power = (this->apu_regs[0x16] & 0x80) != 0;
+
+    if(off == 0x16){
+        if(!(val & 0x80)){
+            memset(this->apu_regs, 0, 0x16);    //電源を切るとNR10〜NR51が消える
+            this->apu_triggered = 0;
+        }
+        this->apu_regs[0x16] = val & 0x80;
+    }else if(off < 0x16){
+        if(!power) return;                      //電源が切れている間は受け付けない
+        this->apu_regs[off] = val;
+        //トリガー(NRx4のbit7)。DACが入っていれば鳴り始める
+        if(val & 0x80){
+            switch(off){
+                case 0x04: if(this->apu_regs[0x02] & 0xF8) this->apu_triggered |= 0x01; break;
+                case 0x09: if(this->apu_regs[0x07] & 0xF8) this->apu_triggered |= 0x02; break;
+                case 0x0E: if(this->apu_regs[0x0A] & 0x80) this->apu_triggered |= 0x04; break;
+                case 0x13: if(this->apu_regs[0x11] & 0xF8) this->apu_triggered |= 0x08; break;
+                default: break;
+            }
+        }
+    }else{
+        this->apu_regs[off] = val;              //未使用の番地と波形メモリ
+    }
+
+    if(this->audio_started && this->audio_sink){
+        uint32_t cycle = this->impl ? this->frameCycle() : 0;
+        if(cycle < this->apu_last_cycle) cycle = this->apu_last_cycle;   //LCDの入り切りで戻らないように
+        this->apu_last_cycle = cycle;
+        this->audio_sink->write(cycle, off, val);
+    }
 }
 
 void GbEmu::setButtons(uint8_t pressed){

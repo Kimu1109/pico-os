@@ -4,6 +4,9 @@
 #include "storage/SD_Path.hpp"
 #include "sound/Mml_Compiler.hpp"
 #include "sound/Music_Player.hpp"
+#include "sound/Gb_Apu.hpp"
+#include "sound/Gb_Audio_Link.hpp"
+#include "gb/Gb_Audio_Sink.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
 
@@ -31,6 +34,11 @@ namespace {
     std::atomic<uint8_t>  core1_active{0};      // 2コア目→1コア目: 鳴っているチャンネル
     std::atomic<uint32_t> core1_processed{0};   // 2コア目→1コア目: 音源へ渡し終えたコマンドの数
     std::atomic<bool>     core1_music{false};   // 2コア目→1コア目: 曲が鳴っている
+    std::atomic<uint8_t>  core1_gb_active{0};   // 2コア目→1コア目: GBの音源で鳴っているチャンネル
+
+    // GBエミュの音源チップへの書き込みの列。最初にROMを起動したときに1コア目が確保して置き、以降は持ち続ける
+    // (2コア目は置かれたのを見てから読む。解放しないので、読んでいる途中で消えることは無い)
+    std::atomic<GbAudioLink*> gb_link{nullptr};
 
     // --- コマンドの列(1コア目が積み、2コア目が取り出す。1対1なのでロック無しで足りる) ---
     enum class CmdType : uint8_t { Play, Stop, StopAll, MusicPlay, MusicStop };
@@ -156,6 +164,7 @@ namespace {
 
     I2S i2s(OUTPUT);
     ChipSynth::Engine engine(kSampleRate);
+    GbApu gb_apu(kSampleRate);
     MusicPlayer player(kSampleRate);
     uint8_t borrowed = 0;               // 効果音が借りているチャンネル(曲はここに触らない)
 
@@ -270,6 +279,7 @@ namespace {
         for(uint32_t i = 0; i < kMaxPerCall; i++){
             if(chunk_pos == chunk_len){
                 player.render(engine, chunk, kChunk);
+                if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, chunk, kChunk);
                 chunk_pos = 0;
                 chunk_len = kChunk;
             }
@@ -286,6 +296,7 @@ namespace {
         last_step_ms = now_ms;
         sample_frac = (uint32_t)(acc % 1000);
         player.render(engine, nullptr, (size_t)(acc / 1000));
+        if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, nullptr, (size_t)(acc / 1000));
     }
 }
 
@@ -322,6 +333,16 @@ void SoundFunctions::UpdateAt(unsigned long now_ms){
     if(d != logged_dropped){
         LOG_SYS_WARN("Sound: 要求が多すぎて%lu件捨てました", (unsigned long)(d - logged_dropped));
         logged_dropped = d;
+    }
+
+    //GBの音: 書き込みを捨てたら知らせる(捨て続けるときにログで埋まらないよう1秒に1回まで)
+    static uint32_t logged_gb_dropped = 0;
+    static unsigned long logged_gb_ms = 0;
+    const uint32_t gd = GbDroppedWrites();
+    if(gd != logged_gb_dropped && now_ms - logged_gb_ms >= 1000){
+        LOG_SYS_WARN("Sound: GBの音の書き込みが多すぎて%lu件捨てました", (unsigned long)(gd - logged_gb_dropped));
+        logged_gb_dropped = gd;
+        logged_gb_ms = now_ms;
     }
 }
 
@@ -469,6 +490,47 @@ bool SoundFunctions::MusicPlaying(){
 
 const char* SoundFunctions::MusicTitle(){ return music_title.c_str(); }
 
+// ---- ゲームボーイの音 ----
+
+namespace {
+    class GbSink : public GbAudioSink {
+    public:
+        void begin() override {
+            GbAudioLink* link = gb_link.load(std::memory_order_relaxed);
+            if(!link){
+                void* mem = malloc(sizeof(GbAudioLink));
+                if(!mem){
+                    LOG_SYS_FAIL("Sound: GBの音のためのメモリ(%uB)が足りません(音は出ません)", (unsigned)sizeof(GbAudioLink));
+                    return;
+                }
+                link = new (mem) GbAudioLink(kSampleRate);
+                gb_link.store(link, std::memory_order_release);
+            }
+            link->begin();
+        }
+        void write(uint32_t cycle, uint8_t reg, uint8_t val) override {
+            if(GbAudioLink* link = gb_link.load(std::memory_order_relaxed)) link->write(cycle, reg, val);
+        }
+        void endFrame() override {
+            if(GbAudioLink* link = gb_link.load(std::memory_order_relaxed)) link->endFrame();
+        }
+        void end() override {
+            if(GbAudioLink* link = gb_link.load(std::memory_order_relaxed)) link->end();
+        }
+        uint8_t activeChannels() override {
+            return core1_gb_active.load(std::memory_order_acquire);
+        }
+    };
+    GbSink gb_sink;
+}
+
+GbAudioSink* SoundFunctions::GbAudio(){ return &gb_sink; }
+
+uint32_t SoundFunctions::GbDroppedWrites(){
+    GbAudioLink* link = gb_link.load(std::memory_order_relaxed);
+    return link ? link->dropped() : 0;
+}
+
 // ================================================================
 // 2コア目
 // ================================================================
@@ -492,7 +554,10 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     borrowed &= engine.activeMask();
     player.setBorrowed(borrowed);
     const uint8_t vol = master_volume.load(std::memory_order_acquire);
-    if(vol != engine.masterVolume()) engine.setMasterVolume(vol);
+    if(vol != engine.masterVolume()){
+        engine.setMasterVolume(vol);
+        gb_apu.setMasterVolume(vol);
+    }
 
     ApplyRunState(now_ms);
 
@@ -504,6 +569,10 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     //この順(チャンネル→渡し終えた数)で書く。IsPlaying()参照
     core1_active.store(engine.activeMask(), std::memory_order_release);
     core1_music.store(player.playing(), std::memory_order_release);
+    {
+        GbAudioLink* link = gb_link.load(std::memory_order_acquire);
+        core1_gb_active.store((link && link->active()) ? gb_apu.activeMask() : 0, std::memory_order_release);
+    }
     core1_processed.store(processed, std::memory_order_release);
     return busy;
 }

@@ -3,6 +3,7 @@
 #include "sound/Chip_Synth.hpp"
 
 struct MmlResult;
+class GbAudioSink;
 
 // 音声出力(I2S + MAX98357A)とチップチューン音源(SUMMARY.md #11)。
 //
@@ -93,6 +94,14 @@ namespace SoundFunctions {
     bool MusicPlaying();
     // 最後に鳴らした曲の名前(#title。無ければファイル名)
     const char* MusicTitle();
+
+    // ---- ゲームボーイの音(GBエミュ) ----
+    // GbEmu::setAudioSink() へ渡す窓口。音源チップ(GbApu)は2コア目にあり、レジスタへの書き込みは
+    // 時刻付きの列(GbAudioLink、約4KB)で渡す。列は最初にROMを起動したときに確保し、以降は持ち続ける。
+    // 曲・効果音と同時に鳴らせる(足し合わせる)
+    GbAudioSink* GbAudio();
+    // 列が満杯で捨てた書き込みの数
+    uint32_t GbDroppedWrites();
 
     // ===== 2コア目から使う =====
 

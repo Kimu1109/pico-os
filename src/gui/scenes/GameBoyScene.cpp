@@ -8,6 +8,7 @@
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
+#include "functions/Sound_Functions.hpp"
 #include "gb/Gb_PadMap.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
@@ -99,6 +100,8 @@ void GameBoyScene::loadRom(const char* path){
     this->emu.unload();
     this->crash_reported = false;
 
+    //音は2コア目の音源チップ(GbApu)で鳴らす
+    this->emu.setAudioSink(SoundFunctions::GbAudio());
     const GbEmu::LoadError err = this->emu.load(path);
     if(err != GbEmu::LoadError::None){
         LOG_APP_FAIL("GameBoy: %s を開けません: %s", path, GbEmu::loadErrorToStr(err));

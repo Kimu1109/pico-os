@@ -7,6 +7,7 @@
 //   - 不正な命令で止まっても落ちずに crashed() になること(Peanut-GBの誤り通知から戻らない経路)
 //   - 画面の「変わった行」の受け渡しと、GameBoyViewが積むdirty矩形
 //   - 操作パッドのタップ位置 → ボタン(十字キーの8方向/A/B/SELECT/START/ROM/戻る、指を滑らせたとき)
+//   - 音源チップへの書き込みが時刻付きで GbAudioSink へ渡ること、読み出し(NR52等)の答え方
 // 実際の描画(1.5倍の拡大)は、PCビルドで dmg-acid2 を表示して確認する。
 #include "gb/Gb_Emu.hpp"
 #include "gui/widgets/apps/GameBoyPad.hpp"
@@ -171,6 +172,96 @@ static void testCrash(){
     check(emu.crashed(), "止まったまま");
 }
 
+// ---- 音 ----
+struct FakeSink : public GbAudioSink {
+    struct W { uint32_t cycle; uint8_t reg; uint8_t val; };
+    int begins = 0, ends = 0, frames = 0;
+    uint8_t active = 0;
+    std::vector<W> writes;
+    void begin() override { begins++; writes.clear(); }
+    void write(uint32_t c, uint8_t r, uint8_t v) override { writes.push_back({c, r, v}); }
+    void endFrame() override { frames++; }
+    void end() override { ends++; }
+    uint8_t activeChannels() override { return active; }
+};
+
+static void testSound(){
+    //   LD A,0x80 / LDH (0x26),A    … NR52 電源
+    //   LD A,0xF0 / LDH (0x17),A    … NR22 音量15
+    //   LD A,0x80 / LDH (0x16),A    … NR21 デューティ50%
+    //   LD A,0xD6 / LDH (0x18),A    … NR23 (f=1750の下位)
+    //   LD A,0x86 / LDH (0x19),A    … NR24 トリガー + 上位
+    // loop: INC B / LD A,B / LDH (0x24),A / JR loop   … NR50へ書き続ける(時刻の進み方を見る)
+    const std::vector<uint8_t> code = {
+        0x3E, 0x80, 0xE0, 0x26,
+        0x3E, 0xF0, 0xE0, 0x17,
+        0x3E, 0x80, 0xE0, 0x16,
+        0x3E, 0xD6, 0xE0, 0x18,
+        0x3E, 0x86, 0xE0, 0x19,
+        0x04, 0x78, 0xE0, 0x24, 0x18, 0xFA,
+    };
+    HostSd::files["/gb/snd.gb"] = MakeRom(0x00, 0x00, code);
+
+    FakeSink sink;
+    GbEmu emu;
+    emu.setAudioSink(&sink);
+    check(emu.load("/gb/snd.gb") == GbEmu::LoadError::None, "音を鳴らすROMを読める");
+    eq_int(sink.begins, 1, "読み込むと音を始める");
+    check(!sink.writes.empty() && sink.writes[0].reg == 0x16, "起動時の値(NR52)が渡る");
+
+    sink.writes.clear();
+    emu.runFrame();
+    eq_int(sink.frames, 1, "1フレームごとに区切る");
+    bool trig = false;
+    for(auto& w : sink.writes) if(w.reg == 0x09 && w.val == 0x86) trig = true;
+    check(trig, "NR24(トリガー)が渡る");
+    bool mono = true;
+    uint32_t max_cycle = 0, n50 = 0;
+    for(size_t i = 1; i < sink.writes.size(); i++) if(sink.writes[i].cycle < sink.writes[i - 1].cycle) mono = false;
+    for(auto& w : sink.writes){ if(w.cycle > max_cycle) max_cycle = w.cycle; if(w.reg == 0x14) n50++; }
+    check(mono, "時刻はフレームの中で戻らない");
+    check(max_cycle < 70224 && max_cycle > 60000, "時刻はフレームの頭から終わりまで(0〜70223)");
+    check(n50 > 1000, "ループの書き込みが全部渡る");
+
+    // 読み出し: 書き込み専用のビットは1で返る
+    eq_int(emu.audioRead(0xFF16), 0xBF, "NR21はデューティだけ読める");
+    eq_int(emu.audioRead(0xFF18), 0xFF, "NR23は読めない(0xFF)");
+    eq_int(emu.audioRead(0xFF17), 0xF0, "NR22は読める");
+    sink.active = 0x02;
+    eq_int(emu.audioRead(0xFF26), 0xF2, "NR52: 電源 + 音源が知らせた鳴っているチャンネル");
+    sink.active = 0;
+    eq_int(emu.audioRead(0xFF26), 0xF0, "NR52: 鳴っていなければ下位は0");
+    emu.audioWrite(0xFF19, 0x86);
+    eq_int(emu.audioRead(0xFF26), 0xF2, "NR52: このフレームにトリガーしたチャンネルはすぐ1になる");
+    emu.audioWrite(0xFF26, 0x00);
+    eq_int(emu.audioRead(0xFF26), 0x70, "電源を切るとNR52は0x70");
+    eq_int(emu.audioRead(0xFF17), 0x00, "電源を切るとNR22が消える");
+    emu.audioWrite(0xFF17, 0xF0);
+    eq_int(emu.audioRead(0xFF17), 0x00, "電源が切れている間は書けない");
+    emu.audioWrite(0xFF30, 0x12);
+    eq_int(emu.audioRead(0xFF30), 0x12, "波形メモリは電源が切れていても書ける");
+
+    const int ends_before = sink.ends;
+    emu.unload();
+    eq_int(sink.ends - ends_before, 1, "閉じると音を止める");
+
+    // 止まったエミュの音も止める
+    HostSd::files["/gb/bad2.gb"] = MakeRom(0x00, 0x00, { 0x3E, 0x80, 0xE0, 0x26, 0xD3 });
+    check(emu.load("/gb/bad2.gb") == GbEmu::LoadError::None, "止まるROMを読める");
+    const int ends2 = sink.ends;
+    emu.runFrame();
+    check(emu.crashed(), "不正な命令で止まる");
+    eq_int(sink.ends - ends2, 1, "止まったら音も止める");
+    emu.unload();
+    eq_int(sink.ends - ends2, 1, "二重に止めない");
+
+    // 渡し先が無くても控えだけで動く
+    GbEmu quiet;
+    check(quiet.load("/gb/snd.gb") == GbEmu::LoadError::None, "渡し先無しでも読める");
+    quiet.runFrame();
+    eq_int(quiet.audioRead(0xFF17), 0xF0, "渡し先無しでも読み出しは答える");
+}
+
 static void testScreen(){
     HostSd::files["/gb/idle.gb"] = MakeRom(0x00, 0x00, kIdle);
     GbEmu emu;
@@ -264,6 +355,7 @@ int main(){
     testLoadErrors();
     testSaveAndJoypad();
     testCrash();
+    testSound();
     testScreen();
     testPad();
 

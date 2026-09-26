@@ -317,7 +317,9 @@ void LuaEngine::registerApi() {
     registerFn("draw_text", l_draw_text);
     registerFn("set_draw_area", l_set_draw_area);
     registerFn("clear_draw_area", l_clear_draw_area);
+    registerFn("get_draw_area", l_get_draw_area);
     registerFn("draw_image", l_draw_image);
+    registerFn("draw_image_part", l_draw_image_part);
     registerFn("image_load", l_image_load);
     registerFn("image_size", l_image_size);
     registerFn("image_free", l_image_free);
@@ -1302,6 +1304,49 @@ int LuaEngine::l_draw_image(lua_State* L) {
     return 0;
 }
 
+// 画像の一部(sx,sy,w,h)だけを(x,y)へ描く。スプライトシート(同じ大きさのタイルを並べた
+// 1枚の画像)から1枚ずつ取り出して描くためのもの。画像は4枚までしか持てないので、
+// 部品の多い絵(テトリスのミノ等)は1枚にまとめて読み、これで切り出す。
+// 実装は「今のクリップ(FlushDirty()のdirty矩形)と描き先の矩形の重なり」へクリップを
+// 一時的に狭めてから画像全体をずらしてpushSprite()するだけ(描かれるのは重なりの中だけ)。
+// クリップは元へ戻すので、renderコールバックの中で何回呼んでもdirty矩形の外へははみ出さない
+int LuaEngine::l_draw_image_part(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+    const int32_t x = (int32_t)luaL_checkinteger(L, 2);
+    const int32_t y = (int32_t)luaL_checkinteger(L, 3);
+    int32_t sx = (int32_t)luaL_checkinteger(L, 4);
+    int32_t sy = (int32_t)luaL_checkinteger(L, 5);
+    int32_t w = (int32_t)luaL_checkinteger(L, 6);
+    int32_t h = (int32_t)luaL_checkinteger(L, 7);
+
+    size_t index;
+    if (!self->ResolveImageHandle(handle, index)) {
+        return luaL_error(L, "pico.draw_image_part: 無効なイメージハンドル");
+    }
+    ImageSlot& slot = self->images_[index];
+
+    // 画像の外を指す分は削る(負のsx/syは描き先を右/下へずらして吸収する)
+    int32_t dx = x, dy = y;
+    if (sx < 0) { w += sx; dx -= sx; sx = 0; }
+    if (sy < 0) { h += sy; dy -= sy; sy = 0; }
+    if (sx + w > slot.sprite.width) w = slot.sprite.width - sx;
+    if (sy + h > slot.sprite.height) h = slot.sprite.height - sy;
+    if (w <= 0 || h <= 0) return 0;
+
+    int32_t cx = 0, cy = 0, cw = 0, ch = 0;
+    OSData::frame->getClipRect(&cx, &cy, &cw, &ch);
+    const Rect clip = Rect{ (int16_t)cx, (int16_t)cy, (int16_t)cw, (int16_t)ch }
+        .intersection({ (int16_t)dx, (int16_t)dy, (int16_t)w, (int16_t)h });
+    if (clip.w > 0 && clip.h > 0) {
+        OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
+        IconRender::DrawPimgSprite(slot.sprite, dx - sx, dy - sy);
+        OSData::frame->setClipRect(cx, cy, cw, ch);
+    }
+    PICO_GFX::MarkDirty({ (int16_t)dx, (int16_t)dy, (int16_t)w, (int16_t)h });
+    return 0;
+}
+
 // ---------------- 直接描画エリア ----------------
 // クラスコメント(ヘッダ)参照。OSData::frameのクリップ矩形を差し替えるだけの薄いラッパー。
 
@@ -1318,6 +1363,19 @@ int LuaEngine::l_set_draw_area(lua_State* L) {
 int LuaEngine::l_clear_draw_area(lua_State*) {
     OSData::frame->clearClipRect();
     return 0;
+}
+
+// 今のクリップ矩形を返す。Canvasのrenderコールバックの中では、FlushDirty()が
+// 「そのCanvasとdirty矩形の重なり」を設定しているので、そこだけ描けば足りる
+// (盤面のように部品の多い絵で、変わったところだけを描き直すためのもの)
+int LuaEngine::l_get_draw_area(lua_State* L) {
+    int32_t x = 0, y = 0, w = 0, h = 0;
+    OSData::frame->getClipRect(&x, &y, &w, &h);
+    lua_pushinteger(L, x);
+    lua_pushinteger(L, y);
+    lua_pushinteger(L, w);
+    lua_pushinteger(L, h);
+    return 4;
 }
 
 // ---------------- 画像 ----------------

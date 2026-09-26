@@ -40,6 +40,7 @@
 #if defined(__EMSCRIPTEN__)
     #include <emscripten.h>
     #include <emscripten/html5.h>  // emscripten_get_canvas_element_size
+    #include <Arduino.h>           // PicoPcSerial(picoos_serial_push)
 #endif
 
 #include "consts.hpp"
@@ -144,6 +145,12 @@ namespace {
 #endif  // !__EMSCRIPTEN__
 
 #if defined(__EMSCRIPTEN__)
+
+// ページ(pc/web/shell.html)のコントローラーが、USBシリアルの代わりに1バイトずつ入れる口。
+// 中身は script/pad_serial.py と同じ "pad XXXX\n" の行(PadFunctions がそのまま読む)
+extern "C" EMSCRIPTEN_KEEPALIVE void picoos_serial_push(int c) {
+    PicoPcSerial::Push(c);
+}
 
 namespace {
     // ブラウザに環境変数は無いので、URLのクエリを環境変数として置き直す。

@@ -1,7 +1,7 @@
 ---
 title: "画像"
 weight: 30
-description: "image_load / image_size / draw_image / image_free"
+description: "image_load / image_size / draw_image / draw_image_part / image_free"
 ---
 
 ## pico.image_load
@@ -29,6 +29,19 @@ description: "image_load / image_size / draw_image / image_free"
 <div class="sig">pico.draw_image(handle: integer, x: integer, y: integer) <span class="ret">-> (なし)</span></div>
 
 画像を描画します。他の `pico.draw_*` と同様、`Canvas` の `render` コールバックの中で使うこと([直接描画](../drawing/) 参照)。無効なハンドルを渡すとエラーになります。
+
+## pico.draw_image_part
+
+<div class="sig">pico.draw_image_part(handle: integer, x: integer, y: integer, sx: integer, sy: integer, w: integer, h: integer) <span class="ret">-> (なし)</span></div>
+
+画像のうち `(sx, sy)` から幅 `w`・高さ `h` の部分だけを `(x, y)` へ描きます。**同じ大きさの絵を1枚に並べた画像(スプライトシート)から1つずつ切り出す**ためのもので、画像は4枚までしか持てないので、部品の多い絵はまとめて1枚にしてこれで描き分けます。画像の外にはみ出す分は描きません。`draw_image` と同じく `Canvas` の `render` コールバックの中で使い、無効なハンドルはエラーです。
+
+```lua
+-- 12x12のタイルを横に並べた画像から、n番目(1始まり)を描く
+pico.draw_image_part(img, x, y, (n - 1) * 12, 0, 12, 12)
+```
+
+実例は「テトリス」(`/lua/apps/テトリス/`。ミノの絵を1枚の `blocks.pimg` から切り出す)。
 
 ## pico.image_free
 

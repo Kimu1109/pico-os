@@ -30,6 +30,7 @@ pico.image_free(handle)
 | `pico.image_load(path)` | `.pimg`をデコードし整数ハンドルを返す。失敗(SD無し/権限外/壊れたファイル/上限超過)は `nil` |
 | `pico.image_size(handle)` | `width, height` を返す |
 | `pico.draw_image(handle, x, y)` | 描画(他の `pico.draw_*` と同じく `Canvas` の `render` の中で使うこと) |
+| `pico.draw_image_part(handle, x, y, sx, sy, w, h)` | 画像の一部だけを描く(スプライトシートからの切り出し) |
 | `pico.image_free(handle)` | 明示的に解放する |
 
 ## 画像はウィジェットではない

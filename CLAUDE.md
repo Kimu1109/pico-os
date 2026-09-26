@@ -85,11 +85,12 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/padの33本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/pad/tetrisの34本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
   pad_serial.py               PCのキーボードを外部コントローラーにする(USBシリアルへ送る。tkinter + pyserial)
+  generate_tetris_blocks.py   テトリスのミノの絵(blocks.pimg)とアイコンを作る(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
 lib/peanut_gb/                 vendorしたPeanut-GB(Game Boyエミュ、ヘッダ1本・無改造)。詳細はlib/peanut_gb/README-pico-os.md
 pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripten)。`src/`は実機と同一のまま使う
@@ -100,6 +101,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
     lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
     lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
     lua/apps/コントローラー確認/ 外部コントローラーの動作確認(押しているボタンを図で出す)
+    lua/apps/テトリス/        テトリス風ゲーム(下記「テトリス」)
     music/*.mml               ミュージックアプリが並べる曲(demo.mml / sample.mml。MUSIC_FORMAT.md)
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
@@ -804,8 +806,13 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   ステータスバー(つながっている間だけゲームパッドのアイコン。無いのが普通なのでバツは付けない)、
   動作確認アプリ「コントローラー確認」(`pc/sdcard/lua/apps/コントローラー確認/`)。
   **通常の画面をコントローラーで操作する(フォーカス移動)のは対象外**(ウィジェットにフォーカスの概念が無い。別の大きな仕事)。
-- **PCビルド**: `pc/compat/Arduino.h`の`Serial.available()/read()`が**標準入力**を別スレッドで読む(`PICOOS_SERIAL_STDIN=off`で無効、Webは常に空)。
+- **PCビルド**: `pc/compat/Arduino.h`の`Serial.available()/read()`が**標準入力**を別スレッドで読む(`PICOOS_SERIAL_STDIN=off`で無効)。
   `python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc`、ヘッドレスなら`echo "pad 0011"`を100msごとに流し込めばよい。
+- **Webビルド**(2026-09-26): 標準入力が無いので、ページ(`pc/web/shell.html`)の**コントローラー**(Wiiクラシックと同じボタンの並び。
+  ポインタごとに覚えるので**複数の指で同時押し**でき、押したまま滑らせると隣のボタンへ移る)と**キーボード**(割り当ては`pad_serial.py`と同じ、
+  `KeyboardEvent.code`で引く)が`pad XXXX\n`を作り、`main_pc.cpp`の`picoos_serial_push()`(`EMSCRIPTEN_KEEPALIVE`+`-sEXPORTED_FUNCTIONS`)で
+  1バイトずつSerialの受信口へ入れる。**取り決めは実機と同じ**(変わったとき+100msごと、チェックを外すと送らなくなり500msで外れる)ので、
+  pico-os側は何も変えていない。タブを離れたら(`blur`)全部離す。Chromium(Playwright)で、キーボードとページのボタンの両方でテトリスを操作できることを確認した。
 - 検証: `pad_test`(run.sh。行の読み取り、押した/離したはそのフレームだけ、途切れたら外れる、行が分かれて届く、長すぎる行、1回に読む量、GBの対応)、
   `lua_engine_test`(Lua API)、PCビルドで`pad_serial.py --stdout`→`picoos_pc`をXvfb+xdotoolで通し(十字キー斜め+Bの同時押しで点が斜めに動く)、
   擬似端末を相手にシリアルの経路(pyserial有り/無し、ログの折り返し)。**実機のUSBシリアル(arduino-picoのCDC)では未確認**。
@@ -1056,9 +1063,9 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
+| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイント/テトリス風はLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。音も鳴る(#11)。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
-| 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
+| 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
 | 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。MIDIはPCの`script/midi2mml.py`で取り込む。GBエミュの音(音源チップの再現)も鳴る。**実機での確認は未**(下記「音声出力」「曲データ」「ゲームボーイの音」参照)。 |
 
 **#7は完了しており、#5(Lua)の前提として十分な実例が揃った。** Lua APIの仕様は「C++で標準アプリを
@@ -1216,6 +1223,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.draw_pixel(x,y,color)` / `draw_line(x0,y0,x1,y1,color)` / `draw_rect(x,y,w,h,color)` / `fill_rect(...)` / `draw_circle(x,y,r,color)` / `fill_circle(...)` / `clear_rect(x,y,w,h[,color])` / `draw_text(x,y,text[,color[,font_size]])` | `OSData::frame`へ直接描く。**`Canvas`の`render`コールバック内で使うこと**(下記「直接描画」参照)(2026-09-20追加) |
 | `pico.invalidate(id)` | 対象ウィジェットの画面矩形を`needsRender()`でdirty化(次のFlushDirty()で`render()`が呼ばれる)。`Canvas`に限らず任意のウィジェットに使える汎用API(2026-09-20追加) |
 | `pico.mark_dirty(x,y,w,h)` | `PICO_GFX::MarkDirty()`の生の下請け。任意の矩形を直接dirty化したいとき向けの低レベルAPI(2026-09-20追加) |
+| `pico.get_draw_area()` | 今のクリップ矩形を`x,y,w,h`で返す(無ければw/hが0)。`render`の中では「Canvasとdirty矩形の重なり」なので、部品の多い絵で描き直しが要る部分だけを描ける(テトリスの盤面)(2026-09-26追加) |
 | `pico.set_draw_area(x,y,w,h)` / `pico.clear_draw_area()` | `OSData::frame->setClipRect()`/`clearClipRect()`。以降の`pico.draw_*`をこの矩形の内側だけに制限する/解除する(下記「直接描画エリア」参照)(2026-09-20追加) |
 | `pico.sd_exists(path)` | `OSData::SD.exists()`。`bool`を返す(2026-09-20追加) |
 | `pico.sd_read(path)` | ファイル全体を文字列で返す。無い/開けない/上限超過は`nil`(下記「SDカードアクセス」参照)(2026-09-20追加) |
@@ -1227,6 +1235,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.image_size(handle)` | 読み込んだ画像の`width, height`を返す。無効なハンドルはエラー(2026-09-21追加) |
 | `pico.draw_image(handle, x, y)` | 画像を描く。他の`pico.draw_*`と同じく**`Canvas`の`render`コールバック内で使うこと**。無効なハンドルはエラー(2026-09-21追加) |
 | `pico.image_free(handle)` | 画像を明示的に解放する。無効/解放済みハンドルは`pico.destroy`と同じく黙って無視(2026-09-21追加) |
+| `pico.draw_image_part(handle, x, y, sx, sy, w, h)` | 画像の一部だけを描く(スプライトシートからの切り出し。画像は4枚までなので部品の多い絵は1枚にまとめる)。今のクリップと描き先の重なりへクリップを一時的に狭めてから画像全体をずらして`pushSprite()`し、クリップは元へ戻す(2026-09-26追加) |
 | `pico.canvas_clear(id)` | `CanvasRaster`(`pico.create("CanvasRaster")`)を白紙(`PICO_WHITE`)へ戻す。対象がCanvasRaster以外/無効なIDはエラー(下記「ラスタキャンバスの保存/読み込み」参照)(2026-09-23追加) |
 | `pico.canvas_save(id, path)` | `CanvasRaster`の中身を`.pimg`としてSDへ書き出す。成否を`bool`で返す(SD無し/権限外/書き込み失敗はfalse。対象種別/IDが不正ならエラー)(2026-09-23追加) |
 | `pico.canvas_load(id, path[, keep_size])` | `.pimg`を読み込み`CanvasRaster`へ反映する。**読み込んだ画像のサイズへキャンバス自体もリサイズされる**(内容は消える)。`keep_size=true`なら大きさを変えず白紙にしてから左上に合わせて読む(2026-09-24追加)。成否を`bool`で返す(2026-09-23追加) |
@@ -1647,6 +1656,30 @@ SUMMARY.md #8の「ペイント」。**Luaアプリ**で、描画の中身は全
   `bufferLength()`を足した。塗りつぶし(種あふれを含む)・元に戻す・塗りつぶしの四角形・`keep_size`は
   `lua_engine_test.cpp`で確認。輪郭の図形は`fillCircle`/`fillTriangle`がスタブで無描画なので、見た目は
   PCビルドの`--tap`で確認した。
+
+### テトリス(`pc/sdcard/lua/apps/テトリス/`、2026-09-26実装)
+
+SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**(C++へ足したのは汎用の`pico.draw_image_part()`/`pico.get_draw_area()`の2つだけ)。
+
+- ファイル: `main.lua`(ゲーム・描画・入力)/ `lib.lua`(ミノの形・SRSの壁蹴りの表・操作ボタンの絵・`textW`/`mini`。
+  **`main.lua`を16KiBに収めるため分けた**。`pico.sd_read`+`load()`で読む、ブロック崩しの`stages.lua`と同じ形。
+  **`main.lua`は16KiBぎりぎり**なので、足すときは`lib.lua`へ寄せること)/ `blocks.pimg` / `bgm.mml` / `hiscore.txt`(書き出し)/ `app.cfg` / `icon.pimg`。
+- **ミノの絵は画像**: 12x12のタイルを横に8枚(I O T S Z J L ゴースト)並べた`blocks.pimg`(96x12)を1枚だけ読み、`pico.draw_image_part()`で
+  切り出す(Luaが持てる画像は4枚まで)。`script/generate_tetris_blocks.py`がパレット番号で直接描く(PIL不要)。パレットに橙が無いのでLは灰。
+  読めなければ色の四角で描く。
+- 規則: SRSの回転と壁蹴り(左回転は「1つ前の向きからの右回転」の候補の符号反転で引く)、7種1巡、NEXT3つ、HOLD(1個につき1回)、ゴースト、
+  接地から500msで固定(動かすと猶予が戻る、15回まで)、左右の長押しは170ms後に50msごと、ソフトドロップ30ms/段(+1点)、ハードドロップ(+2点/段)、
+  得点は100/300/500/800×レベル、10ラインごとにレベルが上がり落下はガイドラインの式(`(0.8-(lv-1)*0.007)^(lv-1)`秒)。消える行は200ms白く光る。
+- **盤面は変わったマスだけ描き直す**: 毎フレーム「今の見た目」(見える20段、8=ゴースト、9=消える行)を作って前回と比べ、変わったマスを囲む矩形だけを
+  `pico.mark_dirty()`。`render`は`pico.get_draw_area()`で聞いた範囲にかかるマスだけを描く。状態が変わったとき(一時停止の表示等)だけ全体を`invalidate`。
+- **入力は「押しているボタンのビット」1つ**: タッチ(下の6ボタンの`press_start/move/end/out`、盤面タップ=右回転/開始、HOLD枠・BGM枠のタップ)と
+  `pico.pad_down()`をORし、前フレームとの差で「押された」を取る。**短いタップを取りこぼさないよう`press_start`で`latch`も立てる**。
+  コントローラー: 十字キー=移動/ソフト(下)/ハード(上)、A・X=右回転、B・Y=左回転、L/R/ZL/ZR=HOLD、START=一時停止/開始、HOME=戻る。
+- 音: BGMは`bgm.mml`(コロベイニキ、ロシア民謡でパブリックドメイン)。効果音は**チャンネル2**(BGMが使わないチャンネル)で鳴らすので曲を借りない。BGM枠のタップで入り切り。
+- 検証: `tetris_test`(run.sh。`script/host_test/tetris_test.lua`を`lua_script_test`(vendorしたLuaで.luaを動かすだけの下請け)で実行する。
+  `pico.*`をLuaの偽物に差し替え、`main.lua`の末尾へ`TEST`(ローカル変数を覗く口)を足して読む。ライン消し・テトリス・壁蹴り・HOLD・長押し・
+  ゲームオーバーとハイスコア保存・一時停止・タッチの操作ボタン・重力・16KiB以内)、PCビルドの`--tap`+標準入力の`pad`行、Webビルドを
+  Chromium(Playwright)でページのボタンとキーボードから操作。**実機では未確認**(Luaで200マスの差分を毎フレーム作る重さは実機で見ること)。
 
 ### Buttonのアイコン化(`pico.set(id,"icon_id"/"icon_size",...)`、2026-09-23実装)
 
@@ -2239,7 +2272,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、33本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、34本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

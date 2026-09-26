@@ -83,6 +83,10 @@
 #                    が無い場合に安全に0件を返すことまでを確認する
 #                    (完全な走査結果はPCビルドの--shotで確認済み。CLAUDE.md
 #                    「SDを走査してLuaアプリを見つける処理」参照)
+#   tetris_test… Luaアプリ「テトリス」(pc/sdcard/lua/apps/テトリス/)のゲームの規則。
+#                 pico.*をLuaの偽物に差し替え、lua_script_test(vendorしたLuaで.luaを
+#                 動かすだけの下請け)で tetris_test.lua を実行する。ライン消し・壁蹴り・
+#                 HOLD・長押しの連続移動・ゲームオーバーとハイスコア保存・タッチの操作ボタン
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -123,7 +127,7 @@ compile_or_die() {
 
 run_or_die() {
     rc=0
-    timeout -k 10 "$RUN_TIMEOUT_SEC" "$1" || rc=$?
+    timeout -k 10 "$RUN_TIMEOUT_SEC" "$@" || rc=$?
     if [ "$rc" -ne 0 ]; then
         if [ "$rc" -eq 124 ]; then
             echo "[FATAL] $1 が${RUN_TIMEOUT_SEC}秒を超えて応答しませんでした(無限ループの疑いあり)" >&2
@@ -836,3 +840,13 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
 echo ""
 echo "===== lua_app_scanner_test ====="
 run_or_die "$OUT/lua_app_scanner_test"
+
+# --- Luaアプリのゲームの規則(pico.*を差し替えてLuaだけで動かす) ---
+compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/lua_script_test.cpp" \
+    "$OUT"/lua_obj/*.o \
+    -o "$OUT/lua_script_test"
+
+echo ""
+echo "===== tetris_test ====="
+run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/tetris_test.lua" "$ROOT"

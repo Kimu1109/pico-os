@@ -168,6 +168,8 @@ if(EMSCRIPTEN)
         "-sEXIT_RUNTIME=0"
         # クエリ文字列の取り出し(main_pc.cpp の EM_ASM)で使う
         "-sEXPORTED_RUNTIME_METHODS=stringToUTF8,UTF8ToString"
+        # ページのコントローラーがSerialの受信口へ流し込む(main_pc.cpp の picoos_serial_push)
+        "-sEXPORTED_FUNCTIONS=_main,_picoos_serial_push"
         "--preload-file" "${CMAKE_CURRENT_SOURCE_DIR}/sdcard@/sdcard"
         "--shell-file" "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
 

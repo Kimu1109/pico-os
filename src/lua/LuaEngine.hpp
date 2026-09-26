@@ -570,6 +570,8 @@ class LuaEngine {
         // renderコールバックの中で使うこと)なのでここに置くが、ハンドルの発行・
         // 解放自体はrenderコールバックの外(setup()等)で自由に呼んでよい
         static int l_draw_image(lua_State* L);
+        // 画像の一部だけを描く(スプライトシートからの切り出し)。今のクリップの内側だけに描く
+        static int l_draw_image_part(lua_State* L);
 
         // 直接描画エリア(クリップ矩形)。OSData::frameへのpico.draw_*/draw_text呼び出しを
         // この矩形の内側だけに制限する。set_draw_areaを呼びっぱなしでrenderコールバックを
@@ -581,6 +583,8 @@ class LuaEngine {
         // 少なくとも「そのCanvas以外を巻き込む」事故には至らない。
         static int l_set_draw_area(lua_State* L);
         static int l_clear_draw_area(lua_State* L);
+        // 今のクリップ矩形(renderコールバックの中ならdirty矩形とCanvasの重なり)を返す
+        static int l_get_draw_area(lua_State* L);
 
         // 画像(pico.image_load/image_size/image_free)。クラスコメント「画像」参照。
         // `.pimg`をこのLuaEngineインスタンスの固定長スロットへデコードして持ち、

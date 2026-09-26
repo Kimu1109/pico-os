@@ -1139,6 +1139,25 @@ int main(){
         check(g_last_dirty.x == 10 && g_last_dirty.y == 20 && g_last_dirty.w == 2 && g_last_dirty.h == 2,
               "pico.draw_image: 画像サイズ分のdirty矩形が登録される");
 
+        // 一部だけ描く(スプライトシートの切り出し)。はみ出す分は画像の大きさへ削られる
+        const bool part_ok = engine.Run("pico.draw_image_part(img_a, 30, 40, 1, 0, 5, 5)", "draw_image_part_test");
+        check(part_ok, "pico.draw_image_part: エラーなく実行できる");
+        check(g_last_dirty.x == 30 && g_last_dirty.y == 40 && g_last_dirty.w == 1 && g_last_dirty.h == 2,
+              "pico.draw_image_part: 画像の内側へ削った大きさのdirty矩形が登録される");
+        // 描いたあとも呼び出し前のクリップ(renderの中ならdirty矩形)へ戻っている
+        OSData::frame->setClipRect(3, 4, 50, 60);
+        const bool part_clip_ok = engine.Run(R"LUA(
+            pico.draw_image_part(img_a, 0, 0, 0, 0, 2, 2)
+            local x, y, w, h = pico.get_draw_area()
+            check(x == 3 and y == 4 and w == 50 and h == 60,
+                  'pico.draw_image_part/get_draw_area: クリップは元へ戻り、get_draw_areaで読める')
+            pico.draw_image_part(img_a, 0, 0, 5, 5, 2, 2) -- 画像の外だけを指す: 何もしない
+            check(pcall(pico.draw_image_part, 999999, 0, 0, 0, 0, 1, 1) == false,
+                  'pico.draw_image_part: 無効なハンドルはエラー')
+        )LUA", "draw_image_part_clip_test");
+        OSData::frame->clearClipRect();
+        check(part_clip_ok, "pico.draw_image_part: クリップのテストの実行自体は成功する");
+
         const bool bad_handle_ok = engine.Run(
             "check(pcall(pico.draw_image, 999999, 0, 0) == false, 'pico.draw_image: 無効なハンドルはエラー')",
             "draw_image_bad_handle_test");

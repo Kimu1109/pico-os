@@ -5,13 +5,14 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Checkbox.hpp"
 #include "gui/widgets/DropdownMenu.hpp"
+#include "gui/widgets/NumberSlider.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
 #include <cstdint>
 
 // 標準アプリの設定。Wi-Fi/時刻/ブラウザのホーム(network.cfg)と
-// 起動時セルフチェック(user.cfg)を1画面のフォームで編集する。
+// 音量(sound.cfg)と起動時セルフチェック(user.cfg)を1画面のフォームで編集する。
 //
 // 電卓/時計と違い「保存」ボタンは持たない。各行の操作(編集ダイアログの決定/
 // チェックボックスのタップ/タイムゾーンの選択)ごとにConfig_Functions::SetValue()で
@@ -51,6 +52,13 @@ class SettingsScene : public Scene {
         Label<PICO_STR_L>* home_label           = nullptr;
         Button*            home_edit_button     = nullptr;
 
+        Label<PICO_STR_S>* volume_title         = nullptr;
+        NumberSlider*      volume_slider        = nullptr;
+        // 音量はドラッグ中もSoundFunctions::SetVolume()で即座に反映し、sound.cfgへの
+        // 書き込みと確認音は指を離したときに1回だけ行う(ドラッグの1フレームごとにSDへ書かないため)
+        int  volume_applied = -1;
+        bool volume_dirty   = false;
+
         Checkbox*          run_test_checkbox    = nullptr;
         Label<PICO_STR_M>* run_test_note        = nullptr;
 
@@ -70,7 +78,7 @@ class SettingsScene : public Scene {
         int tz_selected_index = -1; // onUpdate()での変化検出用
 
         constexpr static int MARGIN     = 3;
-        constexpr static int ROW_H      = 34;
+        constexpr static int ROW_H      = 30; // 8行(音量を含む)を画面へ収めるため34から詰めた
         constexpr static int EDIT_BTN_W = 48;
         constexpr static int EDIT_BTN_H = 20;
 
@@ -89,6 +97,7 @@ class SettingsScene : public Scene {
         void refreshNtp1Label();
         void refreshNtp2Label();
         void refreshHomeLabel();
+        void updateVolume();
 
         // InputDialogを1つnewして開く。閉じたらcommitEdit()へ渡してから破棄する
         void openEditDialog(EditField field, const char* label_text, const char* prefill);

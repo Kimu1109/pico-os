@@ -75,6 +75,11 @@ local NUM_COLORS = {
     [8] = 8,  -- DARKGREY
 }
 
+-- 効果音(チャンネル2)。勝ったときのジングルは短いMMLを曲として鳴らす(チャンネル1なので効果音に食われない)
+local function se(freq, ms, wave, env)
+    pico.sound_play(2, freq, ms, { wave = wave or "pulse25", volume = 9, envelope = env or -3 })
+end
+
 local function neighbors(r, c)
     local list = {}
     for dr = -1, 1 do
@@ -116,6 +121,7 @@ pico.set(flag_button, "font_size", 0)
 pico.set(flag_button, "text", "旗:OFF")
 pico.on(flag_button, "press_start", function()
     flag_mode = not flag_mode
+    se(flag_mode and 990 or 660, 30, "pulse12")
     pico.set(flag_button, "text", flag_mode and "旗:ON" or "旗:OFF")
 end)
 
@@ -204,6 +210,7 @@ local function checkWin()
 
     game_over = true
     win = true
+    pico.music_play_text("#tempo 180\nA @pulse25 v11 q7 o5 l16 c e g > c e g > c4")
     -- 地雷マスへ自動で旗を立てて見せる
     for r = 1, ROWS do
         for c = 1, COLS do
@@ -237,6 +244,7 @@ local function onReveal(r, c)
     end
 
     if mine[r][c] then
+        se(70, 900, "noise", -2) -- 爆発
         revealed[r][c] = true
         game_over = true
         win = false
@@ -245,6 +253,8 @@ local function onReveal(r, c)
         return
     end
 
+    -- 1マスだけならクリック音、0マスで広く開いたら低めの長い音
+    if adjacent[r][c] == 0 then se(440, 120, "triangle", -2) else se(880, 30) end
     floodReveal(r, c)
     checkWin()
     if not game_over then setStatusLabel() end
@@ -253,6 +263,7 @@ end
 local function onFlag(r, c)
     if game_over or revealed[r][c] then return end
     flagged[r][c] = not flagged[r][c]
+    se(flagged[r][c] and 1320 or 660, 40, "pulse12")
     setStatusLabel()
 end
 

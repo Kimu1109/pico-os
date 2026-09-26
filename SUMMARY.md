@@ -181,6 +181,9 @@
   - [x] 動作確認アプリ(チップチューン)
   - [x] 曲と効果音の同居
   - [ ] 既存アプリへの効果音/BGM
+    - [x] ブロック崩し
+    - [x] マインスイーパー
+  - [x] 設定アプリで音量を変える
 
 ---
 
@@ -416,7 +419,7 @@ CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォ
 
 ### 設定(`SettingsScene`)
 
-`network.cfg`(Wi-Fi/NTP/ブラウザのホーム/タイムゾーン)と`user.cfg`(起動時セルフチェック)を
+`network.cfg`(Wi-Fi/NTP/ブラウザのホーム/タイムゾーン)と`sound.cfg`(音量)と`user.cfg`(起動時セルフチェック)を
 1画面のフォームで編集する。**`Config_Functions::SetValue()`・`Checkbox`・`DropdownMenu`の
 初めての実利用箇所**(いずれもこれまで発行側/部品のみで、呼び出し元が無かった)。
 
@@ -437,6 +440,10 @@ CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォ
   ※`DropdownMenu`自体は2026-09-21のLua API穴埋めで`setOnChanged()`
   (Lua側`dropdown_changed`イベント)を持つようになったが、`SettingsScene.cpp`はこの
   ポーリング実装のまま未移行(上記「5. Luaアプリ」の`dropdown_changed`参照)。
+- **音量**(`sound.cfg`の`volume`、0〜100)は`NumberSlider`。ドラッグ中は`SoundFunctions::SetVolume()`で
+  その場で反映し、**指を離したときに1回だけ**`SetValue()`で保存して確認音(880Hz)を鳴らす
+  (ドラッグの1フレームごとにSDへ書かないため。離す前に画面を抜けた場合は`onExit()`で保存)。
+  8行を画面へ収めるため行の高さ(`ROW_H`)を34→30pxへ詰めた。
 - ブラウザのホームは空欄も許可する(空にすると`MarkdownScene`が同梱サンプル文書を開く)。
   他のテキスト項目は空欄のまま決定しても変更しない。
 - 実装に伴い部品側の欠けを2つ埋めた: `Checkbox::causeOnPressStart()`がタップ後に
@@ -471,4 +478,4 @@ CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォ
 | 8 | セカンダリアプリ開発 | 部品は存在するが、アプリ本体のコードは無い。[7](#7-標準アプリ開発-1)が一巡してから。カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示(`CalendarScene`、SDの`/calendar/*.ics`を読む)・取得元URLからの取得(`Calendar_Sync`、`/calendar/sources.cfg`、HTTPS対応)まで入った(Google CalendarはOAuthではなく非公開のiCal URLで読む方針。`CLAUDE.md`参照)。ペイントはLuaアプリ(`pc/sdcard/lua/apps/ペイント/`)として実装済み: ペン/消しゴム/直線/四角形・楕円(輪郭/塗りつぶし)/塗りつぶし(バケツ)/色(`ColorDialog`)/太さ/元に戻す/新規/`.pimg`の保存(`FileSaveDialog`)・読込(`FileSelectDialog`)。描画の中身は`CanvasRaster`(C++)側に足した。チャットは自前のサーバ(`server/chat/`、Python標準ライブラリのみ、仕様は`CHAT_PROTOCOL.md`)+ Webクライアント + `ChatScene`(`/sys/chat.cfg`)として実装済み。Discordは自分のアカウントでの自動操作が規約違反でBot名義になるため見送った(`CLAUDE.md`「チャット」参照) **テトリス風はLuaアプリ(`/lua/apps/テトリス/`)として実装**: SRSの回転と壁蹴り・7種1巡・HOLD・ゴースト・ハイスコア・BGM(コロベイニキ)。ミノの絵は1枚の`blocks.pimg`から`pico.draw_image_part()`で切り出し、盤面は変わったマスだけを描き直す(`pico.get_draw_area()`)。タッチとコントローラーの両方で遊べる |
 | 9 | GameBoyエミュ | **[Peanut-GB](https://github.com/deltabeard/Peanut-GB)を採用**(MIT・C99のヘッダ1本・ROMの読み出しがコールバック・1行ずつ描画を渡す・RP2040でもフルスピード。`lib/peanut_gb/`へ無改造でvendor)。Pico-GB/pico-peanutGB(GPL-3・HDMI出力)/gnuboy/SameBoy等と比べた経緯は`CLAUDE.md`「ゲームボーイ」参照。**第1段 = ROMをRAMへ丸ごと読む(256KBまで)**が`GameBoyScene`(ランチャの「ゲームボーイ」)として入った: SDの`/gb/`からROMを選び、240x216(1.5倍)で表示、タッチの操作パッド(十字キー8方向/A/B/SELECT/START)、カートリッジRAMは終了時に`<ROM名>.sav`へ保存。音は#11の「GB対応」で鳴るようになった(音源チップを2コア目で再現)。PCビルドでdmg-acid2・cpu_instrsが正しく動き、59.7フレーム/秒が出ることを確認。**残り**: 実機での速さの計測(5秒ごとに実行/捨てたフレーム数をログへ出す)、256KBを超えるROM(第2段=SDからバンク単位で読む/第3段=Flashへ書く)、タッチが1点しか取れないため「十字キー+A」の同時押しができない(#10の外部コントローラーで解消する見込み)、GBC |
 | 10 | 外部コントローラー | **方式は市販のWiiクラシックコントローラー(I2C、GP0/GP1、抜き差しはACKで見る)に決めた**が、実物がまだ無い。先に**入力の窓口`PadFunctions`**(15ボタンのビットマスク、押した/離したはそのフレームだけ)と、**USBシリアル経由のPCキーボード入力**(`script/pad_serial.py`が`pad XXXX`の行を100msごとに送る。500ms途切れたら全部離す)を作った。GBエミュ(画面のパッドと重ねるので同時押しができる。HOMEで戻る)・Lua(`pico.pad_*`)・ステータスバーのアイコン・動作確認アプリ「コントローラー確認」まで。PCビルドでは標準入力がシリアルの代わり、**Webビルドではページのボタン(同時押し可)とキーボードが同じ`pad XXXX`の行を流す**(`pc/web/shell.html` → `picoos_serial_push()`)。**実機のUSBシリアルでは未確認** |
-| 11 | Chiptuneを再生 | **出力の土台**(`SoundFunctions`): I2S(MAX98357A、BCLK=GP2/LRCLK=GP3/DIN=GP4)、アンプの有無を検出線(GP5、アンプ側でGND)で見て**刺さっている間だけI2Sを動かす**(未接続でも呼び出しは受け付け、音は時間どおりに進むので刺し直すと続きから鳴る)、`/sys/sound.cfg`(`output = auto / off`、`volume`)、ステータスバーのアイコン、PC/Web版(SDL)。**音源**(`src/sound/Chip_Synth`): 4チャンネル、波形は矩形(12.5/25/50/75%)・三角・のこぎり・ノイズ2種をどのチャンネルでも選べる、ゲームボーイ風の音量エンベロープと長さ。**2コア目(`setup1()/loop1()`)で合成してI2Sへ流す**ので、1コア目の描画やTLSで途切れない(1コア目からは固定長のコマンドの列で渡す)。Luaの`pico.sound_play/sound_stop/sound_playing/note_freq`と、動作確認アプリ「チップチューン」(鍵盤とデモ曲、`pc/sdcard/lua/apps/チップチューン/`)。**曲データ**: 標準はMML(`MUSIC_FORMAT.md`)。1コア目で読み取って小さな演奏データへ、2コア目のシーケンサーがサンプル単位で鳴らす(テンポが揺れない)。効果音は曲のチャンネルを借りる。Luaの`pico.music_play/music_play_text/music_stop/music_playing`、ミュージックアプリ(`/music/*.mml`)。**MIDIの取り込み**: `script/midi2mml.py`(PCで動かす。和音を声部へ分けて4チャンネルへ割り当て、打楽器はノイズへ、6KiBに収まるよう切る。`MUSIC_FORMAT.md`「MIDIからの変換」)。**GB対応**: GBエミュの音源チップ(矩形波+スイープ/矩形波/波形メモリ/ノイズ、長さ・エンベロープ、NR50〜52)を`src/sound/Gb_Apu`として2コア目で再現。エミュ(1コア目)は音源チップへの書き込みに「フレームの頭から何クロック目か」を付けて列(`Gb_Audio_Link`、約4KB、初めてROMを起動したときに確保)へ積み、2コア目はその時刻にあたるサンプルの位置で当てる(音はエミュより約1フレーム遅れる)。曲・効果音と足し合わせて鳴る。エミュが止まったら(ダイアログ・終了・停止)約50msで無音。**残り**: 既存アプリへの効果音、実機での確認(2コア目の負荷・市販ゲームでの聞こえ方) |
+| 11 | Chiptuneを再生 | **出力の土台**(`SoundFunctions`): I2S(MAX98357A、BCLK=GP2/LRCLK=GP3/DIN=GP4)、アンプの有無を検出線(GP5、アンプ側でGND)で見て**刺さっている間だけI2Sを動かす**(未接続でも呼び出しは受け付け、音は時間どおりに進むので刺し直すと続きから鳴る)、`/sys/sound.cfg`(`output = auto / off`、`volume`)、ステータスバーのアイコン、PC/Web版(SDL)。**音源**(`src/sound/Chip_Synth`): 4チャンネル、波形は矩形(12.5/25/50/75%)・三角・のこぎり・ノイズ2種をどのチャンネルでも選べる、ゲームボーイ風の音量エンベロープと長さ。**2コア目(`setup1()/loop1()`)で合成してI2Sへ流す**ので、1コア目の描画やTLSで途切れない(1コア目からは固定長のコマンドの列で渡す)。Luaの`pico.sound_play/sound_stop/sound_playing/note_freq`と、動作確認アプリ「チップチューン」(鍵盤とデモ曲、`pc/sdcard/lua/apps/チップチューン/`)。**曲データ**: 標準はMML(`MUSIC_FORMAT.md`)。1コア目で読み取って小さな演奏データへ、2コア目のシーケンサーがサンプル単位で鳴らす(テンポが揺れない)。効果音は曲のチャンネルを借りる。Luaの`pico.music_play/music_play_text/music_stop/music_playing`、ミュージックアプリ(`/music/*.mml`)。**MIDIの取り込み**: `script/midi2mml.py`(PCで動かす。和音を声部へ分けて4チャンネルへ割り当て、打楽器はノイズへ、6KiBに収まるよう切る。`MUSIC_FORMAT.md`「MIDIからの変換」)。**GB対応**: GBエミュの音源チップ(矩形波+スイープ/矩形波/波形メモリ/ノイズ、長さ・エンベロープ、NR50〜52)を`src/sound/Gb_Apu`として2コア目で再現。エミュ(1コア目)は音源チップへの書き込みに「フレームの頭から何クロック目か」を付けて列(`Gb_Audio_Link`、約4KB、初めてROMを起動したときに確保)へ積み、2コア目はその時刻にあたるサンプルの位置で当てる(音はエミュより約1フレーム遅れる)。曲・効果音と足し合わせて鳴る。エミュが止まったら(ダイアログ・終了・停止)約50msで無音。既存アプリへの効果音はブロック崩し(+ジングル)・マインスイーパーから。設定アプリで音量を変えられる。**残り**: 他の既存アプリへの効果音、実機での確認(2コア目の負荷・市販ゲームでの聞こえ方) |

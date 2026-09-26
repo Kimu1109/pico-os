@@ -45,6 +45,8 @@ struct LGFX_Sprite {
     // 十分)。IconRender::EncodePimg/DecodePimgBody(pico.canvas_save/canvas_load)を
     // ホストテストで検証するために追加した。他のメソッドは元々どおり無描画のまま
     int sp_w_ = 0, sp_h_ = 0;
+    int clip_[4] = {0, 0, 0, 0};
+    bool clip_set_ = false;
     std::vector<uint8_t> pixels_;
 
     LGFX_Sprite(void* = nullptr){}
@@ -65,8 +67,10 @@ struct LGFX_Sprite {
     void setTextSize(int size){ text_size = (size > 0) ? size : 1; }
     void setTextColor(int, int = 0){}
     void setTextWrap(bool, bool = false){}
-    void setClipRect(int, int, int, int){}
-    void clearClipRect(){}
+    // クリップ矩形は覚えるだけ(描き込みには効かせない)。getClipRect()は
+    // setClipRect()されている間だけその値を、それ以外は0を返す(以前の挙動のまま)
+    void setClipRect(int x, int y, int w, int h){ clip_[0] = x; clip_[1] = y; clip_[2] = w; clip_[3] = h; clip_set_ = true; }
+    void clearClipRect(){ clip_set_ = false; }
     // fillRect/drawFastHLineも実際に書き込む(CanvasRasterの塗りつぶし・四角形の
     // 焼き込みをホストテストで検証するため)。範囲外はwritePixel()と同じく捨てる
     void fillRect(int x, int y, int w, int h, int color){
@@ -82,7 +86,9 @@ struct LGFX_Sprite {
     void fillEllipse(int, int, int, int, int){}
     void drawWideLine(int, int, int, int, float, int){}
     void getClipRect(int32_t* x, int32_t* y, int32_t* w, int32_t* h){
-        if(x) *x = 0; if(y) *y = 0; if(w) *w = 0; if(h) *h = 0;
+        const bool s = clip_set_;
+        if(x) *x = s ? clip_[0] : 0; if(y) *y = s ? clip_[1] : 0;
+        if(w) *w = s ? clip_[2] : 0; if(h) *h = s ? clip_[3] : 0;
     }
     void fillTriangle(int, int, int, int, int, int, int){}
     void drawFastHLine(int x, int y, int w, int color){ fillRect(x, y, w, 1, color); }

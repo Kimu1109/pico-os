@@ -18,10 +18,10 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | カテゴリ | 関数 |
 |---|---|
 | [ウィジェット操作](widgets/) | `create` `destroy` `set` `get` `on` `add_child` `remove_child` `list_add` `list_clear` `tab_add` |
-| [直接描画](drawing/) | `draw_pixel` `draw_line` `draw_rect` `fill_rect` `draw_circle` `fill_circle` `clear_rect` `draw_text` `invalidate` `mark_dirty` `set_draw_area` `clear_draw_area` |
+| [直接描画](drawing/) | `draw_pixel` `draw_line` `draw_rect` `fill_rect` `draw_circle` `fill_circle` `clear_rect` `draw_text` `invalidate` `mark_dirty` `set_draw_area` `clear_draw_area` `get_draw_area` |
 | [タッチ](touch/) | `get_touch` |
 | [コントローラー](pad/) | `pad_connected` `pad_down` `pad_pressed` `pad_released` |
-| [画像](images/) | `image_load` `image_size` `draw_image` `image_free` |
+| [画像](images/) | `image_load` `image_size` `draw_image` `draw_image_part` `image_free` |
 | [ラスタキャンバス](canvas/) | `canvas_clear` `canvas_save` `canvas_load` `canvas_undo` |
 | [SDカード](sdcard/) | `sd_exists` `sd_read` `sd_write` `sd_remove` `sd_mkdir` `sd_list` |
 | [シーン制御](scenes/) | `pop` `push_scene` `change_scene` `launch_app` `content_rect` |

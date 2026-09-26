@@ -105,6 +105,24 @@
   #log .err { color: #ff9a8a; }
   .hint { color: var(--muted); font-size: 11.5px; margin: 8px 0 0; }
   code { background: #16181c; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+
+  /* ---- 外部コントローラー(pico-osの PadFunctions へ USBシリアルの代わりに流す) ---- */
+  .pad { margin-top: 12px; user-select: none; -webkit-user-select: none; touch-action: none; }
+  .pad-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .pad-main { margin-top: 8px; }
+  .pad-dpad, .pad-face { display: grid; grid-template-columns: repeat(3, 38px); grid-template-rows: repeat(3, 38px); gap: 2px; }
+  .pad-mid { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .pad button {
+    padding: 0; font-size: 12px; min-width: 38px; height: 38px;
+    background: #2f343b; border-radius: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pad button:hover { color: var(--text); border-color: var(--line); }
+  .pad .face { border-radius: 50%; font-weight: 700; }
+  .pad .small { height: 26px; min-width: 60px; font-size: 11px; border-radius: 13px; }
+  .pad .shoulder { height: 26px; min-width: 52px; }
+  .pad button.on { background: var(--accent); color: #111; border-color: var(--accent); }
+  .pad-opts { margin-top: 8px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 </style>
 </head>
 <body>
@@ -114,6 +132,32 @@
 <div class="layout">
   <div class="screen">
     <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+
+    <!-- 外部コントローラー(Wiiクラシックコントローラーと同じボタン)。ボタンもキーボードも同時押しできる -->
+    <div class="pad" id="pad" oncontextmenu="event.preventDefault()">
+      <div class="pad-row">
+        <div><button type="button" class="shoulder" data-btn="zl">ZL</button> <button type="button" class="shoulder" data-btn="l">L</button></div>
+        <div><button type="button" class="shoulder" data-btn="r">R</button> <button type="button" class="shoulder" data-btn="zr">ZR</button></div>
+      </div>
+      <div class="pad-row pad-main">
+        <div class="pad-dpad">
+          <span></span><button type="button" data-btn="up">▲</button><span></span>
+          <button type="button" data-btn="left">◀</button><span></span><button type="button" data-btn="right">▶</button>
+          <span></span><button type="button" data-btn="down">▼</button><span></span>
+        </div>
+        <div class="pad-mid">
+          <button type="button" class="small" data-btn="select">SELECT</button>
+          <button type="button" class="small" data-btn="home">HOME</button>
+          <button type="button" class="small" data-btn="start">START</button>
+        </div>
+        <div class="pad-face">
+          <span></span><button type="button" class="face" data-btn="x">X</button><span></span>
+          <button type="button" class="face" data-btn="y">Y</button><span></span><button type="button" class="face" data-btn="a">A</button>
+          <span></span><button type="button" class="face" data-btn="b">B</button><span></span>
+        </div>
+      </div>
+      <label class="pad-opts"><input type="checkbox" id="pad-enable" checked> コントローラーをつなぐ</label>
+    </div>
   </div>
 
   <div class="side">
@@ -129,6 +173,20 @@
       <p class="hint">
         URLのクエリがそのまま環境変数になる(<code>?wifi=disconnected&amp;rssi=-85</code>)。
         使えるキーは <code>wifi</code> / <code>rssi</code> / <code>ssid</code> / <code>scan</code>。
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>外部コントローラー</h2>
+      <p class="hint" style="margin-top:0">
+        画面の下のボタン(マウス・複数の指で同時押しも可)か、キーボードで操作する。
+        実機では USB シリアルの <code>script/pad_serial.py</code> が担う部分で、同じ
+        <code>pad XXXX</code> の行を pico-os へ流している(チェックを外すと 0.5 秒で「外れた」扱いになる)。
+      </p>
+      <p class="hint">
+        十字キー = 矢印 / A = <code>X</code> / B = <code>Z</code> / X = <code>S</code> / Y = <code>A</code> /
+        L・R・ZL・ZR = <code>Q</code> <code>W</code> <code>E</code> <code>R</code> /
+        START = <code>Enter</code> / SELECT = <code>Backspace</code> / HOME = <code>H</code> か <code>Esc</code>
       </p>
     </div>
 
@@ -278,6 +336,109 @@
       if (ctx && ctx.state === 'suspended') ctx.resume();
     }, true);
   });
+
+  // ---- 外部コントローラー ----
+  // pico-os(PadFunctions)は USB シリアルから "pad XXXX\n"(押しているボタンの16進数)を読む。
+  // Webでは Serial の受信口が picoos_serial_push()(main_pc.cpp)なので、そこへ1バイトずつ入れる。
+  // 取り決めは script/pad_serial.py と同じ: 変わったときと、変わらなくても100msごとに送る
+  // (pico-osは500ms届かないと全部離す)。並びは Pad_Functions.hpp の Button と同じ(変えないこと)
+  (function () {
+    var NAMES = ['up', 'down', 'left', 'right', 'a', 'b', 'x', 'y',
+                 'l', 'r', 'zl', 'zr', 'start', 'select', 'home'];
+    var BIT = {};
+    NAMES.forEach(function (n, i) { BIT[n] = 1 << i; });
+    // KeyboardEvent.code → ボタン(pad_serial.py の KEYMAP と同じ割り当て)
+    var KEYMAP = {
+      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+      KeyX: 'a', KeyZ: 'b', KeyS: 'x', KeyA: 'y',
+      KeyQ: 'l', KeyW: 'r', KeyE: 'zl', KeyR: 'zr',
+      Enter: 'start', NumpadEnter: 'start',
+      Backspace: 'select', ShiftRight: 'select',
+      KeyH: 'home', Escape: 'home',
+    };
+
+    var enableEl = document.getElementById('pad-enable');
+    var padEl = document.getElementById('pad');
+    var keys = {};        // code → ボタン名(押しているキー)
+    var pointers = {};    // pointerId → ボタン名(押している指/マウス)
+    var lastMask = -1;
+
+    function mask() {
+      var m = 0, k;
+      for (k in keys) m |= BIT[keys[k]];
+      for (k in pointers) if (pointers[k]) m |= BIT[pointers[k]];
+      return m;
+    }
+
+    function send(m) {
+      var push = Module._picoos_serial_push;
+      if (!enableEl.checked || typeof push !== 'function') return;
+      var line = 'pad ' + m.toString(16) + '\n';
+      for (var i = 0; i < line.length; i++) push(line.charCodeAt(i));
+    }
+
+    function update() {
+      var m = mask();
+      if (m === lastMask) return;
+      lastMask = m;
+      padEl.querySelectorAll('[data-btn]').forEach(function (b) {
+        b.classList.toggle('on', (m & BIT[b.dataset.btn]) !== 0);
+      });
+      send(m);
+    }
+    setInterval(function () { send(mask()); }, 100);
+
+    // 画面のボタン。押したまま指を滑らせると隣のボタンへ移る(十字キーの斜めなど)
+    function btnAt(x, y) {
+      var el = document.elementFromPoint(x, y);
+      el = el && el.closest ? el.closest('[data-btn]') : null;
+      return el && padEl.contains(el) ? el.dataset.btn : null;
+    }
+    padEl.addEventListener('pointerdown', function (e) {
+      var b = btnAt(e.clientX, e.clientY);
+      if (!b) return;
+      e.preventDefault();
+      pointers[e.pointerId] = b;
+      update();
+    });
+    window.addEventListener('pointermove', function (e) {
+      if (!(e.pointerId in pointers)) return;
+      pointers[e.pointerId] = btnAt(e.clientX, e.clientY);
+      update();
+    });
+    ['pointerup', 'pointercancel'].forEach(function (type) {
+      window.addEventListener(type, function (e) {
+        if (!(e.pointerId in pointers)) return;
+        delete pointers[e.pointerId];
+        update();
+      });
+    });
+
+    // キーボード(割り当てたキーだけ横取りする。矢印でページが動かないように)
+    window.addEventListener('keydown', function (e) {
+      var b = KEYMAP[e.code];
+      if (!b || !enableEl.checked) return;
+      e.preventDefault();
+      keys[e.code] = b;
+      update();
+    }, true);
+    window.addEventListener('keyup', function (e) {
+      if (!(e.code in keys)) return;
+      e.preventDefault();
+      delete keys[e.code];
+      update();
+    }, true);
+    // タブを離れたら全部離す(keyupが来なくなるため)
+    window.addEventListener('blur', function () {
+      keys = {}; pointers = {};
+      update();
+    });
+    enableEl.addEventListener('change', function () {
+      keys = {}; pointers = {};
+      lastMask = -1;
+      update();
+    });
+  })();
 
   window.onerror = function (message) {
     Module.setStatus('エラー: 詳細はブラウザのコンソールを見てください');

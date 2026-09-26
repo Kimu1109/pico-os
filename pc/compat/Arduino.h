@@ -80,8 +80,18 @@ inline long map(long x, long in_min, long in_max, long out_min, long out_max) {
 //   python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc
 // 標準入力は最初に available() を呼んだときから別スレッドで読み、溜めたものを read() で返す
 // (read(0)はブロックするので、ループのスレッドでは読めない)。
-// PICOOS_SERIAL_STDIN=off で読まない。Webは標準入力が無いので常に空
-#if !defined(__EMSCRIPTEN__)
+// PICOOS_SERIAL_STDIN=off で読まない。
+// Webは標準入力が無いので、代わりにページ(pc/web/shell.html)のコントローラーが
+// picoos_serial_push()(main_pc.cpp)で1バイトずつ入れる(スレッドが無いのでロックも要らない)
+#if defined(__EMSCRIPTEN__)
+#include <string>
+namespace PicoPcSerial {
+    inline std::string buffer;
+    inline void Push(int c) {
+        if (buffer.size() < 4096) buffer.push_back((char)c);
+    }
+}
+#else
 #include <cstdlib>
 #include <mutex>
 #include <string>
@@ -124,8 +134,13 @@ public:
     void print(const char* s){ if(s) fputs(s, stdout); }
     void println(const char* s = ""){ if(s) fputs(s, stdout); fputc('\n', stdout); fflush(stdout); }
 #if defined(__EMSCRIPTEN__)
-    int available(){ return 0; }
-    int read(){ return -1; }
+    int available(){ return (int)PicoPcSerial::buffer.size(); }
+    int read(){
+        if (PicoPcSerial::buffer.empty()) return -1;
+        const unsigned char c = (unsigned char)PicoPcSerial::buffer[0];
+        PicoPcSerial::buffer.erase(0, 1);
+        return c;
+    }
 #else
     int available(){
         PicoPcSerial::Start();

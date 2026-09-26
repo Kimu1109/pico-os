@@ -1,7 +1,7 @@
 ---
 title: "直接描画"
 weight: 20
-description: "draw_* / fill_* / clear_rect / draw_text / invalidate / mark_dirty / set_draw_area"
+description: "draw_* / fill_* / clear_rect / draw_text / invalidate / mark_dirty / set_draw_area / get_draw_area"
 ---
 
 > これらの関数は `Canvas`(`pico.create("Canvas")`)の `render` コールバックの中で使うことを前提としています。詳細と理由は [Canvasと直接描画](../../guide/drawing/) を参照してください。座標は絶対スクリーン座標、色は0〜15のPICO-8風パレット番号です。
@@ -75,3 +75,18 @@ description: "draw_* / fill_* / clear_rect / draw_text / invalidate / mark_dirty
 <div class="sig">pico.clear_draw_area() <span class="ret">-> (なし)</span></div>
 
 `set_draw_area` で設定したクリップを解除します。**`set_draw_area` を呼んだら、同じ `render` コールバック内で必ず対にして呼んでください**(クリップ矩形は画面全体で1個しか無い共有状態です)。
+
+## pico.get_draw_area
+
+<div class="sig">pico.get_draw_area() <span class="ret">-> x: integer, y: integer, w: integer, h: integer</span></div>
+
+今のクリップ矩形を返します。`render` コールバックの中では「そのCanvasのうち、今回描き直す部分(dirty矩形との重なり)」になるので、**部品の多い絵で、描き直しが要る部分だけを描く**のに使えます(`pico.mark_dirty` で小さな矩形だけをdirtyにした場合、`render` はその矩形ぶんだけ呼ばれます)。クリップが無いときは `w` と `h` が0です。
+
+```lua
+pico.on(board, "render", function()
+    local x, y, w, h = pico.get_draw_area()
+    -- (x, y, w, h) にかかるマスだけを描く
+end)
+```
+
+`set_draw_area` を呼ぶとこの値も置き換わる点に注意してください(dirty矩形の外へ描いてしまいます)。実例は「テトリス」の盤面。

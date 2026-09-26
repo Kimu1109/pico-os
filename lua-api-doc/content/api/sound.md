@@ -97,7 +97,7 @@ pico.beep(880, 500)
 
 ## 曲を鳴らす(pico-os MML)
 
-曲は **MML(テキスト)** で書き、`pico.music_play()` で鳴らします。書き方は [`MUSIC_FORMAT.md`](https://github.com/Kimu1109/pico-os/blob/main/MUSIC_FORMAT.md) を見てください。曲は2コア目で鳴るので、`loop()` が重くてもテンポは揺れません。
+曲は **MML(テキスト)** で書き、`pico.music_play()` で鳴らします。書き方は [`MUSIC_FORMAT.md`](https://github.com/Kimu1109/pico-os/blob/main/MUSIC_FORMAT.md) を見てください。MIDIファイルは、PCで `python3 script/midi2mml.py song.mid -o song.mml` を実行するとMMLの下書きに変換できます。曲は2コア目で鳴るので、`loop()` が重くてもテンポは揺れません。
 
 ```
 ; demo.mml

@@ -31,6 +31,8 @@
 #   music_test    … 曲データ(pico-os MML、MUSIC_FORMAT.md)。読み取り(音の高さ/長さ/繰り返し/マクロ/
 #                   誤りの行・列/警告)、シーケンサー(サンプル単位の音の位置・テンポ・繰り返し・ループ・
 #                   効果音への貸し出し)、SoundFunctionsの配線(置き場の入れ替え・効果音との同居)
+#   midi2mml_test … MIDI→MMLの変換(script/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
+#                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
 #   pad_test      … 外部コントローラーの窓口(PadFunctions)。USBシリアルの行("pad XXXX")の読み取り、
 #                   押した/離したのはそのフレームだけ、行が途切れたら外れて押しっぱなしにならないこと、
 #                   Game Boyのボタンへの対応
@@ -375,6 +377,23 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== music_test ====="
 run_or_die "$OUT/music_test"
+
+# --- MIDI→MMLの変換(Python。出てきたMMLを本物の読み取りで確かめる) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/mml_dump.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    -o "$OUT/mml_dump"
+
+echo ""
+echo "===== midi2mml_test ====="
+rc=0
+timeout -k 10 "$RUN_TIMEOUT_SEC" python3 "$ROOT/script/host_test/midi2mml_test.py" "$OUT/mml_dump" || rc=$?
+if [ "$rc" -ne 0 ]; then
+    if [ "$rc" -eq 124 ]; then
+        echo "[FATAL] midi2mml_test が${RUN_TIMEOUT_SEC}秒を超えて応答しませんでした" >&2
+    fi
+    exit "$rc"
+fi
 
 # --- 外部コントローラー ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

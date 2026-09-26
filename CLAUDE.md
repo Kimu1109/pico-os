@@ -85,9 +85,10 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/sound/music/padの31本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/sound/music/midi2mml/padの32本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
+  midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
   pad_serial.py               PCのキーボードを外部コントローラーにする(USBシリアルへ送る。tkinter + pyserial)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
 lib/peanut_gb/                 vendorしたPeanut-GB(Game Boyエミュ、ヘッダ1本・無改造)。詳細はlib/peanut_gb/README-pico-os.md
@@ -678,7 +679,7 @@ SUMMARY.md #11。**出力の土台 + 4チャンネルのチップチューン音
 ### 曲データ (`MUSIC_FORMAT.md` / `src/sound/Mml_Compiler` / `Music_Player` / `MusicScene`) (2026-09-25)
 
 SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML**(pico-os向けの方言。書き方は`MUSIC_FORMAT.md`)。
-他の形式(MIDI=PC側の`midi2mml.py`で変換、VGM/GBS=ゲームボーイの音源チップの再現後)は、どれも同じ「演奏データ」へ
+他の形式(MIDI=PC側の`script/midi2mml.py`で変換(下記)、VGM/GBS=ゲームボーイの音源チップの再現後)は、どれも同じ「演奏データ」へ
 変換してから鳴らす方針で、2コア目は形式を知らない。
 
 - **流れ**: `.mml`(テキスト)→ 1コア目の`MmlCompiler`が「演奏データ」(`Music_Data.hpp`の小さなバイト列。音符1つ4バイト)へ →
@@ -712,6 +713,19 @@ SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML
 - 検証: `music_test`(run.sh。読み取り・誤りの行列・警告・シーケンサーのサンプル単位の位置/テンポ/繰り返し/ループ/借用・置き場の入れ替え)、
   `lua_engine_test`(Lua API)、PCビルドの`--tap`でミュージックアプリの再生・誤りの表示、チップチューンアプリで曲+鍵盤(借用)を確認。
   **実機では未確認**。
+- **MIDIからの変換(`script/midi2mml.py`、2026-09-26)**: PCで動かすPython(標準ライブラリのみ)。本体はMIDIを知らないまま
+  (「形式を増やすときは変換を1つ足すだけ」の方針どおり)。手順と既定の割り当ては`MUSIC_FORMAT.md`「MIDIからの変換」。
+  - 時間は4分音符=48ティックへ直して格子へ揃える。格子は「音の出だしの97%以上が乗る、いちばん粗いもの」を自動で選ぶ
+    (楽譜から書き出したMIDIは3連符も16分もずれない。演奏を録ったMIDIは16分音符で妥協し、`--grid`で変えられる)
+  - 和音はパート(トラック×チャンネル)ごとに「同時に1音の線」へ分けてから選ぶ。和音のまま1チャンネルへ畳むと、
+    主旋律が内声に負けて消える(高い音優先でも、伴奏のほうが高いことがある)
+  - **テンポは空いているチャンネルへ`t`だけを書く**(`t`は全チャンネル共通なので、どこに書いても効く)。
+    4チャンネルとも埋まっていて、しかも全部が音符の途中なら、その音符を2つに分ける(鳴らし直しになるので警告)
+  - **演奏データのバイト数を読み取りと同じ数え方で数える**(音符4・休符3・`v`/`@`/`E`/`q`は2・`t`は3・`L`は1・終わり1・見出し16)。
+    6KiBを超えたら収まる小節数を二分探索で探して切る。見積もりが本物と一致することはテストで確かめている
+  - 長い休符は`[r1]n`(6バイト)。`r1^1^1…`だと1行512バイトを超えうる
+  - 検証は`midi2mml_test.py`(run.sh。`mml_dump.cpp`=本物の`MmlCompiler`で読んで演奏データを1行ずつ書き出す下請けを通す)。
+    music21のテスト用MIDI(ピアノ曲、演奏を録ったもの等)でも変換→読み取りまで確かめた(リポジトリには含めていない)
 
 ### 外部コントローラー (`src/functions/Pad_Functions` / `script/pad_serial.py`) (2026-09-25)
 
@@ -998,7 +1012,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイントはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
-| 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。**MIDIからの変換・GB対応・実機での確認は未**(下記「音声出力」「曲データ」参照)。 |
+| 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。MIDIはPCの`script/midi2mml.py`で取り込む。**GB対応・実機での確認は未**(下記「音声出力」「曲データ」参照)。 |
 
 **#7は完了しており、#5(Lua)の前提として十分な実例が揃った。** Lua APIの仕様は「C++で標準アプリを
 書いてみて必要になったもの」から逆算するのが確実で、`MarkdownScene`/`ClocksScene`/`CalculatorScene`/
@@ -2178,7 +2192,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、31本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、32本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

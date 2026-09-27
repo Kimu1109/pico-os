@@ -232,6 +232,34 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   戻ることを確認済み。既存の平文`network.cfg`(`pc/sdcard/sys/network.cfg`)がそのまま読める
   ことはPCビルドの`--shot`で確認した(設定画面にSSID/パスワードが正しく表示される)。
 
+**チャットのトークン(`/sys/chat.cfg`のtoken)も同日中に同じ方式へ広げた。** 実装直後にユーザーから
+「チャットの認証情報は暗号化されているか」と問われて気づいた漏れで、この時点では`Chat_Client::loadConfig()`
+がtokenを平文のまま読んでいた。
+
+- **`ChatScene`に「設定」ボタンを新設した**(一覧画面でだけ、`[招待]`ボタンと同じ位置に出す。
+  部屋の中では招待、一覧では設定という切り替え)。押すと`InputDialog`で「チャットサーバURL:」→
+  (1フレーム空けて)「トークン(空欄で変更なし):」の順に編集する
+  (`openChatSettings()`/`openTokenDialog()`。ダイアログからダイアログは1フレーム空ける、
+  という「ブラウザのヘッダー」節の既存ルールをそのまま踏襲)。
+- **サーバURLは暗号化しない。** Wi-FiのSSIDと同じ判断で、URL自体は秘匿情報ではなく、
+  `chat_server_value`としてプレフィル・表示に使うため平文のまま保持・保存する。
+  **トークンだけ暗号化する**(用途文字列は`"chat-token"`。Wi-Fiの`"wifi-ssid"`/`"wifi-password"`と
+  同じ`PICO_Secret`を使うので新規実装は無し)。トークンの編集ダイアログは
+  Wi-Fiパスワードと同じく**常に空欄から始まり**、空欄のまま決定すると既存の値を変更しない
+  (`commitChatToken()`。`ChatScene`はトークンの平文を保持しない)。
+- `Chat_Client.cpp::loadConfig()`のtoken読み込み箇所に`PICO_Secret::Decrypt("chat-token", ...)`を
+  挟んだだけ(後方互換で`enc1:`接頭辞が無ければ平文のまま使う)。`configure()`自体
+  (ホストテスト等からの直接注入経路)は平文のtokenを受け取る前提のまま変えていない
+  (暗号化を意識するのは「SDのconfigファイルを読む」`loadConfig()`側だけでよいため)。
+- 検証: `chat_scene_test`(run.sh、既存)が設定ボタン追加後も全項目パス。
+  ホストテストのSdFatスタブ経由で、`ChatScene::commitChatToken()`相当の手順
+  (`Encrypt("chat-token",...)`→`SetValue()`)で`/sys/chat.cfg`を書き、
+  `ChatClient::loadConfig()`が実際にそれを復号して`State::Ok`まで進むことを確認した
+  (このリポジトリには含めていない検証用の使い捨てプログラムで確認。手順はWi-Fiの
+  検証と同じ)。PCビルドの`--shot`で「設定」ボタンから実際にサーバURL入力ダイアログが
+  開くことまで確認済み(オンスクリーンキーボードでの実入力までは行っていない。
+  暗号化ロジック自体は上記の往復検証で担保されている)。
+
 ## Widgetシステム
 
 ### 基底クラス (`src/gui/widgets/Widget.hpp`)

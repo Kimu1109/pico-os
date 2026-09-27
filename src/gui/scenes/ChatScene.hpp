@@ -34,6 +34,7 @@ class ChatScene : public Scene {
         Button* back_button = nullptr;
         Button* refresh_button = nullptr;
         Button* invite_button = nullptr;
+        Button* settings_button = nullptr;
         Button* search_button = nullptr;
         Button* code_button = nullptr;
         Label<PICO_STR_M>* title_label = nullptr;
@@ -55,6 +56,12 @@ class ChatScene : public Scene {
         int8_t notice_color = PICO_DARKGREY;
         // 参加コードを受け取った。次のフレームでダイアログを出す
         bool pending_invite_dialog = false;
+        // サーバURLの編集を終えた。次のフレームでトークン編集ダイアログを出す
+        // (ダイアログからダイアログは1フレーム空ける。MarkdownScene::Pendingと同じ理由)
+        bool pending_token_dialog = false;
+        // /sys/chat.cfgのserverの現在値(表示・プレフィル用)。tokenは平文を保持しない
+        // (Wi-Fiパスワードと同じ扱いで、編集ダイアログは常に空欄から始まる)
+        FixedString<PICO_STR_LL> chat_server_value;
 
         // 画面へ反映済みの版(ChatClient の revision と比べて、変わったときだけ描き直す)
         uint32_t seen_rooms_rev = 0;
@@ -95,6 +102,11 @@ class ChatScene : public Scene {
         void openCodeInput();
         void startSearch();
         void showInvite();
+        void loadChatConfigValues();
+        void openChatSettings();
+        void openTokenDialog();
+        void commitChatServer(const FixedString<PICO_STR_LL>& input);
+        void commitChatToken(const FixedString<PICO_STR_LL>& input);
         void onActionDone();
         void setNotice(const char* text, int8_t color = PICO_DARKGREY);
 

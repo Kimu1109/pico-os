@@ -3,6 +3,7 @@
 #include "functions/Config_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
+#include "util/Secret_Cipher.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
 
@@ -82,7 +83,10 @@ bool ChatClient::loadConfig(){
             if(strcmp(key, "server") == 0){
                 strncpy(server, value, sizeof(server) - 1);
             }else if(strcmp(key, "token") == 0){
-                strncpy(token, value, sizeof(token) - 1);
+                char decrypted[PICO_Config::kConfigMaxValueLen];
+                if(PICO_Secret::Decrypt("chat-token", value, decrypted, sizeof(decrypted))){
+                    strncpy(token, decrypted, sizeof(token) - 1);
+                }
             }else if(strcmp(key, "poll-ms") == 0){
                 int v = 0;
                 if(PICO_Config::ConfigValue::AsInt(value, v) && v > 0) poll = v;

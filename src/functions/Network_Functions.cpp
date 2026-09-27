@@ -1,5 +1,4 @@
 #include "functions/Network_Functions.hpp"
-#include "functions/Task_Functions.hpp"
 #include "functions/Config_Functions.hpp"
 #include "task/NetworkScan.hpp"
 #include "storage/SD_Path.hpp"
@@ -105,8 +104,13 @@ void NetworkFunctions::ConnectWiFiAsync(const char* ssid, const char* password){
     currentStatus = NetStatus::TRYING_CONNECT;
 };
 
-Task* NetworkFunctions::ScanAsync(){
-    NetworkScan* task = new NetworkScan();
-    PICO_Task::Add(task);
-    return task;
+NetworkScan* NetworkFunctions::ScanAsync(){
+    // HttpGet/HttpRequestと同じ「呼び出し側が生ポインタとして持ち、自分のonUpdate()から
+    // 毎フレームupdate()を呼び、終わったら自分でdeleteする」流儀にしてある。
+    // PICO_Task::Add()には乗せない — 乗せると、status()がPROCESSING以外になった
+    // その場でPICO_Task::Update()自身が即座にdeleteしてしまうため、呼び出し側が
+    // 次のフレームのonUpdate()で結果を読もうとした時点で既に解放済みになる
+    // (呼び出し側のonUpdate()は毎フレームPICO_Task::Update()より先に走るので、
+    // 完了を検知できるのは早くても次のフレームであり、その時点では手遅れ)
+    return new NetworkScan();
 };

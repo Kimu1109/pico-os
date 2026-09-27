@@ -5,6 +5,8 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
+class NetworkScan; // task/NetworkScan.hpp。ここではポインタ型でしか使わないので前方宣言で足りる
+
 namespace NetworkFunctions {
 
     enum class NetStatus
@@ -43,7 +45,10 @@ namespace NetworkFunctions {
     IconID GetWifiStateIconID();
     
     void ConnectWiFiAsync(const char* ssid, const char* password);
-    Task* ScanAsync();
+    // 戻り値の所有権は呼び出し側に移る(HttpGet/HttpRequestと同じ流儀。
+    // PICO_Task::Add()には乗らない)。呼び出し側は毎フレーム update() を呼び、
+    // getStatus()がPROCESSING以外になったら結果を読み、自分でdeleteすること
+    NetworkScan* ScanAsync();
     
     inline void ScanResultClear(){
         WiFi.scanDelete();

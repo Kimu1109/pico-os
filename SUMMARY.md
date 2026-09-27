@@ -67,6 +67,7 @@
 
 - [x] 定期的再接続交渉
 - [x] 確実な時刻同期
+- [x] 周辺スキャン→選択→パスワード入力→接続(SettingsScene)
 
 ### 5. [Luaアプリ](#5-luaアプリ-1)
 
@@ -256,6 +257,10 @@
 非ブロッキング接続・スキャン(Task化)・NTP同期・電波強度アイコンに加え、
 `SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、
 切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。
+
+`SettingsScene`から周辺Wi-Fiのスキャン→一覧から選択→パスワード入力(空欄でオープン
+ネットワークも可)→接続、という一般的な「Wi-Fi設定」と同じ操作ができる
+(`WifiScanDialog`。詳細は`CLAUDE.md`「Wi-Fiの新規接続」参照)。
 
 ## 5. Luaアプリ
 

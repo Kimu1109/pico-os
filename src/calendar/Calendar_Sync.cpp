@@ -6,29 +6,46 @@
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
 #include "util/Url.hpp"
+#include "util/Secret_Cipher.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <strings.h>
 
 namespace {
+    // 暗号化の用途文字列は名前ごとに分ける(同じ鍵ストリームを複数の値で使い回すと、
+    // 2つの暗号文をXORして平文同士のXORが漏れる、というutil/Secret_Cipher.hppの
+    // 弱点をカレンダーが複数件あるときに踏まないため。Wi-Fiのssid/passwordを
+    // 別用途文字列にしたのと同じ理由)
+    void CalendarUrlPurpose(const char* name, char* out, size_t cap){
+        snprintf(out, cap, "calendar-url:%s", name);
+    }
+
     // sources.cfg の1行を読み、書式が正しければ name/url を返す
     bool ParseSourceLine(const char* line, CalendarSync::Source& out){
         char key[CalendarSync::kMaxNameLen + 1];
-        char value[PICO_STR_256B];
+        char value[PICO_STR_512B]; // enc1:接頭辞+16進(平文255Bぶん)でも収まる余裕を持たせる
         if(PICO_Config::ParseLine(line, key, sizeof(key), value, sizeof(value))
            != PICO_Config::ConfigLineResult::Entry){
             return false;
         }
         if(!CalendarSync::IsValidName(key) || value[0] == '\0') return false;
 
+        char purpose[CalendarSync::kMaxNameLen + 32];
+        CalendarUrlPurpose(key, purpose, sizeof(purpose));
+        char decrypted[PICO_STR_256B];
+        if(!PICO_Secret::Decrypt(purpose, value, decrypted, sizeof(decrypted))
+           || decrypted[0] == '\0'){
+            return false;
+        }
+
         out.name.assign(key);
         //Apple/Googleが配る webcal:// は https:// のこと
-        if(strncasecmp(value, "webcal://", 9) == 0){
+        if(strncasecmp(decrypted, "webcal://", 9) == 0){
             out.url.assign("https://");
-            return out.url.append(value + 9);
+            return out.url.append(decrypted + 9);
         }
-        return out.url.assign(value);
+        return out.url.assign(decrypted);
     }
 
     // 読んだ先頭がiCalendarか(ログイン画面のHTML等で手元の .ics を上書きしないため)
@@ -96,6 +113,81 @@ int CalendarSync::CountSources(){
     Source src;
     while(n < kMaxSources && ReadSource(n, src)) n++;
     return n;
+}
+
+namespace {
+    // sources.cfgの1行(name=value\n)を書く。Config_Functions::Detail::WriteEntry()と
+    // 同じ形だが、暗号化後の値(最大 5+255*2+1=516B)がConfig_FunctionsのkConfigMaxValueLen
+    // (160B、Wi-Fi/チャット向け)を超えるため、専用の大きめバッファで実装している
+    bool WriteSourceEntry(FsFile& f, const char* name, const char* enc_value){
+        char buf[CalendarSync::kMaxNameLen + PICO_STR_512B + 4];
+        const int n = snprintf(buf, sizeof(buf), "%s=%s\n", name, enc_value);
+        if(n <= 0 || n >= (int)sizeof(buf)) return false;
+        return f.write(buf, (size_t)n) == (size_t)n;
+    }
+
+    // 元の行をそのまま書き戻す(Config_Functions::Detail::WriteRawLine()と同じ)
+    bool WriteRawLine(FsFile& f, const char* line){
+        const size_t len = strlen(line);
+        if(len > 0 && f.write(line, len) != len) return false;
+        if(len == 0 || line[len - 1] != '\n'){
+            if(f.write("\n", 1) != 1) return false;
+        }
+        return true;
+    }
+}
+
+bool CalendarSync::WriteSource(const char* name, const char* url){
+    if(!OSData::SD_usable || !IsValidName(name) || !url || !*url) return false;
+
+    char purpose[kMaxNameLen + 32];
+    CalendarUrlPurpose(name, purpose, sizeof(purpose));
+    char enc[PICO_STR_512B];
+    if(!PICO_Secret::Encrypt(purpose, url, enc, sizeof(enc))) return false;
+
+    const char* path = PICO_Path::FILE::CALENDAR_SOURCES;
+    char tmp_path[PICO_PATH_LEN];
+    const int tp_len = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    if(tp_len <= 0 || tp_len >= (int)sizeof(tmp_path)) return false;
+
+    FsFile dst = OSData::SD.open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC);
+    if(!dst) return false;
+
+    bool ok = true;
+    bool replaced = false;
+
+    FsFile src = OSData::SD.open(path, O_RDONLY);
+    if(src){
+        char line[PICO_STR_512B];
+        char key[kMaxNameLen + 1];
+        char value[PICO_STR_512B];
+        int n;
+        while(ok && (n = src.fgets(line, sizeof(line))) > 0){
+            const auto result = PICO_Config::ParseLine(line, key, sizeof(key), value, sizeof(value));
+            if(result == PICO_Config::ConfigLineResult::Entry && strcmp(key, name) == 0){
+                if(!replaced){
+                    ok = WriteSourceEntry(dst, name, enc);
+                    replaced = true;
+                }
+                continue; //2件目以降の重複行は落とす(Config_Functions::SetValue()と同じ判断)
+            }
+            ok = WriteRawLine(dst, line);
+        }
+        src.close();
+    }
+
+    if(ok && !replaced) ok = WriteSourceEntry(dst, name, enc);
+    dst.close();
+
+    if(!ok){
+        OSData::SD.remove(tmp_path);
+        return false;
+    }
+    if(OSData::SD.exists(path) && !OSData::SD.remove(path)){
+        OSData::SD.remove(tmp_path);
+        return false;
+    }
+    return OSData::SD.rename(tmp_path, path);
 }
 
 bool CalendarSync::FileSink::write(const void* data, size_t len){

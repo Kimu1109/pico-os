@@ -112,11 +112,12 @@ int main(){
         memset(maxPlain, 'x', PICO_Secret::kMaxPlainBytes);
         maxPlain[PICO_Secret::kMaxPlainBytes] = '\0';
 
-        char enc[256];
+        // "enc1:"(5) + 16進(平文の2倍) + 終端(1)を収める大きさ
+        char enc[PICO_Secret::kMaxPlainBytes * 2 + 8];
         check(PICO_Secret::Encrypt("wifi-password", maxPlain, enc, sizeof(enc)),
               "上限ちょうどの平文は暗号化できる");
 
-        char dec[256];
+        char dec[PICO_Secret::kMaxPlainBytes + 8];
         check(PICO_Secret::Decrypt("wifi-password", enc, dec, sizeof(dec)),
               "上限ちょうどの平文を復号できる");
         eqStr(dec, maxPlain, "上限ちょうどの平文が正しく往復する");

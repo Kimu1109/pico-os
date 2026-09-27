@@ -260,6 +260,37 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   開くことまで確認済み(オンスクリーンキーボードでの実入力までは行っていない。
   暗号化ロジック自体は上記の往復検証で担保されている)。
 
+**カレンダーの非公開URL(`/calendar/sources.cfg`)も同日中に同じ方式へ広げた。** Googleカレンダーの
+非公開URLはSDカードから読める平文のままだと、SDだけ紛失した場合にWi-Fi/チャットと同じ脅威に晒される。
+
+- **`PICO_Secret::kMaxPlainBytes`を64→255へ拡張した**(`Secret_Cipher.hpp`)。Googleの非公開URLは
+  200文字を超えることがあり(`Url::path`を`PICO_STR_LL`へ広げた経緯と同じ理由)、Wi-Fi/チャット向けの
+  64では全く足りないため。既存の暗号文字列の復号には影響しない後方互換な変更(上限を緩めるだけ)。
+- **用途文字列はカレンダーの名前ごとに分けた**(`"calendar-url:" + 名前`)。sources.cfgは複数件
+  持てるため、Wi-Fiの`"wifi-ssid"`/`"wifi-password"`のように固定1種類の用途文字列を使い回すと、
+  複数のURLの暗号文をXORして平文同士のXORが漏れる、という`Secret_Cipher.hpp`の弱点をカレンダーが
+  複数あるときに実際に踏むことになるため。
+- **`CalendarSync::WriteSource(name, url)`を新設した**(`Config_Functions::SetValue()`と同じ
+  「一時ファイル経由で1行だけ差し替え、無ければ追記」の手順だが、暗号化後の値(最大約516文字)が
+  `Config_Functions::kConfigMaxValueLen`(160、Wi-Fi/チャット向け)を大きく超えるため、
+  `Config_Functions`自体には触れず`Calendar_Sync.cpp`内に専用の大きめバッファ(`PICO_STR_512B`)で
+  実装した。ロジックはほぼ`SetValue()`のコピーになるが、汎用パーサの制約(全設定ファイル共通の
+  バッファサイズ)を変えるより影響範囲を`Calendar_Sync.cpp`へ閉じ込める方を優先した)。
+- **`CalendarScene`に「追加」ボタンを新設した**(`[更新]`の左、`source_count`に関わらず常に表示)。
+  押すと名前→(1フレーム空けて)URLの順に`InputDialog`で編集し、`WriteSource()`で暗号化して保存する。
+  名前が不正/保存に失敗した場合は`ErrorFunctions::ShowFatal()`で理由を出す(GameBoyScene等、
+  既存のC++シーンからの利用例と同じ)。
+- **`CalendarSync::ReadSource()`(≒`ParseSourceLine()`)がenc1:接頭辞を見て復号する**(後方互換:
+  接頭辞が無ければ平文のまま使う)。母艦のSDカードリーダーで`sources.cfg`を直接編集する既存の運用
+  (URLを平文で書く)は変わらず使える。`webcal://→https://`の変換は復号した後の値に対して行う
+  (暗号化された16進文字列は`webcal://`では始まらないため、順序を間違えると判定が効かなくなる)。
+- ホストテストは`script/host_test/calendar_sync_secret_test.cpp`(189文字の長いURLでの往復・
+  `enc1:`接頭辞で保存されること・平文がSDにそのまま書かれないこと・複数件・同名の上書き・
+  後方互換(平文の既存行がそのまま読める)・不正な名前の拒否)。`calendar_scene_test`は
+  「追加」ボタン追加後も既存の全項目がパスすることを確認済み。PCビルドの`--shot`で
+  「追加」ボタンから実際に名前入力ダイアログが開くことまで確認済み(実際の保存はホストテストの
+  SdFatスタブ経由で確認。暗号化ロジック自体は上記の往復検証で担保されている)。
+
 ## Widgetシステム
 
 ### 基底クラス (`src/gui/widgets/Widget.hpp`)

@@ -53,7 +53,11 @@ namespace PICO_Secret
     // --------------------------------------------------------------------
     constexpr uint32_t kKey[4] = { 0x9F3B1A7Cu, 0x452E8D01u, 0xC7A6F350u, 0x1B84DE29u };
 
-    constexpr size_t kMaxPlainBytes = 64;   // Wi-Fiパスフレーズ/64桁PSK/SSIDの現実的な上限
+    // Wi-Fiパスフレーズ/64桁PSK/SSIDなら64で足りるが、カレンダーの非公開URL(Googleは
+    // 200文字を超えることがある。Url::pathをPICO_STR_LLへ広げた経緯と同じ理由)まで
+    // 暗号化対象にしたため255に拡張した(2026-09-27)。既存の暗号文字列(Wi-Fi/チャット)の
+    // 復号には影響しない(上限を緩めるだけの後方互換な変更)。
+    constexpr size_t kMaxPlainBytes = 255;
     constexpr const char *kPrefix = "enc1:";
     constexpr size_t kPrefixLen = 5;
 

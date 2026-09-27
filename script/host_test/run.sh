@@ -22,6 +22,9 @@
 #                   繰り返し(RRULE/EXDATE/上書き予定)がどの日に出るか
 #   calendar_scene_test… カレンダーアプリのGUI配線(MonthGridのタップ位置→日付、
 #                   CalendarSceneの生成/解放、SDや.icsが無いときの案内)
+#   calendar_sync_secret_test… /calendar/sources.cfgの暗号化保存(CalendarSync::WriteSource/
+#                   ReadSourceがutil/Secret_Cipher.hppを通すこと)。長いURLの往復・複数件・
+#                   同名の上書き・後方互換(平文の既存行がそのまま読める)
 #   chat_proto_test… チャットの応答(1行1件のTSV)の読み取りと本文のエスケープ
 #   chat_scene_test… チャットアプリのGUI配線(ChatLogViewの折り返し/スクロール、
 #                   ChatSceneの生成/解放、chat.cfgが無い/足りないときの案内)
@@ -293,6 +296,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/scenes/CalendarScene.cpp" \
     "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
     "$ROOT/src/gui/widgets/dialogs/EventDetailDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
     "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/calendar/Ical.cpp" \
     "$ROOT/src/calendar/Calendar_Sync.cpp" \
@@ -303,7 +308,9 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
@@ -311,11 +318,25 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/functions/Error_Functions.cpp" \
     -o "$OUT/calendar_scene_test" -lssl -lcrypto
 
 echo ""
 echo "===== calendar_scene_test ====="
 run_or_die "$OUT/calendar_scene_test"
+
+# --- カレンダー取得元の暗号化保存 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/calendar_sync_secret_test.cpp" \
+    "$ROOT/src/calendar/Calendar_Sync.cpp" \
+    "$ROOT/src/task/Http_Get.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    -o "$OUT/calendar_sync_secret_test" -lssl -lcrypto
+
+echo ""
+echo "===== calendar_sync_secret_test ====="
+run_or_die "$OUT/calendar_sync_secret_test"
 
 # --- チャット: 応答の読み取り ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

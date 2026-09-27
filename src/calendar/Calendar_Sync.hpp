@@ -52,12 +52,17 @@ class CalendarSync {
         CalendarSync() = default;
         ~CalendarSync(){ cancel(); }
 
-        // sources.cfg の index 件目(書式の正しい行だけを数える)を読む
+        // sources.cfg の index 件目(書式の正しい行だけを数える)を読む。
+        // URLは util/Secret_Cipher.hpp で暗号化されて保存されている場合は復号して返す
+        // (enc1:接頭辞が無ければ後方互換で平文のまま扱う)
         static bool ReadSource(int index, Source& out);
         // 書式の正しい取得元の数。ファイルが無ければ0
         static int CountSources();
         // 名前がファイル名として使えるか
         static bool IsValidName(const char* name);
+        // sources.cfgへ1件書く(既存の同名行があれば置き換え、無ければ追記)。
+        // URLは暗号化してから保存する。SD無し/名前が不正/書き込み失敗はfalse
+        static bool WriteSource(const char* name, const char* url);
 
         // 全件の取得を始める。取得元が1件も無ければfalse
         bool begin();

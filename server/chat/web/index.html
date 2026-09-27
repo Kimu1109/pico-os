@@ -40,9 +40,12 @@
   #side { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
   #side header { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   #me { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #rooms { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; flex: 1; }
-  #rooms li { padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
-  #rooms li.active { background: var(--me); font-weight: 600; }
+  #roomsWrap { overflow-y: auto; flex: 1; }
+  .section { color: var(--muted); font-size: 12px; padding: 10px 12px 2px; }
+  .rooms { list-style: none; margin: 0; padding: 0 0 4px; }
+  .rooms li.none { color: var(--muted); cursor: default; font-size: 13px; }
+  .rooms li { padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .rooms li.active { background: var(--me); font-weight: 600; }
   .badge { background: var(--unread); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 12px; align-self: center; }
   #side footer { padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
 
@@ -64,6 +67,20 @@
   #empty { color: var(--muted); padding: 24px 16px; }
 
   dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--fg); max-width: min(520px, 92vw); }
+  dialog h2 { margin: 0 0 10px; font-size: 17px; }
+  dialog .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+  dialog .row input[type=text] { flex: 1; min-width: 0; }
+  dialog .buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  dialog .list { list-style: none; margin: 8px 0; padding: 0; max-height: 50vh; overflow-y: auto; }
+  dialog .list li { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  dialog .list li .grow { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  dialog .list li button { padding: 3px 9px; font-size: 13px; }
+  dialog .list li .sub { color: var(--muted); font-size: 12px; }
+  dialog .hint { color: var(--muted); font-size: 13px; }
+  .code { font: 600 28px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 2px; text-align: center; margin: 10px 0; }
+  .role { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); }
+  #roomTools { display: flex; gap: 6px; }
+  #roomTools button { padding: 4px 10px; font-size: 13px; }
   dialog pre { background: var(--bg); padding: 10px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; }
 
   @media (max-width: 640px) {
@@ -87,14 +104,28 @@
 <div id="app" class="hidden">
   <aside id="side">
     <header><span id="me"></span><button class="plain" id="logout">ログアウト</button></header>
-    <ul id="rooms"></ul>
+    <div id="roomsWrap">
+      <div class="section">オープンチャット</div>
+      <ul class="rooms" id="openRooms"></ul>
+      <div class="section">プライベートチャット</div>
+      <ul class="rooms" id="privateRooms"></ul>
+    </div>
     <footer>
+      <button class="plain" id="searchRoom">オープンチャットを探す</button>
+      <button class="plain" id="joinCode">参加コードで入る</button>
       <button class="plain" id="newRoom">部屋を作る</button>
       <button class="plain" id="picoToken">pico-os の設定</button>
     </footer>
   </aside>
   <main id="main">
-    <header><button class="plain" id="back">←</button><span id="roomTitle">部屋を選んでください</span></header>
+    <header>
+      <button class="plain" id="back">←</button><span id="roomTitle">部屋を選んでください</span>
+      <span id="roomTools" class="hidden">
+        <button class="plain" id="inviteBtn">招待</button>
+        <button class="plain" id="membersBtn">メンバー</button>
+        <button class="plain" id="leaveBtn">退出</button>
+      </span>
+    </header>
     <div id="log"><div id="empty">左の一覧から部屋を選んでください。</div></div>
     <div id="status"></div>
     <form id="compose" class="hidden">
@@ -109,6 +140,64 @@
      <b>トークンはこの画面でしか表示されません</b>。発行し直すと前のトークンは使えなくなります。</p>
   <pre id="tokenCfg"></pre>
   <p><button id="tokenCopy">コピー</button> <button class="plain" id="tokenClose">閉じる</button></p>
+</dialog>
+
+<dialog id="newRoomDialog">
+  <form method="dialog" id="newRoomForm">
+    <h2>部屋を作る</h2>
+    <div class="row"><input type="text" id="newRoomName" placeholder="部屋の名前(15文字くらいまで)" required></div>
+    <div class="row"><label><input type="radio" name="kind" value="open" checked> オープンチャット</label></div>
+    <div class="hint">誰でも検索して参加できます。</div>
+    <div class="row"><label><input type="radio" name="kind" value="private"> プライベートチャット</label></div>
+    <div class="hint">検索には出ません。参加している人が発行する参加コード(30分で無効)でだけ入れます。</div>
+    <div class="error" id="newRoomError"></div>
+    <div class="buttons"><button type="button" class="plain" data-close>やめる</button><button type="submit">作る</button></div>
+  </form>
+</dialog>
+
+<dialog id="searchDialog">
+  <h2>オープンチャットを探す</h2>
+  <form class="row" id="searchForm"><input type="text" id="searchQuery" placeholder="部屋の名前(空なら全部)"><button type="submit">検索</button></form>
+  <ul class="list" id="searchResults"></ul>
+  <div class="error" id="searchError"></div>
+  <div class="buttons"><button type="button" class="plain" data-close>閉じる</button></div>
+</dialog>
+
+<dialog id="joinDialog">
+  <form method="dialog" id="joinForm">
+    <h2>参加コードで入る</h2>
+    <div class="hint">プライベートチャットの参加者から聞いた8文字のコード(例: ABCD-EFGH)。</div>
+    <div class="row"><input type="text" id="joinCodeInput" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX" required></div>
+    <div class="error" id="joinError"></div>
+    <div class="buttons"><button type="button" class="plain" data-close>やめる</button><button type="submit">参加</button></div>
+  </form>
+</dialog>
+
+<dialog id="inviteDialog">
+  <h2>参加コード</h2>
+  <div id="inviteBody">
+    <div class="hint">このコードを伝えた人が、この部屋に入れます。</div>
+    <div class="code" id="inviteCode"></div>
+    <div class="hint" id="inviteExpire"></div>
+  </div>
+  <div class="row"><label><input type="checkbox" id="inviteOnce"> 1人だけ使えるコードにする</label></div>
+  <div class="error" id="inviteError"></div>
+  <div class="buttons">
+    <button type="button" class="plain hidden" id="inviteRevoke">有効なコードを全部無効にする</button>
+    <button type="button" class="plain" id="inviteCopy">コピー</button>
+    <button type="button" id="inviteNew">発行する</button>
+    <button type="button" class="plain" data-close>閉じる</button>
+  </div>
+</dialog>
+
+<dialog id="membersDialog">
+  <h2>メンバー</h2>
+  <ul class="list" id="memberList"></ul>
+  <div class="error" id="membersError"></div>
+  <div class="buttons">
+    <button type="button" class="plain hidden" id="deleteRoom">部屋を消す</button>
+    <button type="button" class="plain" data-close>閉じる</button>
+  </div>
 </dialog>
 
 <script>
@@ -158,6 +247,7 @@ async function start() {
   try {
     const me = lines(await text(await api("GET", "/api/v1/me")))[0];
     $("me").textContent = me[1] + " (" + me[0] + ")";
+    $("me").dataset.login = me[0];
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
     await loadRooms();
@@ -193,42 +283,316 @@ $("logout").addEventListener("click", async () => {
 });
 
 // ---- 部屋 ----
+const ROLE_LABEL = { owner: "オーナー", admin: "管理者", member: "参加者", banned: "追放中" };
+const ROLE_RANK = { member: 1, admin: 2, owner: 3 };
+
 async function loadRooms() {
   try {
     rooms = lines(await text(await api("GET", "/api/v1/rooms"))).map((f) => ({
       id: Number(f[0]), name: f[1], last: Number(f[2]), unread: Number(f[3]),
+      kind: f[4] || "open", role: f[5] || "member",
     }));
   } catch (e) {
     return;
   }
-  const ul = $("rooms");
-  ul.textContent = "";
-  for (const r of rooms) {
-    const li = document.createElement("li");
-    li.className = r.id === current ? "active" : "";
-    const name = document.createElement("span");
-    name.textContent = "# " + r.name;
-    li.appendChild(name);
-    if (r.unread > 0 && r.id !== current) {
-      const b = document.createElement("span");
-      b.className = "badge";
-      b.textContent = r.unread;
-      li.appendChild(b);
+  // 開いていた部屋から外された(追い出された/部屋が消えた)
+  if (current && !rooms.some((r) => r.id === current)) leaveView("この部屋にはもう参加していません");
+  for (const kind of ["open", "private"]) {
+    const ul = $(kind === "open" ? "openRooms" : "privateRooms");
+    ul.textContent = "";
+    const list = rooms.filter((r) => r.kind === kind);
+    if (!list.length) {
+      const li = document.createElement("li");
+      li.className = "none";
+      li.textContent = kind === "open" ? "「オープンチャットを探す」から参加できます" : "参加コードで入れます";
+      ul.appendChild(li);
     }
-    li.addEventListener("click", () => openRoom(r.id));
-    ul.appendChild(li);
+    for (const r of list) {
+      const li = document.createElement("li");
+      li.className = r.id === current ? "active" : "";
+      const name = document.createElement("span");
+      name.textContent = (kind === "open" ? "# " : "🔒 ") + r.name;
+      li.appendChild(name);
+      if (r.unread > 0 && r.id !== current) {
+        const b = document.createElement("span");
+        b.className = "badge";
+        b.textContent = r.unread;
+        li.appendChild(b);
+      }
+      li.addEventListener("click", () => openRoom(r.id));
+      ul.appendChild(li);
+    }
   }
   const total = rooms.reduce((n, r) => n + (r.id === current ? 0 : r.unread), 0);
   document.title = (total > 0 ? "(" + total + ") " : "") + "pico-chat";
+  updateRoomTools();
 }
 
-$("newRoom").addEventListener("click", async () => {
-  const name = prompt("部屋の名前");
-  if (!name) return;
+function currentRoom() { return rooms.find((r) => r.id === current) || null; }
+
+function updateRoomTools() {
+  const r = currentRoom();
+  $("roomTools").classList.toggle("hidden", !r);
+  if (!r) return;
+  $("inviteBtn").classList.toggle("hidden", r.kind !== "private");
+  $("roomTitle").textContent = (r.kind === "open" ? "# " : "🔒 ") + r.name;
+}
+
+// 開いている部屋から出て、一覧だけの表示へ戻る
+function leaveView(message) {
+  stopPoll();
+  current = null;
+  localStorage.removeItem("room");
+  $("app").classList.remove("in-room");
+  $("compose").classList.add("hidden");
+  $("roomTools").classList.add("hidden");
+  $("roomTitle").textContent = "部屋を選んでください";
+  const log = $("log");
+  log.textContent = "";
+  const empty = document.createElement("div");
+  empty.id = "empty";
+  empty.textContent = message || "左の一覧から部屋を選んでください。";
+  log.appendChild(empty);
+}
+
+// dialog の [data-close] は閉じるだけ
+for (const btn of document.querySelectorAll("dialog [data-close]")) {
+  btn.addEventListener("click", () => btn.closest("dialog").close());
+}
+
+$("newRoom").addEventListener("click", () => {
+  $("newRoomName").value = "";
+  $("newRoomError").textContent = "";
+  $("newRoomDialog").showModal();
+  $("newRoomName").focus();
+});
+
+$("newRoomForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const kind = document.querySelector("input[name=kind]:checked").value;
   try {
-    const row = lines(await text(await api("POST", "/api/v1/rooms", name)))[0];
+    const row = lines(await text(await api("POST", "/api/v1/rooms?kind=" + kind, $("newRoomName").value)))[0];
+    $("newRoomDialog").close();
     await loadRooms();
     openRoom(Number(row[0]));
+  } catch (e) {
+    $("newRoomError").textContent = e.message;
+  }
+});
+
+// ---- オープンチャットを探す ----
+async function search() {
+  $("searchError").textContent = "";
+  const ul = $("searchResults");
+  ul.textContent = "";
+  try {
+    const q = encodeURIComponent($("searchQuery").value.trim());
+    const rows = lines(await text(await api("GET", "/api/v1/rooms/search?limit=50&q=" + q)));
+    if (!rows.length) $("searchError").textContent = "見つかりませんでした";
+    for (const f of rows) {
+      const id = Number(f[0]);
+      const li = document.createElement("li");
+      const name = document.createElement("span");
+      name.className = "grow";
+      name.textContent = "# " + f[1];
+      const n = document.createElement("span");
+      n.className = "sub";
+      n.textContent = f[2] + "人";
+      const btn = document.createElement("button");
+      const joined = f[3] === "1";
+      btn.textContent = joined ? "開く" : "参加";
+      btn.className = joined ? "plain" : "";
+      btn.addEventListener("click", async () => {
+        try {
+          if (!joined) await text(await api("POST", `/api/v1/rooms/${id}/join`, ""));
+          $("searchDialog").close();
+          await loadRooms();
+          openRoom(id);
+        } catch (e) {
+          $("searchError").textContent = e.message;
+        }
+      });
+      li.append(name, n, btn);
+      ul.appendChild(li);
+    }
+  } catch (e) {
+    $("searchError").textContent = e.message;
+  }
+}
+$("searchRoom").addEventListener("click", () => {
+  $("searchDialog").showModal();
+  $("searchQuery").focus();
+  search();
+});
+$("searchForm").addEventListener("submit", (ev) => { ev.preventDefault(); search(); });
+
+// ---- 参加コードで入る ----
+$("joinCode").addEventListener("click", () => {
+  $("joinCodeInput").value = "";
+  $("joinError").textContent = "";
+  $("joinDialog").showModal();
+  $("joinCodeInput").focus();
+});
+$("joinForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  try {
+    const row = lines(await text(await api("POST", "/api/v1/join", $("joinCodeInput").value)))[0];
+    $("joinDialog").close();
+    await loadRooms();
+    openRoom(Number(row[0]));
+  } catch (e) {
+    $("joinError").textContent = e.message;
+  }
+});
+
+// ---- 招待(参加コードの発行) ----
+let inviteTimer = null;
+function showInvite(code, expires) {
+  $("inviteCode").textContent = code;
+  $("inviteBody").classList.remove("hidden");
+  $("inviteCopy").classList.remove("hidden");
+  clearInterval(inviteTimer);
+  const tick = () => {
+    const left = expires - Math.floor(Date.now() / 1000);
+    if (left <= 0) {
+      $("inviteExpire").textContent = "期限が切れました。発行し直してください";
+      $("inviteCode").style.opacity = 0.4;
+      clearInterval(inviteTimer);
+      return;
+    }
+    $("inviteCode").style.opacity = 1;
+    $("inviteExpire").textContent = "あと " + Math.floor(left / 60) + "分" + String(left % 60).padStart(2, "0") + "秒 で無効になります";
+  };
+  tick();
+  inviteTimer = setInterval(tick, 1000);
+}
+$("inviteBtn").addEventListener("click", () => {
+  const r = currentRoom();
+  $("inviteBody").classList.add("hidden");
+  $("inviteCopy").classList.add("hidden");
+  $("inviteError").textContent = "";
+  $("inviteOnce").checked = false;
+  $("inviteRevoke").classList.toggle("hidden", !r || ROLE_RANK[r.role] < ROLE_RANK.admin);
+  $("inviteDialog").showModal();
+});
+$("inviteDialog").addEventListener("close", () => clearInterval(inviteTimer));
+$("inviteNew").addEventListener("click", async () => {
+  $("inviteError").textContent = "";
+  try {
+    const uses = $("inviteOnce").checked ? "?uses=1" : "";
+    const row = lines(await text(await api("POST", `/api/v1/rooms/${current}/invites${uses}`, "")))[0];
+    showInvite(row[0], Number(row[1]));
+  } catch (e) {
+    $("inviteError").textContent = e.message;
+  }
+});
+$("inviteCopy").addEventListener("click", () => navigator.clipboard.writeText($("inviteCode").textContent));
+$("inviteRevoke").addEventListener("click", async () => {
+  if (!confirm("この部屋の有効な参加コードを全て無効にします。よろしいですか?")) return;
+  try {
+    const n = (await text(await api("POST", `/api/v1/rooms/${current}/invites/revoke`, ""))).trim();
+    $("inviteBody").classList.add("hidden");
+    $("inviteCopy").classList.add("hidden");
+    clearInterval(inviteTimer);
+    $("inviteError").textContent = n + "個のコードを無効にしました";
+  } catch (e) {
+    $("inviteError").textContent = e.message;
+  }
+});
+
+// ---- メンバー(役割の変更・追い出し) ----
+async function loadMembers() {
+  const r = currentRoom();
+  if (!r) return;
+  const myRank = ROLE_RANK[r.role] || 0;
+  $("membersError").textContent = "";
+  $("deleteRoom").classList.toggle("hidden", r.role !== "owner");
+  const ul = $("memberList");
+  ul.textContent = "";
+  let rows;
+  try {
+    rows = lines(await text(await api("GET", `/api/v1/rooms/${r.id}/members`)));
+  } catch (e) {
+    $("membersError").textContent = e.message;
+    return;
+  }
+  const act = async (label, path, body, confirmText) => {
+    if (confirmText && !confirm(confirmText)) return;
+    try {
+      await text(await api("POST", `/api/v1/rooms/${r.id}/${path}`, body));
+      await loadRooms();
+      if (current === r.id) loadMembers(); else $("membersDialog").close();
+    } catch (e) {
+      $("membersError").textContent = label + ": " + e.message;
+    }
+  };
+  for (const f of rows) {
+    const [login, display, role] = f;
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "grow";
+    name.textContent = display + " ";
+    const sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = "@" + login;
+    name.appendChild(sub);
+    const badge = document.createElement("span");
+    badge.className = "role";
+    badge.textContent = ROLE_LABEL[role] || role;
+    li.append(name, badge);
+    const me = $("me").dataset.login === login;
+    const button = (label, fn) => {
+      const b = document.createElement("button");
+      b.className = "plain";
+      b.textContent = label;
+      b.addEventListener("click", fn);
+      li.appendChild(b);
+    };
+    if (role === "banned") {
+      if (myRank >= ROLE_RANK.admin) button("追放を解く", () => act("追放を解く", "unban", login));
+    } else if (!me) {
+      if (r.role === "owner") {
+        if (role === "member") button("管理者にする", () => act("管理者にする", "role", login + "\tadmin"));
+        if (role === "admin") button("管理者を外す", () => act("管理者を外す", "role", login + "\tmember"));
+        button("オーナーを譲る", () => act("オーナーを譲る", "role", login + "\towner",
+          display + " さんにオーナーを譲ります。あなたは管理者になります。よろしいですか?"));
+      }
+      if (myRank >= ROLE_RANK.admin && ROLE_RANK[role] < myRank) {
+        button("追い出す", () => act("追い出す", "kick", login, display + " さんを追い出します(また参加できます)。よろしいですか?"));
+        button("追放", () => act("追放", "kick?ban=1", login, display + " さんを追放します(解くまで戻れません)。よろしいですか?"));
+      }
+    }
+    ul.appendChild(li);
+  }
+}
+$("membersBtn").addEventListener("click", () => {
+  $("membersDialog").showModal();
+  loadMembers();
+});
+$("deleteRoom").addEventListener("click", async () => {
+  const r = currentRoom();
+  if (!r || !confirm("「" + r.name + "」を発言ごと消します。元に戻せません。よろしいですか?")) return;
+  try {
+    await text(await api("POST", `/api/v1/rooms/${r.id}/delete`, ""));
+    $("membersDialog").close();
+    leaveView();
+    loadRooms();
+  } catch (e) {
+    $("membersError").textContent = e.message;
+  }
+});
+
+$("leaveBtn").addEventListener("click", async () => {
+  const r = currentRoom();
+  if (!r) return;
+  let msg = "「" + r.name + "」から抜けます。";
+  if (r.kind === "private") msg += "戻るには参加コードが要ります。";
+  if (r.role === "owner") msg += "オーナーは他の人へ移ります(誰もいなければ部屋は消えます)。";
+  if (!confirm(msg + "よろしいですか?")) return;
+  try {
+    await text(await api("POST", `/api/v1/rooms/${r.id}/leave`, ""));
+    leaveView();
+    loadRooms();
   } catch (e) {
     alert(e.message);
   }
@@ -313,8 +677,7 @@ async function openRoom(id) {
   stopPoll();
   current = id;
   localStorage.setItem("room", String(id));
-  const room = rooms.find((r) => r.id === id);
-  $("roomTitle").textContent = room ? "# " + room.name : "";
+  updateRoomTools();
   $("app").classList.add("in-room");
   $("compose").classList.remove("hidden");
   lastId = 0; firstId = 0; lastDay = ""; firstDay = "";
@@ -334,6 +697,7 @@ async function openRoom(id) {
     older.classList.toggle("hidden", rows.length < 50);
     log.scrollTop = log.scrollHeight;
   } catch (e) {
+    if (e.status === 403 || e.status === 404) { leaveView(e.message); loadRooms(); return; }
     $("status").textContent = e.message;
   }
   loadRooms();
@@ -366,6 +730,12 @@ async function poll(id, gen) {
       delay = 1000;
     } catch (e) {
       if (gen !== pollGen) return;
+      if (e.status === 403 || e.status === 404) {
+        // 追い出された/部屋が消えた。待ち直しても同じなのでやめる
+        leaveView(e.message);
+        loadRooms();
+        return;
+      }
       $("status").textContent = "再接続中… (" + e.message + ")";
       await new Promise((r) => setTimeout(r, delay));
       delay = Math.min(delay * 2, 30000);

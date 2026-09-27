@@ -9,14 +9,19 @@
 //   - **接続を使い回す**(keep-alive)。サーバが無通信で閉じた後も、繋ぎ直して続けられる
 //   - トークンが違えば AuthError になり、勝手に取り直さない
 //   - HTTPS でも同じように動き、接続を使い回す
+//   - オープンチャットは検索して参加でき、プライベートチャットは検索に出ず参加コードでだけ入れる
+//   - 開いている部屋が消えたら(追い出された場合と同じ応答)、部屋を閉じて一覧へ戻す合図を出す
 //
 // 使い方: chat_net_test <httpのport> <httpsのport> <ca.pem> <aliceのトークン> <bobのトークン>
+//                       <chat_server.py> <DB>(部屋を消すために管理コマンドを呼ぶ)
 #include "chat/Chat_Client.hpp"
 #include "functions/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>
+#include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>
@@ -81,6 +86,20 @@ static bool fetchMessages(ChatClient& c){
     }) && c.state() == ChatClient::State::Ok;
 }
 
+// 利用者の操作(検索・参加・招待)が終わるまで回す。成功したか
+static bool runAction(ChatClient& c, const std::function<bool()>& start){
+    const uint32_t rev = c.actionRevision();
+    if(!start()) return false;
+    return runUntil(c, [&]{ return c.actionRevision() != rev; }) && c.lastActionOk();
+}
+
+static int findHit(ChatClient& c, const char* name){
+    for(int i = 0; i < c.searchCount(); i++){
+        if(strcmp(c.searchAt(i).name.c_str(), name) == 0) return i;
+    }
+    return -1;
+}
+
 static const ChatProto::Message* last(ChatClient& c){
     return c.messageCount() ? &c.messageAt(c.messageCount() - 1) : nullptr;
 }
@@ -93,13 +112,57 @@ static void scenario(const char* label, const std::string& server, const char* a
     check(alice.configure(server.c_str(), alice_token), "設定を受け付ける");
 
     check(fetchRooms(alice), "部屋の一覧を取れる");
-    eq_int(alice.roomCount(), 2, "部屋は2つ");
-    if(alice.roomCount() == 2){
+    eq_int(alice.roomCount(), 4, "参加している部屋は4つ");
+    if(alice.roomCount() == 4){
         eq_str(alice.roomAt(0).name.c_str(), "雑談", "1つ目の部屋の名前");
+        check(!alice.roomAt(0).is_private && alice.roomAt(0).role == ChatProto::Role::Owner,
+              "雑談はオープンチャットで、alice がオーナー");
+        eq_str(alice.roomAt(2).name.c_str(), "秘密", "3つ目の部屋の名前");
+        check(alice.roomAt(2).is_private, "秘密はプライベートチャット");
     }
     check(alice.connectionKept(), "応答の後も接続を持っている(keep-alive)");
 
     const uint32_t room = alice.roomCount() ? alice.roomAt(0).id : 1;
+    const uint32_t other = alice.roomCount() >= 2 ? alice.roomAt(1).id : 2;
+    const uint32_t secret = alice.roomCount() >= 3 ? alice.roomAt(2).id : 3;
+
+    // ---- bob: オープンチャットを探して参加する ----
+    ChatClient bob;
+    check(bob.configure(server.c_str(), bob_token), "bob: 設定を受け付ける");
+    check(runAction(bob, [&]{ return bob.search(""); }), "bob: 空の検索語で全部のオープンチャットを探せる");
+    eq_int(bob.searchCount(), 3, "bob: オープンチャットは3つ見つかる");
+    check(findHit(bob, "秘密") < 0, "bob: プライベートチャットは検索に出ない");
+    check(runAction(bob, [&]{ return bob.search("連"); }), "bob: 名前の一部で探せる");
+    eq_int(bob.searchCount(), 1, "bob: 「連」で1つ");
+    if(bob.searchCount() == 1){
+        eq_str(bob.searchAt(0).name.c_str(), "連絡", "bob: 見つかった部屋");
+        check(bob.searchAt(0).members >= 1, "bob: 人数が分かる");
+    }
+    for(uint32_t id : {room, other}){
+        check(runAction(bob, [&]{ return bob.joinOpen(id); }), "bob: 検索した部屋に参加できる");
+        eq_int(bob.joinedRoomId(), id, "bob: 参加した部屋のid");
+        check(bob.findRoom(id) != nullptr, "bob: 参加した部屋が一覧に入る(取り直す前から)");
+    }
+
+    // ---- プライベートチャットへの招待 ----
+    check(!runAction(bob, [&]{ return bob.joinOpen(secret); }), "bob: プライベートチャットには検索から入れない");
+    check(runAction(bob, [&]{ return bob.joinByCode("ZZZZ-ZZZZ"); }) == false, "bob: 違う参加コードは通らない");
+    check(strstr(bob.actionMessage(), "参加コード") != nullptr, "bob: 理由(サーバの1行目)が分かる");
+
+    alice.setRoom(room);
+    check(!alice.requestInvite(), "オープンチャットでは参加コードを出さない");
+    alice.setRoom(secret);
+    check(runAction(alice, [&]{ return alice.requestInvite(); }), "プライベートチャットの参加コードを出せる");
+    const std::string code = alice.inviteCode();
+    check(code.size() == 9 && code[4] == '-', "コードは XXXX-XXXX");
+    check(alice.inviteExpires() > 1577836800u, "期限(UNIX時刻)が分かる");
+    std::string typed;
+    for(char ch : code) if(ch != '-') typed += (char)tolower((unsigned char)ch);
+    check(runAction(bob, [&]{ return bob.joinByCode(typed.c_str()); }), "bob: 参加コードで入れる(小文字・区切り無し)");
+    eq_int(bob.joinedRoomId(), secret, "bob: 入った部屋");
+    const ChatProto::Room* br = bob.findRoom(secret);
+    check(br && br->is_private && br->role == ChatProto::Role::Member, "bob: プライベートチャットの参加者");
+    alice.setRoom(0);
     alice.setRoom(room);
     check(fetchMessages(alice), "部屋を開くと発言を取れる");
     const int before = alice.messageCount();
@@ -120,8 +183,6 @@ static void scenario(const char* label, const std::string& server, const char* a
     check(!alice.send(too_long.c_str()), "長すぎる発言は送らない");
 
     // ---- 別の人から見える ----
-    ChatClient bob;
-    check(bob.configure(server.c_str(), bob_token), "bob: 設定を受け付ける");
     bob.setRoom(room);
     check(fetchMessages(bob), "bob: 部屋を開ける");
     if(const ChatProto::Message* m = last(bob)){
@@ -143,7 +204,6 @@ static void scenario(const char* label, const std::string& server, const char* a
 
     // ---- 未読の数 ----
     alice.setRoom(0);
-    const uint32_t other = alice.roomCount() >= 2 ? alice.roomAt(1).id : 2;
     bob.setRoom(other);
     check(fetchMessages(bob), "bob: 別の部屋を開ける");
     check(bob.send("別の部屋への発言"), "bob: 別の部屋へ送る");
@@ -169,9 +229,41 @@ static void scenario(const char* label, const std::string& server, const char* a
     bob.stop();
 }
 
+// 開いている部屋が消えたら、部屋を閉じて一覧へ戻す合図を出す(追い出されたときも同じ 403/404)
+static void roomLost(const std::string& server, const char* alice_token, const char* chat_py, const char* db){
+    printf("\n---- 開いている部屋が消える ----\n");
+    ChatClient alice;
+    alice.configure(server.c_str(), alice_token);
+    check(fetchRooms(alice), "一覧を取れる");
+    uint32_t doomed = 0;
+    for(int i = 0; i < alice.roomCount(); i++){
+        if(strcmp(alice.roomAt(i).name.c_str(), "消える部屋") == 0) doomed = alice.roomAt(i).id;
+    }
+    check(doomed != 0, "消える部屋がある");
+    alice.setRoom(doomed);
+    check(fetchMessages(alice), "開ける");
+
+    const uint32_t lost = alice.roomLostRevision();
+    const std::string cmd = std::string("python3 '") + chat_py + "' --db '" + db + "' delroom '#"
+                          + std::to_string(doomed) + "' > /dev/null";
+    check(system(cmd.c_str()) == 0, "管理コマンドで部屋を消す");
+    alice.refreshNow();
+    check(runUntil(alice, [&]{ return alice.roomLostRevision() != lost; }), "部屋が消えたと分かる");
+    eq_int(alice.room(), 0, "部屋を閉じる");
+    check(alice.findRoom(doomed) == nullptr, "一覧から外す");
+    check(strstr(alice.statusText(), "部屋") != nullptr, "理由を出す");
+    //一覧はすぐ(待たずに)取り直し、取れたら状態も元に戻る
+    const uint32_t rev = alice.roomsRevision();
+    check(runUntil(alice, [&]{ return alice.roomsRevision() != rev && alice.state() == ChatClient::State::Ok; }),
+          "すぐ一覧を取り直す");
+    check(alice.findRoom(doomed) == nullptr, "取り直した一覧にも無い");
+    alice.stop();
+}
+
 int main(int argc, char** argv){
-    if(argc < 6){
-        fprintf(stderr, "使い方: %s <http port> <https port> <ca.pem> <alice token> <bob token>\n", argv[0]);
+    if(argc < 8){
+        fprintf(stderr, "使い方: %s <http port> <https port> <ca.pem> <alice token> <bob token> <chat_server.py> <db>\n",
+                argv[0]);
         return 2;
     }
     std::ifstream ca_in(argv[3]);
@@ -192,6 +284,7 @@ int main(int argc, char** argv){
 
     scenario("HTTP", std::string("http://127.0.0.1:") + argv[1], argv[4], argv[5], true);
     scenario("HTTPS", std::string("https://localhost:") + argv[2], argv[4], argv[5], false);
+    roomLost(std::string("http://127.0.0.1:") + argv[1], argv[4], argv[6], argv[7]);
 
     printf("\n%s (失敗 %d件)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

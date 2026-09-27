@@ -77,8 +77,17 @@ int main(){
         eq_int(r.last_id, 120, "最新id");
         eq_int(r.unread, 5, "未読");
 
-        char l2[] = "4\t連絡\t0\t0\t将来の列\tさらに";
+        check(!r.is_private && r.role == Role::Member, "v1 のサーバ(4列)ならオープン・参加者扱い");
+
+        char l2[] = "4\t連絡\t0\t0\tprivate\towner\t将来の列\tさらに";
         check(ParseRoom(l2, r) && r.id == 4 && r.unread == 0, "列が増えていても読める");
+        check(r.is_private, "5列目 private はプライベートチャット");
+        check(r.role == Role::Owner, "6列目は自分の役割");
+
+        char l2b[] = "6\t広場\t1\t0\topen\tadmin";
+        check(ParseRoom(l2b, r) && !r.is_private && r.role == Role::Admin, "open / admin");
+        char l2c[] = "7\t謎\t1\t0\tsecret\tking";
+        check(ParseRoom(l2c, r) && !r.is_private && r.role == Role::Member, "知らない種類・役割は一番弱い扱い");
 
         char l3[] = "5\t名前だけ\t9";
         check(!ParseRoom(l3, r), "列が足りなければ捨てる");
@@ -86,6 +95,42 @@ int main(){
         check(!ParseRoom(l4, r), "idが数値でなければ捨てる");
         char l5[] = "0\t名前\t1\t1";
         check(!ParseRoom(l5, r), "id 0 は捨てる");
+    }
+
+    printf("---- ParseSearchHit / ParseJoined / ParseInvite ----\n");
+    {
+        char l1[] = "8\t雑談\t12\t1\t将来の列";
+        SearchHit h;
+        check(ParseSearchHit(l1, h), "検索結果を読める");
+        check(h.id == 8 && h.members == 12 && h.joined, "id・人数・参加済み");
+        eq_str(h.name.c_str(), "雑談", "名前");
+        char l2[] = "9\t広場\t3\t0";
+        check(ParseSearchHit(l2, h) && !h.joined, "未参加");
+        char l3[] = "9\t広場\tx\t0";
+        check(!ParseSearchHit(l3, h), "人数が数値でなければ捨てる");
+        char l4[] = "9\t広場\t3";
+        check(!ParseSearchHit(l4, h), "列が足りなければ捨てる");
+
+        char j1[] = "12\t秘密\tprivate\tmember";
+        Room r;
+        check(ParseJoined(j1, r), "参加の応答を読める");
+        check(r.id == 12 && r.is_private && r.role == Role::Member && r.unread == 0, "id・種類・役割");
+        eq_str(r.name.c_str(), "秘密", "名前");
+        char j2[] = "0\t秘密\tprivate\tmember";
+        check(!ParseJoined(j2, r), "id 0 は捨てる");
+
+        char i1[] = "ABCD-EFGH\t1790001800\t0";
+        InviteCode code;
+        uint32_t expires = 0;
+        check(ParseInvite(i1, code, expires), "参加コードの応答を読める");
+        eq_str(code.c_str(), "ABCD-EFGH", "コード");
+        eq_int(expires, 1790001800, "期限");
+        char i2[] = "ABCD-EFGH\tsoon";
+        check(!ParseInvite(i2, code, expires), "期限が数値でなければ捨てる");
+        std::string long_code = std::string(PICO_STR_S + 4, 'A') + "\t1";
+        std::vector<char> i3(long_code.begin(), long_code.end());
+        i3.push_back('\0');
+        check(!ParseInvite(i3.data(), code, expires), "切り詰まるコードは受け付けない");
     }
 
     printf("---- ParseMessage ----\n");

@@ -57,10 +57,22 @@ namespace {
     }
 }
 
+bool ParseKind(const char* s){
+    return s && strcmp(s, "private") == 0;
+}
+
+Role ParseRole(const char* s){
+    if(!s) return Role::Member;
+    if(strcmp(s, "owner") == 0) return Role::Owner;
+    if(strcmp(s, "admin") == 0) return Role::Admin;
+    return Role::Member;
+}
+
 bool ParseRoom(char* line, Room& out){
-    char* f[5];
-    //5列目以降(将来の拡張)は f[4] へまとめて入る。読まない
-    const int n = SplitTabs(line, f, 5);
+    char* f[7];
+    //5・6列目は種類と役割(v2)。v1 のサーバは4列なので無くてよい。
+    //7列目以降(将来の拡張)は f[6] へまとめて入る。読まない
+    const int n = SplitTabs(line, f, 7);
     if(n < 4) return false;
 
     Room r;
@@ -68,8 +80,45 @@ bool ParseRoom(char* line, Room& out){
     if(!ParseUint(f[2], r.last_id)) return false;
     if(!ParseUint(f[3], r.unread)) return false;
     r.name.assign(f[1]); //表示にしか使わないので切り詰まってよい
+    if(n >= 5) r.is_private = ParseKind(f[4]);
+    if(n >= 6) r.role = ParseRole(f[5]);
     out = r;
     return true;
+}
+
+bool ParseSearchHit(char* line, SearchHit& out){
+    char* f[5];
+    if(SplitTabs(line, f, 5) < 4) return false;
+
+    SearchHit h;
+    if(!ParseUint(f[0], h.id) || h.id == 0) return false;
+    if(!ParseUint(f[2], h.members)) return false;
+    h.name.assign(f[1]);
+    h.joined = (strcmp(f[3], "1") == 0);
+    out = h;
+    return true;
+}
+
+bool ParseJoined(char* line, Room& out){
+    char* f[5];
+    const int n = SplitTabs(line, f, 5);
+    if(n < 2) return false;
+
+    Room r;
+    if(!ParseUint(f[0], r.id) || r.id == 0) return false;
+    r.name.assign(f[1]);
+    if(n >= 3) r.is_private = ParseKind(f[2]);
+    if(n >= 4) r.role = ParseRole(f[3]);
+    out = r;
+    return true;
+}
+
+bool ParseInvite(char* line, InviteCode& code, uint32_t& expires){
+    char* f[4];
+    if(SplitTabs(line, f, 4) < 2) return false;
+    if(!*f[0] || !ParseUint(f[1], expires)) return false;
+    //切り詰めたコードは別物なので受け付けない
+    return code.assign(f[0]);
 }
 
 bool ParseMessage(char* line, Message& out){

@@ -48,9 +48,10 @@ import ssl
 import sys
 import threading
 import time
+import unicodedata
 import urllib.parse
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 # ---- 上限(CHAT_PROTOCOL.md「制限値」と揃えること。pico-os側の固定長バッファの大きさ) ----
 MAX_TEXT_BYTES = 500        # 発言1件の本文(UTF-8)
@@ -68,6 +69,14 @@ LOGIN_WINDOW_SEC = 600
 LOGIN_MAX_FAILS = 10
 
 PBKDF2_ITER = 200_000
+
+# 参加コード(プライベートチャット)
+INVITE_TTL_SEC = 30 * 60    # 発行から30分で無効
+MAX_INVITE_USES = 50        # 回数を指定するときの上限(指定しなければ期限内は何回でも)
+MAX_ACTIVE_INVITES = 20     # 1つの部屋で同時に有効なコードの数
+# 参加コードの総当たり対策。同じ人/同じIPから JOIN_WINDOW_SEC 秒に JOIN_MAX_FAILS 回外したら断る
+JOIN_WINDOW_SEC = 600
+JOIN_MAX_FAILS = 10
 
 LOGIN_RE = re.compile(r"^[A-Za-z0-9_-]{1,%d}$" % MAX_LOGIN_LEN)
 
@@ -134,6 +143,8 @@ def check_password(password, salt_hex, digest_hex):
 
 # ============================================================ 保存(SQLite)
 
+SCHEMA_VERSION = 2
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id          INTEGER PRIMARY KEY,
@@ -145,7 +156,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE TABLE IF NOT EXISTS rooms (
     id          INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    kind        TEXT NOT NULL DEFAULT 'open' CHECK (kind IN ('open', 'private')),
     created     INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS messages (
@@ -167,7 +179,96 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires     INTEGER NOT NULL
 );
+-- 部屋の参加者と役割(v2)。役割の意味は ROLE_RANK / PERMS
+CREATE TABLE IF NOT EXISTS members (
+    room_id     INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role        TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
+    joined      INTEGER NOT NULL,
+    PRIMARY KEY (room_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS members_user ON members(user_id);
+-- 追い出したうえで、検索からも参加コードからも戻れなくした人(v2)
+CREATE TABLE IF NOT EXISTS bans (
+    room_id     INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created     INTEGER NOT NULL,
+    PRIMARY KEY (room_id, user_id)
+);
+-- プライベートチャットの参加コード(v2)。コードそのものは持たずハッシュだけ
+CREATE TABLE IF NOT EXISTS invites (
+    id          INTEGER PRIMARY KEY,
+    hash        TEXT NOT NULL UNIQUE,
+    room_id     INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    created_by  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created     INTEGER NOT NULL,
+    expires     INTEGER NOT NULL,
+    uses_left   INTEGER            -- NULL = 期限内なら何回でも
+);
+CREATE INDEX IF NOT EXISTS invites_room ON invites(room_id);
 """
+
+# v1 の rooms は name が UNIQUE で kind も無い。作り直す(外部キーの付け替えを避けるため
+# SQLite の推奨手順「新しい表へ写す → 古い表を消す → 名前を変える」を外部キー無効で行う)
+MIGRATE_V1_ROOMS = """
+BEGIN;
+CREATE TABLE rooms_v2 (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    kind        TEXT NOT NULL DEFAULT 'open' CHECK (kind IN ('open', 'private')),
+    created     INTEGER NOT NULL
+);
+INSERT INTO rooms_v2(id, name, kind, created) SELECT id, name, 'open', created FROM rooms;
+DROP TABLE rooms;
+ALTER TABLE rooms_v2 RENAME TO rooms;
+COMMIT;
+"""
+
+# 役割の強さ。数が大きいほど強い
+ROLE_RANK = {"member": 1, "admin": 2, "owner": 3}
+
+# 操作ごとに要る役割(CHAT_PROTOCOL.md「役割と権限」と揃えること)
+PERMS = {
+    "read": "member",            # 発言を読む
+    "post": "member",            # 発言する
+    "invite": "member",          # 参加コードを発行する(プライベートのみ)
+    "members": "member",         # 参加者の一覧を見る
+    "kick": "admin",             # 自分より弱い人を追い出す/追放する/追放を解く
+    "revoke_invites": "admin",   # 有効な参加コードを全部無効にする
+    "set_role": "owner",         # 管理者の任命・解任、オーナーの譲渡
+    "delete_room": "owner",      # 部屋を発言ごと消す
+}
+
+
+KIND_LABEL = {"open": "オープンチャット", "private": "プライベートチャット"}
+ROLE_LABEL = {"member": "参加者", "admin": "管理者", "owner": "オーナー"}
+
+
+def can(role, action):
+    return ROLE_RANK.get(role or "", 0) >= ROLE_RANK[PERMS[action]]
+
+
+# 参加コード。読み違えやすい 0/O 1/I を除いた32文字 × 8文字(40bit)。見せるときは4文字ずつ - で区切る
+INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+INVITE_LEN = 8
+
+
+def new_invite_code():
+    return "".join(secrets.choice(INVITE_ALPHABET) for _ in range(INVITE_LEN))
+
+
+def normalize_invite_code(s):
+    """利用者が打ったコードを揃える(小文字・区切りの - や空白を許す)。形が違えば None。"""
+    # 全角で打たれた英数字(日本語キーボードのまま等)も受け付ける
+    s = unicodedata.normalize("NFKC", s or "")
+    s = re.sub(r"[\s\-\u2010-\u2015\u2212\u30fc]+", "", s).upper()
+    if len(s) != INVITE_LEN or any(c not in INVITE_ALPHABET for c in s):
+        return None
+    return s
+
+
+def format_invite_code(code):
+    return code[:4] + "-" + code[4:]
 
 
 class Store:
@@ -185,6 +286,35 @@ class Store:
         db = self.db()
         db.executescript(SCHEMA)
         db.commit()
+        self.migrate()
+
+    def migrate(self):
+        db = self.db()
+        version = db.execute("PRAGMA user_version").fetchone()[0]
+        if version >= SCHEMA_VERSION:
+            return
+        cols = [r["name"] for r in db.execute("PRAGMA table_info(rooms)")]
+        if "kind" not in cols:
+            # v1 → v2: 既存の部屋は全てオープンチャットにし、今いる人を全員参加者にする
+            # (v1 では全員が全部の部屋を見ていたので、アップデートで部屋が消えたように見せない)
+            with self.write_lock:
+                db.execute("PRAGMA foreign_keys=OFF")
+                db.executescript(MIGRATE_V1_ROOMS)
+                db.execute("PRAGMA foreign_keys=ON")
+                bad = db.execute("PRAGMA foreign_key_check").fetchall()
+                if bad:
+                    raise RuntimeError("移行後の外部キーの検査に失敗しました: %r" % (bad,))
+                db.execute(
+                    "INSERT OR IGNORE INTO members(room_id, user_id, role, joined) "
+                    "SELECT rooms.id, users.id, 'member', ? FROM rooms, users "
+                    "WHERE users.pw_hash IS NOT NULL OR users.token_hash IS NOT NULL",
+                    (int(time.time()),))
+                db.commit()
+            log("DBを v2 へ移行しました(既存の部屋はオープンチャット、今いる人は全員参加者)")
+        with self.write_lock:
+            db.executescript("CREATE UNIQUE INDEX IF NOT EXISTS rooms_open_name ON rooms(name) WHERE kind='open';")
+            db.execute("PRAGMA user_version=%d" % SCHEMA_VERSION)
+            db.commit()
 
     def db(self):
         conn = getattr(self.local, "conn", None)
@@ -202,6 +332,11 @@ class Store:
             cur = db.execute(sql, params)
             db.commit()
             return cur
+
+    def wake(self):
+        """ロングポーリング中の接続を起こす(新しい発言・追い出し・部屋の削除)。"""
+        with self.new_message:
+            self.new_message.notify_all()
 
     # ---- ユーザー ----
     def user_by_token(self, token):
@@ -233,22 +368,186 @@ class Store:
 
     # ---- 部屋 ----
     def rooms_for(self, user_id):
+        """参加している部屋だけ。"""
         return self.db().execute(
-            "SELECT rooms.id, rooms.name, "
+            "SELECT rooms.id, rooms.name, rooms.kind, members.role, "
             "  COALESCE((SELECT MAX(id) FROM messages WHERE room_id=rooms.id), 0) AS last_id, "
             "  COALESCE((SELECT last_read FROM reads WHERE user_id=? AND room_id=rooms.id), 0) AS last_read "
-            "FROM rooms ORDER BY rooms.id", (user_id,)).fetchall()
+            "FROM rooms JOIN members ON members.room_id=rooms.id AND members.user_id=? "
+            "ORDER BY rooms.id", (user_id, user_id)).fetchall()
 
     def room(self, room_id):
         return self.db().execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone()
 
-    def add_room(self, name):
-        cur = self.write("INSERT INTO rooms(name,created) VALUES(?,?)", (name, int(time.time())))
-        return cur.lastrowid
+    def role_of(self, room_id, user_id):
+        row = self.db().execute("SELECT role FROM members WHERE room_id=? AND user_id=?",
+                                (room_id, user_id)).fetchone()
+        return row["role"] if row else None
+
+    def is_banned(self, room_id, user_id):
+        return self.db().execute("SELECT 1 FROM bans WHERE room_id=? AND user_id=?",
+                                 (room_id, user_id)).fetchone() is not None
+
+    def add_room(self, name, kind="open", owner_id=None):
+        """部屋を作る。オープンチャットの名前が重なれば sqlite3.IntegrityError。"""
+        now = int(time.time())
+        with self.write_lock:
+            db = self.db()
+            try:
+                cur = db.execute("INSERT INTO rooms(name,kind,created) VALUES(?,?,?)", (name, kind, now))
+                room_id = cur.lastrowid
+                if owner_id is not None:
+                    db.execute("INSERT INTO members(room_id,user_id,role,joined) VALUES(?,?,'owner',?)",
+                               (room_id, owner_id, now))
+                db.commit()
+            except sqlite3.Error:
+                db.rollback()
+                raise
+        return room_id
+
+    def delete_room(self, room_id):
+        # 外部キーの ON DELETE CASCADE で発言・既読・参加者・追放・参加コードも消える
+        self.write("DELETE FROM rooms WHERE id=?", (room_id,))
+        self.wake()
+
+    def join(self, room_id, user_id):
+        """参加者にする(既に参加していれば何もしない)。"""
+        self.write("INSERT OR IGNORE INTO members(room_id,user_id,role,joined) VALUES(?,?,'member',?)",
+                   (room_id, user_id, int(time.time())))
+
+    def leave(self, room_id, user_id):
+        """抜ける。オーナーが抜けたら一番強く古い人へ譲り、誰もいなくなったら部屋ごと消す。
+
+        戻り値: "left" / "deleted"
+        """
+        with self.write_lock:
+            db = self.db()
+            role = db.execute("SELECT role FROM members WHERE room_id=? AND user_id=?",
+                              (room_id, user_id)).fetchone()
+            db.execute("DELETE FROM members WHERE room_id=? AND user_id=?", (room_id, user_id))
+            db.execute("DELETE FROM reads WHERE room_id=? AND user_id=?", (room_id, user_id))
+            rest = db.execute(
+                "SELECT user_id FROM members WHERE room_id=? "
+                "ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, joined, user_id",
+                (room_id,)).fetchall()
+            result = "left"
+            if not rest:
+                db.execute("DELETE FROM rooms WHERE id=?", (room_id,))
+                result = "deleted"
+            elif role is not None and role["role"] == "owner":
+                db.execute("UPDATE members SET role='owner' WHERE room_id=? AND user_id=?",
+                           (room_id, rest[0]["user_id"]))
+            db.commit()
+        self.wake()
+        return result
+
+    def kick(self, room_id, user_id, ban=False):
+        with self.write_lock:
+            db = self.db()
+            db.execute("DELETE FROM members WHERE room_id=? AND user_id=?", (room_id, user_id))
+            db.execute("DELETE FROM reads WHERE room_id=? AND user_id=?", (room_id, user_id))
+            if ban:
+                db.execute("INSERT OR IGNORE INTO bans(room_id,user_id,created) VALUES(?,?,?)",
+                           (room_id, user_id, int(time.time())))
+            db.commit()
+        self.wake()
+
+    def unban(self, room_id, user_id):
+        return self.write("DELETE FROM bans WHERE room_id=? AND user_id=?", (room_id, user_id)).rowcount > 0
+
+    def set_role(self, room_id, user_id, role, by_user_id):
+        """役割を変える。role='owner' は譲渡(今のオーナー by_user_id は管理者になる)。"""
+        with self.write_lock:
+            db = self.db()
+            if role == "owner":
+                db.execute("UPDATE members SET role='admin' WHERE room_id=? AND user_id=?", (room_id, by_user_id))
+            db.execute("UPDATE members SET role=? WHERE room_id=? AND user_id=?", (role, room_id, user_id))
+            db.commit()
+
+    def members(self, room_id):
+        return self.db().execute(
+            "SELECT users.login, users.display, members.role FROM members JOIN users ON users.id=members.user_id "
+            "WHERE members.room_id=? "
+            "ORDER BY CASE members.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, members.joined, users.id",
+            (room_id,)).fetchall()
+
+    def banned(self, room_id):
+        return self.db().execute(
+            "SELECT users.login, users.display FROM bans JOIN users ON users.id=bans.user_id "
+            "WHERE bans.room_id=? ORDER BY bans.created", (room_id,)).fetchall()
+
+    def search_open(self, query, user_id, limit, offset):
+        """オープンチャットを名前の部分一致で探す。参加者の多い順。"""
+        like = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        return self.db().execute(
+            "SELECT rooms.id, rooms.name, "
+            "  (SELECT COUNT(*) FROM members WHERE room_id=rooms.id) AS n, "
+            "  EXISTS(SELECT 1 FROM members WHERE room_id=rooms.id AND user_id=?) AS joined "
+            "FROM rooms WHERE kind='open' AND name LIKE ? ESCAPE '\\' "
+            "ORDER BY n DESC, rooms.id LIMIT ? OFFSET ?", (user_id, like, limit, offset)).fetchall()
 
     def unread_count(self, room_id, last_read):
         return self.db().execute(
             "SELECT COUNT(*) FROM messages WHERE room_id=? AND id>?", (room_id, last_read)).fetchone()[0]
+
+    # ---- 参加コード ----
+    def new_invite(self, room_id, user_id, ttl_sec, uses):
+        """参加コードを発行して (コード, 期限) を返す。有効なコードが多すぎれば None。"""
+        now = int(time.time())
+        with self.write_lock:
+            db = self.db()
+            db.execute("DELETE FROM invites WHERE expires<=? OR uses_left<=0", (now,))
+            n = db.execute("SELECT COUNT(*) FROM invites WHERE room_id=?", (room_id,)).fetchone()[0]
+            if n >= MAX_ACTIVE_INVITES:
+                db.commit()
+                return None
+            for _ in range(5):
+                code = new_invite_code()
+                try:
+                    db.execute("INSERT INTO invites(hash,room_id,created_by,created,expires,uses_left) "
+                               "VALUES(?,?,?,?,?,?)",
+                               (token_hash(code), room_id, user_id, now, now + ttl_sec, uses or None))
+                    db.commit()
+                    return code, now + ttl_sec
+                except sqlite3.IntegrityError:
+                    continue  # 有効なコードと重なった(ほぼ起きない)。引き直す
+            db.commit()
+            return None
+
+    def use_invite(self, code, user_id):
+        """参加コードで参加する。成功なら部屋の行、コードが無い/期限切れ/追放されていれば None。
+
+        1回きりのコードを2人が同時に使っても1人しか通らないよう、確認と消費を1つのロックの中で行う。
+        """
+        now = int(time.time())
+        with self.write_lock:
+            db = self.db()
+            inv = db.execute("SELECT * FROM invites WHERE hash=? AND expires>? AND (uses_left IS NULL OR uses_left>0)",
+                             (token_hash(code), now)).fetchone()
+            if inv is None:
+                return None
+            room_id = inv["room_id"]
+            if db.execute("SELECT 1 FROM bans WHERE room_id=? AND user_id=?", (room_id, user_id)).fetchone():
+                return None
+            already = db.execute("SELECT 1 FROM members WHERE room_id=? AND user_id=?",
+                                 (room_id, user_id)).fetchone()
+            if not already:
+                db.execute("INSERT INTO members(room_id,user_id,role,joined) VALUES(?,?,'member',?)",
+                           (room_id, user_id, now))
+                if inv["uses_left"] is not None:
+                    db.execute("UPDATE invites SET uses_left=uses_left-1 WHERE id=?", (inv["id"],))
+            db.commit()
+            return db.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone()
+
+    def active_invites(self, room_id):
+        return self.db().execute(
+            "SELECT invites.expires, invites.uses_left, users.display FROM invites "
+            "JOIN users ON users.id=invites.created_by "
+            "WHERE room_id=? AND expires>? AND (uses_left IS NULL OR uses_left>0) ORDER BY invites.id",
+            (room_id, int(time.time()))).fetchall()
+
+    def revoke_invites(self, room_id):
+        return self.write("DELETE FROM invites WHERE room_id=?", (room_id,)).rowcount
 
     # ---- 発言 ----
     def messages(self, room_id, after=None, before=None, limit=DEFAULT_LIMIT):
@@ -275,8 +574,7 @@ class Store:
         msg_id = cur.lastrowid
         # 自分の発言は既読にしておく(自分の発言で未読が増えるのは変なので)
         self.mark_read(user_id, room_id, msg_id)
-        with self.new_message:
-            self.new_message.notify_all()
+        self.wake()
         return msg_id, now
 
     def mark_read(self, user_id, room_id, msg_id):
@@ -296,16 +594,23 @@ class HttpError(Exception):
 
 
 class LoginThrottle:
-    def __init__(self):
+    """一定時間の失敗の回数を数える(ログインと参加コードの総当たり対策)。キーはIPや利用者。"""
+
+    def __init__(self, window=LOGIN_WINDOW_SEC, max_fails=LOGIN_MAX_FAILS):
         self.lock = threading.Lock()
-        self.fails = {}  # ip -> [時刻, ...]
+        self.window = window
+        self.max_fails = max_fails
+        self.fails = {}  # キー -> [時刻, ...]
 
     def blocked(self, ip):
         now = time.time()
         with self.lock:
-            lst = [t for t in self.fails.get(ip, []) if now - t < LOGIN_WINDOW_SEC]
-            self.fails[ip] = lst
-            return len(lst) >= LOGIN_MAX_FAILS
+            lst = [t for t in self.fails.get(ip, []) if now - t < self.window]
+            if lst:
+                self.fails[ip] = lst
+            else:
+                self.fails.pop(ip, None)
+            return len(lst) >= self.max_fails
 
     def fail(self, ip):
         with self.lock:
@@ -324,6 +629,8 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
     # server 側から差し込まれる
     store: Store = None
     throttle: LoginThrottle = None
+    join_throttle: LoginThrottle = None
+    invite_ttl = INVITE_TTL_SEC
     secure_cookie = False
 
     def log_message(self, fmt, *args):
@@ -442,15 +749,32 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
                 if method == "GET":
                     return self.api_rooms()
                 if method == "POST":
-                    return self.api_add_room()
+                    return self.api_add_room(query)
+            if path == "/api/v1/rooms/search" and method == "GET":
+                return self.api_search(query)
+            if path == "/api/v1/join" and method == "POST":
+                return self.api_join_code()
 
-            m = re.fullmatch(r"/api/v1/rooms/(\d+)/messages", path)
+            m = re.fullmatch(r"/api/v1/rooms/(\d+)/([a-z/]+)", path)
             if m:
                 room_id = int(m.group(1))
-                if method == "GET":
-                    return self.api_messages(room_id, query)
-                if method == "POST":
-                    return self.api_post(room_id)
+                action = m.group(2)
+                route = {
+                    ("GET", "messages"): lambda: self.api_messages(room_id, query),
+                    ("POST", "messages"): lambda: self.api_post(room_id),
+                    ("POST", "join"): lambda: self.api_join_open(room_id),
+                    ("POST", "leave"): lambda: self.api_leave(room_id),
+                    ("GET", "members"): lambda: self.api_members(room_id),
+                    ("GET", "invites"): lambda: self.api_invites(room_id),
+                    ("POST", "invites"): lambda: self.api_new_invite(room_id, query),
+                    ("POST", "invites/revoke"): lambda: self.api_revoke_invites(room_id),
+                    ("POST", "kick"): lambda: self.api_kick(room_id, query),
+                    ("POST", "unban"): lambda: self.api_unban(room_id),
+                    ("POST", "role"): lambda: self.api_set_role(room_id),
+                    ("POST", "delete"): lambda: self.api_delete_room(room_id),
+                }.get((method, action))
+                if route:
+                    return route()
 
             raise HttpError(404, "そのようなAPIはありません")
         except HttpError as e:
@@ -529,23 +853,187 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
         out = []
         for r in self.store.rooms_for(user["id"]):
             unread = self.store.unread_count(r["id"], r["last_read"]) if r["last_id"] > r["last_read"] else 0
-            out.append(tsv_line(r["id"], clean_name(r["name"]), r["last_id"], unread))
+            out.append(tsv_line(r["id"], clean_name(r["name"]), r["last_id"], unread, r["kind"], r["role"]))
         self.send_body(200, "".join(out))
 
-    def api_add_room(self):
-        self.current_user(for_write=True)
+    def room_name_param(self):
         name = clean_name(self.read_text_body())
         if not name:
             raise HttpError(400, "部屋の名前が空です")
         if utf8_len(name) > MAX_NAME_BYTES:
             raise HttpError(400, "部屋の名前が長すぎます(%dバイトまで)" % MAX_NAME_BYTES)
+        return name
+
+    def api_add_room(self, query):
+        user = self.current_user(for_write=True)
+        kind = (query.get("kind") or ["open"])[0]
+        if kind not in ("open", "private"):
+            raise HttpError(400, "kind は open か private です")
+        name = self.room_name_param()
         try:
-            room_id = self.store.add_room(name)
+            room_id = self.store.add_room(name, kind, user["id"])
         except sqlite3.IntegrityError:
-            raise HttpError(409, "同じ名前の部屋があります")
-        with self.store.new_message:
-            self.store.new_message.notify_all()
-        self.send_body(201, tsv_line(room_id, name))
+            raise HttpError(409, "同じ名前のオープンチャットがあります")
+        log("%s が%s「%s」(#%d)を作りました" % (user["login"], KIND_LABEL[kind], name, room_id))
+        self.send_body(201, tsv_line(room_id, name, kind, "owner"))
+
+    def member_room(self, user, room_id, action="read"):
+        """部屋と自分の役割を返す。参加していなければ、プライベートは 404(有るかどうかも教えない)、
+        オープンは 403。役割が足りなければ 403。"""
+        room = self.store.room(room_id)
+        role = self.store.role_of(room_id, user["id"]) if room is not None else None
+        if room is None or (role is None and room["kind"] == "private"):
+            raise HttpError(404, "部屋がありません")
+        if role is None:
+            raise HttpError(403, "この部屋に参加していません")
+        if not can(role, action):
+            raise HttpError(403, "%s以上でないとできません" % ROLE_LABEL[PERMS[action]])
+        return room, role
+
+    def target_user(self, room_id, login):
+        login = (login or "").strip()
+        target = self.store.user_by_login(login) if LOGIN_RE.match(login) else None
+        if target is None:
+            raise HttpError(404, "その人はいません")
+        return target
+
+    def api_search(self, query):
+        user = self.current_user()
+        q = clean_name((query.get("q") or [""])[0])
+        if utf8_len(q) > MAX_NAME_BYTES:
+            raise HttpError(400, "検索語が長すぎます")
+        limit = self.int_param(query, "limit", DEFAULT_LIMIT, 1, MAX_LIMIT)
+        offset = self.int_param(query, "offset", 0, 0, 10**6)
+        out = []
+        for r in self.store.search_open(q, user["id"], limit, offset):
+            out.append(tsv_line(r["id"], clean_name(r["name"]), r["n"], 1 if r["joined"] else 0))
+        self.send_body(200, "".join(out))
+
+    def joined_line(self, room, user):
+        return tsv_line(room["id"], clean_name(room["name"]), room["kind"],
+                        self.store.role_of(room["id"], user["id"]) or "member")
+
+    def api_join_open(self, room_id):
+        user = self.current_user(for_write=True)
+        self.read_body()
+        room = self.store.room(room_id)
+        # プライベートチャットは参加コードでしか入れない。有るかどうかも教えない
+        if room is None or room["kind"] != "open":
+            raise HttpError(404, "部屋がありません")
+        if self.store.is_banned(room_id, user["id"]):
+            raise HttpError(403, "この部屋には参加できません")
+        self.store.join(room_id, user["id"])
+        self.send_body(200, self.joined_line(room, user))
+
+    def api_join_code(self):
+        user = self.current_user(for_write=True)
+        ip = self.client_address[0]
+        keys = ("ip:" + ip, "user:%d" % user["id"])
+        if any(self.join_throttle.blocked(k) for k in keys):
+            raise HttpError(429, "失敗が多すぎます。しばらく待ってください")
+        code = normalize_invite_code(self.read_text_body())
+        room = self.store.use_invite(code, user["id"]) if code else None
+        if room is None:
+            # 「コードが無い」「期限切れ」「追放されている」を区別しない(総当たりの手がかりを与えない)
+            for k in keys:
+                self.join_throttle.fail(k)
+            raise HttpError(404, "参加コードが違うか、期限が切れています")
+        log("%s が参加コードで「%s」(#%d)に参加しました" % (user["login"], room["name"], room["id"]))
+        self.send_body(200, self.joined_line(room, user))
+
+    def api_leave(self, room_id):
+        user = self.current_user(for_write=True)
+        self.read_body()
+        room, _ = self.member_room(user, room_id)
+        result = self.store.leave(room_id, user["id"])
+        if result == "deleted":
+            log("「%s」(#%d)は誰もいなくなったので消しました" % (room["name"], room_id))
+        self.send_body(200, result + "\n")
+
+    def api_members(self, room_id):
+        user = self.current_user()
+        _, role = self.member_room(user, room_id, "members")
+        out = [tsv_line(m["login"], clean_name(m["display"]), m["role"]) for m in self.store.members(room_id)]
+        if can(role, "kick"):
+            # 追放した人は、解く権限のある人にだけ見せる
+            out += [tsv_line(b["login"], clean_name(b["display"]), "banned") for b in self.store.banned(room_id)]
+        self.send_body(200, "".join(out))
+
+    def api_invites(self, room_id):
+        user = self.current_user()
+        self.member_room(user, room_id, "revoke_invites")
+        out = [tsv_line(i["expires"], i["uses_left"] or 0, clean_name(i["display"]))
+               for i in self.store.active_invites(room_id)]
+        self.send_body(200, "".join(out))
+
+    def api_new_invite(self, room_id, query):
+        user = self.current_user(for_write=True)
+        self.read_body()
+        room, _ = self.member_room(user, room_id, "invite")
+        if room["kind"] != "private":
+            raise HttpError(400, "オープンチャットは検索から参加できます(参加コードはプライベートチャット用です)")
+        uses = self.int_param(query, "uses", 0, 0, MAX_INVITE_USES)
+        made = self.store.new_invite(room_id, user["id"], self.invite_ttl, uses)
+        if made is None:
+            raise HttpError(429, "有効な参加コードが多すぎます(%d個まで)。管理者に無効化してもらってください"
+                            % MAX_ACTIVE_INVITES)
+        code, expires = made
+        log("%s が「%s」(#%d)の参加コードを発行しました" % (user["login"], room["name"], room_id))
+        self.send_body(201, tsv_line(format_invite_code(code), expires, uses))
+
+    def api_revoke_invites(self, room_id):
+        user = self.current_user(for_write=True)
+        self.read_body()
+        self.member_room(user, room_id, "revoke_invites")
+        n = self.store.revoke_invites(room_id)
+        self.send_body(200, "%d\n" % n)
+
+    def api_kick(self, room_id, query):
+        user = self.current_user(for_write=True)
+        _, role = self.member_room(user, room_id, "kick")
+        target = self.target_user(room_id, self.read_text_body())
+        target_role = self.store.role_of(room_id, target["id"])
+        ban = self.int_param(query, "ban", 0, 0, 1) == 1
+        if target["id"] == user["id"]:
+            raise HttpError(400, "自分は追い出せません(抜けるときは leave)")
+        if target_role is None and not ban:
+            raise HttpError(404, "その人は参加していません")
+        if target_role is not None and ROLE_RANK[target_role] >= ROLE_RANK[role]:
+            raise HttpError(403, "自分と同じか上の役割の人は追い出せません")
+        self.store.kick(room_id, target["id"], ban)
+        log("%s が %s を「#%d」から%s" % (user["login"], target["login"], room_id, "追放しました" if ban else "追い出しました"))
+        self.send_body(200, "ok\n")
+
+    def api_unban(self, room_id):
+        user = self.current_user(for_write=True)
+        self.member_room(user, room_id, "kick")
+        target = self.target_user(room_id, self.read_text_body())
+        if not self.store.unban(room_id, target["id"]):
+            raise HttpError(404, "その人は追放されていません")
+        self.send_body(200, "ok\n")
+
+    def api_set_role(self, room_id):
+        user = self.current_user(for_write=True)
+        self.member_room(user, room_id, "set_role")
+        login, _, new_role = self.read_text_body().strip().partition("\t")
+        if new_role not in ROLE_RANK:
+            raise HttpError(400, "役割は owner / admin / member のどれかです")
+        target = self.target_user(room_id, login)
+        if target["id"] == user["id"]:
+            raise HttpError(400, "自分の役割は変えられません(譲るときは相手を owner に)")
+        if self.store.role_of(room_id, target["id"]) is None:
+            raise HttpError(404, "その人は参加していません")
+        self.store.set_role(room_id, target["id"], new_role, user["id"])
+        log("%s が %s を「#%d」の %s にしました" % (user["login"], target["login"], room_id, new_role))
+        self.send_body(200, "ok\n")
+
+    def api_delete_room(self, room_id):
+        user = self.current_user(for_write=True)
+        self.read_body()
+        room, _ = self.member_room(user, room_id, "delete_room")
+        self.store.delete_room(room_id)
+        log("%s が「%s」(#%d)を消しました" % (user["login"], room["name"], room_id))
+        self.send_body(200, "ok\n")
 
     def int_param(self, query, name, default=None, lo=0, hi=2**53):
         vals = query.get(name)
@@ -559,8 +1047,7 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
 
     def api_messages(self, room_id, query):
         user = self.current_user()
-        if self.store.room(room_id) is None:
-            raise HttpError(404, "部屋がありません")
+        self.member_room(user, room_id)
         after = self.int_param(query, "after")
         before = self.int_param(query, "before")
         limit = self.int_param(query, "limit", DEFAULT_LIMIT, 1, MAX_LIMIT)
@@ -576,6 +1063,8 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
                     break
                 with self.store.new_message:
                     self.store.new_message.wait(timeout=min(left, 5))
+                # 待っている間に追い出された/部屋が消えたなら、そこで打ち切る
+                self.member_room(user, room_id)
                 rows = self.store.messages(room_id, after=after, limit=limit)
 
         out = []
@@ -588,8 +1077,7 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
 
     def api_post(self, room_id):
         user = self.current_user(for_write=True)
-        if self.store.room(room_id) is None:
-            raise HttpError(404, "部屋がありません")
+        self.member_room(user, room_id, "post")
         text = clean_text(self.read_text_body())
         if not text.strip():
             raise HttpError(400, "本文が空です")
@@ -735,6 +1223,8 @@ def make_server(host, port, handler, tls=None):
 def cmd_serve(args, store):
     ChatHandler.store = store
     ChatHandler.throttle = LoginThrottle()
+    ChatHandler.join_throttle = LoginThrottle(JOIN_WINDOW_SEC, JOIN_MAX_FAILS)
+    ChatHandler.invite_ttl = args.invite_ttl
     ChatHandler.timeout = args.idle_timeout
 
     use_tls = bool(args.tls_cert or args.tls_key)
@@ -839,28 +1329,74 @@ def cmd_users(args, store):
         print("%s\t%s%s" % (u["login"], u["display"], state))
 
 
+def find_room(store, spec):
+    """部屋を id(#3 や 3)か、オープンチャットの名前で探す。プライベートチャットは名前が重なり得るので id で。"""
+    m = re.fullmatch(r"#?(\d+)", spec)
+    if m:
+        row = store.room(int(m.group(1)))
+        if row:
+            return row
+    rows = store.db().execute("SELECT * FROM rooms WHERE name=? ORDER BY kind, id", (spec,)).fetchall()
+    if len(rows) > 1:
+        sys.exit("同じ名前の部屋が複数あります。id(rooms で確認)で指定してください")
+    if not rows:
+        sys.exit("その部屋はありません")
+    return rows[0]
+
+
 def cmd_addroom(args, store):
     name = clean_name(args.name)
     if not name or utf8_len(name) > MAX_NAME_BYTES:
         sys.exit("部屋の名前は1〜%dバイトにしてください" % MAX_NAME_BYTES)
+    kind = "private" if args.private else "open"
+    owner = None
+    if args.owner:
+        owner = store.user_by_login(args.owner)
+        if not owner:
+            sys.exit("%s はいません" % args.owner)
+    elif kind == "private":
+        sys.exit("プライベートチャットは --owner を指定してください(誰も参加コードを出せなくなるため)")
     try:
-        print("作成しました: #%d %s" % (store.add_room(name), name))
+        room_id = store.add_room(name, kind, owner["id"] if owner else None)
     except sqlite3.IntegrityError:
-        sys.exit("同じ名前の部屋があります")
+        sys.exit("同じ名前のオープンチャットがあります")
+    print("作成しました: #%d %s (%s%s)" % (room_id, name, KIND_LABEL[kind],
+                                       ", オーナー " + args.owner if owner else ""))
 
 
 def cmd_rooms(args, store):
-    for r in store.db().execute("SELECT * FROM rooms ORDER BY id"):
-        print("%d\t%s" % (r["id"], r["name"]))
+    for r in store.db().execute(
+            "SELECT rooms.*, (SELECT COUNT(*) FROM members WHERE room_id=rooms.id) AS n FROM rooms ORDER BY id"):
+        print("#%d\t%s\t%s\t%d人" % (r["id"], r["name"], KIND_LABEL[r["kind"]], r["n"]))
+
+
+def cmd_members(args, store):
+    room = find_room(store, args.room)
+    for m in store.members(room["id"]):
+        print("%s\t%s\t%s" % (m["login"], m["display"], ROLE_LABEL[m["role"]]))
+    for b in store.banned(room["id"]):
+        print("%s\t%s\t追放" % (b["login"], b["display"]))
+
+
+def cmd_setrole(args, store):
+    """サーバの管理者として役割を直接決める(オーナーのいない部屋にオーナーを置く、など)。"""
+    room = find_room(store, args.room)
+    user = store.user_by_login(args.login)
+    if not user:
+        sys.exit("%s はいません" % args.login)
+    if args.role == "owner":
+        # オーナーは1人。今のオーナーは管理者にする
+        store.write("UPDATE members SET role='admin' WHERE room_id=? AND role='owner'", (room["id"],))
+    store.write("DELETE FROM bans WHERE room_id=? AND user_id=?", (room["id"], user["id"]))
+    store.write("INSERT INTO members(room_id,user_id,role,joined) VALUES(?,?,?,?) "
+                "ON CONFLICT(room_id,user_id) DO UPDATE SET role=excluded.role",
+                (room["id"], user["id"], args.role, int(time.time())))
+    print("#%d %s: %s を%sにしました" % (room["id"], room["name"], args.login, ROLE_LABEL[args.role]))
 
 
 def cmd_delroom(args, store):
-    row = store.db().execute("SELECT * FROM rooms WHERE name=?", (args.name,)).fetchone()
-    if not row:
-        sys.exit("その部屋はありません")
-    store.write("DELETE FROM messages WHERE room_id=?", (row["id"],))
-    store.write("DELETE FROM reads WHERE room_id=?", (row["id"],))
-    store.write("DELETE FROM rooms WHERE id=?", (row["id"],))
+    row = find_room(store, args.name)
+    store.delete_room(row["id"])
     print("削除しました(発言も全て消えました)")
 
 
@@ -879,6 +1415,8 @@ def main():
     s.add_argument("--acme-root", help="certbot --webroot -w に渡すディレクトリ")
     s.add_argument("--idle-timeout", type=int, default=IDLE_TIMEOUT_SEC,
                    help="keep-aliveの接続を何秒で切るか(既定%d)" % IDLE_TIMEOUT_SEC)
+    s.add_argument("--invite-ttl", type=int, default=INVITE_TTL_SEC,
+                   help="参加コードが使える秒数(既定%d=30分。テスト用に縮められる)" % INVITE_TTL_SEC)
 
     a = sub.add_parser("adduser", help="ユーザーを作る")
     a.add_argument("login")
@@ -897,13 +1435,23 @@ def main():
 
     sub.add_parser("users", help="ユーザーの一覧")
 
-    a = sub.add_parser("addroom", help="部屋を作る")
+    a = sub.add_parser("addroom", help="部屋を作る(既定はオープンチャット)")
     a.add_argument("name")
+    a.add_argument("--private", action="store_true", help="プライベートチャット(参加コードでだけ入れる)にする")
+    a.add_argument("--owner", help="オーナーにする人(プライベートチャットでは必須)")
 
     sub.add_parser("rooms", help="部屋の一覧")
 
+    a = sub.add_parser("members", help="部屋の参加者と役割")
+    a.add_argument("room", help="部屋のid(#3)またはオープンチャットの名前")
+
+    a = sub.add_parser("setrole", help="部屋での役割を決める(参加していなければ参加させる)")
+    a.add_argument("room")
+    a.add_argument("login")
+    a.add_argument("role", choices=["owner", "admin", "member"])
+
     a = sub.add_parser("delroom", help="部屋を発言ごと消す")
-    a.add_argument("name")
+    a.add_argument("name", help="部屋のid(#3)またはオープンチャットの名前")
 
     args = p.parse_args()
     if args.cmd is None:
@@ -913,7 +1461,7 @@ def main():
     {
         "serve": cmd_serve, "adduser": cmd_adduser, "passwd": cmd_passwd, "token": cmd_token,
         "deluser": cmd_deluser, "users": cmd_users, "addroom": cmd_addroom, "rooms": cmd_rooms,
-        "delroom": cmd_delroom,
+        "members": cmd_members, "setrole": cmd_setrole, "delroom": cmd_delroom,
     }[args.cmd](args, store)
 
 

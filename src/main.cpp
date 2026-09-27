@@ -3,6 +3,7 @@
 #include "functions/SD_Functions.hpp"
 #include "functions/Touch_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
+#include "functions/Display_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/IME_Functions.hpp"
@@ -32,6 +33,7 @@ void setup() {
     PICO_SD::Setup();
 
     LogFunctions::Setup();
+    DisplayFunctions::Setup(); //display.cfgを読むのでSDより後
 
     //以降のSetupがどれだけヒープを食うかを見るための基準点
     MemFunctions::Setup();
@@ -72,6 +74,9 @@ void loop() {
     //外部コントローラー(今はUSBシリアル経由のPCのキーボード)。
     //シーンのonUpdate()より前に読み、1フレームの間は同じ答えを返す
     PadFunctions::Update();
+
+    //操作の有無を見て自動調光を掛ける/戻す(タッチ・パッドの状態が確定した直後)
+    DisplayFunctions::Update();
 
     //保留中のシーン遷移をフレーム境界で適用する(ウィジェット更新より前)
     SceneFunctions::Update();

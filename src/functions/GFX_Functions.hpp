@@ -36,4 +36,9 @@ namespace PICO_GFX {
     void FlushDirty();
 
     void DrawDialogBackground();
+
+    // 画面の明るさ(0〜100)。バックライトそのものではなく、frameのパレット16色を
+    // COLORS[]基準で暗くする(DisplayFunctions参照)。設定直後に全画面をMarkDirtyする。
+    void SetBrightness(uint8_t percent);
+    uint8_t GetBrightness();
 }

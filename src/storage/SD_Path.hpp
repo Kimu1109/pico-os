@@ -46,6 +46,8 @@ namespace PICO_Path {
             constexpr const char* SYS_CHAT_CFG = "/sys/chat.cfg";
             // 音声出力("output = auto | off" / "volume = 0〜100")。SoundFunctions参照
             constexpr const char* SYS_SOUND_CFG = "/sys/sound.cfg";
+            // 画面の明るさ("brightness = 0〜100" / "auto-dim = true|false")。DisplayFunctions参照
+            constexpr const char* SYS_DISPLAY_CFG = "/sys/display.cfg";
         }
 
         namespace IME {

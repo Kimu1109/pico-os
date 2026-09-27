@@ -34,6 +34,7 @@ class CalendarScene : public Scene {
         MonthGrid* grid = nullptr;
         Label<PICO_STR_M>* day_label = nullptr;   // 「9月23日(水) 2件」/ 読めなかった理由
         Button* sync_button = nullptr;            // 「更新」/「取得中」/「再試行」
+        Button* add_source_button = nullptr;      // 「追加」(取得元の名前+URLを登録)
         ScrollList* event_list = nullptr;
         EventDetailDialog* detail_dialog = nullptr; // 開いている間だけ
 
@@ -74,6 +75,10 @@ class CalendarScene : public Scene {
         int frames_since_enter = 0;
         bool last_sync_failed = false;
 
+        // 「追加」ボタンの入力フロー: 名前を入力→(1フレーム空けて)URLを入力の順
+        bool pending_add_url_dialog = false;
+        FixedString<PICO_STR_S> pending_add_name;
+
         // 1日に並べる予定の上限。EventsOn() の out の大きさ
         constexpr static int kMaxEventsPerDay = 16; // list_events の大きさと揃える
 
@@ -104,6 +109,8 @@ class CalendarScene : public Scene {
 
         void startSync();
         void refreshSyncButton();
+        void openAddSourceName();
+        void openAddSourceUrl();
 
     public:
         const char* getName() const override { return "Calendar"; }

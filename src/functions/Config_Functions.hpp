@@ -27,10 +27,15 @@ namespace PICO_Config
     // --------------------------------------------------------------------
     // バッファ長(用途: Wi-Fi SSID/パスワード, app.iniの住所的キー名など)
     // 不足した場合はここを拡張する。
+    //
+    // kConfigMaxValueLenは160(2026-09-27、util/Secret_Cipher.hppでの
+    // Wi-Fi認証情報の暗号化保存に合わせて128から拡張): 暗号化後の値は
+    // "enc1:"(5) + 平文64バイト分の16進(128) + 終端 = 134文字になり得るため。
+    // kConfigMaxLineLenもそれに合わせて拡張した。
     // --------------------------------------------------------------------
-    constexpr size_t kConfigMaxLineLen = 192;  // SDから読み込む1行分の生バッファ
+    constexpr size_t kConfigMaxLineLen = 256;  // SDから読み込む1行分の生バッファ
     constexpr size_t kConfigMaxKeyLen = 64;    // 住所的記法のキー名を想定
-    constexpr size_t kConfigMaxValueLen = 128; // パスワードやパスに余裕を持たせる
+    constexpr size_t kConfigMaxValueLen = 160; // 暗号化したWi-Fiパスワード等に余裕を持たせる
 
     // --------------------------------------------------------------------
     // 1行の解析結果

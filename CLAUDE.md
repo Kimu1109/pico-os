@@ -192,6 +192,160 @@ SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、
   `display.cfg`への書き込みと再起動後の読み込みを確認済み。**実機での見え方(ソフト輝度なので
   正しく暗く見えるはず)・自動調光の30秒閾値の実測は未確認**。
 
+### Wi-Fi認証情報の暗号化保存 (`src/util/Secret_Cipher.hpp`) (2026-09-27)
+
+SDカードだけを紛失/盗難された場合に、`/sys/network.cfg`の`wifi-ssid`/`wifi-password`を
+テキストエディタでそのまま読まれないようにする対策。相談の発端は「フラッシュに鍵を焼けば
+SD紛失時も安全では」という提案で、そこから以下の設計に落とした。
+
+- **守れるのは「SDカードだけの紛失/盗難」のケースだけ**。本体(基板)ごと持ち去られた場合は
+  無力(鍵はソースにハードコードされ実機のフラッシュに焼かれるだけなので、SWD等でフラッシュを
+  吸い出せば鍵も一緒に読める)。さらに**鍵は既定値のままリポジトリに公開されている**ため、
+  本気の攻撃者(ファームウェアの吸い出しを厭わない相手)には無力で、「肩越しに見られた・
+  SDだけ他人に渡した」程度の偶発的な漏洩を防ぐのが目的と割り切った。本格的に守るなら
+  RP2350のOTP/Secure Bootでデバイス固有鍵を焼く必要があるが、実機ビルド・検証手段が
+  このリモート環境に無く実装コストも高いため見送り、この簡易版(相談時の案で言う「a」)を採用した。
+  **forkして実運用する場合は`PICO_Secret::kKey`を必ず書き換えること**(コメントに明記)。
+- **方式はXTEA(128bit固定鍵)をCTRモードのストリーム暗号として使うだけ**。ブロック暗号の
+  出力(暗号文ではなく鍵ストリーム)を平文とXORするので、暗号化と復号が同じ関数
+  (`XorStream()`)で済む。TLS(BearSSL/OpenSSL)のような重い依存を持ち込まず、PC/実機で
+  同じコードがそのまま動く(他のsrc/コード全般と同じ方針)。
+- **「用途文字列(purpose)」を鍵ストリームの種に混ぜる**(`Fnv1aHash(purpose)`を初期カウンタにする)。
+  SSIDとパスワードで別々のストリームになるので、同じ鍵ストリームを使い回して2つの暗号文を
+  XORすると平文同士のXORが漏れる、という典型的な弱点を避けられる。
+- **保存形式は`"enc1:"`接頭辞+16進文字列**。接頭辞が無い値は「まだ暗号化されていない平文」と
+  みなしてそのまま返す(後方互換)。既存の`network.cfg`(`pc/sdcard/sys/network.cfg`のサンプルも
+  含め平文のまま)は変更不要で、次に`SettingsScene`から保存し直したときに暗号化形式へ移行する。
+- **`PICO_Config::kConfigMaxValueLen`を128→160、`kConfigMaxLineLen`を192→256へ拡張した**
+  (`Config_Functions.hpp`)。64バイトのWi-Fiパスフレーズ(64桁PSKの16進表記を想定した上限)を
+  暗号化すると`"enc1:"`(5)+16進128文字+終端=134文字になり、旧上限の128に収まらないため。
+  他の設定キー(NTPサーバー名等)には影響しない(バッファが大きくなるだけ)。
+- **暗号化・復号の呼び出し元は2箇所**: `NetworkFunctions::Setup()`(起動時、読み込んだ値を
+  復号してから使う)と`SettingsScene`(`loadValues()`でSSID表示用に復号、`commitEdit()`で
+  保存前に暗号化)。`SD_Functions`/`Config_Functions`自体には手を入れていない
+  (暗号化はWi-Fi認証情報という特定の値の扱いであり、汎用のconfigパーサの仕事ではないため)。
+- ホストテストは`script/host_test/secret_cipher_test.cpp`(往復・用途違いで暗号文が変わること・
+  取り違えた用途では正しく復号できないこと・空文字列の扱い・後方互換・壊れたデータやバッファ
+  不足への安全な失敗・上限ちょうどの長さの往復)。PCビルドでも、ホストテストのSdFatスタブ経由で
+  `SettingsScene::commitEdit()`と同じ手順(暗号化→`SetValue()`→ファイルの生内容確認→
+  `ParseFile()`→復号)を通し、SD上には`enc1:...`の形で保存され、読み込み側で元の文字列に
+  戻ることを確認済み。既存の平文`network.cfg`(`pc/sdcard/sys/network.cfg`)がそのまま読める
+  ことはPCビルドの`--shot`で確認した(設定画面にSSID/パスワードが正しく表示される)。
+
+**チャットのトークン(`/sys/chat.cfg`のtoken)も同日中に同じ方式へ広げた。** 実装直後にユーザーから
+「チャットの認証情報は暗号化されているか」と問われて気づいた漏れで、この時点では`Chat_Client::loadConfig()`
+がtokenを平文のまま読んでいた。
+
+- **`ChatScene`に「設定」ボタンを新設した**(一覧画面でだけ、`[招待]`ボタンと同じ位置に出す。
+  部屋の中では招待、一覧では設定という切り替え)。押すと`InputDialog`で「チャットサーバURL:」→
+  (1フレーム空けて)「トークン(空欄で変更なし):」の順に編集する
+  (`openChatSettings()`/`openTokenDialog()`。ダイアログからダイアログは1フレーム空ける、
+  という「ブラウザのヘッダー」節の既存ルールをそのまま踏襲)。
+- **サーバURLは暗号化しない。** Wi-FiのSSIDと同じ判断で、URL自体は秘匿情報ではなく、
+  `chat_server_value`としてプレフィル・表示に使うため平文のまま保持・保存する。
+  **トークンだけ暗号化する**(用途文字列は`"chat-token"`。Wi-Fiの`"wifi-ssid"`/`"wifi-password"`と
+  同じ`PICO_Secret`を使うので新規実装は無し)。トークンの編集ダイアログは
+  Wi-Fiパスワードと同じく**常に空欄から始まり**、空欄のまま決定すると既存の値を変更しない
+  (`commitChatToken()`。`ChatScene`はトークンの平文を保持しない)。
+- `Chat_Client.cpp::loadConfig()`のtoken読み込み箇所に`PICO_Secret::Decrypt("chat-token", ...)`を
+  挟んだだけ(後方互換で`enc1:`接頭辞が無ければ平文のまま使う)。`configure()`自体
+  (ホストテスト等からの直接注入経路)は平文のtokenを受け取る前提のまま変えていない
+  (暗号化を意識するのは「SDのconfigファイルを読む」`loadConfig()`側だけでよいため)。
+- 検証: `chat_scene_test`(run.sh、既存)が設定ボタン追加後も全項目パス。
+  ホストテストのSdFatスタブ経由で、`ChatScene::commitChatToken()`相当の手順
+  (`Encrypt("chat-token",...)`→`SetValue()`)で`/sys/chat.cfg`を書き、
+  `ChatClient::loadConfig()`が実際にそれを復号して`State::Ok`まで進むことを確認した
+  (このリポジトリには含めていない検証用の使い捨てプログラムで確認。手順はWi-Fiの
+  検証と同じ)。PCビルドの`--shot`で「設定」ボタンから実際にサーバURL入力ダイアログが
+  開くことまで確認済み(オンスクリーンキーボードでの実入力までは行っていない。
+  暗号化ロジック自体は上記の往復検証で担保されている)。
+
+**カレンダーの非公開URL(`/calendar/sources.cfg`)も同日中に同じ方式へ広げた。** Googleカレンダーの
+非公開URLはSDカードから読める平文のままだと、SDだけ紛失した場合にWi-Fi/チャットと同じ脅威に晒される。
+
+- **`PICO_Secret::kMaxPlainBytes`を64→255へ拡張した**(`Secret_Cipher.hpp`)。Googleの非公開URLは
+  200文字を超えることがあり(`Url::path`を`PICO_STR_LL`へ広げた経緯と同じ理由)、Wi-Fi/チャット向けの
+  64では全く足りないため。既存の暗号文字列の復号には影響しない後方互換な変更(上限を緩めるだけ)。
+- **用途文字列はカレンダーの名前ごとに分けた**(`"calendar-url:" + 名前`)。sources.cfgは複数件
+  持てるため、Wi-Fiの`"wifi-ssid"`/`"wifi-password"`のように固定1種類の用途文字列を使い回すと、
+  複数のURLの暗号文をXORして平文同士のXORが漏れる、という`Secret_Cipher.hpp`の弱点をカレンダーが
+  複数あるときに実際に踏むことになるため。
+- **`CalendarSync::WriteSource(name, url)`を新設した**(`Config_Functions::SetValue()`と同じ
+  「一時ファイル経由で1行だけ差し替え、無ければ追記」の手順だが、暗号化後の値(最大約516文字)が
+  `Config_Functions::kConfigMaxValueLen`(160、Wi-Fi/チャット向け)を大きく超えるため、
+  `Config_Functions`自体には触れず`Calendar_Sync.cpp`内に専用の大きめバッファ(`PICO_STR_512B`)で
+  実装した。ロジックはほぼ`SetValue()`のコピーになるが、汎用パーサの制約(全設定ファイル共通の
+  バッファサイズ)を変えるより影響範囲を`Calendar_Sync.cpp`へ閉じ込める方を優先した)。
+- **`CalendarScene`に「追加」ボタンを新設した**(`[更新]`の左、`source_count`に関わらず常に表示)。
+  押すと名前→(1フレーム空けて)URLの順に`InputDialog`で編集し、`WriteSource()`で暗号化して保存する。
+  名前が不正/保存に失敗した場合は`ErrorFunctions::ShowFatal()`で理由を出す(GameBoyScene等、
+  既存のC++シーンからの利用例と同じ)。
+- **`CalendarSync::ReadSource()`(≒`ParseSourceLine()`)がenc1:接頭辞を見て復号する**(後方互換:
+  接頭辞が無ければ平文のまま使う)。母艦のSDカードリーダーで`sources.cfg`を直接編集する既存の運用
+  (URLを平文で書く)は変わらず使える。`webcal://→https://`の変換は復号した後の値に対して行う
+  (暗号化された16進文字列は`webcal://`では始まらないため、順序を間違えると判定が効かなくなる)。
+- ホストテストは`script/host_test/calendar_sync_secret_test.cpp`(189文字の長いURLでの往復・
+  `enc1:`接頭辞で保存されること・平文がSDにそのまま書かれないこと・複数件・同名の上書き・
+  後方互換(平文の既存行がそのまま読める)・不正な名前の拒否)。`calendar_scene_test`は
+  「追加」ボタン追加後も既存の全項目がパスすることを確認済み。PCビルドの`--shot`で
+  「追加」ボタンから実際に名前入力ダイアログが開くことまで確認済み(実際の保存はホストテストの
+  SdFatスタブ経由で確認。暗号化ロジック自体は上記の往復検証で担保されている)。
+
+### Wi-Fiの新規接続(周辺スキャン→選択→パスワード入力→接続) (`SettingsScene` / `task/NetworkScan.hpp` / `gui/widgets/dialogs/WifiScanDialog`) (2026-09-27)
+
+`SettingsScene`のSSID/パスワード編集は元々`InputDialog`への手入力のみだった。
+一般的なスマホ/PCの「Wi-Fi設定」と同じ、周辺をスキャンして一覧から選び、
+パスワードを入れて繋ぐという操作を追加した。
+
+- **既存の手入力(`ssid_edit_button`「編集」)は残したまま**、SSID行の左隣に
+  「検索」ボタンを新設した(`wifi_scan_button`)。隠れたSSIDや特殊な入力が要る場合は
+  従来通り手入力できる。このボタン1つぶんだけSSID行のラベル幅(`ssid_label_w`)を
+  詰めており、他の行(NTP/ホーム等)のラベル幅は変えていない。
+- **`NetworkScan`(既存、未使用のまま放置されていたTask)を初めて実利用する過程で
+  所有権の設計を直した。** 元の実装は`NetworkFunctions::ScanAsync()`が生成した
+  `NetworkScan`を`PICO_Task::Add()`でグローバルリストに乗せていたが、これは
+  「呼び出し側が結果を読み出す前に消える」バグを持っていた: `PICO_Task::Update()`は
+  `status()`がPROCESSING以外になったその場で即座に`delete`する。main.cppの`loop()`は
+  シーンの`onUpdate()`を`PICO_Task::Update()`より先に呼ぶため、呼び出し側が完了を
+  検知できるのは早くても次のフレームであり、その時点では既に解放済み
+  (実際にPCビルドで試して初めて踏んだuse-after-free。スキャン自体は成功したのに
+  ダイアログが「スキャンに失敗しました」を表示する、という壊れ方をした)。
+  **`HttpGet`/`HttpRequest`と同じ「呼び出し側が生ポインタとして持ち、自分の
+  `onUpdate()`から毎フレーム`update()`を呼び、終わったら自分で`delete`する」流儀へ
+  変更し、`PICO_Task::Add()`には乗せないようにした**(`ScanAsync()`の戻り値の型も
+  `Task*`から`NetworkScan*`へ変えて、呼び出し側が`getCount()`/`getResult()`を
+  キャストなしで読めるようにした)。
+- **`NetworkScan`自体に結果の保持(`Result{ssid, rssi}`の固定長配列
+  `kMaxResults=16`)を足した**(以前は見つけたSSID/RSSIを`Serial.printf`で
+  ログへ流すだけで、呼び出し側が読み取る手段が無かった)。電波の強い順に
+  挿入する(`CalendarScene::reload()`のファイル名ソートと同じ、高々16件の
+  挿入ソート)。隠しSSID(空文字列)は選びようが無いので一覧に出さない。
+- **`WifiScanDialog`(新設、`gui/widgets/dialogs/`)はSearchDialog(MarkdownScene)と
+  全く同じ骨格**(状態1行+`ScrollList`+ボタン群、2回タップで選ぶ流儀)。
+  スキャンそのものはせず、結果を詰めるのは`SettingsScene`の仕事(SearchDialogが
+  検索そのものをしないのと同じ役割分担)。`ScrollList`のアイコンに
+  `IconID::WifiSignal1〜4`(ステータスバーと同じ4段階、`NetworkFunctions::GetWifiStateIconID()`と
+  同じ閾値)を使い、電波の強さを一覧内で見せる。ダイアログは開くたびに`new`し、
+  閉じたら`DestroyLater()`する(SearchDialogと同じ、使い回さない)。
+- **選択後はパスワード入力(`InputDialog`、空欄のまま決定可)を1フレーム空けて開く**
+  (`pending_wifi_password_dialog`。ダイアログからダイアログは1フレーム空ける、
+  という「ブラウザのヘッダー」節の既存ルールをそのまま踏襲)。
+  **`connectScannedNetwork()`は既存の`commitEdit(EditField::Password)`とは
+  空文字列の扱いが違う**: 手入力の編集は「空欄なら既存のパスワードを保持」だが、
+  スキャンからの新規接続は選んだネットワークへの新規接続そのものなので、
+  空欄(オープンネットワークのつもり)でも常に上書きする(別のネットワーク用の
+  古いパスワードを引きずらないため)。SSID/パスワードとも暗号化して保存するのは
+  既存の「Wi-Fi認証情報の暗号化保存」と同じ経路(`PICO_Secret::Encrypt()`)。
+- 検証はPCビルドの`--shot`/`--tap`で行った(ホストテストは無し。GFX_Functions/
+  Touch_Functionsと同じく実描画・実タッチに強く依存するため対象外にした):
+  スキャン→3件表示(電波の強い順、アイコンの本数が変わること)→選択→
+  パスワード入力(空欄で決定)→`NetworkFunctions::ConnectWiFiAsync()`が
+  実際に呼ばれ、SSID/パスワードのラベルが更新されること。「再スキャン」
+  「閉じる」ボタン、パスワード入力の「キャンセル」(接続を試みずに戻ること)も
+  確認済み。**実機での確認は未**(このリモート環境には実機が無い。PC側の
+  `WiFi.scanNetworks()`は`pc/sdcard/sys/network.cfg`の`pc-wifi-scan`が返す
+  固定リストなので、実際の電波状況に応じた挙動は実機でしか確かめられない)。
+
 ## Widgetシステム
 
 ### 基底クラス (`src/gui/widgets/Widget.hpp`)
@@ -1129,7 +1283,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 1 | ダイアログ系統 | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用(電卓用)キーボード`KeyboardNum`も実装済み。 |
 | 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
-| 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。 |
+| 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。`SettingsScene`から周辺スキャン→選択→パスワード入力→接続まで一般的な「Wi-Fi設定」と同じ操作でできる(下記「Wi-Fiの新規接続」参照)。 |
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |

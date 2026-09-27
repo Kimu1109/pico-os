@@ -47,6 +47,7 @@ enum class WidgetType : uint8_t {
     TabBar,
     Textbox,
     TriangleShape,
+    WifiScanDialog,
     Count // 番兵。実際の種類としては使わない
 };
 

@@ -1,9 +1,11 @@
 #include "gui/scenes/CalendarScene.hpp"
+#include "gui/widgets/dialogs/InputDialog.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Network_Functions.hpp"
+#include "functions/Error_Functions.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
@@ -468,12 +470,20 @@ void CalendarScene::onEnter(){
     this->sync_button->setOnPressEnd([this](){ this->startSync(); });
     WidgetFunctions::Add(this->sync_button);
 
+    //取得元(名前+URL)を1件登録する。source_countが0でも(=まだ何も無くても)常に押せる
+    this->add_source_button = make_button("追加");
+    this->add_source_button->setY(day_row_y);
+    this->add_source_button->setOnPressEnd([this](){ this->openAddSourceName(); });
+    WidgetFunctions::Add(this->add_source_button);
+
     this->source_count = CalendarSync::CountSources();
-    //取得元が無ければボタンは出さず、見出しに幅を全部使う
+    //取得元が無ければ[更新]は出さず、見出しへその分の幅を回す([追加]は常に出す)
     this->sync_button->setVisible(this->source_count > 0);
-    const int day_label_w = (this->source_count > 0)
-        ? this->sync_button->getLocalRect().x - MARGIN - (content.x + MARGIN)
-        : content.w - MARGIN * 2;
+    const int add_right_edge = (this->source_count > 0)
+        ? this->sync_button->getLocalRect().x - MARGIN
+        : content.x + content.w - MARGIN;
+    this->add_source_button->setX(add_right_edge - this->add_source_button->getLocalRect().w);
+    const int day_label_w = this->add_source_button->getLocalRect().x - MARGIN - (content.x + MARGIN);
 
     this->day_label = new Label<PICO_STR_M>(content.x + MARGIN, day_row_y, "");
     this->day_label->setFontSize(FontFn::Small);
@@ -506,6 +516,48 @@ void CalendarScene::onEnter(){
 // 取得
 // ---------------------------------------------------------------------------
 
+void CalendarScene::openAddSourceName(){
+    // 名前→(1フレーム空けて)URLの順に編集する。MarkdownScene::Pendingと同じ理由で
+    // ダイアログからダイアログは1フレーム空ける
+    auto* dialog = new InputDialog("カレンダーの名前(英数字と_-、20文字まで):", true);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        if(is_submit){
+            const FixedString<PICO_STR_LL>& name = dialog->getInput();
+            if(!name.empty()){
+                if(CalendarSync::IsValidName(name.c_str())){
+                    this->pending_add_name.assign(name.c_str());
+                    this->pending_add_url_dialog = true;
+                }else{
+                    ErrorFunctions::ShowFatal("使えない名前です(英数字と _ - のみ、20文字まで)");
+                }
+            }
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void CalendarScene::openAddSourceUrl(){
+    auto* dialog = new InputDialog("カレンダーのURL(iCal/.ics):", true);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        if(is_submit){
+            const FixedString<PICO_STR_LL>& url = dialog->getInput();
+            if(!url.empty()){
+                if(CalendarSync::WriteSource(this->pending_add_name.c_str(), url.c_str())){
+                    this->source_count = CalendarSync::CountSources();
+                    if(this->sync_button) this->sync_button->setVisible(this->source_count > 0);
+                }else{
+                    ErrorFunctions::ShowFatal("保存できませんでした(SD無しか、URLが長すぎます)");
+                }
+            }
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
 void CalendarScene::startSync(){
     if(this->sync.state() == CalendarSync::State::Running) return;
     this->auto_synced = true;
@@ -527,6 +579,11 @@ void CalendarScene::refreshSyncButton(){
 }
 
 void CalendarScene::onUpdate(){
+    if(this->pending_add_url_dialog){
+        this->pending_add_url_dialog = false;
+        this->openAddSourceUrl();
+    }
+
     // ---- 取得 ----
     if(this->frames_since_enter < 1000) this->frames_since_enter++;
 
@@ -573,6 +630,7 @@ void CalendarScene::onExit(){
 
     this->back_button = nullptr;
     this->sync_button = nullptr;
+    this->add_source_button = nullptr;
     this->detail_dialog = nullptr; //ダイアログ層ごとフレームワークが片付ける
     this->prev_button = nullptr;
     this->next_button = nullptr;
@@ -581,4 +639,5 @@ void CalendarScene::onExit(){
     this->grid = nullptr;
     this->day_label = nullptr;
     this->event_list = nullptr;
+    this->pending_add_url_dialog = false;
 }

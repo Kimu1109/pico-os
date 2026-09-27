@@ -1,8 +1,8 @@
 #include "functions/Network_Functions.hpp"
-#include "functions/Task_Functions.hpp"
 #include "functions/Config_Functions.hpp"
 #include "task/NetworkScan.hpp"
 #include "storage/SD_Path.hpp"
+#include "util/Secret_Cipher.hpp"
 
 IconID NetworkFunctions::GetWifiStateIconID(){
     //圏外でも最弱の棒を返す。バツ印は呼び出し側が重ねる
@@ -21,9 +21,15 @@ void NetworkFunctions::Setup(){
     bool is_ok = PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "wifi-ssid") == 0){
-                ssid.assign(value);
+                char buf[PICO_STR_M];
+                if(PICO_Secret::Decrypt("wifi-ssid", value, buf, sizeof(buf))){
+                    ssid.assign(buf);
+                }
             }else if(strcmp(key, "wifi-password") == 0){
-                password.assign(value);
+                char buf[PICO_STR_L];
+                if(PICO_Secret::Decrypt("wifi-password", value, buf, sizeof(buf))){
+                    password.assign(buf);
+                }
             }else if(strcmp(key, "ntp-server-1") == 0){
                 ntpServer1.assign(value);
             }else if(strcmp(key, "ntp-server-2") == 0){
@@ -98,8 +104,13 @@ void NetworkFunctions::ConnectWiFiAsync(const char* ssid, const char* password){
     currentStatus = NetStatus::TRYING_CONNECT;
 };
 
-Task* NetworkFunctions::ScanAsync(){
-    NetworkScan* task = new NetworkScan();
-    PICO_Task::Add(task);
-    return task;
+NetworkScan* NetworkFunctions::ScanAsync(){
+    // HttpGet/HttpRequestと同じ「呼び出し側が生ポインタとして持ち、自分のonUpdate()から
+    // 毎フレームupdate()を呼び、終わったら自分でdeleteする」流儀にしてある。
+    // PICO_Task::Add()には乗せない — 乗せると、status()がPROCESSING以外になった
+    // その場でPICO_Task::Update()自身が即座にdeleteしてしまうため、呼び出し側が
+    // 次のフレームのonUpdate()で結果を読もうとした時点で既に解放済みになる
+    // (呼び出し側のonUpdate()は毎フレームPICO_Task::Update()より先に走るので、
+    // 完了を検知できるのは早くても次のフレームであり、その時点では手遅れ)
+    return new NetworkScan();
 };

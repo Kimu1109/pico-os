@@ -9,6 +9,9 @@
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
+#include "gui/widgets/dialogs/WifiScanDialog.hpp"
+#include "task/NetworkScan.hpp"
+#include "util/Secret_Cipher.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -55,7 +58,10 @@ void SettingsScene::loadValues(){
     PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "wifi-ssid") == 0){
-                this->ssid_value.assign(value);
+                char buf[PICO_STR_M];
+                if(PICO_Secret::Decrypt("wifi-ssid", value, buf, sizeof(buf))){
+                    this->ssid_value.assign(buf);
+                }
             }else if(strcmp(key, "wifi-password") == 0){
                 this->has_password = (value[0] != '\0');
             }else if(strcmp(key, "ntp-server-1") == 0){
@@ -154,7 +160,12 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
     switch(field){
         case EditField::Ssid: {
             if(input.empty()) break; // 空欄なら変更しない(SSIDは消せない)
-            PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-ssid", input.c_str());
+            char enc[PICO_STR_LL];
+            if(PICO_Secret::Encrypt("wifi-ssid", input.c_str(), enc, sizeof(enc))){
+                PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-ssid", enc);
+            }else{
+                LOG_SYS_WARN("Settings: SSIDの暗号化に失敗しました(長すぎます)。保存されていません。");
+            }
             this->ssid_value.assign(input.c_str());
             this->refreshSsidLabel();
             // 既知のパスワード(NetworkFunctionsが再接続用に保持している)があれば、
@@ -166,7 +177,12 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
         }
         case EditField::Password: {
             if(input.empty()) break; // 空欄なら変更しない(既存のパスワードを保つ)
-            PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-password", input.c_str());
+            char enc[PICO_STR_LL];
+            if(PICO_Secret::Encrypt("wifi-password", input.c_str(), enc, sizeof(enc))){
+                PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-password", enc);
+            }else{
+                LOG_SYS_WARN("Settings: パスワードの暗号化に失敗しました(長すぎます)。保存されていません。");
+            }
             this->has_password = true;
             this->refreshPasswordLabel();
             if(!this->ssid_value.empty()){
@@ -198,6 +214,132 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
             break;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 周辺Wi-Fiのスキャン→選択→パスワード入力→接続
+// ---------------------------------------------------------------------------
+
+void SettingsScene::startWifiScan(){
+    if(this->wifi_scan_task) return; //既にスキャン中なら何もしない(再スキャンの二重起動防止)
+    if(this->wifi_scan_dialog){
+        this->wifi_scan_dialog->clearResults();
+        this->wifi_scan_dialog->setMessage("スキャン中...");
+    }
+    this->wifi_scan_task = NetworkFunctions::ScanAsync();
+}
+
+void SettingsScene::pollWifiScan(){
+    if(!this->wifi_scan_task) return;
+
+    // 所有権はこちらにある(task/NetworkScan.hppのコメント参照)ので、
+    // 毎フレーム自分でupdate()を呼んで進める
+    this->wifi_scan_task->update();
+
+    const TaskTools::Status s = this->wifi_scan_task->getStatus();
+    if(s == TaskTools::PROCESSING) return;
+
+    if(this->wifi_scan_dialog){
+        if(s == TaskTools::SUCCESS){
+            this->wifi_scan_dialog->clearResults();
+            const int count = this->wifi_scan_task->getCount();
+            for(int i = 0; i < count; i++){
+                const NetworkScan::Result& r = this->wifi_scan_task->getResult(i);
+                this->wifi_scan_dialog->addResult(r.ssid.c_str(), r.rssi);
+            }
+            char buf[32];
+            if(count == 0){
+                this->wifi_scan_dialog->setMessage("見つかりませんでした");
+            }else{
+                snprintf(buf, sizeof(buf), "%d件見つかりました", count);
+                this->wifi_scan_dialog->setMessage(buf);
+            }
+        }else{
+            this->wifi_scan_dialog->setMessage("スキャンに失敗しました");
+        }
+    }
+
+    delete this->wifi_scan_task;
+    this->wifi_scan_task = nullptr;
+}
+
+void SettingsScene::openWifiScanDialog(){
+    // SearchDialog(MarkdownScene)と同じく開くたびにnewし、閉じたらDestroyLater()する
+    if(!this->wifi_scan_dialog){
+        this->wifi_scan_dialog = new WifiScanDialog();
+        WidgetFunctions::AddDialog(this->wifi_scan_dialog);
+
+        this->wifi_scan_dialog->setOnSelect([this](const char* ssid){
+            // ダイアログからダイアログは1フレーム空ける(MarkdownScene::Pendingと同じ理由)
+            this->pending_wifi_ssid.assign(ssid);
+            this->pending_wifi_password_dialog = true;
+            this->closeWifiScanDialog();
+        });
+        this->wifi_scan_dialog->setOnRescan([this](){ this->startWifiScan(); });
+        this->wifi_scan_dialog->setOnClosed([this](bool){ this->closeWifiScanDialog(); });
+
+        this->wifi_scan_dialog->setVisible(true);
+    }
+
+    this->startWifiScan();
+}
+
+void SettingsScene::closeWifiScanDialog(){
+    // 進行中のスキャンTaskの所有権はこちらにある(task/NetworkScan.hpp参照)ので、
+    // 完了を待たずに閉じる場合はここで自分から後始末する
+    if(this->wifi_scan_task){
+        delete this->wifi_scan_task;
+        this->wifi_scan_task = nullptr;
+    }
+
+    if(!this->wifi_scan_dialog) return;
+    this->wifi_scan_dialog->setVisible(false);
+    WidgetFunctions::DestroyLater(this->wifi_scan_dialog);
+    this->wifi_scan_dialog = nullptr;
+}
+
+void SettingsScene::openWifiPasswordDialog(){
+    // ラベル文字列(日本語)+SSID(最大47B)を余裕を持って収める。
+    // 表示側はどのみちInputDialogのLabel<PICO_STR_L>(96B)で切り詰まる
+    char label[PICO_STR_LL];
+    snprintf(label, sizeof(label), "「%s」のパスワード(不要なら空欄のまま決定):",
+              this->pending_wifi_ssid.c_str());
+
+    auto* dialog = new InputDialog(label, true);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        if(is_submit){
+            this->connectScannedNetwork(this->pending_wifi_ssid.c_str(), dialog->getInput().c_str());
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void SettingsScene::connectScannedNetwork(const char* ssid, const char* password){
+    char enc_ssid[PICO_STR_LL];
+    if(PICO_Secret::Encrypt("wifi-ssid", ssid, enc_ssid, sizeof(enc_ssid))){
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-ssid", enc_ssid);
+    }else{
+        LOG_SYS_WARN("Settings: SSIDの暗号化に失敗しました(長すぎます)。保存されていません。");
+    }
+
+    // 空文字列(オープンネットワーク)でも常に上書きする。commitEdit(EditField::Password)の
+    // 「空欄なら既存を保持」とはここが違う: 選んだネットワークへの新規接続なので、
+    // 別のネットワーク用に残っていた古いパスワードを引きずってはいけない
+    char enc_pass[PICO_STR_LL];
+    if(PICO_Secret::Encrypt("wifi-password", password, enc_pass, sizeof(enc_pass))){
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-password", enc_pass);
+    }else{
+        LOG_SYS_WARN("Settings: パスワードの暗号化に失敗しました(長すぎます)。保存されていません。");
+    }
+
+    this->ssid_value.assign(ssid);
+    this->has_password = (password[0] != '\0');
+    this->refreshSsidLabel();
+    this->refreshPasswordLabel();
+
+    NetworkFunctions::ConnectWiFiAsync(ssid, password);
 }
 
 void SettingsScene::onEnter(){
@@ -237,9 +379,22 @@ void SettingsScene::onEnter(){
     // 編集ボタンの実測が済んだので、以降の行のラベル幅はこれで揃える
     const int label_w = this->edit_btn_x - content.x - MARGIN * 2;
 
+    // 「検索」ボタン(周辺Wi-Fiのスキャン→選択→パスワード入力→接続)は「編集」のすぐ左に置く。
+    // このボタンぶんだけSSID行のラベルを詰める(他の行は「編集」ボタン1つ分のままでよい)
+    this->wifi_scan_button = new Button(0, rowY(0), "検索");
+    this->wifi_scan_button->setFontSize(FontFn::Small);
+    this->wifi_scan_button->setAllowTextSpacing(false);
+    this->wifi_scan_button->setW(EDIT_BTN_W);
+    this->wifi_scan_button->setH(EDIT_BTN_H);
+    this->wifi_scan_button->setX(this->edit_btn_x - MARGIN - EDIT_BTN_W);
+    this->wifi_scan_button->setOnPressEnd([this](){ this->openWifiScanDialog(); });
+    WidgetFunctions::Add(this->wifi_scan_button);
+
+    const int ssid_label_w = this->wifi_scan_button->getLocalRect().x - content.x - MARGIN * 2;
+
     this->ssid_label = new Label<PICO_STR_L>(content.x + MARGIN, rowY(0), "");
     this->ssid_label->setFontSize(FontFn::Small);
-    this->ssid_label->setMaxWidth(label_w);
+    this->ssid_label->setMaxWidth(ssid_label_w);
     this->ssid_label->setMaxHeight(Label<PICO_STR_L>::GetLineHeight(FontFn::Small));
     WidgetFunctions::Add(this->ssid_label);
     this->refreshSsidLabel();
@@ -426,6 +581,12 @@ void SettingsScene::updateBrightness(){
 }
 
 void SettingsScene::onUpdate(){
+    if(this->pending_wifi_password_dialog){
+        this->pending_wifi_password_dialog = false;
+        this->openWifiPasswordDialog();
+    }
+    this->pollWifiScan();
+
     this->updateVolume();
     this->updateBrightness();
 
@@ -461,6 +622,16 @@ void SettingsScene::onExit(){
 
     this->ssid_label           = nullptr;
     this->ssid_edit_button     = nullptr;
+    this->wifi_scan_button     = nullptr;
+    // ダイアログ層はシーン終了時にフレームワーク側がまとめて片付ける(CalendarScene::detail_dialogと同じ)
+    this->wifi_scan_dialog     = nullptr;
+    // スキャンTaskの所有権はこちらにある(task/NetworkScan.hpp参照)ので、
+    // 完了を待たずシーンごと抜けた場合はここで自分から後始末する
+    if(this->wifi_scan_task){
+        delete this->wifi_scan_task;
+        this->wifi_scan_task = nullptr;
+    }
+    this->pending_wifi_password_dialog = false;
     this->password_label       = nullptr;
     this->password_edit_button = nullptr;
     this->timezone_title       = nullptr;

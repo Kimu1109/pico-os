@@ -6,6 +6,9 @@
 #include "functions/Network_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Config_Functions.hpp"
+#include "storage/SD_Path.hpp"
+#include "util/Secret_Cipher.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -60,6 +63,14 @@ void ChatScene::onEnter(){
         else if(this->client.actionBusy()) this->setNotice("前の操作が終わるまで待ってください", PICO_RED);
     });
     WidgetFunctions::Add(this->invite_button);
+
+    //一覧を見ている間だけ、[招待]と同じ位置に出す(部屋の中では招待、一覧では設定という切り替え)
+    this->settings_button = new Button(0, y0, "設定");
+    this->settings_button->setFontSize(FontFn::Small);
+    this->settings_button->setH(20);
+    this->settings_button->setX(this->refresh_button->getLocalRect().x - MARGIN - this->settings_button->getLocalRect().w);
+    this->settings_button->setOnPressEnd([this](){ this->openChatSettings(); });
+    WidgetFunctions::Add(this->settings_button);
 
     //タイトルは [招待] がある場合の幅に合わせる(部屋ごとに位置を変えない)
     const int title_x = this->back_button->getLocalRect().x + this->back_button->getLocalRect().w + MARGIN * 2;
@@ -130,6 +141,7 @@ void ChatScene::onEnter(){
     this->log_view->setSource(&this->client);
     WidgetFunctions::Add(this->log_view);
 
+    this->loadChatConfigValues();
     this->client.loadConfig();
     //前回の部屋を開いたまま戻ってきた(Push()から戻った)なら、部屋の中から始める
     if(this->mode == Mode::Room && this->client.room() == 0) this->mode = Mode::List;
@@ -160,6 +172,7 @@ void ChatScene::applyMode(){
 
     const ChatProto::Room* r = in_room ? this->client.findRoom(this->client.room()) : nullptr;
     this->invite_button->setVisible(r && r->is_private);
+    this->settings_button->setVisible(this->mode == Mode::List);
 
     //状態の行は、部屋の中では入力欄の上に1行、一覧/検索ではボタンの行の上に2行(設定の案内が長いので)
     const int status_lines = in_room ? 1 : 2;
@@ -342,6 +355,63 @@ void ChatScene::openCodeInput(){
     });
 }
 
+void ChatScene::loadChatConfigValues(){
+    this->chat_server_value.clear();
+    PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_CHAT_CFG,
+        [&](const char* key, const char* value){
+            if(strcmp(key, "server") == 0){
+                this->chat_server_value.assign(value);
+            }
+        }
+    );
+}
+
+void ChatScene::openChatSettings(){
+    // サーバURL→(1フレーム空けて)トークンの順に編集する。SettingsSceneのWi-Fi編集と
+    // 同じ「押されるたびにnew、閉じたらDestroyLater()」の形
+    auto* dialog = new InputDialog("チャットサーバURL:", true);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setInput(this->chat_server_value.c_str());
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        if(is_submit) this->commitChatServer(dialog->getInput());
+        //キャンセルでもトークンの編集へは進む(サーバだけ確認して閉じたい場合の一連の流れを止めないため)
+        this->pending_token_dialog = true;
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void ChatScene::openTokenDialog(){
+    // Wi-Fiパスワードと同じ扱い: 現在のトークンは平文で持たないので、常に空欄から始まる。
+    // 空欄のまま決定すると既存のトークンを変更しない(commitChatToken()参照)
+    auto* dialog = new InputDialog("トークン(空欄で変更なし):", true);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        if(is_submit) this->commitChatToken(dialog->getInput());
+        WidgetFunctions::DestroyLater(dialog);
+        //設定を書き換えたので読み直す([更新]ボタンと同じ手順)
+        this->client.loadConfig();
+        this->refreshStatus();
+    });
+}
+
+void ChatScene::commitChatServer(const FixedString<PICO_STR_LL>& input){
+    if(input.empty()) return; //空欄なら変更しない
+    PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_CHAT_CFG, "server", input.c_str());
+    this->chat_server_value.assign(input.c_str());
+}
+
+void ChatScene::commitChatToken(const FixedString<PICO_STR_LL>& input){
+    if(input.empty()) return; //空欄なら変更しない(既存のトークンを保つ)
+    char enc[PICO_STR_LL];
+    if(PICO_Secret::Encrypt("chat-token", input.c_str(), enc, sizeof(enc))){
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_CHAT_CFG, "token", enc);
+    }else{
+        LOG_SYS_WARN("Chat: トークンの暗号化に失敗しました(長すぎます)。保存されていません。");
+    }
+}
+
 void ChatScene::showInvite(){
     //期限は時計が合っていれば時刻で、合っていなければ「30分」とだけ出す(サーバの時刻が基準)
     char text[96];
@@ -416,6 +486,10 @@ void ChatScene::onUpdate(){
         this->pending_invite_dialog = false;
         this->showInvite();
     }
+    if(this->pending_token_dialog){
+        this->pending_token_dialog = false;
+        this->openTokenDialog();
+    }
 
     this->client.update(NetworkFunctions::IsConnected());
 
@@ -467,10 +541,12 @@ void ChatScene::onExit(){
     //検索の画面は結果を持ち越さないので、戻ってきたら一覧から
     if(this->mode == Mode::Search) this->mode = Mode::List;
     this->pending_invite_dialog = false;
+    this->pending_token_dialog = false;
 
     this->back_button = nullptr;
     this->refresh_button = nullptr;
     this->invite_button = nullptr;
+    this->settings_button = nullptr;
     this->search_button = nullptr;
     this->code_button = nullptr;
     this->title_label = nullptr;

@@ -14,6 +14,7 @@
 #include "functions/Log_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Time_Functions.hpp"
+#include "functions/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>
@@ -32,6 +33,10 @@ void LogFunctions::Flush(){}
 
 static int pop_calls = 0;
 void SceneFunctions::Pop(){ pop_calls++; }
+
+void KeyboardFunctions::RegisterInputTarget(ITextInputTarget*){}
+void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget*){}
+void KeyboardFunctions::HideAll(){}
 
 static int failures = 0;
 static void check(bool cond, const char* label){

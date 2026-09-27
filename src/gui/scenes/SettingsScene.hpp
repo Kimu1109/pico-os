@@ -11,6 +11,9 @@
 
 #include <cstdint>
 
+class WifiScanDialog; // gui/widgets/dialogs/WifiScanDialog.hpp。ポインタ型でしか使わないので前方宣言で足りる
+class NetworkScan;    // task/NetworkScan.hpp。同上
+
 // 標準アプリの設定。Wi-Fi/時刻/ブラウザのホーム(network.cfg)と
 // 音量(sound.cfg)と起動時セルフチェック(user.cfg)を1画面のフォームで編集する。
 //
@@ -36,6 +39,7 @@ class SettingsScene : public Scene {
 
         Label<PICO_STR_L>* ssid_label           = nullptr;
         Button*            ssid_edit_button     = nullptr;
+        Button*            wifi_scan_button     = nullptr;
 
         Label<PICO_STR_M>* password_label       = nullptr;
         Button*            password_edit_button = nullptr;
@@ -69,6 +73,28 @@ class SettingsScene : public Scene {
 
         Checkbox*          run_test_checkbox    = nullptr;
         Label<PICO_STR_M>* run_test_note        = nullptr;
+
+        // ---- 周辺Wi-Fiのスキャン→選択→パスワード入力→接続 ----
+        // ダイアログはSearchDialog(MarkdownScene)と同じく開くたびにnewし、
+        // 閉じたらDestroyLater()する(使い回さない)
+        WifiScanDialog* wifi_scan_dialog = nullptr;
+        // スキャンTaskへの生ポインタ。所有権はこちらにある(task/NetworkScan.hppの
+        // コメントの通り、HttpGet等と同じ「値/生ポインタとして持ち、毎フレーム
+        // 自分でupdate()を呼び、終わったら自分でdeleteする」流儀)
+        NetworkScan* wifi_scan_task = nullptr;
+        // ダイアログでSSIDを選んだ直後、パスワード入力ダイアログを1フレーム空けて開くための保留
+        // (MarkdownScene::Pending/CalendarSceneの「追加」フローと同じ理由)
+        bool pending_wifi_password_dialog = false;
+        FixedString<PICO_STR_M> pending_wifi_ssid;
+
+        void startWifiScan();
+        void pollWifiScan();
+        void openWifiScanDialog();
+        void closeWifiScanDialog();
+        void openWifiPasswordDialog();
+        // スキャンで選んだネットワークへの新規接続。パスワードは空でもそのまま書く
+        // (commitEdit(EditField::Password)の「空欄なら既存を保持」とは違う挙動)
+        void connectScannedNetwork(const char* ssid, const char* password);
 
         // network.cfg / user.cfgから読んだ現在値。
         // パスワードは平文を持たず「設定済みか」だけを覚える(画面に出さないため)

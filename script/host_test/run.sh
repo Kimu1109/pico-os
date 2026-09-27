@@ -331,6 +331,9 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \

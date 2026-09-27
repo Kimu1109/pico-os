@@ -8,6 +8,7 @@
 // を見る。
 #include "gui/scenes/ChatScene.hpp"
 #include "gui/widgets/apps/ChatLogView.hpp"
+#include "gui/widgets/dialogs/InputDialog.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -173,6 +174,15 @@ static const char* statusText(){
     return found;
 }
 
+static Button* findButton(const char* text){
+    for(Widget* w : WidgetFunctions::widgets){
+        if(w->getWidgetType() != WidgetType::Button) continue;
+        Button* b = static_cast<Button*>(w);
+        if(strcmp(b->getText().c_str(), text) == 0) return b;
+    }
+    return nullptr;
+}
+
 static void testScene(){
     auto* scene = new ChatScene();
 
@@ -208,12 +218,43 @@ static void testScene(){
     scene->onEnter();
     check(strstr(statusText(), "token") != nullptr, "token に使えない文字があれば案内する");
 
-    //一覧で「戻る」を押すとランチャへ戻る
-    Button* back = nullptr;
-    for(Widget* w : WidgetFunctions::widgets){
-        if(w->getWidgetType() == WidgetType::Button && w->getLocalRect().x < 10) back = static_cast<Button*>(w);
+    //一覧の下には [部屋を探す] [コードで参加]。[招待] はプライベートチャットの中でだけ出す
+    Button* search = findButton("部屋を探す");
+    Button* code = findButton("コードで参加");
+    Button* invite = findButton("招待");
+    check(search && search->getVisible(), "一覧に「部屋を探す」がある");
+    check(code && code->getVisible(), "一覧に「コードで参加」がある");
+    check(invite && !invite->getVisible(), "一覧では「招待」を出さない");
+
+    //「コードで参加」は入力のダイアログを開く。キャンセルすれば何もしない(ASanで解放漏れも見る)
+    const size_t dialogs = WidgetFunctions::dialog_roots.size();
+    if(code) code->causeOnPressEnd();
+    eq_int((long)WidgetFunctions::dialog_roots.size(), (long)dialogs + 1, "コードの入力ダイアログが開く");
+    if(WidgetFunctions::dialog_roots.size() > dialogs){
+        auto* dlg = static_cast<InputDialog*>(WidgetFunctions::dialog_roots.back());
+        dlg->causeOnClosed(false);
+        dlg->setVisible(false);
     }
+    if(search) search->causeOnPressEnd();
+    eq_int((long)WidgetFunctions::dialog_roots.size(), (long)dialogs + 2, "検索語の入力ダイアログが開く");
+    if(WidgetFunctions::dialog_roots.size() > dialogs + 1){
+        auto* dlg = static_cast<InputDialog*>(WidgetFunctions::dialog_roots.back());
+        dlg->setInput("雑談");
+        dlg->causeOnClosed(true); //設定が使えない状態なので検索は始まらず、理由を出す
+        dlg->setVisible(false);
+    }
+    check(findButton("別の語で探す") != nullptr, "検索の画面に切り替わる");
+    check(code && !code->getVisible(), "検索の画面では「コードで参加」を隠す");
+    WidgetFunctions::ProcessPendingDeletes();
+
+    //検索の画面で「戻る」を押すと一覧へ
+    Button* back = findButton("戻る");
     check(back != nullptr, "戻るボタンがある");
+    if(back) back->causeOnPressEnd();
+    eq_int(pop_calls, 0, "検索の画面で戻る → 一覧へ(Popしない)");
+    check(findButton("部屋を探す") != nullptr, "一覧に戻る");
+
+    //一覧で「戻る」を押すとランチャへ戻る
     if(back) back->causeOnPressEnd();
     eq_int(pop_calls, 1, "一覧で戻る → Pop()");
     scene->onExit();

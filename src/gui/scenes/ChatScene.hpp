@@ -12,8 +12,13 @@
 
 // チャットアプリ。自前のチャットサーバ(server/chat/、仕様は CHAT_PROTOCOL.md)へ繋ぐ。
 //
-// 1つのシーンで「部屋の一覧」と「部屋の中(発言の一覧 + 入力欄)」を切り替える
+// 1つのシーンで「部屋の一覧」「オープンチャットの検索」「部屋の中(発言の一覧 + 入力欄)」を切り替える
 // (ClocksScene と同じく、表示/非表示は applyMode() の1箇所で決める)。
+//
+// 一覧に出るのは参加している部屋だけ(オープンチャット = 吹き出し、プライベートチャット = 鍵のアイコン)。
+// 一覧の下の [部屋を探す] でオープンチャットを検索して参加し、[コードで参加] で参加コードを打って
+// プライベートチャットに入る。プライベートチャットの中では [招待] で参加コード(30分で無効)を出せる。
+// 部屋を作る・抜ける・メンバーの管理は Web から行う(CHAT_PROTOCOL.md)。
 //
 // 接続先は SD の /sys/chat.cfg。Webクライアントの「pico-os の設定」で出る内容をそのまま置く:
 //     server = https://chat.example.com
@@ -24,10 +29,13 @@
 // TLSの約40KBを持ち続ける**(接続を使い回すため)。onExit() で閉じる。
 class ChatScene : public Scene {
     private:
-        enum class Mode : uint8_t { List, Room };
+        enum class Mode : uint8_t { List, Search, Room };
 
         Button* back_button = nullptr;
         Button* refresh_button = nullptr;
+        Button* invite_button = nullptr;
+        Button* search_button = nullptr;
+        Button* code_button = nullptr;
         Label<PICO_STR_M>* title_label = nullptr;
         ScrollList* room_list = nullptr;
         ChatLogView* log_view = nullptr;
@@ -40,15 +48,26 @@ class ChatScene : public Scene {
         // onExit() を跨いで残す(上へ別のシーンをPush()して戻ったときに復元する)
         Mode mode = Mode::List;
         FixedString<PICO_STR_LL> draft;
+        ChatProto::Name search_query;
+
+        // 利用者の操作の結果など、状態の行へ出す一言(通信の失敗の理由があればそちらが優先)
+        FixedString<PICO_STR_LL> notice;
+        int8_t notice_color = PICO_DARKGREY;
+        // 参加コードを受け取った。次のフレームでダイアログを出す
+        bool pending_invite_dialog = false;
 
         // 画面へ反映済みの版(ChatClient の revision と比べて、変わったときだけ描き直す)
         uint32_t seen_rooms_rev = 0;
         uint32_t seen_msgs_rev = 0;
         uint32_t seen_status_rev = 0;
+        uint32_t seen_action_rev = 0;
+        uint32_t seen_room_lost_rev = 0;
         bool seen_sending = false;
 
-        // 一覧の行 → 部屋のid
-        uint32_t list_room_ids[ChatClient::kMaxRooms] = {};
+        // 一覧の行 → 部屋のid(検索中は検索結果の部屋のid)
+        constexpr static int kMaxListRows = (ChatClient::kMaxRooms > ChatClient::kMaxSearchHits)
+                                          ? ChatClient::kMaxRooms : ChatClient::kMaxSearchHits;
+        uint32_t list_room_ids[kMaxListRows] = {};
         int list_count = 0;
 
         // 画面を1回描いてから繋ぎに行く(TLSのハンドシェイクで止まる前に画面を出しておくため)
@@ -57,6 +76,7 @@ class ChatScene : public Scene {
         // 配置(onEnter()で実測して決める)
         int body_top = 0;
         int input_row_y = 0;
+        int action_row_y = 0;
         int row_h = 0;
 
         constexpr static int MARGIN = 3;
@@ -70,6 +90,13 @@ class ChatScene : public Scene {
         void refreshSendButton();
         void refreshPlaceholder();
         void sendDraft();
+        void onListTap(int index);
+        void openSearchInput();
+        void openCodeInput();
+        void startSearch();
+        void showInvite();
+        void onActionDone();
+        void setNotice(const char* text, int8_t color = PICO_DARKGREY);
 
     public:
         const char* getName() const override { return "Chat"; }

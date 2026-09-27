@@ -12,7 +12,8 @@
 # script/host_test/tls_test_server.py を立てて確かめる(外のサーバへは行かない)。
 #
 # チャット(chat_net_test)は server/chat/chat_server.py を使い捨てのDBで、平文とHTTPS
-# (上と同じ使い捨ての証明書)の2つ立てて確かめる。
+# (上と同じ使い捨ての証明書)の2つ立てて確かめる。サーバ単体の権限まわり(chat_server_test.py)も
+# ここで回す(同じプロセスの中で 127.0.0.1 の空きポートにサーバを立てる)。
 #
 # 使い方: sh script/host_test/run_net.sh
 set -e
@@ -127,8 +128,11 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
 
 ALICE=$(python3 "$CHAT" --db "$CHAT_DB" adduser alice --display ありす --password password1 | tail -1 | tr -d ' ')
 BOB=$(python3 "$CHAT" --db "$CHAT_DB" adduser bob --display ぼぶ --password password2 | tail -1 | tr -d ' ')
-python3 "$CHAT" --db "$CHAT_DB" addroom 雑談 > /dev/null
-python3 "$CHAT" --db "$CHAT_DB" addroom 連絡 > /dev/null
+# alice が作った部屋(オープン2つ・プライベート1つ・途中で消す1つ)。bob はテストの中で検索/参加コードから入る
+python3 "$CHAT" --db "$CHAT_DB" addroom 雑談 --owner alice > /dev/null
+python3 "$CHAT" --db "$CHAT_DB" addroom 連絡 --owner alice > /dev/null
+python3 "$CHAT" --db "$CHAT_DB" addroom 秘密 --private --owner alice > /dev/null
+python3 "$CHAT" --db "$CHAT_DB" addroom 消える部屋 --owner alice > /dev/null
 
 # 無通信の接続を1秒で閉じさせる(使い回した接続が死んでいた場合の繋ぎ直しを確かめるため)
 python3 "$CHAT" --db "$CHAT_DB" serve --host 127.0.0.1 --port "$CHAT_PORT" --idle-timeout 1 \
@@ -149,4 +153,9 @@ done
 
 echo ""
 echo "===== chat_net_test ====="
-"$OUT/chat_net_test" "$CHAT_PORT" "$CHAT_TLS_PORT" "$OUT/ca.pem" "$ALICE" "$BOB"
+"$OUT/chat_net_test" "$CHAT_PORT" "$CHAT_TLS_PORT" "$OUT/ca.pem" "$ALICE" "$BOB" "$CHAT" "$CHAT_DB"
+
+# ---- チャットサーバ単体(部屋の種類・参加コード・役割と権限・v1のDBからの移行) ----
+echo ""
+echo "===== chat_server_test ====="
+python3 "$ROOT/script/host_test/chat_server_test.py"

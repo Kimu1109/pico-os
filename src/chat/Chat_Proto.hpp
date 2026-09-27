@@ -28,12 +28,28 @@ namespace ChatProto {
     static_assert(PICO_STR_M > kMaxNameBytes, "Name に名前が入りきらない");
     static_assert(PICO_STR_512B > kMaxTextBytes, "Text に本文が入りきらない");
 
+    // 部屋での自分の役割(CHAT_PROTOCOL.md「役割と権限」)。強い順に大きい
+    enum class Role : uint8_t { Member = 0, Admin = 1, Owner = 2 };
+
     struct Room {
         uint32_t id = 0;
         Name name;
         uint32_t last_id = 0;   // 部屋の最新の発言id(0 = 発言なし)
         uint32_t unread = 0;    // 自分の未読の数
+        bool is_private = false; // プライベートチャット(参加コードで入る)。v1のサーバは列が無いので false
+        Role role = Role::Member;
     };
+
+    // オープンチャットの検索結果の1件
+    struct SearchHit {
+        uint32_t id = 0;
+        Name name;
+        uint32_t members = 0;   // 参加している人数
+        bool joined = false;    // 自分が既に参加しているか
+    };
+
+    // 参加コード。"XXXX-XXXX"(9文字)
+    using InviteCode = FixedString<PICO_STR_S>;
 
     struct Message {
         uint32_t id = 0;
@@ -64,6 +80,20 @@ namespace ChatProto {
 
     // "id<TAB>時刻<TAB>名前<TAB>本文" の1行
     bool ParseMessage(char* line, Message& out);
+
+    // "private" → true。それ以外(open・空・知らない値)は false
+    bool ParseKind(const char* s);
+    // "owner"/"admin" → その役割。それ以外は Member(知らない値も一番弱い役割として扱う)
+    Role ParseRole(const char* s);
+
+    // 検索結果 "id<TAB>名前<TAB>人数<TAB>参加済み(0/1)" の1行
+    bool ParseSearchHit(char* line, SearchHit& out);
+
+    // 参加/部屋を作った応答 "id<TAB>名前<TAB>種類<TAB>役割" の1行。out の last_id/unread は0
+    bool ParseJoined(char* line, Room& out);
+
+    // 参加コードの発行の応答 "コード<TAB>期限(UNIX時刻)<TAB>回数" の1行
+    bool ParseInvite(char* line, InviteCode& code, uint32_t& expires);
 
     // 受け取ったバイト列を行へ切り分けて onLine() へ渡すシンク。
     // 1行が kMaxLineBytes を超えたらその行は捨てて数える(次の改行から読み直す)。

@@ -12,7 +12,10 @@ run_net.sh から呼ぶ(サーバを同じプロセスの中で 127.0.0.1 の空
     無効化・追放された人には通らない。外し続けると 429
   - 役割: 管理者は自分より弱い人だけを追い出せる。オーナーだけが役割を変え、部屋を消せる。
     オーナーが抜けると次の人へ譲られ、誰もいなくなった部屋は消える
-  - v1 のDB(rooms.name が UNIQUE、参加者の表が無い)を開くと、部屋を残したまま v2 へ移る
+  - サーバ管理者: ユーザーの作成/パスワードの決め直し/無効化/管理者の任命、全部屋の一覧、部屋を作れる人の設定。
+    参加していない部屋でも管理の操作(メンバーを見る・追い出す・オーナーを決める・消す)はできるが、
+    プライベートチャットの発言は参加しない限り読めない。管理者でない人は /api/v1/admin/ を一切使えない
+  - v1 のDB(rooms.name が UNIQUE、参加者の表が無い)を開くと、部屋を残したまま v3 へ移る
 
 使い方: python3 chat_server_test.py
 """
@@ -80,12 +83,8 @@ class Client:
         return {int(r[0]): r for r in self.rows("GET", "/api/v1/rooms")[1]}
 
 
-def add_user(store, login, display):
-    token = cs.new_token()
-    salt, digest = cs.hash_password("password1")
-    store.write("INSERT INTO users(login,display,pw_salt,pw_hash,token_hash) VALUES(?,?,?,?,?)",
-                (login, display, salt, digest, cs.token_hash(token)))
-    return token
+def add_user(store, login, display, admin=False):
+    return store.add_user(login, display, "password1", admin)
 
 
 def start_server(db_path, invite_ttl=cs.INVITE_TTL_SEC):
@@ -250,6 +249,87 @@ def test_roles(tmp):
     srv.server_close()
 
 
+def test_server_admin(tmp):
+    print("\n---- サーバ管理者 ----")
+    store, srv, port = start_server(os.path.join(tmp, "c.db"))
+    root = Client(port, add_user(store, "root", "かんりにん", admin=True))
+    alice = Client(port, add_user(store, "alice", "ありす"))
+    bob = Client(port, add_user(store, "bob", "ぼぶ"))
+
+    eq(root.rows("GET", "/api/v1/me")[1][0][2:], ["admin", "1"], "me: 管理者で、部屋を作れる")
+    eq(alice.rows("GET", "/api/v1/me")[1][0][2:], ["user", "1"], "me: 一般の人")
+    for method, path in (("GET", "/api/v1/admin/users"), ("GET", "/api/v1/admin/rooms"),
+                         ("GET", "/api/v1/admin/settings"), ("POST", "/api/v1/admin/users/bob/disable")):
+        eq(alice.req(method, path, "" if method == "POST" else None)[0], 403, "一般の人は使えない: " + path)
+
+    # ---- ユーザーの管理 ----
+    form = urllib.parse.urlencode({"login": "carol", "display": "きゃろる", "password": "carolpass"})
+    eq(root.req("POST", "/api/v1/admin/users", form)[0], 201, "ユーザーを作れる")
+    eq(root.req("POST", "/api/v1/admin/users", form)[0], 409, "同じログイン名は断る")
+    short = urllib.parse.urlencode({"login": "dave", "password": "short"})
+    eq(root.req("POST", "/api/v1/admin/users", short)[0], 400, "短いパスワードは断る")
+    users = {r[0]: r for r in root.rows("GET", "/api/v1/admin/users")[1]}
+    eq(users["carol"][1:], ["きゃろる", "0", "1"], "一覧: 表示名・管理者でない・使える")
+    eq(users["root"][2], "1", "一覧: 管理者の印")
+
+    eq(root.req("POST", "/api/v1/admin/users/bob/disable", "")[0], 200, "無効にできる")
+    eq(bob.req("GET", "/api/v1/rooms")[0], 401, "無効にした人のトークンは通らない")
+    eq(root.req("POST", "/api/v1/admin/users/root/disable", "")[0], 400, "自分は無効にできない")
+    eq(root.req("POST", "/api/v1/admin/users/bob/password", "newpassword")[0], 200, "パスワードを決め直せる")
+    b = store.user_by_login("bob")
+    check(cs.check_password("newpassword", b["pw_salt"], b["pw_hash"]), "決め直したパスワードでログインできる")
+    eq(root.req("POST", "/api/v1/admin/users/nobody/password", "newpassword")[0], 404, "いない人は404")
+
+    eq(root.req("POST", "/api/v1/admin/users/alice/admin", "1")[0], 200, "管理者にできる")
+    eq(alice.rows("GET", "/api/v1/me")[1][0][2], "admin", "管理者になった")
+    eq(root.req("POST", "/api/v1/admin/users/root/admin", "0")[0], 400, "自分の管理者は外せない")
+    eq(root.req("POST", "/api/v1/admin/users/alice/admin", "0")[0], 200, "他の管理者は外せる")
+    eq(alice.req("GET", "/api/v1/admin/users")[0], 403, "外された人は使えなくなる")
+
+    # ---- 部屋を作れる人 ----
+    eq(root.req("POST", "/api/v1/admin/settings", "room_create\tadmin")[0], 200, "設定を変えられる")
+    eq(root.req("POST", "/api/v1/admin/settings", "room_create\teveryone")[0], 400, "知らない値は断る")
+    eq(root.req("POST", "/api/v1/admin/settings", "color\tred")[0], 400, "知らない設定は断る")
+    eq(alice.rows("GET", "/api/v1/me")[1][0][3], "0", "me: 部屋を作れない")
+    eq(alice.req("POST", "/api/v1/rooms", "作れない部屋")[0], 403, "管理者でなければ部屋を作れない")
+    eq(root.req("POST", "/api/v1/rooms", "お知らせ")[0], 201, "管理者は作れる")
+    root.req("POST", "/api/v1/admin/settings", "room_create\tall")
+    eq(alice.req("POST", "/api/v1/rooms", "作れる部屋")[0], 201, "全員に戻すと作れる")
+
+    # ---- 参加していない部屋の管理 ----
+    priv = int(alice.rows("POST", "/api/v1/rooms", "ないしょ", query={"kind": "private"})[1][0][0])
+    alice.req("POST", "/api/v1/rooms/%d/messages" % priv, "ひみつ")
+    rooms = {int(r[0]): r for r in root.rows("GET", "/api/v1/admin/rooms")[1]}
+    eq(rooms[priv][1:], ["ないしょ", "private", "1", "alice"], "全部屋の一覧(プライベートも、オーナーも分かる)")
+    eq(root.req("GET", "/api/v1/rooms/%d/messages" % priv)[0], 404, "参加していないプライベートチャットは読めない")
+    eq(root.req("POST", "/api/v1/rooms/%d/invites" % priv, "")[0], 404, "参加コードも出せない")
+    eq(root.req("GET", "/api/v1/rooms/%d/members" % priv)[0], 200, "メンバーは見られる")
+
+    code = alice.rows("POST", "/api/v1/rooms/%d/invites" % priv, "")[1][0][0]
+    carol_token = store.reset_token(store.user_by_login("carol")["id"])
+    carol = Client(port, carol_token)
+    carol.req("POST", "/api/v1/join", code)
+    eq(root.req("POST", "/api/v1/rooms/%d/role" % priv, "carol\towner")[0], 200, "オーナーを付け替えられる")
+    roles = {r[0]: r[2] for r in root.rows("GET", "/api/v1/rooms/%d/members" % priv)[1]}
+    eq((roles["carol"], roles["alice"]), ("owner", "admin"), "前のオーナーは管理者になる(オーナーは1人)")
+    eq(root.req("POST", "/api/v1/rooms/%d/kick" % priv, "carol", query={"ban": 1})[0], 200,
+       "オーナーでも追放できる")
+    eq(root.req("POST", "/api/v1/rooms/%d/role" % priv, "alice\towner")[0], 200, "オーナーを置き直せる")
+    eq(root.req("POST", "/api/v1/rooms/%d/delete" % priv, "")[0], 200, "参加していない部屋を消せる")
+    eq(store.room(priv), None, "消えた")
+
+    # オーナーのいない部屋(v1 から移行した部屋や、管理コマンドで作った部屋)を引き取る
+    orphan = store.add_room("みんなの部屋")
+    root.req("POST", "/api/v1/rooms/%d/join" % orphan, "")
+    eq(root.req("POST", "/api/v1/rooms/%d/role" % orphan, "root\towner")[0], 200, "自分をオーナーにできる")
+    eq(root.rooms()[orphan][5], "owner", "オーナーになった")
+    alice.req("POST", "/api/v1/rooms/%d/join" % orphan, "")
+    eq(alice.req("POST", "/api/v1/rooms/%d/role" % orphan, "alice\towner")[0], 403, "一般の人には同じことはできない")
+
+    srv.shutdown()
+    srv.server_close()
+
+
 def test_migration(tmp):
     print("\n---- v1 のDBからの移行 ----")
     path = os.path.join(tmp, "v1.db")
@@ -285,6 +365,9 @@ def test_migration(tmp):
     eq([(r["room_id"], r["user_id"]) for r in db.execute("SELECT * FROM members ORDER BY room_id, user_id")],
        [(1, 1), (2, 1)], "使える人は全部の部屋の参加者になる(無効にした人は除く)")
     eq(db.execute("PRAGMA foreign_key_check").fetchall(), [], "外部キーが壊れていない")
+    eq(db.execute("SELECT is_admin FROM users WHERE login='alice'").fetchone()[0], 0,
+       "サーバ管理者の列が足され、誰も管理者にはならない")
+    eq(store.admin_count(), 0, "管理者は0人(管理コマンドで決める)")
     try:
         store.add_room("雑談")
         check(False, "オープンチャットの名前の重なりは移行後も断る")
@@ -301,6 +384,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         test_rooms_and_invites(tmp)
         test_roles(tmp)
+        test_server_admin(tmp)
         test_migration(tmp)
     print("\n%s (失敗 %d件)" % ("ALL PASSED" if failures == 0 else "FAILED", failures))
     return 0 if failures == 0 else 1

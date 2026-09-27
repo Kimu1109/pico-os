@@ -78,6 +78,8 @@ MAX_ACTIVE_INVITES = 20     # 1つの部屋で同時に有効なコードの数
 JOIN_WINDOW_SEC = 600
 JOIN_MAX_FAILS = 10
 
+MIN_PASSWORD_LEN = 8
+
 LOGIN_RE = re.compile(r"^[A-Za-z0-9_-]{1,%d}$" % MAX_LOGIN_LEN)
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
@@ -143,7 +145,7 @@ def check_password(password, salt_hex, digest_hex):
 
 # ============================================================ 保存(SQLite)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -152,7 +154,8 @@ CREATE TABLE IF NOT EXISTS users (
     display     TEXT NOT NULL,
     pw_salt     TEXT,
     pw_hash     TEXT,
-    token_hash  TEXT UNIQUE
+    token_hash  TEXT UNIQUE,
+    is_admin    INTEGER NOT NULL DEFAULT 0   -- サーバ管理者(v3)
 );
 CREATE TABLE IF NOT EXISTS rooms (
     id          INTEGER PRIMARY KEY,
@@ -206,6 +209,11 @@ CREATE TABLE IF NOT EXISTS invites (
     uses_left   INTEGER            -- NULL = 期限内なら何回でも
 );
 CREATE INDEX IF NOT EXISTS invites_room ON invites(room_id);
+-- サーバ全体の設定(v3)。値は SERVER_SETTINGS の既定値から選ぶ
+CREATE TABLE IF NOT EXISTS settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL
+);
 """
 
 # v1 の rooms は name が UNIQUE で kind も無い。作り直す(外部キーの付け替えを避けるため
@@ -245,7 +253,26 @@ ROLE_LABEL = {"member": "参加者", "admin": "管理者", "owner": "オーナ�
 
 
 def can(role, action):
-    return ROLE_RANK.get(role or "", 0) >= ROLE_RANK[PERMS[action]]
+    return role_rank(role) >= ROLE_RANK[PERMS[action]]
+
+
+# サーバ管理者は、部屋に参加していなくても「管理の操作」だけはオーナーより強い立場でできる。
+# **発言を読む・書く・参加コードを出すには、管理者でも参加が要る**(プライベートチャットを黙って読めないように)
+SERVER_ADMIN_ROLE = "server"
+SERVER_ADMIN_RANK = ROLE_RANK["owner"] + 1
+MODERATION_ACTIONS = {"members", "kick", "revoke_invites", "set_role", "delete_room"}
+
+
+def role_rank(role):
+    if role == SERVER_ADMIN_ROLE:
+        return SERVER_ADMIN_RANK
+    return ROLE_RANK.get(role or "", 0)
+
+
+# サーバ全体の設定と、取りうる値(先頭が既定値)
+SERVER_SETTINGS = {
+    "room_create": ("all", "admin"),   # 部屋を作れるのは 全員 / サーバ管理者だけ
+}
 
 
 # 参加コード。読み違えやすい 0/O 1/I を除いた32文字 × 8文字(40bit)。見せるときは4文字ずつ - で区切る
@@ -311,6 +338,13 @@ class Store:
                     (int(time.time()),))
                 db.commit()
             log("DBを v2 へ移行しました(既存の部屋はオープンチャット、今いる人は全員参加者)")
+        user_cols = [r["name"] for r in db.execute("PRAGMA table_info(users)")]
+        if "is_admin" not in user_cols:
+            # v2 → v3: サーバ管理者の印。誰も管理者にはしない(管理コマンド admin で決める)
+            with self.write_lock:
+                db.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+                db.commit()
+            log("DBを v3 へ移行しました(サーバ管理者は「admin <名前>」で決めてください)")
         with self.write_lock:
             db.executescript("CREATE UNIQUE INDEX IF NOT EXISTS rooms_open_name ON rooms(name) WHERE kind='open';")
             db.execute("PRAGMA user_version=%d" % SCHEMA_VERSION)
@@ -329,8 +363,14 @@ class Store:
     def write(self, sql, params=()):
         with self.write_lock:
             db = self.db()
-            cur = db.execute(sql, params)
-            db.commit()
+            try:
+                cur = db.execute(sql, params)
+                db.commit()
+            except sqlite3.Error:
+                # 失敗した文(同じ名前の重複など)の暗黙のトランザクションを残すと、DBの書き込みの鍵を
+                # 持ったままになり、他のスレッドの書き込みが全部待たされる
+                db.rollback()
+                raise
             return cur
 
     def wake(self):
@@ -365,6 +405,52 @@ class Store:
         token = new_token()
         self.write("UPDATE users SET token_hash=? WHERE id=?", (token_hash(token), user_id))
         return token
+
+    # ---- サーバ管理 ----
+    def users(self):
+        return self.db().execute("SELECT * FROM users ORDER BY id").fetchall()
+
+    def admin_count(self):
+        return self.db().execute(
+            "SELECT COUNT(*) FROM users WHERE is_admin=1 AND (pw_hash IS NOT NULL OR token_hash IS NOT NULL)"
+        ).fetchone()[0]
+
+    def add_user(self, login, display, password, admin=False):
+        """ユーザーを作って pico-os 用のトークンを返す。ログイン名が重なれば sqlite3.IntegrityError。"""
+        salt, digest = hash_password(password)
+        token = new_token()
+        self.write("INSERT INTO users(login,display,pw_salt,pw_hash,token_hash,is_admin) VALUES(?,?,?,?,?,?)",
+                   (login, display, salt, digest, token_hash(token), 1 if admin else 0))
+        return token
+
+    def set_password(self, user_id, password):
+        salt, digest = hash_password(password)
+        self.write("UPDATE users SET pw_salt=?, pw_hash=? WHERE id=?", (salt, digest, user_id))
+        self.write("DELETE FROM sessions WHERE user_id=?", (user_id,))
+
+    def disable_user(self, user_id):
+        # 発言は残す(会話の流れが壊れるので)。ログインとトークンだけ使えなくする
+        self.write("UPDATE users SET pw_salt=NULL, pw_hash=NULL, token_hash=NULL WHERE id=?", (user_id,))
+        self.write("DELETE FROM sessions WHERE user_id=?", (user_id,))
+        self.wake()
+
+    def set_admin(self, user_id, on):
+        self.write("UPDATE users SET is_admin=? WHERE id=?", (1 if on else 0, user_id))
+
+    def setting(self, key):
+        row = self.db().execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else SERVER_SETTINGS[key][0]
+
+    def set_setting(self, key, value):
+        self.write("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                   (key, value))
+
+    def all_rooms(self):
+        return self.db().execute(
+            "SELECT rooms.*, (SELECT COUNT(*) FROM members WHERE room_id=rooms.id) AS n, "
+            "  (SELECT users.login FROM members JOIN users ON users.id=members.user_id "
+            "   WHERE members.room_id=rooms.id AND members.role='owner' LIMIT 1) AS owner "
+            "FROM rooms ORDER BY rooms.id").fetchall()
 
     # ---- 部屋 ----
     def rooms_for(self, user_id):
@@ -455,12 +541,12 @@ class Store:
     def unban(self, room_id, user_id):
         return self.write("DELETE FROM bans WHERE room_id=? AND user_id=?", (room_id, user_id)).rowcount > 0
 
-    def set_role(self, room_id, user_id, role, by_user_id):
-        """役割を変える。role='owner' は譲渡(今のオーナー by_user_id は管理者になる)。"""
+    def set_role(self, room_id, user_id, role):
+        """役割を変える。role='owner' は譲渡(今のオーナーは管理者になる。オーナーは常に1人)。"""
         with self.write_lock:
             db = self.db()
             if role == "owner":
-                db.execute("UPDATE members SET role='admin' WHERE room_id=? AND user_id=?", (room_id, by_user_id))
+                db.execute("UPDATE members SET role='admin' WHERE room_id=? AND role='owner'", (room_id,))
             db.execute("UPDATE members SET role=? WHERE room_id=? AND user_id=?", (role, room_id, user_id))
             db.commit()
 
@@ -755,6 +841,19 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
             if path == "/api/v1/join" and method == "POST":
                 return self.api_join_code()
 
+            if path == "/api/v1/admin/users":
+                if method == "GET":
+                    return self.api_admin_users()
+                if method == "POST":
+                    return self.api_admin_add_user()
+            m = re.fullmatch(r"/api/v1/admin/users/([^/]+)/(password|disable|admin)", path)
+            if m and method == "POST":
+                return self.api_admin_user_action(urllib.parse.unquote(m.group(1)), m.group(2))
+            if path == "/api/v1/admin/rooms" and method == "GET":
+                return self.api_admin_rooms()
+            if path == "/api/v1/admin/settings":
+                return self.api_admin_settings(method)
+
             m = re.fullmatch(r"/api/v1/rooms/(\d+)/([a-z/]+)", path)
             if m:
                 room_id = int(m.group(1))
@@ -835,9 +934,18 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
         self.read_body()
         self.send_body(200, "ok\n", headers=[("Set-Cookie", "pc_session=; Path=/; Max-Age=0")])
 
+    def is_server_admin(self, user):
+        return bool(user["is_admin"])
+
+    def can_create_rooms(self, user):
+        return self.store.setting("room_create") == "all" or self.is_server_admin(user)
+
     def api_me(self):
+        # 3列目はサーバでの立場(admin / user)、4列目は部屋を作れるか(1/0)。v1/v2 のクライアントは読まない
         user = self.current_user()
-        self.send_body(200, tsv_line(user["login"], user["display"]))
+        self.send_body(200, tsv_line(user["login"], user["display"],
+                                     "admin" if self.is_server_admin(user) else "user",
+                                     1 if self.can_create_rooms(user) else 0))
 
     def api_token(self):
         # pico-os用のトークンを発行し直す(古いトークンは使えなくなる)。
@@ -869,6 +977,8 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
         kind = (query.get("kind") or ["open"])[0]
         if kind not in ("open", "private"):
             raise HttpError(400, "kind は open か private です")
+        if not self.can_create_rooms(user):
+            raise HttpError(403, "部屋を作れるのはサーバ管理者だけです")
         name = self.room_name_param()
         try:
             room_id = self.store.add_room(name, kind, user["id"])
@@ -879,8 +989,13 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
 
     def member_room(self, user, room_id, action="read"):
         """部屋と自分の役割を返す。参加していなければ、プライベートは 404(有るかどうかも教えない)、
-        オープンは 403。役割が足りなければ 403。"""
+        オープンは 403。役割が足りなければ 403。
+
+        サーバ管理者は、管理の操作(MODERATION_ACTIONS)に限り参加していなくても、
+        どの部屋でもオーナーより強い立場(SERVER_ADMIN_ROLE)で行える。"""
         room = self.store.room(room_id)
+        if room is not None and action in MODERATION_ACTIONS and self.is_server_admin(user):
+            return room, SERVER_ADMIN_ROLE
         role = self.store.role_of(room_id, user["id"]) if room is not None else None
         if room is None or (role is None and room["kind"] == "private"):
             raise HttpError(404, "部屋がありません")
@@ -998,7 +1113,7 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
             raise HttpError(400, "自分は追い出せません(抜けるときは leave)")
         if target_role is None and not ban:
             raise HttpError(404, "その人は参加していません")
-        if target_role is not None and ROLE_RANK[target_role] >= ROLE_RANK[role]:
+        if target_role is not None and role_rank(target_role) >= role_rank(role):
             raise HttpError(403, "自分と同じか上の役割の人は追い出せません")
         self.store.kick(room_id, target["id"], ban)
         log("%s が %s を「#%d」から%s" % (user["login"], target["login"], room_id, "追放しました" if ban else "追い出しました"))
@@ -1014,18 +1129,104 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
 
     def api_set_role(self, room_id):
         user = self.current_user(for_write=True)
-        self.member_room(user, room_id, "set_role")
+        _, role = self.member_room(user, room_id, "set_role")
         login, _, new_role = self.read_text_body().strip().partition("\t")
         if new_role not in ROLE_RANK:
             raise HttpError(400, "役割は owner / admin / member のどれかです")
         target = self.target_user(room_id, login)
-        if target["id"] == user["id"]:
+        # オーナーが自分を変えると部屋にオーナーがいなくなる。サーバ管理者は自分をオーナーにしてよい
+        # (オーナーのいない部屋を引き取るため)
+        if target["id"] == user["id"] and role != SERVER_ADMIN_ROLE:
             raise HttpError(400, "自分の役割は変えられません(譲るときは相手を owner に)")
         if self.store.role_of(room_id, target["id"]) is None:
             raise HttpError(404, "その人は参加していません")
-        self.store.set_role(room_id, target["id"], new_role, user["id"])
+        self.store.set_role(room_id, target["id"], new_role)
         log("%s が %s を「#%d」の %s にしました" % (user["login"], target["login"], room_id, new_role))
         self.send_body(200, "ok\n")
+
+    # ---- サーバ管理(サーバ管理者だけ) ----
+    def admin_user(self, for_write=False):
+        user = self.current_user(for_write=for_write)
+        if not self.is_server_admin(user):
+            raise HttpError(403, "サーバ管理者だけが使えます")
+        return user
+
+    def admin_target(self, login):
+        target = self.store.user_by_login(login) if LOGIN_RE.match(login or "") else None
+        if target is None:
+            raise HttpError(404, "その人はいません")
+        return target
+
+    def api_admin_users(self):
+        self.admin_user()
+        out = []
+        for u in self.store.users():
+            active = 1 if (u["pw_hash"] or u["token_hash"]) else 0
+            out.append(tsv_line(u["login"], clean_name(u["display"]), 1 if u["is_admin"] else 0, active))
+        self.send_body(200, "".join(out))
+
+    def api_admin_add_user(self):
+        user = self.admin_user(for_write=True)
+        form = urllib.parse.parse_qs(self.read_text_body())
+        login = (form.get("login") or [""])[0]
+        display = clean_name((form.get("display") or [""])[0]) or login
+        password = (form.get("password") or [""])[0]
+        if not LOGIN_RE.match(login):
+            raise HttpError(400, "ログイン名は英数字と _ - だけ、%d文字までです" % MAX_LOGIN_LEN)
+        if utf8_len(display) > MAX_NAME_BYTES:
+            raise HttpError(400, "表示名が長すぎます(%dバイトまで)" % MAX_NAME_BYTES)
+        if len(password) < MIN_PASSWORD_LEN:
+            raise HttpError(400, "パスワードは%d文字以上にしてください" % MIN_PASSWORD_LEN)
+        try:
+            self.store.add_user(login, display, password)
+        except sqlite3.IntegrityError:
+            raise HttpError(409, "%s は既にいます" % login)
+        log("%s がユーザー %s を作りました" % (user["login"], login))
+        self.send_body(201, tsv_line(login, display))
+
+    def api_admin_user_action(self, login, action):
+        user = self.admin_user(for_write=True)
+        body = self.read_text_body()
+        target = self.admin_target(login)
+        if action == "password":
+            if len(body) < MIN_PASSWORD_LEN:
+                raise HttpError(400, "パスワードは%d文字以上にしてください" % MIN_PASSWORD_LEN)
+            # 使えなくしていた人も、パスワードを決め直せばWebでログインできるようになる
+            # (pico-os のトークンは本人が Web から発行し直す)
+            self.store.set_password(target["id"], body)
+            log("%s が %s のパスワードを決め直しました" % (user["login"], login))
+        elif action == "disable":
+            if target["id"] == user["id"]:
+                raise HttpError(400, "自分は使えなくできません")
+            self.store.disable_user(target["id"])
+            log("%s が %s を使えなくしました" % (user["login"], login))
+        elif action == "admin":
+            on = body.strip() == "1"
+            if target["id"] == user["id"] and not on:
+                # 最後の管理者がいなくなるのを防ぐ(外すなら別の管理者から)
+                raise HttpError(400, "自分の管理者は外せません(別の管理者に外してもらってください)")
+            self.store.set_admin(target["id"], on)
+            log("%s が %s を%s" % (user["login"], login, "サーバ管理者にしました" if on else "サーバ管理者から外しました"))
+        self.send_body(200, "ok\n")
+
+    def api_admin_rooms(self):
+        self.admin_user()
+        out = [tsv_line(r["id"], clean_name(r["name"]), r["kind"], r["n"], r["owner"] or "-")
+               for r in self.store.all_rooms()]
+        self.send_body(200, "".join(out))
+
+    def api_admin_settings(self, method):
+        user = self.admin_user(for_write=(method == "POST"))
+        if method == "POST":
+            key, _, value = self.read_text_body().strip().partition("\t")
+            if key not in SERVER_SETTINGS:
+                raise HttpError(400, "そのような設定はありません")
+            if value not in SERVER_SETTINGS[key]:
+                raise HttpError(400, "%s は %s のどれかです" % (key, " / ".join(SERVER_SETTINGS[key])))
+            self.store.set_setting(key, value)
+            log("%s が設定 %s を %s にしました" % (user["login"], key, value))
+        out = [tsv_line(k, self.store.setting(k)) for k in SERVER_SETTINGS]
+        self.send_body(200, "".join(out))
 
     def api_delete_room(self, room_id):
         user = self.current_user(for_write=True)
@@ -1254,6 +1455,8 @@ def cmd_serve(args, store):
             tls = ReloadingTlsContext(args.tls_cert, args.tls_key)
             ChatHandler.secure_cookie = True
 
+        if store.admin_count() == 0:
+            log("サーバ管理者がいません。「admin <名前>」で決めると Web から管理できます")
         main = make_server(args.host, port, ChatHandler, tls)
         threading.Thread(target=main.serve_forever, daemon=True).start()
         log("チャットサーバを起動しました (%s://%s:%d, DB=%s)" % ("https" if tls else "http", args.host, port, args.db))
@@ -1267,8 +1470,8 @@ def cmd_serve(args, store):
 def ask_password():
     while True:
         p1 = getpass.getpass("パスワード(Webでのログイン用): ")
-        if len(p1) < 8:
-            print("8文字以上にしてください")
+        if len(p1) < MIN_PASSWORD_LEN:
+            print("%d文字以上にしてください" % MIN_PASSWORD_LEN)
             continue
         p2 = getpass.getpass("もう一度: ")
         if p1 != p2:
@@ -1286,11 +1489,10 @@ def cmd_adduser(args, store):
     if store.user_by_login(args.login):
         sys.exit("%s は既にいます" % args.login)
     password = args.password if args.password is not None else ask_password()
-    salt, digest = hash_password(password)
-    token = new_token()
-    store.write("INSERT INTO users(login,display,pw_salt,pw_hash,token_hash) VALUES(?,?,?,?,?)",
-                (args.login, display, salt, digest, token_hash(token)))
-    print("作成しました: %s (%s)" % (args.login, display))
+    # 最初のユーザーはサーバ管理者にする(誰も管理者がいないと Web から管理できないため)
+    admin = args.admin or store.db().execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+    token = store.add_user(args.login, display, password, admin)
+    print("作成しました: %s (%s)%s" % (args.login, display, " [サーバ管理者]" if admin else ""))
     print("pico-os用のトークン(このときしか表示しません。Webからいつでも発行し直せます):")
     print("  " + token)
 
@@ -1300,9 +1502,7 @@ def cmd_passwd(args, store):
     if not user:
         sys.exit("%s はいません" % args.login)
     password = args.password if args.password is not None else ask_password()
-    salt, digest = hash_password(password)
-    store.write("UPDATE users SET pw_salt=?, pw_hash=? WHERE id=?", (salt, digest, user["id"]))
-    store.write("DELETE FROM sessions WHERE user_id=?", (user["id"],))
+    store.set_password(user["id"], password)
     print("パスワードを変更しました(ログイン中のWebは全てログアウトされます)")
 
 
@@ -1317,16 +1517,36 @@ def cmd_deluser(args, store):
     user = store.user_by_login(args.login)
     if not user:
         sys.exit("%s はいません" % args.login)
-    # 発言は残す(会話の流れが壊れるので)。ログインとトークンだけ使えなくする
-    store.write("UPDATE users SET pw_salt=NULL, pw_hash=NULL, token_hash=NULL WHERE id=?", (user["id"],))
-    store.write("DELETE FROM sessions WHERE user_id=?", (user["id"],))
+    store.disable_user(user["id"])
     print("%s を使えなくしました(過去の発言は残ります)" % args.login)
 
 
 def cmd_users(args, store):
-    for u in store.db().execute("SELECT * FROM users ORDER BY id"):
+    for u in store.users():
         state = "" if u["token_hash"] or u["pw_hash"] else " (無効)"
-        print("%s\t%s%s" % (u["login"], u["display"], state))
+        admin = " [サーバ管理者]" if u["is_admin"] else ""
+        print("%s\t%s%s%s" % (u["login"], u["display"], admin, state))
+
+
+def cmd_admin(args, store):
+    user = store.user_by_login(args.login)
+    if not user:
+        sys.exit("%s はいません" % args.login)
+    store.set_admin(user["id"], not args.off)
+    print("%s を%s" % (args.login, "サーバ管理者から外しました" if args.off else "サーバ管理者にしました"))
+
+
+def cmd_setting(args, store):
+    if args.key is None:
+        for k in SERVER_SETTINGS:
+            print("%s\t%s\t(%s)" % (k, store.setting(k), " / ".join(SERVER_SETTINGS[k])))
+        return
+    if args.key not in SERVER_SETTINGS:
+        sys.exit("設定は %s のどれかです" % " / ".join(SERVER_SETTINGS))
+    if args.value not in SERVER_SETTINGS[args.key]:
+        sys.exit("%s は %s のどれかです" % (args.key, " / ".join(SERVER_SETTINGS[args.key])))
+    store.set_setting(args.key, args.value)
+    print("%s = %s" % (args.key, args.value))
 
 
 def find_room(store, spec):
@@ -1422,6 +1642,7 @@ def main():
     a.add_argument("login")
     a.add_argument("--display", help="発言に出る名前(既定: ログイン名)")
     a.add_argument("--password", help="省略すると対話で聞く")
+    a.add_argument("--admin", action="store_true", help="サーバ管理者にする(最初のユーザーは指定しなくても管理者)")
 
     a = sub.add_parser("passwd", help="パスワードを変える")
     a.add_argument("login")
@@ -1434,6 +1655,14 @@ def main():
     a.add_argument("login")
 
     sub.add_parser("users", help="ユーザーの一覧")
+
+    a = sub.add_parser("admin", help="サーバ管理者にする(--off で外す)")
+    a.add_argument("login")
+    a.add_argument("--off", action="store_true")
+
+    a = sub.add_parser("setting", help="サーバ全体の設定を見る/変える(例: setting room_create admin)")
+    a.add_argument("key", nargs="?")
+    a.add_argument("value", nargs="?")
 
     a = sub.add_parser("addroom", help="部屋を作る(既定はオープンチャット)")
     a.add_argument("name")
@@ -1462,6 +1691,7 @@ def main():
         "serve": cmd_serve, "adduser": cmd_adduser, "passwd": cmd_passwd, "token": cmd_token,
         "deluser": cmd_deluser, "users": cmd_users, "addroom": cmd_addroom, "rooms": cmd_rooms,
         "members": cmd_members, "setrole": cmd_setrole, "delroom": cmd_delroom,
+        "admin": cmd_admin, "setting": cmd_setting,
     }[args.cmd](args, store)
 
 

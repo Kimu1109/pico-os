@@ -76,6 +76,10 @@
   dialog .list li .grow { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   dialog .list li button { padding: 3px 9px; font-size: 13px; }
   dialog .list li .sub { color: var(--muted); font-size: 12px; }
+  #adminUsers, #adminRooms { max-height: 30vh; }
+  #adminAddUser { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+  #adminAddUser input[type=password] { grid-column: 1 / -1; }
+  #adminAddUser button { grid-column: 1 / -1; justify-self: end; }
   dialog .hint { color: var(--muted); font-size: 13px; }
   .code { font: 600 28px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 2px; text-align: center; margin: 10px 0; }
   .role { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); }
@@ -115,6 +119,7 @@
       <button class="plain" id="joinCode">参加コードで入る</button>
       <button class="plain" id="newRoom">部屋を作る</button>
       <button class="plain" id="picoToken">pico-os の設定</button>
+      <button class="plain hidden" id="adminBtn">サーバ管理</button>
     </footer>
   </aside>
   <main id="main">
@@ -191,13 +196,35 @@
 </dialog>
 
 <dialog id="membersDialog">
-  <h2>メンバー</h2>
+  <h2 id="membersTitle">メンバー</h2>
   <ul class="list" id="memberList"></ul>
   <div class="error" id="membersError"></div>
   <div class="buttons">
     <button type="button" class="plain hidden" id="deleteRoom">部屋を消す</button>
     <button type="button" class="plain" data-close>閉じる</button>
   </div>
+</dialog>
+
+<dialog id="adminDialog">
+  <h2>サーバ管理</h2>
+  <div class="error" id="adminError"></div>
+  <div class="hint" id="adminStatus"></div>
+  <div class="section">ユーザー</div>
+  <ul class="list" id="adminUsers"></ul>
+  <form id="adminAddUser">
+    <input type="text" id="newLogin" placeholder="ログイン名(英数字)" required pattern="[A-Za-z0-9_\-]{1,32}">
+    <input type="text" id="newDisplay" placeholder="表示名">
+    <input type="password" id="newPassword" placeholder="パスワード(8文字以上)" required minlength="8" autocomplete="new-password">
+    <button type="submit">ユーザーを作る</button>
+  </form>
+  <div class="section">部屋(プライベートチャットも含む全部。「管理」でメンバーの管理・オーナーの指定・削除)</div>
+  <ul class="list" id="adminRooms"></ul>
+  <div class="section">設定</div>
+  <div class="row">部屋を作れるのは
+    <select id="roomCreate"><option value="all">全員</option><option value="admin">サーバ管理者だけ</option></select>
+  </div>
+  <div class="hint">サーバ管理者は参加していない部屋でもメンバーの管理・削除ができますが、プライベートチャットの発言は参加しない限り読めません。</div>
+  <div class="buttons"><button type="button" class="plain" data-close>閉じる</button></div>
 </dialog>
 
 <script>
@@ -248,6 +275,10 @@ async function start() {
     const me = lines(await text(await api("GET", "/api/v1/me")))[0];
     $("me").textContent = me[1] + " (" + me[0] + ")";
     $("me").dataset.login = me[0];
+    // 3列目: サーバでの立場、4列目: 部屋を作れるか(v2 以前のサーバには無い)
+    isServerAdmin = me[2] === "admin";
+    $("adminBtn").classList.toggle("hidden", !isServerAdmin);
+    $("newRoom").classList.toggle("hidden", me[3] === "0");
     $("login").classList.add("hidden");
     $("app").classList.remove("hidden");
     await loadRooms();
@@ -284,7 +315,10 @@ $("logout").addEventListener("click", async () => {
 
 // ---- 部屋 ----
 const ROLE_LABEL = { owner: "オーナー", admin: "管理者", member: "参加者", banned: "追放中" };
-const ROLE_RANK = { member: 1, admin: 2, owner: 3 };
+const ROLE_RANK = { member: 1, admin: 2, owner: 3, server: 4 };
+let isServerAdmin = false;
+// サーバ管理者は管理の操作だけ、どの部屋でもオーナーより強い立場でできる(サーバと同じ考え方)
+function effectiveRole(role) { return isServerAdmin ? "server" : role; }
 
 async function loadRooms() {
   try {
@@ -472,7 +506,7 @@ $("inviteBtn").addEventListener("click", () => {
   $("inviteCopy").classList.add("hidden");
   $("inviteError").textContent = "";
   $("inviteOnce").checked = false;
-  $("inviteRevoke").classList.toggle("hidden", !r || ROLE_RANK[r.role] < ROLE_RANK.admin);
+  $("inviteRevoke").classList.toggle("hidden", !r || ROLE_RANK[effectiveRole(r.role)] < ROLE_RANK.admin);
   $("inviteDialog").showModal();
 });
 $("inviteDialog").addEventListener("close", () => clearInterval(inviteTimer));
@@ -501,12 +535,24 @@ $("inviteRevoke").addEventListener("click", async () => {
 });
 
 // ---- メンバー(役割の変更・追い出し) ----
+// 開いている部屋のほか、サーバ管理の「部屋」からも開く(参加していない部屋でも管理できる)
+let membersRoom = null;   // {id, name, role}。role は自分の役割(参加していなければ null)
+
+function openMembers(room) {
+  membersRoom = room;
+  $("membersTitle").textContent = "メンバー: " + room.name;
+  $("membersDialog").showModal();
+  loadMembers();
+}
+
 async function loadMembers() {
-  const r = currentRoom();
+  const r = membersRoom;
   if (!r) return;
-  const myRank = ROLE_RANK[r.role] || 0;
+  const myRole = effectiveRole(r.role);
+  const myRank = ROLE_RANK[myRole] || 0;
+  const ownerPower = myRank >= ROLE_RANK.owner;
   $("membersError").textContent = "";
-  $("deleteRoom").classList.toggle("hidden", r.role !== "owner");
+  $("deleteRoom").classList.toggle("hidden", !ownerPower);
   const ul = $("memberList");
   ul.textContent = "";
   let rows;
@@ -521,7 +567,11 @@ async function loadMembers() {
     try {
       await text(await api("POST", `/api/v1/rooms/${r.id}/${path}`, body));
       await loadRooms();
-      if (current === r.id) loadMembers(); else $("membersDialog").close();
+      const mine = rooms.find((x) => x.id === r.id);
+      r.role = mine ? mine.role : null;
+      loadMembers();
+      if (!$("adminDialog").open) return;
+      loadAdminRooms();
     } catch (e) {
       $("membersError").textContent = label + ": " + e.message;
     }
@@ -551,35 +601,169 @@ async function loadMembers() {
     if (role === "banned") {
       if (myRank >= ROLE_RANK.admin) button("追放を解く", () => act("追放を解く", "unban", login));
     } else if (!me) {
-      if (r.role === "owner") {
+      if (ownerPower) {
         if (role === "member") button("管理者にする", () => act("管理者にする", "role", login + "\tadmin"));
         if (role === "admin") button("管理者を外す", () => act("管理者を外す", "role", login + "\tmember"));
-        button("オーナーを譲る", () => act("オーナーを譲る", "role", login + "\towner",
-          display + " さんにオーナーを譲ります。あなたは管理者になります。よろしいですか?"));
+        if (role !== "owner") {
+          const msg = myRole === "owner"
+            ? display + " さんにオーナーを譲ります。あなたは管理者になります。よろしいですか?"
+            : display + " さんをオーナーにします(今のオーナーは管理者になります)。よろしいですか?";
+          button(myRole === "owner" ? "オーナーを譲る" : "オーナーにする", () => act("オーナーにする", "role", login + "\towner", msg));
+        }
       }
       if (myRank >= ROLE_RANK.admin && ROLE_RANK[role] < myRank) {
         button("追い出す", () => act("追い出す", "kick", login, display + " さんを追い出します(また参加できます)。よろしいですか?"));
         button("追放", () => act("追放", "kick?ban=1", login, display + " さんを追放します(解くまで戻れません)。よろしいですか?"));
       }
+    } else if (myRole === "server" && role !== "owner") {
+      // オーナーのいない部屋(前の版から移行した部屋など)を管理者が引き取る
+      button("自分をオーナーにする", () => act("オーナーにする", "role", login + "\towner"));
     }
     ul.appendChild(li);
   }
 }
 $("membersBtn").addEventListener("click", () => {
-  $("membersDialog").showModal();
-  loadMembers();
+  const r = currentRoom();
+  if (r) openMembers({ id: r.id, name: r.name, role: r.role });
 });
 $("deleteRoom").addEventListener("click", async () => {
-  const r = currentRoom();
+  const r = membersRoom;
   if (!r || !confirm("「" + r.name + "」を発言ごと消します。元に戻せません。よろしいですか?")) return;
   try {
     await text(await api("POST", `/api/v1/rooms/${r.id}/delete`, ""));
     $("membersDialog").close();
-    leaveView();
+    if (current === r.id) leaveView();
     loadRooms();
+    if ($("adminDialog").open) loadAdminRooms();
   } catch (e) {
     $("membersError").textContent = e.message;
   }
+});
+
+// ---- サーバ管理(サーバ管理者だけ) ----
+function adminButton(li, label, fn, plain = true) {
+  const b = document.createElement("button");
+  if (plain) b.className = "plain";
+  b.textContent = label;
+  b.addEventListener("click", fn);
+  li.appendChild(b);
+}
+function adminRow(main, subText) {
+  const li = document.createElement("li");
+  const name = document.createElement("span");
+  name.className = "grow";
+  name.textContent = main + " ";
+  const sub = document.createElement("span");
+  sub.className = "sub";
+  sub.textContent = subText;
+  name.appendChild(sub);
+  li.appendChild(name);
+  return li;
+}
+async function adminAct(path, body, confirmText) {
+  if (confirmText && !confirm(confirmText)) return false;
+  $("adminError").textContent = "";
+  $("adminStatus").textContent = "";
+  try {
+    await text(await api("POST", path, body));
+    return true;
+  } catch (e) {
+    $("adminError").textContent = e.message;
+    return false;
+  }
+}
+
+async function loadAdminUsers() {
+  const ul = $("adminUsers");
+  ul.textContent = "";
+  let rows;
+  try {
+    rows = lines(await text(await api("GET", "/api/v1/admin/users")));
+  } catch (e) {
+    $("adminError").textContent = e.message;
+    return;
+  }
+  for (const [login, display, admin, active] of rows) {
+    const li = adminRow(display, "@" + login + (admin === "1" ? " / サーバ管理者" : "") + (active === "1" ? "" : " / 無効"));
+    const me = $("me").dataset.login === login;
+    const base = `/api/v1/admin/users/${encodeURIComponent(login)}`;
+    adminButton(li, "パスワードを決め直す", async () => {
+      const pw = prompt(display + " さんの新しいパスワード(8文字以上)");
+      if (pw && await adminAct(base + "/password", pw)) {
+        $("adminStatus").textContent = display + " さんのパスワードを変えました(ログイン中の画面はログアウトされます)";
+        loadAdminUsers();
+      }
+    });
+    if (!me) {
+      if (admin === "1") adminButton(li, "管理者を外す", async () => { if (await adminAct(base + "/admin", "0")) loadAdminUsers(); });
+      else adminButton(li, "管理者にする", async () => {
+        if (await adminAct(base + "/admin", "1", display + " さんをサーバ管理者にします。よろしいですか?")) loadAdminUsers();
+      });
+      if (active === "1") adminButton(li, "使えなくする", async () => {
+        if (await adminAct(base + "/disable", "", display + " さんのログインと pico-os のトークンを使えなくします(発言は残ります)。よろしいですか?")) loadAdminUsers();
+      });
+    }
+    ul.appendChild(li);
+  }
+}
+
+const KIND_LABEL = { open: "オープン", private: "プライベート" };
+async function loadAdminRooms() {
+  const ul = $("adminRooms");
+  ul.textContent = "";
+  let rows;
+  try {
+    rows = lines(await text(await api("GET", "/api/v1/admin/rooms")));
+  } catch (e) {
+    $("adminError").textContent = e.message;
+    return;
+  }
+  for (const [id, name, kind, n, owner] of rows) {
+    const li = adminRow((kind === "open" ? "# " : "🔒 ") + name,
+                        KIND_LABEL[kind] + " / " + n + "人 / オーナー: " + (owner === "-" ? "なし" : "@" + owner));
+    adminButton(li, "管理", () => {
+      const mine = rooms.find((x) => x.id === Number(id));
+      openMembers({ id: Number(id), name, role: mine ? mine.role : null });
+    });
+    ul.appendChild(li);
+  }
+}
+
+async function loadAdminSettings() {
+  try {
+    for (const [key, value] of lines(await text(await api("GET", "/api/v1/admin/settings")))) {
+      if (key === "room_create") $("roomCreate").value = value;
+    }
+  } catch (e) {
+    $("adminError").textContent = e.message;
+  }
+}
+
+$("adminBtn").addEventListener("click", () => {
+  $("adminError").textContent = "";
+  $("adminStatus").textContent = "";
+  $("adminDialog").showModal();
+  loadAdminUsers();
+  loadAdminRooms();
+  loadAdminSettings();
+});
+$("adminAddUser").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const body = new URLSearchParams({
+    login: $("newLogin").value, display: $("newDisplay").value, password: $("newPassword").value,
+  });
+  if (await adminAct("/api/v1/admin/users", body)) {
+    $("adminStatus").textContent = $("newLogin").value + " を作りました。ログイン名とパスワードを本人に伝えてください";
+    $("adminAddUser").reset();
+    loadAdminUsers();
+  }
+});
+$("roomCreate").addEventListener("change", async () => {
+  if (await adminAct("/api/v1/admin/settings", "room_create\t" + $("roomCreate").value)) {
+    // 自分の「部屋を作る」ボタンの出し分けも取り直す(管理者は常に作れる)
+    $("adminStatus").textContent = "設定を変えました";
+  }
+  loadAdminSettings();
 });
 
 $("leaveBtn").addEventListener("click", async () => {

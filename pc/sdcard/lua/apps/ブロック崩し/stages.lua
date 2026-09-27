@@ -162,10 +162,27 @@ local function stage(rows, shapeFn, tierFn, wallFn)
     return { rows = rows, cell = function(r, c) return grid[r][c] end }
 end
 
+-- アイテムの図形3つを作る(ステージとは無関係だが、main.luaを16KiBに収めるためここに置く)。
+-- 添字はmain.luaのITEM_TRIBALL(1)/ITEM_DOUBLE(2)/ITEM_SLOW(3)と揃えること
+local function itemShapes(size)
+    local r = pico.create("Rect")
+    pico.set(r, "w", size); pico.set(r, "h", size); pico.set(r, "color", 14)
+    local e = pico.create("Ellipse")
+    pico.set(e, "w", size); pico.set(e, "h", size); pico.set(e, "color", 11)
+    local t = pico.create("Triangle")
+    pico.set(t, "x1", 0); pico.set(t, "y1", size)
+    pico.set(t, "x2", size / 2); pico.set(t, "y2", 0)
+    pico.set(t, "x3", size); pico.set(t, "y3", size)
+    pico.set(t, "color", 9)
+    for _, id in ipairs({ r, e, t }) do pico.set(id, "visible", false) end
+    return { r, e, t }
+end
+
 -- 序盤(1〜5)は壁なし・上段が速いだけのチュートリアル。6以降は
 -- 柱/門/斜め帯の壁を幾何学的に配置しつつ、tierBottom(下段が速い)の
 -- 採用比率を上げていくことで、壁の物量に頼らず難易度を積み増す。
 return {
+    itemShapes = itemShapes,
     cols = COLS,
     list = {
         stage(3, shapeFull, tierTop),

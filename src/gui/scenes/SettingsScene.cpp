@@ -4,6 +4,8 @@
 #include "functions/Config_Functions.hpp"
 #include "functions/Network_Functions.hpp"
 #include "functions/Time_Functions.hpp"
+#include "functions/Sound_Functions.hpp"
+#include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 
@@ -215,7 +217,7 @@ void SettingsScene::onEnter(){
 
     // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、
     // 読み込みより前に生成しておく(見た目の並び順は後段のNTP/ホームより下で変わらない)
-    this->run_test_checkbox = new Checkbox(content.x + MARGIN, rowY(6), "起動時に自己診断を実行");
+    this->run_test_checkbox = new Checkbox(content.x + MARGIN, rowY(7), "起動時に自己診断を実行");
     this->run_test_checkbox->setFontSize(FontFn::Small);
     this->run_test_checkbox->setOnChangeChecked([this](){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, "run-test",
@@ -299,10 +301,27 @@ void SettingsScene::onEnter(){
     WidgetFunctions::Add(this->home_label);
     this->refreshHomeLabel();
 
+    // ---- 音量(sound.cfgの volume) ----
+    // 現在値はSoundFunctionsが起動時にsound.cfgから読んだもの(=今鳴っている音量)を出す
+    this->volume_title = new Label<PICO_STR_S>(content.x + MARGIN, (int16_t)(rowY(6) + 2), "音量");
+    this->volume_title->setFontSize(FontFn::Small);
+    WidgetFunctions::Add(this->volume_title);
+
+    constexpr int16_t kVolumeTitleW = 40;
+    const int16_t slider_x = (int16_t)(content.x + MARGIN + kVolumeTitleW);
+    this->volume_slider = new NumberSlider(slider_x, rowY(6), (int16_t)(content.x + content.w - MARGIN - slider_x));
+    this->volume_slider->setMinValue(0);
+    this->volume_slider->setMaxValue(100);
+    this->volume_slider->setDecimalPlacesNum(0);
+    this->volume_applied = SoundFunctions::GetVolume();
+    this->volume_dirty   = false;
+    this->volume_slider->setValue((float)this->volume_applied);
+    WidgetFunctions::Add(this->volume_slider);
+
     // ---- 起動時セルフチェック(本体はloadValues()より前で生成済み) ----
     WidgetFunctions::Add(this->run_test_checkbox);
 
-    this->run_test_note = new Label<PICO_STR_M>(content.x + MARGIN, (int16_t)(rowY(6) + this->run_test_checkbox->getH() + 2), "次回の起動から反映されます");
+    this->run_test_note = new Label<PICO_STR_M>(content.x + MARGIN, (int16_t)(rowY(7) + this->run_test_checkbox->getH() + 2), "次回の起動から反映されます");
     this->run_test_note->setFontSize(FontFn::Small);
     this->run_test_note->setTextColor(PICO_DARKGREY);
     WidgetFunctions::Add(this->run_test_note);
@@ -326,7 +345,29 @@ void SettingsScene::onEnter(){
     WidgetFunctions::Add(this->timezone_dropdown);
 }
 
+void SettingsScene::updateVolume(){
+    if(!this->volume_slider) return;
+
+    const int v = (int)(this->volume_slider->getValue() + 0.5f);
+    if(v != this->volume_applied){
+        this->volume_applied = v;
+        SoundFunctions::SetVolume(v);
+        this->volume_dirty = true;
+    }
+
+    // 指を離したら(スライダーの外で離した場合も含む)保存して、その音量で確認音を1回鳴らす
+    if(this->volume_dirty && !OSData::isTouched){
+        this->volume_dirty = false;
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%d", this->volume_applied);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "volume", buf);
+        SoundFunctions::Beep(880, 120);
+    }
+}
+
 void SettingsScene::onUpdate(){
+    this->updateVolume();
+
     if(!this->timezone_dropdown) return;
 
     const int idx = this->timezone_dropdown->getSelectedIndex();
@@ -340,6 +381,14 @@ void SettingsScene::onUpdate(){
 }
 
 void SettingsScene::onExit(){
+    // 離す前に画面を抜けた(Popされた)場合も、変えた音量は保存しておく
+    if(this->volume_dirty){
+        this->volume_dirty = false;
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%d", this->volume_applied);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "volume", buf);
+    }
+
     this->back_button = nullptr;
 
     this->ssid_label           = nullptr;
@@ -354,6 +403,8 @@ void SettingsScene::onExit(){
     this->ntp2_edit_button     = nullptr;
     this->home_label           = nullptr;
     this->home_edit_button     = nullptr;
+    this->volume_title         = nullptr;
+    this->volume_slider        = nullptr;
     this->run_test_checkbox    = nullptr;
     this->run_test_note        = nullptr;
 

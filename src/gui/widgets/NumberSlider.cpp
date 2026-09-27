@@ -77,11 +77,11 @@ void NumberSlider::render(){
     //横線
     OSData::frame->fillRect(
         g_rect.x + numW, g_rect.y + 10,
-        g_rect.w, 2, this->color
+        g_rect.w - numW, 2, this->color
     );
     
     //現在値
-    int slide = ((float)this->value / (float)(this->maxValue - this->minValue)) * (g_rect.w - numW);
+    int slide = ((float)(this->value - this->minValue) / (float)(this->maxValue - this->minValue)) * (g_rect.w - numW);
     OSData::frame->fillRect(
         g_rect.x - 2 + slide + numW, g_rect.y,
         2 * 2 + 1, 21,

@@ -21,8 +21,12 @@ namespace DisplayFunctions {
     constexpr uint8_t kMinBrightness = 10;
     constexpr uint8_t kDefaultBrightness = 100;
 
-    // 自動調光で落とす先の明るさ(絶対値)。通常の明るさがこれより低ければそちらを使う
-    constexpr uint8_t kDimBrightness = 15;
+    // 自動調光で落とす先の明るさ(絶対値)。通常の明るさがこれより低ければそちらを使う。
+    // パレットのRGB値を直接減らす方式(GFX_Functions::SetBrightness()参照)なので、
+    // 人の目の感度(非線形)に対しては値の見た目以上に暗く感じる。当初15にしていたが、
+    // 「ぱっと見真っ黒にしか見えない」との指摘を受け、暗いままでも文字や絵が判別できる
+    // 値まで上げた(2026-09-27)
+    constexpr uint8_t kDimBrightness = 40;
     // この時間操作が無ければ暗くする
     constexpr unsigned long kIdleTimeoutMs = 30000;
 

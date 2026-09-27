@@ -177,7 +177,9 @@ SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、
   指を離したときに1回だけ`SetValue()`で書く)で編集できる。**画面が真っ黒になり操作不能になるのを
   防ぐため、`kMinBrightness=10`未満には設定できない**(スライダーの最小値もここに合わせてある)。
 - **自動調光**: `OSData::isTouched`と`PadFunctions::IsDown(kAllButtons)`のどちらも
-  `kIdleTimeoutMs`(既定30秒)の間ずっと無ければ`kDimBrightness`(既定15)まで即座に暗くする
+  `kIdleTimeoutMs`(既定30秒)の間ずっと無ければ`kDimBrightness`(既定40。パレットのRGB値を
+  直接減らす方式は人の目の感度に対して値の見た目以上に暗く感じるため、当初の15から
+  「真っ黒にしか見えない」との指摘を受けて上げた)まで即座に暗くする
   (フェードはしない。`ClocksScene`と同じ`millis()`差分の考え方)。触れる/ボタンを押すと
   即座に通常の明るさへ戻る。設定側の`SettingsScene`の自動調光チェックボックスは
   `Checkbox`の既存の当たり判定の都合上(`causeOnPressStart()`がアイコン部分の24px幅しか

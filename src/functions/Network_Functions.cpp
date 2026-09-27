@@ -3,6 +3,7 @@
 #include "functions/Config_Functions.hpp"
 #include "task/NetworkScan.hpp"
 #include "storage/SD_Path.hpp"
+#include "util/Secret_Cipher.hpp"
 
 IconID NetworkFunctions::GetWifiStateIconID(){
     //圏外でも最弱の棒を返す。バツ印は呼び出し側が重ねる
@@ -21,9 +22,15 @@ void NetworkFunctions::Setup(){
     bool is_ok = PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "wifi-ssid") == 0){
-                ssid.assign(value);
+                char buf[PICO_STR_M];
+                if(PICO_Secret::Decrypt("wifi-ssid", value, buf, sizeof(buf))){
+                    ssid.assign(buf);
+                }
             }else if(strcmp(key, "wifi-password") == 0){
-                password.assign(value);
+                char buf[PICO_STR_L];
+                if(PICO_Secret::Decrypt("wifi-password", value, buf, sizeof(buf))){
+                    password.assign(buf);
+                }
             }else if(strcmp(key, "ntp-server-1") == 0){
                 ntpServer1.assign(value);
             }else if(strcmp(key, "ntp-server-2") == 0){

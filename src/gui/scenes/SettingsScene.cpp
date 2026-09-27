@@ -9,6 +9,7 @@
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
+#include "util/Secret_Cipher.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -55,7 +56,10 @@ void SettingsScene::loadValues(){
     PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "wifi-ssid") == 0){
-                this->ssid_value.assign(value);
+                char buf[PICO_STR_M];
+                if(PICO_Secret::Decrypt("wifi-ssid", value, buf, sizeof(buf))){
+                    this->ssid_value.assign(buf);
+                }
             }else if(strcmp(key, "wifi-password") == 0){
                 this->has_password = (value[0] != '\0');
             }else if(strcmp(key, "ntp-server-1") == 0){
@@ -154,7 +158,12 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
     switch(field){
         case EditField::Ssid: {
             if(input.empty()) break; // 空欄なら変更しない(SSIDは消せない)
-            PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-ssid", input.c_str());
+            char enc[PICO_STR_LL];
+            if(PICO_Secret::Encrypt("wifi-ssid", input.c_str(), enc, sizeof(enc))){
+                PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-ssid", enc);
+            }else{
+                LOG_SYS_WARN("Settings: SSIDの暗号化に失敗しました(長すぎます)。保存されていません。");
+            }
             this->ssid_value.assign(input.c_str());
             this->refreshSsidLabel();
             // 既知のパスワード(NetworkFunctionsが再接続用に保持している)があれば、
@@ -166,7 +175,12 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
         }
         case EditField::Password: {
             if(input.empty()) break; // 空欄なら変更しない(既存のパスワードを保つ)
-            PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-password", input.c_str());
+            char enc[PICO_STR_LL];
+            if(PICO_Secret::Encrypt("wifi-password", input.c_str(), enc, sizeof(enc))){
+                PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-password", enc);
+            }else{
+                LOG_SYS_WARN("Settings: パスワードの暗号化に失敗しました(長すぎます)。保存されていません。");
+            }
             this->has_password = true;
             this->refreshPasswordLabel();
             if(!this->ssid_value.empty()){

@@ -10,6 +10,9 @@
 #   label_test … Labelのテキストレイアウト結果(幅/高さ/文字数/カーソル座標)の固定
 #   markdown_test … MarkdownViewのブロック高さとLabelの実高さの整合(重なり検出)
 #   config_test   … 設定ファイル(key=value)の読み書き
+#   secret_cipher_test… Wi-Fi SSID/パスワードの暗号化保存(util/Secret_Cipher.hpp)。
+#                   往復・用途(purpose)ごとに鍵ストリームが変わること・enc1:接頭辞の
+#                   無い値は平文として読める後方互換・壊れたデータへの安全な失敗
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
 #   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)とマニフェストの引き当て
@@ -203,6 +206,15 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== config_test ====="
 run_or_die "$OUT/config_test"
+
+# --- Wi-Fi SSID/パスワードの暗号化保存 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/secret_cipher_test.cpp" \
+    -o "$OUT/secret_cipher_test"
+
+echo ""
+echo "===== secret_cipher_test ====="
+run_or_die "$OUT/secret_cipher_test"
 
 # --- アプリ登録簿とランチャ ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

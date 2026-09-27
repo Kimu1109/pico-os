@@ -122,7 +122,8 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 
 | モジュール | 役割 |
 |---|---|
-| GFX_Functions | LovyanGFX初期化、ダーティリージョン管理(`dirtyRects`)、`FlushDirty()`で差分描画 |
+| GFX_Functions | LovyanGFX初期化、ダーティリージョン管理(`dirtyRects`)、`FlushDirty()`で差分描画。`SetBrightness()`(下記「画面の明るさ調整と自動調光」参照)も持つ |
+| Display_Functions | 画面の明るさ(0〜100)の管理と、無操作が続いたときの自動調光。下記「画面の明るさ調整と自動調光」参照 |
 | Widget_Functions | ウィジェット/ダイアログの登録・削除・毎フレーム更新・当たり判定の中枢 |
 | Touch_Functions | XPT2046からのタッチ座標取得 |
 | Task_Functions | `Task`のリスト管理・毎フレームupdate |
@@ -145,14 +146,49 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
 
 ### 起動・ループ (`main.cpp`)
-`setup()`: GFX→SD→Log→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
+`setup()`: GFX→SD→Log→Display→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
-`loop()`: Touch更新 → Pad更新(外部コントローラー) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound更新、という単純なポーリングループ。
+`loop()`: Touch更新 → Pad更新(外部コントローラー) → Display更新(自動調光の判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound更新、という単純なポーリングループ。
 
 **2コア目(`setup1()`/`loop1()`)は音声専用**(`SoundFunctions::LoopCore1()`だけを回す)。1コア目とは`std::atomic`とロック無しのコマンドの列だけでやり取りする。
 **2コア目からログを出したり、ウィジェット/SD/`OSData`に触ったりしないこと**(どれもロックを持たない1コア目専用の作り)。
 
 `main.cpp`が直接newするのは**常駐ウィジェット(Statusbar)と最初のシーンだけ**で、画面ごとのウィジェットは各`Scene`の`onEnter()`が生成する。
+
+### 画面の明るさ調整と自動調光 (`src/functions/Display_Functions`) (2026-09-27)
+
+SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、この節にだけ残す)。
+
+- **明るさの実体はバックライトのPWM制御ではなく、`frame`(4bppパレットスプライト)のパレット16色を
+  `PICO_GFX::COLORS[]`基準で暗くする「ソフト輝度」**(`PICO_GFX::SetBrightness(percent)`)。
+  `TFT_LED`(GP22)は`GFX_Functions::Setup()`で相変わらず`digitalWrite(HIGH)`固定のままで触っていない。
+  **理由は主にテスト容易性**: パレット走査はPC/Webビルドでもそのまま効くので`--shot`で見た目を確認できるが、
+  実機のバックライトPWM(`lgfx::Light_PWM`を`LGFX_Config.hpp`へ足す方式)はこのリモート環境に
+  RP2350の実機ビルド手段が無く検証できない。**実機での省電力効果(バックライト自体を暗くする)は
+  無い**(パレットが暗くなるだけで消費電力は変わらない)。実機のバックライトPWM化は将来の拡張候補として残す。
+  `CanvasRaster`等の自前スプライト+自前パレットを持つウィジェット(ペイント/スクラッチパッド等)は
+  この経路の対象外(通常の画面・ダイアログ・ステータスバーは`frame`のパレットを直接使うため、
+  それらは正しく暗くなる)。
+- **`DisplayFunctions`が「今どの明るさを見せるか」の方針を持ち、`PICO_GFX::SetBrightness()`は
+  値をパレットへ適用するだけの機構**という役割分担(`Sound_Functions`が方針、`ChipSynth`が機構、
+  という分け方と同じ形)。
+- 設定は`/sys/display.cfg`(無くてよい): `brightness = 0〜100`(既定100)、`auto-dim = true|false`(既定true)。
+  `SettingsScene`が音量(`sound.cfg`)と全く同じ流儀(ドラッグ中は`SetBrightness()`で即反映、
+  指を離したときに1回だけ`SetValue()`で書く)で編集できる。**画面が真っ黒になり操作不能になるのを
+  防ぐため、`kMinBrightness=10`未満には設定できない**(スライダーの最小値もここに合わせてある)。
+- **自動調光**: `OSData::isTouched`と`PadFunctions::IsDown(kAllButtons)`のどちらも
+  `kIdleTimeoutMs`(既定30秒)の間ずっと無ければ`kDimBrightness`(既定15)まで即座に暗くする
+  (フェードはしない。`ClocksScene`と同じ`millis()`差分の考え方)。触れる/ボタンを押すと
+  即座に通常の明るさへ戻る。設定側の`SettingsScene`の自動調光チェックボックスは
+  `Checkbox`の既存の当たり判定の都合上(`causeOnPressStart()`がアイコン部分の24px幅しか
+  見ない。`Checkbox.cpp`参照)、ラベルではなくチェックの四角そのものをタップする必要がある
+  (他の`run_test_checkbox`等、既存の全チェックボックスと共通の制約で、この機能で新たに
+  作ったものではない)。
+- ホストテストは無し(`GFX_Functions`/`Touch_Functions`と同じく実描画・実タッチに強く依存するため、
+  この2つと同様ASanホストテストの対象外にしてある)。検証はPCビルドの`--shot`/`--tap`で行った:
+  明るさスライダーで画面全体が実際に暗くなること、無操作からの自動調光・タッチでの復帰、
+  `display.cfg`への書き込みと再起動後の読み込みを確認済み。**実機での見え方(ソフト輝度なので
+  正しく暗く見えるはず)・自動調光の30秒閾値の実測は未確認**。
 
 ## Widgetシステム
 

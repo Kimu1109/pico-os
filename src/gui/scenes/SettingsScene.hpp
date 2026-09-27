@@ -59,6 +59,14 @@ class SettingsScene : public Scene {
         int  volume_applied = -1;
         bool volume_dirty   = false;
 
+        Label<PICO_STR_S>* brightness_title     = nullptr;
+        NumberSlider*      brightness_slider    = nullptr;
+        Checkbox*          auto_dim_checkbox    = nullptr;
+        // 明るさも音量と同じ流儀: ドラッグ中はDisplayFunctions::SetBrightness()で即反映し、
+        // display.cfgへの書き込みは指を離したときに1回だけ行う
+        int  brightness_applied = -1;
+        bool brightness_dirty   = false;
+
         Checkbox*          run_test_checkbox    = nullptr;
         Label<PICO_STR_M>* run_test_note        = nullptr;
 
@@ -78,7 +86,7 @@ class SettingsScene : public Scene {
         int tz_selected_index = -1; // onUpdate()での変化検出用
 
         constexpr static int MARGIN     = 3;
-        constexpr static int ROW_H      = 30; // 8行(音量を含む)を画面へ収めるため34から詰めた
+        constexpr static int ROW_H      = 26; // 9行(音量・明るさを含む)を画面へ収めるため30から詰めた
         constexpr static int EDIT_BTN_W = 48;
         constexpr static int EDIT_BTN_H = 20;
 
@@ -98,6 +106,7 @@ class SettingsScene : public Scene {
         void refreshNtp2Label();
         void refreshHomeLabel();
         void updateVolume();
+        void updateBrightness();
 
         // InputDialogを1つnewして開く。閉じたらcommitEdit()へ渡してから破棄する
         void openEditDialog(EditField field, const char* label_text, const char* prefill);

@@ -6,6 +6,12 @@
 
 #include "GFX_Functions.hpp"
 
+namespace {
+    // 起動直後(SetBrightness()が一度も呼ばれる前)は満光。DisplayFunctions::Setup()が
+    // display.cfgを読んだ直後に上書きする
+    uint8_t currentBrightness = 100;
+}
+
 void PICO_GFX::Setup() {
     OSData::lcd->init();
     OSData::lcd->setBaseColor(TFT_WHITE);
@@ -34,6 +40,35 @@ void PICO_GFX::Setup() {
     isDirtyDeactivates = false;
 
     LOG_SYS_OK("GFX Setup has succeeded!");
+}
+
+// 画面の明るさ: バックライト(TFT_LED)はハードウェア側の切り替えのみで、明るさの調整は
+// frameのパレット16色をCOLORS[]基準で暗くする形にしてある(PC/Webでもパレット表示なので
+// そのまま効き、実機とPCで同じ経路を通せる)。CanvasRaster等が自前のスプライト+パレットを
+// 持つ箇所は対象外(このOSの標準ウィジェット・ダイアログはframeの16色を直接使うため、
+// 通常の画面はこれで十分暗くなる)。
+void PICO_GFX::SetBrightness(uint8_t percent) {
+    if(percent > 100) percent = 100;
+    currentBrightness = percent;
+
+    if(!OSData::frame) return; // Setup()より前(呼ばれない想定だが念のため)
+
+    for(int i = 0; i < 16; i++){
+        const uint32_t rgb888 = lgfx::convert_to_rgb888(COLORS[i]);
+        uint8_t r = (uint8_t)((rgb888 >> 16) & 0xFF);
+        uint8_t g = (uint8_t)((rgb888 >> 8)  & 0xFF);
+        uint8_t b = (uint8_t)(rgb888 & 0xFF);
+        r = (uint8_t)(((uint32_t)r * percent) / 100);
+        g = (uint8_t)(((uint32_t)g * percent) / 100);
+        b = (uint8_t)(((uint32_t)b * percent) / 100);
+        OSData::frame->setPaletteColor(i, r, g, b);
+    }
+
+    MarkDirty({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
+}
+
+uint8_t PICO_GFX::GetBrightness() {
+    return currentBrightness;
 }
 
 void PICO_GFX::MarkDirty(const Rect& rect) {

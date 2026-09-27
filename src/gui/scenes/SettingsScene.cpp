@@ -5,6 +5,7 @@
 #include "functions/Network_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Display_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
@@ -217,7 +218,7 @@ void SettingsScene::onEnter(){
 
     // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、
     // 読み込みより前に生成しておく(見た目の並び順は後段のNTP/ホームより下で変わらない)
-    this->run_test_checkbox = new Checkbox(content.x + MARGIN, rowY(7), "起動時に自己診断を実行");
+    this->run_test_checkbox = new Checkbox(content.x + MARGIN, rowY(8), "起動時に自己診断を実行");
     this->run_test_checkbox->setFontSize(FontFn::Small);
     this->run_test_checkbox->setOnChangeChecked([this](){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, "run-test",
@@ -318,10 +319,50 @@ void SettingsScene::onEnter(){
     this->volume_slider->setValue((float)this->volume_applied);
     WidgetFunctions::Add(this->volume_slider);
 
+    // ---- 画面の明るさ(display.cfgの brightness)+ 自動調光(auto-dim) ----
+    // 音量の行と同じ形だが、右端に自動調光のチェックボックスを同居させて行数を1つに抑えている
+    // (この画面は8行前提でROW_Hを詰めてあり、明るさ・自動調光それぞれに専用行を割く余白が無いため)
+    // "音量"と同じ2文字幅に揃える("画面の明るさ"では長すぎてスライダーへ食い込むため)
+    this->brightness_title = new Label<PICO_STR_S>(content.x + MARGIN, (int16_t)(rowY(7) + 2), "輝度");
+    this->brightness_title->setFontSize(FontFn::Small);
+    WidgetFunctions::Add(this->brightness_title);
+
+    // 自動調光のチェックボックスは幅がテキストから自動計算されるため、先に作って実測してから
+    // 明るさスライダーの幅をその手前までに詰める(makeEditButton()と同じ「実測してから並べる」流儀)。
+    // setFontSize()自体は再計算しない(l_rect.wは構築時のフォントのまま)ので、
+    // 小さいフォントでの幅を得るためsetText()で同じ文字列を渡し直して計算をやり直させる
+    this->auto_dim_checkbox = new Checkbox(0, rowY(7), "自動調光");
+    this->auto_dim_checkbox->setFontSize(FontFn::Small);
+    this->auto_dim_checkbox->setText("自動調光");
+    const int16_t auto_dim_w = this->auto_dim_checkbox->getLocalRect().w;
+    const int16_t auto_dim_x = (int16_t)(content.x + content.w - MARGIN - auto_dim_w);
+    this->auto_dim_checkbox->setX(auto_dim_x);
+    this->auto_dim_checkbox->setIsChecked(DisplayFunctions::GetAutoDimEnabled());
+    this->auto_dim_checkbox->setOnChangeChecked([this](){
+        const bool enabled = this->auto_dim_checkbox->getIsChecked();
+        DisplayFunctions::SetAutoDimEnabled(enabled);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "auto-dim",
+            PICO_Config::ConfigValue::FromBool(enabled));
+    });
+    WidgetFunctions::Add(this->auto_dim_checkbox);
+
+    constexpr int16_t kBrightnessTitleW = 40;
+    constexpr int16_t kBrightnessGap    = 4;
+    const int16_t brightness_slider_x = (int16_t)(content.x + MARGIN + kBrightnessTitleW);
+    const int16_t brightness_slider_w = (int16_t)(auto_dim_x - kBrightnessGap - brightness_slider_x);
+    this->brightness_slider = new NumberSlider(brightness_slider_x, rowY(7), brightness_slider_w);
+    this->brightness_slider->setMinValue(DisplayFunctions::kMinBrightness);
+    this->brightness_slider->setMaxValue(100);
+    this->brightness_slider->setDecimalPlacesNum(0);
+    this->brightness_applied = DisplayFunctions::GetBrightness();
+    this->brightness_dirty   = false;
+    this->brightness_slider->setValue((float)this->brightness_applied);
+    WidgetFunctions::Add(this->brightness_slider);
+
     // ---- 起動時セルフチェック(本体はloadValues()より前で生成済み) ----
     WidgetFunctions::Add(this->run_test_checkbox);
 
-    this->run_test_note = new Label<PICO_STR_M>(content.x + MARGIN, (int16_t)(rowY(7) + this->run_test_checkbox->getH() + 2), "次回の起動から反映されます");
+    this->run_test_note = new Label<PICO_STR_M>(content.x + MARGIN, (int16_t)(rowY(8) + this->run_test_checkbox->getH() + 2), "次回の起動から反映されます");
     this->run_test_note->setFontSize(FontFn::Small);
     this->run_test_note->setTextColor(PICO_DARKGREY);
     WidgetFunctions::Add(this->run_test_note);
@@ -365,8 +406,28 @@ void SettingsScene::updateVolume(){
     }
 }
 
+void SettingsScene::updateBrightness(){
+    if(!this->brightness_slider) return;
+
+    const int v = (int)(this->brightness_slider->getValue() + 0.5f);
+    if(v != this->brightness_applied){
+        this->brightness_applied = v;
+        DisplayFunctions::SetBrightness(v);
+        this->brightness_dirty = true;
+    }
+
+    // 指を離したら(スライダーの外で離した場合も含む)display.cfgへ書く
+    if(this->brightness_dirty && !OSData::isTouched){
+        this->brightness_dirty = false;
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%d", this->brightness_applied);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "brightness", buf);
+    }
+}
+
 void SettingsScene::onUpdate(){
     this->updateVolume();
+    this->updateBrightness();
 
     if(!this->timezone_dropdown) return;
 
@@ -388,6 +449,13 @@ void SettingsScene::onExit(){
         snprintf(buf, sizeof(buf), "%d", this->volume_applied);
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "volume", buf);
     }
+    // 同じく明るさも離す前に画面を抜けたら保存しておく
+    if(this->brightness_dirty){
+        this->brightness_dirty = false;
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%d", this->brightness_applied);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "brightness", buf);
+    }
 
     this->back_button = nullptr;
 
@@ -405,6 +473,9 @@ void SettingsScene::onExit(){
     this->home_edit_button     = nullptr;
     this->volume_title         = nullptr;
     this->volume_slider        = nullptr;
+    this->brightness_title     = nullptr;
+    this->brightness_slider    = nullptr;
+    this->auto_dim_checkbox    = nullptr;
     this->run_test_checkbox    = nullptr;
     this->run_test_note        = nullptr;
 

@@ -18,15 +18,11 @@ local PADMAP = { left = LEFT, right = RIGHT, down = DOWN, up = HARD, a = CW, x =
     l = HOLD, r = HOLD, zl = HOLD, zr = HOLD, start = PAUSE, home = BACK }
 local BTNS = { LEFT, DOWN, RIGHT, HARD, CCW, CW } -- 下の操作ボタン(左から、40px幅)
 
--- ミノの形・壁蹴りの表と操作ボタンの絵は lib.lua(16KiBに収めるため分けた)
-local LIB
-do
-    local code = pico.sd_read(DIR .. "lib.lua")
-    local chunk = code and load(code, "lib")
-    local ok, r = false, nil
-    if chunk then ok, r = pcall(chunk) end
-    if ok then LIB = r else error("lib.lua を読めません: " .. tostring(r)) end
-end
+-- ミノの形・壁蹴りの表と操作ボタンの絵は lib.lua(16KiBに収めるため分けた)。
+-- LuaSceneがこの本体より先にlib.luaを読み込み・実行し、グローバル変数LIBとして渡ってくる
+-- (LuaScene.hppのクラスコメント参照。以前はここでpico.sd_read()+load()を使って
+-- 自前で読み込んでいたが、実機でコア0のスタックオーバーフローを起こしたため撤去した)
+local LIB = LIB
 local ROT, KJ, KI, COL = LIB.ROT, LIB.KJ, LIB.KI, LIB.COL
 
 local img = pico.image_load(DIR .. "blocks.pimg")

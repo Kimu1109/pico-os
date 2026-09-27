@@ -35,6 +35,11 @@ function pico.music_stop() music_on = false end
 local popped = false
 function pico.pop() popped = true end
 
+-- LuaSceneは本体(main.lua)より先に同じディレクトリのlib.luaを読み込み・実行する
+-- (LuaScene.hppのクラスコメント参照)。ここでも同じ順序を再現する
+local lib_src = assert(io.open(ROOT.."/lua/apps/テトリス/lib.lua")):read("a")
+assert(load(lib_src, "lib"))()
+
 local src = assert(io.open(ROOT.."/lua/apps/テトリス/main.lua")):read("a")
 assert(#src < 16384, "main.lua must be under 16KiB: "..#src)
 src = src .. [[

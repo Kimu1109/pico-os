@@ -35,7 +35,17 @@ void LuaScene::onEnter() {
         return;
     }
 
-    script_ok = loadAndRun();
+    // 本体スクリプトより先に、同じディレクトリの"lib.lua"があれば読み込み・実行する
+    // (クラスコメント参照。無ければ何もしない=単一ファイルの従来アプリはここを素通りする)
+    FixedString<PICO_PATH_LEN> lib_path;
+    if (PICO_IO::join(lib_path, app_dir, "lib.lua") && OSData::SD.exists(lib_path.c_str())) {
+        if (!runFile(lib_path.c_str())) {
+            last_tick_ms = millis();
+            return; // エラーはrunFile()内で表示済み
+        }
+    }
+
+    script_ok = runFile(script_path.c_str());
     if (script_ok) {
         engine->CallSetup();
     }
@@ -43,8 +53,8 @@ void LuaScene::onEnter() {
     last_tick_ms = millis();
 }
 
-bool LuaScene::loadAndRun() {
-    FsFile f = OSData::SD.open(script_path.c_str());
+bool LuaScene::runFile(const char* path) {
+    FsFile f = OSData::SD.open(path);
     if (!f) {
         ErrorFunctions::ShowFatal("スクリプトを開けません(パスを確認してください)");
         return false;
@@ -55,7 +65,7 @@ bool LuaScene::loadAndRun() {
     if (size > kMaxScriptBytes) {
         size = kMaxScriptBytes;
         LOG_SYS_WARN("LuaScene: %s が上限(%uB)を超えているため%uBで打ち切りました",
-            script_path.c_str(), (unsigned)kMaxScriptBytes, (unsigned)file_size);
+            path, (unsigned)kMaxScriptBytes, (unsigned)file_size);
     }
 
     // MarkdownView::load()と同じ理由でスタック上の小さなチャンクで読み進める
@@ -72,7 +82,7 @@ bool LuaScene::loadAndRun() {
     }
     f.close();
 
-    return engine->Run(script_source.c_str(), script_path.c_str());
+    return engine->Run(script_source.c_str(), path);
 }
 
 void LuaScene::onUpdate() {

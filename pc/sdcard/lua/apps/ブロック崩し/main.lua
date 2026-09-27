@@ -1,6 +1,9 @@
 -- ブロック崩し。ブロック/パドル/アイテムは図形ウィジェット(Rect/Ellipse/Triangle)で、
--- 位置だけを毎フレームpico.setする。ステージはstages.luaへ分離した
+-- 位置だけを毎フレームpico.setする。ステージはlib.luaへ分離した
 -- (main.luaを読み込み上限16KiBに収めるため。今もぎりぎりなので足すときは注意)。
+-- lib.luaはLuaSceneがこの本体より先に読み込み・実行し、結果はグローバル変数STAGESとして
+-- 渡ってくる(LuaScene.hppのクラスコメント参照。以前はここでpico.sd_read()+load()を
+-- 使って自前で読み込んでいたが、実機でコア0のスタックオーバーフローを起こしたため撤去した)。
 -- 外部コントローラー: 左右=パドル、A/START/上=発射・ダイアログを閉じる、HOME=戻る。
 
 local function clamp(v, lo, hi)
@@ -9,19 +12,7 @@ local function clamp(v, lo, hi)
     return v
 end
 
-local STAGES
-do
-    local code = pico.sd_read("/lua/apps/ブロック崩し/stages.lua")
-    local chunk = code and load(code, "stages")
-    local ok, result = false, nil
-    if chunk then ok, result = pcall(chunk) end
-    if ok then STAGES = result end
-end
-if not STAGES then
-    pico.show_error("ステージデータの読み込みに失敗しました")
-    STAGES = { cols = 8, list = { { rows = 3, cell = function(r, c) return 1 end } },
-        itemShapes = function() return {} end }
-end
+local STAGES = STAGES
 
 local COLS = STAGES.cols
 local MAX_ROWS = 0

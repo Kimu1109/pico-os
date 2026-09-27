@@ -28,6 +28,20 @@ struct AppEntry;
 // ランチャへ戻る手段(戻るボタン等)はスクリプト側がpico.create("Button")+
 // pico.on(id, "press_start", ...)でpico.pop()を呼ぶ形で自前で用意する
 // (ClocksScene/CalculatorScene等、他のアプリの「戻る」ボタンと同じ考え方)。
+//
+// 本体が16KiBに収まらないアプリ向けに、同じディレクトリの"lib.lua"を伴う「補助モジュール」
+// 方式に対応する。存在すれば本体スクリプトより先にrunFile()で読み込み・実行し(本体と同じく
+// 浅いコールスタックのうちに1回で済ませる)、結果はスクリプト側がグローバル変数として
+// 受け取る(returnではなく`グローバル名 = {...}`の形で書く)。
+// 以前はスクリプト自身がpico.sd_read()+Luaの`load()`+`pcall()`でlib.lua相当のファイルを
+// 実行時にコンパイルしていたが、この経路は「Luaのバイトコード実行中に、さらにコンパイラの
+// 再帰下降パーサーを重ねて呼ぶ」形になり、コア0のスタック(RP2350で4KiBしかない)を
+// 実機で実際に使い切ってあふれさせる事故が起きた(ブロック崩し/テトリスの2本で確認)。
+// コア0のスタックオーバーフローはコア1(音声専用)のスタックへそのまま溢れ込み、
+// 音声が二度と直らない壊れ方をする(SCRATCH_Y/SCRATCH_Xが隣接しているため。詳細は
+// このバグの調査記録を参照)。lib.luaをこのクラス側で(本体スクリプトと同じ「トップレベル
+// チャンクの実行」として)読み込むことで、スクリプト自身が実行時にLuaコードをコンパイルする
+// 経路そのものを無くし、再発を防ぐ。
 class LuaScene : public Scene {
     private:
         // このLuaアプリに許すメモリ予算(lua_newstateのカスタムallocへ渡す上限)。
@@ -60,10 +74,12 @@ class LuaScene : public Scene {
         // loop()へ渡す経過時間(ms)の計算用。ClocksScene等と同じくmillis()の差分で積む
         unsigned long last_tick_ms = 0;
 
-        // スクリプトをSDから読み込み、engineへ渡して実行する。戻り値はRun()の成否
-        // (=setup()を呼んでよいか)。読み込み失敗(ファイルが無い等)やLuaEngine::Run()の
-        // 失敗はErrorFunctions側で既にダイアログ表示済みなので、ここでは追加のエラー表示をしない
-        bool loadAndRun();
+        // 指定パスのLuaファイルをSDから読み込み、engineへ渡して実行する(トップレベルの
+        // チャンクとして1回コンパイル+実行するだけ。Run()と同じ「浅いコールスタックのうちに
+        // 済ませる」実行になる)。戻り値はRun()の成否。読み込み失敗(ファイルが無い等)や
+        // LuaEngine::Run()の失敗はErrorFunctions側で既にダイアログ表示済みなので、
+        // ここでは追加のエラー表示をしない
+        bool runFile(const char* path);
 
     public:
         explicit LuaScene(const char* path, const LuaPermissions& permissions = LuaPermissions{})

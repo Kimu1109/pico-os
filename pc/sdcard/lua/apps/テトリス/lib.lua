@@ -1,4 +1,6 @@
--- テトリスの部品(main.luaから読む)。ミノの形・SRSの壁蹴り・操作ボタンの絵
+-- テトリスの部品。ミノの形・SRSの壁蹴り・操作ボタンの絵。
+-- LuaSceneが本体(main.lua)より先にこのファイルを実行するので、returnではなく
+-- グローバル変数LIBへの代入で結果を渡す(本体側は`local LIB = LIB`で受け取る)
 local M = {}
 
 -- ミノ(向き0のマス。yは下向き)と箱の大きさ。並びは画像のタイルと同じ
@@ -85,4 +87,4 @@ function M.mini(ROT, T, tile, kind, x, y, w, h)
     for i = 1, 8, 2 do tile(kind, ox + c[i] * T, oy + c[i + 1] * T) end
 end
 
-return M
+LIB = M

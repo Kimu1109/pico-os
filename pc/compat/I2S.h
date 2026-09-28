@@ -15,7 +15,7 @@
 //
 //   PICOOS_SOUND_STATE=disconnected ./pc/build/picoos_pc
 //
-// ヘッドレス(SDL_VIDEODRIVER=dummy)で音の中身を確かめるなら SDL_AUDIODRIVER=disk で
+// ヘッドレス(SDL_VIDEODRIVER=offscreen)で音の中身を確かめるなら SDL_AUDIODRIVER=disk で
 // sdlaudio.raw へ書き出せる(SDL_DISKAUDIOFILE でファイル名を変えられる)。
 //
 // 読み取り側(Sound_Functions)と書き込み側(SDLの音声スレッド/Webではメインスレッド)の間は

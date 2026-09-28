@@ -1134,11 +1134,11 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 sudo apt-get install libsdl2-dev      # 前提: SDL2開発パッケージ
 cmake -S pc -B pc/build && cmake --build pc/build -j
 ./pc/build/picoos_pc                  # マウス左ドラッグ = タッチ
-SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレス確認
+SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレス確認
 
 # ヘッドレスではSDLへマウスが来ないので、撮りたい画面まで --tap で操作を進める
 #   --tap X,Y@FRAME[:HOLD]   FRAMEフレーム目に(X,Y)をHOLDフレーム押す(既定3、最大16件)
-SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc \
+SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc \
     --tap 61,65@30:5 --shot md.ppm 250        # ランチャの1枚目のアプリを開いて撮る
 
 python3 script/ppm2png.py md.ppm md.png 2     # PPMは見づらいのでPNGへ(2倍)
@@ -1357,7 +1357,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
     そのためコールバックのDelegate化は今後も「単体では5%程度」の効果しかなく、優先度は低いまま。
 - **判断: 断片化もリークも観測されていない以上、64KBを常時占有する対価に見合わないため保留**。アプリが増えて断片化が実際に観測された時点で再検討する。
 
-### ⚠️ 未解決: PCビルドでシーン遷移を繰り返すと「ヒープ下限」が際限なく増える(2026-09-19発見)
+### ✅ 解決済み: PCビルドでシーン遷移を繰り返すと「ヒープ下限」が際限なく増える(2026-09-19発見 → 2026-09-28特定・修正)
 
 上の結論は**実機RP2350での計測**に基づくが、`LuaScene`の動作確認中、**PCビルド
 (`pc/build/picoos_pc`)で`--tap`により同じ画面遷移を繰り返すと、上と同じ「ヒープ下限」
@@ -1374,6 +1374,9 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc \
   --shot /tmp/probe.ppm 260
 # (178,65)=ランチャの「入力テスト」タイル、(40,215)=InputTestSceneの「戻る」ボタン。
 # ランチャ→InputTestScene→ランチャ を5回繰り返すだけ
+# (このコマンド自体が「未解決」当時の再現コマンドで、原因のSDL_VIDEODRIVER=dummyを
+#  わざと使っている。通常の動作確認ではdummyではなくoffscreenを使うこと。上記
+#  「PC / Web実行環境」参照)
 ```
 結果: `ヒープ下限(シーン破棄直後/9回): 初回=188032B 最新=478256B 最大=478256B 差+290224B`
 (9サンプルで約290KB増加。1往復あたり約30〜40KB)。
@@ -1399,12 +1402,54 @@ ASanの通らないPCビルドのGUI経路——実際のLovyanGFX描画・フ�
 開いたままにしているだけで同じ割合で増える。**どの画面でも毎フレーム何かが確保されて返っていない**
 (= シーン遷移そのものではなく、毎フレームの処理のどこか)と見てよい。
 
-**未着手**: 原因の特定(候補: LovyanGFXのフォント/グリフキャッシュ、Task_Functions、
+**未着手(2026-09-24時点)**: 原因の特定(候補: LovyanGFXのフォント/グリフキャッシュ、Task_Functions、
 Network_Functionsの再接続チェック、SDL側のイベント処理)、実機での再現確認、修正。
-次にこの周辺(Scene/Widget基盤、PCビルド)を触る回で必ず引き継ぐこと。
-再現用の`--tap`コマンドは上記の通りなので、まずそれで実機/PCの両方を確認するのが早い。
   `Label::lines`の件は上記のとおり対処済みで、残る`std::function`のDelegate化も単体では5%程度の効果しかない
   (上記)。
+
+**原因特定・修正(2026-09-28)**: 「候補」に挙げていた**「SDL側のイベント処理」が的中**。
+`valgrind --tool=massif`で400フレーム分のヒープ成長を追跡したところ、増加分の一部が
+`lgfx::v1::Panel_sdl::sdl_create() <- sdl_update() <- _update_proc() <- loop()`という、
+**毎フレーム呼ばれる経路から確保されたまま残っている**ことが分かった(`PICO_GFX::Setup()`
+からの起動時1回きりの確保とは別の経路として計上されていたのが決め手)。
+
+原因は**pico-osではなくLovyanGFX側(`src/lgfx/v1/platforms/sdl/Panel_sdl.cpp`)のバグ**:
+`sdl_update()`は`monitor.renderer == nullptr`の間ずっと`sdl_create()`を呼び直すが、
+`sdl_create()`は`SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)`
+の戻り値をチェックしていない。**この再現コマンドが使っている`SDL_VIDEODRIVER=dummy`は
+この組み合わせのレンダラーを一切提供できない**(検証用の最小SDLプログラムで確認:
+`dummy`は`opengl`/`opengles2`/`software`の3種を持つが、`index=-1`の自動選択では
+先に列挙される`opengl`/`opengles2`の失敗で終わり、`software`まで辿り着かない。
+`SDL_RENDERER_SOFTWARE`を明示すれば`dummy`でも成功する)。そのため`monitor.renderer`が
+永遠に`nullptr`のままになり、`sdl_create()`が毎フレーム(実測: 60フレームで510回)
+呼ばれ続け、**呼ばれるたびに`SDL_CreateWindow()`で新しいウィンドウを作り、直前の
+`m->window`を`SDL_DestroyWindow()`せずに上書きして捨てる**(=毎フレーム1つ
+SDL_Windowがリークする)、という壊れ方だった。
+
+**この問題はSDL_VIDEODRIVER=dummyというヘッドレス実行条件に固有**で、実際のウィンドウ
+表示環境(通常のPCビルド)・Webビルド(Emscripten、別経路)・実機(RP2350、SDL不使用)
+のいずれでも再現しない。上の「実機での20回計測と矛盾しているように見える点」は、
+実機がそもそもSDLを使わないことを踏まえれば矛盾ではなかったことになる。
+
+対応:
+1. **`pc/patches/0001-panel_sdl-renderer-fallback-and-cleanup.patch`**を新設し、
+   `pc/CMakeLists.txt`のFetchContentへ`PATCH_COMMAND`として組み込んだ(取得した
+   LovyanGFXへ自動適用される。詳細は`pc/patches/README.md`)。`sdl_create()`の
+   呼び直しに備えて前回分を必ず`SDL_Destroy*`してから作り直すようにし、
+   `SDL_RENDERER_SOFTWARE`へのフォールバックも追加した。これで`dummy`環境でも
+   毎フレームのリークが止まり(検証: 上記`--tap`再現コマンドで
+   `ヒープ下限(9回): 初回=276832B 最新=282880B 差+6048B`まで縮小。修正前は
+   `差+523872B`)、`dummy`のままでも正しく描画できるようになった。
+2. **`pc/README.md`/`CLAUDE.md`のヘッドレス確認コマンドは`SDL_VIDEODRIVER=dummy`
+   ではなく`SDL_VIDEODRIVER=offscreen`を使うよう変更した**(`cli-tool/picoos`の
+   `pc shot`サブコマンドも同様)。`offscreen`は最初からレンダラーを作れるので
+   `sdl_create()`は起動時の1回だけで済み、パッチが無くても問題を踏まない
+   (パッチは主に「`dummy`をどうしても使う場合の保険」「本当にレンダラーが
+   1つも無い環境でもクラッシュしない安全策」という位置づけになった)。
+3. 修正後に残る微小な残留(**+6048B/9回、1往復あたり1KB未満**)は、実機計測
+   (2026-09-12、「9回時点で+248B」)と同程度のオーダーで、通常のシーン滞在中の
+   一時確保(Wi-Fi再接続チェック等)が拾われているだけと見てよい。この規模の残留を
+   追う投資対効果は低いと判断し、追加調査は行っていない。
 
 ## Luaバインディング (`src/lua/LuaEngine`) (2026-09-19着手)
 

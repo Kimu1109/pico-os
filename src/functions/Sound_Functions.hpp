@@ -51,6 +51,13 @@ namespace SoundFunctions {
     // 1コア目→2コア目のコマンドの列。溢れた要求は捨てる(DroppedCommands()で数える)
     constexpr uint8_t       kCommandQueueSize  = 32;
     constexpr uint8_t       kDefaultVolume     = 50;
+    // バッテリー駆動中(VSYSがUSBの5VでなくLiPoセルの電圧、最大4.2V)は、MAX98357Aの
+    // 出力ヘッドルームが下がり、通常の音量では実機で音割れ(アナログクリップ)することを
+    // 実機で確認した。sound.cfg/SettingsScene上の設定値(master_volume)はそのまま保ち、
+    // 2コア目が実際に音源へ渡す値だけをこの上限で頭打ちする(DisplayFunctionsの
+    // 自動調光と同じ「保存値」と「実効値」を分ける考え方)。20という値はユーザーの実機での
+    // 実測(20%以下では音割れしない)に基づく
+    constexpr uint8_t       kBatteryVolumeCapPercent = 20;
     // 演奏データの置き場1つの大きさ。置き場は2つ(鳴らしている曲と、次に読む曲)で、
     // 最初に曲を鳴らすときに読み取り係(約3.5KB)と一緒に確保し、以降は持ち続ける
     constexpr uint16_t      kMusicDataBytes    = 6144;
@@ -69,6 +76,9 @@ namespace SoundFunctions {
 
     uint8_t GetVolume();
     void SetVolume(int volume);         // 0〜100。今だけ
+    // 今、バッテリー駆動によるkBatteryVolumeCapPercentの頭打ちが掛かっているか
+    // (GetVolume()が返す設定値そのものは変わらない。表示上の注記等に使う想定)
+    bool IsBatteryVolumeCapActive();
 
     // chで鳴らす(鳴っている音は差し替え)。列が満杯ならfalse(その要求は捨てる)
     bool Play(uint8_t ch, const ChipSynth::Note& note);
@@ -80,7 +90,7 @@ namespace SoundFunctions {
     // 何か鳴っている(鳴っていることになっている)か。まだ2コア目が受け取っていない要求も含む
     bool IsPlaying();
     // 鳴っているチャンネルのビット(2コア目が最後に知らせた値)
-    uint8_t ActiveChannels();
+    ChipSynth::ChannelMask ActiveChannels();
     // 列が満杯で捨てた要求の数
     uint32_t DroppedCommands();
 

@@ -104,6 +104,10 @@ local status_label = pico.create("Label")
 pico.set(status_label, "font_size", 0)
 pico.set(status_label, "x", cx + 48); pico.set(status_label, "y", cy + 4)
 
+-- バッテリー計測用の自動プレイON/OFF(既定OFF)。詳細はlib.lua参照
+-- (-43はButtonの実描画幅がw+9広がる分を差し引いた右寄せ位置)
+local isAuto = STAGES.makeAutoToggle(cx + cw - 43, cy + 2)
+
 local score, lives, stage_idx = 0, 3, 1
 local blocks, blocks_remaining = {}, 0
 local balls = {}
@@ -406,10 +410,10 @@ end
 function loop(dt)
     if pico.pad_pressed("home") then pico.pop() return end
     local tx, ty, touched = pico.get_touch()
-    if touched then setPaddle(tx) end
+    -- 自動プレイ中はgoを常時trueにし、発射・ダイアログ継続もこれで賄う(go検知は1回だけ効く)
+    local go = pico.pad_pressed("a") or pico.pad_pressed("start") or pico.pad_pressed("up") or isAuto()
     local dir = (pico.pad_down("right") and 1 or 0) - (pico.pad_down("left") and 1 or 0)
-    if dir ~= 0 and game_state ~= "dialog" then setPaddle(paddle_cx + dir * PAD_SPEED * dt / 1000) end
-    local go = pico.pad_pressed("a") or pico.pad_pressed("start") or pico.pad_pressed("up")
+    STAGES.autoControl(isAuto(), game_state, balls, paddle_cx, tx, touched, dir * PAD_SPEED * dt / 1000, setPaddle)
 
     if game_state == "dialog" then
         if go and dlg then

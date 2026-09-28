@@ -2,7 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 
-// チップチューン音源(SUMMARY.md #11)。4チャンネルを足し合わせてモノラルの16bitを作る。
+// チップチューン音源(SUMMARY.md #11)。kChannelsチャンネルを足し合わせてモノラルの16bitを作る。
 //
 // ゲームボーイのAPUを手本にしているが、チャンネルごとの波形は固定しない
 // (どのチャンネルでも矩形波/三角波/のこぎり波/ノイズを選べる)。
@@ -12,9 +12,27 @@
 // - スレッド/コアの面倒は見ない。SoundFunctionsが2コア目だけから触る
 //   (1コア目からの要求はコマンドの列で渡す)
 // - 帯域制限はしない(22050Hzで素朴に矩形を作るので高い音は折り返しで濁るが、チップチューンの味の内)
+//
+// 同時発音数(2026-09-28、任意チャンネル数対応): kChannelsは単なる定数で、増減はここ1箇所を
+// 直せば全体(MML/Lua API/コマンドの列)へ伝わる。上限はMMLのチャンネル文字がA〜Zの26種までな
+// ので26(Music_Data.hppのstatic_assertで強制)。1chあたりの音量(kChannelAmplitude)はkChannels
+// を増やしても変えていない — 既存の曲(A〜Dの4chしか使わない)の音量を変えないため。代わりに
+// render()が「同時に鳴っている数がkHeadroomChannelsを超えたときだけ、超えた分だけ全体を下げる」
+// (詳細はEngine::render()のコメント参照)。そのため5ch目以降を同時に鳴らすと、鳴っている数に
+// 応じて少しずつ静かになる(歪みはしない)。
 namespace ChipSynth {
 
-    constexpr int kChannels = 4;
+    constexpr int kChannels = 8;
+
+    // 同時に鳴らしても音量を下げずに済む数(kChannelAmplitudeがこの数×最大音量で16bitに
+    // ちょうど収まるよう決めてある)。kChannelsをこれより増やしても、実際に同時に鳴る数が
+    // これ以下ならこれまでと音量は変わらない
+    constexpr int kHeadroomChannels = 4;
+
+    // activeMask()等が返すビットマスクの型。32bitあるのでkChannels<=32まで足りる
+    // (実際にはMML側のA〜Z制限でkChannels<=26が上限になる)
+    using ChannelMask = uint32_t;
+    static_assert(kChannels <= 32, "ChannelMask(32bit)に収まる範囲にすること");
 
     enum class Wave : uint8_t {
         Pulse12,        // 矩形波 デューティ12.5%
@@ -46,7 +64,7 @@ namespace ChipSynth {
 
     class Engine {
     public:
-        // 1チャンネルの最大振幅(音量15・全体の音量100のとき)。4チャンネル足しても16bitに収まる
+        // 1チャンネルの最大振幅(音量15・全体の音量100のとき)。kHeadroomChannels個足しても16bitに収まる
         static constexpr int32_t kChannelAmplitude = 7800;
 
         explicit Engine(uint32_t sample_rate);
@@ -64,7 +82,7 @@ namespace ChipSynth {
         void render(int16_t* out, size_t n);
 
         // 鳴っているチャンネルのビット(bit0 = ch0)
-        uint8_t activeMask() const;
+        ChannelMask activeMask() const;
 
         uint32_t sampleRate() const { return rate_; }
 

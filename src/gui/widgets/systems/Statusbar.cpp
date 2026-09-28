@@ -4,6 +4,7 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Network_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Battery_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 
 #include "OS_Data.hpp"
@@ -72,6 +73,24 @@ void Statusbar::render(){
             break;
     }
     draw_pos += 16 + MARGIN;
+
+    //バッテリー: 残量に応じた4段階(まだ1回もVSYS読み取りが済んでいなければ何も描かない。
+    //通常はSetup()で即座に読むので起動直後の1フレーム目だけの話)。
+    //給電中かどうかはここでは示さない — IconID::BatteryChargingは16pxではtabler由来の
+    //絵柄が崩れて判読できなかった(自作アイコンに差し替えるまでの間は保留。設定画面には
+    //テキストで「電池 USB給電中」と出る)
+    if(BatteryFunctions::HasSample()){
+        const int pct = BatteryFunctions::GetPercent();
+        IconID battery_icon;
+        if(pct >= 75)      battery_icon = IconID::Battery4;
+        else if(pct >= 50) battery_icon = IconID::Battery3;
+        else if(pct >= 25) battery_icon = IconID::Battery2;
+        else if(pct >= 10) battery_icon = IconID::Battery1;
+        else               battery_icon = IconID::Battery0;
+
+        IconRender::DrawIcon(battery_icon, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+        draw_pos += 16 + MARGIN;
+    }
 
     //外部コントローラー: つながっているときだけ出す(無いのが普通なのでバツは付けない)
     if(pad_connected){

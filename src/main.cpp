@@ -10,6 +10,7 @@
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Network_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Battery_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
@@ -60,6 +61,7 @@ void setup() {
     IME_Functions::Setup();
     TimeFunctions::Setup();
     SoundFunctions::Setup(); //sound.cfgを読むのでSDより後
+    BatteryFunctions::Setup();
 
     TestFunctions::Setup();
 
@@ -102,6 +104,8 @@ void loop() {
     NetworkFunctions::Update();
     //アンプの抜き差しの検出(音そのものは2コア目が作って流す)
     SoundFunctions::Update();
+    //VSYS電圧の読み取り(内部でkSampleIntervalMsごとに間引く)
+    BatteryFunctions::Update();
 }
 
 //--- 2コア目: 音声専用 ---

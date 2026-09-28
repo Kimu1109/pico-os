@@ -62,9 +62,9 @@ void Engine::stopAll(){
     for(Channel& c : ch_) c.active = false;
 }
 
-uint8_t Engine::activeMask() const {
-    uint8_t m = 0;
-    for(int i = 0; i < kChannels; i++) if(ch_[i].active) m |= (uint8_t)(1u << i);
+ChannelMask Engine::activeMask() const {
+    ChannelMask m = 0;
+    for(int i = 0; i < kChannels; i++) if(ch_[i].active) m |= (ChannelMask)(1u << i);
     return m;
 }
 
@@ -113,8 +113,10 @@ void Engine::render(int16_t* out, size_t n){
 
     for(size_t i = 0; i < n; i++){
         int32_t mix = 0;
+        int active_count = 0;
         for(Channel& c : ch_){
             if(!c.active) continue;
+            active_count++;
 
             if(out) mix += (waveValue(c) * c.gain) >> 15;
 
@@ -138,6 +140,12 @@ void Engine::render(int16_t* out, size_t n){
             }
         }
         if(out){
+            //kHeadroomChannels(kChannelAmplitudeの前提)を超えて同時に鳴っているときだけ、
+            //超えた比率ぶん全体を下げる。歪む代わりに静かになる方を選ぶ(kChannels<=kHeadroomChannels
+            //の間、つまり従来通りの使い方では一切効かず、音量は変わらない)
+            if(active_count > kHeadroomChannels){
+                mix = (int32_t)((int64_t)mix * kHeadroomChannels / active_count);
+            }
             if(mix > 32767) mix = 32767;
             if(mix < -32768) mix = -32768;
             out[i] = (int16_t)mix;

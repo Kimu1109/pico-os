@@ -37,6 +37,11 @@ class SettingsScene : public Scene {
 
         Button* back_button = nullptr;
 
+        // 戻るボタンと同じ行の右側に表示するバッテリー残量(詳細数値)。
+        // 専用の行は割かず(9行で既に画面が一杯のため)、上部の空いている横幅へ同居させる
+        Label<PICO_STR_M>* battery_label = nullptr;
+        void refreshBatteryLabel();
+
         Label<PICO_STR_L>* ssid_label           = nullptr;
         Button*            ssid_edit_button     = nullptr;
         Button*            wifi_scan_button     = nullptr;

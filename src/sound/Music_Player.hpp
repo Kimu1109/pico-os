@@ -24,7 +24,7 @@ public:
     const uint8_t* data() const { return playing_ ? data_ : nullptr; }
 
     // 効果音に借りられているチャンネル(bit0 = ch0)。ここに立っているチャンネルへは触らない
-    void setBorrowed(uint8_t mask) { borrowed_ = mask; }
+    void setBorrowed(ChipSynth::ChannelMask mask) { borrowed_ = mask; }
 
     // n サンプル進める(曲の出来事を挟みながら engine.render する)。out が nullptr なら作らずに進める
     void render(ChipSynth::Engine& engine, int16_t* out, size_t n);
@@ -61,7 +61,7 @@ private:
     size_t size_ = 0;
     bool playing_ = false;
     uint16_t tempo_ = 120;
-    uint8_t borrowed_ = 0;
+    ChipSynth::ChannelMask borrowed_ = 0;
     // ティックの境目までの積み上げ(単位: サンプル×テンポ×48。rate×60 に達したら1ティック)
     uint64_t acc_ = 0;
     Track tracks_[MusicData::kChannels];

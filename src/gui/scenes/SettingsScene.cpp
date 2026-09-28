@@ -6,6 +6,7 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "functions/Display_Functions.hpp"
+#include "functions/Battery_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
@@ -121,6 +122,20 @@ void SettingsScene::refreshHomeLabel(){
     char buf[PICO_STR_L];
     snprintf(buf, sizeof(buf), "ホーム: %s", this->home_value.empty() ? "(未設定)" : this->home_value.c_str());
     this->home_label->setText(buf);
+}
+
+void SettingsScene::refreshBatteryLabel(){
+    if(!this->battery_label) return;
+    char buf[PICO_STR_M];
+    if(!BatteryFunctions::HasSample()){
+        buf[0] = '\0';
+    }else if(BatteryFunctions::IsExternallyPowered()){
+        snprintf(buf, sizeof(buf), "電池 USB給電中");
+    }else{
+        snprintf(buf, sizeof(buf), "電池 %d%% (%.2fV)",
+            BatteryFunctions::GetPercent(), BatteryFunctions::GetVoltage());
+    }
+    this->battery_label->setText(buf);
 }
 
 Button* SettingsScene::makeEditButton(int16_t y){
@@ -354,6 +369,18 @@ void SettingsScene::onEnter(){
 
     const Rect back_box = this->back_button->getLocalRect();
     this->top_row_h = back_box.h;
+
+    // ---- バッテリー残量(戻るボタンと同じ行の右側へ同居させる) ----
+    // 専用の行を割く余白は無いので(この画面は9行で既に画面いっぱい)、
+    // 上部の戻るボタンの右側に空いている横幅を使う
+    const int16_t battery_x = (int16_t)(content.x + MARGIN + back_box.w + MARGIN);
+    const int16_t battery_w = (int16_t)(content.x + content.w - MARGIN - battery_x);
+    this->battery_label = new Label<PICO_STR_M>(battery_x, content.y + MARGIN, "");
+    this->battery_label->setFontSize(FontFn::Small);
+    this->battery_label->setMaxWidth(battery_w);
+    this->battery_label->setMaxHeight(Label<PICO_STR_M>::GetLineHeight(FontFn::Small));
+    WidgetFunctions::Add(this->battery_label);
+    this->refreshBatteryLabel();
 
     const int16_t body_y = (int16_t)(content.y + MARGIN + this->top_row_h + MARGIN);
     auto rowY = [&](int i) -> int16_t { return (int16_t)(body_y + i * ROW_H); };
@@ -589,6 +616,7 @@ void SettingsScene::onUpdate(){
 
     this->updateVolume();
     this->updateBrightness();
+    this->refreshBatteryLabel();
 
     if(!this->timezone_dropdown) return;
 
@@ -619,6 +647,7 @@ void SettingsScene::onExit(){
     }
 
     this->back_button = nullptr;
+    this->battery_label = nullptr;
 
     this->ssid_label           = nullptr;
     this->ssid_edit_button     = nullptr;

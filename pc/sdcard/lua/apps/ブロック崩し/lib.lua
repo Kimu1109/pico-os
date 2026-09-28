@@ -182,6 +182,49 @@ local function itemShapes(size)
     return { r, e, t }
 end
 
+-- バッテリー消費計測等で放置プレイさせるための自動操作(main.luaを16KiBに収めるため
+-- ここに置く)。狙うのは「パドルへ向かって落ちてくるボールのうち一番下にいるもの」で、
+-- 無ければ(全ボールが上向きの間)先頭のボールを追う。完璧な反射は狙わずパドル中央で
+-- 追尾するだけの単純な実装(ミスもする=ライフが減りゲームオーバーへ至ることも許容)。
+local function autoTargetX(balls, fallback)
+    local best, bestY = nil, -1
+    for i = 1, #balls do
+        local b = balls[i]
+        if b.vy > 0 and b.y > bestY then best, bestY = b, b.y end
+    end
+    if not best and #balls > 0 then best = balls[1] end
+    return best and best.x or fallback
+end
+
+-- 自動プレイのON/OFFトグルボタン。状態(state)はここへ閉じ込め、main.luaへは
+-- 問い合わせ関数(isAuto)だけを返す(main.luaが16KiBぎりぎりなので、状態変数・
+-- ボタン生成・色の切り替えを一切main.lua側へ書かずに済ませるため)。
+-- 文字色でON(明るい緑)/OFF(既定の黒)を示す(Buttonは背景色を持てないため。
+-- テキストで"自動:ON"/"OFF"にすると幅32pxのボタンに収まらないので色だけで示す)
+local function makeAutoToggle(x, y)
+    local state = false
+    local id = pico.create("Button")
+    pico.set(id, "x", x); pico.set(id, "y", y)
+    pico.set(id, "w", 32); pico.set(id, "h", 16)
+    pico.set(id, "font_size", 0); pico.set(id, "text", "自動")
+    pico.on(id, "press_start", function()
+        state = not state
+        pico.set(id, "text_color", state and 10 or 0) -- PICO_GREEN / PICO_BLACK
+    end)
+    return function() return state end
+end
+
+-- 自動プレイ中のパドル制御。手動(タッチ/十字キー)操作と排他で、
+-- 自動プレイ中はボール追尾のみ・手動操作は無視する
+local function autoControl(auto, game_state, balls, paddle_cx, tx, touched, ddx, setPaddle)
+    if auto then
+        if game_state == "playing" then setPaddle(autoTargetX(balls, paddle_cx) - 20) end --あえてノイズを入れて次に進むように
+    else
+        if touched then setPaddle(tx) end
+        if ddx ~= 0 and game_state ~= "dialog" then setPaddle(paddle_cx + ddx) end
+    end
+end
+
 -- 序盤(1〜5)は壁なし・上段が速いだけのチュートリアル。6以降は
 -- 柱/門/斜め帯の壁を幾何学的に配置しつつ、tierBottom(下段が速い)の
 -- 採用比率を上げていくことで、壁の物量に頼らず難易度を積み増す。
@@ -189,6 +232,8 @@ end
 -- グローバル変数への代入で結果を渡す(本体側は`local STAGES = STAGES`で受け取る)
 STAGES = {
     itemShapes = itemShapes,
+    makeAutoToggle = makeAutoToggle,
+    autoControl = autoControl,
     cols = COLS,
     list = {
         stage(3, shapeFull, tierTop),

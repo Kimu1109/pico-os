@@ -95,10 +95,11 @@ namespace {
         return len;
     }
 
-    // 行頭のチャンネル文字(A〜D)を読む。チャンネルの行でなければ0
+    // 行頭のチャンネル文字(A〜、kChannels個ぶん)を読む。チャンネルの行でなければ0
     int ChannelMask(const char* s, int len, int& consumed){
+        const char last = (char)('A' + kChannels - 1);
         int mask = 0, i = 0;
-        while(i < len && s[i] >= 'A' && s[i] <= 'D'){
+        while(i < len && s[i] >= 'A' && s[i] <= last){
             mask |= 1 << (s[i] - 'A');
             i++;
         }
@@ -517,7 +518,8 @@ bool MmlCompiler::compile(MmlLineSource& src, uint8_t* out, size_t cap, MmlResul
         int consumed = 0;
         const int mask = ChannelMask(s, len, consumed);
         if(mask == 0){
-            fail(line, (int)(s - line_buf) + 1, "行の先頭は # (ヘッダ)か A〜D (チャンネル)です");
+            fail(line, (int)(s - line_buf) + 1, "行の先頭は # (ヘッダ)か A〜%c (チャンネル)です",
+                 (char)('A' + kChannels - 1));
             return false;
         }
         used_mask |= mask;

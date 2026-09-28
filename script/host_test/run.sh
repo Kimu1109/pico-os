@@ -15,6 +15,9 @@
 #                   無い値は平文として読める後方互換・壊れたデータへの安全な失敗
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
+#   touch_filter_test… タッチ座標のmedian-of-3ノイズ抑制(util/TouchFilter.hpp)。
+#                   単発のスパイクを無視すること・滑らかな動きへの追従・タッチ開始ごとの
+#                   履歴リセット
 #   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)とマニフェストの引き当て
 #   http_test     … URLの分解/解決と、HTTPレスポンスの解釈(ソケット抜きで検証)
 #   discovery_test… サーバ情報(/.well-known/pico-os)の解釈と前方互換
@@ -145,7 +148,15 @@ run_or_die() {
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 OUT=$(mktemp -d)
 
-CXXFLAGS="-std=gnu++17 -g -fsanitize=address,undefined"
+
+# -DPICOOS_PC: Battery_Functions.cppだけが見るフラグ(他のstubs/はどれも参照していない、
+# 2026-09-28時点でgrep済み)。実ADC/実CYW43が無いホストテスト環境では、GFX_Functions/
+# Touch_Functionsと同じくBattery_Functions自体をASan対象外にする手もあったが、
+# Sound_FunctionsがBatteryFunctions::IsExternallyPowered()を読むようになった(音割れ対策の
+# バッテリー駆動時音量キャップ)ため、Sound_Functions.cppをリンクする全テストで
+# Battery_Functions.cppも一緒にリンクする必要が生じた。PCビルドと同じ「環境変数で
+# 疑似値を返す」簡易実装のほうを使う(ASanもここは無害に通る)
+CXXFLAGS="-std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC"
 INCLUDES="-I$ROOT/script/host_test/stubs -I$ROOT/src"
 
 # --- シーン遷移 ---
@@ -247,6 +258,15 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== path_test ====="
 run_or_die "$OUT/path_test"
+
+# --- タッチ座標のノイズ抑制(median-of-3フィルタ) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/touch_filter_test.cpp" \
+    -o "$OUT/touch_filter_test"
+
+echo ""
+echo "===== touch_filter_test ====="
+run_or_die "$OUT/touch_filter_test"
 
 # --- 文書キャッシュ ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -411,6 +431,7 @@ run_or_die "$OUT/gb_apu_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/sound_test.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
@@ -426,6 +447,7 @@ run_or_die "$OUT/sound_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/music_test.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
@@ -693,6 +715,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
@@ -757,6 +780,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \
@@ -821,6 +845,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
     "$ROOT/src/sound/Chip_Synth.cpp" \
     "$ROOT/src/sound/Mml_Compiler.cpp" \
     "$ROOT/src/sound/Music_Player.cpp" \

@@ -79,6 +79,7 @@ PASSTHROUGH_PY = {
     ("pimg2png",): "pimg2png.py",
     ("ppm2png",): "ppm2png.py",
     ("serve",): "reference_server.py",
+    ("midi2mml",): "midi2mml.py",
     ("dict", "skk"): "convert_skk_dict.py",
     ("dict", "index"): "build_dict_index.py",
     ("dict", "suffix-index"): "build_dict_suffix_index.py",
@@ -208,6 +209,7 @@ def build_parser() -> argparse.ArgumentParser:
   picoos ppm2png shot.ppm shot.png 2              --shotのPPMをPNGへ(2倍)
   picoos dict skk dic/SKK-JISYO.M                 SKK辞書をIME用tsvへ変換
   picoos serve --root ~/docs --port 8080          Markdownブラウザ用の参照サーバを起動
+  picoos midi2mml song.mid -o song.mml            MIDIをpico-os MMLへ変換
   picoos test                                     ホストテスト一式(ASan)を実行
   picoos test net                                 HTTP結合テストを実行
   picoos pc build                                 PC(SDL2)版をビルド
@@ -227,6 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("pimg2png", help=".pimgをPNGへ変換(逆変換、目視確認用) (pimg2png.py、引数は転送)")
     sub.add_parser("ppm2png", help="--shot が出すPPMをPNGへ変換 (ppm2png.py、引数は転送)")
     sub.add_parser("serve", help="PROTOCOL.md参照実装サーバを起動 (reference_server.py、引数は転送)")
+    sub.add_parser("midi2mml", help="MIDI(SMF)をpico-os MMLへ変換 (midi2mml.py、引数は転送)")
 
     dict_parser = sub.add_parser("dict", help="辞書データ関連 (script/dic, en-ja-and-ja-en.tsv 等)")
     dict_sub = dict_parser.add_subparsers(dest="dict_command", required=True)

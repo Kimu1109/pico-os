@@ -1,22 +1,28 @@
 #pragma once
 #include <cstdint>
+#include "sound/Chip_Synth.hpp"
 
 // 演奏データ(MUSIC_FORMAT.md「本体の中での扱い」)。MMLの読み取り(Mml_Compiler)が書き、
 // 2コア目のシーケンサー(Music_Player)が読む、小さなバイト列の取り決め。
 // ファイル形式ではない(SDへは書かない)ので、版を上げずに変えてよい。
 //
-// [ヘッダ 16バイト]
+// [ヘッダ kHeaderBytesバイト]
 //   0: 'P' 'M'   1: 版(kVersion)   3: 予備
 //   4: 最初のテンポ(u16)   6: 予備(u16)
-//   8: チャンネル0〜3の命令列の開始位置(u16×4、バッファの先頭から。0なら空のチャンネル)
+//   8: チャンネル0〜kChannels-1の命令列の開始位置(u16×kChannels、バッファの先頭から。0なら空のチャンネル)
 // [命令列] チャンネルごとに END で終わる。数値はすべてリトルエンディアン
 namespace MusicData {
 
     constexpr uint8_t  kMagic0 = 'P';
     constexpr uint8_t  kMagic1 = 'M';
     constexpr uint8_t  kVersion = 1;
-    constexpr uint16_t kHeaderBytes = 16;
-    constexpr int      kChannels = 4;
+    // MMLのトラックはChipSynthの音源チャンネルへ1:1で乗るので、同じ定数を使う
+    // (任意チャンネル数対応、2026-09-28。詳細はChip_Synth.hppのコメント参照)
+    constexpr int      kChannels = ChipSynth::kChannels;
+    constexpr uint16_t kHeaderBytes = 8 + kChannels * 2;
+    // MMLのチャンネルは行頭の文字 A〜Z で選ぶ(Mml_Compiler.cpp の ChannelMask())ので、
+    // 26種より多くは書き表せない
+    static_assert(kChannels >= 1 && kChannels <= 26, "MMLのチャンネル文字はA〜Zの26種まで");
     constexpr uint16_t kTicksPerQuarter = 48;
     constexpr uint16_t kTicksPerWhole = kTicksPerQuarter * 4;
     constexpr int      kMaxLoopDepth = 4;

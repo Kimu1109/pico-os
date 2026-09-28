@@ -1,6 +1,7 @@
 #include "functions/Sound_Functions.hpp"
 #include "functions/Config_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Battery_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "sound/Mml_Compiler.hpp"
 #include "sound/Music_Player.hpp"
@@ -28,10 +29,12 @@ namespace {
     std::atomic<bool>     want_run{false};      // 1コア目→2コア目: I2Sを動かしてほしい
     std::atomic<uint32_t> retry_epoch{0};       // 1コア目→2コア目: 増えたらbegin()の失敗を忘れて試し直す
     std::atomic<uint8_t>  master_volume{kDefaultVolume};
+    // 1コア目→2コア目: バッテリー駆動中か(音割れ防止のkBatteryVolumeCapPercent頭打ちを掛けるかどうか)
+    std::atomic<bool>     battery_cap_active{false};
 
     std::atomic<bool>     core1_running{false}; // 2コア目→1コア目: I2Sが動いている
     std::atomic<bool>     core1_failed{false};  // 2コア目→1コア目: begin()に失敗した
-    std::atomic<uint8_t>  core1_active{0};      // 2コア目→1コア目: 鳴っているチャンネル
+    std::atomic<ChipSynth::ChannelMask> core1_active{0};  // 2コア目→1コア目: 鳴っているチャンネル
     std::atomic<uint32_t> core1_processed{0};   // 2コア目→1コア目: 音源へ渡し終えたコマンドの数
     std::atomic<bool>     core1_music{false};   // 2コア目→1コア目: 曲が鳴っている
     std::atomic<uint8_t>  core1_gb_active{0};   // 2コア目→1コア目: GBの音源で鳴っているチャンネル
@@ -166,7 +169,7 @@ namespace {
     ChipSynth::Engine engine(kSampleRate);
     GbApu gb_apu(kSampleRate);
     MusicPlayer player(kSampleRate);
-    uint8_t borrowed = 0;               // 効果音が借りているチャンネル(曲はここに触らない)
+    ChipSynth::ChannelMask borrowed = 0;   // 効果音が借りているチャンネル(曲はここに触らない)
 
     bool running = false;
     bool failed = false;
@@ -243,12 +246,12 @@ namespace {
                 case CmdType::Play:
                     //効果音。曲が鳴っていても、このチャンネルを借りて鳴らす
                     engine.play(cmd.ch, cmd.note);
-                    borrowed |= (uint8_t)(1u << cmd.ch);
+                    borrowed |= (ChipSynth::ChannelMask)(1u << cmd.ch);
                     break;
                 case CmdType::Stop:
                     //効果音を止める。曲が使っているチャンネルは止めない
                     if((borrowed & (1u << cmd.ch)) || !player.playing()) engine.stop(cmd.ch);
-                    borrowed &= (uint8_t)~(1u << cmd.ch);
+                    borrowed &= (ChipSynth::ChannelMask)~(1u << cmd.ch);
                     break;
                 case CmdType::StopAll:
                     //効果音を全部止める。曲が鳴っていなければ全チャンネル
@@ -328,6 +331,13 @@ void SoundFunctions::UpdateAt(unsigned long now_ms){
     Detect(now_ms, false);
     LogCore1Changes();
 
+    //VSYSがUSBの5VでなくLiPoセルの電圧になるバッテリー駆動中は、アンプの出力ヘッドルームが
+    //下がり音割れする(実機で確認済み)。BatteryFunctionsの直近のサンプル(60秒間隔)で判定する
+    battery_cap_active.store(
+        BatteryFunctions::HasSample() && !BatteryFunctions::IsExternallyPowered(),
+        std::memory_order_relaxed
+    );
+
     const uint32_t d = dropped.load(std::memory_order_relaxed);
     static uint32_t logged_dropped = 0;
     if(d != logged_dropped){
@@ -368,6 +378,7 @@ void SoundFunctions::SetVolume(int v){
     if(v > 100) v = 100;
     master_volume.store((uint8_t)v, std::memory_order_release);
 }
+bool SoundFunctions::IsBatteryVolumeCapActive(){ return battery_cap_active.load(std::memory_order_relaxed); }
 
 bool SoundFunctions::Play(uint8_t ch, const ChipSynth::Note& note){
     if(ch >= kChannels) return false;
@@ -405,7 +416,7 @@ bool SoundFunctions::IsPlaying(){
     return core1_active.load(std::memory_order_acquire) != 0;
 }
 
-uint8_t SoundFunctions::ActiveChannels(){ return core1_active.load(std::memory_order_acquire); }
+ChipSynth::ChannelMask SoundFunctions::ActiveChannels(){ return core1_active.load(std::memory_order_acquire); }
 uint32_t SoundFunctions::DroppedCommands(){ return dropped.load(std::memory_order_relaxed); }
 
 // ---- 曲 ----
@@ -553,7 +564,11 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     //効果音が鳴り終わったチャンネルは曲へ返す(曲は次の音符から鳴らす)
     borrowed &= engine.activeMask();
     player.setBorrowed(borrowed);
-    const uint8_t vol = master_volume.load(std::memory_order_acquire);
+    uint8_t vol = master_volume.load(std::memory_order_acquire);
+    //バッテリー駆動中は設定値そのものは変えず、音源へ渡す値だけ頭打ちする(音割れ対策)
+    if(battery_cap_active.load(std::memory_order_acquire) && vol > kBatteryVolumeCapPercent){
+        vol = kBatteryVolumeCapPercent;
+    }
     if(vol != engine.masterVolume()){
         engine.setMasterVolume(vol);
         gb_apu.setMasterVolume(vol);

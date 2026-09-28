@@ -18,6 +18,7 @@
 
 #include <Arduino.h>
 #include <I2S.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -213,22 +214,28 @@ static void TestSynth(){
 
     printf("--- 音源: 足し合わせと全体の音量 ---\n");
     {
+        //全チャンネルを同時に鳴らしたときの上限(kHeadroomChannelsを超えた分は比率で下げられる。
+        //Chip_Synth.hpp「同時発音数」参照)。kChannels<=kHeadroomChannelsなら単純にA*kChannels
+        const int nominal = ChipSynth::kHeadroomChannels;
+        const int32_t fullMask = (int32_t)(((uint64_t)1 << ChipSynth::kChannels) - 1);
+        const int32_t expectedFull = A * std::min<int>(ChipSynth::kChannels, nominal);
+
         ChipSynth::Engine e(kRate);
         for(uint8_t ch = 0; ch < ChipSynth::kChannels; ch++) e.play(ch, MakeNote(Wave::Pulse50, 441));
-        check(e.activeMask() == 0xF, "4チャンネル同時に鳴る");
+        check(e.activeMask() == (ChipSynth::ChannelMask)fullMask, "全チャンネル同時に鳴る");
         const auto v = Render(e, 50);
-        //同じ位相の4つが重なる = 4倍(16bitに収まる)
-        check(v[0] >= A * 4 - 4 && v[0] <= 32767, "4チャンネル分が足される(溢れない)");
+        //全チャンネルが同じ位相で重なっても、kHeadroomChannels分を超えて歪みはしない(溢れない)
+        check(v[0] >= expectedFull - 4 && v[0] <= 32767, "全チャンネル分が足される(溢れない)");
         e.setMasterVolume(50);
         const auto h = Render(e, 50);
-        check(abs(abs(h[0]) - (A / 2) * 4) <= 8, "全体の音量50で半分");
+        check(abs(abs(h[0]) - expectedFull / 2) <= 8, "全体の音量50で半分");
         e.setMasterVolume(0);
         const auto z = Render(e, 50);
         bool silent = true;
         for(int16_t s : z) if(s != 0) silent = false;
-        check(silent && e.activeMask() == 0xF, "全体の音量0は無音だが鳴っている扱い");
-        e.play(9, MakeNote(Wave::Pulse50, 441));
-        check(e.activeMask() == 0xF, "範囲外のチャンネルは無視");
+        check(silent && e.activeMask() == (ChipSynth::ChannelMask)fullMask, "全体の音量0は無音だが鳴っている扱い");
+        e.play((uint8_t)(ChipSynth::kChannels + 50), MakeNote(Wave::Pulse50, 441));
+        check(e.activeMask() == (ChipSynth::ChannelMask)fullMask, "範囲外のチャンネルは無視");
         e.stopAll();
         check(e.activeMask() == 0, "stopAll()で全部止まる");
     }

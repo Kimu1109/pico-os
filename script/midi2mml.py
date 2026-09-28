@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """MIDI(SMF)を pico-os MML(MUSIC_FORMAT.md)へ変換する。標準ライブラリだけで動く。
 
-pico-os の音源は4チャンネル・1チャンネル1音なので、MIDIの全部の音は鳴らせない。
+pico-os の音源はチャンネルが複数あるが1チャンネル1音なので、MIDIの全部の音は鳴らせない
+(--channels の既定は4。音源側の上限は ChipSynth::kChannels で、既定は8)。
 このスクリプトは「それらしく鳴る下書き」を作るところまでで、仕上げは人がMMLを直す前提
 (MUSIC_FORMAT.md「なぜMMLか」)。何をどこへ割り当てたかは出力の注釈に残す。
 
@@ -10,13 +11,14 @@ pico-os の音源は4チャンネル・1チャンネル1音なので、MIDIの�
     python3 script/midi2mml.py song.mid --list             # 声部の一覧(番号は --pick で使う)
     python3 script/midi2mml.py song.mid --pick A=1,B=3+4,C=2,D=drums
     python3 script/midi2mml.py song.mid --loop --bars 1-32
+    python3 script/midi2mml.py song.mid --channels 8       # 8チャンネル(A〜H)まで使う
 
 変換の流れ:
   1. 音符を読み、時間を MML のティック(4分音符 = 48)へ直して格子へ揃える(--grid。既定は自動)
   2. MIDIのトラック×チャンネル(=パート)ごとに、和音を「声部」(同時に1音の線)へ分ける。
      和音のいちばん上の音が1本目の声部に入る
-  3. 声部を選んで A〜D へ割り当てる(--pick。既定は鳴っている時間の長い順に選び、
-     いちばん低い声部を三角波の C、打楽器(MIDIの10ch)をノイズの D にする)
+  3. 声部を選んで A〜(--channels で決めた数だけ)へ割り当てる(--pick。既定は鳴っている時間の
+     長い順に選び、いちばん低い声部を三角波の C、打楽器(MIDIの10ch)をノイズの最後のチャンネルにする)
   4. チャンネルごとに1音へ間引く(同じ時刻なら高い音、後から来た音が前の音を切る)
   5. MMLを書く。演奏データが6KiBを超えるなら、収まる小節までで切る(--no-fit で切らない)
 
@@ -39,9 +41,16 @@ MAX_LINE_BYTES = 512            # 1行の上限
 LINE_SOFT_LIMIT = 300           # これを超えたら次の音から改行する
 BARS_PER_LINE = 4
 MAX_TOKEN_TICKS = 65535         # 音符/休符1つの長さの上限(演奏データがu16)
+# 演奏データのヘッダ(Music_Data.hpp)は ChipSynth::kChannels 個ぶんのu16を積むので、
+# ヘッダのバイト数は「このスクリプトが --channels で何チャンネルへ割り当てるか」ではなく
+# 「変換先のpico-osビルドの音源チャンネル数」で決まる。ChipSynth::kChannelsと合わせること
+# (このスクリプトはsrc/を読まない独立ツールなので、値がずれたら手で直す)
+DEVICE_CHANNELS = 8
 
 WAVES = ("pulse12", "pulse25", "pulse50", "pulse75", "triangle", "saw", "noise", "noise_short")
-CHANNELS = "ABCD"
+MAX_CHANNELS = 26   # MMLのチャンネル文字はA〜Zの26種まで(MUSIC_FORMAT.md「同時発音数と音量」)
+DEFAULT_CHANNELS = 4  # 変換の既定(以前からの挙動を変えないための値。音源側の既定8とは独立)
+CHANNELS = "ABCD"[:DEFAULT_CHANNELS]   # main()が --channels を見て後で差し替える
 NOTE_NAMES = ("c", "c+", "d", "d+", "e", "f", "f+", "g", "g+", "a", "a+", "b")
 DRUM_CHANNEL = 9                # MIDIの10ch(0始まりで9)
 
@@ -406,14 +415,30 @@ def grid_name(g):
 
 # ---------------------------------------------------------------- チャンネルへの割り当て
 
-DEFAULT_WAVES = {"A": "pulse50", "B": "pulse25", "C": "triangle", "D": "pulse12"}
+# 最初の4チャンネル(A〜D)は昔からの役割固定: 主旋律2本・ベース(三角波)・打楽器/主旋律。
+# 5チャンネル目以降(--channels で増やした分)は、決まった役割を持たず矩形波/のこぎり波を巡回する
+_ROLE_WAVES = ["pulse50", "pulse25", "triangle", "pulse12"]
+_EXTRA_WAVES = ["pulse75", "saw", "pulse50", "pulse25"]
+
+
+def default_wave_for(index):
+    if index < len(_ROLE_WAVES):
+        return _ROLE_WAVES[index]
+    return _EXTRA_WAVES[(index - len(_ROLE_WAVES)) % len(_EXTRA_WAVES)]
+
+
+def default_waves_for(channels):
+    return {c: default_wave_for(i) for i, c in enumerate(channels)}
+
+
+DEFAULT_WAVES = default_waves_for(CHANNELS)
 
 
 def auto_pick(lines, use_drums):
     """{チャンネル: [声部]} と 打楽器を載せるチャンネル(無ければNone)"""
     melodic = number_lines(lines)
     has_drums = use_drums and any(l.is_drums for l in lines)
-    slots = 3 if has_drums else 4
+    slots = len(CHANNELS) - 1 if has_drums else len(CHANNELS)
 
     # 2本目以降の声部(和音の内声)は、別のパートの主旋律より後回しにする
     ranked = sorted(melodic, key=lambda l: -(l.sounding() * (1.0 if l.voice == 0 else 0.5)))
@@ -430,14 +455,15 @@ def auto_pick(lines, use_drums):
                 break
 
     chosen.sort(key=lambda l: -l.avg_pitch())
+    drum_channel = CHANNELS[-1] if has_drums else None
     assign = {}
-    free = [c for c in CHANNELS if not (has_drums and c == "D")]
-    if len(chosen) >= 2 and chosen[-1].avg_pitch() < 60:
+    free = [c for c in CHANNELS if c != drum_channel]
+    if len(chosen) >= 2 and chosen[-1].avg_pitch() < 60 and "C" in free:
         assign["C"] = [chosen.pop()]
         free.remove("C")
     for l in chosen:
         assign[free.pop(0)] = [l]
-    return assign, ("D" if has_drums else None)
+    return assign, drum_channel
 
 
 def parse_pick(text, lines):
@@ -453,7 +479,7 @@ def parse_pick(text, lines):
         ch, rhs = [s.strip() for s in item.split("=", 1)]
         ch = ch.upper()
         if ch not in CHANNELS:
-            raise ValueError("チャンネルは A〜D です(%s)" % ch)
+            raise ValueError("チャンネルは A〜%s です(%s)" % (CHANNELS[-1], ch))
         if ch in assign or ch == drums_at:
             raise ValueError("チャンネル %s が2回出てきます" % ch)
         if rhs.lower() == "drums":
@@ -798,7 +824,11 @@ def render(chans, waves, bar, loop, deflens):
     for c in CHANNELS:
         if c in chans:
             writers[c] = build_channel(c, chans[c], waves[c], bar, loop, end_tick, deflens[c])
-    size = 16 + sum(w.bytes for w in writers.values())
+    #演奏データのヘッダ(Music_Data.hpp): 8バイト固定 + DEVICE_CHANNELS個ぶんのu16(開始位置)。
+    #実際に書くのはCHANNELS(--channelsで決めた数)ぶんの命令列だけだが、ヘッダの大きさは
+    #変換先ビルドの音源チャンネル数で決まるので、DEVICE_CHANNELSを使う(len(CHANNELS)ではない)
+    header_bytes = 8 + DEVICE_CHANNELS * 2
+    size = header_bytes + sum(w.bytes for w in writers.values())
     return writers, size, end_tick
 
 
@@ -908,8 +938,9 @@ def convert(song, args, out_err=None):
     print("midi2mml: %s → %sチャンネル、演奏データ約%dバイト" % (
         os.path.basename(args.input), "".join(sorted(writers)), size), file=out_err)
     if dropped > 0:
-        print("midi2mml: 4音に収めるため、打楽器以外の音符%d個のうち%d個を使いませんでした(--list と --pick で選び直せます)"
-              % (total_notes, dropped), file=out_err)
+        print("midi2mml: %d音に収めるため、打楽器以外の音符%d個のうち%d個を使いませんでした"
+              "(--list と --pick で選び直せます。--channels で増やすこともできます)"
+              % (len(CHANNELS), total_notes, dropped), file=out_err)
     return "\n".join(out) + "\n", size
 
 
@@ -930,7 +961,16 @@ def main(argv=None):
     ap.add_argument("--no-fit", action="store_true", help="演奏データが6KiBを超えても切り詰めない")
     ap.add_argument("--title", help="曲名(既定は最初のトラック名かファイル名)")
     ap.add_argument("--composer", help="作者")
+    ap.add_argument("--channels", type=int, default=DEFAULT_CHANNELS,
+                    help="割り当て先のチャンネル数(既定%d、1〜%d)。音源側(ChipSynth::kChannels)の"
+                         "上限に合わせて増やせる" % (DEFAULT_CHANNELS, MAX_CHANNELS))
     args = ap.parse_args(argv)
+
+    if args.channels < 1 or args.channels > MAX_CHANNELS:
+        ap.error("--channels は1〜%dです" % MAX_CHANNELS)
+    global CHANNELS, DEFAULT_WAVES
+    CHANNELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[:args.channels]
+    DEFAULT_WAVES = default_waves_for(CHANNELS)
 
     args.grid_ticks = 0
     if args.grid:

@@ -74,6 +74,17 @@ if(LOVYANGFX_DIR STREQUAL "")
         GIT_REPOSITORY https://github.com/lovyan03/LovyanGFX.git
         GIT_TAG        ${LOVYANGFX_TAG}
         GIT_SHALLOW    TRUE
+        # UPDATE_DISCONNECTED: これが無いと、同じpc/buildディレクトリへ2回目以降
+        # configureするたびに「update」(git fetch/checkout。中身は同じでも毎回実行される)
+        # のスタンプが更新され、後続の「patch」ステップが(実際は変更が無くても)
+        # 依存関係上「古い」とみなされ再実行される。パッチは既に当たった木へは
+        # 当て直せない(git applyは冪等ではない)ため、2回目以降のconfigureが
+        # 必ず"patch does not apply"で失敗していた。これを付けると、初回の取得・
+        # パッチ適用が済んだ後はupdateステップ自体が自動実行されなくなり、
+        # 同じビルドディレクトリへの再configureが安全になる
+        # (版を上げ直す場合は -DFETCHCONTENT_FULLY_DISCONNECTED=OFF か、
+        # ビルドディレクトリを作り直すこと)
+        UPDATE_DISCONNECTED TRUE
         PATCH_COMMAND  git apply --whitespace=fix
                        "${CMAKE_CURRENT_SOURCE_DIR}/patches/0001-panel_sdl-renderer-fallback-and-cleanup.patch")
     FetchContent_GetProperties(lovyangfx)

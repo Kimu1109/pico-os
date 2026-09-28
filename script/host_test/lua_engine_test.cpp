@@ -950,7 +950,7 @@ int main(){
                       "pico.sound_play: 積めたらtrue")
                 check(pico.sound_playing() == true, "pico.sound_playing: 積んだ直後から鳴っている扱い")
                 check(not pcall(pico.sound_play, 0, 440, 100), "pico.sound_play: チャンネル0はエラー(1始まり)")
-                check(not pcall(pico.sound_play, 5, 440, 100), "pico.sound_play: チャンネル5はエラー")
+                check(not pcall(pico.sound_play, 999, 440, 100), "pico.sound_play: 範囲外のチャンネルはエラー")
                 check(not pcall(pico.sound_play, 1, 440, 100, {wave = "sine"}), "pico.sound_play: 不明な波形はエラー")
                 check(not pcall(pico.sound_play, 1, 440, 100, "pulse50"), "pico.sound_play: 4番目は表")
             )LUA", "sound_test");

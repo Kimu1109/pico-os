@@ -490,6 +490,13 @@ class LuaEngine {
         void BindCallback(class Widget* w, WidgetId id, EventKind kind, int ref);
         void PruneCallbacksFor(WidgetId id);
 
+        // callbacks_はid昇順を不変条件として保つ(BindCallback/PruneCallbacksForが維持する)。
+        // 同じidのイベント種別はEventKindの種類数ぶん(現状12種)しかないので、idの範囲を
+        // 二分探索で絞ってから先頭だけを線形に見れば、実質O(log n)でヒットする。
+        // アプリ全体のコールバック合計数ぶん毎回舐めていた線形探索(Dispatch系は毎フレーム
+        // 呼ばれうる)をここへ集約した。見つからなければnullptr
+        CallbackBinding* FindCallback(WidgetId id, EventKind kind);
+
         static bool EventKindFromName(const char* name, EventKind& out);
 
         // "pico.*" 関数群。lua_CFunction(引数もコンテキストも持てない素の関数ポインタ)

@@ -58,8 +58,14 @@ Task → Network → Keyboard → IME → Time → Test → App)が走る。
 CIや画面のないマシンでは、Nフレーム回してPPMへ書き出して終了できる。
 
 ```sh
-SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40
+SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --shot shot.ppm 40
 ```
+
+**`dummy`ドライバは使わないこと。** `dummy`は`SDL_RENDERER_ACCELERATED`系のレンダラーを
+一切提供できず、LovyanGFXの`Panel_sdl`がフレームごとにウィンドウを作り直そうとして
+ヒープが際限なく増え続ける(`pc/patches/README.md`参照。取得したLovyanGFXへ
+フォールバックのパッチを当てて緩和はしてあるが、`offscreen`を使えばそもそも
+毎フレームの作り直し自体が起きない)。
 
 ## ブラウザで動かす (WebAssembly)
 

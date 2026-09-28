@@ -70,6 +70,58 @@ namespace {
         //パスは "/" 始まりへそろえる("." や ".." も畳む)
         return PICO_IO::normalize(pathOut, path ? path : "/");
     }
+
+    // 目録からsafeHost/normalizedPath(どちらも正規化済み)に一致する行を探す、読み取り専用の走査。
+    // outがnullptrなら「一致する行があるかどうか」だけを返す(SetEntry()/RemoveEntry()が
+    // 全体を書き直す必要が本当にあるかを判断するために使う)。Lookup()もこれ1つに寄せてある
+    bool scanIndexFor(const char* safeHost, const char* normalizedPath, PICO_DocCache::Entry* out){
+        FsFile src = OSData::SD.open(PICO_Path::FILE::CACHE_INDEX_TSV, O_RDONLY);
+        if(!src) return false;
+
+        char line[PICO_DocCache::kMaxIndexLineLen];
+        bool found = false;
+
+        while(src.fgets(line, sizeof(line)) > 0){
+            chomp(line);
+            if(line[0] == '\0' || line[0] == '#') continue;
+
+            char* fields[5];
+            int fieldCount = 0;
+            if(!lineMatches(line, safeHost, normalizedPath, fields, fieldCount)) continue;
+
+            if(out){
+                out->host.assign(fields[0]);
+                out->path.assign(fields[1]);
+                out->validator.assign(fieldCount > 2 ? fields[2] : "");
+                out->fetched_epoch = (fieldCount > 3) ? (uint32_t)strtoul(fields[3], nullptr, 10) : 0;
+                out->size = (fieldCount > 4) ? (uint32_t)strtoul(fields[4], nullptr, 10) : 0;
+            }
+            found = true;
+            break;
+        }
+
+        src.close();
+        return found;
+    }
+
+    // 目録の末尾へ1行だけ追記する。host/pathの重複が無いと分かっている場合専用
+    // (呼び出し元がscanIndexFor()で確認済みであること)。rewriteIndex()と違って
+    // 全体を読み書きしないので、新規追加は事実上O(1)のSD I/Oで済む
+    bool appendIndexEntry(const PICO_DocCache::Entry& entry){
+        //目録は /cache 直下なので、まだ無ければ作っておく
+        OSData::SD.mkdir(PICO_Path::DIR::CACHE);
+
+        FsFile dst = OSData::SD.open(PICO_Path::FILE::CACHE_INDEX_TSV, O_WRONLY | O_CREAT | O_APPEND);
+        if(!dst){
+            LOG_SYS_FAIL("DocCache: 目録を追記モードで開けません (%s)", PICO_Path::FILE::CACHE_INDEX_TSV);
+            return false;
+        }
+        const bool ok = writeEntryLine(dst, entry);
+        dst.close();
+
+        if(!ok) LOG_SYS_FAIL("DocCache: 目録への追記に失敗しました");
+        return ok;
+    }
 }
 
 // ---------- ホスト名とパス ----------
@@ -123,31 +175,7 @@ bool PICO_DocCache::Lookup(const char* host, const char* path, Entry& out){
     FixedString<PICO_PATH_LEN> normalized;
     if(!canonicalize(host, path, safeHost, normalized)) return false;
 
-    FsFile src = OSData::SD.open(PICO_Path::FILE::CACHE_INDEX_TSV, O_RDONLY);
-    if(!src) return false;
-
-    char line[kMaxIndexLineLen];
-    bool found = false;
-
-    while(src.fgets(line, sizeof(line)) > 0){
-        chomp(line);
-        if(line[0] == '\0' || line[0] == '#') continue;
-
-        char* fields[5];
-        int fieldCount = 0;
-        if(!lineMatches(line, safeHost.c_str(), normalized.c_str(), fields, fieldCount)) continue;
-
-        out.host.assign(fields[0]);
-        out.path.assign(fields[1]);
-        out.validator.assign(fieldCount > 2 ? fields[2] : "");
-        out.fetched_epoch = (fieldCount > 3) ? (uint32_t)strtoul(fields[3], nullptr, 10) : 0;
-        out.size = (fieldCount > 4) ? (uint32_t)strtoul(fields[4], nullptr, 10) : 0;
-        found = true;
-        break;
-    }
-
-    src.close();
-    return found;
+    return scanIndexFor(safeHost.c_str(), normalized.c_str(), &out);
 }
 
 namespace {
@@ -254,6 +282,14 @@ bool PICO_DocCache::SetEntry(const Entry& entry){
     if(!stored.host.assign(safeHost)) return false;
     if(!stored.path.assign(normalized)) return false;
 
+    //既存行が無ければ末尾への1行追記だけで済む(目録全体の読み書きが要らない)。
+    //ブラウジングで新しい文書を開くたびに通る、最も頻度の高い経路をここで軽くする
+    if(!scanIndexFor(safeHost.c_str(), normalized.c_str(), nullptr)){
+        return appendIndexEntry(stored);
+    }
+
+    //既存行がある(内容が更新された)場合だけ、これまで通り全体を書き直して
+    //古い行を新しい内容へ差し替える(1件のhost/pathにつき目録には常に高々1行)
     return rewriteIndex(safeHost.c_str(), normalized.c_str(), &stored);
 }
 
@@ -261,6 +297,12 @@ bool PICO_DocCache::RemoveEntry(const char* host, const char* path){
     FixedString<PICO_STR_M> safeHost;
     FixedString<PICO_PATH_LEN> normalized;
     if(!canonicalize(host, path, safeHost, normalized)) return false;
+
+    //元から無い行を消そうとしただけなら目録には一切触れない。
+    //Remove()は本体が無くても目録の掃除を試みるため、実際によく通る経路
+    //(以前は無条件でrewriteIndex()を呼んでおり、目録が無い状態からでも
+    //空のindex.tsvを新規に作ってしまっていた)
+    if(!scanIndexFor(safeHost.c_str(), normalized.c_str(), nullptr)) return true;
 
     return rewriteIndex(safeHost.c_str(), normalized.c_str(), nullptr);
 }

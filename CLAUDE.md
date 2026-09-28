@@ -192,6 +192,104 @@ SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、
   `display.cfg`への書き込みと再起動後の読み込みを確認済み。**実機での見え方(ソフト輝度なので
   正しく暗く見えるはず)・自動調光の30秒閾値の実測は未確認**。
 
+### dirty矩形を固定長配列化(`src/functions/GFX_Functions`) (2026-09-28)
+
+パフォーマンス監査で見つかった、`PICO_GFX::dirtyRects`が`std::vector<Rect>`のままだった点への対応。
+`FlushDirty()`のたびに`dirtyRects.clear()`→次フレームの`push_back()`で伸縮を繰り返しており、
+「確保ゼロ」方針(MarkdownViewのプール等)から外れていた。加えて`reserve(48)`は**シーン遷移直後の
+実測で軽く超える**件数で、実質恩恵が無かった。
+
+- **`std::vector<Rect> dirtyRects`を`Rect dirtyRects[kMaxDirtyRects]`(固定長配列)+
+  `int dirtyRectCount`へ置き換えた**(`kMaxDirtyRects=128`。48→128へ拡張)。ヒープ確保が
+  完全に無くなる。
+- **128件を超えて`MarkDirty()`された場合は、個々の矩形を追うのを諦めて画面全体を
+  1枚のdirty矩形として扱う**(`dirtyOverflowed`フラグ)。溢れた時点で積んであった
+  個別の矩形は(どうせ全画面転送に飲み込まれるので)破棄し、以降の`MarkDirty()`も
+  静かに無視する。`FlushDirty()`が呼ばれた瞬間に`dirtyRects[0]`を`{0,0,SCREEN_WIDTH,SCREEN_HEIGHT}`
+  へ差し替えて1件だけ処理する(取りこぼしが無く、128枚ぶんの当たり判定・転送より軽い)。
+- 検証はPCビルドで実施: 通常の`--shot`/`--tap`で見た目に変化が無いこと、
+  `kMaxDirtyRects`を一時的に3まで下げてほぼ毎フレーム溢れさせた状態でも
+  クラッシュせず正しく描画されること(画面全体を1枚として扱うので、部分描画時と
+  見た目は変わらない)を確認した。ホストテストは無し(`GFX_Functions`は上記
+  「画面の明るさ調整と自動調光」と同じ理由でASan対象外)。
+
+### 文書キャッシュ目録(index.tsv)の書き込みをO(n)からほぼO(1)へ (`src/storage/Doc_Cache.cpp`) (2026-09-28)
+
+パフォーマンス監査で見つかった、`PICO_DocCache::SetEntry()`/`RemoveEntry()`が常に
+`rewriteIndex()`(目録全体を読みながら一時ファイルへ書き写し、最後にrenameする)を
+呼んでいた点への対応。Markdownブラウザで新しい文書を開くたび(=キャッシュに無い
+host/pathへ初めて`SetEntry()`する)、その時点までに溜まった目録**全件**を読み直し・
+書き直していた。ブラウジングで未訪問のページを開き続けるセッションでは、
+1件追加するたびのコストが目録の総件数に比例して伸び続ける(n件目の追加がO(n)、
+合計でO(n²))。
+
+- **`Lookup()`の中身を`scanIndexFor()`という読み取り専用の走査へ切り出した**
+  (振る舞いは変えていない、単純な抽出)。`SetEntry()`/`RemoveEntry()`からも
+  「本当に既存行があるか」を確認するためだけに呼べるようにするための下準備。
+- **`SetEntry()`は、`scanIndexFor()`で既存行が無いと確認できたら`appendIndexEntry()`
+  (目録の末尾へ1行追記するだけ)で済ませる**。既存行がある(内容が更新された)場合
+  だけ、これまで通り`rewriteIndex()`で全体を書き直す。ブラウジングで新しい文書を
+  開くたびに通る経路(未訪問ページの初回キャッシュ)が最も軽くなるよう狙った
+  (読み取りは相変わらずO(n)だが、**書き込みが「全件読み書き+一時ファイル+rename」
+  から「1行の追記」へ縮む**。SDは書き込みの方が読み込みより重いため、体感の差は
+  読み取り側の計算量が変わらない以上に大きいはず)。
+- **`RemoveEntry()`も同様に、`scanIndexFor()`で対象行が無いと分かれば目録に一切
+  触れず即`true`で返す**。`Remove()`(本体を消す口)は本体が無くても目録の掃除を
+  試みる作りのため、この経路は実際によく通る。**以前は目録が存在しない状態から
+  でも`rewriteIndex()`が空の`index.tsv`を新規に作ってしまっていた**(削除対象が
+  見つからなくても、読み書きの手順自体は素通りで最後まで進んでいたため)。今回の
+  変更でこの副作用も無くなった。
+- **`Doc_Fetch`側の呼び出し元(`DocFetch::begin()`/`update()`)は一切変更していない**。
+  `SetEntry()`/`RemoveEntry()`の入口だけで「新規か更新か」を判断しており、
+  外から見た振る舞い(目録には1つのhost/pathにつき常に高々1行、という不変条件含む)
+  は完全に保たれる。
+- 検証は`script/host_test/cache_test.cpp`(既存の全項目に加えて、
+  「存在しないエントリの削除は目録に一切触れない(ファイルすら作らない)」
+  「新規追加5件それぞれが正しく引ける」を追加)。PCビルドで`script/reference_server.py`を
+  相手に実際にMarkdownアプリから文書を開き、`index.tsv`に正しく1行追記されること、
+  同じページを再訪問しても(304になり`SetEntry()`が呼ばれないため)目録が
+  1バイトも変わらないことを確認した。
+
+### Luaコールバックの探索を線形からid昇順+二分探索へ (`src/lua/LuaEngine`) (2026-09-28)
+
+パフォーマンス監査で見つかった、`LuaEngine::Dispatch()`/`DispatchClosed()`/
+`DispatchSelectItem()`が毎回`callbacks_`(**アプリ全体**のコールバック登録の合計)を
+先頭から線形探索していた点への対応。1ウィジェットが持てるイベント種別は
+`EventKind`の12種までなので「1ウィジェットあたりは十分速い」という当初の判断
+(クラスコメント「コールバック中継の設計」参照)は正しいが、**アプリ全体**では
+ウィジェット数×イベント数ぶん(テトリス/ペイントのような多ボタンLuaアプリでは
+数十〜百程度)に比例して線形探索のコストが伸びる。`render`イベントは毎フレーム
+`Dispatch()`されうるため、この経路はホットパスになりうる。
+
+- **`callbacks_`を`WidgetId`の昇順に保つという不変条件を導入した**
+  (`BindCallback()`/`PruneCallbacksFor()`が維持する)。新設した
+  `FindCallback(id, kind)`が`std::lower_bound()`でidの区間をO(log n)に絞り、
+  そこから先はEventKindの種類数(高々12)ぶんだけ線形に見る(実質定数時間)。
+  `Dispatch()`/`DispatchClosed()`/`DispatchSelectItem()`は全てこれ1つに寄せた。
+- **`BindCallback()`の新規挿入は`std::lower_bound()`で見つけた位置へ`insert()`する**
+  (同じidの中での並び順は`FindCallback()`が線形走査するので問わない)。
+  `PruneCallbacksFor()`も同様にidの区間を二分探索で絞ってから、その範囲をまとめて
+  1回の`erase(first, last)`で消す(以前は1件ずつ`erase(it)`していたため、複数件
+  持つウィジェットの破棄はO(件数×n)だった)。
+- **`Dispatch()`系は`FindCallback()`が返すポインタから`ref`(int)を即座に値コピー
+  してから`ProtectedCall()`(Lua呼び出し)へ入る**。Lua側のコールバックが
+  `pico.on()`/`pico.destroy()`を呼ぶと`callbacks_`(`std::vector`)が再確保・移動
+  されうるため、ポインタ/参照をLua呼び出しの前後で跨いで持たない(元のコードも
+  `ref`を値でコピーしてから使っていたので、その規律をそのまま踏襲しただけ)。
+- コンテナ自体は変わらず`std::vector<CallbackBinding>`のまま(確保回数・メモリ
+  footprintに変化は無い)。挿入・削除の実行時間計算量自体はvectorの性質上O(n)
+  (要素の詰め直しが要る)のままだが、そちらは`pico.on()`/`pico.destroy()`という
+  低頻度の操作でしか起きない。**高頻度(毎フレームありうる)な`Dispatch()`系だけを
+  O(n)からO(log n)へ落とす**のが狙いで、既存の「ヒープ確保を増やさない」方針
+  (クラスコメント参照)とも矛盾しない。
+- 検証: `script/host_test/lua_engine_test.cpp`(既存の全項目。共通4イベント+
+  `render`+`closed`+ウィジェット固有6種+コンテナ操作+HTTPまで、`callbacks_`が
+  絡む経路を一通り踏む)、`script/host_test/lua_scene_test.cpp`をASan/UBSan付きで
+  実行し、並び替え後も全件パスすることを確認。PCビルドでは「テトリス」
+  (タッチボタン6つ+HOLD/BGM枠のタップ+盤面のCanvas `render`を毎フレーム
+  dispatchする、最もコールバック数の多いLuaアプリ)を実際に起動し、ゲーム開始・
+  ソフトドロップ操作・スコア加算・盤面の差分描画までタップで操作して確認した。
+
 ### Wi-Fi認証情報の暗号化保存 (`src/util/Secret_Cipher.hpp`) (2026-09-27)
 
 SDカードだけを紛失/盗難された場合に、`/sys/network.cfg`の`wifi-ssid`/`wifi-password`を
@@ -1134,11 +1232,11 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 sudo apt-get install libsdl2-dev      # 前提: SDL2開発パッケージ
 cmake -S pc -B pc/build && cmake --build pc/build -j
 ./pc/build/picoos_pc                  # マウス左ドラッグ = タッチ
-SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレス確認
+SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --shot shot.ppm 40   # ヘッドレス確認
 
 # ヘッドレスではSDLへマウスが来ないので、撮りたい画面まで --tap で操作を進める
 #   --tap X,Y@FRAME[:HOLD]   FRAMEフレーム目に(X,Y)をHOLDフレーム押す(既定3、最大16件)
-SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc \
+SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc \
     --tap 61,65@30:5 --shot md.ppm 250        # ランチャの1枚目のアプリを開いて撮る
 
 python3 script/ppm2png.py md.ppm md.png 2     # PPMは見づらいのでPNGへ(2倍)
@@ -1357,7 +1455,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
     そのためコールバックのDelegate化は今後も「単体では5%程度」の効果しかなく、優先度は低いまま。
 - **判断: 断片化もリークも観測されていない以上、64KBを常時占有する対価に見合わないため保留**。アプリが増えて断片化が実際に観測された時点で再検討する。
 
-### ⚠️ 未解決: PCビルドでシーン遷移を繰り返すと「ヒープ下限」が際限なく増える(2026-09-19発見)
+### ✅ 解決済み: PCビルドでシーン遷移を繰り返すと「ヒープ下限」が際限なく増える(2026-09-19発見 → 2026-09-28特定・修正)
 
 上の結論は**実機RP2350での計測**に基づくが、`LuaScene`の動作確認中、**PCビルド
 (`pc/build/picoos_pc`)で`--tap`により同じ画面遷移を繰り返すと、上と同じ「ヒープ下限」
@@ -1374,6 +1472,9 @@ SDL_VIDEODRIVER=dummy ./pc/build/picoos_pc \
   --shot /tmp/probe.ppm 260
 # (178,65)=ランチャの「入力テスト」タイル、(40,215)=InputTestSceneの「戻る」ボタン。
 # ランチャ→InputTestScene→ランチャ を5回繰り返すだけ
+# (このコマンド自体が「未解決」当時の再現コマンドで、原因のSDL_VIDEODRIVER=dummyを
+#  わざと使っている。通常の動作確認ではdummyではなくoffscreenを使うこと。上記
+#  「PC / Web実行環境」参照)
 ```
 結果: `ヒープ下限(シーン破棄直後/9回): 初回=188032B 最新=478256B 最大=478256B 差+290224B`
 (9サンプルで約290KB増加。1往復あたり約30〜40KB)。
@@ -1399,12 +1500,54 @@ ASanの通らないPCビルドのGUI経路——実際のLovyanGFX描画・フ�
 開いたままにしているだけで同じ割合で増える。**どの画面でも毎フレーム何かが確保されて返っていない**
 (= シーン遷移そのものではなく、毎フレームの処理のどこか)と見てよい。
 
-**未着手**: 原因の特定(候補: LovyanGFXのフォント/グリフキャッシュ、Task_Functions、
+**未着手(2026-09-24時点)**: 原因の特定(候補: LovyanGFXのフォント/グリフキャッシュ、Task_Functions、
 Network_Functionsの再接続チェック、SDL側のイベント処理)、実機での再現確認、修正。
-次にこの周辺(Scene/Widget基盤、PCビルド)を触る回で必ず引き継ぐこと。
-再現用の`--tap`コマンドは上記の通りなので、まずそれで実機/PCの両方を確認するのが早い。
   `Label::lines`の件は上記のとおり対処済みで、残る`std::function`のDelegate化も単体では5%程度の効果しかない
   (上記)。
+
+**原因特定・修正(2026-09-28)**: 「候補」に挙げていた**「SDL側のイベント処理」が的中**。
+`valgrind --tool=massif`で400フレーム分のヒープ成長を追跡したところ、増加分の一部が
+`lgfx::v1::Panel_sdl::sdl_create() <- sdl_update() <- _update_proc() <- loop()`という、
+**毎フレーム呼ばれる経路から確保されたまま残っている**ことが分かった(`PICO_GFX::Setup()`
+からの起動時1回きりの確保とは別の経路として計上されていたのが決め手)。
+
+原因は**pico-osではなくLovyanGFX側(`src/lgfx/v1/platforms/sdl/Panel_sdl.cpp`)のバグ**:
+`sdl_update()`は`monitor.renderer == nullptr`の間ずっと`sdl_create()`を呼び直すが、
+`sdl_create()`は`SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC)`
+の戻り値をチェックしていない。**この再現コマンドが使っている`SDL_VIDEODRIVER=dummy`は
+この組み合わせのレンダラーを一切提供できない**(検証用の最小SDLプログラムで確認:
+`dummy`は`opengl`/`opengles2`/`software`の3種を持つが、`index=-1`の自動選択では
+先に列挙される`opengl`/`opengles2`の失敗で終わり、`software`まで辿り着かない。
+`SDL_RENDERER_SOFTWARE`を明示すれば`dummy`でも成功する)。そのため`monitor.renderer`が
+永遠に`nullptr`のままになり、`sdl_create()`が毎フレーム(実測: 60フレームで510回)
+呼ばれ続け、**呼ばれるたびに`SDL_CreateWindow()`で新しいウィンドウを作り、直前の
+`m->window`を`SDL_DestroyWindow()`せずに上書きして捨てる**(=毎フレーム1つ
+SDL_Windowがリークする)、という壊れ方だった。
+
+**この問題はSDL_VIDEODRIVER=dummyというヘッドレス実行条件に固有**で、実際のウィンドウ
+表示環境(通常のPCビルド)・Webビルド(Emscripten、別経路)・実機(RP2350、SDL不使用)
+のいずれでも再現しない。上の「実機での20回計測と矛盾しているように見える点」は、
+実機がそもそもSDLを使わないことを踏まえれば矛盾ではなかったことになる。
+
+対応:
+1. **`pc/patches/0001-panel_sdl-renderer-fallback-and-cleanup.patch`**を新設し、
+   `pc/CMakeLists.txt`のFetchContentへ`PATCH_COMMAND`として組み込んだ(取得した
+   LovyanGFXへ自動適用される。詳細は`pc/patches/README.md`)。`sdl_create()`の
+   呼び直しに備えて前回分を必ず`SDL_Destroy*`してから作り直すようにし、
+   `SDL_RENDERER_SOFTWARE`へのフォールバックも追加した。これで`dummy`環境でも
+   毎フレームのリークが止まり(検証: 上記`--tap`再現コマンドで
+   `ヒープ下限(9回): 初回=276832B 最新=282880B 差+6048B`まで縮小。修正前は
+   `差+523872B`)、`dummy`のままでも正しく描画できるようになった。
+2. **`pc/README.md`/`CLAUDE.md`のヘッドレス確認コマンドは`SDL_VIDEODRIVER=dummy`
+   ではなく`SDL_VIDEODRIVER=offscreen`を使うよう変更した**(`cli-tool/picoos`の
+   `pc shot`サブコマンドも同様)。`offscreen`は最初からレンダラーを作れるので
+   `sdl_create()`は起動時の1回だけで済み、パッチが無くても問題を踏まない
+   (パッチは主に「`dummy`をどうしても使う場合の保険」「本当にレンダラーが
+   1つも無い環境でもクラッシュしない安全策」という位置づけになった)。
+3. 修正後に残る微小な残留(**+6048B/9回、1往復あたり1KB未満**)は、実機計測
+   (2026-09-12、「9回時点で+248B」)と同程度のオーダーで、通常のシーン滞在中の
+   一時確保(Wi-Fi再接続チェック等)が拾われているだけと見てよい。この規模の残留を
+   追う投資対効果は低いと判断し、追加調査は行っていない。
 
 ## Luaバインディング (`src/lua/LuaEngine`) (2026-09-19着手)
 

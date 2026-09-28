@@ -1,0 +1,56 @@
+--- a/src/lgfx/v1/platforms/sdl/Panel_sdl.cpp
++++ b/src/lgfx/v1/platforms/sdl/Panel_sdl.cpp
+@@ -499,6 +499,17 @@
+ 
+   void Panel_sdl::sdl_create(monitor_t * m)
+   {
++    // pico-os patch: sdl_update()はmonitor.renderer==nullptrの間ずっとsdl_create()を
++    // 呼び直す。SDL_CreateRenderer()がACCELERATED|PRESENTVSYNCで失敗する環境
++    // (例: SDL_VIDEODRIVER=dummy)では、以前は毎フレーム新しいSDL_Windowを作っては
++    // 前のものを解放せずに捨て続けるヒープリークになっていた(pico-os側でvalgrind massif
++    // で実測: 400フレームで約2MB増加)。呼び直しに備え、まず前回分を確実に破棄してから
++    // 作り直す(このガードが無くても初回は無害)。
++    if (m->texture_frameimage) { SDL_DestroyTexture(m->texture_frameimage); m->texture_frameimage = nullptr; }
++    if (m->texture)            { SDL_DestroyTexture(m->texture);            m->texture = nullptr; }
++    if (m->renderer)           { SDL_DestroyRenderer(m->renderer);          m->renderer = nullptr; }
++    if (m->window)             { SDL_DestroyWindow(m->window);              m->window = nullptr; }
++
+     int flag = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+ #if SDL_FULLSCREEN
+     flag |= SDL_WINDOW_FULLSCREEN;
+@@ -522,11 +533,18 @@
+                                 window_width, window_height, flag);       /*last param. SDL_WINDOW_BORDERLESS to hide borders*/
+     }
+     m->renderer = SDL_CreateRenderer(m->window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+-    m->texture = SDL_CreateTexture(m->renderer, SDL_PIXELFORMAT_RGB24,
+-                     SDL_TEXTUREACCESS_STREAMING, _cfg.panel_width, _cfg.panel_height);
+-    SDL_SetTextureBlendMode(m->texture, SDL_BLENDMODE_NONE);
++    if (!m->renderer) {
++      // pico-os patch: ACCELERATED|PRESENTVSYNCの組み合わせを提供できない環境
++      // (SDL_VIDEODRIVER=dummy等)向けのフォールバック。ソフトウェアレンダラーは
++      // 明示的にSDL_RENDERER_SOFTWAREを要求しないと選ばれない(indexを-1のまま
++      // 探索させても、失敗するopengl/opengles2の方が先に試されて終わる)。
++      m->renderer = SDL_CreateRenderer(m->window, -1, SDL_RENDERER_SOFTWARE);
++    }
++    m->texture = m->renderer ? SDL_CreateTexture(m->renderer, SDL_PIXELFORMAT_RGB24,
++                     SDL_TEXTUREACCESS_STREAMING, _cfg.panel_width, _cfg.panel_height) : nullptr;
++    if (m->texture) { SDL_SetTextureBlendMode(m->texture, SDL_BLENDMODE_NONE); }
+ 
+-    if (m->frame_image) {
++    if (m->frame_image && m->renderer) {
+ // 枠画像用のサーフェイスを作成
+       auto sf = SDL_CreateRGBSurfaceFrom((void*)m->frame_image, m->frame_width, m->frame_height, 32, m->frame_width* 4, 0xFF000000, 0xFF0000, 0xFF00, 0xFF);
+       if (sf != nullptr) {
+@@ -535,8 +553,10 @@
+         SDL_FreeSurface(sf);
+       }
+     }
+-    SDL_SetTextureBlendMode(m->texture_frameimage, SDL_BLENDMODE_BLEND);
+-    _update_scaling(m, scaling_x, scaling_y);
++    if (m->texture_frameimage) { SDL_SetTextureBlendMode(m->texture_frameimage, SDL_BLENDMODE_BLEND); }
++    // pico-os patch: レンダラーが1つも作れなかった場合(真にレンダラー皆無の環境)は
++    // rw/rhが未初期化のままSDL_GetRendererOutputSize()内の除算に使われクラッシュしうるため
++    if (m->renderer) { _update_scaling(m, scaling_x, scaling_y); }
+   }
+ 
+   void Panel_sdl::sdl_update(void)

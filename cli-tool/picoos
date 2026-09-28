@@ -174,7 +174,10 @@ def cmd_pc_shot(args) -> int:
         cmd += [str(args.frames)]
 
     env = dict(os.environ)
-    env["SDL_VIDEODRIVER"] = "dummy"
+    # dummyドライバはSDL_RENDERER_ACCELERATED系のレンダラーを作れず、LovyanGFXの
+    # Panel_sdlが毎フレームウィンドウを作り直してヒープが際限なく増え続ける
+    # (pc/patches/README.md参照。パッチで緩和はしてあるが、そもそも踏まないoffscreenを使う)
+    env["SDL_VIDEODRIVER"] = "offscreen"
     rc = run(cmd, cwd=REPO_ROOT, env=env)
     if rc != 0 or not args.png:
         return rc

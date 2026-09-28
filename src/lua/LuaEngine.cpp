@@ -366,17 +366,32 @@ bool LuaEngine::EventKindFromName(const char* name, EventKind& out) {
     return false;
 }
 
-void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
-    for (auto& e : callbacks_) {
-        if (e.id == id && e.kind == kind) {
-            // 同じid+kindへ再度onした場合は古いrefを捨てて差し替える(リーク防止)。
-            // Widget側のstd::functionは初回のBindCallbackで既に配線済みなので繋ぎ直し不要
-            luaL_unref(L, LUA_REGISTRYINDEX, e.ref);
-            e.ref = ref;
-            return;
-        }
+LuaEngine::CallbackBinding* LuaEngine::FindCallback(WidgetId id, EventKind kind) {
+    // callbacks_はid昇順に保ってあるので、まずidの範囲だけをlower_bound()で絞る。
+    // 同じidが持ちうるイベント種別はEventKindの総数ぶん(現状12種)しかないため、
+    // そこから先の線形走査は実質定数時間で終わる
+    auto it = std::lower_bound(callbacks_.begin(), callbacks_.end(), id,
+        [](const CallbackBinding& e, WidgetId key) { return e.id < key; });
+    for (; it != callbacks_.end() && it->id == id; ++it) {
+        if (it->kind == kind) return &*it;
     }
-    callbacks_.push_back({id, kind, ref});
+    return nullptr;
+}
+
+void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
+    if (CallbackBinding* existing = FindCallback(id, kind)) {
+        // 同じid+kindへ再度onした場合は古いrefを捨てて差し替える(リーク防止)。
+        // Widget側のstd::functionは初回のBindCallbackで既に配線済みなので繋ぎ直し不要
+        luaL_unref(L, LUA_REGISTRYINDEX, existing->ref);
+        existing->ref = ref;
+        return;
+    }
+
+    // 新規挿入はid昇順を保つ位置(lower_bound)へ差し込む。同じidの中での並びは
+    // 探索(FindCallback)が線形走査するだけなので問わない
+    auto pos = std::lower_bound(callbacks_.begin(), callbacks_.end(), id,
+        [](const CallbackBinding& e, WidgetId key) { return e.id < key; });
+    callbacks_.insert(pos, {id, kind, ref});
 
     // キャプチャするのはthis(LuaEngine*)とid(WidgetId=uint32_t)だけなので、
     // std::functionの小バッファに収まりヒープ確保は起きない(クラスコメント参照)
@@ -462,22 +477,26 @@ bool LuaEngine::ResolveImageHandle(uint32_t handle, size_t& out_index) const {
 }
 
 void LuaEngine::PruneCallbacksFor(WidgetId id) {
-    for (auto it = callbacks_.begin(); it != callbacks_.end(); ) {
-        if (it->id == id) {
-            luaL_unref(L, LUA_REGISTRYINDEX, it->ref);
-            it = callbacks_.erase(it);
-        } else {
-            ++it;
-        }
+    // callbacks_はid昇順なので、このidの区間はlower_bound()で先頭を絞ってから
+    // 連続する分だけ前へ進めば良い(同じidは高々EventKindの種類数ぶんしか無い)
+    auto first = std::lower_bound(callbacks_.begin(), callbacks_.end(), id,
+        [](const CallbackBinding& e, WidgetId key) { return e.id < key; });
+    auto last = first;
+    while (last != callbacks_.end() && last->id == id) ++last;
+
+    for (auto it = first; it != last; ++it) {
+        luaL_unref(L, LUA_REGISTRYINDEX, it->ref);
     }
+    callbacks_.erase(first, last);
 }
 
 void LuaEngine::Dispatch(WidgetId id, EventKind kind) {
-    int ref = LUA_NOREF;
-    for (const auto& e : callbacks_) {
-        if (e.id == id && e.kind == kind) { ref = e.ref; break; }
-    }
-    if (ref == LUA_NOREF) return; // pico.destroy()等で既に外れている
+    CallbackBinding* e = FindCallback(id, kind);
+    if (!e) return; // pico.destroy()等で既に外れている
+
+    // Lua呼び出しの中からpico.on/pico.destroyが起きるとcallbacks_が再確保・移動
+    // されうるので、eを跨いで持ち越さずrefだけ値でコピーしておく
+    const int ref = e->ref;
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     lua_pushinteger(L, (lua_Integer)id);
@@ -490,9 +509,8 @@ void LuaEngine::Dispatch(WidgetId id, EventKind kind) {
 
 void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
     int ref = LUA_NOREF;
-    for (const auto& e : callbacks_) {
-        if (e.id == id && e.kind == EventKind::Closed) { ref = e.ref; break; }
-    }
+    if (CallbackBinding* e = FindCallback(id, EventKind::Closed)) ref = e->ref;
+
     if (ref != LUA_NOREF) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
         lua_pushinteger(L, (lua_Integer)id);
@@ -511,11 +529,9 @@ void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
 }
 
 void LuaEngine::DispatchSelectItem(WidgetId id, bool already_selected) {
-    int ref = LUA_NOREF;
-    for (const auto& e : callbacks_) {
-        if (e.id == id && e.kind == EventKind::SelectItem) { ref = e.ref; break; }
-    }
-    if (ref == LUA_NOREF) return;
+    CallbackBinding* e = FindCallback(id, EventKind::SelectItem);
+    if (!e) return;
+    const int ref = e->ref; // Dispatch()と同じ理由でrefだけ値コピーしておく
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     lua_pushinteger(L, (lua_Integer)id);

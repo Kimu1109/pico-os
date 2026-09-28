@@ -63,10 +63,19 @@ endif()
 
 if(LOVYANGFX_DIR STREQUAL "")
     include(FetchContent)
+    # PATCH_COMMAND: Panel_sdl::sdl_create()のバグ修正(pc/patches/README.md参照)。
+    # SDL_VIDEODRIVER=dummy等、SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNCで
+    # レンダラーを作れない環境では、本家コードはmonitor.rendererがnullptrのまま
+    # 残り続け、次フレームごとにsdl_create()が(前回のSDL_Windowを解放せずに)
+    # 呼び直されて毎フレームリークする。ソフトウェアレンダラーへのフォールバックと
+    # 呼び直し前の後始末を足すパッチを当てる(取得したソースへの初回のみ適用され、
+    # 既に取得済みのソースには影響しない)
     FetchContent_Declare(lovyangfx
         GIT_REPOSITORY https://github.com/lovyan03/LovyanGFX.git
         GIT_TAG        ${LOVYANGFX_TAG}
-        GIT_SHALLOW    TRUE)
+        GIT_SHALLOW    TRUE
+        PATCH_COMMAND  git apply --whitespace=fix
+                       "${CMAKE_CURRENT_SOURCE_DIR}/patches/0001-panel_sdl-renderer-fallback-and-cleanup.patch")
     FetchContent_GetProperties(lovyangfx)
     if(NOT lovyangfx_POPULATED)
         # add_subdirectory はしない(LovyanGFX同梱のCMakeListsはESP-IDF向けのため)

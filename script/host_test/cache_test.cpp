@@ -353,6 +353,59 @@ int main(){
               "マニフェスト: 壊れた行の後ろも読める");
     }
 
+    // ---- 存在しないエントリの削除は目録に一切触れない ----
+    // (性能改善: 以前はRemoveEntry()が無条件でrewriteIndex()を呼んでおり、
+    //  目録が無い状態からでも空のindex.tsvを新規に作ってしまっていた。
+    //  今は事前にscanIndexFor()で無いと分かれば早期returnし、ファイルへ触れない)
+    {
+        reset();
+        check(!sdHas(PICO_Path::FILE::CACHE_INDEX_TSV), "削除(無し): 事前に目録が無い");
+        check(PICO_DocCache::RemoveEntry("nope.example", "/nothing.md"),
+              "削除(無し): 存在しないエントリの削除はtrueを返す");
+        check(!sdHas(PICO_Path::FILE::CACHE_INDEX_TSV),
+              "削除(無し): 目録ファイルを新規に作らない(全体書き換えをしていない証拠)");
+
+        //目録はあるが対象の行だけが無いケースも同様に、目録の中身を変えない
+        HostSd::files[PICO_Path::FILE::CACHE_INDEX_TSV] =
+            "keep.example\t/keep.md\tv-keep\t5\t10\n";
+        const std::string before = indexText();
+        check(PICO_DocCache::RemoveEntry("nope.example", "/nothing.md"),
+              "削除(無し・目録あり): trueを返す");
+        eq_str(indexText().c_str(), before.c_str(),
+               "削除(無し・目録あり): 目録の中身が1バイトも変わらない");
+    }
+
+    // ---- 新規追加は既存の行を1つも書き写さない(追記のみで済む) ----
+    // 直接は観測できないので、新規追加後に「既存の行の内容」が
+    // 一切書き換わっていないことで間接的に確かめる
+    {
+        reset();
+        for(int i = 0; i < 5; i++){
+            char path[32];
+            snprintf(path, sizeof(path), "/doc%d.md", i);
+            PICO_DocCache::Writer w;
+            w.begin(kHost, path);
+            char body[8];
+            snprintf(body, sizeof(body), "v%d", i);
+            w.write(body, strlen(body));
+            char etag[16];
+            snprintf(etag, sizeof(etag), "etag-%d", i);
+            w.commit(etag, (uint32_t)i);
+        }
+        eq_u32((uint32_t)countLines(indexText()), 5, "新規追加5件: 目録が5行になる");
+
+        for(int i = 0; i < 5; i++){
+            char path[32];
+            snprintf(path, sizeof(path), "/doc%d.md", i);
+            char expectedEtag[16];
+            snprintf(expectedEtag, sizeof(expectedEtag), "etag-%d", i);
+
+            PICO_DocCache::Entry e;
+            check(PICO_DocCache::Lookup(kHost, path, e), "新規追加5件: 各行が引ける");
+            eq_str(e.validator.c_str(), expectedEtag, "新規追加5件: 各行の内容が正しい");
+        }
+    }
+
     // 注記: Clear()はディレクトリを再帰的に消すためisDir()が要るが、
     // このスタブはパス->内容のフラットなmapでディレクトリの実体が無いため
     // ここでは検証できない。PCビルド(pc/compat/SdFat.h は実ファイルシステム)側で確認すること。

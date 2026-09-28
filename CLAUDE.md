@@ -192,6 +192,27 @@ SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、
   `display.cfg`への書き込みと再起動後の読み込みを確認済み。**実機での見え方(ソフト輝度なので
   正しく暗く見えるはず)・自動調光の30秒閾値の実測は未確認**。
 
+### dirty矩形を固定長配列化(`src/functions/GFX_Functions`) (2026-09-28)
+
+パフォーマンス監査で見つかった、`PICO_GFX::dirtyRects`が`std::vector<Rect>`のままだった点への対応。
+`FlushDirty()`のたびに`dirtyRects.clear()`→次フレームの`push_back()`で伸縮を繰り返しており、
+「確保ゼロ」方針(MarkdownViewのプール等)から外れていた。加えて`reserve(48)`は**シーン遷移直後の
+実測で軽く超える**件数で、実質恩恵が無かった。
+
+- **`std::vector<Rect> dirtyRects`を`Rect dirtyRects[kMaxDirtyRects]`(固定長配列)+
+  `int dirtyRectCount`へ置き換えた**(`kMaxDirtyRects=128`。48→128へ拡張)。ヒープ確保が
+  完全に無くなる。
+- **128件を超えて`MarkDirty()`された場合は、個々の矩形を追うのを諦めて画面全体を
+  1枚のdirty矩形として扱う**(`dirtyOverflowed`フラグ)。溢れた時点で積んであった
+  個別の矩形は(どうせ全画面転送に飲み込まれるので)破棄し、以降の`MarkDirty()`も
+  静かに無視する。`FlushDirty()`が呼ばれた瞬間に`dirtyRects[0]`を`{0,0,SCREEN_WIDTH,SCREEN_HEIGHT}`
+  へ差し替えて1件だけ処理する(取りこぼしが無く、128枚ぶんの当たり判定・転送より軽い)。
+- 検証はPCビルドで実施: 通常の`--shot`/`--tap`で見た目に変化が無いこと、
+  `kMaxDirtyRects`を一時的に3まで下げてほぼ毎フレーム溢れさせた状態でも
+  クラッシュせず正しく描画されること(画面全体を1枚として扱うので、部分描画時と
+  見た目は変わらない)を確認した。ホストテストは無し(`GFX_Functions`は上記
+  「画面の明るさ調整と自動調光」と同じ理由でASan対象外)。
+
 ### Wi-Fi認証情報の暗号化保存 (`src/util/Secret_Cipher.hpp`) (2026-09-27)
 
 SDカードだけを紛失/盗難された場合に、`/sys/network.cfg`の`wifi-ssid`/`wifi-password`を

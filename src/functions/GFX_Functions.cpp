@@ -36,7 +36,6 @@ void PICO_GFX::Setup() {
     pinMode(22, OUTPUT); //LED ON
     digitalWrite(22, HIGH);
 
-    dirtyRects.reserve(48);
     isDirtyDeactivates = false;
 
     LOG_SYS_OK("GFX Setup has succeeded!");
@@ -79,11 +78,31 @@ void PICO_GFX::MarkDirty(const Rect& rect) {
     //未使用のカーソル矩形({0,0,0,0})を毎回markdirtyするので、ここで落とす
     if(rect.w <= 0 || rect.h <= 0) return;
 
-    dirtyRects.push_back(rect);
+    //既に上限を超えて「画面全体を1枚として転送する」方針に切り替わっている間は、
+    //個々の矩形を追っても無駄なので静かに捨てる
+    if(dirtyOverflowed) return;
+
+    if(dirtyRectCount >= kMaxDirtyRects) {
+        //128件を超えたら、個々の矩形を保持するのを諦めて画面全体を1枚のdirty矩形として
+        //扱う方針へ切り替える(実際に置き換えるのはFlushDirty()側)。ここまでに積んだ
+        //個別の矩形はどうせ全画面転送に飲み込まれるので、保持し続ける意味が無く破棄する
+        dirtyOverflowed = true;
+        dirtyRectCount = 0;
+        return;
+    }
+
+    dirtyRects[dirtyRectCount++] = rect;
 }
 
 void PICO_GFX::FlushDirty() {
-    if (dirtyRects.empty()) return;
+    if (dirtyRectCount == 0 && !dirtyOverflowed) return;
+
+    //128件を超えた場合は、細切れの矩形を1枚ずつ処理する代わりに画面全体を
+    //1枚のdirty矩形として扱う(取りこぼしが無く、128枚の当たり判定・転送より軽い)
+    if (dirtyOverflowed) {
+        dirtyRects[0] = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+        dirtyRectCount = 1;
+    }
 
     //! DEBUG !
     unsigned long buf_timer_ms = 0;
@@ -91,7 +110,8 @@ void PICO_GFX::FlushDirty() {
     int push_frame_total_ms = 0;
     //! DEBUG !
 
-    for (auto& d : dirtyRects) {
+    for (int dirty_i = 0; dirty_i < dirtyRectCount; dirty_i++) {
+        const Rect& d = dirtyRects[dirty_i];
         buf_timer_ms = millis(); //! DEBUG !
 
         std::vector<Widget*> hit;
@@ -187,7 +207,7 @@ void PICO_GFX::FlushDirty() {
 
     perf_draw_total_ms += draw_frame_total_ms;
     perf_push_total_ms += push_frame_total_ms;
-    perf_dirtyrects_total += dirtyRects.size();
+    perf_dirtyrects_total += dirtyRectCount;
     perf_frame_count++;
 
     const unsigned long now_ms = millis();
@@ -212,7 +232,8 @@ void PICO_GFX::FlushDirty() {
     }
     //! DEBUG !
 
-    dirtyRects.clear();
+    dirtyRectCount = 0;
+    dirtyOverflowed = false;
 }
 
 void PICO_GFX::DrawDialogBackground(){

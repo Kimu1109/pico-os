@@ -6,7 +6,6 @@
 #include "gui/scenes/ClocksScene.hpp"
 #include "gui/scenes/CalculatorScene.hpp"
 #include "gui/scenes/FileExplorerScene.hpp"
-#include "gui/scenes/FileViewerScene.hpp"
 #include "gui/scenes/TextEditorScene.hpp"
 #include "gui/scenes/SettingsScene.hpp"
 #include "gui/scenes/DictScene.hpp"
@@ -43,8 +42,7 @@ void AppFunctions::Setup(){
     Register("時計", IconID::Clock, &MakeScene<ClocksScene>);
     Register("電卓", IconID::Calculator, &MakeScene<CalculatorScene>);
     Register("ファイル", IconID::Folder, &MakeScene<FileExplorerScene>);
-    //画像(.pimg)/プレーンテキスト/Markdownを表示するビューワー
-    Register("ファイルビューワー", IconID::Eye, &MakeScene<FileViewerScene>);
+    //ファイルの中身を見るビューワー(FileViewerScene)は、ファイルアプリでファイルを2回タップして開く
     //行単位のシンプルなテキストエディタ(TextEditorScene参照)
     Register("テキスト", IconID::Pencil, &MakeScene<TextEditorScene>);
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);

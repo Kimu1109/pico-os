@@ -1,6 +1,7 @@
 #include "gui/scenes/FileExplorerScene.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
+#include "gui/scenes/FileViewerScene.hpp"
 
 void FileExplorerScene::onEnter(){
     const Rect content = Scene::contentRect();
@@ -18,6 +19,10 @@ void FileExplorerScene::onEnter(){
         content.x, (int16_t)body_y,
         content.w, (int16_t)(content.y + content.h - body_y)
     );
+    //ファイルを2回タップしたら中身を見る(ファイルビューワーを上へ積む。「戻る」でここへ戻る)
+    this->explorer->setOnFileTap([](const char* path){
+        SceneFunctions::Push(new FileViewerScene(path));
+    });
     WidgetFunctions::Add(this->explorer);
 }
 

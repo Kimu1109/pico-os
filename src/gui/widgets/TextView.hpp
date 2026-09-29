@@ -4,19 +4,23 @@
 
 #include <functional>
 
-// テキストエディタ(TextEditorScene)の本文欄。
+// プレーンテキストの表示欄(汎用)。テキストエディタの本文欄とファイルビューワーが使う。
 //
 // 「子を持たずrender()で直接描き、タップ位置から逆算する」型(ChatLogView/AppGrid等と同じ)。
-// 文書は呼び出し側(シーン)のバッファをそのまま指し、コピーを持たない。
+// Label+ScrollContainerと違い、**見えている行だけを描く**(長い文書でもスクロールの重さが変わらない)。
+// 文書は呼び出し側のバッファをそのまま指し、コピーを持たない(寿命は呼び出し側が保証する)。
 //   - 行は枠の幅で折り返し、上下のドラッグでスクロールする
-//   - カーソル(縦棒)と、変換中の読み(下線)を描く
+//   - マークアップ(**や~)は解釈しない。書いてあるとおりに出す
+//   - 任意でカーソル(縦棒、setCursorVisible())と、変換中の読みの下線(setComposition())を描く
 //   - 動かさずに指を離すと、そこに一番近い文字の境目のバイト位置を setOnTap() で知らせる
 //
 // 折り返しの計算は文書が変わったときだけ全体をやり直す(setDocument())。1文字ごとの
 // textWidth()は重いので、文字の幅は小さな表に覚えておく(フォントはSmall固定)。
-class TextEditView : public Widget {
+// 行の表は固定長(kMaxRows、1行4バイト)で、溢れた分は表示しない(isTruncated())。
+// 位置は16bitで持つので、文書は64KiB未満であること。
+class TextView : public Widget {
     public:
-        static constexpr int kMaxRows = 512;
+        static constexpr int kMaxRows = 1024;
 
     private:
         struct Row { uint16_t start; uint16_t end; }; // endは行の終わり('\n'の位置 or 折り返し位置)
@@ -34,7 +38,8 @@ class TextEditView : public Widget {
         bool layout_dirty = true;
 
         size_t cursor = 0;
-        bool show_cursor = true;
+        bool show_cursor = false;
+        bool truncated = false;
         size_t comp_start = 0;
         size_t comp_len = 0;
 
@@ -56,7 +61,7 @@ class TextEditView : public Widget {
         static int CharWidth(const char* s, int n);
 
     public:
-        TextEditView(int16_t x, int16_t y, int16_t w, int16_t h) {
+        TextView(int16_t x, int16_t y, int16_t w, int16_t h) {
             this->l_rect = {x, y, w, h};
             this->rows[0] = {0, 0};
         }
@@ -66,6 +71,10 @@ class TextEditView : public Widget {
         // getText()上のバイト位置
         void setCursor(size_t byte_offset);
         size_t getCursor() const { return this->cursor; }
+        // 行の表が足りず、文書の終わりまで表示できていない
+        bool isTruncated() { this->layout(); return this->truncated; }
+        // 一番上へスクロールする
+        void scrollToTop();
         void setCursorVisible(bool v);
         void setComposition(size_t start, size_t len);
 
@@ -81,6 +90,6 @@ class TextEditView : public Widget {
         void causeOnPressEnd() override;
         void render() override;
 
-        WidgetType getWidgetType() const override { return WidgetType::TextEditView; }
+        WidgetType getWidgetType() const override { return WidgetType::TextView; }
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 };

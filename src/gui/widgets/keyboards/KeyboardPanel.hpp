@@ -9,7 +9,7 @@
 // 以前は全画面を覆い、背景の斜線と上部の入力欄(Label)まで自分で描いていたが、
 // その「ダイアログとしての見た目」は KeyboardDialog へ分離した。
 //   - ダイアログ表示(従来どおり): KeyboardDialog が背景の斜線と入力欄を出し、その上にキー盤が載る
-//   - 据え置き表示(docked)    : キー盤だけが画面下に出て、入力先(TextEditView等)が
+//   - 据え置き表示(docked)    : キー盤だけが画面下に出て、入力先(TextView等)が
 //                                 onDisplayChanged() を受けて自分で表示する
 // どちらにするかは KeyboardFunctions::Show() の引数で決まる。
 //

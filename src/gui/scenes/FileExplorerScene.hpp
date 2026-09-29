@@ -9,6 +9,7 @@
 // SD上のファイル一覧・フォルダ作成/削除・選択はFileExplorerウィジェットが
 // 一通り持っているので、このシーンは「戻る」ボタンを足して起動時に
 // ウィジェットを生成するだけの薄い皮(ClocksScene/CalculatorSceneと同じ形)。
+// ファイルを2回タップすると、その中身をファイルビューワー(FileViewerScene)で開く。
 class FileExplorerScene : public Scene {
     private:
         Button* back_button    = nullptr;

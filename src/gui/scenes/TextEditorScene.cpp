@@ -428,7 +428,8 @@ void TextEditorScene::onEnter(){
     WidgetFunctions::Add(this->status_label);
 
     const int view_y = y2 + Label<PICO_STR_L>::GetLineHeight(FontFn::Small) + MARGIN;
-    this->view = new TextEditView(content.x, view_y, content.w, content.y + content.h - view_y);
+    this->view = new TextView(content.x, view_y, content.w, content.y + content.h - view_y);
+    this->view->setCursorVisible(true);
     this->view->setOnTap([this](size_t byte_offset){
         this->view->setCursor(byte_offset);
         if(!KeyboardFunctions::IsDocked()){

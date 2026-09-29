@@ -134,6 +134,49 @@ bool DecodePimgBody(FsFile& f, LGFX_Sprite& sprite, uint16_t width, uint16_t hei
     return py >= height; // 全ピクセルが埋まっていなければ壊れたファイル
 }
 
+bool DecodePimgWindow(FsFile& f, const PimgHeader& header, LGFX_Sprite& dst,
+                      int src_x, int src_y, int w, int h) {
+    if (w <= 0 || h <= 0 || header.width == 0) return false;
+    const int x_end = src_x + w;
+    const int y_end = src_y + h;
+    if (y_end > header.height) return false;
+
+    f.seek(kPimgHeaderSize);
+
+    uint8_t buf[512];
+    int len = 0, pos = 0;
+    int px = 0, py = 0;
+    while (py < y_end) {
+        if (pos + 2 > len) {
+            //読み残しの1バイトを先頭へ寄せてから続きを読む
+            const int rest = len - pos;
+            if (rest > 0) buf[0] = buf[pos];
+            const int got = f.read(buf + rest, sizeof(buf) - rest);
+            if (got <= 0) return false;
+            len = rest + got;
+            pos = 0;
+            if (len < 2) return false;
+        }
+        int run = buf[pos];
+        const uint8_t idx = buf[pos + 1];
+        pos += 2;
+
+        //ランは行をまたぎうるので、行ごとに切って書く
+        while (run > 0 && py < y_end) {
+            const int n = (header.width - px < run) ? header.width - px : run;
+            if (py >= src_y) {
+                const int a = px > src_x ? px : src_x;
+                const int b = (px + n) < x_end ? (px + n) : x_end;
+                if (b > a) dst.drawFastHLine(a - src_x, py - src_y, b - a, idx);
+            }
+            px += n;
+            run -= n;
+            if (px >= header.width) { px = 0; py++; }
+        }
+    }
+    return true;
+}
+
 bool EncodePimg(LGFX_Sprite& sprite, uint16_t width, uint16_t height, FsFile& f, bool transparent) {
     if (width == 0 || height == 0) return false;
 

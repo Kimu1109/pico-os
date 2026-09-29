@@ -58,6 +58,14 @@ void DrawPimgSprite(PimgSprite& s, int x, int y);
 // ピクセルがheight行ぶん埋まらなかった場合(壊れたファイル)はfalseを返す。
 bool DecodePimgBody(FsFile& f, LGFX_Sprite& sprite, uint16_t width, uint16_t height);
 
+// .pimgのうち画像座標(src_x, src_y)からw×hの範囲だけを、dstの(0,0)へデコードする。
+// 範囲の外のランは読み飛ばし、範囲の最後の行を過ぎたらファイルの残りは読まない。
+// SDからは512Bずつまとめて読む(2バイトずつのf.read()は遅い)。ランは行ごとに
+// drawFastHLine()でまとめて書く。dstはあらかじめw×h以上でcreateSprite()済みのこと。
+// 透過(index 0)の画素も書く(透過の扱いはpushSprite()側で決める)。
+bool DecodePimgWindow(FsFile& f, const PimgHeader& header, LGFX_Sprite& dst,
+                      int src_x, int src_y, int w, int h);
+
 // sprite(4bpp、readPixelValue()でパレット番号0〜15を読める前提)の中身を
 // 行優先(ラスタスキャン)でRLE符号化し、.pimg形式でfへ書き出す
 // (script/generate_pimg.pyのC++版エンコーダ)。width/heightは呼び出し側が

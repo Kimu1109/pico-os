@@ -864,4 +864,3 @@ template class Label<PICO_STR_512B>;
 template class Label<PICO_STR_1KiB>;
 template class Label<PICO_STR_2KiB>;
 template class Label<PICO_STR_4KiB>;
-template class Label<PICO_STR_8KiB>; // FileViewerSceneのプレーンテキスト表示欄

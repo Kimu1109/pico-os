@@ -135,6 +135,8 @@ class FakeKeyboard : public ITextInputWidget {
         FixedString<PICO_STR_LL> text;
         FixedString<PICO_STR_LL> getText() override { return text; }
         void setText(const FixedString<PICO_STR_LL>& t) override { text = t; }
+        size_t getCursorByteOffset() override { return text.length(); }
+        void setCursorByteOffset(size_t) override {}
         void setInputTarget(ITextInputTarget*) override {}
         void removeInputTarget(ITextInputTarget*) override {}
         ITextInputTarget* getInputTarget() override { return nullptr; }

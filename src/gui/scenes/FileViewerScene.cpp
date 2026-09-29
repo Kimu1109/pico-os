@@ -5,12 +5,11 @@
 #include "storage/SD_IO.hpp"
 #include "OS_Data.hpp"
 
+#include <cstdio>
 #include <cstring>
 
 namespace {
-    // pathの拡張子がextと一致するか(大文字小文字を区別しない)。
-    // 元は英字だけの拡張子(.md/.pimg等)しか比較しないため、FixedStringの
-    // charCount()等の文字単位API(UTF-8境界考慮)は不要でstrcasecmpで足りる
+    // pathの拡張子がextと一致するか(大文字小文字を区別しない)
     bool HasExtension(const char* path, const char* ext){
         const size_t path_len = strlen(path);
         const size_t ext_len  = strlen(ext);
@@ -19,102 +18,53 @@ namespace {
     }
 }
 
-Rect FileViewerScene::bodyRect() const {
+Rect FileViewerScene::bodyRect(int top_row_h) const {
     const Rect content = Scene::contentRect();
-    const int16_t body_y = content.y + MARGIN + this->top_row_h + MARGIN;
-
-    return {
-        content.x,
-        body_y,
-        content.w,
-        (int16_t)(content.y + content.h - body_y)
-    };
+    const int16_t body_y = content.y + MARGIN + top_row_h + MARGIN;
+    return { content.x, body_y, content.w, (int16_t)(content.y + content.h - body_y) };
 }
 
-void FileViewerScene::applyVisibility(){
-    const bool browsing = (this->mode == Mode::Browse);
-
-    //Browseモードの「戻る」はランチャへ、Viewモードの「戻る」は一覧へ(一段階だけ戻る)
-    if(this->back_button) this->back_button->setText(browsing ? "戻る" : "一覧");
-
-    if(this->status_label) this->status_label->setVisible(!browsing);
-    if(this->explorer)     this->explorer->setVisible(browsing);
-
-    if(this->md_view)      this->md_view->setVisible(!browsing && this->view_kind == ViewKind::Markdown);
-    if(this->text_scroll)  this->text_scroll->setVisible(!browsing && this->view_kind == ViewKind::Text);
-    if(this->image_scroll) this->image_scroll->setVisible(!browsing && this->view_kind == ViewKind::Image);
-}
-
-void FileViewerScene::showTextMessage(const char* message){
+void FileViewerScene::showText(const Rect& body, const char* message){
     this->text_buf.assign(message);
-    this->text_label->setText(this->text_buf);
-    this->text_scroll->refreshContentBounds();
-    this->text_scroll->scrollToTop();
-    this->view_kind = ViewKind::Text;
+    if(!this->text_view){
+        this->text_view = new TextView(body.x, body.y, body.w, body.h);
+        WidgetFunctions::Add(this->text_view);
+    }
+    this->text_view->setDocument(this->text_buf.c_str(), (int)this->text_buf.length());
 }
 
-bool FileViewerScene::loadPlainText(const char* path){
-    FsFile f = OSData::SD.open(path);
+bool FileViewerScene::loadPlainText(const Rect& body, bool& truncated){
+    truncated = false;
+    FsFile f = OSData::SD.open(this->path.c_str());
     if(!f) return false;
 
-    const size_t file_size = f.fileSize();
-    size_t size = file_size;
-    if(size > kMaxTextBytes){
-        size = kMaxTextBytes;
-        //黙って切るとファイルの後半が消えた理由が分からなくなる(MarkdownView::load()と同じ配慮)
-        LOG_SYS_WARN("FileViewer: %s が上限(%uB)を超えているため %uB で打ち切りました",
-            path, (unsigned)kMaxTextBytes, (unsigned)file_size);
-    }
-
-    //MarkdownView::load()と同じく、ファイル全体ぶんの一時バッファをヒープへ一度に
-    //要求せず、スタック上の小さなチャンクで読み進めてtext_bufへ追記する
+    //ファイル全体ぶんの一時バッファを確保せず、小さなチャンクで読み進めて本文へ追記する。
+    //'\r'は捨てる(TextViewは'\n'だけを改行として扱う)
     this->text_buf.clear();
     char chunk[256];
-    size_t remaining = size;
-    while(remaining > 0){
-        const size_t want = (remaining < sizeof(chunk)) ? remaining : sizeof(chunk);
-        const int got = f.read((uint8_t*)chunk, want);
-        if(got <= 0) break; //読み取り失敗。読めたところまでで打ち切る
-        this->text_buf.append(chunk, (size_t)got);
-        remaining -= (size_t)got;
+    char clean[256];
+    for(;;){
+        const int got = f.read((uint8_t*)chunk, sizeof(chunk));
+        if(got <= 0) break;
+        int n = 0;
+        for(int i = 0; i < got; i++){
+            if(chunk[i] != '\r' && chunk[i] != '\0') clean[n++] = chunk[i];
+        }
+        if(this->text_buf.length() + (size_t)n > FixedString<kMaxTextBytes>::capacity()){
+            //入るところまで入れて打ち切る(appendがUTF-8の文字の途中では切らない)
+            this->text_buf.append(clean, (size_t)n);
+            truncated = true;
+            break;
+        }
+        this->text_buf.append(clean, (size_t)n);
     }
     f.close();
 
-    this->text_label->setText(this->text_buf);
-    this->text_scroll->refreshContentBounds();
-    this->text_scroll->scrollToTop();
-    this->view_kind = ViewKind::Text;
+    this->text_view = new TextView(body.x, body.y, body.w, body.h);
+    WidgetFunctions::Add(this->text_view);
+    this->text_view->setDocument(this->text_buf.c_str(), (int)this->text_buf.length());
+    if(this->text_view->isTruncated()) truncated = true;
     return true;
-}
-
-void FileViewerScene::openFile(const char* path){
-    this->mode = Mode::View;
-    this->status_label->setText(PICO_IO::filename(path));
-
-    if(HasExtension(path, ".md") || HasExtension(path, ".markdown")){
-        if(this->md_view->load(path)){
-            this->view_kind = ViewKind::Markdown;
-        }else{
-            this->showTextMessage("このファイルを開けませんでした");
-        }
-    }else if(HasExtension(path, ".pimg")){
-        this->image_view->setPath(path);
-        //Image::updatePath()はヘッダを読めた場合だけ幅/高さを入れる(読めなければ0のまま。
-        //Image.cppの修正で前回開いた画像の大きさを引きずらないようにしてある)
-        if(this->image_view->getLocalRect().w > 0){
-            this->image_scroll->refreshContentBounds();
-            this->image_scroll->scrollToTop();
-            this->view_kind = ViewKind::Image;
-        }else{
-            this->showTextMessage("この画像を開けませんでした");
-        }
-    }else{
-        if(!this->loadPlainText(path)){
-            this->showTextMessage("このファイルを開けませんでした");
-        }
-    }
-
-    this->applyVisibility();
 }
 
 void FileViewerScene::onEnter(){
@@ -123,70 +73,66 @@ void FileViewerScene::onEnter(){
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20);
-    this->back_button->setOnPressEnd([this](){
-        if(this->mode == Mode::View){
-            this->mode = Mode::Browse;
-            this->applyVisibility();
-        }else{
-            SceneFunctions::Pop();
-        }
-    });
+    this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 
     const Rect back_box = this->back_button->getLocalRect();
-    this->top_row_h = back_box.h;
-
     const int status_x = back_box.x + back_box.w + MARGIN;
-    const int status_w = content.x + content.w - MARGIN - status_x;
 
     this->status_label = new Label<PICO_STR_L>(status_x, content.y + MARGIN, "");
     this->status_label->setFontSize(FontFn::Small);
-    this->status_label->setMaxWidth(status_w);
-    this->status_label->setMaxHeight(this->top_row_h);
-    //ファイル名やエラー文言に**等が含まれても装飾として解釈しない
+    this->status_label->setMaxWidth(content.x + content.w - MARGIN - status_x);
+    this->status_label->setMaxHeight(back_box.h);
+    //ファイル名に**等が含まれても装飾として解釈しない
     this->status_label->setDisableAutoTextDecoration(true);
     WidgetFunctions::Add(this->status_label);
 
-    const Rect body = this->bodyRect();
+    const Rect body = this->bodyRect(back_box.h);
+    const char* p = this->path.c_str();
+    const char* name = PICO_IO::filename(p);
+    this->status_label->setText(name);
 
-    this->explorer = new FileExplorer(body.x, body.y, body.w, body.h);
-    this->explorer->setOnFileTap([this](const char* path){
-        this->openFile(path);
-    });
-    WidgetFunctions::Add(this->explorer);
+    if(!OSData::SD_usable){
+        this->showText(body, "SDカードが使えません");
+        return;
+    }
 
-    this->md_view = new MarkdownView(body.x, body.y, body.w, body.h);
-    WidgetFunctions::Add(this->md_view);
-
-    this->text_scroll = new ScrollContainer(body.x, body.y, body.w, body.h);
-    this->text_label = new Label<kMaxTextBytes>(TEXT_PADDING, TEXT_PADDING, "");
-    this->text_label->setFontSize(FontFn::Small);
-    //ソースをそのまま見せるビューなので**や~をマークアップとして解釈しない
-    this->text_label->setDisableAutoTextDecoration(true);
-    this->text_label->setMaxWidth(body.w - SCROLLBAR_W - TEXT_PADDING * 2);
-    this->text_scroll->add(this->text_label); //所有権はtext_scrollへ移る
-    WidgetFunctions::Add(this->text_scroll);
-
-    this->image_scroll = new ScrollContainer(body.x, body.y, body.w, body.h);
-    this->image_scroll->setScrollAxes(true, true); //画像は横にも縦にもはみ出しうる
-    this->image_view = new Image("", 0, 0, false); //空パス=初期状態は何も描かない(openFile()で差し替える)
-    this->image_scroll->add(this->image_view); //所有権はimage_scrollへ移る
-    WidgetFunctions::Add(this->image_scroll);
-
-    this->mode = Mode::Browse;
-    this->view_kind = ViewKind::None;
-    this->applyVisibility();
+    if(HasExtension(p, ".md") || HasExtension(p, ".markdown")){
+        this->md_view = new MarkdownView(body.x, body.y, body.w, body.h);
+        WidgetFunctions::Add(this->md_view);
+        if(!this->md_view->load(p)){
+            this->md_view->setVisible(false);
+            this->showText(body, "このファイルを開けませんでした");
+        }
+    }else if(HasExtension(p, ".pimg")){
+        this->image_view = new ImageView(body.x, body.y, body.w, body.h);
+        WidgetFunctions::Add(this->image_view);
+        if(!this->image_view->load(p)){
+            this->image_view->setVisible(false);
+            this->showText(body, "この画像を開けませんでした");
+        }else{
+            char buf[PICO_STR_L];
+            snprintf(buf, sizeof(buf), "%s %dx%d", name,
+                this->image_view->getImageW(), this->image_view->getImageH());
+            this->status_label->setText(buf);
+        }
+    }else{
+        bool truncated = false;
+        if(!this->loadPlainText(body, truncated)){
+            this->showText(body, "このファイルを開けませんでした");
+        }else if(truncated){
+            char buf[PICO_STR_L];
+            snprintf(buf, sizeof(buf), "%s(途中まで)", name);
+            this->status_label->setText(buf);
+            LOG_SYS_WARN("FileViewer: %s は大きすぎるため途中までしか表示しません", p);
+        }
+    }
 }
 
 void FileViewerScene::onExit(){
-    this->back_button   = nullptr;
-    this->status_label  = nullptr;
-    this->explorer      = nullptr;
-    this->md_view        = nullptr;
-    this->text_scroll   = nullptr;
-    this->text_label    = nullptr;
-    this->image_scroll  = nullptr;
-    this->image_view    = nullptr;
-    this->mode      = Mode::Browse;
-    this->view_kind = ViewKind::None;
+    this->back_button  = nullptr;
+    this->status_label = nullptr;
+    this->md_view      = nullptr;
+    this->text_view    = nullptr;
+    this->image_view   = nullptr;
 }

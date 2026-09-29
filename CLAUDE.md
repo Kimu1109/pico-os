@@ -662,7 +662,7 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
 
 | 置き場所 | 何を入れるか | 中身 |
 |---|---|---|
-| `widgets/` | 汎用部品と基底 | `Widget` / `WidgetID` / `WidgetRegistry` + 下のカタログのうち専用でないもの |
+| `widgets/` | 汎用部品と基底 | `Widget` / `WidgetID` / `WidgetRegistry` + 下のカタログのうち専用でないもの(`TextView` / `ImageView`を含む) |
 | `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` / `ChatLogView` / `GameBoyView` / `GameBoyPad` 等 |
 | `widgets/systems/` | **OSのシェル部品**(特定アプリのものではない) | `Statusbar`(常駐オーバーレイ) / `AppGrid`(ランチャのタイル) |
 | `widgets/dialogs/` | モーダルダイアログ(キーボードのダイアログ枠`KeyboardDialog`を含む) | 下記「ダイアログ」参照 |
@@ -678,7 +678,7 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   画面に紐付いていないこと」で、「複数箇所から使われていること」ではない。
 
 ### ウィジェットカタログ
-Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照)。
+Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / TextView(見えている行だけを描くプレーンテキストの表示欄。任意でカーソル) / ImageView(.pimgを1回だけ解いて持ち、ドラッグでスクロール) / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照)。
 
 `LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
 
@@ -1422,7 +1422,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 - 次: Wiiクラシックコントローラーのドライバ(`Source::WiiClassic`。I2Cで6バイト読むだけ、見つからない間は500msごとに探す)。
   PCビルドにSDLのキーボード/ゲームパッドを直接つなぐのも手軽な追加候補。
 
-### テキストエディタ (`TextEditorScene` / `widgets/apps/TextEditView`) (2026-09-29)
+### テキストエディタ (`TextEditorScene` / `widgets/TextView`) (2026-09-29)
 
 ランチャの「テキスト」。スマホの文字入力と同じく、本文の下にオンスクリーンキーボードを**据え置いて**直接書き込む
 (`KeyboardFunctions::Show(this, Layout::Japanese, true)`。上の「オンスクリーンキーボード」参照)。
@@ -1436,13 +1436,36 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   **シーンからキーボードへ`setText()`等をしている間(`syncing`)は、返ってくる通知を無視する**(再入で行がずれるため)。
 - 文書は固定長の1本のバッファ(4KiB)に`'\n'`区切り。上限は4KiB・200行・1行191バイト。超えるファイルは
   保存で内容が消えないよう**開かずに断る**。入力で上限に当たったときは入力を取り消して状態欄へ理由を出す。
-- `TextEditView`は「子を持たずrender()で直接描く」型。文書のバッファを指すだけでコピーしない。折り返しは
-  文書が変わったときだけ全体をやり直す(行の表は最大512行ぶん、2KB)。1文字ごとの`textWidth()`は重いので、
+- 本文欄は汎用の`TextView`(下の「ファイルビューワー」参照。当初は`apps/TextEditView`だったのを汎用部品へ上げた)。
+  「子を持たずrender()で直接描く」型で、文書のバッファを指すだけでコピーしない。折り返しは
+  文書が変わったときだけ全体をやり直す(行の表は最大1024行ぶん、4KB)。1文字ごとの`textWidth()`は重いので、
   **文字の幅を小さな表に覚える**(ASCIIは128の表、それ以外はUTF-8のバイト列をキーに256スロットへ直接写像。Smallフォント固定)。
   カーソルは青の縦棒、変換中の読みは下線。
 - ダイアログ(保存/開く/破棄の確認)は据え置きのキーボードより奥に出るので、開く前にキーボードを閉じる。
 - 検証はPCビルドの`--tap`/`--shot`(入力・改行・行頭の削除での結合・英字への切り替え・タップでのカーソル移動・
   ボタンでの出し入れ・保存)。**実機では未確認**(1文字ごとに4KiBの折り返しをやり直す重さは実機で見ること)。
+
+### ファイルビューワー (`FileViewerScene` / `widgets/TextView` / `widgets/ImageView`) (2026-09-29)
+
+**ランチャからは開かない。** ファイルを探すのはファイルアプリ(`FileExplorerScene`)に任せ、そこでファイルを
+2回タップすると`SceneFunctions::Push(new FileViewerScene(path))`される(「戻る」でファイルアプリへ戻る)。
+以前は自前の`FileExplorer`と3種の表示部品を`onEnter()`で全部作っていたが、1ファイルだけを見る画面にして、
+**表示部品は開いたファイルの種類の1つだけを作る**(`MarkdownView`は約40KBあるため)。
+
+- `.md`/`.markdown` … `MarkdownView`(変更なし)
+- `.pimg` … **`ImageView`**(汎用、`widgets/`)。以前は`Image(onRAM=false)`を`ScrollContainer`へ入れていたため、
+  **1px動くたびにSDから.pimgを頭から読み直して1画素ずつ解いていた**。今は開いたときに1回だけスプライトへ解き、
+  描くときは`pushSprite()`するだけ。4bppで`w*h/2`が`kMaxFullBytes`(64KiB)に収まれば全体を持ち、
+  超える大きな画像は**表示欄と同じ大きさの窓だけ**を持つ(ドラッグ中は窓をずらして見せ、指を離したときに
+  その位置の窓だけSDから読み直す)。窓の読み出しは`IconRender::DecodePimgWindow()`(512Bずつまとめて読み、
+  窓の外のランは読み飛ばし、窓の最後の行を過ぎたら残りは読まない。ランは`drawFastHLine()`でまとめて書く)。
+  表示欄より小さい画像は中央に置く。上下左右のドラッグでスクロール。
+- それ以外 … **`TextView`**(汎用、`widgets/`)。`Label`+`ScrollContainer`は**画面外の行まで毎回レイアウト・描画していた**ので、
+  テキストエディタの本文欄を汎用部品へ上げて使い回した(見えている行だけを描く)。マークアップは解釈しない。
+  読むのは先頭16KiBまで(`kMaxTextBytes`)で、`'\r'`と`NUL`は捨てる。超えたら状態欄に「(途中まで)」と出す。
+  行の表(1024行)が溢れた場合も同じ(`TextView::isTruncated()`)。
+- 検証はPCビルドの`--tap`/`--shot`(長いテキストのスクロール、480x600の画像=窓モードのドラッグと読み直し、
+  48x24の画像=全体モードで中央、Markdown、「戻る」でファイルアプリへ)。**実機での速さは未計測**。
 
 ### ClocksScene 実装詳細
 

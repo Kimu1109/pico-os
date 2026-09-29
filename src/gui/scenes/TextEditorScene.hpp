@@ -3,7 +3,7 @@
 #include "gui/scenes/Scene.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
-#include "gui/widgets/apps/TextEditView.hpp"
+#include "gui/widgets/TextView.hpp"
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
 #include "util/FixedString.hpp"
 
@@ -11,7 +11,7 @@
 
 // シンプルなテキストエディタ。
 //
-// スマホの文字入力と同じく、本文(TextEditView)の下にオンスクリーンキーボードを据え置いて
+// スマホの文字入力と同じく、本文(TextView)の下にオンスクリーンキーボードを据え置いて
 // 直接書き込む(KeyboardFunctions::Show(..., docked=true))。キーボードは右上のボタンで
 // 出し入れでき、本文をタップするとそこへカーソルが移ってキーボードが開く。
 //
@@ -57,7 +57,7 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         Button* save_button = nullptr;
         Button* kb_button = nullptr;
         Label<PICO_STR_L>* status_label = nullptr;
-        TextEditView* view = nullptr;
+        TextView* view = nullptr;
 
         int lineCount() const;
         int lineOfByte(int byte_offset) const;

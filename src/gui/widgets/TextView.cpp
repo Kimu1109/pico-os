@@ -1,4 +1,4 @@
-#include "gui/widgets/apps/TextEditView.hpp"
+#include "gui/widgets/TextView.hpp"
 #include "functions/Font_Functions.hpp"
 #include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
@@ -16,7 +16,7 @@ namespace {
     WideEntry wide_w[kWideSlots];
 }
 
-int TextEditView::CharWidth(const char* s, int n){
+int TextView::CharWidth(const char* s, int n){
     if(n == 1 && (uint8_t)s[0] < 128){
         if(!ascii_ready){
             memset(ascii_w, -1, sizeof(ascii_w));
@@ -43,7 +43,7 @@ int TextEditView::CharWidth(const char* s, int n){
     return e.w;
 }
 
-void TextEditView::layout(){
+void TextView::layout(){
     if(!this->layout_dirty) return;
     this->layout_dirty = false;
 
@@ -77,17 +77,18 @@ void TextEditView::layout(){
         x += cw;
         i += n;
     }
+    this->truncated = (i <= this->len);
     if(count == 0) this->rows[count++] = {0, 0};
     this->row_count = count;
 }
 
-int TextEditView::maxScroll(){
+int TextView::maxScroll(){
     this->layout();
     const int content = this->row_count * this->line_h + kPad * 2;
     return content > this->l_rect.h ? content - this->l_rect.h : 0;
 }
 
-int TextEditView::rowOf(size_t byte_offset){
+int TextView::rowOf(size_t byte_offset){
     this->layout();
     for(int r = 0; r < this->row_count; r++){
         const Row& row = this->rows[r];
@@ -101,7 +102,7 @@ int TextEditView::rowOf(size_t byte_offset){
     return this->row_count - 1;
 }
 
-int TextEditView::widthOf(int from, int to) const {
+int TextView::widthOf(int from, int to) const {
     int w = 0;
     int i = from;
     while(i < to){
@@ -113,7 +114,7 @@ int TextEditView::widthOf(int from, int to) const {
     return w;
 }
 
-void TextEditView::setDocument(const char* text, int len){
+void TextView::setDocument(const char* text, int len){
     this->text = text ? text : "";
     this->len = len;
     this->layout_dirty = true;
@@ -123,27 +124,27 @@ void TextEditView::setDocument(const char* text, int len){
     this->needsRender();
 }
 
-void TextEditView::setCursor(size_t byte_offset){
+void TextView::setCursor(size_t byte_offset){
     if(byte_offset > (size_t)this->len) byte_offset = this->len;
     if(byte_offset == this->cursor) return;
     this->cursor = byte_offset;
     this->needsRender();
 }
 
-void TextEditView::setCursorVisible(bool v){
+void TextView::setCursorVisible(bool v){
     if(v == this->show_cursor) return;
     this->show_cursor = v;
     this->needsRender();
 }
 
-void TextEditView::setComposition(size_t start, size_t len){
+void TextView::setComposition(size_t start, size_t len){
     if(start == this->comp_start && len == this->comp_len) return;
     this->comp_start = start;
     this->comp_len = len;
     this->needsRender();
 }
 
-void TextEditView::setH(int h){
+void TextView::setH(int h){
     if(h == this->l_rect.h) return;
     markdirty(this->getScreenRect()); //縮むときは、はみ出していた部分を下の物に描き直させる
     this->l_rect.h = h;
@@ -152,7 +153,13 @@ void TextEditView::setH(int h){
     this->needsRender();
 }
 
-void TextEditView::ensureCursorVisible(){
+void TextView::scrollToTop(){
+    if(this->scroll_y == 0) return;
+    this->scroll_y = 0;
+    this->needsRender();
+}
+
+void TextView::ensureCursorVisible(){
     const int r = this->rowOf(this->cursor);
     const int top = r * this->line_h;
     const int bottom = top + this->line_h + kPad * 2;
@@ -167,14 +174,14 @@ void TextEditView::ensureCursorVisible(){
     this->needsRender();
 }
 
-void TextEditView::causeOnPressStart(){
+void TextView::causeOnPressStart(){
     Widget::causeOnPressStart();
     this->ref_touch_y = OSData::touchY;
     this->ref_scroll_y = this->scroll_y;
     this->dragging = false;
 }
 
-void TextEditView::causeOnPressMove(){
+void TextView::causeOnPressMove(){
     Widget::causeOnPressMove();
     const int dy = OSData::touchY - this->ref_touch_y;
     if(!this->dragging && (dy > kDragThreshold || dy < -kDragThreshold)) this->dragging = true;
@@ -189,7 +196,7 @@ void TextEditView::causeOnPressMove(){
     this->needsRender();
 }
 
-void TextEditView::causeOnPressEnd(){
+void TextView::causeOnPressEnd(){
     Widget::causeOnPressEnd();
     if(this->dragging){
         this->dragging = false;
@@ -218,7 +225,7 @@ void TextEditView::causeOnPressEnd(){
     this->on_tap((size_t)i);
 }
 
-void TextEditView::render(){
+void TextView::render(){
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 

@@ -30,6 +30,12 @@ void Image::render(){
 }
 
 void Image::updatePath(){
+    // setPath()で同じウィジェットを使い回す呼び出し元(ファイルビューワー等)が、
+    // 壊れたpimg/存在しないパスを踏んだ際に前回の画像の大きさを
+    // 引きずらないよう、まず0へ戻してから読み直す
+    this->l_rect.w = 0;
+    this->l_rect.h = 0;
+
     this->imgFile = OSData::SD.open(this->path.c_str());
     if(this->imgFile){
         IconRender::PimgHeader head;
@@ -41,6 +47,9 @@ void Image::updatePath(){
 }
 
 void Image::updateSprite(){
+    this->l_rect.w = 0;
+    this->l_rect.h = 0;
+
     this->imgFile = OSData::SD.open(this->path.c_str());
 
     if(this->imgFile){

@@ -1,4 +1,5 @@
 #include "gui/scenes/FileViewerScene.hpp"
+#include "gui/scenes/TextEditorScene.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -79,16 +80,32 @@ void FileViewerScene::onEnter(){
     const Rect back_box = this->back_button->getLocalRect();
     const int status_x = back_box.x + back_box.w + MARGIN;
 
+    const char* p = this->path.c_str();
+    const bool editable = OSData::SD_usable && !HasExtension(p, ".pimg");
+
+    //右端の「編集」(テキスト系だけ)。状態欄はその手前までにする
+    int status_right = content.x + content.w - MARGIN;
+    if(editable){
+        this->edit_button = new Button(0, content.y + MARGIN, "編集");
+        this->edit_button->setFontSize(FontFn::Small);
+        this->edit_button->setH(20);
+        this->edit_button->setX(content.x + content.w - MARGIN - this->edit_button->getLocalRect().w);
+        this->edit_button->setOnPressEnd([this](){
+            SceneFunctions::Push(new TextEditorScene(this->path.c_str()));
+        });
+        WidgetFunctions::Add(this->edit_button);
+        status_right = this->edit_button->getLocalRect().x - MARGIN;
+    }
+
     this->status_label = new Label<PICO_STR_L>(status_x, content.y + MARGIN, "");
     this->status_label->setFontSize(FontFn::Small);
-    this->status_label->setMaxWidth(content.x + content.w - MARGIN - status_x);
+    this->status_label->setMaxWidth(status_right - status_x);
     this->status_label->setMaxHeight(back_box.h);
     //ファイル名に**等が含まれても装飾として解釈しない
     this->status_label->setDisableAutoTextDecoration(true);
     WidgetFunctions::Add(this->status_label);
 
     const Rect body = this->bodyRect(back_box.h);
-    const char* p = this->path.c_str();
     const char* name = PICO_IO::filename(p);
     this->status_label->setText(name);
 
@@ -131,6 +148,7 @@ void FileViewerScene::onEnter(){
 
 void FileViewerScene::onExit(){
     this->back_button  = nullptr;
+    this->edit_button  = nullptr;
     this->status_label = nullptr;
     this->md_view      = nullptr;
     this->text_view    = nullptr;

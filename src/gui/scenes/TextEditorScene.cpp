@@ -475,6 +475,11 @@ void TextEditorScene::onEnter(){
     this->refreshStatus();
     this->last_view_bottom = -1;
     this->layoutView();
+
+    if(!this->initial_loaded){
+        this->initial_loaded = true;
+        if(!this->initial_path.empty()) this->loadFile(this->initial_path.c_str());
+    }
 }
 
 void TextEditorScene::onExit(){

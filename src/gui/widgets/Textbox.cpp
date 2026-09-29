@@ -7,8 +7,7 @@ template<size_t N>
 void Textbox<N>::causeOnPressStart(){
     Widget::causeOnPressStart();
 
-    KeyboardFunctions::RegisterInputTarget(this);
-    OSData::keyboard_jpn->setVisible(true);
+    KeyboardFunctions::Show(this, KeyboardFunctions::Layout::Japanese);
 }
 
 template<size_t N>

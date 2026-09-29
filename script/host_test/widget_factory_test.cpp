@@ -25,6 +25,11 @@ void LogFunctions::Flush(){}
 // NumberInput/Textboxのデストラクタが呼ぶ。実体(KeyboardNum等)は本テストの対象外
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget*){}
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget*){}
+void KeyboardFunctions::Show(ITextInputTarget*, KeyboardFunctions::Layout, bool){}
+void KeyboardFunctions::OnPanelShown(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelHidden(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelResized(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelChanged(KeyboardPanel*, bool){}
 void KeyboardFunctions::HideAll(){}
 
 static int failures = 0;

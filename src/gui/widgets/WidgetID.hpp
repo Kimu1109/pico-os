@@ -48,6 +48,8 @@ enum class WidgetType : uint8_t {
     Textbox,
     TriangleShape,
     WifiScanDialog,
+    KeyboardDialog,
+    TextEditView,
     Count // 番兵。実際の種類としては使わない
 };
 

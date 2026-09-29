@@ -1,9 +1,7 @@
 #pragma once
 
-#include "gui/widgets/Widget.hpp"
-#include "gui/widgets/Label.hpp"
+#include "gui/widgets/keyboards/KeyboardPanel.hpp"
 #include "functions/Font_Functions.hpp"
-#include "gui/widgets/interfaces/ITextInputTarget.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -18,11 +16,8 @@ struct KeyStrSize {
     int h;
 };
 
-class KeyboardEng : public Widget, public ITextInputWidget {
-    protected:
-        std::vector<Widget*> children_;
-        ITextInputTarget* target = nullptr;
-
+// 英字・記号(QWERTY)のキー盤
+class KeyboardEng : public KeyboardPanel {
     private:
 
         const static int key_h = 28;
@@ -187,16 +182,11 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         FixedString<PICO_STR_LL> inputs;
 
         // inputs内の挿入位置(UTF-8文字単位)。
-        // 位置の真はこちらが持ち、input_label側へはバイト位置に直して渡す。
+        // 位置の真はこちらが持ち、表示側へはバイト位置に直して渡す。
         // Labelのカーソルスロットはマークアップ記号(**や~)のぶんだけ
         // 文字数とずれるため、スロット番号をそのまま位置として使えない
         int cursor_char = 0;
 
-        //inputsとカーソル位置をinput_labelへ反映する
-        void syncInputLabel(){
-            input_label->setText(inputs);
-            input_label->setCursorToByteOffset((size_t)inputs.byteOffsetOfChar(cursor_char));
-        }
         void addInput(const char* str){
             //半端に入ると壊れた文字が残るので、入り切らないときは何もしない
             if(inputs.length() + strlen(str) > FixedString<PICO_STR_LL>::capacity()) return;
@@ -204,17 +194,18 @@ class KeyboardEng : public Widget, public ITextInputWidget {
             inputs.insertAtChar(cursor_char, str);
             cursor_char += FixedString<PICO_STR_LL>::charCount(str);
 
-            syncInputLabel();
-            if(this->target) this->target->onTextChanged(this);
+            this->notifyChanged(true);
         }
         void removeInput(){
-            if(cursor_char <= 0) return; //カーソルより前に文字が無い
+            if(cursor_char <= 0){ //カーソルより前に文字が無い
+                if(this->target) this->target->onBackspaceAtStart(this);
+                return;
+            }
 
             inputs.removeCharAt(cursor_char - 1);
             cursor_char--;
 
-            syncInputLabel();
-            if(this->target) this->target->onTextChanged(this);
+            this->notifyChanged(true);
         }
         //カーソルをdelta文字ぶん動かす(テキストは変えないのでonTextChangedは飛ばさない)
         void moveCursor(int delta){
@@ -222,10 +213,13 @@ class KeyboardEng : public Widget, public ITextInputWidget {
             int last = inputs.charCount();
             if(next < 0) next = 0;
             if(next > last) next = last;
-            if(next == cursor_char) return;
+            if(next == cursor_char){
+                if(delta != 0 && this->target) this->target->onCursorAtEdge(this, delta < 0 ? -1 : 1);
+                return;
+            }
 
             cursor_char = next;
-            input_label->setCursorToByteOffset((size_t)inputs.byteOffsetOfChar(cursor_char));
+            this->notifyChanged(false);
         }
         Key keyEnv(int index){
             if(isNumMode){ //123モード
@@ -248,53 +242,30 @@ class KeyboardEng : public Widget, public ITextInputWidget {
         bool isNumMode = false;
 
     public:
+        static constexpr int PANEL_H = key_h * 4;
 
-        Label<PICO_STR_LL>* input_label;
-
-        void setVisible(bool visible) override;
-
-        KeyboardEng(Label<PICO_STR_LL>* input_label){
-            this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
-
-            this->input_label = input_label;
-            this->input_label->setVisible(false);
-            this->visible = false;
-
-            children_.push_back(input_label);
-        }
+        KeyboardEng() : KeyboardPanel(PANEL_H) {}
 
         void causeOnPressStart() override;
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::KeyboardEng; }
 
-        const std::vector<Widget*>& getChildren() const override {
-            return children_;
-        }
-
-        void setX(int x) override {};
-        void setY(int y) override {};
-
-        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
-
-        void setInputTarget(ITextInputTarget* target) override {
-            this->target = target;
-        }
-        void removeInputTarget(ITextInputTarget* valid_target) override {
-            if(this->target == valid_target){
-                this->target = nullptr;
-            }
-        }
-        ITextInputTarget* getInputTarget() override {
-            return this->target;
-        }
-
         void setText(const FixedString<PICO_STR_LL>& text) override {
             this->inputs = text;
             this->cursor_char = this->inputs.charCount(); //受け取った直後は末尾から書き足せるようにする
-            syncInputLabel();
+            this->notifyChanged(false);
         }
         FixedString<PICO_STR_LL> getText() override {
             return this->inputs;
+        }
+        size_t getCursorByteOffset() override {
+            return (size_t)this->inputs.byteOffsetOfChar(this->cursor_char);
+        }
+        void setCursorByteOffset(size_t byte_offset) override {
+            int c = CharIndexOfByte(this->inputs.c_str(), byte_offset);
+            const int last = this->inputs.charCount();
+            this->cursor_char = (c > last) ? last : c;
+            this->notifyChanged(false);
         }
 };

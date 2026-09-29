@@ -1,4 +1,4 @@
-#include "gui/widgets/dialogs/KeyboardNum.hpp"
+#include "gui/widgets/keyboards/KeyboardNum.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
@@ -22,22 +22,6 @@ namespace {
     const int kPadKeyCount = sizeof(kPadKeys) / sizeof(kPadKeys[0]);
 }
 
-void KeyboardNum::setVisible(bool visible) {
-    this->visible = visible;
-    this->input_label->setVisible(visible);
-    this->input_label->setMaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
-
-    if (visible) {
-        this->inputs = *this->input_label->getText();
-        if (this->target) this->target->onShow(this);
-    } else {
-        if (this->target) this->target->onHide(this);
-    }
-
-    this->needs_redraw = true;
-    markdirty(this->getScreenRect());
-}
-
 void KeyboardNum::causeOnPressStart() {
     Widget::causeOnPressStart();
 
@@ -51,8 +35,7 @@ void KeyboardNum::causeOnPressStart() {
             SymbolMode newMode = visibleTabAt(col);
             if (newMode != this->mode) {
                 this->mode = newMode;
-                this->needs_redraw = true;
-                markdirty(this->getScreenRect());
+                this->needsRender();
             }
         }
         return;
@@ -107,7 +90,6 @@ void KeyboardNum::render() {
     if (!this->visible) return;
 
     markdirty(this->getScreenRect());
-    PICO_GFX::DrawDialogBackground();
     OSData::frame->fillRect(0, kb_top, SCREEN_WIDTH, kb_h, this->background_color);
 
     FontFn::SetSmall();

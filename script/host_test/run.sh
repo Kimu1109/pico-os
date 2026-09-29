@@ -579,7 +579,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
-    "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
@@ -618,7 +619,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
     "$ROOT/src/gui/widgets/GridContainer.cpp" \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
-    "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
     "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
@@ -750,7 +752,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
-    "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
     "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
@@ -821,7 +824,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
-    "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
     "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
@@ -886,7 +890,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
-    "$ROOT/src/gui/widgets/dialogs/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
     "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \

@@ -86,9 +86,16 @@ void FileExplorer::on_press_delete(){
 
 void FileExplorer::on_press_item(int index){
     auto item = this->list->itemAt(index);
-    if(item && item->icon == IconID::Folder){
+    if(!item) return;
+
+    if(item->icon == IconID::Folder){
         PICO_IO::join(this->currentPath, this->currentPath, item->text.c_str());
         this->update_list();
+    }else if(this->on_file_tap){
+        FixedString<PICO_PATH_LEN> path;
+        if(PICO_IO::join(path, this->currentPath, item->text.c_str())){
+            this->on_file_tap(path.c_str());
+        }
     }
 }
 

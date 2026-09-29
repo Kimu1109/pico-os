@@ -1,10 +1,11 @@
 #include "gui/scenes/TextEditorScene.hpp"
-#include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
+#include "functions/Keyboard_Functions.hpp"
+#include "gui/widgets/keyboards/KeyboardPanel.hpp"
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "storage/SD_IO.hpp"
@@ -13,12 +14,22 @@
 #include <cstdio>
 #include <cstring>
 
+// ---------------------------------------------------------------- 文書
+
 int TextEditorScene::lineCount() const {
     int n = 1;
     for(int i = 0; i < this->len; i++){
         if(this->text[i] == '\n') n++;
     }
     return n;
+}
+
+int TextEditorScene::lineOfByte(int byte_offset) const {
+    int line = 0;
+    for(int i = 0; i < byte_offset && i < this->len; i++){
+        if(this->text[i] == '\n') line++;
+    }
+    return line;
 }
 
 void TextEditorScene::lineRange(int i, int& start, int& end) const {
@@ -34,85 +45,33 @@ void TextEditorScene::lineRange(int i, int& start, int& end) const {
     while(end < this->len && this->text[end] != '\n') end++;
 }
 
-bool TextEditorScene::replaceLine(int i, const char* s){
-    int start, end;
-    this->lineRange(i, start, end);
-
-    const int new_len = (int)strlen(s);
-    const int total = this->len - (end - start) + new_len;
+bool TextEditorScene::replaceRange(int start, int end, const char* s, int n){
+    const int total = this->len - (end - start) + n;
     if(total > kMaxBytes) return false;
 
-    memmove(this->text + start + new_len, this->text + end, this->len - end);
-    memcpy(this->text + start, s, new_len);
+    memmove(this->text + start + n, this->text + end, this->len - end);
+    memcpy(this->text + start, s, n);
     this->len = total;
     this->text[this->len] = '\0';
     return true;
 }
 
-bool TextEditorScene::insertLineAfter(int i){
-    if(this->len + 1 > kMaxBytes || this->lineCount() >= kMaxLines) return false;
+// ---------------------------------------------------------------- 表示
 
-    int start, end;
-    this->lineRange(i, start, end);
-    memmove(this->text + end + 1, this->text + end, this->len - end);
-    this->text[end] = '\n';
-    this->len++;
-    this->text[this->len] = '\0';
-    return true;
+void TextEditorScene::refreshView(){
+    if(this->view) this->view->setDocument(this->text, this->len);
 }
 
-void TextEditorScene::deleteLine(int i){
-    int start, end;
-    this->lineRange(i, start, end);
-
-    int from = start;
-    int to = end;
-    if(end < this->len){
-        to = end + 1;        // 後ろに行がある: 自分の改行ごと消す
-    }else if(start > 0){
-        from = start - 1;    // 最後の行: 手前の改行ごと消す
-    }
-    memmove(this->text + from, this->text + to, this->len - to);
-    this->len -= (to - from);
-    this->text[this->len] = '\0';
-}
-
-void TextEditorScene::refreshItem(int i){
-    ScrollListTools::Item* item = this->list->itemAt(i);
-    if(!item) return;
-
-    int start, end;
-    this->lineRange(i, start, end);
-
-    char line[kMaxLineBytes + 1];
-    int n = end - start;
-    if(n > kMaxLineBytes) n = kMaxLineBytes;
-    memcpy(line, this->text + start, n);
-    line[n] = '\0';
-
-    char buf[PICO_PATH_LEN];
-    snprintf(buf, sizeof(buf), "%d %s", i + 1, line);
-    item->text.assign(buf);
-    this->list->needsRender();
-}
-
-void TextEditorScene::refreshList(){
-    const int selected = this->list->getSelectedIndex();
-    const int count = this->lineCount();
-
-    this->list->clear();
-    for(int i = 0; i < count; i++){
-        this->list->add(ScrollListTools::Item{});
-        this->refreshItem(i);
-    }
-    if(selected >= 0) this->list->setSelectedIndex(selected < count ? selected : count - 1);
-}
-
-void TextEditorScene::refreshStatus(){
+void TextEditorScene::refreshStatus(const char* message){
+    if(!this->status_label) return;
     char buf[PICO_STR_L];
-    snprintf(buf, sizeof(buf), "%s%s",
-        this->path.empty() ? "(新規)" : PICO_IO::filename(this->path.c_str()),
-        this->dirty ? " (未保存)" : "");
+    if(message){
+        snprintf(buf, sizeof(buf), "%s", message);
+    }else{
+        snprintf(buf, sizeof(buf), "%s%s",
+            this->path.empty() ? "(新規)" : PICO_IO::filename(this->path.c_str()),
+            this->dirty ? " (未保存)" : "");
+    }
     this->status_label->setText(buf);
 }
 
@@ -121,65 +80,174 @@ void TextEditorScene::setDirty(bool value){
     this->refreshStatus();
 }
 
-void TextEditorScene::editLine(int i){
-    if(i < 0 || i >= this->lineCount()) return;
+void TextEditorScene::layoutView(){
+    if(!this->view) return;
+    //据え置きのキーボードが出ていれば、その上端までに本文欄を縮める
+    const int bottom = KeyboardFunctions::IsDocked() ? KeyboardFunctions::VisibleTop() : SCREEN_HEIGHT;
+    if(bottom == this->last_view_bottom) return;
+    this->last_view_bottom = bottom;
+
+    const int top = this->view->getLocalRect().y;
+    this->view->setH(bottom - top);
+    this->view->ensureCursorVisible();
+}
+
+// ---------------------------------------------------------------- キーボード
+
+void TextEditorScene::openKeyboard(){
+    KeyboardFunctions::Show(this, KeyboardFunctions::Layout::Japanese, true);
+}
+
+void TextEditorScene::toggleKeyboard(){
+    if(KeyboardFunctions::IsDocked()){
+        KeyboardFunctions::HideAll();
+    }else{
+        this->openKeyboard();
+    }
+}
+
+void TextEditorScene::attachLine(ITextInputWidget* kb, int line, int col){
+    int start, end;
+    this->lineRange(line, start, end);
+    if(col > end - start) col = end - start;
+    this->cur_line = line;
+
+    FixedString<PICO_STR_LL> s;
+    s.assign(this->text + start, (size_t)(end - start));
+
+    this->syncing = true;
+    kb->setText(s);
+    kb->setCursorByteOffset((size_t)col);
+    this->syncing = false;
+
+    this->syncFromKeyboard(kb);
+}
+
+void TextEditorScene::syncFromKeyboard(ITextInputWidget* kb){
+    FixedString<PICO_STR_LL> s = kb->getText();
+    size_t cursor = kb->getCursorByteOffset();
 
     int start, end;
-    this->lineRange(i, start, end);
-    char line[kMaxLineBytes + 1];
-    int n = end - start;
-    if(n > kMaxLineBytes) n = kMaxLineBytes;
-    memcpy(line, this->text + start, n);
-    line[n] = '\0';
+    this->lineRange(this->cur_line, start, end);
 
-    char label[PICO_STR_S];
-    snprintf(label, sizeof(label), "%d行目:", i + 1);
+    //改行キー: '\n'の後ろを次の行としてキーボードへ渡し直す
+    const char* nl = strchr(s.c_str(), '\n');
+    if(nl){
+        const int p = (int)(nl - s.c_str());
+        FixedString<PICO_STR_LL> rest;
+        rest.assign(nl + 1);
+        int col = (int)cursor - p - 1;
+        if(col < 0) col = 0;
 
-    auto* dialog = new InputDialog(label, true);
-    if(!dialog) return;
-    WidgetFunctions::AddDialog(dialog);
-    dialog->setInput(line);
-    dialog->setVisible(true);
-    dialog->setOnClosed([this, dialog, i](bool is_submit){
-        if(is_submit && this->list){
-            if(this->replaceLine(i, dialog->getInput().c_str())){
-                this->refreshItem(i);
-                this->setDirty(true);
-            }else{
-                ErrorFunctions::ShowFatal("容量の上限(4KiB)を超えるため反映できません");
-            }
+        if(this->lineCount() >= kMaxLines || !this->replaceRange(start, end, s.c_str(), (int)s.length())){
+            //増やせないので改行を取り消す
+            FixedString<PICO_STR_LL> joined;
+            joined.assign(s.c_str(), (size_t)p);
+            joined.append(rest);
+            this->syncing = true;
+            kb->setText(joined);
+            kb->setCursorByteOffset((size_t)p);
+            this->syncing = false;
+            this->refreshStatus("これ以上行を増やせません");
+            this->syncFromKeyboard(kb);
+            return;
         }
-        WidgetFunctions::DestroyLater(dialog);
-    });
-}
-
-void TextEditorScene::addLine(){
-    const int sel = this->list->getSelectedIndex();
-    const int at = (sel >= 0) ? sel : this->lineCount() - 1;
-
-    if(!this->insertLineAfter(at)){
-        ErrorFunctions::ShowFatal("これ以上行を増やせません(4KiB/100行まで)");
+        this->setDirty(true);
+        this->refreshView();
+        this->attachLine(kb, this->cur_line + 1, col);
         return;
     }
-    this->list->setSelectedIndex(at + 1);
-    this->refreshList();
-    this->setDirty(true);
-    this->editLine(at + 1);
+
+    //行の中身が変わっていれば文書へ書き戻す
+    const int old_n = end - start;
+    if(old_n != (int)s.length() || memcmp(this->text + start, s.c_str(), old_n) != 0){
+        if(!this->replaceRange(start, end, s.c_str(), (int)s.length())){
+            //容量の上限。キーボード側を文書の内容へ戻す
+            FixedString<PICO_STR_LL> old;
+            old.assign(this->text + start, (size_t)old_n);
+            size_t c = cursor > (size_t)old_n ? (size_t)old_n : cursor;
+            this->syncing = true;
+            kb->setText(old);
+            kb->setCursorByteOffset(c);
+            this->syncing = false;
+            this->refreshStatus("容量の上限(4KiB)です");
+            s = old;
+            cursor = c;
+        }else{
+            this->setDirty(true);
+        }
+        this->refreshView();
+    }
+
+    size_t comp_start = 0, comp_len = 0;
+    kb->getComposition(comp_start, comp_len);
+    if(this->view){
+        this->view->setCursor((size_t)start + cursor);
+        this->view->setComposition((size_t)start + comp_start, comp_len);
+        this->view->ensureCursorVisible();
+    }
 }
 
-void TextEditorScene::deleteSelected(){
-    const int sel = this->list->getSelectedIndex();
-    if(sel < 0) return;
-    this->deleteLine(sel);
-    this->refreshList();
-    this->setDirty(true);
+void TextEditorScene::onShow(ITextInputWidget* keyboard){
+    const int cursor = this->view ? (int)this->view->getCursor() : this->len;
+    const int line = this->lineOfByte(cursor);
+    int start, end;
+    this->lineRange(line, start, end);
+    this->attachLine(keyboard, line, cursor - start);
 }
+
+void TextEditorScene::onTextChanged(ITextInputWidget*){
+    //文書への書き戻しはonDisplayChanged()でまとめて行う
+}
+
+void TextEditorScene::onHide(ITextInputWidget*){
+    //変換中の読みはそのまま文字として残る(文書へは書き戻し済み)
+    if(this->view) this->view->setComposition(0, 0);
+}
+
+void TextEditorScene::onDisplayChanged(ITextInputWidget* keyboard){
+    if(this->syncing) return;
+    this->syncFromKeyboard(keyboard);
+}
+
+bool TextEditorScene::onBackspaceAtStart(ITextInputWidget* keyboard){
+    if(this->cur_line <= 0) return true;
+
+    int ps, pe, cs, ce;
+    this->lineRange(this->cur_line - 1, ps, pe);
+    this->lineRange(this->cur_line, cs, ce);
+    if((pe - ps) + (ce - cs) > kMaxLineBytes){
+        this->refreshStatus("1行が長くなりすぎるため繋げられません");
+        return true;
+    }
+
+    //前の行の末尾の'\n'を消すだけで2行が繋がる
+    this->replaceRange(pe, pe + 1, "", 0);
+    this->setDirty(true);
+    this->refreshView();
+    this->attachLine(keyboard, this->cur_line - 1, pe - ps);
+    return true;
+}
+
+bool TextEditorScene::onCursorAtEdge(ITextInputWidget* keyboard, int dir){
+    if(dir < 0 && this->cur_line > 0){
+        int s, e;
+        this->lineRange(this->cur_line - 1, s, e);
+        this->attachLine(keyboard, this->cur_line - 1, e - s);
+    }else if(dir > 0 && this->cur_line + 1 < this->lineCount()){
+        this->attachLine(keyboard, this->cur_line + 1, 0);
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------- ファイル
 
 void TextEditorScene::confirmDiscard(const char* msg, std::function<void()> then){
     if(!this->dirty){
         then();
         return;
     }
+    KeyboardFunctions::HideAll(); //キーボードはダイアログより手前に出るので先に閉じる
     MsgDialog* dialog = new MsgDialog(msg, "キャンセル", "破棄する");
     if(!dialog) return;
     dialog->setVisibleIcon(true);
@@ -193,11 +261,12 @@ void TextEditorScene::confirmDiscard(const char* msg, std::function<void()> then
 }
 
 void TextEditorScene::newDocument(){
+    KeyboardFunctions::HideAll();
     this->len = 0;
     this->text[0] = '\0';
     this->path.clear();
-    this->list->clearSelectedIndex();
-    this->refreshList();
+    this->refreshView();
+    if(this->view) this->view->setCursor(0);
     this->setDirty(false);
 }
 
@@ -231,26 +300,27 @@ bool TextEditorScene::loadFile(const char* file){
             lines++;
             line_bytes = 0;
         }else if(++line_bytes > kMaxLineBytes){
-            ErrorFunctions::ShowFatal("1行が長すぎて開けません(190バイトまで)");
+            ErrorFunctions::ShowFatal("1行が長すぎて開けません(191バイトまで)");
             return false;
         }
         buf[out++] = c;
     }
-    if(out > 0 && buf[out - 1] == '\n'){ // 末尾の改行は最後の行の一部として扱う
+    if(out > 0 && buf[out - 1] == '\n'){ // 末尾の改行は保存時に付け直す
         out--;
         lines--;
     }
     if(lines > kMaxLines){
-        ErrorFunctions::ShowFatal("行数が多すぎて開けません(100行まで)");
+        ErrorFunctions::ShowFatal("行数が多すぎて開けません(200行まで)");
         return false;
     }
 
+    KeyboardFunctions::HideAll();
     memcpy(this->text, buf, out);
     this->len = out;
     this->text[out] = '\0';
     this->path.assign(file);
-    this->list->clearSelectedIndex();
-    this->refreshList();
+    this->refreshView();
+    if(this->view) this->view->setCursor(0);
     this->setDirty(false);
     return true;
 }
@@ -262,7 +332,7 @@ void TextEditorScene::openPicker(){
     dialog->setVisible(true);
     dialog->setOnClose([this, dialog](bool is_ok){
         const char* selected = is_ok ? dialog->getSelectedPath() : nullptr;
-        if(selected && this->list) this->loadFile(selected);
+        if(selected && this->view) this->loadFile(selected);
         WidgetFunctions::DestroyLater(dialog);
     });
 }
@@ -291,13 +361,14 @@ void TextEditorScene::saveFile(){
 }
 
 void TextEditorScene::saveAsPicker(){
+    KeyboardFunctions::HideAll();
     FileSaveDialog* dialog = new FileSaveDialog("/");
     if(!dialog) return;
     dialog->setFileName("memo.txt");
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClose([this, dialog](bool is_ok){
-        if(is_ok && this->list){
+        if(is_ok && this->view){
             const char* target = dialog->getSavePath();
             if(target && *target && target[strlen(target) - 1] != '/'){
                 if(this->writeFile(target)){
@@ -312,6 +383,12 @@ void TextEditorScene::saveAsPicker(){
     });
 }
 
+// ---------------------------------------------------------------- シーン
+
+TextEditorScene::~TextEditorScene(){
+    KeyboardFunctions::UnregisterInputTarget(this);
+}
+
 void TextEditorScene::onEnter(){
     const Rect content = Scene::contentRect();
 
@@ -323,7 +400,7 @@ void TextEditorScene::onEnter(){
         return b;
     };
 
-    // 1段目: 戻る 新規 開く 保存
+    // 1段目: 戻る 新規 開く 保存 … キーボードの出し入れ(右端)
     int x = content.x + MARGIN;
     const int y1 = content.y + MARGIN;
     this->back_button = make_button("戻る", x, y1);
@@ -334,28 +411,43 @@ void TextEditorScene::onEnter(){
     x += this->open_button->getLocalRect().w + MARGIN;
     this->save_button = make_button("保存", x, y1);
 
-    // 2段目: 追加 削除 + ファイル名/状態。行の高さはボタンの実測値(フォントで変わるため)
     const int row_h = this->back_button->getLocalRect().h;
-    const int y2 = y1 + row_h + MARGIN;
-    this->add_button = make_button("追加", content.x + MARGIN, y2);
-    x = content.x + MARGIN + this->add_button->getLocalRect().w + MARGIN;
-    this->del_button = make_button("削除", x, y2);
-    x += this->del_button->getLocalRect().w + MARGIN;
+    this->kb_button = new Button(0, y1, "");
+    this->kb_button->setIcon(IconID::Keyboard, IconSize::Px16);
+    this->kb_button->setW(28);
+    this->kb_button->setH(20); //他のボタンと同じ指定(描かれる箱は枠のぶん大きくなる)
+    this->kb_button->setX(content.x + content.w - MARGIN - this->kb_button->getLocalRect().w);
+    WidgetFunctions::Add(this->kb_button);
 
-    this->status_label = new Label<PICO_STR_L>(x, y2, "");
+    // 2段目: ファイル名/状態
+    const int y2 = y1 + row_h + MARGIN;
+    this->status_label = new Label<PICO_STR_L>(content.x + MARGIN, y2, "");
     this->status_label->setFontSize(FontFn::Small);
-    this->status_label->setMaxWidth(content.x + content.w - MARGIN - x);
-    this->status_label->setMaxHeight(row_h);
+    this->status_label->setMaxWidth(content.w - MARGIN * 2);
     this->status_label->setDisableAutoTextDecoration(true); //ファイル名の_や*を装飾にしない
     WidgetFunctions::Add(this->status_label);
 
-    const int list_y = y2 + row_h + MARGIN;
-    this->list = new ScrollList(content.x, list_y, content.w, content.y + content.h - list_y);
-    this->list->setFontSize(FontFn::Small);
-    this->list->setOnSelectItem([this](int index, bool already_selected){
-        if(already_selected) this->editLine(index);
+    const int view_y = y2 + Label<PICO_STR_L>::GetLineHeight(FontFn::Small) + MARGIN;
+    this->view = new TextEditView(content.x, view_y, content.w, content.y + content.h - view_y);
+    this->view->setOnTap([this](size_t byte_offset){
+        this->view->setCursor(byte_offset);
+        if(!KeyboardFunctions::IsDocked()){
+            this->openKeyboard(); //onShow()がカーソルの行をキーボードへ渡す
+            return;
+        }
+        //開いているキー盤(日本語/英字のどちらか)へ、タップした行を渡し直す
+        Widget* panels[] = { OSData::keyboard_jpn, OSData::keyboard_eng, OSData::keyboard_num };
+        for(Widget* w : panels){
+            if(!w->getVisible()) continue;
+            ITextInputWidget* panel = static_cast<ITextInputWidget*>(static_cast<KeyboardPanel*>(w));
+            const int line = this->lineOfByte((int)byte_offset);
+            int start, end;
+            this->lineRange(line, start, end);
+            this->attachLine(panel, line, (int)byte_offset - start);
+            break;
+        }
     });
-    WidgetFunctions::Add(this->list);
+    WidgetFunctions::Add(this->view);
 
     this->back_button->setOnPressEnd([this](){
         this->confirmDiscard("保存していない変更があります。破棄して戻りますか?", [](){
@@ -369,32 +461,37 @@ void TextEditorScene::onEnter(){
     });
     this->open_button->setOnPressEnd([this](){
         this->confirmDiscard("保存していない変更があります。破棄して別のファイルを開きますか?", [this](){
+            KeyboardFunctions::HideAll();
             this->pending = Pending::OpenPicker;
             this->pending_wait_frames = 1;
         });
     });
     this->save_button->setOnPressEnd([this](){ this->saveFile(); });
-    this->add_button->setOnPressEnd([this](){ this->addLine(); });
-    this->del_button->setOnPressEnd([this](){ this->deleteSelected(); });
+    this->kb_button->setOnPressEnd([this](){ this->toggleKeyboard(); });
 
     // Pop()で戻ってきたときも文書はメンバに残っている
-    this->refreshList();
+    this->refreshView();
     this->refreshStatus();
+    this->last_view_bottom = -1;
+    this->layoutView();
 }
 
 void TextEditorScene::onExit(){
+    //キーボードはSceneFunctionsが先に閉じている(onHide済み)
+    KeyboardFunctions::UnregisterInputTarget(this);
     this->back_button = nullptr;
     this->new_button = nullptr;
     this->open_button = nullptr;
     this->save_button = nullptr;
-    this->add_button = nullptr;
-    this->del_button = nullptr;
+    this->kb_button = nullptr;
     this->status_label = nullptr;
-    this->list = nullptr;
+    this->view = nullptr;
     this->pending = Pending::None;
 }
 
 void TextEditorScene::onUpdate(){
+    this->layoutView();
+
     if(this->pending == Pending::None) return;
     if(this->pending_wait_frames > 0){
         this->pending_wait_frames--;

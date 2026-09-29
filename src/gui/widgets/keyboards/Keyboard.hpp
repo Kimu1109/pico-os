@@ -1,28 +1,24 @@
 #pragma once
 
-#include "gui/widgets/Widget.hpp"
-#include "gui/widgets/Label.hpp"
-#include "gui/widgets/interfaces/ITextInputTarget.hpp"
+#include "gui/widgets/keyboards/KeyboardPanel.hpp"
 #include "functions/UTF8_Functions.hpp"
 #include "functions/IME_Functions.hpp"
 #include "functions/Font_Functions.hpp"
 #include "consts.hpp"
 
 
-class Keyboard : public Widget, public ITextInputWidget {
-    protected:
-        std::vector<Widget*> children_;
-        ITextInputTarget* target = nullptr;
-
+// 日本語(フリック入力 + SKK辞書のかな漢字変換)のキー盤
+class Keyboard : public KeyboardPanel {
     private:
-        const int SQUARE_W = SCREEN_WIDTH / 5;
-        const int SQUARE_H = SQUARE_W / 1.5;
+        static constexpr int SQUARE_W = SCREEN_WIDTH / 5;
+        static constexpr int SQUARE_H = SQUARE_W * 2 / 3;
 
-        const int CANDIDATES_H = 23;
-        const int CANDIDATES_MARGIN = 3;
+        static constexpr int CANDIDATES_H = 23;
+        static constexpr int CANDIDATES_MARGIN = 3;
 
-        const int START_KEY_Y = SCREEN_HEIGHT - SQUARE_H * 4;
-        const int START_CANDIDATES_Y = START_KEY_Y - CANDIDATES_H;
+        static constexpr int START_KEY_Y = SCREEN_HEIGHT - SQUARE_H * 4;
+        static constexpr int START_CANDIDATES_Y = START_KEY_Y - CANDIDATES_H;
+        static constexpr int PANEL_H = SCREEN_HEIGHT - START_CANDIDATES_Y;
 
         const char* const keys_jpn[4 * 5] = {
             "123", "あ", "か", "さ", "X",
@@ -128,7 +124,7 @@ class Keyboard : public Widget, public ITextInputWidget {
         // 確定済みテキスト(inputs_done)上の挿入位置(UTF-8文字単位)。
         // 変換中の読み(inputs)は常にこの位置へ挟まる形で表示・確定される。
         //
-        // 位置の真はこちらが持ち、input_labelへはバイト位置に直して渡す。
+        // 位置の真はこちらが持ち、表示側(KeyboardDialogの入力欄等)へはバイト位置に直して渡す。
         // Labelのカーソルスロットは読みを囲む`~`(波線のマークアップ)のぶんだけ
         // 文字数とずれるため、スロット番号をそのまま位置として使えない
         int done_cursor = 0;
@@ -195,40 +191,17 @@ class Keyboard : public Widget, public ITextInputWidget {
             }
         }
 
+        //変換中の読み・確定済みテキスト・カーソルが変わったら呼ぶ。
+        //表示(ダイアログの入力欄 / 据え置き時の入力先)はKeyboardFunctions経由で更新される
         void updateInputs(bool notToCauseEvent){
             bool is_inputs_empty_now = inputs.length() == 0;
 
             if(is_inputs_empty != is_inputs_empty_now){
                 is_inputs_empty = is_inputs_empty_now;
-                this->needsRender();
+                this->needsRender(); //改/行キーの表記が変わる
             }
 
-            is_inputs_empty = is_inputs_empty_now;
-
-            //確定済みテキストをカーソル位置で割り、そこへ変換中の読みを挟んで表示する。
-            //読みを囲む`~`は波線のマークアップで、記号自体は描画されない。
-            //変換中でないときに囲みを出さないのは、空の`~~`が取り消し線の開始として
-            //解釈され、カーソル以降の確定済みテキストに線が入ってしまうため
-            const size_t split = (size_t)inputs_done.byteOffsetOfChar(done_cursor);
-
-            FixedString<PICO_STR_LL> display;
-            display.assign(inputs_done.c_str(), split);
-            if(!is_inputs_empty_now){
-                display.append("~");
-                display.append(inputs);
-                display.append("~");
-            }
-            display.append(inputs_done.c_str() + split);
-
-            input_label->setText(display);
-            //変換中は読みの直後、そうでなければカーソル位置そのものへ置く
-            input_label->setCursorToByteOffset(
-                is_inputs_empty_now ? split : split + 1 + inputs.length()
-            );
-
-            if(!notToCauseEvent){
-                if(this->target) this->target->onTextChanged(this);
-            }
+            this->notifyChanged(!notToCauseEvent);
         }
 
         void addInput(const char* input) {
@@ -240,7 +213,10 @@ class Keyboard : public Widget, public ITextInputWidget {
         void removeInput() {
             if(is_inputs_empty){
                 //確定済みテキストからカーソルの直前の1文字を消す
-                if(done_cursor <= 0) return;
+                if(done_cursor <= 0){
+                    if(this->target) this->target->onBackspaceAtStart(this);
+                    return;
+                }
 
                 inputs_done.removeCharAt(done_cursor - 1);
                 done_cursor--;
@@ -279,7 +255,10 @@ class Keyboard : public Widget, public ITextInputWidget {
             int last = inputs_done.charCount();
             if(next < 0) next = 0;
             if(next > last) next = last;
-            if(next == done_cursor) return;
+            if(next == done_cursor){
+                if(delta != 0 && this->target) this->target->onCursorAtEdge(this, delta < 0 ? -1 : 1);
+                return;
+            }
 
             done_cursor = next;
             updateInputs(true); //テキストは変えていないのでonTextChangedは飛ばさない
@@ -315,19 +294,7 @@ class Keyboard : public Widget, public ITextInputWidget {
         void drawCandidates();
 
     public:
-
-        Label<PICO_STR_LL>* input_label;
-
-        Keyboard(Label<PICO_STR_LL>* input_label){
-            this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
-            
-            this->visible = false;
-
-            this->input_label = input_label;
-            children_.push_back(input_label);
-        }
-
-        void setVisible(bool visible) override;
+        Keyboard() : KeyboardPanel(PANEL_H) {}
 
         void causeOnPressStart() override;
         void causeOnPressEnd() override;
@@ -335,37 +302,24 @@ class Keyboard : public Widget, public ITextInputWidget {
 
         WidgetType getWidgetType() const override { return WidgetType::Keyboard; }
 
-        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
-
-        const std::vector<Widget*>& getChildren() const override {
-            return children_;
-        }
-
-        void setX(int x) override {};
-        void setY(int y) override {};
-
-        void setInputTarget(ITextInputTarget* target) override {
-            this->target = target;
-            this->needsRender();
-        }
-        void removeInputTarget(ITextInputTarget* valid_target) override{
-            if(this->target == valid_target){
-                this->target = nullptr;
-            }
-            this->needsRender();
-        }
-        ITextInputTarget* getInputTarget() override{
-            return this->target;
+        void resetTransientState() override {
+            this->inputs.clear();
+            this->okuri_hira.clear();
+            this->is_inputs_empty = true;
+            this->is_swiping = false;
+            this->candidates_scroll_index = 0;
+            IME_Functions::candidatesCount = 0; //前回の変換候補を出しっぱなしにしない
         }
 
         void setText(const FixedString<PICO_STR_LL>& text) override {
             this->inputs_done = text;
-            this->inputs.clear();
+            this->resetTransientState();
             this->done_cursor = this->inputs_done.charCount(); //受け取った直後は末尾から書き足せるようにする
+            this->needsRender();
             this->updateInputs(true);
         }
         FixedString<PICO_STR_LL> getText() override {
-            //表示と同じく、変換中の読みはカーソル位置へ挟んで返す
+            //変換中の読みはカーソル位置へ挟んで返す
             const size_t split = (size_t)inputs_done.byteOffsetOfChar(done_cursor);
 
             FixedString<PICO_STR_LL> result;
@@ -373,5 +327,28 @@ class Keyboard : public Widget, public ITextInputWidget {
             result.append(inputs);
             result.append(inputs_done.c_str() + split);
             return result;
+        }
+
+        size_t getCursorByteOffset() override {
+            return (size_t)inputs_done.byteOffsetOfChar(done_cursor) + inputs.length();
+        }
+        void setCursorByteOffset(size_t byte_offset) override {
+            if(inputs.length() != 0){
+                //読みはそのまま確定させる(ここでは通知しない。最後に1回だけ出す)
+                if(inputs_done.length() + inputs.length() <= FixedString<PICO_STR_LL>::capacity()){
+                    inputs_done.insertAtChar(done_cursor, inputs);
+                }
+                this->resetTransientState();
+                this->needsRender();
+            }
+            int c = CharIndexOfByte(inputs_done.c_str(), byte_offset);
+            const int last = inputs_done.charCount();
+            if(c > last) c = last;
+            done_cursor = c;
+            updateInputs(true);
+        }
+        void getComposition(size_t& start, size_t& len) override {
+            start = (size_t)inputs_done.byteOffsetOfChar(done_cursor);
+            len = inputs.length();
         }
 };

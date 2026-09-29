@@ -1,9 +1,7 @@
 #pragma once
 
-#include "gui/widgets/Widget.hpp"
-#include "gui/widgets/Label.hpp"
+#include "gui/widgets/keyboards/KeyboardPanel.hpp"
 #include "functions/Font_Functions.hpp"
-#include "gui/widgets/interfaces/ITextInputTarget.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -17,7 +15,7 @@
 // 制限はコンストラクタ引数、または setAllowedModes() で後から変更可能。
 // 許可されていないタブは非表示・当たり判定なしになり、現在のモードが
 // 許可外になった場合は自動的に「許可されている中で最初のモード」に切り替わる。
-class KeyboardNum : public Widget, public ITextInputWidget {
+class KeyboardNum : public KeyboardPanel {
     public:
         // 記号行(タブ)の種類
         enum class SymbolMode {
@@ -147,61 +145,51 @@ class KeyboardNum : public Widget, public ITextInputWidget {
             }
             this->kb_h = this->tab_h + SYMBOL_H + PAD_H * 4;
             this->kb_top = SCREEN_HEIGHT - this->kb_h;
+            this->setPanelHeight(this->kb_h);
         }
 
         FixedString<PICO_STR_LL> inputs;
 
-        // カーソル位置(input_labelのcursor_pos, 文字インデックス)に文字列を挿入する
+        // inputs内の挿入位置(UTF-8文字単位)。KeyboardEngと同じくこちらが位置の真を持つ
+        int cursor_char = 0;
+
         void addInputAtCursor(const char* str) {
-            int cursorChar = input_label->getCursorPos();
-            int byteOffset = inputs.byteOffsetOfChar(cursorChar);
+            if (inputs.length() + strlen(str) > FixedString<PICO_STR_LL>::capacity()) return;
 
-            inputs.insert(byteOffset, str);
+            inputs.insertAtChar(cursor_char, str);
+            cursor_char += FixedString<PICO_STR_LL>::charCount(str);
 
-            input_label->setText(inputs);
-            input_label->setCursorPos(cursorChar + FixedString<PICO_STR_LL>::charCount(str));
-
-            if (this->target) this->target->onTextChanged(this);
+            this->notifyChanged(true);
         }
 
-        // カーソルの直前の1文字を削除する(backspace)
         void removeBeforeCursor() {
-            int cursorChar = input_label->getCursorPos();
-            if (cursorChar <= 0 || inputs.length() == 0) return;
+            if (cursor_char <= 0) {
+                if (this->target) this->target->onBackspaceAtStart(this);
+                return;
+            }
 
-            inputs.removeCharAt(cursorChar - 1);
+            inputs.removeCharAt(cursor_char - 1);
+            cursor_char--;
 
-            input_label->setText(inputs);
-            input_label->setCursorPos(cursorChar - 1);
-
-            if (this->target) this->target->onTextChanged(this);
+            this->notifyChanged(true);
         }
 
         void moveCursor(int delta) {
-            input_label->setCursorMove(delta);
-        }
-
-        void submit() {
-            // KeyboardEngの submit/go キーに合わせ、targetへhide通知した上で自身を隠す
-            if (this->target) this->target->onHide(this);
-            this->setVisible(false);
+            int next = cursor_char + delta;
+            const int last = inputs.charCount();
+            if (next < 0) next = 0;
+            if (next > last) next = last;
+            if (next == cursor_char) {
+                if (delta != 0 && this->target) this->target->onCursorAtEdge(this, delta < 0 ? -1 : 1);
+                return;
+            }
+            cursor_char = next;
+            this->notifyChanged(false);
         }
 
     public:
-        Label<PICO_STR_LL>* input_label;
-
-        void setVisible(bool visible) override;
-
         // allowed_modes: MODE_DIGIT/MODE_ARITH/MODE_MATHのビットOR。省略時は全モード許可。
-        KeyboardNum(Label<PICO_STR_LL>* input_label, uint8_t allowed_modes = MODE_ALL) {
-            this->l_rect = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
-
-            this->input_label = input_label;
-            this->input_label->setVisible(false);
-            this->visible = false;
-
-            children_.push_back(input_label);
-
+        KeyboardNum(uint8_t allowed_modes = MODE_ALL) : KeyboardPanel(TAB_ROW_H + SYMBOL_H + PAD_H * 4) {
             this->setAllowedModes(allowed_modes);
         }
 
@@ -217,8 +205,7 @@ class KeyboardNum : public Widget, public ITextInputWidget {
             }
             recalcLayout();
 
-            this->needs_redraw = true;
-            markdirty(this->getScreenRect());
+            this->needsRender();
         }
         uint8_t getAllowedModes() const {
             return this->allowed_modes;
@@ -232,33 +219,21 @@ class KeyboardNum : public Widget, public ITextInputWidget {
 
         WidgetType getWidgetType() const override { return WidgetType::KeyboardNum; }
 
-        const std::vector<Widget*>& getChildren() const override {
-            return children_;
-        }
-
-        void setX(int x) override {};
-        void setY(int y) override {};
-
-        WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
-
-        void setInputTarget(ITextInputTarget* target) override {
-            this->target = target;
-        }
-        void removeInputTarget(ITextInputTarget* valid_target) override {
-            if (this->target == valid_target) {
-                this->target = nullptr;
-            }
-        }
-        ITextInputTarget* getInputTarget() override {
-            return this->target;
-        }
-
         void setText(const FixedString<PICO_STR_LL>& text) override {
             this->inputs = text;
-            input_label->setText(inputs);
-            input_label->setCursorToEnd();
+            this->cursor_char = this->inputs.charCount();
+            this->notifyChanged(false);
         }
         FixedString<PICO_STR_LL> getText() override {
             return this->inputs;
+        }
+        size_t getCursorByteOffset() override {
+            return (size_t)this->inputs.byteOffsetOfChar(this->cursor_char);
+        }
+        void setCursorByteOffset(size_t byte_offset) override {
+            int c = CharIndexOfByte(this->inputs.c_str(), byte_offset);
+            const int last = this->inputs.charCount();
+            this->cursor_char = (c > last) ? last : c;
+            this->notifyChanged(false);
         }
 };

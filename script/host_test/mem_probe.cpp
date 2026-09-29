@@ -158,6 +158,11 @@ void KeyboardFunctions::HideAll(){}
 void KeyboardFunctions::Setup(){}
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget*){}
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget*){}
+void KeyboardFunctions::Show(ITextInputTarget*, KeyboardFunctions::Layout, bool){}
+void KeyboardFunctions::OnPanelShown(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelHidden(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelResized(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelChanged(KeyboardPanel*, bool){}
 
 //ログは計測ノイズになるので黙らせる(確保をしない実装にする)
 void LogFunctions::Log(LogType, const char*, ...){}

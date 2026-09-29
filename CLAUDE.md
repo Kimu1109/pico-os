@@ -68,7 +68,8 @@ src/
     scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene/CalendarScene/GameBoyScene等)
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
       apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView/GameBoyView/GameBoyPad等)
-      dialogs/              モーダルダイアログ
+      dialogs/              モーダルダイアログ(オンスクリーンキーボードのダイアログ枠 KeyboardDialog を含む)
+      keyboards/            オンスクリーンキーボードのキー盤3種(Keyboard/KeyboardEng/KeyboardNum)と基底KeyboardPanel
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid)
   ime/                       SKK方式かな漢字変換辞書エンジン
@@ -129,7 +130,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | Task_Functions | `Task`のリスト管理・毎フレームupdate |
 | Network_Functions | Wi-Fi非ブロッキング接続・スキャン(Task化)・NTP同期・電波強度アイコン |
 | IME_Functions | SKK辞書ベース変換候補検索 |
-| Keyboard_Functions | 日/英オンスクリーンキーボードの入力ルーティング |
+| Keyboard_Functions | オンスクリーンキーボードの窓口。`Show(target, layout, docked)`でダイアログ表示/画面下への据え置き表示を開く。下記「オンスクリーンキーボード」参照 |
 | Font_Functions | U8g2フォントサイズ切替(Small16px/Normal24px/Big32px/Bigger48px) |
 | SD_Functions | SDカード初期化 |
 | Scene_Functions | シーン(画面)の遷移管理。Change/Push/Popをフレーム境界まで保留して適用 |
@@ -664,7 +665,8 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
 | `widgets/` | 汎用部品と基底 | `Widget` / `WidgetID` / `WidgetRegistry` + 下のカタログのうち専用でないもの |
 | `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` / `ChatLogView` / `GameBoyView` / `GameBoyPad` 等 |
 | `widgets/systems/` | **OSのシェル部品**(特定アプリのものではない) | `Statusbar`(常駐オーバーレイ) / `AppGrid`(ランチャのタイル) |
-| `widgets/dialogs/` | モーダルダイアログ + オンスクリーンキーボード3種 | 下記「ダイアログ」参照 |
+| `widgets/dialogs/` | モーダルダイアログ(キーボードのダイアログ枠`KeyboardDialog`を含む) | 下記「ダイアログ」参照 |
+| `widgets/keyboards/` | オンスクリーンキーボードのキー盤3種 + 基底`KeyboardPanel` | 下記「オンスクリーンキーボード」参照 |
 | `widgets/interfaces/` | ミックスイン的インターフェース | `IBorderColor` / `IFontImplementation` / `ITextColor` / `ITextInputTarget` |
 
 - **includeは常に`src/`起点の絶対パス**(`#include "gui/widgets/apps/MarkdownView.hpp"`)。
@@ -758,14 +760,43 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - `SearchDialog`: Markdownブラウザの検索結果。状態1行 + `ScrollList` + 再検索/次へ/閉じる。
   **通信はしない**(判断は`MarkdownScene`側)。結果は2回タップで開く。
 - `ColorDialog`: 実装済み(直近コミット)。4×4=16色グリッド(`getIndexToColor(x,y)=x+y*4`)+OK/キャンセル。`selected_color`(未選択-1)、`getSelectedColor()`。
-- `Keyboard` / `KeyboardEng` / `KeyboardNum`: オンスクリーンキーボード3種。いずれも`KeyboardFunctions::Setup()`が`AddOverlay()`でOS常駐させる。
+### オンスクリーンキーボード (`src/gui/widgets/keyboards/` / `dialogs/KeyboardDialog` / `functions/Keyboard_Functions`) (2026-09-29)
+
+キーボードは**「キー盤」と「ダイアログ枠」に分かれている**。以前は3種とも全画面を覆う1つのウィジェットで、
+背景の斜線・上部の入力欄(共有の`Label`)・キーを全部自分で描いていたが、テキストエディタで
+キーボードを画面下に据え置いて本文へ直接書き込めるようにするため分離した。
+
+- **キー盤**(`KeyboardPanel`派生の`Keyboard`(日本語フリック) / `KeyboardEng`(QWERTY) / `KeyboardNum`(数字))。
+  `l_rect`は**画面下端の自分の領域だけ**(日本語151px / 英字112px / 数字140〜168px)で、`OPAQUE`。
+  テキスト・カーソル・変換中の読みは自分で持ち、変わるたびに`notifyChanged()`→`KeyboardFunctions::OnPanelChanged()`。
+  日本語の最上段を上へフリックしたときの候補の枠は、キー盤の外へはみ出さないよう候補の欄へ重ねて出す。
+- **ダイアログ枠**(`KeyboardDialog`)。全画面の`TRANSLUCENT`で、背景の斜線(下へのタップを塞ぐ)と上部の入力欄だけを持つ。
+  キー盤より先に`AddOverlay()`してあるのでキー盤がその上に重なる。変換中の読みを`~`で囲むのはこちらの仕事(`refresh()`)。
+  日本語→英字のように**低いキー盤へ切り替えると、旧キー盤が覆っていた所に絵が残る**(TRANSLUCENTは下を描き直さない)ので、
+  その1フレームだけ`CLEAR`として振る舞って下の画面ごと描き直させる(`redraw_below_frames`)。
+- **開き方は`KeyboardFunctions::Show(target, layout, docked)`の1本**(`Textbox`/`NumberInput`もこれを使う)。
+  `docked=false`(既定)なら従来どおりのダイアログ、`true`ならキー盤だけが画面下に出る(据え置き表示)。
+  据え置き表示の入力先は`ITextInputTarget::onDisplayChanged()`を受けて自分の画面へ反映し、
+  `KeyboardFunctions::VisibleTop()`で自分の表示領域を縮める。キー盤が閉じると表示方法はダイアログへ戻る
+  (次に`OSData::keyboard_jpn->setVisible(true)`と直接開かれても据え置きにならないように)。
+- **`ITextInputWidget`/`ITextInputTarget`に足したもの**: キー盤側に`getCursorByteOffset()`/`setCursorByteOffset()`/
+  `getComposition()`、ターゲット側に任意の`onDisplayChanged()`/`onBackspaceAtStart()`(行頭で1文字削除)/
+  `onCursorAtEdge()`(端でさらに←→)。後の2つは1行ずつキーボードへ渡す複数行の編集欄が、行をまたぐために使う。
+- 日本語⇔英字の切り替えは`KeyboardFunctions::SwitchPanel()`。**`onShow`/`onHide`を挟まず**テキストとカーソルを引き継ぐ
+  (以前は切り替えのたびにターゲットへ`onHide`→`onShow`が飛んでいた)。決定キーも`onHide`は1回だけになった
+  (以前は決定キーが`onHide`を明示的に呼んだ上で`setVisible(false)`でもう一度呼んでいた)。
+- ホストテストの各`*_test.cpp`は`KeyboardFunctions`の関数を個別にスタブしているので、`Keyboard_Functions.hpp`へ関数を
+  足したら使われるものをスタブへも足すこと。`KeyboardNum.cpp`をリンクするテストは`KeyboardPanel.cpp`も要る。
+
+キー盤それぞれの中身:
+
   - **入力位置は3種ともカーソル基準**(末尾への追記ではない)。挿入も削除(1文字戻し)もカーソルの位置で起きる。
-  - `Keyboard`/`KeyboardEng`では、カーソル位置の**真を持つのはキーボード側**(自分のテキスト上の
-    文字インデックス)で、`input_label`へは`Label::setCursorToByteOffset()`でバイト位置として渡す。
+  - 3種とも、カーソル位置の**真を持つのはキー盤側**(自分のテキスト上の文字インデックス)で、
+    表示側へは`getCursorByteOffset()`のバイト位置として渡す(ダイアログの入力欄は
+    `Label::setCursorToByteOffset()`へそのまま渡す)。
     **Labelのカーソルスロット番号を位置として使ってはいけない** — `**`や`~`のマークアップ記号は
     描画されずスロットも持たないため、元テキストの文字数とスロット番号は一致しない。
-    (`KeyboardNum`だけは位置をラベルのスロット番号のまま持っている。打てる記号に
-    マークアップ文字が無いのでずれないが、記号を足すときはここを先に直すこと)
+    (以前は`KeyboardNum`だけ位置をラベルのスロット番号で持っていたが、分離の際に他の2つと揃えた)
   - 移動キーの置き場所: `KeyboardEng`は最下段(`123` `かな` `←` `space` `→` `enter` [`go`])。
     **この行は20セル(1セル12px)を使い切っていて余りが無い** — 幅やラベルを変えると
     すぐ文字が枠線に重なるので、PCビルドの`--shot`で実際の描画を見て確かめること
@@ -1390,6 +1421,28 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   擬似端末を相手にシリアルの経路(pyserial有り/無し、ログの折り返し)。**実機のUSBシリアル(arduino-picoのCDC)では未確認**。
 - 次: Wiiクラシックコントローラーのドライバ(`Source::WiiClassic`。I2Cで6バイト読むだけ、見つからない間は500msごとに探す)。
   PCビルドにSDLのキーボード/ゲームパッドを直接つなぐのも手軽な追加候補。
+
+### テキストエディタ (`TextEditorScene` / `widgets/apps/TextEditView`) (2026-09-29)
+
+ランチャの「テキスト」。スマホの文字入力と同じく、本文の下にオンスクリーンキーボードを**据え置いて**直接書き込む
+(`KeyboardFunctions::Show(this, Layout::Japanese, true)`。上の「オンスクリーンキーボード」参照)。
+右上のキーボードのボタンで出し入れでき、本文をタップするとそこへカーソルが移ってキーボードが開く
+(閉じているときも同じ)。本文は上下のドラッグでスクロールする。新規/開く/保存(名前が無ければ名前を付けて保存)。
+
+- **キーボードの入力バッファは192バイトなので、カーソルのある1行だけをキーボードへ渡す**(`attachLine()`)。
+  キーボードが何か変えるたびに`onDisplayChanged()`でその行を文書へ書き戻す。行をまたぐ操作はシーンが受け持つ:
+  改行キーは受け取ったテキストの`'\n'`で行を割って後ろ半分を次の行として渡し直す、
+  行頭の1文字削除は前の行と繋げる(`onBackspaceAtStart()`)、行頭の←/行末の→は前後の行へ移る(`onCursorAtEdge()`)。
+  **シーンからキーボードへ`setText()`等をしている間(`syncing`)は、返ってくる通知を無視する**(再入で行がずれるため)。
+- 文書は固定長の1本のバッファ(4KiB)に`'\n'`区切り。上限は4KiB・200行・1行191バイト。超えるファイルは
+  保存で内容が消えないよう**開かずに断る**。入力で上限に当たったときは入力を取り消して状態欄へ理由を出す。
+- `TextEditView`は「子を持たずrender()で直接描く」型。文書のバッファを指すだけでコピーしない。折り返しは
+  文書が変わったときだけ全体をやり直す(行の表は最大512行ぶん、2KB)。1文字ごとの`textWidth()`は重いので、
+  **文字の幅を小さな表に覚える**(ASCIIは128の表、それ以外はUTF-8のバイト列をキーに256スロットへ直接写像。Smallフォント固定)。
+  カーソルは青の縦棒、変換中の読みは下線。
+- ダイアログ(保存/開く/破棄の確認)は据え置きのキーボードより奥に出るので、開く前にキーボードを閉じる。
+- 検証はPCビルドの`--tap`/`--shot`(入力・改行・行頭の削除での結合・英字への切り替え・タップでのカーソル移動・
+  ボタンでの出し入れ・保存)。**実機では未確認**(1文字ごとに4KiBの折り返しをやり直す重さは実機で見ること)。
 
 ### ClocksScene 実装詳細
 

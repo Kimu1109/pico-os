@@ -36,6 +36,11 @@ void KeyboardFunctions::HideAll(){}
 void KeyboardFunctions::Setup(){}
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget*){}
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget*){}
+void KeyboardFunctions::Show(ITextInputTarget*, KeyboardFunctions::Layout, bool){}
+void KeyboardFunctions::OnPanelShown(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelHidden(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelResized(KeyboardPanel*){}
+void KeyboardFunctions::OnPanelChanged(KeyboardPanel*, bool){}
 
 static int failures = 0;
 static void check(bool cond, const char* label){

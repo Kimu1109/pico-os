@@ -1,28 +1,9 @@
-#include "Keyboard.hpp"
+#include "gui/widgets/keyboards/Keyboard.hpp"
+#include "functions/Keyboard_Functions.hpp"
 
 #include "functions/GFX_Functions.hpp"
 #include "functions/HitBox_Functions.hpp"
 #include "OS_Data.hpp"
-
-//表示の切り替え
-void Keyboard::setVisible(bool visible) {
-    this->visible = visible;
-    this->input_label->setVisible(visible);
-    this->input_label->setMaxHeight(SCREEN_HEIGHT - 10 * 2 - this->l_rect.h);
-
-    if(!visible){
-        this->input_label->setText(this->getText()); //読みを挟んだ確定形(表示用の`~`は含まない)
-        if(this->target) this->target->onHide(this);
-    }else{
-        this->inputs_done = *this->input_label->getText();
-        this->inputs.clear();
-        this->done_cursor = this->inputs_done.charCount();
-        if(this->target) this->target->onShow(this); //targetがいればsetText()でカーソルごと引き直される
-        this->updateInputs(false);
-    }
-
-    this->needsRender();
-}
 
 //フォントのスタイルの切り替え(主にキー用)
 void Keyboard::switch_font_style(char style){
@@ -148,12 +129,12 @@ void Keyboard::causeOnPressStart() {
         if(is_inputs_empty){
             if(this->target){
                 if(this->target->getIsSingleLine()){
-                    this->target->onHide(this);
-                    this->setVisible(false);
+                    this->submit();
+                    return;
                 }else{
                     if(swipe_y_index == 2){
-                        this->target->onHide(this);
-                        this->setVisible(false);
+                        this->submit();
+                        return;
                     }else if(swipe_y_index == 3){
                         inputs.assign("\n");
                         commitAndClear();
@@ -184,8 +165,8 @@ void Keyboard::causeOnPressStart() {
         }
         //英字へ
         if(swipe_x_index == 0 && swipe_y_index == 1){
-            this->setVisible(false);
-            OSData::keyboard_eng->setVisible(true);
+            KeyboardFunctions::SwitchPanel(this, static_cast<KeyboardPanel*>(OSData::keyboard_eng));
+            return;
         }
         //カタカナへ
         if(swipe_x_index == 0 && swipe_y_index == 2 && !is_inputs_empty){
@@ -273,12 +254,8 @@ void Keyboard::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    PICO_GFX::DrawDialogBackground();
     OSData::frame->fillRect(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y, this->background_color);
-    markdirty({
-        0, (int16_t)(START_KEY_Y - SQUARE_H),
-        SCREEN_WIDTH, (int16_t)(SCREEN_HEIGHT - START_KEY_Y + SQUARE_H)
-    });
+    markdirty(this->getScreenRect());
 
     //候補
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y, SCREEN_WIDTH, PICO_BLACK);
@@ -327,6 +304,8 @@ void Keyboard::render() {
 
             int BOX_X = SQUARE_W * (swipe_x_index + swipe_directions[i * 2]);
             int BOX_Y = START_KEY_Y + SQUARE_H * (swipe_y_index + swipe_directions[i * 2 + 1]);
+            //最上段の上方向はキー盤の外(入力先の画面)へはみ出すので、候補の欄へ重ねて出す
+            if(BOX_Y < START_CANDIDATES_Y) BOX_Y = START_CANDIDATES_Y;
 
             //塗りつぶし&矩形
             OSData::frame->fillRect(BOX_X, BOX_Y, SQUARE_W, SQUARE_H, PICO_BACKGROUND);

@@ -2,7 +2,7 @@
 #include "OS_Data.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
-#include "gui/widgets/dialogs/KeyboardNum.hpp"
+#include "gui/widgets/keyboards/KeyboardNum.hpp"
 
 void NumberInput::render(){
     if(!this->visible) return;
@@ -32,9 +32,8 @@ void NumberInput::render(){
 void NumberInput::causeOnPressStart(){
     Widget::causeOnPressStart();
 
-    KeyboardFunctions::RegisterInputTarget(this);
     static_cast<KeyboardNum*>(OSData::keyboard_num)->setAllowedModes(KeyboardNum::MODE_DIGIT);
-    OSData::keyboard_num->setVisible(true);
+    KeyboardFunctions::Show(this, KeyboardFunctions::Layout::Number);
 }
 
 void NumberInput::onShow(ITextInputWidget* keyboard){

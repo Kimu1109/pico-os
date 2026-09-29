@@ -22,10 +22,10 @@
 //   ハードウェア依存を一切持たない
 class TouchFilter {
     private:
-        static constexpr int kWindow = 5;
+        static constexpr int kWindow = 3;
 
-        int16_t hx[kWindow] = {0, 0, 0, 0, 0};
-        int16_t hy[kWindow] = {0, 0, 0, 0, 0};
+        int16_t hx[kWindow] = {0, 0, 0};
+        int16_t hy[kWindow] = {0, 0, 0};
         bool    primed = false;
 
         // kWindow個(=5、小さい固定数)の中央値。要素数が少ないので単純な挿入ソートで

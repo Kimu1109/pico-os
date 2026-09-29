@@ -16,6 +16,9 @@
 //   .md / .markdown … MarkdownView(Markdownブラウザと同じ描画)
 //   .pimg           … ImageView(開いたときに1回だけ解いて、以降はメモリから描く)
 //   それ以外        … TextView(見えている行だけを描くプレーンテキストの表示欄)
+// テキスト系(.md含む、画像以外)は右上の「編集」でテキストエディタ(TextEditorScene)をその
+// ファイルを開いた状態でPush()する。エディタの「戻る」で戻ると、ここはonEnter()から作り直される
+// ので、編集した内容が反映された表示になる(画像の編集エディタは今のところ無い)
 // 表示に使う部品は開いたファイルの種類の1つだけを作る(MarkdownViewは約40KBあるため)。
 class FileViewerScene : public Scene {
     private:
@@ -27,6 +30,7 @@ class FileViewerScene : public Scene {
         FixedString<PICO_PATH_LEN> path;
 
         Button* back_button = nullptr;
+        Button* edit_button = nullptr;
         Label<PICO_STR_L>* status_label = nullptr;
         MarkdownView* md_view = nullptr;
         TextView* text_view = nullptr;

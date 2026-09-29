@@ -40,6 +40,10 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         int  len = 0;
         bool dirty = false;
         FixedString<PICO_PATH_LEN> path; // 空なら未保存の新規文書
+        // 起動時に開くファイル(ファイルビューワーの「編集」から渡される)。
+        // 最初のonEnter()で1回だけ読む(Pop()で戻ってきたときに読み直して編集内容を捨てないため)
+        FixedString<PICO_PATH_LEN> initial_path;
+        bool initial_loaded = false;
 
         // キーボードへ渡している行(キーボードが開いている間だけ意味を持つ)
         int cur_line = 0;
@@ -86,6 +90,10 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         bool writeFile(const char* path);
 
     public:
+        // initial_pathを渡すと、そのファイルを開いた状態で始まる(開けなければ空の新規文書)
+        explicit TextEditorScene(const char* initial_path = nullptr){
+            if(initial_path) this->initial_path.assign(initial_path);
+        }
         ~TextEditorScene() override;
 
         const char* getName() const override { return "TextEditor"; }

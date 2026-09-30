@@ -1,0 +1,13 @@
+{
+    "name": "monocypher",
+    "version": "4.0.2",
+    "description": "Monocypher 4.0.2 (vendored, src/ + optional/monocypher-ed25519). Used by the SSH client (src/ssh/). See README-pico-os.md.",
+    "keywords": ["crypto", "x25519", "ed25519", "chacha20", "poly1305"],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/LoupVaillant/Monocypher.git"
+    },
+    "license": "BSD-2-Clause OR CC0-1.0",
+    "frameworks": "arduino",
+    "platforms": "*"
+}

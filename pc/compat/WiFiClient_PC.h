@@ -23,6 +23,8 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 
 class WiFiClientPC {
@@ -134,6 +136,14 @@ public:
     }
 
     operator bool() const { return fd_ >= 0; }
+
+    // Nagleを切る(実機のWiFiClient::setNoDelayと同じ)。SSHのキー入力のように小さく
+    // 何度も送る相手で、ACK待ちの遅れを出さないため。connect()の後に呼ぶ
+    void setNoDelay(bool on){
+        if(fd_ < 0) return;
+        const int v = on ? 1 : 0;
+        ::setsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v));
+    }
 
 protected:
     int fd() const { return fd_; }

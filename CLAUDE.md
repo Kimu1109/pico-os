@@ -145,13 +145,14 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | HitBox_Functions | 当たり判定のヘルパ |
 | Test_Functions | フォントカバレッジ等の起動時セルフチェック |
 | Sound_Functions | 音声出力(I2S)と音源の窓口。1コア目はアンプの抜き差しの検出と要求の受付、2コア目(`loop1()`)が音源を回してI2Sへ流す。下記「音声出力」参照 |
+| Power_Functions | スリープ(省電力)。自動調光のさらに先の段階。下記「スリープ(省電力)」参照 |
 | Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。今の入力元はUSBシリアル(PCのキーボード)。下記「外部コントローラー」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Display→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
-`loop()`: Touch更新 → Pad更新(外部コントローラー) → Display更新(自動調光の判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound更新、という単純なポーリングループ。
+`loop()`: Touch更新 → Pad更新(外部コントローラー) → Display更新(自動調光の判定) → Power更新(スリープの判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound/Battery更新 → `PowerFunctions::IdleWait()`(スリープ中だけ少し休む)、という単純なポーリングループ。
 
 **2コア目(`setup1()`/`loop1()`)は音声専用**(`SoundFunctions::LoopCore1()`だけを回す)。1コア目とは`std::atomic`とロック無しのコマンドの列だけでやり取りする。
 **2コア目からログを出したり、ウィジェット/SD/`OSData`に触ったりしないこと**(どれもロックを持たない1コア目専用の作り)。
@@ -206,6 +207,53 @@ SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、
   実機側のコード(`LGFX_Config.hpp`の`Light_PWM`設定)はコンパイルすらできていない。実機ビルドで
   `lgfx::Light_PWM`の未解決や、明るさが効かない/ちらつく場合は、まずここ(pin_bl/pwm_channel、
   他コードがGP22のPWMスライスを使っていないか)を疑うこと。自動調光の30秒閾値の実測も未確認。
+
+### スリープ(省電力)(`src/functions/Power_Functions`) (2026-09-30)
+
+SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、この節にだけ残す)。
+自動調光(バックライトを絞るだけ)の先に、消費電力そのものを下げる段階を足した。
+
+```
+Active → (30秒: kIdleTimeoutMs) → Dim(DisplayFunctions) → (sleep-timeout。既定120秒) → Sleep
+```
+タイムアウトは**最後の操作からの通算**(自動調光が切れていてもスリープは別に効く)。Sleepに入ると:
+
+1. **バックライトを消し、液晶パネルもSLPINで休ませる**(`DisplayFunctions::SetSleeping()`。`lcd->sleep()/wakeup()`)。
+   起きるとき**120ms待つ**(ILI9341/ST7789はSLPOUTから次のコマンドまで必要。LovyanGFXの`Panel_LCD::setSleep()`は待たない)。
+   スリープ中は`ApplyEffectiveBrightness()`が何もしない(起きるときに今の明るさへ戻す)。表示内容(GRAM)は保たれるので再描画は要らない。
+2. **Wi-Fiを積極的な省電力へ**(`NetworkFunctions::SetLowPower()` = `WiFi.lowPowerMode()`、起きると`defaultLowPowerMode()`)。接続は保つので
+   生存確認(5秒ごと)や再接続はそのまま動く。再接続で設定が戻るかもしれないので、接続が確立するたびに掛け直す。
+3. **何も鳴っていなければI2Sとアンプ(休止端子)を止め、2コア目をゆっくり回す**(`SoundFunctions::SetPowerSave()`。
+   鳴っているものが無い間だけ`want`を偽にする。要求が来れば次の周回で動き直す。2コア目の休みは1ms→`kPowerSaveIdleDelayMs`=20ms)。
+4. **1コア目のloop()を間引く**(`IdleWait()`が`delay(kSleepLoopDelayMs=30)`。タッチで起きるまでの最大の遅れ)。
+   CPUクロックは変えていない(SPI/I2S/CYW43のPIOの分周が`clk_sys`基準で、変えると全部の再初期化が要るため。効果を実測してから検討)。
+
+**スリープへ入らない条件**: 各画面が**毎フレーム`PowerFunctions::KeepAwake()`を呼ぶ**(ヘッダの`inline`関数で、フラグを立てるだけ。
+前のフレームに呼ばれたかで判断するので、**呼び忘れても「スリープに入る」だけで戻し忘れの事故が無い**。`Power_Functions.cpp`をリンクせずに
+画面のホストテストを通せる)/ 音・曲が鳴っている / Wi-Fiへ接続中。スリープ中に`KeepAwake()`が来たら起きる
+(ClocksScene: タイマーが鳴って`Finished`になったとき)。
+
+KeepAwakeを呼んでいる画面: ゲームボーイ・SSH・チャット(常時)、カレンダー(取得中)、Markdown(取得/検索中)、Lua(`pico.http_request`中。`LuaEngine::HttpBusy()`)、
+設定(Wi-Fiスキャン中)、時計(タイマーが鳴っているとき)。**計測中のタイマー/ストップウォッチはスリープしてよい**(`millis()`の差分で積むので、間引いても進む)。
+新しく「操作が無くても動き続ける画面」を作るときは`onUpdate()`で呼ぶこと。
+
+**スリープから起こしたタッチは画面へ渡さない**(暗い画面の見えないボタンを押さないよう。`swallow_touch`)。指を離すまで
+`OSData::isTouched`等を毎フレーム下ろし続ける(Touch_Functionsは`isTouched`が偽なら新しいタッチとみなすので、離した瞬間に自然に終わる)。
+コントローラーのボタンで起きた場合は握りつぶさない。
+
+- 設定は`/sys/display.cfg`の`sleep-timeout = 秒`(0で無効、既定120)。`SettingsScene`の「スリープ」ドロップダウン(しない/1/2/5/10/30分)で編集する
+  (一覧に無い値は一番近い項目を選んで見せる)。**設定画面は10行になった**(`ROW_H` 26→24。ドロップダウンの箱は行より背が高いので、
+  箱の下端を行の下端へ揃えて下の行への食い込みを防いでいる。タイムゾーンも同じ)。
+- ホストテスト: `power_test`(run.sh。入り方・タッチで起きて指を離すまで握りつぶす・コントローラーで起きる・KeepAwake/音/Wi-Fi接続中は入らない・
+  スリープ中のKeepAwakeで起きる・0で無効)、`sound_test`(省電力でI2Sとアンプが止まり、要求で動き直し、解けば戻る)。
+  依存する窓口は偽物へ差し替えている(`stubs/Arduino.h`に`delay()`、`stubs/WiFi.h`/`pc/compat/WiFi.h`に省電力モードの記録を足した)。
+- PCビルドの検証: `display.cfg`に`sleep-timeout = 2`を置いて`--shot 1000`でスリープへ入る/`--tap`で復帰しそのタッチでアプリが開かない
+  (2回目のタッチで開く)ことをログで確認。**PCの`--shot`はスリープ中の暗転が写らない**(`lcd->sleep()`は`PICO_GFX::SetBrightness()`を通らず、
+  `main_pc.cpp`の掛け率が動かないため)。**起動から10秒はWi-Fi接続中扱い(PCは疎通が無いと`TRYING_CONNECT`のまま)でスリープに入らない**ので、
+  確かめるときは10秒以上(1000フレーム程度)回すこと。
+- **実機では未確認**: `WiFi.lowPowerMode()/defaultLowPowerMode()`の名前(arduino-picoのWiFiクラス。ビルドが通らなければここ)・
+  `delay()`が実際にCPUを寝かせるか(arduino-picoの`delay()`はWFE/sleep系のはずだが未確認)・SLPINしたILI9341/ST7789への書き込み・
+  復帰時の120msで足りるか・消費電流の実測(LiPo/USBの電流計で、スリープ前後を比べること)。
 
 ### バッテリー残量表示(`src/functions/Battery_Functions`) (2026-09-28)
 
@@ -3145,7 +3193,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、34本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、37本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

@@ -49,6 +49,9 @@
 #   pad_test      … 外部コントローラーの窓口(PadFunctions)。USBシリアルの行("pad XXXX")の読み取り、
 #                   押した/離したのはそのフレームだけ、行が途切れたら外れて押しっぱなしにならないこと、
 #                   Game Boyのボタンへの対応
+#   power_test    … スリープ(PowerFunctions)。操作が無いまま sleep-timeout が過ぎると入り、画面/Wi-Fi/音の
+#                   省電力が掛かること、タッチで起きて起こした指は離すまで画面へ渡さないこと、KeepAwake()・
+#                   音・Wi-Fi接続中は入らないこと
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -491,6 +494,17 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== pad_test ====="
 run_or_die "$OUT/pad_test"
+
+# --- スリープ(省電力) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/power_test.cpp" \
+    "$ROOT/src/functions/Power_Functions.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
+    -o "$OUT/power_test"
+
+echo ""
+echo "===== power_test ====="
+run_or_die "$OUT/power_test"
 
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

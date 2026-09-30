@@ -1,4 +1,5 @@
 #include "gui/scenes/ChatScene.hpp"
+#include "functions/Power_Functions.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "functions/Scene_Functions.hpp"
@@ -476,6 +477,8 @@ void ChatScene::sendDraft(){
 }
 
 void ChatScene::onUpdate(){
+    //新着の取得は操作が無くても続く(スリープで止めない)
+    PowerFunctions::KeepAwake();
     //1回描いてから繋ぎに行く(最初の接続はTLSのハンドシェイクで1〜2秒止まるため)
     if(this->frames_since_enter < 2){
         this->frames_since_enter++;

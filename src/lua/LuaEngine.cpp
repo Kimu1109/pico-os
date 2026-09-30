@@ -1,4 +1,5 @@
 #include "lua/LuaEngine.hpp"
+#include "functions/Power_Functions.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -2182,6 +2183,10 @@ int LuaEngine::l_http_cancel(lua_State* L) {
         self->http_->callback_ref = LUA_NOREF;
     }
     return 0;
+}
+
+bool LuaEngine::HttpBusy() const {
+    return http_ && http_->callback_ref != LUA_NOREF;
 }
 
 void LuaEngine::UpdateHttp() {

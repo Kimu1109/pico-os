@@ -31,6 +31,8 @@ namespace {
     std::atomic<uint8_t>  master_volume{kDefaultVolume};
     // 1コア目→2コア目: バッテリー駆動中か(音割れ防止のkBatteryVolumeCapPercent頭打ちを掛けるかどうか)
     std::atomic<bool>     battery_cap_active{false};
+    // 1コア目→2コア目: 省電力中(何も鳴っていなければI2Sを止めてゆっくり回る)
+    std::atomic<bool>     power_save{false};
 
     std::atomic<bool>     core1_running{false}; // 2コア目→1コア目: I2Sが動いている
     std::atomic<bool>     core1_failed{false};  // 2コア目→1コア目: begin()に失敗した
@@ -222,6 +224,13 @@ namespace {
         sample_frac = 0;
     }
 
+    // 何か鳴っている(鳴っていることになっている)か。省電力中に止めてよいかの判断に使う
+    bool AnythingSounding(){
+        if(engine.activeMask() != 0 || player.playing()) return true;
+        GbAudioLink* link = gb_link.load(std::memory_order_acquire);
+        return link && link->active();
+    }
+
     void ApplyRunState(unsigned long now_ms){
         const uint32_t epoch = retry_epoch.load(std::memory_order_acquire);
         if(epoch != seen_epoch){
@@ -229,7 +238,9 @@ namespace {
             failed = false;
             core1_failed.store(false, std::memory_order_release);
         }
-        const bool want = want_run.load(std::memory_order_acquire) && !failed;
+        bool want = want_run.load(std::memory_order_acquire) && !failed;
+        //省電力中は、何も鳴っていない間だけI2Sとアンプを止める(鳴らす要求が来れば次の周回で動き直す)
+        if(want && power_save.load(std::memory_order_acquire) && !AnythingSounding()) want = false;
         if(want && !running)        StartOutput(now_ms);
         else if(!want && running)   StopOutput(now_ms);
     }
@@ -378,6 +389,9 @@ void SoundFunctions::SetVolume(int v){
     if(v > 100) v = 100;
     master_volume.store((uint8_t)v, std::memory_order_release);
 }
+void SoundFunctions::SetPowerSave(bool enable){ power_save.store(enable, std::memory_order_release); }
+bool SoundFunctions::IsPowerSave(){ return power_save.load(std::memory_order_acquire); }
+
 bool SoundFunctions::IsBatteryVolumeCapActive(){ return battery_cap_active.load(std::memory_order_relaxed); }
 
 bool SoundFunctions::Play(uint8_t ch, const ChipSynth::Note& note){
@@ -548,6 +562,14 @@ uint32_t SoundFunctions::GbDroppedWrites(){
 
 void SoundFunctions::SetupCore1(){}
 bool SoundFunctions::LoopCore1(){ return Core1StepAt(millis()); }
+
+unsigned long SoundFunctions::IdleDelayMs(){
+    //省電力中でI2Sも止まっていれば長く休む。動いている間は今までどおり1ms(バッファ切れを避ける)
+    if(power_save.load(std::memory_order_acquire) && !core1_running.load(std::memory_order_acquire)){
+        return kPowerSaveIdleDelayMs;
+    }
+    return 1;
+}
 
 bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     //1コア目のSetup()(設定の読み込みと最初の検出)が済むまでは何もしない

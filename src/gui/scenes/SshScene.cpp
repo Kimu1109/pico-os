@@ -1,4 +1,5 @@
 #include "gui/scenes/SshScene.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
@@ -651,6 +652,8 @@ void SshScene::onExit(){
 }
 
 void SshScene::onUpdate(){
+    //接続の受信は操作が無くても続く(スリープで止めない)
+    PowerFunctions::KeepAwake();
     this->layout();
 
     if(this->connect_wait_frames >= 0){

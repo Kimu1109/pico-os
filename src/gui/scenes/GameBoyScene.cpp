@@ -1,4 +1,5 @@
 #include "gui/scenes/GameBoyScene.hpp"
+#include "functions/Power_Functions.hpp"
 
 #include "gui/widgets/apps/GameBoyView.hpp"
 #include "gui/widgets/apps/GameBoyPad.hpp"
@@ -122,6 +123,8 @@ void GameBoyScene::loadRom(const char* path){
 }
 
 void GameBoyScene::onUpdate(){
+    //エミュは操作が無くても動き続ける(スリープさせない)
+    PowerFunctions::KeepAwake();
     const uint32_t now = millis();
     uint32_t elapsed = now - this->last_ms;
     this->last_ms = now;

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 #include "lua.hpp"
+#include "functions/Power_Functions.hpp"
 #include "gui/widgets/WidgetID.hpp"
 #include "gui/icons/icon_render.h"
 #include "lua/LuaPermissions.hpp"
@@ -364,6 +365,8 @@ class LuaEngine {
         // 毎フレーム呼ぶ想定(クラスコメント「ネットワーク」参照)。リクエストが
         // 無ければ何もしない
         void UpdateHttp();
+        // pico.http_request()が進行中か(スリープさせないかの判断に使う)
+        bool HttpBusy() const;
 
     private:
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が

@@ -472,6 +472,33 @@ static void TestSoundFunctions(){
     plugged = true;
     for(int i = 0; i < kDetectStableCount; i++){ now += kDetectIntervalMs; Step(now); }
     check(GetState() == State::Active, "刺し直せば試し直す");
+
+    printf("--- 省電力(スリープ中): 何も鳴っていなければI2Sとアンプを止める ---\n");
+    StopAll();
+    Step(now);
+    check(GetState() == State::Active && Out().running, "省電力の前は動いている");
+    check(IdleDelayMs() == 1, "省電力でなければ2コア目は1msずつ休む");
+    SetPowerSave(true);
+    check(IsPowerSave(), "省電力を掛けた");
+    Step(now);
+    check(!Out().running, "何も鳴っていなければI2Sを止める");
+    check(HostGpio::last_written[AUDIO_SHUTDOWN] == LOW, "アンプも休止端子で止める");
+    check(IdleDelayMs() == kPowerSaveIdleDelayMs, "止まっている間は2コア目を長く休ませる");
+    check(IsConnected(), "アンプの検出はそのまま(刺さっている扱い)");
+
+    Beep(880, 100);
+    Step(now);
+    check(Out().running && HostGpio::last_written[AUDIO_SHUTDOWN] == HIGH, "鳴らす要求が来れば動き直す");
+    check(IdleDelayMs() == 1, "動いている間は1msに戻る");
+    now += 200;
+    Step(now);
+    Out().consume(Out().queued.size());
+    for(int i = 0; i < 20 && Out().running; i++){ now += 20; Out().consume(Out().queued.size()); Step(now); }
+    check(!Out().running, "鳴り終わったらまた止める");
+
+    SetPowerSave(false);
+    Step(now);
+    check(Out().running && !IsPowerSave(), "省電力を解けば動き直す");
 }
 
 int main(){

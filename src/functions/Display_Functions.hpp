@@ -46,4 +46,12 @@ namespace DisplayFunctions {
 
     // 自動調光で今暗くなっているか
     bool IsDimmed();
+
+    // ---- スリープ(PowerFunctionsが呼ぶ) ----
+    // trueでバックライトを消し、液晶パネルもスリープコマンド(SLPIN)で休ませる。
+    // falseでパネルを起こしてから、今の明るさ(通常/自動調光)へ戻す。
+    // スリープ中はSetBrightness()や自動調光の判定がバックライトへ反映されない
+    // (起きたときの値としてだけ効く)。パネルの表示内容(GRAM)はスリープ中も保たれる
+    void SetSleeping(bool sleeping);
+    bool IsSleeping();
 }

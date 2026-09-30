@@ -13,6 +13,9 @@ pico.sd_write(path, content [, append]) -- true/false
 pico.sd_remove(path)                    -- true/false(ディレクトリなら再帰削除)
 pico.sd_mkdir(path)                     -- true/false
 pico.sd_list(path)                      -- { {name=..., is_dir=...}, ... } or nil
+pico.config_read(path)                  -- { key = "value", ... } or nil
+pico.config_get(path, key)              -- "value" or nil
+pico.config_write(path, key, value)     -- true/false
 ```
 
 パスは `FileExplorer` などと同じ**SD絶対パス**(`/`始まり)です。
@@ -43,6 +46,27 @@ local function load()
     return tonumber(content:match("score=(%d+)")) or 0
 end
 ```
+
+## 設定ファイル(key=value)
+
+設定は `pico.config_*` で読み書きするのが手軽です。書式はOSの `/sys/*.cfg` や `app.cfg` と同じ `key=value`(1行1項目、`#` で始まる行はコメント、同じキーは後勝ち)です。
+
+```lua
+local CFG = "/lua/apps/myapp/settings.cfg"
+
+local volume = tonumber(pico.config_get(CFG, "volume") or "") or 50
+local all = pico.config_read(CFG) or {}   -- { volume = "50", ... }(値は常に文字列)
+local muted = all.muted == "true"
+
+pico.config_write(CFG, "volume", 70)      -- そのキーの行だけ差し替え(無ければ追記)
+pico.config_write(CFG, "muted", true)
+```
+
+`config_write` はコメントや他の行をそのまま残し、一時ファイルへ書いてから差し替えるので、途中で電源が落ちても設定が壊れません。
+
+## app.cfgは書き換えられない
+
+アプリ自身の `app.cfg`(`/lua/apps/<名前>/app.cfg`)は権限(`permission_network` 等)を持つため、**読めますが書き換えられません**。`sd_write` / `sd_remove` / `sd_mkdir` / `canvas_save` / `config_write` のどれでも `false` が返ります(大文字小文字や `..` の違いも同じファイルとして扱います)。`app.cfg` を含むディレクトリ(自分のアプリのディレクトリや `/lua/apps` 自体)を `sd_remove` で消すこともできません。自分の設定は `settings.cfg` のような別の名前のファイルへ書いてください。
 
 ## 読み込みサイズの上限
 

@@ -481,6 +481,18 @@ class LuaEngine {
         // app_dir_=="/"(既定値)の場合は常にtrue(「制限なし」)。
         bool SdPathAllowed(const char* path) const;
 
+        // 書き込み系(sd_write/sd_remove/sd_mkdir/canvas_save/config_write)の共通ガード。
+        // SdPathAllowed()に加えて、アプリの設定ファイル(app.cfg)を守る:
+        //   - 自分のapp_dir直下のapp.cfg、および/lua/apps/<名前>/app.cfg(どのアプリのものでも)
+        //     へは書き込めない。app.cfgは権限(permission_network等)を持つので、書き換えを
+        //     許すとスクリプトが自分(やsd_outside_app_dirを持つ場合は他のアプリ)の権限を
+        //     勝手に上げられてしまうため。読むのは自由(pico.sd_read/config_read)
+        //   - FATは大小を区別せず末尾の'.'/空白も捨てるので、名前はそれを吸収して比べる
+        //   - is_remove(sd_remove)では、app.cfgを丸ごと消せてしまう「それを含むディレクトリ」
+        //     (自分のapp_dirとその祖先、/lua/apps/<名前>とその祖先)の削除も拒否する
+        // 拒否したときはLOG_APP_WARNを出す(apiはログに出す関数名)
+        bool SdWriteAllowed(const char* path, const char* api, bool is_remove = false) const;
+
         void registerApi();
         void registerFn(const char* name, lua_CFunction fn);
 
@@ -629,6 +641,17 @@ class LuaEngine {
         static int l_sd_remove(lua_State* L);
         static int l_sd_mkdir(lua_State* L);
         static int l_sd_list(lua_State* L);
+
+        // 設定ファイル(key=value形式。PICO_Config/sys/*.cfg・app.cfgと同じ書式)の読み書き。
+        // 権限はpico.sd_*と同じ(書き込みはSdWriteAllowed()なのでapp.cfgへは書けない)。
+        //   config_read(path)            -> {key=value(文字列), ...} | nil
+        //   config_get(path, key)        -> value(文字列) | nil
+        //   config_write(path, key, val) -> bool  (valは文字列/数値/真偽値。1キーだけ差し替え、
+        //                                          コメントと行順は保つ。PICO_Config::SetValue())
+        // 値は常に文字列で返す(型の解釈はスクリプト側。tonumber()やv=="true")。
+        static int l_config_read(lua_State* L);
+        static int l_config_get(lua_State* L);
+        static int l_config_write(lua_State* L);
 
         // pico.sd_read()が1回で読む上限。LuaScene::kMaxScriptBytesと同じ考え方
         // (Lua state全体の予算(通常200KB)を1ファイルで食い潰さないための頭打ち)。

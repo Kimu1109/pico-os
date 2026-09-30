@@ -2054,6 +2054,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.sd_remove(path)` | ファイルなら`SD.remove()`、ディレクトリなら`PICO_IO::removeRecursive()`(`FileExplorer`の削除と同じ判断)(2026-09-20追加) |
 | `pico.sd_mkdir(path)` | `OSData::SD.mkdir()`(2026-09-20追加) |
 | `pico.sd_list(path)` | ディレクトリを列挙し`{ {name=..., is_dir=...}, ... }`の配列を返す。パスが無い/ディレクトリでないなら`nil`(2026-09-20追加) |
+| `pico.config_read(path)` / `pico.config_get(path, key)` / `pico.config_write(path, key, value)` | `key=value`形式の設定ファイル(`PICO_Config`と同じ書式)の読み書き。値は文字列で返す。書き込みは`PICO_Config::SetValue()`(1キー差し替え)。**`app.cfg`へは書けない**(下記「設定ファイルとapp.cfgの書き込み制限」参照)(2026-09-30追加) |
 | `pico.image_load(path)` | `.pimg`をデコードして整数ハンドルを返す。失敗(SD無し/パス不正/不正な`.pimg`/上限超過)は`nil`(下記「画像」参照)(2026-09-21追加) |
 | `pico.image_size(handle)` | 読み込んだ画像の`width, height`を返す。無効なハンドルはエラー(2026-09-21追加) |
 | `pico.draw_image(handle, x, y)` | 画像を描く。他の`pico.draw_*`と同じく**`Canvas`の`render`コールバック内で使うこと**。無効なハンドルはエラー(2026-09-21追加) |
@@ -2263,6 +2264,31 @@ dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ
   `close()`が飛ばされ得る。ごく小さな読み書きの最中に限られる稀なエッジケースであり、
   「Lua着手前の受け皿の状態」表にある**OS内部90箇所のOOM未対応と同じ割り切りで
   対象外**とした(そこまで手を入れる投資対効果は低いと判断)。
+
+### 設定ファイルとapp.cfgの書き込み制限(2026-09-30実装)
+
+`pico.config_read/config_get/config_write`。セーブデータや設定を`pico.sd_read`+自前の文字列解析で扱っていたのを、
+OSと同じ`key=value`書式(`Config_Functions`)で読み書きできるようにした。読みは`PICO_Config::ParseFile()`、
+書きは`PICO_Config::SetValue()`(一時ファイル経由で1キーだけ差し替え)をそのまま使う。
+
+- 値は常に**文字列**で返す(型の解釈はスクリプト側)。書くときは文字列/数値/真偽値を受け、`AsInt/AsFloat/AsBool`で
+  読み戻せる表記にする(小数は`%.6f`から末尾の0を削る。`AsFloat()`が指数表記を拒むので`%g`は使えない)。
+- **改行を含む値は`false`**(次の行として別のキー=権限等を差し込めるため)。不正なキー(`=`・改行・前後の空白・`#`始まり)は`luaL_error`。
+- 読みは`pico.sd_read`と同じ16KiB上限。ファイルが無い/ディレクトリならnil。
+
+**app.cfgの書き込み制限**: `app.cfg`は`permission_network`/`permission_sd_outside_app_dir`を持つので、
+スクリプトが書き換えられると自分の権限を上げられてしまう(次回起動のスキャンで効く)。書き込み系の共通ガード
+`LuaEngine::SdWriteAllowed()`(`sd_write`/`sd_remove`/`sd_mkdir`/`canvas_save`/`config_write`が通る)で、
+権限に関わらず以下を拒否する(`false`+`LOG_APP_WARN`):
+
+- 自分の`app_dir`直下の`app.cfg`、および`/lua/apps/<名前>/app.cfg`(どのアプリのものでも)。後者は
+  `sd_outside_app_dir`を持つアプリが他のアプリの権限を上げる・新しいアプリを`app.cfg`付きで作るのを防ぐため。
+- `sd_remove`では、それらを含むディレクトリ(自分の`app_dir`とその祖先、`/lua/apps/<名前>`とその祖先)も。
+- パスは`normalize()`の後、**FATと同じく大小を区別せず、各セグメントの先頭の空白・末尾の空白と`.`を捨てて**比べる
+  (`APP.CFG`や`app.cfg.`も同じファイルを指すため)。
+- 読むのは自由(`sd_read`/`config_read`)。
+- ホストテストは`lua_engine_test.cpp`(読み書きの往復・後勝ち・型ごとの書式・改行の拒否・各経路でのapp.cfg拒否・
+  大文字/末尾の`.`/`..`・`sd_outside_app_dir=true`でも他アプリの`app.cfg`は拒否)。
 
 ### 画像(2026-09-21実装)
 

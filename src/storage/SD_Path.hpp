@@ -39,6 +39,11 @@ namespace PICO_Path {
         // カレンダーの取得元の一覧("名前 = URL" の行)。CalendarSync参照
         constexpr const char* CALENDAR_SOURCES = "/calendar/sources.cfg";
 
+        // SSHアプリ(SshScene)。公開鍵認証に使う秘密鍵(OpenSSH形式・ssh-ed25519・パスフレーズ無し)と、
+        // 信頼したホスト鍵の一覧(OpenSSHのknown_hostsと同じ書き方)
+        constexpr const char* SSH_ID_ED25519 = "/sys/ssh/id_ed25519";
+        constexpr const char* SSH_KNOWN_HOSTS = "/sys/ssh/known_hosts";
+
         namespace CFG {
             constexpr const char* SYS_NETWORK_CFG = "/sys/network.cfg";
             constexpr const char* SYS_USER_CFG = "/sys/user.cfg";
@@ -48,6 +53,8 @@ namespace PICO_Path {
             constexpr const char* SYS_SOUND_CFG = "/sys/sound.cfg";
             // 画面の明るさ("brightness = 0〜100" / "auto-dim = true|false")。DisplayFunctions参照
             constexpr const char* SYS_DISPLAY_CFG = "/sys/display.cfg";
+            // SSHアプリ("target = user@host:port" / "font = small|large")。SshScene参照
+            constexpr const char* SYS_SSH_CFG = "/sys/ssh.cfg";
         }
 
         namespace IME {

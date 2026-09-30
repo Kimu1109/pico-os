@@ -96,6 +96,12 @@
 #                 pico.*をLuaの偽物に差し替え、lua_script_test(vendorしたLuaで.luaを
 #                 動かすだけの下請け)で tetris_test.lua を実行する。ライン消し・壁蹴り・
 #                 HOLD・長押しの連続移動・ゲームオーバーとハイスコア保存・タッチの操作ボタン
+#   vt_terminal_test… SSHアプリの端末エミュレータ(src/ssh/Vt_Terminal)。折り返し・カーソル移動・
+#                 消去・色(256色/RGB→16色)・全角(2セル)・スクロールバック・範囲スクロール・
+#                 代替画面・問い合わせ(6n等)への返事・大きさの変更
+#   ssh_util_test… SSHクライアントの小道具(Ssh_Sha256/Ssh_Util)。SHA-256の既知の値・Base64・
+#                 OpenSSH形式の秘密鍵の読み取り(パスフレーズ付き/RSAは断る)・ホスト鍵の指紋・
+#                 known_hostsの照合と追記(本物のsshd相手の往復は run_net.sh の ssh_net_test)
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
@@ -916,3 +922,22 @@ compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
 echo ""
 echo "===== tetris_test ====="
 run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/tetris_test.lua" "$ROOT"
+
+# --- SSHアプリ(端末エミュレータと暗号まわりの小道具) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/vt_terminal_test.cpp" \
+    "$ROOT/src/ssh/Vt_Terminal.cpp" \
+    -o "$OUT/vt_terminal_test"
+
+echo ""
+echo "===== vt_terminal_test ====="
+run_or_die "$OUT/vt_terminal_test"
+
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/ssh_util_test.cpp" \
+    "$ROOT/src/ssh/Ssh_Util.cpp" \
+    -o "$OUT/ssh_util_test"
+
+echo ""
+echo "===== ssh_util_test ====="
+run_or_die "$OUT/ssh_util_test"

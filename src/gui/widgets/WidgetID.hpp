@@ -51,6 +51,8 @@ enum class WidgetType : uint8_t {
     KeyboardDialog,
     TextView,
     ImageView,
+    TerminalView,
+    TermKeyBar,
     Count // 番兵。実際の種類としては使わない
 };
 

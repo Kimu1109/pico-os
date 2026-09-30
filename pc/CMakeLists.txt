@@ -135,11 +135,16 @@ file(GLOB LGFX_SOURCES CONFIGURE_DEPENDS
 # (dlopenが要る`require`でのCモジュール読み込みは元々使わない)。
 file(GLOB LUA_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/lua/src/*.c")
 
+# ---- Monocypher(SSHクライアントの暗号。lib/monocypher/README-pico-os.md)----
+# Luaと同じく lib/ にvendorしたものを、PlatformIOと同じコピーのままビルドする
+file(GLOB MONOCYPHER_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/monocypher/src/*.c")
+
 add_executable(picoos_pc
     "${CMAKE_CURRENT_SOURCE_DIR}/main_pc.cpp"
     ${PICOOS_SOURCES}
     ${LGFX_SOURCES}
-    ${LUA_SOURCES})
+    ${LUA_SOURCES}
+    ${MONOCYPHER_SOURCES})
 
 # LGFX_SDL … LovyanGFX側がSDLパネルを有効にするためのフラグ
 # PICOOS_PC  … pico-os側がPC向けの実装(パネル設定/タッチ取得)へ切り替えるためのフラグ
@@ -150,6 +155,7 @@ target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"
     "${PICOOS_ROOT}/src"
     "${PICOOS_ROOT}/lib/lua/src"
+    "${PICOOS_ROOT}/lib/monocypher/src"
     # Peanut-GB(ヘッダ1本。実装の取り込みはsrc/gb/Gb_Emu.cppだけ。lib/peanut_gb/README-pico-os.md)
     "${PICOOS_ROOT}/lib/peanut_gb/src"
     "${LOVYANGFX_DIR}/src")
@@ -157,7 +163,7 @@ target_include_directories(picoos_pc PRIVATE
 # LuaのCソースをC++コード([-fpermissive]無しで]警告無く混在ビルドできるよう、
 # 拡張子で明示的に「Cとしてコンパイルする」設定を入れる
 # (CMAKE_CXX_STANDARDがCソースへ波及しないよう、LANGUAGE Cを明示する)
-set_source_files_properties(${LUA_SOURCES} PROPERTIES LANGUAGE C)
+set_source_files_properties(${LUA_SOURCES} ${MONOCYPHER_SOURCES} PROPERTIES LANGUAGE C)
 
 if(EMSCRIPTEN)
     # ---- Web(WebAssembly)ビルド ----

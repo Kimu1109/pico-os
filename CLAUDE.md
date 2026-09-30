@@ -67,7 +67,7 @@ src/
     icons/                  アイコンデータ(tabler_iconsから生成)
     scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene/CalendarScene/GameBoyScene等)
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
-      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView/GameBoyView/GameBoyPad等)
+      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView/GameBoyView/GameBoyPad/TerminalView/TermKeyBar等)
       dialogs/              モーダルダイアログ(オンスクリーンキーボードのダイアログ枠 KeyboardDialog を含む)
       keyboards/            オンスクリーンキーボードのキー盤3種(Keyboard/KeyboardEng/KeyboardNum)と基底KeyboardPanel
       interfaces/            ミックスイン的インターフェース
@@ -75,6 +75,7 @@ src/
   ime/                       SKK方式かな漢字変換辞書エンジン
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
+  ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
@@ -86,13 +87,14 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/pad/tetrisの34本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ相手の結合テスト(net/calendar_sync/chat_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_utilの36本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
   pad_serial.py               PCのキーボードを外部コントローラーにする(USBシリアルへ送る。tkinter + pyserial)
   generate_tetris_blocks.py   テトリスのミノの絵(blocks.pimg)とアイコンを作る(標準ライブラリのみ)
 lib/lua/                       vendorしたLua 5.4.7本体(lua.c/luac.cを除く)。詳細はlib/lua/README-pico-os.md
+lib/monocypher/                vendorしたMonocypher 4.0.2(X25519/Ed25519/ChaCha20/Poly1305。SSHの暗号、無改造)。詳細はlib/monocypher/README-pico-os.md
 lib/peanut_gb/                 vendorしたPeanut-GB(Game Boyエミュ、ヘッダ1本・無改造)。詳細はlib/peanut_gb/README-pico-os.md
 pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripten)。`src/`は実機と同一のまま使う
   compat/                     実機ライブラリの代替ヘッダ(Arduino/SPI/WiFi/SdFat/I2S/LGFX設定/タッチ)
@@ -389,6 +391,10 @@ Sの字を1ストロークで描いたもの)を確認したところ、人の�
 - ホストテスト(`touch_filter_test.cpp`)も窓5点の挙動(単発スパイクの無視・2フレーム
   連続ノイズへの耐性・滑らかな動きへの追従・`reset()`の履歴クリア)に合わせて書き直した。
   全34本再実行し全件パスを確認済み。
+- **2026-09-29にユーザーが追従の遅れを優先して窓を3点へ戻した**("median adjust"コミット)。テストが窓5点を前提に
+  「2フレーム連続のノイズを消す」を確かめていたため失敗していたので、**テストを窓の大きさ(`TouchFilter::Window()`)に
+  合わせる形へ直した**(2026-09-30): 「(窓-1)/2フレームまで続くノイズは消える」「過半数を超えて続いた値には追従する」。
+  窓3と窓5の両方で通ることを確認した。
 
 Sources(この追記時点の調査で参照): [XPT2046 touch controller pinout and wiring guide](https://inairspace.com/blogs/learn-with-inair/xpt2046-touch-controller-pinout-and-wiring-guide-for-reliable-touchscreens)、
 [rp2040 and Touch XPT2046 · Issue #216 · lovyan03/LovyanGFX](https://github.com/lovyan03/LovyanGFX/issues/216)
@@ -1445,6 +1451,98 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 - 検証はPCビルドの`--tap`/`--shot`(入力・改行・行頭の削除での結合・英字への切り替え・タップでのカーソル移動・
   ボタンでの出し入れ・保存)。**実機では未確認**(1文字ごとに4KiBの折り返しをやり直す重さは実機で見ること)。
 
+### SSHクライアント (`src/ssh/` / `SshScene` / `lib/monocypher/`) (2026-09-30)
+
+ランチャの「SSH」。**画面全体が1つの端末**で、接続先・ホスト鍵の確認・パスワードも端末の中で聞く
+(普通の`ssh`コマンドと同じ流れ。パスワードは画面に出さない)。キーボードは**テキストエディタと同じく
+端末の下に据え置く**(`KeyboardFunctions::Show(this, English, docked=true)`)。
+
+- **SSHクライアント(`Ssh_Client`)**: SSH2の対話シェル1本だけ(ポート転送・SFTP・X11は無し)。
+  **方式は1つずつに絞った**(どれも今のOpenSSHの既定で有効): 鍵交換`curve25519-sha256`(`@libssh.org`も可、
+  **`kex-strict`=Terrapin対策あり**) / ホスト鍵`ssh-ed25519` / 暗号`chacha20-poly1305@openssh.com`(MAC込み) /
+  認証は公開鍵(`ssh-ed25519`)・パスワード・keyboard-interactive(PAMの「Password:」)。
+  RSAのホスト鍵しか無い古いサーバ、AES/HMACしか受け付けないサーバには繋がらない(理由を端末に出す)。
+  - 暗号の計算は**Monocypher**(`lib/monocypher/`、Luaと同じく`lib/<名前>/src/`へ無改造でvendor)。
+    実機のBearSSLにはEd25519が無く、PCのOpenSSLとは呼び方も違うため、**PC/Web/実機で同じコードが動く**
+    Cのライブラリにした。SHA-256はMonocypherに無いので`Ssh_Sha256.hpp`に自前で持つ(FIPSの例でテスト済み)。
+  - 乱数は`SshUtil::Random()`: 実機は`rp2040.hwrand32()`(pico_rand)、PC/Webは`/dev/urandom`。
+    `Battery_Functions`と同じく`#if defined(PICOOS_PC)`で分けた数少ない箇所。
+  - **受信は`update()`から毎フレーム進める**(ソケットのポーリング、フレームを止めない)。TCPの接続だけは
+    同期(`HttpTransport`と同じ制約)。鍵交換のX25519/Ed25519の計算も1フレームの中で同期に行う(**実機での時間は未計測**)。
+  - 利用者の判断が要るところでは**状態を変えて止まって待つ**(`HostKeyCheck`→`acceptHostKey()`、
+    `NeedPassword`→`providePassword()`)。known_hostsの照合はシーン側の仕事。
+  - 確保はしない(受信8KB・送信1.3KB等の固定長、全体で約12KB)。**シーンが接続の間だけ`new`する**。
+  - 受信窓は16KB・1回のデータは4KBまでとサーバへ伝える(大きな出力でも受信バッファ8KBに収まる)。
+    半分読んだら`WINDOW_ADJUST`を返す。サーバからの鍵の交換し直し(rekey)にも応じる(その間の送信は溜める)。
+  - 端末の大きさは`pty-req`と、変わるたびの`window-change`(キーボードの出し入れ・文字の大きさの切り替え)で伝える。
+    `TERM=xterm-256color`。**`LANG`は送らない**(サーバ側のロケールを上書きしないため。サーバの既定がCロケールだと
+    日本語の入力をシェルが受け付けないが、それはサーバ側の設定の問題)。
+- **端末エミュレータ(`Vt_Terminal`)**: 描画を知らない文字の格子(ホストテストで中身を直接見られる)。
+  xtermの主な制御(カーソル移動・消去・挿入削除・範囲スクロール・SGRの16色/256色/RGB→16色へ丸める・
+  代替画面`?1049`・DECの罫線・問い合わせ`6n`/`c`への返事)に対応。全角(東アジアの幅広の文字)は2セル。
+  セルは4バイトの固定長配列で、**最大40桁x40行の通常画面+代替画面+スクロールバック100行で約29KB**
+  (シーンのメンバ。シーン本体が約30KBになる例外で、`ChatScene`等と同じ扱い)。
+  ANSIの16色はパレット(VGA風の16色)とそのまま対応が取れる(`TerminalView`の`kAnsiToPico`)。
+- **表示(`widgets/apps/TerminalView`)**: 「子を持たず直接描く」型で、`GameBoyView`と同じく
+  **描くのは`FlushDirty()`の合成の中だけ**、`onFrame()`が変わった行(とカーソルの行)だけをdirtyにする。
+  文字の大きさは2通り(上の段の「文字:大/小」、`/sys/ssh.cfg`の`font`に覚える):
+  大=8x16(ASCIIは`AsciiFont8x16`、全角は日本語16pxフォント)で30桁、
+  小=6x8(ASCIIは`Font0`、全角は16pxフォントを半分に縮めて描く=形が分かる程度)で40桁。
+  罫線(U+2500〜)とブロック(U+2580〜)は線と塗りで描く(フォントの幅に依らず升目に揃うように)。
+  上下のドラッグでスクロールバックを遡る(遡っている間は右上に黄色の目印)。キーを打つと一番下へ戻る。
+- **入力**: キーボードの入力欄は常に空にしておき、文字が入るたび(`onDisplayChanged()`)すぐ送って空へ戻す。
+  改行キー=CR、空のときの1文字削除=DEL(`onBackspaceAtStart()`)、空のときの←→=カーソルキー(`onCursorAtEdge()`、
+  `?1h`ならSS3の形)。**日本語の変換中は送らず、読みを端末のカーソル位置へ重ねて出し、確定してから送る**。
+  キーボードに無いキーは端末の下の**補助キーの列(`widgets/apps/TermKeyBar`)**: Esc / Tab / Ctrl(次の1文字を制御文字に。
+  点灯する) / ↑↓←→ / ^C。接続前の入力(接続先・yes/no・パスワード)はシーンが1行ぶん自前で持つ(`SshScene::line`)。
+- **ファイル**: `/sys/ssh.cfg`(無くてよい)の`target = user@host[:port]`(前回の接続先。次回は空Enterか「接続」ボタンで繋ぐ)
+  と`font = small|large`。公開鍵認証の鍵は`/sys/ssh/id_ed25519`(**OpenSSH形式のssh-ed25519・パスフレーズ無し**。
+  PCで`ssh-keygen -t ed25519 -N ''`して置き、`.pub`をサーバの`authorized_keys`へ)。パスフレーズ付き/RSAの鍵は理由を出して
+  パスワードへ進む。信頼したホスト鍵は`/sys/ssh/known_hosts`へ追記(**OpenSSHと同じ書き方**。22番以外は`[host]:port`。
+  PCの`~/.ssh/known_hosts`の行をそのまま置いてもよい。ハッシュ化された行は読まない)。**鍵が変わったら接続を拒否**し、
+  該当する行を消すよう案内する。
+- **秘密鍵の暗号化(2026-09-30)**: Wi-Fiのパスワードと同じ`PICO_Secret`(`util/Secret_Cipher.hpp`、用途文字列`"ssh-id-ed25519"`)。
+  暗号鍵を画面のキーボードで打たせるのは現実的でないので、**PCで作った平文の鍵をSDへそのまま置けばよく、
+  読んだときに平文なら暗号化して同じ場所へ書き直す**(`SshUtil::LoadPrivateKey()`。端末に「秘密鍵を暗号化して保存し直しました」)。
+  - 見分け方: 暗号化したファイルは`enc1:`+16進の1行、平文は`-----BEGIN OPENSSH PRIVATE KEY-----`で始まる
+    (先頭の空白・改行は飛ばして見る。`IsEncryptedKeyText()`)。
+  - 暗号化するのは`"pico-ssh-ed25519:"`+秘密鍵64バイトの16進(公開鍵は秘密鍵の後半32バイトなので持たない。
+    コメントは捨てる)。`PICO_Secret::kMaxPlainBytes`(255)に収まるよう、OpenSSHの鍵ファイル丸ごと(約400B)ではなくこの形にした。
+    復号して目印`pico-ssh-ed25519:`が合わなければ壊れた扱い(`kKey`の違うファームで作られた場合もこれになる)。
+  - 書き直しは一時ファイル(`id_ed25519.tmp`)へ書いて**読み戻して同じ鍵に戻ることを確かめてから**差し替える。
+    失敗しても元の平文の鍵は壊さず、その回は平文のまま使う(端末に理由を出す)。壊れた鍵・パスフレーズ付きの鍵は書き換えない。
+  - **守れるのは「SDだけを落とした/見られた」場合だけ**(Wi-Fiと同じ限界。暗号鍵`kKey`はファームに焼かれた既定値で、
+    リポジトリを見れば分かる)。PC側に残した元の鍵ファイルは利用者が管理すること。
+- **画面を離れたら切る**(`onExit()`。受信を進める者がいなくなるため)。
+- **踏み台(ProxyJump)**(2026-09-30): 接続先を`user@host[:port] -J user@踏み台[:port]`と書くと(OpenSSHの`ssh -J`と同じ)、
+  踏み台へSSHしてから`direct-tcpip`(RFC 4254 7.2)の通り道を開き、**その上でもう一度SSHする**。
+  **狙いは外からTailscaleのtailnetへ入ること**: Tailscaleそのものに参加するのは現実的でない(公式はGo製で組み込み向けの
+  C実装が無く、自前で書くにはWireGuard+非公開寄りの制御プロトコル+DERP+大きなJSONが要り、RAMも足りない)ので、
+  Tailscaleの入った常時起動の機械(自宅のRaspberry Pi等)を踏み台にする。`host`はMagicDNSの名前でよい(名前は踏み台の側で引かれる)。
+  暗号は相手のホストまで途切れないので、踏み台で中身を見られることは無い。踏み台のsshdは外から届く必要がある
+  (ルーターでポートを開ける。パスワード認証は切って公開鍵だけにすることを勧める)。
+  - `SshClient::setForward()`でシェルの代わりに通り道を開く。`SshTunnel`(`Ssh_Client.hpp`)が通り道を`SshStream`として見せ、
+    中の`SshClient::connectVia()`がTCPの代わりにそれと話す(`SshClient`のTCPの読み書きは`io*()`の4つに集めた)。
+  - **流れの制御**: 通り道のデータは`SshTunnel`の受信の輪(8KB)へ溜め、**中が読んだ分だけ**踏み台の受信窓を広げる
+    (`setWindow(8KB, manual=true)`+`consume()`)。受け取った時点で窓を広げると、中が読むより速く届いて輪が溢れるため。
+    鍵の交換し直しの間に送れなかった窓の調整は、終わったときに送る(`adjustWindow()`)。
+  - 送信の溜め(`pending_out_`)を512B→2KBへ(通り道には中のSSHのパケット=最大1.3KBがまとめて来るため)。
+  - 踏み台経由の間は `SshClient`2つ+輪で約34KB。片付けは中→通り道→踏み台の順(`SshScene::dropClient()`)。
+  - ホスト鍵(known_hostsは踏み台・相手それぞれの名前で持つ)とパスワードは両方について聞く。どちらを聞いているかは`prompt_client`。
+    踏み台が切れて中が「接続が切れました」になった場合は、踏み台の理由の方を出す。
+  - 検証: `ssh_net_test`に踏み台の項目(同じsshdを踏み台にして`localhost`へ。大きな出力が8KBの輪を何度も跨いでも欠けない・
+    踏み台から繋げない相手は理由付きで失敗・中を閉じると踏み台も閉じる)。PCビルドの`--tap`で踏み台経由のログイン→`exit`を確認。
+    **本物のTailscale越しの確認はしていない**(この環境にtailnetが無い。踏み台から先は普通のTCPなので、踏み台のsshdが
+    `AllowTcpForwarding`(既定yes)なら同じに動くはず)。
+- アプリ数: SSHを足したところで`AppFunctions::kMaxApps`(24)が静的13+Lua Hello+SDのLuaアプリ10本で埋まっていたので**32へ広げた**
+  (約2KBのstatic RAM増)。アイコンはtablerの`terminal-2`(`IconID::Terminal`、末尾へ追加)。
+- 検証: `vt_terminal_test`/`ssh_util_test`(run.sh)、**`ssh_net_test`(run_net.sh。本物のOpenSSH 9.6のsshdを使い捨ての鍵で立てる)**:
+  鍵交換→ホスト鍵の確認→公開鍵認証→pty付きシェル→出力が端末に出る・`stty size`で大きさ・数万行の出力(受信窓の調整を跨ぐ)・
+  UTF-8・終了コード・信頼しない/認証方式が無い/繋がらない場合。パスワードとkeyboard-interactive(PAM)は母艦に利用者を
+  作って手で確かめた(`SSH_TEST_PW_*`)。PCビルドの`--tap`で接続→yes→ログイン→`ls`・`top`(文字:小)・日本語入力(変換中の表示→確定で送信)を確認。
+  **実機では未確認**(鍵交換の計算時間・`rp2040.hwrand32()`・`WiFiClient::setNoDelay`・Monocypherのスタック使用量(Ed25519の検証で数KB)は実機で見ること)。
+  **Webビルドでは繋がらない**(生のTCPソケットが無い。HTTPと同じ制約)。
+
 ### ファイルビューワー (`FileViewerScene` / `widgets/TextView` / `widgets/ImageView`) (2026-09-29)
 
 **ランチャからは開かない。** ファイルを探すのはファイルアプリ(`FileExplorerScene`)に任せ、そこでファイルを
@@ -1716,7 +1814,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイント/テトリス風はLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
+| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイント/テトリス風はLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。音も鳴る(#11)。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
 | 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。MIDIはPCの`script/midi2mml.py`で取り込む。GBエミュの音(音源チップの再現)も鳴る。**実機での確認は未**(下記「音声出力」「曲データ」「ゲームボーイの音」参照)。 |

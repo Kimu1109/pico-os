@@ -15,6 +15,11 @@
 # (上と同じ使い捨ての証明書)の2つ立てて確かめる。サーバ単体の権限まわり(chat_server_test.py)も
 # ここで回す(同じプロセスの中で 127.0.0.1 の空きポートにサーバを立てる)。
 #
+# SSH(ssh_net_test)は OpenSSH の sshd を使い捨てのホスト鍵・利用者の鍵・設定で 127.0.0.1 に立てて
+# 確かめる(公開鍵認証。sshd が無い環境では飛ばす。Debian/Ubuntuなら apt install openssh-server)。
+# パスワード/keyboard-interactive認証は母艦に利用者を作る必要があるので自動では回さない
+# (ssh_net_test.cpp の SSH_TEST_PW_* を参照)。
+#
 # 使い方: sh script/host_test/run_net.sh
 set -e
 
@@ -63,8 +68,9 @@ done
 
 TLS_PID=""
 CHAT_PIDS=""
+SSHD_PID=""
 cleanup(){
-    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS 2>/dev/null || true
+    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $SSHD_PID 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     wait "$BARE_PID" 2>/dev/null || true
     [ -n "$TLS_PID" ] && wait "$TLS_PID" 2>/dev/null || true
@@ -159,3 +165,57 @@ echo "===== chat_net_test ====="
 echo ""
 echo "===== chat_server_test ====="
 python3 "$ROOT/script/host_test/chat_server_test.py"
+
+# ---- SSH(SshClient)。本物の sshd を使い捨ての鍵と設定で立てる ----
+SSHD=$(command -v sshd || ls /usr/sbin/sshd 2>/dev/null || true)
+if [ -z "$SSHD" ] || ! command -v ssh-keygen > /dev/null; then
+    echo ""
+    echo "===== ssh_net_test ===== (sshd が無いので飛ばします)"
+    exit 0
+fi
+SSH_PORT=$((PORT + 5))
+SSH_DIR="$OUT/sshd"
+mkdir -p "$SSH_DIR"
+ssh-keygen -q -t ed25519 -N '' -f "$SSH_DIR/host_ed25519"
+ssh-keygen -q -t ed25519 -N '' -f "$SSH_DIR/id_ed25519"
+cp "$SSH_DIR/id_ed25519.pub" "$SSH_DIR/authorized_keys"
+cat > "$SSH_DIR/sshd_config" <<EOF
+Port $SSH_PORT
+ListenAddress 127.0.0.1
+HostKey $SSH_DIR/host_ed25519
+AuthorizedKeysFile $SSH_DIR/authorized_keys
+PidFile $SSH_DIR/sshd.pid
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password
+StrictModes no
+UsePAM no
+EOF
+# 特権分離のディレクトリ(root以外で動かす場合は既にあること)
+[ -d /run/sshd ] || mkdir -p /run/sshd 2>/dev/null || true
+
+gcc -c -O2 "$ROOT/lib/monocypher/src/monocypher.c" -o "$OUT/monocypher.o"
+gcc -c -O2 -I"$ROOT/lib/monocypher/src" "$ROOT/lib/monocypher/src/monocypher-ed25519.c" -o "$OUT/monocypher-ed25519.o"
+g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" -I"$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/ssh_net_test.cpp" \
+    "$ROOT/src/ssh/Ssh_Client.cpp" \
+    "$ROOT/src/ssh/Ssh_Util.cpp" \
+    "$ROOT/src/ssh/Vt_Terminal.cpp" \
+    "$OUT/monocypher.o" "$OUT/monocypher-ed25519.o" \
+    -o "$OUT/ssh_net_test"
+
+"$SSHD" -D -e -f "$SSH_DIR/sshd_config" > "$SSH_DIR/sshd.log" 2>&1 &
+SSHD_PID=$!
+i=0
+while [ $i -lt 50 ]; do
+    if grep -q "listening" "$SSH_DIR/sshd.log" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+echo ""
+echo "===== ssh_net_test ====="
+SSH_TEST_FINGERPRINT=$(ssh-keygen -l -f "$SSH_DIR/host_ed25519.pub" | cut -d' ' -f2) \
+    "$OUT/ssh_net_test" "$SSH_PORT" "$SSH_DIR/id_ed25519" "$(id -un)" "$SSH_DIR/host_ed25519.pub"

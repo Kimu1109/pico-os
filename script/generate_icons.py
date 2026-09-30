@@ -179,6 +179,9 @@ ICONS: list[IconSpec] = [
 
     # --- 音楽(2026-09-25)。末尾へ足すこと(上の【重要】参照) ---
     IconSpec("music",          str(ICON_DIR / "music.svg")),
+
+    # --- SSH(2026-09-30)。末尾へ足すこと(上の【重要】参照) ---
+    IconSpec("terminal",       str(ICON_DIR / "terminal-2.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

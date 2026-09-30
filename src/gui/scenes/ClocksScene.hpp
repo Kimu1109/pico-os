@@ -3,6 +3,7 @@
 #include "gui/scenes/Scene.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
+#include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/apps/AnalogClock.hpp"
 #include "gui/widgets/apps/DurationPicker.hpp"
@@ -15,7 +16,8 @@ class ClocksScene : public Scene {
         enum class Feature : uint8_t {
             Clock     = 0,
             Timer     = 1,
-            Stopwatch = 2
+            Stopwatch = 2,
+            Alarm     = 3
         };
 
         // 時計の表示形式。上部のTabBarのタブ順と対応(index == (int)ClockMode)
@@ -60,6 +62,17 @@ class ClocksScene : public Scene {
         Button*            sw_start  = nullptr; // 開始/停止/再開
         Button*            sw_reset  = nullptr;
 
+        //アラーム。鳴らす側はOSの AlarmFunctions が持ち(このシーンを閉じていても鳴る)、
+        //ここは4件の一覧と、選んだ1件の編集だけ
+        ScrollList*     alarm_list   = nullptr;
+        DurationPicker* alarm_picker = nullptr; // 時:分(秒は使わない。0へ戻す)
+        Button*         alarm_toggle = nullptr; // オン/オフ
+        Button*         alarm_repeat = nullptr; // 1回→毎日→平日→土日
+        int  alarm_sel = 0;
+        // ▲▼の長押しで続けて変わる間はSDへ書かず、落ち着いてからまとめて1回書く
+        bool alarm_dirty = false;
+        unsigned long alarm_changed_ms = 0;
+
         int before_sec  = -1;
         int before_mday = -1;
 
@@ -79,6 +92,9 @@ class ClocksScene : public Scene {
         unsigned long timer_last_tick_ms = 0;
         unsigned long timer_blink_ms     = 0;
         bool timer_blink_on = false;
+        // 完了音。鳴り始めの時刻と、最後に鳴らした拍(-1=まだ)。kRingMaxMsを過ぎたら黙る(点滅は続く)
+        unsigned long timer_ring_start_ms = 0;
+        long          timer_ring_step     = -1;
 
         // ---- ストップウォッチの状態 ----
         RunState sw_state      = RunState::Idle;
@@ -96,6 +112,9 @@ class ClocksScene : public Scene {
         // 1/100秒まで出すが、毎フレーム書き換えるとLabelの再レイアウトが重いので間引く。
         // 20fpsもあれば「速く回っている」ことは十分に伝わる
         constexpr static unsigned long SW_DRAW_INTERVAL_MS = 50;
+
+        // アラームの編集が止まってからSDへ書くまでの間
+        constexpr static unsigned long ALARM_SAVE_DELAY_MS = 600;
 
         // 「時間になりました」の点滅周期
         constexpr static unsigned long BLINK_INTERVAL_MS = 500;
@@ -139,6 +158,16 @@ class ClocksScene : public Scene {
         void updateStopwatch();
         void onStopwatchStartPressed();
         void onStopwatchResetPressed();
+
+        //アラーム
+        void refreshAlarmList();     // 一覧の4行
+        void refreshAlarmControls(); // 選択中の1件をpicker/ボタンへ流し込む
+        void selectAlarm(int index);
+        void flushAlarm();           // 未保存の編集があれば書く
+        void updateAlarm();
+        void onAlarmToggled();
+        void onAlarmRepeatPressed();
+        void onAlarmTimeChanged(uint32_t total_ms);
 
     public:
         const char* getName() const override { return "Clocks"; }

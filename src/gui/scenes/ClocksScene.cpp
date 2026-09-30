@@ -1,4 +1,5 @@
 #include "gui/scenes/ClocksScene.hpp"
+#include "functions/Alarm_Functions.hpp"
 #include "functions/Power_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
@@ -36,6 +37,7 @@ void ClocksScene::applyVisibility(){
     const bool is_clock = (this->feature == Feature::Clock);
     const bool is_timer = (this->feature == Feature::Timer);
     const bool is_sw    = (this->feature == Feature::Stopwatch);
+    const bool is_alarm = (this->feature == Feature::Alarm);
 
     const bool digital = is_clock && (this->mode == ClockMode::Digital);
     const bool analog  = is_clock && (this->mode == ClockMode::Analog);
@@ -56,12 +58,18 @@ void ClocksScene::applyVisibility(){
     if(this->sw_status) this->sw_status->setVisible(is_sw);
     if(this->sw_start)  this->sw_start->setVisible(is_sw);
     if(this->sw_reset)  this->sw_reset->setVisible(is_sw);
+
+    if(this->alarm_list)   this->alarm_list->setVisible(is_alarm);
+    if(this->alarm_picker) this->alarm_picker->setVisible(is_alarm);
+    if(this->alarm_toggle) this->alarm_toggle->setVisible(is_alarm);
+    if(this->alarm_repeat) this->alarm_repeat->setVisible(is_alarm);
 }
 
 void ClocksScene::applyFeature(){
     if(this->title_label && this->feature != Feature::Clock){
         this->title_label->setText(
-            (this->feature == Feature::Timer) ? "タイマー" : "ストップウォッチ"
+            (this->feature == Feature::Timer)     ? "タイマー" :
+            (this->feature == Feature::Stopwatch) ? "ストップウォッチ" : "アラーム"
         );
     }
 
@@ -74,6 +82,11 @@ void ClocksScene::applyFeature(){
     this->refresh_time();
     this->refreshTimer();
     this->refreshStopwatch();
+
+    //アラームの編集を離れるときは、書き残しを保存しておく
+    if(this->feature != Feature::Alarm) this->flushAlarm();
+    this->refreshAlarmList();
+    this->refreshAlarmControls();
 }
 
 void ClocksScene::applyMode(){
@@ -181,6 +194,8 @@ void ClocksScene::updateTimer(){
             this->timer_state    = RunState::Finished;
             this->timer_blink_on = true;
             this->timer_blink_ms = now;
+            this->timer_ring_start_ms = now;
+            this->timer_ring_step     = -1;
 
             //別の機能を見ている間に鳴り終わっても気づけるように、タイマーへ引き戻す
             if(this->feature != Feature::Timer){
@@ -203,6 +218,17 @@ void ClocksScene::updateTimer(){
 
     if(this->timer_state == RunState::Finished){
         const unsigned long now = millis();
+
+        //アラームと同じ音を鳴らす。開始/リセットを押すと状態が変わるので止まる
+        const unsigned long ring_ms = now - this->timer_ring_start_ms;
+        if(ring_ms < AlarmFunctions::kRingMaxMs){
+            const long step = (long)(ring_ms / AlarmFunctions::kBeepStepMs);
+            if(step != this->timer_ring_step){
+                this->timer_ring_step = step;
+                AlarmFunctions::PlayBeepStep(step);
+            }
+        }
+
         if(now - this->timer_blink_ms >= BLINK_INTERVAL_MS){
             this->timer_blink_ms = now;
             this->timer_blink_on = !this->timer_blink_on;
@@ -336,6 +362,96 @@ void ClocksScene::onStopwatchResetPressed(){
 }
 
 // ---------------------------------------------------------------------------
+// アラーム
+// ---------------------------------------------------------------------------
+
+void ClocksScene::refreshAlarmList(){
+    if(this->feature != Feature::Alarm || !this->alarm_list) return;
+
+    for(int i = 0; i < AlarmFunctions::kMaxAlarms; i++){
+        ScrollListTools::Item* item = this->alarm_list->itemAt(i);
+        if(!item) continue;
+        const AlarmFunctions::Alarm& a = AlarmFunctions::Get(i);
+        char buf[PICO_STR_M];
+        snprintf(buf, sizeof(buf), "%d  %02d:%02d  %s  %s", i + 1, a.hour, a.minute,
+                 AlarmFunctions::RepeatToStr(a.repeat), a.enabled ? "オン" : "オフ");
+        item->text.assign(buf);
+        //オフの行は薄くして、鳴る予定のものと見分ける
+        item->color = a.enabled ? -1 : PICO_DARKGREY;
+    }
+    this->alarm_list->setSelectedIndex(this->alarm_sel);
+}
+
+void ClocksScene::refreshAlarmControls(){
+    if(this->feature != Feature::Alarm) return;
+
+    const AlarmFunctions::Alarm& a = AlarmFunctions::Get(this->alarm_sel);
+    if(this->alarm_picker){
+        this->alarm_picker->setEditable(true);
+        this->alarm_picker->setTotalMs(((uint32_t)a.hour * 60u + a.minute) * 60000u);
+    }
+    if(this->alarm_toggle) this->alarm_toggle->setText(a.enabled ? "オン" : "オフ");
+    if(this->alarm_repeat) this->alarm_repeat->setText(AlarmFunctions::RepeatToStr(a.repeat));
+}
+
+void ClocksScene::selectAlarm(int index){
+    if(index < 0 || index >= AlarmFunctions::kMaxAlarms) return;
+    this->flushAlarm();
+    this->alarm_sel = index;
+    this->refreshAlarmControls();
+}
+
+void ClocksScene::flushAlarm(){
+    if(!this->alarm_dirty) return;
+    this->alarm_dirty = false;
+    AlarmFunctions::Save(this->alarm_sel);
+}
+
+void ClocksScene::updateAlarm(){
+    if(this->alarm_dirty && millis() - this->alarm_changed_ms >= ALARM_SAVE_DELAY_MS){
+        this->flushAlarm();
+    }
+}
+
+void ClocksScene::onAlarmTimeChanged(uint32_t total_ms){
+    AlarmFunctions::Alarm a = AlarmFunctions::Get(this->alarm_sel);
+    const uint32_t minutes = total_ms / 60000u;
+    a.hour   = (uint8_t)((minutes / 60u) % 24u);
+    a.minute = (uint8_t)(minutes % 60u);
+    //時刻を決めたら、そのアラームは有効にする(設定しただけで鳴らないと戸惑うため)
+    a.enabled = true;
+
+    AlarmFunctions::Set(this->alarm_sel, a, false);
+    this->alarm_dirty = true;
+    this->alarm_changed_ms = millis();
+
+    //秒の桁はアラームでは使わないので0へ戻す(setTotalMs()はon_changedを呼ばない)
+    if(this->alarm_picker) this->alarm_picker->setTotalMs(minutes * 60000u);
+    this->refreshAlarmList();
+    this->refreshAlarmControls();
+}
+
+void ClocksScene::onAlarmToggled(){
+    AlarmFunctions::Alarm a = AlarmFunctions::Get(this->alarm_sel);
+    a.enabled = !a.enabled;
+    AlarmFunctions::Set(this->alarm_sel, a, false);
+    this->alarm_dirty = true;
+    this->alarm_changed_ms = millis();
+    this->refreshAlarmList();
+    this->refreshAlarmControls();
+}
+
+void ClocksScene::onAlarmRepeatPressed(){
+    AlarmFunctions::Alarm a = AlarmFunctions::Get(this->alarm_sel);
+    a.repeat = (AlarmFunctions::Repeat)(((int)a.repeat + 1) % AlarmFunctions::kRepeatCount);
+    AlarmFunctions::Set(this->alarm_sel, a, false);
+    this->alarm_dirty = true;
+    this->alarm_changed_ms = millis();
+    this->refreshAlarmList();
+    this->refreshAlarmControls();
+}
+
+// ---------------------------------------------------------------------------
 // 生成
 // ---------------------------------------------------------------------------
 
@@ -391,8 +507,9 @@ void ClocksScene::onEnter(){
         FEATURE_TAB_H
     );
     this->feature_tab->addTab("時計");
-    this->feature_tab->addTab("タイマー");
-    this->feature_tab->addTab("ストップウォッチ");
+    this->feature_tab->addTab("ﾀｲﾏｰ");
+    this->feature_tab->addTab("ｽﾄｯﾌﾟ");
+    this->feature_tab->addTab("ｱﾗｰﾑ");
     this->feature_tab->setSelected((int)this->feature);
     this->feature_tab->setOnChanged([this](int index){
         this->feature = (Feature)index;
@@ -493,6 +610,41 @@ void ClocksScene::onEnter(){
     this->sw_status->setTextAlign(TextAlign::Center);
     WidgetFunctions::Add(this->sw_status);
 
+    // ---- アラーム ----
+    // [一覧4行] / [時:分の▲▼] / [オン・オフ][繰り返し](下2つはタイマーの操作ボタンと同じ位置)
+    const int alarm_list_h = AlarmFunctions::kMaxAlarms * (FontFn::GetFontSize(FontFn::Small) + 4) + 4;
+
+    this->alarm_list = new ScrollList(body.x + MARGIN, body.y, body.w - MARGIN * 2, alarm_list_h, AlarmFunctions::kMaxAlarms);
+    this->alarm_list->setFontSize(FontFn::Small);
+    for(int i = 0; i < AlarmFunctions::kMaxAlarms; i++){
+        ScrollListTools::Item item;
+        item.text.assign("-");
+        this->alarm_list->add(item);
+    }
+    this->alarm_list->setOnSelectItem([this](int index, bool){
+        this->selectAlarm(index);
+    });
+    WidgetFunctions::Add(this->alarm_list);
+
+    this->alarm_toggle = new Button(action_left, action_y, "オフ");
+    this->alarm_toggle->setFontSize(FontFn::Small);
+    this->alarm_toggle->setW(ACTION_BUTTON_W);
+    this->alarm_toggle->setH(ACTION_BUTTON_H);
+    this->alarm_toggle->setOnPressEnd([this](){ this->onAlarmToggled(); });
+    WidgetFunctions::Add(this->alarm_toggle);
+
+    this->alarm_repeat = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, "1回");
+    this->alarm_repeat->setFontSize(FontFn::Small);
+    this->alarm_repeat->setW(ACTION_BUTTON_W);
+    this->alarm_repeat->setH(ACTION_BUTTON_H);
+    this->alarm_repeat->setOnPressEnd([this](){ this->onAlarmRepeatPressed(); });
+    WidgetFunctions::Add(this->alarm_repeat);
+
+    const int alarm_picker_y = body.y + alarm_list_h + MARGIN;
+    this->alarm_picker = new DurationPicker(body.x, alarm_picker_y, body.w, action_y - MARGIN - alarm_picker_y);
+    this->alarm_picker->setOnChanged([this](uint32_t ms){ this->onAlarmTimeChanged(ms); });
+    WidgetFunctions::Add(this->alarm_picker);
+
     //残りが数字の置き場所。▲▼はこの矩形の中で数字の上下へ並ぶ
     const int digits_h = status_y - MARGIN - body.y;
 
@@ -527,9 +679,17 @@ void ClocksScene::onUpdate(){
     //タイマーにもストップウォッチにもならない
     this->updateTimer();
     this->updateStopwatch();
+    this->updateAlarm();
 }
 
 void ClocksScene::onExit(){
+    //書き残した編集があれば保存する(ウィジェットを手放す前に)
+    this->flushAlarm();
+
+    this->alarm_list   = nullptr;
+    this->alarm_picker = nullptr;
+    this->alarm_toggle = nullptr;
+    this->alarm_repeat = nullptr;
     this->back_button = nullptr;
     this->mode_tab    = nullptr;
     this->feature_tab = nullptr;

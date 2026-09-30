@@ -145,6 +145,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | HitBox_Functions | 当たり判定のヘルパ |
 | Test_Functions | フォントカバレッジ等の起動時セルフチェック |
 | Sound_Functions | 音声出力(I2S)と音源の窓口。1コア目はアンプの抜き差しの検出と要求の受付、2コア目(`loop1()`)が音源を回してI2Sへ流す。下記「音声出力」参照 |
+| Alarm_Functions | アラーム。時計アプリを閉じていても鳴るようOS側で見張る。下記「アラーム」参照 |
 | Power_Functions | スリープ(省電力)。自動調光のさらに先の段階。下記「スリープ(省電力)」参照 |
 | Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。今の入力元はUSBシリアル(PCのキーボード)。下記「外部コントローラー」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
@@ -152,7 +153,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Display→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
-`loop()`: Touch更新 → Pad更新(外部コントローラー) → Display更新(自動調光の判定) → Power更新(スリープの判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound/Battery更新 → `PowerFunctions::IdleWait()`(スリープ中だけ少し休む)、という単純なポーリングループ。
+`loop()`: Touch更新 → Pad更新(外部コントローラー) → Display更新(自動調光の判定) → Power更新(スリープの判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound/Battery/Alarm更新 → `PowerFunctions::IdleWait()`(スリープ中だけ少し休む)、という単純なポーリングループ。
 
 **2コア目(`setup1()`/`loop1()`)は音声専用**(`SoundFunctions::LoopCore1()`だけを回す)。1コア目とは`std::atomic`とロック無しのコマンドの列だけでやり取りする。
 **2コア目からログを出したり、ウィジェット/SD/`OSData`に触ったりしないこと**(どれもロックを持たない1コア目専用の作り)。
@@ -254,6 +255,32 @@ KeepAwakeを呼んでいる画面: ゲームボーイ・SSH・チャット(常�
 - **実機では未確認**: `WiFi.lowPowerMode()/defaultLowPowerMode()`の名前(arduino-picoのWiFiクラス。ビルドが通らなければここ)・
   `delay()`が実際にCPUを寝かせるか(arduino-picoの`delay()`はWFE/sleep系のはずだが未確認)・SLPINしたILI9341/ST7789への書き込み・
   復帰時の120msで足りるか・消費電流の実測(LiPo/USBの電流計で、スリープ前後を比べること)。
+
+### アラーム (`src/functions/Alarm_Functions` / `ClocksScene`の「アラーム」タブ) (2026-09-30)
+
+SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
+
+- **鳴らす側はシーンではなくOS(`main.cpp`の`loop()`、`TimeFunctions::Update()`の後)が持つ**。
+  タイマーは`ClocksScene`のメンバで、シーンを閉じると止まるが、アラームはアプリを閉じていても鳴る必要があるため。
+  時計アプリの「アラーム」タブは4件の編集画面でしかない。
+- 設定は`/sys/alarm.cfg`(無くてよい)。`alarm1 = 07:30,daily,on`(時刻 , `once|daily|weekdays|weekends` , `on|off`)、4件まで。
+  書式違いの行は警告して読み飛ばす。`Set()`は1キーだけ差し替える(`SetValue()`)。
+- **鳴らし方**: 確認ダイアログ(`MsgDialog`「止める」/「5分後」)+ビープ音(ch0、4拍のうち3拍)+毎フレーム`PowerFunctions::KeepAwake()`
+  (スリープ中でも画面が起きる)。止められなければ`kRingMaxMs`(60秒)で自動停止。
+  **ダイアログは`WidgetId`で持って毎フレーム`Resolve()`する**(シーン遷移で`dialog_roots`ごと破棄されうるので、
+  生ポインタだとダングリングになる)。鳴っている間に消えたら出し直す。
+- **NTP同期前(2020年より前)は鳴らさない**。「同じ分に2回鳴らさない」は日付込みの通算分(`last_minute_key`)で見る。
+  **1回だけ(`once`)のアラームは鳴った時点でoffにして保存する**。同じ分に複数あっても鳴らすのは1つ。
+- **UIの編集はSDへ即書きしない**(`Set(idx, a, persist=false)`)。▲▼の長押しは110msごとに値が変わり、
+  SDへの書き込みは1回数十msかかるため、`ClocksScene`が最後の変更から600ms後(または画面を離れる/別のアラームを選ぶ/`onExit()`)に
+  `Save()`する。時刻を編集したら自動でオンにする。DurationPickerは秒の桁も出るが、変えても0へ戻す(アラームは分単位)。
+- **タイマーの完了音**: `ClocksScene`のタイマーが`Finished`になると、アラームと同じビープ(`AlarmFunctions::PlayBeepStep()`。3拍鳴らして1拍休む)を
+  `kRingMaxMs`(60秒)まで鳴らす。開始/リセットを押すと止まる(点滅は従来どおり)。**音を出すのはこのシーンが動いている間だけ**
+  (タイマー自体がシーンのメンバで、別の画面へ`Push()`している間は進まない既存の制約のまま。アラームのようにOS側へ上げてはいない)。
+- **タブ名は半角カナ(`ﾀｲﾏｰ`/`ｽﾄｯﾌﾟ`/`ｱﾗｰﾑ`)**。4タブにすると1タブ約58pxで、全角4文字(64px)が収まらず崩れて折り返した。
+- 検証: `alarm_test`(run.sh。時刻はUpdateAt()へ直接渡す)と、PCビルドの`--tap`/`--shot`(編集→保存、時刻を今の分にして起動すると鳴る)。
+  **PCビルドの表示タイムゾーンは`network.cfg`の`timezone`(既定JST)なので、鳴らして試すときは`TZ=JST-9 date +%H:%M`で合わせること**
+  (`date`だけだとUTCで1分もずれて鳴らない)。**実機では未確認**(I2Sでの音の聞こえ方・スリープからの復帰)。
 
 ### バッテリー残量表示(`src/functions/Battery_Functions`) (2026-09-28)
 

@@ -12,6 +12,7 @@
 #include "functions/Network_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
+#include "functions/Alarm_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
@@ -64,6 +65,7 @@ void setup() {
     TimeFunctions::Setup();
     SoundFunctions::Setup(); //sound.cfgを読むのでSDより後
     BatteryFunctions::Setup();
+    AlarmFunctions::Setup(); //alarm.cfgを読むのでSDより後
 
     TestFunctions::Setup();
 
@@ -112,6 +114,8 @@ void loop() {
     SoundFunctions::Update();
     //VSYS電圧の読み取り(内部でkSampleIntervalMsごとに間引く)
     BatteryFunctions::Update();
+    //アラームの時刻の見張り(時計アプリを閉じていても鳴らす)。TimeFunctions::Update()より後
+    AlarmFunctions::Update();
 
     //スリープ中だけ少し休んでCPUを寝かせる(それ以外は何もしない)
     PowerFunctions::IdleWait();

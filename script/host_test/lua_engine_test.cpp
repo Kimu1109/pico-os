@@ -1816,6 +1816,96 @@ int main(){
         }
     }
 
+    // ---- 設定ファイル(pico.config_read/get/write)と、app.cfgの書き込み制限 ----
+    {
+        LuaEngine cfg_engine(64 * 1024, LuaPermissions{}, "/lua/apps/demo");
+        check(cfg_engine.valid(), "設定ファイルテスト用にLuaEngineを構築(app_dir=/lua/apps/demo)");
+        if (cfg_engine.valid()) {
+            lua_pushcfunction(cfg_engine.raw(), l_check);
+            lua_setglobal(cfg_engine.raw(), "check");
+
+            HostSd::files["/lua/apps/demo/app.cfg"] =
+                "name=デモ\npermission_network=false\n";
+            HostSd::files["/lua/apps/demo/settings.cfg"] =
+                "# コメント\nvolume = 30\nname=a\nname=b\n";
+            HostSd::files["/lua/apps/other/app.cfg"] = "permission_network=false\n";
+            HostSd::files["/other/x.cfg"] = "k=v\n";
+
+            const bool ok = cfg_engine.Run(R"LUA(
+                local t = pico.config_read('/lua/apps/demo/settings.cfg')
+                check(t ~= nil and t.volume == '30', 'config_read: 前後の空白を除いた値を文字列で返す')
+                check(t.name == 'b', 'config_read: 同じキーは後勝ち')
+                check(pico.config_read('/lua/apps/demo/none.cfg') == nil, 'config_read: 無いファイルはnil')
+                check(pico.config_read('/other/x.cfg') == nil, 'config_read: app_dir外はnil')
+                check(pico.config_get('/lua/apps/demo/settings.cfg', 'name') == 'b', 'config_get: 後勝ち')
+                check(pico.config_get('/lua/apps/demo/settings.cfg', 'nokey') == nil, 'config_get: 無いキーはnil')
+                check(pico.config_get('/lua/apps/demo/app.cfg', 'name') == 'デモ', 'config_get: app.cfgは読める')
+
+                check(pico.config_write('/lua/apps/demo/settings.cfg', 'volume', 55) == true, 'config_write: 整数')
+                check(pico.config_write('/lua/apps/demo/settings.cfg', 'ratio', 0.25) == true, 'config_write: 小数')
+                check(pico.config_write('/lua/apps/demo/settings.cfg', 'on', true) == true, 'config_write: 真偽値')
+                check(pico.config_write('/lua/apps/demo/new.cfg', 'k', 'v v') == true, 'config_write: 新しいファイル')
+                local t2 = pico.config_read('/lua/apps/demo/settings.cfg')
+                check(t2.volume == '55' and t2.ratio == '0.25' and t2.on == 'true' and t2.name == 'b',
+                      'config_write→config_read: 書いた値が読み返せる')
+                check(pico.config_get('/lua/apps/demo/new.cfg', 'k') == 'v v', 'config_write: 新規作成した値')
+                check(pico.config_write('/lua/apps/demo/settings.cfg', 'x', 'a\npermission_network=true') == false,
+                      'config_write: 改行を含む値は拒否')
+                check(not pcall(pico.config_write, '/lua/apps/demo/settings.cfg', 'a=b', '1'),
+                      'config_write: =を含むキーはエラー')
+                check(not pcall(pico.config_write, '/lua/apps/demo/settings.cfg', 'k', {}),
+                      'config_write: テーブルの値はエラー')
+                check(pico.config_write('/other/x.cfg', 'k', 'w') == false, 'config_write: app_dir外はfalse')
+
+                -- app.cfg(権限を持つ)はどの経路でも書き換えられない
+                check(pico.config_write('/lua/apps/demo/app.cfg', 'permission_network', true) == false,
+                      'config_write: 自分のapp.cfgは拒否')
+                check(pico.sd_write('/lua/apps/demo/app.cfg', 'permission_network=true') == false,
+                      'sd_write: 自分のapp.cfgは拒否')
+                check(pico.sd_write('/lua/apps/demo/APP.CFG', 'x') == false, 'sd_write: 大文字でも拒否')
+                check(pico.sd_write('/lua/apps/demo/app.cfg.', 'x') == false, 'sd_write: 末尾の.でも拒否')
+                check(pico.sd_write('/lua/apps/demo/sub/../app.cfg', 'x') == false, 'sd_write: ..を挟んでも拒否')
+                check(pico.sd_write('/lua/apps/demo/app.cfg', 'x', true) == false, 'sd_write: 追記も拒否')
+                check(pico.sd_remove('/lua/apps/demo/app.cfg') == false, 'sd_remove: app.cfgの削除は拒否')
+                check(pico.sd_remove('/lua/apps/demo') == false, 'sd_remove: app_dirごとの削除も拒否')
+                check(pico.sd_mkdir('/lua/apps/demo/app.cfg') == false, 'sd_mkdir: app.cfgという名前は拒否')
+                local cv = pico.create('CanvasRaster')
+                check(pico.canvas_save(cv, '/lua/apps/demo/app.cfg') == false, 'canvas_save: app.cfgは拒否')
+                check(pico.sd_write('/lua/apps/demo/sub/app.cfg', 'x') == true,
+                      'sd_write: アプリとして読まれない場所のapp.cfgは書ける')
+                check(pico.sd_remove('/lua/apps/demo/settings.cfg') == true, 'sd_remove: 普通のファイルは消せる')
+            )LUA", "config_test");
+            check(ok, "設定ファイルテストの実行が成功する");
+            check(HostSd::files["/lua/apps/demo/app.cfg"] == "name=デモ\npermission_network=false\n",
+                  "app.cfgの中身が変わっていない");
+            check(HostSd::files.count("/lua/apps/demo/settings.cfg.tmp") == 0,
+                  "config_write: 一時ファイルが残らない");
+        }
+
+        // sd_outside_app_dir=trueでも、他のアプリ(スキャン対象)のapp.cfgへは書けない
+        LuaPermissions outside_perm;
+        outside_perm.sd_outside_app_dir = true;
+        LuaEngine outside_engine(64 * 1024, outside_perm, "/lua/apps/demo");
+        check(outside_engine.valid(), "設定ファイルテスト用にLuaEngineを構築(sd_outside_app_dir=true)");
+        if (outside_engine.valid()) {
+            lua_pushcfunction(outside_engine.raw(), l_check);
+            lua_setglobal(outside_engine.raw(), "check");
+            const bool ok = outside_engine.Run(R"LUA(
+                check(pico.config_write('/lua/apps/other/app.cfg', 'permission_network', true) == false,
+                      'config_write: 他のアプリのapp.cfgは拒否')
+                check(pico.sd_write('/lua/apps/newapp/app.cfg', 'permission_network=true') == false,
+                      'sd_write: 新しいアプリのapp.cfgを作るのも拒否')
+                check(pico.sd_remove('/lua/apps/other') == false, 'sd_remove: 他のアプリのディレクトリは拒否')
+                check(pico.sd_remove('/lua/apps') == false, 'sd_remove: /lua/appsは拒否')
+                check(pico.sd_remove('/') == false, 'sd_remove: ルートは拒否')
+                check(pico.config_write('/other/x.cfg', 'k', 'w') == true, 'config_write: 権限があればapp_dir外にも書ける')
+                check(pico.config_get('/other/x.cfg', 'k') == 'w', 'config_get: 書いた値')
+            )LUA", "config_outside_test");
+            check(ok, "sd_outside_app_dir=trueの設定ファイルテストの実行が成功する");
+            check(HostSd::files.count("/lua/apps/newapp/app.cfg") == 0, "新しいアプリのapp.cfgが作られていない");
+        }
+    }
+
     // ---- 後片付け(残りのウィジェットも解放し、ASanのリーク検出を素通りさせない) ----
     // 自前でループを回すとDestroy()が子孫ごと解放した後のダングリングポインタを
     // 踏みうる(LayoutContainerの子として既に解放済みのLabelを、コピーしておいた

@@ -55,6 +55,10 @@ pico.sd_read("/lua/apps/myapp/sub/data.txt")    -- OK(配下のさらに下も�
 pico.sd_read("/lua/other_app/save.txt")         -- 拒否(nilが返り、警告ログが出る)
 ```
 
+## app.cfgは書き換えられない
+
+権限は `app.cfg` に書かれるため、スクリプトが自分で権限を足せないよう、`app.cfg` への書き込み・削除は**権限に関わらず拒否**されます(自分のアプリの `app.cfg` と、`/lua/apps/<名前>/app.cfg` すべて)。詳しくは [SDカードアクセス](../sdcard/) を参照してください。
+
 ## 権限は「アプリ単位」で引き継がれる
 
 `pico.push_scene()` / `pico.change_scene()` で複数画面のLuaアプリを作った場合、**画面が変わっても権限(`network` / `sd_outside_app_dir`)はそのまま引き継がれます**。2画面目以降だけ権限が最小権限に落ちることはありません。一方 `pico.launch_app()` で別のアプリへ遷移した場合は、遷移先アプリ自身の権限に切り替わります(独立したアプリとして扱われるため)。

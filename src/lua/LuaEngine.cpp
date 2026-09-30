@@ -35,6 +35,8 @@
 #include "gui/scenes/Scene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "storage/SD_IO.hpp"
+#include "storage/SD_Path.hpp"
+#include "functions/Config_Functions.hpp"
 #include "task/Http_Request.hpp"
 #include "util/Url.hpp"
 #include "functions/Time_Functions.hpp"
@@ -333,6 +335,9 @@ void LuaEngine::registerApi() {
     registerFn("sd_remove", l_sd_remove);
     registerFn("sd_mkdir", l_sd_mkdir);
     registerFn("sd_list", l_sd_list);
+    registerFn("config_read", l_config_read);
+    registerFn("config_get", l_config_get);
+    registerFn("config_write", l_config_write);
     registerFn("show_message", l_show_message);
     registerFn("show_input", l_show_input);
     registerFn("show_file_save", l_show_file_save);
@@ -1541,8 +1546,7 @@ int LuaEngine::l_canvas_save(lua_State* L) {
     const char* path = luaL_checkstring(L, 2);
 
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
-    if (!self->SdPathAllowed(path)) {
-        LOG_APP_WARN("pico.canvas_save: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+    if (!self->SdWriteAllowed(path, "pico.canvas_save")) {
         lua_pushboolean(L, false);
         return 1;
     }
@@ -1629,6 +1633,96 @@ bool LuaEngine::SdPathAllowed(const char* path) const {
     return p[dir_len] == '\0' || p[dir_len] == '/';
 }
 
+namespace {
+    // SdWriteAllowed()で比べるための形へ直す。normalized(PICO_IO::normalize()済み)の
+    // 各セグメントについて、FATと同じく先頭の空白・末尾の空白と'.'を捨て、ASCIIを小文字にする
+    // ("/Lua/Apps/X/APP.CFG." も "/lua/apps/x/app.cfg" と同じファイルを指すため)。
+    // 捨てると空になるセグメントは元のまま残す(そういう名前はFATでは開けないので害は無い)
+    bool CanonicalizeSdPath(FixedString<PICO_PATH_LEN>& out, const char* normalized) {
+        char buf[PICO_PATH_LEN];
+        size_t n = 0;
+        const char* p = normalized;
+        while (*p) {
+            while (*p == '/') p++;
+            if (!*p) break;
+            const char* start = p;
+            while (*p && *p != '/') p++;
+            const char* b = start;
+            const char* e = p;
+            while (b < e && *b == ' ') b++;
+            while (e > b && (e[-1] == ' ' || e[-1] == '.')) e--;
+            if (b == e) { b = start; e = p; }
+            if (n + 1 + (size_t)(e - b) >= sizeof(buf)) return false;
+            buf[n++] = '/';
+            for (const char* q = b; q < e; ++q) {
+                char c = *q;
+                if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+                buf[n++] = c;
+            }
+        }
+        if (n == 0) buf[n++] = '/';
+        buf[n] = '\0';
+        return out.assign(buf);
+    }
+
+    // pathがdir自身か、その祖先か("/"は全ての祖先)
+    bool IsAncestorOrSelf(const char* path, const char* dir) {
+        if (strcmp(path, "/") == 0) return true;
+        const size_t len = strlen(path);
+        return strncmp(dir, path, len) == 0 && (dir[len] == '\0' || dir[len] == '/');
+    }
+
+    // "/lua/apps/<名前>"(LuaAppScannerが1アプリとして見るディレクトリ)か
+    bool IsScannedAppDir(const char* path) {
+        const char* apps = PICO_Path::DIR::LUA_APPS; // "/lua/apps/"
+        const size_t n = strlen(apps);
+        if (strncmp(path, apps, n) != 0) return false;
+        const char* rest = path + n;
+        return rest[0] != '\0' && strchr(rest, '/') == nullptr;
+    }
+
+    constexpr const char* kAppConfigName = "app.cfg"; // LuaAppScannerが読む名前(小文字で比べる)
+}
+
+bool LuaEngine::SdWriteAllowed(const char* path, const char* api, bool is_remove) const {
+    if (!SdPathAllowed(path)) {
+        LOG_APP_WARN("%s: アプリディレクトリ外へのアクセスは許可されていません: %s", api, path);
+        return false;
+    }
+
+    FixedString<PICO_PATH_LEN> normalized;
+    FixedString<PICO_PATH_LEN> target;
+    FixedString<PICO_PATH_LEN> own_dir;
+    if (!PICO_IO::normalize(normalized, path) || !CanonicalizeSdPath(target, normalized.c_str()) ||
+        !CanonicalizeSdPath(own_dir, app_dir_.c_str())) {
+        LOG_APP_WARN("%s: パスを解釈できません: %s", api, path);
+        return false;
+    }
+
+    const char* t = target.c_str();
+    const char* slash = strrchr(t, '/');
+    FixedString<PICO_PATH_LEN> parent;
+    if (slash == t) parent.assign("/");
+    else parent.assign(t, (size_t)(slash - t));
+
+    bool is_protected = false;
+    if (strcmp(slash + 1, kAppConfigName) == 0) {
+        // 自分のapp.cfg、またはスキャン対象のアプリのapp.cfg(sd_outside_app_dirを持つアプリが
+        // 他のアプリ、あるいは新しく作ったアプリのapp.cfgで権限を足すのも防ぐ)
+        is_protected = strcmp(parent.c_str(), own_dir.c_str()) == 0 || IsScannedAppDir(parent.c_str());
+    }
+    if (!is_protected && is_remove) {
+        // app.cfgを含むディレクトリごと消すのも同じ扱い
+        is_protected = IsAncestorOrSelf(t, own_dir.c_str()) || IsScannedAppDir(t) ||
+                       IsAncestorOrSelf(t, "/lua/apps");
+    }
+    if (is_protected) {
+        LOG_APP_WARN("%s: アプリの設定ファイル(app.cfg)は書き換えられません: %s", api, path);
+        return false;
+    }
+    return true;
+}
+
 int LuaEngine::l_sd_exists(lua_State* L) {
     LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
@@ -1693,8 +1787,7 @@ int LuaEngine::l_sd_write(lua_State* L) {
     const bool append = lua_toboolean(L, 3);
 
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
-    if (!self->SdPathAllowed(path)) {
-        LOG_APP_WARN("pico.sd_write: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+    if (!self->SdWriteAllowed(path, "pico.sd_write")) {
         lua_pushboolean(L, false);
         return 1;
     }
@@ -1712,8 +1805,7 @@ int LuaEngine::l_sd_remove(lua_State* L) {
     LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
-    if (!self->SdPathAllowed(path)) {
-        LOG_APP_WARN("pico.sd_remove: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+    if (!self->SdWriteAllowed(path, "pico.sd_remove", true)) {
         lua_pushboolean(L, false);
         return 1;
     }
@@ -1738,8 +1830,7 @@ int LuaEngine::l_sd_mkdir(lua_State* L) {
     LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
-    if (!self->SdPathAllowed(path)) {
-        LOG_APP_WARN("pico.sd_mkdir: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+    if (!self->SdWriteAllowed(path, "pico.sd_mkdir")) {
         lua_pushboolean(L, false);
         return 1;
     }
@@ -1782,6 +1873,140 @@ int LuaEngine::l_sd_list(lua_State* L) {
         file.close();
     }
     dir.close();
+    return 1;
+}
+
+// ---------------- 設定ファイル ----------------
+// ヘッダのl_config_readの説明参照。書式はPICO_Config(key=value、'#'でコメント、後勝ち)。
+
+namespace {
+    // config_read/config_getの共通の入口。読めるならtrue(ファイルがあり、ディレクトリでなく、
+    // 大きさがpico.sd_readと同じ上限以内)。読めない理由はここでログへ出す
+    bool OpenableConfig(LuaEngine* self, const char* path, const char* api, size_t max_bytes,
+                        bool path_allowed) {
+        (void)self;
+        if (!OSData::SD_usable) return false;
+        if (!path_allowed) {
+            LOG_APP_WARN("%s: アプリディレクトリ外へのアクセスは許可されていません: %s", api, path);
+            return false;
+        }
+        if (!OSData::SD.exists(path)) return false;
+        FsFile f = OSData::SD.open(path, O_RDONLY);
+        if (!f) return false;
+        const bool is_dir = f.isDir();
+        const size_t size = f.fileSize();
+        f.close();
+        if (is_dir) return false;
+        if (size > max_bytes) {
+            LOG_APP_WARN("%s: %s が上限(%uB)を超えています(%uB)", api, path,
+                (unsigned)max_bytes, (unsigned)size);
+            return false;
+        }
+        return true;
+    }
+
+    // キーとして書けるか。読み戻したときに同じキーになる形だけを許す
+    // ('='を含まない・前後に空白が無い・'#'で始まらない・改行を含まない)
+    bool ValidConfigKey(const char* key) {
+        const size_t len = strlen(key);
+        if (len == 0 || len >= PICO_Config::kConfigMaxKeyLen) return false;
+        if (key[0] == '#' || key[0] == ' ' || key[0] == '\t') return false;
+        if (key[len - 1] == ' ' || key[len - 1] == '\t') return false;
+        for (const char* p = key; *p; ++p) {
+            if (*p == '=' || *p == '\r' || *p == '\n') return false;
+        }
+        return true;
+    }
+}
+
+int LuaEngine::l_config_read(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const char* path = luaL_checkstring(L, 1);
+    if (!OpenableConfig(self, path, "pico.config_read", kMaxSdReadBytes, self->SdPathAllowed(path))) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    lua_newtable(L);
+    const bool ok = PICO_Config::ParseFile(path, [&](const char* key, const char* value) {
+        // 後勝ち: 同じキーが後で出てくればそのまま上書きされる
+        lua_pushstring(L, value);
+        lua_setfield(L, -2, key);
+    });
+    if (!ok) {
+        lua_pop(L, 1);
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+int LuaEngine::l_config_get(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const char* path = luaL_checkstring(L, 1);
+    const char* key = luaL_checkstring(L, 2);
+    if (!OpenableConfig(self, path, "pico.config_get", kMaxSdReadBytes, self->SdPathAllowed(path))) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    FixedString<PICO_Config::kConfigMaxValueLen> found;
+    bool has = false;
+    PICO_Config::ParseFile(path, [&](const char* k, const char* v) {
+        if (strcmp(k, key) == 0) { found.assign(v); has = true; } // 後勝ち
+    });
+    if (has) lua_pushstring(L, found.c_str());
+    else lua_pushnil(L);
+    return 1;
+}
+
+int LuaEngine::l_config_write(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const char* path = luaL_checkstring(L, 1);
+    const char* key = luaL_checkstring(L, 2);
+    if (!ValidConfigKey(key)) {
+        return luaL_error(L, "pico.config_write: キーが不正です('='・改行・前後の空白を含まず、"
+                             "'#'で始まらない%d字未満の文字列): %s",
+                          (int)PICO_Config::kConfigMaxKeyLen, key);
+    }
+
+    // 値は文字列/数値/真偽値。読み戻し(PICO_Config::ConfigValue::AsXxx)で同じ値になる表記にする
+    char num_buf[48];
+    const char* value = nullptr;
+    switch (lua_type(L, 3)) {
+    case LUA_TBOOLEAN:
+        value = PICO_Config::ConfigValue::FromBool(lua_toboolean(L, 3));
+        break;
+    case LUA_TNUMBER:
+        if (lua_isinteger(L, 3)) {
+            snprintf(num_buf, sizeof(num_buf), "%lld", (long long)lua_tointeger(L, 3));
+        } else {
+            // AsFloat()は指数表記を受け付けないので%gは使えない。小数点以下の余分な0は削る
+            snprintf(num_buf, sizeof(num_buf), "%.6f", (double)lua_tonumber(L, 3));
+            char* end = num_buf + strlen(num_buf);
+            while (end > num_buf + 1 && end[-1] == '0' && end[-2] != '.') *--end = '\0';
+        }
+        value = num_buf;
+        break;
+    case LUA_TSTRING:
+        value = lua_tostring(L, 3);
+        break;
+    default:
+        return luaL_error(L, "pico.config_write: 値は文字列・数値・真偽値のどれかです");
+    }
+
+    if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
+    // 改行を含む値を通すと、次の行として別のキー(権限等)を差し込めてしまう
+    if (strchr(value, '\n') || strchr(value, '\r')) {
+        LOG_APP_WARN("pico.config_write: 値に改行は使えません (%s)", key);
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    if (!self->SdWriteAllowed(path, "pico.config_write")) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+
+    lua_pushboolean(L, PICO_Config::SetValue(path, key, value));
     return 1;
 }
 

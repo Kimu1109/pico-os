@@ -115,6 +115,8 @@ class SshScene : public Scene, public ITextInputTarget {
         ~SshScene() override;
 
         const char* getName() const override { return "SSH"; }
+        // 離れると接続を切るので、ステータスバー/トーストのタップで別の画面へ移らない
+        bool keepForeground() const override { return true; }
 
         void onEnter() override;
         void onExit() override;

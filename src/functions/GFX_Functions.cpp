@@ -81,6 +81,7 @@ void PICO_GFX::MarkDirty(const Rect& rect) {
         return;
     }
 
+    dirtyForceBelow[dirtyRectCount] = false;
     dirtyRects[dirtyRectCount++] = rect;
 }
 
@@ -91,6 +92,7 @@ void PICO_GFX::FlushDirty() {
     //1枚のdirty矩形として扱う(取りこぼしが無く、128枚の当たり判定・転送より軽い)
     if (dirtyOverflowed) {
         dirtyRects[0] = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+        dirtyForceBelow[0] = dirtyForceBelowAny;
         dirtyRectCount = 1;
     }
 
@@ -132,6 +134,8 @@ void PICO_GFX::FlushDirty() {
             WidgetTools::RenderMode mode = w->getRenderMode();
 
             if (mode == WidgetTools::TRANSLUCENT) {
+                // MarkDirtyBelow()の矩形は半透明の下も描き直す(上に重ねていたものを消した跡)
+                if (dirtyForceBelow[dirty_i]) continue;
                 // TRANSLUCENT: 背景ウィジェットの更新を行わない
                 start_idx = i;
                 clear_bg = false;
@@ -224,6 +228,7 @@ void PICO_GFX::FlushDirty() {
 
     dirtyRectCount = 0;
     dirtyOverflowed = false;
+    dirtyForceBelowAny = false;
 }
 
 void PICO_GFX::DrawDialogBackground(){

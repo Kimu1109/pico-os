@@ -87,7 +87,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_utilの36本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notificationの37本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -146,6 +146,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | Test_Functions | フォントカバレッジ等の起動時セルフチェック |
 | Sound_Functions | 音声出力(I2S)と音源の窓口。1コア目はアンプの抜き差しの検出と要求の受付、2コア目(`loop1()`)が音源を回してI2Sへ流す。下記「音声出力」参照 |
 | Alarm_Functions | アラーム。時計アプリを閉じていても鳴るようOS側で見張る。下記「アラーム」参照 |
+| Notification_Functions | 通知。予約(時間・時刻・電池・Wi-Fi)の見張り、トースト、通知センターの履歴。Luaの`pico.notify`。下記「通知」参照 |
 | Power_Functions | スリープ(省電力)。自動調光のさらに先の段階。下記「スリープ(省電力)」参照 |
 | Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。今の入力元はUSBシリアル(PCのキーボード)。下記「外部コントローラー」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
@@ -281,6 +282,49 @@ SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
 - 検証: `alarm_test`(run.sh。時刻はUpdateAt()へ直接渡す)と、PCビルドの`--tap`/`--shot`(編集→保存、時刻を今の分にして起動すると鳴る)。
   **PCビルドの表示タイムゾーンは`network.cfg`の`timezone`(既定JST)なので、鳴らして試すときは`TZ=JST-9 date +%H:%M`で合わせること**
   (`date`だけだとUTCで1分もずれて鳴らない)。**実機では未確認**(I2Sでの音の聞こえ方・スリープからの復帰)。
+
+### 通知 (`src/functions/Notification_Functions` / `Notification_Sources.cpp` / `NotificationScene` / `widgets/systems/NotificationToast`) (2026-09-30)
+
+SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・電池・Wi-Fiの条件で知らせる仕組み。**Luaアプリも`pico.notify`で使える**。
+
+- **条件を見張るのはOS(`main.cpp`の`loop()`、アラームの直後)。アプリは予約するだけ。** `LuaScene`は閉じると`LuaEngine`ごと消えるので、
+  Luaのコードで条件を判定することはできない(**任意のLuaで判定する条件は対象外**と決めた。必要になったら「数秒おきに小さな予算で1回だけ走る
+  使い捨てのエンジン」を別に検討する)。
+- **中身とつなぎを分けてある**: `Notification_Functions.cpp`は予約・履歴・条件の判定だけ(描画・Wi-Fi・電池・登録簿に依存しない。
+  `UpdateAt(now_ms, tm, epoch, Sensors)`でホストテストする)。`Notification_Sources.cpp`が実際の時刻/電池/Wi-Fiの取り込み・トーストの出し入れ・
+  通知音・`AppFunctions::LaunchByName`の差し込み・`OpenCenter()`を持つ(`Setup()`/`Update()`の定義もこちら)。
+- 予約(`Rule`、`kMaxRules=16`、送り主ごとに`kMaxRulesPerOwner=4`): `Delay`(millis差分。再起動で消える)/ `At`(エポック秒。NTP同期前は待ち、
+  過ぎていれば同期した時点で出す)/ `Daily`(HH:MM。アラームと同じく同じ分に2回出さない。**登録した分は見送る**)/ `Every`(10秒以上。遅れても溜めて何回も出さない)/
+  `BatteryLow`(下回ったら1回、+5%戻るまで次は出さない)/ `WifiConnected`・`WifiDisconnected`(変わった瞬間だけ。登録時の状態では出さない)。
+  **送り主(`owner`)はLuaアプリのディレクトリ**(`LuaEngine::app_dir_`。C++からは空)。同じ送り主・同じ`tag`は置き換え。他の送り主の予約はLuaから消せない。
+- 保存: `Delay`以外を`/sys/notify_rules.tsv`(1行1件のタブ区切り。値が`Config_Functions`の上限160Bを超えるので自前の書式)へ、
+  変更から`kSaveDelayMs`(1秒)後にまとめて一時ファイル→差し替えで書く。文字列は`Sanitize()`でタブ/改行を空白にしてから持つ。
+  起動時に`RefreshOwners()`で登録簿(`AppFunctions::NameForDir()`=argの親ディレクトリで引く)と突き合わせ、**送り主が消えた(アンインストールした)予約は捨てる**。
+  そのため`NotificationFunctions::Setup()`は`AppFunctions::Setup()`より後、かつトーストを最前面に置くためキーボードより後。
+- 履歴(`kMaxHistory=16`の輪)はRAMだけ(再起動で消える)。見せ方は`/sys/notify.cfg`の`mode = on|quiet`と`sound = true|false`(通知センターの[通常/控えめ][音あり/なし])。
+  quietはトーストも音も出さず、ステータスバーの印(右端の赤いベル+未読数)と通知センターだけ。**`Scene::quietNotifications()`がtrueの画面(ゲームボーイ)の間も同じ扱い**。
+  **`Scene::keepForeground()`がtrueの画面(SSH・ゲームボーイ。離れると接続が切れる/ROMを閉じる)では、ステータスバーやトーストをタップしても別の画面へ移らない**
+  (トーストは既読にして閉じるだけ)。うっかり触って接続やゲームを失わないため。
+- **トースト**(`NotificationToast`)はオーバーレイの一番上(キーボードや半透明のダイアログの上にも出る)、約5秒(後ろに待ちがあれば2.5秒)。
+  本体タップで送ったアプリを`Open()`(起動できなければ通知センター)、右端の×で既読にして閉じる。見せている間は`PowerFunctions::KeepAwake()`(スリープ中なら起きる)。
+  **消すときは新設の`PICO_GFX::MarkDirtyBelow()`**: 普通の`MarkDirty()`だと`FlushDirty()`が「TRANSLUCENTの下は描き直さない」近道を使うため、
+  半透明のダイアログ/キーボードの上に出していたトーストの跡が残る。`MarkDirtyBelow()`の矩形だけその近道を使わず一番下から描き直す
+  (ヘッダの`inline`なので`MarkDirty()`を偽物にしたホストテストでもそのまま使える)。PCビルドでキーボードのダイアログの上で跡が残らないことを確認した。
+- 通知音は最後のチャンネル(`SoundFunctions::kChannels-1`)を借りて2音(E6→A6)。同じフレームに何件出ても1回。
+- **起動理由**: `Open()`が送り主・tag・dataを覚えてアプリを起動し、`LuaScene::onEnter()`が`TakeLaunchReason(正規化したapp_dir)`で受け取って
+  `LuaEngine::SetLaunchReason()`へ渡す(`pico.launch_reason()`)。1回きりで、`kLaunchReasonTtlMs`(3秒)を過ぎたら捨てる(起動に失敗した理由が後の別の起動に混ざらないように)。
+- **通知センター**(`NotificationScene`、ランチャの「通知」、ステータスバーのタップでも開く=`main.cpp`が`status->setOnPressEnd()`): [履歴|予約]のタブ、
+  1回目のタップで下に詳しく、2回目で開く/取り消す(予約はどのアプリのものでも取り消せる)。`Revision()`が変わったら一覧を作り直す。画面を離れるときに全部既読にする。
+- Lua: `pico.notify{title=, body=, tag=, data=, sound=, delay_ms|at|daily|every_ms|when(+below)}` → id(すぐ出したら0)/ `nil, 理由`(権限無し・上限)、
+  `pico.notify_cancel([id|tag])` → 件数、`pico.notify_list()`、`pico.launch_reason()`。**権限`LuaPermissions::notify`(app.cfgの`permission_notify`)が要る**
+  (アプリを閉じた後にも画面と音へ出るため既定では許さない)。引数の誤りは権限より先に`luaL_error`。ドキュメントは`lua-api-doc/content/api/notify.md`。
+- 動作確認アプリ「通知テスト」(`pc/sdcard/lua/apps/通知テスト/`、`permission_notify=true`)。
+- RAMは静的に約10KB(予約16件×約360B + 履歴16件×約330B)。
+- 検証: `notification_test`(run.sh。種類ごとの発火・置き換え/上限・履歴の輪・控えめ・保存と読み込み・送り主の掃除・起動理由)、`lua_engine_test`(Lua API)、
+  PCビルドの`--tap`/`--shot`(アプリで10秒後を予約→閉じてランチャでトースト→タップでアプリが`launch_reason`付きで開く、ステータスバーから通知センター、
+  再起動しても`daily`/`every`の予約が残る、キーボードのダイアログの上でトーストの跡が残らない)。**実機・Webビルドは未確認**。
+- 未: C++の標準アプリからの利用(チャットの未読・カレンダーの予定はシーンを閉じると通信係ごと止まるので、使うにはOS側へ上げる必要がある)、
+  アラーム/タイマーの完了を通知へ統合すること。
 
 ### バッテリー残量表示(`src/functions/Battery_Functions`) (2026-09-28)
 
@@ -3220,7 +3264,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、37本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、38本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

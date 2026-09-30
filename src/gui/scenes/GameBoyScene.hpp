@@ -65,6 +65,10 @@ class GameBoyScene : public Scene {
 
     public:
         const char* getName() const override { return "GameBoy"; }
+        // 画面の上部(ゲームの画面)をトーストで隠さない
+        bool quietNotifications() const override { return true; }
+        // 離れるとROMを閉じる(遊んでいる途中の状態は保存しない)
+        bool keepForeground() const override { return true; }
 
         void onEnter() override;
         void onExit() override;

@@ -36,6 +36,15 @@ class Scene {
         // ウィジェットの描画とは独立した軽い処理(ポーリング等)向け
         virtual void onUpdate() {}
 
+        // この画面の間は通知のトーストと音を控える(ゲーム等、画面の上部を隠されると困る画面)。
+        // 控えた通知もステータスバーの印と通知センターには残る(NotificationFunctions参照)
+        virtual bool quietNotifications() const { return false; }
+
+        // この画面は離れると状態を失う(SSHの接続が切れる、ゲームボーイのROMを閉じる)。
+        // trueの間は、ステータスバーや通知のトーストをタップしても別の画面へ移らない
+        // (トーストのタップは既読にして閉じるだけ)。うっかり触って接続/ゲームを失わないため
+        virtual bool keepForeground() const { return false; }
+
         // ステータスバーを除いたシーンが自由に使える領域
         static constexpr Rect contentRect() {
             return {

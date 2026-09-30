@@ -6,6 +6,7 @@
 #include "functions/Sound_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
+#include "functions/Notification_Functions.hpp"
 
 #include "OS_Data.hpp"
 
@@ -23,6 +24,12 @@ void Statusbar::render(){
     const bool pad_connected = PadFunctions::IsConnected();
     if(pad_connected != this->last_pad_connected){
         this->last_pad_connected = pad_connected;
+        this->needsRender();
+    }
+
+    const int unread = NotificationFunctions::UnreadCount();
+    if(unread != this->last_unread){
+        this->last_unread = unread;
         this->needsRender();
     }
 
@@ -96,6 +103,20 @@ void Statusbar::render(){
     if(pad_connected){
         IconRender::DrawIcon(IconID::Game, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
         draw_pos += 16 + MARGIN;
+    }
+
+    //未読の通知: 右端にベルと数(タップで通知センター)。無ければ何も出さない
+    if(unread > 0){
+        char num[4];
+        snprintf(num, sizeof(num), "%d", unread > 99 ? 99 : unread);
+        OSData::frame->setFont(FontFn::GetSmall());
+        const int num_w = OSData::frame->textWidth(num);
+        const int bell_x = g_rect.x + g_rect.w - MARGIN - num_w - 1 - 16;
+        IconRender::DrawIcon(IconID::Bell, IconSize::Px16, bell_x, ICON_MARGIN_TOP, PICO_RED);
+        OSData::frame->setTextColor(PICO_RED);
+        OSData::frame->setCursor(bell_x + 16 + 1, g_rect.y);
+        OSData::frame->print(num);
+        FontFn::SetNormal();
     }
 
     OSData::frame->drawFastHLine(g_rect.x, g_rect.y + g_rect.h - 1, g_rect.w, PICO_BLACK);

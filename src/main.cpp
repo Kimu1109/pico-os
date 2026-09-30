@@ -13,6 +13,7 @@
 #include "functions/Sound_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Alarm_Functions.hpp"
+#include "functions/Notification_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
@@ -58,6 +59,8 @@ void setup() {
     //--- 常駐(オーバーレイ層): シーン遷移で破棄されない ---
     status = new Statusbar();
     WidgetFunctions::AddOverlay(status);
+    //ステータスバーをタップすると通知センターを開く
+    status->setOnPressEnd([](){ NotificationFunctions::OpenCenter(); });
 
     NetworkFunctions::Setup();
     KeyboardFunctions::Setup(); //キーボード3種もAddOverlay()される
@@ -71,6 +74,10 @@ void setup() {
 
     //ランチャに並べるアプリを登録する(一覧は App_List.cpp)
     AppFunctions::Setup();
+
+    //通知(予約の読み込みとトースト)。予約の送り主を登録簿と突き合わせるのでAppFunctionsより後、
+    //トーストを全オーバーレイの一番上に置くのでキーボードより後
+    NotificationFunctions::Setup();
 
     //ここまでの確保は全てOS常駐。シーンアリーナを導入する際の「永続領域」に相当する
     MemFunctions::SealPermanentBaseline();
@@ -116,6 +123,8 @@ void loop() {
     BatteryFunctions::Update();
     //アラームの時刻の見張り(時計アプリを閉じていても鳴らす)。TimeFunctions::Update()より後
     AlarmFunctions::Update();
+    //通知の予約の見張りとトーストの出し入れ。TimeFunctions::Update()より後
+    NotificationFunctions::Update();
 
     //スリープ中だけ少し休んでCPUを寝かせる(それ以外は何もしない)
     PowerFunctions::IdleWait();

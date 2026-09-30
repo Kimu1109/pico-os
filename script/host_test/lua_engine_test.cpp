@@ -77,6 +77,7 @@
 //                      往復できること、icon_size変更でw/h未指定なら箱の大きさも
 //                      追従することを確認する
 #include "lua/LuaEngine.hpp"
+#include "functions/Notification_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "gui/widgets/Widget.hpp"
@@ -1904,6 +1905,91 @@ int main(){
             check(ok, "sd_outside_app_dir=trueの設定ファイルテストの実行が成功する");
             check(HostSd::files.count("/lua/apps/newapp/app.cfg") == 0, "新しいアプリのapp.cfgが作られていない");
         }
+    }
+
+    // ---- 通知(pico.notify / notify_cancel / notify_list / launch_reason) ----
+    {
+        NotificationFunctions::SetupAt(0);
+        //権限が無ければ nil, 理由(引数の書き間違いは権限より先にエラー)
+        {
+            LuaEngine no_perm(64 * 1024, LuaPermissions{}, "/lua/apps/demo");
+            lua_pushcfunction(no_perm.raw(), l_check);
+            lua_setglobal(no_perm.raw(), "check");
+            const bool ok = no_perm.Run(R"LUA(
+                local id, err = pico.notify{ title = 'x' }
+                check(id == nil and type(err) == 'string', 'notify: 権限が無ければnilと理由')
+                check(not pcall(pico.notify, { body = 'タイトル無し' }), 'notify: titleが無ければ(権限より先に)エラー')
+            )LUA", "notify_noperm");
+            check(ok, "通知: 権限無しのテストの実行が成功する");
+            check(NotificationFunctions::HistoryCount() == 0, "通知: 権限が無ければ何も出ない");
+        }
+
+        LuaPermissions perm;
+        perm.notify = true;
+        LuaEngine ne(64 * 1024, perm, "/lua/apps/demo");
+        check(ne.valid(), "通知テスト用にLuaEngineを構築");
+        if (ne.valid()) {
+            lua_pushcfunction(ne.raw(), l_check);
+            lua_setglobal(ne.raw(), "check");
+            const bool ok = ne.Run(R"LUA(
+                check(pico.launch_reason() == nil, 'launch_reason: 通知から起動されていなければnil')
+                check(pico.notify{ title = 'すぐ', body = '本文' } == 0, 'notify: すぐ出すと0')
+                local a = pico.notify{ title = '後で', delay_ms = 60000, tag = 'later', data = 'x1' }
+                check(type(a) == 'number' and a > 0, 'notify: 予約するとid')
+                local b = pico.notify{ title = '毎朝', daily = '07:30' }
+                local c = pico.notify{ title = '電池', when = 'battery_low', below = 10 }
+                local d = pico.notify{ title = '日時', at = { year = 2027, month = 1, day = 2, hour = 3, min = 4 } }
+                check(b and c and d, 'notify: daily / when / at(テーブル)で予約できる')
+                check(pico.notify{ title = 'もう1件', every_ms = 60000 } == nil, 'notify: 送り主ごとの上限でnil')
+                local l = pico.notify_list()
+                check(#l == 4 and l[1].tag == 'later' and l[1].kind == 'delay' and l[2].kind == 'daily' and
+                      l[3].kind == 'battery_low' and l[4].kind == 'at', 'notify_list: 自分の予約を返す')
+                check(pico.notify_cancel('later') == 1, 'notify_cancel: tagで取り消す')
+                check(pico.notify_cancel(b) == 1, 'notify_cancel: idで取り消す')
+                check(pico.notify_cancel() == 2, 'notify_cancel: 引数無しで全部')
+                check(#pico.notify_list() == 0, 'notify_list: 取り消した後は空')
+
+                check(not pcall(pico.notify, { title = 'x', delay_ms = 10, every_ms = 20000 }), 'notify: いつを2つ指定するとエラー')
+                check(not pcall(pico.notify, { title = 'x', every_ms = 100 }), 'notify: every_msが短すぎるとエラー')
+                check(not pcall(pico.notify, { title = 'x', daily = '25:00' }), 'notify: dailyの書式違いはエラー')
+                check(not pcall(pico.notify, { title = 'x', when = 'rain' }), 'notify: 知らないwhenはエラー')
+                check(not pcall(pico.notify, { title = 'x', at = { year = 2027 } }), 'notify: atの足りないフィールドはエラー')
+            )LUA", "notify");
+            check(ok, "通知: Luaテストの実行が成功する");
+            check(NotificationFunctions::HistoryCount() == 1 &&
+                  NotificationFunctions::HistoryAt(0)->content.owner == "/lua/apps/demo" &&
+                  NotificationFunctions::HistoryAt(0)->content.body == "本文",
+                  "通知: 送り主はアプリのディレクトリ");
+        }
+        //他のアプリの予約は取り消せない/見えない
+        {
+            NotificationFunctions::When w;
+            w.trigger = NotificationFunctions::Trigger::Delay;
+            w.delay_ms = 1000;
+            NotificationFunctions::Content oc;
+            oc.title.assign("他");
+            oc.owner.assign("/lua/apps/other");
+            oc.tag.assign("t");
+            NotificationFunctions::Schedule(oc, w);
+            const bool ok = ne.Run(R"LUA(
+                check(#pico.notify_list() == 0, 'notify_list: 他のアプリの予約は見えない')
+                check(pico.notify_cancel('t') == 0 and pico.notify_cancel() == 0, 'notify_cancel: 他のアプリの予約は消せない')
+            )LUA", "notify_other");
+            check(ok && NotificationFunctions::RuleCount() == 1, "通知: 他のアプリの予約は残る");
+        }
+        //起動理由
+        {
+            LuaEngine re(64 * 1024, perm, "/lua/apps/demo");
+            re.SetLaunchReason("tg", "42");
+            lua_pushcfunction(re.raw(), l_check);
+            lua_setglobal(re.raw(), "check");
+            const bool ok = re.Run(R"LUA(
+                local tag, data = pico.launch_reason()
+                check(tag == 'tg' and data == '42', 'launch_reason: 通知のtagとdataを返す')
+            )LUA", "launch_reason");
+            check(ok, "通知: launch_reasonのテストの実行が成功する");
+        }
+        NotificationFunctions::SetupAt(0);
     }
 
     // ---- 後片付け(残りのウィジェットも解放し、ASanのリーク検出を素通りさせない) ----

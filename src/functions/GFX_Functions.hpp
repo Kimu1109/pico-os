@@ -37,8 +37,27 @@ namespace PICO_GFX {
     inline bool dirtyOverflowed = false;
     inline bool isDirtyDeactivates;
 
+    // MarkDirtyBelow()で積まれた矩形か(dirtyRectsと同じ添字)。FlushDirty()が、この矩形では
+    // 「TRANSLUCENTの下は描き直さない」近道を使わず、一番下から描き直す
+    inline bool dirtyForceBelow[kMaxDirtyRects];
+    // 溢れて画面全体に切り替わったときの取りこぼし対策(1枚でもMarkDirtyBelow()があったか)
+    inline bool dirtyForceBelowAny = false;
+
     void Setup();
     void MarkDirty(const Rect& rect);
+
+    // MarkDirty()と同じだが、この矩形の中は「半透明(TRANSLUCENT)のウィジェットの下」まで
+    // 描き直させる。半透明のダイアログやキーボードの上に一時的に重ねていたもの(通知のトースト)を
+    // 消すとき用。普通のMarkDirty()だと、半透明の下は変わっていない前提で描き直されないため、
+    // 消したものの絵がダイアログの下に残る。
+    // ヘッダに置いているのは、MarkDirty()を偽物に差し替えるホストテストでもそのまま使えるように
+    inline void MarkDirtyBelow(const Rect& rect){
+        if(isDirtyDeactivates || rect.w <= 0 || rect.h <= 0) return;
+        const int before = dirtyRectCount;
+        MarkDirty(rect);
+        if(dirtyRectCount == before + 1) dirtyForceBelow[before] = true;
+        dirtyForceBelowAny = true;
+    }
 
     void FlushDirty();
 

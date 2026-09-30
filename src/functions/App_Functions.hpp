@@ -111,6 +111,11 @@ namespace AppFunctions {
     // 名前の綴りミスを呼び出し側で検知できるようにするための戻り値)
     bool LaunchByName(const char* name);
 
+    // argの親ディレクトリ(正規化済み)がdirに一致するアプリを探し、その名前をoutへ。
+    // Luaアプリ(argがスクリプトのパス)を、そのディレクトリ(LuaEngineのapp_dir)から引く用途。
+    // 通知の送り主→タップで起動するアプリ、の対応に使う(NotificationFunctions)
+    bool NameForDir(const char* dir, FixedString<PICO_STR_M>& out);
+
     // 登録簿を空にする(主にテスト用。Setup()の冒頭でも呼ばれる)
     void Clear();
 

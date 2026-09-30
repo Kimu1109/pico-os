@@ -14,6 +14,7 @@
 #include "gui/scenes/GameBoyScene.hpp"
 #include "gui/scenes/MusicScene.hpp"
 #include "gui/scenes/SshScene.hpp"
+#include "gui/scenes/NotificationScene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "lua/LuaPermissions.hpp"
 #include "lua/LuaAppScanner.hpp"
@@ -57,6 +58,8 @@ void AppFunctions::Setup(){
     Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
     //SSHクライアント(端末)。接続先は起動後に端末の中で聞く。鍵は /sys/ssh/id_ed25519(SshScene参照)
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
+    //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)
+    Register("通知", IconID::Bell, &MakeScene<NotificationScene>);
     // Luaバインディングの動作サンプル(pc/sdcard/lua/hello.lua参照)。
     // MakeLuaAppScene(LuaScene.hpp)がentry.permissionsをそのままLuaSceneへ渡すので、
     // ここでsd_outside_app_dirを立てるだけで済む(/img/hello.pimgを読むため)。

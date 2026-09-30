@@ -1,4 +1,5 @@
 #include "functions/App_Functions.hpp"
+#include "storage/SD_IO.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 
@@ -87,6 +88,21 @@ bool AppFunctions::LaunchByName(const char* name){
     }
 
     LOG_SYS_WARN("App LaunchByName: 該当するアプリが見つかりません (%s)", name);
+    return false;
+}
+
+bool AppFunctions::NameForDir(const char* dir, FixedString<PICO_STR_M>& out){
+    if(!dir || dir[0] == '\0') return false;
+    for(int i = 0; i < app_count; i++){
+        if(apps[i].arg.empty()) continue;
+        FixedString<PICO_PATH_LEN> parent, norm;
+        if(!PICO_IO::parent(parent, apps[i].arg.c_str())) continue;
+        if(!PICO_IO::normalize(norm, parent.c_str())) continue;
+        if(norm == dir){
+            out.assign(apps[i].name.c_str());
+            return true;
+        }
+    }
     return false;
 }
 

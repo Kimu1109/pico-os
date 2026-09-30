@@ -11,6 +11,8 @@
 //   sd_outside_app_dir … pico.sd_*/pico.image_loadで、スクリプト自身のディレクトリ
 //                         (LuaEngineのapp_dir。通常はスクリプトの親ディレクトリ)の
 //                         外を読み書きできるか。falseの間はapp_dir配下だけに閉じる
+//   notify             … pico.notify(通知を出す/予約する)を使えるか。通知はアプリを閉じた後にも
+//                         画面へ出て音も鳴るので、既定では許さない(app.cfgのpermission_notify)
 //
 // 経路ごとの細かい許可(パスのホワイトリスト、ホスト単位のネットワーク制限等)は
 // 今のところ無い。「そのアプリの持ち場の外へ出られるか出られないか」の二値だけを見る、
@@ -18,4 +20,5 @@
 struct LuaPermissions {
     bool network = false;
     bool sd_outside_app_dir = false;
+    bool notify = false;
 };

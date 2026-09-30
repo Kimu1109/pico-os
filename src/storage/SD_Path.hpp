@@ -55,6 +55,8 @@ namespace PICO_Path {
             constexpr const char* SYS_DISPLAY_CFG = "/sys/display.cfg";
             // SSHアプリ("target = user@host:port" / "font = small|large")。SshScene参照
             constexpr const char* SYS_SSH_CFG = "/sys/ssh.cfg";
+            // アラーム("alarm1 = 07:30,daily,on" ...)。AlarmFunctions参照
+            constexpr const char* SYS_ALARM_CFG = "/sys/alarm.cfg";
         }
 
         namespace IME {

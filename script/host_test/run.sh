@@ -52,6 +52,8 @@
 #   power_test    … スリープ(PowerFunctions)。操作が無いまま sleep-timeout が過ぎると入り、画面/Wi-Fi/音の
 #                   省電力が掛かること、タッチで起きて起こした指は離すまで画面へ渡さないこと、KeepAwake()・
 #                   音・Wi-Fi接続中は入らないこと
+#   alarm_test    … アラーム(AlarmFunctions)。alarm.cfgの読み書き、時刻での発火と確認ダイアログ、
+#                   繰り返し(1回/毎日/平日/土日)、止める/5分後/放置での停止、ダイアログが消えたときの出し直し
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
 #   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
@@ -670,6 +672,29 @@ compile_or_die g++ -std=gnu++17 -g -fsanitize=address,undefined -pthread \
 echo ""
 echo "===== step_budget_test ====="
 run_or_die "$OUT/step_budget_test"
+
+# --- アラーム ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/alarm_test.cpp" \
+    "$ROOT/src/functions/Alarm_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    -o "$OUT/alarm_test"
+
+echo ""
+echo "===== alarm_test ====="
+run_or_die "$OUT/alarm_test"
 
 # --- ErrorFunctions(エラーの見せ方の共通口) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

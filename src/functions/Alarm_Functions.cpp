@@ -170,15 +170,19 @@ namespace {
         if(step == ring_step) return;
         ring_step = step;
 
-        //4拍のうち最後の1拍は休む
-        if(step % 4 == 3) return;
-        ChipSynth::Note n;
-        n.wave = ChipSynth::Wave::Pulse50;
-        n.freq_x16 = 1047u * 16u; // C6
-        n.volume = 15;
-        n.length_ms = 120;
-        SoundFunctions::Play(0, n);
+        AlarmFunctions::PlayBeepStep(step);
     }
+}
+
+void AlarmFunctions::PlayBeepStep(long step){
+    //4拍のうち最後の1拍は休む
+    if(step % 4 == 3) return;
+    ChipSynth::Note n;
+    n.wave = ChipSynth::Wave::Pulse50;
+    n.freq_x16 = 1047u * 16u; // C6
+    n.volume = 15;
+    n.length_ms = 120;
+    SoundFunctions::Play(0, n);
 }
 
 // ---------------------------------------------------------------------------

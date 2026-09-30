@@ -92,6 +92,9 @@ class ClocksScene : public Scene {
         unsigned long timer_last_tick_ms = 0;
         unsigned long timer_blink_ms     = 0;
         bool timer_blink_on = false;
+        // 完了音。鳴り始めの時刻と、最後に鳴らした拍(-1=まだ)。kRingMaxMsを過ぎたら黙る(点滅は続く)
+        unsigned long timer_ring_start_ms = 0;
+        long          timer_ring_step     = -1;
 
         // ---- ストップウォッチの状態 ----
         RunState sw_state      = RunState::Idle;

@@ -52,6 +52,10 @@ namespace AlarmFunctions {
     // 鳴っている(または5分後を待っている)アラームを止める
     void Dismiss();
 
+    // 鳴らす音(ビープ)の1拍ぶん。step は鳴らし始めからの拍の通し番号(kBeepStepMsごとに1増える。
+    // 同じstepで何度呼んでも1回分だけ鳴らすのは呼び出し側の仕事)。タイマーの完了音も同じ音を使う
+    void PlayBeepStep(long step);
+
     // 一覧用の表記
     const char* RepeatToStr(Repeat r);   // "1回" "毎日" "平日" "土日"
     // 繰り返しが今日(wday: 0=日〜6=土)にあたるか

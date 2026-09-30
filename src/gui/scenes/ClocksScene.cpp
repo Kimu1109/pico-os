@@ -194,6 +194,8 @@ void ClocksScene::updateTimer(){
             this->timer_state    = RunState::Finished;
             this->timer_blink_on = true;
             this->timer_blink_ms = now;
+            this->timer_ring_start_ms = now;
+            this->timer_ring_step     = -1;
 
             //別の機能を見ている間に鳴り終わっても気づけるように、タイマーへ引き戻す
             if(this->feature != Feature::Timer){
@@ -216,6 +218,17 @@ void ClocksScene::updateTimer(){
 
     if(this->timer_state == RunState::Finished){
         const unsigned long now = millis();
+
+        //アラームと同じ音を鳴らす。開始/リセットを押すと状態が変わるので止まる
+        const unsigned long ring_ms = now - this->timer_ring_start_ms;
+        if(ring_ms < AlarmFunctions::kRingMaxMs){
+            const long step = (long)(ring_ms / AlarmFunctions::kBeepStepMs);
+            if(step != this->timer_ring_step){
+                this->timer_ring_step = step;
+                AlarmFunctions::PlayBeepStep(step);
+            }
+        }
+
         if(now - this->timer_blink_ms >= BLINK_INTERVAL_MS){
             this->timer_blink_ms = now;
             this->timer_blink_on = !this->timer_blink_on;

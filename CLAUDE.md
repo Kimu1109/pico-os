@@ -1499,6 +1499,26 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   該当する行を消すよう案内する。**秘密鍵はSD上に平文**(`PICO_Secret`の暗号化も考えたが、鍵ファイルはPCで作って
   そのまま置く運用なので見送った。SDの紛失で鍵が漏れる点は利用者が判断すること)。
 - **画面を離れたら切る**(`onExit()`。受信を進める者がいなくなるため)。
+- **踏み台(ProxyJump)**(2026-09-30): 接続先を`user@host[:port] -J user@踏み台[:port]`と書くと(OpenSSHの`ssh -J`と同じ)、
+  踏み台へSSHしてから`direct-tcpip`(RFC 4254 7.2)の通り道を開き、**その上でもう一度SSHする**。
+  **狙いは外からTailscaleのtailnetへ入ること**: Tailscaleそのものに参加するのは現実的でない(公式はGo製で組み込み向けの
+  C実装が無く、自前で書くにはWireGuard+非公開寄りの制御プロトコル+DERP+大きなJSONが要り、RAMも足りない)ので、
+  Tailscaleの入った常時起動の機械(自宅のRaspberry Pi等)を踏み台にする。`host`はMagicDNSの名前でよい(名前は踏み台の側で引かれる)。
+  暗号は相手のホストまで途切れないので、踏み台で中身を見られることは無い。踏み台のsshdは外から届く必要がある
+  (ルーターでポートを開ける。パスワード認証は切って公開鍵だけにすることを勧める)。
+  - `SshClient::setForward()`でシェルの代わりに通り道を開く。`SshTunnel`(`Ssh_Client.hpp`)が通り道を`SshStream`として見せ、
+    中の`SshClient::connectVia()`がTCPの代わりにそれと話す(`SshClient`のTCPの読み書きは`io*()`の4つに集めた)。
+  - **流れの制御**: 通り道のデータは`SshTunnel`の受信の輪(8KB)へ溜め、**中が読んだ分だけ**踏み台の受信窓を広げる
+    (`setWindow(8KB, manual=true)`+`consume()`)。受け取った時点で窓を広げると、中が読むより速く届いて輪が溢れるため。
+    鍵の交換し直しの間に送れなかった窓の調整は、終わったときに送る(`adjustWindow()`)。
+  - 送信の溜め(`pending_out_`)を512B→2KBへ(通り道には中のSSHのパケット=最大1.3KBがまとめて来るため)。
+  - 踏み台経由の間は `SshClient`2つ+輪で約34KB。片付けは中→通り道→踏み台の順(`SshScene::dropClient()`)。
+  - ホスト鍵(known_hostsは踏み台・相手それぞれの名前で持つ)とパスワードは両方について聞く。どちらを聞いているかは`prompt_client`。
+    踏み台が切れて中が「接続が切れました」になった場合は、踏み台の理由の方を出す。
+  - 検証: `ssh_net_test`に踏み台の項目(同じsshdを踏み台にして`localhost`へ。大きな出力が8KBの輪を何度も跨いでも欠けない・
+    踏み台から繋げない相手は理由付きで失敗・中を閉じると踏み台も閉じる)。PCビルドの`--tap`で踏み台経由のログイン→`exit`を確認。
+    **本物のTailscale越しの確認はしていない**(この環境にtailnetが無い。踏み台から先は普通のTCPなので、踏み台のsshdが
+    `AllowTcpForwarding`(既定yes)なら同じに動くはず)。
 - アプリ数: SSHを足したところで`AppFunctions::kMaxApps`(24)が静的13+Lua Hello+SDのLuaアプリ10本で埋まっていたので**32へ広げた**
   (約2KBのstatic RAM増)。アイコンはtablerの`terminal-2`(`IconID::Terminal`、末尾へ追加)。
 - 検証: `vt_terminal_test`/`ssh_util_test`(run.sh)、**`ssh_net_test`(run_net.sh。本物のOpenSSH 9.6のsshdを使い捨ての鍵で立てる)**:

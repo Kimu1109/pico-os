@@ -22,7 +22,13 @@
 // キーボードに無いキー(Esc/Tab/Ctrl/↑↓/^C)は端末の下の補助キーの列(TermKeyBar)で打つ。
 // 右上のボタンでキーボードを出し入れでき、出し入れのたびに端末の行数を変えてサーバへ知らせる。
 //
-// 設定は /sys/ssh.cfg(無くてよい): target = user@host[:port](前回の接続先)、font = small | large。
+// **踏み台(ProxyJump)**: 接続先を「user@host -J user@踏み台[:port]」と書くと、踏み台へSSHしてから
+// その先の host:port への通り道(direct-tcpip)の上でもう一度SSHする(OpenSSHの ssh -J と同じ)。
+// 外からTailscaleのtailnet上のホストへ繋ぐ用途を想定している(踏み台=Tailscaleの入った自宅の機械。
+// hostはMagicDNSの名前でよい。名前は踏み台の側で引かれる)。暗号は相手のホストまで途切れない。
+// ホスト鍵の確認とパスワードは、踏み台と相手の両方についてそれぞれ聞く。
+//
+// 設定は /sys/ssh.cfg(無くてよい): target = user@host[:port][ -J user@host[:port]](前回の接続先)、font = small | large。
 // 公開鍵認証の鍵は /sys/ssh/id_ed25519(OpenSSH形式のssh-ed25519、パスフレーズ無し)があれば使う。
 // 信頼したホスト鍵は /sys/ssh/known_hosts に追記する(22番以外は "[host]:port")。
 //
@@ -35,8 +41,12 @@ class SshScene : public Scene, public ITextInputTarget {
         static constexpr int kKeyBarH = 24;
 
         VtTerminal term;
-        SshClient* client = nullptr;
+        SshClient* client = nullptr;              // シェルを開く相手
         SshClient::State last_state = SshClient::State::Idle;
+        SshClient* jump = nullptr;                // 踏み台(使うときだけ)
+        SshClient::State last_jump_state = SshClient::State::Idle;
+        SshTunnel* tunnel = nullptr;              // 踏み台の通り道(clientが話す相手)
+        SshClient* prompt_client = nullptr;       // ホスト鍵/パスワードを聞いている相手
 
         Prompt prompt = Prompt::None;
         FixedString<PICO_STR_L> line;       // 端末の中で打っている1行(接続先/yes/パスワード)
@@ -45,6 +55,10 @@ class SshScene : public Scene, public ITextInputTarget {
         FixedString<PICO_STR_M> host;
         FixedString<PICO_STR_M> user;
         uint16_t port = 22;
+        bool use_jump = false;
+        FixedString<PICO_STR_M> jump_host;
+        FixedString<PICO_STR_M> jump_user;
+        uint16_t jump_port = 22;
         bool small_font = false;
         bool started = false;
 
@@ -73,9 +87,17 @@ class SshScene : public Scene, public ITextInputTarget {
         void startPrompt(Prompt p, const char* text, bool echo);
         void submitLine();
         bool parseTarget(const char* s);
+        static bool ParseEndpoint(const char* s, size_t n, FixedString<PICO_STR_M>& user,
+                                  FixedString<PICO_STR_M>& host, uint16_t& port);
         void beginConnect();
-        void onStateChanged(SshClient::State s);
+        void onStateChanged(SshClient* c, SshClient::State s);
+        void onJumpOpen();
         void dropClient();
+        bool isActive() const {
+            return (this->client && this->client->isActive()) || (this->jump && this->jump->isActive());
+        }
+        SshClient* newClient();
+        void hostOf(SshClient* c, const char*& host, uint16_t& port, const char*& user) const;
 
         // 入力(キーボード/補助キー)
         void inputText(const char* s, size_t n);

@@ -153,8 +153,68 @@ void SshClient::notice(const char* text){
 }
 
 void SshClient::closeSocket(){
-    this->sock_.stop();
+    if(this->stream_) this->stream_->stop();
+    else this->sock_.stop();
     this->rx_len_ = 0;
+}
+
+int SshClient::ioAvailable(){
+    return this->stream_ ? this->stream_->available() : this->sock_.available();
+}
+
+int SshClient::ioRead(uint8_t* buf, size_t n){
+    return this->stream_ ? this->stream_->read(buf, n) : this->sock_.read(buf, n);
+}
+
+bool SshClient::ioWrite(const uint8_t* buf, size_t n){
+    if(this->stream_) return this->stream_->write(buf, n);
+    return this->sock_.write(buf, n) == n;
+}
+
+bool SshClient::ioConnected(){
+    return this->stream_ ? this->stream_->connected() : (bool)this->sock_.connected();
+}
+
+bool SshClient::sendHello(){
+    char hello[32];
+    const int n = snprintf(hello, sizeof(hello), "%s\r\n", kClientVersion);
+    if(!this->ioWrite((const uint8_t*)hello, (size_t)n)){
+        this->fail("送信に失敗しました");
+        return false;
+    }
+    this->state_ = State::Handshake;
+    this->phase_start_ = millis();
+    this->sendKexInit(); //相手の挨拶を待たずに出してよい(RFC 4253 7.1)
+    return this->state_ != State::Closed;
+}
+
+bool SshClient::connectVia(SshStream* stream, const char* user){
+    if(this->state_ != State::Idle || !stream) return false;
+    this->user_.assign(user ? user : "");
+    this->stream_ = stream;
+    return this->sendHello();
+}
+
+void SshClient::setForward(const char* host, uint16_t port){
+    this->fwd_host_.assign(host ? host : "");
+    this->fwd_port_ = port;
+}
+
+void SshClient::consume(size_t n){
+    if(!this->manual_window_) return;
+    this->consumed_ += (uint32_t)n;
+    this->adjustWindow();
+}
+
+void SshClient::adjustWindow(){
+    //鍵の交換し直しの間は送れないので、終わったとき(kexDone())にもう一度呼ぶ
+    if(this->state_ != State::Open || this->kex_in_progress_) return;
+    if(this->consumed_ < this->window_ / 2) return;
+    this->begin(MSG_CHANNEL_WINDOW_ADJUST);
+    this->putU32(this->remote_id_);
+    this->putU32(this->consumed_);
+    this->sendPacket();
+    this->consumed_ = 0;
 }
 
 void SshClient::fail(const char* text){
@@ -178,17 +238,7 @@ bool SshClient::connect(const char* host, uint16_t port, const char* user, unsig
         return false;
     }
     this->sock_.setNoDelay(true);
-
-    char hello[32];
-    const int n = snprintf(hello, sizeof(hello), "%s\r\n", kClientVersion);
-    if(this->sock_.write((const uint8_t*)hello, (size_t)n) != (size_t)n){
-        this->fail("送信に失敗しました");
-        return false;
-    }
-    this->state_ = State::Handshake;
-    this->phase_start_ = millis();
-    this->sendKexInit(); //相手の挨拶を待たずに出してよい(RFC 4253 7.1)
-    return this->state_ != State::Closed;
+    return this->sendHello();
 }
 
 void SshClient::disconnect(){
@@ -276,7 +326,7 @@ bool SshClient::sendPacket(){
     }
     this->tx_seq_++;
 
-    if(this->sock_.write(this->tx_, total) != total){
+    if(!this->ioWrite(this->tx_, total)){
         this->fail("送信に失敗しました");
         return false;
     }
@@ -297,7 +347,7 @@ void SshClient::update(){
     while(this->got_version_ && this->state_ != State::Closed && this->parsePacket()){}
     if(this->state_ == State::Closed) return;
 
-    if(!this->sock_.connected() && this->sock_.available() <= 0){
+    if(!this->ioConnected() && this->ioAvailable() <= 0){
         this->fail("接続が切れました");
         return;
     }
@@ -311,11 +361,11 @@ void SshClient::update(){
 
 void SshClient::pumpSocket(){
     while(this->rx_len_ < kRxCap){
-        const int avail = this->sock_.available();
+        const int avail = this->ioAvailable();
         if(avail <= 0) break;
         size_t want = (size_t)avail;
         if(want > kRxCap - this->rx_len_) want = kRxCap - this->rx_len_;
-        const int n = this->sock_.read(this->rx_ + this->rx_len_, want);
+        const int n = this->ioRead(this->rx_ + this->rx_len_, want);
         if(n <= 0) break;
         this->rx_len_ += (size_t)n;
     }
@@ -508,7 +558,7 @@ void SshClient::handle(const uint8_t* p, size_t n, uint32_t seq){
             this->onChannelOpenConfirm(p + 1, n - 1);
             return;
         case MSG_CHANNEL_OPEN_FAILURE:
-            this->fail("シェルを開けませんでした(チャネルを拒否されました)");
+            this->onChannelOpenFailure(p + 1, n - 1);
             return;
         case MSG_CHANNEL_WINDOW_ADJUST: {
             r.u32();
@@ -846,6 +896,7 @@ void SshClient::kexDone(){
         return;
     }
     this->flushPending();
+    this->adjustWindow();
 }
 
 // ---------------------------------------------------------------- 認証
@@ -1040,11 +1091,41 @@ void SshClient::openChannel(){
     this->state_ = State::Opening;
     this->phase_start_ = millis();
     this->begin(MSG_CHANNEL_OPEN);
-    this->putCStr("session");
-    this->putU32(0);
-    this->putU32(kWindow);
-    this->putU32(kMaxPacket);
+    if(this->fwd_host_.empty()){
+        this->putCStr("session");
+        this->putU32(0);
+        this->putU32(this->window_);
+        this->putU32(kMaxPacket);
+    }else{
+        //踏み台: 相手の先の host:port へのTCPの通り道(RFC 4254 7.2)
+        this->putCStr("direct-tcpip");
+        this->putU32(0);
+        this->putU32(this->window_);
+        this->putU32(kMaxPacket);
+        this->putCStr(this->fwd_host_.c_str());
+        this->putU32(this->fwd_port_);
+        this->putCStr("127.0.0.1");
+        this->putU32(0);
+    }
     this->sendPacket();
+}
+
+void SshClient::onChannelOpenFailure(const uint8_t* p, size_t n){
+    char buf[PICO_STR_LL];
+    if(this->fwd_host_.empty()){
+        this->fail("シェルを開けませんでした(チャネルを拒否されました)");
+        return;
+    }
+    Reader r(p, n);
+    r.u32();
+    r.u32(); // 理由の番号
+    uint32_t dn;
+    const uint8_t* d = r.str(dn);
+    if(!r.ok) dn = 0;
+    if(dn > 80) dn = 80;
+    snprintf(buf, sizeof(buf), "踏み台から %s:%u へ繋げませんでした(%.*s)",
+             this->fwd_host_.c_str(), (unsigned)this->fwd_port_, (int)dn, (const char*)d);
+    this->fail(buf);
 }
 
 void SshClient::onChannelOpenConfirm(const uint8_t* p, size_t n){
@@ -1055,6 +1136,12 @@ void SshClient::onChannelOpenConfirm(const uint8_t* p, size_t n){
     this->remote_max_ = r.u32();
     if(!r.ok){
         this->fail("チャネルの応答が壊れています");
+        return;
+    }
+    if(!this->fwd_host_.empty()){
+        //踏み台の通り道はこれで開通(端末もシェルも要らない)
+        this->state_ = State::Open;
+        this->flushPending();
         return;
     }
 
@@ -1098,15 +1185,11 @@ void SshClient::onChannelReply(bool ok){
 }
 
 void SshClient::onChannelData(const uint8_t* data, size_t n){
-    this->output(data, n);
+    if(this->chan_fn_) this->chan_fn_(this->chan_ctx_, data, n);
+    else this->output(data, n);
+    if(this->manual_window_) return; // 渡し先が consume() で知らせる
     this->consumed_ += (uint32_t)n;
-    if(this->consumed_ >= kWindow / 2){
-        this->begin(MSG_CHANNEL_WINDOW_ADJUST);
-        this->putU32(this->remote_id_);
-        this->putU32(this->consumed_);
-        this->sendPacket();
-        this->consumed_ = 0;
-    }
+    this->adjustWindow();
 }
 
 void SshClient::sendWindowChange(){
@@ -1121,58 +1204,86 @@ void SshClient::sendWindowChange(){
     this->sendPacket();
 }
 
-bool SshClient::sendChannelData(const uint8_t* data, size_t len){
-    while(len > 0){
-        size_t allow = len;
+void SshClient::flushPending(){
+    if(this->kex_in_progress_ || this->state_ != State::Open) return;
+    size_t off = 0;
+    while(off < this->pending_len_){
+        size_t allow = this->pending_len_ - off;
         if(allow > this->remote_window_) allow = this->remote_window_;
         if(allow > this->remote_max_) allow = this->remote_max_;
         if(allow > 512) allow = 512;
-        if(allow == 0){
-            //相手の窓が空くまで溜めておく
-            if(this->pending_len_ + len > sizeof(this->pending_out_)) return false;
-            memcpy(this->pending_out_ + this->pending_len_, data, len);
-            this->pending_len_ += len;
-            return true;
-        }
+        if(allow == 0) break; //相手の窓が空くまで残しておく(WINDOW_ADJUSTでまた呼ばれる)
         this->begin(MSG_CHANNEL_DATA);
         this->putU32(this->remote_id_);
-        this->putString(data, allow);
-        if(!this->sendPacket()) return false;
+        this->putString(this->pending_out_ + off, allow);
+        if(!this->sendPacket()) return;
         this->remote_window_ -= (uint32_t)allow;
-        data += allow;
-        len -= allow;
+        off += allow;
     }
-    return true;
-}
-
-void SshClient::flushPending(){
-    if(this->kex_in_progress_ || this->state_ != State::Open || this->pending_len_ == 0) return;
-    uint8_t tmp[sizeof(this->pending_out_)];
-    const size_t n = this->pending_len_;
-    memcpy(tmp, this->pending_out_, n);
-    this->pending_len_ = 0;
-    this->sendChannelData(tmp, n);
+    memmove(this->pending_out_, this->pending_out_ + off, this->pending_len_ - off);
+    this->pending_len_ -= off;
 }
 
 bool SshClient::send(const uint8_t* data, size_t len){
     if(this->state_ != State::Open) return false;
-    if(this->kex_in_progress_){
-        if(this->pending_len_ + len > sizeof(this->pending_out_)) return false;
-        memcpy(this->pending_out_ + this->pending_len_, data, len);
-        this->pending_len_ += len;
-        return true;
-    }
-    if(this->pending_len_ > 0){
-        //先に溜まっている分を追い越さない
-        if(this->pending_len_ + len > sizeof(this->pending_out_)) return false;
-        memcpy(this->pending_out_ + this->pending_len_, data, len);
-        this->pending_len_ += len;
-        this->flushPending();
-        return true;
-    }
-    return this->sendChannelData(data, len);
+    if(this->pending_len_ + len > sizeof(this->pending_out_)) return false;
+    memcpy(this->pending_out_ + this->pending_len_, data, len);
+    this->pending_len_ += len;
+    this->flushPending();
+    return this->state_ != State::Closed;
 }
 
 bool SshClient::send(const char* s){
     return this->send((const uint8_t*)s, strlen(s));
+}
+
+// ---------------------------------------------------------------- 踏み台の通り道
+
+void SshTunnel::attach(SshClient* jump){
+    this->jump_ = jump;
+    this->head_ = 0;
+    this->count_ = 0;
+    this->overflow_ = false;
+    jump->setChannelSink(&SshTunnel::OnData, this);
+    jump->setWindow((uint32_t)kCap, true);
+}
+
+void SshTunnel::OnData(void* ctx, const uint8_t* data, size_t len){
+    SshTunnel* t = static_cast<SshTunnel*>(ctx);
+    //受信窓を kCap にしてあるので本来は溢れない。溢れたら通り道ごと壊れたとみなす
+    if(t->count_ + len > kCap){
+        t->overflow_ = true;
+        return;
+    }
+    size_t tail = (t->head_ + t->count_) % kCap;
+    for(size_t i = 0; i < len; i++){
+        t->buf_[tail] = data[i];
+        tail = (tail + 1) % kCap;
+    }
+    t->count_ += len;
+}
+
+int SshTunnel::read(uint8_t* buf, size_t n){
+    if(n > this->count_) n = this->count_;
+    for(size_t i = 0; i < n; i++){
+        buf[i] = this->buf_[this->head_];
+        this->head_ = (this->head_ + 1) % kCap;
+    }
+    this->count_ -= n;
+    if(n > 0 && this->jump_) this->jump_->consume(n);
+    return (int)n;
+}
+
+bool SshTunnel::write(const uint8_t* buf, size_t n){
+    return this->jump_ && this->jump_->send(buf, n);
+}
+
+bool SshTunnel::connected(){
+    if(this->overflow_) return false;
+    return this->jump_ && this->jump_->isOpen();
+}
+
+void SshTunnel::stop(){
+    //中のSSHが終わったら踏み台も用済み
+    if(this->jump_) this->jump_->disconnect();
 }

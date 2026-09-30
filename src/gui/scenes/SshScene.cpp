@@ -29,7 +29,7 @@ void SshScene::loadConfig(){
 
 void SshScene::refreshButtons(){
     if(this->conn_button){
-        const bool active = this->client && this->client->isActive();
+        const bool active = this->isActive();
         this->conn_button->setText(active ? "切断" : "接続");
     }
     if(this->font_button) this->font_button->setText(this->small_font ? "文字:小" : "文字:大");
@@ -73,30 +73,63 @@ void SshScene::startPrompt(Prompt p, const char* text, bool echo){
 void SshScene::startTargetPrompt(){
     char buf[PICO_STR_LL];
     if(this->target_default.empty()){
-        snprintf(buf, sizeof(buf), "\r\n接続先 (ユーザー@ホスト[:ポート]): ");
+        snprintf(buf, sizeof(buf), "\r\n接続先 (ユーザー@ホスト[:ポート] [-J 踏み台]): ");
     }else{
         snprintf(buf, sizeof(buf), "\r\n接続先 [%s]: ", this->target_default.c_str());
     }
     this->startPrompt(Prompt::Target, buf, true);
 }
 
-bool SshScene::parseTarget(const char* s){
-    const char* at = strchr(s, '@');
-    if(!at || at == s || !at[1]) return false;
-    this->user.assign(s, (size_t)(at - s));
+bool SshScene::ParseEndpoint(const char* s, size_t n, FixedString<PICO_STR_M>& user,
+                             FixedString<PICO_STR_M>& host, uint16_t& port){
+    while(n > 0 && s[0] == ' '){ s++; n--; }
+    while(n > 0 && s[n - 1] == ' ') n--;
+    const char* at = (const char*)memchr(s, '@', n);
+    if(!at || at == s || at + 1 >= s + n) return false;
+    user.assign(s, (size_t)(at - s));
     const char* h = at + 1;
-    const char* colon = strrchr(h, ':');
-    this->port = 22;
+    const size_t hn = (size_t)(s + n - h);
+    //最後の':'より後が数字だけならポート
+    const char* colon = nullptr;
+    for(size_t i = 0; i < hn; i++) if(h[i] == ':') colon = h + i;
+    port = 22;
+    size_t host_n = hn;
     if(colon){
-        char* end = nullptr;
-        const long p = strtol(colon + 1, &end, 10);
-        if(!end || *end != '\0' || p <= 0 || p > 65535) return false;
-        this->port = (uint16_t)p;
-        this->host.assign(h, (size_t)(colon - h));
-    }else{
-        this->host.assign(h);
+        long p = 0;
+        const char* q = colon + 1;
+        if(q >= h + hn) return false;
+        for(; q < h + hn; q++){
+            if(*q < '0' || *q > '9') return false;
+            p = p * 10 + (*q - '0');
+            if(p > 65535) return false;
+        }
+        if(p <= 0) return false;
+        port = (uint16_t)p;
+        host_n = (size_t)(colon - h);
     }
-    return !this->host.empty() && strchr(this->host.c_str(), ' ') == nullptr;
+    host.assign(h, host_n);
+    return !host.empty() && memchr(host.c_str(), ' ', host.length()) == nullptr &&
+           memchr(user.c_str(), ' ', user.length()) == nullptr;
+}
+
+bool SshScene::parseTarget(const char* s){
+    // "user@host[:port]" または "user@host[:port] -J user@jump[:port]"
+    const char* j = strstr(s, " -J ");
+    if(!j){
+        this->use_jump = false;
+        return ParseEndpoint(s, strlen(s), this->user, this->host, this->port);
+    }
+    this->use_jump = true;
+    return ParseEndpoint(s, (size_t)(j - s), this->user, this->host, this->port) &&
+           ParseEndpoint(j + 4, strlen(j + 4), this->jump_user, this->jump_host, this->jump_port);
+}
+
+void SshScene::hostOf(SshClient* c, const char*& h, uint16_t& p, const char*& u) const {
+    if(c && c == this->jump){
+        h = this->jump_host.c_str(); p = this->jump_port; u = this->jump_user.c_str();
+    }else{
+        h = this->host.c_str(); p = this->port; u = this->user.c_str();
+    }
 }
 
 void SshScene::submitLine(){
@@ -112,7 +145,8 @@ void SshScene::submitLine(){
                 return;
             }
             if(!this->parseTarget(t.c_str())){
-                this->say("\x1b[91m「ユーザー名@ホスト」または「ユーザー名@ホスト:ポート」の形で入力してください\x1b[0m");
+                this->say("\x1b[91m「ユーザー名@ホスト[:ポート]」の形で入力してください。"
+                          "踏み台を通すときは後ろに「 -J ユーザー名@踏み台[:ポート]」\x1b[0m");
                 this->startTargetPrompt();
                 return;
             }
@@ -121,35 +155,47 @@ void SshScene::submitLine(){
                 if(OSData::SD_usable) PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SSH_CFG, "target", t.c_str());
             }
             char buf[PICO_STR_LL];
-            snprintf(buf, sizeof(buf), "%s:%u へ接続しています...\r\n", this->host.c_str(), (unsigned)this->port);
+            if(this->use_jump){
+                snprintf(buf, sizeof(buf), "踏み台 %s:%u へ接続しています...\r\n",
+                         this->jump_host.c_str(), (unsigned)this->jump_port);
+            }else{
+                snprintf(buf, sizeof(buf), "%s:%u へ接続しています...\r\n", this->host.c_str(), (unsigned)this->port);
+            }
             this->say(buf);
             this->connect_wait_frames = 2;
             return;
         }
         case Prompt::HostKey: {
-            if(!this->client) return;
+            SshClient* c = this->prompt_client;
+            if(!c) return;
+            const char* h; uint16_t pt; const char* u;
+            this->hostOf(c, h, pt, u);
             if(this->line == "yes" || this->line == "y" || this->line == "YES"){
-                if(SshUtil::AddKnownHost(PICO_Path::FILE::SSH_KNOWN_HOSTS, this->host.c_str(), this->port, this->client->hostKey())){
+                if(SshUtil::AddKnownHost(PICO_Path::FILE::SSH_KNOWN_HOSTS, h, pt, c->hostKey())){
                     this->say("known_hosts へ追加しました\r\n");
                 }else{
                     this->say("\x1b[93m(known_hosts へ書き込めませんでした。次回も確認します)\x1b[0m\r\n");
                 }
-                this->client->acceptHostKey(true);
+                c->acceptHostKey(true);
             }else{
-                this->client->acceptHostKey(false);
+                c->acceptHostKey(false);
             }
             //次に見えた状態は(同じ状態へ戻ってきた場合も)必ず onStateChanged() へ通す
-            this->last_state = SshClient::State::Idle;
+            if(c == this->jump) this->last_jump_state = SshClient::State::Idle;
+            else this->last_state = SshClient::State::Idle;
             return;
         }
-        case Prompt::Secret:
-            if(this->client) this->client->providePassword(this->line.c_str());
+        case Prompt::Secret: {
+            SshClient* c = this->prompt_client;
+            if(c) c->providePassword(this->line.c_str());
             //パスワードが違うと同じ NeedPassword へすぐ戻ってくるので、状態の変化として拾えるようにする
-            this->last_state = SshClient::State::Idle;
+            if(c == this->jump) this->last_jump_state = SshClient::State::Idle;
+            else this->last_state = SshClient::State::Idle;
             //打った内容を残さない
             memset((void*)this->line.c_str(), 0, this->line.length());
             this->line.clear();
             return;
+        }
         case Prompt::None:
             return;
     }
@@ -160,34 +206,33 @@ void SshScene::OnOutput(void* ctx, const uint8_t* data, size_t len){
 }
 
 void SshScene::dropClient(){
-    if(!this->client) return;
-    this->client->disconnect();
-    delete this->client;
-    this->client = nullptr;
+    //中(client)は通り道(tunnel)を、通り道は踏み台(jump)を指しているので、この順に片付ける
+    if(this->client){
+        this->client->disconnect();
+        delete this->client;
+        this->client = nullptr;
+    }
+    delete this->tunnel;
+    this->tunnel = nullptr;
+    if(this->jump){
+        this->jump->disconnect();
+        delete this->jump;
+        this->jump = nullptr;
+    }
+    this->prompt_client = nullptr;
     this->last_state = SshClient::State::Idle;
+    this->last_jump_state = SshClient::State::Idle;
 }
 
-void SshScene::beginConnect(){
-    this->dropClient();
+SshClient* SshScene::newClient(){
+    SshClient* c = new SshClient();
+    c->setOutput(&SshScene::OnOutput, this);
 
-    if(!NetworkFunctions::IsConnected()){
-        this->say("\x1b[91mWi-Fiに繋がっていません\x1b[0m\r\n");
-        this->startTargetPrompt();
-        return;
-    }
-
-    this->client = new SshClient();
-    this->client->setOutput(&SshScene::OnOutput, this);
-    if(this->view){
-        this->client->setTerminalSize(this->term.cols(), this->term.rows(),
-                                      this->term.cols() * this->view->cellW(), this->term.rows() * this->view->cellH());
-    }
-
-    //公開鍵(あれば)
+    //公開鍵(あれば)。踏み台と相手の両方で同じ鍵を使う
     uint8_t secret[64], pub[32];
     switch(SshUtil::LoadPrivateKey(PICO_Path::FILE::SSH_ID_ED25519, secret, pub)){
         case SshUtil::KeyResult::Ok:
-            this->client->setIdentity(secret, pub);
+            c->setIdentity(secret, pub);
             break;
         case SshUtil::KeyResult::NotFound:
             break;
@@ -202,66 +247,117 @@ void SshScene::beginConnect(){
             break;
     }
     memset(secret, 0, sizeof(secret));
+    return c;
+}
 
-    LOG_APP_MSG("SSH: %s@%s:%u へ接続", this->user.c_str(), this->host.c_str(), (unsigned)this->port);
-    if(!this->client->connect(this->host.c_str(), this->port, this->user.c_str())){
+void SshScene::beginConnect(){
+    this->dropClient();
+
+    if(!NetworkFunctions::IsConnected()){
+        this->say("\x1b[91mWi-Fiに繋がっていません\x1b[0m\r\n");
+        this->startTargetPrompt();
+        return;
+    }
+
+    SshClient* first = this->newClient();
+    const char* h; uint16_t pt; const char* u;
+    if(this->use_jump){
+        this->jump = first;
+        this->tunnel = new SshTunnel();
+        this->tunnel->attach(this->jump);
+        this->jump->setForward(this->host.c_str(), this->port);
+        h = this->jump_host.c_str(); pt = this->jump_port; u = this->jump_user.c_str();
+    }else{
+        this->client = first;
+        if(this->view){
+            this->client->setTerminalSize(this->term.cols(), this->term.rows(),
+                                          this->term.cols() * this->view->cellW(), this->term.rows() * this->view->cellH());
+        }
+        h = this->host.c_str(); pt = this->port; u = this->user.c_str();
+    }
+
+    LOG_APP_MSG("SSH: %s@%s:%u へ接続", u, h, (unsigned)pt);
+    if(!first->connect(h, pt, u)){
         char buf[PICO_STR_LL];
-        snprintf(buf, sizeof(buf), "\x1b[91m%s\x1b[0m\r\n", this->client->errorText());
+        snprintf(buf, sizeof(buf), "\x1b[91m%s\x1b[0m\r\n", first->errorText());
         this->say(buf);
-        delete this->client;
-        this->client = nullptr;
+        this->dropClient();
         this->startTargetPrompt();
     }
     this->refreshButtons();
 }
 
-void SshScene::onStateChanged(SshClient::State s){
+void SshScene::onJumpOpen(){
+    //踏み台の通り道が開いた。その上で相手とSSHする
+    char buf[PICO_STR_LL];
+    snprintf(buf, sizeof(buf), "踏み台経由で %s:%u へ接続しています...\r\n", this->host.c_str(), (unsigned)this->port);
+    this->say(buf);
+    this->client = this->newClient();
+    if(this->view){
+        this->client->setTerminalSize(this->term.cols(), this->term.rows(),
+                                      this->term.cols() * this->view->cellW(), this->term.rows() * this->view->cellH());
+    }
+    this->client->connectVia(this->tunnel, this->user.c_str());
+    this->last_state = SshClient::State::Idle;
+}
+
+void SshScene::onStateChanged(SshClient* c, SshClient::State s){
     char buf[PICO_STR_512B];
+    const char* h; uint16_t pt; const char* u;
+    this->hostOf(c, h, pt, u);
+    const bool is_jump = (c == this->jump);
+
     switch(s){
         case SshClient::State::HostKeyCheck: {
-            const SshUtil::HostStatus st = SshUtil::CheckKnownHost(
-                PICO_Path::FILE::SSH_KNOWN_HOSTS, this->host.c_str(), this->port, this->client->hostKey());
+            const SshUtil::HostStatus st = SshUtil::CheckKnownHost(PICO_Path::FILE::SSH_KNOWN_HOSTS, h, pt, c->hostKey());
             char fp[80];
-            SshUtil::Fingerprint(this->client->hostKey(), fp, sizeof(fp));
+            SshUtil::Fingerprint(c->hostKey(), fp, sizeof(fp));
             if(st == SshUtil::HostStatus::Match){
-                this->client->acceptHostKey(true);
+                c->acceptHostKey(true);
                 return;
             }
             if(st == SshUtil::HostStatus::Mismatch){
                 snprintf(buf, sizeof(buf),
-                    "\x1b[91m警告: ホスト鍵が以前と違います!\r\n"
+                    "\x1b[91m警告: %s のホスト鍵が以前と違います!\r\n"
                     "なりすましの可能性があります。心当たりがあれば\r\n"
                     "%s から該当する行を消してください。\r\n"
                     "今の鍵: %s\x1b[0m\r\n",
-                    PICO_Path::FILE::SSH_KNOWN_HOSTS, fp);
+                    h, PICO_Path::FILE::SSH_KNOWN_HOSTS, fp);
                 this->say(buf);
-                this->client->acceptHostKey(false);
+                c->acceptHostKey(false);
                 return;
             }
             snprintf(buf, sizeof(buf),
-                "初めて接続するホストです。\r\nED25519の鍵の指紋:\r\n%s\r\n", fp);
+                "%s%s は初めて接続するホストです。\r\nED25519の鍵の指紋:\r\n%s\r\n", is_jump ? "踏み台 " : "", h, fp);
             this->say(buf);
+            this->prompt_client = c;
             this->startPrompt(Prompt::HostKey, "このホストを信頼して接続しますか? (yes/no): ", true);
             return;
         }
         case SshClient::State::NeedPassword: {
-            snprintf(buf, sizeof(buf), "%s@%s の%s", this->user.c_str(), this->host.c_str(), this->client->promptText());
-            this->startPrompt(Prompt::Secret, buf, this->client->promptEcho());
+            snprintf(buf, sizeof(buf), "%s@%s の%s", u, h, c->promptText());
+            this->prompt_client = c;
+            this->startPrompt(Prompt::Secret, buf, c->promptEcho());
             return;
         }
         case SshClient::State::Open:
             this->prompt = Prompt::None;
+            if(is_jump) this->onJumpOpen();
             return;
         case SshClient::State::Closed: {
             this->prompt = Prompt::None;
-            snprintf(buf, sizeof(buf), "\r\n\x1b[0m\x1b[93m%s\x1b[0m\r\n", this->client->errorText());
+            //踏み台が先に切れた場合は、中の「接続が切れました」より踏み台の理由の方が役に立つ
+            const char* why = c->errorText();
+            if(!is_jump && this->jump && this->jump->state() == SshClient::State::Closed &&
+               strcmp(why, "接続が切れました") == 0){
+                why = this->jump->errorText();
+            }
+            snprintf(buf, sizeof(buf), "\r\n\x1b[0m\x1b[93m%s%s\x1b[0m\r\n", is_jump ? "踏み台: " : "", why);
             //代替画面(vim等)の途中で切れた場合に備えて、普通の画面へ戻す
             //(スクロール範囲の指定を戻すとカーソルが左上へ飛ぶので、保存/復元で挟む)
             this->say("\x1b[?1049l\x1b[?25h\x1b" "7\x1b[r\x1b" "8");
             this->say(buf);
-            delete this->client;
-            this->client = nullptr;
-            this->last_state = SshClient::State::Idle;
+            this->dropClient();
             this->startTargetPrompt();
             this->refreshButtons();
             return;
@@ -356,9 +452,11 @@ void SshScene::inputInterrupt(){
     }
     //接続の途中(ホスト鍵の確認・パスワード)なら中止、接続先の入力なら打ち直し
     this->say("^C\r\n");
-    if(this->client){
+    if(this->client || this->jump){
         this->prompt = Prompt::None;
-        this->client->disconnect(); // 次のonUpdate()でClosedとして後始末される
+        //次のonUpdate()でClosedとして後始末される
+        if(this->client) this->client->disconnect();
+        else this->jump->disconnect();
         return;
     }
     this->connect_wait_frames = -1;
@@ -489,9 +587,10 @@ void SshScene::onEnter(){
 
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     this->conn_button->setOnPressEnd([this](){
-        if(this->client && this->client->isActive()){
+        if(this->isActive()){
             this->prompt = Prompt::None;
-            this->client->disconnect();
+            if(this->client) this->client->disconnect();
+            else this->jump->disconnect();
             return;
         }
         //接続先の入力中ならEnterと同じ(何も打っていなければ前回の接続先へ繋ぐ)
@@ -535,7 +634,7 @@ void SshScene::onExit(){
     this->view = nullptr;
     this->keybar = nullptr;
     //画面を離れたら切る(受信を進める者がいなくなるため)
-    if(this->client){
+    if(this->client || this->jump){
         this->dropClient();
         this->say("\r\n\x1b[93m切断しました\x1b[0m\r\n");
         this->startTargetPrompt();
@@ -555,6 +654,17 @@ void SshScene::onUpdate(){
         }
     }
 
+    //踏み台を先に回す(届いたデータを通り道に溜めてから、中が読む)
+    if(this->jump){
+        this->jump->update();
+        const SshClient::State s = this->jump->state();
+        if(s != this->last_jump_state){
+            this->last_jump_state = s;
+            //中が居る(=開通した後)なら、踏み台が切れたことは中が「接続が切れました」として拾う
+            if(!(s == SshClient::State::Closed && this->client)) this->onStateChanged(this->jump, s);
+            this->refreshButtons();
+        }
+    }
     if(this->client){
         this->client->update();
         //端末の問い合わせ(カーソル位置等)への返事
@@ -565,7 +675,7 @@ void SshScene::onUpdate(){
         const SshClient::State s = this->client->state();
         if(s != this->last_state){
             this->last_state = s;
-            this->onStateChanged(s);
+            this->onStateChanged(this->client, s);
             this->refreshButtons();
         }
     }else{

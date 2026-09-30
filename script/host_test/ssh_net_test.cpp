@@ -10,6 +10,9 @@
 //   - window-change(端末の大きさの変更)が stty size に反映される
 //   - 大きな出力(受信窓の調整を何度も跨ぐ)を取りこぼさない
 //   - exit で終了コードと共に閉じる
+//   - 踏み台(ProxyJump): 同じsshdを踏み台にして、direct-tcpipの通り道の上でもう一度SSHする。
+//     名前(localhost)は踏み台の側で引かれる / 大きな出力が通り道の受信窓(8KB)を跨いでも欠けない /
+//     踏み台から繋げない相手は理由付きで失敗する / 中のSSHを閉じると踏み台も閉じる
 //   - ホスト鍵を信頼しなければ中止される / 鍵が無くパスワードも使えないサーバでは認証に失敗する
 #include "ssh/Ssh_Client.hpp"
 #include "ssh/Ssh_Util.hpp"
@@ -189,8 +192,8 @@ int main(int argc, char** argv){
     }
     // 大量の出力そのもの
     g_out.clear();
-    c->send("seq 1 5000; echo DONE-MARK\r");
-    CHECK(WaitFor(*c, "DONE-MARK\r\n"));
+    c->send("seq 1 5000; echo DONE-$((1+1))-MARK\r"); // 打った行のエコーと区別するため計算させる
+    CHECK(WaitFor(*c, "DONE-2-MARK\r\n"));
     CHECK(g_out.find("\r\n4999\r\n5000\r\n") != std::string::npos);
 
     // UTF-8(全角)が端末に2セルで入る
@@ -253,6 +256,93 @@ int main(int argc, char** argv){
         c->send("echo pw-$((1+1))-ok; exit\r");
         CHECK(WaitFor(*c, "pw-2-ok"));
         delete c;
+    }
+
+    printf("===== 踏み台(ProxyJump) =====\n");
+    {
+        SshClient* jump = new SshClient();
+        SshTunnel* tunnel = new SshTunnel();
+        std::string jump_out;
+        jump->setOutput([](void* ctx, const uint8_t* d, size_t n){ ((std::string*)ctx)->append((const char*)d, n); }, &jump_out);
+        jump->setIdentity(secret, pub);
+        tunnel->attach(jump);
+        jump->setForward("localhost", port); // 名前は踏み台の側で引かれる(Tailscaleなら MagicDNS の名前)
+        CHECK(jump->connect("127.0.0.1", port, user));
+        Pump(*jump, [](SshClient& s){ return s.state() == SshClient::State::HostKeyCheck || s.state() == SshClient::State::Closed; });
+        CHECK(jump->state() == SshClient::State::HostKeyCheck);
+        jump->acceptHostKey(true);
+        Pump(*jump, [](SshClient& s){ return s.state() == SshClient::State::Open || s.state() == SshClient::State::Closed; });
+        CHECK(jump->state() == SshClient::State::Open);
+        if(jump->state() != SshClient::State::Open) printf("  err: %s\n", jump->errorText());
+
+        g_out.clear();
+        c = new SshClient();
+        c->setOutput(OnOutput, nullptr);
+        c->setIdentity(secret, pub);
+        c->setTerminalSize(40, 12, 240, 192);
+        CHECK(c->connectVia(tunnel, user));
+        // 2本を交互に回す(実際のSshSceneと同じ順: 踏み台 → 中)
+        for(int i = 0; i < 2000 && c->state() != SshClient::State::HostKeyCheck && c->state() != SshClient::State::Closed; i++){
+            jump->update(); c->update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        CHECK(c->state() == SshClient::State::HostKeyCheck);
+        CHECK(memcmp(c->hostKey(), jump->hostKey(), 32) == 0); // 同じsshdなので同じ鍵
+        c->acceptHostKey(true);
+        for(int i = 0; i < 2000 && c->state() != SshClient::State::Open && c->state() != SshClient::State::Closed; i++){
+            jump->update(); c->update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        CHECK(c->state() == SshClient::State::Open);
+        if(c->state() != SshClient::State::Open) printf("  err: %s / jump: %s\n", c->errorText(), jump->errorText());
+
+        auto wait2 = [&](const char* needle){
+            for(int i = 0; i < 3000 && g_out.find(needle) == std::string::npos && c->state() != SshClient::State::Closed; i++){
+                jump->update(); c->update();
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            return g_out.find(needle) != std::string::npos;
+        };
+        c->send("echo via-$((6*7))-jump\r");
+        CHECK(wait2("via-42-jump"));
+        c->send("stty size\r");
+        CHECK(wait2("12 40"));
+        // 通り道の受信窓(8KB)を何度も跨ぐ大きな出力
+        g_out.clear();
+        c->send("seq 1 20000; echo JUMP-$((1+1))-END\r"); // 打った行のエコーと区別するため計算させる
+        CHECK(wait2("JUMP-2-END\r\n"));
+        CHECK(g_out.find("\r\n19999\r\n20000\r\n") != std::string::npos);
+        CHECK(jump->isOpen());
+
+        c->send("exit 5\r");
+        for(int i = 0; i < 2000 && c->state() != SshClient::State::Closed; i++){
+            jump->update(); c->update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        CHECK(c->state() == SshClient::State::Closed);
+        CHECK(c->exitStatus() == 5);
+        delete c;  // 中→通り道→踏み台の順に片付ける(中の片付けで踏み台も切れる)
+        CHECK(jump->state() == SshClient::State::Closed);
+        delete tunnel;
+        delete jump;
+    }
+    {
+        // 踏み台から繋げない相手
+        SshClient* jump = new SshClient();
+        SshTunnel* tunnel = new SshTunnel();
+        jump->setOutput(OnOutput, nullptr);
+        jump->setIdentity(secret, pub);
+        tunnel->attach(jump);
+        jump->setForward("127.0.0.1", 1);
+        CHECK(jump->connect("127.0.0.1", port, user));
+        Pump(*jump, [](SshClient& s){ return s.state() == SshClient::State::HostKeyCheck || s.state() == SshClient::State::Closed; });
+        jump->acceptHostKey(true);
+        Pump(*jump, [](SshClient& s){ return s.state() == SshClient::State::Open || s.state() == SshClient::State::Closed; });
+        CHECK(jump->state() == SshClient::State::Closed);
+        printf("  %s\n", jump->errorText());
+        CHECK(strstr(jump->errorText(), "踏み台から 127.0.0.1:1") != nullptr);
+        delete tunnel;
+        delete jump;
     }
 
     printf("===== 繋がらない相手 =====\n");

@@ -1,4 +1,5 @@
 #include "gui/scenes/SettingsScene.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Config_Functions.hpp"
@@ -24,6 +25,11 @@ namespace {
         "JST-9", "UTC0", "EST5EDT", "CST6CDT", "MST7MDT", "PST8PDT"
     };
     constexpr int kTimezonePresetCount = sizeof(kTimezonePresets) / sizeof(kTimezonePresets[0]);
+
+    // スリープまでの時間(秒、0=無効)と表示名。最後の操作からの通算(自動調光の30秒より後ろの値を選ぶ)
+    constexpr unsigned long kSleepPresetsSec[] = { 0, 60, 120, 300, 600, 1800 };
+    constexpr const char*   kSleepPresetLabels[] = { "しない", "1分", "2分", "5分", "10分", "30分" };
+    constexpr int kSleepPresetCount = sizeof(kSleepPresetsSec) / sizeof(kSleepPresetsSec[0]);
 }
 
 void SettingsScene::loadTimezoneItems(const FixedString<PICO_STR_M>& current_tz){
@@ -387,7 +393,7 @@ void SettingsScene::onEnter(){
 
     // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、
     // 読み込みより前に生成しておく(見た目の並び順は後段のNTP/ホームより下で変わらない)
-    this->run_test_checkbox = new Checkbox(content.x + MARGIN, rowY(8), "起動時に自己診断を実行");
+    this->run_test_checkbox = new Checkbox(content.x + MARGIN, rowY(9), "起動時に自己診断を実行");
     this->run_test_checkbox->setFontSize(FontFn::Small);
     this->run_test_checkbox->setOnChangeChecked([this](){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, "run-test",
@@ -544,7 +550,7 @@ void SettingsScene::onEnter(){
     // ---- 起動時セルフチェック(本体はloadValues()より前で生成済み) ----
     WidgetFunctions::Add(this->run_test_checkbox);
 
-    this->run_test_note = new Label<PICO_STR_M>(content.x + MARGIN, (int16_t)(rowY(8) + this->run_test_checkbox->getH() + 2), "次回の起動から反映されます");
+    this->run_test_note = new Label<PICO_STR_M>(content.x + MARGIN, (int16_t)(rowY(9) + this->run_test_checkbox->getH() + 2), "次回の起動から反映されます");
     this->run_test_note->setFontSize(FontFn::Small);
     this->run_test_note->setTextColor(PICO_DARKGREY);
     WidgetFunctions::Add(this->run_test_note);
@@ -564,8 +570,54 @@ void SettingsScene::onEnter(){
     }
     this->timezone_dropdown->setSelectedIndex(this->tz_selected_index);
 
+    // ドロップダウンの箱は行の高さ(ROW_H)より背が高く、そのまま置くと下の行の「編集」ボタンへ食い込む。
+    // 箱の下端を行の下端へ揃え、はみ出しは上の行との隙間へ逃がす
+    this->timezone_dropdown->setY((int16_t)(rowY(2) + ROW_H - this->timezone_dropdown->getH()));
+
     WidgetFunctions::Add(this->timezone_title);
     WidgetFunctions::Add(this->timezone_dropdown);
+
+    // ---- スリープまでの時間(display.cfgの sleep-timeout) ----
+    // タイムゾーンと同じくドロップダウンなので、一覧が下の行へ重ならないよう後からAdd()する。
+    // 設定値が一覧のどれとも違う(display.cfgを手で書き換えた)ときは、いちばん近い項目を選んで見せる
+    this->sleep_title = new Label<PICO_STR_S>(content.x + MARGIN, rowY(8) + 2, "スリープ");
+    this->sleep_title->setFontSize(FontFn::Small);
+
+    constexpr int16_t kSleepDropdownW = 110;
+    const int16_t sleep_x = (int16_t)(content.x + content.w - MARGIN - kSleepDropdownW);
+    this->sleep_dropdown = new DropdownMenu(sleep_x, rowY(8), kSleepDropdownW);
+    for(int i = 0; i < kSleepPresetCount; i++){
+        this->sleep_dropdown->add(kSleepPresetLabels[i]);
+    }
+    const unsigned long cur_sec = PowerFunctions::GetSleepTimeoutMs() / 1000UL;
+    int best = 0;
+    unsigned long best_diff = (unsigned long)-1;
+    for(int i = 0; i < kSleepPresetCount; i++){
+        const unsigned long v = kSleepPresetsSec[i];
+        const unsigned long d = (v > cur_sec) ? (v - cur_sec) : (cur_sec - v);
+        if(d < best_diff){ best_diff = d; best = i; }
+    }
+    // 無効(0)は「一番近い」ではなく厳密に見る(0秒に近いのが1分になってしまうため)
+    if(cur_sec == 0) best = 0;
+    this->sleep_selected_index = best;
+    this->sleep_dropdown->setSelectedIndex(best);
+    this->sleep_dropdown->setY((int16_t)(rowY(8) + ROW_H - this->sleep_dropdown->getH())); // 上のタイムゾーンと同じ理由
+
+    WidgetFunctions::Add(this->sleep_title);
+    WidgetFunctions::Add(this->sleep_dropdown);
+}
+
+void SettingsScene::updateSleep(){
+    if(!this->sleep_dropdown) return;
+    const int idx = this->sleep_dropdown->getSelectedIndex();
+    if(idx < 0 || idx >= kSleepPresetCount || idx == this->sleep_selected_index) return;
+    this->sleep_selected_index = idx;
+
+    const unsigned long sec = kSleepPresetsSec[idx];
+    PowerFunctions::SetSleepTimeoutMs(sec * 1000UL);
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%lu", sec);
+    PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "sleep-timeout", buf);
 }
 
 void SettingsScene::updateVolume(){
@@ -608,6 +660,7 @@ void SettingsScene::updateBrightness(){
 }
 
 void SettingsScene::onUpdate(){
+    if(this->wifi_scan_task) PowerFunctions::KeepAwake(); // スキャン中はスリープさせない
     if(this->pending_wifi_password_dialog){
         this->pending_wifi_password_dialog = false;
         this->openWifiPasswordDialog();
@@ -616,6 +669,7 @@ void SettingsScene::onUpdate(){
 
     this->updateVolume();
     this->updateBrightness();
+    this->updateSleep();
     this->refreshBatteryLabel();
 
     if(!this->timezone_dropdown) return;
@@ -676,6 +730,8 @@ void SettingsScene::onExit(){
     this->brightness_title     = nullptr;
     this->brightness_slider    = nullptr;
     this->auto_dim_checkbox    = nullptr;
+    this->sleep_title          = nullptr;
+    this->sleep_dropdown       = nullptr;
     this->run_test_checkbox    = nullptr;
     this->run_test_note        = nullptr;
 

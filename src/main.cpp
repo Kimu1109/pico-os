@@ -4,6 +4,7 @@
 #include "functions/Touch_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Display_Functions.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/IME_Functions.hpp"
@@ -43,6 +44,7 @@ void setup() {
 
     LogFunctions::Setup();
     DisplayFunctions::Setup(); //display.cfgを読むのでSDより後
+    PowerFunctions::Setup();   //同上(sleep-timeout)
 
     //以降のSetupがどれだけヒープを食うかを見るための基準点
     MemFunctions::Setup();
@@ -88,6 +90,10 @@ void loop() {
     //操作の有無を見て自動調光を掛ける/戻す(タッチ・パッドの状態が確定した直後)
     DisplayFunctions::Update();
 
+    //さらに操作が無ければスリープへ入る/操作で戻す(起こしたタッチはここで握りつぶす)。
+    //各画面のonUpdate()が呼ぶKeepAwake()は次のフレームのここで読まれる
+    PowerFunctions::Update();
+
     //保留中のシーン遷移をフレーム境界で適用する(ウィジェット更新より前)
     SceneFunctions::Update();
 
@@ -106,6 +112,9 @@ void loop() {
     SoundFunctions::Update();
     //VSYS電圧の読み取り(内部でkSampleIntervalMsごとに間引く)
     BatteryFunctions::Update();
+
+    //スリープ中だけ少し休んでCPUを寝かせる(それ以外は何もしない)
+    PowerFunctions::IdleWait();
 }
 
 //--- 2コア目: 音声専用 ---
@@ -115,6 +124,7 @@ void setup1() {
 }
 
 void loop1() {
-    //I2Sのバッファが埋まっていて何もすることが無ければ少し休む(バッファは約23ms分ある)
-    if(!SoundFunctions::LoopCore1()) delay(1);
+    //I2Sのバッファが埋まっていて何もすることが無ければ少し休む(バッファは約23ms分ある)。
+    //スリープ中で何も鳴っていなければI2Sも止まっているので、長めに休む
+    if(!SoundFunctions::LoopCore1()) delay(SoundFunctions::IdleDelayMs());
 }

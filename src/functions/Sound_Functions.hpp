@@ -51,6 +51,8 @@ namespace SoundFunctions {
     // 1コア目→2コア目のコマンドの列。溢れた要求は捨てる(DroppedCommands()で数える)
     constexpr uint8_t       kCommandQueueSize  = 32;
     constexpr uint8_t       kDefaultVolume     = 50;
+    // 省電力中で何も鳴っていないときの2コア目の休み(ms)。要求から音が出るまでこの分まで遅れうる
+    constexpr unsigned long kPowerSaveIdleDelayMs = 20;
     // バッテリー駆動中(VSYSがUSBの5VでなくLiPoセルの電圧、最大4.2V)は、MAX98357Aの
     // 出力ヘッドルームが下がり、通常の音量では実機で音割れ(アナログクリップ)することを
     // 実機で確認した。sound.cfg/SettingsScene上の設定値(master_volume)はそのまま保ち、
@@ -113,11 +115,19 @@ namespace SoundFunctions {
     // 列が満杯で捨てた書き込みの数
     uint32_t GbDroppedWrites();
 
+    // ---- 省電力(スリープ中) ----
+    // 何も鳴っていない間だけ、I2Sとアンプ(休止端子)を止めて2コア目をゆっくり回す。
+    // 鳴らす要求が来れば(効果音・曲・GBの音)自動で動き直す。呼び出しはPowerFunctionsだけ
+    void SetPowerSave(bool enable);
+    bool IsPowerSave();
+
     // ===== 2コア目から使う =====
 
     void SetupCore1();
     // 1回ぶんの仕事をする。何もすることが無かったらfalse(呼び出し側が少し休んでよい)
     bool LoopCore1();
+    // LoopCore1()がfalseのとき休む長さ(ms)。省電力中で何も鳴っていなければ長く休む
+    unsigned long IdleDelayMs();
 
     // ===== テスト用(時刻を外から与える。ホストテストのmillis()は常に0のため) =====
     void SetupAt(unsigned long now_ms);

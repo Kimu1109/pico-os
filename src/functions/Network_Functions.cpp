@@ -53,6 +53,7 @@ void NetworkFunctions::Update(){
                 LOG_SYS_OK("Succeeded to connect Wi-Fi!");
                 currentStatus = NetStatus::SUCCESS;
                 healthCheckTimer = millis();
+                if(low_power) WiFi.lowPowerMode(); // 再接続でモードが既定へ戻っていても掛け直す
                 // 初回接続・再接続どちらの経路でもここを通るので、
                 // 再接続時にもNTPを即座に再同期させて時刻ドリフトを補正する。
                 NTP.begin(ntpServer1.c_str(), ntpServer2.c_str());
@@ -94,6 +95,12 @@ void NetworkFunctions::Update(){
             break;
     };
 };
+
+void NetworkFunctions::SetLowPower(bool enable){
+    low_power = enable;
+    if(enable) WiFi.lowPowerMode();
+    else       WiFi.defaultLowPowerMode();
+}
 
 void NetworkFunctions::ConnectWiFiAsync(const char* ssid, const char* password){
     LOG_SYS_MSG("Network Service: Connecting to Wi-Fi.");

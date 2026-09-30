@@ -228,6 +228,12 @@ public:
 
     void disconnect(){ connect_requested_ = false; }
 
+    // 省電力モード(実機はCYW43のPM設定)。PCでは覚えるだけ(テストや表示で確かめられるように)
+    void lowPowerMode(){ low_power_mode_ = 2; }
+    void defaultLowPowerMode(){ low_power_mode_ = 1; }
+    void noLowPowerMode(){ low_power_mode_ = 0; }
+    int  lowPowerModeState() const { return low_power_mode_; } // 0=高性能, 1=既定, 2=積極的な省電力
+
     int status(){
         PicoOsWifiHost::LoadConfigOnce();
         if(!connect_requested_) return WL_DISCONNECTED;
@@ -280,6 +286,7 @@ public:
 private:
     bool connect_requested_ = false;
     bool scan_done_ = false;
+    int  low_power_mode_ = 1;
 };
 inline WiFiClassPC WiFi;
 

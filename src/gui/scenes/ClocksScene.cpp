@@ -1,4 +1,5 @@
 #include "gui/scenes/ClocksScene.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Time_Functions.hpp"
@@ -517,6 +518,9 @@ void ClocksScene::onEnter(){
 }
 
 void ClocksScene::onUpdate(){
+    //タイマーが鳴っている間は画面を戻して見せる(鳴る前のスリープ中は時間だけ進めておく)
+    if(this->timer_state == RunState::Finished) PowerFunctions::KeepAwake();
+
     this->refresh_time();
 
     //見えていなくても時間は進める。タブを切り替えている間に止まってしまっては

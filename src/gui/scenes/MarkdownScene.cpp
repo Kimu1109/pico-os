@@ -1,4 +1,5 @@
 #include "gui/scenes/MarkdownScene.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Config_Functions.hpp"
@@ -141,6 +142,9 @@ void MarkdownScene::onExit(){
 }
 
 void MarkdownScene::onUpdate(){
+    //取得中はスリープさせない(Wi-Fiの省電力で通信が遅くなるため)
+    if(phase != Phase::Idle || searching) PowerFunctions::KeepAwake();
+
     //前のフレームで閉じたダイアログの跡を描き直させてから次を開く(Pendingの説明を参照)
     if(pending != Pending::None){
         const Pending todo = pending;

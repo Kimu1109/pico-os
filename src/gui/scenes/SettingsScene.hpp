@@ -76,6 +76,11 @@ class SettingsScene : public Scene {
         int  brightness_applied = -1;
         bool brightness_dirty   = false;
 
+        // スリープまでの時間(display.cfgの sleep-timeout)。項目の並びはSettingsScene.cppのkSleepPresetsSec
+        Label<PICO_STR_S>* sleep_title          = nullptr;
+        DropdownMenu*      sleep_dropdown       = nullptr;
+        int                sleep_selected_index = -1; // onUpdate()での変化検出用
+
         Checkbox*          run_test_checkbox    = nullptr;
         Label<PICO_STR_M>* run_test_note        = nullptr;
 
@@ -117,7 +122,7 @@ class SettingsScene : public Scene {
         int tz_selected_index = -1; // onUpdate()での変化検出用
 
         constexpr static int MARGIN     = 3;
-        constexpr static int ROW_H      = 26; // 9行(音量・明るさを含む)を画面へ収めるため30から詰めた
+        constexpr static int ROW_H      = 24; // 10行(音量・明るさ・スリープを含む)を画面へ収めるため30から詰めた
         constexpr static int EDIT_BTN_W = 48;
         constexpr static int EDIT_BTN_H = 20;
 
@@ -138,6 +143,7 @@ class SettingsScene : public Scene {
         void refreshHomeLabel();
         void updateVolume();
         void updateBrightness();
+        void updateSleep();
 
         // InputDialogを1つnewして開く。閉じたらcommitEdit()へ渡してから破棄する
         void openEditDialog(EditField field, const char* label_text, const char* prefill);

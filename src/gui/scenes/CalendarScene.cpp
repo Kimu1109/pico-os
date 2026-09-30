@@ -1,4 +1,5 @@
 #include "gui/scenes/CalendarScene.hpp"
+#include "functions/Power_Functions.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
@@ -579,6 +580,9 @@ void CalendarScene::refreshSyncButton(){
 }
 
 void CalendarScene::onUpdate(){
+    //取得中はスリープさせない(Wi-Fiの省電力で通信が遅くなるため)
+    if(this->sync.state() == CalendarSync::State::Running) PowerFunctions::KeepAwake();
+
     if(this->pending_add_url_dialog){
         this->pending_add_url_dialog = false;
         this->openAddSourceUrl();

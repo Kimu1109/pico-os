@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <type_traits>
 static inline unsigned long millis(){ return 0; }
+static inline void delay(unsigned long){}
 static inline unsigned long micros(){ return 0; }
 #define LED_BUILTIN 0
 

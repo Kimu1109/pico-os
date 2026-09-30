@@ -13,9 +13,12 @@ namespace {
     uint8_t       normal_brightness = DisplayFunctions::kDefaultBrightness;
     bool          auto_dim_enabled  = true;
     bool          is_dimmed         = false;
+    bool          is_sleeping       = false;
     unsigned long last_activity_ms  = 0;
 
     void ApplyEffectiveBrightness(){
+        //スリープ中はバックライトを消したまま(起きるときにSetSleeping(false)が今の値へ戻す)
+        if(is_sleeping) return;
         if(is_dimmed){
             const uint8_t dim = (DisplayFunctions::kDimBrightness < normal_brightness)
                 ? DisplayFunctions::kDimBrightness : normal_brightness;
@@ -56,6 +59,7 @@ void DisplayFunctions::Setup(){
     normal_brightness = kDefaultBrightness;
     auto_dim_enabled  = true;
     is_dimmed         = false;
+    is_sleeping       = false;
 
     LoadConfig();
     if(normal_brightness < kMinBrightness) normal_brightness = kMinBrightness;
@@ -95,7 +99,7 @@ void DisplayFunctions::SetBrightness(int percent){
     if(percent < (int)kMinBrightness) percent = (int)kMinBrightness;
     if(percent > 100) percent = 100;
     normal_brightness = (uint8_t)percent;
-    if(!is_dimmed) PICO_GFX::SetBrightness(normal_brightness);
+    if(!is_dimmed && !is_sleeping) PICO_GFX::SetBrightness(normal_brightness);
 }
 
 bool DisplayFunctions::GetAutoDimEnabled(){
@@ -113,4 +117,25 @@ void DisplayFunctions::SetAutoDimEnabled(bool enabled){
 
 bool DisplayFunctions::IsDimmed(){
     return is_dimmed;
+}
+
+void DisplayFunctions::SetSleeping(bool sleeping){
+    if(sleeping == is_sleeping) return;
+    is_sleeping = sleeping;
+    if(!OSData::lcd) return;
+
+    if(sleeping){
+        //先にバックライトを消してからパネルを休ませる(lcd->sleep()も明るさ0を設定する)
+        OSData::lcd->sleep();
+    }else{
+        OSData::lcd->wakeup();
+        //ILI9341/ST7789はSLPOUTから次のコマンドまで120ms空ける必要がある
+        //(LovyanGFXのPanel_LCD::setSleep()は待たない)。起きるときの1回だけなので待つ
+        delay(120);
+        ApplyEffectiveBrightness();
+    }
+}
+
+bool DisplayFunctions::IsSleeping(){
+    return is_sleeping;
 }

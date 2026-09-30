@@ -27,7 +27,7 @@ Raspberry Pi Pico 2 W (RP2350, `rpipico2w`) 上で動く自作タッチGUI OS。
 | SDカード | SPI1専用(SdFat) |
 | SPI0(TFT+タッチ共有) | SCK=18, MOSI=19, MISO=16 / TFT: CS=17, DC=20, RST=21 / TOUCH: CS=13, IRQ=9 |
 | SPI1(SD専用) | CS=15, SCK=10, MOSI=11, MISO=12, 10MHz |
-| バックライト | TFT_LED=22 |
+| バックライト | TFT_LED=22(PWM調光。LovyanGFXの`Light_PWM`、PWMスライス3のチャンネルA) |
 | 音声(I2S) | MAX98357A: BCLK=2, LRCLK=3(=BCLK+1固定), DIN=4 / 検出=5(アンプ側でGND、内部プルアップ) / 休止(SD)=6(任意)。VINは5V(VBUS/VSYS) |
 | 外部コントローラー(予定) | Wiiクラシックコントローラー(I2C0: SDA=GP0, SCL=GP1、3.3V)。**まだ配線もコードも無い**。今はUSBシリアル経由のPCのキーボードで代用(下記「外部コントローラー」) |
 | TFT_MAX_SPEED | 80MHz |
@@ -125,7 +125,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 
 | モジュール | 役割 |
 |---|---|
-| GFX_Functions | LovyanGFX初期化、ダーティリージョン管理(`dirtyRects`)、`FlushDirty()`で差分描画。`SetBrightness()`(下記「画面の明るさ調整と自動調光」参照)も持つ |
+| GFX_Functions | LovyanGFX初期化、ダーティリージョン管理(`dirtyRects`)、`FlushDirty()`で差分描画。`SetBrightness()`(バックライトのPWM調光。下記「画面の明るさ調整と自動調光」参照)も持つ |
 | Display_Functions | 画面の明るさ(0〜100)の管理と、無操作が続いたときの自動調光。下記「画面の明るさ調整と自動調光」参照 |
 | Widget_Functions | ウィジェット/ダイアログの登録・削除・毎フレーム更新・当たり判定の中枢 |
 | Touch_Functions | XPT2046からのタッチ座標取得 |
@@ -162,27 +162,35 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 
 SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、この節にだけ残す)。
 
-- **明るさの実体はバックライトのPWM制御ではなく、`frame`(4bppパレットスプライト)のパレット16色を
-  `PICO_GFX::COLORS[]`基準で暗くする「ソフト輝度」**(`PICO_GFX::SetBrightness(percent)`)。
-  `TFT_LED`(GP22)は`GFX_Functions::Setup()`で相変わらず`digitalWrite(HIGH)`固定のままで触っていない。
-  **理由は主にテスト容易性**: パレット走査はPC/Webビルドでもそのまま効くので`--shot`で見た目を確認できるが、
-  実機のバックライトPWM(`lgfx::Light_PWM`を`LGFX_Config.hpp`へ足す方式)はこのリモート環境に
-  RP2350の実機ビルド手段が無く検証できない。**実機での省電力効果(バックライト自体を暗くする)は
-  無い**(パレットが暗くなるだけで消費電力は変わらない)。実機のバックライトPWM化は将来の拡張候補として残す。
-  `CanvasRaster`等の自前スプライト+自前パレットを持つウィジェット(ペイント/スクラッチパッド等)は
-  この経路の対象外(通常の画面・ダイアログ・ステータスバーは`frame`のパレットを直接使うため、
-  それらは正しく暗くなる)。
+- **明るさの実体はバックライト(`TFT_LED`=GP22)のPWM調光**(`PICO_GFX::SetBrightness(percent)` →
+  `OSData::lcd->setBrightness()` → LovyanGFXの`lgfx::Light_PWM`)。`LGFX_Config.hpp`が
+  `Light_PWM`を`_panel_instance.setLight()`へ付けている(`pin_bl=TFT_LED`、`pwm_channel=TFT_LED&1`=0)。
+  **2026-09-30にパレット減光(frameのパレット16色を暗くする「ソフト輝度」)から置き換えた**。
+  旧方式は実機の消費電力が変わらず、`CanvasRaster`等の自前パレットも対象外だったため。
+  今は描画内容に一切触れないので、全ウィジェットが一様に暗くなり、設定直後の全画面再描画も要らない。
+  - **LovyanGFXのrp2040の`Light_PWM`はPWMのwrapを100に固定している**(clkdiv 50、RP2350の150MHzで
+    約30kHz。可聴域の外)。だから明るさ0〜100がそのままデューティ比(%)になる。
+    レベル100はwrap100でも「101段中の100段(約99%)」なので、**百分率の100だけ255を渡して常時HIGH**にする
+    (`SetBrightness()`)。
+  - **`GFX_Functions::Setup()`で`TFT_LED`へ`pinMode()`/`digitalWrite()`をしてはいけない**(端子がPWMからSIOへ戻り
+    調光が効かなくなる。以前あった`digitalWrite(22, HIGH)`は削除済み)。GP22のPWMスライス3
+    (GP22/GP23)を他でPWMに使わないこと(wrap/clkdivがスライス単位のため。今はI2SがPIOで、PWMの利用者は他に無い)。
+  - **PC/Webビルド**: `Panel_sdl_SpiWait::setBrightness()`が同じ0〜100を受け取り、表示用SDLテクスチャの色の
+    掛け率(`SDL_SetTextureColorMod`)にする。`readRect()`(`--shot`)には写らないので、`main_pc.cpp`の
+    `writeScreenshot()`が同じ掛け率を掛けて書き出す(バックライトは液晶のピクセルの中身ではないため)。
+    テクスチャは描画スレッドが作り直すことがあるので、書き込みのたびに軽い比較で当て直している。
 - **`DisplayFunctions`が「今どの明るさを見せるか」の方針を持ち、`PICO_GFX::SetBrightness()`は
-  値をパレットへ適用するだけの機構**という役割分担(`Sound_Functions`が方針、`ChipSynth`が機構、
+  値をバックライトへ適用するだけの機構**という役割分担(`Sound_Functions`が方針、`ChipSynth`が機構、
   という分け方と同じ形)。
 - 設定は`/sys/display.cfg`(無くてよい): `brightness = 0〜100`(既定100)、`auto-dim = true|false`(既定true)。
   `SettingsScene`が音量(`sound.cfg`)と全く同じ流儀(ドラッグ中は`SetBrightness()`で即反映、
   指を離したときに1回だけ`SetValue()`で書く)で編集できる。**画面が真っ黒になり操作不能になるのを
   防ぐため、`kMinBrightness=10`未満には設定できない**(スライダーの最小値もここに合わせてある)。
 - **自動調光**: `OSData::isTouched`と`PadFunctions::IsDown(kAllButtons)`のどちらも
-  `kIdleTimeoutMs`(既定30秒)の間ずっと無ければ`kDimBrightness`(既定40。パレットのRGB値を
-  直接減らす方式は人の目の感度に対して値の見た目以上に暗く感じるため、当初の15から
-  「真っ黒にしか見えない」との指摘を受けて上げた)まで即座に暗くする
+  `kIdleTimeoutMs`(既定30秒)の間ずっと無ければ`kDimBrightness`(既定40。パレット減光の時代に
+  「15だと真っ黒にしか見えない」との指摘を受けて上げた値をそのまま引き継いだ。バックライトのPWMは
+  光量そのものを絞るので同じ数値でもパレット減光より明るく見えるはずで、**暗さが足りなければ
+  実機で見て下げる**)まで即座に暗くする
   (フェードはしない。`ClocksScene`と同じ`millis()`差分の考え方)。触れる/ボタンを押すと
   即座に通常の明るさへ戻る。設定側の`SettingsScene`の自動調光チェックボックスは
   `Checkbox`の既存の当たり判定の都合上(`causeOnPressStart()`がアイコン部分の24px幅しか
@@ -192,8 +200,12 @@ SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、
 - ホストテストは無し(`GFX_Functions`/`Touch_Functions`と同じく実描画・実タッチに強く依存するため、
   この2つと同様ASanホストテストの対象外にしてある)。検証はPCビルドの`--shot`/`--tap`で行った:
   明るさスライダーで画面全体が実際に暗くなること、無操作からの自動調光・タッチでの復帰、
-  `display.cfg`への書き込みと再起動後の読み込みを確認済み。**実機での見え方(ソフト輝度なので
-  正しく暗く見えるはず)・自動調光の30秒閾値の実測は未確認**。
+  `display.cfg`への書き込みと再起動後の読み込みを確認済み。`--shot`は`readRect()`にバックライトが
+  写らないため`main_pc.cpp`が掛け率を掛けて書き出す(明るさ30で平均輝度237→約71、自動調光後は約95=40%を確認)。
+  **実機(RP2350の`Light_PWM`でGP22を駆動)は未確認**: このリモート環境にはRP2350のボード定義・実機ビルド手段が無く、
+  実機側のコード(`LGFX_Config.hpp`の`Light_PWM`設定)はコンパイルすらできていない。実機ビルドで
+  `lgfx::Light_PWM`の未解決や、明るさが効かない/ちらつく場合は、まずここ(pin_bl/pwm_channel、
+  他コードがGP22のPWMスライスを使っていないか)を疑うこと。自動調光の30秒閾値の実測も未確認。
 
 ### バッテリー残量表示(`src/functions/Battery_Functions`) (2026-09-28)
 

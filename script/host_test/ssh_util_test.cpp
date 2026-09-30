@@ -5,6 +5,8 @@
 //   - Base64 の往復
 //   - OpenSSH形式の秘密鍵を読める / パスフレーズ付き・RSA・壊れた鍵を断る
 //   - ホスト鍵の指紋が ssh-keygen -l と同じ文字列になる
+//   - 鍵ファイルの暗号化: 平文なら読んだときに enc1: の形へ書き直す・2回目は書き直さない・壊れた/
+//     パスフレーズ付きの鍵は書き換えない
 //   - known_hosts の照合(22番は名前だけ・それ以外は[host]:port・カンマ区切り・ハッシュ化された行は無視)
 #include "ssh/Ssh_Sha256.hpp"
 #include "ssh/Ssh_Util.hpp"
@@ -122,9 +124,64 @@ int main(){
 
     printf("===== 鍵ファイル・known_hosts(SD) =====\n");
     OSData::SD_usable = true;
-    HostSd::files["/sys/ssh/id_ed25519"] = kTestKey;
-    CHECK(SshUtil::LoadPrivateKey("/sys/ssh/id_ed25519", secret, pub) == SshUtil::KeyResult::Ok);
     CHECK(SshUtil::LoadPrivateKey("/sys/ssh/missing", secret, pub) == SshUtil::KeyResult::NotFound);
+
+    printf("===== 鍵ファイルの暗号化(平文なら読んだときに書き直す) =====\n");
+    {
+        const char* kp = "/sys/ssh/id_ed25519";
+        uint8_t want_secret[64], want_pub[32];
+        SshUtil::ParsePrivateKey(kTestKey, strlen(kTestKey), want_secret, want_pub);
+
+        HostSd::files[kp] = kTestKey;
+        SshUtil::KeyRewrite converted = SshUtil::KeyRewrite::None;
+        CHECK(SshUtil::LoadPrivateKey(kp, secret, pub, &converted) == SshUtil::KeyResult::Ok);
+        CHECK(converted == SshUtil::KeyRewrite::Encrypted);
+        CHECK(memcmp(secret, want_secret, 64) == 0 && memcmp(pub, want_pub, 32) == 0);
+        const std::string enc = HostSd::files[kp];
+        printf("  %.40s...\n", enc.c_str());
+        CHECK(enc.compare(0, 5, "enc1:") == 0);
+        CHECK(enc.find("BEGIN") == std::string::npos);
+        CHECK(enc.find("OPENSSH") == std::string::npos);
+        CHECK(HostSd::files.count("/sys/ssh/id_ed25519.tmp") == 0); // 一時ファイルは残らない
+        CHECK(SshUtil::IsEncryptedKeyText(enc.c_str(), enc.size()));
+        CHECK(!SshUtil::IsEncryptedKeyText(kTestKey, strlen(kTestKey)));
+
+        // 2回目は暗号化された形から読み、書き直さない
+        memset(secret, 0, sizeof(secret));
+        CHECK(SshUtil::LoadPrivateKey(kp, secret, pub, &converted) == SshUtil::KeyResult::Ok);
+        CHECK(converted == SshUtil::KeyRewrite::None);
+        CHECK(memcmp(secret, want_secret, 64) == 0 && memcmp(pub, want_pub, 32) == 0);
+        CHECK(HostSd::files[kp] == enc);
+
+        // 先頭に空白や改行があっても暗号化されたものと分かる
+        HostSd::files[kp] = "\n  " + enc;
+        CHECK(SshUtil::LoadPrivateKey(kp, secret, pub, &converted) == SshUtil::KeyResult::Ok && converted == SshUtil::KeyRewrite::None);
+
+        // 目印の部分を書き換えると(=別の鍵kKeyで作られた/壊れた)壊れた扱い
+        std::string bad = enc;
+        bad[6] = bad[6] == '0' ? '1' : '0';
+        HostSd::files[kp] = bad;
+        CHECK(SshUtil::LoadPrivateKey(kp, secret, pub, &converted) == SshUtil::KeyResult::Broken);
+        CHECK(HostSd::files[kp] == bad); // 壊れた鍵を勝手に書き換えない
+        // 途中で切れている
+        HostSd::files[kp] = enc.substr(0, 100);
+        CHECK(SshUtil::LoadPrivateKey(kp, secret, pub, &converted) == SshUtil::KeyResult::Broken);
+
+        // パスフレーズ付きの鍵は使えないので、そのまま残す
+        HostSd::files[kp] = kEncryptedKey;
+        CHECK(SshUtil::LoadPrivateKey(kp, secret, pub, &converted) == SshUtil::KeyResult::Encrypted);
+        CHECK(converted == SshUtil::KeyRewrite::None && HostSd::files[kp] == kEncryptedKey);
+
+        // 暗号化/復号の往復
+        char line[SshUtil::kEncryptedKeyCap];
+        CHECK(SshUtil::EncryptKey(want_secret, line, sizeof(line)));
+        CHECK(SshUtil::DecryptKey(line, strlen(line), secret, pub) == SshUtil::KeyResult::Ok);
+        CHECK(memcmp(secret, want_secret, 64) == 0);
+        CHECK(!SshUtil::EncryptKey(want_secret, line, sizeof(line) - 1)); // 置き場が足りなければ失敗
+        CHECK(SshUtil::DecryptKey(kTestKey, strlen(kTestKey), secret, pub) == SshUtil::KeyResult::NotFound);
+
+        HostSd::files[kp] = kTestKey;
+    }
 
     const char* kh = "/sys/ssh/known_hosts";
     HostSd::files[kh] =

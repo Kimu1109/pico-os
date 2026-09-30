@@ -1,5 +1,6 @@
 #include "ssh/Ssh_Util.hpp"
 #include "ssh/Ssh_Sha256.hpp"
+#include "util/Secret_Cipher.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>
@@ -201,7 +202,117 @@ SshUtil::KeyResult SshUtil::ParseDecoded(const uint8_t* raw, int n, uint8_t secr
     return KeyResult::Ok;
 }
 
-SshUtil::KeyResult SshUtil::LoadPrivateKey(const char* path, uint8_t secret[64], uint8_t pub[32]){
+namespace {
+    const char kKeyTag[] = "pico-ssh-ed25519:";
+
+    const char* SkipSpace(const char* text, size_t& len){
+        while(len > 0 && (*text == ' ' || *text == '\t' || *text == '\r' || *text == '\n')){
+            text++;
+            len--;
+        }
+        return text;
+    }
+
+    int HexVal(char c){
+        if(c >= '0' && c <= '9') return c - '0';
+        if(c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if(c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    }
+}
+
+bool SshUtil::IsEncryptedKeyText(const char* text, size_t len){
+    text = SkipSpace(text, len);
+    return len >= 5 && memcmp(text, "enc1:", 5) == 0;
+}
+
+bool SshUtil::EncryptKey(const uint8_t secret[64], char* out, size_t outCap){
+    static const char* d = "0123456789abcdef";
+    char plain[sizeof(kKeyTag) + 128];
+    memcpy(plain, kKeyTag, sizeof(kKeyTag) - 1);
+    char* h = plain + sizeof(kKeyTag) - 1;
+    for(int i = 0; i < 64; i++){
+        *h++ = d[secret[i] >> 4];
+        *h++ = d[secret[i] & 15];
+    }
+    *h = '\0';
+    const bool ok = PICO_Secret::Encrypt(kKeyPurpose, plain, out, outCap);
+    memset(plain, 0, sizeof(plain));
+    return ok;
+}
+
+SshUtil::KeyResult SshUtil::DecryptKey(const char* text, size_t len, uint8_t secret[64], uint8_t pub[32]){
+    text = SkipSpace(text, len);
+    if(len < 5 || memcmp(text, "enc1:", 5) != 0) return KeyResult::NotFound;
+    //1行目だけ(末尾の改行を落とす)
+    size_t n = 0;
+    while(n < len && text[n] != '\r' && text[n] != '\n') n++;
+    char line[kEncryptedKeyCap];
+    if(n >= sizeof(line)) return KeyResult::Broken;
+    memcpy(line, text, n);
+    line[n] = '\0';
+
+    char plain[PICO_Secret::kMaxPlainBytes + 1];
+    const size_t tag = sizeof(kKeyTag) - 1;
+    KeyResult r = KeyResult::Broken;
+    //鍵(kKey)が違うファームで作られたファイルは、復号しても目印が合わないので壊れた扱いになる
+    if(PICO_Secret::Decrypt(kKeyPurpose, line, plain, sizeof(plain)) &&
+       strlen(plain) == tag + 128 && memcmp(plain, kKeyTag, tag) == 0){
+        r = KeyResult::Ok;
+        for(int i = 0; i < 64; i++){
+            const int hi = HexVal(plain[tag + i * 2]);
+            const int lo = HexVal(plain[tag + i * 2 + 1]);
+            if(hi < 0 || lo < 0){
+                r = KeyResult::Broken;
+                break;
+            }
+            secret[i] = (uint8_t)((hi << 4) | lo);
+        }
+        if(r == KeyResult::Ok) memcpy(pub, secret + 32, 32);
+    }
+    memset(plain, 0, sizeof(plain));
+    memset(line, 0, sizeof(line));
+    return r;
+}
+
+namespace {
+    // 平文の鍵ファイルを暗号化した形で書き直す。一時ファイルへ書き、読み戻して同じ鍵に戻ることを
+    // 確かめてから差し替える(途中で失敗しても元の鍵ファイルは壊さない)
+    bool RewriteEncrypted(const char* path, const uint8_t secret[64]){
+        char enc[SshUtil::kEncryptedKeyCap + 1];
+        if(!SshUtil::EncryptKey(secret, enc, sizeof(enc) - 1)) return false;
+        const size_t n = strlen(enc);
+        enc[n] = '\n';
+
+        char tmp[128];
+        if(snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= (int)sizeof(tmp)) return false;
+        OSData::SD.remove(tmp);
+        FsFile f = OSData::SD.open(tmp, O_WRONLY | O_CREAT | O_TRUNC);
+        if(!f) return false;
+        const bool wrote = f.write((const uint8_t*)enc, n + 1) == n + 1;
+        f.close();
+
+        bool ok = wrote;
+        if(ok){
+            //読み戻して確かめる
+            char back[SshUtil::kEncryptedKeyCap + 8];
+            FsFile r = OSData::SD.open(tmp, O_RDONLY);
+            int got = r ? r.read((uint8_t*)back, sizeof(back)) : -1;
+            if(r) r.close();
+            uint8_t s2[64], p2[32];
+            ok = got > 0 && SshUtil::DecryptKey(back, (size_t)got, s2, p2) == SshUtil::KeyResult::Ok &&
+                 memcmp(s2, secret, 64) == 0;
+            memset(s2, 0, sizeof(s2));
+        }
+        ok = ok && OSData::SD.remove(path) && OSData::SD.rename(tmp, path);
+        if(!ok) OSData::SD.remove(tmp);
+        memset(enc, 0, sizeof(enc));
+        return ok;
+    }
+}
+
+SshUtil::KeyResult SshUtil::LoadPrivateKey(const char* path, uint8_t secret[64], uint8_t pub[32], KeyRewrite* rewrite){
+    if(rewrite) *rewrite = KeyRewrite::None;
     if(!OSData::SD_usable || !OSData::SD.exists(path)) return KeyResult::NotFound;
     FsFile f = OSData::SD.open(path, O_RDONLY);
     if(!f) return KeyResult::NotFound;
@@ -213,7 +324,19 @@ SshUtil::KeyResult SshUtil::LoadPrivateKey(const char* path, uint8_t secret[64],
     }
     const int n = f.read((uint8_t*)text, kTextCap);
     f.close();
-    const KeyResult r = n > 0 ? ParsePrivateKey(text, (size_t)n, secret, pub) : KeyResult::Broken;
+
+    KeyResult r = KeyResult::Broken;
+    if(n > 0 && IsEncryptedKeyText(text, (size_t)n)){
+        r = DecryptKey(text, (size_t)n, secret, pub);
+    }else if(n > 0){
+        r = ParsePrivateKey(text, (size_t)n, secret, pub);
+        //平文の鍵だった。次からはSDに平文で残らないよう、暗号化して書き直す
+        if(r == KeyResult::Ok && rewrite){
+            *rewrite = RewriteEncrypted(path, secret) ? KeyRewrite::Encrypted : KeyRewrite::Failed;
+        }else if(r == KeyResult::Ok){
+            RewriteEncrypted(path, secret);
+        }
+    }
     memset(text, 0, kTextCap);
     free(text);
     return r;

@@ -230,9 +230,17 @@ SshClient* SshScene::newClient(){
 
     //公開鍵(あれば)。踏み台と相手の両方で同じ鍵を使う
     uint8_t secret[64], pub[32];
-    switch(SshUtil::LoadPrivateKey(PICO_Path::FILE::SSH_ID_ED25519, secret, pub)){
+    SshUtil::KeyRewrite rewrite = SshUtil::KeyRewrite::None;
+    switch(SshUtil::LoadPrivateKey(PICO_Path::FILE::SSH_ID_ED25519, secret, pub, &rewrite)){
         case SshUtil::KeyResult::Ok:
             c->setIdentity(secret, pub);
+            if(rewrite == SshUtil::KeyRewrite::Encrypted){
+                this->say("\x1b[93m秘密鍵を暗号化して保存し直しました\x1b[0m\r\n");
+                LOG_APP_MSG("SSH: 秘密鍵を暗号化して保存し直しました");
+            }else if(rewrite == SshUtil::KeyRewrite::Failed){
+                this->say("\x1b[93m秘密鍵を暗号化して保存し直せませんでした(平文のままです)\x1b[0m\r\n");
+                LOG_APP_WARN("SSH: 秘密鍵を暗号化して保存し直せませんでした");
+            }
             break;
         case SshUtil::KeyResult::NotFound:
             break;

@@ -25,7 +25,25 @@ namespace SshUtil {
     enum class KeyResult { Ok, NotFound, Broken, Encrypted, Unsupported };
     // secret は Monocypher の crypto_ed25519_sign が取る64バイト(種32 + 公開鍵32)
     KeyResult ParsePrivateKey(const char* text, size_t len, uint8_t secret[64], uint8_t pub[32]);
-    KeyResult LoadPrivateKey(const char* path, uint8_t secret[64], uint8_t pub[32]);
+    // 鍵ファイルを読む。**平文のOpenSSH形式なら、読めた時点で暗号化して同じ場所へ書き直す**
+    // (PCで作った鍵をSDへそのまま置けばよく、次からは暗号化された形で残る)。
+    // 書き直した結果は *rewrite へ(書き直しに失敗しても鍵は使える。平文のまま残る)
+    enum class KeyRewrite { None, Encrypted, Failed };
+    KeyResult LoadPrivateKey(const char* path, uint8_t secret[64], uint8_t pub[32], KeyRewrite* rewrite = nullptr);
+
+    // ---- 鍵ファイルの暗号化(Wi-Fiのパスワードと同じ PICO_Secret。util/Secret_Cipher.hpp) ----
+    // 中身は "enc1:" + 16進の1行。暗号化するのは "pico-ssh-ed25519:" + 秘密鍵64バイトの16進
+    // (公開鍵は秘密鍵の後半32バイトなので別に持たない)。
+    // **守れるのは「SDだけを落とした/見られた」場合だけ**(鍵はファームウェアに焼かれた固定値。
+    // Secret_Cipher.hpp の冒頭の注意を参照)。
+    constexpr const char* kKeyPurpose = "ssh-id-ed25519";
+    // 暗号化した1行(終端の'\0'込み。outは kEncryptedKeyCap 以上)
+    constexpr size_t kEncryptedKeyCap = 5 + (17 + 128) * 2 + 1;
+    bool EncryptKey(const uint8_t secret[64], char* out, size_t outCap);
+    // text が暗号化された鍵ファイルなら読んで Ok、"enc1:" で始まらなければ NotFound(=暗号化されていない)
+    KeyResult DecryptKey(const char* text, size_t len, uint8_t secret[64], uint8_t pub[32]);
+    // 鍵ファイルの中身が暗号化されたものか(先頭の空白を飛ばして "enc1:" で始まるか)
+    bool IsEncryptedKeyText(const char* text, size_t len);
     // ParsePrivateKey の下請け(Base64を解いた後の "openssh-key-v1" の中身を読む)
     KeyResult ParseDecoded(const uint8_t* raw, int n, uint8_t secret[64], uint8_t pub[32]);
 

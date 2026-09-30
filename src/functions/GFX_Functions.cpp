@@ -33,37 +33,27 @@ void PICO_GFX::Setup() {
     OSData::frame = frame;
     MarkDirty({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
 
-    pinMode(22, OUTPUT); //LED ON
-    digitalWrite(22, HIGH);
+    //バックライト(TFT_LED)はLGFXのLight_PWMがinit()で初期化済み。ここでpinMode()/digitalWrite()を
+    //すると端子がPWMからSIOへ戻って調光が効かなくなるので触らない(明るさはSetBrightness()で決める)
 
     isDirtyDeactivates = false;
 
     LOG_SYS_OK("GFX Setup has succeeded!");
 }
 
-// 画面の明るさ: バックライト(TFT_LED)はハードウェア側の切り替えのみで、明るさの調整は
-// frameのパレット16色をCOLORS[]基準で暗くする形にしてある(PC/Webでもパレット表示なので
-// そのまま効き、実機とPCで同じ経路を通せる)。CanvasRaster等が自前のスプライト+パレットを
-// 持つ箇所は対象外(このOSの標準ウィジェット・ダイアログはframeの16色を直接使うため、
-// 通常の画面はこれで十分暗くなる)。
+// 画面の明るさ: バックライト(TFT_LED)のPWMデューティ比を変える。frameのパレットには触れないので、
+// CanvasRaster等の自前スプライトを含め画面全体が一様に暗くなり、再描画も要らない。
+// LovyanGFXのrp2040のLight_PWMはPWMのwrapを100に固定している(カウンタは0〜100の101段)ため、
+// 0〜99はそのままデューティ比(%)になり、100以上は常時HIGH。百分率の100だけ255を渡して
+// 「101段中の100段(約99%)」ではなく完全に点灯させる。
+// PC/Webビルドは同じ0〜100の値をSDLのテクスチャの色の掛け率へ変える(Panel_sdl_SpiWait参照)。
 void PICO_GFX::SetBrightness(uint8_t percent) {
     if(percent > 100) percent = 100;
     currentBrightness = percent;
 
-    if(!OSData::frame) return; // Setup()より前(呼ばれない想定だが念のため)
+    if(!OSData::lcd) return; // Setup()より前(呼ばれない想定だが念のため)
 
-    for(int i = 0; i < 16; i++){
-        const uint32_t rgb888 = lgfx::convert_to_rgb888(COLORS[i]);
-        uint8_t r = (uint8_t)((rgb888 >> 16) & 0xFF);
-        uint8_t g = (uint8_t)((rgb888 >> 8)  & 0xFF);
-        uint8_t b = (uint8_t)(rgb888 & 0xFF);
-        r = (uint8_t)(((uint32_t)r * percent) / 100);
-        g = (uint8_t)(((uint32_t)g * percent) / 100);
-        b = (uint8_t)(((uint32_t)b * percent) / 100);
-        OSData::frame->setPaletteColor(i, r, g, b);
-    }
-
-    MarkDirty({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
+    OSData::lcd->setBrightness(percent >= 100 ? 255 : percent);
 }
 
 uint8_t PICO_GFX::GetBrightness() {

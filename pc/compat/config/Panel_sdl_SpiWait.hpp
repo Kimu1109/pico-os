@@ -101,6 +101,21 @@ namespace PcSpiWait {
 
 // 書き込み系の関数だけを包んで、転送量に応じた待ちを入れる。描画そのものはPanel_sdlに任せる
 class Panel_sdl_SpiWait : public lgfx::Panel_sdl {
+    // texture(SDLが描画スレッドで作る。作り直されることもある)へ掛け率を当て直す。
+    // 書き込みのたびに呼ぶので、テクスチャが変わっていなければ何もしない軽い比較だけにしてある
+    void applyBacklight(){
+        SDL_Texture* tex = monitor.texture;
+        if(!tex || (tex == backlight_texture && backlight_applied == backlight_percent)) return;
+        const uint8_t v = (uint8_t)(backlight_percent * 255 / 100);
+        SDL_SetTextureColorMod(tex, v, v, v);
+        backlight_texture = tex;
+        backlight_applied = backlight_percent;
+    }
+
+    uint8_t backlight_percent = 100;
+    uint8_t backlight_applied = 255; // 未適用(ありえない値)
+    SDL_Texture* backlight_texture = nullptr;
+
 public:
     // 設定(環境変数)はここで読む。LGFXはグローバル初期化の時点で作られるが、
     // Webビルドはmain()の中でURLのクエリを環境変数へ置き直すので、それより後のinit()で読む
@@ -109,31 +124,47 @@ public:
         return lgfx::Panel_sdl::init(use_reset);
     }
 
+    // バックライトの代わり: 実機のLight_PWMと同じ0〜100(百分率。100以上は満光)を受け取り、
+    // 表示用テクスチャの色の掛け率にする。液晶のバックライトが光量そのものを絞るのと同じく、
+    // 描画済みの内容はそのままで画面全体が一様に暗くなる。
+    void setBrightness(uint8_t brightness) override {
+        backlight_percent = brightness > 100 ? 100 : brightness;
+        applyBacklight();
+        sdl_invalidate(); // 描画内容が変わらなくても次のフレームで描き直させる
+    }
+
     void drawPixelPreclipped(uint_fast16_t x, uint_fast16_t y, uint32_t rawcolor) override {
+        applyBacklight();
         lgfx::Panel_sdl::drawPixelPreclipped(x, y, rawcolor);
         PcSpiWait::Transfer(PcSpiWait::kWindowBits + PcSpiWait::PixelBits(1));
     }
     void writeFillRectPreclipped(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, uint32_t rawcolor) override {
+        applyBacklight();
         lgfx::Panel_sdl::writeFillRectPreclipped(x, y, w, h, rawcolor);
         PcSpiWait::Transfer(PcSpiWait::kWindowBits + PcSpiWait::PixelBits((uint64_t)w * h));
     }
     void setWindow(uint_fast16_t xs, uint_fast16_t ys, uint_fast16_t xe, uint_fast16_t ye) override {
+        applyBacklight();
         lgfx::Panel_sdl::setWindow(xs, ys, xe, ye);
         PcSpiWait::Transfer(PcSpiWait::kWindowBits);
     }
     void writeBlock(uint32_t rawcolor, uint32_t length) override {
+        applyBacklight();
         lgfx::Panel_sdl::writeBlock(rawcolor, length);
         PcSpiWait::Transfer(PcSpiWait::PixelBits(length));
     }
     void writeImage(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, lgfx::pixelcopy_t* param, bool use_dma) override {
+        applyBacklight();
         lgfx::Panel_sdl::writeImage(x, y, w, h, param, use_dma);
         PcSpiWait::Transfer(PcSpiWait::kWindowBits + PcSpiWait::PixelBits((uint64_t)w * h));
     }
     void writeImageARGB(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, lgfx::pixelcopy_t* param) override {
+        applyBacklight();
         lgfx::Panel_sdl::writeImageARGB(x, y, w, h, param);
         PcSpiWait::Transfer(PcSpiWait::kWindowBits + PcSpiWait::PixelBits((uint64_t)w * h));
     }
     void writePixels(lgfx::pixelcopy_t* param, uint32_t len, bool use_dma) override {
+        applyBacklight();
         lgfx::Panel_sdl::writePixels(param, len, use_dma);
         PcSpiWait::Transfer(PcSpiWait::PixelBits(len));
     }

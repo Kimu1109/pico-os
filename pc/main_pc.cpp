@@ -82,9 +82,16 @@ namespace {
             return false;
         }
 
+        // バックライトは液晶のピクセルの中身ではないのでreadRect()には写らない。
+        // 実際の画面(Panel_sdl_SpiWait::setBrightness()がテクスチャへ掛ける率)と同じ
+        // 百分率を掛けて、明るさの設定が--shotでも見えるようにする
+        const int backlight = OSData::lcd->getBrightness() >= 100 ? 100 : OSData::lcd->getBrightness();
+
         fprintf(fp, "P6\n%d %d\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT);
         for (const auto& c : pixels) {
-            fputc(c.R8(), fp); fputc(c.G8(), fp); fputc(c.B8(), fp);
+            fputc(c.R8() * backlight / 100, fp);
+            fputc(c.G8() * backlight / 100, fp);
+            fputc(c.B8() * backlight / 100, fp);
         }
         fclose(fp);
 

@@ -17,6 +17,7 @@
 class LGFX : public lgfx::LGFX_Device {
   lgfx::Panel_ILI9341 _panel_instance;
   lgfx::Bus_SPI       _bus_instance;
+  lgfx::Light_PWM     _light_instance; // バックライト(TFT_LED)のPWM調光
 public:
   LGFX(void) {
     auto cfg = _bus_instance.config();
@@ -36,6 +37,16 @@ public:
     pcfg.panel_height = SCREEN_HEIGHT;
     pcfg.bus_shared = true;
     _panel_instance.config(pcfg);
+
+    // バックライトのPWM調光。明るさは0〜100(百分率)がそのままデューティ比になる
+    // (LovyanGFXのrp2040実装はPWMのwrapを100に固定している。PICO_GFX::SetBrightness()参照)。
+    // TFT_LED(GP22)はPWMスライス3のチャンネルA(偶数ピン=A=0、奇数ピン=B=1)。
+    auto lcfg = _light_instance.config();
+    lcfg.pin_bl = TFT_LED;
+    lcfg.pwm_channel = TFT_LED & 1;
+    lcfg.invert = false;
+    _light_instance.config(lcfg);
+    _panel_instance.setLight(&_light_instance);
 
     setPanel(&_panel_instance);
   }

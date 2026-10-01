@@ -48,6 +48,13 @@ bool WavDecoder::open(const char* path, uint32_t out_rate){
     this->rate_ = this->data_start_ = this->data_size_ = this->data_left_ = 0;
     if(!OSData::SD_usable) return this->fail(Error::NoSd);
 
+    //reopen()は覚えているパスそのものを渡してくる(自分自身へのコピーは避ける)
+    if(path != this->path_){
+        this->path_[0] = '\0';
+        if(strlen(path) < sizeof(this->path_)) strcpy(this->path_, path);
+    }
+    this->out_rate_ = out_rate ? out_rate : 22050;
+
     this->f_ = OSData::SD.open(path, O_RDONLY);
     if(!this->f_) return this->fail(Error::OpenFailed);
     this->open_ = true;
@@ -61,6 +68,22 @@ bool WavDecoder::open(const char* path, uint32_t out_rate){
     this->ending_ = false;
     this->buf_pos_ = this->buf_len_ = 0;
     this->data_left_ = this->data_size_;
+    this->finished_ = false;
+    return true;
+}
+
+bool WavDecoder::seekMs(uint32_t ms){
+    if(!this->open_ && !this->reopen()) return false;
+    const uint32_t frames = this->data_size_ / this->block_;
+    uint64_t frame = (uint64_t)ms * this->rate_ / 1000;
+    if(frame >= frames) frame = frames > 0 ? frames - 1 : 0;
+    const uint32_t offset = (uint32_t)frame * this->block_;
+    if(!this->f_.seek(this->data_start_ + offset)) return false;
+    this->data_left_ = this->data_size_ - offset;
+    this->buf_pos_ = this->buf_len_ = 0;
+    this->frac_ = 0;
+    this->primed_ = false;
+    this->ending_ = false;
     this->finished_ = false;
     return true;
 }

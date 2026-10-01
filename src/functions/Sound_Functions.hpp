@@ -111,6 +111,14 @@ namespace SoundFunctions {
     bool MusicPlaying();
     // 最後に鳴らした曲の名前(#title。無ければファイル名)
     const char* MusicTitle();
+    // 一時停止/再開。曲が鳴っていなければfalse。止めている間も MusicPlaying() は true のまま。
+    // 再開は今の音符の途中ではなく次の音符から鳴る。新しく鳴らす/止めると解除される
+    bool MusicPause(bool pause);
+    bool MusicPaused();
+    // 鳴らし始めてからの時間(ms。一時停止中は進まない。鳴らす要求を2コア目が受け取るまでは0)
+    uint32_t MusicElapsedMs();
+    // 曲の長さ(ms)。L(ループ位置)がある曲は終わりが無く、*loops が true で、最初に戻るまでの長さを返す
+    uint32_t MusicTotalMs(bool* loops = nullptr);
 
     // ---- ゲームボーイの音(GBエミュ) ----
     // GbEmu::setAudioSink() へ渡す窓口。音源チップ(GbApu)は2コア目にあり、レジスタへの書き込みは
@@ -139,6 +147,17 @@ namespace SoundFunctions {
     bool WavPlaying();
     // 最後に鳴らしたWAVのファイル名
     const char* WavTitle();
+    // 一時停止/再開。WAVが鳴っていなければfalse。止めている間も WavPlaying() は true のまま。
+    // 新しく鳴らす/止めると解除される。止めている間はスリープに入ってよい(PowerFunctions)
+    bool WavPause(bool pause);
+    bool WavPaused();
+    // 再生位置と全体の長さ(ms)。ループ再生中の位置は 0〜長さ の中を巡る。
+    // 位置は2コア目が受け取った分を引いた値(I2Sのバッファ約23msぶん先を指す)
+    uint32_t WavPositionMs();
+    uint32_t WavDurationMs();
+    // 位置へ飛ぶ(読み込み済みの先読みは捨てて、その位置から読み直す)。
+    // 読み終えて止まった直後でも開き直して飛べる。止めた(WavStop)後や未再生ならfalse
+    bool WavSeekMs(uint32_t ms);
     // 読み込みが間に合わず途切れた回数
     uint32_t WavUnderruns();
 

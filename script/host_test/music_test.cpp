@@ -335,6 +335,56 @@ static void TestPlayer(){
         check(s.size() == 1 && s[0].start >= 5512 * 1 - 1 && s[0].start <= 5513 * 1 + 1,
               "返されたら次の音符から鳴らす(鳴りかけの音は鳴らし直さない)");
     }
+    printf("--- シーケンサー: 一時停止・経過時間・曲の長さ ---\n");
+    {
+        ChipSynth::Engine e(kRate); MusicPlayer p(kRate);
+        //4分音符4つ(テンポ120)= 2秒
+        const MmlResult r = Compile("A l4 a a a a");
+        p.start(e, buf, r.size);
+        std::vector<int16_t> v(kRate / 2);
+        p.render(e, v.data(), v.size());
+        check(p.elapsedMs() == 500, "経過時間はサンプルで数える(0.5秒)");
+        p.setPaused(e, true);
+        check(p.paused() && e.activeMask() == 0, "一時停止すると曲の音は止まる");
+        std::vector<int16_t> w(kRate);
+        p.render(e, w.data(), w.size());
+        check(Spans(w).empty() && p.elapsedMs() == 500 && p.playing(), "止めている間は無音で、時間も進まない");
+        p.setPaused(e, false);
+        std::vector<int16_t> x(kRate / 2);
+        p.render(e, x.data(), x.size());
+        check(p.elapsedMs() == 1000, "再開すると時間が進む");
+        //止めたのは2音目の頭(0.5秒)。止めた音は鳴らし直さず、次の音符(1.0秒)から鳴る
+        check(Spans(x).empty(), "再開しても止めた音は鳴らし直さない");
+        std::vector<int16_t> y(kRate / 4);
+        p.render(e, y.data(), y.size());
+        check(!Spans(y).empty(), "再開後の次の音符から鳴る");
+        //新しく始めると解除・経過は0から
+        p.setPaused(e, true);
+        p.start(e, buf, r.size);
+        check(!p.paused() && p.elapsedMs() == 0, "start()で一時停止と経過時間は戻る");
+    }
+    {
+        bool loops = true;
+        Compile("A l4 a a a a");
+        uint32_t ms = MusicPlayer::MeasureMs(buf, 100, &loops);
+        (void)ms;
+        const MmlResult r = Compile("A l4 a a a a");
+        ms = MusicPlayer::MeasureMs(buf, r.size, &loops);
+        check(ms == 2000 && !loops, "曲の長さ: 4分音符4つはテンポ120で2000ms");
+        const MmlResult r2 = Compile("A l4 a t240 a a a");
+        ms = MusicPlayer::MeasureMs(buf, r2.size, &loops);
+        check(ms == 500 + 3 * 250 && !loops, "曲の長さ: 途中のテンポ変更を数える");
+        const MmlResult r3 = Compile("A l8 [c d]3 e");
+        ms = MusicPlayer::MeasureMs(buf, r3.size, &loops);
+        check(ms == 7 * 250 && !loops, "曲の長さ: 繰り返しを数える");
+        const MmlResult r4 = Compile("A l4 a L a a");
+        ms = MusicPlayer::MeasureMs(buf, r4.size, &loops);
+        check(loops && ms == 1500, "曲の長さ: L で戻る曲は終わりが無い(戻るまでの長さ)");
+        const MmlResult r5 = Compile("A l4 a a\nB l4 r r r r");
+        ms = MusicPlayer::MeasureMs(buf, r5.size, &loops);
+        check(ms == 2000 && !loops, "曲の長さ: いちばん長いチャンネルで決まる");
+        check(MusicPlayer::MeasureMs(buf, 4, &loops) == 0, "曲の長さ: 不正なデータは0");
+    }
     {
         ChipSynth::Engine e(kRate); MusicPlayer p(kRate);
         check(!p.start(e, buf, 4), "短すぎるデータは鳴らさない");
@@ -407,6 +457,33 @@ static void TestSoundFunctions(){
         check(SoundFunctions::MusicPlayText(b, strlen(b), &r), "手放した後は書ける");
         Drain(now);
         check(SoundFunctions::MusicPlaying(), "差し替えた曲が鳴っている");
+    }
+
+    printf("--- SoundFunctions: 一時停止 ---\n");
+    {
+        const char* longer = "A L l4 c d e f";
+        SoundFunctions::MusicPlayText(longer, strlen(longer), &r);
+        Drain(now);
+        check(!SoundFunctions::MusicPaused() && SoundFunctions::MusicPause(true), "一時停止を頼める");
+        Drain(now);
+        check(SoundFunctions::MusicPaused() && SoundFunctions::MusicPlaying(), "止めている間も鳴っている扱い(曲は終わっていない)");
+        check(SoundFunctions::ActiveChannels() == 0, "音は止まっている");
+        const uint32_t held = SoundFunctions::MusicElapsedMs();
+        Drain(now, 20);
+        check(SoundFunctions::MusicElapsedMs() == held, "止めている間は時間が進まない");
+        check(SoundFunctions::MusicPause(false) && !SoundFunctions::MusicPaused(), "再開");
+        Drain(now, 40);
+        check(SoundFunctions::MusicElapsedMs() > held, "再開すると時間が進む");
+        bool loops = false;
+        check(SoundFunctions::MusicTotalMs(&loops) == 2000 && loops, "曲の長さ(ループする曲)");
+        SoundFunctions::MusicPause(true);
+        const char* next = "A l4 c";
+        SoundFunctions::MusicPlayText(next, strlen(next), &r);
+        check(!SoundFunctions::MusicPaused() && SoundFunctions::MusicElapsedMs() == 0, "新しい曲は一時停止が解けて0から");
+        Drain(now);
+        SoundFunctions::MusicStop();
+        check(!SoundFunctions::MusicPause(true), "鳴っていなければ一時停止できない");
+        Drain(now);
     }
 
     printf("--- SoundFunctions: 止める ---\n");

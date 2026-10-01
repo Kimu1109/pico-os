@@ -1656,7 +1656,26 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
 - スリープ: `PowerFunctions::Busy()`が`WavPlaying()`を見る。省電力中の2コア目は列に残りがあれば動き続ける(`AnythingSounding()`)。
 - Lua: `pico.wav_play(path[, {loop=, volume=}])` → true / `nil, 理由`(SDの権限に従う。引数の誤りは先に`luaL_error`)、`pico.wav_stop()`、`pico.wav_playing()`。
   使ったアプリは閉じるときに止める(`used_wav_`)。ドキュメントは`lua-api-doc/content/api/sound.md`「WAV」。
+- **一時停止・位置・シーク(2026-10-01)**: `WavPause(bool)`/`WavPaused()`/`WavPositionMs()`/`WavDurationMs()`/`WavSeekMs(ms)`。
+  - 一時停止は`WavStream::setPaused()`(atomic)で、2コア目が列から取り出さなくなるだけ(積むのは続き、満杯で読み取りも止まる)。
+    止めている間は`hasData()`が偽(省電力でI2Sを止めてよい。`Power_Functions::Busy()`も`Paused`を除く)で、途切れとも数えない。
+    新しく鳴らす/止めると解ける。`WavPlaying()`は止めている間も真のまま。
+  - **位置は「積んだ数 − 列に残っている数」**(`wav_pushed`は1コア目だけが数える。`WavStream::bufferedSamples()`)。2コア目から値をもらわない。
+    I2Sのバッファ約23msぶん先を指す。ループ中は長さで巡る。
+  - **シーク**: 先読みを`flush()`で捨てて`WavDecoder::seekMs()`で飛び、`wav_pushed`を飛び先へ合わせて先読みし直す。
+    読み終えて閉じた後でも(`WavStop()`していなければ)`reopen()`で開き直して飛べる(デコーダがパスを覚える)。
+    `seekMs()`は`open()`を呼ぶので、`open()`が自分のパスバッファへ`strcpy`しないよう`path != path_`で守っている(ASanで踏んだ)。
+- **MML側の一時停止・時間**: `MusicPause(bool)`/`MusicPaused()`/`MusicElapsedMs()`/`MusicTotalMs(bool* loops)`。一時停止は`music_paused`(atomic)を2コア目が
+  `MusicPlayer::setPaused()`へ当てる(曲のチャンネルを無音にして時間も止める。**再開は止めた音を鳴らし直さず次の音符から**)。経過時間は
+  `MusicPlayer`がサンプルで数えて`core1_music_ms`で1コア目へ渡す(「鳴らす」を受け取るまでは0)。**曲の長さは読み込み時に1コア目が
+  `MusicPlayer::MeasureMs()`で数える**(ティックだけ進める。上限40万ティック)。**L(ループ位置)で戻る曲や上限を超えた曲は終わりが無いので`*loops=true`で、
+  戻るまでの長さを返す**。ミュージックアプリはこの場合「ループ」と出す(経過時間だけ数える)。MMLの時間はシークできない(バーを出さない)。
 - ミュージックアプリ: `/music/`の`*.wav`も並べる(拡張子の大小は区別しない)。MMLとWAVは同時に鳴らさない(片方を鳴らすともう片方を止める)。
+  **操作部**(鳴っている間だけ表示): `0:23 [シークバー] 3:45`の行(バー=`NumberSlider`はWAVだけ。MMLは時間の2つだけ)と`[一時停止/再開][停止]`。
+  バーは動かしている間は飛ばず、離したところへ1回だけ飛ぶ(動かすたびにSDを読み直さない)。**押した瞬間にもその位置へつまみを動かす**ので
+  (`NumberSlider`は`causeOnPressMove()`でしか値が変わらない)、タップだけでも飛べる。時間の欄は秒が変わったときだけ書き換える。
+  検証: `wav_test`/`music_test`(一時停止・位置・シーク・曲長・新しく鳴らすと解ける)、PCビルドの`--tap`(`SDL_AUDIODRIVER=disk`は実時間で消費されるので、
+  進行を見るには1000フレーム以上回す。バーのタップでの飛び先・一時停止中の時間の固定・MMLの「ループ」表示を確認)。**実機では未確認**。
   サンプルは`pc/sdcard/music/chime.wav`(8bit・11025Hz・約1秒。周波数の変換の経路も通る)。
 - 検証: `wav_test`(run.sh。形式ごとの変換・平均・周波数の変換・チャンクの読み飛ばし・ループ・断り方、SoundFunctionsの配線: 音量・止める/切り替えで
   先読みを捨てる・途切れの数え方・アンプが無い間も時間どおりに進む)、`lua_engine_test`(Lua API)、`power_test`(WAV中はスリープしない)、

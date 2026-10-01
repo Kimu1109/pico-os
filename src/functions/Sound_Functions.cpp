@@ -41,6 +41,8 @@ namespace {
     std::atomic<ChipSynth::ChannelMask> core1_active{0};  // 2コア目→1コア目: 鳴っているチャンネル
     std::atomic<uint32_t> core1_processed{0};   // 2コア目→1コア目: 音源へ渡し終えたコマンドの数
     std::atomic<bool>     core1_music{false};   // 2コア目→1コア目: 曲が鳴っている
+    std::atomic<bool>     music_paused{false};  // 1コア目→2コア目: 曲を一時停止してほしい
+    std::atomic<uint32_t> core1_music_ms{0};    // 2コア目→1コア目: 曲を鳴らし始めてからの時間(ms)
     std::atomic<uint8_t>  core1_gb_active{0};   // 2コア目→1コア目: GBの音源で鳴っているチャンネル
 
     // GBエミュの音源チップへの書き込みの列。最初にROMを起動したときに1コア目が確保して置き、以降は持ち続ける
@@ -99,10 +101,16 @@ namespace {
     uint32_t music_cmd_seq = 0;             // 最後に積んだ曲のコマンドが何番目か
     bool music_cmd_play = false;            // それが「鳴らす」だったか
     FixedString<PICO_STR_M> music_title;
+    uint32_t music_total_ms = 0;
+    bool music_loops = false;
 
     // --- WAV(1コア目側) ---
     WavDecoder* wav_decoder = nullptr;      //最初にWAVを鳴らすときに確保し、以降は持ち続ける
     FixedString<PICO_STR_M> wav_title;
+    uint64_t wav_pushed = 0;                // 列へ積んだサンプル数(鳴らし始め/飛んだ位置から数える)
+    uint32_t wav_duration_ms = 0;
+    bool wav_loop = false;
+    bool wav_loaded = false;                // 鳴らしたWAVが今も有効(WavStop()するまで。読み終えても true)
     uint32_t logged_wav_underruns = 0;
     unsigned long logged_wav_ms = 0;
 
@@ -182,7 +190,7 @@ namespace {
         if(want > max_samples) want = max_samples;
         while(want > 0){
             const size_t n = wav_decoder->read(tmp, want < 256 ? want : 256);
-            wav->push(tmp, n);
+            wav_pushed += wav->push(tmp, n);
             want -= (uint32_t)n;
             if(wav_decoder->finished()){
                 wav_decoder->close();
@@ -257,7 +265,7 @@ namespace {
 
     // 何か鳴っている(鳴っていることになっている)か。省電力中に止めてよいかの判断に使う
     bool AnythingSounding(){
-        if(engine.activeMask() != 0 || player.playing()) return true;
+        if(engine.activeMask() != 0 || (player.playing() && !player.paused())) return true;
         GbAudioLink* link = gb_link.load(std::memory_order_acquire);
         if(link && link->active()) return true;
         WavStream* wav = wav_stream.load(std::memory_order_acquire);
@@ -508,6 +516,7 @@ namespace {
         if(!music_work->compiler.compile(src, music_work->slots[slot], kMusicDataBytes, r)) return false;
 
         Command cmd{CmdType::MusicPlay, 0, {}};
+        music_paused.store(false, std::memory_order_release);
         cmd.music = music_work->slots[slot];
         cmd.music_size = r.size;
         if(!Push(cmd)){
@@ -522,6 +531,7 @@ namespace {
         music_cmd_seq = seq;
         music_cmd_play = true;
 
+        music_total_ms = MusicPlayer::MeasureMs(cmd.music, cmd.music_size, &music_loops);
         music_title.assign(r.title.empty() ? fallback_title : r.title.c_str());
         if(!r.warning.empty()) LOG_SYS_WARN("Sound: %s", r.warning.c_str());
         return true;
@@ -542,6 +552,7 @@ bool SoundFunctions::MusicPlayText(const char* text, size_t len, MmlResult* resu
 
 void SoundFunctions::MusicStop(){
     if(music_current < 0) return;
+    music_paused.store(false, std::memory_order_release);
     if(!Push(Command{CmdType::MusicStop, 0, {}})) return;
     const uint32_t seq = q_head.load(std::memory_order_relaxed);
     slot_release_seq[music_current] = seq;
@@ -557,6 +568,28 @@ bool SoundFunctions::MusicPlaying(){
 }
 
 const char* SoundFunctions::MusicTitle(){ return music_title.c_str(); }
+
+bool SoundFunctions::MusicPause(bool pause){
+    if(!MusicPlaying()) return false;
+    music_paused.store(pause, std::memory_order_release);
+    return true;
+}
+
+bool SoundFunctions::MusicPaused(){
+    return music_paused.load(std::memory_order_acquire) && MusicPlaying();
+}
+
+uint32_t SoundFunctions::MusicElapsedMs(){
+    //2コア目が「鳴らす」を受け取るまでは、前の曲の値が残っている
+    const uint32_t done = core1_processed.load(std::memory_order_acquire);
+    if((int32_t)(done - music_cmd_seq) < 0) return 0;
+    return core1_music_ms.load(std::memory_order_acquire);
+}
+
+uint32_t SoundFunctions::MusicTotalMs(bool* loops){
+    if(loops) *loops = music_loops;
+    return music_total_ms;
+}
 
 // ---- ゲームボーイの音 ----
 
@@ -625,7 +658,12 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
     //見出しを先に別の係で確かめると読み取り係が2つ要るので、読めなかったら今のWAVも止まる
     //(読み取り係は1つで、開き直した時点で前のファイルは閉じるため)
     wav->setFeeding(false);
+    wav->setPaused(false);
     wav->flush();
+    wav_pushed = 0;
+    wav_duration_ms = 0;
+    wav_loaded = false;
+    wav_loop = loop;
     if(!wav_decoder->open(path, kSampleRate)){
         if(error) *error = wav_decoder->errorText();
         return false;
@@ -637,6 +675,8 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
         info->sample_rate = wav_decoder->sampleRate();
         info->duration_ms = wav_decoder->durationMs();
     }
+    wav_duration_ms = wav_decoder->durationMs();
+    wav_loaded = true;
     const char* slash = strrchr(path, '/');
     wav_title.assign(slash ? slash + 1 : path);
 
@@ -650,8 +690,56 @@ void SoundFunctions::WavStop(){
     WavStream* wav = wav_stream.load(std::memory_order_relaxed);
     if(!wav) return;
     wav->setFeeding(false);
+    wav->setPaused(false);
     wav->flush();
+    wav_loaded = false;
     if(wav_decoder) wav_decoder->close();
+}
+
+bool SoundFunctions::WavPause(bool pause){
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    if(!wav || !WavPlaying()) return false;
+    wav->setPaused(pause);
+    return true;
+}
+
+bool SoundFunctions::WavPaused(){
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    return wav && wav->paused() && WavPlaying();
+}
+
+uint32_t SoundFunctions::WavDurationMs(){ return wav_duration_ms; }
+
+uint32_t SoundFunctions::WavPositionMs(){
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    if(!wav) return 0;
+    const uint64_t buffered = wav->bufferedSamples();
+    const uint64_t played = wav_pushed > buffered ? wav_pushed - buffered : 0;
+    uint64_t ms = played * 1000 / kSampleRate;
+    if(wav_duration_ms > 0){
+        if(wav_loop) ms %= wav_duration_ms;
+        else if(ms > wav_duration_ms) ms = wav_duration_ms;
+    }
+    return (uint32_t)ms;
+}
+
+bool SoundFunctions::WavSeekMs(uint32_t ms){
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    if(!wav || !wav_decoder || wav_duration_ms == 0) return false;
+    if(ms >= wav_duration_ms) ms = wav_duration_ms - 1;
+    if(!wav_loaded) return false;
+
+    wav->setFeeding(false);
+    wav->flush();
+    if(!wav_decoder->seekMs(ms)){
+        //飛べなければ止める(読み取り係が中途半端な状態で残らないように)
+        wav_decoder->close();
+        return false;
+    }
+    wav_pushed = (uint64_t)ms * kSampleRate / 1000;
+    wav->setFeeding(true);
+    FeedWav(kWavPrefillSamples);
+    return true;
 }
 
 bool SoundFunctions::WavPlaying(){
@@ -694,6 +782,8 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     if(!running) AdvanceByTime(now_ms);
 
     bool busy = DrainCommands();
+    //一時停止の要求を曲へ当てる(DrainCommands()で新しい曲が始まったときは、その曲も止まった状態にできる)
+    player.setPaused(engine, music_paused.load(std::memory_order_acquire));
     //効果音が鳴り終わったチャンネルは曲へ返す(曲は次の音符から鳴らす)
     borrowed &= engine.activeMask();
     player.setBorrowed(borrowed);
@@ -717,6 +807,7 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
 
     //この順(チャンネル→渡し終えた数)で書く。IsPlaying()参照
     core1_active.store(engine.activeMask(), std::memory_order_release);
+    core1_music_ms.store(player.elapsedMs(), std::memory_order_release);
     core1_music.store(player.playing(), std::memory_order_release);
     {
         GbAudioLink* link = gb_link.load(std::memory_order_acquire);

@@ -44,6 +44,9 @@ namespace PICO_Path {
         constexpr const char* SSH_ID_ED25519 = "/sys/ssh/id_ed25519";
         constexpr const char* SSH_KNOWN_HOSTS = "/sys/ssh/known_hosts";
 
+        // 通知の予約(1行1件のタブ区切り)。NotificationFunctions参照
+        constexpr const char* SYS_NOTIFY_RULES = "/sys/notify_rules.tsv";
+
         namespace CFG {
             constexpr const char* SYS_NETWORK_CFG = "/sys/network.cfg";
             constexpr const char* SYS_USER_CFG = "/sys/user.cfg";
@@ -57,6 +60,8 @@ namespace PICO_Path {
             constexpr const char* SYS_SSH_CFG = "/sys/ssh.cfg";
             // アラーム("alarm1 = 07:30,daily,on" ...)。AlarmFunctions参照
             constexpr const char* SYS_ALARM_CFG = "/sys/alarm.cfg";
+            // 通知の見せ方("mode = on | quiet" / "sound = true | false")。NotificationFunctions参照
+            constexpr const char* SYS_NOTIFY_CFG = "/sys/notify.cfg";
         }
 
         namespace IME {

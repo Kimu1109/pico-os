@@ -52,6 +52,8 @@
 #   power_test    … スリープ(PowerFunctions)。操作が無いまま sleep-timeout が過ぎると入り、画面/Wi-Fi/音の
 #                   省電力が掛かること、タッチで起きて起こした指は離すまで画面へ渡さないこと、KeepAwake()・
 #                   音・Wi-Fi接続中は入らないこと
+#   notification_test … 通知(NotificationFunctions)の中身。予約の種類ごとの発火、置き換え・上限、履歴、
+#                   控えめ、保存と読み込み、起動理由
 #   alarm_test    … アラーム(AlarmFunctions)。alarm.cfgの読み書き、時刻での発火と確認ダイアログ、
 #                   繰り返し(1回/毎日/平日/土日)、止める/5分後/放置での停止、ダイアログが消えたときの出し直し
 #   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
@@ -696,6 +698,16 @@ echo ""
 echo "===== alarm_test ====="
 run_or_die "$OUT/alarm_test"
 
+# --- 通知(中身だけ。トースト/音/起動は Notification_Sources.cpp でPCビルドで確かめる) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/notification_test.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
+    -o "$OUT/notification_test"
+
+echo ""
+echo "===== notification_test ====="
+run_or_die "$OUT/notification_test"
+
 # --- ErrorFunctions(エラーの見せ方の共通口) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/error_functions_test.cpp" \
@@ -760,6 +772,7 @@ run_or_die "$OUT/lua_alloc_budget_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/functions/Battery_Functions.cpp" \
@@ -826,6 +839,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_scene_test.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/functions/Battery_Functions.cpp" \
@@ -892,6 +906,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaAppScanner.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
     "$ROOT/src/functions/Battery_Functions.cpp" \

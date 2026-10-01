@@ -4,6 +4,7 @@
 #include "functions/App_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Error_Functions.hpp"
+#include "functions/Notification_Functions.hpp"
 #include "storage/SD_IO.hpp"
 
 #include "Arduino.h"
@@ -34,6 +35,17 @@ void LuaScene::onEnter() {
         // 画面側にも見える形で伝える
         ErrorFunctions::ShowFatal("Luaの初期化に失敗しました(メモリ不足の可能性があります)");
         return;
+    }
+
+    // 通知をタップして起動された場合は、その理由(tag/data)をスクリプトより先に渡す
+    // (pico.launch_reason())。1回きりなので、Pop()で戻ってきた再実行では受け取らない
+    {
+        FixedString<PICO_STR_S> tag, data;
+        FixedString<PICO_PATH_LEN> owner; // 送り主はLuaEngineと同じく正規化したディレクトリ
+        if (PICO_IO::normalize(owner, app_dir.c_str()) &&
+            NotificationFunctions::TakeLaunchReason(owner.c_str(), tag, data)) {
+            engine->SetLaunchReason(tag.c_str(), data.c_str());
+        }
     }
 
     // 本体スクリプトより先に、同じディレクトリの"lib.lua"があれば読み込み・実行する

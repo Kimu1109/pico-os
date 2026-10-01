@@ -368,6 +368,10 @@ class LuaEngine {
         // pico.http_request()が進行中か(スリープさせないかの判断に使う)
         bool HttpBusy() const;
 
+        // 通知から起動されたときの起動理由(pico.launch_reason()が返す)。
+        // LuaScene::onEnter()がNotificationFunctions::TakeLaunchReason()で受け取って、Run()の前に渡す
+        void SetLaunchReason(const char* tag, const char* data);
+
     private:
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
         // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
@@ -398,6 +402,11 @@ class LuaEngine {
         bool loop_broken_ = false;
         // pico.sound_play/beepを使ったか。使ったアプリは閉じるときに音を全部止める(デストラクタ)
         bool used_sound_ = false;
+
+        // 通知から起動されたときの起動理由(SetLaunchReason()。pico.launch_reason())
+        bool has_launch_reason_ = false;
+        FixedString<PICO_STR_S> launch_tag_;
+        FixedString<PICO_STR_S> launch_data_;
         // pico.music_*を使ったか。使ったアプリは閉じるときに曲を止める
         bool used_music_ = false;
 
@@ -655,6 +664,18 @@ class LuaEngine {
         static int l_config_read(lua_State* L);
         static int l_config_get(lua_State* L);
         static int l_config_write(lua_State* L);
+
+        // ---- 通知(NotificationFunctions) ----
+        // pico.notify{title=, body=, tag=, data=, sound=, <いつ>} → 予約のid(すぐ出した場合は0)、
+        //   失敗(権限が無い/上限)は nil, 理由。<いつ>は delay_ms / at / daily / every_ms / when のどれか1つ
+        //   (無ければすぐ出す)。送り主はこのアプリのディレクトリ(app_dir_)で、タップするとこのアプリが開く
+        // pico.notify_cancel([id | tag]) → 取り消した件数(引数無しなら自分の予約を全部)
+        // pico.notify_list() → { {id=, tag=, title=, kind=}, ... }(自分の予約だけ)
+        // pico.launch_reason() → tag, data(通知をタップして起動されたとき)。それ以外はnil
+        static int l_notify(lua_State* L);
+        static int l_notify_cancel(lua_State* L);
+        static int l_notify_list(lua_State* L);
+        static int l_launch_reason(lua_State* L);
 
         // pico.sd_read()が1回で読む上限。LuaScene::kMaxScriptBytesと同じ考え方
         // (Lua state全体の予算(通常200KB)を1ファイルで食い潰さないための頭打ち)。

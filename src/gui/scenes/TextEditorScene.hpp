@@ -26,8 +26,8 @@
 // 上限を超えるファイル(容量・行数・1行の長さ)は、保存で内容が消えないよう開かずに断る。
 class TextEditorScene : public Scene, public ITextInputTarget {
     private:
-        static constexpr int kMaxBytes = PICO_STR_4KiB;
-        static constexpr int kMaxLines = 200;
+        static constexpr int kMaxBytes = PICO_STR_32KiB;
+        static constexpr int kMaxLines = 1000;
         // キーボードの入力バッファ(FixedString<PICO_STR_LL>)に収まる1行の最大バイト数
         static constexpr int kMaxLineBytes = PICO_STR_LL - 1;
 

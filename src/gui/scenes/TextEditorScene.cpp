@@ -170,7 +170,7 @@ void TextEditorScene::syncFromKeyboard(ITextInputWidget* kb){
             kb->setText(old);
             kb->setCursorByteOffset(c);
             this->syncing = false;
-            this->refreshStatus("容量の上限(4KiB)です");
+            this->refreshStatus("容量の上限(32KiB)です");
             s = old;
             cursor = c;
         }else{
@@ -351,40 +351,54 @@ bool TextEditorScene::loadFile(const char* file){
     }
     if(f.fileSize() > (uint32_t)kMaxBytes){
         f.close();
-        ErrorFunctions::ShowFatal("大きすぎて開けません(4KiBまで)");
+        ErrorFunctions::ShowFatal("大きすぎて開けません(32KiBまで)");
         return false;
     }
 
-    // 上限を超える内容は保存時に消えてしまうので、切り詰めずに断る
-    static char buf[kMaxBytes + 1];
-    int n = f.read((uint8_t*)buf, kMaxBytes);
-    f.close();
-    if(n < 0) n = 0;
-
+    // 上限を超える内容は保存時に消えてしまうので、切り詰めずに断る。
+    // 文書バッファと同じ大きさの作業領域は持たず、先に小さなチャンクで検査してから本体へ読み込む
+    char chunk[256];
     int out = 0, lines = 1, line_bytes = 0;
-    for(int i = 0; i < n; i++){
-        const char c = buf[i];
-        if(c == '\r') continue;
-        if(c == '\n'){
-            lines++;
-            line_bytes = 0;
-        }else if(++line_bytes > kMaxLineBytes){
-            ErrorFunctions::ShowFatal("1行が長すぎて開けません(191バイトまで)");
-            return false;
+    char last = '\0';
+    for(;;){
+        const int n = f.read((uint8_t*)chunk, sizeof(chunk));
+        if(n <= 0) break;
+        for(int i = 0; i < n; i++){
+            const char c = chunk[i];
+            if(c == '\r') continue;
+            if(c == '\n'){
+                lines++;
+                line_bytes = 0;
+            }else if(++line_bytes > kMaxLineBytes){
+                f.close();
+                ErrorFunctions::ShowFatal("1行が長すぎて開けません(191バイトまで)");
+                return false;
+            }
+            out++;
+            last = c;
         }
-        buf[out++] = c;
     }
-    if(out > 0 && buf[out - 1] == '\n'){ // 末尾の改行は保存時に付け直す
+    if(out > 0 && last == '\n'){ // 末尾の改行は保存時に付け直す
         out--;
         lines--;
     }
     if(lines > kMaxLines){
-        ErrorFunctions::ShowFatal("行数が多すぎて開けません(200行まで)");
+        f.close();
+        ErrorFunctions::ShowFatal("行数が多すぎて開けません(1000行まで)");
         return false;
     }
 
     KeyboardFunctions::HideAll();
-    memcpy(this->text, buf, out);
+    f.seekSet(0);
+    int w = 0;
+    for(;;){
+        const int n = f.read((uint8_t*)chunk, sizeof(chunk));
+        if(n <= 0) break;
+        for(int i = 0; i < n && w < out; i++){
+            if(chunk[i] != '\r') this->text[w++] = chunk[i];
+        }
+    }
+    f.close();
     this->len = out;
     this->text[out] = '\0';
     this->path.assign(file);

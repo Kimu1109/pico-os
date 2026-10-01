@@ -49,6 +49,8 @@ namespace PICO_Path {
 
         namespace CFG {
             constexpr const char* SYS_NETWORK_CFG = "/sys/network.cfg";
+            // 保存済みのWi-Fiネットワークと Wi-FiのON/OFF("enabled" / "ssid1" / "pass1" ...)。net/Wifi_Profiles参照
+            constexpr const char* SYS_WIFI_CFG = "/sys/wifi.cfg";
             constexpr const char* SYS_USER_CFG = "/sys/user.cfg";
             // チャットアプリの接続先("server = https://..." と "token = ...")。ChatClient参照
             constexpr const char* SYS_CHAT_CFG = "/sys/chat.cfg";

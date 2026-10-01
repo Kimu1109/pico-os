@@ -27,6 +27,13 @@ void Statusbar::render(){
         this->needsRender();
     }
 
+    //Wi-Fiの接続/切断/OFFは5秒の定期更新を待たずに出す
+    const uint8_t wifi_status = (uint8_t)NetworkFunctions::currentStatus;
+    if(wifi_status != this->last_wifi_status){
+        this->last_wifi_status = wifi_status;
+        this->needsRender();
+    }
+
     const int unread = NotificationFunctions::UnreadCount();
     if(unread != this->last_unread){
         this->last_unread = unread;
@@ -58,9 +65,13 @@ void Statusbar::render(){
     draw_pos += 16 + MARGIN;
 
     //Wi-Fiステート
-    //圏外は「最弱の棒 + バツ」で表す(SDカードと同じ組み立て方)
-    IconRender::DrawIcon(NetworkFunctions::GetWifiStateIconID(), IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
-    if(!NetworkFunctions::IsConnected()){
+    //圏外は「最弱の棒 + バツ」で表す(SDカードと同じ組み立て方)。OFFは満タンの扇を薄い灰色で(バツは付けない)
+    if(NetworkFunctions::currentStatus == NetworkFunctions::NetStatus::OFF){
+        IconRender::DrawIcon(IconID::WifiSignal4, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_LIGHTGREY);
+    }else{
+        IconRender::DrawIcon(NetworkFunctions::GetWifiStateIconID(), IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+    }
+    if(!NetworkFunctions::IsConnected() && NetworkFunctions::currentStatus != NetworkFunctions::NetStatus::OFF){
         IconRender::DrawIcon(IconID::X, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_RED);
     }
     draw_pos += 16 + MARGIN;

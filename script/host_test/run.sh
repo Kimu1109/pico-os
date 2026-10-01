@@ -13,6 +13,9 @@
 #   secret_cipher_test… Wi-Fi SSID/パスワードの暗号化保存(util/Secret_Cipher.hpp)。
 #                   往復・用途(purpose)ごとに鍵ストリームが変わること・enc1:接頭辞の
 #                   無い値は平文として読める後方互換・壊れたデータへの安全な失敗
+#   wifi_profiles_test… 保存済みのWi-Fiネットワーク(net/Wifi_Profiles、/sys/wifi.cfg)。network.cfgの
+#                   旧形式からの取り込み・追加/更新/上限/削除・接続できたものを先頭へ(自動接続の順番)・
+#                   ON/OFFの保存・番号ごとの暗号化
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
 #   touch_filter_test… タッチ座標のmedian-of-3ノイズ抑制(util/TouchFilter.hpp)。
@@ -242,6 +245,16 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== secret_cipher_test ====="
 run_or_die "$OUT/secret_cipher_test"
+
+# --- 保存済みのWi-Fiネットワーク(/sys/wifi.cfg) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/wifi_profiles_test.cpp" \
+    "$ROOT/src/net/Wifi_Profiles.cpp" \
+    -o "$OUT/wifi_profiles_test"
+
+echo ""
+echo "===== wifi_profiles_test ====="
+run_or_die "$OUT/wifi_profiles_test"
 
 # --- アプリ登録簿とランチャ ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

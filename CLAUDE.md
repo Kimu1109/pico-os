@@ -79,7 +79,7 @@ src/
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
-  net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest)
+  net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScan / HttpGet タスク + StepBudget(実行時間の区切り)
@@ -87,7 +87,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notificationの37本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profilesの38本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -726,6 +726,58 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   「追加」ボタン追加後も既存の全項目がパスすることを確認済み。PCビルドの`--shot`で
   「追加」ボタンから実際に名前入力ダイアログが開くことまで確認済み(実際の保存はホストテストの
   SdFatスタブ経由で確認。暗号化ロジック自体は上記の往復検証で担保されている)。
+
+### 保存済みのWi-Fiネットワーク・Wi-FiのON/OFF・自動再接続 (`src/net/Wifi_Profiles` / `NetworkFunctions` / `SettingsScene`) (2026-10-01)
+
+SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/`wifi-password`)のを、複数保存して
+任意のものへ繋げるようにした。合わせて設定アプリをタブで分けた。
+
+- **一覧は`WifiProfiles`(`src/net/Wifi_Profiles.hpp/.cpp`)、置き場所は`/sys/wifi.cfg`**: `enabled = true|false`と
+  `ssid1`/`pass1` … `ssid8`/`pass8`(`kMaxProfiles=8`、固定長の静的領域で約1.2KB、確保なし)。
+  **番号の若い順 = 直近で接続できた順**で、`NetworkFunctions`が接続に成功するたびに`MarkConnected()`でその組を先頭へ
+  繰り上げる(並びが変わったときだけ保存)。この並びがそのまま自動接続の順番になる。
+  - 暗号化はWi-Fiの単一設定と同じ`PICO_Secret`。**用途文字列は番号ごと**(`"wifi-ssid:1"`/`"wifi-password:1"`)。
+    同じ用途の暗号文を1ファイルに並べると平文同士のXORが漏れるため(カレンダーのURLと同じ理由)。
+  - 書き込みは`Config_Functions::SetValue()`を使わず、**ファイル丸ごとを一時ファイル→差し替え**(`Save()`)。
+    1件で2キー、並べ替えで全キーが変わるので、1キーずつ書き換えるより単純。
+  - SSIDは32バイト・パスワードは64バイトまで(WPAの上限。暗号化後133文字で`kConfigMaxValueLen`=160に収まる)。
+    超えると`Put()`が`Invalid`、9件目は`Full`(自動で古いものを消さない。利用者に消してもらう)。
+  - **移行**: `wifi.cfg`が無いときだけ`network.cfg`の`wifi-ssid`/`wifi-password`を1番として取り込み、`wifi.cfg`を作る。
+    以後その2キーは読まない(全部消した後に古いSSIDが復活しないように)。`network.cfg`側のキーは消していない。
+    PCビルドは起動のたびに`pc/sdcard/sys/wifi.cfg`を作るので`.gitignore`に入れてある。
+- **自動接続(`NetworkFunctions`)**: 起動時は先頭(直近で接続したもの)へ繋ぐ。接続に失敗した
+  (`TIMEOUT`/`SSID_NOT_FOUND`/`FAILED`)まま`RETRY_INTERVAL`(30秒)経つたびに、保存済みを**先頭から1つずつ**試す
+  (`retryRank`。一巡したら先頭へ戻る。接続できたら/手動で選んだら0へ戻す)。依頼は「直近で接続したWi-Fiへ試みる」で、
+  先頭がそれ。2番目以降も巡るのは、場所を移った(家⇔職場)ときに繋がらないままにならないため。
+  接続中に切れた場合は従来どおり同じSSIDへ繋ぎ直す(5秒ごとの生存確認)。
+  試行中(10秒)は`TRYING_CONNECT`なのでスリープに入らないが、30秒のうち残りの20秒で入れる。
+- **ON/OFF**(`NetworkFunctions::SetEnabled()`): 新しい状態`NetStatus::OFF`。OFFは`WiFi.disconnect()`して自動接続を止めるだけで、
+  **無線チップ自体(CYW43)は止めない** — 電池の残量表示がVBUSの検出に無線チップのGPIO(WL_GPIO2)を使うため
+  (`Battery_Functions`参照)。`WiFi.mode(WIFI_OFF)`/`end()`まで落とせばもっと省電力になるが、その場合は電池の読み取りとの
+  兼ね合いを実機で確かめること。手動で接続先を選ぶ(`ConnectWiFiAsync()`)とONに戻る。ステータスバーはOFFのとき
+  満タンの扇を薄い灰色で出す(バツは付けない)。Wi-Fiの状態が変わったら5秒の定期更新を待たずに描き直す。
+- `NetworkFunctions::ConnectProfile(index)`/`RemoveProfile(index)`(今繋いでいる/繋ごうとしているものを消したら切断し、
+  30秒後に残りへ自動接続)。
+- **設定アプリ(`SettingsScene`)は画面下のタブ**: `Wi-Fi`(ON/OFFのチェックボックス+状態の1行、保存済みの一覧=`ScrollList`、
+  [検索][追加][接続][削除]) / `本体`(音量・輝度と自動調光・スリープ) / `時刻`(タイムゾーン・NTP1/2) / `その他`(ブラウザのホーム・
+  起動時の自己診断)。全タブぶんのウィジェットを`onEnter()`で作り、`tab_widgets[]`へ登録して表示中のタブだけ見せる
+  (`ClocksScene::applyVisibility()`と同じ考え方)。ドロップダウンは開いた一覧が下の行に重なるので最後に`Add()`する(従来どおり)。
+  タブ名は4つとも2〜4文字の幅に収める(「画面/音」は58pxに収まらず2行に折れたので「本体」にした)。
+  - 一覧: 1回目のタップで選択、2回目で接続(`ScrollList`の流儀)。鍵のアイコン=パスワードあり、扇=オープン。
+    接続中のものは緑で「(接続中)」。状態の1行と一覧は接続状態/接続先/ON・OFFが変わったときだけ作り直す(選択はSSIDで覚えて戻す)。
+  - [検索]: 従来の`WifiScanDialog`。選んだSSIDが**保存済みならそのまま繋ぎ**、未保存ならパスワードを聞いて保存して繋ぐ。
+  - [追加]: SSIDの手入力→パスワード(隠れたSSID用)。**同じSSIDを追加し直すとパスワードの書き換え**(パスワード変更の手段はこれ)。
+  - [削除]: 確認の`MsgDialog`の後に消す。確認中に並びが変わっても別の組を消さないよう、SSIDで覚えておく。
+  - ダイアログを閉じた直後に次のダイアログを出すときは1フレーム空ける(`Pending`。「ブラウザのヘッダー」節と同じ理由)。
+  - 旧来のSSID/パスワードの「編集」行は無くなった。
+- ついでに直したもの: **`pc/compat/Arduino.h`の`min`/`max`が引数(値渡しの一時変数)への参照を返していた**
+  (`decltype(a < b ? a : b)`はTとUが同じ型だと左辺値参照になる)。`NumberSlider::setValue()`の`min(max(...))`が壊れた値を読み、
+  タブ化で生成順が変わった途端に音量/輝度が0で保存される形で表に出た(PCビルドをASan付きでビルドして特定)。`std::decay`で値を返すようにした。
+  実機のArduinoはマクロなので無関係。
+- 検証: `wifi_profiles_test`(run.sh。旧形式の取り込み・追加/更新/上限/削除・先頭への繰り上げ・ON/OFFの保存・番号ごとの暗号化・番号の抜け)、
+  PCビルド(ASan付きでも)の`--tap`/`--shot`: 4タブの表示、OFF→再起動してもOFF→ONで再接続、検索→未保存のネットワークを選択→パスワード空欄で決定→
+  保存されて接続し一覧の先頭へ、削除の確認、`PICOOS_WIFI_STATE=failed`で「直近のもの→次→直近のもの」と30秒ごとに巡ること。
+  **実機では未確認**(`WiFi.disconnect()`後の`beginNoBlock()`での復帰、別のSSIDへ切り替えるときに切断を挟まなくてよいか)。
 
 ### Wi-Fiの新規接続(周辺スキャン→選択→パスワード入力→接続) (`SettingsScene` / `task/NetworkScan.hpp` / `gui/widgets/dialogs/WifiScanDialog`) (2026-09-27)
 
@@ -1941,7 +1993,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 1 | ダイアログ系統 | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用(電卓用)キーボード`KeyboardNum`も実装済み。 |
 | 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
-| 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。`SettingsScene`から周辺スキャン→選択→パスワード入力→接続まで一般的な「Wi-Fi設定」と同じ操作でできる(下記「Wi-Fiの新規接続」参照)。 |
+| 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。`SettingsScene`から周辺スキャン→選択→パスワード入力→接続まで一般的な「Wi-Fi設定」と同じ操作でできる(下記「Wi-Fiの新規接続」参照)。**複数のネットワークの保存・ON/OFF・未接続時の自動再接続(直近で接続したものから)も実装済み**(「保存済みのWi-Fiネットワーク」参照)。 |
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
@@ -3264,7 +3316,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、38本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、39本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

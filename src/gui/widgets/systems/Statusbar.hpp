@@ -14,6 +14,7 @@ class Statusbar : public Widget {
         bool last_pad_connected = false;
         //未読の通知の数。変わったフレームで描き直す
         int last_unread = -1;
+        uint8_t last_wifi_status = 0xFF;
 
         constexpr static int MARGIN = 2;
         constexpr static int ICON_MARGIN_TOP = (STATUSBAR_HEIGHT - 16) / 2;

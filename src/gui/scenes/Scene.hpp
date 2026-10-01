@@ -2,6 +2,7 @@
 
 #include "util/Rect.hpp"
 #include "consts.hpp"
+#include "functions/KeyInput_Functions.hpp"
 
 // 画面(シーン)1枚を表す基底クラス。
 //
@@ -35,6 +36,11 @@ class Scene {
         // アクティブなシーンのみ毎フレーム呼ばれる。
         // ウィジェットの描画とは独立した軽い処理(ポーリング等)向け
         virtual void onUpdate() {}
+
+        // 物理キーボードの打鍵(KeyInputFunctions)。扱ったらtrue。
+        // falseを返すと、開いているオンスクリーンキーボードのキー盤へ回る(Textbox等へはそちらで入る)。
+        // シェルへそのまま送りたい(SSH)、↑↓やCtrl+Sを自分で扱いたい(テキストエディタ)画面が使う
+        virtual bool onKey(const KeyInputFunctions::Event& ev) { (void)ev; return false; }
 
         // この画面の間は通知のトーストと音を控える(ゲーム等、画面の上部を隠されると困る画面)。
         // 控えた通知もステータスバーの印と通知センターには残る(NotificationFunctions参照)

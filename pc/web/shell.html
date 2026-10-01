@@ -157,6 +157,12 @@
         </div>
       </div>
       <label class="pad-opts"><input type="checkbox" id="pad-enable" checked> コントローラーをつなぐ</label>
+      <label class="pad-opts">PCのキーボード:
+        <select id="kb-mode">
+          <option value="pad">コントローラーとして使う</option>
+          <option value="text">文字入力に使う</option>
+        </select>
+      </label>
     </div>
   </div>
 
@@ -187,6 +193,12 @@
         十字キー = 矢印 / A = <code>X</code> / B = <code>Z</code> / X = <code>S</code> / Y = <code>A</code> /
         L・R・ZL・ZR = <code>Q</code> <code>W</code> <code>E</code> <code>R</code> /
         START = <code>Enter</code> / SELECT = <code>Backspace</code> / HOME = <code>H</code> か <code>Esc</code>
+      </p>
+      <p class="hint">
+        「PCのキーボード」を<b>文字入力</b>にすると、打ったキーを物理キーボードとして送る
+        (<code>key M u+XXXX</code> の行。実機では <code>pad_serial.py --mode text</code> と同じ)。
+        オンスクリーンキーボードを開いている所・テキストエディタ・SSH にそのまま入る
+        (Ctrl+C 等も送るので、ブラウザのショートカットは効かなくなる。Cmd/⌘ 付きはブラウザへ渡す)。
       </p>
     </div>
 
@@ -414,10 +426,50 @@
       });
     });
 
+    // ---- PCのキーボードを文字入力に使う(KeyInput_Functions.hpp の "key M CODE" の行) ----
+    var kbModeEl = document.getElementById('kb-mode');
+    var NAMED = {
+      Enter: 'enter', Backspace: 'backspace', Tab: 'tab', Escape: 'esc', Delete: 'delete',
+      ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+      Home: 'home', End: 'end', PageUp: 'pageup', PageDown: 'pagedown',
+    };
+    function textMode() { return kbModeEl.value === 'text'; }
+    function sendLine(line) {
+      var push = Module._picoos_serial_push;
+      if (typeof push !== 'function') return;
+      for (var i = 0; i < line.length; i++) push(line.charCodeAt(i));
+    }
+    function keyLine(e) {
+      var mods = (e.ctrlKey ? 1 : 0) | (e.altKey ? 2 : 0) | (e.shiftKey ? 4 : 0);
+      if (NAMED[e.key]) return 'key ' + mods.toString(16) + ' ' + NAMED[e.key] + '\n';
+      var chars = Array.from(e.key);
+      if (chars.length !== 1) return null;           // Shift / Control / F1 等
+      var cp = chars[0].codePointAt(0);
+      if ((e.ctrlKey || e.altKey) && /^Key[A-Z]$/.test(e.code)) {
+        cp = e.code.charCodeAt(3) + 32;               // Ctrl+C等は押したキーの英字(小文字)で送る
+      }
+      if (cp < 0x20 || cp === 0x7f) return null;
+      return 'key ' + mods.toString(16) + ' u+' + cp.toString(16) + '\n';
+    }
+    window.addEventListener('keydown', function (e) {
+      if (!textMode() || e.metaKey || e.isComposing) return;
+      if (e.target && e.target.closest && e.target.closest('input, select, textarea')) return;
+      var line = keyLine(e);
+      if (!line) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();   // SDL(emscripten)や下のコントローラーへは渡さない
+      sendLine(line);
+    }, true);
+    kbModeEl.addEventListener('change', function () {
+      keys = {};                      // コントローラーとして押していたキーは離す
+      update();
+      kbModeEl.blur();                // 以降のキーが選択肢の切り替えに取られないように
+    });
+
     // キーボード(割り当てたキーだけ横取りする。矢印でページが動かないように)
     window.addEventListener('keydown', function (e) {
       var b = KEYMAP[e.code];
-      if (!b || !enableEl.checked) return;
+      if (!b || !enableEl.checked || textMode()) return;
       e.preventDefault();
       keys[e.code] = b;
       update();

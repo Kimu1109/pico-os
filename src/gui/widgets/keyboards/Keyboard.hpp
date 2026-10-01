@@ -289,6 +289,24 @@ class Keyboard : public KeyboardPanel {
             updateInputs(false);
         }
 
+        // ---- 物理キーボード ----
+        // 打った文字は読みにせず、確定済みのテキストへそのまま入れる(ローマ字かな変換は未対応)。
+        // 変換中の読みがあれば先に確定させる
+        void physicalInsert(const char* utf8) override {
+            if(!is_inputs_empty) commitAndClear();
+            if(!is_inputs_empty) return; //確定し切れなかった(容量)
+            if(inputs_done.length() + strlen(utf8) > FixedString<PICO_STR_LL>::capacity()) return;
+            inputs_done.insertAtChar(done_cursor, utf8);
+            done_cursor += FixedString<PICO_STR_LL>::charCount(utf8);
+            updateInputs(false);
+        }
+        void physicalBackspace() override { removeInput(); }
+        void physicalMove(int delta) override { moveCursor(delta); }
+        void physicalEnter() override {
+            if(!is_inputs_empty){ commitAndClear(); return; } //「確」キーと同じ
+            KeyboardPanel::physicalEnter();
+        }
+
         void switch_font_style(char style);
         void updateImeCandidates();
         void drawCandidates();

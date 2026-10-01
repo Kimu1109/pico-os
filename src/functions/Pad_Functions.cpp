@@ -1,5 +1,6 @@
 #include "functions/Pad_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/KeyInput_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstring>
@@ -37,7 +38,11 @@ namespace {
     void OnSerialLine(unsigned long now){
         line[line_len] = '\0';
         uint16_t value = 0;
-        if(!PadFunctions::ParseLine(line, value)) return;
+        if(!PadFunctions::ParseLine(line, value)){
+            //同じSerialで届く物理キーボードの打鍵("key ...")は KeyInputFunctions へ回す
+            KeyInputFunctions::FeedLine(line);
+            return;
+        }
 
         serial_buttons = value;
         serial_last_ms = now;

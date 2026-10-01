@@ -187,6 +187,42 @@ class KeyboardNum : public KeyboardPanel {
             this->notifyChanged(false);
         }
 
+        // 物理キーボードの1文字を、このキー盤の記号表の表記へ直す(*→× /→÷)。入れられなければnullptr
+        const char* physicalSymbolFor(uint32_t cp, char* buf) const {
+            if (cp >= '0' && cp <= '9') { buf[0] = (char)cp; buf[1] = '\0'; return buf; }
+            if (cp == '.') return ".";
+            const char* want = nullptr;
+            char one[2] = { (char)cp, '\0' };
+            if (cp == '*') want = "×";
+            else if (cp == '/') want = "÷";
+            else if (cp < 0x80) want = one;
+            else return nullptr;
+            const SymbolMode order[3] = { SymbolMode::Digit, SymbolMode::Arith, SymbolMode::Math };
+            for (SymbolMode m : order) {
+                if (!isModeAllowed(m)) continue;
+                const SymbolKey* syms = symbolsFor(m);
+                for (int i = 0; i < SYMBOL_COLS; i++) {
+                    if (strcmp(syms[i].str, want) == 0) return syms[i].str;
+                }
+            }
+            return nullptr;
+        }
+
+        // ---- 物理キーボード ----
+        bool acceptsPhysicalChar(uint32_t cp) const override {
+            char buf[2];
+            return physicalSymbolFor(cp, buf) != nullptr;
+        }
+        void physicalInsert(const char* utf8) override {
+            //1文字ずつ届く(KeyboardPanel::onPhysicalKey())ので、先頭の1文字を見ればよい
+            uint32_t cp = (uint8_t)utf8[0];
+            char buf[2];
+            const char* s = (cp < 0x80) ? physicalSymbolFor(cp, buf) : nullptr;
+            if (s) addInputAtCursor(s);
+        }
+        void physicalBackspace() override { removeBeforeCursor(); }
+        void physicalMove(int delta) override { moveCursor(delta); }
+
     public:
         // allowed_modes: MODE_DIGIT/MODE_ARITH/MODE_MATHのビットOR。省略時は全モード許可。
         KeyboardNum(uint8_t allowed_modes = MODE_ALL) : KeyboardPanel(TAB_ROW_H + SYMBOL_H + PAD_H * 4) {

@@ -486,6 +486,49 @@ void SshScene::onKeyBar(TermKeyBar::Key key){
     }
 }
 
+bool SshScene::onKey(const KeyInputFunctions::Event& ev){
+    using KeyInputFunctions::Key;
+    const bool open = this->client && this->client->isOpen();
+
+    switch(ev.key){
+        case Key::Char: {
+            if(ev.ctrl()){
+                uint32_t c = ev.cp;
+                if(c >= 'a' && c <= 'z') c = c - 'a' + 'A';
+                if(c == 'C'){ this->inputInterrupt(); return true; } //接続前は中止/打ち直し
+                char code;
+                if(c >= '@' && c <= '_') code = (char)(c & 0x1F);
+                else if(c == '?') code = 0x7F;
+                else if(c == ' ') code = 0;
+                else return true;
+                if(ev.alt()) this->sendToShell("\x1b", 1);
+                this->sendToShell(&code, 1);
+                return true;
+            }
+            char buf[5];
+            const int n = KeyInputFunctions::EncodeUtf8(ev.cp, buf);
+            if(n <= 0) return true;
+            if(ev.alt() && open) this->sendToShell("\x1b", 1); //Meta = ESCを前置(xtermの既定)
+            this->inputText(buf, (size_t)n);
+            return true;
+        }
+        case Key::Enter:     this->inputEnter(); return true;
+        case Key::Backspace: this->inputBackspace(); return true;
+        case Key::Tab:       this->sendToShell("\t", 1); return true;
+        case Key::Escape:    this->sendToShell("\x1b", 1); return true;
+        case Key::Up:        this->inputArrow('A'); return true;
+        case Key::Down:      this->inputArrow('B'); return true;
+        case Key::Right:     this->inputArrow('C'); return true;
+        case Key::Left:      this->inputArrow('D'); return true;
+        case Key::Home:      this->inputArrow('H'); return true; //?1hならSS3の形(ESC O H)
+        case Key::End:       this->inputArrow('F'); return true;
+        case Key::Delete:    this->sendToShell("\x1b[3~", 4); return true;
+        case Key::PageUp:    this->sendToShell("\x1b[5~", 4); return true;
+        case Key::PageDown:  this->sendToShell("\x1b[6~", 4); return true;
+        default: return false;
+    }
+}
+
 void SshScene::openKeyboard(){
     KeyboardFunctions::Show(this, KeyboardFunctions::Layout::English, true);
 }

@@ -3,6 +3,7 @@
 #include "functions/Network_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
+#include "functions/KeyInput_Functions.hpp"
 #include "functions/Config_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
@@ -78,7 +79,8 @@ void PowerFunctions::SetupAt(unsigned long now_ms){
 
 void PowerFunctions::UpdateAt(unsigned long now_ms){
     const bool touched = OSData::isTouched;
-    const bool active  = touched || PadFunctions::IsDown(PadFunctions::kAllButtons);
+    const bool active  = touched || PadFunctions::IsDown(PadFunctions::kAllButtons)
+                       || KeyInputFunctions::Pending() > 0; //このフレームの打鍵(配るのはこの後)
     //直前のフレームで各画面が呼んだ印(この後の画面の更新で、次のフレーム分が立つ)
     const bool kept = detail::keep_awake;
     detail::keep_awake = false;
@@ -88,6 +90,8 @@ void PowerFunctions::UpdateAt(unsigned long now_ms){
         if(sleeping){
             Leave();
             if(touched) swallow_touch = true;
+            //起こした打鍵も画面へ渡さない(暗い画面のどこへ入るか見えないため。タッチと同じ考え方)
+            KeyInputFunctions::DiscardPending();
         }
     }else if(sleeping && kept){
         //操作が無くても動く画面へ切り替わった/その画面が動き出した。画面を戻す

@@ -20,6 +20,7 @@
 //   - 空のときの← →     … カーソルキーを送る(onCursorAtEdge())
 //   - 日本語の変換中     … 読みは送らずに端末のカーソル位置へ重ねて出し、確定したら送る
 // キーボードに無いキー(Esc/Tab/Ctrl/↑↓/^C)は端末の下の補助キーの列(TermKeyBar)で打つ。
+// 物理キーボード(KeyInputFunctions)の打鍵はキー盤を通さず onKey() で直接シェルへ送る。
 // 右上のボタンでキーボードを出し入れでき、出し入れのたびに端末の行数を変えてサーバへ知らせる。
 //
 // **踏み台(ProxyJump)**: 接続先を「user@host -J user@踏み台[:port]」と書くと、踏み台へSSHしてから
@@ -103,7 +104,7 @@ class SshScene : public Scene, public ITextInputTarget {
         void inputText(const char* s, size_t n);
         void inputEnter();
         void inputBackspace();
-        void inputArrow(char dir); // 'A'上 'B'下 'C'右 'D'左
+        void inputArrow(char dir); // 'A'上 'B'下 'C'右 'D'左 'H'Home 'F'End
         void inputInterrupt();
         void sendToShell(const char* s, size_t n);
         void onKeyBar(TermKeyBar::Key key);
@@ -129,6 +130,10 @@ class SshScene : public Scene, public ITextInputTarget {
         void onDisplayChanged(ITextInputWidget* keyboard) override;
         bool onBackspaceAtStart(ITextInputWidget* keyboard) override;
         bool onCursorAtEdge(ITextInputWidget* keyboard, int dir) override;
+        // 物理キーボード: 打鍵をそのままシェルへ送る(Ctrl+文字・Alt=ESC前置・Esc/Tab/矢印/Home/End/Delete/PageUp/PageDown)。
+        // 接続前(接続先・yes/no・パスワード)は端末の中の1行へ入れる
+        bool onKey(const KeyInputFunctions::Event& ev) override;
+
         bool getIsSingleLine() override { return false; }
         void setIsSingleLine(bool) override {}
 };

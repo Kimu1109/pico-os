@@ -3,6 +3,7 @@
 #include "functions/Config_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
+#include "functions/KeyInput_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 
@@ -71,7 +72,8 @@ void DisplayFunctions::Setup(){
 }
 
 void DisplayFunctions::Update(){
-    const bool active = OSData::isTouched || PadFunctions::IsDown(PadFunctions::kAllButtons);
+    const bool active = OSData::isTouched || PadFunctions::IsDown(PadFunctions::kAllButtons)
+                       || KeyInputFunctions::Pending() > 0; //このフレームの打鍵(配るのはこの後)
     const unsigned long now = millis();
 
     if(active){

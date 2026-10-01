@@ -57,6 +57,8 @@
 #                   効果音への貸し出し)、SoundFunctionsの配線(置き場の入れ替え・効果音との同居)
 #   midi2mml_test … MIDI→MMLの変換(script/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
 #                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
+#   key_input_test … 物理キーボードの窓口(KeyInputFunctions)。"key ..."の行の読み取り、padの行との同居、
+#                   画面のonKey()→開いているキー盤の順に配ること、キー盤の編集(挿入/削除/移動/決定)、数字のキー盤の制限
 #   pad_test      … 外部コントローラーの窓口(PadFunctions)。USBシリアルの行("pad XXXX")の読み取り、
 #                   押した/離したのはそのフレームだけ、行が途切れたら外れて押しっぱなしにならないこと、
 #                   Game Boyのボタンへの対応
@@ -583,17 +585,38 @@ fi
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/pad_test.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
     -o "$OUT/pad_test"
 
 echo ""
 echo "===== pad_test ====="
 run_or_die "$OUT/pad_test"
 
+# --- 物理キーボード(KeyInputFunctions) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/key_input_test.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    "$ROOT/src/functions/KeyInput_Dispatch.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardEng.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    -o "$OUT/key_input_test"
+
+echo ""
+echo "===== key_input_test ====="
+run_or_die "$OUT/key_input_test"
+
 # --- スリープ(省電力) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/power_test.cpp" \
     "$ROOT/src/functions/Power_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
     -o "$OUT/power_test"
 
 echo ""
@@ -701,6 +724,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/icons/icon_render.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
     -o "$OUT/widget_factory_test"
 
 echo ""
@@ -749,6 +773,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
     -o "$OUT/widget_property_test"
 
 echo ""
@@ -920,6 +945,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     "$OUT"/lua_obj/*.o \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
     -o "$OUT/lua_engine_test" -lssl -lcrypto
 
 echo ""
@@ -988,6 +1014,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     "$OUT"/lua_obj/*.o \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
     -o "$OUT/lua_scene_test" -lssl -lcrypto
 
 echo ""
@@ -1057,6 +1084,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     "$OUT"/lua_obj/*.o \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
     -o "$OUT/lua_app_scanner_test" -lssl -lcrypto
 
 echo ""

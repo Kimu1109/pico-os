@@ -84,6 +84,10 @@ bool KeyboardFunctions::IsDocked(){
     return docked && IsVisible();
 }
 
+KeyboardPanel* KeyboardFunctions::VisiblePanel(){
+    return visiblePanel();
+}
+
 int KeyboardFunctions::VisibleTop(){
     KeyboardPanel* p = visiblePanel();
     return p ? p->getPanelTop() : SCREEN_HEIGHT;

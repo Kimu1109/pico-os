@@ -52,6 +52,9 @@ class ITextInputTarget {
         virtual bool onBackspaceAtStart(ITextInputWidget* keyboard) { return false; }
         //カーソルが端にあってそれ以上動かせない(dir: -1=左端で←, +1=右端で→)。処理したらtrue
         virtual bool onCursorAtEdge(ITextInputWidget* keyboard, int dir) { return false; }
+        //カーソルが末尾にあるときに物理キーボードのDeleteが押された。処理したらtrue
+        //(onBackspaceAtStart()の逆向き。次の行と繋げるために使う)
+        virtual bool onDeleteAtEnd(ITextInputWidget* keyboard) { return false; }
 
         virtual ~ITextInputTarget() = default;
 };

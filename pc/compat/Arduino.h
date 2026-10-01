@@ -94,6 +94,9 @@ namespace PicoPcSerial {
     inline void Push(int c) {
         if (buffer.size() < 4096) buffer.push_back((char)c);
     }
+    inline void PushLine(const char* s) {
+        while (*s) Push((unsigned char)*s++);
+    }
 }
 #else
 #include <cstdlib>
@@ -121,6 +124,12 @@ namespace PicoPcSerial {
                 if (buffer.size() < 4096) buffer.append(chunk, (size_t)n);
             }
         }).detach();
+    }
+    // 標準入力以外の入力元(main_pc.cppのSDLのキーボード)から1行を足す。どのスレッドからでもよい
+    inline void PushLine(const char* s) {
+        std::lock_guard<std::mutex> lock(mutex);
+        const size_t n = strlen(s);
+        if (buffer.size() + n <= 4096) buffer.append(s, n);
     }
 }
 #endif

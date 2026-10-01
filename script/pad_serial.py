@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
-"""PCのキーボードをpico-osの外部コントローラーにする(USBシリアル経由)。
+"""PCのキーボードをpico-osの外部コントローラー/物理キーボードにする(USBシリアル経由)。
 
-小さなウィンドウを開き、そこでのキーの押し下げ/離しをボタンの状態(ビットマスク)にして、
-pico-osへ1行ずつ送る(形式は src/functions/Pad_Functions.hpp):
+小さなウィンドウを開き、そこでのキー操作をpico-osへ1行ずつ送る。2つのモードがあり、F1で切り替える:
 
-    pad XXXX\\n      XXXX = 押しているボタンの16進数
+- コントローラー(既定): キーの押し下げ/離しをボタンの状態(ビットマスク)にして送る
+  (形式は src/functions/Pad_Functions.hpp):
 
-状態が変わったときと、変わらなくても100msごとに送る。pico-os側は500ms届かなければ
-全部離した扱いにするので、このスクリプトを止めればボタンが押しっぱなしになることは無い。
+      pad XXXX\\n      XXXX = 押しているボタンの16進数
+
+  状態が変わったときと、変わらなくても100msごとに送る。pico-os側は500ms届かなければ
+  全部離した扱いにするので、このスクリプトを止めればボタンが押しっぱなしになることは無い。
+
+- 文字入力(--mode text): 打ったキーを1打鍵1行で送る(形式は src/functions/KeyInput_Functions.hpp):
+
+      key M u+XXXX\\n  文字(Mは修飾キー 1=Ctrl 2=Alt 4=Shift)
+      key M left\\n    名前のあるキー(enter backspace tab esc delete left right up down home end pageup pagedown)
+
+  オンスクリーンキーボードを開いている所(Textbox等)・テキストエディタ・SSHへそのまま入る。
+  キーの自動リピートはそのまま連打として送る。文字入力の間もコントローラーは「何も押していない」を
+  送り続ける(押しっぱなしのボタンを残さないため)。
 
 使い方:
     python3 script/pad_serial.py COM3            # Windows
@@ -15,6 +26,7 @@ pico-osへ1行ずつ送る(形式は src/functions/Pad_Functions.hpp):
     python3 script/pad_serial.py                 # ポートが1つだけならそれを使う(pyserialが要る)
     python3 script/pad_serial.py --list          # ポートの一覧
     python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc    # PCビルドへ
+    python3 script/pad_serial.py --mode text COM3   # 文字入力のモードで始める(F1で切り替え)
 
 - シリアルはpyserial(`pip install pyserial`)で開く。無ければLinux/macOSだけは標準ライブラリで開く
 - ポートは同時に1つのプログラムしか開けないので、シリアルモニタとは同時に使えない。
@@ -50,6 +62,41 @@ KEYMAP = {
     "BackSpace": "select", "Shift_R": "select",
     "h": "home", "Escape": "home",
 }
+
+# 文字入力のモード: tkinterのkeysym → KeyInput_Functions.hpp の名前
+NAMED_KEYS = {
+    "Return": "enter", "KP_Enter": "enter", "BackSpace": "backspace", "Tab": "tab",
+    "ISO_Left_Tab": "tab", "Escape": "esc", "Delete": "delete", "KP_Delete": "delete",
+    "Left": "left", "Right": "right", "Up": "up", "Down": "down",
+    "KP_Left": "left", "KP_Right": "right", "KP_Up": "up", "KP_Down": "down",
+    "Home": "home", "End": "end", "KP_Home": "home", "KP_End": "end",
+    "Prior": "pageup", "Next": "pagedown", "KP_Prior": "pageup", "KP_Next": "pagedown",
+}
+MOD_CTRL, MOD_ALT, MOD_SHIFT = 1, 2, 4
+
+
+def key_line(keysym, char, state):
+    """tkinterのキーイベント → "key ..." の行(送らないキーはNone)"""
+    mods = 0
+    if state & 0x0001:
+        mods |= MOD_SHIFT
+    if state & 0x0004:
+        mods |= MOD_CTRL
+    # Altの位置はOSで違う(Windows: 0x20000、X11: Mod1=0x8、macOS: Option=0x10)
+    alt_bit = 0x20000 if sys.platform == "win32" else (0x10 if sys.platform == "darwin" else 0x0008)
+    if state & alt_bit:
+        mods |= MOD_ALT
+
+    if keysym in NAMED_KEYS:
+        return f"key {mods:x} {NAMED_KEYS[keysym]}\n"
+    if mods & (MOD_CTRL | MOD_ALT) and len(keysym) == 1 and keysym.isascii():
+        # Ctrl+C等はcharが制御文字になるので、keysym(押したキーの文字)を送る
+        return f"key {mods:x} u+{ord(keysym.lower()):x}\n"
+    if char and len(char) == 1 and ord(char) >= 0x20 and ord(char) != 0x7F:
+        # 文字はShiftを反映済みで送る(Shiftの印は参考)
+        return f"key {mods:x} u+{ord(char):x}\n"
+    return None
+
 
 SEND_INTERVAL_MS = 100
 # X11はキーの自動リピートで「離した→押した」を連続して送ってくるので、離したのは少し待ってから採る
@@ -196,8 +243,9 @@ def list_ports():
 # ---------------- ウィンドウ ----------------
 
 class PadWindow:
-    def __init__(self, link):
+    def __init__(self, link, text_mode=False):
         self.link = link
+        self.text_mode = text_mode
         self.held = set()       # 押しているキー(keysym)
         self.pending_release = {}
         self.last_sent = None
@@ -206,15 +254,20 @@ class PadWindow:
         self.root.title(f"pico-os コントローラー → {link.name}")
         self.root.resizable(False, False)
 
+        self.mode_label = tk.Label(self.root, font=("TkFixedFont", 11, "bold"), anchor="w")
+        self.mode_label.pack(padx=12, pady=(10, 0), anchor="w")
+
         tk.Label(self.root, justify="left", font=("TkFixedFont", 10), text=(
-            "このウィンドウを選んだ状態でキーを押す\n"
+            "このウィンドウを選んだ状態でキーを押す(F1でモード切り替え)\n"
+            "[コントローラー]\n"
             "  十字キー      : 矢印キー\n"
             "  A / B         : X / Z\n"
             "  X / Y         : S / A\n"
             "  L / R / ZL / ZR : Q / W / E / R\n"
             "  START / SELECT: Enter / BackSpace(右Shift)\n"
             "  HOME          : H / Esc\n"
-        )).pack(padx=12, pady=(10, 4), anchor="w")
+            "[文字入力] 打ったキーをそのまま入力(Ctrl/Alt付きも送る)\n"
+        )).pack(padx=12, pady=(4, 4), anchor="w")
 
         self.state_label = tk.Label(self.root, font=("TkFixedFont", 12, "bold"),
                                     width=40, anchor="w")
@@ -226,7 +279,21 @@ class PadWindow:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.update_label()
+        self.update_mode_label()
         self.tick()
+
+    def update_mode_label(self):
+        self.mode_label.config(text="モード: " + ("文字入力" if self.text_mode else "コントローラー"))
+
+    def toggle_mode(self):
+        self.text_mode = not self.text_mode
+        # どちらへ切り替えても、押していたボタンは離す
+        for job in self.pending_release.values():
+            self.root.after_cancel(job)
+        self.pending_release.clear()
+        self.held.clear()
+        self.send()
+        self.update_mode_label()
 
     @staticmethod
     def key_of(event):
@@ -255,6 +322,14 @@ class PadWindow:
         self.state_label.config(text="押している: " + (" ".join(names) if names else "(なし)"))
 
     def on_press(self, event):
+        if event.keysym == "F1":
+            self.toggle_mode()
+            return "break"
+        if self.text_mode:
+            line = key_line(event.keysym, event.char, event.state)
+            if line:
+                self.link.write(line.encode("ascii"))
+            return "break"  # Tabでフォーカスが移ったりしないように
         k = self.key_of(event)
         if k not in KEYMAP:
             return
@@ -266,6 +341,8 @@ class PadWindow:
             self.send()
 
     def on_release(self, event):
+        if self.text_mode:
+            return
         k = self.key_of(event)
         if k not in KEYMAP:
             return
@@ -307,6 +384,8 @@ def main():
     ap.add_argument("port", nargs="?", help="シリアルポート(COM3 / /dev/ttyACM0 等)")
     ap.add_argument("--stdout", action="store_true", help="標準出力へ流す(PCビルドへパイプする)")
     ap.add_argument("--list", action="store_true", help="シリアルポートの一覧を出す")
+    ap.add_argument("--mode", choices=["pad", "text"], default="pad",
+                    help="始めのモード(pad=コントローラー / text=文字入力)。F1で切り替えられる")
     args = ap.parse_args()
 
     if args.list:
@@ -333,7 +412,7 @@ def main():
             sys.exit("Windowsではpyserialが要ります: pip install pyserial")
         link = SerialLink(port)
 
-    PadWindow(link).run()
+    PadWindow(link, text_mode=(args.mode == "text")).run()
 
 
 if __name__ == "__main__":

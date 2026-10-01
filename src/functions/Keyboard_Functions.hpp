@@ -30,6 +30,8 @@ namespace KeyboardFunctions {
     bool IsVisible();
     // 据え置き表示で開いているか
     bool IsDocked();
+    // 表示中のキー盤(無ければnullptr)。物理キーボードの打鍵の届け先
+    KeyboardPanel* VisiblePanel();
     // 表示中のキー盤の上端のy座標(表示していなければSCREEN_HEIGHT)
     int VisibleTop();
 

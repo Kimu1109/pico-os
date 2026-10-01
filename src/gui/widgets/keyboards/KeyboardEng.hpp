@@ -241,6 +241,11 @@ class KeyboardEng : public KeyboardPanel {
         bool isUpperCase = false;
         bool isNumMode = false;
 
+        // ---- 物理キーボード ----
+        void physicalInsert(const char* utf8) override { addInput(utf8); }
+        void physicalBackspace() override { removeInput(); }
+        void physicalMove(int delta) override { moveCursor(delta); }
+
     public:
         static constexpr int PANEL_H = key_h * 4;
 

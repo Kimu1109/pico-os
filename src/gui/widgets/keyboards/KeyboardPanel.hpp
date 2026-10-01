@@ -2,6 +2,7 @@
 
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
+#include "functions/KeyInput_Functions.hpp"
 
 // オンスクリーンキーボードの「キー盤」部分の基底(Keyboard / KeyboardEng / KeyboardNum)。
 //
@@ -36,6 +37,18 @@ class KeyboardPanel : public Widget, public ITextInputWidget {
             return n;
         }
 
+        // ---- 物理キーボード(onPhysicalKey())から呼ばれる。各キー盤が自分の編集操作へ繋ぐ ----
+        // カーソル位置へ文字列を入れる(日本語は変換中の読みを確定させてから)
+        virtual void physicalInsert(const char* utf8) = 0;
+        // カーソルの前の1文字を消す(先頭なら target->onBackspaceAtStart())
+        virtual void physicalBackspace() = 0;
+        // カーソルを動かす(端なら target->onCursorAtEdge())
+        virtual void physicalMove(int delta) = 0;
+        // Enter。単一行なら決定、複数行なら改行(日本語の変換中は確定だけ)
+        virtual void physicalEnter();
+        // このキー盤へ入れてよい文字か(数字のキー盤は英字を断る)
+        virtual bool acceptsPhysicalChar(uint32_t cp) const { (void)cp; return true; }
+
         // 自分の高さが変わった(KeyboardNumのタブ数など)ときに呼ぶ
         void setPanelHeight(int h);
 
@@ -68,6 +81,11 @@ class KeyboardPanel : public Widget, public ITextInputWidget {
             this->needsRender();
         }
         ITextInputTarget* getInputTarget() override { return this->target; }
+
+        // 物理キーボードの打鍵を入力として扱う。扱ったらtrue
+        //   文字 → カーソル位置へ / Enter → 決定か改行(Ctrl+Enterは常に決定) / Esc → 決定して閉じる /
+        //   Backspace・Delete・←→・Home・End → 編集。↑↓・Tab・Ctrl/Alt付きの文字は扱わない
+        bool onPhysicalKey(const KeyInputFunctions::Event& ev);
 
         // 表示直前に呼ばれる。変換候補など、前回の入力の名残りを捨てる
         virtual void resetTransientState() {}

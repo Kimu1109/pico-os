@@ -109,6 +109,11 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         void onDisplayChanged(ITextInputWidget* keyboard) override;
         bool onBackspaceAtStart(ITextInputWidget* keyboard) override;
         bool onCursorAtEdge(ITextInputWidget* keyboard, int dir) override;
+        bool onDeleteAtEnd(ITextInputWidget* keyboard) override;
+
+        // 物理キーボード: ↑↓/PageUp/PageDownで行を移る、Ctrl+Sで保存、
+        // キーボードが閉じていれば打ったときに開く(文字そのものはキー盤が入れる)
+        bool onKey(const KeyInputFunctions::Event& ev) override;
         bool getIsSingleLine() override { return false; }
         void setIsSingleLine(bool) override {}
 };

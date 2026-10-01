@@ -240,6 +240,75 @@ bool TextEditorScene::onCursorAtEdge(ITextInputWidget* keyboard, int dir){
     return true;
 }
 
+bool TextEditorScene::onDeleteAtEnd(ITextInputWidget* keyboard){
+    if(this->cur_line + 1 >= this->lineCount()) return true;
+
+    int cs, ce, ns, ne;
+    this->lineRange(this->cur_line, cs, ce);
+    this->lineRange(this->cur_line + 1, ns, ne);
+    if((ce - cs) + (ne - ns) > kMaxLineBytes){
+        this->refreshStatus("1行が長くなりすぎるため繋げられません");
+        return true;
+    }
+
+    //この行の末尾の'\n'を消すだけで次の行と繋がる。カーソルは繋ぎ目のまま
+    this->replaceRange(ce, ce + 1, "", 0);
+    this->setDirty(true);
+    this->refreshView();
+    this->attachLine(keyboard, this->cur_line, ce - cs);
+    return true;
+}
+
+bool TextEditorScene::onKey(const KeyInputFunctions::Event& ev){
+    using KeyInputFunctions::Key;
+
+    //ダイアログ(保存/開く/破棄の確認)を出している間は触らない(キー盤へ回す/捨てる)
+    for(Widget* d : WidgetFunctions::dialog_roots){
+        if(d && d->getVisible()) return false;
+    }
+
+    if(ev.key == Key::Char && ev.ctrl() && (ev.cp == 's' || ev.cp == 'S')){
+        this->saveFile();
+        return true;
+    }
+
+    KeyboardPanel* panel = KeyboardFunctions::VisiblePanel();
+    if(panel && panel->getInputTarget() != this) panel = nullptr;
+
+    int lines = 0;
+    switch(ev.key){
+        case Key::Up:       lines = -1;  break;
+        case Key::Down:     lines = 1;   break;
+        case Key::PageUp:   lines = -10; break;
+        case Key::PageDown: lines = 10;  break;
+        default: break;
+    }
+    if(lines != 0){
+        if(!panel){
+            this->openKeyboard(); //onShow()がカーソルの行を渡す
+            panel = KeyboardFunctions::VisiblePanel();
+            if(!panel) return true;
+        }
+        int next = this->cur_line + lines;
+        if(next < 0) next = 0;
+        if(next > this->lineCount() - 1) next = this->lineCount() - 1;
+        if(next != this->cur_line){
+            //桁はバイト数のまま引き継ぐ(attachLine()が行の長さで頭打ちにする)
+            this->attachLine(panel, next, (int)panel->getCursorByteOffset());
+        }
+        return true;
+    }
+
+    //閉じているキーボードを開いてから、打鍵そのものはキー盤に入れてもらう
+    if(!panel){
+        const bool edits = ev.isPlainChar() || ev.key == Key::Enter || ev.key == Key::Backspace
+                        || ev.key == Key::Delete || ev.key == Key::Left || ev.key == Key::Right
+                        || ev.key == Key::Home || ev.key == Key::End;
+        if(edits) this->openKeyboard();
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------- ファイル
 
 void TextEditorScene::confirmDiscard(const char* msg, std::function<void()> then){

@@ -40,8 +40,8 @@
 #if defined(__EMSCRIPTEN__)
     #include <emscripten.h>
     #include <emscripten/html5.h>  // emscripten_get_canvas_element_size
-    #include <Arduino.h>           // PicoPcSerial(picoos_serial_push)
 #endif
+#include <Arduino.h>               // PicoPcSerial(picoos_serial_push / SDLのキーボード)
 
 #include "consts.hpp"
 #include "OS_Data.hpp"
@@ -110,6 +110,103 @@ namespace {
         SDL_PushEvent(&ev);
     }
 
+    // ---- PCのキーボード → 物理キーボードの打鍵 ----
+    // ウィンドウでのキー操作を、実機のUSBシリアルと同じ "key M CODE" の行にして
+    // Serialの受信口へ入れる(KeyInput_Functions.hpp)。pico-os側は実機と同じ経路で読む。
+    // 文字はSDL_TEXTINPUT(Shift・キー配列・母艦のIMEを反映済みのUTF-8)、名前のあるキーと
+    // Ctrl/Alt付きの文字はSDL_KEYDOWNから作る(Ctrl+CではTEXTINPUTが来ないため)。
+    // PICOOS_PC_KEYBOARD=off で無効。
+    //
+    // イベントの監視(SDL_AddEventWatch)はSDLのイベントを取り込むスレッドで呼ばれる。
+    // 受信口はロックを持つので、ループのスレッドとぶつからない
+    bool g_pc_keyboard = true;
+
+    uint8_t pcKeyMods(Uint16 mod)
+    {
+        uint8_t m = 0;
+        if (mod & KMOD_CTRL)  m |= 1;
+        if (mod & KMOD_LALT)  m |= 2;   //右AltはAltGr(記号の入力)のことがあるので数えない
+        if (mod & KMOD_SHIFT) m |= 4;
+        return m;
+    }
+
+    void pcPushKey(uint8_t mods, const char* code)
+    {
+        char line[48];
+        snprintf(line, sizeof(line), "key %x %s\n", mods, code);
+        PicoPcSerial::PushLine(line);
+    }
+
+    int pcKeyboardWatch(void*, SDL_Event* ev)
+    {
+        if (ev->type == SDL_TEXTINPUT) {
+            //Ctrl/Alt付きはKEYDOWN側で送る(環境によってはTEXTINPUTも来るため二重にしない)
+            if (SDL_GetModState() & (KMOD_CTRL | KMOD_LALT)) return 0;
+            const unsigned char* s = (const unsigned char*)ev->text.text;
+            while (*s) {
+                uint32_t cp; int n;
+                if (s[0] < 0x80)                { cp = s[0];        n = 1; }
+                else if ((s[0] & 0xE0) == 0xC0) { cp = s[0] & 0x1F; n = 2; }
+                else if ((s[0] & 0xF0) == 0xE0) { cp = s[0] & 0x0F; n = 3; }
+                else if ((s[0] & 0xF8) == 0xF0) { cp = s[0] & 0x07; n = 4; }
+                else { s++; continue; }
+                int i = 1;
+                for (; i < n && (s[i] & 0xC0) == 0x80; i++) cp = (cp << 6) | (s[i] & 0x3F);
+                if (i < n) { s += i; continue; }
+                s += n;
+                char code[16];
+                snprintf(code, sizeof(code), "u+%x", (unsigned)cp);
+                pcPushKey(0, code);
+            }
+            return 0;
+        }
+        if (ev->type != SDL_KEYDOWN) return 0;
+
+        const SDL_Keycode sym = ev->key.keysym.sym;
+        const uint8_t mods = pcKeyMods(ev->key.keysym.mod);
+        const char* name = nullptr;
+        switch (sym) {
+            case SDLK_RETURN: case SDLK_KP_ENTER: name = "enter"; break;
+            case SDLK_BACKSPACE: name = "backspace"; break;
+            case SDLK_TAB:       name = "tab"; break;
+            case SDLK_ESCAPE:    name = "esc"; break;
+            case SDLK_DELETE:    name = "delete"; break;
+            case SDLK_LEFT:      name = "left"; break;
+            case SDLK_RIGHT:     name = "right"; break;
+            case SDLK_UP:        name = "up"; break;
+            case SDLK_DOWN:      name = "down"; break;
+            case SDLK_HOME:      name = "home"; break;
+            case SDLK_END:       name = "end"; break;
+            case SDLK_PAGEUP:    name = "pageup"; break;
+            case SDLK_PAGEDOWN:  name = "pagedown"; break;
+            default: break;
+        }
+        if (name) {
+            pcPushKey(mods, name);
+            return 0;
+        }
+        //Ctrl/Alt付きの文字(Ctrl+C等)。SDLのキーコードは英字なら小文字のASCII
+        if ((mods & 3) && sym >= 0x20 && sym < 0x7F) {
+            char code[16];
+            snprintf(code, sizeof(code), "u+%x", (unsigned)sym);
+            pcPushKey(mods, code);
+        }
+        return 0;
+    }
+
+    void setupPcKeyboard()
+    {
+        const char* env = getenv("PICOOS_PC_KEYBOARD");
+        if (env && strcmp(env, "off") == 0) g_pc_keyboard = false;
+        if (!g_pc_keyboard) return;
+        //LovyanGFXのSDLパネルは修飾キー無しの r / l / 1〜6 を画面の回転・拡大に使うので、
+        //文字を打つと画面が回ってしまう。左Ctrl+左Altを押したときだけにずらす
+        lgfx::Panel_sdl::setShortcutKeymod((SDL_Keymod)(KMOD_LCTRL | KMOD_LALT));
+        SDL_AddEventWatch(pcKeyboardWatch, nullptr);
+        SDL_StartTextInput();
+        printf("[PC] PCのキーボードで文字を入力できます(PICOOS_PC_KEYBOARD=offで無効)\n");
+    }
+
     // 2コア目の代わりのスレッド。実機のloop1()と同じく回し続ける
     // (loop1()は仕事が無ければdelay(1)で休むので、CPUを食い潰さない)
     std::atomic<bool> g_core1_run{true};
@@ -128,6 +225,7 @@ namespace {
             ~Core1Joiner() { g_core1_run.store(false); t.join(); }
         } joiner{core1};
 
+        setupPcKeyboard();
         setup();
 
         int frame = 0;
@@ -481,6 +579,10 @@ int main(int, char**)
     pinCanvasCssSizeForProbe();
 
     if (0 != lgfx::Panel_sdl::setup()) return 1;
+
+    //LovyanGFXのSDLパネルは修飾キー無しの r / l / 1〜6 を画面の回転・拡大に使う。
+    //ページで文字を打つ(shell.htmlの「文字入力」)ときに画面が回らないよう、左Ctrl+左Altの時だけにする
+    lgfx::Panel_sdl::setShortcutKeymod((SDL_Keymod)(KMOD_LCTRL | KMOD_LALT));
 
     setup();
     setup1();

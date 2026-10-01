@@ -11,6 +11,7 @@
 #include "gui/scenes/DictScene.hpp"
 #include "gui/scenes/CalendarScene.hpp"
 #include "gui/scenes/ChatScene.hpp"
+#include "gui/scenes/TodoScene.hpp"
 #include "gui/scenes/GameBoyScene.hpp"
 #include "gui/scenes/MusicScene.hpp"
 #include "gui/scenes/SshScene.hpp"
@@ -52,6 +53,8 @@ void AppFunctions::Setup(){
     Register("カレンダー", IconID::Calendar, &MakeScene<CalendarScene>);
     //自前のチャットサーバ(server/chat/)へ繋ぐ。接続先は /sys/chat.cfg
     Register("チャット", IconID::Messages, &MakeScene<ChatScene>);
+    //Todoistのタスク(TODO/リマインダー)。トークンは /sys/todoist.cfg(アプリの[設定]から入れる)
+    Register(TodoScene::kAppName, IconID::CheckboxOn, &MakeScene<TodoScene>);
     //Game Boy(DMG)エミュ。ROMはSDの /gb/ に置く(256KBまで。SUMMARY.md #9)
     Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
     //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(MUSIC_FORMAT.md)

@@ -11,6 +11,9 @@
 # HTTPS(calendar_sync_test)は、ここで使い捨てのCAとサーバ証明書を openssl コマンドで作り、
 # script/host_test/tls_test_server.py を立てて確かめる(外のサーバへは行かない)。
 #
+# TODO(todoist_net_test)は script/host_test/todoist_fake_server.py(Todoist API v1 の偽物)を平文・HTTPS
+# (上と同じ使い捨ての証明書)・ページを小さくしたものの3つ立てて確かめる。本物の api.todoist.com へは行かない。
+#
 # チャット(chat_net_test)は server/chat/chat_server.py を使い捨てのDBで、平文とHTTPS
 # (上と同じ使い捨ての証明書)の2つ立てて確かめる。サーバ単体の権限まわり(chat_server_test.py)も
 # ここで回す(同じプロセスの中で 127.0.0.1 の空きポートにサーバを立てる)。
@@ -68,9 +71,10 @@ done
 
 TLS_PID=""
 CHAT_PIDS=""
+TODO_PIDS=""
 SSHD_PID=""
 cleanup(){
-    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $SSHD_PID 2>/dev/null || true
+    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $SSHD_PID 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     wait "$BARE_PID" 2>/dev/null || true
     [ -n "$TLS_PID" ] && wait "$TLS_PID" 2>/dev/null || true
@@ -165,6 +169,46 @@ echo "===== chat_net_test ====="
 echo ""
 echo "===== chat_server_test ====="
 python3 "$ROOT/script/host_test/chat_server_test.py"
+
+# ---- TODO(TodoistClient)。Todoist API v1 の偽物を平文・HTTPS・ページ分けの3つ立てる ----
+TODO_PORT=$((PORT + 5))
+TODO_TLS_PORT=$((PORT + 6))
+TODO_PAGED_PORT=$((PORT + 7))
+TODO_FAKE="$ROOT/script/host_test/todoist_fake_server.py"
+TODO_TOKEN=0123456789abcdef0123456789abcdef01234567
+
+g++ -std=gnu++17 -g -fsanitize=address,undefined \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
+    "$ROOT/script/host_test/todoist_net_test.cpp" \
+    "$ROOT/src/todo/Todoist_Client.cpp" \
+    "$ROOT/src/todo/Todoist_Proto.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    -o "$OUT/todoist_net_test" -lssl -lcrypto
+
+python3 "$TODO_FAKE" --port "$TODO_PORT" --token "$TODO_TOKEN" > "$OUT/todo_server.log" 2>&1 &
+TODO_PIDS="$!"
+python3 "$TODO_FAKE" --port "$TODO_TLS_PORT" --token "$TODO_TOKEN" \
+    --cert "$OUT/server.pem" --key "$OUT/server.key" > "$OUT/todo_tls_server.log" 2>&1 &
+TODO_PIDS="$TODO_PIDS $!"
+python3 "$TODO_FAKE" --port "$TODO_PAGED_PORT" --token "$TODO_TOKEN" --page-size 4 --fillers 40 \
+    > "$OUT/todo_paged_server.log" 2>&1 &
+TODO_PIDS="$TODO_PIDS $!"
+
+i=0
+while [ $i -lt 50 ]; do
+    if grep -q "起動しました" "$OUT/todo_server.log" 2>/dev/null \
+       && grep -q "起動しました" "$OUT/todo_tls_server.log" 2>/dev/null \
+       && grep -q "起動しました" "$OUT/todo_paged_server.log" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+echo ""
+echo "===== todoist_net_test ====="
+"$OUT/todoist_net_test" "$TODO_PORT" "$TODO_TLS_PORT" "$OUT/ca.pem" "$TODO_TOKEN" "$TODO_PAGED_PORT"
 
 # ---- SSH(SshClient)。本物の sshd を使い捨ての鍵と設定で立てる ----
 SSHD=$(command -v sshd || ls /usr/sbin/sshd 2>/dev/null || true)

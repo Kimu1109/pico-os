@@ -10,13 +10,18 @@ pico-os は OS の証明書ストアを持たないので、繋ぎたい相手�
 
     python3 script/generate_tls_roots.py
 
+**ROOTS は末尾へ足すこと。** 母艦のストアから消えたルート(配布元が信頼を外した古いルート等)は、
+今の Tls_Roots_Data.hpp に焼き込まれている同じ位置の証明書を引き継ぐ(並びで対応を取るため)。
+
 1枚あたり、接続中だけRAMを約1.5KB使う(BearSSLが信頼の起点へ展開するため)。
 むやみに増やさないこと。
 """
 import datetime
 import os
+import re
 import subprocess
 import sys
+import tempfile
 
 CERT_DIR = "/etc/ssl/certs"
 
@@ -29,6 +34,7 @@ ROOTS = [
     ("DigiCert_Global_Root_G2.pem", "DigiCert(Microsoft/Outlookの公開カレンダー等)"),
     ("DigiCert_Global_Root_CA.pem", "DigiCert(旧ルート。まだ多くのサイトが使う)"),
     ("USERTrust_RSA_Certification_Authority.pem", "Sectigo"),
+    ("Amazon_Root_CA_1.pem", "Amazon(AWSの証明書。api.todoist.com 等)"),
 ]
 
 
@@ -46,9 +52,19 @@ def subject_and_expiry(path):
     return subject, expiry
 
 
+def existing_pems(path):
+    """今の Tls_Roots_Data.hpp に焼き込まれている証明書を、並んでいる順に返す"""
+    if not os.path.exists(path):
+        return []
+    text = open(path, encoding="utf-8").read()
+    body = "\n".join(re.findall(r'^\s*"(.*)\\n"', text, re.M))
+    return re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", body, re.S)
+
+
 def main():
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out_path = os.path.join(repo, "src", "net", "Tls_Roots_Data.hpp")
+    previous = existing_pems(out_path)
 
     lines = [
         "#pragma once",
@@ -59,16 +75,26 @@ def main():
         "// HTTPSで信頼するルート証明書(PEMを連結したもの)。一覧:",
     ]
     pems = []
-    for name, why in ROOTS:
+    for i, (name, why) in enumerate(ROOTS):
         path = os.path.join(CERT_DIR, name)
+        tmp = None
         if not os.path.exists(path):
-            print(f"見つかりません: {path}", file=sys.stderr)
-            return 1
+            if i >= len(previous):
+                print(f"見つかりません: {path}", file=sys.stderr)
+                return 1
+            #母艦のストアに無い。今焼き込まれているものを引き継ぐ
+            print(f"{name} は母艦に無いので、今の Tls_Roots_Data.hpp のものを使います", file=sys.stderr)
+            tmp = tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False, encoding="ascii")
+            tmp.write(previous[i] + "\n")
+            tmp.close()
+            path = tmp.name
         subject, expiry = subject_and_expiry(path)
         lines.append(f"//   - {subject}")
         lines.append(f"//       {why} / 期限 {expiry}")
         with open(path, encoding="ascii") as f:
             pems.append(f.read().strip())
+        if tmp:
+            os.unlink(tmp.name)
 
     lines.append("")
     lines.append("namespace TlsRootsData {")

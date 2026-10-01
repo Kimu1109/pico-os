@@ -13,3 +13,6 @@ pc/sdcard/sys/log.txt
 .claude/worktrees/
 pc/sdcard/sys/wifi.cfg
 pc/sdcard/sys/wifi.cfg.tmp
+# TODOアプリのトークン(PCで試すときに置く。秘密なのでコミットしない)
+pc/sdcard/sys/todoist.cfg
+pc/sdcard/sys/todoist.cfg.tmp

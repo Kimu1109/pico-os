@@ -12,8 +12,9 @@
 #include "storage/SD_Path.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/WifiScanDialog.hpp"
+#include "gui/widgets/dialogs/MsgDialog.hpp"
+#include "net/Wifi_Profiles.hpp"
 #include "task/NetworkScan.hpp"
-#include "util/Secret_Cipher.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -52,9 +53,8 @@ void SettingsScene::loadTimezoneItems(const FixedString<PICO_STR_M>& current_tz)
     if(this->tz_selected_index < 0) this->tz_selected_index = 0; // 空/上限溢れ時はJST-9(先頭)を既定に
 }
 
+
 void SettingsScene::loadValues(){
-    this->ssid_value.clear();
-    this->has_password = false;
     this->ntp1_value.assign(NetworkFunctions::ntpServer1.c_str());
     this->ntp2_value.assign(NetworkFunctions::ntpServer2.c_str());
     this->home_value.clear();
@@ -64,14 +64,7 @@ void SettingsScene::loadValues(){
 
     PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
-            if(strcmp(key, "wifi-ssid") == 0){
-                char buf[PICO_STR_M];
-                if(PICO_Secret::Decrypt("wifi-ssid", value, buf, sizeof(buf))){
-                    this->ssid_value.assign(buf);
-                }
-            }else if(strcmp(key, "wifi-password") == 0){
-                this->has_password = (value[0] != '\0');
-            }else if(strcmp(key, "ntp-server-1") == 0){
+            if(strcmp(key, "ntp-server-1") == 0){
                 this->ntp1_value.assign(value);
             }else if(strcmp(key, "ntp-server-2") == 0){
                 this->ntp2_value.assign(value);
@@ -95,18 +88,6 @@ void SettingsScene::loadValues(){
     );
 
     this->loadTimezoneItems(tz_value);
-}
-
-void SettingsScene::refreshSsidLabel(){
-    if(!this->ssid_label) return;
-    char buf[PICO_STR_L];
-    snprintf(buf, sizeof(buf), "SSID: %s", this->ssid_value.empty() ? "(未設定)" : this->ssid_value.c_str());
-    this->ssid_label->setText(buf);
-}
-
-void SettingsScene::refreshPasswordLabel(){
-    if(!this->password_label) return;
-    this->password_label->setText(this->has_password ? "パスワード: 設定済み" : "パスワード: 未設定");
 }
 
 void SettingsScene::refreshNtp1Label(){
@@ -162,6 +143,42 @@ Button* SettingsScene::makeEditButton(int16_t y){
     return b;
 }
 
+template <size_t N>
+Label<N>* SettingsScene::makeRowLabel(int16_t x, int16_t y, int max_w, const char* text){
+    auto* l = new Label<N>(x, y, text);
+    l->setFontSize(FontFn::Small);
+    l->setMaxWidth(max_w);
+    l->setMaxHeight(Label<N>::GetLineHeight(FontFn::Small));
+    return l;
+}
+
+void SettingsScene::addToTab(Tab t, Widget* w){
+    WidgetFunctions::Add(w);
+    const int ti = (int)t;
+    if(this->tab_widget_count[ti] < kMaxTabWidgets){
+        this->tab_widgets[ti][this->tab_widget_count[ti]++] = w;
+    }else{
+        LOG_SYS_WARN("Settings: タブのウィジェットが多すぎます(%d)", ti);
+    }
+}
+
+void SettingsScene::applyTab(){
+    // 先に隠してから見せる(隠す側のdirtyと見せる側のdirtyが同じフレームにまとまる)
+    for(int t = 0; t < (int)Tab::Count; t++){
+        if(t == (int)this->tab) continue;
+        for(int i = 0; i < this->tab_widget_count[t]; i++) this->tab_widgets[t][i]->setVisible(false);
+    }
+    const int cur = (int)this->tab;
+    for(int i = 0; i < this->tab_widget_count[cur]; i++) this->tab_widgets[cur][i]->setVisible(true);
+
+    if(this->tab == Tab::Wifi){
+        // 隠れている間は更新していないので、見せる側を今の状態で埋め直す
+        this->shown_status = 0xFF;
+        this->wifi_list_dirty = true;
+        this->refreshWifi();
+    }
+}
+
 void SettingsScene::openEditDialog(EditField field, const char* label_text, const char* prefill){
     // MarkdownSceneの検索入力と同じ形: 押されるたびにnewし、閉じたらDestroyLater()で破棄する
     // (設定項目ごとに専用ダイアログを持つより省メモリで、既存の流儀にも合う)
@@ -179,38 +196,6 @@ void SettingsScene::openEditDialog(EditField field, const char* label_text, cons
 
 void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& input){
     switch(field){
-        case EditField::Ssid: {
-            if(input.empty()) break; // 空欄なら変更しない(SSIDは消せない)
-            char enc[PICO_STR_LL];
-            if(PICO_Secret::Encrypt("wifi-ssid", input.c_str(), enc, sizeof(enc))){
-                PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-ssid", enc);
-            }else{
-                LOG_SYS_WARN("Settings: SSIDの暗号化に失敗しました(長すぎます)。保存されていません。");
-            }
-            this->ssid_value.assign(input.c_str());
-            this->refreshSsidLabel();
-            // 既知のパスワード(NetworkFunctionsが再接続用に保持している)があれば、
-            // その場でSSIDの変更を反映する。無ければ次にパスワードを入れた時に繋がる
-            if(!NetworkFunctions::currentPassword.empty()){
-                NetworkFunctions::ConnectWiFiAsync(this->ssid_value.c_str(), NetworkFunctions::currentPassword.c_str());
-            }
-            break;
-        }
-        case EditField::Password: {
-            if(input.empty()) break; // 空欄なら変更しない(既存のパスワードを保つ)
-            char enc[PICO_STR_LL];
-            if(PICO_Secret::Encrypt("wifi-password", input.c_str(), enc, sizeof(enc))){
-                PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-password", enc);
-            }else{
-                LOG_SYS_WARN("Settings: パスワードの暗号化に失敗しました(長すぎます)。保存されていません。");
-            }
-            this->has_password = true;
-            this->refreshPasswordLabel();
-            if(!this->ssid_value.empty()){
-                NetworkFunctions::ConnectWiFiAsync(this->ssid_value.c_str(), input.c_str());
-            }
-            break;
-        }
         case EditField::Ntp1: {
             if(input.empty()) break;
             PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "ntp-server-1", input.c_str());
@@ -234,11 +219,162 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
             this->refreshHomeLabel();
             break;
         }
+        case EditField::WifiSsid: {
+            if(input.empty()) break;
+            if(input.length() > WifiProfiles::kMaxSsidBytes){
+                this->showMessageLater("SSIDが長すぎます(32バイトまで)");
+                break;
+            }
+            // ダイアログからダイアログは1フレーム空ける
+            this->pending_wifi_ssid.assign(input.c_str());
+            this->pending = Pending::WifiPassword;
+            break;
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
-// 周辺Wi-Fiのスキャン→選択→パスワード入力→接続
+// Wi-Fi: 状態の1行と保存済みのネットワークの一覧
+// ---------------------------------------------------------------------------
+
+void SettingsScene::refreshWifi(){
+    if(!this->wifi_status_label) return;
+
+    const auto status  = NetworkFunctions::currentStatus;
+    const bool enabled = NetworkFunctions::IsEnabled();
+    if((uint8_t)status != this->shown_status || !(this->shown_ssid == NetworkFunctions::currentSSID.c_str())
+        || enabled != this->shown_enabled){
+        this->shown_status = (uint8_t)status;
+        this->shown_ssid.assign(NetworkFunctions::currentSSID.c_str());
+        this->shown_enabled = enabled;
+        this->wifi_list_dirty = true; // 「接続中」の印と並び(接続できたら先頭へ繰り上がる)が変わる
+
+        if(this->wifi_enable_checkbox && this->wifi_enable_checkbox->getIsChecked() != enabled){
+            this->wifi_enable_checkbox->setIsChecked(enabled);
+        }
+
+        char buf[PICO_STR_L];
+        using NS = NetworkFunctions::NetStatus;
+        switch(status){
+            case NS::OFF:
+                snprintf(buf, sizeof(buf), "OFF");
+                break;
+            case NS::SUCCESS:
+                snprintf(buf, sizeof(buf), "接続中: %s", this->shown_ssid.c_str());
+                break;
+            case NS::TRYING_CONNECT:
+                snprintf(buf, sizeof(buf), "接続しています: %s", this->shown_ssid.c_str());
+                break;
+            default:
+                snprintf(buf, sizeof(buf), "%s",
+                    WifiProfiles::Count() > 0 ? "未接続(自動で再接続します)" : "未接続");
+                break;
+        }
+        this->wifi_status_label->setText(buf);
+        this->wifi_status_label->setTextColor(status == NS::SUCCESS ? PICO_DARKGREEN : PICO_BLACK);
+    }
+
+    if(this->wifi_list_dirty) this->rebuildWifiList();
+}
+
+void SettingsScene::rebuildWifiList(){
+    this->wifi_list_dirty = false;
+    if(!this->wifi_list) return;
+
+    // 選択はSSIDで覚えて作り直した後に戻す(接続できると並びが変わるため)
+    FixedString<PICO_STR_M> selected_ssid;
+    const int sel = this->selectedProfile();
+    if(const WifiProfiles::Profile* p = WifiProfiles::At(sel)) selected_ssid.assign(p->ssid.c_str());
+
+    this->wifi_list->clear();
+    const auto status = NetworkFunctions::currentStatus;
+    int new_sel = -1;
+    for(int i = 0; i < WifiProfiles::Count(); i++){
+        const WifiProfiles::Profile* p = WifiProfiles::At(i);
+        ScrollListTools::Item item;
+        item.icon = p->password.empty() ? IconID::WifiSignal4 : IconID::Lock;
+        item.text.assign(p->ssid.c_str());
+        if(p->ssid == NetworkFunctions::currentSSID.c_str()){
+            if(status == NetworkFunctions::NetStatus::SUCCESS){
+                item.text.append(" (接続中)");
+                item.color = PICO_DARKGREEN;
+            }else if(status == NetworkFunctions::NetStatus::TRYING_CONNECT){
+                item.text.append(" (接続しています)");
+            }
+        }
+        this->wifi_list->add(item);
+        if(!selected_ssid.empty() && p->ssid == selected_ssid.c_str()) new_sel = i;
+    }
+    if(new_sel >= 0) this->wifi_list->setSelectedIndex(new_sel);
+    else             this->wifi_list->clearSelectedIndex();
+
+    char title[PICO_STR_M];
+    snprintf(title, sizeof(title), "保存済み %d/%d (2回タップで接続)", WifiProfiles::Count(), WifiProfiles::kMaxProfiles);
+    if(this->wifi_list_title) this->wifi_list_title->setText(title);
+    this->wifi_list->needsRender();
+}
+
+int SettingsScene::selectedProfile(){
+    if(!this->wifi_list) return -1;
+    const int i = this->wifi_list->getSelectedIndex();
+    return (i >= 0 && i < WifiProfiles::Count()) ? i : -1;
+}
+
+void SettingsScene::connectSelected(){
+    const int idx = this->selectedProfile();
+    if(idx < 0){
+        this->showMessageLater("接続するネットワークを一覧から選んでください");
+        return;
+    }
+    NetworkFunctions::ConnectProfile(idx);
+    this->refreshWifi();
+}
+
+void SettingsScene::confirmRemoveSelected(){
+    const int idx = this->selectedProfile();
+    const WifiProfiles::Profile* p = WifiProfiles::At(idx);
+    if(!p){
+        this->showMessageLater("削除するネットワークを一覧から選んでください");
+        return;
+    }
+
+    char msg[PICO_STR_LL];
+    snprintf(msg, sizeof(msg), "「%s」を削除しますか?", p->ssid.c_str());
+    auto* dialog = new MsgDialog(msg, "やめる", "削除");
+    dialog->setVisibleIcon(false);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+
+    // 確認中に並びが変わっても(接続できて先頭へ繰り上がる等)別の組を消さないよう、SSIDで覚えておく
+    FixedString<PICO_STR_M> ssid;
+    ssid.assign(p->ssid.c_str());
+    dialog->setOnClosed([this, dialog, ssid](bool is_ok){
+        if(is_ok){
+            const int i = WifiProfiles::Find(ssid.c_str());
+            if(i >= 0) NetworkFunctions::RemoveProfile(i);
+            if(this->wifi_list) this->wifi_list->clearSelectedIndex();
+            this->wifi_list_dirty = true;
+            this->shown_status = 0xFF;
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void SettingsScene::showMessageLater(const char* text){
+    this->pending_message.assign(text);
+    this->pending = Pending::Message;
+}
+
+void SettingsScene::openMessage(){
+    auto* dialog = new MsgDialog(this->pending_message.c_str(), "閉じる", "OK");
+    dialog->setVisibleIcon(false);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([dialog](bool){ WidgetFunctions::DestroyLater(dialog); });
+}
+
+// ---------------------------------------------------------------------------
+// 周辺Wi-Fiのスキャン→選択→パスワード入力→保存して接続
 // ---------------------------------------------------------------------------
 
 void SettingsScene::startWifiScan(){
@@ -285,15 +421,25 @@ void SettingsScene::pollWifiScan(){
 }
 
 void SettingsScene::openWifiScanDialog(){
+    if(!NetworkFunctions::IsEnabled()){
+        this->showMessageLater("Wi-FiがOFFです。ONにしてから検索してください");
+        return;
+    }
     // SearchDialog(MarkdownScene)と同じく開くたびにnewし、閉じたらDestroyLater()する
     if(!this->wifi_scan_dialog){
         this->wifi_scan_dialog = new WifiScanDialog();
         WidgetFunctions::AddDialog(this->wifi_scan_dialog);
 
         this->wifi_scan_dialog->setOnSelect([this](const char* ssid){
-            // ダイアログからダイアログは1フレーム空ける(MarkdownScene::Pendingと同じ理由)
-            this->pending_wifi_ssid.assign(ssid);
-            this->pending_wifi_password_dialog = true;
+            const int saved = WifiProfiles::Find(ssid);
+            if(saved >= 0){
+                // 保存済みなら覚えているパスワードでそのまま繋ぐ(パスワードを変えたいときは「追加」から入れ直す)
+                NetworkFunctions::ConnectProfile(saved);
+            }else{
+                // ダイアログからダイアログは1フレーム空ける(MarkdownScene::Pendingと同じ理由)
+                this->pending_wifi_ssid.assign(ssid);
+                this->pending = Pending::WifiPassword;
+            }
             this->closeWifiScanDialog();
         });
         this->wifi_scan_dialog->setOnRescan([this](){ this->startWifiScan(); });
@@ -320,7 +466,7 @@ void SettingsScene::closeWifiScanDialog(){
 }
 
 void SettingsScene::openWifiPasswordDialog(){
-    // ラベル文字列(日本語)+SSID(最大47B)を余裕を持って収める。
+    // ラベル文字列(日本語)+SSID(最大32B)を余裕を持って収める。
     // 表示側はどのみちInputDialogのLabel<PICO_STR_L>(96B)で切り詰まる
     char label[PICO_STR_LL];
     snprintf(label, sizeof(label), "「%s」のパスワード(不要なら空欄のまま決定):",
@@ -331,42 +477,44 @@ void SettingsScene::openWifiPasswordDialog(){
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){
         if(is_submit){
-            this->connectScannedNetwork(this->pending_wifi_ssid.c_str(), dialog->getInput().c_str());
+            this->saveAndConnect(this->pending_wifi_ssid.c_str(), dialog->getInput().c_str());
         }
         WidgetFunctions::DestroyLater(dialog);
     });
 }
 
-void SettingsScene::connectScannedNetwork(const char* ssid, const char* password){
-    char enc_ssid[PICO_STR_LL];
-    if(PICO_Secret::Encrypt("wifi-ssid", ssid, enc_ssid, sizeof(enc_ssid))){
-        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-ssid", enc_ssid);
-    }else{
-        LOG_SYS_WARN("Settings: SSIDの暗号化に失敗しました(長すぎます)。保存されていません。");
+void SettingsScene::saveAndConnect(const char* ssid, const char* password){
+    switch(WifiProfiles::Put(ssid, password)){
+        case WifiProfiles::PutResult::Added:
+        case WifiProfiles::PutResult::Updated:
+            break;
+        case WifiProfiles::PutResult::Full: {
+            char msg[PICO_STR_L];
+            snprintf(msg, sizeof(msg), "保存できるのは%d件までです。不要なものを削除してください",
+                WifiProfiles::kMaxProfiles);
+            this->showMessageLater(msg);
+            return;
+        }
+        case WifiProfiles::PutResult::Invalid:
+            this->showMessageLater("SSIDかパスワードが長すぎます(パスワードは64文字まで)");
+            return;
     }
-
-    // 空文字列(オープンネットワーク)でも常に上書きする。commitEdit(EditField::Password)の
-    // 「空欄なら既存を保持」とはここが違う: 選んだネットワークへの新規接続なので、
-    // 別のネットワーク用に残っていた古いパスワードを引きずってはいけない
-    char enc_pass[PICO_STR_LL];
-    if(PICO_Secret::Encrypt("wifi-password", password, enc_pass, sizeof(enc_pass))){
-        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "wifi-password", enc_pass);
-    }else{
-        LOG_SYS_WARN("Settings: パスワードの暗号化に失敗しました(長すぎます)。保存されていません。");
-    }
-
-    this->ssid_value.assign(ssid);
-    this->has_password = (password[0] != '\0');
-    this->refreshSsidLabel();
-    this->refreshPasswordLabel();
 
     NetworkFunctions::ConnectWiFiAsync(ssid, password);
+    this->wifi_list_dirty = true;
+    this->refreshWifi();
 }
+
+// ---------------------------------------------------------------------------
+// 画面の組み立て
+// ---------------------------------------------------------------------------
 
 void SettingsScene::onEnter(){
     const Rect content = Scene::contentRect();
 
-    // ---- 上部: [戻る] ----
+    for(int t = 0; t < (int)Tab::Count; t++) this->tab_widget_count[t] = 0;
+
+    // ---- 上部: [戻る] + バッテリー残量(全タブ共通) ----
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20);
@@ -376,24 +524,34 @@ void SettingsScene::onEnter(){
     const Rect back_box = this->back_button->getLocalRect();
     this->top_row_h = back_box.h;
 
-    // ---- バッテリー残量(戻るボタンと同じ行の右側へ同居させる) ----
-    // 専用の行を割く余白は無いので(この画面は9行で既に画面いっぱい)、
-    // 上部の戻るボタンの右側に空いている横幅を使う
     const int16_t battery_x = (int16_t)(content.x + MARGIN + back_box.w + MARGIN);
     const int16_t battery_w = (int16_t)(content.x + content.w - MARGIN - battery_x);
-    this->battery_label = new Label<PICO_STR_M>(battery_x, content.y + MARGIN, "");
-    this->battery_label->setFontSize(FontFn::Small);
-    this->battery_label->setMaxWidth(battery_w);
-    this->battery_label->setMaxHeight(Label<PICO_STR_M>::GetLineHeight(FontFn::Small));
+    this->battery_label = makeRowLabel<PICO_STR_M>(battery_x, content.y + MARGIN, battery_w, "");
     WidgetFunctions::Add(this->battery_label);
     this->refreshBatteryLabel();
 
-    const int16_t body_y = (int16_t)(content.y + MARGIN + this->top_row_h + MARGIN);
-    auto rowY = [&](int i) -> int16_t { return (int16_t)(body_y + i * ROW_H); };
+    // ---- 下部: タブ ----
+    const int16_t tab_y = (int16_t)(content.y + content.h - MARGIN - TAB_H);
+    this->tab_bar = new TabBar(content.x + MARGIN, tab_y, content.w - MARGIN * 2, TAB_H);
+    this->tab_bar->addTab("Wi-Fi");
+    this->tab_bar->addTab("本体");
+    this->tab_bar->addTab("時刻");
+    this->tab_bar->addTab("その他");
+    this->tab_bar->setSelected((int)this->tab);
+    this->tab_bar->setOnChanged([this](int index){
+        this->tab = (Tab)index;
+        this->applyTab();
+    });
+    WidgetFunctions::Add(this->tab_bar);
 
-    // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、
-    // 読み込みより前に生成しておく(見た目の並び順は後段のNTP/ホームより下で変わらない)
-    this->run_test_checkbox = new Checkbox(content.x + MARGIN, rowY(9), "起動時に自己診断を実行");
+    const int16_t body_y   = (int16_t)(content.y + MARGIN + this->top_row_h + MARGIN);
+    const int16_t body_bot = (int16_t)(tab_y - MARGIN);
+    auto rowY = [&](int i) -> int16_t { return (int16_t)(body_y + i * ROW_H); };
+    const int16_t left = (int16_t)(content.x + MARGIN);
+    const int full_w = content.w - MARGIN * 2;
+
+    // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、読み込みより前に生成しておく
+    this->run_test_checkbox = new Checkbox(left, rowY(1), "起動時に自己診断を実行");
     this->run_test_checkbox->setFontSize(FontFn::Small);
     this->run_test_checkbox->setOnChangeChecked([this](){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, "run-test",
@@ -402,124 +560,102 @@ void SettingsScene::onEnter(){
 
     this->loadValues();
 
-    // ---- SSID ----
-    this->ssid_edit_button = this->makeEditButton(rowY(0));
-    this->ssid_edit_button->setOnPressEnd([this](){
-        this->openEditDialog(EditField::Ssid, "Wi-Fi SSID", this->ssid_value.c_str());
+    // =====================================================================
+    // Wi-Fi
+    // =====================================================================
+    // [■ Wi-Fi]  接続中: home-ap
+    this->wifi_enable_checkbox = new Checkbox(left, rowY(0), "Wi-Fi");
+    this->wifi_enable_checkbox->setFontSize(FontFn::Small);
+    this->wifi_enable_checkbox->setText("Wi-Fi"); // 小さいフォントで幅を測り直す(Checkboxの幅は構築時のフォントで決まるため)
+    this->wifi_enable_checkbox->setIsChecked(NetworkFunctions::IsEnabled());
+    this->wifi_enable_checkbox->setOnChangeChecked([this](){
+        NetworkFunctions::SetEnabled(this->wifi_enable_checkbox->getIsChecked());
+        this->refreshWifi();
     });
-    WidgetFunctions::Add(this->ssid_edit_button);
+    addToTab(Tab::Wifi, this->wifi_enable_checkbox);
 
-    // 編集ボタンの実測が済んだので、以降の行のラベル幅はこれで揃える
-    const int label_w = this->edit_btn_x - content.x - MARGIN * 2;
+    const Rect cb_box = this->wifi_enable_checkbox->getLocalRect();
+    const int16_t status_x = (int16_t)(cb_box.x + cb_box.w + MARGIN * 2);
+    this->wifi_status_label = makeRowLabel<PICO_STR_L>(
+        status_x, (int16_t)(rowY(0) + (cb_box.h - Label<PICO_STR_L>::GetLineHeight(FontFn::Small)) / 2),
+        content.x + content.w - MARGIN - status_x, "");
+    addToTab(Tab::Wifi, this->wifi_status_label);
 
-    // 「検索」ボタン(周辺Wi-Fiのスキャン→選択→パスワード入力→接続)は「編集」のすぐ左に置く。
-    // このボタンぶんだけSSID行のラベルを詰める(他の行は「編集」ボタン1つ分のままでよい)
-    this->wifi_scan_button = new Button(0, rowY(0), "検索");
-    this->wifi_scan_button->setFontSize(FontFn::Small);
-    this->wifi_scan_button->setAllowTextSpacing(false);
-    this->wifi_scan_button->setW(EDIT_BTN_W);
-    this->wifi_scan_button->setH(EDIT_BTN_H);
-    this->wifi_scan_button->setX(this->edit_btn_x - MARGIN - EDIT_BTN_W);
+    this->wifi_list_title = makeRowLabel<PICO_STR_M>(left, rowY(1), full_w, "");
+    this->wifi_list_title->setTextColor(PICO_DARKGREY);
+    addToTab(Tab::Wifi, this->wifi_list_title);
+
+    // 下段のボタン: [検索][追加][接続][削除]
+    constexpr int kWifiButtons = 4;
+    const int btn_w = (full_w - MARGIN * (kWifiButtons - 1)) / kWifiButtons;
+    Button** buttons[kWifiButtons] = {
+        &this->wifi_scan_button, &this->wifi_add_button, &this->wifi_connect_button, &this->wifi_remove_button
+    };
+    const char* button_texts[kWifiButtons] = { "検索", "追加", "接続", "削除" };
+    int16_t buttons_y = 0;
+    for(int i = 0; i < kWifiButtons; i++){
+        Button* b = new Button(0, 0, button_texts[i]);
+        b->setFontSize(FontFn::Small);
+        b->setAllowTextSpacing(false);
+        b->setW(btn_w);
+        b->setH(EDIT_BTN_H);
+        const Rect box = b->getLocalRect();
+        buttons_y = (int16_t)(body_bot - box.h);
+        b->setX((int16_t)(left + i * (btn_w + MARGIN)));
+        b->setY(buttons_y);
+        *buttons[i] = b;
+        addToTab(Tab::Wifi, b);
+    }
     this->wifi_scan_button->setOnPressEnd([this](){ this->openWifiScanDialog(); });
-    WidgetFunctions::Add(this->wifi_scan_button);
-
-    const int ssid_label_w = this->wifi_scan_button->getLocalRect().x - content.x - MARGIN * 2;
-
-    this->ssid_label = new Label<PICO_STR_L>(content.x + MARGIN, rowY(0), "");
-    this->ssid_label->setFontSize(FontFn::Small);
-    this->ssid_label->setMaxWidth(ssid_label_w);
-    this->ssid_label->setMaxHeight(Label<PICO_STR_L>::GetLineHeight(FontFn::Small));
-    WidgetFunctions::Add(this->ssid_label);
-    this->refreshSsidLabel();
-
-    // ---- Wi-Fiパスワード ----
-    this->password_edit_button = this->makeEditButton(rowY(1));
-    this->password_edit_button->setOnPressEnd([this](){
-        // 空欄のまま決定すると既存のパスワードを変更しない(commitEdit()参照)。
-        // プレースホルダはInputDialog側の固定文言("ここに入力...")のままになる
-        this->openEditDialog(EditField::Password, "Wi-Fiパスワード", "");
+    this->wifi_add_button->setOnPressEnd([this](){
+        this->openEditDialog(EditField::WifiSsid, "追加するWi-FiのSSID", "");
     });
-    WidgetFunctions::Add(this->password_edit_button);
+    this->wifi_connect_button->setOnPressEnd([this](){ this->connectSelected(); });
+    this->wifi_remove_button->setOnPressEnd([this](){ this->confirmRemoveSelected(); });
 
-    this->password_label = new Label<PICO_STR_M>(content.x + MARGIN, rowY(1), "");
-    this->password_label->setFontSize(FontFn::Small);
-    this->password_label->setMaxWidth(label_w);
-    this->password_label->setMaxHeight(Label<PICO_STR_M>::GetLineHeight(FontFn::Small));
-    WidgetFunctions::Add(this->password_label);
-    this->refreshPasswordLabel();
-
-    // ---- NTPサーバー1/2 ----
-    this->ntp1_edit_button = this->makeEditButton(rowY(3));
-    this->ntp1_edit_button->setOnPressEnd([this](){
-        this->openEditDialog(EditField::Ntp1, "NTPサーバー1", this->ntp1_value.c_str());
+    const int16_t list_y = (int16_t)(rowY(1) + Label<PICO_STR_M>::GetLineHeight(FontFn::Small) + MARGIN);
+    this->wifi_list = new ScrollList(left, list_y, full_w, (int16_t)(buttons_y - MARGIN - list_y), WifiProfiles::kMaxProfiles);
+    this->wifi_list->setFontSize(FontFn::Small);
+    this->wifi_list->setEnableIcon(true);
+    this->wifi_list->setOnSelectItem([this](int index, bool already_selected){
+        // 1回目のタップで選択、2回目で接続(ScrollListの流儀)
+        if(already_selected && index >= 0 && index < WifiProfiles::Count()){
+            NetworkFunctions::ConnectProfile(index);
+            this->refreshWifi();
+        }
     });
-    WidgetFunctions::Add(this->ntp1_edit_button);
+    addToTab(Tab::Wifi, this->wifi_list);
 
-    this->ntp1_label = new Label<PICO_STR_L>(content.x + MARGIN, rowY(3), "");
-    this->ntp1_label->setFontSize(FontFn::Small);
-    this->ntp1_label->setMaxWidth(label_w);
-    this->ntp1_label->setMaxHeight(Label<PICO_STR_L>::GetLineHeight(FontFn::Small));
-    WidgetFunctions::Add(this->ntp1_label);
-    this->refreshNtp1Label();
-
-    this->ntp2_edit_button = this->makeEditButton(rowY(4));
-    this->ntp2_edit_button->setOnPressEnd([this](){
-        this->openEditDialog(EditField::Ntp2, "NTPサーバー2", this->ntp2_value.c_str());
-    });
-    WidgetFunctions::Add(this->ntp2_edit_button);
-
-    this->ntp2_label = new Label<PICO_STR_L>(content.x + MARGIN, rowY(4), "");
-    this->ntp2_label->setFontSize(FontFn::Small);
-    this->ntp2_label->setMaxWidth(label_w);
-    this->ntp2_label->setMaxHeight(Label<PICO_STR_L>::GetLineHeight(FontFn::Small));
-    WidgetFunctions::Add(this->ntp2_label);
-    this->refreshNtp2Label();
-
-    // ---- ブラウザのホーム ----
-    this->home_edit_button = this->makeEditButton(rowY(5));
-    this->home_edit_button->setOnPressEnd([this](){
-        // 空欄で決定すると同梱サンプル文書に戻る(commitEdit()参照)
-        this->openEditDialog(EditField::BrowserHome, "ブラウザのホームURL", this->home_value.c_str());
-    });
-    WidgetFunctions::Add(this->home_edit_button);
-
-    this->home_label = new Label<PICO_STR_L>(content.x + MARGIN, rowY(5), "");
-    this->home_label->setFontSize(FontFn::Small);
-    this->home_label->setMaxWidth(label_w);
-    this->home_label->setMaxHeight(Label<PICO_STR_L>::GetLineHeight(FontFn::Small));
-    WidgetFunctions::Add(this->home_label);
-    this->refreshHomeLabel();
+    // =====================================================================
+    // 本体(画面と音)
+    // =====================================================================
+    constexpr int16_t kTitleW = 40;
+    const int16_t slider_x = (int16_t)(left + kTitleW);
 
     // ---- 音量(sound.cfgの volume) ----
     // 現在値はSoundFunctionsが起動時にsound.cfgから読んだもの(=今鳴っている音量)を出す
-    this->volume_title = new Label<PICO_STR_S>(content.x + MARGIN, (int16_t)(rowY(6) + 2), "音量");
+    this->volume_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), "音量");
     this->volume_title->setFontSize(FontFn::Small);
-    WidgetFunctions::Add(this->volume_title);
+    addToTab(Tab::Device, this->volume_title);
 
-    constexpr int16_t kVolumeTitleW = 40;
-    const int16_t slider_x = (int16_t)(content.x + MARGIN + kVolumeTitleW);
-    this->volume_slider = new NumberSlider(slider_x, rowY(6), (int16_t)(content.x + content.w - MARGIN - slider_x));
+    this->volume_slider = new NumberSlider(slider_x, rowY(0), (int16_t)(content.x + content.w - MARGIN - slider_x));
     this->volume_slider->setMinValue(0);
     this->volume_slider->setMaxValue(100);
     this->volume_slider->setDecimalPlacesNum(0);
     this->volume_applied = SoundFunctions::GetVolume();
     this->volume_dirty   = false;
     this->volume_slider->setValue((float)this->volume_applied);
-    WidgetFunctions::Add(this->volume_slider);
+    addToTab(Tab::Device, this->volume_slider);
 
     // ---- 画面の明るさ(display.cfgの brightness)+ 自動調光(auto-dim) ----
-    // 音量の行と同じ形だが、右端に自動調光のチェックボックスを同居させて行数を1つに抑えている
-    // (この画面は8行前提でROW_Hを詰めてあり、明るさ・自動調光それぞれに専用行を割く余白が無いため)
-    // "音量"と同じ2文字幅に揃える("画面の明るさ"では長すぎてスライダーへ食い込むため)
-    this->brightness_title = new Label<PICO_STR_S>(content.x + MARGIN, (int16_t)(rowY(7) + 2), "輝度");
+    this->brightness_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(1) + 2), "輝度");
     this->brightness_title->setFontSize(FontFn::Small);
-    WidgetFunctions::Add(this->brightness_title);
+    addToTab(Tab::Device, this->brightness_title);
 
     // 自動調光のチェックボックスは幅がテキストから自動計算されるため、先に作って実測してから
-    // 明るさスライダーの幅をその手前までに詰める(makeEditButton()と同じ「実測してから並べる」流儀)。
-    // setFontSize()自体は再計算しない(l_rect.wは構築時のフォントのまま)ので、
-    // 小さいフォントでの幅を得るためsetText()で同じ文字列を渡し直して計算をやり直させる
-    this->auto_dim_checkbox = new Checkbox(0, rowY(7), "自動調光");
+    // 明るさスライダーの幅をその手前までに詰める。setFontSize()自体は再計算しない
+    // (l_rect.wは構築時のフォントのまま)ので、setText()で同じ文字列を渡し直して計算をやり直させる
+    this->auto_dim_checkbox = new Checkbox(0, rowY(1), "自動調光");
     this->auto_dim_checkbox->setFontSize(FontFn::Small);
     this->auto_dim_checkbox->setText("自動調光");
     const int16_t auto_dim_w = this->auto_dim_checkbox->getLocalRect().w;
@@ -532,60 +668,79 @@ void SettingsScene::onEnter(){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "auto-dim",
             PICO_Config::ConfigValue::FromBool(enabled));
     });
-    WidgetFunctions::Add(this->auto_dim_checkbox);
+    addToTab(Tab::Device, this->auto_dim_checkbox);
 
-    constexpr int16_t kBrightnessTitleW = 40;
-    constexpr int16_t kBrightnessGap    = 4;
-    const int16_t brightness_slider_x = (int16_t)(content.x + MARGIN + kBrightnessTitleW);
-    const int16_t brightness_slider_w = (int16_t)(auto_dim_x - kBrightnessGap - brightness_slider_x);
-    this->brightness_slider = new NumberSlider(brightness_slider_x, rowY(7), brightness_slider_w);
+    constexpr int16_t kBrightnessGap = 4;
+    const int16_t brightness_slider_w = (int16_t)(auto_dim_x - kBrightnessGap - slider_x);
+    this->brightness_slider = new NumberSlider(slider_x, rowY(1), brightness_slider_w);
     this->brightness_slider->setMinValue(DisplayFunctions::kMinBrightness);
     this->brightness_slider->setMaxValue(100);
     this->brightness_slider->setDecimalPlacesNum(0);
     this->brightness_applied = DisplayFunctions::GetBrightness();
     this->brightness_dirty   = false;
     this->brightness_slider->setValue((float)this->brightness_applied);
-    WidgetFunctions::Add(this->brightness_slider);
+    addToTab(Tab::Device, this->brightness_slider);
 
-    // ---- 起動時セルフチェック(本体はloadValues()より前で生成済み) ----
-    WidgetFunctions::Add(this->run_test_checkbox);
+    // =====================================================================
+    // 時刻(タイムゾーンのドロップダウンは一覧が下の行へ重なるので、最後にAdd()する)
+    // =====================================================================
+    this->ntp1_edit_button = this->makeEditButton(rowY(1));
+    this->ntp1_edit_button->setOnPressEnd([this](){
+        this->openEditDialog(EditField::Ntp1, "NTPサーバー1", this->ntp1_value.c_str());
+    });
+    addToTab(Tab::Time, this->ntp1_edit_button);
 
-    this->run_test_note = new Label<PICO_STR_M>(content.x + MARGIN, (int16_t)(rowY(9) + this->run_test_checkbox->getH() + 2), "次回の起動から反映されます");
-    this->run_test_note->setFontSize(FontFn::Small);
+    // 編集ボタンの実測が済んだので、以降の行のラベル幅はこれで揃える
+    const int label_w = this->edit_btn_x - content.x - MARGIN * 2;
+
+    this->ntp1_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(1) + 2), label_w, "");
+    addToTab(Tab::Time, this->ntp1_label);
+    this->refreshNtp1Label();
+
+    this->ntp2_edit_button = this->makeEditButton(rowY(2));
+    this->ntp2_edit_button->setOnPressEnd([this](){
+        this->openEditDialog(EditField::Ntp2, "NTPサーバー2", this->ntp2_value.c_str());
+    });
+    addToTab(Tab::Time, this->ntp2_edit_button);
+
+    this->ntp2_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(2) + 2), label_w, "");
+    addToTab(Tab::Time, this->ntp2_label);
+    this->refreshNtp2Label();
+
+    // =====================================================================
+    // その他
+    // =====================================================================
+    this->home_edit_button = this->makeEditButton(rowY(0));
+    this->home_edit_button->setOnPressEnd([this](){
+        // 空欄で決定すると同梱サンプル文書に戻る(commitEdit()参照)
+        this->openEditDialog(EditField::BrowserHome, "ブラウザのホームURL", this->home_value.c_str());
+    });
+    addToTab(Tab::Other, this->home_edit_button);
+
+    this->home_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(0) + 2), label_w, "");
+    addToTab(Tab::Other, this->home_label);
+    this->refreshHomeLabel();
+
+    // 起動時セルフチェック(本体はloadValues()より前で生成済み)
+    addToTab(Tab::Other, this->run_test_checkbox);
+
+    this->run_test_note = makeRowLabel<PICO_STR_M>(left,
+        (int16_t)(rowY(1) + this->run_test_checkbox->getH() + 2), full_w, "次回の起動から反映されます");
     this->run_test_note->setTextColor(PICO_DARKGREY);
-    WidgetFunctions::Add(this->run_test_note);
+    addToTab(Tab::Other, this->run_test_note);
 
-    // ---- タイムゾーン ----
-    // 開いた時にドロップダウンの一覧が下の行(NTP等)へ重なるため、当たり判定・描画の
-    // 両方で最前面に来るよう他の行より後にAdd()する(追加順=描画順、後が上に乗る)。
-    // 見た目の並び順(2行目の下)とAdd()の順序は無関係なので、位置はここで決めてよい
-    this->timezone_title = new Label<PICO_STR_M>(content.x + MARGIN, rowY(2), "タイムゾーン");
-    this->timezone_title->setFontSize(FontFn::Small);
-
-    constexpr int16_t kTzDropdownW = 110;
-    const int16_t tz_x = (int16_t)(content.x + content.w - MARGIN - kTzDropdownW);
-    this->timezone_dropdown = new DropdownMenu(tz_x, rowY(2), kTzDropdownW);
-    for(int i = 0; i < this->tz_item_count; i++){
-        this->timezone_dropdown->add(this->tz_items[i].c_str());
-    }
-    this->timezone_dropdown->setSelectedIndex(this->tz_selected_index);
-
-    // ドロップダウンの箱は行の高さ(ROW_H)より背が高く、そのまま置くと下の行の「編集」ボタンへ食い込む。
-    // 箱の下端を行の下端へ揃え、はみ出しは上の行との隙間へ逃がす
-    this->timezone_dropdown->setY((int16_t)(rowY(2) + ROW_H - this->timezone_dropdown->getH()));
-
-    WidgetFunctions::Add(this->timezone_title);
-    WidgetFunctions::Add(this->timezone_dropdown);
-
-    // ---- スリープまでの時間(display.cfgの sleep-timeout) ----
-    // タイムゾーンと同じくドロップダウンなので、一覧が下の行へ重ならないよう後からAdd()する。
+    // =====================================================================
+    // ドロップダウン(開いた一覧が下の行へ重なるので、当たり判定・描画の両方で最前面に来るよう
+    // 他より後にAdd()する。追加順=描画順、後が上に乗る)
+    // =====================================================================
+    // ---- スリープまでの時間(display.cfgの sleep-timeout)。本体タブの3行目 ----
     // 設定値が一覧のどれとも違う(display.cfgを手で書き換えた)ときは、いちばん近い項目を選んで見せる
-    this->sleep_title = new Label<PICO_STR_S>(content.x + MARGIN, rowY(8) + 2, "スリープ");
+    this->sleep_title = new Label<PICO_STR_S>(left, rowY(2) + 4, "スリープ");
     this->sleep_title->setFontSize(FontFn::Small);
 
-    constexpr int16_t kSleepDropdownW = 110;
-    const int16_t sleep_x = (int16_t)(content.x + content.w - MARGIN - kSleepDropdownW);
-    this->sleep_dropdown = new DropdownMenu(sleep_x, rowY(8), kSleepDropdownW);
+    constexpr int16_t kDropdownW = 110;
+    const int16_t dropdown_x = (int16_t)(content.x + content.w - MARGIN - kDropdownW);
+    this->sleep_dropdown = new DropdownMenu(dropdown_x, rowY(2), kDropdownW);
     for(int i = 0; i < kSleepPresetCount; i++){
         this->sleep_dropdown->add(kSleepPresetLabels[i]);
     }
@@ -601,10 +756,22 @@ void SettingsScene::onEnter(){
     if(cur_sec == 0) best = 0;
     this->sleep_selected_index = best;
     this->sleep_dropdown->setSelectedIndex(best);
-    this->sleep_dropdown->setY((int16_t)(rowY(8) + ROW_H - this->sleep_dropdown->getH())); // 上のタイムゾーンと同じ理由
+    addToTab(Tab::Device, this->sleep_title);
+    addToTab(Tab::Device, this->sleep_dropdown);
 
-    WidgetFunctions::Add(this->sleep_title);
-    WidgetFunctions::Add(this->sleep_dropdown);
+    // ---- タイムゾーン。時刻の1行目 ----
+    this->timezone_title = new Label<PICO_STR_M>(left, rowY(0) + 4, "タイムゾーン");
+    this->timezone_title->setFontSize(FontFn::Small);
+
+    this->timezone_dropdown = new DropdownMenu(dropdown_x, rowY(0), kDropdownW);
+    for(int i = 0; i < this->tz_item_count; i++){
+        this->timezone_dropdown->add(this->tz_items[i].c_str());
+    }
+    this->timezone_dropdown->setSelectedIndex(this->tz_selected_index);
+    addToTab(Tab::Time, this->timezone_title);
+    addToTab(Tab::Time, this->timezone_dropdown);
+
+    this->applyTab();
 }
 
 void SettingsScene::updateSleep(){
@@ -659,19 +826,7 @@ void SettingsScene::updateBrightness(){
     }
 }
 
-void SettingsScene::onUpdate(){
-    if(this->wifi_scan_task) PowerFunctions::KeepAwake(); // スキャン中はスリープさせない
-    if(this->pending_wifi_password_dialog){
-        this->pending_wifi_password_dialog = false;
-        this->openWifiPasswordDialog();
-    }
-    this->pollWifiScan();
-
-    this->updateVolume();
-    this->updateBrightness();
-    this->updateSleep();
-    this->refreshBatteryLabel();
-
+void SettingsScene::updateTimezone(){
     if(!this->timezone_dropdown) return;
 
     const int idx = this->timezone_dropdown->getSelectedIndex();
@@ -682,6 +837,24 @@ void SettingsScene::onUpdate(){
 
     PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "timezone", this->tz_items[idx].c_str());
     TimeFunctions::ApplyTimezone(this->tz_items[idx].c_str());
+}
+
+void SettingsScene::onUpdate(){
+    if(this->wifi_scan_task) PowerFunctions::KeepAwake(); // スキャン中はスリープさせない
+
+    const Pending p = this->pending;
+    this->pending = Pending::None;
+    if(p == Pending::WifiPassword) this->openWifiPasswordDialog();
+    else if(p == Pending::Message) this->openMessage();
+
+    this->pollWifiScan();
+    if(this->tab == Tab::Wifi) this->refreshWifi();
+
+    this->updateVolume();
+    this->updateBrightness();
+    this->updateSleep();
+    this->updateTimezone();
+    this->refreshBatteryLabel();
 }
 
 void SettingsScene::onExit(){
@@ -700,31 +873,36 @@ void SettingsScene::onExit(){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "brightness", buf);
     }
 
-    this->back_button = nullptr;
-    this->battery_label = nullptr;
-
-    this->ssid_label           = nullptr;
-    this->ssid_edit_button     = nullptr;
-    this->wifi_scan_button     = nullptr;
-    // ダイアログ層はシーン終了時にフレームワーク側がまとめて片付ける(CalendarScene::detail_dialogと同じ)
-    this->wifi_scan_dialog     = nullptr;
     // スキャンTaskの所有権はこちらにある(task/NetworkScan.hpp参照)ので、
     // 完了を待たずシーンごと抜けた場合はここで自分から後始末する
     if(this->wifi_scan_task){
         delete this->wifi_scan_task;
         this->wifi_scan_task = nullptr;
     }
-    this->pending_wifi_password_dialog = false;
-    this->password_label       = nullptr;
-    this->password_edit_button = nullptr;
-    this->timezone_title       = nullptr;
-    this->timezone_dropdown    = nullptr;
-    this->ntp1_label           = nullptr;
-    this->ntp1_edit_button     = nullptr;
-    this->ntp2_label           = nullptr;
-    this->ntp2_edit_button     = nullptr;
-    this->home_label           = nullptr;
-    this->home_edit_button     = nullptr;
+    // ダイアログ層はシーン終了時にフレームワーク側がまとめて片付ける(CalendarScene::detail_dialogと同じ)
+    this->wifi_scan_dialog = nullptr;
+    this->pending = Pending::None;
+
+    for(int t = 0; t < (int)Tab::Count; t++){
+        for(int i = 0; i < kMaxTabWidgets; i++) this->tab_widgets[t][i] = nullptr;
+        this->tab_widget_count[t] = 0;
+    }
+
+    this->back_button   = nullptr;
+    this->tab_bar       = nullptr;
+    this->battery_label = nullptr;
+
+    this->wifi_enable_checkbox = nullptr;
+    this->wifi_status_label    = nullptr;
+    this->wifi_list_title      = nullptr;
+    this->wifi_list            = nullptr;
+    this->wifi_scan_button     = nullptr;
+    this->wifi_add_button      = nullptr;
+    this->wifi_connect_button  = nullptr;
+    this->wifi_remove_button   = nullptr;
+    this->shown_status         = 0xFF;
+    this->wifi_list_dirty      = true;
+
     this->volume_title         = nullptr;
     this->volume_slider        = nullptr;
     this->brightness_title     = nullptr;
@@ -732,6 +910,16 @@ void SettingsScene::onExit(){
     this->auto_dim_checkbox    = nullptr;
     this->sleep_title          = nullptr;
     this->sleep_dropdown       = nullptr;
+
+    this->timezone_title       = nullptr;
+    this->timezone_dropdown    = nullptr;
+    this->ntp1_label           = nullptr;
+    this->ntp1_edit_button     = nullptr;
+    this->ntp2_label           = nullptr;
+    this->ntp2_edit_button     = nullptr;
+
+    this->home_label           = nullptr;
+    this->home_edit_button     = nullptr;
     this->run_test_checkbox    = nullptr;
     this->run_test_note        = nullptr;
 

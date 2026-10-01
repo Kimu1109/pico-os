@@ -16,6 +16,7 @@ namespace NetworkFunctions {
         SSID_NOT_FOUND,
         FAILED,
         TRYING_CONNECT,
+        OFF,            // Wi-FiをOFFにしている(WifiProfiles::IsEnabled()が偽)
     };
 
     //NOT TO WRITE! READONLY!
@@ -32,6 +33,15 @@ namespace NetworkFunctions {
     // 切断を検知したらConnectWiFiAsync()を呼び直してTRYING_CONNECTへ戻す。
     inline unsigned long healthCheckTimer = 0;
     constexpr unsigned long HEALTH_CHECK_INTERVAL = 5000; // ms、生存確認の間隔
+
+    // --- 未接続のときの自動接続 ---
+    // 接続に失敗した(TIMEOUT/SSID_NOT_FOUND/FAILED)まま RETRY_INTERVAL が過ぎたら、
+    // 保存済みのネットワーク(net/Wifi_Profiles)へ「直近で接続できた順」に1つずつ試す。
+    // 先頭(直近で接続したもの)から始め、失敗するたびに次へ進み、一巡したら先頭へ戻る。
+    // 接続できたら(または手動で接続先を選んだら)また先頭から数え直す
+    inline unsigned long retryTimer = 0;
+    inline int retryRank = 0;  // 次に試す保存済みネットワークの番号(0 = 直近で接続したもの)
+    constexpr unsigned long RETRY_INTERVAL = 30000; // ms
 
     void Setup();
     void Update();
@@ -52,7 +62,20 @@ namespace NetworkFunctions {
     void SetLowPower(bool enable);
     inline bool low_power = false;
 
+    // 指定したネットワークへ繋ぐ(手動の接続。Wi-FiがOFFならONにする)。
+    // 保存済みかどうかは問わない(保存は呼び出し側がWifiProfiles::Put()で行う)
     void ConnectWiFiAsync(const char* ssid, const char* password);
+    // 保存済みの index 番目(0 = 直近で接続したもの)へ繋ぐ。範囲外ならfalse
+    bool ConnectProfile(int index);
+    // 保存済みの index 番目を削除する。今それに繋いでいる(繋ごうとしている)なら切断し、
+    // 少し置いてから残りの保存済みネットワークへ自動接続する
+    bool RemoveProfile(int index);
+
+    // Wi-FiのON/OFF。OFFにすると切断して自動接続も止める(wifi.cfgの enabled に保存)。
+    // ONにすると直近で接続したネットワークから自動接続を始める。
+    // 無線チップ自体は止めない(電池の残量表示がVBUSの検出に無線チップのGPIOを使うため。Battery_Functions参照)
+    void SetEnabled(bool enabled);
+    bool IsEnabled();
     // 戻り値の所有権は呼び出し側に移る(HttpGet/HttpRequestと同じ流儀。
     // PICO_Task::Add()には乗らない)。呼び出し側は毎フレーム update() を呼び、
     // getStatus()がPROCESSING以外になったら結果を読み、自分でdeleteすること

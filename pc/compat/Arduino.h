@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <thread>
+#include <type_traits>
 
 // ---- 時間 ----
 inline unsigned long millis() {
@@ -62,10 +63,13 @@ inline int  digitalRead(int pin){
 }
 
 // ---- Arduinoの定番マクロ(実機はマクロだが、標準ライブラリと衝突しないよう関数にする) ----
+// 戻り値は必ず値で返す。decltype(a < b ? a : b) のままだと、TとUが同じ型のとき
+// 条件演算子が左辺値になって「引数(値渡しの一時変数)への参照」を返してしまい、
+// 呼び出し側が壊れた値を読む(NumberSlider::setValue()の min(max(...)) で実際に踏んだ。ASanで検出)
 template<typename T, typename U>
-constexpr auto min(T a, U b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
+constexpr auto min(T a, U b) -> typename std::decay<decltype(a < b ? a : b)>::type { return a < b ? a : b; }
 template<typename T, typename U>
-constexpr auto max(T a, U b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
+constexpr auto max(T a, U b) -> typename std::decay<decltype(a > b ? a : b)>::type { return a > b ? a : b; }
 template<typename T, typename L, typename H>
 constexpr T constrain(T v, L lo, H hi) {
     return (v < lo) ? (T)lo : ((v > hi) ? (T)hi : v);

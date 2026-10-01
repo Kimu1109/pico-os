@@ -34,6 +34,11 @@
 #   chat_proto_test… チャットの応答(1行1件のTSV)の読み取りと本文のエスケープ
 #   chat_scene_test… チャットアプリのGUI配線(ChatLogViewの折り返し/スクロール、
 #                   ChatSceneの生成/解放、chat.cfgが無い/足りないときの案内)
+#   todoist_proto_test… TODOアプリ(Todoist)の応答の読み取り(todo/Todoist_Proto)と、その下のJSONの
+#                   読み取り(util/Json_Reader)。エスケープ/サロゲート/切り詰め/1バイトずつ/誤り、
+#                   一覧から必要なキーだけ拾う・完了済みを飛ばす・next_cursor、期限の読み取りと表記・並べ替え
+#   todo_test     … TODOアプリのリマインダー(todo/Todo_Reminders。本物のNotificationFunctionsへ予約する)と
+#                   TodoSceneの生成/解放・トークンが無いときの案内
 #   gb_emu_test   … Game Boyエミュ(GbEmu/GameBoyPad/GameBoyView)。テスト内で組み立てたROMで、
 #                   読み込みの断り方・セーブ(.sav)の往復・ボタン・不正な命令で落ちないこと・
 #                   変わった行だけdirtyにすること・操作パッドのタップ位置→ボタン・
@@ -428,6 +433,52 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== chat_scene_test ====="
 run_or_die "$OUT/chat_scene_test"
+
+# --- TODO(Todoist): 応答の読み取り ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/todoist_proto_test.cpp" \
+    "$ROOT/src/todo/Todoist_Proto.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    -o "$OUT/todoist_proto_test"
+
+echo ""
+echo "===== todoist_proto_test ====="
+run_or_die "$OUT/todoist_proto_test"
+
+# --- TODO: リマインダーと画面の配線 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/todo_test.cpp" \
+    "$ROOT/src/gui/scenes/TodoScene.cpp" \
+    "$ROOT/src/todo/Todo_Reminders.cpp" \
+    "$ROOT/src/todo/Todoist_Client.cpp" \
+    "$ROOT/src/todo/Todoist_Proto.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    -o "$OUT/todo_test" -lssl -lcrypto
+
+echo ""
+echo "===== todo_test ====="
+run_or_die "$OUT/todo_test"
 
 # --- Game Boyエミュ ---
 compile_or_die g++ $CXXFLAGS $INCLUDES -I"$ROOT/lib/peanut_gb/src" \

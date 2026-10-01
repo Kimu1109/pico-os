@@ -54,6 +54,8 @@ namespace PICO_Path {
             constexpr const char* SYS_USER_CFG = "/sys/user.cfg";
             // チャットアプリの接続先("server = https://..." と "token = ...")。ChatClient参照
             constexpr const char* SYS_CHAT_CFG = "/sys/chat.cfg";
+            // TODOアプリ(Todoist)のトークン("token = enc1:...")と表示の設定。TodoistClient参照
+            constexpr const char* SYS_TODOIST_CFG = "/sys/todoist.cfg";
             // 音声出力("output = auto | off" / "volume = 0〜100")。SoundFunctions参照
             constexpr const char* SYS_SOUND_CFG = "/sys/sound.cfg";
             // 画面の明るさ("brightness = 0〜100" / "auto-dim = true|false")。DisplayFunctions参照

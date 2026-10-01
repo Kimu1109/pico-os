@@ -75,19 +75,20 @@ src/
   ime/                       SKK方式かな漢字変換辞書エンジン
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
+  todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders)。下記「TODOアプリ」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
-  util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
+  util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査) / Json_Reader(流しながら読むJSON)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScan / HttpGet タスク + StepBudget(実行時間の区切り)
   test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profilesの38本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profiles等の46本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -1051,7 +1052,9 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
   PCビルドは`libssl-dev`が要る(`find_package(OpenSSL)`)。**Webビルドは常に繋がらないスタブ**
   (生のソケットが無いので、そもそもTLSも無い)。
 - **信頼するルート**は`script/generate_tls_roots.py`が母艦の`/etc/ssl/certs`から`src/net/Tls_Roots_Data.hpp`へ焼き込む
-  (GTS Root R1/R4=Google、ISRG Root X1/X2=Let's Encrypt、DigiCert Global Root G2/CA、USERTrust RSA=Sectigoの7枚)。
+  (GTS Root R1/R4=Google、ISRG Root X1/X2=Let's Encrypt、DigiCert Global Root G2/CA、USERTrust RSA=Sectigo、
+  Amazon Root CA 1=AWS(api.todoist.com。2026-10-01追加)の8枚)。**`ROOTS`は末尾へ足すこと** — 母艦のストアから消えたルート
+  (DigiCert Global Root CAは既に無い)は、今焼き込まれている同じ位置の証明書を引き継いで生成し直す。
   足りない相手(自己署名の自前サーバ等)はSDの**`/sys/tls/ca.pem`**へPEMを置けば足される。
   **フラッシュに置くだけで、RAMへ展開するのは接続中だけ**(1枚あたり約1.5KB)。
 - **TLSの道具一式は`connect()`で確保し`close()`で返す**。BearSSLは受信バッファ16KB+専用スタック6.4KB+
@@ -1285,6 +1288,64 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   PCビルドの`--tap`で一覧→部屋→キーボード入力→送信まで、v2では一覧のアイコン・検索→参加・招待のダイアログを確認した。
   WebクライアントはChromium(Playwright)で作成/検索/参加コード/メンバー管理(追放すると相手の画面から部屋が消える)を確認した。
   **実機(RP2350 + BearSSL)とLet's Encryptの本物の証明書での接続は未確認**
+
+### TODOアプリ(Todoist連携) (`src/todo/` / `TodoScene` / `util/Json_Reader`) (2026-10-01)
+
+ランチャの「TODO」。**Todoist(https://todoist.com)のタスクを見る・足す・完了にする + 時刻つきの期限をOSの通知で知らせる**。
+連携先の比較(Google Tasks/Microsoft To Do=OAuth必須、iCloud=CalDAVのXML、Notion=応答が大きい)の結果、
+**個人用のAPIトークン(Bearer)だけで使えるTodoist**にした。OAuthは使わない。
+
+- **API は v1**(`https://api.todoist.com/api/v1/`。旧REST v2/Sync v9は廃止の流れ)。使うのは
+  `GET /tasks`(すべて)・`GET /tasks/filter?query=`(今日=`today | overdue`、7日間=`overdue | next 7 days`)・
+  `POST /tasks`(`{"content","due_string","due_lang":"ja"}`)・`POST /tasks/<id>/close`(204)。一覧は
+  `{"results":[...],"next_cursor":...}`のページ分けで、`kMaxTasks`(30)件に達するまで続きを取る(上限`kMaxPages`=8)。
+  フィルタは`todoist.cfg`の`today-filter`/`week-filter`で差し替えられる(英語で書けば利用者の言語設定に依らず通る)。
+- **JSONは流しながら読む(`util/Json_Reader`、SAX型)**。応答は1件約800バイト(user_id/added_at/order_key…)あり、30件で20KBを超えるが、
+  RAMに載るのはタスク1件ぶんの読みかけと値のバッファ(256B)だけ。`Todoist::TaskParser`が`results[].{id,content,priority,
+  checked,is_deleted,parent_id,due.{date,string,is_recurring}}`だけを拾う。文字列は`\uXXXX`/サロゲートペアをUTF-8へ戻し、
+  長いものは文字の途中で切らずに切り詰める。**C++側に汎用のJSONパーサが入ったのはこれが初めて**(他で要るときもこれを使う)。
+- **期限は現地時刻へ揃えて持つ**(`Todoist::Due{day, sec}`。Icalと同じ)。`due.date`は`"2026-10-01"`(日付だけ)/
+  `"…T15:00:00"`(浮動=現地)/`"…T06:00:00.000000Z"`(UTC。`setUtcOffset()`の分ずらす)。一覧は期限順(期限なしは最後、
+  同じ日は日付だけ→時刻順、次に優先度)に並べ替える。表記は「今日 15:00」「明日」「10/3(土)」。期限切れは赤。
+  優先度はTodoistの`priority`(4=画面のP1)で、一覧では`!!!`(P1)〜`!`(P3)。
+- **通信係(`TodoistClient`)はChatClientと同じ形**: keep-alive(TLSの約40KBを開いている間だけ持つ。`onExit()`で閉じる)、
+  同時に1本、操作(完了>追加)は一覧のページの間にも割り込む、5分ごとに取り直し、失敗は5秒→2分のバックオフ、401/403は
+  `AuthError`で手動の[更新]まで待つ。一覧は受信用の配列へ取り終えてから入れ替える(途中で失敗しても前の一覧が残る。
+  その代わり30件×2=約18KB)。完了は取り直しを待たずに一覧から消し、すぐ取り直す(繰り返しのタスクは次の回で並び直す)。
+  失敗の理由は応答のJSONの`error`(`Todoist::ErrorParser`)。
+- **トークン**: `/sys/todoist.cfg`の`token`。画面の[設定]から入れると`PICO_Secret`(用途`"todoist-token"`)で暗号化して保存する。
+  **母艦で平文のまま書いて置いてもよく、読んだときに暗号化して書き直す**(SSHの秘密鍵と同じ流儀)。ほかのキー:
+  `api`(既定`https://api.todoist.com`。テストで偽物へ向ける)/`reminders = true|false`/`remind-before-min`(既定0)/
+  `today-filter`/`week-filter`。PCビルドで試すときの`pc/sdcard/sys/todoist.cfg`は`.gitignore`済み。
+- **TLS**: api.todoist.com の証明書は Amazon(`Amazon RSA 2048 M01` ← `Amazon Root CA 1`)、TLS 1.2の`ECDHE-RSA-AES128-GCM`で
+  BearSSLで話せる。**焼き込みのルートに Amazon Root CA 1 が無かったので足した**(上の「HTTPS」)。実際の鎖が新しいルートで
+  検証でき、足す前のルートでは失敗することを`openssl verify`で確認した。
+  **このリモート環境からの直接の接続は出口のゲートウェイが証明書を差し替えるため、PCビルドから本物には繋がらない**(正しく拒否される)。
+- **リマインダー(`Todo_Reminders`)**: 取った一覧の時刻つきの期限を、通知(`NotificationFunctions`)の`At`の予約にする。
+  OSが見張り`/sys/notify_rules.tsv`へ保存されるので、**アプリを閉じていても・再起動しても期限の時刻に知らせ、タップでTODOが開く**。
+  送り主は空(C++)、tagは`td:<タスクのid>`。**空の送り主の予約は`kMaxRulesPerOwner`(4)件までなので、近い順に4件まで**
+  (ほかのC++の予約があればその分減る)。表示(今日/7日間/すべて)ごとにしか一覧を取らないので、
+  「一覧が網羅している期限の範囲(今日=今日の終わりまで、7日間=7日後まで、すべて=全部、溢れていたら無し)」の中で
+  一覧に無くなった予約だけを消す(範囲の外の予約は別の表示で入れたものとして残す)。変わっていない予約は入れ直さない
+  (SDへの書き込みを減らす)。時計が合う(NTP同期)まで入れない。
+- **画面(`TodoScene`)**: `[戻る] TODO(件数) [設定][更新]` / `TabBar`(今日|7日間|すべて) / `ScrollList` / 選んだタスクの欄(3行:
+  全文・期限(繰り返しは`due.string`)・優先度) / 状態の1行 / `[追加][完了]`。1回のタップで選び、もう一度タップか[完了]で
+  確認の`MsgDialog`(96バイトまでなので名前は8文字程度で切る)。[追加]は名前→(1フレーム空けて)期限の`InputDialog`
+  (今日の表示からなら期限の初期値は「今日」)。日付が変わる/期限を過ぎると見た目が変わるので10秒ごとに見直す。
+  通信中だけ`KeepAwake()`(待っているだけならスリープしてよい)。**シーン本体は約18KB**(ChatSceneと同じ例外)。
+  アイコンは既存の`IconID::CheckboxOn`(新しいアイコンは足していない)。
+- **未対応**: プロジェクト/セクション/ラベルの表示と絞り込み、説明文、サブタスクの入れ子(一覧では字下げだけ)、
+  完了の取り消し(Todoistの画面からはできる)、編集、期限の変更。追加の期限は Todoist の自然言語(`due_lang=ja`。
+  「明日 15時」「毎週月曜」)に任せていて、読めなければ`Date is invalid`等の理由が状態の行に出る。
+- 検証: `todoist_proto_test`(run.sh。JSON: 入れ子/エスケープ/サロゲート/切り詰め/1バイトずつ/誤り、一覧: 必要なキーだけ・完了済みを
+  飛ばす・上限・next_cursor、期限の読み取り/表記/期限切れ/並べ替え、失敗の理由、JSONの書き出し)、`todo_test`(run.sh。本物の
+  NotificationFunctionsへの予約: 近い順に枠の数だけ・過ぎたもの/日付だけは入れない・何分前・範囲の中だけ消す・入れ直さない・
+  保存される、TodoSceneの生成/解放とトークンの案内)、**`todoist_net_test`(run_net.sh。`script/host_test/todoist_fake_server.py`=
+  Todoist API v1の偽物を平文/HTTPS/ページ分けで立てる)**: 3つの表示・並び順・UTC・ページを跨ぐ・30件で打ち切り・追加(" と \ の往復、
+  期限)・読めない期限の理由・完了・繰り返しが次の回へ・404・keep-alive・401で止まる・todoist.cfgの読み込みと暗号化の書き直し。
+  PCビルドの`--tap`/`--shot`(偽物の`api = http://127.0.0.1:8150`): 一覧・期限切れの赤・選択と詳細・完了の確認→一覧から消える・
+  7日間の表示・追加のダイアログ・明日15時のタスクが`notify_rules.tsv`に`At`で入ること。
+  **本物のTodoistアカウント・実機(BearSSL)での確認は未**(この環境には本物のトークンも実機も無い)。
 
 ### ゲームボーイ (`src/gb/` / `GameBoyScene` / `lib/peanut_gb/`) (2026-09-24)
 
@@ -2030,7 +2091,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイント/テトリス風はLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
+| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイント/テトリス風はLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。**TODO/リマインダーはTodoist連携の`TodoScene`として実装済み**(下記「TODOアプリ」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。音も鳴る(#11)。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
 | 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。MIDIはPCの`script/midi2mml.py`で取り込む。GBエミュの音(音源チップの再現)も鳴る。**実機での確認は未**(下記「音声出力」「曲データ」「ゲームボーイの音」参照)。 |
@@ -3349,7 +3410,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、40本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、46本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

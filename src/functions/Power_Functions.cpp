@@ -41,6 +41,7 @@ namespace {
     bool Busy(){
         return SoundFunctions::IsPlaying()
             || SoundFunctions::MusicPlaying()
+            || SoundFunctions::WavPlaying()
             || NetworkFunctions::currentStatus == NetworkFunctions::NetStatus::TRYING_CONNECT;
     }
 

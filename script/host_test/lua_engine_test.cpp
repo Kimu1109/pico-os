@@ -1012,6 +1012,52 @@ int main(){
         check(!SoundFunctions::MusicPlaying(), "曲: 曲を使ったアプリを閉じると止まる");
     }
 
+    // ---- WAV(pico.wav_play / wav_stop / wav_playing) ----
+    {
+        const bool sd_before = OSData::SD_usable;
+        OSData::SD_usable = true;
+        {
+            //16bitモノラル22050Hz・1000サンプルの最小のWAV
+            std::string data(2000, '\0');
+            auto u32 = [](uint32_t v){ std::string s; for(int i = 0; i < 4; i++) s += (char)((v >> (i * 8)) & 0xFF); return s; };
+            auto u16 = [](uint16_t v){ std::string s; s += (char)(v & 0xFF); s += (char)(v >> 8); return s; };
+            std::string fmt = u16(1) + u16(1) + u32(22050) + u32(44100) + u16(2) + u16(16);
+            std::string body = "WAVE" + std::string("fmt ") + u32(16) + fmt + "data" + u32(2000) + data;
+            HostSd::files["/wav/a.wav"] = "RIFF" + u32((uint32_t)body.size()) + body;
+            HostSd::files["/wav/bad.wav"] = "not a wav";
+        }
+        {
+            LuaEngine wav(200 * 1024, LuaPermissions{}, "/wav");
+            lua_register(wav.raw(), "check", l_check);
+            const bool ok = wav.Run(R"LUA(
+                local ok, err = pico.wav_play("/wav/bad.wav")
+                check(ok == nil and type(err) == "string" and #err > 0, "pico.wav_play: 読めなければ nil, 理由")
+                check(pico.wav_playing() == false, "pico.wav_playing: 読めなかったときは鳴らない")
+                local ok2, err2 = pico.wav_play("/other/a.wav")
+                check(ok2 == nil and type(err2) == "string", "pico.wav_play: アプリの外は権限が無ければ nil, 理由")
+                check(pico.wav_play("/wav/a.wav", {loop = true, volume = 30}) == true, "pico.wav_play: 読めたら true")
+                check(pico.wav_playing() == true, "pico.wav_playing: 鳴らした直後から true")
+                local e1 = pcall(pico.wav_play, "/wav/a.wav", {loop = 1})
+                check(e1 == false, "pico.wav_play: loopが真偽値でなければエラー")
+                local e2 = pcall(pico.wav_play, "/wav/a.wav", 5)
+                check(e2 == false, "pico.wav_play: 2つ目が表でなければエラー")
+            )LUA", "wav_test");
+            check(ok, "WAV: スクリプトの実行が成功する");
+            check(SoundFunctions::WavPlaying(), "WAV: 鳴っている");
+        }
+        check(!SoundFunctions::WavPlaying(), "WAV: WAVを使ったアプリを閉じると止まる");
+        {
+            LuaEngine wav(200 * 1024, LuaPermissions{}, "/wav");
+            lua_register(wav.raw(), "check", l_check);
+            wav.Run(R"LUA(
+                pico.wav_play("/wav/a.wav", {loop = true})
+                pico.wav_stop()
+                check(pico.wav_playing() == false, "pico.wav_stop: 止まる")
+            )LUA", "wav_stop_test");
+        }
+        OSData::SD_usable = sd_before;
+    }
+
     // ---- pico.list_add / pico.list_clear(ScrollList/DropdownMenu) / pico.tab_add(TabBar) ----
     {
         const bool ok = engine.Run(R"LUA(

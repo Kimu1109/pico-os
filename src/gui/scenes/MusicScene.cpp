@@ -1,6 +1,7 @@
 #include "gui/scenes/MusicScene.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
+#include "gui/widgets/NumberSlider.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
@@ -29,6 +30,17 @@ namespace {
     bool IsWav(const char* name){ return EndsWith(name, ".wav"); }
 
     enum Status { kNoSd, kEmpty, kStopped, kPlaying, kError };
+
+    // 時間の表示は m:ss(1時間を超えたら h:mm:ss)
+    void FormatTime(FixedString<PICO_STR_S>& out, uint32_t ms){
+        const uint32_t sec = ms / 1000;
+        out.assign("");
+        if(sec >= 3600) out.appendFormat("%u:%02u:%02u", (unsigned)(sec / 3600), (unsigned)(sec / 60 % 60), (unsigned)(sec % 60));
+        else            out.appendFormat("%u:%02u", (unsigned)(sec / 60), (unsigned)(sec % 60));
+    }
+
+    constexpr int kCurW = 44;       // 現在時間の欄(「12:34」が収まる幅)
+    constexpr int kTotalW = 52;     // 全体の長さの欄(「ループ」が収まる幅)
 }
 
 void MusicScene::onEnter(){
@@ -50,12 +62,20 @@ void MusicScene::onEnter(){
     this->title_label->setY(y0 + (row_h - FontFn::GetFontSize(FontFn::Small)) / 2);
     WidgetFunctions::Add(this->title_label);
 
-    // ---- 下から: [停止] と状態の1行 ----
-    this->stop_button = new Button(content.x + MARGIN, 0, "停止");
+    // ---- 下から: [一時停止][停止] / シークバーの行 / 状態の2行 ----
+    this->pause_button = new Button(content.x + MARGIN, 0, "一時停止");
+    this->pause_button->setFontSize(FontFn::Small);
+    this->pause_button->setH(20);
+    this->pause_button->setOnPressEnd([this](){ this->togglePause(); });
+    WidgetFunctions::Add(this->pause_button);
+    const Rect pause_rect = this->pause_button->getLocalRect();
+
+    this->stop_button = new Button(pause_rect.x + pause_rect.w + MARGIN, 0, "停止");
     this->stop_button->setFontSize(FontFn::Small);
     this->stop_button->setH(20);
     const int stop_y = content.y + content.h - MARGIN - this->stop_button->getLocalRect().h - 8;
     this->stop_button->setY(stop_y);
+    this->pause_button->setY(stop_y);
     this->stop_button->setOnPressEnd([this](){
         SoundFunctions::MusicStop();
         SoundFunctions::WavStop();
@@ -63,8 +83,37 @@ void MusicScene::onEnter(){
     });
     WidgetFunctions::Add(this->stop_button);
 
+    //シークバーの行: 現在時間 [バー] 全体の長さ(バーはWAVだけ。MMLは時間の2つだけ)
+    const int bar_h = 21;
+    const int bar_y = stop_y - MARGIN - bar_h;
+    const int label_y = bar_y + (bar_h - FontFn::GetFontSize(FontFn::Small)) / 2;
+    this->cur_label = new Label<PICO_STR_S>(content.x + MARGIN, label_y, "0:00");
+    this->cur_label->setFontSize(FontFn::Small);
+    WidgetFunctions::Add(this->cur_label);
+
+    this->total_label = new Label<PICO_STR_S>(content.x + content.w - MARGIN - kTotalW, label_y, "0:00");
+    this->total_label->setFontSize(FontFn::Small);
+    WidgetFunctions::Add(this->total_label);
+
+    this->bar_w = content.w - MARGIN * 2 - kCurW - kTotalW;
+    this->seek_bar = new NumberSlider(content.x + MARGIN + kCurW, bar_y, this->bar_w);
+    this->seek_bar->setVisibleNum(false);
+    this->seek_bar->setMaxValue(1);
+    //つまみを動かしている間は飛ばず、離したところへ1回だけ飛ぶ(動かすたびにSDを読み直さないため)
+    this->seek_bar->setOnValueChanged([this](){
+        if(!this->updating_bar) this->seek_pending = true;
+    });
+    //押した瞬間にもその位置へつまみを動かす(NumberSliderは動かさないと値が変わらない。タップだけで飛べるように)
+    this->seek_bar->setOnPressStart([this](){ this->seek_bar->causeOnPressMove(); });
+    this->seek_bar->setOnPressEnd([this](){
+        if(!this->seek_pending) return;
+        this->seek_pending = false;
+        SoundFunctions::WavSeekMs((uint32_t)this->seek_bar->getValue());
+    });
+    WidgetFunctions::Add(this->seek_bar);
+
     //状態の欄は2行ぶん取る(読めなかった理由は長くなる)
-    const int status_y = stop_y - MARGIN - FontFn::GetFontSize(FontFn::Small) * 2 - 8;
+    const int status_y = bar_y - MARGIN - FontFn::GetFontSize(FontFn::Small) * 2 - 8;
     this->status_label = new Label<PICO_STR_256B>(content.x + MARGIN, status_y, "");
     this->status_label->setFontSize(FontFn::Small);
     this->status_label->setMaxWidth(content.w - MARGIN * 2);
@@ -92,8 +141,14 @@ void MusicScene::onEnter(){
     WidgetFunctions::Add(this->list);
 
     this->last_status = -1;
+    this->transport_mode = -1;      //最初の refreshTransport() で必ず表示状態を決め直す
+    this->last_cur_sec = this->last_total_ms = -1;
+    this->last_bar_px = -1;
+    this->bar_duration = 0;
+    this->seek_pending = false;
     this->reloadList();
     this->refreshStatus();
+    this->refreshTransport();
 }
 
 void MusicScene::onExit(){
@@ -103,6 +158,10 @@ void MusicScene::onExit(){
 
     this->back_button = nullptr;
     this->stop_button = nullptr;
+    this->pause_button = nullptr;
+    this->cur_label = nullptr;
+    this->total_label = nullptr;
+    this->seek_bar = nullptr;
     this->title_label = nullptr;
     this->status_label = nullptr;
     this->list = nullptr;
@@ -111,6 +170,7 @@ void MusicScene::onExit(){
 void MusicScene::onUpdate(){
     //L の無い曲が終わったら「止まっています」へ戻す
     this->refreshStatus();
+    this->refreshTransport();
 }
 
 void MusicScene::reloadList(){
@@ -211,9 +271,11 @@ void MusicScene::refreshStatus(){
     const char* title = wav ? SoundFunctions::WavTitle() : SoundFunctions::MusicTitle();
     if(this->last_status == kError && status == kPlaying && this->last_title == title) return;
 
-    if(status == this->last_status && (status != kPlaying || this->last_title == title)) return;
+    const bool paused = wav ? SoundFunctions::WavPaused() : SoundFunctions::MusicPaused();
+    if(status == this->last_status && (status != kPlaying || (this->last_title == title && paused == this->last_paused))) return;
     this->last_status = status;
     this->last_title.assign(title);
+    this->last_paused = paused;
 
     FixedString<PICO_STR_L> text;
     switch(status){
@@ -221,7 +283,7 @@ void MusicScene::refreshStatus(){
         case kEmpty:   text.assign("/music/ に .mml か .wav を置いてください"); break;
         case kStopped: text.assign("2回タップで再生"); break;
         case kPlaying:
-            text.assign("再生中: ");
+            text.assign(paused ? "一時停止中: " : "再生中: ");
             text.append(title);
             //音が出ない本体でも曲は進むので、画面で知らせる
             if(!SoundFunctions::IsAvailable()) text.append("(音は出ません)");
@@ -229,5 +291,85 @@ void MusicScene::refreshStatus(){
     }
     this->status_label->setTextColor(PICO_BLACK);
     this->status_label->setText(text.c_str());
-    if(this->stop_button) this->stop_button->setVisible(status == kPlaying);
+}
+
+void MusicScene::togglePause(){
+    if(SoundFunctions::WavPlaying()) SoundFunctions::WavPause(!SoundFunctions::WavPaused());
+    else                             SoundFunctions::MusicPause(!SoundFunctions::MusicPaused());
+    this->refreshStatus();
+    this->refreshTransport();
+}
+
+void MusicScene::refreshTransport(){
+    if(!this->seek_bar) return;
+
+    const bool wav = SoundFunctions::WavPlaying();
+    const int mode = wav ? 2 : (SoundFunctions::MusicPlaying() ? 1 : 0);
+
+    if(mode != this->transport_mode){
+        this->transport_mode = mode;
+        const bool on = mode != 0;
+        this->pause_button->setVisible(on);
+        this->stop_button->setVisible(on);
+        this->cur_label->setVisible(on);
+        this->total_label->setVisible(on);
+        this->seek_bar->setVisible(mode == 2);
+        //次に出すとき(別の曲へ替えたときも)全部書き直す
+        this->last_cur_sec = this->last_total_ms = -1;
+        this->last_bar_px = -1;
+        this->bar_duration = 0;
+        this->seek_pending = false;
+        this->transport_paused = !on;   //「一時停止/再開」の文字も書き直させる
+    }
+    if(mode == 0) return;
+
+    //一時停止中は「再開」を出す
+    const bool paused = wav ? SoundFunctions::WavPaused() : SoundFunctions::MusicPaused();
+    if(paused != this->transport_paused){
+        this->transport_paused = paused;
+        this->pause_button->setText(paused ? "再開" : "一時停止");
+    }
+
+    uint32_t pos, total;
+    bool loops = false;
+    if(wav){
+        pos = SoundFunctions::WavPositionMs();
+        total = SoundFunctions::WavDurationMs();
+    }else{
+        pos = SoundFunctions::MusicElapsedMs();
+        total = SoundFunctions::MusicTotalMs(&loops);
+    }
+
+    //時間は秒が変わったときだけ書く(毎フレーム書くとLabelがdirtyを積み続ける)
+    const int64_t sec = pos / 1000;
+    if(sec != this->last_cur_sec){
+        this->last_cur_sec = sec;
+        FixedString<PICO_STR_S> t;
+        FormatTime(t, pos);
+        this->cur_label->setText(t.c_str());
+    }
+    const int64_t total_key = loops ? -2 : (int64_t)total;
+    if(total_key != this->last_total_ms){
+        this->last_total_ms = total_key;
+        FixedString<PICO_STR_S> t;
+        if(loops) t.assign("ループ");
+        else      FormatTime(t, total);
+        this->total_label->setText(t.c_str());
+    }
+
+    //シークバー。つまみを持っている間は指に任せる
+    if(wav && !this->seek_bar->is_pressing){
+        if(total != this->bar_duration){
+            this->bar_duration = total;
+            this->seek_bar->setMaxValue((float)(total > 0 ? total : 1));
+            this->last_bar_px = -1;
+        }
+        const int px = total > 0 ? (int)((uint64_t)pos * this->bar_w / total) : 0;
+        if(px != this->last_bar_px){
+            this->last_bar_px = px;
+            this->updating_bar = true;
+            this->seek_bar->setValue((float)pos);
+            this->updating_bar = false;
+        }
+    }
 }

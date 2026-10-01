@@ -41,8 +41,8 @@ namespace {
     // 操作が無くても止めてはいけない仕事があるか
     bool Busy(){
         return SoundFunctions::IsPlaying()
-            || SoundFunctions::MusicPlaying()
-            || SoundFunctions::WavPlaying()
+            || (SoundFunctions::MusicPlaying() && !SoundFunctions::MusicPaused())
+            || (SoundFunctions::WavPlaying() && !SoundFunctions::WavPaused())
             || NetworkFunctions::currentStatus == NetworkFunctions::NetStatus::TRYING_CONNECT;
     }
 

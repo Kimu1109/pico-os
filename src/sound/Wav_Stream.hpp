@@ -22,6 +22,11 @@ public:
     bool buffered() const;                          // まだ鳴らしていないものが残っているか
     void setFeeding(bool feeding){ this->feeding_.store(feeding, std::memory_order_release); }
     void setVolume(uint8_t v){ this->volume_.store(v > 100 ? 100 : v, std::memory_order_release); }
+    // 一時停止: 2コア目が取り出さなくなる(積むのは続くので、列が満杯になったら読み取りも止まる)
+    void setPaused(bool paused){ this->paused_.store(paused, std::memory_order_release); }
+    bool paused() const { return this->paused_.load(std::memory_order_acquire); }
+    // まだ鳴らしていない(積んだが取り出されていない)サンプル数。再生位置の計算に使う
+    uint32_t bufferedSamples() const;
     uint32_t underruns() const { return this->underruns_.load(std::memory_order_relaxed); }
 
     // ===== 2コア目 =====
@@ -40,6 +45,7 @@ private:
     std::atomic<uint32_t> flush_to_{0};     // 1コア目: ここまで捨ててほしい
     std::atomic<uint32_t> flush_gen_{0};    // 1コア目: 捨てる要求の世代
     std::atomic<bool>     feeding_{false};  // 1コア目: まだ積み続けるつもりか(途切れの数え方に使う)
+    std::atomic<bool>     paused_{false};
     std::atomic<uint8_t>  volume_{100};
     std::atomic<uint32_t> underruns_{0};
 

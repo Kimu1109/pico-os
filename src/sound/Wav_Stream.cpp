@@ -32,6 +32,10 @@ void WavStream::flush(){
     this->flush_gen_.fetch_add(1, std::memory_order_release);
 }
 
+uint32_t WavStream::bufferedSamples() const {
+    return this->head_.load(std::memory_order_relaxed) - this->effectiveTail();
+}
+
 bool WavStream::buffered() const {
     return this->head_.load(std::memory_order_relaxed) != this->effectiveTail();
 }
@@ -52,11 +56,15 @@ void WavStream::applyFlush(){
 
 bool WavStream::hasData(){
     this->applyFlush();
+    //一時停止中は鳴らすものが無い扱い(省電力でI2Sを止めてよい)
+    if(this->paused_.load(std::memory_order_acquire)) return false;
     return this->head_.load(std::memory_order_acquire) != this->tail_.load(std::memory_order_relaxed);
 }
 
 void WavStream::renderAdd(int16_t* out, size_t n, uint8_t master){
     this->applyFlush();
+    //一時停止中は取り出さない(時間も進めない。再開した位置から続く)
+    if(this->paused_.load(std::memory_order_acquire)) return;
     const uint32_t t = this->tail_.load(std::memory_order_relaxed);
     const uint32_t avail = this->head_.load(std::memory_order_acquire) - t;
     const size_t k = n < avail ? n : avail;

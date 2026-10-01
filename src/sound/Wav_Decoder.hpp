@@ -29,6 +29,12 @@ public:
     void close();
     bool isOpen() const { return this->open_; }
 
+    // 再生位置(元のファイルの時刻 ms)へ飛ぶ。開いていなければ(読み終えて閉じた後は)開き直してから飛ぶ。
+    // 範囲外は終わりぎわへ丸める。周波数の変換の途中状態は捨てる。失敗したら false
+    bool seekMs(uint32_t ms);
+    bool canReopen() const { return this->path_[0] != '\0'; }
+    bool reopen(){ return this->path_[0] != '\0' && this->open(this->path_, this->out_rate_); }
+
     // 終わりまで来たら頭から読み直す(BGM向け)
     void setLoop(bool loop){ this->loop_ = loop; }
 
@@ -68,6 +74,9 @@ private:
     uint32_t data_start_ = 0;
     uint32_t data_size_ = 0;
     uint32_t data_left_ = 0;    // まだバッファへ読み込んでいないバイト数
+
+    char path_[128] = {0};      // reopen()用に覚えておく(長すぎるパスは覚えない=reopenできない)
+    uint32_t out_rate_ = 22050;
 
     uint8_t buf_[kBufferBytes];
     size_t buf_pos_ = 0;

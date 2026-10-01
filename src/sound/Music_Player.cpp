@@ -18,6 +18,9 @@ bool MusicPlayer::start(ChipSynth::Engine& engine, const uint8_t* data, size_t s
     tempo_ = ReadU16(data + 4);
     if(tempo_ < 30 || tempo_ > 300) tempo_ = 120;
     acc_ = 0;
+    elapsed_samples_ = 0;
+    paused_ = false;
+    wrapped_ = false;
     bool any = false;
     for(int ch = 0; ch < kChannels; ch++){
         Track& t = tracks_[ch];
@@ -40,12 +43,21 @@ void MusicPlayer::silence(ChipSynth::Engine& engine, int ch){
     t.sounding = false;
 }
 
+void MusicPlayer::silenceAll(ChipSynth::Engine& engine){
+    for(int ch = 0; ch < kChannels; ch++) silence(engine, ch);
+}
+
 void MusicPlayer::stop(ChipSynth::Engine& engine){
-    if(playing_){
-        for(int ch = 0; ch < kChannels; ch++) silence(engine, ch);
-    }
+    if(playing_) silenceAll(engine);
     playing_ = false;
+    paused_ = false;
     data_ = nullptr;
+}
+
+void MusicPlayer::setPaused(ChipSynth::Engine& engine, bool paused){
+    if(paused == paused_) return;
+    paused_ = paused;
+    if(paused && playing_) silenceAll(engine);
 }
 
 // 次の音符/休符/終わりまで命令を読む
@@ -141,6 +153,7 @@ void MusicPlayer::fetch(ChipSynth::Engine& engine, int ch){
             case Op::End:
             default:
                 if(op == Op::End && t.segno != 0){
+                    wrapped_ = true;
                     t.pc = t.segno;
                     t.depth = 0;
                     break;
@@ -180,7 +193,7 @@ uint32_t MusicPlayer::samplesToNextTick() const {
 
 void MusicPlayer::render(ChipSynth::Engine& engine, int16_t* out, size_t n){
     while(n > 0){
-        if(!playing_){
+        if(!playing_ || paused_){
             engine.render(out, n);
             return;
         }
@@ -189,6 +202,7 @@ void MusicPlayer::render(ChipSynth::Engine& engine, int16_t* out, size_t n){
         engine.render(out, k);
         if(out) out += k;
         n -= k;
+        elapsed_samples_ += k;
 
         const uint64_t threshold = (uint64_t)rate_ * 60;
         acc_ += (uint64_t)k * tempo_ * kTicksPerQuarter;
@@ -197,4 +211,27 @@ void MusicPlayer::render(ChipSynth::Engine& engine, int16_t* out, size_t n){
             tick(engine);
         }
     }
+}
+
+uint32_t MusicPlayer::MeasureMs(const uint8_t* data, size_t size, bool* loops){
+    // 数えるティックの上限(テンポ120で約1時間)。ループの中のループで膨らむ曲が1コア目を止めないように
+    constexpr uint32_t kMaxTicks = 400000;
+    if(loops) *loops = false;
+
+    ChipSynth::Engine scratch(22050);
+    MusicPlayer p(22050);
+    if(!p.start(scratch, data, size)) return 0;
+
+    double ms = 0;
+    uint32_t ticks = 0;
+    bool cut = false;
+    while(p.playing_){
+        if(p.wrapped_){ cut = true; break; }
+        if(++ticks > kMaxTicks){ cut = true; break; }
+        //このティックの長さ(tick()の中でテンポが変わるので、進める前のテンポで数える)
+        ms += 60000.0 / ((double)p.tempo_ * kTicksPerQuarter);
+        p.tick(scratch);
+    }
+    if(loops) *loops = cut;
+    return (uint32_t)(ms + 0.5);
 }

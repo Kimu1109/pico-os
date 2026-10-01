@@ -31,6 +31,19 @@ public:
 
     uint16_t tempo() const { return tempo_; }
 
+    // 一時停止/再開。止めている間は時間が進まず、曲のチャンネルは無音になる。
+    // 再開は今の音符の途中からではなく、次の音符から鳴る(鳴っていた音は止めたまま)
+    void setPaused(ChipSynth::Engine& engine, bool paused);
+    bool paused() const { return paused_; }
+
+    // 鳴らし始めてから進んだ時間(ms。一時停止中は進まない)
+    uint32_t elapsedMs() const { return (uint32_t)(elapsed_samples_ * 1000 / rate_); }
+
+    // 演奏データを頭から数えた長さ(ms)。engine/PCM は作らず、ティックだけ数える(1コア目から呼んでよい)。
+    // L(ループ位置)で頭へ戻る曲は終わりが無いので *loops=true とし、最初に戻るまでの長さを返す。
+    // 数えきれないほど長い曲(上限を超えた)も *loops=true にして、そこまでの長さを返す
+    static uint32_t MeasureMs(const uint8_t* data, size_t size, bool* loops);
+
 private:
     struct Loop {
         uint16_t start;     // LoopBeginの次
@@ -55,8 +68,12 @@ private:
     void fetch(ChipSynth::Engine& engine, int ch);
     void silence(ChipSynth::Engine& engine, int ch);
     uint32_t samplesToNextTick() const;
+    void silenceAll(ChipSynth::Engine& engine);
 
     uint32_t rate_;
+    bool paused_ = false;
+    bool wrapped_ = false;      // ENDからL(ループ位置)へ戻ったことがある(MeasureMs用)
+    uint64_t elapsed_samples_ = 0;
     const uint8_t* data_ = nullptr;
     size_t size_ = 0;
     bool playing_ = false;

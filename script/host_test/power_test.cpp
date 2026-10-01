@@ -41,6 +41,8 @@ void SoundFunctions::SetPowerSave(bool e){ Fake::sound_power_save = e; }
 bool SoundFunctions::IsPlaying(){ return Fake::playing; }
 bool SoundFunctions::MusicPlaying(){ return Fake::music; }
 bool SoundFunctions::WavPlaying(){ return Fake::wav; }
+bool SoundFunctions::MusicPaused(){ return false; }
+bool SoundFunctions::WavPaused(){ return false; }
 
 static int failures = 0;
 static void check(bool cond, const char* label){

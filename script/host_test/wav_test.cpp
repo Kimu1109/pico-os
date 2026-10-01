@@ -115,6 +115,38 @@ static std::vector<int16_t> Decode(const std::string& file, uint32_t out_rate = 
 }
 
 static void TestDecoder(){
+    //(シーク用の先頭の1件だけここに置く。詳細な形式の検証は下)
+    {
+        std::vector<int16_t> ramp(22050);
+        for(size_t i = 0; i < ramp.size(); i++) ramp[i] = (int16_t)i;
+        HostSd::files["/seek.wav"] = MakeWav(WavSpec{}, Pcm16(ramp));
+        OSData::SD_usable = true;
+        WavDecoder dec;
+        check(dec.open("/seek.wav", 22050), "シーク用のWAVを開く");
+        int16_t tmp[16];
+        check(dec.read(tmp, 10) == 10 && tmp[9] == 9, "頭から読む");
+        check(dec.seekMs(500) && dec.read(tmp, 4) == 4 && tmp[0] == 11025 && tmp[3] == 11028, "500msへ飛ぶとそのフレームから読める");
+        check(dec.seekMs(0) && dec.read(tmp, 2) == 2 && tmp[0] == 0, "頭へ戻れる");
+        check(dec.seekMs(99999) && dec.read(tmp, 16) == 1 && tmp[0] == 22049, "範囲外は終わりぎわの1フレームへ");
+        check(dec.finished(), "最後まで読めば終わり");
+        dec.close();
+        check(dec.seekMs(250) && dec.read(tmp, 1) == 1 && tmp[0] == 5512, "読み終えて閉じた後も開き直して飛べる");
+        //ステレオ(1フレーム4バイト)でもフレームの境目へ飛ぶ
+        WavSpec st; st.channels = 2;
+        std::vector<int16_t> two(44100);
+        for(size_t i = 0; i < 22050; i++){ two[2 * i] = (int16_t)i; two[2 * i + 1] = (int16_t)i; }
+        HostSd::files["/seek2.wav"] = MakeWav(st, Pcm16(two));
+        check(dec.open("/seek2.wav", 22050) && dec.seekMs(500) && dec.read(tmp, 1) == 1 && tmp[0] == 11025, "ステレオも1フレームの境目へ飛ぶ");
+        //周波数の変換がある場合(44100Hz→22050Hz)も時刻で飛ぶ
+        WavSpec hi; hi.rate = 44100;
+        std::vector<int16_t> fast(44100);
+        for(size_t i = 0; i < fast.size(); i++) fast[i] = (int16_t)(i / 2);
+        HostSd::files["/seek3.wav"] = MakeWav(hi, Pcm16(fast));
+        check(dec.open("/seek3.wav", 22050) && dec.durationMs() == 1000 && dec.seekMs(500) && dec.read(tmp, 1) == 1 && tmp[0] == 11025,
+              "44.1kHzでも500msの位置から読める");
+        dec.close();
+    }
+
     OSData::SD_usable = true;
 
     printf("--- 16bitモノラル・同じ周波数はそのまま ---\n");
@@ -392,6 +424,76 @@ static void TestSoundFunctions(){
         const auto got = Run(now, 200);
         check(Count(got, 1000) > 6000 && WavPlaying(), "ループは鳴り続ける");
         WavStop();
+    }
+
+    printf("--- 一時停止・位置・シーク ---\n");
+    {
+        check(!WavPause(true), "鳴っていなければ一時停止できない");
+        std::vector<int16_t> ramp(22050);
+        for(size_t i = 0; i < ramp.size(); i++) ramp[i] = (int16_t)i;
+        HostSd::files["/music/ramp.wav"] = MakeWav(WavSpec{}, Pcm16(ramp));
+        HostSd::files["/music/c.wav"] = MakeWav(WavSpec{}, Pcm16(std::vector<int16_t>(44100, 10000)));
+
+        check(WavPlay("/music/c.wav", false, 100) && WavDurationMs() == 2000, "全体の長さ(2000ms)");
+        check(WavPositionMs() == 0 && !WavPaused(), "鳴らし始めは位置0・一時停止ではない");
+        auto got = Run(now, 20);
+        const size_t n1 = Count(got, 5000);
+        const uint32_t pos1 = WavPositionMs();
+        const long want1 = (long)(n1 * 1000 / 22050);
+        printf("       鳴った %zu サンプル 位置 %u ms\n", n1, (unsigned)pos1);
+        check(n1 > 0 && labs((long)pos1 - want1) <= 5, "位置は鳴らした分に付いていく");
+
+        check(WavPause(true) && WavPaused() && WavPlaying(), "一時停止(止めている間も鳴っている扱い)");
+        got = Run(now, 30);
+        check(Count(got, 5000) == 0, "止めている間は鳴らさない");
+        check(WavPositionMs() == pos1, "止めている間は位置が進まない");
+        check(WavPause(false) && !WavPaused(), "再開");
+        got = Run(now, 200);
+        check(n1 + Count(got, 5000) == 44100, "止めても欠けず、再開した続きから全部鳴る");
+        check(WavPositionMs() == 2000 && !WavPlaying(), "鳴り終えたら位置は全体の長さ");
+
+        printf("--- シーク ---\n");
+        check(WavPlay("/music/ramp.wav", false, 100), "ランプのWAV(1000ms)");
+        Run(now, 4);
+        check(WavSeekMs(500), "500msへ飛ぶ");
+        got = Run(now, 2);
+        //全体の音量50: 11025 * 0.5 = 5512。飛ぶ前に作っておいた分(最大64サンプル)が前に混ざりうる
+        check(Count(got, 5512) == 1, "飛んだ位置のサンプルから鳴る");
+        const uint32_t pos2 = WavPositionMs();
+        printf("       飛んだ後の位置 %u ms\n", (unsigned)pos2);
+        check(pos2 >= 500 && pos2 <= 500 + got.size() * 1000 / 22050 + 5, "位置も飛んだ先から、鳴らした分だけ進む");
+        got = Run(now, 100);
+        check(!WavPlaying() && WavPositionMs() == 1000, "最後まで鳴らして1000ms");
+        check(WavSeekMs(200) && WavPlaying(), "鳴り終えた後でも飛べば(開き直して)鳴り直す");
+        Run(now, 100);
+        check(!WavPlaying(), "鳴り終える");
+
+        WavPlay("/music/ramp.wav", false, 100);
+        Run(now, 3);
+        WavPause(true);
+        check(WavSeekMs(100) && WavPaused(), "一時停止中に飛んでも止まったまま");
+        got = Run(now, 5);
+        check(Count(got, 1102) == 0, "止まったまま鳴らさない(飛んだ先の1102が鳴らない)");
+        WavPause(false);
+        got = Run(now, 5);
+        check(Count(got, 1102) == 1, "再開すると飛んだ先から鳴る");
+        WavStop();
+        check(!WavPaused() && !WavSeekMs(100), "止めたら一時停止は解けて、飛べない");
+        Run(now, 2);
+
+        //ループ中の位置は長さの中を巡る
+        WavPlay("/music/ramp.wav", true, 100);
+        Run(now, 200);
+        check(WavPositionMs() < 1000, "ループ中の位置は長さを超えない");
+        WavStop();
+        Run(now, 2);
+        //新しく鳴らすと一時停止は解ける
+        WavPlay("/music/c.wav", false, 100);
+        WavPause(true);
+        WavPlay("/music/c.wav", false, 100);
+        check(!WavPaused(), "新しく鳴らすと一時停止は解ける");
+        WavStop();
+        Run(now, 2);
     }
 
     printf("--- 未接続でも時間どおりに進む ---\n");

@@ -63,6 +63,11 @@ namespace SoundFunctions {
     // 演奏データの置き場1つの大きさ。置き場は2つ(鳴らしている曲と、次に読む曲)で、
     // 最初に曲を鳴らすときに読み取り係(約3.5KB)と一緒に確保し、以降は持ち続ける
     constexpr uint16_t      kMusicDataBytes    = 6144;
+    // WAV: 1回のUpdate()で読んで積むサンプル数の上限(SDの読み込みで1フレームが長引きすぎないように。
+    // 44.1kHzステレオ16bitなら約8KBを読む量)。毎フレーム約370サンプル(60fps)消費するので十分追いつく
+    constexpr uint16_t      kWavMaxPerUpdate   = 1024;
+    // WAVを鳴らし始める前に先読みしておく数(鳴らし始めの途切れを防ぐ)
+    constexpr uint16_t      kWavPrefillSamples = 4096;
 
     // ===== 1コア目から使う =====
 
@@ -114,6 +119,28 @@ namespace SoundFunctions {
     GbAudioSink* GbAudio();
     // 列が満杯で捨てた書き込みの数
     uint32_t GbDroppedWrites();
+
+    // ---- WAV(SDの .wav をそのまま鳴らす) ----
+    // 1コア目がSDから少しずつ読んでモノラル22050Hzへ直し、列(WavStream、約16KB)で2コア目へ渡す。
+    // 曲・効果音・GBの音と足し合わせる。同時に鳴らせるWAVは1本(鳴らすと前のWAVは止まる)。
+    // 列と読み取り係(合わせて約17KB)は最初に鳴らすときに確保し、以降は持ち続ける。
+    // 読み込みが WavStream::kRingSamples(約370ms)より長く止まると途切れる(WavUnderruns())
+    struct WavInfo {
+        uint16_t channels = 0;
+        uint16_t bits = 0;
+        uint32_t sample_rate = 0;
+        uint32_t duration_ms = 0;
+    };
+    // 鳴らせなければfalseで、error に理由(読み取り係は1つなので、今のWAVは止まる)。volumeは0〜100(全体の音量と両方掛かる)
+    bool WavPlay(const char* path, bool loop = false, uint8_t volume = 100,
+                 const char** error = nullptr, WavInfo* info = nullptr);
+    void WavStop();
+    // 読んでいる途中か、まだ鳴らしていないものが残っているか
+    bool WavPlaying();
+    // 最後に鳴らしたWAVのファイル名
+    const char* WavTitle();
+    // 読み込みが間に合わず途切れた回数
+    uint32_t WavUnderruns();
 
     // ---- 省電力(スリープ中) ----
     // 何も鳴っていない間だけ、I2Sとアンプ(休止端子)を止めて2コア目をゆっくり回す。

@@ -27,6 +27,7 @@ namespace Fake {
     bool sound_power_save = false;
     bool playing          = false;
     bool music            = false;
+    bool wav              = false;
     int  display_calls    = 0;
 }
 void LogFunctions::Log(LogType, const char*, ...){}
@@ -39,6 +40,7 @@ void NetworkFunctions::SetLowPower(bool e){ Fake::wifi_low_power = e; }
 void SoundFunctions::SetPowerSave(bool e){ Fake::sound_power_save = e; }
 bool SoundFunctions::IsPlaying(){ return Fake::playing; }
 bool SoundFunctions::MusicPlaying(){ return Fake::music; }
+bool SoundFunctions::WavPlaying(){ return Fake::wav; }
 
 static int failures = 0;
 static void check(bool cond, const char* label){
@@ -48,7 +50,7 @@ static void check(bool cond, const char* label){
 
 static void Reset(){
     Fake::display_sleeping = Fake::wifi_low_power = Fake::sound_power_save = false;
-    Fake::playing = Fake::music = false;
+    Fake::playing = Fake::music = Fake::wav = false;
     Fake::display_calls = 0;
     OSData::isTouched = OSData::isTouchStart = OSData::isTouchEnd = OSData::isTouchMove = false;
     NetworkFunctions::currentStatus = NetworkFunctions::NetStatus::SUCCESS;
@@ -124,7 +126,10 @@ int main(){
     Fake::playing = false; Fake::music = true;
     Frame(kDefaultSleepTimeoutMs + 2, false);
     check(!IsSleeping(), "曲が鳴っている間は入らない");
-    Fake::music = false;
+    Fake::music = false; Fake::wav = true;
+    Frame(kDefaultSleepTimeoutMs + 2, false);
+    check(!IsSleeping(), "WAVが鳴っている間は入らない");
+    Fake::wav = false;
     NetworkFunctions::currentStatus = NetworkFunctions::NetStatus::TRYING_CONNECT;
     Frame(kDefaultSleepTimeoutMs + 3, false);
     check(!IsSleeping(), "Wi-Fiへ接続中は入らない");

@@ -77,7 +77,7 @@ src/
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
-  sound/                     チップチューン音源(Chip_Synth)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
+  sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査)
@@ -1567,6 +1567,39 @@ SUMMARY.md #11「GB対応」。Peanut-GBは音源チップ(APU)を持たず、`E
   PCビルドでテストの中と同じ要領で組み立てたドレミのROMを`--tap`で開き、`SDL_AUDIODRIVER=disk`の出力で8音の高さと、
   「戻る」で無音になることを確認。**市販ゲームでの聞こえ方・実機(2コア目の負荷)は未確認**(1サンプルあたり4チャンネル+浮動小数点のハイパス1回。
   RP2350のFPUで数%の見込み)。
+
+### WAVの再生 (`src/sound/Wav_Decoder` / `Wav_Stream` / `SoundFunctions::WavPlay`) (2026-10-01)
+
+SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し合わせる**(チャンネルの貸し借りは無い)。同時に鳴らせるWAVは1本。
+
+```
+1コア目 UpdateAt() → FeedWav(): WavDecoder.read()(SDから1KBずつ読み、モノラル22050Hzへ直す)
+  → WavStream(ロック無しの列、8192サンプル ≒ 370ms・16KB) → 2コア目 Pump(): ChipSynth/GBの出力へ renderAdd
+```
+
+- **SDから読むのは1コア目**(2コア目からSDに触らない決まりのため)。1回の`Update()`で積むのは`kWavMaxPerUpdate`(1024サンプル)まで、
+  鳴らし始めは`kWavPrefillSamples`(4096)をまとめて先読みする。消費は毎フレーム約370サンプル(60fps)なので十分追いつく。
+  **1コア目が約370msより長く止まると途切れる**(TLSのハンドシェイク等)。途切れた回数は`WavUnderruns()`、1秒に1回まで`LOG_SYS_WARN`。
+  鳴らせない間(アンプ未接続、`out==nullptr`)の不足は聞こえないので数えない。
+- **`WavDecoder`**: 整数PCM 8/16/24/32bit(8bitだけ符号なし、24/32bitは上位16bit)・float 32bit・`WAVE_FORMAT_EXTENSIBLE`。
+  1〜8チャンネルを平均してモノラルに、周波数は線形補間(16.16の固定小数点、帯域制限なし)で22050Hzへ。fmt/data以外のチャンクは飛ばし、
+  dataの長さがファイルより長い(0xFFFFFFFF等)ならファイルの終わりまで。ADPCM・64bit float・9ch以上は`Unsupported`。
+  同じ周波数なら入れたのと同じ数だけ出す(最後の1サンプルも`ending_`で出してから終える)。`setLoop(true)`で頭へ戻る。
+- **`WavStream`の「捨てる」(止める/切り替え)は1コア目から`flush()`するだけ**: 捨てたい位置(その時点のhead)と世代を書き、2コア目が次に読むときに
+  tailをそこまで進める。1コア目は`effectiveTail()`(tailとflush位置の進んだ方)で空きを数える。切り替えの瞬間、2コア目が古い位置を読んでいる間に
+  新しいデータが同じ場所へ書かれて数サンプル混ざることはありうる(メモリ安全には影響しない)。
+- 音量はWAVごと(0〜100)×全体(バッテリーの頭打ち込み。2コア目の`eff_volume`)。全体100・WAV100でWAVのフルスケールがそのまま出る。
+- 列(約16KB)と読み取り係(約1.1KB)は**最初にWAVを鳴らすときに`malloc`して持ち続ける**(GBの列・曲の置き場と同じ。2コア目が読んでいる途中で消えないよう解放しない)。
+  読み取り係は1つなので、**読めないWAVを頼むと今のWAVは止まる**(MMLの「読めなければ今の曲はそのまま」とは違う)。
+- スリープ: `PowerFunctions::Busy()`が`WavPlaying()`を見る。省電力中の2コア目は列に残りがあれば動き続ける(`AnythingSounding()`)。
+- Lua: `pico.wav_play(path[, {loop=, volume=}])` → true / `nil, 理由`(SDの権限に従う。引数の誤りは先に`luaL_error`)、`pico.wav_stop()`、`pico.wav_playing()`。
+  使ったアプリは閉じるときに止める(`used_wav_`)。ドキュメントは`lua-api-doc/content/api/sound.md`「WAV」。
+- ミュージックアプリ: `/music/`の`*.wav`も並べる(拡張子の大小は区別しない)。MMLとWAVは同時に鳴らさない(片方を鳴らすともう片方を止める)。
+  サンプルは`pc/sdcard/music/chime.wav`(8bit・11025Hz・約1秒。周波数の変換の経路も通る)。
+- 検証: `wav_test`(run.sh。形式ごとの変換・平均・周波数の変換・チャンクの読み飛ばし・ループ・断り方、SoundFunctionsの配線: 音量・止める/切り替えで
+  先読みを捨てる・途切れの数え方・アンプが無い間も時間どおりに進む)、`lua_engine_test`(Lua API)、`power_test`(WAV中はスリープしない)、
+  PCビルドで`SDL_AUDIODRIVER=disk`の出力を見てミュージックアプリからchime.wavが約1秒途切れずに鳴ることを確認。
+  **実機では未確認**(SPI1の実効速度・1コア目の引っかかりでの途切れ・Webビルドは1フレームに1回の`loop1()`で足りるか)。
 
 ### 外部コントローラー (`src/functions/Pad_Functions` / `script/pad_serial.py`) (2026-09-25)
 
@@ -3316,7 +3349,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、39本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、40本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

@@ -7,6 +7,8 @@
 #include "sound/Music_Player.hpp"
 #include "sound/Gb_Apu.hpp"
 #include "sound/Gb_Audio_Link.hpp"
+#include "sound/Wav_Decoder.hpp"
+#include "sound/Wav_Stream.hpp"
 #include "gb/Gb_Audio_Sink.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
@@ -44,6 +46,8 @@ namespace {
     // GBエミュの音源チップへの書き込みの列。最初にROMを起動したときに1コア目が確保して置き、以降は持ち続ける
     // (2コア目は置かれたのを見てから読む。解放しないので、読んでいる途中で消えることは無い)
     std::atomic<GbAudioLink*> gb_link{nullptr};
+    // WAVの列。最初にWAVを鳴らすときに1コア目が確保して置き、以降は持ち続ける(gb_linkと同じ考え方)
+    std::atomic<WavStream*> wav_stream{nullptr};
 
     // --- コマンドの列(1コア目が積み、2コア目が取り出す。1対1なのでロック無しで足りる) ---
     enum class CmdType : uint8_t { Play, Stop, StopAll, MusicPlay, MusicStop };
@@ -95,6 +99,12 @@ namespace {
     uint32_t music_cmd_seq = 0;             // 最後に積んだ曲のコマンドが何番目か
     bool music_cmd_play = false;            // それが「鳴らす」だったか
     FixedString<PICO_STR_M> music_title;
+
+    // --- WAV(1コア目側) ---
+    WavDecoder* wav_decoder = nullptr;      //最初にWAVを鳴らすときに確保し、以降は持ち続ける
+    FixedString<PICO_STR_M> wav_title;
+    uint32_t logged_wav_underruns = 0;
+    unsigned long logged_wav_ms = 0;
 
     bool ReadDetectPin(){
         return digitalRead(AUDIO_DETECT) == LOW;
@@ -163,6 +173,26 @@ namespace {
         }
     }
 
+    // WAVを読んで列へ積む(最大 max_samples)。読み終えたら読み取り係を閉じる
+    void FeedWav(uint32_t max_samples){
+        WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+        if(!wav || !wav_decoder || !wav_decoder->isOpen()) return;
+        int16_t tmp[256];
+        uint32_t want = wav->freeSpace();
+        if(want > max_samples) want = max_samples;
+        while(want > 0){
+            const size_t n = wav_decoder->read(tmp, want < 256 ? want : 256);
+            wav->push(tmp, n);
+            want -= (uint32_t)n;
+            if(wav_decoder->finished()){
+                wav_decoder->close();
+                wav->setFeeding(false);     //ここから先は鳴らし切るだけ(足りなくても途切れとは数えない)
+                break;
+            }
+            if(n == 0) break;
+        }
+    }
+
     // ================================================================
     // 2コア目だけが触るもの
     // ================================================================
@@ -177,6 +207,7 @@ namespace {
     bool failed = false;
     uint32_t seen_epoch = 0;
     uint32_t processed = 0;
+    uint8_t eff_volume = kDefaultVolume;    // 全体の音量(バッテリーの頭打ち込み)。WAVへ掛ける
 
     // I2Sへ書く前の一時置き場
     constexpr size_t kChunk = 64;
@@ -228,7 +259,9 @@ namespace {
     bool AnythingSounding(){
         if(engine.activeMask() != 0 || player.playing()) return true;
         GbAudioLink* link = gb_link.load(std::memory_order_acquire);
-        return link && link->active();
+        if(link && link->active()) return true;
+        WavStream* wav = wav_stream.load(std::memory_order_acquire);
+        return wav && wav->hasData();
     }
 
     void ApplyRunState(unsigned long now_ms){
@@ -294,6 +327,7 @@ namespace {
             if(chunk_pos == chunk_len){
                 player.render(engine, chunk, kChunk);
                 if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, chunk, kChunk);
+                if(WavStream* wav = wav_stream.load(std::memory_order_acquire)) wav->renderAdd(chunk, kChunk, eff_volume);
                 chunk_pos = 0;
                 chunk_len = kChunk;
             }
@@ -311,6 +345,7 @@ namespace {
         sample_frac = (uint32_t)(acc % 1000);
         player.render(engine, nullptr, (size_t)(acc / 1000));
         if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, nullptr, (size_t)(acc / 1000));
+        if(WavStream* wav = wav_stream.load(std::memory_order_acquire)) wav->renderAdd(nullptr, (size_t)(acc / 1000), 0);
     }
 }
 
@@ -348,6 +383,14 @@ void SoundFunctions::UpdateAt(unsigned long now_ms){
         BatteryFunctions::HasSample() && !BatteryFunctions::IsExternallyPowered(),
         std::memory_order_relaxed
     );
+
+    FeedWav(kWavMaxPerUpdate);
+    const uint32_t wu = WavUnderruns();
+    if(wu != logged_wav_underruns && now_ms - logged_wav_ms >= 1000){
+        LOG_SYS_WARN("Sound: WAVの読み込みが間に合わず%lu回途切れました", (unsigned long)(wu - logged_wav_underruns));
+        logged_wav_underruns = wu;
+        logged_wav_ms = now_ms;
+    }
 
     const uint32_t d = dropped.load(std::memory_order_relaxed);
     static uint32_t logged_dropped = 0;
@@ -556,6 +599,74 @@ uint32_t SoundFunctions::GbDroppedWrites(){
     return link ? link->dropped() : 0;
 }
 
+// ---- WAV ----
+
+bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const char** error, WavInfo* info){
+    if(error) *error = "";
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    if(!wav){
+        void* mem = malloc(sizeof(WavStream));
+        if(!mem){
+            if(error) *error = "WAVを鳴らすためのメモリが足りません";
+            return false;
+        }
+        wav = new (mem) WavStream();
+        wav_stream.store(wav, std::memory_order_release);
+    }
+    if(!wav_decoder){
+        void* mem = malloc(sizeof(WavDecoder));
+        if(!mem){
+            if(error) *error = "WAVを鳴らすためのメモリが足りません";
+            return false;
+        }
+        wav_decoder = new (mem) WavDecoder();
+    }
+
+    //見出しを先に別の係で確かめると読み取り係が2つ要るので、読めなかったら今のWAVも止まる
+    //(読み取り係は1つで、開き直した時点で前のファイルは閉じるため)
+    wav->setFeeding(false);
+    wav->flush();
+    if(!wav_decoder->open(path, kSampleRate)){
+        if(error) *error = wav_decoder->errorText();
+        return false;
+    }
+    wav_decoder->setLoop(loop);
+    if(info){
+        info->channels = wav_decoder->channels();
+        info->bits = wav_decoder->bitsPerSample();
+        info->sample_rate = wav_decoder->sampleRate();
+        info->duration_ms = wav_decoder->durationMs();
+    }
+    const char* slash = strrchr(path, '/');
+    wav_title.assign(slash ? slash + 1 : path);
+
+    wav->setVolume(volume);
+    wav->setFeeding(true);
+    FeedWav(kWavPrefillSamples);    //鳴らし始めの途切れを防ぐため、先にまとめて読んでおく
+    return true;
+}
+
+void SoundFunctions::WavStop(){
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    if(!wav) return;
+    wav->setFeeding(false);
+    wav->flush();
+    if(wav_decoder) wav_decoder->close();
+}
+
+bool SoundFunctions::WavPlaying(){
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    if(!wav) return false;
+    return (wav_decoder && wav_decoder->isOpen()) || wav->buffered();
+}
+
+const char* SoundFunctions::WavTitle(){ return wav_title.c_str(); }
+
+uint32_t SoundFunctions::WavUnderruns(){
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    return wav ? wav->underruns() : 0;
+}
+
 // ================================================================
 // 2コア目
 // ================================================================
@@ -591,6 +702,7 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     if(battery_cap_active.load(std::memory_order_acquire) && vol > kBatteryVolumeCapPercent){
         vol = kBatteryVolumeCapPercent;
     }
+    eff_volume = vol;
     if(vol != engine.masterVolume()){
         engine.setMasterVolume(vol);
         gb_apu.setMasterVolume(vol);

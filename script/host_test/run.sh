@@ -44,6 +44,9 @@
 #   sound_test    … 音声出力(SoundFunctions)。アンプの検出(ばたつきを採らない)、刺さっている間だけ
 #                   I2Sを動かすこと、未接続の間も音が時間どおりに進み刺し直すと続きから鳴ること、
 #                   矩形波の中身、sound.cfg(output=off/volume)、I2Sを開始できなかったとき
+#   wav_test      … WAVの再生。WavDecoder(形式ごとの変換・チャンネルの平均・周波数の変換・チャンクの読み飛ばし・
+#                   ループ・断り方)とSoundFunctionsの配線(音量・止める/切り替えで先読みを捨てる・途切れの数え方・
+#                   アンプが無い間も時間どおりに進む)
 #   music_test    … 曲データ(pico-os MML、MUSIC_FORMAT.md)。読み取り(音の高さ/長さ/繰り返し/マクロ/
 #                   誤りの行・列/警告)、シーケンサー(サンプル単位の音の位置・テンポ・繰り返し・ループ・
 #                   効果音への貸し出し)、SoundFunctionsの配線(置き場の入れ替え・効果音との同居)
@@ -447,6 +450,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/gb_apu_test.cpp" \
     "$ROOT/src/sound/Gb_Apu.cpp" \
     "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
     -o "$OUT/gb_apu_test"
 
 echo ""
@@ -463,11 +468,30 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/sound/Music_Player.cpp" \
     "$ROOT/src/sound/Gb_Apu.cpp" \
     "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
     -o "$OUT/sound_test"
 
 echo ""
 echo "===== sound_test ====="
 run_or_die "$OUT/sound_test"
+
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/wav_test.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
+    -o "$OUT/wav_test"
+
+echo ""
+echo "===== wav_test ====="
+run_or_die "$OUT/wav_test"
 
 # --- 曲データ(MML)の読み取りとシーケンサー ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -479,6 +503,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/sound/Music_Player.cpp" \
     "$ROOT/src/sound/Gb_Apu.cpp" \
     "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
     -o "$OUT/music_test"
 
 echo ""
@@ -794,6 +820,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/sound/Music_Player.cpp" \
     "$ROOT/src/sound/Gb_Apu.cpp" \
     "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -861,6 +889,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/sound/Music_Player.cpp" \
     "$ROOT/src/sound/Gb_Apu.cpp" \
     "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
@@ -928,6 +958,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/sound/Music_Player.cpp" \
     "$ROOT/src/sound/Gb_Apu.cpp" \
     "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/functions/Scene_Functions.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \

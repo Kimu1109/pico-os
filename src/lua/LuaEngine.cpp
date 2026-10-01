@@ -203,6 +203,7 @@ LuaEngine::~LuaEngine() {
     // 音を使ったアプリは閉じるときに全部止める
     if (used_sound_) SoundFunctions::StopAll();
     if (used_music_) SoundFunctions::MusicStop();
+    if (used_wav_) SoundFunctions::WavStop();
     delete http_; // lua_close()より前でも後でも問題ない(HttpStateはLuaと無関係のC++側の状態)
     if (L) lua_close(L);
 }
@@ -313,6 +314,9 @@ void LuaEngine::registerApi() {
     registerFn("music_play_text", l_music_play_text);
     registerFn("music_stop", l_music_stop);
     registerFn("music_playing", l_music_playing);
+    registerFn("wav_play", l_wav_play);
+    registerFn("wav_stop", l_wav_stop);
+    registerFn("wav_playing", l_wav_playing);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
     registerFn("draw_pixel", l_draw_pixel);
@@ -1365,6 +1369,59 @@ int LuaEngine::l_music_stop(lua_State* L) {
 
 int LuaEngine::l_music_playing(lua_State* L) {
     lua_pushboolean(L, SoundFunctions::MusicPlaying());
+    return 1;
+}
+
+int LuaEngine::l_wav_play(lua_State* L) {
+    // pico.wav_play(path[, {loop=bool, volume=0〜100}]) -> true | nil, 理由
+    LuaEngine* self = Self(L);
+    const char* path = luaL_checkstring(L, 1);
+    bool loop = false;
+    uint8_t volume = 100;
+    //引数の誤りは状態(SD無し・権限)より先にエラーにする
+    if (!lua_isnoneornil(L, 2)) {
+        luaL_checktype(L, 2, LUA_TTABLE);
+        lua_getfield(L, 2, "loop");
+        if (!lua_isnil(L, -1)) {
+            luaL_checktype(L, -1, LUA_TBOOLEAN);
+            loop = lua_toboolean(L, -1);
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "volume");
+        if (!lua_isnil(L, -1)) volume = (uint8_t)std::clamp<lua_Integer>(luaL_checkinteger(L, -1), 0, 100);
+        lua_pop(L, 1);
+    }
+
+    if (!OSData::SD_usable) {
+        lua_pushnil(L);
+        lua_pushstring(L, "SDカードが使えません");
+        return 2;
+    }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.wav_play: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushnil(L);
+        lua_pushstring(L, "このアプリからは読めない場所です");
+        return 2;
+    }
+    self->used_wav_ = true;
+    const char* err = "";
+    if (!SoundFunctions::WavPlay(path, loop, volume, &err)) {
+        lua_pushnil(L);
+        lua_pushstring(L, err);
+        return 2;
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+int LuaEngine::l_wav_stop(lua_State* L) {
+    (void)L;
+    SoundFunctions::WavStop();
+    return 0;
+}
+
+int LuaEngine::l_wav_playing(lua_State* L) {
+    lua_pushboolean(L, SoundFunctions::WavPlaying());
     return 1;
 }
 

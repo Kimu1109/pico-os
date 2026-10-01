@@ -14,15 +14,19 @@
 #include <cstring>
 
 namespace {
-    bool EndsWithMml(const char* name){
-        const size_t n = strlen(name);
-        if(n < 4) return false;
-        const char* ext = name + n - 4;
-        return (ext[0] == '.') &&
-               (ext[1] == 'm' || ext[1] == 'M') &&
-               (ext[2] == 'm' || ext[2] == 'M') &&
-               (ext[3] == 'l' || ext[3] == 'L');
+    // 拡張子(".mml"等、小文字で渡す)で終わるか。大小は区別しない
+    bool EndsWith(const char* name, const char* ext){
+        const size_t n = strlen(name), e = strlen(ext);
+        if(n < e) return false;
+        for(size_t i = 0; i < e; i++){
+            char c = name[n - e + i];
+            if(c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+            if(c != ext[i]) return false;
+        }
+        return true;
     }
+    bool IsMml(const char* name){ return EndsWith(name, ".mml"); }
+    bool IsWav(const char* name){ return EndsWith(name, ".wav"); }
 
     enum Status { kNoSd, kEmpty, kStopped, kPlaying, kError };
 }
@@ -54,6 +58,7 @@ void MusicScene::onEnter(){
     this->stop_button->setY(stop_y);
     this->stop_button->setOnPressEnd([this](){
         SoundFunctions::MusicStop();
+        SoundFunctions::WavStop();
         this->refreshStatus();
     });
     WidgetFunctions::Add(this->stop_button);
@@ -94,6 +99,7 @@ void MusicScene::onEnter(){
 void MusicScene::onExit(){
     //閉じたら止める(このアプリの外から止める手段が無いため)
     SoundFunctions::MusicStop();
+    SoundFunctions::WavStop();
 
     this->back_button = nullptr;
     this->stop_button = nullptr;
@@ -117,7 +123,7 @@ void MusicScene::reloadList(){
     FsFile file;
     while(file.openNext(&dir, O_RDONLY)){
         char name[128];
-        const bool ok = file.getName(name, sizeof(name)) && !file.isDirectory() && EndsWithMml(name);
+        const bool ok = file.getName(name, sizeof(name)) && !file.isDirectory() && (IsMml(name) || IsWav(name));
         file.close();
         if(!ok) continue;
         if(this->file_count >= kMaxFiles){
@@ -153,6 +159,24 @@ void MusicScene::playIndex(int index){
     path.assign(PICO_Path::DIR::MUSIC);
     path.append(this->file_names[index].c_str());
 
+    //MMLとWAVは同時には鳴らさない(このアプリで鳴らすのは1曲ずつ)
+    if(IsWav(this->file_names[index].c_str())){
+        const char* err = "";
+        if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err)){
+            FixedString<PICO_STR_256B> msg;
+            msg.appendFormat("%s を読めません\n%s", this->file_names[index].c_str(), err);
+            LOG_APP_WARN("ミュージック: %s", msg.c_str());
+            this->status_label->setTextColor(PICO_RED);
+            this->status_label->setText(msg.c_str());
+            this->last_status = kError;
+            return;
+        }
+        SoundFunctions::MusicStop();
+        this->last_status = -1;
+        this->refreshStatus();
+        return;
+    }
+
     MmlResult r;
     if(!SoundFunctions::MusicPlayFile(path.c_str(), &r)){
         //理由は状態の欄へ赤で出す(ダイアログは1行しか見せられず、行・列が切れてしまう)
@@ -167,6 +191,7 @@ void MusicScene::playIndex(int index){
         this->last_status = kError;
         return;
     }
+    SoundFunctions::WavStop();
     this->last_status = -1;     //鳴らせたら誤りの表示を消す(同じ曲を鳴らし直した場合も)
     this->refreshStatus();
 }
@@ -174,17 +199,18 @@ void MusicScene::playIndex(int index){
 void MusicScene::refreshStatus(){
     if(!this->status_label) return;
 
+    const bool wav = SoundFunctions::WavPlaying();
     int status;
     if(!OSData::SD_usable) status = kNoSd;
-    else if(SoundFunctions::MusicPlaying()) status = kPlaying;
+    else if(wav || SoundFunctions::MusicPlaying()) status = kPlaying;
     else if(this->file_count == 0) status = kEmpty;
     else status = kStopped;
 
     //読めなかった理由を出している間は、鳴っている曲が変わるまでそのまま
     if(this->last_status == kError && status != kPlaying) return;
-    if(this->last_status == kError && status == kPlaying && this->last_title == SoundFunctions::MusicTitle()) return;
+    const char* title = wav ? SoundFunctions::WavTitle() : SoundFunctions::MusicTitle();
+    if(this->last_status == kError && status == kPlaying && this->last_title == title) return;
 
-    const char* title = SoundFunctions::MusicTitle();
     if(status == this->last_status && (status != kPlaying || this->last_title == title)) return;
     this->last_status = status;
     this->last_title.assign(title);
@@ -192,7 +218,7 @@ void MusicScene::refreshStatus(){
     FixedString<PICO_STR_L> text;
     switch(status){
         case kNoSd:    text.assign("SDカードがありません"); break;
-        case kEmpty:   text.assign("/music/ に .mml を置いてください"); break;
+        case kEmpty:   text.assign("/music/ に .mml か .wav を置いてください"); break;
         case kStopped: text.assign("2回タップで再生"); break;
         case kPlaying:
             text.assign("再生中: ");

@@ -46,3 +46,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+`music/chime.wav` はミュージックアプリのWAV再生の動作サンプル(8bitモノラル11025Hzの短いチャイム。
+22050Hzへ直して鳴らす経路も通る)。このリポジトリのために作ったもので、ライセンス上の制約は無い。

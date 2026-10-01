@@ -1,7 +1,7 @@
 ---
 title: "音"
 weight: 85
-description: "sound_play / sound_stop / sound_playing / note_freq / beep / sound_available / music_play / music_play_text / music_stop / music_playing"
+description: "sound_play / sound_stop / sound_playing / note_freq / beep / sound_available / music_play / music_play_text / music_stop / music_playing / wav_play / wav_stop / wav_playing"
 ---
 
 音はI2Sのアンプ(MAX98357A)から出ます。**アンプがつながっていない本体でも、以下の関数はエラーにならず普通に呼べます**(音が出ないだけで、音の長さや「鳴っているか」は時間どおりに進みます)。アンプの有無でスクリプトを書き分ける必要はありません。
@@ -149,6 +149,39 @@ A @pulse50 v12 E-3 o5 l16 c e g > c
 曲を鳴らしている間に `pico.sound_play()` や `pico.beep()` を呼ぶと、**効果音がそのチャンネルを借ります**。借りている間、曲のそのチャンネルは黙りますが進行は止まらず、効果音が終わったら次の音符から曲へ戻ります。BGMと効果音を同時に使うゲームでは、効果音を曲があまり使わないチャンネル(例えば4)で鳴らすと、曲が途切れにくくなります。
 
 アプリを閉じると、曲も効果音も止まります。
+
+## WAV
+
+SDの `.wav` をそのまま鳴らします。読めるのは整数PCM(8/16/24/32bit)と浮動小数点(32bit)で、何チャンネルでも全チャンネルを平均したモノラルで、何Hzでも22050Hzへ直して鳴らします。ADPCM・MP3等の圧縮形式は読めません。
+
+ファイルは鳴らしながら少しずつSDから読むので、長い曲でもRAMを食いません。ただし、先読みは約0.37秒分なので、`loop()` がそれより長く止まるとその間は音が途切れます(`pico.http_request()` でHTTPSの接続を始めた瞬間など)。
+
+曲(MML)・効果音とは足し合わせて鳴ります(チャンネルの貸し借りはありません)。同時に鳴らせるWAVは1つで、鳴らすと前のWAVは止まります。容量を抑えたいなら、11025Hz・8bit・モノラルで書き出すと1秒あたり約11KBで済みます。
+
+### pico.wav_play
+
+<div class="sig">pico.wav_play(path[, opts]) <span class="ret">-> true | nil, err</span></div>
+
+`opts` は表で、`loop`(真なら終わりまで来たら頭から。既定は偽)と `volume`(0〜100。既定は100。設定アプリの音量と両方掛かります)を書けます。読めなければ `nil` と理由を返します(**そのとき鳴っていたWAVは止まります**)。SDの権限は `pico.music_play` と同じです。
+
+```lua
+local ok, err = pico.wav_play("/lua/apps/わたしのゲーム/bgm.wav", { loop = true, volume = 60 })
+if not ok then pico.log("BGMを鳴らせません: " .. err) end
+```
+
+### pico.wav_stop
+
+<div class="sig">pico.wav_stop() <span class="ret">-> (なし)</span></div>
+
+WAVを止めます。曲と効果音は止めません。
+
+### pico.wav_playing
+
+<div class="sig">pico.wav_playing() <span class="ret">-> boolean</span></div>
+
+WAVを読んでいる途中か、まだ鳴らしていない分が残っていれば `true`。`loop` の無いWAVは最後まで鳴らすと `false` になります。
+
+アプリを閉じるとWAVも止まります。
 
 ## 例: 1拍ずつ鳴らす
 

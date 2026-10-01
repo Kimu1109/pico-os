@@ -409,6 +409,8 @@ class LuaEngine {
         FixedString<PICO_STR_S> launch_data_;
         // pico.music_*を使ったか。使ったアプリは閉じるときに曲を止める
         bool used_music_ = false;
+        // pico.wav_*を使ったか。使ったアプリは閉じるときにWAVを止める
+        bool used_wav_ = false;
 
         std::vector<CallbackBinding> callbacks_;
 
@@ -569,6 +571,9 @@ class LuaEngine {
         static int l_music_play_text(lua_State* L);
         static int l_music_stop(lua_State* L);
         static int l_music_playing(lua_State* L);
+        static int l_wav_play(lua_State* L);
+        static int l_wav_stop(lua_State* L);
+        static int l_wav_playing(lua_State* L);
 
         // ダイアログ。クラスコメント「ダイアログ」参照。いずれも生成した
         // WidgetId(整数)を返す。閉じたときの結果はpico.on(id,"closed",fn)

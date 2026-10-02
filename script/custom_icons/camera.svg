@@ -1,0 +1,11 @@
+<!--
+  pico-os 自作アイコン: カメラ(スクリーンショット)
+
+  tablerには適当なカメラが無い(あっても24pxグリッドの細線で16pxでは崩れる)ので、
+  16pxグリッドに載る塗りの多角形で描き起こした。
+  本体 : x=1..15 / y=4..14、上のでっぱり(ファインダー)x=5..11 / y=2..4
+  レンズ: 本体の中の抜き(evenodd)。角を落とした6x5の穴。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+  <path fill-rule="evenodd" d="M1 4h4l1-2h4l1 2h4v10H1z M6 7h4v1h1v3h-1v1H6v-1H5V8h1z" />
+</svg>

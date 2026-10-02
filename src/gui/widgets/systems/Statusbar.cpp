@@ -7,6 +7,7 @@
 #include "functions/Battery_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
+#include "functions/Screenshot_Functions.hpp"
 
 #include "OS_Data.hpp"
 
@@ -116,13 +117,16 @@ void Statusbar::render(){
         draw_pos += 16 + MARGIN;
     }
 
-    //未読の通知: 右端にベルと数(タップで通知センター)。無ければ何も出さない
+    //スクリーンショット: 右端のカメラ(タップで撮る。範囲はScreenshotFunctions::kButtonWidth)
+    IconRender::DrawIcon(IconID::Camera, IconSize::Px16, g_rect.x + g_rect.w - MARGIN - 16, ICON_MARGIN_TOP, PICO_BLACK);
+
+    //未読の通知: カメラの左にベルと数(タップで通知センター)。無ければ何も出さない
     if(unread > 0){
         char num[4];
         snprintf(num, sizeof(num), "%d", unread > 99 ? 99 : unread);
         OSData::frame->setFont(FontFn::GetSmall());
         const int num_w = OSData::frame->textWidth(num);
-        const int bell_x = g_rect.x + g_rect.w - MARGIN - num_w - 1 - 16;
+        const int bell_x = g_rect.x + g_rect.w - (MARGIN + 16) - MARGIN - num_w - 1 - 16;
         IconRender::DrawIcon(IconID::Bell, IconSize::Px16, bell_x, ICON_MARGIN_TOP, PICO_RED);
         OSData::frame->setTextColor(PICO_RED);
         OSData::frame->setCursor(bell_x + 16 + 1, g_rect.y);

@@ -306,11 +306,9 @@ void TodoScene::confirmClose(){
         this->setNotice("前の操作が終わるまで待ってください", PICO_RED);
         return;
     }
-    //MsgDialog は96バイトまで・大きい文字で3行ほどなので、名前は短く切る
-    FixedString<PICO_STR_S> name;
-    const bool whole = name.assign(t->content.c_str());
-    FixedString<PICO_STR_L> text;
-    text.appendFormat("「%s%s」を完了にしますか?", name.c_str(), whole ? "" : "…");
+    //長い名前は MsgDialog が小さい文字/スクロールで見せてくれるので、そのまま出す
+    FixedString<PICO_STR_512B> text;
+    text.appendFormat("「%s」を完了にしますか?", t->content.c_str());
     this->confirm_id = t->id;
 
     auto* dialog = new MsgDialog(text.c_str(), "やめる", "完了");

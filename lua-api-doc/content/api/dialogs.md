@@ -12,11 +12,16 @@ description: "show_message / show_input / show_file_save / show_file_select / sh
 
 メッセージ+キャンセル/OKボタンのダイアログ。3引数はすべて必須です。
 
+- 本文が枠に収まらないときは小さい文字(16px)になり、それでも収まらなければ枠の中でスクロールできる(スクロールバーをドラッグ)。本文は512バイトまで。
+- ボタンの文字を空文字列 `""` にすると、そのボタンは出さずに詰める(例: `pico.show_message("保存しました", "", "OK")` でOKだけ)。両方とも空のときだけ「OK」を出す(閉じられなくならないように)。
+
 ## pico.show_input
 
-<div class="sig">pico.show_input(label: string, initial_text?: string, is_single_line?: boolean) <span class="ret">-> id: integer</span></div>
+<div class="sig">pico.show_input(label: string, initial_text?: string, is_single_line?: boolean, submit_text?: string, cancel_text?: string) <span class="ret">-> id: integer</span></div>
 
 - `initial_text` の既定値は空文字列。
+- `submit_text` / `cancel_text` はボタンの文字(既定は「決定」「キャンセル」)。空文字列 `""` にするとそのボタンは出さずに詰める(両方とも空のときだけ「決定」を出す)。
+- `label` が長いときは `show_message` と同じく小さい文字→スクロールになる。
 - `is_single_line` の既定値は `true`(単一行)。複数行にするには明示的に `false` を渡す。
 - 結果の入力文字列は `pico.get(id, "text")` で読む。
 

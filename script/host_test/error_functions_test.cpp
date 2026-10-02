@@ -52,6 +52,23 @@ int main(){
     static_cast<MsgDialog*>(WidgetFunctions::dialog_roots.back())->causeOnClosed(false);
     WidgetFunctions::ProcessPendingDeletes();
 
+    // ボタンの文字が空ならそのボタンは作らない(子の数で見る。本文の枠とアイコンは常にある)
+    {
+        auto count_buttons = [](MsgDialog* d){
+            int n = 0;
+            for(Widget* w : d->getChildren()) if(w->getWidgetType() == WidgetType::Button) n++;
+            return n;
+        };
+        MsgDialog both("本文", "キャンセル", "OK");
+        check(count_buttons(&both) == 2, "MsgDialog: 両方の文字があればボタン2つ");
+        MsgDialog ok_only("本文", "", "OK");
+        check(count_buttons(&ok_only) == 1, "MsgDialog: キャンセルの文字が空ならボタン1つ");
+        MsgDialog cancel_only("本文", "閉じる", nullptr);
+        check(count_buttons(&cancel_only) == 1, "MsgDialog: OKがnullptrでもボタン1つ");
+        MsgDialog none("本文", "", "");
+        check(count_buttons(&none) == 1, "MsgDialog: 両方空なら閉じられるようOKだけ出す");
+    }
+
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

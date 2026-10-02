@@ -2307,7 +2307,11 @@ int LuaEngine::l_show_input(lua_State* L) {
     // 「複数行を明示的に指定しない限り単一行」にするには先にnoneornilを見る必要がある
     const bool is_single_line = lua_isnoneornil(L, 3) ? true : (bool)lua_toboolean(L, 3);
 
-    InputDialog* dialog = new InputDialog(label, is_single_line);
+    // ボタンの文字。省略時は従来どおり「決定」「キャンセル」、空文字列ならそのボタンを出さない
+    const char* submit_text = luaL_optstring(L, 4, "決定");
+    const char* cancel_text = luaL_optstring(L, 5, "キャンセル");
+
+    InputDialog* dialog = new InputDialog(label, is_single_line, submit_text, cancel_text);
     if (!dialog) return luaL_error(L, "pico.show_input: 生成に失敗しました(メモリ不足の可能性)");
     if (initial_text && *initial_text) dialog->setInput(initial_text);
 

@@ -4,14 +4,23 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Icon.hpp"
+#include "gui/widgets/ScrollContainer.hpp"
+#include "gui/widgets/dialogs/DialogLayout.hpp"
 
+// メッセージ + 任意のアイコン + ボタン(最大2つ)のダイアログ。
+//
+// - 本文が枠に収まらなければ小さい文字(16px)にし、それでも収まらなければスクロールさせる
+//   (DialogLayout::FitText)。本文は512バイトまで。
+// - ボタンの文字が空("")ならそのボタンは出さず、本文の枠をその分広げる。
+//   両方とも空だと閉じる手段が無くなるので、そのときだけ「OK」を出す。
 class MsgDialog : public Widget {
     private:
         std::vector<Widget*> children_;
 
-        Label<PICO_STR_L>* msg_label;
-        Button* ok_button;
-        Button* cancel_button;
+        ScrollContainer* msg_box;
+        Label<PICO_STR_512B>* msg_label; // 所有権は msg_box にある
+        Button* ok_button = nullptr;     // 文字が空なら作らない
+        Button* cancel_button = nullptr; // 同上
         Icon* msg_icon;
 
         bool icon_visible = false;
@@ -26,11 +35,11 @@ class MsgDialog : public Widget {
 
         constexpr static int BASE_X = (SCREEN_WIDTH - DIALOG_WIDTH) * 0.5;
         constexpr static int BASE_Y = (SCREEN_HEIGHT - DIALOG_HEIGHT) * 0.5;
-        constexpr static int MARGIN = 5;
+        constexpr static int MARGIN = DialogLayout::kMargin;
 
-        constexpr static int BUTTON_HEIGHT = 30;
-        constexpr static int BUTTON_AREA_HEIGHT = BUTTON_HEIGHT * 2 + MARGIN * 3; 
         constexpr static int BUTTON_WIDTH = DIALOG_WIDTH - MARGIN * 2;
+
+        int buttonCount() const { return (ok_button ? 1 : 0) + (cancel_button ? 1 : 0); }
 
         void updateWidgets(){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
@@ -38,24 +47,29 @@ class MsgDialog : public Widget {
             msg_icon->setX(BASE_X + MARGIN + (DIALOG_WIDTH - MARGIN * 2 - ICON_SIZE) * 0.5);
             msg_icon->setY(BASE_Y + MARGIN);
             msg_icon->setIconId(this->icon_id);
-            msg_icon->setVisible(this->icon_visible);
+            msg_icon->setVisible(this->visible && this->icon_visible);
 
-            msg_label->setX(BASE_X + MARGIN);
-            msg_label->setY(BASE_Y + MARGIN + (this->icon_visible ? (ICON_SIZE + MARGIN) : 0));
-            msg_label->setMaxWidth(DIALOG_WIDTH - MARGIN * 2);
-            msg_label->setMaxHeight(DIALOG_HEIGHT - MARGIN * 2 - BUTTON_AREA_HEIGHT - (this->icon_visible ? ICON_SIZE : 0));
+            const int bottom = BASE_Y + DIALOG_HEIGHT;
+            const int text_y = BASE_Y + MARGIN + (this->icon_visible ? (ICON_SIZE + MARGIN) : 0);
+            int text_bottom = bottom - DialogLayout::ButtonAreaHeight(this->buttonCount());
+            if(this->buttonCount() == 0) text_bottom -= MARGIN;
+            DialogLayout::FitText(msg_box, msg_label, BASE_X + MARGIN, text_y,
+                                  DIALOG_WIDTH - MARGIN * 2, text_bottom - text_y);
 
-            ok_button->setX(BASE_X + MARGIN - 2);
-            ok_button->setY(BASE_Y + DIALOG_HEIGHT - BUTTON_AREA_HEIGHT + MARGIN);
-            ok_button->setW(BUTTON_WIDTH);
-            ok_button->setAllowTextSpacing(false);
-
-            cancel_button->setX(BASE_X + MARGIN - 2);
-            cancel_button->setY(BASE_Y + DIALOG_HEIGHT - BUTTON_HEIGHT - MARGIN);
-            cancel_button->setW(BUTTON_WIDTH);
-            cancel_button->setAllowTextSpacing(false);
+            Button* buttons[] = { ok_button, cancel_button };
+            DialogLayout::StackButtons(buttons, 2, BASE_X + MARGIN, BUTTON_WIDTH, bottom);
 
             this->needsRender();
+        }
+
+        Button* makeButton(const char* text, bool is_ok){
+            Button* b = new Button(0, 0, text);
+            b->setOnPressStart([this, is_ok](){
+                this->causeOnClosed(is_ok);
+                this->setVisible(false);
+            });
+            b->setParent(this);
+            return b;
         }
 
     public:
@@ -66,28 +80,23 @@ class MsgDialog : public Widget {
             msg_icon = new Icon(0, 0, this->icon_id, IconSize::Px64);
             msg_icon->setParent(this);
 
-            msg_label = new Label<PICO_STR_L>(0, 0, msg_text);
-            msg_label->setParent(this);
+            msg_box = new ScrollContainer(0, 0, DIALOG_WIDTH - MARGIN * 2, 0);
+            msg_box->setParent(this);
+            msg_label = new Label<PICO_STR_512B>(0, 0, msg_text ? msg_text : "");
+            msg_box->add(msg_label); //所有権は msg_box へ移る
 
-            ok_button = new Button(0, 0, ok_text);
-            ok_button->setOnPressStart([this](){
-                this->causeOnClosed(true);
-                this->setVisible(false);
-            });
-            ok_button->setParent(this);
-
-            cancel_button = new Button(0, 0, cancel_text);
-            cancel_button->setOnPressStart([this](){
-                this->causeOnClosed(false);
-                this->setVisible(false);
-            });
-            cancel_button->setParent(this);
+            const bool has_ok = DialogLayout::HasText(ok_text);
+            const bool has_cancel = DialogLayout::HasText(cancel_text);
+            if(has_ok) ok_button = makeButton(ok_text, true);
+            if(has_cancel) cancel_button = makeButton(cancel_text, false);
+            //どちらも空だと閉じられなくなるので、OKだけは出す
+            if(!has_ok && !has_cancel) ok_button = makeButton("OK", true);
 
             this->updateWidgets();
 
-            children_.push_back(msg_label);
-            children_.push_back(cancel_button);
-            children_.push_back(ok_button);
+            children_.push_back(msg_box);
+            if(cancel_button) children_.push_back(cancel_button);
+            if(ok_button) children_.push_back(ok_button);
             children_.push_back(msg_icon);
 
             this->visible = false;
@@ -116,7 +125,7 @@ class MsgDialog : public Widget {
         }
 
         ~MsgDialog(){
-            delete msg_label;
+            delete msg_box; //msg_labelも一緒に消える
             delete ok_button;
             delete cancel_button;
             delete msg_icon;

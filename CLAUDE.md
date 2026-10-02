@@ -225,7 +225,7 @@ Active → (30秒: kIdleTimeoutMs) → Dim(DisplayFunctions) → (sleep-timeout�
 1. **バックライトを消し、液晶パネルもSLPINで休ませる**(`DisplayFunctions::SetSleeping()`。`lcd->sleep()/wakeup()`)。
    起きるとき**120ms待つ**(ILI9341/ST7789はSLPOUTから次のコマンドまで必要。LovyanGFXの`Panel_LCD::setSleep()`は待たない)。
    スリープ中は`ApplyEffectiveBrightness()`が何もしない(起きるときに今の明るさへ戻す)。表示内容(GRAM)は保たれるので再描画は要らない。
-2. **Wi-Fiを積極的な省電力へ**(`NetworkFunctions::SetLowPower()` = `WiFi.lowPowerMode()`、起きると`defaultLowPowerMode()`)。接続は保つので
+2. **Wi-Fiを積極的な省電力へ**(`NetworkFunctions::SetLowPower()` = `WiFi.aggressiveLowPowerMode()`、起きると`defaultLowPowerMode()`)。接続は保つので
    生存確認(5秒ごと)や再接続はそのまま動く。再接続で設定が戻るかもしれないので、接続が確立するたびに掛け直す。
 3. **何も鳴っていなければI2Sとアンプ(休止端子)を止め、2コア目をゆっくり回す**(`SoundFunctions::SetPowerSave()`。
    鳴っているものが無い間だけ`want`を偽にする。要求が来れば次の周回で動き直す。2コア目の休みは1ms→`kPowerSaveIdleDelayMs`=20ms)。
@@ -255,7 +255,7 @@ KeepAwakeを呼んでいる画面: ゲームボーイ・SSH・チャット(常�
   (2回目のタッチで開く)ことをログで確認。**PCの`--shot`はスリープ中の暗転が写らない**(`lcd->sleep()`は`PICO_GFX::SetBrightness()`を通らず、
   `main_pc.cpp`の掛け率が動かないため)。**起動から10秒はWi-Fi接続中扱い(PCは疎通が無いと`TRYING_CONNECT`のまま)でスリープに入らない**ので、
   確かめるときは10秒以上(1000フレーム程度)回すこと。
-- **実機では未確認**: `WiFi.lowPowerMode()/defaultLowPowerMode()`の名前(arduino-picoのWiFiクラス。ビルドが通らなければここ)・
+- **実機では未確認**: `WiFi.aggressiveLowPowerMode()/defaultLowPowerMode()`の名前(arduino-picoのWiFiクラス。ビルドが通らなければここ)・
   `delay()`が実際にCPUを寝かせるか(arduino-picoの`delay()`はWFE/sleep系のはずだが未確認)・SLPINしたILI9341/ST7789への書き込み・
   復帰時の120msで足りるか・消費電流の実測(LiPo/USBの電流計で、スリープ前後を比べること)。
 

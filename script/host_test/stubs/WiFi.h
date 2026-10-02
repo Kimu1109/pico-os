@@ -12,7 +12,7 @@ struct HostWiFiStub {
     void scanDelete(){}
     // 省電力モード(記録するだけ。0=高性能, 1=既定, 2=積極的な省電力)
     int power_mode = 1;
-    void lowPowerMode(){ power_mode = 2; }
+    void aggressiveLowPowerMode(){ power_mode = 2; }
     void defaultLowPowerMode(){ power_mode = 1; }
     void noLowPowerMode(){ power_mode = 0; }
 };

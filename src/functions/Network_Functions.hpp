@@ -54,7 +54,7 @@ namespace NetworkFunctions {
     // (Statusbar::render を参照)。
     IconID GetWifiStateIconID();
     
-    // Wi-Fiチップ(CYW43)の省電力モード。trueで積極的な省電力(WiFi.lowPowerMode())、
+    // Wi-Fiチップ(CYW43)の省電力モード。trueで積極的な省電力(WiFi.aggressiveLowPowerMode())、
     // falseで既定の省電力(WiFi.defaultLowPowerMode())へ戻す。接続は保たれるので
     // 生存確認や再接続はそのまま動くが、応答は数十〜数百ms遅れうる。
     // 再接続したあとも効いているよう、接続が確立するたびに今の設定を掛け直す。

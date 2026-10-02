@@ -71,7 +71,7 @@ void NetworkFunctions::Update(){
                 retryRank = 0;
                 // 直近で接続したネットワークとして先頭へ(次の起動・次の自動接続はここから)
                 WifiProfiles::MarkConnected(currentSSID.c_str());
-                if(low_power) WiFi.lowPowerMode(); // 再接続でモードが既定へ戻っていても掛け直す
+                if(low_power) WiFi.aggressiveLowPowerMode(); // 再接続でモードが既定へ戻っていても掛け直す
                 // 初回接続・再接続どちらの経路でもここを通るので、
                 // 再接続時にもNTPを即座に再同期させて時刻ドリフトを補正する。
                 NTP.begin(ntpServer1.c_str(), ntpServer2.c_str());
@@ -167,7 +167,7 @@ bool NetworkFunctions::ConnectProfile(int index){
 
 void NetworkFunctions::SetLowPower(bool enable){
     low_power = enable;
-    if(enable) WiFi.lowPowerMode();
+    if(enable) WiFi.aggressiveLowPowerMode();
     else       WiFi.defaultLowPowerMode();
 }
 

@@ -59,6 +59,7 @@
 #                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
 #   key_input_test … 物理キーボードの窓口(KeyInputFunctions)。"key ..."の行の読み取り、padの行との同居、
 #                   画面のonKey()→開いているキー盤の順に配ること、キー盤の編集(挿入/削除/移動/決定)、数字のキー盤の制限
+#   cardkb_test   … CardKB2(I2Cのキーボード)の入力元。変換・未接続で静か・検出・打鍵・抜き差し
 #   pad_test      … 外部コントローラーの窓口(PadFunctions)。USBシリアルの行("pad XXXX")の読み取り、
 #                   押した/離したのはそのフレームだけ、行が途切れたら外れて押しっぱなしにならないこと、
 #                   Game Boyのボタンへの対応
@@ -593,6 +594,17 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== pad_test ====="
 run_or_die "$OUT/pad_test"
+
+# --- CardKB2(あれば使うI2Cのキーボード) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/cardkb_test.cpp" \
+    "$ROOT/src/functions/CardKB_Functions.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    -o "$OUT/cardkb_test"
+
+echo ""
+echo "===== cardkb_test ====="
+run_or_die "$OUT/cardkb_test"
 
 # --- 物理キーボード(KeyInputFunctions) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

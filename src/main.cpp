@@ -17,6 +17,7 @@
 #include "functions/Screenshot_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "functions/KeyInput_Functions.hpp"
+#include "functions/CardKB_Functions.hpp"
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Test_Functions.hpp"
@@ -56,6 +57,7 @@ void setup() {
     PICO_Touch::Setup();
     PadFunctions::Setup();
     KeyInputFunctions::Setup();
+    CardKbFunctions::Setup();   //あれば使うだけ(CardKB2。無くても何も出さない)
     PICO_Task::Setup();
     WidgetFunctions::Setup();
 
@@ -117,6 +119,8 @@ void loop() {
     //シーンのonUpdate()より前に読み、1フレームの間は同じ答えを返す。
     //同じSerialで届く物理キーボードの打鍵("key ...")もここで KeyInputFunctions の列へ積まれる
     PadFunctions::Update();
+    //CardKB2の打鍵も同じ列へ積む(あれば。無いときは1秒に1回呼びかけるだけ)
+    CardKbFunctions::Update();
 
     //操作の有無を見て自動調光を掛ける/戻す(タッチ・パッドの状態が確定した直後)
     DisplayFunctions::Update();

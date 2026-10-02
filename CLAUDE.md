@@ -942,8 +942,10 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 `WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`ベクタで子を保持」「`setOnClosed(std::function<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
 
 - **本文とボタンの配置は`dialogs/DialogLayout.hpp`で共通化**(MsgDialog/InputDialog、2026-10-02):
-  - 本文は`ScrollContainer`で包んだ`Label`(512Bまで)。`FitText()`がまず大きい文字(24px)で置き、枠に収まらなければ
-    小さい文字(16px)、それでも収まらなければ枠いっぱいにしてスクロールバーを出す(収まる間は枠もバーも出さない)。
+  - 本文は`ScrollContainer`で包んだ`Label`(512Bまで)。`FitDialog()`がまず既定の大きさ・大きい文字(24px)で置き、収まらなければ
+    ①小さい文字(16px)→②ダイアログを大きく(幅を画面いっぱい`kMaxWidth`まで→高さを本文に合わせてステータスバーの下から
+    画面の下端まで`kMaxHeight`)→③上限の大きさで本文の枠をスクロール、の順で収める(収まる間は枠もバーも出さない)。
+    ダイアログの枠はメンバ`dlg`(画面座標)で持ち、`DialogLayout::Place()`が中央へ置く(ステータスバーには重ねない)。
   - ボタンは縦に積む。**文字が空(`""`/nullptr)のボタンは作らず、その分だけ本文の枠を広げる**。両方空だと閉じられなく
     なるので、そのときだけ1つ(「OK」/「決定」)を出す。`ScrollContainer::setSize()`/`kScrollBarWidth`はこのために足した。
   - `ErrorFunctions::ShowFatal()`はこれでボタン1つ(「閉じる」)になった(以前は同じ動きのOK/閉じるの2つで、アイコンと合わせて本文が1行しか入らなかった)。

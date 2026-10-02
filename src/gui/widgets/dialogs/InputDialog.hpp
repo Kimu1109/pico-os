@@ -10,8 +10,8 @@
 
 // ラベル + テキスト入力 + ボタン(最大2つ)のダイアログ。
 //
-// - ラベルが枠に収まらなければ小さい文字(16px)にし、それでも収まらなければスクロールさせる
-//   (DialogLayout::FitText。MsgDialogと同じ)。
+// - ラベルが既定の大きさに収まらなければ、①小さい文字(16px)→②ダイアログを大きく→③スクロール
+//   の順で収める(DialogLayout::FitDialog。MsgDialogと同じ)。
 // - ボタンの文字は変えられ、空("")ならそのボタンは出さずに詰める。
 //   両方とも空だと閉じる手段が無くなるので、そのときだけ「決定」を出す。
 class InputDialog : public Widget {
@@ -19,14 +19,14 @@ class InputDialog : public Widget {
     private:
         std::vector<Widget*> children_;
 
+        // 既定の大きさ。ラベルが収まらなければ DialogLayout::FitDialog が広げる
         constexpr static int DIALOG_HEIGHT = 200;
         constexpr static int DIALOG_WIDTH = 180;
 
-        constexpr static int BASE_X = (SCREEN_WIDTH - DIALOG_WIDTH) * 0.5;
-        constexpr static int BASE_Y = (SCREEN_HEIGHT - DIALOG_HEIGHT) * 0.5;
         constexpr static int MARGIN = DialogLayout::kMargin;
 
-        constexpr static int BUTTON_WIDTH = DIALOG_WIDTH - MARGIN * 2;
+        // 今のダイアログの枠(画面座標)。render()もこれを描く
+        Rect dlg = DialogLayout::Place(DIALOG_WIDTH, DIALOG_HEIGHT);
 
         // 入力欄の高さ(1行)と、複数行のときに最低限残す高さ
         constexpr static int SINGLE_INPUT_H = 30;
@@ -47,22 +47,27 @@ class InputDialog : public Widget {
         int buttonCount() const { return (submit_button ? 1 : 0) + (cancel_button ? 1 : 0); }
 
         void updatePlaces() {
-            const int bottom = BASE_Y + DIALOG_HEIGHT;
+            //ラベル以外が使う高さ: 上の余白 + 入力欄(と上の余白) + ボタン(無ければ下の余白)
+            const int input_min_h = this->isSingleLine ? SINGLE_INPUT_H : MIN_MULTI_INPUT_H;
+            int overhead = MARGIN + MARGIN + input_min_h;
+            overhead += this->buttonCount() ? DialogLayout::ButtonAreaHeight(this->buttonCount()) : MARGIN;
+            const DialogLayout::Fit fit = DialogLayout::FitDialog(label_box, label, DIALOG_WIDTH, DIALOG_HEIGHT, overhead);
+            this->dlg = fit.dialog;
+
+            const int top = dlg.y + MARGIN;
+            const int bottom = dlg.y + dlg.h;
             int content_bottom = bottom - DialogLayout::ButtonAreaHeight(this->buttonCount());
             if(this->buttonCount() == 0) content_bottom -= MARGIN;
 
-            const int top = BASE_Y + MARGIN;
-            const int input_min_h = this->isSingleLine ? SINGLE_INPUT_H : MIN_MULTI_INPUT_H;
-            const int label_max_h = content_bottom - top - MARGIN - input_min_h;
-            const int label_h = DialogLayout::FitText(label_box, label, BASE_X + MARGIN, top,
-                                                      DIALOG_WIDTH - MARGIN * 2, label_max_h);
+            label_box->setX(dlg.x + MARGIN);
+            label_box->setY(top);
 
             Button* buttons[] = { submit_button, cancel_button };
-            DialogLayout::StackButtons(buttons, 2, BASE_X + MARGIN, BUTTON_WIDTH, bottom);
+            DialogLayout::StackButtons(buttons, 2, dlg.x + MARGIN, dlg.w - MARGIN * 2, bottom);
 
-            this->input->setX(BASE_X + MARGIN);
-            this->input->setY(top + label_h + MARGIN);
-            this->input->setMaxWidth(DIALOG_WIDTH - MARGIN * 2);
+            this->input->setX(dlg.x + MARGIN);
+            this->input->setY(top + fit.text_h + MARGIN);
+            this->input->setMaxWidth(dlg.w - MARGIN * 2);
             this->input->setIsSingleLine(isSingleLine);
             if(this->isSingleLine){
                 this->input->setMaxHeight(SINGLE_INPUT_H);

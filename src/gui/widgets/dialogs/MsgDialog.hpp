@@ -9,8 +9,9 @@
 
 // メッセージ + 任意のアイコン + ボタン(最大2つ)のダイアログ。
 //
-// - 本文が枠に収まらなければ小さい文字(16px)にし、それでも収まらなければスクロールさせる
-//   (DialogLayout::FitText)。本文は512バイトまで。
+// - 本文が既定の大きさ(180x180)に収まらなければ、①小さい文字(16px)→②ダイアログを大きく→
+//   ③スクロール の順で収める
+//   (DialogLayout::FitDialog)。本文は512バイトまで。
 // - ボタンの文字が空("")ならそのボタンは出さず、本文の枠をその分広げる。
 //   両方とも空だと閉じる手段が無くなるので、そのときだけ「OK」を出す。
 class MsgDialog : public Widget {
@@ -28,36 +29,38 @@ class MsgDialog : public Widget {
 
         std::function<void(bool is_ok)> on_closed = nullptr;
 
+        // 既定の大きさ。本文が収まらなければ DialogLayout::FitDialog が広げる
         constexpr static int DIALOG_HEIGHT = 180;
         constexpr static int DIALOG_WIDTH = 180;
 
         constexpr static int ICON_SIZE = 64;
 
-        constexpr static int BASE_X = (SCREEN_WIDTH - DIALOG_WIDTH) * 0.5;
-        constexpr static int BASE_Y = (SCREEN_HEIGHT - DIALOG_HEIGHT) * 0.5;
         constexpr static int MARGIN = DialogLayout::kMargin;
 
-        constexpr static int BUTTON_WIDTH = DIALOG_WIDTH - MARGIN * 2;
+        // 今のダイアログの枠(画面座標)。render()もこれを描く
+        Rect dlg = DialogLayout::Place(DIALOG_WIDTH, DIALOG_HEIGHT);
 
         int buttonCount() const { return (ok_button ? 1 : 0) + (cancel_button ? 1 : 0); }
 
         void updateWidgets(){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
-            msg_icon->setX(BASE_X + MARGIN + (DIALOG_WIDTH - MARGIN * 2 - ICON_SIZE) * 0.5);
-            msg_icon->setY(BASE_Y + MARGIN);
+            //本文以外が使う高さ: 上の余白 + アイコン + ボタン(無ければ下の余白)
+            int overhead = MARGIN + (this->icon_visible ? (ICON_SIZE + MARGIN) : 0);
+            overhead += this->buttonCount() ? DialogLayout::ButtonAreaHeight(this->buttonCount()) : MARGIN;
+            const DialogLayout::Fit fit = DialogLayout::FitDialog(msg_box, msg_label, DIALOG_WIDTH, DIALOG_HEIGHT, overhead);
+            this->dlg = fit.dialog;
+
+            msg_icon->setX(dlg.x + (dlg.w - ICON_SIZE) / 2);
+            msg_icon->setY(dlg.y + MARGIN);
             msg_icon->setIconId(this->icon_id);
             msg_icon->setVisible(this->visible && this->icon_visible);
 
-            const int bottom = BASE_Y + DIALOG_HEIGHT;
-            const int text_y = BASE_Y + MARGIN + (this->icon_visible ? (ICON_SIZE + MARGIN) : 0);
-            int text_bottom = bottom - DialogLayout::ButtonAreaHeight(this->buttonCount());
-            if(this->buttonCount() == 0) text_bottom -= MARGIN;
-            DialogLayout::FitText(msg_box, msg_label, BASE_X + MARGIN, text_y,
-                                  DIALOG_WIDTH - MARGIN * 2, text_bottom - text_y);
+            msg_box->setX(dlg.x + MARGIN);
+            msg_box->setY(dlg.y + MARGIN + (this->icon_visible ? (ICON_SIZE + MARGIN) : 0));
 
             Button* buttons[] = { ok_button, cancel_button };
-            DialogLayout::StackButtons(buttons, 2, BASE_X + MARGIN, BUTTON_WIDTH, bottom);
+            DialogLayout::StackButtons(buttons, 2, dlg.x + MARGIN, dlg.w - MARGIN * 2, dlg.y + dlg.h);
 
             this->needsRender();
         }

@@ -9,9 +9,9 @@ void ErrorFunctions::ShowFatal(const char* message) {
     LOG_APP_FAIL("%s", text);
 
     // FileExplorer::on_press_delete()等と同じ「生成→AddDialog→setVisible→
-    // setOnClosedでDestroyLater」の作法。OK/キャンセルどちらを押しても
-    // 単に閉じるだけなので、両ボタンとも同じ扱いにしている
-    MsgDialog* dialog = new MsgDialog(text, "閉じる", "OK");
+    // setOnClosedでDestroyLater」の作法。閉じる以外の選択肢は無いので、
+    // ボタンは1つだけにして本文の枠を広く取る(空のボタンは出ない)
+    MsgDialog* dialog = new MsgDialog(text, "", "閉じる");
     if (!dialog) return; // Widget::operator newの確保失敗(nullptr)。ログは既に出た上で諦める
 
     dialog->setVisibleIcon(true);

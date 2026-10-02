@@ -9,8 +9,8 @@ void InputDialog::render(){
     markdirty(this->getScreenRect());
     PICO_GFX::DrawDialogBackground();
 
-    OSData::frame->fillRect(BASE_X, BASE_Y, DIALOG_WIDTH, DIALOG_HEIGHT, this->background_color);
-    OSData::frame->drawRect(BASE_X, BASE_Y, DIALOG_WIDTH, DIALOG_HEIGHT, PICO_BLACK);
+    OSData::frame->fillRect(dlg.x, dlg.y, dlg.w, dlg.h, this->background_color);
+    OSData::frame->drawRect(dlg.x, dlg.y, dlg.w, dlg.h, PICO_BLACK);
 
     needs_redraw = false;
 }

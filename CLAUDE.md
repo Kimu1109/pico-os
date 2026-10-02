@@ -941,8 +941,17 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 ### ダイアログ (`src/gui/widgets/dialogs/`)
 `WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`ベクタで子を保持」「`setOnClosed(std::function<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
 
+- **本文とボタンの配置は`dialogs/DialogLayout.hpp`で共通化**(MsgDialog/InputDialog、2026-10-02):
+  - 本文は`ScrollContainer`で包んだ`Label`(512Bまで)。`FitDialog()`がまず既定の大きさ・大きい文字(24px)で置き、収まらなければ
+    ①小さい文字(16px)→②ダイアログを大きく(幅を画面いっぱい`kMaxWidth`まで→高さを本文に合わせてステータスバーの下から
+    画面の下端まで`kMaxHeight`)→③上限の大きさで本文の枠をスクロール、の順で収める(収まる間は枠もバーも出さない)。
+    ダイアログの枠はメンバ`dlg`(画面座標)で持ち、`DialogLayout::Place()`が中央へ置く(ステータスバーには重ねない)。
+  - ボタンは縦に積む。**文字が空(`""`/nullptr)のボタンは作らず、その分だけ本文の枠を広げる**。両方空だと閉じられなく
+    なるので、そのときだけ1つ(「OK」/「決定」)を出す。`ScrollContainer::setSize()`/`kScrollBarWidth`はこのために足した。
+  - `ErrorFunctions::ShowFatal()`はこれでボタン1つ(「閉じる」)になった(以前は同じ動きのOK/閉じるの2つで、アイコンと合わせて本文が1行しか入らなかった)。
 - `MsgDialog`: メッセージ+アイコン+OK/キャンセル。`RenderMode::TRANSLUCENT`。
-- `InputDialog`: ラベル+テキスト入力+決定/キャンセル(単一行/複数行切替可)。
+- `InputDialog`: ラベル+テキスト入力+決定/キャンセル(単一行/複数行切替可)。ボタンの文字はコンストラクタの3・4番目の引数で変えられる
+  (既定「決定」「キャンセル」。Luaの`pico.show_input`も4・5番目の引数で)。
   決定/キャンセルの時点で`KeyboardFunctions::HideAll()`を呼ぶ(入力対象がこの後消えるため)。
 - `FileSaveDialog`: `FileExplorer`+ファイル名`Textbox`+OK/キャンセル。**保存専用**。
 - `FileSelectDialog`: `FileExplorer`+OK/キャンセルのみ。**選択専用**(ファイル名欄なし)。
@@ -1331,7 +1340,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   (SDへの書き込みを減らす)。時計が合う(NTP同期)まで入れない。
 - **画面(`TodoScene`)**: `[戻る] TODO(件数) [設定][更新]` / `TabBar`(今日|7日間|すべて) / `ScrollList` / 選んだタスクの欄(3行:
   全文・期限(繰り返しは`due.string`)・優先度) / 状態の1行 / `[追加][完了]`。1回のタップで選び、もう一度タップか[完了]で
-  確認の`MsgDialog`(96バイトまでなので名前は8文字程度で切る)。[追加]は名前→(1フレーム空けて)期限の`InputDialog`
+  確認の`MsgDialog`。[追加]は名前→(1フレーム空けて)期限の`InputDialog`
   (今日の表示からなら期限の初期値は「今日」)。日付が変わる/期限を過ぎると見た目が変わるので10秒ごとに見直す。
   通信中だけ`KeepAwake()`(待っているだけならスリープしてよい)。**シーン本体は約18KB**(ChatSceneと同じ例外)。
   アイコンは既存の`IconID::CheckboxOn`(新しいアイコンは足していない)。

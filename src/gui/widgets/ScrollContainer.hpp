@@ -30,9 +30,20 @@ class ScrollContainer : public Widget, public IBorderColor {
         constexpr static int SCROLL_L = 15;
 
     public:
+        // 縦スクロールバーの幅。中身の幅を見込む呼び出し元向け
+        constexpr static int kScrollBarWidth = SCROLL_L;
 
         ScrollContainer(int16_t x, int16_t y, int16_t w, int16_t h){
             this->l_rect = {x, y, w, h};
+        }
+
+        // 大きさを変える(Widget基底にsetW/setHが無いため)。スクロール範囲も測り直す
+        void setSize(int16_t w, int16_t h){
+            if(this->l_rect.w == w && this->l_rect.h == h) return;
+            this->needsRender(); //古い大きさの領域を消す
+            this->l_rect.w = w;
+            this->l_rect.h = h;
+            this->refreshContentBounds();
         }
 
         void render() override;

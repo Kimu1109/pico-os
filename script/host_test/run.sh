@@ -422,6 +422,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/Icon.cpp" \
     "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
@@ -468,6 +469,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
     "$ROOT/src/gui/widgets/Icon.cpp" \
     "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
@@ -798,6 +800,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Icon.cpp" \
@@ -827,6 +830,7 @@ run_or_die "$OUT/notification_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/error_functions_test.cpp" \
     "$ROOT/src/functions/Error_Functions.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \

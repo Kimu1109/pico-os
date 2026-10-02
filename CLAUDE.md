@@ -334,9 +334,9 @@ SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
 
 - ステータスバーの**右端のカメラのアイコン(右端24px)をタップすると撮る**。それ以外の場所のタップは従来どおり通知センター(`main.cpp`の`status->setOnPressEnd()`が`OSData::touchX`で振り分ける)。
   カメラは自作アイコン(`custom_icons/camera.svg`、`IconID::Camera`は末尾)。未読のベルはカメラの左へ寄せた。
-- `OSData::frame`(合成済みの全画面、4bppパレット)を**4bppのBMP**で`/screenshots/shot_0001.bmp`,`0002`…へ書く(PCでそのまま開ける。パレットはRGB565の`COLORS`から変換)。
-  1行120Bずつ組み立てて書くので大きなバッファは要らない。書き込みに失敗したら半端なファイルは消す。タップのフレームでは直前に合成した絵が写る(ステータスバーも入る)。
-- 結果は通知(`NotificationFunctions::Post()`、音なし)で出す(控えめモードならトーストは出ず通知センターだけ)。
+- `OSData::frame`(合成済みの全画面、4bppパレット)を**.pimg**(`IconRender::EncodePimg()`。4bpp+RLE)で`/screenshots/shot_0001.pimg`,`0002`…へ書く。
+  本体はファイルアプリ→ファイルビューワーで見られ、PCでは`script/pimg2png.py`でPNGへ直せる。書き込みに失敗したら半端なファイルは消す。タップのフレームでは直前に合成した絵が写る(ステータスバーも入る)。
+- 結果は通知(`NotificationFunctions::Post()`、音なし)で出す(控えめモードならトーストは出ず通知センターだけ)。成功時は通知の`app`へ`"file:<パス>"`を入れ、**通知をタップするとファイルビューワーで開く**(`Notification_Sources.cpp`の`Launch()`が`file:`接頭辞をアプリ名ではなくファイルとして扱う)。
 - 検証: PCビルドの`--tap 230,8@30:5`で保存・内容を確認。ホストテストは無し。**実機では未確認**(1フレーム76800回の`readPixelValue`+SD書き込みの時間)。
 
 ### バッテリー残量表示(`src/functions/Battery_Functions`) (2026-09-28)

@@ -73,6 +73,12 @@ void setup() {
         NotificationFunctions::Content c;
         NotificationFunctions::Sanitize(c.title, ok ? "スクリーンショット" : "スクリーンショット失敗");
         NotificationFunctions::Sanitize(c.body, path);
+        //通知をタップしたらスクリーンショットをビューワーで開く("file:"+パス。Notification_Sources.cppが解釈する)
+        if(ok){
+            char target[PICO_STR_M];
+            snprintf(target, sizeof(target), "file:%s", path);
+            NotificationFunctions::Sanitize(c.app, target);
+        }
         c.sound = false;
         NotificationFunctions::Post(c);
     });

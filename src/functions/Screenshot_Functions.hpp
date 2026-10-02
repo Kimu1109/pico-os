@@ -2,8 +2,9 @@
 
 #include <stddef.h>
 
-// スクリーンショット。今の画面(OSData::frame、4bppパレット)をSDへ4bppのBMPで書く。
-// BMPにしたのは母艦のPCでそのまま開けるため。保存先は /screenshots/shot_0001.bmp, 0002, ...
+// スクリーンショット。今の画面(OSData::frame、4bppパレット)をSDへ.pimg(4bpp+RLE。IconRender::EncodePimg)で書く。
+// 本体のファイルアプリ→ファイルビューワーで見られ、PCでは script/pimg2png.py でPNGへ直せる。
+// 保存先は /screenshots/shot_0001.pimg, 0002, ...
 namespace ScreenshotFunctions {
 
     constexpr const char* kDir = "/screenshots";

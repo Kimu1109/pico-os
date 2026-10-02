@@ -12,11 +12,13 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "gui/scenes/NotificationScene.hpp"
+#include "gui/scenes/FileViewerScene.hpp"
 #include "gui/widgets/systems/NotificationToast.hpp"
 #include "OS_Data.hpp"
 
 #include <Arduino.h>
 #include <ctime>
+#include <cstring>
 
 namespace {
     using namespace NotificationFunctions;
@@ -32,6 +34,11 @@ namespace {
     bool chime2_pending = false;
 
     bool Launch(const char* app_name){
+        //"file:<パス>"はアプリではなくファイルをビューワーで開く(スクリーンショット)
+        if(strncmp(app_name, "file:", 5) == 0){
+            SceneFunctions::Push(new FileViewerScene(app_name + 5));
+            return true;
+        }
         return AppFunctions::LaunchByName(app_name);
     }
 

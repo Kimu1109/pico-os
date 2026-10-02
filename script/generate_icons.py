@@ -182,6 +182,9 @@ ICONS: list[IconSpec] = [
 
     # --- SSH(2026-09-30)。末尾へ足すこと(上の【重要】参照) ---
     IconSpec("terminal",       str(ICON_DIR / "terminal-2.svg")),
+
+    # --- スクリーンショット(2026-10-02)。末尾へ足すこと(上の【重要】参照)。自作 ---
+    IconSpec("camera",         str(CUSTOM_DIR / "camera.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

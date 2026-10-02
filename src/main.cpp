@@ -14,6 +14,7 @@
 #include "functions/Battery_Functions.hpp"
 #include "functions/Alarm_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
+#include "functions/Screenshot_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "functions/KeyInput_Functions.hpp"
 #include "functions/Task_Functions.hpp"
@@ -61,8 +62,26 @@ void setup() {
     //--- 常駐(オーバーレイ層): シーン遷移で破棄されない ---
     status = new Statusbar();
     WidgetFunctions::AddOverlay(status);
-    //ステータスバーをタップすると通知センターを開く
-    status->setOnPressEnd([](){ NotificationFunctions::OpenCenter(); });
+    //ステータスバーの右端のカメラはスクリーンショット、それ以外のタップは通知センターを開く
+    status->setOnPressEnd([](){
+        if(OSData::touchX < SCREEN_WIDTH - ScreenshotFunctions::kButtonWidth){
+            NotificationFunctions::OpenCenter();
+            return;
+        }
+        char path[48];
+        const bool ok = ScreenshotFunctions::Capture(path, sizeof(path));
+        NotificationFunctions::Content c;
+        NotificationFunctions::Sanitize(c.title, ok ? "スクリーンショット" : "スクリーンショット失敗");
+        NotificationFunctions::Sanitize(c.body, path);
+        //通知をタップしたらスクリーンショットをビューワーで開く("file:"+パス。Notification_Sources.cppが解釈する)
+        if(ok){
+            char target[PICO_STR_M];
+            snprintf(target, sizeof(target), "file:%s", path);
+            NotificationFunctions::Sanitize(c.app, target);
+        }
+        c.sound = false;
+        NotificationFunctions::Post(c);
+    });
 
     NetworkFunctions::Setup();
     KeyboardFunctions::Setup(); //キーボード3種もAddOverlay()される

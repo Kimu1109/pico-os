@@ -58,7 +58,9 @@
 #   midi2mml_test … MIDI→MMLの変換(script/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
 #                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
 #   key_input_test … 物理キーボードの窓口(KeyInputFunctions)。"key ..."の行の読み取り、padの行との同居、
-#                   画面のonKey()→開いているキー盤の順に配ること、キー盤の編集(挿入/削除/移動/決定)、数字のキー盤の制限
+#                   画面のonKey()→開いているキー盤の順に配ること、キー盤の編集(挿入/削除/移動/決定)、数字のキー盤の制限、
+#                   日本語入力の入り切り(Tab2回・半角/全角・Ctrl+Space)と日本語のキー盤のかな漢字変換(小さい辞書を作って)
+#   romaji_kana_test … ローマ字→かな(ime/Romaji_Kana.hpp)。ん・っ・拗音・記号・送りの印
 #   cardkb_test   … CardKB2(I2Cのキーボード)の入力元。変換・未接続で静か・検出・打鍵・抜き差し
 #   pad_test      … 外部コントローラーの窓口(PadFunctions)。USBシリアルの行("pad XXXX")の読み取り、
 #                   押した/離したのはそのフレームだけ、行が途切れたら外れて押しっぱなしにならないこと、
@@ -606,6 +608,15 @@ echo ""
 echo "===== cardkb_test ====="
 run_or_die "$OUT/cardkb_test"
 
+# --- ローマ字→かな ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/romaji_kana_test.cpp" \
+    -o "$OUT/romaji_kana_test"
+
+echo ""
+echo "===== romaji_kana_test ====="
+run_or_die "$OUT/romaji_kana_test"
+
 # --- 物理キーボード(KeyInputFunctions) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/key_input_test.cpp" \
@@ -615,6 +626,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardEng.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/Keyboard.cpp" \
+    "$ROOT/src/ime/IME_Dict.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \

@@ -6,6 +6,9 @@
 //   - 列の溢れ・UTF-8への変換
 //   - 配り先: 画面の onKey() が先、取らなければ開いているキー盤(英字/数字)へ入る
 //   - キー盤の編集(挿入・Backspace・Delete・←→・Home/End・Enterで決定/改行・Esc・数字のキー盤の制限)
+//   - 日本語入力の入り切り(Tabを素早く2回・半角/全角・Ctrl+Space)
+//   - 日本語のキー盤のかな漢字変換(ローマ字の読み・Spaceで変換・候補の選び方・送り仮名(自動/SKK式)・
+//     読み/変換中は画面より先にキー盤へ配る・キーを畳む)。辞書はテストの中で小さいものを作る
 #include "functions/KeyInput_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
@@ -15,6 +18,8 @@
 #include "gui/scenes/Scene.hpp"
 #include "gui/widgets/keyboards/KeyboardEng.hpp"
 #include "gui/widgets/keyboards/KeyboardNum.hpp"
+#include "gui/widgets/keyboards/Keyboard.hpp"
+#include "functions/IME_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <Arduino.h>
@@ -39,6 +44,12 @@ void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget*){}
 void KeyboardFunctions::Show(ITextInputTarget*, KeyboardFunctions::Layout, bool){}
 void KeyboardFunctions::HideAll(){}
 void KeyboardFunctions::SwitchPanel(KeyboardPanel*, KeyboardPanel*){ g_switch_count++; }
+static int g_toggle_count = 0;
+bool KeyboardFunctions::ToggleJapanese(){
+    if(!g_visible) return false;
+    g_toggle_count++;
+    return true;
+}
 void KeyboardFunctions::OnPanelShown(KeyboardPanel* p){ g_visible = p; }
 void KeyboardFunctions::OnPanelHidden(KeyboardPanel* p){ if(g_visible == p) g_visible = nullptr; }
 void KeyboardFunctions::OnPanelResized(KeyboardPanel*){}
@@ -59,11 +70,17 @@ class FakeScene : public Scene {
     public:
         int got = 0;
         bool take_up_down = true;
+        bool take_chars = false;    // SSHのように文字を全部取る画面
+        int chars = 0;
         const char* getName() const override { return "fake"; }
         void onEnter() override {}
         bool onKey(const KeyInputFunctions::Event& ev) override {
             if(take_up_down && (ev.key == KeyInputFunctions::Key::Up || ev.key == KeyInputFunctions::Key::Down)){
                 got++;
+                return true;
+            }
+            if(take_chars && ev.key == KeyInputFunctions::Key::Char){
+                chars++;
                 return true;
             }
             return false;
@@ -246,6 +263,157 @@ int main(){
     TypeAll("+9");
     check(strcmp(num->getText().c_str(), "12\xC3\x97" "3\xC3\xB7" "4.5(9") == 0, "使えないタブの記号は入らない");
     num->setVisible(false);
+
+
+    // ---- 日本語入力の入り切りの打鍵 ----
+    Setup();
+    check(!CheckImeToggle(K(IK::Tab), 1000), "Tabの1回目は入り切りではない");
+    check(CheckImeToggle(K(IK::Tab), 1300), "素早い2回目のTabで入り切り");
+    check(!CheckImeToggle(K(IK::Tab), 2000), "入り切りの後のTabはまた1回目");
+    check(!CheckImeToggle(K(IK::Tab), 2500), "間が空いたTabは1回目として数え直す");
+    check(CheckImeToggle(K(IK::Tab), 2600), "数え直した後の素早い2回目");
+    check(!CheckImeToggle(K(IK::Tab), 3000) && !CheckImeToggle(Ch('a'), 3010) && !CheckImeToggle(K(IK::Tab), 3020),
+          "Tabの間に他の打鍵を挟むと入り切りにならない");
+    check(!CheckImeToggle(K(IK::Tab, Shift), 3030), "Shift+Tabは数えない");
+    check(CheckImeToggle(K(IK::Zenhan), 4000), "半角/全角");
+    check(CheckImeToggle(Ch(' ', Ctrl), 4000), "Ctrl+Space");
+    check(!CheckImeToggle(Ch(' '), 4000), "ただのSpaceは入り切りではない");
+    check(ParseKey("key 0 zenhan", IK::Zenhan, 0), "zenhan の行");
+
+    // ---- 日本語のキー盤 ----
+    // 小さい辞書(読みの昇順。送りありは「語幹+印」)
+    HostSd::files["/sys/ime/skk_index.tsv"] = "\xE3\x81\x82\t0\n";
+    HostSd::files["/sys/ime/skk_body.tsv"] =
+        "あるk\t歩\t或\n"
+        "うつくしi\t美し\n"
+        "かんじ\t漢字\t感じ\t幹事\n"
+        "まt\t待\n";
+    OSData::SD_usable = true;
+    check(IME_Functions::ime.begin("/sys/ime/skk_body.tsv", "/sys/ime/skk_index.tsv"), "テスト用の辞書を開ける");
+
+    Keyboard* jpn = new Keyboard();
+    FakeTarget jt;
+    jt.single = false;
+    jpn->setInputTarget(&jt);
+    jpn->setVisible(true);
+    g_scene = &scene;
+    scene.take_up_down = true;
+    scene.got = 0;
+    Setup();
+
+    auto comp_len = [&](){ size_t a = 0, b = 0; jpn->getComposition(a, b); return b; };
+    auto text = [&](){ return std::string(jpn->getText().c_str()); };
+
+    TypeAll("nihon");
+    check(text() == "にほn" && comp_len() == strlen("にほn"), "ローマ字は読みになり、途中のnは保留して見せる");
+    check(!jpn->isConverting(), "読みの入力中は変換中ではない");
+    check(jpn->isCompact(), "物理キーボードで打つとキーを畳む");
+    TypeAll("go");
+    Push(K(IK::Enter)); Update();
+    check(text() == "にほんご" && comp_len() == 0, "Enterで読みのまま確定");
+    check(jpn->getVisible(), "読みの確定では閉じない");
+
+    TypeAll("kanji");
+    Push(Ch(' ')); Update();
+    check(jpn->isConverting() && text() == "にほんご漢字", "Spaceで変換(1つ目の候補を出す)");
+    Push(Ch(' ')); Update();
+    check(text() == "にほんご感じ", "もう一度Spaceで次の候補");
+    Push(Ch(' ', Shift)); Update();
+    check(text() == "にほんご漢字", "Shift+Spaceで前の候補");
+    Push(K(IK::Down)); Update();
+    check(text() == "にほんご感じ" && scene.got == 0, "変換中の↓は画面より先にキー盤が取る");
+    Push(K(IK::Up)); Update();
+    check(text() == "にほんご漢字", "↑で前の候補");
+    Push(Ch('3')); Update();
+    check(text() == "にほんご幹事" && !jpn->isConverting() && comp_len() == 0, "数字キーで番号の候補を選んで確定");
+
+    //辞書に無い読み: ひらがな・カタカナが候補になる
+    TypeAll("zz");
+    Push(Ch(' ')); Update();
+    check(jpn->isConverting() && IME_Functions::candidatesCount >= 1, "辞書に無い読みも変換できる");
+    Push(K(IK::Escape)); Update();
+    check(!jpn->isConverting() && text() == "にほんご幹事っz", "Escで読みへ戻る");
+    Push(K(IK::Escape)); Update();
+    check(text() == "にほんご幹事" && comp_len() == 0, "読みの入力中のEscで読みを捨てる");
+
+    //送り仮名(自動): 最後の1文字を送り仮名とみなした候補
+    jpn->setText(FixedString<PICO_STR_LL>(""));
+    TypeAll("aruku");
+    Push(Ch(' ')); Update();
+    check(text() == "歩く", "送り仮名を自動で探す(あるく → 歩く)");
+    Push(K(IK::Enter)); Update();
+    TypeAll("matte");
+    Push(Ch(' ')); Update();
+    check(text() == "歩く待って", "最後の2文字を送り仮名に(まって → 待って)");
+    Push(K(IK::Enter)); Update();
+
+    //送り仮名(SKK式): 大文字で送り仮名の頭を示す
+    jpn->setText(FixedString<PICO_STR_LL>(""));
+    TypeAll("aruKu");
+    Push(Ch(' ')); Update();
+    check(text() == "歩く" && IME_Functions::candidatesCount == 4, "SKK式の送り仮名(aruKu → 歩く。その切れ目の候補だけ+かな2つ)");
+    Push(K(IK::Enter)); Update();
+    jpn->setText(FixedString<PICO_STR_LL>(""));
+    TypeAll("utukusiI");
+    check(text() == "うつくしい", "大文字は小文字として読みにする");
+    Push(Ch(' ')); Update();
+    check(text() == "美しい", "SKK式の送り仮名(utukusiI → 美しい)");
+    Push(K(IK::Backspace)); Update();
+    check(!jpn->isConverting() && text() == "うつくしい", "変換中のBackspaceで読みへ戻る");
+    Push(K(IK::Backspace)); Push(K(IK::Backspace)); Update();
+    check(text() == "うつく", "読みの入力中のBackspaceは1文字ずつ");
+    Push(K(IK::Escape)); Update();
+
+    //Ctrl+I でカタカナ、Ctrl+U でひらがな
+    jpn->setText(FixedString<PICO_STR_LL>(""));
+    TypeAll("kanji");
+    Push(Ch('i', Ctrl)); Update();
+    check(text() == "カンジ" && comp_len() == 0, "Ctrl+Iでカタカナにして確定");
+    TypeAll("kanji");
+    Push(Ch(' ')); Push(Ch('u', Ctrl)); Update();
+    check(text() == "カンジかんじ", "変換中でもCtrl+Uでひらがなにして確定");
+
+    //変換中に文字を打つと、選んでいる候補で確定して次の読みを始める
+    jpn->setText(FixedString<PICO_STR_LL>(""));
+    TypeAll("kanji");
+    Push(Ch(' ')); Update();
+    TypeAll("ga");
+    check(text() == "漢字が" && comp_len() == strlen("が"), "変換中に打つと確定して次の読みへ");
+    Push(K(IK::Enter)); Update();
+
+    //読みの入力中のTabは画面へ漏らさない。数字は読みの外ならそのまま入る
+    jpn->setText(FixedString<PICO_STR_LL>(""));
+    TypeAll("1");
+    check(text() == "1" && comp_len() == 0, "読みの外の数字はそのまま入る");
+    TypeAll("ka2");
+    check(text() == "1か2" && comp_len() == strlen("か2"), "読みの途中の数字は読みに足す");
+    Push(K(IK::Enter)); Update();
+
+    //SSHのように文字を全部取る画面でも、英字は日本語のキー盤が先に受け取る
+    scene.take_chars = true;
+    scene.chars = 0;
+    jpn->setText(FixedString<PICO_STR_LL>(""));
+    TypeAll("ka");
+    check(text() == "か" && scene.chars == 0, "英字は画面より先に日本語のキー盤へ");
+    Push(K(IK::Enter)); Update();
+    TypeAll("5");
+    check(scene.chars == 1, "読みが無いときの数字は画面へ");
+    scene.take_chars = false;
+
+    //Tabを2回でキー盤の切り替えを頼む
+    g_toggle_count = 0;
+    Setup();
+    Push(K(IK::Tab)); Push(K(IK::Tab)); Update();
+    check(g_toggle_count == 1, "Tabを素早く2回で日本語入力の入り切り");
+    Push(K(IK::Zenhan)); Update();
+    check(g_toggle_count == 2, "半角/全角で入り切り");
+
+    //開き直すと畳まない形に戻る
+    jpn->setVisible(false);
+    jpn->setVisible(true);
+    check(!jpn->isCompact(), "開き直すとキーを広げた形で出る");
+    jpn->setVisible(false);
+    delete jpn;
 
     delete num;
     delete eng;

@@ -4,6 +4,7 @@
 #include "functions/UTF8_Functions.hpp"
 #include "functions/IME_Functions.hpp"
 #include "functions/Font_Functions.hpp"
+#include "ime/Romaji_Kana.hpp"
 #include "consts.hpp"
 
 
@@ -19,6 +20,12 @@ class Keyboard : public KeyboardPanel {
         static constexpr int START_KEY_Y = SCREEN_HEIGHT - SQUARE_H * 4;
         static constexpr int START_CANDIDATES_Y = START_KEY_Y - CANDIDATES_H;
         static constexpr int PANEL_H = SCREEN_HEIGHT - START_CANDIDATES_Y;
+
+        // 物理キーボードで打っている間は、キーを畳んで候補の欄だけにする(画面を広く使うため)
+        static constexpr int COMPACT_H = CANDIDATES_H + 1;
+        static constexpr int CANDIDATES_AREA_W = 200;          // 候補を並べる幅(右に←→)
+        static constexpr int COMPACT_AREA_W = 176;             // 畳んだときは右端に「あ」(広げるボタン)を置く
+        static constexpr int EXPAND_X = SCREEN_WIDTH - 22;
 
         const char* const keys_jpn[4 * 5] = {
             "123", "あ", "か", "さ", "X",
@@ -133,6 +140,34 @@ class Keyboard : public KeyboardPanel {
         int candidates_width[IME_Functions::candidates_size];
 
         bool keyboard_mode = false; //false -> jpn, true -> num
+
+        // ---- 物理キーボードのかな漢字変換 ----
+        // 読みは inputs(フリックと共通)。ローマ字のうちまだかなにならない分(例 "ky")は romaji に持ち、
+        // 表示では inputs の後ろへ続けて見せる。Space で変換すると conv_index が候補を指し、
+        // 表示・確定の対象が候補(IME_Functions::candidates[conv_index])に替わる。
+        // 送り仮名は「大文字で打った所から」(SKK式。okuri_split)か、指定が無ければ
+        // 読みの最後の1〜2文字を送り仮名とみなした候補も引いて足す(自動)
+        FixedString<8> romaji;
+        int conv_index = -1;            // 変換中の候補(-1=変換していない)
+        int okuri_split = -1;           // SKK式の送り仮名の頭(inputs上の文字位置。-1=指定なし)
+        bool phys_candidates = false;   // 候補の欄が物理キーボードの変換の候補を出している
+        bool compact = false;           // キーを畳んで候補の欄だけを出している
+
+        int candY() const { return compact ? SCREEN_HEIGHT - COMPACT_H : START_CANDIDATES_Y; }
+        int candAreaW() const { return compact ? COMPACT_AREA_W : CANDIDATES_AREA_W; }
+
+        bool compositionEmpty() const {
+            return inputs.length() == 0 && romaji.length() == 0 && conv_index < 0;
+        }
+        // 表示・確定する「変換中の部分」(候補を選んでいれば候補、そうでなければ読み+ローマ字)
+        void composition(FixedString<PICO_STR_LL>& out) const {
+            if(conv_index >= 0 && conv_index < IME_Functions::candidatesCount){
+                out.assign(IME_Functions::candidates[conv_index]);
+                return;
+            }
+            out.assign(inputs);
+            out.append(romaji);
+        }
         
         //カナ/送りは変換中にしか働かないので、働かない場面ではカーソル移動キーとして使う
         bool isCursorKeyCell(int key_index) const {
@@ -194,7 +229,7 @@ class Keyboard : public KeyboardPanel {
         //変換中の読み・確定済みテキスト・カーソルが変わったら呼ぶ。
         //表示(ダイアログの入力欄 / 据え置き時の入力先)はKeyboardFunctions経由で更新される
         void updateInputs(bool notToCauseEvent){
-            bool is_inputs_empty_now = inputs.length() == 0;
+            bool is_inputs_empty_now = compositionEmpty();
 
             if(is_inputs_empty != is_inputs_empty_now){
                 is_inputs_empty = is_inputs_empty_now;
@@ -234,17 +269,31 @@ class Keyboard : public KeyboardPanel {
         }
 
         void commitAndClear() {
-            if(inputs.length() != 0){
+            FixedString<PICO_STR_LL> comp;
+            composition(comp);
+            if(comp.length() != 0){
                 //入り切らないときは確定せず読みのまま残す(半端に挿すと壊れた文字が残るため)
-                if(inputs_done.length() + inputs.length() > FixedString<PICO_STR_LL>::capacity()) return;
+                if(inputs_done.length() + comp.length() > FixedString<PICO_STR_LL>::capacity()) return;
 
-                inputs_done.insertAtChar(done_cursor, inputs);
-                done_cursor += inputs.charCount();
+                inputs_done.insertAtChar(done_cursor, comp);
+                done_cursor += comp.charCount();
             }
             inputs.clear();
             okuri_hira.clear();
+            romaji.clear();
+            conv_index = -1;
+            okuri_split = -1;
+            clearPhysicalCandidates();
 
             updateInputs(false);
+        }
+
+        void clearPhysicalCandidates(){
+            if(!phys_candidates) return;
+            phys_candidates = false;
+            IME_Functions::candidatesCount = 0;
+            candidates_scroll_index = 0;
+            this->needsRender();
         }
 
         //カーソルをdelta文字ぶん動かす。変換中の読みがあれば先に確定させる
@@ -290,7 +339,8 @@ class Keyboard : public KeyboardPanel {
         }
 
         // ---- 物理キーボード ----
-        // 打った文字は読みにせず、確定済みのテキストへそのまま入れる(ローマ字かな変換は未対応)。
+        // 英字と一部の記号はローマ字として読みにし(onPhysicalKey())、それ以外の文字(数字・空白・
+        // PC側のIMEで確定した文字等)はここで確定済みのテキストへそのまま入れる。
         // 変換中の読みがあれば先に確定させる
         void physicalInsert(const char* utf8) override {
             if(!is_inputs_empty) commitAndClear();
@@ -300,7 +350,12 @@ class Keyboard : public KeyboardPanel {
             done_cursor += FixedString<PICO_STR_LL>::charCount(utf8);
             updateInputs(false);
         }
-        void physicalBackspace() override { removeInput(); }
+        void physicalBackspace() override {
+            if(conv_index >= 0){ cancelConversion(); return; }
+            if(romaji.length() != 0){ romaji.removeLastChar(); afterPhysicalEdit(); return; }
+            if(inputs.length() != 0){ inputs.removeLastChar(); afterPhysicalEdit(); return; }
+            removeInput(); //確定済みテキストの1文字
+        }
         void physicalMove(int delta) override { moveCursor(delta); }
         void physicalEnter() override {
             if(!is_inputs_empty){ commitAndClear(); return; } //「確」キーと同じ
@@ -311,12 +366,51 @@ class Keyboard : public KeyboardPanel {
         void updateImeCandidates();
         void drawCandidates();
 
+        // ---- 物理キーボードのかな漢字変換(Keyboard.cpp) ----
+        bool handlePhysical(const KeyInputFunctions::Event& ev);
+        bool handleReading(const KeyInputFunctions::Event& ev);
+        bool handleConverting(const KeyInputFunctions::Event& ev);
+        void feedRomaji(char c);
+        void afterPhysicalEdit();
+        void startConversion();
+        void cancelConversion();
+        void selectCandidate(int delta);
+        void commitAsKana(bool katakana);
+        int addCandidates(const char* key, const char* okuri, int n);
+        int addOkuriCandidates(int split, int n);
+        int addUniqueCandidate(const char* s, int n);
+        void measureCandidates();
+        void ensureCandidateVisible(int index);
+        void setCompact(bool on);
+        int candidateNumberW();
+
     public:
         Keyboard() : KeyboardPanel(PANEL_H) {}
 
         void causeOnPressStart() override;
         void causeOnPressEnd() override;
         void render() override;
+
+        // 開くとき(入力先から開かれたとき)は畳まない形で出す。日本語⇔英字の切り替え(setShownSilently)では
+        // 畳んだまま戻るので、物理キーボードでTabを2回押して行き来しても大きさが変わらない
+        void setVisible(bool visible) override {
+            if(visible && !this->visible && compact){
+                compact = false;
+                this->l_rect = {0, (int16_t)(SCREEN_HEIGHT - PANEL_H), SCREEN_WIDTH, (int16_t)PANEL_H};
+            }
+            KeyboardPanel::setVisible(visible);
+        }
+
+        bool onPhysicalKey(const KeyInputFunctions::Event& ev) override;
+        bool wantsKeyFirst(const KeyInputFunctions::Event& ev) const override {
+            if(!this->visible) return false;
+            if(!compositionEmpty()) return true;
+            return ev.key == KeyInputFunctions::Key::Char && ev.isPlainChar() && ev.cp < 0x80 &&
+                   RomajiKana::StartsComposition((char)ev.cp);
+        }
+
+        bool isCompact() const { return compact; }
+        int getConversionIndex() const { return conv_index; }
 
         WidgetType getWidgetType() const override { return WidgetType::Keyboard; }
 
@@ -327,6 +421,10 @@ class Keyboard : public KeyboardPanel {
             this->is_swiping = false;
             this->candidates_scroll_index = 0;
             IME_Functions::candidatesCount = 0; //前回の変換候補を出しっぱなしにしない
+            this->romaji.clear();
+            this->conv_index = -1;
+            this->okuri_split = -1;
+            this->phys_candidates = false;
         }
 
         void setText(const FixedString<PICO_STR_LL>& text) override {
@@ -340,21 +438,27 @@ class Keyboard : public KeyboardPanel {
             //変換中の読みはカーソル位置へ挟んで返す
             const size_t split = (size_t)inputs_done.byteOffsetOfChar(done_cursor);
 
+            FixedString<PICO_STR_LL> comp;
+            composition(comp);
             FixedString<PICO_STR_LL> result;
             result.assign(inputs_done.c_str(), split);
-            result.append(inputs);
+            result.append(comp);
             result.append(inputs_done.c_str() + split);
             return result;
         }
 
         size_t getCursorByteOffset() override {
-            return (size_t)inputs_done.byteOffsetOfChar(done_cursor) + inputs.length();
+            FixedString<PICO_STR_LL> comp;
+            composition(comp);
+            return (size_t)inputs_done.byteOffsetOfChar(done_cursor) + comp.length();
         }
         void setCursorByteOffset(size_t byte_offset) override {
-            if(inputs.length() != 0){
-                //読みはそのまま確定させる(ここでは通知しない。最後に1回だけ出す)
-                if(inputs_done.length() + inputs.length() <= FixedString<PICO_STR_LL>::capacity()){
-                    inputs_done.insertAtChar(done_cursor, inputs);
+            if(!compositionEmpty()){
+                //読み(選んでいる候補)はそのまま確定させる(ここでは通知しない。最後に1回だけ出す)
+                FixedString<PICO_STR_LL> comp;
+                composition(comp);
+                if(inputs_done.length() + comp.length() <= FixedString<PICO_STR_LL>::capacity()){
+                    inputs_done.insertAtChar(done_cursor, comp);
                 }
                 this->resetTransientState();
                 this->needsRender();
@@ -367,6 +471,9 @@ class Keyboard : public KeyboardPanel {
         }
         void getComposition(size_t& start, size_t& len) override {
             start = (size_t)inputs_done.byteOffsetOfChar(done_cursor);
-            len = inputs.length();
+            FixedString<PICO_STR_LL> comp;
+            composition(comp);
+            len = comp.length();
         }
+        bool isConverting() override { return conv_index >= 0; }
 };

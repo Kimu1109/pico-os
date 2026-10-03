@@ -39,12 +39,14 @@ void KeyboardDialog::refresh(ITextInputWidget* keyboard){
     }
 
     //変換中の読みを`~`(波線のマークアップ。記号自体は描かれない)で囲んで見せる。
+    //漢字へ変換している最中(選んでいる候補)は`_`(下線)にして、読みと見分けられるようにする。
     //読みが無いときに囲みを出さないのは、空の`~~`が取り消し線の開始として解釈されるため
+    const char* mark = keyboard->isConverting() ? "_" : "~";
     FixedString<PICO_STR_LL + 2> display;
     display.assign(text.c_str(), comp_start);
-    display.append("~");
+    display.append(mark);
     display.append(text.c_str() + comp_start, comp_len);
-    display.append("~");
+    display.append(mark);
     display.append(text.c_str() + comp_start + comp_len);
 
     this->preview->setText(display);

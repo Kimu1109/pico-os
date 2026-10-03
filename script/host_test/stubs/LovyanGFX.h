@@ -35,6 +35,8 @@ using U8g2font = lgfx::v1::U8g2font;
 //実機と同じ名前でフォント実体を用意する(Font_Functions.cppがこの名前を参照する)
 inline const lgfx::v1::U8g2font lgfxJapanGothicP_16{16};
 inline const lgfx::v1::U8g2font lgfxJapanGothicP_24{24};
+//LovyanGFX組み込みの6x8の英数字フォント(PerfOverlay/GraphView等が使う)
+namespace fonts { inline const lgfx::v1::U8g2font Font0{8}; }
 
 struct LGFX_Sprite {
     int font_px = 24;   //現在のフォントの1文字高(px)

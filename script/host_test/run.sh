@@ -72,8 +72,8 @@
 #                   控えめ、保存と読み込み、起動理由
 #   alarm_test    … アラーム(AlarmFunctions)。alarm.cfgの読み書き、時刻での発火と確認ダイアログ、
 #                   繰り返し(1回/毎日/平日/土日)、止める/5分後/放置での停止、ダイアログが消えたときの出し直し
-#   calc_eval_test… 電卓アプリの式評価(四則演算/括弧/√/π/エラー)
-#   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/履歴/画面切替)
+#   calc_eval_test… 電卓アプリの式評価(四則演算/関数電卓の関数/省略した掛け算/Ans/x/エラー)
+#   calculator_test… 電卓アプリのGUI配線(キーパッドの当たり判定/SHIFT/HYP/グラフ/履歴/画面切替)
 #   dict_test     … 単語辞書(en-ja-and-ja-en.tsv形式)の部分一致検索(前方一致の即時性/全体走査/重複無し/件数上限)
 #   dict_scene_test… 辞書アプリ(DictScene)のGUI配線(入力欄→検索→一覧への逐次反映→タップで詳細欄)
 #   widget_factory_test… WidgetFactory(WidgetType→new Xxx)とWidgetRegistry::Resolve()
@@ -670,6 +670,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calculator_test.cpp" \
     "$ROOT/src/gui/scenes/CalculatorScene.cpp" \
     "$ROOT/src/gui/widgets/apps/CalculatorKeypad.cpp" \
+    "$ROOT/src/gui/widgets/apps/GraphView.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \

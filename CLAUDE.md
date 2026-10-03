@@ -968,7 +968,7 @@ SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/
 | 置き場所 | 何を入れるか | 中身 |
 |---|---|---|
 | `widgets/` | 汎用部品と基底 | `Widget` / `WidgetID` / `WidgetRegistry` + 下のカタログのうち専用でないもの(`TextView` / `ImageView`を含む) |
-| `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` / `ChatLogView` / `GameBoyView` / `GameBoyPad` 等 |
+| `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` / `ChatLogView` / `GameBoyView` / `GameBoyPad` / `CalculatorKeypad` / `GraphView` 等 |
 | `widgets/systems/` | **OSのシェル部品**(特定アプリのものではない) | `Statusbar`(常駐オーバーレイ) / `AppGrid`(ランチャのタイル) |
 | `widgets/dialogs/` | モーダルダイアログ(キーボードのダイアログ枠`KeyboardDialog`を含む) | 下記「ダイアログ」参照 |
 | `widgets/keyboards/` | オンスクリーンキーボードのキー盤3種 + 基底`KeyboardPanel` | 下記「オンスクリーンキーボード」参照 |
@@ -2099,6 +2099,27 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - 検証はPCビルドの`--tap`/`--shot`(長いテキストのスクロール、480x600の画像=窓モードのドラッグと読み直し、
   48x24の画像=全体モードで中央、Markdown、「戻る」でファイルアプリへ)。**実機での速さは未計測**。
 
+### 電卓(関数電卓・グラフ電卓) (`CalculatorScene` / `util/Calc_Eval.hpp` / `widgets/apps/CalculatorKeypad` / `widgets/apps/GraphView`) (2026-10-03)
+
+タブは「電卓 / グラフ / 履歴」。使える関数の一覧と操作はSUMMARY.md「電卓」。ここには設計の判断だけ残す。
+
+- **式は文字列のまま、評価のたびに読む**(`CalcEval::Evaluate(expr, Context)`。中間形式へ翻訳しない)。
+  グラフは画素の列ごと(最大240列×3本)に評価して`GraphView::samples`(float、約2.9KB)へ覚え、式・範囲・角度・Ansが
+  変わったときだけ計算し直す。FlushDirty()はdirty矩形ごとにrender()を呼ぶので、毎回評価すると同じ計算を何度もするため。
+  描くのは`GameBoyView`と同じく**FlushDirty()の合成の中だけ**(`PICO_GFX::isDirtyDeactivates`)。**実機での評価の速さは未計測**
+  (重ければ式を逆ポーランドへ1回だけ翻訳する形にする)。
+- **数値は自前で読む**(`strtod`は`inf`/`0x10`を読み、`2e`が定数eとぶつかるため)。指数はEXPキーの大文字`E`。
+  結果の表示も`1e+20`ではなく`1E20`にして、履歴から読み戻した式がそのまま評価できるようにした。
+- **省略した掛け算は×と同じ強さで左から**(`6÷2(1+2)=9`)。nCr/nPrは×より強い、`-2^2=-4`、累乗は右結合。
+  関数名は前方一致を長い順に試す(`asinh`を`asin`/`sin`に食わせない)。`C`/`P`/`E`が大文字なのは小文字の関数名・定数とぶつけないため。
+- **直角の倍数の三角関数は表で答える**(`exactQuarter()`)。sin(180°)が1.2e-16、tan(90°)が1.6e16になるのを防ぐ(tanはDomain)。
+- キーの表示は**ASCII中心**(`x^2` `x^-1` `10^x`)。²や⁻¹は日本語フォントに無いかもしれないため。収まらない長いラベル
+  ("SHIFT" "acosh")だけLovyanGFXの`Font0`で描く(ホストテストのスタブに`fonts::Font0`を足した)。
+- `=`の後に演算子を押すと`Ans`から続ける(以前は結果の文字列を式へ写していたが、桁が落ちるため)。
+- 物理キーボードは`CalculatorScene::onKey()`で受ける(日本語のキー盤が開いていない画面なので、そのまま画面へ届く)。
+- 検証: `calc_eval_test`/`calculator_test`(run.sh)、PCビルドの`--tap`+標準入力の`key`行で計算・SHIFT表示・3本のグラフ・トレースを`--shot`で確認。
+  **実機では未確認**。
+
 ### ClocksScene 実装詳細
 
 画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える1画面のアプリ
@@ -2342,7 +2363,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。`SettingsScene`から周辺スキャン→選択→パスワード入力→接続まで一般的な「Wi-Fi設定」と同じ操作でできる(下記「Wi-Fiの新規接続」参照)。**複数のネットワークの保存・ON/OFF・未接続時の自動再接続(直近で接続したものから)も実装済み**(「保存済みのWi-Fiネットワーク」参照)。 |
 | 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
-| 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
+| 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`。関数電卓+グラフ電卓、2026-10-03)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイント/テトリス風はLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。**TODO/リマインダーはTodoist連携の`TodoScene`として実装済み**(下記「TODOアプリ」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。音も鳴る(#11)。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |

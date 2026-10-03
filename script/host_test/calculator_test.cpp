@@ -10,6 +10,8 @@
 // を確認する。
 #include "gui/scenes/CalculatorScene.hpp"
 #include "gui/widgets/apps/CalculatorKeypad.hpp"
+#include "gui/widgets/apps/GraphView.hpp"
+#include <cmath>
 #include "functions/Widget_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -46,62 +48,83 @@ static void eq_str(const char* actual, const char* expected, const char* label){
 }
 
 // ---- CalculatorKeypad: 位置合わせの確認 ----
+static void tapAt(Widget* w, int x, int y){
+    OSData::touchX = x; OSData::touchY = y;
+    w->causeOnPressStart();
+}
+
 static void testKeypadHitTest(){
-    // 呼び出し側の表示領域次第で高さが6で割り切れないことがあるので、
+    // 呼び出し側の表示領域次第で高さが7で割り切れないことがあるので、
     // わざと割り切れない高さ(181px)で確かめる(余りは最後の行が吸収する)
     CalculatorKeypad kp(0, 20, SCREEN_WIDTH, 181);
 
     const char* pressed = nullptr;
-    kp.setOnKey([&pressed](const char* key){ pressed = key; });
+    char last[16] = "";
+    kp.setOnKey([&](const char* key){ pressed = key; snprintf(last, sizeof(last), "%s", key); });
 
-    struct Expect { const char* label; int row; int col_start; int col_span; };
+    struct Expect { const char* label; const char* insert; };
     static const Expect kExpect[] = {
-        { "AC", 0, 0, 1 }, { "(", 0, 1, 1 }, { ")", 0, 2, 1 }, { "X", 0, 3, 1 },
-        { "7",  1, 0, 1 }, { "8", 1, 1, 1 }, { "9", 1, 2, 1 }, { "÷", 1, 3, 1 },
-        { "4",  2, 0, 1 }, { "5", 2, 1, 1 }, { "6", 2, 2, 1 }, { "×", 2, 3, 1 },
-        { "1",  3, 0, 1 }, { "2", 3, 1, 1 }, { "3", 3, 2, 1 }, { "-", 3, 3, 1 },
-        { "√",  4, 0, 1 }, { "π", 4, 1, 1 }, { ".", 4, 2, 1 }, { "+", 4, 3, 1 },
-        { "0",  5, 0, 3 }, { "=", 5, 3, 1 },
+        { "(", "(" }, { ")", ")" }, { "AC", "AC" }, { "DEG", "DRG" },
+        { "sin", "sin(" }, { "cos", "cos(" }, { "tan", "tan(" }, { "log", "log(" }, { "ln", "ln(" }, { "DEL", "DEL" },
+        { "√", "√(" }, { "x^2", "^2" }, { "x^y", "^" }, { "x^-1", "^(-1)" }, { "x!", "!" }, { "π", "π" },
+        { "7", "7" }, { "8", "8" }, { "9", "9" }, { "nCr", "C" }, { "mod", "mod" }, { "÷", "÷" },
+        { "4", "4" }, { "5", "5" }, { "6", "6" }, { ",", "," }, { "e", "e" }, { "×", "×" },
+        { "1", "1" }, { "2", "2" }, { "3", "3" }, { "EXP", "E" }, { "Ans", "Ans" }, { "-", "-" },
+        { "0", "0" }, { ".", "." }, { "%", "%" }, { "=", "=" }, { "+", "+" },
     };
 
-    const Rect g = kp.getScreenRect();
-    const int colBase = g.w / CalculatorKeypad::kCols;
-    const int rowBase = g.h / CalculatorKeypad::kRows;
-
-    bool all_center_hit = true;
-    bool all_corner_hit = true;
-
+    bool all_hit = true;
     for(const Expect& e : kExpect){
-        const int x = g.x + e.col_start * colBase;
-        const int w = e.col_span * colBase;
-        const int y = g.y + e.row * rowBase;
-        const int h = (e.row == CalculatorKeypad::kRows - 1) ? (g.h - rowBase * (CalculatorKeypad::kRows - 1)) : rowBase;
-
-        //中心を叩くと自分のキーが返る(描画位置と当たり判定位置が同じ計算式であることの確認)
-        OSData::touchX = x + w / 2;
-        OSData::touchY = y + h / 2;
+        int x = 0, y = 0;
+        if(!kp.keyCenter(e.label, x, y)){ printf("  キーが無い: %s\n", e.label); all_hit = false; continue; }
         pressed = nullptr;
-        kp.causeOnPressStart();
-        if(!pressed || strcmp(pressed, e.label) != 0) all_center_hit = false;
-
-        //左上と右下の内側の隅も自分のキーになること(隣のマスと重なっていないことの裏取り)
-        OSData::touchX = x; OSData::touchY = y;
-        pressed = nullptr;
-        kp.causeOnPressStart();
-        if(!pressed || strcmp(pressed, e.label) != 0) all_corner_hit = false;
-
-        OSData::touchX = x + w - 1; OSData::touchY = y + h - 1;
-        pressed = nullptr;
-        kp.causeOnPressStart();
-        if(!pressed || strcmp(pressed, e.label) != 0) all_corner_hit = false;
+        tapAt(&kp, x, y);
+        if(!pressed || strcmp(last, e.insert) != 0){ printf("  %s → %s\n", e.label, pressed ? last : "(なし)"); all_hit = false; }
     }
+    check(all_hit, "キーパッド: 各キーの中心を叩くとそのキーの文字列が返る(高さが7で割り切れない場合も)");
 
-    check(all_center_hit, "キーパッド: 各キーの中心を叩くとそのキーが返る(高さが6で割り切れない場合も)");
-    check(all_corner_hit, "キーパッド: 各キーの内側の隅も自分のキーになる(マス目が重なっていない)");
+    // 隅: 左上のキーの左上隅と、右下のキーの右下隅
+    const Rect g = kp.getScreenRect();
+    pressed = nullptr;
+    tapAt(&kp, g.x + g.w - 1, g.y + g.h - 1);
+    check(pressed && strcmp(last, "+") == 0, "キーパッド: 右下の隅は\"+\"(最終行が余りを吸収する)");
 
-    //最終行(0と=)は割り切れない余りを吸収するぶん他の行より高い
-    const int last_row_h = g.h - rowBase * (CalculatorKeypad::kRows - 1);
-    check(last_row_h >= rowBase, "キーパッド: 最終行が余りを吸収して他の行以上の高さになる");
+    // SHIFT: 裏の機能に変わり、1回押すと戻る
+    int sx, sy, x, y;
+    check(kp.keyCenter("SHIFT", sx, sy), "キーパッド: SHIFTがある");
+    pressed = nullptr;
+    tapAt(&kp, sx, sy);
+    check(pressed == nullptr && kp.isShift(), "SHIFT: 押しても文字は送らず、SHIFT中になる");
+    check(kp.keyCenter("asin", x, y) && kp.keyCenter("10^x", x, y) && kp.keyCenter("nPr", x, y),
+          "SHIFT中: asin/10^x/nPrが見える");
+    kp.keyCenter("asin", x, y);
+    tapAt(&kp, x, y);
+    check(pressed && strcmp(last, "asin(") == 0, "SHIFT+sin → asin(");
+    check(!kp.isShift(), "SHIFTは1回きりで戻る");
+
+    // HYP / SHIFT+HYP
+    int hx, hy;
+    kp.keyCenter("HYP", hx, hy);
+    tapAt(&kp, hx, hy);
+    kp.keyCenter("cosh", x, y);
+    tapAt(&kp, x, y);
+    check(strcmp(last, "cosh(") == 0, "HYP+cos → cosh(");
+    tapAt(&kp, sx, sy);
+    tapAt(&kp, hx, hy);
+    check(kp.keyCenter("atanh", x, y), "SHIFT+HYP中: atanhが見える");
+    tapAt(&kp, x, y);
+    check(strcmp(last, "atanh(") == 0, "SHIFT+HYP+tan → atanh(");
+
+    // グラフのときは mod の位置が x、= が描画
+    kp.setGraphMode(true);
+    check(kp.keyCenter("x", x, y), "グラフ: xキーがある");
+    tapAt(&kp, x, y);
+    check(strcmp(last, "x") == 0, "グラフ: xキーでxが入る");
+    check(kp.keyCenter("描画", x, y), "グラフ: =は[描画]");
+    tapAt(&kp, sx, sy);
+    check(kp.keyCenter("mod", x, y), "グラフ: SHIFT+x はmod");
+    tapAt(&kp, x, y);
+    check(strcmp(last, "mod") == 0, "グラフ: SHIFT+xでmodが入る");
 }
 
 // ---- CalculatorScene: 実際のタッチ経路での配線確認 ----
@@ -134,49 +157,26 @@ static int countItems(ScrollList* list){
 }
 
 // 電卓ページの2つのLabelはY座標の小さい方が式(expr)、大きい方が結果(result)
-static void findDisplays(Label<PICO_STR_L>*& expr, Label<PICO_STR_M>*& result){
+static void findDisplays(Label<PICO_STR_LL>*& expr, Label<PICO_STR_M>*& result){
     std::vector<Widget*> labels;
     for(Widget* w : WidgetFunctions::widgets){
-        if(w->getWidgetType() == WidgetType::Label) labels.push_back(w);
+        if(w->getWidgetType() == WidgetType::Label && w->getVisible()) labels.push_back(w);
     }
     std::sort(labels.begin(), labels.end(), [](Widget* a, Widget* b){
         return a->getScreenRect().y < b->getScreenRect().y;
     });
-    expr   = (labels.size() > 0) ? static_cast<Label<PICO_STR_L>*>(labels[0]) : nullptr;
+    expr   = (labels.size() > 0) ? static_cast<Label<PICO_STR_LL>*>(labels[0]) : nullptr;
     result = (labels.size() > 1) ? static_cast<Label<PICO_STR_M>*>(labels[1]) : nullptr;
 }
 
 static void pressKeypad(CalculatorKeypad* kp, const char* key){
-    // CalculatorKeypad::hitKey()は座標から逆算するだけなので、テストとしては
-    // 「このキーが押された」という結果だけを見たい。行/列の再計算をここでも
-    // 繰り返すのは冗長なので、testKeypadHitTest()側で位置合わせ済みの前提に立ち、
-    // ここでは中心座標を1回だけ計算して押す
-    struct Loc { int row, col_start, col_span; };
-    static const struct { const char* label; Loc loc; } table[] = {
-        { "AC", {0,0,1} }, { "(", {0,1,1} }, { ")", {0,2,1} }, { "X", {0,3,1} },
-        { "7",  {1,0,1} }, { "8", {1,1,1} }, { "9", {1,2,1} }, { "÷", {1,3,1} },
-        { "4",  {2,0,1} }, { "5", {2,1,1} }, { "6", {2,2,1} }, { "×", {2,3,1} },
-        { "1",  {3,0,1} }, { "2", {3,1,1} }, { "3", {3,2,1} }, { "-", {3,3,1} },
-        { "√",  {4,0,1} }, { "π", {4,1,1} }, { ".", {4,2,1} }, { "+", {4,3,1} },
-        { "0",  {5,0,3} }, { "=", {5,3,1} },
-    };
-
-    const Rect g = kp->getScreenRect();
-    const int colBase = g.w / CalculatorKeypad::kCols;
-    const int rowBase = g.h / CalculatorKeypad::kRows;
-
-    for(const auto& row : table){
-        if(strcmp(row.label, key) != 0) continue;
-        const Loc& loc = row.loc;
-        const int h = (loc.row == CalculatorKeypad::kRows - 1)
-            ? (g.h - rowBase * (CalculatorKeypad::kRows - 1)) : rowBase;
-        OSData::touchX = g.x + loc.col_start * colBase + (loc.col_span * colBase) / 2;
-        OSData::touchY = g.y + loc.row * rowBase + h / 2;
-        kp->causeOnPressStart();
+    int x = 0, y = 0;
+    if(!kp->keyCenter(key, x, y)){
+        printf("[FAIL] pressKeypad: 未知のキー %s\n", key);
+        failures++;
         return;
     }
-    printf("[FAIL] pressKeypad: 未知のキー %s\n", key);
-    failures++;
+    tapAt(kp, x, y);
 }
 
 static void testCalculatorScene(){
@@ -188,14 +188,18 @@ static void testCalculatorScene(){
 
     CalculatorKeypad* kp = findByType<CalculatorKeypad>(WidgetType::CalculatorKeypad);
     TabBar* page_tab      = findByType<TabBar>(WidgetType::TabBar);
-    ScrollList* history   = findByType<ScrollList>(WidgetType::ScrollList);
+    CalculatorKeypad* gkp = findByType<CalculatorKeypad>(WidgetType::CalculatorKeypad, 1);
+    ScrollList* glist     = findByType<ScrollList>(WidgetType::ScrollList, 0);
+    ScrollList* history   = findByType<ScrollList>(WidgetType::ScrollList, 1);
+    GraphView* gview      = findByType<GraphView>(WidgetType::GraphView);
     Button* back_button   = findButtonByText("戻る");
     Button* clear_button  = findButtonByText("履歴を消去");
 
-    check(kp && page_tab && history && back_button && clear_button,
-          "onEnter(): 想定した5種のウィジェットが揃っている");
+    check(kp && gkp && glist && gview && page_tab && history && back_button && clear_button,
+          "onEnter(): 想定したウィジェットが揃っている");
+    if(!gkp || !glist || !gview) return;
 
-    Label<PICO_STR_L>* expr = nullptr;
+    Label<PICO_STR_LL>* expr = nullptr;
     Label<PICO_STR_M>* result = nullptr;
     findDisplays(expr, result);
     check(expr && result, "onEnter(): 式/結果の2つのLabelが見つかる");
@@ -220,7 +224,7 @@ static void testCalculatorScene(){
     // \"=\"の直後に演算子を押すと結果から続けて計算できる
     pressKeypad(kp, "×");
     pressKeypad(kp, "2");
-    eq_str(expr->getText()->c_str(), "10×2", "\"=\"の直後は結果から続けて計算する");
+    eq_str(expr->getText()->c_str(), "Ans×2", "\"=\"の直後に演算子を押すとAnsから続けて計算する");
     pressKeypad(kp, "=");
     eq_str(result->getText()->c_str(), "20", "続けて計算した結果が正しい");
     check(countItems(history) == 2, "続けての計算も履歴に積まれる");
@@ -234,11 +238,15 @@ static void testCalculatorScene(){
     eq_str(expr->getText()->c_str(), "0", "AC: 式が空になる");
     eq_str(result->getText()->c_str(), "", "AC: 結果欄も空になる");
 
-    // ---- X(削除) ----
+    // ---- DEL(削除) ----
     pressKeypad(kp, "1");
     pressKeypad(kp, "2");
-    pressKeypad(kp, "X");
-    eq_str(expr->getText()->c_str(), "1", "X: 末尾の1文字が消える");
+    pressKeypad(kp, "DEL");
+    eq_str(expr->getText()->c_str(), "1", "DEL: 末尾の1文字が消える");
+    pressKeypad(kp, "sin");
+    eq_str(expr->getText()->c_str(), "1sin(", "関数キーは括弧ごと入る");
+    pressKeypad(kp, "DEL");
+    eq_str(expr->getText()->c_str(), "1", "DEL: 関数は\"sin(\"ごと消える");
 
     // ---- 閉じていない括弧の\")\"は無視される ----
     pressKeypad(kp, "AC");
@@ -272,7 +280,7 @@ static void testCalculatorScene(){
     check(strlen(result->getText()->c_str()) > 0, "不完全な式で\"=\": 結果欄に何か表示される(エラーメッセージ)");
     check(result->getTextColor() == PICO_RED, "不完全な式で\"=\": エラーは赤色で区別される");
     check(result->getFontSize() == FontFn::Small,
-          "不完全な式で\"=\": エラー文言はBigger(48px)だと画面に収まらないためSmallへ縮む");
+          "不完全な式で\"=\": エラー文言はBig(32px)だと画面に収まらないためSmallへ縮む");
     //Smallなら日本語1文字16pxなので、最長のエラー文言でも表示幅(maxWidth)に収まる。
     //textWidth()はOSData::frameへ最後に適用したフォントに依存するため、明示的にSmallへ
     //してから測る(Labelのrelayout()自身がfontApply()/fontDefault()で行うのと同じ手順)
@@ -283,21 +291,140 @@ static void testCalculatorScene(){
           "不完全な式で\"=\": エラー文言の実測幅が表示領域に収まる");
     check(countItems(history) == before_history, "不完全な式で\"=\": 履歴は増えない");
 
-    // ---- エラーの後に数字を打つとBigger(48px)のプレビューへ戻る ----
+    // ---- エラーの後に数字を打つとBig(32px)のプレビューへ戻る ----
     pressKeypad(kp, "AC");
     pressKeypad(kp, "5");
-    check(result->getFontSize() == FontFn::Bigger, "エラーの後でも数字を打てばプレビューは通常のフォントへ戻る");
+    check(result->getFontSize() == FontFn::Big, "エラーの後でも数字を打てばプレビューは通常のフォントへ戻る");
+
+    // ---- 関数電卓 ----
+    pressKeypad(kp, "AC");
+    pressKeypad(kp, "sin");
+    pressKeypad(kp, "3");
+    pressKeypad(kp, "0");
+    eq_str(result->getText()->c_str(), "0.5", "閉じていない括弧でもプレビューが出る(sin(30)、度)");
     pressKeypad(kp, "=");
-    check(result->getFontSize() == FontFn::Bigger, "確定した数値の答えは通常のフォントで出る");
+    eq_str(expr->getText()->c_str(), "sin(30)", "\"=\"で閉じ忘れた括弧が自動で閉じる");
+    eq_str(result->getText()->c_str(), "0.5", "sin(30°) = 0.5");
+
+    pressKeypad(kp, "DEG"); // → RAD
+    pressKeypad(kp, "AC");
+    pressKeypad(kp, "SHIFT");
+    pressKeypad(kp, "e"); // SHIFTのπの位置はe
+    pressKeypad(kp, "=");
+    eq_str(result->getText()->c_str(), "2.718281828", "SHIFT+π → e");
+    pressKeypad(kp, "AC");
+    pressKeypad(kp, "cos");
+    pressKeypad(kp, "π");
+    pressKeypad(kp, "=");
+    eq_str(result->getText()->c_str(), "-1", "RAD: cos(π) = -1");
+    pressKeypad(kp, "RAD"); // → GRA
+    pressKeypad(kp, "GRA"); // → DEG
+    pressKeypad(kp, "AC");
+    pressKeypad(kp, "5");
+    pressKeypad(kp, "nCr");
+    pressKeypad(kp, "2");
+    pressKeypad(kp, "=");
+    eq_str(result->getText()->c_str(), "10", "5C2 = 10");
+    pressKeypad(kp, "x^2");
+    pressKeypad(kp, "=");
+    eq_str(expr->getText()->c_str(), "Ans^2", "=の後のx^2はAnsの2乗");
+    eq_str(result->getText()->c_str(), "100", "Ans^2 = 100");
+    pressKeypad(kp, "AC");
+    pressKeypad(kp, "1");
+    pressKeypad(kp, "0");
+    pressKeypad(kp, "x^y");
+    pressKeypad(kp, "2");
+    pressKeypad(kp, "5");
+    pressKeypad(kp, "=");
+    eq_str(result->getText()->c_str(), "1E25", "大きな答えは指数表記(E)で出る");
+    check(result->getFontSize() == FontFn::Big, "短い指数表記はBigのまま");
+    pressKeypad(kp, "AC");
+    pressKeypad(kp, "2");
+    pressKeypad(kp, "÷");
+    pressKeypad(kp, "3");
+    pressKeypad(kp, "=");
+    eq_str(result->getText()->c_str(), "0.6666666667", "2÷3");
+    {
+        FontFn::SetBig();
+        const int w_big = OSData::frame->textWidth(result->getText()->c_str());
+        FontFn::SetDefault();
+        check(w_big <= result->getMaxWidth() || result->getFontSize() != FontFn::Big,
+              "長い答えはBigで収まらなければ字を小さくする");
+    }
+
+    pressKeypad(kp, "AC");
+    pressKeypad(kp, "5");
+    pressKeypad(kp, "=");
+    check(result->getFontSize() == FontFn::Big, "確定した数値の答えは通常のフォントで出る");
 
     // ---- 履歴ページの表示切替と読み戻し ----
-    page_tab->setSelected(1, true); // 「履歴」タブへ切り替え(実際のタップと同じくnotify=trueで呼ぶ)
+    page_tab->setSelected(2, true); // 「履歴」タブへ切り替え(実際のタップと同じくnotify=trueで呼ぶ)
     check(!kp->getVisible() && history->getVisible(), "履歴タブ: キーパッドが隠れ履歴一覧が出る");
 
     history->setSelectedIndex(0);
     history->causeOnSelectItem(true); // 選択済みの項目をもう一度タップした状態を再現(2回タップの流儀)
     check(page_tab->getSelected() == 0, "履歴の再選択: 電卓ページへ自動的に戻る");
     eq_str(expr->getText()->c_str(), "5", "履歴の再選択: 直近の式が読み戻される");
+
+    // ---- グラフ ----
+    page_tab->setSelected(1, true);
+    check(gkp->getVisible() && glist->getVisible() && !gview->getVisible() && !kp->getVisible(),
+          "グラフタブ: 式の一覧とキーパッドが出る");
+    pressKeypad(gkp, "2");
+    pressKeypad(gkp, "x");
+    pressKeypad(gkp, "+");
+    pressKeypad(gkp, "1");
+    eq_str(glist->itemAt(0)->text.c_str(), "y1=2x+1", "グラフ: y1の式を入れる");
+    glist->setSelectedIndex(1);
+    glist->causeOnSelectItem(false);
+    pressKeypad(gkp, "sin");
+    pressKeypad(gkp, "x");
+    eq_str(glist->itemAt(1)->text.c_str(), "y2=sin(x", "グラフ: 一覧で選んだy2へ入る");
+    pressKeypad(gkp, "描画");
+    eq_str(glist->itemAt(1)->text.c_str(), "y2=sin(x)", "[描画]で括弧が閉じる");
+    check(gview->getVisible() && !gkp->getVisible(), "[描画]: グラフが出る");
+    {
+        // 初期の範囲は横-10〜10。列の中心のxでの値になる
+        const Rect g = gview->getScreenRect();
+        const int col = g.w / 2;
+        const double x = gview->getXMin() + (gview->getXMax() - gview->getXMin()) * (col + 0.5) / g.w;
+        const float y1 = gview->sampleAt(0, col);
+        check(std::fabs(y1 - (2 * x + 1)) < 1e-4, "グラフ: y1の値が2x+1");
+        const float y3 = gview->sampleAt(2, col);
+        check(std::isnan(y3), "グラフ: 空のy3は描かない");
+        const float y2 = gview->sampleAt(1, col);
+        check(std::fabs(y2 - std::sin(x * 3.14159265358979 / 180)) < 1e-4, "グラフ: 角度の単位(DEG)が効く");
+
+        // ドラッグで範囲が動く
+        const double xmin0 = gview->getXMin();
+        OSData::touchX = g.x + 100; OSData::touchY = g.y + 50;
+        gview->causeOnPressStart();
+        OSData::touchX = g.x + 120;
+        gview->causeOnPressMove();
+        gview->causeOnPressEnd();
+        check(gview->getXMin() < xmin0 && !gview->isTracing(), "グラフ: 右へドラッグすると左側が見え、トレースはしない");
+
+        // タップでトレース
+        OSData::touchX = g.x + 60; OSData::touchY = g.y + 50;
+        gview->causeOnPressStart();
+        gview->causeOnPressEnd();
+        check(gview->isTracing(), "グラフ: タップでトレース");
+
+        Button* zin = findButtonByText("拡大");
+        Button* reset = findButtonByText("初期化");
+        Button* edit = findButtonByText("式");
+        check(zin && reset && edit, "グラフ: 拡大/初期化/式のボタン");
+        if(zin && reset && edit){
+            const double w0 = gview->getXMax() - gview->getXMin();
+            zin->causeOnPressEnd();
+            check(std::fabs((gview->getXMax() - gview->getXMin()) - w0 / 2) < 1e-9, "拡大: 範囲が半分");
+            reset->causeOnPressEnd();
+            check(gview->getXMin() == -10.0 && gview->getXMax() == 10.0 && !gview->isTracing(), "初期化: -10〜10に戻りトレースも消える");
+            edit->causeOnPressEnd();
+            check(gkp->getVisible() && !gview->getVisible(), "[式]: 式の入力へ戻る");
+        }
+    }
+    page_tab->setSelected(2, true);
 
     // ---- 履歴の消去 ----
     clear_button->causeOnPressEnd();

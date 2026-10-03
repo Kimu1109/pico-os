@@ -99,7 +99,7 @@ int main(){
     check(Buttons() == B, "形式に合わない行は無視");
 
     // 長すぎる行は改行まで読み捨て、次の行はまた読める
-    HostSerial::Feed("pad 1                                                  \npad 0040\n");
+    HostSerial::Feed("pad 1                                                                                                     \npad 0040\n");
     UpdateAt(t += 16);
     check(Buttons() == X, "長すぎる行を捨てて次の行を読む");
 

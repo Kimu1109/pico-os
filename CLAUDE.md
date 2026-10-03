@@ -71,7 +71,7 @@ src/
       dialogs/              モーダルダイアログ(オンスクリーンキーボードのダイアログ枠 KeyboardDialog を含む)
       keyboards/            オンスクリーンキーボードのキー盤3種(Keyboard/KeyboardEng/KeyboardNum)と基底KeyboardPanel
       interfaces/            ミックスイン的インターフェース
-      systems/               OSのシェル部品(Statusbar / AppGrid)
+      systems/               OSのシェル部品(Statusbar / AppGrid / PerfOverlay)
   ime/                       SKK方式かな漢字変換辞書エンジン
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
@@ -79,7 +79,7 @@ src/
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
-  lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録
+  lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査) / Json_Reader(流しながら読むJSON)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
@@ -88,7 +88,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の49本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の51本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -152,11 +152,14 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | KeyInput_Functions | 物理キーボードの窓口。1打鍵1件の列を持ち、今の画面(`Scene::onKey()`)→開いているキー盤の順に配る。今の入力元はUSBシリアル(PCのキーボード)。下記「物理キーボード」参照 |
 | Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。今の入力元はUSBシリアル(PCのキーボード)。下記「外部コントローラー」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
+| Profiler_Functions | `loop()`の区間ごとの時間とフレーム時間の集計。下記「開発者向けの道具」参照 |
+| CrashDump_Functions | クラッシュダンプ(HardFault・ウォッチドッグ・Luaのエラー)とパンくず。下記「開発者向けの道具」参照 |
+| DevTools_Functions | `/sys/debug.cfg`(プロファイラの表示/ログ・Luaデバッガ・ウォッチドッグ)の窓口 |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Display→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
-`loop()`: Touch更新 → Pad更新(外部コントローラー。物理キーボードの打鍵もここで列へ積まれる) → Display更新(自動調光の判定) → Power更新(スリープの判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `KeyInputFunctions::Update()`(打鍵を配る) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound/Battery/Alarm更新 → `PowerFunctions::IdleWait()`(スリープ中だけ少し休む)、という単純なポーリングループ。
+`loop()`: (`ProfilerFunctions::BeginFrame()`/`CrashDumpFunctions::Feed()`) → Touch更新 → Pad更新(外部コントローラー。物理キーボードの打鍵もここで列へ積まれる) → Display更新(自動調光の判定) → Power更新(スリープの判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `KeyInputFunctions::Update()`(打鍵を配る) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound/Battery/Alarm/Notification/DevTools更新 → `PowerFunctions::IdleWait()`(スリープ中だけ少し休む)、という単純なポーリングループ。各処理の後の`ProfilerFunctions::Mark(区間)`はプロファイラとクラッシュダンプのパンくず(下記「開発者向けの道具」)。
 
 **2コア目(`setup1()`/`loop1()`)は音声専用**(`SoundFunctions::LoopCore1()`だけを回す)。1コア目とは`std::atomic`とロック無しのコマンドの列だけでやり取りする。
 **2コア目からログを出したり、ウィジェット/SD/`OSData`に触ったりしないこと**(どれもロックを持たない1コア目専用の作り)。
@@ -327,6 +330,106 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
   再起動しても`daily`/`every`の予約が残る、キーボードのダイアログの上でトーストの跡が残らない)。**実機・Webビルドは未確認**。
 - 未: C++の標準アプリからの利用(チャットの未読・カレンダーの予定はシーンを閉じると通信係ごと止まるので、使うにはOS側へ上げる必要がある)、
   アラーム/タイマーの完了を通知へ統合すること。
+
+### 開発者向けの道具 (プロファイラ / Luaデバッガ / クラッシュダンプ / Luaサンドボックス) (2026-10-03)
+
+設定は`/sys/debug.cfg`(`DevToolsFunctions`。無くてよく、全部既定で切れている)。設定アプリの「その他」タブの
+「フレーム時間を表示」「Luaデバッガ」「固まったら再起動する」でも切り替えられる(`perf-log`と`watchdog-ms`はファイルだけ)。
+
+**プロファイラ(`Profiler_Functions`)とフレーム時間の表示(`widgets/systems/PerfOverlay`)**
+- `loop()`の頭で`BeginFrame()`、各処理の後に`Mark(区間)`(**区間の終わりで呼ぶ**。直前のMarkからの時間をその区間へ足す)、
+  `IdleWait()`の手前で`EndWork()`。区間は 入力/電源/シーン/画面更新/描画/タスク/Wi-Fi/サービス(`main.cpp`の並び順)。
+  0.5秒の窓で平均・最大・休みを除いた仕事の時間・1フレームあたりのLuaの時間(`LuaEngine::ProtectedCall()`の一番外が
+  `AddLuaMicros()`する。ヘッダだけで完結させてあるのでLuaEngineはProfiler_Functions.cppへ依存しない)を出す。
+  直近60フレームは輪で持つ。全部固定長。無効の間は`BeginFrame()`/`Mark()`がパンくず(下)だけ書いて戻る。
+- 表示は右下132x50pxの常駐オーバーレイ(トーストより上)。書き換えは窓が閉じたとき(0.5秒ごと)だけ(毎フレーム描くと
+  表示そのものが測る時間を押し上げるため)。`hit_transparent`でタップは下へ素通り(ただし下の部品は隠れる)。
+  文字はLovyanGFXの`Font0`(6x8)。グラフは緑≦16.7ms・黄≦33.3ms・赤。
+- `perf-log = true`で5秒ごとに`[PROF] ...`をシリアルへ(SDのログには書かない)。`FlushDirty()`の旧来の`fps:`の行はそのまま。
+- PCビルドの値は`main_pc.cpp`の`sleep_for(5ms)`を含むので、フレーム時間は約5ms+仕事になる。**実機の値は未計測**。
+
+**Luaデバッガ(`src/lua/LuaDebugger` / `LuaDebugScreen`)**
+- `LuaDebugger::GlobalEnabled()`(debug.cfgの`lua-debugger`)が立っている間に作られた`LuaEngine`だけが`LuaDebugger`を持つ
+  (約3KB、`new`)。**今動いているエンジンには後から付けない**(次に開いたアプリから)。
+- 止まる仕組みはLuaのフックの`LUA_MASKLINE`。行フックは重いので、ブレークポイントがある・ステップ実行中・`dbg pause`の予約が
+  あるときだけ入れる(`LuaEngine::ApplyHook()`が`wantsLineHook()`を見る)。**フックはスレッドごと**なので、作った後の
+  コルーチンへは`coroutine.resume`/`wrap`の包み(下)と、フックの中(`ApplyHook(L)`)で合わせる。
+- 「止まる」= フックの中で`Frontend::onPause()`を呼んで戻るのを待つこと。OSの`loop()`はその間止まる(2コア目の音は鳴る)。
+  実機/PCのFrontendは`LuaDebugScreen`: ウィジェットを使わず`OSData::lcd`へ直接描き、`PICO_Touch::Update()`/
+  `PadFunctions::Update()`/`KeyInputFunctions::Pop()`/シリアルを自分で読む小さなループ(10msごと、ウォッチドッグへFeed)。
+  続けるときは`OSData::frame`を液晶へ戻し、`RequestRedraw()`→次のフレームの`main.cpp`が`MarkDirtyBelow(全画面)`
+  (半透明のダイアログの下も描き直すため。`MarkDirty()`だと止まる前の画面が残った)。**Webビルドは持たない**(メインスレッドを
+  止められない)ので、止まる代わりにシリアルへ場所を出して続ける。
+- 止まるきっかけ: 行のブレークポイント(16個、ファイル名は`MatchFile()`で後ろ一致)、`pico.breakpoint()`、ステップ
+  (1行/次へ=深さ≦/抜ける=深さ<。`pico.breakpoint()`で止まったときはCの関数の段を引いて数える)、`dbg pause`、
+  **捕まえられなかったエラー**(`LuaEngine::MessageHandler()`の中。続けてもエラーのまま進む)。`pcall`の中のエラーでは止まらない
+  (Luaのpcallはメッセージハンドラを持たないため)。
+- 変数はローカル(`(`で始まる中間値は除く)と上位値(`^名前`。トップレベルの`local`はこちらに出る)、計16個。値は
+  `FormatValue()`で1行に(メタメソッドは呼ばない=Luaを動かさない)。ソースは`@パス`のチャンク名からSDのファイルを読む
+  (`ReadSourceLines()`)。**そのため`LuaEngine::Run()`は`/`で始まるチャンク名に`@`を付ける**(エラーも`[string "..."]`ではなく
+  `/lua/apps/x/main.lua:12:`の形になった)。`LuaScene`の`lib.lua`/`main.lua`はこれで足りる。
+- シリアルのコマンド`dbg ...`は`PadFunctions`の行の振り分け(`extra_line_handler`。Pad_Functions.cppをLuaへ依存させないための
+  関数ポインタ。`main.cpp`が`LuaDebugger::FeedSerialLine`を差す)で列(8件)へ入り、止まっていない間は`LuaScene::onUpdate()`の
+  `engine->UpdateDebugger()`、止まっている間はFrontendが`pollSerial(L, true)`で処理する。シリアルの1行の上限`PadFunctions::kLineMax`は
+  これのため32→96にした。
+- Lua API: `pico.traceback([msg])` / `pico.breakpoint([msg])` / `pico.set_breakpoint(file, line)` / `pico.clear_breakpoint([file, line])` /
+  `pico.debugger_enabled()`。ドキュメントは`lua-api-doc/content/api/debug.md`と`guide/debugging.md`。
+- **スタックトレース**: 捕まえられなかったエラーは`MessageHandler()`が`BuildTrace()`(`main.lua:12 関数名`の行、10段まで)で
+  `last_trace_`(1KB)へ作り、`ReportError()`がダイアログ(メッセージ+先頭4段)・ログ(全部)・`LuaDebugger::ReportError()`
+  (=`CrashDumpFunctions::SaveLuaError`、`/crash/lua_NNNN.txt`)へ出す。デバッガが無くても常に効く。
+
+**クラッシュダンプ(`CrashDump_Functions`)**
+- 落ちた瞬間はSDへ書けないので2段: 消えないRAM(`.uninitialized_data`。pico-sdkのリンカスクリプトが0クリアしない領域)へ
+  記録(`Record`: レジスタ・例外フレームの後のスタック16語・CFSR/HFSR/MMFAR/BFAR・パンくず、magic+FNV-1a)を置いて再起動 →
+  次の起動の`Setup()`(`LogFunctions::Setup()`の直後)が`/crash/crash_NNNN.txt`へ文章にして書き、印を消す。
+  `PostPendingNotice()`(通知の`Setup()`の後)が通知を出し、タップでファイルビューワーが開く(`file:`)。
+- **HardFault**: pico-sdkのcrt0の弱いシンボル`isr_hardfault`を上書き(naked。`tst lr,#4`でMSP/PSPを選んで
+  `pico_os_hardfault_c(frame, exc_return)`へ)。フレームのアドレスがSRAMの中のときだけ読む(壊れたSPで二重に落ちないため)。
+  最後に`watchdog_reboot(0,0,0)`。CFSRの主なビット(IACCVIOL/DACCVIOL/IBUSERR/PRECISERR/STKERR/UNDEFINSTR/STKOF/
+  UNALIGNED/DIVBYZERO)はダンプで日本語に読み解き、`arm-none-eabi-addr2line`の打ち方も書く。
+- **ウォッチドッグ**(`watchdog = true`、`watchdog-ms`既定8000、1000〜8300): `watchdog_enable(ms, true)`。`loop()`の頭で`Feed()`。
+  再起動の前に何も書けないので、`watchdog_enable_caused_reboot()`のときは**パンくず**から組み立てる。パンくず(`Crumbs`、
+  これも消えないRAM)は毎フレーム: フレーム番号・時刻(`BeginFrame`)、今の区間(`SetPhase`。`ProfilerFunctions::Mark(s)`が
+  **次の区間**を書く。`EndWork()`の後は「休み」)、画面の名前(`SetScene`、ポインタが変わったときだけ写す)、Luaの実行中か+
+  直近のアプリ(`SetLua`。`LuaEngine::ProtectedCall()`の一番外が`LuaDebugger::NotifyActivity()`経由で呼ぶ)。
+  **実機のウォッチドッグは一度動かすと止められない**ので、設定で切っても次の再起動まで効く。TLSのハンドシェイク(1〜2秒)・
+  大きなSDの読み書きより長い同期処理があれば`watchdog-ms`を見直すこと。
+- **PCビルド**: シグナル(SEGV/BUS/FPE/ILL/ABRT)のハンドラが記録を`<SDのルート>/sys/crash.pending`へ書いてから既定の動作で落ちる
+  (`PICOOS_NO_CRASH_HANDLER`で無効)。ウォッチドッグはスレッドで真似る(固まったら記録を書いて`_exit(3)`)。Webは対象外。
+  `crash.pending`は`<fcntl.h>`の`open()`ではなく`fopen()`で書く(ホストテストのSdFatスタブとO_*の値が食い違う罠を避けるため)。
+- Luaのエラーは落ちていないが`/crash/lua_NNNN.txt`へ残す(1回の起動で8件まで)。
+
+**Luaサンドボックスの強化(`LuaEngine`)**
+- **打ち切りは握り潰せない**: 命令数の上限で「打ち切り中」(`aborting_`)になり、フックを1命令ごとにして次の命令で投げ直す。
+  `pcall`/`xpcall`/`coroutine.resume`/`coroutine.close`は包んであり(`l_guarded_call`、yieldをまたげるよう継続関数つき)、
+  打ち切り中なら捕まえた結果を捨てて投げ直す。`coroutine.wrap`は自前(`l_wrap`)。打ち切りが解けるのは次の一番外の
+  `ProtectedCall()`の入口だけで、**入れ子の呼び出し(`pico.set`から鳴るコールバック=`Dispatch`)では予算も打ち切りも積み直さない**
+  (`call_depth_`。積み直すと、それを繰り返して上限を逃れられた)。
+- **投げ方はメモリ不足(`LUA_ERRMEM`)**: 打ち切り中は`Alloc()`が増える確保を全部断り、`RaiseAbort()`がわざと確保して起こす。
+  `lua_error()`だと`xpcall`のメッセージハンドラ(Luaの関数)が呼ばれ、**フックの中から投げるとそのハンドラはフック無し
+  (`allowhook=0`)で動く**ので、ハンドラの中の終わらないループで固まった(テストで踏んだ)。メモリ不足はハンドラを呼ばない。
+  表示は`ReportError()`が`abort_msg_`(場所付き)へ差し替え、トレースは打ち切りに入った時点でフックの中で作る。
+- **ライブラリ**: `luaL_openlibs()`をやめ、基本/coroutine/table/string/math/utf8/osだけを開く(`openSandboxedLibs()`)。
+  外したもの: `debug`(`debug.sethook()`で安全網のフックを外せた)、`io`/`package`/`require`/`dofile`/`loadfile`(権限の確認を
+  通らずにSDへ触れた)、`os.exit`/`execute`/`remove`/`rename`/`getenv`/`tmpname`/`setlocale`、`string.dump`。
+  `load`はモードを"t"に固定(書き換えたバイトコードはVMを壊せる)。`print`はログへ。
+- **`__gc`を持つメタテーブルは`setmetatable`がエラーにする**。LuaはGCのメタメソッドをフック無しで動かすので、中の終わらない
+  ループは止めようがなく、GCが走るところ(どこでも)でOSごと固まる。5.4ではsetmetatableの時点で`__gc`があったときだけ
+  ファイナライザが付くので、そこで見れば足りる。
+- **残っている限界**: C関数の中(重い`string.find`のパターン等)はフックが来ないので止められない → ウォッチドッグで拾う
+  (PCビルドで`string.find(("a"):rep(40), ("a*"):rep(30).."b")`が2秒のウォッチドッグで落ちてダンプが書かれることを確認)。
+  `LUAI_MAXCCALLS`(Cのスタック)は無改造のvendorのまま。
+- 以前の`lua_engine_test`の「pcallで打ち切りを捕まえれば続けられる」は振る舞いが変わったので、「握り潰せない」へ書き換えた。
+
+**検証**: `lua_sandbox_test`(run.sh。サンドボックス・打ち切り7通り+入れ子のコールバック+yieldをまたぐpcall+`__gc`・
+スタックトレース・偽物のFrontendでのデバッガ一式)、`devtools_test`(run.sh。プロファイラの区間/窓/履歴・クラッシュダンプの書き出し/
+crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド: 表示の`--shot`、`kill -SEGV`→次の起動でダンプと通知、
+重いパターンでのウォッチドッグ、`pico.breakpoint()`とエラーで止まったデバッガの画面と「続行」(一時的に画面を書き出す
+仕掛けを入れて撮った。コミットには含めていない)、設定アプリの切り替え。
+**実機では未確認**(このリモート環境にはRP2350のボード定義が無くビルドもできていない): `isr_hardfault`がarduino-picoで
+差し替えられるか(既に定義していれば多重定義)・`.uninitialized_data`がarduino-picoのリンカスクリプトにあるか・
+`watchdog_enable_caused_reboot()`の名前・RP2350(Cortex-M33)のnakedのアセンブリ・デバッガの画面の描画と`Font0`・
+プロファイラの実機の値。
 
 ### スクリーンショット (`src/functions/Screenshot_Functions` / ステータスバー右端のカメラ) (2026-10-02)
 
@@ -3415,16 +3518,8 @@ OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なの�
   付きでも約50ms程度で打ち切りに達する)、ハードウェアに依存しない決定的な基準になる。
   `kMaxInstructionsPerCall=200万`は暫定値(実機RP2350での実測は未実施。RAM/Flash予算の
   「200KB」と同種の「後で実機で確かめる」枠)。
-- **既知の限界: Luaの`pcall`で自前でエラーを握り潰して繰り返す敵対的なスクリプトまでは
-  防げない。** 例えば`while true do pcall(function() while true do end end) end`の
-  ように、内側の無限ループを毎回自前の`pcall`で包んで再試行し続けると、打ち切りエラーは
-  その内側`pcall`に毎回捕まり、外側のスクリプト自身は止まらない
-  (`instructions_remaining_`は`ProtectedCall()`の入口でしかリセットされないため
-  打ち切りエラー自体は連続発生し続けるが、`ProtectedCall()`(=C++側の`lua_pcall`)自体は
-  戻ってこない)。`lua_sethook`が提供できるのは「Luaの通常のエラーと同じ形の割り込み」
-  までで、Luaレベルの`pcall`より強い(握り潰せない)中断手段は標準APIには無い。
-  想定しているのは悪意ある攻撃者ではなく「うっかり無限ループを書いてしまった開発者」で、
-  その場合はこの仕組みで確実に止まる。
+- ~~既知の限界: Luaの`pcall`で自前でエラーを握り潰して繰り返す敵対的なスクリプトまでは
+  防げない~~ → **解消済み(2026-10-03)**。下の「開発者向けの道具」の「Luaサンドボックスの強化」参照。
 - ホストテストは`lua_engine_test.cpp`に追加。終わらないループを含むスクリプトが
   `Run()`/`CallLoop()`をハングさせず`false`で戻ること(テストプロセス自体がハング
   しないことが最大の確認点)、打ち切り時もダイアログが出ること、Lua側の`pcall`で
@@ -3560,7 +3655,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、49本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、51本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

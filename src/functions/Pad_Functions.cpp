@@ -39,6 +39,8 @@ namespace {
         line[line_len] = '\0';
         uint16_t value = 0;
         if(!PadFunctions::ParseLine(line, value)){
+            //他の係の行(Luaデバッガの"dbg ..."等。main.cppが差す)
+            if(PadFunctions::extra_line_handler && PadFunctions::extra_line_handler(line)) return;
             //同じSerialで届く物理キーボードの打鍵("key ...")は KeyInputFunctions へ回す
             KeyInputFunctions::FeedLine(line);
             return;

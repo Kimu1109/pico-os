@@ -21,6 +21,7 @@
 | 9 | [GameBoyエミュ](#9-gameboyエミュ) | 🔨 Peanut-GBを採用。第1段(256KBまでのROMをRAMへ丸ごと読む)がPCで動作し、音も鳴る。実機は未確認 |
 | 10 | [外部コントローラー](#10-外部コントローラー) | 🔨 入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(Webビルドはページのボタン/キーボード)、GBエミュ・Luaへの組み込みまで。物理キーボードの文字入力もUSBシリアル経由で入った。実物(Wiiクラシックコントローラー、I2C)・キーボードを本体へ直接つなぐのは未 |
 | 11 | [Chiptuneを再生](#11-chiptuneを再生) | 🔨 4チャンネルの音源と曲(MML)が2コア目で鳴り、Luaとミュージックアプリから使える(PCで確認)。MIDIはPCの`midi2mml.py`で取り込める。GBエミュの音も鳴る。WAVも鳴らせる。実機は未確認 |
+| 12 | [開発者向けの道具](#12-開発者向けの道具) | 🔨 プロファイラ(フレーム時間の表示)・Luaデバッガ・クラッシュダンプ・Luaサンドボックスの強化がPCで動作。実機は未確認 |
 
 ---
 
@@ -100,6 +101,9 @@
 - [ ] 残タスク
   - [x] 命令単位の実行時間制御(lua_sethook等)
   - [x] SDを走査してLuaアプリを見つける処理
+  - [x] pcallで握り潰せない打ち切り
+  - [x] サンドボックス(debug/io/os.exit/バイトコード/__gcを外す)
+  - [x] スタックトレースとLuaデバッガ
   - [ ] 実機の空きRAM/Flashの実測
 
 ### 6. [PC/Web動作対応](#6-pcweb動作対応-1)
@@ -215,6 +219,15 @@
     - [x] マインスイーパー
   - [x] 設定アプリで音量を変える
 
+### 12. [開発者向けの道具](#12-開発者向けの道具-1)
+
+- [x] プロファイラ(loop()の区間ごとの時間)
+- [x] フレーム時間のオンスクリーン表示
+- [x] Luaデバッガ(ブレークポイント・ステップ実行・変数・スタックトレース)
+- [x] クラッシュダンプの保存(HardFault・ウォッチドッグ・Luaのエラー)
+- [x] Luaサンドボックスの強化
+- [ ] 実機での確認(HardFaultの捕まえ方・ウォッチドッグ・実機の速さ)
+
 ---
 
 # 詳細
@@ -308,7 +321,7 @@
 | Lua用allocatorでのRAM上限 | ✅ `lua_newstate`へ`budget_bytes`付きカスタムallocを渡す。暫定枠200KB(`LuaScene::kLuaBudgetBytes`) |
 | pcallで拾ったエラーの表示導線 | ✅ `ErrorFunctions::ShowFatal()`。構文/実行時エラーをログ+MsgDialogの両方で見せる |
 | ビルドの二重管理 | ✅ Lua 5.4.7本体を`lib/lua/`へvendor。`platformio.ini`への追記は不要になり、PCビルドも同じ`lib/lua/src/`を参照する実質1箇所の情報源に |
-| 実行時間バジェット | ✅ `task/StepBudget.hpp`(時間で区切る土台)に加え、`LuaEngine`が`lua_sethook(LUA_MASKCOUNT)`でLuaバイトコード命令数を数え、1回の外部呼び出しあたりの上限(暫定200万命令)を超えたら`luaL_error()`で打ち切る。終わらないループを含むLuaコールバックでOS全体が固まる事故を防ぐ(既知の限界: Lua側の`pcall`で握り潰して再試行し続ける敵対的スクリプトまでは防げない) |
+| 実行時間バジェット | ✅ `task/StepBudget.hpp`(時間で区切る土台)に加え、`LuaEngine`が`lua_sethook(LUA_MASKCOUNT)`でLuaバイトコード命令数を数え、1回の外部呼び出しあたりの上限(暫定200万命令)を超えたら打ち切る。**2026-10-03から`pcall`/`xpcall`/`coroutine`で捕まえても握り潰せない**(打ち切り中は1命令ごとに投げ直す。メッセージハンドラを呼ばないメモリ不足として投げる)。残る限界はC関数の中(重いパターン等)で、そこはウォッチドッグ([12](#12-開発者向けの道具-1))で拾う |
 | SDを走査してLuaアプリを見つける処理 | ✅ `src/lua/LuaAppScanner`。`/lua/apps/<名前>/main.lua`を走査し、ディレクトリ名をそのままタイル名として`AppFunctions::Register()`する。権限は既定(両方false)固定。`App_List.cpp::Setup()`の末尾で1回呼ぶだけ |
 | ウィジェット固有コールバック | ✅ `checked_changed`(Checkbox)/`value_changed`(NumberSlider)/`select_item`(ScrollList)/`tab_changed`(TabBar)/`dropdown_changed`(DropdownMenu)/`text_changed`(Textbox)を`pico.on()`から追加。値自体は既存の`pico.get()`(プロパティ共通口)で読む設計にし、`select_item`の`already_selected`(永続プロパティではない一時値)だけコールバック引数で渡す |
 | 時刻取得 | ✅ `pico.get_time()`。`TimeFunctions::timeinfo`を`{year,month,day,hour,min,sec,wday}`のテーブルで返す薄いラッパー |
@@ -523,3 +536,16 @@ SSID/パスワードの「編集」行は無くなった(同じSSIDを「追加�
 | 9 | GameBoyエミュ | **[Peanut-GB](https://github.com/deltabeard/Peanut-GB)を採用**(MIT・C99のヘッダ1本・ROMの読み出しがコールバック・1行ずつ描画を渡す・RP2040でもフルスピード。`lib/peanut_gb/`へ無改造でvendor)。Pico-GB/pico-peanutGB(GPL-3・HDMI出力)/gnuboy/SameBoy等と比べた経緯は`CLAUDE.md`「ゲームボーイ」参照。**第1段 = ROMをRAMへ丸ごと読む(256KBまで)**が`GameBoyScene`(ランチャの「ゲームボーイ」)として入った: SDの`/gb/`からROMを選び、240x216(1.5倍)で表示、タッチの操作パッド(十字キー8方向/A/B/SELECT/START)、カートリッジRAMは終了時に`<ROM名>.sav`へ保存。音は#11の「GB対応」で鳴るようになった(音源チップを2コア目で再現)。PCビルドでdmg-acid2・cpu_instrsが正しく動き、59.7フレーム/秒が出ることを確認。**残り**: 実機での速さの計測(5秒ごとに実行/捨てたフレーム数をログへ出す)、256KBを超えるROM(第2段=SDからバンク単位で読む/第3段=Flashへ書く)、タッチが1点しか取れないため「十字キー+A」の同時押しができない(#10の外部コントローラーで解消する見込み)、GBC |
 | 10 | 外部コントローラー | **方式は市販のWiiクラシックコントローラー(I2C、GP0/GP1、抜き差しはACKで見る)に決めた**が、実物がまだ無い。先に**入力の窓口`PadFunctions`**(15ボタンのビットマスク、押した/離したはそのフレームだけ)と、**USBシリアル経由のPCキーボード入力**(`script/pad_serial.py`が`pad XXXX`の行を100msごとに送る。500ms途切れたら全部離す)を作った。GBエミュ(画面のパッドと重ねるので同時押しができる。HOMEで戻る)・Lua(`pico.pad_*`)・ステータスバーのアイコン・動作確認アプリ「コントローラー確認」まで。PCビルドでは標準入力がシリアルの代わり、**Webビルドではページのボタン(同時押し可)とキーボードが同じ`pad XXXX`の行を流す**(`pc/web/shell.html` → `picoos_serial_push()`)。**実機のUSBシリアルでは未確認**。**物理キーボードの文字入力(`KeyInputFunctions`)も同じUSBシリアルに相乗りした**: `pad_serial.py --mode text`(F1で切り替え)が1打鍵1行の`key M CODE`を送り、今の画面(`Scene::onKey()`。SSHはシェルへ直接、テキストエディタは↑↓/Ctrl+S)→開いているオンスクリーンキーボードのキー盤の順に配る。PCビルドはウィンドウのキー入力(SDL)、Webビルドはページの「PCのキーボード: 文字入力」が同じ行を作る。日本語のキー盤が開いていれば**pico-os側でローマ字かな漢字変換**をする(Spaceで変換、送り仮名は自動+SKK式の大文字、半角/全角・Ctrl+Space・Tab2回で日本語⇔英字)。本体へ直接つなぐ方式(Bluetooth/PS/2等)は未(`CLAUDE.md`「物理キーボード」参照) |
 | 11 | Chiptuneを再生 | **出力の土台**(`SoundFunctions`): I2S(MAX98357A、BCLK=GP2/LRCLK=GP3/DIN=GP4)、アンプの有無を検出線(GP5、アンプ側でGND)で見て**刺さっている間だけI2Sを動かす**(未接続でも呼び出しは受け付け、音は時間どおりに進むので刺し直すと続きから鳴る)、`/sys/sound.cfg`(`output = auto / off`、`volume`)、ステータスバーのアイコン、PC/Web版(SDL)。**音源**(`src/sound/Chip_Synth`): 4チャンネル、波形は矩形(12.5/25/50/75%)・三角・のこぎり・ノイズ2種をどのチャンネルでも選べる、ゲームボーイ風の音量エンベロープと長さ。**2コア目(`setup1()/loop1()`)で合成してI2Sへ流す**ので、1コア目の描画やTLSで途切れない(1コア目からは固定長のコマンドの列で渡す)。Luaの`pico.sound_play/sound_stop/sound_playing/note_freq`と、動作確認アプリ「チップチューン」(鍵盤とデモ曲、`pc/sdcard/lua/apps/チップチューン/`)。**曲データ**: 標準はMML(`MUSIC_FORMAT.md`)。1コア目で読み取って小さな演奏データへ、2コア目のシーケンサーがサンプル単位で鳴らす(テンポが揺れない)。効果音は曲のチャンネルを借りる。Luaの`pico.music_play/music_play_text/music_stop/music_playing`、ミュージックアプリ(`/music/*.mml`)。**MIDIの取り込み**: `script/midi2mml.py`(PCで動かす。和音を声部へ分けて4チャンネルへ割り当て、打楽器はノイズへ、6KiBに収まるよう切る。`MUSIC_FORMAT.md`「MIDIからの変換」)。**GB対応**: GBエミュの音源チップ(矩形波+スイープ/矩形波/波形メモリ/ノイズ、長さ・エンベロープ、NR50〜52)を`src/sound/Gb_Apu`として2コア目で再現。エミュ(1コア目)は音源チップへの書き込みに「フレームの頭から何クロック目か」を付けて列(`Gb_Audio_Link`、約4KB、初めてROMを起動したときに確保)へ積み、2コア目はその時刻にあたるサンプルの位置で当てる(音はエミュより約1フレーム遅れる)。曲・効果音と足し合わせて鳴る。エミュが止まったら(ダイアログ・終了・停止)約50msで無音。既存アプリへの効果音はブロック崩し(+ジングル)・マインスイーパーから。設定アプリで音量を変えられる。**WAV**: SDの`.wav`(整数PCM 8/16/24/32bit・float 32bit、何チャンネル/何Hzでもモノラル22050Hzへ直す)を1コア目が少しずつ読み、列(`Wav_Stream`、約370ms・16KB)で2コア目へ渡して曲・効果音と足し合わせる。Luaの`pico.wav_play/wav_stop/wav_playing`、ミュージックアプリ(`/music/*.wav`)。**残り**: 他の既存アプリへの効果音、実機での確認(2コア目の負荷・市販ゲームでの聞こえ方) |
+
+## 12. 開発者向けの道具
+
+設定は`/sys/debug.cfg`(設定アプリの「その他」タブでも切り替えられる)。全部既定で切れている。詳細は`CLAUDE.md`の「開発者向けの道具」。
+
+| 項目 | 状況 |
+|---|---|
+| プロファイラ | ✅ `ProfilerFunctions`。`loop()`を入力/電源/シーン/画面更新/描画/タスク/Wi-Fi/サービスの区間に分けて計り、0.5秒の窓で平均・最大・Luaの時間を出す。`perf-log = true`で5秒ごとにシリアルへ |
+| フレーム時間の表示 | ✅ `PerfOverlay`(右下、タップは素通り)。fps・平均/最大フレーム時間・Lua・内訳・直近60フレームのグラフ |
+| Luaデバッガ | ✅ `LuaDebugger`+`LuaDebugScreen`。`pico.breakpoint()`/`pico.set_breakpoint()`/シリアルの`dbg b`、エラーで止まる、1行/次へ/抜ける/停止、ローカル変数と上位値、ソースの行。スタックトレースはダイアログ・ログ・`/crash/lua_NNNN.txt`へ |
+| クラッシュダンプ | ✅ `CrashDumpFunctions`。HardFault(`isr_hardfault`)とウォッチドッグ(`watchdog = true`)の記録を消えないRAMに置き、次の起動で`/crash/crash_NNNN.txt`へ書いて通知する。PCビルドはシグナルとスレッドで同じ流れを確かめた |
+| Luaサンドボックス | ✅ 打ち切りを握り潰せない、`debug`/`io`/`package`/`dofile`/`loadfile`/`os.exit`等/`string.dump`/バイトコードの`load`/`__gc`を外した、入れ子のコールバックで予算を積み直せない |
+| 実機での確認 | ⬜ `isr_hardfault`の差し替え・`.uninitialized_data`・`watchdog_enable_caused_reboot()`・デバッガの画面の描画は実機でビルドもできていない |

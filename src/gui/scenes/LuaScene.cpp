@@ -105,6 +105,8 @@ void LuaScene::onUpdate() {
     // 関わらず毎フレーム呼ぶ(HttpRequestはPICO_Taskの全体リストに乗らず、
     // 所有側が自分でupdate()する設計のため。LuaEngineクラスコメント「ネットワーク」参照)
     engine->UpdateHttp();
+    // シリアルから届いたデバッガのコマンド(dbg b main.lua:12 等)。デバッガが無ければ何もしない
+    engine->UpdateDebugger();
     //通信中はスリープさせない(Wi-Fiの省電力で通信が遅くなるため)
     if (engine->HttpBusy()) PowerFunctions::KeepAwake();
 

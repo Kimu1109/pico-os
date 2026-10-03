@@ -66,6 +66,8 @@ namespace PICO_Path {
             constexpr const char* SYS_ALARM_CFG = "/sys/alarm.cfg";
             // 通知の見せ方("mode = on | quiet" / "sound = true | false")。NotificationFunctions参照
             constexpr const char* SYS_NOTIFY_CFG = "/sys/notify.cfg";
+            // 開発者向けの道具("perf-overlay" / "perf-log" / "lua-debugger" / "watchdog" / "watchdog-ms")。DevToolsFunctions参照
+            constexpr const char* SYS_DEBUG_CFG = "/sys/debug.cfg";
         }
 
         namespace IME {

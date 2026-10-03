@@ -54,6 +54,7 @@ enum class WidgetType : uint8_t {
     TerminalView,
     TermKeyBar,
     NotificationToast,
+    PerfOverlay,
     Count // 番兵。実際の種類としては使わない
 };
 

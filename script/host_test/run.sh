@@ -104,6 +104,12 @@
 #                     動的追加の重なり順、ScrollContainerの子を個別destroyしても
 #                     二重解放しないこと、スクリプトエラー時にErrorFunctions経由で
 #                     ダイアログが出ることまでを確認する
+#   lua_sandbox_test… Luaのサンドボックス(debug/io/os.exit等が無い・loadはテキストだけ・__gcは使えない)、
+#                    打ち切りを握り潰せないこと(pcall/xpcall/coroutineで包んで繰り返す・メッセージハンドラ・
+#                    入れ子のコールバックで予算を積み直す抜け道)、スタックトレース、デバッガ(偽物の画面で
+#                    ブレークポイント・ステップ実行・エラーで止まる・停止・変数・シリアルのdbgコマンド)
+#   devtools_test… プロファイラ(区間の時間・窓の集計・履歴)、クラッシュダンプ(次の起動で/crash/へ書く・
+#                    レジスタとCFSR・壊れた記録・通知・Luaのエラー)、/sys/debug.cfg
 #   lua_scene_test… LuaScene(SD上のLuaスクリプトを読んで実行する画面)を実際の
 #                    シーン遷移(Scene_Functions.cpp)と組み合わせて動かす結合テスト。
 #                    SDからの読み込み・pico.pop()での実際のランチャ復帰・
@@ -916,6 +922,7 @@ run_or_die "$OUT/lua_alloc_budget_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
@@ -981,11 +988,97 @@ echo ""
 echo "===== lua_engine_test ====="
 run_or_die "$OUT/lua_engine_test"
 
+# --- Luaのサンドボックス・打ち切り・スタックトレース・デバッガ(lua_engine_testと同じソース一式) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/lua_sandbox_test.cpp" \
+    "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaDebugger.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/NumberInput.cpp" \
+    "$ROOT/src/gui/widgets/Checkbox.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Image.cpp" \
+    "$ROOT/src/gui/widgets/NumberSlider.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/RectShape.cpp" \
+    "$ROOT/src/gui/widgets/EllipseShape.cpp" \
+    "$ROOT/src/gui/widgets/LineShape.cpp" \
+    "$ROOT/src/gui/widgets/TriangleShape.cpp" \
+    "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
+    "$ROOT/src/gui/widgets/GridContainer.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
+    "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/functions/Error_Functions.cpp" \
+    "$ROOT/src/functions/Scene_Functions.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/gui/scenes/LuaScene.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    "$OUT"/lua_obj/*.o \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    -o "$OUT/lua_sandbox_test" -lssl -lcrypto
+
+echo ""
+echo "===== lua_sandbox_test ====="
+run_or_die "$OUT/lua_sandbox_test"
+
+# --- 開発者向けの道具(プロファイラ・クラッシュダンプ・debug.cfg) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/devtools_test.cpp" \
+    "$ROOT/src/functions/Profiler_Functions.cpp" \
+    "$ROOT/src/functions/CrashDump_Functions.cpp" \
+    "$ROOT/src/functions/DevTools_Functions.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
+    "$ROOT/src/lua/LuaDebugger.cpp" \
+    "$OUT"/lua_obj/*.o \
+    -o "$OUT/devtools_test"
+
+echo ""
+echo "===== devtools_test ====="
+run_or_die "$OUT/devtools_test"
+
 # --- LuaScene(SD上のLuaスクリプトを読んで実行する画面)をシーン遷移と組み合わせた結合テスト ---
 compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_scene_test.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \
@@ -1056,6 +1149,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/lua/LuaAppScanner.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/functions/Sound_Functions.cpp" \

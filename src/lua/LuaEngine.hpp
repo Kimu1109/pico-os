@@ -8,6 +8,7 @@
 #include "gui/widgets/WidgetID.hpp"
 #include "gui/icons/icon_render.h"
 #include "lua/LuaPermissions.hpp"
+#include "lua/LuaDebugger.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -270,17 +271,43 @@
 // `kMaxInstructionsPerCall=200万`は暫定値(実機RP2350での実測は未実施。CLAUDE.mdの
 // 「RAM/Flash予算」と同種の「後で実機で確かめる」枠)。
 //
-// **既知の限界: Lua側で`pcall`により自前でエラーを握り潰して繰り返す
-// 敵対的なスクリプトまでは防げない。** 例えば
-// `while true do pcall(function() while true do end end) end`のように、
-// 内側の無限ループを毎回自前の`pcall`で包んで再試行し続けると、打ち切りエラーは
-// その内側`pcall`に毎回捕まり、外側のスクリプト自身は(そのループを抜けようとしない限り)
-// 止まらない。`instructions_remaining_`は`ProtectedCall()`の入口でしかリセットされない
-// ため個々の打ち切りエラー自体は連続発生し続けるが、`ProtectedCall()`(=C++側の
-// `lua_pcall`)自体は戻ってこない。`lua_sethook`が提供できるのは「Luaの通常のエラーと
-// 同じ形の割り込み」までで、Luaレベルの`pcall`より強い(握り潰せない)中断手段は
-// 標準APIには無い。想定しているのは悪意ある攻撃者ではなく「うっかり無限ループを
-// 書いてしまった開発者」で、その場合はこの仕組みで確実に止まる。
+// **打ち切りは握り潰せない(2026-10-03)。** 以前は`pcall`で打ち切りのエラーを捕まえて
+// 繰り返すスクリプト(`while true do pcall(function() while true do end end) end`)を止められなかった。
+// 今は上限を超えた時点で「打ち切り中」(`aborting_`)になり:
+//   - フックを1命令ごとにして(`ApplyHook()`)、どこで何をしていても次の命令で投げ直す
+//   - 投げるのは`lua_error()`ではなくメモリ不足(`LUA_ERRMEM`。打ち切り中は`Alloc()`が確保を断る)。
+//     `lua_error()`は`xpcall`のメッセージハンドラ(Luaの関数)を呼び、フックの中から投げると
+//     そのハンドラはフック無しで動くので、ハンドラの中の終わらないループを止められないため
+//     (メモリ不足はハンドラを呼ばずに巻き戻す)。表示は`ReportError()`が本当の理由に差し替える
+//   - エラーを捕まえる関数(`pcall`/`xpcall`/`coroutine.resume`/`coroutine.close`)を包んであり
+//     (`l_guarded_call`)、打ち切り中なら捕まえた結果を捨てて投げ直す
+// ので、必ず一番外の`ProtectedCall()`(C++側の`lua_pcall`)まで戻る。打ち切りが解けるのは次の
+// 一番外の呼び出しの入口だけ。`pico.set`等から入れ子でLuaへ戻る呼び出し(`Dispatch`)では予算も
+// 打ち切りも積み直さない(`call_depth_`。入れ子で積み直すと、それを繰り返して上限を逃れられるため)。
+// コルーチンはスレッドごとにフックを持つが、新しいスレッドは作った時点の設定を受け継ぎ、
+// その後の変更はフックの中で合わせる(`ApplyHook(L)`を各スレッドで呼ぶ)。
+// **残っている限界**: Cの関数の中(`string.find`の重いパターン等)はフックが来ないので止められない
+// (そこで固まったらウォッチドッグ = CrashDumpFunctions の出番)。GCのメタメソッド(`__gc`)はLuaが
+// フック無しで動かすので止めようがない。そのため`__gc`を持つメタテーブルは`setmetatable`で断る(下)。
+//
+// サンドボックス(2026-10-03): `luaL_openlibs()`は使わず、基本/coroutine/table/string/math/utf8/os
+// だけを開く(`openSandboxedLibs()`)。外したもの:
+//   - `debug`(`debug.sethook()`で上の安全網のフックそのものを外せてしまう。他のアプリの状態も覗ける)
+//   - `io` / `package` / `require` / `dofile` / `loadfile`(権限の確認を通らずにSDを読み書きできる。
+//     ファイルは`pico.sd_*`を使う)
+//   - `os.exit` / `os.execute` / `os.remove` / `os.rename` / `os.getenv` / `os.tmpname` / `os.setlocale`
+//     (`os.time` / `os.clock` / `os.date` / `os.difftime`は残す)
+//   - `string.dump`、`load`のバイトコード(`load`はモードを"t"に固定。書き換えたバイトコードはVMを壊せる)
+//   - `__gc`を持つメタテーブル(`setmetatable`がエラーにする。GCのメタメソッドはフック無しで動くため)
+// `print`はログ(`pico.log`と同じ)へ出す。
+//
+// デバッガ(2026-10-03): /sys/debug.cfg の lua-debugger = true のときだけ`LuaDebugger`を持つ
+// (`debugger_`)。行フック(`LUA_MASKLINE`)はブレークポイントがあるかステップ実行中のときだけ入れる。
+// 捕まえられなかったエラーは`MessageHandler()`(`lua_pcall`のメッセージハンドラ)がスタックトレースを
+// 作り(`last_trace_`)、デバッガがあればその場で止まって変数を見られる。エラーのダイアログには
+// メッセージとトレースの先頭数段を出し、全部はログとクラッシュダンプ(/crash/lua_NNNN.txt)へ残す。
+// Lua向けには`pico.traceback()` / `pico.breakpoint()` / `pico.set_breakpoint()` /
+// `pico.clear_breakpoint()` / `pico.debugger_enabled()`。
 //
 // コンテナからの取り外し(pico.remove_child、細部の穴埋めとして追加): `pico.add_child`
 // の逆で、`LayoutContainer`/`GridContainer`/`ScrollContainer`から子を**破棄せず**
@@ -372,6 +399,13 @@ class LuaEngine {
         // LuaScene::onEnter()がNotificationFunctions::TakeLaunchReason()で受け取って、Run()の前に渡す
         void SetLaunchReason(const char* tag, const char* data);
 
+        // デバッガ(lua-debugger = true のときだけ。それ以外はnullptr)
+        LuaDebugger* debugger() const { return debugger_; }
+        // シリアルのデバッガのコマンド(dbg b ...)を処理する。LuaScene::onUpdate()から毎フレーム呼ぶ
+        void UpdateDebugger();
+        // 直近の(捕まえられなかった)エラーのスタックトレース
+        const char* lastTrace() const { return last_trace_; }
+
     private:
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
         // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
@@ -424,6 +458,16 @@ class LuaEngine {
         // InstructionHook()が発火するたびkHookInstructionIntervalぶん減らし、
         // 0になったらluaL_error()で打ち切る。ProtectedCall()の入口でのみリセットする
         uint32_t instructions_remaining_ = 0;
+        // ProtectedCall()の入れ子の深さ。一番外(0→1)のときだけ予算と打ち切りを積み直す
+        int call_depth_ = 0;
+        // 打ち切り中(クラスコメント「打ち切りは握り潰せない」参照)
+        bool aborting_ = false;
+        // 直近の一番外の呼び出しが打ち切りで終わったか(ReportError()がメッセージを差し替える)
+        bool last_aborted_ = false;
+        FixedString<PICO_STR_256B> abort_msg_;
+        // 直近のエラーのスタックトレース(MessageHandler()が作る)
+        char last_trace_[PICO_STR_1KiB] = {};
+        LuaDebugger* debugger_ = nullptr;
 
         // pico.image_* が使う画像スロット。ウィジェットの生成数のように実行時に
         // 増減する必要が無い(1つのLuaアプリが同時に扱う画像は少数の見込み)ため、
@@ -488,6 +532,30 @@ class LuaEngine {
         // 外部から見えるLua呼び出し(Run/setup/loop/各種コールバック)は必ずこれを経由する。
         // instructions_remaining_をkMaxInstructionsPerCallへ積み直してからlua_pcall()する
         int ProtectedCall(int nargs);
+        // ProtectedCall()が失敗した後: スタックの一番上のメッセージ(+トレース)をダイアログ・ログ・
+        // クラッシュダンプへ出してpopする。入れ子の呼び出しの打ち切りは外側に任せて出さない
+        void ReportError(const char* fallback);
+        // lua_pcallのメッセージハンドラ(スタックトレースを作る・デバッガで止まる)
+        static int MessageHandler(lua_State* L);
+
+        // ---- サンドボックス・打ち切り ----
+        void openSandboxedLibs();
+        // フックの設定を今の状態(デバッガの行フックの要否・打ち切り中か)に合わせる。thはスレッド
+        void ApplyHook(lua_State* th);
+        void BeginAbort(const char* msg);
+        static int RaiseAbort(lua_State* L);
+        static int l_guarded_call(lua_State* L);
+        static int GuardedFinish(lua_State* L, int status, lua_KContext ctx);
+        static int l_safe_load(lua_State* L);
+        static int l_wrap(lua_State* L);
+        static int l_wrap_aux(lua_State* L);
+        static int l_safe_setmetatable(lua_State* L);
+        static int l_print(lua_State* L);
+        static int l_traceback(lua_State* L);
+        static int l_breakpoint(lua_State* L);
+        static int l_set_breakpoint(lua_State* L);
+        static int l_clear_breakpoint(lua_State* L);
+        static int l_debugger_enabled(lua_State* L);
 
         // pico.sd_*/pico.image_loadの共通ガード。permissions_.sd_outside_app_dirが
         // trueなら常にtrue。falseの間はpathを正規化した上でapp_dir_の配下

@@ -16,6 +16,7 @@
 #include "net/Wifi_Profiles.hpp"
 #include "task/NetworkScan.hpp"
 
+#include "functions/DevTools_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -729,6 +730,29 @@ void SettingsScene::onEnter(){
     this->run_test_note->setTextColor(PICO_DARKGREY);
     addToTab(Tab::Other, this->run_test_note);
 
+    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)
+    auto makeDevCheckbox = [&](int row, const char* text, bool checked) -> Checkbox* {
+        Checkbox* cb = new Checkbox(left, rowY(row), text);
+        cb->setFontSize(FontFn::Small);
+        cb->setText(text); // 小さいフォントで幅を測り直す(Checkboxの幅は構築時のフォントで決まるため)
+        cb->setIsChecked(checked);
+        addToTab(Tab::Other, cb);
+        return cb;
+    };
+    this->perf_overlay_checkbox = makeDevCheckbox(3, "フレーム時間を表示", DevToolsFunctions::PerfOverlay());
+    this->perf_overlay_checkbox->setOnChangeChecked([this](){
+        DevToolsFunctions::SetPerfOverlay(this->perf_overlay_checkbox->getIsChecked());
+    });
+    this->lua_debugger_checkbox = makeDevCheckbox(4, "Luaデバッガ", DevToolsFunctions::LuaDebuggerEnabled());
+    this->lua_debugger_checkbox->setOnChangeChecked([this](){
+        // 次に開いたLuaアプリから効く(今動いているLuaEngineには後から付けない)
+        DevToolsFunctions::SetLuaDebugger(this->lua_debugger_checkbox->getIsChecked());
+    });
+    this->watchdog_checkbox = makeDevCheckbox(5, "固まったら再起動する", DevToolsFunctions::Watchdog());
+    this->watchdog_checkbox->setOnChangeChecked([this](){
+        DevToolsFunctions::SetWatchdog(this->watchdog_checkbox->getIsChecked());
+    });
+
     // =====================================================================
     // ドロップダウン(開いた一覧が下の行へ重なるので、当たり判定・描画の両方で最前面に来るよう
     // 他より後にAdd()する。追加順=描画順、後が上に乗る)
@@ -922,6 +946,9 @@ void SettingsScene::onExit(){
     this->home_edit_button     = nullptr;
     this->run_test_checkbox    = nullptr;
     this->run_test_note        = nullptr;
+    this->perf_overlay_checkbox = nullptr;
+    this->lua_debugger_checkbox = nullptr;
+    this->watchdog_checkbox    = nullptr;
 
     this->edit_btn_x = 0;
 }

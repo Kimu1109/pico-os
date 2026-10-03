@@ -147,6 +147,10 @@ class SettingsScene : public Scene {
 
         Checkbox*          run_test_checkbox    = nullptr;
         Label<PICO_STR_M>* run_test_note        = nullptr;
+        // 開発者向け(/sys/debug.cfg)
+        Checkbox*          perf_overlay_checkbox = nullptr;
+        Checkbox*          lua_debugger_checkbox = nullptr;
+        Checkbox*          watchdog_checkbox    = nullptr;
 
         // network.cfg / user.cfgから読んだ現在値
         FixedString<PICO_STR_M>  ntp1_value;

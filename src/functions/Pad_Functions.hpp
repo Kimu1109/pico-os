@@ -57,7 +57,8 @@ namespace PadFunctions {
 
     constexpr unsigned long kSerialTimeoutMs   = 500;
     constexpr size_t        kMaxBytesPerUpdate = 256;
-    constexpr size_t        kLineMax           = 32;
+    // Luaデバッガの"dbg b /lua/apps/<名前>/main.lua:120"が入る長さ(日本語のアプリ名を含む)
+    constexpr size_t        kLineMax           = 96;
 
     void Setup();
     // Serialから届いた分を読んで状態を更新する(loop()の先頭で毎フレーム)
@@ -79,4 +80,9 @@ namespace PadFunctions {
 
     // 1行("pad XXXX"、改行は含まない)を読む。読めればoutへ入れてtrue
     bool ParseLine(const char* line, uint16_t& out);
+
+    // USBシリアルの行のうち"pad "でないものを先に見る係(trueを返したら取ったものとして他へ回さない)。
+    // Luaデバッガの"dbg ..."の行に使う(main.cppが LuaDebugger::FeedSerialLine を差す)。
+    // ここを関数ポインタにしているのは、Pad_Functions.cppをLuaへ依存させないため
+    inline bool (*extra_line_handler)(const char* line) = nullptr;
 }

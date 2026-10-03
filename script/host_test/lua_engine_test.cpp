@@ -51,7 +51,7 @@
 //   実行時間の安全網(lua_sethook) → 終わらないループ(while true do end)を含む
 //                      スクリプトがRun()/CallLoop()をハングさせずfalseで戻ること、
 //                      打ち切り時もErrorFunctions経由でダイアログが出ること、
-//                      Lua側のpcallで捕まえれば普通に続行できること、上限内の
+//                      Lua側のpcallで捕まえても打ち切りは握り潰せないこと、上限内の
 //                      ループは邪魔されないこと、loop()内で打ち切られた場合は
 //                      既存のloop_broken_安全弁と重ねて効くことを確認する
 //   pico.remove_child → add_child()の逆。破棄せず取り外せること(parentがnullになる・
@@ -387,15 +387,22 @@ int main(){
         }
         WidgetFunctions::ProcessPendingDeletes();
 
-        // 見た目は無限ループでも、Lua自身のpcallで内側の打ち切りエラーを捕まえてから
-        // 素直に抜けるスクリプトは正常終了する(打ち切りエラーはLuaの通常のエラーと
-        // 区別が付かないため、pcallで捕まえれば普通に処理を続けられる。
-        // クラスコメント「実行時間の安全網」の「既知の限界」参照)
+        // Lua自身のpcallで内側の打ち切りエラーを捕まえても、打ち切りは握り潰せない
+        // (2026-10-03から。以前はpcallで捕まえれば続けられたので、pcallで包んで繰り返す
+        // スクリプトを止められなかった)。詳しくはlua_sandbox_test.cpp
+        const size_t dialogs_before_caught = WidgetFunctions::dialog_roots.size();
         const bool caught_ok = engine.Run(R"LUA(
             local ok, err = pcall(function() while true do end end)
-            check(ok == false, "実行時間の安全網: 打ち切りは通常のLuaエラーとしてpcallで捕まえられる")
+            check(false, "実行時間の安全網: 打ち切りをpcallで捕まえた後の行は実行されない")
         )LUA", "caught_infinite_loop_test");
-        check(caught_ok, "実行時間の安全網: pcallで打ち切りを捕まえた後のスクリプト自体は正常終了する");
+        check(!caught_ok, "実行時間の安全網: pcallで打ち切りを捕まえても、スクリプト全体が打ち切られる");
+        check(WidgetFunctions::dialog_roots.size() == dialogs_before_caught + 1,
+              "実行時間の安全網: pcallで包んでいても打ち切りのダイアログが1枚だけ出る");
+        if (WidgetFunctions::dialog_roots.size() > dialogs_before_caught) {
+            MsgDialog* dialog = static_cast<MsgDialog*>(WidgetFunctions::dialog_roots.back());
+            dialog->causeOnClosed(true);
+        }
+        WidgetFunctions::ProcessPendingDeletes();
 
         // 妥当な範囲のループは打ち切られず最後まで実行できる
         const bool bounded_ok = engine.Run(R"LUA(

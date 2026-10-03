@@ -16,3 +16,8 @@ pc/sdcard/sys/wifi.cfg.tmp
 # TODOアプリのトークン(PCで試すときに置く。秘密なのでコミットしない)
 pc/sdcard/sys/todoist.cfg
 pc/sdcard/sys/todoist.cfg.tmp
+# 開発者向けの道具(/sys/debug.cfg)とクラッシュダンプ。PCビルドで試すと作られる
+pc/sdcard/sys/debug.cfg
+pc/sdcard/sys/debug.cfg.tmp
+pc/sdcard/sys/crash.pending
+pc/sdcard/crash/

@@ -23,8 +23,14 @@
 #include "functions/Test_Functions.hpp"
 #include "functions/Mem_Functions.hpp"
 #include "functions/App_Functions.hpp"
+#include "functions/Profiler_Functions.hpp"
+#include "functions/CrashDump_Functions.hpp"
+#include "functions/DevTools_Functions.hpp"
+#include "lua/LuaDebugger.hpp"
+#include "lua/LuaDebugScreen.hpp"
 
 #include "gui/widgets/systems/Statusbar.hpp"
+#include "gui/widgets/systems/PerfOverlay.hpp"
 #include "gui/scenes/HomeScene.hpp"
 
 #include "OS_Data.hpp"
@@ -32,6 +38,12 @@
 
 //シーンをまたいで常駐させるウィジェットはオーバーレイ層に置く
 static Statusbar* status;
+//フレーム時間の表示(/sys/debug.cfg の perf-overlay)。全オーバーレイの一番上
+static PerfOverlay* perf_overlay;
+#if !defined(__EMSCRIPTEN__)
+//Luaデバッガの画面。Webビルドはブラウザのメインスレッドを止められないので持たない(止まらずに続ける)
+static LuaDebugScreen lua_debug_screen;
+#endif
 
 //コア1(音声専用)のスタックをヒープ側の別領域へ切り出す(arduino-pico側の弱いシンボルを上書き)。
 //既定(false)だとコア0/コア1のスタックがSCRATCH_Y/SCRATCH_Xという隣接した4KBバンクに
@@ -48,6 +60,9 @@ void setup() {
     PICO_SD::Setup();
 
     LogFunctions::Setup();
+    //前回の起動で落ちていたら /crash/ へダンプを書く(SDとログの後、できるだけ早く)
+    CrashDumpFunctions::Setup();
+    CrashDumpFunctions::InstallHandlers();
     DisplayFunctions::Setup(); //display.cfgを読むのでSDより後
     PowerFunctions::Setup();   //同上(sleep-timeout)
 
@@ -102,6 +117,22 @@ void setup() {
     //トーストを全オーバーレイの一番上に置くのでキーボードより後
     NotificationFunctions::Setup();
 
+    //--- 開発者向けの道具(/sys/debug.cfg) ---
+    perf_overlay = new PerfOverlay();
+    WidgetFunctions::AddOverlay(perf_overlay); //トーストよりさらに上
+    DevToolsFunctions::perf_overlay_visibility = [](bool visible){
+        if(perf_overlay) perf_overlay->setVisible(visible);
+    };
+#if !defined(__EMSCRIPTEN__)
+    LuaDebugger::SetFrontend(&lua_debug_screen);
+#endif
+    LuaDebugger::SetErrorReporter(&CrashDumpFunctions::SaveLuaError);
+    LuaDebugger::SetActivityHook(&CrashDumpFunctions::SetLua);
+    PadFunctions::extra_line_handler = &LuaDebugger::FeedSerialLine;
+    DevToolsFunctions::Setup();
+    //前回のクラッシュを知らせる(タップでダンプを開く)
+    CrashDumpFunctions::PostPendingNotice();
+
     //ここまでの確保は全てOS常駐。シーンアリーナを導入する際の「永続領域」に相当する
     MemFunctions::SealPermanentBaseline();
 
@@ -114,6 +145,10 @@ void setup() {
 }
 
 void loop() {
+    //フレームの頭: プロファイラの区切りとウォッチドッグへの「生きている」
+    ProfilerFunctions::BeginFrame();
+    CrashDumpFunctions::Feed();
+
     PICO_Touch::Update();
     //外部コントローラー(今はUSBシリアル経由のPCのキーボード)。
     //シーンのonUpdate()より前に読み、1フレームの間は同じ答えを返す。
@@ -121,6 +156,7 @@ void loop() {
     PadFunctions::Update();
     //CardKB2の打鍵も同じ列へ積む(あれば。無いときは1秒に1回呼びかけるだけ)
     CardKbFunctions::Update();
+    ProfilerFunctions::Mark(ProfilerFunctions::Section::Input);
 
     //操作の有無を見て自動調光を掛ける/戻す(タッチ・パッドの状態が確定した直後)
     DisplayFunctions::Update();
@@ -128,16 +164,27 @@ void loop() {
     //さらに操作が無ければスリープへ入る/操作で戻す(起こしたタッチはここで握りつぶす)。
     //各画面のonUpdate()が呼ぶKeepAwake()は次のフレームのここで読まれる
     PowerFunctions::Update();
+    ProfilerFunctions::Mark(ProfilerFunctions::Section::Power);
 
     //保留中のシーン遷移をフレーム境界で適用する(ウィジェット更新より前)
     SceneFunctions::Update();
+    {
+        Scene* cur = SceneFunctions::Current();
+        CrashDumpFunctions::SetScene(cur ? cur->getName() : nullptr);
+    }
+    //Luaデバッガで止まっていた間に液晶へ直接描いたので、全体を描き直す
+    //(半透明のダイアログの下も。MarkDirty()だとFlushDirty()がそこを描き直さない)
+    if(LuaDebugger::TakeRedrawRequest()) PICO_GFX::MarkDirtyBelow({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
 
     //物理キーボードの打鍵を今の画面/開いているキー盤へ配る(遷移の適用後、ウィジェット更新の前)
     KeyInputFunctions::Update();
+    ProfilerFunctions::Mark(ProfilerFunctions::Section::Scene);
 
     WidgetFunctions::UpdateAll();
+    ProfilerFunctions::Mark(ProfilerFunctions::Section::Widgets);
 
     PICO_GFX::FlushDirty();
+    ProfilerFunctions::Mark(ProfilerFunctions::Section::Flush);
 
     //現シーン滞在中のピーク使用量を追う(mallinfoを読むだけ)
     MemFunctions::Update();
@@ -145,7 +192,9 @@ void loop() {
     PICO_Task::Update();
     LogFunctions::Update();
     TimeFunctions::Update();
+    ProfilerFunctions::Mark(ProfilerFunctions::Section::Tasks);
     NetworkFunctions::Update();
+    ProfilerFunctions::Mark(ProfilerFunctions::Section::Network);
     //アンプの抜き差しの検出(音そのものは2コア目が作って流す)
     SoundFunctions::Update();
     //VSYS電圧の読み取り(内部でkSampleIntervalMsごとに間引く)
@@ -154,6 +203,12 @@ void loop() {
     AlarmFunctions::Update();
     //通知の予約の見張りとトーストの出し入れ。TimeFunctions::Update()より後
     NotificationFunctions::Update();
+    //プロファイラの集計をシリアルへ(perf-log = true のときだけ)
+    DevToolsFunctions::Update();
+    ProfilerFunctions::Mark(ProfilerFunctions::Section::Services);
+
+    //ここまでが仕事の時間(この後の休みはフレーム時間にだけ入る)
+    ProfilerFunctions::EndWork();
 
     //スリープ中だけ少し休んでCPUを寝かせる(それ以外は何もしない)
     PowerFunctions::IdleWait();

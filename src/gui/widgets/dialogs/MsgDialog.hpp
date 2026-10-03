@@ -77,6 +77,9 @@ class MsgDialog : public Widget {
 
     public:
 
+        // 表示している本文(テスト・診断用)
+        const char* getMessage() const { return msg_label ? msg_label->getText()->c_str() : ""; }
+
         MsgDialog(const char* msg_text, const char* cancel_text, const char* ok_text){
             this->l_rect = {0, 0, DIALOG_WIDTH, DIALOG_HEIGHT};
 

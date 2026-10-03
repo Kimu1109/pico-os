@@ -393,7 +393,19 @@ static void testCalculatorScene(){
         const float y3 = gview->sampleAt(2, col);
         check(std::isnan(y3), "グラフ: 空のy3は描かない");
         const float y2 = gview->sampleAt(1, col);
-        check(std::fabs(y2 - std::sin(x * 3.14159265358979 / 180)) < 1e-4, "グラフ: 角度の単位(DEG)が効く");
+        check(std::fabs(y2 - std::sin(x)) < 1e-4, "グラフ: 角度の単位は既定でラジアン(sin(x)が普通の波になる)");
+
+        // 電卓側の単位(この時点ではDEG)とは別で、グラフのページでDRGを押すとグラフだけが変わる
+        int dx, dy;
+        check(gkp->keyCenter("RAD", dx, dy), "グラフ: キーパッドの単位表示はRAD");
+        check(kp->keyCenter("DEG", dx, dy), "グラフ: 電卓側の単位表示はDEGのまま");
+        pressKeypad(gkp, "RAD"); // → GRA
+        check(gkp->keyCenter("GRA", dx, dy) && kp->keyCenter("DEG", dx, dy), "グラフのDRG: グラフだけが次の単位へ");
+        pressKeypad(gkp, "GRA"); // → DEG
+        const float y2deg = gview->sampleAt(1, col);
+        check(std::fabs(y2deg - std::sin(x * 3.14159265358979 / 180)) < 1e-4, "グラフ: DEGにすると度で評価される");
+        pressKeypad(gkp, "DEG"); // → RAD(元へ)
+        check(std::fabs(gview->sampleAt(1, col) - std::sin(x)) < 1e-4, "グラフ: RADへ戻る");
 
         // ドラッグで範囲が動く
         const double xmin0 = gview->getXMin();

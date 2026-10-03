@@ -153,15 +153,22 @@ void CalculatorScene::applyPage(){
 }
 
 void CalculatorScene::cycleAngle(){
-    switch(this->angle){
-        case CalcEval::AngleMode::Deg: this->angle = CalcEval::AngleMode::Rad; break;
-        case CalcEval::AngleMode::Rad: this->angle = CalcEval::AngleMode::Grad; break;
-        default:                       this->angle = CalcEval::AngleMode::Deg; break;
+    auto next = [](CalcEval::AngleMode a){
+        switch(a){
+            case CalcEval::AngleMode::Deg: return CalcEval::AngleMode::Rad;
+            case CalcEval::AngleMode::Rad: return CalcEval::AngleMode::Grad;
+            default:                       return CalcEval::AngleMode::Deg;
+        }
+    };
+
+    if(this->page == Page::Graph){
+        this->graph_angle = next(this->graph_angle);
+        if(this->graph_keypad) this->graph_keypad->setAngleLabel(AngleLabel(this->graph_angle));
+        if(this->graph_view)   this->graph_view->setAngleMode(this->graph_angle);
+    }else{
+        this->angle = next(this->angle);
+        if(this->keypad) this->keypad->setAngleLabel(AngleLabel(this->angle));
     }
-    const char* label = AngleLabel(this->angle);
-    if(this->keypad)       this->keypad->setAngleLabel(label);
-    if(this->graph_keypad) this->graph_keypad->setAngleLabel(label);
-    if(this->graph_view)   this->graph_view->setAngleMode(this->angle);
     this->refreshGraphStatus();
 }
 
@@ -347,6 +354,7 @@ void CalculatorScene::refreshGraphStatus(){
         Expr closed;
         CloseParens(e, closed);
         CalcEval::Context c = this->context();
+        c.angle = this->graph_angle;
         c.has_x = true;
         c.x = 1.0;
         const CalcEval::Result r = CalcEval::Evaluate(closed.c_str(), c);
@@ -354,7 +362,7 @@ void CalculatorScene::refreshGraphStatus(){
             msg.assign(ErrorMessage(r.error));
             color = PICO_RED;
         }else{
-            msg.appendFormat("[描画]でグラフ (%s)", AngleLabel(this->angle));
+            msg.appendFormat("[描画]でグラフ (%s)", AngleLabel(this->graph_angle));
         }
     }
     this->graph_status->setTextColor(color);
@@ -478,6 +486,7 @@ void CalculatorScene::onEnter(){
 
     const Rect body = this->bodyRect();
     const char* angle_label = AngleLabel(this->angle);
+    const char* graph_angle_label = AngleLabel(this->graph_angle);
 
     // ---- 電卓ページ: 式 + 結果 + キーパッド ----
     const int expr_line_h = Label<PICO_STR_M>::GetLineHeight(FontFn::Small);
@@ -536,7 +545,7 @@ void CalculatorScene::onEnter(){
     const int gk_y = status_y + status_h + MARGIN;
     this->graph_keypad = new CalculatorKeypad(body.x, gk_y, body.w, body.y + body.h - gk_y);
     this->graph_keypad->setGraphMode(true);
-    this->graph_keypad->setAngleLabel(angle_label);
+    this->graph_keypad->setAngleLabel(graph_angle_label);
     this->graph_keypad->setOnKey([this](const char* key){ this->handleKey(key); });
     WidgetFunctions::Add(this->graph_keypad);
 
@@ -545,7 +554,7 @@ void CalculatorScene::onEnter(){
     const int btn_y = body.y + body.h - MARGIN - btn_h;
     this->graph_view = new GraphView(body.x, body.y, body.w, btn_y - MARGIN - body.y);
     for(int i = 0; i < kGraphFns; i++) this->graph_view->setFunction(i, this->graph_exprs[i].c_str());
-    this->graph_view->setAngleMode(this->angle);
+    this->graph_view->setAngleMode(this->graph_angle);
     this->graph_view->setAns(this->ans);
     WidgetFunctions::Add(this->graph_view);
 

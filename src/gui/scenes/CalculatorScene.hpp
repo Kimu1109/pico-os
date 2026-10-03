@@ -72,6 +72,9 @@ class CalculatorScene : public Scene {
         bool graph_plotting = false; // グラフページで「グラフを見る」側を出しているか
 
         CalcEval::AngleMode angle = CalcEval::AngleMode::Deg;
+        // グラフの角度の単位は電卓とは別に持つ。既定はラジアン
+        // (度のままだとx=-10〜10でsin(x)がほぼ平らな線になり、グラフとして読めないため)
+        CalcEval::AngleMode graph_angle = CalcEval::AngleMode::Rad;
         double ans = 0.0; // 直前に=で確定した答え(Ans)
 
         // 入力中の式
@@ -102,7 +105,8 @@ class CalculatorScene : public Scene {
         void handleKey(const char* key);
         void handleGraphKey(const char* key);
 
-        // 角度の単位を DEG→RAD→GRA→DEG と切り替える
+        // 角度の単位を DEG→RAD→GRA→DEG と切り替える。グラフのページでは
+        // グラフ専用の単位(graph_angle)を、それ以外のページでは電卓の単位(angle)を切り替える
         void cycleAngle();
 
         // 式ラベル/結果ラベルを今のexpressionへ合わせて更新する。

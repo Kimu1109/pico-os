@@ -432,6 +432,8 @@
       Enter: 'enter', Backspace: 'backspace', Tab: 'tab', Escape: 'esc', Delete: 'delete',
       ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
       Home: 'home', End: 'end', PageUp: 'pageup', PageDown: 'pagedown',
+      // 半角/全角(pico-osの日本語入力の入り切り。ブラウザ・OSで名前が違う)
+      Zenkaku: 'zenhan', Hankaku: 'zenhan', ZenkakuHankaku: 'zenhan',
     };
     function textMode() { return kbModeEl.value === 'text'; }
     function sendLine(line) {

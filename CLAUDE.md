@@ -88,7 +88,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profiles/key_input等の47本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の49本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -1770,7 +1770,7 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
      文字→カーソル位置 / Enter→単一行は決定・複数行は改行(Ctrl+Enterは常に決定) / Esc→決定して閉じる / Backspace・←→・Home・End /
      Delete→「右へ1つ動いて前を消す」(末尾なら`ITextInputTarget::onDeleteAtEnd()`。テキストエディタが次の行と繋ぐ)。
      ↑↓・Tab・Ctrl/Alt付きの文字はキー盤では扱わない。
-     - 日本語のキー盤は**打った文字を読みにせず確定済みのテキストへそのまま入れる**(変換中の読みがあれば先に確定)。**ローマ字かな変換は未**
+     - 日本語のキー盤は**ローマ字かな漢字変換をする**(下の「物理キーボードのかな漢字変換」)
      - 数字のキー盤は数字・`.`と、使えるタブの記号表にあるものだけ(`*`→`×`、`/`→`÷`に直す)。英字は断る(他へも回さない)
   3. どちらも取らなければ捨てる(ウィジェットにフォーカスの概念が無いため。通常の画面のボタン操作等は対象外)。
 - **自動調光/スリープ**: 列に打鍵があれば操作とみなす(`DisplayFunctions`/`PowerFunctions`が`Pending()`を見る)。**スリープから起こした打鍵は捨てる**
@@ -1791,6 +1791,53 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
   SSH(接続先の入力・Backspace・Ctrl+Cで打ち直し)、入力テストのTextbox(日本語のキー盤へ英字と「あ」)/NumberInput(英字・使えない記号を断る)。
   `pad_serial.py`の行の組み立て、Webのページ(Chromiumで「文字入力」の行とコントローラーのときは送らないこと)。
   **実機のUSBシリアル・Webビルド本体(emsdk無し)・PCビルドの実ウィンドウでのSDLのキー入力(ヘッドレスでは来ない)・実際のSSHサーバ相手は未確認**。
+
+### 物理キーボードのかな漢字変換 (`src/ime/Romaji_Kana.hpp` / `Keyboard`の物理キーの処理) (2026-10-03)
+
+日本語のキー盤(`Keyboard`)が開いている間、物理キーボードの英字を**ローマ字として読みにし、Spaceで漢字へ変換する**。
+辞書・候補の欄・読みの表示(`~読み~`)はフリック入力と共通で、新しく足したのはローマ字→かなと変換の状態だけ。
+
+- **ローマ字→かな(`ime/Romaji_Kana.hpp`)**: 描画にもSDにも依存しないヘッダだけの部品。表で一番長く一致するものを取る。
+  `n'`/n+子音 → ん、`nn` は次が母音/y なら「ん+な行」(konnichiha → こんにちは)・それ以外なら ん 1つ(kannji → かんじ)、
+  子音の重ね/`tch` → っ、`- , . [ ] ~ /` → ー 、 。「 」 〜 ・。表に無い文字はそのまま読みに残す。
+  まだかなにならない分(`ky`等)は`Keyboard::romaji`に持ち、読みの後ろへ続けて見せる。
+- **状態**: 何も入力していない → (英字/上の記号)→ 読みを入力中 → (Space/↓)→ 変換中 → (Enter/1〜9/タップ/次の文字)→ 確定。
+  - 読みを入力中: Enter=読みのまま確定、Esc=読みを捨てる、Backspace=ローマ字→かなの順に1つ、数字や他の文字は読みに足す、
+    ←→等のカーソル移動は扱わない(画面やシェルへも漏らさない)
+  - 変換中: Space/↓/→=次、Shift+Space/↑/←=前、1〜9=見えている候補の番号で確定、Esc/Backspace=読みへ戻る、
+    文字を打つと選んでいる候補で確定してから次の読みを始める。キー盤のキーをタップしたときも確定するだけ(そのキーは働かない)
+  - Ctrl+U / Ctrl+I: 読み(変換中でも)をひらがな/カタカナで確定
+  - 何も入力していないときの数字・空白・記号・PC側のIMEで確定した文字は、今までどおりそのまま入る
+- **変換は1回に1つの語(単文節)**。文節の区切りの情報が辞書に無いため。候補は「読み全体(送り無し・完全一致)」→
+  「最後の1文字を送り仮名」→「最後の2文字を送り仮名」→ ひらがな → カタカナ の順に重ならないように並べる(`startConversion()`)。
+  ひらがな/カタカナを最後に足すので、辞書に無い読み・辞書が無いPCビルドでも変換・確定できる。候補は16件(`IME_MAX_CANDIDATES`)、
+  1候補24バイトに収まらないもの(送り仮名を付けて溢れたもの)は捨てる。
+- **送り仮名は両方の方式**: 指定が無ければ上の自動。**大文字で送り仮名の頭を示すと(SKK式: `aruKu`/`utukusiI`)その切れ目の候補だけを引く**。
+  大文字を含むかなが送り仮名の頭になる(母音の大文字ならそのかな自身)。送りの印は`RomajiKana::OkuriMarker()`で、
+  **SKK-JISYOどおり母音の送りは母音そのもの**(い → i。フリックの「送り」が使う`IME_Functions::BuildOkuriKey`の表は
+  い/う → w にまとめていて形容詞で外れるが、そちらは今回触っていない)。
+- **配り順**: 日本語のキー盤が読みを入力中/変換中、または何も入力していない状態でローマ字を始める文字が来たら、
+  **今の画面の`onKey()`より先にキー盤へ配る**(`KeyboardPanel::wantsKeyFirst()`、`KeyInput_Dispatch.cpp`)。
+  テキストエディタの↑↓・SSHの「文字を全部取る」に負けないため。扱わない打鍵(Ctrl+S等)は画面へ回る。
+  そのため`onPhysicalKey()`は**扱わないときに状態を一切変えずfalseを返す**決まり(同じ打鍵で2回呼ばれることがある)。
+- **日本語⇔英字の切り替え**: 半角/全角(`key 0 zenhan`。`Key::Zenhan`)・Ctrl+Space・**Tabを400ms以内に2回**(CardKB2向け)。
+  `KeyInputFunctions::CheckImeToggle()`(時刻を引数に取るのでホストテストできる)が見張り、`KeyboardFunctions::ToggleJapanese()`が
+  `SwitchPanel()`で入れ替える(変換中の部分は確定して引き継ぐ)。**Tabの1回目は普通に配られる**(SSHなら補完のTabが1回飛ぶ。
+  日本語の読みの途中ならキー盤が握りつぶす)。2回目はキー盤が開いていれば切り替えに使って捨てる。開いていなければ普通に配る。
+  入力元: `pad_serial.py`(`Zenkaku_Hankaku`等)、PCビルド(`SDL_SCANCODE_LANG5`)、Webのページ(`Zenkaku`/`Hankaku`)。
+  **PC側のIMEは切っておくこと**(入れたままだと母艦で変換した文字がそのまま届く。それはそれで入る)。
+- **キーを畳む**: 物理キーボードの打鍵を扱ったら、日本語のキー盤を**候補の欄だけ(24px)**にする(`setCompact()`→`setPanelHeight()`)。
+  右端の「あ」が日本語入力中の印で、タップするとキーを広げる。入力先から開き直す(`setVisible(true)`)と広げた形に戻り、
+  日本語⇔英字の切り替え(`setShownSilently()`)では畳んだまま。据え置き表示ではテキストエディタ等の表示領域がそのぶん広がり、
+  ダイアログ表示では空いた所に下の画面(斜線)が見える(`KeyboardDialog::attach()`の描き直し)。英字のキー盤は畳まない。
+- 変換中は候補の欄で選んでいる候補を反転し、見えている候補に1〜9の番号を青で振る。選んでいる候補が見えるよう自動でスクロールする
+  (`ensureCandidateVisible()`)。入力欄では読みは`~`(波線)、変換中の候補は`_`(下線)で囲む(`ITextInputWidget::isConverting()`)。
+- 検証: `romaji_kana_test`(run.sh)、`key_input_test`(テストの中で小さい辞書をSDのスタブへ置き、Space/番号/↑↓/Esc/Backspace・
+  自動とSKK式の送り仮名・Ctrl+U/I・変換中に打つと確定・画面より先に配ること・Tab2回/半角全角)。そのためスタブに
+  `FsFile::seekSet()`とフォント指定の`textWidth()`を足した。PCビルドで標準入力へ`key`の行を流して、テキストエディタ(据え置き・畳んだ候補の欄)と
+  入力テストのTextbox(ダイアログ・Tab2回で英字へ・「あ」で広げる)を`--shot`で確認した(辞書は一時的なSDのルートへ小さいものを置いた)。
+  **実機・本物のSKK辞書・CardKB2・Webビルドでは未確認**(本物の辞書では1回の変換で最大3回辞書を引く。SDの速さは実機で見ること)。
+- **未対応**: 文節の区切り・連文節変換、変換の学習(候補の並び替え)、読みの途中でのカーソル移動、全角英数への変換(F9/F10)。
 
 ### CardKB2(`src/functions/CardKB_Functions`) (2026-10-02)
 
@@ -3513,7 +3560,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、47本)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、49本)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

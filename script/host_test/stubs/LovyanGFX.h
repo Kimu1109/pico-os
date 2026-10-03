@@ -118,6 +118,8 @@ struct LGFX_Sprite {
         }
         return width;
     }
+    // フォントを指定する版(フォントは見ずに今の大きさで概算する)
+    template<typename F> int textWidth(const char* s, F){ return textWidth(s); }
     int fontHeight(){ return font_px * text_size; }
     int drawString(const char*, int, int){ return 0; }
     void setCursor(int, int){}

@@ -181,6 +181,8 @@ namespace {
             case SDLK_PAGEDOWN:  name = "pagedown"; break;
             default: break;
         }
+        //半角/全角(日本語キーボード)。SDLにキーコードが無いのでスキャンコード(USB HIDのLANG5)で見る
+        if (!name && ev->key.keysym.scancode == SDL_SCANCODE_LANG5) name = "zenhan";
         if (name) {
             pcPushKey(mods, name);
             return 0;

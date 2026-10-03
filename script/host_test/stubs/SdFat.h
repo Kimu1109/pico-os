@@ -105,6 +105,11 @@ struct FsFile {
         buf[n] = '\0';
         return n;
     }
+    bool seekSet(uint64_t pos){
+        if(!data_ || pos > data_->size()) return false;
+        pos_ = (size_t)pos;
+        return true;
+    }
 };
 
 struct SdFat {

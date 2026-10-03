@@ -15,7 +15,7 @@
 //     key M CODE\n
 //       M    … 修飾キー(Mod のOR)の16進数1桁。1=Ctrl 2=Alt 4=Shift
 //       CODE … u+XXXX(文字。Unicodeの符号位置の16進数、1〜6桁)
-//              または enter backspace tab esc delete left right up down home end pageup pagedown
+//              または enter backspace tab esc delete left right up down home end pageup pagedown zenhan
 //
 //   例) key 0 u+61   … a       key 4 u+41 … A(Shift付き。文字はShiftを反映済みで送る)
 //       key 1 u+63   … Ctrl+C  key 0 u+3042 … あ(PC側のIMEで確定した文字もそのまま送れる)
@@ -29,6 +29,9 @@
 // 2. 開いているオンスクリーンキーボードのキー盤(KeyboardPanel::onPhysicalKey())。
 //    Textbox/InputDialog/チャット等、キーボードを開いて入力する所はどこでもそのまま打てる
 // 3. どちらも取らなければ捨てる(ウィジェットにフォーカスの概念が無いため)
+// ただし先に:
+// - 日本語入力の入り切り(半角/全角・Ctrl+Space・Tabを素早く2回)は、日本語⇔英字のキー盤の切り替えにする
+// - 日本語のキー盤が読みを入力中/変換中なら、画面より先にキー盤へ配る(KeyboardPanel::wantsKeyFirst())
 //
 // 中身(列・行の読み取り)と配り先(Update())はファイルを分けてある。前者は何にも依存しないので、
 // PadFunctions / PowerFunctions のホストテストがこちらだけをリンクすればよい。
@@ -39,6 +42,7 @@ namespace KeyInputFunctions {
         Enter, Backspace, Tab, Escape, Delete,
         Left, Right, Up, Down,
         Home, End, PageUp, PageDown,
+        Zenhan,     // 半角/全角(日本語入力の入り切り)
     };
 
     enum Mod : uint8_t {
@@ -80,6 +84,12 @@ namespace KeyInputFunctions {
     void Update();
     // 直前の Update() で1つでも配ったか(打っている間は自動調光/スリープさせない)
     bool HadInputThisFrame();
+
+    // Tabを2回押したとみなす間隔
+    constexpr uint32_t kDoubleTabMs = 400;
+    // 日本語入力の入り切りの打鍵か(半角/全角・Ctrl+Space・素早い2回目のTab)。
+    // Tabの1回目はfalse(そのまま配る)で、時刻を覚える。他の打鍵を挟むと数え直し
+    bool CheckImeToggle(const Event& ev, uint32_t now_ms);
 
     // 符号位置 → UTF-8。書いたバイト数(0=表せない)。outは5バイト以上(終端を付ける)
     int EncodeUtf8(uint32_t cp, char* out);

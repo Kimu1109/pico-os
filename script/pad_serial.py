@@ -14,9 +14,11 @@
 - 文字入力(--mode text): 打ったキーを1打鍵1行で送る(形式は src/functions/KeyInput_Functions.hpp):
 
       key M u+XXXX\\n  文字(Mは修飾キー 1=Ctrl 2=Alt 4=Shift)
-      key M left\\n    名前のあるキー(enter backspace tab esc delete left right up down home end pageup pagedown)
+      key M left\\n    名前のあるキー(enter backspace tab esc delete left right up down home end pageup pagedown zenhan)
 
   オンスクリーンキーボードを開いている所(Textbox等)・テキストエディタ・SSHへそのまま入る。
+  日本語のキー盤が開いていれば、pico-os側がローマ字かな漢字変換をする(PC側のIMEは切っておく)。
+  半角/全角・Ctrl+Space・Tabを素早く2回で、pico-osの日本語⇔英字が切り替わる。
   キーの自動リピートはそのまま連打として送る。文字入力の間もコントローラーは「何も押していない」を
   送り続ける(押しっぱなしのボタンを残さないため)。
 
@@ -71,6 +73,8 @@ NAMED_KEYS = {
     "KP_Left": "left", "KP_Right": "right", "KP_Up": "up", "KP_Down": "down",
     "Home": "home", "End": "end", "KP_Home": "home", "KP_End": "end",
     "Prior": "pageup", "Next": "pagedown", "KP_Prior": "pageup", "KP_Next": "pagedown",
+    # 半角/全角(pico-osの日本語入力の入り切り。X11/Windowsで名前が違う)
+    "Zenkaku_Hankaku": "zenhan", "Hankaku": "zenhan", "Zenkaku": "zenhan", "Kanji": "zenhan",
 }
 MOD_CTRL, MOD_ALT, MOD_SHIFT = 1, 2, 4
 

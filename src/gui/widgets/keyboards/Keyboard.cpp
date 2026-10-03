@@ -34,23 +34,32 @@ void Keyboard::updateImeCandidates() {
 
 //候補を描画
 void Keyboard::drawCandidates(){
+    const int top = candY();
+    const int area = candAreaW();
 
     //区画を確保
-    OSData::frame->drawFastHLine(0, START_CANDIDATES_Y, SCREEN_WIDTH, PICO_BLACK);
-    OSData::frame->drawFastHLine(0, START_CANDIDATES_Y + CANDIDATES_H, SCREEN_WIDTH, PICO_BLACK);
+    OSData::frame->drawFastHLine(0, top, SCREEN_WIDTH, PICO_BLACK);
+    OSData::frame->drawFastHLine(0, top + CANDIDATES_H, SCREEN_WIDTH, PICO_BLACK);
 
 
     FontFn::SetSmall();
 
     int cands_x = 0;
-    int cands_y = START_CANDIDATES_Y + (CANDIDATES_H - OSData::frame->fontHeight()) / 2;
+    int cands_y = top + (CANDIDATES_H - OSData::frame->fontHeight()) / 2;
 
     //候補を左へスクロール
-    OSData::frame->setCursor(200 + CANDIDATES_MARGIN, cands_y);
+    OSData::frame->setCursor(area + CANDIDATES_MARGIN, cands_y);
     OSData::frame->print("←");
     //候補を右へスクロール
-    OSData::frame->setCursor(200 + OSData::frame->textWidth("←") + CANDIDATES_MARGIN * 2, cands_y);
+    OSData::frame->setCursor(area + OSData::frame->textWidth("←") + CANDIDATES_MARGIN * 2, cands_y);
     OSData::frame->print("→");
+
+    //畳んでいるときは右端に「あ」(日本語入力中の印。タップでキーを広げる)
+    if(compact){
+        OSData::frame->drawFastVLine(EXPAND_X, top, CANDIDATES_H, PICO_BLACK);
+        OSData::frame->setCursor(EXPAND_X + (SCREEN_WIDTH - EXPAND_X - OSData::frame->textWidth("あ")) / 2, cands_y);
+        OSData::frame->print("あ");
+    }
 
     int n = IME_Functions::candidatesCount;
     if(n == 0) { //候補がなかったら描画しない
@@ -58,15 +67,35 @@ void Keyboard::drawCandidates(){
         return;
     }
 
+    const int num_w = (conv_index >= 0) ? candidateNumberW() : 0;
+
     //候補の描画
     for(int i = candidates_scroll_index; i < n; i++){
         int w = candidates_width[i];
-        if(cands_x + w + CANDIDATES_MARGIN > 200) break; //幅を超えそうになったら終わり
+        if(cands_x + w + CANDIDATES_MARGIN > area) break; //幅を超えそうになったら終わり
 
-        OSData::frame->setCursor(cands_x, cands_y);
+        const bool selected = (i == conv_index);
+        if(selected){
+            OSData::frame->fillRect(cands_x - 1, top + 1, w + 3, CANDIDATES_H - 1, PICO_BLACK);
+        }
+
+        //変換中は見えている候補に1〜9の番号を振る(数字キーで選べる)
+        if(num_w > 0){
+            const int num = i - candidates_scroll_index + 1;
+            if(num <= 9){
+                const char digit[2] = { (char)('0' + num), '\0' };
+                OSData::frame->setTextColor(selected ? PICO_LIGHTGREY : PICO_BLUE);
+                OSData::frame->setCursor(cands_x, cands_y);
+                OSData::frame->print(digit);
+            }
+        }
+
+        OSData::frame->setTextColor(selected ? PICO_WHITE : PICO_BLACK);
+        OSData::frame->setCursor(cands_x + num_w, cands_y);
         OSData::frame->print(IME_Functions::candidates[i]);
+        OSData::frame->setTextColor(PICO_BLACK);
 
-        OSData::frame->drawFastVLine(cands_x + w + 2, START_CANDIDATES_Y, CANDIDATES_H, PICO_BLACK); //区切り線
+        OSData::frame->drawFastVLine(cands_x + w + 2, top, CANDIDATES_H, PICO_BLACK); //区切り線
 
         cands_x += w + CANDIDATES_MARGIN;
     }
@@ -78,14 +107,29 @@ void Keyboard::drawCandidates(){
 void Keyboard::causeOnPressStart() {
     Widget::causeOnPressStart();
 
-    if(OSData::touchY < START_KEY_Y){ //候補のタップ
-        if(OSData::touchX > 200){ //候補のスクロール
-            if(OSData::touchX < 200 + OSData::frame->textWidth("←") + CANDIDATES_MARGIN){
+    //物理キーボードで打ちかけのローマ字は、タップの前にかなへ片付ける
+    if(romaji.length() != 0){
+        RomajiKana::Flush(romaji, inputs);
+        updateInputs(false);
+    }
+
+    //畳んでいるときの右端(「あ」)はキーを広げる
+    if(compact && OSData::touchX >= EXPAND_X){
+        setCompact(false);
+        return;
+    }
+
+    const int area = candAreaW();
+    if(compact || OSData::touchY < START_KEY_Y){ //候補のタップ
+        if(OSData::touchX > area){ //候補のスクロール
+            const int arrow_w = OSData::frame->textWidth("←", FontFn::GetSmall());
+            if(OSData::touchX < area + arrow_w + CANDIDATES_MARGIN){
                 candidates_scroll_index -= 1; //左へ
                 if(candidates_scroll_index < 0) candidates_scroll_index = 0;
             }else{
                 candidates_scroll_index += 1; //右へ
-                if(candidates_scroll_index == IME_Functions::candidatesCount) candidates_scroll_index -= 1;
+                if(candidates_scroll_index >= IME_Functions::candidatesCount)
+                    candidates_scroll_index = IME_Functions::candidatesCount > 0 ? IME_Functions::candidatesCount - 1 : 0;
             }
             this->needsRender(); //候補が移動したため
             return;
@@ -94,10 +138,11 @@ void Keyboard::causeOnPressStart() {
         int cands_x = 0;
         for(int i = candidates_scroll_index; i < IME_Functions::candidatesCount; i++){
             int w = candidates_width[i];
-            if(cands_x + w + CANDIDATES_MARGIN > 200) break; //候補が領域を超えそうなときは停止
+            if(cands_x + w + CANDIDATES_MARGIN > area) break; //候補が領域を超えそうなときは停止
 
             if(OSData::touchX - 1 >= cands_x && OSData::touchX <= cands_x + w + 2){ //押されてるかどうか
-                inputs.assign(IME_Functions::candidates[i]);
+                if(conv_index >= 0) conv_index = i; //物理キーボードで変換中: その候補で確定
+                else inputs.assign(IME_Functions::candidates[i]);
                 commitAndClear();
                 return;
             }
@@ -106,6 +151,13 @@ void Keyboard::causeOnPressStart() {
         }
         return;
     }
+
+    //物理キーボードで変換中にキーを押したら、選んでいる候補で確定するだけ(押したキーは働かせない)
+    if(conv_index >= 0){
+        commitAndClear();
+        return;
+    }
+    okuri_split = -1; //SKK式の送りの指定はフリックの入力とは混ぜない
 
     //インデックス
     swipe_x_index = floor((float)OSData::touchX / (float)SQUARE_W);
@@ -254,8 +306,14 @@ void Keyboard::render() {
     if(!this->needs_redraw) return;
     if(!this->visible) return;
 
-    OSData::frame->fillRect(0, START_CANDIDATES_Y, SCREEN_WIDTH, SCREEN_HEIGHT - START_CANDIDATES_Y, this->background_color);
+    OSData::frame->fillRect(0, candY(), SCREEN_WIDTH, SCREEN_HEIGHT - candY(), this->background_color);
     markdirty(this->getScreenRect());
+
+    if(compact){ //候補の欄だけ
+        drawCandidates();
+        this->needs_redraw = false;
+        return;
+    }
 
     //候補
     OSData::frame->drawFastHLine(0, START_CANDIDATES_Y, SCREEN_WIDTH, PICO_BLACK);
@@ -318,4 +376,293 @@ void Keyboard::render() {
     }    
 
     this->needs_redraw = false;
+}
+
+// ======================================================================
+// 物理キーボードのかな漢字変換
+//
+//   何も入力していない ─英字/記号→ 読みを入力中 ─Space/↓→ 変換中 ─Enter/数字/タップ→ 確定
+//                         ↑ Enter(読みのまま確定)      Esc/Backspace → 読みを入力中へ戻す
+//
+// 変換は1回に1つの語(単文節)。候補は「読み全体(送り無し)」→「最後の1文字を送り仮名」→
+// 「最後の2文字を送り仮名」→ ひらがな → カタカナ の順に、重ならないように並べる。
+// 大文字で送り仮名の頭を示した場合(SKK式: aruKu)は、その切れ目の候補だけを引く。
+// ======================================================================
+
+bool Keyboard::onPhysicalKey(const KeyInputFunctions::Event& ev){
+    if(!this->visible) return false;
+    if(!handlePhysical(ev)) return false;
+    setCompact(true);
+    return true;
+}
+
+bool Keyboard::handlePhysical(const KeyInputFunctions::Event& ev){
+    using KeyInputFunctions::Key;
+    const bool composing = !compositionEmpty();
+
+    //Ctrl/Alt付きの文字: 読みがあれば Ctrl+U = ひらがな / Ctrl+I = カタカナ で確定。他は扱わない
+    if(ev.key == Key::Char && (ev.ctrl() || ev.alt())){
+        if(composing && ev.ctrl() && !ev.alt() && (ev.cp == 'u' || ev.cp == 'i')){
+            commitAsKana(ev.cp == 'i');
+            return true;
+        }
+        return false;
+    }
+
+    if(conv_index >= 0) return handleConverting(ev);
+    if(composing) return handleReading(ev);
+
+    //何も入力していない: 英字と一部の記号で読みを始める。他は今までどおり
+    if(ev.key == Key::Char && ev.isPlainChar() && ev.cp < 0x80 && RomajiKana::StartsComposition((char)ev.cp)){
+        IME_Functions::candidatesCount = 0; //フリックで出ていた候補を消す
+        candidates_scroll_index = 0;
+        feedRomaji((char)ev.cp);
+        return true;
+    }
+    return KeyboardPanel::onPhysicalKey(ev);
+}
+
+bool Keyboard::handleReading(const KeyInputFunctions::Event& ev){
+    using KeyInputFunctions::Key;
+    switch(ev.key){
+        case Key::Char: {
+            if(!ev.isPlainChar()) return true;
+            if(ev.cp == ' '){ startConversion(); return true; }
+            if(ev.cp < 0x80 && RomajiKana::StartsComposition((char)ev.cp)){
+                feedRomaji((char)ev.cp);
+                return true;
+            }
+            //数字・その他の記号・PC側のIMEで確定した文字は、読みの続きにそのまま足す
+            char buf[5];
+            if(KeyInputFunctions::EncodeUtf8(ev.cp, buf) == 0) return true;
+            RomajiKana::Flush(romaji, inputs);
+            inputs.append(buf);
+            afterPhysicalEdit();
+            return true;
+        }
+        case Key::Enter:
+            RomajiKana::Flush(romaji, inputs);
+            commitAndClear();
+            return true;
+        case Key::Escape:
+            inputs.clear();
+            romaji.clear();
+            okuri_split = -1;
+            afterPhysicalEdit();
+            return true;
+        case Key::Backspace:
+            physicalBackspace();
+            return true;
+        case Key::Down:
+            startConversion();
+            return true;
+        default:
+            return true; //読みの途中のカーソル移動等は扱わない(画面やシェルへも渡さない)
+    }
+}
+
+bool Keyboard::handleConverting(const KeyInputFunctions::Event& ev){
+    using KeyInputFunctions::Key;
+    switch(ev.key){
+        case Key::Char: {
+            if(!ev.isPlainChar()) return true;
+            if(ev.cp == ' '){ selectCandidate(ev.shift() ? -1 : 1); return true; }
+            if(ev.cp >= '1' && ev.cp <= '9'){
+                const int index = candidates_scroll_index + (int)(ev.cp - '1');
+                if(index < IME_Functions::candidatesCount){
+                    conv_index = index;
+                    commitAndClear();
+                    return true;
+                }
+            }
+            //それ以外の文字: 選んでいる候補で確定してから、その文字を打ったことにする
+            commitAndClear();
+            if(!compositionEmpty()) return true; //確定し切れなかった(容量)
+            return handlePhysical(ev);
+        }
+        case Key::Enter:
+            commitAndClear();
+            return true;
+        case Key::Escape:
+        case Key::Backspace:
+            cancelConversion();
+            return true;
+        case Key::Down:
+        case Key::Right:
+            selectCandidate(1);
+            return true;
+        case Key::Up:
+        case Key::Left:
+            selectCandidate(-1);
+            return true;
+        default:
+            return true;
+    }
+}
+
+void Keyboard::feedRomaji(char c){
+    const bool upper = (c >= 'A' && c <= 'Z');
+    if(upper) c = (char)(c - 'A' + 'a');
+    const bool was_empty = inputs.length() == 0 && romaji.length() == 0;
+
+    RomajiKana::Feed(romaji, c, inputs);
+
+    //SKK式: 読みの途中で大文字を打ったら、そこが送り仮名の頭
+    if(upper && !was_empty && okuri_split < 0){
+        const int total = inputs.charCount();
+        okuri_split = (romaji.length() != 0) ? total : total - 1; //母音ならもうかなになっている
+        if(okuri_split <= 0) okuri_split = -1;
+    }
+    afterPhysicalEdit();
+}
+
+void Keyboard::afterPhysicalEdit(){
+    //送り仮名の頭が読みの外へ出た(消した)ら指定を捨てる
+    if(okuri_split >= 0){
+        const int total = inputs.charCount();
+        if(okuri_split > total || (okuri_split == total && romaji.length() == 0)) okuri_split = -1;
+    }
+    updateInputs(false);
+}
+
+int Keyboard::addUniqueCandidate(const char* s, int n){
+    if(n >= IME_Functions::candidates_size) return n;
+    if(!s || s[0] == '\0' || strlen(s) >= IME_MAX_CAND_BYTES) return n;
+    for(int i = 0; i < n; i++){
+        if(strcmp(IME_Functions::candidates[i], s) == 0) return n;
+    }
+    strcpy(IME_Functions::candidates[n], s);
+    return n + 1;
+}
+
+//keyで辞書を引き、各候補の後ろへokuriを付けて candidates[n..] へ足す。足した後の件数を返す
+int Keyboard::addCandidates(const char* key, const char* okuri, int n){
+    const int room = IME_Functions::candidates_size - n;
+    if(room <= 0) return n;
+    if(strlen(key) >= IME_MAX_KEY_BYTES) return n;
+
+    const int got = IME_Functions::ime.lookup(key, &IME_Functions::candidates[n], room, false);
+    int w = n;
+    for(int i = n; i < n + got; i++){
+        char buf[IME_MAX_CAND_BYTES];
+        if(strlen(IME_Functions::candidates[i]) + strlen(okuri) >= sizeof(buf)) continue;
+        strcpy(buf, IME_Functions::candidates[i]);
+        strcat(buf, okuri);
+        w = addUniqueCandidate(buf, w); //w <= i なので、まだ見ていない候補を潰さない
+    }
+    return w;
+}
+
+//inputsの先頭split文字を語幹、残りを送り仮名として引く
+int Keyboard::addOkuriCandidates(int split, int n){
+    const int total = inputs.charCount();
+    if(split <= 0 || split >= total) return n;
+    const int split_byte = inputs.byteOffsetOfChar(split);
+    const char* okuri = inputs.c_str() + split_byte;
+
+    const char marker = RomajiKana::OkuriMarker(okuri);
+    if(marker == 0) return n;
+
+    FixedString<IME_MAX_KEY_BYTES> key;
+    if(!key.assign(inputs.c_str(), (size_t)split_byte)) return n;
+    if(!key.append(marker)) return n;
+    return addCandidates(key.c_str(), okuri, n);
+}
+
+void Keyboard::startConversion(){
+    RomajiKana::Flush(romaji, inputs);
+    if(inputs.length() == 0){
+        updateInputs(false);
+        return;
+    }
+
+    int n = 0;
+    const int total = inputs.charCount();
+    if(okuri_split > 0 && okuri_split < total){
+        n = addOkuriCandidates(okuri_split, n);
+    }else{
+        n = addCandidates(inputs.c_str(), "", n);
+        n = addOkuriCandidates(total - 1, n);
+        n = addOkuriCandidates(total - 2, n);
+    }
+    //辞書に無くても確定できるように、ひらがな・カタカナを最後に足す
+    n = addUniqueCandidate(inputs.c_str(), n);
+    FixedString<PICO_STR_LL> katakana;
+    UTF8_Functions::HiraganaToKatakana(inputs, katakana);
+    n = addUniqueCandidate(katakana.c_str(), n);
+
+    if(n == 0){ //読みが長すぎて候補の欄に入らない: 読みのまま
+        updateInputs(false);
+        return;
+    }
+
+    IME_Functions::candidatesCount = n;
+    phys_candidates = true;
+    conv_index = 0;
+    candidates_scroll_index = 0;
+    measureCandidates();
+    ensureCandidateVisible(0);
+    this->needsRender();
+    updateInputs(false);
+}
+
+void Keyboard::cancelConversion(){
+    if(conv_index < 0) return;
+    conv_index = -1;
+    clearPhysicalCandidates();
+    updateInputs(false);
+}
+
+void Keyboard::selectCandidate(int delta){
+    const int n = IME_Functions::candidatesCount;
+    if(conv_index < 0 || n <= 0) return;
+    conv_index = ((conv_index + delta) % n + n) % n;
+    ensureCandidateVisible(conv_index);
+    this->needsRender();
+    updateInputs(false);
+}
+
+void Keyboard::commitAsKana(bool katakana){
+    RomajiKana::Flush(romaji, inputs);
+    conv_index = -1;
+    if(katakana){
+        FixedString<PICO_STR_LL> converted;
+        UTF8_Functions::HiraganaToKatakana(inputs, converted);
+        inputs.assign(converted);
+    }
+    commitAndClear();
+    clearPhysicalCandidates();
+}
+
+//今のフォントを変えずに測る(drawCandidates()の途中から呼ばれる)
+int Keyboard::candidateNumberW(){
+    return OSData::frame->textWidth("9", FontFn::GetSmall()) + 1;
+}
+
+void Keyboard::measureCandidates(){
+    const int num_w = (conv_index >= 0) ? candidateNumberW() : 0;
+    for(int i = 0; i < IME_Functions::candidatesCount; i++){
+        candidates_width[i] = OSData::frame->textWidth(IME_Functions::candidates[i], FontFn::GetSmall()) + num_w;
+    }
+}
+
+//index番目の候補が候補の欄に見えるよう、スクロール位置を合わせる(drawCandidates()と同じ詰め方)
+void Keyboard::ensureCandidateVisible(int index){
+    if(index < candidates_scroll_index) candidates_scroll_index = index;
+    const int area = candAreaW();
+    while(candidates_scroll_index < index){
+        int x = 0;
+        for(int i = candidates_scroll_index; i <= index; i++) x += candidates_width[i] + CANDIDATES_MARGIN;
+        if(x <= area) break;
+        candidates_scroll_index++;
+    }
+}
+
+void Keyboard::setCompact(bool on){
+    if(compact == on) return;
+    compact = on;
+    is_swiping = false;
+    setPanelHeight(on ? COMPACT_H : PANEL_H);
+    if(conv_index >= 0) ensureCandidateVisible(conv_index); //候補の欄の幅が変わった
+    this->needsRender();
 }

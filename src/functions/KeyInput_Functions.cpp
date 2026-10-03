@@ -10,6 +10,8 @@ namespace {
     size_t q_count = 0;
     uint32_t dropped = 0;
     bool dispatched_this_frame = false;
+    bool tab_armed = false;     // 直前の打鍵がTab(2回目を待っている)
+    uint32_t tab_ms = 0;
 
     struct NamedKey { const char* name; KeyInputFunctions::Key key; };
     const NamedKey kNamedKeys[] = {
@@ -26,6 +28,7 @@ namespace {
         { "end",       KeyInputFunctions::Key::End },
         { "pageup",    KeyInputFunctions::Key::PageUp },
         { "pagedown",  KeyInputFunctions::Key::PageDown },
+        { "zenhan",    KeyInputFunctions::Key::Zenhan },
     };
 
     int HexDigit(char c){
@@ -40,6 +43,23 @@ void KeyInputFunctions::Setup(){
     q_head = q_count = 0;
     dropped = 0;
     dispatched_this_frame = false;
+    tab_armed = false;
+}
+
+bool KeyInputFunctions::CheckImeToggle(const Event& ev, uint32_t now_ms){
+    if(ev.key == Key::Tab && ev.mods == 0){
+        if(tab_armed && now_ms - tab_ms <= kDoubleTabMs){
+            tab_armed = false;
+            return true;
+        }
+        tab_armed = true;
+        tab_ms = now_ms;
+        return false;
+    }
+    tab_armed = false;
+    if(ev.key == Key::Zenhan) return true;
+    if(ev.key == Key::Char && ev.cp == ' ' && ev.ctrl() && !ev.alt()) return true;
+    return false;
 }
 
 bool KeyInputFunctions::ParseLine(const char* s, Event& out){

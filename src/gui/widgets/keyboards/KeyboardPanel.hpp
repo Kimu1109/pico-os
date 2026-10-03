@@ -85,7 +85,11 @@ class KeyboardPanel : public Widget, public ITextInputWidget {
         // 物理キーボードの打鍵を入力として扱う。扱ったらtrue
         //   文字 → カーソル位置へ / Enter → 決定か改行(Ctrl+Enterは常に決定) / Esc → 決定して閉じる /
         //   Backspace・Delete・←→・Home・End → 編集。↑↓・Tab・Ctrl/Alt付きの文字は扱わない
-        bool onPhysicalKey(const KeyInputFunctions::Event& ev);
+        // (扱わないときは状態を一切変えずにfalseを返すこと。KeyInputFunctions::Update()が2回呼ぶことがある)
+        virtual bool onPhysicalKey(const KeyInputFunctions::Event& ev);
+        // 今の画面(Scene::onKey())より先にこの打鍵を受け取りたいか。
+        // 日本語のキー盤が読みを入力中/変換中のとき(↑↓やEnterをテキストエディタ・SSHに取られないように)
+        virtual bool wantsKeyFirst(const KeyInputFunctions::Event& ev) const { (void)ev; return false; }
 
         // 表示直前に呼ばれる。変換候補など、前回の入力の名残りを捨てる
         virtual void resetTransientState() {}

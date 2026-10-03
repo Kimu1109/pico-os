@@ -108,6 +108,16 @@ void KeyboardFunctions::SwitchPanel(KeyboardPanel* from, KeyboardPanel* to){
     OnPanelChanged(to, false);
 }
 
+bool KeyboardFunctions::ToggleJapanese(){
+    KeyboardPanel* p = visiblePanel();
+    KeyboardPanel* jpn = panelFor(Layout::Japanese);
+    KeyboardPanel* eng = panelFor(Layout::English);
+    if(!p) return false;
+    if(p == jpn){ SwitchPanel(jpn, eng); return true; }
+    if(p == eng){ SwitchPanel(eng, jpn); return true; }
+    return false;
+}
+
 void KeyboardFunctions::OnPanelShown(KeyboardPanel* panel){
     //別のキー盤が開いていたら閉じる(targetへはonHideが届く)
     for(KeyboardPanel* p : panels){

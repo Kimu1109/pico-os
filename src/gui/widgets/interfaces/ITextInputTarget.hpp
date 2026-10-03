@@ -21,6 +21,8 @@ class ITextInputWidget {
         virtual void setCursorByteOffset(size_t byte_offset) = 0;
         //変換中の読みのgetText()上の範囲(バイト)。読みが無ければlen=0
         virtual void getComposition(size_t& start, size_t& len) { start = 0; len = 0; }
+        //読みを漢字へ変換している最中か(getComposition()の範囲が読みではなく選んでいる候補)
+        virtual bool isConverting() { return false; }
 
         virtual void setInputTarget(ITextInputTarget* target) = 0;
         virtual void removeInputTarget(ITextInputTarget* valid_target) = 0;

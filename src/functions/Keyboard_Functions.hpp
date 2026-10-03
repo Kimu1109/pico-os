@@ -37,6 +37,9 @@ namespace KeyboardFunctions {
 
     // 日本語⇔英字の切り替え。onShow/onHideを挟まずにテキストとカーソルを引き継ぐ
     void SwitchPanel(KeyboardPanel* from, KeyboardPanel* to);
+    // 物理キーボードの日本語入力の入り切り: 日本語⇔英字のキー盤を入れ替える。
+    // どちらも開いていなければ何もせずfalse
+    bool ToggleJapanese();
 
     // ---- KeyboardPanelから呼ばれる ----
     void OnPanelShown(KeyboardPanel* panel);

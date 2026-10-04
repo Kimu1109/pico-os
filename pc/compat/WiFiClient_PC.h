@@ -27,6 +27,29 @@
 #include <netinet/tcp.h>
 #include <unistd.h>
 
+// 実機のIPAddressの代わり。PCでは名前解決の結果を数字の文字列で持つだけ
+class IPAddress {
+public:
+    IPAddress() = default;
+    const char* c_str() const { return text_; }
+    bool isSet() const { return text_[0] != 0; }
+    char text_[48] = {0};
+};
+
+// 実機のWiFi.hostByName()と同じ呼び方(成功で1、失敗で0)。getaddrinfo()の最初の結果を使う
+inline int PicoPcHostByName(const char* host, IPAddress& out){
+    if(!host || !*host) return 0;
+    addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* list = nullptr;
+    if(::getaddrinfo(host, nullptr, &hints, &list) != 0 || !list) return 0;
+    const int rc = ::getnameinfo(list->ai_addr, list->ai_addrlen, out.text_, sizeof(out.text_),
+                                 nullptr, 0, NI_NUMERICHOST);
+    ::freeaddrinfo(list);
+    return rc == 0 ? 1 : 0;
+}
+
 class WiFiClientPC {
 public:
     WiFiClientPC() = default;
@@ -82,6 +105,9 @@ public:
         fd_ = fd;
         return 1;
     }
+
+    // 名前解決済みのアドレスへ繋ぐ(実機のconnect(IPAddress, port)と同じ呼び方)
+    int connect(const IPAddress& ip, uint16_t port){ return connect(ip.c_str(), port); }
 
     virtual bool connected(){
         if(fd_ < 0) return false;

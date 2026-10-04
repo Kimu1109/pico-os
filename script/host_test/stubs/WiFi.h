@@ -15,5 +15,6 @@ struct HostWiFiStub {
     void aggressiveLowPowerMode(){ power_mode = 2; }
     void defaultLowPowerMode(){ power_mode = 1; }
     void noLowPowerMode(){ power_mode = 0; }
+    int hostByName(const char* host, IPAddress& out, uint32_t = 5000){ return PicoPcHostByName(host, out); }
 };
 inline HostWiFiStub WiFi;

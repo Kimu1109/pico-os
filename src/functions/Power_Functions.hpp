@@ -28,6 +28,8 @@ namespace PowerFunctions {
     constexpr unsigned long kDefaultSleepTimeoutMs = 120000;
     // スリープ中の1コア目のloop()の休み(ms)。タッチで起きるまでの最大の遅れになる
     constexpr unsigned long kSleepLoopDelayMs = 30;
+    //通常時の1フレームの最短時間(10ms = 100fps以下に抑える)
+    constexpr unsigned long kMinFrameMs = 10;
 
     void Setup();      // display.cfgを読むのでSDより後
     // loop()の頭、タッチ/パッドの更新とDisplayFunctions::Update()の後に呼ぶ

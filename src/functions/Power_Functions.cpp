@@ -118,7 +118,15 @@ void PowerFunctions::UpdateAt(unsigned long now_ms){
 }
 
 void PowerFunctions::IdleWait(){
-    if(sleeping) delay(kSleepLoopDelayMs);
+    static unsigned long last_frame_ms = 0;
+    if(sleeping){
+        delay(kSleepLoopDelayMs);
+    }else{
+        //無駄なループを減らすため、1フレームを最低kMinFrameMs(=100fps以下)に保つ
+        const unsigned long elapsed = millis() - last_frame_ms;
+        if(elapsed < kMinFrameMs) delay(kMinFrameMs - elapsed);
+    }
+    last_frame_ms = millis();
 }
 
 bool PowerFunctions::IsSleeping(){ return sleeping; }

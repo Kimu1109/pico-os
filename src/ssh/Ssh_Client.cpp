@@ -231,9 +231,18 @@ bool SshClient::connect(const char* host, uint16_t port, const char* user, unsig
     if(this->state_ != State::Idle) return false;
     this->user_.assign(user ? user : "");
 
+    // 名前の解決(DNS)と接続を分けて、どちらで失敗したか分かるようにする
+    IPAddress ip;
+    if(WiFi.hostByName(host, ip, (uint32_t)timeout_ms) != 1){
+        this->err_.assign("名前を解決できませんでした: ");
+        this->err_.append(host);
+        this->state_ = State::Closed;
+        return false;
+    }
+
     this->sock_.setTimeout(timeout_ms);
-    if(this->sock_.connect(host, port) != 1){
-        this->err_.assign("接続できませんでした(名前が引けない/到達しない)");
+    if(this->sock_.connect(ip, port) != 1){
+        this->err_.assign("接続できませんでした(到達しない/ポートが閉じている)");
         this->state_ = State::Closed;
         return false;
     }

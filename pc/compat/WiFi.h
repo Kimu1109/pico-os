@@ -51,6 +51,7 @@
 
 #include "Arduino.h"  // millis()
 #include "SdFat.h"    // PicoOsSdHost::root (SDのルートから network.cfg を読むため)
+#include "WiFiClient_PC.h" // IPAddress / PicoPcHostByName(下のTCPクライアントの説明を参照)
 
 enum {
     WL_IDLE_STATUS = 0,
@@ -232,6 +233,9 @@ public:
     void aggressiveLowPowerMode(){ low_power_mode_ = 2; }
     void defaultLowPowerMode(){ low_power_mode_ = 1; }
     void noLowPowerMode(){ low_power_mode_ = 0; }
+
+    // 名前解決(実機はlwIPのDNS)。PCでは母艦のリゾルバを使う(通信そのものと同じく本物)
+    int hostByName(const char* host, IPAddress& out, uint32_t = 5000){ return PicoPcHostByName(host, out); }
     int  lowPowerModeState() const { return low_power_mode_; } // 0=高性能, 1=既定, 2=積極的な省電力
 
     int status(){
@@ -307,4 +311,3 @@ inline NTPClassPC NTP;
 // ホストテスト(script/host_test/stubs/WiFi.h)からも同じ実装を使いたいが、
 // このファイルはSDのルート(PicoOsSdHost::root)から network.cfg を読むため
 // SdFat.h に依存していて、そのまま取り込めないため。
-#include "WiFiClient_PC.h"

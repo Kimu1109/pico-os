@@ -38,7 +38,7 @@ description: "sd_exists / sd_read / sd_write / sd_remove / sd_mkdir / sd_list / 
 
 <div class="sig">pico.sd_list(path: string) <span class="ret">-> entries: table | nil</span></div>
 
-`path` がディレクトリの場合、`{ {name = string, is_dir = boolean}, ... }` の配列(1始まりのテーブル)を返します。`path` が存在しない・ディレクトリでない場合は `nil`。
+`path` がディレクトリの場合、`{ {name = string, is_dir = boolean, size = integer}, ... }` の配列(`size` はバイト数、ディレクトリは `0`)(1始まりのテーブル)を返します。`path` が存在しない・ディレクトリでない場合は `nil`。
 
 ```lua
 local entries = pico.sd_list("/lua/apps/myapp")
@@ -48,6 +48,18 @@ if entries then
     end
 end
 ```
+
+## pico.sd_stat
+
+<div class="sig">pico.sd_stat(path: string) <span class="ret">-> info: table | nil</span></div>
+
+ファイル/ディレクトリの情報 `{size = integer, is_dir = boolean}` を返します。存在しない・SDが使えない・権限外のときは `nil`。更新日時は持っていません。
+
+## pico.sd_read_part
+
+<div class="sig">pico.sd_read_part(path: string, offset: integer, length: integer) <span class="ret">-> data: string | nil</span></div>
+
+`offset` バイト目から最大 `length` バイトを読みます。ファイルの終わりを越える分は短く(完全に越えていれば空文字列)返ります。`length` の上限は `sd_read` と同じ16KiB。`offset` / `length` が負だとエラー、存在しない・ディレクトリは `nil`。`sd_read` では読めない大きなファイルを少しずつ読むためのものです。
 
 ## pico.config_read
 

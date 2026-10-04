@@ -98,6 +98,11 @@ bool LuaScene::runFile(const char* path) {
     return engine->Run(script_source.c_str(), path);
 }
 
+bool LuaScene::onKey(const KeyInputFunctions::Event& ev) {
+    if (!engine || !script_ok) return false;
+    return engine->DispatchKey(ev);
+}
+
 void LuaScene::onUpdate() {
     if (!engine || !script_ok) return;
 

@@ -197,6 +197,8 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         }
         static void DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const char* text);
         static int GetLineHeight(FontFn::FontSize size);
+        // text(UTF-8)を1行で描いたときの幅(px)。DrawPlain()と同じフォントで測る
+        static int GetTextWidth(FontFn::FontSize size, const char* text);
 
         // ---------- setter / getter ----------
         template<size_t M>

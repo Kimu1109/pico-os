@@ -486,6 +486,19 @@ void Label<N>::updateCursorBlink() {
 }
 
 // コンストラクタ
+template<size_t N>
+int Label<N>::GetTextWidth(FontFn::FontSize size, const char* text) {
+    if (!text) return 0;
+    Label<PICO_STR_LL>& helper = utilityInstance();
+    helper.f_size = size;
+
+    helper.fontApply();
+    const int w = OSData::frame->textWidth(text);
+    helper.fontDefault();
+
+    return w;
+}
+
 // FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
 template<size_t N>
 Label<N>::Label(int x, int y, const char* text) {

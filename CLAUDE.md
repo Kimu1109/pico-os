@@ -2686,6 +2686,34 @@ Luaアプリの権限管理の第一歩として、`network`/`sd_outside_app_dir
   再設計する必要がある**(スキャンで見つけたスクリプトに対し、誰が何を根拠に
   権限を決めるかがまだ無い)。
 
+### Love2D比較で足した拡張API (2026-10-04)
+
+Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほぼ実装があり橋渡しだけで済むものをまとめて足した。
+ドキュメントは`lua-api-doc/content/api/`(drawing/images/sound/sdcard/misc)。**ハード制約で難しいもの
+(半透明・Shader・Mesh・物理エンジン・スレッド・マルチタッチ)と、変換/座標変換のスタック(`translate/rotate/scale/push/pop`)・
+`require`・OGG/MP3・複数WAVの同時再生・Quad/SpriteBatch・フォント差し替えは対象外のまま**。
+
+- **図形**: `pico.draw_ellipse/fill_ellipse`、`draw_triangle/fill_triangle`、`draw_polygon/fill_polygon`(`{x1,y1,...}`の平らな配列、3〜32点。
+  塗りは偶奇規則のスキャンラインで凹んだ形も塗れる)、`draw_arc/fill_arc`(ラジアン、0=右・時計回り。扇形は中心+円弧の多角形)。
+  `draw_line`/`draw_triangle`/`draw_polygon`/`draw_arc`の末尾引数`width`(1〜64)は`CanvasRaster::DrawThickLine()`を再利用
+  (**`drawWideLine()`は4bppパレットでクラッシュするので使わない**)。楕円は`drawEllipse/fillEllipse`をそのまま使う。
+- **画像**: `pico.draw_image_ex(handle, x, y, r, sx, sy, ox, oy)`(Love2Dの`draw`と同じ並び。負の倍率で反転)。描き先の画素ごとに
+  元画像を逆変換で引く最近傍で、**クリップ(`getClipRect()`)の内側だけ**を`writePixel()`する(実機のクリップ未設定時は全面を返す。
+  ホストのスタブは未設定だと0を返すので、テストでは`setClipRect()`してから呼ぶ)。透過画像はindex0を飛ばす。
+- **文字幅**: `pico.text_width(text[, font_size])`(`Label::GetTextWidth()`を新設。`DrawPlain()`と同じフォント設定で`textWidth()`)。
+- **WAV**: `wav_pause/wav_paused/wav_position/wav_duration/wav_seek`(`SoundFunctions`にあったものを出しただけ)。
+- **システム**: `pico.millis()`(単調)、`pico.battery()`(残量・電圧・USB給電。読めていなければnil。`LuaEngine.cpp`が`Battery_Functions.hpp`を取り込む)。
+- **ファイル**: `pico.sd_stat(path)`→`{size,is_dir}`、`pico.sd_read_part(path, offset, length)`(`sd_read`と同じ16KiB上限)、`sd_list`の要素へ`size`を追加。
+  **更新日時は持たない**(PCビルドの`FsFile`互換層に`getModifyDateTime`が無いため。要るなら互換層から足す)。
+- **物理キーボード**: `pico.on_key(fn)`。`LuaScene::onKey()`→`LuaEngine::DispatchKey()`が`fn(key, mods)`を呼び(文字はUTF-8、特殊キーは名前、
+  `mods={ctrl,alt,shift}`)、**真を返せば取った扱い、偽ならオンスクリーンキーボードの入力へ回る**。エラーになったらダイアログを1回出して以降は呼ばない
+  (`loop()`と同じ安全弁。その打鍵は消費した扱い)。`ProtectedCall()`は戻り値を1つ受けるため`nresults`引数を足した。
+  配り順は「画面の`onKey()`→開いているキー盤」(「物理キーボード」参照)で、日本語キー盤が読みを入力中のときはキー盤が先。
+- 動作確認アプリ「描画API確認」(`pc/sdcard/lua/apps/描画API確認/`。図形・太線・画像の拡大/回転/反転・扇形・右寄せ文字・`on_key`・電池を1画面に描く。PCビルドの`--tap`+標準入力の`key`行で確認済み)。
+- 検証: `lua_engine_test`(run.sh。dirty矩形・引数エラー・塗りのピクセル(正方形/L字/扇形)・画像の等倍/拡大/反転/回転/原点/透過・
+  文字幅・WAV・battery・sd_stat/sd_read_part・on_keyの登録/解除/エラー)。PCビルドは通る。**実機・PCビルドでの見た目は未確認**
+  (`fill_polygon`の1画素ごとの`drawFastHLine`、`draw_image_ex`の全画素ループの速さは実機で見ること。クリップが全面だと最大240x320回)。
+
 ### コールバック中継の設計(ヒープを使わない理由)
 
 `Widget::on_press_start`等は`std::function<void()>`のままシグネチャを変えていない

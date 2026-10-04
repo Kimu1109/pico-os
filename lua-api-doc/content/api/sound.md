@@ -183,6 +183,30 @@ WAVを読んでいる途中か、まだ鳴らしていない分が残ってい�
 
 アプリを閉じるとWAVも止まります。
 
+### pico.wav_pause
+
+<div class="sig">pico.wav_pause(paused?: boolean) <span class="ret">-> boolean</span></div>
+
+WAVを一時停止(`true`、省略時)/再開(`false`)します。鳴らしているWAVがあれば `true`。止めている間も `wav_playing()` は `true` のままで、新しく `wav_play` すると解けます。
+
+### pico.wav_paused
+
+<div class="sig">pico.wav_paused() <span class="ret">-> boolean</span></div>
+
+### pico.wav_position / pico.wav_duration
+
+<div class="sig">pico.wav_position() <span class="ret">-> ms: integer</span></div>
+<div class="sig">pico.wav_duration() <span class="ret">-> ms: integer</span></div>
+
+再生位置と全体の長さ(ミリ秒)。長さは**最後に鳴らしたWAV**のもの(一度も鳴らしていなければ `0`。止めた後も残ります)。位置は出力のバッファ分(約23ms)だけ先を指します。ループ中は長さで巡ります。
+
+### pico.wav_seek
+
+<div class="sig">pico.wav_seek(ms: integer) <span class="ret">-> boolean</span></div>
+
+`ms` ミリ秒の位置へ飛びます。飛べなかったとき(WAVを一度も鳴らしていない・`ms` が負など)は `false`。
+
+
 ## 例: 1拍ずつ鳴らす
 
 曲の形式を使わずに、`loop(dt)` で時間を数えて1拍ずつ `pico.sound_play()` することもできます(自動で作る音や、画面の動きに合わせる音向け)。こちらは1コア目で数えるので、`loop()` が重いとテンポが揺れます。

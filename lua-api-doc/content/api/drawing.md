@@ -1,7 +1,7 @@
 ---
 title: "直接描画"
 weight: 20
-description: "draw_* / fill_* / clear_rect / draw_text / invalidate / mark_dirty / set_draw_area / get_draw_area"
+description: "draw_* / fill_* / clear_rect / draw_text / text_width / invalidate / mark_dirty / set_draw_area / get_draw_area"
 ---
 
 > これらの関数は `Canvas`(`pico.create("Canvas")`)の `render` コールバックの中で使うことを前提としています。詳細と理由は [Canvasと直接描画](../../guide/drawing/) を参照してください。座標は絶対スクリーン座標、色は0〜15のPICO-8風パレット番号です。
@@ -12,7 +12,9 @@ description: "draw_* / fill_* / clear_rect / draw_text / invalidate / mark_dirty
 
 ## pico.draw_line
 
-<div class="sig">pico.draw_line(x0: integer, y0: integer, x1: integer, y1: integer, color: integer) <span class="ret">-> (なし)</span></div>
+<div class="sig">pico.draw_line(x0: integer, y0: integer, x1: integer, y1: integer, color: integer, width?: integer) <span class="ret">-> (なし)</span></div>
+
+`width`(px、既定1、最大64)を指定すると太い線を引きます。両端は丸くなります。
 
 ## pico.draw_rect
 
@@ -37,6 +39,53 @@ description: "draw_* / fill_* / clear_rect / draw_text / invalidate / mark_dirty
 <div class="sig">pico.fill_circle(x: integer, y: integer, r: integer, color: integer) <span class="ret">-> (なし)</span></div>
 
 円を塗りつぶします。
+
+## pico.draw_ellipse / pico.fill_ellipse
+
+<div class="sig">pico.draw_ellipse(x: integer, y: integer, rx: integer, ry: integer, color: integer) <span class="ret">-> (なし)</span></div>
+<div class="sig">pico.fill_ellipse(x: integer, y: integer, rx: integer, ry: integer, color: integer) <span class="ret">-> (なし)</span></div>
+
+中心 `(x, y)`、横半径 `rx`・縦半径 `ry` の楕円の輪郭/塗りつぶし。半径が負だとエラー。
+
+## pico.draw_triangle / pico.fill_triangle
+
+<div class="sig">pico.draw_triangle(x0, y0, x1, y1, x2, y2, color: integer, width?: integer) <span class="ret">-> (なし)</span></div>
+<div class="sig">pico.fill_triangle(x0, y0, x1, y1, x2, y2, color: integer) <span class="ret">-> (なし)</span></div>
+
+三角形の輪郭(`width` で太さ)/塗りつぶし。
+
+## pico.draw_polygon / pico.fill_polygon
+
+<div class="sig">pico.draw_polygon(points: table, color: integer, width?: integer) <span class="ret">-> (なし)</span></div>
+<div class="sig">pico.fill_polygon(points: table, color: integer) <span class="ret">-> (なし)</span></div>
+
+`points` は `{x1, y1, x2, y2, ...}` の平らな配列で、**3点以上・32点まで**。点列は最後から最初へ自動で閉じます。`fill_polygon` は偶奇規則で塗るので、凹んだ形や自己交差する形も塗れます。点が足りない・奇数個・数値以外・33点以上はエラー。
+
+```lua
+pico.fill_polygon({100,100, 130,100, 130,110, 110,110, 110,130, 100,130}, 9) -- L字
+```
+
+## pico.draw_arc / pico.fill_arc
+
+<div class="sig">pico.draw_arc(x: integer, y: integer, r: integer, a0: number, a1: number, color: integer, width?: integer) <span class="ret">-> (なし)</span></div>
+<div class="sig">pico.fill_arc(x: integer, y: integer, r: integer, a0: number, a1: number, color: integer) <span class="ret">-> (なし)</span></div>
+
+中心 `(x, y)`・半径 `r` の円弧(`draw_arc`)と扇形(`fill_arc`、中心から円弧までを塗る)。角度は**ラジアン**で、`0` が右、増えると**時計回り**(y が下向きのため)。`a1 < a0` なら逆回り。`fill_arc` は円弧の分割が粗くなる(最大約30分割)ので、大きな円では角が見えます。
+
+```lua
+pico.fill_arc(150, 150, 20, 0, math.pi / 2, 6) -- 右下の1/4
+```
+
+## pico.text_width
+
+<div class="sig">pico.text_width(text: string, font_size?: integer) <span class="ret">-> width: integer</span></div>
+
+`draw_text` と同じフォントで1行に描いたときの幅(px)。`font_size` の既定は `1`(`Normal`)。右寄せ・中央寄せの位置決めに使います。
+
+```lua
+local w = pico.text_width("Score", 1)
+pico.draw_text(240 - w - 4, 4, "Score", 0, 1)
+```
 
 ## pico.clear_rect
 

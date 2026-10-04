@@ -43,6 +43,24 @@ pico.draw_image_part(img, x, y, (n - 1) * 12, 0, 12, 12)
 
 実例は「テトリス」(`/lua/apps/テトリス/`。ミノの絵を1枚の `blocks.pimg` から切り出す)。
 
+## pico.draw_image_ex
+
+<div class="sig">pico.draw_image_ex(handle: integer, x: number, y: number, r?: number, sx?: number, sy?: number, ox?: number, oy?: number) <span class="ret">-> (なし)</span></div>
+
+Love2D の `love.graphics.draw(image, x, y, r, sx, sy, ox, oy)` と同じ並びで、画像を拡大縮小・回転・反転して描きます。
+
+- 画像の `(ox, oy)`(元画像のピクセル座標、既定 `0, 0`)を画面の `(x, y)` に置く。
+- `r`: 回転(ラジアン、時計回り、既定0)。回転の中心も `(ox, oy)`。
+- `sx`, `sy`: 倍率(既定1)。`sy` を省くと `sx` と同じ。**負にすると反転**(`sx = -1` で左右反転)。倍率は±64まで、0は何もしない。
+- 最近傍で、補間はしません。透過指定の画像は index 0 を描きません。
+- 描くのは今のクリップ(`set_draw_area` / `Canvas` の `render` 中なら dirty 矩形)の内側だけです。
+
+```lua
+-- 画像の中心を軸に、2倍で45度回して描く
+local w, h = pico.image_size(img)
+pico.draw_image_ex(img, 120, 160, math.pi / 4, 2, 2, w / 2, h / 2)
+```
+
 ## pico.image_free
 
 <div class="sig">pico.image_free(handle: integer) <span class="ret">-> (なし)</span></div>

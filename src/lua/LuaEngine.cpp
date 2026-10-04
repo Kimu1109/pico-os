@@ -2,6 +2,7 @@
 #include "functions/Power_Functions.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -43,6 +44,7 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
+#include "functions/Battery_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "sound/Note_Name.hpp"
 #include "sound/Mml_Compiler.hpp"
@@ -456,7 +458,7 @@ int LuaEngine::MessageHandler(lua_State* L) {
     return 1;
 }
 
-int LuaEngine::ProtectedCall(int nargs) {
+int LuaEngine::ProtectedCall(int nargs, int nresults) {
     const int func = lua_gettop(L) - nargs;
     const bool outer = (call_depth_ == 0);
     if (outer) {
@@ -474,7 +476,7 @@ int LuaEngine::ProtectedCall(int nargs) {
 
     call_depth_++;
     const uint32_t t0 = outer ? (uint32_t)micros() : 0;
-    const int status = lua_pcall(L, nargs, 0, func);
+    const int status = lua_pcall(L, nargs, nresults, func);
     call_depth_--;
     lua_remove(L, func); // メッセージハンドラ(エラーならその上にメッセージが残る)
 
@@ -637,6 +639,40 @@ void LuaEngine::CallLoop(uint32_t dt_ms) {
     }
 }
 
+bool LuaEngine::DispatchKey(const KeyInputFunctions::Event& ev) {
+    using KeyInputFunctions::Key;
+    if (!L || key_callback_ref_ == LUA_NOREF) return false;
+
+    static const char* const kNames[] = {
+        nullptr, "enter", "backspace", "tab", "escape", "delete",
+        "left", "right", "up", "down", "home", "end", "pageup", "pagedown", "zenhan",
+    };
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, key_callback_ref_);
+    // 第1引数: 文字ならその文字(UTF-8)、特殊キーなら名前。第2引数: {ctrl=,alt=,shift=}
+    if (ev.key == Key::Char) {
+        lua_pushfstring(L, "%U", (long)ev.cp);
+    } else {
+        const size_t i = (size_t)ev.key;
+        lua_pushstring(L, i < sizeof(kNames) / sizeof(kNames[0]) && kNames[i] ? kNames[i] : "unknown");
+    }
+    lua_createtable(L, 0, 3);
+    lua_pushboolean(L, ev.ctrl());  lua_setfield(L, -2, "ctrl");
+    lua_pushboolean(L, ev.alt());   lua_setfield(L, -2, "alt");
+    lua_pushboolean(L, ev.shift()); lua_setfield(L, -2, "shift");
+
+    if (ProtectedCall(2, 1) != LUA_OK) {
+        // 毎打鍵同じエラーのダイアログが積まれないよう、以降は呼ばない(loop()と同じ安全弁)
+        luaL_unref(L, LUA_REGISTRYINDEX, key_callback_ref_);
+        key_callback_ref_ = LUA_NOREF;
+        ReportError("on_key()の実行時エラー");
+        return true; // 打鍵はここで消費した扱い(キー盤へ回さない)
+    }
+    const bool handled = lua_toboolean(L, -1) != 0;
+    lua_pop(L, 1);
+    return handled;
+}
+
 // ---------------- pico.* API登録 ----------------
 
 void LuaEngine::registerFn(const char* name, lua_CFunction fn) {
@@ -670,6 +706,9 @@ void LuaEngine::registerApi() {
     registerFn("content_rect", l_content_rect);
     registerFn("get_time", l_get_time);
     registerFn("get_touch", l_get_touch);
+    registerFn("millis", l_millis);
+    registerFn("battery", l_battery);
+    registerFn("on_key", l_on_key);
     registerFn("pad_connected", l_pad_connected);
     registerFn("pad_down", l_pad_down);
     registerFn("pad_pressed", l_pad_pressed);
@@ -687,6 +726,11 @@ void LuaEngine::registerApi() {
     registerFn("wav_play", l_wav_play);
     registerFn("wav_stop", l_wav_stop);
     registerFn("wav_playing", l_wav_playing);
+    registerFn("wav_pause", l_wav_pause);
+    registerFn("wav_paused", l_wav_paused);
+    registerFn("wav_position", l_wav_position);
+    registerFn("wav_duration", l_wav_duration);
+    registerFn("wav_seek", l_wav_seek);
     registerFn("invalidate", l_invalidate);
     registerFn("mark_dirty", l_mark_dirty);
     registerFn("draw_pixel", l_draw_pixel);
@@ -695,6 +739,15 @@ void LuaEngine::registerApi() {
     registerFn("fill_rect", l_fill_rect);
     registerFn("draw_circle", l_draw_circle);
     registerFn("fill_circle", l_fill_circle);
+    registerFn("draw_ellipse", l_draw_ellipse);
+    registerFn("fill_ellipse", l_fill_ellipse);
+    registerFn("draw_triangle", l_draw_triangle);
+    registerFn("fill_triangle", l_fill_triangle);
+    registerFn("draw_polygon", l_draw_polygon);
+    registerFn("fill_polygon", l_fill_polygon);
+    registerFn("draw_arc", l_draw_arc);
+    registerFn("fill_arc", l_fill_arc);
+    registerFn("text_width", l_text_width);
     registerFn("clear_rect", l_clear_rect);
     registerFn("draw_text", l_draw_text);
     registerFn("set_draw_area", l_set_draw_area);
@@ -702,6 +755,7 @@ void LuaEngine::registerApi() {
     registerFn("get_draw_area", l_get_draw_area);
     registerFn("draw_image", l_draw_image);
     registerFn("draw_image_part", l_draw_image_part);
+    registerFn("draw_image_ex", l_draw_image_ex);
     registerFn("image_load", l_image_load);
     registerFn("image_size", l_image_size);
     registerFn("image_free", l_image_free);
@@ -715,6 +769,8 @@ void LuaEngine::registerApi() {
     registerFn("sd_remove", l_sd_remove);
     registerFn("sd_mkdir", l_sd_mkdir);
     registerFn("sd_list", l_sd_list);
+    registerFn("sd_stat", l_sd_stat);
+    registerFn("sd_read_part", l_sd_read_part);
     registerFn("config_read", l_config_read);
     registerFn("config_get", l_config_get);
     registerFn("config_write", l_config_write);
@@ -1931,11 +1987,24 @@ int LuaEngine::l_draw_line(lua_State* L) {
     const int16_t x1 = (int16_t)luaL_checkinteger(L, 3);
     const int16_t y1 = (int16_t)luaL_checkinteger(L, 4);
     const int8_t color = (int8_t)luaL_checkinteger(L, 5);
+    // 6番目の引数: 線の太さ(px、既定1)。2以上は両端の円+胴体の三角形で塗る
+    // (drawWideLine()は4bppパレットでアンチエイリアスのブレンドに入りクラッシュするため使わない)
+    const int width = (int)std::clamp<lua_Integer>(luaL_optinteger(L, 6, 1), 1, 64);
 
-    OSData::frame->drawLine(x0, y0, x1, y1, color);
+    if (width <= 1) {
+        OSData::frame->drawLine(x0, y0, x1, y1, color);
+        PICO_GFX::MarkDirty({
+            (int16_t)std::min(x0, x1), (int16_t)std::min(y0, y1),
+            (int16_t)(std::abs(x1 - x0) + 1), (int16_t)(std::abs(y1 - y0) + 1)
+        });
+        return 0;
+    }
+    const float radius = width * 0.5f;
+    CanvasRaster::DrawThickLine(OSData::frame, x0, y0, x1, y1, radius, color);
+    const int pad = width / 2 + 1;
     PICO_GFX::MarkDirty({
-        (int16_t)std::min(x0, x1), (int16_t)std::min(y0, y1),
-        (int16_t)(std::abs(x1 - x0) + 1), (int16_t)(std::abs(y1 - y0) + 1)
+        (int16_t)(std::min(x0, x1) - pad), (int16_t)(std::min(y0, y1) - pad),
+        (int16_t)(std::abs(x1 - x0) + 1 + pad * 2), (int16_t)(std::abs(y1 - y0) + 1 + pad * 2)
     });
     return 0;
 }
@@ -2075,6 +2144,413 @@ int LuaEngine::l_draw_image_part(lua_State* L) {
     }
     PICO_GFX::MarkDirty({ (int16_t)dx, (int16_t)dy, (int16_t)w, (int16_t)h });
     return 0;
+}
+
+// ---------------- 拡張API(Love2Dとの比較で足したもの) ----------------
+// 図形(楕円・三角形・多角形・円弧)、画像の拡大縮小/回転/反転、文字幅、WAVの一時停止/シーク、
+// バッテリー・経過時間、ファイルの情報/部分読み、物理キーボード。
+// 描画は他のpico.draw_*と同じく`Canvas`のrenderコールバック内で使う。色は4bitパレット番号。
+
+namespace {
+    constexpr int kMaxPolyPoints = 32;
+
+    // 描いた範囲(両端を含む座標)をdirtyにする
+    void MarkBounds(int minx, int miny, int maxx, int maxy) {
+        PICO_GFX::MarkDirty({(int16_t)minx, (int16_t)miny,
+                             (int16_t)(maxx - minx + 1), (int16_t)(maxy - miny + 1)});
+    }
+
+    // {x1,y1,x2,y2,...}の平らな配列から点列を読む。点が3つ未満/上限超過/数値以外はエラー
+    int ReadPoints(lua_State* L, int idx, int* xs, int* ys, const char* api) {
+        luaL_checktype(L, idx, LUA_TTABLE);
+        const lua_Integer len = (lua_Integer)lua_rawlen(L, idx);
+        if (len % 2 != 0 || len < 6) luaL_error(L, "%s: 点は{x1,y1,x2,y2,x3,y3,...}の形で3つ以上必要です", api);
+        if (len / 2 > kMaxPolyPoints) luaL_error(L, "%s: 点は%d個までです", api, kMaxPolyPoints);
+        for (lua_Integer i = 0; i < len; i++) {
+            lua_rawgeti(L, idx, i + 1);
+            if (!lua_isnumber(L, -1)) luaL_error(L, "%s: 点の座標は数値です", api);
+            const int v = (int)lua_tonumber(L, -1);
+            lua_pop(L, 1);
+            if (i % 2 == 0) xs[i / 2] = v; else ys[i / 2] = v;
+        }
+        return (int)(len / 2);
+    }
+
+    void Bounds(const int* xs, const int* ys, int n, int& minx, int& miny, int& maxx, int& maxy) {
+        minx = maxx = xs[0];
+        miny = maxy = ys[0];
+        for (int i = 1; i < n; i++) {
+            minx = std::min(minx, xs[i]); maxx = std::max(maxx, xs[i]);
+            miny = std::min(miny, ys[i]); maxy = std::max(maxy, ys[i]);
+        }
+    }
+
+    void DrawPolyOutline(const int* xs, const int* ys, int n, int8_t color, int width) {
+        for (int i = 0; i < n; i++) {
+            const int j = (i + 1) % n;
+            if (width > 1) CanvasRaster::DrawThickLine(OSData::frame, xs[i], ys[i], xs[j], ys[j], width * 0.5f, color);
+            else OSData::frame->drawLine(xs[i], ys[i], xs[j], ys[j], color);
+        }
+    }
+
+    // 偶奇規則のスキャンライン塗り(凹多角形も塗れる)。ピクセルの中心(x+0.5,y+0.5)が内側なら塗る
+    void FillPoly(const int* xs, const int* ys, int n, int8_t color) {
+        int minx, miny, maxx, maxy;
+        Bounds(xs, ys, n, minx, miny, maxx, maxy);
+        const int y_from = std::max(miny, 0);
+        const int y_to = std::min(maxy, (int)SCREEN_HEIGHT - 1);
+        float cross[kMaxPolyPoints];
+        for (int y = y_from; y <= y_to; y++) {
+            const float cy = y + 0.5f;
+            int cnt = 0;
+            for (int i = 0; i < n; i++) {
+                const int j = (i + 1) % n;
+                const float ya = (float)ys[i], yb = (float)ys[j];
+                if ((ya <= cy && cy < yb) || (yb <= cy && cy < ya)) {
+                    const float t = (cy - ya) / (yb - ya);
+                    cross[cnt++] = xs[i] + t * (xs[j] - xs[i]);
+                }
+            }
+            for (int a = 1; a < cnt; a++) { // 挿入ソート(高々32個)
+                const float v = cross[a];
+                int b = a - 1;
+                while (b >= 0 && cross[b] > v) { cross[b + 1] = cross[b]; b--; }
+                cross[b + 1] = v;
+            }
+            for (int a = 0; a + 1 < cnt; a += 2) {
+                const int xl = (int)std::ceil(cross[a] - 0.5f);
+                const int xr = (int)std::ceil(cross[a + 1] - 0.5f) - 1;
+                if (xr >= xl) OSData::frame->drawFastHLine(xl, y, xr - xl + 1, color);
+            }
+        }
+    }
+
+    // 円弧の点列(中心x,y・半径r・角度a0〜a1ラジアン。0=右、増えると時計回り(y下向き))
+    int ArcPoints(float cx, float cy, float r, float a0, float a1, int max_points, int* xs, int* ys) {
+        int n = (int)(std::fabs(a1 - a0) * r / 3.0f) + 1;
+        n = std::clamp(n, 2, max_points - 1);
+        for (int i = 0; i <= n; i++) {
+            const float a = a0 + (a1 - a0) * i / n;
+            xs[i] = (int)std::lround(cx + r * std::cos(a));
+            ys[i] = (int)std::lround(cy + r * std::sin(a));
+        }
+        return n + 1;
+    }
+}
+
+int LuaEngine::l_draw_ellipse(lua_State* L) {
+    const int x = (int)luaL_checkinteger(L, 1), y = (int)luaL_checkinteger(L, 2);
+    const int rx = (int)luaL_checkinteger(L, 3), ry = (int)luaL_checkinteger(L, 4);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 5);
+    if (rx < 0 || ry < 0) return luaL_error(L, "pico.draw_ellipse: 半径は0以上です");
+    OSData::frame->drawEllipse(x, y, rx, ry, color);
+    MarkBounds(x - rx, y - ry, x + rx, y + ry);
+    return 0;
+}
+
+int LuaEngine::l_fill_ellipse(lua_State* L) {
+    const int x = (int)luaL_checkinteger(L, 1), y = (int)luaL_checkinteger(L, 2);
+    const int rx = (int)luaL_checkinteger(L, 3), ry = (int)luaL_checkinteger(L, 4);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 5);
+    if (rx < 0 || ry < 0) return luaL_error(L, "pico.fill_ellipse: 半径は0以上です");
+    OSData::frame->fillEllipse(x, y, rx, ry, color);
+    MarkBounds(x - rx, y - ry, x + rx, y + ry);
+    return 0;
+}
+
+int LuaEngine::l_draw_triangle(lua_State* L) {
+    int xs[3], ys[3];
+    for (int i = 0; i < 3; i++) {
+        xs[i] = (int)luaL_checkinteger(L, 1 + i * 2);
+        ys[i] = (int)luaL_checkinteger(L, 2 + i * 2);
+    }
+    const int8_t color = (int8_t)luaL_checkinteger(L, 7);
+    const int width = (int)std::clamp<lua_Integer>(luaL_optinteger(L, 8, 1), 1, 64);
+    DrawPolyOutline(xs, ys, 3, color, width);
+    int minx, miny, maxx, maxy;
+    Bounds(xs, ys, 3, minx, miny, maxx, maxy);
+    const int pad = width > 1 ? width / 2 + 1 : 0;
+    MarkBounds(minx - pad, miny - pad, maxx + pad, maxy + pad);
+    return 0;
+}
+
+int LuaEngine::l_fill_triangle(lua_State* L) {
+    int xs[3], ys[3];
+    for (int i = 0; i < 3; i++) {
+        xs[i] = (int)luaL_checkinteger(L, 1 + i * 2);
+        ys[i] = (int)luaL_checkinteger(L, 2 + i * 2);
+    }
+    const int8_t color = (int8_t)luaL_checkinteger(L, 7);
+    OSData::frame->fillTriangle(xs[0], ys[0], xs[1], ys[1], xs[2], ys[2], color);
+    int minx, miny, maxx, maxy;
+    Bounds(xs, ys, 3, minx, miny, maxx, maxy);
+    MarkBounds(minx, miny, maxx, maxy);
+    return 0;
+}
+
+int LuaEngine::l_draw_polygon(lua_State* L) {
+    int xs[kMaxPolyPoints], ys[kMaxPolyPoints];
+    const int n = ReadPoints(L, 1, xs, ys, "pico.draw_polygon");
+    const int8_t color = (int8_t)luaL_checkinteger(L, 2);
+    const int width = (int)std::clamp<lua_Integer>(luaL_optinteger(L, 3, 1), 1, 64);
+    DrawPolyOutline(xs, ys, n, color, width);
+    int minx, miny, maxx, maxy;
+    Bounds(xs, ys, n, minx, miny, maxx, maxy);
+    const int pad = width > 1 ? width / 2 + 1 : 0;
+    MarkBounds(minx - pad, miny - pad, maxx + pad, maxy + pad);
+    return 0;
+}
+
+int LuaEngine::l_fill_polygon(lua_State* L) {
+    int xs[kMaxPolyPoints], ys[kMaxPolyPoints];
+    const int n = ReadPoints(L, 1, xs, ys, "pico.fill_polygon");
+    const int8_t color = (int8_t)luaL_checkinteger(L, 2);
+    FillPoly(xs, ys, n, color);
+    int minx, miny, maxx, maxy;
+    Bounds(xs, ys, n, minx, miny, maxx, maxy);
+    MarkBounds(minx, miny, maxx, maxy);
+    return 0;
+}
+
+int LuaEngine::l_draw_arc(lua_State* L) {
+    const int x = (int)luaL_checkinteger(L, 1), y = (int)luaL_checkinteger(L, 2);
+    const int r = (int)luaL_checkinteger(L, 3);
+    const float a0 = (float)luaL_checknumber(L, 4), a1 = (float)luaL_checknumber(L, 5);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 6);
+    const int width = (int)std::clamp<lua_Integer>(luaL_optinteger(L, 7, 1), 1, 64);
+    if (r < 0) return luaL_error(L, "pico.draw_arc: 半径は0以上です");
+    int xs[kMaxPolyPoints * 2], ys[kMaxPolyPoints * 2];
+    const int n = ArcPoints((float)x, (float)y, (float)r, a0, a1, kMaxPolyPoints * 2, xs, ys);
+    for (int i = 0; i + 1 < n; i++) {
+        if (width > 1) CanvasRaster::DrawThickLine(OSData::frame, xs[i], ys[i], xs[i + 1], ys[i + 1], width * 0.5f, color);
+        else OSData::frame->drawLine(xs[i], ys[i], xs[i + 1], ys[i + 1], color);
+    }
+    const int pad = r + (width > 1 ? width / 2 + 1 : 0); // 円全体を覆う(範囲の計算を簡単にするため)
+    MarkBounds(x - pad, y - pad, x + pad, y + pad);
+    return 0;
+}
+
+// 扇形(パイ)。中心と円弧の点で作る多角形を塗る
+int LuaEngine::l_fill_arc(lua_State* L) {
+    const int x = (int)luaL_checkinteger(L, 1), y = (int)luaL_checkinteger(L, 2);
+    const int r = (int)luaL_checkinteger(L, 3);
+    const float a0 = (float)luaL_checknumber(L, 4), a1 = (float)luaL_checknumber(L, 5);
+    const int8_t color = (int8_t)luaL_checkinteger(L, 6);
+    if (r < 0) return luaL_error(L, "pico.fill_arc: 半径は0以上です");
+    int xs[kMaxPolyPoints], ys[kMaxPolyPoints];
+    xs[0] = x; ys[0] = y;
+    const int n = ArcPoints((float)x, (float)y, (float)r, a0, a1, kMaxPolyPoints - 1, xs + 1, ys + 1);
+    FillPoly(xs, ys, n + 1, color);
+    MarkBounds(x - r, y - r, x + r, y + r);
+    return 0;
+}
+
+int LuaEngine::l_text_width(lua_State* L) {
+    const char* text = luaL_checkstring(L, 1);
+    const FontFn::FontSize size = (FontFn::FontSize)luaL_optinteger(L, 2, (lua_Integer)FontFn::Normal);
+    lua_pushinteger(L, Label<PICO_STR_M>::GetTextWidth(size, text));
+    return 1;
+}
+
+// pico.draw_image_ex(handle, x, y [, r [, sx [, sy [, ox [, oy]]]]])
+// Love2Dのlove.graphics.draw(image, x, y, r, sx, sy, ox, oy)と同じ並び:
+// 画像の(ox,oy)を(x,y)に置き、rラジアン(時計回り)回して(sx,sy)倍に拡大縮小する。
+// sxが負なら左右反転、syが負なら上下反転(syを省くとsxと同じ)。最近傍で、補間はしない。
+// 描き先ごとに元の画素を引く逆変換なので隙間ができない。描くのは今のクリップの内側だけ
+int LuaEngine::l_draw_image_ex(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+    const double x = luaL_checknumber(L, 2);
+    const double y = luaL_checknumber(L, 3);
+    const double r = luaL_optnumber(L, 4, 0.0);
+    const double sx = luaL_optnumber(L, 5, 1.0);
+    const double sy = luaL_optnumber(L, 6, sx);
+    const double ox = luaL_optnumber(L, 7, 0.0);
+    const double oy = luaL_optnumber(L, 8, 0.0);
+
+    size_t index;
+    if (!self->ResolveImageHandle(handle, index)) {
+        return luaL_error(L, "pico.draw_image_ex: 無効なイメージハンドル");
+    }
+    if (std::fabs(sx) < 1e-6 || std::fabs(sy) < 1e-6) return 0;
+    if (std::fabs(sx) > 64 || std::fabs(sy) > 64) return luaL_error(L, "pico.draw_image_ex: 倍率は64倍までです");
+
+    ImageSlot& slot = self->images_[index];
+    const int iw = slot.sprite.width, ih = slot.sprite.height;
+    const double c = std::cos(r), s = std::sin(r);
+
+    // 元画像の4隅を描き先へ写して外接矩形を出す
+    double minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+    const double cx[4] = {0, (double)iw, 0, (double)iw};
+    const double cy[4] = {0, 0, (double)ih, (double)ih};
+    for (int i = 0; i < 4; i++) {
+        const double ux = (cx[i] - ox) * sx, uy = (cy[i] - oy) * sy;
+        const double dx = x + c * ux - s * uy;
+        const double dy = y + s * ux + c * uy;
+        minx = std::min(minx, dx); maxx = std::max(maxx, dx);
+        miny = std::min(miny, dy); maxy = std::max(maxy, dy);
+    }
+    int32_t kx = 0, ky = 0, kw = 0, kh = 0;
+    OSData::frame->getClipRect(&kx, &ky, &kw, &kh);
+    const Rect area = Rect{(int16_t)kx, (int16_t)ky, (int16_t)kw, (int16_t)kh}
+        .intersection({0, 0, (int16_t)SCREEN_WIDTH, (int16_t)SCREEN_HEIGHT});
+    const int x0 = std::max((int)std::floor(minx), (int)area.x);
+    const int y0 = std::max((int)std::floor(miny), (int)area.y);
+    const int x1 = std::min((int)std::ceil(maxx), (int)area.x + area.w);
+    const int y1 = std::min((int)std::ceil(maxy), (int)area.y + area.h);
+
+    for (int py = y0; py < y1; py++) {
+        for (int px = x0; px < x1; px++) {
+            const double rx = px + 0.5 - x, ry = py + 0.5 - y;
+            const double u = c * rx + s * ry;     // 逆回転
+            const double v = -s * rx + c * ry;
+            const int ix = (int)std::floor(u / sx + ox);
+            const int iy = (int)std::floor(v / sy + oy);
+            if (ix < 0 || iy < 0 || ix >= iw || iy >= ih) continue;
+            const uint32_t col = slot.sprite.sprite.readPixelValue(ix, iy);
+            if (slot.sprite.transparent && col == 0) continue; // index0は透過(DrawPimgSprite()と同じ)
+            OSData::frame->writePixel(px, py, (int)col);
+        }
+    }
+    if (x1 > x0 && y1 > y0) MarkBounds((int)std::floor(minx), (int)std::floor(miny), (int)std::ceil(maxx), (int)std::ceil(maxy));
+    return 0;
+}
+
+// ---- WAVの一時停止・位置・シーク(SoundFunctionsにあったものをLuaへ出しただけ) ----
+
+int LuaEngine::l_wav_pause(lua_State* L) {
+    // pico.wav_pause([paused=true]) -> 鳴らしているWAVがあればtrue
+    const bool pause = lua_isnoneornil(L, 1) ? true : (lua_toboolean(L, 1) != 0);
+    lua_pushboolean(L, SoundFunctions::WavPause(pause));
+    return 1;
+}
+
+int LuaEngine::l_wav_paused(lua_State* L) {
+    lua_pushboolean(L, SoundFunctions::WavPaused());
+    return 1;
+}
+
+int LuaEngine::l_wav_position(lua_State* L) {
+    lua_pushinteger(L, (lua_Integer)SoundFunctions::WavPositionMs());
+    return 1;
+}
+
+int LuaEngine::l_wav_duration(lua_State* L) {
+    lua_pushinteger(L, (lua_Integer)SoundFunctions::WavDurationMs());
+    return 1;
+}
+
+int LuaEngine::l_wav_seek(lua_State* L) {
+    const lua_Integer ms = luaL_checkinteger(L, 1);
+    lua_pushboolean(L, ms >= 0 && SoundFunctions::WavSeekMs((uint32_t)ms));
+    return 1;
+}
+
+// ---- システム ----
+
+int LuaEngine::l_millis(lua_State* L) {
+    // 起動からのミリ秒(単調増加。NTPの同期で飛ばない)。経過時間の計測用
+    lua_pushinteger(L, (lua_Integer)millis());
+    return 1;
+}
+
+int LuaEngine::l_battery(lua_State* L) {
+    // pico.battery() -> 残量%(0〜100), 電圧(V), USB給電中か。まだ読めていなければnil
+    if (!BatteryFunctions::HasSample()) {
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushinteger(L, BatteryFunctions::GetPercent());
+    lua_pushnumber(L, BatteryFunctions::GetVoltage());
+    lua_pushboolean(L, BatteryFunctions::IsExternallyPowered());
+    return 3;
+}
+
+// pico.on_key(fn)で物理キーボードの打鍵を受け取る(nilで解除)。
+// fn(key, mods): keyは文字(UTF-8。Shiftやキー配列は反映済み)か、特殊キーの名前
+// ("enter" "backspace" "tab" "escape" "delete" "left" "right" "up" "down" "home" "end"
+// "pageup" "pagedown")。modsは{ctrl=,alt=,shift=}。
+// 真を返すと「取った」扱い。偽/nilを返すと開いているキーボードの入力へ回る
+int LuaEngine::l_on_key(lua_State* L) {
+    LuaEngine* self = Self(L);
+    if (!lua_isnoneornil(L, 1)) luaL_checktype(L, 1, LUA_TFUNCTION);
+    if (self->key_callback_ref_ != LUA_NOREF) {
+        luaL_unref(L, LUA_REGISTRYINDEX, self->key_callback_ref_);
+        self->key_callback_ref_ = LUA_NOREF;
+    }
+    if (!lua_isnoneornil(L, 1)) {
+        lua_pushvalue(L, 1);
+        self->key_callback_ref_ = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    return 0;
+}
+
+// ---- ファイルの情報・部分読み ----
+
+int LuaEngine::l_sd_stat(lua_State* L) {
+    // pico.sd_stat(path) -> {size=バイト数, is_dir=bool} | nil
+    LuaEngine* self = Self(L);
+    const char* path = luaL_checkstring(L, 1);
+    if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.sd_stat: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushnil(L);
+        return 1;
+    }
+    if (!OSData::SD.exists(path)) { lua_pushnil(L); return 1; }
+    FsFile f = OSData::SD.open(path, O_RDONLY);
+    if (!f) { lua_pushnil(L); return 1; }
+    const bool is_dir = f.isDir();
+    const size_t size = is_dir ? 0 : f.fileSize();
+    f.close();
+    lua_createtable(L, 0, 2);
+    lua_pushinteger(L, (lua_Integer)size);
+    lua_setfield(L, -2, "size");
+    lua_pushboolean(L, is_dir);
+    lua_setfield(L, -2, "is_dir");
+    return 1;
+}
+
+int LuaEngine::l_sd_read_part(lua_State* L) {
+    // pico.sd_read_part(path, offset, length) -> string | nil
+    // offsetバイト目からlengthバイトまで(sd_readと同じ上限)。ファイルの終わりを越えたら短く返る。
+    // 大きなファイルを少しずつ読む/途中だけ読むためのもの
+    LuaEngine* self = Self(L);
+    const char* path = luaL_checkstring(L, 1);
+    const lua_Integer offset = luaL_checkinteger(L, 2);
+    const lua_Integer length = luaL_checkinteger(L, 3);
+    if (offset < 0 || length < 0) return luaL_error(L, "pico.sd_read_part: offsetとlengthは0以上です");
+    if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+    if (!self->SdPathAllowed(path)) {
+        LOG_APP_WARN("pico.sd_read_part: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+        lua_pushnil(L);
+        return 1;
+    }
+    FsFile f = OSData::SD.open(path, O_RDONLY);
+    if (!f || f.isDir()) { if (f) f.close(); lua_pushnil(L); return 1; }
+
+    const size_t file_size = f.fileSize();
+    size_t want = (size_t)std::min<lua_Integer>(length, (lua_Integer)kMaxSdReadBytes);
+    if ((size_t)offset >= file_size) want = 0;
+    else want = std::min(want, file_size - (size_t)offset);
+    if (want > 0 && !f.seek((uint32_t)offset)) { f.close(); lua_pushnil(L); return 1; }
+
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+    char chunk[256];
+    size_t remaining = want;
+    bool ok = true;
+    while (remaining > 0) {
+        const size_t n = std::min(remaining, sizeof(chunk));
+        const int got = f.read((uint8_t*)chunk, n);
+        if (got <= 0) { ok = false; break; }
+        luaL_addlstring(&b, chunk, (size_t)got);
+        remaining -= (size_t)got;
+    }
+    f.close();
+    if (!ok) { lua_pushnil(L); return 1; }
+    luaL_pushresult(&b);
+    return 1;
 }
 
 // ---------------- 直接描画エリア ----------------
@@ -2577,6 +3053,8 @@ int LuaEngine::l_sd_list(lua_State* L) {
             lua_setfield(L, -2, "name");
             lua_pushboolean(L, file.isDir());
             lua_setfield(L, -2, "is_dir");
+            lua_pushinteger(L, file.isDir() ? 0 : (lua_Integer)file.fileSize());
+            lua_setfield(L, -2, "size");
             lua_rawseti(L, -2, idx++);
         }
         file.close();

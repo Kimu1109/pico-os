@@ -5,6 +5,7 @@
 #include <vector>
 #include "lua.hpp"
 #include "functions/Power_Functions.hpp"
+#include "functions/KeyInput_Functions.hpp"
 #include "gui/widgets/WidgetID.hpp"
 #include "gui/icons/icon_render.h"
 #include "lua/LuaPermissions.hpp"
@@ -388,6 +389,10 @@ class LuaEngine {
         void CallSetup();
         void CallLoop(uint32_t dt_ms);
 
+        // 物理キーボードの打鍵をpico.on_key()のコールバックへ渡す(LuaScene::onKey()から)。
+        // コールバックが無い/真を返さなかったらfalse(=画面は取らなかった扱いで、開いているキー盤へ回る)
+        bool DispatchKey(const KeyInputFunctions::Event& ev);
+
         // 進行中のpico.http_request()を1フレーム分進める。LuaScene::onUpdate()から
         // 毎フレーム呼ぶ想定(クラスコメント「ネットワーク」参照)。リクエストが
         // 無ければ何もしない
@@ -434,6 +439,9 @@ class LuaEngine {
         // loop()が一度エラーを出したら以降は呼ばない(毎フレーム同じエラーダイアログが
         // 積まれるのを防ぐ安全弁)。setup()側はRun()と同じく1回きりなので不要
         bool loop_broken_ = false;
+
+        // pico.on_key()で登録した打鍵のコールバック(Luaのregistry ref。無ければLUA_NOREF)
+        int key_callback_ref_ = LUA_NOREF;
         // pico.sound_play/beepを使ったか。使ったアプリは閉じるときに音を全部止める(デストラクタ)
         bool used_sound_ = false;
 
@@ -531,7 +539,8 @@ class LuaEngine {
 
         // 外部から見えるLua呼び出し(Run/setup/loop/各種コールバック)は必ずこれを経由する。
         // instructions_remaining_をkMaxInstructionsPerCallへ積み直してからlua_pcall()する
-        int ProtectedCall(int nargs);
+        // nresults: 成功時にスタックへ残す戻り値の数(通常は0。pico.on_key()の「取った」の判定が1)
+        int ProtectedCall(int nargs, int nresults = 0);
         // ProtectedCall()が失敗した後: スタックの一番上のメッセージ(+トレース)をダイアログ・ログ・
         // クラッシュダンプへ出してpopする。入れ子の呼び出しの打ち切りは外側に任せて出さない
         void ReportError(const char* fallback);
@@ -622,6 +631,9 @@ class LuaEngine {
         static int l_content_rect(lua_State* L);
         // 時刻。クラスコメント「時刻取得」参照
         static int l_get_time(lua_State* L);
+        static int l_millis(lua_State* L);
+        static int l_battery(lua_State* L);
+        static int l_on_key(lua_State* L);
         // タッチ位置。クラスコメント「タップ位置の取得」参照
         static int l_get_touch(lua_State* L);
         static int l_pad_connected(lua_State* L);
@@ -642,6 +654,11 @@ class LuaEngine {
         static int l_wav_play(lua_State* L);
         static int l_wav_stop(lua_State* L);
         static int l_wav_playing(lua_State* L);
+        static int l_wav_pause(lua_State* L);
+        static int l_wav_paused(lua_State* L);
+        static int l_wav_position(lua_State* L);
+        static int l_wav_duration(lua_State* L);
+        static int l_wav_seek(lua_State* L);
 
         // ダイアログ。クラスコメント「ダイアログ」参照。いずれも生成した
         // WidgetId(整数)を返す。閉じたときの結果はpico.on(id,"closed",fn)
@@ -667,6 +684,15 @@ class LuaEngine {
         static int l_draw_rect(lua_State* L);
         static int l_fill_rect(lua_State* L);
         static int l_draw_circle(lua_State* L);
+        static int l_draw_ellipse(lua_State* L);
+        static int l_fill_ellipse(lua_State* L);
+        static int l_draw_triangle(lua_State* L);
+        static int l_fill_triangle(lua_State* L);
+        static int l_draw_polygon(lua_State* L);
+        static int l_fill_polygon(lua_State* L);
+        static int l_draw_arc(lua_State* L);
+        static int l_fill_arc(lua_State* L);
+        static int l_text_width(lua_State* L);
         static int l_fill_circle(lua_State* L);
         static int l_clear_rect(lua_State* L);
         static int l_draw_text(lua_State* L);
@@ -676,6 +702,7 @@ class LuaEngine {
         static int l_draw_image(lua_State* L);
         // 画像の一部だけを描く(スプライトシートからの切り出し)。今のクリップの内側だけに描く
         static int l_draw_image_part(lua_State* L);
+        static int l_draw_image_ex(lua_State* L);
 
         // 直接描画エリア(クリップ矩形)。OSData::frameへのpico.draw_*/draw_text呼び出しを
         // この矩形の内側だけに制限する。set_draw_areaを呼びっぱなしでrenderコールバックを
@@ -726,6 +753,8 @@ class LuaEngine {
         static int l_sd_remove(lua_State* L);
         static int l_sd_mkdir(lua_State* L);
         static int l_sd_list(lua_State* L);
+        static int l_sd_stat(lua_State* L);
+        static int l_sd_read_part(lua_State* L);
 
         // 設定ファイル(key=value形式。PICO_Config/sys/*.cfg・app.cfgと同じ書式)の読み書き。
         // 権限はpico.sd_*と同じ(書き込みはSdWriteAllowed()なのでapp.cfgへは書けない)。

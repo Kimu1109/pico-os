@@ -92,6 +92,8 @@ class LuaScene : public Scene {
         void onEnter() override;
         void onExit() override;
         void onUpdate() override;
+        // 物理キーボードの打鍵をpico.on_key()のコールバックへ渡す(登録が無ければ取らない)
+        bool onKey(const KeyInputFunctions::Event& ev) override;
 
         // テスト・デバッグ用の脱出口(LuaEngine::raw()と同じ位置づけ)。
         // アクティブでない間(onExit()後)はnullptr

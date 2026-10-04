@@ -77,6 +77,7 @@
 //                      往復できること、icon_size変更でw/h未指定なら箱の大きさも
 //                      追従することを確認する
 #include "lua/LuaEngine.hpp"
+#include "functions/Battery_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
@@ -2043,6 +2044,180 @@ int main(){
             check(ok, "通知: launch_reasonのテストの実行が成功する");
         }
         NotificationFunctions::SetupAt(0);
+    }
+
+    // ---- 拡張API(Love2Dとの比較で足したもの): 図形・画像の変形・文字幅・WAV・システム・ファイル・キー ----
+    {
+        LuaEngine ex(256 * 1024);
+        check(ex.valid(), "拡張API: エンジンを作れる");
+        lua_pushcfunction(ex.raw(), l_check);
+        lua_setglobal(ex.raw(), "check");
+
+        if (OSData::frame->sp_w_ == 0) OSData::frame->createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+        OSData::frame->setClipRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+        // 線の太さ・楕円・三角形・多角形・円弧: dirty矩形と引数の検証
+        bool ok = ex.Run("pico.draw_line(10, 10, 20, 10, 1)", "ex_line_thin");
+        check(ok && g_last_dirty.x == 10 && g_last_dirty.w == 11 && g_last_dirty.h == 1, "draw_line: 太さ省略は従来どおり");
+        ok = ex.Run("pico.draw_line(10, 10, 20, 10, 1, 5)", "ex_line_wide");
+        check(ok && g_last_dirty.x < 10 && g_last_dirty.w > 11 && g_last_dirty.h > 1, "draw_line: 太さを指定すると線の周りまでdirtyになる");
+
+        ok = ex.Run("pico.draw_ellipse(50, 60, 5, 3, 1)", "ex_ellipse");
+        check(ok && g_last_dirty.x == 45 && g_last_dirty.y == 57 && g_last_dirty.w == 11 && g_last_dirty.h == 7, "draw_ellipse: 外接矩形がdirty");
+        ok = ex.Run("pico.fill_ellipse(50, 60, 5, 3, 1)", "ex_fill_ellipse");
+        check(ok && g_last_dirty.x == 45 && g_last_dirty.w == 11, "fill_ellipse: 外接矩形がdirty");
+        ok = ex.Run("check(not pcall(pico.draw_ellipse, 0, 0, -1, 2, 1), 'draw_ellipse: 負の半径はエラー')", "ex_ellipse_err");
+        check(ok, "draw_ellipse: 負の半径テストの実行");
+
+        ok = ex.Run("pico.fill_triangle(10, 10, 30, 12, 20, 40, 1)", "ex_tri");
+        check(ok && g_last_dirty.x == 10 && g_last_dirty.y == 10 && g_last_dirty.w == 21 && g_last_dirty.h == 31, "fill_triangle: 外接矩形がdirty");
+        ok = ex.Run("pico.draw_triangle(10, 10, 30, 12, 20, 40, 1, 3)", "ex_tri_outline");
+        check(ok && g_last_dirty.x < 10 && g_last_dirty.w > 21, "draw_triangle: 太い輪郭は外へ広がる");
+
+        ok = ex.Run(R"LUA(
+            check(not pcall(pico.draw_polygon, {1, 2, 3, 4}, 1), 'draw_polygon: 点が2つはエラー')
+            check(not pcall(pico.draw_polygon, {1, 2, 3, 4, 5}, 1), 'draw_polygon: 奇数個はエラー')
+            check(not pcall(pico.draw_polygon, {1, 2, 3, 4, 5, 'x'}, 1), 'draw_polygon: 数値以外はエラー')
+            local many = {}
+            for i = 1, 66 do many[i] = i end
+            check(not pcall(pico.fill_polygon, many, 1), 'fill_polygon: 33点以上はエラー')
+            check(pcall(pico.draw_polygon, {0, 0, 10, 0, 10, 10}, 1, 2), 'draw_polygon: 正常')
+        )LUA", "ex_poly_err");
+        check(ok, "多角形: 引数の検証");
+
+        // 塗りつぶしは実際にピクセルが入る(スタブのdrawFastHLineは書き込む)
+        ok = ex.Run("pico.fill_polygon({10, 10, 20, 10, 20, 20, 10, 20}, 7)", "ex_fill_square");
+        check(ok && OSData::frame->readPixelValue(10, 10) == 7 && OSData::frame->readPixelValue(19, 19) == 7
+              && OSData::frame->readPixelValue(20, 20) == 0 && OSData::frame->readPixelValue(9, 10) == 0,
+              "fill_polygon: 正方形の内側だけが塗られる");
+        ok = ex.Run("pico.fill_polygon({100,100, 130,100, 130,110, 110,110, 110,130, 100,130}, 9)", "ex_fill_concave");
+        check(ok && OSData::frame->readPixelValue(105, 120) == 9 && OSData::frame->readPixelValue(120, 120) == 0
+              && OSData::frame->readPixelValue(120, 105) == 9, "fill_polygon: 凹んだL字も正しく塗れる");
+
+        ok = ex.Run("pico.draw_arc(100, 100, 20, 0, 3.14159, 1, 2)", "ex_arc");
+        check(ok && g_last_dirty.x <= 80 && g_last_dirty.w >= 41, "draw_arc: 円全体を覆うdirty");
+        ok = ex.Run("pico.fill_arc(150, 150, 20, 0, 1.5708, 6)", "ex_fill_arc");
+        check(ok && OSData::frame->readPixelValue(158, 158) == 6 && OSData::frame->readPixelValue(140, 140) == 0,
+              "fill_arc: 右下の1/4だけが塗られる(角度は時計回り)");
+
+        // 文字幅
+        ok = ex.Run(R"LUA(
+            check(pico.text_width('') == 0, 'text_width: 空文字列は0')
+            check(pico.text_width('abcd') > pico.text_width('ab'), 'text_width: 長いほど広い')
+        )LUA", "ex_text_width");
+        check(ok, "text_width: 実行");
+
+        // 画像の拡大縮小・回転・反転
+        OSData::SD_usable = true;
+        HostSd::files["/img/ex.pimg"] = MakePimgBytes(2, 2, false, 5);
+        HostSd::files["/img/ext.pimg"] = MakePimgBytes(2, 2, true, 0); // 全部透過
+        ok = ex.Run(R"LUA(
+            img = pico.image_load('/img/ex.pimg')
+            imt = pico.image_load('/img/ext.pimg')
+            check(img and imt, 'draw_image_ex: 画像を読める')
+            pico.draw_image_ex(img, 200, 200)
+            pico.draw_image_ex(img, 50, 250, 0, 4)
+        )LUA", "ex_image_load");
+        check(ok, "draw_image_ex: 実行");
+        check(OSData::frame->readPixelValue(200, 200) == 5 && OSData::frame->readPixelValue(201, 201) == 5
+              && OSData::frame->readPixelValue(202, 200) == 0, "draw_image_ex: 等倍");
+        check(OSData::frame->readPixelValue(50, 250) == 5 && OSData::frame->readPixelValue(57, 257) == 5
+              && OSData::frame->readPixelValue(58, 250) == 0 && OSData::frame->readPixelValue(50, 258) == 0,
+              "draw_image_ex: 4倍で8x8になる");
+        ok = ex.Run("pico.draw_image_ex(img, 100, 280, 0, -3, 3, 0, 0)", "ex_flip");
+        check(ok && OSData::frame->readPixelValue(99, 280) == 5 && OSData::frame->readPixelValue(94, 285) == 5
+              && OSData::frame->readPixelValue(100, 280) == 0, "draw_image_ex: 負のsxで左右反転(xから左へ伸びる)");
+        ok = ex.Run("pico.draw_image_ex(img, 150, 20, 1.5707963, 1, 1, 0, 0)", "ex_rot");
+        check(ok && OSData::frame->readPixelValue(149, 20) == 5 && OSData::frame->readPixelValue(148, 21) == 5
+              && OSData::frame->readPixelValue(151, 20) == 0, "draw_image_ex: 90度回転(時計回り)");
+        ok = ex.Run("pico.draw_image_ex(img, 20, 100, 0, 4, 4, 1, 1)", "ex_origin");
+        check(ok && OSData::frame->readPixelValue(16, 96) == 5 && OSData::frame->readPixelValue(15, 96) == 0,
+              "draw_image_ex: 原点(ox,oy)を(x,y)に合わせる");
+        ok = ex.Run("pico.draw_image_ex(imt, 30, 150, 0, 3, 3)", "ex_transparent");
+        check(ok && OSData::frame->readPixelValue(30, 150) == 0, "draw_image_ex: 透過画像は何も塗らない");
+        ok = ex.Run(R"LUA(
+            check(not pcall(pico.draw_image_ex, 999999, 0, 0), 'draw_image_ex: 無効なハンドルはエラー')
+            check(not pcall(pico.draw_image_ex, img, 0, 0, 0, 100), 'draw_image_ex: 倍率の上限')
+            pico.draw_image_ex(img, 0, 0, 0, 0) -- 倍率0は何もしない
+        )LUA", "ex_image_err");
+        check(ok, "draw_image_ex: エラー系");
+
+        // WAV(何も鳴らしていないときの答え)
+        ok = ex.Run(R"LUA(
+            check(pico.wav_paused() == false, 'wav_paused: 鳴らしていなければfalse')
+            check(pico.wav_pause(true) == false, 'wav_pause: 鳴らしていなければfalse')
+            check(math.type(pico.wav_position()) == 'integer' and math.type(pico.wav_duration()) == 'integer',
+                  'wav_position/duration: 整数(ms)')
+            check(pico.wav_position() <= pico.wav_duration() or pico.wav_duration() == 0, 'wav_position: 長さを越えない')
+            check(pico.wav_seek(-5) == false, 'wav_seek: 負はfalse')
+        )LUA", "ex_wav");
+        check(ok, "wav: 一時停止・位置・シーク");
+
+        // システム
+        ok = ex.Run(R"LUA(
+            local a = pico.millis()
+            check(type(a) == 'number' and a >= 0, 'millis: 数値')
+            check(pico.battery() == nil, 'battery: まだ読めていなければnil')
+        )LUA", "ex_system");
+        check(ok, "system: millis/battery");
+        BatteryFunctions::Setup();
+        ok = ex.Run(R"LUA(
+            local p, v, ext = pico.battery()
+            check(p >= 0 and p <= 100 and v >= 3.0 and v <= 4.2 and type(ext) == 'boolean', 'battery: 残量・電圧・給電')
+        )LUA", "ex_battery");
+        check(ok, "battery: 読めたあと");
+
+        // ファイルの情報・部分読み
+        HostSd::files["/ex/data.bin"] = std::string("0123456789ABCDEF");
+        ok = ex.Run(R"LUA(
+            local st = pico.sd_stat('/ex/data.bin')
+            check(st and st.size == 16 and st.is_dir == false, 'sd_stat: サイズとis_dir')
+            check(pico.sd_stat('/ex/nothing') == nil, 'sd_stat: 無ければnil')
+            check(pico.sd_read_part('/ex/data.bin', 4, 4) == '4567', 'sd_read_part: 途中から読める')
+            check(pico.sd_read_part('/ex/data.bin', 12, 100) == 'CDEF', 'sd_read_part: 終わりで短く返る')
+            check(pico.sd_read_part('/ex/data.bin', 99, 4) == '', 'sd_read_part: 終わりより先は空')
+            check(pico.sd_read_part('/ex/nothing', 0, 4) == nil, 'sd_read_part: 無ければnil')
+            check(not pcall(pico.sd_read_part, '/ex/data.bin', -1, 4), 'sd_read_part: 負のoffsetはエラー')
+        )LUA", "ex_sd");
+        check(ok, "sd_stat/sd_read_part");
+
+        // 物理キーボード: on_key
+        {
+            using KeyInputFunctions::Event;
+            using KeyInputFunctions::Key;
+            Event a; a.key = Key::Char; a.cp = 0x3042; // あ
+            check(!ex.DispatchKey(a), "on_key: 登録が無ければ取らない");
+            ok = ex.Run(R"LUA(
+                log = {}
+                pico.on_key(function(key, mods)
+                    log[#log + 1] = key .. (mods.ctrl and '+C' or '') .. (mods.shift and '+S' or '')
+                    return key ~= 'tab'
+                end)
+            )LUA", "ex_on_key");
+            check(ok, "on_key: 登録できる");
+            Event c; c.key = Key::Char; c.cp = 'x'; c.mods = KeyInputFunctions::Ctrl;
+            Event l; l.key = Key::Left; l.mods = KeyInputFunctions::Shift;
+            Event t; t.key = Key::Tab;
+            check(ex.DispatchKey(a), "on_key: 真を返せば取った扱い");
+            check(ex.DispatchKey(c), "on_key: Ctrl付きの文字");
+            check(ex.DispatchKey(l), "on_key: 特殊キー");
+            check(!ex.DispatchKey(t), "on_key: 偽を返せば取らない(キー盤へ回る)");
+            ok = ex.Run(R"LUA(
+                check(log[1] == 'あ' and log[2] == 'x+C' and log[3] == 'left+S' and log[4] == 'tab',
+                      'on_key: 文字はUTF-8・特殊キーは名前・修飾キーが渡る')
+                check(not pcall(pico.on_key, 5), 'on_key: 関数以外はエラー')
+                pico.on_key(nil)
+            )LUA", "ex_on_key_check");
+            check(ok, "on_key: 引数の確認");
+            check(!ex.DispatchKey(a), "on_key: nilで解除できる");
+            // コールバックがエラーなら1回だけダイアログを出して以降は呼ばない
+            ok = ex.Run("pico.on_key(function() error('boom') end)", "ex_on_key_err");
+            check(ok, "on_key: エラーになる関数を登録できる");
+            check(ex.DispatchKey(a), "on_key: エラーのときは打鍵を消費したことにする");
+            check(!ex.DispatchKey(a), "on_key: エラーの後は呼ばれない");
+        }
+        OSData::frame->clearClipRect();
+        OSData::SD_usable = false;
     }
 
     // ---- 後片付け(残りのウィジェットも解放し、ASanのリーク検出を素通りさせない) ----

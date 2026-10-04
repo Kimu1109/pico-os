@@ -30,6 +30,9 @@ namespace PowerFunctions {
     constexpr unsigned long kSleepLoopDelayMs = 30;
     //通常時の1フレームの最短時間(10ms = 100fps以下に抑える)
     constexpr unsigned long kMinFrameMs = 10;
+    //平均fpsがこの値以下なら通常時でも休まない(平均は kFpsWindowMs の窓で見る。スリープ中は適用しない)
+    constexpr unsigned long kSkipSleepFps = 60;
+    constexpr unsigned long kFpsWindowMs = 500;
 
     void Setup();      // display.cfgを読むのでSDより後
     // loop()の頭、タッチ/パッドの更新とDisplayFunctions::Update()の後に呼ぶ

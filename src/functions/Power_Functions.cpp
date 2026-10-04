@@ -118,7 +118,29 @@ void PowerFunctions::UpdateAt(unsigned long now_ms){
 }
 
 void PowerFunctions::IdleWait(){
-    if(sleeping) delay(kSleepLoopDelayMs);
+    static unsigned long last_frame_ms = 0;
+    //平均fpsの計測窓(kFpsWindowMsごとに前の窓の結果を採用する)
+    static unsigned long window_start_ms = 0;
+    static unsigned long window_frames = 0;
+    static bool slow = false;  //直近の窓の平均がkSkipSleepFps以下
+    if(sleeping){
+        //スリープ中は平均fpsに関わらず従来どおり休む
+        delay(kSleepLoopDelayMs);
+    }else if(!slow){
+        //無駄なループを減らすため、1フレームを最低kMinFrameMs(=100fps以下)に保つ。
+        //平均fpsがkSkipSleepFps以下のときは、これ以上遅くしないよう休まない
+        const unsigned long elapsed = millis() - last_frame_ms;
+        if(elapsed < kMinFrameMs) delay(kMinFrameMs - elapsed);
+    }
+    const unsigned long now = millis();
+    last_frame_ms = now;
+
+    window_frames++;
+    if(now - window_start_ms >= kFpsWindowMs){
+        slow = window_frames * 1000UL <= (unsigned long)kSkipSleepFps * (now - window_start_ms);
+        window_start_ms = now;
+        window_frames = 0;
+    }
 }
 
 bool PowerFunctions::IsSleeping(){ return sleeping; }

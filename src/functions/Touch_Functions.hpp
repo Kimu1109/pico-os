@@ -12,6 +12,7 @@
 #include "consts.hpp"
 #include "OS_Data.hpp"
 #include "util/TouchFilter.hpp"
+#include "functions/Log_Functions.hpp"
 
 namespace PICO_Touch
 {

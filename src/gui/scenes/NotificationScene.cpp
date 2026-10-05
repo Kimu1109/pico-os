@@ -137,7 +137,7 @@ void NotificationScene::onEnter(){
     this->action_button->setFontSize(FontFn::Small);
     this->action_button->setH(20 + Button::kFrameExtra);
     const int action_w = this->action_button->getLocalRect().w;
-    this->action_button->setW(action_w + Button::kFrameExtra);
+    this->action_button->setW(action_w); //全体の幅のまま固定する(右端が余白からはみ出さない)
     this->action_button->setX(content.x + content.w - MARGIN - action_w);
     this->action_button->setOnPressEnd([this](){ this->doAction(); });
     WidgetFunctions::Add(this->action_button);

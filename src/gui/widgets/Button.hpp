@@ -30,6 +30,14 @@ class Button :
         int fixed_w = 0;
         int fixed_h = 0;
 
+        // setW()/setH()を使わないボタンの箱の大きさ。文字の差し替え(setText)では
+        // 縮めず、これまでで一番大きかった文字に合わせた大きさのまま保つ
+        // (「開始/一時停止/再開」のように文字が変わっても、押すたびに箱の幅が
+        // 伸び縮みして並べたボタンがずれたり、跡が残ったりしないように)。
+        // フォントの切り替え(setFontSize)は箱を測り直す
+        int auto_w = 0;
+        int auto_h = 0;
+
         bool allowTextSpacing = true;
 
         // アイコンボタン(文字の代わりにアイコンを描く)。戻るボタンのように
@@ -39,7 +47,7 @@ class Button :
         IconID icon_id = IconID::AppBox;
         IconSize icon_size = IconSize::Px16;
 
-        void calcTextSize(const char* text);
+        void calcTextSize(const char* text, bool reset_box = true);
         // 中身(テキストまたはアイコン)を箱の中央へ描く。pressOffsetは
         // 押し込み表示時の見た目のずれ分(_3D_PIX_LEN、非押下時は0)
         void drawContent(const Rect& g_rect, int text_spacing, int pressOffset);

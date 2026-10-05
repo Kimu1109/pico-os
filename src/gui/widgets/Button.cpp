@@ -3,16 +3,19 @@
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
-void Button::calcTextSize(const char* text){
+void Button::calcTextSize(const char* text, bool reset_box){
     this->fontApply();
     this->text_w = OSData::frame->textWidth(text);
     this->text_h = OSData::frame->fontHeight();
     this->fontDefault();
 
     //setW()/setH()で明示的に指定されている場合はそちらを優先する。
-    //文字を測り直すたびに箱が伸び縮みすると、並べたボタンの位置がずれるため
-    this->l_rect.w = this->fixed_w ? this->fixed_w : this->text_w;
-    this->l_rect.h = this->fixed_h ? this->fixed_h : this->text_h;
+    //文字を測り直すたびに箱が伸び縮みすると、並べたボタンの位置がずれるため、
+    //文字の差し替え(reset_box=false)では今までで一番大きい大きさを保つ
+    this->auto_w = reset_box ? this->text_w : (this->text_w > this->auto_w ? this->text_w : this->auto_w);
+    this->auto_h = reset_box ? this->text_h : (this->text_h > this->auto_h ? this->text_h : this->auto_h);
+    this->l_rect.w = this->fixed_w ? this->fixed_w : this->auto_w;
+    this->l_rect.h = this->fixed_h ? this->fixed_h : this->auto_h;
 }
 
 void Button::setText(const char* text){
@@ -22,7 +25,7 @@ void Button::setText(const char* text){
     //needsRender()(=新しい箱の分だけdirtyにする)だけでは右側が消え残る
     this->markdirty(this->getScreenRect());
 
-    this->calcTextSize(text);
+    this->calcTextSize(text, false);
     this->text.assign(text);
     this->needsRender();
 }

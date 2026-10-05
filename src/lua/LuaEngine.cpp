@@ -2687,18 +2687,41 @@ int LuaEngine::l_draw_image_ex(lua_State* L) {
     const int x1 = std::min((int)std::ceil(maxx), (int)area.x + area.w);
     const int y1 = std::min((int)std::ceil(maxy), (int)area.y + area.h);
 
+    // 実機では1画素ごとのdoubleの掛け算・割り算・floorが支配的だったので、
+    // 逆変換を16.16の固定小数点に直し、1行の中は加算だけで進める(行の頭だけdoubleで出す)。
+    // 画素の読み書きも「同じ元画素が続くあいだは読み直さない」「同じ色が続けば横線1本にまとめる」
+    constexpr double kFix = 65536.0;
+    const double dux = c / sx, dvx = -s / sy;   // 描き先を右へ1画素進めたときの元画像上の動き
+    const int64_t stepU = (int64_t)std::llround(dux * kFix);
+    const int64_t stepV = (int64_t)std::llround(dvx * kFix);
+    const int64_t fw = (int64_t)iw << 16, fh = (int64_t)ih << 16;
+    const bool transparent = slot.sprite.transparent;
+    LGFX_Sprite& src = slot.sprite.sprite;
+
     for (int py = y0; py < y1; py++) {
-        for (int px = x0; px < x1; px++) {
-            const double rx = px + 0.5 - x, ry = py + 0.5 - y;
-            const double u = c * rx + s * ry;     // 逆回転
-            const double v = -s * rx + c * ry;
-            const int ix = (int)std::floor(u / sx + ox);
-            const int iy = (int)std::floor(v / sy + oy);
-            if (ix < 0 || iy < 0 || ix >= iw || iy >= ih) continue;
-            const uint32_t col = slot.sprite.sprite.readPixelValue(ix, iy);
-            if (slot.sprite.transparent && col == 0) continue; // index0は透過(DrawPimgSprite()と同じ)
-            OSData::frame->writePixel(px, py, (int)col);
+        const double rx0 = x0 + 0.5 - x, ry = py + 0.5 - y;
+        int64_t u = (int64_t)std::llround(((c * rx0 + s * ry) / sx + ox) * kFix);
+        int64_t v = (int64_t)std::llround(((-s * rx0 + c * ry) / sy + oy) * kFix);
+
+        int run_x = 0, run_len = 0, run_col = -1;
+        int last_ix = -1, last_iy = -1;
+        uint32_t last_col = 0;
+        for (int px = x0; px < x1; px++, u += stepU, v += stepV) {
+            int col = -1;  // -1は描かない
+            if (u >= 0 && v >= 0 && u < fw && v < fh) {
+                const int ix = (int)(u >> 16), iy = (int)(v >> 16);
+                if (ix != last_ix || iy != last_iy) {
+                    last_col = src.readPixelValue(ix, iy);
+                    last_ix = ix; last_iy = iy;
+                }
+                if (!(transparent && last_col == 0)) col = (int)last_col; // index0は透過(DrawPimgSprite()と同じ)
+            }
+            if (run_len > 0 && col == run_col) { run_len++; continue; }
+            if (run_len > 0) OSData::frame->drawFastHLine(run_x, py, run_len, run_col);
+            if (col >= 0) { run_x = px; run_len = 1; run_col = col; }
+            else run_len = 0;
         }
+        if (run_len > 0) OSData::frame->drawFastHLine(run_x, py, run_len, run_col);
     }
     if (x1 > x0 && y1 > y0) MarkBounds((int)std::floor(minx), (int)std::floor(miny), (int)std::ceil(maxx), (int)std::ceil(maxy));
     return 0;

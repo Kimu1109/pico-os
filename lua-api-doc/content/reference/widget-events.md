@@ -8,10 +8,10 @@ description: "pico.on(id, event_name, fn) に渡せるイベント名と対応�
 
 | event_name | 対応ウィジェット | コールバック引数 | 発生条件 |
 |---|---|---|---|
-| `press_start` | 全種別 | `(id)` | 押し始め |
-| `press_end` | 全種別 | `(id)` | 押した場所の上で離した |
-| `press_move` | 全種別 | `(id)` | 押しながら移動 |
-| `press_out` | 全種別 | `(id)` | 押したまま当たり判定の外へ |
+| `press_start` | 全種別 | `(id, x, y, lx, ly, dx, dy)` | 押し始め |
+| `press_end` | 全種別 | `(id, x, y, lx, ly, dx, dy)` | 押した場所の上で離した |
+| `press_move` | 全種別 | `(id, x, y, lx, ly, dx, dy)` | 押しながら移動 |
+| `press_out` | 全種別 | `(id, x, y, lx, ly, dx, dy)` | 押したまま当たり判定の外へ |
 | `render` | `Canvas` のみ | `(id)` | `FlushDirty()`の合成サイクル中(dirty時) |
 | `closed` | ダイアログ(`pico.show_*`が返すID)のみ | `(id, is_ok)` | ダイアログが閉じた |
 | `checked_changed` | `Checkbox` のみ | `(id)` | チェック状態が変わった |
@@ -23,4 +23,4 @@ description: "pico.on(id, event_name, fn) に渡せるイベント名と対応�
 
 対応外のウィジェット種別へ登録しようとすると、`pico.on()` はエラーになります。
 
-タップ座標はどのイベントの引数にも含まれません。必要な場合は [`pico.get_touch()`](../../api/touch/) をコールバックの中から呼んでください。
+タッチのイベント(`press_*`)には座標が引数で届きます(`x, y`=画面座標、`lx, ly`=ウィジェット内の座標、`dx, dy`=前のイベントからの移動量。[イベント](../../guide/events/) 参照)。他のイベントには座標は含まれません。必要なら [`pico.get_touch()`](../../api/touch/) を呼んでください。

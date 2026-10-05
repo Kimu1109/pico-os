@@ -42,6 +42,7 @@ void HttpResponse::reset(IHttpSink* s){
 
     validator_.clear();
     location_.clear();
+    content_type_.clear();
     has_etag = false;
 
     connection_close = false;
@@ -138,6 +139,9 @@ bool HttpResponse::handleHeaderLine(){
     }else if(headerIs(line, "Location")){
         char* value = headerValue(line);
         if(value) location_.assign(value);
+    }else if(headerIs(line, "Content-Type")){
+        char* value = headerValue(line);
+        if(value) content_type_.assign(value); //長ければ切り詰まるだけ(表示用)
     }
 
     return true;

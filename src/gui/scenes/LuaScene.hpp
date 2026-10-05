@@ -67,6 +67,14 @@ class LuaScene : public Scene {
 
         LuaEngine* engine = nullptr;
 
+        // ---- 画面をまたぐ受け渡し(pico.push_scene(path, args) / pico.pop(result) / on_suspend・on_resume) ----
+        // push_sceneした側が教えてくれた引数(JSON)と、pico.pop(result)の宛先になる親のスクリプト
+        FixedString<PICO_STR_1KiB> launch_args;
+        FixedString<PICO_PATH_LEN> parent_script;
+        // 画面を離れるときの on_suspend() が返した状態(JSON)。次のonEnter()で on_resume(state) に渡す。
+        // Pushで背後へ退避されている間もシーンのオブジェクトは残るので、メンバに持てる
+        FixedString<PICO_STR_2KiB> saved_state;
+
         // Run()(トップレベルのチャンク実行)が成功したかどうか。失敗時はsetup()/loop()を
         // 呼ばない(engineの状態が中途半端な可能性があり、追加のエラーダイアログも避けたい)
         bool script_ok = false;
@@ -94,6 +102,20 @@ class LuaScene : public Scene {
         void onUpdate() override;
         // 物理キーボードの打鍵をpico.on_key()のコールバックへ渡す(登録が無ければ取らない)
         bool onKey(const KeyInputFunctions::Event& ev) override;
+
+        // push_scene/change_sceneの呼び出し側が、引数(JSON。無ければ空)と親のスクリプトパスを教える。
+        // 生成直後(Push/Changeする前)に呼ぶ
+        void setLaunchArgs(const char* args_json, const char* parent) {
+            launch_args.assign(args_json ? args_json : "");
+            parent_script.assign(parent ? parent : "");
+        }
+
+        // pico.pop(result) が親へ渡す結果の待ち箱。親(target = 親のスクリプトパス)が
+        // Pop で戻って onEnter() で受け取る(TakeResult)。短い間(kResultTtlMs)だけ有効で、
+        // 誰も受け取らなかった結果が後の別の起動に混ざらない。1件だけ持つ(Popは一度に1画面ぶん)
+        static constexpr unsigned long kResultTtlMs = 3000;
+        static void PostResult(const char* target, const char* json);
+        static bool TakeResult(const char* target, FixedString<PICO_STR_1KiB>& out);
 
         // テスト・デバッグ用の脱出口(LuaEngine::raw()と同じ位置づけ)。
         // アクティブでない間(onExit()後)はnullptr

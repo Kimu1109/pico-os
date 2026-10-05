@@ -41,6 +41,7 @@ class HttpRequest : public Task {
         static constexpr unsigned long kTimeoutMs = 10000;
         static constexpr unsigned long kConnectTimeoutMs = 3000;
         static constexpr int kMaxRedirects = 3;
+        static constexpr unsigned long kLongTransferMaxMs = 30UL * 60UL * 1000UL;
         static constexpr size_t kReadPerUpdate = 1024;
 
         enum class Fail : uint8_t {
@@ -73,6 +74,14 @@ class HttpRequest : public Task {
         // 要求ごとに足すヘッダ1行("Authorization: Bearer xxx" のようにCRLF抜きで)。
         // nullptr/空で消す。入りきらなければfalse(消えた状態になる)
         bool setExtraHeader(const char* line);
+        // setExtraHeader()の複数行版。"Name: value"を1行ずつ足す(CRLF区切りで溜める)。
+        // 名前・値にCR/LFや制御文字があったり、入りきらなければfalse(それまでの分は残る)。
+        // setExtraHeader()/要求ごとに clearExtraHeaders() で空にする
+        bool addExtraHeader(const char* name, const char* value);
+        void clearExtraHeaders(){ extra_header_.clear(); }
+        // 大きなダウンロード向け: 10秒の全体タイムアウトの代わりに「何も受け取れない時間」が
+        // kTimeoutMs続いたときだけ打ち切る(全体はkLongTransferMaxMsまで)。既定はfalse
+        void setIdleTimeout(bool on){ idle_timeout_ = on; }
         // 使い回すために持っている接続を閉じる(TLSの約40KBを返す)
         void closeConnection();
         // 次のbegin()で使い回せる接続を持っているか
@@ -100,7 +109,9 @@ class HttpRequest : public Task {
 
         // ---- keep-alive ----
         bool keep_alive_ = false;
-        FixedString<PICO_STR_LL> extra_header_;
+        FixedString<PICO_STR_512B> extra_header_; //複数行(CRLF区切り、末尾のCRLFは無し)
+        bool idle_timeout_ = false;
+        unsigned long last_activity_ms = 0;
         bool conn_reusable_ = false; // 前の応答の後、接続を開けたまま持っている
         Url conn_url_;               // その接続の相手(ホスト・ポート・schemeだけを見る)
         bool reused_ = false;        // 今の要求は持っていた接続で送った

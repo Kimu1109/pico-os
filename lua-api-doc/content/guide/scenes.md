@@ -29,7 +29,13 @@ pico.content_rect()        -- x, y, w, h (ステータスバーを除いた描�
 
 ## LuaSceneはPopで戻ると最初から実行し直す
 
-`push_scene` で開いた画面から `pico.pop()` で戻ってきたとき、戻った先の `LuaScene` は**スクリプトを最初から実行し直します**。Lua変数に持たせた状態は画面を出るたびにリセットされます。状態を残したい場合はSDへ保存してください([SDカードアクセス](../sdcard/) 参照)。
+`push_scene` で開いた画面から `pico.pop()` で戻ってきたとき、戻った先の `LuaScene` は**スクリプトを最初から実行し直します**。Lua変数に持たせた状態は画面を出るたびにリセットされます。状態を残したい場合は次のどれかを使います。
+
+- 画面を離れて戻るだけなら、`on_suspend()`(テーブルを返す)→ `on_resume(state)` で持ち越せます。
+- 子の画面へ値を渡す・結果を受け取るなら `push_scene(path, args)` / `pico.args()` / `pico.pop(result)` / `on_result(result)`。
+- アプリを閉じても残したい値は `pico.store_save()` / `pico.store_load()`、または SD へ保存します([SDカードアクセス](../sdcard/) 参照)。
+
+詳しくは [シーン制御API](../../api/scenes/#画面の間で値を受け渡す) を参照してください。
 
 ## トップレベルで呼ばない
 

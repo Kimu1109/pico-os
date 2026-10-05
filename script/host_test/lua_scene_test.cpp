@@ -403,6 +403,91 @@ int main(){
         check(SceneFunctions::Current() == launcher, "launch_appテスト後: ランチャへ戻っている");
     }
 
+    // ---- 画面をまたぐ受け渡し: push_scene(path, args) / pico.args() / pico.pop(result) / on_suspend・on_resume・on_result ----
+    {
+        static const char* kParentScript = R"LUA(
+            parent_runs = (parent_runs or 0) + 1
+            parent_btn = pico.create("Button")
+            pico.on(parent_btn, "press_start", function()
+                pico.push_scene("/lua/flow_child.lua", {mode = "pick", n = 7})
+            end)
+            function on_suspend() return {visited = true, note = "kept"} end
+            function on_resume(s) resumed = s end
+            function on_result(r) result = r end
+        )LUA";
+        static const char* kChildScript = R"LUA(
+            args = pico.args()
+            child_btn = pico.create("Button")
+            pico.on(child_btn, "press_start", function()
+                pico.pop({chosen = args.n * 2, mode = args.mode})
+            end)
+            child_btn2 = pico.create("Button")
+            pico.on(child_btn2, "press_start", function() pico.pop() end)
+        )LUA";
+        HostSd::files["/lua/flow_parent.lua"] = kParentScript;
+        HostSd::files["/lua/flow_child.lua"] = kChildScript;
+
+        SceneFunctions::Push(new LuaScene("/lua/flow_parent.lua"));
+        SceneFunctions::Update();
+        LuaScene* parent = static_cast<LuaScene*>(SceneFunctions::Current());
+        check(parent != nullptr && SceneFunctions::Depth() == 1, "受け渡し準備: 親へ遷移");
+
+        auto get_widget = [](LuaScene* sc, const char* name) -> Widget* {
+            lua_State* Ls = sc->getEngine()->raw();
+            lua_getglobal(Ls, name);
+            const WidgetId id = (WidgetId)lua_tointeger(Ls, -1);
+            lua_pop(Ls, 1);
+            return WidgetRegistry::Resolve(id);
+        };
+        auto get_str = [](LuaScene* sc, const char* expr) -> std::string {
+            lua_State* Ls = sc->getEngine()->raw();
+            std::string code = std::string("__r = tostring(") + expr + ")";
+            sc->getEngine()->Run(code.c_str(), "probe");
+            lua_getglobal(Ls, "__r");
+            std::string r = lua_tostring(Ls, -1);
+            lua_pop(Ls, 1);
+            return r;
+        };
+
+        check(get_str(parent, "resumed") == "nil" && get_str(parent, "result") == "nil",
+              "受け渡し: 最初の起動では on_resume/on_result は呼ばれない");
+
+        Widget* pb = get_widget(parent, "parent_btn");
+        check(pb != nullptr, "受け渡し準備: 親のボタン");
+        if (pb) pb->causeOnPressStart();
+        SceneFunctions::Update();
+        LuaScene* child = static_cast<LuaScene*>(SceneFunctions::Current());
+        check(child != nullptr && child != parent && SceneFunctions::Depth() == 2, "push_scene(path, args): 子へ遷移");
+        check(get_str(child, "args.mode") == "pick" && get_str(child, "args.n") == "7",
+              "pico.args(): 子で引数が読める");
+
+        Widget* cb = get_widget(child, "child_btn");
+        if (cb) cb->causeOnPressStart();
+        SceneFunctions::Update();
+        check(SceneFunctions::Current() == parent && SceneFunctions::Depth() == 1, "pico.pop(result): 親へ戻る");
+        check(get_str(parent, "parent_runs") == "1", "受け渡し: 戻ったときスクリプトは最初から実行し直される");
+        check(get_str(parent, "resumed.note") == "kept" && get_str(parent, "resumed.visited") == "true",
+              "on_suspend → on_resume: 離れる前の状態が戻ったあとに渡る");
+        check(get_str(parent, "result.chosen") == "14" && get_str(parent, "result.mode") == "pick",
+              "pico.pop(result) → on_result: 子の結果が親に渡る");
+
+        // 結果なしでpopすると on_result は呼ばれない。on_resume は(離れるたびに)呼ばれる
+        pb = get_widget(parent, "parent_btn");
+        if (pb) pb->causeOnPressStart();
+        SceneFunctions::Update();
+        child = static_cast<LuaScene*>(SceneFunctions::Current());
+        Widget* cb2 = get_widget(child, "child_btn2");
+        if (cb2) cb2->causeOnPressStart();
+        SceneFunctions::Update();
+        check(SceneFunctions::Current() == parent, "pico.pop(): 結果なしでも親へ戻る");
+        check(get_str(parent, "result") == "nil", "pico.pop(): 結果なしなら on_result は呼ばれない(前回の結果が残らない)");
+        check(get_str(parent, "resumed.note") == "kept", "on_resume: 2回目の離脱でも状態が渡る");
+
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+        check(SceneFunctions::Current() == launcher, "受け渡しテスト後: ランチャへ戻っている");
+    }
+
     // ---- 後片付け ----
     WidgetFunctions::ClearSceneWidgets();
     delete launcher;

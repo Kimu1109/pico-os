@@ -339,6 +339,26 @@
 //     Luaへ返す(呼び出し側がタブ数の上限を検知できるようにするため)
 // いずれも対象外のウィジェット種別へ呼ぶとエラーになる(`pico.on`の`render`/`closed`
 // と同じ「対応する種別以外はluaL_error」という約束)。
+// ---- 2026-10-05: ウィジェットアプリを書くときに足りなかったAPI(5項目) ----
+//
+// 1. require(name) / pico.require(name): アプリのディレクトリ(app_dir)の <name>.lua か <name>/init.lua を読む
+//    ("a.b" は a/b)。結果は一度だけ実行して覚える(戻り値が無ければtrue)。循環はエラー。1ファイル32KiBまで
+//    (本体のmain.luaは従来どおり16KiB)。**実行中にコンパイルしない**のが肝: LuaScene のコメントにある通り、
+//    実機のコア0のスタックは4KiBしかなく「Luaの実行中にさらにパーサーを重ねる」と溢れる。そこでRun()が
+//    スクリプトの `require("名前")` を文字列として拾い、本体より前(実行の外の浅い所)に読み込んでおく
+//    (拾った先のモジュールの require も同様に辿る。最大16個)。実行中の require はその読み込み済みの
+//    関数を呼ぶだけ。拾えなかった名前(組み立てた名前など)は、Luaの呼び出しが浅い(トップレベル近く)
+//    ときだけ実行中に読む。
+// 2. タッチのイベント(press_start/press_move/press_end/press_out)は fn(id, x, y, lx, ly, dx, dy) で呼ぶ。
+//    x,y=画面座標、lx,ly=そのウィジェットの左上からの座標、dx,dy=前のイベントからの移動量。
+// 3. 画面をまたぐ受け渡し: push_scene/change_scene(path, args) → 子で pico.args()、pico.pop(result) →
+//    親の on_result(result)。親は Pop で戻るとスクリプトを最初から実行し直すので、離れるときの
+//    on_suspend()(テーブルを返す)→ 戻ったときの on_resume(state) で状態を持ち越せる。
+//    pico.store_load()/store_save(tbl) はアプリのディレクトリの store.json に永続する。
+// 4. HTTP: 任意ヘッダ(opts.headers)・応答ヘッダ(コールバックの5番目)・順番待ち(同時に1本だけ走り、
+//    最大4本を待たせる。戻り値はリクエストID)・ファイルへ直接保存(opts.save_to。16KiBの上限なし、
+//    無通信が10秒続くまで続く)。JSON: pico.json_decode / json_encode / json_null。
+// 5. タイマー: pico.after(ms, fn) / pico.every(ms, fn) / pico.cancel(handle)。
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
@@ -400,6 +420,21 @@ class LuaEngine {
         // pico.http_request()が進行中か(スリープさせないかの判断に使う)
         bool HttpBusy() const;
 
+        // ---- 画面をまたぐ受け渡し・タイマー(LuaSceneから呼ぶ) ----
+        // 経過時間を進めて、時間になった pico.after / pico.every のコールバックを呼ぶ。
+        // 毎フレーム(setup()/loop()の有無に関わらず)呼ぶ。dt_msは前回からの経過ミリ秒
+        void UpdateTimers(uint32_t dt_ms);
+        // このスクリプト自身のSDパス(pico.push_scene が子へ「親」として教える・pico.require 等の基準)
+        void SetScriptPath(const char* path);
+        // push_scene/change_scene で渡された引数のJSON(pico.args())と、戻り値(pico.pop(result))の宛先
+        void SetSceneArgs(const char* json, const char* parent_script);
+        // グローバル関数 name(on_resume / on_result)を、jsonを読んだ値1つを引数にして呼ぶ。
+        // 関数が無ければ何もしない。エラーはReportError()
+        void CallWithJson(const char* name, const char* json);
+        // 画面を離れるとき: グローバルの on_suspend() があれば呼び、返したテーブルをJSONで out へ入れる。
+        // 保存したら true(返さない/入りきらないときは false)。エラーはログだけ(画面を離れる途中なので)
+        bool CallSuspend(FixedString<PICO_STR_2KiB>& out);
+
         // 通知から起動されたときの起動理由(pico.launch_reason()が返す)。
         // LuaScene::onEnter()がNotificationFunctions::TakeLaunchReason()で受け取って、Run()の前に渡す
         void SetLaunchReason(const char* tag, const char* data);
@@ -440,6 +475,10 @@ class LuaEngine {
         // 積まれるのを防ぐ安全弁)。setup()側はRun()と同じく1回きりなので不要
         bool loop_broken_ = false;
 
+        // タッチのイベントの移動量(dx,dy)を出すための、直前のタッチ位置
+        int last_touch_x_ = 0;
+        int last_touch_y_ = 0;
+
         // pico.on_key()で登録した打鍵のコールバック(Luaのregistry ref。無ければLUA_NOREF)
         int key_callback_ref_ = LUA_NOREF;
         // pico.sound_play/beepを使ったか。使ったアプリは閉じるときに音を全部止める(デストラクタ)
@@ -455,6 +494,28 @@ class LuaEngine {
         bool used_wav_ = false;
 
         std::vector<CallbackBinding> callbacks_;
+
+        // ---- 画面をまたぐ受け渡し ----
+        FixedString<PICO_PATH_LEN> script_path_;   // このスクリプトのSDパス(SetScriptPath)
+        FixedString<PICO_PATH_LEN> parent_path_;   // pico.pop(result) の宛先(push_sceneした側)
+        FixedString<PICO_STR_1KiB> scene_args_;    // push_scene/change_scene で渡された引数(JSON)
+
+        // ---- タイマー(pico.after / every / cancel) ----
+        // 固定長。ハンドルは(世代<<8 | 添字+1)。世代は使うたびに進めるので、解放済みのハンドルを
+        // 取り消しても別のタイマーを巻き込まない(画像ハンドルと同じ考え方)
+        static constexpr size_t kMaxTimers = 16;
+        struct Timer {
+            bool used = false;
+            bool repeat = false;
+            uint32_t generation = 0;
+            uint32_t interval_ms = 0;
+            uint32_t due_ms = 0;   // timer_clock_ms_ がこれ以上になったら鳴らす(一周しても比べられる差で見る)
+            int ref = LUA_NOREF;
+        };
+        Timer timers_[kMaxTimers];
+        uint32_t timer_clock_ms_ = 0;
+        bool ResolveTimerHandle(uint32_t handle, size_t& out_index) const;
+        void ReleaseTimer(size_t index);
 
         // 実行時間の安全網(暴走防止)。クラスコメント参照。
         // kHookInstructionInterval: lua_sethook(LUA_MASKCOUNT)へ渡す間隔
@@ -511,6 +572,15 @@ class LuaEngine {
         // newしない(完全な定義は.cppのみ。クラスコメント「ネットワーク」参照)
         struct HttpState;
         HttpState* http_ = nullptr;
+        // 順番待ちのリクエスト(同時に走るのは1本だけ。2本目以降は先に走っているものが終わってから順に始める)。
+        // 本体は待っている間だけnewする
+        struct PendingHttp;
+        static constexpr size_t kMaxHttpQueue = 4;
+        std::vector<PendingHttp*> http_queue_;
+        bool StartHttp(PendingHttp* r, const char** why);
+        void FinishHttp();
+        void StartQueuedHttp();
+        static void FreePending(lua_State* L, PendingHttp* r);
 
         // ダイアログが閉じたときのC++側コールバック配線(pico.show_xxx()内で生成直後に
         // 必ず呼ぶ。pico.on()の有無に関わらずDestroyLater()までを保証する。
@@ -672,6 +742,25 @@ class LuaEngine {
         // ネットワーク。クラスコメント「ネットワーク」参照
         static int l_http_request(lua_State* L);
         static int l_http_cancel(lua_State* L);
+
+        // JSON(pico.json_decode / json_encode)。LuaJson.hpp
+        static int l_json_decode(lua_State* L);
+        static int l_json_encode(lua_State* L);
+        // タイマー(pico.after / every / cancel)
+        static int l_after(lua_State* L);
+        static int l_every(lua_State* L);
+        static int l_cancel(lua_State* L);
+        static int addTimer(lua_State* L, bool repeat);
+        // 画面をまたぐ受け渡し(pico.args / store_load / store_save)
+        static int l_args(lua_State* L);
+        static int l_store_load(lua_State* L);
+        static int l_store_save(lua_State* L);
+        // require(グローバルの require と pico.require)。クラスコメント「require」参照
+        static int l_require(lua_State* L);
+        static int PreloadTrampoline(lua_State* L);
+        void preloadModules(const char* src, size_t len);
+        bool ResolveModulePath(const char* name, FixedString<PICO_PATH_LEN>& out) const;
+        static int pushFileString(lua_State* L, const char* path, size_t max, const char** why);
         static int l_invalidate(lua_State* L);
         static int l_mark_dirty(lua_State* L);
 

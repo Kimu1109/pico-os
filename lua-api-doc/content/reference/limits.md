@@ -19,7 +19,15 @@ description: "メモリ予算・実行時間・各種サイズ上限・列挙型
 |---|---|
 | `pico.sd_read()` の読み込み上限 | 16KiB(超過は`nil`。切り詰めない) |
 | `pico.http_request()` の送信ボディ上限 | 16KiB |
-| `pico.http_request()` の受信本文上限 | 16KiB |
+| `pico.http_request()` の受信本文上限 | 16KiB(メモリで受ける場合。`save_to` でSDへ保存するなら8MiB) |
+| `pico.http_request()` の順番待ち | 走っている1本 + 待ち4本 |
+| `pico.http_request()` の追加ヘッダ | 合計480バイト |
+| `pico.after` / `pico.every` のタイマー数 | 16個 |
+| `require` で読む1ファイル | 32KiB(先読みするのは1回のスクリプトにつき最大16モジュール) |
+| `push_scene` の `args` / `pop` の `result` | JSONで1KiB未満 |
+| `on_suspend` が返す状態 | JSONで2KiB未満 |
+| `pico.store_save()` の大きさ | JSONで16KiB |
+| `pico.json_decode` の入力 / `json_encode` の出力 | 64KiB。入れ子は16段 |
 | 同時に保持できる画像(`pico.image_load`)の枚数 | 4枚 |
 | 画像データの合計サイズ上限 | 64KiB(65,536バイト) |
 | `TabBar` に追加できるタブ数(`pico.tab_add`) | 4個 |

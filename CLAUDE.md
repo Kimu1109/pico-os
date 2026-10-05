@@ -2586,14 +2586,14 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.create(type_name)` | `WidgetFactory::TypeFromName()`→`Create()`。生成物は即`WidgetFunctions::Add()`で登録し、`WidgetId`(整数)を返す |
 | `pico.destroy(id)` | コールバック登録を`PruneCallbacksFor()`で外してから`WidgetFunctions::DestroyLater()`(フレーム境界での遅延削除) |
 | `pico.set(id, name, value)` / `pico.get(id, name)` | `WidgetProperty::IdFromName()`→`Set()`/`Get()`。プロパティ名は`snake_case`の文字列 |
-| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`)+`render`(`Canvas`限定、下記「直接描画」参照)+ウィジェット固有4種(`checked_changed`/`value_changed`/`select_item`/`tab_changed`、下記「ウィジェット固有イベント」参照)+`closed`(ダイアログ限定)に対応(下記) |
+| `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`。**`fn(id, x, y, lx, ly, dx, dy)`でタッチ座標も届く**、下記「Lua APIの追加(2026-10-05)」)+`render`(`Canvas`限定、下記「直接描画」参照)+ウィジェット固有4種(`checked_changed`/`value_changed`/`select_item`/`tab_changed`、下記「ウィジェット固有イベント」参照)+`closed`(ダイアログ限定)に対応(下記) |
 | `pico.add_child(container_id, child_id)` | `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応 |
 | `pico.remove_child(container_id, child_id)` | `add_child`の逆。破棄せず取り外す。取り外した子はフラットリストへ独立したルートとして戻る(下記「コンテナからの取り外し」参照)(2026-09-21追加) |
 | `pico.list_add(id, text)` / `pico.list_clear(id)` | `ScrollList`/`DropdownMenu`へ項目を足す/全消しする(下記「リストへの項目追加」参照)(2026-09-21追加) |
 | `pico.tab_add(id, label)` | `TabBar`へタブを足す。`kMaxTabs`(4)超過なら`false`(下記「リストへの項目追加」参照)(2026-09-21追加) |
 | `pico.log(msg)` | `LOG_APP_MSG` |
 | `pico.show_error(msg)` | `ErrorFunctions::ShowFatal()` |
-| `pico.pop()` | `SceneFunctions::Pop()`。`LuaScene`から起動されたアプリがランチャへ戻るためのもの(2026-09-19追加) |
+| `pico.pop([result])` | `SceneFunctions::Pop()`。`LuaScene`から起動されたアプリがランチャへ戻るためのもの。`result`は`push_scene`した親の`on_result(result)`に届く(2026-09-19追加) |
 | `pico.content_rect()` | `Scene::contentRect()`を`x,y,w,h`の4値で返す。ステータスバー分を避けた配置に使う(2026-09-19追加) |
 | `pico.draw_pixel(x,y,color)` / `draw_line(x0,y0,x1,y1,color)` / `draw_rect(x,y,w,h,color)` / `fill_rect(...)` / `draw_circle(x,y,r,color)` / `fill_circle(...)` / `clear_rect(x,y,w,h[,color])` / `draw_text(x,y,text[,color[,font_size]])` | `OSData::frame`へ直接描く。**`Canvas`の`render`コールバック内で使うこと**(下記「直接描画」参照)(2026-09-20追加) |
 | `pico.invalidate(id)` | 対象ウィジェットの画面矩形を`needsRender()`でdirty化(次のFlushDirty()で`render()`が呼ばれる)。`Canvas`に限らず任意のウィジェットに使える汎用API(2026-09-20追加) |
@@ -2616,14 +2616,14 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.canvas_save(id, path)` | `CanvasRaster`の中身を`.pimg`としてSDへ書き出す。成否を`bool`で返す(SD無し/権限外/書き込み失敗はfalse。対象種別/IDが不正ならエラー)(2026-09-23追加) |
 | `pico.canvas_load(id, path[, keep_size])` | `.pimg`を読み込み`CanvasRaster`へ反映する。**読み込んだ画像のサイズへキャンバス自体もリサイズされる**(内容は消える)。`keep_size=true`なら大きさを変えず白紙にしてから左上に合わせて読む(2026-09-24追加)。成否を`bool`で返す(2026-09-23追加) |
 | `pico.canvas_undo(id)` | 1段だけの「元に戻す」(もう一度でやり直し)。`undo_enabled`が有効なときだけ効く(下記「ペイント」参照)(2026-09-24追加) |
-| `pico.push_scene(path)` / `pico.change_scene(path)` | 別のLuaスクリプトへ`SceneFunctions::Push/Change`する(下記「シーン制御」参照)(2026-09-21追加) |
+| `pico.push_scene(path [, args])` / `pico.change_scene(path [, args])` | 別のLuaスクリプトへ`SceneFunctions::Push/Change`する。`args`は子の`pico.args()`で受け取る(下記「シーン制御」「Lua APIの追加(2026-10-05)」参照)(2026-09-21追加) |
 | `pico.launch_app(name)` | `AppFunctions::LaunchByName()`経由で登録簿の任意のアプリ(C++製含む)へ`Push`する。見つかれば`true`、無ければ`false`(下記「シーン制御」参照)(2026-09-21追加) |
 | `pico.show_message(text, cancel_text, ok_text)` | `MsgDialog`を表示する。閉じた結果は`pico.on(id,"closed",fn)`で受ける(下記「ダイアログ」参照)(2026-09-21追加) |
 | `pico.show_input(label, initial_text, is_single_line)` | `InputDialog`を表示する。入力文字列は`pico.get(id,"text")`で読む(2026-09-21追加) |
 | `pico.show_file_save(start_dir[, default_name])` / `pico.show_file_select(start_dir)` | `FileSaveDialog`/`FileSelectDialog`を表示する。選択パスは`pico.get(id,"path")`で読む(未選択は`nil`)(2026-09-21追加) |
 | `pico.show_color()` | `ColorDialog`(4×4パレット)を表示する。選択色は`pico.get(id,"value")`で読む(未選択は`-1`)(2026-09-21追加) |
-| `pico.http_request(method, url, body, content_type, callback)` | 非同期HTTPリクエスト(GET/POST/PUT/PATCH/DELETE)。同時に1本まで。`callback(ok, status_code, body_or_nil, error_or_nil)`(下記「ネットワーク」参照)(2026-09-21追加) |
-| `pico.http_cancel()` | 進行中の`pico.http_request()`を取り消す(2026-09-21追加) |
+| `pico.http_request(method, url, body, content_type, callback [, opts])` | 非同期HTTPリクエスト(GET/POST/PUT/PATCH/DELETE)。走るのは1本、2本目以降は順番待ち(最大4本)。戻り値はリクエストID。`opts={headers=, save_to=}`、`callback(ok, status_code, body_or_nil, error_or_nil, headers, info)`(下記「ネットワーク」と「Lua APIの追加(2026-10-05)」参照)(2026-09-21追加、2026-10-05拡張) |
+| `pico.http_cancel([id])` | `pico.http_request()`を取り消す(idなしは走っているものも順番待ちも全部)(2026-09-21追加) |
 | `pico.get_time()` | `TimeFunctions::timeinfo`を`{year, month, day, hour, min, sec, wday}`のテーブルで返す(下記「時刻取得」参照)(2026-09-21追加) |
 | `pico.get_touch()` | 現在(直近)のタッチ位置を`x, y, is_touched`の3値で返す。`pico.draw_*`と同じ絶対スクリーン座標(下記「タップ位置の取得」参照)(2026-09-21追加) |
 
@@ -3290,7 +3290,7 @@ Luaスクリプトから表示できるようにした(`SearchDialog`はMarkdown
   進める**(`setup()`/`loop()`の定義有無に関わらず無条件に呼ぶ。`CallLoop()`
   とは別の独立した呼び出しにしてあり、`pico.*`のネットワーク進行を
   Arduino風`loop(dt)`の意味論と混ぜていない)。
-- **同時に実行できるリクエストは1本まで。** `HttpState::callback_ref`が
+- **同時に走るリクエストは1本まで(2026-10-05からは2本目以降を最大4本まで順番待ちにする。下記「Lua APIの追加(2026-10-05)」)。** `HttpState::callback_ref`が
   `LUA_NOREF`かどうかで「進行中か」を判定する。進行中に`pico.http_request()`を
   呼んでも`luaL_error`にはせず`false`を返すだけ(SD無し等と同じ「実行時の状態」
   枠)。完了時は**Lua側コールバックを呼ぶ前に`callback_ref`を`LUA_NOREF`へ戻す**
@@ -3537,6 +3537,59 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   結合テストで、SDからの読み込み・`pico.pop()`での実際のランチャ復帰・ファイル不在時の
   ダイアログ表示・大きすぎるスクリプトの打ち切り警告を確認している
   (`script/host_test/stubs/SdFat.h`の`HostSd::files`にスクリプトを登録して読ませる)。
+
+### Lua APIの追加(2026-10-05): require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー
+
+「ウィジェットを使うLuaアプリを書くときに足りない機能」を洗い出した(`pico.*`の不足リスト)うち、実害が出ていた5項目をまとめて入れた。
+ドキュメントは`lua-api-doc/content/api/`(`modules.md`/`json.md`/`timers.md`/`scenes.md`/`network.md`)、動作確認アプリは`pc/sdcard/lua/apps/ウィジェットAPI確認/`。
+**実機では未確認**(PCのホストテストとPCビルドのみ)。
+
+1. **`require(name)` / `pico.require(name)`**(`LuaEngine::l_require`、`preloadModules`)
+   - アプリのフォルダ(`app_dir_`)の`<名前>.lua`→`<名前>/init.lua`を読む。`.`はフォルダ区切り、`..`や`/`は不可、`sd_outside_app_dir`があっても外は探さない。
+     1ファイル32KiBまで(`main.lua`は`LuaScene::kMaxScriptBytes`=16KiBのまま)。結果は`registry.pico_loaded`に覚え、2回目は同じ値。循環はエラー。
+   - **実行中にコンパイルしない**のが肝(`LuaScene.hpp`のコメント: 実機のコア0スタックは4KiBで、Luaの実行中にパーサーを重ねて溢れた事故がある)。
+     `Run()`がソースの`require("名前")`/`require "名前"`/`require('名前')`を**文字列として拾い**(`ScanRequires`)、本体より前に`PreloadTrampoline`(`ProtectedCall`越し)で
+     読み込んで`registry.pico_preload[名前]`に関数(構文エラーなら文字列)で置く。読んだモジュールの`require`も辿る(最大16個)。実行時の`require`はその関数を呼ぶだけ。
+     先読みで拾えない名前(変数で組み立てたもの)は、`lua_getstack(L, 6)`が無い=呼び出しが浅いときだけ実行中に読む。深ければ「関数の奥から呼ばれています」でエラー。
+   - `package`ライブラリは引き続き無い。グローバル`require`は`pico.require`と**同じ関数**。サンドボックスのテストは「標準のrequireは無い」から「requireは自前のもの」へ書き換えた。
+     モジュールの実行は`lua_pcall`で包むが、失敗は必ず再度`lua_error`で投げ直す(打ち切り=`aborting_`を握り潰さない)。
+2. **タッチのイベント引数**: `press_start/move/end/out`は`fn(id, x, y, lx, ly, dx, dy)`(`Dispatch()`で組み立てる)。`x,y`=画面座標、`lx,ly`=`getScreenRect()`の左上からの座標、
+   `dx,dy`=前のタッチのイベントからの移動量(`last_touch_x_/y_`。`press_start`は0)。`fn(id)`の書き方は従来どおり動く。`pico.get_touch()`は残してある。
+3. **画面をまたぐ受け渡し**(`LuaScene`+`LuaEngine`)
+   - `push_scene/change_scene(path, args)` → 子の`pico.args()`。`pico.pop(result)` → 親の`on_result(result)`。値はJSONにして**1KiB未満**(`EncodeSceneValue`、超過・JSON化不能は`luaL_error`)。
+   - `LuaScene`は`launch_args`/`parent_script`/`saved_state`(2KiB)をメンバに持つ(`setLaunchArgs()`)。`LuaEngine`は`SetScriptPath()`/`SetSceneArgs()`で受ける。
+     `change_scene`は親を引き継ぐ(置き換えた先の`pop(result)`は元の親へ届く)。
+   - **結果の待ち箱**は`LuaScene::PostResult(target, json)`/`TakeResult(target, out)`(宛先=親のスクリプトパス、1件、`kResultTtlMs`=3秒で失効、別の画面宛ては取らない)。
+     通知の起動理由(`TakeLaunchReason`)と同じ作り。親は`Pop`で戻って`onEnter()`からやり直すので、`setup()`の後に受け取る。
+   - **状態の持ち越し**: `onExit()`で`engine->CallSuspend()`(グローバル`on_suspend()`が返したテーブルをJSON化して`saved_state`へ。エラーはダイアログを出さずログだけ)→
+     次の`onEnter()`で`setup()` → `on_resume(state)` → `on_result(result)`の順に`CallWithJson()`で呼ぶ。`Push`で退避中もシーンのオブジェクトは残るのでメンバで持てる。
+   - **`pico.store_load()`/`store_save(tbl)`**: `<app_dir>/store.json`(JSON、16KiBまで、一時ファイル→差し替え)。アプリを閉じても残る。`.gitignore`済み。
+4. **HTTPとJSON**
+   - `http_request(..., callback, opts)`: `opts.headers`(`HttpRequest::addExtraHeader()`で足す。`Host`/`Content-Length`/`Content-Type`/`Connection`/`Transfer-Encoding`等は不可、
+     CR/LF・制御文字は不可、合計480B)、`opts.save_to`(`<path>.part`へ直接書いて最後まで受け取れたら差し替え。上限8MiB、`SdWriteAllowed`を通る=`app.cfg`や`app_dir`の外は不可。
+     保存中は`setIdleTimeout(true)`で「10秒無通信」まで続け、`UpdateHttp()`が1フレームに最大16回・6msまで`update()`を回す)。
+     `callback(ok, status, body, err, headers, info)`: `headers`は小文字キー(`content-type`/`content-length`/`etag`/`last-modified`/`location`。`HttpResponse::contentType()`を足した)、
+     `info={size=, saved=}`。
+   - **同時に走るのは1本のまま**(RAMとTLSの約40KBのため。本物の並列にはしていない)。2本目以降は`PendingHttp`(本文・ヘッダを`std::string`で持つ)として最大`kMaxHttpQueue`=4本待たせ、
+     終わるたび`StartQueuedHttp()`が先頭から始める。戻り値は`true`ではなくリクエストID(整数)に**変えた**(旧: 進行中に呼ぶと`false`、今: 順番待ち)。`http_cancel(id)`/`http_cancel()`(全部)。
+     始められなかった待ちは失敗としてコールバックへ知らせる。コールバックの中から次の`http_request`を呼んでも待ちの後ろに並ぶ。
+   - **`pico.json_decode(text [, keep_null])` / `pico.json_encode(v)` / `pico.json_null`**(`src/lua/LuaJson.hpp`、ヘッダのみ=ホストテストのビルド一覧を増やさないため)。
+     Decodeは再帰下降でLuaの値を直接作る(深さ16・入力64KiB、整数は整数、`null`は既定でnil)。Encodeは確保しない関数だけで読み`std::string`へ出す(longjmpしない)。
+     空テーブルは`[]`、穴のある配列は`null`で埋める、まばらな整数キー/文字列以外のキー/NaN/循環は失敗(`nil, 理由`)。
+     C++側の`Json_Reader`(SAX、値256B・キー48Bの上限)は使わなかった(汎用の変換には小さすぎる)。
+5. **タイマー**: `pico.after(ms, fn)`/`pico.every(ms, fn)`/`pico.cancel(handle)`。固定16個(`kMaxTimers`)、ハンドルは`(世代<<8 | 添字+1)`で、解放済みハンドルが別のタイマーを巻き込まない。
+   `LuaScene::onUpdate()`が毎フレーム`UpdateTimers(dt)`(`setup()/loop()`の有無に関わらず)。`every`は遅れても溜めずに1回(次は「今からms後」)。
+   コールバックのエラーはそのタイマーを止める。別の画面へ`push_scene`している間は動かない(シーンごと`LuaEngine`が作り直されるため)。
+
+- 検証: `lua_engine_test`(JSON・タイマー・タッチ引数・受け渡し・`require`・**127.0.0.1に立てた小さなサーバ(スレッド)相手の実HTTP**: ヘッダ送信・応答ヘッダ・順番待ち・POST・`save_to`で40000バイト・取り消し・権限)、
+  `lua_scene_test`(実際のシーン遷移で`args`→`pop(result)`→`on_result`、`on_suspend`→`on_resume`)、`lua_sandbox_test`(`require`の扱いを更新)。
+  `lua_engine_test`は`-pthread`でビルドする。環境変数`LUA_TEST_VERBOSE=1`でテストのログ(Luaのエラー等)が標準エラーへ出る。PCビルドでは「ウィジェットAPI確認」アプリで
+  盤面のタップ→マス目、タイマー、`push_scene`→`pop(result)`、`store_save`を`--tap`/`--shot`で確認した。
+- **既知の限界/未確認**: 実機でのスタック(`ScanRequires`と先読みのコンパイルが想定どおり浅いか)・`save_to`の速度(SDとTLS)・`http_request`の戻り値の変更で`== true`と比べていた既存アプリが無いこと
+  (リポジトリ内のLuaアプリは`http_request`を使っていない)。OOM時に`PendingHttp`/`std::string`が漏れうる(`luaL_error`のlongjmpはデストラクタを飛ばす。アプリを閉じる状況なので許容)。
+- 洗い出したうえで**今回は見送った**もの(必要になったら): `TextView`/`ImageView`/`MarkdownView`/`AnalogClock`等のLuaからの生成、`ProgressBar`、ScrollListのアイコン・項目の挿入削除、
+  TabBarの上限4個、ツリー探索(`parent`/`children`/`find`)、Z順、`enabled`、長押し/ダブルタップ/スワイプのイベント、オフスクリーンスプライト、`pico.await`/`sleep`(コルーチン連携)、
+  トースト、宣言的なUIヘルパー(`pico.ui{}`)、`pico.memory_info()`。
 
 ### 実行時間の安全網(暴走防止、2026-09-21実装)
 

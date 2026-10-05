@@ -28,6 +28,27 @@ void HttpRequest::setKeepAlive(bool on){
     }
 }
 
+bool HttpRequest::addExtraHeader(const char* name, const char* value){
+    if(!name || !*name || !value) return false;
+    //名前はtoken文字だけ、値は制御文字(HTAB以外)を含まない。区切りを混ぜられると別のヘッダや別の要求を差し込める
+    for(const char* p = name; *p; p++){
+        const unsigned char c = (unsigned char)*p;
+        const bool tok = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+            || c == '-' || c == '_' || c == '.';
+        if(!tok) return false;
+    }
+    for(const char* p = value; *p; p++){
+        const unsigned char c = (unsigned char)*p;
+        if((c < 0x20 && c != '\t') || c == 0x7f) return false;
+    }
+    FixedString<PICO_STR_512B> next;
+    if(!next.assign(extra_header_)) return false;
+    if(!next.empty() && !next.append("\r\n")) return false;
+    if(!next.append(name) || !next.append(": ") || !next.append(value)) return false;
+    extra_header_.assign(next);
+    return true;
+}
+
 bool HttpRequest::setExtraHeader(const char* line){
     extra_header_.clear();
     if(!line || !*line) return true;
@@ -76,6 +97,7 @@ bool HttpRequest::begin(const Url& target, Method method, IHttpSink* sink,
     fail_ = Fail::None;
     status = TaskTools::PROCESSING;
     started_ms = millis();
+    last_activity_ms = started_ms;
 
     return startRequest(reuse);
 }
@@ -122,9 +144,27 @@ bool HttpRequest::sendRequestLine(){
     ok = req.append("\r\nUser-Agent: pico-os/1\r\n") && ok;
     //圧縮させない(展開の手段が無い)。使い回さないならConnection: closeで応答後に閉じてもらう
     ok = req.append(keep_alive_ ? "Connection: keep-alive\r\n" : "Connection: close\r\n") && ok;
-    if(!extra_header_.empty()){
-        ok = req.append(extra_header_) && ok;
+    if(!ok) return false;
+
+    //足されたヘッダは1行ずつ。reqに収まらなければそこまでを送ってから続ける(スタックに大きな領域を取らないため)
+    for(const char* p = extra_header_.c_str(); *p; ){
+        const char* end = strstr(p, "\r\n");
+        const size_t n = end ? (size_t)(end - p) : strlen(p);
+        if(req.length() + n + 2 >= PICO_STR_512B){
+            if(client.write((const uint8_t*)req.c_str(), req.length()) != req.length()) return false;
+            req.clear();
+            if(n + 2 >= PICO_STR_512B) return false;
+        }
+        ok = req.append(p, n) && ok;
         ok = req.append("\r\n") && ok;
+        p += n;
+        if(end) p += 2;
+    }
+
+    //Content-Type/Content-Length/終端の空行が入る余地(content_type_は48B以内)を残す
+    if(req.length() + 160 >= PICO_STR_512B){
+        if(client.write((const uint8_t*)req.c_str(), req.length()) != req.length()) return false;
+        req.clear();
     }
 
     if(body_ && body_len_ > 0){
@@ -189,9 +229,15 @@ bool HttpRequest::followRedirect(){
 void HttpRequest::update(){
     if(phase == Phase::Idle || phase == Phase::Ended) return;
 
-    if(millis() - started_ms > kTimeoutMs){
-        finishWith(TaskTools::FAILED, Fail::Timeout);
-        return;
+    {
+        const unsigned long now = millis();
+        const bool timed_out = idle_timeout_
+            ? (now - last_activity_ms > kTimeoutMs || now - started_ms > kLongTransferMaxMs)
+            : (now - started_ms > kTimeoutMs);
+        if(timed_out){
+            finishWith(TaskTools::FAILED, Fail::Timeout);
+            return;
+        }
     }
 
     if(phase == Phase::Connecting){
@@ -238,6 +284,7 @@ void HttpRequest::update(){
 
         readTotal += (size_t)got;
         got_bytes_ = true;
+        last_activity_ms = millis();
 
         if(!res.feed(buf, (size_t)got)){
             finishWith(TaskTools::FAILED, Fail::Response);

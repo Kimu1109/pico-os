@@ -24,9 +24,12 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | [画像](images/) | `image_load` `image_size` `draw_image` `draw_image_part` `image_free` |
 | [ラスタキャンバス](canvas/) | `canvas_clear` `canvas_save` `canvas_load` `canvas_undo` |
 | [SDカード](sdcard/) | `sd_exists` `sd_read` `sd_write` `sd_remove` `sd_mkdir` `sd_list` |
-| [シーン制御](scenes/) | `pop` `push_scene` `change_scene` `launch_app` `content_rect` |
+| [シーン制御](scenes/) | `pop` `push_scene` `change_scene` `launch_app` `content_rect` `args` `store_load` `store_save`(+ `on_suspend` `on_resume` `on_result`) |
 | [ダイアログ](dialogs/) | `show_message` `show_input` `show_file_save` `show_file_select` `show_color` |
 | [ネットワーク](network/) | `http_request` `http_cancel` |
+| [JSON](json/) | `json_decode` `json_encode` `json_null` |
+| [タイマー](timers/) | `after` `every` `cancel` |
+| [モジュール](modules/) | `require` `pico.require` |
 | [時刻](time/) | `get_time` |
 | [通知](notify/) | `notify` `notify_cancel` `notify_list` `launch_reason` |
 | [音](sound/) | `sound_play` `sound_stop` `sound_playing` `note_freq` `beep` `sound_available` `music_play` `music_play_text` `music_stop` `music_playing` `wav_play` `wav_stop` `wav_playing` |

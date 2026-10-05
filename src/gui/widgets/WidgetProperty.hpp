@@ -61,6 +61,17 @@ namespace WidgetProperty {
         // RectShape / EllipseShape / LineShape / TriangleShape(図形ウィジェット)
         Filled, Thickness, X1, Y1, X2, Y2, X3, Y3,
 
+        // TextView / MarkdownView / ImageView
+        ScrollY, ImageW, ImageH, RowCount, ScrollX, MaxScrollX, MaxScrollY,
+
+        // AnalogClock / DurationPicker / MonthGrid
+        Hour, Minute, Second, HandColor, SecondHandColor,
+        TotalMs, Editable,
+        Year, Month, Today, Selected,
+
+        // Widget基底(型を問わない)
+        HitTransparent, Enabled,
+
         Count
     };
 

@@ -56,6 +56,8 @@ enum class WidgetType : uint8_t {
     NotificationToast,
     PerfOverlay,
     GraphView,
+    ProgressBar,
+    PickerDialog,
     Count // 番兵。実際の種類としては使わない
 };
 

@@ -102,3 +102,30 @@ end
 - 一時ファイルに書いてから差し替えるので、書き込み中に電源が切れても前の内容は壊れません。
 - ファイルが無い・壊れている・SDが使えないときは `nil` を返します。
 - アプリのフォルダの外には書きません(`sd_outside_app_dir` の権限に関わらず固定です)。
+
+### 暗号化して保存する
+
+<div class="sig">pico.store_save(value, opts?: { encrypt?: boolean, password?: string }) <span class="ret">-> ok: boolean</span></div>
+<div class="sig">pico.store_load(opts?: { password?: string }) <span class="ret">-> value | nil [, reason: string]</span></div>
+
+`opts.encrypt = true` で、JSONを暗号化して `store.json` に書きます(`password` だけ渡しても暗号化されます)。読むときは自動で見分けます。パスワード付きで保存したものは、`store_load({ password = ... })` が必要で、無い/違うと `nil, 理由` を返します。暗号化したときの上限は**12KiB**(平文のJSONの大きさ)です。鍵の決め方と守れる範囲は [暗号化](../crypto/) を読んでください。
+
+```lua
+pico.store_save({ token = "abc" }, { password = "ながいあいことば" })
+local data = pico.store_load({ password = "ながいあいことば" })
+```
+
+## pico.on_back / pico.go_back
+
+<div class="sig">pico.on_back(fn: function | nil) <span class="ret">-> (なし)</span></div>
+<div class="sig">pico.go_back() <span class="ret">-> (なし)</span></div>
+
+「戻る」の操作を横取りします。**Escキー**と**コントローラーのHOME**で `fn()` が呼ばれます(画面に自前の「戻る」ボタンがあるなら、そこから `pico.go_back()` を呼びます)。`fn` が `false` を返すと「取らなかった」扱いで既定の動き(`pico.pop()`)になります。それ以外(何も返さない場合を含む)は取った扱いです。`nil` で解除。
+
+```lua
+pico.on_back(function()
+    if not dirty then return false end          -- そのまま戻る
+    local d = pico.show_message("保存していません。戻りますか?", "いいえ", "はい")
+    pico.on(d, "closed", function(_, ok) if ok then dirty = false; pico.pop() end end)
+end)
+```

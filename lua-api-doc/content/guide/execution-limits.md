@@ -52,6 +52,6 @@ end
 |---|---|
 | 突然エラーダイアログが出て `loop()` が止まった | 実行時間の上限、またはスクリプト中の通常のバグ(ダイアログのスタックトレース・`/crash/lua_NNNN.txt` を見る) |
 | `pico.sd_read()` が `nil` を返す | ファイルが大きすぎる(16KiB超)、または権限(`sd_outside_app_dir`) |
-| `pico.image_load()` が `nil` を返す | 画像枚数(4枚)/合計サイズ(64KiB)上限、または権限 |
+| `pico.image_load()` が `nil` を返す | 画像枚数(8枚)/合計サイズ(96KiB)上限、または権限 |
 | `pico.http_request()` が `false` を返す | `network` 権限が無い、順番待ちの上限(走っている1本+待ち4本)、URLが不正、送信ボディが16KiB超、`save_to` が書けない場所 |
 | Lua自体のエラー(メモリ不足) | LuaEngineのメモリ予算(200KB)超過 |

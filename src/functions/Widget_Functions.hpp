@@ -36,6 +36,11 @@ namespace WidgetFunctions
     void ClearSceneWidgets();
 
     void BringToFront(Widget *w);
+    // wとその子孫を、描画順(通常レイヤ)の一番上/一番下へ移す。順序は保つ。
+    // 親子はこのリストでは親が先・子が後なので、まとめて動かさないと子が親の裏に隠れる。
+    // 通常レイヤ(widgets)にいなければ何もしない
+    void BringToFrontTree(Widget *w);
+    void SendToBackTree(Widget *w);
 
     void UpdateAll();
 

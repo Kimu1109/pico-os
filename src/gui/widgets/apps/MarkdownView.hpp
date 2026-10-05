@@ -259,6 +259,12 @@ class MarkdownView : public Widget {
         ~MarkdownView() override;
 
         bool load(const char* path);
+        bool loadText(const char* text, size_t len);
+        // 表示欄の大きさを変える(持っている文書を組み直す)
+        void setSize(int w, int h);
+        void setW(int w){ setSize(w, this->l_rect.h); }
+        void setH(int h){ setSize(this->l_rect.w, h); }
+        bool finishLoad(const char* path_for_log);
 
         void render() override;
 

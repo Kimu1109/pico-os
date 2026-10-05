@@ -37,6 +37,11 @@ class Widget {
         // そういう子にこれを立てると、当たり判定だけ素通りして親が拾える。
         bool hit_transparent = false;
 
+        // 操作を受け付けるか。falseの間はタップを受け止めるだけでコールバックを呼ばない
+        // (下のウィジェットへ素通りもしない)。親が無効なら子も無効として扱う(isEffectivelyEnabled)。
+        // 見た目をグレーにするかは各ウィジェット次第(Button/Labelは文字色を灰色にする)
+        bool enabled = true;
+
         int8_t background_color = PICO_BACKGROUND;
 
         //Luaなど外部から参照するためのID。getId()呼び出し時に遅延発行する(未使用なら発行しない)
@@ -206,6 +211,18 @@ class Widget {
         }
 
         //当たり判定を素通りさせるか(上のhit_transparentを参照)
+        virtual bool getEnabled() const { return this->enabled; }
+        virtual void setEnabled(bool value){
+            if(this->enabled == value) return;
+            this->enabled = value;
+            this->needsRender();
+        }
+        bool isEffectivelyEnabled() const {
+            for(const Widget* w = this; w; w = w->parent){
+                if(!w->enabled) return false;
+            }
+            return true;
+        }
         virtual bool getHitTransparent() const { return this->hit_transparent; }
         virtual void setHitTransparent(bool value){ this->hit_transparent = value; }
 

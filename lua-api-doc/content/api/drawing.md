@@ -101,6 +101,29 @@ pico.draw_text(240 - w - 4, 4, "Score", 0, 1)
 - `font_size` の既定値は `1`(`Normal`、24px)。値は [定数・上限一覧](../../reference/limits/) を参照。
 - 描画幅は自動で残りスクリーン幅(`SCREEN_WIDTH - x`)に収まるよう切り詰められます(折り返しはしません)。
 
+`align` で揃えを選べます(6番目の引数、既定 `"left"`)。`"left"` は `x` が左端、`"center"` は `x` が中心、`"right"` は `x` が右端になります。
+
+<div class="sig">pico.draw_text(x, y, text, color?, font_size?, align?) <span class="ret">-> (なし)</span></div>
+
+## pico.draw_text_wrapped
+
+<div class="sig">pico.draw_text_wrapped(x: integer, y: integer, w: integer, text: string, color?: integer, font_size?: integer, align?: string, line_gap?: integer) <span class="ret">-> lines: integer, height: integer</span></div>
+
+幅 `w` に収まるように折り返して描きます。`\n` で改行し、英語は空白で、日本語は文字の途中で折れます。戻り値は行数と全体の高さ(`line_gap` は行と行の間の追加の余白)。`align` は `"left"` / `"center"` / `"right"`(幅 `w` の中での揃え)。2048バイト・64行までです。
+
+## pico.measure_text
+
+<div class="sig">pico.measure_text(text: string, w: integer, font_size?: integer, line_gap?: integer) <span class="ret">-> lines: integer, height: integer</span></div>
+
+描かずに、`draw_text_wrapped` と同じ折り返しの行数と高さだけを返します。枠の大きさを先に決めるときに使います。
+
+## pico.get_pixel
+
+<div class="sig">pico.get_pixel(x: integer, y: integer) <span class="ret">-> color: integer | nil</span></div>
+
+画面(今描いている合成先)の1画素のパレット番号(0〜15)を読みます。範囲外は `nil`。`Canvas` の `render` の中では、その時点までに合成された絵が読めます。`CanvasRaster` の中身は [`pico.canvas_get_pixel`](../canvas/) で読みます。
+
+
 ## pico.invalidate
 
 <div class="sig">pico.invalidate(id: integer) <span class="ret">-> (なし)</span></div>

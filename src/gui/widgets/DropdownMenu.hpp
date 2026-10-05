@@ -154,6 +154,15 @@ class DropdownMenu : public Widget {
 
         int getItemCount() const { return this->dropdown->getItemCount(); }
 
+        // index番目の項目を取り除く。選択中の項目を消したら表示もプレースホルダへ戻す
+        bool removeAt(int index){
+            const bool was_selected = (this->dropdown->getSelectedIndex() == index);
+            if(!this->dropdown->removeAt(index)) return false;
+            if(was_selected) this->value->setText("");
+            this->relayout();
+            return true;
+        }
+
         void setOnChanged(std::function<void()> callback){
             this->on_changed = callback;
         }

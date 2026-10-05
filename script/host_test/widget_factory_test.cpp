@@ -61,14 +61,18 @@ static const WidgetType kCreatableTypes[] = {
     WidgetType::EllipseShape,
     WidgetType::LineShape,
     WidgetType::TriangleShape,
+    WidgetType::ProgressBar,
+    WidgetType::TextView,
+    WidgetType::ImageView,
+    WidgetType::MarkdownView,
+    WidgetType::AnalogClock,
+    WidgetType::DurationPicker,
+    WidgetType::MonthGrid,
 };
 
 // アプリ/OS専用で、Create()が対応しない側の代表例
 static const WidgetType kNonCreatableTypes[] = {
-    WidgetType::MarkdownView,
     WidgetType::FileExplorer,
-    WidgetType::AnalogClock,
-    WidgetType::DurationPicker,
     WidgetType::Statusbar,
     WidgetType::AppGrid,
     WidgetType::MsgDialog,

@@ -25,3 +25,4 @@ pc/sdcard/crash/
 # Luaアプリの pico.store_save() が作る保存ファイル(PCビルドで試すと作られる)
 pc/sdcard/lua/apps/*/store.json
 pc/sdcard/lua/apps/*/store.json.tmp
+pc/sdcard/lua/apps/*/settings.cfg

@@ -16,7 +16,7 @@
 class TabBar : public Widget, public IFontImplementation, public IBorderColor {
     public:
         // 同時に並べられるタブの上限。増やすとlabels[]のぶんだけsizeofが増える
-        constexpr static int kMaxTabs = 4;
+        constexpr static int kMaxTabs = 8;
 
     private:
         // 文字と罫線の間に最低限空ける余白。折返し位置の判定にも使う
@@ -49,6 +49,16 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
         bool addTab(const char* label);
 
         int getTabCount() const { return this->tab_count; }
+
+        // index番目のラベルを書き換える(範囲外はfalse)
+        bool setLabel(int index, const char* label);
+        const char* getLabel(int index) const {
+            return (index >= 0 && index < this->tab_count) ? this->labels[index].c_str() : nullptr;
+        }
+        // index番目のタブを取り除く(範囲外はfalse)。選択中より前を消したら選択が追従し、
+        // 選択中を消したら範囲内へ詰める(通知はしない)
+        bool removeTab(int index);
+        void clearTabs();
 
         int getSelected() const { return this->selected; }
 

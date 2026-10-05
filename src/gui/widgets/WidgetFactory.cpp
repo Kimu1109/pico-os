@@ -20,6 +20,13 @@
 #include "gui/widgets/EllipseShape.hpp"
 #include "gui/widgets/LineShape.hpp"
 #include "gui/widgets/TriangleShape.hpp"
+#include "gui/widgets/ProgressBar.hpp"
+#include "gui/widgets/TextView.hpp"
+#include "gui/widgets/ImageView.hpp"
+#include "gui/widgets/apps/MarkdownView.hpp"
+#include "gui/widgets/apps/AnalogClock.hpp"
+#include "gui/widgets/apps/DurationPicker.hpp"
+#include "gui/widgets/apps/MonthGrid.hpp"
 #include "consts.hpp"
 #include <cstring>
 
@@ -67,6 +74,20 @@ Widget* WidgetFactory::Create(WidgetType type) {
             return new LineShape(0, 0, 40, 24);
         case WidgetType::TriangleShape:
             return new TriangleShape(0, 20, 20, 0, 40, 20);
+        case WidgetType::ProgressBar:
+            return new ProgressBar(0, 0, 100, 12);
+        case WidgetType::TextView:
+            return new TextView(0, 0, 100, 100);
+        case WidgetType::ImageView:
+            return new ImageView(0, 0, 100, 100);
+        case WidgetType::MarkdownView:
+            return new MarkdownView(0, 0, 100, 100);
+        case WidgetType::AnalogClock:
+            return new AnalogClock(0, 0, 100);
+        case WidgetType::DurationPicker:
+            return new DurationPicker(0, 0, 150, 60);
+        case WidgetType::MonthGrid:
+            return new MonthGrid(0, 0, 210, 150);
         default:
             // アプリ/OS専用ウィジェットとダイアログはここでは作らない
             return nullptr;
@@ -95,6 +116,13 @@ bool WidgetFactory::IsCreatable(WidgetType type) {
         case WidgetType::EllipseShape:
         case WidgetType::LineShape:
         case WidgetType::TriangleShape:
+        case WidgetType::ProgressBar:
+        case WidgetType::TextView:
+        case WidgetType::ImageView:
+        case WidgetType::MarkdownView:
+        case WidgetType::AnalogClock:
+        case WidgetType::DurationPicker:
+        case WidgetType::MonthGrid:
             return true;
         default:
             return false;
@@ -130,6 +158,13 @@ bool WidgetFactory::TypeFromName(const char* name, WidgetType& out) {
         {"Ellipse", WidgetType::EllipseShape},
         {"Line", WidgetType::LineShape},
         {"Triangle", WidgetType::TriangleShape},
+        {"ProgressBar", WidgetType::ProgressBar},
+        {"TextView", WidgetType::TextView},
+        {"ImageView", WidgetType::ImageView},
+        {"MarkdownView", WidgetType::MarkdownView},
+        {"AnalogClock", WidgetType::AnalogClock},
+        {"DurationPicker", WidgetType::DurationPicker},
+        {"MonthGrid", WidgetType::MonthGrid},
     };
 
     for (const auto& entry : kTable) {

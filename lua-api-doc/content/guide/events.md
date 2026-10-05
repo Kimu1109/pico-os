@@ -93,6 +93,38 @@ end)
 
 対応するウィジェット種別以外へ登録しようとするとエラーになります(例: `Button` へ `"checked_changed"` を登録するとエラー)。
 
+### 新しいウィジェットのイベント
+
+| イベント名 | 対象ウィジェット | コールバック引数 |
+|---|---|---|
+| `text_input` | `Textbox` | `(id)` — 1文字ごと。入力中も `pico.get(id, "text")` が最新になる |
+| `duration_changed` | `DurationPicker` | `(id, total_ms)` |
+| `day_selected` | `MonthGrid` | `(id, day)` |
+| `link_tap` | `MarkdownView` | `(id, path)` |
+| `text_tap` | `TextView` | `(id, byte_offset)` |
+| `scrolled` | `ScrollContainer` | `(id, scroll_y)` |
+
+## ジェスチャー(長押し・ダブルタップ・スワイプ)
+
+どのウィジェットにも登録できます。ウィジェットが `press_*` を使っていても独立して判定されます(同じタッチから `press_end` と `swipe` の両方が届くことがあります)。登録が1つも無いアプリでは判定自体をしません。
+
+| イベント名 | 条件 | 引数 |
+|---|---|---|
+| `long_press` | 動かさずに0.5秒押し続けた(押している間に1回) | `(id, x, y, lx, ly)` |
+| `double_tap` | 短い(0.4秒以内の)タップが、0.4秒以内・24px以内でもう一度 | `(id, x, y, lx, ly)` |
+| `swipe` | 24px以上を0.7秒以内に動かして離した | `(id, direction, dx, dy, x, y)` |
+
+```lua
+pico.on(card, "swipe", function(id, dir)
+    if dir == "left" then next_page() elseif dir == "right" then prev_page() end
+end)
+pico.on(card, "long_press", function(id, x, y) show_menu(x, y) end)
+```
+
+ジェスチャーが届くのは、押し始めた位置にあるウィジェットです(ダイアログが上に重なっている場合は判定が重なることがあります)。無効(`enabled = false`)・非表示のウィジェットには届きません。
+
+`pico.off(id, event_name)` で登録を解除できます。
+
 ## `render`(Canvas限定)
 
 `Canvas`(`pico.create("Canvas")`)にのみ登録できます。`FlushDirty()` の合成サイクルの中で呼ばれ、この中でだけ `pico.draw_*` 系が正しく機能します。詳細は [Canvasと直接描画](../drawing/) を参照してください。
@@ -106,12 +138,12 @@ end)
 
 ## `closed`(ダイアログ限定)
 
-`pico.show_message` / `show_input` / `show_file_save` / `show_file_select` / `show_color` が返すIDにのみ登録できます。
+`pico.show_message` / `show_input` / `show_file_save` / `show_file_select` / `show_color` / `show_choice` / `show_date` / `show_time` / `show_number` / `show_progress` が返すIDにのみ登録できます。
 
 ```lua
-pico.on(dialog_id, "closed", function(id, is_ok)
+pico.on(dialog_id, "closed", function(id, is_ok, value)
     if is_ok then
-        -- InputDialogなら pico.get(id, "text") で入力文字列が読める
+        -- value に結果が入る(InputDialogなら入力文字列、show_choiceなら選んだ番号など)
     end
 end)
 ```

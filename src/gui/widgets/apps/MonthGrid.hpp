@@ -60,6 +60,9 @@ class MonthGrid : public Widget, public IBorderColor {
             this->l_rect = { (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h };
         }
 
+        void setW(int w){ markdirty(this->getScreenRect()); this->l_rect.w = (int16_t)w; this->needsRender(); }
+        void setH(int h){ markdirty(this->getScreenRect()); this->l_rect.h = (int16_t)h; this->needsRender(); }
+
         // 表示する月を変える。今日・選択・件数はそのまま残るので、呼び出し側で入れ直すこと
         void setMonth(int year, int month);
         int getYear() const  { return this->year; }

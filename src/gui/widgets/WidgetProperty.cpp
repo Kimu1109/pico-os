@@ -23,10 +23,18 @@
 #include "gui/widgets/EllipseShape.hpp"
 #include "gui/widgets/LineShape.hpp"
 #include "gui/widgets/TriangleShape.hpp"
+#include "gui/widgets/ProgressBar.hpp"
+#include "gui/widgets/TextView.hpp"
+#include "gui/widgets/ImageView.hpp"
+#include "gui/widgets/apps/MarkdownView.hpp"
+#include "gui/widgets/apps/AnalogClock.hpp"
+#include "gui/widgets/apps/DurationPicker.hpp"
+#include "gui/widgets/apps/MonthGrid.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
 #include "gui/widgets/dialogs/ColorDialog.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
 
 using WidgetProperty::Id;
 using WidgetProperty::Type;
@@ -47,6 +55,8 @@ namespace {
             case Id::H: out = Value::MakeInt(w->getH()); return true;
             case Id::Visible: out = Value::MakeBool(w->getVisible()); return true;
             case Id::BackgroundColor: out = Value::MakeInt(w->getBackgroundColor()); return true;
+            case Id::HitTransparent: out = Value::MakeBool(w->getHitTransparent()); return true;
+            case Id::Enabled: out = Value::MakeBool(w->getEnabled()); return true;
             default: return false;
         }
     }
@@ -68,6 +78,12 @@ namespace {
             case Id::BackgroundColor:
                 if (v.type != Type::Int) return false;
                 w->setBackgroundColor((int8_t)v.i); return true;
+            case Id::HitTransparent:
+                if (v.type != Type::Bool) return false;
+                w->setHitTransparent(v.b); return true;
+            case Id::Enabled:
+                if (v.type != Type::Bool) return false;
+                w->setEnabled(v.b); return true;
             default: return false;
         }
     }
@@ -173,12 +189,17 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
             ScrollContainer* sc = static_cast<ScrollContainer*>(widget);
             switch (id) {
                 case Id::BorderColor: out = Value::MakeInt(sc->getBorderColor()); return true;
+                case Id::ScrollX: out = Value::MakeInt(sc->getScrollX()); return true;
+                case Id::ScrollY: out = Value::MakeInt(sc->getScrollY()); return true;
+                case Id::MaxScrollX: out = Value::MakeInt(sc->getMaxScrollX()); return true;
+                case Id::MaxScrollY: out = Value::MakeInt(sc->getMaxScrollY()); return true;
                 default: return false;
             }
         }
         case WidgetType::ScrollList: {
             ScrollList* sl = static_cast<ScrollList*>(widget);
             switch (id) {
+                case Id::ScrollY: out = Value::MakeInt(sl->getScrollY()); return true;
                 case Id::FontSize: out = Value::MakeInt((int32_t)sl->getFontSize()); return true;
                 case Id::TextColor: out = Value::MakeInt(sl->getTextColor()); return true;
                 case Id::BorderColor: out = Value::MakeInt(sl->getBorderColor()); return true;
@@ -280,6 +301,82 @@ bool WidgetProperty::Get(Widget* widget, Id id, Value& out) {
                 case Id::Y2: out = Value::MakeInt(ts->getY2()); return true;
                 case Id::X3: out = Value::MakeInt(ts->getX3()); return true;
                 case Id::Y3: out = Value::MakeInt(ts->getY3()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::ProgressBar: {
+            ProgressBar* pb = static_cast<ProgressBar*>(widget);
+            switch (id) {
+                case Id::Value: out = Value::MakeFloat(pb->getValue()); return true;
+                case Id::MinValue: out = Value::MakeFloat(pb->getMinValue()); return true;
+                case Id::MaxValue: out = Value::MakeFloat(pb->getMaxValue()); return true;
+                case Id::Color: out = Value::MakeInt(pb->getColor()); return true;
+                case Id::BorderColor: out = Value::MakeInt(pb->getBorderColor()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::TextView: {
+            TextView* tv = static_cast<TextView*>(widget);
+            switch (id) {
+                case Id::Text: out = Value::MakeStr(tv->getText()); return true;
+                case Id::ScrollY: out = Value::MakeInt(tv->getScrollY()); return true;
+                case Id::RowCount: out = Value::MakeInt(tv->getRowCount()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::ImageView: {
+            ImageView* iv = static_cast<ImageView*>(widget);
+            switch (id) {
+                case Id::Path: out = Value::MakeStr(iv->getPath()); return true;
+                case Id::ImageW: out = Value::MakeInt(iv->getImageW()); return true;
+                case Id::ImageH: out = Value::MakeInt(iv->getImageH()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::MarkdownView: {
+            MarkdownView* mv = static_cast<MarkdownView*>(widget);
+            switch (id) {
+                case Id::ScrollY: out = Value::MakeInt(mv->getScrollY()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::AnalogClock: {
+            AnalogClock* ac = static_cast<AnalogClock*>(widget);
+            switch (id) {
+                case Id::Hour: out = Value::MakeInt(ac->getHour()); return true;
+                case Id::Minute: out = Value::MakeInt(ac->getMinute()); return true;
+                case Id::Second: out = Value::MakeInt(ac->getSecond()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::DurationPicker: {
+            DurationPicker* dp = static_cast<DurationPicker*>(widget);
+            switch (id) {
+                case Id::TotalMs: out = Value::MakeInt((int32_t)dp->getTotalMs()); return true;
+                case Id::Editable: out = Value::MakeBool(dp->getEditable()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::MonthGrid: {
+            MonthGrid* mg = static_cast<MonthGrid*>(widget);
+            switch (id) {
+                case Id::Year: out = Value::MakeInt(mg->getYear()); return true;
+                case Id::Month: out = Value::MakeInt(mg->getMonth()); return true;
+                case Id::Selected: out = Value::MakeInt(mg->getSelected()); return true;
+                case Id::ItemCount: out = Value::MakeInt(mg->getDaysInMonth()); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::PickerDialog: {
+            PickerDialog* pd = static_cast<PickerDialog*>(widget);
+            switch (id) {
+                case Id::SelectedIndex: out = Value::MakeInt(pd->getSelectedIndex()); return true;
+                case Id::Text: out = Value::MakeStr(pd->getResultText().c_str()); return true;
+                case Id::Value: out = Value::MakeFloat(pd->getProgress()); return true;
+                case Id::Year: out = Value::MakeInt(pd->getYear()); return true;
+                case Id::Month: out = Value::MakeInt(pd->getMonth()); return true;
+                case Id::Selected: out = Value::MakeInt(pd->getDay()); return true;
+                case Id::ItemCount: out = Value::MakeInt(pd->getChoiceCount()); return true;
                 default: return false;
             }
         }
@@ -525,6 +622,18 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
                 case Id::BorderColor:
                     if (value.type != Type::Int) return false;
                     sc->setBorderColor((int8_t)value.i); return true;
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    sc->setSize((int16_t)value.i, (int16_t)sc->getH()); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    sc->setSize((int16_t)sc->getW(), (int16_t)value.i); return true;
+                case Id::ScrollX:
+                    if (value.type != Type::Int) return false;
+                    sc->setScroll(value.i, sc->getScrollY()); return true;
+                case Id::ScrollY:
+                    if (value.type != Type::Int) return false;
+                    sc->setScroll(sc->getScrollX(), value.i); return true;
                 default: return false;
             }
         }
@@ -799,6 +908,183 @@ bool WidgetProperty::Set(Widget* widget, Id id, const Value& value) {
                 default: return false;
             }
         }
+        case WidgetType::ProgressBar: {
+            ProgressBar* pb = static_cast<ProgressBar*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    pb->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    pb->setH(value.i); return true;
+                case Id::Value:
+                    if (value.type != Type::Float && value.type != Type::Int) return false;
+                    pb->setValue(value.type == Type::Float ? value.f : (float)value.i); return true;
+                case Id::MinValue:
+                    if (value.type != Type::Float && value.type != Type::Int) return false;
+                    pb->setMinValue(value.type == Type::Float ? value.f : (float)value.i); return true;
+                case Id::MaxValue:
+                    if (value.type != Type::Float && value.type != Type::Int) return false;
+                    pb->setMaxValue(value.type == Type::Float ? value.f : (float)value.i); return true;
+                case Id::Color:
+                    if (value.type != Type::Int) return false;
+                    pb->setColor((int8_t)value.i); return true;
+                case Id::BorderColor:
+                    if (value.type != Type::Int) return false;
+                    pb->setBorderColor((int8_t)value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::TextView: {
+            TextView* tv = static_cast<TextView*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    tv->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    tv->setH(value.i); return true;
+                case Id::Text:
+                    // 255Bまで。長い文書はpico.text_set()(LuaEngine)で渡す
+                    if (value.type != Type::Str) return false;
+                    tv->setOwnedText(value.s.c_str(), value.s.length()); return true;
+                case Id::ScrollY:
+                    if (value.type != Type::Int) return false;
+                    tv->setScrollY(value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::ImageView: {
+            ImageView* iv = static_cast<ImageView*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    iv->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    iv->setH(value.i); return true;
+                case Id::Path:
+                    // 読み込めなければfalse(表示は空になる)
+                    if (value.type != Type::Str) return false;
+                    if (value.s.empty()) { iv->unload(); return true; }
+                    return iv->load(value.s.c_str());
+                default: return false;
+            }
+        }
+        case WidgetType::MarkdownView: {
+            MarkdownView* mv = static_cast<MarkdownView*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    mv->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    mv->setH(value.i); return true;
+                case Id::Path:
+                    if (value.type != Type::Str) return false;
+                    return mv->load(value.s.c_str());
+                case Id::Text:
+                    // 255Bまで。長い文書はpico.text_set()で渡す
+                    if (value.type != Type::Str) return false;
+                    return mv->loadText(value.s.c_str(), value.s.length());
+                case Id::ScrollY:
+                    if (value.type != Type::Int) return false;
+                    mv->setScrollY(value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::AnalogClock: {
+            AnalogClock* ac = static_cast<AnalogClock*>(widget);
+            switch (id) {
+                case Id::W:
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    ac->setDiameter(value.i); return true;
+                case Id::Hour:
+                    if (value.type != Type::Int) return false;
+                    ac->setTime(value.i, ac->getMinute(), ac->getSecond()); return true;
+                case Id::Minute:
+                    if (value.type != Type::Int) return false;
+                    ac->setTime(ac->getHour(), value.i, ac->getSecond()); return true;
+                case Id::Second:
+                    if (value.type != Type::Int) return false;
+                    ac->setTime(ac->getHour(), ac->getMinute(), value.i); return true;
+                case Id::HandColor:
+                    if (value.type != Type::Int) return false;
+                    ac->setHandColor((int8_t)value.i); return true;
+                case Id::SecondHandColor:
+                    if (value.type != Type::Int) return false;
+                    ac->setSecondHandColor((int8_t)value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::DurationPicker: {
+            DurationPicker* dp = static_cast<DurationPicker*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    dp->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    dp->setH(value.i); return true;
+                case Id::TotalMs:
+                    if (value.type != Type::Int || value.i < 0) return false;
+                    dp->setTotalMs((uint32_t)value.i); return true;
+                case Id::Editable:
+                    if (value.type != Type::Bool) return false;
+                    dp->setEditable(value.b); return true;
+                case Id::FontSize:
+                    if (value.type != Type::Int) return false;
+                    dp->setFontSize((FontFn::FontSize)value.i); return true;
+                case Id::TextColor:
+                    if (value.type != Type::Int) return false;
+                    dp->setTextColor((int8_t)value.i); return true;
+                case Id::BorderColor:
+                    if (value.type != Type::Int) return false;
+                    dp->setBorderColor((int8_t)value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::MonthGrid: {
+            MonthGrid* mg = static_cast<MonthGrid*>(widget);
+            switch (id) {
+                case Id::W:
+                    if (value.type != Type::Int) return false;
+                    mg->setW(value.i); return true;
+                case Id::H:
+                    if (value.type != Type::Int) return false;
+                    mg->setH(value.i); return true;
+                case Id::Year:
+                    if (value.type != Type::Int) return false;
+                    mg->setMonth(value.i, mg->getMonth()); return true;
+                case Id::Month:
+                    if (value.type != Type::Int || value.i < 1 || value.i > 12) return false;
+                    mg->setMonth(mg->getYear(), value.i); return true;
+                case Id::Today:
+                    if (value.type != Type::Int) return false;
+                    mg->setToday(value.i); return true;
+                case Id::Selected:
+                    if (value.type != Type::Int) return false;
+                    mg->setSelected(value.i); return true;
+                case Id::BorderColor:
+                    if (value.type != Type::Int) return false;
+                    mg->setBorderColor((int8_t)value.i); return true;
+                default: return false;
+            }
+        }
+        case WidgetType::PickerDialog: {
+            PickerDialog* pd = static_cast<PickerDialog*>(widget);
+            switch (id) {
+                // 進捗ダイアログ: 0〜100の進み具合と、題名(メッセージ)の差し替え
+                case Id::Value:
+                    if (value.type != Type::Float && value.type != Type::Int) return false;
+                    pd->setProgress(value.type == Type::Float ? value.f : (float)value.i); return true;
+                case Id::Text:
+                    if (value.type != Type::Str) return false;
+                    pd->setMessage(value.s.c_str()); return true;
+                default: return false;
+            }
+        }
         // FileSaveDialog/FileSelectDialog/ColorDialogは開始ディレクトリ/選択色を
         // 生成後に差し替えるsetterを持たない(コンストラクタでのみ決まる)ため、
         // Set()側の対応は無し(Get()参照)。
@@ -844,6 +1130,18 @@ namespace {
         {"filled", Id::Filled}, {"thickness", Id::Thickness},
         {"x1", Id::X1}, {"y1", Id::Y1}, {"x2", Id::X2}, {"y2", Id::Y2},
         {"x3", Id::X3}, {"y3", Id::Y3},
+
+        {"scroll_x", Id::ScrollX}, {"max_scroll_x", Id::MaxScrollX}, {"max_scroll_y", Id::MaxScrollY},
+        {"scroll_y", Id::ScrollY}, {"image_w", Id::ImageW}, {"image_h", Id::ImageH},
+        {"row_count", Id::RowCount},
+
+        {"hour", Id::Hour}, {"minute", Id::Minute}, {"second", Id::Second},
+        {"hand_color", Id::HandColor}, {"second_hand_color", Id::SecondHandColor},
+        {"total_ms", Id::TotalMs}, {"editable", Id::Editable},
+        {"year", Id::Year}, {"month", Id::Month}, {"today", Id::Today},
+        {"selected", Id::Selected},
+
+        {"hit_transparent", Id::HitTransparent}, {"enabled", Id::Enabled},
     };
 }
 

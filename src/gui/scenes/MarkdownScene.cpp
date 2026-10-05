@@ -56,8 +56,8 @@ void MarkdownScene::onEnter(){
     auto placeButton = [&](Button* b, int min_w){
         b->setFontSize(FontFn::Small);
         b->setAllowTextSpacing(false);
-        if(b->getLocalRect().w < min_w) b->setW(min_w);
-        b->setH(BUTTON_H);
+        if(b->getLocalRect().w < min_w) b->setW(min_w + Button::kFrameExtraTight);
+        b->setH(BUTTON_H + Button::kFrameExtraTight);
         b->setX(button_x);
         b->setY(header_y);
         button_x += b->getLocalRect().w + BUTTON_GAP;
@@ -90,7 +90,7 @@ void MarkdownScene::onEnter(){
     this->exit_button = new Button(0, header_y, "終了");
     this->exit_button->setFontSize(FontFn::Small);
     this->exit_button->setAllowTextSpacing(false);
-    this->exit_button->setH(BUTTON_H);
+    this->exit_button->setH(BUTTON_H + Button::kFrameExtraTight);
     this->exit_button->setX(content.w - MARGIN - this->exit_button->getLocalRect().w);
     this->exit_button->setOnPressEnd([](){
         //ここでのPopはアプリ終了(ランチャへ戻る)。文書の履歴とは別物

@@ -3,6 +3,9 @@
 -- そのため、ここでpico.pop()すると hello_sub.lua を飛び越して
 -- hello.luaへ直接戻る。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local x, y = pico.content_rect()
 local margin = 10
 
@@ -20,8 +23,8 @@ pico.set(desc, "text", "pico.change_scene()で来た画面")
 local back_button = pico.create("Button")
 pico.set(back_button, "x", x + margin)
 pico.set(back_button, "y", y + margin + 80)
-pico.set(back_button, "w", 80)
-pico.set(back_button, "h", 30)
+pico.set(back_button, "w", 80 + BUTTON_FRAME)
+pico.set(back_button, "h", 30 + BUTTON_FRAME)
 pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function()
     -- change_sceneで来ているのでスタックに積まれているのはhello.luaのまま。

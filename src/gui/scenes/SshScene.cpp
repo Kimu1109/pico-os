@@ -600,7 +600,7 @@ void SshScene::onEnter(){
     auto make_button = [&](const char* label, int x, int y){
         Button* b = new Button(x, y, label);
         b->setFontSize(FontFn::Small);
-        b->setH(20);
+        b->setH(20 + Button::kFrameExtra);
         WidgetFunctions::Add(b);
         return b;
     };
@@ -613,16 +613,16 @@ void SshScene::onEnter(){
     this->back_button = make_button("戻る", x, y1);
     x += this->back_button->getLocalRect().w + MARGIN;
     this->conn_button = make_button("接続", x, y1);
-    this->conn_button->setW(this->conn_button->getLocalRect().w); //文字が変わっても幅を変えない
+    this->conn_button->setW(this->conn_button->getLocalRect().w + Button::kFrameExtra); //文字が変わっても幅を変えない
     x += this->conn_button->getLocalRect().w + MARGIN;
     this->font_button = make_button("文字:大", x, y1);
-    this->font_button->setW(this->font_button->getLocalRect().w);
+    this->font_button->setW(this->font_button->getLocalRect().w + Button::kFrameExtra);
 
     const int row_h = this->back_button->getLocalRect().h;
     this->kb_button = new Button(0, y1, "");
     this->kb_button->setIcon(IconID::Keyboard, IconSize::Px16);
-    this->kb_button->setW(28);
-    this->kb_button->setH(20);
+    this->kb_button->setW(28 + Button::kFrameExtra);
+    this->kb_button->setH(20 + Button::kFrameExtra);
     this->kb_button->setX(content.x + content.w - MARGIN - this->kb_button->getLocalRect().w);
     WidgetFunctions::Add(this->kb_button);
 

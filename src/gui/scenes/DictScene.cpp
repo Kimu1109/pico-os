@@ -19,8 +19,8 @@ void DictScene::onEnter(){
     this->back_button = new Button(content.x + MARGIN, y, "");
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setAllowTextSpacing(false);
-    this->back_button->setW(BACK_BUTTON_W);
-    this->back_button->setH(SEARCH_ROW_H);
+    this->back_button->setW(BACK_BUTTON_W + Button::kFrameExtraTight);
+    this->back_button->setH(SEARCH_ROW_H + Button::kFrameExtraTight);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 
@@ -40,8 +40,8 @@ void DictScene::onEnter(){
     this->search_button = new Button(box_x + box_w + MARGIN, y, "検索");
     this->search_button->setFontSize(FontFn::Small);
     this->search_button->setAllowTextSpacing(false);
-    this->search_button->setW(SEARCH_BUTTON_W);
-    this->search_button->setH(SEARCH_ROW_H);
+    this->search_button->setW(SEARCH_BUTTON_W + Button::kFrameExtraTight);
+    this->search_button->setH(SEARCH_ROW_H + Button::kFrameExtraTight);
     this->search_button->setOnPressEnd([this](){ this->startSearch(); });
     WidgetFunctions::Add(this->search_button);
     y += SEARCH_ROW_H + MARGIN;

@@ -26,7 +26,7 @@ class WifiScanDialog : public Widget {
 
         constexpr static int MESSAGE_H = 18;
         constexpr static int BUTTON_H = 18;
-        //Buttonのボックスは setW/setH に立体ぶんが足される(getLocalRect()参照)
+        //Buttonは立体の縁ぶん(BUTTON_EDGE)も大きさに含める。setW/setHは全体の大きさなので BUTTON_H + BUTTON_EDGE を渡す
         constexpr static int BUTTON_EDGE = 3;
 
         constexpr static int LIST_Y = BASE_Y + MARGIN + MESSAGE_H;
@@ -52,8 +52,8 @@ class WifiScanDialog : public Widget {
             auto* b = new Button(x, BUTTON_Y, text);
             b->setFontSize(FontFn::Small);
             b->setAllowTextSpacing(false);
-            b->setW(w);
-            b->setH(BUTTON_H);
+            b->setW(w + Button::kFrameExtraTight);
+            b->setH(BUTTON_H + Button::kFrameExtraTight);
             b->setParent(this);
             return b;
         }

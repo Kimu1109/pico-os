@@ -11,6 +11,9 @@
 -- press_startで判定していた。pico.get_touch()が無かった頃の名残りで、
 -- タップ座標を直接読めるようになった今は不要な遠回りだったため統合した)
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local SIZE = 8
 local CELL = 24
 local BOARD_COLOR = 2   -- PICO_DARKGREEN
@@ -209,8 +212,8 @@ local button_row_y = y + margin + 46
 local back_button = pico.create("Button")
 pico.set(back_button, "x", x + margin)
 pico.set(back_button, "y", button_row_y)
-pico.set(back_button, "w", 50)
-pico.set(back_button, "h", 22)
+pico.set(back_button, "w", 50 + BUTTON_FRAME)
+pico.set(back_button, "h", 22 + BUTTON_FRAME)
 pico.set(back_button, "font_size", 0)
 pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function()
@@ -220,8 +223,8 @@ end)
 local reset_button = pico.create("Button")
 pico.set(reset_button, "x", x + margin + 54)
 pico.set(reset_button, "y", button_row_y)
-pico.set(reset_button, "w", 70)
-pico.set(reset_button, "h", 22)
+pico.set(reset_button, "w", 70 + BUTTON_FRAME)
+pico.set(reset_button, "h", 22 + BUTTON_FRAME)
 pico.set(reset_button, "font_size", 0)
 pico.set(reset_button, "text", "リセット")
 

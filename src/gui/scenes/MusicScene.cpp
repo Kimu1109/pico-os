@@ -49,7 +49,7 @@ void MusicScene::onEnter(){
 
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 
@@ -65,14 +65,14 @@ void MusicScene::onEnter(){
     // ---- 下から: [一時停止][停止] / シークバーの行 / 状態の2行 ----
     this->pause_button = new Button(content.x + MARGIN, 0, "一時停止");
     this->pause_button->setFontSize(FontFn::Small);
-    this->pause_button->setH(20);
+    this->pause_button->setH(20 + Button::kFrameExtra);
     this->pause_button->setOnPressEnd([this](){ this->togglePause(); });
     WidgetFunctions::Add(this->pause_button);
     const Rect pause_rect = this->pause_button->getLocalRect();
 
     this->stop_button = new Button(pause_rect.x + pause_rect.w + MARGIN, 0, "停止");
     this->stop_button->setFontSize(FontFn::Small);
-    this->stop_button->setH(20);
+    this->stop_button->setH(20 + Button::kFrameExtra);
     const int stop_y = content.y + content.h - MARGIN - this->stop_button->getLocalRect().h - 8;
     this->stop_button->setY(stop_y);
     this->pause_button->setY(stop_y);

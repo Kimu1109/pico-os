@@ -478,7 +478,7 @@ void TextEditorScene::onEnter(){
     auto make_button = [&](const char* label, int x, int y){
         Button* b = new Button(x, y, label);
         b->setFontSize(FontFn::Small);
-        b->setH(20);
+        b->setH(20 + Button::kFrameExtra);
         WidgetFunctions::Add(b);
         return b;
     };
@@ -497,8 +497,8 @@ void TextEditorScene::onEnter(){
     const int row_h = this->back_button->getLocalRect().h;
     this->kb_button = new Button(0, y1, "");
     this->kb_button->setIcon(IconID::Keyboard, IconSize::Px16);
-    this->kb_button->setW(28);
-    this->kb_button->setH(20); //他のボタンと同じ指定(描かれる箱は枠のぶん大きくなる)
+    this->kb_button->setW(28 + Button::kFrameExtra);
+    this->kb_button->setH(20 + Button::kFrameExtra); //他のボタンと同じ指定(描かれる箱は枠のぶん大きくなる)
     this->kb_button->setX(content.x + content.w - MARGIN - this->kb_button->getLocalRect().w);
     WidgetFunctions::Add(this->kb_button);
 

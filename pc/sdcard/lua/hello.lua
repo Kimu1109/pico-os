@@ -7,6 +7,9 @@
 -- setup()はonEnter()直後に1回、loop(dt)は毎フレーム(dtは前回からの経過ミリ秒)
 -- 呼ばれる(どちらも定義は任意)。ここでは経過秒数を表示する例にした。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local x, y, w, h = pico.content_rect()
 local margin = 10
 
@@ -25,8 +28,8 @@ pico.set(count_label, "text", "count: 0")
 local inc_button = pico.create("Button")
 pico.set(inc_button, "x", x + margin)
 pico.set(inc_button, "y", y + margin + 70)
-pico.set(inc_button, "w", 80)
-pico.set(inc_button, "h", 30)
+pico.set(inc_button, "w", 80 + BUTTON_FRAME)
+pico.set(inc_button, "h", 30 + BUTTON_FRAME)
 pico.set(inc_button, "text", "+1")
 pico.on(inc_button, "press_start", function()
     count = count + 1
@@ -57,8 +60,8 @@ end)
 local back_button = pico.create("Button")
 pico.set(back_button, "x", x + margin)
 pico.set(back_button, "y", y + margin + 120)
-pico.set(back_button, "w", 80)
-pico.set(back_button, "h", 30)
+pico.set(back_button, "w", 80 + BUTTON_FRAME)
+pico.set(back_button, "h", 30 + BUTTON_FRAME)
 pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function()
     -- 呼び忘れてもLuaEngine破棄(onExit())で自動回収されるが、使い終わった
@@ -76,8 +79,8 @@ end)
 local sub_button = pico.create("Button")
 pico.set(sub_button, "x", x + margin)
 pico.set(sub_button, "y", y + margin + 230)
-pico.set(sub_button, "w", 100)
-pico.set(sub_button, "h", 30)
+pico.set(sub_button, "w", 100 + BUTTON_FRAME)
+pico.set(sub_button, "h", 30 + BUTTON_FRAME)
 pico.set(sub_button, "text", "サブ画面へ")
 pico.on(sub_button, "press_start", function()
     pico.push_scene("/lua/hello_sub.lua")

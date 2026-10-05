@@ -66,7 +66,7 @@ void NotificationScene::onEnter(){
     // ---- 上の行 ----
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 
@@ -80,7 +80,7 @@ void NotificationScene::onEnter(){
 
     this->clear_button = new Button(0, y0, "全消去");
     this->clear_button->setFontSize(FontFn::Small);
-    this->clear_button->setH(20);
+    this->clear_button->setH(20 + Button::kFrameExtra);
     this->clear_button->setX(content.x + content.w - MARGIN - this->clear_button->getLocalRect().w);
     this->clear_button->setOnPressEnd([this](){
         ClearHistory();
@@ -90,7 +90,7 @@ void NotificationScene::onEnter(){
 
     this->read_button = new Button(0, y0, "既読");
     this->read_button->setFontSize(FontFn::Small);
-    this->read_button->setH(20);
+    this->read_button->setH(20 + Button::kFrameExtra);
     this->read_button->setX(this->clear_button->getLocalRect().x - MARGIN - this->read_button->getLocalRect().w);
     this->read_button->setOnPressEnd([](){ MarkAllRead(); });
     WidgetFunctions::Add(this->read_button);
@@ -114,8 +114,8 @@ void NotificationScene::onEnter(){
     const int bottom_y = content.y + content.h - MARGIN - row_h - 4;
     this->mode_button = new Button(content.x + MARGIN, bottom_y, "控えめ");
     this->mode_button->setFontSize(FontFn::Small);
-    this->mode_button->setH(20);
-    this->mode_button->setW(this->mode_button->getLocalRect().w);
+    this->mode_button->setH(20 + Button::kFrameExtra);
+    this->mode_button->setW(this->mode_button->getLocalRect().w + Button::kFrameExtra);
     this->mode_button->setOnPressEnd([this](){
         SetMode(GetMode() == Mode::On ? Mode::Quiet : Mode::On);
         this->refreshSettingButtons();
@@ -125,8 +125,8 @@ void NotificationScene::onEnter(){
     const Rect mode_box = this->mode_button->getLocalRect();
     this->sound_button = new Button(mode_box.x + mode_box.w + MARGIN, bottom_y, "音なし");
     this->sound_button->setFontSize(FontFn::Small);
-    this->sound_button->setH(20);
-    this->sound_button->setW(this->sound_button->getLocalRect().w);
+    this->sound_button->setH(20 + Button::kFrameExtra);
+    this->sound_button->setW(this->sound_button->getLocalRect().w + Button::kFrameExtra);
     this->sound_button->setOnPressEnd([this](){
         SetSoundEnabled(!GetSoundEnabled());
         this->refreshSettingButtons();
@@ -135,9 +135,9 @@ void NotificationScene::onEnter(){
 
     this->action_button = new Button(0, bottom_y, "取り消す");
     this->action_button->setFontSize(FontFn::Small);
-    this->action_button->setH(20);
+    this->action_button->setH(20 + Button::kFrameExtra);
     const int action_w = this->action_button->getLocalRect().w;
-    this->action_button->setW(action_w);
+    this->action_button->setW(action_w + Button::kFrameExtra);
     this->action_button->setX(content.x + content.w - MARGIN - action_w);
     this->action_button->setOnPressEnd([this](){ this->doAction(); });
     WidgetFunctions::Add(this->action_button);

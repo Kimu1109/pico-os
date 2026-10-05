@@ -52,7 +52,7 @@ namespace DialogLayout {
             //Buttonの箱は立体ぶん右下へ出るので、これまでのダイアログと同じく2px左へ寄せる
             b->setX(x - 2);
             b->setY(y);
-            b->setW(w);
+            b->setW(w + Button::kFrameExtraTight);
             b->setAllowTextSpacing(false);
             y += kButtonHeight + kMargin;
         }

@@ -24,8 +24,8 @@ EventDetailDialog::EventDetailDialog(){
     this->close_button = new Button(BASE_X + DIALOG_WIDTH - MARGIN - CLOSE_W - BUTTON_EDGE, BUTTON_Y, "閉じる");
     this->close_button->setFontSize(FontFn::Small);
     this->close_button->setAllowTextSpacing(false);
-    this->close_button->setW(CLOSE_W);
-    this->close_button->setH(BUTTON_H);
+    this->close_button->setW(CLOSE_W + Button::kFrameExtraTight);
+    this->close_button->setH(BUTTON_H + Button::kFrameExtraTight);
     this->close_button->setParent(this);
     this->close_button->setOnPressStart([this](){
         if(this->on_closed) this->on_closed(false);

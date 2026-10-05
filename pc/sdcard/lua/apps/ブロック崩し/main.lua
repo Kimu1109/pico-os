@@ -407,8 +407,10 @@ local function setPaddle(x)
     pico.set(paddle_id, "x", math.floor(paddle_cx - paddle_w / 2))
 end
 
+-- EscキーとコントローラーのHOMEで戻る
+pico.on_back(function() pico.pop() end)
+
 function loop(dt)
-    if pico.pad_pressed("home") then pico.pop() return end
     local tx, ty, touched = pico.get_touch()
     -- 自動プレイ中はgoを常時trueにし、発射・ダイアログ継続もこれで賄う(go検知は1回だけ効く)
     local go = pico.pad_pressed("a") or pico.pad_pressed("start") or pico.pad_pressed("up") or isAuto()

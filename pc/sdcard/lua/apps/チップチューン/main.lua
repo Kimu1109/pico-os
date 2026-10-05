@@ -114,9 +114,8 @@ local function playKey(note)
     pico.set(note_label, "text", string.format("%s%d  %.1fHz", NAMES[note % 12 + 1], note // 12 - 1, pico.note_freq(note)))
 end
 
-local function onTouch()
-    local x, y, touched = pico.get_touch()
-    if touched then playKey(noteAt(x, y)) else playKey(nil) end
+local function onTouch(_, x, y)
+    playKey(noteAt(x, y))
 end
 pico.on(keys, "press_start", onTouch)
 pico.on(keys, "press_move", onTouch)

@@ -3,13 +3,13 @@
 -- App_List.cppには一切手を加えていない。
 --
 -- 盤面はButtonではなく、1枚の"Canvas"(pico.create("Canvas"))へpico.draw_*で
--- 自前描画している。タップ判定は"press_start"の中でpico.get_touch()が返す
--- 絶対スクリーン座標から、Canvas自身の左上位置(board_x/board_y)を引いて
+-- 自前描画している。タップ判定は"press_start"のコールバック引数(id, x, y, ...)で
+-- 届く絶対スクリーン座標から、Canvas自身の左上位置(board_x/board_y)を引いて
 -- マス目を逆算する(lua-api-doc「Canvasと直接描画」の「タップ位置の取得」参照)。
 --
 -- (旧版はマス目の数(8x8=64個)だけ小さなCanvasを敷き詰め、それぞれの
--- press_startで判定していた。pico.get_touch()が無かった頃の名残りで、
--- タップ座標を直接読めるようになった今は不要な遠回りだったため統合した)
+-- press_startで判定していた。タップ座標を直接読めるようになった今は
+-- 不要な遠回りだったため統合した)
 
 -- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
 local BUTTON_FRAME = 9
@@ -262,8 +262,7 @@ pico.on(board_canvas, "render", function()
     end
 end)
 
-pico.on(board_canvas, "press_start", function()
-    local tx, ty = pico.get_touch()
+pico.on(board_canvas, "press_start", function(_, tx, ty)
     local c = math.floor((tx - board_x) / CELL) + 1
     local r = math.floor((ty - board_y) / CELL) + 1
     if r < 1 or r > SIZE or c < 1 or c > SIZE then return end

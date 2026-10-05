@@ -134,7 +134,7 @@
 #
 # 確保回数やピーク使用量の計測は run_mem.sh の担当(ASanはmallocごと差し替えるため両立しない)。
 #
-# 使い方: sh script/host_test/run.sh
+# 使い方: sh script/host_test/run.sh [グループ名...]  (グループは --list、並列実行は run_parallel.sh)
 set -e
 
 # 「run.shが一生終わらない」事故の対策(2026-09-21追加)。
@@ -194,6 +194,40 @@ OUT=$(mktemp -d)
 CXXFLAGS="-std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC"
 INCLUDES="-I$ROOT/script/host_test/stubs -I$ROOT/src"
 
+# --- グループ選択(2026-10-05追加) ---
+# 全部を直列に回すと時間がかかるので、テストをグループに分けた。
+#   sh script/host_test/run.sh                 … 全グループ(従来どおり)
+#   sh script/host_test/run.sh core lua-engine … 指定したグループだけ
+#   sh script/host_test/run.sh --list          … グループ名の一覧
+# 並列に全部回すときは run_parallel.sh(グループごとに別プロセス・別の一時ディレクトリ)。
+ALL_GROUPS="core apps media input calc widget lua-base lua-engine lua-sandbox lua-scene ssh"
+SELECTED=""
+for a in "$@"; do
+    case "$a" in
+        --list) echo $ALL_GROUPS; exit 0 ;;
+        *) case " $ALL_GROUPS " in
+               *" $a "*) SELECTED="$SELECTED $a" ;;
+               *) echo "不明なグループ: $a (候補: $ALL_GROUPS)" >&2; exit 2 ;;
+           esac ;;
+    esac
+done
+group_on() {
+    [ -z "$SELECTED" ] && return 0
+    case " $SELECTED " in *" $1 "*) return 0 ;; esac
+    return 1
+}
+
+# lib/luaのオブジェクトを作る(Luaを使うグループが先頭で呼ぶ。同じOUT内では1回だけ)
+ensure_lua_obj() {
+    [ -d "$OUT/lua_obj" ] && return 0
+    mkdir -p "$OUT/lua_obj"
+    for f in "$ROOT"/lib/lua/src/*.c; do
+        compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
+            -I "$ROOT/lib/lua/src" -c "$f" -o "$OUT/lua_obj/$(basename "$f" .c).o"
+    done
+}
+
+if group_on core; then
 # --- シーン遷移 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/scene_test.cpp" \
@@ -344,7 +378,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== discovery_test ====="
 run_or_die "$OUT/discovery_test"
+fi
 
+
+if group_on apps; then
 # --- iCalendar(.ics)の読み取り ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/ical_test.cpp" \
@@ -492,7 +529,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== todo_test ====="
 run_or_die "$OUT/todo_test"
+fi
 
+
+if group_on media; then
 # --- Game Boyエミュ ---
 compile_or_die g++ $CXXFLAGS $INCLUDES -I"$ROOT/lib/peanut_gb/src" \
     "$ROOT/script/host_test/gb_emu_test.cpp" \
@@ -591,7 +631,10 @@ if [ "$rc" -ne 0 ]; then
     fi
     exit "$rc"
 fi
+fi
 
+
+if group_on input; then
 # --- 外部コントローラー ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/pad_test.cpp" \
@@ -655,7 +698,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== power_test ====="
 run_or_die "$OUT/power_test"
+fi
 
+
+if group_on calc; then
 # --- 電卓の式評価 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calc_eval_test.cpp" \
@@ -724,7 +770,10 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== dict_scene_test ====="
 run_or_die "$OUT/dict_scene_test"
+fi
 
+
+if group_on widget; then
 # --- WidgetFactory / WidgetRegistry::Resolve()(Lua統合の受け皿) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/widget_factory_test.cpp" \
@@ -881,16 +930,16 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== error_functions_test ====="
 run_or_die "$OUT/error_functions_test"
+fi
+
+
+if group_on lua-base; then
 
 # --- lib/lua(vendorしたLua本体)が実際にビルド・リンクできること ---
 # pc/CMakeLists.txtと同じくLUA_USE_LINUX等は定義しない(実機は
 # dlopen等のPOSIX機能を持たないため、ANSI構成で確認する。-ldlも不要になる)。
 # 3本のLuaテストで同じオブジェクトを使い回す
-mkdir -p "$OUT/lua_obj"
-for f in "$ROOT"/lib/lua/src/*.c; do
-    compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
-        -I "$ROOT/lib/lua/src" -c "$f" -o "$OUT/lua_obj/$(basename "$f" .c).o"
-done
+ensure_lua_obj
 
 compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_smoke_test.cpp" \
@@ -919,6 +968,10 @@ echo ""
 echo "===== lua_alloc_budget_test ====="
 run_or_die "$OUT/lua_alloc_budget_test"
 
+fi
+
+if group_on lua-engine; then
+ensure_lua_obj
 # --- LuaEngine(Lua<->C++バインディング本体)をウィジェット層と繋げた結合テスト ---
 compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
@@ -989,6 +1042,10 @@ echo ""
 echo "===== lua_engine_test ====="
 run_or_die "$OUT/lua_engine_test"
 
+fi
+
+if group_on lua-sandbox; then
+ensure_lua_obj
 # --- Luaのサンドボックス・打ち切り・スタックトレース・デバッガ(lua_engine_testと同じソース一式) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_sandbox_test.cpp" \
@@ -1074,6 +1131,10 @@ echo ""
 echo "===== devtools_test ====="
 run_or_die "$OUT/devtools_test"
 
+fi
+
+if group_on lua-scene; then
+ensure_lua_obj
 # --- LuaScene(SD上のLuaスクリプトを読んで実行する画面)をシーン遷移と組み合わせた結合テスト ---
 compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_scene_test.cpp" \
@@ -1224,7 +1285,10 @@ compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
 echo ""
 echo "===== tetris_test ====="
 run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/tetris_test.lua" "$ROOT"
+fi
 
+
+if group_on ssh; then
 # --- SSHアプリ(端末エミュレータと暗号まわりの小道具) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/vt_terminal_test.cpp" \
@@ -1243,3 +1307,5 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== ssh_util_test ====="
 run_or_die "$OUT/ssh_util_test"
+fi
+

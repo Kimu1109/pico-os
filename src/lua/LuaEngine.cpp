@@ -29,6 +29,7 @@
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
 #include "gui/widgets/dialogs/ColorDialog.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/icons/icon_render.h"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
@@ -52,6 +53,8 @@
 #include "sound/Mml_Compiler.hpp"
 #include "lua/LuaDebugger.hpp"
 #include "lua/LuaJson.hpp"
+#include "lua/LuaBuiltinModules.hpp"
+#include "util/Secret_Aead.hpp"
 #include "functions/Profiler_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
@@ -66,6 +69,12 @@ namespace {
     // そのまま行き来させて問題ない(桁が全く足りている)。
     LuaEngine* Self(lua_State* L) {
         return static_cast<LuaEngine*>(lua_touserdata(L, lua_upvalueindex(1)));
+    }
+
+    // pico.draw_*が描いた範囲をdirtyにする。pico.image_target()で画像へ描いている間は
+    // 画面に関係が無いので何もしない
+    void LuaMarkDirty(const Rect& r) {
+        if (!LuaOffscreen::active) PICO_GFX::MarkDirty(r);
     }
 
     // WidgetProperty::Value <-> Luaスタックの変換
@@ -554,6 +563,9 @@ int LuaEngine::ProtectedCall(int nargs, int nresults) {
     if (outer) {
         ProfilerFunctions::AddLuaMicros((uint32_t)micros() - t0);
         LuaDebugger::NotifyActivity(false, nullptr);
+        // pico.image_target()で描き先を画像へ向けたまま呼び出しを抜けたら、画面へ戻す
+        // (OSData::frameは全ウィジェットの共有なので、残すと他の描画が画像へ吸い込まれる)
+        EndImageTarget();
         last_aborted_ = (status != LUA_OK) && aborting_;
         if (aborting_) {
             aborting_ = false;
@@ -632,6 +644,7 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
 }
 
 LuaEngine::~LuaEngine() {
+    EndImageTarget();
     // 鳴らしっぱなし(長さ0)の音を残したままアプリを閉じると鳴り止まないので、
     // 音を使ったアプリは閉じるときに全部止める
     if (used_sound_) SoundFunctions::StopAll();
@@ -881,6 +894,7 @@ void LuaEngine::registerApi() {
     registerFn("set_breakpoint", l_set_breakpoint);
     registerFn("clear_breakpoint", l_clear_breakpoint);
     registerFn("debugger_enabled", l_debugger_enabled);
+    RegisterExtApi();
     // グローバルの require は pico.require と同じ関数
     lua_getfield(L, -1, "require");
     lua_setglobal(L, "require");
@@ -903,6 +917,15 @@ bool LuaEngine::EventKindFromName(const char* name, EventKind& out) {
         {"tab_changed", EventKind::TabChanged},
         {"dropdown_changed", EventKind::DropdownChanged},
         {"text_changed", EventKind::TextChanged},
+        {"duration_changed", EventKind::DurationChanged},
+        {"day_selected", EventKind::DaySelected},
+        {"link_tap", EventKind::LinkTap},
+        {"text_tap", EventKind::TextTap},
+        {"text_input", EventKind::TextInput},
+        {"scrolled", EventKind::Scrolled},
+        {"long_press", EventKind::LongPress},
+        {"double_tap", EventKind::DoubleTap},
+        {"swipe", EventKind::Swipe},
     };
     for (const auto& e : kTable) {
         if (strcmp(e.name, name) == 0) { out = e.kind; return true; }
@@ -975,7 +998,7 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
             break;
         case EventKind::TabChanged:
             static_cast<TabBar*>(w)->setOnChanged(
-                [this, id](int) { this->Dispatch(id, EventKind::TabChanged); });
+                [this, id](int) { this->OnTabChanged(id); });
             break;
         case EventKind::DropdownChanged:
             static_cast<DropdownMenu*>(w)->setOnChanged(
@@ -984,6 +1007,17 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
         case EventKind::TextChanged:
             static_cast<TextboxT*>(w)->setOnTextChanged(
                 [this, id]() { this->Dispatch(id, EventKind::TextChanged); });
+            break;
+        case EventKind::DurationChanged:
+        case EventKind::DaySelected:
+        case EventKind::LinkTap:
+        case EventKind::TextTap:
+        case EventKind::TextInput:
+        case EventKind::Scrolled:
+        case EventKind::LongPress:
+        case EventKind::DoubleTap:
+        case EventKind::Swipe:
+            this->BindExtCallback(w, id, kind);
             break;
         case EventKind::SelectItem:
             // already_selectedは永続プロパティとして持てない一時的な値なので、
@@ -1032,6 +1066,12 @@ void LuaEngine::PruneCallbacksFor(WidgetId id) {
         luaL_unref(L, LUA_REGISTRYINDEX, it->ref);
     }
     callbacks_.erase(first, last);
+
+    // 名前・タブの連動も、このウィジェットが消えたら一緒に片付ける
+    names_.erase(std::remove_if(names_.begin(), names_.end(),
+        [id](const NameEntry& e) { return e.id == id; }), names_.end());
+    tab_links_.erase(std::remove_if(tab_links_.begin(), tab_links_.end(),
+        [id](const TabLink& e) { return e.tab == id || e.target == id; }), tab_links_.end());
 }
 
 void LuaEngine::Dispatch(WidgetId id, EventKind kind) {
@@ -1089,7 +1129,35 @@ void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
         lua_pushinteger(L, (lua_Integer)id);
         lua_pushboolean(L, is_ok);
-        if (ProtectedCall(2) != LUA_OK) {
+        int nargs = 2;
+        // 決定で閉じたときは、結果(入力した文字列/選んだパス/選んだ色)を3番目の引数にも渡す。
+        // 閉じた後はDestroyLater()で消えるので、ここで読んでおけば順序を気にせず済む
+        if (is_ok) {
+            if (Widget* dw = WidgetRegistry::Resolve(id)) {
+                WidgetProperty::Id pid = WidgetProperty::Id::Count;
+                switch (dw->getWidgetType()) {
+                    case WidgetType::InputDialog: pid = WidgetProperty::Id::Text; break;
+                    case WidgetType::FileSaveDialog:
+                    case WidgetType::FileSelectDialog: pid = WidgetProperty::Id::Path; break;
+                    case WidgetType::ColorDialog: pid = WidgetProperty::Id::Value; break;
+                    case WidgetType::PickerDialog:
+                        // 選択肢は選んだ番号(0始まり)、日付/時刻/数字は結果の文字列、進捗は無し
+                        switch (static_cast<PickerDialog*>(dw)->getMode()) {
+                            case PickerDialog::Mode::Choice: pid = WidgetProperty::Id::SelectedIndex; break;
+                            case PickerDialog::Mode::Progress: break;
+                            default: pid = WidgetProperty::Id::Text; break;
+                        }
+                        break;
+                    default: break;
+                }
+                WidgetProperty::Value v;
+                if (pid != WidgetProperty::Id::Count && WidgetProperty::Get(dw, pid, v)) {
+                    PushPropertyValue(L, v);
+                    nargs = 3;
+                }
+            }
+        }
+        if (ProtectedCall(nargs) != LUA_OK) {
             ReportError("Luaコールバックでエラーが発生しました");
         }
     }
@@ -1132,6 +1200,9 @@ void LuaEngine::WireDialogClosed(Widget* dialog, WidgetId id) {
             break;
         case WidgetType::ColorDialog:
             static_cast<ColorDialog*>(dialog)->setOnClose(handler);
+            break;
+        case WidgetType::PickerDialog:
+            static_cast<PickerDialog*>(dialog)->setOnClosed(handler);
             break;
         default:
             break; // pico.show_xxx()から渡される型は上の5種のみ
@@ -1180,6 +1251,25 @@ int LuaEngine::l_set(lua_State* L) {
     WidgetProperty::Id pid;
     if (!WidgetProperty::IdFromName(name, pid)) {
         return luaL_error(L, "pico.set: 未知のプロパティ '%s'", name);
+    }
+
+    // 画像・文書をSDのパスから読み込むプロパティは、pico.image_loadと同じ権限(app_dirの外は
+    // sd_outside_app_dirが要る)で縛る。縛らないと、Image/ImageView/MarkdownViewのpathから
+    // 権限なしにSDの任意のファイルの中身を(画像や文書として)画面に出せてしまう
+    if (pid == WidgetProperty::Id::Path && lua_type(L, 3) == LUA_TSTRING) {
+        switch (w->getWidgetType()) {
+            case WidgetType::Image:
+            case WidgetType::ImageView:
+            case WidgetType::MarkdownView: {
+                const char* path = lua_tostring(L, 3);
+                if (path[0] && !Self(L)->SdPathAllowed(path)) {
+                    LOG_APP_WARN("pico.set(path): アプリディレクトリ外へのアクセスは許可されていません: %s", path);
+                    return luaL_error(L, "pico.set: アプリのフォルダの外のファイルは読めません(sd_outside_app_dir権限が必要です)");
+                }
+                break;
+            }
+            default: break;
+        }
     }
 
     bool ok = false;
@@ -1260,6 +1350,7 @@ int LuaEngine::l_on(lua_State* L) {
             case WidgetType::FileSaveDialog:
             case WidgetType::FileSelectDialog:
             case WidgetType::ColorDialog:
+            case WidgetType::PickerDialog:
                 break;
             default:
                 return luaL_error(L, "pico.on: 'closed'イベントはダイアログ(pico.show_*が返すID)のみ対応");
@@ -1284,6 +1375,13 @@ int LuaEngine::l_on(lua_State* L) {
     }
     if (kind == EventKind::TextChanged && w->getWidgetType() != WidgetType::Textbox) {
         return luaL_error(L, "pico.on: 'text_changed'イベントはTextboxのみ対応");
+    }
+
+    {
+        const char* why = nullptr;
+        if (!self->CheckExtEventTarget(kind, w, &why)) {
+            return luaL_error(L, "pico.on: '%s'イベントは%sのみ対応", ev, why ? why : "対応するウィジェット");
+        }
     }
 
     lua_pushvalue(L, 3);
@@ -2157,7 +2255,7 @@ int LuaEngine::l_draw_pixel(lua_State* L) {
     const int8_t color = (int8_t)luaL_checkinteger(L, 3);
 
     OSData::frame->drawPixel(x, y, color);
-    PICO_GFX::MarkDirty({x, y, 1, 1});
+    LuaMarkDirty({x, y, 1, 1});
     return 0;
 }
 
@@ -2173,7 +2271,7 @@ int LuaEngine::l_draw_line(lua_State* L) {
 
     if (width <= 1) {
         OSData::frame->drawLine(x0, y0, x1, y1, color);
-        PICO_GFX::MarkDirty({
+        LuaMarkDirty({
             (int16_t)std::min(x0, x1), (int16_t)std::min(y0, y1),
             (int16_t)(std::abs(x1 - x0) + 1), (int16_t)(std::abs(y1 - y0) + 1)
         });
@@ -2182,7 +2280,7 @@ int LuaEngine::l_draw_line(lua_State* L) {
     const float radius = width * 0.5f;
     CanvasRaster::DrawThickLine(OSData::frame, x0, y0, x1, y1, radius, color);
     const int pad = width / 2 + 1;
-    PICO_GFX::MarkDirty({
+    LuaMarkDirty({
         (int16_t)(std::min(x0, x1) - pad), (int16_t)(std::min(y0, y1) - pad),
         (int16_t)(std::abs(x1 - x0) + 1 + pad * 2), (int16_t)(std::abs(y1 - y0) + 1 + pad * 2)
     });
@@ -2197,7 +2295,7 @@ int LuaEngine::l_draw_rect(lua_State* L) {
     const int8_t color = (int8_t)luaL_checkinteger(L, 5);
 
     OSData::frame->drawRect(x, y, w, h, color);
-    PICO_GFX::MarkDirty({x, y, w, h});
+    LuaMarkDirty({x, y, w, h});
     return 0;
 }
 
@@ -2209,7 +2307,7 @@ int LuaEngine::l_fill_rect(lua_State* L) {
     const int8_t color = (int8_t)luaL_checkinteger(L, 5);
 
     OSData::frame->fillRect(x, y, w, h, color);
-    PICO_GFX::MarkDirty({x, y, w, h});
+    LuaMarkDirty({x, y, w, h});
     return 0;
 }
 
@@ -2220,7 +2318,7 @@ int LuaEngine::l_draw_circle(lua_State* L) {
     const int8_t color = (int8_t)luaL_checkinteger(L, 4);
 
     OSData::frame->drawCircle(x, y, r, color);
-    PICO_GFX::MarkDirty({(int16_t)(x - r), (int16_t)(y - r), (int16_t)(r * 2 + 1), (int16_t)(r * 2 + 1)});
+    LuaMarkDirty({(int16_t)(x - r), (int16_t)(y - r), (int16_t)(r * 2 + 1), (int16_t)(r * 2 + 1)});
     return 0;
 }
 
@@ -2231,7 +2329,7 @@ int LuaEngine::l_fill_circle(lua_State* L) {
     const int8_t color = (int8_t)luaL_checkinteger(L, 4);
 
     OSData::frame->fillCircle(x, y, r, color);
-    PICO_GFX::MarkDirty({(int16_t)(x - r), (int16_t)(y - r), (int16_t)(r * 2 + 1), (int16_t)(r * 2 + 1)});
+    LuaMarkDirty({(int16_t)(x - r), (int16_t)(y - r), (int16_t)(r * 2 + 1), (int16_t)(r * 2 + 1)});
     return 0;
 }
 
@@ -2243,7 +2341,7 @@ int LuaEngine::l_clear_rect(lua_State* L) {
     const int8_t color = (int8_t)luaL_optinteger(L, 5, PICO_BACKGROUND);
 
     OSData::frame->fillRect(x, y, w, h, color);
-    PICO_GFX::MarkDirty({x, y, w, h});
+    LuaMarkDirty({x, y, w, h});
     return 0;
 }
 
@@ -2253,16 +2351,26 @@ int LuaEngine::l_draw_text(lua_State* L) {
     const char* text = luaL_checkstring(L, 3);
     const int8_t color = (int8_t)luaL_optinteger(L, 4, PICO_FORECOLOR);
     const FontFn::FontSize size = (FontFn::FontSize)luaL_optinteger(L, 5, (lua_Integer)FontFn::Normal);
+    // 6番目: 揃え。"left"(既定)はxが左端、"center"はxが中心、"right"はxが右端
+    const char* align = luaL_optstring(L, 6, "left");
+
+    int16_t draw_x = x;
+    if (strcmp(align, "left") != 0) {
+        const int tw = Label<PICO_STR_M>::GetTextWidth(size, text);
+        if (strcmp(align, "center") == 0) draw_x = (int16_t)(x - tw / 2);
+        else if (strcmp(align, "right") == 0) draw_x = (int16_t)(x - tw);
+        else return luaL_error(L, "pico.draw_text: align は left / center / right です");
+    }
 
     // 右端をはみ出さないよう、幅は残りスクリーン幅に自動で収める(AppGrid::drawName()等と
     // 同じ理由でmaxWidth=0以下はDrawPlain側がクリップ無しとして扱ってしまうため先に弾く)
-    const int16_t max_w = (int16_t)(SCREEN_WIDTH - x);
+    const int16_t max_w = (int16_t)(SCREEN_WIDTH - draw_x);
     if (max_w <= 0) return 0;
 
-    Label<PICO_STR_M>::DrawPlain(size, color, x, y, max_w, text);
+    Label<PICO_STR_M>::DrawPlain(size, color, draw_x, y, max_w, text);
 
     const int16_t line_h = (int16_t)Label<PICO_STR_M>::GetLineHeight(size);
-    PICO_GFX::MarkDirty({x, y, max_w, line_h});
+    LuaMarkDirty({draw_x, y, max_w, line_h});
     return 0;
 }
 
@@ -2279,7 +2387,7 @@ int LuaEngine::l_draw_image(lua_State* L) {
 
     ImageSlot& slot = self->images_[index];
     IconRender::DrawPimgSprite(slot.sprite, x, y);
-    PICO_GFX::MarkDirty({x, y, (int16_t)slot.sprite.width, (int16_t)slot.sprite.height});
+    LuaMarkDirty({x, y, (int16_t)slot.sprite.width, (int16_t)slot.sprite.height});
     return 0;
 }
 
@@ -2322,7 +2430,7 @@ int LuaEngine::l_draw_image_part(lua_State* L) {
         IconRender::DrawPimgSprite(slot.sprite, dx - sx, dy - sy);
         OSData::frame->setClipRect(cx, cy, cw, ch);
     }
-    PICO_GFX::MarkDirty({ (int16_t)dx, (int16_t)dy, (int16_t)w, (int16_t)h });
+    LuaMarkDirty({ (int16_t)dx, (int16_t)dy, (int16_t)w, (int16_t)h });
     return 0;
 }
 
@@ -2336,7 +2444,7 @@ namespace {
 
     // 描いた範囲(両端を含む座標)をdirtyにする
     void MarkBounds(int minx, int miny, int maxx, int maxy) {
-        PICO_GFX::MarkDirty({(int16_t)minx, (int16_t)miny,
+        LuaMarkDirty({(int16_t)minx, (int16_t)miny,
                              (int16_t)(maxx - minx + 1), (int16_t)(maxy - miny + 1)});
     }
 
@@ -2854,6 +2962,7 @@ int LuaEngine::l_image_free(lua_State* L) {
     // 二重解放をエラーにしない
     if (!self->ResolveImageHandle(handle, index)) return 0;
 
+    if ((int)index == self->image_target_index_) self->EndImageTarget();
     ImageSlot& slot = self->images_[index];
     slot.sprite.sprite.deleteSprite();
     slot.sprite.usable = false;
@@ -4087,17 +4196,25 @@ bool LuaEngine::CallSuspend(FixedString<PICO_STR_2KiB>& out) {
 
 namespace {
     constexpr size_t kMaxStoreBytes = PICO_STR_16KiB;
+    constexpr size_t kMaxStoreFileBytes = 24 * 1024;   // 暗号化した保存ファイルの読み込み上限
 }
 
 int LuaEngine::l_store_load(lua_State* L) {
     LuaEngine* self = Self(L);
+    // pico.store_load([{password = "..."}]) 暗号化して保存したstoreを読む(パスワードを付けて保存したときだけ必要)
+    const char* password = nullptr;
+    if (lua_istable(L, 1)) {
+        lua_getfield(L, 1, "password");   // スタックに残したまま使う(文字列を生かしておくため)
+        if (lua_type(L, -1) == LUA_TSTRING && lua_tostring(L, -1)[0]) password = lua_tostring(L, -1);
+    }
     if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
     FixedString<PICO_PATH_LEN> path;
     if (!PICO_IO::join(path, self->app_dir_, "store.json")) { lua_pushnil(L); return 1; }
     if (!OSData::SD.exists(path.c_str())) { lua_pushnil(L); return 1; }
 
     const char* why = "";
-    if (pushFileString(L, path.c_str(), kMaxStoreBytes, &why) == 0) {
+    // 暗号化すると約4/3倍になるので、読む上限は平文の上限より少し大きくしてある
+    if (pushFileString(L, path.c_str(), kMaxStoreFileBytes, &why) == 0) {
         LOG_APP_WARN("pico.store_load: %s", why);
         lua_pushnil(L);
         return 1;
@@ -4106,6 +4223,30 @@ int LuaEngine::l_store_load(lua_State* L) {
     const char* s = lua_tolstring(L, -1, &len);
     const char* err = nullptr;
     size_t pos = 0;
+
+    if (SecretAead::IsEncrypted(s, len)) {
+        SecretAead::Result r;
+        bool decoded = false;
+        {
+            std::string plain;
+            r = SecretAead::Decrypt(s, len, self->app_dir_.c_str(), password, plain);
+            if (r == SecretAead::Result::Ok) {
+                decoded = LuaJson::Decode(L, plain.data(), plain.size(), false, err, pos);
+            }
+        }
+        if (r != SecretAead::Result::Ok) {
+            LOG_APP_WARN("pico.store_load: %s", SecretAead::ResultToStr(r));
+            lua_pushnil(L);
+            lua_pushstring(L, SecretAead::ResultToStr(r));
+            return 2;
+        }
+        if (!decoded) {
+            LOG_APP_WARN("pico.store_load: store.jsonが壊れています: %s", err ? err : "?");
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
     if (!LuaJson::Decode(L, s, len, false, err, pos)) {
         LOG_APP_WARN("pico.store_load: store.jsonが壊れています: %s", err ? err : "?");
         lua_pushnil(L);
@@ -4116,15 +4257,42 @@ int LuaEngine::l_store_load(lua_State* L) {
 int LuaEngine::l_store_save(lua_State* L) {
     LuaEngine* self = Self(L);
     luaL_checkany(L, 1);
+    // pico.store_save(tbl [, {encrypt = true, password = "..."}])
+    //   encrypt=trueで暗号化して保存する(passwordを渡すとそのパスワードで。渡さなければアプリごとの固定鍵)。
+    //   passwordだけ渡してもencrypt=true扱い。暗号化すると平文の上限は12KiB
+    bool encrypt = false;
+    const char* password = nullptr;
+    if (lua_istable(L, 2)) {
+        lua_getfield(L, 2, "encrypt");
+        encrypt = lua_toboolean(L, -1) != 0;
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "password");
+        if (lua_type(L, -1) == LUA_TSTRING && lua_tostring(L, -1)[0]) { password = lua_tostring(L, -1); encrypt = true; }
+        // passwordの文字列はスタックに残したまま使う
+    }
+    lua_settop(L, lua_istable(L, 2) ? 3 : 1);
+
     const char* err = nullptr;
     bool ok = false;
     bool too_big = false;
+    const char* enc_err = nullptr;
     FixedString<PICO_PATH_LEN> path, part;
     {
         std::string json;
         ok = LuaJson::EncodeValue(L, 1, json, 0, err);
-        lua_settop(L, 1);
         if (ok && json.size() > kMaxStoreBytes) { too_big = true; ok = false; }
+        if (ok && encrypt) {
+            if (json.size() > SecretAead::kMaxPlainBytes) {
+                too_big = true;
+                ok = false;
+            } else {
+                std::string enc;
+                const SecretAead::Result r = SecretAead::Encrypt((const uint8_t*)json.data(), json.size(),
+                                                                 self->app_dir_.c_str(), password, enc);
+                if (r != SecretAead::Result::Ok) { ok = false; enc_err = SecretAead::ResultToStr(r); }
+                else json.swap(enc);
+            }
+        }
         if (ok) {
             ok = OSData::SD_usable
                 && PICO_IO::join(path, self->app_dir_, "store.json")
@@ -4147,8 +4315,9 @@ int LuaEngine::l_store_save(lua_State* L) {
     }
     if (err) return luaL_error(L, "pico.store_save: 値をJSONにできません(%s)", err);
     if (too_big) {
-        LOG_APP_WARN("pico.store_save: 大きすぎます(%uBまで)", (unsigned)kMaxStoreBytes);
+        LOG_APP_WARN("pico.store_save: 大きすぎます(%uBまで)", (unsigned)(encrypt ? SecretAead::kMaxPlainBytes : kMaxStoreBytes));
     }
+    if (enc_err) LOG_APP_WARN("pico.store_save: 暗号化できません: %s", enc_err);
     lua_pushboolean(L, ok);
     return 1;
 }
@@ -4310,6 +4479,17 @@ void LuaEngine::preloadModules(const char* src, size_t len) {
         const bool already = !lua_isnil(L, -1);
         lua_pop(L, 1);
         if (already) { lua_pop(L, 1); continue; }
+
+        // OS同梱のモジュール(pico.ui / pico.async)は、アプリのフォルダより優先してそのソースを使う
+        if (const char* bsrc = LuaBuiltin::Source(name)) {
+            FixedString<PICO_STR_M> bname;
+            bname.assign("=");
+            bname.append(name);
+            luaL_loadbufferx(L, bsrc, strlen(bsrc), bname.c_str(), "t"); // 成功なら関数、失敗ならメッセージ
+            lua_setfield(L, pre, name);
+            lua_pop(L, 1);
+            continue;
+        }
 
         FixedString<PICO_PATH_LEN> path;
         if (!ResolveModulePath(name, path)) { lua_pop(L, 1); continue; } // 無ければ実行時にエラーになる

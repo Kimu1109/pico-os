@@ -1,5 +1,6 @@
 #include "gui/scenes/LuaScene.hpp"
 #include "functions/Power_Functions.hpp"
+#include "functions/Pad_Functions.hpp"
 #include "OS_Data.hpp"
 #include "functions/App_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -147,7 +148,12 @@ bool LuaScene::runFile(const char* path) {
 
 bool LuaScene::onKey(const KeyInputFunctions::Event& ev) {
     if (!engine || !script_ok) return false;
-    return engine->DispatchKey(ev);
+    if (engine->DispatchKey(ev)) return true;
+    // pico.on_back(fn)が登録されていれば、Escキーを「戻る」として渡す(登録が無ければ取らない)
+    if (ev.key == KeyInputFunctions::Key::Escape && engine->HasBackHandler()) {
+        return engine->DispatchBack();
+    }
+    return false;
 }
 
 void LuaScene::onUpdate() {
@@ -169,6 +175,10 @@ void LuaScene::onUpdate() {
 
     // pico.after / pico.every(setup()/loop()の有無に関わらず動かす)
     engine->UpdateTimers((uint32_t)dt);
+    // 長押し・ダブルタップ・スワイプ(pico.on(id,"long_press"/"double_tap"/"swipe",fn)がある間だけ判定する)
+    engine->UpdateGestures();
+    // コントローラーのHOMEを「戻る」として渡す(pico.on_back(fn)の登録があるときだけ)
+    if (engine->HasBackHandler() && PadFunctions::Pressed(PadFunctions::Home)) engine->DispatchBack();
     engine->CallLoop((uint32_t)dt);
 }
 

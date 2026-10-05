@@ -121,6 +121,9 @@
 #                    が無い場合に安全に0件を返すことまでを確認する
 #                    (完全な走査結果はPCビルドの--shotで確認済み。CLAUDE.md
 #                    「SDを走査してLuaアプリを見つける処理」参照)
+#   pico_mock_test… script/host_test/lua/pico_mock.lua(Luaアプリのゲームの規則やUIを、実機/PCビルド無しで
+#                 普通のLuaだけで確かめるための、pico.*の偽物)自身のテスト。ウィジェット・イベント・タイマー・
+#                 ダイアログ・HTTP・SD・保存・画面遷移を記録して返せる
 #   tetris_test… Luaアプリ「テトリス」(pc/sdcard/lua/apps/テトリス/)のゲームの規則。
 #                 pico.*をLuaの偽物に差し替え、lua_script_test(vendorしたLuaで.luaを
 #                 動かすだけの下請け)で tetris_test.lua を実行する。ライン消し・壁蹴り・
@@ -200,7 +203,7 @@ INCLUDES="-I$ROOT/script/host_test/stubs -I$ROOT/src"
 #   sh script/host_test/run.sh core lua-engine … 指定したグループだけ
 #   sh script/host_test/run.sh --list          … グループ名の一覧
 # 並列に全部回すときは run_parallel.sh(グループごとに別プロセス・別の一時ディレクトリ)。
-ALL_GROUPS="core apps media input calc widget lua-base lua-engine lua-sandbox lua-scene ssh"
+ALL_GROUPS="core apps media input calc widget lua-base lua-engine lua-ext lua-sandbox lua-scene ssh"
 SELECTED=""
 for a in "$@"; do
     case "$a" in
@@ -225,6 +228,9 @@ ensure_lua_obj() {
         compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
             -I "$ROOT/lib/lua/src" -c "$f" -o "$OUT/lua_obj/$(basename "$f" .c).o"
     done
+    # Luaの暗号API(Secret_Aead)が使うMonocypher。lua_obj/*.oと一緒にリンクされる
+    compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
+        -c "$ROOT/lib/monocypher/src/monocypher.c" -o "$OUT/lua_obj/monocypher.o"
 }
 
 if group_on core; then
@@ -780,6 +786,14 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/TextView.cpp" \
+    "$ROOT/src/gui/widgets/ImageView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/AnalogClock.cpp" \
+    "$ROOT/src/gui/widgets/apps/DurationPicker.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
@@ -818,9 +832,18 @@ run_or_die "$OUT/widget_factory_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/widget_property_test.cpp" \
     "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/PickerDialog.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/TextView.cpp" \
+    "$ROOT/src/gui/widgets/ImageView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/AnalogClock.cpp" \
+    "$ROOT/src/gui/widgets/apps/DurationPicker.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
@@ -974,9 +997,12 @@ if group_on lua-engine; then
 ensure_lua_obj
 # --- LuaEngine(Lua<->C++バインディング本体)をウィジェット層と繋げた結合テスト ---
 # (HTTPの結合テストが127.0.0.1に小さなサーバのスレッドを立てるので-pthread)
-compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" \
+compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/monocypher/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
@@ -993,7 +1019,16 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/TextView.cpp" \
+    "$ROOT/src/gui/widgets/ImageView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/AnalogClock.cpp" \
+    "$ROOT/src/gui/widgets/apps/DurationPicker.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
     "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/PickerDialog.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
@@ -1045,12 +1080,16 @@ run_or_die "$OUT/lua_engine_test"
 
 fi
 
-if group_on lua-sandbox; then
+if group_on lua-ext; then
 ensure_lua_obj
-# --- Luaのサンドボックス・打ち切り・スタックトレース・デバッガ(lua_engine_testと同じソース一式) ---
-compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
-    "$ROOT/script/host_test/lua_sandbox_test.cpp" \
+# --- LuaEngineの拡張API(Ext/Crypto/組み込みモジュール)のテスト ---
+# (HTTPの結合テストが127.0.0.1に小さなサーバのスレッドを立てるので-pthread)
+compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/lua_ext_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
@@ -1067,7 +1106,102 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/TextView.cpp" \
+    "$ROOT/src/gui/widgets/ImageView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/AnalogClock.cpp" \
+    "$ROOT/src/gui/widgets/apps/DurationPicker.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
     "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/PickerDialog.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/NumberInput.cpp" \
+    "$ROOT/src/gui/widgets/Checkbox.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Image.cpp" \
+    "$ROOT/src/gui/widgets/NumberSlider.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/RectShape.cpp" \
+    "$ROOT/src/gui/widgets/EllipseShape.cpp" \
+    "$ROOT/src/gui/widgets/LineShape.cpp" \
+    "$ROOT/src/gui/widgets/TriangleShape.cpp" \
+    "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
+    "$ROOT/src/gui/widgets/GridContainer.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
+    "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/functions/Error_Functions.cpp" \
+    "$ROOT/src/functions/Scene_Functions.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/gui/scenes/LuaScene.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    "$OUT"/lua_obj/*.o \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    -o "$OUT/lua_ext_test" -lssl -lcrypto
+
+echo ""
+echo "===== lua_ext_test ====="
+run_or_die "$OUT/lua_ext_test"
+
+fi
+
+if group_on lua-sandbox; then
+ensure_lua_obj
+# --- Luaのサンドボックス・打ち切り・スタックトレース・デバッガ(lua_engine_testと同じソース一式) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/lua_sandbox_test.cpp" \
+    "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
+    "$ROOT/src/lua/LuaDebugger.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/TextView.cpp" \
+    "$ROOT/src/gui/widgets/ImageView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/AnalogClock.cpp" \
+    "$ROOT/src/gui/widgets/apps/DurationPicker.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
+    "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/PickerDialog.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
@@ -1137,10 +1271,13 @@ fi
 if group_on lua-scene; then
 ensure_lua_obj
 # --- LuaScene(SD上のLuaスクリプトを読んで実行する画面)をシーン遷移と組み合わせた結合テスト ---
-compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/monocypher/src" \
     "$ROOT/script/host_test/lua_scene_test.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
@@ -1163,7 +1300,16 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/TextView.cpp" \
+    "$ROOT/src/gui/widgets/ImageView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/AnalogClock.cpp" \
+    "$ROOT/src/gui/widgets/apps/DurationPicker.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
     "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/PickerDialog.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
@@ -1207,11 +1353,14 @@ echo "===== lua_scene_test ====="
 run_or_die "$OUT/lua_scene_test"
 
 # --- LuaAppScanner(SD走査によるLuaアプリの自動登録) ---
-compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/monocypher/src" \
     "$ROOT/script/host_test/lua_app_scanner_test.cpp" \
     "$ROOT/src/lua/LuaAppScanner.cpp" \
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
@@ -1234,7 +1383,16 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/TextView.cpp" \
+    "$ROOT/src/gui/widgets/ImageView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/AnalogClock.cpp" \
+    "$ROOT/src/gui/widgets/apps/DurationPicker.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
     "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/PickerDialog.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
     "$ROOT/src/gui/widgets/Textbox.cpp" \
@@ -1286,6 +1444,11 @@ compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
 echo ""
 echo "===== tetris_test ====="
 run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/tetris_test.lua" "$ROOT"
+
+# --- pico_mock.lua(Luaアプリのテスト用のpico.*の偽物)自身 ---
+echo ""
+echo "===== pico_mock_test ====="
+run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/pico_mock_test.lua" "$ROOT"
 fi
 
 

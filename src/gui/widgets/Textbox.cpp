@@ -18,7 +18,12 @@ void Textbox<N>::onShow(ITextInputWidget* keyboard){
 }
 template<size_t N>
 void Textbox<N>::onTextChanged(ITextInputWidget* keyboard){
-    // 入力途中は背景のTextboxを更新せず、onHide(確定時)に反映する
+    // 入力途中は背景のTextboxを更新せず、onHide(確定時)に反映する。
+    // ただし1文字ごとのコールバックが設定されている間は、欄の表示も更新してから知らせる
+    if(this->on_text_input){
+        this->setText(keyboard->getText());
+        this->on_text_input();
+    }
 }
 template<size_t N>
 void Textbox<N>::onHide(ITextInputWidget* keyboard){

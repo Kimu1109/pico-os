@@ -54,12 +54,49 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         void clear(){
             dataSource.clear();
             this->selected_index = -1;
+            this->scrollY = 0;
             this->needsRender();
         }
+        // index番目の位置へ挿入する(範囲外は末尾)。選択中の項目はずれた分だけ追従する
+        void insertAt(int index, const ScrollListTools::Item& value){
+            if(index < 0 || index > (int)dataSource.size()) index = (int)dataSource.size();
+            dataSource.insert(dataSource.begin() + index, value);
+            if(this->selected_index >= index) this->selected_index++;
+            this->needsRender();
+        }
+        // index番目を取り除く。範囲外ならfalse。選択中の項目を消したら選択は外れる
+        bool removeAt(int index){
+            if(index < 0 || index >= (int)dataSource.size()) return false;
+            dataSource.erase(dataSource.begin() + index);
+            if(this->selected_index == index) this->selected_index = -1;
+            else if(this->selected_index > index) this->selected_index--;
+            this->clampScroll();
+            this->needsRender();
+            return true;
+        }
+        // index番目の項目が見える位置までスクロールする(一番上に寄せる)
+        void scrollToIndex(int index){
+            if(index < 0 || index >= (int)dataSource.size()) return;
+            if(this->font_h == 0) this->font_h = FontFn::GetFontSize(getFontSize());
+            this->scrollY = index * (this->font_h + MARGIN);
+            this->clampScroll();
+            this->needsRender();
+        }
+        int getScrollY() const { return this->scrollY; }
 
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::ScrollList; }
+
+    private:
+        // 項目数・表示領域が変わったあとにscrollYを範囲内へ戻す
+        void clampScroll(){
+            const int total = (this->font_h + MARGIN) * (int)this->dataSource.size();
+            const int max_scroll = total > this->l_rect.h ? total - this->l_rect.h : 0;
+            if(this->scrollY > max_scroll) this->scrollY = max_scroll;
+            if(this->scrollY < 0) this->scrollY = 0;
+        }
+    public:
 
         void causeOnPressStart() override;
         void causeOnPressMove() override;

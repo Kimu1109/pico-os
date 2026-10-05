@@ -1,7 +1,7 @@
 ---
 title: "その他"
 weight: 90
-description: "log / show_error / millis / battery / on_key"
+description: "log / show_error / millis / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast"
 ---
 
 ## pico.log
@@ -49,3 +49,65 @@ end)
 ```
 
 `fn` がエラーになるとダイアログを1回出し、以降は呼ばれません。打鍵はタッチのイベントと違いコールバックで届くので、`loop(dt)` の中でポーリングする必要はありません。
+
+## pico.app_dir
+
+<div class="sig">pico.app_dir() <span class="ret">-> path: string</span></div>
+
+このアプリのフォルダ(`main.lua` のあるフォルダ。末尾に `/` は付きません)。画像やデータのパスをハードコードせずに済みます。
+
+## pico.path_join
+
+<div class="sig">pico.path_join(a: string, b: string, ...) <span class="ret">-> path: string</span></div>
+
+パスをつなぎます。`/` で始まる要素が来たらそこからやり直し、`.` と `..` は畳みます(SDのルートより上へは出ません)。
+
+```lua
+local img = pico.path_join(pico.app_dir(), "img", "title.pimg")
+```
+
+## pico.time
+
+<div class="sig">pico.time() <span class="ret">-> epoch_seconds: integer | nil</span></div>
+
+現在時刻のUNIX時間(秒)。NTPで時計が合っていなければ `nil`。年月日が欲しいときは `pico.get_time()`。
+
+## pico.wifi_status
+
+<div class="sig">pico.wifi_status() <span class="ret">-> { connected: boolean, status: string, enabled: boolean, ssid?: string }</span></div>
+
+Wi-Fiの状態です。`status` は `"connected"` `"connecting"` `"off"` `"failed"` `"timeout"` `"not_found"` のどれか。`ssid` は接続中だけ入ります。
+
+## pico.url_encode / pico.url_decode
+
+<div class="sig">pico.url_encode(s: string) <span class="ret">-> string</span></div>
+<div class="sig">pico.url_decode(s: string) <span class="ret">-> string</span></div>
+
+パーセントエンコード(英数字と `-` `_` `.` `~` 以外を `%XX` に)。`url_decode` は `+` も空白に戻します。壊れた `%` はそのまま残します。
+
+## pico.base64_encode / pico.base64_decode
+
+<div class="sig">pico.base64_encode(data: string, url_safe?: boolean) <span class="ret">-> string</span></div>
+<div class="sig">pico.base64_decode(text: string) <span class="ret">-> data: string | nil</span></div>
+
+base64です(`data` は12KiB、`text` は16KiBまで)。`url_safe = true` なら `-` `_` を使いパディング(`=`)を付けません。`base64_decode` は標準とURL安全の両方を受け付け、改行や空白は飛ばし、不正なら `nil`。バイナリも往復できます。
+
+## pico.settings_get / settings_set / settings_all
+
+<div class="sig">pico.settings_get(key: string, default?: any) <span class="ret">-> value: string | default</span></div>
+<div class="sig">pico.settings_set(key: string, value: string | number | boolean) <span class="ret">-> ok: boolean</span></div>
+<div class="sig">pico.settings_all() <span class="ret">-> table</span></div>
+
+アプリ専用の設定です。アプリのフォルダの `settings.cfg`(`key=value` 形式)に読み書きします。パスを意識せずに「音量」「前回の選択」のような小さな値を持てます。値は**文字列**で返ります(`tonumber` や `== "true"` で解釈してください)。キーに `=` や改行は使えません。値に改行を含む場合は `false`。まとまった構造は [`store_save`](../scenes/) が向いています。
+
+## pico.memory_info
+
+<div class="sig">pico.memory_info() <span class="ret">-> table</span></div>
+
+`{ lua_used, lua_budget, lua_free, heap_free, heap_used, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と予算(既定200KB)、`heap_*` は本体のヒープ、`image_bytes` は `image_load`/`image_create` で使っている量です。重いアプリの調整に使います。
+
+## pico.toast
+
+<div class="sig">pico.toast(text: string) <span class="ret">-> shown: boolean</span></div>
+
+画面の上に短い通知(トースト)を出します。権限は要りません。通知センターの履歴にも残ります。連続して呼ぶと(300ms以内)断られて `false` を返します。アプリを閉じた後に出したい予約の通知は [`pico.notify`](../notify/) です。

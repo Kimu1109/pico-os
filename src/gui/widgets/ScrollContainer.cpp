@@ -68,7 +68,19 @@ void ScrollContainer::causeOnPressMove(){
         for(Widget* child : children_){
             child->needsRender();
         }
+        if(this->on_scrolled) this->on_scrolled();
     }
+}
+
+void ScrollContainer::applyScroll(int new_x, int new_y){
+    if(new_x == scroll_x && new_y == scroll_y) return;
+    scroll_x = new_x;
+    scroll_y = new_y;
+    this->needsRender();
+    for(Widget* child : children_){
+        child->needsRender();
+    }
+    if(this->on_scrolled) this->on_scrolled();
 }
 
 void ScrollContainer::render() {

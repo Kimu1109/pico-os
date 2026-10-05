@@ -29,6 +29,10 @@ class ScrollContainer : public Widget, public IBorderColor {
 
         constexpr static int SCROLL_L = 15;
 
+        // スクロール位置が変わったとき(ドラッグ・setScrollY()どちらも)に呼ぶ
+        std::function<void()> on_scrolled = nullptr;
+        void applyScroll(int new_x, int new_y);
+
     public:
         // 縦スクロールバーの幅。中身の幅を見込む呼び出し元向け
         constexpr static int kScrollBarWidth = SCROLL_L;
@@ -105,6 +109,23 @@ class ScrollContainer : public Widget, public IBorderColor {
             this->needsRender();
             for(Widget* child : children_) child->needsRender();
         }
+
+        // スクロール位置の読み書き(Luaなど)。範囲(中身の大きさ)に収まるよう詰める
+        int getScrollX() const { return this->scroll_x; }
+        int getScrollY() const { return this->scroll_y; }
+        int getMaxScrollX() { this->updateContentBounds(); return this->max_scroll_x; }
+        int getMaxScrollY() { this->updateContentBounds(); return this->max_scroll_y; }
+        void setScroll(int x, int y){
+            this->updateContentBounds();
+            this->applyScroll(constrain(x, 0, this->max_scroll_x), constrain(y, 0, this->max_scroll_y));
+        }
+        // 子が見える位置までスクロールする(縦。上端に寄せる)。子でなければfalse
+        bool scrollToChild(Widget* child){
+            if(std::find(children_.begin(), children_.end(), child) == children_.end()) return false;
+            this->setScroll(this->scroll_x, child->getLocalRect().y);
+            return true;
+        }
+        void setOnScrolled(std::function<void()> cb){ this->on_scrolled = cb; }
 
         // 表示中の中身が別物に変わった(=前回のスクロール位置に意味が無い)
         // ときに、先頭へ戻す。

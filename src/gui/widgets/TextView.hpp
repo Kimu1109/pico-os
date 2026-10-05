@@ -52,6 +52,11 @@ class TextView : public Widget {
 
         std::function<void(size_t byte_offset)> on_tap = nullptr;
 
+        // setOwnedText()が確保した文書(Luaなど、呼び出し側が文書を持ち続けられない場合用)。
+        // 確保するのは文書が変わるときだけ。textがこれを指している間だけ有効
+        char* owned = nullptr;
+        size_t owned_cap = 0;
+
         int contentW() const { return this->l_rect.w - kPad * 2 - kBarW; }
         int maxScroll();
         void layout();
@@ -66,8 +71,22 @@ class TextView : public Widget {
             this->rows[0] = {0, 0};
         }
 
+        ~TextView() override;
+        TextView(const TextView&) = delete;
+        TextView& operator=(const TextView&) = delete;
+
         // 文書を差し替える(折り返しをやり直す)。textは呼び出し側が持ち続けること
         void setDocument(const char* text, int len);
+        // 文書をこのウィジェットの中へコピーして持つ(Luaから使う用)。
+        // 位置が16bitなので kMaxOwnedBytes を超える分は切り捨てる(切ったらfalse)。確保できなければfalse
+        static constexpr size_t kMaxOwnedBytes = 16 * 1024;
+        bool setOwnedText(const char* text, size_t len);
+        const char* getText() const { return this->text; }
+        int getTextLength() const { return this->len; }
+        int getScrollY() const { return this->scroll_y; }
+        void setScrollY(int y);
+        int getRowCount() { this->layout(); return this->row_count; }
+        void setW(int w);
         // getText()上のバイト位置
         void setCursor(size_t byte_offset);
         size_t getCursor() const { return this->cursor; }

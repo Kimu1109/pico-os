@@ -47,6 +47,12 @@ class ImageView : public Widget {
         bool load(const char* path);
         void unload();
 
+        // 表示欄の大きさを変える。読み込み済みなら窓を取り直すために読み直す
+        void setSize(int w, int h);
+        void setW(int w){ this->setSize(w, this->l_rect.h); }
+        void setH(int h){ this->setSize(this->l_rect.w, h); }
+        const char* getPath() const { return this->path.c_str(); }
+
         bool isLoaded() const { return this->loaded; }
         int getImageW() const { return this->header.width; }
         int getImageH() const { return this->header.height; }

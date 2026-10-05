@@ -79,7 +79,7 @@ src/
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
-  lua/                        Lua<->C++バインディング本体(LuaEngine)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
+  lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査) / Json_Reader(流しながら読むJSON)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
@@ -88,7 +88,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の51本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の53本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -983,7 +983,8 @@ SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/
   画面に紐付いていないこと」で、「複数箇所から使われていること」ではない。
 
 ### ウィジェットカタログ
-Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / TextView(見えている行だけを描くプレーンテキストの表示欄。任意でカーソル) / ImageView(.pimgを1回だけ解いて持ち、ドラッグでスクロール) / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照)。
+Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / TextView(見えている行だけを描くプレーンテキストの表示欄。任意でカーソル) / ImageView(.pimgを1回だけ解いて持ち、ドラッグでスクロール) / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照) / ProgressBar(表示専用の進捗バー。タップ素通り)。
+**`TextView` / `ImageView` / `MarkdownView` / `AnalogClock` / `DurationPicker` / `MonthGrid` も2026-10-05からLuaの `pico.create` で作れる**(下記「Lua APIの追加(2026-10-05 その2)」)。
 
 `LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
 
@@ -1073,6 +1074,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - `EventDetailDialog`: カレンダーの予定1件の詳細。題名 + `ScrollContainer`で包んだ本文 + 閉じる。中身は`CalendarScene`が作る。
 - `SearchDialog`: Markdownブラウザの検索結果。状態1行 + `ScrollList` + 再検索/次へ/閉じる。
   **通信はしない**(判断は`MarkdownScene`側)。結果は2回タップで開く。
+- `PickerDialog`: 選ぶ・入れる系(Choice/Date/Time/Number/Progress)を1クラスにしたもの(2026-10-05。Luaの `pico.show_choice` 等が使う)。
 - `ColorDialog`: 実装済み(直近コミット)。4×4=16色グリッド(`getIndexToColor(x,y)=x+y*4`)+OK/キャンセル。`selected_color`(未選択-1)、`getSelectedColor()`。
 ### オンスクリーンキーボード (`src/gui/widgets/keyboards/` / `dialogs/KeyboardDialog` / `functions/Keyboard_Functions`) (2026-09-29)
 
@@ -2586,6 +2588,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.create(type_name)` | `WidgetFactory::TypeFromName()`→`Create()`。生成物は即`WidgetFunctions::Add()`で登録し、`WidgetId`(整数)を返す |
 | `pico.destroy(id)` | コールバック登録を`PruneCallbacksFor()`で外してから`WidgetFunctions::DestroyLater()`(フレーム境界での遅延削除) |
 | `pico.set(id, name, value)` / `pico.get(id, name)` | `WidgetProperty::IdFromName()`→`Set()`/`Get()`。プロパティ名は`snake_case`の文字列 |
+| (追加分) | 2026-10-05に `off` `text_set` `set_dots` `set_name/find/parent/children/get_rect` `bring_to_front/send_to_back` `scroll_to` `list_*` `tab_*` `show_choice/date/time/number/progress` `draw_text_wrapped` `measure_text` `get_pixel` `image_create/target/clear` `app_dir` `path_join` `time` `wifi_status` `url_*` `base64_*` `settings_*` `memory_info` `toast` `on_back/go_back` `encrypt/decrypt/is_encrypted/hash/random_bytes` を足した。一覧は下記「Lua APIの追加(2026-10-05 その2)」 |
 | `pico.on(id, event_name, fn)` | 4種の共通イベント(`press_start`/`press_end`/`press_move`/`press_out`。**`fn(id, x, y, lx, ly, dx, dy)`でタッチ座標も届く**、下記「Lua APIの追加(2026-10-05)」)+`render`(`Canvas`限定、下記「直接描画」参照)+ウィジェット固有4種(`checked_changed`/`value_changed`/`select_item`/`tab_changed`、下記「ウィジェット固有イベント」参照)+`closed`(ダイアログ限定)に対応(下記) |
 | `pico.add_child(container_id, child_id)` | `LayoutContainer`/`GridContainer`/`ScrollContainer`のみ対応 |
 | `pico.remove_child(container_id, child_id)` | `add_child`の逆。破棄せず取り外す。取り外した子はフラットリストへ独立したルートとして戻る(下記「コンテナからの取り外し」参照)(2026-09-21追加) |
@@ -3587,9 +3590,65 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   盤面のタップ→マス目、タイマー、`push_scene`→`pop(result)`、`store_save`を`--tap`/`--shot`で確認した。
 - **既知の限界/未確認**: 実機でのスタック(`ScanRequires`と先読みのコンパイルが想定どおり浅いか)・`save_to`の速度(SDとTLS)・`http_request`の戻り値の変更で`== true`と比べていた既存アプリが無いこと
   (リポジトリ内のLuaアプリは`http_request`を使っていない)。OOM時に`PendingHttp`/`std::string`が漏れうる(`luaL_error`のlongjmpはデストラクタを飛ばす。アプリを閉じる状況なので許容)。
-- 洗い出したうえで**今回は見送った**もの(必要になったら): `TextView`/`ImageView`/`MarkdownView`/`AnalogClock`等のLuaからの生成、`ProgressBar`、ScrollListのアイコン・項目の挿入削除、
-  TabBarの上限4個、ツリー探索(`parent`/`children`/`find`)、Z順、`enabled`、長押し/ダブルタップ/スワイプのイベント、オフスクリーンスプライト、`pico.await`/`sleep`(コルーチン連携)、
-  トースト、宣言的なUIヘルパー(`pico.ui{}`)、`pico.memory_info()`。
+- 洗い出したうえで見送った項目は、下の「Lua APIの追加(2026-10-05 その2)」で入れた。
+
+### Lua APIの追加(2026-10-05 その2): 見送ったウィジェット・○項目・暗号化
+
+前節の洗い出しで「見送った」としたものと、洗い出しの○(あると明らかに楽)の項目を入れた。ドキュメントは `lua-api-doc/content/`
+(`api/crypto.md` `api/stdlib.md` を新設、`api/widgets` `dialogs` `drawing` `images` `misc` `scenes` `canvas` と `reference/*` `guide/events.md` を更新)、
+動作確認アプリは `pc/sdcard/lua/apps/ウィジェット追加確認/`。**実機では未確認**(PCのホストテストとPCビルドのみ)。
+
+**ソースの置き場**: `LuaEngine.cpp` が4400行を超えたので、追加分は `src/lua/LuaEngine_Ext.cpp`(ウィジェット補助・イベント・ジェスチャー・リスト/タブ・ダイアログ・
+描画の補助・ユーティリティ)と `LuaEngine_Crypto.cpp`(暗号API)に置いた。`LuaEngine` の private へは `friend struct LuaEngineExt` / `LuaEngineCrypto` 経由で触る。
+登録は `registerApi()` の末尾の `RegisterExtApi()`(同名は後勝ちなので `list_add` は差し替え)。**ホストテストのリンクの一覧にこの2本と `util/Secret_Aead.cpp` と
+`lib/monocypher`(`lua_obj/monocypher.o`)を足した**(`LuaEngine.cpp` をリンクする4つの塊すべて)。
+
+1. **Luaから作れるウィジェットを7種足した**(合計27種): `ProgressBar`(新設、タップ素通り)・`TextView`・`ImageView`・`MarkdownView`・`AnalogClock`・`DurationPicker`・`MonthGrid`。
+   `WidgetFactory`/`WidgetProperty` の表に足した(新しい `Id`: `ScrollX/Y` `MaxScrollX/Y` `ImageW/H` `RowCount` `Hour/Minute/Second` `HandColor` `SecondHandColor` `TotalMs`
+   `Editable` `Year/Month/Today/Selected` `HitTransparent` `Enabled`)。足りなかった口を元のウィジェットへ足した: `TextView::setOwnedText()`(Lua用に文書を自分で持つ。16KiB・確保は更新のときだけ)・
+   `setW()`/`setScrollY()`、`MonthGrid::setW/H`、`ImageView::setSize()`(窓を取り直す)、`MarkdownView::loadText()`/`setSize()`(組み直す)。
+   - 255バイトを超える文章は `pico.set(id,"text")` に入らない(`Value` の文字列が255B)ので、`pico.text_set(id, text)` を用意した(TextView 16KiB / MarkdownView 8KiB)。
+   - **`MarkdownView` は約40KB**使うので1アプリに1つまで(生成を数えて断ってはいない。ドキュメントで注意)。
+   - **`Image`/`ImageView`/`MarkdownView` の `path` は `sd_outside_app_dir` の権限で縛った**(`l_set`)。これまで `Image` の `path` が権限を迂回できる穴だった。
+2. **新しいイベント**: `duration_changed`(DurationPicker)・`day_selected`(MonthGrid)・`link_tap`(MarkdownView)・`text_tap`(TextView)・`text_input`(Textbox。入力中も `text` が最新)・`scrolled`(ScrollContainer)。
+   引数付きのイベントは `BeginDispatch(id, kind)` → 値を積む → `EndDispatch(n)` の口で呼ぶ。`pico.off(id, event)` で解除。
+   **ジェスチャー**(`long_press` / `double_tap` / `swipe`)はウィジェットへ配線せず、`LuaScene::onUpdate()` が毎フレーム呼ぶ `LuaEngine::UpdateGestures()` が
+   `OSData` のタッチの状態から判定する(`press_*` が同じウィジェットで使われていても干渉しない。登録が1つも無ければ何もしない)。しきい値: 長押し500ms・
+   タップ400ms以内・ダブルタップは400ms/24px・スワイプは24px以上を700ms以内。発火先は押し始めの位置を矩形に含む、表示中で有効なウィジェットだけ。
+   ホストテストのために `script/host_test/stubs/Arduino.h` の `millis()` を `PicoHostClock::now` で進められるようにした(既定は0のまま)。
+3. **ウィジェット操作**: `enabled`(`Widget` 基底に追加。`WidgetFunctions::UpdateAll()` が無効のウィジェットへのタップを受け止めて何も起こさない。`Button` は文字が灰色)・`hit_transparent`・
+   `pico.set_name/find/parent/children/get_rect`・`bring_to_front/send_to_back`(`WidgetFunctions::BringToFrontTree/SendToBackTree`。部分木ごと動かす。コンテナの子には使えない)・
+   `scroll_to`・`show_keyboard/hide_keyboard`(`causeOnPressStart()` を呼ぶだけ)。
+   リストは `list_insert/remove/get/select/scroll_to` と `list_add` のオプション(`icon`/`color`)(`ScrollList` に `insertAt/removeAt/scrollToIndex`、`DropdownMenu` に `removeAt`)。**インデックスは0始まり**(`selected_index` と同じ)。
+   タブは `kMaxTabs` を4→8にして `tab_label/set_label/remove/clear`、**`pico.tab_link(tab, index, widget)`**(タブが選ばれている間だけ表示。`TabBar::setOnChanged` を `OnTabChanged()` に差し、`pico.on(tab,"tab_changed")` の有無に関わらず動く)。
+4. **ダイアログ**: `closed` の3番目の引数に結果(`DispatchClosed()` が閉じる前に読む)。新設の `PickerDialog`(`dialogs/PickerDialog.hpp/.cpp`。Choice/Date/Time/Number/Progress の5モードを1クラスで)を
+   `pico.show_choice/show_date/show_time/show_number/show_progress` で出す。Choiceは1タップで選んで閉じる。Dateは `MonthGrid`+`[<][>]`。Timeは `DurationPicker`。Numberは `NumberInput`。
+   Progressは自動では閉じず、`pico.set(id,"value",0〜100)` で進めて `pico.destroy` で閉じる。`WidgetType::PickerDialog` を足した(Countは64未満のまま)。
+5. **描画**: `draw_text` の第6引数 `align`・`draw_text_wrapped`・`measure_text`(`WrapLineLength` が空白と文字で折る)・`get_pixel`・`canvas_get_pixel`。
+   **オフスクリーン画像**: `pico.image_create(w,h[,transparent])` / `image_target(handle|nil)` / `image_clear`。`image_target` は `OSData::frame` を画像のスプライトへ差し替え、
+   `LuaOffscreen::active` の間は `pico.draw_*` が画面のdirtyを積まない(`LuaMarkDirty()`)。**`ProtectedCall()` の一番外を抜けると必ず画面へ戻す**(`EndImageTarget()`。戻し忘れで他の描画が吸い込まれない)。
+   画像スロットは4→8枚・64→96KiBに増やした。
+6. **ユーティリティ**: `app_dir/path_join/time/wifi_status/url_encode/url_decode/base64_encode/base64_decode/settings_get/set/all/memory_info/toast`、`pico.on_back(fn)`/`pico.go_back()`
+   (`LuaScene::onKey()` がEscを、`onUpdate()` がコントローラーのHOMEを「戻る」として渡す。登録が無ければ何もしない)。`util/Base64.hpp` を新設。
+   `settings_*` はアプリのフォルダの `settings.cfg`(`PICO_Config`)。`toast` は `NotificationFunctions::Post()` の音なし(履歴にも残る。300msの間隔を空ける)。
+7. **OS同梱のLuaモジュール**(`src/lua/LuaBuiltinModules.hpp`。ソースはフラッシュに置くだけで、`require` されたときだけコンパイルする): `pico.ui`(宣言的なUIの組み立て)・
+   `pico.async`(`async.run/await/sleep/http/message/input/choice/date/time/number/...` でコルーチン連携)・`pico.tween`。`preloadModules()` が `pico.` で始まる名前を
+   アプリのフォルダより先に同梱ソースから読む(実行中のコンパイルを避ける「先読み」の仕組みに乗せた)。**静的な `require("pico.ui")` の書き方だけ**先読みされる。
+8. **暗号化**(`util/Secret_Aead.hpp/.cpp`、`LuaEngine_Crypto.cpp`): `pico.encrypt(plain[, password])` / `decrypt` / `is_encrypted` / `hash`(BLAKE2b-256・鍵付き可)/ `random_bytes`、
+   `pico.store_save(tbl, {encrypt=, password=})` / `pico.store_load({password=})`。**XChaCha20-Poly1305(Monocypher)+パスワードならArgon2id(64KiB・3パス)**。形式は
+   `"enc2:"`+base64url(`version(1)`[+`passes(1)`+`blocks(2)`+`salt(16)`]+`nonce(24)`+暗号文+`MAC(16)`)で、ヘッダもAADに入れて認証する。
+   - **パスワード無し**は鍵が「`PICO_Secret::kKey`(ファームに焼かれた固定鍵)+アプリのフォルダ名」なので、守れるのは**SDだけを盗まれる場合と、別のアプリが復号すること**だけ
+     (`Secret_Cipher.hpp` と同じ限界)。**パスワード付き**はファームを吸い出されても読めない(強いパスフレーズなら)。どちらも実行中のメモリを覗く相手と暗号文の巻き戻しは防げない。
+   - 復号側は壊れた/悪意のあるヘッダで大量のメモリを使わないよう、Argon2のブロック数(8〜256)とパス数(1〜10)に上限を設けてある。平文は12KiBまで。
+   - Argon2は64KiBを `malloc` して使い終わったら消す(Luaの予算の外)。**実機での時間とRAMは未計測**(RP2350で数十ms〜の見込み)。
+   - 乱数は `SecretAead::Random()`(実機は `rp2040.hwrand32()`、PCは `/dev/urandom`。`SshUtil::Random()` と同じ中身を、SSHに依存しないよう複製した)。
+9. **開発体験**: `script/host_test/lua/pico_mock.lua`(Luaアプリのテスト用の `pico.*` の偽物。ウィジェット・イベント・タイマー・ダイアログ・HTTP・SD・保存・画面遷移を記録し、
+   `mock.fire/advance/close_dialog/respond` で動かす。`pico_mock_test.lua` が自身のテスト)。`pico.memory_info()` で予算の残りが見える。
+
+**検証**: `lua_ext_test`(新設のグループ `lua-ext`。新ウィジェットのプロパティ・イベント(MonthGrid/TextViewは実際のタップ)・`pico.off`・無効のウィジェットがタップを受けないこと(`UpdateAll()`)・
+ジェスチャー(スワイプ/長押し/ダブルタップ/遅い動き/矩形の外)・スクロール・リスト/タブ/連動・5種のダイアログと `closed` の3番目の引数・オフスクリーン画像(画面のdirtyを積まないこと、抜けると戻ること)・
+描画の補助・ユーティリティ・`on_back`・暗号(往復・改ざん・パスワード違い・別のアプリ・12KiB・BLAKE2bの既知の値・store)・`pico.ui`/`pico.async`/`pico.tween`)、`widget_factory_test`/`widget_property_test`、
+`lua_engine_test`(タブ8個・画像8枚に更新)、`pico_mock_test`。ASan/UBSanで通る。
 
 ### 実行時間の安全網(暴走防止、2026-09-21実装)
 
@@ -3759,7 +3818,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、51本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、53本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

@@ -359,6 +359,9 @@
 //    最大4本を待たせる。戻り値はリクエストID)・ファイルへ直接保存(opts.save_to。16KiBの上限なし、
 //    無通信が10秒続くまで続く)。JSON: pico.json_decode / json_encode / json_null。
 // 5. タイマー: pico.after(ms, fn) / pico.every(ms, fn) / pico.cancel(handle)。
+// pico.image_target()で描き先を画像へ向けている間true(draw系が画面のdirty矩形を積まないための印)
+namespace LuaOffscreen { inline bool active = false; }
+
 class LuaEngine {
     public:
         // budget_bytes: このLua stateに許す確保量の上限(BudgetAlloc参照)。
@@ -446,7 +449,18 @@ class LuaEngine {
         // 直近の(捕まえられなかった)エラーのスタックトレース
         const char* lastTrace() const { return last_trace_; }
 
+        // ---- 2026-10-05(2): 長押し・ダブルタップ・スワイプの判定 / 戻る操作 ----
+        // タッチの状態を毎フレーム見て、pico.on(id, "long_press"/"double_tap"/"swipe", fn)を呼ぶ
+        // (LuaScene::onUpdate()から毎フレーム。対象のコールバックが無ければ何もしない)
+        void UpdateGestures();
+        // pico.on_back(fn)で登録した「戻る」の処理を呼ぶ(Escキー・コントローラーのHOME・pico.go_back())。
+        // 登録が無ければfalse(呼び出し側が既定の動き=Popをする)
+        bool DispatchBack();
+        bool HasBackHandler() const { return back_callback_ref_ != LUA_NOREF; }
+
     private:
+        friend struct LuaEngineExt;
+        friend struct LuaEngineCrypto;
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
         // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
         // TabChangedはウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)
@@ -454,6 +468,16 @@ class LuaEngine {
             PressStart, PressEnd, PressMove, PressOut, Render, Closed,
             CheckedChanged, ValueChanged, SelectItem, TabChanged, DropdownChanged,
             TextChanged,
+            // 2026-10-05(2)で足したもの
+            DurationChanged,   // DurationPicker: fn(id, total_ms)
+            DaySelected,       // MonthGrid: fn(id, day)
+            LinkTap,           // MarkdownView: fn(id, path)
+            TextTap,           // TextView: fn(id, byte_offset)
+            TextInput,         // Textbox: 1文字ごと。fn(id)(中身はpico.get(id,"text"))
+            LongPress,         // 全ウィジェット(エンジン側で判定): fn(id, x, y, lx, ly)
+            DoubleTap,         // 同上: fn(id, x, y, lx, ly)
+            Swipe,             // 同上: fn(id, "left"|"right"|"up"|"down", dx, dy, x, y)
+            Scrolled,          // ScrollContainer: fn(id, scroll_y)
         };
 
         struct CallbackBinding {
@@ -494,6 +518,41 @@ class LuaEngine {
         bool used_wav_ = false;
 
         std::vector<CallbackBinding> callbacks_;
+
+        // ---- 2026-10-05(2): ツリー探索・名前・タブの連動・戻る・ジェスチャー・オフスクリーン ----
+        // pico.set_name(id, name) / pico.find(name)。ウィジェットの数は多くないので線形探索で足りる
+        struct NameEntry { WidgetId id; FixedString<PICO_STR_S> name; };
+        std::vector<NameEntry> names_;
+        static constexpr size_t kMaxNames = 128;
+        // pico.tab_link(tab_id, index, widget_id): タブが切り替わったら対応するウィジェットだけ見せる
+        struct TabLink { WidgetId tab; int index; WidgetId target; };
+        std::vector<TabLink> tab_links_;
+        static constexpr size_t kMaxTabLinks = 32;
+        void ApplyTabLinks(WidgetId tab);
+        void OnTabChanged(WidgetId tab);
+        // pico.on_back(fn)
+        int back_callback_ref_ = LUA_NOREF;
+        // ジェスチャー判定の状態(UpdateGestures)
+        struct GestureState {
+            bool active = false;
+            bool long_fired = false;
+            bool moved = false;
+            int sx = 0, sy = 0;
+            uint32_t t0 = 0;
+            uint32_t last_tap_ms = 0;
+            int last_tap_x = -1000, last_tap_y = -1000;
+        } gesture_;
+        // 画像スロットへの描き込み(pico.image_target)。activeの間、OSData::frameを画像のスプライトへ差し替える
+        LGFX_Sprite* saved_frame_ = nullptr;
+        int image_target_index_ = -1;
+        void EndImageTarget();
+        // 引数付きイベントの共通口。コールバックがあれば関数とidを積んでtrue(呼んだらEndDispatch(追加引数の数))
+        bool BeginDispatch(WidgetId id, EventKind kind);
+        void EndDispatch(int extra_args);
+        void BindExtCallback(class Widget* w, WidgetId id, EventKind kind);
+        bool CheckExtEventTarget(EventKind kind, class Widget* w, const char** why) const;
+        void RegisterExtApi();
+        void RegisterCryptoApi();
 
         // ---- 画面をまたぐ受け渡し ----
         FixedString<PICO_PATH_LEN> script_path_;   // このスクリプトのSDパス(SetScriptPath)
@@ -556,8 +615,8 @@ class LuaEngine {
         // 後者は「小さい画像を大量に」でも予算を使い切れるようにするための頭打ち
         // (LGFX_Sprite側の確保はLuaEngineのbudget_/Alloc経由の予算に乗らないため、
         // ここで別枠として管理する。上のクラスコメント参照)。
-        static constexpr size_t kMaxLuaImages = 4;
-        static constexpr size_t kMaxLuaImageBytes = 64 * 1024;
+        static constexpr size_t kMaxLuaImages = 8;
+        static constexpr size_t kMaxLuaImageBytes = 96 * 1024;
 
         ImageSlot images_[kMaxLuaImages];
         size_t image_bytes_used_ = 0;

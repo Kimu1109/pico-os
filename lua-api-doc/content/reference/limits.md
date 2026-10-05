@@ -28,9 +28,20 @@ description: "メモリ予算・実行時間・各種サイズ上限・列挙型
 | `on_suspend` が返す状態 | JSONで2KiB未満 |
 | `pico.store_save()` の大きさ | JSONで16KiB |
 | `pico.json_decode` の入力 / `json_encode` の出力 | 64KiB。入れ子は16段 |
-| 同時に保持できる画像(`pico.image_load`)の枚数 | 4枚 |
-| 画像データの合計サイズ上限 | 64KiB(65,536バイト) |
-| `TabBar` に追加できるタブ数(`pico.tab_add`) | 4個 |
+| 同時に保持できる画像(`pico.image_load`/`pico.image_create`)の枚数 | 8枚 |
+| 画像データの合計サイズ上限 | 96KiB(98,304バイト) |
+| `TabBar` に追加できるタブ数(`pico.tab_add`) | 8個 |
+| `pico.tab_link` の連動の数 | 32個 |
+| `pico.set_name` の名前 | 128個・各23文字まで |
+| `TextView` に渡せる文章(`pico.text_set`) | 16KiB(1024行まで表示) |
+| `MarkdownView` に渡せる文書 | 8KiB・1ブロック約170文字 |
+| `pico.text_set` 以外で `pico.set(id, "text", ...)` に渡せる文字列 | 255バイト |
+| `pico.show_choice` の選択肢 | 64個 |
+| `pico.draw_text_wrapped` | 2048バイト・64行 |
+| `pico.encrypt` の平文 | 12KiB |
+| `pico.store_save` を暗号化するときのJSON | 12KiB |
+| `pico.random_bytes` | 1〜1024バイト |
+| `pico.base64_encode` / `decode` の入力 | 12KiB / 16KiB |
 
 ## WidgetIdのビット構成
 

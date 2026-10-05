@@ -32,6 +32,18 @@ bool ImageView::decodeWindow(int x, int y){
     return ok;
 }
 
+void ImageView::setSize(int w, int h){
+    if(w == this->l_rect.w && h == this->l_rect.h) return;
+    markdirty(this->getScreenRect());
+    this->l_rect.w = (int16_t)w;
+    this->l_rect.h = (int16_t)h;
+    if(this->loaded){
+        FixedString<PICO_PATH_LEN> p = this->path; // load()がpathを作り直すのでコピーを渡す
+        this->load(p.c_str());
+    }
+    this->needsRender();
+}
+
 bool ImageView::load(const char* path){
     this->unload();
     this->path.assign(path);

@@ -25,6 +25,31 @@ bool TabBar::addTab(const char* label){
     return true;
 }
 
+bool TabBar::setLabel(int index, const char* label){
+    if(index < 0 || index >= this->tab_count) return false;
+    this->labels[index].assign(label);
+    this->needsRender();
+    return true;
+}
+
+bool TabBar::removeTab(int index){
+    if(index < 0 || index >= this->tab_count) return false;
+    for(int i = index; i + 1 < this->tab_count; i++) this->labels[i] = this->labels[i + 1];
+    this->labels[this->tab_count - 1].clear();
+    this->tab_count--;
+    if(this->selected > index) this->selected--;
+    if(this->selected >= this->tab_count) this->selected = this->tab_count > 0 ? this->tab_count - 1 : 0;
+    this->needsRender();
+    return true;
+}
+
+void TabBar::clearTabs(){
+    for(int i = 0; i < this->tab_count; i++) this->labels[i].clear();
+    this->tab_count = 0;
+    this->selected = 0;
+    this->needsRender();
+}
+
 void TabBar::setSelected(int index, bool notify){
     if(index < 0 || index >= this->tab_count) return;
     if(index == this->selected) return;

@@ -227,10 +227,49 @@ void WidgetFunctions::BringToFront(Widget *w)
     }
 }
 
+namespace {
+    // w以下の部分木を、widgetsの中での並び順のまま取り出して外す
+    std::vector<Widget*> ExtractTree(Widget *w)
+    {
+        std::vector<Widget*> out;
+        std::vector<Widget*> members;
+        w->visitAll([&members](Widget* x){ if (x) members.push_back(x); });
+        std::vector<Widget*> rest;
+        rest.reserve(WidgetFunctions::widgets.size());
+        for (Widget* x : WidgetFunctions::widgets) {
+            if (std::find(members.begin(), members.end(), x) != members.end()) out.push_back(x);
+            else rest.push_back(x);
+        }
+        WidgetFunctions::widgets.swap(rest);
+        return out;
+    }
+}
+
+void WidgetFunctions::BringToFrontTree(Widget *w)
+{
+    if (!w) return;
+    if (std::find(widgets.begin(), widgets.end(), w) == widgets.end()) return;
+    std::vector<Widget*> tree = ExtractTree(w);
+    widgets.insert(widgets.end(), tree.begin(), tree.end());
+    for (Widget* x : tree) x->needsRender();
+}
+
+void WidgetFunctions::SendToBackTree(Widget *w)
+{
+    if (!w) return;
+    if (std::find(widgets.begin(), widgets.end(), w) == widgets.end()) return;
+    std::vector<Widget*> tree = ExtractTree(w);
+    widgets.insert(widgets.begin(), tree.begin(), tree.end());
+    // 後ろへ回すと、これまで上にいたものが重なり直すので全体を描き直させる
+    for (Widget* x : widgets) x->needsRender();
+}
+
 void WidgetFunctions::UpdateAll()
 {
     if(OSData::isTouchStart){
         pressingWidget = HitTest(OSData::touchX, OSData::touchY);
+        // 無効(setEnabled(false))のウィジェットはタップを受け止めるだけで何も起こさない
+        if(pressingWidget && !pressingWidget->isEffectivelyEnabled()) pressingWidget = nullptr;
         if(pressingWidget){
             pressingWidget->is_pressing = true;
             pressingWidget->causeOnPressStart();

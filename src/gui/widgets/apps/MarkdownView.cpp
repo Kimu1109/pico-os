@@ -99,6 +99,41 @@ bool MarkdownView::load(const char* path) {
     }
     f.close();
 
+    return finishLoad(path);
+}
+
+// 文字列から読み込む(Luaなど、SDに書かずに文書を渡したい用)。基準パスは持たない
+// (画像の相対参照はルート基準になる)。8KiB(kMdMaxSourceBytes)を超える分は切り捨てる
+bool MarkdownView::loadText(const char* text, size_t len) {
+    doc_path.clear();
+    if (!text) len = 0;
+    if (len > kMdMaxSourceBytes) {
+        len = kMdMaxSourceBytes;
+        LOG_SYS_WARN("MarkdownView: 文字列が上限(%uB)を超えているため打ち切りました", (unsigned)kMdMaxSourceBytes);
+    }
+    doc_text.clear();
+    if (len) doc_text.append(text, len);
+    return finishLoad("(text)");
+}
+
+void MarkdownView::setSize(int w, int h) {
+    if (w == this->l_rect.w && h == this->l_rect.h) return;
+    markdirty(this->getScreenRect());
+    this->l_rect.w = (int16_t)w;
+    this->l_rect.h = (int16_t)h;
+    // 折り返し幅が変わるので、持っている文書で組み直す(スクロール位置は先頭へ戻る)
+    if (!doc_text.empty()) {
+        if (!doc_path.empty()) {
+            FixedString<PICO_PATH_LEN> p = doc_path;
+            load(p.c_str());
+        } else {
+            finishLoad("(text)");
+        }
+    }
+    this->needsRender();
+}
+
+bool MarkdownView::finishLoad(const char* path) {
     parseBlocks();
 
     //1ブロックがkMdBlockTextBytesを超えるとLabelへ入れる時点で切り詰められる。

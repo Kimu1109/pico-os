@@ -41,15 +41,18 @@ void Button::setText(const char* text){
 }
 
 void Button::drawContent(const Rect& g_rect, int text_spacing, int pressOffset) {
+    // 無効の間は灰色で描く(isEffectivelyEnabled)。drawContent()の外でtextColorDefault()が戻す
+    const int8_t fg = this->isEffectivelyEnabled() ? this->text_color : (int8_t)PICO_DARKGREY;
     if(this->has_icon){
         const int icon_px = IconRender::IconPixelSize(this->icon_size);
         IconRender::DrawIcon(
             this->icon_id, this->icon_size,
             g_rect.x + pressOffset + text_spacing * 0.5 + (this->l_rect.w - icon_px) * 0.5,
             g_rect.y + pressOffset + text_spacing * 0.5 + (this->l_rect.h - icon_px) * 0.5,
-            this->text_color
+            fg
         );
     }else{
+        if(fg != this->text_color) OSData::frame->setTextColor(fg);
         OSData::frame->setCursor(
             g_rect.x + pressOffset + text_spacing * 0.5 + (this->l_rect.w - this->text_w) * 0.5,
             g_rect.y + pressOffset + text_spacing * 0.5 + (this->l_rect.h - this->text_h) * 0.5

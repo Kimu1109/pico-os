@@ -63,6 +63,7 @@ struct LGFX_Sprite {
     void setPaletteColor(int, int){}
     void setBaseColor(int){}
     void clear(int color = 0){ std::fill(pixels_.begin(), pixels_.end(), (uint8_t)color); }
+    void fillScreen(int color = 0){ clear(color); }
     void setFont(const void* font){
         if(font) font_px = ((const lgfx::v1::U8g2font*)font)->px;
     }

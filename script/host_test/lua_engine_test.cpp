@@ -1108,10 +1108,13 @@ int main(){
             check(pico.tab_add(tabbar, "A") == true, "pico.tab_add: 1本目は成功")
             check(pico.tab_add(tabbar, "B") == true, "pico.tab_add: 2本目は成功")
             check(pico.tab_add(tabbar, "C") == true, "pico.tab_add: 3本目は成功")
-            check(pico.tab_add(tabbar, "D") == true, "pico.tab_add: 4本目(kMaxTabs)は成功")
-            check(pico.tab_add(tabbar, "E") == false,
-                  "pico.tab_add: 5本目はkMaxTabs超過でfalse(luaL_errorにはしない)")
-            check(pico.get(tabbar, "tab_count") == 4, "pico.tab_add: tab_countが4のまま")
+            check(pico.tab_add(tabbar, "D") == true, "pico.tab_add: 4本目は成功")
+            for i = 5, 8 do
+                check(pico.tab_add(tabbar, "T" .. i) == true, "pico.tab_add: " .. i .. "本目(kMaxTabs=8まで)は成功")
+            end
+            check(pico.tab_add(tabbar, "X") == false,
+                  "pico.tab_add: 9本目はkMaxTabs超過でfalse(luaL_errorにはしない)")
+            check(pico.get(tabbar, "tab_count") == 8, "pico.tab_add: tab_countが8のまま")
 
             local other = pico.create("Button")
             check(pcall(function() pico.list_add(other, "x") end) == false,
@@ -1247,12 +1250,15 @@ int main(){
             "draw_image_bad_handle_test");
         check(bad_handle_ok, "pico.draw_image: 無効ハンドルテストの実行自体は成功する");
 
-        // 残り3スロット(kMaxLuaImages=4のうち1つはimg_aが使用中)を埋めてスロット枯渇を確認する
+        // 残り7スロット(kMaxLuaImages=8のうち1つはimg_aが使用中)を埋めてスロット枯渇を確認する
         const bool fill_ok = engine.Run(R"LUA(
             img_b = pico.image_load('/img/b.pimg')
             img_c = pico.image_load('/img/c.pimg')
             img_d = pico.image_load('/img/d.pimg')
-            check(img_b ~= nil and img_c ~= nil and img_d ~= nil,
+            fill_extra = {}
+            for i = 1, 4 do fill_extra[i] = pico.image_load('/img/b.pimg') end
+            check(img_b ~= nil and img_c ~= nil and img_d ~= nil
+                  and fill_extra[1] ~= nil and fill_extra[4] ~= nil,
                   'pico.image_load: 上限枚数までは読み込める')
             check(pico.image_load('/img/e.pimg') == nil,
                   'pico.image_load: スロット上限に達すると以降はnil')
@@ -1284,9 +1290,9 @@ int main(){
             lua_setglobal(img_budget_engine.raw(), "check");
 
             OSData::SD_usable = true;
-            // ヘッダだけ有効(400x400 = 4bppで80000B相当。予算判定はヘッダを読んだ
+            // ヘッダだけ有効(600x600 = 4bppで180000B相当。予算判定はヘッダを読んだ
             // 直後、実ピクセルのデコードより前に行われるのでボディは無くてよい)
-            HostSd::files["/img/huge.pimg"] = MakePimgBytes(400, 400, false, 0).substr(0, 5);
+            HostSd::files["/img/huge.pimg"] = MakePimgBytes(600, 600, false, 0).substr(0, 5);
             const bool ok = img_budget_engine.Run(
                 "check(pico.image_load('/img/huge.pimg') == nil, "
                 "'pico.image_load: 合計バイト数の上限を超える場合はnil')",

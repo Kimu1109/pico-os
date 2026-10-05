@@ -16,7 +16,7 @@ description: "pc/sdcard/lua/apps/テトリス/ — 画像のミノ・タッチ�
 
 ## 画像を1枚にまとめて切り出す
 
-Luaが同時に持てる画像は4枚までなので、ミノの絵は1枚の画像に並べて `pico.draw_image_part()` で切り出します。
+Luaが同時に持てる画像は8枚までなので、ミノの絵は1枚の画像に並べて `pico.draw_image_part()` で切り出します。
 
 ```lua
 local img = pico.image_load(DIR .. "blocks.pimg")

@@ -14,6 +14,7 @@
 #include "functions/Log_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include <cstdio>
+#include <string>
 
 // ---- モック(widget_factory_test.cppと同じ) ----
 void PICO_GFX::MarkDirty(const Rect&){}
@@ -221,6 +222,72 @@ int main(){
         dm->clear();
         check(WP::Get(w, WP::Id::ItemCount, v) && v.i == 0, "DropdownMenu: ItemCount get(clear()新設、0に戻る)");
         delete w;
+    }
+
+    // ---- 見送っていたウィジェットのLua生成(ProgressBar/TextView/ImageView/MarkdownView/AnalogClock/DurationPicker/MonthGrid) ----
+    {
+        WP::Value v;
+        Widget* pb = WidgetFactory::Create(WidgetType::ProgressBar);
+        check(WP::Set(pb, WP::Id::MaxValue, WP::Value::MakeInt(200)), "ProgressBar: max set");
+        check(WP::Set(pb, WP::Id::Value, WP::Value::MakeFloat(50.5f)), "ProgressBar: value set");
+        check(WP::Get(pb, WP::Id::Value, v) && v.f == 50.5f, "ProgressBar: value get");
+        check(WP::Set(pb, WP::Id::Value, WP::Value::MakeInt(900)), "ProgressBar: 範囲外のvalue set");
+        check(WP::Get(pb, WP::Id::Value, v) && v.f == 200.0f, "ProgressBar: valueはmaxに丸まる");
+        check(WP::Set(pb, WP::Id::W, WP::Value::MakeInt(77)) && pb->getW() == 77, "ProgressBar: W set");
+        check(WP::Set(pb, WP::Id::Color, WP::Value::MakeInt(8)) && WP::Get(pb, WP::Id::Color, v) && v.i == 8, "ProgressBar: color");
+        check(pb->getHitTransparent(), "ProgressBar: タップは素通り");
+        delete pb;
+
+        Widget* tv = WidgetFactory::Create(WidgetType::TextView);
+        check(WP::Set(tv, WP::Id::Text, WP::Value::MakeStr("hello\nworld")), "TextView: text set");
+        check(WP::Get(tv, WP::Id::Text, v) && std::string(v.s.c_str()) == "hello\nworld", "TextView: text get");
+        check(WP::Get(tv, WP::Id::RowCount, v) && v.i == 2, "TextView: 2行");
+        check(WP::Set(tv, WP::Id::W, WP::Value::MakeInt(80)) && tv->getW() == 80, "TextView: W set");
+        check(WP::Set(tv, WP::Id::ScrollY, WP::Value::MakeInt(5)), "TextView: scroll_y set");
+        check(WP::Get(tv, WP::Id::ScrollY, v) && v.i == 0, "TextView: 短い文書ではスクロールしない");
+        delete tv;
+
+        Widget* iv = WidgetFactory::Create(WidgetType::ImageView);
+        check(!WP::Set(iv, WP::Id::Path, WP::Value::MakeStr("/nonexistent.pimg")), "ImageView: 読めないpathはfalse");
+        check(WP::Get(iv, WP::Id::ImageW, v) && v.i == 0, "ImageView: 未読込の幅は0");
+        check(WP::Set(iv, WP::Id::H, WP::Value::MakeInt(40)) && iv->getH() == 40, "ImageView: H set");
+        delete iv;
+
+        Widget* mv = WidgetFactory::Create(WidgetType::MarkdownView);
+        check(WP::Set(mv, WP::Id::Text, WP::Value::MakeStr("# title\n\nbody")), "MarkdownView: text set");
+        check(WP::Set(mv, WP::Id::W, WP::Value::MakeInt(200)) && mv->getW() == 200, "MarkdownView: W set(組み直し)");
+        check(WP::Set(mv, WP::Id::ScrollY, WP::Value::MakeInt(0)), "MarkdownView: scroll_y set");
+        delete mv;
+
+        Widget* ac = WidgetFactory::Create(WidgetType::AnalogClock);
+        check(WP::Set(ac, WP::Id::Hour, WP::Value::MakeInt(3)), "AnalogClock: hour set");
+        check(WP::Set(ac, WP::Id::Minute, WP::Value::MakeInt(15)), "AnalogClock: minute set");
+        check(WP::Get(ac, WP::Id::Hour, v) && v.i == 3, "AnalogClock: hour get");
+        check(WP::Get(ac, WP::Id::Minute, v) && v.i == 15, "AnalogClock: minute get");
+        check(WP::Set(ac, WP::Id::W, WP::Value::MakeInt(64)) && ac->getW() == 64 && ac->getH() == 64, "AnalogClock: Wは直径");
+        delete ac;
+
+        Widget* dp = WidgetFactory::Create(WidgetType::DurationPicker);
+        check(WP::Set(dp, WP::Id::TotalMs, WP::Value::MakeInt(90000)), "DurationPicker: total_ms set");
+        check(WP::Get(dp, WP::Id::TotalMs, v) && v.i == 90000, "DurationPicker: total_ms get");
+        check(!WP::Set(dp, WP::Id::TotalMs, WP::Value::MakeInt(-1)), "DurationPicker: 負は拒否");
+        check(WP::Set(dp, WP::Id::Editable, WP::Value::MakeBool(false)), "DurationPicker: editable set");
+        check(WP::Get(dp, WP::Id::Editable, v) && !v.b, "DurationPicker: editable get");
+        delete dp;
+
+        Widget* mg = WidgetFactory::Create(WidgetType::MonthGrid);
+        check(WP::Set(mg, WP::Id::Year, WP::Value::MakeInt(2026)), "MonthGrid: year set");
+        check(WP::Set(mg, WP::Id::Month, WP::Value::MakeInt(2)), "MonthGrid: month set");
+        check(!WP::Set(mg, WP::Id::Month, WP::Value::MakeInt(13)), "MonthGrid: 範囲外の月は拒否");
+        check(WP::Get(mg, WP::Id::ItemCount, v) && v.i == 28, "MonthGrid: 2026年2月は28日");
+        check(WP::Set(mg, WP::Id::Selected, WP::Value::MakeInt(14)) && WP::Get(mg, WP::Id::Selected, v) && v.i == 14, "MonthGrid: selected");
+        check(WP::Set(mg, WP::Id::H, WP::Value::MakeInt(120)) && mg->getH() == 120, "MonthGrid: H set");
+        delete mg;
+
+        Widget* b2 = WidgetFactory::Create(WidgetType::Button);
+        check(WP::Set(b2, WP::Id::HitTransparent, WP::Value::MakeBool(true)), "共通: hit_transparent set");
+        check(WP::Get(b2, WP::Id::HitTransparent, v) && v.b, "共通: hit_transparent get");
+        delete b2;
     }
 
     // ---- RectShape ----

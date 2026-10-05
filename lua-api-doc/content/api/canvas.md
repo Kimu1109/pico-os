@@ -87,3 +87,9 @@ pico.set(canvas, "h", h)
 ```
 
 **`w`/`h` を変更すると内部のバッファを作り直すため、それまでの描画内容は消えます。** 生成直後、まだ何も描いていない段階で一度だけ呼ぶ使い方を想定しています。
+
+## pico.canvas_get_pixel
+
+<div class="sig">pico.canvas_get_pixel(id: integer, x: integer, y: integer) <span class="ret">-> color: integer | nil</span></div>
+
+`CanvasRaster` の1画素のパレット番号(0〜15)を読みます。範囲外は `nil`。塗りつぶしの判定など、描いた結果を使う処理に使えます(白紙は `15`)。

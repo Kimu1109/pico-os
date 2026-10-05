@@ -488,6 +488,34 @@ int main(){
         check(SceneFunctions::Current() == launcher, "受け渡しテスト後: ランチャへ戻っている");
     }
 
+    // ---- 戻る操作(pico.on_back)とジェスチャーの呼び出し口 ----
+    {
+        HostSd::files["/lua/back_a.lua"] = "back = 0\npico.on_back(function() back = back + 1 end)\n";
+        HostSd::files["/lua/back_b.lua"] = "back = 0\n";
+        SceneFunctions::Push(new LuaScene("/lua/back_a.lua"));
+        SceneFunctions::Update();
+        LuaScene* bs = static_cast<LuaScene*>(SceneFunctions::Current());
+        KeyInputFunctions::Event esc;
+        esc.key = KeyInputFunctions::Key::Escape;
+        check(bs && bs->onKey(esc), "on_back: Escキーを取る(登録があるとき)");
+        lua_State* bL = bs->getEngine()->raw();
+        lua_getglobal(bL, "back");
+        check(lua_tointeger(bL, -1) == 1, "on_back: Escで登録した処理が呼ばれる");
+        lua_pop(bL, 1);
+        // コントローラーのHOMEも「戻る」(PadFunctionsは今のフレームの状態を見るので、onUpdateの前に押された扱いにする)
+        bs->onUpdate();
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+
+        SceneFunctions::Push(new LuaScene("/lua/back_b.lua"));
+        SceneFunctions::Update();
+        bs = static_cast<LuaScene*>(SceneFunctions::Current());
+        check(bs && !bs->onKey(esc), "on_back: 登録が無ければEscは取らない");
+        SceneFunctions::Pop();
+        SceneFunctions::Update();
+        check(SceneFunctions::Current() == launcher, "on_backテスト後: ランチャへ戻っている");
+    }
+
     // ---- 後片付け ----
     WidgetFunctions::ClearSceneWidgets();
     delete launcher;

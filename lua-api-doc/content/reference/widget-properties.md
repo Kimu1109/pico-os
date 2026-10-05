@@ -18,6 +18,10 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `h` | Int | ✓ | ウィジェットによる(下表) |
 | `visible` | Bool | ✓ | ✓ |
 | `background_color` | Int | ✓ | ✓ |
+| `hit_transparent` | Bool | ✓ | ✓ |
+| `enabled` | Bool | ✓ | ✓ |
+
+`hit_transparent` を `true` にすると、そのウィジェットはタップを受けず下のウィジェットへ素通りさせます(表示専用の部品を上に重ねたいとき)。`enabled` を `false` にすると操作を受け付けなくなります(タップは受け止めるだけで、コールバックは呼ばれず、下へも抜けません)。親が無効なら子も無効です。`Button` は文字が灰色になります。
 
 `w` / `h` の**取得**は常にできますが(現在の実寸が返ります)、**設定**できるかはウィジェットごとに異なります。下表で `w`/`h` の行がある種別のみ `pico.set` に対応しています。
 
@@ -97,7 +101,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 | name | 型 | get | set |
 |---|---|---|---|
-| `path` | Str | ✓ | ✓ |
+| `path` | Str | ✓ | ✓(`ImageView`/`MarkdownView` の `path` と同じく、アプリのフォルダの外を指すには `sd_outside_app_dir` 権限が要り、無ければエラー) |
 
 ## NumberSlider
 
@@ -117,8 +121,12 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | name | 型 | get | set |
 |---|---|---|---|
 | `border_color` | Int | ✓ | ✓ |
-
-`w` / `h` の設定には対応していません(生成時の100×100固定)。
+| `w` | Int | ✓ | ✓ |
+| `h` | Int | ✓ | ✓ |
+| `scroll_x` | Int | ✓ | ✓ |
+| `scroll_y` | Int | ✓ | ✓(範囲に収まる) |
+| `max_scroll_x` | Int | ✓ | ✗ |
+| `max_scroll_y` | Int | ✓ | ✗(子の大きさから測る。`add_child`のあとに読む) |
 
 ## ScrollList
 
@@ -132,6 +140,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `selected_index` | Int | ✓ | ✓ |
 | `enable_icon` | Bool | ✓ | ✓ |
 | `item_count` | Int | ✓ | ✗(**読み取り専用**。`pico.list_add`/`pico.list_clear`で増減) |
+| `scroll_y` | Int | ✓ | ✗(`pico.list_scroll_to`で動かす) |
 
 ## CanvasRaster
 
@@ -253,6 +262,73 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 `Line`と同じく`w`/`h`の設定には対応していません(3頂点+`thickness`から自動計算)。共通プロパティの`x`/`y`は外接矩形の左上を指し、**setすると3頂点をまとめて平行移動**します。
 
+## ProgressBar
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `value` | Float | ✓ | ✓(Int/Floatどちらでも可。`min_value`〜`max_value`に収まる) |
+| `min_value` | Float | ✓ | ✓ |
+| `max_value` | Float | ✓ | ✓ |
+| `color` | Int | ✓ | ✓(バーの色) |
+| `border_color` | Int | ✓ | ✓ |
+| `w` / `h` | Int | ✓ | ✓ |
+
+## TextView
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `text` | Str | ✓ | ✓(255バイトまで。長い文章は `pico.text_set`) |
+| `scroll_y` | Int | ✓ | ✓ |
+| `row_count` | Int | ✓ | ✗(折り返した後の行数) |
+| `w` / `h` | Int | ✓ | ✓ |
+
+## ImageView
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `path` | Str | ✓ | ✓(`.pimg`を読み込む。読めなければエラー。`""`で閉じる。`sd_outside_app_dir`権限が要るのは`pico.image_load`と同じ) |
+| `image_w` / `image_h` | Int | ✓ | ✗(読み込んだ画像の大きさ。未読込は0) |
+| `w` / `h` | Int | ✓ | ✓(表示欄の大きさ。変えると読み直す) |
+
+## MarkdownView
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `path` | Str | ✗ | ✓(`.md`を読む。読めなければエラー) |
+| `text` | Str | ✗ | ✓(255バイトまで。長い文書は `pico.text_set`、8KiBまで) |
+| `scroll_y` | Int | ✓ | ✓ |
+| `w` / `h` | Int | ✓ | ✓(変えると文書を組み直す) |
+
+## AnalogClock
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `hour` / `minute` / `second` | Int | ✓ | ✓(`pico.get_time()` の値を流し込む) |
+| `hand_color` / `second_hand_color` | Int | ✗ | ✓ |
+| `w` / `h` | Int | ✓ | ✓(どちらも直径になる) |
+
+## DurationPicker
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `total_ms` | Int | ✓ | ✓(0〜86,399,999) |
+| `editable` | Bool | ✓ | ✓(`false`で▲▼が消える) |
+| `font_size` / `text_color` / `border_color` | Int | ✗ | ✓ |
+| `w` / `h` | Int | ✓ | ✓ |
+
+## MonthGrid
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `year` / `month` | Int | ✓ | ✓(`month`は1〜12) |
+| `today` | Int | ✗ | ✓(この月の中の今日の日。0で無し) |
+| `selected` | Int | ✓ | ✓(選択中の日。0で無し) |
+| `item_count` | Int | ✓ | ✗(その月の日数) |
+| `border_color` | Int | ✗ | ✓ |
+| `w` / `h` | Int | ✓ | ✓ |
+
+予定の点は `pico.set_dots` で渡します。
+
 ## ダイアログ
 
 `pico.show_xxx()` が返すIDに対しては、共通プロパティに加えて次だけ使えます。
@@ -264,6 +340,10 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `FileSaveDialog` | `path` | Str | ✓ | ✗ |
 | `FileSelectDialog` | `path` | Str | ✓(未選択は`nil`) | ✗ |
 | `ColorDialog` | `value` | Int | ✓(未選択は`-1`) | ✗ |
+| `PickerDialog`(`show_choice`) | `selected_index` / `item_count` | Int | ✓ | ✗ |
+| `PickerDialog`(`show_date`) | `year` / `month` / `selected`(日) / `text`(`"YYYY-MM-DD"`) | Int / Str | ✓ | ✗ |
+| `PickerDialog`(`show_time`/`show_number`) | `text`(`"HH:MM:SS"` / 入力した文字列) | Str | ✓ | ✗ |
+| `PickerDialog`(`show_progress`) | `value`(0〜100) / `text`(メッセージ) | Float / Str | ✓(`text`は✗) | ✓ |
 | `MsgDialog` | (専用プロパティなし。結果は`closed`イベントの`is_ok`のみ) | — | — | — |
 
 `start_dir`(FileSaveDialog/FileSelectDialog)や選択色の初期値など、生成時のみ決まる値は後から差し替えられません。

@@ -1,4 +1,6 @@
 #include "gui/widgets/TextView.hpp"
+#include <cstdlib>
+#include <cstring>
 #include "functions/Font_Functions.hpp"
 #include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
@@ -119,6 +121,60 @@ void TextView::setDocument(const char* text, int len){
     this->len = len;
     this->layout_dirty = true;
     if(this->cursor > (size_t)len) this->cursor = len;
+    const int max = this->maxScroll();
+    if(this->scroll_y > max) this->scroll_y = max;
+    this->needsRender();
+}
+
+TextView::~TextView(){
+    free(this->owned);
+}
+
+bool TextView::setOwnedText(const char* t, size_t n){
+    bool whole = true;
+    if(!t) n = 0;
+    if(n > kMaxOwnedBytes){
+        n = kMaxOwnedBytes;
+        // UTF-8の途中で切らない
+        while(n > 0 && ((unsigned char)t[n] & 0xC0) == 0x80) n--;
+        whole = false;
+    }
+    if(n + 1 > this->owned_cap){
+        // 余裕を持って確保し、少しずつ伸びる更新で毎回確保し直さない
+        size_t cap = n + 1 + 64;
+        if(cap > kMaxOwnedBytes + 1) cap = kMaxOwnedBytes + 1;
+        char* p = (char*)malloc(cap);
+        if(!p) return false;
+        // 古い文書をまだ指しているので、差し替えてから解放する
+        const char* old = this->owned;
+        if(n) memcpy(p, t, n);
+        p[n] = '\0';
+        this->owned = p;
+        this->owned_cap = cap;
+        this->setDocument(p, (int)n);
+        free((void*)old);
+        return whole;
+    }
+    if(n) memmove(this->owned, t, n);
+    this->owned[n] = '\0';
+    this->setDocument(this->owned, (int)n);
+    return whole;
+}
+
+void TextView::setScrollY(int y){
+    const int max = this->maxScroll();
+    if(y > max) y = max;
+    if(y < 0) y = 0;
+    if(y == this->scroll_y) return;
+    this->scroll_y = y;
+    this->needsRender();
+}
+
+void TextView::setW(int w){
+    if(w == this->l_rect.w) return;
+    markdirty(this->getScreenRect());
+    this->l_rect.w = w;
+    this->layout_dirty = true;
     const int max = this->maxScroll();
     if(this->scroll_y > max) this->scroll_y = max;
     this->needsRender();

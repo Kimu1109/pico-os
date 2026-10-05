@@ -7,7 +7,9 @@
 #include <cstdarg>
 #include <cstddef>
 #include <type_traits>
-static inline unsigned long millis(){ return 0; }
+// テストが時間を進められるようにする(既定は0のまま)。ジェスチャーなどmillis()の差を見る処理の検証用
+namespace PicoHostClock { inline unsigned long now = 0; }
+static inline unsigned long millis(){ return PicoHostClock::now; }
 static inline void delay(unsigned long){}
 static inline unsigned long micros(){ return 0; }
 #define LED_BUILTIN 0

@@ -105,7 +105,19 @@
 #include "functions/Time_Functions.hpp"
 #include "OS_Data.hpp"
 #include <algorithm>
+#include <cstdarg>
+#include <cstdlib>
+#include <atomic>
 #include <cstdio>
+#include <cstring>
+#include <mutex>
+#include <thread>
+#include <vector>
+#include <arpa/inet.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include "gui/scenes/LuaScene.hpp"
 #include <string>
 
 // ---- モック(widget_factory_test.cppと同じ方針) ----
@@ -116,7 +128,15 @@ void PICO_GFX::MarkDirty(const Rect& r){ g_last_dirty = r; }
 void PICO_GFX::Setup(){}
 void PICO_GFX::FlushDirty(){}
 void PICO_GFX::DrawDialogBackground(){}
-void LogFunctions::Log(LogType, const char*, ...){}
+void LogFunctions::Log(LogType, const char* fmt, ...){
+    // 環境変数 LUA_TEST_VERBOSE があればログを標準エラーへ出す(テストが落ちた理由を見るため)
+    if(!getenv("LUA_TEST_VERBOSE")) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+    va_end(ap);
+}
 void LogFunctions::Setup(){}
 void LogFunctions::Update(){}
 void LogFunctions::Flush(){}
@@ -1772,8 +1792,8 @@ int main(){
                       "pico.http_request: 不正なURLはfalseを返す")
 
                 -- httpsも受け付ける(接続はHttp_Transportが担う)。接続を試みる前に取り消すので実ソケットには触れない
-                check(pico.http_request("GET", "https://127.0.0.1:1/", nil, nil, function() end) == true,
-                      "pico.http_request: httpsも開始できる")
+                check(type(pico.http_request("GET", "https://127.0.0.1:1/", nil, nil, function() end)) == "number",
+                      "pico.http_request: httpsも開始できる(リクエストIDが返る)")
                 pico.http_cancel()
 
                 local huge_body = string.rep("a", 20000) -- kMaxHttpBodyBytes(16KiB)超え
@@ -1781,14 +1801,40 @@ int main(){
                       "pico.http_request: 送信ボディが上限を超える場合はfalse")
 
                 local started = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end)
-                check(started == true, "pico.http_request: 正常な呼び出しはtrue(開始した)を返す")
+                check(type(started) == "number", "pico.http_request: 正常な呼び出しはリクエストIDを返す")
 
-                local started2 = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end)
-                check(started2 == false, "pico.http_request: 進行中に2本目を開始しようとするとfalse")
+                -- 走っているのは1本だけ。2本目以降は順番待ち(最大4本)。それを超えるとfalse
+                local queued = {}
+                for i = 1, 4 do
+                    queued[i] = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end)
+                    check(type(queued[i]) == "number" and queued[i] ~= started, "pico.http_request: 進行中でも順番待ちにできる " .. i)
+                end
+                check(pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end) == false,
+                      "pico.http_request: 待たせられる数(4)を超えるとfalse")
+                check(pico.http_cancel(queued[2]) == true, "pico.http_cancel(id): 順番待ちの1本だけ取り消せる")
+                check(pico.http_cancel(queued[2]) == false, "pico.http_cancel(id): 二重に取り消すとfalse")
+                check(type(pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end)) == "number",
+                      "pico.http_request: 取り消した分だけ空く")
 
                 pico.http_cancel()
                 local started3 = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end)
-                check(started3 == true, "pico.http_cancel(): 取り消し後は新しいリクエストを開始できる")
+                check(type(started3) == "number", "pico.http_cancel(): 全部取り消したあとは新しいリクエストを開始できる")
+
+                -- opts.headers の誤り
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {["A\r\nB"] = "x"}}),
+                      "pico.http_request: ヘッダ名に改行は使えない")
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {A = "x\r\nHost: evil"}}),
+                      "pico.http_request: ヘッダの値に改行は使えない")
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {Host = "evil"}}),
+                      "pico.http_request: Hostは指定できない")
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {["Content-Length"] = 5}}),
+                      "pico.http_request: Content-Lengthは指定できない")
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {A = {}}}),
+                      "pico.http_request: ヘッダの値は文字列か数値")
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {A = string.rep("x", 600)}}),
+                      "pico.http_request: ヘッダの合計に上限がある")
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, 5),
+                      "pico.http_request: optsはテーブル")
                 pico.http_cancel() -- 後片付け(接続を試みる前に取り消すので実ソケットには触れない)
             )LUA", "http_request_reject_test");
             check(ok, "pico.http_request: 早期拒否テストの実行が成功する");
@@ -2220,6 +2266,570 @@ int main(){
         }
         OSData::frame->clearClipRect();
         OSData::SD_usable = false;
+    }
+
+    // =====================================================================
+    // 2026-10-05: ウィジェットアプリ向けの5つの追加機能
+    // =====================================================================
+
+    // ---- JSON(pico.json_decode / json_encode / json_null) ----
+    {
+        LuaEngine je(256 * 1024);
+        check(je.valid(), "JSONテスト用にLuaEngineを構築");
+        lua_pushcfunction(je.raw(), l_check);
+        lua_setglobal(je.raw(), "check");
+        const bool ok = je.Run(R"LUA(
+            local t = pico.json_decode('{"a":1,"b":[1,2.5,"x",true,false],"c":{"d":"e"},"n":null}')
+            check(t.a == 1 and math.type(t.a) == "integer", "json_decode: 整数は整数のまま")
+            check(t.b[2] == 2.5 and math.type(t.b[2]) == "float", "json_decode: 小数は小数")
+            check(t.b[3] == "x" and t.b[4] == true and t.b[5] == false, "json_decode: 文字列と真偽")
+            check(t.c.d == "e", "json_decode: 入れ子")
+            check(t.n == nil, "json_decode: nullはnil(キーが消える)")
+            local k = pico.json_decode('{"n":null,"l":[1,null,3]}', true)
+            check(k.n == pico.json_null and k.l[2] == pico.json_null, "json_decode: keep_nullで目印になる")
+            check(pico.json_decode('"a\\n\\t\\"\\\\\\/b"') == 'a\n\t"\\/b', "json_decode: エスケープ")
+            check(pico.json_decode('"\\u3042\\u00e9"') == "あé", "json_decode: \\uをUTF-8へ")
+            check(pico.json_decode('"\\ud83d\\ude00"') == "\u{1F600}", "json_decode: サロゲートペア")
+            check(pico.json_decode('"\\ud83d"') == "\u{FFFD}", "json_decode: 対にならないサロゲートはU+FFFD")
+            check(pico.json_decode("  [ ]  ")[1] == nil, "json_decode: 空の配列と前後の空白")
+            check(pico.json_decode("-12") == -12 and pico.json_decode("1e3") == 1000.0, "json_decode: 数値(負・指数)")
+            check(pico.json_decode("123456789012345678901234567890") > 1e29, "json_decode: 範囲外の整数は小数へ")
+            check(pico.json_decode("true") == true and pico.json_decode("null") == nil, "json_decode: 単独の値")
+
+            local function bad(s)
+                local v, e = pico.json_decode(s)
+                return v == nil and type(e) == "string"
+            end
+            check(bad("{"), "json_decode: 閉じていないオブジェクト")
+            check(bad("[1,]"), "json_decode: 末尾のカンマ")
+            check(bad("{'a':1}"), "json_decode: 単引用符")
+            check(bad("01"), "json_decode: 先頭の0")
+            check(bad("1 2"), "json_decode: 余分な文字")
+            check(bad('"abc'), "json_decode: 閉じていない文字列")
+            check(bad('"\\x"'), "json_decode: 不正なエスケープ")
+            check(bad(""), "json_decode: 空")
+            check(bad(string.rep("[", 40) .. string.rep("]", 40)), "json_decode: 入れ子が深すぎる")
+            check(bad(string.rep("1", 65537)), "json_decode: 入力が大きすぎる")
+            local _, e = pico.json_decode('{"a":}')
+            check(e:find("位置") ~= nil, "json_decode: 誤りの位置が分かる")
+
+            local function rt(v) return pico.json_decode(pico.json_encode(v)) end
+            local r = rt({name = "たろう", list = {1, 2, 3}, nested = {x = {y = {z = true}}}, f = 1.5})
+            check(r.name == "たろう" and r.list[3] == 3 and r.nested.x.y.z == true and r.f == 1.5, "json_encode: 往復")
+            check(pico.json_encode({1, 2, 3}) == "[1,2,3]", "json_encode: 配列")
+            check(pico.json_encode({a = 1}) == '{"a":1}', "json_encode: オブジェクト")
+            check(pico.json_encode({}) == "[]", "json_encode: 空のテーブルは[]")
+            check(pico.json_encode("a\"b\\c\n\1") == '"a\\"b\\\\c\\n\\u0001"', "json_encode: 文字列のエスケープ")
+            check(pico.json_encode(nil) == "null" and pico.json_encode(true) == "true", "json_encode: nil/真偽")
+            check(pico.json_encode(pico.json_null) == "null", "json_encode: json_null")
+            check(pico.json_encode(3) == "3" and pico.json_encode(2.5) == "2.5", "json_encode: 数値")
+            check(pico.json_encode({1, nil, 3}) == "[1,null,3]", "json_encode: 穴のある配列はnullで埋める")
+            check(pico.json_encode({[1000] = 1}) == nil, "json_encode: まばらな整数キーは配列にしない(キーが文字列でないので失敗)")
+
+            local v, e1 = pico.json_encode(0/0)
+            check(v == nil and e1 ~= nil, "json_encode: NaNは書けない")
+            v, e1 = pico.json_encode(function() end)
+            check(v == nil and e1 ~= nil, "json_encode: 関数は書けない")
+            v, e1 = pico.json_encode({[1.5] = 1, [true] = 2})
+            check(v == nil and e1 ~= nil, "json_encode: 文字列以外のキーは書けない")
+            local cyc = {}
+            cyc.self = cyc
+            v, e1 = pico.json_encode(cyc)
+            check(v == nil and e1 ~= nil, "json_encode: 循環参照は失敗する(無限再帰しない)")
+        )LUA", "json_test");
+        check(ok, "JSON: テストスクリプトの実行が成功する");
+    }
+
+    // ---- タイマー(pico.after / every / cancel) ----
+    {
+        LuaEngine te(64 * 1024);
+        check(te.valid(), "タイマーテスト用にLuaEngineを構築");
+        lua_pushcfunction(te.raw(), l_check);
+        lua_setglobal(te.raw(), "check");
+        bool ok = te.Run(R"LUA(
+            log = {}
+            h_after = pico.after(100, function(h) log[#log + 1] = "after" end)
+            h_every = pico.every(30, function(h) log[#log + 1] = "every" end)
+            h_cancel = pico.after(50, function() log[#log + 1] = "cancelled" end)
+            check(type(h_after) == "number" and h_after ~= h_every, "pico.after/every: ハンドルが返る")
+            check(pico.cancel(h_cancel) == true, "pico.cancel: 取り消せる")
+            check(pico.cancel(h_cancel) == false, "pico.cancel: 二重に取り消すとfalse")
+            check(not pcall(pico.after, -1, function() end), "pico.after: 負はエラー")
+            check(not pcall(pico.every, 0, function() end), "pico.every: 0はエラー")
+            check(not pcall(pico.after, 10, 5), "pico.after: 関数以外はエラー")
+        )LUA", "timer_setup");
+        check(ok, "タイマー: 準備スクリプトの実行が成功する");
+
+        auto log_str = [&]() {
+            lua_getglobal(te.raw(), "log");
+            std::string r;
+            const int n = (int)lua_rawlen(te.raw(), -1);
+            for (int i = 1; i <= n; i++) {
+                lua_rawgeti(te.raw(), -1, i);
+                r += lua_tostring(te.raw(), -1);
+                r += ",";
+                lua_pop(te.raw(), 1);
+            }
+            lua_pop(te.raw(), 1);
+            return r;
+        };
+        te.UpdateTimers(29);
+        check(log_str() == "", "タイマー: 時間になるまで鳴らない");
+        te.UpdateTimers(1);
+        check(log_str() == "every,", "タイマー: every(30)が30msで鳴る");
+        te.UpdateTimers(70);   // 100ms: afterが鳴る。everyは遅れても1回だけ(溜めない)
+        check(log_str() == "every,after,every,", "タイマー: 遅れても1回だけ・afterは1度だけ(スロット順)");
+        te.UpdateTimers(500);
+        check(log_str() == "every,after,every,every,", "タイマー: 大きく遅れても溜めて鳴らさない");
+        te.UpdateTimers(30);
+        check(log_str() == "every,after,every,every,every,", "タイマー: afterは再び鳴らない・everyは続く");
+
+        ok = te.Run(R"LUA(
+            check(pico.cancel(h_after) == false, "pico.cancel: 鳴り終わったafterはfalse")
+            check(pico.cancel(h_every) == true, "pico.cancel: everyを止められる")
+            -- コールバックの中から自分を止める・新しいタイマーを作る
+            n_self = 0
+            h_self = pico.every(10, function(h)
+                n_self = n_self + 1
+                pico.cancel(h)
+                pico.after(10, function() n_chain = true end)
+            end)
+        )LUA", "timer_cancel");
+        check(ok, "タイマー: 取り消しのスクリプトが成功する");
+        te.UpdateTimers(10);
+        te.UpdateTimers(10);
+        te.UpdateTimers(10);
+        ok = te.Run(R"LUA(
+            check(n_self == 1, "タイマー: コールバックの中で自分をcancelすると1回で止まる")
+            check(n_chain == true, "タイマー: コールバックの中で作ったタイマーも動く")
+            -- 上限(16個)
+            local hs = {}
+            for i = 1, 16 do hs[i] = pico.after(1000000, function() end) end
+            check(hs[16] ~= nil, "pico.after: 16個まで作れる")
+            check(pico.after(1000, function() end) == nil, "pico.after: 上限を超えるとnil")
+            pico.cancel(hs[1])
+            local again = pico.after(1000, function() end)
+            check(again ~= nil and again ~= hs[1], "pico.after: 空いたスロットは別のハンドルで再利用される")
+            check(pico.cancel(hs[1]) == false, "pico.cancel: 解放済みハンドルは別のタイマーを巻き込まない")
+            check(pico.cancel(again) == true, "pico.cancel: 再利用したタイマーは取り消せる")
+            -- エラーになるタイマーは止まり、ダイアログは1回だけ
+            err_count = 0
+            pico.every(5, function() err_count = err_count + 1; error("boom") end)
+        )LUA", "timer_limit");
+        check(ok, "タイマー: 上限のスクリプトが成功する");
+        te.UpdateTimers(5);
+        te.UpdateTimers(5);
+        te.UpdateTimers(5);
+        ok = te.Run("check(err_count == 1, 'タイマー: エラーになった繰り返しタイマーはそれ以降鳴らない')", "timer_err");
+        check(ok, "タイマー: エラー後の確認が成功する");
+    }
+
+    // ---- タッチのイベント引数(id, x, y, lx, ly, dx, dy) ----
+    {
+        const bool setup_ok = engine.Run(R"LUA(
+            ev_btn = pico.create("Button")
+            pico.set(ev_btn, "x", 10)
+            pico.set(ev_btn, "y", 20)
+            ev_log = {}
+            for _, name in ipairs({"press_start", "press_move", "press_end", "press_out"}) do
+                pico.on(ev_btn, name, function(id, x, y, lx, ly, dx, dy)
+                    ev_log[#ev_log + 1] = {name = name, id = id, x = x, y = y, lx = lx, ly = ly, dx = dx, dy = dy}
+                end)
+            end
+        )LUA", "touch_args_setup");
+        check(setup_ok, "タッチのイベント引数: 準備スクリプトの実行が成功する");
+        lua_State* L2 = engine.raw();
+        lua_getglobal(L2, "ev_btn");
+        const WidgetId ev_id = (WidgetId)lua_tointeger(L2, -1);
+        lua_pop(L2, 1);
+        Widget* w = WidgetRegistry::Resolve(ev_id);
+        check(w != nullptr, "タッチのイベント引数: ボタンが解決できる");
+        if (w) {
+            const Rect r = w->getScreenRect();
+            OSData::touchX = (int16_t)(r.x + 7);
+            OSData::touchY = (int16_t)(r.y + 3);
+            w->causeOnPressStart();
+            OSData::touchX = (int16_t)(r.x + 12);
+            OSData::touchY = (int16_t)(r.y + 1);
+            w->causeOnPressMove();
+            w->causeOnPressEnd();
+            const bool ok = engine.Run(R"LUA(
+                local a, b, c = ev_log[1], ev_log[2], ev_log[3]
+                check(a.name == "press_start" and a.id == ev_btn, "press_start: 第1引数はid")
+                check(a.lx == 7 and a.ly == 3, "press_start: ウィジェット内の座標(lx, ly)")
+                check(a.x == a.lx + (a.x - a.lx) and a.x - a.lx == b.x - b.lx, "press_start: 画面座標x,yはlx,lyと整合する")
+                check(a.dx == 0 and a.dy == 0, "press_start: 移動量は0")
+                check(b.name == "press_move" and b.lx == 12 and b.ly == 1, "press_move: 座標")
+                check(b.dx == 5 and b.dy == -2, "press_move: 前のイベントからの移動量")
+                check(c.name == "press_end" and c.dx == 0 and c.dy == 0, "press_end: 動いていなければ移動量は0")
+            )LUA", "touch_args_check");
+            check(ok, "タッチのイベント引数: 検証スクリプトの実行が成功する");
+        }
+    }
+
+    // ---- 画面をまたぐ受け渡し(pico.args / pico.pop(result) / on_suspend・on_resume / store) ----
+    {
+        HostSd::files.clear();
+        OSData::SD_usable = true;
+        LuaEngine se(128 * 1024, LuaPermissions{}, "/app");
+        se.SetScriptPath("/app/main.lua");
+        se.SetSceneArgs("{\"level\":3,\"name\":\"x\"}", "/parent/main.lua");
+        lua_pushcfunction(se.raw(), l_check);
+        lua_setglobal(se.raw(), "check");
+        bool ok = se.Run(R"LUA(
+            local a = pico.args()
+            check(a.level == 3 and a.name == "x", "pico.args: 渡された引数が読める")
+
+            -- 引数・結果の誤り
+            check(not pcall(pico.push_scene, "/app/sub.lua", function() end), "push_scene: 関数は渡せない")
+            check(not pcall(pico.push_scene, "/app/sub.lua", {big = string.rep("x", 2000)}), "push_scene: 大きすぎる引数はエラー")
+            check(not pcall(pico.pop, {big = string.rep("x", 2000)}), "pop: 大きすぎる結果はエラー")
+
+            -- store
+            check(pico.store_load() == nil, "store_load: まだ無ければnil")
+            check(pico.store_save({score = 10, names = {"a", "b"}}) == true, "store_save: 保存できる")
+            local s = pico.store_load()
+            check(s.score == 10 and s.names[2] == "b", "store_load: 保存した値が読める")
+            check(pico.sd_exists("/app/store.json"), "store: アプリのフォルダのstore.jsonに置かれる")
+            check(not pcall(pico.store_save, function() end), "store_save: JSONにできない値はエラー")
+            check(not pico.sd_exists("/app/store.json.tmp"), "store_save: 一時ファイルが残らない")
+
+            suspended = 0
+            function on_suspend() suspended = suspended + 1; return {pos = 5, tags = {"k"}} end
+            got_state, got_result = nil, nil
+            function on_resume(st) got_state = st end
+            function on_result(r) got_result = r end
+        )LUA", "scene_args_test");
+        check(ok, "画面の受け渡し: テストスクリプトの実行が成功する");
+
+        // pico.pop(result) は親宛ての待ち箱に積む(Pop自体は要求を登録するだけ)
+        ok = se.Run("pico.pop({picked = 'red', n = 2})", "pop_result");
+        check(ok, "pico.pop(result): 呼べる");
+        FixedString<PICO_STR_1KiB> res;
+        check(!LuaScene::TakeResult("/other/main.lua", res), "TakeResult: 別の画面宛てには渡さない");
+        check(LuaScene::TakeResult("/parent/main.lua", res), "TakeResult: 親宛ての結果を受け取れる");
+        check(strstr(res.c_str(), "\"picked\":\"red\"") != nullptr, "TakeResult: 結果がJSONで入っている");
+        check(!LuaScene::TakeResult("/parent/main.lua", res), "TakeResult: 受け取ったら空になる(1回きり)");
+
+        // on_suspend / on_resume / on_result
+        FixedString<PICO_STR_2KiB> state;
+        check(se.CallSuspend(state), "CallSuspend: on_suspendの戻り値を保存する");
+        check(strstr(state.c_str(), "\"pos\":5") != nullptr, "CallSuspend: JSONで返る");
+        se.CallWithJson("on_resume", state.c_str());
+        se.CallWithJson("on_result", "{\"ok\":true}");
+        ok = se.Run(R"LUA(
+            check(suspended == 1, "on_suspend: 1回呼ばれる")
+            check(got_state.pos == 5 and got_state.tags[1] == "k", "on_resume: 保存した状態が渡る")
+            check(got_result.ok == true, "on_result: 結果が渡る")
+            function on_suspend() return nil end
+        )LUA", "scene_args_check");
+        check(ok, "画面の受け渡し: 確認スクリプトが成功する");
+        check(!se.CallSuspend(state), "CallSuspend: nilを返せば保存しない");
+        se.CallWithJson("no_such_function", "{}");   // 無い関数は何もしない
+        check(true, "CallWithJson: 無い関数は無視される");
+
+        // 別のアプリフォルダの引数が無い場合
+        LuaEngine plain(64 * 1024);
+        lua_pushcfunction(plain.raw(), l_check);
+        lua_setglobal(plain.raw(), "check");
+        ok = plain.Run("check(pico.args() == nil, 'pico.args: 引数が無ければnil')", "no_args");
+        check(ok, "pico.args: 引数なし");
+        HostSd::files.clear();
+    }
+
+    // ---- require ----
+    {
+        HostSd::files.clear();
+        OSData::SD_usable = true;
+        HostSd::files["/rq/util.lua"] = "local M = {}\nfunction M.double(x) return x * 2 end\nM.loaded_count = (LOADED or 0) + 1\nLOADED = M.loaded_count\nreturn M\n";
+        HostSd::files["/rq/a/b.lua"] = "return { name = 'ab', util = require('util') }\n";
+        HostSd::files["/rq/pkg/init.lua"] = "return 'pkg-init'\n";
+        HostSd::files["/rq/noret.lua"] = "NORET_RAN = (NORET_RAN or 0) + 1\n";
+        HostSd::files["/rq/cyc1.lua"] = "return require('cyc2')\n";
+        HostSd::files["/rq/cyc2.lua"] = "return require('cyc1')\n";
+        HostSd::files["/rq/syntax.lua"] = "return = =\n";
+        HostSd::files["/rq/boom.lua"] = "error('module failed')\n";
+        HostSd::files["/rq/dyn1.lua"] = "return 'dyn1'\n";
+        HostSd::files["/outside/secret.lua"] = "return 'secret'\n";
+
+        LuaEngine re(256 * 1024, LuaPermissions{}, "/rq");
+        lua_pushcfunction(re.raw(), l_check);
+        lua_setglobal(re.raw(), "check");
+        const bool ok = re.Run(R"LUA(
+            local util = require("util")
+            check(util.double(21) == 42, "require: モジュールを読んで使える")
+            check(require("util") == util, "require: 2回目は同じ値(キャッシュ)")
+            check(LOADED == 1, "require: 実行は1回だけ")
+            check(pico.require("util") == util, "pico.require: requireと同じ")
+            local ab = require("a.b")
+            check(ab.name == "ab" and ab.util == util, "require: ドット区切りはディレクトリ・入れ子のrequireも先読みされる")
+            check(require "pkg" == "pkg-init", "require: <名前>/init.lua")
+            check(require("noret") == true and NORET_RAN == 1, "require: 戻り値が無ければtrue")
+            require('noret')
+            check(NORET_RAN == 1, "require: 戻り値が無くても2回実行しない")
+
+            local ok, err = pcall(require, "cyc1")
+            check(not ok and tostring(err):find("循環"), "require: 循環はエラー")
+            ok, err = pcall(require, "syntax")
+            check(not ok, "require: 構文エラーはエラー")
+            ok, err = pcall(require, "boom")
+            check(not ok and tostring(err):find("module failed"), "require: モジュールの実行時エラーが伝わる")
+            ok, err = pcall(require, "boom")
+            check(not ok and not tostring(err):find("循環"), "require: 失敗した後に再度呼んでも循環扱いにならない")
+            ok, err = pcall(require, "no.such.mod")
+            check(not ok and tostring(err):find("見つかりません"), "require: 無いモジュール")
+            ok = pcall(require, "../outside/secret")
+            check(not ok, "require: ..は使えない")
+            ok = pcall(require, "/outside/secret")
+            check(not ok, "require: 絶対パスは使えない")
+            ok = pcall(require, "")
+            check(not ok, "require: 空の名前")
+            ok = pcall(require, "a b")
+            check(not ok, "require: 使えない文字")
+
+            -- 組み立てた名前: トップレベル近くなら実行中に読める
+            local name = "dyn" .. 1
+            check(require(name) == "dyn1", "require: 組み立てた名前もトップレベルなら読める")
+            -- 深い所から組み立てた名前で呼ぶと断る(先読みされていないもの)
+            HOSTILE = "dyn1"
+        )LUA", "/rq/main.lua");
+        check(ok, "require: テストスクリプトの実行が成功する");
+
+        // app_dir外は読めない(sd_outside_app_dirなし)
+        LuaEngine ce(64 * 1024, LuaPermissions{}, "/rq/a");
+        lua_pushcfunction(ce.raw(), l_check);
+        lua_setglobal(ce.raw(), "check");
+        const bool ok2 = ce.Run("check(not pcall(require, 'util'), 'require: app_dirの外のモジュールは読めない')", "/rq/a/main.lua");
+        check(ok2, "require: app_dir外の確認");
+
+        // 深い所からの組み立てた名前
+        LuaEngine de(128 * 1024, LuaPermissions{}, "/rq");
+        lua_pushcfunction(de.raw(), l_check);
+        lua_setglobal(de.raw(), "check");
+        const bool ok3 = de.Run(R"LUA(
+            local function d1(n)
+                if n == 0 then return (pcall(require, "dy" .. "n1")) end
+                local r = d1(n - 1)   -- 末尾呼び出しにしない(深さを稼ぐ)
+                return r
+            end
+            local ok = d1(10)
+            check(not ok, "require: 深い呼び出しの奥で、先読みされていない名前を読もうとすると断る")
+            local nm = "dy" .. "n1"
+            check(require(nm) == "dyn1", "require: 浅くなれば(先読みされていなくても)読める")
+        )LUA", "/rq/main.lua");
+        check(ok3, "require: 深い所の確認");
+        HostSd::files.clear();
+    }
+
+    // ---- HTTP(実ソケット: 127.0.0.1に立てた小さなサーバ相手) ----
+    {
+        struct Srv {
+            int lfd = -1;
+            int port = 0;
+            std::atomic<bool> stop{false};
+            std::mutex mu;
+            std::vector<std::string> requests;
+            std::thread th;
+        } srv;
+        srv.lfd = socket(AF_INET, SOCK_STREAM, 0);
+        int one = 1;
+        setsockopt(srv.lfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = 0;
+        bool listening = bind(srv.lfd, (sockaddr*)&addr, sizeof(addr)) == 0 && listen(srv.lfd, 8) == 0;
+        socklen_t alen = sizeof(addr);
+        if (listening) {
+            getsockname(srv.lfd, (sockaddr*)&addr, &alen);
+            srv.port = ntohs(addr.sin_port);
+        }
+        check(listening, "HTTPテスト用のローカルサーバを立てる");
+        if (listening) {
+            srv.th = std::thread([&srv]() {
+                while (!srv.stop) {
+                    fd_set fds;
+                    FD_ZERO(&fds);
+                    FD_SET(srv.lfd, &fds);
+                    timeval tv{0, 50000};
+                    if (select(srv.lfd + 1, &fds, nullptr, nullptr, &tv) <= 0) continue;
+                    int c = accept(srv.lfd, nullptr, nullptr);
+                    if (c < 0) continue;
+                    std::string req;
+                    char buf[2048];
+                    size_t body_need = 0;
+                    size_t head_end = std::string::npos;
+                    while (true) {
+                        ssize_t n = recv(c, buf, sizeof(buf), 0);
+                        if (n <= 0) break;
+                        req.append(buf, (size_t)n);
+                        if (head_end == std::string::npos) {
+                            head_end = req.find("\r\n\r\n");
+                            if (head_end != std::string::npos) {
+                                size_t p = req.find("Content-Length: ");
+                                if (p != std::string::npos && p < head_end) body_need = (size_t)atoi(req.c_str() + p + 16);
+                            }
+                        }
+                        if (head_end != std::string::npos && req.size() >= head_end + 4 + body_need) break;
+                    }
+                    { std::lock_guard<std::mutex> lk(srv.mu); srv.requests.push_back(req); }
+                    std::string body, status = "200 OK", ctype = "text/plain";
+                    if (req.compare(0, 10, "GET /hello") == 0) {
+                        body = "hello";
+                    } else if (req.compare(0, 9, "GET /json") == 0) {
+                        body = "{\"ok\":true,\"n\":[1,2,3]}";
+                        ctype = "application/json";
+                    } else if (req.compare(0, 8, "GET /big") == 0) {
+                        body.assign(40000, 'x');
+                    } else if (req.compare(0, 10, "POST /echo") == 0) {
+                        body = req.substr(head_end + 4);
+                    } else {
+                        status = "500 Internal Server Error";
+                        body = "oops";
+                    }
+                    std::string resp = "HTTP/1.1 " + status + "\r\nContent-Type: " + ctype +
+                        "\r\nETag: \"v1\"\r\nContent-Length: " + std::to_string(body.size()) +
+                        "\r\nConnection: close\r\n\r\n" + body;
+                    size_t off = 0;
+                    while (off < resp.size()) {
+                        ssize_t n = send(c, resp.data() + off, resp.size() - off, 0);
+                        if (n <= 0) break;
+                        off += (size_t)n;
+                    }
+                    close(c);
+                }
+            });
+
+            LuaPermissions np;
+            np.network = true;
+            LuaEngine he(256 * 1024, np);
+            check(he.valid(), "HTTP結合テスト用にLuaEngineを構築");
+            lua_pushcfunction(he.raw(), l_check);
+            lua_setglobal(he.raw(), "check");
+            lua_pushfstring(he.raw(), "http://127.0.0.1:%d", srv.port);
+            lua_setglobal(he.raw(), "BASE");
+            HostSd::files.clear();
+            OSData::SD_usable = true;
+
+            bool ok = he.Run(R"LUA(
+                order = {}
+                R = {}
+                id1 = pico.http_request("GET", BASE .. "/hello", nil, nil, function(ok, st, body, err, hdr, info)
+                    order[#order + 1] = 1
+                    R.hello = {ok = ok, st = st, body = body, err = err, ct = hdr["content-type"], etag = hdr["etag"],
+                               cl = hdr["content-length"], size = info.size}
+                end, {headers = {["X-Test"] = "abc", Authorization = "Bearer tok", ["X-Num"] = 42}})
+                id2 = pico.http_request("POST", BASE .. "/echo", '{"a":1}', "application/json", function(ok, st, body)
+                    order[#order + 1] = 2
+                    R.echo = {ok = ok, st = st, body = body}
+                end)
+                id3 = pico.http_request("GET", BASE .. "/json", nil, nil, function(ok, st, body)
+                    order[#order + 1] = 3
+                    R.json = pico.json_decode(body)
+                end)
+                id4 = pico.http_request("GET", BASE .. "/nope", nil, nil, function(ok, st, body)
+                    order[#order + 1] = 4
+                    R.fail = {ok = ok, st = st, body = body}
+                end)
+                id5 = pico.http_request("GET", BASE .. "/big", nil, nil, function(ok, st, body, err)
+                    order[#order + 1] = 5
+                    R.big = {ok = ok, body = body, err = err}
+                end)
+                check(id1 and id2 and id3 and id4 and id5, "HTTP: 5本とも受け付ける(1本走って4本待つ)")
+                check(pico.http_request("GET", BASE .. "/hello", nil, nil, function() end) == false, "HTTP: 6本目は断る")
+            )LUA", "http_net_start");
+            check(ok, "HTTP結合: 開始スクリプトが成功する");
+
+            for (int i = 0; i < 4000 && he.HttpBusy(); i++) {
+                he.UpdateHttp();
+                usleep(1000);
+            }
+            check(!he.HttpBusy(), "HTTP結合: 全部終わる");
+
+            ok = he.Run(R"LUA(
+                check(#order == 5 and order[1] == 1 and order[2] == 2 and order[3] == 3 and order[4] == 4 and order[5] == 5,
+                      "HTTP: 順番どおりに1本ずつ走る")
+                check(R.hello.ok and R.hello.st == 200 and R.hello.body == "hello", "HTTP: GETの結果")
+                check(R.hello.ct == "text/plain" and R.hello.etag == "v1" and R.hello.cl == 5, "HTTP: 応答ヘッダが読める")
+                check(R.hello.size == 5, "HTTP: info.size")
+                check(R.echo.ok and R.echo.body == '{"a":1}', "HTTP: POSTのボディが届く")
+                check(R.json.ok == true and R.json.n[3] == 3, "HTTP: 応答をjson_decodeできる")
+                check(R.fail.ok and R.fail.st == 500 and R.fail.body == "oops", "HTTP: 500でも本文が読める")
+                check(R.big.ok == false and R.big.body == nil and R.big.err ~= nil, "HTTP: 16KiBを超える応答はメモリでは受けない")
+            )LUA", "http_net_check");
+            check(ok, "HTTP結合: 結果の確認が成功する");
+
+            {
+                std::lock_guard<std::mutex> lk(srv.mu);
+                const std::string& r = srv.requests.empty() ? std::string() : srv.requests[0];
+                check(r.find("X-Test: abc\r\n") != std::string::npos, "HTTP: 足したヘッダが送られる");
+                check(r.find("Authorization: Bearer tok\r\n") != std::string::npos, "HTTP: Authorizationが送られる");
+                check(r.find("X-Num: 42\r\n") != std::string::npos, "HTTP: 数値のヘッダ値");
+                check(r.find("Host: 127.0.0.1") != std::string::npos && r.find("User-Agent: pico-os/1") != std::string::npos,
+                      "HTTP: 標準のヘッダも付く");
+                const std::string& r2 = srv.requests.size() > 1 ? srv.requests[1] : std::string();
+                check(r2.find("Content-Type: application/json\r\n") != std::string::npos
+                      && r2.find("Content-Length: 7\r\n") != std::string::npos, "HTTP: POSTのContent-Type/Length");
+                check(r2.find("X-Test") == std::string::npos, "HTTP: ヘッダは次のリクエストへ引き継がれない");
+            }
+
+            // ファイルへ直接保存(16KiBを超えるもの)
+            ok = he.Run(R"LUA(
+                dl = nil
+                pico.http_request("GET", BASE .. "/big", nil, nil, function(ok, st, body, err, hdr, info)
+                    dl = {ok = ok, st = st, body = body, err = err, size = info.size, saved = info.saved}
+                end, {save_to = "/dl/big.bin"})
+                dl_bad = nil
+                pico.http_request("GET", BASE .. "/nope", nil, nil, function(ok, st, body, err, hdr, info)
+                    dl_bad = {ok = ok, st = st, saved = info.saved}
+                end, {save_to = "/dl/err.bin"})
+                dl_cancel = pico.http_request("GET", BASE .. "/big", nil, nil, function() CANCEL_CALLED = true end, {save_to = "/dl/cancel.bin"})
+            )LUA", "http_dl_start");
+            check(ok, "HTTP保存: 開始スクリプトが成功する");
+            for (int i = 0; i < 4000 && he.HttpBusy(); i++) {
+                he.UpdateHttp();
+                usleep(1000);
+                if (i == 3) {
+                    // 3本目(取り消し用)は待ち行列にいるうちに取り消す
+                    he.Run("pico.http_cancel(dl_cancel)", "http_dl_cancel");
+                }
+            }
+            ok = he.Run(R"LUA(
+                check(dl and dl.ok and dl.st == 200 and dl.body == nil, "HTTP保存: 成功すると本文はnil")
+                check(dl.size == 40000 and dl.saved == "/dl/big.bin", "HTTP保存: info.size/saved")
+                check(dl_bad and dl_bad.ok and dl_bad.st == 500 and dl_bad.saved == "/dl/err.bin", "HTTP保存: 500でも受け取れた分は保存される")
+                check(CANCEL_CALLED == nil, "HTTP保存: 取り消したコールバックは呼ばれない")
+                check(pico.sd_exists("/dl/big.bin") and not pico.sd_exists("/dl/big.bin.part"), "HTTP保存: .partは残らない")
+                check(not pico.sd_exists("/dl/cancel.bin"), "HTTP保存: 取り消した分は作られない")
+                check(pico.http_request("GET", BASE .. "/hello", nil, nil, function() end, {save_to = "/sys/x.bin"}) ~= nil, "HTTP保存: パス指定は通る")
+                pico.http_cancel()
+            )LUA", "http_dl_check");
+            check(ok, "HTTP保存: 結果の確認が成功する");
+            check(HostSd::files["/dl/big.bin"].size() == 40000, "HTTP保存: 40000バイト全部が書かれている");
+
+            // 保存先の権限
+            LuaEngine ce(64 * 1024, np, "/app");
+            lua_pushcfunction(ce.raw(), l_check);
+            lua_setglobal(ce.raw(), "check");
+            lua_pushfstring(ce.raw(), "http://127.0.0.1:%d", srv.port);
+            lua_setglobal(ce.raw(), "BASE");
+            HostSd::files["/app/app.cfg"] = "permission_network=true\n";
+            ok = ce.Run(R"LUA(
+                check(pico.http_request("GET", BASE .. "/hello", nil, nil, function() end, {save_to = "/other/x.bin"}) == false,
+                      "HTTP保存: app_dirの外には保存できない")
+                check(pico.http_request("GET", BASE .. "/hello", nil, nil, function() end, {save_to = "/app/app.cfg"}) == false,
+                      "HTTP保存: app.cfgは上書きできない")
+                check(type(pico.http_request("GET", BASE .. "/hello", nil, nil, function() end, {save_to = "/app/x.bin"})) == "number",
+                      "HTTP保存: app_dirの中なら保存できる")
+                pico.http_cancel()
+            )LUA", "http_dl_perm");
+            check(ok, "HTTP保存: 権限の確認が成功する");
+
+            srv.stop = true;
+            srv.th.join();
+        }
+        if (srv.lfd >= 0) close(srv.lfd);
+        HostSd::files.clear();
     }
 
     // ---- 後片付け(残りのウィジェットも解放し、ASanのリーク検出を素通りさせない) ----

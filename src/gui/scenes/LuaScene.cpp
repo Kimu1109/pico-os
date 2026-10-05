@@ -9,6 +9,39 @@
 
 #include "Arduino.h"
 
+#include <cstring>
+
+namespace {
+    struct PendingResult {
+        bool valid = false;
+        FixedString<PICO_PATH_LEN> target;
+        FixedString<PICO_STR_1KiB> json;
+        unsigned long posted_ms = 0;
+    };
+    PendingResult g_result;
+}
+
+void LuaScene::PostResult(const char* target, const char* json) {
+    g_result.valid = true;
+    g_result.target.assign(target ? target : "");
+    g_result.json.assign(json ? json : "");
+    g_result.posted_ms = millis();
+}
+
+bool LuaScene::TakeResult(const char* target, FixedString<PICO_STR_1KiB>& out) {
+    if (!g_result.valid) return false;
+    const bool fresh = (millis() - g_result.posted_ms) <= kResultTtlMs;
+    const bool mine = target && strcmp(g_result.target.c_str(), target) == 0;
+    if (!fresh) {
+        g_result.valid = false;   // 古いものは誰のものでも捨てる
+        return false;
+    }
+    if (!mine) return false;      // 別の画面宛て(その画面が受け取るまで残す)
+    out.assign(g_result.json);
+    g_result.valid = false;
+    return true;
+}
+
 Scene* MakeLuaAppScene(const AppEntry& entry) {
     return new LuaScene(entry.arg.c_str(), entry.permissions);
 }
@@ -37,6 +70,10 @@ void LuaScene::onEnter() {
         return;
     }
 
+    // 画面をまたぐ受け渡し(引数・親・自分のパス)。スクリプトより先に渡す
+    engine->SetScriptPath(script_path.c_str());
+    engine->SetSceneArgs(launch_args.c_str(), parent_script.c_str());
+
     // 通知をタップして起動された場合は、その理由(tag/data)をスクリプトより先に渡す
     // (pico.launch_reason())。1回きりなので、Pop()で戻ってきた再実行では受け取らない
     {
@@ -61,6 +98,16 @@ void LuaScene::onEnter() {
     script_ok = runFile(script_path.c_str());
     if (script_ok) {
         engine->CallSetup();
+        // 離れる前に on_suspend() が返した状態を、戻ってきたこのスクリプトへ渡す
+        if (!saved_state.empty()) {
+            engine->CallWithJson("on_resume", saved_state.c_str());
+            saved_state.clear();
+        }
+        // 子の画面が pico.pop(result) で残した結果
+        FixedString<PICO_STR_1KiB> result;
+        if (TakeResult(script_path.c_str(), result)) {
+            engine->CallWithJson("on_result", result.c_str());
+        }
     }
 
     last_tick_ms = millis();
@@ -120,6 +167,8 @@ void LuaScene::onUpdate() {
     const unsigned long dt = now - last_tick_ms;
     last_tick_ms = now;
 
+    // pico.after / pico.every(setup()/loop()の有無に関わらず動かす)
+    engine->UpdateTimers((uint32_t)dt);
     engine->CallLoop((uint32_t)dt);
 }
 
@@ -129,6 +178,9 @@ void LuaScene::onExit() {
     // Pop()で戻ってきた際はonEnter()でスクリプトを読み直して最初から実行し直す
     // (他のシーンがonExit()で状態をメンバへ退避してonEnter()で復元するのと違い、
     // Luaアプリの状態はスクリプト内のLua変数にあるため、C++側で退避しようがない)
+    // 離れる前に on_suspend() があれば呼び、返した状態を持ち越す(Pop で戻ったときの on_resume に渡す)
+    saved_state.clear();
+    if (engine && script_ok) engine->CallSuspend(saved_state);
     delete engine;
     engine = nullptr;
 }

@@ -1,6 +1,6 @@
 // Luaのサンドボックス・打ち切り(握り潰せないこと)・スタックトレース・デバッガのテスト。
 //
-//   サンドボックス  … debug/io/package/require/dofile/loadfile/os.exit/string.dumpが無いこと、
+//   サンドボックス  … debug/io/package/標準のrequire/dofile/loadfile/os.exit/string.dumpが無いこと、
 //                     loadがバイトコードを断ること(テキストとenvは今までどおり)、printがエラーにならないこと
 //   打ち切り        … pcall/xpcall/coroutine.resume/coroutine.wrapで包んで繰り返す終わらないループ、
 //                     メッセージハンドラの中の終わらないループ、pico.setから入れ子で鳴るコールバックで
@@ -155,7 +155,10 @@ int main() {
         const bool ok = e.Run(R"LUA(
             check(debug == nil, "debugライブラリは無い(debug.sethookでフックを外せないように)")
             check(io == nil, "ioライブラリは無い")
-            check(package == nil and require == nil, "package/requireは無い")
+            check(package == nil, "packageライブラリは無い")
+            -- requireはある(アプリのフォルダの中のモジュールだけを読む自前のもの。標準のrequireではない)
+            check(type(require) == "function" and require == pico.require, "requireはpico.requireと同じ(標準のpackage.pathは使わない)")
+            check(not pcall(require, "../etc/passwd"), "requireで..は使えない")
             check(dofile == nil and loadfile == nil, "dofile/loadfileは無い")
             check(os.exit == nil and os.execute == nil and os.remove == nil and os.rename == nil
                   and os.getenv == nil, "osの危ない関数は無い")

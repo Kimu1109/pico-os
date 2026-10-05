@@ -21,3 +21,7 @@ pc/sdcard/sys/debug.cfg
 pc/sdcard/sys/debug.cfg.tmp
 pc/sdcard/sys/crash.pending
 pc/sdcard/crash/
+
+# Luaアプリの pico.store_save() が作る保存ファイル(PCビルドで試すと作られる)
+pc/sdcard/lua/apps/*/store.json
+pc/sdcard/lua/apps/*/store.json.tmp

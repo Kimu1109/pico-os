@@ -973,7 +973,8 @@ fi
 if group_on lua-engine; then
 ensure_lua_obj
 # --- LuaEngine(Lua<->C++バインディング本体)をウィジェット層と繋げた結合テスト ---
-compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" \
+# (HTTPの結合テストが127.0.0.1に小さなサーバのスレッドを立てるので-pthread)
+compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \

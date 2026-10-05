@@ -53,7 +53,7 @@ namespace HttpTools {
 //     (PROTOCOL.mdの参照サーバは使わないが、HTTPSで繋ぐ一般のサーバ(Googleのカレンダー等)は
 //     動的な応答をchunkedで返すため)。chunked以外の転送符号化(gzip等)はエラーにする
 //   - そうでなければ Content-Length があればその長さで終端、無ければ接続が閉じるまで
-//   - 見るヘッダは Content-Length / ETag / Last-Modified / Location / Transfer-Encoding だけ。
+//   - 見るヘッダは Content-Length / Content-Type / ETag / Last-Modified / Location / Transfer-Encoding だけ。
 //     **それ以外のヘッダは長すぎても読み飛ばす**(Set-Cookie や Content-Security-Policy は
 //     kMaxLineLen を平気で超える。読みもしない行で失敗させない)
 class HttpResponse {
@@ -79,6 +79,10 @@ class HttpResponse {
         const FixedString<PICO_STR_M>& validator() const { return validator_; }
         // 3xxのときの転送先
         const FixedString<PICO_STR_L>& location() const { return location_; }
+        // Content-Type(Luaの pico.http_request が応答ヘッダとして見せる)。無ければ空
+        const FixedString<PICO_STR_M>& contentType() const { return content_type_; }
+        // ETagがあって validator() がそれか(無ければ Last-Modified)
+        bool validatorIsEtag() const { return has_etag; }
 
         int32_t contentLength() const { return content_length; }
 
@@ -123,6 +127,7 @@ class HttpResponse {
 
         FixedString<PICO_STR_M> validator_;
         FixedString<PICO_STR_L> location_;
+        FixedString<PICO_STR_M> content_type_;
         bool has_etag = false;
 
         bool connection_close = false; // "Connection: close" か HTTP/1.0

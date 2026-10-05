@@ -31,10 +31,32 @@ end)
 
 | イベント名 | 発生タイミング | コールバック引数 |
 |---|---|---|
-| `press_start` | 押し始め | `(id)` |
-| `press_end` | 離した瞬間(押した場所の上で) | `(id)` |
-| `press_move` | 押しながら移動 | `(id)` |
-| `press_out` | 押したまま当たり判定の外へ出た | `(id)` |
+| `press_start` | 押し始め | `(id, x, y, lx, ly, dx, dy)` |
+| `press_end` | 離した瞬間(押した場所の上で) | `(id, x, y, lx, ly, dx, dy)` |
+| `press_move` | 押しながら移動 | `(id, x, y, lx, ly, dx, dy)` |
+| `press_out` | 押したまま当たり判定の外へ出た | `(id, x, y, lx, ly, dx, dy)` |
+
+タッチ座標が引数で届きます。
+
+| 引数 | 意味 |
+|---|---|
+| `x`, `y` | 画面の絶対座標(`pico.get_touch()` と同じ) |
+| `lx`, `ly` | そのウィジェットの左上からの座標。盤面(`Canvas`)のマス目を逆算するときはこれを使います |
+| `dx`, `dy` | 前のタッチのイベントからの移動量。`press_start` では `0`。ドラッグ・スクロールに使います |
+
+```lua
+local board = pico.create("Canvas")
+pico.set(board, "w", 160); pico.set(board, "h", 160)
+pico.on(board, "press_start", function(id, x, y, lx, ly)
+    local col, row = lx // 20, ly // 20      -- 20pxのマス目
+    select_cell(col, row)
+end)
+pico.on(board, "press_move", function(id, x, y, lx, ly, dx, dy)
+    scroll_x = scroll_x - dx                  -- ドラッグでスクロール
+end)
+```
+
+引数を使わない `function(id)` の形でも従来どおり動きます。
 
 ```lua
 local button = pico.create("Button")

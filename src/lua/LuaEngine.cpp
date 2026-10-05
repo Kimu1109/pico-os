@@ -5,6 +5,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <utility>
 
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
@@ -49,6 +51,7 @@
 #include "sound/Note_Name.hpp"
 #include "sound/Mml_Compiler.hpp"
 #include "lua/LuaDebugger.hpp"
+#include "lua/LuaJson.hpp"
 #include "functions/Profiler_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
@@ -101,20 +104,88 @@ namespace {
             return body.append((const char*)data, len);
         }
     };
+
+    // opts.save_to を指定したときの本文の行き先。メモリに溜めずSDの <path>.part へ書き、
+    // 最後まで受け取れたときだけ本来の名前へ差し替える(途中で切れた半端なファイルを残さない)
+    constexpr size_t kMaxHttpDownloadBytes = 8u * 1024u * 1024u;
+    struct LuaFileSink : IHttpSink {
+        FsFile file;
+        bool is_open = false;
+        size_t total = 0;
+        bool write(const void* data, size_t len) override {
+            if (!is_open) return false;
+            if (total + len > kMaxHttpDownloadBytes) return false;
+            if (file.write(data, len) != len) return false;
+            total += len;
+            return true;
+        }
+        void closeFile() {
+            if (is_open) { file.close(); is_open = false; }
+        }
+    };
+
+    // 足せるリクエストヘッダの合計(HttpRequestの溜め場所512Bに、区切りを含めて収まる大きさ)
+    constexpr size_t kMaxHttpHeaderBytes = 480;
+
+    // Luaから足せないヘッダ(接続の仕組みや本文の長さは自分で決める。Hostを変えると別のサーバへ送れてしまう)
+    bool HttpHeaderReserved(const char* name) {
+        static const char* const kNames[] = {
+            "host", "content-length", "connection", "transfer-encoding", "content-type",
+            "upgrade", "te", "trailer", "keep-alive", "proxy-authorization", "proxy-connection",
+        };
+        for (const char* n : kNames) {
+            if (strcasecmp(name, n) == 0) return true;
+        }
+        return false;
+    }
+
+    bool HttpHeaderValid(const char* name, const char* value) {
+        if (!name || !*name || !value) return false;
+        for (const char* p = name; *p; p++) {
+            const unsigned char c = (unsigned char)*p;
+            const bool tok = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+                || c == '-' || c == '_' || c == '.';
+            if (!tok) return false;
+        }
+        for (const char* p = value; *p; p++) {
+            const unsigned char c = (unsigned char)*p;
+            if ((c < 0x20 && c != '\t') || c == 0x7f) return false;
+        }
+        return true;
+    }
 }
+
+// pico.http_request()を待たせている間の1本分(走り出す前の控え)。本体は待つ間だけnewする
+struct LuaEngine::PendingHttp {
+    int id = 0;
+    HttpRequest::Method method = HttpRequest::Method::GET;
+    Url url;
+    std::string body;
+    FixedString<PICO_STR_M> content_type;
+    std::vector<std::pair<std::string, std::string>> headers;
+    std::string save_to;
+    int callback_ref = LUA_NOREF;
+};
 
 // pico.http_request()用の状態一式。ヘッダでは前方宣言のみにしてポインタで持ち、
 // 使わないLuaアプリのメモリコストをゼロに保つ(クラスコメント「ネットワーク」参照)
 struct LuaEngine::HttpState {
     HttpRequest request;
     LuaHttpSink sink;
+    LuaFileSink file_sink;
     // HttpRequestは送信ボディ/Content-Typeを非所有ポインタで受け取る(IHttpSinkと
     // 同じ約束)ため、Luaスタック上の一時的な文字列をそのまま渡すのではなく、
     // リクエストが終わるまで生きているこのバッファへ一度コピーしてから渡す
     FixedString<kMaxHttpBodyBytes> body_buf;
     FixedString<PICO_STR_M> content_type_buf;
-    // 進行中のリクエストが無ければLUA_NOREF。「同時に1本まで」の判定にも使う
+    // 進行中のリクエストが無ければLUA_NOREF。「走っているのは1本だけ」の判定にも使う
     int callback_ref = LUA_NOREF;
+    int cur_id = 0;
+    int next_id = 1;
+    // 走っているリクエストの保存先(空ならメモリで受ける)
+    FixedString<PICO_PATH_LEN> save_path;
+    FixedString<PICO_PATH_LEN> save_part;
+    bool saving() const { return !save_path.empty(); }
 };
 
 // ---------------- メモリ予算 ----------------
@@ -566,6 +637,8 @@ LuaEngine::~LuaEngine() {
     if (used_sound_) SoundFunctions::StopAll();
     if (used_music_) SoundFunctions::MusicStop();
     if (used_wav_) SoundFunctions::WavStop();
+    for (PendingHttp* r : http_queue_) delete r; // 順番待ちの控え(Luaのrefはlua_close()が捨てる)
+    http_queue_.clear();
     delete http_; // lua_close()より前でも後でも問題ない(HttpStateはLuaと無関係のC++側の状態)
     if (L) {
         // __gcはsetmetatableで断っているが、念のため打ち切り中にしてから閉じる
@@ -587,6 +660,17 @@ bool LuaEngine::Run(const char* script, const char* chunkname) {
         name.append(chunkname);
     } else {
         name.assign(chunkname ? chunkname : "script");
+    }
+
+    // require("名前") されるモジュールを、実行の外の浅い所で先に読み込んでおく
+    // (実行中のコンパイルでコア0のスタックを溢れさせないため。クラスコメント参照)
+    lua_pushcfunction(L, PreloadTrampoline);
+    lua_pushlightuserdata(L, this);
+    lua_pushlightuserdata(L, (void*)script);
+    lua_pushinteger(L, (lua_Integer)strlen(script));
+    if (ProtectedCall(3) != LUA_OK) {
+        LOG_APP_WARN("LuaEngine: require先の先読みに失敗しました: %s", lua_tostring(L, -1));
+        lua_pop(L, 1);
     }
 
     // テキストだけ受け付ける(バイトコードはVMを壊せるため。サンドボックス参照)
@@ -781,11 +865,25 @@ void LuaEngine::registerApi() {
     registerFn("show_color", l_show_color);
     registerFn("http_request", l_http_request);
     registerFn("http_cancel", l_http_cancel);
+    registerFn("json_decode", l_json_decode);
+    registerFn("json_encode", l_json_encode);
+    lua_pushlightuserdata(L, LuaJson::NullValue());
+    lua_setfield(L, -2, "json_null");
+    registerFn("after", l_after);
+    registerFn("every", l_every);
+    registerFn("cancel", l_cancel);
+    registerFn("args", l_args);
+    registerFn("store_load", l_store_load);
+    registerFn("store_save", l_store_save);
+    registerFn("require", l_require);
     registerFn("traceback", l_traceback);
     registerFn("breakpoint", l_breakpoint);
     registerFn("set_breakpoint", l_set_breakpoint);
     registerFn("clear_breakpoint", l_clear_breakpoint);
     registerFn("debugger_enabled", l_debugger_enabled);
+    // グローバルの require は pico.require と同じ関数
+    lua_getfield(L, -1, "require");
+    lua_setglobal(L, "require");
     lua_setglobal(L, "pico");
 }
 
@@ -946,7 +1044,39 @@ void LuaEngine::Dispatch(WidgetId id, EventKind kind) {
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     lua_pushinteger(L, (lua_Integer)id);
-    if (ProtectedCall(1) != LUA_OK) {
+    int nargs = 1;
+
+    // タッチのイベントには座標を添える: fn(id, x, y, lx, ly, dx, dy)
+    //   x,y   = 画面座標(pico.get_touch()と同じ)
+    //   lx,ly = そのウィジェットの左上からの座標(盤面のマスを逆算するときに使う)
+    //   dx,dy = 前のタッチのイベントからの移動量(press_startでは0。ドラッグ・スクロールに使う)
+    if (kind == EventKind::PressStart || kind == EventKind::PressMove
+        || kind == EventKind::PressEnd || kind == EventKind::PressOut) {
+        const int x = (int)OSData::touchX;
+        const int y = (int)OSData::touchY;
+        int lx = x, ly = y;
+        if (Widget* w = WidgetRegistry::Resolve(id)) {
+            const Rect r = w->getScreenRect();
+            lx = x - r.x;
+            ly = y - r.y;
+        }
+        int dx = 0, dy = 0;
+        if (kind != EventKind::PressStart) {
+            dx = x - last_touch_x_;
+            dy = y - last_touch_y_;
+        }
+        last_touch_x_ = x;
+        last_touch_y_ = y;
+        lua_pushinteger(L, x);
+        lua_pushinteger(L, y);
+        lua_pushinteger(L, lx);
+        lua_pushinteger(L, ly);
+        lua_pushinteger(L, dx);
+        lua_pushinteger(L, dy);
+        nargs = 7;
+    }
+
+    if (ProtectedCall(nargs) != LUA_OK) {
         ReportError("Luaコールバックでエラーが発生しました");
     }
 }
@@ -1385,7 +1515,45 @@ void LuaEngine::UpdateDebugger() {
     if (changed) ApplyHook(L);
 }
 
-int LuaEngine::l_pop(lua_State*) {
+namespace {
+    // push_scene/change_scene/pop が画面の間で渡す値(引数・結果)をJSONにする。
+    // 渡さない(nil)なら空文字列。1KiBに収まらなければ luaL_error
+    void EncodeSceneValue(lua_State* L, int idx, const char* api, FixedString<PICO_STR_1KiB>& out) {
+        out.clear();
+        if (lua_isnoneornil(L, idx)) return;
+        const char* err = nullptr; // 静的文字列
+        bool too_big = false;
+        {   // luaL_error(longjmp)はデストラクタを飛ばすので、std::stringはここで確実に破棄してから投げる
+            std::string json;
+            const int base = lua_gettop(L);
+            const bool ok = LuaJson::EncodeValue(L, idx, json, 0, err);
+            lua_settop(L, base);
+            if (ok) {
+                if (json.size() >= PICO_STR_1KiB) too_big = true;
+                else out.assign(json.c_str());
+            } else if (!err) {
+                err = "?";
+            }
+        }
+        if (err) luaL_error(L, "%s: 値をJSONにできません(%s)", api, err);
+        if (too_big) {
+            luaL_error(L, "%s: 渡す値が大きすぎます(%dバイトまで。大きなデータはファイルに置いてください)",
+                       api, (int)PICO_STR_1KiB - 1);
+        }
+    }
+}
+
+int LuaEngine::l_pop(lua_State* L) {
+    LuaEngine* self = Self(L);
+    // pico.pop(result): 呼び出し元(push_sceneした画面)の on_result(result) に渡す値(任意)。
+    // 親はこのあとPopで戻ってonEnter()からやり直すので、受け渡しはLuaSceneの待ち箱を介す
+    if (!lua_isnoneornil(L, 1)) {
+        FixedString<PICO_STR_1KiB> json;
+        EncodeSceneValue(L, 1, "pico.pop", json);
+        if (!self->parent_path_.empty()) {
+            LuaScene::PostResult(self->parent_path_.c_str(), json.c_str());
+        }
+    }
     // LuaSceneがアプリを起動する際はSceneFunctions::Pushなので、Popでランチャへ戻れる
     // (ClocksScene/CalculatorScene等、他のアプリの「戻る」ボタンと同じ仕組み)。
     // 要求を登録するだけで実際の遷移はフレーム境界(SceneFunctions::Update())まで保留される
@@ -1396,6 +1564,10 @@ int LuaEngine::l_pop(lua_State*) {
 int LuaEngine::l_push_scene(lua_State* L) {
     LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
+
+    // pico.push_scene(path [, args]): argsは遷移先で pico.args() として受け取る(JSONにできる値)
+    FixedString<PICO_STR_1KiB> args;
+    EncodeSceneValue(L, 2, "pico.push_scene", args);
 
     // LuaScene(path, permissions)のコンストラクタはFixedStringへコピーするだけなので、
     // ここで即座に構築してよい(SDを開くのはSceneFunctions::Update()経由のonEnter()から)。
@@ -1409,16 +1581,24 @@ int LuaEngine::l_push_scene(lua_State* L) {
     // (最小権限)へ戻ってしまうと、複数画面のLuaアプリで2画面目以降だけ権限が
     // 落ちるという分かりにくい挙動になる)。app_dir自体は遷移先スクリプト自身の
     // 親ディレクトリから改めて計算し直す(LuaScene::onEnter()側)
-    SceneFunctions::Push(new LuaScene(path, self->permissions_));
+    LuaScene* scene = new LuaScene(path, self->permissions_);
+    // 子から見た「親」は今のスクリプト(pico.pop(result)の宛先)
+    scene->setLaunchArgs(args.c_str(), self->script_path_.c_str());
+    SceneFunctions::Push(scene);
     return 0;
 }
 
 int LuaEngine::l_change_scene(lua_State* L) {
     LuaEngine* self = Self(L);
     const char* path = luaL_checkstring(L, 1);
+    FixedString<PICO_STR_1KiB> args;
+    EncodeSceneValue(L, 2, "pico.change_scene", args);
     // push_sceneと違いスタックを消費しない(戻れなくなる)版。l_push_sceneのコメント参照
-    // (権限の引き継ぎ方も同じ)
-    SceneFunctions::Change(new LuaScene(path, self->permissions_));
+    // (権限の引き継ぎ方も同じ)。置き換えた先から pop(result) したときの宛先は、
+    // 今の画面の「親」をそのまま引き継ぐ(置き換えた画面は消えるため)
+    LuaScene* scene = new LuaScene(path, self->permissions_);
+    scene->setLaunchArgs(args.c_str(), self->parent_path_.c_str());
+    SceneFunctions::Change(scene);
     return 0;
 }
 
@@ -3289,7 +3469,99 @@ int LuaEngine::l_show_color(lua_State* L) {
 }
 
 // ---------------- ネットワーク ----------------
-// ヘッダのクラスコメント「ネットワーク」参照。
+// ヘッダのクラスコメント「ネットワーク」と、冒頭の「2026-10-05」の4を参照。
+//
+//   pico.http_request(method, url, body, content_type, callback [, opts]) -> リクエストID | false
+//     opts = { headers = { ["Authorization"] = "Bearer ..." }, save_to = "/path/to/file" }
+//     callback(ok, status, body, err, headers, info)
+//       headers = 応答ヘッダ(小文字の名前: content-type / location / etag / last-modified / content-length)
+//       info    = { size = 受け取った本文のバイト数, saved = save_toのパス(保存したときだけ) }
+//     走るのは1本だけ。2本目以降は(最大kMaxHttpQueue本)順番に始める。待たせられなければfalse
+//   pico.http_cancel([id]) -> 取り消せたか(idなしは全部。コールバックは呼ばれない)
+
+void LuaEngine::FreePending(lua_State* L, PendingHttp* r) {
+    if (!r) return;
+    if (r->callback_ref != LUA_NOREF) luaL_unref(L, LUA_REGISTRYINDEX, r->callback_ref);
+    delete r;
+}
+
+// idle(何も走っていない)ときに r を走らせる。成功したら r の中身を HttpState へ移すので、
+// 呼び出し側は r の callback_ref を触らない(r自体は呼び出し側がdeleteする)。
+// 失敗したら false と理由(静的文字列)を返す
+bool LuaEngine::StartHttp(PendingHttp* r, const char** why) {
+    *why = "";
+    if (!http_) http_ = new HttpState();
+    HttpState* st = http_;
+
+    st->sink.body.clear();
+    st->body_buf.clear();
+    st->content_type_buf.clear();
+    st->save_path.clear();
+    st->save_part.clear();
+    st->file_sink.closeFile();
+    st->file_sink.total = 0;
+
+    // HttpRequestは送信ボディ/Content-Typeを非所有ポインタで受け取るため、
+    // 呼び出し側の一時的な文字列をそのまま渡さず、リクエストが終わるまで
+    // 生きているst->body_buf/content_type_bufへ一度コピーしてから渡す
+    const void* body_ptr = nullptr;
+    size_t body_len = 0;
+    if (!r->body.empty()) {
+        st->body_buf.assign(r->body.data(), r->body.size());
+        body_ptr = st->body_buf.c_str();
+        body_len = st->body_buf.length();
+    }
+    const char* content_type_ptr = nullptr;
+    if (!r->content_type.empty()) {
+        st->content_type_buf.assign(r->content_type);
+        content_type_ptr = st->content_type_buf.c_str();
+    }
+
+    st->request.clearExtraHeaders();
+    for (const auto& h : r->headers) {
+        if (!st->request.addExtraHeader(h.first.c_str(), h.second.c_str())) {
+            *why = "リクエストヘッダが長すぎる/不正";
+            return false;
+        }
+    }
+
+    IHttpSink* sink = &st->sink;
+    if (!r->save_to.empty()) {
+        // 保存先: <path>.part へ書き、最後まで受け取れたら差し替える
+        st->save_path.assign(r->save_to.c_str());
+        st->save_part.assign(r->save_to.c_str());
+        if (!st->save_part.append(".part")) {
+            st->save_path.clear();
+            *why = "保存先のパスが長すぎる";
+            return false;
+        }
+        st->file_sink.file = OSData::SD.open(st->save_part.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+        if (!st->file_sink.file) {
+            st->save_path.clear();
+            st->save_part.clear();
+            *why = "保存先を開けない";
+            return false;
+        }
+        st->file_sink.is_open = true;
+        sink = &st->file_sink;
+    }
+    // 保存するときは、全体の10秒ではなく「何も届かない時間」で打ち切る(大きなファイル向け)
+    st->request.setIdleTimeout(!r->save_to.empty());
+
+    if (!st->request.begin(r->url, r->method, sink, body_ptr, body_len, content_type_ptr)) {
+        st->file_sink.closeFile();
+        if (st->saving()) OSData::SD.remove(st->save_part.c_str());
+        st->save_path.clear();
+        st->save_part.clear();
+        *why = "リクエストを開始できない";
+        return false;
+    }
+
+    st->callback_ref = r->callback_ref;
+    st->cur_id = r->id;
+    r->callback_ref = LUA_NOREF; // HttpStateへ移した
+    return true;
+}
 
 int LuaEngine::l_http_request(lua_State* L) {
     LuaEngine* self = Self(L);
@@ -3299,21 +3571,59 @@ int LuaEngine::l_http_request(lua_State* L) {
     const char* body = lua_isnoneornil(L, 3) ? nullptr : luaL_checklstring(L, 3, &body_len);
     const char* content_type = lua_isnoneornil(L, 4) ? nullptr : luaL_checkstring(L, 4);
     luaL_checktype(L, 5, LUA_TFUNCTION);
+    if (!lua_isnoneornil(L, 6)) luaL_checktype(L, 6, LUA_TTABLE);
 
     HttpRequest::Method method;
     if (!HttpMethodFromName(method_str, method)) {
         return luaL_error(L, "pico.http_request: 未知のメソッド '%s'(GET/POST/PUT/PATCH/DELETEのいずれか)", method_str);
     }
 
-    if (!self->permissions_.network) {
-        LOG_APP_WARN("pico.http_request: このアプリにはネットワーク権限がありません");
-        lua_pushboolean(L, false);
-        return 1;
+    // opts.headers / opts.save_to の形の誤りはプログラムの誤りとして先にエラーにする
+    // (権限や状態による拒否より前。std::vector等はまだ作らない=longjmpで漏らさない)
+    const char* save_to = nullptr;
+    if (lua_istable(L, 6)) {
+        lua_getfield(L, 6, "save_to");
+        if (!lua_isnil(L, -1)) save_to = luaL_checkstring(L, -1);
+        lua_pop(L, 1);   // save_toの文字列は引数のテーブルが保持しているので有効なまま
+        lua_getfield(L, 6, "headers");
+        if (!lua_isnil(L, -1)) {
+            if (!lua_istable(L, -1)) return luaL_error(L, "pico.http_request: opts.headers はテーブルで指定してください");
+            size_t total = 0;
+            lua_pushnil(L);
+            while (lua_next(L, -2) != 0) {
+                if (lua_type(L, -2) != LUA_TSTRING) return luaL_error(L, "pico.http_request: ヘッダ名は文字列で指定してください");
+                const char* name = lua_tostring(L, -2);
+                if (lua_type(L, -1) != LUA_TSTRING && lua_type(L, -1) != LUA_TNUMBER) {
+                    return luaL_error(L, "pico.http_request: ヘッダ '%s' の値は文字列か数値で指定してください", name);
+                }
+                // 数値はここで文字列にしない(キー走査中の変換は避ける)ので長さは別に数える
+                char numbuf[40];
+                const char* value = numbuf;
+                if (lua_type(L, -1) == LUA_TSTRING) {
+                    value = lua_tostring(L, -1);
+                } else if (lua_isinteger(L, -1)) {
+                    snprintf(numbuf, sizeof(numbuf), "%lld", (long long)lua_tointeger(L, -1));
+                } else {
+                    snprintf(numbuf, sizeof(numbuf), "%.14g", (double)lua_tonumber(L, -1));
+                }
+                if (!HttpHeaderValid(name, value)) {
+                    return luaL_error(L, "pico.http_request: ヘッダ '%s' の名前か値に使えない文字があります", name);
+                }
+                if (HttpHeaderReserved(name)) {
+                    return luaL_error(L, "pico.http_request: ヘッダ '%s' は指定できません(自動で付く/変えると危険)", name);
+                }
+                total += strlen(name) + strlen(value) + 4;
+                if (total > kMaxHttpHeaderBytes) {
+                    return luaL_error(L, "pico.http_request: ヘッダの合計が大きすぎます(%dバイトまで)", (int)kMaxHttpHeaderBytes);
+                }
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
     }
 
-    // 同時に1本まで。前のリクエストが完了していなければ黙って拒否する
-    // (SD無し等と同じ「実行時の状態」枠として扱い、luaL_errorにはしない)
-    if (self->http_ && self->http_->callback_ref != LUA_NOREF) {
+    if (!self->permissions_.network) {
+        LOG_APP_WARN("pico.http_request: このアプリにはネットワーク権限がありません");
         lua_pushboolean(L, false);
         return 1;
     }
@@ -3331,87 +3641,778 @@ int LuaEngine::l_http_request(lua_State* L) {
         return 1;
     }
 
-    if (!self->http_) self->http_ = new HttpState();
-    HttpState* st = self->http_;
-
-    st->sink.body.clear();
-    st->body_buf.clear();
-    st->content_type_buf.clear();
-
-    // HttpRequestは送信ボディ/Content-Typeを非所有ポインタで受け取るため、
-    // Luaスタック上の一時的な文字列をそのまま渡さず、リクエストが終わるまで
-    // 生きているst->body_buf/content_type_bufへ一度コピーしてから渡す
-    const void* body_ptr = nullptr;
-    if (body && body_len > 0) {
-        st->body_buf.assign(body, body_len);
-        body_ptr = st->body_buf.c_str();
-        body_len = st->body_buf.length();
-    }
-    const char* content_type_ptr = nullptr;
-    if (content_type && *content_type) {
-        st->content_type_buf.assign(content_type);
-        content_type_ptr = st->content_type_buf.c_str();
+    if (save_to) {
+        // 保存先はSDへの書き込みなので、sd_writeと同じ確認(app_dir外・app.cfgは拒否)を通す
+        if (!OSData::SD_usable || !self->SdWriteAllowed(save_to, "pico.http_request(save_to)")) {
+            lua_pushboolean(L, false);
+            return 1;
+        }
     }
 
-    if (!st->request.begin(url, method, &st->sink, body_ptr, body_len, content_type_ptr)) {
+    // 走っているものがある、または待っているものがあるなら順番待ち(待たせられなければ拒否)
+    const bool must_wait = self->HttpBusy();
+    if (must_wait && self->http_queue_.size() >= kMaxHttpQueue) {
         lua_pushboolean(L, false);
         return 1;
     }
 
-    lua_pushvalue(L, 5);
-    st->callback_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    PendingHttp* r = new PendingHttp();
+    r->method = method;
+    r->url = url;
+    if (body && body_len > 0) r->body.assign(body, body_len);
+    if (content_type && *content_type) r->content_type.assign(content_type);
+    if (save_to) r->save_to = save_to;
 
-    lua_pushboolean(L, true);
+    if (lua_istable(L, 6)) {
+        // 上の検査を通っているので型はもう確かめない。ここからはlongjmpしうる関数(lua_next等の
+        // 型変換)を避けて読む: 値が数値のものは上で文字列化した結果と同じ書式で作り直す
+        lua_getfield(L, 6, "headers");
+        if (lua_istable(L, -1)) {
+            lua_pushnil(L);
+            while (lua_next(L, -2) != 0) {
+                char numbuf[40];
+                const char* value = numbuf;
+                if (lua_type(L, -1) == LUA_TSTRING) value = lua_tostring(L, -1);
+                else if (lua_isinteger(L, -1)) snprintf(numbuf, sizeof(numbuf), "%lld", (long long)lua_tointeger(L, -1));
+                else snprintf(numbuf, sizeof(numbuf), "%.14g", (double)lua_tonumber(L, -1));
+                r->headers.emplace_back(lua_tostring(L, -2), value);
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+    }
+
+    HttpState* st = self->http_;
+    const int id = st ? st->next_id : 1;
+    if (!st) { self->http_ = new HttpState(); st = self->http_; }
+    st->next_id++;
+    r->id = id;
+
+    lua_pushvalue(L, 5);
+    r->callback_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    if (must_wait) {
+        self->http_queue_.push_back(r);
+    } else {
+        const char* why = "";
+        if (!self->StartHttp(r, &why)) {
+            LOG_APP_WARN("pico.http_request: %s", why);
+            FreePending(L, r);
+            lua_pushboolean(L, false);
+            return 1;
+        }
+        delete r;
+    }
+
+    lua_pushinteger(L, id);
     return 1;
 }
 
 int LuaEngine::l_http_cancel(lua_State* L) {
     LuaEngine* self = Self(L);
-    if (self->http_ && self->http_->callback_ref != LUA_NOREF) {
-        self->http_->request.cancel();
-        luaL_unref(L, LUA_REGISTRYINDEX, self->http_->callback_ref);
-        self->http_->callback_ref = LUA_NOREF;
+    bool found = false;
+    const bool all = lua_isnoneornil(L, 1);
+    const int id = all ? 0 : (int)luaL_checkinteger(L, 1);
+
+    if (self->http_ && self->http_->callback_ref != LUA_NOREF && (all || self->http_->cur_id == id)) {
+        HttpState* st = self->http_;
+        st->request.cancel();
+        st->file_sink.closeFile();
+        if (st->saving()) OSData::SD.remove(st->save_part.c_str());
+        st->save_path.clear();
+        st->save_part.clear();
+        luaL_unref(L, LUA_REGISTRYINDEX, st->callback_ref);
+        st->callback_ref = LUA_NOREF;
+        found = true;
     }
-    return 0;
+    for (size_t i = 0; i < self->http_queue_.size();) {
+        if (all || self->http_queue_[i]->id == id) {
+            FreePending(L, self->http_queue_[i]);
+            self->http_queue_.erase(self->http_queue_.begin() + (long)i);
+            found = true;
+        } else {
+            i++;
+        }
+    }
+    lua_pushboolean(L, found);
+    return 1;
 }
 
 bool LuaEngine::HttpBusy() const {
-    return http_ && http_->callback_ref != LUA_NOREF;
+    return (http_ && http_->callback_ref != LUA_NOREF) || !http_queue_.empty();
+}
+
+// 順番待ちの先頭を走らせる(何も走っていないときだけ)。始められなかったものは
+// 失敗としてそのコールバックを呼び、次の待ちへ進む
+void LuaEngine::StartQueuedHttp() {
+    while (!http_queue_.empty() && !(http_ && http_->callback_ref != LUA_NOREF)) {
+        PendingHttp* r = http_queue_.front();
+        http_queue_.erase(http_queue_.begin());
+        const char* why = "";
+        if (StartHttp(r, &why)) {
+            delete r;
+            return;
+        }
+        // 始められなかった: コールバックへ失敗を知らせる(ok=false, status=0, body=nil, err=理由)
+        const int ref = r->callback_ref;
+        r->callback_ref = LUA_NOREF;
+        delete r;
+        lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+        lua_pushboolean(L, 0);
+        lua_pushinteger(L, 0);
+        lua_pushnil(L);
+        lua_pushstring(L, why);
+        if (ProtectedCall(4) != LUA_OK) {
+            ReportError("pico.http_requestのコールバックでエラーが発生しました");
+        }
+        luaL_unref(L, LUA_REGISTRYINDEX, ref);
+    }
 }
 
 void LuaEngine::UpdateHttp() {
-    if (!http_ || http_->callback_ref == LUA_NOREF) return;
+    if (http_ && http_->callback_ref != LUA_NOREF) {
+        // 保存(ダウンロード)中は1フレームに何回か進めて速度を稼ぐ(1回で読むのは1KBまで)。
+        // 時間で区切って画面を止めない
+        if (http_->saving()) {
+            const unsigned long t0 = millis();
+            for (int i = 0; i < 16; i++) {
+                http_->request.update();
+                if (http_->request.getStatus() != TaskTools::PROCESSING) break;
+                if (millis() - t0 >= 6) break;
+            }
+        } else {
+            http_->request.update();
+        }
+        if (http_->request.getStatus() != TaskTools::PROCESSING) FinishHttp();
+    }
+    // 何も走っていなければ待っているものを始める(終わったフレームのうちに次へ進める)
+    StartQueuedHttp();
+}
 
-    http_->request.update();
-    if (http_->request.getStatus() == TaskTools::PROCESSING) return;
+// 終わったリクエストの結果をコールバックへ渡す
+void LuaEngine::FinishHttp() {
+    HttpState* st = http_;
+    bool ok = (st->request.getStatus() == TaskTools::SUCCESS);
+    const int status_code = ok ? st->request.response().statusCode() : 0;
+    const char* err_text = ok ? nullptr : st->request.failureToStr();
 
-    const bool ok = (http_->request.getStatus() == TaskTools::SUCCESS);
-    const int status_code = ok ? http_->request.response().statusCode() : 0;
+    // 保存先へ書いていたら、最後まで受け取れたときだけ本来の名前へ差し替える
+    const bool saved = st->saving();
+    const size_t saved_bytes = st->file_sink.total;
+    FixedString<PICO_PATH_LEN> saved_path;
+    if (saved) {
+        st->file_sink.closeFile();
+        if (ok) {
+            OSData::SD.remove(st->save_path.c_str());
+            if (OSData::SD.rename(st->save_part.c_str(), st->save_path.c_str())) {
+                saved_path.assign(st->save_path);
+            } else {
+                ok = false;
+                err_text = "保存先へ差し替えられない";
+                OSData::SD.remove(st->save_part.c_str());
+            }
+        } else {
+            OSData::SD.remove(st->save_part.c_str());
+        }
+        st->save_path.clear();
+        st->save_part.clear();
+    }
 
     // 先に外しておく: コールバック内からpico.http_request()を再度呼べるようにするため
-    // (LuaEngine::l_http_requestの「同時に1本まで」判定はcallback_refを見ている)
-    const int ref = http_->callback_ref;
-    http_->callback_ref = LUA_NOREF;
+    // (走っているかの判定はcallback_refを見ている。待ちがあれば新しい要求はその後ろへ並ぶ)
+    const int ref = st->callback_ref;
+    st->callback_ref = LUA_NOREF;
+    st->cur_id = 0;
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
     lua_pushboolean(L, ok);
     lua_pushinteger(L, status_code);
-    if (ok && !http_->sink.body.empty()) {
+    if (ok && !saved && !st->sink.body.empty()) {
         // 本文にNULが混じり得るため、strlen前提のlua_pushstring()ではなく
         // 長さ明示のlua_pushlstring()を使う
-        lua_pushlstring(L, http_->sink.body.c_str(), http_->sink.body.length());
+        lua_pushlstring(L, st->sink.body.c_str(), st->sink.body.length());
     } else {
         lua_pushnil(L);
     }
-    if (!ok) {
-        lua_pushstring(L, http_->request.failureToStr());
-    } else {
-        lua_pushnil(L);
+    if (!ok) lua_pushstring(L, err_text ? err_text : "失敗");
+    else lua_pushnil(L);
+
+    // 応答ヘッダ(小文字の名前)
+    lua_createtable(L, 0, 5);
+    if (st->request.getStatus() == TaskTools::SUCCESS || st->request.response().headersDone()) {
+        const HttpResponse& res = st->request.response();
+        if (!res.contentType().empty()) {
+            lua_pushstring(L, res.contentType().c_str());
+            lua_setfield(L, -2, "content-type");
+        }
+        if (!res.location().empty()) {
+            lua_pushstring(L, res.location().c_str());
+            lua_setfield(L, -2, "location");
+        }
+        if (!res.validator().empty()) {
+            lua_pushstring(L, res.validator().c_str());
+            lua_setfield(L, -2, res.validatorIsEtag() ? "etag" : "last-modified");
+        }
+        if (res.contentLength() >= 0) {
+            lua_pushinteger(L, res.contentLength());
+            lua_setfield(L, -2, "content-length");
+        }
+    }
+    // 受け取った本文の大きさ(と保存先)
+    lua_createtable(L, 0, 2);
+    lua_pushinteger(L, saved ? (lua_Integer)saved_bytes : (lua_Integer)st->sink.body.length());
+    lua_setfield(L, -2, "size");
+    if (!saved_path.empty()) {
+        lua_pushstring(L, saved_path.c_str());
+        lua_setfield(L, -2, "saved");
     }
 
-    if (ProtectedCall(4) != LUA_OK) {
+    if (ProtectedCall(6) != LUA_OK) {
         ReportError("pico.http_requestのコールバックでエラーが発生しました");
     }
 
     luaL_unref(L, LUA_REGISTRYINDEX, ref);
+}
+
+// ---------------- JSON ----------------
+
+int LuaEngine::l_json_decode(lua_State* L) {
+    size_t len = 0;
+    const char* s = luaL_checklstring(L, 1, &len);
+    const bool keep_null = lua_toboolean(L, 2) != 0;
+    const char* err = nullptr;
+    size_t pos = 0;
+    if (!LuaJson::Decode(L, s, len, keep_null, err, pos)) {
+        lua_pushnil(L);
+        lua_pushfstring(L, "%s (位置 %d)", err, (int)pos);
+        return 2;
+    }
+    return 1;
+}
+
+int LuaEngine::l_json_encode(lua_State* L) {
+    luaL_checkany(L, 1);
+    const char* err = nullptr;
+    std::string out;
+    const bool ok = LuaJson::EncodeValue(L, 1, out, 0, err);
+    lua_settop(L, 1);
+    if (!ok) {
+        lua_pushnil(L);
+        lua_pushstring(L, err ? err : "失敗");
+        return 2;
+    }
+    // (メモリ不足でlua_pushlstringがlongjmpするとoutが漏れるが、その時はアプリごと閉じるので許容する)
+    lua_pushlstring(L, out.data(), out.size());
+    return 1;
+}
+
+// ---------------- タイマー ----------------
+
+bool LuaEngine::ResolveTimerHandle(uint32_t handle, size_t& out_index) const {
+    const uint32_t index1 = handle & 0xFF;
+    if (index1 == 0 || index1 > kMaxTimers) return false;
+    const Timer& t = timers_[index1 - 1];
+    if (!t.used || t.generation != (handle >> 8)) return false;
+    out_index = index1 - 1;
+    return true;
+}
+
+void LuaEngine::ReleaseTimer(size_t index) {
+    Timer& t = timers_[index];
+    if (t.ref != LUA_NOREF) luaL_unref(L, LUA_REGISTRYINDEX, t.ref);
+    t.ref = LUA_NOREF;
+    t.used = false;
+    t.generation++; // 古いハンドルを無効にする
+}
+
+int LuaEngine::addTimer(lua_State* L, bool repeat) {
+    LuaEngine* self = Self(L);
+    const lua_Integer ms = luaL_checkinteger(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    if (ms < 0 || ms > 24LL * 60 * 60 * 1000) {
+        return luaL_error(L, "pico.%s: ミリ秒は0〜86400000で指定してください", repeat ? "every" : "after");
+    }
+    if (repeat && ms < 1) return luaL_error(L, "pico.every: 間隔は1ミリ秒以上にしてください");
+
+    for (size_t i = 0; i < kMaxTimers; i++) {
+        Timer& t = self->timers_[i];
+        if (t.used) continue;
+        lua_pushvalue(L, 2);
+        t.ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        t.used = true;
+        t.repeat = repeat;
+        t.interval_ms = (uint32_t)ms;
+        t.due_ms = self->timer_clock_ms_ + (uint32_t)ms;
+        lua_pushinteger(L, (lua_Integer)((t.generation << 8) | (uint32_t)(i + 1)));
+        return 1;
+    }
+    LOG_APP_WARN("pico.%s: タイマーが上限(%u個)に達しています", repeat ? "every" : "after", (unsigned)kMaxTimers);
+    lua_pushnil(L);
+    return 1;
+}
+
+int LuaEngine::l_after(lua_State* L) { return addTimer(L, false); }
+int LuaEngine::l_every(lua_State* L) { return addTimer(L, true); }
+
+int LuaEngine::l_cancel(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+    size_t index;
+    if (!self->ResolveTimerHandle(handle, index)) {
+        lua_pushboolean(L, false); // 終わったタイマーや無効なハンドルは黙って無視(二重cancelを許す)
+        return 1;
+    }
+    self->ReleaseTimer(index);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+void LuaEngine::UpdateTimers(uint32_t dt_ms) {
+    if (!L) return;
+    timer_clock_ms_ += dt_ms;
+
+    for (size_t i = 0; i < kMaxTimers; i++) {
+        Timer& t = timers_[i];
+        if (!t.used) continue;
+        if ((int32_t)(timer_clock_ms_ - t.due_ms) < 0) continue;
+
+        const uint32_t gen = t.generation;
+        const int ref = t.ref;
+        const uint32_t handle = (gen << 8) | (uint32_t)(i + 1);
+        bool one_shot_ref_owned = false;
+
+        if (t.repeat) {
+            // 遅れても溜めて何回も鳴らさない: 次は「今から」interval後
+            t.due_ms += t.interval_ms;
+            if ((int32_t)(timer_clock_ms_ - t.due_ms) >= 0) t.due_ms = timer_clock_ms_ + t.interval_ms;
+        } else {
+            // 呼ぶ間もrefを生かしておくため、スロットだけ先に空ける(refはこちらで外す)
+            t.used = false;
+            t.ref = LUA_NOREF;
+            t.generation++;
+            one_shot_ref_owned = true;
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+        lua_pushinteger(L, (lua_Integer)handle);
+        const bool failed = (ProtectedCall(1) != LUA_OK);
+        if (failed) {
+            // 同じエラーが毎回出ないよう、繰り返しのタイマーはここで止める
+            if (!one_shot_ref_owned && timers_[i].used && timers_[i].generation == gen) ReleaseTimer(i);
+            ReportError("タイマーのコールバックでエラーが発生しました");
+        }
+        if (one_shot_ref_owned) luaL_unref(L, LUA_REGISTRYINDEX, ref);
+    }
+}
+
+// ---------------- 画面をまたぐ受け渡し ----------------
+
+void LuaEngine::SetScriptPath(const char* path) {
+    script_path_.assign(path ? path : "");
+}
+
+void LuaEngine::SetSceneArgs(const char* json, const char* parent_script) {
+    scene_args_.assign(json ? json : "");
+    parent_path_.assign(parent_script ? parent_script : "");
+}
+
+int LuaEngine::l_args(lua_State* L) {
+    LuaEngine* self = Self(L);
+    if (self->scene_args_.empty()) { lua_pushnil(L); return 1; }
+    const char* err = nullptr;
+    size_t pos = 0;
+    if (!LuaJson::Decode(L, self->scene_args_.c_str(), self->scene_args_.length(), true, err, pos)) {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+void LuaEngine::CallWithJson(const char* name, const char* json) {
+    if (!L || !json || !*json) return;
+    lua_getglobal(L, name);
+    if (!lua_isfunction(L, -1)) { lua_pop(L, 1); return; }
+
+    // デコード(メモリ不足でlongjmpしうる)は保護された呼び出しの中でやる必要があるため、
+    // 小さなC関数に包んで ProtectedCall する
+    struct Ctx { LuaEngine* self; const char* json; };
+    Ctx ctx{this, json};
+    lua_pushcfunction(L, [](lua_State* L2) -> int {
+        Ctx* c = (Ctx*)lua_touserdata(L2, 1);
+        const char* err = nullptr;
+        size_t pos = 0;
+        if (!LuaJson::Decode(L2, c->json, strlen(c->json), true, err, pos)) lua_pushnil(L2);
+        return 1;
+    });
+    lua_pushlightuserdata(L, &ctx);
+    if (ProtectedCall(1, 1) != LUA_OK) {
+        lua_pop(L, 1); // 関数(name)は下に残っているので外す
+        lua_pop(L, 1);
+        return;
+    }
+    // スタック: [fn, value]
+    if (ProtectedCall(1) != LUA_OK) {
+        ReportError("Luaスクリプトの実行時エラー");
+    }
+}
+
+bool LuaEngine::CallSuspend(FixedString<PICO_STR_2KiB>& out) {
+    if (!L) return false;
+    out.clear();
+    lua_getglobal(L, "on_suspend");
+    if (!lua_isfunction(L, -1)) { lua_pop(L, 1); return false; }
+
+    if (ProtectedCall(0, 1) != LUA_OK) {
+        // 画面を離れる途中なのでダイアログは出さずログだけ
+        LOG_APP_FAIL("on_suspend()でエラー: %s", lua_tostring(L, -1) ? lua_tostring(L, -1) : "?");
+        lua_pop(L, 1);
+        return false;
+    }
+    bool saved = false;
+    if (!lua_isnil(L, -1)) {
+        const char* err = nullptr;
+        std::string json;
+        const bool ok = LuaJson::EncodeValue(L, -1, json, 0, err);
+        if (!ok) {
+            LOG_APP_WARN("on_suspend()の戻り値を保存できません: %s", err ? err : "?");
+        } else if (json.size() >= PICO_STR_2KiB) {
+            LOG_APP_WARN("on_suspend()の戻り値が大きすぎます(%uバイトまで)", (unsigned)PICO_STR_2KiB - 1);
+        } else {
+            out.assign(json.c_str());
+            saved = true;
+        }
+    }
+    lua_pop(L, 1);
+    return saved;
+}
+
+namespace {
+    constexpr size_t kMaxStoreBytes = PICO_STR_16KiB;
+}
+
+int LuaEngine::l_store_load(lua_State* L) {
+    LuaEngine* self = Self(L);
+    if (!OSData::SD_usable) { lua_pushnil(L); return 1; }
+    FixedString<PICO_PATH_LEN> path;
+    if (!PICO_IO::join(path, self->app_dir_, "store.json")) { lua_pushnil(L); return 1; }
+    if (!OSData::SD.exists(path.c_str())) { lua_pushnil(L); return 1; }
+
+    const char* why = "";
+    if (pushFileString(L, path.c_str(), kMaxStoreBytes, &why) == 0) {
+        LOG_APP_WARN("pico.store_load: %s", why);
+        lua_pushnil(L);
+        return 1;
+    }
+    size_t len = 0;
+    const char* s = lua_tolstring(L, -1, &len);
+    const char* err = nullptr;
+    size_t pos = 0;
+    if (!LuaJson::Decode(L, s, len, false, err, pos)) {
+        LOG_APP_WARN("pico.store_load: store.jsonが壊れています: %s", err ? err : "?");
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+int LuaEngine::l_store_save(lua_State* L) {
+    LuaEngine* self = Self(L);
+    luaL_checkany(L, 1);
+    const char* err = nullptr;
+    bool ok = false;
+    bool too_big = false;
+    FixedString<PICO_PATH_LEN> path, part;
+    {
+        std::string json;
+        ok = LuaJson::EncodeValue(L, 1, json, 0, err);
+        lua_settop(L, 1);
+        if (ok && json.size() > kMaxStoreBytes) { too_big = true; ok = false; }
+        if (ok) {
+            ok = OSData::SD_usable
+                && PICO_IO::join(path, self->app_dir_, "store.json")
+                && self->SdWriteAllowed(path.c_str(), "pico.store_save");
+            if (ok) {
+                part.assign(path);
+                part.append(".tmp");
+                // 一時ファイルへ書いてから差し替える(書き込み中の電源断で既存の内容を壊さない)
+                FsFile f = OSData::SD.open(part.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+                ok = f && (json.empty() || f.write(json.data(), json.size()) == json.size());
+                if (f) f.close();
+                if (ok) {
+                    OSData::SD.remove(path.c_str());
+                    ok = OSData::SD.rename(part.c_str(), path.c_str());
+                } else if (OSData::SD_usable) {
+                    OSData::SD.remove(part.c_str());
+                }
+            }
+        }
+    }
+    if (err) return luaL_error(L, "pico.store_save: 値をJSONにできません(%s)", err);
+    if (too_big) {
+        LOG_APP_WARN("pico.store_save: 大きすぎます(%uBまで)", (unsigned)kMaxStoreBytes);
+    }
+    lua_pushboolean(L, ok);
+    return 1;
+}
+
+// ---------------- require ----------------
+
+namespace {
+    constexpr size_t kMaxModuleBytes = 32 * 1024;
+    constexpr int kMaxPreloadModules = 16;
+    char g_require_marker = 0; // 実行中のモジュールの目印(循環の検出)
+
+    bool IsIdentChar(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+    }
+
+    // "a.b" の形。英数字・_・-・区切りの.だけ。..や先頭末尾の.は不可
+    bool ModuleNameValid(const char* name) {
+        if (!name || !*name) return false;
+        const size_t n = strlen(name);
+        if (n > 47) return false;
+        if (name[0] == '.' || name[n - 1] == '.') return false;
+        for (size_t i = 0; i < n; i++) {
+            const char c = name[i];
+            if (c == '.') {
+                if (i + 1 < n && name[i + 1] == '.') return false;
+                continue;
+            }
+            if (!IsIdentChar(c) && c != '-') return false;
+        }
+        return true;
+    }
+
+    // registry[key] のテーブルをスタックに積む(無ければ作る)
+    void PushRegTable(lua_State* L, const char* key) {
+        lua_getfield(L, LUA_REGISTRYINDEX, key);
+        if (!lua_istable(L, -1)) {
+            lua_pop(L, 1);
+            lua_newtable(L);
+            lua_pushvalue(L, -1);
+            lua_setfield(L, LUA_REGISTRYINDEX, key);
+        }
+    }
+
+    // ソース中の require("名前") / require "名前" / require('名前') を拾って worklist (テーブルの添字idx)へ足す。
+    // 文字列として拾うだけ(コメントの中でも拾うが、無いモジュールは無視されるだけで害は無い)
+    void ScanRequires(lua_State* L, const char* src, size_t len, int wl_idx) {
+        static const char kWord[] = "require";
+        const size_t wn = sizeof(kWord) - 1;
+        for (size_t i = 0; i + wn < len; i++) {
+            if (src[i] != 'r' || memcmp(src + i, kWord, wn) != 0) continue;
+            if (i > 0 && IsIdentChar(src[i - 1])) continue;
+            size_t j = i + wn;
+            if (j < len && IsIdentChar(src[j])) continue;
+            while (j < len && (src[j] == ' ' || src[j] == '\t')) j++;
+            if (j < len && src[j] == '(') { j++; while (j < len && (src[j] == ' ' || src[j] == '\t')) j++; }
+            if (j >= len || (src[j] != '"' && src[j] != '\'')) continue;
+            const char q = src[j++];
+            const size_t start = j;
+            while (j < len && src[j] != q && src[j] != '\n') j++;
+            if (j >= len || src[j] != q) continue;
+            const size_t nlen = j - start;
+            if (nlen == 0 || nlen > 47) continue;
+            char name[48];
+            memcpy(name, src + start, nlen);
+            name[nlen] = '\0';
+            if (!ModuleNameValid(name)) continue;
+
+            const size_t count = lua_rawlen(L, wl_idx);
+            if ((int)count >= kMaxPreloadModules) return;
+            bool dup = false;
+            for (size_t k = 1; k <= count && !dup; k++) {
+                lua_rawgeti(L, wl_idx, (lua_Integer)k);
+                dup = (strcmp(lua_tostring(L, -1), name) == 0);
+                lua_pop(L, 1);
+            }
+            if (dup) continue;
+            lua_pushstring(L, name);
+            lua_rawseti(L, wl_idx, (lua_Integer)count + 1);
+        }
+    }
+}
+
+// 1つの名前の置き場所を探す(<app_dir>/<a/b>.lua → <app_dir>/<a/b>/init.lua)
+bool LuaEngine::ResolveModulePath(const char* name, FixedString<PICO_PATH_LEN>& out) const {
+    if (!OSData::SD_usable) return false;
+    FixedString<PICO_STR_M> rel;
+    rel.assign(name);
+    char* buf = const_cast<char*>(rel.c_str());
+    for (char* p = buf; *p; p++) if (*p == '.') *p = '/';
+
+    static const char* const kSuffix[] = {".lua", "/init.lua"};
+    for (const char* suf : kSuffix) {
+        FixedString<PICO_PATH_LEN> cand;
+        if (!PICO_IO::join(cand, app_dir_, rel.c_str())) continue;
+        if (!cand.append(suf)) continue;
+        if (!SdPathAllowed(cand.c_str())) continue;
+        if (OSData::SD.exists(cand.c_str())) { out.assign(cand); return true; }
+    }
+    return false;
+}
+
+// path のファイルを文字列としてスタックに積む(積んだら1、できなければ0で何も積まない)
+int LuaEngine::pushFileString(lua_State* L, const char* path, size_t max, const char** why) {
+    *why = "";
+    FsFile f = OSData::SD.open(path, O_RDONLY);
+    if (!f) { *why = "開けません"; return 0; }
+    const size_t file_size = f.fileSize();
+    if (file_size > max) {
+        f.close();
+        *why = "大きすぎます";
+        return 0;
+    }
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+    char chunk[256];
+    size_t remaining = file_size;
+    bool ok = true;
+    while (remaining > 0) {
+        const size_t want = (remaining < sizeof(chunk)) ? remaining : sizeof(chunk);
+        const int got = f.read((uint8_t*)chunk, want);
+        if (got <= 0) { ok = false; break; }
+        luaL_addlstring(&b, chunk, (size_t)got);
+        remaining -= (size_t)got;
+    }
+    f.close();
+    if (!ok) {
+        luaL_pushresult(&b); // バッファの後始末(箱をスタックから外す)
+        lua_pop(L, 1);
+        *why = "読み取りに失敗しました";
+        return 0;
+    }
+    luaL_pushresult(&b);
+    return 1;
+}
+
+int LuaEngine::PreloadTrampoline(lua_State* L) {
+    LuaEngine* self = static_cast<LuaEngine*>(lua_touserdata(L, 1));
+    const char* src = static_cast<const char*>(lua_touserdata(L, 2));
+    const size_t len = (size_t)lua_tointeger(L, 3);
+    self->preloadModules(src, len);
+    return 0;
+}
+
+// スクリプトが require する名前を拾い、モジュールを(実行の外で)読み込んでおく。
+// 読み込んだ関数は registry.pico_preload[名前] に、構文エラーなどはその文字列で置く
+void LuaEngine::preloadModules(const char* src, size_t len) {
+    lua_newtable(L);                       // worklist
+    const int wl = lua_gettop(L);
+    ScanRequires(L, src, len, wl);
+    if (lua_rawlen(L, wl) == 0) { lua_pop(L, 1); return; }
+
+    PushRegTable(L, "pico_preload");       // preload
+    const int pre = lua_gettop(L);
+
+    for (size_t i = 1; i <= lua_rawlen(L, wl); i++) {   // 読んだモジュールが増やした分も辿る
+        lua_rawgeti(L, wl, (lua_Integer)i);
+        const char* name = lua_tostring(L, -1);          // worklistが保持しているので有効
+        lua_getfield(L, pre, name);
+        const bool already = !lua_isnil(L, -1);
+        lua_pop(L, 1);
+        if (already) { lua_pop(L, 1); continue; }
+
+        FixedString<PICO_PATH_LEN> path;
+        if (!ResolveModulePath(name, path)) { lua_pop(L, 1); continue; } // 無ければ実行時にエラーになる
+
+        const char* why = "";
+        if (pushFileString(L, path.c_str(), kMaxModuleBytes, &why) == 0) {
+            lua_pushfstring(L, "module '%s' を読めません(%s): %s", name, path.c_str(), why);
+            lua_setfield(L, pre, name);
+            lua_pop(L, 1);
+            continue;
+        }
+        size_t slen = 0;
+        const char* s = lua_tolstring(L, -1, &slen);
+        ScanRequires(L, s, slen, wl);
+
+        FixedString<PICO_PATH_LEN> chunkname;
+        chunkname.assign("@");
+        chunkname.append(path);
+        if (luaL_loadbufferx(L, s, slen, chunkname.c_str(), "t") == LUA_OK) {
+            lua_setfield(L, pre, name);        // 関数
+        } else {
+            lua_setfield(L, pre, name);        // エラーメッセージ(文字列)
+        }
+        lua_pop(L, 2);                          // ソースの文字列と名前
+    }
+    lua_settop(L, wl - 1);
+}
+
+int LuaEngine::l_require(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const char* name = luaL_checkstring(L, 1);
+    if (!ModuleNameValid(name)) {
+        return luaL_error(L, "require: モジュール名 '%s' は使えません(英数字・_・-と、区切りの.だけ)", name);
+    }
+
+    PushRegTable(L, "pico_loaded");
+    const int loaded = lua_gettop(L);
+    lua_getfield(L, loaded, name);
+    if (!lua_isnil(L, -1)) {
+        if (lua_islightuserdata(L, -1) && lua_touserdata(L, -1) == &g_require_marker) {
+            return luaL_error(L, "require: '%s' が循環しています", name);
+        }
+        return 1; // 読み込み済み
+    }
+    lua_pop(L, 1);
+
+    // 先読みしてあれば、その関数(文字列ならその時のエラー)を使う
+    PushRegTable(L, "pico_preload");
+    const int pre = lua_gettop(L);
+    lua_getfield(L, pre, name);
+    FixedString<PICO_PATH_LEN> path;
+    if (lua_isstring(L, -1) && !lua_isnumber(L, -1)) {
+        return luaL_error(L, "%s", lua_tostring(L, -1));
+    }
+    if (lua_isfunction(L, -1)) {
+        lua_pushnil(L);
+        lua_setfield(L, pre, name);           // 先読みの置き場から外す(関数は下の呼び出しで使い切る)
+        self->ResolveModulePath(name, path);  // 表示用(デバッガ・エラー)。見つからなければ空のまま
+    } else {
+        lua_pop(L, 1);
+        // 先読みで拾えなかった名前(組み立てた名前など)。実行中のコンパイルはスタックを使うので、
+        // Luaの呼び出しが浅い(トップレベル近く)ときだけ許す
+        lua_Debug ar;
+        if (lua_getstack(L, 6, &ar)) {
+            return luaL_error(L, "require: '%s' を実行中に読み込めません(関数の奥から呼ばれています)。"
+                                 "スクリプトの先頭で require(\"%s\") と書くか、トップレベルで呼んでください", name, name);
+        }
+        if (!self->ResolveModulePath(name, path)) {
+            return luaL_error(L, "require: モジュール '%s' が見つかりません(アプリのフォルダの %s.lua または %s/init.lua)",
+                              name, name, name);
+        }
+        const char* why = "";
+        if (pushFileString(L, path.c_str(), kMaxModuleBytes, &why) == 0) {
+            return luaL_error(L, "require: '%s' を読めません(%s): %s", name, path.c_str(), why);
+        }
+        size_t slen = 0;
+        const char* s = lua_tolstring(L, -1, &slen);
+        FixedString<PICO_PATH_LEN> chunkname;
+        chunkname.assign("@");
+        chunkname.append(path);
+        if (luaL_loadbufferx(L, s, slen, chunkname.c_str(), "t") != LUA_OK) {
+            return lua_error(L);              // 構文エラーのメッセージ
+        }
+        lua_remove(L, -2);                    // ソースの文字列
+    }
+
+    // スタック: [..., loaded, pre, fn]
+    lua_pushlightuserdata(L, &g_require_marker);
+    lua_setfield(L, loaded, name);            // 実行中の目印(循環の検出)
+    lua_pushvalue(L, -1);
+    lua_pushstring(L, name);
+    lua_pushstring(L, path.c_str());
+    if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
+        // 失敗した目印を残さない。エラーはそのまま呼び出し元へ(打ち切りの握り潰しにならない)
+        lua_pushnil(L);
+        lua_setfield(L, loaded, name);
+        return lua_error(L);
+    }
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        lua_pushboolean(L, 1);
+    }
+    lua_pushvalue(L, -1);
+    lua_setfield(L, loaded, name);
+    return 1;
 }

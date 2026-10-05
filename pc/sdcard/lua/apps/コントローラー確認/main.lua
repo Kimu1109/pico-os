@@ -3,6 +3,9 @@
 -- 実物のコントローラーが無い間は、PCで script/pad_serial.py を動かすとキーボードがコントローラーになる。
 -- HOMEか「戻る」でランチャへ戻る。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local x, y, w, h = pico.content_rect()
 local margin = 8
 
@@ -92,8 +95,8 @@ end)
 local back = pico.create("Button")
 pico.set(back, "x", x + margin)
 pico.set(back, "y", y + h - 32)
-pico.set(back, "w", 80)
-pico.set(back, "h", 26)
+pico.set(back, "w", 80 + BUTTON_FRAME)
+pico.set(back, "h", 26 + BUTTON_FRAME)
 pico.set(back, "text", "戻る")
 pico.on(back, "press_start", function() pico.pop() end)
 

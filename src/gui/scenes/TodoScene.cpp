@@ -53,14 +53,14 @@ void TodoScene::onEnter(){
     // ---- 上部の行: [戻る] TODO [設定] [更新] ----
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
     const int row_h = this->back_button->getLocalRect().h;
 
     this->refresh_button = new Button(0, y0, "更新");
     this->refresh_button->setFontSize(FontFn::Small);
-    this->refresh_button->setH(20);
+    this->refresh_button->setH(20 + Button::kFrameExtra);
     this->refresh_button->setX(content.x + content.w - MARGIN - this->refresh_button->getLocalRect().w);
     this->refresh_button->setOnPressEnd([this](){
         //設定を書き換えてから押した場合にも効くよう、読み直してから取り直す
@@ -77,7 +77,7 @@ void TodoScene::onEnter(){
 
     this->settings_button = new Button(0, y0, "設定");
     this->settings_button->setFontSize(FontFn::Small);
-    this->settings_button->setH(20);
+    this->settings_button->setH(20 + Button::kFrameExtra);
     this->settings_button->setX(this->refresh_button->getLocalRect().x - MARGIN - this->settings_button->getLocalRect().w);
     this->settings_button->setOnPressEnd([this](){ this->openSettings(); });
     WidgetFunctions::Add(this->settings_button);
@@ -114,15 +114,15 @@ void TodoScene::onEnter(){
     const int half_w = (content.w - MARGIN * 3) / 2;
     this->add_button = new Button(content.x + MARGIN, action_y, "追加");
     this->add_button->setFontSize(FontFn::Small);
-    this->add_button->setH(kActionH);
-    this->add_button->setW(half_w);
+    this->add_button->setH(kActionH + Button::kFrameExtra);
+    this->add_button->setW(half_w + Button::kFrameExtra);
     this->add_button->setOnPressEnd([this](){ this->openAddDialog(); });
     WidgetFunctions::Add(this->add_button);
 
     this->done_button = new Button(content.x + MARGIN * 2 + half_w, action_y, "完了");
     this->done_button->setFontSize(FontFn::Small);
-    this->done_button->setH(kActionH);
-    this->done_button->setW(half_w);
+    this->done_button->setH(kActionH + Button::kFrameExtra);
+    this->done_button->setW(half_w + Button::kFrameExtra);
     this->done_button->setOnPressEnd([this](){ this->confirmClose(); });
     WidgetFunctions::Add(this->done_button);
 

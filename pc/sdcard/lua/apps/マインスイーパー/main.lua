@@ -24,6 +24,9 @@
 -- 切替のたびpico.destroy()して作り直す。画像は14x14固定であらゆる難易度の
 -- 最小CELL(14)に合わせてあるので、それより小さい難易度は用意しない。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local ICON = 14 -- mine.pimg/flag.pimg/digits.pimg(1コマぶん)のネイティブサイズ
 
 local DIFFICULTIES = {
@@ -100,8 +103,8 @@ local status_label = pico.create("Label")
 pico.set(status_label, "font_size", 0)
 
 local back_button = pico.create("Button")
-pico.set(back_button, "w", 34)
-pico.set(back_button, "h", 22)
+pico.set(back_button, "w", 34 + BUTTON_FRAME)
+pico.set(back_button, "h", 22 + BUTTON_FRAME)
 pico.set(back_button, "font_size", 0)
 pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function()
@@ -109,14 +112,14 @@ pico.on(back_button, "press_start", function()
 end)
 
 local reset_button = pico.create("Button")
-pico.set(reset_button, "w", 58)
-pico.set(reset_button, "h", 22)
+pico.set(reset_button, "w", 58 + BUTTON_FRAME)
+pico.set(reset_button, "h", 22 + BUTTON_FRAME)
 pico.set(reset_button, "font_size", 0)
 pico.set(reset_button, "text", "リセット")
 
 local flag_button = pico.create("Button")
-pico.set(flag_button, "w", 52)
-pico.set(flag_button, "h", 22)
+pico.set(flag_button, "w", 52 + BUTTON_FRAME)
+pico.set(flag_button, "h", 22 + BUTTON_FRAME)
 pico.set(flag_button, "font_size", 0)
 pico.set(flag_button, "text", "旗:OFF")
 pico.on(flag_button, "press_start", function()

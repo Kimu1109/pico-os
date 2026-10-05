@@ -73,7 +73,7 @@ void FileViewerScene::onEnter(){
 
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 
@@ -88,7 +88,7 @@ void FileViewerScene::onEnter(){
     if(editable){
         this->edit_button = new Button(0, content.y + MARGIN, "編集");
         this->edit_button->setFontSize(FontFn::Small);
-        this->edit_button->setH(20);
+        this->edit_button->setH(20 + Button::kFrameExtra);
         this->edit_button->setX(content.x + content.w - MARGIN - this->edit_button->getLocalRect().w);
         this->edit_button->setOnPressEnd([this](){
             SceneFunctions::Push(new TextEditorScene(this->path.c_str()));

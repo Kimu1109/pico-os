@@ -96,7 +96,7 @@ pico.set(border_id, "w", field_w); pico.set(border_id, "h", BOTTOM_LIMIT - TOP_W
 
 local back_button = pico.create("Button")
 pico.set(back_button, "x", cx + 2); pico.set(back_button, "y", cy + 2)
-pico.set(back_button, "w", 34); pico.set(back_button, "h", 16)
+pico.set(back_button, "w", 43); pico.set(back_button, "h", 25)
 pico.set(back_button, "font_size", 0); pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function() pico.pop() end)
 
@@ -105,7 +105,7 @@ pico.set(status_label, "font_size", 0)
 pico.set(status_label, "x", cx + 48); pico.set(status_label, "y", cy + 4)
 
 -- バッテリー計測用の自動プレイON/OFF(既定OFF)。詳細はlib.lua参照
--- (-43はButtonの実描画幅がw+9広がる分を差し引いた右寄せ位置)
+-- (-43はButtonの全体の幅(w=32+枠9=41)+余白を引いた右寄せ位置)
 local isAuto = STAGES.makeAutoToggle(cx + cw - 43, cy + 2)
 
 local score, lives, stage_idx = 0, 3, 1

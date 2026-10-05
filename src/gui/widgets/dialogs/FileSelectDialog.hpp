@@ -39,8 +39,8 @@ class FileSelectDialog : public Widget {
             this->button_ok = new Button(BASE_X + DIALOG_W / 2 + BUTTON_MARGIN, BUTTON_Y - 3, "OK");
             this->button_ok->setAllowTextSpacing(false);
             this->button_ok->setFontSize(FontFn::Small);
-            this->button_ok->setW(BUTTON_W);
-            this->button_ok->setH(BUTTON_H - 2);
+            this->button_ok->setW(BUTTON_W + Button::kFrameExtraTight);
+            this->button_ok->setH(BUTTON_H - 2 + Button::kFrameExtraTight);
             this->button_ok->setOnPressStart([this](){
                 if(this->on_close) this->on_close(true);
                 this->setVisible(false);
@@ -49,8 +49,8 @@ class FileSelectDialog : public Widget {
             this->button_no = new Button(BASE_X + BUTTON_MARGIN, BUTTON_Y - 3, "キャンセル");
             this->button_no->setAllowTextSpacing(false);
             this->button_no->setFontSize(FontFn::Small);
-            this->button_no->setW(BUTTON_W);
-            this->button_no->setH(BUTTON_H - 2);
+            this->button_no->setW(BUTTON_W + Button::kFrameExtraTight);
+            this->button_no->setH(BUTTON_H - 2 + Button::kFrameExtraTight);
             this->button_no->setOnPressStart([this](){
                 if(this->on_close) this->on_close(false);
                 this->setVisible(false);

@@ -4,6 +4,9 @@
 -- C++側からは見えないため、他のシーンのようにonExit()で退避してonEnter()で
 -- 復元することができない)。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local x, y = pico.content_rect()
 local margin = 10
 
@@ -23,8 +26,8 @@ pico.set(desc, "text", "pico.push_scene()で開いた画面")
 local calc_button = pico.create("Button")
 pico.set(calc_button, "x", x + margin)
 pico.set(calc_button, "y", y + margin + 80)
-pico.set(calc_button, "w", 140)
-pico.set(calc_button, "h", 30)
+pico.set(calc_button, "w", 140 + BUTTON_FRAME)
+pico.set(calc_button, "h", 30 + BUTTON_FRAME)
 pico.set(calc_button, "text", "電卓を開く")
 pico.on(calc_button, "press_start", function()
     if not pico.launch_app("電卓") then
@@ -38,8 +41,8 @@ end)
 local change_button = pico.create("Button")
 pico.set(change_button, "x", x + margin)
 pico.set(change_button, "y", y + margin + 120)
-pico.set(change_button, "w", 140)
-pico.set(change_button, "h", 30)
+pico.set(change_button, "w", 140 + BUTTON_FRAME)
+pico.set(change_button, "h", 30 + BUTTON_FRAME)
 pico.set(change_button, "text", "置き換えへ")
 pico.on(change_button, "press_start", function()
     pico.change_scene("/lua/hello_sub2.lua")
@@ -48,8 +51,8 @@ end)
 local back_button = pico.create("Button")
 pico.set(back_button, "x", x + margin)
 pico.set(back_button, "y", y + margin + 160)
-pico.set(back_button, "w", 80)
-pico.set(back_button, "h", 30)
+pico.set(back_button, "w", 80 + BUTTON_FRAME)
+pico.set(back_button, "h", 30 + BUTTON_FRAME)
 pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function()
     pico.pop()

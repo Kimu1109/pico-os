@@ -30,7 +30,7 @@ void ChatScene::onEnter(){
     // ---- 上部の行: [戻る] タイトル [招待] [更新] ----
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([this](){
         if(this->mode != Mode::List) this->backToList();
         else SceneFunctions::Pop();
@@ -40,7 +40,7 @@ void ChatScene::onEnter(){
 
     this->refresh_button = new Button(0, y0, "更新");
     this->refresh_button->setFontSize(FontFn::Small);
-    this->refresh_button->setH(20);
+    this->refresh_button->setH(20 + Button::kFrameExtra);
     this->refresh_button->setX(content.x + content.w - MARGIN - this->refresh_button->getLocalRect().w);
     this->refresh_button->setOnPressEnd([this](){
         //設定を書き換えてから押した場合にも効くよう、読み直してから取り直す
@@ -57,7 +57,7 @@ void ChatScene::onEnter(){
     //プライベートチャットの中でだけ出す
     this->invite_button = new Button(0, y0, "招待");
     this->invite_button->setFontSize(FontFn::Small);
-    this->invite_button->setH(20);
+    this->invite_button->setH(20 + Button::kFrameExtra);
     this->invite_button->setX(this->refresh_button->getLocalRect().x - MARGIN - this->invite_button->getLocalRect().w);
     this->invite_button->setOnPressEnd([this](){
         if(this->client.requestInvite()) this->setNotice("参加コードを発行しています…");
@@ -68,7 +68,7 @@ void ChatScene::onEnter(){
     //一覧を見ている間だけ、[招待]と同じ位置に出す(部屋の中では招待、一覧では設定という切り替え)
     this->settings_button = new Button(0, y0, "設定");
     this->settings_button->setFontSize(FontFn::Small);
-    this->settings_button->setH(20);
+    this->settings_button->setH(20 + Button::kFrameExtra);
     this->settings_button->setX(this->refresh_button->getLocalRect().x - MARGIN - this->settings_button->getLocalRect().w);
     this->settings_button->setOnPressEnd([this](){ this->openChatSettings(); });
     WidgetFunctions::Add(this->settings_button);
@@ -92,25 +92,25 @@ void ChatScene::onEnter(){
     this->search_button = new Button(content.x + MARGIN, this->action_row_y, "部屋を探す");
     this->search_button->setFontSize(FontFn::Small);
     this->search_button->setAllowTextSpacing(false);
-    this->search_button->setH(kActionH);
-    this->search_button->setW(half_w);
+    this->search_button->setH(kActionH + Button::kFrameExtraTight);
+    this->search_button->setW(half_w + Button::kFrameExtraTight);
     this->search_button->setOnPressEnd([this](){ this->openSearchInput(); });
     WidgetFunctions::Add(this->search_button);
 
     this->code_button = new Button(content.x + MARGIN * 2 + half_w, this->action_row_y, "コードで参加");
     this->code_button->setFontSize(FontFn::Small);
     this->code_button->setAllowTextSpacing(false);
-    this->code_button->setH(kActionH);
-    this->code_button->setW(half_w);
+    this->code_button->setH(kActionH + Button::kFrameExtraTight);
+    this->code_button->setW(half_w + Button::kFrameExtraTight);
     this->code_button->setOnPressEnd([this](){ this->openCodeInput(); });
     WidgetFunctions::Add(this->code_button);
 
     // ---- 部屋の中: 入力欄 + [送信] ----
     this->send_button = new Button(0, this->input_row_y, "送信中");
     this->send_button->setFontSize(FontFn::Small);
-    this->send_button->setH(kInputH);
+    this->send_button->setH(kInputH + Button::kFrameExtra);
     //押すと文字が変わる(送信/送信中)ので、長いほうで幅を固定する
-    this->send_button->setW(this->send_button->getLocalRect().w);
+    this->send_button->setW(this->send_button->getLocalRect().w + Button::kFrameExtra);
     this->send_button->setX(content.x + content.w - MARGIN - this->send_button->getLocalRect().w);
     this->send_button->setOnPressEnd([this](){ this->sendDraft(); });
     WidgetFunctions::Add(this->send_button);

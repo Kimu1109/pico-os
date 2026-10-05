@@ -405,7 +405,7 @@ void CalendarScene::onEnter(){
 
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){
         SceneFunctions::Pop();
     });
@@ -417,7 +417,7 @@ void CalendarScene::onEnter(){
     auto make_button = [&](const char* text){
         Button* b = new Button(0, y0, text);
         b->setFontSize(FontFn::Small);
-        b->setH(20);
+        b->setH(20 + Button::kFrameExtra);
         return b;
     };
     this->today_button = make_button("今日");
@@ -465,7 +465,7 @@ void CalendarScene::onEnter(){
 
     //押すたびに文字が変わる(更新/取得中/再試行)ので、一番長い文字で幅を固定する
     this->sync_button = make_button("取得中");
-    this->sync_button->setW(this->sync_button->getLocalRect().w);
+    this->sync_button->setW(this->sync_button->getLocalRect().w + Button::kFrameExtra);
     this->sync_button->setX(content.x + content.w - MARGIN - this->sync_button->getLocalRect().w);
     this->sync_button->setY(day_row_y);
     this->sync_button->setOnPressEnd([this](){ this->startSync(); });

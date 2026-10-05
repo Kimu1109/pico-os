@@ -15,6 +15,9 @@
 -- Buttonのicon_id/icon_sizeも元々C++側にsetIcon()はあったがLuaへ橋渡しされて
 -- いなかった穴で、このアプリを作る過程で埋めた(WidgetProperty.cppのButtonケース参照)。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local SAVE_PATH = "/lua/apps/スクラッチパッド/memo.pimg"
 
 local PEN_BLACK = 0    -- PICO_BLACK
@@ -46,8 +49,8 @@ local function makeIconButton(icon_id, bx, by)
     local id = pico.create("Button")
     pico.set(id, "x", bx)
     pico.set(id, "y", by)
-    pico.set(id, "w", btn_size)
-    pico.set(id, "h", btn_size)
+    pico.set(id, "w", btn_size + BUTTON_FRAME)
+    pico.set(id, "h", btn_size + BUTTON_FRAME)
     pico.set(id, "icon_id", icon_id)
     pico.set(id, "icon_size", ICON_SIZE_24)
     return id
@@ -72,7 +75,7 @@ local btn_clear  = makeIconButton(ICON_TRASH,       colX(4), row_y)
 local btn_save   = makeIconButton(ICON_STACK_PUSH,  colX(5), row_y)
 local btn_load   = makeIconButton(ICON_STACK_POP,   colX(6), row_y)
 -- 最後(読込)だけ列の余りぶん幅を広げる。既に置いた位置はcolX()どおりなのでwだけ上書き
-pico.set(btn_load, "w", col_last_w)
+pico.set(btn_load, "w", col_last_w + BUTTON_FRAME)
 
 -- ペン/消しゴムのボタンは色そのものを背景にして、今どの色で描けるかを見せる
 pico.set(btn_black, "background_color", PEN_BLACK)
@@ -83,9 +86,9 @@ pico.set(btn_eraser, "background_color", ERASER_WHITE)
 pico.set(btn_eraser, "text_color", 0)
 
 -- 保存/読込の結果を一言だけ出す小さなラベル。
--- Buttonの実際の描画枠はl_rect.hより一回り大きい(文字用の余白+立体表現の分、
--- 固定で+9px。Button.cpp参照)ため、btn_sizeだけで詰めると枠と文字が重なる
-local btn_visual_h = btn_size + 9
+-- Buttonのw/hは枠を含む全体の大きさなので、中身(btn_size)に枠のぶん(+9)を
+-- 足した高さがそのまま見た目の高さ。btn_sizeだけで詰めると枠と文字が重なる
+local btn_visual_h = btn_size + BUTTON_FRAME
 local status_y = row_y + btn_visual_h + 2
 local status = pico.create("Label")
 pico.set(status, "x", x + margin)

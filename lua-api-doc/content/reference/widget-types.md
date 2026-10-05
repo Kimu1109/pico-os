@@ -10,7 +10,7 @@ description: "pico.createで生成できる種別と、生成直後の初期値"
 
 | `type_name` | 生成直後の状態 | 対応プロパティ(抜粋) |
 |---|---|---|
-| `"Button"` | x=0, y=0, text="" | text, w, h, font_size, text_color, border_color, icon_id, icon_size(アイコンボタン化) |
+| `"Button"` | x=0, y=0, text="" | text, w, h(枠を含む全体の大きさ), font_size, text_color, border_color, icon_id, icon_size(アイコンボタン化) |
 | `"Label"` | x=0, y=0, text="" | text, placeholder, font_size, text_color, border_color, max_width, max_height, text_align |
 | `"Textbox"` | x=0, y=0, w=100, h=24, 単一行 | text, placeholder, font_size, text_color, border_color, max_width, max_height, is_single_line |
 | `"NumberInput"` | x=0, y=0, w=60 | text(入力された数字文字列), font_size, text_color, border_color |

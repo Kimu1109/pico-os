@@ -6,6 +6,9 @@
 -- ここで作る図形ウィジェットは他のウィジェットと同じく「置いたら値が変わるまで
 -- 自動的に維持される」普通の部品であることを示すのが狙い。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local x, y, w, h = pico.content_rect()
 local margin = 10
 
@@ -85,8 +88,8 @@ local moved = false
 local move_button = pico.create("Button")
 pico.set(move_button, "x", x + margin)
 pico.set(move_button, "y", y + margin + 130)
-pico.set(move_button, "w", 140)
-pico.set(move_button, "h", 26)
+pico.set(move_button, "w", 140 + BUTTON_FRAME)
+pico.set(move_button, "h", 26 + BUTTON_FRAME)
 pico.set(move_button, "text", "x/yで平行移動")
 pico.on(move_button, "press_start", function()
     local dy = moved and -20 or 20
@@ -98,8 +101,8 @@ end)
 local back_button = pico.create("Button")
 pico.set(back_button, "x", x + margin)
 pico.set(back_button, "y", y + margin + 166)
-pico.set(back_button, "w", 80)
-pico.set(back_button, "h", 26)
+pico.set(back_button, "w", 80 + BUTTON_FRAME)
+pico.set(back_button, "h", 26 + BUTTON_FRAME)
 pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function()
     pico.pop()

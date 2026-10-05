@@ -130,8 +130,8 @@ Button* SettingsScene::makeEditButton(int16_t y){
     Button* b = new Button("編集");
     b->setFontSize(FontFn::Small);
     b->setAllowTextSpacing(false);
-    b->setW(EDIT_BTN_W);
-    b->setH(EDIT_BTN_H);
+    b->setW(EDIT_BTN_W + Button::kFrameExtraTight);
+    b->setH(EDIT_BTN_H + Button::kFrameExtraTight);
 
     // 全行で同じ右端に揃えるので、xは最初の1回だけ実測して覚えておく
     if(this->edit_btn_x == 0){
@@ -518,7 +518,7 @@ void SettingsScene::onEnter(){
     // ---- 上部: [戻る] + バッテリー残量(全タブ共通) ----
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 
@@ -598,8 +598,8 @@ void SettingsScene::onEnter(){
         Button* b = new Button(0, 0, button_texts[i]);
         b->setFontSize(FontFn::Small);
         b->setAllowTextSpacing(false);
-        b->setW(btn_w);
-        b->setH(EDIT_BTN_H);
+        b->setW(btn_w + Button::kFrameExtraTight);
+        b->setH(EDIT_BTN_H + Button::kFrameExtraTight);
         const Rect box = b->getLocalRect();
         buttons_y = (int16_t)(body_bot - box.h);
         b->setX((int16_t)(left + i * (btn_w + MARGIN)));

@@ -3,6 +3,9 @@
 -- 切り替えとファイル操作の配線だけ。詳細はlua-api-doc/content/examples/paint.md。
 -- ※LuaSceneが読むのは16KiBまで。コメントを増やしすぎないこと
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local APP_DIR = "/lua/apps/ペイント"
 
 -- 色(PICO 4bitパレット番号。src/consts.hpp)
@@ -61,8 +64,8 @@ local x, y, w, h = pico.content_rect()
 local margin = 3
 local gap = 3
 local btn_size = 30
--- Buttonの描画枠はhより+9px大きい(Button.cpp)
-local btn_visual_h = btn_size + 9
+-- Buttonのw/hは枠を含む全体の大きさ。中身(btn_size)に枠のぶんを足した高さが見た目の高さ
+local btn_visual_h = btn_size + BUTTON_FRAME
 
 local row1_y = y + margin
 local row2_y = row1_y + btn_visual_h + 2
@@ -79,8 +82,8 @@ local function makeIconButton(icon_id, bx, by, bw)
     local id = pico.create("Button")
     pico.set(id, "x", bx)
     pico.set(id, "y", by)
-    pico.set(id, "w", bw)
-    pico.set(id, "h", btn_size)
+    pico.set(id, "w", bw + BUTTON_FRAME)
+    pico.set(id, "h", btn_size + BUTTON_FRAME)
     if icon_id then
         pico.set(id, "icon_id", icon_id)
         pico.set(id, "icon_size", ICON_SIZE_24)

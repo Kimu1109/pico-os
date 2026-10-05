@@ -4,6 +4,9 @@
 -- 操作: タッチ(下のボタン・盤面タップ=右回転・HOLD枠タップ)と外部コントローラー。
 -- ※LuaSceneが読むのは16KiBまで(日本語コメントは1文字3バイト)
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local DIR = "/lua/apps/テトリス/"
 local W, H, HID = 10, 20, 2          -- 盤面の幅/高さ + 見えない上の段
 local T = 12                         -- タイルの大きさ(px)
@@ -340,7 +343,7 @@ pad_id = canvas(cx, PY, 240, PH, 15, renderPad)
 local function button(text, x, fn)
     local id = pico.create("Button")
     pico.set(id, "x", x); pico.set(id, "y", cy + 214)
-    pico.set(id, "w", 50); pico.set(id, "h", 28)
+    pico.set(id, "w", 50 + BUTTON_FRAME); pico.set(id, "h", 28 + BUTTON_FRAME)
     pico.set(id, "font_size", 0); pico.set(id, "text", text)
     pico.on(id, "press_start", fn)
     return id

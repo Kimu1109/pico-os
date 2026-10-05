@@ -8,7 +8,7 @@ void FileExplorerScene::onEnter(){
 
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 

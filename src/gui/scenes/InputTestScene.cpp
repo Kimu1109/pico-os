@@ -26,15 +26,15 @@ void InputTestScene::onEnter(){
     y += this->number->getH() + ROW_GAP;
 
     this->back_button = new Button(MARGIN, y, "戻る");
-    this->back_button->setH(BUTTON_HEIGHT);
+    this->back_button->setH(BUTTON_HEIGHT + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){
         SceneFunctions::Pop();
     });
     WidgetFunctions::Add(this->back_button);
 
     //音声出力の確認用(アンプが無ければ鳴らないだけ)
-    this->beep_button = new Button(this->back_button->getX() + this->back_button->getW() + MARGIN, y, "テスト音");
-    this->beep_button->setH(BUTTON_HEIGHT);
+    this->beep_button = new Button(this->back_button->getX() + this->back_button->getW() - Button::kFrameExtra + MARGIN, y, "テスト音");
+    this->beep_button->setH(BUTTON_HEIGHT + Button::kFrameExtra);
     this->beep_button->setOnPressEnd([](){
         SoundFunctions::Beep(880, 300);
     });

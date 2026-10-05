@@ -4,6 +4,9 @@
 -- 曲を鳴らしながら鍵盤を押すと、鍵盤の音(効果音)がチャンネル1を借り、離すと曲へ返す。
 -- アンプがつながっていなくても同じように動く(音が出ないだけ。上の1行で分かる)。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local cx, cy, cw, ch = pico.content_rect()
 
 local WAVES = { "pulse50", "pulse25", "pulse12", "triangle", "saw", "noise", "noise_short" }
@@ -16,7 +19,7 @@ local function button(x, y, w, text, fn)
     -- 文字を先に決める(後から文字を変えると箱の大きさが測り直される)
     pico.set(b, "font_size", 0); pico.set(b, "text", text)
     pico.set(b, "x", x); pico.set(b, "y", y)
-    pico.set(b, "w", w); pico.set(b, "h", 18)
+    pico.set(b, "w", w + BUTTON_FRAME); pico.set(b, "h", 18 + BUTTON_FRAME)
     pico.on(b, "press_start", fn)
     return b
 end
@@ -35,8 +38,8 @@ decay_btn = button(cx + 154, cy + 2, cw - 156, "減衰: あり", function()
     pico.set(decay_btn, "text", decay and "減衰: あり" or "減衰: なし")
 end)
 
--- ボタンは"h"の外側に余白と影(約10px)を描くので、その分空けて下を並べる
-local row_bottom = cy + 2 + pico.get(wave_btn, "h") + 10
+-- "h"は影を含むボタン全体の高さ。そこから1px空けて下を並べる
+local row_bottom = cy + 2 + pico.get(wave_btn, "h") + 1
 
 local status = pico.create("Label")
 pico.set(status, "x", cx + 4); pico.set(status, "y", row_bottom + 4)

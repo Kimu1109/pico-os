@@ -16,6 +16,9 @@
 -- 届くか」を毎ステージ機械的に検証するので、デザインを間違えても詰みステージは
 -- 出荷されない(万一届かないブロックがあれば、そのマスだけ自動的に空へ戻す)。
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local COLS = 8
 local WALL = -1 -- main.lua側のWALL_TIERと値を一致させること
 
@@ -205,7 +208,7 @@ local function makeAutoToggle(x, y)
     local state = false
     local id = pico.create("Button")
     pico.set(id, "x", x); pico.set(id, "y", y)
-    pico.set(id, "w", 32); pico.set(id, "h", 16)
+    pico.set(id, "w", 32 + BUTTON_FRAME); pico.set(id, "h", 16 + BUTTON_FRAME)
     pico.set(id, "font_size", 0); pico.set(id, "text", "自動")
     pico.on(id, "press_start", function()
         state = not state

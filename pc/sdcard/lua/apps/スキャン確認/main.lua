@@ -9,6 +9,9 @@
 --   "text_changed"                        … Textbox
 --   pico.add_child / pico.remove_child    … LayoutContainer
 
+-- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
+local BUTTON_FRAME = 9
+
 local x, y, w, h = pico.content_rect()
 local margin = 10
 
@@ -81,8 +84,8 @@ local dynamic_child = nil
 local toggle_button = pico.create("Button")
 pico.set(toggle_button, "x", x + margin)
 pico.set(toggle_button, "y", y + margin + 206)
-pico.set(toggle_button, "w", 140)
-pico.set(toggle_button, "h", 26)
+pico.set(toggle_button, "w", 140 + BUTTON_FRAME)
+pico.set(toggle_button, "h", 26 + BUTTON_FRAME)
 pico.set(toggle_button, "text", "子を追加")
 pico.on(toggle_button, "press_start", function()
     if dynamic_child == nil then
@@ -101,8 +104,8 @@ end)
 local back_button = pico.create("Button")
 pico.set(back_button, "x", x + margin)
 pico.set(back_button, "y", y + margin + 238)
-pico.set(back_button, "w", 80)
-pico.set(back_button, "h", 26)
+pico.set(back_button, "w", 80 + BUTTON_FRAME)
+pico.set(back_button, "h", 26 + BUTTON_FRAME)
 pico.set(back_button, "text", "戻る")
 pico.on(back_button, "press_start", function()
     pico.pop()

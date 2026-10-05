@@ -32,16 +32,16 @@ void HomeScene::onEnter(){
     const int pager_y = content.y + content.h - PAGER_H + 2;
 
     this->prev_button = new Button(MARGIN, pager_y, "<");
-    this->prev_button->setW(PAGER_BUTTON_W);
-    this->prev_button->setH(PAGER_H - 4);
+    this->prev_button->setW(PAGER_BUTTON_W + Button::kFrameExtra);
+    this->prev_button->setH(PAGER_H - 4 + Button::kFrameExtra);
     this->prev_button->setOnPressEnd([this](){
         if(this->grid->prevPage()) this->updatePageLabel();
     });
     WidgetFunctions::Add(this->prev_button);
 
     this->next_button = new Button(content.w - MARGIN - PAGER_BUTTON_W, pager_y, ">");
-    this->next_button->setW(PAGER_BUTTON_W);
-    this->next_button->setH(PAGER_H - 4);
+    this->next_button->setW(PAGER_BUTTON_W + Button::kFrameExtra);
+    this->next_button->setH(PAGER_H - 4 + Button::kFrameExtra);
     this->next_button->setOnPressEnd([this](){
         if(this->grid->nextPage()) this->updatePageLabel();
     });

@@ -18,8 +18,8 @@ class Button :
     private:
         FixedString<PICO_STR_M> text;
 
-        const int TEXT_SPACING = 6;
-        const int _3D_PIX_LEN = 2;
+        static constexpr int TEXT_SPACING = 6;
+        static constexpr int _3D_PIX_LEN = 2;
 
         int text_w;
         int text_h;
@@ -27,8 +27,17 @@ class Button :
         // setW()/setH()で明示的に指定された箱の大きさ(0 = 文字の実寸に合わせる)。
         // setText()やsetFontSize()で文字を測り直した時に指定を上書きしないよう覚えておく
         // — ラベルが変わるたびに幅が伸び縮みすると、並べたボタンの位置がずれてしまうため。
+        // setW()/setH()は枠・立体表示を含めたウィジェット全体の大きさ(getLocalRect()と同じ)
         int fixed_w = 0;
         int fixed_h = 0;
+
+        // setW()/setH()を使わないボタンの箱の大きさ。文字の差し替え(setText)では
+        // 縮めず、これまでで一番大きかった文字に合わせた大きさのまま保つ
+        // (「開始/一時停止/再開」のように文字が変わっても、押すたびに箱の幅が
+        // 伸び縮みして並べたボタンがずれたり、跡が残ったりしないように)。
+        // フォントの切り替え(setFontSize)は箱を測り直す
+        int auto_w = 0;
+        int auto_h = 0;
 
         bool allowTextSpacing = true;
 
@@ -39,12 +48,21 @@ class Button :
         IconID icon_id = IconID::AppBox;
         IconSize icon_size = IconSize::Px16;
 
-        void calcTextSize(const char* text);
+        void calcTextSize(const char* text, bool reset_box = true);
         // 中身(テキストまたはアイコン)を箱の中央へ描く。pressOffsetは
         // 押し込み表示時の見た目のずれ分(_3D_PIX_LEN、非押下時は0)
+        // 固定指定(全体の大きさ)か文字/アイコンの大きさから、中身の箱l_rectを決め直す
+        void applyBox();
         void drawContent(const Rect& g_rect, int text_spacing, int pressOffset);
 
     public:
+
+        // 枠・立体表示が文字/アイコンの外側へ足す大きさ(全体 = 中身 + これ)。
+        // setW()/setH()は全体の大きさを取るので、「文字がちょうど収まる大きさ+余白」
+        // のような指定をしたい呼び出し側が使う。setAllowTextSpacing(false)にしたボタンは
+        // 文字の余白(TEXT_SPACING)が無いのでkFrameExtraTight
+        static constexpr int kFrameExtra = TEXT_SPACING + _3D_PIX_LEN + 1;
+        static constexpr int kFrameExtraTight = _3D_PIX_LEN + 1;
 
         template<size_t N>
         Button(int x, int y, FixedString<N> text){
@@ -113,17 +131,30 @@ class Button :
 
         const FixedString<PICO_STR_M>& getText() const { return this->text; }
 
+        // ウィジェット全体(枠・立体表示を含む。getLocalRect()が返す大きさ)の
+        // 幅/高さを固定する。0で文字に合わせた大きさへ戻す。
+        // 中身(文字・アイコン)の領域は、ここから枠のぶんを引いた残りになる
         void setW(int w){
             this->fixed_w = w;
-            this->l_rect.w = w;
+            this->applyBox();
         }
         void setH(int h){
             this->fixed_h = h;
-            this->l_rect.h = h;
+            this->applyBox();
         }
+
+        // 枠・立体表示が中身の外側へ足す大きさ(全体 = 中身 + frameExtra())
+        int frameExtra() const {
+            return this->allowTextSpacing ? kFrameExtra : kFrameExtraTight;
+        }
+
+        // setW()/setH()と対になるよう、枠を含めた全体の大きさを返す
+        int getW() override { return this->getLocalRect().w; }
+        int getH() override { return this->getLocalRect().h; }
 
         void setAllowTextSpacing(bool v){
             this->allowTextSpacing = v;
+            this->applyBox();
             this->needsRender();
         }
         bool getAllowTextSpacing() { return this->allowTextSpacing; }
@@ -136,9 +167,7 @@ class Button :
             this->icon_id = id;
             this->icon_size = size;
 
-            const int icon_px = IconRender::IconPixelSize(size);
-            if(!this->fixed_w) this->l_rect.w = icon_px;
-            if(!this->fixed_h) this->l_rect.h = icon_px;
+            this->applyBox();
 
             this->needsRender();
         }

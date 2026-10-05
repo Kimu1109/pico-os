@@ -463,7 +463,7 @@ void CalculatorScene::onEnter(){
     // ---- 上部: [戻る][電卓|グラフ|履歴] ----
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 
@@ -570,8 +570,8 @@ void CalculatorScene::onEnter(){
     for(int i = 0; i < n_btn; i++){
         Button* b = new Button(body.x + MARGIN + i * (btn_w + MARGIN), btn_y, specs[i].text);
         b->setFontSize(FontFn::Small);
-        b->setW(btn_w);
-        b->setH(btn_h);
+        b->setW(btn_w + Button::kFrameExtra);
+        b->setH(btn_h + Button::kFrameExtra);
         WidgetFunctions::Add(b);
         *specs[i].slot = b;
     }
@@ -587,7 +587,7 @@ void CalculatorScene::onEnter(){
     // ---- 履歴ページ: 消去ボタン + 一覧 ----
     this->history_clear_button = new Button(body.x + MARGIN, body.y + MARGIN, "履歴を消去");
     this->history_clear_button->setFontSize(FontFn::Small);
-    this->history_clear_button->setH(20);
+    this->history_clear_button->setH(20 + Button::kFrameExtra);
     this->history_clear_button->setOnPressEnd([this](){ this->clearHistory(); });
     WidgetFunctions::Add(this->history_clear_button);
 

@@ -73,12 +73,10 @@ class DictScene : public Scene {
         // (BACK_BUTTON_H+MARGIN=24px)使っていたが、そのぶんを詳細欄(説明文)へ回す
         constexpr static int BACK_BUTTON_W = 24;
         constexpr static int SEARCH_BUTTON_W = 40;
-        // Button::getLocalRect()はsetW()で指定した幅に
-        // _3D_PIX_LEN(2)+1を必ず足して描く(setAllowTextSpacing(false)で
-        // 文字間の余白ぶんは消せるが、立体の縁取りぶんは消せない)。
-        // ここを見込んでおかないとボタンの右端が画面をはみ出す
-        // (--shotで実際にはみ出すのを確認して気付いた)。戻る/検索どちらの
-        // ボタンもsetAllowTextSpacing(false)にするのでこの分だけ共通で見込む
+        // Button::setW()/setH()はウィジェット全体(立体の縁取りを含む)の大きさ。
+        // 立体の縁取りぶん(_3D_PIX_LEN(2)+1)は文字間の余白を消す
+        // setAllowTextSpacing(false)でも消えないので、ボタンの中身の大きさに
+        // これを足した値を渡している(戻る/検索どちらも同じ)
         constexpr static int BUTTON_OVERHEAD = 3;
         constexpr static int STATUS_H = 16;
         constexpr static int LIST_H = 108;

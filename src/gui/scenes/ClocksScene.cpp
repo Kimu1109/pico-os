@@ -11,7 +11,8 @@ static const char* const WDAY_JP[7] = { "日", "月", "火", "水", "木", "金"
 
 // 操作ボタン(開始/リセット)1つぶんの文字領域の幅。
 // 「一時停止」(16px x 4文字)が収まる大きさにしてあり、押すたびに文字が変わっても
-// 箱の大きさが変わらないよう Button::setW() で固定する
+// 箱の大きさが変わらないよう Button::setW() で固定する(setW/setHは枠を含む全体の
+// 大きさなので、この文字領域に Button::kFrameExtra を足して渡している)
 static constexpr int ACTION_BUTTON_W = 74;
 static constexpr int ACTION_BUTTON_H = 22;
 static constexpr int ACTION_BUTTON_GAP = 14;
@@ -467,7 +468,7 @@ void ClocksScene::onEnter(){
     // ---- 上部の行: [戻る][デジタル|アナログ] ----
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setH(20);
+    this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){
         SceneFunctions::Pop();
     });
@@ -556,8 +557,8 @@ void ClocksScene::onEnter(){
     // 位置は実測値から下詰めで決める(フォントを変えても崩れないように)
     this->timer_start = new Button(0, 0, "一時停止");
     this->timer_start->setFontSize(FontFn::Small);
-    this->timer_start->setW(ACTION_BUTTON_W);
-    this->timer_start->setH(ACTION_BUTTON_H);
+    this->timer_start->setW(ACTION_BUTTON_W + Button::kFrameExtra);
+    this->timer_start->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->timer_start->setOnPressEnd([this](){ this->onTimerStartPressed(); });
 
     this->action_row_h = this->timer_start->getLocalRect().h;
@@ -573,22 +574,22 @@ void ClocksScene::onEnter(){
 
     this->timer_reset = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, "リセット");
     this->timer_reset->setFontSize(FontFn::Small);
-    this->timer_reset->setW(ACTION_BUTTON_W);
-    this->timer_reset->setH(ACTION_BUTTON_H);
+    this->timer_reset->setW(ACTION_BUTTON_W + Button::kFrameExtra);
+    this->timer_reset->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->timer_reset->setOnPressEnd([this](){ this->onTimerResetPressed(); });
     WidgetFunctions::Add(this->timer_reset);
 
     this->sw_start = new Button(action_left, action_y, "開始");
     this->sw_start->setFontSize(FontFn::Small);
-    this->sw_start->setW(ACTION_BUTTON_W);
-    this->sw_start->setH(ACTION_BUTTON_H);
+    this->sw_start->setW(ACTION_BUTTON_W + Button::kFrameExtra);
+    this->sw_start->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->sw_start->setOnPressEnd([this](){ this->onStopwatchStartPressed(); });
     WidgetFunctions::Add(this->sw_start);
 
     this->sw_reset = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, "リセット");
     this->sw_reset->setFontSize(FontFn::Small);
-    this->sw_reset->setW(ACTION_BUTTON_W);
-    this->sw_reset->setH(ACTION_BUTTON_H);
+    this->sw_reset->setW(ACTION_BUTTON_W + Button::kFrameExtra);
+    this->sw_reset->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->sw_reset->setOnPressEnd([this](){ this->onStopwatchResetPressed(); });
     WidgetFunctions::Add(this->sw_reset);
 
@@ -628,15 +629,15 @@ void ClocksScene::onEnter(){
 
     this->alarm_toggle = new Button(action_left, action_y, "オフ");
     this->alarm_toggle->setFontSize(FontFn::Small);
-    this->alarm_toggle->setW(ACTION_BUTTON_W);
-    this->alarm_toggle->setH(ACTION_BUTTON_H);
+    this->alarm_toggle->setW(ACTION_BUTTON_W + Button::kFrameExtra);
+    this->alarm_toggle->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->alarm_toggle->setOnPressEnd([this](){ this->onAlarmToggled(); });
     WidgetFunctions::Add(this->alarm_toggle);
 
     this->alarm_repeat = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, "1回");
     this->alarm_repeat->setFontSize(FontFn::Small);
-    this->alarm_repeat->setW(ACTION_BUTTON_W);
-    this->alarm_repeat->setH(ACTION_BUTTON_H);
+    this->alarm_repeat->setW(ACTION_BUTTON_W + Button::kFrameExtra);
+    this->alarm_repeat->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->alarm_repeat->setOnPressEnd([this](){ this->onAlarmRepeatPressed(); });
     WidgetFunctions::Add(this->alarm_repeat);
 

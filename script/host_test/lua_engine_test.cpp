@@ -1140,7 +1140,9 @@ int main(){
         check(btn_icon_w != nullptr && btn_icon_w->getHasIcon(),
               "Button: setIcon()経由でhas_icon=trueになりアイコンボタンとして描かれる");
         // w/hを明示指定していないので、icon_size=Px32(32px)へ箱の大きさも追従する
-        check(btn_icon_w != nullptr && btn_icon_w->getW() == 32 && btn_icon_w->getH() == 32,
+        // (getW()/getH()は枠・立体表示を含む全体の大きさなので、32 + 枠のぶん)
+        check(btn_icon_w != nullptr &&
+              btn_icon_w->getW() == 32 + Button::kFrameExtra && btn_icon_w->getH() == 32 + Button::kFrameExtra,
               "Button: icon_size変更で(w/h未指定なら)箱の大きさも追従する");
     }
 

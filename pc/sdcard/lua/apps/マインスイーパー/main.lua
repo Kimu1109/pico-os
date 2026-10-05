@@ -3,7 +3,7 @@
 -- App_List.cppには一切手を加えていない。
 --
 -- 盤面はButtonではなく、1枚の"Canvas"へpico.draw_*で自前描画している
--- (リバーシと同じ方式)。タップ判定はpico.get_touch()の絶対座標から
+-- (リバーシと同じ方式)。タップ判定はpress_startのコールバック引数(id, x, y)で届く絶対座標から
 -- grid_x/grid_yを引いてマス目を逆算する。
 --
 -- 地雷/旗/数字は自作の.pimg(14x14、透過あり。mine.pimg/flag.pimg/digits.pimg、
@@ -330,10 +330,7 @@ local function renderBoard()
     end
 end
 
-local function onCanvasPress()
-    local tx, ty, touched = pico.get_touch()
-    if not touched then return end
-
+local function onCanvasPress(_, tx, ty)
     local c = math.floor((tx - grid_x) / (CELL + GAP)) + 1
     local r = math.floor((ty - grid_y) / (CELL + GAP)) + 1
     if r < 1 or r > ROWS or c < 1 or c > COLS then return end

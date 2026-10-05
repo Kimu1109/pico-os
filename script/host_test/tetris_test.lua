@@ -135,7 +135,7 @@ check(S() == "play", "tap resumes")
 -- タッチの操作ボタン: 左端のボタン(左移動)
 local pad_id = 3
 local _,_,_,_,_,_,pxa = S()
-touch = {10, 300}; cbs[pad_id].press_start(); step(1); cbs[pad_id].press_end(); step(1)
+touch = {10, 300}; cbs[pad_id].press_start(pad_id, touch[1], touch[2]); step(1); cbs[pad_id].press_end(); step(1)
 local _,_,_,_,_,_,pxb = S()
 check(pxb == pxa - 1, "touch left button moves left")
 -- 重力: 落下中のミノが時間で下がる

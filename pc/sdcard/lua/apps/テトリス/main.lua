@@ -379,8 +379,7 @@ pico.on(board_id, "press_start", function()
     elseif state == "title" or state == "over" then newGame() end
 end)
 
-pico.on(side_id, "press_start", function()
-    local _, y = pico.get_touch()
+pico.on(side_id, "press_start", function(_, _, y)
     if y < SY + 52 then
         latch = latch | HOLD
     elseif y < SY + 92 then
@@ -391,8 +390,7 @@ pico.on(side_id, "press_start", function()
 end)
 
 -- 下の操作ボタン。押したまま指を滑らせると隣のボタンへ移る
-local function padTouch()
-    local x = pico.get_touch()
+local function padTouch(_, x)
     local b = BTNS[math.max(1, math.min(6, (x - cx) // 40 + 1))]
     if b ~= touch_btn then latch = latch | b end
     touch_btn = b

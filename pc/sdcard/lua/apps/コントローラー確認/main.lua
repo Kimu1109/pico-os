@@ -98,7 +98,9 @@ pico.set(back, "y", y + h - 32)
 pico.set(back, "w", 80 + BUTTON_FRAME)
 pico.set(back, "h", 26 + BUTTON_FRAME)
 pico.set(back, "text", "戻る")
-pico.on(back, "press_start", function() pico.pop() end)
+pico.on(back, "press_start", function() pico.go_back() end)
+-- EscキーとコントローラーのHOMEでも戻る(HOMEは下のキー図にも出る)
+pico.on_back(function() pico.pop() end)
 
 -- ---- 毎フレーム ----
 local NAMES = { "up", "down", "left", "right", "a", "b", "x", "y",
@@ -107,11 +109,6 @@ local last_key = nil
 local last_connected = nil
 
 function loop(dt)
-    if pico.pad_pressed("home") then
-        pico.pop()
-        return
-    end
-
     local connected = pico.pad_connected()
     if connected ~= last_connected then
         last_connected = connected

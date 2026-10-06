@@ -2758,7 +2758,15 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
   `draw_image`・`Image`ウィジェット・`draw_tilemap`(タイルごとにクリップを触らず直接)・`draw_image_part`(反転も)・`draw_rotated`が全部これを通る。
   4bppでない(ホストテストのスタブ)ときはfalseで従来の`pushSprite()`へ落ちる。PCビルドで200回: 不透明`draw_image` 1.71→0.58ms・
   透過`draw_image` 1.57→0.50ms・`draw_image_part`(反転込み) 3.17→0.85ms・`draw_rotated` 5.74→1.71ms。出力は従来の道と全画素一致(PCビルドで比べた)。
-  実機では未計測
+  `ImageView::render()`も同じ`Blit4bpp`で写す(背景の塗りは下の`Fill4bpp::FillRect`)。実機では未計測
+- **図形の塗りも4bppへ直接**(2026-10-06、`src/gui/Fill4bpp.hpp`、ヘッダのみ): `Fill4bpp::Span`がframeのバッファ・1行のバイト数・クリップを図形1つにつき
+  1回だけ求め、横線は「端の半端な画素+間は`memset`」で書く。`FillRect/HLine/FillCircle/FillEllipse/FillTriangle`は**LovyanGFXの
+  `fillRect`/`fillCircle`(+`fillCircleHelper`)/`fillEllipse`/`fillTriangle`と同じ手順を写した**もの(どの横線を塗るかが同じなので画素は変わらない。
+  3点が一直線の三角形だけLovyanGFXの`drawLine`へ任せる)。`pico.fill_rect/clear_rect/fill_circle/fill_ellipse/fill_triangle`と`FillPoly`
+  (`fill_polygon`/`fill_arc`)の横線が通る。4bppでない(ホストテストのスタブ)ときはfalseを返し、呼び出し側が従来のLovyanGFXの関数で描く。
+  PCビルドで大きい図形を300回: 円1.5→1.1ms・楕円1.6→1.2ms・三角形3.3→2.1ms・多角形/扇形は約1.15倍(交点の浮動小数点の計算が大半)・
+  長方形は同等(LovyanGFXの4bppの`fillRect`は元々バイト単位。`rect()`も同じく列ごとに端→`memset`→端の順にしてある)。小さい図形はLuaの呼び出しが大半で差は小さい。
+  出力は従来の道と全画素一致(PCビルドで比べた)。実機では未計測
 - **文字幅**: `pico.text_width(text[, font_size])`(`Label::GetTextWidth()`を新設。`DrawPlain()`と同じフォント設定で`textWidth()`)。
 - **WAV**: `wav_pause/wav_paused/wav_position/wav_duration/wav_seek`(`SoundFunctions`にあったものを出しただけ)。
 - **システム**: `pico.millis()`(単調)、`pico.battery()`(残量・電圧・USB給電。読めていなければnil。`LuaEngine.cpp`が`Battery_Functions.hpp`を取り込む)。

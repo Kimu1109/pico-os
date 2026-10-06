@@ -2,6 +2,7 @@
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
+#include "gui/Fill4bpp.hpp"
 
 int ImageView::maxOffX() const {
     const int m = this->header.width - this->l_rect.w;
@@ -122,7 +123,9 @@ void ImageView::render(){
 
     const Rect g = this->getScreenRect();
     markdirty(g);
-    OSData::frame->fillRect(g.x, g.y, g.w, g.h, this->background_color);
+    if(!Fill4bpp::FillRect(g.x, g.y, g.w, g.h, this->background_color)){
+        OSData::frame->fillRect(g.x, g.y, g.w, g.h, this->background_color);
+    }
 
     if(this->loaded){
         //表示欄より小さい画像は中央へ
@@ -131,17 +134,20 @@ void ImageView::render(){
         const int sx = base_x - this->off_x + this->win_x;
         const int sy = base_y - this->off_y + this->win_y;
 
-        //はみ出しを切る(元のクリップ=合成中のdirty矩形と重ねる)
+        const bool transparent = this->header.flags & IconRender::kPimgFlagTransparent;
+        //4bppどうしならバッファを直接写す(今のクリップと表示欄の重なりの中だけ)
         int32_t ox, oy, ow, oh;
         OSData::frame->getClipRect(&ox, &oy, &ow, &oh);
         const Rect orig = { (int16_t)ox, (int16_t)oy, (int16_t)ow, (int16_t)oh };
         const Rect clip = orig.intersection(g);
         OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
 
-        if(this->header.flags & IconRender::kPimgFlagTransparent){
-            this->sprite.pushSprite(OSData::frame, sx, sy, 0);
-        }else{
-            this->sprite.pushSprite(OSData::frame, sx, sy);
+        if(!IconRender::Blit4bpp(this->sprite, 0, 0, this->sprite.width(), this->sprite.height(), sx, sy, transparent)){
+            if(transparent){
+                this->sprite.pushSprite(OSData::frame, sx, sy, 0);
+            }else{
+                this->sprite.pushSprite(OSData::frame, sx, sy);
+            }
         }
 
         OSData::frame->setClipRect(orig.x, orig.y, orig.w, orig.h);

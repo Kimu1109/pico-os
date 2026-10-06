@@ -31,6 +31,7 @@
 #include "gui/widgets/dialogs/ColorDialog.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/icons/icon_render.h"
+#include "gui/Fill4bpp.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -2306,7 +2307,7 @@ int LuaEngine::l_fill_rect(lua_State* L) {
     const int16_t h = (int16_t)luaL_checkinteger(L, 4);
     const int8_t color = (int8_t)luaL_checkinteger(L, 5);
 
-    OSData::frame->fillRect(x, y, w, h, color);
+    if (!Fill4bpp::FillRect(x, y, w, h, color)) OSData::frame->fillRect(x, y, w, h, color);
     LuaMarkDirty({x, y, w, h});
     return 0;
 }
@@ -2328,7 +2329,7 @@ int LuaEngine::l_fill_circle(lua_State* L) {
     const int16_t r = (int16_t)luaL_checkinteger(L, 3);
     const int8_t color = (int8_t)luaL_checkinteger(L, 4);
 
-    OSData::frame->fillCircle(x, y, r, color);
+    if (!Fill4bpp::FillCircle(x, y, r, color)) OSData::frame->fillCircle(x, y, r, color);
     LuaMarkDirty({(int16_t)(x - r), (int16_t)(y - r), (int16_t)(r * 2 + 1), (int16_t)(r * 2 + 1)});
     return 0;
 }
@@ -2340,7 +2341,7 @@ int LuaEngine::l_clear_rect(lua_State* L) {
     const int16_t h = (int16_t)luaL_checkinteger(L, 4);
     const int8_t color = (int8_t)luaL_optinteger(L, 5, PICO_BACKGROUND);
 
-    OSData::frame->fillRect(x, y, w, h, color);
+    if (!Fill4bpp::FillRect(x, y, w, h, color)) OSData::frame->fillRect(x, y, w, h, color);
     LuaMarkDirty({x, y, w, h});
     return 0;
 }
@@ -2525,6 +2526,7 @@ namespace {
         const int y_from = std::max(miny, 0);
         const int y_to = std::min(maxy, (int)SCREEN_HEIGHT - 1);
         float cross[kMaxPolyPoints];
+        const Fill4bpp::Span span(color);  // 横線はバッファへ直接書く(4bppでなければLovyanGFXで)
         for (int y = y_from; y <= y_to; y++) {
             const float cy = y + 0.5f;
             int cnt = 0;
@@ -2545,7 +2547,9 @@ namespace {
             for (int a = 0; a + 1 < cnt; a += 2) {
                 const int xl = (int)std::ceil(cross[a] - 0.5f);
                 const int xr = (int)std::ceil(cross[a + 1] - 0.5f) - 1;
-                if (xr >= xl) OSData::frame->drawFastHLine(xl, y, xr - xl + 1, color);
+                if (xr < xl) continue;
+                if (span.ok) span.hline(xl, y, xr - xl + 1);
+                else OSData::frame->drawFastHLine(xl, y, xr - xl + 1, color);
             }
         }
     }
@@ -2578,7 +2582,7 @@ int LuaEngine::l_fill_ellipse(lua_State* L) {
     const int rx = (int)luaL_checkinteger(L, 3), ry = (int)luaL_checkinteger(L, 4);
     const int8_t color = (int8_t)luaL_checkinteger(L, 5);
     if (rx < 0 || ry < 0) return luaL_error(L, "pico.fill_ellipse: 半径は0以上です");
-    OSData::frame->fillEllipse(x, y, rx, ry, color);
+    if (!Fill4bpp::FillEllipse(x, y, rx, ry, color)) OSData::frame->fillEllipse(x, y, rx, ry, color);
     MarkBounds(x - rx, y - ry, x + rx, y + ry);
     return 0;
 }
@@ -2606,7 +2610,8 @@ int LuaEngine::l_fill_triangle(lua_State* L) {
         ys[i] = (int)luaL_checkinteger(L, 2 + i * 2);
     }
     const int8_t color = (int8_t)luaL_checkinteger(L, 7);
-    OSData::frame->fillTriangle(xs[0], ys[0], xs[1], ys[1], xs[2], ys[2], color);
+    if (!Fill4bpp::FillTriangle(xs[0], ys[0], xs[1], ys[1], xs[2], ys[2], color))
+        OSData::frame->fillTriangle(xs[0], ys[0], xs[1], ys[1], xs[2], ys[2], color);
     int minx, miny, maxx, maxy;
     Bounds(xs, ys, 3, minx, miny, maxx, maxy);
     MarkBounds(minx, miny, maxx, maxy);

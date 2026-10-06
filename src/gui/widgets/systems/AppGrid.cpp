@@ -5,6 +5,7 @@
 #include "functions/GFX_Functions.hpp"
 #include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
+#include "util/ScopedClip.hpp"
 
 #include <cstring>
 
@@ -184,9 +185,10 @@ void AppGrid::drawIcon(const AppEntry& entry, int x, int y, int color) {
                 const int iy = y + (kIconPx - (int)header.height) / 2;
                 //枠をはみ出すサイズの.pimgが置かれても隣のタイルを侵さないための安全策
                 //(IconRender::DrawIconRawが組み込みアイコンで同じことをしているのと同じ理由)
-                OSData::frame->setClipRect(x, y, kIconPx, kIconPx);
-                IconRender::DrawImageRLE4bpp(f, ix, iy);
-                OSData::frame->clearClipRect();
+                {
+                    ScopedClip clip(x, y, kIconPx, kIconPx);
+                    IconRender::DrawImageRLE4bpp(f, ix, iy);
+                }
                 f.close();
                 return;
             }

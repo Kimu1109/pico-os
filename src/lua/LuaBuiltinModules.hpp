@@ -863,7 +863,7 @@ end
 function Game:dirty(lx, ly, w, h)
     self:_push_rect(self.x + floor(lx), self.y + floor(ly), floor(w + 0.999), floor(h + 0.999))
 end
-function Game:redraw() self._full = true end
+function Game:redraw() self._full_canvas = true end
 
 -- 次の_flushで描き直す矩形(画面座標)
 function Game:_push_rect(x, y, w, h)
@@ -893,8 +893,20 @@ function Game:_flush()
             s._rf, s._rfx, s._rfy, s._rc = s.frame, s.flip_x, s.flip_y, s.color
         end
     end
-    if full or #rects > 24 then
+    if self._full_canvas then
         pico.invalidate(self.canvas)
+        self._full_canvas = false
+    elseif full or #rects > 24 then
+        -- カメラが動いた等: 描き直すのはワールドの見える範囲だけ(画面ボタンの帯は変わらない)。
+        -- ボタンの帯に入る矩形(押した/離した)は別に積む
+        pico.mark_dirty(self.x, self.y, self.vw, self.vh)
+        local x0, y0, x1, y1 = self.x, self.y + self.vh, self.x + self.w, self.y + self.h
+        for i = 1, #rects do
+            local r = rects[i]
+            local ax, ay = max(r[1], x0), max(r[2], y0)
+            local bx, by = min(r[1] + r[3], x1), min(r[2] + r[4], y1)
+            if bx > ax and by > ay then pico.mark_dirty(ax, ay, bx - ax, by - ay) end
+        end
     else
         local x0, y0, x1, y1 = self.x, self.y, self.x + self.w, self.y + self.h
         for i = 1, #rects do

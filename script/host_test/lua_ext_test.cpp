@@ -1324,7 +1324,9 @@ int main() {
         check(ok, "pico.game: カメラ");
         if (Widget* c = WidgetRegistry::Resolve((WidgetId)GlobalInt(GL, "G_CANVAS"))) {
             OSData::frame->setClipRect(0, 16, 240, 304);
+            PICO_GFX::isDirtyDeactivates = true; // FlushDirty()の合成の中を模す
             c->renderForce();
+            PICO_GFX::isDirtyDeactivates = false;
             OSData::frame->clearClipRect();
         }
         ok = ge.Run(R"LUA(
@@ -1338,6 +1340,31 @@ int main() {
         WidgetFunctions::ClearSceneWidgets();
         HostSd::files.clear();
         PicoHostClock::now = 0;
+    }
+
+    // =====================================================================
+    // 描画中のクリップ: 文字・アイコンが今のクリップ(FlushDirty()のdirty矩形)を外さないこと、
+    // set_draw_area/clear_draw_areaがウィジェットの描画範囲の外へ広げないこと
+    // =====================================================================
+    {
+        auto clip_is = [](int x, int y, int w, int h) {
+            int32_t cx, cy, cw, ch;
+            OSData::frame->getClipRect(&cx, &cy, &cw, &ch);
+            return cx == x && cy == y && cw == w && ch == h;
+        };
+        OSData::frame->createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+        OSData::frame->setClipRect(10, 20, 50, 60);
+        bool ok = engine.Run("pico.draw_text(0, 30, 'abc', 0, 0)", "clip_text");
+        check(ok && clip_is(10, 20, 50, 60), "draw_text: 描いた後もクリップが元のまま");
+
+        PICO_GFX::render_clip = Rect{10, 20, 50, 60};
+        PICO_GFX::render_clip_active = true;
+        ok = engine.Run("pico.set_draw_area(0, 0, 40, 200)", "clip_area");
+        check(ok && clip_is(10, 20, 30, 60), "set_draw_area: 描画中はウィジェットの描画範囲との重なりに留まる");
+        ok = engine.Run("pico.clear_draw_area()", "clip_clear");
+        check(ok && clip_is(10, 20, 50, 60), "clear_draw_area: 描画中はウィジェットの描画範囲へ戻す");
+        PICO_GFX::render_clip_active = false;
+        OSData::frame->clearClipRect();
     }
 
     WidgetFunctions::ClearSceneWidgets();

@@ -3,6 +3,10 @@
 #include "config/LGFX_Config.hpp"
 #include "OS_Data.hpp"
 #include <SPI.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <algorithm>
 
 #include "GFX_Functions.hpp"
 
@@ -85,6 +89,163 @@ void PICO_GFX::MarkDirty(const Rect& rect) {
     dirtyRects[dirtyRectCount++] = rect;
 }
 
+namespace {
+    uint32_t perf_pushed_px = 0;   // 液晶へ送った画素数(5秒ごとの集計)
+    uint32_t perf_skipped_px = 0;  // dirtyだったが中身が同じで送らなかった画素数
+
+    // 2つの矩形をまとめる目安。別々に描いて送るより、間の余白ごと1枚にしたほうが安い大きさ
+    // (矩形1枚ごとに、全ウィジェットの当たり判定・Luaのrender・液晶の範囲指定の手間がかかる)
+    constexpr int32_t kMergeSlackPx = 1024;
+
+    int32_t Area(const Rect& r) { return (int32_t)r.w * r.h; }
+    Rect Union(const Rect& a, const Rect& b) {
+        const int16_t x0 = std::min(a.x, b.x), y0 = std::min(a.y, b.y);
+        const int16_t x1 = std::max<int16_t>(a.x + a.w, b.x + b.w), y1 = std::max<int16_t>(a.y + a.h, b.y + b.h);
+        return Rect{x0, y0, (int16_t)(x1 - x0), (int16_t)(y1 - y0)};
+    }
+
+    // ---- 行ごとの「液晶に今出ている内容」 ----
+    // FlushDirty()が終わった時点で液晶の中身はframeと同じ(全部の変化をdirty矩形として送るため)。
+    // そこで送った行のframeの中身のハッシュを覚えておき、次に同じ行がdirtyになっても中身が
+    // 同じなら送らない。スクロールで空だけの行・動いていないボタンの帯・再描画しても同じ絵の
+    // 部分を送らずに済む。64bitのハッシュなので、違う中身を同じと見る(古い絵が残る)ことは実質無い。
+    // 液晶へframeを通さずに描いたとき(Luaデバッガの画面)はMarkDirtyBelow()の矩形が必ず送られる。
+    uint64_t row_hash[SCREEN_HEIGHT];
+    bool     row_valid[SCREEN_HEIGHT];
+    uint64_t row_new[SCREEN_HEIGHT];
+    bool     row_computed[SCREEN_HEIGHT];
+
+    uint64_t HashRow(int y) {
+        const uint8_t* buf = static_cast<const uint8_t*>(OSData::frame->getBuffer());
+        const int stride = (OSData::frame->width() * 4 + 7) / 8; // 4bpp
+        const uint8_t* p = buf + (size_t)y * stride;
+        uint32_t a = 0x9E3779B9u, b = 0x85EBCA6Bu;
+        int i = 0;
+        for (; i + 4 <= stride; i += 4) {
+            uint32_t w;
+            memcpy(&w, p + i, 4);
+            a = (a ^ w) * 0x01000193u;
+            b = ((b ^ w) * 0xC2B2AE35u) ^ (b >> 15);
+        }
+        for (; i < stride; i++) a = (a ^ p[i]) * 0x01000193u;
+        return ((uint64_t)a << 32) | b;
+    }
+
+    bool RowChanged(int y) {
+        if (!row_computed[y]) {
+            row_new[y] = HashRow(y);
+            row_computed[y] = true;
+        }
+        return !row_valid[y] || row_hash[y] != row_new[y];
+    }
+}
+
+void PICO_GFX::InvalidateLcdRows(int y, int h) {
+    for (int i = std::max(0, y); i < std::min<int>(SCREEN_HEIGHT, y + h); i++) row_valid[i] = false;
+}
+
+void PICO_GFX::BeginRowCompare() {
+    memset(row_computed, 0, sizeof(row_computed));
+}
+
+void PICO_GFX::EndRowCompare() {
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        if (!row_computed[y]) continue;
+        row_hash[y] = row_new[y];
+        row_valid[y] = true;
+    }
+}
+
+uint32_t PICO_GFX::PushChangedRows(const Rect& d, bool force) {
+#if defined(PICOOS_PC)
+    // PCビルドの比較用: PICOOS_NO_ROW_SKIP=1 なら最適化前と同じく矩形を全部送る
+    static const bool no_skip = getenv("PICOOS_NO_ROW_SKIP") != nullptr;
+    if (no_skip) force = true;
+#endif
+    // 変わった行が続く帯ごとに送る。間に挟まる変わっていない行が数行なら、帯を分けずに一緒に送る
+    // (帯を分けるたびに液晶の範囲指定が要るため)
+    constexpr int kGapRows = 2;
+    uint32_t pushed = 0;
+    const int end = d.y + d.h;
+    int y = d.y;
+    while (y < end) {
+        if (!force && !RowChanged(y)) { perf_skipped_px += d.w; y++; continue; }
+        const int y0 = y;
+        int last = y; // 変わった最後の行
+        for (y = y0 + 1; y < end; y++) {
+            if (force || RowChanged(y)) last = y;
+            else if (y - last > kGapRows) break;
+        }
+        const int16_t h = (int16_t)(last + 1 - y0);
+        OSData::lcd->setClipRect(d.x, y0, d.w, h);
+        OSData::frame->pushSprite(OSData::lcd, 0, 0);
+        OSData::lcd->clearClipRect();
+        pushed += (uint32_t)d.w * h;
+        perf_skipped_px += (uint32_t)d.w * (y - 1 - last);
+        y = last + 1;
+    }
+    if (force) {
+        // 送った行は計算済みにしておく(EndRowCompare()で覚える)
+        for (int r = d.y; r < end; r++) RowChanged(r);
+    }
+    return pushed;
+}
+
+void PICO_GFX::CoalesceDirtyRects() {
+    const Rect screen{0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+    int n = 0;
+    for (int i = 0; i < dirtyRectCount; i++) {
+        const Rect r = dirtyRects[i].intersection(screen);
+        if (r.w <= 0 || r.h <= 0) continue;
+        dirtyForceBelow[n] = dirtyForceBelow[i];
+        dirtyRects[n++] = r;
+    }
+    // 重なる・近い2枚を1枚にする。まとめた結果がまた別の矩形と重なりうるので、変わらなくなるまで繰り返す
+    bool merged = true;
+    while (merged) {
+        merged = false;
+        for (int i = 0; i < n && !merged; i++) {
+            for (int j = i + 1; j < n; j++) {
+                const Rect& a = dirtyRects[i];
+                const Rect& b = dirtyRects[j];
+                const Rect u = Union(a, b);
+                if (a.intersects(b) || Area(u) <= Area(a) + Area(b) + kMergeSlackPx) {
+                    dirtyRects[i] = u;
+                    dirtyForceBelow[i] = dirtyForceBelow[i] || dirtyForceBelow[j];
+                    dirtyRects[j] = dirtyRects[n - 1];
+                    dirtyForceBelow[j] = dirtyForceBelow[n - 1];
+                    n--;
+                    merged = true;
+                    break;
+                }
+            }
+        }
+    }
+    dirtyRectCount = n;
+}
+
+#if defined(PICOOS_PC)
+void PICO_GFX::VerifyLcdMatchesFrame() {
+    static uint32_t checks = 0, bad_frames = 0;
+    static uint16_t lcd_row[SCREEN_WIDTH], frame_row[SCREEN_WIDTH];
+    uint32_t bad = 0;
+    int first_y = -1;
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        OSData::lcd->readRect(0, y, SCREEN_WIDTH, 1, lcd_row);
+        OSData::frame->readRect(0, y, SCREEN_WIDTH, 1, frame_row);
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            if (lcd_row[x] != frame_row[x]) { if (first_y < 0) first_y = y; if (bad < 8) Serial.printf("  (%d,%d) lcd=%04x frame=%04x\n", x, y, lcd_row[x], frame_row[x]); bad++; }
+        }
+    }
+    checks++;
+    if (bad) {
+        bad_frames++;
+        Serial.printf("[VERIFY] 液晶とframeが%lu画素食い違っています(最初の行 y=%d)\n", (unsigned long)bad, first_y);
+    }
+    if (checks % 300 == 0) Serial.printf("[VERIFY] %lu回確認、食い違い %lu回\n", (unsigned long)checks, (unsigned long)bad_frames);
+}
+#endif
+
 void PICO_GFX::FlushDirty() {
     if (dirtyRectCount == 0 && !dirtyOverflowed) return;
 
@@ -97,15 +258,17 @@ void PICO_GFX::FlushDirty() {
     }
 
     //! DEBUG !
-    unsigned long buf_timer_ms = 0;
+    unsigned long buf_timer_ms = millis();
     int draw_frame_total_ms = 0;
     int push_frame_total_ms = 0;
     //! DEBUG !
 
+    // ★ 0. 重なる/近いdirty矩形を1枚にまとめる(同じ所を2回描いて2回送らないため)
+    CoalesceDirtyRects();
+
+    // ★ 1. 全部の矩形をframeへ描く(液晶へ送るのは全部描き終えてから)
     for (int dirty_i = 0; dirty_i < dirtyRectCount; dirty_i++) {
         const Rect& d = dirtyRects[dirty_i];
-        buf_timer_ms = millis(); //! DEBUG !
-
         std::vector<Widget*> hit;
         for (auto* w : WidgetFunctions::widgets) {
             if (w && w->getVisible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
@@ -149,12 +312,12 @@ void PICO_GFX::FlushDirty() {
             }
         }
 
-        // ★ 1. 必要な場合のみ背景を白クリア
+        // (a) 必要な場合のみ背景を白クリア
         if (clear_bg) {
             OSData::frame->fillRect(d.x, d.y, d.w, d.h, PICO_BACKGROUND);
         }
 
-        // ★ 2. start_idx から上へ Widget を重ね描きする
+        // (b) start_idx から上へ Widget を重ね描きする
         isDirtyDeactivates = true;
         for (size_t i = start_idx; i < hit.size(); ++i) {
             Rect clip = hit[i]->clippedScreenRect().intersection(d);
@@ -163,21 +326,24 @@ void PICO_GFX::FlushDirty() {
             if (hit[i]->getRenderMode() == WidgetTools::OPAQUE) {
                 OSData::frame->fillRect(clip.x, clip.y, clip.w, clip.h, hit[i]->getBackgroundColor());
             }
+            render_clip = clip;
+            render_clip_active = true;
             hit[i]->renderForce();
+            render_clip_active = false;
             OSData::frame->clearClipRect();
         }
         isDirtyDeactivates = false;
-
-        draw_frame_total_ms += millis() - buf_timer_ms;
-        buf_timer_ms = millis();
-
-        // ★ 3. 液晶へ転送
-        OSData::lcd->setClipRect(d.x, d.y, d.w, d.h);
-        OSData::frame->pushSprite(OSData::lcd, 0, 0);
-        OSData::lcd->clearClipRect();
-
-        push_frame_total_ms += millis() - buf_timer_ms;
     }
+    draw_frame_total_ms = millis() - buf_timer_ms;
+    buf_timer_ms = millis();
+
+    // ★ 2. 液晶へ転送。描き終えたframeの行が、前に送った内容と同じ行は送らない
+    //       (液晶の中身は常にframeと同じ、という前提。PushChangedRows()参照)
+    BeginRowCompare();
+    for (int dirty_i = 0; dirty_i < dirtyRectCount; dirty_i++) {
+        perf_pushed_px += PushChangedRows(dirtyRects[dirty_i], dirtyForceBelow[dirty_i]);
+    }
+    EndRowCompare();
 
     if(enableDirectRender){
         OSData::lcd->setClipRect(
@@ -186,7 +352,15 @@ void PICO_GFX::FlushDirty() {
         );
         OSData::frame->pushSprite(OSData::lcd, 0, 0);
         OSData::lcd->clearClipRect();
+        InvalidateLcdRows(directRenderRect.y, directRenderRect.h);
     }
+    push_frame_total_ms = millis() - buf_timer_ms;
+
+#if defined(PICOOS_PC)
+    // PCビルドだけ: PICOOS_VERIFY_LCD=1 のとき、送り終えた液晶の中身がframeと一致するかを全画素比べる
+    // (変わっていない行を送らない最適化が古い絵を残していないかの確認用)
+    if (getenv("PICOOS_VERIFY_LCD")) VerifyLcdMatchesFrame();
+#endif
 
     //! DEBUG !
     //レンダリングが発生したフレーム(dirtyRectsが空でない呼び出し)のみを対象に
@@ -211,14 +385,16 @@ void PICO_GFX::FlushDirty() {
         const float avg_fps = perf_frame_count * 1000.0f / elapsed_ms;
 
         Serial.printf(
-            "fps: %.1f, dirtyrects average: %.1f, draw average: %lums, push average: %lums\n",
-            avg_fps,
+            "fps: %.1f, px/frame: %lu (skipped %lu), dirtyrects average: %.1f, draw: %lums/frame, push: %lums/frame\n",
+            avg_fps, (unsigned long)(perf_pushed_px / perf_frame_count), (unsigned long)(perf_skipped_px / perf_frame_count),
             (float)perf_dirtyrects_total / perf_frame_count,
-            perf_draw_total_ms / perf_dirtyrects_total,
-            perf_push_total_ms / perf_dirtyrects_total
+            perf_draw_total_ms / perf_frame_count,
+            perf_push_total_ms / perf_frame_count
         );
 
         perf_report_start_ms = now_ms;
+        perf_pushed_px = 0;
+        perf_skipped_px = 0;
         perf_draw_total_ms = 0;
         perf_push_total_ms = 0;
         perf_dirtyrects_total = 0;

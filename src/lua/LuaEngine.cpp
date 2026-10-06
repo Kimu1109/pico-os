@@ -2904,12 +2904,24 @@ int LuaEngine::l_set_draw_area(lua_State* L) {
     const int32_t w = (int32_t)luaL_checkinteger(L, 3);
     const int32_t h = (int32_t)luaL_checkinteger(L, 4);
 
-    OSData::frame->setClipRect(x, y, w, h);
+    // renderの中(FlushDirty()の合成中)は、dirty矩形とこのCanvasの重なり(PICO_GFX::render_clip)の
+    // 外へは広げない。広げると、送られない所まで描いてframeと液晶の中身が食い違う
+    if (PICO_GFX::render_clip_active) {
+        const Rect r = Rect{(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h}.intersection(PICO_GFX::render_clip);
+        OSData::frame->setClipRect(r.x, r.y, r.w > 0 ? r.w : 0, r.h > 0 ? r.h : 0);
+    } else {
+        OSData::frame->setClipRect(x, y, w, h);
+    }
     return 0;
 }
 
 int LuaEngine::l_clear_draw_area(lua_State*) {
-    OSData::frame->clearClipRect();
+    if (PICO_GFX::render_clip_active) {
+        const Rect& r = PICO_GFX::render_clip;
+        OSData::frame->setClipRect(r.x, r.y, r.w, r.h);
+    } else {
+        OSData::frame->clearClipRect();
+    }
     return 0;
 }
 

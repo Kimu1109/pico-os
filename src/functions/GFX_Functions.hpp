@@ -43,6 +43,11 @@ namespace PICO_GFX {
     // 溢れて画面全体に切り替わったときの取りこぼし対策(1枚でもMarkDirtyBelow()があったか)
     inline bool dirtyForceBelowAny = false;
 
+    // FlushDirty()がウィジェットのrender()を呼んでいる間、そのウィジェットに掛けているクリップ
+    // (ウィジェットの矩形 ∩ dirty矩形)。pico.set_draw_area()はこの外へ広げない
+    inline Rect render_clip = {0, 0, 0, 0};
+    inline bool render_clip_active = false;
+
     void Setup();
     void MarkDirty(const Rect& rect);
 
@@ -60,6 +65,20 @@ namespace PICO_GFX {
     }
 
     void FlushDirty();
+
+    // FlushDirty()の中身(ホストテストやデバッグ用に外から見えるようにしてある)。
+    // 重なる/近いdirty矩形を1枚にまとめる
+    void CoalesceDirtyRects();
+    // 液晶へ送る: 矩形の中の、前に送った内容から変わった行だけを送る(forceなら全部)。送った画素数を返す
+    void BeginRowCompare();
+    uint32_t PushChangedRows(const Rect& d, bool force);
+    void EndRowCompare();
+    // frameを通さずに液晶へ描いたとき、その行を「次は必ず送る」にする
+    void InvalidateLcdRows(int y, int h);
+#if defined(PICOOS_PC)
+    // PCビルドの確認用(PICOOS_VERIFY_LCD=1): 液晶の中身がframeと一致するか全画素比べてログへ出す
+    void VerifyLcdMatchesFrame();
+#endif
 
     void DrawDialogBackground();
 

@@ -140,13 +140,13 @@ pico.draw_text(240 - w - 4, 4, "Score", 0, 1)
 
 <div class="sig">pico.set_draw_area(x: integer, y: integer, w: integer, h: integer) <span class="ret">-> (なし)</span></div>
 
-以降の `pico.draw_*` をこの矩形の内側だけに制限します(クリップ矩形)。
+以降の `pico.draw_*` をこの矩形の内側だけに制限します(クリップ矩形)。`render` コールバックの中では、今回描き直す範囲(Canvasとdirty矩形の重なり)との**重なり**に制限します(その外へは広げられません。描いても液晶へ送られないため)。
 
 ## pico.clear_draw_area
 
 <div class="sig">pico.clear_draw_area() <span class="ret">-> (なし)</span></div>
 
-`set_draw_area` で設定したクリップを解除します。**`set_draw_area` を呼んだら、同じ `render` コールバック内で必ず対にして呼んでください**(クリップ矩形は画面全体で1個しか無い共有状態です)。
+`set_draw_area` で設定したクリップを解除します(`render` コールバックの中では、今回描き直す範囲へ戻します)。**`set_draw_area` を呼んだら、同じ `render` コールバック内で必ず対にして呼んでください**(クリップ矩形は画面全体で1個しか無い共有状態です)。
 
 ## pico.get_draw_area
 
@@ -161,4 +161,4 @@ pico.on(board, "render", function()
 end)
 ```
 
-`set_draw_area` を呼ぶとこの値も置き換わる点に注意してください(dirty矩形の外へ描いてしまいます)。実例は「テトリス」の盤面。
+`set_draw_area` を呼ぶとこの値も(元の範囲との重なりへ)狭まる点に注意してください。実例は「テトリス」の盤面。

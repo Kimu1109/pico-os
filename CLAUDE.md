@@ -646,6 +646,44 @@ Sの字を1ストロークで描いたもの)を確認したところ、人の�
 Sources(この追記時点の調査で参照): [XPT2046 touch controller pinout and wiring guide](https://inairspace.com/blogs/learn-with-inair/xpt2046-touch-controller-pinout-and-wiring-guide-for-reliable-touchscreens)、
 [rp2040 and Touch XPT2046 · Issue #216 · lovyan03/LovyanGFX](https://github.com/lovyan03/LovyanGFX/issues/216)
 
+### 液晶への転送を減らす(`GFX_Functions::FlushDirty()` / `LuaCanvas` / `util/ScopedClip.hpp`) (2026-10-06)
+
+「pico.gameのゲームが24fps出ない」の調査。PCビルド(SPIの待ちを実機と同じ速さで真似る)で、カメラが動き続ける場面を
+測ると**1フレームに約15万画素(画面2枚ぶん)を送って11fps**だった。直したもの:
+
+- **`LuaCanvas`が1フレームに2回描いていた**: `WidgetFunctions::UpdateAll()`の`Widget::update()`→`render()`でも
+  Luaの`render`を呼んでいて、合成の外なので`pico.draw_*`が描いた範囲をそれぞれdirtyに積み(タイルマップで全面、
+  ボタン1つずつ…)、`FlushDirty()`でもう一度描いて送っていた。`GameBoyView`と同じく、**合成の外(`!isDirtyDeactivates`)では
+  自分の矩形をdirtyに積むだけ**にした。
+- **`FlushDirty()`**:
+  - 先に**重なる/近いdirty矩形を1枚にまとめる**(`CoalesceDirtyRects()`。和の面積が2枚の合計+1024画素以下なら1枚に)。
+    同じ矩形が2回積まれると2回描いて2回送っていた。まとめると矩形同士が重ならないので、**全部描いてから全部送る**順にした。
+  - **変わっていない行は送らない**(`PushChangedRows()`)。`FlushDirty()`の後は液晶の中身がframeと同じ、という前提で、
+    送った行のframeの中身のハッシュ(64bit、`row_hash[320]`)を覚え、次にdirtyになってもハッシュが同じ行は飛ばす。
+    スクロールで空だけの行、動いていないボタンの帯、描き直しても同じ絵の所を送らない。3行以内の切れ目は帯を分けずに送る。
+    `MarkDirtyBelow()`の矩形は必ず送る(Luaデバッガが液晶へ直接描いた後の描き直しがこれ)。frameを通さずに液晶へ描くときは
+    `InvalidateLcdRows()`。5秒ごとのシリアルの`fps:`の行に`px/frame`(送った画素)と`skipped`(飛ばした画素)を出す。
+- **描画中にクリップを外していた**(以前からのバグ。上の2回描きに隠れていた): `Label::DrawPlain()`(`pico.draw_text`等)・
+  `IconRender::DrawIconRaw()`・`AppGrid`・`MarkdownView`の表が`setClipRect()`→`clearClipRect()`していたため、
+  `FlushDirty()`が掛けた「dirty矩形の内側だけ」のクリップが外れ、その後の描画がdirty矩形の外へはみ出していた
+  (送られないのでframeと液晶が食い違い、行を飛ばす最適化と組み合わさると古い絵が残る。テトリスのSCOREの数字で踏んだ)。
+  **`util/ScopedClip.hpp`**(今のクリップとの重なりへ狭め、抜けるときに元へ戻す)に置き換えた。
+  `pico.set_draw_area/clear_draw_area`も、描画中(`PICO_GFX::render_clip_active`)は**ウィジェットの描画範囲∩dirty矩形**
+  (`render_clip`)の外へ広げない/そこへ戻すようにした。**部品の中で一部だけクリップして描くときは`ScopedClip`を使うこと**
+  (`clearClipRect()`を描画の途中で呼ばない)。
+- `pico.game`: カメラが動いたときの描き直しをワールドの見える範囲だけにした(画面ボタンの帯は描き直さない)。
+- **確かめ方(PCビルドだけ)**: `PICOOS_VERIFY_LCD=1`で、`FlushDirty()`のたびに液晶(SDLパネル)の中身をframeと全画素比べ、
+  食い違えば`[VERIFY]`と場所をログへ出す(`VerifyLcdMatchesFrame()`)。`PICOOS_NO_ROW_SKIP=1`で行を飛ばす最適化だけを切れる(比較用)。
+  わざと「変わった行も飛ばす」ように壊すと食い違いを報告することを確かめてある。ランチャ・入力テスト(キーボードのダイアログ)・
+  ペイント・テトリス・時計・ジャンプアクションで食い違い0。
+- 結果(PCビルド、SPIは下の37.5MHzを真似る): カメラが流れ続ける場面で**11fps・15万画素/フレーム → 約60fps・1.6万画素/フレーム**。
+  **実機では未計測**(Luaの描画・4bpp→RGB565の変換のCPU時間はPCでは見えない)。
+- **⚠ `TFT_MAX_SPEED`(60MHz)は実際には37.5MHzで動いている**: LovyanGFX(rp2040)は`clk_peri`(150MHz)を2で割った75MHzを
+  さらに整数(1+SCR)で割るので、選べるのは75 / 37.5 / 25MHz…だけで、**37.5〜74.99MHzを指定するとすべて37.5MHz**になる
+  (`FreqToClockDiv()`。`pc/compat/config/Panel_sdl_SpiWait.hpp`も同じ計算)。全画面1枚の転送は37.5MHzで約33ms(30fps止まり)、
+  75MHz(`80000000`等、75MHz以上を指定)なら約16ms。タッチのノイズの調査で下げたが、ノイズはクロックに依らなかった
+  (上の「タッチ座標のノイズ抑制」)。上げるかは実機の安定性次第。
+
 ### dirty矩形を固定長配列化(`src/functions/GFX_Functions`) (2026-09-28)
 
 パフォーマンス監査で見つかった、`PICO_GFX::dirtyRects`が`std::vector<Rect>`のままだった点への対応。

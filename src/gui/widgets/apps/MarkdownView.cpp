@@ -1,5 +1,6 @@
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "OS_Data.hpp"
+#include "util/ScopedClip.hpp"
 #include "storage/SD_IO.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "gui/icons/icon_render.h"
@@ -1305,10 +1306,9 @@ void MarkdownView::renderDecorations() {
                     }
                     if (alignOffset < 0) alignOffset = 0;
 
-                    OSData::frame->setClipRect(cellBaseX, textY, cellW, (int)b.height);
+                    ScopedClip clip(cellBaseX, textY, cellW, (int)b.height);
                     OSData::frame->setCursor(cellBaseX + alignOffset, textY);
                     OSData::frame->print(cellText.c_str());
-                    OSData::frame->clearClipRect();
                 }
             }
         }

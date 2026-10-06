@@ -601,10 +601,35 @@ int main(){
                   canvas->getW() == 40 && canvas->getH() == 30,
               "pico.set: x/y/w/hがCanvasにも効く");
 
-        if (canvas) canvas->renderForce(); // FlushDirty()がdirty矩形に重なるウィジェットへ行うforce呼び出しを模す
+        // FlushDirty()がdirty矩形に重なるウィジェットへ行うforce呼び出しを模す(合成の中=isDirtyDeactivatesの間だけ描く)
+        if (canvas) {
+            PICO_GFX::isDirtyDeactivates = true;
+            canvas->renderForce();
+            PICO_GFX::isDirtyDeactivates = false;
+        }
         lua_getglobal(L, "render_calls");
         check((int)lua_tointeger(L, -1) == 1, "render()経由でLuaのrenderコールバックが呼ばれる");
         lua_pop(L, 1);
+
+        // UpdateAll()(合成の外)から来たrender()はLuaを呼ばず、自分の矩形をdirtyに積むだけ
+        // (合成の外で描くと2回描くうえ、pico.draw_*がそれぞれdirtyを積んで転送が倍以上になっていた)
+        if (canvas) {
+            g_last_dirty = Rect{0, 0, 0, 0};
+            canvas->needsRender();
+            g_last_dirty = Rect{0, 0, 0, 0};
+            canvas->render();
+            lua_getglobal(L, "render_calls");
+            check((int)lua_tointeger(L, -1) == 1, "Canvas: 合成の外のrender()ではLuaのrenderを呼ばない");
+            lua_pop(L, 1);
+            check(g_last_dirty.x == 5 && g_last_dirty.y == 6 && g_last_dirty.w == 40 && g_last_dirty.h == 30,
+                  "Canvas: 合成の外のrender()は自分の矩形をdirtyに積む");
+            PICO_GFX::isDirtyDeactivates = true;
+            canvas->renderForce();
+            PICO_GFX::isDirtyDeactivates = false;
+            lua_getglobal(L, "render_calls");
+            check((int)lua_tointeger(L, -1) == 2, "Canvas: 合成の中でだけLuaのrenderを呼ぶ");
+            lua_pop(L, 1);
+        }
 
         const bool guard_ok = engine.Run(R"LUA(
             local btn2 = pico.create("Button")

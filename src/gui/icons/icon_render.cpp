@@ -1,6 +1,7 @@
 // icon_render.cpp
 #include "icon_render.h"
 #include "OS_Data.hpp"
+#include "util/ScopedClip.hpp"
 #include "functions/GFX_Functions.hpp"
 
 namespace IconRender {
@@ -24,8 +25,10 @@ bool DrawIconRaw(const IconAsset& asset,
     // データは必ず「off, on, off, on, ...」の順で始まる(生成側で保証済み)。
     bool opaque = false;
  
-    // 描画範囲外への書き込みを防ぐ（画面端に配置した場合の安全策）
-    OSData::frame->setClipRect(x, y, width, height);
+    // 描画範囲外への書き込みを防ぐ（画面端に配置した場合の安全策）。今のクリップ(FlushDirty()の
+    // dirty矩形)との重なりへ狭め、抜けるときに元へ戻す(clearClipRect()すると、この後に描くものが
+    // dirty矩形の外へはみ出す。util/ScopedClip.hpp参照)
+    ScopedClip clip(x, y, width, height);
  
     while (p < end && py < height) {
         const uint8_t run_len = *p++;
@@ -48,8 +51,7 @@ bool DrawIconRaw(const IconAsset& asset,
  
         opaque = !opaque;  // off/onを交互に切り替える
     }
- 
-    OSData::frame->clearClipRect();
+
     return true;
 }
 

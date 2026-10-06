@@ -21,7 +21,7 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | [直接描画](drawing/) | `draw_pixel` `draw_line` `draw_rect` `fill_rect` `draw_circle` `fill_circle` `clear_rect` `draw_text` `draw_text_wrapped` `measure_text` `get_pixel` `invalidate` `mark_dirty` `set_draw_area` `clear_draw_area` `get_draw_area` |
 | [タッチ](touch/) | `get_touch` |
 | [コントローラー](pad/) | `pad_connected` `pad_down` `pad_pressed` `pad_released` |
-| [画像](images/) | `image_load` `image_create` `image_target` `image_clear` `image_size` `draw_image` `draw_image_part` `draw_image_ex` `image_free` |
+| [画像](images/) | `image_load` `image_create` `image_target` `image_clear` `image_size` `draw_image` `draw_image_part` `draw_image_ex` `image_rotate` `draw_rotated` `image_free` |
 | [ゲームエンジン](game/) | `require("pico.game")`(スプライト・タイルマップ・当たり判定・カメラ・入力・状態)、`draw_tilemap` |
 | [ラスタキャンバス](canvas/) | `canvas_clear` `canvas_save` `canvas_load` `canvas_undo` `canvas_get_pixel` |
 | [SDカード](sdcard/) | `sd_exists` `sd_read` `sd_write` `sd_remove` `sd_mkdir` `sd_list` |

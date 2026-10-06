@@ -3084,6 +3084,7 @@ int LuaEngine::l_image_free(lua_State* L) {
     slot.sprite.usable = false;
     self->image_bytes_used_ -= slot.bytes;
     slot.bytes = 0;
+    slot.rot_frames = slot.rot_cols = slot.rot_cell = 0;
     slot.used = false;
 
     // WidgetRegistry::Unregister()と同じく、ここでgenerationを進めておく

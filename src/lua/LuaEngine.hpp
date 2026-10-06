@@ -609,6 +609,9 @@ class LuaEngine {
             // を表す予約値で、初回使用時に1へ進める)
             uint32_t generation = 0;
             size_t bytes = 0; // 使用中のバイト数(image_bytes_used_の増減用に覚えておく)
+            // pico.image_rotateで作った「回転済みのコマを並べた画像」なら、コマの数・1行のコマ数・コマの一辺。
+            // 普通の画像は0(pico.draw_rotatedで使えない)。解放したときに0へ戻す
+            uint16_t rot_frames = 0, rot_cols = 0, rot_cell = 0;
         };
 
         // 同時に保持できる画像の枚数と合計バイト数の上限。前者はスロット数の頭打ち、

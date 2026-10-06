@@ -2744,6 +2744,14 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
   **2026-10-06に速い道を足した**: 元と描き先がどちらも4bpp(回転0)なら`getBuffer()`を直接読み書きし、各行で「元画像の中に入る区間」を
   割り算で先に求めて外接矩形の空きを回らない(1画素ごとは32bitの加算だけ)。PCビルドで回転・2.5倍の描画が約2.3倍速く、出力は同じ。
   ホストテストのスタブ(1画素1バイト、`getColorDepth()`=8)は従来の`readPixelValue()`/`drawFastHLine()`の道を通る
+- **回転済みのコマ**(2026-10-06): `pico.image_rotate(handle, frames, {sx,sy,ox,oy,start})`が`frames`通りの角度に回した絵を
+  1枚の透過画像(一辺`cell`の正方形のコマを格子に並べたもの、スロットを1つ使う)へ先に焼き、`pico.draw_rotated(sheet, x, y, r)`が
+  一番近い角度のコマを中心が(x,y)に来るよう写す(角度は丸まる。品質より速さ)。コマの情報は`ImageSlot::rot_frames/rot_cols/rot_cell`
+  (解放で0へ戻す)。**写すのはLovyanGFXの透過つき`pushSprite()`ではなく4bppバッファどうしの直接コピー**
+  (透過つきの`pushSprite()`は1画素ごとに色変換と判定を通り、PCビルドで同じ大きさの不透明な画像の約40倍遅かった)。
+  PCビルドで1.5倍・16コマを180回: `draw_rotated` 2.4ms / 同じ大きさの透過画像の`draw_image` 8.9ms / `draw_image_ex` 5.5ms。
+  出力はpushSpriteの道と同じ(PCビルドで比べた)。焼いた画像は0番が透過になる(元が不透明でも黒が抜ける)。
+  **透過画像の`draw_image`/`draw_image_part`も同じ直接コピーにすれば速くなる見込み**(今回は手を付けていない)。実機では未計測
 - **文字幅**: `pico.text_width(text[, font_size])`(`Label::GetTextWidth()`を新設。`DrawPlain()`と同じフォント設定で`textWidth()`)。
 - **WAV**: `wav_pause/wav_paused/wav_position/wav_duration/wav_seek`(`SoundFunctions`にあったものを出しただけ)。
 - **システム**: `pico.millis()`(単調)、`pico.battery()`(残量・電圧・USB給電。読めていなければnil。`LuaEngine.cpp`が`Battery_Functions.hpp`を取り込む)。

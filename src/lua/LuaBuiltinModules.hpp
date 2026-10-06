@@ -236,11 +236,14 @@ return M
     //       gravity = 900, solid = true }
     //   g:follow(p)
     //   function g:on_update(dt) p.vx = g:axis() * 80 end
+    // 軽い物理: 加速度・空気抵抗・床の摩擦・跳ね返り(bounce)・すり抜け床(oneway)と、
+    //   g:solid(tagA, tagB)でスプライト同士を押し合う(質量の比で押し戻し、速度は撃力で交換。
+    //   乗っている足場の動きに付いていく)。回転と坂は無い
     // キャンバス1枚に描き、動いたスプライトの周りだけを描き直す(カメラが動いたら全体)。
     // タイルの描画はC++(pico.draw_tilemap)。詳しくは lua-api-doc の api/game.md
     static const char* const kGame = R"LUA(
 local M = {}
-local floor, min, max = math.floor, math.min, math.max
+local floor, min, max, abs = math.floor, math.min, math.max, math.abs
 
 local Game, Sprite, Tilemap = {}, {}, {}
 Game.__index = Game
@@ -253,6 +256,13 @@ local PAD = { up = true, down = true, left = true, right = true, a = true, b = t
 local PAD_H = 56
 
 local function round(v) return floor(v + 0.5) end
+
+-- 当たり判定の箱の、スプライトの左上からのずれ
+local function hoff(s)
+    local hb = s.hitbox
+    if hb then return hb[1], hb[2] end
+    return 0, 0
+end
 
 -- 当たり判定の箱(ワールド座標)
 local function box(s)
@@ -279,7 +289,10 @@ function M.new(o)
     g.w, g.h = o.w or (cx + cw - g.x), o.h or (cy + ch - g.y)
     g.vw, g.vh = g.w, g.h - (o.pad and PAD_H or 0)
     g.bg = o.bg or 0
+    g.gravity = o.gravity                       -- 全スプライトの既定の重力(px/秒²。static以外)
+    g.iterations = o.iterations or 2            -- スプライト同士の押し戻しを何周するか
     g.sprites, g.maps, g.images, g.rules, g.timers, g.states, g.buttons = {}, {}, {}, {}, {}, {}, {}
+    g.solids = {}
     g.cam_x, g.cam_y, g.time, g.paused = 0, 0, 0, false
     g.touch = { x = 0, y = 0, wx = 0, wy = 0, down = false, pressed = false, released = false }
     g._iw, g._held, g._latch, g._cur, g._prev, g._rects = {}, {}, {}, {}, {}, {}
@@ -346,8 +359,12 @@ function Game:step(dt)
         local list = self.sprites
         for i = 1, #list do
             local s = list[i]
-            if not s.dead then s:_update(dt) end
+            if not s.dead then
+                s._px, s._py = s.x, s.y
+                s:_update(dt)
+            end
         end
+        self:_physics()
         self:_check_rules()
         self:_follow()
     end
@@ -569,12 +586,49 @@ function Sprite:_update(dt)
     end
     if self.on_update then self:on_update(dt) end
     if self.dead then return end
-    if self.gravity then
-        self.vy = self.vy + self.gravity * dt
-        if self.max_fall and self.vy > self.max_fall then self.vy = self.max_fall end
+    local grounded = self.on_ground
+    local gr = self.gravity
+    if gr == nil and not self.static then gr = self.game.gravity end
+    local vx, vy = self.vx, self.vy
+    if self.ax then vx = vx + self.ax * dt end
+    if self.ay then vy = vy + self.ay * dt end
+    if gr then vy = vy + gr * dt end
+    local drag = self.drag
+    if drag then
+        local k = 1 - drag * dt
+        if k < 0 then k = 0 end
+        vx, vy = vx * k, vy * k
     end
+    local fr = self.friction
+    if fr and grounded then
+        -- 床に乗っている間、横の速さを fr px/秒² で0へ近づける
+        local f = fr * dt
+        if vx > f then vx = vx - f elseif vx < -f then vx = vx + f else vx = 0 end
+    end
+    local mvx = self.max_vx
+    if mvx then
+        if vx > mvx then vx = mvx elseif vx < -mvx then vx = -mvx end
+    end
+    if self.max_fall and vy > self.max_fall then vy = self.max_fall end
+    self.vx, self.vy = vx, vy
     self.on_ground, self.hit_wall, self.hit_ceiling = false, 0, false
     if self.vx ~= 0 or self.vy ~= 0 then self:move(self.vx * dt, self.vy * dt) end
+end
+
+-- 向きdir(1/-1)の障害物に当たった速度v: 跳ね返る(bounce)か0になる。逆向きならそのまま
+local function stop_v(s, v, dir)
+    if v * dir <= 0 then return v end
+    local e = s.bounce
+    if e and e > 0 and abs(v) >= (s.bounce_min or 20) then return -v * e end
+    return 0
+end
+
+-- 速度に撃力(ix, iy)を足す(質量で割る。staticは動かない)
+function Sprite:impulse(ix, iy)
+    if self.static then return end
+    local m = self.mass or 1
+    self.vx = self.vx + (ix or 0) / m
+    self.vy = self.vy + (iy or 0) / m
 end
 
 -- (dx, dy)だけ動かす。solidならタイルで止まり、boundedならワールドの端で止まる。
@@ -589,21 +643,26 @@ function Sprite:move(dx, dy)
         self.y = self.y + dy
         if self.solid then g:_tiles(self, false, dy) end
     end
-    if self.bounded then
-        local ww, wh = g:world_size()
-        local bx, by, bw, bh = box(self)
-        if bx < 0 then self.x = self.x - bx; self.hit_wall = -1; self.vx = max(self.vx, 0)
-        elseif bx + bw > ww then self.x = self.x - (bx + bw - ww); self.hit_wall = 1; self.vx = min(self.vx, 0) end
-        if by < 0 then self.y = self.y - by; self.hit_ceiling = true; self.vy = max(self.vy, 0)
-        elseif by + bh > wh then self.y = self.y - (by + bh - wh); self.on_ground = true; self.vy = min(self.vy, 0) end
-    end
+    if self.bounded then self:_bounds() end
+end
+
+function Sprite:_bounds()
+    local ww, wh = self.game:world_size()
+    local bx, by, bw, bh = box(self)
+    local hx, hy = hoff(self)
+    -- 位置は差し引きではなく「端 - 箱のずれ」で決める(小数の誤差を溜めない)
+    if bx < 0 then self.x = -hx; self.hit_wall = -1; self.vx = stop_v(self, self.vx, -1)
+    elseif bx + bw > ww then self.x = ww - bw - hx; self.hit_wall = 1; self.vx = stop_v(self, self.vx, 1) end
+    if by < 0 then self.y = -hy; self.hit_ceiling = true; self.vy = stop_v(self, self.vy, -1)
+    elseif by + bh > wh then self.y = wh - bh - hy; self.on_ground = true; self.vy = stop_v(self, self.vy, 1) end
 end
 
 -- 動いた軸の向きにだけ、新しく入ったマスを近い順に調べて押し戻す
 function Game:_tiles(s, horiz, d)
     for _, m in ipairs(self.maps) do
-        if m._solid then
+        if m._solid or m._oneway then
             local bx, by, bw, bh = box(s)
+            local hx, hy = hoff(s)
             local tw, th, mx, my = m.tw, m.th, m.x, m.y
             local e = 0.0001
             if horiz then
@@ -612,8 +671,8 @@ function Game:_tiles(s, horiz, d)
                     local from, to = floor((bx + bw - d - e - mx) / tw), floor((bx + bw - e - mx) / tw)
                     for c = from, to do
                         if m:_row_solid(c, r0, r1, true) then
-                            s.x = s.x - (bx + bw - (mx + c * tw)); s.hit_wall = 1
-                            if s.vx > 0 then s.vx = 0 end
+                            s.x = mx + c * tw - bw - hx; s.hit_wall = 1
+                            s.vx = stop_v(s, s.vx, 1)
                             break
                         end
                     end
@@ -621,8 +680,8 @@ function Game:_tiles(s, horiz, d)
                     local from, to = floor((bx - d - mx) / tw), floor((bx - mx) / tw)
                     for c = from, to, -1 do
                         if m:_row_solid(c, r0, r1, true) then
-                            s.x = s.x + (mx + (c + 1) * tw - bx); s.hit_wall = -1
-                            if s.vx < 0 then s.vx = 0 end
+                            s.x = mx + (c + 1) * tw - hx; s.hit_wall = -1
+                            s.vx = stop_v(s, s.vx, -1)
                             break
                         end
                     end
@@ -631,10 +690,14 @@ function Game:_tiles(s, horiz, d)
                 local c0, c1 = floor((bx - mx) / tw), floor((bx + bw - e - mx) / tw)
                 if d > 0 then
                     local from, to = floor((by + bh - d - e - my) / th), floor((by + bh - e - my) / th)
+                    -- すり抜け床は、動く前の足元がそのマスの上端より上にあったときだけ乗る
+                    local ow = m._oneway and not s.drop_through
+                    local foot = by + bh - d
                     for r = from, to do
-                        if m:_row_solid(r, c0, c1, false) then
-                            s.y = s.y - (by + bh - (my + r * th)); s.on_ground = true
-                            if s.vy > 0 then s.vy = 0 end
+                        if m:_row_solid(r, c0, c1, false)
+                            or (ow and foot <= my + r * th + 0.01 and m:_row_solid(r, c0, c1, false, m._oneway)) then
+                            s.y = my + r * th - bh - hy; s.on_ground = true
+                            s.vy = stop_v(s, s.vy, 1)
                             break
                         end
                     end
@@ -642,8 +705,8 @@ function Game:_tiles(s, horiz, d)
                     local from, to = floor((by - d - my) / th), floor((by - my) / th)
                     for r = from, to, -1 do
                         if m:_row_solid(r, c0, c1, false) then
-                            s.y = s.y + (my + (r + 1) * th - by); s.hit_ceiling = true
-                            if s.vy < 0 then s.vy = 0 end
+                            s.y = my + (r + 1) * th - hy; s.hit_ceiling = true
+                            s.vy = stop_v(s, s.vy, -1)
                             break
                         end
                     end
@@ -698,6 +761,137 @@ function Game:_check_rules()
     end
 end
 
+-- ---- スプライト同士の押し合い(軽い物理) ----
+
+-- タグaのスプライトをタグbのスプライトから押し出す(重なったら質量の比で押し戻す)。
+-- opt: 関数なら fn(a, b, nx, ny)(押し戻した周の最初に呼ぶ。nはbからaへ向く)/
+--      表なら { oneway = true(aが上から乗るときだけ), on_hit = fn }
+function Game:solid(a, b, opt)
+    local r = { a = a, b = b }
+    if type(opt) == "function" then r.fn = opt
+    elseif type(opt) == "table" then r.fn, r.oneway = opt.on_hit, opt.oneway end
+    self.solids[#self.solids + 1] = r
+end
+
+local function blocked(s, dx, dy)
+    if dx > 0 then return s.hit_wall == 1 elseif dx < 0 then return s.hit_wall == -1 end
+    if dy > 0 then return s.on_ground end
+    return s.hit_ceiling
+end
+
+local function resolve(g, a, b, rule, first)
+    if a.dead or b.dead then return end
+    local ax, ay, aw, ah = box(a)
+    local bx, by, bw, bh = box(b)
+    local ox = min(ax + aw, bx + bw) - max(ax, bx)
+    if ox <= 0 then return end
+    local oy = min(ay + ah, by + bh) - max(ay, by)
+    if oy <= 0 then return end
+    local ima = a.static and 0 or 1 / (a.mass or 1)
+    local imb = b.static and 0 or 1 / (b.mass or 1)
+    if ima + imb <= 0 then return end
+    -- 動く前の位置で、どちらの軸から入ってきたかを見る
+    local pax, pay = ax - (a.x - (a._px or a.x)), ay - (a.y - (a._py or a.y))
+    local pbx, pby = bx - (b.x - (b._px or b.x)), by - (b.y - (b._py or b.y))
+    local nx, ny, pen = 0, 0, 0
+    if rule.oneway then
+        if a.drop_through or pay + ah > pby + 0.01 then return end
+        ny, pen = -1, oy
+    else
+        local pox = min(pax + aw, pbx + bw) - max(pax, pbx)
+        local poy = min(pay + ah, pby + bh) - max(pay, pby)
+        local use_x
+        if pox <= 0 and poy > 0 then use_x = true
+        elseif poy <= 0 and pox > 0 then use_x = false
+        else use_x = ox < oy end
+        if use_x then
+            nx, pen = (ax + aw / 2 < bx + bw / 2) and -1 or 1, ox
+        else
+            ny, pen = (ay + ah / 2 < by + bh / 2) and -1 or 1, oy
+        end
+    end
+    -- 押される向きが既に塞がっている側(壁に当たっている・床に乗っている)は動かないものとして扱う。
+    -- 「押す→箱→壁」や積み重ねが少ない周回で落ち着く
+    if ima > 0 and imb > 0 then
+        if blocked(a, nx, ny) then
+            if not blocked(b, -nx, -ny) then ima = 0 end
+        elseif blocked(b, -nx, -ny) then imb = 0 end
+    end
+    local sum = ima + imb
+    local ka, kb = pen * ima / sum, pen * imb / sum
+    if nx ~= 0 then
+        if ka ~= 0 then a.x = a.x + nx * ka; if a.solid then g:_tiles(a, true, nx * ka) end end
+        if kb ~= 0 then b.x = b.x - nx * kb; if b.solid then g:_tiles(b, true, -nx * kb) end end
+        a.hit_wall, b.hit_wall = -nx, nx
+    else
+        if ka ~= 0 then a.y = a.y + ny * ka; if a.solid then g:_tiles(a, false, ny * ka) end end
+        if kb ~= 0 then b.y = b.y - ny * kb; if b.solid then g:_tiles(b, false, -ny * kb) end end
+        if ny < 0 then
+            a.on_ground, a._ride, b.hit_ceiling = true, b, true
+        else
+            b.on_ground, b._ride, a.hit_ceiling = true, a, true
+        end
+    end
+    if a.bounded then a:_bounds() end
+    if b.bounded then b:_bounds() end
+    -- 近づく向きの速度だけを撃力で交換する
+    local vr = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny
+    if vr < 0 then
+        local e = max(a.bounce or 0, b.bounce or 0)
+        if -vr < max(a.bounce_min or 20, b.bounce_min or 20) then e = 0 end
+        local j = -(1 + e) * vr / sum
+        a.vx, a.vy = a.vx + j * ima * nx, a.vy + j * ima * ny
+        b.vx, b.vy = b.vx - j * imb * nx, b.vy - j * imb * ny
+    end
+    if first and rule.fn then rule.fn(a, b, nx, ny) end
+end
+
+function Game:_physics()
+    local rules = self.solids
+    if #rules == 0 then return end
+    local list = self.sprites
+    -- 前のフレームに乗っていた足場が動いた分だけ一緒に動く
+    for i = 1, #list do
+        local s = list[i]
+        local r = s._ride
+        if r then
+            s._ride = nil
+            if not s.dead and not s.static and not r.dead and r._px then
+                local dx, dy = r.x - r._px, r.y - r._py
+                if dx ~= 0 or dy ~= 0 then s:move(dx, dy) end
+            end
+        end
+    end
+    local bytag = {}
+    for i = 1, #list do
+        local s = list[i]
+        local t = s.tag
+        if t ~= nil and not s.dead then
+            local l = bytag[t]
+            if not l then l = {}; bytag[t] = l end
+            l[#l + 1] = s
+        end
+    end
+    for it = 1, max(1, self.iterations) do
+        local first = (it == 1)
+        for _, r in ipairs(rules) do
+            local la, lb = bytag[r.a], bytag[r.b]
+            if la and lb then
+                if la == lb then
+                    for i = 1, #la do
+                        for j = i + 1, #la do resolve(self, la[i], la[j], r, first) end
+                    end
+                else
+                    for i = 1, #la do
+                        local a = la[i]
+                        for j = 1, #lb do resolve(self, a, lb[j], r, first) end
+                    end
+                end
+            end
+        end
+    end
+end
+
 function Game:_compact()
     local list, n = self.sprites, 0
     for i = 1, #list do
@@ -730,6 +924,16 @@ end
 --      data={1,1,0,...} + cols
 --    spawn={P=function(x, y) ... end}: rowsのその文字の位置(ワールド座標)で呼ぶ(マスは空にする)
 --    solid=true(0以外は全部壁) / {1,2,...} / function(id) return bool end
+--    oneway=同じ書き方(上から乗れて下・横からはすり抜ける床。スプライトのdrop_through=trueで落ちる)
+local function pred(sol)
+    if sol == true then return function(v) return v ~= 0 end
+    elseif type(sol) == "table" then
+        local set = {}
+        for _, v in ipairs(sol) do set[v] = true end
+        return function(v) return set[v] == true end
+    elseif type(sol) == "function" then return sol end
+end
+
 function Game:tilemap(o)
     local m = setmetatable({ game = self }, Tilemap)
     m.image = self:_img(o.image)
@@ -766,13 +970,7 @@ function Game:tilemap(o)
     end
     if not m.cols or m.cols < 1 then error("pico.game: tilemapの列数(cols)がありません", 2) end
     m.rows = (#m.data + m.cols - 1) // m.cols
-    local sol = o.solid
-    if sol == true then m._solid = function(v) return v ~= 0 end
-    elseif type(sol) == "table" then
-        local set = {}
-        for _, v in ipairs(sol) do set[v] = true end
-        m._solid = function(v) return set[v] == true end
-    elseif type(sol) == "function" then m._solid = sol end
+    m._solid, m._oneway = pred(o.solid), pred(o.oneway)
     self.maps[#self.maps + 1] = m
     self._full = true
     for _, sp in ipairs(spawns) do sp[1](sp[2], sp[3]) end
@@ -813,10 +1011,14 @@ function Tilemap:find(v)
     return out
 end
 
-function Tilemap:_row_solid(a, b0, b1, a_is_col)
+function Tilemap:is_oneway(c, r) return self._oneway ~= nil and self._oneway(self:get(c, r)) end
+
+function Tilemap:_row_solid(a, b0, b1, a_is_col, test)
+    test = test or self._solid
+    if not test then return false end
     for b = b0, b1 do
         local v = a_is_col and self:get(a, b) or self:get(b, a)
-        if self._solid(v) then return true end
+        if test(v) then return true end
     end
     return false
 end

@@ -1300,6 +1300,147 @@ int main() {
         )LUA", "game_logic");
         check(ok, "pico.game: ロジック");
 
+        // 軽い物理: 加速度・抵抗・摩擦・跳ね返り・すり抜け床・スプライト同士の押し合い・足場
+        ok = ge.Run(R"LUA(
+            local game = require("pico.game")
+            local w = game.new{ x = 0, y = 0, w = 240, h = 160, manual = true }
+            local m = w:tilemap{ tile = 8, solid = { 1 }, oneway = { 3 },
+                legend = { ["#"] = 1, ["="] = 3 },
+                rows = {
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#......=====...................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "################################",
+                } }
+            check(m:is_oneway(8, 5) and not m:is_solid(8, 5), "tilemap: oneway")
+            local function run(n) for i = 1, n do w:step(1 / 60) end end
+
+            -- 跳ね返り: 床に当たると上向きになり、だんだん収まる
+            local ball = w:sprite{ x = 150, y = 8, w = 8, h = 8, gravity = 600, solid = true, bounce = 0.6 }
+            local up = false
+            for i = 1, 60 do w:step(1 / 60); if ball.vy < 0 then up = true end end
+            check(up, "bounce: 床で跳ね返る")
+            run(300)
+            check(ball.on_ground and ball.vy == 0 and ball.y == 56, "bounce: 遅くなると止まる y=" .. ball.y .. " vy=" .. ball.vy)
+            -- 摩擦: 床の上で横の速さが0へ近づく(無ければ滑り続ける)
+            ball.vx = 100
+            run(10)
+            check(ball.vx == 100, "friction無し: 滑り続ける")
+            ball.friction = 600
+            run(30)
+            check(ball.vx == 0, "friction: 床の上で止まる")
+            ball:remove()
+            -- 空気抵抗・加速度・最高速度
+            local f = w:sprite{ x = 100, y = 10, w = 4, h = 4, drag = 2, ax = 1000, max_vx = 50 }
+            w:step(1 / 60)
+            check(f.vx > 0 and f.vx <= 50, "ax/max_vx: 加速して上限で止まる")
+            f.ax = nil; f.vx = 50
+            run(30)
+            check(f.vx < 50 * 0.5 and f.vx > 0, "drag: 減速する " .. f.vx)
+            f:remove()
+            -- impulse: 質量で割る / staticは動かない
+            local h = w:sprite{ x = 100, y = 10, w = 4, h = 4, mass = 2 }
+            h:impulse(100, -40)
+            check(h.vx == 50 and h.vy == -20, "impulse: 質量で割る")
+            local st = w:sprite{ x = 100, y = 10, w = 4, h = 4, static = true }
+            st:impulse(100, 0)
+            check(st.vx == 0, "impulse: staticは動かない")
+            h:remove(); st:remove()
+
+            -- すり抜け床: 下からは抜け、上からは乗り、drop_throughで落ちる
+            local p = w:sprite{ x = 64, y = 56, w = 8, h = 8, gravity = 600, solid = true, tag = "p" }
+            p.vy = -250
+            local passed = false
+            for i = 1, 90 do w:step(1 / 60); if p.y + p.h <= 40 then passed = true end end
+            check(passed, "oneway: 下からジャンプで抜ける")
+            check(p.on_ground and p.y == 32, "oneway: 上から落ちると乗る y=" .. p.y)
+            p.drop_through = true
+            run(30)
+            check(p.y == 56, "oneway: drop_throughで落ちる y=" .. p.y)
+            p.drop_through = false
+            p:move(40, 0)
+            check(p.hit_wall == 0, "oneway: 横からはすり抜ける")
+            p.x, p.vx = 64, 0
+
+            -- 押し合い: 同じ重さの箱を押すと一緒に動き、static の壁で止まる
+            w:solid("p", "box")
+            w:solid("box", "box")
+            w:solid("p", "wall")
+            w:solid("box", "wall")
+            local box = w:sprite{ x = 80, y = 56, w = 8, h = 8, gravity = 600, solid = true, tag = "box", friction = 2000 }
+            run(5)
+            p.vx = 60
+            for i = 1, 30 do p.vx = 60; w:step(1 / 60) end
+            check(box.x > 80 and box.x >= p.x + 8 - 0.01, "solid: 箱を押す box.x=" .. box.x .. " p.x=" .. p.x)
+            check(p.x + 8 <= box.x + 0.01, "solid: 重ならない")
+            local wall = w:sprite{ x = box.x + 20, y = 40, w = 8, h = 24, static = true, tag = "wall" }
+            for i = 1, 60 do p.vx = 60; w:step(1 / 60) end
+            check(math.abs(box.x + 8 - wall.x) < 0.01 and wall.x == wall._px, "solid: staticの壁で止まり、壁は動かない box.x=" .. box.x)
+            check(math.abs(p.x + 8 - box.x) < 0.01, "solid: 押している側も止まる p.x=" .. p.x)
+            -- 積み重ね: 箱の上に箱が乗る
+            local box2 = w:sprite{ x = box.x, y = 20, w = 8, h = 8, gravity = 600, solid = true, tag = "box" }
+            run(60)
+            check(math.abs(box2.y + 8 - box.y) < 0.6 and box2.on_ground, "solid: 箱の上に乗る y=" .. box2.y)
+            box:remove(); box2:remove(); wall:remove()
+            run(1)
+
+            -- 動く足場: 乗っているものを運ぶ
+            local HIT = 0
+            w:solid("p", "lift", { oneway = true, on_hit = function(a, b, nx, ny) if ny == -1 then HIT = HIT + 1 end end })
+            local lift = w:sprite{ x = 120, y = 40, w = 24, h = 4, static = true, tag = "lift" }
+            p.x, p.y, p.vx, p.vy = 124, 20, 0, 0
+            run(60)
+            check(p.on_ground and math.abs(p.y + 8 - 40) < 0.6 and HIT > 0, "lift: 上から乗る y=" .. p.y)
+            local px = p.x
+            lift.vx = 30
+            run(30)
+            check(math.abs((p.x - px) - (lift.x - 120)) < 1, "lift: 横に運ばれる " .. (p.x - px) .. " / " .. (lift.x - 120))
+            lift.vx = 0; lift.vy = -20
+            run(30)
+            check(math.abs(p.y + 8 - lift.y) < 0.6, "lift: 上へ運ばれる")
+            lift.vy = 20
+            run(30)
+            check(math.abs(p.y + 8 - lift.y) < 1.5 and p.on_ground, "lift: 下がっても付いていく " .. (p.y + 8 - lift.y))
+            -- 下からは通り抜ける(oneway)
+            lift.vy = 0
+            p.x, p.y, p.vy = lift.x + 4, lift.y + 10, -300
+            run(4)
+            check(p.y < lift.y, "lift(oneway): 下から抜ける")
+
+            -- 撃力: 同じ重さの2つがぶつかると速度を分け合い、bounce=1なら入れ替わる。重いほうは押されにくい
+            local w3 = game.new{ x = 0, y = 0, w = 200, h = 64, manual = true }
+            w3:solid("m", "m")
+            local m1 = w3:sprite{ x = 0, y = 10, w = 8, h = 8, vx = 100, tag = "m" }
+            local m2 = w3:sprite{ x = 20, y = 10, w = 8, h = 8, tag = "m" }
+            for i = 1, 30 do w3:step(1 / 60) end
+            check(math.abs(m1.vx - 50) < 0.01 and math.abs(m2.vx - 50) < 0.01, "solid: 速度を分け合う " .. m1.vx .. "," .. m2.vx)
+            m1.x, m1.vx, m2.x, m2.vx = 0, 100, 20, 0
+            m1.bounce, m2.bounce = 1, 1
+            for i = 1, 30 do w3:step(1 / 60) end
+            check(math.abs(m1.vx) < 0.01 and math.abs(m2.vx - 100) < 0.01, "solid: bounce=1で入れ替わる")
+            m1.x, m1.vx, m2.x, m2.vx, m1.bounce, m2.bounce = 0, 100, 20, 0, 0, 0
+            m2.mass = 4
+            for i = 1, 30 do w3:step(1 / 60) end
+            check(math.abs(m1.vx - 20) < 0.01 and math.abs(m2.vx - 20) < 0.01, "solid: massの比で分ける")
+            w3:destroy()
+
+            -- 世界の重力: gravity無しのスプライトも落ちる(staticとgravity=0は落ちない)
+            local w2 = game.new{ x = 0, y = 0, w = 64, h = 64, manual = true, gravity = 500 }
+            local a1 = w2:sprite{ x = 0, y = 0, w = 4, h = 4, bounded = true }
+            local a2 = w2:sprite{ x = 10, y = 0, w = 4, h = 4, static = true }
+            local a3 = w2:sprite{ x = 20, y = 0, w = 4, h = 4, gravity = 0 }
+            for i = 1, 60 do w2:step(1 / 60) end
+            check(a1.y == 60 and a1.on_ground and a2.y == 0 and a3.y == 0, "game.gravity: 既定の重力")
+            w2:destroy()
+            w:destroy()
+        )LUA", "game_physics");
+        check(ok, "pico.game: 物理");
+
         // 描き直し: カメラが動かない間は動いたスプライトの周りだけ
         ok = ge.Run(R"LUA(
             g:step(0.01)                  -- 溜まっているものを流す

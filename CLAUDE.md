@@ -2365,7 +2365,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
 | 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)は計測の結果いったん保留**(下記「メモリ計測の結論」参照)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。`SettingsScene`から周辺スキャン→選択→パスワード入力→接続まで一般的な「Wi-Fi設定」と同じ操作でできる(下記「Wi-Fiの新規接続」参照)。**複数のネットワークの保存・ON/OFF・未接続時の自動再接続(直近で接続したものから)も実装済み**(「保存済みのWi-Fiネットワーク」参照)。 |
-| 5 | Luaアプリ/API | **`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
+| 5 | Luaアプリ/API | **2Dゲームの簡易エンジン`pico.game`(2026-10-06)あり**。**`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`。関数電卓+グラフ電卓、2026-10-03)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/オセロ風/ブロック崩し風/スクラッチパッド/ペイント/テトリス風はLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。**TODO/リマインダーはTodoist連携の`TodoScene`として実装済み**(下記「TODOアプリ」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
@@ -3649,6 +3649,36 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
 ジェスチャー(スワイプ/長押し/ダブルタップ/遅い動き/矩形の外)・スクロール・リスト/タブ/連動・5種のダイアログと `closed` の3番目の引数・オフスクリーン画像(画面のdirtyを積まないこと、抜けると戻ること)・
 描画の補助・ユーティリティ・`on_back`・暗号(往復・改ざん・パスワード違い・別のアプリ・12KiB・BLAKE2bの既知の値・store)・`pico.ui`/`pico.async`/`pico.tween`)、`widget_factory_test`/`widget_property_test`、
 `lua_engine_test`(タブ8個・画像8枚に更新)、`pico_mock_test`。ASan/UBSanで通る。
+
+### 2Dゲームの簡易エンジン(`pico.game`、2026-10-06)
+
+`require("pico.game")`。**本体はLuaの同梱モジュール**(`LuaBuiltinModules.hpp`の`kGame`)で、C++へ足したのは重い描画の2つだけ:
+`pico.draw_tilemap(handle, tw, th, data, cols, x, y)`(`LuaEngine_Ext.cpp`。1バイト1マスの文字列を今のクリップにかかるマスだけ
+`DrawPimgSprite()`で描く。`draw_image_part`と同じ「クリップを狭めて画像全体をずらしてpushSprite」)と、
+`pico.draw_image_part`の8・9番目の引数`flip_x/flip_y`(反転はpushSpriteでできないので1画素ずつ。`draw_image_ex`と同じ書き方)。
+ドキュメントは`lua-api-doc/content/api/game.md`、サンプルは`pc/sdcard/lua/apps/ジャンプアクション/`(絵は`script/generate_platformer_sheet.py`)。
+
+- **構成**: `game.new{...}`がCanvasを1枚作り、`pico.every(1, ...)`で毎フレーム`g:step()`(`manual=true`なら自分で呼ぶ)。
+  1回のdtは0.05秒で頭打ち(遅いフレームで壁をすり抜けないため)。順番: 入力 → ゲーム内タイマー → 状態の`update` → `g:on_update` →
+  各スプライト(アニメ → `on_update` → 重力と移動)→ `g:collide`の規則 → カメラ → 描き直す範囲。
+- **タイルとの当たり**: 軸ごとに動かし、動いた向きに**新しく入ったマスだけ**を近い順に見て押し戻す(すり抜けない・壁の中から始めても
+  反対側へ飛ばない)。結果は`on_ground`/`hit_ceiling`/`hit_wall`(そのフレームだけ。`on_update`では前のフレームの値が読める)。
+  坂・すり抜け床は無い。スプライト同士はAABB(`hitbox`)の総当たり(`g:collide(tagA, tagB, fn)`)。
+- **描き直し**: カメラが動いた/状態が変わった/重なり順が変わった → `pico.invalidate`。それ以外は見た目(位置・コマ・反転・色・表示)の
+  変わったスプライトの前後の矩形だけを`pico.mark_dirty`(24個を超えたら全体)。`render`は`pico.get_draw_area()`の範囲にかかるものだけ描く
+  (FlushDirty()はdirty矩形ごとに`render`を呼ぶため)。HUDは`g:on_draw`で描き、中身を変えたら`g:dirty()`で知らせる決まり。
+- **入力**: `g:down/pressed/released(name)`はコントローラー(`pico.pad_*`)と画面ボタン(`g:button`、`pad=true`で下56pxに← ↑ ↓ → B A)をOR。
+  画面ボタンは`press_start`で`latch`も立てて1フレームより短いタップを取りこぼさない(テトリスと同じ)。押したまま滑らせると隣へ移る。
+- **同梱モジュールのデバッグ情報を落とすようにした**(`LuaEngine::preloadModules`→`StripFunction()`。`lua_dump(strip=1)`して`"b"`で読み直す。
+  自分でdumpしたものなので安全)。pico.gameのrequireは約61KB→約47KB(PCの64bit。`lua_ext_test`が表示する)。
+  代わりに同梱モジュールの中で起きたエラーは行番号が「?」になる(`error(msg, 2)`の引数の誤りはアプリの行を指す)。
+  pico.ui/async/tweenも同じく小さくなった。**実機(32bit)での値は未計測**(ポインタが半分なので少し小さいはず)。
+- 検証: `lua_ext_test`(反転の画素・`draw_tilemap`の引数とクリップの復元・rows/legend/spawn・重力と床・壁・すり抜け・天井・hitbox・
+  collideとremove・アニメ・状態・ゲーム内タイマーと一時停止・画面ボタン(押す/滑らせる/離す/短いタップ)・タイルの書き換え・
+  描き直す矩形が動いたスプライトの前後だけ・カメラの追従と端・bounded・renderのon_draw/draw)。PCビルドの`--tap`でサンプルの
+  タイトル・歩く・スクロール・ジャンプ・ミスを`--shot`で確認。**実機では未確認**(Luaで毎フレーム回す量・反転描画・タイル描画の速さ)。
+- 未: 坂・すり抜け床・スプライトの回転/拡大(`draw_image_ex`を`s.draw`で使えばできる)・パーティクル・効果音の補助・
+  タッチパネルでの同時押し(XPT2046が1点しか取れない)。
 
 ### 実行時間の安全網(暴走防止、2026-09-21実装)
 

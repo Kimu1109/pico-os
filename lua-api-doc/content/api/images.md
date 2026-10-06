@@ -32,7 +32,7 @@ description: "image_load / image_create / image_target / image_size / draw_image
 
 ## pico.draw_image_part
 
-<div class="sig">pico.draw_image_part(handle: integer, x: integer, y: integer, sx: integer, sy: integer, w: integer, h: integer) <span class="ret">-> (なし)</span></div>
+<div class="sig">pico.draw_image_part(handle: integer, x: integer, y: integer, sx: integer, sy: integer, w: integer, h: integer, flip_x?: boolean, flip_y?: boolean) <span class="ret">-> (なし)</span></div>
 
 画像のうち `(sx, sy)` から幅 `w`・高さ `h` の部分だけを `(x, y)` へ描きます。**同じ大きさの絵を1枚に並べた画像(スプライトシート)から1つずつ切り出す**ためのもので、画像は8枚までしか持てないので、部品の多い絵はまとめて1枚にしてこれで描き分けます。画像の外にはみ出す分は描きません。`draw_image` と同じく `Canvas` の `render` コールバックの中で使い、無効なハンドルはエラーです。
 
@@ -41,7 +41,9 @@ description: "image_load / image_create / image_target / image_size / draw_image
 pico.draw_image_part(img, x, y, (n - 1) * 12, 0, 12, 12)
 ```
 
-実例は「テトリス」(`/lua/apps/テトリス/`。ミノの絵を1枚の `blocks.pimg` から切り出す)。
+`flip_x` / `flip_y` が真なら左右/上下を反転して描きます(キャラクターの向きを変えるのに。反転は1画素ずつ描くので、しないときより遅い)。
+
+実例は「テトリス」(`/lua/apps/テトリス/`。ミノの絵を1枚の `blocks.pimg` から切り出す)。タイルマップをまとめて描く `pico.draw_tilemap` は [ゲームエンジン](../game/#picodraw_tilemap) にあります。
 
 ## pico.draw_image_ex
 

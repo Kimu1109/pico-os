@@ -22,6 +22,7 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | [タッチ](touch/) | `get_touch` |
 | [コントローラー](pad/) | `pad_connected` `pad_down` `pad_pressed` `pad_released` |
 | [画像](images/) | `image_load` `image_create` `image_target` `image_clear` `image_size` `draw_image` `draw_image_part` `draw_image_ex` `image_free` |
+| [ゲームエンジン](game/) | `require("pico.game")`(スプライト・タイルマップ・当たり判定・カメラ・入力・状態)、`draw_tilemap` |
 | [ラスタキャンバス](canvas/) | `canvas_clear` `canvas_save` `canvas_load` `canvas_undo` `canvas_get_pixel` |
 | [SDカード](sdcard/) | `sd_exists` `sd_read` `sd_write` `sd_remove` `sd_mkdir` `sd_list` |
 | [シーン制御](scenes/) | `pop` `push_scene` `change_scene` `launch_app` `content_rect` `args` `store_load` `store_save` `on_back` `go_back`(+ `on_suspend` `on_resume` `on_result`) |
@@ -30,7 +31,7 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | [JSON](json/) | `json_decode` `json_encode` `json_null` |
 | [タイマー](timers/) | `after` `every` `cancel` |
 | [モジュール](modules/) | `require` `pico.require` |
-| [同梱モジュール](stdlib/) | `pico.ui` `pico.async` `pico.tween` |
+| [同梱モジュール](stdlib/) | `pico.ui` `pico.async` `pico.tween`(`pico.game` は[ゲームエンジン](game/)) |
 | [暗号化](crypto/) | `encrypt` `decrypt` `is_encrypted` `hash` `random_bytes`(+ `store_save`/`store_load` の暗号化) |
 | [時刻](time/) | `get_time` |
 | [通知](notify/) | `notify` `notify_cancel` `notify_list` `launch_reason` |

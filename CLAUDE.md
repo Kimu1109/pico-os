@@ -2741,6 +2741,9 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
 - **画像**: `pico.draw_image_ex(handle, x, y, r, sx, sy, ox, oy)`(Love2Dの`draw`と同じ並び。負の倍率で反転)。描き先の画素ごとに
   元画像を逆変換で引く最近傍で、**クリップ(`getClipRect()`)の内側だけ**を`writePixel()`する(実機のクリップ未設定時は全面を返す。
   ホストのスタブは未設定だと0を返すので、テストでは`setClipRect()`してから呼ぶ)。透過画像はindex0を飛ばす。
+  **2026-10-06に速い道を足した**: 元と描き先がどちらも4bpp(回転0)なら`getBuffer()`を直接読み書きし、各行で「元画像の中に入る区間」を
+  割り算で先に求めて外接矩形の空きを回らない(1画素ごとは32bitの加算だけ)。PCビルドで回転・2.5倍の描画が約2.3倍速く、出力は同じ。
+  ホストテストのスタブ(1画素1バイト、`getColorDepth()`=8)は従来の`readPixelValue()`/`drawFastHLine()`の道を通る
 - **文字幅**: `pico.text_width(text[, font_size])`(`Label::GetTextWidth()`を新設。`DrawPlain()`と同じフォント設定で`textWidth()`)。
 - **WAV**: `wav_pause/wav_paused/wav_position/wav_duration/wav_seek`(`SoundFunctions`にあったものを出しただけ)。
 - **システム**: `pico.millis()`(単調)、`pico.battery()`(残量・電圧・USB給電。読めていなければnil。`LuaEngine.cpp`が`Battery_Functions.hpp`を取り込む)。

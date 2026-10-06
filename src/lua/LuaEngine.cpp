@@ -2728,6 +2728,56 @@ int LuaEngine::l_draw_image_ex(lua_State* L) {
     const int64_t fw = (int64_t)iw << 16, fh = (int64_t)ih << 16;
     const bool transparent = slot.sprite.transparent;
     LGFX_Sprite& src = slot.sprite.sprite;
+    LGFX_Sprite& dst = *OSData::frame;
+
+    // 速い道: 元も描き先も4bpp(回転無し)なら、バッファを直接読み書きする。
+    // readPixelValue()/drawFastHLine()は1回ごとに回転・クリップ・色変換を通るので、
+    // 回した画像のように色の続かない画素ではそれが支配的だった。
+    // さらに各行で「元画像の中に入る区間」を割り算で先に求め、外接矩形の空き(回すと半分近く)を回らない。
+    // ホストテストのスタブ(1画素1バイト)は下の遅い道を通る
+    uint8_t* sbuf = static_cast<uint8_t*>(src.getBuffer());
+    uint8_t* dbuf = static_cast<uint8_t*>(dst.getBuffer());
+    if (sbuf && dbuf && (((int)src.getColorDepth() & 0xFF) == 4) && (((int)dst.getColorDepth() & 0xFF) == 4)
+        && src.getRotation() == 0 && dst.getRotation() == 0 && iw < 16384 && ih < 16384) {
+        const int sstride = ((iw + 1) & ~1) >> 1;
+        const int dw = dst.width(), dh = dst.height();
+        const int dstride = ((dw + 1) & ~1) >> 1;
+        const int fx0 = std::max(x0, 0), fx1 = std::min(x1, dw);
+        const int fy0 = std::max(y0, 0), fy1 = std::min(y1, dh);
+        // u0 + k*step が [0, lim) に入るkの範囲を[lo, hi)へ狭める
+        auto narrow = [](int64_t u0, int64_t step, int64_t lim, int& lo, int& hi) {
+            if (step == 0) { if (u0 < 0 || u0 >= lim) hi = lo; return; }
+            auto fdiv = [](int64_t a, int64_t b) { int64_t q = a / b; if ((a % b != 0) && ((a < 0) != (b < 0))) q--; return q; };
+            int64_t a, b; // a <= k <= b
+            if (step > 0) { a = -fdiv(u0, step); b = fdiv(lim - 1 - u0, step); }   // ceil(-u0/step)
+            else          { a = -fdiv(u0 - (lim - 1), step); b = fdiv(u0, -step); }
+            if (a > lo) lo = (int)std::min<int64_t>(a, hi);
+            if (b + 1 < hi) hi = (int)std::max<int64_t>(b + 1, lo);
+        };
+        for (int py = fy0; py < fy1; py++) {
+            const double rx0 = fx0 + 0.5 - x, ry = py + 0.5 - y;
+            const int64_t u0 = (int64_t)std::llround(((c * rx0 + s * ry) / sx + ox) * kFix);
+            const int64_t v0 = (int64_t)std::llround(((-s * rx0 + c * ry) / sy + oy) * kFix);
+            int lo = 0, hi = fx1 - fx0;
+            narrow(u0, stepU, fw, lo, hi);
+            narrow(v0, stepV, fh, lo, hi);
+            if (lo >= hi) continue;
+            // 区間の中はu,vとも[0, 16384<<16)に収まるので、1画素ごとの計算は32bitで足りる(M33は64bitの加算が2命令)
+            int32_t u = (int32_t)(u0 + stepU * lo), v = (int32_t)(v0 + stepV * lo);
+            const int32_t su = (int32_t)stepU, sv = (int32_t)stepV;
+            uint8_t* drow = dbuf + (size_t)py * dstride;
+            for (int px = fx0 + lo, pe = fx0 + hi; px < pe; px++, u += su, v += sv) {
+                const int ix = (int)(u >> 16), iy = (int)(v >> 16);
+                const uint8_t sb = sbuf[(size_t)iy * sstride + (ix >> 1)];
+                const uint8_t col = (ix & 1) ? (sb & 0x0F) : (sb >> 4);
+                if (transparent && col == 0) continue;  // index0は透過(DrawPimgSprite()と同じ)
+                uint8_t& d = drow[px >> 1];
+                d = (px & 1) ? (uint8_t)((d & 0xF0) | col) : (uint8_t)((d & 0x0F) | (col << 4));
+            }
+        }
+        if (x1 > x0 && y1 > y0) MarkBounds((int)std::floor(minx), (int)std::floor(miny), (int)std::ceil(maxx), (int)std::ceil(maxy));
+        return 0;
+    }
 
     for (int py = y0; py < y1; py++) {
         const double rx0 = x0 + 0.5 - x, ry = py + 0.5 - y;

@@ -129,6 +129,9 @@ struct LGFX_Sprite {
     int print(const char*){ return 0; }
     int width(){ return sp_w_; }
     int height(){ return sp_h_; }
+    // 1画素1バイトなので4bppの速い道(pico.draw_image_ex等)には乗せない
+    int getColorDepth() const { return 8; }
+    int getRotation() const { return 0; }
     void* getBuffer(){ return pixels_.empty() ? nullptr : pixels_.data(); }
     uint32_t bufferLength() const { return (uint32_t)pixels_.size(); }
 };

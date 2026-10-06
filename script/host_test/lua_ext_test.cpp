@@ -737,6 +737,30 @@ int main() {
         engine.Run("check(true, 'ターゲットを残したまま抜ける')", "ext_target_leak2");
         check(OSData::frame == before && !LuaOffscreen::active, "オフスクリーン: 呼び出しを抜けると画面へ戻る");
 
+        // 回転済みのコマ(pico.image_rotate / pico.draw_rotated)
+        ok = engine.Run(R"LUA(
+            local bar = pico.image_create(8, 2)
+            pico.image_target(bar); pico.fill_rect(0, 0, 8, 2, 5); pico.image_target(nil)
+            local sheet, cell = pico.image_rotate(bar, 4)
+            check(type(sheet) == "number" and cell == 12, "image_rotate: ハンドルとコマの一辺")
+            local w, h = pico.image_size(sheet)
+            check(w == 48 and h == 12, "image_rotate: 4コマを横に並べる")
+            pico.image_target(sheet)
+            check(pico.get_pixel(3, 5) == 5 and pico.get_pixel(5, 3) == 0, "image_rotate: 0度は横のまま")
+            check(pico.get_pixel(17, 3) == 5 and pico.get_pixel(14, 6) == 0, "image_rotate: 90度は縦")
+            pico.image_target(nil)
+            check(not pcall(pico.draw_rotated, bar, 10, 10, 0), "draw_rotated: 普通の画像はエラー")
+            check(not pcall(pico.image_rotate, bar, 0), "image_rotate: コマ0はエラー")
+            pico.image_free(bar)
+            rot_sheet = sheet
+        )LUA", "ext_rotate");
+        check(ok, "image_rotate: 実行");
+        g_dirty_calls = 0;
+        ok = engine.Run("pico.draw_rotated(rot_sheet, 100, 50, math.pi / 2)", "ext_rotate_draw");
+        check(ok && g_dirty_calls == 1 && g_last_dirty.x == 94 && g_last_dirty.y == 44
+              && g_last_dirty.w == 12 && g_last_dirty.h == 12, "draw_rotated: 中心を(x,y)にコマ1つぶんだけdirty");
+        engine.Run("pico.image_free(rot_sheet)", "ext_rotate_free");
+
         ok = engine.Run(R"LUA(
             pico.image_free(img); pico.image_free(img2)
             check(pico.get_pixel(-1, 0) == nil, "get_pixel: 範囲外はnil")

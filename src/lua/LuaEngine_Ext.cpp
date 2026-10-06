@@ -118,6 +118,9 @@ struct LuaEngineExt {
     static int l_image_target(lua_State* L);
     static int l_image_clear(lua_State* L);
     static int l_draw_tilemap(lua_State* L);
+    static int l_image_rotate(lua_State* L);
+    static int l_draw_rotated(lua_State* L);
+    static int AllocImageSlot(LuaEngine* self, int w, int h, bool transparent, const char* fn);
 
     // ---------------- ユーティリティ ----------------
     static int l_app_dir(lua_State* L);
@@ -1027,37 +1030,26 @@ int LuaEngineExt::l_measure_text(lua_State* L) {
 // pico.image_create(w, h [, transparent]) -> ハンドル | nil
 //   中身は白(transparent=trueなら0番色=透過)。pico.draw_imageなどで画面へ描けるし、
 //   pico.image_target(handle)の間はpico.draw_*の描き先がこの画像になる
-int LuaEngineExt::l_image_create(lua_State* L) {
-    LuaEngine* self = Self(L);
-    const int w = (int)luaL_checkinteger(L, 1);
-    const int h = (int)luaL_checkinteger(L, 2);
-    const bool transparent = lua_toboolean(L, 3);
-    if (w <= 0 || h <= 0 || w > SCREEN_WIDTH * 2 || h > SCREEN_HEIGHT * 2) {
-        return luaL_error(L, "pico.image_create: 大きさが不正です(1〜%dx%d)", SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2);
-    }
-
+// 空いているスロットにw x hの4bppの画像を作り、添字を返す(作れなければ警告を出して-1)
+int LuaEngineExt::AllocImageSlot(LuaEngine* self, int w, int h, bool transparent, const char* fn) {
     size_t index = LuaEngine::kMaxLuaImages;
     for (size_t i = 0; i < LuaEngine::kMaxLuaImages; ++i) {
         if (!self->images_[i].used) { index = i; break; }
     }
     if (index == LuaEngine::kMaxLuaImages) {
-        LOG_APP_WARN("pico.image_create: 同時に保持できる画像数の上限(%zu枚)に達しています", LuaEngine::kMaxLuaImages);
-        lua_pushnil(L);
-        return 1;
+        LOG_APP_WARN("%s: 同時に保持できる画像数の上限(%zu枚)に達しています", fn, LuaEngine::kMaxLuaImages);
+        return -1;
     }
     const size_t need = ((size_t)w * h + 1) / 2;
     if (self->image_bytes_used_ + need > LuaEngine::kMaxLuaImageBytes) {
-        LOG_APP_WARN("pico.image_create: 画像用メモリの上限(%uB)を超えます", (unsigned)LuaEngine::kMaxLuaImageBytes);
-        lua_pushnil(L);
-        return 1;
+        LOG_APP_WARN("%s: 画像用メモリの上限(%uB)を超えます(%uB必要)", fn,
+                     (unsigned)LuaEngine::kMaxLuaImageBytes, (unsigned)need);
+        return -1;
     }
 
     LuaEngine::ImageSlot& slot = self->images_[index];
     slot.sprite.sprite.setColorDepth(4);
-    if (!slot.sprite.sprite.createSprite(w, h)) {
-        lua_pushnil(L);
-        return 1;
-    }
+    if (!slot.sprite.sprite.createSprite(w, h)) return -1;
     for (int i = 0; i < 16; i++) slot.sprite.sprite.setPaletteColor(i, PICO_GFX::COLORS[i]);
     slot.sprite.sprite.fillScreen(transparent ? 0 : PICO_BACKGROUND);
     slot.sprite.width = (uint16_t)w;
@@ -1066,11 +1058,166 @@ int LuaEngineExt::l_image_create(lua_State* L) {
     slot.sprite.usable = true;
     slot.used = true;
     slot.bytes = need;
+    slot.rot_frames = slot.rot_cols = slot.rot_cell = 0;
     self->image_bytes_used_ += need;
     if (slot.generation == 0) slot.generation = 1;
+    return (int)index;
+}
 
-    lua_pushinteger(L, (lua_Integer)LuaEngine::MakeImageHandle(index, slot.generation));
+int LuaEngineExt::l_image_create(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const int w = (int)luaL_checkinteger(L, 1);
+    const int h = (int)luaL_checkinteger(L, 2);
+    const bool transparent = lua_toboolean(L, 3);
+    if (w <= 0 || h <= 0 || w > SCREEN_WIDTH * 2 || h > SCREEN_HEIGHT * 2) {
+        return luaL_error(L, "pico.image_create: 大きさが不正です(1〜%dx%d)", SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2);
+    }
+    const int index = AllocImageSlot(self, w, h, transparent, "pico.image_create");
+    if (index < 0) { lua_pushnil(L); return 1; }
+    lua_pushinteger(L, (lua_Integer)LuaEngine::MakeImageHandle((size_t)index, self->images_[index].generation));
     return 1;
+}
+
+namespace {
+    constexpr double kTwoPi = 6.283185307179586;
+}
+
+// ---- 回転済みのコマ(pico.image_rotate / pico.draw_rotated) ----
+// pico.draw_image_exは描くたびに1画素ずつ逆変換するので、回転のない描画より何倍も重い。
+// そこで「frames通りの角度に回した絵」を先に1枚の画像(コマを格子に並べたもの)へ作っておき、
+// 描くときは一番近い角度のコマを切り出してpushSprite()するだけにする(pico.draw_image_partと同じ重さ)。
+// 角度はframes段階に丸まる(既定16=22.5度刻み)。品質より速さを取る版。
+//
+// pico.image_rotate(handle, frames [, opts]) -> sheet, cell | nil
+//   opts = { sx=, sy= (拡大率。既定1、負で反転), ox=, oy= (回転の中心。既定は画像の中央), start= (最初のコマの角度、ラジアン) }
+//   sheetは新しい画像のハンドル(画像のスロットとメモリを1つ使う。pico.image_freeで解放)。
+//   cellはコマの一辺(px)。回転の中心はコマの真ん中に来る。
+//   出来た画像は0番の色が透過になる(元が透過でない画像の0番=黒も抜ける)。
+int LuaEngineExt::l_image_rotate(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+    const int frames = (int)luaL_optinteger(L, 2, 16);
+    size_t src_index;
+    if (!self->ResolveImageHandle(handle, src_index)) {
+        return luaL_error(L, "pico.image_rotate: 無効なイメージハンドル");
+    }
+    if (frames < 1 || frames > 64) return luaL_error(L, "pico.image_rotate: コマの数は1〜64です");
+
+    const int iw = self->images_[src_index].sprite.width, ih = self->images_[src_index].sprite.height;
+    double sx = 1.0, sy = 1.0, ox = iw / 2.0, oy = ih / 2.0, start = 0.0;
+    if (lua_istable(L, 3)) {
+        auto opt = [&](const char* key, double& v) {
+            lua_getfield(L, 3, key);
+            if (!lua_isnil(L, -1)) v = luaL_checknumber(L, -1);
+            lua_pop(L, 1);
+        };
+        opt("sx", sx);
+        sy = sx;
+        opt("sy", sy);
+        opt("ox", ox);
+        opt("oy", oy);
+        opt("start", start);
+    } else if (!lua_isnoneornil(L, 3)) {
+        return luaL_error(L, "pico.image_rotate: 3番目の引数はテーブルです");
+    }
+    if (std::fabs(sx) < 1e-3 || std::fabs(sy) < 1e-3 || std::fabs(sx) > 8 || std::fabs(sy) > 8) {
+        return luaL_error(L, "pico.image_rotate: 倍率は0より大きく8倍までです");
+    }
+
+    // コマの一辺: 回転の中心から一番遠い角までの距離(拡大後)の2倍。中心がコマの真ん中に来る
+    double r = 0;
+    const double cx4[4] = {0, (double)iw, 0, (double)iw};
+    const double cy4[4] = {0, 0, (double)ih, (double)ih};
+    for (int i = 0; i < 4; i++) {
+        r = std::max(r, std::hypot((cx4[i] - ox) * sx, (cy4[i] - oy) * sy));
+    }
+    const int cell = 2 * (int)std::ceil(r) + 2;
+    const int max_w = SCREEN_WIDTH * 2, max_h = SCREEN_HEIGHT * 2;
+    if (cell > max_w || cell > max_h) {
+        LOG_APP_WARN("pico.image_rotate: 回した画像が大きすぎます(一辺%dpx)", cell);
+        lua_pushnil(L);
+        return 1;
+    }
+    const int cols = std::min(frames, max_w / cell);
+    const int rows = (frames + cols - 1) / cols;
+    if (rows * cell > max_h) {
+        LOG_APP_WARN("pico.image_rotate: コマが多すぎて1枚に並びません(%dコマ x 一辺%dpx)", frames, cell);
+        lua_pushnil(L);
+        return 1;
+    }
+
+    const int index = AllocImageSlot(self, cols * cell, rows * cell, true, "pico.image_rotate");
+    if (index < 0) { lua_pushnil(L); return 1; }
+    LuaEngine::ImageSlot& dst = self->images_[index];
+    LuaEngine::ImageSlot& src = self->images_[src_index]; // AllocImageSlotの後に取る(同じ配列の別の要素)
+    const bool src_transparent = src.sprite.transparent;
+
+    // 1回きりの処理なので、描くときの速さより分かりやすさを取る(1画素ずつ逆変換して最近傍)
+    const double half = cell / 2.0;
+    for (int k = 0; k < frames; k++) {
+        const double a = start + k * (kTwoPi / frames);
+        const double c = std::cos(a), s = std::sin(a);
+        const int bx = (k % cols) * cell, by = (k / cols) * cell;
+        for (int py = 0; py < cell; py++) {
+            const double ry = py + 0.5 - half;
+            for (int px = 0; px < cell; px++) {
+                const double rx = px + 0.5 - half;
+                const double u = (c * rx + s * ry) / sx + ox;
+                const double v = (-s * rx + c * ry) / sy + oy;
+                if (u < 0 || v < 0 || u >= iw || v >= ih) continue;
+                const uint32_t col = src.sprite.sprite.readPixelValue((int)u, (int)v);
+                if (src_transparent && col == 0) continue;
+                dst.sprite.sprite.writePixel(bx + px, by + py, (int)col);
+            }
+        }
+    }
+    dst.rot_frames = (uint16_t)frames;
+    dst.rot_cols = (uint16_t)cols;
+    dst.rot_cell = (uint16_t)cell;
+
+    lua_pushinteger(L, (lua_Integer)LuaEngine::MakeImageHandle((size_t)index, dst.generation));
+    lua_pushinteger(L, cell);
+    return 2;
+}
+
+// pico.draw_rotated(sheet, x, y, r)
+//   pico.image_rotateで作った画像から、角度r(ラジアン、時計回り)に一番近いコマを選び、
+//   回転の中心が(x, y)に来るように描く。中身はpico.draw_image_partと同じ(1回のpushSprite)
+int LuaEngineExt::l_draw_rotated(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+    const double x = luaL_checknumber(L, 2);
+    const double y = luaL_checknumber(L, 3);
+    const double r = luaL_optnumber(L, 4, 0.0);
+    size_t index;
+    if (!self->ResolveImageHandle(handle, index)) {
+        return luaL_error(L, "pico.draw_rotated: 無効なイメージハンドル");
+    }
+    LuaEngine::ImageSlot& slot = self->images_[index];
+    if (slot.rot_frames == 0) {
+        return luaL_error(L, "pico.draw_rotated: pico.image_rotateで作った画像を渡してください");
+    }
+    const int frames = slot.rot_frames, cell = slot.rot_cell;
+    int k = (int)std::lround(r * frames / kTwoPi) % frames;
+    if (k < 0) k += frames;
+    const int sx = (k % slot.rot_cols) * cell, sy = (k / slot.rot_cols) * cell;
+    const int32_t dx = (int32_t)std::lround(x) - cell / 2;
+    const int32_t dy = (int32_t)std::lround(y) - cell / 2;
+
+    int32_t kx = 0, ky = 0, kw = 0, kh = 0;
+    OSData::frame->getClipRect(&kx, &ky, &kw, &kh);
+    const Rect clip = Rect{ (int16_t)kx, (int16_t)ky, (int16_t)kw, (int16_t)kh }
+        .intersection({ (int16_t)dx, (int16_t)dy, (int16_t)cell, (int16_t)cell });
+    if (clip.w > 0 && clip.h > 0) {
+        // 透過つきのpushSprite()は重いので、4bppのバッファどうしで直接写す(IconRender::Blit4bpp)
+        if (!IconRender::Blit4bpp(slot.sprite.sprite, sx, sy, cell, cell, dx, dy, true)) {
+            OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
+            IconRender::DrawPimgSprite(slot.sprite, dx - sx, dy - sy);
+            OSData::frame->setClipRect(kx, ky, kw, kh);
+        }
+    }
+    if (!LuaOffscreen::active) PICO_GFX::MarkDirty({ (int16_t)dx, (int16_t)dy, (int16_t)cell, (int16_t)cell });
+    return 0;
 }
 
 // pico.draw_tilemap(handle, tile_w, tile_h, data, cols, x, y)
@@ -1129,6 +1276,9 @@ int LuaEngineExt::l_draw_tilemap(lua_State* L) {
             const int32_t cx0 = std::max(dx, ax0), cy0 = std::max(dy, ay0);
             const int32_t cx1 = std::min(dx + tw, ax1), cy1 = std::min(dy + th, ay1);
             if (cx1 <= cx0 || cy1 <= cy0) continue;
+            // 速い道: タイル1枚ぶんを4bppのバッファどうしで直接写す(クリップは触らない)
+            if (IconRender::Blit4bpp(slot.sprite.sprite, (ti % tcols) * tw, (ti / tcols) * th, tw, th,
+                                     dx, dy, slot.sprite.transparent)) continue;
             OSData::frame->setClipRect(cx0, cy0, cx1 - cx0, cy1 - cy0);
             IconRender::DrawPimgSprite(slot.sprite, dx - (ti % tcols) * tw, dy - (ti / tcols) * th);
         }
@@ -1463,6 +1613,8 @@ void LuaEngine::RegisterExtApi() {
     registerFn("image_create", LuaEngineExt::l_image_create);
     registerFn("image_clear", LuaEngineExt::l_image_clear);
     registerFn("draw_tilemap", LuaEngineExt::l_draw_tilemap);
+    registerFn("image_rotate", LuaEngineExt::l_image_rotate);
+    registerFn("draw_rotated", LuaEngineExt::l_draw_rotated);
     registerFn("image_target", LuaEngineExt::l_image_target);
     registerFn("app_dir", LuaEngineExt::l_app_dir);
     registerFn("path_join", LuaEngineExt::l_path_join);

@@ -31,6 +31,7 @@
 #include "gui/widgets/dialogs/ColorDialog.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/icons/icon_render.h"
+#include "gui/Fill4bpp.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -2306,7 +2307,7 @@ int LuaEngine::l_fill_rect(lua_State* L) {
     const int16_t h = (int16_t)luaL_checkinteger(L, 4);
     const int8_t color = (int8_t)luaL_checkinteger(L, 5);
 
-    OSData::frame->fillRect(x, y, w, h, color);
+    if (!Fill4bpp::FillRect(x, y, w, h, color)) OSData::frame->fillRect(x, y, w, h, color);
     LuaMarkDirty({x, y, w, h});
     return 0;
 }
@@ -2328,7 +2329,7 @@ int LuaEngine::l_fill_circle(lua_State* L) {
     const int16_t r = (int16_t)luaL_checkinteger(L, 3);
     const int8_t color = (int8_t)luaL_checkinteger(L, 4);
 
-    OSData::frame->fillCircle(x, y, r, color);
+    if (!Fill4bpp::FillCircle(x, y, r, color)) OSData::frame->fillCircle(x, y, r, color);
     LuaMarkDirty({(int16_t)(x - r), (int16_t)(y - r), (int16_t)(r * 2 + 1), (int16_t)(r * 2 + 1)});
     return 0;
 }
@@ -2340,7 +2341,7 @@ int LuaEngine::l_clear_rect(lua_State* L) {
     const int16_t h = (int16_t)luaL_checkinteger(L, 4);
     const int8_t color = (int8_t)luaL_optinteger(L, 5, PICO_BACKGROUND);
 
-    OSData::frame->fillRect(x, y, w, h, color);
+    if (!Fill4bpp::FillRect(x, y, w, h, color)) OSData::frame->fillRect(x, y, w, h, color);
     LuaMarkDirty({x, y, w, h});
     return 0;
 }
@@ -2416,10 +2417,16 @@ int LuaEngine::l_draw_image_part(lua_State* L) {
     const bool flip_x = lua_toboolean(L, 8) != 0;
     const bool flip_y = lua_toboolean(L, 9) != 0;
 
+    if (w <= 0 || h <= 0) return 0;
+    // 速い道: 4bppのバッファどうしで直接写す(反転も含む。IconRender::Blit4bpp)
+    if (IconRender::Blit4bpp(slot.sprite.sprite, sx, sy, w, h, x, y, slot.sprite.transparent, flip_x, flip_y)) {
+        LuaMarkDirty({ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h });
+        return 0;
+    }
+
     if (flip_x || flip_y) {
         // 反転はpushSprite()ではできないので、描き先の1画素ごとに元の画素を引く
         // (ゲームのキャラクター1体ぶん程度の大きさを想定。draw_image_exと同じ書き方)
-        if (w <= 0 || h <= 0) return 0;
         int32_t kx = 0, ky = 0, kw = 0, kh = 0;
         OSData::frame->getClipRect(&kx, &ky, &kw, &kh);
         const int32_t x0 = std::max({x, kx, (int32_t)0});
@@ -2519,6 +2526,7 @@ namespace {
         const int y_from = std::max(miny, 0);
         const int y_to = std::min(maxy, (int)SCREEN_HEIGHT - 1);
         float cross[kMaxPolyPoints];
+        const Fill4bpp::Span span(color);  // 横線はバッファへ直接書く(4bppでなければLovyanGFXで)
         for (int y = y_from; y <= y_to; y++) {
             const float cy = y + 0.5f;
             int cnt = 0;
@@ -2539,7 +2547,9 @@ namespace {
             for (int a = 0; a + 1 < cnt; a += 2) {
                 const int xl = (int)std::ceil(cross[a] - 0.5f);
                 const int xr = (int)std::ceil(cross[a + 1] - 0.5f) - 1;
-                if (xr >= xl) OSData::frame->drawFastHLine(xl, y, xr - xl + 1, color);
+                if (xr < xl) continue;
+                if (span.ok) span.hline(xl, y, xr - xl + 1);
+                else OSData::frame->drawFastHLine(xl, y, xr - xl + 1, color);
             }
         }
     }
@@ -2572,7 +2582,7 @@ int LuaEngine::l_fill_ellipse(lua_State* L) {
     const int rx = (int)luaL_checkinteger(L, 3), ry = (int)luaL_checkinteger(L, 4);
     const int8_t color = (int8_t)luaL_checkinteger(L, 5);
     if (rx < 0 || ry < 0) return luaL_error(L, "pico.fill_ellipse: 半径は0以上です");
-    OSData::frame->fillEllipse(x, y, rx, ry, color);
+    if (!Fill4bpp::FillEllipse(x, y, rx, ry, color)) OSData::frame->fillEllipse(x, y, rx, ry, color);
     MarkBounds(x - rx, y - ry, x + rx, y + ry);
     return 0;
 }
@@ -2600,7 +2610,8 @@ int LuaEngine::l_fill_triangle(lua_State* L) {
         ys[i] = (int)luaL_checkinteger(L, 2 + i * 2);
     }
     const int8_t color = (int8_t)luaL_checkinteger(L, 7);
-    OSData::frame->fillTriangle(xs[0], ys[0], xs[1], ys[1], xs[2], ys[2], color);
+    if (!Fill4bpp::FillTriangle(xs[0], ys[0], xs[1], ys[1], xs[2], ys[2], color))
+        OSData::frame->fillTriangle(xs[0], ys[0], xs[1], ys[1], xs[2], ys[2], color);
     int minx, miny, maxx, maxy;
     Bounds(xs, ys, 3, minx, miny, maxx, maxy);
     MarkBounds(minx, miny, maxx, maxy);
@@ -2728,6 +2739,56 @@ int LuaEngine::l_draw_image_ex(lua_State* L) {
     const int64_t fw = (int64_t)iw << 16, fh = (int64_t)ih << 16;
     const bool transparent = slot.sprite.transparent;
     LGFX_Sprite& src = slot.sprite.sprite;
+    LGFX_Sprite& dst = *OSData::frame;
+
+    // 速い道: 元も描き先も4bpp(回転無し)なら、バッファを直接読み書きする。
+    // readPixelValue()/drawFastHLine()は1回ごとに回転・クリップ・色変換を通るので、
+    // 回した画像のように色の続かない画素ではそれが支配的だった。
+    // さらに各行で「元画像の中に入る区間」を割り算で先に求め、外接矩形の空き(回すと半分近く)を回らない。
+    // ホストテストのスタブ(1画素1バイト)は下の遅い道を通る
+    uint8_t* sbuf = static_cast<uint8_t*>(src.getBuffer());
+    uint8_t* dbuf = static_cast<uint8_t*>(dst.getBuffer());
+    if (sbuf && dbuf && (((int)src.getColorDepth() & 0xFF) == 4) && (((int)dst.getColorDepth() & 0xFF) == 4)
+        && src.getRotation() == 0 && dst.getRotation() == 0 && iw < 16384 && ih < 16384) {
+        const int sstride = ((iw + 1) & ~1) >> 1;
+        const int dw = dst.width(), dh = dst.height();
+        const int dstride = ((dw + 1) & ~1) >> 1;
+        const int fx0 = std::max(x0, 0), fx1 = std::min(x1, dw);
+        const int fy0 = std::max(y0, 0), fy1 = std::min(y1, dh);
+        // u0 + k*step が [0, lim) に入るkの範囲を[lo, hi)へ狭める
+        auto narrow = [](int64_t u0, int64_t step, int64_t lim, int& lo, int& hi) {
+            if (step == 0) { if (u0 < 0 || u0 >= lim) hi = lo; return; }
+            auto fdiv = [](int64_t a, int64_t b) { int64_t q = a / b; if ((a % b != 0) && ((a < 0) != (b < 0))) q--; return q; };
+            int64_t a, b; // a <= k <= b
+            if (step > 0) { a = -fdiv(u0, step); b = fdiv(lim - 1 - u0, step); }   // ceil(-u0/step)
+            else          { a = -fdiv(u0 - (lim - 1), step); b = fdiv(u0, -step); }
+            if (a > lo) lo = (int)std::min<int64_t>(a, hi);
+            if (b + 1 < hi) hi = (int)std::max<int64_t>(b + 1, lo);
+        };
+        for (int py = fy0; py < fy1; py++) {
+            const double rx0 = fx0 + 0.5 - x, ry = py + 0.5 - y;
+            const int64_t u0 = (int64_t)std::llround(((c * rx0 + s * ry) / sx + ox) * kFix);
+            const int64_t v0 = (int64_t)std::llround(((-s * rx0 + c * ry) / sy + oy) * kFix);
+            int lo = 0, hi = fx1 - fx0;
+            narrow(u0, stepU, fw, lo, hi);
+            narrow(v0, stepV, fh, lo, hi);
+            if (lo >= hi) continue;
+            // 区間の中はu,vとも[0, 16384<<16)に収まるので、1画素ごとの計算は32bitで足りる(M33は64bitの加算が2命令)
+            int32_t u = (int32_t)(u0 + stepU * lo), v = (int32_t)(v0 + stepV * lo);
+            const int32_t su = (int32_t)stepU, sv = (int32_t)stepV;
+            uint8_t* drow = dbuf + (size_t)py * dstride;
+            for (int px = fx0 + lo, pe = fx0 + hi; px < pe; px++, u += su, v += sv) {
+                const int ix = (int)(u >> 16), iy = (int)(v >> 16);
+                const uint8_t sb = sbuf[(size_t)iy * sstride + (ix >> 1)];
+                const uint8_t col = (ix & 1) ? (sb & 0x0F) : (sb >> 4);
+                if (transparent && col == 0) continue;  // index0は透過(DrawPimgSprite()と同じ)
+                uint8_t& d = drow[px >> 1];
+                d = (px & 1) ? (uint8_t)((d & 0xF0) | col) : (uint8_t)((d & 0x0F) | (col << 4));
+            }
+        }
+        if (x1 > x0 && y1 > y0) MarkBounds((int)std::floor(minx), (int)std::floor(miny), (int)std::ceil(maxx), (int)std::ceil(maxy));
+        return 0;
+    }
 
     for (int py = y0; py < y1; py++) {
         const double rx0 = x0 + 0.5 - x, ry = py + 0.5 - y;
@@ -3034,6 +3095,7 @@ int LuaEngine::l_image_free(lua_State* L) {
     slot.sprite.usable = false;
     self->image_bytes_used_ -= slot.bytes;
     slot.bytes = 0;
+    slot.rot_frames = slot.rot_cols = slot.rot_cell = 0;
     slot.used = false;
 
     // WidgetRegistry::Unregister()と同じく、ここでgenerationを進めておく

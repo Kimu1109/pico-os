@@ -63,6 +63,42 @@ local w, h = pico.image_size(img)
 pico.draw_image_ex(img, 120, 160, math.pi / 4, 2, 2, w / 2, h / 2)
 ```
 
+`draw_image_ex` は描くたびに1画素ずつ回すので、回転しない描画より重くなります。毎フレームたくさん回して描くなら、下の `image_rotate` + `draw_rotated` を使ってください。
+
+## pico.image_rotate
+
+<div class="sig">pico.image_rotate(handle: integer, frames?: integer, opts?: table) <span class="ret">-> sheet: integer, cell: integer | nil</span></div>
+
+画像を `frames` 通りの角度(既定16 = 22.5度刻み、1〜64)に回した絵を**先に作っておき**、1枚の画像(コマを格子状に並べたもの)として返します。`setup()` などで1回だけ呼び、描くときは `pico.draw_rotated` を使います。
+
+- `opts.sx`, `opts.sy`: 倍率(既定1、`sy` を省くと `sx` と同じ。負で反転、8倍まで)。
+- `opts.ox`, `opts.oy`: 回転の中心(元画像のピクセル座標、既定は画像の中央)。
+- `opts.start`: 最初のコマの角度(ラジアン、既定0)。
+- 戻り値の `cell` はコマの一辺(px)。回転の中心はコマの真ん中に来ます。
+- 新しい画像のスロットを1つ使い、メモリは `cell × cell × frames ÷ 2` バイトほど食います(48x24の画像・16コマで約25KB、1.5倍なら約56KB)。画像の上限(8枚・合計96KiB)に収まらなければ `nil`。
+- 出来た画像は **0番の色が透過**になります(元が透過でない画像の0番の色=黒も抜けます)。
+- 使い終わったら `pico.image_free(sheet)` で解放できます。
+
+## pico.draw_rotated
+
+<div class="sig">pico.draw_rotated(sheet: integer, x: number, y: number, r?: number) <span class="ret">-> (なし)</span></div>
+
+`image_rotate` で作った画像から、角度 `r`(ラジアン、時計回り)に**一番近いコマ**を選び、回転の中心が `(x, y)` に来るように描きます。角度は `frames` 段階に丸まります(品質より速さを取る版)。
+
+1画素ずつ回す処理が無く、コマを1枚写すだけなので、回転しない `draw_image` とほぼ同じ速さで描けます。
+
+```lua
+local img = pico.image_load("/lua/apps/x/ship.pimg")
+local ship = pico.image_rotate(img, 32)   -- 11.25度刻み
+pico.image_free(img)                      -- 元の画像はもう要らなければ解放してよい
+
+pico.on(canvas, "render", function()
+    pico.draw_rotated(ship, px, py, angle)
+end)
+```
+
+`image_rotate` で作った画像以外を渡すとエラーです。
+
 ## pico.image_free
 
 <div class="sig">pico.image_free(handle: integer) <span class="ret">-> (なし)</span></div>

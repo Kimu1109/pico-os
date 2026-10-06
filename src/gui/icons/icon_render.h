@@ -50,6 +50,13 @@ inline bool ReadPimgHeader(FsFile& f, PimgHeader& header) {
 
 void DrawPimgSprite(PimgSprite& s, int x, int y);
 
+// 4bppのsrcの(sx, sy, w, h)を、OSData::frameの(dx, dy)へ直接写す(frameの今のクリップの内側だけ)。
+// LovyanGFXのpushSprite()(とくに透過つき)は1画素ごとに色変換・透過の判定を通って重いので、
+// 4bppのバッファどうしで写す。transparentなら0番の色を飛ばす。flip_x/flip_yで左右/上下を反転する。
+// srcの外を指す分は削る。srcかframeが4bppでなければ何もせずfalse(呼び出し側が従来の道で描く)
+bool Blit4bpp(LGFX_Sprite& src, int sx, int sy, int w, int h, int dx, int dy,
+              bool transparent, bool flip_x = false, bool flip_y = false);
+
 // LoadPimgToSprite()は新規にスプライトを確保するが、こちらは呼び出し側が既に
 // width×heightでcreateSprite()済みのspriteへ、ファイルのヘッダ以降(RLE本体)を
 // そのままデコードして書き込む(pico.canvas_load()がCanvasRasterの自前スプライトへ

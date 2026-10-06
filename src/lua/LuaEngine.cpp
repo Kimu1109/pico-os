@@ -2416,10 +2416,16 @@ int LuaEngine::l_draw_image_part(lua_State* L) {
     const bool flip_x = lua_toboolean(L, 8) != 0;
     const bool flip_y = lua_toboolean(L, 9) != 0;
 
+    if (w <= 0 || h <= 0) return 0;
+    // 速い道: 4bppのバッファどうしで直接写す(反転も含む。IconRender::Blit4bpp)
+    if (IconRender::Blit4bpp(slot.sprite.sprite, sx, sy, w, h, x, y, slot.sprite.transparent, flip_x, flip_y)) {
+        LuaMarkDirty({ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h });
+        return 0;
+    }
+
     if (flip_x || flip_y) {
         // 反転はpushSprite()ではできないので、描き先の1画素ごとに元の画素を引く
         // (ゲームのキャラクター1体ぶん程度の大きさを想定。draw_image_exと同じ書き方)
-        if (w <= 0 || h <= 0) return 0;
         int32_t kx = 0, ky = 0, kw = 0, kh = 0;
         OSData::frame->getClipRect(&kx, &ky, &kw, &kh);
         const int32_t x0 = std::max({x, kx, (int32_t)0});

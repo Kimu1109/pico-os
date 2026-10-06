@@ -3,6 +3,8 @@
 #include "OS_Data.hpp"
 #include "util/ScopedClip.hpp"
 #include "functions/GFX_Functions.hpp"
+#include <algorithm>
+#include <cstring>
 
 namespace IconRender {
 
@@ -113,7 +115,115 @@ bool LoadPimgToSprite(FsFile& f, PimgSprite& out) {
     return true;
 }
 
+bool Blit4bpp(LGFX_Sprite& src, int sx, int sy, int w, int h, int dx, int dy,
+              bool transparent, bool flip_x, bool flip_y) {
+    LGFX_Sprite& dst = *OSData::frame;
+    uint8_t* sbuf = static_cast<uint8_t*>(src.getBuffer());
+    uint8_t* dbuf = static_cast<uint8_t*>(dst.getBuffer());
+    if (!sbuf || !dbuf || (((int)src.getColorDepth() & 0xFF) != 4) || (((int)dst.getColorDepth() & 0xFF) != 4)
+        || src.getRotation() != 0 || dst.getRotation() != 0) {
+        return false;
+    }
+    const int sw = src.width(), sh = src.height();
+
+    // srcの外を指す分を削る。反転するときは、削った列/行が描き先の反対側の端に当たる
+    if (sx < 0) { if (!flip_x) dx -= sx; w += sx; sx = 0; }
+    if (sx + w > sw) { const int e = sx + w - sw; if (flip_x) dx += e; w -= e; }
+    if (sy < 0) { if (!flip_y) dy -= sy; h += sy; sy = 0; }
+    if (sy + h > sh) { const int e = sy + h - sh; if (flip_y) dy += e; h -= e; }
+    if (w <= 0 || h <= 0) return true;
+
+    // 描き先: (dx, dy, w, h) ∩ 今のクリップ ∩ frame
+    int32_t kx = 0, ky = 0, kw = 0, kh = 0;
+    dst.getClipRect(&kx, &ky, &kw, &kh);
+    const int dw = dst.width(), dh = dst.height();
+    const int x0 = std::max({dx, (int)kx, 0}), x1 = std::min({dx + w, (int)(kx + kw), dw});
+    const int y0 = std::max({dy, (int)ky, 0}), y1 = std::min({dy + h, (int)(ky + kh), dh});
+    if (x0 >= x1 || y0 >= y1) return true;
+
+    const int sstride = ((sw + 1) & ~1) >> 1;
+    const int dstride = ((dw + 1) & ~1) >> 1;
+    // 4bppは1バイトに2画素(左=上位4bit)
+    auto getpx = [](const uint8_t* row, int x) -> uint8_t {
+        return (x & 1) ? (row[x >> 1] & 0x0F) : (row[x >> 1] >> 4);
+    };
+    auto putpx = [](uint8_t* row, int x, uint8_t c) {
+        uint8_t& d = row[x >> 1];
+        d = (x & 1) ? (uint8_t)((d & 0xF0) | c) : (uint8_t)((d & 0x0F) | (c << 4));
+    };
+
+    for (int py = y0; py < y1; py++) {
+        const int iy = flip_y ? (sy + h - 1 - (py - dy)) : (sy + (py - dy));
+        const uint8_t* srow = sbuf + (size_t)iy * sstride;
+        uint8_t* drow = dbuf + (size_t)py * dstride;
+
+        if (flip_x) {
+            const int base = sx + w - 1 + dx;  // 描き先pxの元は base - px
+            for (int px = x0; px < x1; px++) {
+                const uint8_t c = getpx(srow, base - px);
+                if (transparent && c == 0) continue;
+                putpx(drow, px, c);
+            }
+            continue;
+        }
+
+        const int ox = sx - dx;  // 描き先pxの元は px + ox
+        int px = x0;
+        if ((ox & 1) == 0) {
+            // 元と描き先で画素の上位/下位が揃っている: 端の半端な1画素ずつと、間はバイト(2画素)単位
+            if (px & 1) {
+                const uint8_t c = getpx(srow, px + ox);
+                if (!(transparent && c == 0)) putpx(drow, px, c);
+                px++;
+            }
+            const int bytes = (x1 - px) >> 1;
+            const uint8_t* sp = srow + ((px + ox) >> 1);
+            uint8_t* dp = drow + (px >> 1);
+            if (!transparent) {
+                memmove(dp, sp, (size_t)bytes);
+            } else {
+                for (int i = 0; i < bytes; i++) {
+                    const uint8_t b = sp[i];
+                    if (!b) continue;
+                    if ((b & 0xF0) && (b & 0x0F)) dp[i] = b;
+                    else if (b & 0xF0) dp[i] = (uint8_t)((dp[i] & 0x0F) | (b & 0xF0));
+                    else dp[i] = (uint8_t)((dp[i] & 0xF0) | (b & 0x0F));
+                }
+            }
+            px += bytes * 2;
+        } else {
+            // ずれている(元が奇数ぶんずれる): 描き先の1バイト(2画素)を、元の隣り合う2バイトの
+            // 下位4bitと上位4bitから組み立てる
+            if (px & 1) {
+                const uint8_t c = getpx(srow, px + ox);
+                if (!(transparent && c == 0)) putpx(drow, px, c);
+                px++;
+            }
+            const int bytes = (x1 - px) >> 1;
+            const uint8_t* sp = srow + ((px + ox) >> 1);  // px+oxは奇数: このバイトの下位4bitから始まる
+            uint8_t* dp = drow + (px >> 1);
+            for (int i = 0; i < bytes; i++) {
+                const uint8_t b = (uint8_t)((sp[i] << 4) | (sp[i + 1] >> 4));
+                if (!transparent) { dp[i] = b; continue; }
+                if (!b) continue;
+                if ((b & 0xF0) && (b & 0x0F)) dp[i] = b;
+                else if (b & 0xF0) dp[i] = (uint8_t)((dp[i] & 0x0F) | (b & 0xF0));
+                else dp[i] = (uint8_t)((dp[i] & 0xF0) | (b & 0x0F));
+            }
+            px += bytes * 2;
+        }
+        for (; px < x1; px++) {
+            const uint8_t c = getpx(srow, px + ox);
+            if (transparent && c == 0) continue;
+            putpx(drow, px, c);
+        }
+    }
+    return true;
+}
+
 void DrawPimgSprite(PimgSprite& s, int x, int y) {
+    if (Blit4bpp(s.sprite, 0, 0, s.width, s.height, x, y, s.transparent)) return;
+
     if (s.transparent) {
         s.sprite.pushSprite(OSData::frame, x, y, 0); // index0を透過キーとして使う
     } else {

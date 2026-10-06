@@ -1209,50 +1209,8 @@ int LuaEngineExt::l_draw_rotated(lua_State* L) {
     const Rect clip = Rect{ (int16_t)kx, (int16_t)ky, (int16_t)kw, (int16_t)kh }
         .intersection({ (int16_t)dx, (int16_t)dy, (int16_t)cell, (int16_t)cell });
     if (clip.w > 0 && clip.h > 0) {
-        LGFX_Sprite& src = slot.sprite.sprite;
-        LGFX_Sprite& dst = *OSData::frame;
-        uint8_t* sbuf = static_cast<uint8_t*>(src.getBuffer());
-        uint8_t* dbuf = static_cast<uint8_t*>(dst.getBuffer());
-        const int dw = dst.width(), dh = dst.height();
-        if (sbuf && dbuf && (((int)src.getColorDepth() & 0xFF) == 4) && (((int)dst.getColorDepth() & 0xFF) == 4)
-            && src.getRotation() == 0 && dst.getRotation() == 0) {
-            // 速い道: 透過つきのpushSprite()は1画素ごとに色変換と透過の判定を通って重いので、
-            // 4bppのバッファどうしで直接写す(0番=透過は飛ばす)。
-            // 左右の端の画素の位置(上位/下位4bit)が元と描き先で揃っていれば、1バイトに2画素まとめて扱える
-            const int sstride = ((src.width() + 1) & ~1) >> 1;
-            const int dstride = ((dw + 1) & ~1) >> 1;
-            const int x0 = std::max<int>(clip.x, 0), x1 = std::min<int>(clip.x + clip.w, dw);
-            const int y0 = std::max<int>(clip.y, 0), y1 = std::min<int>(clip.y + clip.h, dh);
-            const int ox = sx - dx, oy = sy - dy;  // 描き先(px,py)の元は(px+ox, py+oy)
-            for (int py = y0; py < y1; py++) {
-                const uint8_t* srow = sbuf + (size_t)(py + oy) * sstride;
-                uint8_t* drow = dbuf + (size_t)py * dstride;
-                int px = x0;
-                if (((ox & 1) == 0)) {
-                    // 揃っている: 端の半端な1画素ずつと、間の1バイト(2画素)ずつ
-                    if (px & 1) {
-                        const uint8_t c = srow[(px + ox) >> 1] & 0x0F;
-                        if (c) drow[px >> 1] = (uint8_t)((drow[px >> 1] & 0xF0) | c);
-                        px++;
-                    }
-                    for (; px + 1 < x1; px += 2) {
-                        const uint8_t b = srow[(px + ox) >> 1];
-                        if (!b) continue;
-                        uint8_t& d = drow[px >> 1];
-                        if ((b & 0xF0) && (b & 0x0F)) d = b;
-                        else if (b & 0xF0) d = (uint8_t)((d & 0x0F) | (b & 0xF0));
-                        else d = (uint8_t)((d & 0xF0) | (b & 0x0F));
-                    }
-                }
-                for (; px < x1; px++) {
-                    const int ix = px + ox;
-                    const uint8_t c = (ix & 1) ? (srow[ix >> 1] & 0x0F) : (srow[ix >> 1] >> 4);
-                    if (!c) continue;
-                    uint8_t& d = drow[px >> 1];
-                    d = (px & 1) ? (uint8_t)((d & 0xF0) | c) : (uint8_t)((d & 0x0F) | (c << 4));
-                }
-            }
-        } else {
+        // 透過つきのpushSprite()は重いので、4bppのバッファどうしで直接写す(IconRender::Blit4bpp)
+        if (!IconRender::Blit4bpp(slot.sprite.sprite, sx, sy, cell, cell, dx, dy, true)) {
             OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
             IconRender::DrawPimgSprite(slot.sprite, dx - sx, dy - sy);
             OSData::frame->setClipRect(kx, ky, kw, kh);
@@ -1318,6 +1276,9 @@ int LuaEngineExt::l_draw_tilemap(lua_State* L) {
             const int32_t cx0 = std::max(dx, ax0), cy0 = std::max(dy, ay0);
             const int32_t cx1 = std::min(dx + tw, ax1), cy1 = std::min(dy + th, ay1);
             if (cx1 <= cx0 || cy1 <= cy0) continue;
+            // 速い道: タイル1枚ぶんを4bppのバッファどうしで直接写す(クリップは触らない)
+            if (IconRender::Blit4bpp(slot.sprite.sprite, (ti % tcols) * tw, (ti / tcols) * th, tw, th,
+                                     dx, dy, slot.sprite.transparent)) continue;
             OSData::frame->setClipRect(cx0, cy0, cx1 - cx0, cy1 - cy0);
             IconRender::DrawPimgSprite(slot.sprite, dx - (ti % tcols) * tw, dy - (ti / tcols) * th);
         }

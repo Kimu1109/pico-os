@@ -85,7 +85,7 @@ pico.draw_image_ex(img, 120, 160, math.pi / 4, 2, 2, w / 2, h / 2)
 
 `image_rotate` で作った画像から、角度 `r`(ラジアン、時計回り)に**一番近いコマ**を選び、回転の中心が `(x, y)` に来るように描きます。角度は `frames` 段階に丸まります(品質より速さを取る版)。
 
-1画素ずつ回す処理が無く、コマを1枚写すだけなので、回転しない透過画像の `draw_image` と同じくらいかそれより速く描けます(PCビルドで1.5倍・16コマの画像180回: `draw_rotated` 2.4ms、同じ大きさの透過画像の `draw_image` 8.9ms、`draw_image_ex` 5.5ms)。
+1画素ずつ回す処理が無く、コマを1枚写すだけなので、回転しない `draw_image` とほぼ同じ速さで描けます。
 
 ```lua
 local img = pico.image_load("/lua/apps/x/ship.pimg")

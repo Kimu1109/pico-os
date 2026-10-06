@@ -2751,7 +2751,14 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
   (透過つきの`pushSprite()`は1画素ごとに色変換と判定を通り、PCビルドで同じ大きさの不透明な画像の約40倍遅かった)。
   PCビルドで1.5倍・16コマを180回: `draw_rotated` 2.4ms / 同じ大きさの透過画像の`draw_image` 8.9ms / `draw_image_ex` 5.5ms。
   出力はpushSpriteの道と同じ(PCビルドで比べた)。焼いた画像は0番が透過になる(元が不透明でも黒が抜ける)。
-  **透過画像の`draw_image`/`draw_image_part`も同じ直接コピーにすれば速くなる見込み**(今回は手を付けていない)。実機では未計測
+  実機では未計測
+- **画像の描画は全部4bppの直接コピー**(2026-10-06): `IconRender::Blit4bpp(src, sx, sy, w, h, dx, dy, transparent, flip_x, flip_y)`が
+  frameの今のクリップの内側だけを`getBuffer()`どうしで写す(元と描き先の画素の上位/下位が揃えば不透明は`memmove`・透過は1バイト=2画素ずつ、
+  奇数ぶんずれていても隣の2バイトの4bitを組み合わせて1バイトずつ。反転は1画素ずつ)。`DrawPimgSprite()`がこれを先に試すので、
+  `draw_image`・`Image`ウィジェット・`draw_tilemap`(タイルごとにクリップを触らず直接)・`draw_image_part`(反転も)・`draw_rotated`が全部これを通る。
+  4bppでない(ホストテストのスタブ)ときはfalseで従来の`pushSprite()`へ落ちる。PCビルドで200回: 不透明`draw_image` 1.71→0.58ms・
+  透過`draw_image` 1.57→0.50ms・`draw_image_part`(反転込み) 3.17→0.85ms・`draw_rotated` 5.74→1.71ms。出力は従来の道と全画素一致(PCビルドで比べた)。
+  実機では未計測
 - **文字幅**: `pico.text_width(text[, font_size])`(`Label::GetTextWidth()`を新設。`DrawPlain()`と同じフォント設定で`textWidth()`)。
 - **WAV**: `wav_pause/wav_paused/wav_position/wav_duration/wav_seek`(`SoundFunctions`にあったものを出しただけ)。
 - **システム**: `pico.millis()`(単調)、`pico.battery()`(残量・電圧・USB給電。読めていなければnil。`LuaEngine.cpp`が`Battery_Functions.hpp`を取り込む)。

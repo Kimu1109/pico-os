@@ -10,7 +10,8 @@
 //   ユーティリティ(path_join・url・base64・settings・time・wifi_status・memory_info・toast)
 //   戻る操作(on_back)
 //   暗号(encrypt/decrypt/hash/random_bytes・storeの暗号化)
-//   OS同梱のLuaモジュール(pico.ui / pico.async)
+//   OS同梱のLuaモジュール(pico.ui / pico.async / pico.tween / pico.game)
+//   pico.draw_tilemap / draw_image_partの反転
 #include "lua/LuaEngine.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
@@ -1068,6 +1069,274 @@ int main() {
             check(up and #TW >= 4, "tween: 単調に増える")
         )LUA", "ext_tween_check");
         check(ok, "pico.tween: 結果");
+        PicoHostClock::now = 0;
+    }
+
+    // =====================================================================
+    // pico.game(2Dゲームの簡易エンジン)と、その土台の描画(draw_tilemap・反転)
+    // =====================================================================
+    {
+        // requireしたときに使うLuaのメモリ(コンパイル結果+モジュールの表)。
+        // 使わないアプリとの差をGCの後で比べる
+        {
+            auto kb_after = [](const char* script) {
+                LuaEngine e(160 * 1024, LuaPermissions{}, "/app");
+                lua_State* EL = e.raw();
+                e.Run(script, "game_mem");
+                lua_gc(EL, LUA_GCCOLLECT);
+                return lua_gc(EL, LUA_GCCOUNT, 0) + lua_gc(EL, LUA_GCCOUNTB, 0) / 1024.0;
+            };
+            const double base = kb_after("GAME = nil");
+            const double used = kb_after("GAME = require('pico.game')");
+            printf("       (pico.game: requireで +%.1fKB)\n", used - base);
+            check(used - base < 64, "pico.game: requireで使うメモリが64KB未満");
+        }
+        LuaEngine ge(160 * 1024, LuaPermissions{}, "/app");
+        check(ge.valid(), "pico.game: エンジン構築");
+        lua_State* GL = ge.raw();
+        lua_pushcfunction(GL, l_check);
+        lua_setglobal(GL, "check");
+        OSData::SD_usable = true;
+        OSData::frame->createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+        // 4x2の画像: 1行目 1,2,3,4 / 2行目 5,6,7,8
+        {
+            std::string b;
+            b += (char)4; b += (char)0; b += (char)2; b += (char)0; b += (char)0;
+            for (int c = 1; c <= 8; c++) { b += (char)1; b += (char)c; }
+            HostSd::files["/app/strip.pimg"] = b;
+        }
+        // 16x8のタイル画像(8x8が2枚、色9と10)
+        {
+            std::string b;
+            b += (char)16; b += (char)0; b += (char)8; b += (char)0; b += (char)0;
+            for (int r = 0; r < 8; r++) { b += (char)8; b += (char)9; b += (char)8; b += (char)10; }
+            HostSd::files["/app/tiles.pimg"] = b;
+        }
+
+        OSData::frame->setClipRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        bool ok = ge.Run(R"LUA(
+            local img = pico.image_load("/app/strip.pimg")
+            check(img ~= nil, "反転: 画像を読む")
+            pico.draw_image_part(img, 10, 10, 0, 0, 4, 2, true, false)
+            local row = {}
+            for i = 0, 3 do row[#row + 1] = pico.get_pixel(10 + i, 10) end
+            check(table.concat(row, ",") == "4,3,2,1", "draw_image_part: 左右反転 [" .. table.concat(row, ",") .. "]")
+            pico.draw_image_part(img, 20, 10, 0, 0, 4, 2, false, true)
+            check(pico.get_pixel(20, 10) == 5 and pico.get_pixel(23, 11) == 4, "draw_image_part: 上下反転")
+            pico.draw_image_part(img, 30, 10, 1, 0, 2, 2, true, true)
+            check(pico.get_pixel(30, 10) == 7 and pico.get_pixel(31, 11) == 2, "draw_image_part: 一部を両方反転")
+            pico.image_free(img)
+
+            local t = pico.image_load("/app/tiles.pimg")
+            check(not pcall(pico.draw_tilemap, t, 0, 8, "\1", 1, 0, 0), "draw_tilemap: タイルの大きさ0はエラー")
+            check(not pcall(pico.draw_tilemap, t, 32, 32, "\1", 1, 0, 0), "draw_tilemap: 画像よりタイルが大きいとエラー")
+            check(not pcall(pico.draw_tilemap, 999, 8, 8, "\1", 1, 0, 0), "draw_tilemap: 無効なハンドルはエラー")
+            check(pcall(pico.draw_tilemap, t, 8, 8, "\1\0\2\3\255", 2, -100, -100), "draw_tilemap: 画面外・範囲外の値でも落ちない")
+            check(pcall(pico.draw_tilemap, t, 8, 8, "", 2, 0, 0), "draw_tilemap: 空のデータ")
+            pico.image_free(t)
+        )LUA", "game_prims");
+        check(ok, "pico.game: 描画の土台");
+
+        int x0, y0, w0, h0;
+        OSData::frame->getClipRect(&x0, &y0, &w0, &h0);
+        check(x0 == 0 && y0 == 0 && w0 == SCREEN_WIDTH && h0 == SCREEN_HEIGHT, "draw_tilemap: クリップを元へ戻す");
+
+        PicoHostClock::now = 0;
+        ok = ge.Run(R"LUA(
+            local game = require("pico.game")
+            g = game.new{ x = 0, y = 16, w = 240, h = 304, bg = 12, pad = true, manual = true }
+            G_CANVAS = g.canvas
+            check(#g.buttons == 6 and g.vh == 304 - 56, "game.new: padで6つのボタンと狭いビュー")
+            check(pico.get(g.canvas, "w") == 240 and pico.get(g.canvas, "h") == 304, "game.new: キャンバス")
+
+            SPAWNED = {}
+            map = g:tilemap{ image = "/app/tiles.pimg", tile = 8, solid = { 1 },
+                legend = { ["#"] = 1, ["~"] = 2 },
+                spawn = { P = function(x, y) SPAWNED[#SPAWNED + 1] = x .. "," .. y end },
+                rows = {
+                    "#..............#",
+                    "#..............#",
+                    "#..............#",
+                    "#...##.........#",
+                    "#..P...........#",
+                    "#~~~~~.........#",
+                    "################",
+                } }
+            check(map.cols == 16 and map.rows == 7, "tilemap: rowsから列と行")
+            check(SPAWNED[1] == "24,32", "tilemap: spawnがワールド座標で呼ばれる [" .. tostring(SPAWNED[1]) .. "]")
+            check(map:get(3, 4) == 0, "tilemap: spawnのマスは空")
+            check(map:get(0, 0) == 1 and map:get(1, 5) == 2 and map:get(99, 0) == 0, "tilemap: get")
+            check(map:is_solid(0, 0) and not map:is_solid(1, 5), "tilemap: solidの一覧")
+            check(#map:find(2) == 5, "tilemap: find")
+            local v, c, r = map:at(9, 41)
+            check(v == 2 and c == 1 and r == 5, "tilemap: at")
+            local ww, wh = g:world_size()
+            check(ww == 240 and wh == 248, "world_size: ビューより小さいマップはビューの大きさ")
+
+            -- 落ちて床(6行目=y48)で止まる
+            p = g:sprite{ x = 64, y = 8, w = 8, h = 8, color = 8, gravity = 1000, solid = true, tag = "player" }
+            for i = 1, 60 do g:step(1 / 60) end
+            check(p.on_ground and p.y == 40 and p.vy == 0, "sprite: 重力で落ちて床に乗る y=" .. p.y)
+            -- 右へ歩くと右の壁(x=120)で止まる
+            p.vx = 300
+            for i = 1, 60 do g:step(1 / 60) end
+            check(p.x == 112 and p.vx == 0, "sprite: 右の壁で止まる x=" .. p.x)
+            p.vx = 300; g:step(1 / 60)
+            check(p.x == 112 and p.hit_wall == 1, "sprite: 押し付けている間はhit_wall")
+            g:step(1 / 60)
+            check(p.hit_wall == 0, "sprite: hit_wallはそのフレームだけ")
+            -- 左へ速く動いても壁をすり抜けない
+            p.vx = 0
+            p:move(-1000, 0)
+            check(p.x == 8 and p.hit_wall == -1, "sprite: 速く動いてもすり抜けない x=" .. p.x)
+            -- 天井(3行目のブロック x32..47, y24..31)
+            p.x, p.y, p.vy = 34, 40, 0
+            p:move(0, -20)
+            check(p.y == 32 and p.hit_ceiling, "sprite: 天井で止まる y=" .. p.y)
+            -- 当たり判定の箱
+            local q = g:sprite{ x = 100, y = 10, w = 16, h = 16, hitbox = { 4, 4, 8, 8 }, tag = "coin" }
+            local r2 = g:sprite{ x = 110, y = 20, w = 4, h = 4 }
+            check(q:overlaps(r2), "overlaps: hitboxで判定")
+            r2.x = 113
+            check(not q:overlaps(r2), "overlaps: hitboxの外")
+
+            -- 当たりの規則と削除
+            HITS = 0
+            g:collide("player", "coin", function(a, b) HITS = HITS + 1; b:remove() end)
+            q.x, q.y = p.x - 4, p.y - 4
+            g:step(1 / 60)
+            check(HITS == 1 and #g:find("coin") == 0, "collide: 重なると呼ばれ、removeで消える")
+            g:step(1 / 60)
+            check(HITS == 1, "collide: 消えたものとはもう当たらない")
+            check(g:sprite_at(p.x + 1, p.y + 1) == p, "sprite_at")
+
+            -- アニメーション
+            local an = g:sprite{ x = 0, y = 0, w = 8, h = 8, color = 1,
+                anims = { walk = { frames = { 3, 4, 5 }, fps = 10 }, once = { frames = { 7, 8 }, fps = 10, loop = false,
+                          on_done = function(s) ANIM_DONE = true end } } }
+            an:play("walk")
+            check(an.frame == 3, "play: 最初のコマ")
+            g:step(0.05); g:step(0.05); check(an.frame == 4, "anim: 0.1秒で次のコマ")
+            g:step(0.05); g:step(0.05); check(an.frame == 5, "anim: 次")
+            g:step(0.05); g:step(0.05); check(an.frame == 3, "anim: 一周して戻る")
+            g:step(1)
+            check(an.frame == 3, "step: 1回のdtは0.05秒で頭打ち(コマが飛ばない)")
+            an:play("once")
+            for i = 1, 5 do g:step(0.05) end
+            check(an.frame == 8 and an.anim_done and ANIM_DONE, "anim: loop=falseは最後で止まりon_done")
+            check(not pcall(an.play, an, "nope"), "play: 知らない名前はエラー")
+            an:remove()
+
+            -- ゲーム内タイマーと状態
+            LOGS = {}
+            g:state("title", { enter = function(gg, a) LOGS[#LOGS + 1] = "enter:" .. tostring(a) end,
+                               exit = function() LOGS[#LOGS + 1] = "exit" end,
+                               update = function() LOGS.u = (LOGS.u or 0) + 1 end })
+            g:state("play", { enter = function() LOGS[#LOGS + 1] = "play" end })
+            g:go("title", 5)
+            g:step(0.01)
+            g:go("play")
+            check(table.concat(LOGS, "|") == "enter:5|exit|play" and LOGS.u == 1, "state: enter/update/exit")
+            check(not pcall(g.go, g, "nope"), "state: 知らない名前はエラー")
+            local fired = 0
+            g:after(0.5, function() fired = fired + 1 end)
+            local ev = g:every(0.2, function() fired = fired + 10 end)
+            for i = 1, 13 do g:step(0.05) end
+            check(fired == 31, "after/every: ゲームの時間で動く " .. fired)
+            g:cancel(ev)
+            g:pause(true)
+            for i = 1, 13 do g:step(0.05) end
+            check(fired == 31, "pause: 止まっている間は進まない")
+            g:pause(false)
+
+            -- 画面ボタン(タッチ)
+            g:_touch("start", 5, 260)            -- 左の矢印
+            g:step(0.01)
+            check(g:down("left") and g:pressed("left"), "button: 押した")
+            g:step(0.01)
+            check(g:down("left") and not g:pressed("left"), "button: 押しっぱなし")
+            g:_touch("move", 45, 260)            -- 隣の「上」へ滑らせる
+            g:step(0.01)
+            check(g:down("up") and not g:down("left") and g:released("left"), "button: 滑らせると切り替わる")
+            g:_touch("end", 45, 260)
+            g:step(0.01)
+            check(not g:down("up") and g:released("up"), "button: 離した")
+            g:_touch("start", 10, 10); g:_touch("end", 10, 10)   -- 1フレームの間に押して離す
+            g:step(0.01)
+            check(g.touch.pressed and g.touch.x == 10, "touch: 短いタップも取りこぼさない")
+            g:step(0.01)
+            check(g.touch.released and not g.touch.down, "touch: 離した")
+            local h, v = g:axis()
+            check(h == 0 and v == 0, "axis")
+
+            -- タイルの書き換え
+            map:set(5, 3, 0)
+            check(map:get(5, 3) == 0 and not map:is_solid(5, 3), "tilemap: set")
+        )LUA", "game_logic");
+        check(ok, "pico.game: ロジック");
+
+        // 描き直し: カメラが動かない間は動いたスプライトの周りだけ
+        ok = ge.Run(R"LUA(
+            g:step(0.01)                  -- 溜まっているものを流す
+            mover = g:sprite{ x = 60, y = 10, w = 8, h = 8, color = 3 }
+            g:step(0.01)                  -- 並び順が変わったので全体
+        )LUA", "game_dirty0");
+        g_dirty_calls = 0;
+        g_last_dirty = Rect{0, 0, 0, 0};
+        ok = ok && ge.Run("mover.x = mover.x + 3; g:step(0.01)", "game_dirty1");
+        check(ok && g_dirty_calls == 2, "dirty: 動いたスプライトの前後だけ");
+        check(g_last_dirty.w == 8 && g_last_dirty.h == 8 && g_last_dirty.x == 63 && g_last_dirty.y == 26,
+              "dirty: 新しい位置の矩形(画面座標)");
+        g_dirty_calls = 0;
+        ok = ok && ge.Run("g:step(0.01)", "game_dirty2");
+        check(ok && g_dirty_calls == 0, "dirty: 何も変わらなければ描き直さない");
+
+        // カメラ: 大きいマップで追いかける
+        ok = ge.Run(R"LUA(
+            g:clear()
+            local rows = {}
+            for r = 1, 40 do rows[r] = string.rep(".", 100) end
+            big = g:tilemap{ image = "/app/tiles.pimg", tile = 8, rows = rows }
+            hero = g:sprite{ x = 400, y = 150, w = 8, h = 8, color = 7 }
+            g:follow(hero)
+            g:step(0.01)
+            check(g.cam_x == 400 + 4 - 120 and g.cam_y == 150 + 4 - 124, "follow: 中央に保つ " .. g.cam_x .. "," .. g.cam_y)
+            hero.x, hero.y = 0, 0
+            g:step(0.01)
+            check(g.cam_x == 0 and g.cam_y == 0, "follow: ワールドの端で止まる")
+            hero.x, hero.y = 799, 319
+            g:step(0.01)
+            check(g.cam_x == 800 - 240 and g.cam_y == 320 - 248, "follow: 右下の端")
+            local sx, sy = g:to_screen(hero.x, hero.y)
+            check(sx == 799 - 560 and sy == 16 + 319 - 72, "to_screen")
+            hero.bounded = true
+            hero.vx = 500
+            g:step(0.05)
+            check(hero.x == 792 and hero.hit_wall == 1, "bounded: ワールドの端で止まる")
+            -- 描画(エラーにならないこと)
+            sprite_img = g:image("/app/tiles.pimg")
+            g:sprite{ image = sprite_img, w = 8, h = 8, frame = 1, x = 700, y = 300, flip_x = true }
+            g:sprite{ x = 690, y = 300, w = 8, h = 8, draw = function(s, x, y) DRAWN_AT = x .. "," .. y end }
+            function g:on_draw(ox, oy) HUD = ox .. "," .. oy end
+            g:step(0.01)
+        )LUA", "game_camera");
+        check(ok, "pico.game: カメラ");
+        if (Widget* c = WidgetRegistry::Resolve((WidgetId)GlobalInt(GL, "G_CANVAS"))) {
+            OSData::frame->setClipRect(0, 16, 240, 304);
+            c->renderForce();
+            OSData::frame->clearClipRect();
+        }
+        ok = ge.Run(R"LUA(
+            check(HUD == "0,16", "render: on_drawにキャンバスの左上")
+            check(DRAWN_AT == (690 - 560) .. "," .. (16 + 300 - 72), "render: drawで描くスプライトに画面座標 " .. tostring(DRAWN_AT))
+            g:destroy()
+            check(g.canvas == nil, "destroy")
+        )LUA", "game_render");
+        check(ok, "pico.game: 描画");
+        WidgetFunctions::ProcessPendingDeletes();
+        WidgetFunctions::ClearSceneWidgets();
+        HostSd::files.clear();
         PicoHostClock::now = 0;
     }
 

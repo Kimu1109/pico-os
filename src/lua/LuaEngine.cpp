@@ -2396,7 +2396,8 @@ int LuaEngine::l_draw_image(lua_State* L) {
 // 部品の多い絵(テトリスのミノ等)は1枚にまとめて読み、これで切り出す。
 // 実装は「今のクリップ(FlushDirty()のdirty矩形)と描き先の矩形の重なり」へクリップを
 // 一時的に狭めてから画像全体をずらしてpushSprite()するだけ(描かれるのは重なりの中だけ)。
-// クリップは元へ戻すので、renderコールバックの中で何回呼んでもdirty矩形の外へははみ出さない
+// クリップは元へ戻すので、renderコールバックの中で何回呼んでもdirty矩形の外へははみ出さない。
+// 8・9番目の引数(flip_x / flip_y)が真なら左右/上下を反転して描く(1画素ずつ。pico.gameのスプライト用)
 int LuaEngine::l_draw_image_part(lua_State* L) {
     LuaEngine* self = Self(L);
     const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
@@ -2412,6 +2413,36 @@ int LuaEngine::l_draw_image_part(lua_State* L) {
         return luaL_error(L, "pico.draw_image_part: 無効なイメージハンドル");
     }
     ImageSlot& slot = self->images_[index];
+    const bool flip_x = lua_toboolean(L, 8) != 0;
+    const bool flip_y = lua_toboolean(L, 9) != 0;
+
+    if (flip_x || flip_y) {
+        // 反転はpushSprite()ではできないので、描き先の1画素ごとに元の画素を引く
+        // (ゲームのキャラクター1体ぶん程度の大きさを想定。draw_image_exと同じ書き方)
+        if (w <= 0 || h <= 0) return 0;
+        int32_t kx = 0, ky = 0, kw = 0, kh = 0;
+        OSData::frame->getClipRect(&kx, &ky, &kw, &kh);
+        const int32_t x0 = std::max({x, kx, (int32_t)0});
+        const int32_t y0 = std::max({y, ky, (int32_t)0});
+        const int32_t x1 = std::min({x + w, kx + kw, (int32_t)SCREEN_WIDTH});
+        const int32_t y1 = std::min({y + h, ky + kh, (int32_t)SCREEN_HEIGHT});
+        const int32_t iw = slot.sprite.width, ih = slot.sprite.height;
+        for (int32_t py = y0; py < y1; py++) {
+            const int32_t v = py - y;
+            const int32_t iy = sy + (flip_y ? (h - 1 - v) : v);
+            if (iy < 0 || iy >= ih) continue;
+            for (int32_t px = x0; px < x1; px++) {
+                const int32_t u = px - x;
+                const int32_t ix = sx + (flip_x ? (w - 1 - u) : u);
+                if (ix < 0 || ix >= iw) continue;
+                const uint32_t col = slot.sprite.sprite.readPixelValue(ix, iy);
+                if (slot.sprite.transparent && col == 0) continue; // index0は透過(DrawPimgSprite()と同じ)
+                OSData::frame->writePixel(px, py, (int)col);
+            }
+        }
+        LuaMarkDirty({ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h });
+        return 0;
+    }
 
     // 画像の外を指す分は削る(負のsx/syは描き先を右/下へずらして吸収する)
     int32_t dx = x, dy = y;
@@ -4361,6 +4392,34 @@ namespace {
         }
     }
 
+    // スタックの一番上の関数(OS同梱モジュールをコンパイルしたもの)から、デバッグ情報
+    // (行番号・ローカル変数名)を落として置き換える。pico.gameはこれで約3割小さくなる。
+    // 自分でdumpしたものを読み直すだけなのでバイナリのチャンクでも安全。
+    // モジュールの中で起きたエラーは行番号が「?」になるが、error(msg, 2)で投げる
+    // 引数の誤りは呼んだ側(アプリ)の行を指すので困らない
+    struct DumpWriter { bool init; luaL_Buffer b; };
+    int DumpWrite(lua_State* L, const void* p, size_t sz, void* ud) {
+        DumpWriter* w = static_cast<DumpWriter*>(ud);
+        if (!w->init) { w->init = true; luaL_buffinit(L, &w->b); }
+        luaL_addlstring(&w->b, static_cast<const char*>(p), sz);
+        return 0;
+    }
+    void StripFunction(lua_State* L, const char* chunkname) {
+        DumpWriter w;
+        w.init = false;
+        if (lua_dump(L, DumpWrite, &w, 1) != 0 || !w.init) return;   // 失敗したらそのまま使う
+        luaL_pushresult(&w.b);                                        // fn, bin
+        lua_remove(L, -2);                                            // bin(元の関数は捨てる)
+        lua_gc(L, LUA_GCCOLLECT);                                     // 読み直す前に元の分を返す
+        size_t n = 0;
+        const char* bin = lua_tolstring(L, -1, &n);
+        if (luaL_loadbufferx(L, bin, n, chunkname, "b") != LUA_OK) {  // bin, fn|msg
+            lua_remove(L, -2);
+            return;
+        }
+        lua_remove(L, -2);                                            // fn
+    }
+
     // ソース中の require("名前") / require "名前" / require('名前') を拾って worklist (テーブルの添字idx)へ足す。
     // 文字列として拾うだけ(コメントの中でも拾うが、無いモジュールは無視されるだけで害は無い)
     void ScanRequires(lua_State* L, const char* src, size_t len, int wl_idx) {
@@ -4485,8 +4544,10 @@ void LuaEngine::preloadModules(const char* src, size_t len) {
             FixedString<PICO_STR_M> bname;
             bname.assign("=");
             bname.append(name);
-            luaL_loadbufferx(L, bsrc, strlen(bsrc), bname.c_str(), "t"); // 成功なら関数、失敗ならメッセージ
-            lua_setfield(L, pre, name);
+            if (luaL_loadbufferx(L, bsrc, strlen(bsrc), bname.c_str(), "t") == LUA_OK) {
+                StripFunction(L, bname.c_str());
+            }
+            lua_setfield(L, pre, name);  // 成功なら関数、失敗ならメッセージ
             lua_pop(L, 1);
             continue;
         }

@@ -14,7 +14,7 @@
 | 2 | [汎用基盤](#2-汎用基盤) | ✅ 完了(Resolve()もLua統合から実利用済み) |
 | 3 | [スクリーン管理](#3-スクリーン管理) | 🔨 メモリプールは計測の結果いったん保留 |
 | 4 | [Wi-Fiの管理強化](#4-wi-fiの管理強化) | ✅ 完了 |
-| 5 | [Luaアプリ](#5-luaアプリ) | ✅ LuaEngine/LuaSceneが動作しウィジェット・ダイアログ・SD・画像・ネットワーク・シーン制御・権限管理・実行時間の安全網・SDスキャンによるアプリ自動登録まで実装済み。細部の穴(pico.remove_child/list_add等)も埋まり、既知の欠けは無い。2026-10-05に require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー、さらに TextView/ImageView/MarkdownView/AnalogClock/DurationPicker/MonthGrid/ProgressBar の生成・ジェスチャー・リスト/タブ/ダイアログの拡張・オフスクリーン画像・`pico.ui`/`pico.async`/`pico.tween`・暗号化(XChaCha20-Poly1305/Argon2id)まで入った(PCで確認。実機は未確認。`CLAUDE.md`「Lua APIの追加」参照) |
+| 5 | [Luaアプリ](#5-luaアプリ) | ✅ LuaEngine/LuaSceneが動作しウィジェット・ダイアログ・SD・画像・ネットワーク・シーン制御・権限管理・実行時間の安全網・SDスキャンによるアプリ自動登録まで実装済み。細部の穴(pico.remove_child/list_add等)も埋まり、既知の欠けは無い。2026-10-05に require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー、さらに TextView/ImageView/MarkdownView/AnalogClock/DurationPicker/MonthGrid/ProgressBar の生成・ジェスチャー・リスト/タブ/ダイアログの拡張・オフスクリーン画像・`pico.ui`/`pico.async`/`pico.tween`・暗号化(XChaCha20-Poly1305/Argon2id)、2026-10-06に2Dゲームの簡易エンジン`pico.game`まで入った(PCで確認。実機は未確認。`CLAUDE.md`「Lua APIの追加」参照) |
 | 6 | [PC/Web動作対応](#6-pcweb動作対応) | ✅ 完了 |
 | 7 | [標準アプリ開発](#7-標準アプリ開発) | ✅ Markdownブラウザ / 時計 / 電卓 / ファイルエクスプローラー / ファイルビューワー / テキストエディタ / 設定 / 辞書が完了 |
 | 8 | [セカンダリアプリ開発](#8-セカンダリアプリ開発) | ⬜ 未完了 |
@@ -98,6 +98,7 @@
   - [x] 時刻取得(pico.get_time())
   - [x] コンテナからの子の取り外し(pico.remove_child)
   - [x] リストへの項目追加(pico.list_add/list_clear/pico.tab_add)
+  - [x] 2Dゲームの簡易エンジン(pico.game)
 - [ ] 残タスク
   - [x] 命令単位の実行時間制御(lua_sethook等)
   - [x] SDを走査してLuaアプリを見つける処理

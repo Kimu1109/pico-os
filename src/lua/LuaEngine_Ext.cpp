@@ -34,6 +34,7 @@
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/widgets/apps/DurationPicker.hpp"
 #include "gui/widgets/apps/MonthGrid.hpp"
+#include "gui/icons/icon_render.h"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
@@ -116,6 +117,7 @@ struct LuaEngineExt {
     static int l_image_create(lua_State* L);
     static int l_image_target(lua_State* L);
     static int l_image_clear(lua_State* L);
+    static int l_draw_tilemap(lua_State* L);
 
     // ---------------- ユーティリティ ----------------
     static int l_app_dir(lua_State* L);
@@ -1071,6 +1073,73 @@ int LuaEngineExt::l_image_create(lua_State* L) {
     return 1;
 }
 
+// pico.draw_tilemap(handle, tile_w, tile_h, data, cols, x, y)
+// タイルマップを描く(pico.gameの土台。Luaでタイルを1枚ずつdraw_image_partすると、
+// 全面で数百回の呼び出しになって重いため、ここでまとめて回す)。
+//   handle: タイルを並べた画像(左上から右へ、行が終わったら次の行へ番号が進む)
+//   data:   1バイト=1マスの文字列(行優先。cols列で折り返す)。0は空(何も描かない)、
+//           1〜255は画像の(値-1)番目のタイル
+//   x, y:   マップの左上を置く画面座標(カメラでずらした結果。画面の外でもよい)
+// 描くのは今のクリップ(renderの中ではdirty矩形)にかかるマスだけ。
+int LuaEngineExt::l_draw_tilemap(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+    const int32_t tw = (int32_t)luaL_checkinteger(L, 2);
+    const int32_t th = (int32_t)luaL_checkinteger(L, 3);
+    size_t len = 0;
+    const char* data = luaL_checklstring(L, 4, &len);
+    const int32_t cols = (int32_t)luaL_checkinteger(L, 5);
+    const int32_t x = (int32_t)luaL_checkinteger(L, 6);
+    const int32_t y = (int32_t)luaL_checkinteger(L, 7);
+
+    size_t index;
+    if (!self->ResolveImageHandle(handle, index)) {
+        return luaL_error(L, "pico.draw_tilemap: 無効なイメージハンドル");
+    }
+    if (tw < 1 || th < 1 || tw > 128 || th > 128) return luaL_error(L, "pico.draw_tilemap: タイルの大きさは1〜128です");
+    if (cols < 1 || cols > 4096) return luaL_error(L, "pico.draw_tilemap: 列数は1〜4096です");
+    if (len == 0) return 0;
+
+    LuaEngine::ImageSlot& slot = self->images_[index];
+    const int32_t tcols = slot.sprite.width / tw;
+    const int32_t trows = slot.sprite.height / th;
+    if (tcols < 1 || trows < 1) return luaL_error(L, "pico.draw_tilemap: 画像がタイル1枚より小さいです");
+    const int32_t tcount = tcols * trows;
+    const int32_t rows = (int32_t)((len + (size_t)cols - 1) / (size_t)cols);
+
+    // マップの範囲 ∩ 画面 ∩ 今のクリップ
+    int32_t kx = 0, ky = 0, kw = 0, kh = 0;
+    OSData::frame->getClipRect(&kx, &ky, &kw, &kh);
+    const int32_t ax0 = std::max({x, kx, (int32_t)0});
+    const int32_t ay0 = std::max({y, ky, (int32_t)0});
+    const int32_t ax1 = std::min({x + cols * tw, kx + kw, (int32_t)SCREEN_WIDTH});
+    const int32_t ay1 = std::min({y + rows * th, ky + kh, (int32_t)SCREEN_HEIGHT});
+    if (ax1 <= ax0 || ay1 <= ay0) return 0;
+
+    const int32_t c0 = (ax0 - x) / tw, c1 = (ax1 - 1 - x) / tw;
+    const int32_t r0 = (ay0 - y) / th, r1 = (ay1 - 1 - y) / th;
+    for (int32_t r = r0; r <= r1; r++) {
+        for (int32_t c = c0; c <= c1; c++) {
+            const size_t i = (size_t)r * (size_t)cols + (size_t)c;
+            if (i >= len) break;
+            const int32_t v = (uint8_t)data[i];
+            if (v == 0 || v > tcount) continue;
+            const int32_t ti = v - 1;
+            const int32_t dx = x + c * tw, dy = y + r * th;
+            const int32_t cx0 = std::max(dx, ax0), cy0 = std::max(dy, ay0);
+            const int32_t cx1 = std::min(dx + tw, ax1), cy1 = std::min(dy + th, ay1);
+            if (cx1 <= cx0 || cy1 <= cy0) continue;
+            OSData::frame->setClipRect(cx0, cy0, cx1 - cx0, cy1 - cy0);
+            IconRender::DrawPimgSprite(slot.sprite, dx - (ti % tcols) * tw, dy - (ti / tcols) * th);
+        }
+    }
+    OSData::frame->setClipRect(kx, ky, kw, kh);
+    if (!LuaOffscreen::active) {
+        PICO_GFX::MarkDirty({ (int16_t)ax0, (int16_t)ay0, (int16_t)(ax1 - ax0), (int16_t)(ay1 - ay0) });
+    }
+    return 0;
+}
+
 int LuaEngineExt::l_image_clear(lua_State* L) {
     LuaEngine* self = Self(L);
     const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
@@ -1393,6 +1462,7 @@ void LuaEngine::RegisterExtApi() {
     registerFn("measure_text", LuaEngineExt::l_measure_text);
     registerFn("image_create", LuaEngineExt::l_image_create);
     registerFn("image_clear", LuaEngineExt::l_image_clear);
+    registerFn("draw_tilemap", LuaEngineExt::l_draw_tilemap);
     registerFn("image_target", LuaEngineExt::l_image_target);
     registerFn("app_dir", LuaEngineExt::l_app_dir);
     registerFn("path_join", LuaEngineExt::l_path_join);

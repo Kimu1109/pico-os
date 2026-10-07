@@ -130,6 +130,11 @@
 #                 HOLD・長押しの連続移動・ゲームオーバーとハイスコア保存・タッチの操作ボタン
 #   oshite_test… Luaアプリ「おしてのぼれ」(pico.gameの軽い物理を使うパズルアクション)の
 #                 3ステージを、操作を流し込んで実際に解けることを確かめる(pico.gameは本物)。
+#   reversi_test / minesweeper_test / breakout_test… Luaアプリ「リバーシ」「マインスイーパー」「ブロック崩し」
+#                 (どれもpico.gameで作ってある)のゲームの規則。tetris_testと同じく、pico.gameは本物で
+#                 pico.*だけ描画を捨てる偽物に差し替え、タップや十字キーを流し込んで確かめる
+#                 (打つ・裏返す・パス・終局 / 最初の1手は安全・連鎖・旗・難易度 / 反射・ブロック・
+#                 アイテム・ステージクリア・全20ステージ・自動プレイ)
 #   vt_terminal_test… SSHアプリの端末エミュレータ(src/ssh/Vt_Terminal)。折り返し・カーソル移動・
 #                 消去・色(256色/RGB→16色)・全角(2セル)・スクロールバック・範囲スクロール・
 #                 代替画面・問い合わせ(6n等)への返事・大きさの変更
@@ -1450,6 +1455,12 @@ run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/tetris_test.lua" "$ROO
 echo ""
 echo "===== oshite_test ====="
 run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/oshite_test.lua" "$ROOT"
+
+for t in reversi_test minesweeper_test breakout_test; do
+    echo ""
+    echo "===== $t ====="
+    run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/$t.lua" "$ROOT"
+done
 
 # --- pico_mock.lua(Luaアプリのテスト用のpico.*の偽物)自身 ---
 echo ""

@@ -1,5 +1,5 @@
--- ブロック崩しのステージ定義。main.lua単体でスクリプト読み込み上限(16KiB)へ
--- 収めるため、ステージ生成ロジックをここへ分離した。LuaSceneが本体(main.lua)より
+-- ブロック崩しのステージ定義と自動プレイの狙い。ステージの生成ロジックが大きいので
+-- 本体(main.lua)と分けてある。LuaSceneが本体(main.lua)より
 -- 先にこのファイルを読み込み・実行し(同じディレクトリの"lib.lua"を自動で探す)、
 -- 結果はグローバル変数STAGESとして本体から見える(LuaScene.hppのクラスコメント参照)。
 -- 以前はmain.lua自身がpico.sd_read()+Luaのload()+pcall()で実行時にこのファイルを
@@ -15,9 +15,6 @@
 -- 加えて末尾のensureSolvable()が「壊せるブロックがパドル側の開放空間へ本当に
 -- 届くか」を毎ステージ機械的に検証するので、デザインを間違えても詰みステージは
 -- 出荷されない(万一届かないブロックがあれば、そのマスだけ自動的に空へ戻す)。
-
--- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
-local BUTTON_FRAME = 9
 
 local COLS = 8
 local WALL = -1 -- main.lua側のWALL_TIERと値を一致させること
@@ -169,63 +166,19 @@ local function stage(rows, shapeFn, tierFn, wallFn)
     return { rows = rows, cell = function(r, c) return grid[r][c] end }
 end
 
--- アイテムの図形3つを作る(ステージとは無関係だが、main.luaを16KiBに収めるためここに置く)。
--- 添字はmain.luaのITEM_TRIBALL(1)/ITEM_DOUBLE(2)/ITEM_SLOW(3)と揃えること
-local function itemShapes(size)
-    local r = pico.create("Rect")
-    pico.set(r, "w", size); pico.set(r, "h", size); pico.set(r, "color", 14)
-    local e = pico.create("Ellipse")
-    pico.set(e, "w", size); pico.set(e, "h", size); pico.set(e, "color", 11)
-    local t = pico.create("Triangle")
-    pico.set(t, "x1", 0); pico.set(t, "y1", size)
-    pico.set(t, "x2", size / 2); pico.set(t, "y2", 0)
-    pico.set(t, "x3", size); pico.set(t, "y3", size)
-    pico.set(t, "color", 9)
-    for _, id in ipairs({ r, e, t }) do pico.set(id, "visible", false) end
-    return { r, e, t }
-end
-
--- バッテリー消費計測等で放置プレイさせるための自動操作(main.luaを16KiBに収めるため
--- ここに置く)。狙うのは「パドルへ向かって落ちてくるボールのうち一番下にいるもの」で、
--- 無ければ(全ボールが上向きの間)先頭のボールを追う。完璧な反射は狙わずパドル中央で
--- 追尾するだけの単純な実装(ミスもする=ライフが減りゲームオーバーへ至ることも許容)。
+-- 自動プレイ(バッテリー消費計測等で放置プレイさせるためのもの)の狙い。狙うのは
+-- 「パドルへ向かって落ちてくるボールのうち一番下にいるもの」で、無ければ(全ボールが
+-- 上向きの間)先頭のボールを追う。完璧な反射は狙わずパドル中央で追尾するだけの単純な
+-- 実装(ミスもする=ライフが減りゲームオーバーへ至ることも許容)。
+-- ボールは { cx, cy(中心), dx, dy(速度) } を持つスプライト。戻り値は狙うx(無ければfallback)
 local function autoTargetX(balls, fallback)
     local best, bestY = nil, -1
     for i = 1, #balls do
         local b = balls[i]
-        if b.vy > 0 and b.y > bestY then best, bestY = b, b.y end
+        if b.dy > 0 and b.cy > bestY then best, bestY = b, b.cy end
     end
     if not best and #balls > 0 then best = balls[1] end
-    return best and best.x or fallback
-end
-
--- 自動プレイのON/OFFトグルボタン。状態(state)はここへ閉じ込め、main.luaへは
--- 問い合わせ関数(isAuto)だけを返す(main.luaが16KiBぎりぎりなので、状態変数・
--- ボタン生成・色の切り替えを一切main.lua側へ書かずに済ませるため)。
--- 文字色でON(明るい緑)/OFF(既定の黒)を示す(Buttonは背景色を持てないため。
--- テキストで"自動:ON"/"OFF"にすると幅32pxのボタンに収まらないので色だけで示す)
-local function makeAutoToggle(x, y)
-    local state = false
-    local id = pico.create("Button")
-    pico.set(id, "x", x); pico.set(id, "y", y)
-    pico.set(id, "w", 32 + BUTTON_FRAME); pico.set(id, "h", 16 + BUTTON_FRAME)
-    pico.set(id, "font_size", 0); pico.set(id, "text", "自動")
-    pico.on(id, "press_start", function()
-        state = not state
-        pico.set(id, "text_color", state and 10 or 0) -- PICO_GREEN / PICO_BLACK
-    end)
-    return function() return state end
-end
-
--- 自動プレイ中のパドル制御。手動(タッチ/十字キー)操作と排他で、
--- 自動プレイ中はボール追尾のみ・手動操作は無視する
-local function autoControl(auto, game_state, balls, paddle_cx, tx, touched, ddx, setPaddle)
-    if auto then
-        if game_state == "playing" then setPaddle(autoTargetX(balls, paddle_cx) - 20) end --あえてノイズを入れて次に進むように
-    else
-        if touched then setPaddle(tx) end
-        if ddx ~= 0 and game_state ~= "dialog" then setPaddle(paddle_cx + ddx) end
-    end
+    return best and best.cx or fallback
 end
 
 -- 序盤(1〜5)は壁なし・上段が速いだけのチュートリアル。6以降は
@@ -234,9 +187,7 @@ end
 -- LuaSceneが本体より先にこのファイルを実行するだけなので、returnではなく
 -- グローバル変数への代入で結果を渡す(本体側は`local STAGES = STAGES`で受け取る)
 STAGES = {
-    itemShapes = itemShapes,
-    makeAutoToggle = makeAutoToggle,
-    autoControl = autoControl,
+    autoTargetX = autoTargetX,
     cols = COLS,
     list = {
         stage(3, shapeFull, tierTop),

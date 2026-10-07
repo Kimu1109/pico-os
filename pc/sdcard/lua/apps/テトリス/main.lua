@@ -1,53 +1,48 @@
--- テトリス風ゲーム。盤面/NEXT・HOLD/操作ボタンはそれぞれCanvas 1枚で、render()で直接描く。
--- ミノの絵は blocks.pimg(12x12のタイルを横に8枚: I O T S Z J L ゴースト)から
--- pico.draw_image_part()で切り出す。作り直すときは script/generate_tetris_blocks.py。
--- 操作: タッチ(下のボタン・盤面タップ=右回転・HOLD枠タップ)と外部コントローラー。
--- ※LuaSceneが読むのは16KiBまで(日本語コメントは1文字3バイト)
+-- テトリス風ゲーム。pico.game(2Dゲームの簡易エンジン)で作っている。
+--   盤面=タイルマップ(blocks.pimg。変わったマスを map:set() するだけ) / 落ちるミノ・ゴースト=スプライト4枚ずつ
+--   HOLD/NEXT/点数=g:on_draw(変わったとき g:dirty) / 操作ボタン=g:button(絵はlib.luaのdrawBtn)
+--   画面=g:state(title / play / pause / clear / over)
+-- ミノの形・SRSの壁蹴りの表・ボタンの絵は lib.lua(グローバルLIBで渡る)。画像は script/generate_tetris_blocks.py
+-- ※LuaSceneが読むのは16KiBまで(日本語コメントは1文字3バイト)。足すときは余裕を見ること
+local game = require("pico.game")
 
--- Buttonのw/hは枠・立体表示を含めた全体の大きさ。文字/アイコンの領域はこれより9px小さい
-local BUTTON_FRAME = 9
-
-local DIR = "/lua/apps/テトリス/"
 local W, H, HID = 10, 20, 2          -- 盤面の幅/高さ + 見えない上の段
 local T = 12                         -- タイルの大きさ(px)
-local cx, cy = pico.content_rect()
-local BX, BY = cx + 5, cy + 3        -- 盤面の左上(見える1段目)
-local SX, SY, SW, SH = cx + 130, cy + 2, 106, 208
-local PY, PH = cy + 246, 54
+local BX, BY = 5, 3                  -- 盤面の左上(キャンバスの中の座標。キャンバスはステータスバーの下の全面)
+local SX, SY, SW, SH = 130, 2, 106, 208    -- 右の欄(HOLD/NEXT/点数)
+local PY, PH = 246, 54               -- 下の操作ボタン
+-- タイルの値(blocks.pimgの左から1番目〜): 1〜7=ミノ 8=ゴースト 9=消える行の白 10=空きマス
+local T_GHOST, T_FLASH, T_EMPTY = 8, 9, 10
 
--- 入力のビット(タッチとコントローラーを同じ形にまとめる)
-local LEFT, RIGHT, DOWN, HARD, CW, CCW, HOLD, PAUSE, BACK = 1, 2, 4, 8, 16, 32, 64, 128, 256
-local PADMAP = { left = LEFT, right = RIGHT, down = DOWN, up = HARD, a = CW, x = CW, b = CCW, y = CCW,
-    l = HOLD, r = HOLD, zl = HOLD, zr = HOLD, start = PAUSE, home = BACK }
-local BTNS = { LEFT, DOWN, RIGHT, HARD, CCW, CW } -- 下の操作ボタン(左から、40px幅)
-
--- ミノの形・壁蹴りの表と操作ボタンの絵は lib.lua(16KiBに収めるため分けた)。
--- LuaSceneがこの本体より先にlib.luaを読み込み・実行し、グローバル変数LIBとして渡ってくる
--- (LuaScene.hppのクラスコメント参照。以前はここでpico.sd_read()+load()を使って
--- 自前で読み込んでいたが、実機でコア0のスタックオーバーフローを起こしたため撤去した)
 local LIB = LIB
-local ROT, KJ, KI, COL = LIB.ROT, LIB.KJ, LIB.KI, LIB.COL
+local ROT, KJ, KI = LIB.ROT, LIB.KJ, LIB.KI
 
-local img = pico.image_load(DIR .. "blocks.pimg")
-if not img then pico.log("テトリス: blocks.pimg を読めません。色だけで描きます") end
+local DIR = pico.app_dir()
+local HISCORE_PATH = pico.path_join(DIR, "hiscore.txt")
+local g = game.new{ bg = 15 }
+local img = g:image(pico.path_join(DIR, "blocks.pimg"))
+local map = g:tilemap{ image = img, tile = T, x = BX, y = BY, cols = W,
+                       data = string.rep(string.char(T_EMPTY), W * H) }
+
+-- 落ちているミノとゴースト(どちらも4マス=スプライト4枚)
+local piece_s, ghost_s = {}, {}
+for i = 1, 4 do
+    ghost_s[i] = g:sprite{ image = img, w = T, h = T, frame = T_GHOST - 1, layer = 1, visible = false }
+    piece_s[i] = g:sprite{ image = img, w = T, h = T, frame = 0, layer = 2, visible = false }
+end
 
 -- ---- ゲームの状態 ----
-local g = {}          -- 盤面 g[y*W+x+1] (y=0..H+HID-1)。0=空、1〜7=ミノ
-local cur = {}        -- 画面に出している見た目(見える20段、8=ゴースト)
-local state = "title" -- title / play / pause / clear / over
+local grid = {}       -- 盤面 grid[y*W+x+1] (y=0..H+HID-1)。0=空、1〜7=ミノ
 local p, rot, px, py  -- 落下中のミノ
 local queue, bag = {}, {}
 local hold, held_used = 0, false
 local score, lines, level = 0, 0, 1
-local hiscore = tonumber(pico.sd_read(DIR .. "hiscore.txt") or "") or 0
+local hiscore = tonumber(pico.sd_read(HISCORE_PATH) or "") or 0
 local fall_t, lock_t, resets, low_y = 0, 0, 0, 0
 local das_dir, das_t = 0, 0
 local clear_rows, clear_t = {}, 0
 local bgm = true
-local prev_in, latch, touch_btn = 0, 0, 0
-local side_dirty, board_all = true, true
-
-local board_id, side_id, pad_id, pause_btn
+local side_dirty, board_dirty = true, true
 
 local function se(freq, ms, wave, vol, env)
     pico.sound_play(2, freq, ms, { wave = wave or "pulse25", volume = vol or 8, envelope = env or 0 })
@@ -55,7 +50,7 @@ end
 
 local function music(on)
     if on and bgm then
-        local ok, err = pico.music_play(DIR .. "bgm.mml")
+        local ok, err = pico.music_play(pico.path_join(DIR, "bgm.mml"))
         if not ok then pico.log("テトリス: BGM " .. tostring(err)) end
     else
         pico.music_stop()
@@ -67,7 +62,7 @@ local function fits(pp, r, x, y)
     for i = 1, 8, 2 do
         local bx, by = x + c[i], y + c[i + 1]
         if bx < 0 or bx >= W or by >= H + HID then return false end
-        if by >= 0 and g[by * W + bx + 1] ~= 0 then return false end
+        if by >= 0 and grid[by * W + bx + 1] ~= 0 then return false end
     end
     return true
 end
@@ -89,15 +84,19 @@ local function nextPiece()
     return table.remove(bag)
 end
 
-local function gameOver()
-    state = "over"
-    board_all, side_dirty = true, true
-    music(false)
-    se(160, 700, "pulse50", 10, -2)
+local function saveHiscore()
     if score > hiscore then
         hiscore = score
-        pico.sd_write(DIR .. "hiscore.txt", tostring(hiscore))
+        pico.sd_write(HISCORE_PATH, tostring(hiscore))
     end
+end
+
+local function gameOver()
+    g:go("over")
+    side_dirty = true
+    music(false)
+    se(160, 700, "pulse50", 10, -2)
+    saveHiscore()
 end
 
 local function spawn(kind)
@@ -112,13 +111,13 @@ local function spawn(kind)
 end
 
 local function newGame()
-    for i = 1, W * (H + HID) do g[i] = 0 end
+    for i = 1, W * (H + HID) do grid[i] = 0 end
     bag, queue = {}, {}
     for i = 1, 5 do queue[i] = nextPiece() end
     hold, held_used = 0, false
     score, lines, level = 0, 0, 1
-    state = "play"
-    board_all, side_dirty = true, true
+    g:go("play")
+    board_dirty, side_dirty = true, true
     spawn()
     music(true)
 end
@@ -167,15 +166,16 @@ local function lock()
     local visible = false
     for i = 1, 8, 2 do
         local y = py + c[i + 1]
-        g[y * W + px + c[i] + 1] = p
+        grid[y * W + px + c[i] + 1] = p
         if y >= HID then visible = true end
     end
     held_used = false
+    board_dirty = true
     clear_rows = {}
     for y = 0, H + HID - 1 do
         local full = true
         for x = 0, W - 1 do
-            if g[y * W + x + 1] == 0 then full = false break end
+            if grid[y * W + x + 1] == 0 then full = false break end
         end
         if full then clear_rows[#clear_rows + 1] = y end
     end
@@ -184,7 +184,8 @@ local function lock()
         score = score + ({ 100, 300, 500, 800 })[n] * level
         lines = lines + n
         level = 1 + lines // 10
-        state, clear_t = "clear", 0
+        clear_t = 0
+        g:go("clear")
         if n == 4 then se(1760, 300, "pulse25", 12, -2) else se(880 + n * 220, 180, "pulse50", 10, -3) end
         side_dirty = true
         p = nil
@@ -198,12 +199,13 @@ end
 local function finishClear()
     for _, row in ipairs(clear_rows) do
         for y = row, 1, -1 do
-            for x = 1, W do g[y * W + x] = g[(y - 1) * W + x] end
+            for x = 1, W do grid[y * W + x] = grid[(y - 1) * W + x] end
         end
-        for x = 1, W do g[x] = 0 end
+        for x = 1, W do grid[x] = 0 end
     end
     clear_rows = {}
-    state = "play"
+    board_dirty = true
+    g:go("play")
     spawn()
 end
 
@@ -217,226 +219,147 @@ local function doHold()
     held_used = true
 end
 
--- ---- 盤面の見た目の差分をdirtyにする ----
-local function compose()
-    local x0, y0, x1, y1 = W, H, -1, -1
-    local gy, cells = -1, nil
-    if p and state ~= "over" then gy, cells = ghostY(), ROT[p][rot] end
+-- ---- 見た目へ写す ----
+
+-- 盤面をタイルへ。変わったタイルだけエンジンが描き直す
+local function syncBoard()
+    local flash = g.state_name == "clear"
     for y = 0, H - 1 do
+        local lit = false
+        if flash then
+            for _, r in ipairs(clear_rows) do if r == y + HID then lit = true end end
+        end
         for x = 0, W - 1 do
-            local i = y * W + x + 1
-            local v = g[(y + HID) * W + x + 1]
-            if state == "clear" then
-                for _, r in ipairs(clear_rows) do if r == y + HID then v = 9 end end
-            end
-            if cells and v == 0 then
-                for k = 1, 8, 2 do
-                    local cxx = px + cells[k]
-                    if cxx == x then
-                        if py + cells[k + 1] == y + HID then v = p
-                        elseif gy + cells[k + 1] == y + HID and v == 0 then v = 8 end
-                    end
-                end
-            end
-            if cur[i] ~= v then
-                cur[i] = v
-                if x < x0 then x0 = x end
-                if x > x1 then x1 = x end
-                if y < y0 then y0 = y end
-                if y > y1 then y1 = y end
-            end
+            local v = grid[(y + HID) * W + x + 1]
+            map:set(x, y, lit and T_FLASH or (v == 0 and T_EMPTY or v))
         end
-    end
-    if board_all then
-        pico.invalidate(board_id)
-        board_all = false
-    elseif x1 >= 0 then
-        pico.mark_dirty(BX + x0 * T, BY + y0 * T, (x1 - x0 + 1) * T, (y1 - y0 + 1) * T)
     end
 end
 
--- ---- 描画 ----
+-- 落ちているミノとゴーストのスプライトの位置(見えない上の段は隠す)
+local function syncPiece()
+    local show = p and (g.state_name == "play" or g.state_name == "pause")
+    local gy = show and ghostY()
+    local cells = show and ROT[p][rot]
+    for i = 1, 4 do
+        local ps, gs = piece_s[i], ghost_s[i]
+        if show then
+            local cx, cy = cells[i * 2 - 1], cells[i * 2]
+            local row, grow = py + cy - HID, gy + cy - HID
+            ps.visible, gs.visible = row >= 0, grow >= 0
+            ps.x, ps.y, ps.frame = BX + (px + cx) * T, BY + row * T, p - 1
+            gs.x, gs.y = ps.x, BY + grow * T
+        else
+            ps.visible, gs.visible = false, false
+        end
+    end
+end
+
+-- ---- 描画(キャンバスの中のHUD) ----
+
 local function tile(v, x, y)
-    if v == 9 then
-        pico.fill_rect(x, y, T, T, 15)
-    elseif img then
-        pico.draw_image_part(img, x, y, (v - 1) * T, 0, T, T)
-    elseif v == 8 then
-        pico.draw_rect(x, y, T, T, 8)
-    else
-        pico.fill_rect(x, y, T, T, COL[v])
-    end
-end
-
-local textW = LIB.textW
-
-local function center(s, x, w, y, color)
-    pico.draw_text(x + (w - textW(s)) // 2, y, s, color, 0)
-end
-
-local function renderBoard()
-    local x, y, w, h = pico.get_draw_area()
-    if w <= 0 then x, y, w, h = BX, BY, W * T, H * T end
-    local c0, c1 = math.max(0, (x - BX) // T), math.min(W - 1, (x + w - 1 - BX) // T)
-    local r0, r1 = math.max(0, (y - BY) // T), math.min(H - 1, (y + h - 1 - BY) // T)
-    for r = r0, r1 do
-        for c = c0, c1 do
-            local v = cur[r * W + c + 1]
-            if v and v > 0 then tile(v, BX + c * T, BY + r * T) end
-        end
-    end
-    pico.draw_rect(BX - 1, BY - 1, W * T + 2, H * T + 2, 7)
-
-    local l1, l2
-    if state == "title" then l1, l2 = "テトリス", "タップで開始"
-    elseif state == "pause" then l1, l2 = "一時停止中", "タップで再開"
-    elseif state == "over" then l1, l2 = "GAME OVER", "タップでもう一度" end
-    if l1 then
-        pico.fill_rect(BX + 4, BY + 90, W * T - 8, 56, 0)
-        pico.draw_rect(BX + 4, BY + 90, W * T - 8, 56, 15)
-        center(l1, BX, W * T, BY + 98, 14)
-        center(l2, BX, W * T, BY + 122, 15)
-    end
+    pico.draw_image_part(img, x, y, (v - 1) * T, 0, T, T)
 end
 
 local function mini(kind, x, y, w, h) LIB.mini(ROT, T, tile, kind, x, y, w, h) end
 
-local function renderSide()
-    pico.draw_text(SX + 2, SY, "HOLD", 0, 0)
-    pico.draw_rect(SX, SY + 18, 52, 32, held_used and 8 or 0)
-    mini(hold, SX, SY + 18, 52, 32)
-    pico.draw_text(SX + 2, SY + 54, "BGM", 0, 0)
-    pico.draw_text(SX + 2, SY + 72, bgm and "ON" or "OFF", bgm and 2 or 8, 0)
-    pico.draw_rect(SX, SY + 52, 52, 40, 7)
+local function overlaps(x, y, w, h)
+    local ax, ay, aw, ah = pico.get_draw_area()
+    if aw <= 0 then return true end
+    return ax < x + w and x < ax + aw and ay < y + h and y < ay + ah
+end
 
-    pico.draw_text(SX + 56, SY, "NEXT", 0, 0)
-    pico.draw_rect(SX + 54, SY + 18, 52, 92, 0)
-    for i = 1, 3 do mini(queue[i], SX + 54, SY + 20 + (i - 1) * 30, 52, 28) end
+function g:on_draw(ox, oy)
+    pico.draw_rect(ox + BX - 1, oy + BY - 1, W * T + 2, H * T + 2, 7)
+    local sx, sy = ox + SX, oy + SY
+    if not overlaps(sx, sy, SW, SH) then return end
+    pico.draw_text(sx + 2, sy, "HOLD", 0, 0)
+    pico.draw_rect(sx, sy + 18, 52, 32, held_used and 8 or 0)
+    mini(hold, sx, sy + 18, 52, 32)
+    pico.draw_text(sx + 2, sy + 54, "BGM", 0, 0)
+    pico.draw_text(sx + 2, sy + 72, bgm and "ON" or "OFF", bgm and 2 or 8, 0)
+    pico.draw_rect(sx, sy + 52, 52, 40, 7)
+
+    pico.draw_text(sx + 56, sy, "NEXT", 0, 0)
+    pico.draw_rect(sx + 54, sy + 18, 52, 92, 0)
+    for i = 1, 3 do mini(queue[i], sx + 54, sy + 20 + (i - 1) * 30, 52, 28) end
 
     local rows = { { "SCORE", score }, { "LEVEL", level }, { "LINES", lines }, { "HI", hiscore } }
     for i, r in ipairs(rows) do
-        local y = SY + 116 + (i - 1) * 23
-        pico.draw_text(SX + 2, y, r[1], 8, 0)
+        local y = sy + 116 + (i - 1) * 23
+        pico.draw_text(sx + 2, y, r[1], 8, 0)
         local v = tostring(r[2])
-        pico.draw_text(SX + SW - 2 - textW(v), y, v, 0, 0)
+        pico.draw_text(sx + SW - 2 - pico.text_width(v, 0), y, v, 0, 0)
     end
 end
 
-local function renderPad()
-    LIB.drawPad(prev_in, cx, PY, PH, BTNS, LEFT, RIGHT, DOWN, HARD, CW)
+-- 盤面の真ん中に出す2行の枠(タイトル・一時停止・ゲームオーバー)
+local function box(ox, oy, l1, l2)
+    local x, y, w = ox + BX + 4, oy + BY + 90, W * T - 8
+    pico.fill_rect(x, y, w, 56, 0)
+    pico.draw_rect(x, y, w, 56, 15)
+    pico.draw_text(x + (w - pico.text_width(l1, 0)) // 2, y + 8, l1, 14, 0)
+    pico.draw_text(x + (w - pico.text_width(l2, 0)) // 2, y + 32, l2, 15, 0)
 end
 
--- ---- ウィジェット ----
-local function canvas(x, y, w, h, bg, fn)
-    local id = pico.create("Canvas")
-    pico.set(id, "x", x); pico.set(id, "y", y)
-    pico.set(id, "w", w); pico.set(id, "h", h)
-    pico.set(id, "background_color", bg)
-    pico.on(id, "render", fn)
-    return id
+-- ---- 操作 ----
+
+local function tapIn(x, y, w, h)
+    local t = g.touch
+    return t.pressed and t.x >= x and t.x < x + w and t.y >= y and t.y < y + h
+end
+local function boardTap() return tapIn(BX, BY, W * T, H * T) end
+local function holdTap() return tapIn(SX, SY, 54, 52) end
+local function bgmTap() return tapIn(SX, SY + 52, 54, 40) end
+
+-- 開始・再開・もう一度のきっかけ(盤面のタップ、START、A/X、上=すぐ落とす)
+local function startKey()
+    return boardTap() or g:pressed("start") or g:pressed("a") or g:pressed("x") or g:pressed("up")
 end
 
-board_id = canvas(BX - 1, BY - 1, W * T + 2, H * T + 2, 0, renderBoard)
-side_id = canvas(SX, SY, SW, SH, 15, renderSide)
-pad_id = canvas(cx, PY, 240, PH, 15, renderPad)
-
-local function button(text, x, fn)
-    local id = pico.create("Button")
-    pico.set(id, "x", x); pico.set(id, "y", cy + 214)
-    pico.set(id, "w", 50 + BUTTON_FRAME); pico.set(id, "h", 28 + BUTTON_FRAME)
-    pico.set(id, "font_size", 0); pico.set(id, "text", text)
-    pico.on(id, "press_start", fn)
-    return id
-end
-
+local pause_btn
 local function setPause(on)
-    if on and state == "play" then
-        state = "pause"
+    if on and g.state_name == "play" then
+        g:go("pause")
         music(false)
-    elseif not on and state == "pause" then
-        state = "play"
+    elseif not on and g.state_name == "pause" then
+        g:go("play")
         music(true)
     else
         return
     end
-    board_all = true
-    pico.set(pause_btn, "text", on and "再開" or "停止")
+    pause_btn.label = on and "再開" or "停止"
+    g:dirty(pause_btn.x, pause_btn.y, pause_btn.w, pause_btn.h)
 end
 
 local function leave()
-    if score > hiscore then pico.sd_write(DIR .. "hiscore.txt", tostring(score)) end
+    saveHiscore()
     pico.music_stop()
     pico.pop()
 end
 
-pause_btn = button("停止", SX, function() setPause(state == "play") end)
-button("戻る", SX + 56, leave)
-
--- 盤面のタップ: 遊んでいる間は右回転、それ以外は開始/再開
-pico.on(board_id, "press_start", function()
-    if state == "play" then latch = latch | CW
-    elseif state == "pause" then setPause(false)
-    elseif state == "title" or state == "over" then newGame() end
-end)
-
-pico.on(side_id, "press_start", function(_, _, y)
-    if y < SY + 52 then
-        latch = latch | HOLD
-    elseif y < SY + 92 then
-        bgm = not bgm
-        side_dirty = true
-        music(state == "play")
-    end
-end)
-
--- 下の操作ボタン。押したまま指を滑らせると隣のボタンへ移る
-local function padTouch(_, x)
-    local b = BTNS[math.max(1, math.min(6, (x - cx) // 40 + 1))]
-    if b ~= touch_btn then latch = latch | b end
-    touch_btn = b
-end
-pico.on(pad_id, "press_start", padTouch)
-pico.on(pad_id, "press_move", padTouch)
-pico.on(pad_id, "press_end", function() touch_btn = 0 end)
-pico.on(pad_id, "press_out", function() touch_btn = 0 end)
-
--- ---- 毎フレーム ----
-local function readInput()
-    local held = touch_btn
-    if pico.pad_connected() then
-        for name, bit in pairs(PADMAP) do
-            if pico.pad_down(name) then held = held | bit end
-        end
-    end
-    local pressed = (held & ~prev_in) | latch
-    latch = 0
-    if held ~= prev_in then pico.invalidate(pad_id) end
-    prev_in = held
-    return held, pressed
-end
-
-local function play(dt, held, pressed)
-    if pressed & HOLD ~= 0 then doHold() end
-    if not p or state ~= "play" then return end
-    if pressed & CW ~= 0 then rotate(1) end
-    if pressed & CCW ~= 0 then rotate(-1) end
+local function play(ms)
+    if g:pressed("l") or g:pressed("r") or g:pressed("zl") or g:pressed("zr") or holdTap() then doHold() end
+    if not p or g.state_name ~= "play" then return end
+    if g:pressed("a") or g:pressed("x") or boardTap() then rotate(1) end
+    if g:pressed("b") or g:pressed("y") then rotate(-1) end
 
     -- 左右: 押した瞬間に1マス、170ms押し続けたら50msごと
-    if pressed & LEFT ~= 0 then das_dir, das_t = -1, 0 shift(-1)
-    elseif pressed & RIGHT ~= 0 then das_dir, das_t = 1, 0 shift(1) end
-    local want = das_dir < 0 and LEFT or RIGHT
-    if das_dir ~= 0 and held & want == 0 then
+    if g:pressed("left") then das_dir, das_t = -1, 0 shift(-1)
+    elseif g:pressed("right") then das_dir, das_t = 1, 0 shift(1) end
+    local want = das_dir < 0 and "left" or "right"
+    if das_dir ~= 0 and not g:down(want) then
         das_dir, das_t = 0, 0
-        if held & LEFT ~= 0 then das_dir = -1 elseif held & RIGHT ~= 0 then das_dir = 1 end
+        if g:down("left") then das_dir = -1 elseif g:down("right") then das_dir = 1 end
     elseif das_dir ~= 0 then
-        das_t = das_t + dt
+        das_t = das_t + ms
         while das_t >= 170 do
             das_t = das_t - 50
             if not shift(das_dir) then das_t = 169 break end
         end
     end
 
-    if pressed & HARD ~= 0 then
+    if g:pressed("up") then
         local gy = ghostY()
         score = score + (gy - py) * 2
         py = gy
@@ -446,9 +369,9 @@ local function play(dt, held, pressed)
     end
 
     local iv = interval()
-    local soft = held & DOWN ~= 0
+    local soft = g:down("down")
     if soft then iv = math.min(iv, 30) end
-    fall_t = fall_t + dt
+    fall_t = fall_t + ms
     while fall_t >= iv do
         fall_t = fall_t - iv
         if fits(p, rot, px, py + 1) then
@@ -461,33 +384,68 @@ local function play(dt, held, pressed)
         end
     end
     if not fits(p, rot, px, py + 1) then
-        lock_t = lock_t + dt
+        lock_t = lock_t + ms
         if lock_t >= 500 then lock() end
     else
         lock_t = 0
     end
 end
 
-function loop(dt)
-    if dt > 100 then dt = 100 end
-    local held, pressed = readInput()
-
-    if pressed & BACK ~= 0 then leave() return end
-    if state == "play" then
-        if pressed & PAUSE ~= 0 then setPause(true)
-        else play(dt, held, pressed) end
-    elseif state == "clear" then
-        clear_t = clear_t + dt
+g:state("title", {
+    update = function() if startKey() then newGame() end end,
+    draw = function(_, ox, oy) box(ox, oy, "テトリス", "タップで開始") end,
+})
+g:state("play", {
+    update = function(_, dt)
+        if g:pressed("start") then setPause(true) else play(dt * 1000) end
+    end,
+})
+g:state("pause", {
+    update = function() if startKey() then setPause(false) end end,
+    draw = function(_, ox, oy) box(ox, oy, "一時停止中", "タップで再開") end,
+})
+g:state("clear", {
+    update = function(_, dt)
+        clear_t = clear_t + dt * 1000
         if clear_t >= 200 then finishClear() end
-    elseif pressed & (PAUSE | CW | HARD) ~= 0 then
-        if state == "pause" then setPause(false) else newGame() end
-    end
+    end,
+})
+g:state("over", {
+    update = function() if startKey() then newGame() end end,
+    draw = function(_, ox, oy) box(ox, oy, "GAME OVER", "タップでもう一度") end,
+})
 
-    compose()
+-- 毎フレーム(状態ごとの update の後): 見た目へ写す
+function g:on_update()
+    if self:pressed("back") then leave() return end
+    if self:pressed("pause") then setPause(self.state_name == "play") end
+    if bgmTap() then
+        bgm = not bgm
+        side_dirty = true
+        music(self.state_name == "play")
+    end
+    if board_dirty then
+        syncBoard()
+        board_dirty = false
+    end
+    syncPiece()
     if side_dirty then
-        pico.invalidate(side_id)
+        self:dirty(SX, SY, SW, SH)
         side_dirty = false
     end
 end
 
-for i = 1, W * (H + HID) do g[i] = 0 end
+-- 下の操作ボタン(左から)。名前はコントローラーのボタン名と同じにしてあるので、
+-- 画面のボタンでも十字キー・A/Bでも同じ g:down / g:pressed で読める。
+-- up は「すぐ落とす」、a は右回転、b は左回転
+for i, n in ipairs({ "left", "down", "right", "up", "b", "a" }) do
+    g:button{ name = n, x = (i - 1) * 40, y = PY, w = 40, h = PH, draw = function(b, x, y, w, h, on)
+        LIB.drawBtn(n, x, y, w, h, on)
+    end }
+end
+pause_btn = g:button{ name = "pause", x = SX, y = SH + 6, w = 50, h = 30, label = "停止" }
+g:button{ name = "back", x = SX + 54, y = SH + 6, w = 50, h = 30, label = "戻る" }
+
+for i = 1, W * (H + HID) do grid[i] = 0 end
+pico.on_back(leave)
+g:go("title")

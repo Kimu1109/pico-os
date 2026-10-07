@@ -646,6 +646,7 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
 
 LuaEngine::~LuaEngine() {
     EndImageTarget();
+    DestroyIso();
     // 鳴らしっぱなし(長さ0)の音を残したままアプリを閉じると鳴り止まないので、
     // 音を使ったアプリは閉じるときに全部止める
     if (used_sound_) SoundFunctions::StopAll();

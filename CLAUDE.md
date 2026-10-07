@@ -77,9 +77,10 @@ src/
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
   todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders)。下記「TODOアプリ」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
+  iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て / Iso_Blit: 面の絵の写し方)。Luaの`pico.iso`。下記「ブロック」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
-  lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
+  lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査) / Json_Reader(流しながら読むJSON)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
@@ -88,7 +89,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の56本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の57本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -3810,64 +3811,63 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   ブロック崩し=壁/ブロック/パドルの反射・段ごとの速さ・点・アイテム3種・残機・ステージクリア・全20ステージ・全クリア・自動プレイ。
   PCビルドの`--tap`/`--shot`で4本とも動かして見た目を確認した(`PICOOS_VERIFY_LCD=1`で食い違い0)。**実機では未確認**(Luaで毎フレーム回す量・タイルマップの描画の速さ)。
 
-### ブロック(2.5Dマインクラフト風、`pc/sdcard/lua/apps/ブロック/`、2026-10-07)
+### ブロック(2.5Dマインクラフト風、`pc/sdcard/lua/apps/ブロック/` + C++のエンジン `src/iso/`、2026-10-07)
 
 [TheScienceElf/Blocks-TI-84](https://github.com/TheScienceElf/Blocks-TI-84)(TI-84 CE用、MIT)をLuaアプリへ移したもの。
 元は 48x16x48 の世界だが、**チャンク読み込みで 1024x16x1024 にした**(下記)。24種類のブロック(水を含む)・太陽の影・半透明の水・自然/平ら/デモの3種の生成・5つのセーブ枠・
 カーソルを9方向+上下に動かして置く/壊す(数字キーの配置も同じ)。元の絵(`TextureMap.png`/`player.png`)とライセンスは
-`script/blocks_assets/`。ファイルは `main.lua`(`require("game")` だけ)/ `game.lua`(画面・入力)/ `view.lua`(描画・引き当て)/
-`world.lua`(チャンク・生成・保存)/ `demo.lua`(デモの家などの並び)/ `migrate.lua`(前の版の保存の移し替え)/ `palette.lua`・`faces.pimg`・`icon.pimg`(`script/generate_blocks_sheet.py` が作る)。
+`script/blocks_assets/`。
 
-- **本体を `game.lua` にした**: `main.lua` は16KiBまで(`LuaScene`)だが `require` のモジュールは32KiBまで読める。
-- **チャンク読み込み(2026-10-07)**: 世界は 8x8 の柱(高さ16)を1つのチャンクにし、チャンクは文字列1本
-  (`C[cx*K+cz]`、(lx,y,lz) は `y*64+lx*8+lz+1` バイト目、上の空気だけの段は持たない)。新しいワールドは K=128(1024x1024)。
-  - **持つのは見えている所のまわりだけ**: 視点が動くと `V.load_range()`(表示範囲の u=x-z / s=x+z の範囲に、影をたどる分
-    左へ 2*(H-1) を足す)を `world.window()` へ渡し、そこにかかるチャンクを近い順に読み込む予定にし、それより1チャンク以上
-    外れたものは手放す。`loop()` が毎フレーム `world.pump()` で6個まで(12msを過ぎたら止める)読み込む(読み込み中の所は空気に見え、
-    読み込んだら全体を描き直す)。始めは「チャンクを読み込んでいます」の画面で全部読む(1フレーム24個・40msまで)。
-    読み込んでいないチャンクは空気として扱う(`world.get` が0、置く/壊すはその場で読み込む)。
-  - **地形は種と位置だけで決まる**(整数のハッシュ。格子の高さ3〜12の補間・水面5・水辺の砂・鉱石は元と同じ規則)。
-    木はチャンク3つに1本くらいで、葉がはみ出さないよう根元をチャンクの中の2〜5に置く。だから**書き出すのは書き換えたチャンクだけ**:
-    手放すとき・終了するときに `worlds/<A〜E>/c_<cx>_<cz>.dat`(チャンクの文字列そのまま)へ書き、`world.dat`(見出し17バイト:
-    種類・K・種・カーソル・ブロック + K*K ビットの「書き出したチャンク」の印)に印を付ける。読むときは印のあるものだけファイルから
-    (壊れていれば作り直す)、それ以外は生成。`world.dat` を書くのは「終了」のときだけ(元と同じ)。
-  - 1チャンクの生成は約4.6万命令(PCで約0.4ms)。平ら=どこでも同じ草の段、デモ=左下 48x48 に元の家などを `demo.lua` の直方体の
-    並び(7バイトの文字列。テーブルだと約8KB残る)で塗る。
-  - 前の版の `worlds/world_X.dat`(48x48の1ファイル)は開くときに `migrate.lua` が K=6 のワールドへ移して元を消す。
-  - **Luaのメモリが一番の制約**: 何もしないアプリで約38KB、このアプリのモジュールで約150KB(PCの64bit。`world.lua` の関数だけで
-    約36KB)。ゲーム中は約171KB(チャンク32個・約23KB)、動き回ったときの最大で48個・約38KB。予算は200KB。そのため
-    読み込みの余裕は持たず、めったに使わない `migrate.lua`/`demo.lua` は名前を変数で渡す `require` で使うときだけ読む
-    (`require("名前")` と書くと先読みされて常に持つ)。
-- **描画**: 画家のアルゴリズム(s=x+z の大きい順、同じ s の中は y の小さい順。同じ s の柱は横に32pxずつ離れて重ならない)。
-  `Canvas` の `render` で `pico.get_draw_area()`(=dirty矩形)にかかる柱と高さだけを回し、見える面(上・-x・-z で隣が不透明でない面)を
-  `draw_image_part` で描く。ブロックの絵は面ごと(上32x15・左/右16x23、日なたと影の種類ごと)に `faces.pimg` へ並べてある。
-  水は市松模様の透過で半透明に見せる。**真上が水でない水(水面)は元の`WATER_HALF`と同じく2px低く見せる**(上面を2px下げ、
-  横の面は上2行を抜いた絵=`faces.pimg`の水の段の x=144/160)。元の名前は「HALF」だが、元のマスク(`water_half_1〜3`)を
-  再現すると下がるのは約2px(=ブロック高さの1/8)で、池の奥の岸の壁の上端が2pxだけ水の上に見える。手前の岸は後から描く
-  ブロックが上書きするので、水面全体を下げるだけで元と同じ見た目になる。
-  カーソルを動かす/置く/壊すときは小さな矩形だけ `mark_dirty`(置く/壊すは影が変わりうる面の列も)。視点を動かしたときだけ全体。
-  PCビルドで自然のワールドの全体の描き直しが約2.5ms(実機は未計測)。オフスクリーンのキャッシュは持たない。
-- **影は元と同じ形**(2026-10-07に作り直した。最初は「面ごとに1本の光線で全体を影/日なた」で、四角い塊の影になり色も潰れていた):
-  - 日の当たりうる上面・左面を光から見た三角形2つに分け、三角形ごとに影を決める(元の`SHADOW_TOP`/`SHADOW_BOTTOM`と
-    `sprites/Masks`)。上面は x+z 一定の線(画面の横の中央線)で奥/手前、左面は y=z の線(テクスチャの対角線)で上/下。
-    右面はいつも影。影の色は明るさ半分。
-  - 元は光から見た三角形の格子に一番光に近い深さを書いて比べるが、三角形の中の1点から太陽(-1,+1,+1)へ向かう直線が通る
-    マスを調べても同じ答えになる(立方体の影は格子の三角形の和なので)。直線は1歩ごとに3マスを通り、2つの三角形で2マスを
-    共有するので1歩4マス(`view.lua`の`top_shadow`/`left_shadow`)。読み込んだチャンクの空気でない一番上の高さ(`world.top()`)より上はたどらない。
-  - 絵は面ごとに 上(日なた/影/奥半分/手前半分)・左(日なた/影/上半分/下半分)・右 の9枚を `faces.pimg`(208x575、約60KB)に並べる。
-  - 置く/壊すときの描き直しは、太陽へ向かう直線がそのマスを通る面のブロック(k歩ごとに8個)を覆う矩形をkごとに積む。
-  - 減色は Lab の k-means で、よく出るブロック(草・土・石・葉・砂)を重く数える(草の影の濃い緑が残るように)。
-  - PCで自然のワールドの全体のLua側の描き直しが約1.2ms→1.5ms(描画の呼び出しを除く)。
-- **色**: 元の63色+半分の明るさの影を k-means で14色にし、起動時に `pico.set_palette` で入れる(1〜14番を既定のパレットの近い番号へ
+**2.5Dのエンジン(ワールド・生成・保存・描画・影・引き当て)は C++ にある(2026-10-07に Lua の `view.lua`/`world.lua`/`demo.lua`/`migrate.lua` から移した)**:
+`src/iso/Iso_World.hpp/.cpp`(エンジン本体。LovyanGFXを知らず、描き先は関数ポインタの `Sink`)・`src/iso/Iso_Blit.hpp`(面の絵の写し方)・
+`src/lua/LuaEngine_Iso.cpp`(Luaの `pico.iso.*`。ドキュメントは `lua-api-doc/content/api/iso.md`)。アプリに残るのは
+`main.lua`(`require("game")` だけ)/ `game.lua`(画面の流れ・操作)/ `palette.lua`・`faces.pimg`・`icon.pimg`(`script/generate_blocks_sheet.py` が作る)。
+
+- **移した理由と結果**: Luaでは描画の処理だけでPCで約1.4ms/画面(絵を写す呼び出しを除く)、Luaのメモリがゲーム中に約171〜180KB/200KB
+  (モジュールの関数だけで約150KB・チャンクの文字列で最大約38KB)で余裕が無かった。C++では描画の処理が約0.026ms(約55倍)、
+  絵を写すところまで入れて約0.07ms(PC)。Luaのメモリは約97KB(チャンクは C++ の置き場 約61KB に移った)。**実機の値は未計測**。
+- **ワールド(`Iso::World`)**: 8x8 の柱(高さ16)を1チャンク(1024バイト、(lx,y,lz) は `y*64+lx*8+lz`)とし、固定長の置き場
+  `kMaxChunks=56`(1個 約1.1KB = 約61KB。ワールドを開いている間だけ `malloc`)に読み込む。チャンクを引くのは
+  `(cx&31, cz&31)` の直写しの表(`map_`、1KB)+座標の照合。柱ごとの高さ(`col[64]`)を持ち、描画は柱の一番上までしか回さない。
+  - **読み込む範囲**: 視点(`iso.origin`)/表示範囲が変わると、次の `pump()` が表示範囲の u=x-z / s=x+z の範囲に影をたどる分(左へ 2*(H-1))を
+    足した範囲を決め直し、そこにかかるチャンクを近い順に予定に入れ、範囲より1チャンクより外は手放す(書き換えたものは書き出す)。
+    Lua版と同じ規則で、240x204 の表示を動き回って最大49個(テストで確認)。置き場が足りなければ範囲の外で一番遠いものを手放し、
+    それも無ければ読み込まない(空気に見える。ログを1回)。
+  - **地形は種と位置だけで決まる**(整数のハッシュ。格子の高さ3〜12の補間・水面5・水辺の砂・鉱石・木はチャンク3つに1本で根元はチャンクの中の2〜5)。
+    **Lua版と1バイトも違わない**(既存のセーブの書き換えていないチャンクは種から作り直すため。Lua版で作った1164チャンクと突き合わせ、
+    テストにはそのハッシュを残した)。デモの家などの並びは C++ の表(`Demo()`)。
+  - **ファイルの形式は Lua 版と同じ**(`worlds/<A〜E>/world.dat` = 見出し17バイト + K*K ビットの「書き出したチャンク」の印、
+    `c_<cx>_<cz>.dat` = 上の空気だけの段を落としたチャンク)。ただし **K は128まで**(印を固定長 2KB で持つため。新しいワールドは128)。
+    前の版の `worlds/world_X.dat`(48x48の1ファイル)は `iso.migrate()` が K=6 のワールドへ移して元を消す。
+  - `create/open/migrate` のディレクトリは `pico.sd_write` と同じ権限の確認(`SdWriteAllowed(dir + "/world.dat")`)を通す。
+- **描画(`World::render`)**: 画家のアルゴリズム(s=x+z の大きい順、同じ s の中は y の小さい順。同じ s の柱は横に32pxずつ離れて重ならない)。
+  dirty矩形にかかる柱と高さだけを回す(Lua版と同じ範囲の計算)。水は市松模様の透過で半透明、**真上が水でない水(水面)は元の`WATER_HALF`と同じく2px低く見せる**
+  (上面を2px下げ、横の面は上2行を抜いた絵=`faces.pimg`の水の段の x=144/160)。
+  - **隠れたブロックを描かない**: (x-k, y+k, z-k) は画面のちょうど同じ六角形に重なり後から描かれるので、そこに**透けない**(絵に穴の無い)
+    ブロックがあれば描かない。どの画素も、視線を手前からたどって最初に当たる透けないブロックのその面が必ず描かれるため、省いても画素は変わらない。
+    **これが成り立つよう、透けないブロックの面は「隣が透けないブロックでなければ」描く**(Lua版は「隣が空気か水なら」で、葉に面した面を描かなかった。
+    葉の絵には穴があり、穴から見える所が「たまたまその前に描いた絵」になっていた)。葉の面・水の面の規則は Lua 版のまま。
+    透けないブロックは `iso.set_image` のときに絵から調べる(`ComputeOccluders`。今の絵では水・葉以外)。乱数のワールド150個・Lua版の画面で、
+    省いても画素が1つも変わらないことをテストで確かめた。表示全体で描く面は約2〜3割減る。
+  - **面の写し方(`FaceBlitter`)**: 透けないブロックの面の絵は「上面のひし形(32x15)・左右の平行四辺形(16x23)」の形どおり(内側が全部不透明・外側が全部透過)なので、
+    1行を1区間として透過の判定なしに写す(元と描き先の画素の偶奇が揃えば `memcpy`)。形どおりかは絵を読み込んだときに調べる(今の絵で22種×9枚)。
+    葉・水・カーソルは1画素ずつ。画面か画像が 4bpp でなければ(ホストテストのスタブ)`pico.draw_image_part` と同じ遅い道。
+  - Lua版と同じ規則(葉も透けないとして省略を切る)にすると、描く面・影の絵・順番が Lua 版と全く同じになる(テストに Lua 版の並びのハッシュを残した)。
+- **影は元と同じ形**: 日の当たりうる上面・左面を光から見た三角形2つに分け(上面は x+z 一定の線で奥/手前、左面は y=z の線で上/下)、
+  三角形の中の1点から太陽(-1,+1,+1)へ向かう直線が通るマスを調べる(1歩4マス。`topShadow`/`leftShadow`)。右面はいつも影。
+  読み込んだチャンクの空気でない一番上の高さより上はたどらない。絵は面ごとに 上(日なた/影/奥半分/手前半分)・左(日なた/影/上半分/下半分)・右 の9枚を
+  `faces.pimg`(208x575)に並べる。置く/壊すときの描き直しは、太陽へ向かう直線がそのマスを通る面のブロック(k歩ごとに8個)を覆う矩形をkごとに積む(`dirtyEdit`)。
+- **色**: 元の63色+半分の明るさの影を Lab の k-means で14色にし、起動時に `pico.set_palette` で入れる(1〜14番を既定のパレットの近い番号へ
   並べてあるので、ステータスバー等の色は大きくは変わらない)。アイコンは既定のパレット(彩度を上げてから最近傍)。
 - 操作: 画面=左下の9キー(真ん中が置く/壊す)・上へ/下へ・ブロック変更・中央・終了、ワールドのタップ=その面の手前へ・長押し=そのブロックへ・
   ドラッグ=視点。コントローラー=十字(2つ同時で斜め)・A・B/START・X/R・Y/L・SELECT+十字=視点・HOME=保存して戻る。キーボード=元と同じ
-  1〜9・`*` `-`・Enter・矢印。セーブは `worlds/A/`〜`E/`(上記。`.gitignore`済み)。
+  1〜9・`*` `-`・Enter・矢印。セーブは `worlds/A/`〜`E/`(`.gitignore`済み)。
 - 元との違い: 世界の広さ(1024x1024)と地形の作り方(種から決まる)。カーソルの奥側の面、視点の滑らかなスクロールは無い。水は色を混ぜずに市松模様で透かす。
-- 検証: `blocks_test`(run.sh の lua-scene。チャンクの読み書きと境目・生成(同じ種なら同じ・境目で高さが飛ばない)・読み込みの範囲と手放し・
-  書き換えたチャンクだけ書き出す・保存と読み込みの往復と壊れたファイル・前の版からの移し替え・見えない面/影/水/範囲・引き当て・置く/壊すの規則・
-  画面の流れ)、PCビルドの `--tap`/`--shot` と標準入力の `pad`/`key` 行(`PICOOS_VERIFY_LCD=1` で食い違い0)。**実機では未確認**
-  (全体の描き直しの時間・チャンクの生成の時間(動かしたときに引っかからないか)・32bitでのLuaのメモリ・SDへの小さなファイルの読み書き)。
+- 検証: `iso_world_test`(run.sh の lua-scene。エンジン: 生成がLua版と同じ・読み書きと境目・読み込みの範囲と手放し・置き場に収まる・保存と読み込みの往復と壊れたファイル・
+  前の版からの移し替え・見えない面/影/水/葉/範囲/カーソル・Lua版と同じ描画の並び・隠れたブロックを省いても画素が同じ・引き当て・描き直す範囲・面の写し方が1画素ずつと同じ)、
+  `lua_ext_test`(`pico.iso` をLuaから一通りと権限)、`blocks_test`(`game.lua` の画面の流れと操作。`pico.iso` は偽物)、PCビルドの `--tap`/`--shot`
+  (`PICOOS_VERIFY_LCD=1` で食い違い0。同じ種で Lua 版と並べて、違うのは葉の穴の中だけ)。**実機では未確認**
+  (描画の時間・チャンクの生成の時間・約61KBの置き場の確保・SDへの小さなファイルの読み書き)。
 
 ### 実行時間の安全網(暴走防止、2026-09-21実装)
 
@@ -4037,7 +4037,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、56本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、57本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

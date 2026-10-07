@@ -23,6 +23,7 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | [コントローラー](pad/) | `pad_connected` `pad_down` `pad_pressed` `pad_released` |
 | [画像](images/) | `image_load` `image_create` `image_target` `image_clear` `image_size` `draw_image` `draw_image_part` `draw_image_ex` `image_rotate` `draw_rotated` `image_free` |
 | [ゲームエンジン](game/) | `require("pico.game")`(スプライト・タイルマップ・当たり判定・カメラ・入力・状態)、`draw_tilemap` |
+| [2.5Dの箱庭](iso/) | `iso.create` `iso.open` `iso.info` `iso.save` `iso.close` `iso.migrate` `iso.get` `iso.set` `iso.first_air` `iso.size` `iso.pump` `iso.pending` `iso.stats` `iso.set_image` `iso.view` `iso.origin` `iso.cursor` `iso.sky` `iso.render` `iso.draw_icon` `iso.block_pos` `iso.pick` `iso.dirty_block` `iso.dirty_edit` `iso.culling` |
 | [ラスタキャンバス](canvas/) | `canvas_clear` `canvas_save` `canvas_load` `canvas_undo` `canvas_get_pixel` |
 | [SDカード](sdcard/) | `sd_exists` `sd_read` `sd_write` `sd_remove` `sd_mkdir` `sd_list` |
 | [シーン制御](scenes/) | `pop` `push_scene` `change_scene` `launch_app` `content_rect` `args` `store_load` `store_save` `on_back` `go_back`(+ `on_suspend` `on_resume` `on_result`) |

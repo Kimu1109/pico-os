@@ -461,6 +461,7 @@ class LuaEngine {
     private:
         friend struct LuaEngineExt;
         friend struct LuaEngineCrypto;
+        friend struct LuaEngineIso;
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
         // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
         // TabChangedはウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)
@@ -554,6 +555,12 @@ class LuaEngine {
         bool CheckExtEventTarget(EventKind kind, class Widget* w, const char** why) const;
         void RegisterExtApi();
         void RegisterCryptoApi();
+        void RegisterIsoApi();
+
+        // pico.iso(2.5Dの箱庭のエンジン。LuaEngine_Iso.cpp)の状態。初めて pico.iso.* を使ったときに new する
+        struct IsoState;
+        IsoState* iso_ = nullptr;
+        void DestroyIso();
 
         // ---- 画面をまたぐ受け渡し ----
         FixedString<PICO_PATH_LEN> script_path_;   // このスクリプトのSDパス(SetScriptPath)

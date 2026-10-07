@@ -12,6 +12,7 @@
 //   暗号(encrypt/decrypt/hash/random_bytes・storeの暗号化)
 //   OS同梱のLuaモジュール(pico.ui / pico.async / pico.tween / pico.game)
 //   pico.draw_tilemap / draw_image_partの反転
+//   pico.iso(2.5Dの箱庭のエンジン。中身は iso_world_test、ここはLuaからの呼び方と権限)
 #include "lua/LuaEngine.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
@@ -45,6 +46,8 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
 
 // ---- モック(lua_engine_test.cppと同じ方針) ----
@@ -1553,6 +1556,73 @@ int main() {
         check(ok && clip_is(10, 20, 50, 60), "clear_draw_area: 描画中はウィジェットの描画範囲へ戻す");
         PICO_GFX::render_clip_active = false;
         OSData::frame->clearClipRect();
+    }
+
+    // =====================================================================
+    // pico.iso: Luaからの呼び方と権限(エンジンの中身は iso_world_test)
+    // =====================================================================
+    {
+        // 面の絵はリポジトリの本物を使う(透けないブロックの判定に使われる)
+        std::string root(__FILE__);
+        root = root.substr(0, root.rfind("/script/host_test/"));
+        std::ifstream fin(root + "/pc/sdcard/lua/apps/ブロック/faces.pimg", std::ios::binary);
+        HostSd::files["/app/faces.pimg"] = std::string((std::istreambuf_iterator<char>(fin)), {});
+        OSData::SD_usable = true;
+        OSData::frame->createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+        LuaEngine ie(160 * 1024, LuaPermissions{}, "/app");
+        lua_register(ie.raw(), "check", l_check);
+        bool ok = ie.Run(R"LUA(
+            local iso = pico.iso
+            check(iso.size() == nil, "iso.size: 開いていなければ nil")
+            local img = pico.image_load("/app/faces.pimg")
+            check(img ~= nil, "faces.pimg を読める")
+            iso.set_image(img)
+            check(not pcall(iso.set_image, pico.image_create(16, 16)), "iso.set_image: 小さい画像はエラー")
+            local x, y, z = iso.create("/app/w", 0, 1234)
+            check(x == 512 and z == 512 and y > 0, "iso.create: 始めのカーソルは真ん中の柱の一番下の空気")
+            local w, h, kind = iso.size()
+            check(w == 1024 and h == 16 and kind == 0, "iso.size")
+            check(iso.get(x, y, z) == 0 and iso.get(x, y - 1, z) ~= 0, "iso.get")
+            iso.set(x, y, z, 13)
+            check(iso.get(x, y, z) == 13, "iso.set")
+            check(not pcall(iso.set, x, y, z, 25), "iso.set: 知らないブロックはエラー")
+            iso.view(0, 20, 240, 204)
+            iso.origin(120 - 16, 122 - 16 + 8 * (x + z) + 16 * y)
+            local ox, oy = iso.origin()
+            check(ox == 104, "iso.origin: 読み戻せる")
+            iso.pump(64)                  -- 視点が変わったので範囲を決め直して読み込む
+            while iso.pending() > 0 do iso.pump(64) end
+            check(iso.stats().chunks > 10, "iso.pump: 見える所のチャンクを読み込む (" .. iso.stats().chunks .. ")")
+            local bx, by = iso.block_pos(x, y, z)
+            local px, py, pz, f = iso.pick(bx + 16, by + 7)
+            check(px == x and py == y and pz == z and f == "top", "iso.pick: 置いたブロックの上面")
+            iso.cursor(x, y, z, true)
+            iso.render(0, 20, 240, 204)
+            check(iso.stats().faces > 50, "iso.render: 面を描く (" .. iso.stats().faces .. ")")
+            check(iso.save(x, y, z, 13), "iso.save")
+            iso.close()
+            check(iso.size() == nil, "iso.close")
+            local k2, w2 = iso.info("/app/w/world.dat")
+            check(k2 == 0 and w2 == 1024, "iso.info")
+            local ox2, oy2, oz2, cur = iso.open("/app/w")
+            check(ox2 == x and oy2 == y and oz2 == z and cur == 13, "iso.open: 位置とブロック")
+            check(iso.get(x, y, z) == 0, "iso.open: 読み込む前は空気")
+            iso.pump(100)
+            check(iso.pending() == 0 and iso.get(x, y, z) == 13, "iso.open: 書き換えたチャンクを読む")
+            local n, e = iso.create("/other/w", 1, 5)
+            check(n == nil and e ~= nil, "iso.create: アプリのディレクトリの外は断る")
+            check(iso.open("/other/w") == nil, "iso.open: アプリのディレクトリの外は断る")
+            check(iso.info("/other/w/world.dat") == nil, "iso.info: アプリのディレクトリの外は nil")
+            check(iso.migrate("/other/old.dat", "/app/m") == nil, "iso.migrate: アプリのディレクトリの外は断る")
+            iso.dirty_block(x, y, z)
+            iso.dirty_edit(x, y, z)
+            iso.draw_icon(3, 10, 10)
+            check(not pcall(iso.create, "/app/w", 9, 1), "iso.create: 知らない種類はエラー")
+        )LUA", "iso");
+        check(ok, "pico.iso: Luaから一通り使える");
+        check(HostSd::files.count("/app/w/world.dat") == 1 && HostSd::files.count("/app/w/c_64_64.dat") == 1,
+              "pico.iso: 見出しと書き換えたチャンクだけを書き出す");
+        check(HostSd::files.count("/app/w/c_63_63.dat") == 0, "pico.iso: 書き換えていないチャンクは書き出さない");
     }
 
     WidgetFunctions::ClearSceneWidgets();

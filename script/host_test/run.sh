@@ -135,8 +135,12 @@
 #                 pico.*だけ描画を捨てる偽物に差し替え、タップや十字キーを流し込んで確かめる
 #                 (打つ・裏返す・パス・終局 / 最初の1手は安全・連鎖・旗・難易度 / 反射・ブロック・
 #                 アイテム・ステージクリア・全20ステージ・自動プレイ)
-#   blocks_test… Luaアプリ「ブロック」(Blocks-TI-84の移植)。ワールドの生成・保存と読み込みの往復・
-#                 描画(見えない面を描かない・影・水・範囲の絞り込み)・タップ位置の引き当て・置く/壊す
+#   iso_world_test… 2.5Dの箱庭のエンジン(src/iso/Iso_World・Iso_Blit。Luaアプリ「ブロック」の pico.iso)。
+#                 地形の生成がLua版と同じ(ハッシュで比べる)・チャンクの読み込みと手放し・保存と読み込みの往復・
+#                 前の版からの移し替え・描画(見えない面・影・水・Lua版と同じ並び)・隠れたブロックを省いても
+#                 画素が変わらないこと・タップ位置の引き当て・面の写し方
+#   blocks_test… Luaアプリ「ブロック」の画面の流れと操作(pico.iso は偽物)。作る/開く/移す→読み込む→遊ぶ→
+#                 保存して戻る・置く/壊すの規則・カーソルと視点・タップ・ブロックを選ぶ画面
 #   vt_terminal_test… SSHアプリの端末エミュレータ(src/ssh/Vt_Terminal)。折り返し・カーソル移動・
 #                 消去・色(256色/RGB→16色)・全角(2セル)・スクロールバック・範囲スクロール・
 #                 代替画面・問い合わせ(6n等)への返事・大きさの変更
@@ -1011,6 +1015,8 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Iso.cpp" \
+    "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1098,6 +1104,8 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Iso.cpp" \
+    "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1184,6 +1192,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Iso.cpp" \
+    "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1286,6 +1296,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Iso.cpp" \
+    "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1369,6 +1381,8 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Iso.cpp" \
+    "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1457,6 +1471,16 @@ run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/tetris_test.lua" "$ROO
 echo ""
 echo "===== oshite_test ====="
 run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/oshite_test.lua" "$ROOT"
+
+# --- 2.5Dの箱庭のエンジン(src/iso。Luaアプリ「ブロック」が pico.iso で使う) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/iso_world_test.cpp" \
+    "$ROOT/src/iso/Iso_World.cpp" \
+    -o "$OUT/iso_world_test"
+
+echo ""
+echo "===== iso_world_test ====="
+run_or_die "$OUT/iso_world_test" "$ROOT"
 
 for t in reversi_test minesweeper_test breakout_test blocks_test; do
     echo ""

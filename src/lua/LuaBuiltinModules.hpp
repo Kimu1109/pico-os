@@ -465,7 +465,8 @@ function Game:axis()
     return h, v
 end
 
--- 画面ボタン: { name=, x=, y=, w=, h=(キャンバスの中の座標), label= }
+-- 画面ボタン: { name=, x=, y=, w=, h=(キャンバスの中の座標), label=, visible=(falseで隠す。タッチも受けない),
+--               draw=function(b, x, y, w, h, on)(自分で描く。x,yは画面座標、onは押している間true) }
 function Game:button(b)
     b.label = b.label or b.name
     b.x, b.y, b.w, b.h = floor(b.x), floor(b.y), floor(b.w), floor(b.h)
@@ -478,7 +479,7 @@ local function button_at(g, lx, ly)
     local bs = g.buttons
     for i = #bs, 1, -1 do
         local b = bs[i]
-        if lx >= b.x and lx < b.x + b.w and ly >= b.y and ly < b.y + b.h then return b end
+        if b.visible ~= false and lx >= b.x and lx < b.x + b.w and ly >= b.y and ly < b.y + b.h then return b end
     end
 end
 
@@ -1181,6 +1182,7 @@ local ARROW = {
 function Game:_draw_button(b)
     local x, y, w, h = self.x + b.x, self.y + b.y, b.w, b.h
     local on = self._held[b.name]
+    if b.draw then b.draw(b, x, y, w, h, on) return end
     pico.fill_rect(x + 1, y + 1, w - 2, h - 2, on and 7 or 8)   -- 押している間は明るい灰
     pico.draw_rect(x + 1, y + 1, w - 2, h - 2, 0)
     local fg = on and 0 or 15

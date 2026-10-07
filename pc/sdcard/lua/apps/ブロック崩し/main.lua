@@ -1,10 +1,10 @@
--- ブロック崩し。ブロック/パドル/アイテムは図形ウィジェット(Rect/Ellipse/Triangle)で、
--- 位置だけを毎フレームpico.setする。ステージはlib.luaへ分離した
--- (main.luaを読み込み上限16KiBに収めるため。今もぎりぎりなので足すときは注意)。
--- lib.luaはLuaSceneがこの本体より先に読み込み・実行し、結果はグローバル変数STAGESとして
--- 渡ってくる(LuaScene.hppのクラスコメント参照。以前はここでpico.sd_read()+load()を
--- 使って自前で読み込んでいたが、実機でコア0のスタックオーバーフローを起こしたため撤去した)。
--- 外部コントローラー: 左右=パドル、A/START/上=発射・ダイアログを閉じる、HOME=戻る。
+-- ブロック崩し。pico.game(2Dゲームの簡易エンジン)で作っている。
+-- ブロック=タイルマップ(tiles.pimg。1〜6が速さの段、7が壊せない灰)。ボール・パドル・アイテム=スプライト。
+-- ステージクリア等は g:state の枠。ステージの定義は lib.lua(グローバルSTAGES)。
+-- コントローラー: 左右=パドル、A/START/上=発射・次へ、HOME=戻る。
+-- ※LuaSceneが読むのは16KiBまで(日本語コメントは1文字3バイト)。足すときは余裕を見ること
+local game = require("pico.game")
+local STAGES = STAGES
 
 local function clamp(v, lo, hi)
     if v < lo then return lo end
@@ -12,23 +12,17 @@ local function clamp(v, lo, hi)
     return v
 end
 
-local STAGES = STAGES
-
 local COLS = STAGES.cols
-local MAX_ROWS = 0
-for i = 1, #STAGES.list do
-    if STAGES.list[i].rows > MAX_ROWS then MAX_ROWS = STAGES.list[i].rows end
-end
 
--- 色(=速度)のtier。1が最速(赤)、6が最遅(青)
-local TIER_COLOR = { 12, 13, 14, 10, 11, 9 }
+-- 速さの段。1が最速(赤)、6が最遅(青)
 local TIER_MULT = { 2.0, 1.6, 1.35, 1.25, 1.0, 0.7 }
 local TIER_POINTS = { 60, 50, 40, 30, 20, 10 }
-local WALL_TIER = -1 -- 壊せないブロック(灰色)。stages.luaのaddWalls()が挿入する
-local WALL_COLOR = 8 -- PICO_DARKGREY
+local WALL_TIER = -1 -- lib.luaのWALLと同じ値
+local T_WALL = 7
 local function baseSpeed(stage) return 110 + stage * 5 end -- px/秒
 
-local BLOCK_GAP, ROW_GAP, BLOCK_H = 2, 2, 12
+local BLOCK_W, BLOCK_H, GAP = 27, 12, 2
+local TW, TH = BLOCK_W + GAP, BLOCK_H + GAP    -- タイル(ブロック+隙間)
 local BALL_R = 4
 local PADDLE_H = 8
 -- パドル幅はステージが進むほど狭くする(5ステージごとに4px、最小28px)
@@ -37,7 +31,9 @@ local function paddleWidthForStage(stage)
     local w = PADDLE_W_MAX - math.floor((stage - 1) / PADDLE_W_STAGE_SPAN) * PADDLE_W_STEP
     return math.max(PADDLE_W_MIN, w)
 end
-local ITEM_SIZE = 10
+-- drawは w x h の外へ描かない(残る)。fill_circleは直径2r+1画素なので、ボールは9x9・アイテムは11x11
+local BALL_SIZE = BALL_R * 2 + 1
+local ITEM_SIZE = 11
 local ITEM_TRIBALL, ITEM_DOUBLE, ITEM_SLOW = 1, 2, 3
 local ITEM_FALL_SPEED = 70 -- px/秒
 local DROP_CHANCE = 0.2
@@ -47,76 +43,29 @@ local STEP_MAX = 6 -- サブステップ分割の閾値(px)。低フレームレ
 local PAD_SPEED = 220 -- コントローラーでのパドルの速さ(px/秒)
 local MAX_ANGLE = 1.1 -- パドル反射の最大角(ラジアン)
 
-local cx, cy, cw, ch = pico.content_rect()
+local g = game.new{ bg = 15 }
+local cw, ch = g.vw, g.vh
 local MARGIN = 4
-local field_x = cx + MARGIN
+local field_x = MARGIN
 local field_w = cw - MARGIN * 2
-local TOP_WALL = cy + 22
+local TOP_WALL = 22
 local BLOCK_TOP = TOP_WALL + 2
-local BLOCK_W = math.floor((field_w - (COLS - 1) * BLOCK_GAP) / COLS)
-local totalBlockW = COLS * BLOCK_W + (COLS - 1) * BLOCK_GAP
-local blockOffsetX = field_x + math.floor((field_w - totalBlockW) / 2)
-local paddle_y = cy + ch - 24
-local BOTTOM_LIMIT = cy + ch
+local BLOCK_X = field_x + (field_w - (COLS * TW - GAP)) // 2
+local paddle_y = ch - 24
+local BOTTOM_LIMIT = ch
 
-local blockWidgets = {}
-for slot = 1, MAX_ROWS * COLS do
-    local id = pico.create("Rect")
-    pico.set(id, "w", BLOCK_W)
-    pico.set(id, "h", BLOCK_H)
-    pico.set(id, "visible", false)
-    blockWidgets[slot] = id
-end
-
-local ballWidgets = {}
-for i = 1, MAX_BALLS do
-    local id = pico.create("Ellipse")
-    pico.set(id, "w", BALL_R * 2)
-    pico.set(id, "h", BALL_R * 2)
-    pico.set(id, "color", 0)
-    pico.set(id, "visible", false)
-    ballWidgets[i] = id
-end
-
--- アイテムの図形(ids[種類])はstages.luaのitemShapes()が作る
-local itemSlots = {}
-for i = 1, MAX_ITEMS do
-    itemSlots[i] = { ids = STAGES.itemShapes(ITEM_SIZE), active = false, type = 0, x = 0, y = 0 }
-end
-
+local img = g:image(pico.path_join(pico.app_dir(), "tiles.pimg"))
+local map, paddle
 local paddle_w = paddleWidthForStage(1)
-local paddle_id = pico.create("Rect")
-pico.set(paddle_id, "w", paddle_w); pico.set(paddle_id, "h", PADDLE_H)
-pico.set(paddle_id, "color", 1); pico.set(paddle_id, "y", paddle_y)
-
-local border_id = pico.create("Rect")
-pico.set(border_id, "filled", false); pico.set(border_id, "color", 7)
-pico.set(border_id, "x", field_x); pico.set(border_id, "y", TOP_WALL)
-pico.set(border_id, "w", field_w); pico.set(border_id, "h", BOTTOM_LIMIT - TOP_WALL)
-
-local back_button = pico.create("Button")
-pico.set(back_button, "x", cx + 2); pico.set(back_button, "y", cy + 2)
-pico.set(back_button, "w", 43); pico.set(back_button, "h", 25)
-pico.set(back_button, "font_size", 0); pico.set(back_button, "text", "戻る")
-pico.on(back_button, "press_start", function() pico.pop() end)
-
-local status_label = pico.create("Label")
-pico.set(status_label, "font_size", 0)
-pico.set(status_label, "x", cx + 48); pico.set(status_label, "y", cy + 4)
-
--- バッテリー計測用の自動プレイON/OFF(既定OFF)。詳細はlib.lua参照
--- (-43はButtonの全体の幅(w=32+枠9=41)+余白を引いた右寄せ位置)
-local isAuto = STAGES.makeAutoToggle(cx + cw - 43, cy + 2)
 
 local score, lives, stage_idx = 0, 3, 1
-local blocks, blocks_remaining = {}, 0
+local blocks_remaining = 0
 local balls = {}
 local paddle_cx = field_x + field_w / 2
-local game_state = "ready" -- "ready" | "playing" | "dialog"
-local prev_touched = false
-local dlg, dlg_fn -- 表示中のダイアログ(コントローラーで閉じるため)
+local auto = false      -- 自動プレイ(右上の「自動」。バッテリー計測用の放置プレイ)
+local auto_btn
 
--- 効果音はch2で1フレーム1回、優先度(pri)の高いもの(ボールが多いと命令の列が溢れるため)
+-- 効果音はch2で1フレーム1回、優先度の高いもの(ボールが多いと命令の列が溢れる)
 local snd
 local function se(pri, f, ms, wave)
     if not snd or pri > snd[1] then snd = { pri, f, ms, wave or "pulse25" } end
@@ -126,58 +75,70 @@ local function jingle(mml)
     pico.music_play_text("#tempo 200\nA @pulse25 v11 q7 o5 l16 " .. mml)
 end
 
-local function syncItemSlot(i)
-    local s = itemSlots[i]
-    for t, id in pairs(s.ids) do pico.set(id, "visible", s.active and s.type == t) end
+local function hudDirty() g:dirty(0, 0, g.vw, TOP_WALL) end
+
+-- ---- スプライトの絵 ----
+
+local function ballDraw(_, x, y) pico.fill_circle(x + BALL_R, y + BALL_R, BALL_R, 0) end
+-- アイテム: 1=3つに増える(黄の四角) 2=倍にする(シアンの円) 3=ゆっくり(青の三角)
+local ITEM_DRAWS = {
+    function(_, x, y) pico.fill_rect(x, y, ITEM_SIZE, ITEM_SIZE, 14) end,
+    function(_, x, y) pico.fill_circle(x + ITEM_SIZE // 2, y + ITEM_SIZE // 2, ITEM_SIZE // 2, 11) end,
+    function(_, x, y) pico.fill_triangle(x, y + ITEM_SIZE - 1, x + ITEM_SIZE // 2, y, x + ITEM_SIZE - 1, y + ITEM_SIZE - 1, 9) end,
+}
+
+local function newBall(cx, cy, dx, dy)
+    local b = g:sprite{ x = cx - BALL_R, y = cy - BALL_R, w = BALL_SIZE, h = BALL_SIZE, layer = 3,
+                        draw = ballDraw, tag = "ball", cx = cx, cy = cy, dx = dx, dy = dy }
+    balls[#balls + 1] = b
+    return b
 end
 
-local function syncBalls()
-    for i = 1, MAX_BALLS do
-        pico.set(ballWidgets[i], "visible", i <= #balls)
-    end
+local function placeBall(b)
+    b.x, b.y = b.cx - BALL_R, b.cy - BALL_R
 end
 
-local function updateHud()
-    pico.set(status_label, "text",
-        "St:" .. stage_idx .. "/" .. #STAGES.list .. " Sc:" .. score .. " L:" .. lives)
-end
+-- ---- ステージ ----
 
 local function loadStage(idx)
     local data = STAGES.list[idx]
-    blocks, blocks_remaining = {}, 0
-    for r = 1, MAX_ROWS do
+    g:clear()                       -- 前のステージのものを全部消す
+    local bytes, parts = {}, {}
+    blocks_remaining = 0
+    for r = 1, data.rows do
         for c = 1, COLS do
-            local slot = (r - 1) * COLS + c
-            local wid = blockWidgets[slot]
-            local tier = (r <= data.rows) and data.cell(r, c) or 0
-            if tier ~= 0 then
-                local bx = blockOffsetX + (c - 1) * (BLOCK_W + BLOCK_GAP)
-                local by = BLOCK_TOP + (r - 1) * (BLOCK_H + ROW_GAP)
-                blocks[slot] = { x = bx, y = by, tier = tier }
-                if tier ~= WALL_TIER then blocks_remaining = blocks_remaining + 1 end
-                pico.set(wid, "x", bx); pico.set(wid, "y", by)
-                pico.set(wid, "color", (tier == WALL_TIER) and WALL_COLOR or TIER_COLOR[tier])
-                pico.set(wid, "visible", true)
-            else
-                pico.set(wid, "visible", false)
-            end
+            local tier = data.cell(r, c)
+            local v = 0
+            if tier == WALL_TIER then v = T_WALL
+            elseif tier ~= 0 then v = tier; blocks_remaining = blocks_remaining + 1 end
+            bytes[c] = v
         end
+        parts[r] = string.char(table.unpack(bytes, 1, COLS))
     end
+    map = g:tilemap{ image = img, tile_w = TW, tile_h = TH, x = BLOCK_X, y = BLOCK_TOP,
+                     data = table.concat(parts), cols = COLS }
     paddle_w = paddleWidthForStage(idx)
-    pico.set(paddle_id, "w", paddle_w)
-    updateHud()
+    paddle = g:sprite{ x = 0, y = paddle_y, w = paddle_w, h = PADDLE_H, color = 1, tag = "paddle", layer = 2 }
+    balls = {}
+    hudDirty()
+end
+
+local function setPaddle(x)
+    paddle_cx = clamp(x, field_x + paddle_w / 2, field_x + field_w - paddle_w / 2)
+    paddle.x = math.floor(paddle_cx - paddle_w / 2)
+end
+
+local function clearItems()
+    for _, it in ipairs(g:find("item")) do it:remove() end
 end
 
 local function readyBall()
+    for _, b in ipairs(balls) do b:remove() end
     balls = {}
-    syncBalls()
-    for i = 1, MAX_ITEMS do
-        itemSlots[i].active = false
-        syncItemSlot(i)
-    end
-    paddle_cx = field_x + field_w / 2
-    pico.set(paddle_id, "x", math.floor(paddle_cx - paddle_w / 2))
-    game_state = "ready"
+    clearItems()
+    setPaddle(field_x + field_w / 2)
+    newBall(paddle_cx, paddle_y - BALL_R * 2 - 1, 0, 0)
+    g:go("ready")
 end
 
 local function startGame()
@@ -188,111 +149,21 @@ end
 
 local function applyTierSpeed(b, tier)
     local speed = baseSpeed(stage_idx) * TIER_MULT[tier]
-    local mag = math.sqrt(b.vx * b.vx + b.vy * b.vy)
+    local mag = math.sqrt(b.dx * b.dx + b.dy * b.dy)
     if mag > 0 then
         local k = speed / mag
-        b.vx, b.vy = b.vx * k, b.vy * k
+        b.dx, b.dy = b.dx * k, b.dy * k
     end
 end
+
+-- ---- アイテム ----
 
 local function spawnItem(x, y)
-    for i = 1, MAX_ITEMS do
-        local s = itemSlots[i]
-        if not s.active then
-            s.active, s.type = true, math.random(1, 3)
-            s.x, s.y = x - ITEM_SIZE / 2, y - ITEM_SIZE / 2
-            syncItemSlot(i)
-            return
-        end
-    end
-end
-
-local function destroyBlock(slot)
-    local blk = blocks[slot]
-    if not blk then return end
-    pico.set(blockWidgets[slot], "visible", false)
-    blocks[slot] = nil
-    blocks_remaining = blocks_remaining - 1
-    se(3, 1500 - blk.tier * 150, 50, "pulse50")
-    score = score + TIER_POINTS[blk.tier]
-    updateHud()
-    if math.random() < DROP_CHANCE then
-        spawnItem(blk.x + BLOCK_W / 2, blk.y + BLOCK_H / 2)
-    end
-end
-
-local function collideBlocks(b)
-    for slot = 1, MAX_ROWS * COLS do
-        local blk = blocks[slot]
-        if blk then
-            local nx = clamp(b.x, blk.x, blk.x + BLOCK_W)
-            local ny = clamp(b.y, blk.y, blk.y + BLOCK_H)
-            local dx, dy = b.x - nx, b.y - ny
-            if dx * dx + dy * dy < BALL_R * BALL_R then
-                local left = (b.x + BALL_R) - blk.x
-                local right = (blk.x + BLOCK_W) - (b.x - BALL_R)
-                local top = (b.y + BALL_R) - blk.y
-                local bottom = (blk.y + BLOCK_H) - (b.y - BALL_R)
-                local m = math.min(left, right, top, bottom)
-                if m == left then
-                    b.x = blk.x - BALL_R; b.vx = -math.abs(b.vx)
-                elseif m == right then
-                    b.x = blk.x + BLOCK_W + BALL_R; b.vx = math.abs(b.vx)
-                elseif m == top then
-                    b.y = blk.y - BALL_R; b.vy = -math.abs(b.vy)
-                else
-                    b.y = blk.y + BLOCK_H + BALL_R; b.vy = math.abs(b.vy)
-                end
-                if blk.tier == WALL_TIER then
-                    se(2, 180, 40, "triangle") -- 壊せないブロック: 反射だけ
-                else
-                    applyTierSpeed(b, blk.tier)
-                    destroyBlock(slot)
-                end
-                return
-            end
-        end
-    end
-end
-
-local function collidePaddle(b)
-    local px = paddle_cx - paddle_w / 2
-    if b.x + BALL_R >= px and b.x - BALL_R <= px + paddle_w
-        and b.y + BALL_R >= paddle_y and b.y - BALL_R <= paddle_y + PADDLE_H then
-        local offset = clamp((b.x - paddle_cx) / (paddle_w / 2), -1, 1)
-        local speed = math.sqrt(b.vx * b.vx + b.vy * b.vy)
-        local angle = offset * MAX_ANGLE
-        b.vx = speed * math.sin(angle)
-        b.vy = -speed * math.cos(angle)
-        b.y = paddle_y - BALL_R
-        se(2, 520, 40)
-    end
-end
-
-local function stepBall(b, dtSec)
-    local dist = math.sqrt(b.vx * b.vx + b.vy * b.vy) * dtSec
-    local steps = math.max(1, math.ceil(dist / STEP_MAX))
-    local subDt = dtSec / steps
-    for i = 1, steps do
-        b.x = b.x + b.vx * subDt
-        b.y = b.y + b.vy * subDt
-        local vx, vy = b.vx, b.vy
-        if b.x - BALL_R < field_x then
-            b.x = field_x + BALL_R; b.vx = math.abs(b.vx)
-        elseif b.x + BALL_R > field_x + field_w then
-            b.x = field_x + field_w - BALL_R; b.vx = -math.abs(b.vx)
-        end
-        if b.y - BALL_R < TOP_WALL then
-            b.y = TOP_WALL + BALL_R; b.vy = math.abs(b.vy)
-        end
-        if vx ~= b.vx or vy ~= b.vy then se(1, 330, 20, "pulse12") end
-        collideBlocks(b)
-        if b.vy > 0 then collidePaddle(b) end
-        if b.y - BALL_R > BOTTOM_LIMIT then
-            b.dead = true
-            return
-        end
-    end
+    if #g:find("item") >= MAX_ITEMS then return end
+    local kind = math.random(1, 3)
+    g:sprite{ x = x - ITEM_SIZE / 2, y = y - ITEM_SIZE / 2, w = ITEM_SIZE, h = ITEM_SIZE, vy = ITEM_FALL_SPEED,
+              layer = 1, tag = "item", kind = kind, draw = ITEM_DRAWS[kind],
+              on_update = function(s) if s.y > BOTTOM_LIMIT then s:remove() end end }
 end
 
 local function spawnExtraBalls(n)
@@ -300,13 +171,9 @@ local function spawnExtraBalls(n)
     for i = 1, n do
         if #balls < MAX_BALLS then
             local ang = (i - (n + 1) / 2) * 0.35
-            table.insert(balls, {
-                x = paddle_cx, y = paddle_y - BALL_R * 2 - 1,
-                vx = speed * math.sin(ang), vy = -speed * math.cos(ang),
-            })
+            newBall(paddle_cx, paddle_y - BALL_R * 2 - 1, speed * math.sin(ang), -speed * math.cos(ang))
         end
     end
-    syncBalls()
 end
 
 local function doubleBalls()
@@ -314,78 +181,138 @@ local function doubleBalls()
     for i = 1, n do
         if #balls < MAX_BALLS then
             local b = balls[i]
-            table.insert(balls, { x = b.x, y = b.y, vx = -b.vx, vy = b.vy })
+            newBall(b.cx, b.cy, -b.dx, b.dy)
         end
     end
-    syncBalls()
 end
 
 local function slowAllBalls()
     for i = 1, #balls do applyTierSpeed(balls[i], #TIER_MULT) end
 end
 
-local function applyItem(t)
-    if t == ITEM_TRIBALL then
-        spawnExtraBalls(3)
-    elseif t == ITEM_DOUBLE then
-        doubleBalls()
-    else
-        slowAllBalls()
+g:collide("paddle", "item", function(_, it)
+    it:remove()
+    se(4, 1760, 120, "pulse50")
+    if it.kind == ITEM_TRIBALL then spawnExtraBalls(3)
+    elseif it.kind == ITEM_DOUBLE then doubleBalls()
+    else slowAllBalls() end
+end)
+
+-- ---- ボールの動き ----
+
+local function destroyBlock(c, r, tier)
+    map:set(c, r, 0)
+    blocks_remaining = blocks_remaining - 1
+    se(3, 1500 - tier * 150, 50, "pulse50")
+    score = score + TIER_POINTS[tier]
+    hudDirty()
+    if math.random() < DROP_CHANCE then
+        spawnItem(BLOCK_X + c * TW + BLOCK_W / 2, BLOCK_TOP + r * TH + BLOCK_H / 2)
     end
 end
 
-local function updateItems(dtSec)
-    for i = 1, MAX_ITEMS do
-        local s = itemSlots[i]
-        if s.active then
-            s.y = s.y + ITEM_FALL_SPEED * dtSec
-            local px = paddle_cx - paddle_w / 2
-            if s.x + ITEM_SIZE >= px and s.x <= px + paddle_w
-                and s.y + ITEM_SIZE >= paddle_y and s.y <= paddle_y + PADDLE_H then
-                s.active = false
-                syncItemSlot(i)
-                se(4, 1760, 120, "pulse50")
-                applyItem(s.type)
-            elseif s.y > BOTTOM_LIMIT then
-                s.active = false
-                syncItemSlot(i)
-            else
-                local id = s.ids[s.type]
-                pico.set(id, "x", math.floor(s.x))
-                pico.set(id, "y", math.floor(s.y))
+-- ボールの外接矩形がかかるマスだけ調べ、1つ見つけたら反射して終わり
+local function collideBlocks(b)
+    local c0 = math.floor((b.cx - BALL_R - BLOCK_X) / TW)
+    local c1 = math.floor((b.cx + BALL_R - BLOCK_X) / TW)
+    local r0 = math.floor((b.cy - BALL_R - BLOCK_TOP) / TH)
+    local r1 = math.floor((b.cy + BALL_R - BLOCK_TOP) / TH)
+    for r = r0, r1 do
+        for c = c0, c1 do
+            local v = map:get(c, r)
+            if v ~= 0 then
+                local bx, by = BLOCK_X + c * TW, BLOCK_TOP + r * TH
+                local nx = clamp(b.cx, bx, bx + BLOCK_W)
+                local ny = clamp(b.cy, by, by + BLOCK_H)
+                local dx, dy = b.cx - nx, b.cy - ny
+                if dx * dx + dy * dy < BALL_R * BALL_R then
+                    local left = (b.cx + BALL_R) - bx
+                    local right = (bx + BLOCK_W) - (b.cx - BALL_R)
+                    local top = (b.cy + BALL_R) - by
+                    local bottom = (by + BLOCK_H) - (b.cy - BALL_R)
+                    local m = math.min(left, right, top, bottom)
+                    if m == left then
+                        b.cx = bx - BALL_R; b.dx = -math.abs(b.dx)
+                    elseif m == right then
+                        b.cx = bx + BLOCK_W + BALL_R; b.dx = math.abs(b.dx)
+                    elseif m == top then
+                        b.cy = by - BALL_R; b.dy = -math.abs(b.dy)
+                    else
+                        b.cy = by + BLOCK_H + BALL_R; b.dy = math.abs(b.dy)
+                    end
+                    if v == T_WALL then
+                        se(2, 180, 40, "triangle") -- 壊せないブロック: 反射だけ
+                    else
+                        applyTierSpeed(b, v)
+                        destroyBlock(c, r, v)
+                    end
+                    return
+                end
             end
         end
     end
 end
 
--- タッチで閉じても、コントローラーで閉じても(loop()参照)fnが1回だけ呼ばれる
-local function dialog(text, btn, fn)
-    game_state = "dialog"
-    dlg_fn = fn
-    dlg = pico.show_message(text, "", btn)
-    pico.on(dlg, "closed", function() dlg = nil; fn() end)
+local function collidePaddle(b)
+    local px = paddle_cx - paddle_w / 2
+    if b.cx + BALL_R >= px and b.cx - BALL_R <= px + paddle_w
+        and b.cy + BALL_R >= paddle_y and b.cy - BALL_R <= paddle_y + PADDLE_H then
+        local offset = clamp((b.cx - paddle_cx) / (paddle_w / 2), -1, 1)
+        local speed = math.sqrt(b.dx * b.dx + b.dy * b.dy)
+        local angle = offset * MAX_ANGLE
+        b.dx = speed * math.sin(angle)
+        b.dy = -speed * math.cos(angle)
+        b.cy = paddle_y - BALL_R
+        se(2, 520, 40)
+    end
 end
 
+local function stepBall(b, dtSec)
+    local dist = math.sqrt(b.dx * b.dx + b.dy * b.dy) * dtSec
+    local steps = math.max(1, math.ceil(dist / STEP_MAX))
+    local subDt = dtSec / steps
+    for _ = 1, steps do
+        b.cx = b.cx + b.dx * subDt
+        b.cy = b.cy + b.dy * subDt
+        local dx, dy = b.dx, b.dy
+        if b.cx - BALL_R < field_x then
+            b.cx = field_x + BALL_R; b.dx = math.abs(b.dx)
+        elseif b.cx + BALL_R > field_x + field_w then
+            b.cx = field_x + field_w - BALL_R; b.dx = -math.abs(b.dx)
+        end
+        if b.cy - BALL_R < TOP_WALL then
+            b.cy = TOP_WALL + BALL_R; b.dy = math.abs(b.dy)
+        end
+        if dx ~= b.dx or dy ~= b.dy then se(1, 330, 20, "pulse12") end
+        collideBlocks(b)
+        if b.dy > 0 then collidePaddle(b) end
+        if b.cy - BALL_R > BOTTOM_LIMIT then
+            b.lost = true
+            return
+        end
+    end
+end
+
+-- ---- 流れ ----
+
 local function stageClear()
+    clearItems()
     if stage_idx >= #STAGES.list then
         jingle("c e g > c e g > c4")
-        dialog("全ステージクリア!  スコア:" .. score, "最初から", startGame)
-        return
+        g:go("win")
+    else
+        jingle("c e g > c4")
+        g:go("clear")
     end
-    jingle("c e g > c4")
-    dialog("ステージ" .. stage_idx .. "クリア!", "次へ", function()
-        stage_idx = stage_idx + 1
-        loadStage(stage_idx)
-        readyBall()
-    end)
 end
 
 local function loseLife()
     lives = lives - 1
-    updateHud()
+    hudDirty()
     if lives <= 0 then
         jingle("l8 e d c < g2")
-        dialog("ゲームオーバー  スコア:" .. score, "もう一度", startGame)
+        clearItems()
+        g:go("over")
     else
         jingle("l8 g e c4")
         readyBall()
@@ -394,65 +321,123 @@ end
 
 local function launch()
     local speed = baseSpeed(stage_idx)
-    balls = { { x = paddle_cx, y = paddle_y - BALL_R * 2 - 1, vx = 0, vy = -speed } }
-    syncBalls()
-    pico.set(ballWidgets[1], "x", math.floor(balls[1].x - BALL_R))
-    pico.set(ballWidgets[1], "y", math.floor(balls[1].y - BALL_R))
-    game_state = "playing"
+    local b = balls[1]
+    b.dx, b.dy = 0, -speed
+    g:go("play")
     se(2, 880, 60)
 end
 
-local function setPaddle(x)
-    paddle_cx = clamp(x, field_x + paddle_w / 2, field_x + field_w - paddle_w / 2)
-    pico.set(paddle_id, "x", math.floor(paddle_cx - paddle_w / 2))
+-- パドル: 指(触れている間そこへ)・コントローラー・自動プレイ
+local function control(dt, playing)
+    local t = g.touch
+    local dir = (g:down("right") and 1 or 0) - (g:down("left") and 1 or 0)
+    if auto then
+        if playing then setPaddle(STAGES.autoTargetX(balls, paddle_cx) - 20) end -- あえてずらす
+    else
+        if t.down then setPaddle(t.x) end
+        if dir ~= 0 then setPaddle(paddle_cx + dir * PAD_SPEED * dt) end
+    end
 end
 
--- EscキーとコントローラーのHOMEで戻る
-pico.on_back(function() pico.pop() end)
+-- 発射・次へ・もう一度(タップ、A、START、上。自動プレイ中は常に)
+local function goKey()
+    return auto or g.touch.pressed or g:pressed("a") or g:pressed("start") or g:pressed("up")
+end
 
-function loop(dt)
-    local tx, ty, touched = pico.get_touch()
-    -- 自動プレイ中はgoを常時trueにし、発射・ダイアログ継続もこれで賄う(go検知は1回だけ効く)
-    local go = pico.pad_pressed("a") or pico.pad_pressed("start") or pico.pad_pressed("up") or isAuto()
-    local dir = (pico.pad_down("right") and 1 or 0) - (pico.pad_down("left") and 1 or 0)
-    STAGES.autoControl(isAuto(), game_state, balls, paddle_cx, tx, touched, dir * PAD_SPEED * dt / 1000, setPaddle)
+-- ---- 画面 ----
 
-    if game_state == "dialog" then
-        if go and dlg then
-            local id = dlg
-            dlg = nil
-            pico.destroy(id) -- closedは呼ばれないので自分でfnを呼ぶ
-            dlg_fn()
-        end
-    elseif game_state == "ready" then
-        pico.set(ballWidgets[1], "visible", true)
-        pico.set(ballWidgets[1], "x", math.floor(paddle_cx - BALL_R))
-        pico.set(ballWidgets[1], "y", math.floor(paddle_y - BALL_R * 2 - 1))
-        if (touched and not prev_touched) or go then launch() end
-    elseif game_state == "playing" then
-        local dtSec = dt / 1000
-        for i = #balls, 1, -1 do
-            stepBall(balls[i], dtSec)
-            if balls[i].dead then table.remove(balls, i) end
-        end
-        syncBalls()
-        for i = 1, #balls do
-            pico.set(ballWidgets[i], "x", math.floor(balls[i].x - BALL_R))
-            pico.set(ballWidgets[i], "y", math.floor(balls[i].y - BALL_R))
-        end
-        updateItems(dtSec)
-        if #balls == 0 then
-            loseLife()
-        elseif blocks_remaining == 0 then
-            stageClear()
-        end
+local function overlay(ox, oy, l1, l2, l3)
+    local x, y, w, h = ox + 20, oy + 96, cw - 40, l3 and 84 or 60
+    pico.fill_rect(x, y, w, h, 0)
+    pico.draw_rect(x, y, w, h, 15)
+    local lines = { l1, l2, l3 }
+    for i = 1, l3 and 3 or 2 do
+        local t = lines[i]
+        pico.draw_text(x + (w - pico.text_width(t, 0)) // 2, y + 8 + (i - 1) * 24, t, i == 1 and 14 or 15, 0)
     end
-    prev_touched = touched
+end
+
+function g:on_update()
+    if self:pressed("back") then pico.pop() return end
+    if self:pressed("auto") then
+        auto = not auto
+        self:dirty(auto_btn.x, auto_btn.y, auto_btn.w, auto_btn.h)
+    end
+    for _, b in ipairs(balls) do placeBall(b) end
     if snd then
         pico.sound_play(2, snd[2], snd[3], { wave = snd[4], volume = 9, envelope = -3 })
         snd = nil
     end
 end
 
+function g:on_draw_world(ox, oy)
+    pico.draw_rect(ox + field_x, oy + TOP_WALL, field_w, BOTTOM_LIMIT - TOP_WALL, 7)
+end
+
+function g:on_draw(ox, oy)
+    pico.draw_text(ox + 46, oy + 3,
+        "St" .. stage_idx .. "/" .. #STAGES.list .. " Sc" .. score .. " L" .. lives, 0, 0)
+end
+
+g:button{ name = "back", x = 2, y = 0, w = 40, h = 22, label = "戻る" }
+auto_btn = g:button{ name = "auto", x = cw - 43, y = 0, w = 41, h = 22, draw = function(b, x, y, w, h)
+    pico.fill_rect(x + 1, y + 1, w - 2, h - 2, auto and 2 or 8)
+    pico.draw_rect(x + 1, y + 1, w - 2, h - 2, 0)
+    pico.draw_text(x + (w - pico.text_width("自動", 0)) // 2, y + 3, "自動", 15, 0)
+end }
+
+g:state("ready", {
+    update = function(_, dt)
+        control(dt, false)
+        local b = balls[1]
+        b.cx, b.cy = paddle_cx, paddle_y - BALL_R * 2 - 1
+        if goKey() then launch() end
+    end,
+    draw = function(_, ox, oy)
+        local t = "タップで発射"
+        pico.draw_text(ox + (cw - pico.text_width(t, 0)) // 2, oy + paddle_y - 36, t, 8, 0)
+    end,
+})
+
+g:state("play", {
+    update = function(_, dt)
+        control(dt, true)
+        for i = #balls, 1, -1 do
+            stepBall(balls[i], dt)
+            if balls[i].lost then
+                balls[i]:remove()
+                table.remove(balls, i)
+            end
+        end
+        if #balls == 0 then
+            loseLife()
+        elseif blocks_remaining == 0 then
+            stageClear()
+        end
+    end,
+})
+
+g:state("clear", {
+    update = function()
+        if goKey() then
+            stage_idx = stage_idx + 1
+            loadStage(stage_idx)
+            readyBall()
+        end
+    end,
+    draw = function(_, ox, oy) overlay(ox, oy, "ステージ" .. stage_idx .. "クリア!", "タップで次へ") end,
+})
+
+g:state("over", {
+    update = function() if goKey() then startGame() end end,
+    draw = function(_, ox, oy) overlay(ox, oy, "ゲームオーバー", "スコア:" .. score, "タップでもう一度") end,
+})
+
+g:state("win", {
+    update = function() if goKey() then startGame() end end,
+    draw = function(_, ox, oy) overlay(ox, oy, "全ステージクリア!", "スコア:" .. score, "タップで最初から") end,
+})
+
+pico.on_back(function() pico.pop() end)
 math.randomseed(pico.get_time().sec * 1000 + pico.get_time().min)
 startGame()

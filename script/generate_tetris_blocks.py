@@ -4,10 +4,12 @@ generate_tetris_blocks.py
 -------------------------
 テトリス(pc/sdcard/lua/apps/テトリス/)のミノの画像 blocks.pimg を作る。標準ライブラリのみ。
 
-12x12pxのタイルを横に8枚並べた1枚の画像(96x12)で、Lua側は pico.draw_image_part() で
-1枚ずつ切り出して描く(Luaが同時に持てる画像は4枚までなので1枚にまとめてある)。
+12x12pxのタイルを横に10枚並べた1枚の画像(120x12)。pico.game のタイルマップ(盤面)と
+スプライト(落ちているミノ・ゴースト)・pico.draw_image_part()(HOLD/NEXTの絵)で同じ画像を使う
+(Luaが同時に持てる画像は8枚までなので1枚にまとめてある)。
 
     並び: 1=I 2=O 3=T 4=S 5=Z 6=J 7=L 8=ゴースト(落ちる位置の影)
+          9=消えるラインの白  10=空きマス(盤面の黒)
 
 色はpico-osの16色パレットの番号で直接描く(generate_pimg.pyと同じ.pimg形式・同じパレット)。
 パレットに橙が無いので、L は灰色にしてある。
@@ -82,8 +84,12 @@ def ghost_tile():
     return t
 
 
+def solid_tile(color):
+    return [[color] * TILE for _ in range(TILE)]
+
+
 def build_sheet():
-    tiles = [mino_tile(*m) for m in MINOS] + [ghost_tile()]
+    tiles = [mino_tile(*m) for m in MINOS] + [ghost_tile(), solid_tile(WHITE), solid_tile(BLACK)]
     w, h = TILE * len(tiles), TILE
     rows = [[0] * w for _ in range(h)]
     for n, t in enumerate(tiles):

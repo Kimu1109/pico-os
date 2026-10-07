@@ -1,150 +1,218 @@
 -- テトリス(pc/sdcard/lua/apps/テトリス/)のゲームの規則を、pico.* を差し替えて確かめる。
+-- pico.game は本物(src/lua/LuaBuiltinModules.hpp の kGame をそのまま読む)で、描画だけ捨てる。
 -- lua_script_test(vendorしたLuaでこのファイルを動かすだけの下請け)から run.sh が呼ぶ。
 -- 見た目はPCビルドの --tap / --shot で確かめること(ここでは描画は数えるだけ)。
 -- main.lua の末尾へ TEST(ローカル変数を覗く口)を足してから読み込む
 local ROOT = ROOT_DIR .. "/pc/sdcard"
-local cbs, nid, files_written = {}, 0, {}
-local pad = {}
-local touch = {0,0}
-local draws = 0
-pico = {}
-function pico.content_rect() return 0, 20, 240, 300 end
-function pico.sd_read(p)
-  if files_written[p] then return files_written[p] end
-  local f = io.open(ROOT..p, "rb"); if not f then return nil end
-  local s = f:read("a"); f:close(); return s
+local DIR = "/lua/apps/テトリス/"
+local fails = 0
+local function check(c, m) if c then print("[ OK ] " .. m) else print("[FAIL] " .. m) fails = fails + 1 end end
+
+local hpp = assert(io.open(ROOT_DIR .. "/src/lua/LuaBuiltinModules.hpp")):read("a")
+local _, s0 = hpp:find('kGame = R"LUA(', 1, true)
+local e0 = hpp:find(')LUA"', s0, true)
+local game = assert(load(hpp:sub(s0 + 1, e0 - 1), "=pico.game"))()
+
+local files_written = {}
+local pad, pad_prev = {}, {}
+local draws, popped, music_on = 0, false, false
+local back_fn
+local nid = 0
+pico = setmetatable({
+    content_rect = function() return 0, 20, 240, 300 end,
+    create = function() nid = nid + 1 return nid end,
+    millis = function() return 0 end,
+    every = function() return 1 end,
+    app_dir = function() return DIR end,
+    path_join = function(a, b) return a .. b end,
+    image_load = function() return 1 end,
+    image_size = function() return 120, 12 end,
+    text_width = function(t) return #t * 6 end,
+    sd_read = function(p)
+        if files_written[p] then return files_written[p] end
+        local f = io.open(ROOT .. p, "rb")
+        if not f then return nil end
+        local s = f:read("a")
+        f:close()
+        return s
+    end,
+    sd_write = function(p, s) files_written[p] = s return true end,
+    log = function(s) print("LOG", s) end,
+    get_draw_area = function() return 0, 0, 0, 0 end,
+    pad_down = function(n) return pad[n] or false end,
+    pad_pressed = function(n) return (pad[n] and not pad_prev[n]) or false end,
+    pad_released = function(n) return (pad_prev[n] and not pad[n]) or false end,
+    sound_play = function() return true end,
+    music_play = function(p) music_on = true return pico.sd_read(p) ~= nil end,
+    music_stop = function() music_on = false end,
+    on_back = function(f) back_fn = f end,
+    pop = function() popped = true end,
+}, { __index = function() return function() draws = draws + 1 end end })
+for _, n in ipairs { "fill_rect", "draw_rect", "draw_text", "draw_line", "draw_circle", "draw_image_part" } do
+    pico[n] = function() draws = draws + 1 end
 end
-function pico.sd_write(p, s) files_written[p] = s return true end
-function pico.image_load(p) return pico.sd_read(p) and 1 or nil end
-function pico.log(s) print("LOG", s) end
-function pico.create(t) nid = nid + 1; cbs[nid] = {type=t}; return nid end
-function pico.set(id,k,v) cbs[id][k]=v end
-function pico.on(id,ev,fn) cbs[id][ev]=fn end
-for _,n in ipairs{"fill_rect","draw_rect","draw_text","draw_line","draw_circle","draw_image_part","mark_dirty","invalidate"} do
-  pico[n] = function() draws = draws + 1 end
-end
-function pico.get_draw_area() return 0,0,0,0 end
-function pico.get_touch() return touch[1], touch[2], true end
-function pico.pad_connected() return true end
-function pico.pad_down(n) return pad[n] or false end
-local sounds = 0
-function pico.sound_play() sounds = sounds + 1 return true end
-local music_on = false
-function pico.music_play(p) music_on = true return pico.sd_read(p) ~= nil end
-function pico.music_stop() music_on = false end
-local popped = false
-function pico.pop() popped = true end
+
+local g
+local new = game.new
+game.new = function(o) g = new(o) return g end
+function require(n) return game end
 
 -- LuaSceneは本体(main.lua)より先に同じディレクトリのlib.luaを読み込み・実行する
 -- (LuaScene.hppのクラスコメント参照)。ここでも同じ順序を再現する
-local lib_src = assert(io.open(ROOT.."/lua/apps/テトリス/lib.lua")):read("a")
-assert(load(lib_src, "lib"))()
+assert(load(assert(io.open(ROOT .. DIR .. "lib.lua")):read("a"), "lib"))()
 
-local src = assert(io.open(ROOT.."/lua/apps/テトリス/main.lua")):read("a")
-assert(#src < 16384, "main.lua must be under 16KiB: "..#src)
+local src = assert(io.open(ROOT .. DIR .. "main.lua")):read("a")
+assert(#src < 15872, "main.lua must stay under 15.5KiB (LuaScene reads 16KiB only): " .. #src)
 src = src .. [[
-TEST = { g = g, spawn = spawn, S = function() return state, score, lines, level, p, rot, px, py, hold, hiscore end }
+TEST = { grid = grid, spawn = spawn, map = map, piece = piece_s, ghost = ghost_s,
+         S = function() return g.state_name, score, lines, level, p, rot, px, py, hold, hiscore end }
 ]]
-assert(load(src, "main"))()
-local fails = 0
-local function check(c, m) if c then print("[OK] "..m) else print("[NG] "..m) fails = fails + 1 end end
+assert(load(src, "=main"))()
 
--- 描画コールバックが全部エラー無く走る
-for id, w in pairs(cbs) do if w.render then w.render() end end
-check(draws > 0, "render callbacks run")
-local board = 1
+local function step(n, ms)
+    for _ = 1, n or 1 do
+        g:step((ms or 16) / 1000)
+        for k in pairs(pad_prev) do pad_prev[k] = nil end
+        for k, v in pairs(pad) do pad_prev[k] = v end
+    end
+end
+local function pressPad(name) pad[name] = true; step(1); pad[name] = nil; step(1) end
+local function tap(x, y)
+    g:_touch("start", x, y)
+    step(1)
+    g:_touch("end", 0, 0)
+    step(1)
+end
 local function S() return TEST.S() end
-local function step(n, ms) for i=1,n do loop(ms or 16) end end
-local function pressPad(name) pad[name]=true; step(1); pad[name]=nil; step(1) end
+local W = 10
+local grid = TEST.grid
+local function tile(x, y) return TEST.map:get(x, y) end
 
-check(S() == "title", "starts at title")
-cbs[board].press_start()
-check(S() == "play", "board tap starts the game")
-check(music_on, "bgm starts")
+g:step(0)
+g:_render()
+check(draws > 0, "描画が最後までエラー無く走る")
+
+check(S() == "title", "起動するとタイトル")
+tap(60, 100)                              -- 盤面のタップ
+check(S() == "play", "盤面をタップすると始まる")
+check(music_on, "BGMが始まる")
 step(1)
+check(tile(0, 19) == 10 and tile(9, 0) == 10, "空きマスは黒のタイル(10)")
+
 -- 左に押し続ける → 壁まで
 pad.left = true; step(40); pad.left = nil; step(1)
-local _,_,_,_,p,rot,px = S()
-local minx = 9
-local ROTS = nil
-check(px <= 1, "DAS moves to the wall (px="..px..")")
+local _, _, _, _, p, rot, px = S()
+check(px <= 1, "押し続けると壁まで動く (px=" .. px .. ")")
 
 -- HOLD
-local _,_,_,_,p0 = S()
+local _, _, _, _, p0 = S()
 pressPad("l")
-local st,_,_,_,p1,_,_,_,hold = S()
-check(hold == p0 and p1 ~= nil, "hold stores current piece")
+local _, _, _, _, p1, _, _, _, hold = S()
+check(hold == p0 and p1 ~= nil, "HOLDで今のミノを取っておく")
 pressPad("l")
-local _,_,_,_,p2,_,_,_,hold2 = S()
-check(hold2 == p0 and p2 == p1, "hold only once per piece")
+local _, _, _, _, p2, _, _, _, hold2 = S()
+check(hold2 == p0 and p2 == p1, "HOLDは1個につき1回だけ")
+
+-- 落ちているミノとゴーストのスプライト
+local ps, gs = TEST.piece[1], TEST.ghost[1]
+local st, _, _, _, pp, rr, pxx, pyy = S()
+check(ps.frame == pp - 1 and ps.x % 12 == 5 % 12, "落ちているミノのスプライトの絵と位置")
+check(gs.y >= ps.y, "ゴーストはミノの真下(以下)")
 
 -- 1ライン消し: 最下段を4マス(3..6)残して埋め、Iを落とす
-local g, W = TEST.g, 10
-for i = 1, #g do g[i] = 0 end
-for x = 0, 9 do if x < 3 or x > 6 then g[21*W + x + 1] = 5 end end
+for i = 1, #grid do grid[i] = 0 end
+for x = 0, 9 do if x < 3 or x > 6 then grid[21 * W + x + 1] = 5 end end
 TEST.spawn(1)
 pressPad("up")
 local st, score, lines = S()
-check(st == "clear" and lines == 1, "single line clear (state="..st..", lines="..lines..")")
+check(st == "clear" and lines == 1, "1ライン消し (state=" .. st .. ", lines=" .. lines .. ")")
+check(tile(0, 19) == 9 and tile(9, 19) == 9 and tile(4, 19) == 9, "消える行は白く光る")
 step(20)
 st = S()
-check(st == "play", "back to play after clear animation")
+check(st == "play", "光った後は続きから")
 local empty = true
-for x = 0, 9 do if g[21*W + x + 1] ~= 0 then empty = false end end
-check(empty, "bottom row empty after clear")
+for x = 0, 9 do if grid[21 * W + x + 1] ~= 0 then empty = false end end
+check(empty and tile(0, 19) == 10, "最下段が空になる")
+
+-- ミノが固まるとタイルになる(Iが最下段に横向き)
+for i = 1, #grid do grid[i] = 0 end
+TEST.spawn(1)
+pressPad("up")
+check(tile(3, 19) == 1 and tile(6, 19) == 1 and tile(2, 19) == 10, "固まったミノは盤面のタイルになる")
 
 -- テトリス: 下4段を列5以外埋めて、縦にしたIを落とす
-for i = 1, #g do g[i] = 0 end
-for y = 18, 21 do for x = 0, 9 do if x ~= 5 then g[y*W + x + 1] = 3 end end end
+for i = 1, #grid do grid[i] = 0 end
+for y = 18, 21 do for x = 0, 9 do if x ~= 5 then grid[y * W + x + 1] = 3 end end end
 local _, sc0 = S()
 TEST.spawn(1)
 pressPad("a")  -- 右回転: 縦で列px+2=5
-local _,_,_,_,_,r,ppx = S()
-check(r == 1 and ppx == 3, "I rotated to vertical at column 5")
+local _, _, _, _, _, r, ppx = S()
+check(r == 1 and ppx == 3, "Iが縦になり列5に来る")
 pressPad("up")
 local st2, sc1, lines2 = S()
-check(lines2 == 5 and sc1 - sc0 >= 800, "tetris: 4 lines, +800 (score +"..(sc1-sc0)..")")
+check(lines2 == 5 and sc1 - sc0 >= 800, "テトリス: 4ライン、+800 (+" .. (sc1 - sc0) .. ")")
 step(20)
 local all_empty = true
-for i = 1, #g do if g[i] ~= 0 then all_empty = false end end
-check(all_empty, "board empty after tetris")
+for i = 1, #grid do if grid[i] ~= 0 then all_empty = false end end
+check(all_empty, "テトリスのあと盤面が空")
 
 -- 壁蹴り: 右壁にくっつけたTを回転できる
 TEST.spawn(3)
 pad.right = true; step(40); pad.right = nil; step(1)
 pressPad("b"); pressPad("b")
-local _,_,_,_,_,rr = S()
-check(rr == 2, "T rotates twice near wall (rot="..rr..")")
+local _, _, _, _, _, rr2 = S()
+check(rr2 == 2, "壁際でもTが回る (rot=" .. rr2 .. ")")
 
 -- ゲームオーバー → ハイスコア保存
-for y = 1, 3 do for x = 3, 6 do g[y*W + x + 1] = 2 end end
+for y = 1, 3 do for x = 3, 6 do grid[y * W + x + 1] = 2 end end
 TEST.spawn(4)
-local st3,sc3,_,_,_,_,_,_,_,hi = S()
-check(st3 == "over", "spawn overlap -> game over")
-check(files_written["/lua/apps/テトリス/hiscore.txt"] == tostring(sc3), "hiscore saved")
-check(not music_on, "bgm stopped on game over")
+local st3, sc3 = S()
+check(st3 == "over", "出現位置が埋まっていたらゲームオーバー")
+check(files_written[DIR .. "hiscore.txt"] == tostring(sc3), "ハイスコアを保存する")
+check(not music_on, "ゲームオーバーでBGMが止まる")
+g:step(0); g:_render()
 pressPad("start")
-check(S() == "play", "start restarts the game")
+check(S() == "play", "STARTでやり直せる")
 
 -- 一時停止
 pressPad("start")
-check(S() == "pause", "start pauses")
-cbs[board].press_start()
-check(S() == "play", "tap resumes")
+check(S() == "pause", "STARTで一時停止")
+check(not music_on, "一時停止中はBGMが止まる")
+g:_render()
+tap(60, 100)
+check(S() == "play", "盤面のタップで再開")
+check(music_on, "再開でBGMが戻る")
+g._latch.pause = true; step(2)
+check(S() == "pause", "「停止」ボタンで一時停止")
+g._latch.pause = true; step(2)
+check(S() == "play", "もう一度押すと再開")
 
 -- タッチの操作ボタン: 左端のボタン(左移動)
-local pad_id = 3
-local _,_,_,_,_,_,pxa = S()
-touch = {10, 300}; cbs[pad_id].press_start(pad_id, touch[1], touch[2]); step(1); cbs[pad_id].press_end(); step(1)
-local _,_,_,_,_,_,pxb = S()
-check(pxb == pxa - 1, "touch left button moves left")
+local _, _, _, _, _, _, pxa = S()
+tap(10, 270)
+local _, _, _, _, _, _, pxb = S()
+check(pxb == pxa - 1, "左のボタンで左へ動く")
+-- 押したまま指を滑らせると隣のボタンへ移る
+g:_touch("start", 10, 270); step(1)
+g:_touch("move", 50, 270); step(1)
+g:_touch("end", 0, 0); step(2)
+local _, _, _, _, _, _, pxc = S()
+check(pxc == pxb - 1, "押したまま滑らせても取りこぼさない (px " .. pxb .. "→" .. pxc .. ")")
+
 -- 重力: 落下中のミノが時間で下がる
-local _,_,_,_,_,_,_,pya = S()
+local _, _, _, _, _, _, _, pya = S()
 step(70)
-local _,_,_,_,_,_,_,pyb = S()
-check(pyb > pya, "gravity drops the piece")
-for id, w in pairs(cbs) do if w.render then w.render() end end
-pressPad("home")
-check(popped, "home leaves the app")
-print(fails == 0 and "ALL OK" or (fails.." FAILED"))
+local _, _, _, _, _, _, _, pyb = S()
+check(pyb > pya, "時間でミノが落ちる")
+g:_render()
+
+-- 戻る(HOMEとEscは pico.on_back、画面の「戻る」ボタン)
+check(back_fn ~= nil, "on_back を登録している")
+back_fn()
+check(popped, "HOME/Escで戻る")
+popped = false
+g._latch.back = true; step(1)
+check(popped, "「戻る」ボタンで戻る")
+
+print(fails == 0 and "ALL OK" or (fails .. " FAILED"))
 os.exit(fails == 0 and 0 or 1)

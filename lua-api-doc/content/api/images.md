@@ -43,7 +43,7 @@ pico.draw_image_part(img, x, y, (n - 1) * 12, 0, 12, 12)
 
 `flip_x` / `flip_y` が真なら左右/上下を反転して描きます(キャラクターの向きを変えるのに。反転は1画素ずつ描くので、しないときより遅い)。
 
-実例は「テトリス」(`/lua/apps/テトリス/`。ミノの絵を1枚の `blocks.pimg` から切り出す)。タイルマップをまとめて描く `pico.draw_tilemap` は [ゲームエンジン](../game/#picodraw_tilemap) にあります。
+実例は「テトリス」(`/lua/apps/テトリス/`。ミノの絵を1枚の `blocks.pimg` に並べ、盤面のタイルマップ・スプライト・HOLD/NEXTの絵の全部で同じ画像を使う)。タイルマップをまとめて描く `pico.draw_tilemap` は [ゲームエンジン](../game/#picodraw_tilemap) にあります。
 
 ## pico.draw_image_ex
 

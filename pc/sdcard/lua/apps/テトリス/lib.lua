@@ -1,6 +1,7 @@
 -- テトリスの部品。ミノの形・SRSの壁蹴り・操作ボタンの絵。
 -- LuaSceneが本体(main.lua)より先にこのファイルを実行するので、returnではなく
--- グローバル変数LIBへの代入で結果を渡す(本体側は`local LIB = LIB`で受け取る)
+-- グローバル変数LIBへの代入で結果を渡す(本体側は`local LIB = LIB`で受け取る)。
+-- 中身: ミノの形・SRSの壁蹴りの表・操作ボタンの絵・HOLD/NEXTのミノの絵
 local M = {}
 
 -- ミノ(向き0のマス。yは下向き)と箱の大きさ。並びは画像のタイルと同じ
@@ -13,7 +14,6 @@ local SHAPES = {
     { 3, 0,0, 0,1, 1,1, 2,1 }, -- J
     { 3, 2,0, 0,1, 1,1, 2,1 }, -- L
 }
-M.COL = { 11, 14, 13, 10, 12, 9, 7 } -- 画像が無いときの色
 -- ROT[p][r] = {x1,y1,...,x4,y4}(右回転は (x,y) -> (n-1-y, x))
 local ROT = {}
 M.ROT = ROT
@@ -38,12 +38,6 @@ M.KJ = { [0] = { 0,0, -1,0, -1,1, 0,-2, -1,-2 }, { 0,0, 1,0, 1,-1, 0,2, 1,2 },
 M.KI = { [0] = { 0,0, -2,0, 1,0, -2,-1, 1,2 }, { 0,0, -1,0, 2,0, -1,2, 2,-1 },
     { 0,0, 2,0, -1,0, 2,1, -1,-2 }, { 0,0, 1,0, -2,0, 1,-2, -2,1 } }
 
-function M.textW(s)
-    local w = 0
-    for _, c in utf8.codes(s) do w = w + (c < 128 and 8 or 16) end
-    return w
-end
-
 local function tri(x, y, dir, s, color)
     for i = 0, s do
         if dir == "l" then pico.draw_line(x - s + i, y - i, x - s + i, y + i, color)
@@ -52,24 +46,22 @@ local function tri(x, y, dir, s, color)
     end
 end
 
-function M.drawPad(held, cx, PY, PH, BTNS, LEFT, RIGHT, DOWN, HARD, CW)
-    for i, b in ipairs(BTNS) do
-        local x = cx + (i - 1) * 40
-        local on = (held & b) ~= 0
-        local fg = on and 15 or 0
-        pico.fill_rect(x + 2, PY + 4, 36, PH - 8, on and 0 or 7)
-        local mx, my = x + 20, PY + PH // 2
-        if b == LEFT then tri(mx + 3, my, "l", 8, fg)
-        elseif b == RIGHT then tri(mx - 3, my, "r", 8, fg)
-        elseif b == DOWN then tri(mx, my - 3, "d", 8, fg)
-        elseif b == HARD then
-            tri(mx, my - 8, "d", 7, fg)
-            pico.fill_rect(mx - 8, my + 3, 17, 3, fg)
-        else
-            pico.draw_circle(mx, my, 9, fg)
-            pico.draw_circle(mx, my, 8, fg)
-            tri(b == CW and mx + 9 or mx - 9, my - 3, "d", 4, fg)
-        end
+-- 画面の操作ボタン1つの絵(g:button の draw に渡す)。name: left / right / down(ゆっくり) /
+-- up(すぐ落とす) / a(右回転) / b(左回転)。on は押している間 true
+function M.drawBtn(name, x, y, w, h, on)
+    local fg = on and 15 or 0
+    pico.fill_rect(x + 2, y + 4, w - 4, h - 8, on and 0 or 7)
+    local mx, my = x + w // 2, y + h // 2
+    if name == "left" then tri(mx + 3, my, "l", 8, fg)
+    elseif name == "right" then tri(mx - 3, my, "r", 8, fg)
+    elseif name == "down" then tri(mx, my - 3, "d", 8, fg)
+    elseif name == "up" then
+        tri(mx, my - 8, "d", 7, fg)
+        pico.fill_rect(mx - 8, my + 3, 17, 3, fg)
+    else
+        pico.draw_circle(mx, my, 9, fg)
+        pico.draw_circle(mx, my, 8, fg)
+        tri(name == "a" and mx + 9 or mx - 9, my - 3, "d", 4, fg)
     end
 end
 

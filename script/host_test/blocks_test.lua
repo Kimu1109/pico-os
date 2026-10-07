@@ -1,6 +1,6 @@
 -- Luaアプリ「ブロック」(pc/sdcard/lua/apps/ブロック/。Blocks-TI-84 の移植)の画面の流れと操作を確かめる:
 -- ワールドを作る/開く/前の版から移す → チャンクの読み込み → 遊ぶ → 保存して戻る、置く/壊すの規則、
--- カーソルの移動と視点、タップ位置からのカーソル、ブロックを選ぶ画面。
+-- カーソルの移動と視点、タップ位置からのカーソル、ブロックを選ぶ画面、松明と昼/夜。
 -- ワールドと描画は C++ のエンジン pico.iso(src/iso/Iso_World)が受け持つので、ここでは pico.iso を
 -- 呼ばれ方を記録するだけの偽物(辞書で持つ平らなワールド)に差し替える。エンジンの中身は iso_world_test、
 -- Lua からの呼び方と権限は lua_ext_test。lua_script_test から run.sh が呼ぶ。
@@ -24,7 +24,8 @@ local world = nil          -- 開いているワールド
 local origin = { 0, 0 }
 local function key(x, y, z) return x .. "," .. y .. "," .. z end
 local iso = {
-    sky = function() end,
+    sky = function(c) rec("sky", c) end,
+    sunlight = function(on) rec("sunlight", on) end,
     set_image = function(h) rec("set_image", h) end,
     view = function(...) rec("view", ...) end,
     create = function(d, kind, seed)
@@ -207,6 +208,30 @@ E.open_select()
 check(E.mode() == "select", "ブロックを選ぶ画面")
 E.choose(3)
 check(E.mode() == "play", "選ぶと遊ぶ画面へ戻る")
+
+-- 選ぶ画面は7列: 松明(25)を含む25種類が4段に収まる
+check(#E.order == 25 and E.order[#E.order] == 1 and E.order[24] == 25, "選べるのは25種類(松明の次に水)")
+check(E.select_at(1 + 34 * 3 + 5, 28 + 42 * 3 + 5) == 25 and E.select_at(1 + 5, 28 + 5) == 1
+      and E.select_at(1 + 34 * 6 + 5, 28 + 5) == 7, "7列 x 4段のタップ位置からブロックを選ぶ")
+check(E.select_at(1 + 34 * 6 + 5, 28 + 42 * 3 + 5) == nil, "並びの外は選ばない")
+check(28 + 42 * 3 + 38 <= 204, "4段とも表示に収まる")
+
+-- 松明を置く/取る
+E.set_cursor(30, 1, 30)
+E.set_cur(25)
+E.act()
+check(iso.get(30, 1, 30) == 25, "松明を置ける")
+E.act()
+check(iso.get(30, 1, 30) == 0, "松明を取れる")
+
+-- 昼/夜
+local function last(name)
+    for i = #calls, 1, -1 do if calls[i][1] == name then return calls[i] end end
+end
+E.set_night(true)
+check(E.night() and last("sunlight")[2] == false and last("sky")[2] == 0, "夜にすると日の光を消して空を暗く")
+E.set_night(false)
+check(not E.night() and last("sunlight")[2] == true and last("sky")[2] == 7, "昼に戻すと空の色も戻る")
 
 -- ---- 保存して戻る → 読む ----
 E.set_cursor(513, 3, 511)

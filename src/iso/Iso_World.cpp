@@ -262,6 +262,12 @@ void World::generate(int cx, int cz, uint8_t* b) const {
 // チャンクの置き場
 // ===================================================================
 
+void World::CountTorches(Chunk* c) {
+    int n = 0;
+    for (int i = 0; i < c->top * kLayer; i++) n += c->b[i] == TORCH;
+    c->torches = (uint8_t)(n > 255 ? 255 : n);
+}
+
 void World::Finish(Chunk* c) {
     int top = 0;
     for (int i = 0; i < kLayer; i++) {
@@ -273,6 +279,7 @@ void World::Finish(Chunk* c) {
         if (t > top) top = t;
     }
     c->top = (uint8_t)top;
+    CountTorches(c);
 }
 
 void World::chunkPath(int cx, int cz, FixedString<PICO_PATH_LEN>& out) const {
@@ -358,6 +365,8 @@ Chunk* World::allocSlot(int cx, int cz) {
     best->cx = (int16_t)cx;
     best->cz = (int16_t)cz;
     best->dirty = false;
+    best->torches = 0;
+    memset(best->light, 0, sizeof(best->light));
     map_[mi] = (uint8_t)(best - pool_ + 1);
     return best;
 }
@@ -375,7 +384,154 @@ Chunk* World::loadChunk(int cx, int cz) {
     }
     if (!from_file) generate(cx, cz, c->b);
     Finish(c);
+    // 自分の松明はまわりを、まわりの松明は自分を照らす
+    relightAround(cx, cz, false);
     return c;
+}
+
+// ===================================================================
+// 松明の光
+// ===================================================================
+
+void World::setOccluders(uint32_t mask) {
+    if (mask == occluders_) return;
+    occluders_ = mask;
+    relightAll();   // 光を通すブロックが変わる
+}
+
+void World::relightAll() {
+    if (!pool_) return;
+    for (int i = 0; i < kMaxChunks; i++) {
+        if (pool_[i].cx >= 0) relight(pool_[i].cx, pool_[i].cz, false);
+    }
+}
+
+bool World::torchNear(int x, int y, int z) const {
+    constexpr int R = kLightReach;
+    for (int ccx = (x - R) >> 3; ccx <= (x + R) >> 3; ccx++) {
+        for (int ccz = (z - R) >> 3; ccz <= (z + R) >> 3; ccz++) {
+            const Chunk* n = find(ccx, ccz);
+            if (!n || !n->torches) continue;
+            for (int i = 0; i < n->top * kLayer; i++) {
+                if (n->b[i] != TORCH) continue;
+                const int d = abs(n->cx * 8 + ((i & 63) >> 3) - x) + abs(n->cz * 8 + (i & 7) - z) + abs((i >> 6) - y);
+                if (d <= R) return true;
+            }
+        }
+    }
+    return false;
+}
+
+void World::relightAround(int cx, int cz, bool track) {
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dz = -1; dz <= 1; dz++) {
+            if (find(cx + dx, cz + dz)) relight(cx + dx, cz + dz, track);
+        }
+    }
+}
+
+// チャンクのまわり kLightReach マス(作業場所 kLightSpan 四方)の中で光を広げる。松明から kLightReach 歩以内の道は
+// 全部この中に収まるので、チャンクの中のマスの明るさはこれで正しく決まる。読み込んでいないチャンクと世界の外は
+// 光を通さないものとして扱う(読み込んだときに、まわりと一緒に計算し直す)
+void World::relight(int cx, int cz, bool track) {
+    Chunk* c = findMut(cx, cz);
+    if (!c) return;
+    constexpr int S = kLightSpan, R = kLightReach, kWall = 0xFF;
+    const int ex0 = cx * 8 - R, ez0 = cz * 8 - R;
+    // 作業場所の中にある松明の範囲(作業場所の座標)。まわり3x3の松明のあるチャンクだけを見る
+    int tx0 = S, tx1 = -1, ty0 = H, ty1 = -1, tz0 = S, tz1 = -1;
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dz = -1; dz <= 1; dz++) {
+            const Chunk* n = find(cx + dx, cz + dz);
+            if (!n || !n->torches) continue;
+            for (int i = 0; i < n->top * kLayer; i++) {
+                if (n->b[i] != TORCH) continue;
+                const int ex = n->cx * 8 + ((i & 63) >> 3) - ex0, ez = n->cz * 8 + (i & 7) - ez0, y = i >> 6;
+                if (ex < 0 || ex >= S || ez < 0 || ez >= S) continue;
+                tx0 = imin(tx0, ex); tx1 = imax(tx1, ex);
+                tz0 = imin(tz0, ez); tz1 = imax(tz1, ez);
+                ty0 = imin(ty0, y); ty1 = imax(ty1, y);
+            }
+        }
+    }
+    uint8_t* sc = scratch_;
+    const bool any = tx1 >= 0 && sc;
+    // 光が届きうる範囲 = 松明の範囲 + kLightReach(作業場所の中だけ)
+    int bx0 = 0, bx1 = -1, by0 = 0, by1 = -1, bz0 = 0, bz1 = -1;
+    if (any) {
+        bx0 = imax(tx0 - R, 0); bx1 = imin(tx1 + R, S - 1);
+        bz0 = imax(tz0 - R, 0); bz1 = imin(tz1 + R, S - 1);
+        by0 = imax(ty0 - R, 0); by1 = imin(ty1 + R, H - 1);
+        // チャンクにかからなければ、このチャンクは暗い
+        if (bx1 < R || bx0 > R + 7 || bz1 < R || bz0 > R + 7) bx1 = -1;
+    }
+    if (bx1 < 0) {
+        // 松明の光が届かない: 暗くするだけ(もともと真っ暗なら何もしない)
+        bool lit = false;
+        for (size_t i = 0; i < sizeof(c->light); i++) if (c->light[i]) { lit = true; break; }
+        if (!lit) return;
+    } else {
+        for (int ex = bx0; ex <= bx1; ex++) {
+            for (int ez = bz0; ez <= bz1; ez++) {
+                const int wx = ex0 + ex, wz = ez0 + ez;
+                const Chunk* n = (wx < 0 || wz < 0 || wx >= W_ || wz >= W_) ? nullptr : find(wx >> 3, wz >> 3);
+                const int ci = (wx & 7) * 8 + (wz & 7);
+                for (int y = by0; y <= by1; y++) {
+                    uint8_t v = kWall;
+                    if (n) {
+                        const uint8_t b = n->b[y * kLayer + ci];
+                        v = blocksLight(b) ? kWall : (b == TORCH ? kTorchLight : 0);
+                    }
+                    sc[(y * S + ex) * S + ez] = v;
+                }
+            }
+        }
+        // 明るさ l のマスから、まだ l-1 より暗い隣へ l-1 を広げる(l の大きい順に1周ずつ。範囲の外へは出ない)
+        for (int l = kTorchLight; l >= 2; l--) {
+            const uint8_t nl = (uint8_t)(l - 1);
+            for (int y = by0; y <= by1; y++) {
+                for (int ex = bx0; ex <= bx1; ex++) {
+                    uint8_t* row = sc + (y * S + ex) * S;
+                    for (int ez = bz0; ez <= bz1; ez++) {
+                        if (row[ez] != l) continue;
+                        auto spread = [&](uint8_t& t) { if (t != kWall && t < nl) t = nl; };
+                        if (ez > bz0) spread(row[ez - 1]);
+                        if (ez < bz1) spread(row[ez + 1]);
+                        if (ex > bx0) spread(row[ez - S]);
+                        if (ex < bx1) spread(row[ez + S]);
+                        if (y > by0) spread(row[ez - S * S]);
+                        if (y < by1) spread(row[ez + S * S]);
+                    }
+                }
+            }
+        }
+    }
+    for (int y = 0; y < H; y++) {
+        for (int lx = 0; lx < 8; lx++) {
+            for (int lz = 0; lz < 8; lz++) {
+                int q = 0;
+                const int ex = lx + R, ez = lz + R;
+                if (ex >= bx0 && ex <= bx1 && ez >= bz0 && ez <= bz1 && y >= by0 && y <= by1) {
+                    const int l = sc[(y * S + ex) * S + ez];
+                    q = (l == kWall) ? 0 : (l >= 5 ? 3 : (l >= 3 ? 2 : (l >= 1 ? 1 : 0)));
+                }
+                const int i = y * kLayer + lx * 8 + lz;
+                if (LightOf(c, i) == q) continue;
+                uint8_t& d = c->light[i >> 2];
+                const int sh = (i & 3) * 2;
+                d = (uint8_t)((d & ~(3 << sh)) | (q << sh));
+                if (!track) continue;
+                const int wx = cx * 8 + lx, wz = cz * 8 + lz;
+                if (!ld_valid_) {
+                    ld_[0] = ld_[3] = wx; ld_[1] = ld_[4] = y; ld_[2] = ld_[5] = wz;
+                    ld_valid_ = true;
+                } else {
+                    ld_[0] = imin(ld_[0], wx); ld_[1] = imin(ld_[1], y); ld_[2] = imin(ld_[2], wz);
+                    ld_[3] = imax(ld_[3], wx); ld_[4] = imax(ld_[4], y); ld_[5] = imax(ld_[5], wz);
+                }
+            }
+        }
+    }
 }
 
 int World::loadedCount() const {
@@ -399,7 +555,8 @@ void World::set(int x, int y, int z, uint8_t v) {
     Chunk* c = loadChunk(x >> 3, z >> 3);
     if (!c) return;
     const int i = (x & 7) * 8 + (z & 7);
-    if (c->b[y * kLayer + i] == v) return;
+    const uint8_t old = c->b[y * kLayer + i];
+    if (old == v) return;
     c->b[y * kLayer + i] = v;
     c->dirty = true;
     // その柱の高さと、チャンクの段の数だけ数え直す
@@ -413,6 +570,14 @@ void World::set(int x, int y, int z, uint8_t v) {
         int top = 0;
         for (int k = 0; k < kLayer; k++) if (c->col[k] > top) top = c->col[k];
         c->top = (uint8_t)top;
+    }
+    // 松明を置いた/取った、光を通すかが変わった: まわり kLightReach マスにかかるチャンクの明るさを計算し直す
+    if (old == TORCH || v == TORCH) CountTorches(c);
+    // (光を通すかだけが変わったときは、松明から kLightReach 歩以内のマスでなければ、どの道も変わらない)
+    if (old == TORCH || v == TORCH || (blocksLight(old) != blocksLight(v) && torchNear(x, y, z))) {
+        for (int ccx = (x - kLightReach) >> 3; ccx <= (x + kLightReach) >> 3; ccx++) {
+            for (int ccz = (z - kLightReach) >> 3; ccz <= (z + kLightReach) >> 3; ccz++) relight(ccx, ccz, true);
+        }
     }
 }
 
@@ -494,10 +659,17 @@ bool World::begin(const char* dir, uint8_t kind, int k, uint32_t seed) {
     close();
     if (k < 1 || k > kMaxK) return false;
     pool_ = static_cast<Chunk*>(malloc(sizeof(Chunk) * kMaxChunks));
-    if (!pool_) {
-        LOG_APP_WARN("ブロック: チャンクの置き場(%u バイト)を確保できません", (unsigned)(sizeof(Chunk) * kMaxChunks));
+    scratch_ = static_cast<uint8_t*>(malloc(kScratchBytes));
+    if (!pool_ || !scratch_) {
+        LOG_APP_WARN("ブロック: チャンクの置き場(%u バイト)を確保できません",
+                     (unsigned)(sizeof(Chunk) * kMaxChunks + kScratchBytes));
+        free(pool_);
+        free(scratch_);
+        pool_ = nullptr;
+        scratch_ = nullptr;
         return false;
     }
+    ld_valid_ = false;
     for (int i = 0; i < kMaxChunks; i++) { pool_[i].cx = pool_[i].cz = -1; pool_[i].dirty = false; }
     memset(map_, 0, sizeof(map_));
     memset(saved_, 0, sizeof(saved_));
@@ -516,6 +688,9 @@ bool World::begin(const char* dir, uint8_t kind, int k, uint32_t seed) {
 void World::close() {
     free(pool_);
     pool_ = nullptr;
+    free(scratch_);
+    scratch_ = nullptr;
+    ld_valid_ = false;
     memset(map_, 0, sizeof(map_));
     dir_.assign("");
     kind_ = EMPTY;
@@ -658,17 +833,21 @@ void World::loadRange(int& umin, int& umax, int& smin, int& smax) const {
 // 影: 太陽は (-1, +1, +1) の向き。日の当たりうる上面と左面を、光から見た三角形2つに分け
 // (上面は x+z が一定の線で奥/手前、左面は y=z の線で上/下)、三角形ごとに影を決める。
 // 三角形の中の1点から太陽へ向かう直線は1歩(-1,+1,+1)ごとに3マスを通り、2つの三角形で2マスを共有するので、
-// 1歩あたり4マスを見る。水は影を作らない(>= 2 だけが光を遮る)。
+// 1歩あたり4マスを見る。水と松明は影を作らない(Casts)。
 //
 // 上面: k歩目、高さ y+1+k で A=(x-k, z+k) 両方 / B=(x-k, z+1+k) 奥 / C=(x-1-k, z+k) 手前 / D=(x-1-k, z+1+k) 両方
+namespace {
+inline bool Casts(uint8_t b) { return b >= 2 && b != TORCH; }
+}
+
 void World::topShadow(int x, int y, int z, int top, bool& far, bool& near) const {
     far = near = false;
     for (int k = 0; y + 1 + k <= top; k++) {
         const int yy = y + 1 + k, x0 = x - k, x1 = x - 1 - k, z0 = z + k, z1 = z + 1 + k;
         if (x0 < 0 || z0 >= W_) break;
-        if (get(x0, yy, z0) >= 2 || get(x1, yy, z1) >= 2) { far = near = true; return; }
-        if (!far && get(x0, yy, z1) >= 2) far = true;
-        if (!near && get(x1, yy, z0) >= 2) near = true;
+        if (Casts(get(x0, yy, z0)) || Casts(get(x1, yy, z1))) { far = near = true; return; }
+        if (!far && Casts(get(x0, yy, z1))) far = true;
+        if (!near && Casts(get(x1, yy, z0))) near = true;
         if (far && near) return;
     }
 }
@@ -679,11 +858,11 @@ void World::leftShadow(int x, int y, int z, int top, bool& up, bool& low) const 
     for (int k = 0;; k++) {
         const int xx = x - 1 - k, y0 = y + k, z0 = z + k;
         if (xx < 0 || y0 > top || z0 >= W_) break;
-        if (get(xx, y0, z0) >= 2) { up = low = true; return; }
-        if (!low && get(xx, y0, z0 + 1) >= 2) low = true;
+        if (Casts(get(xx, y0, z0))) { up = low = true; return; }
+        if (!low && Casts(get(xx, y0, z0 + 1))) low = true;
         if (y0 + 1 <= top) {
-            if (get(xx, y0 + 1, z0 + 1) >= 2) { up = low = true; return; }
-            if (!up && get(xx, y0 + 1, z0) >= 2) up = true;
+            if (Casts(get(xx, y0 + 1, z0 + 1))) { up = low = true; return; }
+            if (!up && Casts(get(xx, y0 + 1, z0))) up = true;
         }
         if (up && low) return;
     }
@@ -711,6 +890,18 @@ uint32_t World::ComputeOccluders(int (*px)(void* ctx, int x, int y), void* ctx) 
     return mask;
 }
 
+// 面を、日の光で決まった絵 sx に、松明の明るさ q(0〜3)のぶんだけ日なたの絵 lit を重ねて描く
+void World::DrawLit(const Sink& sink, int sx, int lit, int q, int sy, int w, int h, int dx, int dy) {
+    if (q >= 3 || sx == lit) {
+        sink.draw(sink.ctx, q >= 3 ? lit : sx, sy, w, h, dx, dy);
+        return;
+    }
+    sink.draw(sink.ctx, sx, sy, w, h, dx, dy);
+    if (q <= 0) return;
+    if (sink.dither) sink.dither(sink.ctx, lit, sy, w, h, dx, dy, q);
+    else if (q >= 2) sink.draw(sink.ctx, lit, sy, w, h, dx, dy);
+}
+
 void World::DrawIcon(const Sink& sink, int id, int px, int py) {
     const int sy = (id - 1) * kRowH;
     sink.draw(sink.ctx, 0, sy, 32, 15, px, py);
@@ -725,7 +916,7 @@ void World::render(const Sink& sink, int x0, int y0, int x1, int y1) {
     if (pool_ && top >= 0) {
         const int OX = OX_, OY = OY_, W = W_;
         const uint32_t occ = occluders_;
-        const uint32_t solid = ~3u;   // 空気と水以外
+        const uint32_t solid = ~((1u << AIR) | (1u << WATER) | (1u << TORCH));   // 空気と水と松明以外
         const int umin = fdiv(x0 - OX - 32, 16) + 1, umax = -fdiv(OX - x1, 16) - 1;
         int smin = fdiv(OY - 16 * (H - 1) - y1, 8) + 1, smax = -fdiv(y0 - OY - 31, 8) - 1;
         if (smin < 0) smin = 0;
@@ -766,13 +957,16 @@ void World::render(const Sink& sink, int x0, int y0, int x1, int y1) {
                     // (葉の穴から後ろが見えるので、葉に面した面も描く)。葉の面は隣が空気か水なら描く。
                     // 水の面は隣が空気なら描く
                     bool da, dl, dr;
-                    if (b >= 2) {
+                    if (b == TORCH) {
+                        // 松明: 前の3つの隣が全部透けないブロックなら見えない
+                        da = dl = dr = !(((occ >> a) & 1) && ((occ >> l) & 1) && ((occ >> r) & 1));
+                    } else if (b >= 2) {
                         const uint32_t hide = ((occluders_ >> b) & 1) ? occ : solid;
                         da = !((hide >> a) & 1);
                         dl = !((hide >> l) & 1);
                         dr = !((hide >> r) & 1);
                     } else {
-                        da = a == 0; dl = l == 0; dr = r == 0;
+                        da = a == AIR || a == TORCH; dl = l == AIR || l == TORCH; dr = r == AIR || r == TORCH;
                     }
                     if (!da && !dl && !dr) continue;   // 見える面が無い
                     // 隠れたブロック: (x-k, y+k, z-k) は画面のちょうど同じ所(同じ六角形)に重なり、後から描かれる。
@@ -788,22 +982,36 @@ void World::render(const Sink& sink, int x0, int y0, int x1, int y1) {
                         if (hidden) continue;
                     }
                     const int by = base - 16 * y;
-                    if (b >= 2) {
+                    if (b == TORCH) {
+                        // 松明は自分で光るので、影も明るさも無くいつも同じ絵
+                        DrawIcon(sink, TORCH, bx, by);
+                        faces += 3;
+                    } else if (b >= 2) {
                         const int sy = (b - 1) * kRowH;
+                        // 面の明るさは、その面が向いている隣のマス(上・左(-x)・右(-z))の松明の明るさ
                         if (da) {
-                            bool f, n;
-                            topShadow(x, y, z, top, f, n);
-                            sink.draw(sink.ctx, f ? (n ? 32 : 64) : (n ? 96 : 0), sy, 32, 15, bx, by);
+                            int sx = 32;
+                            if (sun_) {
+                                bool f, n;
+                                topShadow(x, y, z, top, f, n);
+                                sx = f ? (n ? 32 : 64) : (n ? 96 : 0);
+                            }
+                            const int q = (y + 1 < H) ? LightOf(c, o + kLayer + i) : 0;
+                            DrawLit(sink, sx, 0, q, sy, 32, 15, bx, by);
                             faces++;
                         }
                         if (dl) {
-                            bool uu, w;
-                            leftShadow(x, y, z, top, uu, w);
-                            sink.draw(sink.ctx, uu ? (w ? 144 : 160) : (w ? 176 : 128), sy, 16, 23, bx, by + 8);
+                            int sx = 144;
+                            if (sun_) {
+                                bool uu, w;
+                                leftShadow(x, y, z, top, uu, w);
+                                sx = uu ? (w ? 144 : 160) : (w ? 176 : 128);
+                            }
+                            DrawLit(sink, sx, 128, LightOf(lc, o + li), sy, 16, 23, bx, by + 8);
                             faces++;
                         }
                         if (dr) {
-                            sink.draw(sink.ctx, 192, sy, 16, 23, bx + 16, by + 8);
+                            DrawLit(sink, 192, 208, LightOf(rc, o + ri), sy, 16, 23, bx + 16, by + 8);
                             faces++;
                         }
                     } else {
@@ -864,7 +1072,17 @@ void World::dirtyBlock(const Sink& sink, int x, int y, int z) const {
 // (x, y, z) を置いた/壊したとき: 太陽へ向かう直線が P を通るのは、上面なら P + {(0,-1,0),(0,-1,-1),(1,-1,0),(1,-1,-1)}
 // + k(1,-1,-1)、左面なら P + {(1,0,0),(1,-1,0),(1,0,-1),(1,-1,-1)} + k(1,-1,-1) のブロック。k ごとにその8個の絵を
 // 覆う矩形(左上が P の絵から (32k, 16k-8)、64x63)を描き直す(P 自身と、面の見え方が変わる隣も入る)
-void World::dirtyEdit(const Sink& sink, int x, int y, int z) const {
+void World::dirtyEdit(const Sink& sink, int x, int y, int z) {
+    // 松明の明るさが変わったマスの範囲: そのマスに面を向けているブロック(下・+x・+z)の絵を覆う矩形
+    if (ld_valid_) {
+        ld_valid_ = false;
+        const int x0 = ld_[0], y0 = ld_[1] - 1, z0 = ld_[2], x1 = ld_[3] + 1, y1 = ld_[4], z1 = ld_[5] + 1;
+        const int rx0 = OX_ + 16 * (x0 - z1), rx1 = OX_ + 16 * (x1 - z0) + 32;
+        const int ry0 = OY_ - 8 * (x1 + z1) - 16 * y1, ry1 = OY_ - 8 * (x0 + z0) - 16 * y0 + 31;
+        const int ax0 = imax(rx0, vx_), ay0 = imax(ry0, vy_);
+        const int ax1 = imin(rx1, vx_ + vw_), ay1 = imin(ry1, vy_ + vh_);
+        if (ax0 < ax1 && ay0 < ay1) sink.dirty(sink.ctx, ax0, ay0, ax1 - ax0, ay1 - ay0);
+    }
     int bx, by;
     blockPos(x, y, z, bx, by);
     for (int k = 0; k <= y + 1; k++) {

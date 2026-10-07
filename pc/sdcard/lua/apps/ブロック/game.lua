@@ -1,19 +1,21 @@
 -- ブロック: 斜め上から見たマインクラフト風の箱庭(TheScienceElf/Blocks-TI-84 の移植。MIT)
 -- 1024x16x1024 の世界(見えている所のまわりのチャンクだけを読み込む)でカーソルを動かし、
--- 24種類のブロックを置く/壊す。影・半透明の水・5つのセーブ枠。
--- 操作(画面): 左下の9つのキー=移動(真ん中=置く/壊す)、上へ/下へ、ブロック変更、中央、終了。
+-- 25種類のブロック(松明を含む)を置く/壊す。影・松明の光・昼と夜・半透明の水・5つのセーブ枠。
+-- 操作(画面): 左下の9つのキー=移動(真ん中=置く/壊す)、上へ/下へ、ブロック変更、中央、昼/夜、終了。
 --   ワールドのタップ=その面の手前へカーソル、長押し=そのブロックへカーソル、ドラッグ=視点を動かす。
 -- コントローラー: 十字=移動(斜めは2つ同時)、A=置く/壊す、B/START=ブロック変更、X/R=上へ、Y/L=下へ、
---   SELECT+十字=視点、HOME=保存して終了。キーボード: 1〜9(5=置く/壊す)、*と-=上下、Enter=変更、矢印=視点。
+--   SELECT+十字=視点、ZL/ZR=昼/夜、HOME=保存して終了。
+--   キーボード: 1〜9(5=置く/壊す)、*と-=上下、Enter=変更、矢印=視点、n=昼/夜。
 -- 本体はこのファイル(main.lua は16KiBまでなので、32KiBまで読める require のモジュールにした)。
--- ワールド(チャンクの読み込み・生成・保存)と描画(影・水・タップ位置の引き当て)は C++ のエンジン pico.iso
+-- ワールド(チャンクの読み込み・生成・保存)と描画(影・松明の光・水・タップ位置の引き当て)は C++ のエンジン pico.iso
 -- (src/iso/Iso_World、src/lua/LuaEngine_Iso.cpp)が受け持つ。ここは画面の流れと操作だけ。
 -- 色は palette.lua(script/generate_blocks_sheet.py が作る)。
 local iso = pico.iso
 local PAL = require("palette")
 local H = 16
-local B = { AIR = 0, WATER = 1, STONE = 2, GRASS = 3 }
-local BLOCK_COUNT = 24          -- ブロックの種類(水を含む)
+local B = { AIR = 0, WATER = 1, STONE = 2, GRASS = 3, TORCH = 25 }
+local BLOCK_COUNT = 25          -- ブロックの種類(水と松明を含む)
+local NIGHT_SKY = 0             -- 夜の空の色
 local KINDS = { [0] = "自然", "平ら", "デモ", "空" }
 
 for i, c in ipairs(PAL.colors) do pico.set_palette(i, c[1], c[2], c[3]) end
@@ -34,7 +36,8 @@ local panel = pico.create("Canvas")
 pico.set(view, "x", CX); pico.set(view, "y", CY); pico.set(view, "w", CW)
 pico.set(panel, "x", CX); pico.set(panel, "y", PY); pico.set(panel, "w", CW); pico.set(panel, "h", PANEL_H)
 
--- 選ぶ画面の並び(元と同じく水が最後)
+-- 選ぶ画面の並び(元と同じく水が最後。7列 x 4段)
+local SEL_COLS, SEL_STEP = 7, 34
 local ORDER = {}
 for b = 2, BLOCK_COUNT do ORDER[#ORDER + 1] = b end
 ORDER[#ORDER + 1] = B.WATER
@@ -51,6 +54,7 @@ local in_game = false
 local W = 48                   -- 今のワールドの1辺のマス数
 local OX, OY = 0, 0            -- ブロック(0,0,0)の絵の左上(視点)
 local cx, cy, cz = 0, 0, 0     -- カーソル
+local night = false
 
 -- スロット i のディレクトリ(world.dat とチャンクのファイルを入れる)と、前の版の1ファイルの保存
 local function slot_dir(i) return pico.path_join(SAVE_DIR, string.char(64 + i)) end
@@ -116,6 +120,15 @@ local function cursor_to(x, y, z)
 end
 
 local function move(dx, dy, dz) cursor_to(cx + dx, cy + dy, cz + dz) end
+
+-- 昼/夜: 夜は日の光が無く、松明の光が届く所だけ明るい
+local function set_night(on)
+    night = on
+    iso.sunlight(not on)
+    iso.sky(on and NIGHT_SKY or PAL.sky)
+    pico.invalidate(view)
+    pico.invalidate(panel)
+end
 
 local function scroll(dx, dy) set_origin(OX + dx, OY + dy) end
 
@@ -258,20 +271,20 @@ local function draw_select()
     pico.draw_rect(CX + 2, CY + 2, CW - 4, VH - 4, 0)
     pico.draw_text(CX + CW // 2, CY + 6, "ブロックを選ぶ", 0, 0, "center")
     for i, b in ipairs(ORDER) do
-        local col, row = (i - 1) % 6, (i - 1) // 6
-        local x, y = CX + 4 + col * 39, CY + 28 + row * 42
+        local col, row = (i - 1) % SEL_COLS, (i - 1) // SEL_COLS
+        local x, y = CX + 1 + col * SEL_STEP, CY + 28 + row * 42
         if i == sel then
-            pico.draw_rect(x - 1, y - 2, 38, 38, PAL.accent)
-            pico.draw_rect(x, y - 1, 36, 36, PAL.accent)
+            pico.draw_rect(x, y - 2, 34, 38, PAL.accent)
+            pico.draw_rect(x + 1, y - 1, 32, 36, PAL.accent)
         end
-        iso.draw_icon(b, x + 2, y + 1)
+        iso.draw_icon(b, x + 1, y + 1)
     end
 end
 
 local function select_at(lx, ly)
-    local col, row = (lx - 4) // 39, (ly - 28) // 42
-    if col < 0 or col > 5 or row < 0 or ly < 28 then return nil end
-    local i = row * 6 + col + 1
+    local col, row = (lx - 1) // SEL_STEP, (ly - 28) // 42
+    if col < 0 or col >= SEL_COLS or row < 0 or ly < 28 then return nil end
+    local i = row * SEL_COLS + col + 1
     if i > #ORDER then return nil end
     return i
 end
@@ -304,8 +317,9 @@ end
 add("up", 102, 1, 67, "上へ", true)
 add("down", 172, 1, 67, "下へ", true)
 add("block", 102, 33, 137)
-add("center", 102, 65, 67, "中央")
-add("quit", 172, 65, 67, "終了")
+add("center", 102, 65, 45, "中央")
+add("night", 149, 65, 45)
+add("quit", 196, 65, 43, "終了")
 
 local held = nil
 
@@ -329,6 +343,8 @@ pico.on(panel, "render", function()
             iso.draw_icon(cur, x + 2, y)
             pico.clear_draw_area()
             pico.draw_text(x + 40, y + 7, "ブロック変更", 0, 0)
+        elseif b.id == "night" then
+            pico.draw_text(x + b.w // 2, y + (b.h - 16) // 2, night and "昼へ" or "夜へ", 0, 0, "center")
         end
     end
 end)
@@ -341,6 +357,7 @@ local function press(b)
     elseif b.id == "down" then move(0, -1, 0)
     elseif b.id == "block" then open_select()
     elseif b.id == "center" then center_on(cx, cy, cz)
+    elseif b.id == "night" then set_night(not night)
     elseif b.id == "quit" then save_and_quit() end
 end
 
@@ -468,8 +485,10 @@ function loop(dt)
         if P("b") or P("start") then open_select() end
         if P("x") or P("r") then move(0, 1, 0) end
         if P("y") or P("l") then move(0, -1, 0) end
+        if P("zl") or P("zr") then set_night(not night) end
     elseif mode == "select" then
-        local d = (P("right") and 1 or 0) - (P("left") and 1 or 0) + ((P("down") and 6 or 0) - (P("up") and 6 or 0))
+        local d = (P("right") and 1 or 0) - (P("left") and 1 or 0)
+            + ((P("down") and SEL_COLS or 0) - (P("up") and SEL_COLS or 0))
         if d ~= 0 then sel = math.max(1, math.min(#ORDER, sel + d)); pico.invalidate(view) end
         if P("a") then choose(sel) elseif P("b") then choose(nil) end
     elseif mode == "title" then
@@ -498,10 +517,11 @@ pico.on_key(function(key)
         elseif key == "up" then scroll(0, 16)
         elseif key == "down" then scroll(0, -16)
         elseif key == "c" then center_on(cx, cy, cz)
+        elseif key == "n" then set_night(not night)
         else return false end
         return true
     elseif mode == "select" then
-        local d = ({ left = -1, right = 1, up = -6, down = 6 })[key]
+        local d = ({ left = -1, right = 1, up = -SEL_COLS, down = SEL_COLS })[key]
         if d then sel = math.max(1, math.min(#ORDER, sel + d)); pico.invalidate(view)
         elseif key == "enter" then choose(sel)
         else return false end
@@ -527,4 +547,5 @@ if TEST then TEST.env = { act = act, move = move, start = start, scroll = scroll
     save_and_quit = save_and_quit, open_select = open_select, choose = choose, pick_to = pick_to,
     mode = function() return mode end, set_cur = function(b) cur = b end, slot = function(i) slot = i end,
     cursor = function() return cx, cy, cz end, set_cursor = function(x, y, z) cx, cy, cz = x, y, z end,
-    origin = function() return OX, OY end } end
+    origin = function() return OX, OY end, set_night = set_night, night = function() return night end,
+    order = ORDER, select_at = select_at } end

@@ -7,7 +7,9 @@
 //   描画: 見えない面を描かない・影(三角形2つ)・水・描く範囲の絞り込み、Lua版と同じ描画の並び
 //   隠れたブロックを描かない(省略しても画素が1つも変わらないこと。乱数のワールドで突き合わせる)
 //   タップ位置の引き当て・描き直す範囲
-//   面の写し方(FaceBlitter)が素朴な1画素ずつの写し方と同じになること
+//   面の写し方(FaceBlitter)が素朴な1画素ずつの写し方と同じになること(ディザも)
+//   松明の光: 広がり方・壁で遮られる・取ると消える・チャンクの境目と後から読み込んだチャンク・描く絵(明るさ・夜)・
+//     描き直す範囲・影を落とさない・保存して開き直しても同じ
 // 面の絵はリポジトリの pc/sdcard/lua/apps/ブロック/faces.pimg を使う(第1引数にリポジトリのルート)。
 #include "iso/Iso_World.hpp"
 #include "iso/Iso_Blit.hpp"
@@ -42,6 +44,7 @@ static int SheetPx(void*, int x, int y) { return sheet[(size_t)y * SW + x]; }
 // ---- 描画の記録と、1画素1バイトの画面 ----
 struct Rec {
     std::vector<std::string> lines;
+    std::vector<std::string> dithers;
     bool raster = false;
     int cx0 = 0, cy0 = 0, cx1 = 240, cy1 = 320;
 };
@@ -57,6 +60,21 @@ static void Draw(void* p, int sx, int sy, int w, int h, int dx, int dy) {
         for (int x = 0; x < w; x++) {
             const int X = dx + x, Y = dy + y;
             if (X < r->cx0 || X >= r->cx1 || Y < r->cy0 || Y >= r->cy1) continue;
+            const uint8_t c = sheet[(size_t)(sy + y) * SW + sx + x];
+            if (c) fb[Y][X] = c;
+        }
+    }
+}
+static void Dither(void* p, int sx, int sy, int w, int h, int dx, int dy, int level) {
+    Rec* r = static_cast<Rec*>(p);
+    char b[64];
+    snprintf(b, sizeof b, "%d %d %d %d %d %d %d", sx, sy, w, h, dx, dy, level);
+    r->dithers.push_back(b);
+    if (!r->raster) return;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            const int X = dx + x, Y = dy + y;
+            if (X < r->cx0 || X >= r->cx1 || Y < r->cy0 || Y >= r->cy1 || !World::DitherOn(level, x, y)) continue;
             const uint8_t c = sheet[(size_t)(sy + y) * SW + sx + x];
             if (c) fb[Y][X] = c;
         }
@@ -87,8 +105,15 @@ static bool Has(const std::vector<std::string>& lines, int sx, int sy, int w, in
 static std::vector<std::string> RenderAll(World& w, bool cursor = false) {
     Rec r;
     w.setCursor(0, 0, 0, cursor);
-    w.render(World::Sink{&r, Draw, Dirty}, 0, 20, 240, 224);
+    w.render(World::Sink{&r, Draw, Dirty, Dither}, 0, 20, 240, 224);
     return r.lines;
+}
+
+static Rec RenderRec(World& w) {
+    Rec r;
+    w.setCursor(0, 0, 0, false);
+    w.render(World::Sink{&r, Draw, Dirty, Dither}, 0, 20, 240, 224);
+    return r;
 }
 
 // 小さな空のワールド(K=6、48x48)を全部読み込む
@@ -123,12 +148,13 @@ int main(int argc, char** argv) {
             for (int x = 0; x < SW; x++) FaceBlitter::Put(&sheet4[(size_t)y * ((SW + 1) / 2)], x, sheet[(size_t)y * SW + x]);
         }
     }
-    check(SW == 208 && SH == 575 && (int)sheet.size() == SW * SH, "faces.pimg は 208x575");
+    check(SW == kSheetW && SH == (kCursorRow + 1) * kRowH && (int)sheet.size() == SW * SH, "faces.pimg は 224x598");
     const uint32_t occ = World::ComputeOccluders(SheetPx, nullptr);
     {
         World w;
         check(occ == w.occluders(), "透けないブロック: 水・葉以外(絵から求めたものと既定が同じ)");
         check(!((occ >> LEAVES) & 1) && ((occ >> STONE) & 1) && ((occ >> GOLD) & 1), "透けないブロック: 葉は穴が開いている");
+        check(!((occ >> TORCH) & 1), "透けないブロック: 松明は透ける(光も通す)");
     }
 
     // ================================================================ 生成: Lua版と同じ
@@ -413,7 +439,7 @@ int main(int argc, char** argv) {
         w.setCursor(1, 1, 1, true);
         Rec rc;
         w.render(World::Sink{&rc, Draw, Dirty}, 0, 20, 240, 224);
-        check(rc.lines.size() == 3 && rc.lines[0].rfind("0 552 ", 0) == 0, "カーソルを最後に描く");
+        check(rc.lines.size() == 3 && rc.lines[0].rfind("0 575 ", 0) == 0, "カーソルを最後に描く");
     }
 
     // ================================================================ Lua版と同じ描画の並び
@@ -431,8 +457,18 @@ int main(int argc, char** argv) {
         Rec r;
         w.setCursor(512, 7, 512, true);
         w.render(World::Sink{&r, Draw, Dirty}, 0, 20, 240, 224);
+        // Lua版のカーソルの段は 24(sy=552)。松明の段を足して 25(sy=575)になったので、比べるときだけ戻す
         std::string all;
-        for (auto& l : r.lines) { all += l; all += '\n'; }
+        for (auto l : r.lines) {
+            int a, b2, c, d, e, f2;
+            if (sscanf(l.c_str(), "%d %d %d %d %d %d", &a, &b2, &c, &d, &e, &f2) == 6 && b2 == kCursorRow * kRowH) {
+                char t[64];
+                snprintf(t, sizeof t, "%d %d %d %d %d %d", a, 552, c, d, e, f2);
+                l = t;
+            }
+            all += l;
+            all += '\n';
+        }
         char msg[96];
         snprintf(msg, sizeof msg, "Lua版と同じ面・影・順番で描く (%zu面、%08x)", r.lines.size(), (unsigned)Fnv(all.data(), all.size()));
         check(r.lines.size() == 396 && Fnv(all.data(), all.size()) == 0xf3de7f65u, msg);
@@ -458,7 +494,11 @@ int main(int argc, char** argv) {
                 if (rng() % 4 == 0) b = AIR;
                 w.set(bx, byy, bz, (uint8_t)b);
             }
+            // 松明を少し(置いた後に、まわりを少し書き換える)
+            for (int i = 0, nt = (int)(rng() % 8); i < nt; i++) w.set(rng() % 48, rng() % 16, rng() % 48, TORCH);
+            for (int i = 0; i < 40; i++) w.set(rng() % 48, rng() % 16, rng() % 48, (uint8_t)(rng() % 3 ? STONE : AIR));
             w.setView(0, 20, 240, 204);
+            w.setSunlight(rng() % 3 != 0);
             w.setOrigin((int)(rng() % 200), 300 + (int)(rng() % 300));
             const int cx0 = (int)(rng() % 120), cy0 = 20 + (int)(rng() % 100);
             const int cx1 = (t & 1) ? 240 : cx0 + 1 + (int)(rng() % 120), cy1 = (t & 1) ? 224 : cy0 + 1 + (int)(rng() % 100);
@@ -467,17 +507,17 @@ int main(int argc, char** argv) {
             w.setCursor(0, 0, 0, false);
             memset(fb, 7, sizeof fb);
             w.setCulling(false);
-            w.render(World::Sink{&r, Draw, Dirty}, cx0, cy0, cx1, cy1);
+            w.render(World::Sink{&r, Draw, Dirty, Dither}, cx0, cy0, cx1, cy1);
             f0 += w.lastFaces();
             memcpy(ref, fb, sizeof fb);
             memset(fb, 7, sizeof fb);
             w.setCulling(true);
-            w.render(World::Sink{&r, Draw, Dirty}, cx0, cy0, cx1, cy1);
+            w.render(World::Sink{&r, Draw, Dirty, Dither}, cx0, cy0, cx1, cy1);
             f1 += w.lastFaces();
             if (memcmp(ref, fb, sizeof fb)) bad++;
         }
         char msg[128];
-        snprintf(msg, sizeof msg, "隠れたブロックを省いても画素は1つも変わらない (150回、面 %ld → %ld)", f0, f1);
+        snprintf(msg, sizeof msg, "隠れたブロックを省いても画素は1つも変わらない (150回・松明と夜を含む、面 %ld → %ld)", f0, f1);
         check(bad == 0 && f1 < f0, msg);
     }
 
@@ -519,32 +559,181 @@ int main(int argc, char** argv) {
         b.setSource(sheet4.data(), SW, SH);
         int exact = 0;
         for (int r = 0; r < FaceBlitter::kRows; r++) for (int c = 0; c < FaceBlitter::kCols; c++) exact += b.exact(r, c);
-        check(exact == 22 * 9, "透けないブロック22種の9枚の絵は形どおり(区間で写せる)");
+        check(exact == 22 * 10, "透けないブロック22種の10枚の絵は形どおり(区間で写せる)");
         std::mt19937 rng(5);
         int bad = 0;
         std::vector<uint8_t> d1(120 * 320), d2;
         for (int t = 0; t < 20000; t++) {
             for (auto& v : d1) v = (uint8_t)rng();
             d2 = d1;
-            const int row = rng() % 25, c = rng() % 9;
+            const int row = rng() % FaceBlitter::kRows, c = rng() % FaceBlitter::kCols;
             int sx = FaceBlitter::kColX[c], sy = row * kRowH;
             const int shape = FaceBlitter::ShapeOf(c);
             const int w = shape == 0 ? 32 : 16, h = FaceBlitter::Height(shape);
-            if (rng() % 10 == 0) { sx = rng() % 176; sy = rng() % (SH - h); }
+            if (rng() % 10 == 0) { sx = rng() % (SW - 32); sy = rng() % (SH - h); }
+            const int level = (int)(rng() % 5) - 1;   // -1 なら draw、0〜3 なら dither
             const int dx = (int)(rng() % 300) - 40, dy = (int)(rng() % 360) - 20;
             const int cx0 = rng() % 240, cx1 = cx0 + (int)(rng() % (241 - cx0));
             const int cy0 = rng() % 320, cy1 = cy0 + (int)(rng() % (321 - cy0));
             b.setTarget(d1.data(), 120, cx0, cy0, cx1, cy1);
-            b.draw(sx, sy, w, h, dx, dy);
+            if (level < 0) b.draw(sx, sy, w, h, dx, dy);
+            else b.dither(sx, sy, w, h, dx, dy, level);
             for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
                 const int X = dx + x, Y = dy + y;
                 if (X < cx0 || X >= cx1 || Y < cy0 || Y >= cy1) continue;
+                if (level >= 0 && (level == 0 || !World::DitherOn(level, x, y))) continue;
                 const uint8_t v = sheet[(size_t)(sy + y) * SW + sx + x];
                 if (v) FaceBlitter::Put(&d2[(size_t)Y * 120], X, v);
             }
             if (d1 != d2) bad++;
         }
-        check(bad == 0, "面の写し方が1画素ずつの写し方と同じ(2万回、位置・クリップ・偶奇はばらばら)");
+        check(bad == 0, "面の写し方が1画素ずつの写し方と同じ(2万回、位置・クリップ・偶奇・ディザはばらばら)");
+    }
+
+    // ================================================================ 松明の光
+    {
+        World w;
+        w.setOccluders(occ);
+        EmptyWorld(w);
+        for (int x = 0; x < 48; x++) for (int z = 0; z < 48; z++) w.set(x, 0, z, STONE);
+        w.set(10, 1, 10, TORCH);
+        // 明るさ 7(松明)から1マスごとに1減る: 距離0〜2 → 3、3〜4 → 2、5〜6 → 1、7〜 → 0
+        check(w.light(10, 1, 10) == 3 && w.light(12, 1, 10) == 3 && w.light(10, 3, 10) == 3, "松明の近く(2マス)は明るさ3");
+        check(w.light(13, 1, 10) == 2 && w.light(12, 1, 12) == 2, "3〜4マス先は明るさ2");
+        check(w.light(15, 1, 10) == 1 && w.light(13, 1, 13) == 1, "5〜6マス先は明るさ1");
+        check(w.light(17, 1, 10) == 0 && w.light(10, 1, 3) == 0, "7マス先には届かない");
+        check(w.light(10, 0, 10) == 0, "石の中は暗い");
+        check(w.light(30, 1, 30) == 0, "遠くは暗い");
+
+        // 壁で遮られる: x=12 に高い壁を作ると、すぐ裏 (13,1,10) は回り込む道が長いので暗くなる
+        for (int y = 1; y < H; y++) for (int z = 0; z < 48; z++) w.set(12, y, z, STONE);
+        check(w.light(11, 1, 10) == 3, "壁の手前は明るい");
+        check(w.light(13, 1, 10) == 0, "壁の裏は暗い(光は透けないブロックを通らない)");
+        for (int y = 1; y < H; y++) for (int z = 0; z < 48; z++) w.set(12, y, z, AIR);
+        check(w.light(13, 1, 10) == 2, "壁を取ると明るさが戻る");
+        w.set(11, 1, 10, LEAVES);
+        w.set(11, 1, 11, WATER);
+        check(w.light(11, 1, 10) == 3 && w.light(11, 1, 11) == 3, "葉と水は光を通す");
+        w.set(11, 1, 10, AIR);
+        w.set(11, 1, 11, AIR);
+
+        // 描き直す範囲: 松明を取ると明るさの変わった所を覆う矩形を描き直す
+        w.setOrigin(120, 300);
+        int x0, y0, z0, x1, y1, z1;
+        w.dirtyEdit(World::Sink{nullptr, nullptr, Dirty}, 0, 0, 0);    // 溜まっていた分を捨てる
+        check(!w.lightChanged(x0, y0, z0, x1, y1, z1), "描き直すと明るさの変わった範囲は空になる");
+        w.set(10, 1, 10, AIR);
+        check(w.light(10, 1, 10) == 0 && w.light(12, 1, 10) == 0, "松明を取ると暗くなる");
+        check(w.lightChanged(x0, y0, z0, x1, y1, z1) && x0 == 4 && x1 == 16 && z0 == 4 && z1 == 16 && y0 == 1 && y1 == 7,
+              "明るさが変わった範囲は松明のまわり6マス");
+        dirties.clear();
+        w.dirtyEdit(World::Sink{nullptr, nullptr, Dirty}, 10, 1, 10);
+        bool big = false;
+        for (auto& d : dirties) {
+            int dx, dy, dw, dh;
+            sscanf(d.c_str(), "%d %d %d %d", &dx, &dy, &dw, &dh);
+            if (dw > 64 || dh > 63) big = true;
+        }
+        check(big, "明るさが変わったときは、影より広い範囲を描き直す");
+        dirties.clear();
+        w.set(30, 0, 30, DIRT);
+        w.dirtyEdit(World::Sink{nullptr, nullptr, Dirty}, 30, 0, 30);
+        bool small = true;
+        for (auto& d : dirties) {
+            int dx, dy, dw, dh;
+            sscanf(d.c_str(), "%d %d %d %d", &dx, &dy, &dw, &dh);
+            if (dw > 64 || dh > 63) small = false;
+        }
+        check(small, "松明の届かない所の置き換えは、明るさの範囲を描き直さない");
+
+        // チャンクの境目: 後から読み込んだチャンクも照らす / 読み込んだチャンクの松明がまわりを照らす
+        {
+            World v;
+            v.setOccluders(occ);
+            int x, y, z;
+            v.create("", EMPTY, 0, 6, x, y, z);
+            v.loadChunk(0, 0);
+            v.set(7, 1, 4, TORCH);
+            check(v.light(8, 1, 4) == 0, "読み込んでいないチャンクは暗い");
+            v.loadChunk(1, 0);
+            check(v.light(8, 1, 4) == 3 && v.light(11, 1, 4) == 2, "後から読み込んだ隣のチャンクも照らす");
+            v.set(16, 1, 4, TORCH);   // チャンク(2,0)はまだ無いので読み込まれる
+            check(v.light(15, 1, 4) == 3 && v.light(9, 1, 4) == 3, "別のチャンクの松明の光が重なる");
+        }
+
+        // 松明は影を落とさない・後ろを隠さない
+        EmptyWorld(w);
+        bool f, n;
+        w.set(5, 3, 5, STONE); w.set(4, 4, 6, TORCH);
+        w.topShadow(5, 3, 5, H - 1, f, n);
+        check(!f && !n, "松明は影を落とさない");
+        EmptyWorld(w);
+        w.set(3, 0, 3, STONE); w.set(2, 1, 2, TORCH);
+        const int tsy = (TORCH - 1) * kRowH;
+        std::vector<std::string> got = RenderAll(w);
+        int bx, by;
+        w.blockPos(2, 1, 2, bx, by);
+        check(got.size() == 6 && Has(got, 0, tsy, 32, 15, bx, by) && Has(got, 128, tsy, 16, 23, bx, by + 8)
+              && Has(got, 192, tsy, 16, 23, bx + 16, by + 8), "松明は松明の絵を描き、後ろのブロックも描く");
+
+        // 描く絵: 松明のすぐ上の面は日なた、右面(いつも影)も日なたの絵 x=208、少し離れると影+ディザ
+        EmptyWorld(w);
+        const int ssy = (STONE - 1) * kRowH;
+        w.set(5, 0, 5, STONE);      // 上面が松明に照らされる
+        w.set(9, 1, 9, STONE);      // 右面(-z)の隣 (9,1,8) は松明から距離1
+        w.set(9, 1, 8, TORCH);
+        w.set(0, 0, 0, STONE);      // 照らされない
+        w.set(5, 1, 5, AIR);
+        w.set(5, 2, 5, AIR);
+        w.set(6, 1, 5, TORCH);      // (5,1,5) は距離1
+        w.setSunlight(false);
+        Rec r = RenderRec(w);
+        w.blockPos(5, 0, 5, bx, by);
+        check(Has(r.lines, 0, ssy, 32, 15, bx, by), "夜: 松明に照らされた上面は日なたの絵");
+        w.blockPos(0, 0, 0, bx, by);
+        check(Has(r.lines, 32, ssy, 32, 15, bx, by) && Has(r.lines, 144, ssy, 16, 23, bx, by + 8),
+              "夜: 照らされない面は影の絵");
+        w.blockPos(9, 1, 9, bx, by);
+        check(Has(r.lines, 208, ssy, 16, 23, bx + 16, by + 8), "松明に照らされた右面は日なたの右面 (x=208)");
+        // 距離3〜6: 影の絵の上に、日なたの絵をディザで重ねる
+        EmptyWorld(w);
+        w.set(5, 0, 5, STONE);
+        w.set(5, 1, 9, TORCH);      // (5,1,5) は距離4 → 明るさ2
+        r = RenderRec(w);
+        w.blockPos(5, 0, 5, bx, by);
+        char want[64];
+        snprintf(want, sizeof want, "0 %d 32 15 %d %d 2", ssy, bx, by);
+        bool found = false;
+        for (auto& d : r.dithers) if (d == want) found = true;
+        check(Has(r.lines, 32, ssy, 32, 15, bx, by) && found, "夜: 少し離れた面は影の絵 + 日なたの絵のディザ(明るさ2)");
+        w.setSunlight(true);
+        r = RenderRec(w);
+        found = false;
+        for (auto& d : r.dithers) if (d.rfind(std::string("0 ") + std::to_string(ssy) + " 32 15 ", 0) == 0) found = true;
+        check(!found && Has(r.lines, 0, ssy, 32, 15, bx, by), "昼: 日の当たる上面にはディザを重ねない");
+        snprintf(want, sizeof want, "208 %d 16 23 %d %d 1", ssy, bx + 16, by + 8);
+        found = false;
+        for (auto& d : r.dithers) if (d == want) found = true;
+        check(found, "昼でも右面(いつも影)は松明の光でディザがかかる(明るさ1)");
+
+        // 保存して開き直しても同じ明るさ(明るさは保存せず、読み込むときに計算する)
+        HostSd::files.clear();
+        {
+            World v;
+            v.setOccluders(occ);
+            int x, y, z, cur;
+            v.create("/w/t", FLAT, 3, 6, x, y, z);
+            v.loadChunk(2, 2);
+            v.set(20, 1, 20, TORCH);
+            const int l0 = v.light(22, 1, 20);
+            check(v.save(1, 1, 1, TORCH), "松明を置いたワールドを保存できる");
+            v.close();
+            const char* err = nullptr;
+            check(v.open("/w/t", x, y, z, cur, err) && cur == TORCH, "開き直せる(選んでいたブロックが松明)");
+            v.pump(1000, 0);
+            v.loadChunk(2, 2);
+            check(v.get(20, 1, 20) == TORCH && v.light(22, 1, 20) == l0 && l0 == 3, "開き直しても同じ明るさ");
+        }
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

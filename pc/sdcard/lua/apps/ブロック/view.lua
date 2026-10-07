@@ -160,10 +160,12 @@ function V.render(cx, cy, cw, ch)
                                 draw_part(img, bx + 16, by + 8, 192, sy, 16, 23)
                             end
                         else
-                            -- 水: 空気に面した所だけ、市松模様で半分透けた面を描く
-                            if a == 0 then draw_part(img, bx, by, 0, 0, 32, 15) end
-                            if l == 0 then draw_part(img, bx, by + 8, 128, 0, 16, 23) end
-                            if r == 0 then draw_part(img, bx + 16, by + 8, 192, 0, 16, 23) end
+                            -- 水: 空気に面した所だけ、市松模様で半分透けた面を描く。真上が水でない水面は
+                            -- 元(WATER_HALF)と同じく 2px 低く見せる(上面を2px下げ、横の面は上2行を抜いた絵)
+                            local surf = a ~= 1
+                            if a == 0 then draw_part(img, bx, by + 2, 0, 0, 32, 15) end
+                            if l == 0 then draw_part(img, bx, by + 8, surf and 144 or 128, 0, 16, 23) end
+                            if r == 0 then draw_part(img, bx + 16, by + 8, surf and 160 or 192, 0, 16, 23) end
                         end
                     end
                 end

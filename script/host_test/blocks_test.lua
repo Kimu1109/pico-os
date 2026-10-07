@@ -221,6 +221,26 @@ local water_ok = #draws == 8
 for _, d in ipairs(draws) do if d[4] ~= 0 then water_ok = false end end
 check(water_ok, "2x2の水はくっついた面を描かない(上4+左2+右2) (" .. #draws .. ")")
 
+-- 水面(真上が水でない水)は元の WATER_HALF と同じく2px低い: 上面は2px下、横の面は上2行を抜いた絵
+local function water_draws(x, y, z)
+    local bx2, by2 = V.block_pos(x, y, z)
+    local got2 = {}
+    for _, d in ipairs(draws) do
+        if d[4] == 0 and d[1] >= bx2 and d[1] < bx2 + 32 and d[2] >= by2 and d[2] < by2 + 31 then
+            got2[#got2 + 1] = (d[1] - bx2) .. "," .. (d[2] - by2) .. "," .. d[3]
+        end
+    end
+    table.sort(got2)
+    return table.concat(got2, " ")
+end
+world.clear()
+world.set(0, 0, 0, B.WATER)
+render_all()
+check(water_draws(0, 0, 0) == "0,2,0 0,8,144 16,8,160", "水面: 上面は2px下げ、横の面は水面用の絵 (" .. water_draws(0, 0, 0) .. ")")
+world.set(0, 1, 0, B.WATER)
+render_all()
+check(water_draws(0, 0, 0) == "0,8,128 16,8,192", "真上も水なら下の水は普通の横の面 (" .. water_draws(0, 0, 0) .. ")")
+
 -- 描く範囲の外のブロックは描かない
 world.clear()
 world.set(0, 0, 0, B.STONE)

@@ -253,7 +253,11 @@ def build():
     rows = []
     tw, lw, rw = make_faces([[WATER] * 16] * 16, [[WATER] * 16] * 16, [[WATER] * 16] * 16)
     tw, lw, rw = dither(tw, WATER), dither(lw, WATER), dither(rw, WATER)
-    rows.append([tw] * 4 + [lw] * 4 + [rw])
+    # 水面(真上が水でない水): 元の WATER_HALF と同じく、水の高さを 2px 低く見せる。
+    # 横の面はテクスチャの上2行を抜いた絵(左面 x=144・右面 x=160)、上面は描くときに2px下げる
+    lw_cut = [[c if y - x // 2 >= 2 else None for x, c in enumerate(row)] for y, row in enumerate(lw)]
+    rw_cut = [[c if y - 7 + x // 2 >= 2 else None for x, c in enumerate(row)] for y, row in enumerate(rw)]
+    rows.append([tw] * 4 + [lw, lw_cut, rw_cut, lw, rw])
     weights = []
     for i in range(TEX_COUNT):
         t, lf, rf = make_faces(cut(i * 16, 0), cut(i * 16, 16), cut(i * 16, 32))

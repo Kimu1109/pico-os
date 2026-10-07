@@ -24,6 +24,7 @@ class ImageView : public Widget {
         bool loaded = false;
 
         LGFX_Sprite sprite;
+        uint32_t palette_rev = 0; // スプライトに反映済みのPICO_GFX::paletteRevision
         bool full = true;
         // スプライトが持つ範囲(画像座標)
         int win_x = 0, win_y = 0, win_w = 0, win_h = 0;

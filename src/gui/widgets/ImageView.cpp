@@ -75,6 +75,7 @@ bool ImageView::load(const char* path){
         return false;
     }
     for(int i = 0; i < 16; i++) this->sprite.setPaletteColor(i, PICO_GFX::COLORS[i]);
+    this->palette_rev = PICO_GFX::paletteRevision;
     this->loaded = true;
 
     if(!this->decodeWindow(0, 0)){
@@ -120,6 +121,11 @@ void ImageView::causeOnPressEnd(){
 void ImageView::render(){
     if(!this->needs_redraw) return;
     if(!this->visible) return;
+    // pico.set_palette()でパレットが変わっていたら、自前スプライトのパレットも合わせる
+    if(this->loaded && this->palette_rev != PICO_GFX::paletteRevision){
+        for(int i = 0; i < 16; i++) this->sprite.setPaletteColor(i, PICO_GFX::COLORS[i]);
+        this->palette_rev = PICO_GFX::paletteRevision;
+    }
 
     const Rect g = this->getScreenRect();
     markdirty(g);

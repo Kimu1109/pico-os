@@ -35,6 +35,7 @@ CanvasRaster::CanvasRaster(int16_t x, int16_t y, int16_t w, int16_t h){
     for(int i = 0; i < 16; i++){
         sp->setPaletteColor(i, PICO_GFX::COLORS[i]);
     }
+    palette_rev = PICO_GFX::paletteRevision;
     sp->setBaseColor(PICO_WHITE);
     sp->clear(PICO_WHITE);
     sp->setFont(&lgfxJapanGothicP_24);
@@ -53,6 +54,11 @@ CanvasRaster::~CanvasRaster(){
 
 void CanvasRaster::render(){
     if(!this->visible) return;
+    // pico.set_palette()でパレットが変わっていたら、自前スプライトのパレットも合わせる
+    if(this->palette_rev != PICO_GFX::paletteRevision && this->sp){
+        for(int i = 0; i < 16; i++) this->sp->setPaletteColor(i, PICO_GFX::COLORS[i]);
+        this->palette_rev = PICO_GFX::paletteRevision;
+    }
     if(!this->needs_redraw) return;
 
     const Rect g_rect = this->getScreenRect();
@@ -178,6 +184,7 @@ void CanvasRaster::resize(int16_t w, int16_t h){
     for(int i = 0; i < 16; i++){
         sp->setPaletteColor(i, PICO_GFX::COLORS[i]);
     }
+    palette_rev = PICO_GFX::paletteRevision;
     sp->setBaseColor(PICO_WHITE);
     sp->clear(PICO_WHITE);
     sp->setFont(&lgfxJapanGothicP_24);

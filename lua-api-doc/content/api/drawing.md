@@ -123,6 +123,26 @@ pico.draw_text(240 - w - 4, 4, "Score", 0, 1)
 
 画面(今描いている合成先)の1画素のパレット番号(0〜15)を読みます。範囲外は `nil`。`Canvas` の `render` の中では、その時点までに合成された絵が読めます。`CanvasRaster` の中身は [`pico.canvas_get_pixel`](../canvas/) で読みます。
 
+## pico.set_palette
+
+<div class="sig">pico.set_palette(index: integer, r: integer, g: integer, b: integer) <span class="ret">-> (なし)</span></div>
+
+パレット番号 `index`(**1〜14**)の色を RGB(各 0〜255)に差し替えます(液晶と同じ RGB565 に丸められます)。画面全体とキャンバス・画像の同じ番号の色が一斉に変わります。**黒(0)と白(15)は変えられず**、`index` が 0・15・範囲外ならエラーです。
+
+変えたパレットは、**アプリを閉じるときと別の画面へ移るときに既定のパレットへ自動で戻ります**(`pico.reset_palette()` で自分から戻すこともできます)。
+
+## pico.get_palette
+
+<div class="sig">pico.get_palette(index: integer) <span class="ret">-> r: integer, g: integer, b: integer</span></div>
+
+パレット番号 `index`(0〜15)の今の色を RGB(各 0〜255)で返します。
+
+## pico.reset_palette
+
+<div class="sig">pico.reset_palette() <span class="ret">-> (なし)</span></div>
+
+パレットを既定の16色へ戻します。
+
 
 ## pico.invalidate
 

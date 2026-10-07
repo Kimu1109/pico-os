@@ -516,6 +516,7 @@ class LuaEngine {
         bool used_music_ = false;
         // pico.wav_*を使ったか。使ったアプリは閉じるときにWAVを止める
         bool used_wav_ = false;
+        bool used_palette_ = false; // pico.set_palette()を呼んだ(閉じるときに既定のパレットへ戻す)
 
         std::vector<CallbackBinding> callbacks_;
 

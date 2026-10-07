@@ -150,6 +150,14 @@ int main() {
     lua_setglobal(L, "check");
     OSData::SD_usable = true;
 
+    // アプリを閉じる(エンジンの破棄)と、変えたパレットが既定へ戻る
+    {
+        LuaEngine pe(64 * 1024, LuaPermissions{}, "/app");
+        check(pe.Run("pico.set_palette(5, 8, 24, 33)", "pal"), "パレット: 変更");
+        check(PICO_GFX::COLORS[5] == PICO_GFX::Rgb565(8, 24, 33), "パレット: 反映された");
+    }
+    check(PICO_GFX::COLORS[5] == PICO_GFX::DEFAULT_COLORS[5], "パレット: エンジン破棄で既定へ戻る");
+
     // =====================================================================
     // 見送っていたウィジェットの生成
     // =====================================================================
@@ -765,6 +773,21 @@ int main() {
             pico.image_free(img); pico.image_free(img2)
             check(pico.get_pixel(-1, 0) == nil, "get_pixel: 範囲外はnil")
             check(type(pico.get_pixel(0, 0)) == "number", "get_pixel: 範囲内は番号")
+
+            -- パレット
+            local pr, pg, pb = pico.get_palette(12)
+            local or_, og, ob = pr, pg, pb
+            check(pr and pg and pb, "get_palette: 3値")
+            pico.set_palette(12, 8, 24, 33)
+            pr, pg, pb = pico.get_palette(12)
+            check(pr == 8 and pg == 24 and pb == 33, "set_palette: 変わる")
+            check(not pcall(pico.set_palette, 0, 1, 2, 3), "set_palette: 黒は変えられない")
+            check(not pcall(pico.set_palette, 15, 1, 2, 3), "set_palette: 白は変えられない")
+            check(not pcall(pico.set_palette, 16, 1, 2, 3), "set_palette: 範囲外")
+            check(not pcall(pico.set_palette, 3, 256, 0, 0), "set_palette: 値の範囲外")
+            pico.reset_palette()
+            pr, pg, pb = pico.get_palette(12)
+            check(pr == or_ and pg == og and pb == ob, "reset_palette: 既定へ戻る")
 
             -- テキスト
             local lines, h = pico.measure_text("hello world foo bar baz", 60, 1)

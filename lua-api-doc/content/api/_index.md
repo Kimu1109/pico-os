@@ -18,7 +18,7 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | カテゴリ | 関数 |
 |---|---|
 | [ウィジェット操作](widgets/) | `create` `destroy` `set` `get` `on` `off` `add_child` `remove_child` `text_set` `set_dots` `set_name` `find` `parent` `children` `get_rect` `bring_to_front` `send_to_back` `scroll_to` `show_keyboard` `hide_keyboard` `list_add` `list_insert` `list_remove` `list_get` `list_select` `list_scroll_to` `list_clear` `tab_add` `tab_label` `tab_set_label` `tab_remove` `tab_clear` `tab_link` `tab_unlink` |
-| [直接描画](drawing/) | `draw_pixel` `draw_line` `draw_rect` `fill_rect` `draw_circle` `fill_circle` `clear_rect` `draw_text` `draw_text_wrapped` `measure_text` `get_pixel` `invalidate` `mark_dirty` `set_draw_area` `clear_draw_area` `get_draw_area` |
+| [直接描画](drawing/) | `draw_pixel` `draw_line` `draw_rect` `fill_rect` `draw_circle` `fill_circle` `clear_rect` `draw_text` `draw_text_wrapped` `measure_text` `get_pixel` `set_palette` `get_palette` `reset_palette` `invalidate` `mark_dirty` `set_draw_area` `clear_draw_area` `get_draw_area` |
 | [タッチ](touch/) | `get_touch` |
 | [コントローラー](pad/) | `pad_connected` `pad_down` `pad_pressed` `pad_released` |
 | [画像](images/) | `image_load` `image_create` `image_target` `image_clear` `image_size` `draw_image` `draw_image_part` `draw_image_ex` `image_rotate` `draw_rotated` `image_free` |

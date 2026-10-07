@@ -26,3 +26,5 @@ pc/sdcard/crash/
 pc/sdcard/lua/apps/*/store.json
 pc/sdcard/lua/apps/*/store.json.tmp
 pc/sdcard/lua/apps/*/settings.cfg
+# 「ブロック」のセーブ(PCビルドで試すと作られる)
+pc/sdcard/lua/apps/ブロック/worlds/

@@ -859,6 +859,13 @@ function Game:_physics()
             if not s.dead and not s.static and not r.dead and r._px then
                 local dx, dy = r.x - r._px, r.y - r._py
                 if dx ~= 0 or dy ~= 0 then s:move(dx, dy) end
+                -- 運ばれた後もまだ足場の上面に立っていれば乗ったままにする
+                -- (上がる足場では重なりが生まれず、1フレームおきにon_groundが外れるため)
+                local sx, sy, sw, sh = box(s)
+                local rx, ry, rw = box(r)
+                if math.abs(sy + sh - ry) < 0.5 and sx < rx + rw and rx < sx + sw then
+                    s.on_ground, s._ride = true, r
+                end
             end
         end
     end

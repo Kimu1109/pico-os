@@ -1,5 +1,6 @@
 -- ブロック: 斜め上から見たマインクラフト風の箱庭(TheScienceElf/Blocks-TI-84 の移植。MIT)
--- 48x16x48 の世界でカーソルを動かし、24種類のブロックを置く/壊す。影・半透明の水・5つのセーブ枠。
+-- 1024x16x1024 の世界(見えている所のまわりのチャンクだけを読み込む)でカーソルを動かし、
+-- 24種類のブロックを置く/壊す。影・半透明の水・5つのセーブ枠。
 -- 操作(画面): 左下の9つのキー=移動(真ん中=置く/壊す)、上へ/下へ、ブロック変更、中央、終了。
 --   ワールドのタップ=その面の手前へカーソル、長押し=そのブロックへカーソル、ドラッグ=視点を動かす。
 -- コントローラー: 十字=移動(斜めは2つ同時)、A=置く/壊す、B/START=ブロック変更、X/R=上へ、Y/L=下へ、
@@ -10,7 +11,7 @@ local world = require("world")
 local V = require("view")
 local PAL = require("palette")
 local B = world.B
-local N, H = world.N, world.H
+local H = world.H
 
 for i, c in ipairs(PAL.colors) do pico.set_palette(i, c[1], c[2], c[3]) end
 V.sky = PAL.sky
@@ -18,6 +19,8 @@ local DIR = pico.app_dir()
 V.img = pico.image_load(pico.path_join(DIR, "faces.pimg"))
 if not V.img then pico.show_error("faces.pimg を読めません") end
 local SAVE_DIR = pico.path_join(DIR, "worlds")
+-- めったに使わない部分は、使うときだけ読み込む(先読みされないよう名前は変数で渡す。Luaのメモリを節約)
+local MIGRATE, DEMO = "migrate", "demo"
 
 local CX, CY, CW, CH = pico.content_rect()
 local PANEL_H = 96
@@ -35,7 +38,7 @@ local ORDER = {}
 for b = 2, world.COUNT do ORDER[#ORDER + 1] = b end
 ORDER[#ORDER + 1] = B.WATER
 
-local mode = "title"      -- title / play / select / busy
+local mode = "title"      -- title / play / select / busy / load(チャンクを読み込み中)
 local busy_msg = ""
 local slot = 1
 local title_sel = 1
@@ -44,14 +47,21 @@ local cur = B.STONE
 local sel = 1
 local SLOTS = 5
 
-local function slot_path(i) return pico.path_join(SAVE_DIR, "world_" .. string.char(64 + i) .. ".dat") end
+-- スロット i のディレクトリ(world.dat とチャンクのファイルを入れる)と、前の版の1ファイルの保存
+local function slot_dir(i) return pico.path_join(SAVE_DIR, string.char(64 + i)) end
+local function old_path(i) return pico.path_join(SAVE_DIR, "world_" .. string.char(64 + i) .. ".dat") end
 local function refresh_slots()
-    for i = 1, SLOTS do exists[i] = pico.sd_exists(slot_path(i)) end
+    for i = 1, SLOTS do
+        local k, w = world.info(slot_dir(i) .. "/world.dat")
+        if k then exists[i] = (world.KINDS[k] or "?") .. " " .. w .. "x" .. w
+        elseif pico.sd_exists(old_path(i)) then exists[i] = "48x48(前の版)"
+        else exists[i] = nil end
+    end
 end
 
 local function set_mode(m)
     mode = m
-    local full = (m == "title") or (m == "busy" and not V.in_game)
+    local full = (m == "title") or ((m == "busy" or m == "load") and not V.in_game)
     pico.set(view, "h", full and CH or VH)
     pico.set(panel, "visible", not full)
     pico.invalidate(view)
@@ -68,9 +78,12 @@ local function click(f, ms) pico.sound_play(2, f, ms or 30, { wave = "noise", vo
 
 -- ---------------------------------------------------------------- カメラとカーソル
 
+-- 視点を動かしたら、次の loop で読み込むチャンクの範囲を決め直す
+local cam_moved = false
 local function center_on(x, y, z)
     V.OX = V.x + V.w // 2 - 16 - 16 * (x - z)
     V.OY = V.y + V.h // 2 - 16 + 8 * (x + z) + 16 * y
+    cam_moved = true
     pico.invalidate(view)
 end
 
@@ -85,9 +98,10 @@ local function keep_visible()
 end
 
 local function cursor_to(x, y, z)
-    x = math.max(0, math.min(N - 1, x))
+    local W = world.W
+    x = math.max(0, math.min(W - 1, x))
     y = math.max(0, math.min(H - 1, y))
-    z = math.max(0, math.min(N - 1, z))
+    z = math.max(0, math.min(W - 1, z))
     if x == V.cx and y == V.cy and z == V.cz then return end
     V.dirty_block(V.cx, V.cy, V.cz)
     V.cx, V.cy, V.cz = x, y, z
@@ -98,6 +112,7 @@ local function move(dx, dy, dz) cursor_to(V.cx + dx, V.cy + dy, V.cz + dz) end
 
 local function scroll(dx, dy)
     V.OX, V.OY = V.OX + dx, V.OY + dy
+    cam_moved = true
     pico.invalidate(view)
 end
 
@@ -117,19 +132,33 @@ end
 
 -- ---------------------------------------------------------------- 始める・保存する
 
+-- 今の視点で見える所のチャンクを読み込む予定に入れる
+local function update_window()
+    cam_moved = false
+    world.window(V.load_range())
+end
+
 local function start(kind)
     busy(kind and "ワールドを作っています..." or "読み込んでいます...", function()
+        local d = slot_dir(slot)
         local p, c
         if kind then
+            pico.sd_mkdir(SAVE_DIR)
+            pico.sd_mkdir(d)
             math.randomseed(pico.millis())
-            local x, y, z
-            if kind == 0 then x, y, z = world.gen_natural()
-            elseif kind == 1 then x, y, z = world.gen_flat()
-            else x, y, z = world.gen_demo() end
+            local x, y, z = world.create(d, kind, math.random(0, 0x7fffffff))
             p, c = { x = x, y = y, z = z }, B.STONE
         else
             local err
-            p, err = world.load(slot_path(slot))
+            if not world.info(d .. "/world.dat") and pico.sd_exists(old_path(slot)) then
+                local ok, e = require(MIGRATE)(old_path(slot), d)
+                if not ok then
+                    pico.show_error("前の版のワールドを移せません: " .. tostring(e))
+                    set_mode("title")
+                    return
+                end
+            end
+            p, err = world.open(d)
             if not p then
                 pico.show_error("ワールドを読めません: " .. tostring(err))
                 set_mode("title")
@@ -137,23 +166,22 @@ local function start(kind)
             end
             c = err
         end
+        if world.kind == 2 then world.demo = require(DEMO) end
         cur = c
         V.cx, V.cy, V.cz = p.x, p.y, p.z
         V.in_game = true
         center_on(p.x, p.y, p.z)
-        set_mode("play")
-        collectgarbage("collect")
-        local m = pico.memory_info()
-        pico.log(string.format("ブロック: Lua %d/%d バイト", m.lua_used, m.lua_budget))
+        update_window()
+        busy_msg = "チャンクを読み込んでいます..."
+        set_mode("load")
     end)
 end
 
 local function save_and_quit()
     busy("保存しています...", function()
-        pico.sd_mkdir(SAVE_DIR)
-        local ok = world.save(slot_path(slot), { x = V.cx, y = V.cy, z = V.cz }, cur)
+        local ok = world.save({ x = V.cx, y = V.cy, z = V.cz }, cur)
         if not ok then pico.show_error("保存できませんでした") end
-        world.clear()
+        world.close()
         V.in_game = false
         refresh_slots()
         set_mode("title")
@@ -174,7 +202,12 @@ local function open_slot(i, direct)
             else
                 local m = pico.show_message(name .. " を削除しますか?", "いいえ", "はい")
                 pico.on(m, "closed", function(_, yes)
-                    if yes then pico.sd_remove(slot_path(i)); refresh_slots(); pico.invalidate(view) end
+                    if yes then
+                        pico.sd_remove(slot_dir(i))
+                        pico.sd_remove(old_path(i))
+                        refresh_slots()
+                        pico.invalidate(view)
+                    end
                 end)
             end
         end)
@@ -213,7 +246,7 @@ local function draw_title()
         pico.draw_rect(CX + 10, y, CW - 20, i <= SLOTS and 38 or 30, on and PAL.accent or PAL.mid)
         if i <= SLOTS then
             pico.draw_text(CX + 20, y + 4, "ワールド " .. string.char(64 + i), 0, 0)
-            pico.draw_text(CX + 36, y + 20, exists[i] and "48x16x48" or "( 空き )", PAL.mid, 0)
+            pico.draw_text(CX + 36, y + 20, exists[i] or "( 空き )", PAL.mid, 0)
         else
             pico.draw_text(CX + 20, y + 7, "おわる", 0, 0)
         end
@@ -245,7 +278,7 @@ end
 
 pico.on(view, "render", function()
     if mode == "title" then draw_title()
-    elseif mode == "busy" then
+    elseif mode == "busy" or mode == "load" then
         local x, y, w, h = pico.get_draw_area()
         pico.fill_rect(x, y, w, h, PAL.sky)
         local cy = CY + (V.in_game and VH or CH) // 2
@@ -388,6 +421,19 @@ end
 pico.on_back(back)
 
 function loop(dt)
+    if V.in_game then
+        if cam_moved then update_window() end
+        -- 見えている所のチャンクを少しずつ読み込む(1回の呼び出しの命令数の上限に収まるよう数も絞る)
+        local n = world.pump(mode == "load" and 24 or 6, mode == "load" and 40 or 12)
+        if n > 0 and mode ~= "load" then pico.invalidate(view) end
+        if mode == "load" and world.pending() == 0 then
+            set_mode("play")
+            collectgarbage("collect")
+            local m = pico.memory_info()
+            local k, bytes = world.loaded_count()
+            pico.log(string.format("ブロック: チャンク %d 個 (%d バイト)、Lua %d/%d バイト", k, bytes, m.lua_used, m.lua_budget))
+        end
+    end
     if touch and not touch.drag and not touch.long and mode == "play" and pico.millis() - touch.t > 500 then
         touch.long = true
         pick_to(touch.x, touch.y, true)

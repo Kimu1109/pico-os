@@ -16,8 +16,8 @@ local world = require("world")
 
 local V = {}
 
-local N, H = world.N, world.H
-local L = world.L
+local H = world.H
+local get, chunk = world.get, world.chunk
 local byte = string.byte
 local ROW = 23                     -- faces.pimg の1種類ぶんの段の高さ
 local CURSOR_ROW = 24              -- カーソルの段(ブロック番号25の位置)
@@ -36,19 +36,17 @@ V.top = H - 1          -- 空気でない一番上の高さ(これより上を�
 
 -- 上面の影: 奥半分・手前半分がそれぞれ影なら true。たどるマス(k歩目、高さ y+1+k):
 --   A=(x-k, z+k) 両方 / B=(x-k, z+1+k) 奥 / C=(x-1-k, z+k) 手前 / D=(x-1-k, z+1+k) 両方
+-- 世界の外と読み込んでいないチャンクは空気(get が 0 を返す)
 local function top_shadow(x, y, z)
     local far, near = false, false
+    local W = world.W
     local k = 0
     while y + 1 + k <= V.top do
-        local layer = L[y + 2 + k]
-        local x0, x1, z0, z1 = x - k, x - 1 - k, z + k, z + 1 + k
-        if x0 < 0 or z0 >= N then break end
-        if byte(layer, x0 * N + z0 + 1) >= 2 then return true, true end
-        if not far and z1 < N and byte(layer, x0 * N + z1 + 1) >= 2 then far = true end
-        if x1 >= 0 then
-            if z1 < N and byte(layer, x1 * N + z1 + 1) >= 2 then return true, true end
-            if not near and byte(layer, x1 * N + z0 + 1) >= 2 then near = true end
-        end
+        local yy, x0, x1, z0, z1 = y + 1 + k, x - k, x - 1 - k, z + k, z + 1 + k
+        if x0 < 0 or z0 >= W then break end
+        if get(x0, yy, z0) >= 2 or get(x1, yy, z1) >= 2 then return true, true end
+        if not far and get(x0, yy, z1) >= 2 then far = true end
+        if not near and get(x1, yy, z0) >= 2 then near = true end
         if far and near then break end
         k = k + 1
     end
@@ -59,18 +57,16 @@ end
 --   E=(y+k, z+k) 両方 / F=(y+1+k, z+k) 上 / G=(y+k, z+1+k) 下 / J=(y+1+k, z+1+k) 両方
 local function left_shadow(x, y, z)
     local up, low = false, false
+    local W, top = world.W, V.top
     local k = 0
     while true do
         local xx, y0, z0 = x - 1 - k, y + k, z + k
-        if xx < 0 or y0 > V.top or z0 >= N then break end
-        local i0 = xx * N + z0 + 1
-        local la, lb = L[y0 + 1], L[y0 + 2]
-        if byte(la, i0) >= 2 then return true, true end
-        local z1ok = z0 + 1 < N
-        if z1ok and not low and byte(la, i0 + 1) >= 2 then low = true end
-        if lb and y0 + 1 <= V.top then
-            if z1ok and byte(lb, i0 + 1) >= 2 then return true, true end
-            if not up and byte(lb, i0) >= 2 then up = true end
+        if xx < 0 or y0 > top or z0 >= W then break end
+        if get(xx, y0, z0) >= 2 then return true, true end
+        if not low and get(xx, y0, z0 + 1) >= 2 then low = true end
+        if y0 + 1 <= top then
+            if get(xx, y0 + 1, z0 + 1) >= 2 then return true, true end
+            if not up and get(xx, y0 + 1, z0) >= 2 then up = true end
         end
         if up and low then break end
         k = k + 1
@@ -78,15 +74,6 @@ local function left_shadow(x, y, z)
     return up, low
 end
 V.top_shadow, V.left_shadow = top_shadow, left_shadow
-
--- 空気でない一番上の高さ
-local function find_top()
-    local air = L.air
-    for y = H, 1, -1 do
-        if L[y] ~= air then return y - 1 end
-    end
-    return -1
-end
 
 function V.block_pos(x, y, z)
     return V.OX + 16 * (x - z), V.OY - 8 * (x + z) - 16 * y
@@ -108,64 +95,85 @@ local function draw_cursor()
     draw_part(V.img, bx + 16, by + 8, 192, sy, 16, 23)
 end
 
+-- 表示範囲 (V.x, V.y, V.w, V.h) にかかる柱の範囲(u = x - z, s = x + z)
+function V.ranges(x0, y0, x1, y1)
+    local OX, OY = V.OX, V.OY
+    return (x0 - OX - 32) // 16 + 1, -((OX - x1) // 16) - 1,
+           (OY - 16 * (H - 1) - y1) // 8 + 1, -((y0 - OY - 31) // 8) - 1
+end
+
+-- 読み込んでおくチャンクの範囲: 表示範囲に、影をたどる分を足す(光は1歩ごとに u = x - z が2減る。
+-- たどるのは高さ H-1 までなので左へ 2*(H-1) まで)。読み込みの余裕は持たない(Luaのメモリが足りないため)
+function V.load_range()
+    local umin, umax, smin, smax = V.ranges(V.x, V.y, V.x + V.w, V.y + V.h)
+    return umin - 2 * (H - 1), umax, smin, smax
+end
+
 -- 画面の矩形 (cx, cy, cw, ch) の中だけを描き直す。Canvas の render の中から呼ぶ
 function V.render(cx, cy, cw, ch)
     local x0, y0, x1, y1 = cx, cy, cx + cw, cy + ch
     fill_rect(cx, cy, cw, ch, V.sky)
     local img, OX, OY = V.img, V.OX, V.OY
-    V.top = find_top()
-    -- 矩形にかかる柱の範囲(u = x - z, s = x + z)
-    local umin = (x0 - OX - 32) // 16 + 1
-    local umax = -((OX - x1) // 16) - 1
-    local smin = (OY - 16 * (H - 1) - y1) // 8 + 1
-    local smax = -((y0 - OY - 31) // 8) - 1
+    local W = world.W
+    local top = world.top()
+    V.top = top
+    local umin, umax, smin, smax = V.ranges(x0, y0, x1, y1)
     if smin < 0 then smin = 0 end
-    if smax > 2 * N - 2 then smax = 2 * N - 2 end
+    if smax > 2 * W - 2 then smax = 2 * W - 2 end
     for s = smax, smin, -1 do
         local base = OY - 8 * s
         local ylo = (base - y1) // 16 + 1
         local yhi = -((y0 - base - 31) // 16) - 1
         if ylo < 0 then ylo = 0 end
-        if yhi > H - 1 then yhi = H - 1 end
+        if yhi > top then yhi = top end
         if ylo <= yhi then
             local ulo, uhi = umin, umax
             if ulo < -s then ulo = -s end
-            if ulo < s - 2 * N + 2 then ulo = s - 2 * N + 2 end
+            if ulo < s - 2 * W + 2 then ulo = s - 2 * W + 2 end
             if uhi > s then uhi = s end
-            if uhi > 2 * N - 2 - s then uhi = 2 * N - 2 - s end
+            if uhi > 2 * W - 2 - s then uhi = 2 * W - 2 - s end
             if (ulo - s) % 2 ~= 0 then ulo = ulo + 1 end
             for u = ulo, uhi, 2 do
                 local x, z = (s + u) // 2, (s - u) // 2
-                local i = x * N + z + 1
-                local bx = OX + 16 * u
-                for y = ylo, yhi do
-                    local layer = L[y + 1]
-                    local b = byte(layer, i)
-                    if b ~= 0 then
-                        local a = (y < H - 1) and byte(L[y + 2], i) or 0
-                        local l = (x > 0) and byte(layer, i - N) or 0
-                        local r = (z > 0) and byte(layer, i - 1) or 0
-                        local by = base - 16 * y
-                        if b >= 2 then
-                            local sy = (b - 1) * ROW
-                            if a < 2 then
-                                local f, n = top_shadow(x, y, z)
-                                draw_part(img, bx, by, f and (n and 32 or 64) or (n and 96 or 0), sy, 32, 15)
+                local c = chunk(x >> 3, z >> 3)
+                local i = (x & 7) * 8 + (z & 7) + 1
+                local yh = c and (#c - i) // 64 or -1
+                if yh > yhi then yh = yhi end
+                if ylo <= yh then
+                    -- 左(-x)と右(-z)の隣の柱。チャンクの境目なら隣のチャンク(読み込んでいなければ空気)
+                    local lc, li, rc, ri = c, i - 8, c, i - 1
+                    if x & 7 == 0 then lc, li = chunk((x >> 3) - 1, z >> 3), i + 56 end
+                    if z & 7 == 0 then rc, ri = chunk(x >> 3, (z >> 3) - 1), i + 7 end
+                    local bx = OX + 16 * u
+                    for y = ylo, yh do
+                        local o = y * 64
+                        local b = byte(c, o + i) or 0
+                        if b ~= 0 then
+                            local a = byte(c, o + 64 + i) or 0
+                            local l = lc and byte(lc, o + li) or 0
+                            local r = rc and byte(rc, o + ri) or 0
+                            local by = base - 16 * y
+                            if b >= 2 then
+                                local sy = (b - 1) * ROW
+                                if a < 2 then
+                                    local f, n = top_shadow(x, y, z)
+                                    draw_part(img, bx, by, f and (n and 32 or 64) or (n and 96 or 0), sy, 32, 15)
+                                end
+                                if l < 2 then
+                                    local uu, w = left_shadow(x, y, z)
+                                    draw_part(img, bx, by + 8, uu and (w and 144 or 160) or (w and 176 or 128), sy, 16, 23)
+                                end
+                                if r < 2 then
+                                    draw_part(img, bx + 16, by + 8, 192, sy, 16, 23)
+                                end
+                            else
+                                -- 水: 空気に面した所だけ、市松模様で半分透けた面を描く。真上が水でない水面は
+                                -- 元(WATER_HALF)と同じく 2px 低く見せる(上面を2px下げ、横の面は上2行を抜いた絵)
+                                local surf = a ~= 1
+                                if a == 0 then draw_part(img, bx, by + 2, 0, 0, 32, 15) end
+                                if l == 0 then draw_part(img, bx, by + 8, surf and 144 or 128, 0, 16, 23) end
+                                if r == 0 then draw_part(img, bx + 16, by + 8, surf and 160 or 192, 0, 16, 23) end
                             end
-                            if l < 2 then
-                                local u, w = left_shadow(x, y, z)
-                                draw_part(img, bx, by + 8, u and (w and 144 or 160) or (w and 176 or 128), sy, 16, 23)
-                            end
-                            if r < 2 then
-                                draw_part(img, bx + 16, by + 8, 192, sy, 16, 23)
-                            end
-                        else
-                            -- 水: 空気に面した所だけ、市松模様で半分透けた面を描く。真上が水でない水面は
-                            -- 元(WATER_HALF)と同じく 2px 低く見せる(上面を2px下げ、横の面は上2行を抜いた絵)
-                            local surf = a ~= 1
-                            if a == 0 then draw_part(img, bx, by + 2, 0, 0, 32, 15) end
-                            if l == 0 then draw_part(img, bx, by + 8, surf and 144 or 128, 0, 16, 23) end
-                            if r == 0 then draw_part(img, bx + 16, by + 8, surf and 160 or 192, 0, 16, 23) end
                         end
                     end
                 end
@@ -225,16 +233,20 @@ end
 -- 画面の点に見えている一番手前のブロックと、その面を返す(何も無ければ nil)
 function V.pick(px, py)
     local OX, OY = V.OX, V.OY
+    local W = world.W
     local u0 = (px - OX) // 16
-    for s = 0, 2 * N - 2 do
+    -- 絵の縦の範囲 [by, by+30] に py が入る s だけを見る(手前=s の小さい順)
+    local s0 = math.max(0, (OY - py - 30 - 16 * (H - 1)) // 8)
+    local s1 = math.min(2 * W - 2, (OY - py) // 8 + 1)
+    for s = s0, s1 do
         local u = ((u0 - s) % 2 == 0) and u0 or (u0 - 1)
         local x, z = (s + u) // 2, (s - u) // 2
-        if x >= 0 and z >= 0 and x < N and z < N then
+        if x >= 0 and z >= 0 and x < W and z < W then
             local base = OY - 8 * s
             local bx = OX + 16 * u
             for y = H - 1, 0, -1 do
                 local by = base - 16 * y
-                if py >= by and py <= by + 30 and world.get(x, y, z) ~= 0 then
+                if py >= by and py <= by + 30 and get(x, y, z) ~= 0 then
                     local f = face_at(px - bx, py - by)
                     if f then return x, y, z, f end
                 end

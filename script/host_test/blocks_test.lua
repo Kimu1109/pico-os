@@ -148,7 +148,7 @@ local sy = (B.STONE - 1) * 23
 local got = {}
 for _, d in ipairs(draws) do got[#got + 1] = table.concat(d, ",") end
 table.sort(got)
-local want = { "100,150,0," .. sy .. ",32,15", "100,158,64," .. sy .. ",16,23", "116,158,96," .. sy .. ",16,23" }
+local want = { "100,150,0," .. sy .. ",32,15", "100,158,128," .. sy .. ",16,23", "116,158,192," .. sy .. ",16,23" }
 table.sort(want)
 check(table.concat(got, " ") == table.concat(want, " "), "上面(日なた)・左面(日なた)・右面の位置と絵")
 
@@ -170,7 +170,48 @@ for _, d in ipairs(draws) do
     if d[1] == bx and d[2] == by and d[3] == 32 then top_shadow = true end
 end
 check(top_shadow, "日の当たらない上面は影の絵で描く")
-check(V.sunlit(5, 3, 5) and not V.sunlit(5, 1, 5), "sunlit: 太陽の方をたどって遮るものを見つける")
+
+-- 元と同じ「面を2つの三角形に分けた影」: 遮るマスの位置で奥/手前・上/下の片方だけが影になる
+local function shadow_case(occ, fn, x, y, z)
+    world.clear()
+    world.set(5, 3, 5, B.STONE)
+    world.set(occ[1], occ[2], occ[3], B.DIRT)
+    V.top = H - 1
+    return fn(5, 3, 5)
+end
+local f, n = shadow_case({5, 4, 6}, V.top_shadow)
+check(f and not n, "上面: 奥 (x, y+1, z+1) のブロックは奥半分だけを影にする")
+f, n = shadow_case({4, 4, 5}, V.top_shadow)
+check(n and not f, "上面: 左 (x-1, y+1, z) のブロックは手前半分だけを影にする")
+f, n = shadow_case({4, 4, 6}, V.top_shadow)
+check(f and n, "上面: (x-1, y+1, z+1) のブロックは全部を影にする")
+f, n = shadow_case({2, 7, 8}, V.top_shadow)
+check(f and n, "上面: 太陽の方へ遠く (3歩先) のブロックも影を落とす")
+f, n = shadow_case({5, 2, 5}, V.top_shadow)
+check(not f and not n, "上面: 下のブロックは影を落とさない")
+local u, w = shadow_case({4, 4, 5}, V.left_shadow)
+check(u and not w, "左面: (x-1, y+1, z) のブロックは上半分だけを影にする")
+u, w = shadow_case({4, 3, 6}, V.left_shadow)
+check(w and not u, "左面: (x-1, y, z+1) のブロックは下半分だけを影にする")
+u, w = shadow_case({3, 4, 6}, V.left_shadow)
+check(u and w, "左面: (x-2, y+1, z+1) のブロックは全部を影にする")
+world.clear(); world.set(5, 3, 5, B.STONE); world.set(4, 4, 6, B.WATER); V.top = H - 1
+f, n = V.top_shadow(5, 3, 5)
+check(not f and not n, "水は影を落とさない")
+
+-- 半分の影の絵: 奥半分の影は x=64、手前半分は x=96、左面の上半分は x=160
+world.clear()
+world.set(5, 3, 5, B.STONE); world.set(5, 4, 6, B.DIRT)
+draws = {}
+V.show_cursor = false
+V.render(0, 20, 240, 204)
+V.show_cursor = true
+bx, by = V.block_pos(5, 3, 5)
+local half_top = false
+for _, d in ipairs(draws) do
+    if d[1] == bx and d[2] == by and d[3] == 64 and d[4] == sy then half_top = true end
+end
+check(half_top, "奥半分だけ影の上面は、奥半分が影の絵 (x=64) で描く")
 
 -- 水: 空気に面した面だけ、水の段(0)で描く
 world.clear()
@@ -229,7 +270,7 @@ V.dirty_edit(10, 4, 10)
 local area, big = 0, false
 for _, d in ipairs(dirties) do
     area = area + d[3] * d[4]
-    if d[3] > 32 or d[4] > 31 then big = true end
+    if d[3] > 64 or d[4] > 63 then big = true end
 end
 check(#dirties > 1 and not big, "置いたときは小さな矩形だけ描き直す (" .. #dirties .. "個)")
 

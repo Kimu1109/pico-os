@@ -11,15 +11,20 @@ pico-os へ移したもの)の絵を作る。標準ライブラリのみ(PNGも�
 
 作るもの:
     faces.pimg   ブロックの面の絵(透過つき)。1種類につき高さ23pxの1段で、横に
-                     x=0   上面(日なた)   32x15
-                     x=32  上面(影)       32x15
-                     x=64  左面(日なた)   16x23
-                     x=80  左面(影)       16x23
-                     x=96  右面(いつも影) 16x23
+                     x=0   上面 日なた      x=32  上面 影       (32x15)
+                     x=64  上面 奥半分が影  x=96  上面 手前半分が影
+                     x=128 左面 日なた      x=144 左面 影       (16x23)
+                     x=160 左面 上半分が影  x=176 左面 下半分が影
+                     x=192 右面(いつも影)                      (16x23)
                  を並べる。段の番号 = ブロックの番号 - 1(1=水, 2=石 … 24=金, 25=カーソル)。
                  面の形は元の convert_textures.py と同じ(上面は2:1のひし形、横の面は2pxごとに1段ずらす)。
+                 影は元と同じく「明るさ半分の色」で、面を光の向きの対角線で2つの三角形に分けて
+                 半分ずつ影にする(元の sprites/Masks の shadow top / shadow bottom)。
+                 上面は x+z が一定の線(画面では横の中央線)で奥/手前に、左面は y=z の線
+                 (テクスチャの対角線)で上/下に分ける。
     palette.lua  アプリが pico.set_palette で入れる色(1〜14番)と、空・水・UIに使う番号。
-                 テクスチャの色(日なたと、明るさ半分の影)と空・水の色を k-means で14色にまとめる。
+                 テクスチャの色(日なたと、明るさ半分の影)と空・水の色を、よく出るブロック(草・土・石・
+                 葉・砂…)ほど重く数えて、Lab色空間の k-means で14色にまとめる。
     icon.pimg    ランチャのアイコン(48x48、既定のパレット)。
 
 使い方:
@@ -49,7 +54,11 @@ WATER = (56, 96, 232)     # 水(ディザで半透明に見せる)
 TEX_COUNT = 23            # 石(2)〜金(24)
 B_GRASS = 3
 ROW_H = 23                # 1種類ぶんの段の高さ
-SHEET_W = 112
+SHEET_W = 208
+# 段の中の各絵の x(上: 日なた/影/奥半分/手前半分、左: 日なた/影/上半分/下半分、右)
+COLS = (0, 32, 64, 96, 128, 144, 160, 176, 192)
+# よく出るブロックの重み(石=0 草=1 土=2 丸石=3 板=4 … 葉=8 砂=9)
+TEX_WEIGHT = {0: 3, 1: 8, 2: 4, 3: 2, 4: 2, 7: 2, 8: 3, 9: 3}
 
 
 # ---------------------------------------------------------------- PNG(8bit、パレット/RGBA)
@@ -152,9 +161,32 @@ def dither(face, color):
 
 # ---------------------------------------------------------------- 減色
 
+_LAB = {}
+
+
+def lab(c):
+    """sRGB → CIE L*a*b*(D65)。色の近さはこの空間の距離で測る"""
+    v = _LAB.get(c)
+    if v is not None:
+        return v
+    def lin(u):
+        u /= 255
+        return u / 12.92 if u <= 0.04045 else ((u + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(u) for u in c)
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+    def f(t):
+        return t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+    fx, fy, fz = f(x), f(y), f(z)
+    v = (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+    _LAB[c] = v
+    return v
+
+
 def dist(a, b):
-    dr, dg, db = a[0] - b[0], a[1] - b[1], a[2] - b[2]
-    return 2 * dr * dr + 4 * dg * dg + 3 * db * db
+    la, lb = lab(a), lab(b)
+    return (la[0] - lb[0]) ** 2 + (la[1] - lb[1]) ** 2 + (la[2] - lb[2]) ** 2
 
 
 def kmeans(samples, fixed, k, iters=40):
@@ -203,31 +235,44 @@ def build():
     def cut(x0, y0):
         return [row[x0:x0 + 16] for row in tex[y0:y0 + 16]]
 
-    # 段ごとの面: [上(日なた), 上(影), 左(日なた), 左(影), 右(影)]
+    # 段ごとの面: COLS の順の9枚
+    def shade(f, which):
+        """which(行, 列) が真の画素だけ明るさ半分にする"""
+        return [[half(c) if c is not None and which(y, x) else c for x, c in enumerate(row)]
+                for y, row in enumerate(f)]
+
+    def faces9(t, lf, rf):
+        far = lambda y, x: y <= 7                    # 上面の奥半分(画面で上の三角形)
+        near = lambda y, x: y > 7
+        up = lambda y, x: y - x // 2 <= x            # 左面: テクスチャの行 k = y - x//2、k <= 列 が上半分
+        low = lambda y, x: y - x // 2 > x
+        every = lambda y, x: True
+        return [t, shade(t, every), shade(t, far), shade(t, near),
+                lf, shade(lf, every), shade(lf, up), shade(lf, low), shade(rf, every)]
+
     rows = []
-    blank = make_faces([[None] * 16] * 16, [[None] * 16] * 16, [[None] * 16] * 16)
     tw, lw, rw = make_faces([[WATER] * 16] * 16, [[WATER] * 16] * 16, [[WATER] * 16] * 16)
-    rows.append([dither(tw, WATER), dither(tw, WATER), dither(lw, WATER), dither(lw, WATER),
-                 dither(rw, WATER)])
+    tw, lw, rw = dither(tw, WATER), dither(lw, WATER), dither(rw, WATER)
+    rows.append([tw] * 4 + [lw] * 4 + [rw])
+    weights = []
     for i in range(TEX_COUNT):
         t, lf, rf = make_faces(cut(i * 16, 0), cut(i * 16, 16), cut(i * 16, 32))
-        sh = lambda f: [[half(c) for c in row] for row in f]
-        rows.append([t, sh(t), lf, sh(lf), sh(rf)])
+        rows.append(faces9(t, lf, rf))
+        weights.append(TEX_WEIGHT.get(i, 1))
     # カーソル: player.png の上半分が上面、下半分が横の面
     ct, cl, cr = make_faces([r[:16] for r in cur[:16]], [r[:16] for r in cur[16:32]],
                             [r[:16] for r in cur[16:32]])
-    rows.append([ct, ct, cl, cl, cr])
-    del blank
+    rows.append([ct] * 4 + [cl] * 4 + [cr])
 
-    # 減色: テクスチャ(日なた+影)と空・水
+    # 減色: テクスチャ(日なた+影)と空・水。日なたの面(上・左)と影の面(上・左・右)を数える
     samples = {}
-    for faces in rows[1:-1]:
-        for f in faces:
+    for faces, w in zip(rows[1:-1], weights):
+        for f in (faces[0], faces[4], faces[1], faces[5], faces[8]):
             for row in f:
                 for c in row:
                     if c is not None:
-                        samples[c] = samples.get(c, 0) + 1
-    samples[SKY] = samples.get(SKY, 0) + 500
+                        samples[c] = samples.get(c, 0) + w
+    samples[SKY] = samples.get(SKY, 0) + 2000
     fixed = [(0, 0, 0), (255, 255, 255), SKY, WATER]
     centers = kmeans(samples, fixed, 16 - len(fixed))
 
@@ -257,17 +302,19 @@ def build():
     sheet = [[0] * SHEET_W for _ in range(sheet_h)]
     for r, faces in enumerate(rows):
         y0 = r * ROW_H
-        for f, x0 in zip(faces, (0, 32, 64, 80, 96)):
+        for f, x0 in zip(faces, COLS):
             for y, row in enumerate(f):
                 for x, c in enumerate(row):
                     sheet[y0 + y][x0 + x] = idx(c)
 
+    # UIの色(空と水の色は使わない)
+    ui_skip = (0, 15, pal.index(SKY), pal.index(WATER))
     info = {
         "sky": pal.index(SKY), "water": pal.index(WATER),
-        "dark": nearest((48, 48, 48), pal), "mid": nearest((128, 128, 128), pal, skip=(0, 15)),
-        "light": nearest((200, 200, 200), pal, skip=(0, 15)),
-        "accent": nearest((220, 40, 20), pal, skip=(0, 15)),
-        "green": nearest((60, 170, 60), pal, skip=(0, 15)),
+        "dark": nearest((48, 48, 48), pal, skip=ui_skip[2:]), "mid": nearest((128, 128, 128), pal, skip=ui_skip),
+        "light": nearest((210, 205, 180), pal, skip=ui_skip),
+        "accent": nearest((220, 40, 20), pal, skip=ui_skip),
+        "green": nearest((60, 170, 60), pal, skip=ui_skip),
     }
 
     # アイコン(既定のパレット): 空色の地に、草のブロックを1.5倍で

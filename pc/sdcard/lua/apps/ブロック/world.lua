@@ -26,6 +26,7 @@ M.L = L
 local byte, char, sub, rep = string.byte, string.char, string.sub, string.rep
 local WATER_LEVEL = 5
 local AIR_LAYER = rep("\0", NN)
+L.air = AIR_LAYER      -- 空気だけの高さ(view.lua が「ここより上は空」を素早く見分けるのに使う)
 
 function M.clear()
     for y = 1, H do L[y] = AIR_LAYER end
@@ -110,22 +111,25 @@ function M.gen_natural()
     local hmap = table.concat(rows)
     -- 水辺の砂: 頂上が水面の高さ(4か5)で、まわり±2マス(上下±1)に水がある土/草。
     -- 高さ4は真上が水なので必ず砂、高さ5はまわりに高さ4以下の柱があれば砂
-    local sand = {}
+    -- (テーブルに柱ごとの印を持つと数十KBになるので、高さの地図と同じく N*N バイトの文字列にする)
     for x = 0, N - 1 do
         for z = 0, N - 1 do
-            local i = x * N + z + 1
-            local h = byte(hmap, i)
+            local h = byte(hmap, x * N + z + 1)
+            local v = 0
             if h == WATER_LEVEL - 1 then
-                sand[i] = true
+                v = 1
             elseif h == WATER_LEVEL then
                 for bx = math.max(0, x - 2), math.min(N - 1, x + 2) do
                     for bz = math.max(0, z - 2), math.min(N - 1, z + 2) do
-                        if byte(hmap, bx * N + bz + 1) < WATER_LEVEL then sand[i] = true end
+                        if byte(hmap, bx * N + bz + 1) < WATER_LEVEL then v = 1 end
                     end
                 end
             end
+            row[z + 1] = v
         end
+        rows[x + 1] = char(table.unpack(row, 1, N))
     end
+    local sand = table.concat(rows)
     -- 高さごとに1本の文字列を作る(石の10%は石炭/鉄鉱石)
     local random = math.random
     for y = 0, H - 1 do
@@ -136,7 +140,7 @@ function M.gen_natural()
                 local v
                 if y == 0 then v = B.BEDROCK
                 elseif y > h then v = (y <= WATER_LEVEL) and B.WATER or B.AIR
-                elseif y == h and sand[i] then v = B.SAND
+                elseif y == h and byte(sand, i) == 1 then v = B.SAND
                 elseif y == h and h >= WATER_LEVEL then v = B.GRASS
                 elseif h > 3 and y <= h - 3 then
                     local r = random(0, 19)
@@ -147,6 +151,7 @@ function M.gen_natural()
             rows[x + 1] = char(table.unpack(row, 1, N))
         end
         L[y + 1] = table.concat(rows)
+        collectgarbage("step")
     end
     -- 木
     for _ = 1, 12 do

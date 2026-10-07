@@ -18,9 +18,9 @@ namespace Iso {
 
 class FaceBlitter {
 public:
-    static constexpr int kRows = 25;   // faces.pimg の段の数(水 + 23種 + カーソル)
-    static constexpr int kCols = 9;    // 段の中の絵の数(上面4・左面4・右面1)
-    static constexpr int kColX[kCols] = {0, 32, 64, 96, 128, 144, 160, 176, 192};
+    static constexpr int kRows = kCursorRow + 1;   // faces.pimg の段の数(水 + 23種 + 松明 + カーソル)
+    static constexpr int kCols = 10;   // 段の中の絵の数(上面4・左面4・右面2(影・日なた))
+    static constexpr int kColX[kCols] = {0, 32, 64, 96, 128, 144, 160, 176, 192, 208};
 
     // 形: 0 = 上面、1 = 左面、2 = 右面。行 r の不透明な区間 [Left, Right)
     static int ShapeOf(int col) { return col < 4 ? 0 : (col < 8 ? 1 : 2); }
@@ -52,7 +52,7 @@ public:
     void setSource(const uint8_t* buf, int w, int h) {
         src_ = buf; sw_ = w; sh_ = h; sstride_ = (w + 1) >> 1;
         memset(exact_, 0, sizeof(exact_));
-        if (!buf || w < 208) return;
+        if (!buf || w < kSheetW) return;
         for (int row = 0; row < kRows; row++) {
             const int sy = row * kRowH;
             if (sy + kRowH > h) break;
@@ -119,6 +119,32 @@ public:
                     const uint8_t c = Get(srow, x + o);
                     if (c) Put(drow, x, c);
                 }
+            }
+        }
+    }
+
+    // draw と同じだが、絵の左上からの (x, y) が World::DitherOn(level, x, y) の画素だけを写す
+    void dither(int sx, int sy, int w, int h, int dx, int dy, int level) const {
+        if (level >= 3) { draw(sx, sy, w, h, dx, dy); return; }
+        if (!src_ || !dst_ || level <= 0) return;
+        const int y0 = dy < cy0_ ? cy0_ : dy;
+        const int y1 = dy + h > cy1_ ? cy1_ : dy + h;
+        int a = dx, b = dx + w;
+        if (a < cx0_) a = cx0_;
+        if (b > cx1_) b = cx1_;
+        if (y0 >= y1 || a >= b) return;
+        const int o = sx - dx;
+        for (int py = y0; py < y1; py++) {
+            const int r = py - dy;
+            if (level == 1 && (r & 1)) continue;
+            const uint8_t* srow = src_ + (size_t)(sy + r) * sstride_;
+            uint8_t* drow = dst_ + (size_t)py * dstride_;
+            // 模様の画素は1つおき: 最初の1つを合わせてから2画素ずつ
+            int x = a;
+            if (!World::DitherOn(level, x - dx, r)) x++;
+            for (; x < b; x += 2) {
+                const uint8_t c = Get(srow, x + o);
+                if (c) Put(drow, x, c);
             }
         }
     }

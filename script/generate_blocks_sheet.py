@@ -15,8 +15,11 @@ pico-os へ移したもの)の絵を作る。標準ライブラリのみ(PNGも�
                      x=64  上面 奥半分が影  x=96  上面 手前半分が影
                      x=128 左面 日なた      x=144 左面 影       (16x23)
                      x=160 左面 上半分が影  x=176 左面 下半分が影
-                     x=192 右面(いつも影)                      (16x23)
-                 を並べる。段の番号 = ブロックの番号 - 1(1=水, 2=石 … 24=金, 25=カーソル)。
+                     x=192 右面 影          x=208 右面 日なた   (16x23)
+                 を並べる。段の番号 = ブロックの番号 - 1(1=水, 2=石 … 24=金, 25=松明, 26=カーソル)。
+                 右面は日の光が当たらないので影の絵だけを使うが、松明の光が当たると日なたの絵(x=208)になる。
+                 松明の段は、松明の絵(32x31)を上(高さ8より上)・左半分・右半分に分けて、上面・左面・右面の
+                 場所に置く(どの列も同じ絵。影も明るさも無く、いつもそのまま描く)。
                  面の形は元の convert_textures.py と同じ(上面は2:1のひし形、横の面は2pxごとに1段ずらす)。
                  影は元と同じく「明るさ半分の色」で、面を光の向きの対角線で2つの三角形に分けて
                  半分ずつ影にする(元の sprites/Masks の shadow top / shadow bottom)。
@@ -54,9 +57,26 @@ WATER = (56, 96, 232)     # 水(ディザで半透明に見せる)
 TEX_COUNT = 23            # 石(2)〜金(24)
 B_GRASS = 3
 ROW_H = 23                # 1種類ぶんの段の高さ
-SHEET_W = 208
-# 段の中の各絵の x(上: 日なた/影/奥半分/手前半分、左: 日なた/影/上半分/下半分、右)
-COLS = (0, 32, 64, 96, 128, 144, 160, 176, 192)
+SHEET_W = 224
+# 段の中の各絵の x(上: 日なた/影/奥半分/手前半分、左: 日なた/影/上半分/下半分、右: 影/日なた)
+COLS = (0, 32, 64, 96, 128, 144, 160, 176, 192, 208)
+
+# 松明(32x31 の絵の中。床(ブロックの底面の真ん中 y=23)に立つ棒と炎)。. は透過
+# r=赤 y=黄 w=白 b=木の明るい側 d=木の暗い側
+TORCH_ART = {
+    3:  "..rr..",
+    4:  ".ryyr.",
+    5:  ".ryyr.",
+    6:  "ryywyr",
+    7:  "ryywyr",
+    8:  "ryyyyr",
+    9:  ".ryyr.",
+    10: "..rr..",
+}
+TORCH_STICK = (11, 23)      # 棒の y の範囲(両端を含む)
+TORCH_X = 13                # 炎の左端の x(棒は x=14〜17)
+TORCH_COLORS = {"r": (204, 43, 10), "y": (236, 229, 70), "w": (255, 255, 255),
+                "b": (175, 140, 80), "d": (107, 93, 65)}
 # よく出るブロックの重み(石=0 草=1 土=2 丸石=3 板=4 … 葉=8 砂=9)
 TEX_WEIGHT = {0: 3, 1: 8, 2: 4, 3: 2, 4: 2, 7: 2, 8: 3, 9: 3}
 
@@ -248,7 +268,7 @@ def build():
         low = lambda y, x: y - x // 2 > x
         every = lambda y, x: True
         return [t, shade(t, every), shade(t, far), shade(t, near),
-                lf, shade(lf, every), shade(lf, up), shade(lf, low), shade(rf, every)]
+                lf, shade(lf, every), shade(lf, up), shade(lf, low), shade(rf, every), rf]
 
     rows = []
     tw, lw, rw = make_faces([[WATER] * 16] * 16, [[WATER] * 16] * 16, [[WATER] * 16] * 16)
@@ -257,16 +277,30 @@ def build():
     # 横の面はテクスチャの上2行を抜いた絵(左面 x=144・右面 x=160)、上面は描くときに2px下げる
     lw_cut = [[c if y - x // 2 >= 2 else None for x, c in enumerate(row)] for y, row in enumerate(lw)]
     rw_cut = [[c if y - 7 + x // 2 >= 2 else None for x, c in enumerate(row)] for y, row in enumerate(rw)]
-    rows.append([tw] * 4 + [lw, lw_cut, rw_cut, lw, rw])
+    rows.append([tw] * 4 + [lw, lw_cut, rw_cut, lw, rw, rw])
     weights = []
     for i in range(TEX_COUNT):
         t, lf, rf = make_faces(cut(i * 16, 0), cut(i * 16, 16), cut(i * 16, 32))
         rows.append(faces9(t, lf, rf))
         weights.append(TEX_WEIGHT.get(i, 1))
+    # 松明: 32x31 の絵を、上(y<8)は上面の場所、残りは左半分・右半分を横の面の場所へ
+    art = [[None] * 32 for _ in range(31)]
+    for y, line in TORCH_ART.items():
+        for i, ch in enumerate(line):
+            if ch != ".":
+                art[y][TORCH_X + i] = TORCH_COLORS[ch]
+    for y in range(TORCH_STICK[0], TORCH_STICK[1] + 1):
+        for x, ch in zip(range(14, 18), "bbdd"):
+            art[y][x] = TORCH_COLORS[ch]
+    tt = [[art[y][x] if y < 8 else None for x in range(32)] for y in range(15)]
+    tl = [[art[y + 8][x] for x in range(16)] for y in range(23)]
+    tr = [[art[y + 8][x + 16] for x in range(16)] for y in range(23)]
+    # 減色の重み(weights)は石〜金の23種だけ。松明の色はパレットの近い色を使う
+    rows.append([tt] * 4 + [tl] * 4 + [tr, tr])
     # カーソル: player.png の上半分が上面、下半分が横の面
     ct, cl, cr = make_faces([r[:16] for r in cur[:16]], [r[:16] for r in cur[16:32]],
                             [r[:16] for r in cur[16:32]])
-    rows.append([ct] * 4 + [cl] * 4 + [cr])
+    rows.append([ct] * 4 + [cl] * 4 + [cr, cr])
 
     # 減色: テクスチャ(日なた+影)と空・水。日なたの面(上・左)と影の面(上・左・右)を数える
     samples = {}

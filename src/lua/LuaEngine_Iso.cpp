@@ -1,6 +1,6 @@
 // pico.iso: 2.5D(斜め上から見た)ボクセルの箱庭のエンジン(src/iso/Iso_World)を Lua へ出す。
 // Luaアプリ「ブロック」の view.lua / world.lua を C++ へ移したもの。ワールド(チャンク)の持ち方・生成・保存、
-// 描画(影・半透明の水・隠れたブロックの省略)、タップ位置の引き当て、描き直す範囲をここで受け持ち、
+// 描画(影・松明の光・昼と夜・半透明の水・隠れたブロックの省略)、タップ位置の引き当て、描き直す範囲をここで受け持ち、
 // Lua 側は画面の流れと操作だけを書く。
 //
 // 面の絵(faces.pimg)は Lua が pico.image_load したものを pico.iso.set_image(handle) で渡す。
@@ -118,8 +118,25 @@ struct LuaEngineIso {
         IconRender::DrawPimgSprite(c->slot->sprite, dx - sx, dy - sy);
         OSData::frame->setClipRect(kx, ky, kw, kh);
     }
+    // 遅い道のディザ: 1画素ずつ読んで、模様の画素だけ書く
+    static void SlowDither(void* p, int sx, int sy, int w, int h, int dx, int dy, int level) {
+        SlowCtx* c = static_cast<SlowCtx*>(p);
+        LGFX_Sprite& src = c->slot->sprite.sprite;
+        const int x0 = std::max(dx, c->cx0), y0 = std::max(dy, c->cy0);
+        const int x1 = std::min(dx + w, c->cx1), y1 = std::min(dy + h, c->cy1);
+        for (int y = y0; y < y1; y++) {
+            for (int x = x0; x < x1; x++) {
+                if (!Iso::World::DitherOn(level, x - dx, y - dy)) continue;
+                const int v = (int)src.readPixelValue(sx + x - dx, sy + y - dy);
+                if (v) OSData::frame->writePixel(x, y, v);
+            }
+        }
+    }
     static void FastDraw(void* p, int sx, int sy, int w, int h, int dx, int dy) {
         static_cast<const Iso::FaceBlitter*>(p)->draw(sx, sy, w, h, dx, dy);
+    }
+    static void FastDither(void* p, int sx, int sy, int w, int h, int dx, int dy, int level) {
+        static_cast<const Iso::FaceBlitter*>(p)->dither(sx, sy, w, h, dx, dy, level);
     }
     static void Dirty(void*, int x, int y, int w, int h) { MarkDirty(x, y, w, h); }
 
@@ -134,11 +151,11 @@ struct LuaEngineIso {
             const int fw = frame.width(), fh = frame.height();
             st.blit.setTarget(static_cast<uint8_t*>(frame.getBuffer()), ((fw + 1) & ~1) >> 1,
                               std::max(x0, 0), std::max(y0, 0), std::min(x1, fw), std::min(y1, fh));
-            Iso::World::Sink sink{&st.blit, FastDraw, Dirty};
+            Iso::World::Sink sink{&st.blit, FastDraw, Dirty, FastDither};
             fn(sink);
         } else {
             SlowCtx c{slot, x0, y0, x1, y1};
-            Iso::World::Sink sink{&c, SlowDraw, Dirty};
+            Iso::World::Sink sink{&c, SlowDraw, Dirty, SlowDither};
             fn(sink);
         }
     }
@@ -289,7 +306,7 @@ struct LuaEngineIso {
         lua_createtable(L, 0, 4);
         lua_pushinteger(L, st.world.loadedCount());
         lua_setfield(L, -2, "chunks");
-        lua_pushinteger(L, st.world.isOpen() ? (lua_Integer)(sizeof(Iso::Chunk) * Iso::kMaxChunks) : 0);
+        lua_pushinteger(L, st.world.isOpen() ? (lua_Integer)Iso::World::PoolBytes() : 0);
         lua_setfield(L, -2, "bytes");
         lua_pushinteger(L, st.world.lastFaces());
         lua_setfield(L, -2, "faces");
@@ -307,8 +324,9 @@ struct LuaEngineIso {
         st.analyzed = nullptr;
         LuaEngine::ImageSlot* slot = Image(self, st);
         if (!slot) return luaL_error(L, "pico.iso.set_image: 無効なイメージハンドル");
-        if (slot->sprite.width < 208 || slot->sprite.height < (Iso::kCursorRow + 1) * Iso::kRowH) {
-            return luaL_error(L, "pico.iso.set_image: 面の絵の大きさが違います(208x575 以上)");
+        if (slot->sprite.width < Iso::kSheetW || slot->sprite.height < (Iso::kCursorRow + 1) * Iso::kRowH) {
+            return luaL_error(L, "pico.iso.set_image: 面の絵の大きさが違います(%dx%d 以上)", Iso::kSheetW,
+                              (Iso::kCursorRow + 1) * Iso::kRowH);
         }
         Analyze(st, *slot);
         return 0;
@@ -339,6 +357,20 @@ struct LuaEngineIso {
         return 0;
     }
 
+    // pico.iso.sunlight([on]) -> on。false で夜(どの面も影の絵、松明の光だけで明るくなる)。描き直しは呼び出し側
+    static int l_sunlight(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        if (!lua_isnoneornil(L, 1)) st.world.setSunlight(lua_toboolean(L, 1) != 0);
+        lua_pushboolean(L, st.world.sunlight());
+        return 1;
+    }
+
+    // pico.iso.light(x, y, z) -> 松明の明るさ(0〜3)
+    static int l_light(lua_State* L) {
+        lua_pushinteger(L, St(L).world.light(Int(L, 1), Int(L, 2), Int(L, 3)));
+        return 1;
+    }
+
     static int l_culling(lua_State* L) {
         St(L).world.setCulling(lua_toboolean(L, 1) != 0);
         return 0;
@@ -366,7 +398,7 @@ struct LuaEngineIso {
         return 0;
     }
 
-    // pico.iso.draw_icon(ブロック, x, y): 1個のブロックをまるごと(日なたの3面)描く
+    // pico.iso.draw_icon(ブロック, x, y): 1個のブロックをまるごと(日なたの3面。松明は松明の絵)描く
     static int l_draw_icon(lua_State* L) {
         LuaEngine* self = Self(L);
         LuaEngine::IsoState& st = St(L);
@@ -436,6 +468,8 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("cursor", LuaEngineIso::l_cursor);
     registerFn("sky", LuaEngineIso::l_sky);
     registerFn("culling", LuaEngineIso::l_culling);
+    registerFn("sunlight", LuaEngineIso::l_sunlight);
+    registerFn("light", LuaEngineIso::l_light);
     registerFn("render", LuaEngineIso::l_render);
     registerFn("draw_icon", LuaEngineIso::l_draw_icon);
     registerFn("block_pos", LuaEngineIso::l_block_pos);

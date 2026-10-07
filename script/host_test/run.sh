@@ -128,6 +128,8 @@
 #                 pico.*をLuaの偽物に差し替え、lua_script_test(vendorしたLuaで.luaを
 #                 動かすだけの下請け)で tetris_test.lua を実行する。ライン消し・壁蹴り・
 #                 HOLD・長押しの連続移動・ゲームオーバーとハイスコア保存・タッチの操作ボタン
+#   oshite_test… Luaアプリ「おしてのぼれ」(pico.gameの軽い物理を使うパズルアクション)の
+#                 3ステージを、操作を流し込んで実際に解けることを確かめる(pico.gameは本物)。
 #   vt_terminal_test… SSHアプリの端末エミュレータ(src/ssh/Vt_Terminal)。折り返し・カーソル移動・
 #                 消去・色(256色/RGB→16色)・全角(2セル)・スクロールバック・範囲スクロール・
 #                 代替画面・問い合わせ(6n等)への返事・大きさの変更
@@ -1444,6 +1446,10 @@ compile_or_die g++ $CXXFLAGS -I "$ROOT/lib/lua/src" \
 echo ""
 echo "===== tetris_test ====="
 run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/tetris_test.lua" "$ROOT"
+
+echo ""
+echo "===== oshite_test ====="
+run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/oshite_test.lua" "$ROOT"
 
 # --- pico_mock.lua(Luaアプリのテスト用のpico.*の偽物)自身 ---
 echo ""

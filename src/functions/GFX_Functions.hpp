@@ -5,7 +5,8 @@
 
 namespace PICO_GFX {
 
-    inline const static int COLORS[16] = {
+    // 既定のパレット(PICO-8風16色)。ResetPalette()が戻す先
+    inline const static int DEFAULT_COLORS[16] = {
         TFT_BLACK,
         TFT_NAVY,
         TFT_DARKGREEN,
@@ -23,6 +24,40 @@ namespace PICO_GFX {
         TFT_YELLOW,
         TFT_WHITE
     };
+
+    // 今のパレット。Luaの pico.set_palette() で黒(0)と白(15)以外を差し替えられる。
+    // スプライトを作るときはこれを読む。変更するとpaletteRevisionが進み、frameへの反映と全画面の
+    // 描き直しはFlushDirty()が行う。CanvasRaster等の自前スプライトはpaletteRevisionを見て追従する
+    inline int COLORS[16] = {
+        TFT_BLACK, TFT_NAVY, TFT_DARKGREEN, TFT_DARKCYAN, TFT_MAROON, TFT_PURPLE, TFT_OLIVE, TFT_LIGHTGREY,
+        TFT_DARKGREY, TFT_BLUE, TFT_GREEN, TFT_CYAN, TFT_RED, TFT_MAGENTA, TFT_YELLOW, TFT_WHITE
+    };
+    inline uint32_t paletteRevision = 1;
+
+    // 8bitのr,g,bをCOLORSの形式(RGB565。LovyanGFXはint32をRGB565として扱う)へ
+    inline int Rgb565(int r, int g, int b){
+        return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xFF) >> 3);
+    }
+
+    // 黒(0)と白(15)は固定。それ以外のindex(1〜14)の色をRGB565で差し替える。範囲外ならfalse
+    inline bool SetPaletteColor(int index, int rgb565){
+        if(index <= 0 || index >= 15) return false;
+        rgb565 &= 0xFFFF;
+        if(COLORS[index] != rgb565){
+            COLORS[index] = rgb565;
+            paletteRevision++;
+        }
+        return true;
+    }
+    // 既定のパレットへ戻す(アプリの終了時・画面遷移時)
+    inline void ResetPalette(){
+        for(int i = 0; i < 16; i++){
+            if(COLORS[i] != DEFAULT_COLORS[i]){
+                COLORS[i] = DEFAULT_COLORS[i];
+                paletteRevision++;
+            }
+        }
+    }
 
     inline Rect directRenderRect = {0, 0, 0, 0};
     inline bool enableDirectRender = false;

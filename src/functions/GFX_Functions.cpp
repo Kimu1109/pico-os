@@ -247,6 +247,16 @@ void PICO_GFX::VerifyLcdMatchesFrame() {
 #endif
 
 void PICO_GFX::FlushDirty() {
+    // パレットが変わったら、frameのパレットを合わせて全画面を描き直す。
+    // frameの中身(パレット番号)は変わらないので、行を飛ばす最適化も効かせないよう全行を無効にする
+    static uint32_t applied_palette_revision = 1;
+    if (applied_palette_revision != paletteRevision && OSData::frame) {
+        applied_palette_revision = paletteRevision;
+        for (int i = 0; i < 16; i++) OSData::frame->setPaletteColor(i, COLORS[i]);
+        InvalidateLcdRows(0, SCREEN_HEIGHT);
+        MarkDirtyBelow({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
+    }
+
     if (dirtyRectCount == 0 && !dirtyOverflowed) return;
 
     //128件を超えた場合は、細切れの矩形を1枚ずつ処理する代わりに画面全体を

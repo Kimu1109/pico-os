@@ -2640,6 +2640,7 @@ Lua<->C++を繋ぐ実行エンジン。**1インスタンス=1つのlua_State=1�
 | `pico.draw_pixel(x,y,color)` / `draw_line(x0,y0,x1,y1,color)` / `draw_rect(x,y,w,h,color)` / `fill_rect(...)` / `draw_circle(x,y,r,color)` / `fill_circle(...)` / `clear_rect(x,y,w,h[,color])` / `draw_text(x,y,text[,color[,font_size]])` | `OSData::frame`へ直接描く。**`Canvas`の`render`コールバック内で使うこと**(下記「直接描画」参照)(2026-09-20追加) |
 | `pico.invalidate(id)` | 対象ウィジェットの画面矩形を`needsRender()`でdirty化(次のFlushDirty()で`render()`が呼ばれる)。`Canvas`に限らず任意のウィジェットに使える汎用API(2026-09-20追加) |
 | `pico.mark_dirty(x,y,w,h)` | `PICO_GFX::MarkDirty()`の生の下請け。任意の矩形を直接dirty化したいとき向けの低レベルAPI(2026-09-20追加) |
+| `pico.set_palette(index,r,g,b)` / `pico.get_palette(index)` / `pico.reset_palette()` | パレットの1〜14番(黒0・白15は固定)の色を差し替える(2026-10-07)。実体は`PICO_GFX::COLORS`(RGB565、可変)+`paletteRevision`で、`FlushDirty()`がframeのパレットを合わせて全画面を描き直す(行ハッシュも無効化)。`CanvasRaster`/`ImageView`は`render()`で、Luaの画像は`set_palette`時に追従。**`LuaEngine`のデストラクタが既定へ戻す**(アプリ終了・画面遷移)。ホストテストは`lua_ext_test`、PCビルドの`--shot`で確認、実機は未確認 |
 | `pico.get_draw_area()` | 今のクリップ矩形を`x,y,w,h`で返す(無ければw/hが0)。`render`の中では「Canvasとdirty矩形の重なり」なので、部品の多い絵で描き直しが要る部分だけを描ける(テトリスの盤面)(2026-09-26追加) |
 | `pico.set_draw_area(x,y,w,h)` / `pico.clear_draw_area()` | `OSData::frame->setClipRect()`/`clearClipRect()`。以降の`pico.draw_*`をこの矩形の内側だけに制限する/解除する(下記「直接描画エリア」参照)(2026-09-20追加) |
 | `pico.sd_exists(path)` | `OSData::SD.exists()`。`bool`を返す(2026-09-20追加) |

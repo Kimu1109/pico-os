@@ -20,6 +20,7 @@ class CanvasRaster : public Widget {
         Canvas::Mode mode = Canvas::Mode::Line;
 
         LGFX_Sprite* sp;
+        uint32_t palette_rev = 0; // スプライトに反映済みのPICO_GFX::paletteRevision
 
         int16_t sx;
         int16_t sy;

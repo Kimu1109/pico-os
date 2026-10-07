@@ -35,6 +35,7 @@
 #include "gui/widgets/apps/DurationPicker.hpp"
 #include "gui/widgets/apps/MonthGrid.hpp"
 #include "gui/icons/icon_render.h"
+#include "functions/GFX_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
@@ -111,6 +112,10 @@ struct LuaEngineExt {
 
     // ---------------- 描画の補助 ----------------
     static int l_get_pixel(lua_State* L);
+    static int l_set_palette(lua_State* L);
+    static int l_get_palette(lua_State* L);
+    static int l_reset_palette(lua_State* L);
+    static void SyncImagePalettes(LuaEngine* self);
     static int l_canvas_get_pixel(lua_State* L);
     static int l_draw_text_wrapped(lua_State* L);
     static int l_measure_text(lua_State* L);
@@ -916,6 +921,54 @@ int LuaEngineExt::l_get_pixel(lua_State* L) {
     return 1;
 }
 
+// Luaが読み込んだ画像(images_)のパレットを今のパレットへ合わせる(インデックスは変わらず色だけ変わる)
+void LuaEngineExt::SyncImagePalettes(LuaEngine* self) {
+    for (auto& slot : self->images_) {
+        if (!slot.used || !slot.sprite.usable) continue;
+        for (int i = 0; i < 16; i++) slot.sprite.sprite.setPaletteColor(i, PICO_GFX::COLORS[i]);
+    }
+}
+
+// pico.set_palette(index, r, g, b): 黒(0)と白(15)以外のパレット色を変える(r,g,bは0〜255)。
+// アプリを閉じる/別の画面へ移るときは既定のパレットへ戻る(~LuaEngine)
+int LuaEngineExt::l_set_palette(lua_State* L) {
+    LuaEngine* self = Self(L);
+    const lua_Integer index = luaL_checkinteger(L, 1);
+    if (index == 0 || index == 15) return luaL_error(L, "pico.set_palette: 黒(0)と白(15)は変更できません");
+    if (index < 1 || index > 14) return luaL_error(L, "pico.set_palette: indexは1〜14です(%d)", (int)index);
+    int c[3];
+    for (int i = 0; i < 3; i++) {
+        const lua_Integer v = luaL_checkinteger(L, 2 + i);
+        if (v < 0 || v > 255) return luaL_error(L, "pico.set_palette: r,g,bは0〜255です(%d)", (int)v);
+        c[i] = (int)v;
+    }
+    PICO_GFX::SetPaletteColor((int)index, PICO_GFX::Rgb565(c[0], c[1], c[2]));
+    self->used_palette_ = true;
+    SyncImagePalettes(self);
+    return 0;
+}
+
+// pico.get_palette(index) -> r, g, b (index 0〜15)
+int LuaEngineExt::l_get_palette(lua_State* L) {
+    const lua_Integer index = luaL_checkinteger(L, 1);
+    if (index < 0 || index > 15) return luaL_error(L, "pico.get_palette: indexは0〜15です(%d)", (int)index);
+    // COLORSはRGB565。下位ビットを上位の複製で埋めて8bitへ戻す(0xF800 -> 255,0,0)
+    const int c = PICO_GFX::COLORS[index];
+    const int r5 = (c >> 11) & 0x1F, g6 = (c >> 5) & 0x3F, b5 = c & 0x1F;
+    lua_pushinteger(L, (r5 << 3) | (r5 >> 2));
+    lua_pushinteger(L, (g6 << 2) | (g6 >> 4));
+    lua_pushinteger(L, (b5 << 3) | (b5 >> 2));
+    return 3;
+}
+
+// pico.reset_palette(): 既定のパレットへ戻す
+int LuaEngineExt::l_reset_palette(lua_State* L) {
+    LuaEngine* self = Self(L);
+    PICO_GFX::ResetPalette();
+    SyncImagePalettes(self);
+    return 0;
+}
+
 int LuaEngineExt::l_canvas_get_pixel(lua_State* L) {
     Widget* w = WidgetArg(L, 1, "pico.canvas_get_pixel");
     if (w->getWidgetType() != WidgetType::CanvasRaster) return luaL_error(L, "pico.canvas_get_pixel: CanvasRasterのみ対応");
@@ -1607,6 +1660,9 @@ void LuaEngine::RegisterExtApi() {
     registerFn("on_back", LuaEngineExt::l_on_back);
     registerFn("go_back", LuaEngineExt::l_go_back);
     registerFn("get_pixel", LuaEngineExt::l_get_pixel);
+    registerFn("set_palette", LuaEngineExt::l_set_palette);
+    registerFn("get_palette", LuaEngineExt::l_get_palette);
+    registerFn("reset_palette", LuaEngineExt::l_reset_palette);
     registerFn("canvas_get_pixel", LuaEngineExt::l_canvas_get_pixel);
     registerFn("draw_text_wrapped", LuaEngineExt::l_draw_text_wrapped);
     registerFn("measure_text", LuaEngineExt::l_measure_text);

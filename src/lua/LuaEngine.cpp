@@ -651,6 +651,8 @@ LuaEngine::~LuaEngine() {
     if (used_sound_) SoundFunctions::StopAll();
     if (used_music_) SoundFunctions::MusicStop();
     if (used_wav_) SoundFunctions::WavStop();
+    // パレットを変えたアプリは閉じる/別の画面へ移るときに既定へ戻す
+    if (used_palette_) PICO_GFX::ResetPalette();
     for (PendingHttp* r : http_queue_) delete r; // 順番待ちの控え(Luaのrefはlua_close()が捨てる)
     http_queue_.clear();
     delete http_; // lua_close()より前でも後でも問題ない(HttpStateはLuaと無関係のC++側の状態)

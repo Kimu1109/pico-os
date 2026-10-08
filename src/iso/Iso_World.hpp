@@ -57,7 +57,8 @@ constexpr int kSheetW = 224;          // faces.pimg の幅(段の中に 上4・�
 constexpr int kTorchLight = 7;        // 松明のマスの明るさ(1マスごとに1減る。6マス先まで届く)
 constexpr int kLightReach = kTorchLight - 1;
 constexpr int kMaxEntities = 96;      // 同時に置ける人や物の数(ハンドルの下位8bitが番号+1なので255まで)
-constexpr int kMaxShots = 64;         // 同時に飛ばせる弾の数
+constexpr int kEntityChunk = 16;      // 人や物の置き場は、置いた数に合わせてこの数ずつ広げる(使わないアプリに RAM を負担させない)
+constexpr int kMaxShots = 64;         // 同時に飛ばせる弾の数(置き場は最初に弾を撃ったときに確保する)
 
 enum Block : uint8_t {
     AIR = 0, WATER = 1, STONE = 2, GRASS = 3, DIRT = 4, COBBLE = 5, PLANKS = 6, BRICKS = 7,
@@ -279,6 +280,7 @@ public:
     bool entityRemove(const Sink& sink, int handle);
     void entityClear(const Sink& sink);
     int entityCount() const;
+    int entityCapacity() const { return ent_cap_; }   // 今確保している置き場の数(kMaxEntities まで広がる)
     // 画面の点に見えている一番手前の人や物(絵の不透明な画素で判定。ブロックに隠れているかは見ない)。無ければ 0
     int entityAt(const Sink& sink, int px, int py) const;
     // 画面の範囲(絵と影を合わせたもの)。見えなければ false
@@ -405,8 +407,19 @@ private:
     bool sun_ = true;
     uint32_t occluders_ = DefaultOccluders();
     int last_faces_ = 0;
-    Entity ents_[kMaxEntities];
-    Shot shots_[kMaxShots];
+    // 人や物と弾の置き場はヒープ(固定長で持つと World が約15KBになり、実機でチャンクの置き場を確保できなかった)。
+    // 人や物は置いた数に合わせて kEntityChunk ずつ広げ、閉じる(close)まで縮めない。弾は最初の shotAdd で kMaxShots 個。
+    // 番号(ハンドルの下位8bit)は広げても変わらない。Entity* は広げたとき(entityAdd)に無効になる
+    Entity* ents_ = nullptr;
+    int ent_cap_ = 0;
+    // 並べ替え・近い順・押し合いの作業場所(人や物と同じ数。スタックに置かない)
+    struct EntScratch { float key, ox, oz; int16_t order, idx; };
+    mutable EntScratch* escr_ = nullptr;
+    Shot* shots_ = nullptr;
+    bool growEntities();
+    bool ensureShots();
+    void freeEntities();
+    int sortEntities() const;   // 奥から順に escr_[k].order へ。数を返す
 
     static constexpr uint32_t DefaultOccluders() {
         return ((1u << (kBlockCount + 1)) - 1) & ~((1u << AIR) | (1u << WATER) | (1u << LEAVES) | (1u << TORCH));

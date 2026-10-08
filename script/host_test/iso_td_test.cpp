@@ -288,11 +288,23 @@ int main(int argc, char** argv) {
         check(n == 2 && out[0] == hc && out[1] == hb, "近く: max で近いものだけ");
         n = w.nearby(29.0f, 10.5f, 2, 0, out, 8);
         check(n == 1 && out[0] == hd, "近く: 遠くの1つ");
-        // 96個置ける
+        // 置き場は置いた数に合わせて広がり、96個まで置ける(World 自体は小さいまま)
+        check(sizeof(World) < 6 * 1024, "人や物: World に置き場を持たない(実機でチャンクの置き場を確保できるように)");
+        check(w.entityCapacity() == kEntityChunk, "人や物: 4個なら置き場は16個ぶんだけ");
         w.entityClear(sink);
         int ok = 0;
-        for (int i = 0; i < kMaxEntities + 2; i++) if (w.entityAdd(sink, Ent(1.5f + (i % 40), 1, 1.5f + i / 40))) ok++;
-        check(ok == kMaxEntities && kMaxEntities == 96, "人や物: 96個まで置ける");
+        std::vector<int> hs;
+        for (int i = 0; i < kMaxEntities + 2; i++) {
+            const int h = w.entityAdd(sink, Ent(1.5f + (i % 40), 1, 1.5f + i / 40));
+            if (h) { ok++; hs.push_back(h); }
+        }
+        check(ok == kMaxEntities && kMaxEntities == 96 && w.entityCapacity() == kMaxEntities, "人や物: 96個まで置ける");
+        bool same = true;
+        for (size_t i = 0; i < hs.size(); i++) {
+            const Entity* e = w.entity(hs[i]);
+            if (!e || e->x != 1.5f + (float)(i % 40)) same = false;
+        }
+        check(same, "人や物: 置き場を広げても前のハンドルがそのまま使える");
         w.entityClear(sink);
     }
 
@@ -420,6 +432,13 @@ int main(int argc, char** argv) {
         w.shotAdd(sink, p);
         w.shotClear(sink);
         check(w.shotCount() == 0, "弾: shotClear");
+        {
+            static World w2;
+            FlatWorld(w2);
+            check(w2.shotCount() == 0 && !w2.shot(1 << 8 | 1), "弾: 撃つまで置き場は無い");
+            ShotHit none[1];
+            check(w2.shotsStep(sink, 0.1f, none, 1) == 0, "弾: 置き場が無くても進められる");
+        }
         // 描く: 置いた所に色の点
         memset(fb, 15, sizeof fb);
         Shot q;

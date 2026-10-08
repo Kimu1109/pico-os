@@ -19,6 +19,7 @@ void Flow::clear() {
     ycol_ = fy_ = fnext_ = bnext_ = nullptr;
     fdist_ = bdist_ = nullptr;
     hpos_ = heap_ = nullptr;
+    goals_ = nullptr;
     W_ = 0;
     heap_n_ = 0;
     phase_ = Phase::Idle;
@@ -31,7 +32,7 @@ bool Flow::alloc(int W) {
     clear();
     const size_t n = (size_t)W * W;
     // y(1) + fy(1) + fdist(2) + fnext(1) + bdist(2) + bnext(1) + hpos(2) + heap(2)
-    block_ = static_cast<uint8_t*>(malloc(n * 12));
+    block_ = static_cast<uint8_t*>(malloc(n * 12 + sizeof(int16_t) * kMaxFlowGoals));
     if (!block_) return false;
     W_ = W;
     uint8_t* p = block_;
@@ -39,6 +40,7 @@ bool Flow::alloc(int W) {
     bdist_ = reinterpret_cast<uint16_t*>(p); p += n * 2;
     hpos_ = reinterpret_cast<int16_t*>(p); p += n * 2;
     heap_ = reinterpret_cast<int16_t*>(p); p += n * 2;
+    goals_ = reinterpret_cast<int16_t*>(p); p += sizeof(int16_t) * kMaxFlowGoals;
     ycol_ = p; p += n;
     fy_ = p; p += n;
     fnext_ = p; p += n;
@@ -47,9 +49,9 @@ bool Flow::alloc(int W) {
     return true;
 }
 
-bool Flow::begin(const World& w, const PathRules& r, const int16_t* gx, const int16_t* gz, int n) {
+bool Flow::begin(const World& w, const PathRules& r) {
     const int W = w.width();
-    if (W < 1 || W > kMaxFlowWidth || n < 0 || n > kMaxFlowGoals) return false;
+    if (W < 1 || W > kMaxFlowWidth) return false;
     if (W != W_ && building()) phase_ = Phase::Idle;
     if (!alloc(W)) return false;
     rules_ = r;
@@ -58,15 +60,22 @@ bool Flow::begin(const World& w, const PathRules& r, const int16_t* gx, const in
     if (rules_.max_down < 0) rules_.max_down = 0;
     if (!(rules_.step > 0)) rules_.step = 1.0f;
     ngoals_ = 0;
-    for (int i = 0; i < n; i++) {
-        if ((unsigned)gx[i] >= (unsigned)W || (unsigned)gz[i] >= (unsigned)W) continue;
-        gx_[ngoals_] = gx[i];
-        gz_[ngoals_] = gz[i];
-        ngoals_++;
-    }
     phase_ = Phase::Scan;
     scan_ = 0;
     heap_n_ = 0;
+    return true;
+}
+
+bool Flow::addGoal(int x, int z) {
+    if (!block_ || ngoals_ >= kMaxFlowGoals) return false;
+    if ((unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_) return false;
+    goals_[ngoals_++] = (int16_t)(x * W_ + z);
+    return true;
+}
+
+bool Flow::begin(const World& w, const PathRules& r, const int16_t* gx, const int16_t* gz, int n) {
+    if (n < 0 || n > kMaxFlowGoals || !begin(w, r)) return false;
+    for (int i = 0; i < n; i++) addGoal(gx[i], gz[i]);
     return true;
 }
 
@@ -127,7 +136,7 @@ bool Flow::step(const World& w, int budget) {
         budget--;
         if (scan_ >= n) {
             for (int i = 0; i < ngoals_; i++) {
-                const int c = gx_[i] * W + gz_[i];
+                const int c = goals_[i];
                 if (ycol_[c] == 255 || bdist_[c] == 0) continue;
                 bdist_[c] = 0;
                 bnext_[c] = kAtGoal;

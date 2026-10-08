@@ -17,7 +17,7 @@
 // 作っている間は前の結果を引き続き答え、出来上がった瞬間に入れ替える(2面持ち)。
 // 値段は 1/8 単位の 16bit で持つ(8191.75 で頭打ち)。
 //
-// 作業場所は 1柱あたり 12バイト(56x56 の世界で約37KB)。begin で確保し、clear で返す。
+// 作業場所は 1柱あたり 12バイト + 目的地 512バイト(56x56 の世界で約38KB)。begin で確保し、clear で返す。
 // 幅は kMaxFlowWidth まで。
 
 #include <cstdint>
@@ -42,8 +42,12 @@ public:
     Flow(const Flow&) = delete;
     Flow& operator=(const Flow&) = delete;
 
-    // 作り始める(前の結果は出来上がるまで答え続ける)。gx/gz は目的地の柱(n 個、kMaxFlowGoals まで)。
-    // 世界が広すぎる・メモリが足りない・目的地が多すぎるなら false
+    // 作り始める(前の結果は出来上がるまで答え続ける)。続けて addGoal() で目的地の柱を足す(最初の step() より前に)。
+    // 世界が広すぎる・メモリが足りないなら false
+    bool begin(const World& w, const PathRules& r);
+    // 目的地の柱を足す(kMaxFlowGoals まで。世界の外・多すぎるなら false)
+    bool addGoal(int x, int z);
+    // まとめて(テスト用。gx/gz は n 個)
     bool begin(const World& w, const PathRules& r, const int16_t* gx, const int16_t* gz, int n);
     // 最大 budget 単位(柱を1つ調べる/1つ確定する = 1単位)進める。この呼び出しで出来上がったら true
     bool step(const World& w, int budget);
@@ -86,7 +90,7 @@ private:
     Phase phase_ = Phase::Idle;
     int scan_ = 0;
     PathRules rules_;
-    int16_t gx_[kMaxFlowGoals], gz_[kMaxFlowGoals];
+    int16_t* goals_ = nullptr;   // 目的地の柱の番号(x*W+z)。kMaxFlowGoals 個。block_ の中
     int ngoals_ = 0;
     uint32_t revision_ = 0;
 };

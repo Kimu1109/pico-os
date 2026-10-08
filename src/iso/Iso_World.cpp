@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
+#include <new>
 
 #include <Arduino.h>
 #include <SdFat.h>
@@ -701,8 +702,9 @@ void World::close() {
     ld_valid_ = false;
     memset(map_, 0, sizeof(map_));
     // 人や物はそのワールドの中の位置なので、閉じたら片付ける(描き直しは呼び出し側。ハンドルは使い回さない)
-    for (int i = 0; i < kMaxEntities; i++) ents_[i].used = false;
-    for (int i = 0; i < kMaxShots; i++) shots_[i].used = false;
+    freeEntities();
+    delete[] shots_;
+    shots_ = nullptr;
     keep_all_ = false;
     dir_.assign("");
     kind_ = EMPTY;
@@ -1119,7 +1121,7 @@ void World::dirtyEdit(const Sink& sink, int x, int y, int z) {
         if (ax0 < ax1 && ay0 < ay1) sink.dirty(sink.ctx, ax0, ay0, ax1 - ax0, ay1 - ay0);
     }
     // その柱に足元がかかっている人や物は、地面の影の高さが変わりうる
-    for (int i = 0; i < kMaxEntities; i++) {
+    for (int i = 0; i < ent_cap_; i++) {
         const Entity& e = ents_[i];
         if (e.used && fabsf(e.x - (x + 0.5f)) <= 0.5f + e.r && fabsf(e.z - (z + 0.5f)) <= 0.5f + e.r) {
             entityChanged(sink, ((int)e.gen << 8) | (i + 1));
@@ -1234,31 +1236,82 @@ void World::markRect(const Sink& sink, int x0, int y0, int x1, int y1) const {
 
 Entity* World::entity(int handle) {
     const int i = (handle & 0xFF) - 1;
-    if (i < 0 || i >= kMaxEntities) return nullptr;
+    if (i < 0 || i >= ent_cap_) return nullptr;
     Entity& e = ents_[i];
     return (e.used && e.gen == (uint16_t)(handle >> 8)) ? &e : nullptr;
 }
 
+// 奥から順(描く順)。奥行き = 箱の中心の x - y + z が大きいほど奥
+int World::sortEntities() const {
+    int n = 0;
+    for (int i = 0; i < ent_cap_; i++) {
+        const Entity& e = ents_[i];
+        if (!e.used || !e.visible) continue;
+        const float k = e.x + e.z - (e.y + e.h * 0.5f);
+        int j = n++;
+        while (j > 0 && escr_[j - 1].key < k) {
+            escr_[j].key = escr_[j - 1].key;
+            escr_[j].order = escr_[j - 1].order;
+            j--;
+        }
+        escr_[j].key = k;
+        escr_[j].order = (int16_t)i;
+    }
+    return n;
+}
+
+void World::freeEntities() {
+    delete[] ents_;
+    delete[] escr_;
+    ents_ = nullptr;
+    escr_ = nullptr;
+    ent_cap_ = 0;
+}
+
+bool World::growEntities() {
+    if (ent_cap_ >= kMaxEntities) return false;
+    int cap = ent_cap_ + kEntityChunk;
+    if (cap > kMaxEntities) cap = kMaxEntities;
+    Entity* ne = new (std::nothrow) Entity[cap];
+    EntScratch* ns = new (std::nothrow) EntScratch[cap];
+    if (!ne || !ns) {
+        delete[] ne;
+        delete[] ns;
+        return false;
+    }
+    for (int i = 0; i < ent_cap_; i++) ne[i] = ents_[i];   // 番号(=ハンドル)はそのまま
+    delete[] ents_;
+    delete[] escr_;
+    ents_ = ne;
+    escr_ = ns;
+    ent_cap_ = cap;
+    return true;
+}
+
+bool World::ensureShots() {
+    if (!shots_) shots_ = new (std::nothrow) Shot[kMaxShots];
+    return shots_ != nullptr;
+}
+
 int World::entityCount() const {
     int n = 0;
-    for (int i = 0; i < kMaxEntities; i++) if (ents_[i].used) n++;
+    for (int i = 0; i < ent_cap_; i++) if (ents_[i].used) n++;
     return n;
 }
 
 int World::entityAdd(const Sink& sink, const Entity& src) {
-    for (int i = 0; i < kMaxEntities; i++) {
-        Entity& e = ents_[i];
-        if (e.used) continue;
-        const uint16_t gen = (uint16_t)(e.gen + 1 > 0x7FFF ? 1 : e.gen + 1);   // ハンドルを正の int に収める
-        e = src;
-        e.used = true;
-        e.gen = gen;
-        e.lw = e.lh = 0;
-        const int handle = ((int)gen << 8) | (i + 1);
-        entityChanged(sink, handle);
-        return handle;
-    }
-    return 0;
+    int i = 0;
+    while (i < ent_cap_ && ents_[i].used) i++;
+    if (i >= ent_cap_ && !growEntities()) return 0;   // 上限か、メモリが足りない
+    Entity& e = ents_[i];
+    const uint16_t gen = (uint16_t)(e.gen + 1 > 0x7FFF ? 1 : e.gen + 1);   // ハンドルを正の int に収める
+    e = src;
+    e.used = true;
+    e.gen = gen;
+    e.lw = e.lh = 0;
+    const int handle = ((int)gen << 8) | (i + 1);
+    entityChanged(sink, handle);
+    return handle;
 }
 
 void World::entityChanged(const Sink& sink, int handle) {
@@ -1283,13 +1336,13 @@ bool World::entityRemove(const Sink& sink, int handle) {
 }
 
 void World::entityClear(const Sink& sink) {
-    for (int i = 0; i < kMaxEntities; i++) {
+    for (int i = 0; i < ent_cap_; i++) {
         if (ents_[i].used) entityRemove(sink, ((int)ents_[i].gen << 8) | (i + 1));
     }
 }
 
 void World::refreshEntityRects() {
-    for (int i = 0; i < kMaxEntities; i++) {
+    for (int i = 0; i < ent_cap_; i++) {
         Entity& e = ents_[i];
         if (!e.used) continue;
         int x0, y0, x1, y1;
@@ -1302,22 +1355,6 @@ void World::refreshEntityRects() {
 }
 
 namespace {
-
-// 奥から順(描く順)。奥行き = 箱の中心の x - y + z が大きいほど奥
-int SortEntities(const Entity* ents, int* order) {
-    int n = 0;
-    float key[kMaxEntities];
-    for (int i = 0; i < kMaxEntities; i++) {
-        const Entity& e = ents[i];
-        if (!e.used || !e.visible) continue;
-        const float k = e.x + e.z - (e.y + e.h * 0.5f);
-        int j = n++;
-        while (j > 0 && key[j - 1] < k) { key[j] = key[j - 1]; order[j] = order[j - 1]; j--; }
-        key[j] = k;
-        order[j] = i;
-    }
-    return n;
-}
 
 // 書いてよい画素を絞った描き先: 人や物の絵の不透明な画素だけ / 地面の影の画素だけ。
 // ブロックの面を、そこへだけ1画素ずつ描き直す
@@ -1385,8 +1422,7 @@ struct Masked {
 }  // namespace
 
 void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
-    int order[kMaxEntities];
-    const int n = SortEntities(ents_, order);
+    const int n = sortEntities();
     if (n == 0) return;
     Masked m;
     m.base = &sink;
@@ -1396,7 +1432,7 @@ void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
     ms.dither = Masked::Dither;
     // 影を先に全部(人や物の絵の下に来るように)。影ごとに、地面より手前のブロックを影の画素の上へ描き直す
     for (int k = 0; k < n; k++) {
-        const Entity& e = ents_[order[k]];
+        const Entity& e = ents_[escr_[k].order];
         float cx, cy, a, b;
         int gy;
         if (!shadowShape(e, cx, cy, a, b, gy)) continue;
@@ -1420,7 +1456,7 @@ void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
     }
     // 絵を奥から順に。描いたら、その箱より手前のブロックを絵の不透明な画素の上へ描き直す
     for (int k = 0; k < n; k++) {
-        const Entity& e = ents_[order[k]];
+        const Entity& e = ents_[escr_[k].order];
         if (e.sw <= 0 || e.sh <= 0) continue;
         int dx, dy;
         entityScreen(e, dx, dy);
@@ -1447,17 +1483,16 @@ void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
 
 int World::entityAt(const Sink& sink, int px, int py) const {
     if (!sink.image_px) return 0;
-    int order[kMaxEntities];
-    const int n = SortEntities(ents_, order);
+    const int n = sortEntities();
     for (int k = n - 1; k >= 0; k--) {   // 手前から
-        const Entity& e = ents_[order[k]];
+        const Entity& e = ents_[escr_[k].order];
         int dx, dy;
         entityScreen(e, dx, dy);
         int lx = px - dx;
         const int ly = py - dy;
         if (lx < 0 || ly < 0 || lx >= e.sw || ly >= e.sh) continue;
         if (e.flip) lx = e.sw - 1 - lx;
-        if (sink.image_px(sink.ctx, e.image, e.sx + lx, e.sy + ly) >= 0) return ((int)e.gen << 8) | (order[k] + 1);
+        if (sink.image_px(sink.ctx, e.image, e.sx + lx, e.sy + ly) >= 0) return ((int)e.gen << 8) | (escr_[k].order + 1);
     }
     return 0;
 }
@@ -1491,7 +1526,7 @@ void World::renderOverlays(const Sink& sink, int x0, int y0, int x1, int y1) con
     auto put = [&](int x, int y, int c) {
         if (x >= x0 && x < x1 && y >= y0 && y < y1) sink.put(sink.ctx, x, y, c);
     };
-    for (int i = 0; i < kMaxEntities; i++) {
+    for (int i = 0; i < ent_cap_; i++) {
         const Entity& e = ents_[i];
         int rx0, ry0, rx1, ry1;
         if (!overlayRect(e, rx0, ry0, rx1, ry1)) continue;
@@ -1516,10 +1551,9 @@ void World::renderOverlays(const Sink& sink, int x0, int y0, int x1, int y1) con
 
 int World::nearby(float x, float z, float range, uint32_t tagmask, int32_t* out, int max) const {
     if (!out || max <= 0) return 0;
-    float d2s[kMaxEntities];
     int n = 0;
     const float r2 = range * range;
-    for (int i = 0; i < kMaxEntities; i++) {
+    for (int i = 0; i < ent_cap_; i++) {
         const Entity& e = ents_[i];
         if (!e.used) continue;
         if (tagmask && !((tagmask >> (e.tag & 31)) & 1)) continue;
@@ -1528,11 +1562,11 @@ int World::nearby(float x, float z, float range, uint32_t tagmask, int32_t* out,
         // 近い順に挿入(溢れたら一番遠いものを捨てる)
         int j = n < max ? n++ : max;
         if (j == max) {
-            if (d2 >= d2s[max - 1]) continue;
+            if (d2 >= escr_[max - 1].key) continue;
             j = max - 1;
         }
-        while (j > 0 && d2s[j - 1] > d2) { d2s[j] = d2s[j - 1]; out[j] = out[j - 1]; j--; }
-        d2s[j] = d2;
+        while (j > 0 && escr_[j - 1].key > d2) { escr_[j].key = escr_[j - 1].key; out[j] = out[j - 1]; j--; }
+        escr_[j].key = d2;
         out[j] = ((int32_t)e.gen << 8) | (i + 1);
     }
     return n;
@@ -1553,20 +1587,19 @@ bool World::bodyFree(float x, float y, float z, int height, uint32_t pass) const
 int World::crowdStep(const Sink& sink, int iterations, int height, uint32_t pass) {
     if (iterations < 1) iterations = 1;
     if (height < 1) height = 1;
-    int idx[kMaxEntities];
+    EntScratch* sc = escr_;
     int n = 0;
-    for (int i = 0; i < kMaxEntities; i++) {
-        if (ents_[i].used && ents_[i].crowd) idx[n++] = i;
+    for (int i = 0; i < ent_cap_; i++) {
+        if (ents_[i].used && ents_[i].crowd) sc[n++].idx = (int16_t)i;
     }
     if (n < 2) return 0;
-    float ox[kMaxEntities], oz[kMaxEntities];
-    for (int k = 0; k < n; k++) { ox[k] = ents_[idx[k]].x; oz[k] = ents_[idx[k]].z; }
+    for (int k = 0; k < n; k++) { sc[k].ox = ents_[sc[k].idx].x; sc[k].oz = ents_[sc[k].idx].z; }
     for (int it = 0; it < iterations; it++) {
         bool any = false;
         for (int a = 0; a < n; a++) {
-            Entity& A = ents_[idx[a]];
+            Entity& A = ents_[sc[a].idx];
             for (int b = a + 1; b < n; b++) {
-                Entity& B = ents_[idx[b]];
+                Entity& B = ents_[sc[b].idx];
                 if (A.crowd == 2 && B.crowd == 2) continue;
                 if (fabsf(A.y - B.y) >= (float)height) continue;
                 const float rr = A.r + B.r;
@@ -1577,7 +1610,7 @@ int World::crowdStep(const Sink& sink, int iterations, int height, uint32_t pass
                 const float push = rr - d;
                 if (d < 1e-4f) {
                     // ちょうど重なっている: 番号で決まる向きへ離す(毎回同じ結果になるように)
-                    const float ang = (float)((idx[a] * 7 + idx[b] * 13) % 16) * 0.39269908f;
+                    const float ang = (float)((sc[a].idx * 7 + sc[b].idx * 13) % 16) * 0.39269908f;
                     dx = cosf(ang); dz = sinf(ang); d = 1.0f;
                 }
                 const float ia = A.crowd == 2 ? 0.0f : 1.0f / (A.mass > 1e-3f ? A.mass : 1e-3f);
@@ -1602,10 +1635,10 @@ int World::crowdStep(const Sink& sink, int iterations, int height, uint32_t pass
     }
     int moved = 0;
     for (int k = 0; k < n; k++) {
-        Entity& e = ents_[idx[k]];
-        if (e.x != ox[k] || e.z != oz[k]) {
+        Entity& e = ents_[sc[k].idx];
+        if (e.x != sc[k].ox || e.z != sc[k].oz) {
             moved++;
-            entityChanged(sink, ((int)e.gen << 8) | (idx[k] + 1));
+            entityChanged(sink, ((int)e.gen << 8) | (sc[k].idx + 1));
         }
     }
     return moved;
@@ -1641,13 +1674,14 @@ bool World::lineOfSight(float x0, float y0, float z0, float x1, float y1, float 
 
 Shot* World::shot(int handle) {
     const int i = (handle & 0xFF) - 1;
-    if (i < 0 || i >= kMaxShots) return nullptr;
+    if (!shots_ || i < 0 || i >= kMaxShots) return nullptr;
     Shot& s = shots_[i];
     return (s.used && s.gen == (uint16_t)(handle >> 8)) ? &s : nullptr;
 }
 
 int World::shotCount() const {
     int n = 0;
+    if (!shots_) return 0;
     for (int i = 0; i < kMaxShots; i++) if (shots_[i].used) n++;
     return n;
 }
@@ -1694,6 +1728,7 @@ void World::shotChanged(const Sink& sink, Shot& s) {
 }
 
 int World::shotAdd(const Sink& sink, const Shot& src) {
+    if (!ensureShots()) return 0;
     for (int i = 0; i < kMaxShots; i++) {
         Shot& s = shots_[i];
         if (s.used) continue;
@@ -1722,6 +1757,7 @@ bool World::shotRemove(const Sink& sink, int handle) {
 }
 
 void World::shotClear(const Sink& sink) {
+    if (!shots_) return;
     for (int i = 0; i < kMaxShots; i++) {
         if (shots_[i].used) shotRemove(sink, ((int)shots_[i].gen << 8) | (i + 1));
     }
@@ -1729,6 +1765,7 @@ void World::shotClear(const Sink& sink) {
 
 int World::shotsStep(const Sink& sink, float dt, ShotHit* out, int max) {
     int n = 0;
+    if (!shots_) return 0;
     if (!(dt > 0)) dt = 0;
     for (int i = 0; i < kMaxShots; i++) {
         Shot& s = shots_[i];
@@ -1763,6 +1800,7 @@ int World::shotsStep(const Sink& sink, float dt, ShotHit* out, int max) {
 }
 
 void World::renderShots(const Sink& sink, int x0, int y0, int x1, int y1) const {
+    if (!shots_) return;
     for (int i = 0; i < kMaxShots; i++) {
         const Shot& s = shots_[i];
         int rx0, ry0, rx1, ry1;

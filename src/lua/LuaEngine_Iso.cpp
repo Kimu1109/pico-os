@@ -670,7 +670,8 @@ struct LuaEngineIso {
         const int h = st.world.entityAdd(DirtySink(c), e);
         if (!h) {
             lua_pushnil(L);
-            lua_pushfstring(L, "置けるのは %d 個までです", Iso::kMaxEntities);
+            if (st.world.entityCount() >= Iso::kMaxEntities) lua_pushfstring(L, "置けるのは %d 個までです", Iso::kMaxEntities);
+            else lua_pushstring(L, "メモリが足りません");
             return 2;
         }
         lua_pushinteger(L, h);
@@ -959,26 +960,27 @@ struct LuaEngineIso {
             ParseRules(L, 2, r, "pico.iso.flow_build");
         }
         const bool now = lua_toboolean(L, 3) != 0;
-        int16_t gx[Iso::kMaxFlowGoals], gz[Iso::kMaxFlowGoals];
         const lua_Integer n = luaL_len(L, 1);
         if (n < 1 || n > Iso::kMaxFlowGoals) luaL_error(L, "pico.iso.flow_build: 目的地は 1〜%d 個です", Iso::kMaxFlowGoals);
-        for (lua_Integer i = 1; i <= n; i++) {
-            lua_rawgeti(L, 1, i);
-            if (!lua_istable(L, -1)) luaL_error(L, "pico.iso.flow_build: 目的地の %d 番目が {x, z} ではありません", (int)i);
-            const int t = lua_gettop(L);
-            lua_rawgeti(L, t, 1);
-            if (lua_isnil(L, -1)) { lua_pop(L, 1); lua_getfield(L, t, "x"); }
-            lua_rawgeti(L, t, 2);
-            if (lua_isnil(L, -1)) { lua_pop(L, 1); lua_getfield(L, t, "z"); }
-            if (!lua_isnumber(L, -2) || !lua_isnumber(L, -1)) luaL_error(L, "pico.iso.flow_build: 目的地の %d 番目が {x, z} ではありません", (int)i);
-            gx[i - 1] = (int16_t)floor(lua_tonumber(L, -2));
-            gz[i - 1] = (int16_t)floor(lua_tonumber(L, -1));
-            lua_pop(L, 3);
-        }
-        if (!st.flow.begin(st.world, r, gx, gz, (int)n)) {
-            lua_pushnil(L);
-            lua_pushstring(L, st.world.width() > Iso::kMaxFlowWidth ? "世界が広すぎます" : "メモリが足りません");
-            return 2;
+        // 目的地は先に全部読んで確かめる(誤りなら作り直しを始めない)
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 1 && !st.flow.begin(st.world, r)) {
+                lua_pushnil(L);
+                lua_pushstring(L, st.world.width() > Iso::kMaxFlowWidth ? "世界が広すぎます" : "メモリが足りません");
+                return 2;
+            }
+            for (lua_Integer i = 1; i <= n; i++) {
+                lua_rawgeti(L, 1, i);
+                if (!lua_istable(L, -1)) luaL_error(L, "pico.iso.flow_build: 目的地の %d 番目が {x, z} ではありません", (int)i);
+                const int t = lua_gettop(L);
+                lua_rawgeti(L, t, 1);
+                if (lua_isnil(L, -1)) { lua_pop(L, 1); lua_getfield(L, t, "x"); }
+                lua_rawgeti(L, t, 2);
+                if (lua_isnil(L, -1)) { lua_pop(L, 1); lua_getfield(L, t, "z"); }
+                if (!lua_isnumber(L, -2) || !lua_isnumber(L, -1)) luaL_error(L, "pico.iso.flow_build: 目的地の %d 番目が {x, z} ではありません", (int)i);
+                if (pass == 1) st.flow.addGoal((int)floor(lua_tonumber(L, -2)), (int)floor(lua_tonumber(L, -1)));
+                lua_pop(L, 3);
+            }
         }
         if (now) {
             while (!st.flow.step(st.world, 1 << 20)) {}
@@ -1057,15 +1059,18 @@ struct LuaEngineIso {
         return m;
     }
 
-    // pico.iso.nearby(x, z, range[, tags[, max]]) -> {id, ...}(近い順)
+    static constexpr int kMaxNearby = 32;
+
+    // pico.iso.nearby(x, z, range[, tags[, max]]) -> {id, ...}(近い順、32個まで)
     static int l_nearby(lua_State* L) {
         LuaEngine::IsoState& st = St(L);
         const float x = Num(L, 1), z = Num(L, 2), range = Num(L, 3);
         const uint32_t mask = TagMask(L, 4);
-        int max = (int)luaL_optinteger(L, 5, Iso::kMaxEntities);
+        // 返すのは近い順に kMaxNearby 個まで(結果をスタックに置くので小さく抑える)
+        int max = (int)luaL_optinteger(L, 5, kMaxNearby);
         if (max < 1) max = 1;
-        if (max > Iso::kMaxEntities) max = Iso::kMaxEntities;
-        int32_t out[Iso::kMaxEntities];
+        if (max > kMaxNearby) max = kMaxNearby;
+        int32_t out[kMaxNearby];
         const int n = st.world.nearby(x, z, range, mask, out, max);
         lua_createtable(L, n, 0);
         for (int i = 0; i < n; i++) { lua_pushinteger(L, out[i]); lua_rawseti(L, -2, i + 1); }
@@ -1149,21 +1154,27 @@ struct LuaEngineIso {
         LuaEngine::IsoState& st = St(L);
         const float dt = Num(L, 1);
         if (!(dt >= 0.0f && dt <= 10.0f)) luaL_error(L, "pico.iso.shots_step: dt は 0〜10 秒です");
-        Iso::ShotHit hits[Iso::kMaxShots];
+        // 当たった弾は少しずつ受け取る(全部をスタックに置かない)。2回目からは dt=0 で、返しきれなかった分だけを受け取る
+        Iso::ShotHit hits[8];
         Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
-        const int n = st.world.shotsStep(DirtySink(c), dt, hits, Iso::kMaxShots);
-        lua_createtable(L, n, 0);
-        for (int i = 0; i < n; i++) {
-            lua_createtable(L, 0, 7);
-            lua_pushinteger(L, hits[i].shot); lua_setfield(L, -2, "id");
-            if (hits[i].target) { lua_pushinteger(L, hits[i].target); lua_setfield(L, -2, "target"); }
-            lua_pushinteger(L, hits[i].tag); lua_setfield(L, -2, "tag");
-            lua_pushboolean(L, hits[i].lost); lua_setfield(L, -2, "lost");
-            lua_pushnumber(L, hits[i].x); lua_setfield(L, -2, "x");
-            lua_pushnumber(L, hits[i].y); lua_setfield(L, -2, "y");
-            lua_pushnumber(L, hits[i].z); lua_setfield(L, -2, "z");
-            lua_rawseti(L, -2, i + 1);
-        }
+        lua_newtable(L);
+        int total = 0, n;
+        float step_dt = dt;
+        do {
+            n = st.world.shotsStep(DirtySink(c), step_dt, hits, 8);
+            step_dt = 0;
+            for (int i = 0; i < n; i++) {
+                lua_createtable(L, 0, 7);
+                lua_pushinteger(L, hits[i].shot); lua_setfield(L, -2, "id");
+                if (hits[i].target) { lua_pushinteger(L, hits[i].target); lua_setfield(L, -2, "target"); }
+                lua_pushinteger(L, hits[i].tag); lua_setfield(L, -2, "tag");
+                lua_pushboolean(L, hits[i].lost); lua_setfield(L, -2, "lost");
+                lua_pushnumber(L, hits[i].x); lua_setfield(L, -2, "x");
+                lua_pushnumber(L, hits[i].y); lua_setfield(L, -2, "y");
+                lua_pushnumber(L, hits[i].z); lua_setfield(L, -2, "z");
+                lua_rawseti(L, -2, ++total);
+            }
+        } while (n == 8);
         return 1;
     }
 

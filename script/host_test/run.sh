@@ -1018,6 +1018,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
+    "$ROOT/src/iso/Iso_Path.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1107,6 +1108,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
+    "$ROOT/src/iso/Iso_Path.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1195,6 +1197,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
+    "$ROOT/src/iso/Iso_Path.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1299,6 +1302,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
+    "$ROOT/src/iso/Iso_Path.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1384,6 +1388,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
+    "$ROOT/src/iso/Iso_Path.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1477,6 +1482,7 @@ run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/oshite_test.lua" "$ROO
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/iso_world_test.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
+    "$ROOT/src/iso/Iso_Path.cpp" \
     -o "$OUT/iso_world_test"
 
 echo ""

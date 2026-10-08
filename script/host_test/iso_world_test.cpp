@@ -12,9 +12,12 @@
 //     水に沈む・地面の影(形・壁の裏で隠れる・高さで小さく)・描き直す範囲・引き当て・ハンドル・反転
 //   松明の光: 広がり方・壁で遮られる・取ると消える・チャンクの境目と後から読み込んだチャンク・描く絵(明るさ・夜)・
 //     描き直す範囲・影を落とさない・保存して開き直しても同じ
+//   経路探索(Iso_Path): 平らな所・段差の上限・頭の上・避けるブロック・ブロックと段差の値段・斜め(角をすり抜けない)・
+//     edge・partial/上限/出発点と目的地の誤り・乱数の地形で素朴なダイクストラと同じ値段
 // 面の絵はリポジトリの pc/sdcard/lua/apps/ブロック/faces.pimg を使う(第1引数にリポジトリのルート)。
 #include "iso/Iso_World.hpp"
 #include "iso/Iso_Blit.hpp"
+#include "iso/Iso_Path.hpp"
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
@@ -1126,6 +1129,247 @@ int main(int argc, char** argv) {
         char msg[128];
         snprintf(msg, sizeof msg, "人や物: 頼まれた矩形だけ描き直しても全体を描き直したのと同じ(300回、違ったもの %d 回)", bad);
         check(bad == 0, msg);
+    }
+
+
+    // ================================================================ 経路探索
+    {
+        World w;
+        EmptyWorld(w);
+        // 0段目を石で敷きつめる(立つ高さは 1)
+        auto floorAll = [&]() {
+            for (int x = 0; x < 48; x++) for (int z = 0; z < 48; z++) {
+                for (int y = 0; y < H; y++) w.set(x, y, z, y == 0 ? STONE : AIR);
+            }
+        };
+        floorAll();
+        PathRules r;
+        std::vector<PathPoint> out(kMaxPathNodes);
+        PathResult res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && res.length == 9 && std::fabs(res.cost - 8) < 1e-4f &&
+              out[0].x == 2 && out[0].y == 1 && out[8].x == 10 && out[8].z == 2, "経路: 平らな所はまっすぐ(9点・値段8)");
+        bool adj = true;
+        for (int i = 1; i < res.length; i++) if (std::abs(out[i].x - out[i - 1].x) + std::abs(out[i].z - out[i - 1].z) != 1) adj = false;
+        check(adj, "経路: 斜めなしは東西南北に1マスずつ");
+        check(StandAt(w, 5, -1, 5, r) == 1 && StandAt(w, 5, 0, 5, r) == -1, "経路: 立てる高さ");
+
+        // 1段の段差: 登れる。up_cost が値段に乗る
+        for (int z = 0; z < 48; z++) w.set(6, 1, z, DIRT);
+        r.up_cost = 2; r.down_cost = 0.5f;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && std::fabs(res.cost - (8 + 2 + 0.5f)) < 1e-4f, "経路: 1段登って降りる(up_cost・down_cost)");
+        check(out[4].x == 6 && out[4].y == 2, "経路: 段の上では y が1つ上");
+        // 2段の壁(端から端まで): max_up=1 では越えられない
+        for (int z = 0; z < 48; z++) w.set(6, 2, z, DIRT);
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::NoPath, "経路: 2段の壁は max_up=1 で越えられない");
+        r.max_up = 2;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && std::fabs(res.cost - (8 + 4 + 1)) < 1e-4f, "経路: max_up=2 なら越えられる");
+        r.max_down = 1;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::NoPath, "経路: 降りる側も max_down で止まる");
+        r = PathRules();
+        // 壁に1か所だけ穴(z=20) → 回り道
+        w.set(6, 1, 20, AIR); w.set(6, 2, 20, AIR);
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        bool through = false;
+        for (int i = 0; i < res.length; i++) if (out[i].x == 6) through = out[i].z == 20;
+        check(res.status == PathStatus::Found && through && std::fabs(res.cost - (8 + 2 * 18)) < 1e-4f, "経路: 穴を通る回り道");
+        // 頭の上: 穴に天井(高さ1のトンネル)
+        w.set(6, 2, 20, STONE);
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::NoPath, "経路: 背の高さ2では高さ1のトンネルを通れない");
+        r.height = 1;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found, "経路: height=1 なら通れる");
+        r = PathRules();
+        // 段を登るとき、今の柱の頭の上が空いていること
+        floorAll();
+        w.set(4, 1, 4, DIRT);            // 1段の段
+        w.set(3, 3, 4, STONE);           // 手前の柱の y=3 に天井(立つ y=1 で体は1〜2、登ると3まで要る)
+        // 1歩で直接行けるか(出発点と目的地の高さを指定。回り道は数えない)
+        auto canGo = [&](int x, int y, int z, int nx, int ny, int nz, const PathRules& rr) {
+            PathRules q = rr; q.max_nodes = 64;
+            PathResult t = FindPath(w, x, y, z, nx, ny, nz, q, out.data(), (int)out.size());
+            return t.status == PathStatus::Found && t.length == 2;
+        };
+        check(!canGo(3, 1, 4, 4, 2, 4, r), "経路: 登る先の頭の上が今の柱で塞がっていれば登れない");
+        w.set(3, 3, 4, AIR);
+        check(canGo(3, 1, 4, 4, 2, 4, r), "経路: 天井をどければ登れる");
+        w.set(4, 4, 4, STONE);           // 段の上の柱の y=4(段の上に立つと体は2〜3。降りるときは 1+2=3 まで空いていればよい)
+        check(canGo(4, 2, 4, 3, 1, 4, r) && canGo(3, 1, 4, 4, 2, 4, r), "経路: 頭の上に余裕があれば行き来できる");
+        w.set(2, 2, 4, STONE);           // 低い柱の y=2(体のマス)を塞ぐ → (2,4) には y=1 で立てない
+        check(!canGo(3, 1, 4, 2, 1, 4, r) && StandAt(w, 2, 1, 4, r) == -1, "経路: 体のマスが塞がっていれば立てない");
+
+        // 避けるブロック: 足元の砂の帯(z=0..46)を避けて回る
+        floorAll();
+        for (int z = 0; z < 47; z++) w.set(6, 0, z, SAND);
+        r.avoid = 1u << SAND;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && std::fabs(res.cost - (8 + 2 * 45)) < 1e-4f, "経路: 避けるブロック(足元)を回り道");
+        // 体のマスにある物(松明)も避けられる
+        floorAll();
+        for (int z = 0; z < 47; z++) w.set(6, 1, z, TORCH);
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && std::fabs(res.cost - 8) < 1e-4f, "経路: 松明は普段は通り抜けられる");
+        r.avoid = 1u << TORCH;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && std::fabs(res.cost - (8 + 2 * 45)) < 1e-4f, "経路: 避けるブロック(体のマス)を回り道");
+        r = PathRules();
+        // ブロックの値段: 砂は高いが、遠回りより安ければ通る
+        floorAll();
+        for (int z = 0; z < 47; z++) w.set(6, 0, z, SAND);
+        r.block_cost[SAND] = 5;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && std::fabs(res.cost - 13) < 1e-4f, "経路: 足元のブロックの値段");
+        r = PathRules();
+
+        // 段差の値段で道が変わる: まっすぐ行くと山(高さ3)を越える。山の横は回れる
+        floorAll();
+        for (int x = 5; x <= 7; x++) for (int z = 0; z <= 6; z++) for (int y = 1; y <= (x == 6 ? 2 : 1); y++) w.set(x, y, z, DIRT);
+        r.max_up = 1; r.max_down = 1;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && std::fabs(res.cost - 8) < 1e-4f, "経路: 値段が段差を気にしなければ山を越える");
+        r.up_cost = 2;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && std::fabs(res.cost - (8 + 4)) < 1e-4f, "経路: 段差の値段が小さければまだ越える");
+        r.up_cost = 6;
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        bool flat = true;
+        for (int i = 0; i < res.length; i++) if (out[i].y != 1) flat = false;
+        check(res.status == PathStatus::Found && flat && std::fabs(res.cost - (8 + 10)) < 1e-4f, "経路: 段差が高いと山の横を回る");
+        r = PathRules();
+
+        // 斜め
+        floorAll();
+        r.diagonal = true;
+        res = FindPath(w, 2, -1, 2, 10, -1, 10, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && res.length == 9 && std::fabs(res.cost - 8 * 1.41421356f) < 1e-3f, "経路: 斜め");
+        // 角をすり抜けない: (3,3)→(4,4) の脇 (4,3)・(3,4) の片方が壁
+        for (int y = 1; y <= 3; y++) w.set(4, y, 3, STONE);
+        check(!canGo(3, 1, 3, 4, 1, 4, r), "経路: 斜めは角をすり抜けない");
+        w.set(4, 1, 3, AIR); w.set(4, 2, 3, AIR); w.set(4, 3, 3, AIR);
+        check(canGo(3, 1, 3, 4, 1, 4, r), "経路: 角が空いていれば斜めに行ける");
+        r = PathRules();
+
+        // edge: x=6 を通れなくする / 値段を足す
+        floorAll();
+        struct E { int calls = 0; };
+        E e;
+        r.ctx = &e;
+        r.edge = [](void* p, int, int, int, int nx, int, int nz, uint8_t, bool&) -> float {
+            static_cast<E*>(p)->calls++;
+            return (nx == 6 && nz < 40) ? -1.0f : 0.0f;
+        };
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && e.calls > 0 && std::fabs(res.cost - (8 + 2 * 38)) < 1e-4f, "経路: edge で通れなくする");
+        r.edge = [](void*, int, int, int, int, int, int, uint8_t, bool& abort) -> float { abort = true; return 0; };
+        res = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Aborted, "経路: edge が止めると探すのをやめる");
+        r = PathRules();
+
+        // 着けない・上限・誤り
+        floorAll();
+        for (int x = 8; x <= 12; x++) for (int z = 8; z <= 12; z++) {
+            if (x == 8 || x == 12 || z == 8 || z == 12) for (int y = 1; y <= 3; y++) w.set(x, y, z, STONE);
+        }
+        r.max_nodes = kMaxPathNodes;
+        res = FindPath(w, 2, -1, 2, 10, -1, 10, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::NoPath, "経路: 囲まれた所へは着けない(行ける所を全部調べる)");
+        r.partial = true;
+        res = FindPath(w, 2, -1, 2, 10, -1, 10, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Partial && res.length > 1 &&
+              std::abs(out[res.length - 1].x - 10) + std::abs(out[res.length - 1].z - 10) == 3, "経路: partial は一番近い所まで");
+        r.partial = false;
+        r.max_nodes = 50;
+        res = FindPath(w, 2, -1, 2, 40, -1, 40, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Limit && res.nodes == 50, "経路: max_nodes を使い切ると Limit");
+        r = PathRules();
+        w.set(0, 0, 0, AIR);
+        res = FindPath(w, 0, -1, 0, 5, -1, 5, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::BadStart, "経路: 出発点に立てない");
+        res = FindPath(w, 5, -1, 5, 60, -1, 5, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::BadGoal, "経路: 世界の外は目的地にならない");
+        res = FindPath(w, 5, -1, 5, 5, -1, 5, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && res.length == 1 && res.cost == 0, "経路: 出発点=目的地");
+        // 高さの指定: 橋の上と下
+        floorAll();
+        for (int x = 10; x <= 20; x++) w.set(x, 4, 5, PLANKS);    // 橋(上に立つ y=5)
+        check(StandAt(w, 15, -1, 5, r) == 5 && StandAt(w, 15, 4, 5, r) == 1, "経路: 柱の一番上 / 指定した高さ以下");
+        res = FindPath(w, 8, -1, 5, 15, 1, 5, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::Found && out[res.length - 1].y == 1, "経路: 橋の下の目的地");
+        r.max_nodes = kMaxPathNodes;
+        res = FindPath(w, 8, -1, 5, 15, 5, 5, r, out.data(), (int)out.size());
+        check(res.status == PathStatus::NoPath, "経路: 階段の無い橋の上へは行けない");
+
+        // 乱数の地形: 素朴なダイクストラ(柱ごとに高さ1つ)と同じ値段
+        std::mt19937 rng(7);
+        int same = 0, trials = 0;
+        for (int t = 0; t < 40; t++) {
+            int hgt[24][24];
+            for (int x = 0; x < 48; x++) for (int z = 0; z < 48; z++) for (int y = 0; y < H; y++) w.set(x, y, z, AIR);
+            for (int x = 0; x < 24; x++) for (int z = 0; z < 24; z++) {
+                hgt[x][z] = 1 + (int)(rng() % 5);
+                for (int y = 0; y < hgt[x][z]; y++) w.set(x, y, z, (rng() % 6) ? DIRT : SAND);
+            }
+            PathRules q;
+            q.max_up = 1 + (int)(rng() % 2); q.max_down = 1 + (int)(rng() % 3);
+            q.up_cost = (float)(rng() % 4); q.down_cost = (float)(rng() % 2);
+            q.block_cost[SAND] = (float)(rng() % 3);
+            q.diagonal = (t & 1) != 0;
+            q.max_nodes = kMaxPathNodes;
+            const int sx = (int)(rng() % 24), sz = (int)(rng() % 24), gx = (int)(rng() % 24), gz = (int)(rng() % 24);
+            res = FindPath(w, sx, -1, sz, gx, -1, gz, q, out.data(), (int)out.size());
+            // ダイクストラ(地形は柱ごとに1つの高さ、天井なし)
+            std::vector<float> dist(24 * 24, 1e30f);
+            std::vector<char> done(24 * 24, 0);
+            dist[sx * 24 + sz] = 0;
+            for (;;) {
+                int u = -1;
+                for (int i = 0; i < 24 * 24; i++) if (!done[i] && dist[i] < 1e29f && (u < 0 || dist[i] < dist[u])) u = i;
+                if (u < 0) break;
+                done[u] = 1;
+                const int ux = u / 24, uz = u % 24;
+                auto ok = [&](int nx, int nz) {
+                    if (nx < 0 || nz < 0 || nx >= 24 || nz >= 24) return false;
+                    const int dh = hgt[nx][nz] - hgt[ux][uz];
+                    return dh <= q.max_up && -dh <= q.max_down;
+                };
+                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                    if (!dx && !dz) continue;
+                    const bool diag = dx && dz;
+                    if (diag && (!q.diagonal || !ok(ux + dx, uz) || !ok(ux, uz + dz))) continue;
+                    const int nx = ux + dx, nz = uz + dz;
+                    if (!ok(nx, nz)) continue;
+                    const int dh = hgt[nx][nz] - hgt[ux][uz];
+                    float c = diag ? 1.41421356f : 1.0f;
+                    c += dh > 0 ? q.up_cost * dh : q.down_cost * -dh;
+                    c += w.get(nx, hgt[nx][nz] - 1, nz) == SAND ? q.block_cost[SAND] : 0;
+                    if (dist[u] + c < dist[nx * 24 + nz]) dist[nx * 24 + nz] = dist[u] + c;
+                }
+            }
+            const float want = dist[gx * 24 + gz];
+            trials++;
+            if (want > 1e29f) { if (res.status == PathStatus::NoPath) same++; }
+            else if (res.status == PathStatus::Found && std::fabs(res.cost - want) < 1e-3f) {
+                // 道の値段を数え直しても同じ
+                float sum = 0;
+                bool okp = out[0].x == sx && out[0].z == sz && out[res.length - 1].x == gx && out[res.length - 1].z == gz;
+                for (int i = 1; i < res.length; i++) {
+                    const PathPoint& a = out[i - 1]; const PathPoint& b = out[i];
+                    const bool diag = a.x != b.x && a.z != b.z;
+                    const int dh = b.y - a.y;
+                    sum += (diag ? 1.41421356f : 1.0f) + (dh > 0 ? q.up_cost * dh : q.down_cost * -dh);
+                    sum += w.get(b.x, b.y - 1, b.z) == SAND ? q.block_cost[SAND] : 0;
+                    if (std::max(std::abs(a.x - b.x), std::abs(a.z - b.z)) != 1 || dh > q.max_up || -dh > q.max_down) okp = false;
+                }
+                if (okp && std::fabs(sum - want) < 1e-3f) same++;
+            }
+        }
+        char msg[96];
+        snprintf(msg, sizeof msg, "経路: 乱数の地形でダイクストラと同じ値段・正しい道 (%d/%d)", same, trials);
+        check(same == trials, msg);
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

@@ -12,7 +12,7 @@
 //   暗号(encrypt/decrypt/hash/random_bytes・storeの暗号化)
 //   OS同梱のLuaモジュール(pico.ui / pico.async / pico.tween / pico.game)
 //   pico.draw_tilemap / draw_image_partの反転
-//   pico.iso(2.5Dの箱庭のエンジン。中身は iso_world_test、ここはLuaからの呼び方と権限)
+//   pico.iso(2.5Dの箱庭のエンジン。中身は iso_world_test、ここはLuaからの呼び方と権限。経路探索 path/stand も)
 #include "lua/LuaEngine.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
@@ -1609,6 +1609,41 @@ int main() {
             iso.set(x + 1, y, z, 0)
             check(iso.light(x + 1, y, z) == 0, "iso.light: 松明を取ると暗い")
             iso.draw_icon(25, 10, 10)
+            -- 経路探索: 空中(y=14)に石の床を作り、その上だけを歩かせる
+            for i = 0, 10 do for j = 0, 4 do iso.set(x + i, 14, z + j, 2) end end
+            check(iso.stand(x + 3, z + 2) == 15, "iso.stand: 柱の一番上の立てる高さ")
+            local p, cost, how = iso.path(x, nil, z, x + 10, nil, z)
+            check(p and #p == 11 and cost == 10 and how == "found" and p[1].y == 15 and p[11].x == x + 10,
+                  "iso.path: 床の上をまっすぐ")
+            for j = 0, 3 do iso.set(x + 5, 14, z + j, 11) end      -- 砂の帯(z+4 だけ石)
+            p, cost = iso.path(x, nil, z, x + 10, nil, z, {avoid = {11}})
+            check(p and cost == 18, "iso.path: avoid で砂を避けて回る (" .. tostring(cost) .. ")")
+            p, cost = iso.path(x, nil, z, x + 10, nil, z, {block_cost = {[11] = 3}})
+            check(p and cost == 13, "iso.path: block_cost")
+            for j = 0, 4 do iso.set(x + 7, 15, z + j, 2) end         -- 1段の段(床の幅いっぱい)
+            p, cost = iso.path(x, nil, z, x + 10, nil, z, {up_cost = 4, down_cost = 1})
+            check(p and cost == 15 and p[8].y == 16, "iso.path: up_cost/down_cost(段を越える)")
+            local none, why = iso.path(x, nil, z, x + 10, nil, z, {max_up = 0})
+            check(none == nil and why == "no_path", "iso.path: max_up=0 なら段を越えられない")
+            for j = 1, 4 do iso.set(x + 7, 15, z + j, 0) end         -- 段は z の1列だけ残す
+            p, cost = iso.path(x, nil, z, x + 10, nil, z, {up_cost = 4, down_cost = 1})
+            check(p and cost == 12, "iso.path: 段差が高くつけば横を回る")
+            iso.set(x + 7, 15, z, 0)
+            local calls = 0
+            p, cost = iso.path(x, nil, z, x + 10, nil, z, {edge = function(ax, ay, az, bx, by, bz, floor)
+                calls = calls + 1
+                if bz == z and bx == x + 3 then return false end
+                return 0
+            end})
+            check(p and calls > 0 and cost == 12, "iso.path: edge で通れなくする")
+            check(not pcall(iso.path, x, nil, z, x + 10, nil, z, {edge = function() error("boom") end}),
+                  "iso.path: edge のエラーはそのまま")
+            none, why = iso.path(x, nil, z, x + 10, nil, z + 30)
+            check(none == nil and (why == "no_path" or why == "goal" or why == "limit"), "iso.path: 着けない (" .. tostring(why) .. ")")
+            p, cost, how = iso.path(x, nil, z, x + 10, nil, z + 30, {partial = true})
+            check(p and how == "partial", "iso.path: partial")
+            check(not pcall(iso.path, x, nil, z, x + 1, nil, z, {avoid = {99}}), "iso.path: 知らないブロックはエラー")
+            check(not pcall(iso.path, x, nil, z, x + 1, nil, z, {max_nodes = 0}), "iso.path: max_nodes の範囲")
             check(iso.save(x, y, z, 13), "iso.save")
             iso.close()
             check(iso.size() == nil, "iso.close")

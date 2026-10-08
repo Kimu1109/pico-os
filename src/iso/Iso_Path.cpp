@@ -14,7 +14,7 @@ bool BodyOk(const World& w, int x, int y, int z, const PathRules& r) {
     if (y >= H) return true;
     const uint8_t b = w.get(x, y, z);
     if ((r.avoid >> b) & 1) return false;
-    return b == AIR || b == TORCH || (b == WATER && r.swim);
+    return b == AIR || b == TORCH || (b == WATER && r.swim) || ((r.pass >> b) & 1);
 }
 
 // 頭の上 y0 .. y1-1 が空いているか
@@ -26,12 +26,12 @@ bool ClearRange(const World& w, int x, int y0, int y1, int z, const PathRules& r
 bool Standable(const World& w, int x, int y, int z, const PathRules& r) {
     if (y < 1 || y > H) return false;
     const uint8_t f = w.get(x, y - 1, z);
-    if (f == AIR || f == TORCH || ((r.avoid >> f) & 1)) return false;
+    if (f == AIR || f == TORCH || ((r.avoid >> f) & 1) || ((r.pass >> f) & 1)) return false;
     return ClearRange(w, x, y, y + r.height, z, r);
 }
 
 // (x,y,z) から隣の柱 (nx,nz) の高さ ny へ1歩で行けるか(高低差と頭の上だけ。値段は見ない)
-bool CanStep(const World& w, int x, int y, int z, int nx, int ny, int nz, const PathRules& r) {
+bool CanStepImpl(const World& w, int x, int y, int z, int nx, int ny, int nz, const PathRules& r) {
     if (ny > y) {
         if (ny - y > r.max_up) return false;
         // 今の柱で ny+height まで頭の上が空いている
@@ -56,7 +56,7 @@ int StepTargets(const World& w, int x, int y, int z, int nx, int nz, const PathR
     if (hi > H) hi = H;
     if (lo < 1) lo = 1;
     for (int ny = hi; ny >= lo; ny--) {
-        if (CanStep(w, x, y, z, nx, ny, nz, r)) out[n++] = (uint8_t)ny;
+        if (CanStepImpl(w, x, y, z, nx, ny, nz, r)) out[n++] = (uint8_t)ny;
     }
     return n;
 }
@@ -171,6 +171,20 @@ float Heuristic(int x, int z, int gx, int gz, const PathRules& r) {
 
 }  // namespace
 
+bool CanStep(const World& w, int x, int y, int z, int nx, int ny, int nz, const PathRules& r) {
+    return InWorld(w, nx, nz) && CanStepImpl(w, x, y, z, nx, ny, nz, r);
+}
+
+float EnterCost(const World& w, int x, int y, int z, const PathRules& r) {
+    const uint8_t floor = w.get(x, y - 1, z);
+    float c = r.block_cost[floor <= kBlockCount ? floor : 0];
+    for (int yy = y; yy < y + r.height && yy < H; yy++) {
+        const uint8_t b = w.get(x, yy, z);
+        if (b && b <= kBlockCount) c += r.body_cost[b];
+    }
+    return c;
+}
+
 int StandAt(const World& w, int x, int y, int z, const PathRules& r) {
     if (!InWorld(w, x, z)) return -1;
     int yy = (y < 0 || y > H) ? H : y;
@@ -237,7 +251,7 @@ PathResult FindPath(const World& w, int sx, int sy, int sz, int gx, int gy, int 
                 float cost = (d >= 4 ? r.step * 1.41421356f : r.step);
                 if (ny > c.y) cost += r.up_cost * (float)(ny - c.y);
                 else if (ny < c.y) cost += r.down_cost * (float)(c.y - ny);
-                cost += r.block_cost[floor <= kBlockCount ? floor : 0];
+                cost += EnterCost(w, nx, ny, nz, r);
                 if (r.edge) {
                     bool abort = false;
                     const float e = r.edge(r.ctx, c.x, c.y, c.z, nx, ny, nz, floor, abort);

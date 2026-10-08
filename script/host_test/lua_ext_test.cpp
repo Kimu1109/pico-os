@@ -1694,9 +1694,9 @@ int main() {
             check(iso.entity_remove(id) and iso.entity_get(id) == nil and not iso.entity_remove(id), "iso.entity_remove")
             check(not pcall(iso.entity_move, id, 1, 1, 1), "iso.entity_move: 無効なハンドルはエラー")
             local ids = {}
-            for i = 1, 40 do ids[#ids + 1] = iso.entity_add(sp, ex, ey, ez) end
+            for i = 1, 100 do ids[#ids + 1] = iso.entity_add(sp, ex, ey, ez) end
             local nn, why = iso.entity_add(sp, ex, ey, ez)
-            check(#ids == 32 and nn == nil and why ~= nil, "iso.entity_add: 32個まで")
+            check(#ids == 96 and nn == nil and why ~= nil, "iso.entity_add: 96個まで")
             iso.entity_clear()
             check(iso.entity_get(ids[1]) == nil, "iso.entity_clear")
             local n, e = iso.create("/other/w", 1, 5)
@@ -1708,6 +1708,73 @@ int main() {
             iso.dirty_edit(x, y, z)
             iso.draw_icon(3, 10, 10)
             check(not pcall(iso.create, "/app/w", 9, 1), "iso.create: 知らない種類はエラー")
+
+            -- ---- タワーディフェンス向けの道具 ----
+            iso.create("/app/t", 3, 1, 4)                 -- 空の 32x32
+            check(iso.keep_all(true), "iso.keep_all: 4x4 チャンクなら読み込んだままにできる")
+            iso.view(0, 20, 240, 204)
+            iso.origin(104, 106 + 8 * 20 + 16)
+            while iso.pump(64) > 0 do end
+            check(iso.stats().chunks == 16, "iso.keep_all: 全部読み込む")
+            for i = 0, 31 do for k = 0, 31 do iso.set(i, 0, k, 2) end end
+            check(not pcall(iso.flow_build, {}), "iso.flow_build: 目的地が無ければエラー")
+            check(iso.flow_build({{20, 20}}, {}, true), "iso.flow_build: その場で作る")
+            local d, nx, nz, ny = iso.flow_get(10.4, 20.7)
+            check(d == 10 and nx == 11 and nz == 20 and ny == 1, "iso.flow_get: 値段と次の柱と立つ高さ")
+            d, nx = iso.flow_get(20, 20)
+            check(d == 0 and nx == nil, "iso.flow_get: 目的地は次が無い")
+            check(iso.flow_get(-1, 3) == nil, "iso.flow_get: 世界の外は nil")
+            -- バリケード(板=6)の列で仕切る: pass なら中を通れて、body_cost だけ高い
+            for k = 0, 31 do iso.set(15, 1, k, 6); iso.set(15, 2, k, 6) end
+            check(iso.flow_build({{20, 20}}, {pass = {6}, body_cost = {[6] = 2}}), "iso.flow_build: 少しずつ作り始める")
+            check(iso.flow_info().building and iso.flow_get(10, 20) == 10, "iso.flow_step: 作っている間は前の結果")
+            local steps = 0
+            while not iso.flow_step(200) do steps = steps + 1 end
+            check(steps > 2 and iso.flow_get(10, 20) == 14 and iso.flow_info().revision == 2, "iso.flow_step: 出来上がると入れ替わる(板の中を通る)")
+            check(iso.stand(15, 20, nil, {pass = {6}}) == 1 and iso.stand(15, 20) == 3, "iso.stand: pass のブロックの上には立たない")
+            local p2, c2 = iso.path(10, nil, 20, 20, nil, 20, {pass = {6}, body_cost = {[6] = 2}})
+            check(p2 and c2 == 14, "iso.path: pass と body_cost")
+            check(not iso.sight(10.5, 1.5, 20.5, 20.5, 1.5, 20.5) and iso.sight(10.5, 1.5, 20.5, 20.5, 1.5, 20.5, {6}),
+                  "iso.sight: 板に遮られる / pass なら通る")
+            -- 人や物: 押し合い・分類・HPバー
+            local a = iso.entity_add(sp, 10.5, 1, 10.5, {crowd = "move", tag = 3, bar = 100, bar_color = 11, mark = 9})
+            local b = iso.entity_add(sp, 10.6, 1, 10.5, {crowd = "move", tag = 4, mass = 2})
+            local t = iso.entity_add(sp, 12.5, 1, 10.5, {crowd = "fixed", tag = 5})
+            local _, _, _, ia = iso.entity_get(a)
+            check(ia.crowd == "move" and ia.tag == 3 and ia.bar == 100 and ia.mark == 9 and ia.bar_color == 11, "iso.entity_get: 足した値")
+            check(not pcall(iso.entity_set, a, {crowd = "push"}) and not pcall(iso.entity_set, a, {tag = 40}), "iso.entity_set: crowd/tag の誤り")
+            check(iso.crowd() == 2, "iso.crowd: 重なった2人が動く")
+            local ax = iso.entity_get(a)
+            local bx = iso.entity_get(b)
+            check(math.abs((bx - ax) - 0.375) < 1e-3 and bx - 10.6 < 10.5 - ax, "iso.crowd: 重いほうが動かない")
+            local near = iso.nearby(10.5, 10.5, 3)
+            check(#near == 3 and near[3] == t, "iso.nearby: 近い順")
+            near = iso.nearby(10.5, 10.5, 3, {4, 5})
+            check(#near == 2 and near[1] == b, "iso.nearby: tag で絞る")
+            check(#iso.nearby(10.5, 10.5, 3, 3) == 1, "iso.nearby: tag は数1つでもよい")
+            iso.cursor(0, 0, 0, false)
+            iso.entity_set(a, {x = 10.5, z = 10.5})
+            local fx2, fy2 = iso.to_screen(10.5, 1, 10.5)
+            fx2, fy2 = math.floor(fx2 + 0.5), math.floor(fy2 + 0.5)
+            iso.render(0, 20, 240, 204)
+            check(pico.get_pixel(fx2 - 5, fy2 - 23 - 3) == 11 and pico.get_pixel(fx2, fy2 - 23 - 9) == 9, "iso.render: HPバーと印")
+            iso.entity_set(a, {bar = false, mark = false})
+            check(select(4, iso.entity_get(a)).bar == nil, "iso.entity_set: bar = false で消す")
+            -- 弾
+            check(not pcall(iso.shot_add, 1, 1, 1, {target = 12345}), "iso.shot_add: 無効な相手はエラー")
+            check(not pcall(iso.shot_add, 1, 1, 1, {}), "iso.shot_add: 相手も点も無ければエラー")
+            local s = iso.shot_add(5.5, 2, 10.5, {target = t, speed = 20, tag = 3, color = 8})
+            check(type(s) == "number" and iso.shot_count() == 1, "iso.shot_add")
+            local hits
+            for i = 1, 20 do hits = iso.shots_step(0.1); if #hits > 0 then break end end
+            check(#hits == 1 and hits[1].id == s and hits[1].target == t and hits[1].tag == 3 and not hits[1].lost
+                  and math.abs(hits[1].x - 12.5) < 1e-3, "iso.shots_step: 狙った相手に当たる")
+            check(iso.shot_count() == 0, "iso.shots_step: 当たった弾は消える")
+            iso.shot_add(1.5, 1, 1.5, {tx = 3.5, ty = 1, tz = 1.5, arc = 0.5})
+            iso.shot_clear()
+            check(iso.shot_count() == 0, "iso.shot_clear")
+            iso.close()
+            check(iso.flow_info().ready == false, "iso.close: 流れの場も片付く")
         )LUA", "iso");
         check(ok, "pico.iso: Luaから一通り使える");
         check(HostSd::files.count("/app/w/world.dat") == 1 && HostSd::files.count("/app/w/c_64_64.dat") == 1,

@@ -8,6 +8,8 @@
 //   隠れたブロックを描かない(省略しても画素が1つも変わらないこと。乱数のワールドで突き合わせる)
 //   タップ位置の引き当て・描き直す範囲
 //   面の写し方(FaceBlitter)が素朴な1画素ずつの写し方と同じになること(ディザも)
+//   人や物(エンティティ): ブロックとの前後(セルに収まる人や物を画家の順の途中へ挟んだ答えと画素が同じ・乱数のワールド)、
+//     水に沈む・地面の影(形・壁の裏で隠れる・高さで小さく)・描き直す範囲・引き当て・ハンドル・反転
 //   松明の光: 広がり方・壁で遮られる・取ると消える・チャンクの境目と後から読み込んだチャンク・描く絵(明るさ・夜)・
 //     描き直す範囲・影を落とさない・保存して開き直しても同じ
 // 面の絵はリポジトリの pc/sdcard/lua/apps/ブロック/faces.pimg を使う(第1引数にリポジトリのルート)。
@@ -16,6 +18,8 @@
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -123,6 +127,34 @@ static void EmptyWorld(World& w) {
     for (int cx = 0; cx < 6; cx++) for (int cz = 0; cz < 6; cz++) w.loadChunk(cx, cz);
     w.setView(0, 20, 240, 204);
     w.setOrigin(100, 150);
+}
+
+// ---- 人や物の描き先: fb へ1画素ずつ。人や物の絵は spr(1画素1バイト、0xFF = 透過) ----
+static int SPW = 0, SPH = 0;
+static std::vector<uint8_t> spr;
+static int FacePx(void*, int x, int y) { return (x >= 0 && y >= 0 && x < SW && y < SH) ? sheet[(size_t)y * SW + x] : 0; }
+static int ImagePx(void*, int32_t img, int x, int y) {
+    if (img != 7 || x < 0 || y < 0 || x >= SPW || y >= SPH) return -1;
+    const uint8_t c = spr[(size_t)y * SPW + x];
+    return c == 0xFF ? -1 : c;
+}
+static void PutPx(void* p, int x, int y, int c) {
+    Rec* r = static_cast<Rec*>(p);
+    if (x < r->cx0 || x >= r->cx1 || y < r->cy0 || y >= r->cy1) return;
+    fb[y][x] = (uint8_t)c;
+}
+static World::Sink EntSink(Rec& r) {
+    World::Sink s{&r, Draw, Dirty, Dither};
+    s.face_px = FacePx;
+    s.image_px = ImagePx;
+    s.put = PutPx;
+    return s;
+}
+// w×h の絵(色 c、四隅は透過)
+static void MakeSprite(int w, int h, uint8_t c) {
+    SPW = w; SPH = h;
+    spr.assign((size_t)w * h, c);
+    spr[0] = spr[w - 1] = spr[(size_t)(h - 1) * w] = spr[(size_t)h * w - 1] = 0xFF;
 }
 
 static int TopLen(const uint8_t* b) {
@@ -734,6 +766,364 @@ int main(int argc, char** argv) {
             v.loadChunk(2, 2);
             check(v.get(20, 1, 20) == TORCH && v.light(22, 1, 20) == l0 && l0 == 3, "開き直しても同じ明るさ");
         }
+    }
+
+    // ================================================================ 人や物(エンティティ)
+    {
+        // セルの中に収まる人や物は、画家の順の途中(そのセルの所)へ挟んだのと同じ絵になる。
+        // 答え: 「人や物より奥のブロックだけのワールド」を描き、人や物を描き、「手前のブロックだけのワールド」を重ねる
+        // (手前 = s が小さいか、同じ s で y が大きい。日の光は切る: 影がブロックの有る無しで変わるので)
+        // 絵は箱の画面の形の中に収まる大きさにする(はみ出す所は近似なので)
+        std::mt19937 rng(7);
+        MakeSprite(10, 14, 12);
+        int mism = 0, total = 0, covered = 0, hidden_some = 0;
+        for (int iter = 0; iter < 120; iter++) {
+            World full, back, front;
+            for (World* w : {&full, &back, &front}) { EmptyWorld(*w); w->setOccluders(occ); w->setSunlight(false); }
+            // 人や物の居るセル(空気)と、まわりの乱数のブロック
+            const int ex = 4 + (int)(rng() % 3), ey = 1 + (int)(rng() % 3), ez = 4 + (int)(rng() % 3);
+            const int es = ex + ez;
+            for (int n = 0; n < 60; n++) {
+                const int x = 1 + (int)(rng() % 9), y = (int)(rng() % 6), z = 1 + (int)(rng() % 9);
+                if (x == ex && z == ez && y == ey) continue;
+                // 葉は使わない(葉どうしの面は描かない決まりなので、ワールドを分けた答えの方に余計な面が出る)
+                uint8_t b = (uint8_t)(STONE + rng() % 20);
+                if (b == LEAVES) b = BRICKS;
+                full.set(x, y, z, b);
+                const int s2 = x + z;
+                ((s2 < es || (s2 == es && y > ey)) ? front : back).set(x, y, z, b);
+            }
+            Entity e;
+            e.x = ex + 0.5f; e.y = (float)ey; e.z = ez + 0.5f; e.r = 0.3f; e.h = 0.95f;
+            e.image = 7; e.sw = (int16_t)SPW; e.sh = (int16_t)SPH; e.ax = 5; e.ay = 13; e.shadow = false;
+            // 答え
+            memset(fb, 0, sizeof fb);
+            Rec r1; r1.raster = true; r1.cy0 = 20; r1.cy1 = 224;
+            back.setCursor(0, 0, 0, false);
+            back.render(World::Sink{&r1, Draw, Dirty, Dither}, 0, 20, 240, 224);
+            int dx, dy;
+            {
+                float fx, fy;
+                back.project(e.x, e.y, e.z, fx, fy);
+                dx = (int)floorf(fx + 0.5f) - e.ax; dy = (int)floorf(fy + 0.5f) - e.ay;
+            }
+            for (int y = 0; y < SPH; y++) for (int x = 0; x < SPW; x++) {
+                const int c = ImagePx(nullptr, 7, x, y);
+                if (c >= 0) PutPx(&r1, dx + x, dy + y, c);
+            }
+            front.setCursor(0, 0, 0, false);
+            front.render(World::Sink{&r1, Draw, Dirty, Dither}, 0, 20, 240, 224);
+            static uint8_t want[320][240];
+            memcpy(want, fb, sizeof fb);
+            // エンジン
+            memset(fb, 0, sizeof fb);
+            Rec r2; r2.raster = true; r2.cy0 = 20; r2.cy1 = 224;
+            full.setCursor(0, 0, 0, false);
+            full.entityAdd(World::Sink{}, e);
+            full.render(EntSink(r2), 0, 20, 240, 224);
+            int diff = 0, spr_px = 0;
+            for (int y = 20; y < 224; y++) for (int x = 0; x < 240; x++) if (fb[y][x] != want[y][x]) diff++;
+            for (int y = 0; y < SPH; y++) for (int x = 0; x < SPW; x++) {
+                if (dy + y >= 20 && dy + y < 224 && ImagePx(nullptr, 7, x, y) >= 0) {
+                    spr_px++;
+                    if (fb[dy + y][dx + x] == 12) covered++;
+                }
+            }
+            total += spr_px;
+            if (covered < total) hidden_some++;
+            if (diff) {
+                mism++;
+                if (mism <= 3) {
+                    printf("  違い: 人や物 (%d,%d,%d) 画素 %d:", ex, ey, ez, diff);
+                    for (int y = 20; y < 224; y++) for (int x = 0; x < 240; x++) if (fb[y][x] != want[y][x]) {
+                        // その画素に見えているブロック
+                        int bx, by, bz;
+                        const Face f = full.pick(x, y, bx, by, bz);
+                        printf(" (%d,%d %d->%d blk %d,%d,%d f%d)", x, y, want[y][x], fb[y][x], bx, by, bz, (int)f);
+                        y = 999; break;
+                    }
+                    printf("\n");
+                }
+            }
+        }
+        char msg[128];
+        snprintf(msg, sizeof msg, "人や物: 画家の順へ挟んだ答えと画素が同じ(乱数のワールド120個、違ったもの %d 個)", mism);
+        check(mism == 0, msg);
+        check(covered > 0 && covered < total && hidden_some > 0, "人や物: 見えている所も、手前のブロックに隠れた所もある");
+    }
+    {
+        // 壁の裏/手前・柱の手前・水・影
+        MakeSprite(12, 24, 12);
+        auto setup = [&](World& w) {
+            EmptyWorld(w);
+            w.setOccluders(occ);
+            w.setCursor(0, 0, 0, false);
+            for (int x = 0; x < 12; x++) for (int z = 0; z < 12; z++) w.set(x, 0, z, STONE);
+        };
+        auto count = [&](World& w, int handle) {
+            memset(fb, 0, sizeof fb);
+            Rec r; r.raster = true; r.cy0 = 20; r.cy1 = 224;
+            w.render(EntSink(r), 0, 20, 240, 224);
+            const Entity* e = w.entity(handle);
+            float fx, fy;
+            w.project(e->x, e->y, e->z, fx, fy);
+            const int dx = (int)floorf(fx + 0.5f) - e->ax, dy = (int)floorf(fy + 0.5f) - e->ay;
+            int n = 0;
+            for (int y = 0; y < SPH; y++) for (int x = 0; x < SPW; x++) {
+                if (ImagePx(nullptr, 7, x, y) >= 0 && fb[dy + y][dx + x] == 12) n++;
+            }
+            return n;
+        };
+        Entity e;
+        e.image = 7; e.sw = (int16_t)SPW; e.sh = (int16_t)SPH; e.ax = 6; e.ay = 23; e.r = 0.25f; e.h = 1.5f;
+        e.shadow = false;
+        const int all = SPW * SPH - 4;
+        {
+            World w;
+            setup(w);
+            e.x = 5.5f; e.y = 1; e.z = 5.5f;
+            const int h = w.entityAdd(World::Sink{}, e);
+            check(h != 0 && count(w, h) == all, "人や物: 何も無い所では絵が全部見える");
+            // 奥(+x)の壁: 見えたまま
+            for (int y = 1; y < 4; y++) for (int z = 3; z < 9; z++) w.set(6, y, z, STONE);
+            check(count(w, h) == all, "人や物: 奥の壁の手前に立つと全部見える");
+            // 手前(-x)の壁: 隠れる
+            for (int y = 1; y < 4; y++) for (int z = 3; z < 9; z++) w.set(4, y, z, BRICKS);
+            check(count(w, h) == 0, "人や物: 手前の壁の裏に回ると隠れる");
+        }
+        {
+            World w;
+            setup(w);
+            e.x = 5.5f; e.y = 1; e.z = 5.5f;
+            const int h = w.entityAdd(World::Sink{}, e);
+            w.set(4, 1, 5, STONE);   // 手前の低いブロック(1段): 足元だけ隠れる
+            const int n = count(w, h);
+            check(n > 0 && n < all, "人や物: 手前の1段のブロックは足元だけを隠す");
+            // 箱の上(高さ2)へ乗ると全部見える(足元のブロックは奥)
+            w.set(5, 1, 5, STONE);
+            w.entity(h)->y = 2;
+            check(count(w, h) == all, "人や物: ブロックの上に乗ると全部見える");
+            // 少しずれた所(セルをまたぐ)でも、奥のブロックに隠れない
+            w.set(5, 1, 5, AIR);
+            w.set(4, 1, 5, AIR);
+            w.set(6, 1, 6, STONE); w.set(6, 2, 6, STONE); w.set(7, 1, 5, STONE); w.set(7, 2, 5, STONE);
+            w.entity(h)->y = 1;
+            int worst = all;
+            for (int k = 0; k <= 10; k++) {
+                w.entity(h)->x = 5.3f + 0.04f * k;
+                w.entity(h)->z = 5.7f - 0.04f * k;
+                worst = std::min(worst, count(w, h));
+            }
+            check(worst == all, "人や物: セルをまたいで動いても奥のブロックに隠れない");
+        }
+        {
+            World w;
+            setup(w);
+            for (int x = 3; x < 9; x++) for (int z = 3; z < 9; z++) w.set(x, 1, z, WATER);
+            e.x = 5.5f; e.y = 1; e.z = 5.5f;
+            const int h = w.entityAdd(World::Sink{}, e);
+            const int n = count(w, h);
+            check(n > 0 && n < all, "人や物: 水の中では水面が手前に来て一部が透けて見える");
+            // 水面より上(絵の上の方)は隠れない: 水面の人や物より奥の所は手前に来ない
+            float fx, fy;
+            w.project(e.x, e.y, e.z, fx, fy);
+            const int dx = (int)floorf(fx + 0.5f) - e.ax, dy = (int)floorf(fy + 0.5f) - e.ay;
+            int top_ok = 0, top_all = 0, low_hidden = 0;
+            for (int y = 0; y < SPH; y++) for (int x = 0; x < SPW; x++) {
+                if (ImagePx(nullptr, 7, x, y) < 0) continue;
+                if (dy + y < (int)fy - 18) { top_all++; if (fb[dy + y][dx + x] == 12) top_ok++; }
+                if (dy + y > (int)fy - 6 && fb[dy + y][dx + x] != 12) low_hidden++;
+            }
+            check(top_all > 0 && top_ok == top_all && low_hidden > 0, "人や物: 水から出ている所はそのまま、沈んだ所は水越し");
+            check(w.ground(5.5f, 1.0f, 5.5f) == 1 && w.ground(5.5f, 1.5f, 5.5f) == 1 && w.ground(5.5f, 2.0f, 5.5f) == 2,
+                  "ground: 水の中に立っていれば水の底、水面より上なら水面");
+        }
+        {
+            // 影: 地面の上面に市松模様で。高く上がると小さく。壁の裏の地面の影は壁が隠す
+            World w;
+            setup(w);
+            e.shadow = true; e.shadow_color = 3;
+            e.x = 5.5f; e.y = 1; e.z = 5.5f;
+            const int h = w.entityAdd(World::Sink{}, e);
+            float cx, cy, a, b;
+            int gy;
+            check(w.shadowShape(*w.entity(h), cx, cy, a, b, gy) && gy == 1, "影: 地面の高さ");
+            check(w.ground(5.5f, 1.0f, 5.5f) == 1 && w.ground(5.5f, 0.0f, 5.5f) == -1 && w.ground(10.5f, 3.f, 10.5f) == 1 && w.ground(20.f, 3.f, 20.f) == -1,
+                  "影: ground は足の裏より下の一番上の地面");
+            // 影の画素 = 影ありと影なしで違う画素
+            auto shadowPx = [&]() {
+                static uint8_t base[320][240];
+                MakeSprite(12, 24, 12);
+                std::fill(spr.begin(), spr.end(), 0xFF);   // 絵は全部透過(影だけ見る)
+                Entity* p = w.entity(h);
+                const bool on = p->shadow;
+                memset(fb, 0, sizeof fb);
+                Rec r; r.raster = true; r.cy0 = 20; r.cy1 = 224;
+                p->shadow = false;
+                w.render(EntSink(r), 0, 20, 240, 224);
+                memcpy(base, fb, sizeof fb);
+                p->shadow = on;
+                memset(fb, 0, sizeof fb);
+                w.render(EntSink(r), 0, 20, 240, 224);
+                int n = 0;
+                for (int y = 20; y < 224; y++) for (int x = 0; x < 240; x++) if (fb[y][x] != base[y][x]) n++;
+                return n;
+            };
+            const int s0 = shadowPx();
+            w.entity(h)->y = 4;
+            const int s1 = shadowPx();
+            check(s0 > 8 && s1 > 0 && s1 < s0, "影: 地面に落ち、高く上がると小さくなる");
+            w.entity(h)->y = 1;
+            for (int y = 1; y < 4; y++) for (int z = 3; z < 9; z++) w.set(4, y, z, BRICKS);
+            check(shadowPx() == 0, "影: 手前の壁の裏の影は壁が隠す");
+            w.entity(h)->shadow = false;
+            check(shadowPx() == 0, "影: shadow = false なら落とさない");
+            MakeSprite(12, 24, 12);
+        }
+        {
+            // 描き直す範囲・引き当て・ハンドル・反転
+            World w;
+            setup(w);
+            e.shadow = true;
+            e.x = 5.5f; e.y = 1; e.z = 5.5f;
+            dirties.clear();
+            Rec r;
+            const World::Sink sink = EntSink(r);
+            const int h = w.entityAdd(sink, e);
+            int x0, y0, x1, y1;
+            check(w.entityRect(*w.entity(h), x0, y0, x1, y1) && dirties.size() == 1, "置くと絵と影の範囲を描き直す");
+            float fx, fy;
+            w.project(5.5f, 1, 5.5f, fx, fy);
+            check(x0 <= (int)fx - 6 && x1 >= (int)fx + 6 && y0 <= (int)fy - 23 && y1 > (int)fy, "範囲は絵を含む");
+            dirties.clear();
+            w.entity(h)->x = 7.5f;
+            w.entityChanged(sink, h);
+            check(dirties.size() == 2, "動かすと前の所と今の所を描き直す");
+            const int fx2 = (int)floorf(fx + 0.5f) + 32;   // x を 2 増やすと画面で右へ 32px、上へ 16px
+            const int fy2 = (int)floorf(fy + 0.5f) - 16;
+            check(w.entityAt(sink, fx2, fy2 - 10) == h, "引き当て: 絵の不透明な所");
+            check(w.entityAt(sink, fx2 - 6, fy2 - 23) == 0, "引き当て: 絵の透過した所(角)は当たらない");
+            // 手前のもう1つ
+            Entity e2 = e;
+            e2.x = 6.5f; e2.y = 1; e2.z = 5.5f;   // 少し手前…ではなく奥と手前を比べる: (7.5,5.5) より x が小さい = 手前
+            const int h2 = w.entityAdd(sink, e2);
+            w.project(6.5f, 1, 5.5f, fx, fy);
+            check(w.entityAt(sink, (int)floorf(fx + 0.5f) + 5, (int)floorf(fy + 0.5f) - 10) == h2, "引き当て: 重なれば手前のもの");
+            check(w.entityRemove(sink, h2) && !w.entity(h2) && w.entityCount() == 1, "取り除くとハンドルは無効");
+            const int h3 = w.entityAdd(sink, e2);
+            check(h3 != h2 && !w.entity(h2) && w.entity(h3), "取り除いた所を使い回してもハンドルは別物");
+            int n = w.entityCount();
+            while (w.entityAdd(sink, e2)) n++;
+            check(n == kMaxEntities && w.entityCount() == kMaxEntities, "置けるのは kMaxEntities 個まで");
+            w.entityClear(sink);
+            check(w.entityCount() == 0 && !w.entity(h), "全部片付ける");
+            // 反転: 左右で色の違う絵
+            MakeSprite(12, 24, 12);
+            for (int y = 0; y < 24; y++) for (int x = 0; x < 6; x++) if (spr[(size_t)y * 12 + x] != 0xFF) spr[(size_t)y * 12 + x] = 9;
+            Entity e3 = e;
+            e3.shadow = false; e3.flip = true;
+            const int h4 = w.entityAdd(sink, e3);
+            memset(fb, 0, sizeof fb);
+            Rec rr; rr.raster = true; rr.cy0 = 20; rr.cy1 = 224;
+            w.render(EntSink(rr), 0, 20, 240, 224);
+            w.project(e3.x, e3.y, e3.z, fx, fy);
+            const int dx = (int)floorf(fx + 0.5f) - 6, dy = (int)floorf(fy + 0.5f) - 23;
+            check(w.entity(h4) && fb[dy + 10][dx + 1] == 12 && fb[dy + 10][dx + 10] == 9, "反転: 左右が入れ替わる");
+            // ワールドを閉じると片付く
+            w.close();
+            check(w.entityCount() == 0, "ワールドを閉じると片付く");
+            MakeSprite(12, 24, 12);
+        }
+        {
+            // 前後の判定
+            const Box b{5.2f, 1.0f, 5.2f, 5.8f, 2.5f, 5.8f};
+            check(World::InFront(b, 4, 1, 5, STONE) && !World::InFront(b, 6, 1, 5, STONE), "前後: -x は手前、+x は奥");
+            check(World::InFront(b, 5, 1, 4, STONE) && !World::InFront(b, 5, 1, 6, STONE), "前後: -z は手前、+z は奥");
+            check(World::InFront(b, 5, 3, 5, STONE) && !World::InFront(b, 5, 0, 5, STONE), "前後: 上は手前、足元は奥");
+            check(World::InFront(b, 5, 1, 5, WATER) && !World::InFront(b, 5, 1, 5, STONE), "前後: 重なった水は手前、ブロックは奥");
+            const Box c{5.3f - 0.3f, 1.0f, 5.5f, 5.6f, 2.0f, 5.9f};   // x0 = 4.9999…(小数の誤差)
+            check(World::InFront(c, 4, 1, 5, STONE), "前後: 面で接していれば小数の誤差があっても手前");
+        }
+    }
+
+    {
+        // 描き直す範囲: 人や物を動かす・跳ねる・反転・隠す・足す・取り除く、足元のブロックを置く/壊すたびに、
+        // 頼まれた矩形だけを描き直した画面が、全体を描き直した画面と同じになる
+        std::mt19937 rng(11);
+        MakeSprite(12, 22, 12);
+        World w;
+        EmptyWorld(w);
+        w.setOccluders(occ);
+        w.setCursor(0, 0, 0, false);
+        for (int x = 0; x < 14; x++) for (int z = 0; z < 14; z++) {
+            w.set(x, 0, z, STONE);
+            if (rng() % 4 == 0) w.set(x, 1, z, GRASS);
+            if (rng() % 9 == 0) { w.set(x, 1, z, BRICKS); w.set(x, 2, z, BRICKS); }
+        }
+        for (int x = 9; x < 13; x++) for (int z = 2; z < 6; z++) w.set(x, 1, z, WATER);
+        auto full = [&](uint8_t (*out)[240]) {
+            memset(fb, 0, sizeof fb);
+            Rec r; r.raster = true; r.cy0 = 20; r.cy1 = 224;
+            w.render(EntSink(r), 0, 20, 240, 224);
+            memcpy(out, fb, sizeof fb);
+        };
+        static uint8_t cur[320][240], want[320][240];
+        std::vector<int> hs;
+        Rec rr;
+        const World::Sink dsink = EntSink(rr);
+        for (int i = 0; i < 6; i++) {
+            Entity e;
+            e.image = 7; e.sw = 12; e.sh = 22; e.ax = 6; e.ay = 21; e.r = 0.2f; e.h = 1.4f; e.shadow_color = 4;
+            e.x = 2.5f + i * 1.7f; e.z = 2.5f + (i % 3) * 3.1f;
+            e.y = (float)w.ground(e.x, 16, e.z);
+            hs.push_back(w.entityAdd(dsink, e));
+        }
+        full(cur);
+        int bad = 0;
+        for (int step = 0; step < 300; step++) {
+            dirties.clear();
+            const int h = hs[rng() % hs.size()];
+            Entity* e = w.entity(h);
+            const int op = (int)(rng() % 10);
+            if (!e) {
+                Entity n;
+                n.image = 7; n.sw = 12; n.sh = 22; n.ax = 6; n.ay = 21; n.x = 6.5f; n.z = 6.5f;
+                n.y = (float)std::max(0, w.ground(6.5f, 16, 6.5f));
+                for (int& hh : hs) if (hh == h) hh = w.entityAdd(dsink, n);
+            } else if (op < 5) {
+                e->x = std::min(13.5f, std::max(0.5f, e->x + ((int)(rng() % 9) - 4) * 0.13f));
+                e->z = std::min(13.5f, std::max(0.5f, e->z + ((int)(rng() % 9) - 4) * 0.13f));
+                e->y = (float)std::max(0, w.ground(e->x, 16, e->z)) + ((rng() % 3 == 0) ? (rng() % 30) * 0.1f : 0.0f);
+                w.entityChanged(dsink, h);
+            } else if (op == 5) {
+                e->flip = !e->flip; w.entityChanged(dsink, h);
+            } else if (op == 6) {
+                e->visible = !e->visible; w.entityChanged(dsink, h);
+            } else if (op == 7) {
+                w.entityRemove(dsink, h);
+            } else {
+                // 足元のまわりのブロックを置く/壊す
+                const int bx = (int)floorf(e->x) + (int)(rng() % 3) - 1, bz = (int)floorf(e->z) + (int)(rng() % 3) - 1;
+                const int by = 1 + (int)(rng() % 2);
+                w.set(bx, by, bz, w.get(bx, by, bz) ? AIR : COBBLE);
+                w.dirtyEdit(dsink, bx, by, bz);
+            }
+            // 頼まれた矩形だけ描き直す
+            for (const std::string& d : dirties) {
+                int x, y, ww, hh;
+                sscanf(d.c_str(), "%d %d %d %d", &x, &y, &ww, &hh);
+                memcpy(fb, cur, sizeof fb);
+                Rec r; r.raster = true; r.cx0 = x; r.cy0 = y; r.cx1 = x + ww; r.cy1 = y + hh;
+                for (int yy = y; yy < y + hh; yy++) for (int xx = x; xx < x + ww; xx++) fb[yy][xx] = 0;
+                w.render(EntSink(r), x, y, x + ww, y + hh);
+                memcpy(cur, fb, sizeof fb);
+            }
+            full(want);
+            if (memcmp(cur, want, sizeof cur) != 0) { bad++; memcpy(cur, want, sizeof cur); }
+        }
+        char msg[128];
+        snprintf(msg, sizeof msg, "人や物: 頼まれた矩形だけ描き直しても全体を描き直したのと同じ(300回、違ったもの %d 回)", bad);
+        check(bad == 0, msg);
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

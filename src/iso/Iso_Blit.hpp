@@ -149,6 +149,17 @@ public:
         }
     }
 
+    // 元の画像の1画素(範囲外は 0 = 透過)
+    int pixel(int sx, int sy) const {
+        if (!src_ || (unsigned)sx >= (unsigned)sw_ || (unsigned)sy >= (unsigned)sh_) return 0;
+        return Get(src_ + (size_t)sy * sstride_, sx);
+    }
+    // 描き先の1画素(クリップの外は書かない)
+    void put(int x, int y, int c) const {
+        if (!dst_ || x < cx0_ || x >= cx1_ || y < cy0_ || y >= cy1_) return;
+        Put(dst_ + (size_t)y * dstride_, x, (uint8_t)(c & 15));
+    }
+
     // 透過の判定なしに n 画素を写す
     static void CopySpan(const uint8_t* srow, int sx, uint8_t* drow, int dx, int n) {
         if (((sx ^ dx) & 1) == 0) {

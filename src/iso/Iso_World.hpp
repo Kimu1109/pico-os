@@ -31,6 +31,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cmath>
 
 #include "util/FixedString.hpp"
 #include "consts.hpp"
@@ -245,6 +246,13 @@ public:
     // (x, z) の柱で、上面が高さ y(足の裏)以下にある一番上のブロックの上面の y(= 地面の高さ)。無ければ -1
     // (水も地面。松明は地面にならない。水の中に立っているなら水の底)
     int ground(float x, float y, float z) const;
+    // 点 (x, z) の柱のチャンクを読み込んでいるか(世界の外は false)。読み込んでいない所は空気に見えるので、
+    // 人や物を動かすときはここで止める(落ちて消えないように)
+    bool loadedAt(float x, float z) const {
+        const int ix = (int)floorf(x), iz = (int)floorf(z);
+        if (ix < 0 || iz < 0 || ix >= W_ || iz >= W_ || !pool_) return false;
+        return find(ix >> 3, iz >> 3) != nullptr;
+    }
     // 点 (X, Y, Z) の画面の位置
     void project(float x, float y, float z, float& sx, float& sy) const {
         sx = (float)OX_ + 16.0f + 16.0f * (x - z);

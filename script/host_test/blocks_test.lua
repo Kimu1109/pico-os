@@ -100,6 +100,8 @@ function iso.entity_move(id, x, y, z) local e = assert(ents[id]); e.x, e.y, e.z 
 function iso.entity_set(id, o) local e = assert(ents[id]); for k, v in pairs(o) do e.o[k] = v end end
 function iso.entity_remove(id) local had = ents[id] ~= nil; ents[id] = nil; return had end
 function iso.entity_at() return tap_id end
+local unloaded = nil       -- function(x, z) -> true なら読み込んでいない扱い
+function iso.loaded(x, z) return not (unloaded and unloaded(x, z)) end
 function iso.ground(x, z, y)
     y = y or 16
     for yy = math.min(15, math.floor(y + 0.001) - 1), 0, -1 do
@@ -216,6 +218,39 @@ local up = ents[id1].y
 frames(60)
 check(up > 2 and ents[id1].y == 2, "タップすると跳ねて、地面へ戻る")
 for dx = -2, 2 do for dz = -2, 2 do for y = 1, 3 do iso.set(bx0 + dx, y, bz0 + dz, 0) end end end
+-- 段の端: 足元の角が高い段にかかっていても、登ったまま(上下を行ったり来たりしない)
+local m1 = E.mobs.list()[1]
+for x = 520, 530 do for z = 480, 560 do iso.set(x, 1, z, 2) end end
+m1.x, m1.y, m1.z, m1.vy = 519.85, 1, 500.5, 0      -- 半径0.2の角が x=520(高い段)にかかる
+m1.dx, m1.dz, m1.walk, m1.wait = 0, 1, 99, 0       -- 段の縁に沿って歩く
+local changes, prev = 0, m1.y
+for _ = 1, 60 do
+    frames(1)
+    if m1.y ~= prev then changes = changes + 1; prev = m1.y end
+end
+check(changes <= 1 and m1.y == 2, "段の縁に沿って歩いても上下を行ったり来たりしない (変化 " .. changes .. " 回)")
+-- 縁から離れたら1回だけ降りる
+m1.dx, m1.dz, m1.walk = -1, 0, 99
+changes, prev = 0, m1.y
+for _ = 1, 60 do
+    frames(1)
+    if m1.y ~= prev then changes = changes + 1; prev = m1.y end
+end
+check(m1.y == 1 and m1.x < 519.5, "縁から離れると下の段へ降りる")
+for x = 520, 530 do for z = 480, 560 do iso.set(x, 1, z, 0) end end
+-- 足元のチャンクを読み込んでいない(空気に見える)間は、落ちずにその場で止まる
+m1.x, m1.y, m1.z, m1.vy, m1.wait = 512.5, 1, 512.5, 0, 0
+unloaded = function(x, z) return x >= 504 and x < 520 and z >= 504 and z < 520 end
+for x = 508, 516 do for z = 508, 516 do iso.set(x, 0, z, 0) end end
+frames(60)
+check(m1.y == 1 and m1.x == 512.5 and m1.z == 512.5 and ents[m1.id].y == 1, "読み込んでいない所では落ちずに止まる")
+unloaded = nil
+for x = 508, 516 do for z = 508, 516 do iso.set(x, 0, z, 3) end end
+local mx0 = m1.x
+m1.walk, m1.wait, m1.dx, m1.dz = 99, 0, 1, 0
+frames(30)
+check(m1.y == 1 and m1.x ~= mx0, "読み込み直すとまた歩く")
+
 -- 歩くコマ
 local sx_seen = {}
 for _ = 1, 60 do frames(1); for _, e in pairs(ents) do if e.o.sx then sx_seen[e.o.sx] = true end end end

@@ -948,6 +948,8 @@ int main(int argc, char** argv) {
             float cx, cy, a, b;
             int gy;
             check(w.shadowShape(*w.entity(h), cx, cy, a, b, gy) && gy == 1, "影: 地面の高さ");
+            check(w.loadedAt(5.5f, 5.5f) && w.loadedAt(47.9f, 0.0f) && !w.loadedAt(48.0f, 5.0f) && !w.loadedAt(-0.1f, 5.0f),
+                  "loadedAt: 読み込んだチャンクの中だけ true");
             check(w.ground(5.5f, 1.0f, 5.5f) == 1 && w.ground(5.5f, 0.0f, 5.5f) == -1 && w.ground(10.5f, 3.f, 10.5f) == 1 && w.ground(20.f, 3.f, 20.f) == -1,
                   "影: ground は足の裏より下の一番上の地面");
             // 影の画素 = 影ありと影なしで違う画素

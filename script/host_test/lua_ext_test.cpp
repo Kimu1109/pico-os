@@ -1628,6 +1628,8 @@ int main() {
             check(not pcall(iso.entity_add, sp, x, y, z, { w = 40 }), "iso.entity_add: 画像の外の範囲はエラー")
             -- (x, y, z) には TNT を置いてある。その上に立てる
             local ex, ey, ez = x + 0.5, iso.ground(x + 0.5, z + 0.5, y + 1), z + 0.5
+            check(iso.loaded(x + 0.5, z + 0.5) and not iso.loaded(-1, 5) and not iso.loaded(5000, 5)
+                  and not iso.loaded(x + 400, z), "iso.loaded: 読み込んだ所だけ true(世界の外・遠くは false)")
             check(ey == y + 1 and iso.ground(x + 0.5, z + 0.5, y) == y and iso.ground(x + 0.5, z + 0.5, 0) == nil,
                   "iso.ground: 足の裏より下の一番上の地面")
             local id = iso.entity_add(sp, ex, ey, ez, { shadow_color = 4 })

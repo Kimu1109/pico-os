@@ -51,13 +51,29 @@ local function new_dir(m)
     end
 end
 
+-- 足元の正方形の四隅で一番高い地面(高さ y 以下)。立つ高さ(stand_height)と同じ四隅で見る
+-- (中心の柱だけで見ると、段の端で「登る→中心の下が低いので落ちる→また登る」を毎フレーム繰り返した)
+local function support(x, y, z, r)
+    local g = -1
+    for _, c in ipairs({ { -r, -r }, { r, -r }, { -r, r }, { r, r } }) do
+        local gy = iso.ground(x + c[1], z + c[2], y + 0.01)
+        if gy and gy > g then g = gy end
+    end
+    return g
+end
+
+-- 足元の四隅のチャンクを全部読み込んでいるか(読み込んでいない所は空気に見えるので、そこでは動かさない)
+local function loaded(x, z, r)
+    return iso.loaded(x - r, z - r) and iso.loaded(x + r, z - r) and iso.loaded(x - r, z + r) and iso.loaded(x + r, z + r)
+end
+
 -- (cx, cz) のまわりの、立てる所へ置く(置けなければ false)
 local function place(m, cx, cz)
     for _ = 1, 20 do
         local x = cx + math.random(-6, 6) + 0.5
         local z = cz + math.random(-6, 6) + 0.5
         local g = iso.ground(x, z)
-        if g and g < 16 and stand_height(x, g, z, m.k.r, m.k.height) == g then
+        if g and g < 16 and loaded(x, z, m.k.r) and stand_height(x, g, z, m.k.r, m.k.height) == g then
             m.x, m.y, m.z, m.vy = x, g, z, 0
             iso.entity_move(m.id, x, g, z)
             return true
@@ -99,13 +115,15 @@ function M.update(dt_ms, cx, cz)
         local k = m.k
         if math.abs(m.x - cx) + math.abs(m.z - cz) > FAR then place(m, cx, cz) end
         local moving = false
-        if m.wait > 0 then
+        if not loaded(m.x, m.z, k.r) then
+            -- 足元のチャンクを読み込んでいない(視点を遠くへ動かした): 読み込み直すまでその場で止める
+        elseif m.wait > 0 then
             m.wait = m.wait - dt
         else
             m.walk = m.walk - dt
             if m.walk <= 0 then new_dir(m) end
             local nx, nz = m.x + m.dx * k.speed * dt, m.z + m.dz * k.speed * dt
-            local g = stand_height(nx, m.y, nz, k.r, k.height)
+            local g = loaded(nx, nz, k.r) and stand_height(nx, m.y, nz, k.r, k.height)
             if g and m.vy == 0 then
                 m.x, m.z = nx, nz
                 if g > m.y then m.y = g end   -- 1段なら登る
@@ -114,9 +132,9 @@ function M.update(dt_ms, cx, cz)
                 new_dir(m)                    -- 壁・水・崖の外: 向きを変える
             end
         end
-        -- 落ちる・跳ねる
-        local gnd = iso.ground(m.x, m.z, m.y + 0.01) or -1
-        if m.y > gnd or m.vy > 0 then
+        -- 落ちる・跳ねる(足元を読み込んでいなければ落とさない)
+        local gnd = support(m.x, m.y, m.z, k.r)
+        if loaded(m.x, m.z, k.r) and (m.y > gnd or m.vy > 0) then
             m.vy = m.vy - GRAVITY * dt
             m.y = m.y + m.vy * dt
             if m.y <= gnd then m.y, m.vy = gnd, 0 end
@@ -149,5 +167,6 @@ function M.tap(px, py)
 end
 
 function M.count() return #mobs end
+function M.list() return mobs end   -- テスト用
 
 return M

@@ -1162,9 +1162,10 @@ int World::ground(float x, float y, float z) const {
 
 bool World::shadowShape(const Entity& e, float& cx, float& cy, float& a, float& b, int& gy) const {
     if (!e.shadow) return false;
-    // 足元の正方形の四隅と中心のうち一番高い地面(段の端に立っていても下の段に影が浮かないように)
+    // 足元の正方形の四隅と中心のうち一番高い地面(段の端に立っていても下の段に影が浮かないように。
+    // 四隅は箱の角そのもの: 立つ高さを同じ四隅で決めるアプリ(mobs.lua)と食い違わないように)
     gy = ground(e.x, e.y, e.z);
-    const float r = e.r * 0.9f;
+    const float r = e.r;
     for (int k = 0; k < 4; k++) {
         const int g = ground(e.x + ((k & 1) ? r : -r), e.y, e.z + ((k & 2) ? r : -r));
         if (g > gy) gy = g;

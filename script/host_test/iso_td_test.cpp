@@ -133,6 +133,19 @@ int main(int argc, char** argv) {
         int steps = 0;
         while (!f.step(w, 100)) steps++;
         check(f.ready() && f.revision() == 1 && steps > 10, "流れの場: 少しずつ作って出来上がる");
+        {
+            const size_t n = (size_t)w.width() * w.width();
+            check(f.memoryBytes() == n * 3, "流れの場: 出来上がったら結果の 3バイト/柱 だけ持つ(作業場所は返す)");
+            Flow g;
+            g.begin(w, r, gx, gz, 1);
+            g.step(w, 1 << 20);
+            const size_t peak_first = g.memoryBytes();
+            g.begin(w, r, gx, gz, 1);
+            check(g.memoryBytes() > n * 6 && g.memoryBytes() < n * 6 + 8192, "流れの場: 作り直しの間は結果2組と出番待ちの列だけ");
+            check(g.dist(10, 40) == 30 && !g.failed(), "流れの場: 作り直しの間も前の結果を答える");
+            while (!g.step(w, 500)) {}
+            check(g.memoryBytes() == peak_first && g.revision() == 2, "流れの場: 作り直した後も 3バイト/柱 に戻る");
+        }
         check(f.dist(40, 40) == 0 && f.standY(40, 40) == 1, "流れの場: 目的地は値段0、立つ高さ1");
         check(f.dist(10, 40) == 30 && f.dist(0, 0) == 80, "流れの場: 平らな所の値段は歩数(斜め無し)");
         int nx, nz;

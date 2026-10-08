@@ -1015,7 +1015,12 @@ struct LuaEngineIso {
             }
         }
         if (now) {
-            while (!st.flow.step(st.world, 1 << 20)) {}
+            while (st.flow.building()) st.flow.step(st.world, 1 << 20);
+            if (st.flow.failed()) {
+                lua_pushnil(L);
+                lua_pushstring(L, "メモリが足りません");
+                return 2;
+            }
         }
         lua_pushboolean(L, 1);
         return 1;
@@ -1046,10 +1051,12 @@ struct LuaEngineIso {
         return 4;
     }
 
-    // pico.iso.flow_info() -> {ready=, building=, revision=}
+    // pico.iso.flow_info() -> {ready=, building=, revision=, failed=, bytes=}(failed = 直前の作り直しがメモリ不足で止まった)
     static int l_flow_info(lua_State* L) {
         LuaEngine::IsoState& st = St(L);
-        lua_createtable(L, 0, 3);
+        lua_createtable(L, 0, 5);
+        lua_pushboolean(L, st.flow.failed()); lua_setfield(L, -2, "failed");
+        lua_pushinteger(L, (lua_Integer)st.flow.memoryBytes()); lua_setfield(L, -2, "bytes");
         lua_pushboolean(L, st.flow.ready()); lua_setfield(L, -2, "ready");
         lua_pushboolean(L, st.flow.building()); lua_setfield(L, -2, "building");
         lua_pushinteger(L, (lua_Integer)st.flow.revision()); lua_setfield(L, -2, "revision");

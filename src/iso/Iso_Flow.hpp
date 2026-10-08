@@ -17,9 +17,13 @@
 // 作っている間は前の結果を引き続き答え、出来上がった瞬間に入れ替える(2面持ち)。
 // 値段は 1/8 単位の 16bit で持つ(8191.75 で頭打ち)。
 //
-// 作業場所は 1柱あたり 12バイト + 目的地 512バイト(56x56 の世界で約38KB)。begin で確保し、clear で返す。
+// メモリ(実機ではチャンクの置き場の後に取るので、大きな塊を1つ取らない):
+//   出来上がった結果: 1柱あたり 3バイト(値段 2 + 向きと立つ高さを詰めた 1)。56x56 で約9.4KB。
+//   作っている間だけ: もう1組(3バイト/柱)+ 出番待ちのヒープ(1件4バイト、512件から必要なだけ広げる)。
+//   作り終えたら前の結果とヒープを返す。確保は配列ごとに分ける(一番大きいものでも 2*W*W バイト)。
 // 幅は kMaxFlowWidth まで。
 
+#include <cstddef>
 #include <cstdint>
 
 #include "iso/Iso_World.hpp"
@@ -33,8 +37,6 @@ constexpr int kMaxFlowGoals = 256;
 class Flow {
 public:
     static constexpr uint16_t kUnreached = 0xFFFF;
-    static constexpr uint8_t kNoNext = 0xFF;    // 届かない
-    static constexpr uint8_t kAtGoal = 0xFE;    // 目的地そのもの
     static constexpr float kUnit = 8.0f;        // 値段の単位(1/8)
 
     Flow() = default;
@@ -52,6 +54,10 @@ public:
     // 最大 budget 単位(柱を1つ調べる/1つ確定する = 1単位)進める。この呼び出しで出来上がったら true
     bool step(const World& w, int budget);
     bool building() const { return phase_ != Phase::Idle; }
+    // 直前の作り直しがメモリ不足で止まったか(前の結果はそのまま残る。次の begin で下りる)
+    bool failed() const { return failed_; }
+    // 今持っているメモリ(バイト。目的地の表のぶんは Flow 自身の中なので含めない)
+    size_t memoryBytes() const;
     bool ready() const { return revision_ > 0; }
     uint32_t revision() const { return revision_; }
     void clear();
@@ -59,40 +65,39 @@ public:
 
     // 柱 (x, z) の値(出来上がった結果)。届かない・世界の外・まだ無いなら dist は負
     float dist(int x, int z) const;
-    // 立つ高さ(柱の一番上の立てる所。無ければ -1)
+    // 立つ高さ(柱の一番上の立てる所。立てない柱・まだ結果が無いなら -1)
     int standY(int x, int z) const;
     // 次に進む柱。目的地そのもの・届かないなら false(at_goal で区別)
     bool next(int x, int z, int& nx, int& nz, bool* at_goal = nullptr) const;
 
 private:
     enum class Phase : uint8_t { Idle, Scan, Run };
+    // 向き(上位4bit)と立つ高さ(下位4bit)を1バイトに詰める
+    static constexpr uint8_t kPackNoStand = 14;   // 立てない柱(高さは意味が無い)
+    static constexpr uint8_t kPackUnreached = 15; // 立てるが届かない
+    static constexpr uint8_t kPackGoal = 8;
+    struct HeapEnt { uint16_t d; int16_t c; };
 
-    bool alloc(int W);
-    void push(int i);
-    void up(int pos);
-    void down(int pos);
-    int pop();
-    bool lessAt(int a, int b) const { return bdist_[heap_[a]] < bdist_[heap_[b]]; }
-    void swapAt(int a, int b);
+    void freeBack();
+    bool pushHeap(uint16_t d, int c);
+    HeapEnt popHeap();
 
     int W_ = 0;
-    uint8_t* block_ = nullptr;   // まとめて確保した領域
-    uint8_t* ycol_ = nullptr;    // 立つ高さ(255 = 立てない)。作っている間に書き換えるので、前の結果用に fy_ を持つ
-    uint8_t* fy_ = nullptr;      // 出来上がった結果の立つ高さ
     uint16_t* fdist_ = nullptr;  // 出来上がった結果
-    uint8_t* fnext_ = nullptr;
+    uint8_t* fpack_ = nullptr;
     uint16_t* bdist_ = nullptr;  // 作っている途中
-    uint8_t* bnext_ = nullptr;
-    int16_t* hpos_ = nullptr;    // ヒープの中の位置(-1 = 入っていない、-2 = 確定)
-    int16_t* heap_ = nullptr;
+    uint8_t* bpack_ = nullptr;
+    HeapEnt* heap_ = nullptr;    // 出番待ち(古くなった件は取り出すときに飛ばす)
     int heap_n_ = 0;
+    int heap_cap_ = 0;
 
     Phase phase_ = Phase::Idle;
     int scan_ = 0;
     PathRules rules_;
-    int16_t* goals_ = nullptr;   // 目的地の柱の番号(x*W+z)。kMaxFlowGoals 個。block_ の中
+    int16_t goals_[kMaxFlowGoals];   // 目的地の柱の番号(x*W+z)
     int ngoals_ = 0;
     uint32_t revision_ = 0;
+    bool failed_ = false;
 };
 
 }  // namespace Iso

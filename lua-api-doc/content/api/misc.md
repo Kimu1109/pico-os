@@ -110,7 +110,7 @@ base64です(`data` は12KiB、`text` は16KiBまで)。`url_safe = true` なら
 
 <div class="sig">pico.memory_info() <span class="ret">-> table</span></div>
 
-`{ lua_used, lua_budget, lua_free, heap_free, heap_used, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と予算(既定200KB)、`heap_*` は本体のヒープ、`image_bytes` は `image_load`/`image_create` で使っている量です。重いアプリの調整に使います。
+`{ lua_used, lua_budget, lua_free, heap_free, heap_used, heap_headroom, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と予算(既定200KB)、`heap_*` は本体のヒープ(`heap_free` は確保済みのヒープの中の空きの合計、`heap_headroom` はヒープの末尾とスタックの間のまだ使っていない広さ。PCでは0)、`image_bytes` は `image_load`/`image_create` で使っている量です。重いアプリの調整に使います。
 
 ## pico.toast
 

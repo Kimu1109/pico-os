@@ -13,47 +13,42 @@ const uint8_t kOpposite[8] = {1, 0, 3, 2, 7, 6, 5, 4};
 
 Flow::~Flow() { clear(); }
 
+void Flow::freeBack() {
+    free(bdist_); bdist_ = nullptr;
+    free(bpack_); bpack_ = nullptr;
+    free(heap_); heap_ = nullptr;
+    heap_n_ = heap_cap_ = 0;
+}
+
 void Flow::clear() {
-    free(block_);
-    block_ = nullptr;
-    ycol_ = fy_ = fnext_ = bnext_ = nullptr;
-    fdist_ = bdist_ = nullptr;
-    hpos_ = heap_ = nullptr;
-    goals_ = nullptr;
+    freeBack();
+    free(fdist_); fdist_ = nullptr;
+    free(fpack_); fpack_ = nullptr;
     W_ = 0;
-    heap_n_ = 0;
     phase_ = Phase::Idle;
     revision_ = 0;
     ngoals_ = 0;
-}
-
-bool Flow::alloc(int W) {
-    if (W == W_ && block_) return true;
-    clear();
-    const size_t n = (size_t)W * W;
-    // y(1) + fy(1) + fdist(2) + fnext(1) + bdist(2) + bnext(1) + hpos(2) + heap(2)
-    block_ = static_cast<uint8_t*>(malloc(n * 12 + sizeof(int16_t) * kMaxFlowGoals));
-    if (!block_) return false;
-    W_ = W;
-    uint8_t* p = block_;
-    fdist_ = reinterpret_cast<uint16_t*>(p); p += n * 2;
-    bdist_ = reinterpret_cast<uint16_t*>(p); p += n * 2;
-    hpos_ = reinterpret_cast<int16_t*>(p); p += n * 2;
-    heap_ = reinterpret_cast<int16_t*>(p); p += n * 2;
-    goals_ = reinterpret_cast<int16_t*>(p); p += sizeof(int16_t) * kMaxFlowGoals;
-    ycol_ = p; p += n;
-    fy_ = p; p += n;
-    fnext_ = p; p += n;
-    bnext_ = p;
-    for (size_t i = 0; i < n; i++) { fdist_[i] = kUnreached; fnext_[i] = kNoNext; fy_[i] = 255; }
-    return true;
+    failed_ = false;
 }
 
 bool Flow::begin(const World& w, const PathRules& r) {
     const int W = w.width();
     if (W < 1 || W > kMaxFlowWidth) return false;
-    if (W != W_ && building()) phase_ = Phase::Idle;
-    if (!alloc(W)) return false;
+    if (W != W_) clear();   // 大きさが変わったら前の結果は使えない
+    freeBack();
+    phase_ = Phase::Idle;
+    failed_ = false;
+    const size_t n = (size_t)W * W;
+    bdist_ = static_cast<uint16_t*>(malloc(n * sizeof(uint16_t)));
+    bpack_ = static_cast<uint8_t*>(malloc(n));
+    heap_cap_ = 512;
+    heap_ = static_cast<HeapEnt*>(malloc(sizeof(HeapEnt) * (size_t)heap_cap_));
+    if (!bdist_ || !bpack_ || !heap_) {
+        freeBack();
+        failed_ = true;
+        return false;
+    }
+    W_ = W;
     rules_ = r;
     if (rules_.height < 1) rules_.height = 1;
     if (rules_.max_up < 0) rules_.max_up = 0;
@@ -67,7 +62,7 @@ bool Flow::begin(const World& w, const PathRules& r) {
 }
 
 bool Flow::addGoal(int x, int z) {
-    if (!block_ || ngoals_ >= kMaxFlowGoals) return false;
+    if (phase_ != Phase::Scan || ngoals_ >= kMaxFlowGoals) return false;
     if ((unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_) return false;
     goals_[ngoals_++] = (int16_t)(x * W_ + z);
     return true;
@@ -79,86 +74,106 @@ bool Flow::begin(const World& w, const PathRules& r, const int16_t* gx, const in
     return true;
 }
 
-void Flow::swapAt(int a, int b) {
-    const int16_t t = heap_[a]; heap_[a] = heap_[b]; heap_[b] = t;
-    hpos_[heap_[a]] = (int16_t)a;
-    hpos_[heap_[b]] = (int16_t)b;
-}
-void Flow::up(int i) {
+// 二分ヒープ(値段の小さい順)。値段を下げた柱はもう1件積み、古い件は取り出したときに飛ばす
+bool Flow::pushHeap(uint16_t d, int c) {
+    if (heap_n_ >= heap_cap_) {
+        // 古くなった件を捨ててから、足りなければ広げる
+        int k = 0;
+        for (int i = 0; i < heap_n_; i++) {
+            if (heap_[i].d == bdist_[heap_[i].c]) heap_[k++] = heap_[i];
+        }
+        if (k < heap_n_) {
+            heap_n_ = k;
+            for (int i = heap_n_ / 2 - 1; i >= 0; i--) {
+                // 下へ沈めて組み直す
+                int j = i;
+                for (;;) {
+                    const int l = j * 2 + 1, rr = l + 1;
+                    int m = j;
+                    if (l < heap_n_ && heap_[l].d < heap_[m].d) m = l;
+                    if (rr < heap_n_ && heap_[rr].d < heap_[m].d) m = rr;
+                    if (m == j) break;
+                    const HeapEnt t = heap_[j]; heap_[j] = heap_[m]; heap_[m] = t;
+                    j = m;
+                }
+            }
+        }
+        if (heap_n_ >= heap_cap_ - heap_cap_ / 8) {
+            const int cap = heap_cap_ * 2;
+            HeapEnt* p = static_cast<HeapEnt*>(realloc(heap_, sizeof(HeapEnt) * (size_t)cap));
+            if (!p) { if (heap_n_ >= heap_cap_) return false; }
+            else { heap_ = p; heap_cap_ = cap; }
+        }
+    }
+    int i = heap_n_++;
     while (i > 0) {
         const int p = (i - 1) / 2;
-        if (!lessAt(i, p)) break;
-        swapAt(i, p);
+        if (heap_[p].d <= d) break;
+        heap_[i] = heap_[p];
         i = p;
     }
+    heap_[i].d = d;
+    heap_[i].c = (int16_t)c;
+    return true;
 }
-void Flow::down(int i) {
+
+Flow::HeapEnt Flow::popHeap() {
+    const HeapEnt top = heap_[0];
+    const HeapEnt last = heap_[--heap_n_];
+    int i = 0;
     for (;;) {
         const int l = i * 2 + 1, r = l + 1;
-        int m = i;
-        if (l < heap_n_ && lessAt(l, m)) m = l;
-        if (r < heap_n_ && lessAt(r, m)) m = r;
-        if (m == i) break;
-        swapAt(i, m);
+        if (l >= heap_n_) break;
+        const int m = (r < heap_n_ && heap_[r].d < heap_[l].d) ? r : l;
+        if (heap_[m].d >= last.d) break;
+        heap_[i] = heap_[m];
         i = m;
     }
-}
-void Flow::push(int c) {
-    heap_[heap_n_] = (int16_t)c;
-    hpos_[c] = (int16_t)heap_n_;
-    up(heap_n_++);
-}
-int Flow::pop() {
-    const int c = heap_[0];
-    heap_n_--;
-    if (heap_n_ > 0) {
-        heap_[0] = heap_[heap_n_];
-        hpos_[heap_[0]] = 0;
-        down(0);
-    }
-    hpos_[c] = -2;
-    return c;
+    if (heap_n_ > 0) heap_[i] = last;
+    return top;
 }
 
 bool Flow::step(const World& w, int budget) {
-    if (phase_ == Phase::Idle || !block_ || w.width() != W_) return false;
+    if (phase_ == Phase::Idle || !bdist_ || w.width() != W_) return false;
     const int W = W_, n = W * W;
     const PathRules& r = rules_;
     while (budget > 0 && phase_ == Phase::Scan) {
         // 柱ごとの立つ高さを調べる
         const int x = scan_ / W, z = scan_ % W;
         const int y = StandAt(w, x, -1, z, r);
-        ycol_[scan_] = y < 0 ? 255 : (uint8_t)y;
+        bpack_[scan_] = y < 0 || y > 15 ? (uint8_t)(kPackNoStand << 4) : (uint8_t)((kPackUnreached << 4) | y);
         bdist_[scan_] = kUnreached;
-        bnext_[scan_] = kNoNext;
-        hpos_[scan_] = -1;
         scan_++;
         budget--;
         if (scan_ >= n) {
             for (int i = 0; i < ngoals_; i++) {
                 const int c = goals_[i];
-                if (ycol_[c] == 255 || bdist_[c] == 0) continue;
+                if ((bpack_[c] >> 4) == kPackNoStand || bdist_[c] == 0) continue;
                 bdist_[c] = 0;
-                bnext_[c] = kAtGoal;
-                push(c);
+                bpack_[c] = (uint8_t)((kPackGoal << 4) | (bpack_[c] & 15));
+                if (!pushHeap(0, c)) { phase_ = Phase::Idle; failed_ = true; freeBack(); return false; }
             }
             phase_ = Phase::Run;
         }
     }
     while (budget > 0 && phase_ == Phase::Run) {
         if (heap_n_ == 0) {
-            // 出来上がり: 入れ替える
-            uint16_t* td = fdist_; fdist_ = bdist_; bdist_ = td;
-            uint8_t* tn = fnext_; fnext_ = bnext_; bnext_ = tn;
-            memcpy(fy_, ycol_, (size_t)n);
+            // 出来上がり: 入れ替えて、前の結果と作業場所を返す
+            free(fdist_);
+            free(fpack_);
+            fdist_ = bdist_; fpack_ = bpack_;
+            bdist_ = nullptr; bpack_ = nullptr;
+            freeBack();
             phase_ = Phase::Idle;
             revision_++;
             return true;
         }
-        const int c = pop();
+        const HeapEnt e = popHeap();
         budget--;
-        const int cx = c / W, cz = c % W, cy = ycol_[c];
-        const uint32_t dc = bdist_[c];
+        const int c = e.c;
+        if (e.d != bdist_[c]) continue;   // 古い件(その後もっと安く来られた)
+        const int cx = c / W, cz = c % W, cy = bpack_[c] & 15;
+        const uint32_t dc = e.d;
         const float enter = EnterCost(w, cx, cy, cz, r);
         const int ndir = r.diagonal ? 8 : 4;
         for (int d = 0; d < ndir; d++) {
@@ -166,15 +181,15 @@ bool Flow::step(const World& w, int budget) {
             const int mx = cx + kDir[d][0], mz = cz + kDir[d][1];
             if ((unsigned)mx >= (unsigned)W || (unsigned)mz >= (unsigned)W) continue;
             const int m = mx * W + mz;
-            if (hpos_[m] == -2) continue;
-            const int my = ycol_[m];
-            if (my == 255) continue;
+            if ((bpack_[m] >> 4) == kPackNoStand) continue;
+            if (bdist_[m] <= dc) continue;    // もう確定している(値段は負にならない)
+            const int my = bpack_[m] & 15;
             if (!CanStep(w, mx, my, mz, cx, cy, cz, r)) continue;
             if (d >= 4) {
                 // 斜め: m から両脇の柱 (cx, mz) と (mx, cz) のどちらにも行けること(角をすり抜けない)
-                const int sy = ycol_[cx * W + mz], ty = ycol_[mx * W + cz];
-                if (sy == 255 || ty == 255) continue;
-                if (!CanStep(w, mx, my, mz, cx, sy, mz, r) || !CanStep(w, mx, my, mz, mx, ty, cz, r)) continue;
+                const uint8_t sp = bpack_[cx * W + mz], tp = bpack_[mx * W + cz];
+                if ((sp >> 4) == kPackNoStand || (tp >> 4) == kPackNoStand) continue;
+                if (!CanStep(w, mx, my, mz, cx, sp & 15, mz, r) || !CanStep(w, mx, my, mz, mx, tp & 15, cz, r)) continue;
             }
             float cost = d >= 4 ? r.step * 1.41421356f : r.step;
             if (cy > my) cost += r.up_cost * (float)(cy - my);
@@ -186,31 +201,39 @@ bool Flow::step(const World& w, int budget) {
             if (nd >= bdist_[m]) continue;
             bdist_[m] = (uint16_t)nd;
             // m から c への向き = kDir[d] の逆
-            bnext_[m] = kOpposite[d];
-            if (hpos_[m] >= 0) up(hpos_[m]);
-            else push(m);
+            bpack_[m] = (uint8_t)((kOpposite[d] << 4) | my);
+            if (!pushHeap((uint16_t)nd, m)) { phase_ = Phase::Idle; failed_ = true; freeBack(); return false; }
         }
     }
     return false;
 }
 
+size_t Flow::memoryBytes() const {
+    const size_t n = (size_t)W_ * W_;
+    size_t b = 0;
+    if (fdist_) b += n * 3;
+    if (bdist_) b += n * 3;
+    if (heap_) b += sizeof(HeapEnt) * (size_t)heap_cap_;
+    return b;
+}
+
 float Flow::dist(int x, int z) const {
-    if (!block_ || !revision_ || (unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_) return -1;
+    if (!fdist_ || (unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_) return -1;
     const uint16_t d = fdist_[x * W_ + z];
     return d == kUnreached ? -1.0f : (float)d / kUnit;
 }
 
 int Flow::standY(int x, int z) const {
-    if (!block_ || !revision_ || (unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_) return -1;
-    const uint8_t y = fy_[x * W_ + z];
-    return y == 255 ? -1 : y;
+    if (!fpack_ || (unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_) return -1;
+    const uint8_t p = fpack_[x * W_ + z];
+    return (p >> 4) == kPackNoStand ? -1 : (p & 15);
 }
 
 bool Flow::next(int x, int z, int& nx, int& nz, bool* at_goal) const {
     if (at_goal) *at_goal = false;
-    if (!block_ || !revision_ || (unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_) return false;
-    const uint8_t d = fnext_[x * W_ + z];
-    if (d == kAtGoal) { if (at_goal) *at_goal = true; return false; }
+    if (!fpack_ || (unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_) return false;
+    const uint8_t d = fpack_[x * W_ + z] >> 4;
+    if (d == kPackGoal) { if (at_goal) *at_goal = true; return false; }
     if (d >= 8) return false;
     nx = x + kDir[d][0];
     nz = z + kDir[d][1];

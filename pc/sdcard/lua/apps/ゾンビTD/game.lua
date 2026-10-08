@@ -108,6 +108,21 @@ local function goals_around(bx, bz)
     return g
 end
 
+local function mem_log(what)
+    collectgarbage("collect")
+    local m = pico.memory_info()
+    pico.log(string.format("[TD] %s: ヒープの空き %d + 未使用 %d バイト、Lua %d/%d バイト",
+        what, m.heap_free, m.heap_headroom or 0, m.lua_used, m.lua_budget))
+end
+
+local function gen_fail(msg)
+    mem_log("失敗")
+    pico.show_error(msg)
+    load_msg = "作れませんでした([作直]でやり直し)"
+    stage = nil
+    pico.invalidate(view)
+end
+
 local function gen_start()
     zombies.clear()
     iso.shot_clear()
@@ -116,9 +131,8 @@ local function gen_start()
     base = nil
     local bx, by, bz = iso.create(MAP_DIR, 4, seed, W_CHUNKS)
     if not bx then
-        pico.show_error("マップを作れません: " .. tostring(by))
-        mode = "over"
-        return
+        mode = "load"
+        return gen_fail("マップを作れません: " .. tostring(by))
     end
     W = iso.size()
     iso.keep_all(true)
@@ -166,8 +180,8 @@ local function start_play()
     collectgarbage("collect")
     local m = pico.memory_info()
     local st = iso.stats()
-    pico.log(string.format("[TD] 種 %d: チャンク %d 個 (置き場 %d バイト)、Lua %d/%d バイト",
-        seed, st.chunks, st.bytes, m.lua_used, m.lua_budget))
+    pico.log(string.format("[TD] 種 %d: チャンク %d 個 (置き場 %d バイト)、Lua %d/%d バイト、ヒープの空き %d + 未使用 %d バイト",
+        seed, st.chunks, st.bytes, m.lua_used, m.lua_budget, m.heap_free, m.heap_headroom or 0))
 end
 
 local function gen_step()
@@ -176,17 +190,16 @@ local function gen_step()
         if iso.pending() == 0 then
             load_msg = "道を調べています..."
             pico.invalidate(view)
+            mem_log("チャンクを読み込んだ")
             local ok, err = iso.flow_build(goals_around(arena.base.x, arena.base.z), FLOW_RULES)
-            if not ok then
-                pico.show_error("道を作れません: " .. tostring(err))
-                mode = "over"
-                return
-            end
+            if not ok then return gen_fail("道を作れません: " .. tostring(err)) end
             stage = "flow"
         end
     elseif stage == "flow" then
-        iso.flow_step(4000)
-        if iso.flow_info().ready then
+        local done = iso.flow_step(4000)
+        local info = iso.flow_info()
+        if info.failed then return gen_fail("道を作れません: メモリが足りません") end
+        if done then
             -- 出現位置のどれかからベースへ届かない種は使わない
             local ok = true
             for _, s in ipairs(arena.spawns) do
@@ -285,7 +298,7 @@ local function press(b)
     elseif b.id == "z40" then call(40)
     elseif b.id == "speed" then speed = speed == 1 and 3 or 1; pico.invalidate(panel)
     elseif b.id == "center" then if base then center_on(base.x, base.y, base.z) end
-    elseif b.id == "remake" then if mode ~= "load" then new_map() end end
+    elseif b.id == "remake" then if mode ~= "load" or stage == nil then new_map() end end
 end
 
 local function button_at(lx)
@@ -316,7 +329,7 @@ end)
 pico.on(view, "press_end", function()
     local t = touch
     touch = nil
-    if t and not t.drag and mode == "over" then restart() end
+    if t and not t.drag and mode == "over" and base then restart() end
 end)
 pico.on(view, "press_out", function() touch = nil end)
 

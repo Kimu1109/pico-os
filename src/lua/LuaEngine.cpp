@@ -4677,6 +4677,8 @@ void LuaEngine::preloadModules(const char* src, size_t len) {
         chunkname.assign("@");
         chunkname.append(path);
         if (luaL_loadbufferx(L, s, slen, chunkname.c_str(), "t") == LUA_OK) {
+            // app.cfg の strip_debug: 行番号とローカル変数名を落とす(大きなアプリでLuaのメモリを減らす)
+            if (permissions_.strip_debug) StripFunction(L, chunkname.c_str());
             lua_setfield(L, pre, name);        // 関数
         } else {
             lua_setfield(L, pre, name);        // エラーメッセージ(文字列)
@@ -4741,6 +4743,7 @@ int LuaEngine::l_require(lua_State* L) {
         if (luaL_loadbufferx(L, s, slen, chunkname.c_str(), "t") != LUA_OK) {
             return lua_error(L);              // 構文エラーのメッセージ
         }
+        if (self->permissions_.strip_debug) StripFunction(L, chunkname.c_str());
         lua_remove(L, -2);                    // ソースの文字列
     }
 

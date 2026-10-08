@@ -1802,6 +1802,32 @@ int main() {
     }
 
     // =====================================================================
+    // app.cfg の strip_debug: require したモジュールのデバッグ情報を落とす
+    // =====================================================================
+    {
+        OSData::SD_usable = true;
+        HostSd::files["/sd1/mod.lua"] = "local M = {}\nfunction M.boom()\n  error('boom')\nend\nreturn M\n";
+        HostSd::files["/sd1/main.lua"] = "";
+        std::string msgs[2];
+        size_t used[2] = {0, 0};
+        for (int k = 0; k < 2; k++) {
+            LuaPermissions perm;
+            perm.strip_debug = (k == 1);
+            LuaEngine se(64 * 1024, perm, "/sd1");
+            bool ok = se.Run("M = require('mod'); collectgarbage('collect'); local ok, e = pcall(M.boom); MSG = e", "sd");
+            check(ok, "strip_debug: require できる");
+            lua_getglobal(se.raw(), "MSG");
+            msgs[k] = lua_tostring(se.raw(), -1) ? lua_tostring(se.raw(), -1) : "";
+            lua_pop(se.raw(), 1);
+            used[k] = (size_t)lua_gc(se.raw(), LUA_GCCOUNT, 0) * 1024 + lua_gc(se.raw(), LUA_GCCOUNTB, 0);
+        }
+        check(msgs[0].find("mod.lua:3:") != std::string::npos, "strip_debug: 既定はエラーに行番号が付く");
+        check(msgs[1].find("mod.lua:3:") == std::string::npos && msgs[1].find("boom") != std::string::npos,
+              "strip_debug: 落とすと行番号が付かない");
+        check(used[1] < used[0], "strip_debug: Luaのメモリが減る");
+    }
+
+    // =====================================================================
     // ゾンビTD の zombies.lua を本物のエンジン(ARENA・流れの場・押し合い・弾)の上で動かす
     // =====================================================================
     {
@@ -1812,6 +1838,8 @@ int main() {
             return std::string((std::istreambuf_iterator<char>(f)), {});
         };
         HostSd::files["/td/zombies.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/zombies.lua");
+        HostSd::files["/td/combat.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/combat.lua");
+        HostSd::files["/td/soldiers.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/soldiers.lua");
         HostSd::files["/td/units.pimg"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/units.pimg");
         HostSd::files["/td/faces.pimg"] = slurp("/pc/sdcard/lua/apps/ブロック/faces.pimg");
         OSData::SD_usable = true;
@@ -1820,6 +1848,7 @@ int main() {
         bool ok = te.Run(R"LUA(
             local iso = pico.iso
             Z = require("zombies")
+            C = require("combat")
             iso.set_image(pico.image_load("/td/faces.pimg"))
             local units = pico.image_load("/td/units.pimg")
             iso.create("/td/map", 4, 3, 7)
@@ -1834,10 +1863,14 @@ int main() {
             end end
             iso.flow_build(goals, {max_up = 1, max_down = 2, height = 2, up_cost = 0.5, diagonal = true}, true)
             for _, s in ipairs(A.spawns) do check(iso.flow_get(s.x, s.z) ~= nil, "zombies: 出現位置から道がある") end
-            BASE = {x = b.x, y = b.y, z = b.z, hp = 100000, melee = 0, thrown = 0}
+            BASE = {x = b.x, y = b.y, z = b.z, hp = 100000, melee = 0, thrown = 0, r = 1.4, side = "base"}
             BASE.id = iso.entity_add(units, b.x + 0.5, b.y, b.z + 0.5,
                 {sx = 80, sy = 0, w = 44, h = 40, r = 1.4, height = 2.5, crowd = "fixed", tag = 2})
-            function BASE.hit(d) BASE.hp = BASE.hp - d; BASE.melee = BASE.melee + 1 end
+            function BASE.hurt(self, d, src)
+                BASE.hp = BASE.hp - d
+                if src and src.t.reach > 0 then BASE.thrown = BASE.thrown + 1 else BASE.melee = BASE.melee + 1 end
+            end
+            C.add(BASE)
             math.randomseed(7)
             Z.init(units, A.spawns, BASE, {height = 2})
             Z.queue("normal", 30); Z.queue("ranged", 12); Z.queue("heavy", 8)
@@ -1847,9 +1880,8 @@ int main() {
             function tick(n)
                 for _ = 1, n do
                     Z.update(0.05)
-                    for _, h in ipairs(iso.shots_step(0.05)) do
-                        if h.target == BASE.id and not h.lost then BASE.thrown = BASE.thrown + 1; BASE.hp = BASE.hp - h.tag end
-                    end
+                    if iso.crowd(2, {height = 2}) > 0 then Z.sync() end
+                    C.step(0.05)
                 end
             end
         )LUA", "td");
@@ -1899,6 +1931,168 @@ int main() {
             iso.close()
         )LUA", "td3");
         check(ok, "zombies: 上限・ベースへの攻撃・押し合い・倒す");
+    }
+
+    // =====================================================================
+    // ゾンビTD の soldiers.lua(雇う・移動・戦い・回復・強化・売却)を本物のエンジンの上で動かす
+    // =====================================================================
+    {
+        OSData::SD_usable = true;
+        LuaEngine te(180 * 1024, LuaPermissions{}, "/td");
+        lua_register(te.raw(), "check", l_check);
+        bool ok = te.Run(R"LUA(
+            local iso = pico.iso
+            Z = require("zombies"); C = require("combat"); S = require("soldiers")
+            iso.set_image(pico.image_load("/td/faces.pimg"))
+            local units = pico.image_load("/td/units.pimg")
+            iso.create("/td/map2", 4, 3, 7)
+            iso.keep_all(true)
+            iso.view(0, 20, 240, 246)
+            while iso.pump(64) > 0 do end
+            A = iso.arena()
+            local b = A.base
+            local goals = {}
+            for dx = -2, 2 do for dz = -2, 2 do
+                if math.max(math.abs(dx), math.abs(dz)) == 2 then goals[#goals + 1] = {b.x + dx, b.z + dz} end
+            end end
+            RULES = {height = 2, avoid = {1}}
+            iso.flow_build(goals, {max_up = 1, max_down = 2, height = 2, up_cost = 0.5, diagonal = true, avoid = {1}}, true)
+            BASE = {x = b.x, y = b.y, z = b.z, hp = 100000, r = 1.4, side = "base"}
+            BASE.id = iso.entity_add(units, b.x + 0.5, b.y, b.z + 0.5,
+                {sx = 80, sy = 0, w = 44, h = 40, r = 1.4, height = 2.5, crowd = "fixed", tag = 2})
+            function BASE.hurt(self, d) BASE.hp = BASE.hp - d end
+            C.add(BASE)
+            math.randomseed(11)
+            Z.init(units, A.spawns, BASE, RULES)
+            S.init(units, BASE, RULES)
+            Z.SOLDIER_TAG = S.TAG; S.ZOMBIE_TAG = Z.TAG; Z.hunt = true
+            KILLED, LOST, HEALED, LASTHP = 0, 0, 0, setmetatable({}, {__mode = "k"})
+            Z.on_kill = function() KILLED = KILLED + 1 end
+            S.on_lost = function() LOST = LOST + 1 end
+            function tick(n)
+                for _ = 1, n do
+                    Z.update(0.05)
+                    S.update(0.05)
+                    if iso.crowd(2, {height = 2}) > 0 then Z.sync(); S.sync() end
+                    C.step(0.05)
+                    for _, s in ipairs(S.list) do
+                        if s.state == "hold" and s.kind == "melee" then
+                            local d = math.sqrt((s.x - s.px) ^ 2 + (s.z - s.pz) ^ 2)
+                            if d > (MAXLEASH or 0) then MAXLEASH = d end
+                        end
+                        if s.hp > (LASTHP[s] or s.hp) then HEALED = HEALED + 1 end
+                        LASTHP[s] = s.hp
+                    end
+                end
+            end
+            -- 雇う: ベースの前へ出てきて、持ち場へ歩いて止まる
+            M1 = S.hire("melee"); H1 = S.hire("healer"); R1 = S.hire("ranged")
+            check(M1 and H1 and R1 and S.count() == 3, "soldiers.hire: 3種類を雇える")
+            check(M1.t.name == "近接" and M1.lv == 1 and M1.hp == 60, "soldiers.hire: Lv1 の値")
+        )LUA", "sol");
+        check(ok, "soldiers: 準備");
+        ok = ok && te.Run("tick(120)", "tick");
+        ok = ok && te.Run(R"LUA(
+            local iso = pico.iso
+            for _, s in ipairs(S.list) do
+                check(s.state == "hold" and not s.path, "soldiers: 持ち場に着いて止まる (" .. s.kind .. ")")
+                local g = iso.stand(s.x, s.z, nil, RULES)
+                check(g and math.abs(s.y - g) < 0.01, "soldiers: 地面に立っている")
+                check(s.z > BASE.z + 1.5, "soldiers: ベースの前(出現位置の側)にいる")
+            end
+            -- 移動の指示: 10マスほど先へ3人を散らばらせる
+            local tx, tz = BASE.x, BASE.z + 14
+            while not S.standable(tx, tz) do tx = tx + 1 end
+            check(S.order_group(S.list, tx + 0.5, tz + 0.5), "soldiers.order_group: 立てる所へは指示できる")
+            DEST = {tx, tz}
+            -- 水の上へは指示できない
+            local wx, wz
+            for x = 0, 55 do for z = 0, 55 do
+                if not wx and iso.ground(x, z) and iso.get(x, iso.ground(x, z) - 1, z) == 1 then wx, wz = x, z end
+            end end
+            if wx then check(not S.order_group(S.list, wx + 0.5, wz + 0.5), "soldiers.order_group: 水の上は不可") end
+            check(not S.order_group(S.list, BASE.x + 0.5, BASE.z + 0.5), "soldiers.order_group: ベースの上は不可")
+        )LUA", "sol2");
+        ok = ok && te.Run("tick(200)", "tick") && te.Run("tick(200)", "tick");
+        ok = ok && te.Run(R"LUA(
+            local iso = pico.iso
+            local cols = {}
+            for _, s in ipairs(S.list) do
+                check(s.state == "hold", "soldiers: 指示した所へ着く (" .. s.kind .. ")")
+                check(math.abs(s.x - (DEST[1] + 0.5)) <= 3.6 and math.abs(s.z - (DEST[2] + 0.5)) <= 3.6, "soldiers: 指示した地点のまわりにいる")
+                cols[math.floor(s.px) * 100 + math.floor(s.pz)] = true
+                check(iso.get(math.floor(s.x), math.floor(s.gy) - 1, math.floor(s.z)) ~= 1, "soldiers: 水の上に立っていない")
+            end
+            local n = 0 for _ in pairs(cols) do n = n + 1 end
+            check(n == 3, "soldiers: 複数人はまわりに散らばって並ぶ")
+            -- 1人/1匹の表のキーは16個以内(超えるとLuaの表が倍の大きさになる)
+            local function keys(t) local k = 0 for _ in pairs(t) do k = k + 1 end return k end
+            for _, u in ipairs(S.list) do check(keys(u) <= 16, "soldiers: 表のキーは16個以内 (" .. keys(u) .. ")") end
+            -- 強化と売却
+            check(S.upgrade_cost(M1) == 40, "soldiers.upgrade_cost")
+            M1.hp = 50
+            check(S.upgrade(M1) and M1.lv == 2 and S.max_hp(M1) == 90 and M1.hp == 80, "soldiers.upgrade: 最大耐久の増えた分だけ回復")
+            S.upgrade(M1); S.upgrade(M1)
+            check(M1.lv == 4 and S.upgrade_cost(M1) == nil and not S.upgrade(M1), "soldiers.upgrade: Lv4 が最大")
+            check(S.paid(M1) == 50 + 40 + 70 + 110 and S.sell_value(M1) == 189, "soldiers.sell_value: 払った合計の70%")
+            M1.hp = S.max_hp(M1)
+            -- 持ち場をベースの近くへ戻し、ゾンビを呼ぶ
+            S.order_group(S.list, BASE.x + 0.5, BASE.z + 5.5)
+            Z.queue("normal", 12); Z.queue("ranged", 4)
+        )LUA", "sol3");
+        // 60秒ぶん戦わせる
+        for (int i = 0; i < 30 && ok; i++) ok = te.Run("tick(40)", "tick");
+        ok = ok && te.Run(R"LUA(
+            check(KILLED > 0 and Z.stats.killed == KILLED, "soldiers: ゾンビを倒す (" .. KILLED .. ")")
+            local function keys(t) local k = 0 for _ in pairs(t) do k = k + 1 end return k end
+            local mk = 0
+            for _, u in ipairs(Z.list) do mk = math.max(mk, keys(u)) end
+            check(mk <= 16, "zombies: 表のキーは16個以内 (" .. mk .. ")")
+            check(MAXLEASH and MAXLEASH <= 3.6, "soldiers: 近接兵は持ち場から3マスほどまでしか離れない (" .. tostring(MAXLEASH) .. ")")
+            check(HEALED > 0, "soldiers: 回復兵が回復する (" .. HEALED .. ")")
+            -- 移動中の反撃: 攻撃してきたゾンビが近くにいれば止まって戦う
+            Z.clear(); C.clear_shots()
+            S.clear()
+            local s = S.hire("melee")
+            tick(80)
+            S.order(s, s.x, s.z + 12)
+            Z.queue("normal", 1)
+            Z.update(0.4)
+            local zb = Z.list[1]
+            zb.x, zb.z = s.x + 0.4, s.z
+            zb.gy = s.gy; zb.y = s.y
+            pico.iso.entity_move(zb.id, zb.x, zb.y, zb.z)
+            zb.tgt = s
+            s.hurt(s, 1, zb)
+            check(s.state == "move" and s.tgt == zb, "soldiers: 移動中でも攻撃してきた相手に反撃する")
+            local px, pz = s.x, s.z
+            S.update(0.35)
+            check(s.tgt == zb and math.abs(s.x - px) + math.abs(s.z - pz) < 0.3, "soldiers: 反撃しながら目的地へは進まない")
+            -- 相手が倒れたら移動を続ける
+            zb.hp = 1
+            tick(30)
+            check(Z.alive() == 0, "soldiers: 反撃で倒す")
+            tick(20)
+            check(s.state == "move" and s.path and not s.tgt, "soldiers: 倒したら移動を続ける")
+            -- 兵士が倒れる
+            s.hp = 1
+            local lost0 = LOST
+            s.hurt(s, 5, nil)
+            S.update(0.05)
+            check(LOST == lost0 + 1 and S.count() == 0 and C.units[s.id] == nil, "soldiers: 倒れたら消える")
+            -- ゾンビは気づく範囲の兵士を、優先度と距離で狙う
+            local m = S.hire("melee"); local r = S.hire("ranged")
+            Z.queue("normal", 1); Z.update(0.4)
+            local z2 = Z.list[1]
+            m.x, m.z = z2.x + 2.5, z2.z; r.x, r.z = z2.x + 1.5, z2.z
+            pico.iso.entity_move(m.id, m.x, m.y, m.z); pico.iso.entity_move(r.id, r.x, r.y, r.z)
+            z2.scan = 0
+            Z.update(0.01)
+            check(z2.tgt == m, "zombies: 近接兵(優先度0)を弓兵(優先度3)より先に狙う")
+            S.clear(); Z.clear()
+            pico.iso.close()
+        )LUA", "sol4");
+        check(ok, "soldiers: 一通り");
     }
 
     WidgetFunctions::ClearSceneWidgets();

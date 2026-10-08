@@ -67,6 +67,14 @@ namespace {
                         LOG_SYS_WARN("LuaAppScanner: %s のpermission_notifyがtrue/false"
                                      "ではありません (%s)", config_path, value);
                     }
+                } else if (strcmp(key, "strip_debug") == 0) {
+                    bool v = false;
+                    if (PICO_Config::ConfigValue::AsBool(value, v)) {
+                        out.permissions.strip_debug = v;
+                    } else {
+                        LOG_SYS_WARN("LuaAppScanner: %s のstrip_debugがtrue/false"
+                                     "ではありません (%s)", config_path, value);
+                    }
                 } else if (strcmp(key, "permission_sd_outside_app_dir") == 0) {
                     bool v = false;
                     if (PICO_Config::ConfigValue::AsBool(value, v)) {

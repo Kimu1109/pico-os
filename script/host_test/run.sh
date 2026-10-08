@@ -140,6 +140,8 @@
 #                 前の版からの移し替え・描画(見えない面・影・水・Lua版と同じ並び)・隠れたブロックを省いても
 #                 画素が変わらないこと・タップ位置の引き当て・面の写し方・人や物(ブロックとの前後・水・影・
 #                 頼まれた矩形だけ描き直しても全体と同じ)
+#   iso_td_test… 2.5Dの箱庭のタワーディフェンス向けの道具: 流れの場(Iso_Flow。経路探索と同じ値段・pass・
+#                 少しずつ作る)・視線・近くの人や物・押し合い・弾・HPバーと印・世界全体を読み込んだままにする・ARENA の地形(平らな所・道があるか)
 #   blocks_test… Luaアプリ「ブロック」の画面の流れと操作(pico.iso は偽物)。作る/開く/移す→読み込む→遊ぶ→
 #                 保存して戻る・置く/壊すの規則・カーソルと視点・タップ・ブロックを選ぶ画面・村人と羊
 #   vt_terminal_test… SSHアプリの端末エミュレータ(src/ssh/Vt_Terminal)。折り返し・カーソル移動・
@@ -1019,6 +1021,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
+    "$ROOT/src/iso/Iso_Flow.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1109,6 +1112,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
+    "$ROOT/src/iso/Iso_Flow.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1198,6 +1202,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
+    "$ROOT/src/iso/Iso_Flow.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1303,6 +1308,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
+    "$ROOT/src/iso/Iso_Flow.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1389,6 +1395,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
+    "$ROOT/src/iso/Iso_Flow.cpp" \
     "$ROOT/src/util/Secret_Aead.cpp" \
     "$ROOT/src/lua/LuaDebugger.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
@@ -1483,11 +1490,23 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/iso_world_test.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
+    "$ROOT/src/iso/Iso_Flow.cpp" \
     -o "$OUT/iso_world_test"
 
 echo ""
 echo "===== iso_world_test ====="
 run_or_die "$OUT/iso_world_test" "$ROOT"
+
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/iso_td_test.cpp" \
+    "$ROOT/src/iso/Iso_World.cpp" \
+    "$ROOT/src/iso/Iso_Path.cpp" \
+    "$ROOT/src/iso/Iso_Flow.cpp" \
+    -o "$OUT/iso_td_test"
+
+echo ""
+echo "===== iso_td_test ====="
+run_or_die "$OUT/iso_td_test" "$ROOT"
 
 for t in reversi_test minesweeper_test breakout_test blocks_test; do
     echo ""

@@ -1,7 +1,7 @@
 ---
 title: "その他"
 weight: 90
-description: "log / show_error / millis / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast"
+description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast"
 ---
 
 ## pico.log
@@ -21,6 +21,12 @@ description: "log / show_error / millis / battery / on_key / app_dir / path_join
 <div class="sig">pico.millis() <span class="ret">-> ms: integer</span></div>
 
 起動からのミリ秒。単調に増え、NTPの同期で飛びません(`get_time` は壁時計で飛びます)。経過時間の計測に使います。
+
+## pico.micros
+
+<div class="sig">pico.micros() <span class="ret">-> us: integer</span></div>
+
+起動からのマイクロ秒(32bitの値で、約71分ごとに0へ戻ります)。1フレームの中の処理の時間のような、ミリ秒では粗すぎる計測に使います。差は `(b - a) % 4294967296` で取ると、0へ戻った後でも正しく出ます。
 
 ## pico.battery
 
@@ -104,7 +110,7 @@ base64です(`data` は12KiB、`text` は16KiBまで)。`url_safe = true` なら
 
 <div class="sig">pico.memory_info() <span class="ret">-> table</span></div>
 
-`{ lua_used, lua_budget, lua_free, heap_free, heap_used, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と予算(既定200KB)、`heap_*` は本体のヒープ、`image_bytes` は `image_load`/`image_create` で使っている量です。重いアプリの調整に使います。
+`{ lua_used, lua_budget, lua_free, heap_free, heap_used, heap_headroom, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と予算(既定200KB)、`heap_*` は本体のヒープ(`heap_free` は確保済みのヒープの中の空きの合計、`heap_headroom` はヒープの末尾とスタックの間のまだ使っていない広さ。PCでは0)、`image_bytes` は `image_load`/`image_create` で使っている量です。重いアプリの調整に使います。
 
 ## pico.toast
 

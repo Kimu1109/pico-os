@@ -27,6 +27,12 @@
 // 前後の決め方: 箱とブロックが x・z・y のどれかで離れていれば、見る人の側(-x・-z・+y)にある方が手前。
 // 絵が箱からはみ出す所(箱より幅の広い絵)は近似になる。
 //
+// タワーディフェンス向けの道具(2026-10-08):
+//   ・人や物の上の HPバー(bar)と選択の印(mark)は、ブロックにも他の人や物にも隠れず一番上に描く
+//   ・弾(Shot): エンティティではない軽い点。狙った人や物(または点)へ必ず当たるまで飛び、当たったら知らせる
+//   ・押し合い(crowdStep): crowd を持つ人や物どうしが重ならないよう水平に押し合う(fixed は動かない)
+//   ・近くの人や物(nearby)、ブロックに遮られない視線(lineOfSight)、世界全体を読み込んだままにする(setKeepAll)
+//
 // 描画・dirty の積み方は Sink(関数ポインタ)越しにするので、このファイルは LovyanGFX を知らない(ホストテストで中身を見られる)。
 
 #include <cstdint>
@@ -50,7 +56,9 @@ constexpr int kCursorRow = 25;        // カーソルの段
 constexpr int kSheetW = 224;          // faces.pimg の幅(段の中に 上4・左4・右2 の10枚)
 constexpr int kTorchLight = 7;        // 松明のマスの明るさ(1マスごとに1減る。6マス先まで届く)
 constexpr int kLightReach = kTorchLight - 1;
-constexpr int kMaxEntities = 32;      // 同時に置ける人や物の数
+constexpr int kMaxEntities = 96;      // 同時に置ける人や物の数(ハンドルの下位8bitが番号+1なので255まで)
+constexpr int kEntityChunk = 16;      // 人や物の置き場は、置いた数に合わせてこの数ずつ広げる(使わないアプリに RAM を負担させない)
+constexpr int kMaxShots = 64;         // 同時に飛ばせる弾の数(置き場は最初に弾を撃ったときに確保する)
 
 enum Block : uint8_t {
     AIR = 0, WATER = 1, STONE = 2, GRASS = 3, DIRT = 4, COBBLE = 5, PLANKS = 6, BRICKS = 7,
@@ -59,7 +67,9 @@ enum Block : uint8_t {
     IRON_ORE = 21, BEDROCK = 22, IRON = 23, GOLD = 24, TORCH = 25,
 };
 
-enum Kind : uint8_t { NATURAL = 0, FLAT = 1, DEMO = 2, EMPTY = 3 };
+// ARENA: タワーディフェンス用の地形(木なし・なだらか・ベースと出現位置を平らにする。arenaLayout() 参照)
+enum Kind : uint8_t { NATURAL = 0, FLAT = 1, DEMO = 2, EMPTY = 3, ARENA = 4 };
+constexpr int kArenaSpawns = 3;       // ARENA の出現位置の数
 
 // タップした面
 enum class Face : uint8_t { None, Top, Left, Right };
@@ -90,6 +100,39 @@ struct Entity {
     int16_t sx = 0, sy = 0, sw = 0, sh = 0;   // 画像の中の範囲
     int16_t ax = 0, ay = 0;      // 足元の点(範囲の左上から)
     int16_t lx = 0, ly = 0, lw = 0, lh = 0;   // 最後に描き直しを頼んだ画面の範囲(動いたときに消す所)
+    // 一番上に描く飾り(ブロックに隠れない)
+    int8_t bar = -1;             // HPバー(0〜100%。負なら出さない)
+    uint8_t bar_color = 11;
+    int8_t mark = -1;            // 選択の印(頭の上の小さな三角)の色。負なら出さない
+    // 分類と押し合い
+    uint8_t tag = 0;             // 分類(0〜31。nearby で絞る)
+    uint8_t crowd = 0;           // 押し合い: 0 = しない / 1 = 押し合って動く / 2 = 動かない(押し返すだけ)
+    float mass = 1.0f;           // 押し合いの重さ(重いほど動かない)
+};
+
+// 弾。位置はブロックの単位。狙った人や物(target)か点(tx,ty,tz)へ、出発点からの割合 p で進む(必ず当たる)。
+// 狙った人や物が消えたら、最後に見た位置へ飛んで終わる
+struct Shot {
+    bool used = false;
+    uint16_t gen = 0;
+    float x = 0, y = 0, z = 0;        // 今の位置
+    float ox = 0, oy = 0, oz = 0;     // 出発点
+    float tx = 0, ty = 0, tz = 0;     // 狙う点(人や物なら毎回の位置の中心へ更新)
+    int32_t target = 0;               // 狙う人や物のハンドル(0 = 点)
+    float speed = 8.0f;               // ブロック/秒
+    float arc = 0.0f;                 // 山なりの高さ(距離に対する割合)
+    float p = 0.0f;                   // 進んだ割合(0〜1)
+    uint8_t color = 0, size = 2;
+    int32_t tag = 0;                  // 呼び出し側の印(当たったときに返す)
+    int16_t lx = 0, ly = 0, lw = 0, lh = 0;
+};
+
+struct ShotHit {
+    int32_t shot;      // 弾のハンドル(当たった時点で消えている)
+    int32_t target;    // 狙った人や物(0 = 点、または当たる前に消えていた)
+    int32_t tag;
+    bool lost;         // 狙った人や物が途中で消えていた
+    float x, y, z;
 };
 
 // 箱(前後の判定に使う)。[x0, x1] x [y0, y1] x [z0, z1]
@@ -185,6 +228,11 @@ public:
     // 種類・種・位置だけで決まるチャンクの中身(テスト・作り直しに使う)。out は kChunkBytes
     void generate(int cx, int cz, uint8_t* out) const;
     int height(int x, int z) const;
+    // ARENA の地形: ベース(1辺の真ん中、z の小さい端)と、出現位置(反対の端に kArenaSpawns か所)。
+    // ベースは半径3(7x7)を、出現位置は半径1(3x3)を平らにし、そのまわりをなだらかにつなぐ
+    void arenaLayout(int& bx, int& bz, int* sx, int* sz) const;
+    // ARENA の柱 (x, z) の地面の高さ(一番上のブロックの y)
+    int arenaHeight(int x, int z) const;
     uint32_t hash(int32_t a, int32_t b, int32_t c) const;
 
     // ---------------- 表示 ----------------
@@ -239,6 +287,7 @@ public:
     bool entityRemove(const Sink& sink, int handle);
     void entityClear(const Sink& sink);
     int entityCount() const;
+    int entityCapacity() const { return ent_cap_; }   // 今確保している置き場の数(kMaxEntities まで広がる)
     // 画面の点に見えている一番手前の人や物(絵の不透明な画素で判定。ブロックに隠れているかは見ない)。無ければ 0
     int entityAt(const Sink& sink, int px, int py) const;
     // 画面の範囲(絵と影を合わせたもの)。見えなければ false
@@ -266,6 +315,28 @@ public:
     bool shadowShape(const Entity& e, float& cx, float& cy, float& a, float& b, int& gy) const;
     // 直前の render で描いた面の数(計測用)
     int lastFaces() const { return last_faces_; }
+
+    // ---------------- タワーディフェンス向けの道具 ----------------
+    // 中心 (x, z) から水平距離 range 以内の人や物(tagmask のビットの tag のもの。0 なら全部)を近い順に out へ。数を返す
+    int nearby(float x, float z, float range, uint32_t tagmask, int32_t* out, int max) const;
+    // 押し合い。crowd を持つ人や物どうしを、水平に重ならないよう押し離す(高さが height 以上違えば押さない)。
+    // 押された先の体のマス(足の裏から height マス)に、空気・水・松明・pass 以外のブロックがあれば、その軸は動かさない。
+    // 動いたものは描き直しを頼む。動いた数を返す
+    int crowdStep(const Sink& sink, int iterations, int height, uint32_t pass);
+    // (x0,y0,z0) から (x1,y1,z1) への線分がブロックに遮られないか。空気・水・松明・pass のブロックは通す。
+    // 出発点と到着点のマスは見ない(弓兵の立っているタワー・狙う相手の足元)
+    bool lineOfSight(float x0, float y0, float z0, float x1, float y1, float z1, uint32_t pass) const;
+    // 弾。target(0 なら点 tx,ty,tz)へ。ハンドル(0 = 満杯)
+    int shotAdd(const Sink& sink, const Shot& s);
+    Shot* shot(int handle);
+    bool shotRemove(const Sink& sink, int handle);
+    void shotClear(const Sink& sink);
+    int shotCount() const;
+    // dt 秒進め、着いた弾を消して out へ(最大 max 個。溢れた分は次の呼び出しで返す)。数を返す
+    int shotsStep(const Sink& sink, float dt, ShotHit* out, int max);
+    // 世界全体のチャンクを読み込んだままにする(視点が変わっても手放さない)。K*K が kMaxChunks を超えれば false
+    bool setKeepAll(bool on);
+    bool keepAll() const { return keep_all_; }
     // (cx, cz) のチャンクの明るさを計算し直す(まわり kLightReach マスの松明から)。変わった範囲を覚えるなら track
     void relight(int cx, int cz, bool track);
     // 読み込んでいるチャンクを全部計算し直す
@@ -296,6 +367,14 @@ private:
     // そこへ「この行より下(手前)だけ描く」画面の y を入れる(水面のうち人や物より奥の所は人や物を隠さない)
     void renderBlocks(const Sink& sink, int x0, int y0, int x1, int y1, const Box* front, int* cut = nullptr);
     void renderEntities(const Sink& sink, int x0, int y0, int x1, int y1);
+    void renderShots(const Sink& sink, int x0, int y0, int x1, int y1) const;
+    void renderOverlays(const Sink& sink, int x0, int y0, int x1, int y1) const;
+    bool overlayRect(const Entity& e, int& x0, int& y0, int& x1, int& y1) const;
+    bool shotRect(const Shot& s, int& x0, int& y0, int& x1, int& y1) const;
+    void shotAim(Shot& s) const;           // 狙う点を今の人や物の位置へ
+    void shotPlace(Shot& s) const;         // p から今の位置を決める
+    void shotChanged(const Sink& sink, Shot& s);
+    bool bodyFree(float x, float y, float z, int height, uint32_t pass) const;
     void drawCursor(const Sink& sink, int x0, int y0, int x1, int y1) const;
     void entityScreen(const Entity& e, int& dx, int& dy) const;
     void markRect(const Sink& sink, int x0, int y0, int x1, int y1) const;
@@ -324,6 +403,7 @@ private:
     int wa0_ = 1, wa1_ = 0, wb0_ = 1, wb1_ = 0;   // 今の範囲(チャンクの a = cx - cz、b = cx + cz)
     bool window_stale_ = true;
     bool warned_full_ = false;
+    bool keep_all_ = false;
 
     // 表示
     int vx_ = 0, vy_ = 20, vw_ = 240, vh_ = 204;
@@ -334,7 +414,19 @@ private:
     bool sun_ = true;
     uint32_t occluders_ = DefaultOccluders();
     int last_faces_ = 0;
-    Entity ents_[kMaxEntities];
+    // 人や物と弾の置き場はヒープ(固定長で持つと World が約15KBになり、実機でチャンクの置き場を確保できなかった)。
+    // 人や物は置いた数に合わせて kEntityChunk ずつ広げ、閉じる(close)まで縮めない。弾は最初の shotAdd で kMaxShots 個。
+    // 番号(ハンドルの下位8bit)は広げても変わらない。Entity* は広げたとき(entityAdd)に無効になる
+    Entity* ents_ = nullptr;
+    int ent_cap_ = 0;
+    // 並べ替え・近い順・押し合いの作業場所(人や物と同じ数。スタックに置かない)
+    struct EntScratch { float key, ox, oz; int16_t order, idx; };
+    mutable EntScratch* escr_ = nullptr;
+    Shot* shots_ = nullptr;
+    bool growEntities();
+    bool ensureShots();
+    void freeEntities();
+    int sortEntities() const;   // 奥から順に escr_[k].order へ。数を返す
 
     static constexpr uint32_t DefaultOccluders() {
         return ((1u << (kBlockCount + 1)) - 1) & ~((1u << AIR) | (1u << WATER) | (1u << LEAVES) | (1u << TORCH));

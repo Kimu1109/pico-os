@@ -808,6 +808,7 @@ void LuaEngine::registerApi() {
     registerFn("get_time", l_get_time);
     registerFn("get_touch", l_get_touch);
     registerFn("millis", l_millis);
+    registerFn("micros", l_micros);
     registerFn("battery", l_battery);
     registerFn("on_key", l_on_key);
     registerFn("pad_connected", l_pad_connected);
@@ -2857,6 +2858,12 @@ int LuaEngine::l_wav_seek(lua_State* L) {
 int LuaEngine::l_millis(lua_State* L) {
     // 起動からのミリ秒(単調増加。NTPの同期で飛ばない)。経過時間の計測用
     lua_pushinteger(L, (lua_Integer)millis());
+    return 1;
+}
+
+int LuaEngine::l_micros(lua_State* L) {
+    // 起動からのマイクロ秒(32bit で約71分ごとに一巡する)。短い処理の時間を測る用。差は (b - a) % 2^32 で取る
+    lua_pushinteger(L, (lua_Integer)(uint32_t)micros());
     return 1;
 }
 

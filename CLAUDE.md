@@ -77,7 +77,7 @@ src/
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
   todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders)。下記「TODOアプリ」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
-  iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索)。Luaの`pico.iso`。下記「ブロック」参照
+  iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索 / Iso_Flow: 流れの場(フローフィールド))。Luaの`pico.iso`。下記「ブロック」「2.5Dエンジンのタワーディフェンス向けの道具」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
@@ -89,7 +89,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の57本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の58本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -107,6 +107,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
     lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
     lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
     lua/apps/コントローラー確認/ 外部コントローラーの動作確認(押しているボタンを図で出す)
+    lua/apps/ゾンビTD/        タワーディフェンス(作りかけ。下記「ゾンビTD」)
     lua/apps/テトリス/        テトリス風ゲーム(下記「テトリス」)。リバーシ/マインスイーパー/ブロック崩しと合わせて4本とも pico.game で作ってある
     music/*.mml               ミュージックアプリが並べる曲(demo.mml / sample.mml。MUSIC_FORMAT.md)
 examples/doc.md                MarkdownView動作確認用サンプル文書
@@ -3883,7 +3884,7 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   - 絵: `generate_blocks_sheet.py`の`TORCH_ART`(炎6x8 + 棒4x13、32x31の絵を上面/左面/右面の場所へ分ける)。色はパレットの近い色で、
     減色(k-means)には入れていない(パレット・既存の絵は変わらない)。
   - 選ぶ画面は7列(25種類が4段に収まる)。`l_set_image`は 224x598 以上を求める。
-- **人や物(エンティティ、2026-10-08)**: 好きな画像を箱庭の中の小数の位置に立てて置ける(`Iso::Entity`、`World::ents_[kMaxEntities=32]`、約2KB。
+- **人や物(エンティティ、2026-10-08)**: 好きな画像を箱庭の中の小数の位置に立てて置ける(`Iso::Entity`、`World::ents_`。最初は32個の固定長配列。2026-10-08に96個へ広げ、置いた数に合わせて16個ずつ確保する形にした(下の「タワーディフェンス向けの道具」)。
   Luaは`pico.iso.entity_add(image, x, y, z, opts)`/`entity_set`/`entity_move`/`entity_get`/`entity_remove`/`entity_clear`/`entity_at`、
   `pico.iso.ground(x, z[, y])`/`to_screen(x, y, z)`)。(x, y, z) は足元の中心、点 (X,Y,Z) は画面の `(OX+16+16(X-Z), OY+32-8(X+Z)-16Y)`。
   - **前後**: エンティティは「足元を中心にした半径 r の正方形 × 高さ h」の箱を持つ(既定は絵の大きさから r=幅/64・h=高さ/16)。
@@ -3924,6 +3925,59 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   検証: `iso_world_test`(段差の上限・頭の上・避けるブロック・値段で道が変わる・斜めの角・edge・partial/上限/誤り・橋の上下・
   **乱数の高さの地形40個で素朴なダイクストラと値段が一致し、道が規則を守ること**)、`lua_ext_test`(Lua APIの引数・回り道・edgeのエラー)。
   **実機での時間は未計測**。アプリ「ブロック」ではまだ使っていない(村人を目的地へ歩かせる等は今後)。
+- **タワーディフェンス向けの道具(2026-10-08、`ZOMBIE_TD.md`のゲームのため)**: 使い方は`lua-api-doc/content/api/iso.md`「タワーディフェンス向けの道具」。
+  - **流れの場(`src/iso/Iso_Flow`、`pico.iso.flow_build/flow_step/flow_get/flow_info/flow_clear`)**: 目的地の柱(256個まで)から全部の柱へ
+    ダイクストラで「値段」と「次の柱」を求める(大勢が1体ずつ経路探索しない)。規則は`PathRules`そのもの。登り/降りの向きは「歩く側から見た向き」
+    (柱 m から目的地側の柱 c へ`CanStep`)で、値段は c へ入る値段(経路探索と同じなので、高さの地形なら`FindPath`と値段が一致することをテストで確かめた)。
+    **1つの柱に立てる高さは1つだけ**(柱の一番上。橋の下は扱わない)。`step(budget)`で少しずつ作り(柱を調べる/確定するのが1単位)、**作っている間は
+    前の結果を答え**、出来上がったら入れ替える(dist/next の2面持ち、立つ高さは出来上がったときに写す)。値段は1/8単位の16bit(斜めは1.375)。
+    幅64まで。`begin()`の後に`addGoal()`で目的地を足す。
+    **メモリ(2026-10-08に作り直した)**: 最初は1柱12バイトを1回の`malloc`(56x56で約38KB)で取っていて、**実機のゾンビTDで「道を作れません: メモリが足りません」**
+    (チャンクの置き場約82KBの後に、その大きさの連続した空きが無かった)。今は結果が1柱3バイト(値段2+「向き4bit・立つ高さ4bit」を詰めた1。56x56で約9.4KB)だけを持ち、
+    作っている間だけもう1組と出番待ちの列(値段と柱の4バイトの組。512件から`realloc`で広げ、値段を下げた柱はもう1件積んで古い件は取り出すときに飛ばす=位置の表は持たない)を足し、
+    出来上がったら前の結果と列を返す。確保は配列ごとに分けた(一番大きいもので2×W×Wバイト)。途中で確保できなければ止まって`failed()`(前の結果は残る。Luaは`flow_info().failed`)。
+    立てない柱の`standY()`は-1(届かない柱でも立てれば高さを返す)。`memoryBytes()`/`flow_info().bytes`で持っている量が分かる。
+    `pico.memory_info()`に`heap_headroom`(ヒープの末尾とスタックの間の未使用。PCでは0)を足し、ゾンビTDは道を作る前と遊び始めにログへ出す。
+  - **`PathRules`に`pass`と`body_cost`**: `pass`のブロックは体のマスにあってよい(中を通り抜ける)が足元にならない(バリケード)。`body_cost`は行き先の体のマスごとの値段。
+    `CanStep`/`EnterCost`を`Iso_Path.hpp`へ出した(流れの場と共有)。
+  - **人や物を96個へ**(ハンドルの下位8bitが番号+1なので255まで増やせる)。**置き場はヒープで、置いた数に合わせて`kEntityChunk`(16)個ずつ広げる**
+    (`growEntities()`。閉じるまで縮めない。番号=ハンドルは広げても変わらないが、`Entity*`は広げたときに無効になる)。弾の置き場(64個、約4.6KB)も
+    最初に撃ったときに確保する。**最初はどちらも`World`の中の固定長配列にしていて、`World`が約6KB→約15KBに増え、実機で「ブロック」のワールドを
+    開けなくなった**(約82KBのチャンクの置き場を確保できなかった)。今の`World`は約4.5KB(前より小さい)。並べ替え・近い順・押し合いの作業場所も
+    スタックに置かず、置き場と同じ数だけヒープに持つ(`escr_`。実機のコア0のスタックは4KiB)。Luaの`shots_step`は当たりを8個ずつ受け取り、
+    `nearby`は32個まで、`flow_build`の目的地は流れの場の作業場所へ直接入れる(どれもスタックに大きな配列を置かないため)。`bar`(HPバー、0〜100)・`mark`(選択の三角)は`renderOverlays()`が
+    **ブロックにも他の人や物にも隠れず一番上に**描き、`entityRect()`に入る。`tag`(0〜31)と`World::nearby()`(近い順)。
+  - **押し合い(`World::crowdStep`、`pico.iso.crowd`)**: `crowd`(1=動く/2=動かない)の総当たりで、水平の円の重なりを`mass`の逆数の比で押し離す。
+    押された先の体のマスにブロックがあればその軸は動かさない。高さ(y)は変えない(地面に合わせるのはアプリ)。
+  - **弾(`Iso::Shot`、64個、`pico.iso.shot_add/shots_step/...`)**: 人や物ではない点。狙った人や物の中心(`y+h/2`)を追い、出発点からの割合`p`で進む
+    (相手が動いても割合で詰めるので**必ず当たる**)。相手が消えたら最後に見た位置で`lost`。`arc`で山なり。描くのは人や物の後(隠れない)。
+  - **視線(`World::lineOfSight`、`pico.iso.sight`)**: 3Dのマスたどり。空気・水・松明・`pass`は通す。出発点と到着点のマスは見ない。
+  - **`World::setKeepAll`(`pico.iso.keep_all`)**: 読み込む範囲を世界全体にして手放さない(K*K ≦ kMaxChunks=56、つまり7x7まで)。
+  - 描く順: ブロック → 人や物(影・絵・手前のブロックの描き直し)→ 弾 → HPバーと印 → カーソル。
+  - 検証: `iso_td_test`(run.sh。流れの場の値段/向き/隙間/pass/届かない/少しずつ/**乱数の地形20個でFindPathと同じ値段**/斜め、視線、近く、押し合い、弾、HPバーと印、全体の読み込み)、
+    `lua_ext_test`(Lua APIを一通り)。**実機では未確認**(人や物96個・流れの場の作り直しの時間)。ゲーム本体は下の「ゾンビTD」。
+- **ゾンビTD(`pc/sdcard/lua/apps/ゾンビTD/`、2026-10-08、`ZOMBIE_TD.md`の「作る順番」の2と3)**: 今あるのはマップとゾンビだけ(兵士・建物・ウェーブ・お金は未)。
+  - **地形は`Iso::ARENA`(`kind`=4、`Iso_World.cpp`の`arenaLayout`/`arenaHeight`)**: 8マスごとの格子の高さ4〜9を補間し、水面5より下は水(底は砂)、木は無し。
+    ベースは z の小さい端の真ん中(`W/2, 4`)で 7x7 を平らな丸石に、出現位置は反対の端(`z = W-3`)に3つで 3x3 を平らな砂利に(半径8/4まで元の高さへなだらかにつなぐ)。
+    `create(ARENA)`はベースの中心を返す。Luaは`pico.iso.arena()`→`{base=, spawns=}`。
+  - **アプリ(`game.lua`)**: `iso.create(app_dir.."/map", 4, 種, 7)`(56x56。何も書き出さない)→`keep_all`→`pump`を数フレーム→
+    ベースの中心から2マスの輪(16柱)を目的地に`flow_build`→`flow_step`で少しずつ→**出現位置のどれかから届かなければ種を1つ進めて作り直す**(8回まで)。
+    ベースは人や物(`crowd="fixed"`、HPバー)。カメラはドラッグ/十字/矢印で、画面の真ん中の地面がマップの中に収まるよう抑える。
+  - **ゾンビ(`zombies.lua`)**: 種類ごとの表(ノーマル/遠距離/重量級)、順番待ち→同時40匹まで出す(出現位置ごとに0.35秒空ける)。**柱が変わったときだけ**
+    `iso.stand`と`iso.flow_get`を引き、次の柱の真ん中へ歩く(毎フレームの仕事は位置の更新と`entity_move`だけ。絵の向きとコマは変わったときだけ`entity_set`)。
+    目的地(流れの場の`次`が無い)で近接はベースを叩き、遠距離は流れの場の値段が`reach`以下で`iso.sight`が通れば止まって石(`iso.shot_add`の`target`=ベース、`tag`=ダメージ)を投げる。
+    押し合いは`iso.crowd(2, ...)`の後に`iso.entity_pos`で位置を読み戻す。段差は見た目だけ少しずつ上り下りする。
+  - **速さを測る画面でもある**: 上の行に fps と1フレームの処理時間(Lua+描画の平均、ms)、5秒ごとにシリアルへ`[TD] fps=.. lua=..ms render=..ms alive=..`。
+    計測用に`pico.micros()`(32bit、約71分で一巡)を足した。下のボタン`[+5][+40]`でゾンビを呼ぶ、`[x1/x3]`で速さ、`[作直]`で別の種。
+    PCビルド(SPIの待ち込み)で40匹: 約98fps(フレームの上限)、Luaの処理は約0.26ms/フレーム、描画は見えている所次第。**実機は未計測**。
+  - **実機で「ゾンビが30体を超えると再起動」(2026-10-08)**: Luaの使い捨ての表(コマ/向きが変わるたびの`entity_set{...}`、毎フレームの空の`shots_step`の表)が
+    既定のごみ集め(生きている量の2倍まで溜める)で溜まり、PCで測るとLuaが予算の上限(約200KB)まで膨らんでいた。実機ではその前に本体のヒープが尽きて落ちたと見ている
+    (Luaの確保の失敗は本来エラーで済むので、再起動したのは本体側の確保の失敗。クラッシュダンプは未確認)。`entity_set`の表を使い回し、弾が無いときは`shots_step`を呼ばず、
+    `collectgarbage("generational")`にした(PCで40体: 約200KB→約140KB)。5秒ごとの`[TD]`の行に`mem lua=.. heap_free=.. headroom=..`を出す。
+  - 絵は`script/generate_zombie_td_sheet.py`(`units.pimg`=ゾンビ3種x2コマとベース、`icon.pimg`。地面の`faces.pimg`と`palette.lua`は「ブロック」から写す)。
+  - 検証: `iso_td_test`(ARENA: 平らな所・丸石と砂利・木が無い・24個の種で道がある・種で決まる)、`lua_ext_test`(`iso.arena`/`entity_pos`/`pico.micros`と、
+    **本物の`zombies.lua`を本物のエンジンの上で120秒ぶん動かす**: 40匹の上限と順番待ち・近接と石がベースに当たる・地面に立つ・重ならない・倒すと次が出る)、
+    PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)。
 - **色**: 元の63色+半分の明るさの影を Lab の k-means で14色にし、起動時に `pico.set_palette` で入れる(1〜14番を既定のパレットの近い番号へ
   並べてあるので、ステータスバー等の色は大きくは変わらない)。アイコンは既定のパレット(彩度を上げてから最近傍)。
 - 操作: 画面=左下の9キー(真ん中が置く/壊す)・上へ/下へ・ブロック変更・中央・昼へ/夜へ・終了、ワールドのタップ=その面の手前へ・長押し=そのブロックへ・
@@ -4106,7 +4160,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、57本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、58本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

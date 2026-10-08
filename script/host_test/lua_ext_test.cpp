@@ -1694,9 +1694,9 @@ int main() {
             check(iso.entity_remove(id) and iso.entity_get(id) == nil and not iso.entity_remove(id), "iso.entity_remove")
             check(not pcall(iso.entity_move, id, 1, 1, 1), "iso.entity_move: 無効なハンドルはエラー")
             local ids = {}
-            for i = 1, 40 do ids[#ids + 1] = iso.entity_add(sp, ex, ey, ez) end
+            for i = 1, 100 do ids[#ids + 1] = iso.entity_add(sp, ex, ey, ez) end
             local nn, why = iso.entity_add(sp, ex, ey, ez)
-            check(#ids == 32 and nn == nil and why ~= nil, "iso.entity_add: 32個まで")
+            check(#ids == 96 and nn == nil and why ~= nil, "iso.entity_add: 96個まで")
             iso.entity_clear()
             check(iso.entity_get(ids[1]) == nil, "iso.entity_clear")
             local n, e = iso.create("/other/w", 1, 5)
@@ -1708,11 +1708,197 @@ int main() {
             iso.dirty_edit(x, y, z)
             iso.draw_icon(3, 10, 10)
             check(not pcall(iso.create, "/app/w", 9, 1), "iso.create: 知らない種類はエラー")
+
+            -- ---- タワーディフェンス向けの道具 ----
+            iso.create("/app/t", 3, 1, 4)                 -- 空の 32x32
+            check(iso.keep_all(true), "iso.keep_all: 4x4 チャンクなら読み込んだままにできる")
+            iso.view(0, 20, 240, 204)
+            iso.origin(104, 106 + 8 * 20 + 16)
+            while iso.pump(64) > 0 do end
+            check(iso.stats().chunks == 16, "iso.keep_all: 全部読み込む")
+            for i = 0, 31 do for k = 0, 31 do iso.set(i, 0, k, 2) end end
+            check(not pcall(iso.flow_build, {}), "iso.flow_build: 目的地が無ければエラー")
+            check(iso.flow_build({{20, 20}}, {}, true), "iso.flow_build: その場で作る")
+            local d, nx, nz, ny = iso.flow_get(10.4, 20.7)
+            check(d == 10 and nx == 11 and nz == 20 and ny == 1, "iso.flow_get: 値段と次の柱と立つ高さ")
+            d, nx = iso.flow_get(20, 20)
+            check(d == 0 and nx == nil, "iso.flow_get: 目的地は次が無い")
+            check(iso.flow_get(-1, 3) == nil, "iso.flow_get: 世界の外は nil")
+            -- バリケード(板=6)の列で仕切る: pass なら中を通れて、body_cost だけ高い
+            for k = 0, 31 do iso.set(15, 1, k, 6); iso.set(15, 2, k, 6) end
+            check(iso.flow_build({{20, 20}}, {pass = {6}, body_cost = {[6] = 2}}), "iso.flow_build: 少しずつ作り始める")
+            check(iso.flow_info().building and iso.flow_get(10, 20) == 10, "iso.flow_step: 作っている間は前の結果")
+            local steps = 0
+            while not iso.flow_step(200) do steps = steps + 1 end
+            check(steps > 2 and iso.flow_get(10, 20) == 14 and iso.flow_info().revision == 2, "iso.flow_step: 出来上がると入れ替わる(板の中を通る)")
+            check(iso.stand(15, 20, nil, {pass = {6}}) == 1 and iso.stand(15, 20) == 3, "iso.stand: pass のブロックの上には立たない")
+            local p2, c2 = iso.path(10, nil, 20, 20, nil, 20, {pass = {6}, body_cost = {[6] = 2}})
+            check(p2 and c2 == 14, "iso.path: pass と body_cost")
+            check(not iso.sight(10.5, 1.5, 20.5, 20.5, 1.5, 20.5) and iso.sight(10.5, 1.5, 20.5, 20.5, 1.5, 20.5, {6}),
+                  "iso.sight: 板に遮られる / pass なら通る")
+            -- 人や物: 押し合い・分類・HPバー
+            local a = iso.entity_add(sp, 10.5, 1, 10.5, {crowd = "move", tag = 3, bar = 100, bar_color = 11, mark = 9})
+            local b = iso.entity_add(sp, 10.6, 1, 10.5, {crowd = "move", tag = 4, mass = 2})
+            local t = iso.entity_add(sp, 12.5, 1, 10.5, {crowd = "fixed", tag = 5})
+            local _, _, _, ia = iso.entity_get(a)
+            check(ia.crowd == "move" and ia.tag == 3 and ia.bar == 100 and ia.mark == 9 and ia.bar_color == 11, "iso.entity_get: 足した値")
+            check(not pcall(iso.entity_set, a, {crowd = "push"}) and not pcall(iso.entity_set, a, {tag = 40}), "iso.entity_set: crowd/tag の誤り")
+            check(iso.crowd() == 2, "iso.crowd: 重なった2人が動く")
+            local ax = iso.entity_get(a)
+            local bx = iso.entity_get(b)
+            check(math.abs((bx - ax) - 0.375) < 1e-3 and bx - 10.6 < 10.5 - ax, "iso.crowd: 重いほうが動かない")
+            local near = iso.nearby(10.5, 10.5, 3)
+            check(#near == 3 and near[3] == t, "iso.nearby: 近い順")
+            near = iso.nearby(10.5, 10.5, 3, {4, 5})
+            check(#near == 2 and near[1] == b, "iso.nearby: tag で絞る")
+            check(#iso.nearby(10.5, 10.5, 3, 3) == 1, "iso.nearby: tag は数1つでもよい")
+            iso.cursor(0, 0, 0, false)
+            iso.entity_set(a, {x = 10.5, z = 10.5})
+            local fx2, fy2 = iso.to_screen(10.5, 1, 10.5)
+            fx2, fy2 = math.floor(fx2 + 0.5), math.floor(fy2 + 0.5)
+            iso.render(0, 20, 240, 204)
+            check(pico.get_pixel(fx2 - 5, fy2 - 23 - 3) == 11 and pico.get_pixel(fx2, fy2 - 23 - 9) == 9, "iso.render: HPバーと印")
+            iso.entity_set(a, {bar = false, mark = false})
+            check(select(4, iso.entity_get(a)).bar == nil, "iso.entity_set: bar = false で消す")
+            -- 弾
+            check(not pcall(iso.shot_add, 1, 1, 1, {target = 12345}), "iso.shot_add: 無効な相手はエラー")
+            check(not pcall(iso.shot_add, 1, 1, 1, {}), "iso.shot_add: 相手も点も無ければエラー")
+            local s = iso.shot_add(5.5, 2, 10.5, {target = t, speed = 20, tag = 3, color = 8})
+            check(type(s) == "number" and iso.shot_count() == 1, "iso.shot_add")
+            local hits
+            for i = 1, 20 do hits = iso.shots_step(0.1); if #hits > 0 then break end end
+            check(#hits == 1 and hits[1].id == s and hits[1].target == t and hits[1].tag == 3 and not hits[1].lost
+                  and math.abs(hits[1].x - 12.5) < 1e-3, "iso.shots_step: 狙った相手に当たる")
+            check(iso.shot_count() == 0, "iso.shots_step: 当たった弾は消える")
+            iso.shot_add(1.5, 1, 1.5, {tx = 3.5, ty = 1, tz = 1.5, arc = 0.5})
+            iso.shot_clear()
+            check(iso.shot_count() == 0, "iso.shot_clear")
+            check(iso.arena() == nil, "iso.arena: ARENA でなければ nil")
+            local ex, ey, ez = iso.entity_pos(a)
+            local gx, gy, gz = iso.entity_get(a)
+            check(ex == gx and ey == gy and ez == gz, "iso.entity_pos: entity_get と同じ位置")
+            iso.close()
+            check(iso.flow_info().ready == false, "iso.close: 流れの場も片付く")
+            check(iso.entity_pos(a) == nil, "iso.entity_pos: 閉じたら nil")
+            -- ARENA(タワーディフェンスの地形)
+            local bx, by, bz = iso.create("/app/a", 4, 3, 7)
+            check(bx == 28 and bz == 4, "iso.create: ARENA はベースの中心を返す")
+            local ar = iso.arena()
+            check(ar and ar.base.x == bx and ar.base.y == by and ar.base.z == bz and #ar.spawns == 3
+                  and ar.spawns[1].z == 53, "iso.arena: ベースと出現位置")
+            check(iso.keep_all(true), "iso.keep_all: ARENA 7x7")
+            while iso.pump(64) > 0 do end
+            check(iso.get(bx, by - 1, bz) == 5 and iso.get(ar.spawns[2].x, ar.spawns[2].y - 1, ar.spawns[2].z) == 18,
+                  "iso.arena: 立つ高さの下はベースが丸石・出現位置が砂利")
+            iso.close()
+            -- pico.micros
+            local u0 = pico.micros()
+            check(math.type(u0) == "integer" and u0 >= 0 and u0 < 4294967296, "pico.micros: 32bit の整数")
         )LUA", "iso");
         check(ok, "pico.iso: Luaから一通り使える");
         check(HostSd::files.count("/app/w/world.dat") == 1 && HostSd::files.count("/app/w/c_64_64.dat") == 1,
               "pico.iso: 見出しと書き換えたチャンクだけを書き出す");
         check(HostSd::files.count("/app/w/c_63_63.dat") == 0, "pico.iso: 書き換えていないチャンクは書き出さない");
+    }
+
+    // =====================================================================
+    // ゾンビTD の zombies.lua を本物のエンジン(ARENA・流れの場・押し合い・弾)の上で動かす
+    // =====================================================================
+    {
+        std::string root(__FILE__);
+        root = root.substr(0, root.rfind("/script/host_test/"));
+        auto slurp = [&](const char* rel) {
+            std::ifstream f(root + rel, std::ios::binary);
+            return std::string((std::istreambuf_iterator<char>(f)), {});
+        };
+        HostSd::files["/td/zombies.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/zombies.lua");
+        HostSd::files["/td/units.pimg"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/units.pimg");
+        HostSd::files["/td/faces.pimg"] = slurp("/pc/sdcard/lua/apps/ブロック/faces.pimg");
+        OSData::SD_usable = true;
+        LuaEngine te(180 * 1024, LuaPermissions{}, "/td");
+        lua_register(te.raw(), "check", l_check);
+        bool ok = te.Run(R"LUA(
+            local iso = pico.iso
+            Z = require("zombies")
+            iso.set_image(pico.image_load("/td/faces.pimg"))
+            local units = pico.image_load("/td/units.pimg")
+            iso.create("/td/map", 4, 3, 7)
+            iso.keep_all(true)
+            iso.view(0, 20, 240, 246)
+            while iso.pump(64) > 0 do end
+            A = iso.arena()
+            local b = A.base
+            local goals = {}
+            for dx = -2, 2 do for dz = -2, 2 do
+                if math.max(math.abs(dx), math.abs(dz)) == 2 then goals[#goals + 1] = {b.x + dx, b.z + dz} end
+            end end
+            iso.flow_build(goals, {max_up = 1, max_down = 2, height = 2, up_cost = 0.5, diagonal = true}, true)
+            for _, s in ipairs(A.spawns) do check(iso.flow_get(s.x, s.z) ~= nil, "zombies: 出現位置から道がある") end
+            BASE = {x = b.x, y = b.y, z = b.z, hp = 100000, melee = 0, thrown = 0}
+            BASE.id = iso.entity_add(units, b.x + 0.5, b.y, b.z + 0.5,
+                {sx = 80, sy = 0, w = 44, h = 40, r = 1.4, height = 2.5, crowd = "fixed", tag = 2})
+            function BASE.hit(d) BASE.hp = BASE.hp - d; BASE.melee = BASE.melee + 1 end
+            math.randomseed(7)
+            Z.init(units, A.spawns, BASE, {height = 2})
+            Z.queue("normal", 30); Z.queue("ranged", 12); Z.queue("heavy", 8)
+            check(Z.waiting() == 50 and Z.alive() == 0, "zombies.queue: 順番待ちに積む")
+            Z.update(0.05)
+            check(Z.alive() >= 1 and Z.alive() <= 3, "zombies.update: 出現位置ごとに間を空けて出す")
+            function tick(n)
+                for _ = 1, n do
+                    Z.update(0.05)
+                    for _, h in ipairs(iso.shots_step(0.05)) do
+                        if h.target == BASE.id and not h.lost then BASE.thrown = BASE.thrown + 1; BASE.hp = BASE.hp - h.tag end
+                    end
+                end
+            end
+        )LUA", "td");
+        check(ok, "zombies: 準備");
+        int max_alive = 0;
+        // 120秒ぶん(1回の Run は 2秒ぶん。命令数の上限に掛からないよう分ける)
+        for (int i = 0; i < 60 && ok; i++) {
+            ok = te.Run("tick(40)", "tick");
+            lua_State* L = te.raw();
+            lua_getglobal(L, "Z"); lua_getfield(L, -1, "alive"); lua_call(L, 0, 1);
+            max_alive = std::max(max_alive, (int)lua_tointeger(L, -1));
+            lua_pop(L, 2);
+        }
+        check(ok, "zombies: 120秒ぶん動かしてもエラーにならない");
+        check(max_alive == 40, "zombies: 同時に出るのは40匹まで");
+        ok = te.Run(R"LUA(
+            local iso = pico.iso
+            check(Z.alive() == 40 and Z.waiting() == 10, "zombies: 倒さなければ上限の40匹で止まり、残りは待つ")
+            check(BASE.melee > 0, "zombies: 近接のゾンビがベースへ着いて叩く")
+            check(BASE.thrown > 0, "zombies: 遠距離のゾンビの石がベースに当たる")
+            -- 全員がマップの中、ベースのまわりへ寄っている
+            local near, inside = 0, true
+            for _, zb in ipairs(Z.list) do
+                local x, y, z = iso.entity_pos(zb.id)
+                if x < 0 or x > 56 or z < 0 or z > 56 then inside = false end
+                if math.abs(x - (A.base.x + 0.5)) < 8 and math.abs(z - (A.base.z + 0.5)) < 8 then near = near + 1 end
+                -- 立っている高さ: 柱の地面の上(浮いても埋まってもいない)
+                local g = iso.stand(x, z, nil, {height = 2})
+                if g and math.abs(y - g) > 1.01 then inside = false end
+            end
+            check(inside, "zombies: マップの中で地面に立っている")
+            check(near >= 30, "zombies: ほとんどがベースのまわりへ着く (" .. near .. ")")
+            -- 押し合い: 同じ所に重なっていない
+            local overlap = 0
+            for i = 1, #Z.list do for k = i + 1, #Z.list do
+                local ax, _, az = iso.entity_pos(Z.list[i].id)
+                local bx, _, bz = iso.entity_pos(Z.list[k].id)
+                if (ax - bx) ^ 2 + (az - bz) ^ 2 < 0.01 then overlap = overlap + 1 end
+            end end
+            check(overlap == 0, "zombies: 押し合って重ならない")
+            Z.kill(1)
+            check(Z.alive() == 39 and Z.stats.killed == 1, "zombies.kill")
+            Z.update(0.5)
+            check(Z.alive() == 40 and Z.waiting() == 9, "zombies: 倒れた分だけ順番待ちから出す")
+            Z.clear()
+            check(Z.alive() == 0 and Z.waiting() == 0 and iso.entity_get(BASE.id) ~= nil, "zombies.clear: ゾンビだけ消える")
+            iso.close()
+        )LUA", "td3");
+        check(ok, "zombies: 上限・ベースへの攻撃・押し合い・倒す");
     }
 
     WidgetFunctions::ClearSceneWidgets();

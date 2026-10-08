@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
+#include <new>
 
 #include <Arduino.h>
 #include <SdFat.h>
@@ -177,10 +178,77 @@ int World::height(int x, int z) const {
           + grid(gx, gz + 1) * (8 - lx) * lz + grid(gx + 1, gz + 1) * lx * lz) / 64;
 }
 
+// ---- ARENA(タワーディフェンス用) ----
+
+void World::arenaLayout(int& bx, int& bz, int* sx, int* sz) const {
+    bx = W_ / 2;
+    bz = 4;
+    for (int i = 0; i < kArenaSpawns; i++) {
+        if (sx) sx[i] = W_ * (i + 1) / (kArenaSpawns + 1);
+        if (sz) sz[i] = W_ - 3;
+    }
+}
+
+namespace {
+// 平らにした所(中心の高さ hf、半径 r0)から、半径 r1 までで元の高さ h へつなぐ
+int Blend(int h, int hf, int d, int r0, int r1) {
+    if (d <= r0) return hf;
+    if (d >= r1) return h;
+    return hf + ((h - hf) * (d - r0) * 2 + (r1 - r0)) / (2 * (r1 - r0));   // 四捨五入
+}
+int Cheb(int ax, int az, int bx, int bz) {
+    const int dx = abs(ax - bx), dz = abs(az - bz);
+    return dx > dz ? dx : dz;
+}
+}  // namespace
+
+int World::arenaHeight(int x, int z) const {
+    // 8マスごとの格子に高さ(4〜9)を決め、間は双一次補間(自然より起伏が小さい。1歩の段差は1段まで)
+    auto raw = [this](int x, int z) {
+        const int gx = x >> 3, gz = z >> 3, lx = x & 7, lz = z & 7;
+        auto grid = [this](int a, int b) { return 4 + (int)(hash(a, b, 11) % 6); };
+        return (grid(gx, gz) * (8 - lx) * (8 - lz) + grid(gx + 1, gz) * lx * (8 - lz)
+              + grid(gx, gz + 1) * (8 - lx) * lz + grid(gx + 1, gz + 1) * lx * lz) / 64;
+    };
+    int h = raw(x, z);
+    int bx, bz, sx[kArenaSpawns], sz[kArenaSpawns];
+    arenaLayout(bx, bz, sx, sz);
+    for (int i = 0; i < kArenaSpawns; i++) {
+        const int hf = raw(sx[i], sz[i]) > kWaterLevel + 1 ? raw(sx[i], sz[i]) : kWaterLevel + 1;
+        h = Blend(h, hf, Cheb(x, z, sx[i], sz[i]), 1, 4);
+    }
+    const int hb = raw(bx, bz) > kWaterLevel + 1 ? raw(bx, bz) : kWaterLevel + 1;
+    return Blend(h, hb, Cheb(x, z, bx, bz), 3, 8);
+}
+
 void World::generate(int cx, int cz, uint8_t* b) const {
     memset(b, 0, kChunkBytes);
     const int ox = cx * 8, oz = cz * 8;
     if (kind_ == EMPTY) return;
+    if (kind_ == ARENA) {
+        // 水面(5)より低い所は水(底は砂)。ベースの平らな所は丸石、出現位置は砂利
+        int bx, bz, sx[kArenaSpawns], sz[kArenaSpawns];
+        arenaLayout(bx, bz, sx, sz);
+        for (int lx = 0; lx < 8; lx++) {
+            for (int lz = 0; lz < 8; lz++) {
+                const int x = ox + lx, z = oz + lz, i = lx * 8 + lz;
+                const int h = arenaHeight(x, z);
+                uint8_t top = h < kWaterLevel ? SAND : GRASS;
+                if (Cheb(x, z, bx, bz) <= 3) top = COBBLE;
+                for (int k = 0; k < kArenaSpawns; k++) if (Cheb(x, z, sx[k], sz[k]) <= 1) top = GRAVEL;
+                for (int y = 0; y < H; y++) {
+                    uint8_t v = AIR;
+                    if (y == 0) v = BEDROCK;
+                    else if (y < h - 2) v = STONE;
+                    else if (y < h) v = DIRT;
+                    else if (y == h) v = top;
+                    else if (y <= kWaterLevel) v = WATER;
+                    b[y * kLayer + i] = v;
+                }
+            }
+        }
+        return;
+    }
     if (kind_ == FLAT || (kind_ == DEMO && (cx >= 6 || cz >= 6))) {
         memset(b, GRASS, kLayer);
         return;
@@ -636,9 +704,14 @@ void World::window(int umin, int umax, int smin, int smax) {
 int World::pump(int max, uint32_t ms) {
     if (!pool_) return 0;
     if (window_stale_) {
-        int umin, umax, smin, smax;
-        loadRange(umin, umax, smin, smax);
-        window(umin, umax, smin, smax);
+        if (keep_all_) {
+            // 世界全体(u = x - z は -(W-1)〜W-1、s = x + z は 0〜2W-2)
+            window(-(W_ - 1), W_ - 1, 0, 2 * W_ - 2);
+        } else {
+            int umin, umax, smin, smax;
+            loadRange(umin, umax, smin, smax);
+            window(umin, umax, smin, smax);
+        }
         window_stale_ = false;
     }
     const uint32_t t0 = millis();
@@ -696,7 +769,10 @@ void World::close() {
     ld_valid_ = false;
     memset(map_, 0, sizeof(map_));
     // 人や物はそのワールドの中の位置なので、閉じたら片付ける(描き直しは呼び出し側。ハンドルは使い回さない)
-    for (int i = 0; i < kMaxEntities; i++) ents_[i].used = false;
+    freeEntities();
+    delete[] shots_;
+    shots_ = nullptr;
+    keep_all_ = false;
     dir_.assign("");
     kind_ = EMPTY;
     K_ = 6;
@@ -705,8 +781,13 @@ void World::close() {
 }
 
 bool World::create(const char* dir, uint8_t kind, uint32_t seed, int k, int& px, int& py, int& pz) {
-    if (kind > EMPTY || !begin(dir, kind, k, seed)) return false;
+    if (kind > ARENA || !begin(dir, kind, k, seed)) return false;
     if (kind == DEMO) { px = 0; py = 1; pz = 0; return true; }
+    if (kind == ARENA) {
+        arenaLayout(px, pz, nullptr, nullptr);
+        py = arenaHeight(px, pz) + 1;
+        return true;
+    }
     px = pz = W_ / 2;
     py = firstAir(px, pz);
     return true;
@@ -729,7 +810,7 @@ bool World::open(const char* dir, int& px, int& py, int& pz, int& cur, const cha
         return false;
     }
     const int kind = h[4], kk = R16(h + 5);
-    if (kind > EMPTY || kk < 1) { err = "壊れています"; return false; }
+    if (kind > ARENA || kk < 1) { err = "壊れています"; return false; }
     if (kk > kMaxK) { err = "大きすぎます"; return false; }
     const uint32_t seed = ((uint32_t)h[7] << 24) | ((uint32_t)h[8] << 16) | ((uint32_t)h[9] << 8) | h[10];
     const int x = R16(h + 11), y = h[13], z = R16(h + 14);
@@ -919,6 +1000,10 @@ void World::DrawIcon(const Sink& sink, int id, int px, int py) {
 void World::render(const Sink& sink, int x0, int y0, int x1, int y1) {
     renderBlocks(sink, x0, y0, x1, y1, nullptr);
     if (sink.face_px && sink.image_px && sink.put) renderEntities(sink, x0, y0, x1, y1);
+    if (sink.put) {
+        renderShots(sink, x0, y0, x1, y1);
+        renderOverlays(sink, x0, y0, x1, y1);
+    }
     drawCursor(sink, x0, y0, x1, y1);
 }
 
@@ -1108,7 +1193,7 @@ void World::dirtyEdit(const Sink& sink, int x, int y, int z) {
         if (ax0 < ax1 && ay0 < ay1) sink.dirty(sink.ctx, ax0, ay0, ax1 - ax0, ay1 - ay0);
     }
     // その柱に足元がかかっている人や物は、地面の影の高さが変わりうる
-    for (int i = 0; i < kMaxEntities; i++) {
+    for (int i = 0; i < ent_cap_; i++) {
         const Entity& e = ents_[i];
         if (e.used && fabsf(e.x - (x + 0.5f)) <= 0.5f + e.r && fabsf(e.z - (z + 0.5f)) <= 0.5f + e.r) {
             entityChanged(sink, ((int)e.gen << 8) | (i + 1));
@@ -1206,6 +1291,11 @@ bool World::entityRect(const Entity& e, int& x0, int& y0, int& x1, int& y1) cons
         if (!any) { x0 = sx0; y0 = sy0; x1 = sx1; y1 = sy1; any = true; }
         else { x0 = imin(x0, sx0); y0 = imin(y0, sy0); x1 = imax(x1, sx1); y1 = imax(y1, sy1); }
     }
+    int ox0, oy0, ox1, oy1;
+    if (overlayRect(e, ox0, oy0, ox1, oy1)) {
+        if (!any) { x0 = ox0; y0 = oy0; x1 = ox1; y1 = oy1; any = true; }
+        else { x0 = imin(x0, ox0); y0 = imin(y0, oy0); x1 = imax(x1, ox1); y1 = imax(y1, oy1); }
+    }
     return any;
 }
 
@@ -1218,31 +1308,82 @@ void World::markRect(const Sink& sink, int x0, int y0, int x1, int y1) const {
 
 Entity* World::entity(int handle) {
     const int i = (handle & 0xFF) - 1;
-    if (i < 0 || i >= kMaxEntities) return nullptr;
+    if (i < 0 || i >= ent_cap_) return nullptr;
     Entity& e = ents_[i];
     return (e.used && e.gen == (uint16_t)(handle >> 8)) ? &e : nullptr;
 }
 
+// 奥から順(描く順)。奥行き = 箱の中心の x - y + z が大きいほど奥
+int World::sortEntities() const {
+    int n = 0;
+    for (int i = 0; i < ent_cap_; i++) {
+        const Entity& e = ents_[i];
+        if (!e.used || !e.visible) continue;
+        const float k = e.x + e.z - (e.y + e.h * 0.5f);
+        int j = n++;
+        while (j > 0 && escr_[j - 1].key < k) {
+            escr_[j].key = escr_[j - 1].key;
+            escr_[j].order = escr_[j - 1].order;
+            j--;
+        }
+        escr_[j].key = k;
+        escr_[j].order = (int16_t)i;
+    }
+    return n;
+}
+
+void World::freeEntities() {
+    delete[] ents_;
+    delete[] escr_;
+    ents_ = nullptr;
+    escr_ = nullptr;
+    ent_cap_ = 0;
+}
+
+bool World::growEntities() {
+    if (ent_cap_ >= kMaxEntities) return false;
+    int cap = ent_cap_ + kEntityChunk;
+    if (cap > kMaxEntities) cap = kMaxEntities;
+    Entity* ne = new (std::nothrow) Entity[cap];
+    EntScratch* ns = new (std::nothrow) EntScratch[cap];
+    if (!ne || !ns) {
+        delete[] ne;
+        delete[] ns;
+        return false;
+    }
+    for (int i = 0; i < ent_cap_; i++) ne[i] = ents_[i];   // 番号(=ハンドル)はそのまま
+    delete[] ents_;
+    delete[] escr_;
+    ents_ = ne;
+    escr_ = ns;
+    ent_cap_ = cap;
+    return true;
+}
+
+bool World::ensureShots() {
+    if (!shots_) shots_ = new (std::nothrow) Shot[kMaxShots];
+    return shots_ != nullptr;
+}
+
 int World::entityCount() const {
     int n = 0;
-    for (int i = 0; i < kMaxEntities; i++) if (ents_[i].used) n++;
+    for (int i = 0; i < ent_cap_; i++) if (ents_[i].used) n++;
     return n;
 }
 
 int World::entityAdd(const Sink& sink, const Entity& src) {
-    for (int i = 0; i < kMaxEntities; i++) {
-        Entity& e = ents_[i];
-        if (e.used) continue;
-        const uint16_t gen = (uint16_t)(e.gen + 1 > 0x7FFF ? 1 : e.gen + 1);   // ハンドルを正の int に収める
-        e = src;
-        e.used = true;
-        e.gen = gen;
-        e.lw = e.lh = 0;
-        const int handle = ((int)gen << 8) | (i + 1);
-        entityChanged(sink, handle);
-        return handle;
-    }
-    return 0;
+    int i = 0;
+    while (i < ent_cap_ && ents_[i].used) i++;
+    if (i >= ent_cap_ && !growEntities()) return 0;   // 上限か、メモリが足りない
+    Entity& e = ents_[i];
+    const uint16_t gen = (uint16_t)(e.gen + 1 > 0x7FFF ? 1 : e.gen + 1);   // ハンドルを正の int に収める
+    e = src;
+    e.used = true;
+    e.gen = gen;
+    e.lw = e.lh = 0;
+    const int handle = ((int)gen << 8) | (i + 1);
+    entityChanged(sink, handle);
+    return handle;
 }
 
 void World::entityChanged(const Sink& sink, int handle) {
@@ -1267,13 +1408,13 @@ bool World::entityRemove(const Sink& sink, int handle) {
 }
 
 void World::entityClear(const Sink& sink) {
-    for (int i = 0; i < kMaxEntities; i++) {
+    for (int i = 0; i < ent_cap_; i++) {
         if (ents_[i].used) entityRemove(sink, ((int)ents_[i].gen << 8) | (i + 1));
     }
 }
 
 void World::refreshEntityRects() {
-    for (int i = 0; i < kMaxEntities; i++) {
+    for (int i = 0; i < ent_cap_; i++) {
         Entity& e = ents_[i];
         if (!e.used) continue;
         int x0, y0, x1, y1;
@@ -1286,22 +1427,6 @@ void World::refreshEntityRects() {
 }
 
 namespace {
-
-// 奥から順(描く順)。奥行き = 箱の中心の x - y + z が大きいほど奥
-int SortEntities(const Entity* ents, int* order) {
-    int n = 0;
-    float key[kMaxEntities];
-    for (int i = 0; i < kMaxEntities; i++) {
-        const Entity& e = ents[i];
-        if (!e.used || !e.visible) continue;
-        const float k = e.x + e.z - (e.y + e.h * 0.5f);
-        int j = n++;
-        while (j > 0 && key[j - 1] < k) { key[j] = key[j - 1]; order[j] = order[j - 1]; j--; }
-        key[j] = k;
-        order[j] = i;
-    }
-    return n;
-}
 
 // 書いてよい画素を絞った描き先: 人や物の絵の不透明な画素だけ / 地面の影の画素だけ。
 // ブロックの面を、そこへだけ1画素ずつ描き直す
@@ -1369,8 +1494,7 @@ struct Masked {
 }  // namespace
 
 void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
-    int order[kMaxEntities];
-    const int n = SortEntities(ents_, order);
+    const int n = sortEntities();
     if (n == 0) return;
     Masked m;
     m.base = &sink;
@@ -1380,7 +1504,7 @@ void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
     ms.dither = Masked::Dither;
     // 影を先に全部(人や物の絵の下に来るように)。影ごとに、地面より手前のブロックを影の画素の上へ描き直す
     for (int k = 0; k < n; k++) {
-        const Entity& e = ents_[order[k]];
+        const Entity& e = ents_[escr_[k].order];
         float cx, cy, a, b;
         int gy;
         if (!shadowShape(e, cx, cy, a, b, gy)) continue;
@@ -1404,7 +1528,7 @@ void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
     }
     // 絵を奥から順に。描いたら、その箱より手前のブロックを絵の不透明な画素の上へ描き直す
     for (int k = 0; k < n; k++) {
-        const Entity& e = ents_[order[k]];
+        const Entity& e = ents_[escr_[k].order];
         if (e.sw <= 0 || e.sh <= 0) continue;
         int dx, dy;
         entityScreen(e, dx, dy);
@@ -1431,19 +1555,331 @@ void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
 
 int World::entityAt(const Sink& sink, int px, int py) const {
     if (!sink.image_px) return 0;
-    int order[kMaxEntities];
-    const int n = SortEntities(ents_, order);
+    const int n = sortEntities();
     for (int k = n - 1; k >= 0; k--) {   // 手前から
-        const Entity& e = ents_[order[k]];
+        const Entity& e = ents_[escr_[k].order];
         int dx, dy;
         entityScreen(e, dx, dy);
         int lx = px - dx;
         const int ly = py - dy;
         if (lx < 0 || ly < 0 || lx >= e.sw || ly >= e.sh) continue;
         if (e.flip) lx = e.sw - 1 - lx;
-        if (sink.image_px(sink.ctx, e.image, e.sx + lx, e.sy + ly) >= 0) return ((int)e.gen << 8) | (order[k] + 1);
+        if (sink.image_px(sink.ctx, e.image, e.sx + lx, e.sy + ly) >= 0) return ((int)e.gen << 8) | (escr_[k].order + 1);
     }
     return 0;
+}
+
+// ===================================================================
+// タワーディフェンス向けの道具: HPバーと印・弾・押し合い・近くの人や物・視線・全体の読み込み
+// ===================================================================
+
+bool World::setKeepAll(bool on) {
+    if (on && K_ * K_ > kMaxChunks) return false;
+    if (on != keep_all_) {
+        keep_all_ = on;
+        window_stale_ = true;
+    }
+    return true;
+}
+
+// HPバー(幅12・高さ3)と印(幅5の下向きの三角)の範囲。絵の上端の上に置く
+bool World::overlayRect(const Entity& e, int& x0, int& y0, int& x1, int& y1) const {
+    if (!e.used || !e.visible || (e.bar < 0 && e.mark < 0)) return false;
+    int dx, dy;
+    entityScreen(e, dx, dy);
+    const int cx = dx + e.ax;
+    x0 = cx - 6; x1 = cx + 6;
+    y1 = dy - 1;
+    y0 = e.mark >= 0 ? dy - 9 : dy - 4;
+    return true;
+}
+
+void World::renderOverlays(const Sink& sink, int x0, int y0, int x1, int y1) const {
+    auto put = [&](int x, int y, int c) {
+        if (x >= x0 && x < x1 && y >= y0 && y < y1) sink.put(sink.ctx, x, y, c);
+    };
+    for (int i = 0; i < ent_cap_; i++) {
+        const Entity& e = ents_[i];
+        int rx0, ry0, rx1, ry1;
+        if (!overlayRect(e, rx0, ry0, rx1, ry1)) continue;
+        if (rx0 >= x1 || rx1 <= x0 || ry0 >= y1 || ry1 <= y0) continue;
+        int dx, dy;
+        entityScreen(e, dx, dy);
+        const int cx = dx + e.ax;
+        if (e.bar >= 0) {
+            // 黒の枠(12x3)の中に、残りの割合だけ色の線(最大10)
+            const int by = dy - 4;
+            for (int y = by; y < by + 3; y++) for (int x = cx - 6; x < cx + 6; x++) put(x, y, 0);
+            const int fill = (e.bar * 10 + 50) / 100;
+            const int len = e.bar > 0 && fill < 1 ? 1 : (fill > 10 ? 10 : fill);
+            for (int x = cx - 5; x < cx - 5 + len; x++) put(x, by + 1, e.bar_color & 15);
+        }
+        if (e.mark >= 0) {
+            const int my = dy - 9;
+            for (int r = 0; r < 3; r++) for (int x = cx - 2 + r; x <= cx + 2 - r; x++) put(x, my + r, e.mark & 15);
+        }
+    }
+}
+
+int World::nearby(float x, float z, float range, uint32_t tagmask, int32_t* out, int max) const {
+    if (!out || max <= 0) return 0;
+    int n = 0;
+    const float r2 = range * range;
+    for (int i = 0; i < ent_cap_; i++) {
+        const Entity& e = ents_[i];
+        if (!e.used) continue;
+        if (tagmask && !((tagmask >> (e.tag & 31)) & 1)) continue;
+        const float dx = e.x - x, dz = e.z - z, d2 = dx * dx + dz * dz;
+        if (d2 > r2) continue;
+        // 近い順に挿入(溢れたら一番遠いものを捨てる)
+        int j = n < max ? n++ : max;
+        if (j == max) {
+            if (d2 >= escr_[max - 1].key) continue;
+            j = max - 1;
+        }
+        while (j > 0 && escr_[j - 1].key > d2) { escr_[j].key = escr_[j - 1].key; out[j] = out[j - 1]; j--; }
+        escr_[j].key = d2;
+        out[j] = ((int32_t)e.gen << 8) | (i + 1);
+    }
+    return n;
+}
+
+// 足の裏から height マスの体が、その位置(柱)に収まるか
+bool World::bodyFree(float x, float y, float z, int height, uint32_t pass) const {
+    const int ix = (int)floorf(x), iz = (int)floorf(z);
+    if (ix < 0 || iz < 0 || ix >= W_ || iz >= W_) return false;
+    const int y0 = (int)floorf(y + 0.01f);
+    for (int yy = y0 < 0 ? 0 : y0; yy < y0 + height && yy < H; yy++) {
+        const uint8_t b = get(ix, yy, iz);
+        if (b != AIR && b != WATER && b != TORCH && !((pass >> b) & 1)) return false;
+    }
+    return true;
+}
+
+int World::crowdStep(const Sink& sink, int iterations, int height, uint32_t pass) {
+    if (iterations < 1) iterations = 1;
+    if (height < 1) height = 1;
+    EntScratch* sc = escr_;
+    int n = 0;
+    for (int i = 0; i < ent_cap_; i++) {
+        if (ents_[i].used && ents_[i].crowd) sc[n++].idx = (int16_t)i;
+    }
+    if (n < 2) return 0;
+    for (int k = 0; k < n; k++) { sc[k].ox = ents_[sc[k].idx].x; sc[k].oz = ents_[sc[k].idx].z; }
+    for (int it = 0; it < iterations; it++) {
+        bool any = false;
+        for (int a = 0; a < n; a++) {
+            Entity& A = ents_[sc[a].idx];
+            for (int b = a + 1; b < n; b++) {
+                Entity& B = ents_[sc[b].idx];
+                if (A.crowd == 2 && B.crowd == 2) continue;
+                if (fabsf(A.y - B.y) >= (float)height) continue;
+                const float rr = A.r + B.r;
+                float dx = B.x - A.x, dz = B.z - A.z;
+                const float d2 = dx * dx + dz * dz;
+                if (d2 >= rr * rr) continue;
+                float d = sqrtf(d2);
+                const float push = rr - d;
+                if (d < 1e-4f) {
+                    // ちょうど重なっている: 番号で決まる向きへ離す(毎回同じ結果になるように)
+                    const float ang = (float)((sc[a].idx * 7 + sc[b].idx * 13) % 16) * 0.39269908f;
+                    dx = cosf(ang); dz = sinf(ang); d = 1.0f;
+                }
+                const float ia = A.crowd == 2 ? 0.0f : 1.0f / (A.mass > 1e-3f ? A.mass : 1e-3f);
+                const float ib = B.crowd == 2 ? 0.0f : 1.0f / (B.mass > 1e-3f ? B.mass : 1e-3f);
+                if (ia + ib <= 0) continue;
+                const float nx = dx / d, nz = dz / d;
+                const float ma = push * ia / (ia + ib), mb = push * ib / (ia + ib);
+                if (ma > 0) {
+                    const float px = A.x - nx * ma, pz = A.z - nz * ma;
+                    if (bodyFree(px, A.y, A.z, height, pass)) A.x = px;
+                    if (bodyFree(A.x, A.y, pz, height, pass)) A.z = pz;
+                }
+                if (mb > 0) {
+                    const float px = B.x + nx * mb, pz = B.z + nz * mb;
+                    if (bodyFree(px, B.y, B.z, height, pass)) B.x = px;
+                    if (bodyFree(B.x, B.y, pz, height, pass)) B.z = pz;
+                }
+                any = true;
+            }
+        }
+        if (!any) break;
+    }
+    int moved = 0;
+    for (int k = 0; k < n; k++) {
+        Entity& e = ents_[sc[k].idx];
+        if (e.x != sc[k].ox || e.z != sc[k].oz) {
+            moved++;
+            entityChanged(sink, ((int)e.gen << 8) | (sc[k].idx + 1));
+        }
+    }
+    return moved;
+}
+
+bool World::lineOfSight(float x0, float y0, float z0, float x1, float y1, float z1, uint32_t pass) const {
+    // 3D のマスたどり(Amanatides & Woo)
+    int ix = (int)floorf(x0), iy = (int)floorf(y0), iz = (int)floorf(z0);
+    const int ex = (int)floorf(x1), ey = (int)floorf(y1), ez = (int)floorf(z1);
+    const float dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
+    const int sx = dx > 0 ? 1 : (dx < 0 ? -1 : 0);
+    const int sy = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+    const int sz = dz > 0 ? 1 : (dz < 0 ? -1 : 0);
+    const float inf = 1e30f;
+    const float tdx = sx ? fabsf(1.0f / dx) : inf, tdy = sy ? fabsf(1.0f / dy) : inf, tdz = sz ? fabsf(1.0f / dz) : inf;
+    float tmx = sx > 0 ? ((float)(ix + 1) - x0) * tdx : (sx < 0 ? (x0 - (float)ix) * tdx : inf);
+    float tmy = sy > 0 ? ((float)(iy + 1) - y0) * tdy : (sy < 0 ? (y0 - (float)iy) * tdy : inf);
+    float tmz = sz > 0 ? ((float)(iz + 1) - z0) * tdz : (sz < 0 ? (z0 - (float)iz) * tdz : inf);
+    for (int guard = 0; guard < 4 * (W_ + H) + 8; guard++) {
+        if (ix == ex && iy == ey && iz == ez) return true;
+        // 次のマスへ
+        if (tmx <= tmy && tmx <= tmz) { if (tmx > 1.0f) return true; ix += sx; tmx += tdx; }
+        else if (tmy <= tmz) { if (tmy > 1.0f) return true; iy += sy; tmy += tdy; }
+        else { if (tmz > 1.0f) return true; iz += sz; tmz += tdz; }
+        if (ix == ex && iy == ey && iz == ez) return true;
+        const uint8_t b = get(ix, iy, iz);
+        if (b != AIR && b != WATER && b != TORCH && !((pass >> b) & 1)) return false;
+    }
+    return true;
+}
+
+// ---- 弾 ----
+
+Shot* World::shot(int handle) {
+    const int i = (handle & 0xFF) - 1;
+    if (!shots_ || i < 0 || i >= kMaxShots) return nullptr;
+    Shot& s = shots_[i];
+    return (s.used && s.gen == (uint16_t)(handle >> 8)) ? &s : nullptr;
+}
+
+int World::shotCount() const {
+    int n = 0;
+    if (!shots_) return 0;
+    for (int i = 0; i < kMaxShots; i++) if (shots_[i].used) n++;
+    return n;
+}
+
+void World::shotAim(Shot& s) const {
+    if (!s.target) return;
+    const Entity* e = entity(s.target);
+    if (!e) return;
+    s.tx = e->x; s.ty = e->y + e->h * 0.5f; s.tz = e->z;
+}
+
+void World::shotPlace(Shot& s) const {
+    const float p = s.p;
+    s.x = s.ox + (s.tx - s.ox) * p;
+    s.y = s.oy + (s.ty - s.oy) * p;
+    s.z = s.oz + (s.tz - s.oz) * p;
+    if (s.arc > 0) {
+        const float ddx = s.tx - s.ox, ddz = s.tz - s.oz;
+        s.y += s.arc * sqrtf(ddx * ddx + ddz * ddz) * 4.0f * p * (1.0f - p);
+    }
+}
+
+bool World::shotRect(const Shot& s, int& x0, int& y0, int& x1, int& y1) const {
+    if (!s.used) return false;
+    float fx, fy;
+    project(s.x, s.y, s.z, fx, fy);
+    const int sz = s.size < 1 ? 1 : s.size;
+    x0 = iround(fx) - sz / 2;
+    y0 = iround(fy) - sz / 2;
+    x1 = x0 + sz;
+    y1 = y0 + sz;
+    return true;
+}
+
+void World::shotChanged(const Sink& sink, Shot& s) {
+    if (s.lw > 0) markRect(sink, s.lx, s.ly, s.lx + s.lw, s.ly + s.lh);
+    int x0, y0, x1, y1;
+    if (shotRect(s, x0, y0, x1, y1)) {
+        s.lx = (int16_t)x0; s.ly = (int16_t)y0; s.lw = (int16_t)(x1 - x0); s.lh = (int16_t)(y1 - y0);
+        markRect(sink, x0, y0, x1, y1);
+    } else {
+        s.lw = s.lh = 0;
+    }
+}
+
+int World::shotAdd(const Sink& sink, const Shot& src) {
+    if (!ensureShots()) return 0;
+    for (int i = 0; i < kMaxShots; i++) {
+        Shot& s = shots_[i];
+        if (s.used) continue;
+        const uint16_t gen = (uint16_t)(s.gen + 1 > 0x7FFF ? 1 : s.gen + 1);
+        s = src;
+        s.used = true;
+        s.gen = gen;
+        s.lw = s.lh = 0;
+        s.ox = s.x; s.oy = s.y; s.oz = s.z;
+        s.p = 0;
+        if (s.target && !entity(s.target)) s.target = 0;
+        shotAim(s);
+        shotPlace(s);
+        shotChanged(sink, s);
+        return ((int)gen << 8) | (i + 1);
+    }
+    return 0;
+}
+
+bool World::shotRemove(const Sink& sink, int handle) {
+    Shot* s = shot(handle);
+    if (!s) return false;
+    if (s->lw > 0) markRect(sink, s->lx, s->ly, s->lx + s->lw, s->ly + s->lh);
+    s->used = false;
+    return true;
+}
+
+void World::shotClear(const Sink& sink) {
+    if (!shots_) return;
+    for (int i = 0; i < kMaxShots; i++) {
+        if (shots_[i].used) shotRemove(sink, ((int)shots_[i].gen << 8) | (i + 1));
+    }
+}
+
+int World::shotsStep(const Sink& sink, float dt, ShotHit* out, int max) {
+    int n = 0;
+    if (!shots_) return 0;
+    if (!(dt > 0)) dt = 0;
+    for (int i = 0; i < kMaxShots; i++) {
+        Shot& s = shots_[i];
+        if (!s.used) continue;
+        const int handle = ((int)s.gen << 8) | (i + 1);
+        // 狙った人や物が消えていたら、最後に見た位置へ飛んで終わる(ハンドルは世代つきなので使い回されない)
+        const bool lost = s.target && !entity(s.target);
+        if (!lost) shotAim(s);
+        if (s.p < 1.0f) {
+            // 残りの距離(水平+高さ)を、狙う点が動いても割合で詰める
+            const float ddx = s.tx - s.ox, ddy = s.ty - s.oy, ddz = s.tz - s.oz;
+            float len = sqrtf(ddx * ddx + ddy * ddy + ddz * ddz);
+            if (len < 0.05f) len = 0.05f;
+            s.p += s.speed * dt / len;
+            if (s.p > 1.0f) s.p = 1.0f;
+        }
+        shotPlace(s);
+        if (s.p >= 1.0f) {
+            if (n >= max || !out) { shotChanged(sink, s); continue; }   // 返しきれない分は次へ
+            ShotHit& h = out[n++];
+            h.shot = handle;
+            h.target = lost ? 0 : s.target;
+            h.tag = s.tag;
+            h.lost = lost;
+            h.x = s.x; h.y = s.y; h.z = s.z;
+            shotRemove(sink, handle);
+        } else {
+            shotChanged(sink, s);
+        }
+    }
+    return n;
+}
+
+void World::renderShots(const Sink& sink, int x0, int y0, int x1, int y1) const {
+    if (!shots_) return;
+    for (int i = 0; i < kMaxShots; i++) {
+        const Shot& s = shots_[i];
+        int rx0, ry0, rx1, ry1;
+        if (!shotRect(s, rx0, ry0, rx1, ry1)) continue;
+        rx0 = imax(rx0, x0); ry0 = imax(ry0, y0); rx1 = imin(rx1, x1); ry1 = imin(ry1, y1);
+        for (int y = ry0; y < ry1; y++) for (int x = rx0; x < rx1; x++) sink.put(sink.ctx, x, y, s.color & 15);
+    }
 }
 
 }  // namespace Iso

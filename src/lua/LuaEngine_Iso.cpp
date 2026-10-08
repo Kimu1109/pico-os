@@ -20,6 +20,7 @@
 #include "iso/Iso_World.hpp"
 #include "iso/Iso_Blit.hpp"
 #include "iso/Iso_Path.hpp"
+#include "iso/Iso_Flow.hpp"
 #include "gui/Fill4bpp.hpp"
 #include "gui/icons/icon_render.h"
 #include "functions/GFX_Functions.hpp"
@@ -29,6 +30,7 @@
 
 struct LuaEngine::IsoState {
     Iso::World world;
+    Iso::Flow flow;                     // 流れの場(pico.iso.flow_*)
     Iso::FaceBlitter blit;
     uint32_t image = 0;                 // faces.pimg のハンドル
     const void* analyzed = nullptr;     // blit.setSource() を済ませた画像のバッファ
@@ -243,7 +245,7 @@ struct LuaEngineIso {
         const int kind = Int(L, 2);
         const uint32_t seed = (uint32_t)luaL_checkinteger(L, 3);
         const int k = (int)luaL_optinteger(L, 4, Iso::kNewK);
-        if (kind < 0 || kind > Iso::EMPTY) return luaL_error(L, "pico.iso.create: kind は 0〜3 です");
+        if (kind < 0 || kind > Iso::ARENA) return luaL_error(L, "pico.iso.create: kind は 0〜4 です");
         if (k < 1 || k > Iso::kMaxK) return luaL_error(L, "pico.iso.create: k は 1〜%d です", Iso::kMaxK);
         LuaEngine::IsoState& st = St(L);
         if (!DirAllowed(self, dir, "pico.iso.create")) {
@@ -306,6 +308,7 @@ struct LuaEngineIso {
 
     static int l_close(lua_State* L) {
         St(L).world.close();
+        St(L).flow.clear();
         return 0;
     }
 
@@ -612,6 +615,35 @@ struct LuaEngineIso {
             e.flip = OptBool(L, t, "flip", e.flip);
             e.visible = OptBool(L, t, "visible", e.visible);
             e.shadow_color = (uint8_t)(OptInt(L, t, "shadow_color", e.shadow_color) & 15);
+            // 一番上に描く飾り。false で消す
+            lua_getfield(L, t, "bar");
+            if (lua_isboolean(L, -1) && !lua_toboolean(L, -1)) e.bar = -1;
+            else if (!lua_isnil(L, -1)) {
+                const lua_Number b = luaL_checknumber(L, -1);
+                e.bar = (int8_t)(b < 0 ? 0 : (b > 100 ? 100 : (int)(b + 0.5)));
+            }
+            lua_pop(L, 1);
+            e.bar_color = (uint8_t)(OptInt(L, t, "bar_color", e.bar_color) & 15);
+            lua_getfield(L, t, "mark");
+            if (lua_isboolean(L, -1) && !lua_toboolean(L, -1)) e.mark = -1;
+            else if (!lua_isnil(L, -1)) e.mark = (int8_t)(luaL_checkinteger(L, -1) & 15);
+            lua_pop(L, 1);
+            const int tag = OptInt(L, t, "tag", e.tag);
+            if (tag < 0 || tag > 31) luaL_error(L, "pico.iso: tag は 0〜31 です");
+            e.tag = (uint8_t)tag;
+            lua_getfield(L, t, "crowd");
+            if (lua_isboolean(L, -1)) e.crowd = lua_toboolean(L, -1) ? 1 : 0;
+            else if (lua_isstring(L, -1)) {
+                const char* c = lua_tostring(L, -1);
+                if (!strcmp(c, "none")) e.crowd = 0;
+                else if (!strcmp(c, "move")) e.crowd = 1;
+                else if (!strcmp(c, "fixed")) e.crowd = 2;
+                else luaL_error(L, "pico.iso: crowd は \"none\" / \"move\" / \"fixed\" です");
+            } else if (!lua_isnil(L, -1)) luaL_error(L, "pico.iso: crowd は文字列か真偽値です");
+            lua_pop(L, 1);
+            const float mass = OptNum(L, t, "mass", e.mass);
+            if (!(mass > 0.0f && mass <= 1000.0f)) luaL_error(L, "pico.iso: mass は 0 より大きく 1000 以下です");
+            e.mass = mass;
         }
         if (!(e.x > -1e6f && e.x < 1e6f && e.y > -1e6f && e.y < 1e6f && e.z > -1e6f && e.z < 1e6f)) {
             luaL_error(L, "pico.iso: 位置が大きすぎます");
@@ -638,7 +670,8 @@ struct LuaEngineIso {
         const int h = st.world.entityAdd(DirtySink(c), e);
         if (!h) {
             lua_pushnil(L);
-            lua_pushfstring(L, "置けるのは %d 個までです", Iso::kMaxEntities);
+            if (st.world.entityCount() >= Iso::kMaxEntities) lua_pushfstring(L, "置けるのは %d 個までです", Iso::kMaxEntities);
+            else lua_pushstring(L, "メモリが足りません");
             return 2;
         }
         lua_pushinteger(L, h);
@@ -698,7 +731,23 @@ struct LuaEngineIso {
         lua_pushinteger(L, e->shadow_color); lua_setfield(L, -2, "shadow_color");
         lua_pushboolean(L, e->flip); lua_setfield(L, -2, "flip");
         lua_pushboolean(L, e->visible); lua_setfield(L, -2, "visible");
+        if (e->bar >= 0) { lua_pushinteger(L, e->bar); lua_setfield(L, -2, "bar"); }
+        lua_pushinteger(L, e->bar_color); lua_setfield(L, -2, "bar_color");
+        if (e->mark >= 0) { lua_pushinteger(L, e->mark); lua_setfield(L, -2, "mark"); }
+        lua_pushinteger(L, e->tag); lua_setfield(L, -2, "tag");
+        lua_pushstring(L, e->crowd == 1 ? "move" : (e->crowd == 2 ? "fixed" : "none")); lua_setfield(L, -2, "crowd");
+        lua_pushnumber(L, e->mass); lua_setfield(L, -2, "mass");
         return 4;
+    }
+
+    // pico.iso.entity_pos(id) -> x, y, z | nil(entity_get より軽い。表を作らない。押し合いの後に位置を読み戻す)
+    static int l_entity_pos(lua_State* L) {
+        const Iso::Entity* e = St(L).world.entity(Int(L, 1));
+        if (!e) { lua_pushnil(L); return 1; }
+        lua_pushnumber(L, e->x);
+        lua_pushnumber(L, e->y);
+        lua_pushnumber(L, e->z);
+        return 3;
     }
 
     // pico.iso.entity_remove(id) -> bool
@@ -779,7 +828,7 @@ struct LuaEngineIso {
             for (lua_Integer i = 1; i <= n; i++) {
                 lua_rawgeti(L, -1, i);
                 const lua_Integer b = lua_tointeger(L, -1);
-                if (!lua_isinteger(L, -1) || b < 1 || b > Iso::kBlockCount) luaL_error(L, "pico.iso.path: %s の %d 番目が正しいブロック番号ではありません", key, (int)i);
+                if (!lua_isinteger(L, -1) || b < 1 || b > Iso::kBlockCount) luaL_error(L, "pico.iso: %s の %d 番目が正しいブロック番号ではありません", key, (int)i);
                 m |= 1u << b;
                 lua_pop(L, 1);
             }
@@ -790,6 +839,41 @@ struct LuaEngineIso {
 
     static int OptY(lua_State* L, int idx) {
         return lua_isnoneornil(L, idx) ? -1 : (int)floorf(Num(L, idx) + 0.001f);
+    }
+
+    // ブロックごとの値段の表(1〜kBlockCount)
+    static void CostTable(lua_State* L, int t, const char* key, float* out, const char* api) {
+        lua_getfield(L, t, key);
+        if (!lua_isnil(L, -1)) {
+            if (!lua_istable(L, -1)) luaL_error(L, "%s: %s はテーブルです", api, key);
+            for (int b = 1; b <= Iso::kBlockCount; b++) {
+                lua_rawgeti(L, -1, b);
+                if (!lua_isnil(L, -1)) {
+                    if (!lua_isnumber(L, -1) || lua_tonumber(L, -1) < 0) luaL_error(L, "%s: %s[%d] は0以上の数です", api, key, b);
+                    out[b] = (float)lua_tonumber(L, -1);
+                }
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+    }
+
+    // 経路・流れの場で共通の規則(表 t)
+    static void ParseRules(lua_State* L, int t, Iso::PathRules& r, const char* api) {
+        r.max_up = OptInt(L, t, "max_up", r.max_up);
+        r.max_down = OptInt(L, t, "max_down", r.max_down);
+        r.height = OptInt(L, t, "height", r.height);
+        r.diagonal = OptBool(L, t, "diagonal", r.diagonal);
+        r.swim = OptBool(L, t, "swim", r.swim);
+        r.step = OptNum(L, t, "step", r.step);
+        r.up_cost = OptNum(L, t, "up_cost", r.up_cost);
+        r.down_cost = OptNum(L, t, "down_cost", r.down_cost);
+        if (!(r.step > 0) || r.up_cost < 0 || r.down_cost < 0) luaL_error(L, "%s: step は正、up_cost/down_cost は0以上です", api);
+        if (r.max_up < 0 || r.max_down < 0 || r.height < 1) luaL_error(L, "%s: max_up/max_down は0以上、height は1以上です", api);
+        r.avoid = BlockMask(L, t, "avoid");
+        r.pass = BlockMask(L, t, "pass");
+        CostTable(L, t, "block_cost", r.block_cost, api);
+        CostTable(L, t, "body_cost", r.body_cost, api);
     }
 
     // pico.iso.path(x0, y0, z0, x1, y1, z1 [, opts]) -> 道 {{x=,y=,z=}, ...}, 値段, "found"|"partial"
@@ -803,33 +887,10 @@ struct LuaEngineIso {
         EdgeCtx ec{L, 0};
         if (!lua_isnoneornil(L, 7)) {
             luaL_checktype(L, 7, LUA_TTABLE);
-            r.max_up = OptInt(L, 7, "max_up", r.max_up);
-            r.max_down = OptInt(L, 7, "max_down", r.max_down);
-            r.height = OptInt(L, 7, "height", r.height);
-            r.diagonal = OptBool(L, 7, "diagonal", r.diagonal);
-            r.swim = OptBool(L, 7, "swim", r.swim);
+            ParseRules(L, 7, r, "pico.iso.path");
             r.partial = OptBool(L, 7, "partial", r.partial);
-            r.step = OptNum(L, 7, "step", r.step);
-            r.up_cost = OptNum(L, 7, "up_cost", r.up_cost);
-            r.down_cost = OptNum(L, 7, "down_cost", r.down_cost);
             r.max_nodes = OptInt(L, 7, "max_nodes", r.max_nodes);
-            if (r.step <= 0 || r.up_cost < 0 || r.down_cost < 0) luaL_error(L, "pico.iso.path: step は正、up_cost/down_cost は0以上です");
             if (r.max_nodes < 1 || r.max_nodes > Iso::kMaxPathNodes) luaL_error(L, "pico.iso.path: max_nodes は 1〜%d です", Iso::kMaxPathNodes);
-            if (r.max_up < 0 || r.max_down < 0 || r.height < 1) luaL_error(L, "pico.iso.path: max_up/max_down は0以上、height は1以上です");
-            r.avoid = BlockMask(L, 7, "avoid");
-            lua_getfield(L, 7, "block_cost");
-            if (!lua_isnil(L, -1)) {
-                luaL_argexpected(L, lua_istable(L, -1), 7, "block_cost はテーブル");
-                for (int b = 1; b <= Iso::kBlockCount; b++) {
-                    lua_rawgeti(L, -1, b);
-                    if (!lua_isnil(L, -1)) {
-                        if (!lua_isnumber(L, -1) || lua_tonumber(L, -1) < 0) luaL_error(L, "pico.iso.path: block_cost[%d] は0以上の数です", b);
-                        r.block_cost[b] = (float)lua_tonumber(L, -1);
-                    }
-                    lua_pop(L, 1);
-                }
-            }
-            lua_pop(L, 1);
             lua_getfield(L, 7, "edge");
             if (!lua_isnil(L, -1)) {
                 luaL_checktype(L, -1, LUA_TFUNCTION);
@@ -886,10 +947,294 @@ struct LuaEngineIso {
             r.height = OptInt(L, 4, "height", r.height);
             r.swim = OptBool(L, 4, "swim", r.swim);
             r.avoid = BlockMask(L, 4, "avoid");
+            r.pass = BlockMask(L, 4, "pass");
             if (r.height < 1) luaL_error(L, "pico.iso.stand: height は1以上です");
         }
         const int y = Iso::StandAt(st.world, (int)floorf(Num(L, 1)), OptY(L, 3), (int)floorf(Num(L, 2)), r);
         if (y < 0) lua_pushnil(L); else lua_pushinteger(L, y);
+        return 1;
+    }
+
+    // pico.iso.arena() -> {base = {x=, y=, z=}, spawns = {{x=, y=, z=}, ...}} | nil(ARENA のワールドでない)
+    // y は立つ高さ(一番上のブロックの上)
+    static int l_arena(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        if (!st.world.isOpen() || st.world.kind() != Iso::ARENA) { lua_pushnil(L); return 1; }
+        int bx, bz, sx[Iso::kArenaSpawns], sz[Iso::kArenaSpawns];
+        st.world.arenaLayout(bx, bz, sx, sz);
+        auto point = [&](int x, int z) {
+            lua_createtable(L, 0, 3);
+            lua_pushinteger(L, x); lua_setfield(L, -2, "x");
+            lua_pushinteger(L, st.world.arenaHeight(x, z) + 1); lua_setfield(L, -2, "y");
+            lua_pushinteger(L, z); lua_setfield(L, -2, "z");
+        };
+        lua_createtable(L, 0, 2);
+        point(bx, bz);
+        lua_setfield(L, -2, "base");
+        lua_createtable(L, Iso::kArenaSpawns, 0);
+        for (int i = 0; i < Iso::kArenaSpawns; i++) { point(sx[i], sz[i]); lua_rawseti(L, -2, i + 1); }
+        lua_setfield(L, -2, "spawns");
+        return 1;
+    }
+
+    // ---------------- 流れの場(フローフィールド) ----------------
+
+    // pico.iso.flow_build(goals, opts[, now]) -> true | nil, 理由
+    //   goals = {{x, z}, ...}(柱。{x=, z=} でもよい)。opts は pico.iso.path と同じ規則(max_nodes/partial/edge は無し)。
+    //   now なら出来上がるまでその場で作る。そうでなければ pico.iso.flow_step で少しずつ
+    static int l_flow_build(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        if (!st.world.isOpen()) luaL_error(L, "pico.iso.flow_build: ワールドを開いていません");
+        luaL_checktype(L, 1, LUA_TTABLE);
+        Iso::PathRules r;
+        if (!lua_isnoneornil(L, 2)) {
+            luaL_checktype(L, 2, LUA_TTABLE);
+            ParseRules(L, 2, r, "pico.iso.flow_build");
+        }
+        const bool now = lua_toboolean(L, 3) != 0;
+        const lua_Integer n = luaL_len(L, 1);
+        if (n < 1 || n > Iso::kMaxFlowGoals) luaL_error(L, "pico.iso.flow_build: 目的地は 1〜%d 個です", Iso::kMaxFlowGoals);
+        // 目的地は先に全部読んで確かめる(誤りなら作り直しを始めない)
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 1 && !st.flow.begin(st.world, r)) {
+                lua_pushnil(L);
+                lua_pushstring(L, st.world.width() > Iso::kMaxFlowWidth ? "世界が広すぎます" : "メモリが足りません");
+                return 2;
+            }
+            for (lua_Integer i = 1; i <= n; i++) {
+                lua_rawgeti(L, 1, i);
+                if (!lua_istable(L, -1)) luaL_error(L, "pico.iso.flow_build: 目的地の %d 番目が {x, z} ではありません", (int)i);
+                const int t = lua_gettop(L);
+                lua_rawgeti(L, t, 1);
+                if (lua_isnil(L, -1)) { lua_pop(L, 1); lua_getfield(L, t, "x"); }
+                lua_rawgeti(L, t, 2);
+                if (lua_isnil(L, -1)) { lua_pop(L, 1); lua_getfield(L, t, "z"); }
+                if (!lua_isnumber(L, -2) || !lua_isnumber(L, -1)) luaL_error(L, "pico.iso.flow_build: 目的地の %d 番目が {x, z} ではありません", (int)i);
+                if (pass == 1) st.flow.addGoal((int)floor(lua_tonumber(L, -2)), (int)floor(lua_tonumber(L, -1)));
+                lua_pop(L, 3);
+            }
+        }
+        if (now) {
+            while (st.flow.building()) st.flow.step(st.world, 1 << 20);
+            if (st.flow.failed()) {
+                lua_pushnil(L);
+                lua_pushstring(L, "メモリが足りません");
+                return 2;
+            }
+        }
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // pico.iso.flow_step([budget]) -> この呼び出しで出来上がったら true
+    static int l_flow_step(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        const int budget = (int)luaL_optinteger(L, 1, 512);
+        if (budget < 1) luaL_error(L, "pico.iso.flow_step: budget は1以上です");
+        lua_pushboolean(L, st.flow.step(st.world, budget));
+        return 1;
+    }
+
+    // pico.iso.flow_get(x, z) -> 値段, 次の柱の x, z, その立つ高さ | 値段, nil(目的地) | nil(届かない)
+    static int l_flow_get(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        const int x = (int)floorf(Num(L, 1)), z = (int)floorf(Num(L, 2));
+        const float d = st.flow.dist(x, z);
+        if (d < 0) { lua_pushnil(L); return 1; }
+        lua_pushnumber(L, d);
+        int nx, nz;
+        bool goal;
+        if (!st.flow.next(x, z, nx, nz, &goal)) { lua_pushnil(L); return 2; }
+        lua_pushinteger(L, nx);
+        lua_pushinteger(L, nz);
+        lua_pushinteger(L, st.flow.standY(nx, nz));
+        return 4;
+    }
+
+    // pico.iso.flow_info() -> {ready=, building=, revision=, failed=, bytes=}(failed = 直前の作り直しがメモリ不足で止まった)
+    static int l_flow_info(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        lua_createtable(L, 0, 5);
+        lua_pushboolean(L, st.flow.failed()); lua_setfield(L, -2, "failed");
+        lua_pushinteger(L, (lua_Integer)st.flow.memoryBytes()); lua_setfield(L, -2, "bytes");
+        lua_pushboolean(L, st.flow.ready()); lua_setfield(L, -2, "ready");
+        lua_pushboolean(L, st.flow.building()); lua_setfield(L, -2, "building");
+        lua_pushinteger(L, (lua_Integer)st.flow.revision()); lua_setfield(L, -2, "revision");
+        return 1;
+    }
+
+    static int l_flow_clear(lua_State* L) {
+        St(L).flow.clear();
+        return 0;
+    }
+
+    // ---------------- タワーディフェンス向けの道具 ----------------
+
+    // pico.iso.keep_all(on) -> bool(世界全体を読み込んだままにする。広すぎれば false)
+    static int l_keep_all(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        lua_pushboolean(L, st.world.setKeepAll(lua_toboolean(L, 1) != 0));
+        return 1;
+    }
+
+    // tags: nil(全部)/ 数(1つ)/ 数の配列 → ビット
+    static uint32_t TagMask(lua_State* L, int idx) {
+        if (lua_isnoneornil(L, idx)) return 0;
+        if (lua_isnumber(L, idx)) {
+            const lua_Integer t = luaL_checkinteger(L, idx);
+            if (t < 0 || t > 31) luaL_error(L, "pico.iso: tag は 0〜31 です");
+            return 1u << t;
+        }
+        luaL_checktype(L, idx, LUA_TTABLE);
+        uint32_t m = 0;
+        const lua_Integer n = luaL_len(L, idx);
+        for (lua_Integer i = 1; i <= n; i++) {
+            lua_rawgeti(L, idx, i);
+            const lua_Integer t = lua_tointeger(L, -1);
+            if (!lua_isinteger(L, -1) || t < 0 || t > 31) luaL_error(L, "pico.iso: tag は 0〜31 です");
+            m |= 1u << t;
+            lua_pop(L, 1);
+        }
+        return m;
+    }
+
+    static constexpr int kMaxNearby = 32;
+
+    // pico.iso.nearby(x, z, range[, tags[, max]]) -> {id, ...}(近い順、32個まで)
+    static int l_nearby(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        const float x = Num(L, 1), z = Num(L, 2), range = Num(L, 3);
+        const uint32_t mask = TagMask(L, 4);
+        // 返すのは近い順に kMaxNearby 個まで(結果をスタックに置くので小さく抑える)
+        int max = (int)luaL_optinteger(L, 5, kMaxNearby);
+        if (max < 1) max = 1;
+        if (max > kMaxNearby) max = kMaxNearby;
+        int32_t out[kMaxNearby];
+        const int n = st.world.nearby(x, z, range, mask, out, max);
+        lua_createtable(L, n, 0);
+        for (int i = 0; i < n; i++) { lua_pushinteger(L, out[i]); lua_rawseti(L, -2, i + 1); }
+        return 1;
+    }
+
+    // pico.iso.crowd([iterations[, opts{height=, pass=}]]) -> 動いた数
+    static int l_crowd(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        const int it = (int)luaL_optinteger(L, 1, 2);
+        if (it < 1 || it > 8) luaL_error(L, "pico.iso.crowd: iterations は 1〜8 です");
+        int height = 2;
+        uint32_t pass = 0;
+        if (!lua_isnoneornil(L, 2)) {
+            luaL_checktype(L, 2, LUA_TTABLE);
+            height = OptInt(L, 2, "height", height);
+            pass = BlockMask(L, 2, "pass");
+            if (height < 1) luaL_error(L, "pico.iso.crowd: height は1以上です");
+        }
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        lua_pushinteger(L, st.world.crowdStep(DirtySink(c), it, height, pass));
+        return 1;
+    }
+
+    // pico.iso.sight(x0, y0, z0, x1, y1, z1[, pass]) -> bool(ブロックに遮られないか)
+    static int l_sight(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        uint32_t pass = 0;
+        if (!lua_isnoneornil(L, 7)) {
+            luaL_checktype(L, 7, LUA_TTABLE);
+            const lua_Integer n = luaL_len(L, 7);
+            for (lua_Integer i = 1; i <= n; i++) {
+                lua_rawgeti(L, 7, i);
+                const lua_Integer b = lua_tointeger(L, -1);
+                if (!lua_isinteger(L, -1) || b < 1 || b > Iso::kBlockCount) luaL_error(L, "pico.iso.sight: pass の %d 番目が正しいブロック番号ではありません", (int)i);
+                pass |= 1u << b;
+                lua_pop(L, 1);
+            }
+        }
+        lua_pushboolean(L, st.world.lineOfSight(Num(L, 1), Num(L, 2), Num(L, 3), Num(L, 4), Num(L, 5), Num(L, 6), pass));
+        return 1;
+    }
+
+    // pico.iso.shot_add(x, y, z, opts{target= | tx=,ty=,tz=, speed=, arc=, color=, size=, tag=}) -> id | nil, 理由
+    static int l_shot_add(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        Iso::Shot sh;
+        sh.x = Num(L, 1); sh.y = Num(L, 2); sh.z = Num(L, 3);
+        luaL_checktype(L, 4, LUA_TTABLE);
+        sh.target = OptInt(L, 4, "target", 0);
+        if (sh.target && !st.world.entity(sh.target)) luaL_error(L, "pico.iso.shot_add: 無効な人や物のハンドル");
+        if (!sh.target) {
+            if (!Has(L, 4, "tx") || !Has(L, 4, "ty") || !Has(L, 4, "tz")) luaL_error(L, "pico.iso.shot_add: target か tx,ty,tz が要ります");
+            sh.tx = OptNum(L, 4, "tx", 0); sh.ty = OptNum(L, 4, "ty", 0); sh.tz = OptNum(L, 4, "tz", 0);
+        }
+        sh.speed = OptNum(L, 4, "speed", sh.speed);
+        sh.arc = OptNum(L, 4, "arc", sh.arc);
+        if (!(sh.speed > 0.0f && sh.speed <= 1000.0f)) luaL_error(L, "pico.iso.shot_add: speed は 0 より大きく 1000 以下です");
+        if (!(sh.arc >= 0.0f && sh.arc <= 4.0f)) luaL_error(L, "pico.iso.shot_add: arc は 0〜4 です");
+        sh.color = (uint8_t)(OptInt(L, 4, "color", 0) & 15);
+        const int size = OptInt(L, 4, "size", 2);
+        if (size < 1 || size > 6) luaL_error(L, "pico.iso.shot_add: size は 1〜6 です");
+        sh.size = (uint8_t)size;
+        sh.tag = (int32_t)OptInt(L, 4, "tag", 0);
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        const int h = st.world.shotAdd(DirtySink(c), sh);
+        if (!h) {
+            lua_pushnil(L);
+            lua_pushfstring(L, "弾は %d 個までです", Iso::kMaxShots);
+            return 2;
+        }
+        lua_pushinteger(L, h);
+        return 1;
+    }
+
+    // pico.iso.shots_step(dt) -> 当たった弾の配列 {{id=, target=, tag=, lost=, x=, y=, z=}, ...}
+    static int l_shots_step(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        const float dt = Num(L, 1);
+        if (!(dt >= 0.0f && dt <= 10.0f)) luaL_error(L, "pico.iso.shots_step: dt は 0〜10 秒です");
+        // 当たった弾は少しずつ受け取る(全部をスタックに置かない)。2回目からは dt=0 で、返しきれなかった分だけを受け取る
+        Iso::ShotHit hits[8];
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        lua_newtable(L);
+        int total = 0, n;
+        float step_dt = dt;
+        do {
+            n = st.world.shotsStep(DirtySink(c), step_dt, hits, 8);
+            step_dt = 0;
+            for (int i = 0; i < n; i++) {
+                lua_createtable(L, 0, 7);
+                lua_pushinteger(L, hits[i].shot); lua_setfield(L, -2, "id");
+                if (hits[i].target) { lua_pushinteger(L, hits[i].target); lua_setfield(L, -2, "target"); }
+                lua_pushinteger(L, hits[i].tag); lua_setfield(L, -2, "tag");
+                lua_pushboolean(L, hits[i].lost); lua_setfield(L, -2, "lost");
+                lua_pushnumber(L, hits[i].x); lua_setfield(L, -2, "x");
+                lua_pushnumber(L, hits[i].y); lua_setfield(L, -2, "y");
+                lua_pushnumber(L, hits[i].z); lua_setfield(L, -2, "z");
+                lua_rawseti(L, -2, ++total);
+            }
+        } while (n == 8);
+        return 1;
+    }
+
+    static int l_shot_remove(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        lua_pushboolean(L, st.world.shotRemove(DirtySink(c), Int(L, 1)));
+        return 1;
+    }
+
+    static int l_shot_clear(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        st.world.shotClear(DirtySink(c));
+        return 0;
+    }
+
+    static int l_shot_count(lua_State* L) {
+        lua_pushinteger(L, St(L).world.shotCount());
         return 1;
     }
 };
@@ -928,6 +1273,7 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("entity_set", LuaEngineIso::l_entity_set);
     registerFn("entity_move", LuaEngineIso::l_entity_move);
     registerFn("entity_get", LuaEngineIso::l_entity_get);
+    registerFn("entity_pos", LuaEngineIso::l_entity_pos);
     registerFn("entity_remove", LuaEngineIso::l_entity_remove);
     registerFn("entity_clear", LuaEngineIso::l_entity_clear);
     registerFn("entity_at", LuaEngineIso::l_entity_at);
@@ -936,5 +1282,20 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("to_screen", LuaEngineIso::l_to_screen);
     registerFn("path", LuaEngineIso::l_path);
     registerFn("stand", LuaEngineIso::l_stand);
+    registerFn("arena", LuaEngineIso::l_arena);
+    registerFn("flow_build", LuaEngineIso::l_flow_build);
+    registerFn("flow_step", LuaEngineIso::l_flow_step);
+    registerFn("flow_get", LuaEngineIso::l_flow_get);
+    registerFn("flow_info", LuaEngineIso::l_flow_info);
+    registerFn("flow_clear", LuaEngineIso::l_flow_clear);
+    registerFn("keep_all", LuaEngineIso::l_keep_all);
+    registerFn("nearby", LuaEngineIso::l_nearby);
+    registerFn("crowd", LuaEngineIso::l_crowd);
+    registerFn("sight", LuaEngineIso::l_sight);
+    registerFn("shot_add", LuaEngineIso::l_shot_add);
+    registerFn("shots_step", LuaEngineIso::l_shots_step);
+    registerFn("shot_remove", LuaEngineIso::l_shot_remove);
+    registerFn("shot_clear", LuaEngineIso::l_shot_clear);
+    registerFn("shot_count", LuaEngineIso::l_shot_count);
     lua_setfield(L, -2, "iso");
 }

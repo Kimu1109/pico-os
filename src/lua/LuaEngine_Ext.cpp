@@ -1603,7 +1603,9 @@ int LuaEngineExt::l_settings_set(lua_State* L) {
 int LuaEngineExt::l_memory_info(lua_State* L) {
     LuaEngine* self = Self(L);
     const MemFunctions::Snapshot s = MemFunctions::Take(false);
-    lua_createtable(L, 0, 6);
+    lua_createtable(L, 0, 7);
+    lua_pushinteger(L, (lua_Integer)s.stack_headroom);
+    lua_setfield(L, -2, "heap_headroom");
     lua_pushinteger(L, (lua_Integer)self->used_);
     lua_setfield(L, -2, "lua_used");
     lua_pushinteger(L, (lua_Integer)self->budget_);

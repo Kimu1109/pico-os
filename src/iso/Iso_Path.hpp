@@ -1,8 +1,9 @@
 #pragma once
 // 2.5Dの箱庭(Iso::World)の上を歩く経路を探す(A*)。Luaの pico.iso.path。
 //
-// 「立てる場所」は (x, y, z) のマス: 足元 (x, y-1, z) が空気・松明でないブロックで、体のマス
-// (x, y .. y+height-1, z) が通り抜けられる(空気・松明。swim なら水も)こと。y は足の裏の高さで、
+// 「立てる場所」は (x, y, z) のマス: 足元 (x, y-1, z) が空気・松明・pass のブロックでないブロックで、体のマス
+// (x, y .. y+height-1, z) が通り抜けられる(空気・松明・pass のブロック。swim なら水も)こと。
+// pass は「中を通り抜けられるブロック」(バリケード等。乗れはしない)。y は足の裏の高さで、
 // pico.iso.ground() / エンティティの y と同じ数え方。水も足元になれる(水面を歩く/泳ぐ。嫌なら avoid に水を入れる)。
 //
 // 1歩は東西南北(diagonal なら斜めも)の隣の柱へ。隣の柱で立てる高さのうち、登りが max_up 段以内・降りが
@@ -10,7 +11,7 @@
 // (天井を突き抜けない)。斜めは、両脇の柱のどちらにも(同じ規則で)行けるときだけ(角をすり抜けない)。
 //
 // 1歩の値段 = step(斜めは×√2) + up_cost×登った段数 + down_cost×降りた段数 + block_cost[足元のブロック]
-//            + edge コールバックの返す値(負なら通れない)。
+//            + 行き先の体のマスごとの body_cost[ブロック] + edge コールバックの返す値(負なら通れない)。
 // 一番安い道を返す(どの値段も 0 以上なら。見積もりは step×距離なので、1歩の値段が step を下回る規則は
 // 最短を保証しない)。
 //
@@ -34,7 +35,9 @@ struct PathRules {
     float up_cost = 0.0f;      // 1段登るごとに足す値段
     float down_cost = 0.0f;    // 1段降りるごとに足す値段
     uint32_t avoid = 0;        // このブロック(ビット)が足元か体のマスにある所へは行かない
+    uint32_t pass = 0;         // 体のマスにあってよいブロック(ビット。中を通り抜ける。足元にはならない)
     float block_cost[kBlockCount + 1] = {};   // 足元のブロックごとに足す値段
+    float body_cost[kBlockCount + 1] = {};    // 行き先の体のマスのブロックごとに足す値段(pass のブロックの中を通る値段)
     int max_nodes = 1024;      // 調べる点の上限(kMaxPathNodes まで)
     bool partial = false;      // 着けなければ、目的地に一番近づける所までの道を返す
     // 1歩ごとの追加の判定(無くてよい)。戻り値: 負なら通れない、0以上なら足す値段。
@@ -67,6 +70,10 @@ struct PathResult {
 
 // 立てる高さ。y < 0 なら柱の一番上、そうでなければ y 以下で一番上(無ければ -1)
 int StandAt(const World& w, int x, int y, int z, const PathRules& r);
+// (x,y,z) から隣の柱 (nx,nz) の高さ ny へ1歩で行けるか(高低差・頭の上・立てるか。値段は見ない。斜めの角は見ない)
+bool CanStep(const World& w, int x, int y, int z, int nx, int ny, int nz, const PathRules& r);
+// (x,y,z) へ入る値段のうち、足元と体のマスの分(block_cost + body_cost)
+float EnterCost(const World& w, int x, int y, int z, const PathRules& r);
 
 // (sx,sy,sz) から (gx,gy,gz) への道。sy/gy は負なら柱の一番上、そうでなければ その高さ以下で一番上の立てる所。
 // gy < 0 なら目的地の柱のどの高さでもよい。道は out[0] = 出発点 … out[length-1] = 到着点(max_out まで)

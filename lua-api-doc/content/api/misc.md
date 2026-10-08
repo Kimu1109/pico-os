@@ -1,7 +1,7 @@
 ---
 title: "その他"
 weight: 90
-description: "log / show_error / millis / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast"
+description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast"
 ---
 
 ## pico.log
@@ -21,6 +21,12 @@ description: "log / show_error / millis / battery / on_key / app_dir / path_join
 <div class="sig">pico.millis() <span class="ret">-> ms: integer</span></div>
 
 起動からのミリ秒。単調に増え、NTPの同期で飛びません(`get_time` は壁時計で飛びます)。経過時間の計測に使います。
+
+## pico.micros
+
+<div class="sig">pico.micros() <span class="ret">-> us: integer</span></div>
+
+起動からのマイクロ秒(32bitの値で、約71分ごとに0へ戻ります)。1フレームの中の処理の時間のような、ミリ秒では粗すぎる計測に使います。差は `(b - a) % 4294967296` で取ると、0へ戻った後でも正しく出ます。
 
 ## pico.battery
 

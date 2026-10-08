@@ -772,6 +772,7 @@ class LuaEngine {
         // 時刻。クラスコメント「時刻取得」参照
         static int l_get_time(lua_State* L);
         static int l_millis(lua_State* L);
+        static int l_micros(lua_State* L);
         static int l_battery(lua_State* L);
         static int l_on_key(lua_State* L);
         // タッチ位置。クラスコメント「タップ位置の取得」参照

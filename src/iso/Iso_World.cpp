@@ -178,10 +178,77 @@ int World::height(int x, int z) const {
           + grid(gx, gz + 1) * (8 - lx) * lz + grid(gx + 1, gz + 1) * lx * lz) / 64;
 }
 
+// ---- ARENA(タワーディフェンス用) ----
+
+void World::arenaLayout(int& bx, int& bz, int* sx, int* sz) const {
+    bx = W_ / 2;
+    bz = 4;
+    for (int i = 0; i < kArenaSpawns; i++) {
+        if (sx) sx[i] = W_ * (i + 1) / (kArenaSpawns + 1);
+        if (sz) sz[i] = W_ - 3;
+    }
+}
+
+namespace {
+// 平らにした所(中心の高さ hf、半径 r0)から、半径 r1 までで元の高さ h へつなぐ
+int Blend(int h, int hf, int d, int r0, int r1) {
+    if (d <= r0) return hf;
+    if (d >= r1) return h;
+    return hf + ((h - hf) * (d - r0) * 2 + (r1 - r0)) / (2 * (r1 - r0));   // 四捨五入
+}
+int Cheb(int ax, int az, int bx, int bz) {
+    const int dx = abs(ax - bx), dz = abs(az - bz);
+    return dx > dz ? dx : dz;
+}
+}  // namespace
+
+int World::arenaHeight(int x, int z) const {
+    // 8マスごとの格子に高さ(4〜9)を決め、間は双一次補間(自然より起伏が小さい。1歩の段差は1段まで)
+    auto raw = [this](int x, int z) {
+        const int gx = x >> 3, gz = z >> 3, lx = x & 7, lz = z & 7;
+        auto grid = [this](int a, int b) { return 4 + (int)(hash(a, b, 11) % 6); };
+        return (grid(gx, gz) * (8 - lx) * (8 - lz) + grid(gx + 1, gz) * lx * (8 - lz)
+              + grid(gx, gz + 1) * (8 - lx) * lz + grid(gx + 1, gz + 1) * lx * lz) / 64;
+    };
+    int h = raw(x, z);
+    int bx, bz, sx[kArenaSpawns], sz[kArenaSpawns];
+    arenaLayout(bx, bz, sx, sz);
+    for (int i = 0; i < kArenaSpawns; i++) {
+        const int hf = raw(sx[i], sz[i]) > kWaterLevel + 1 ? raw(sx[i], sz[i]) : kWaterLevel + 1;
+        h = Blend(h, hf, Cheb(x, z, sx[i], sz[i]), 1, 4);
+    }
+    const int hb = raw(bx, bz) > kWaterLevel + 1 ? raw(bx, bz) : kWaterLevel + 1;
+    return Blend(h, hb, Cheb(x, z, bx, bz), 3, 8);
+}
+
 void World::generate(int cx, int cz, uint8_t* b) const {
     memset(b, 0, kChunkBytes);
     const int ox = cx * 8, oz = cz * 8;
     if (kind_ == EMPTY) return;
+    if (kind_ == ARENA) {
+        // 水面(5)より低い所は水(底は砂)。ベースの平らな所は丸石、出現位置は砂利
+        int bx, bz, sx[kArenaSpawns], sz[kArenaSpawns];
+        arenaLayout(bx, bz, sx, sz);
+        for (int lx = 0; lx < 8; lx++) {
+            for (int lz = 0; lz < 8; lz++) {
+                const int x = ox + lx, z = oz + lz, i = lx * 8 + lz;
+                const int h = arenaHeight(x, z);
+                uint8_t top = h < kWaterLevel ? SAND : GRASS;
+                if (Cheb(x, z, bx, bz) <= 3) top = COBBLE;
+                for (int k = 0; k < kArenaSpawns; k++) if (Cheb(x, z, sx[k], sz[k]) <= 1) top = GRAVEL;
+                for (int y = 0; y < H; y++) {
+                    uint8_t v = AIR;
+                    if (y == 0) v = BEDROCK;
+                    else if (y < h - 2) v = STONE;
+                    else if (y < h) v = DIRT;
+                    else if (y == h) v = top;
+                    else if (y <= kWaterLevel) v = WATER;
+                    b[y * kLayer + i] = v;
+                }
+            }
+        }
+        return;
+    }
     if (kind_ == FLAT || (kind_ == DEMO && (cx >= 6 || cz >= 6))) {
         memset(b, GRASS, kLayer);
         return;
@@ -714,8 +781,13 @@ void World::close() {
 }
 
 bool World::create(const char* dir, uint8_t kind, uint32_t seed, int k, int& px, int& py, int& pz) {
-    if (kind > EMPTY || !begin(dir, kind, k, seed)) return false;
+    if (kind > ARENA || !begin(dir, kind, k, seed)) return false;
     if (kind == DEMO) { px = 0; py = 1; pz = 0; return true; }
+    if (kind == ARENA) {
+        arenaLayout(px, pz, nullptr, nullptr);
+        py = arenaHeight(px, pz) + 1;
+        return true;
+    }
     px = pz = W_ / 2;
     py = firstAir(px, pz);
     return true;
@@ -738,7 +810,7 @@ bool World::open(const char* dir, int& px, int& py, int& pz, int& cur, const cha
         return false;
     }
     const int kind = h[4], kk = R16(h + 5);
-    if (kind > EMPTY || kk < 1) { err = "壊れています"; return false; }
+    if (kind > ARENA || kk < 1) { err = "壊れています"; return false; }
     if (kk > kMaxK) { err = "大きすぎます"; return false; }
     const uint32_t seed = ((uint32_t)h[7] << 24) | ((uint32_t)h[8] << 16) | ((uint32_t)h[9] << 8) | h[10];
     const int x = R16(h + 11), y = h[13], z = R16(h + 14);

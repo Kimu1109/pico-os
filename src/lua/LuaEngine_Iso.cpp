@@ -245,7 +245,7 @@ struct LuaEngineIso {
         const int kind = Int(L, 2);
         const uint32_t seed = (uint32_t)luaL_checkinteger(L, 3);
         const int k = (int)luaL_optinteger(L, 4, Iso::kNewK);
-        if (kind < 0 || kind > Iso::EMPTY) return luaL_error(L, "pico.iso.create: kind は 0〜3 です");
+        if (kind < 0 || kind > Iso::ARENA) return luaL_error(L, "pico.iso.create: kind は 0〜4 です");
         if (k < 1 || k > Iso::kMaxK) return luaL_error(L, "pico.iso.create: k は 1〜%d です", Iso::kMaxK);
         LuaEngine::IsoState& st = St(L);
         if (!DirAllowed(self, dir, "pico.iso.create")) {
@@ -740,6 +740,16 @@ struct LuaEngineIso {
         return 4;
     }
 
+    // pico.iso.entity_pos(id) -> x, y, z | nil(entity_get より軽い。表を作らない。押し合いの後に位置を読み戻す)
+    static int l_entity_pos(lua_State* L) {
+        const Iso::Entity* e = St(L).world.entity(Int(L, 1));
+        if (!e) { lua_pushnil(L); return 1; }
+        lua_pushnumber(L, e->x);
+        lua_pushnumber(L, e->y);
+        lua_pushnumber(L, e->z);
+        return 3;
+    }
+
     // pico.iso.entity_remove(id) -> bool
     static int l_entity_remove(lua_State* L) {
         LuaEngine* self = Self(L);
@@ -942,6 +952,28 @@ struct LuaEngineIso {
         }
         const int y = Iso::StandAt(st.world, (int)floorf(Num(L, 1)), OptY(L, 3), (int)floorf(Num(L, 2)), r);
         if (y < 0) lua_pushnil(L); else lua_pushinteger(L, y);
+        return 1;
+    }
+
+    // pico.iso.arena() -> {base = {x=, y=, z=}, spawns = {{x=, y=, z=}, ...}} | nil(ARENA のワールドでない)
+    // y は立つ高さ(一番上のブロックの上)
+    static int l_arena(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        if (!st.world.isOpen() || st.world.kind() != Iso::ARENA) { lua_pushnil(L); return 1; }
+        int bx, bz, sx[Iso::kArenaSpawns], sz[Iso::kArenaSpawns];
+        st.world.arenaLayout(bx, bz, sx, sz);
+        auto point = [&](int x, int z) {
+            lua_createtable(L, 0, 3);
+            lua_pushinteger(L, x); lua_setfield(L, -2, "x");
+            lua_pushinteger(L, st.world.arenaHeight(x, z) + 1); lua_setfield(L, -2, "y");
+            lua_pushinteger(L, z); lua_setfield(L, -2, "z");
+        };
+        lua_createtable(L, 0, 2);
+        point(bx, bz);
+        lua_setfield(L, -2, "base");
+        lua_createtable(L, Iso::kArenaSpawns, 0);
+        for (int i = 0; i < Iso::kArenaSpawns; i++) { point(sx[i], sz[i]); lua_rawseti(L, -2, i + 1); }
+        lua_setfield(L, -2, "spawns");
         return 1;
     }
 
@@ -1234,6 +1266,7 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("entity_set", LuaEngineIso::l_entity_set);
     registerFn("entity_move", LuaEngineIso::l_entity_move);
     registerFn("entity_get", LuaEngineIso::l_entity_get);
+    registerFn("entity_pos", LuaEngineIso::l_entity_pos);
     registerFn("entity_remove", LuaEngineIso::l_entity_remove);
     registerFn("entity_clear", LuaEngineIso::l_entity_clear);
     registerFn("entity_at", LuaEngineIso::l_entity_at);
@@ -1242,6 +1275,7 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("to_screen", LuaEngineIso::l_to_screen);
     registerFn("path", LuaEngineIso::l_path);
     registerFn("stand", LuaEngineIso::l_stand);
+    registerFn("arena", LuaEngineIso::l_arena);
     registerFn("flow_build", LuaEngineIso::l_flow_build);
     registerFn("flow_step", LuaEngineIso::l_flow_step);
     registerFn("flow_get", LuaEngineIso::l_flow_get);

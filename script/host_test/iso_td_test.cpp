@@ -7,6 +7,7 @@
 //   弾(Shot): 狙った人や物へ必ず当たる・動く相手を追う・消えたら最後の位置で lost・点を狙う・山なり・満杯
 //   HPバーと印: 壁の裏にいても一番上に描かれる・描き直す範囲に入る
 //   世界全体を読み込んだままにする(setKeepAll)
+//   ARENA の地形: ベースと出現位置が平ら・丸石と砂利・木が無い・多くの種で出現位置からベースへ道がある・種で決まる
 // 面の絵はリポジトリの pc/sdcard/lua/apps/ブロック/faces.pimg を使う(第1引数にリポジトリのルート)。
 #include "iso/Iso_World.hpp"
 #include "iso/Iso_Path.hpp"
@@ -497,6 +498,77 @@ int main(int argc, char** argv) {
         check(w.loadedCount() < 49, "全体: やめると視点の外を手放す");
         w.create("", NATURAL, 7, 8, x, y, z);
         check(!w.setKeepAll(true), "全体: 8x8(64チャンク)は置き場に入らない");
+    }
+
+    // ================================================================ ARENA(タワーディフェンスの地形)
+    {
+        static World w;
+        PathRules r;
+        r.max_up = 1; r.max_down = 2; r.height = 2; r.up_cost = 0.5f; r.diagonal = true;
+        int reachable = 0, flat_ok = 0, blocks_ok = 0, created = 0, n = 0;
+        uint32_t sum = 0;
+        for (uint32_t seed = 1; seed <= 24; seed++, n++) {
+            int x, y, z;
+            created += w.create("", ARENA, seed, 7, x, y, z);
+            w.setKeepAll(true);
+            while (w.pump(64, 0)) {}
+            int bx, bz, sx[kArenaSpawns], sz[kArenaSpawns];
+            w.arenaLayout(bx, bz, sx, sz);
+            if (seed == 1) {
+                check(x == bx && z == bz && y == w.arenaHeight(bx, bz) + 1, "ARENA: create はベースの中心を返す");
+                check(bx == 28 && bz == 4 && sz[0] == 53 && sx[0] == 14 && sx[2] == 42, "ARENA: ベースは手前の端の真ん中、出現位置は奥の端に3つ");
+            }
+            // ベースのまわり(7x7)と出現位置(3x3)は平らで、地面のブロックで見分けられる。水の上ではない
+            bool flat = true, blk = true;
+            const int hb = w.arenaHeight(bx, bz);
+            for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
+                if (w.arenaHeight(bx + dx, bz + dz) != hb) flat = false;
+                if (w.get(bx + dx, hb, bz + dz) != COBBLE || w.get(bx + dx, hb + 1, bz + dz) != AIR) blk = false;
+            }
+            if (hb < 6) flat = false;   // 水面(5)より1段上以上
+            for (int i = 0; i < kArenaSpawns; i++) {
+                const int hs = w.arenaHeight(sx[i], sz[i]);
+                for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
+                    if (w.arenaHeight(sx[i] + dx, sz[i] + dz) != hs) flat = false;
+                    if (w.get(sx[i] + dx, hs, sz[i] + dz) != GRAVEL) blk = false;
+                }
+                if (hs < 6) flat = false;
+            }
+            // 木(幹・葉)は生えない
+            for (int i = 0; i < 56 && blk; i++) for (int k = 0; k < 56; k++) for (int yy = 0; yy < H; yy++) {
+                const uint8_t b = w.get(i, yy, k);
+                if (b == WOOD || b == LEAVES) { blk = false; break; }
+            }
+            flat_ok += flat; blocks_ok += blk;
+            // 流れの場: ベースのまわりの輪から、出現位置へ届くか
+            Flow f;
+            f.begin(w, r);
+            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
+                if (abs(dx) == 2 || abs(dz) == 2) f.addGoal(bx + dx, bz + dz);
+            }
+            while (!f.step(w, 1 << 20)) {}
+            bool ok = true;
+            for (int i = 0; i < kArenaSpawns; i++) {
+                if (f.dist(sx[i], sz[i]) < 0) ok = false;
+                else if (Follow(f, sx[i], sz[i], 4000) < 0) ok = false;
+            }
+            reachable += ok;
+            for (int i = 0; i < 56; i++) for (int k = 0; k < 56; k++) sum = sum * 31 + (uint32_t)w.arenaHeight(i, k);
+        }
+        check(created == n, "ARENA: 作れる");
+        check(flat_ok == n, "ARENA: ベースのまわりと出現位置は平らで、水面より上");
+        check(blocks_ok == n, "ARENA: ベースは丸石・出現位置は砂利・木は無い");
+        printf("  ARENA: %d/%d の種で出現位置からベースへ道がある\n", reachable, n);
+        check(reachable * 2 >= n, "ARENA: 半分以上の種で出現位置からベースへ道がある");
+        // 同じ種なら同じ地形
+        uint32_t again = 0;
+        for (uint32_t seed = 1; seed <= 24; seed++) {
+            int x, y, z;
+            w.create("", ARENA, seed, 7, x, y, z);
+            for (int i = 0; i < 56; i++) for (int k = 0; k < 56; k++) again = again * 31 + (uint32_t)w.arenaHeight(i, k);
+        }
+        check(again == sum, "ARENA: 種で決まる");
+        w.close();
     }
 
     printf("\n%s (%d 件失敗)\n", failures ? "失敗" : "全部成功", failures);

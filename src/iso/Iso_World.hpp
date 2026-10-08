@@ -67,7 +67,9 @@ enum Block : uint8_t {
     IRON_ORE = 21, BEDROCK = 22, IRON = 23, GOLD = 24, TORCH = 25,
 };
 
-enum Kind : uint8_t { NATURAL = 0, FLAT = 1, DEMO = 2, EMPTY = 3 };
+// ARENA: タワーディフェンス用の地形(木なし・なだらか・ベースと出現位置を平らにする。arenaLayout() 参照)
+enum Kind : uint8_t { NATURAL = 0, FLAT = 1, DEMO = 2, EMPTY = 3, ARENA = 4 };
+constexpr int kArenaSpawns = 3;       // ARENA の出現位置の数
 
 // タップした面
 enum class Face : uint8_t { None, Top, Left, Right };
@@ -226,6 +228,11 @@ public:
     // 種類・種・位置だけで決まるチャンクの中身(テスト・作り直しに使う)。out は kChunkBytes
     void generate(int cx, int cz, uint8_t* out) const;
     int height(int x, int z) const;
+    // ARENA の地形: ベース(1辺の真ん中、z の小さい端)と、出現位置(反対の端に kArenaSpawns か所)。
+    // ベースは半径3(7x7)を、出現位置は半径1(3x3)を平らにし、そのまわりをなだらかにつなぐ
+    void arenaLayout(int& bx, int& bz, int* sx, int* sz) const;
+    // ARENA の柱 (x, z) の地面の高さ(一番上のブロックの y)
+    int arenaHeight(int x, int z) const;
     uint32_t hash(int32_t a, int32_t b, int32_t c) const;
 
     // ---------------- 表示 ----------------

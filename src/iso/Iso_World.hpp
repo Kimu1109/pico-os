@@ -18,6 +18,15 @@
 // 面の明るさは、その面が向いている隣のマス(上面なら真上)の明るさ。保存はしない(読み込むときに計算する)。
 // 夜(setSunlight(false))は日の当たる面も影の絵で描き、松明の光が届く所だけ明るく見える。
 //
+// 人や物(エンティティ): 箱庭の中の好きな位置(小数でよい)に、画像を立てて置ける。足元の点と「当たりの箱」
+// (足元を中心にした半径 r の正方形 × 高さ h)を持ち、ブロックとの前後は箱どうしで決める:
+//   ブロックを全部描いた後、エンティティを奥から順に描き、そのたびに「その箱より手前のブロック」だけを、
+//   エンティティの絵の不透明な画素の上にだけ描き直す(画家のアルゴリズムの途中へ挟んだのと同じ結果になる。
+//   壁の裏に回ると隠れ、柱の手前に出ると柱を隠す。水の中では水面が手前に来て沈んで見える)。
+//   足元の下の地面には丸い影(市松模様)を落とす。影も地面の高さで同じように前後を決める。高く上がるほど小さくなる。
+// 前後の決め方: 箱とブロックが x・z・y のどれかで離れていれば、見る人の側(-x・-z・+y)にある方が手前。
+// 絵が箱からはみ出す所(箱より幅の広い絵)は近似になる。
+//
 // 描画・dirty の積み方は Sink(関数ポインタ)越しにするので、このファイルは LovyanGFX を知らない(ホストテストで中身を見られる)。
 
 #include <cstdint>
@@ -40,6 +49,7 @@ constexpr int kCursorRow = 25;        // カーソルの段
 constexpr int kSheetW = 224;          // faces.pimg の幅(段の中に 上4・左4・右2 の10枚)
 constexpr int kTorchLight = 7;        // 松明のマスの明るさ(1マスごとに1減る。6マス先まで届く)
 constexpr int kLightReach = kTorchLight - 1;
+constexpr int kMaxEntities = 32;      // 同時に置ける人や物の数
 
 enum Block : uint8_t {
     AIR = 0, WATER = 1, STONE = 2, GRASS = 3, DIRT = 4, COBBLE = 5, PLANKS = 6, BRICKS = 7,
@@ -63,6 +73,29 @@ struct Chunk {
     uint8_t light[kChunkBytes / 4];   // 松明の明るさ(1マス2bit、0〜3)。i = y*64 + lx*8 + lz の (i&3)*2 bit目から
 };
 
+// 人や物。位置はブロックの単位(小数)で、(x, y, z) は足元の中心(y は足の裏の高さ)。
+// 点 (X, Y, Z) は画面の (OX + 16 + 16*(X - Z), OY + 32 - 8*(X + Z) - 16*Y) に写る(ブロック (x,y,z) の上面の中心は
+// (x+0.5, y+1, z+0.5))。絵は「足元の点 (ax, ay)」がそこへ来るように置く
+struct Entity {
+    bool used = false;
+    bool visible = true;
+    bool shadow = true;          // 地面に影を落とす
+    bool flip = false;           // 左右反転
+    uint8_t shadow_color = 0;
+    uint16_t gen = 0;
+    float x = 0, y = 0, z = 0;
+    float r = 0.25f, h = 1.5f;   // 当たりの箱(前後を決める): 足元を中心にした半径 r の正方形 × 高さ h
+    int32_t image = 0;           // 絵(呼び出し側の画像のハンドル。World は中身を知らず Sink::image_px で読む)
+    int16_t sx = 0, sy = 0, sw = 0, sh = 0;   // 画像の中の範囲
+    int16_t ax = 0, ay = 0;      // 足元の点(範囲の左上から)
+    int16_t lx = 0, ly = 0, lw = 0, lh = 0;   // 最後に描き直しを頼んだ画面の範囲(動いたときに消す所)
+};
+
+// 箱(前後の判定に使う)。[x0, x1] x [y0, y1] x [z0, z1]
+struct Box {
+    float x0, y0, z0, x1, y1, z1;
+};
+
 inline int LightOf(const Chunk* c, int i) { return c ? (c->light[i >> 2] >> ((i & 3) * 2)) & 3 : 0; }
 
 class World {
@@ -76,6 +109,12 @@ public:
         void (*draw)(void* ctx, int sx, int sy, int w, int h, int dx, int dy) = nullptr;
         void (*dirty)(void* ctx, int x, int y, int w, int h) = nullptr;
         void (*dither)(void* ctx, int sx, int sy, int w, int h, int dx, int dy, int level) = nullptr;
+        // 人や物を描くのに使う(どれかが nullptr なら人や物は描かない):
+        // face_px は faces.pimg の画素(0 = 透過)、image_px は人や物の絵 image の画素(透過・範囲外は -1)、
+        // put は画面の1画素(クリップは World が済ませる)
+        int (*face_px)(void* ctx, int sx, int sy) = nullptr;
+        int (*image_px)(void* ctx, int32_t image, int x, int y) = nullptr;
+        void (*put)(void* ctx, int x, int y, int c) = nullptr;
     };
     // ディザの模様: level 1 は4画素に1つ、level 2 は市松模様、3 以上は全部
     static bool DitherOn(int level, int x, int y) {
@@ -187,6 +226,36 @@ public:
     void leftShadow(int x, int y, int z, int top, bool& up, bool& low) const;
     // 読み込んだチャンクの中で、空気でない一番上の高さ(無ければ -1)
     int topAll() const;
+
+    // ---------------- 人や物(エンティティ) ----------------
+    // 置く。e の used/gen/lx.. は無視する。ハンドル(0 = 置き場が満杯)を返す。描き直しは sink.dirty で頼む
+    int entityAdd(const Sink& sink, const Entity& e);
+    // ハンドルの指すもの(無効なら nullptr)。書き換えたら entityChanged() を呼ぶ
+    Entity* entity(int handle);
+    const Entity* entity(int handle) const { return const_cast<World*>(this)->entity(handle); }
+    // 位置や絵を変えた後に呼ぶ: 前に描いた所と今の所を描き直す
+    void entityChanged(const Sink& sink, int handle);
+    bool entityRemove(const Sink& sink, int handle);
+    void entityClear(const Sink& sink);
+    int entityCount() const;
+    // 画面の点に見えている一番手前の人や物(絵の不透明な画素で判定。ブロックに隠れているかは見ない)。無ければ 0
+    int entityAt(const Sink& sink, int px, int py) const;
+    // 画面の範囲(絵と影を合わせたもの)。見えなければ false
+    bool entityRect(const Entity& e, int& x0, int& y0, int& x1, int& y1) const;
+    // (x, z) の柱で、上面が高さ y(足の裏)以下にある一番上のブロックの上面の y(= 地面の高さ)。無ければ -1
+    // (水も地面。松明は地面にならない。水の中に立っているなら水の底)
+    int ground(float x, float y, float z) const;
+    // 点 (X, Y, Z) の画面の位置
+    void project(float x, float y, float z, float& sx, float& sy) const {
+        sx = (float)OX_ + 16.0f + 16.0f * (x - z);
+        sy = (float)OY_ + 32.0f - 8.0f * (x + z) - 16.0f * y;
+    }
+    // ブロック (bx, by, bz)(中身 b)が箱 e より手前か(テスト用に公開)
+    static bool InFront(const Box& e, int bx, int by, int bz, uint8_t b);
+    // ブロックと箱が離れているか(重なっていなければ true)
+    static bool Apart(const Box& e, int bx, int by, int bz);
+    // 地面の影の形(中心と横・縦の半径)。影が無ければ false
+    bool shadowShape(const Entity& e, float& cx, float& cy, float& a, float& b, int& gy) const;
     // 直前の render で描いた面の数(計測用)
     int lastFaces() const { return last_faces_; }
     // (cx, cz) のチャンクの明るさを計算し直す(まわり kLightReach マスの松明から)。変わった範囲を覚えるなら track
@@ -215,6 +284,14 @@ private:
     bool inWindow(int cx, int cz, int margin) const;
     static void CountTorches(Chunk* c);
     void relightAround(int cx, int cz, bool track);   // そのチャンクと、まわり8つの読み込んでいるもの
+    // ブロックを描く(front があれば、その箱より手前のブロックだけ)。cut があれば、箱と重なった水の上面を描く間だけ
+    // そこへ「この行より下(手前)だけ描く」画面の y を入れる(水面のうち人や物より奥の所は人や物を隠さない)
+    void renderBlocks(const Sink& sink, int x0, int y0, int x1, int y1, const Box* front, int* cut = nullptr);
+    void renderEntities(const Sink& sink, int x0, int y0, int x1, int y1);
+    void drawCursor(const Sink& sink, int x0, int y0, int x1, int y1) const;
+    void entityScreen(const Entity& e, int& dx, int& dy) const;
+    void markRect(const Sink& sink, int x0, int y0, int x1, int y1) const;
+    void refreshEntityRects();   // 視点・表示範囲が変わったとき(呼び出し側が全体を描き直す)
     bool torchNear(int x, int y, int z) const;          // kLightReach 歩(マンハッタン距離)以内に松明があるか
 
     Chunk* pool_ = nullptr;               // kMaxChunks 個。ワールドを開いている間だけ確保する
@@ -249,6 +326,7 @@ private:
     bool sun_ = true;
     uint32_t occluders_ = DefaultOccluders();
     int last_faces_ = 0;
+    Entity ents_[kMaxEntities];
 
     static constexpr uint32_t DefaultOccluders() {
         return ((1u << (kBlockCount + 1)) - 1) & ~((1u << AIR) | (1u << WATER) | (1u << LEAVES) | (1u << TORCH));

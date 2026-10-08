@@ -1577,7 +1577,7 @@ int main() {
             local img = pico.image_load("/app/faces.pimg")
             check(img ~= nil, "faces.pimg を読める")
             iso.set_image(img)
-            check(not pcall(iso.set_image, pico.image_create(16, 16)), "iso.set_image: 小さい画像はエラー")
+            check(not pcall(iso.set_image, pico.image_create(16, 16)), "iso.set_image: 小さい画像はエラー(今の絵のまま)")
             local x, y, z = iso.create("/app/w", 0, 1234)
             check(x == 512 and z == 512 and y > 0, "iso.create: 始めのカーソルは真ん中の柱の一番下の空気")
             local w, h, kind = iso.size()
@@ -1619,6 +1619,49 @@ int main() {
             check(iso.get(x, y, z) == 0, "iso.open: 読み込む前は空気")
             iso.pump(100)
             check(iso.pending() == 0 and iso.get(x, y, z) == 13, "iso.open: 書き換えたチャンクを読む")
+            -- 人や物: 透過の画像を立てて置く
+            local sp = pico.image_create(12, 24, true)
+            pico.image_target(sp)
+            pico.fill_rect(2, 0, 8, 24, 12)
+            pico.image_target(nil)
+            check(not pcall(iso.entity_add, 999, x, y, z), "iso.entity_add: 無効な画像はエラー")
+            check(not pcall(iso.entity_add, sp, x, y, z, { w = 40 }), "iso.entity_add: 画像の外の範囲はエラー")
+            -- (x, y, z) には TNT を置いてある。その上に立てる
+            local ex, ey, ez = x + 0.5, iso.ground(x + 0.5, z + 0.5, y + 1), z + 0.5
+            check(ey == y + 1 and iso.ground(x + 0.5, z + 0.5, y) == y and iso.ground(x + 0.5, z + 0.5, 0) == nil,
+                  "iso.ground: 足の裏より下の一番上の地面")
+            local id = iso.entity_add(sp, ex, ey, ez, { shadow_color = 4 })
+            check(type(id) == "number", "iso.entity_add: ハンドル")
+            local gx, gy, gz, info = iso.entity_get(id)
+            check(gx == ex and gy == ey and info.w == 12 and info.h == 24 and info.ax == 6 and info.ay == 23
+                  and math.abs(info.height - 1.5) < 1e-6 and info.shadow == true, "iso.entity_get: 位置と既定の値")
+            local fx, fy = iso.to_screen(ex, ey, ez)
+            fx, fy = math.floor(fx + 0.5), math.floor(fy + 0.5)
+            iso.cursor(x, y, z, false)
+            iso.render(0, 20, 240, 204)
+            check(pico.get_pixel(fx, fy - 10) == 12, "iso.render: 人や物の絵を描く")
+            check(iso.entity_at(fx, fy - 10) == id and iso.entity_at(fx - 6, fy - 10) == nil, "iso.entity_at: 絵の不透明な所")
+            -- 手前(-x)に高い壁を立てると隠れる
+            for yy = y, y + 4 do for zz = z - 2, z + 2 do iso.set(x - 1, yy, zz, 2) end end
+            iso.render(0, 20, 240, 204)
+            check(pico.get_pixel(fx, fy - 10) ~= 12, "iso.render: 手前の壁の裏の人や物は隠れる")
+            for yy = y, y + 4 do for zz = z - 2, z + 2 do iso.set(x - 1, yy, zz, 0) end end
+            iso.entity_move(id, ex + 2, ey, ez)
+            iso.entity_set(id, { flip = true, visible = false, height = 2, r = 0.3 })
+            gx, gy, gz, info = iso.entity_get(id)
+            check(gx == ex + 2 and info.flip and not info.visible and info.height == 2, "iso.entity_move / entity_set")
+            check(not pcall(iso.entity_set, id, { r = -1 }), "iso.entity_set: おかしな値はエラー(何も変えない)")
+            check(select(4, iso.entity_get(id)).r > 0.29, "iso.entity_set: エラーなら変えない")
+            iso.entity_set(id, { sx = 2, w = 8 })
+            check(select(4, iso.entity_get(id)).ax == 4, "iso.entity_set: 範囲を変えると足元の点も決め直す")
+            check(iso.entity_remove(id) and iso.entity_get(id) == nil and not iso.entity_remove(id), "iso.entity_remove")
+            check(not pcall(iso.entity_move, id, 1, 1, 1), "iso.entity_move: 無効なハンドルはエラー")
+            local ids = {}
+            for i = 1, 40 do ids[#ids + 1] = iso.entity_add(sp, ex, ey, ez) end
+            local nn, why = iso.entity_add(sp, ex, ey, ez)
+            check(#ids == 32 and nn == nil and why ~= nil, "iso.entity_add: 32個まで")
+            iso.entity_clear()
+            check(iso.entity_get(ids[1]) == nil, "iso.entity_clear")
             local n, e = iso.create("/other/w", 1, 5)
             check(n == nil and e ~= nil, "iso.create: アプリのディレクトリの外は断る")
             check(iso.open("/other/w") == nil, "iso.open: アプリのディレクトリの外は断る")

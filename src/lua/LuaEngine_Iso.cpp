@@ -67,9 +67,10 @@ struct LuaEngineIso {
     // ---------------- 描き先 ----------------
 
     // 画像のスロット(無効なら nullptr)
-    static LuaEngine::ImageSlot* Image(LuaEngine* self, LuaEngine::IsoState& st) {
+    static LuaEngine::ImageSlot* Image(LuaEngine* self, LuaEngine::IsoState& st) { return Slot(self, st.image); }
+    static LuaEngine::ImageSlot* Slot(LuaEngine* self, uint32_t handle) {
         size_t index;
-        if (!st.image || !self->ResolveImageHandle(st.image, index)) return nullptr;
+        if (!handle || !self->ResolveImageHandle(handle, index)) return nullptr;
         LuaEngine::ImageSlot& slot = self->images_[index];
         if (!slot.sprite.usable) return nullptr;
         return &slot;
@@ -102,26 +103,38 @@ struct LuaEngineIso {
         }
     }
 
-    // 遅い道(画面か画像が 4bpp でないとき): pico.draw_image_part と同じく、クリップを狭めて画像全体をずらして描く
-    struct SlowCtx {
-        LuaEngine::ImageSlot* slot;
+    // 描き先の文脈。速い道(4bpp どうし)は FaceBlitter、遅い道は pico.draw_image_part と同じやり方で描く
+    struct Ctx {
+        LuaEngine* self;
+        LuaEngine::IsoState* st;
+        LuaEngine::ImageSlot* faces;
+        bool fast;
         int cx0, cy0, cx1, cy1;
+        // 人や物の絵(直前に引いたもの)
+        int32_t img = 0;
+        LuaEngine::ImageSlot* islot = nullptr;
+        const uint8_t* ibuf = nullptr;
+        int istride = 0;
     };
-    static void SlowDraw(void* p, int sx, int sy, int w, int h, int dx, int dy) {
-        SlowCtx* c = static_cast<SlowCtx*>(p);
+
+    // 遅い道: クリップを狭めて画像全体をずらして描く
+    static void Draw(void* p, int sx, int sy, int w, int h, int dx, int dy) {
+        Ctx* c = static_cast<Ctx*>(p);
+        if (c->fast) { c->st->blit.draw(sx, sy, w, h, dx, dy); return; }
         const int x0 = std::max(dx, c->cx0), y0 = std::max(dy, c->cy0);
         const int x1 = std::min(dx + w, c->cx1), y1 = std::min(dy + h, c->cy1);
         if (x0 >= x1 || y0 >= y1) return;
         int32_t kx, ky, kw, kh;
         OSData::frame->getClipRect(&kx, &ky, &kw, &kh);
         OSData::frame->setClipRect(x0, y0, x1 - x0, y1 - y0);
-        IconRender::DrawPimgSprite(c->slot->sprite, dx - sx, dy - sy);
+        IconRender::DrawPimgSprite(c->faces->sprite, dx - sx, dy - sy);
         OSData::frame->setClipRect(kx, ky, kw, kh);
     }
     // 遅い道のディザ: 1画素ずつ読んで、模様の画素だけ書く
-    static void SlowDither(void* p, int sx, int sy, int w, int h, int dx, int dy, int level) {
-        SlowCtx* c = static_cast<SlowCtx*>(p);
-        LGFX_Sprite& src = c->slot->sprite.sprite;
+    static void Dither(void* p, int sx, int sy, int w, int h, int dx, int dy, int level) {
+        Ctx* c = static_cast<Ctx*>(p);
+        if (c->fast) { c->st->blit.dither(sx, sy, w, h, dx, dy, level); return; }
+        LGFX_Sprite& src = c->faces->sprite.sprite;
         const int x0 = std::max(dx, c->cx0), y0 = std::max(dy, c->cy0);
         const int x1 = std::min(dx + w, c->cx1), y1 = std::min(dy + h, c->cy1);
         for (int y = y0; y < y1; y++) {
@@ -132,13 +145,66 @@ struct LuaEngineIso {
             }
         }
     }
-    static void FastDraw(void* p, int sx, int sy, int w, int h, int dx, int dy) {
-        static_cast<const Iso::FaceBlitter*>(p)->draw(sx, sy, w, h, dx, dy);
+    static int FacePx(void* p, int sx, int sy) {
+        Ctx* c = static_cast<Ctx*>(p);
+        if (c->fast) return c->st->blit.pixel(sx, sy);
+        const IconRender::PimgSprite& sp = c->faces->sprite;
+        if ((unsigned)sx >= sp.width || (unsigned)sy >= sp.height) return 0;
+        return (int)c->faces->sprite.sprite.readPixelValue(sx, sy);
     }
-    static void FastDither(void* p, int sx, int sy, int w, int h, int dx, int dy, int level) {
-        static_cast<const Iso::FaceBlitter*>(p)->dither(sx, sy, w, h, dx, dy, level);
+    static void Put(void* p, int x, int y, int col) {
+        Ctx* c = static_cast<Ctx*>(p);
+        if (c->fast) { c->st->blit.put(x, y, col); return; }
+        if (x < c->cx0 || x >= c->cx1 || y < c->cy0 || y >= c->cy1) return;
+        OSData::frame->writePixel(x, y, col & 15);
+    }
+    // 人や物の絵の画素(透過・範囲外・無効な画像は -1)
+    static int ImagePx(void* p, int32_t image, int x, int y) {
+        Ctx* c = static_cast<Ctx*>(p);
+        if (image != c->img) {
+            c->img = image;
+            c->islot = nullptr;
+            c->ibuf = nullptr;
+            size_t index;
+            if (image > 0 && c->self->ResolveImageHandle((uint32_t)image, index)) {
+                LuaEngine::ImageSlot& slot = c->self->images_[index];
+                if (slot.sprite.usable) {
+                    c->islot = &slot;
+                    if (Is4bpp(slot.sprite.sprite)) {
+                        c->ibuf = static_cast<const uint8_t*>(slot.sprite.sprite.getBuffer());
+                        c->istride = (slot.sprite.width + 1) >> 1;
+                    }
+                }
+            }
+        }
+        const LuaEngine::ImageSlot* s = c->islot;
+        if (!s || (unsigned)x >= s->sprite.width || (unsigned)y >= s->sprite.height) return -1;
+        const int v = c->ibuf ? (int)Iso::FaceBlitter::Get(c->ibuf + (size_t)y * c->istride, x)
+                              : (int)const_cast<LuaEngine::ImageSlot*>(s)->sprite.sprite.readPixelValue(x, y);
+        return (v == 0 && s->sprite.transparent) ? -1 : v;
     }
     static void Dirty(void*, int x, int y, int w, int h) { MarkDirty(x, y, w, h); }
+
+    static Iso::World::Sink MakeSink(Ctx& c) {
+        Iso::World::Sink sink;
+        sink.ctx = &c;
+        sink.draw = Draw;
+        sink.dirty = Dirty;
+        sink.dither = Dither;
+        sink.face_px = FacePx;
+        sink.image_px = ImagePx;
+        sink.put = Put;
+        return sink;
+    }
+
+    // 描き直しを頼むだけの描き先(人や物の絵を読む口も付ける。entity_at 用)
+    static Iso::World::Sink DirtySink(Ctx& c) {
+        Iso::World::Sink sink;
+        sink.ctx = &c;
+        sink.dirty = Dirty;
+        sink.image_px = ImagePx;
+        return sink;
+    }
 
     // クリップ [x0, x1) x [y0, y1) の中へ描く準備をして fn を呼ぶ
     template <class F>
@@ -147,17 +213,14 @@ struct LuaEngineIso {
         if (!slot || x0 >= x1 || y0 >= y1) return;
         Analyze(st, *slot);
         LGFX_Sprite& frame = *OSData::frame;
+        Ctx c{self, &st, slot, false, x0, y0, x1, y1};
         if (Is4bpp(frame) && Is4bpp(slot->sprite.sprite)) {
             const int fw = frame.width(), fh = frame.height();
             st.blit.setTarget(static_cast<uint8_t*>(frame.getBuffer()), ((fw + 1) & ~1) >> 1,
                               std::max(x0, 0), std::max(y0, 0), std::min(x1, fw), std::min(y1, fh));
-            Iso::World::Sink sink{&st.blit, FastDraw, Dirty, FastDither};
-            fn(sink);
-        } else {
-            SlowCtx c{slot, x0, y0, x1, y1};
-            Iso::World::Sink sink{&c, SlowDraw, Dirty, SlowDither};
-            fn(sink);
+            c.fast = true;
         }
+        fn(MakeSink(c));
     }
 
     // 今のクリップ(無ければ画面全体)
@@ -320,14 +383,16 @@ struct LuaEngineIso {
     static int l_set_image(lua_State* L) {
         LuaEngine* self = Self(L);
         LuaEngine::IsoState& st = St(L);
-        st.image = (uint32_t)luaL_checkinteger(L, 1);
-        st.analyzed = nullptr;
-        LuaEngine::ImageSlot* slot = Image(self, st);
+        // 確かめてから差し替える(エラーのときは今の絵のまま)
+        const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
+        LuaEngine::ImageSlot* slot = Slot(self, handle);
         if (!slot) return luaL_error(L, "pico.iso.set_image: 無効なイメージハンドル");
         if (slot->sprite.width < Iso::kSheetW || slot->sprite.height < (Iso::kCursorRow + 1) * Iso::kRowH) {
             return luaL_error(L, "pico.iso.set_image: 面の絵の大きさが違います(%dx%d 以上)", Iso::kSheetW,
                               (Iso::kCursorRow + 1) * Iso::kRowH);
         }
+        st.image = handle;
+        st.analyzed = nullptr;
         Analyze(st, *slot);
         return 0;
     }
@@ -444,6 +509,238 @@ struct LuaEngineIso {
         St(L).world.dirtyEdit(sink, Int(L, 1), Int(L, 2), Int(L, 3));
         return 0;
     }
+    // ---------------- 人や物(エンティティ) ----------------
+
+    static float Num(lua_State* L, int idx) { return (float)luaL_checknumber(L, idx); }
+
+    // opts の数(無ければ def)。整数でなければエラー
+    static int OptInt(lua_State* L, int t, const char* key, int def) {
+        lua_getfield(L, t, key);
+        int v = def;
+        if (!lua_isnil(L, -1)) {
+            if (!lua_isinteger(L, -1)) {
+                lua_Number n = lua_tonumber(L, -1);
+                if (!lua_isnumber(L, -1) || n != (lua_Number)(lua_Integer)n) luaL_error(L, "pico.iso: %s は整数です", key);
+                v = (int)n;
+            } else {
+                v = (int)lua_tointeger(L, -1);
+            }
+        }
+        lua_pop(L, 1);
+        return v;
+    }
+    static float OptNum(lua_State* L, int t, const char* key, float def) {
+        lua_getfield(L, t, key);
+        float v = def;
+        if (!lua_isnil(L, -1)) {
+            if (!lua_isnumber(L, -1)) luaL_error(L, "pico.iso: %s は数です", key);
+            v = (float)lua_tonumber(L, -1);
+        }
+        lua_pop(L, 1);
+        return v;
+    }
+    static bool OptBool(lua_State* L, int t, const char* key, bool def) {
+        lua_getfield(L, t, key);
+        const bool v = lua_isnil(L, -1) ? def : lua_toboolean(L, -1) != 0;
+        lua_pop(L, 1);
+        return v;
+    }
+    static bool Has(lua_State* L, int t, const char* key) {
+        lua_getfield(L, t, key);
+        const bool v = !lua_isnil(L, -1);
+        lua_pop(L, 1);
+        return v;
+    }
+
+    // 画像のハンドルを確かめて大きさを返す
+    static void CheckImage(lua_State* L, int32_t image, int& w, int& h) {
+        LuaEngine* self = Self(L);
+        size_t index;
+        if (image <= 0 || !self->ResolveImageHandle((uint32_t)image, index) || !self->images_[index].sprite.usable) {
+            luaL_error(L, "pico.iso: 無効なイメージハンドル");
+        }
+        w = self->images_[index].sprite.width;
+        h = self->images_[index].sprite.height;
+    }
+
+    // opts(表 t。0 なら無し)を e へ当てる。adding なら省いた値は既定(画像全体・足元は下の真ん中・箱は絵の大きさから)
+    static void ApplyOpts(lua_State* L, int t, Iso::Entity& e, bool adding) {
+        int iw, ih;
+        bool image_changed = adding;
+        if (t && Has(L, t, "image")) {
+            e.image = (int32_t)OptInt(L, t, "image", 0);
+            image_changed = true;
+        }
+        CheckImage(L, e.image, iw, ih);
+        if (t && Has(L, t, "x")) e.x = OptNum(L, t, "x", e.x);
+        if (t && Has(L, t, "y")) e.y = OptNum(L, t, "y", e.y);
+        if (t && Has(L, t, "z")) e.z = OptNum(L, t, "z", e.z);
+        const bool rect = t && (Has(L, t, "sx") || Has(L, t, "sy") || Has(L, t, "w") || Has(L, t, "h"));
+        if (rect || image_changed) {
+            const int sx = t ? OptInt(L, t, "sx", image_changed && !rect ? 0 : e.sx) : 0;
+            const int sy = t ? OptInt(L, t, "sy", image_changed && !rect ? 0 : e.sy) : 0;
+            const int sw = t ? OptInt(L, t, "w", rect && !adding ? e.sw : iw - sx) : iw - sx;
+            const int sh = t ? OptInt(L, t, "h", rect && !adding ? e.sh : ih - sy) : ih - sy;
+            if (sx < 0 || sy < 0 || sw < 1 || sh < 1 || sx + sw > iw || sy + sh > ih) {
+                luaL_error(L, "pico.iso: 絵の範囲 (%d,%d,%d,%d) が画像 %dx%d の外です", sx, sy, sw, sh, iw, ih);
+            }
+            if (sw > 240 || sh > 320) luaL_error(L, "pico.iso: 絵が大きすぎます(240x320 まで)");
+            const bool size_changed = sw != e.sw || sh != e.sh;
+            e.sx = (int16_t)sx; e.sy = (int16_t)sy; e.sw = (int16_t)sw; e.sh = (int16_t)sh;
+            if (adding || size_changed) {
+                // 足元の点・箱は絵の大きさから決め直す(opts で指定があればそちら)
+                e.ax = (int16_t)(sw / 2);
+                e.ay = (int16_t)(sh - 1);
+                if (adding) {
+                    float r = (float)sw / 64.0f;
+                    e.r = r < 0.05f ? 0.05f : (r > 0.49f ? 0.49f : r);
+                    e.h = (float)sh / 16.0f;
+                }
+            }
+        }
+        if (t) {
+            e.ax = (int16_t)OptInt(L, t, "ax", e.ax);
+            e.ay = (int16_t)OptInt(L, t, "ay", e.ay);
+            const float r = OptNum(L, t, "r", e.r), h = OptNum(L, t, "height", e.h);
+            if (!(r > 0.0f && r <= 4.0f)) luaL_error(L, "pico.iso: r は 0 より大きく 4 以下です");
+            if (!(h > 0.0f && h <= 16.0f)) luaL_error(L, "pico.iso: height は 0 より大きく 16 以下です");
+            e.r = r; e.h = h;
+            e.shadow = OptBool(L, t, "shadow", e.shadow);
+            e.flip = OptBool(L, t, "flip", e.flip);
+            e.visible = OptBool(L, t, "visible", e.visible);
+            e.shadow_color = (uint8_t)(OptInt(L, t, "shadow_color", e.shadow_color) & 15);
+        }
+        if (!(e.x > -1e6f && e.x < 1e6f && e.y > -1e6f && e.y < 1e6f && e.z > -1e6f && e.z < 1e6f)) {
+            luaL_error(L, "pico.iso: 位置が大きすぎます");
+        }
+    }
+
+    static Iso::Entity* CheckEntity(lua_State* L, int idx, int& handle) {
+        handle = Int(L, idx);
+        Iso::Entity* e = St(L).world.entity(handle);
+        if (!e) luaL_error(L, "pico.iso: 無効な人や物のハンドル");
+        return e;
+    }
+
+    // pico.iso.entity_add(image, x, y, z[, opts]) -> id | nil, 理由
+    static int l_entity_add(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        Iso::Entity e;
+        e.image = (int32_t)luaL_checkinteger(L, 1);
+        e.x = Num(L, 2); e.y = Num(L, 3); e.z = Num(L, 4);
+        const int t = lua_isnoneornil(L, 5) ? 0 : (luaL_checktype(L, 5, LUA_TTABLE), 5);
+        ApplyOpts(L, t, e, true);
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        const int h = st.world.entityAdd(DirtySink(c), e);
+        if (!h) {
+            lua_pushnil(L);
+            lua_pushfstring(L, "置けるのは %d 個までです", Iso::kMaxEntities);
+            return 2;
+        }
+        lua_pushinteger(L, h);
+        return 1;
+    }
+
+    // pico.iso.entity_set(id, opts)
+    static int l_entity_set(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        int h;
+        Iso::Entity* e = CheckEntity(L, 1, h);
+        luaL_checktype(L, 2, LUA_TTABLE);
+        Iso::Entity tmp = *e;
+        ApplyOpts(L, 2, tmp, false);   // エラーなら何も変えない
+        *e = tmp;
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        st.world.entityChanged(DirtySink(c), h);
+        return 0;
+    }
+
+    // pico.iso.entity_move(id, x, y, z)
+    static int l_entity_move(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        int h;
+        Iso::Entity* e = CheckEntity(L, 1, h);
+        const float x = Num(L, 2), y = Num(L, 3), z = Num(L, 4);
+        if (!(x > -1e6f && x < 1e6f && y > -1e6f && y < 1e6f && z > -1e6f && z < 1e6f)) {
+            return luaL_error(L, "pico.iso.entity_move: 位置が大きすぎます");
+        }
+        if (x == e->x && y == e->y && z == e->z) return 0;
+        e->x = x; e->y = y; e->z = z;
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        st.world.entityChanged(DirtySink(c), h);
+        return 0;
+    }
+
+    // pico.iso.entity_get(id) -> x, y, z, { ... } | nil
+    static int l_entity_get(lua_State* L) {
+        const Iso::Entity* e = St(L).world.entity(Int(L, 1));
+        if (!e) { lua_pushnil(L); return 1; }
+        lua_pushnumber(L, e->x);
+        lua_pushnumber(L, e->y);
+        lua_pushnumber(L, e->z);
+        lua_createtable(L, 0, 14);
+        lua_pushinteger(L, e->image); lua_setfield(L, -2, "image");
+        lua_pushinteger(L, e->sx); lua_setfield(L, -2, "sx");
+        lua_pushinteger(L, e->sy); lua_setfield(L, -2, "sy");
+        lua_pushinteger(L, e->sw); lua_setfield(L, -2, "w");
+        lua_pushinteger(L, e->sh); lua_setfield(L, -2, "h");
+        lua_pushinteger(L, e->ax); lua_setfield(L, -2, "ax");
+        lua_pushinteger(L, e->ay); lua_setfield(L, -2, "ay");
+        lua_pushnumber(L, e->r); lua_setfield(L, -2, "r");
+        lua_pushnumber(L, e->h); lua_setfield(L, -2, "height");
+        lua_pushboolean(L, e->shadow); lua_setfield(L, -2, "shadow");
+        lua_pushinteger(L, e->shadow_color); lua_setfield(L, -2, "shadow_color");
+        lua_pushboolean(L, e->flip); lua_setfield(L, -2, "flip");
+        lua_pushboolean(L, e->visible); lua_setfield(L, -2, "visible");
+        return 4;
+    }
+
+    // pico.iso.entity_remove(id) -> bool
+    static int l_entity_remove(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        lua_pushboolean(L, st.world.entityRemove(DirtySink(c), Int(L, 1)));
+        return 1;
+    }
+
+    static int l_entity_clear(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        st.world.entityClear(DirtySink(c));
+        return 0;
+    }
+
+    // pico.iso.entity_at(px, py) -> id | nil(絵の不透明な画素で判定)
+    static int l_entity_at(lua_State* L) {
+        LuaEngine* self = Self(L);
+        LuaEngine::IsoState& st = St(L);
+        Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
+        const int h = st.world.entityAt(DirtySink(c), Int(L, 1), Int(L, 2));
+        if (h) lua_pushinteger(L, h); else lua_pushnil(L);
+        return 1;
+    }
+
+    // pico.iso.ground(x, z[, y]) -> 地面の高さ | nil(y より下で一番上の、ブロックの上面)
+    static int l_ground(lua_State* L) {
+        const float y = lua_isnoneornil(L, 3) ? (float)Iso::H : Num(L, 3);
+        const int g = St(L).world.ground(Num(L, 1), y, Num(L, 2));
+        if (g < 0) lua_pushnil(L); else lua_pushinteger(L, g);
+        return 1;
+    }
+
+    // pico.iso.to_screen(x, y, z) -> sx, sy(点の画面の位置。小数のまま)
+    static int l_to_screen(lua_State* L) {
+        float sx, sy;
+        St(L).world.project(Num(L, 1), Num(L, 2), Num(L, 3), sx, sy);
+        lua_pushnumber(L, sx);
+        lua_pushnumber(L, sy);
+        return 2;
+    }
 };
 
 void LuaEngine::RegisterIsoApi() {
@@ -476,5 +773,14 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("pick", LuaEngineIso::l_pick);
     registerFn("dirty_block", LuaEngineIso::l_dirty_block);
     registerFn("dirty_edit", LuaEngineIso::l_dirty_edit);
+    registerFn("entity_add", LuaEngineIso::l_entity_add);
+    registerFn("entity_set", LuaEngineIso::l_entity_set);
+    registerFn("entity_move", LuaEngineIso::l_entity_move);
+    registerFn("entity_get", LuaEngineIso::l_entity_get);
+    registerFn("entity_remove", LuaEngineIso::l_entity_remove);
+    registerFn("entity_clear", LuaEngineIso::l_entity_clear);
+    registerFn("entity_at", LuaEngineIso::l_entity_at);
+    registerFn("ground", LuaEngineIso::l_ground);
+    registerFn("to_screen", LuaEngineIso::l_to_screen);
     lua_setfield(L, -2, "iso");
 }

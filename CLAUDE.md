@@ -2392,6 +2392,11 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
   (ワークフローからの自動有効化は`GITHUB_TOKEN`の権限ではできない)。
   emsdkの版はワークフローの `EMSDK_VERSION` で固定。公開中のコミットはページのログ先頭の
   `[WEB] pico-os build: <hash>` で分かる。
+  **公開版の `index.js`/`index.wasm`/`index.data` はリビジョン付きの名前(`index.<hash>.js` 等)で置く**(2026-10-08)。
+  同じ名前だとGitHub Pagesの`max-age=600`の間にブラウザが古い`index.js`と新しい`index.data`を組み合わせ、
+  SDのファイルの位置がずれて別のファイルの途中を読んだ(公開直後に「ブロック」の`palette.lua:1: unexpected symbol near '<\227>'`として出た)。
+  `shell.html`の`<meta name="picoos-asset-rev">`をワークフローが書き換え、`Module.locateFile`がそれを見て名前を差し替える
+  (ローカルのビルドは書き換えないので従来の名前のまま)。
 
 ## ロードマップ・TODO状況(2026-09-21時点)
 

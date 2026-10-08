@@ -12,6 +12,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="picoos-asset-rev" content="__PICOOS_ASSET_REV__">
 <title>pico-os (Web)</title>
 <style>
   :root {
@@ -314,8 +315,23 @@
       : '画面が作られていません(上のログを開発者へ)');
   }, 4000);
 
+  // 公開版(.github/workflows/web-pages.yml)は index.js / index.wasm / index.data をリビジョン付きの名前
+  // (index.<rev>.js 等)で置き、下の __PICOOS_ASSET_REV__ をそのリビジョンへ書き換える。
+  // 3つを同じ名前で置くと、ブラウザが古い index.js と新しい index.data を組み合わせることがあり
+  // (GitHub Pages は max-age=600)、SDの中身の位置がずれて別のファイルの途中を読んでしまう
+  // (Luaの構文エラー「unexpected symbol near '<\227>'」として出た)。ローカルのビルドでは書き換えないので名前はそのまま
+  // (値は <meta name="picoos-asset-rev"> から実行時に読む。JSの文字列に置くと、ビルドの縮小で
+  //  「書き換え前の値」として畳まれ、分岐ごと消えるおそれがあるため)
+  var assetRevMeta = document.querySelector('meta[name="picoos-asset-rev"]');
+  var assetRev = assetRevMeta ? assetRevMeta.getAttribute('content') : '';
   var Module = {
     canvas: canvasEl,
+    locateFile: function (path, prefix) {
+      if (assetRev && assetRev.indexOf('__') !== 0) {
+        path = path.replace(/^index\.(wasm|data)$/, 'index.' + assetRev + '.$1');
+      }
+      return prefix + path;
+    },
     print: function (text) { console.log(text); appendLog(text, false); },
     printErr: function (text) { console.error(text); appendLog(text, true); },
     setStatus: function (text) {

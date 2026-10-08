@@ -12,11 +12,14 @@
 #include "lua/LuaEngine.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <new>
 
 #include "iso/Iso_World.hpp"
 #include "iso/Iso_Blit.hpp"
+#include "iso/Iso_Path.hpp"
 #include "gui/Fill4bpp.hpp"
 #include "gui/icons/icon_render.h"
 #include "functions/GFX_Functions.hpp"
@@ -747,6 +750,148 @@ struct LuaEngineIso {
         lua_pushnumber(L, sy);
         return 2;
     }
+
+    // ---------------- 経路探索 ----------------
+
+    struct EdgeCtx { lua_State* L; int fn; };
+    // opts.edge(x, y, z, nx, ny, nz, floor) -> 数(足す値段) | false(通れない) | nil/true(0)
+    static float Edge(void* p, int x, int y, int z, int nx, int ny, int nz, uint8_t floor, bool& abort) {
+        EdgeCtx* c = static_cast<EdgeCtx*>(p);
+        lua_State* L = c->L;
+        lua_pushvalue(L, c->fn);
+        const int a[7] = {x, y, z, nx, ny, nz, floor};
+        for (int v : a) lua_pushinteger(L, v);
+        if (lua_pcall(L, 7, 1, 0) != LUA_OK) { abort = true; return -1; }   // エラーはスタックに残して呼び出し側で投げ直す
+        float r = 0;
+        if (lua_isnumber(L, -1)) r = (float)lua_tonumber(L, -1);
+        else if (lua_isboolean(L, -1) && !lua_toboolean(L, -1)) r = -1;
+        lua_pop(L, 1);
+        return r;
+    }
+
+    // ブロック番号の配列(1〜kBlockCount)をビットへ
+    static uint32_t BlockMask(lua_State* L, int t, const char* key) {
+        lua_getfield(L, t, key);
+        uint32_t m = 0;
+        if (!lua_isnil(L, -1)) {
+            luaL_argexpected(L, lua_istable(L, -1), t, "テーブル");
+            const lua_Integer n = luaL_len(L, -1);
+            for (lua_Integer i = 1; i <= n; i++) {
+                lua_rawgeti(L, -1, i);
+                const lua_Integer b = lua_tointeger(L, -1);
+                if (!lua_isinteger(L, -1) || b < 1 || b > Iso::kBlockCount) luaL_error(L, "pico.iso.path: %s の %d 番目が正しいブロック番号ではありません", key, (int)i);
+                m |= 1u << b;
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+        return m;
+    }
+
+    static int OptY(lua_State* L, int idx) {
+        return lua_isnoneornil(L, idx) ? -1 : (int)floorf(Num(L, idx) + 0.001f);
+    }
+
+    // pico.iso.path(x0, y0, z0, x1, y1, z1 [, opts]) -> 道 {{x=,y=,z=}, ...}, 値段, "found"|"partial"
+    //                                              | nil, 理由("no_path"|"limit"|"start"|"goal")
+    static int l_path(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        if (!st.world.isOpen()) luaL_error(L, "pico.iso.path: ワールドを開いていません");
+        const int sx = (int)floorf(Num(L, 1)), sy = OptY(L, 2), sz = (int)floorf(Num(L, 3));
+        const int gx = (int)floorf(Num(L, 4)), gy = OptY(L, 5), gz = (int)floorf(Num(L, 6));
+        Iso::PathRules r;
+        EdgeCtx ec{L, 0};
+        if (!lua_isnoneornil(L, 7)) {
+            luaL_checktype(L, 7, LUA_TTABLE);
+            r.max_up = OptInt(L, 7, "max_up", r.max_up);
+            r.max_down = OptInt(L, 7, "max_down", r.max_down);
+            r.height = OptInt(L, 7, "height", r.height);
+            r.diagonal = OptBool(L, 7, "diagonal", r.diagonal);
+            r.swim = OptBool(L, 7, "swim", r.swim);
+            r.partial = OptBool(L, 7, "partial", r.partial);
+            r.step = OptNum(L, 7, "step", r.step);
+            r.up_cost = OptNum(L, 7, "up_cost", r.up_cost);
+            r.down_cost = OptNum(L, 7, "down_cost", r.down_cost);
+            r.max_nodes = OptInt(L, 7, "max_nodes", r.max_nodes);
+            if (r.step <= 0 || r.up_cost < 0 || r.down_cost < 0) luaL_error(L, "pico.iso.path: step は正、up_cost/down_cost は0以上です");
+            if (r.max_nodes < 1 || r.max_nodes > Iso::kMaxPathNodes) luaL_error(L, "pico.iso.path: max_nodes は 1〜%d です", Iso::kMaxPathNodes);
+            if (r.max_up < 0 || r.max_down < 0 || r.height < 1) luaL_error(L, "pico.iso.path: max_up/max_down は0以上、height は1以上です");
+            r.avoid = BlockMask(L, 7, "avoid");
+            lua_getfield(L, 7, "block_cost");
+            if (!lua_isnil(L, -1)) {
+                luaL_argexpected(L, lua_istable(L, -1), 7, "block_cost はテーブル");
+                for (int b = 1; b <= Iso::kBlockCount; b++) {
+                    lua_rawgeti(L, -1, b);
+                    if (!lua_isnil(L, -1)) {
+                        if (!lua_isnumber(L, -1) || lua_tonumber(L, -1) < 0) luaL_error(L, "pico.iso.path: block_cost[%d] は0以上の数です", b);
+                        r.block_cost[b] = (float)lua_tonumber(L, -1);
+                    }
+                    lua_pop(L, 1);
+                }
+            }
+            lua_pop(L, 1);
+            lua_getfield(L, 7, "edge");
+            if (!lua_isnil(L, -1)) {
+                luaL_checktype(L, -1, LUA_TFUNCTION);
+                ec.fn = lua_gettop(L);   // 呼ぶ間はスタックに置いたまま
+                r.edge = Edge;
+                r.ctx = &ec;
+            } else {
+                lua_pop(L, 1);
+            }
+        }
+        Iso::PathPoint* out = static_cast<Iso::PathPoint*>(malloc(sizeof(Iso::PathPoint) * (size_t)r.max_nodes));
+        if (!out) luaL_error(L, "pico.iso.path: メモリが足りません");
+        const Iso::PathResult res = Iso::FindPath(st.world, sx, sy, sz, gx, gy, gz, r, out, r.max_nodes);
+        if (res.status == Iso::PathStatus::Aborted) {
+            free(out);
+            return lua_error(L);   // edge のエラー(スタックの一番上)をそのまま
+        }
+        if (res.status != Iso::PathStatus::Found && res.status != Iso::PathStatus::Partial) {
+            free(out);
+            if (res.status == Iso::PathStatus::NoMemory) luaL_error(L, "pico.iso.path: メモリが足りません");
+            lua_pushnil(L);
+            const char* why = res.status == Iso::PathStatus::Limit ? "limit"
+                            : res.status == Iso::PathStatus::BadStart ? "start"
+                            : res.status == Iso::PathStatus::BadGoal ? "goal" : "no_path";
+            lua_pushstring(L, why);
+            return 2;
+        }
+        // 表を作る間に Lua のメモリが足りなくなると out が漏れるので、先に Lua の文字列へ移す
+        const int n = res.length < r.max_nodes ? res.length : r.max_nodes;
+        lua_pushlstring(L, reinterpret_cast<const char*>(out), sizeof(Iso::PathPoint) * (size_t)n);
+        free(out);
+        const Iso::PathPoint* pts = reinterpret_cast<const Iso::PathPoint*>(lua_tostring(L, -1));
+        lua_createtable(L, n, 0);
+        for (int i = 0; i < n; i++) {
+            Iso::PathPoint p;
+            memcpy(&p, pts + i, sizeof p);
+            lua_createtable(L, 0, 3);
+            lua_pushinteger(L, p.x); lua_setfield(L, -2, "x");
+            lua_pushinteger(L, p.y); lua_setfield(L, -2, "y");
+            lua_pushinteger(L, p.z); lua_setfield(L, -2, "z");
+            lua_rawseti(L, -2, i + 1);
+        }
+        lua_pushnumber(L, res.cost);
+        lua_pushstring(L, res.status == Iso::PathStatus::Found ? "found" : "partial");
+        return 3;
+    }
+
+    // pico.iso.stand(x, z[, y[, opts]]) -> 立てる高さ | nil(path と同じ規則で、y 以下で一番上)
+    static int l_stand(lua_State* L) {
+        LuaEngine::IsoState& st = St(L);
+        Iso::PathRules r;
+        if (!lua_isnoneornil(L, 4)) {
+            luaL_checktype(L, 4, LUA_TTABLE);
+            r.height = OptInt(L, 4, "height", r.height);
+            r.swim = OptBool(L, 4, "swim", r.swim);
+            r.avoid = BlockMask(L, 4, "avoid");
+            if (r.height < 1) luaL_error(L, "pico.iso.stand: height は1以上です");
+        }
+        const int y = Iso::StandAt(st.world, (int)floorf(Num(L, 1)), OptY(L, 3), (int)floorf(Num(L, 2)), r);
+        if (y < 0) lua_pushnil(L); else lua_pushinteger(L, y);
+        return 1;
+    }
 };
 
 void LuaEngine::RegisterIsoApi() {
@@ -789,5 +934,7 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("ground", LuaEngineIso::l_ground);
     registerFn("loaded", LuaEngineIso::l_loaded);
     registerFn("to_screen", LuaEngineIso::l_to_screen);
+    registerFn("path", LuaEngineIso::l_path);
+    registerFn("stand", LuaEngineIso::l_stand);
     lua_setfield(L, -2, "iso");
 }

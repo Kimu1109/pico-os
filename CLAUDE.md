@@ -77,7 +77,7 @@ src/
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
   todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders)。下記「TODOアプリ」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
-  iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方)。Luaの`pico.iso`。下記「ブロック」参照
+  iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索)。Luaの`pico.iso`。下記「ブロック」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
@@ -3913,6 +3913,17 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
     全体を描き直したのと同じ(移動・跳ねる・反転・隠す・足す・取り除く・足元の置く/壊すを300回)**・引き当て・ハンドル・反転・前後の判定)、
     `lua_ext_test`(Lua APIと、壁の裏で隠れること)、`blocks_test`(村人と羊: 出る・歩く・壁から出ない・段を登る・タップで跳ねる・閉じると片付く)、
     PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)。**実機では未確認**(1画素ずつの描き直しの時間)。
+- **経路探索(2026-10-08、`src/iso/Iso_Path.hpp/.cpp`、Luaの`pico.iso.path`/`pico.iso.stand`)**: 2点を結ぶ一番安い道をA*で探す。
+  「立てる場所」は足元が空気・松明でないブロックで体のマス(`height`、既定2)が空気/松明(`swim`なら水も)の (x,y,z)。1歩は隣の柱へ
+  (`diagonal`で斜めも。斜めは両脇に行けるときだけ)、登り`max_up`(1)・降り`max_down`(2)段まで、登る/降りるときは頭の上が空いていること。
+  値段 = `step`(斜め×√2)+ `up_cost`×登った段 + `down_cost`×降りた段 + `block_cost[足元]` + `edge`コールバックの値(負/falseで通れない)。
+  `avoid`(ブロックのビット)は足元と体のマスの両方で見る。見積もりは`step`×距離なので、どの1歩も`step`以上なら最短。
+  1つの柱に複数の高さの点があり得る(橋の上と下)ので、点は(x,z,y)で持つ。作業場所(点・ハッシュ表・ヒープ、1点約26B)は探す間だけ`malloc`し、
+  点の数は`max_nodes`(既定1024、上限4096)。読み込んでいないチャンクは空気に見えるので立てない。
+  Luaの`edge`は`lua_pcall`で呼び、エラーなら作業場所を返してから投げ直す(`Aborted`)。結果の配列は一度Luaの文字列へ写してから`free`する(表を作る途中のOOMで漏れないように)。
+  検証: `iso_world_test`(段差の上限・頭の上・避けるブロック・値段で道が変わる・斜めの角・edge・partial/上限/誤り・橋の上下・
+  **乱数の高さの地形40個で素朴なダイクストラと値段が一致し、道が規則を守ること**)、`lua_ext_test`(Lua APIの引数・回り道・edgeのエラー)。
+  **実機での時間は未計測**。アプリ「ブロック」ではまだ使っていない(村人を目的地へ歩かせる等は今後)。
 - **色**: 元の63色+半分の明るさの影を Lab の k-means で14色にし、起動時に `pico.set_palette` で入れる(1〜14番を既定のパレットの近い番号へ
   並べてあるので、ステータスバー等の色は大きくは変わらない)。アイコンは既定のパレット(彩度を上げてから最近傍)。
 - 操作: 画面=左下の9キー(真ん中が置く/壊す)・上へ/下へ・ブロック変更・中央・昼へ/夜へ・終了、ワールドのタップ=その面の手前へ・長押し=そのブロックへ・

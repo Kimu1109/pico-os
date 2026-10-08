@@ -70,8 +70,18 @@ jobs:
       - name: 公開するファイルを集める
         run: |
           mkdir -p _site
-          cp pc/build-web/index.html pc/build-web/index.js \
-             pc/build-web/index.wasm pc/build-web/index.data _site/
+          # js/wasm/data はリビジョン付きの名前で置く(shell.html の assetRev 参照)。同じ名前のままだと
+          # ブラウザが古い index.js と新しい index.data を組み合わせ、SDのファイルの位置がずれて壊れて読める
+          rev="${GITHUB_SHA::7}"
+          for ext in js wasm data; do
+            cp "pc/build-web/index.$ext" "_site/index.$rev.$ext"
+          done
+          sed -E -e "s/__PICOOS_ASSET_REV__/$rev/g" \
+                 -e "s/src=(\"?)index\.js\1/src=\1index.$rev.js\1/" \
+              pc/build-web/index.html > _site/index.html
+          # 書き換え漏れ(emscripten の出力の形が変わった等)は公開せずに止める
+          grep -q "index.$rev.js" _site/index.html
+          ! grep -q "__PICOOS_ASSET_REV__" _site/index.html
           ls -la _site
 
       - name: 成果物をアップロードする

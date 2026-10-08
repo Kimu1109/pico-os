@@ -15,6 +15,7 @@ M.TYPES = {
     heavy  = { hp = 90, speed = 0.55, dmg = 12, rate = 1.4, reach = 0, sx = 48, w = 16, h = 26, r = 0.32, mass = 3, money = 12 },
 }
 
+local SET = {}                -- entity_set に渡す表(毎回作るとゴミになり、実機でメモリが尽きるので使い回す)
 local img                     -- units.pimg
 local list = {}               -- 出ているゾンビ
 local queue = {}              -- 順番待ち(種類の名前)
@@ -138,7 +139,9 @@ local function step(zb, dt)
     elseif zb.frame ~= 0 then zb.frame = 0; zb.dirty = true end
     if zb.dirty then
         zb.dirty = false
-        iso.entity_set(zb.id, { sx = t.sx + zb.frame * t.w, flip = zb.flip })
+        SET.sx = t.sx + zb.frame * t.w
+        SET.flip = zb.flip
+        iso.entity_set(zb.id, SET)
     end
 end
 

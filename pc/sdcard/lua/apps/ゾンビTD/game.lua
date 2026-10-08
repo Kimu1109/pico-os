@@ -19,6 +19,11 @@ local LOG_MS = 5000
 local FLOW_RULES = { max_up = 1, max_down = 2, height = 2, up_cost = 0.5, diagonal = true }
 local STAND_RULES = { height = 2 }
 
+-- Luaのごみ集めは世代別にする。既定(incremental)だと、毎フレームの使い捨ての表が
+-- 生きている量の2倍まで溜まってから集めるので、ゾンビが多いとLuaが予算(200KB)近くまで膨らみ、
+-- 実機では本体のメモリが先に尽きて落ちた(ゾンビ30体を超えたところで再起動)
+collectgarbage("generational")
+
 for i, c in ipairs(PAL.colors) do pico.set_palette(i, c[1], c[2], c[3]) end
 iso.sky(PAL.sky)
 local DIR = pico.app_dir()
@@ -88,8 +93,10 @@ local function perf_tick()
         perf.fps = perf.frames * 1000 / span
         perf.lua_ms = perf.lua_us / perf.frames / 1000
         perf.render_ms = perf.render_us / perf.frames / 1000
-        pico.log(string.format("[TD] fps=%.1f lua=%.2fms render=%.2fms alive=%d wait=%d shots=%d",
-            perf.fps, perf.lua_ms, perf.render_ms, zombies.alive(), zombies.waiting(), iso.shot_count()))
+        local m = pico.memory_info()
+        pico.log(string.format("[TD] fps=%.1f lua=%.2fms render=%.2fms alive=%d wait=%d shots=%d mem lua=%d heap_free=%d headroom=%d",
+            perf.fps, perf.lua_ms, perf.render_ms, zombies.alive(), zombies.waiting(), iso.shot_count(),
+            m.lua_used, m.heap_free, m.heap_headroom or 0))
         perf.frames, perf.lua_us, perf.render_us, perf.t0 = 0, 0, 0, now
         pico.invalidate(hud)
     end
@@ -356,8 +363,10 @@ function loop(dt)
     if mode == "play" then
         local d = math.min(dt, 50) / 1000 * speed
         zombies.update(d)
-        for _, h in ipairs(iso.shots_step(d)) do
-            if h.target == base.id and not h.lost then base.hit(h.tag) end
+        if iso.shot_count() > 0 then   -- 弾が無いのに毎フレーム空の表を作らない
+            for _, h in ipairs(iso.shots_step(d)) do
+                if h.target == base.id and not h.lost then base.hit(h.tag) end
+            end
         end
         if (perf.frames % 15) == 0 then pico.invalidate(hud) end
     end

@@ -733,6 +733,12 @@ struct LuaEngineIso {
         return 1;
     }
 
+    // pico.iso.loaded(x, z) -> bool(その柱のチャンクを読み込んでいるか)
+    static int l_loaded(lua_State* L) {
+        lua_pushboolean(L, St(L).world.loadedAt(Num(L, 1), Num(L, 2)));
+        return 1;
+    }
+
     // pico.iso.to_screen(x, y, z) -> sx, sy(点の画面の位置。小数のまま)
     static int l_to_screen(lua_State* L) {
         float sx, sy;
@@ -781,6 +787,7 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("entity_clear", LuaEngineIso::l_entity_clear);
     registerFn("entity_at", LuaEngineIso::l_entity_at);
     registerFn("ground", LuaEngineIso::l_ground);
+    registerFn("loaded", LuaEngineIso::l_loaded);
     registerFn("to_screen", LuaEngineIso::l_to_screen);
     lua_setfield(L, -2, "iso");
 }

@@ -29,6 +29,8 @@
 //                                    (無指定/読み込み失敗時はIconID::AppBoxへ落ちる)
 //   permission_network            … pico.http_request/http_cancelを許すか(true/false)
 //   permission_sd_outside_app_dir … pico.sd_*/image_loadでapp_dirの外を触れるか
+//   strip_debug                   … requireしたモジュールのデバッグ情報を落とす(Luaのメモリを減らす。
+//                                    権限ではない。エラーの行番号が「?」になる)
 // **どちらの権限も未指定なら既定でfalse(最小権限)。** SDに置かれているだけで
 // 中身を検証していないスクリプトへ、勝手に強い権限を与えないための判断
 // (CLAUDE.md「権限」参照)。app.cfg自体が無いアプリも同様に両方falseで登録される。

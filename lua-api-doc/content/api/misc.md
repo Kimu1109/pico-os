@@ -1,7 +1,7 @@
 ---
 title: "その他"
 weight: 90
-description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast"
+description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast / keep_awake"
 ---
 
 ## pico.log
@@ -117,3 +117,15 @@ base64です(`data` は12KiB、`text` は16KiBまで)。`url_safe = true` なら
 <div class="sig">pico.toast(text: string) <span class="ret">-> shown: boolean</span></div>
 
 画面の上に短い通知(トースト)を出します。権限は要りません。通知センターの履歴にも残ります。連続して呼ぶと(300ms以内)断られて `false` を返します。アプリを閉じた後に出したい予約の通知は [`pico.notify`](../notify/) です。
+
+## pico.keep_awake
+
+<div class="sig">pico.keep_awake()</div>
+
+このフレームは本体をスリープ(省電力。操作が無いと画面が消える)に入らせません。スリープ中に呼ぶと起きます。ゲームの進行中のように、**操作が無くても画面が動き続ける間だけ毎フレーム**(`loop` の中で)呼んでください。呼ぶのをやめれば、その後は普通にスリープします(呼び忘れても「スリープに入る」だけです)。権限は要りません。
+
+```lua
+function loop(dt)
+    if playing then pico.keep_awake() end
+end
+```

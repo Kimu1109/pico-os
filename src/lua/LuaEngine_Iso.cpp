@@ -44,7 +44,7 @@ void LuaEngine::DestroyIso() {
 
 struct LuaEngineIso {
     static LuaEngine* Self(lua_State* L) {
-        return static_cast<LuaEngine*>(lua_touserdata(L, lua_upvalueindex(1)));
+        return *static_cast<LuaEngine**>(lua_getextraspace(L));   // registerFn() の説明参照
     }
 
     static LuaEngine::IsoState& St(lua_State* L) {
@@ -1242,6 +1242,8 @@ struct LuaEngineIso {
 void LuaEngine::RegisterIsoApi() {
     // スタックのトップは pico テーブル。pico.iso を作ってそこへ並べる
     lua_newtable(L);
+    api_iso_.reserve(110);
+    api_cur_ = &api_iso_;
     registerFn("create", LuaEngineIso::l_create);
     registerFn("open", LuaEngineIso::l_open);
     registerFn("info", LuaEngineIso::l_info);
@@ -1297,5 +1299,7 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("shot_remove", LuaEngineIso::l_shot_remove);
     registerFn("shot_clear", LuaEngineIso::l_shot_clear);
     registerFn("shot_count", LuaEngineIso::l_shot_count);
+    finishApiTable(api_iso_);
+    api_cur_ = &api_pico_;
     lua_setfield(L, -2, "iso");
 }

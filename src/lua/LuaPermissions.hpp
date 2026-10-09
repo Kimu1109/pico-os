@@ -21,4 +21,8 @@ struct LuaPermissions {
     bool network = false;
     bool sd_outside_app_dir = false;
     bool notify = false;
+    // 権限ではないが、アプリごとに決まりLuaSceneまで同じ道で運ばれる設定なのでここに置く:
+    //   strip_debug … requireしたモジュールのデバッグ情報(行番号・ローカル変数名)を落として
+    //                 Luaのメモリを減らす(app.cfgのstrip_debug)。エラーの行番号は「?」になる
+    bool strip_debug = false;
 };

@@ -40,6 +40,7 @@
 #include "functions/Scene_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Network_Functions.hpp"
 #include "functions/Mem_Functions.hpp"
 #include "functions/Config_Functions.hpp"
@@ -56,7 +57,7 @@ using TextboxT = Textbox<WidgetFactory::kTextboxCapacity>;
 
 struct LuaEngineExt {
     static LuaEngine* Self(lua_State* L) {
-        return static_cast<LuaEngine*>(lua_touserdata(L, lua_upvalueindex(1)));
+        return *static_cast<LuaEngine**>(lua_getextraspace(L));   // registerFn() の説明参照
     }
 
     static Widget* WidgetArg(lua_State* L, int idx, const char* api) {
@@ -107,6 +108,7 @@ struct LuaEngineExt {
 
     // ---------------- 通知・戻る ----------------
     static int l_toast(lua_State* L);
+    static int l_keep_awake(lua_State* L);
     static int l_on_back(lua_State* L);
     static int l_go_back(lua_State* L);
 
@@ -906,6 +908,13 @@ int LuaEngineExt::l_toast(lua_State* L) {
     return 1;
 }
 
+// pico.keep_awake(): このフレームはスリープ(省電力)に入らない。スリープ中なら起きる。
+// 「操作が無くても動き続ける画面」(ゲームの進行中など)が毎フレーム呼ぶ。呼ぶのをやめれば、その後は普通にスリープできる
+int LuaEngineExt::l_keep_awake(lua_State*) {
+    PowerFunctions::KeepAwake();
+    return 0;
+}
+
 // ===================================================================
 // 描画の補助
 // ===================================================================
@@ -1659,6 +1668,7 @@ void LuaEngine::RegisterExtApi() {
     registerFn("tab_link", LuaEngineExt::l_tab_link);
     registerFn("tab_unlink", LuaEngineExt::l_tab_unlink);
     registerFn("toast", LuaEngineExt::l_toast);
+    registerFn("keep_awake", LuaEngineExt::l_keep_awake);
     registerFn("on_back", LuaEngineExt::l_on_back);
     registerFn("go_back", LuaEngineExt::l_go_back);
     registerFn("get_pixel", LuaEngineExt::l_get_pixel);

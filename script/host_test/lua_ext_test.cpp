@@ -2399,12 +2399,31 @@ int main() {
             check(o.sy == 2 * 40 - 22, "soldiers.upgrade: Lv2 の段の絵になる (" .. o.sy .. ")")
             _, _, _, o = pico.iso.entity_get(r.id)
             check(o.sy == 3 * 40 - 36, "buildings: Lv3 の塔の段の絵 (" .. o.sy .. ")")
+            -- ウェーブ2以降の攻撃力の倍率(1.04)でも、ゾンビのダメージは整数(耐久を %d で出すため)
+            E.zombies.dmg_mul = 1.04
+            E.zombies.queue("normal", 4)
+            E.zombies.queue("ranged", 2)
+            G.speed = 3
+        )LUA", "g3");
+        for (int i = 0; i < 3000 && ok; i++) {
+            te.CallLoop(50);
+            ok = te.Run("local b = TEST.env.G.base; DONE = b.hp < 1990", "m");
+            lua_getglobal(L, "DONE");
+            const bool done = lua_toboolean(L, -1);
+            lua_pop(L, 1);
+            if (done) break;
+        }
+        ok = ok && te.Run(R"LUA(
+            local E = TEST.env
+            local G = E.G
+            check(G.base.hp < 1990 and G.base.hp == math.floor(G.base.hp), "zombies: 倍率がかかってもダメージは整数 (" .. G.base.hp .. ")")
+            for _, s in ipairs(E.soldiers.list) do check(s.hp == math.floor(s.hp), "zombies: 兵士の耐久も整数") end
             -- ゲームオーバー
             G.base:hurt(5000)
             check(G.mode == "over", "game: ベースが壊れると終わる")
             st = pico.store_load()
             check(st.game == nil and st.best and st.best.w == 1, "game: 途中の保存を消して最高記録を残す")
-        )LUA", "g3");
+        )LUA", "g4");
         check(ok, "game: ウェーブと保存の流れ");
         // コントローラー・キーボードのカーソル(cursor.lua)と、地図の上のメニュー(ui.lua)
         ok = te.Run(R"LUA(

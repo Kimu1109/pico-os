@@ -20,13 +20,13 @@ description: "log / show_error / millis / micros / battery / on_key / app_dir / 
 
 <div class="sig">pico.millis() <span class="ret">-> ms: integer</span></div>
 
-起動からのミリ秒。単調に増え、NTPの同期で飛びません(`get_time` は壁時計で飛びます)。経過時間の計測に使います。
+起動からのミリ秒。単調に増え、NTPの同期で飛びません(`get_time` は壁時計で飛びます)。経過時間の計測に使います。Luaの整数は32bitなので、約24.8日で負へ回ります(差 `b - a` は回った後も正しい)。
 
 ## pico.micros
 
 <div class="sig">pico.micros() <span class="ret">-> us: integer</span></div>
 
-起動からのマイクロ秒(32bitの値で、約71分ごとに0へ戻ります)。1フレームの中の処理の時間のような、ミリ秒では粗すぎる計測に使います。差は `(b - a) % 4294967296` で取ると、0へ戻った後でも正しく出ます。
+起動からのマイクロ秒(32bitの値で、約36分で負へ回り、約71分で一巡します)。1フレームの中の処理の時間のような、ミリ秒では粗すぎる計測に使います。Luaの整数も32bitで同じく回るので、差は `b - a` でそのまま正しく出ます(約36分より短い間隔なら)。
 
 ## pico.battery
 

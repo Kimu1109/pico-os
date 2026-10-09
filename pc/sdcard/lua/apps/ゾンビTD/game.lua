@@ -55,7 +55,9 @@ iso.sky(PAL.sky)
 local DIR = pico.app_dir()
 local faces = pico.image_load(pico.path_join(DIR, "faces.pimg"))
 local units = pico.image_load(pico.path_join(DIR, "units.pimg"))
-if faces then iso.set_image(faces) else pico.show_error("faces.pimg を読めません") end
+-- faces.pimg は使うブロックの段だけを並べてある(script/generate_zombie_td_sheet.py の FACE_ROWS と同じ並び。26 = カーソル)
+local FACE_ROWS = { 1, 2, 3, 4, 5, 11, 12, 14, 15, 16, 18, 22, 26 }
+if faces then iso.set_image(faces, FACE_ROWS) else pico.show_error("faces.pimg を読めません") end
 if not units then pico.show_error("units.pimg を読めません") end
 local MAP_DIR = pico.path_join(DIR, "map")   -- 何も書かない(地形は種から作るので保存しない)
 
@@ -115,7 +117,8 @@ end
 -- ---------------------------------------------------------------- 計測
 
 local perf = { frames = 0, lua_us = 0, render_us = 0, t0 = 0, fps = 0, lua_ms = 0, render_ms = 0 }
-local function us_since(t) return (pico.micros() - t) % 4294967296 end
+-- Luaの整数は32bit(LUA_32BITS)。pico.micros() は約36分で負へ回るが、引き算も同じく回るので差は正しい
+local function us_since(t) return pico.micros() - t end
 
 local function perf_tick()
     perf.frames = perf.frames + 1
@@ -182,7 +185,10 @@ local function gen_start()
     G.mode = "load"
     if not bx then return gen_fail("マップを作れません: " .. tostring(by)) end
     W = iso.size()
-    iso.keep_all(true)
+    if not iso.keep_all(true) then
+        iso.close()
+        return gen_fail("マップを作れません: メモリが足りません")
+    end
     arena = iso.arena()
     center_on(bx, by, bz)
     load_msg = "マップを作っています..."
@@ -497,6 +503,8 @@ end)
 
 -- ---------------------------------------------------------------- 毎フレーム
 
+local SIM_MS = 33
+local sim_acc = 0
 function loop(dt)
     perf_tick()
     if G.mode == "load" then gen_step(); cursor.update(dt / 1000); return end
@@ -504,7 +512,15 @@ function loop(dt)
     if G.mode == "play" then
         -- ウェーブ中と一時停止中はスリープしない
         if waves.phase == "wave" or G.speed == 0 then pico.keep_awake() end
-        local d = math.min(dt, 50) / 1000 * G.speed
+        -- ゲームの計算(ゾンビ・兵士・建物・弾・押し合い)は1秒に30回まで(SIM_MS ごと)。画面の描き直しと操作は毎フレーム。
+        -- 実機ではLuaの計算が1フレーム 5〜12ms かかり(PCの約30倍。特に重い所は無く、Luaの実行そのものの速さ)、
+        -- 60〜90fps で毎回計算すると CPU の大半を使っていた
+        sim_acc = sim_acc + dt
+        local d = 0
+        if sim_acc >= SIM_MS then
+            d = math.min(sim_acc, 50) / 1000 * G.speed
+            sim_acc = 0
+        end
         if d > 0 then
             local ev = waves.update(d, zombies)
             if ev then wave_event(ev) end
@@ -516,9 +532,15 @@ function loop(dt)
             if G.flow_dirty then
                 G.flow_dirty = false
                 local ok, err = iso.flow_build(goals_around(arena.base.x, arena.base.z), FLOW_RULES)
-                if not ok then G.say("道を作り直せません: " .. tostring(err)) end
+                if not ok then G.say("道を作り直せません: " .. tostring(err)); G.flow_retry = 2 end
             end
-            if iso.flow_info().building then iso.flow_step(800) end
+            local fi = iso.flow_info()
+            if fi.building then iso.flow_step(800)
+            elseif fi.failed or G.flow_retry then
+                -- メモリが足りず作り直しが止まった(前の流れのまま動く): 2秒後にやり直す
+                G.flow_retry = (G.flow_retry or 2) - d
+                if G.flow_retry <= 0 then G.flow_retry = nil; G.flow_dirty = true end
+            end
             if iso.crowd(2, CROWD_RULES) > 0 then
                 zombies.sync()
                 soldiers.sync()

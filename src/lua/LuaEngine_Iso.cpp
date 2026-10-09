@@ -11,6 +11,7 @@
 
 #include "lua/LuaEngine.hpp"
 
+#include <Arduino.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -35,6 +36,16 @@ struct LuaEngine::IsoState {
     uint32_t image = 0;                 // faces.pimg のハンドル
     const void* analyzed = nullptr;     // blit.setSource() を済ませた画像のバッファ
     int sky = 11;
+    // ブロックの段(番号-1、カーソルは kCursorRow)→ 画像の中の段(-1 = 画像に無い)。
+    // set_image に段の一覧を渡すと、使うブロックだけを並べた小さい画像で済む(ゾンビTD)
+    int8_t rows[Iso::kCursorRow + 1];
+    IsoState() { for (int i = 0; i <= Iso::kCursorRow; i++) rows[i] = (int8_t)i; }
+    // 面の絵の y(ブロックの段の並び)→ 画像の y。画像に無い段は -1
+    int mapY(int sy) const {
+        const int r = sy / Iso::kRowH;
+        if (sy < 0 || r > Iso::kCursorRow || rows[r] < 0) return -1;
+        return rows[r] * Iso::kRowH + sy % Iso::kRowH;
+    }
 };
 
 void LuaEngine::DestroyIso() {
@@ -57,6 +68,23 @@ struct LuaEngineIso {
     }
 
     static int Int(lua_State* L, int idx) { return (int)luaL_checkinteger(L, idx); }
+
+    // C++側の確保(経路探索・流れの場・人や物の置き場)に失敗したとき、Luaのごみを集めて空きを作る。
+    // Luaはメモリ不足のときに自分のためにはごみを集めるが、C++側の malloc の失敗では集めないので
+    // (実機のゾンビTDで、ヒープの空きが約17KBのときに pico.iso.path が失敗した。Luaの量にはごみも含まれる)
+    // 全部集めるのは実機で数十msかかるので、1秒に1回まで(それ以外はそのまま失敗を返す)。ログは5秒に1回、回数をまとめて出す
+    static void CollectForRetry(lua_State* L) {
+        static uint32_t last_gc = 0, last_log = 0, skipped = 0;
+        const uint32_t now = millis();
+        if (last_gc != 0 && now - last_gc < 1000) { skipped++; return; }
+        last_gc = now ? now : 1;
+        lua_gc(L, LUA_GCCOLLECT, 0);
+        if (last_log == 0 || now - last_log >= 5000) {
+            LOG_APP_WARN("pico.iso: メモリが足りないので、Luaのごみを集めてやり直します(集めずに失敗したのは %u 回)", (unsigned)skipped);
+            last_log = now ? now : 1;
+            skipped = 0;
+        }
+    }
 
     static void MarkDirty(int x, int y, int w, int h) {
         if (!LuaOffscreen::active) PICO_GFX::MarkDirty({(int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h});
@@ -94,17 +122,22 @@ struct LuaEngineIso {
         if (Is4bpp(sp)) {
             st.blit.setSource(static_cast<const uint8_t*>(buf), slot.sprite.width, slot.sprite.height);
             const int stride = (slot.sprite.width + 1) >> 1;
-            struct Ctx { const uint8_t* b; int stride; };
-            Ctx c{static_cast<const uint8_t*>(buf), stride};
+            struct Ctx { const uint8_t* b; int stride; const LuaEngine::IsoState* st; };
+            Ctx c{static_cast<const uint8_t*>(buf), stride, &st};
             st.world.setOccluders(Iso::World::ComputeOccluders([](void* p, int x, int y) {
                 const Ctx* c = static_cast<const Ctx*>(p);
-                return (int)Iso::FaceBlitter::Get(c->b + (size_t)y * c->stride, x);
+                y = c->st->mapY(y);
+                return y < 0 ? 0 : (int)Iso::FaceBlitter::Get(c->b + (size_t)y * c->stride, x);
             }, &c));
         } else {
             st.blit.setSource(nullptr, 0, 0);
+            struct Ctx { LGFX_Sprite* sp; const LuaEngine::IsoState* st; };
+            Ctx c{&sp, &st};
             st.world.setOccluders(Iso::World::ComputeOccluders([](void* p, int x, int y) {
-                return (int)static_cast<LGFX_Sprite*>(p)->readPixelValue(x, y);
-            }, &sp));
+                const Ctx* c = static_cast<const Ctx*>(p);
+                y = c->st->mapY(y);
+                return y < 0 ? 0 : (int)c->sp->readPixelValue(x, y);
+            }, &c));
         }
     }
 
@@ -125,6 +158,8 @@ struct LuaEngineIso {
     // 遅い道: クリップを狭めて画像全体をずらして描く
     static void Draw(void* p, int sx, int sy, int w, int h, int dx, int dy) {
         Ctx* c = static_cast<Ctx*>(p);
+        sy = c->st->mapY(sy);
+        if (sy < 0) return;
         if (c->fast) { c->st->blit.draw(sx, sy, w, h, dx, dy); return; }
         const int x0 = std::max(dx, c->cx0), y0 = std::max(dy, c->cy0);
         const int x1 = std::min(dx + w, c->cx1), y1 = std::min(dy + h, c->cy1);
@@ -138,6 +173,8 @@ struct LuaEngineIso {
     // 遅い道のディザ: 1画素ずつ読んで、模様の画素だけ書く
     static void Dither(void* p, int sx, int sy, int w, int h, int dx, int dy, int level) {
         Ctx* c = static_cast<Ctx*>(p);
+        sy = c->st->mapY(sy);
+        if (sy < 0) return;
         if (c->fast) { c->st->blit.dither(sx, sy, w, h, dx, dy, level); return; }
         LGFX_Sprite& src = c->faces->sprite.sprite;
         const int x0 = std::max(dx, c->cx0), y0 = std::max(dy, c->cy0);
@@ -152,6 +189,8 @@ struct LuaEngineIso {
     }
     static int FacePx(void* p, int sx, int sy) {
         Ctx* c = static_cast<Ctx*>(p);
+        sy = c->st->mapY(sy);
+        if (sy < 0) return 0;
         if (c->fast) return c->st->blit.pixel(sx, sy);
         const IconRender::PimgSprite& sp = c->faces->sprite;
         if ((unsigned)sx >= sp.width || (unsigned)sy >= sp.height) return 0;
@@ -375,7 +414,7 @@ struct LuaEngineIso {
         lua_createtable(L, 0, 4);
         lua_pushinteger(L, st.world.loadedCount());
         lua_setfield(L, -2, "chunks");
-        lua_pushinteger(L, st.world.isOpen() ? (lua_Integer)Iso::World::PoolBytes() : 0);
+        lua_pushinteger(L, (lua_Integer)st.world.poolBytes());
         lua_setfield(L, -2, "bytes");
         lua_pushinteger(L, st.world.lastFaces());
         lua_setfield(L, -2, "faces");
@@ -393,10 +432,28 @@ struct LuaEngineIso {
         const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
         LuaEngine::ImageSlot* slot = Slot(self, handle);
         if (!slot) return luaL_error(L, "pico.iso.set_image: 無効なイメージハンドル");
-        if (slot->sprite.width < Iso::kSheetW || slot->sprite.height < (Iso::kCursorRow + 1) * Iso::kRowH) {
-            return luaL_error(L, "pico.iso.set_image: 面の絵の大きさが違います(%dx%d 以上)", Iso::kSheetW,
-                              (Iso::kCursorRow + 1) * Iso::kRowH);
+        // 2番目の引数: 画像に並べたブロックの番号の配列(上の段から。カーソルは 26)。無ければ全部の段
+        int8_t rows[Iso::kCursorRow + 1];
+        int n = Iso::kCursorRow + 1;
+        if (lua_isnoneornil(L, 2)) {
+            for (int i = 0; i <= Iso::kCursorRow; i++) rows[i] = (int8_t)i;
+        } else {
+            luaL_checktype(L, 2, LUA_TTABLE);
+            for (int i = 0; i <= Iso::kCursorRow; i++) rows[i] = -1;
+            n = (int)lua_rawlen(L, 2);
+            if (n < 1 || n > Iso::kCursorRow + 1) return luaL_error(L, "pico.iso.set_image: 段の数は 1〜%d です", Iso::kCursorRow + 1);
+            for (int i = 0; i < n; i++) {
+                lua_rawgeti(L, 2, i + 1);
+                const lua_Integer id = luaL_checkinteger(L, -1);
+                lua_pop(L, 1);
+                if (id < 1 || id > Iso::kCursorRow + 1) return luaL_error(L, "pico.iso.set_image: ブロックは 1〜%d です", Iso::kCursorRow + 1);
+                rows[id - 1] = (int8_t)i;
+            }
         }
+        if (slot->sprite.width < Iso::kSheetW || slot->sprite.height < n * Iso::kRowH) {
+            return luaL_error(L, "pico.iso.set_image: 面の絵の大きさが違います(%dx%d 以上)", Iso::kSheetW, n * Iso::kRowH);
+        }
+        memcpy(st.rows, rows, sizeof(rows));
         st.image = handle;
         st.analyzed = nullptr;
         Analyze(st, *slot);
@@ -667,7 +724,11 @@ struct LuaEngineIso {
         const int t = lua_isnoneornil(L, 5) ? 0 : (luaL_checktype(L, 5, LUA_TTABLE), 5);
         ApplyOpts(L, t, e, true);
         Ctx c{self, &st, nullptr, false, 0, 0, 0, 0};
-        const int h = st.world.entityAdd(DirtySink(c), e);
+        int h = st.world.entityAdd(DirtySink(c), e);
+        if (!h && st.world.entityCount() < Iso::kMaxEntities) {
+            CollectForRetry(L);
+            h = st.world.entityAdd(DirtySink(c), e);
+        }
         if (!h) {
             lua_pushnil(L);
             if (st.world.entityCount() >= Iso::kMaxEntities) lua_pushfstring(L, "置けるのは %d 個までです", Iso::kMaxEntities);
@@ -901,25 +962,28 @@ struct LuaEngineIso {
                 lua_pop(L, 1);
             }
         }
-        Iso::PathPoint* out = static_cast<Iso::PathPoint*>(malloc(sizeof(Iso::PathPoint) * (size_t)r.max_nodes));
-        if (!out) luaL_error(L, "pico.iso.path: メモリが足りません");
-        const Iso::PathResult res = Iso::FindPath(st.world, sx, sy, sz, gx, gy, gz, r, out, r.max_nodes);
+        Iso::PathPoint* out = nullptr;   // 道の長さぶんだけ確保される
+        Iso::PathResult res = Iso::FindPathAlloc(st.world, sx, sy, sz, gx, gy, gz, r, &out);
+        if (res.status == Iso::PathStatus::NoMemory) {
+            CollectForRetry(L);
+            res = Iso::FindPathAlloc(st.world, sx, sy, sz, gx, gy, gz, r, &out);
+        }
         if (res.status == Iso::PathStatus::Aborted) {
             free(out);
             return lua_error(L);   // edge のエラー(スタックの一番上)をそのまま
         }
         if (res.status != Iso::PathStatus::Found && res.status != Iso::PathStatus::Partial) {
             free(out);
-            if (res.status == Iso::PathStatus::NoMemory) luaL_error(L, "pico.iso.path: メモリが足りません");
             lua_pushnil(L);
-            const char* why = res.status == Iso::PathStatus::Limit ? "limit"
+            const char* why = res.status == Iso::PathStatus::NoMemory ? "memory"
+                            : res.status == Iso::PathStatus::Limit ? "limit"
                             : res.status == Iso::PathStatus::BadStart ? "start"
                             : res.status == Iso::PathStatus::BadGoal ? "goal" : "no_path";
             lua_pushstring(L, why);
             return 2;
         }
         // 表を作る間に Lua のメモリが足りなくなると out が漏れるので、先に Lua の文字列へ移す
-        const int n = res.length < r.max_nodes ? res.length : r.max_nodes;
+        const int n = res.length;
         lua_pushlstring(L, reinterpret_cast<const char*>(out), sizeof(Iso::PathPoint) * (size_t)n);
         free(out);
         const Iso::PathPoint* pts = reinterpret_cast<const Iso::PathPoint*>(lua_tostring(L, -1));
@@ -996,7 +1060,7 @@ struct LuaEngineIso {
         if (n < 1 || n > Iso::kMaxFlowGoals) luaL_error(L, "pico.iso.flow_build: 目的地は 1〜%d 個です", Iso::kMaxFlowGoals);
         // 目的地は先に全部読んで確かめる(誤りなら作り直しを始めない)
         for (int pass = 0; pass < 2; pass++) {
-            if (pass == 1 && !st.flow.begin(st.world, r)) {
+            if (pass == 1 && !st.flow.begin(st.world, r) && (CollectForRetry(L), !st.flow.begin(st.world, r))) {
                 lua_pushnil(L);
                 lua_pushstring(L, st.world.width() > Iso::kMaxFlowWidth ? "世界が広すぎます" : "メモリが足りません");
                 return 2;

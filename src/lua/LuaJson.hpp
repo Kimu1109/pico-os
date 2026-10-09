@@ -82,7 +82,8 @@ namespace LuaJson {
                 } else {
                     const double d = (double)lua_tonumber(L, idx);
                     if (!std::isfinite(d)) { err = "NaN/無限大はJSONにできません"; return false; }
-                    snprintf(buf, sizeof(buf), "%.14g", d);
+                    // 単精度(LUA_32BITS)なら7桁(Luaの tostring と同じ。0.1 を 0.10000000149012 と書かない)
+                    snprintf(buf, sizeof(buf), sizeof(lua_Number) == 4 ? "%.7g" : "%.14g", d);
                 }
                 out += buf;
                 return true;
@@ -318,8 +319,11 @@ namespace LuaJson {
             errno = 0;
             char* e = nullptr;
             const long long v = strtoll(buf, &e, 10);
-            if (errno == 0) { lua_pushinteger(L, (lua_Integer)v); return true; }
-            // 範囲を超えた整数は浮動小数点数にする
+            // Luaの整数(LUA_32BITS なので32bit)の範囲を超えた整数は浮動小数点数にする
+            if (errno == 0 && v >= (long long)LUA_MININTEGER && v <= (long long)LUA_MAXINTEGER) {
+                lua_pushinteger(L, (lua_Integer)v);
+                return true;
+            }
         }
         lua_pushnumber(L, (lua_Number)strtod(buf, nullptr));
         return true;

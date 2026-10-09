@@ -74,20 +74,40 @@ struct Search {
     Node* nodes = nullptr;
     int16_t* table = nullptr;   // 点の番号 + 1(0 = 空き)
     int16_t* heap = nullptr;
-    int count = 0, cap = 0, heap_n = 0;
+    int count = 0, cap = 0, limit = 0, heap_n = 0;
     uint32_t mask = 0;
 
     ~Search() { free(nodes); free(table); free(heap); }
 
+    // 作業場所は小さく始めて、足りなくなったら倍にする(上限 limit)。以前は limit ぶん(3200点で約86KB)を
+    // 最初に確保していて、実機のゾンビTDで確保できなかった
+    static constexpr int kInitialNodes = 256;
     bool init(int n) {
-        cap = n;
+        limit = n;
+        return grow(n < kInitialNodes ? n : kInitialNodes);
+    }
+    // 点を n 個まで持てるようにする(ハッシュ表は作り直す)。確保できなければ false で、今のまま
+    bool grow(int n) {
         int t = 1;
         while (t < n * 2) t <<= 1;
+        Node* nn = (Node*)realloc(nodes, sizeof(Node) * (size_t)n);
+        if (!nn) return false;
+        nodes = nn;
+        int16_t* nh = (int16_t*)realloc(heap, sizeof(int16_t) * (size_t)n);
+        if (!nh) return false;
+        heap = nh;
+        int16_t* nt = (int16_t*)calloc((size_t)t, sizeof(int16_t));
+        if (!nt) return false;
+        free(table);
+        table = nt;
         mask = (uint32_t)t - 1;
-        nodes = (Node*)malloc(sizeof(Node) * (size_t)n);
-        table = (int16_t*)calloc((size_t)t, sizeof(int16_t));
-        heap = (int16_t*)malloc(sizeof(int16_t) * (size_t)n);
-        return nodes && table && heap;
+        cap = n;
+        for (int i = 0; i < count; i++) {
+            uint32_t s = slot(Key(nodes[i].x, nodes[i].y, nodes[i].z));
+            while (table[s]) s = (s + 1) & mask;
+            table[s] = (int16_t)(i + 1);
+        }
+        return true;
     }
 
     static uint32_t Key(int x, int y, int z) { return (uint32_t)x | ((uint32_t)z << 10) | ((uint32_t)y << 20); }
@@ -103,7 +123,9 @@ struct Search {
     }
     // 増やせなければ -1
     int add(int x, int y, int z) {
-        if (count >= cap) return -1;
+        if (count >= cap) {
+            if (cap >= limit || !grow(cap * 2 < limit ? cap * 2 : limit)) return -1;
+        }
         const uint32_t key = Key(x, y, z);
         uint32_t s = slot(key);
         while (table[s]) s = (s + 1) & mask;
@@ -192,8 +214,22 @@ int StandAt(const World& w, int x, int y, int z, const PathRules& r) {
     return -1;
 }
 
+static PathResult FindPathImpl(const World& w, int sx, int sy, int sz, int gx, int gy, int gz, const PathRules& rules,
+                               PathPoint* out, int max_out, PathPoint** out_alloc);
+
 PathResult FindPath(const World& w, int sx, int sy, int sz, int gx, int gy, int gz, const PathRules& rules,
                     PathPoint* out, int max_out) {
+    return FindPathImpl(w, sx, sy, sz, gx, gy, gz, rules, out, max_out, nullptr);
+}
+
+PathResult FindPathAlloc(const World& w, int sx, int sy, int sz, int gx, int gy, int gz, const PathRules& rules,
+                         PathPoint** out_alloc) {
+    *out_alloc = nullptr;
+    return FindPathImpl(w, sx, sy, sz, gx, gy, gz, rules, nullptr, 0, out_alloc);
+}
+
+static PathResult FindPathImpl(const World& w, int sx, int sy, int sz, int gx, int gy, int gz, const PathRules& rules,
+                        PathPoint* out, int max_out, PathPoint** out_alloc) {
     PathResult res;
     PathRules r = rules;
     if (r.max_nodes < 1) r.max_nodes = 1;
@@ -292,6 +328,12 @@ PathResult FindPath(const World& w, int sx, int sy, int sz, int gx, int gy, int 
     int len = 0;
     for (int i = end; i >= 0; i = s.nodes[i].parent) len++;
     res.length = len;
+    if (out_alloc) {
+        out = static_cast<PathPoint*>(malloc(sizeof(PathPoint) * (size_t)len));
+        if (!out) { res.status = PathStatus::NoMemory; return res; }
+        *out_alloc = out;
+        max_out = len;
+    }
     if (out && max_out > 0) {
         int k = len - 1;
         for (int i = end; i >= 0; i = s.nodes[i].parent, k--) {

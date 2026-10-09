@@ -16,7 +16,8 @@
 // 最短を保証しない)。
 //
 // 読み込んでいないチャンクは空気に見えるので、そこには立てない(探すのは読み込んでいる所だけ)。
-// 作業場所(探す点の数 max_nodes ぶん、1024点で約26KB)は探す間だけ malloc して返す。
+// 作業場所(1点 約26バイト)は探す間だけ malloc して返す。256点から始めて足りなければ倍にし(max_nodes まで)、
+// 広げられなければ max_nodes を使い切ったのと同じ扱い(Limit / partial なら途中までの道)。
 
 #include <cstdint>
 #include <cstddef>
@@ -79,5 +80,8 @@ float EnterCost(const World& w, int x, int y, int z, const PathRules& r);
 // gy < 0 なら目的地の柱のどの高さでもよい。道は out[0] = 出発点 … out[length-1] = 到着点(max_out まで)
 PathResult FindPath(const World& w, int sx, int sy, int sz, int gx, int gy, int gz, const PathRules& r,
                     PathPoint* out, int max_out);
+// 道の長さぶんだけ malloc した配列を *out_alloc へ返す版(呼び出し側が free する)。確保できなければ NoMemory
+PathResult FindPathAlloc(const World& w, int sx, int sy, int sz, int gx, int gy, int gz, const PathRules& r,
+                         PathPoint** out_alloc);
 
 }  // namespace Iso

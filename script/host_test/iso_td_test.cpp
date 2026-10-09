@@ -530,6 +530,36 @@ int main(int argc, char** argv) {
             if (seed == 1) {
                 check(x == bx && z == bz && y == w.arenaHeight(bx, bz) + 1, "ARENA: create はベースの中心を返す");
                 check(bx == 28 && bz == 4 && sz[0] == 53 && sx[0] == 14 && sx[2] == 42, "ARENA: ベースは手前の端の真ん中、出現位置は奥の端に3つ");
+                // 明るさを持たない(1チャンクあたり256バイトと作業場所を確保しない)。松明を置いても光らず、落ちない
+                check(!w.lighting() && w.loadedCount() == 49
+                      && w.poolBytes() == 49 * (offsetof(Chunk, b) + kCompactBytes), "ARENA: 柱ごとの形で持つ(明るさも持たない)");
+                // 柱ごとの形でも、作った地形とブロックが1つも違わない
+                {
+                    static uint8_t full[kChunkBytes];
+                    bool same = true;
+                    for (int cx = 0; cx < 7 && same; cx++) for (int cz = 0; cz < 7 && same; cz++) {
+                        w.generate(cx, cz, full);
+                        for (int y = 0; y < H && same; y++) for (int i = 0; i < kLayer; i++) {
+                            if (w.get(cx * 8 + i / 8, y, cz * 8 + i % 8) != full[y * kLayer + i]) { same = false; break; }
+                        }
+                    }
+                    check(same, "ARENA: 柱ごとの形でも地形は同じ");
+                    // 地面の上の1段は置ける/消せる。それより上や地面の中は書き換えない
+                    const int fx = bx + 5, fz = bz + 5, fy = w.arenaHeight(fx, fz) + 1;
+                    const uint8_t was = w.get(fx, fy, fz);
+                    w.set(fx, fy, fz, 12);
+                    const bool put = w.get(fx, fy, fz) == 12 && w.get(fx, fy + 1, fz) == AIR;
+                    w.set(fx, fy + 1, fz, 12);
+                    w.set(fx, fy - 2, fz, AIR);
+                    const bool kept = w.get(fx, fy + 1, fz) == AIR && w.get(fx, fy - 2, fz) != AIR;
+                    w.set(fx, fy, fz, AIR);
+                    check(put && kept && w.get(fx, fy, fz) == was, "ARENA: 地面の上の1段だけ書き換えられる");
+                }
+                const int ty = w.arenaHeight(bx, bz) + 1;
+                w.set(bx, ty, bz, TORCH);
+                check(w.get(bx, ty, bz) == TORCH && w.light(bx, ty, bz) == 0 && w.light(bx + 1, ty, bz) == 0,
+                      "ARENA: 松明は置けるが光らない");
+                w.set(bx, ty, bz, AIR);
             }
             // ベースのまわり(7x7)と出現位置(3x3)は平らで、地面のブロックで見分けられる。水の上ではない
             bool flat = true, blk = true;

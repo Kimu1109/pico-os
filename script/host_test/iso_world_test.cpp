@@ -1285,6 +1285,29 @@ int main(int argc, char** argv) {
         r.max_nodes = 50;
         res = FindPath(w, 2, -1, 2, 40, -1, 40, r, out.data(), (int)out.size());
         check(res.status == PathStatus::Limit && res.nodes == 50, "経路: max_nodes を使い切ると Limit");
+        // 作業場所は256点から倍に広げる(広げた後も同じ点を引ける)。見積もりが効かない規則で多くの点を調べさせる
+        {
+            PathRules q = r;
+            q.max_nodes = kMaxPathNodes;
+            q.step = 0.001f;
+            for (int k = 0; k <= kBlockCount; k++) q.block_cost[k] = 1.0f;
+            PathRules q0 = q;
+            q0.max_nodes = 256;
+            const PathResult small = FindPath(w, 2, -1, 2, 40, -1, 40, q0, out.data(), (int)out.size());
+            res = FindPath(w, 2, -1, 2, 40, -1, 40, q, out.data(), (int)out.size());
+            check(small.status == PathStatus::Limit && res.status == PathStatus::Found && res.nodes > 512,
+                  "経路: 作業場所を広げながら調べる");
+        }
+        {
+            PathPoint* got = nullptr;
+            r.max_nodes = kMaxPathNodes;
+            const PathResult a = FindPath(w, 2, -1, 2, 10, -1, 2, r, out.data(), (int)out.size());
+            const PathResult b = FindPathAlloc(w, 2, -1, 2, 10, -1, 2, r, &got);
+            bool same = got && a.status == b.status && a.length == b.length;
+            for (int i = 0; same && i < a.length; i++) same = got[i].x == out[i].x && got[i].y == out[i].y && got[i].z == out[i].z;
+            check(same, "経路: FindPathAlloc は道の長さぶんだけ確保して同じ道を返す");
+            free(got);
+        }
         r = PathRules();
         w.set(0, 0, 0, AIR);
         res = FindPath(w, 0, -1, 0, 5, -1, 5, r, out.data(), (int)out.size());

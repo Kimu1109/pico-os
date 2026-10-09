@@ -91,11 +91,10 @@ namespace {
     // --- 曲(1コア目側) ---
     // 演奏データの置き場は2つ。2コア目が片方を読んでいる間に、もう片方へ次の曲を書く。
     // 最初に曲を鳴らすときに確保し、以降は持ち続ける(曲を使わないならRAMを使わない)
-    struct MusicWork {
-        uint8_t slots[2][kMusicDataBytes];
-        MmlCompiler compiler;
-    };
-    MusicWork* music_work = nullptr;
+    //演奏データの置き場2つ。曲を読むたびに、その曲の大きさだけ確保する(2コア目が読んでいない方だけ書き換える)。
+    //以前は 6KiB×2 + 読み取り係(約3.5KB)を最初に確保して持ち続けていて、ジングルを鳴らすだけのアプリ(ゾンビTD)が
+    //約15KBを抱えたまま実機のヒープが足りなくなった。読み取り係と 6KiB の作業場所は読む間だけ確保する
+    uint8_t* music_slots[2] = {nullptr, nullptr};
     int music_current = -1;                 // 2コア目へ最後に渡した置き場(止めたら-1)
     uint32_t slot_release_seq[2] = {0, 0};  // この数のコマンドが処理されたら、その置き場は空く
     uint32_t music_cmd_seq = 0;             // 最後に積んだ曲のコマンドが何番目か
@@ -496,12 +495,6 @@ namespace {
     }
 
     bool CompileAndPlay(MmlLineSource& src, MmlResult* result, const char* fallback_title){
-        if(!music_work){
-            music_work = (MusicWork*)malloc(sizeof(MusicWork));
-            if(!music_work) return SetError(result, "曲を読むためのメモリが足りません");
-            new (&music_work->compiler) MmlCompiler();
-        }
-
         //2コア目が読んでいない置き場を選ぶ
         const uint32_t done = core1_processed.load(std::memory_order_acquire);
         int slot = -1;
@@ -513,11 +506,25 @@ namespace {
 
         MmlResult local;
         MmlResult& r = result ? *result : local;
-        if(!music_work->compiler.compile(src, music_work->slots[slot], kMusicDataBytes, r)) return false;
+        //2コア目はこの置き場を読んでいないので、前の曲の分は返してよい
+        free(music_slots[slot]);
+        music_slots[slot] = nullptr;
+        uint8_t* buf = (uint8_t*)malloc(kMusicDataBytes);
+        MmlCompiler* compiler = buf ? new (std::nothrow) MmlCompiler() : nullptr;
+        if(!compiler){
+            free(buf);
+            return SetError(result, "曲を読むためのメモリが足りません");
+        }
+        const bool compiled = compiler->compile(src, buf, kMusicDataBytes, r);
+        delete compiler;
+        if(!compiled){ free(buf); return false; }
+        //曲の大きさまで縮める(縮めるだけなので失敗しても元のまま使える)
+        uint8_t* shrunk = (uint8_t*)realloc(buf, r.size > 0 ? r.size : 1);
+        music_slots[slot] = shrunk ? shrunk : buf;
 
         Command cmd{CmdType::MusicPlay, 0, {}};
         music_paused.store(false, std::memory_order_release);
-        cmd.music = music_work->slots[slot];
+        cmd.music = music_slots[slot];
         cmd.music_size = r.size;
         if(!Push(cmd)){
             r.ok = false;

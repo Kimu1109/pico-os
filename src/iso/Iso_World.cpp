@@ -20,7 +20,6 @@ namespace Iso {
 
 namespace {
 
-constexpr int kWaterLevel = 5;
 constexpr char kMagic[4] = {'B', 'L', 'K', '2'};
 constexpr int kHead = 17;
 
@@ -335,8 +334,37 @@ void World::generate(int cx, int cz, uint8_t* b) const {
 
 void World::CountTorches(Chunk* c) {
     int n = 0;
-    for (int i = 0; i < c->top * kLayer; i++) n += c->b[i] == TORCH;
+    for (int i = 0; i < c->top * kLayer; i++) n += BlockOf(c, i) == TORCH;
     c->torches = (uint8_t)(n > 255 ? 255 : n);
+}
+
+// 1チャンクぶんのブロック(kChunkBytes)を compact の形にする。表せないマスがあれば false(表せる所までは入る)
+bool World::Compress(Chunk* c, const uint8_t* full) {
+    bool ok = true;
+    for (int i = 0; i < kLayer; i++) {
+        // 地面 = 空気と水でない一番上(その上の1個は、すぐ上が空気・水でなければ「その上」として持つ)
+        int h = 0;
+        for (int y = H - 1; y >= 0; y--) {
+            const uint8_t v = full[y * kLayer + i];
+            if (v != AIR && v != WATER) { h = y; break; }
+        }
+        uint8_t extra = 0;
+        if (h >= 1 && h + 1 < H) {
+            // 一番上が地面の上に置いたもの(下が地面の色)なら、1段下を地面とする
+            const uint8_t below = full[(h - 1) * kLayer + i];
+            if (below != DIRT && below != STONE && below != BEDROCK && below != AIR && below != WATER) {
+                extra = full[h * kLayer + i];
+                h--;
+            }
+        }
+        c->b[i] = (uint8_t)h;
+        c->b[kLayer + i] = full[h * kLayer + i];
+        c->b[2 * kLayer + i] = extra;
+        for (int y = 0; y < H && ok; y++) {
+            if (CompactGet(c, y, i) != full[y * kLayer + i]) ok = false;
+        }
+    }
+    return ok;
 }
 
 void World::Finish(Chunk* c) {
@@ -344,7 +372,7 @@ void World::Finish(Chunk* c) {
     for (int i = 0; i < kLayer; i++) {
         int t = 0;
         for (int y = H - 1; y >= 0; y--) {
-            if (c->b[y * kLayer + i]) { t = y + 1; break; }
+            if (BlockOf(c, y * kLayer + i)) { t = y + 1; break; }
         }
         c->col[i] = (uint8_t)t;
         if (t > top) top = t;
@@ -388,7 +416,12 @@ bool World::writeChunk(Chunk* c) {
     if (dir_.length() == 0) return false;
     FixedString<PICO_PATH_LEN> path;
     chunkPath(c->cx, c->cz, path);
-    if (!WriteFile(path.c_str(), c->b, (size_t)c->top * kLayer)) return false;
+    const uint8_t* src = c->b;
+    if (c->compact) {
+        for (int i = 0; i < c->top * kLayer; i++) gen_buf_[i] = BlockOf(c, i);
+        src = gen_buf_;
+    }
+    if (!WriteFile(path.c_str(), src, (size_t)c->top * kLayer)) return false;
     c->dirty = false;
     markSaved(c->cx * K_ + c->cz);
     return true;
@@ -399,7 +432,7 @@ void World::unload(Chunk* c) {
         if (!writeChunk(c)) LOG_APP_WARN("ブロック: チャンク %d,%d を書き出せません", c->cx, c->cz);
     }
     uint8_t& m = map_[((c->cx & 31) << 5) | (c->cz & 31)];
-    if (m && &pool_[m - 1] == c) m = 0;
+    if (m && slots_[m - 1] == c) m = 0;
     c->cx = c->cz = -1;
     c->dirty = false;
 }
@@ -413,21 +446,32 @@ bool World::inWindow(int cx, int cz, int margin) const {
 Chunk* World::allocSlot(int cx, int cz) {
     // 同じ map の升を使っている別のチャンク(32チャンク以上離れている)は先に手放す
     const int mi = ((cx & 31) << 5) | (cz & 31);
-    if (map_[mi]) unload(&pool_[map_[mi] - 1]);
+    if (map_[mi]) unload(slots_[map_[mi] - 1]);
     Chunk* best = nullptr;
-    int best_d = -1;
+    int best_i = -1, best_d = -1;
     const int ac2 = wa0_ + wa1_, bc2 = wb0_ + wb1_;
     for (int i = 0; i < kMaxChunks; i++) {
-        Chunk* c = &pool_[i];
-        if (c->cx < 0) { best = c; best_d = -2; break; }
+        Chunk* c = slots_[i];
+        if (!c) {
+            // まだ確保していない置き場: 1個ずつ確保する(大きな連続した空きが無くても入るように)
+            c = static_cast<Chunk*>(malloc(slotBytes()));
+            if (!c) break;   // 確保できなければ、今ある中から手放せるものを使う
+            c->cx = c->cz = -1;
+            c->dirty = false;
+            c->no_light = !lighting();
+            c->compact = compactChunks();
+            slots_[i] = c;
+            allocated_++;
+        }
+        if (c->cx < 0) { best = c; best_i = i; best_d = -2; break; }
         if (inWindow(c->cx, c->cz, 0)) continue;
         const int a = c->cx - c->cz, b = c->cx + c->cz;
         const int d = abs(2 * a - ac2) + abs(2 * b - bc2);
-        if (d > best_d) { best = c; best_d = d; }
+        if (d > best_d) { best = c; best_i = i; best_d = d; }
     }
     if (!best) {
         if (!warned_full_) {
-            LOG_APP_WARN("ブロック: チャンクの置き場(%d個)が足りません", kMaxChunks);
+            LOG_APP_WARN("ブロック: チャンクの置き場(%d個、確保できたのは%d個)が足りません", kMaxChunks, allocated_);
             warned_full_ = true;
         }
         return nullptr;
@@ -437,23 +481,30 @@ Chunk* World::allocSlot(int cx, int cz) {
     best->cz = (int16_t)cz;
     best->dirty = false;
     best->torches = 0;
-    memset(best->light, 0, sizeof(best->light));
-    map_[mi] = (uint8_t)(best - pool_ + 1);
+    if (!best->no_light) memset(best->light, 0, sizeof(best->light));
+    map_[mi] = (uint8_t)(best_i + 1);
     return best;
 }
 
 Chunk* World::loadChunk(int cx, int cz) {
-    if (!pool_ || cx < 0 || cz < 0 || cx >= K_ || cz >= K_) return nullptr;
+    if (!open_ || cx < 0 || cz < 0 || cx >= K_ || cz >= K_) return nullptr;
     Chunk* c = findMut(cx, cz);
     if (c) return c;
     c = allocSlot(cx, cz);
     if (!c) return nullptr;
     bool from_file = false;
+    uint8_t* out = c->compact ? gen_buf_ : c->b;
     if (dir_.length() && isSaved(cx * K_ + cz)) {
-        from_file = readChunkFile(cx, cz, c->b);
+        from_file = readChunkFile(cx, cz, out);
         if (!from_file) LOG_APP_WARN("ブロック: チャンク %d,%d を読めません。作り直します", cx, cz);
     }
-    if (!from_file) generate(cx, cz, c->b);
+    if (!from_file) generate(cx, cz, out);
+    if (c->compact && !Compress(c, out)) {
+        if (!warned_compact_) {
+            LOG_APP_WARN("ブロック: チャンク %d,%d は柱ごとの形で持てません(違うブロックは消えます)", cx, cz);
+            warned_compact_ = true;
+        }
+    }
     Finish(c);
     // 自分の松明はまわりを、まわりの松明は自分を照らす
     relightAround(cx, cz, false);
@@ -471,9 +522,9 @@ void World::setOccluders(uint32_t mask) {
 }
 
 void World::relightAll() {
-    if (!pool_) return;
+    if (!open_) return;
     for (int i = 0; i < kMaxChunks; i++) {
-        if (pool_[i].cx >= 0) relight(pool_[i].cx, pool_[i].cz, false);
+        if (slots_[i] && slots_[i]->cx >= 0) relight(slots_[i]->cx, slots_[i]->cz, false);
     }
 }
 
@@ -506,7 +557,7 @@ void World::relightAround(int cx, int cz, bool track) {
 // 光を通さないものとして扱う(読み込んだときに、まわりと一緒に計算し直す)
 void World::relight(int cx, int cz, bool track) {
     Chunk* c = findMut(cx, cz);
-    if (!c) return;
+    if (!c || c->no_light || !scratch_) return;
     constexpr int S = kLightSpan, R = kLightReach, kWall = 0xFF;
     const int ex0 = cx * 8 - R, ez0 = cz * 8 - R;
     // 作業場所の中にある松明の範囲(作業場所の座標)。まわり3x3の松明のあるチャンクだけを見る
@@ -606,17 +657,17 @@ void World::relight(int cx, int cz, bool track) {
 }
 
 int World::loadedCount() const {
-    if (!pool_) return 0;
+    if (!open_) return 0;
     int n = 0;
-    for (int i = 0; i < kMaxChunks; i++) n += pool_[i].cx >= 0;
+    for (int i = 0; i < kMaxChunks; i++) n += slots_[i] && slots_[i]->cx >= 0;
     return n;
 }
 
 int World::topAll() const {
-    if (!pool_) return -1;
+    if (!open_) return -1;
     int t = 0;
     for (int i = 0; i < kMaxChunks; i++) {
-        if (pool_[i].cx >= 0 && pool_[i].top > t) t = pool_[i].top;
+        if (slots_[i] && slots_[i]->cx >= 0 && slots_[i]->top > t) t = slots_[i]->top;
     }
     return t - 1;
 }
@@ -626,14 +677,31 @@ void World::set(int x, int y, int z, uint8_t v) {
     Chunk* c = loadChunk(x >> 3, z >> 3);
     if (!c) return;
     const int i = (x & 7) * 8 + (z & 7);
-    const uint8_t old = c->b[y * kLayer + i];
+    const uint8_t old = BlockOf(c, y * kLayer + i);
     if (old == v) return;
-    c->b[y * kLayer + i] = v;
+    if (c->compact) {
+        // 持てるのは地面の上の1段と、地面の一番上の種類だけ
+        const int h = c->b[i];
+        if (y == h + 1) {
+            c->b[2 * kLayer + i] = 0;
+            if (CompactGet(c, y, i) != v) c->b[2 * kLayer + i] = v;
+        } else if (y == h && v != AIR && v != WATER) {
+            c->b[kLayer + i] = v;
+        } else {
+            if (!warned_compact_) {
+                LOG_APP_WARN("ブロック: この地形では地面の上の1段しか書き換えられません(%d,%d,%d)", x, y, z);
+                warned_compact_ = true;
+            }
+            return;
+        }
+    } else {
+        c->b[y * kLayer + i] = v;
+    }
     c->dirty = true;
     // その柱の高さと、チャンクの段の数だけ数え直す
     int t = 0;
     for (int yy = H - 1; yy >= 0; yy--) {
-        if (c->b[yy * kLayer + i]) { t = yy + 1; break; }
+        if (BlockOf(c, yy * kLayer + i)) { t = yy + 1; break; }
     }
     c->col[i] = (uint8_t)t;
     if (t >= c->top) c->top = (uint8_t)t;
@@ -660,14 +728,14 @@ int World::firstAir(int x, int z) {
 }
 
 void World::window(int umin, int umax, int smin, int smax) {
-    if (!pool_) return;
+    if (!open_) return;
     const int amin = -fdiv(7 - umin, 8), amax = fdiv(umax + 7, 8);
     const int bmin = -fdiv(14 - smin, 8), bmax = fdiv(smax, 8);
     wa0_ = amin; wa1_ = amax; wb0_ = bmin; wb1_ = bmax;
     // 範囲より1チャンクより外のチャンクは手放す(1チャンクぶんは残して、行き来で読み直さない)
     for (int i = 0; i < kMaxChunks; i++) {
-        Chunk* c = &pool_[i];
-        if (c->cx >= 0 && !inWindow(c->cx, c->cz, 1)) unload(c);
+        Chunk* c = slots_[i];
+        if (c && c->cx >= 0 && !inWindow(c->cx, c->cz, 1)) unload(c);
     }
     // 読み込む予定: まだ読み込んでいないものを、範囲の真ん中から近い順に
     int32_t* dist = qdist_;
@@ -702,7 +770,7 @@ void World::window(int umin, int umax, int smin, int smax) {
 }
 
 int World::pump(int max, uint32_t ms) {
-    if (!pool_) return 0;
+    if (!open_) return 0;
     if (window_stale_) {
         if (keep_all_) {
             // 世界全体(u = x - z は -(W-1)〜W-1、s = x + z は 0〜2W-2)
@@ -734,23 +802,22 @@ int World::pump(int max, uint32_t ms) {
 bool World::begin(const char* dir, uint8_t kind, int k, uint32_t seed) {
     close();
     if (k < 1 || k > kMaxK) return false;
-    pool_ = static_cast<Chunk*>(malloc(sizeof(Chunk) * kMaxChunks));
-    scratch_ = static_cast<uint8_t*>(malloc(kScratchBytes));
-    if (!pool_ || !scratch_) {
-        LOG_APP_WARN("ブロック: チャンクの置き場(%u バイト)を確保できません",
-                     (unsigned)(sizeof(Chunk) * kMaxChunks + kScratchBytes));
-        free(pool_);
-        free(scratch_);
-        pool_ = nullptr;
-        scratch_ = nullptr;
-        return false;
+    // チャンクの置き場は読み込むときに1個ずつ確保する(allocSlot)。以前は kMaxChunks 個(約75KB)を1回で取っていて、
+    // 実機でゾンビTDの画像を読んだ後に連続した空きが無く「メモリが足りません」になった
+    kind_ = kind;
+    if (lighting()) {
+        scratch_ = static_cast<uint8_t*>(malloc(kScratchBytes));
+        if (!scratch_) {
+            LOG_APP_WARN("ブロック: 明るさの作業場所(%u バイト)を確保できません", (unsigned)kScratchBytes);
+            kind_ = EMPTY;
+            return false;
+        }
     }
+    open_ = true;
     ld_valid_ = false;
-    for (int i = 0; i < kMaxChunks; i++) { pool_[i].cx = pool_[i].cz = -1; pool_[i].dirty = false; }
     memset(map_, 0, sizeof(map_));
     memset(saved_, 0, sizeof(saved_));
     dir_.assign(dir ? dir : "");
-    kind_ = kind;
     K_ = k;
     W_ = k * 8;
     seed_ = seed;
@@ -758,12 +825,17 @@ bool World::begin(const char* dir, uint8_t kind, int k, uint32_t seed) {
     wa0_ = wb0_ = 1; wa1_ = wb1_ = 0;
     window_stale_ = true;
     warned_full_ = false;
+    warned_compact_ = false;
     return true;
 }
 
 void World::close() {
-    free(pool_);
-    pool_ = nullptr;
+    for (int i = 0; i < kMaxChunks; i++) {
+        free(slots_[i]);
+        slots_[i] = nullptr;
+    }
+    allocated_ = 0;
+    open_ = false;
     free(scratch_);
     scratch_ = nullptr;
     ld_valid_ = false;
@@ -832,11 +904,11 @@ bool World::open(const char* dir, int& px, int& py, int& pz, int& cur, const cha
 }
 
 bool World::save(int px, int py, int pz, int cur) {
-    if (!pool_ || dir_.length() == 0) return false;
+    if (!open_ || dir_.length() == 0) return false;
     bool ok = true;
     for (int i = 0; i < kMaxChunks; i++) {
-        Chunk* c = &pool_[i];
-        if (c->cx >= 0 && c->dirty && !writeChunk(c)) ok = false;
+        Chunk* c = slots_[i];
+        if (c && c->cx >= 0 && c->dirty && !writeChunk(c)) ok = false;
     }
     const int bits = (K_ * K_ + 7) / 8;
     uint8_t h[kHead];
@@ -1023,7 +1095,7 @@ void World::renderBlocks(const Sink& sink, int x0, int y0, int x1, int y1, const
     if (!front) last_faces_ = 0;
     const int top = topAll();
     int faces = 0;
-    if (pool_ && top >= 0) {
+    if (open_ && top >= 0) {
         const int OX = OX_, OY = OY_, W = W_;
         const uint32_t occ = occluders_;
         const uint32_t solid = ~((1u << AIR) | (1u << WATER) | (1u << TORCH));   // 空気と水と松明以外
@@ -1058,11 +1130,11 @@ void World::renderBlocks(const Sink& sink, int x0, int y0, int x1, int y1, const
                 const int bx = OX + 16 * u;
                 for (int y = ylo; y <= yh; y++) {
                     const int o = y * kLayer;
-                    const uint8_t b = c->b[o + i];
+                    const uint8_t b = BlockOf(c, o + i);
                     if (!b) continue;
-                    const uint8_t a = (y + 1 < H) ? c->b[o + kLayer + i] : 0;
-                    const uint8_t l = lc ? lc->b[o + li] : 0;
-                    const uint8_t r = rc ? rc->b[o + ri] : 0;
+                    const uint8_t a = (y + 1 < H) ? BlockOf(c, o + kLayer + i) : 0;
+                    const uint8_t l = lc ? BlockOf(lc, o + li) : 0;
+                    const uint8_t r = rc ? BlockOf(rc, o + ri) : 0;
                     // 面を描くか: 透けない(occluder の)ブロックの面は、隣が透けないブロックでなければ描く
                     // (葉の穴から後ろが見えるので、葉に面した面も描く)。葉の面は隣が空気か水なら描く。
                     // 水の面は隣が空気なら描く
@@ -1524,7 +1596,7 @@ void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
         if (!any) continue;
         const float rs = a / 22.627417f;
         const Box box{e.x - rs, (float)gy, e.z - rs, e.x + rs, (float)gy, e.z + rs};
-        if (pool_) renderBlocks(ms, rx0, ry0, rx1, ry1, &box);
+        if (open_) renderBlocks(ms, rx0, ry0, rx1, ry1, &box);
     }
     // 絵を奥から順に。描いたら、その箱より手前のブロックを絵の不透明な画素の上へ描き直す
     for (int k = 0; k < n; k++) {
@@ -1544,7 +1616,7 @@ void World::renderEntities(const Sink& sink, int x0, int y0, int x1, int y1) {
                 if (c >= 0) { sink.put(sink.ctx, x, y, c); any = true; }
             }
         }
-        if (!any || !pool_) continue;
+        if (!any || !open_) continue;
         m.e = &e;
         m.dx = dx; m.dy = dy;
         m.cx0 = rx0; m.cy0 = ry0; m.cx1 = rx1; m.cy1 = ry1;
@@ -1575,6 +1647,23 @@ int World::entityAt(const Sink& sink, int px, int py) const {
 
 bool World::setKeepAll(bool on) {
     if (on && K_ * K_ > kMaxChunks) return false;
+    if (on && open_) {
+        // 全部を読み込むので、要る数の置き場をここで確保しておく(途中で足りなくなって空気に見えないように)
+        for (int i = 0; i < K_ * K_ && i < kMaxChunks; i++) {
+            if (slots_[i]) continue;
+            Chunk* c = static_cast<Chunk*>(malloc(slotBytes()));
+            if (!c) {
+                LOG_APP_WARN("ブロック: チャンクの置き場を %d 個しか確保できません(要るのは %d 個)", allocated_, K_ * K_);
+                return false;
+            }
+            c->cx = c->cz = -1;
+            c->dirty = false;
+            c->no_light = !lighting();
+            c->compact = compactChunks();
+            slots_[i] = c;
+            allocated_++;
+        }
+    }
     if (on != keep_all_) {
         keep_all_ = on;
         window_stale_ = true;

@@ -1579,6 +1579,32 @@ int main() {
             check(img ~= nil, "faces.pimg を読める")
             iso.set_image(img)
             check(not pcall(iso.set_image, pico.image_create(16, 16)), "iso.set_image: 小さい画像はエラー(今の絵のまま)")
+            do
+                -- 段を選んだ小さい画像(草・カーソルの2段)でも、全部の段の画像と同じ絵になる
+                local small = pico.image_create(224, 46)
+                pico.image_target(small)
+                pico.draw_image_part(img, 0, 0, 0, 2 * 23, 224, 23)
+                pico.draw_image_part(img, 0, 23, 0, 25 * 23, 224, 23)
+                pico.image_target(nil)
+                local function icon(id)
+                    local t = pico.image_create(32, 31)
+                    pico.image_target(t)
+                    if id then iso.draw_icon(id, 0, 0) end
+                    local px = {}
+                    for y = 0, 30 do for x = 0, 31 do px[#px + 1] = pico.get_pixel(x, y) end end
+                    pico.image_target(nil)
+                    pico.image_free(t)
+                    return table.concat(px, ",")
+                end
+                local full3, full26 = icon(3), icon(26)
+                check(not pcall(iso.set_image, small, { 3, 26, 4 }), "iso.set_image: 段の数より低い画像はエラー")
+                check(not pcall(iso.set_image, small, { 27 }), "iso.set_image: 範囲外のブロックはエラー")
+                iso.set_image(small, { 3, 26 })
+                check(icon(3) == full3 and icon(26) == full26, "iso.set_image: 段を選んだ画像でも同じ絵")
+                check(icon(4) == icon(nil), "iso.set_image: 画像に無いブロックは描かない")
+                iso.set_image(img)
+                pico.image_free(small)
+            end
             local x, y, z = iso.create("/app/w", 0, 1234)
             check(x == 512 and z == 512 and y > 0, "iso.create: 始めのカーソルは真ん中の柱の一番下の空気")
             local w, h, kind = iso.size()
@@ -1794,7 +1820,7 @@ int main() {
             iso.close()
             -- pico.micros
             local u0 = pico.micros()
-            check(math.type(u0) == "integer" and u0 >= 0 and u0 < 4294967296, "pico.micros: 32bit の整数")
+            check(math.type(u0) == "integer", "pico.micros: 整数")
         )LUA", "iso");
         check(ok, "pico.iso: Luaから一通り使える");
         check(HostSd::files.count("/app/w/world.dat") == 1 && HostSd::files.count("/app/w/c_64_64.dat") == 1,
@@ -1852,7 +1878,7 @@ int main() {
             local iso = pico.iso
             Z = require("zombies")
             C = require("combat")
-            iso.set_image(pico.image_load("/td/faces.pimg"))
+            iso.set_image(pico.image_load("/td/faces.pimg"), { 1, 2, 3, 4, 5, 11, 12, 14, 15, 16, 18, 22, 26 })
             local units = pico.image_load("/td/units.pimg")
             iso.create("/td/map", 4, 3, 7)
             iso.keep_all(true)
@@ -1946,7 +1972,7 @@ int main() {
         bool ok = te.Run(R"LUA(
             local iso = pico.iso
             Z = require("zombies"); C = require("combat"); S = require("soldiers")
-            iso.set_image(pico.image_load("/td/faces.pimg"))
+            iso.set_image(pico.image_load("/td/faces.pimg"), { 1, 2, 3, 4, 5, 11, 12, 14, 15, 16, 18, 22, 26 })
             local units = pico.image_load("/td/units.pimg")
             iso.create("/td/map2", 4, 3, 7)
             iso.keep_all(true)
@@ -2028,6 +2054,20 @@ int main() {
             end
             local n = 0 for _ in pairs(cols) do n = n + 1 end
             check(n == 3, "soldiers: 複数人はまわりに散らばって並ぶ")
+            -- 道を探す作業場所を確保できない(実機でヒープが足りない)とき: 止まらず、1秒は探し直さず持ち場へ歩く
+            do
+                local real = iso.path
+                local calls = 0
+                iso.path = function() calls = calls + 1; return nil, "memory" end
+                local m = S.hire("melee")
+                S.order(m, DEST[1] + 0.5, DEST[2] + 0.5)   -- 遠い所(毎回探し直す距離)
+                local okk, err = pcall(tick, 40)           -- 2秒
+                iso.path = real
+                check(okk, "soldiers: 道を探すメモリが無くてもエラーにならない " .. tostring(err))
+                check(calls >= 2 and calls <= 5, "soldiers: メモリが無いときは1秒ごとにしか探し直さない (" .. calls .. "回)")
+                S.order(m, m.x, m.z)
+                S.sell(m)
+            end
             -- 1人/1匹の表のキーは16個以内(超えるとLuaの表が倍の大きさになる)
             local function keys(t) local k = 0 for _ in pairs(t) do k = k + 1 end return k end
             for _, u in ipairs(S.list) do check(keys(u) <= 16, "soldiers: 表のキーは16個以内 (" .. keys(u) .. ")") end
@@ -2108,7 +2148,7 @@ int main() {
         bool ok = te.Run(R"LUA(
             local iso = pico.iso
             Z = require("zombies"); C = require("combat"); S = require("soldiers"); B = require("buildings")
-            iso.set_image(pico.image_load("/td/faces.pimg"))
+            iso.set_image(pico.image_load("/td/faces.pimg"), { 1, 2, 3, 4, 5, 11, 12, 14, 15, 16, 18, 22, 26 })
             local units = pico.image_load("/td/units.pimg")
             iso.create("/td/map3", 4, 3, 7)
             iso.keep_all(true)
@@ -2537,6 +2577,7 @@ int main() {
             check(not C.key("q", {}), "cursor.key: 知らないキーは取らない")
             -- START で次へ
             press("start")
+            loop(16)   -- ゲームの計算は33msごと(SIM_MS)なので、次の計算まで進める
             check(E.waves.phase == "wave", "cursor: START で次へ")
         )LUA", "cur");
         check(ok, "game: コントローラーのカーソル");

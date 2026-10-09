@@ -146,8 +146,10 @@ local function order(s, px, pz)
     s.px, s.pz = px, pz
     s.tgt, s.wait = false, 0
     s.state = "move"
-    local path = iso.path(s.x, nil, s.z, px, nil, pz, path_rules)
+    local path, why = iso.path(s.x, nil, s.z, px, nil, pz, path_rules)
     if path and #path >= 2 then path.i = 2; s.path = path else s.path = false end
+    -- メモリが足りず探せなかった: 1秒は探し直さず、持ち場へまっすぐ歩く(wait が負の間)
+    if why == "memory" then s.wait = -1 end
 end
 M.order = order
 
@@ -378,7 +380,8 @@ local function go(s, dt)
         return false
     end
     local d = post_dist(s, s)
-    if d > LEASH + 0.5 then
+    if s.wait < 0 then s.wait = math.min(0, s.wait + dt) end
+    if d > LEASH + 0.5 and s.wait >= 0 then
         order(s, s.px, s.pz)      -- 遠くまで追いかけた/押された: 道を探して戻る
     elseif d > 0.3 then
         if s.state == "move" and d < 0.6 then s.state = "hold" end

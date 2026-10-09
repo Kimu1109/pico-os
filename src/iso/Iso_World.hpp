@@ -47,6 +47,7 @@ namespace Iso {
 constexpr int H = 16;                 // 高さ
 constexpr int kLayer = 64;            // 1段(8x8)のバイト数
 constexpr int kChunkBytes = H * kLayer;
+constexpr int kWaterLevel = 5;        // 水面の高さ(自然とアリーナの地形)
 constexpr int kMaxK = 128;            // 1辺のチャンク数の上限(新しく作るワールドは 128 = 1024マス)
 constexpr int kNewK = 128;
 constexpr int kMaxChunks = 56;        // 同時に読み込めるチャンクの数(240x204 の表示で最大約50個。1個 約1.1KB)
@@ -79,9 +80,13 @@ struct Chunk {
     uint8_t top = 0;            // 空気でない段の数(一番上の空気でない段 + 1)
     bool dirty = false;         // 書き換えて、まだ書き出していない
     uint8_t torches = 0;        // 松明の数(255で頭打ち。0 なら光の計算を飛ばせる)
+    bool no_light = false;      // light を確保していない(明るさを持たないワールド。World::lighting())
+    bool compact = false;       // 柱ごとの3バイトだけで持つ(ARENA。下の CompactGet)。b は kCompactBytes だけ確保する
     uint8_t col[kLayer];        // 柱ごとの「空気でない一番上の y + 1」(0 = 空気だけ)
-    uint8_t b[kChunkBytes];     // ブロック
+    // ブロック。compact なら b[i] = 地面の高さ h、b[64+i] = 地面の一番上のブロック、b[128+i] = その上(h+1)のブロック(0 = 無し)
+    uint8_t b[kChunkBytes];
     uint8_t light[kChunkBytes / 4];   // 松明の明るさ(1マス2bit、0〜3)。i = y*64 + lx*8 + lz の (i&3)*2 bit目から
+    // (最後に置くこと: 明るさを持たないワールドでは light の手前までしか確保しない)
 };
 
 // 人や物。位置はブロックの単位(小数)で、(x, y, z) は足元の中心(y は足の裏の高さ)。
@@ -140,7 +145,22 @@ struct Box {
     float x0, y0, z0, x1, y1, z1;
 };
 
-inline int LightOf(const Chunk* c, int i) { return c ? (c->light[i >> 2] >> ((i & 3) * 2)) & 3 : 0; }
+// compact のチャンク(ARENA の地形): 0 = 岩盤、h-2 より下 = 石、h まで = 土、h = 一番上、h+1 = その上のブロック、水面まで水
+constexpr int kCompactBytes = 3 * kLayer;
+inline uint8_t CompactGet(const Chunk* c, int y, int i) {
+    const int h = c->b[i];
+    if (y == h) return c->b[kLayer + i];
+    if (y > h) {
+        if (y == h + 1 && c->b[2 * kLayer + i]) return c->b[2 * kLayer + i];
+        return y <= kWaterLevel ? WATER : AIR;
+    }
+    return y == 0 ? BEDROCK : (y < h - 2 ? STONE : DIRT);
+}
+// チャンクの中の idx = y*64 + i のブロック
+inline uint8_t BlockOf(const Chunk* c, int idx) {
+    return c->compact ? CompactGet(c, idx >> 6, idx & (kLayer - 1)) : c->b[idx];
+}
+inline int LightOf(const Chunk* c, int i) { return (c && !c->no_light) ? (c->light[i >> 2] >> ((i & 3) * 2)) & 3 : 0; }
 
 class World {
 public:
@@ -183,9 +203,20 @@ public:
     void close();
     // 前の版(48x16x48 を1ファイル、"BLK1")を、チャンクに分けた今の形(K=6)へ移す。成功したら古いファイルを消す
     bool migrate(const char* old_path, const char* dir, const char*& err);
-    bool isOpen() const { return pool_ != nullptr; }
-    // ワールドを開いている間に確保するバイト数(チャンクの置き場 + 明るさの計算の作業場所)
-    static constexpr size_t PoolBytes() { return sizeof(Chunk) * kMaxChunks + kScratchBytes; }
+    bool isOpen() const { return open_; }
+    // 今確保しているバイト数(チャンクの置き場 + 明るさの計算の作業場所)
+    size_t poolBytes() const { return open_ ? slotBytes() * allocated_ + (scratch_ ? kScratchBytes : 0) : 0; }
+    // 松明の明るさを持つか。ARENA(タワーディフェンス)は持たない(松明を置いても光らない)。
+    // 持たなければ1チャンクあたり256バイトと、計算の作業場所(約6KB)を確保しない
+    bool lighting() const { return kind_ != ARENA; }
+    // 1チャンクの置き場の大きさ
+    static constexpr size_t ChunkBytes() { return sizeof(Chunk); }
+    // ARENA は柱ごとの3バイトだけで持つ(地形は種から決まり、書き換えるのは地面の上の1段(柵)だけなので)。
+    // それ以外の書き換え(set)は無視する
+    bool compactChunks() const { return kind_ == ARENA; }
+    size_t slotBytes() const {
+        return compactChunks() ? offsetof(Chunk, b) + kCompactBytes : (lighting() ? sizeof(Chunk) : offsetof(Chunk, light));
+    }
 
     // ---------------- ブロック ----------------
     // 松明の明るさ(0〜3)。世界の外と読み込んでいないチャンクは 0
@@ -199,7 +230,7 @@ public:
     uint8_t get(int x, int y, int z) const {
         if ((unsigned)x >= (unsigned)W_ || (unsigned)z >= (unsigned)W_ || (unsigned)y >= (unsigned)H) return 0;
         const Chunk* c = find(x >> 3, z >> 3);
-        return c ? c->b[y * kLayer + (x & 7) * 8 + (z & 7)] : 0;
+        return c ? BlockOf(c, y * kLayer + (x & 7) * 8 + (z & 7)) : 0;
     }
     // 書き換える(読み込んでいなければその場で読み込む)
     void set(int x, int y, int z, uint8_t b);
@@ -220,7 +251,7 @@ public:
     const Chunk* find(int cx, int cz) const {
         const uint8_t s = map_[((cx & 31) << 5) | (cz & 31)];
         if (!s) return nullptr;
-        const Chunk* c = &pool_[s - 1];
+        const Chunk* c = slots_[s - 1];
         return (c->cx == cx && c->cz == cz) ? c : nullptr;
     }
     // u = x - z、s = x + z の範囲にかかるチャンクを読み込む予定に入れ、それより1チャンクより外は手放す
@@ -299,7 +330,7 @@ public:
     // 人や物を動かすときはここで止める(落ちて消えないように)
     bool loadedAt(float x, float z) const {
         const int ix = (int)floorf(x), iz = (int)floorf(z);
-        if (ix < 0 || iz < 0 || ix >= W_ || iz >= W_ || !pool_) return false;
+        if (ix < 0 || iz < 0 || ix >= W_ || iz >= W_ || !open_) return false;
         return find(ix >> 3, iz >> 3) != nullptr;
     }
     // 点 (X, Y, Z) の画面の位置
@@ -362,6 +393,7 @@ private:
     void markSaved(int n) { saved_[n >> 3] |= (uint8_t)(1u << (n & 7)); }
     bool inWindow(int cx, int cz, int margin) const;
     static void CountTorches(Chunk* c);
+    static bool Compress(Chunk* c, const uint8_t* full);   // 1チャンクぶんを compact の形へ(表せないマスがあれば false)
     void relightAround(int cx, int cz, bool track);   // そのチャンクと、まわり8つの読み込んでいるもの
     // ブロックを描く(front があれば、その箱より手前のブロックだけ)。cut があれば、箱と重なった水の上面を描く間だけ
     // そこへ「この行より下(手前)だけ描く」画面の y を入れる(水面のうち人や物より奥の所は人や物を隠さない)
@@ -381,8 +413,11 @@ private:
     void refreshEntityRects();   // 視点・表示範囲が変わったとき(呼び出し側が全体を描き直す)
     bool torchNear(int x, int y, int z) const;          // kLightReach 歩(マンハッタン距離)以内に松明があるか
 
-    Chunk* pool_ = nullptr;               // kMaxChunks 個。ワールドを開いている間だけ確保する
-    // 明るさの計算の作業場所(チャンクのまわり kLightReach マスまで: 20x20x16)。pool_ と一緒に確保する
+    // チャンクの置き場(最大 kMaxChunks 個)。読み込むときに1個ずつ確保し、閉じるまで返さない
+    Chunk* slots_[kMaxChunks] = {};
+    int allocated_ = 0;
+    bool open_ = false;
+    // 明るさの計算の作業場所(チャンクのまわり kLightReach マスまで: 20x20x16)。開くときに確保する
     static constexpr int kLightSpan = 8 + 2 * kLightReach;
     static constexpr int kScratchBytes = kLightSpan * kLightSpan * H;
     uint8_t* scratch_ = nullptr;
@@ -398,6 +433,8 @@ private:
     // 読み込む予定(近い順)
     static constexpr int kMaxQueue = 128;
     int32_t queue_[kMaxQueue];
+    uint8_t gen_buf_[kChunkBytes];        // compact のチャンクを作る・読む・書き出すときの1チャンクぶんの作業場所
+    bool warned_compact_ = false;
     int32_t qdist_[kMaxQueue];                 // 並べ替えに使う距離(スタックに置かない)
     int qlen_ = 0, qpos_ = 0;
     int wa0_ = 1, wa1_ = 0, wb0_ = 1, wb1_ = 0;   // 今の範囲(チャンクの a = cx - cz、b = cx + cz)

@@ -122,7 +122,12 @@
 /*
 @@ LUA_32BITS enables Lua with 32-bit integers and 32-bit floats.
 */
-#define LUA_32BITS	0
+/*
+** pico-os: 32bitの整数と単精度の小数にする(lib/lua/README-pico-os.md「LUA_32BITS」)。
+** RP2350(Cortex-M33)は単精度しかハードウェアで計算できず、64bitの整数も2命令以上かかる。
+** 値1つ(TValue)も実機で16→8バイトになる。実機・PC・ホストテストで同じにするため、ここで決める
+*/
+#define LUA_32BITS	1
 
 
 /*

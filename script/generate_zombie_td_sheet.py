@@ -22,6 +22,8 @@
 バリケード(柵)の Lv1〜4 の絵に差し替える(穴の開いた絵なので、中を通るゾンビが透けて見える):
   12(本) = Lv1 丸太 / 14(作業台) = Lv2 木材 / 15(かまど) = Lv3 木材と石 / 16(ジュークボックス) = Lv4 石
   (番号は buildings.lua の WALLS と合わせること)
+  さらに、アリーナで使うブロックの段(FACE_ROWS)だけを上から順に並べた画像にする(全部の段だと約67KBで、
+  実機でチャンクの置き場を確保できなくなった)。game.lua の iso.set_image に同じ並びを渡すこと。
 人や物の絵は palette.lua の番号で直接描く:
   0=黒 1=青 2=緑 3=濃い灰 4=茶 5=焦げ茶 6=肌 8=灰 9=濃い緑 10=明るい緑 11=クリーム 12=赤 13=くすんだ茶 14=黄 15=白
 """
@@ -40,6 +42,10 @@ APP = ROOT / "pc" / "sdcard" / "lua" / "apps" / "ゾンビTD"
 BLOCKS = ROOT / "pc" / "sdcard" / "lua" / "apps" / "ブロック"
 
 SHEET_H = 40
+
+# faces.pimg に残す段(ブロックの番号。26 = カーソル)。game.lua の FACE_ROWS と同じ並びにすること
+# 水・石・草・土・丸石・砂・柵Lv1(12)・柵Lv2(14)・柵Lv3(15)・柵Lv4(16)・砂利・岩盤・カーソル
+FACE_ROWS = [1, 2, 3, 4, 5, 11, 12, 14, 15, 16, 18, 22, 26]
 
 # '.' = 透過。それ以外は16進1桁の色番号
 ZOMBIE_TOP = [
@@ -563,7 +569,11 @@ def build_faces():
             for y, row in enumerate(f):
                 for x, c in enumerate(row):
                     sheet[y0 + y][x0 + x] = idx(c)
-    return sheet
+    out = []
+    for block in FACE_ROWS:
+        y0 = (block - 1) * blocks.ROW_H
+        out += sheet[y0:y0 + blocks.ROW_H]
+    return out
 
 
 def write(path, rows, transparent):

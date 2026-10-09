@@ -1,11 +1,13 @@
 -- ゾンビTD: 斜め上から見た箱庭(pico.iso)のタワーディフェンス。仕様は ZOMBIE_TD.md。
--- 今は「作る順番」の2〜4: 種からのマップの生成(ベースを平らに・出現位置・道があるかの確認)・カメラ・
--- ゾンビ(出現・流れの場をたどる・兵士を狙う・押し合い・ベースへの攻撃)・兵士(雇う・選ぶ・移動の指示・
--- 戦い・回復・レベルアップ・売却)。建物・ウェーブはまだ無いので、ゾンビは「他」のメニューから呼ぶ。
+-- 今は「作る順番」の2〜5: 種からのマップの生成(ベースを平らに・出現位置・道があるかの確認)・カメラ・
+-- ゾンビ(出現・流れの場をたどる・兵士とタワーを狙う・押し合い・ベースへの攻撃)・兵士(雇う・選ぶ・移動の指示・
+-- 戦い・回復・レベルアップ・売却)・建物(弓塔・剣塔・バリケード。建設・レベルアップ・修理・売却)。
+-- ウェーブはまだ無いので、ゾンビは「他」のメニューから呼ぶ。
 -- 実機の速さ(fps と Lua の処理時間)を測るための画面でもある。
 --   上の行: ベースの耐久・お金・出ているゾンビ(と順番待ち)・fps・1フレームの処理時間(ms)
---   下の欄: 選んだ兵士の情報と[強化][売却] / [戻る][雇う][選択](範囲選択)[x1/x3](速さ)[中央](ベースへ)[他]
---   地図: タップ=兵士を選ぶ/選んでいる兵士をそこへ動かす、ドラッグ=カメラ(「選択」中は範囲選択)。
+--   下の欄: 選んだ兵士/建物の情報と[強化][修理][売却] / [戻る][雇う][建設][選択](範囲選択)[x1/x3](速さ)[他]
+--   地図: タップ=兵士・建物を選ぶ/選んでいる兵士をそこへ動かす/(「建設」で選んだ後)そこへ建てる、
+--         ドラッグ=カメラ(「選択」中は範囲選択)。
 --   コントローラーの十字・キーボードの矢印でもカメラを動かせる。A=ゾンビ+5、B=+40、HOME=戻る。
 --   5秒ごとにシリアルへ "[TD] fps=.. lua=..ms render=..ms alive=.." を出す。
 -- マップ・流れの場・経路探索・押し合い・弾・描画は C++ のエンジン(src/iso/)。ここは流れと操作だけ。
@@ -14,6 +16,7 @@ local PAL = require("palette")
 local combat = require("combat")
 local zombies = require("zombies")
 local soldiers = require("soldiers")
+local buildings = require("buildings")
 
 local W_CHUNKS = 7                 -- 7x7 チャンク = 56x56 マス(全部を読み込んだままにできる上限)
 local BASE_HP = 2000              -- 数値は仮(ウェーブとお金を入れる段で決め直す)
@@ -22,9 +25,17 @@ local START_MONEY = 300
 local WATER = 1                    -- 水のブロック(ゾンビも兵士も入らない)
 local LOG_MS = 5000
 -- ゾンビの道の規則(流れの場)。水には入らない。段差は1段まで登り、2段まで降りる。高低差は少し嫌う
-local FLOW_RULES = { max_up = 1, max_down = 2, height = 2, up_cost = 0.5, diagonal = true, avoid = { WATER } }
-local STAND_RULES = { height = 2, avoid = { WATER } }
-local CROWD_RULES = { height = 2 }
+-- バリケード(buildings.WALLS のブロック)は、ゾンビは中を通り抜けられる(pass)が通ると高くつく。兵士は避ける。
+-- 弾と視線はバリケードを透過する
+local WALLS = buildings.WALLS
+local WALL_COST = {}
+for _, b in ipairs(WALLS) do WALL_COST[b] = 6 end
+local FLOW_RULES = { max_up = 1, max_down = 2, height = 2, up_cost = 0.5, diagonal = true, avoid = { WATER },
+    pass = WALLS, body_cost = WALL_COST }
+local STAND_RULES = { height = 2, avoid = { WATER }, pass = WALLS }        -- ゾンビ
+local S_STAND_RULES = { height = 2, avoid = { WATER, WALLS[1], WALLS[2], WALLS[3], WALLS[4] } }   -- 兵士・建てる所
+local CROWD_RULES = { height = 2, pass = WALLS }
+combat.SIGHT_PASS = WALLS
 
 -- Luaのごみ集めは世代別にする。既定(incremental)だと、毎フレームの使い捨ての表が
 -- 生きている量の2倍まで溜まってから集めるので、ゾンビが多いとLuaが予算(200KB)近くまで膨らみ、
@@ -65,6 +76,9 @@ local arena = nil
 local speed = 1
 local money = START_MONEY
 local sel = {}             -- 選んでいる兵士
+local bsel = false         -- 選んでいる建物(兵士とは同時に選ばない)
+local build_mode = false   -- 「建てる」で選んだ種類(次に地図をタップした所へ建てる)
+local flow_dirty = false   -- バリケードが変わったので流れの場を作り直す
 local select_mode = false  -- 「選択」: ドラッグが範囲選択になる
 local info_msg, info_t = nil, 0   -- 下の欄に少しの間だけ出す言葉
 local OX, OY = 0, 0
@@ -145,8 +159,11 @@ end
 local function clear_units()
     zombies.clear()
     soldiers.clear()
+    buildings.clear()
     combat.clear_shots()
     for i = #sel, 1, -1 do sel[i] = nil end
+    bsel, build_mode = false, false
+    iso.cursor(0, 0, 0, false)
 end
 
 local function gen_start()
@@ -207,7 +224,8 @@ local function start_play()
     })
     combat.add(base)
     zombies.init(units, arena.spawns, base, STAND_RULES)
-    soldiers.init(units, base, STAND_RULES)
+    soldiers.init(units, base, S_STAND_RULES)
+    buildings.init(units, base, arena.spawns)
     money = START_MONEY
     mode = "play"
     pico.invalidate(view)
@@ -257,6 +275,11 @@ end
 
 local function deselect_all()
     for i = #sel, 1, -1 do soldiers.select(sel[i], false); sel[i] = nil end
+    if bsel then
+        if bsel.id then iso.entity_set(bsel.id, { mark = false }) end
+        iso.cursor(0, 0, 0, false)
+        bsel = false
+    end
     pico.invalidate(panel)
 end
 
@@ -266,62 +289,124 @@ local function set_selection(list)
     pico.invalidate(panel)
 end
 
--- 倒れた兵士は選択からも外す
+-- 建物を選ぶ(タワーは頭の上の印、バリケードはそのブロックにカーソル)
+local function select_building(b)
+    deselect_all()
+    bsel = b
+    if b.id then iso.entity_set(b.id, { mark = 14 })
+    else iso.cursor(math.floor(b.x), b.y, math.floor(b.z), true) end
+    pico.invalidate(panel)
+end
+
+-- 倒れた兵士・壊された建物は選択からも外す
 soldiers.on_lost = function(s)
     for i = #sel, 1, -1 do if sel[i] == s then table.remove(sel, i) end end
     pico.invalidate(panel)
     pico.invalidate(hud)
 end
+buildings.on_lost = function(b)
+    if bsel == b then bsel = false; iso.cursor(0, 0, 0, false) end
+    pico.invalidate(panel)
+end
+buildings.on_walls_changed = function() flow_dirty = true end
 zombies.on_kill = function(zb)
     money = money + zb.money
     pico.invalidate(hud)
     pico.invalidate(panel)
 end
-zombies.SOLDIER_TAG = soldiers.TAG
+zombies.TARGET_TAGS = { soldiers.TAG, buildings.TAG }
+zombies.wall_at = buildings.wall_at
 soldiers.ZOMBIE_TAG = zombies.TAG
+buildings.ZOMBIE_TAG = zombies.TAG
+soldiers.blocked = function(x, z) return buildings.at[buildings.col(x, z)] ~= nil end
+
+local function pay(c)
+    if money < c then say("お金が足りません"); return false end
+    money = money - c
+    pico.invalidate(hud)
+    pico.invalidate(panel)
+    return true
+end
 
 local function hire(kind)
     local t = soldiers.TYPES[kind]
-    if money < t.cost then return say("お金が足りません") end
     if soldiers.count() >= soldiers.MAX then return say("兵士は" .. soldiers.MAX .. "人までです") end
+    if money < t.cost then return say("お金が足りません") end
     local s = soldiers.hire(kind)
     if not s then return say("これ以上置けません") end
-    money = money - t.cost
+    pay(t.cost)
     set_selection({ s })
-    pico.invalidate(hud)
+end
+
+-- 建てる(build_mode の種類を、タップした柱へ)
+local function build_at(bx, bz)
+    local kind = build_mode
+    local ok, why = buildings.can_place(kind, bx, bz, S_STAND_RULES)
+    if not ok then return say(why) end
+    if money < buildings.TYPES[kind].cost then return say("お金が足りません") end
+    local b = buildings.place(kind, bx, bz, S_STAND_RULES)
+    if not b then return say("これ以上置けません") end
+    pay(buildings.TYPES[kind].cost)
+    build_mode = false
+    select_building(b)
 end
 
 local function upgrade()
+    if bsel then
+        local c = buildings.upgrade_cost(bsel)
+        if c and pay(c) then buildings.upgrade(bsel) end
+        return
+    end
     local s = sel[1]
     if #sel ~= 1 then return end
     local c = soldiers.upgrade_cost(s)
-    if not c then return end
-    if money < c then return say("お金が足りません") end
-    money = money - c
-    soldiers.upgrade(s)
-    pico.invalidate(hud)
-    pico.invalidate(panel)
+    if c and pay(c) then soldiers.upgrade(s) end
+end
+
+local function repair()
+    local c = bsel and buildings.repair_cost(bsel)
+    if c and pay(c) then buildings.repair(bsel) end
 end
 
 local function sell()
-    if #sel ~= 1 then return end
-    local s = sel[1]
-    deselect_all()
-    money = money + soldiers.sell(s)
+    local v
+    if bsel then
+        local b = bsel
+        if not buildings.sell_value(b) then return say("建設中・強化中は売れません") end
+        deselect_all()
+        v = buildings.sell(b)
+    elseif #sel == 1 then
+        local s = sel[1]
+        deselect_all()
+        v = soldiers.sell(s)
+    else return end
+    money = money + v
     pico.invalidate(hud)
 end
 
--- 地図のタップ: 兵士なら選ぶ(選んでいる1人をもう一度タップすると外す)、地面なら選んでいる兵士を動かす
+-- 地図のタップ: 兵士・建物なら選ぶ(選んでいるものをもう一度タップすると外す)、
+-- 地面なら選んでいる兵士を動かす/「建てる」で選んだ建物を建てる
 local function tap_map(px, py)
     local id = iso.entity_at(px, py)
     local u = id and combat.units[id]
-    if u and u.side == "soldier" then
+    if not build_mode and u and u.side == "soldier" then
         if #sel == 1 and sel[1] == u then deselect_all() else set_selection({ u }) end
         return
     end
-    if #sel == 0 then return end
+    if not build_mode and u and u.side == "building" then
+        if bsel == u then deselect_all() else select_building(u) end
+        return
+    end
     local bx, _, bz = iso.pick(px, py)
-    if not bx or not soldiers.order_group(sel, bx + 0.5, bz + 0.5) then say("そこへは行けません") end
+    if not bx then return end
+    if build_mode then return build_at(bx, bz) end
+    local w = buildings.wall_at(bx, bz)
+    if w then
+        if bsel == w then deselect_all() else select_building(w) end
+        return
+    end
+    if #sel == 0 then return end
+    if not soldiers.order_group(sel, bx + 0.5, bz + 0.5) then say("そこへは行けません") end
 end
 
 -- 範囲選択: 画面の矩形の中に立っている兵士
@@ -353,7 +438,7 @@ pico.on(hud, "render", function()
     end
     pico.draw_text(CX + 2, CY + 2, string.format("基%d", math.max(0, base.hp)), base.hp > BASE_HP // 4 and 15 or 12, 0)
     pico.draw_text(CX + 62, CY + 2, string.format("$%d", money), 14, 0)
-    pico.draw_text(CX + 112, CY + 2, string.format("Z%d+%d", zombies.alive(), zombies.waiting()), 15, 0)
+    pico.draw_text(CX + 120, CY + 2, string.format("Z%d+%d", zombies.alive(), zombies.waiting()), 15, 0)
     pico.draw_text(CX + CW - 2, CY + 2, string.format("%.0ffps%.1f", perf.fps, perf.lua_ms + perf.render_ms), 8, 0, "right")
 end)
 
@@ -381,16 +466,32 @@ pico.on(view, "render", function()
 end)
 
 local BUTTONS = {
-    { id = "back", label = "戻る" }, { id = "hire", label = "雇う" }, { id = "select", label = "選択" },
-    { id = "speed" }, { id = "center", label = "中央" }, { id = "more", label = "他" },
+    { id = "back", label = "戻る" }, { id = "hire", label = "雇う" }, { id = "build", label = "建設" },
+    { id = "select", label = "選択" }, { id = "speed" }, { id = "more", label = "他" },
 }
 local BW = CW // #BUTTONS
 for i, b in ipairs(BUTTONS) do b.x = (i - 1) * BW; b.w = (i == #BUTTONS) and (CW - b.x) or BW end
--- 下の欄の右の小さいボタン(選んだ兵士が1人のとき)
-local INFO_BUTTONS = { { id = "upgrade", x = CW - 96, w = 52 }, { id = "sell", x = CW - 42, w = 42 } }
+-- 下の欄の右の小さいボタン(選んだ兵士が1人のとき / 建物のとき)
+local SOLDIER_BUTTONS = { { id = "upgrade", x = CW - 96, w = 52 }, { id = "sell", x = CW - 42, w = 42 } }
+local BUILDING_BUTTONS = { { id = "upgrade", x = CW - 120, w = 40 }, { id = "repair", x = CW - 80, w = 40 },
+    { id = "sell", x = CW - 40, w = 40 } }
 local held = nil
 
+local function info_buttons()
+    if info_msg or build_mode then return nil end
+    if bsel then return BUILDING_BUTTONS end
+    if #sel == 1 then return SOLDIER_BUTTONS end
+end
+
 local function info_label(b)
+    if bsel then
+        local v
+        if b.id == "upgrade" then v = buildings.upgrade_cost(bsel)
+        elseif b.id == "repair" then v = buildings.repair_cost(bsel)
+        else v = buildings.sell_value(bsel) end
+        local head = b.id == "upgrade" and "強" or (b.id == "repair" and "修" or "売")
+        return v and (head .. v) or "-"
+    end
     local s = sel[1]
     if b.id == "upgrade" then
         local c = soldiers.upgrade_cost(s)
@@ -399,15 +500,34 @@ local function info_label(b)
     return "売" .. soldiers.sell_value(s)
 end
 
+-- 建物の情報の行: 名前とレベル・耐久(建設中/強化中/修理中は残り秒。耐久は頭の上のバーで見える)
+local function building_text(b)
+    local left = buildings.remaining(b)
+    if left then
+        return string.format("%s %s%d秒", b.t.name, b.state == "build" and "建設" or (b.state == "up" and "強化" or "修理"),
+            math.ceil(left))
+    end
+    return string.format("%s%d %d/%d", b.t.name, b.lv, math.max(0, math.floor(b.hp)), buildings.max_hp(b))
+end
+
 pico.on(panel, "render", function()
     pico.fill_rect(CX, PY, CW, PANEL_H, PAL.dark)
     -- 情報の行
     if info_msg then
         pico.draw_text(CX + 4, PY + 2, info_msg, 14, 0)
+    elseif build_mode then
+        local t = buildings.TYPES[build_mode]
+        pico.draw_text(CX + 4, PY + 2, string.format("%s($%d) 置く所をタップ", t.name, t.cost), 14, 0)
+    elseif bsel then
+        pico.draw_text(CX + 2, PY + 2, building_text(bsel), 15, 0)
+        for _, b in ipairs(BUILDING_BUTTONS) do
+            box(CX + b.x, PY + 1, b.w - 2, INFO_H - 2, nil, held == b)
+            pico.draw_text(CX + b.x + (b.w - 2) // 2, PY + 2, info_label(b), 0, 0, "center")
+        end
     elseif #sel == 1 then
         local s = sel[1]
         pico.draw_text(CX + 2, PY + 2, string.format("%sLv%d %d/%d", s.t.name, s.lv, math.max(0, s.hp), soldiers.max_hp(s)), 15, 0)
-        for _, b in ipairs(INFO_BUTTONS) do
+        for _, b in ipairs(SOLDIER_BUTTONS) do
             box(CX + b.x, PY + 1, b.w - 2, INFO_H - 2, nil, held == b)
             pico.draw_text(CX + b.x + (b.w - 2) // 2, PY + 2, info_label(b), 0, 0, "center")
         end
@@ -439,6 +559,7 @@ end
 local function restart()
     -- 同じマップでやり直す(ゾンビ・兵士・弾を消してベースとお金を戻す)
     clear_units()
+    flow_dirty = true          -- バリケードを消したので道を作り直す
     base.hp = BASE_HP
     money = START_MONEY
     update_base_bar()
@@ -449,7 +570,8 @@ local function restart()
 end
 
 local HIRE_KINDS = soldiers.KINDS
-local MORE = { "ゾンビ +5", "ゾンビ +40", "選択を解除", "マップを作り直す" }
+local MORE = { "ゾンビ +5", "ゾンビ +40", "ベースを見る", "選択を解除", "マップを作り直す" }
+local BUILD_KINDS = buildings.KINDS
 
 local function press(b)
     if b.id == "back" then pico.pop()
@@ -462,19 +584,32 @@ local function press(b)
         end
         local d = pico.show_choice(string.format("雇う($%d)", money), items)
         pico.on(d, "closed", function(_, ok, idx) if ok and idx then hire(HIRE_KINDS[idx + 1]) end end)
+    elseif b.id == "build" then
+        if mode ~= "play" then return end
+        if build_mode then build_mode = false; pico.invalidate(panel); return end
+        local items = {}
+        for i, k in ipairs(BUILD_KINDS) do
+            local t = buildings.TYPES[k]
+            items[i] = string.format("%s $%d", t.name, t.cost)
+        end
+        local d = pico.show_choice(string.format("建てる($%d)", money), items)
+        pico.on(d, "closed", function(_, ok, idx)
+            if ok and idx then deselect_all(); build_mode = BUILD_KINDS[idx + 1]; pico.invalidate(panel) end
+        end)
     elseif b.id == "select" then select_mode = not select_mode; pico.invalidate(panel)
     elseif b.id == "speed" then speed = speed == 1 and 3 or 1; pico.invalidate(panel)
-    elseif b.id == "center" then if base then center_on(base.x, base.y, base.z) end
     elseif b.id == "more" then
         local d = pico.show_choice("その他", MORE)
         pico.on(d, "closed", function(_, ok, idx)
             if not ok or not idx then return end
             if idx == 0 then call(5)
             elseif idx == 1 then call(40)
-            elseif idx == 2 then deselect_all()
-            elseif idx == 3 and (mode ~= "load" or stage == nil) then new_map() end
+            elseif idx == 2 then if base then center_on(base.x, base.y, base.z) end
+            elseif idx == 3 then deselect_all()
+            elseif idx == 4 and (mode ~= "load" or stage == nil) then new_map() end
         end)
     elseif b.id == "upgrade" then upgrade()
+    elseif b.id == "repair" then repair()
     elseif b.id == "sell" then sell()
     end
 end
@@ -482,8 +617,8 @@ end
 local function button_at(lx, ly)
     if ly >= INFO_H then
         for _, b in ipairs(BUTTONS) do if lx >= b.x and lx < b.x + b.w then return b end end
-    elseif #sel == 1 and not info_msg then
-        for _, b in ipairs(INFO_BUTTONS) do if lx >= b.x and lx < b.x + b.w then return b end end
+    else
+        for _, b in ipairs(info_buttons() or {}) do if lx >= b.x and lx < b.x + b.w then return b end end
     end
 end
 pico.on(panel, "press_start", function(_, _, _, lx, ly)
@@ -547,7 +682,7 @@ pico.on_key(function(key)
     elseif key == "z" then call(5)
     elseif key == "x" then call(40)
     elseif key == "1" or key == "2" or key == "3" then if mode == "play" then hire(HIRE_KINDS[tonumber(key)]) end
-    elseif key == "esc" then deselect_all()
+    elseif key == "esc" then build_mode = false; deselect_all()
     else return false end
     return true
 end)
@@ -560,16 +695,24 @@ function loop(dt)
     local t0 = pico.micros()
     if mode == "play" then
         local d = math.min(dt, 50) / 1000 * speed
-        zombies.hunt = soldiers.count() > 0
+        zombies.hunt = soldiers.count() + buildings.count() > 0
         zombies.update(d)
         soldiers.update(d)
+        buildings.update(d)
+        -- バリケードが変わったら流れの場を作り直す(少しずつ。作っている間は前の流れのまま)
+        if flow_dirty then
+            flow_dirty = false
+            local ok, err = iso.flow_build(goals_around(arena.base.x, arena.base.z), FLOW_RULES)
+            if not ok then say("道を作り直せません: " .. tostring(err)) end
+        end
+        if iso.flow_info().building then iso.flow_step(800) end
         if iso.crowd(2, CROWD_RULES) > 0 then
             zombies.sync()
             soldiers.sync()
         end
         combat.step(d)
         if (perf.frames % 15) == 0 then pico.invalidate(hud) end
-        if #sel == 1 and (perf.frames % 10) == 0 then pico.invalidate(panel) end
+        if (#sel == 1 or bsel) and (perf.frames % 10) == 0 then pico.invalidate(panel) end
     end
     if info_msg then
         info_t = info_t - dt / 1000
@@ -591,5 +734,6 @@ if TEST then TEST.env = { mode = function() return mode end, base = function() r
     call = call, restart = restart, press = press, buttons = BUTTONS, zombies = zombies, soldiers = soldiers,
     seed = function() return seed end, new_map = new_map, scroll = scroll, center_on = center_on,
     origin = function() return OX, OY end, perf = perf, speed = function() return speed end,
-    money = function() return money end, sel = sel, hire = hire, upgrade = upgrade, sell = sell,
+    money = function() return money end, sel = sel, hire = hire, upgrade = upgrade, sell = sell, repair = repair,
+    buildings = buildings, bsel = function() return bsel end, set_build = function(k) build_mode = k end, build_at = build_at,
     tap_map = tap_map, select_rect = select_rect } end

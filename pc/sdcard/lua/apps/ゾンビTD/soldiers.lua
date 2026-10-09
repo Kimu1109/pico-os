@@ -64,6 +64,7 @@ local clock = 0
 M.list = list
 M.stats = { hired = 0, lost = 0 }
 M.on_lost = nil               -- function(兵士) 倒されたとき
+M.blocked = nil               -- function(x, z) その柱に建物があるか(game.lua が入れる。持ち場にも道にもしない)
 
 -- 最大の耐久
 local function max_hp(s) return s.t.lv[s.lv].hp end
@@ -114,6 +115,8 @@ function M.init(units_image, base_unit, rules)
     path_rules = {
         max_up = 1, max_down = 2, height = rules.height or 2, avoid = rules.avoid,
         diagonal = true, partial = true, max_nodes = 3200,
+        -- タワーの柱は通らない(バリケードは avoid のブロックで避ける)
+        edge = function(_, _, _, nx, _, nz) if M.blocked and M.blocked(nx, nz) then return false end end,
     }
     M.clear()
 end
@@ -133,6 +136,7 @@ function M.standable(x, z)
     local y = iso.stand(x, z, nil, stand_rules)
     if not y then return nil end
     if base and math.abs(math.floor(x) - base.x) < 2 and math.abs(math.floor(z) - base.z) < 2 then return nil end
+    if M.blocked and M.blocked(x, z) then return nil end
     return y
 end
 
@@ -254,7 +258,7 @@ end
 -- 攻撃できる間合いか
 local function in_reach(s, tgt, d)
     local rg = range_of(s, tgt)
-    if rg then return d <= rg and iso.sight(s.x, s.y + 1.2, s.z, tgt.x, tgt.y + 1, tgt.z) end
+    if rg then return d <= rg and iso.sight(s.x, s.y + 1.2, s.z, tgt.x, tgt.y + 1, tgt.z, combat.SIGHT_PASS) end
     return d - s.r - tgt.r <= MELEE_GAP
 end
 

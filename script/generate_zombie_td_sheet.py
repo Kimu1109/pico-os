@@ -9,19 +9,30 @@
       x=124 近接兵 コマ1, 2(12x22。短剣)
       x=148 回復兵 コマ1, 2(12x22。白い服に赤十字・杖)
       x=172 弓兵   コマ1, 2(12x22。弓)
+      x=196 建設中の足場(20x24)
+      x=216 弓塔(20x36。上に弓兵)
+      x=236 剣塔(20x36。上に近接兵)
     どれも右を向いた絵で、左へ歩くときは左右反転する。高さの違う絵は下に寄せる(足元が y=39)。
     行の並びは main.lua の SPRITES と合わせること。
   icon.pimg   ランチャのアイコン(48x48、既定のパレット)
 
 地面の絵(faces.pimg)と色(palette.lua)は「ブロック」と同じものを使う(scripts/generate_blocks_sheet.py が作る)。
-このスクリプトは「ブロック」のフォルダから写す。
+このスクリプトは「ブロック」のフォルダから写す。ただし faces.pimg は、アリーナの地形で使わないブロック4種の段を
+バリケード(柵)の Lv1〜4 の絵に差し替える(穴の開いた絵なので、中を通るゾンビが透けて見える):
+  12(本) = Lv1 丸太 / 14(作業台) = Lv2 木材 / 15(かまど) = Lv3 木材と石 / 16(ジュークボックス) = Lv4 石
+  (番号は buildings.lua の WALLS と合わせること)
 人や物の絵は palette.lua の番号で直接描く:
   0=黒 1=青 2=緑 3=濃い灰 4=茶 5=焦げ茶 6=肌 8=灰 9=濃い緑 10=明るい緑 11=クリーム 12=赤 13=くすんだ茶 14=黄 15=白
 """
 import argparse
+import re
 import shutil
 import struct
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import generate_blocks_sheet as blocks  # noqa: E402  面の形(make_faces)・影の色(half)・近い色(nearest)
 
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "pc" / "sdcard" / "lua" / "apps" / "ゾンビTD"
@@ -230,6 +241,130 @@ SOLDIER_LEGS = [
         "............",
     ],
 ]
+# タワー。建設中の足場・弓塔・剣塔(上に兵士が立つ)
+SCAFFOLD = [
+    "5..................5",
+    "55................55",
+    "5.5..............5.5",
+    "5..5............5..5",
+    "5...5..........5...5",
+    "5....5........5....5",
+    "5.....5......5.....5",
+    "5......5....5......5",
+    "5.......5..5.......5",
+    "55555555555555555555",
+    "5.......5..5.......5",
+    "5......5....5......5",
+    "5.....5......5.....5",
+    "5....5........5....5",
+    "5...5..........5...5",
+    "5..5............5..5",
+    "5.5..............5.5",
+    "55................55",
+    "5..................5",
+    "55555555555555555555",
+    "5..................5",
+    "5..................5",
+    "88888888888888888888",
+    "88888888888888888888",
+]
+
+
+def tower(top):
+    """上の兵士(12x15)を、木の物見台(20x21)の上に載せる"""
+    base = [
+        "dddddddddddddddddddd",
+        "d4444444444444444445",
+        "d4444444444444444445",
+        "55555555555555555555",
+        ".5..5..........5..5.",
+        ".5...5........5...5.",
+        ".5....5......5....5.",
+        ".5.....5....5.....5.",
+        ".5......5..5......5.",
+        ".5.......55.......5.",
+        ".5......5..5......5.",
+        ".5.....5....5.....5.",
+        ".5....5......5....5.",
+        ".5...5........5...5.",
+        ".5..5..........5..5.",
+        ".5.5............5.5.",
+        ".55..............55.",
+        ".5................5.",
+        ".5................5.",
+        "8888888888888888888.",
+        "8888888888888888888.",
+    ]
+    return ["...." + line + "...." for line in top] + base
+
+
+# バリケードのテクスチャ(16x16)。'.' = 穴、それ以外は palette.lua の色番号(16進)
+def wall_textures(level):
+    side = [["." for _ in range(16)] for _ in range(16)]
+    top = [["." for _ in range(16)] for _ in range(16)]
+    def put(t, x, y, c):
+        if 0 <= x < 16 and 0 <= y < 16:
+            t[y][x] = c
+    if level == 1:      # 丸太: 両端の杭と横の丸太2本
+        for y in range(16):
+            for x in (1, 2, 13, 14):
+                put(side, x, y, "5")
+        for y0 in (3, 10):
+            for x in range(16):
+                put(side, x, y0, "6"); put(side, x, y0 + 1, "4"); put(side, x, y0 + 2, "4"); put(side, x, y0 + 3, "5")
+        for y0 in (3, 10):
+            for x in range(16):
+                put(top, x, y0, "6"); put(top, x, y0 + 1, "4"); put(top, x, y0 + 2, "5")
+        for y in range(16):
+            for x in (1, 13):
+                put(top, x, y, "5")
+    elif level == 2:    # 木材: 柱と板3枚
+        for y in range(16):
+            for x in (0, 1, 14, 15):
+                put(side, x, y, "d")
+        for y0 in (1, 6, 11):
+            for x in range(16):
+                put(side, x, y0, "6"); put(side, x, y0 + 1, "6"); put(side, x, y0 + 2, "6"); put(side, x, y0 + 3, "4")
+        for y0 in (1, 6, 11):
+            for x in range(16):
+                put(top, x, y0, "6"); put(top, x, y0 + 1, "6"); put(top, x, y0 + 2, "4")
+        for y in range(16):
+            for x in (0, 15):
+                put(top, x, y, "d")
+    elif level == 3:    # 木材と石: 下半分は石、上は板2枚
+        for y in range(8, 16):
+            for x in range(16):
+                put(side, x, y, "3" if y in (8, 12) or (x + (4 if y > 12 else 0)) % 8 == 0 else "8")
+        for x in range(6, 10):
+            for y in range(9, 12):
+                put(side, x, y, ".")
+        for y0 in (1, 5):
+            for x in range(16):
+                put(side, x, y0, "6"); put(side, x, y0 + 1, "6"); put(side, x, y0 + 2, "4")
+        for y in range(16):
+            for x in range(16):
+                if y % 5 != 4:
+                    put(top, x, y, "8" if y >= 8 else "6")
+                if y >= 8 and x % 8 == 0:
+                    put(top, x, y, "3")
+    else:               # 石: 石積みに矢狭間(縦長の穴)が2つ
+        for y in range(16):
+            for x in range(16):
+                put(side, x, y, "3" if y % 4 == 3 or (x + (4 if (y // 4) % 2 else 0)) % 8 == 7 else "8")
+        for x0 in (3, 11):
+            for x in range(x0, x0 + 2):
+                for y in range(3, 12):
+                    put(side, x, y, ".")
+        for y in range(16):
+            for x in range(16):
+                put(top, x, y, "3" if y % 4 == 3 or (x + (4 if (y // 4) % 2 else 0)) % 8 == 7 else "8")
+        for x in range(4, 12):
+            for y in range(6, 10):
+                put(top, x, y, ".")
+    return top, side
+WALLS = {12: 1, 14: 2, 15: 3, 16: 4}   # ブロック番号 → レベル
+
+
 # アイコン(既定のパレット: 0=黒 2=暗い緑 7=明るい灰 8=暗い灰 10=緑 12=赤 14=黄 15=白)
 ICON = [
     "................................................",
@@ -280,7 +415,7 @@ def pix(ch):
 
 
 def build_units():
-    w = 12 * 4 + 16 * 2 + 44 + 12 * 6
+    w = 12 * 4 + 16 * 2 + 44 + 12 * 6 + 20 * 3
     rows = [[0] * w for _ in range(SHEET_H)]
 
     def put(art, ox):
@@ -300,6 +435,9 @@ def build_units():
         put(MELEE_TOP + legs, 124 + 12 * i)
         put(HEALER_TOP + legs, 148 + 12 * i)
         put(RANGED_TOP + legs, 172 + 12 * i)
+    put(SCAFFOLD, 196)
+    put(tower(RANGED_TOP), 216)
+    put(tower(MELEE_TOP), 236)
     return rows
 
 
@@ -328,6 +466,57 @@ def rle(rows):
     return bytes(out)
 
 
+def read_pimg(path):
+    data = path.read_bytes()
+    w, h, _ = struct.unpack("<HHB", data[:5])
+    px = []
+    for i in range(5, len(data), 2):
+        px += [data[i + 1]] * data[i]
+    return [px[y * w:(y + 1) * w] for y in range(h)]
+
+
+def read_palette(path):
+    """palette.lua の 1〜14番の色 → 16色のパレット(0=黒 15=白)"""
+    cols = [tuple(map(int, m)) for m in re.findall(r"\{ *(\d+), *(\d+), *(\d+) *\}", path.read_text(encoding="utf-8"))]
+    assert len(cols) == 14, cols
+    return [(0, 0, 0)] + cols + [(255, 255, 255)]
+
+
+def build_faces():
+    """「ブロック」の faces.pimg の、柵に使う段を差し替える"""
+    sheet = read_pimg(BLOCKS / "faces.pimg")
+    pal = read_palette(BLOCKS / "palette.lua")
+
+    def rgb(ch):
+        return None if ch == "." else pal[int(ch, 16)]
+
+    def idx(c):
+        return 0 if c is None else blocks.nearest(c, pal, skip=(0,))
+
+    def shade(f, which):
+        return [[blocks.half(c) if c is not None and which(y, x) else c for x, c in enumerate(row)]
+                for y, row in enumerate(f)]
+
+    for block, level in WALLS.items():
+        top, side = wall_textures(level)
+        t, lf, rf = blocks.make_faces([[rgb(c) for c in r] for r in top], [[rgb(c) for c in r] for r in side],
+                                      [[rgb(c) for c in r] for r in side])
+        every = lambda y, x: True
+        faces = [t, shade(t, every), shade(t, lambda y, x: y <= 7), shade(t, lambda y, x: y > 7),
+                 lf, shade(lf, every), shade(lf, lambda y, x: y - x // 2 <= x), shade(lf, lambda y, x: y - x // 2 > x),
+                 shade(rf, every), rf]
+        y0 = (block - 1) * blocks.ROW_H
+        for y in range(blocks.ROW_H):
+            sheet[y0 + y] = sheet[y0 + y][:]
+            for x in range(blocks.SHEET_W):
+                sheet[y0 + y][x] = 0
+        for f, x0 in zip(faces, blocks.COLS):
+            for y, row in enumerate(f):
+                for x, c in enumerate(row):
+                    sheet[y0 + y][x0 + x] = idx(c)
+    return sheet
+
+
 def write(path, rows, transparent):
     with open(path, "wb") as f:
         f.write(struct.pack("<HHB", len(rows[0]), len(rows), 1 if transparent else 0))
@@ -342,9 +531,9 @@ def main():
     args.dir.mkdir(parents=True, exist_ok=True)
     write(args.dir / "units.pimg", build_units(), True)
     write(args.dir / "icon.pimg", build_icon(), False)
-    for name in ("faces.pimg", "palette.lua"):
-        shutil.copyfile(BLOCKS / name, args.dir / name)
-        print(f"{args.dir / name} を「ブロック」から写しました")
+    shutil.copyfile(BLOCKS / "palette.lua", args.dir / "palette.lua")
+    print(f"{args.dir / 'palette.lua'} を「ブロック」から写しました")
+    write(args.dir / "faces.pimg", build_faces(), True)
 
 
 if __name__ == "__main__":

@@ -1840,8 +1840,9 @@ int main() {
         HostSd::files["/td/zombies.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/zombies.lua");
         HostSd::files["/td/combat.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/combat.lua");
         HostSd::files["/td/soldiers.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/soldiers.lua");
+        HostSd::files["/td/buildings.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/buildings.lua");
         HostSd::files["/td/units.pimg"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/units.pimg");
-        HostSd::files["/td/faces.pimg"] = slurp("/pc/sdcard/lua/apps/ブロック/faces.pimg");
+        HostSd::files["/td/faces.pimg"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/faces.pimg");
         OSData::SD_usable = true;
         LuaEngine te(180 * 1024, LuaPermissions{}, "/td");
         lua_register(te.raw(), "check", l_check);
@@ -1965,7 +1966,7 @@ int main() {
             math.randomseed(11)
             Z.init(units, A.spawns, BASE, RULES)
             S.init(units, BASE, RULES)
-            Z.SOLDIER_TAG = S.TAG; S.ZOMBIE_TAG = Z.TAG; Z.hunt = true
+            Z.TARGET_TAGS = {S.TAG}; S.ZOMBIE_TAG = Z.TAG; Z.hunt = true
             KILLED, LOST, HEALED, LASTHP = 0, 0, 0, setmetatable({}, {__mode = "k"})
             Z.on_kill = function() KILLED = KILLED + 1 end
             S.on_lost = function() LOST = LOST + 1 end
@@ -2093,6 +2094,171 @@ int main() {
             pico.iso.close()
         )LUA", "sol4");
         check(ok, "soldiers: 一通り");
+    }
+
+    // =====================================================================
+    // ゾンビTD の buildings.lua(タワー・バリケード・建設・強化・修理・売却)を本物のエンジンの上で動かす
+    // =====================================================================
+    {
+        OSData::SD_usable = true;
+        LuaEngine te(180 * 1024, LuaPermissions{}, "/td");
+        lua_register(te.raw(), "check", l_check);
+        bool ok = te.Run(R"LUA(
+            local iso = pico.iso
+            Z = require("zombies"); C = require("combat"); S = require("soldiers"); B = require("buildings")
+            iso.set_image(pico.image_load("/td/faces.pimg"))
+            local units = pico.image_load("/td/units.pimg")
+            iso.create("/td/map3", 4, 3, 7)
+            iso.keep_all(true)
+            iso.view(0, 20, 240, 246)
+            while iso.pump(64) > 0 do end
+            A = iso.arena()
+            local b = A.base
+            GOALS = {}
+            for dx = -2, 2 do for dz = -2, 2 do
+                if math.max(math.abs(dx), math.abs(dz)) == 2 then GOALS[#GOALS + 1] = {b.x + dx, b.z + dz} end
+            end end
+            local W = B.WALLS
+            local cost = {}
+            for _, w in ipairs(W) do cost[w] = 6 end
+            FLOW = {max_up = 1, max_down = 2, height = 2, up_cost = 0.5, diagonal = true, avoid = {1}, pass = W, body_cost = cost}
+            ZR = {height = 2, avoid = {1}, pass = W}
+            SR = {height = 2, avoid = {1, W[1], W[2], W[3], W[4]}}
+            C.SIGHT_PASS = W
+            iso.flow_build(GOALS, FLOW, true)
+            BASE = {x = b.x, y = b.y, z = b.z, hp = 100000, r = 1.4, side = "base"}
+            BASE.id = iso.entity_add(units, b.x + 0.5, b.y, b.z + 0.5,
+                {sx = 80, sy = 0, w = 44, h = 40, r = 1.4, height = 2.5, crowd = "fixed", tag = 2})
+            function BASE.hurt(self, d) BASE.hp = BASE.hp - d end
+            C.add(BASE)
+            math.randomseed(5)
+            Z.init(units, A.spawns, BASE, ZR)
+            S.init(units, BASE, SR)
+            B.init(units, BASE, A.spawns)
+            Z.TARGET_TAGS = {S.TAG, B.TAG}; Z.hunt = true; Z.wall_at = B.wall_at
+            S.ZOMBIE_TAG = Z.TAG; B.ZOMBIE_TAG = Z.TAG
+            S.blocked = function(x, z) return B.at[B.col(x, z)] ~= nil end
+            WALLS_CHANGED, KILLED, LOSTB = 0, 0, 0
+            B.on_walls_changed = function() WALLS_CHANGED = WALLS_CHANGED + 1; iso.flow_build(GOALS, FLOW, true) end
+            B.on_lost = function() LOSTB = LOSTB + 1 end
+            Z.on_kill = function() KILLED = KILLED + 1 end
+            function tick(n)
+                for _ = 1, n do
+                    Z.update(0.05); S.update(0.05); B.update(0.05)
+                    if iso.crowd(2, {height = 2, pass = W}) > 0 then Z.sync(); S.sync() end
+                    C.step(0.05)
+                end
+            end
+            -- 置ける所: ベースの近く・出現位置の近く・水の上・建物のある柱は不可
+            check(not B.can_place("arrow", b.x + 2, b.z + 2, SR), "buildings.can_place: ベースの近くは不可")
+            local sp = A.spawns[1]
+            check(not B.can_place("wall", sp.x + 1, sp.z, SR), "buildings.can_place: 出現位置の近くは不可")
+            local wx, wz
+            for x = 0, 55 do for z = 0, 55 do
+                if not wx and iso.ground(x, z) and iso.get(x, iso.ground(x, z) - 1, z) == 1 then wx, wz = x, z end
+            end end
+            if wx then check(not B.can_place("wall", wx, wz, SR), "buildings.can_place: 水の上は不可") end
+            -- 弓塔: ベースの前に建てる
+            TX, TZ = b.x, b.z + 5
+            while not B.can_place("arrow", TX, TZ, SR) do TX = TX + 1 end
+            T1 = B.place("arrow", TX, TZ, SR)
+            check(T1 and T1.state == "build" and T1.hp == 30 and B.max_hp(T1) == 30, "buildings.place: 建設中は完成時の20%の耐久")
+            check(not B.can_place("wall", TX, TZ, SR), "buildings.can_place: 同じ柱には置けない")
+            check(not S.standable(TX, TZ), "soldiers.standable: 建物の柱には立てない")
+            check(B.sell_value(T1) == nil and B.upgrade_cost(T1) == nil and B.repair_cost(T1) == nil, "buildings: 建設中は売れない・強化/修理できない")
+            check(B.remaining(T1) == 8, "buildings.remaining: 建設の残り秒")
+        )LUA", "bld");
+        check(ok, "buildings: 準備");
+        ok = ok && te.Run("tick(165)", "tick");
+        ok = ok && te.Run(R"LUA(
+            local iso = pico.iso
+            check(T1.state == "ready" and T1.hp == 150 and B.max_hp(T1) == 150, "buildings: 建設が終わると耐久が完成時の値になる")
+            local _, _, _, o = iso.entity_get(T1.id)
+            check(o.sx == 216 and o.h == 36, "buildings: 完成すると塔の絵になる")
+            -- 強化: 建設の半分の時間、その間は耐久が低い
+            check(B.upgrade_cost(T1) == 90 and B.upgrade(T1), "buildings.upgrade")
+            check(T1.state == "up" and T1.lv == 2 and B.max_hp(T1) == 34 and T1.hp == 34 and B.remaining(T1) == 4,
+                  "buildings.upgrade: 強化中は耐久が低い (" .. T1.hp .. ")")
+            tick(85)
+            check(T1.state == "ready" and T1.hp == 170, "buildings.upgrade: 終わると耐久が戻る (" .. T1.hp .. ")")
+            -- 修理: 費用 = 減った割合 × 払った合計 × 0.5、3秒かけて戻る
+            T1.hp = 85
+            check(B.repair_cost(T1) == 53, "buildings.repair_cost (" .. tostring(B.repair_cost(T1)) .. ")")
+            check(B.repair(T1) and B.repair_cost(T1) == nil, "buildings.repair: 修理中は重ねて修理しない")
+            tick(30)
+            check(T1.hp > 100 and T1.hp < 170, "buildings.repair: 少しずつ戻る")
+            tick(40)
+            check(math.abs(T1.hp - 170) < 0.01 and T1.rr == 0, "buildings.repair: 3秒で戻る")
+            check(B.sell_value(T1) == 147, "buildings.sell_value: 払った合計の70% (" .. B.sell_value(T1) .. ")")
+            -- バリケード: ブロックを置き、流れの場を作り直す
+            local fz = A.spawns[2].z - 6
+            WX, WZ = A.spawns[2].x, fz
+            while not B.can_place("wall", WX, WZ, SR) do WX = WX + 1 end
+            local w0 = WALLS_CHANGED
+            W1 = B.place("wall", WX, WZ, SR)
+            check(W1 and iso.get(WX, W1.y, WZ) == B.WALLS[1] and WALLS_CHANGED == w0 + 1, "buildings.place(wall): ブロックを置いて道を作り直す")
+            check(B.wall_at(WX + 0.3, WZ + 0.7) == W1 and B.wall_at(TX, TZ) == nil, "buildings.wall_at")
+            check(iso.stand(WX, WZ, nil, ZR) == W1.y and iso.stand(WX, WZ, nil, SR) == nil, "バリケードの中はゾンビは立てる・兵士は立てない")
+            tick(85)
+            check(W1.state == "ready" and W1.hp == 80, "buildings: バリケードの建設が終わる")
+            -- 兵士の道はタワーの柱を通らない
+            local s = S.hire("melee")
+            tick(80)
+            S.order(s, TX + 0.5, TZ + 2.5)
+            local through = false
+            for _, p in ipairs(s.path or {}) do if p.x == TX and p.z == TZ then through = true end end
+            check(s.path and not through, "soldiers: 道はタワーの柱を通らない")
+            S.clear()
+            -- ゾンビがバリケードの中を通ると遅くなり、バリケードが削れる
+            Z.queue("heavy", 1); Z.update(0.4)
+            ZB = Z.list[1]
+            ZB.x, ZB.z, ZB.gy, ZB.y = WX + 0.5, WZ + 0.1, W1.y, W1.y
+            ZB.col = -1
+            local hp0 = W1.hp
+            Z.update(0.05)
+            check(W1.hp < hp0, "zombies: バリケードの中を通ると削る")
+            -- 遅くなる: 同じ時間で動く距離を比べる
+            local x0, z0 = ZB.x, ZB.z
+            Z.update(0.1)
+            local inside = math.sqrt((ZB.x - x0) ^ 2 + (ZB.z - z0) ^ 2)
+            check(inside > 0 and inside < 0.55 * 0.1 * 0.6, "zombies: バリケードの中は遅い (" .. inside .. ")")
+            -- 強化するとブロックが変わる
+            W1.hp = 80
+            Z.clear()
+            check(B.upgrade(W1) and iso.get(WX, W1.y, WZ) == B.WALLS[2], "buildings.upgrade(wall): ブロックが Lv2 の絵になる")
+            tick(45)
+            check(W1.state == "ready" and W1.lv == 2, "buildings.upgrade(wall): 終わる")
+            -- 壊されると消える(ブロックも空気に)
+            local lost0, changed = LOSTB, WALLS_CHANGED
+            W1:hurt(1000)
+            tick(1)
+            check(LOSTB == lost0 + 1 and iso.get(WX, W1.y, WZ) == 0 and B.wall_at(WX, WZ) == nil and WALLS_CHANGED == changed + 1,
+                  "buildings: バリケードは壊されると消えて道を作り直す")
+            -- 表のキーは16個以内
+            local function keys(t) local k = 0 for _ in pairs(t) do k = k + 1 end return k end
+            check(keys(T1) <= 16, "buildings: 表のキーは16個以内 (" .. keys(T1) .. ")")
+            -- ゾンビはタワーを狙い、弓塔はゾンビを倒す
+            Z.queue("normal", 10); Z.queue("ranged", 4)
+        )LUA", "bld2");
+        for (int i = 0; i < 40 && ok; i++) ok = te.Run("tick(40)", "tick");
+        ok = ok && te.Run(R"LUA(
+            local iso = pico.iso
+            check(KILLED > 0, "buildings: 弓塔がゾンビを倒す (" .. KILLED .. ")")
+            check(T1.hp < 170 or LOSTB > 1, "zombies: タワーを狙って攻撃する (" .. T1.hp .. ")")
+            -- 売る
+            if T1.hp > 0 and B.sell_value(T1) then
+                local id = T1.id
+                local v = B.sell(T1)
+                check(v > 0 and iso.entity_get(id) == nil and B.at[B.col(TX, TZ)] == nil, "buildings.sell: 取り除いてお金を返す")
+            end
+            -- 全部消す: バリケードのブロックも空気に戻る
+            local w2 = B.place("wall", WX, WZ, SR)
+            B.clear()
+            check(iso.get(WX, w2.y, WZ) == 0 and B.count() == 0, "buildings.clear: バリケードのブロックも消える")
+            Z.clear()
+            iso.close()
+        )LUA", "bld3");
+        check(ok, "buildings: 一通り");
     }
 
     WidgetFunctions::ClearSceneWidgets();

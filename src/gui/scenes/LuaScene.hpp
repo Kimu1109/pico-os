@@ -45,8 +45,11 @@ struct AppEntry;
 class LuaScene : public Scene {
     private:
         // このLuaアプリに許すメモリ予算(lua_newstateのカスタムallocへ渡す上限)。
-        // CLAUDE.md「RAM/Flash予算」の暫定枠(200KB)
-        static constexpr size_t kLuaBudgetBytes = 200 * 1024;
+        // CLAUDE.md「RAM/Flash予算」の暫定枠(実機=32bitで200KB)。
+        // 64bit の PC/Webビルドでは、同じスクリプトがポインタの大きさの分だけ約1.33倍のメモリを使う
+        // (ゾンビTDのモジュールを32bit/64bitのLuaで読み比べた実測: 57KB / 76KB)ので、予算も同じ割合で広げて、
+        // 実機で収まるアプリがPCで先にメモリ不足にならないようにする
+        static constexpr size_t kLuaBudgetBytes = sizeof(void*) >= 8 ? 200 * 1024 * 4 / 3 : 200 * 1024;
 
         // スクリプトソースの読み込み上限。MarkdownView::kMdMaxSourceBytes(8KiB)より
         // 大きく取ってある(pico.*呼び出しの羅列でUIを組み立てるスクリプトは

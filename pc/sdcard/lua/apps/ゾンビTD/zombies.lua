@@ -1,6 +1,7 @@
 -- ゾンビTD: ゾンビ(出現・流れの場をたどって歩く・兵士を狙う・ベースへの攻撃・倒れる)。仕様は ZOMBIE_TD.md。
 -- 道は C++ の流れの場(pico.iso.flow_*)。ゾンビは自分の柱の「次の柱」の真ん中へ向かって歩くだけ。
--- 気づく範囲に兵士がいれば、優先度と距離の点数で1人を選んで追う(粘着。離れすぎ・近づけないときだけ諦める)。
+-- 気づく範囲に兵士かタワーがいれば、優先度と距離の点数で1つを選んで追う(粘着。離れすぎ・近づけないときだけ諦める)。
+-- バリケード(ブロック)の中は遅くなり、通っている間はバリケードの耐久を削る。
 -- 押し合いは game.lua が C++(pico.iso.crowd)で行い、その後に M.sync() で位置を読み戻す。
 -- 1匹の表は16個以内のキーにする(Luaの表はキーが16個を超えると倍の大きさになり、40匹ぶんで約16KB変わる)。
 -- 種類ごとに同じ値(t・r・お金・hurt)はメタテーブルに置く。
@@ -19,11 +20,13 @@ local COOL_DOWN = 5           -- 諦めた後、次に探すまでの秒
 local MELEE_GAP = 0.25        -- 当たりの円の隙間がこれ以下なら近接で叩ける
 
 -- 種類(数値は初期値。ZOMBIE_TD.md「ゾンビ側」)
+-- bmul = 建物(タワー・バリケード)へのダメージの倍率(重量級は突破・破壊が得意)
 M.TYPES = {
-    normal = { hp = 30, speed = 1.0, dmg = 5, rate = 1.0, reach = 0, sx = 0, w = 12, h = 22, r = 0.22, mass = 1, money = 5 },
-    ranged = { hp = 20, speed = 0.9, dmg = 4, rate = 1.6, reach = 5, sx = 24, w = 12, h = 22, r = 0.22, mass = 1, money = 7 },
-    heavy  = { hp = 90, speed = 0.55, dmg = 12, rate = 1.4, reach = 0, sx = 48, w = 16, h = 26, r = 0.32, mass = 3, money = 12 },
+    normal = { hp = 30, speed = 1.0, dmg = 5, rate = 1.0, reach = 0, sx = 0, w = 12, h = 22, r = 0.22, mass = 1, money = 5, bmul = 1 },
+    ranged = { hp = 20, speed = 0.9, dmg = 4, rate = 1.6, reach = 5, sx = 24, w = 12, h = 22, r = 0.22, mass = 1, money = 7, bmul = 0.5 },
+    heavy  = { hp = 90, speed = 0.55, dmg = 12, rate = 1.4, reach = 0, sx = 48, w = 16, h = 26, r = 0.32, mass = 3, money = 12, bmul = 3 },
 }
+local WALL_SLOW = 0.5         -- バリケードの中の速さの倍率
 
 local SET = {}                -- entity_set に渡す表(毎回作るとゴミになり、実機でメモリが尽きるので使い回す)
 local img                     -- units.pimg
@@ -36,8 +39,10 @@ local clock = 0               -- 歩くコマの時計(秒)
 M.list = list
 M.stats = { spawned = 0, killed = 0 }
 M.on_kill = nil               -- function(ゾンビ) 倒されたとき(お金を足す)
-M.hunt = false                -- 兵士を探すか(兵士が1人もいなければ探さない。探すと毎回小さな表ができる)
-M.SOLDIER_TAG = nil           -- 兵士の人や物の tag(game.lua が入れる)
+M.hunt = false                -- 狙う相手を探すか(兵士もタワーも無ければ探さない。探すと毎回小さな表ができる)
+M.TARGET_TAGS = nil           -- 狙う相手(兵士・タワー)の人や物の tag(game.lua が入れる)
+M.wall_at = nil               -- function(x, z) その柱のバリケード(game.lua が入れる)
+local slow = 1                -- 今の1匹の速さの倍率(バリケードの中なら WALL_SLOW)
 
 -- 叩かれた/弾が当たった(hp が 0 以下 = 倒れた。取り除くのは sweep)
 local function hurt(zb, dmg)
@@ -115,7 +120,7 @@ end
 -- 気づく範囲の兵士から、点数(距離 + 優先度の順位 × 1.5)の一番小さい1人
 local function find_target(zb)
     local best, best_s = false, nil
-    for _, id in ipairs(iso.nearby(zb.x, zb.z, AWARE, M.SOLDIER_TAG, 8)) do
+    for _, id in ipairs(iso.nearby(zb.x, zb.z, AWARE, M.TARGET_TAGS, 8)) do
         local s = combat.units[id]
         if s and s.hp > 0 then
             local sc = combat.dist(zb, s) + s.prio * 1.5
@@ -137,10 +142,11 @@ local function attack(zb, tgt, dt)
     if zb.atk <= 0 then
         local t = zb.t
         zb.atk = t.rate
+        local dmg = tgt.side == "building" and t.dmg * t.bmul or t.dmg
         if t.reach > 0 then
-            combat.shoot(zb, tgt, t.dmg, 8, 3, 6, 0.4)
+            combat.shoot(zb, tgt, dmg, 8, 3, 6, 0.4)
         else
-            tgt:hurt(t.dmg, zb)
+            tgt:hurt(dmg, zb)
         end
     end
 end
@@ -152,7 +158,7 @@ local function fight(zb, tgt, dt)
     local t = zb.t
     local reach
     if t.reach > 0 then
-        reach = d <= t.reach and iso.sight(zb.x, zb.y + 1.2, zb.z, tgt.x, tgt.y + 1, tgt.z)
+        reach = d <= t.reach and iso.sight(zb.x, zb.y + 1.2, zb.z, tgt.x, tgt.y + 1, tgt.z, combat.SIGHT_PASS)
     else
         reach = d - zb.r - tgt.r <= MELEE_GAP
     end
@@ -164,7 +170,7 @@ local function fight(zb, tgt, dt)
     -- 近づく。GIVE_UP_TIME 秒たっても攻撃できなければ諦める(scan を追った時間に使う)
     zb.scan = zb.scan + dt
     if zb.scan > GIVE_UP_TIME then return nil end
-    return combat.walk(zb, tgt.x, tgt.z, t.speed * dt, stand_rules)
+    return combat.walk(zb, tgt.x, tgt.z, t.speed * slow * dt, stand_rules)
 end
 
 -- ベースへ向かう(流れの場)。歩いたら true
@@ -179,7 +185,7 @@ local function march(zb, dt)
         local d, nx, nz = iso.flow_get(cx, cz)
         -- 遠距離ゾンビ: 届く所まで来て、地形に遮られずベースが見えたら止まって投げる
         zb.throw = t.reach > 0 and d ~= nil and d <= t.reach
-            and iso.sight(zb.x, zb.gy + 1.2, zb.z, base.x + 0.5, base.y + 1.5, base.z + 0.5)
+            and iso.sight(zb.x, zb.gy + 1.2, zb.z, base.x + 0.5, base.y + 1.5, base.z + 0.5, combat.SIGHT_PASS)
         if nx then zb.tx, zb.tz = nx + 0.5, nz + 0.5
         elseif d then zb.tx, zb.tz = false, false      -- 目的地(ベースの隣)
         else zb.tx, zb.tz = base.x + 0.5, base.z + 0.5 end   -- 届かない所に押し出された: ベースの方へ
@@ -191,7 +197,7 @@ local function march(zb, dt)
     local dx, dz = zb.tx - zb.x, zb.tz - zb.z
     local len = math.sqrt(dx * dx + dz * dz)
     if len <= 1e-4 then return false end
-    local v = t.speed * dt
+    local v = t.speed * slow * dt
     if v > len then v = len end
     zb.x = zb.x + dx / len * v
     zb.z = zb.z + dz / len * v
@@ -200,6 +206,13 @@ end
 
 -- 1匹を dt 秒進める
 local function step(zb, dt)
+    -- バリケードの中: 遅くなり、通っている間はバリケードを削る
+    slow = 1
+    local w = M.wall_at and M.wall_at(zb.x, zb.z)
+    if w and w.y >= zb.gy - 0.5 and w.y <= zb.gy + 1.5 then
+        slow = WALL_SLOW
+        w:hurt(zb.t.dmg / zb.t.rate * zb.t.bmul * dt, zb)
+    end
     local tgt = zb.tgt
     if tgt and not combat.alive(tgt) then tgt = false; zb.tgt = false; zb.scan = 0 end
     if not tgt and M.hunt then

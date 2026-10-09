@@ -13,7 +13,7 @@
 
 struct LuaEngineCrypto {
     static LuaEngine* Self(lua_State* L) {
-        return static_cast<LuaEngine*>(lua_touserdata(L, lua_upvalueindex(1)));
+        return *static_cast<LuaEngine**>(lua_getextraspace(L));   // registerFn() の説明参照
     }
 
     // 引数idxのパスワード(省略/nil/falseならnullptr)。文字列以外はエラー

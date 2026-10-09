@@ -69,7 +69,7 @@ namespace {
     // WidgetIdは32bitで符号無しだが、Luaのlua_Integerは64bit符号付きなので
     // そのまま行き来させて問題ない(桁が全く足りている)。
     LuaEngine* Self(lua_State* L) {
-        return static_cast<LuaEngine*>(lua_touserdata(L, lua_upvalueindex(1)));
+        return *static_cast<LuaEngine**>(lua_getextraspace(L));   // registerFn() の説明参照
     }
 
     // pico.draw_*が描いた範囲をdirtyにする。pico.image_target()で画像へ描いている間は
@@ -623,6 +623,7 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
         LOG_APP_FAIL("LuaEngine: lua_newstateに失敗しました(予算%zuB)", budget_bytes);
         return;
     }
+    *static_cast<LuaEngine**>(lua_getextraspace(L)) = this;   // pico.* の Self() が読む
 
     if (LuaDebugger::GlobalEnabled()) debugger_ = new LuaDebugger();
 
@@ -776,13 +777,48 @@ bool LuaEngine::DispatchKey(const KeyInputFunctions::Event& ev) {
 
 // ---------------- pico.* API登録 ----------------
 
+// pico.* は素のCの関数として置く(thisはLuaの状態ごとの予備の領域 lua_getextraspace() に入れてあり、
+// Self() がそこから読む。作ったコルーチンへは lua_newthread() が写す)。以前は this を上位値に持つ
+// Cのクロージャにしていたが、関数が約350個あり、クロージャだけで実機で約8KB(PCで約17KB)をLuaの予算から使っていた
 void LuaEngine::registerFn(const char* name, lua_CFunction fn) {
-    lua_pushlightuserdata(L, this);
-    lua_pushcclosure(L, fn, 1);
-    lua_setfield(L, -2, name); // -2 = pushしてあるpicoテーブル
+    api_cur_->push_back({name, fn});   // テーブルへは finishApiTable() の __index が使うときに入れる
+}
+
+// 名前の順に並べ(同じ名前は後から足したもの = 差し替えを残す)、スタックのトップのテーブルの __index にする
+void LuaEngine::finishApiTable(std::vector<luaL_Reg>& api) {
+    std::stable_sort(api.begin(), api.end(),
+                     [](const luaL_Reg& a, const luaL_Reg& b) { return strcmp(a.name, b.name) < 0; });
+    size_t n = 0;
+    for (size_t i = 0; i < api.size(); i++) {
+        if (n > 0 && strcmp(api[n - 1].name, api[i].name) == 0) api[n - 1] = api[i];
+        else api[n++] = api[i];
+    }
+    api.resize(n);
+    api.shrink_to_fit();
+    lua_createtable(L, 0, 1);
+    lua_pushlightuserdata(L, &api);
+    lua_pushcclosure(L, l_api_index, 1);
+    lua_setfield(L, -2, "__index");
+    lua_setmetatable(L, -2);
+}
+
+// pico.xxx が無かったとき: 表から引き、見つかったらテーブルへ入れて(次からは普通に引ける)返す
+int LuaEngine::l_api_index(lua_State* L) {
+    if (lua_type(L, 2) != LUA_TSTRING) return 0;
+    const char* key = lua_tostring(L, 2);
+    const auto* api = static_cast<const std::vector<luaL_Reg>*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const auto it = std::lower_bound(api->begin(), api->end(), key,
+                                     [](const luaL_Reg& r, const char* k) { return strcmp(r.name, k) < 0; });
+    if (it == api->end() || strcmp(it->name, key) != 0) return 0;
+    lua_pushcfunction(L, it->func);
+    lua_pushvalue(L, 2);
+    lua_pushvalue(L, -2);
+    lua_rawset(L, 1);
+    return 1;
 }
 
 void LuaEngine::registerApi() {
+    api_pico_.reserve(240);
     lua_newtable(L);
     registerFn("create", l_create);
     registerFn("destroy", l_destroy);
@@ -900,6 +936,7 @@ void LuaEngine::registerApi() {
     registerFn("clear_breakpoint", l_clear_breakpoint);
     registerFn("debugger_enabled", l_debugger_enabled);
     RegisterExtApi();
+    finishApiTable(api_pico_);
     // グローバルの require は pico.require と同じ関数
     lua_getfield(L, -1, "require");
     lua_setglobal(L, "require");
@@ -4637,13 +4674,16 @@ void LuaEngine::preloadModules(const char* src, size_t len) {
 
     PushRegTable(L, "pico_preload");       // preload
     const int pre = lua_gettop(L);
+    PushRegTable(L, "pico_loaded");        // 読み込み済み(もう一度コンパイルすると使われないまま残る)
+    const int loaded = lua_gettop(L);
 
     for (size_t i = 1; i <= lua_rawlen(L, wl); i++) {   // 読んだモジュールが増やした分も辿る
         lua_rawgeti(L, wl, (lua_Integer)i);
         const char* name = lua_tostring(L, -1);          // worklistが保持しているので有効
         lua_getfield(L, pre, name);
-        const bool already = !lua_isnil(L, -1);
-        lua_pop(L, 1);
+        lua_getfield(L, loaded, name);
+        const bool already = !lua_isnil(L, -1) || !lua_isnil(L, -2);
+        lua_pop(L, 2);
         if (already) { lua_pop(L, 1); continue; }
 
         // OS同梱のモジュール(pico.ui / pico.async)は、アプリのフォルダより優先してそのソースを使う

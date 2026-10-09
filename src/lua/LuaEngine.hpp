@@ -726,6 +726,14 @@ class LuaEngine {
 
         void registerApi();
         void registerFn(const char* name, lua_CFunction fn);
+        // pico / pico.iso の関数は Lua のテーブルへ全部は入れず、名前の順に並べたこの表に持つ
+        // (名前は文字列リテラルを指すだけ)。テーブルの __index(l_api_index)が初めて使われた関数だけを
+        // テーブルへ写す。約320個の関数の表と名前で実機のLuaの予算から約15KBを使っていたため
+        std::vector<luaL_Reg> api_pico_;
+        std::vector<luaL_Reg> api_iso_;
+        std::vector<luaL_Reg>* api_cur_ = &api_pico_;   // registerFn() が足す先
+        void finishApiTable(std::vector<luaL_Reg>& api);  // 並べてトップのテーブルへ __index を付ける
+        static int l_api_index(lua_State* L);
 
         // Widgetのコールバックから中継されて呼ばれる(このシグネチャがstd::function<void()>の
         // 小バッファに収まる理由については上のクラスコメント参照)
@@ -743,7 +751,7 @@ class LuaEngine {
         static bool EventKindFromName(const char* name, EventKind& out);
 
         // "pico.*" 関数群。lua_CFunction(引数もコンテキストも持てない素の関数ポインタ)
-        // なので、thisはlua_pushcclosureのupvalue経由(lua_upvalueindex(1))で受け取る
+        // なので、thisはLuaの状態ごとの予備の領域(lua_getextraspace)から受け取る(registerFn参照)
         static int l_create(lua_State* L);
         static int l_destroy(lua_State* L);
         static int l_set(lua_State* L);

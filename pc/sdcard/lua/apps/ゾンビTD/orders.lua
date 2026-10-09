@@ -107,29 +107,49 @@ function M.sell()
     sfx.coin()
 end
 
--- 地図のタップ: 兵士・建物なら選ぶ(選んでいるものをもう一度タップすると外す)、
--- 地面なら選んでいる兵士を動かす/「建設」で選んだ建物を建てる
-function M.tap_map(px, py)
-    local id = iso.entity_at(px, py)
-    local u = id and combat.units[id]
-    if not G.build_mode and u and u.side == "soldier" then
+-- 選ぶ(選んでいるものをもう一度選ぶと外す)
+local function toggle(u)
+    if u.side == "soldier" then
         if #G.sel == 1 and G.sel[1] == u then M.deselect_all() else M.set_selection({ u }) end
-        return
+    elseif G.bsel == u then M.deselect_all()
+    else M.select_building(u) end
+end
+
+-- 選んでいる兵士を柱 (bx, bz) へ動かす
+local function move_to(bx, bz)
+    if #G.sel == 0 then return end
+    if soldiers.order_group(G.sel, bx + 0.5, bz + 0.5) then G.moved = true else G.say("そこへは行けません") end
+end
+
+-- 柱の真ん中の近くに立っている兵士
+local function soldier_near(bx, bz)
+    local best, bd = nil, 0.75
+    for _, s in ipairs(soldiers.list) do
+        local d = math.max(math.abs(s.x - bx - 0.5), math.abs(s.z - bz - 0.5))
+        if d < bd then best, bd = s, d end
     end
-    if not G.build_mode and u and u.side == "building" then
-        if G.bsel == u then M.deselect_all() else M.select_building(u) end
-        return
-    end
+    return best
+end
+
+-- 地図のタップ: 兵士・建物なら選ぶ、地面なら選んでいる兵士を動かす/「建設」で選んだ建物を建てる
+function M.tap_map(px, py)
+    local id = not G.build_mode and iso.entity_at(px, py)
+    local u = id and combat.units[id]
+    if u and (u.side == "soldier" or u.side == "building") then return toggle(u) end
     local bx, _, bz = iso.pick(px, py)
     if not bx then return end
     if G.build_mode then return M.build_at(bx, bz) end
     local w = buildings.wall_at(bx, bz)
-    if w then
-        if G.bsel == w then M.deselect_all() else M.select_building(w) end
-        return
-    end
-    if #G.sel == 0 then return end
-    if soldiers.order_group(G.sel, bx + 0.5, bz + 0.5) then G.moved = true else G.say("そこへは行けません") end
+    if w then return toggle(w) end
+    move_to(bx, bz)
+end
+
+-- カーソル(コントローラー)で柱 (bx, bz) を選んだ: そこの兵士・建物を選ぶ/選んでいる兵士を動かす/建てる
+function M.act_at(bx, bz)
+    if G.build_mode then return M.build_at(bx, bz) end
+    local u = soldier_near(bx, bz) or buildings.at[buildings.col(bx, bz)]
+    if u then return toggle(u) end
+    move_to(bx, bz)
 end
 
 -- 範囲選択: 画面の矩形の中に立っている兵士

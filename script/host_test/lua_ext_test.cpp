@@ -2273,7 +2273,7 @@ int main() {
             std::ifstream f(root + rel, std::ios::binary);
             return std::string((std::istreambuf_iterator<char>(f)), {});
         };
-        static const char* const kFiles[] = {"game.lua", "state.lua", "orders.lua", "ui.lua", "waves.lua", "save.lua", "sfx.lua", "tutorial.lua",
+        static const char* const kFiles[] = {"game.lua", "state.lua", "orders.lua", "ui.lua", "waves.lua", "save.lua", "sfx.lua", "tutorial.lua", "cursor.lua",
             "combat.lua", "zombies.lua", "soldiers.lua", "buildings.lua", "palette.lua", "faces.pimg", "units.pimg"};
         for (const char* f : kFiles) {
             HostSd::files[std::string("/tdg/") + f] = slurp(std::string("/pc/sdcard/lua/apps/ゾンビTD/") + f);
@@ -2286,7 +2286,9 @@ int main() {
             check(ke.Run("pico.keep_awake()", "ka") && PowerFunctions::detail::keep_awake, "pico.keep_awake: 印を立てる");
             PowerFunctions::detail::keep_awake = false;
         }
-        LuaEngine te(270 * 1024, LuaPermissions{}, "/tdg");
+        LuaPermissions tperm;
+        tperm.strip_debug = true;   // app.cfg と同じ
+        LuaEngine te(270 * 1024, tperm, "/tdg");
         lua_register(te.raw(), "check", l_check);
         // waves.lua 単体
         bool ok = te.Run(R"LUA(
@@ -2382,7 +2384,7 @@ int main() {
             B.upgrade(t)   -- 建設中なので強化できない
             local game = E.save.dump(G, Wv, S, B)
             check(#game.b == 1 and game.b[1][1] == "arrow" and game.b[1][4] == 1, "save.dump: 建物の一覧")
-            B.clear(); S.clear()
+            E.orders.deselect_all(); B.clear(); S.clear()
             game.b[1][4], game.b[1][5] = 3, 100
             game.money = 999
             E.save.restore(game, G, Wv, S, B, G.S_STAND)
@@ -2404,6 +2406,121 @@ int main() {
             check(st.game == nil and st.best and st.best.w == 1, "game: 途中の保存を消して最高記録を残す")
         )LUA", "g3");
         check(ok, "game: ウェーブと保存の流れ");
+        // コントローラー・キーボードのカーソル(cursor.lua)と、地図の上のメニュー(ui.lua)
+        ok = te.Run(R"LUA(
+            PAD, PADP = {}, {}
+            pico.pad_down = function(n) return PAD[n] == true end
+            pico.pad_pressed = function(n) return PADP[n] == true end
+            function press(...)
+                for _, n in ipairs({...}) do PAD[n] = true; PADP[n] = true end
+                loop(16)
+                PAD, PADP = {}, {}
+                loop(16)
+            end
+            press("a")
+            check(TEST.env.G.mode == "load", "cursor: 終わった画面で A を押すと新しく始める")
+        )LUA", "c0");
+        for (int i = 0; i < 300 && ok; i++) {
+            te.CallLoop(50);
+            ok = te.Run("DONE = TEST.env.G.mode == 'play'", "m");
+            lua_getglobal(L, "DONE");
+            const bool done = lua_toboolean(L, -1);
+            lua_pop(L, 1);
+            if (done) break;
+        }
+        ok = ok && te.Run(R"LUA(
+            local E = TEST.env
+            local G, C, ui, S, B = E.G, E.cursor, E.ui, E.soldiers, E.buildings
+            E.tutorial.stop()
+            check(G.mode == "play" and not C.on, "cursor: 始めは隠れている")
+            press("up")
+            check(C.on, "cursor: 十字を押すと出る")
+            local x, z = C.x, C.z
+            press("up"); press("right")
+            check(C.x == x + 1 and C.z == z - 1, "cursor: 上=+x、右=-z (" .. C.x - x .. "," .. C.z - z .. ")")
+            -- 押したままで続けて動く
+            x = C.x
+            PAD.down = true; PADP.down = true; loop(16); PADP = {}
+            for _ = 1, 30 do loop(16) end
+            PAD = {}; loop(16)
+            check(C.x <= x - 3, "cursor: 押したままで続けて動く (" .. x - C.x .. ")")
+            -- SELECT で下の欄へ → A で雇う → メニューで2番目を選ぶ
+            press("select")
+            check(ui.focus and ui.focus.id == "hire", "cursor: SELECT で下の欄の「雇う」へ")
+            press("a")
+            check(ui.menu_active(), "cursor: 雇うでメニューが開く")
+            press("down"); press("a")
+            check(not ui.menu_active() and S.count() == 1 and S.list[1].kind == S.KINDS[2] and G.sel[1] == S.list[1] and not ui.focus,
+                  "cursor: メニューで選んで雇い、地図へ戻る")
+            -- B で外す、X で兵士を選ぶ(カーソルもそこへ)
+            press("b")
+            check(#G.sel == 0, "cursor: B で選択を外す")
+            press("x")
+            local s = S.list[1]
+            check(G.sel[1] == s and C.x == math.floor(s.x) and C.z == math.floor(s.z), "cursor: X で兵士を選びカーソルもそこへ")
+            -- カーソルの所へ動かす
+            local b = G.base
+            G.moved = false
+            C.place(b.x - 3, b.z + 3)
+            press("a")
+            check(G.moved and s.px == b.x - 2.5 and s.pz == b.z + 3.5, "cursor: A で選んだ兵士をカーソルの所へ")
+            -- 兵士の所で A を押すと選ぶ(もう一度で外す)
+            press("b")
+            C.place(s.x, s.z)
+            press("a")
+            check(G.sel[1] == s, "cursor: 兵士の所で A を押すと選ぶ")
+            press("a")
+            check(#G.sel == 0, "cursor: もう一度で外す")
+            -- 建設: 下の欄の「建設」→ 弓塔 → カーソルの所へ
+            press("select"); press("right"); press("a")
+            check(ui.menu_active(), "cursor: 建設のメニュー")
+            press("a")
+            check(G.build_mode == "arrow" and not ui.focus, "cursor: 弓塔を選ぶと建てる所を選ぶ")
+            local bx, bz = b.x, b.z + 6
+            while not B.can_place("arrow", bx, bz, G.S_STAND) do bx = bx + 1 end
+            C.place(bx, bz)
+            local money = G.money
+            press("a")
+            check(B.count() == 1 and G.bsel == B.list[1] and G.money < money and not G.build_mode, "cursor: A で建てる")
+            press("b")
+            press("y")
+            check(G.bsel == B.list[1] and C.x == bx and C.z == bz, "cursor: Y で建物を選ぶ")
+            press("b")
+            -- メニューは B でやめる
+            ui.press(ui.buttons[6])
+            check(ui.menu_active(), "ui: 他のメニュー")
+            press("down"); press("b")
+            check(not ui.menu_active() and #G.sel == 0, "cursor: B でメニューをやめる")
+            -- タップ: 枠の外はやめる、項目は選ぶ
+            local got = nil
+            ui.menu("t", { "a", "b" }, function(i) got = i end, function() got = "cancel" end)
+            ui.menu_tap(0, 0)
+            check(got == "cancel", "ui.menu_tap: 枠の外はやめる")
+            ui.menu("t", { "a", "b" }, function(i) got = i end)
+            local VX, VY, VW, VH = pico.get_rect(G.view)
+            local h = 26 + 2 * 26 + 4
+            ui.menu_tap(VX + VW // 2, VY + (VH - h) // 2 + 26 + 26 + 5)
+            check(got == 2, "ui.menu_tap: 項目を選ぶ (" .. tostring(got) .. ")")
+            -- カメラが付いてくる
+            local ox, oy = E.origin()
+            for _ = 1, 12 do press("up") end
+            local ox2, oy2 = E.origin()
+            check(ox2 ~= ox or oy2 ~= oy, "cursor: 端に近づくとカメラが動く")
+            local sx, sy = pico.iso.to_screen(C.x + 0.5, pico.iso.ground(C.x, C.z), C.z + 0.5)
+            check(sx >= VX and sx < VX + VW and sy >= VY and sy < VY + VH, "cursor: カーソルは画面の中")
+            -- キーボード
+            x = C.x
+            check(C.key("up", {}) and C.x == x + 1, "cursor.key: 矢印でカーソル")
+            G.build_mode = "wall"
+            check(C.key("escape", {}) and not G.build_mode, "cursor.key: Esc で建設をやめる")
+            check(C.key("tab", {}) and ui.focus, "cursor.key: Tab で下の欄へ")
+            check(C.key("escape", {}) and not ui.focus, "cursor.key: Esc で地図へ")
+            check(not C.key("q", {}), "cursor.key: 知らないキーは取らない")
+            -- START で次へ
+            press("start")
+            check(E.waves.phase == "wave", "cursor: START で次へ")
+        )LUA", "cur");
+        check(ok, "game: コントローラーのカーソル");
     }
 
     WidgetFunctions::ClearSceneWidgets();

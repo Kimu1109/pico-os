@@ -952,9 +952,9 @@ function Game:tilemap(o)
     if o.rows then
         local legend, sp, cols = o.legend or {}, o.spawn or {}, 0
         for _, row in ipairs(o.rows) do cols = max(cols, #row) end
-        local parts = {}
+        -- 1行ぶんの表は使い回す(行ごとに作ると、大きいマップで一時的にLuaのメモリを大きく使う)
+        local parts, bytes = {}, {}
         for r, row in ipairs(o.rows) do
-            local bytes = {}
             for c = 1, cols do
                 local ch = row:sub(c, c)
                 if sp[ch] then

@@ -3,9 +3,9 @@
 --   上の行: ベースの耐久・お金・ウェーブ(準備時間は残り秒と[次へ]、ウェーブ中は残りのゾンビ)・fps
 --   下の欄: ui.lua。地図: タップ=兵士・建物を選ぶ/選んでいる兵士をそこへ動かす/(「建設」で選んだ後)そこへ建てる、
 --         ドラッグ=カメラ(「選択」中は範囲選択)。
---   コントローラーの十字・キーボードの矢印でカメラ、A・n=次へ、1/2/3=雇う、Esc=選択の解除、HOME=戻る。
+--   コントローラー・キーボード: カーソルを動かして選ぶ(cursor.lua)。1/2/3=雇う、HOME=戻る。
 --   5秒ごとにシリアルへ "[TD] fps=.. lua=..ms render=..ms alive=.. mem lua=.. heap_free=.." を出す(実機の速さとメモリを測る)。
--- ファイル: state(共有の状態)・orders(操作)・ui(下の欄)・waves・save・sfx(効果音)・tutorial(説明)・
+-- ファイル: state(共有の状態)・orders(操作)・ui(下の欄・メニュー)・cursor(コントローラー)・waves・save・sfx(効果音)・tutorial(説明)・
 --         zombies・soldiers・buildings・combat。
 -- マップ・流れの場・経路探索・押し合い・弾・描画は C++ のエンジン(src/iso/)。
 local iso = pico.iso
@@ -21,6 +21,7 @@ local waves = require("waves")
 local save = require("save")
 local sfx = require("sfx")
 local tutorial = require("tutorial")
+local cursor = require("cursor")
 
 local W_CHUNKS = 7                 -- 7x7 チャンク = 56x56 マス(全部を読み込んだままにできる上限)
 local BASE_HP = 2000
@@ -163,16 +164,17 @@ local function gen_fail(msg)
 end
 
 local function clear_units()
+    orders.deselect_all()       -- 先に外す(消した後だと選択の印を消せない)
     zombies.clear()
     soldiers.clear()
     buildings.clear()
     combat.clear_shots()
-    orders.deselect_all()
     G.build_mode = false
 end
 
 local function gen_start()
     clear_units()
+    cursor.hide()
     iso.flow_clear()
     iso.close()
     G.base = false
@@ -356,7 +358,7 @@ pico.on(hud, "render", function()
     end
 end)
 pico.on(hud, "press_end", function(_, _, _, lx)
-    if lx >= NEXT_X then next_wave() end
+    if lx >= NEXT_X and not ui.menu_active() then next_wave() end
 end)
 
 local drag_rect = nil      -- 範囲選択の矩形 {x0, y0, x1, y1}
@@ -370,11 +372,13 @@ pico.on(view, "render", function()
         local x, y, w, h = pico.get_draw_area()
         pico.fill_rect(x, y, w, h, PAL.sky)
         if load_msg ~= "" then box(CX + 30, VY + VH // 2 - 20, CW - 60, 40, load_msg) end
+        ui.menu_draw()
         return
     end
     local t = pico.micros()
     iso.render()
     perf.render_us = perf.render_us + us_since(t)
+    cursor.draw()
     if drag_rect then
         local r = drag_rect
         pico.draw_rect(math.min(r[1], r[3]), math.min(r[2], r[4]), math.abs(r[3] - r[1]) + 1, math.abs(r[4] - r[2]) + 1, 14)
@@ -391,8 +395,9 @@ pico.on(view, "render", function()
         box(CX + 10, VY + VH // 2 - 38, CW - 20, 76)
         pico.draw_text(CX + CW // 2, VY + VH // 2 - 32, "ベースが壊れました", 12, 0, "center")
         pico.draw_text(CX + CW // 2, VY + VH // 2 - 10, over_text or "", 0, 0, "center")
-        pico.draw_text(CX + CW // 2, VY + VH // 2 + 12, "タップで新しく始める", 0, 0, "center")
+        pico.draw_text(CX + CW // 2, VY + VH // 2 + 12, "タップかAで新しく始める", 0, 0, "center")
     end
+    ui.menu_draw()
 end)
 
 -- ---------------------------------------------------------------- 操作
@@ -420,13 +425,22 @@ local function back()
     pico.pop()
 end
 
-ui.init({ x = CX, y = PY, w = CW, info_h = INFO_H, btn_h = BTN_H },
+ui.init({ x = CX, y = PY, w = CW, info_h = INFO_H, btn_h = BTN_H, vy = VY, vh = VH },
     { back = back, center = center_base, new_game = new_game, sound = set_sound, tutorial = restart_tutorial })
+cursor.init({ x = CX, y = VY, w = CW, h = VH }, {
+    scroll = scroll, new_game = new_game,
+    start = function() next_wave() end,
+})
 
 local touch = nil
-pico.on(view, "press_start", function(_, x, y) touch = { x = x, y = y, drag = false } end)
+pico.on(view, "press_start", function(_, x, y)
+    touch = { x = x, y = y, drag = false, menu = ui.menu_active() }
+    if touch.menu then return end
+    cursor.hide()
+    if ui.focus then ui.set_focus(false); pico.invalidate(panel) end
+end)
 pico.on(view, "press_move", function(_, x, y, _, _, dx, dy)
-    if not touch or G.mode == "load" then return end
+    if not touch or touch.menu or G.mode == "load" then return end
     if not touch.drag and math.abs(x - touch.x) + math.abs(y - touch.y) > 8 then
         touch.drag = true
         dx, dy = x - touch.x, y - touch.y
@@ -443,6 +457,7 @@ pico.on(view, "press_end", function(_, x, y)
     local t = touch
     touch = nil
     if not t then return end
+    if t.menu then return ui.menu_tap(x, y) end
     if drag_rect then
         local r = drag_rect
         drag_rect = nil
@@ -471,16 +486,10 @@ end)
 
 pico.on_back(function() back(); return true end)
 
-pico.on_key(function(key)
-    if key == "left" then scroll(32, 0)
-    elseif key == "right" then scroll(-32, 0)
-    elseif key == "up" then scroll(0, 16)
-    elseif key == "down" then scroll(0, -16)
-    elseif key == "c" then center_base()
-    elseif key == "n" then next_wave()
-    elseif key == "1" or key == "2" or key == "3" then
+pico.on_key(function(key, mods)
+    if cursor.key(key, mods) then return true end
+    if key == "1" or key == "2" or key == "3" then
         if G.mode == "play" then orders.hire(soldiers.KINDS[tonumber(key)]) end
-    elseif key == "esc" then G.build_mode = false; orders.deselect_all()
     else return false end
     pico.invalidate(panel)
     return true
@@ -490,7 +499,7 @@ end)
 
 function loop(dt)
     perf_tick()
-    if G.mode == "load" then gen_step(); return end
+    if G.mode == "load" then gen_step(); cursor.update(dt / 1000); return end
     local t0 = pico.micros()
     if G.mode == "play" then
         -- ウェーブ中と一時停止中はスリープしない
@@ -530,11 +539,7 @@ function loop(dt)
         G.info_t = G.info_t - dt / 1000
         if G.info_t <= 0 then G.info_msg = false; pico.invalidate(panel) end
     end
-    -- コントローラー: 十字=カメラ、A=次へ
-    local h = (pico.pad_down("left") and 1 or 0) - (pico.pad_down("right") and 1 or 0)
-    local v = (pico.pad_down("up") and 1 or 0) - (pico.pad_down("down") and 1 or 0)
-    if h ~= 0 or v ~= 0 then scroll(h * 6, v * 4) end
-    if pico.pad_pressed("a") then next_wave() end
+    cursor.update(dt / 1000)
     perf.lua_us = perf.lua_us + us_since(t0)
 end
 
@@ -545,15 +550,15 @@ local saved = save.load()
 sfx.on = saved.snd ~= false
 if saved.game and saved.game.seed then
     -- 途中の保存があれば、続きからか新しく始めるかを選ぶ(閉じた/キャンセルは続きから。うっかり保存を失わないように)
-    local d = pico.show_choice("ゾンビTD", { string.format("続きから W%d", saved.game.w or 1), "新しく始める" })
-    pico.on(d, "closed", function(_, ok, idx)
-        if ok and idx == 1 then new_game() else new_map(saved.game.seed, saved.game) end
-        saved = nil
-    end)
+    local game = saved.game
+    ui.menu("ゾンビTD", { string.format("続きから W%d", game.w or 1), "新しく始める" },
+        function(i) if i == 2 then new_game() else new_map(game.seed, game) end end,
+        function() new_map(game.seed, game) end)
+    saved = nil
 else
     new_game()
 end
 
 if TEST then TEST.env = { G = G, waves = waves, save = save, zombies = zombies, soldiers = soldiers, buildings = buildings,
     orders = orders, ui = ui, new_map = new_map, tutorial = tutorial, sfx = sfx, next_wave = next_wave, back = back, scroll = scroll,
-    center_on = center_on, origin = function() return OX, OY end, perf = perf } end
+    center_on = center_on, origin = function() return OX, OY end, perf = perf, cursor = cursor } end

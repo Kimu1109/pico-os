@@ -57,7 +57,7 @@ using TextboxT = Textbox<WidgetFactory::kTextboxCapacity>;
 
 struct LuaEngineExt {
     static LuaEngine* Self(lua_State* L) {
-        return static_cast<LuaEngine*>(lua_touserdata(L, lua_upvalueindex(1)));
+        return *static_cast<LuaEngine**>(lua_getextraspace(L));   // registerFn() の説明参照
     }
 
     static Widget* WidgetArg(lua_State* L, int idx, const char* api) {

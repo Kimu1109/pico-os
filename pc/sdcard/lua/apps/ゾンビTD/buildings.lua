@@ -174,6 +174,18 @@ local function finish(b)
     set_bar(b)
 end
 
+-- 保存から戻す: 完成した状態で lv・hp にする
+function M.restore(kind, x, z, lv, hp, stand_rules)
+    local b = M.place(kind, x, z, stand_rules)
+    if not b then return nil end
+    b.lv = math.max(1, math.min(lv or 1, #b.t.lv))
+    finish(b)
+    b.hp = math.max(1, math.min(hp or max_hp(b), max_hp(b)))
+    if not b.id then set_wall_block(b, M.WALLS[b.lv]) end
+    set_bar(b)
+    return b
+end
+
 -- 払った合計
 function M.paid(b)
     local p = b.t.cost

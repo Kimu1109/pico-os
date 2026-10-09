@@ -215,6 +215,7 @@ function M.install(opts)
         pico["show_" .. k] = function(...) return dialog(k, ...) end
     end
     function pico.toast(text) M.toasts[#M.toasts + 1] = text return true end
+    function pico.keep_awake() M.awake = (M.awake or 0) + 1 end
     function pico.log(s) M.logs[#M.logs + 1] = tostring(s) end
     function pico.show_error(s) M.logs[#M.logs + 1] = "ERROR: " .. tostring(s) end
 

@@ -177,6 +177,22 @@ function M.hire(kind)
     return s
 end
 
+-- 保存から戻す: 持ち場 (px, pz) に立った状態で出す
+function M.restore(kind, lv, hp, px, pz)
+    local s = M.hire(kind)
+    if not s then return nil end
+    s.lv = math.max(1, math.min(lv or 1, #s.t.lv))
+    s.hp = math.max(1, math.min(hp or max_hp(s), max_hp(s)))
+    local y = M.standable(px, pz)
+    if y then
+        s.x, s.z, s.px, s.pz, s.y, s.gy = px, pz, px, pz, y, y
+        iso.entity_move(s.id, px, y, pz)
+    end
+    s.path, s.state = false, "hold"
+    set_bar(s)
+    return s
+end
+
 -- 何人かを (x, z) のまわりへ散らばらせて動かす。動かせたら true
 function M.order_group(group, x, z)
     local cx, cz = math.floor(x), math.floor(z)

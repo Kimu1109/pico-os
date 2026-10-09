@@ -42,6 +42,7 @@ M.on_kill = nil               -- function(ゾンビ) 倒されたとき(お金�
 M.hunt = false                -- 狙う相手を探すか(兵士もタワーも無ければ探さない。探すと毎回小さな表ができる)
 M.TARGET_TAGS = nil           -- 狙う相手(兵士・タワー)の人や物の tag(game.lua が入れる)
 M.wall_at = nil               -- function(x, z) その柱のバリケード(game.lua が入れる)
+M.hp_mul, M.dmg_mul = 1, 1    -- ウェーブごとの体力・攻撃力の倍率(waves.lua が入れる)
 local slow = 1                -- 今の1匹の速さの倍率(バリケードの中なら WALL_SLOW)
 
 -- 叩かれた/弾が当たった(hp が 0 以下 = 倒れた。取り除くのは sweep)
@@ -49,7 +50,7 @@ local function hurt(zb, dmg)
     if zb.hp <= 0 then return end
     zb.hp = zb.hp - dmg
     if zb.hp <= 0 then return end
-    SET.bar = zb.hp * 100 // zb.t.hp
+    SET.bar = math.floor(zb.hp * 100 / (zb.t.hp * M.hp_mul))
     iso.entity_set(zb.id, SET)
     SET.bar = nil
 end
@@ -108,7 +109,7 @@ local function spawn_one(kind)
     if not id then return false end
     -- look = コマ(0/1) + 左向きなら2。tgt は無いとき false(キーを消さず、表の大きさを変えない)
     local zb = setmetatable({
-        id = id, x = x, y = y, z = z, gy = y, hp = t.hp,
+        id = id, x = x, y = y, z = z, gy = y, hp = math.floor(t.hp * M.hp_mul),
         col = -1, tx = x, tz = z, look = 0, atk = 0, tgt = false, scan = math.random() * SCAN_GAP, throw = false,
     }, META[kind])
     list[#list + 1] = zb
@@ -142,7 +143,7 @@ local function attack(zb, tgt, dt)
     if zb.atk <= 0 then
         local t = zb.t
         zb.atk = t.rate
-        local dmg = tgt.side == "building" and t.dmg * t.bmul or t.dmg
+        local dmg = t.dmg * M.dmg_mul * (tgt.side == "building" and t.bmul or 1)
         if t.reach > 0 then
             combat.shoot(zb, tgt, dmg, 8, 3, 6, 0.4)
         else

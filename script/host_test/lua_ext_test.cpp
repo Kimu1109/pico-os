@@ -14,6 +14,7 @@
 //   pico.draw_tilemap / draw_image_partの反転
 //   pico.iso(2.5Dの箱庭のエンジン。中身は iso_world_test、ここはLuaからの呼び方と権限。経路探索 path/stand も)
 #include "lua/LuaEngine.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
@@ -2259,6 +2260,135 @@ int main() {
             iso.close()
         )LUA", "bld3");
         check(ok, "buildings: 一通り");
+    }
+
+    // =====================================================================
+    // ゾンビTD のウェーブ・保存(waves.lua / save.lua)と、game.lua 全体の流れ
+    // =====================================================================
+    {
+        std::string root(__FILE__);
+        root = root.substr(0, root.rfind("/script/host_test/"));
+        auto slurp = [&](const std::string& rel) {
+            std::ifstream f(root + rel, std::ios::binary);
+            return std::string((std::istreambuf_iterator<char>(f)), {});
+        };
+        static const char* const kFiles[] = {"game.lua", "state.lua", "orders.lua", "ui.lua", "waves.lua", "save.lua",
+            "combat.lua", "zombies.lua", "soldiers.lua", "buildings.lua", "palette.lua", "faces.pimg", "units.pimg"};
+        for (const char* f : kFiles) {
+            HostSd::files[std::string("/tdg/") + f] = slurp(std::string("/pc/sdcard/lua/apps/ゾンビTD/") + f);
+        }
+        OSData::SD_usable = true;
+        // pico.keep_awake
+        {
+            LuaEngine ke(64 * 1024);
+            PowerFunctions::detail::keep_awake = false;
+            check(ke.Run("pico.keep_awake()", "ka") && PowerFunctions::detail::keep_awake, "pico.keep_awake: 印を立てる");
+            PowerFunctions::detail::keep_awake = false;
+        }
+        LuaEngine te(270 * 1024, LuaPermissions{}, "/tdg");
+        lua_register(te.raw(), "check", l_check);
+        // waves.lua 単体
+        bool ok = te.Run(R"LUA(
+            local Wv = require("waves")
+            local a, b, c = Wv.mix(1)
+            check(a == 9 and b == 0 and c == 0, "waves.mix: 1回目はノーマルだけ")
+            a, b, c = Wv.mix(10)
+            check(a + b + c == 36 and b > 0 and c > 0, "waves.mix: 進むと遠距離・重量級が混ざる")
+            check(Wv.preview(3):find("重量級が来る") ~= nil and Wv.preview(2):find("遠距離が来る") ~= nil,
+                  "waves.preview: 初めて来る種類を予告する")
+            check(Wv.bonus(3) == 60 and Wv.money_mul(5) == 1.2, "waves: 越えたお金と倒したお金の倍率")
+            Wv.reset(1)
+            check(Wv.phase == "prep" and Wv.timer == 60, "waves.reset: 最初の準備時間は60秒")
+            Wv.timer = 12.6
+            check(Wv.skip() == 24 and Wv.timer == 0, "waves.skip: 残り秒数×2 のお金")
+            local Z = { q = {}, a = 0 }
+            function Z.queue(k) Z.q[#Z.q + 1] = k end
+            function Z.alive() return Z.a end
+            function Z.waiting() return #Z.q end
+            check(Wv.update(0.1, Z) == "start", "waves.update: 準備時間が終わると start")
+            Wv.n = 4
+            Wv.start(Z)
+            local n = { normal = 0, ranged = 0, heavy = 0 }
+            for _, k in ipairs(Z.q) do n[k] = n[k] + 1 end
+            a, b, c = Wv.mix(4)
+            check(Wv.phase == "wave" and n.normal == a and n.ranged == b and n.heavy == c, "waves.start: 中身どおりに積む")
+            check(Z.hp_mul == Wv.hp_mul(4) and Z.dmg_mul == Wv.dmg_mul(4), "waves.start: 強さの倍率を入れる")
+            check(Wv.update(1, Z) == nil, "waves.update: 残っている間は続く")
+            Z.q = {}
+            check(Wv.update(1, Z) == "clear" and Wv.n == 5 and Wv.phase == "prep" and Wv.timer == 30,
+                  "waves.update: 全部倒すと clear・次の準備時間は30秒")
+            -- save.better
+            local Sv = require("save")
+            check(Sv.better({w = 3, hp = 0, earned = 1}, {w = 2, hp = 9, earned = 9}) and
+                  not Sv.better({w = 3, hp = 0, earned = 1}, {w = 3, hp = 0, earned = 2}) and
+                  Sv.better({w = 1, hp = 0, earned = 0}, nil), "save.better: ウェーブ数 → ベースの耐久 → 稼いだ合計")
+        )LUA", "waves");
+        check(ok, "waves/save: 単体");
+        // game.lua 全体: 新しく始める → ウェーブ → 越える → 保存 → ゲームオーバー
+        HostSd::files.erase("/tdg/store.json");
+        ok = ok && te.Run("TEST = {}; require('game')", "game");
+        lua_State* L = te.raw();
+        for (int i = 0; i < 300 && ok; i++) {
+            te.CallLoop(50);
+            ok = te.Run("DONE = TEST.env.G.mode == 'play'", "m");
+            lua_getglobal(L, "DONE");
+            const bool done = lua_toboolean(L, -1);
+            lua_pop(L, 1);
+            if (done) break;
+        }
+        ok = te.Run(R"LUA(
+            local E = TEST.env
+            local G, Wv = E.G, E.waves
+            check(G.mode == "play" and G.money == 300 and Wv.n == 1 and Wv.phase == "prep", "game: マップを作って準備時間から始まる")
+            E.orders.hire("melee")
+            check(G.money == 250 and E.soldiers.count() == 1, "game: 雇うとお金が減る")
+            local left = math.floor(Wv.timer)
+            E.next_wave()
+            check(left > 50 and G.money == 250 + left * 2 and Wv.timer == 0, "game: 次へで残り秒数×2 (" .. G.money .. ")")
+            MONEY_START = G.money
+        )LUA", "g1");
+        te.CallLoop(50);
+        ok = ok && te.Run(R"LUA(
+            local E = TEST.env
+            local G, Wv = E.G, E.waves
+            check(Wv.phase == "wave" and E.zombies.waiting() + E.zombies.alive() == 9, "game: ウェーブ1が始まる")
+            local st = pico.store_load()
+            check(st and st.game and st.game.w == 1 and st.game.money == MONEY_START and #st.game.s == 1 and st.game.seed == G.seed,
+                  "game: ウェーブの始めに保存する")
+            -- 全部倒したことにする
+            MONEY0 = G.money
+            E.zombies.clear()
+        )LUA", "g2");
+        te.CallLoop(50);
+        ok = ok && te.Run(R"LUA(
+            local E = TEST.env
+            local G, Wv = E.G, E.waves
+            check(Wv.n == 2 and Wv.phase == "prep" and G.money == MONEY0 + 40, "game: ウェーブを越えると 30+10×1 のお金")
+            local st = pico.store_load()
+            check(st.game.w == 2, "game: 準備時間の始めに保存する")
+            -- 保存から戻す: 建物と兵士
+            local B, S = E.buildings, E.soldiers
+            local b = G.base
+            local x, z = b.x, b.z + 6
+            while not B.can_place("arrow", x, z, G.S_STAND) do x = x + 1 end
+            local t = B.place("arrow", x, z, G.S_STAND)
+            B.upgrade(t)   -- 建設中なので強化できない
+            local game = E.save.dump(G, Wv, S, B)
+            check(#game.b == 1 and game.b[1][1] == "arrow" and game.b[1][4] == 1, "save.dump: 建物の一覧")
+            B.clear(); S.clear()
+            game.b[1][4], game.b[1][5] = 3, 100
+            game.money = 999
+            E.save.restore(game, G, Wv, S, B, G.S_STAND)
+            local r = B.list[1]
+            check(r and r.lv == 3 and r.state == "ready" and r.hp == 100 and G.money == 999 and S.count() == 1 and
+                  S.list[1].state == "hold", "save.restore: 建物と兵士を戻す")
+            -- ゲームオーバー
+            G.base:hurt(5000)
+            check(G.mode == "over", "game: ベースが壊れると終わる")
+            st = pico.store_load()
+            check(st.game == nil and st.best and st.best.w == 1, "game: 途中の保存を消して最高記録を残す")
+        )LUA", "g3");
+        check(ok, "game: ウェーブと保存の流れ");
     }
 
     WidgetFunctions::ClearSceneWidgets();

@@ -5,6 +5,7 @@
 -- 1つの表のキーは16個以内(zombies.lua と同じ理由)。種類ごとに同じ値はメタテーブルに置く。
 local iso = pico.iso
 local combat = require("combat")
+local sfx = require("sfx")
 local M = {}
 
 M.TAG = 4                     -- 人や物の tag(タワー)
@@ -167,7 +168,7 @@ local function finish(b)
     b.state = "ready"
     b.hp = b.hp + (max_hp(b) - low)
     if b.id then
-        SET.sx, SET.sy, SET.w, SET.h, SET.height = b.t.sx, 4, 20, 36, 2.2
+        SET.sx, SET.sy, SET.w, SET.h, SET.height = b.t.sx, b.lv * 40 - 36, 20, 36, 2.2   -- レベルごとに40pxの段
         iso.entity_set(b.id, SET)
         SET.sx, SET.sy, SET.w, SET.h, SET.height = nil, nil, nil, nil, nil
     end
@@ -292,8 +293,10 @@ local function fight(b, dt)
     b.atk = lv.rate
     if b.t.range then
         combat.shoot(b, tgt, math.floor(lv.dmg * combat.height_factor(b, tgt) + 0.5), 5, 2, 12, 0.15)
+        sfx.arrow()
     else
         tgt:hurt(lv.dmg, b)
+        sfx.hit()
     end
     local left = (tgt.x - b.x) - (tgt.z - b.z) < 0
     if b.look ~= left then
@@ -310,7 +313,7 @@ function M.update(dt)
         if b.hp > 0 then
             if b.state ~= "ready" then
                 b.timer = b.timer - dt
-                if b.timer <= 0 then finish(b) end
+                if b.timer <= 0 then finish(b); sfx.built() end
             else
                 if b.rr > 0 then
                     b.timer = b.timer - dt
@@ -326,6 +329,7 @@ function M.update(dt)
         local b = list[i]
         if b.hp <= 0 then
             remove(b)
+            sfx.lost()
             if M.on_lost then M.on_lost(b) end
         end
     end

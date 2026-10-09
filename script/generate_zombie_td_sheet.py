@@ -12,6 +12,7 @@
       x=196 建設中の足場(20x24)
       x=216 弓塔(20x36。上に弓兵)
       x=236 剣塔(20x36。上に近接兵)
+    兵士と塔は Lv1〜4 の絵を縦に並べる(段 = 40px。Lv n は y = 40*(n-1) からの段)。ゾンビ・ベース・足場は1段目だけ。
     どれも右を向いた絵で、左へ歩くときは左右反転する。高さの違う絵は下に寄せる(足元が y=39)。
     行の並びは main.lua の SPRITES と合わせること。
   icon.pimg   ランチャのアイコン(48x48、既定のパレット)
@@ -204,7 +205,7 @@ HEALER_TOP = [
     "...fffff.4..",
     "...55.55.4..",
 ]
-RANGED_TOP = [
+ARCHER_TOP = [
     "....999.....",
     "...99999....",
     "...9666.....",
@@ -270,8 +271,8 @@ SCAFFOLD = [
 ]
 
 
-def tower(top):
-    """上の兵士(12x15)を、木の物見台(20x21)の上に載せる"""
+def tower(top, level=1):
+    """上の兵士(12x15)を、物見台(20x21)の上に載せる。Lv3 から脚が石、Lv4 は手すりが金"""
     base = [
         "dddddddddddddddddddd",
         "d4444444444444444445",
@@ -295,7 +296,53 @@ def tower(top):
         "8888888888888888888.",
         "8888888888888888888.",
     ]
+    if level >= 3:
+        base = base[:3] + [line.replace("5", "8") for line in base[3:19]] + base[19:]
+    if level >= 4:
+        base = [line.replace("d", "e") for line in base[:1]] + base[1:]
+    if level >= 2:
+        # 手すりの右端に旗
+        flag = ["...ccc..", "...ccc..", "...5....", "...5...."]
+        top = [line + "" for line in top]
+        art = ["...." + line + "...." for line in top] + base
+        for i, f in enumerate(flag):
+            row = list(art[i])
+            for x, ch in enumerate(f):
+                if ch != ".":
+                    row[12 + x] = ch
+            art[i] = "".join(row)
+        return art
     return ["...." + line + "...." for line in top] + base
+
+
+def edit(art, recolor=None, points=None, rows=None):
+    """絵の写しを作る。recolor = {元: 先}(rows の行だけ)、points = [(x, y, 色), ...]"""
+    out = [list(line) for line in art]
+    if recolor:
+        for y in (rows if rows is not None else range(len(out))):
+            out[y] = [recolor.get(c, c) for c in out[y]]
+    for x, y, ch in points or []:
+        out[y][x] = ch
+    return ["".join(line) for line in out]
+
+
+# 兵士のレベルごとの上半身(仕様の表: 近接 短剣→鎧付き短剣→鎧付き槍→強化鎧付き槍 / 回復は回復量・間隔 / 弓はダメージ・間隔)
+def soldier_levels():
+    spear = [(9, y, "4") for y in range(2, 14)] + [(9, 0, "8"), (9, 1, "8"), (8, 1, "8"), (10, 1, "8")]
+    no_dagger = [(9, 8, "."), (10, 8, "."), (11, 8, ".")]
+    melee2 = edit(MELEE_TOP, {"1": "8"}, rows=range(6, 11))                     # 鎧
+    melee3 = edit(melee2, points=no_dagger + spear)                              # 槍
+    melee4 = edit(melee3, {"8": "3"}, rows=range(6, 11))                         # 強化鎧(濃い灰と金の縁)
+    melee4 = edit(melee4, points=[(x, 6, "e") for x in range(3, 8)] + [(x, 0, "e") for x in range(4, 7)])
+    archer2 = edit(ARCHER_TOP, {"4": "c"}, rows=[11])                            # 赤い帯
+    archer3 = edit(archer2, points=[(1, y, "5") for y in range(5, 11)] + [(1, 4, "8")])   # 背中の矢筒
+    archer4 = edit(archer3, {"9": "8"}, rows=[0, 1])                             # 兜
+    archer4 = edit(archer4, {"4": "e"}, rows=range(3, 12))                       # 金の弓
+    healer2 = edit(HEALER_TOP, {"2": "a"}, rows=range(0, 5))                     # 明るい頭巾
+    healer3 = edit(healer2, points=[(10, 5, "e"), (9, 6, "e"), (11, 6, "e")])     # 杖が光る
+    healer4 = edit(healer3, {"a": "e"}, rows=range(0, 5))                        # 金の頭巾
+    return ([MELEE_TOP, melee2, melee3, melee4], [HEALER_TOP, healer2, healer3, healer4],
+            [ARCHER_TOP, archer2, archer3, archer4])
 
 
 # バリケードのテクスチャ(16x16)。'.' = 穴、それ以外は palette.lua の色番号(16進)
@@ -416,10 +463,10 @@ def pix(ch):
 
 def build_units():
     w = 12 * 4 + 16 * 2 + 44 + 12 * 6 + 20 * 3
-    rows = [[0] * w for _ in range(SHEET_H)]
+    rows = [[0] * w for _ in range(SHEET_H * 4)]
 
-    def put(art, ox):
-        oy = SHEET_H - len(art)   # 下に寄せる
+    def put(art, ox, level=1):
+        oy = SHEET_H * level - len(art)   # その段(レベル)の下に寄せる
         for y, line in enumerate(art):
             assert len(line) == len(art[0]), (line, len(line), len(art[0]))
             for x, ch in enumerate(line):
@@ -431,13 +478,15 @@ def build_units():
     for i, legs in enumerate(HEAVY_LEGS):
         put(HEAVY_TOP + legs, 48 + 16 * i)
     put(BASE, 80)
-    for i, legs in enumerate(SOLDIER_LEGS):
-        put(MELEE_TOP + legs, 124 + 12 * i)
-        put(HEALER_TOP + legs, 148 + 12 * i)
-        put(RANGED_TOP + legs, 172 + 12 * i)
+    melee, healer, archer = soldier_levels()
+    for lv in range(1, 5):
+        for i, legs in enumerate(SOLDIER_LEGS):
+            put(melee[lv - 1] + legs, 124 + 12 * i, lv)
+            put(healer[lv - 1] + legs, 148 + 12 * i, lv)
+            put(archer[lv - 1] + legs, 172 + 12 * i, lv)
+        put(tower(archer[lv - 1], lv), 216, lv)
+        put(tower(melee[lv - 1], lv), 236, lv)
     put(SCAFFOLD, 196)
-    put(tower(RANGED_TOP), 216)
-    put(tower(MELEE_TOP), 236)
     return rows
 
 

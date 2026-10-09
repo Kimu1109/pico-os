@@ -6,6 +6,7 @@
 -- 1人の表は16個以内のキーにする(zombies.lua と同じ理由)。種類ごとに同じ値はメタテーブルに置く。
 local iso = pico.iso
 local combat = require("combat")
+local sfx = require("sfx")
 local M = {}
 
 M.MAX = 32                    -- 同時に雇える数
@@ -189,6 +190,7 @@ function M.restore(kind, lv, hp, px, pz)
         iso.entity_move(s.id, px, y, pz)
     end
     s.path, s.state = false, "hold"
+    s.look = -1
     set_bar(s)
     return s
 end
@@ -238,6 +240,7 @@ function M.upgrade(s)
     local old = max_hp(s)
     s.lv = s.lv + 1
     s.hp = s.hp + (max_hp(s) - old)
+    s.look = -1                     -- 次の step で新しいレベルの絵にする
     set_bar(s)
     return true
 end
@@ -304,8 +307,10 @@ local function engage(s, tgt, dt)
             s.atk = lv.rate
             if s.t.range then
                 combat.shoot(s, tgt, math.floor(lv.dmg * combat.height_factor(s, tgt) + 0.5), 5, 2, 12, 0.15)
+                sfx.arrow()
             else
                 tgt:hurt(lv.dmg, s)
+                sfx.hit()
             end
         end
         s.wait = 0
@@ -425,9 +430,10 @@ local function step(s, dt)
     if look ~= s.look then
         s.look = look
         SET.sx = s.t.sx + (look % 2) * W
+        SET.sy = s.lv * 40 - H          -- units.pimg はレベルごとに40pxの段
         SET.flip = left
         iso.entity_set(s.id, SET)
-        SET.sx, SET.flip = nil, nil
+        SET.sx, SET.sy, SET.flip = nil, nil, nil
     end
 end
 
@@ -445,6 +451,7 @@ function M.update(dt)
         if s.hp <= 0 then
             remove_at(i)
             M.stats.lost = M.stats.lost + 1
+            sfx.lost()
             if M.on_lost then M.on_lost(s) end
         end
     end

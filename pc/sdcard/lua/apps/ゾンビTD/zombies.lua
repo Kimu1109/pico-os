@@ -7,6 +7,7 @@
 -- 種類ごとに同じ値(t・r・お金・hurt)はメタテーブルに置く。
 local iso = pico.iso
 local combat = require("combat")
+local sfx = require("sfx")
 local M = {}
 
 local MAX_ALIVE = 40          -- 同時に出ているゾンビの上限(超えた分は順番待ち)
@@ -263,6 +264,7 @@ local function sweep()
             iso.entity_remove(zb.id)
             table.remove(list, i)
             M.stats.killed = M.stats.killed + 1
+            sfx.kill()
             if M.on_kill then M.on_kill(zb) end
         end
     end

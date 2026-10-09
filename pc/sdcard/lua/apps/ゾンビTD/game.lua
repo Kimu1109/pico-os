@@ -1,11 +1,12 @@
 -- ゾンビTD: 斜め上から見た箱庭(pico.iso)のタワーディフェンス。仕様は ZOMBIE_TD.md。
--- 今は「作る順番」の2〜6: マップの生成・カメラ・ゾンビ・兵士・建物・ウェーブ(準備時間/次へ/お金)・保存・ハイスコア。
+-- 「作る順番」の2〜7: マップの生成・カメラ・ゾンビ・兵士・建物・ウェーブ(準備時間/次へ/お金)・保存・ハイスコア・効果音・説明。
 --   上の行: ベースの耐久・お金・ウェーブ(準備時間は残り秒と[次へ]、ウェーブ中は残りのゾンビ)・fps
 --   下の欄: ui.lua。地図: タップ=兵士・建物を選ぶ/選んでいる兵士をそこへ動かす/(「建設」で選んだ後)そこへ建てる、
 --         ドラッグ=カメラ(「選択」中は範囲選択)。
 --   コントローラーの十字・キーボードの矢印でカメラ、A・n=次へ、1/2/3=雇う、Esc=選択の解除、HOME=戻る。
 --   5秒ごとにシリアルへ "[TD] fps=.. lua=..ms render=..ms alive=.. mem lua=.. heap_free=.." を出す(実機の速さとメモリを測る)。
--- ファイル: state(共有の状態)・orders(操作)・ui(下の欄)・waves・save・zombies・soldiers・buildings・combat。
+-- ファイル: state(共有の状態)・orders(操作)・ui(下の欄)・waves・save・sfx(効果音)・tutorial(説明)・
+--         zombies・soldiers・buildings・combat。
 -- マップ・流れの場・経路探索・押し合い・弾・描画は C++ のエンジン(src/iso/)。
 local iso = pico.iso
 local PAL = require("palette")
@@ -18,6 +19,8 @@ local orders = require("orders")
 local ui = require("ui")
 local waves = require("waves")
 local save = require("save")
+local sfx = require("sfx")
+local tutorial = require("tutorial")
 
 local W_CHUNKS = 7                 -- 7x7 チャンク = 56x56 マス(全部を読み込んだままにできる上限)
 local BASE_HP = 2000
@@ -41,8 +44,10 @@ G.S_STAND = S_STAND_RULES
 
 -- Luaのごみ集めは世代別にする。既定(incremental)だと、毎フレームの使い捨ての表が
 -- 生きている量の2倍まで溜まってから集めるので、ゾンビが多いとLuaが予算(200KB)近くまで膨らみ、
--- 実機では本体のメモリが先に尽きて落ちた(ゾンビ30体を超えたところで再起動)
-collectgarbage("generational")
+-- 実機では本体のメモリが先に尽きて落ちた(ゾンビ30体を超えたところで再起動)。
+-- さらに小さい集め(minor)を早めにする(既定の 20, 100 → 5, 30)。ゾンビ40匹・兵士8人・建物10個で、
+-- ごみを含めた山が PC で約267KB → 約247KB(実機の32bit換算で約200KB → 約186KB)になり、処理時間は変わらなかった
+collectgarbage("generational", 5, 30)
 
 for i, c in ipairs(PAL.colors) do pico.set_palette(i, c[1], c[2], c[3]) end
 iso.sky(PAL.sky)
@@ -211,6 +216,8 @@ local function game_over()
     over_text = string.format("耐えたウェーブ %d (最高 %d)%s", score.w, nb.w,
         save.better(score, best) and score.w > 0 and " 新記録!" or "")
     pico.invalidate(view)
+    tutorial.stop()
+    sfx.game_over()
     pico.log(string.format("[TD] ベースが壊れました(種 %d、ウェーブ %d、出したゾンビ %d、倒した %d、雇った兵士 %d)",
         G.seed, waves.n, zombies.stats.spawned, zombies.stats.killed, soldiers.stats.hired))
 end
@@ -218,6 +225,7 @@ end
 local function base_hurt(b, dmg)
     if G.mode ~= "play" then return end
     b.hp = b.hp - dmg
+    sfx.base()
     update_base_bar()
     pico.invalidate(hud)
     if b.hp <= 0 then game_over() end
@@ -300,11 +308,13 @@ local function wave_event(ev)
     if ev == "start" then
         save_game()                         -- ウェーブ中に閉じたら、ここからやり直す
         waves.start(zombies)
+        sfx.wave_start()
         G.say(string.format("ウェーブ %d!", waves.n))
     elseif ev == "clear" then
         local bonus = waves.bonus(waves.n - 1)
         G.add_money(bonus, true)
         G.say(string.format("ウェーブ %d を越えた +$%d", waves.n - 1, bonus))
+        sfx.wave_clear()
         save_game()
     end
     pico.invalidate(hud)
@@ -350,6 +360,10 @@ pico.on(hud, "press_end", function(_, _, _, lx)
 end)
 
 local drag_rect = nil      -- 範囲選択の矩形 {x0, y0, x1, y1}
+-- 説明の案内(地図の上に出す枠)
+local TUT_X, TUT_Y, TUT_W = CX + 4, VY + 4, CW - 8
+local TUT_H = 40            -- 描き直す範囲(2行まで)
+local function tut_dirty() pico.mark_dirty(TUT_X, TUT_Y, TUT_W, TUT_H) end
 
 pico.on(view, "render", function()
     if G.mode == "load" then
@@ -365,6 +379,14 @@ pico.on(view, "render", function()
         local r = drag_rect
         pico.draw_rect(math.min(r[1], r[3]), math.min(r[2], r[4]), math.abs(r[3] - r[1]) + 1, math.abs(r[4] - r[2]) + 1, 14)
     end
+    local tt = tutorial.text()
+    if tt then
+        local _, th = pico.measure_text(tt, TUT_W - 24, 0)
+        pico.fill_rect(TUT_X, TUT_Y, TUT_W, th + 6, PAL.light)
+        pico.draw_rect(TUT_X, TUT_Y, TUT_W, th + 6, 0)
+        pico.draw_text_wrapped(TUT_X + 4, TUT_Y + 3, TUT_W - 24, tt, 0, 0)
+        pico.draw_text(TUT_X + TUT_W - 4, TUT_Y + 3, "×", 8, 0, "right")      -- タップで説明を終える
+    end
     if G.mode == "over" then
         box(CX + 10, VY + VH // 2 - 38, CW - 20, 76)
         pico.draw_text(CX + CW // 2, VY + VH // 2 - 32, "ベースが壊れました", 12, 0, "center")
@@ -375,7 +397,22 @@ end)
 
 -- ---------------------------------------------------------------- 操作
 
-local function new_game() new_map() end
+local function new_game()
+    new_map()
+    if not save.load().tut then tutorial.start(); tut_dirty() end
+end
+
+-- 効果音の入り切り(覚えておく)
+local function set_sound(on)
+    sfx.on = on
+    save.set("snd", on)
+end
+
+-- 説明をもう一度(終えると覚える)
+local function restart_tutorial()
+    tutorial.start()
+    tut_dirty()
+end
 
 local function back()
     -- 準備時間の間に閉じたら今の状態を保存する(ウェーブ中ならウェーブの始めの保存が残っている)
@@ -384,7 +421,7 @@ local function back()
 end
 
 ui.init({ x = CX, y = PY, w = CW, info_h = INFO_H, btn_h = BTN_H },
-    { back = back, center = center_base, new_game = new_game })
+    { back = back, center = center_base, new_game = new_game, sound = set_sound, tutorial = restart_tutorial })
 
 local touch = nil
 pico.on(view, "press_start", function(_, x, y) touch = { x = x, y = y, drag = false } end)
@@ -416,6 +453,13 @@ pico.on(view, "press_end", function(_, x, y)
         return
     end
     if t.drag then return end
+    -- 説明の案内をタップすると説明を終える
+    if tutorial.text() and y < TUT_Y + TUT_H and t.y < TUT_Y + TUT_H then
+        tutorial.stop()
+        save.set("tut", true)
+        pico.invalidate(view)
+        return
+    end
     if G.mode == "over" then new_game()
     elseif G.mode == "play" then orders.tap_map(x, y) end
     pico.invalidate(panel)
@@ -475,6 +519,13 @@ function loop(dt)
         if (perf.frames % 15) == 0 then pico.invalidate(hud) end
         if (#G.sel == 1 or G.bsel) and (perf.frames % 10) == 0 then pico.invalidate(panel) end
     end
+    if tutorial.active and G.mode == "play" then
+        if tutorial.update(dt / 1000) then
+            pico.invalidate(view)
+            if not tutorial.active then save.set("tut", true) end
+        end
+    end
+    sfx.flush()
     if G.info_msg then
         G.info_t = G.info_t - dt / 1000
         if G.info_t <= 0 then G.info_msg = false; pico.invalidate(panel) end
@@ -491,17 +542,18 @@ end
 
 math.randomseed(pico.millis())
 local saved = save.load()
+sfx.on = saved.snd ~= false
 if saved.game and saved.game.seed then
     -- 途中の保存があれば、続きからか新しく始めるかを選ぶ(閉じた/キャンセルは続きから。うっかり保存を失わないように)
     local d = pico.show_choice("ゾンビTD", { string.format("続きから W%d", saved.game.w or 1), "新しく始める" })
     pico.on(d, "closed", function(_, ok, idx)
-        if ok and idx == 1 then new_map() else new_map(saved.game.seed, saved.game) end
+        if ok and idx == 1 then new_game() else new_map(saved.game.seed, saved.game) end
         saved = nil
     end)
 else
-    new_map()
+    new_game()
 end
 
 if TEST then TEST.env = { G = G, waves = waves, save = save, zombies = zombies, soldiers = soldiers, buildings = buildings,
-    orders = orders, ui = ui, new_map = new_map, next_wave = next_wave, back = back, scroll = scroll,
+    orders = orders, ui = ui, new_map = new_map, tutorial = tutorial, sfx = sfx, next_wave = next_wave, back = back, scroll = scroll,
     center_on = center_on, origin = function() return OX, OY end, perf = perf } end

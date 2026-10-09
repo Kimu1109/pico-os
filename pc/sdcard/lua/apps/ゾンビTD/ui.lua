@@ -7,10 +7,11 @@ local orders = require("orders")
 local soldiers = require("soldiers")
 local buildings = require("buildings")
 local waves = require("waves")
+local sfx = require("sfx")
 local M = {}
 
 local CX, PY, CW, INFO_H, BTN_H         -- 置き場所(init で決まる)
-local actions                           -- game.lua の操作 {back=, center=, new_game=}
+local actions                           -- game.lua の操作 {back=, center=, new_game=, sound=, tutorial=}
 local held = nil
 
 function M.box(x, y, w, h, label, on)
@@ -93,7 +94,6 @@ local function render()
     end
 end
 
-local MORE = { "ベースを見る", "選択を解除", "新しく始める" }
 
 -- 選ぶ一覧を出して、選んだ番号(1始まり)で fn を呼ぶ
 local function choose(title, items, fn)
@@ -121,9 +121,12 @@ function M.press(b)
     elseif id == "select" then G.select_mode = not G.select_mode
     elseif id == "speed" then G.speed = G.speed == 1 and 3 or (G.speed == 3 and 0 or 1)
     elseif id == "more" then
-        choose("その他", MORE, function(i)
+        local more = { "ベースを見る", "選択を解除", sfx.on and "効果音を切る" or "効果音を入れる", "説明をもう一度", "新しく始める" }
+        choose("その他", more, function(i)
             if i == 1 then actions.center()
             elseif i == 2 then orders.deselect_all()
+            elseif i == 3 then actions.sound(not sfx.on)
+            elseif i == 4 then actions.tutorial()
             else
                 local d = pico.show_message("今のゲームをやめて、新しいマップで始めますか?", "やめる", "始める")
                 pico.on(d, "closed", function(_, ok) if ok then actions.new_game() end end)

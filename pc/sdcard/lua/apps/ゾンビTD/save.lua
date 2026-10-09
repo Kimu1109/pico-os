@@ -27,6 +27,13 @@ function M.write(game, score)
     return pico.store_save(st)
 end
 
+-- 設定などを1つ書く(tut = 説明を終えた、snd = 効果音)
+function M.set(key, value)
+    local st = M.load()
+    st[key] = value
+    return pico.store_save(st)
+end
+
 -- 建物と兵士の一覧を表にする
 function M.dump(G, waves, soldiers, buildings)
     local b, s = {}, {}

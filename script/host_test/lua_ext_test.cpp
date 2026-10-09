@@ -1842,6 +1842,7 @@ int main() {
         HostSd::files["/td/combat.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/combat.lua");
         HostSd::files["/td/soldiers.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/soldiers.lua");
         HostSd::files["/td/buildings.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/buildings.lua");
+        HostSd::files["/td/sfx.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/sfx.lua");
         HostSd::files["/td/units.pimg"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/units.pimg");
         HostSd::files["/td/faces.pimg"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/faces.pimg");
         OSData::SD_usable = true;
@@ -2272,7 +2273,7 @@ int main() {
             std::ifstream f(root + rel, std::ios::binary);
             return std::string((std::istreambuf_iterator<char>(f)), {});
         };
-        static const char* const kFiles[] = {"game.lua", "state.lua", "orders.lua", "ui.lua", "waves.lua", "save.lua",
+        static const char* const kFiles[] = {"game.lua", "state.lua", "orders.lua", "ui.lua", "waves.lua", "save.lua", "sfx.lua", "tutorial.lua",
             "combat.lua", "zombies.lua", "soldiers.lua", "buildings.lua", "palette.lua", "faces.pimg", "units.pimg"};
         for (const char* f : kFiles) {
             HostSd::files[std::string("/tdg/") + f] = slurp(std::string("/pc/sdcard/lua/apps/ゾンビTD/") + f);
@@ -2340,7 +2341,13 @@ int main() {
             local E = TEST.env
             local G, Wv = E.G, E.waves
             check(G.mode == "play" and G.money == 300 and Wv.n == 1 and Wv.phase == "prep", "game: マップを作って準備時間から始まる")
+            check(E.tutorial.active and E.tutorial.text():find("雇う") ~= nil, "tutorial: 初めてなら説明が始まる")
             E.orders.hire("melee")
+            E.tutorial.update(0.1)
+            check(E.tutorial.text():find("地面をタップ") ~= nil, "tutorial: 雇うと次の案内へ進む")
+            G.moved = true
+            E.tutorial.update(0.1)
+            check(E.tutorial.text():find("建設") ~= nil, "tutorial: 動かすと次の案内へ進む")
             check(G.money == 250 and E.soldiers.count() == 1, "game: 雇うとお金が減る")
             local left = math.floor(Wv.timer)
             E.next_wave()
@@ -2382,6 +2389,14 @@ int main() {
             local r = B.list[1]
             check(r and r.lv == 3 and r.state == "ready" and r.hp == 100 and G.money == 999 and S.count() == 1 and
                   S.list[1].state == "hold", "save.restore: 建物と兵士を戻す")
+            -- レベルごとの絵(units.pimg の 40px の段)
+            local sx = S.list[1]
+            S.upgrade(sx)
+            E.soldiers.update(0.05)
+            local _, _, _, o = pico.iso.entity_get(sx.id)
+            check(o.sy == 2 * 40 - 22, "soldiers.upgrade: Lv2 の段の絵になる (" .. o.sy .. ")")
+            _, _, _, o = pico.iso.entity_get(r.id)
+            check(o.sy == 3 * 40 - 36, "buildings: Lv3 の塔の段の絵 (" .. o.sy .. ")")
             -- ゲームオーバー
             G.base:hurt(5000)
             check(G.mode == "over", "game: ベースが壊れると終わる")

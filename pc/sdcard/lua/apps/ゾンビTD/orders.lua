@@ -5,6 +5,7 @@ local G = require("state")
 local combat = require("combat")
 local soldiers = require("soldiers")
 local buildings = require("buildings")
+local sfx = require("sfx")
 local M = {}
 
 function M.deselect_all()
@@ -44,6 +45,7 @@ end
 local function pay(c)
     if G.money < c then G.say("お金が足りません"); return false end
     G.add_money(-c)
+    sfx.coin()
     return true
 end
 
@@ -102,6 +104,7 @@ function M.sell()
         v = soldiers.sell(s)
     else return end
     G.add_money(v)
+    sfx.coin()
 end
 
 -- 地図のタップ: 兵士・建物なら選ぶ(選んでいるものをもう一度タップすると外す)、
@@ -126,7 +129,7 @@ function M.tap_map(px, py)
         return
     end
     if #G.sel == 0 then return end
-    if not soldiers.order_group(G.sel, bx + 0.5, bz + 0.5) then G.say("そこへは行けません") end
+    if soldiers.order_group(G.sel, bx + 0.5, bz + 0.5) then G.moved = true else G.say("そこへは行けません") end
 end
 
 -- 範囲選択: 画面の矩形の中に立っている兵士

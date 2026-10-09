@@ -144,7 +144,8 @@ local function attack(zb, tgt, dt)
     if zb.atk <= 0 then
         local t = zb.t
         zb.atk = t.rate
-        local dmg = t.dmg * M.dmg_mul * (tgt.side == "building" and t.bmul or 1)
+        -- 整数にする(倍率で小数になると、耐久を %d で出すところでエラーになった)
+        local dmg = math.max(1, math.floor(t.dmg * M.dmg_mul * (tgt.side == "building" and t.bmul or 1) + 0.5))
         if t.reach > 0 then
             combat.shoot(zb, tgt, dmg, 8, 3, 6, 0.4)
         else

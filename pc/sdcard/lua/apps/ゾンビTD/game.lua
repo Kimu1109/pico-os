@@ -346,7 +346,7 @@ pico.on(hud, "render", function()
         pico.draw_text(CX + 4, CY + 2, "種 " .. G.seed, 15, 0)
         return
     end
-    pico.draw_text(CX + 2, CY + 2, string.format("基%d", math.max(0, base.hp)), base.hp > BASE_HP // 4 and 15 or 12, 0)
+    pico.draw_text(CX + 2, CY + 2, string.format("基%d", math.max(0, math.floor(base.hp))), base.hp > BASE_HP // 4 and 15 or 12, 0)
     pico.draw_text(CX + 58, CY + 2, string.format("$%d", G.money), 14, 0)
     if waves.phase == "prep" and G.mode == "play" then
         pico.draw_text(CX + 106, CY + 2, string.format("W%dまで%d", waves.n, math.ceil(waves.timer)), 10, 0)

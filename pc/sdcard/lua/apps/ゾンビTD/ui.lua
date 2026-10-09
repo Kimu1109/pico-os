@@ -85,7 +85,7 @@ local function render()
         pico.draw_text(CX + 2, PY + 2, building_text(G.bsel), 15, 0)
     elseif #G.sel == 1 then
         local s = G.sel[1]
-        pico.draw_text(CX + 2, PY + 2, string.format("%sLv%d %d/%d", s.t.name, s.lv, math.max(0, s.hp), soldiers.max_hp(s)), 15, 0)
+        pico.draw_text(CX + 2, PY + 2, string.format("%sLv%d %d/%d", s.t.name, s.lv, math.max(0, math.floor(s.hp)), soldiers.max_hp(s)), 15, 0)
     elseif #G.sel > 1 then
         pico.draw_text(CX + 4, PY + 2, #G.sel .. "人選択中 タップで移動", 15, 0)
     elseif G.select_mode then

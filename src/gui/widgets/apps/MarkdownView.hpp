@@ -58,6 +58,9 @@ struct MdBlock {
     bool     listIsCheckbox = false; // ListItem用：チェックボックス項目かどうか（イミュータブル、表示のみ）
     bool     listChecked = false;    // ListItem用：チェック済みかどうか（listIsCheckbox時のみ有効）
     uint8_t  quoteDepth = 0;         // Quote用：ネストの深さ（0始まり。`>`の重ね数-1）
+    // 長い段落/コードブロックをkMdBlockTextBytesに収まるよう分けたとき、次のブロックが
+    // 同じ段落/コードブロックの続きであることを示す(間隔を空けずに続けて並べる)
+    bool     joinNext = false;
 
     // ---------- TableRow用 ----------
     uint8_t  tableColCount = 0;      // 実際の列数（kMdTableMaxCols以下）
@@ -131,7 +134,7 @@ class MarkdownView : public Widget {
 
         int checkboxIconPx = 0; // チェックボックスアイコン1辺のピクセルサイズ（起動時にキャッシュ）
 
-        Label<PICO_STR_LL>* measure_label; // レイアウト計算専用（レンダリングツリーには含めない）
+        Label<kMdBlockTextBytes>* measure_label; // レイアウト計算専用(表示用のLabelと同じ容量にすること)（レンダリングツリーには含めない）
 
         std::vector<Widget*> children_; // getChildren()用（プール全部への参照）
 

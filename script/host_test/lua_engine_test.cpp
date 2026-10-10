@@ -77,6 +77,7 @@
 //                      往復できること、icon_size変更でw/h未指定なら箱の大きさも
 //                      追従することを確認する
 #include "lua/LuaEngine.hpp"
+#include "functions/Mem_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
@@ -2869,6 +2870,42 @@ int main(){
         }
         if (srv.lfd >= 0) close(srv.lfd);
         HostSd::files.clear();
+    }
+
+    // ---- ヒープの残りを守る(LuaEngine::kHeapReserveBytes) ----
+    // ホストではHeapTopRoom()が測れないので、差し替え口で「ヒープの末尾の残り」を偽る
+    {
+        static int room_calls = 0;
+        LuaEngine ge(64 * 1024);
+        check(ge.valid(), "ヒープの残り: 構築できる");
+        lua_pushcfunction(ge.raw(), l_check);
+        lua_setglobal(ge.raw(), "check");
+
+        // 残りは少ないが、確保の前後で減らない(空きブロックから取れた)なら断らない
+        MemFunctions::heap_room_hook = []() -> size_t { return 1000; };
+        bool ok = ge.Run(R"LUA(
+            local t = {}
+            for i = 1, 200 do t[i] = string.rep("x", i) end
+            check(#t == 200, "ヒープの残り: 空きブロックから取れる確保は通す")
+            local mi = pico.memory_info()
+            check(mi.heap_room == 1000 and mi.heap_refused == 0, "ヒープの残り: memory_infoにheap_room/heap_refused")
+        )LUA", "heap_guard_ok");
+        check(ok, "ヒープの残り: 残りが少なくても末尾を伸ばさない確保は成功する");
+        check(ge.heapRefusals() == 0, "ヒープの残り: 断った回数は0");
+
+        // 確保のたびに末尾が伸びて残りを割る → 全部断る。Luaはエラーで止まり、落ちない
+        room_calls = 0;
+        MemFunctions::heap_room_hook = []() -> size_t { return (room_calls++ % 2 == 0) ? 5000 : 4000; };
+        ok = ge.Run("local s = string.rep('y', 30000) big = {s, s .. 'z'}", "heap_guard_ng");
+        MemFunctions::heap_room_hook = nullptr;
+        check(!ok, "ヒープの残り: 残りを割る確保は断られ、スクリプトはエラーで止まる");
+        check(ge.heapRefusals() > 0, "ヒープの残り: 断った回数が数えられる");
+        check(ge.valid(), "ヒープの残り: 断った後もLuaEngineは壊れていない");
+
+        ok = ge.Run("local t = {} for i = 1, 100 do t[i] = i end check(#t == 100, 'ヒープの残り: 余裕が戻れば続けて動く')",
+                    "heap_guard_after");
+        check(ok, "ヒープの残り: 余裕が戻れば次の実行は成功する");
+        WidgetFunctions::ClearSceneWidgets(); // エラーのダイアログ
     }
 
     // ---- 後片付け(残りのウィジェットも解放し、ASanのリーク検出を素通りさせない) ----

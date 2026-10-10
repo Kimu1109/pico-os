@@ -4,7 +4,7 @@
 --   下の欄: ui.lua。地図: タップ=兵士・建物を選ぶ/選んでいる兵士をそこへ動かす/(「建設」で選んだ後)そこへ建てる、
 --         ドラッグ=カメラ(「選択」中は範囲選択)。
 --   コントローラー・キーボード: カーソルを動かして選ぶ(cursor.lua)。1/2/3=雇う、HOME=戻る。
---   5秒ごとにシリアルへ "[TD] fps=.. lua=..ms render=..ms alive=.. mem lua=.. heap_free=.." を出す(実機の速さとメモリを測る)。
+--   5秒ごとにシリアルへ "[TD] fps=.. lua=..ms render=..ms alive=.. mem lua=.. heap_free=.. refused=.." を出す(実機の速さとメモリを測る)。
 -- ファイル: state(共有の状態)・orders(操作)・ui(下の欄・メニュー)・cursor(コントローラー)・waves・save・sfx(効果音)・tutorial(説明)・
 --         zombies・soldiers・buildings・combat。
 -- マップ・流れの場・経路探索・押し合い・弾・描画は C++ のエンジン(src/iso/)。
@@ -130,9 +130,9 @@ local function perf_tick()
         perf.lua_ms = perf.lua_us / perf.frames / 1000
         perf.render_ms = perf.render_us / perf.frames / 1000
         local m = pico.memory_info()
-        pico.log(string.format("[TD] fps=%.1f lua=%.2fms render=%.2fms alive=%d wait=%d shots=%d mem lua=%d heap_free=%d headroom=%d",
+        pico.log(string.format("[TD] fps=%.1f lua=%.2fms render=%.2fms alive=%d wait=%d shots=%d mem lua=%d heap_free=%d headroom=%d refused=%d",
             perf.fps, perf.lua_ms, perf.render_ms, zombies.alive(), zombies.waiting(), iso.shot_count(),
-            m.lua_used, m.heap_free, m.heap_headroom or 0))
+            m.lua_used, m.heap_free, m.heap_headroom or 0, m.heap_refused or 0))
         perf.frames, perf.lua_us, perf.render_us, perf.t0 = 0, 0, 0, now
         pico.invalidate(hud)
     end

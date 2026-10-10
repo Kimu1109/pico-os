@@ -84,6 +84,10 @@ namespace {
     }
 
     uint32_t ReadStackHeadroom(){
+        //実機のスタックはSCRATCHにあり、ヒープはSRAMの終わり(__HeapLimit)で止まる。
+        //スタックポインタまでの距離だと実際に伸びられる量より大きく見えるので、上限が分かればそちらで測る
+        const size_t room = MemFunctions::HeapTopRoom();
+        if(room != MemFunctions::kRoomUnknown) return (uint32_t)room;
     #if PICO_MEM_HAS_SBRK
         char stack_marker = 0;
         const char* heap_end = (const char*)sbrk(0);

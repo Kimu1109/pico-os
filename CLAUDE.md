@@ -3634,6 +3634,22 @@ Luaの計算そのものが一様に遅かった)かかり、メモリも足り�
   6KiB×2+読み取り係 約3.5KBを確保して持ち続け、ジングルを鳴らすだけのゾンビTDが約15KBを抱えていた。読み取り係と6KiBの作業場所は
   読む間だけ確保する)。`pico.iso`の「ごみを集めてやり直す」は1秒に1回まで(全部集めるのは実機で数十msかかり、兵士の数だけ続いて止まった)。
 
+### Luaの確保がヒープの残りを守る(`LuaEngine::Alloc` / `MemFunctions::HeapTopRoom()`、2026-10-10)
+
+実機のゾンビTDが「ウェーブ4以降にランダムで再起動する」報告への対策。**Luaの予算(200KB)はヒープ全体の空きより大きい**ので、
+Luaが予算の内側でもヒープを使い切ることがあり、そのとき次のC++側の確保(`new`/`std::vector`/`std::string`/SD/Wi-Fi)が失敗する。
+Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで本体ごと落ちる(再起動の候補として一番濃い。クラッシュダンプは未確認)。
+- `MemFunctions::HeapTopRoom()`(`Mem_Functions.hpp`、inline): ヒープの末尾`sbrk(0)`から`__HeapLimit`(arduino-picoのリンカスクリプト。
+  SRAMの終わり=0x20080000。弱いシンボル)までの未使用の量。O(1)。PC/ホストは`kRoomUnknown`で、テストは`heap_room_hook`で偽る。
+  `Mem_Functions`の`stack_headroom`(= `pico.memory_info().heap_headroom`)もこれで測るようにした(以前はスタックポインタまでで、
+  実機のスタックはSCRATCHにあるので大きく見えていた)。
+- `LuaEngine::Alloc()`: 増やす確保で、残りが`kHeapReserveBytes`(20KB)+確保量を割りそうなときだけ`malloc`+コピーで確保し、
+  前後で末尾が伸びて残りが20KBを割っていたら返して断る(空きブロックから取れたなら通す)。断るとLua本体はごみを集めて1回だけ頼み直し
+  (lmem.cの`tryagain`)、それでも足りなければ「not enough memory」のエラー(再起動はしない)。断った回数は`pico.memory_info().heap_refused`、
+  残りは`heap_room`。ゾンビTDの5秒ごとの`[TD]`の行に`refused=`を足した。
+- 検証: `lua_engine_test`(差し替え口で「末尾を伸ばさない確保は通す」「伸ばして割る確保は断りエラーで止まる」「余裕が戻れば続く」)、
+  実機ファームのビルド(maxgerhardtのplatform-raspberrypiで`pio run`。`__HeapLimit`が0x20080000に解決される)。**実機での効果は未確認**。
+
 ### pico.* の関数の置き方(Luaのメモリを減らす、2026-10-09)
 
 ゾンビTDにコントローラーの操作を足してLuaの予算が足りなくなったのを受けて、全部のLuaアプリに効く形で減らした(PCで起動直後に約23KB減)。

@@ -102,4 +102,4 @@ end)
 
 月を変えると `today` と `selected` と点は残るので、`today` / `selected` / `set_dots` を入れ直してください。
 
-動くサンプルは `pc/sdcard/lua/apps/ウィジェット追加確認/` にあります。
+動くサンプルは `pc/sdcard/lua/apps/動作確認/extra.lua` にあります。

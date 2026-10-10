@@ -11,9 +11,8 @@ namespace PICO_Path {
         // ランチャへ自動登録されるLuaアプリの置き場所(LuaAppScanner参照)。
         // 直下の「サブディレクトリ1つ = アプリ1つ」で、<名前>/main.lua が
         // あればその<名前>をそのままタイル名として登録する。
-        // 動作サンプル(hello.lua等)を置く /lua/ 直下とは別にしてあるのは、
-        // "/lua/"直下を走査するとhello_sub.lua等のサブ画面スクリプトまで
-        // 誤って1タイルずつ登録してしまうため
+        // アプリのフォルダの中の main.lua 以外(push_scene で開くページ・require するモジュール)は
+        // タイルにならない
         constexpr const char* LUA_APPS = "/lua/apps/";
         // カレンダーアプリが読む .ics の置き場所。直下の *.ics を全部読んで1つに重ねる
         // (Googleのカレンダーごとの非公開URLを1ファイルずつ置く想定。CalendarScene参照)

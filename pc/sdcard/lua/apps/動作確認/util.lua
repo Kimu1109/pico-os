@@ -1,4 +1,4 @@
--- require のデモ用モジュール(main.lua から require("util") で読まれる)
+-- require のデモ用モジュール(scene.lua から require("util") で読まれる)
 local M = {}
 
 function M.pad2(n)

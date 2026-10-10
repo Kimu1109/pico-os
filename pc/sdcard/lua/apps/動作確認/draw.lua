@@ -1,4 +1,4 @@
--- Love2Dとの比較で足した描画API・入力APIの動作確認(2026-10-04)。
+-- 直接描画: Canvasのrenderコールバックで描く描画API・入力APIの確認。
 --   pico.draw_ellipse/fill_ellipse/draw_triangle/fill_triangle/draw_polygon/fill_polygon/draw_arc/fill_arc
 --   pico.draw_line(…, width) / pico.text_width / pico.draw_image_ex / pico.on_key / pico.battery / pico.millis
 -- 「戻る」ボタン以外は全部Canvasのrenderコールバックの中で描く(直接描画の約束)。
@@ -27,7 +27,7 @@ pico.on_key(function(key, mods)
     return true
 end)
 
-local img = pico.image_load("/lua/apps/描画API確認/icon.pimg")
+local img = pico.image_load(pico.path_join(pico.app_dir(), "icon.pimg"))
 
 pico.on(canvas, "render", function()
     local x, y = cx0, cy0 + 34

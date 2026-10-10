@@ -1,9 +1,8 @@
 -- ブロック: 斜め上から見たマインクラフト風の箱庭(TheScienceElf/Blocks-TI-84 の移植。MIT)
 -- 1024x16x1024 の世界(見えている所のまわりのチャンクだけを読み込む)でカーソルを動かし、
 -- 25種類のブロック(松明を含む)を置く/壊す。影・松明の光・昼と夜・半透明の水・5つのセーブ枠。
--- 村人と羊(pico.iso の人や物。mobs.lua)が歩き回る。ブロックの裏に回ると隠れ、足元に影が落ちる。
 -- 操作(画面): 左下の9つのキー=移動(真ん中=置く/壊す)、上へ/下へ、ブロック変更、中央、昼/夜、終了。
---   ワールドのタップ=その面の手前へカーソル(村人や羊をタップすると跳ねる)、長押し=そのブロックへカーソル、
+--   ワールドのタップ=その面の手前へカーソル、長押し=そのブロックへカーソル、
 --   ドラッグ=視点を動かす。
 -- コントローラー: 十字=移動(斜めは2つ同時)、A=置く/壊す、B/START=ブロック変更、X/R=上へ、Y/L=下へ、
 --   SELECT+十字=視点、ZL/ZR=昼/夜、HOME=保存して終了。
@@ -14,7 +13,6 @@
 -- 色は palette.lua(script/generate_blocks_sheet.py が作る)。
 local iso = pico.iso
 local PAL = require("palette")
-local mobs = require("mobs")
 local H = 16
 local B = { AIR = 0, WATER = 1, STONE = 2, GRASS = 3, TORCH = 25 }
 local BLOCK_COUNT = 25          -- ブロックの種類(水と松明を含む)
@@ -27,7 +25,6 @@ local DIR = pico.app_dir()
 local img = pico.image_load(pico.path_join(DIR, "faces.pimg"))
 if img then iso.set_image(img) else pico.show_error("faces.pimg を読めません") end
 local SAVE_DIR = pico.path_join(DIR, "worlds")
-mobs.init(pico.image_load(pico.path_join(DIR, "people.pimg")))
 
 local CX, CY, CW, CH = pico.content_rect()
 local PANEL_H = 96
@@ -198,7 +195,6 @@ local function save_and_quit()
     busy("保存しています...", function()
         local ok = iso.save(cx, cy, cz, cur)
         if not ok then pico.show_error("保存できませんでした") end
-        mobs.clear()
         iso.close()
         in_game = false
         refresh_slots()
@@ -393,7 +389,6 @@ pico.on(panel, "press_out", function() set_held(nil) end)
 -- ワールドのタッチ: タップ=面の手前へ、長押し=そのブロックへ、ドラッグ=視点
 local touch = nil
 local function pick_to(px, py, onto)
-    if not onto and mobs.tap(px, py) then return end
     local x, y, z, f = iso.pick(px, py)
     if not x then return end
     if not onto then
@@ -450,7 +445,6 @@ function loop(dt)
         if n > 0 and mode ~= "load" then pico.invalidate(view) end
         if mode == "load" and iso.pending() == 0 then
             set_mode("play")
-            mobs.spawn(cx, cz)
             collectgarbage("collect")
             local m = pico.memory_info()
             local st = iso.stats()
@@ -458,7 +452,6 @@ function loop(dt)
                 st.chunks, st.bytes, m.lua_used, m.lua_budget))
         end
     end
-    if mode == "play" then mobs.update(dt, cx, cz) end
     if touch and not touch.drag and not touch.long and mode == "play" and pico.millis() - touch.t > 500 then
         touch.long = true
         pick_to(touch.x, touch.y, true)
@@ -556,4 +549,4 @@ if TEST then TEST.env = { act = act, move = move, start = start, scroll = scroll
     mode = function() return mode end, set_cur = function(b) cur = b end, slot = function(i) slot = i end,
     cursor = function() return cx, cy, cz end, set_cursor = function(x, y, z) cx, cy, cz = x, y, z end,
     origin = function() return OX, OY end, set_night = set_night, night = function() return night end,
-    order = ORDER, select_at = select_at, mobs = mobs } end
+    order = ORDER, select_at = select_at } end

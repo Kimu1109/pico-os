@@ -30,6 +30,9 @@ namespace PowerFunctions {
     constexpr unsigned long kSleepLoopDelayMs = 30;
     //通常時の1フレームの最短時間(10ms = 100fps以下に抑える)
     constexpr unsigned long kMinFrameMs = 10;
+    //自動調光で暗くなっている間の1フレームの最短時間(約30fps)。操作が30秒以上無い状態なので、
+    //画面の更新もタッチへの反応もこれで足りる。KeepAwake()を呼ぶ画面・音が鳴っている間・Wi-Fiの接続中は適用しない
+    constexpr unsigned long kDimFrameMs = 33;
     //平均fpsがこの値以下なら通常時でも休まない(平均は kFpsWindowMs の窓で見る。スリープ中は適用しない)
     constexpr unsigned long kSkipSleepFps = 60;
     constexpr unsigned long kFpsWindowMs = 500;

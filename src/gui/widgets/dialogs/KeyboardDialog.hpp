@@ -25,6 +25,9 @@ class KeyboardDialog : public Widget {
         int redraw_below_frames = 0;
 
     public:
+        // redraw_below_framesは合成の外のrender()が1フレームずつ数える
+        bool wantsFrameUpdate() const override { return this->redraw_below_frames > 0; }
+
         KeyboardDialog();
         ~KeyboardDialog() override { delete this->preview; }
 

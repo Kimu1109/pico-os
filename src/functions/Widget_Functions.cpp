@@ -281,6 +281,18 @@ void WidgetFunctions::UpdateAll()
         pressingWidget = nullptr;
     }
 
+    // update()を呼ぶのは、タッチのあったフレーム(押した/離した/外を押したのコールバックを全員へ配る)と、
+    // 描き直しの要求がある・押されている・毎フレーム見張りたい(wantsFrameUpdate())ウィジェットだけ。
+    // 以前は見えている全ウィジェットに毎フレーム、クリップの計算とupdate()をしていた
+    const bool touch_frame = OSData::isTouchStart || OSData::isTouchEnd || OSData::isTouchMove;
+    auto step = [touch_frame](Widget* w) {
+        if (!touch_frame && !w->getNeedsRedraw() && !w->is_pressing && !w->wantsFrameUpdate()) return;
+        const Rect clipped = w->clippedScreenRect();
+        OSData::frame->setClipRect(clipped.x, clipped.y, clipped.w, clipped.h);
+        w->update();
+        OSData::frame->clearClipRect();
+    };
+
     // 1. 通常ウィジェット描画（下層）
     for (size_t i = 0; i < widgets.size(); i++){
         if (!widgets[i]) continue;
@@ -289,21 +301,15 @@ void WidgetFunctions::UpdateAll()
             widgets[i]->setChildrenUpdate(false);
         }
         if(!widgets[i]->getVisible()) continue;
-        const Rect clipped = widgets[i]->clippedScreenRect();
-        OSData::frame->setClipRect(clipped.x, clipped.y, clipped.w, clipped.h);
-        widgets[i]->update(); // 下から順に描画
-        OSData::frame->clearClipRect();
+        step(widgets[i]); // 下から順に
     }
 
     // 2. ダイアログ描画（中層: 0 から順に描画し、後から開いたダイアログが上に重なる）
     for (size_t d = 0; d < dialog_roots.size(); d++) {
         if (dialog_roots[d] && dialog_roots[d]->getVisible()) {
-            dialog_roots[d]->visitAll([](Widget* w) {
+            dialog_roots[d]->visitAll([&step](Widget* w) {
                 if (!w || !w->getVisible()) return;
-                const Rect clipped = w->clippedScreenRect();
-                OSData::frame->setClipRect(clipped.x, clipped.y, clipped.w, clipped.h);
-                w->update();
-                OSData::frame->clearClipRect();
+                step(w);
             });
         }
     }
@@ -311,12 +317,9 @@ void WidgetFunctions::UpdateAll()
     // 3. 最前面オーバーレイ描画（上層: キーボードやステータスバー）
     for (size_t o = 0; o < overlays.size(); o++) {
         if (overlays[o] && overlays[o]->getVisible()) {
-            overlays[o]->visitAll([](Widget* w) {
+            overlays[o]->visitAll([&step](Widget* w) {
                 if (!w || !w->getVisible()) return;
-                const Rect clipped = w->clippedScreenRect();
-                OSData::frame->setClipRect(clipped.x, clipped.y, clipped.w, clipped.h);
-                w->update();
-                OSData::frame->clearClipRect();
+                step(w);
             });
         }
     }

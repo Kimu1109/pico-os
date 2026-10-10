@@ -15,7 +15,23 @@ namespace {
 
     struct WideEntry { uint32_t key; uint8_t w; };
     constexpr int kWideSlots = 256;
-    WideEntry wide_w[kWideSlots];
+    // TextViewが1つでも生きている間だけ確保する(約2KB。以前は常に静的に持っていた)。
+    // 確保できなければ控えを使わず毎回測る
+    WideEntry* wide_w = nullptr;
+    int width_cache_users = 0;
+}
+
+void TextView::AcquireWidthCache(){
+    if(width_cache_users++ == 0 && !wide_w){
+        wide_w = static_cast<WideEntry*>(calloc(kWideSlots, sizeof(WideEntry)));
+    }
+}
+
+void TextView::ReleaseWidthCache(){
+    if(width_cache_users > 0 && --width_cache_users == 0){
+        free(wide_w);
+        wide_w = nullptr;
+    }
 }
 
 int TextView::CharWidth(const char* s, int n){
@@ -32,13 +48,16 @@ int TextView::CharWidth(const char* s, int n){
         return w;
     }
 
+    if(n > 4) n = 4;
+    char buf[5];
+    memcpy(buf, s, n);
+    buf[n] = '\0';
+    if(!wide_w) return OSData::frame->textWidth(buf, FontFn::GetSmall());
+
     uint32_t key = 0;
     for(int i = 0; i < n; i++) key = (key << 8) | (uint8_t)s[i];
     WideEntry& e = wide_w[(key ^ (key >> 11)) % kWideSlots];
     if(e.key != key || e.key == 0){
-        char buf[5];
-        memcpy(buf, s, n);
-        buf[n] = '\0';
         e.key = key;
         e.w = (uint8_t)OSData::frame->textWidth(buf, FontFn::GetSmall());
     }
@@ -128,6 +147,7 @@ void TextView::setDocument(const char* text, int len){
 
 TextView::~TextView(){
     free(this->owned);
+    ReleaseWidthCache();
 }
 
 bool TextView::setOwnedText(const char* t, size_t n){

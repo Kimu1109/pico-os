@@ -8,9 +8,10 @@
 #include <cstddef>
 #include <type_traits>
 // テストが時間を進められるようにする(既定は0のまま)。ジェスチャーなどmillis()の差を見る処理の検証用
-namespace PicoHostClock { inline unsigned long now = 0; }
+namespace PicoHostClock { inline unsigned long now = 0; inline unsigned long last_delay_ms = 0; }
 static inline unsigned long millis(){ return PicoHostClock::now; }
-static inline void delay(unsigned long){}
+// 待たずに、最後に頼まれた時間だけ覚える(PowerFunctions::IdleWait()の検証用)
+static inline void delay(unsigned long ms){ PicoHostClock::last_delay_ms = ms; }
 static inline unsigned long micros(){ return 0; }
 #define LED_BUILTIN 0
 

@@ -24,6 +24,9 @@ class Statusbar : public Widget {
         constexpr static int ICON_MARGIN_TOP = (STATUSBAR_HEIGHT - 16) / 2;
 
     public:
+        // 時刻・電波・電池・音・未読の変化をrender()で見張る
+        bool wantsFrameUpdate() const override { return true; }
+
         Statusbar(){
             this->l_rect = {
                 0, 0,

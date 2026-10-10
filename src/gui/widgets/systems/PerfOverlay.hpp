@@ -15,6 +15,9 @@
 // 測っている時間を押し上げてしまうため。タップは下の画面へ素通りさせる(hit_transparent)。
 class PerfOverlay : public Widget {
     public:
+        // プロファイラの窓が閉じたかをrender()で見張る
+        bool wantsFrameUpdate() const override { return true; }
+
         static constexpr int kWidth = 132;
         static constexpr int kHeight = 50;
 

@@ -126,6 +126,12 @@ void PowerFunctions::IdleWait(){
     if(sleeping){
         //スリープ中は平均fpsに関わらず従来どおり休む
         delay(kSleepLoopDelayMs);
+    }else if(DisplayFunctions::IsDimmed() && !detail::keep_awake && !Busy()){
+        //暗くなっている(30秒以上操作が無い)間は約30fpsまで落とす。detail::keep_awakeはこのフレームの
+        //画面のonUpdate()が立てたもの(次のフレームのUpdate()が下ろす)。操作があればDisplayFunctionsが
+        //すぐ明るさを戻すので、次のフレームから元の間隔になる
+        const unsigned long elapsed = millis() - last_frame_ms;
+        if(elapsed < kDimFrameMs) delay(kDimFrameMs - elapsed);
     }else if(!slow){
         //無駄なループを減らすため、1フレームを最低kMinFrameMs(=100fps以下)に保つ。
         //平均fpsがkSkipSleepFps以下のときは、これ以上遅くしないよう休まない

@@ -29,6 +29,7 @@ namespace Fake {
     bool music            = false;
     bool wav              = false;
     int  display_calls    = 0;
+    bool dimmed           = false;
 }
 void LogFunctions::Log(LogType, const char*, ...){}
 void LogFunctions::Setup(){}
@@ -36,6 +37,7 @@ void LogFunctions::Update(){}
 void LogFunctions::Flush(){}
 void DisplayFunctions::SetSleeping(bool s){ Fake::display_sleeping = s; Fake::display_calls++; }
 bool DisplayFunctions::IsSleeping(){ return Fake::display_sleeping; }
+bool DisplayFunctions::IsDimmed(){ return Fake::dimmed; }
 void NetworkFunctions::SetLowPower(bool e){ Fake::wifi_low_power = e; }
 void SoundFunctions::SetPowerSave(bool e){ Fake::sound_power_save = e; }
 bool SoundFunctions::IsPlaying(){ return Fake::playing; }
@@ -157,6 +159,35 @@ int main(){
     Frame(10000001, false);
     check(IsSleeping(), "有効へ戻すと(とうに過ぎているので)すぐ入る");
     check(GetSleepTimeoutMs() == 60000, "取得できる");
+
+    // ---- 暗くなっている間はループを約30fpsまで落とす ----
+    {
+        Reset();
+        SetSleepTimeoutMs(0);
+        PicoHostClock::now = 20000000;
+        auto wait = [](){
+            PicoHostClock::last_delay_ms = 0;
+            IdleWait();
+            return PicoHostClock::last_delay_ms;
+        };
+        Fake::dimmed = false;
+        //平均fpsの窓を「速い」で閉じておく(遅いと判定された窓の間は休まない仕様のため)
+        for(int i = 0; i < 100; i++) wait();
+        PicoHostClock::now += kFpsWindowMs;
+        wait();
+        check(wait() == kMinFrameMs, "明るい間は100fpsの間隔");
+        Fake::dimmed = true;
+        check(wait() == kDimFrameMs, "暗い間は約30fpsの間隔");
+        KeepAwake();
+        check(wait() == kMinFrameMs, "KeepAwake()を呼ぶ画面では落とさない");
+        Frame(PicoHostClock::now, false); //印を下ろす
+        Fake::playing = true;
+        check(wait() == kMinFrameMs, "音が鳴っている間は落とさない");
+        Fake::playing = false;
+        check(wait() == kDimFrameMs, "止めばまた落とす");
+        Fake::dimmed = false;
+        check(wait() == kMinFrameMs, "明るくなれば戻る");
+    }
 
     printf("\n%s (%d failures)\n", failures ? "FAILED" : "ALL PASSED", failures);
     return failures ? 1 : 0;

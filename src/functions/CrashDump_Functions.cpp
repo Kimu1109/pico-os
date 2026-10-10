@@ -1,4 +1,5 @@
 #include "functions/CrashDump_Functions.hpp"
+#include <cstdlib>
 #include "functions/Profiler_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -333,10 +334,13 @@ void CrashDumpFunctions::Setup(){
 
     if(!have) return;
 
-    static char text[2048];
-    const size_t len = FormatRecord(r, text, sizeof(text));
+    //文章は書き出す間だけ確保する(以前は2KBの静的なバッファを常に持っていた)。起動の直後なので確保できる見込み
+    constexpr size_t kTextBytes = 2048;
+    char* text = static_cast<char*>(malloc(kTextBytes));
     char path[48] = {};
-    if(WriteDump("crash", text, len, path, sizeof(path))){
+    const bool written = text && WriteDump("crash", text, FormatRecord(r, text, kTextBytes), path, sizeof(path));
+    free(text);
+    if(written){
         CopyStr(last_dump_path, sizeof(last_dump_path), path);
         LOG_SYS_FAIL("前回の起動で異常終了しました。ダンプ: %s", path);
     }else{
@@ -449,9 +453,13 @@ bool CrashDumpFunctions::SaveLuaError(const char* app, const char* message, cons
     if(!OSData::SD_usable) return false;
     if(lua_dumps_this_boot >= kMaxLuaDumpsPerBoot) return false;
 
-    static char text[3072];
+    //文章は書き出す間だけ確保する(以前は3KBの静的なバッファを常に持っていた)。
+    //メモリ不足で落ちたLuaのエラーのときは確保できないことがあるが、そのときは保存を諦める(ログには出ている)
+    constexpr size_t kTextBytes = 3072;
+    char* text = static_cast<char*>(malloc(kTextBytes));
+    if(!text) return false;
     text[0] = '\0';
-    Out o{text, sizeof(text), 0};
+    Out o{text, kTextBytes, 0};
     o.add("pico-os Luaエラー\n");
     o.add("アプリ: %s\n", (app && *app) ? app : "(不明)");
     AddClock(o);
@@ -461,7 +469,9 @@ bool CrashDumpFunctions::SaveLuaError(const char* app, const char* message, cons
     if(trace && *trace) o.add("\nスタックトレース:\n%s\n", trace);
 
     char path[48];
-    if(!WriteDump("lua", text, o.len, path, sizeof(path))) return false;
+    const bool written = WriteDump("lua", text, o.len, path, sizeof(path));
+    free(text);
+    if(!written) return false;
     lua_dumps_this_boot++;
     LOG_APP_MSG("Luaのエラーを保存しました: %s", path);
     return true;

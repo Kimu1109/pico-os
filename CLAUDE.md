@@ -651,7 +651,7 @@ Sources(この追記時点の調査で参照): [XPT2046 touch controller pinout 
 
 ### OSのCPU・RAMの無駄を削る (2026-10-10)
 
-OS側の洗い出しの結果、次を直した。実機ファームの静的RAMは 140,000B → 120,700B(-19.3KB)。
+OS側の洗い出しの結果、次を直した。実機ファームの静的RAMは 140,000B → 113,540B(-26.5KB)。
 
 - **合成の外の描画を捨てる(二重描画の解消)**: `WidgetFunctions::UpdateAll()`→`Widget::update()`→`render()`で、変化したウィジェットが
   `frame`へ実際に描き、直後の`FlushDirty()`が背景ごと塗り直してもう一度描いていた。今は`Widget::update()`が`render()`の間だけ
@@ -675,9 +675,22 @@ OS側の洗い出しの結果、次を直した。実機ファームの静的RAM
   返すまで覚えて毎回探さない。
 - `FlushDirty()`の行のハッシュを64bit→32bit(5KB→2.5KB)。
 - `Label::utilityInstance()`(テンプレートの種類ごとの約650Bの静的なLabel×3)をやめ、`DrawPlain()`等は`FontFn`と`setTextColor()`を直接呼ぶ。
+- **`UpdateAll()`は要るウィジェットにだけ`update()`する**: タッチのあったフレーム(押した/離した/外を押したを全員へ配る)と、
+  `getNeedsRedraw()`・`is_pressing`・**`wantsFrameUpdate()`**が真のウィジェットだけ(クリップの計算もそのときだけ)。
+  `render()`の中で毎フレーム外の状態や時間を見張るウィジェットは`wantsFrameUpdate()`で真を返すこと(今は点滅カーソルのLabel・
+  Statusbar・PerfOverlay・`redraw_below_frames`中のKeyboardDialog・長押し中のDurationPicker)。値の変化をsetter(`needsRender()`)で
+  知らせるだけのウィジェットは何もしなくてよい。**見張りを`render()`に足したのに`wantsFrameUpdate()`を足し忘れると、
+  タッチか描き直しの要求があるまで見張りが止まる**。
+- **自動調光で暗くなっている間は約30fps**(`PowerFunctions::kDimFrameMs`=33ms。以前は100fpsのまま)。`KeepAwake()`を呼ぶ画面・
+  音が鳴っている間・Wi-Fiの接続中(`Busy()`)は落とさない。
+- クラッシュダンプの文章のバッファ(2KB/3KB)は書き出す間だけ`malloc`する(Luaのエラーで確保できなければ保存を諦める)。
+  TextViewの全角の文字幅の控え(約2KB)はTextViewが1つでも生きている間だけ持つ(確保できなければ毎回測る)。
+- **lwIPの領域(`PBUF_POOL`約36KB・`ram_heap`16KB)は減らせなかった**: arduino-picoはlwIPをビルド済みの`liblwip.a`で配っていて、
+  プールの大きさ(`include/lwipopts.h`の`PBUF_POOL_SIZE`/`MEM_SIZE`)はそのビルド時に決まる。こちらのビルドフラグでは変わらず、
+  変えるにはlwIPをソースからビルドし直してフレームワークのものと差し替える必要がある(TLSの受信の速さにも効くので見送った)。
 - 検証: ホストテスト全部(`app_test`にアイコンの相対パス、`key_input_test`に索引の読み直し、`notification_test`は件数に依らない形へ)、
   PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0: ランチャ・SDのアイコン・電卓・テキストエディタ+日本語キー盤)、
-  実機ファームのビルド。**実機での速さ・見た目は未確認**。
+  実機ファームのビルド。`power_test`に暗いときの間隔。**実機での速さ・見た目は未確認**。
 
 ### 液晶への転送を減らす(`GFX_Functions::FlushDirty()` / `LuaCanvas` / `util/ScopedClip.hpp`) (2026-10-06)
 

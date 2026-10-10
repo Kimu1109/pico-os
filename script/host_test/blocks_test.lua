@@ -1,6 +1,6 @@
 -- Luaアプリ「ブロック」(pc/sdcard/lua/apps/ブロック/。Blocks-TI-84 の移植)の画面の流れと操作を確かめる:
 -- ワールドを作る/開く/前の版から移す → チャンクの読み込み → 遊ぶ → 保存して戻る、置く/壊すの規則、
--- カーソルの移動と視点、タップ位置からのカーソル、ブロックを選ぶ画面、松明と昼/夜、村人と羊(人や物)。
+-- カーソルの移動と視点、タップ位置からのカーソル、ブロックを選ぶ画面、松明と昼/夜。
 -- ワールドと描画は C++ のエンジン pico.iso(src/iso/Iso_World)が受け持つので、ここでは pico.iso を
 -- 呼ばれ方を記録するだけの偽物(辞書で持つ平らなワールド)に差し替える。エンジンの中身は iso_world_test、
 -- Lua からの呼び方と権限は lua_ext_test。lua_script_test から run.sh が呼ぶ。
@@ -89,27 +89,6 @@ local iso = {
     dirty_block = function(...) rec("dirty_block", ...) end,
     dirty_edit = function(...) rec("dirty_edit", ...) end,
 }
--- 人や物
-local ents, nent, tap_id = {}, 0, nil
-function iso.entity_add(img, x, y, z, o)
-    nent = nent + 1
-    ents[nent] = { img = img, x = x, y = y, z = z, o = o or {} }
-    return nent
-end
-function iso.entity_move(id, x, y, z) local e = assert(ents[id]); e.x, e.y, e.z = x, y, z end
-function iso.entity_set(id, o) local e = assert(ents[id]); for k, v in pairs(o) do e.o[k] = v end end
-function iso.entity_remove(id) local had = ents[id] ~= nil; ents[id] = nil; return had end
-function iso.entity_at() return tap_id end
-local unloaded = nil       -- function(x, z) -> true なら読み込んでいない扱い
-function iso.loaded(x, z) return not (unloaded and unloaded(x, z)) end
-function iso.ground(x, z, y)
-    y = y or 16
-    for yy = math.min(15, math.floor(y + 0.001) - 1), 0, -1 do
-        local b = iso.get(math.floor(x), yy, math.floor(z))
-        if b ~= 0 and b ~= 25 then return yy + 1 end
-    end
-    return nil
-end
 
 -- ---- 偽物の pico ----
 local files = {}
@@ -172,89 +151,6 @@ check(bx == 0 + 120 - 16 and by == 20 + 102 - 16, "カーソルを表示の真�
 frames(1)
 check(E.mode() == "play", "読み込み終わると遊ぶ画面へ")
 check(count("pump") >= 1, "毎フレーム読み込みを進める")
-
--- ---- 村人と羊 ----
-local mobs = E.mobs
-local function nents() local n = 0; for _ in pairs(ents) do n = n + 1 end return n end
-check(mobs.count() == 5 and nents() == 5, "読み込み終わるとカーソルのまわりに村人3人と羊2匹")
-local all_ground = true
-for _, e in pairs(ents) do
-    if e.y ~= 1 or math.abs(e.x - 512) > 7 or math.abs(e.z - 512) > 7 then all_ground = false end
-end
-check(all_ground, "地面(y=1)の上、カーソルの近くに立つ")
-local start_pos = {}
-for id, e in pairs(ents) do start_pos[id] = { e.x, e.z } end
-frames(120)
-local moved, still_ground = 0, true
-for id, e in pairs(ents) do
-    if e.x ~= start_pos[id][1] or e.z ~= start_pos[id][2] then moved = moved + 1 end
-    if e.y ~= 1 then still_ground = false end
-end
-check(moved >= 3 and still_ground, "歩き回る(平らな所では地面の上のまま)")
--- 壁で囲うと出られない
-local id1 = next(ents)
-local e1 = ents[id1]
-local bx0, bz0 = math.floor(e1.x), math.floor(e1.z)
-for dx = -2, 2 do for dz = -2, 2 do
-    if math.abs(dx) == 2 or math.abs(dz) == 2 then
-        for y = 1, 3 do iso.set(bx0 + dx, y, bz0 + dz, 2) end
-    end
-end end
-frames(300)
-check(math.abs(ents[id1].x - (bx0 + 0.5)) < 2 and math.abs(ents[id1].z - (bz0 + 0.5)) < 2 and ents[id1].y == 1,
-      "壁(3段)の中からは出られない")
--- 1段の段差は登る
-for dx = -1, 1 do for dz = -1, 1 do iso.set(bx0 + dx, 1, bz0 + dz, 2) end end
-frames(200)
-check(ents[id1].y == 2, "1段の段差は登る")
--- タップすると跳ねて、地面へ戻る
-tap_id = id1
-E.pick_to(100, 100, false)
-tap_id = nil
-local cx2, cy2, cz2 = E.cursor()
-check(cx2 == 512 and cy2 == 1 and cz2 == 512, "村人をタップしてもカーソルは動かない")
-frames(5)
-local up = ents[id1].y
-frames(60)
-check(up > 2 and ents[id1].y == 2, "タップすると跳ねて、地面へ戻る")
-for dx = -2, 2 do for dz = -2, 2 do for y = 1, 3 do iso.set(bx0 + dx, y, bz0 + dz, 0) end end end
--- 段の端: 足元の角が高い段にかかっていても、登ったまま(上下を行ったり来たりしない)
-local m1 = E.mobs.list()[1]
-for x = 520, 530 do for z = 480, 560 do iso.set(x, 1, z, 2) end end
-m1.x, m1.y, m1.z, m1.vy = 519.85, 1, 500.5, 0      -- 半径0.2の角が x=520(高い段)にかかる
-m1.dx, m1.dz, m1.walk, m1.wait = 0, 1, 99, 0       -- 段の縁に沿って歩く
-local changes, prev = 0, m1.y
-for _ = 1, 60 do
-    frames(1)
-    if m1.y ~= prev then changes = changes + 1; prev = m1.y end
-end
-check(changes <= 1 and m1.y == 2, "段の縁に沿って歩いても上下を行ったり来たりしない (変化 " .. changes .. " 回)")
--- 縁から離れたら1回だけ降りる
-m1.dx, m1.dz, m1.walk = -1, 0, 99
-changes, prev = 0, m1.y
-for _ = 1, 60 do
-    frames(1)
-    if m1.y ~= prev then changes = changes + 1; prev = m1.y end
-end
-check(m1.y == 1 and m1.x < 519.5, "縁から離れると下の段へ降りる")
-for x = 520, 530 do for z = 480, 560 do iso.set(x, 1, z, 0) end end
--- 足元のチャンクを読み込んでいない(空気に見える)間は、落ちずにその場で止まる
-m1.x, m1.y, m1.z, m1.vy, m1.wait = 512.5, 1, 512.5, 0, 0
-unloaded = function(x, z) return x >= 504 and x < 520 and z >= 504 and z < 520 end
-for x = 508, 516 do for z = 508, 516 do iso.set(x, 0, z, 0) end end
-frames(60)
-check(m1.y == 1 and m1.x == 512.5 and m1.z == 512.5 and ents[m1.id].y == 1, "読み込んでいない所では落ちずに止まる")
-unloaded = nil
-for x = 508, 516 do for z = 508, 516 do iso.set(x, 0, z, 3) end end
-local mx0 = m1.x
-m1.walk, m1.wait, m1.dx, m1.dz = 99, 0, 1, 0
-frames(30)
-check(m1.y == 1 and m1.x ~= mx0, "読み込み直すとまた歩く")
-
--- 歩くコマ
-local sx_seen = {}
-for _ = 1, 60 do frames(1); for _, e in pairs(ents) do if e.o.sx then sx_seen[e.o.sx] = true end end end
-check(sx_seen[0] and sx_seen[12], "村人は歩くと2コマを切り替える")
 
 -- ---- 置く/壊す ----
 E.set_cursor(10, 1, 10)
@@ -344,7 +240,6 @@ E.act()
 E.save_and_quit()
 run_afters()
 check(E.mode() == "title" and count("save") == 1 and count("close") == 1, "保存して閉じ、ワールドを選ぶ画面へ")
-check(nents() == 0 and E.mobs.count() == 0, "閉じると村人と羊も片付ける")
 local s = saves["/app/worlds/B"]
 check(s and s.x == 513 and s.y == 3 and s.z == 511 and s.cur == 5, "カーソルの位置と選んだブロックを保存する")
 E.start(nil)
@@ -382,9 +277,8 @@ local function size(name)
     f:close()
     return n
 end
-check(size("main.lua") <= 16384 and size("game.lua") <= 32768 and size("mobs.lua") <= 32768,
-      "main.lua は16KiB、game.lua・mobs.lua は32KiB以内 (" .. size("main.lua") .. ", " .. size("game.lua") .. ", "
-      .. size("mobs.lua") .. ")")
+check(size("main.lua") <= 16384 and size("game.lua") <= 32768,
+      "main.lua は16KiB、game.lua は32KiB以内 (" .. size("main.lua") .. ", " .. size("game.lua") .. ")")
 
 print(fails == 0 and "blocks_test: 全部通りました" or ("blocks_test: " .. fails .. " 件失敗"))
 if fails > 0 then os.exit(1) end

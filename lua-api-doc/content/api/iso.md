@@ -137,7 +137,7 @@ end
 | `mass` | `1` | 押し合いの重さ(重いほど押されにくい) |
 
 ```lua
-local people = pico.image_load(pico.path_join(pico.app_dir(), "people.pimg"))
+local people = pico.image_load(pico.path_join(pico.app_dir(), "people.pimg"))   -- 自分で用意した絵
 local x, z = 520.5, 512.5
 local y = iso.ground(x, z)                       -- 立てる地面の高さ
 local id = iso.entity_add(people, x, y, z, { w = 12, h = 22 })   -- 1コマ目(12x22)
@@ -153,7 +153,7 @@ end
 
 足元の正方形の四隅のどれかが高い段にかかっているなら、立つ高さは**四隅で一番高い地面**にしてください(登るときも落ちるときも同じ四隅で見る)。登るときだけ四隅、落ちるときは中心の柱だけで見ると、段の縁で「登る → 中心の下は低いので落ちる → また登る」を毎フレーム繰り返して、上下へ瞬間移動して見えます。エンジンの影も四隅で一番高い地面に落ちます。
 
-Canvas の `render` で `iso.render()` を呼んでいれば、人や物もそこで描かれます。アプリ「ブロック」の `mobs.lua`(村人と羊が歩き回り、タップで跳ねる)が使い方の例です。
+Canvas の `render` で `iso.render()` を呼んでいれば、人や物もそこで描かれます。アプリ「ゾンビTD」(`zombies.lua`・`soldiers.lua`)が使い方の例です。
 
 ## 経路探索
 

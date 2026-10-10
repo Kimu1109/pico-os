@@ -138,6 +138,36 @@ int main(){
         checkNoOverlap(v, "折り返す段落があっても重ならない");
     }
 
+    // ---- 512Bを超える段落・コードブロック ----
+    // **回帰テスト**: 高さを測るLabelが192Bしか持てず、長い段落を途中までしか測れずに
+    // 次のブロックと重なっていた。また1ブロック512Bで切り詰められ、残りが表示されなかった。
+    // 今は行の境目で複数のブロックに分け、間隔を空けずに並べる
+    {
+        std::string para;
+        for(int i = 0; i < 24; i++) para += "これは長い段落の1行で、改行で続いていく文章です。\n";
+        para += "段落の終わりの印\n";
+        std::string code;
+        for(int i = 0; i < 40; i++) code += "copies of the Software, and to permit\n";
+        code += "CODE_END_MARK\n";
+
+        //一番下まで見たいので、高い表示領域で全部を貼らせる
+        MarkdownView v(0, 0, 240, 4000);
+        load(v, "前の段落。\n\n" + para + "\n```\n" + code + "```\n\n次の段落。\n");
+        checkNoOverlap(v, "512Bを超える段落/コードブロックでも重ならない");
+
+        bool para_end = false, code_end = false, next_para = false;
+        for(Widget* c : v.getChildren()){
+            if(c->getWidgetType() != WidgetType::Label || !c->getVisible()) continue;
+            const char* t = static_cast<Label<kMdBlockTextBytes>*>(c)->getText()->c_str();
+            if(strstr(t, "段落の終わりの印")) para_end = true;
+            if(strstr(t, "CODE_END_MARK")) code_end = true;
+            if(strstr(t, "次の段落")) next_para = true;
+        }
+        check(para_end, "長い段落の最後まで表示される");
+        check(code_end, "長いコードブロックの最後まで表示される");
+        check(next_para, "長いブロックの後ろの段落も表示される");
+    }
+
     // ---- 画像参照の走査(MdScan) ----
     // Markdownブラウザが「表示する前に取りに行く画像」を見つけるための判定。
     // **parseBlocks()の画像ブロックと同じ規則でなければならない** —

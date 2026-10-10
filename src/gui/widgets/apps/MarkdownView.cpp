@@ -51,7 +51,9 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
     }
     checkboxIconPx = IconRender::IconPixelSize(kCheckboxIconSize);
 
-    measure_label = new Label<PICO_STR_LL>(0, 0, ""); // レンダリングツリーには含めない（getChildren()に入れない）
+    //表示用のLabel(labelPool)と同じ容量でないと、長いブロックを途中までしか測れず
+    //高さが足りなくなって次のブロックと重なる
+    measure_label = new Label<kMdBlockTextBytes>(0, 0, ""); // レンダリングツリーには含めない（getChildren()に入れない）
 }
 
 MarkdownView::~MarkdownView() {
@@ -138,6 +140,8 @@ bool MarkdownView::finishLoad(const char* path) {
     parseBlocks();
 
     //1ブロックがkMdBlockTextBytesを超えるとLabelへ入れる時点で切り詰められる。
+    //長い段落/コードブロックはparseBlocks()がkMdBlockTextBytesに収まるよう分けるので、
+    //ここで超えうるのは1行で完結する要素(見出し・リスト項目・引用等)だけ。
     //srcLengthでの概算判定(インライン記法の変換で増減するため厳密ではない)だが、
     //上限に当たっていること自体に気付けるようにしておく
     int oversized = 0;
@@ -145,8 +149,12 @@ bool MarkdownView::finishLoad(const char* path) {
         if (b.srcLength >= kMdBlockTextBytes) oversized++;
     }
     if (oversized > 0) {
-        LOG_SYS_WARN("MarkdownView: %s に1ブロック上限(%uB)を超える段落が%d件あります(表示が途中で切れます)",
+        LOG_SYS_WARN("MarkdownView: %s に1ブロック上限(%uB)を超える行が%d件あります(表示が途中で切れます)",
             path, (unsigned)kMdBlockTextBytes, oversized);
+    }
+    if ((int)blocks.size() >= kMaxBlocks) {
+        LOG_SYS_WARN("MarkdownView: %s がブロック数の上限(%d)に達しました(以降は表示されません)",
+            path, kMaxBlocks);
     }
 
     layoutBlocks();
@@ -584,20 +592,57 @@ void MarkdownView::parseBlocks() {
         for (int i = 0; i < kMaxListLevels; i++) orderedCounter[i] = 0;
     };
 
-    auto flushParagraph = [&](int endPos) {
-        if (paraStart >= 0 && endPos > paraStart && (int)blocks.size() < kMaxBlocks) {
-            MdBlock b{};
-            b.type = MdBlockType::Paragraph;
-            b.srcOffset = paraStart;
-            b.srcLength = endPos - paraStart;
+    // 段落/コードブロックを積む。1つのLabelに入るのはkMdBlockTextBytes-1バイトまでなので、
+    // 超える分は行の境目(無ければUTF-8の文字の境目)で分け、joinNextで続けて並べる。
+    // 段落のインライン記法は行をまたがない(applyInlineMarkdown参照)ので行で切れば崩れず、
+    // 変換後の長さは元の長さ以下(`x`→~x~は同じ、[t](u)→_t_は短くなる)なので切り詰められない
+    auto pushSplitBlock = [&](MdBlockType type, int start, int end) {
+        constexpr int kLimit = (int)kMdBlockTextBytes - 1;
+        bool pushed = false;
+        while (start < end && (int)blocks.size() < kMaxBlocks) {
+            int chunkEnd = end, next = end;
+            if (end - start > kLimit) {
+                int cut = -1;
+                for (int i = start + kLimit; i > start; i--) {
+                    if (doc_text[i] == '\n') { cut = i; break; }
+                }
+                if (cut > start) {
+                    chunkEnd = cut;
+                    next = cut + 1;
+                } else {
+                    // 1行が長すぎる: 文字の途中で切らないよう継続バイトを避ける
+                    int c = start + kLimit;
+                    while (c > start && ((uint8_t)doc_text[c] & 0xC0) == 0x80) c--;
+                    if (c <= start) c = start + kLimit;
+                    chunkEnd = next = c;
+                }
+            }
 
-            uint16_t linkOff, linkLen;
-            if (findFirstInlineLink(b.srcOffset, b.srcOffset + b.srcLength, linkOff, linkLen)) {
-                b.urlOffset = linkOff;
-                b.urlLength = linkLen;
+            MdBlock b{};
+            b.type = type;
+            b.srcOffset = start;
+            b.srcLength = chunkEnd - start;
+            b.joinNext = (next < end);
+
+            if (type == MdBlockType::Paragraph) {
+                uint16_t linkOff, linkLen;
+                if (findFirstInlineLink(b.srcOffset, b.srcOffset + b.srcLength, linkOff, linkLen)) {
+                    b.urlOffset = linkOff;
+                    b.urlLength = linkLen;
+                }
             }
 
             blocks.push_back(b);
+            pushed = true;
+            start = next;
+        }
+        //ブロック数の上限で打ち切った場合、最後に積んだ分が「続きあり」のまま残らないようにする
+        if (start < end && pushed) blocks.back().joinNext = false;
+    };
+
+    auto flushParagraph = [&](int endPos) {
+        if (paraStart >= 0 && endPos > paraStart) {
+            pushSplitBlock(MdBlockType::Paragraph, paraStart, endPos);
         }
         paraStart = -1;
     };
@@ -658,11 +703,15 @@ void MarkdownView::parseBlocks() {
             int contentEnd = (fenceEndLineStart != -1) ? (fenceEndLineStart > contentStart ? fenceEndLineStart - 1 : contentStart) : len;
 
             if ((int)blocks.size() < kMaxBlocks) {
-                MdBlock b{};
-                b.type = MdBlockType::CodeBlock;
-                b.srcOffset = contentStart;
-                b.srcLength = contentEnd - contentStart;
-                blocks.push_back(b);
+                if (contentEnd > contentStart) {
+                    pushSplitBlock(MdBlockType::CodeBlock, contentStart, contentEnd);
+                } else {
+                    MdBlock b{};
+                    b.type = MdBlockType::CodeBlock;
+                    b.srcOffset = contentStart;
+                    b.srcLength = 0;
+                    blocks.push_back(b);
+                }
             }
 
             pos = (fenceEndLineEnd == -1) ? len : ((fenceEndLineEnd == len) ? len : fenceEndLineEnd + 1);
@@ -951,7 +1000,9 @@ void MarkdownView::layoutBlocks() {
             measure_label->setMaxWidth(viewport_w - kPadding * 2); // 内側に余白を持たせる
             measure_label->setFontSize(FontFn::Small);
             measure_label->setText(getFormattedBlockText((int)idx, b));
-            b.height = measure_label->getH() + kPadding * 2; // 背景ボックス分の余白
+            // 背景ボックス分の余白。続きのある(分けた)コードブロックは余白を付けず、
+            // 次の分と箱を隙間なく繋げる
+            b.height = measure_label->getH() + (b.joinNext ? 0 : kPadding * 2);
         }
         else if (b.type == MdBlockType::Link) {
             measure_label->setMaxWidth(viewport_w);
@@ -998,6 +1049,7 @@ void MarkdownView::layoutBlocks() {
 
         // 連続する同種の要素同士は間隔を詰めて、まとまりを見やすくする
         int spacing = kBlockSpacing;
+        if (b.joinNext) spacing = 0; // 長いブロックを分けた続き。1つのまとまりとして詰める
         if (b.type == MdBlockType::ListItem &&
             idx + 1 < blocks.size() && blocks[idx + 1].type == MdBlockType::ListItem) {
             spacing = kBlockSpacing / 2;

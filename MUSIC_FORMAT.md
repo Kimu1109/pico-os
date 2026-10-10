@@ -7,7 +7,7 @@ pico-os のチップチューン音源(`src/sound/Chip_Synth`、既定8チャン
 > **現状**: **実装済み**(読み取り `src/sound/Mml_Compiler`、2コア目のシーケンサー `src/sound/Music_Player`、
 > 窓口 `SoundFunctions::MusicPlay*`、Luaの `pico.music_*`、ミュージックアプリ `MusicScene`)。
 > 挙動は `script/host_test/music_test.cpp` で固定してある。本書と実装が食い違えば、実装を信じて本書を直す。
-> サンプル: `pc/sdcard/music/demo.mml`(短いループ)、`pc/sdcard/music/sample.mml`(ほとんどの命令を使った見本)
+> サンプル: `pc/sdcard/music/サンプル/demo.mml`(短いループ)、`pc/sdcard/music/サンプル/sample.mml`(ほとんどの命令を使った見本)
 
 ## なぜMMLか(他の形式との関係)
 

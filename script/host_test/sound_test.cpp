@@ -11,6 +11,7 @@
 // SoundFunctionsの状態は1つしか無いので、1本の筋書きとして順に進める。
 #include "functions/Sound_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Battery_Functions.hpp"
 #include "sound/Chip_Synth.hpp"
 #include "sound/Note_Name.hpp"
 #include "consts.hpp"
@@ -456,6 +457,34 @@ static void TestSoundFunctions(){
     SetOutput(Output::Auto);
     Core1StepAt(now);
     check(GetState() == State::Active && Out().running, "autoへ戻すと鳴らせる");
+
+    printf("--- sound.cfg: battery-cap ---\n");
+    {
+        //電池駆動(PCの疑似値: 80%・USB給電なし)なら既定で頭打ちを掛ける
+        setenv("PICOOS_BATTERY_PERCENT", "80", 1);
+        BatteryFunctions::Setup();
+        HostSd::files["/sys/sound.cfg"] = "volume = 50\n";
+        SetupAt(now);
+        UpdateAt(now);
+        check(IsBatteryVolumeCapActive(), "既定では電池駆動中に頭打ちする");
+        HostSd::files["/sys/sound.cfg"] = "volume = 50\nbattery-cap = false\n";
+        SetupAt(now);
+        UpdateAt(now);
+        check(!IsBatteryVolumeCapActive(), "battery-cap = false なら頭打ちしない(ライン出力のDAC向け)");
+        HostSd::files["/sys/sound.cfg"] = "volume = 50\n";
+        SetupAt(now);
+        UpdateAt(now);
+        check(IsBatteryVolumeCapActive(), "キーを消すと既定へ戻る");
+        //後のテストへ影響しないようUSB給電に戻す
+        setenv("PICOOS_BATTERY_PERCENT", "100", 1);
+        BatteryFunctions::Setup();
+        UpdateAt(now);
+        check(!IsBatteryVolumeCapActive(), "USB給電なら頭打ちしない");
+        HostSd::files["/sys/sound.cfg"] = "# テスト\noutput = off\nvolume = 30\n";
+        SetupAt(now);
+        SetOutput(Output::Auto);
+        Core1StepAt(now);
+    }
 
     printf("--- I2Sを開始できなかったとき ---\n");
     SetOutput(Output::Off);

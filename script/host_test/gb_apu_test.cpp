@@ -94,6 +94,29 @@ static void testPulse(){
         for(size_t i = kRate / 2; i < w.size(); i++) if(w[i] > mid) high++;
         near((double)high / (double)(w.size() - kRate / 2), expect[d], 0.03, names[d]);
     }
+
+    //本体の出力(44100Hz)でも同じ高さで鳴り、直流を落とす速さも周波数に合わせて換算される
+    {
+        constexpr uint32_t kRate44 = 44100;
+        GbApu apu44(kRate44);
+        PowerOn(apu44);
+        Ch2(apu44, 1750, 0x80, 0xF0);
+        const auto w = Render(apu44, kRate44);
+        near(RisingCrossings(w), 439.8, 3, "44100Hzでも1秒の周期の数は同じ");
+        //ch3を最大の音量・一定の波形(直流だけ)で鳴らすと0へ戻っていく。22050Hzと同じ時間で同じだけ戻る
+        auto dc_after = [](uint32_t rate){
+            GbApu a(rate);
+            PowerOn(a);
+            for(int i = 0; i < 16; i++) a.write((uint8_t)(WAVE + i), 0xFF);
+            a.write(NR30, 0x80);
+            a.write(NR32, 0x20);
+            a.write(NR33, 0x00);
+            a.write(NR34, 0x87);
+            const auto v = Render(a, rate / 400);     //2.5ms(時定数は約6ms)
+            return (double)v.back() / (double)v[2];
+        };
+        near(dc_after(kRate44), dc_after(kRate), 0.02, "直流が戻る速さは周波数に依らない(2.5ms後の残り)");
+    }
 }
 
 static void testLengthAndEnvelope(){

@@ -81,6 +81,7 @@ namespace {
     // ================================================================
 
     Output output = Output::Auto;
+    bool battery_cap = true;            // sound.cfgのbattery-cap。MAX98357A向けの電池駆動中の頭打ちを掛けるか
     bool connected = false;             // 採用済みの状態
     bool raw_last = false;              // 直近の読み取り
     uint8_t raw_stable = 0;             // raw_last が何回続いたか
@@ -118,6 +119,7 @@ namespace {
     }
 
     void LoadConfig(){
+        battery_cap = true;
         if(!OSData::SD_usable) return;
         //無いのが普通(既定値で動く)。ParseFile()は開けないとFAILを出すので先に確かめる
         if(!OSData::SD.exists(PICO_Path::FILE::CFG::SYS_SOUND_CFG)) return;
@@ -132,6 +134,12 @@ namespace {
                     int v = 0;
                     if(PICO_Config::ConfigValue::AsInt(value, v)) SetVolume(v);
                     else LOG_SYS_WARN("sound.cfg: volume は0〜100の整数です: %s", value);
+                }else if(strcmp(key, "battery-cap") == 0){
+                    //スピーカー用のアンプ(MAX98357A)は電池駆動だと音割れするので音量を絞る(既定)。
+                    //ライン出力のDAC(PCM5102A等)は割れないので false にしてよい
+                    bool b = true;
+                    if(PICO_Config::ConfigValue::AsBool(value, b)) battery_cap = b;
+                    else LOG_SYS_WARN("sound.cfg: battery-cap は true/false です: %s", value);
                 }
             }
         );
@@ -387,7 +395,7 @@ void SoundFunctions::UpdateAt(unsigned long now_ms){
     //VSYSがUSBの5VでなくLiPoセルの電圧になるバッテリー駆動中は、アンプの出力ヘッドルームが
     //下がり音割れする(実機で確認済み)。BatteryFunctionsの直近のサンプル(60秒間隔)で判定する
     battery_cap_active.store(
-        BatteryFunctions::HasSample() && !BatteryFunctions::IsExternallyPowered(),
+        battery_cap && BatteryFunctions::HasSample() && !BatteryFunctions::IsExternallyPowered(),
         std::memory_order_relaxed
     );
 

@@ -40,13 +40,13 @@ namespace SoundFunctions {
         Active,         // 鳴らせる(I2Sが動いている)
     };
 
-    constexpr uint32_t      kSampleRate        = 22050;
+    constexpr uint32_t      kSampleRate        = 44100;   // 2026-10-10に22050から(PCM5102AのDACで鳴らすため)
     constexpr int           kChannels          = ChipSynth::kChannels;
     constexpr unsigned long kDetectIntervalMs  = 100;
     constexpr uint8_t       kDetectStableCount = 3;    // 100ms×3回続けて同じなら採用
-    // I2Sのバッファ: 64ワード(1ワード=左右16bitずつの1サンプル)×8本 = 512サンプル ≒ 23ms / 2KB。
+    // I2Sのバッファ: 128ワード(1ワード=左右16bitずつの1サンプル)×8本 = 1024サンプル ≒ 23ms / 4KB。
     // 2コア目が専任で流すので短くてよい(短いほど要求から音が出るまでが速い)
-    constexpr uint16_t      kBufferWords       = 64;
+    constexpr uint16_t      kBufferWords       = 128;
     constexpr uint8_t       kBufferCount       = 8;
     // 1コア目→2コア目のコマンドの列。溢れた要求は捨てる(DroppedCommands()で数える)
     constexpr uint8_t       kCommandQueueSize  = 32;
@@ -64,10 +64,11 @@ namespace SoundFunctions {
     // 最初に曲を鳴らすときに読み取り係(約3.5KB)と一緒に確保し、以降は持ち続ける
     constexpr uint16_t      kMusicDataBytes    = 6144;
     // WAV: 1回のUpdate()で読んで積むサンプル数の上限(SDの読み込みで1フレームが長引きすぎないように。
-    // 44.1kHzステレオ16bitなら約8KBを読む量)。毎フレーム約370サンプル(60fps)消費するので十分追いつく
-    constexpr uint16_t      kWavMaxPerUpdate   = 1024;
+    // 44.1kHzステレオ16bitなら約8KBを読む量)。毎フレーム約735サンプル(60fps)消費するので、
+    // 1フレームが約46ms(約21fps)までなら追いつく
+    constexpr uint16_t      kWavMaxPerUpdate   = 2048;
     // WAVを鳴らし始める前に先読みしておく数(鳴らし始めの途切れを防ぐ)
-    constexpr uint16_t      kWavPrefillSamples = 4096;
+    constexpr uint16_t      kWavPrefillSamples = 8192;
 
     // ===== 1コア目から使う =====
 
@@ -129,7 +130,7 @@ namespace SoundFunctions {
     uint32_t GbDroppedWrites();
 
     // ---- WAV(SDの .wav をそのまま鳴らす) ----
-    // 1コア目がSDから少しずつ読んでモノラル22050Hzへ直し、列(WavStream、約16KB)で2コア目へ渡す。
+    // 1コア目がSDから少しずつ読んでモノラル44100Hzへ直し、列(WavStream、約32KB)で2コア目へ渡す。
     // 曲・効果音・GBの音と足し合わせる。同時に鳴らせるWAVは1本(鳴らすと前のWAVは止まる)。
     // 列と読み取り係(合わせて約17KB)は最初に鳴らすときに確保し、以降は持ち続ける。
     // 読み込みが WavStream::kRingSamples(約370ms)より長く止まると途切れる(WavUnderruns())

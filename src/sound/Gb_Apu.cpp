@@ -1,5 +1,6 @@
 #include "sound/Gb_Apu.hpp"
 
+#include <cmath>
 #include <cstring>
 
 namespace {
@@ -18,8 +19,6 @@ namespace {
 
     // 位相の増分がこれ以上(1サンプルで半周期以上)なら、サンプル周波数では表せない高さ
     constexpr uint64_t kUltrasonic = 1ull << 31;
-    // 直流を落とすコンデンサの充電の係数(実機の0.999958を4194304Hz→22050Hzへ換算)
-    constexpr float kHighPass = 0.992f;
 }
 
 void GbApu::Envelope::clock(){
@@ -32,6 +31,9 @@ void GbApu::Envelope::clock(){
 }
 
 GbApu::GbApu(uint32_t sample_rate) : rate_(sample_rate ? sample_rate : 22050) {
+    //直流を落とすコンデンサの充電の係数。実機の1クロックあたり0.999958を1サンプルあたりへ換算する
+    //(22050Hzで約0.992、44100Hzで約0.996)
+    this->hp_coef_ = powf(0.999958f, 4194304.0f / (float)this->rate_);
     this->reset();
     this->setMasterVolume(100);
 }
@@ -303,7 +305,7 @@ void GbApu::renderAdd(int16_t* out, size_t n){
         }
         const float x = (float)mix;
         const float y = x - this->hp_cap_;
-        this->hp_cap_ = x - y * kHighPass;
+        this->hp_cap_ = x - y * this->hp_coef_;
         if(!out) continue;
 
         const int32_t s = (int32_t)(y * (float)this->gain_) / 256 + out[i];

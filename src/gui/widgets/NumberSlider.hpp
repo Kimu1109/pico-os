@@ -32,6 +32,14 @@ class NumberSlider : public Widget {
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::NumberSlider; }
+        bool focusableByDefault() const override { return true; }
+        // ←→で範囲の1/20ずつ動かす
+        bool onFocusKey(FocusKey key) override {
+            if(key != FocusKey::Left && key != FocusKey::Right) return false;
+            const float step = (this->maxValue - this->minValue) / 20.0f;
+            this->setValue(this->value + (key == FocusKey::Right ? step : -step));
+            return true;
+        }
 
         void setValue(float value){
             this->value = min(max(value, minValue), maxValue);

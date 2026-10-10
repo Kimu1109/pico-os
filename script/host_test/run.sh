@@ -78,6 +78,8 @@
 #   dict_scene_test… 辞書アプリ(DictScene)のGUI配線(入力欄→検索→一覧への逐次反映→タップで詳細欄)
 #   widget_factory_test… WidgetFactory(WidgetType→new Xxx)とWidgetRegistry::Resolve()
 #                         (Lua統合向けの発行側/消費側で、以前は呼び出し元・テストとも無かった)
+#   focus_test… ウィジェットのフォーカス(FocusFunctions)。読む順と矢印の移り先・候補にならないもの・決定で押す・
+#                消えたとき・タッチで枠を消す・ダイアログの範囲・Checkbox/TabBar/NumberSlider/ScrollList/DropdownMenu/ScrollContainer
 #   widget_property_test… WidgetProperty(WidgetType非依存のget/set共通口)。
 #                          WidgetFactory対応20種それぞれの代表プロパティの読み書きと、
 #                          型不一致/非対応id/nullptrがfalseで安全に弾かれることを確認。
@@ -693,6 +695,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/key_input_test.cpp" \
     "$ROOT/src/functions/KeyInput_Functions.cpp" \
     "$ROOT/src/functions/KeyInput_Dispatch.cpp" \
+    "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardEng.cpp" \
@@ -843,6 +846,32 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== widget_factory_test ====="
 run_or_die "$OUT/widget_factory_test"
+
+# --- ウィジェットのフォーカス(FocusFunctions) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/focus_test.cpp" \
+    "$ROOT/src/functions/Focus_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Checkbox.cpp" \
+    "$ROOT/src/gui/widgets/NumberSlider.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    -o "$OUT/focus_test"
+
+echo ""
+echo "===== focus_test ====="
+run_or_die "$OUT/focus_test"
 
 # --- WidgetProperty(プロパティのget/set共通口) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -1017,6 +1046,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
@@ -1108,6 +1138,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/script/host_test/lua_ext_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
@@ -1198,6 +1229,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/script/host_test/lua_sandbox_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
@@ -1304,6 +1336,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
@@ -1391,6 +1424,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \

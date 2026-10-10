@@ -4,6 +4,7 @@
 #include "functions/GFX_Functions.hpp"
 #include "functions/Mem_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Focus_Functions.hpp"
 
 #include <cstdlib>
 #include <new>
@@ -28,6 +29,7 @@ void Widget::operator delete(void* ptr, size_t bytes) noexcept {
 }
 
 Widget::~Widget() {
+    FocusFunctions::OnWidgetGone(this);
     if (WidgetIdTools::IsValid(cached_id)) {
         WidgetRegistry::Unregister(cached_id);
     }

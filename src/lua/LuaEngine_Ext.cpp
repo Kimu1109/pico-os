@@ -37,6 +37,7 @@
 #include "gui/icons/icon_render.h"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
+#include "functions/Focus_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
@@ -79,6 +80,8 @@ struct LuaEngineExt {
     static int l_children(lua_State* L);
     static int l_get_rect(lua_State* L);
     static int l_bring_to_front(lua_State* L);
+    static int l_focus(lua_State* L);
+    static int l_get_focus(lua_State* L);
     static int l_send_to_back(lua_State* L);
     static int l_show_keyboard(lua_State* L);
     static int l_hide_keyboard(lua_State* L);
@@ -545,6 +548,33 @@ int LuaEngineExt::l_get_rect(lua_State* L) {
     lua_pushinteger(L, r.x); lua_pushinteger(L, r.y);
     lua_pushinteger(L, r.w); lua_pushinteger(L, r.h);
     return 4;
+}
+
+// pico.focus(id [, show_ring]) / pico.focus(nil): フォーカスを移す/外す。
+// 受けないウィジェット(focusable=false・見えない・無効)へは移らずfalse。show_ringの既定はtrue
+int LuaEngineExt::l_focus(lua_State* L) {
+    if (lua_isnoneornil(L, 1)) {
+        FocusFunctions::Set(nullptr, false);
+        lua_pushboolean(L, true);
+        return 1;
+    }
+    Widget* w = WidgetArg(L, 1, "pico.focus");
+    const bool show_ring = lua_isnoneornil(L, 2) ? true : lua_toboolean(L, 2);
+    if (!FocusFunctions::IsCandidate(w) || !FocusFunctions::InScope(w)) {
+        lua_pushboolean(L, false);
+        return 1;
+    }
+    FocusFunctions::Set(w, show_ring);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+// pico.get_focus(): フォーカスのあるウィジェットのid(無ければnil)
+int LuaEngineExt::l_get_focus(lua_State* L) {
+    Widget* w = FocusFunctions::Current();
+    if (!w) { lua_pushnil(L); return 1; }
+    lua_pushinteger(L, (lua_Integer)w->getId());
+    return 1;
 }
 
 int LuaEngineExt::l_bring_to_front(lua_State* L) {
@@ -1652,6 +1682,8 @@ void LuaEngine::RegisterExtApi() {
     registerFn("children", LuaEngineExt::l_children);
     registerFn("get_rect", LuaEngineExt::l_get_rect);
     registerFn("bring_to_front", LuaEngineExt::l_bring_to_front);
+    registerFn("focus", LuaEngineExt::l_focus);
+    registerFn("get_focus", LuaEngineExt::l_get_focus);
     registerFn("send_to_back", LuaEngineExt::l_send_to_back);
     registerFn("show_keyboard", LuaEngineExt::l_show_keyboard);
     registerFn("hide_keyboard", LuaEngineExt::l_hide_keyboard);

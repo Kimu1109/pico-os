@@ -1,6 +1,7 @@
 #include "Widget_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
+#include "functions/Focus_Functions.hpp"
 #include "OS_Data.hpp"
 #include <algorithm>
 
@@ -54,6 +55,7 @@ void WidgetFunctions::Remove(Widget *w)
         if (pressingWidget == widget) {
             pressingWidget = nullptr;
         }
+        FocusFunctions::OnWidgetGone(widget);
         auto it = std::find(widgets.begin(), widgets.end(), widget);
         if (it != widgets.end()) {
             widgets.erase(it);
@@ -75,6 +77,7 @@ void WidgetFunctions::RemoveDialog(Widget *w)
         if (pressingWidget == widget) {
             pressingWidget = nullptr;
         }
+        FocusFunctions::OnWidgetGone(widget);
     });
 
     auto it = std::find(dialog_roots.begin(), dialog_roots.end(), w);
@@ -93,6 +96,7 @@ void WidgetFunctions::RemoveOverlay(Widget *w)
         if (pressingWidget == widget) {
             pressingWidget = nullptr;
         }
+        FocusFunctions::OnWidgetGone(widget);
     });
 
     auto it = std::find(overlays.begin(), overlays.end(), w);
@@ -121,6 +125,7 @@ void WidgetFunctions::RemoveAny(Widget *w)
         if (pressingWidget == widget) {
             pressingWidget = nullptr;
         }
+        FocusFunctions::OnWidgetGone(widget);
         auto it = std::find(widgets.begin(), widgets.end(), widget);
         if (it != widgets.end()) {
             widgets.erase(it);
@@ -149,6 +154,7 @@ void WidgetFunctions::DestroyLater(Widget *w)
         if (pressingWidget == widget) {
             pressingWidget = nullptr;
         }
+        FocusFunctions::OnWidgetGone(widget);
     });
 
     for (auto* p : pending_deletes) {
@@ -206,6 +212,10 @@ void WidgetFunctions::ClearSceneWidgets()
     }
 
     pressingWidget = nullptr;
+    FocusFunctions::focused = nullptr;
+    FocusFunctions::ring_visible = false;
+    FocusFunctions::saved_id = 0;
+    FocusFunctions::saved_ring = false;
 }
 
 void WidgetFunctions::BringToFront(Widget *w)
@@ -270,6 +280,8 @@ void WidgetFunctions::UpdateAll()
         pressingWidget = HitTest(OSData::touchX, OSData::touchY);
         // 無効(setEnabled(false))のウィジェットはタップを受け止めるだけで何も起こさない
         if(pressingWidget && !pressingWidget->isEffectivelyEnabled()) pressingWidget = nullptr;
+        // タッチしたら枠を消す(押したものが受けるならフォーカスもそこへ)
+        FocusFunctions::OnTouchStart(pressingWidget);
         if(pressingWidget){
             pressingWidget->is_pressing = true;
             pressingWidget->causeOnPressStart();

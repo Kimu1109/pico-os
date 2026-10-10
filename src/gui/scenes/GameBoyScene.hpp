@@ -69,6 +69,7 @@ class GameBoyScene : public Scene {
         bool quietNotifications() const override { return true; }
         // 離れるとROMを閉じる(遊んでいる途中の状態は保存しない)
         bool keepForeground() const override { return true; }
+        bool usesPad() const override { return true; }
 
         void onEnter() override;
         void onExit() override;

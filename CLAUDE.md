@@ -1919,7 +1919,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   Lua(`pico.pad_connected/pad_down/pad_pressed/pad_released`、ボタンは小文字の名前。知らない名前はエラー)、
   ステータスバー(つながっている間だけゲームパッドのアイコン。無いのが普通なのでバツは付けない)、
   動作確認は「動作確認」アプリの「コントローラー」(`pc/sdcard/lua/apps/動作確認/pad.lua`)。
-  **通常の画面をコントローラーで操作する(フォーカス移動)のは対象外**(ウィジェットにフォーカスの概念が無い。別の大きな仕事)。
+  通常の画面をコントローラーで操作するのは下の「ウィジェットのフォーカス」(2026-10-10)。
 - **PCビルド**: `pc/compat/Arduino.h`の`Serial.available()/read()`が**標準入力**を別スレッドで読む(`PICOOS_SERIAL_STDIN=off`で無効)。
   `python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc`、ヘッドレスなら`echo "pad 0011"`を100msごとに流し込めばよい。
 - **Webビルド**(2026-09-26): 標準入力が無いので、ページ(`pc/web/shell.html`)の**コントローラー**(Wiiクラシックと同じボタンの並び。
@@ -1960,7 +1960,7 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
      ↑↓・Tab・Ctrl/Alt付きの文字はキー盤では扱わない。
      - 日本語のキー盤は**ローマ字かな漢字変換をする**(下の「物理キーボードのかな漢字変換」)
      - 数字のキー盤は数字・`.`と、使えるタブの記号表にあるものだけ(`*`→`×`、`/`→`÷`に直す)。英字は断る(他へも回さない)
-  3. どちらも取らなければ捨てる(ウィジェットにフォーカスの概念が無いため。通常の画面のボタン操作等は対象外)。
+  3. どちらも取らなければウィジェットのフォーカスへ(Tab・矢印・Enter・Space・Esc。下の「ウィジェットのフォーカス」)。それ以外は捨てる。
 - **自動調光/スリープ**: 列に打鍵があれば操作とみなす(`DisplayFunctions`/`PowerFunctions`が`Pending()`を見る)。**スリープから起こした打鍵は捨てる**
   (`DiscardPending()`。暗い画面のどこへ入るか見えないため。タッチの`swallow_touch`と同じ考え方)。
 - **列・行の読み取り(`KeyInput_Functions.cpp`)は何にも依存しない**ので、Pad/Powerのホストテストはこちらだけをリンクする。
@@ -1979,6 +1979,46 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
   SSH(接続先の入力・Backspace・Ctrl+Cで打ち直し)、入力テストのTextbox(日本語のキー盤へ英字と「あ」)/NumberInput(英字・使えない記号を断る)。
   `pad_serial.py`の行の組み立て、Webのページ(Chromiumで「文字入力」の行とコントローラーのときは送らないこと)。
   **実機のUSBシリアル・Webビルド本体(emsdk無し)・PCビルドの実ウィンドウでのSDLのキー入力(ヘッドレスでは来ない)・実際のSSHサーバ相手は未確認**。
+
+### ウィジェットのフォーカス (`src/functions/Focus_Functions` / `Widget`の`focus_mode`と仮想関数) (2026-10-10)
+
+SUMMARY.md未掲載。物理キーボード・外部コントローラーで、画面のボタン等を選んで押せるようにした。**RAMは状態だけで約10バイト**
+(`FocusFunctions::focused`・`ring_visible`・`saved_id`(WidgetId)・`saved_ring`、十字キーの繰り返し6バイト)。
+ウィジェット側は`Widget::focus_mode`(1バイト。`background_color`の直後の詰め物に入るので**sizeof(Widget)は変わらない**)と
+仮想関数6つ(`focusableByDefault/onFocusKey/onFocusChanged/drawsOwnFocus/focusRect/revealRect`。vtableはフラッシュ)だけ。
+候補の並べた配列も持たず、操作のたびに`widgets`(またはダイアログの部分木)をなめて選ぶ。
+
+- **範囲**: 一番上に開いている(見えている)ダイアログの中、無ければ通常レイヤ。オーバーレイ(ステータスバー・キーボード)には移らない。
+  候補は`isFocusable()`かつ自分と親が全部見えていて有効(`isEffectivelyEnabled()`)で`hit_transparent`でないもの。
+- **移り方**: Tab/Shift+Tab(コントローラーはR・ZR/L・ZL)は**読む順**(画面座標の上から、同じ高さなら左から。端で回る)。
+  矢印/十字キーは、まずフォーカスのあるウィジェットの`onFocusKey()`に渡し、扱わなければ**その向きの一番近いもの**
+  (中心がその向きにあるものの中で「向きの距離+横ずれ×3」が最小。横ずれは直角方向で範囲が重なれば0)。基準は`focusRect()`
+  (AppGridは選んでいるタイル)。十字キーは押したままで400ms後から110msごとに繰り返す。
+- **押す**: Enter/Space/A。`onFocusKey(Activate)`が扱わなければ**真ん中をタップしたことにする**(`OSData::touchX/Y`を一時的に
+  真ん中にして`causeOnPressStart()`→`causeOnPressEnd()`、元へ戻す)。押した中で自分が消えたら(`~Widget()`が`focused`を下ろす)離すは配らない。
+  Esc/Bは`onFocusKey(Back)`(開いたドロップダウンを閉じる)だけ。
+- **枠**: キー/ボタンで動かしたときだけ出す(最初の1回は今の/最初のものに枠を出すだけで、動かしも押しもしない)。**タッチで消える**
+  (`WidgetFunctions::UpdateAll()`の押した瞬間に`OnTouchStart()`。押したものが受けるならフォーカスはそこへ移る)。
+  描くのは`FlushDirty()`の合成で、dirty矩形ごとに全部のウィジェットを描いた後(子に塗りつぶされないように)、フォーカスのある
+  ウィジェットの矩形の**内側**に2pxの青(`kRingColor`)。消す/動かすときは`MarkDirtyBelow()`(半透明のダイアログの下に残らないように)。
+  `drawsOwnFocus()`が真のもの(AppGrid)は自分で描く。
+- **ダイアログ**: 枠が出ている間にダイアログが開いたら(1フレーム遅れて開く画面もあるので毎フレームの`FocusFunctions::Update()`で見る)、
+  開く前のものを**WidgetIdで覚えて**中の最初のものへ移る。閉じたら`WidgetRegistry::Resolve()`で戻す(生ポインタだと破棄を見逃す)。
+  タッチで閉じた場合は戻すが枠は出さない。
+- **入力の配り先**(`KeyInput_Dispatch.cpp`): 打鍵は 画面の`onKey()` → 開いているキー盤 → フォーカス の順(画面やキー盤が取ったものは動かさない)。
+  コントローラーは**`Scene::usesPad()`が偽の画面だけ**(ゲームボーイと、`pico.pad_*`を一度でも呼んだLuaアプリは真)、キー盤が開いている間もしない。
+- **ウィジェットごと**: 受けるのは Button / Checkbox(決定で切り替え。タップは左端の四角しか見ないため) / Textbox / NumberInput(押す=キーボードを開く) /
+  NumberSlider(←→で範囲の1/20) / TabBar(←→でタブ、端より先は隣へ) / ScrollList(↑↓で選ぶ=1回目のタップ、決定=同じ項目の2回目のタップ、端より先は隣へ。
+  `ensureVisible()`を足した) / DropdownMenu(決定で開く、開いている間は↑↓・決定で確定・戻るで閉じる、フォーカスが外れたら閉じる。中の一覧は`setFocusable(false)`) /
+  AppGrid(矢印でタイル、左右の端でページを送る、決定で起動。`HomeScene::onUpdate()`がページの表示を追いかける)。
+  `ScrollContainer::revealRect()`は隠れた子へ移ったとき見える所までスクロールする。**新しい操作部品を作ったら`focusableByDefault()`と、
+  タップの位置で動きが変わるなら`onFocusKey()`を足すこと**(`AppGrid`/`ColorDialog`型の「直接描く」部品は中で選ぶ位置を持つ必要がある)。
+  ColorDialog・KeyboardNum・DurationPicker・MonthGrid・CalculatorKeypad・GameBoyPad等の直接描く部品はまだ受けない(枠もタップの位置も合わない)。
+- Lua: `pico.focus(id|nil [, show_ring])` / `pico.get_focus()`、プロパティ`focusable`(`WidgetProperty::Id::Focusable`)。ドキュメントは`lua-api-doc/content/api/widgets.md`。
+- 検証: `focus_test`(run.sh の widget。読む順・矢印・候補にならないもの・押す・消える・タッチ・ダイアログの範囲と戻り・各ウィジェット)、
+  PCビルドで標準入力へ`key`の行を流して`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): ランチャのタイルの移動とページ送り、
+  Enterで起動、設定アプリ(一覧・ボタン・タブ・スライダー・ドロップダウン・確認ダイアログへ移って閉じたら戻る)、テキストエディタ(Tabでツールバー)。
+  **実機・実物のコントローラーでは未確認**。
 
 ### 物理キーボードのかな漢字変換 (`src/ime/Romaji_Kana.hpp` / `Keyboard`の物理キーの処理) (2026-10-03)
 

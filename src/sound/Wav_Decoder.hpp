@@ -8,7 +8,9 @@
 // - 対応: 整数PCM 8/16/24/32bit、浮動小数点 32bit(format 3)、WAVE_FORMAT_EXTENSIBLE(中身がそのどちらか)。
 //   チャンネルは1〜8で、全チャンネルの平均をとってモノラルにする。
 //   ADPCM・μ-law等の圧縮形式と64bit浮動小数点は Unsupported で断る
-// - サンプリング周波数は線形補間で out_rate へ直す(帯域制限はしない。高い周波数から下げると少し濁る)
+// - サンプリング周波数は線形補間で out_rate へ直す。**下げるとき(44.1kHz→22050Hz等)は先に低域通過フィルタ
+//   (ハミング窓のFIR、元の周波数で回す)を掛け、out_rate の半分より上の音を削る**。削らずに間引くと、
+//   その音が聞こえる帯域へ折り返して濁るため。上げるとき・同じ周波数のときは掛けない(入れたのと同じ値が出る)
 // - **ファイル全体をRAMへ載せない**。1KBの読み込みバッファで少しずつ読む
 // - fmt/data以外のチャンク(LIST等)は読み飛ばす。dataの長さがファイルの残りより長い
 //   (録音途中で切れた/長さ未記入の0xFFFFFFFF)ときは、ファイルの終わりまでを使う
@@ -18,6 +20,9 @@ public:
 
     static constexpr size_t kBufferBytes = 1024;
     static constexpr uint16_t kMaxChannels = 8;
+    // 低域通過フィルタのタップ数の上限(奇数。2*kMaxHalfTaps+1)。比が大きい(96kHz等)と頭打ちになり、少し甘くなる
+    static constexpr uint16_t kMaxHalfTaps = 31;
+    static constexpr uint16_t kMaxTaps = 2 * kMaxHalfTaps + 1;
 
     WavDecoder() = default;
     ~WavDecoder(){ this->close(); }
@@ -57,6 +62,10 @@ private:
     bool parseHeader();
     bool refill();
     bool nextSource(int16_t& v);
+    bool rawSource(int16_t& v);
+    void designFilter();
+    void pushHistory(int16_t x);
+    int16_t filterOut() const;
     int32_t decodeFrame(const uint8_t* p) const;
 
     FsFile f_;
@@ -89,4 +98,15 @@ private:
     int16_t s1_ = 0;
     bool primed_ = false;
     bool ending_ = false;      // 元のサンプルを読み切った(最後の1つを出している)
+
+    // 低域通過フィルタ(下げるときだけ)。係数はQ15で左右対称、合計は32768ちょうど(一定の値はそのまま出る)。
+    // 出す値は履歴の真ん中(half_ だけ前)のサンプルを中心にした値なので、頭は最初の値で埋め、
+    // 終わりは最後の値を half_ 回足して出し切る(入れた数と同じ数を出す)
+    uint16_t half_ = 0;                 // 0ならフィルタ無し
+    int16_t taps_[kMaxHalfTaps + 1];    // taps_[0] が真ん中、taps_[k] が真ん中から k 離れた所
+    int16_t hist_[2 * kMaxTaps];        // 同じ値を2か所へ書き、どこからでも連続で読めるようにした輪
+    uint16_t hist_pos_ = 0;
+    uint16_t flush_left_ = 0;
+    int16_t last_raw_ = 0;
+    bool filt_ready_ = false;
 };

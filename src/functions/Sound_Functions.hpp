@@ -90,11 +90,17 @@ namespace SoundFunctions {
     uint8_t GetVolume();
     void SetVolume(int volume);         // 0〜100。今だけ
 
-    // 出力の周波数(kSampleRateLow / kSampleRateHigh)。今だけ(sound.cfgへは書かない)。
-    // 変えると、鳴っている効果音・曲・WAV・GBの音は止まり、2コア目がI2Sを新しい周波数で開き直す。
-    // それ以外の値は false
+    // 出力の周波数(kSampleRateLow / kSampleRateHigh)。周波数が変わると、鳴っている効果音・曲・WAV・GBの音は止まり、
+    // 2コア目がI2Sを新しい周波数で開き直す。それ以外の値は false。
+    //  - SampleRate():          今の出力の周波数(画面の要求があればそれ、無ければ設定)
+    //  - ConfiguredSampleRate(): 利用者の設定(sound.cfgの sample-rate)
+    //  - SetSampleRate():       設定を変える(今だけ。sound.cfgへは書かない)
+    //  - RequestSampleRate():   画面の要求(0で取り下げ)。設定より優先する。ふつうは Scene::preferredSampleRate() を
+    //                           main.cpp の loop() が毎フレーム渡すので、画面を離れると自動で取り下げられる
     uint32_t SampleRate();
+    uint32_t ConfiguredSampleRate();
     bool SetSampleRate(uint32_t rate);
+    bool RequestSampleRate(uint32_t rate);
 
     // 電池駆動中にkBatteryVolumeCapPercentで頭打ちするか(sound.cfgの battery-cap)。今だけ
     bool GetBatteryCap();

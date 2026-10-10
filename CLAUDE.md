@@ -1902,6 +1902,13 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
   2コア目は受け取ったら`ApplyRate()`で音源(`ChipSynth::Engine`/`GbApu`/`MusicPlayer`)を新しい周波数で作り直し、GBの列(`GbAudioLink::setRate()`。
   フレームの中の位置を換算、音源の中身は消えるのでゲームが次に書くまで鳴らない)を合わせ、動いているI2Sを止める→すぐ新しい周波数・バッファで開き直す。
   1コア目の周波数(`out_rate`)はWAVの読み取り(`WavDecoder::open()`の出力の周波数)・WAVの位置/シークの換算・GBの列を作るときに使う。
+- **画面ごとの要求(2026-10-10)**: `Scene::preferredSampleRate()`(既定0=設定のまま)を`main.cpp`の`loop()`が`SceneFunctions::Update()`の直後に毎フレーム
+  `SoundFunctions::RequestSampleRate()`へ渡す。要求(`requested_rate`)は設定(`configured_rate`)より優先し、0で取り下げると設定へ戻る(設定は書き換えない)。
+  変わったときだけ`SetSampleRate()`と同じ切り替えをする(同じ値なら毎フレーム呼んでも何もしない)。**ミュージックアプリは44100Hz**を返し、
+  `onEnter()`の頭でも`RequestSampleRate()`する(その画面の最初のフレームで鳴らす曲が切り替えで止まらないように)。
+  Luaは`pico.sound_rate()`/`pico.sound_set_rate(44100|22050|nil)`(`LuaEngine::requested_rate_`。`LuaScene::preferredSampleRate()`がそれを返し、
+  `push_scene`/`change_scene`で開いた画面へ引き継ぐ=`LuaScene::setInheritedSampleRate()`)。アプリを閉じると次の画面の要求(ランチャは0)で設定へ戻る。
+  確認: `sound_test`(要求の優先・取り下げ・同じ要求で開き直さない)、`lua_engine_test`、PCビルドでミュージックアプリを開くと44100Hz・「戻る」で22050Hzのログ。
 - **周波数に比例させたもの**: I2Sのバッファ(1本64/128ワード×8本=どちらも約23ms、2KB/4KB。`kBufferWordsLow/High`)、
   GBの直流を落とす係数(コンストラクタで`0.999958^(4194304/周波数)`。22050Hzで約0.992、44100Hzで約0.996)。
 - **WAVの列は24KB(12288サンプル)**: 44100Hzで約280ms、22050Hzで約560ms先読みできる。`kWavMaxPerUpdate`=2048、`kWavPrefillSamples`=8192。

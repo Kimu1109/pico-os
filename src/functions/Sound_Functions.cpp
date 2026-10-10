@@ -83,6 +83,8 @@ namespace {
 
     Output output = Output::Auto;
     uint32_t out_rate = kDefaultSampleRate;     // 1コア目から見た出力の周波数(WAVの読み取り・時間の換算に使う)
+    uint32_t configured_rate = kDefaultSampleRate;  // 利用者の設定(sound.cfg の sample-rate)
+    uint32_t requested_rate = 0;                // 画面の要求(0=無し)。設定より優先する
     bool battery_cap = true;            // sound.cfgのbattery-cap。MAX98357A向けの電池駆動中の頭打ちを掛けるか
     bool connected = false;             // 採用済みの状態
     bool raw_last = false;              // 直近の読み取り
@@ -491,17 +493,37 @@ void SoundFunctions::SetBatteryCap(bool enable){
     if(!enable) battery_cap_active.store(false, std::memory_order_relaxed);
 }
 
+uint32_t SoundFunctions::ConfiguredSampleRate(){ return configured_rate; }
+
+namespace {
+    bool ValidRate(uint32_t rate){ return rate == kSampleRateLow || rate == kSampleRateHigh; }
+
+    // 要求か設定から決まる周波数へ合わせる。列が満杯で積めなければ false(次に呼ばれたときにやり直す)
+    bool ApplyEffectiveRate(){
+        const uint32_t rate = requested_rate ? requested_rate : configured_rate;
+        if(rate == out_rate) return true;
+        //鳴っているものを止めてから切り替える(音源は2コア目で作り直す。WAVは読み直しの周波数が変わる)
+        WavStop();
+        MusicStop();
+        StopAll();
+        if(!Push(Command{CmdType::SetRate, 0, {}, nullptr, 0, rate})) return false;
+        out_rate = rate;
+        LOG_SYS_MSG("Sound: 出力の周波数を%luHzにします", (unsigned long)rate);
+        return true;
+    }
+}
+
 bool SoundFunctions::SetSampleRate(uint32_t rate){
-    if(rate != kSampleRateLow && rate != kSampleRateHigh) return false;
-    if(rate == out_rate) return true;
-    //鳴っているものを止めてから切り替える(音源は2コア目で作り直す。WAVは読み直しの周波数が変わる)
-    WavStop();
-    MusicStop();
-    StopAll();
-    if(!Push(Command{CmdType::SetRate, 0, {}, nullptr, 0, rate})) return false;
-    out_rate = rate;
-    LOG_SYS_MSG("Sound: 出力の周波数を%luHzにします", (unsigned long)rate);
-    return true;
+    if(!ValidRate(rate)) return false;
+    configured_rate = rate;
+    return ApplyEffectiveRate();
+}
+
+bool SoundFunctions::RequestSampleRate(uint32_t rate){
+    if(rate != 0 && !ValidRate(rate)) return false;
+    if(rate == requested_rate && out_rate == (rate ? rate : configured_rate)) return true;
+    requested_rate = rate;
+    return ApplyEffectiveRate();
 }
 
 void SoundFunctions::SetPowerSave(bool enable){ power_save.store(enable, std::memory_order_release); }

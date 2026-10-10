@@ -68,6 +68,7 @@ class LuaScene : public Scene {
         // 見るのが正しいため。CLAUDE.md「Luaバインディング」「権限」参照)
         LuaPermissions permissions;
 
+        uint32_t inherited_rate = 0;    // setInheritedSampleRate()
         LuaEngine* engine = nullptr;
 
         // ---- 画面をまたぐ受け渡し(pico.push_scene(path, args) / pico.pop(result) / on_suspend・on_resume) ----
@@ -107,6 +108,10 @@ class LuaScene : public Scene {
         bool onKey(const KeyInputFunctions::Event& ev) override;
         // pico.pad_* を使ったアプリ(ゲーム)はコントローラーを自分で読む(フォーカスを動かさない)
         bool usesPad() const override;
+        // pico.sound_set_rate() で頼まれた音の出力の周波数(0=設定のまま)
+        uint32_t preferredSampleRate() const override;
+        // push_scene/change_scene で移った先も同じ周波数で鳴らす(同じアプリの中の画面なので)
+        void setInheritedSampleRate(uint32_t rate){ inherited_rate = rate; }
 
         // push_scene/change_sceneの呼び出し側が、引数(JSON。無ければ空)と親のスクリプトパスを教える。
         // 生成直後(Push/Changeする前)に呼ぶ

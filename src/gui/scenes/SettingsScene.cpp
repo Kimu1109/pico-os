@@ -785,7 +785,7 @@ void SettingsScene::onEnter(){
     this->rate_title->setFontSize(FontFn::Small);
     this->rate_dropdown = new DropdownMenu(dropdown_x, rowY(3), kDropdownW);
     for(int i = 0; i < kRatePresetCount; i++) this->rate_dropdown->add(kRatePresetLabels[i]);
-    this->rate_selected_index = (SoundFunctions::SampleRate() == kRatePresets[1]) ? 1 : 0;
+    this->rate_selected_index = (SoundFunctions::ConfiguredSampleRate() == kRatePresets[1]) ? 1 : 0;
     this->rate_dropdown->setSelectedIndex(this->rate_selected_index);
     addToTab(Tab::Device, this->rate_title);
     addToTab(Tab::Device, this->rate_dropdown);

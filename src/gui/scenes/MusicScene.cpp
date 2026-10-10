@@ -46,6 +46,8 @@ namespace {
 // ================================================================ 画面
 
 void MusicScene::onEnter(){
+    //44100Hzへ先に切り替えておく(loop()も毎フレーム preferredSampleRate() を渡すが、切り替えは鳴っている音を止めるので鳴らす前に)
+    SoundFunctions::RequestSampleRate(this->preferredSampleRate());
     const Rect content = Scene::contentRect();
     const int y0 = content.y + MARGIN;
 

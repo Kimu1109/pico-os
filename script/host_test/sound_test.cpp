@@ -541,6 +541,23 @@ static void TestSoundFunctions(){
         StopAll();
         Core1StepAt(now);
 
+        //画面の要求(RequestSampleRate)は設定より優先し、0で取り下げると設定へ戻る
+        check(!RequestSampleRate(48000) && SampleRate() == kSampleRateLow, "要求も22050/44100(か0)以外は断る");
+        check(RequestSampleRate(kSampleRateHigh) && SampleRate() == kSampleRateHigh, "画面の要求で44100Hzへ");
+        check(ConfiguredSampleRate() == kSampleRateLow, "設定の値は変わらない");
+        Core1StepAt(now);
+        check(Out().sample_rate == (long)kSampleRateHigh, "要求どおりに開き直す");
+        const int b1 = Out().begin_count;
+        check(RequestSampleRate(kSampleRateHigh) && Out().begin_count == b1, "毎フレーム同じ要求でも開き直さない");
+        check(SetSampleRate(kSampleRateLow) && SampleRate() == kSampleRateHigh, "要求している間は設定を変えても要求のまま");
+        check(RequestSampleRate(0) && SampleRate() == kSampleRateLow, "取り下げると設定(22050Hz)へ戻る");
+        Core1StepAt(now);
+        check(Out().sample_rate == (long)kSampleRateLow, "22050Hzで開き直す");
+        check(SetSampleRate(kSampleRateHigh) && RequestSampleRate(kSampleRateLow) && SampleRate() == kSampleRateLow, "設定が44100Hzでも要求で22050Hzにできる");
+        check(RequestSampleRate(0) && SampleRate() == kSampleRateHigh, "取り下げると設定の44100Hz");
+        check(SetSampleRate(kSampleRateLow) && SampleRate() == kSampleRateLow, "設定を22050Hzへ戻す");
+        Core1StepAt(now);
+
         //sound.cfg の sample-rate
         HostSd::files["/sys/sound.cfg"] = "volume = 30\nsample-rate = 44100\n";
         SetupAt(now);

@@ -95,6 +95,31 @@ end
 pico.beep(880, 500)
 ```
 
+## pico.sound_rate
+
+<div class="sig">pico.sound_rate() <span class="ret">-> integer</span></div>
+
+今の音の出力の周波数(`22050` か `44100`)を返します。ふだんは設定アプリの「本体」→「音質」の値で、`pico.sound_set_rate()` で頼んでいる間はその値です。
+
+## pico.sound_set_rate
+
+<div class="sig">pico.sound_set_rate(rate) <span class="ret">-> boolean</span></div>
+
+| 引数 | 内容 |
+|---|---|
+| `rate` | `44100` / `22050`、または `nil`(`0`)で設定へ戻す。それ以外はエラー |
+
+**このアプリが開いている間だけ**、音の出力の周波数を変えます(設定アプリの値より優先されます。保存はしません)。アプリを閉じる・別のアプリへ移ると設定の値へ戻り、`pico.push_scene()` / `pico.change_scene()` で開いた画面へは引き継がれます。44.1kHzのWAVをそのまま鳴らしたいアプリ向けです(標準のミュージックアプリも開いている間は44100Hzにします)。
+
+切り替えると**鳴っている効果音・曲・WAVは止まります**(出力を開き直すため)。鳴らす前に呼んでください。頼めなかったときは `false`。
+
+```lua
+function setup()
+    pico.sound_set_rate(44100)        -- このアプリの間だけ44.1kHz
+    pico.wav_play(pico.app_dir() .. "/song.wav")
+end
+```
+
 ## 曲を鳴らす(pico-os MML)
 
 曲は **MML(テキスト)** で書き、`pico.music_play()` で鳴らします。書き方は [`MUSIC_FORMAT.md`](https://github.com/Kimu1109/pico-os/blob/main/MUSIC_FORMAT.md) を見てください。MIDIファイルは、PCで `python3 script/midi2mml.py song.mid -o song.mml` を実行するとMMLの下書きに変換できます。曲は2コア目で鳴るので、`loop()` が重くてもテンポは揺れません。

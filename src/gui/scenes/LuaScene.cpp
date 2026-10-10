@@ -1,4 +1,5 @@
 #include "gui/scenes/LuaScene.hpp"
+#include "functions/Sound_Functions.hpp"
 #include "functions/Power_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "OS_Data.hpp"
@@ -73,6 +74,11 @@ void LuaScene::onEnter() {
 
     // 画面をまたぐ受け渡し(引数・親・自分のパス)。スクリプトより先に渡す
     engine->SetScriptPath(script_path.c_str());
+    //前の画面(同じアプリ)が頼んでいた周波数を引き継ぎ、スクリプトが音を鳴らす前に切り替えておく
+    if(inherited_rate){
+        engine->InheritSampleRate(inherited_rate);
+        SoundFunctions::RequestSampleRate(inherited_rate);
+    }
     engine->SetSceneArgs(launch_args.c_str(), parent_script.c_str());
 
     // 通知をタップして起動された場合は、その理由(tag/data)をスクリプトより先に渡す
@@ -197,4 +203,8 @@ void LuaScene::onExit() {
 
 bool LuaScene::usesPad() const {
     return engine && engine->UsedPad();
+}
+
+uint32_t LuaScene::preferredSampleRate() const {
+    return engine ? engine->RequestedSampleRate() : inherited_rate;
 }

@@ -72,6 +72,9 @@ namespace MemFunctions {
     // 即時ログはこの閾値以上のときだけにする(累計はレポートのresidue列で見る)
     constexpr uint32_t kResidueLogThreshold = 1024;
 
+    // Update()がシーン中のピークを測る間隔(フレーム数)。mallinfo()は空きブロックを全部たどるので毎フレームは重い
+    constexpr uint32_t kPeakSampleFrames = 32;
+
     // largest_freeの探索上限。
     // 上限を設けないと、探索中のmallocがヒープ末尾を大きく伸ばして
     // スタック側の余裕を削ってしまう(伸ばした分は解放してもarenaに残る)。

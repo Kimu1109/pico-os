@@ -490,12 +490,9 @@ void Label<N>::updateCursorBlink() {
 template<size_t N>
 int Label<N>::GetTextWidth(FontFn::FontSize size, const char* text) {
     if (!text) return 0;
-    Label<PICO_STR_LL>& helper = utilityInstance();
-    helper.f_size = size;
-
-    helper.fontApply();
+    FontFn::SetFontSize(size);
     const int w = OSData::frame->textWidth(text);
-    helper.fontDefault();
+    FontFn::SetDefault();
 
     return w;
 }
@@ -525,6 +522,15 @@ void Label<N>::render() {
 
     if (prev_l_rect != l_rect)
         markdirty(getScreenPrevRect());
+
+    //合成の外(UpdateAll()から)の回は描いても捨てられるので、dirtyを積むだけで戻る
+    if (PICO_GFX::render_suppressed) {
+        this->renderCursor(); //カーソルの矩形をdirtyに積む(書き込みはクリップで捨てられる)
+        markdirty(getScreenRect());
+        this->prev_l_rect.copy(this->l_rect);
+        this->needs_redraw = false;
+        return;
+    }
 
     this->renderBackground();
     this->renderBorder();
@@ -578,21 +584,13 @@ void Label<N>::render() {
     this->needs_redraw = false;
 }
 
-template<size_t N>
-Label<PICO_STR_LL>& Label<N>::utilityInstance() {
-    static Label<PICO_STR_LL> instance(0, 0, "");
-    return instance;
-}
-
 // FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
 template<size_t N>
 void Label<N>::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const char* text) {
-    Label<PICO_STR_LL>& helper = utilityInstance();
-    helper.f_size = size;
-    helper.text_color = color;
-
-    helper.fontApply();
-    helper.textColorApply();
+    // 使い回しのLabelは持たない(以前はテンプレートの種類ごとに約650Bの静的なLabelを抱えていた)。
+    // やっていたのはフォントと文字色の設定だけなので、直接設定する
+    FontFn::SetFontSize(size);
+    OSData::frame->setTextColor(color);
 
     // 右端の切り落としは今のクリップとの重なりで行い、元のクリップへ戻す(clearClipRect()すると、
     // FlushDirty()のdirty矩形のクリップまで外れる。util/ScopedClip.hpp参照)
@@ -605,18 +603,15 @@ void Label<N>::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int 
         if (text) OSData::frame->print(text);
     }
 
-    helper.textColorDefault();
-    helper.fontDefault();
+    OSData::frame->setTextColor(PICO_FORECOLOR);
+    FontFn::SetDefault();
 }
 
 template<size_t N>
 int Label<N>::GetLineHeight(FontFn::FontSize size) {
-    Label<PICO_STR_LL>& helper = utilityInstance();
-    helper.f_size = size;
-
-    helper.fontApply();
+    FontFn::SetFontSize(size);
     int h = OSData::frame->fontHeight();
-    helper.fontDefault();
+    FontFn::SetDefault();
 
     return h;
 }

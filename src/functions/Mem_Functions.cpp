@@ -244,7 +244,12 @@ void MemFunctions::SealPermanentBaseline(){
 void MemFunctions::Update(){
     if(!scene_active || current_stat_index < 0) return;
 
-    //毎フレーム呼ばれるのでmallinfoのみ。max_allocの実測(malloc試行)はここではやらない
+    //毎フレーム呼ばれる。newlibのmallinfo()はmallocのロックを取って空きブロックの一覧を全部たどるので、
+    //毎フレームは呼ばず kPeakSampleFrames に1回だけ見る(シーン中のピークの目安には十分。
+    //出入りの瞬間はOnSceneExit()/AfterSceneEnter()が別に測る)。max_allocの実測(malloc試行)もここではやらない
+    static uint32_t frame_counter = 0;
+    if(++frame_counter < kPeakSampleFrames) return;
+    frame_counter = 0;
     const uint32_t used = ReadMallocInfo().used;
     if(used <= scene_baseline_used) return;
 

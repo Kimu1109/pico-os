@@ -9,40 +9,76 @@
 #include "functions/Notification_Functions.hpp"
 #include "functions/Screenshot_Functions.hpp"
 
+#include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
+namespace {
+    //残量(%)→4段階のアイコン
+    IconID BatteryIcon(int pct){
+        if(pct >= 75) return IconID::Battery4;
+        if(pct >= 50) return IconID::Battery3;
+        if(pct >= 25) return IconID::Battery2;
+        if(pct >= 10) return IconID::Battery1;
+        return IconID::Battery0;
+    }
+}
+
 void Statusbar::render(){
-    if(TimeFunctions::changed_HH_mm || millis() - this->update_interval_time >= 5000){
-        this->update_interval_time = millis();
-        this->needsRender();
-    }
-    const uint8_t sound_state = (uint8_t)SoundFunctions::GetState();
-    if(sound_state != this->last_sound_state){
-        this->last_sound_state = sound_state;
-        this->needsRender();
-    }
+    //変化の確認は合成の外(UpdateAll()から)の回だけ。合成の中(FlushDirty())ではMarkDirty()が効かないので、
+    //そこで変化を見つけて覚えてしまうと描き直しの要求が失われる
+    if(!PICO_GFX::isDirtyDeactivates){
+        //時刻は分が変わったときだけ。電波・電池・SDは5秒ごとに見て、段階が変わったときだけ描き直す
+        //(以前は変化が無くても5秒ごとに全体を描き直していた)
+        if(TimeFunctions::changed_HH_mm) this->needsRender();
+        if(millis() - this->update_interval_time >= 5000){
+            this->update_interval_time = millis();
+            const int16_t wifi_icon = (int16_t)NetworkFunctions::GetWifiStateIconID();
+            const int16_t battery_icon = BatteryFunctions::HasSample() ? (int16_t)BatteryIcon(BatteryFunctions::GetPercent()) : -2;
+            const int8_t sd_usable = OSData::SD_usable ? 1 : 0;
+            if(wifi_icon != this->last_wifi_icon || battery_icon != this->last_battery_icon || sd_usable != this->last_sd_usable){
+                this->last_wifi_icon = wifi_icon;
+                this->last_battery_icon = battery_icon;
+                this->last_sd_usable = sd_usable;
+                this->needsRender();
+            }
+        }
+        const uint8_t sound_state = (uint8_t)SoundFunctions::GetState();
+        if(sound_state != this->last_sound_state){
+            this->last_sound_state = sound_state;
+            this->needsRender();
+        }
 
-    const bool pad_connected = PadFunctions::IsConnected();
-    if(pad_connected != this->last_pad_connected){
-        this->last_pad_connected = pad_connected;
-        this->needsRender();
-    }
+        const bool pad_connected = PadFunctions::IsConnected();
+        if(pad_connected != this->last_pad_connected){
+            this->last_pad_connected = pad_connected;
+            this->needsRender();
+        }
 
-    //Wi-Fiの接続/切断/OFFは5秒の定期更新を待たずに出す
-    const uint8_t wifi_status = (uint8_t)NetworkFunctions::currentStatus;
-    if(wifi_status != this->last_wifi_status){
-        this->last_wifi_status = wifi_status;
-        this->needsRender();
-    }
+        //Wi-Fiの接続/切断/OFFは5秒の定期更新を待たずに出す
+        const uint8_t wifi_status = (uint8_t)NetworkFunctions::currentStatus;
+        if(wifi_status != this->last_wifi_status){
+            this->last_wifi_status = wifi_status;
+            this->needsRender();
+        }
 
-    const int unread = NotificationFunctions::UnreadCount();
-    if(unread != this->last_unread){
-        this->last_unread = unread;
-        this->needsRender();
+        const int unread = NotificationFunctions::UnreadCount();
+        if(unread != this->last_unread){
+            this->last_unread = unread;
+            this->needsRender();
+        }
     }
 
     if(!this->needs_redraw) return;
     if(!this->visible) return;
+    //合成の外の回は描いても捨てられる(dirtyはneedsRender()で積んである)
+    if(PICO_GFX::render_suppressed){
+        this->needs_redraw = false;
+        return;
+    }
+
+    const uint8_t sound_state = this->last_sound_state;
+    const bool pad_connected = this->last_pad_connected;
+    const int unread = this->last_unread;
 
     int draw_pos = 0;
 
@@ -99,13 +135,7 @@ void Statusbar::render(){
     //絵柄が崩れて判読できなかった(自作アイコンに差し替えるまでの間は保留。設定画面には
     //テキストで「電池 USB給電中」と出る)
     if(BatteryFunctions::HasSample()){
-        const int pct = BatteryFunctions::GetPercent();
-        IconID battery_icon;
-        if(pct >= 75)      battery_icon = IconID::Battery4;
-        else if(pct >= 50) battery_icon = IconID::Battery3;
-        else if(pct >= 25) battery_icon = IconID::Battery2;
-        else if(pct >= 10) battery_icon = IconID::Battery1;
-        else               battery_icon = IconID::Battery0;
+        const IconID battery_icon = BatteryIcon(BatteryFunctions::GetPercent());
 
         IconRender::DrawIcon(battery_icon, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
         draw_pos += 16 + MARGIN;

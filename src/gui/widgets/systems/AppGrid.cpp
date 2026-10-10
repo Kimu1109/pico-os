@@ -174,8 +174,9 @@ void AppGrid::drawName(const char* name, int x, int y, int w, int color) {
 }
 
 void AppGrid::drawIcon(const AppEntry& entry, int x, int y, int color) {
-    if (!entry.icon_path.empty() && OSData::SD_usable) {
-        FsFile f = OSData::SD.open(entry.icon_path.c_str(), O_RDONLY);
+    FixedString<PICO_PATH_LEN> icon_path;
+    if (OSData::SD_usable && AppFunctions::IconPathOf(entry, icon_path)) {
+        FsFile f = OSData::SD.open(icon_path.c_str(), O_RDONLY);
         if (f) {
             IconRender::PimgHeader header;
             if (IconRender::ReadPimgHeader(f, header) && header.width > 0 && header.height > 0) {

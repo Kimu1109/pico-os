@@ -67,6 +67,10 @@ class KeyboardPanel : public Widget, public ITextInputWidget {
         // target へ何も伝えずに表示/非表示だけを切り替える(KeyboardFunctions::SwitchPanel用)
         void setShownSilently(bool visible);
 
+        // 見えなくなったとき(setVisible(false)・setShownSilently(false)のどちらでも)に呼ばれる。
+        // 開いている間だけ持つもの(日本語のIME辞書の索引)を返す場所
+        virtual void onPanelHidden() {}
+
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 
         void setX(int x) override {};

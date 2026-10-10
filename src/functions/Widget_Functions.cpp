@@ -327,14 +327,17 @@ void WidgetFunctions::UpdateAll()
 // タッチは上から順に判定
 Widget *WidgetFunctions::HitTest(int16_t x, int16_t y)
 {
+    // 部分木を平らに並べる作業場所。使い回す(clear()は容量を残すので、タッチのたびにヒープを触らない)
+    static std::vector<Widget*> list;
+
     // 1. 最前面オーバーレイのタッチ判定（最優先）
     for (int o = (int)overlays.size() - 1; o >= 0; o--)
     {
         Widget* root = overlays[o];
         if(!root || !root->getVisible()) continue;
 
-        std::vector<Widget*> list;
-        root->visitAll([&list](Widget* w){
+        list.clear();
+        root->visitAll([](Widget* w){
             if (w) list.push_back(w);
         });
 
@@ -353,8 +356,8 @@ Widget *WidgetFunctions::HitTest(int16_t x, int16_t y)
         Widget* root = dialog_roots[d];
         if(!root || !root->getVisible()) continue;
 
-        std::vector<Widget*> list;
-        root->visitAll([&list](Widget* w){
+        list.clear();
+        root->visitAll([](Widget* w){
             if (w) list.push_back(w);
         });
 

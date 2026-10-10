@@ -290,6 +290,19 @@ int main(){
         "まt\t待\n";
     OSData::SD_usable = true;
     check(IME_Functions::ime.begin("/sys/ime/skk_body.tsv", "/sys/ime/skk_index.tsv"), "テスト用の辞書を開ける");
+    //索引は初めて引いたときに読み、Release()で返す。返した後に引けば読み直す
+    check(IME_Functions::ImeLookup("かんじ") == 3 && strcmp(IME_Functions::candidates[0], "漢字") == 0,
+          "辞書: 初めて引いたときに索引を読む");
+    IME_Functions::Release();
+    check(IME_Functions::ImeLookup("かんじ") == 3, "辞書: 返した後も引けば読み直す");
+    IME_Functions::Release();
+    {
+        //辞書が無ければ0件(返すまで何度引いても探し直さない)
+        ImeDictionary none;
+        check(none.begin("/sys/ime/none.tsv", "/sys/ime/none_index.tsv"), "辞書: パスを覚えるだけなら成功");
+        char cand[IME_MAX_CANDIDATES][IME_MAX_CAND_BYTES];
+        check(none.lookup("かんじ", cand, IME_MAX_CANDIDATES) == 0, "辞書: 無ければ0件");
+    }
 
     Keyboard* jpn = new Keyboard();
     FakeTarget jt;

@@ -108,27 +108,30 @@ namespace {
     // FlushDirty()が終わった時点で液晶の中身はframeと同じ(全部の変化をdirty矩形として送るため)。
     // そこで送った行のframeの中身のハッシュを覚えておき、次に同じ行がdirtyになっても中身が
     // 同じなら送らない。スクロールで空だけの行・動いていないボタンの帯・再描画しても同じ絵の
-    // 部分を送らずに済む。64bitのハッシュなので、違う中身を同じと見る(古い絵が残る)ことは実質無い。
+    // 部分を送らずに済む。ハッシュは32bit(以前は64bitで、2本の表で5KBあった)。違う中身を同じと見る
+    // (その行に古い絵が残る)のは行が変わるたびに約43億分の1で、残っても次にその行が変われば直る。
     // 液晶へframeを通さずに描いたとき(Luaデバッガの画面)はMarkDirtyBelow()の矩形が必ず送られる。
-    uint64_t row_hash[SCREEN_HEIGHT];
+    uint32_t row_hash[SCREEN_HEIGHT];
     bool     row_valid[SCREEN_HEIGHT];
-    uint64_t row_new[SCREEN_HEIGHT];
+    uint32_t row_new[SCREEN_HEIGHT];
     bool     row_computed[SCREEN_HEIGHT];
 
-    uint64_t HashRow(int y) {
+    uint32_t HashRow(int y) {
         const uint8_t* buf = static_cast<const uint8_t*>(OSData::frame->getBuffer());
         const int stride = (OSData::frame->width() * 4 + 7) / 8; // 4bpp
         const uint8_t* p = buf + (size_t)y * stride;
-        uint32_t a = 0x9E3779B9u, b = 0x85EBCA6Bu;
+        uint32_t h = 0x9E3779B9u ^ (uint32_t)stride;
         int i = 0;
         for (; i + 4 <= stride; i += 4) {
             uint32_t w;
             memcpy(&w, p + i, 4);
-            a = (a ^ w) * 0x01000193u;
-            b = ((b ^ w) * 0xC2B2AE35u) ^ (b >> 15);
+            h = (h ^ w) * 0x85EBCA6Bu;
+            h ^= h >> 15;
         }
-        for (; i < stride; i++) a = (a ^ p[i]) * 0x01000193u;
-        return ((uint64_t)a << 32) | b;
+        for (; i < stride; i++) h = (h ^ p[i]) * 0x01000193u;
+        // 仕上げ(murmur3のfmix32)。最後の数語の違いも全ビットへ散らす
+        h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16;
+        return h;
     }
 
     bool RowChanged(int y) {
@@ -279,7 +282,9 @@ void PICO_GFX::FlushDirty() {
     // ★ 1. 全部の矩形をframeへ描く(液晶へ送るのは全部描き終えてから)
     for (int dirty_i = 0; dirty_i < dirtyRectCount; dirty_i++) {
         const Rect& d = dirtyRects[dirty_i];
-        std::vector<Widget*> hit;
+        // 使い回す(clear()は容量を残すので、育ち切った後はフレームごとにヒープを触らない)
+        static std::vector<Widget*> hit;
+        hit.clear();
         for (auto* w : WidgetFunctions::widgets) {
             if (w && w->getVisible() && w->clippedScreenRect().intersects(d)) hit.push_back(w);
         }

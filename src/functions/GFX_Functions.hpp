@@ -83,6 +83,12 @@ namespace PICO_GFX {
     inline Rect render_clip = {0, 0, 0, 0};
     inline bool render_clip_active = false;
 
+    // WidgetFunctions::UpdateAll()がウィジェットのrender()を呼んでいる間(合成の外)は真。
+    // この回の描画は直後のFlushDirty()が背景ごと塗り直すので必ず捨てられる。そこでWidget::update()が
+    // frameのクリップを空にして実際の書き込みを全部切り捨てさせ、文字を描く部品(Label/Button)は
+    // これを見てdirtyを積むだけで戻る(グリフの展開も省く)。状態の確認とdirtyの積み上げは今まで通り行うこと
+    inline bool render_suppressed = false;
+
     void Setup();
     void MarkDirty(const Rect& rect);
 

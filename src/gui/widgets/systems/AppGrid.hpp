@@ -48,7 +48,7 @@ class AppGrid : public Widget {
         // DrawPlain()は折り返さないので、UTF-8の文字境界で切って自前で行を分ける
         void drawName(const char* name, int x, int y, int w, int color);
 
-        // タイルのアイコンを描く。entry.icon_pathが設定されていればSDから.pimgを
+        // タイルのアイコンを描く。entry.icon_fileが設定されていればSDから.pimgを
         // 読んで描き(失敗時はentry.iconへフォールバック)、空ならentry.icon
         // (組み込みIconID)をそのまま描く。x,yはkIconPx四方のアイコン枠の左上
         void drawIcon(const AppEntry& entry, int x, int y, int color);

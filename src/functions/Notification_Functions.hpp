@@ -41,7 +41,9 @@ namespace NotificationFunctions {
 
     constexpr int kMaxRules = 16;
     constexpr int kMaxRulesPerOwner = 4;
-    constexpr int kMaxHistory = 16;
+    // 履歴(通知センター)はRAMだけに持つ。1件約360Bなので、常に占める量を抑えて8件にした(以前は16件)。
+    // 予約の上限(kMaxRules)はLuaのドキュメントに載っているので変えていない
+    constexpr int kMaxHistory = 8;
     constexpr int kMaxToastQueue = 8;
     constexpr unsigned long kMinEveryMs = 10000;
     constexpr unsigned long kSaveDelayMs = 1000;

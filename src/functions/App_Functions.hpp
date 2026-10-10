@@ -12,6 +12,9 @@ class Scene;
 // 名前と引数は`const char*`ではなく`FixedString`で**コピーして持つ**。
 // 以前は静的寿命のリテラルしか渡せず、「SDを走査して見つけたLuaアプリを登録する」
 // といった動的な登録ができなかったため。呼び出し側の文字列は寿命が短くてよい。
+// AppEntry::icon_file の長さ(終端込み)
+constexpr size_t kAppIconFileLen = 32;
+
 struct AppEntry {
     // 表示名。ランチャは2行で12文字程度しか出せないので、48B(日本語16文字)あれば足りる
     FixedString<PICO_STR_M> name;
@@ -24,10 +27,11 @@ struct AppEntry {
     // 常時RAMを占めるため(下のkMaxAppsのコメント参照)。
     FixedString<PICO_STR_L> arg;
 
-    // SD上の.pimgをタイルアイコンとして使う場合の絶対パス。空文字なら上のiconを使う。
-    // argと同じ理由でPICO_PATH_LEN(255)ではなくPICO_STR_L(96)に留めてある
-    // (AppGridが描画時に読みに行くだけで、このパス自体をRAMへ載せておく必要は無い)
-    FixedString<PICO_STR_L> icon_path;
+    // SD上の.pimgをタイルアイコンとして使う場合の、argのディレクトリからの相対パス
+    // (Luaアプリなら app.cfg の icon。たいてい "icon.pimg")。空文字なら上のiconを使う。
+    // 絶対パス(96B)で持つと32件で3KBを常に占めるので、argと重なるディレクトリ部分は持たない。
+    // 絶対パスは AppFunctions::IconPathOf() で組み立てる
+    FixedString<kAppIconFileLen> icon_file;
 
     // このアプリ(主にLuaアプリ)に許す権限。C++製アプリは既定(両方false)のまま無視してよい。
     // 元はLuaScene生成側(App_List.cpp)が生成関数ごとに手書きしていたが、SDスキャンで
@@ -62,8 +66,8 @@ struct AppEntry {
 // 表示中に増減させた場合は呼び出し側でAppGridへneedsRender()すること。
 namespace AppFunctions {
     // 登録できるアプリ数の上限。固定長配列で持つので、超えた分は警告して捨てる。
-    // AppEntry1件が約260B(名前48B + 引数96B + アイコンパス96B + 権限2B + アイコン種別
-    // + 関数ポインタ)なので、この配列だけで常時8KB強のstatic RAMを占める
+    // AppEntry1件が約190B(名前48B + 引数96B + アイコンのファイル名32B + 権限2B + アイコン種別
+    // + 関数ポインタ)なので、この配列だけで常時約6KBのstatic RAMを占める
     // (24件ではSDのLuaアプリと合わせて埋まったので、SSHアプリを足したときに32件へ広げた)。
     // 上限や文字列長を増やすときはその点に注意すること
     constexpr int kMaxApps = 32;
@@ -88,8 +92,9 @@ namespace AppFunctions {
     //   - 登録上限に達している
     //   - argが長すぎて切り詰められる(パスとして別物になるため登録ごと拒否する)
     // 名前のほうは切り詰めても表示が縮むだけなので、警告を出した上で登録は通す。
-    // icon_pathが長すぎる場合もargほど致命的ではない(アプリ自体は動く)ため、
-    // 登録は拒否せず既定アイコンへフォールバックする。
+    // icon_pathは絶対パスで渡す。argのディレクトリの中にあり、そこからの相対パスが
+    // kAppIconFileLenに収まるときだけ覚える(そうでなければargほど致命的ではない(アプリ自体は動く)ため、
+    // 登録は拒否せず既定アイコンへフォールバックする)。
     // permissions/icon_pathは省略時の既定(両方false / アイコン無し)で、
     // 従来通りC++製アプリの呼び出し側は変更不要
     bool Register(const char* name, IconID icon, Scene* (*create)(const AppEntry&),
@@ -115,6 +120,9 @@ namespace AppFunctions {
     // Luaアプリ(argがスクリプトのパス)を、そのディレクトリ(LuaEngineのapp_dir)から引く用途。
     // 通知の送り主→タップで起動するアプリ、の対応に使う(NotificationFunctions)
     bool NameForDir(const char* dir, FixedString<PICO_STR_M>& out);
+
+    // タイルアイコンの.pimgの絶対パスをoutへ。icon_fileが無ければfalse
+    bool IconPathOf(const AppEntry& entry, FixedString<PICO_PATH_LEN>& out);
 
     // 登録簿を空にする(主にテスト用。Setup()の冒頭でも呼ばれる)
     void Clear();

@@ -85,6 +85,13 @@ void Button::render() {
     //新しく描画
     markdirty(g_rect);
 
+    //合成の外(UpdateAll()から)の回は描いても捨てられるので、dirtyを積むだけで戻る
+    if(PICO_GFX::render_suppressed){
+        this->prev_l_rect.copy(this->getLocalRect());
+        this->needs_redraw = false;
+        return;
+    }
+
     this->fontApply();
     this->textColorApply();
     if(this->is_pressing){

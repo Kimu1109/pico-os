@@ -156,8 +156,6 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void renderCursor();
         void updateCursorBlink();
 
-        static Label<PICO_STR_LL>& utilityInstance();
-
     protected:
         // カーソル位置テーブルの構築を有効にする。
         // 入力欄として使うことが分かっている場合(Textbox)はコンストラクタで呼んでおくと、

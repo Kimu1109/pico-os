@@ -15,6 +15,10 @@ class Statusbar : public Widget {
         //未読の通知の数。変わったフレームで描き直す
         int last_unread = -1;
         uint8_t last_wifi_status = 0xFF;
+        // 5秒ごとに見直す、変化の少ない表示(変わったときだけ描き直す)
+        int16_t last_wifi_icon = -1;    // 電波の段階(IconID)
+        int16_t last_battery_icon = -1; // 電池の段階(IconID)。読めていなければ-2
+        int8_t  last_sd_usable = -1;
 
         constexpr static int MARGIN = 2;
         constexpr static int ICON_MARGIN_TOP = (STATUSBAR_HEIGHT - 16) / 2;

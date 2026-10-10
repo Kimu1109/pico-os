@@ -238,8 +238,16 @@ int main(){
     const uint32_t mid = HistoryAt(5)->seq;
     RemoveEntry(mid);
     check(HistoryCount() == kMaxHistory - 1 && !FindEntry(mid), "1件消せる");
-    check(HistoryAt(0)->content.title == "n18" && HistoryAt(4)->content.title == "n14" &&
-          HistoryAt(5)->content.title == "n12", "消した後も順番が保たれる");
+    {
+        //n0〜n(kMaxHistory+2)を出し、新しい方から6番目(index 5)を消した
+        const int newest = kMaxHistory + 2;
+        char t0[16], t4[16], t5[16];
+        snprintf(t0, sizeof(t0), "n%d", newest);
+        snprintf(t4, sizeof(t4), "n%d", newest - 4);
+        snprintf(t5, sizeof(t5), "n%d", newest - 6);
+        check(HistoryAt(0)->content.title == t0 && HistoryAt(4)->content.title == t4 &&
+              HistoryAt(5)->content.title == t5, "消した後も順番が保たれる");
+    }
     ClearHistory();
     check(HistoryCount() == 0 && UnreadCount() == 0, "全消去");
 

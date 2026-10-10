@@ -156,8 +156,6 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void renderCursor();
         void updateCursorBlink();
 
-        static Label<PICO_STR_LL>& utilityInstance();
-
     protected:
         // カーソル位置テーブルの構築を有効にする。
         // 入力欄として使うことが分かっている場合(Textbox)はコンストラクタで呼んでおくと、
@@ -165,6 +163,9 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void enableCursorTracking();
 
     public:
+        // カーソルの点滅はrender()が時間を見て切り替える
+        bool wantsFrameUpdate() const override { return this->cursor_blink_enabled; }
+
         // 注意: メンバテンプレート(template<size_t M>)はLabel.cpp側で個別インスタンス化していないため、
         // クラス本体内でインライン定義しておく(呼び出し側で使われた組み合わせごとに暗黙インスタンス化させる)。
         // Label.cpp末尾の`template class Label<N>;`はメンバテンプレートまでは実体化しない点に注意。

@@ -6,10 +6,15 @@
 
 namespace LogFunctions {
 namespace {
-    // SDセクタ(512B)の倍数で確保、書き込みバッファとして蓄積
-    constexpr size_t LOG_BUF_SIZE = 4096;
+    // SDセクタ(512B)の倍数。5秒ごとに書き出すので、起動直後のまとまったログでもこの程度で足りる
+    // (溢れたらその場で書き出すだけで、失うものは無い)
+    constexpr size_t LOG_BUF_SIZE = 1024;
     constexpr uint32_t LOG_FLUSH_INTERVAL_MS = 5000; // 定期フラッシュ間隔
-    constexpr uint32_t LOG_PREALLOC_SIZE = 64 * 1024UL;
+    // 起動時にlog.txtがこれより大きければlog.old.txtへ回して新しく始める(前回のログを1世代残す)
+    constexpr uint32_t LOG_ROTATE_BYTES = 256 * 1024UL;
+    // 1行の上限(タイムスタンプ+種別+本文)。スタックに置くのでこれ以上大きくしないこと
+    // (コア0のスタックは4KBで、Luaの奥深くから呼ばれることもある)
+    constexpr size_t LOG_LINE_BYTES = 320;
 
     char s_logBuf[LOG_BUF_SIZE];
     size_t s_logLen = 0;
@@ -45,24 +50,28 @@ void Setup()
         return;
     }
 
+    // 前回までのログは残し、追記していく。大きくなりすぎたら1世代だけ残して新しく始める
+    // (以前は起動のたびにpreAllocate(64KB)してからtruncate(0)していた。truncateが確保した領域を
+    // 返すのでpreAllocateは意味が無く、しかも前回のログ(クラッシュの調査に要る)が毎回消えていた)
+    {
+        FsFile old = OSData::SD.open(PICO_Path::FILE::SYS_LOG_TXT, O_RDONLY);
+        const uint32_t size = old ? (uint32_t)old.fileSize() : 0;
+        if (old) old.close();
+        if (size > LOG_ROTATE_BYTES) {
+            OSData::SD.remove(PICO_Path::FILE::SYS_LOG_OLD_TXT);
+            OSData::SD.rename(PICO_Path::FILE::SYS_LOG_TXT, PICO_Path::FILE::SYS_LOG_OLD_TXT);
+        }
+    }
+
     // O_APPENDで開いたままセッション中保持する(open/closeのたびのオーバーヘッド回避)
     s_fileOpen = s_logFile.open(PICO_Path::FILE::SYS_LOG_TXT, O_WRITE | O_CREAT | O_APPEND);
     if (!s_fileOpen) {
         LOG_SYS_FAIL("Log Setup: Failed to open log.txt");
         return;
     }
-
-    // 事前確保でフラグメンテーションと都度のFAT拡張コストを避ける
-    s_logFile.preAllocate(LOG_PREALLOC_SIZE);
-    // preAllocate()はvalidLength(見かけ上のファイルサイズ)を
-    // 即座にLOG_PREALLOC_SIZEまで拡張してしまうため、
-    // O_APPENDでの書き込み開始位置がオフセット0ではなく末尾(=予約サイズ分)に
-    // ズレてしまう。かつその未書き込み領域はゼロクリアされず、
-    // SDカード上の残留データがそのまま読めてしまう(実際に発生した事象)。
-    // truncate(0)でvalidLengthを0に戻し、予約クラスタは維持したまま
-    // 書き込み開始位置を先頭に正す。
-    // このバグが修正され次第、この行を消すつもり。
-    s_logFile.truncate(0);
+    // 前回の起動との区切り
+    static const char kBootMark[] = "----- boot -----";
+    AppendToBuffer(kBootMark, sizeof(kBootMark) - 1);
     s_lastFlushMs = millis();
 
     LOG_SYS_OK("Log Setup has succeeded!");
@@ -70,20 +79,19 @@ void Setup()
 
 void Log(LogType type, const char* fmt, ...)
 {
-    FixedString<PICO_STR_256B> buf;
+    // 「[時刻] 種別 本文」を1回だけ組み立てる。シリアルへは時刻を除いた部分を出す
+    // (以前は本文256Bと行512Bの2つをスタックに置き、2回整形していた)
+    FixedString<LOG_LINE_BYTES> line;
+    line.appendFormat("[%lu] ", (unsigned long)millis());
+    const size_t body = line.length();
+    line.append(GetPrefix(type));
 
     va_list args;
     va_start(args, fmt);
-    buf.appendFormatV(fmt, args);
+    line.appendFormatV(fmt, args);
     va_end(args);
 
-    Serial.printf("%s", GetPrefix(type));
-    Serial.print(buf.c_str());
-    Serial.println();
-
-    // Serial出力用bufとは別に、プレフィックス込みの行をバッファに積む
-    FixedString<PICO_STR_512B> line;
-    line.appendFormat("[%lu] %s%s", (unsigned long)millis(), GetPrefix(type), buf.c_str());
+    Serial.println(line.c_str() + body);
 
     AppendToBuffer(line.c_str(), line.length());
 }

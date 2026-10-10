@@ -52,7 +52,17 @@ void Widget::update() {
         this->causeOnPressOut();
     }
 
+    // 合成の外のrender()。状態の確認とdirtyの積み上げだけが目的で、描いた絵は直後のFlushDirty()が
+    // 背景ごと塗り直して捨てる(以前は変化したウィジェットを毎フレーム2回描いていた)。
+    // クリップを空にして書き込みを全部切り捨て、文字を描く部品はrender_suppressedを見て早めに戻る
+    int32_t cx, cy, cw, ch;
+    OSData::frame->getClipRect(&cx, &cy, &cw, &ch);
+    OSData::frame->setClipRect(0, 0, 0, 0);
+    const bool was_suppressed = PICO_GFX::render_suppressed;
+    PICO_GFX::render_suppressed = true;
     render();
+    PICO_GFX::render_suppressed = was_suppressed;
+    OSData::frame->setClipRect(cx, cy, cw, ch);
 }
 
 void Widget::causeOnPressStart() {

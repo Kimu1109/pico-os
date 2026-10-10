@@ -26,6 +26,8 @@ namespace PICO_Path {
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";
+        // log.txtが大きくなったとき、起動時に1世代だけ残す先
+        constexpr const char* SYS_LOG_OLD_TXT = "/sys/log.old.txt";
 
         constexpr const char* TMP_TOFU_TXT = "/tmp/tofu-chars.txt";
 

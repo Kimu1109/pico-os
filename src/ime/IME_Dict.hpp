@@ -56,10 +56,16 @@ class ImeDictionary {
 public:
     ImeDictionary();
 
+    ~ImeDictionary();
+
     // dictPath: 辞書tsvファイルパス(読みがなでソート済み、送りあり/なし統合済み)
     // indexPath: インデックスtsvファイルパス(256行毎の先頭読みがな＋バイト位置)
-    // 戻り値: 成功したらtrue
+    // パスを覚えるだけで、索引の読み込みと辞書を開くのは初めてlookup()したとき
+    // (使わない間は索引(最大約6.8KB)をRAMに持たない)。戻り値: パスが収まればtrue
     bool begin(const char* dictPath, const char* indexPath);
+
+    // 索引を返して辞書のファイルを閉じる。次のlookup()で読み直す
+    void release();
 
     // key: 検索キー。
     //   送りありの場合は呼び出し側で「語幹＋子音マーカー」形式に変換済みで
@@ -82,10 +88,16 @@ private:
     SdFat*  _sd;
     FsFile  _dictFile;
     char    _dictPath[64];
+    char    _indexPath[64];
 
-    ImeIndexEntry _index[IME_MAX_INDEX_ENTRIES];
+    // 索引。読み込んだときに件数ぶんだけmallocする(release()で返す)
+    ImeIndexEntry* _index;
     int     _indexCount;
+    // 読み込みに失敗したか(辞書が無いときに毎回SDを探さないため。release()で下ろす)
+    bool    _loadFailed;
 
+    // 索引と辞書が使える状態にする(済んでいれば何もしない)
+    bool ensureLoaded();
     bool loadIndex(const char* indexPath);
 
     // keyより小さいか等しい、最後のインデックスエントリのインデックスを返す

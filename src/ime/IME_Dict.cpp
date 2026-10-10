@@ -7,25 +7,68 @@
 #include "OS_Data.hpp"
 
 ImeDictionary::ImeDictionary()
-    : _sd(nullptr), _indexCount(0) {
+    : _sd(nullptr), _index(nullptr), _indexCount(0), _loadFailed(false) {
     _dictPath[0] = '\0';
+    _indexPath[0] = '\0';
+}
+
+ImeDictionary::~ImeDictionary() {
+    release();
 }
 
 bool ImeDictionary::begin(const char* dictPath, const char* indexPath) {
+    release();
     _sd = &OSData::SD;
-    strncpy(_dictPath, dictPath, sizeof(_dictPath) - 1);
-    _dictPath[sizeof(_dictPath) - 1] = '\0';
+    if (strlen(dictPath) >= sizeof(_dictPath) || strlen(indexPath) >= sizeof(_indexPath)) return false;
+    strcpy(_dictPath, dictPath);
+    strcpy(_indexPath, indexPath);
+    return true;
+}
 
-    if (!loadIndex(indexPath)) {
+void ImeDictionary::release() {
+    free(_index);
+    _index = nullptr;
+    _indexCount = 0;
+    _loadFailed = false;
+    if (_dictFile) _dictFile.close();
+}
+
+bool ImeDictionary::ensureLoaded() {
+    if (_index && _dictFile) return true;
+    if (_loadFailed || !_sd || _indexPath[0] == '\0') return false;
+    free(_index); //片方だけ残っている場合に備えて読み直す
+    _index = nullptr;
+    _indexCount = 0;
+    if (!loadIndex(_indexPath)) {
+        _loadFailed = true;
         return false;
     }
-
-    if (_dictFile) {
-        _dictFile.close();
-    }
-    // 検索の度に開閉しない。begin()時に一度だけ開いてハンドルを保持する。
+    // 検索の度に開閉しない。開いている間はハンドルを保持する。
     _dictFile = _sd->open(_dictPath, O_RDONLY);
-    return (bool)_dictFile;
+    if (!_dictFile) {
+        free(_index);
+        _index = nullptr;
+        _indexCount = 0;
+        _loadFailed = true;
+        return false;
+    }
+    return true;
+}
+
+namespace {
+    // 索引の1行(yomi \t byteOffset)を読む。空行・形式違いはfalse
+    bool ReadIndexLine(FsFile& f, char* line, size_t cap, bool& eof, char*& yomi, const char*& offset) {
+        int len = f.fgets(line, cap);
+        if (len <= 0) { eof = true; return false; }
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) line[--len] = '\0';
+        if (len == 0) return false;
+        char* tab = strchr(line, '\t');
+        if (!tab) return false;
+        *tab = '\0';
+        yomi = line;
+        offset = tab + 1;
+        return true;
+    }
 }
 
 bool ImeDictionary::loadIndex(const char* indexPath) {
@@ -34,35 +77,44 @@ bool ImeDictionary::loadIndex(const char* indexPath) {
         return false;
     }
 
-    _indexCount = 0;
     char line[IME_MAX_LINE_BYTES];
+    char* yomiStr;
+    const char* offsetStr;
+    bool eof = false;
 
-    while (_indexCount < IME_MAX_INDEX_ENTRIES) {
-        int len = idxFile.fgets(line, sizeof(line));
-        if (len <= 0) break; // EOF
+    // 1周目で件数を数え、その分だけ確保する
+    int count = 0;
+    while (!eof && count < IME_MAX_INDEX_ENTRIES) {
+        if (ReadIndexLine(idxFile, line, sizeof(line), eof, yomiStr, offsetStr)) count++;
+    }
+    if (count == 0 || !idxFile.seekSet(0)) {
+        idxFile.close();
+        return false;
+    }
+    _index = static_cast<ImeIndexEntry*>(malloc(sizeof(ImeIndexEntry) * count));
+    if (!_index) {
+        idxFile.close();
+        return false;
+    }
 
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
-            line[--len] = '\0';
-        }
-        if (len == 0) continue;
-
-        // 形式: yomi \t byteOffset
-        char* tab = strchr(line, '\t');
-        if (!tab) continue;
-        *tab = '\0';
-        const char* yomiStr = line;
-        const char* offsetStr = tab + 1;
-
+    _indexCount = 0;
+    eof = false;
+    while (!eof && _indexCount < count) {
+        if (!ReadIndexLine(idxFile, line, sizeof(line), eof, yomiStr, offsetStr)) continue;
         ImeIndexEntry &entry = _index[_indexCount];
         strncpy(entry.yomi, yomiStr, sizeof(entry.yomi) - 1);
         entry.yomi[sizeof(entry.yomi) - 1] = '\0';
         entry.offset = (uint32_t)strtoul(offsetStr, nullptr, 10);
-
         _indexCount++;
     }
 
     idxFile.close();
-    return _indexCount > 0;
+    if (_indexCount == 0) {
+        free(_index);
+        _index = nullptr;
+        return false;
+    }
+    return true;
 }
 
 int ImeDictionary::findBlockStart(const char* key) {
@@ -82,7 +134,7 @@ int ImeDictionary::findBlockStart(const char* key) {
 
 int ImeDictionary::lookup(const char* key, char candidates[][IME_MAX_CAND_BYTES], int maxCandidates,
                             bool prefixMatch) {
-    if (!_dictFile || _indexCount == 0) return 0;
+    if (!ensureLoaded()) return 0;
     if (maxCandidates > IME_MAX_CANDIDATES) maxCandidates = IME_MAX_CANDIDATES;
 
     size_t keyLen = strlen(key);

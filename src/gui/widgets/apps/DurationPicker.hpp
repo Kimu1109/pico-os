@@ -21,6 +21,9 @@
 // 時刻を自分では取りに行かない(TimeFunctionsへ依存しない)のはAnalogClockと同じ方針。
 class DurationPicker : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
     public:
+        // ▲▼の長押しの連続加算はrender()(tickRepeat())が時間を見て進める
+        bool wantsFrameUpdate() const override { return this->repeat_field >= 0; }
+
         // 表示できる上限。桁あふれで表示が崩れないよう 23:59:59 で頭打ちにする
         constexpr static uint32_t kMaxSeconds = 23u * 3600u + 59u * 60u + 59u;
         constexpr static uint32_t kMaxMs      = kMaxSeconds * 1000u;

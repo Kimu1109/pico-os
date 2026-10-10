@@ -92,6 +92,14 @@ class Widget {
 
         void update();
 
+        // WidgetFunctions::UpdateAll()がこのフレームにupdate()を呼ぶ必要があるか(タッチの無いフレーム)。
+        // 呼ぶのは描き直しの要求がある/押されているときと、wantsFrameUpdate()が真のときだけ
+        // (以前は見えている全ウィジェットに毎フレーム呼んでいた)。
+        bool getNeedsRedraw() const { return this->needs_redraw; }
+        // render()の中で毎フレーム状態を見張るウィジェット(時刻・カーソルの点滅・外の状態の変化等)は真を返すこと。
+        // 値の変化をsetter(needsRender())で知らせるだけのウィジェットは既定(偽)のままでよい
+        virtual bool wantsFrameUpdate() const { return false; }
+
         //タッチ開始
         virtual void causeOnPressStart();
         virtual void clearOnPressStart();

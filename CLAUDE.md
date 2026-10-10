@@ -309,7 +309,7 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
   変更から`kSaveDelayMs`(1秒)後にまとめて一時ファイル→差し替えで書く。文字列は`Sanitize()`でタブ/改行を空白にしてから持つ。
   起動時に`RefreshOwners()`で登録簿(`AppFunctions::NameForDir()`=argの親ディレクトリで引く)と突き合わせ、**送り主が消えた(アンインストールした)予約は捨てる**。
   そのため`NotificationFunctions::Setup()`は`AppFunctions::Setup()`より後、かつトーストを最前面に置くためキーボードより後。
-- 履歴(`kMaxHistory=16`の輪)はRAMだけ(再起動で消える)。見せ方は`/sys/notify.cfg`の`mode = on|quiet`と`sound = true|false`(通知センターの[通常/控えめ][音あり/なし])。
+- 履歴(`kMaxHistory=8`の輪。2026-10-10に16から減らした)はRAMだけ(再起動で消える)。見せ方は`/sys/notify.cfg`の`mode = on|quiet`と`sound = true|false`(通知センターの[通常/控えめ][音あり/なし])。
   quietはトーストも音も出さず、ステータスバーの印(右端の赤いベル+未読数)と通知センターだけ。**`Scene::quietNotifications()`がtrueの画面(ゲームボーイ)の間も同じ扱い**。
   **`Scene::keepForeground()`がtrueの画面(SSH・ゲームボーイ。離れると接続が切れる/ROMを閉じる)では、ステータスバーやトーストをタップしても別の画面へ移らない**
   (トーストは既読にして閉じるだけ)。うっかり触って接続やゲームを失わないため。
@@ -327,7 +327,7 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
   `pico.notify_cancel([id|tag])` → 件数、`pico.notify_list()`、`pico.launch_reason()`。**権限`LuaPermissions::notify`(app.cfgの`permission_notify`)が要る**
   (アプリを閉じた後にも画面と音へ出るため既定では許さない)。引数の誤りは権限より先に`luaL_error`。ドキュメントは`lua-api-doc/content/api/notify.md`。
 - 動作確認アプリ「通知テスト」(`pc/sdcard/lua/apps/通知テスト/`、`permission_notify=true`)。
-- RAMは静的に約10KB(予約16件×約360B + 履歴16件×約330B)。
+- RAMは静的に約9KB(予約16件×約380B + 履歴8件×約360B)。
 - 検証: `notification_test`(run.sh。種類ごとの発火・置き換え/上限・履歴の輪・控えめ・保存と読み込み・送り主の掃除・起動理由)、`lua_engine_test`(Lua API)、
   PCビルドの`--tap`/`--shot`(アプリで10秒後を予約→閉じてランチャでトースト→タップでアプリが`launch_reason`付きで開く、ステータスバーから通知センター、
   再起動しても`daily`/`every`の予約が残る、キーボードのダイアログの上でトーストの跡が残らない)。**実機・Webビルドは未確認**。
@@ -648,6 +648,49 @@ Sの字を1ストロークで描いたもの)を確認したところ、人の�
 
 Sources(この追記時点の調査で参照): [XPT2046 touch controller pinout and wiring guide](https://inairspace.com/blogs/learn-with-inair/xpt2046-touch-controller-pinout-and-wiring-guide-for-reliable-touchscreens)、
 [rp2040 and Touch XPT2046 · Issue #216 · lovyan03/LovyanGFX](https://github.com/lovyan03/LovyanGFX/issues/216)
+
+### OSのCPU・RAMの無駄を削る (2026-10-10)
+
+OS側の洗い出しの結果、次を直した。実機ファームの静的RAMは 140,000B → 113,540B(-26.5KB)。
+
+- **合成の外の描画を捨てる(二重描画の解消)**: `WidgetFunctions::UpdateAll()`→`Widget::update()`→`render()`で、変化したウィジェットが
+  `frame`へ実際に描き、直後の`FlushDirty()`が背景ごと塗り直してもう一度描いていた。今は`Widget::update()`が`render()`の間だけ
+  **frameのクリップを空にし**(書き込みは全部捨てられる)、`PICO_GFX::render_suppressed`を立てる。文字を描く`Label`/`Button`/`Statusbar`は
+  これを見てdirtyを積むだけで戻る(グリフの展開も省く)。**新しいウィジェットの`render()`は、合成の外の回でも状態の確認とdirtyの積み上げは
+  今まで通り行い、重い描画(文字・画像の展開)は`render_suppressed`なら省いてよい**。描画の結果を前提にした処理(frameを読み戻す等)を
+  合成の外の回に置かないこと(空のクリップで何も描かれていない)。合成の中(`isDirtyDeactivates`)で状態の変化を見つけて覚えると
+  `MarkDirty()`が効かず描き直しが失われるので、`Statusbar`のように変化の確認は合成の外の回だけで行う。
+- **`MemFunctions::Update()`は`mallinfo()`を`kPeakSampleFrames`(32)フレームに1回だけ**(空きブロックを全部たどるので毎フレームは重い。
+  PCビルドでは1フレーム約0.13ms食っていた)。
+- **`FlushDirty()`の`hit`、`HitTest()`の作業用の`std::vector`は静的に使い回す**(フレーム/タッチごとのヒープ確保をやめた)。
+- **ステータスバーは変化したときだけ描き直す**(時刻は分が変わったとき、電波・電池・SDは5秒ごとに見て段階が変わったとき)。
+- **ログ**: `log.txt`は起動のたびに消さず追記し(区切りに`----- boot -----`)、起動時に256KBを超えていれば`/sys/log.old.txt`へ1世代回す。
+  以前の`preAllocate(64KB)`+`truncate(0)`はやめた(truncateが確保した領域を返すので意味が無く、前回のログも消えていた)。
+  バッファは4KB→1KB、`Log()`のスタックは768B→320B(1回だけ整形する)。
+- **アプリ登録簿**: `AppEntry::icon_path`(96B)を`icon_file`(argのディレクトリからの相対パス、32B)にした。絶対パスは
+  `AppFunctions::IconPathOf()`で組み立てる。`Register()`は従来どおり絶対パスを受け取り、アプリのディレクトリの外・32Bに収まらない
+  ものは既定アイコンへ落とす。
+- **IMEの索引**(最大約6.8KB)は`IME_Functions::Setup()`ではパスを覚えるだけにし、**初めて引いたときに件数ぶん`malloc`**、
+  日本語のキー盤が見えなくなったとき(`KeyboardPanel::onPanelHidden()`)に`IME_Functions::Release()`で返す。辞書が無いときの失敗は
+  返すまで覚えて毎回探さない。
+- `FlushDirty()`の行のハッシュを64bit→32bit(5KB→2.5KB)。
+- `Label::utilityInstance()`(テンプレートの種類ごとの約650Bの静的なLabel×3)をやめ、`DrawPlain()`等は`FontFn`と`setTextColor()`を直接呼ぶ。
+- **`UpdateAll()`は要るウィジェットにだけ`update()`する**: タッチのあったフレーム(押した/離した/外を押したを全員へ配る)と、
+  `getNeedsRedraw()`・`is_pressing`・**`wantsFrameUpdate()`**が真のウィジェットだけ(クリップの計算もそのときだけ)。
+  `render()`の中で毎フレーム外の状態や時間を見張るウィジェットは`wantsFrameUpdate()`で真を返すこと(今は点滅カーソルのLabel・
+  Statusbar・PerfOverlay・`redraw_below_frames`中のKeyboardDialog・長押し中のDurationPicker)。値の変化をsetter(`needsRender()`)で
+  知らせるだけのウィジェットは何もしなくてよい。**見張りを`render()`に足したのに`wantsFrameUpdate()`を足し忘れると、
+  タッチか描き直しの要求があるまで見張りが止まる**。
+- **自動調光で暗くなっている間は約30fps**(`PowerFunctions::kDimFrameMs`=33ms。以前は100fpsのまま)。`KeepAwake()`を呼ぶ画面・
+  音が鳴っている間・Wi-Fiの接続中(`Busy()`)は落とさない。
+- クラッシュダンプの文章のバッファ(2KB/3KB)は書き出す間だけ`malloc`する(Luaのエラーで確保できなければ保存を諦める)。
+  TextViewの全角の文字幅の控え(約2KB)はTextViewが1つでも生きている間だけ持つ(確保できなければ毎回測る)。
+- **lwIPの領域(`PBUF_POOL`約36KB・`ram_heap`16KB)は減らせなかった**: arduino-picoはlwIPをビルド済みの`liblwip.a`で配っていて、
+  プールの大きさ(`include/lwipopts.h`の`PBUF_POOL_SIZE`/`MEM_SIZE`)はそのビルド時に決まる。こちらのビルドフラグでは変わらず、
+  変えるにはlwIPをソースからビルドし直してフレームワークのものと差し替える必要がある(TLSの受信の速さにも効くので見送った)。
+- 検証: ホストテスト全部(`app_test`にアイコンの相対パス、`key_input_test`に索引の読み直し、`notification_test`は件数に依らない形へ)、
+  PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0: ランチャ・SDのアイコン・電卓・テキストエディタ+日本語キー盤)、
+  実機ファームのビルド。`power_test`に暗いときの間隔。**実機での速さ・見た目は未確認**。
 
 ### 液晶への転送を減らす(`GFX_Functions::FlushDirty()` / `LuaCanvas` / `util/ScopedClip.hpp`) (2026-10-06)
 

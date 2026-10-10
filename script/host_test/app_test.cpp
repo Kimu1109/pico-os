@@ -363,6 +363,46 @@ int main(){
     delete pushed_scene;
     pushed_scene = nullptr;
 
+    //---- タイルアイコン: argのディレクトリからの相対パスだけを持ち、絶対パスはIconPathOf()で組み立てる ----
+    {
+        AppFunctions::Clear();
+        FixedString<PICO_PATH_LEN> path;
+        check(AppFunctions::Register("A", IconID::AppBox, &AppFunctions::MakeSceneWithArg<ArgScene>,
+                                     "/lua/apps/テトリス/main.lua", LuaPermissions{}, "/lua/apps/テトリス/icon.pimg"),
+              "icon: 登録できる");
+        const AppEntry* a = AppFunctions::Get(0);
+        check(a->icon_file == "icon.pimg", "icon: 相対パスだけを持つ");
+        check(AppFunctions::IconPathOf(*a, path) && path == "/lua/apps/テトリス/icon.pimg", "icon: 絶対パスに戻せる");
+
+        check(AppFunctions::Register("B", IconID::AppBox, &AppFunctions::MakeSceneWithArg<ArgScene>,
+                                     "/lua/apps/b/main.lua", LuaPermissions{}, "/lua/apps/b/img/i.pimg"),
+              "icon: サブディレクトリも登録できる");
+        check(AppFunctions::IconPathOf(*AppFunctions::Get(1), path) && path == "/lua/apps/b/img/i.pimg",
+              "icon: サブディレクトリの絶対パス");
+
+        //アプリのディレクトリの外・長すぎる相対パスは既定アイコンへ(登録自体は通す)
+        check(AppFunctions::Register("C", IconID::AppBox, &AppFunctions::MakeSceneWithArg<ArgScene>,
+                                     "/lua/apps/c/main.lua", LuaPermissions{}, "/img/other.pimg"),
+              "icon: 外のアイコンでも登録は通る");
+        check(AppFunctions::Get(2)->icon_file.empty() && !AppFunctions::IconPathOf(*AppFunctions::Get(2), path),
+              "icon: 外のアイコンは持たない");
+        check(AppFunctions::Register("D", IconID::AppBox, &AppFunctions::MakeSceneWithArg<ArgScene>,
+                                     "/lua/apps/d/main.lua", LuaPermissions{},
+                                     "/lua/apps/d/very/long/directory/name/icon.pimg"),
+              "icon: 長いアイコンでも登録は通る");
+        check(AppFunctions::Get(3)->icon_file.empty(), "icon: 収まらない相対パスは持たない");
+        //前方だけ一致する別ディレクトリ(/lua/apps/dd)は外扱い
+        check(AppFunctions::Register("E", IconID::AppBox, &AppFunctions::MakeSceneWithArg<ArgScene>,
+                                     "/lua/apps/d/main.lua", LuaPermissions{}, "/lua/apps/dd/icon.pimg"),
+              "icon: 登録は通る");
+        check(AppFunctions::Get(4)->icon_file.empty(), "icon: 名前の頭だけ同じディレクトリは外");
+        //argが無いアプリはアイコンファイルを持てない
+        check(AppFunctions::Register("F", IconID::AppBox, &AppFunctions::MakeScene<DummyScene>,
+                                     nullptr, LuaPermissions{}, "/x/icon.pimg"),
+              "icon: argなしでも登録は通る");
+        check(AppFunctions::Get(5)->icon_file.empty(), "icon: argなしはアイコンファイルを持たない");
+    }
+
     AppFunctions::Clear();
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

@@ -125,7 +125,7 @@ int LuaAppScanner::Scan() {
 
                 // アイコンはapp_dir基準の相対パスをここで絶対パスへ組み立てる。
                 // icon_path変数自身がRegister()呼び出しの間だけ生きていれば十分
-                // (Register()内でAppEntry::icon_pathへコピーされる)
+                // (Register()がアプリのディレクトリからの相対パスにしてAppEntry::icon_fileへコピーする)
                 FixedString<PICO_PATH_LEN> icon_path;
                 const char* icon_path_c = nullptr;
                 if (!cfg.icon.empty() &&

@@ -401,6 +401,9 @@ class Keyboard : public KeyboardPanel {
             KeyboardPanel::setVisible(visible);
         }
 
+        // 辞書の索引(数KB)は日本語のキー盤が開いている間だけ持つ。次に引いたときに読み直す
+        void onPanelHidden() override { IME_Functions::Release(); }
+
         bool onPhysicalKey(const KeyInputFunctions::Event& ev) override;
         bool wantsKeyFirst(const KeyInputFunctions::Event& ev) const override {
             if(!this->visible) return false;

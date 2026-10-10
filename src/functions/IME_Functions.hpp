@@ -13,10 +13,13 @@ namespace IME_Functions {
     inline int candidatesCount = 0;
 
     inline void Setup(){
+        //パスを覚えるだけ。索引(数KB)と辞書のファイルは初めて引いたときに読む(ImeDictionary::lookup())
         ime.begin(PICO_Path::FILE::IME::IME_SKK_BODY, PICO_Path::FILE::IME::IME_SKK_INDEX);
 
         LOG_SYS_OK("IME Setup has succeeded!");
     }
+    //索引を返して辞書のファイルを閉じる(日本語のキー盤を閉じたとき。次に引けば読み直す)
+    inline void Release(){ ime.release(); }
     inline int ImeLookup(const char* key) {
         int n = ime.lookup(key, candidates, IME_MAX_CANDIDATES);
         candidatesCount = n;

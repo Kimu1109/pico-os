@@ -24,6 +24,7 @@ void KeyboardPanel::setShownSilently(bool visible){
         this->needsRender();
     }else{
         PICO_GFX::MarkDirty(this->getScreenRect());
+        this->onPanelHidden();
     }
 }
 
@@ -43,6 +44,7 @@ void KeyboardPanel::setVisible(bool visible){
         PICO_GFX::MarkDirty(this->getScreenRect());
         if(this->target) this->target->onHide(this);
         KeyboardFunctions::OnPanelHidden(this);
+        this->onPanelHidden();
     }
 }
 

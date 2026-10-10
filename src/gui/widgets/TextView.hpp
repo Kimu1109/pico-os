@@ -64,11 +64,15 @@ class TextView : public Widget {
         int widthOf(int from, int to) const;
 
         static int CharWidth(const char* s, int n);
+        // 全角等の文字幅の控え(約2KB)は、TextViewが1つでも生きている間だけ持つ
+        static void AcquireWidthCache();
+        static void ReleaseWidthCache();
 
     public:
         TextView(int16_t x, int16_t y, int16_t w, int16_t h) {
             this->l_rect = {x, y, w, h};
             this->rows[0] = {0, 0};
+            AcquireWidthCache();
         }
 
         ~TextView() override;

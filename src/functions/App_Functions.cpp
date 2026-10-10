@@ -1,4 +1,5 @@
 #include "functions/App_Functions.hpp"
+#include <cstring>
 #include "storage/SD_IO.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -33,11 +34,17 @@ bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(cons
     }
 
     //icon_pathはargと違い、失敗してもアプリ自体は動く(既定アイコンへ落とすだけ)ので
-    //登録ごとは拒否しない
-    if(icon_path && icon_path[0] != '\0' && !entry.icon_path.assign(icon_path)){
-        LOG_SYS_WARN("App Register: アイコンパスが長すぎるため既定アイコンにします (%s: %s)",
-            entry.name.c_str(), icon_path);
-        entry.icon_path.clear();
+    //登録ごとは拒否しない。覚えるのはargのディレクトリからの相対パスだけ(AppEntry::icon_file参照)
+    if(icon_path && icon_path[0] != '\0'){
+        //argの最後の"/"まで(IconPathOf()と同じ切り方)が icon_path の頭と一致すれば、その後ろを覚える
+        const char* slash = entry.arg.empty() ? nullptr : strrchr(entry.arg.c_str(), '/');
+        const size_t dir_len = slash ? (size_t)(slash - entry.arg.c_str()) + 1 : 0;
+        const bool inside = slash && strncmp(icon_path, entry.arg.c_str(), dir_len) == 0 && icon_path[dir_len] != '\0';
+        if(!inside || !entry.icon_file.assign(icon_path + dir_len)){
+            LOG_SYS_WARN("App Register: アイコンはアプリのディレクトリの中の短いパスにしてください。既定アイコンにします (%s: %s)",
+                entry.name.c_str(), icon_path);
+            entry.icon_file.clear();
+        }
     }
 
     entry.icon = icon;
@@ -75,6 +82,18 @@ void AppFunctions::Launch(int index){
     //SceneFunctionsは要求を登録するだけで、実際の遷移はフレーム境界で起きる
     SceneFunctions::Push(scene);
     LOG_SYS_MSG("アプリ起動: %s", entry->name.c_str());
+}
+
+bool AppFunctions::IconPathOf(const AppEntry& entry, FixedString<PICO_PATH_LEN>& out){
+    //描画の途中から呼ばれるので、作業用のパスのバッファをスタックに置かず out の上で組み立てる
+    //(Register()と同じく、argの最後の"/"までをディレクトリとする)
+    out.clear();
+    if(entry.icon_file.empty() || entry.arg.empty()) return false;
+    const char* arg = entry.arg.c_str();
+    const char* slash = strrchr(arg, '/');
+    if(!slash) return false;
+    if(!out.append(arg, (size_t)(slash - arg) + 1)) return false;
+    return out.append(entry.icon_file.c_str());
 }
 
 bool AppFunctions::LaunchByName(const char* name){

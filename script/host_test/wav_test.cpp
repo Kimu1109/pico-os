@@ -18,6 +18,8 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <cmath>
+#include <cstdlib>
 
 void LogFunctions::Log(LogType, const char*, ...){}
 void LogFunctions::Setup(){}
@@ -214,9 +216,31 @@ static void TestDecoder(){
         std::vector<int16_t> src;
         for(int i = 0; i < 100; i++) src.push_back((int16_t)(i * 100));
         const auto out = Decode(MakeWav(w, Pcm16(src)));
+        //低域通過フィルタは直線をそのまま通す。頭と終わりの数個だけは最初/最後の値で埋めた分ずれる
         bool ok = out.size() == 50;
-        for(size_t i = 0; ok && i < out.size(); i++) ok = (out[i] == src[i * 2]);
-        check(ok, "44100Hz→22050Hz は1つおき");
+        for(size_t i = 10; ok && i < out.size() - 10; i++) ok = (out[i] == src[i * 2]);
+        for(size_t i = 0; ok && i < out.size(); i++) ok = std::abs(out[i] - src[i * 2]) <= 1000;
+        check(ok, "44100Hz→22050Hz は1つおき(直線はそのまま)");
+    }
+    {
+        //下げるときは out_rate の半分より上を削る。17kHzは削らないと 22050-17000 = 5050Hz へ折り返して聞こえる
+        auto rms = [](uint32_t rate, double freq){
+            WavSpec w; w.rate = rate;
+            std::vector<int16_t> src(rate);
+            for(size_t i = 0; i < src.size(); i++) src[i] = (int16_t)(10000.0 * sin(2.0 * M_PI * freq * (double)i / rate));
+            const auto out = Decode(MakeWav(w, Pcm16(src)));
+            double sum = 0;
+            size_t n = 0;
+            for(size_t i = 100; i + 100 < out.size(); i++, n++) sum += (double)out[i] * out[i];
+            return n ? sqrt(sum / n) : 0.0;
+        };
+        const double pass = rms(44100, 1000), edge = rms(44100, 8000), alias = rms(44100, 17000), alias48 = rms(48000, 15000);
+        printf("       RMS(元は約7071): 1kHz=%.0f 8kHz=%.0f 17kHz=%.0f 48kHzの15kHz=%.0f\n", pass, edge, alias, alias48);
+        check(pass > 6900 && pass < 7250, "1kHzはほぼそのまま通る");
+        check(edge > 5000, "8kHzもおおむね通る");
+        check(alias < 100, "44.1kHzの17kHzは削られて折り返さない");
+        check(alias48 < 100, "48kHzの15kHzも削られる");
+        check(rms(22050, 9000) > 6900, "同じ周波数のときは削らない");
     }
     {
         WavSpec w; w.rate = 11025;

@@ -38,6 +38,9 @@ public:
     // n サンプルぶん時刻を進め、音を out へ足す。out が nullptr なら音は作らず時刻だけ進める
     void render(GbApu& apu, int16_t* out, size_t n);
     bool active() const { return active_; }                 // 始めてから止めるまで
+    // 出力の周波数を変える(SoundFunctions::SetSampleRate())。apu は新しい周波数で作り直したもの。
+    // 今のフレームの中の位置は換算して続ける。音源の中身は消えるので、ゲームが次に書くまで鳴らない
+    void setRate(GbApu& apu, uint32_t sample_rate);
 
 private:
     enum Marker : uint8_t { kFrameEnd = 63, kBegin = 62, kEnd = 61 };

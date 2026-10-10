@@ -340,8 +340,8 @@ static void TestSoundFunctions(){
     check(GetState() == State::Active && IsAvailable(), "2コア目がI2Sを開始したらActive");
     check(Out().begin_count == 1 && Out().running, "I2Sを1回だけ開始");
     check(Out().bclk == AUDIO_I2S_BCLK && Out().data == AUDIO_I2S_DATA, "ピンはconsts.hppのとおり");
-    check(Out().bps == 16 && Out().sample_rate == (long)kSampleRate, "16bit / kSampleRate");
-    check(Out().capacity == (size_t)kBufferWords * kBufferCount, "バッファの大きさ");
+    check(Out().bps == 16 && Out().sample_rate == (long)SampleRate(), "16bit / SampleRate()");
+    check(Out().capacity == (size_t)kBufferWordsLow * kBufferCount, "バッファの大きさ(22050Hz)");
     check(HostGpio::last_written[AUDIO_SHUTDOWN] == HIGH, "休止端子はHIGH");
     check(Out().queued.size() == Out().capacity, "開始したその回でバッファを埋める");
 
@@ -380,7 +380,7 @@ static void TestSoundFunctions(){
         printf("       サンプル数 %zu\n", n);
         check(lr_same, "左右に同じ値");
         check(full_amp, "音量100で振幅はkChannelAmplitude");
-        check(n == kSampleRate / 10, "100ms分のサンプル数で止まる");
+        check(n == SampleRate() / 10, "100ms分のサンプル数で止まる");
     }
     SetVolume(150);
     check(GetVolume() == 100, "100を超えたら100へ丸める");
@@ -436,9 +436,9 @@ static void TestSoundFunctions(){
         for(uint32_t w : Out().queued) if(Left(w) != 0) queued_nonzero++;
         const size_t rest = queued_nonzero + DrainTone(now);
         //鳴らした長さ(1秒) - 抜く前に作った分(バッファ+一時置き場の64) - 抜けていた間
-        const long expect = (long)kSampleRate
+        const long expect = (long)SampleRate()
                           - (long)Out().capacity - 64
-                          - (long)kSampleRate * kDetectIntervalMs * kDetectStableCount / 1000;
+                          - (long)SampleRate() * kDetectIntervalMs * kDetectStableCount / 1000;
         printf("       刺し直した後に鳴ったサンプル数: %zu (期待 約%ld)\n", rest, expect);
         check(labs((long)rest - expect) <= 64, "抜けていた間の分を飛ばして、残りだけが鳴る");
     }
@@ -480,6 +480,76 @@ static void TestSoundFunctions(){
         BatteryFunctions::Setup();
         UpdateAt(now);
         check(!IsBatteryVolumeCapActive(), "USB給電なら頭打ちしない");
+        HostSd::files["/sys/sound.cfg"] = "# テスト\noutput = off\nvolume = 30\n";
+        SetupAt(now);
+        SetOutput(Output::Auto);
+        Core1StepAt(now);
+    }
+
+    printf("--- 出力の周波数を変える(22050 / 44100) ---\n");
+    {
+        // 書かれたサンプルを集める(I2Sが送り切ったことにしながら1msずつ進める)
+        auto collect = [&](size_t want){
+            std::vector<int16_t> v;
+            while(v.size() < want){
+                Out().consume(Out().queued.size());
+                const size_t before = Out().written.size();
+                now += 1;
+                Step(now);
+                for(size_t k = before; k < Out().written.size(); k++) v.push_back(Left(Out().written[k]));
+            }
+            return v;
+        };
+        // 負から正へ変わった回数(周期の数)
+        auto rising = [](const std::vector<int16_t>& v, size_t from, size_t to){
+            int n = 0;
+            for(size_t i = from + 1; i < to && i < v.size(); i++) if(v[i - 1] < 0 && v[i] >= 0) n++;
+            return n;
+        };
+        check(SampleRate() == kSampleRateLow && Out().sample_rate == (long)kSampleRateLow, "既定は22050Hz");
+        const int b0 = Out().begin_count, e0 = Out().end_count;
+        Beep(1000, 2000);
+        Core1StepAt(now);
+        check(!SetSampleRate(48000) && SampleRate() == kSampleRateLow, "22050/44100以外は断る");
+        check(SetSampleRate(kSampleRateHigh) && SampleRate() == kSampleRateHigh, "44100Hzへ切り替える");
+        Core1StepAt(now);
+        check(Out().end_count == e0 + 1 && Out().begin_count == b0 + 1, "I2Sを開き直す");
+        check(Out().running && Out().sample_rate == (long)kSampleRateHigh, "新しい周波数で動く");
+        check(Out().capacity == (size_t)kBufferWordsHigh * kBufferCount, "バッファも大きくする(約23msのまま)");
+        check(!IsPlaying(), "鳴っていた音は止まる");
+        check(SetSampleRate(kSampleRateHigh) && Out().begin_count == b0 + 1, "同じ周波数なら何もしない");
+
+        //44100Hzでも同じ高さで鳴る(441Hzの矩形波を0.5秒)
+        Beep(441, 1000);
+        auto hi = collect(kSampleRateHigh);
+        printf("       44100Hz: 0.5秒の周期 %d\n", rising(hi, 0, kSampleRateHigh / 2));
+        check(std::abs(rising(hi, 0, kSampleRateHigh / 2) - 220) <= 2, "44100Hzで441Hz");
+        //長さも新しい周波数で数える: 100msの音は100msで終わる
+        Beep(1000, 100);
+        Core1StepAt(now);
+        collect(kSampleRateHigh / 20);
+        check(IsPlaying(), "50msではまだ鳴っている");
+        collect(kSampleRateHigh / 10);
+        check(!IsPlaying(), "100msを過ぎたら終わる(44100Hzで数えている)");
+
+        check(SetSampleRate(kSampleRateLow), "22050Hzへ戻す");
+        Core1StepAt(now);
+        check(Out().sample_rate == (long)kSampleRateLow && Out().capacity == (size_t)kBufferWordsLow * kBufferCount, "22050Hz・小さいバッファで開き直す");
+        Beep(441, 1000);
+        auto lo = collect(kSampleRateLow);
+        check(std::abs(rising(lo, 0, kSampleRateLow / 2) - 220) <= 2, "22050Hzでも441Hz");
+        StopAll();
+        Core1StepAt(now);
+
+        //sound.cfg の sample-rate
+        HostSd::files["/sys/sound.cfg"] = "volume = 30\nsample-rate = 44100\n";
+        SetupAt(now);
+        Core1StepAt(now);
+        check(SampleRate() == kSampleRateHigh && Out().sample_rate == (long)kSampleRateHigh, "sound.cfgのsample-rateを読む");
+        HostSd::files["/sys/sound.cfg"] = "volume = 30\nsample-rate = 48000\n";
+        SetupAt(now);
+        Core1StepAt(now);
+        check(SampleRate() == kSampleRateLow && Out().sample_rate == (long)kSampleRateLow, "読めない値は既定(22050Hz)");
         HostSd::files["/sys/sound.cfg"] = "# テスト\noutput = off\nvolume = 30\n";
         SetupAt(now);
         SetOutput(Output::Auto);

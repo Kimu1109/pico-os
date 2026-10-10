@@ -131,6 +131,12 @@ class SettingsScene : public Scene {
         DropdownMenu*      sleep_dropdown       = nullptr;
         int                sleep_selected_index = -1; // onUpdate()での変化検出用
 
+        // 音の周波数(sound.cfgの sample-rate)と、電池駆動中の音量の頭打ち(battery-cap)
+        Label<PICO_STR_S>* rate_title           = nullptr;
+        DropdownMenu*      rate_dropdown        = nullptr;
+        int                rate_selected_index  = -1;
+        Checkbox*          battery_cap_checkbox = nullptr;
+
         // ================= 時刻 =================
         Label<PICO_STR_M>* timezone_title       = nullptr;
         DropdownMenu*      timezone_dropdown    = nullptr;
@@ -189,6 +195,7 @@ class SettingsScene : public Scene {
         void updateVolume();
         void updateBrightness();
         void updateSleep();
+        void updateSampleRate();
         void updateTimezone();
 
         // InputDialogを1つnewして開く。閉じたらcommitEdit()へ渡してから破棄する

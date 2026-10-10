@@ -52,13 +52,14 @@ namespace {
     std::atomic<WavStream*> wav_stream{nullptr};
 
     // --- コマンドの列(1コア目が積み、2コア目が取り出す。1対1なのでロック無しで足りる) ---
-    enum class CmdType : uint8_t { Play, Stop, StopAll, MusicPlay, MusicStop };
+    enum class CmdType : uint8_t { Play, Stop, StopAll, MusicPlay, MusicStop, SetRate };
     struct Command {
         CmdType type;
         uint8_t ch;
         ChipSynth::Note note;
         const uint8_t* music = nullptr;     // MusicPlay: 演奏データ(置き場の片方)
         uint16_t music_size = 0;
+        uint32_t rate = 0;                  // SetRate: 新しい出力の周波数
     };
     Command queue[kCommandQueueSize];
     std::atomic<uint32_t> q_head{0};    // 積んだ数(1コア目だけが書く)
@@ -81,6 +82,7 @@ namespace {
     // ================================================================
 
     Output output = Output::Auto;
+    uint32_t out_rate = kDefaultSampleRate;     // 1コア目から見た出力の周波数(WAVの読み取り・時間の換算に使う)
     bool battery_cap = true;            // sound.cfgのbattery-cap。MAX98357A向けの電池駆動中の頭打ちを掛けるか
     bool connected = false;             // 採用済みの状態
     bool raw_last = false;              // 直近の読み取り
@@ -118,31 +120,42 @@ namespace {
         return digitalRead(AUDIO_DETECT) == LOW;
     }
 
+    uint32_t cfg_rate = kDefaultSampleRate;     // LoadConfig()の読みかけ(ParseFile()へは捕まえない関数を渡すため)
+
     void LoadConfig(){
         battery_cap = true;
-        if(!OSData::SD_usable) return;
+        cfg_rate = kDefaultSampleRate;
         //無いのが普通(既定値で動く)。ParseFile()は開けないとFAILを出すので先に確かめる
-        if(!OSData::SD.exists(PICO_Path::FILE::CFG::SYS_SOUND_CFG)) return;
-
-        PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_SOUND_CFG,
-            [](const char* key, const char* value){
-                if(strcmp(key, "output") == 0){
-                    if(strcmp(value, "auto") == 0)      output = Output::Auto;
-                    else if(strcmp(value, "off") == 0)  output = Output::Off;
-                    else LOG_SYS_WARN("sound.cfg: output の値が不明です: %s", value);
-                }else if(strcmp(key, "volume") == 0){
-                    int v = 0;
-                    if(PICO_Config::ConfigValue::AsInt(value, v)) SetVolume(v);
-                    else LOG_SYS_WARN("sound.cfg: volume は0〜100の整数です: %s", value);
-                }else if(strcmp(key, "battery-cap") == 0){
-                    //スピーカー用のアンプ(MAX98357A)は電池駆動だと音割れするので音量を絞る(既定)。
-                    //ライン出力のDAC(PCM5102A等)は割れないので false にしてよい
-                    bool b = true;
-                    if(PICO_Config::ConfigValue::AsBool(value, b)) battery_cap = b;
-                    else LOG_SYS_WARN("sound.cfg: battery-cap は true/false です: %s", value);
+        if(OSData::SD_usable && OSData::SD.exists(PICO_Path::FILE::CFG::SYS_SOUND_CFG)){
+            PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_SOUND_CFG,
+                [](const char* key, const char* value){
+                    if(strcmp(key, "output") == 0){
+                        if(strcmp(value, "auto") == 0)      output = Output::Auto;
+                        else if(strcmp(value, "off") == 0)  output = Output::Off;
+                        else LOG_SYS_WARN("sound.cfg: output の値が不明です: %s", value);
+                    }else if(strcmp(key, "volume") == 0){
+                        int v = 0;
+                        if(PICO_Config::ConfigValue::AsInt(value, v)) SetVolume(v);
+                        else LOG_SYS_WARN("sound.cfg: volume は0〜100の整数です: %s", value);
+                    }else if(strcmp(key, "battery-cap") == 0){
+                        //スピーカー用のアンプ(MAX98357A)は電池駆動だと音割れするので音量を絞る(既定)。
+                        //ライン出力のDAC(PCM5102A等)は割れないので false にしてよい
+                        bool b = true;
+                        if(PICO_Config::ConfigValue::AsBool(value, b)) battery_cap = b;
+                        else LOG_SYS_WARN("sound.cfg: battery-cap は true/false です: %s", value);
+                    }else if(strcmp(key, "sample-rate") == 0){
+                        int v = 0;
+                        if(PICO_Config::ConfigValue::AsInt(value, v) && (v == (int)kSampleRateLow || v == (int)kSampleRateHigh)){
+                            cfg_rate = (uint32_t)v;
+                        }else{
+                            LOG_SYS_WARN("sound.cfg: sample-rate は %lu か %lu です: %s",
+                                         (unsigned long)kSampleRateLow, (unsigned long)kSampleRateHigh, value);
+                        }
+                    }
                 }
-            }
-        );
+            );
+        }
+        SetSampleRate(cfg_rate);
     }
 
     void PublishWant(){
@@ -213,9 +226,11 @@ namespace {
     // ================================================================
 
     I2S i2s(OUTPUT);
-    ChipSynth::Engine engine(kSampleRate);
-    GbApu gb_apu(kSampleRate);
-    MusicPlayer player(kSampleRate);
+    uint32_t core1_rate = kDefaultSampleRate;   // 2コア目が今使っている出力の周波数
+    bool restart_output = false;                // 周波数を変えたので、動いているI2Sを止めて開き直す
+    ChipSynth::Engine engine(kDefaultSampleRate);
+    GbApu gb_apu(kDefaultSampleRate);
+    MusicPlayer player(kDefaultSampleRate);
     ChipSynth::ChannelMask borrowed = 0;   // 効果音が借りているチャンネル(曲はここに触らない)
 
     bool running = false;
@@ -234,6 +249,24 @@ namespace {
     unsigned long last_step_ms = 0;
     uint32_t sample_frac = 0;           // ms×サンプル周波数 の1000未満の端数
 
+    uint16_t BufferWords(){ return core1_rate >= kSampleRateHigh ? kBufferWordsHigh : kBufferWordsLow; }
+
+    // 出力の周波数を変える。音源は作り直す(鳴っていた音は全部止まる)。I2Sは次のApplyRunState()で開き直す
+    void ApplyRate(uint32_t rate){
+        if(rate == core1_rate) return;
+        core1_rate = rate;
+        engine = ChipSynth::Engine(rate);
+        gb_apu = GbApu(rate);
+        player = MusicPlayer(rate);
+        borrowed = 0;
+        engine.setMasterVolume(eff_volume);
+        gb_apu.setMasterVolume(eff_volume);
+        if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->setRate(gb_apu, rate);
+        sample_frac = 0;
+        chunk_pos = chunk_len = 0;
+        restart_output = true;
+    }
+
     // 左右とも同じ値を1ワードへ詰める(arduino-picoのwrite16()と同じ並び: 上位が左)
     uint32_t PackStereo(int16_t s){
         const uint32_t u = (uint16_t)s;
@@ -244,8 +277,8 @@ namespace {
         i2s.setBCLK(AUDIO_I2S_BCLK);    // LRCLKは自動でBCLK+1
         i2s.setDATA(AUDIO_I2S_DATA);
         i2s.setBitsPerSample(16);
-        i2s.setBuffers(kBufferCount, kBufferWords);
-        if(!i2s.begin(kSampleRate)){
+        i2s.setBuffers(kBufferCount, BufferWords());
+        if(!i2s.begin(core1_rate)){
             failed = true;
             core1_failed.store(true, std::memory_order_release);
             return;
@@ -326,6 +359,9 @@ namespace {
                     player.setBorrowed(borrowed);
                     player.stop(engine);
                     break;
+                case CmdType::SetRate:
+                    ApplyRate(cmd.rate);
+                    break;
             }
             processed++;
             any = true;
@@ -337,7 +373,7 @@ namespace {
     bool Pump(){
         bool wrote = false;
         //1回に書くのはバッファ全体まで(溜まっていれば数サンプルで抜ける)
-        const uint32_t kMaxPerCall = (uint32_t)kBufferWords * kBufferCount;
+        const uint32_t kMaxPerCall = (uint32_t)BufferWords() * kBufferCount;
         for(uint32_t i = 0; i < kMaxPerCall; i++){
             if(chunk_pos == chunk_len){
                 player.render(engine, chunk, kChunk);
@@ -355,7 +391,7 @@ namespace {
 
     // 鳴らせない間も、鳴っていることになっている音は時間どおりに進める
     void AdvanceByTime(unsigned long now_ms){
-        const uint64_t acc = (uint64_t)(now_ms - last_step_ms) * kSampleRate + sample_frac;
+        const uint64_t acc = (uint64_t)(now_ms - last_step_ms) * core1_rate + sample_frac;
         last_step_ms = now_ms;
         sample_frac = (uint32_t)(acc % 1000);
         player.render(engine, nullptr, (size_t)(acc / 1000));
@@ -447,6 +483,27 @@ void SoundFunctions::SetVolume(int v){
     if(v > 100) v = 100;
     master_volume.store((uint8_t)v, std::memory_order_release);
 }
+uint32_t SoundFunctions::SampleRate(){ return out_rate; }
+
+bool SoundFunctions::GetBatteryCap(){ return battery_cap; }
+void SoundFunctions::SetBatteryCap(bool enable){
+    battery_cap = enable;
+    if(!enable) battery_cap_active.store(false, std::memory_order_relaxed);
+}
+
+bool SoundFunctions::SetSampleRate(uint32_t rate){
+    if(rate != kSampleRateLow && rate != kSampleRateHigh) return false;
+    if(rate == out_rate) return true;
+    //鳴っているものを止めてから切り替える(音源は2コア目で作り直す。WAVは読み直しの周波数が変わる)
+    WavStop();
+    MusicStop();
+    StopAll();
+    if(!Push(Command{CmdType::SetRate, 0, {}, nullptr, 0, rate})) return false;
+    out_rate = rate;
+    LOG_SYS_MSG("Sound: 出力の周波数を%luHzにします", (unsigned long)rate);
+    return true;
+}
+
 void SoundFunctions::SetPowerSave(bool enable){ power_save.store(enable, std::memory_order_release); }
 bool SoundFunctions::IsPowerSave(){ return power_save.load(std::memory_order_acquire); }
 
@@ -619,7 +676,7 @@ namespace {
                     LOG_SYS_FAIL("Sound: GBの音のためのメモリ(%uB)が足りません(音は出ません)", (unsigned)sizeof(GbAudioLink));
                     return;
                 }
-                link = new (mem) GbAudioLink(kSampleRate);
+                link = new (mem) GbAudioLink(out_rate);
                 gb_link.store(link, std::memory_order_release);
             }
             link->begin();
@@ -679,7 +736,7 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
     wav_duration_ms = 0;
     wav_loaded = false;
     wav_loop = loop;
-    if(!wav_decoder->open(path, kSampleRate)){
+    if(!wav_decoder->open(path, out_rate)){
         if(error) *error = wav_decoder->errorText();
         return false;
     }
@@ -730,7 +787,7 @@ uint32_t SoundFunctions::WavPositionMs(){
     if(!wav) return 0;
     const uint64_t buffered = wav->bufferedSamples();
     const uint64_t played = wav_pushed > buffered ? wav_pushed - buffered : 0;
-    uint64_t ms = played * 1000 / kSampleRate;
+    uint64_t ms = played * 1000 / out_rate;
     if(wav_duration_ms > 0){
         if(wav_loop) ms %= wav_duration_ms;
         else if(ms > wav_duration_ms) ms = wav_duration_ms;
@@ -751,7 +808,7 @@ bool SoundFunctions::WavSeekMs(uint32_t ms){
         wav_decoder->close();
         return false;
     }
-    wav_pushed = (uint64_t)ms * kSampleRate / 1000;
+    wav_pushed = (uint64_t)ms * out_rate / 1000;
     wav->setFeeding(true);
     FeedWav(kWavPrefillSamples);
     return true;
@@ -813,6 +870,11 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
         gb_apu.setMasterVolume(vol);
     }
 
+    //周波数を変えたら、動いているI2Sを止める(すぐ下で新しい周波数・バッファで開き直す)
+    if(restart_output){
+        restart_output = false;
+        if(running) StopOutput(now_ms);
+    }
     ApplyRunState(now_ms);
 
     if(running){

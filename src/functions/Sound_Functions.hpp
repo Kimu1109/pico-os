@@ -40,13 +40,18 @@ namespace SoundFunctions {
         Active,         // 鳴らせる(I2Sが動いている)
     };
 
-    constexpr uint32_t      kSampleRate        = 44100;   // 2026-10-10に22050から(PCM5102AのDACで鳴らすため)
+    // 出力の周波数は2通りから選ぶ(sound.cfg の sample-rate、設定アプリ)。既定は22050Hz(計算が軽い)。
+    // 44100Hzはライン出力のDAC(PCM5102A等)向け。切り替えると鳴っている音は止まる(SetSampleRate())
+    constexpr uint32_t      kSampleRateLow     = 22050;
+    constexpr uint32_t      kSampleRateHigh    = 44100;
+    constexpr uint32_t      kDefaultSampleRate = kSampleRateLow;
     constexpr int           kChannels          = ChipSynth::kChannels;
     constexpr unsigned long kDetectIntervalMs  = 100;
     constexpr uint8_t       kDetectStableCount = 3;    // 100ms×3回続けて同じなら採用
-    // I2Sのバッファ: 128ワード(1ワード=左右16bitずつの1サンプル)×8本 = 1024サンプル ≒ 23ms / 4KB。
-    // 2コア目が専任で流すので短くてよい(短いほど要求から音が出るまでが速い)
-    constexpr uint16_t      kBufferWords       = 128;
+    // I2Sのバッファ: 1本のワード数(1ワード=左右16bitずつの1サンプル)×8本 ≒ 23ms。周波数に比例させる
+    // (22050Hzで64ワード=2KB、44100Hzで128ワード=4KB)。2コア目が専任で流すので短くてよい
+    constexpr uint16_t      kBufferWordsLow    = 64;
+    constexpr uint16_t      kBufferWordsHigh   = 128;
     constexpr uint8_t       kBufferCount       = 8;
     // 1コア目→2コア目のコマンドの列。溢れた要求は捨てる(DroppedCommands()で数える)
     constexpr uint8_t       kCommandQueueSize  = 32;
@@ -84,6 +89,16 @@ namespace SoundFunctions {
 
     uint8_t GetVolume();
     void SetVolume(int volume);         // 0〜100。今だけ
+
+    // 出力の周波数(kSampleRateLow / kSampleRateHigh)。今だけ(sound.cfgへは書かない)。
+    // 変えると、鳴っている効果音・曲・WAV・GBの音は止まり、2コア目がI2Sを新しい周波数で開き直す。
+    // それ以外の値は false
+    uint32_t SampleRate();
+    bool SetSampleRate(uint32_t rate);
+
+    // 電池駆動中にkBatteryVolumeCapPercentで頭打ちするか(sound.cfgの battery-cap)。今だけ
+    bool GetBatteryCap();
+    void SetBatteryCap(bool enable);
     // 今、バッテリー駆動によるkBatteryVolumeCapPercentの頭打ちが掛かっているか
     // (GetVolume()が返す設定値そのものは変わらない。表示上の注記等に使う想定)
     bool IsBatteryVolumeCapActive();
@@ -130,10 +145,10 @@ namespace SoundFunctions {
     uint32_t GbDroppedWrites();
 
     // ---- WAV(SDの .wav をそのまま鳴らす) ----
-    // 1コア目がSDから少しずつ読んでモノラル44100Hzへ直し、列(WavStream、約32KB)で2コア目へ渡す。
+    // 1コア目がSDから少しずつ読んでモノラル・出力の周波数へ直し、列(WavStream、24KB)で2コア目へ渡す。
     // 曲・効果音・GBの音と足し合わせる。同時に鳴らせるWAVは1本(鳴らすと前のWAVは止まる)。
     // 列と読み取り係(合わせて約17KB)は最初に鳴らすときに確保し、以降は持ち続ける。
-    // 読み込みが WavStream::kRingSamples(約370ms)より長く止まると途切れる(WavUnderruns())
+    // 読み込みが WavStream::kRingSamples(44100Hzで約280ms、22050Hzで約560ms)より長く止まると途切れる(WavUnderruns())
     struct WavInfo {
         uint16_t channels = 0;
         uint16_t bits = 0;

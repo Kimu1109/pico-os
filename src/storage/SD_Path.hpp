@@ -20,7 +20,7 @@ namespace PICO_Path {
         // Game Boyエミュ(GameBoyScene)がROM選択の最初に開く場所。
         // セーブ(.sav)はROMと同じ場所に「拡張子だけ変えた名前」で置く
         constexpr const char* GB_ROMS = "/gb/";
-        // 曲(pico-os MML、MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下の *.mml を並べる
+        // 曲(pico-os MML、MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下と1段下のフォルダ(=プレイリスト)の *.mml / *.wav を並べる
         constexpr const char* MUSIC = "/music/";
     };
     namespace FILE {
@@ -59,6 +59,8 @@ namespace PICO_Path {
             constexpr const char* SYS_TODOIST_CFG = "/sys/todoist.cfg";
             // 音声出力("output = auto | off" / "volume = 0〜100")。SoundFunctions参照
             constexpr const char* SYS_SOUND_CFG = "/sys/sound.cfg";
+            // ミュージックアプリの再生のしかた("shuffle = true|false" / "repeat = off|all|one")。MusicScene参照
+            constexpr const char* SYS_MUSIC_CFG = "/sys/music.cfg";
             // 画面の明るさ("brightness = 0〜100" / "auto-dim = true|false")。DisplayFunctions参照
             constexpr const char* SYS_DISPLAY_CFG = "/sys/display.cfg";
             // SSHアプリ("target = user@host:port" / "font = small|large")。SshScene参照

@@ -55,6 +55,7 @@
 #   music_test    … 曲データ(pico-os MML、MUSIC_FORMAT.md)。読み取り(音の高さ/長さ/繰り返し/マクロ/
 #                   誤りの行・列/警告)、シーケンサー(サンプル単位の音の位置・テンポ・繰り返し・ループ・
 #                   効果音への貸し出し)、SoundFunctionsの配線(置き場の入れ替え・効果音との同居)
+#   play_queue_test … ミュージックアプリの再生の順番(sound/Play_Queue.hpp)。順番通り/ミックス・リピート(しない/全曲/1曲)
 #   midi2mml_test … MIDI→MMLの変換(script/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
 #                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
 #   key_input_test … 物理キーボードの窓口(KeyInputFunctions)。"key ..."の行の読み取り、padの行との同居、
@@ -638,6 +639,15 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== music_test ====="
 run_or_die "$OUT/music_test"
+
+# --- ミュージックアプリの再生の順番 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/play_queue_test.cpp" \
+    -o "$OUT/play_queue_test"
+
+echo ""
+echo "===== play_queue_test ====="
+run_or_die "$OUT/play_queue_test"
 
 # --- MIDI→MMLの変換(Python。出てきたMMLを本物の読み取りで確かめる) ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

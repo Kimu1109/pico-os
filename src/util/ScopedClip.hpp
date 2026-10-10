@@ -1,6 +1,7 @@
 #pragma once
 
 #include "OS_Data.hpp"
+#include "functions/GFX_Functions.hpp"
 
 // OSData::frameのクリップを「今のクリップ ∩ (x, y, w, h)」へ一時的に狭め、抜けるときに元へ戻す。
 //
@@ -16,6 +17,14 @@ class ScopedClip {
             // クリップが無いとき、実機のLovyanGFXはスプライト全体を返す。ホストテストのスタブは0を返すので
             // 「クリップ無し」として扱う
             had_ = sw_ > 0 && sh_ > 0;
+            // 合成の外のrender()(Widget::update())はクリップを空にして書き込みを捨てている。
+            // 空のクリップも幅0で返るので「クリップ無し」と取り違えると、ここで画面全体へ広げてしまい、
+            // 抜けるときのclearClipRect()でその後の描画まで素通しになる(dirty矩形の外のframeへ描かれ、液晶と食い違った)
+            if (!had_ && PICO_GFX::render_suppressed) {
+                suppressed_ = true;
+                OSData::frame->setClipRect(0, 0, 0, 0);
+                return;
+            }
             int32_t x0 = x, y0 = y, x1 = x + w, y1 = y + h;
             if (had_) {
                 if (x0 < sx_) x0 = sx_;
@@ -28,7 +37,8 @@ class ScopedClip {
             OSData::frame->setClipRect(x0, y0, x1 - x0, y1 - y0);
         }
         ~ScopedClip() {
-            if (had_) OSData::frame->setClipRect(sx_, sy_, sw_, sh_);
+            if (suppressed_) OSData::frame->setClipRect(0, 0, 0, 0);
+            else if (had_) OSData::frame->setClipRect(sx_, sy_, sw_, sh_);
             else OSData::frame->clearClipRect();
         }
         ScopedClip(const ScopedClip&) = delete;
@@ -37,4 +47,5 @@ class ScopedClip {
     private:
         int32_t sx_ = 0, sy_ = 0, sw_ = 0, sh_ = 0;
         bool had_ = false;
+        bool suppressed_ = false;
 };

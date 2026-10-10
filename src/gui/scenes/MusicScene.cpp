@@ -3,6 +3,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/apps/MusicPlayerPanel.hpp"
+#include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
@@ -38,8 +39,8 @@ namespace {
 
     // 1つ前の曲へ戻らず、今の曲の頭へ戻す境目
     constexpr uint32_t kRestartMs = 3000;
-    // 読めなかった理由を出しておく時間(次の曲へ飛ばしても少し残す)
-    constexpr uint32_t kErrorShowMs = 4000;
+    // 飛ばした曲の理由を出しておく時間
+    constexpr uint32_t kErrorShowMs = 8000;
 }
 
 // ================================================================ 画面
@@ -77,6 +78,7 @@ void MusicScene::onEnter(){
     const int panel_y = content.y + content.h - MusicPlayerPanel::kHeight;
     this->panel = new MusicPlayerPanel(content.x, panel_y, content.w);
     this->panel->setOnButton([this](int b){ this->onPanelButton(b); });
+    this->panel->setOnTextTap([this](){ this->showErrorDetail(); });
     this->panel->setOnSeek([this](uint32_t ms){
         if(this->playing_kind == 2) SoundFunctions::WavSeekMs(ms);
     });
@@ -99,6 +101,8 @@ void MusicScene::onEnter(){
     this->finished = false;
     this->fail_streak = 0;
     this->error_until_ms = 0;
+    this->error_sticky = false;
+    this->failed_mask = 0;
     this->queue_playlist = kLibrary;
     this->scanFolders();
     this->showLibrary();
@@ -312,7 +316,12 @@ void MusicScene::refreshListColors(){
         for(int i = 0; i < this->view_count; i++){
             ScrollListTools::Item* it = this->list->itemAt(i);
             if(!it) break;
-            it->color = (this->queue_playlist == this->view && i == cur) ? (int8_t)PICO_DARKGREEN : (int8_t)-1;
+            int8_t c = -1;
+            if(this->queue_playlist == this->view){
+                if(i == cur) c = PICO_DARKGREEN;
+                else if(this->failed_mask & ((uint64_t)1 << i)) c = PICO_RED;
+            }
+            it->color = c;
         }
     }
     this->list->needsRender();
@@ -339,10 +348,11 @@ void MusicScene::startPlaylist(int track){
     this->queue_playlist = this->view;
     this->queue.reset(this->view_count);
     this->fail_streak = 0;
-    //全曲再生(track<0)は並びの頭から(ミックスなら混ぜた並びの頭 = どれかの曲)
-    if(track >= 0) this->queue.start(track);
-    track = this->queue.current();
-    this->playTrack(track);
+    this->failed_mask = 0;
+    //全曲再生(track<0)は並びの頭から(ミックスなら混ぜた並びの頭 = どれかの曲)。読めない曲は飛ばす
+    const bool all = track < 0;
+    if(!all) this->queue.start(track);
+    this->playTrack(this->queue.current(), all);
 }
 
 bool MusicScene::tryPlay(int track, FixedString<PICO_STR_256B>& error){
@@ -359,8 +369,7 @@ bool MusicScene::tryPlay(int track, FixedString<PICO_STR_256B>& error){
     if(IsWav(t.name.c_str())){
         const char* err = "";
         if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err)){
-            error.assign("");
-            error.appendFormat("%s を読めません: %s", t.name.c_str(), err);
+            error.assign(err && *err ? err : "WAVとして読めません");
             return false;
         }
         SoundFunctions::MusicStop();
@@ -370,7 +379,6 @@ bool MusicScene::tryPlay(int track, FixedString<PICO_STR_256B>& error){
     MmlResult r;
     if(!SoundFunctions::MusicPlayFile(path.c_str(), &r)){
         error.assign("");
-        error.appendFormat("%s を読めません: ", t.name.c_str());
         if(r.line > 0) error.appendFormat("%d行%d列: ", r.line, r.col);
         error.append(r.message.c_str());
         return false;
@@ -380,21 +388,34 @@ bool MusicScene::tryPlay(int track, FixedString<PICO_STR_256B>& error){
     return true;
 }
 
-void MusicScene::playTrack(int track){
+void MusicScene::playTrack(int track, bool skip_on_error){
     const int n = this->queue.count();
     while(track >= 0){
         FixedString<PICO_STR_256B> err;
         if(this->tryPlay(track, err)){
             this->fail_streak = 0;
             this->finished = false;
+            this->error_sticky = false;
+            this->failed_mask &= ~((uint64_t)1 << track);
             break;
         }
-        LOG_APP_WARN("ミュージック: %s", err.c_str());
-        this->error_text = err;
+        LOG_APP_WARN("ミュージック: %s を読めません: %s", this->queue_tracks[track].name.c_str(), err.c_str());
+        this->failed_mask |= (uint64_t)1 << track;
+        this->error_track.assign(this->queue_tracks[track].name.c_str());
+        this->error_detail = err;
+        //選んだ曲なら止まって理由を出し続ける(飛ばすと何が悪かったのか読めない)
+        if(!skip_on_error){
+            this->stopPlayback();
+            this->error_sticky = true;
+            this->error_until_ms = 0;
+            break;
+        }
+        this->error_sticky = false;
         this->error_until_ms = millis() + kErrorShowMs;
-        //読めない曲は飛ばす。全部読めなければ止まる
+        //全部読めなければ止まる
         if(++this->fail_streak >= n){
             this->stopPlayback();
+            this->error_sticky = true;
             break;
         }
         track = this->queue.next(true);
@@ -405,10 +426,29 @@ void MusicScene::playTrack(int track){
         }
     }
     this->refreshListColors();
-    if(this->view == this->queue_playlist && this->playing_kind != 0){
+    if(this->view == this->queue_playlist && this->queue.current() >= 0){
         this->list->setSelectedIndex(this->queue.current());
         this->list->ensureVisible(this->queue.current());
     }
+}
+
+bool MusicScene::errorShown() const {
+    if(this->error_sticky) return true;
+    return this->error_until_ms != 0 && (int32_t)(millis() - this->error_until_ms) < 0;
+}
+
+void MusicScene::showErrorDetail(){
+    if(!this->errorShown()) return;
+    //理由は欄に収まらないので全文をダイアログで(長ければダイアログの中でスクロールする)
+    FixedString<PICO_STR_512B> text;
+    text.appendFormat("%s を読めません\n\n%s", this->error_track.c_str(), this->error_detail.c_str());
+    MsgDialog* dialog = new MsgDialog(text.c_str(), "", "閉じる");
+    if(!dialog) return;
+    dialog->setVisibleIcon(true);
+    dialog->setIconId(IconID::AlertTriangle);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([dialog](bool){ WidgetFunctions::DestroyLater(dialog); });
 }
 
 void MusicScene::advance(bool by_user){
@@ -421,7 +461,8 @@ void MusicScene::advance(bool by_user){
         this->refreshListColors();
         return;
     }
-    this->playTrack(next);
+    //曲の終わりで進んだ先が読めなければ飛ばす。「次へ」で選んだ曲なら止まって理由を出す
+    this->playTrack(next, !by_user);
 }
 
 void MusicScene::previous(){
@@ -432,10 +473,10 @@ void MusicScene::previous(){
         return;
     }
     if(this->playing_kind == 1 && SoundFunctions::MusicElapsedMs() > kRestartMs){
-        this->playTrack(this->queue.current());
+        this->playTrack(this->queue.current(), false);
         return;
     }
-    this->playTrack(this->queue.prev());
+    this->playTrack(this->queue.prev(), false);
 }
 
 void MusicScene::togglePlay(){
@@ -451,7 +492,7 @@ void MusicScene::togglePlay(){
             this->finished = false;
         }
         this->fail_streak = 0;
-        this->playTrack(this->queue.current());
+        this->playTrack(this->queue.current(), false);
         return;
     }
     if(this->view == kLibrary){
@@ -530,13 +571,17 @@ void MusicScene::refreshPanel(){
         title.assign("曲が選ばれていません");
         sub.assign("曲をタップすると再生します");
     }
-    if(this->error_until_ms != 0){
-        if((int32_t)(millis() - this->error_until_ms) < 0){
-            sub = this->error_text;
-            sub_color = PICO_RED;
-        }else{
-            this->error_until_ms = 0;
-        }
+    //読めなかった理由。欄には頭しか入らないので、タップで全文を出せることを1行目に書く
+    if(this->errorShown()){
+        FixedString<PICO_PATH_LEN> name;
+        DisplayName(this->error_track.c_str(), name);
+        sub.assign("");
+        if(this->error_sticky) sub.append("読めません(タップで全文)\n");
+        else sub.appendFormat("%s を飛ばしました(タップで全文)\n", name.c_str());
+        sub.append(this->error_detail.c_str());
+        sub_color = PICO_RED;
+    }else if(this->error_until_ms != 0){
+        this->error_until_ms = 0;
     }
     FixedString<PICO_STR_M> t;
     t.assign(title.c_str());

@@ -160,6 +160,10 @@ void MusicPlayerPanel::causeOnPressStart(){
         this->markRow(kTimeY - 4, kButtonsY - kTimeY + 4);
         return;
     }
+    if(ly < kTimeY - 6){
+        this->pressed = kTextArea;
+        return;
+    }
     const int b = this->buttonAt(lx, ly);
     if(b >= 0){
         this->pressed = (int8_t)b;
@@ -179,6 +183,10 @@ void MusicPlayerPanel::causeOnPressMove(){
         }
         return;
     }
+    if(this->pressed == kTextArea){
+        if(ly < 0 || ly >= kTimeY - 6 || lx < 0 || lx >= this->l_rect.w) this->pressed = -1;
+        return;
+    }
     //ボタンの外へ指が出たら押していない見た目へ戻す(離しても押したことにならない)
     if(this->pressed >= 0 && this->buttonAt(lx, ly) != this->pressed){
         this->pressed = -1;
@@ -193,6 +201,11 @@ void MusicPlayerPanel::causeOnPressEnd(){
         this->pos_ms = this->seek_ms;
         this->markRow(kTimeY - 4, kButtonsY - kTimeY + 4);
         if(this->on_seek) this->on_seek(this->seek_ms);
+        return;
+    }
+    if(this->pressed == kTextArea){
+        this->pressed = -1;
+        if(this->on_text_tap) this->on_text_tap();
         return;
     }
     if(this->pressed >= 0){

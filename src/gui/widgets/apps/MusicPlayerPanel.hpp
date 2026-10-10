@@ -43,6 +43,8 @@ class MusicPlayerPanel : public Widget {
 
         void setOnButton(std::function<void(int button)> cb){ on_button = cb; }
         void setOnSeek(std::function<void(uint32_t ms)> cb){ on_seek = cb; }
+        // 曲名と下の行(文字の所)をタップしたとき。収まらない理由の全文を出すのに使う
+        void setOnTextTap(std::function<void()> cb){ on_text_tap = cb; }
 
         bool isSeeking() const { return seeking; }
 
@@ -96,6 +98,9 @@ class MusicPlayerPanel : public Widget {
 
         std::function<void(int)> on_button = nullptr;
         std::function<void(uint32_t)> on_seek = nullptr;
+        std::function<void()> on_text_tap = nullptr;
+        // pressed がこの値なら文字の所を押している
+        static constexpr int8_t kTextArea = kButtons;
 
         static constexpr int kPad = 6;
         static constexpr int kTitleY = 5;

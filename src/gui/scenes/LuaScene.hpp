@@ -11,7 +11,7 @@
 struct AppEntry;
 
 // SD上のLuaスクリプトを1本読んで実行する画面。
-// AppEntry::argへスクリプトパス("/lua/hello.lua"のようなSD絶対パス)を渡し、
+// AppEntry::argへスクリプトパス("/lua/apps/動作確認/main.lua"のようなSD絶対パス)を渡し、
 // AppFunctions::MakeSceneWithArg<LuaScene>で登録する(同じLuaScene型を別のargで
 // 何個でも登録できるので「Luaスクリプトごとに1タイル」が作れる)。
 //

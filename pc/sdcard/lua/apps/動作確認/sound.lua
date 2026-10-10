@@ -1,4 +1,4 @@
--- チップチューン音源の動作確認。
+-- 音: チップチューン音源の確認。
 -- 鍵盤(1オクターブ+1音)を押すとチャンネル1で鳴る。波形と減衰はボタンで切り替え。
 -- 「デモ曲」は同じフォルダの demo.mml(pico-os MML、MUSIC_FORMAT.md)を pico.music_play で鳴らす。
 -- 曲を鳴らしながら鍵盤を押すと、鍵盤の音(効果音)がチャンネル1を借り、離すと曲へ返す。
@@ -132,7 +132,7 @@ song_btn = button(cx + 2, KEY_TOP + KEY_H + 26, 130, "デモ曲を再生", funct
     if pico.music_playing() then
         pico.music_stop()
     else
-        local ok, err = pico.music_play("/lua/apps/チップチューン/demo.mml")
+        local ok, err = pico.music_play(pico.path_join(pico.app_dir(), "demo.mml"))
         if not ok then pico.show_error("デモ曲を読めません\n" .. err) end
     end
     refreshSongButton()

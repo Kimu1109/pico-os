@@ -1,6 +1,7 @@
--- 通知(pico.notify)の動作確認アプリ。
+-- 通知: pico.notify の確認。
 -- 予約した通知はこのアプリを閉じても出る(見張るのはOS)。トーストか通知センターで
--- タップするとこのアプリが開き、pico.launch_reason()で「どの通知から開いたか」が分かる。
+-- タップするとこのアプリが開き、main.lua が pico.launch_reason() で「どの通知から開いたか」を受け取って
+-- このページへ args で渡す(launch_reason は起動した最初の画面で1回だけ読める)。
 -- 通知を使うには app.cfg に permission_notify=true が要る。
 
 local x, y, w, h = pico.content_rect()
@@ -25,7 +26,7 @@ local function label(text, lx, ly)
 end
 
 button("戻る", x + m, y + m, function() pico.pop() end)
-label("通知テスト", x + 70, y + m + 6)
+label("通知", x + 70, y + m + 6)
 
 local status = label("", x + m, y + 200)
 local reason = label("", x + m, y + 250)
@@ -57,10 +58,10 @@ button("電池20%未満", x + m, row, function()
     result(pico.notify{ title = "電池が少なくなりました", when = "battery_low", below = 20, tag = "battery" })
 end)
 
-local tag, data = pico.launch_reason()
-if tag then
-    pico.set(reason, "text", "通知から起動: tag=" .. tag .. " data=" .. data)
+local from = pico.args()
+if from and from.tag then
+    pico.set(reason, "text", "通知から: " .. from.tag .. " / " .. tostring(from.data))
 else
-    pico.set(reason, "text", "ランチャから起動")
+    pico.set(reason, "text", "メニューから開いた")
 end
 refresh()

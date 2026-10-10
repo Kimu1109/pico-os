@@ -6,7 +6,7 @@
 // (openNext()は常にfalseを返す)ため、"/lua/apps/"配下に何個ディレクトリを置いても
 // この環境では1件も見つからない。この制約はCLAUDE.mdの「Doc_Cache::Clear()」
 // 「pico.sd_list」と同じもので、実際の走査結果はPCビルド(pc/compat/SdFat.hは
-// 実ファイルシステム)の--shotで確認した(pc/sdcard/lua/apps/スキャン確認/main.lua
+// 実ファイルシステム)の--shotで確認した(pc/sdcard/lua/apps/ の各アプリ
 // が実際にランチャへ現れ、タップで起動できることを確認済み)。
 //
 // ここで確認するのは、ASanで再現できる範囲の「何もしない」経路が本当に安全に

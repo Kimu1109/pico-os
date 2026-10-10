@@ -65,7 +65,7 @@ src/
   functions/                 「Xxx_Functions」名前空間群
   gui/
     icons/                  アイコンデータ(tabler_iconsから生成)
-    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/InputTestScene/LuaScene/CalendarScene/GameBoyScene等)
+    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/LuaScene/CalendarScene/GameBoyScene等)
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
       apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView/GameBoyView/GameBoyPad/TerminalView/TermKeyBar等)
       dialogs/              モーダルダイアログ(オンスクリーンキーボードのダイアログ枠 KeyboardDialog を含む)
@@ -104,9 +104,8 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
   web/shell.html              Webビルドのページの外枠(canvas + ログ + デバッグ用ボタン)
   sdcard/                     SDカードとして読まれるディレクトリ
     gb/dmg-acid2.gb           ゲームボーイエミュの描画を確かめるテストROM(MIT。ライセンスはpc/sdcard/README.md)
-    lua/hello.lua             LuaEngine/LuaSceneの動作サンプル(ランチャに「Lua Hello」タイルあり)
     lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
-    lua/apps/コントローラー確認/ 外部コントローラーの動作確認(押しているボタンを図で出す)
+    lua/apps/動作確認/        Lua APIの動作確認をまとめたアプリ(メニューから部品/描画/画面とデータ/コントローラー/音/通知のページを開く。下記「動作確認アプリ」)
     lua/apps/ゾンビTD/        タワーディフェンス(下記「ゾンビTD」)
     lua/apps/テトリス/        テトリス風ゲーム(下記「テトリス」)。リバーシ/マインスイーパー/ブロック崩しと合わせて4本とも pico.game で作ってある
     music/*.mml               ミュージックアプリが並べる曲(demo.mml / sample.mml。MUSIC_FORMAT.md)
@@ -326,7 +325,7 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
 - Lua: `pico.notify{title=, body=, tag=, data=, sound=, delay_ms|at|daily|every_ms|when(+below)}` → id(すぐ出したら0)/ `nil, 理由`(権限無し・上限)、
   `pico.notify_cancel([id|tag])` → 件数、`pico.notify_list()`、`pico.launch_reason()`。**権限`LuaPermissions::notify`(app.cfgの`permission_notify`)が要る**
   (アプリを閉じた後にも画面と音へ出るため既定では許さない)。引数の誤りは権限より先に`luaL_error`。ドキュメントは`lua-api-doc/content/api/notify.md`。
-- 動作確認アプリ「通知テスト」(`pc/sdcard/lua/apps/通知テスト/`、`permission_notify=true`)。
+- 動作確認は「動作確認」アプリの「通知」のページ(`pc/sdcard/lua/apps/動作確認/notify.lua`、`permission_notify=true`)。
 - RAMは静的に約9KB(予約16件×約380B + 履歴8件×約360B)。
 - 検証: `notification_test`(run.sh。種類ごとの発火・置き換え/上限・履歴の輪・控えめ・保存と読み込み・送り主の掃除・起動理由)、`lua_engine_test`(Lua API)、
   PCビルドの`--tap`/`--shot`(アプリで10秒後を予約→閉じてランチャでトースト→タップでアプリが`launch_reason`付きで開く、ステータスバーから通知センター、
@@ -1663,11 +1662,11 @@ SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャ�
 
 **外から使う口**:
 - C++: `SoundFunctions::Play(ch, Note)`/`Stop(ch)`/`StopAll()`/`Beep(freq, ms)`(ch0の矩形波)/`IsPlaying()`/`ActiveChannels()`。
-  入力テスト画面の「テスト音」がBeep(880Hz 300ms)。
+  Luaの`pico.beep`も同じ(「動作確認」アプリの「基本の部品」の「テスト音」)。
 - Lua: `pico.sound_play(ch 1〜kChannels, freq, ms, {wave=, volume=, envelope=})`/`sound_stop([ch])`/`sound_playing([ch])`/`note_freq(音名|番号)`/
   `beep(freq, ms)`/`sound_available()`。**チャンネルはLuaでは1始まり**。音を使った`LuaEngine`は壊れるとき(=アプリを閉じるとき)に`StopAll()`する
   (長さ0の音が鳴り止まなくなるため)。
-- 動作確認アプリ「チップチューン」(`pc/sdcard/lua/apps/チップチューン/main.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
+- 動作確認は「動作確認」アプリの「音」(`pc/sdcard/lua/apps/動作確認/sound.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
   波形/減衰の切り替え、デモ曲(同じフォルダの`demo.mml`を`pico.music_play`で鳴らす。鍵盤の音は効果音として曲のチャンネル1を借りる)。
 - 曲(MML)は下の「曲データ」。
 
@@ -1919,7 +1918,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 - **使っている所**: `GameBoyScene`(画面の`GameBoyPad`とORで重ねる。対応は`gb/Gb_PadMap.hpp`、BはYでも押せる。HOMEで戻る)、
   Lua(`pico.pad_connected/pad_down/pad_pressed/pad_released`、ボタンは小文字の名前。知らない名前はエラー)、
   ステータスバー(つながっている間だけゲームパッドのアイコン。無いのが普通なのでバツは付けない)、
-  動作確認アプリ「コントローラー確認」(`pc/sdcard/lua/apps/コントローラー確認/`)。
+  動作確認は「動作確認」アプリの「コントローラー」(`pc/sdcard/lua/apps/動作確認/pad.lua`)。
   **通常の画面をコントローラーで操作する(フォーカス移動)のは対象外**(ウィジェットにフォーカスの概念が無い。別の大きな仕事)。
 - **PCビルド**: `pc/compat/Arduino.h`の`Serial.available()/read()`が**標準入力**を別スレッドで読む(`PICOOS_SERIAL_STDIN=off`で無効)。
   `python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc`、ヘッドレスなら`echo "pad 0011"`を100msごとに流し込めばよい。
@@ -2828,7 +2827,7 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
   `mods={ctrl,alt,shift}`)、**真を返せば取った扱い、偽ならオンスクリーンキーボードの入力へ回る**。エラーになったらダイアログを1回出して以降は呼ばない
   (`loop()`と同じ安全弁。その打鍵は消費した扱い)。`ProtectedCall()`は戻り値を1つ受けるため`nresults`引数を足した。
   配り順は「画面の`onKey()`→開いているキー盤」(「物理キーボード」参照)で、日本語キー盤が読みを入力中のときはキー盤が先。
-- 動作確認アプリ「描画API確認」(`pc/sdcard/lua/apps/描画API確認/`。図形・太線・画像の拡大/回転/反転・扇形・右寄せ文字・`on_key`・電池を1画面に描く。PCビルドの`--tap`+標準入力の`key`行で確認済み)。
+- 動作確認は「動作確認」アプリの「直接描画」(`pc/sdcard/lua/apps/動作確認/draw.lua`。図形・太線・画像の拡大/回転/反転・扇形・右寄せ文字・`on_key`・電池を1画面に描く。PCビルドの`--tap`+標準入力の`key`行で確認済み)。
 - 検証: `lua_engine_test`(run.sh。dirty矩形・引数エラー・塗りのピクセル(正方形/L字/扇形)・画像の等倍/拡大/反転/回転/原点/透過・
   文字幅・WAV・battery・sd_stat/sd_read_part・on_keyの登録/解除/エラー)。PCビルドは通る。**実機・PCビルドでの見た目は未確認**
   (`fill_polygon`の1画素ごとの`drawFastHLine`、`draw_image_ex`の全画素ループの速さは実機で見ること。クリップが全面だと最大240x320回)。
@@ -3710,7 +3709,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
 ### Lua APIの追加(2026-10-05): require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー
 
 「ウィジェットを使うLuaアプリを書くときに足りない機能」を洗い出した(`pico.*`の不足リスト)うち、実害が出ていた5項目をまとめて入れた。
-ドキュメントは`lua-api-doc/content/api/`(`modules.md`/`json.md`/`timers.md`/`scenes.md`/`network.md`)、動作確認アプリは`pc/sdcard/lua/apps/ウィジェットAPI確認/`。
+ドキュメントは`lua-api-doc/content/api/`(`modules.md`/`json.md`/`timers.md`/`scenes.md`/`network.md`)、動作確認は「動作確認」アプリの「画面とデータ」(`pc/sdcard/lua/apps/動作確認/scene.lua`)。
 **実機では未確認**(PCのホストテストとPCビルドのみ)。
 
 1. **`require(name)` / `pico.require(name)`**(`LuaEngine::l_require`、`preloadModules`)
@@ -3762,7 +3761,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
 
 前節の洗い出しで「見送った」としたものと、洗い出しの○(あると明らかに楽)の項目を入れた。ドキュメントは `lua-api-doc/content/`
 (`api/crypto.md` `api/stdlib.md` を新設、`api/widgets` `dialogs` `drawing` `images` `misc` `scenes` `canvas` と `reference/*` `guide/events.md` を更新)、
-動作確認アプリは `pc/sdcard/lua/apps/ウィジェット追加確認/`。**実機では未確認**(PCのホストテストとPCビルドのみ)。
+動作確認は「動作確認」アプリの「追加の部品」(`pc/sdcard/lua/apps/動作確認/extra.lua`)。**実機では未確認**(PCのホストテストとPCビルドのみ)。
 
 **ソースの置き場**: `LuaEngine.cpp` が4400行を超えたので、追加分は `src/lua/LuaEngine_Ext.cpp`(ウィジェット補助・イベント・ジェスチャー・リスト/タブ・ダイアログ・
 描画の補助・ユーティリティ)と `LuaEngine_Crypto.cpp`(暗号API)に置いた。`LuaEngine` の private へは `friend struct LuaEngineExt` / `LuaEngineCrypto` 経由で触る。
@@ -4263,6 +4262,32 @@ OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なの�
   実体も`openNext()`の走査も無いため。`pico.sd_list`/`Doc_Cache::Clear()`と同じ制約)。
   SD無し/ディレクトリが存在しない場合に安全に0件を返すことのみASanで確認し、
   実際の走査結果はPCビルドの`--shot`(上記)で確認する、という役割分担にした。
+
+### 動作確認アプリ(`pc/sdcard/lua/apps/動作確認/`、2026-10-10)
+
+APIごとに増えていた動作確認用のアプリを1つにまとめた。`main.lua`はメニューで、各ページ(同じフォルダの`*.lua`)を
+`pico.push_scene`で開き、ページの「戻る」(`pico.pop()`)でメニューへ戻る。権限(`app.cfg`。通知のため`permission_notify=true`)は
+`push_scene`で開いたページへ引き継がれる。ドキュメントは`lua-api-doc/content/examples/test-app.md`。
+
+| ページ | ファイル | 元のアプリ |
+|---|---|---|
+| 基本の部品 | `basics.lua` | 「スキャン確認」「図形デモ」「Lua Hello」の部品、C++の「入力テスト」(Textbox/NumberInput/テスト音) |
+| 追加の部品 | `extra.lua` | 「ウィジェット追加確認」 |
+| 直接描画 | `draw.lua` | 「描画API確認」 |
+| 画面とデータ | `scene.lua` + `picker.lua` + `util.lua` | 「ウィジェットAPI確認」 |
+| コントローラー | `pad.lua` | 「コントローラー確認」 |
+| 音 | `sound.lua` + `demo.mml` | 「チップチューン」 |
+| 通知 | `notify.lua` | 「通知テスト」 |
+
+- **消したもの**: `pc/sdcard/lua/hello.lua`/`hello_sub.lua`/`hello_sub2.lua`と`pc/sdcard/img/hello.pimg`(`App_List.cpp`の「Lua Hello」の静的登録ごと。
+  `push_scene`は「画面とデータ」、`change_scene`/`launch_app`はホストテスト`lua_scene_test`で確かめている)、
+  C++の`InputTestScene`(「入力テスト」。中身はLuaの「基本の部品」で足りる)、「スキャン確認」「図形デモ」(SDの走査は他のアプリ全部が実演している)。
+  **この節より前の記述(検証手順の`--tap`の座標や「入力テスト」「hello.lua」での確認)は当時の記録**で、今は無い画面を指している。
+- `pico.launch_reason()`はアプリの最初の画面(メニュー)で1回だけ読めるので、メニューが受け取って通知のページへ`args`で渡す。
+- 新しいAPIの動作確認は、アプリを増やさずにこのアプリへページを足すこと(`main.lua`の`PAGES`へ1行)。
+  メニューは1列のボタンで、あと1〜2ページ足すと画面に収まらなくなるので、そのときは`ScrollList`にする。
+- 検証: PCビルドの`--tap`/`--shot`で全ページの表示、「基本の部品」の図形タブ、ページの「戻る」でメニューへ戻ること、
+  通知を出して通知センターから開くとメニュー→通知のページ(`tag`/`data`付き)へ進むことを確認。
 
 ### 現時点のスコープ外(次回以降)
 

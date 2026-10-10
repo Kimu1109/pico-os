@@ -2,7 +2,6 @@
 #include "functions/Log_Functions.hpp"
 
 #include "gui/scenes/MarkdownScene.hpp"
-#include "gui/scenes/InputTestScene.hpp"
 #include "gui/scenes/ClocksScene.hpp"
 #include "gui/scenes/CalculatorScene.hpp"
 #include "gui/scenes/FileExplorerScene.hpp"
@@ -16,8 +15,6 @@
 #include "gui/scenes/MusicScene.hpp"
 #include "gui/scenes/SshScene.hpp"
 #include "gui/scenes/NotificationScene.hpp"
-#include "gui/scenes/LuaScene.hpp"
-#include "lua/LuaPermissions.hpp"
 #include "lua/LuaAppScanner.hpp"
 
 // このOSに載せるアプリの一覧。
@@ -41,7 +38,6 @@ void AppFunctions::Setup(){
     //引数を渡さないと network.cfg の browser-home を開く(無ければ同梱のサンプル)。
     //特定の文書を固定で開くタイルにしたい場合は MakeSceneWithArg + パス/URL を渡す
     Register("Markdown",   IconID::Browser,  &MakeScene<MarkdownScene>);
-    Register("入力テスト", IconID::Keyboard, &MakeScene<InputTestScene>);
     Register("時計", IconID::Clock, &MakeScene<ClocksScene>);
     Register("電卓", IconID::Calculator, &MakeScene<CalculatorScene>);
     Register("ファイル", IconID::Folder, &MakeScene<FileExplorerScene>);
@@ -63,12 +59,8 @@ void AppFunctions::Setup(){
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)
     Register("通知", IconID::Bell, &MakeScene<NotificationScene>);
-    // Luaバインディングの動作サンプル(pc/sdcard/lua/hello.lua参照)。
-    // MakeLuaAppScene(LuaScene.hpp)がentry.permissionsをそのままLuaSceneへ渡すので、
-    // ここでsd_outside_app_dirを立てるだけで済む(/img/hello.pimgを読むため)。
-    // 権限が要らないLuaアプリなら第5引数(permissions)を省略すればよい
-    Register("Lua Hello", IconID::AppBox, &MakeLuaAppScene, "/lua/hello.lua",
-             LuaPermissions{false, true});
+    // Luaアプリは下のスキャンで登録する(動作確認用のサンプルは /lua/apps/動作確認/)。
+    // 権限が要るものは各アプリの app.cfg に書く
 
     // "/lua/apps/<名前>/main.lua" を走査し、見つかった分をここまでの静的登録へ
     // 追加する(LuaAppScanner.hppのクラスコメント参照)。SD無し/ディレクトリが

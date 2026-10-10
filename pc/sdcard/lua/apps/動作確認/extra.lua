@@ -1,4 +1,4 @@
--- ウィジェット追加確認: 2026-10-05(2)に足した機能のデモ
+-- 追加の部品: 専用ウィジェットと補助モジュールの確認
 --   ・Luaから作れるようになったウィジェット(ProgressBar / AnalogClock / DurationPicker / MonthGrid /
 --     MarkdownView / TextView / ImageView)
 --   ・pico.ui(宣言的な組み立て)・pico.tab_link(タブごとの表示切り替え)・pico.tween

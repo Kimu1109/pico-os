@@ -1,4 +1,4 @@
--- ウィジェットAPI確認: 2026-10-05に足した5つの機能のデモ
+-- 画面とデータ: 次の5つの確認
 --   1. require("util")                         … モジュールの分割
 --   2. press_start(id, x, y, lx, ly, dx, dy)   … タッチ座標の引数(盤面のマス目を逆算)
 --   3. push_scene(path, args) / pico.args() / pico.pop(result) / on_suspend・on_resume・on_result / store_load・store_save
@@ -21,7 +21,7 @@ local function label(text, lx, ly)
     return l
 end
 
-local title = label("ウィジェットAPI確認", x + 8, y + 4)
+local title = label("画面とデータ", x + 8, y + 4)
 local clock_label = label("経過 0:00", x + 8, y + 24)
 local cell_label = label("マス: -", x + 8, y + 44)
 local drag_label = label("ドラッグ: 0,0", x + 8, y + 64)
@@ -84,7 +84,7 @@ pico.set(pick_btn, "w", 130)
 pico.set(pick_btn, "h", 34)
 pico.set(pick_btn, "text", "色を選ぶ")
 pico.on(pick_btn, "press_end", function()
-    pico.push_scene("/lua/apps/ウィジェットAPI確認/picker.lua", { title = "色を選ぶ" })
+    pico.push_scene(pico.path_join(pico.app_dir(), "picker.lua"), { title = "色を選ぶ" })
 end)
 
 local back = pico.create("Button")

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include "consts.hpp"
 #include "util/FixedString.hpp"
@@ -23,7 +24,38 @@
     #define PICO_MEM_PROFILE 1
 #endif
 
+// 実機(arduino-pico)のリンカスクリプトはヒープの上限を __HeapLimit(=SRAMの終わり)で示す。
+// 無いリンカスクリプトでも落ちないよう弱いシンボルにしてある(無ければアドレスが0)
+#if (defined(__arm__) || defined(__riscv)) && !defined(PICOOS_PC)
+    #define PICO_MEM_HAS_HEAP_LIMIT 1
+    #include <unistd.h>
+    extern "C" char __HeapLimit __attribute__((weak));
+#else
+    #define PICO_MEM_HAS_HEAP_LIMIT 0
+#endif
+
 namespace MemFunctions {
+
+    // HeapTopRoom()が測れないときの値
+    constexpr size_t kRoomUnknown = (size_t)-1;
+
+    // テスト用の差し替え口(nullptrなら本物を測る)
+    inline size_t (*heap_room_hook)() = nullptr;
+
+    // ヒープの末尾(sbrk(0))から上限(__HeapLimit)までの、まだ一度も使っていない領域のバイト数。
+    // mallocは空きブロックで足りなければここを削って伸びるので、ここが尽きると(断片化した空きに
+    // 収まらない)確保が失敗する。O(1)なので確保のたびに呼んでよい。PC/ホストではkRoomUnknown
+    inline size_t HeapTopRoom(){
+        if(heap_room_hook) return heap_room_hook();
+    #if PICO_MEM_HAS_HEAP_LIMIT
+        if(&__HeapLimit == nullptr) return kRoomUnknown;
+        const char* top = (const char*)sbrk(0);
+        const char* lim = &__HeapLimit;
+        return (lim > top) ? (size_t)(lim - top) : 0;
+    #else
+        return kRoomUnknown;
+    #endif
+    }
 
     // シーン別統計を記録できるシーンの種類数。溢れた分は "(overflow)" にまとめる
     constexpr int kMaxTrackedScenes = 8;
@@ -57,7 +89,7 @@ namespace MemFunctions {
         uint32_t free_blocks = 0;  // 空きブロックの個数。多いほど細切れ = 断片化の直接指標
         uint32_t keepcost = 0;     // ヒープ末尾にある解放可能な空き
         uint32_t largest_free = 0; // 既存の空きブロックから確保できる最大サイズ(実測)
-        uint32_t stack_headroom = 0; // ヒープ末尾と現在のスタックポインタの間隔(0=計測不可)
+        uint32_t stack_headroom = 0; // ヒープ末尾から伸びられる残り(実機は__HeapLimitまで。無ければスタックポインタまで。0=計測不可)
 
         // largest_freeの実測中にヒープ自体が伸びてしまったか。
         // trueのときlargest_freeは「既存の空きから取れた量」を下回って見える可能性がある

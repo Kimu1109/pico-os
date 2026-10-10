@@ -1,5 +1,6 @@
 #include "lua/LuaEngine.hpp"
 #include "functions/Power_Functions.hpp"
+#include "functions/Mem_Functions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -217,6 +218,34 @@ void* LuaEngine::Alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
 
     if (self->used_ - old + nsize > self->budget_) {
         return nullptr; // 予算超過。呼び出し元(Lua本体)はLUA_ERRMEMとして扱う
+    }
+
+    // ヒープの残りを守る(LuaEngine.hppのkHeapReserveBytes参照)。末尾の未使用の領域が
+    // 「確保しても残りを割らない」だけあるうちは何も見ない(sbrk(0)を読むだけで軽い)。
+    // 割りそうなときは、空きブロックから取れたのか末尾を伸ばしたのかを確保の前後で比べ、
+    // 伸ばして残りを割ったときだけ返して断る。reallocだと断るときに元へ戻せないので、
+    // 増やすときはmalloc+コピーにする(縮めるのはreallocのまま。末尾を伸ばさない)
+    if (nsize > old) {
+        const size_t before = MemFunctions::HeapTopRoom();
+        if (before != MemFunctions::kRoomUnknown && before < kHeapReserveBytes + nsize) {
+            void* np = malloc(nsize);
+            if (!np) {
+                self->heap_refusals_++;
+                return nullptr;
+            }
+            const size_t after = MemFunctions::HeapTopRoom();
+            if (after < before && after < kHeapReserveBytes) {
+                free(np);
+                self->heap_refusals_++;
+                return nullptr; // Lua本体はごみを集めてもう一度だけ頼み直す(lmem.cのtryagain)
+            }
+            if (ptr) {
+                memcpy(np, ptr, old);
+                free(ptr);
+            }
+            self->used_ = self->used_ - old + nsize;
+            return np;
+        }
     }
 
     void* np = realloc(ptr, nsize);

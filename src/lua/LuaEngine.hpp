@@ -381,6 +381,14 @@ class LuaEngine {
         LuaEngine& operator=(const LuaEngine&) = delete;
 
         bool valid() const { return L != nullptr; }
+        // ヒープの末尾に、Lua以外(C++のnew/std::vector/SD/Wi-Fi等)のために必ず残しておく量。
+        // Luaの予算(budget_bytes)はヒープ全体の空きより大きいことがあり、Luaが予算の内側でも
+        // ヒープを使い切ると、次のC++側の確保が失敗して(newの失敗はabort)本体ごと再起動する。
+        // 残りがこれを割る確保はAlloc()が断り、Lua本体はごみを集めてやり直す(それでも足りなければ
+        // 「not enough memory」のエラーで止まる。再起動はしない)。実機だけで効く(MemFunctions::HeapTopRoom())
+        static constexpr size_t kHeapReserveBytes = 20 * 1024;
+        uint32_t heapRefusals() const { return heap_refusals_; }
+
         size_t usedBytes() const { return used_; }
         size_t budgetBytes() const { return budget_; }
 
@@ -490,6 +498,8 @@ class LuaEngine {
         lua_State* L = nullptr;
         size_t budget_;
         size_t used_ = 0;
+        // Alloc()がヒープの残り(kHeapReserveBytes)を守るために断った回数(pico.memory_info().heap_refused)
+        uint32_t heap_refusals_ = 0;
 
         LuaPermissions permissions_;
         // sd_outside_app_dir==falseの間、pico.sd_*/pico.image_loadを閉じ込める先

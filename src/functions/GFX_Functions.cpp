@@ -1,5 +1,6 @@
 #include "functions/Widget_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Focus_Functions.hpp"
 #include "config/LGFX_Config.hpp"
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -348,6 +349,20 @@ void PICO_GFX::FlushDirty() {
             OSData::frame->clearClipRect();
         }
         isDirtyDeactivates = false;
+
+        // (c) フォーカスの枠(キー/コントローラーで動かしたときだけ)。子に塗りつぶされないよう全部の後に、
+        //     ウィジェットの矩形の内側へ描く(外へはみ出すとdirty矩形の外が汚れるため)
+        if (Widget* f = FocusFunctions::RingTarget()) {
+            const Rect clip = f->clippedScreenRect().intersection(d);
+            if (clip.w > 0 && clip.h > 0) {
+                const Rect r = f->getScreenRect();
+                OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
+                for (int k = 0; k < FocusFunctions::kRingWidth; k++) {
+                    OSData::frame->drawRect(r.x + k, r.y + k, r.w - 2 * k, r.h - 2 * k, FocusFunctions::kRingColor);
+                }
+                OSData::frame->clearClipRect();
+            }
+        }
     }
     draw_frame_total_ms = millis() - buf_timer_ms;
     buf_timer_ms = millis();

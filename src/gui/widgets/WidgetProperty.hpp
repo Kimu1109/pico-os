@@ -70,7 +70,7 @@ namespace WidgetProperty {
         Year, Month, Today, Selected,
 
         // Widget基底(型を問わない)
-        HitTransparent, Enabled,
+        HitTransparent, Enabled, Focusable,
 
         Count
     };

@@ -2039,22 +2039,27 @@ static uint16_t CheckPadButton(lua_State* L, int arg) {
     return b;
 }
 
+// コントローラーを読むアプリ(ゲーム)の間は、コントローラーでフォーカスを動かさない(LuaScene::usesPad())
 int LuaEngine::l_pad_connected(lua_State* L) {
+    Self(L)->used_pad_ = true;
     lua_pushboolean(L, PadFunctions::IsConnected());
     return 1;
 }
 
 int LuaEngine::l_pad_down(lua_State* L) {
+    Self(L)->used_pad_ = true;
     lua_pushboolean(L, PadFunctions::IsDown(CheckPadButton(L, 1)));
     return 1;
 }
 
 int LuaEngine::l_pad_pressed(lua_State* L) {
+    Self(L)->used_pad_ = true;
     lua_pushboolean(L, PadFunctions::Pressed(CheckPadButton(L, 1)));
     return 1;
 }
 
 int LuaEngine::l_pad_released(lua_State* L) {
+    Self(L)->used_pad_ = true;
     lua_pushboolean(L, PadFunctions::Released(CheckPadButton(L, 1)));
     return 1;
 }

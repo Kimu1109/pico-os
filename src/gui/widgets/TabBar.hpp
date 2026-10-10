@@ -73,6 +73,17 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::TabBar; }
+        bool focusableByDefault() const override { return true; }
+        // ←→で隣のタブへ(端ではフォーカスが隣のウィジェットへ移る)
+        bool onFocusKey(FocusKey key) override {
+            int next = this->selected;
+            if(key == FocusKey::Left) next--;
+            else if(key == FocusKey::Right) next++;
+            else return key == FocusKey::Activate;
+            if(next < 0 || next >= this->tab_count) return false;
+            this->setSelected(next, true);
+            return true;
+        }
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 
         void setFontSize(FontFn::FontSize size) override {

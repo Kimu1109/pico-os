@@ -57,6 +57,7 @@ namespace {
             case Id::BackgroundColor: out = Value::MakeInt(w->getBackgroundColor()); return true;
             case Id::HitTransparent: out = Value::MakeBool(w->getHitTransparent()); return true;
             case Id::Enabled: out = Value::MakeBool(w->getEnabled()); return true;
+            case Id::Focusable: out = Value::MakeBool(w->isFocusable()); return true;
             default: return false;
         }
     }
@@ -84,6 +85,9 @@ namespace {
             case Id::Enabled:
                 if (v.type != Type::Bool) return false;
                 w->setEnabled(v.b); return true;
+            case Id::Focusable:
+                if (v.type != Type::Bool) return false;
+                w->setFocusable(v.b); return true;
             default: return false;
         }
     }
@@ -1142,6 +1146,7 @@ namespace {
         {"selected", Id::Selected},
 
         {"hit_transparent", Id::HitTransparent}, {"enabled", Id::Enabled},
+        {"focusable", Id::Focusable},
     };
 }
 

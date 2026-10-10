@@ -65,6 +65,7 @@ void HomeScene::onEnter(){
 void HomeScene::updatePageLabel(){
     if(!this->page_label || !this->grid) return;
 
+    this->shown_page = this->grid->getPage();
     char buf[16];
     snprintf(buf, sizeof(buf), "%d / %d", this->grid->getPage() + 1, this->grid->pageCount());
     this->page_label->setText(buf);

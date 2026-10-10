@@ -42,6 +42,10 @@ class Scene {
         // シェルへそのまま送りたい(SSH)、↑↓やCtrl+Sを自分で扱いたい(テキストエディタ)画面が使う
         virtual bool onKey(const KeyInputFunctions::Event& ev) { (void)ev; return false; }
 
+        // この画面がコントローラー(PadFunctions)を自分で読む(ゲーム等)。trueの間は、
+        // コントローラーのボタンでウィジェットのフォーカスを動かさない(FocusFunctions)
+        virtual bool usesPad() const { return false; }
+
         // この画面の間は通知のトーストと音を控える(ゲーム等、画面の上部を隠されると困る画面)。
         // 控えた通知もステータスバーの印と通知センターには残る(NotificationFunctions参照)
         virtual bool quietNotifications() const { return false; }

@@ -41,6 +41,11 @@ class AppGrid : public Widget {
 
         std::function<void(int app_index)> on_launch_ = nullptr;
 
+        // キー/コントローラーで選んでいるタイル(ページ内スロット)。枠はフォーカスの枠が出ている間だけ描く
+        int8_t focus_slot_ = 0;
+        // 今のページに並んでいるタイルの数
+        int tilesOnPage() const;
+
         int tileW() const;
         int rowsPerPage() const;
 
@@ -64,6 +69,15 @@ class AppGrid : public Widget {
         Rect tileRect(int slot) const;
 
         WidgetType getWidgetType() const override { return WidgetType::AppGrid; }
+        bool focusableByDefault() const override { return true; }
+        bool drawsOwnFocus() const override { return true; }
+        // 矢印/十字キーでタイルを選び(左右の端ではページを送る)、決定で起動する
+        bool onFocusKey(FocusKey key) override;
+        int getFocusSlot() const { return focus_slot_; }
+        Rect focusRect() const override {
+            const Rect t = tileRect(focus_slot_);
+            return {(int16_t)(getScreenX() + t.x), (int16_t)(getScreenY() + t.y), t.w, t.h};
+        }
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 
         void render() override;

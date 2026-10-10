@@ -135,3 +135,30 @@ void ScrollList::causeOnPressEnd(){
 
     this->is_scrolling = false;
 }
+void ScrollList::ensureVisible(int index){
+    if(index < 0 || index >= (int)this->dataSource.size()) return;
+    if(this->font_h == 0) this->font_h = FontFn::GetFontSize(getFontSize());
+    const int item_h = this->font_h + MARGIN;
+    const int top = index * item_h;
+    if(top < this->scrollY) this->scrollY = top;
+    else if(top + item_h > this->scrollY + this->l_rect.h) this->scrollY = top + item_h - this->l_rect.h;
+    this->clampScroll();
+    this->needsRender();
+}
+
+bool ScrollList::onFocusKey(FocusKey key){
+    const int count = (int)this->dataSource.size();
+    if(key == FocusKey::Activate){
+        if(this->selected_index < 0 || this->selected_index >= count) return count > 0 ? this->onFocusKey(FocusKey::Down) : true;
+        this->causeOnSelectItem(true);
+        return true;
+    }
+    if(key != FocusKey::Up && key != FocusKey::Down) return false;
+    int next = this->selected_index + (key == FocusKey::Down ? 1 : -1);
+    if(this->selected_index < 0) next = 0;
+    if(next < 0 || next >= count) return false;
+    this->selected_index = next;
+    this->ensureVisible(next);
+    this->causeOnSelectItem(false);
+    return true;
+}

@@ -194,3 +194,7 @@ void LuaScene::onExit() {
     delete engine;
     engine = nullptr;
 }
+
+bool LuaScene::usesPad() const {
+    return engine && engine->UsedPad();
+}

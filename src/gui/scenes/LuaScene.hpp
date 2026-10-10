@@ -105,6 +105,8 @@ class LuaScene : public Scene {
         void onUpdate() override;
         // 物理キーボードの打鍵をpico.on_key()のコールバックへ渡す(登録が無ければ取らない)
         bool onKey(const KeyInputFunctions::Event& ev) override;
+        // pico.pad_* を使ったアプリ(ゲーム)はコントローラーを自分で読む(フォーカスを動かさない)
+        bool usesPad() const override;
 
         // push_scene/change_sceneの呼び出し側が、引数(JSON。無ければ空)と親のスクリプトパスを教える。
         // 生成直後(Push/Changeする前)に呼ぶ

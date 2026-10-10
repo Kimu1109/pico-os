@@ -55,6 +55,8 @@ class DropdownMenu : public Widget {
                 }
             });
             this->dropdown->setParent(this);
+            // 開いた一覧はドロップダウン自身がキーで動かす(一覧へはフォーカスを移さない)
+            this->dropdown->setFocusable(false);
 
             this->value = new Label<PICO_STR_L>("");
             this->value->setX(0);
@@ -105,6 +107,53 @@ class DropdownMenu : public Widget {
         };
 
         WidgetType getWidgetType() const override { return WidgetType::DropdownMenu; }
+        bool focusableByDefault() const override { return true; }
+
+        // 決定で開く。開いている間は↑↓で選び、決定で確定、戻る(Esc/B)で閉じる
+        bool onFocusKey(FocusKey key) override {
+            if(!this->open_state){
+                if(key != FocusKey::Activate) return false;
+                this->open_state = true;
+                this->applyOpenState();
+                this->l_rect.h = this->dropdown->getH();
+                if(this->dropdown->getSelectedIndex() < 0 && this->dropdown->getItemCount() > 0){
+                    this->dropdown->setSelectedIndex(0);
+                }
+                this->dropdown->ensureVisible(this->dropdown->getSelectedIndex());
+                return true;
+            }
+            const int count = this->dropdown->getItemCount();
+            const int cur = this->dropdown->getSelectedIndex();
+            switch(key){
+                case FocusKey::Up:
+                case FocusKey::Down: {
+                    const int next = cur + (key == FocusKey::Down ? 1 : -1);
+                    if(next >= 0 && next < count){
+                        this->dropdown->setSelectedIndex(next);
+                        this->dropdown->ensureVisible(next);
+                    }
+                    return true;
+                }
+                case FocusKey::Activate:
+                    if(cur >= 0) this->dropdown->causeOnSelectItem(false);
+                    else this->closeList();
+                    return true;
+                case FocusKey::Back:
+                    this->closeList();
+                    return true;
+                default:
+                    return true;
+            }
+        }
+        void onFocusChanged(bool focused) override {
+            if(!focused) this->closeList();
+        }
+        void closeList(){
+            if(!this->open_state) return;
+            this->open_state = false;
+            this->applyOpenState();
+            this->l_rect.h = 30;
+        }
 
         void setX(int x) override {
             this->l_rect.x = x;

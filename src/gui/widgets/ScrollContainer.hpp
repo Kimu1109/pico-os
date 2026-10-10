@@ -54,6 +54,21 @@ class ScrollContainer : public Widget, public IBorderColor {
 
         WidgetType getWidgetType() const override { return WidgetType::ScrollContainer; }
 
+        // フォーカスが移った子孫が見えるようにスクロールする(最小限。はみ出していなければ何もしない)
+        void revealRect(const Rect& r) override {
+            const Rect view = this->getScreenRect();
+            int dx = 0, dy = 0;
+            if(this->vertical_scroll){
+                if(r.y < view.y) dy = r.y - view.y;
+                else if(r.y + r.h > view.y + view.h) dy = std::min(r.y - view.y, (r.y + r.h) - (view.y + view.h));
+            }
+            if(this->horizontal_scroll){
+                if(r.x < view.x) dx = r.x - view.x;
+                else if(r.x + r.w > view.x + view.w) dx = std::min(r.x - view.x, (r.x + r.w) - (view.x + view.w));
+            }
+            if(dx != 0 || dy != 0) this->setScroll(this->scroll_x + dx, this->scroll_y + dy);
+        }
+
         void causeOnPressStart() override;
         void causeOnPressMove() override;
 

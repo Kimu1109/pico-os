@@ -465,6 +465,8 @@ class LuaEngine {
         // 登録が無ければfalse(呼び出し側が既定の動き=Popをする)
         bool DispatchBack();
         bool HasBackHandler() const { return back_callback_ref_ != LUA_NOREF; }
+        // pico.pad_* を一度でも使ったか(使うアプリの間はコントローラーでフォーカスを動かさない)
+        bool UsedPad() const { return used_pad_; }
 
     private:
         friend struct LuaEngineExt;
@@ -509,6 +511,7 @@ class LuaEngine {
         // loop()が一度エラーを出したら以降は呼ばない(毎フレーム同じエラーダイアログが
         // 積まれるのを防ぐ安全弁)。setup()側はRun()と同じく1回きりなので不要
         bool loop_broken_ = false;
+        bool used_pad_ = false;
 
         // タッチのイベントの移動量(dx,dy)を出すための、直前のタッチ位置
         int last_touch_x_ = 0;

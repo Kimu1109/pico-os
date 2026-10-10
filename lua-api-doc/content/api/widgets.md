@@ -135,6 +135,23 @@ pico.set_dots(grid, { [3] = {12, 9}, [14] = 10 })  -- 3日に赤と青、14日�
 
 重なり順を変えます(子孫も一緒に動きます)。コンテナの子には使えず `false` を返します(コンテナの中の並びは `add_child` した順です)。
 
+## pico.focus / pico.get_focus
+
+<div class="sig">pico.focus(id: integer | nil [, show_ring: boolean]) <span class="ret">-> ok: boolean</span></div>
+<div class="sig">pico.get_focus() <span class="ret">-> id: integer | nil</span></div>
+
+フォーカス(物理キーボード・コントローラーで操作する相手)を移す/外す(`nil`)/読みます。`show_ring` の既定は `true`(青い枠を出す)。
+受けないウィジェット(`focusable` が `false`・見えない・無効・開いているダイアログの外)へは移らず `false` を返します。
+
+フォーカスはOSが動かします。**Tab / Shift+Tab**(コントローラーは R / L)で読む順(上から、同じ高さなら左から)に、**矢印 / 十字キー**でその向きの一番近いものへ移り、
+**Enter / Space**(A)で押します(真ん中をタップしたのと同じで、`press_start` / `press_end` が届きます)。**Esc**(B)は開いたドロップダウンを閉じます。
+枠はキー/ボタンで動かしたときだけ出て、画面をタッチすると消えます(タッチしたものがフォーカスを持ちます)。
+ダイアログが開いている間はその中だけを動き、閉じると開く前のものへ戻ります。
+
+受ける種類の既定は `Button` `Checkbox` `Textbox` `NumberInput` `NumberSlider`(←→で値)`ScrollList`(↑↓で選び、決定で2回目のタップ)`DropdownMenu`(決定で開き、↑↓で選ぶ)`TabBar`(←→でタブ)。
+ほかの種類(`Canvas` 等)も `pico.set(id, "focusable", true)` で受けるようにできます。
+`pico.pad_*` を使ったアプリでは、コントローラーのボタンはフォーカスを動かしません(ゲームの操作とぶつからないように)。キーボードの矢印は `pico.on_key` で取れば(`true` を返せば)動きません。
+
 ## pico.scroll_to
 
 <div class="sig">pico.scroll_to(container_id: integer, child_id: integer) <span class="ret">-> ok: boolean</span></div>

@@ -6,6 +6,13 @@
 #include "consts.hpp"
 #include "gui/widgets/WidgetID.hpp"
 
+// フォーカスを持つウィジェットへ届く操作(FocusFunctions)。物理キーボード・外部コントローラーから
+enum class FocusKey : uint8_t {
+    Activate,   // Enter / Space / A。扱わなければ「真ん中をタップした」として配る
+    Up, Down, Left, Right,  // 扱わなければフォーカスがその向きの隣へ移る
+    Back,       // Esc / B。扱わなければ何もしない
+};
+
 namespace WidgetTools {
     enum RenderMode {
         OPAQUE,        // 完全に不透明
@@ -43,6 +50,10 @@ class Widget {
         bool enabled = true;
 
         int8_t background_color = PICO_BACKGROUND;
+
+        // フォーカスを受けるか(FocusFunctions)。0=種類の既定(focusableByDefault())、1=受ける、2=受けない。
+        // background_colorの直後の詰め物の1バイトに収まるので、ウィジェット1つあたりのRAMは増えない
+        int8_t focus_mode = 0;
 
         //Luaなど外部から参照するためのID。getId()呼び出し時に遅延発行する(未使用なら発行しない)
         mutable WidgetId cached_id = WidgetIdTools::Invalid();
@@ -233,6 +244,22 @@ class Widget {
         }
         virtual bool getHitTransparent() const { return this->hit_transparent; }
         virtual void setHitTransparent(bool value){ this->hit_transparent = value; }
+
+        //---- フォーカス(FocusFunctions) ----
+        // ボタン等、操作を受け付ける種類は真を返す(Lua等からsetFocusable()で上書きできる)
+        virtual bool focusableByDefault() const { return false; }
+        bool isFocusable() const { return focus_mode == 0 ? focusableByDefault() : focus_mode == 1; }
+        void setFocusable(bool value){ this->focus_mode = value ? 1 : 2; }
+        // フォーカスを持っている間のキー/ボタン。扱ったらtrue(falseなら上の既定の動き)
+        virtual bool onFocusKey(FocusKey key) { (void)key; return false; }
+        // フォーカスを得た/失った(開いたドロップダウンを閉じる等)
+        virtual void onFocusChanged(bool focused) { (void)focused; }
+        // フォーカスの枠を自分で描く(AppGridのタイル等)。真なら共通の枠を描かない
+        virtual bool drawsOwnFocus() const { return false; }
+        // 矢印で隣を探すときの基準の矩形(画面座標)。中で選んでいる所があるもの(AppGridのタイル)は返し直す
+        virtual Rect focusRect() const { return getScreenRect(); }
+        // 子孫(画面座標のrect)が見えるようにスクロールする。スクロールする入れ物だけが実装する
+        virtual void revealRect(const Rect& screen_rect) { (void)screen_rect; }
 
         virtual bool getDisableMarkdirty(){ return this->disable_markdirty; }
         //markdirtyをしても実際にはマークしないかのフラグ

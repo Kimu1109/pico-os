@@ -93,6 +93,7 @@ class Button :
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::Button; }
+        bool focusableByDefault() const override { return true; }
 
         Rect getLocalRect() const override { 
             const int text_spacing = this->allowTextSpacing ? TEXT_SPACING : 0;

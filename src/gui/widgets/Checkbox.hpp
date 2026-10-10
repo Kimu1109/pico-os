@@ -42,6 +42,16 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::Checkbox; }
+        bool focusableByDefault() const override { return true; }
+        // 決定で切り替える(タップは左端のチェックの四角しか見ないので、真ん中のタップでは効かない)
+        bool onFocusKey(FocusKey key) override {
+            if(key != FocusKey::Activate) return false;
+            Widget::causeOnPressStart();
+            this->isChecked = !this->isChecked;
+            this->needsRender();
+            this->causeOnChangeChecked();
+            return true;
+        }
 
         void causeOnPressStart() override;
 

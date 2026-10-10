@@ -1,3 +1,4 @@
+#include "functions/Focus_Functions.hpp"
 #include "gui/widgets/systems/AppGrid.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/icons/icon_render.h"
@@ -230,6 +231,13 @@ void AppGrid::render() {
         drawIcon(*entry, tx + (t.w - kIconPx) / 2, ty + kPadding, fore_color);
 
         drawName(entry->name.c_str(), tx, ty + kPadding + kIconPx + kLabelGap, t.w, fore_color);
+
+        //キー/コントローラーで選んでいるタイル
+        if (slot == focus_slot_ && FocusFunctions::ring_visible && FocusFunctions::focused == this) {
+            for (int k = 0; k < FocusFunctions::kRingWidth; k++) {
+                OSData::frame->drawRect(tx + k, ty + k, t.w - 2 * k, t.h - 2 * k, FocusFunctions::kRingColor);
+            }
+        }
     }
 
     markdirty(g);
@@ -241,7 +249,10 @@ void AppGrid::causeOnPressStart() {
 
     pressed_index_ = hitTile(OSData::touchX - this->getScreenX(),
                              OSData::touchY - this->getScreenY());
-    if (pressed_index_ >= 0) this->needsRender();
+    if (pressed_index_ >= 0) {
+        focus_slot_ = (int8_t)(pressed_index_ - page_ * tilesPerPage());
+        this->needsRender();
+    }
 }
 
 void AppGrid::causeOnPressEnd() {
@@ -253,4 +264,50 @@ void AppGrid::causeOnPressEnd() {
 
     //起動するとシーンの入れ替えが要求されるので、自分の状態を戻してから呼ぶ
     if (index >= 0 && on_launch_) on_launch_(index);
+}
+
+int AppGrid::tilesOnPage() const {
+    const int per_page = tilesPerPage();
+    const int n = AppFunctions::Count() - page_ * per_page;
+    return n < 0 ? 0 : (n > per_page ? per_page : n);
+}
+
+bool AppGrid::onFocusKey(FocusKey key) {
+    int count = tilesOnPage();
+    if (count == 0) return false;
+    int slot = focus_slot_ < count ? focus_slot_ : count - 1;
+    const int row = slot / kCols;
+    const int col = slot % kCols;
+
+    switch (key) {
+        case FocusKey::Activate:
+            if (on_launch_) on_launch_(page_ * tilesPerPage() + slot);
+            return true;
+        case FocusKey::Up:
+            if (slot - kCols < 0) return false;
+            slot -= kCols;
+            break;
+        case FocusKey::Down:
+            if (slot + kCols < count) slot += kCols;
+            else if ((count - 1) / kCols > row) slot = count - 1; //下の行が右まで埋まっていない
+            else return false;
+            break;
+        case FocusKey::Left:
+            if (col > 0) { slot--; break; }
+            if (!prevPage()) return false;
+            slot = row * kCols + kCols - 1;
+            break;
+        case FocusKey::Right:
+            if (col < kCols - 1 && slot + 1 < count) { slot++; break; }
+            if (!nextPage()) return false;
+            slot = row * kCols;
+            break;
+        default:
+            return false;
+    }
+    count = tilesOnPage();
+    if (slot >= count) slot = count - 1;
+    focus_slot_ = (int8_t)slot;
+    this->needsRender();
+    return true;
 }

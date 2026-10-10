@@ -27,10 +27,15 @@ class HomeScene : public Scene {
         constexpr static int PAGER_BUTTON_W = 44;
 
         void updatePageLabel();
+        // ラベルに出しているページ(キーでグリッドがページを送ったときに追いつく)
+        int shown_page = -1;
 
     public:
         const char* getName() const override { return "Home"; }
 
         void onEnter() override;
         void onExit() override;
+        void onUpdate() override {
+            if(this->grid && this->page_label && this->grid->getPage() != this->shown_page) this->updatePageLabel();
+        }
 };

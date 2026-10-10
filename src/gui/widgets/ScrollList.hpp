@@ -87,6 +87,12 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::ScrollList; }
+        bool focusableByDefault() const override { return true; }
+        // ↑↓で選ぶ項目を動かす(タップの1回目と同じ扱い)、決定で選んでいる項目をもう一度タップしたことにする
+        // (2回タップで開く画面がそのまま使える)。端より先はフォーカスが隣のウィジェットへ移る
+        bool onFocusKey(FocusKey key) override;
+        // index番目の項目が見えるように最小限スクロールする
+        void ensureVisible(int index);
 
     private:
         // 項目数・表示領域が変わったあとにscrollYを範囲内へ戻す

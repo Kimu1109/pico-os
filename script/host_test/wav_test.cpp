@@ -366,23 +366,35 @@ static size_t Count(const std::vector<int16_t>& v, int16_t x){
     return n;
 }
 
-static void TestSoundFunctions(){
+// SoundFunctionsへ渡すWAVは出力と同じ周波数で作る(周波数の変換が挟まると値がそのまま出ない)
+static WavSpec OutSpec(){ WavSpec w; w.rate = SoundFunctions::SampleRate(); return w; }
+
+// 全体の音量50・WAVの音量100で鳴らしたときの値(2コア目と同じ計算)
+static int16_t At50(int v){ return (int16_t)(v * 5000 / 10000); }
+
+static void TestSoundFunctions(uint32_t rate){
     using namespace SoundFunctions;
+    printf("\n===== 出力 %luHz =====\n", (unsigned long)rate);
     HostGpio::read_hook = &ReadHook;
-    unsigned long now = 1000;
+    plugged = true;
+    static unsigned long now = 1000;
     SetupAt(now);
+    check(SetSampleRate(rate) && SampleRate() == rate, "出力の周波数を選べる");
     Step(now);
+    for(int i = 0; i < 3; i++){ now += 1; Step(now); }
+    const uint32_t under0 = WavUnderruns();
     check(Out().running, "アンプがあればI2Sが動く");
-    check(!WavPlaying() && WavUnderruns() == 0, "最初は鳴っていない");
+    check(Out().sample_rate == (long)rate, "I2Sはその周波数で動く");
+    check(!WavPlaying() && WavUnderruns() == under0, "最初は鳴っていない");
 
     printf("--- 鳴らす ---\n");
     {
         //1万サンプルの一定値。全体の音量50・WAVの音量100で 10000*50/100 = 5000
-        HostSd::files["/music/a.wav"] = MakeWav(WavSpec{}, Pcm16(std::vector<int16_t>(10000, 10000)));
+        HostSd::files["/music/a.wav"] = MakeWav(OutSpec(), Pcm16(std::vector<int16_t>(10000, 10000)));
         const char* err = nullptr;
         WavInfo info;
         check(WavPlay("/music/a.wav", false, 100, &err, &info), "鳴らせる");
-        check(info.sample_rate == 22050 && info.channels == 1 && info.duration_ms == 453, "情報を返す");
+        check(info.sample_rate == SampleRate() && info.channels == 1 && info.duration_ms == 10000u * 1000u / rate, "情報を返す");
         check(strcmp(WavTitle(), "a.wav") == 0, "ファイル名を覚える");
         check(WavPlaying(), "鳴らした直後から鳴っている扱い");
 
@@ -390,7 +402,7 @@ static void TestSoundFunctions(){
         printf("       5000の数 %zu\n", Count(got, 5000));
         check(Count(got, 5000) == 10000, "1万サンプルが全体の音量を掛けて鳴る");
         check(!WavPlaying(), "鳴り終えたら止まる");
-        check(WavUnderruns() == 0, "途切れていない");
+        check(WavUnderruns() == under0, "途切れていない");
     }
 
     printf("--- WAVの音量 ---\n");
@@ -402,7 +414,7 @@ static void TestSoundFunctions(){
 
     printf("--- 止める ---\n");
     {
-        HostSd::files["/music/long.wav"] = MakeWav(WavSpec{}, Pcm16(std::vector<int16_t>(100000, 8000)));
+        HostSd::files["/music/long.wav"] = MakeWav(OutSpec(), Pcm16(std::vector<int16_t>(100000, 8000)));
         WavPlay("/music/long.wav", false, 100);
         Run(now, 3);
         WavStop();
@@ -413,7 +425,7 @@ static void TestSoundFunctions(){
 
     printf("--- 切り替え ---\n");
     {
-        HostSd::files["/music/b.wav"] = MakeWav(WavSpec{}, Pcm16(std::vector<int16_t>(3000, 2000)));
+        HostSd::files["/music/b.wav"] = MakeWav(OutSpec(), Pcm16(std::vector<int16_t>(3000, 2000)));
         WavPlay("/music/long.wav", false, 100);
         Run(now, 3);
         WavPlay("/music/b.wav", false, 100);
@@ -435,9 +447,9 @@ static void TestSoundFunctions(){
         //1コア目(UpdateAt)を回さないと先読み(kWavPrefillSamples)を使い切って途切れる
         WavPlay("/music/long.wav", false, 100);
         Run(now, 40, false);
-        check(WavUnderruns() == 1, "途切れを1回と数える");
+        check(WavUnderruns() == under0 + 1, "途切れを1回と数える");
         Run(now, 40, true);
-        check(WavUnderruns() == 1 && WavPlaying(), "1コア目が戻れば続きから鳴る");
+        check(WavUnderruns() == under0 + 1 && WavPlaying(), "1コア目が戻れば続きから鳴る");
         WavStop();
         Run(now, 2);
     }
@@ -453,17 +465,17 @@ static void TestSoundFunctions(){
     printf("--- 一時停止・位置・シーク ---\n");
     {
         check(!WavPause(true), "鳴っていなければ一時停止できない");
-        std::vector<int16_t> ramp(22050);
+        std::vector<int16_t> ramp(SampleRate() / 2);     //500ms。値はサンプルの番号
         for(size_t i = 0; i < ramp.size(); i++) ramp[i] = (int16_t)i;
-        HostSd::files["/music/ramp.wav"] = MakeWav(WavSpec{}, Pcm16(ramp));
-        HostSd::files["/music/c.wav"] = MakeWav(WavSpec{}, Pcm16(std::vector<int16_t>(44100, 10000)));
+        HostSd::files["/music/ramp.wav"] = MakeWav(OutSpec(), Pcm16(ramp));
+        HostSd::files["/music/c.wav"] = MakeWav(OutSpec(), Pcm16(std::vector<int16_t>(rate, 10000)));     //1000ms
 
-        check(WavPlay("/music/c.wav", false, 100) && WavDurationMs() == 2000, "全体の長さ(2000ms)");
+        check(WavPlay("/music/c.wav", false, 100) && WavDurationMs() == 1000, "全体の長さ(1000ms)");
         check(WavPositionMs() == 0 && !WavPaused(), "鳴らし始めは位置0・一時停止ではない");
         auto got = Run(now, 20);
         const size_t n1 = Count(got, 5000);
         const uint32_t pos1 = WavPositionMs();
-        const long want1 = (long)(n1 * 1000 / 22050);
+        const long want1 = (long)(n1 * 1000 / SampleRate());
         printf("       鳴った %zu サンプル 位置 %u ms\n", n1, (unsigned)pos1);
         check(n1 > 0 && labs((long)pos1 - want1) <= 5, "位置は鳴らした分に付いていく");
 
@@ -473,21 +485,23 @@ static void TestSoundFunctions(){
         check(WavPositionMs() == pos1, "止めている間は位置が進まない");
         check(WavPause(false) && !WavPaused(), "再開");
         got = Run(now, 200);
-        check(n1 + Count(got, 5000) == 44100, "止めても欠けず、再開した続きから全部鳴る");
-        check(WavPositionMs() == 2000 && !WavPlaying(), "鳴り終えたら位置は全体の長さ");
+        check(n1 + Count(got, 5000) == rate, "止めても欠けず、再開した続きから全部鳴る");
+        check(WavPositionMs() == 1000 && !WavPlaying(), "鳴り終えたら位置は全体の長さ");
 
         printf("--- シーク ---\n");
-        check(WavPlay("/music/ramp.wav", false, 100), "ランプのWAV(1000ms)");
+        check(WavPlay("/music/ramp.wav", false, 100), "ランプのWAV(500ms)");
         Run(now, 4);
-        check(WavSeekMs(500), "500msへ飛ぶ");
+        check(WavSeekMs(250), "250msへ飛ぶ");
         got = Run(now, 2);
-        //全体の音量50: 11025 * 0.5 = 5512。飛ぶ前に作っておいた分(最大64サンプル)が前に混ざりうる
-        check(Count(got, 5512) == 1, "飛んだ位置のサンプルから鳴る");
+        //250msは rate/4 番目。飛ぶ前に作っておいた分(最大64サンプル)が前に混ざりうる。
+        //半分にすると隣のサンプルと同じ値になることがあるので1〜2個
+        const size_t c250 = Count(got, At50((int)(rate / 4)));
+        check(c250 >= 1 && c250 <= 2, "飛んだ位置のサンプルから鳴る");
         const uint32_t pos2 = WavPositionMs();
         printf("       飛んだ後の位置 %u ms\n", (unsigned)pos2);
-        check(pos2 >= 500 && pos2 <= 500 + got.size() * 1000 / 22050 + 5, "位置も飛んだ先から、鳴らした分だけ進む");
+        check(pos2 >= 250 && pos2 <= 250 + got.size() * 1000 / SampleRate() + 5, "位置も飛んだ先から、鳴らした分だけ進む");
         got = Run(now, 100);
-        check(!WavPlaying() && WavPositionMs() == 1000, "最後まで鳴らして1000ms");
+        check(!WavPlaying() && WavPositionMs() == 500, "最後まで鳴らして500ms");
         check(WavSeekMs(200) && WavPlaying(), "鳴り終えた後でも飛べば(開き直して)鳴り直す");
         Run(now, 100);
         check(!WavPlaying(), "鳴り終える");
@@ -497,10 +511,10 @@ static void TestSoundFunctions(){
         WavPause(true);
         check(WavSeekMs(100) && WavPaused(), "一時停止中に飛んでも止まったまま");
         got = Run(now, 5);
-        check(Count(got, 1102) == 0, "止まったまま鳴らさない(飛んだ先の1102が鳴らない)");
+        check(Count(got, At50((int)(rate / 10))) == 0, "止まったまま鳴らさない(飛んだ先の値が鳴らない)");
         WavPause(false);
         got = Run(now, 5);
-        check(Count(got, 1102) == 1, "再開すると飛んだ先から鳴る");
+        check(Count(got, At50((int)(rate / 10))) >= 1, "再開すると飛んだ先から鳴る");
         WavStop();
         check(!WavPaused() && !WavSeekMs(100), "止めたら一時停止は解けて、飛べない");
         Run(now, 2);
@@ -508,7 +522,7 @@ static void TestSoundFunctions(){
         //ループ中の位置は長さの中を巡る
         WavPlay("/music/ramp.wav", true, 100);
         Run(now, 200);
-        check(WavPositionMs() < 1000, "ループ中の位置は長さを超えない");
+        check(WavPositionMs() < 500, "ループ中の位置は長さを超えない");
         WavStop();
         Run(now, 2);
         //新しく鳴らすと一時停止は解ける
@@ -525,18 +539,21 @@ static void TestSoundFunctions(){
         plugged = false;
         for(int i = 0; i < kDetectStableCount; i++){ now += kDetectIntervalMs; Step(now); }
         check(!Out().running, "I2Sは止まっている");
-        WavPlay("/music/a.wav", false, 100);    // 10000サンプル ≒ 453ms
+        WavPlay("/music/a.wav", false, 100);    // 10000サンプル ≒ 453ms(22050Hz)/ 226ms(44100Hz)
         now += 200; Step(now);
         check(WavPlaying(), "200msでは鳴り終えない");
         for(int i = 0; i < 10; i++){ now += 100; Step(now); }
         check(!WavPlaying(), "1秒経てば鳴り終えている");
-        check(WavUnderruns() == 1, "時間で進めている間も途切れていない");
+        check(WavUnderruns() == under0 + 1, "時間で進めている間も途切れていない");
+        plugged = true;
+        for(int i = 0; i < kDetectStableCount; i++){ now += kDetectIntervalMs; Step(now); }
     }
 }
 
 int main(){
     TestDecoder();
-    TestSoundFunctions();
+    TestSoundFunctions(SoundFunctions::kSampleRateLow);
+    TestSoundFunctions(SoundFunctions::kSampleRateHigh);
     printf("\n%s (%d件の失敗)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

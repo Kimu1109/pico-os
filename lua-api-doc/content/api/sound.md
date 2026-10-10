@@ -19,7 +19,7 @@ description: "sound_play / sound_stop / sound_playing / note_freq / beep / sound
 | 引数 | 説明 |
 |---|---|
 | `ch` | チャンネル `1`〜`N`(本体のチャンネル数)。範囲外はエラー |
-| `freq` | 周波数(Hz、小数可)。`0` なら止めるだけ(休符)。上限は11025Hz。ノイズでは「ザー」の粗さ(大きいほど細かい。〜22050) |
+| `freq` | 周波数(Hz、小数可)。`0` なら止めるだけ(休符)。上限は出力の周波数の半分(既定の22050Hzなら11025Hz、44100Hzなら22050Hz)。ノイズでは「ザー」の粗さ(大きいほど細かい。〜出力の周波数) |
 | `ms` | 長さ(ミリ秒)。`0` なら `pico.sound_stop()` するまで鳴り続ける。60000で頭打ち |
 | `opts` | 省略可。下の表 |
 
@@ -95,6 +95,31 @@ end
 pico.beep(880, 500)
 ```
 
+## pico.sound_rate
+
+<div class="sig">pico.sound_rate() <span class="ret">-> integer</span></div>
+
+今の音の出力の周波数(`22050` か `44100`)を返します。ふだんは設定アプリの「本体」→「音質」の値で、`pico.sound_set_rate()` で頼んでいる間はその値です。
+
+## pico.sound_set_rate
+
+<div class="sig">pico.sound_set_rate(rate) <span class="ret">-> boolean</span></div>
+
+| 引数 | 内容 |
+|---|---|
+| `rate` | `44100` / `22050`、または `nil`(`0`)で設定へ戻す。それ以外はエラー |
+
+**このアプリが開いている間だけ**、音の出力の周波数を変えます(設定アプリの値より優先されます。保存はしません)。アプリを閉じる・別のアプリへ移ると設定の値へ戻り、`pico.push_scene()` / `pico.change_scene()` で開いた画面へは引き継がれます。44.1kHzのWAVをそのまま鳴らしたいアプリ向けです(標準のミュージックアプリも開いている間は44100Hzにします)。
+
+切り替えると**鳴っている効果音・曲・WAVは止まります**(出力を開き直すため)。鳴らす前に呼んでください。頼めなかったときは `false`。
+
+```lua
+function setup()
+    pico.sound_set_rate(44100)        -- このアプリの間だけ44.1kHz
+    pico.wav_play(pico.app_dir() .. "/song.wav")
+end
+```
+
 ## 曲を鳴らす(pico-os MML)
 
 曲は **MML(テキスト)** で書き、`pico.music_play()` で鳴らします。書き方は [`MUSIC_FORMAT.md`](https://github.com/Kimu1109/pico-os/blob/main/MUSIC_FORMAT.md) を見てください。MIDIファイルは、PCで `python3 script/midi2mml.py song.mid -o song.mml` を実行するとMMLの下書きに変換できます。曲は2コア目で鳴るので、`loop()` が重くてもテンポは揺れません。
@@ -152,7 +177,7 @@ A @pulse50 v12 E-3 o5 l16 c e g > c
 
 ## WAV
 
-SDの `.wav` をそのまま鳴らします。読めるのは整数PCM(8/16/24/32bit)と浮動小数点(32bit)で、何チャンネルでも全チャンネルを平均したモノラルで、何Hzでも22050Hzへ直して鳴らします。ADPCM・MP3等の圧縮形式は読めません。
+SDの `.wav` をそのまま鳴らします。読めるのは整数PCM(8/16/24/32bit)と浮動小数点(32bit)で、何チャンネルでも全チャンネルを平均したモノラルで、何Hzでも出力の周波数(設定アプリの「本体」→「音質」で22050Hzか44100Hz。既定は22050Hz)へ直して鳴らします(下げるときは高い音を削ってから直します)。ADPCM・MP3等の圧縮形式は読めません。
 
 ファイルは鳴らしながら少しずつSDから読むので、長い曲でもRAMを食いません。ただし、先読みは約0.37秒分なので、`loop()` がそれより長く止まるとその間は音が途切れます(`pico.http_request()` でHTTPSの接続を始めた瞬間など)。
 

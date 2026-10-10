@@ -1,4 +1,5 @@
 #pragma once
+#include "functions/Sound_Functions.hpp"
 
 #include "gui/scenes/Scene.hpp"
 #include "sound/Play_Queue.hpp"
@@ -41,6 +42,8 @@ class MusicScene : public Scene {
         void onExit() override;
         void onUpdate() override;
         bool onKey(const KeyInputFunctions::Event& ev) override;
+        // 曲(とくにWAV)を聴く画面なので、設定に関わらず44100Hzで鳴らす(44.1kHzのWAVを間引かない)
+        uint32_t preferredSampleRate() const override { return SoundFunctions::kSampleRateHigh; }
 
     private:
         struct Track {

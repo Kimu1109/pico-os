@@ -5,6 +5,22 @@ GbAudioLink::GbAudioLink(uint32_t sample_rate)
     : rate_(sample_rate ? sample_rate : 22050),
       starve_samples_((sample_rate ? sample_rate : 22050) / 20) {}   // 50ms ≒ 3フレーム
 
+void GbAudioLink::setRate(GbApu& apu, uint32_t sample_rate){
+    const uint32_t old = this->rate_;
+    this->rate_ = sample_rate ? sample_rate : 22050;
+    this->starve_samples_ = this->rate_ / 20;
+    this->frac_ = 0;
+    this->idle_ = 0;
+    //フレームの途中なら、そのフレームの中の位置を新しい周波数へ換算して続ける(列の読みかけはそのまま)
+    if(this->in_frame_ && old > 0){
+        this->frame_pos_ = (uint32_t)((uint64_t)this->frame_pos_ * this->rate_ / old);
+        this->frame_len_ = (uint32_t)((uint64_t)kFrameCycles * this->rate_ / GbApu::kCpuHz);
+        if(this->frame_pos_ > this->frame_len_) this->frame_pos_ = this->frame_len_;
+    }
+    //音源は作り直されて電源が切れているので、鳴らしている途中なら電源だけ入れ直す(音はゲームが次に書くまで鳴らない)
+    if(this->active_) apu.write(0x16, 0x80);
+}
+
 // ================================================================
 // 1コア目
 // ================================================================

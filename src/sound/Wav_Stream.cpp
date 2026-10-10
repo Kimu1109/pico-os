@@ -1,6 +1,6 @@
 #include "sound/Wav_Stream.hpp"
 
-static_assert((WavStream::kRingSamples & (WavStream::kRingSamples - 1)) == 0, "kRingSamples は2のべき乗");
+static_assert(WavStream::kWrap % WavStream::kRingSamples == 0, "kWrap は kRingSamples の倍数(添字を % kRingSamples で引くため)");
 
 // ================================================================
 // 1コア目
@@ -9,11 +9,14 @@ static_assert((WavStream::kRingSamples & (WavStream::kRingSamples - 1)) == 0, "k
 uint32_t WavStream::effectiveTail() const {
     const uint32_t t = this->tail_.load(std::memory_order_acquire);
     const uint32_t f = this->flush_to_.load(std::memory_order_relaxed);   //書くのは自分
-    return ((int32_t)(f - t) > 0) ? f : t;
+    if(Ahead(f, t)) return f;
+    //2コア目が捨て終えて追い越した(世代は変えないので、2コア目が捨て直すことは無い)
+    if(f != t) this->flush_to_.store(t, std::memory_order_relaxed);
+    return t;
 }
 
 uint32_t WavStream::freeSpace() const {
-    const uint32_t used = this->head_.load(std::memory_order_relaxed) - this->effectiveTail();
+    const uint32_t used = Dist(this->head_.load(std::memory_order_relaxed), this->effectiveTail());
     return kRingSamples - used;
 }
 
@@ -22,7 +25,7 @@ size_t WavStream::push(const int16_t* src, size_t n){
     if(n > free) n = free;
     uint32_t h = this->head_.load(std::memory_order_relaxed);
     for(size_t i = 0; i < n; i++) this->ring_[(h + i) % kRingSamples] = src[i];
-    this->head_.store(h + (uint32_t)n, std::memory_order_release);
+    this->head_.store(Add(h, (uint32_t)n), std::memory_order_release);
     return n;
 }
 
@@ -33,7 +36,7 @@ void WavStream::flush(){
 }
 
 uint32_t WavStream::bufferedSamples() const {
-    return this->head_.load(std::memory_order_relaxed) - this->effectiveTail();
+    return Dist(this->head_.load(std::memory_order_relaxed), this->effectiveTail());
 }
 
 bool WavStream::buffered() const {
@@ -50,7 +53,7 @@ void WavStream::applyFlush(){
     this->seen_gen_ = gen;
     const uint32_t f = this->flush_to_.load(std::memory_order_relaxed);
     const uint32_t t = this->tail_.load(std::memory_order_relaxed);
-    if((int32_t)(f - t) > 0) this->tail_.store(f, std::memory_order_release);
+    if(Ahead(f, t)) this->tail_.store(f, std::memory_order_release);
     this->starving_ = false;
 }
 
@@ -66,7 +69,7 @@ void WavStream::renderAdd(int16_t* out, size_t n, uint8_t master){
     //一時停止中は取り出さない(時間も進めない。再開した位置から続く)
     if(this->paused_.load(std::memory_order_acquire)) return;
     const uint32_t t = this->tail_.load(std::memory_order_relaxed);
-    const uint32_t avail = this->head_.load(std::memory_order_acquire) - t;
+    const uint32_t avail = Dist(this->head_.load(std::memory_order_acquire), t);
     const size_t k = n < avail ? n : avail;
 
     if(out && k > 0){
@@ -79,7 +82,7 @@ void WavStream::renderAdd(int16_t* out, size_t n, uint8_t master){
             out[i] = (int16_t)v;
         }
     }
-    this->tail_.store(t + (uint32_t)k, std::memory_order_release);
+    this->tail_.store(Add(t, (uint32_t)k), std::memory_order_release);
 
     //積み続けるつもりなのに足りなかった = 1コア目の読み込みが間に合わなかった。
     //鳴らせない間(out==nullptr)は聞こえる途切れにならないので数えない

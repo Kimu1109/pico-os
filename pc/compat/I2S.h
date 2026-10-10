@@ -86,7 +86,7 @@ namespace PicoPcAudio {
         want.freq = rate;
         want.format = AUDIO_S16SYS;
         want.channels = 2;
-        want.samples = 256;     //リング(実機と同じ512サンプル)より小さく取る
+        want.samples = 512;     //リング(実機と同じ1024サンプル)より小さく取る
         return want;
     }
 
@@ -96,7 +96,7 @@ namespace PicoPcAudio {
             printf("[PC] 音声: SDLの音声を初期化できません(%s)。アンプ未接続として扱います\n", SDL_GetError());
             return false;
         }
-        SDL_AudioSpec want = DesiredSpec(22050);
+        SDL_AudioSpec want = DesiredSpec(44100);
         SDL_AudioSpec have{};
         const SDL_AudioDeviceID dev = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
         if(dev == 0){
@@ -143,7 +143,8 @@ public:
 #if defined(__EMSCRIPTEN__)
         //Webは2コア目の代わりにフレームごと(約16ms、ぶれあり)にしか書けないので、
         //実機より多めに溜めて途切れにくくする(その分、音が出るまで少し遅れる)
-        if(capacity_ < 2048) capacity_ = 2048;
+        //(44100Hzで1フレーム約735サンプル。ぶれを見て4096=約93ms)
+        if(capacity_ < 4096) capacity_ = 4096;
 #endif
         return capacity_ > 0;
     }

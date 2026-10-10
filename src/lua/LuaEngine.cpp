@@ -881,6 +881,8 @@ void LuaEngine::registerApi() {
     registerFn("pad_pressed", l_pad_pressed);
     registerFn("pad_released", l_pad_released);
     registerFn("sound_available", l_sound_available);
+    registerFn("sound_rate", l_sound_rate);
+    registerFn("sound_set_rate", l_sound_set_rate);
     registerFn("beep", l_beep);
     registerFn("sound_play", l_sound_play);
     registerFn("sound_stop", l_sound_stop);
@@ -1751,6 +1753,7 @@ int LuaEngine::l_push_scene(lua_State* L) {
     // 落ちるという分かりにくい挙動になる)。app_dir自体は遷移先スクリプト自身の
     // 親ディレクトリから改めて計算し直す(LuaScene::onEnter()側)
     LuaScene* scene = new LuaScene(path, self->permissions_);
+    scene->setInheritedSampleRate(self->requested_rate_);
     // 子から見た「親」は今のスクリプト(pico.pop(result)の宛先)
     scene->setLaunchArgs(args.c_str(), self->script_path_.c_str());
     SceneFunctions::Push(scene);
@@ -1766,6 +1769,7 @@ int LuaEngine::l_change_scene(lua_State* L) {
     // (権限の引き継ぎ方も同じ)。置き換えた先から pop(result) したときの宛先は、
     // 今の画面の「親」をそのまま引き継ぐ(置き換えた画面は消えるため)
     LuaScene* scene = new LuaScene(path, self->permissions_);
+    scene->setInheritedSampleRate(self->requested_rate_);
     scene->setLaunchArgs(args.c_str(), self->parent_path_.c_str());
     SceneFunctions::Change(scene);
     return 0;
@@ -2069,6 +2073,29 @@ int LuaEngine::l_sound_available(lua_State* L) {
     // falseでもpico.beep()等は呼んでよい(黙って鳴ったことになる)。音で知らせる代わりに
     // 画面でも知らせたいアプリが見分けるためのもの
     lua_pushboolean(L, SoundFunctions::IsAvailable());
+    return 1;
+}
+
+int LuaEngine::l_sound_rate(lua_State* L) {
+    lua_pushinteger(L, (lua_Integer)SoundFunctions::SampleRate());
+    return 1;
+}
+
+int LuaEngine::l_sound_set_rate(lua_State* L) {
+    // pico.sound_set_rate(44100) / (22050) / (nil)。このアプリが開いている間だけ効く(閉じる・別の画面へ移ると設定へ戻る)。
+    // 変わるとそのとき鳴っている音は止まるので、音を鳴らす前(setup()等)に呼ぶ
+    uint32_t rate = 0;
+    if(!lua_isnoneornil(L, 1)){
+        const lua_Integer v = luaL_checkinteger(L, 1);
+        if(v != 0 && v != (lua_Integer)SoundFunctions::kSampleRateLow && v != (lua_Integer)SoundFunctions::kSampleRateHigh){
+            return luaL_error(L, "pico.sound_set_rate: %d か %d か nil です",
+                              (int)SoundFunctions::kSampleRateLow, (int)SoundFunctions::kSampleRateHigh);
+        }
+        rate = (uint32_t)v;
+    }
+    Self(L)->requested_rate_ = rate;
+    //loop()は次のフレームで LuaScene::preferredSampleRate() を渡すが、この後すぐ鳴らす音を止めないよう今ここで切り替える
+    lua_pushboolean(L, SoundFunctions::RequestSampleRate(rate));
     return 1;
 }
 

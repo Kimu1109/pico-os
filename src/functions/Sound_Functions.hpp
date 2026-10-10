@@ -40,13 +40,18 @@ namespace SoundFunctions {
         Active,         // 鳴らせる(I2Sが動いている)
     };
 
-    constexpr uint32_t      kSampleRate        = 22050;
+    // 出力の周波数は2通りから選ぶ(sound.cfg の sample-rate、設定アプリ)。既定は22050Hz(計算が軽い)。
+    // 44100Hzはライン出力のDAC(PCM5102A等)向け。切り替えると鳴っている音は止まる(SetSampleRate())
+    constexpr uint32_t      kSampleRateLow     = 22050;
+    constexpr uint32_t      kSampleRateHigh    = 44100;
+    constexpr uint32_t      kDefaultSampleRate = kSampleRateLow;
     constexpr int           kChannels          = ChipSynth::kChannels;
     constexpr unsigned long kDetectIntervalMs  = 100;
     constexpr uint8_t       kDetectStableCount = 3;    // 100ms×3回続けて同じなら採用
-    // I2Sのバッファ: 64ワード(1ワード=左右16bitずつの1サンプル)×8本 = 512サンプル ≒ 23ms / 2KB。
-    // 2コア目が専任で流すので短くてよい(短いほど要求から音が出るまでが速い)
-    constexpr uint16_t      kBufferWords       = 64;
+    // I2Sのバッファ: 1本のワード数(1ワード=左右16bitずつの1サンプル)×8本 ≒ 23ms。周波数に比例させる
+    // (22050Hzで64ワード=2KB、44100Hzで128ワード=4KB)。2コア目が専任で流すので短くてよい
+    constexpr uint16_t      kBufferWordsLow    = 64;
+    constexpr uint16_t      kBufferWordsHigh   = 128;
     constexpr uint8_t       kBufferCount       = 8;
     // 1コア目→2コア目のコマンドの列。溢れた要求は捨てる(DroppedCommands()で数える)
     constexpr uint8_t       kCommandQueueSize  = 32;
@@ -64,10 +69,11 @@ namespace SoundFunctions {
     // 最初に曲を鳴らすときに読み取り係(約3.5KB)と一緒に確保し、以降は持ち続ける
     constexpr uint16_t      kMusicDataBytes    = 6144;
     // WAV: 1回のUpdate()で読んで積むサンプル数の上限(SDの読み込みで1フレームが長引きすぎないように。
-    // 44.1kHzステレオ16bitなら約8KBを読む量)。毎フレーム約370サンプル(60fps)消費するので十分追いつく
-    constexpr uint16_t      kWavMaxPerUpdate   = 1024;
+    // 44.1kHzステレオ16bitなら約8KBを読む量)。毎フレーム約735サンプル(60fps)消費するので、
+    // 1フレームが約46ms(約21fps)までなら追いつく
+    constexpr uint16_t      kWavMaxPerUpdate   = 2048;
     // WAVを鳴らし始める前に先読みしておく数(鳴らし始めの途切れを防ぐ)
-    constexpr uint16_t      kWavPrefillSamples = 4096;
+    constexpr uint16_t      kWavPrefillSamples = 8192;
 
     // ===== 1コア目から使う =====
 
@@ -83,6 +89,22 @@ namespace SoundFunctions {
 
     uint8_t GetVolume();
     void SetVolume(int volume);         // 0〜100。今だけ
+
+    // 出力の周波数(kSampleRateLow / kSampleRateHigh)。周波数が変わると、鳴っている効果音・曲・WAV・GBの音は止まり、
+    // 2コア目がI2Sを新しい周波数で開き直す。それ以外の値は false。
+    //  - SampleRate():          今の出力の周波数(画面の要求があればそれ、無ければ設定)
+    //  - ConfiguredSampleRate(): 利用者の設定(sound.cfgの sample-rate)
+    //  - SetSampleRate():       設定を変える(今だけ。sound.cfgへは書かない)
+    //  - RequestSampleRate():   画面の要求(0で取り下げ)。設定より優先する。ふつうは Scene::preferredSampleRate() を
+    //                           main.cpp の loop() が毎フレーム渡すので、画面を離れると自動で取り下げられる
+    uint32_t SampleRate();
+    uint32_t ConfiguredSampleRate();
+    bool SetSampleRate(uint32_t rate);
+    bool RequestSampleRate(uint32_t rate);
+
+    // 電池駆動中にkBatteryVolumeCapPercentで頭打ちするか(sound.cfgの battery-cap)。今だけ
+    bool GetBatteryCap();
+    void SetBatteryCap(bool enable);
     // 今、バッテリー駆動によるkBatteryVolumeCapPercentの頭打ちが掛かっているか
     // (GetVolume()が返す設定値そのものは変わらない。表示上の注記等に使う想定)
     bool IsBatteryVolumeCapActive();
@@ -129,10 +151,10 @@ namespace SoundFunctions {
     uint32_t GbDroppedWrites();
 
     // ---- WAV(SDの .wav をそのまま鳴らす) ----
-    // 1コア目がSDから少しずつ読んでモノラル22050Hzへ直し、列(WavStream、約16KB)で2コア目へ渡す。
+    // 1コア目がSDから少しずつ読んでモノラル・出力の周波数へ直し、列(WavStream、24KB)で2コア目へ渡す。
     // 曲・効果音・GBの音と足し合わせる。同時に鳴らせるWAVは1本(鳴らすと前のWAVは止まる)。
     // 列と読み取り係(合わせて約17KB)は最初に鳴らすときに確保し、以降は持ち続ける。
-    // 読み込みが WavStream::kRingSamples(約370ms)より長く止まると途切れる(WavUnderruns())
+    // 読み込みが WavStream::kRingSamples(44100Hzで約280ms、22050Hzで約560ms)より長く止まると途切れる(WavUnderruns())
     struct WavInfo {
         uint16_t channels = 0;
         uint16_t bits = 0;

@@ -171,6 +171,8 @@ void loop() {
     {
         Scene* cur = SceneFunctions::Current();
         CrashDumpFunctions::SetScene(cur ? cur->getName() : nullptr);
+        //画面が望む音の出力の周波数(0なら設定のまま)。変わったときだけ切り替わる
+        SoundFunctions::RequestSampleRate(cur ? cur->preferredSampleRate() : 0);
     }
     //Luaデバッガで止まっていた間に液晶へ直接描いたので、全体を描き直す
     //(半透明のダイアログの下も。MarkDirty()だとFlushDirty()がそこを描き直さない)

@@ -430,6 +430,9 @@ class LuaEngine {
         void UpdateHttp();
         // pico.http_request()が進行中か(スリープさせないかの判断に使う)
         bool HttpBusy() const;
+        // pico.sound_set_rate() で頼まれた音の出力の周波数(0=設定のまま)。LuaScene::preferredSampleRate() が返す
+        uint32_t RequestedSampleRate() const { return requested_rate_; }
+        void InheritSampleRate(uint32_t rate){ requested_rate_ = rate; }
 
         // ---- 画面をまたぐ受け渡し・タイマー(LuaSceneから呼ぶ) ----
         // 経過時間を進めて、時間になった pico.after / pico.every のコールバックを呼ぶ。
@@ -531,6 +534,7 @@ class LuaEngine {
         // pico.wav_*を使ったか。使ったアプリは閉じるときにWAVを止める
         bool used_wav_ = false;
         bool used_palette_ = false; // pico.set_palette()を呼んだ(閉じるときに既定のパレットへ戻す)
+        uint32_t requested_rate_ = 0; // pico.sound_set_rate()(0=設定のまま)
 
         std::vector<CallbackBinding> callbacks_;
 
@@ -804,6 +808,9 @@ class LuaEngine {
         static int l_pad_released(lua_State* L);
         // 音声出力(pico.sound_available/beep)。SoundFunctions参照
         static int l_sound_available(lua_State* L);
+        // pico.sound_rate() / pico.sound_set_rate(rate|nil): 音の出力の周波数
+        static int l_sound_rate(lua_State* L);
+        static int l_sound_set_rate(lua_State* L);
         static int l_beep(lua_State* L);
         static int l_sound_play(lua_State* L);
         static int l_sound_stop(lua_State* L);

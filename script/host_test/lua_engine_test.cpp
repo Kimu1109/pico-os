@@ -1036,6 +1036,17 @@ int main(){
             lua_call(snd.raw(), 1, 1);
             check(lua_toboolean(snd.raw(), -1) == 1, "pico.sound_playing(4): 鳴っているチャンネルはtrue");
             lua_pop(snd.raw(), 2);
+            //出力の周波数(切り替えると鳴っている音は止まる)
+            check(snd.Run(R"LUA(
+                check(pico.sound_rate() == 22050, "pico.sound_rate: 既定は22050")
+                check(not pcall(pico.sound_set_rate, 48000), "pico.sound_set_rate: 22050/44100/nil以外はエラー")
+                check(pico.sound_set_rate(44100) == true and pico.sound_rate() == 44100, "pico.sound_set_rate: 44100へ")
+            )LUA", "sound_rate_test"), "pico.sound_set_rate: 実行できる");
+            check(snd.RequestedSampleRate() == SoundFunctions::kSampleRateHigh, "pico.sound_set_rate: 画面へ返す要求を覚える");
+            check(snd.Run(R"LUA(
+                check(pico.sound_set_rate(nil) == true and pico.sound_rate() == 22050, "pico.sound_set_rate(nil): 設定へ戻す")
+            )LUA", "sound_rate_reset_test"), "pico.sound_set_rate(nil): 実行できる");
+            check(snd.RequestedSampleRate() == 0, "pico.sound_set_rate(nil): 要求を取り下げる");
         }
         //LuaEngineを壊すと(=アプリを閉じると)鳴らしっぱなしの音も止まる
         SoundFunctions::Core1StepAt(0);

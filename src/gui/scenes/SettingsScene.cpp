@@ -32,6 +32,11 @@ namespace {
     constexpr unsigned long kSleepPresetsSec[] = { 0, 60, 120, 300, 600, 1800 };
     constexpr const char*   kSleepPresetLabels[] = { "しない", "1分", "2分", "5分", "10分", "30分" };
     constexpr int kSleepPresetCount = sizeof(kSleepPresetsSec) / sizeof(kSleepPresetsSec[0]);
+
+    // 音の周波数(sound.cfgの sample-rate)。44.1kHzはライン出力のDAC(PCM5102A等)向けで、2コア目の計算が倍になる
+    constexpr uint32_t    kRatePresets[]      = { SoundFunctions::kSampleRateLow, SoundFunctions::kSampleRateHigh };
+    constexpr const char* kRatePresetLabels[] = { "22kHz", "44.1kHz" };
+    constexpr int kRatePresetCount = sizeof(kRatePresets) / sizeof(kRatePresets[0]);
 }
 
 void SettingsScene::loadTimezoneItems(const FixedString<PICO_STR_M>& current_tz){
@@ -757,13 +762,39 @@ void SettingsScene::onEnter(){
     // ドロップダウン(開いた一覧が下の行へ重なるので、当たり判定・描画の両方で最前面に来るよう
     // 他より後にAdd()する。追加順=描画順、後が上に乗る)
     // =====================================================================
+    constexpr int16_t kDropdownW = 110;
+    const int16_t dropdown_x = (int16_t)(content.x + content.w - MARGIN - kDropdownW);
+
+    // ---- 電池駆動中に音量を絞る(sound.cfgの battery-cap)。本体タブの5行目 ----
+    // 上の2つのドロップダウンの一覧がこの行へ重なるので、それより先にAdd()する
+    this->battery_cap_checkbox = new Checkbox(left, rowY(4), "電池で音量を絞る");
+    this->battery_cap_checkbox->setFontSize(FontFn::Small);
+    this->battery_cap_checkbox->setText("電池で音量を絞る");
+    this->battery_cap_checkbox->setIsChecked(SoundFunctions::GetBatteryCap());
+    this->battery_cap_checkbox->setOnChangeChecked([this](){
+        const bool enabled = this->battery_cap_checkbox->getIsChecked();
+        SoundFunctions::SetBatteryCap(enabled);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "battery-cap",
+            PICO_Config::ConfigValue::FromBool(enabled));
+    });
+    addToTab(Tab::Device, this->battery_cap_checkbox);
+
+    // ---- 音の周波数(sound.cfgの sample-rate)。本体タブの4行目 ----
+    // スリープのドロップダウンの一覧がこの行へ重なるので、こちらを先にAdd()する
+    this->rate_title = new Label<PICO_STR_S>(left, rowY(3) + 4, "音質");
+    this->rate_title->setFontSize(FontFn::Small);
+    this->rate_dropdown = new DropdownMenu(dropdown_x, rowY(3), kDropdownW);
+    for(int i = 0; i < kRatePresetCount; i++) this->rate_dropdown->add(kRatePresetLabels[i]);
+    this->rate_selected_index = (SoundFunctions::ConfiguredSampleRate() == kRatePresets[1]) ? 1 : 0;
+    this->rate_dropdown->setSelectedIndex(this->rate_selected_index);
+    addToTab(Tab::Device, this->rate_title);
+    addToTab(Tab::Device, this->rate_dropdown);
+
     // ---- スリープまでの時間(display.cfgの sleep-timeout)。本体タブの3行目 ----
     // 設定値が一覧のどれとも違う(display.cfgを手で書き換えた)ときは、いちばん近い項目を選んで見せる
     this->sleep_title = new Label<PICO_STR_S>(left, rowY(2) + 4, "スリープ");
     this->sleep_title->setFontSize(FontFn::Small);
 
-    constexpr int16_t kDropdownW = 110;
-    const int16_t dropdown_x = (int16_t)(content.x + content.w - MARGIN - kDropdownW);
     this->sleep_dropdown = new DropdownMenu(dropdown_x, rowY(2), kDropdownW);
     for(int i = 0; i < kSleepPresetCount; i++){
         this->sleep_dropdown->add(kSleepPresetLabels[i]);
@@ -796,6 +827,19 @@ void SettingsScene::onEnter(){
     addToTab(Tab::Time, this->timezone_dropdown);
 
     this->applyTab();
+}
+
+void SettingsScene::updateSampleRate(){
+    if(!this->rate_dropdown) return;
+    const int idx = this->rate_dropdown->getSelectedIndex();
+    if(idx < 0 || idx >= kRatePresetCount || idx == this->rate_selected_index) return;
+    this->rate_selected_index = idx;
+    //切り替えると鳴っている音は止まる。確認音で新しい周波数の音を聞かせる
+    SoundFunctions::SetSampleRate(kRatePresets[idx]);
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)kRatePresets[idx]);
+    PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "sample-rate", buf);
+    SoundFunctions::Beep(880, 120);
 }
 
 void SettingsScene::updateSleep(){
@@ -877,6 +921,7 @@ void SettingsScene::onUpdate(){
     this->updateVolume();
     this->updateBrightness();
     this->updateSleep();
+    this->updateSampleRate();
     this->updateTimezone();
     this->refreshBatteryLabel();
 }
@@ -934,6 +979,9 @@ void SettingsScene::onExit(){
     this->auto_dim_checkbox    = nullptr;
     this->sleep_title          = nullptr;
     this->sleep_dropdown       = nullptr;
+    this->rate_title           = nullptr;
+    this->rate_dropdown        = nullptr;
+    this->battery_cap_checkbox = nullptr;
 
     this->timezone_title       = nullptr;
     this->timezone_dropdown    = nullptr;

@@ -55,6 +55,12 @@ class Scene {
         // (トーストのタップは既読にして閉じるだけ)。うっかり触って接続/ゲームを失わないため
         virtual bool keepForeground() const { return false; }
 
+        // この画面の間に使ってほしい音の出力の周波数(SoundFunctions::kSampleRateLow / kSampleRateHigh)。
+        // 0なら設定(sound.cfg の sample-rate)のまま。main.cpp の loop() が毎フレーム SoundFunctions::RequestSampleRate() へ渡すので、
+        // 画面を離れると設定へ戻る。切り替わるとそのとき鳴っている音は止まるので、変えるなら音を鳴らす前(onEnter())に
+        // RequestSampleRate() も呼んでおくとよい(ミュージックアプリ・Luaの pico.sound_set_rate())
+        virtual uint32_t preferredSampleRate() const { return 0; }
+
         // ステータスバーを除いたシーンが自由に使える領域
         static constexpr Rect contentRect() {
             return {

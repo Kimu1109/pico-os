@@ -20,7 +20,12 @@ PCビルドとホストテストでは確かめられない項目だけを、**1
 - **シリアルのコマンド `hw ...`**(`src/functions/HwTest_Functions`。`hw-test = true` のときだけ):
   `hw info`(電池・Wi-Fi・音・ウォッチドッグ)/ `hw mem`(ヒープ: 空き・連続で取れる最大・断片化・末尾の残り)/
   `hw trap`(未定義命令でHardFault)/ `hw buswrite`(存在しない番地へ書いてHardFault)/ `hw hang`(loop()を止めてウォッチドッグ)。
-  シリアルモニタか `pad_serial.py` の小窓から打つ。結果は `[HW]` の行。
+  打ち方は2通り(どちらも行の終わりに改行が要る。ポートは1つのプログラムしか開けない):
+  - `python3 script/pad_serial.py <ポート>` を動かしている**ターミナル**に `hw info` と打ってEnter(小窓ではなくターミナル側。小窓はキーの押し下げを送るだけ)
+  - `pad_serial.py` を止めて、シリアルモニタ(`pio device monitor -b 115200`、Arduino IDEは改行コードを「LFのみ」か「CRおよびLF」に)から打つ。
+    `pio device monitor` は打った文字が画面に出ない(エコーが無い)が、Enterで送られている
+  結果は `[HW]` の行。`hw-test = true` が無いと「切れています」の行だけが出る。**このコマンドはPR #123のファームでしか使えない**(main へ入るまでは
+  `claude/hardware-checklist` のブランチで書き込むこと)。
 - **Luaアプリ「実機チェック」**(`pc/sdcard/lua/apps/実機チェック/`): 「全部」でLuaの計算・描画(renderの中)・全面の描き直しのフレーム時間・
   SD・暗号(Argon2id)・JSON・HTTPS・メモリを順に測り、画面・ログ(`[HWCHK]`)・アプリのフォルダの `results.txt`(追記)へ出す。
   HTTPSの行き先は同じフォルダの `settings.cfg` の `tls_url`(既定 `https://www.google.com/generate_204`)。

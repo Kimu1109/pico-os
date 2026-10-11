@@ -74,7 +74,7 @@ PickerDialog::PickerDialog(Mode mode, const char* title_text, const char* ok_tex
             this->setDate(2026, 1, 1);
             break;
         case Mode::Time:
-            time_picker = new DurationPicker(0, 0, kDialogWidth - MARGIN * 2, 60);
+            time_picker = new DurationPicker(0, 0, kDialogWidth - MARGIN * 2, 104); //▲▼(上下に24pxずつ)+48pxの数字が収まる高さ
             time_picker->setParent(this);
             children_.push_back(time_picker);
             break;

@@ -12,6 +12,7 @@
 #include "OS_Data.hpp"
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 // ---- モック ----
 void PICO_GFX::MarkDirty(const Rect&){}
@@ -401,6 +402,72 @@ int main(){
                                      nullptr, LuaPermissions{}, "/x/icon.pimg"),
               "icon: argなしでも登録は通る");
         check(AppFunctions::Get(5)->icon_file.empty(), "icon: argなしはアイコンファイルを持たない");
+    }
+
+    // ---- ランチャの並び・非表示(/sys/launcher.cfg) ----
+    {
+        HostSd::files.clear();
+        OSData::SD_usable = true;
+        AppFunctions::Clear();
+        const char* names[] = { "A", "B", "C", "D", "E" };
+        for(const char* n : names) AppFunctions::Register(n, IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        AppFunctions::LoadLayout(); //ファイルが無ければ登録順
+        eq(AppFunctions::VisibleCount(), 5, "layout: 最初は全部見える");
+        eq(AppFunctions::VisibleAt(2), 2, "layout: 最初は登録順");
+
+        check(AppFunctions::MoveApp(3, -1), "layout: Dを前へ");
+        eq(AppFunctions::VisibleAt(2), 3, "layout: Dが3番目");
+        eq(AppFunctions::VisiblePosition(2), 3, "layout: Cは4番目");
+        check(!AppFunctions::MoveApp(0, -1), "layout: 先頭より前へは動かない");
+        check(AppFunctions::MoveAppToFront(4), "layout: Eを先頭へ");
+        eq(AppFunctions::VisibleAt(0), 4, "layout: Eが先頭");
+        check(HostSd::files.count("/sys/launcher.cfg") == 1, "layout: launcher.cfgへ書く");
+
+        //隠す: 並びの位置は覚えたまま見えなくなる
+        check(AppFunctions::SetHidden(0, true), "layout: Aを隠す");     //E A B D C → E B D C
+        eq(AppFunctions::VisibleCount(), 4, "layout: 見える数が減る");
+        eq(AppFunctions::HiddenCount(), 1, "layout: 隠した数");
+        eq(AppFunctions::HiddenAt(0), 0, "layout: 隠したのはA");
+        eq(AppFunctions::VisiblePosition(0), -1, "layout: 隠したものは位置なし");
+        eq(AppFunctions::VisibleAt(1), 1, "layout: Bが2番目へ詰まる");
+        //見えているものの間で動かす(隠したAは飛び越すが、相対位置は保つ)
+        check(AppFunctions::MoveApp(1, -1), "layout: Bを前へ(隠したAを飛び越す)");
+        eq(AppFunctions::VisibleAt(0), 1, "layout: Bが先頭");
+
+        //書いたファイルから読み直すと同じになる(登録し直しても)
+        const std::string saved = HostSd::files["/sys/launcher.cfg"];
+        AppFunctions::Clear();
+        for(const char* n : names) AppFunctions::Register(n, IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        AppFunctions::Register("F", IconID::AppBox, &AppFunctions::MakeScene<DummyScene>); //新しく入れたアプリ
+        AppFunctions::LoadLayout();
+        eq(AppFunctions::VisibleAt(0), 1, "layout: 読み直し B");
+        eq(AppFunctions::VisibleAt(1), 4, "layout: 読み直し E");
+        eq(AppFunctions::VisibleAt(2), 3, "layout: 読み直し D");
+        eq(AppFunctions::VisibleAt(3), 2, "layout: 読み直し C");
+        eq(AppFunctions::VisibleAt(4), 5, "layout: 新しいアプリは最後");
+        check(AppFunctions::IsHidden(0), "layout: 隠したまま");
+        //消えたアプリ・知らない行は捨てる
+        HostSd::files["/sys/launcher.cfg"] = "app = Z\nhidden = C\nfoo = A\napp = A\n";
+        AppFunctions::LoadLayout();
+        eq(AppFunctions::VisibleAt(0), 0, "layout: 知らない名前は飛ばす");
+        check(AppFunctions::IsHidden(2), "layout: hidden = C");
+        eq(AppFunctions::VisibleCount(), 5, "layout: Cだけ隠れる");
+
+        //表示し直す・元に戻す
+        check(AppFunctions::SetHidden(2, false), "layout: Cを表示");
+        check(!AppFunctions::SetHidden(2, false), "layout: 変わらなければfalse");
+        AppFunctions::ResetLayout();
+        eq(AppFunctions::VisibleAt(0), 0, "layout: 元に戻すと登録順");
+        check(HostSd::files.count("/sys/launcher.cfg") == 0, "layout: 元に戻すとファイルを消す");
+
+        //ランチャ(AppGrid)は見えているものだけを並べる
+        AppFunctions::SetHidden(0, true);
+        AppGrid grid(0, 20, 240, 300);
+        const Rect t0 = grid.tileRect(0);
+        eq(grid.hitTile(t0.x + 5, t0.y + 5), 1, "layout: 先頭のタイルは隠したAではなくB");
+        grid.showApp(5);
+        eq(grid.focusedApp(), 5, "layout: showAppでそのタイルを選ぶ");
+        eq(grid.getPage(), 0, "layout: 6個目(見えているのは5個)は1ページ目");
     }
 
     AppFunctions::Clear();

@@ -117,6 +117,12 @@ namespace CrashDumpFunctions {
     // SDが無い・1回の起動の上限を超えたら何もしない。書いたらtrue
     bool SaveLuaError(const char* app, const char* message, const char* trace);
 
+    // 落ちたのではない、利用者が頼んだ再起動(電源メニュー)。次の起動でクラッシュと取り違えないよう、
+    // パンくずとスクラッチレジスタの印を消してから watchdog_reboot() する。戻らない。
+    // PC/Webは下の差し込み口(main_pc.cppが自分自身を実行し直す/ページを読み直す)。無ければ終了する
+    [[noreturn]] void Reboot();
+    inline void (*pc_reboot_hook)() = nullptr;
+
     // ---- 以下はテスト・内部用 ----
     // 記録を文章にする(SDへ書く中身)。outが足りなければ切り詰める。書いた長さを返す
     size_t FormatRecord(const Record& r, char* out, size_t size);

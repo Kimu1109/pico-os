@@ -857,7 +857,7 @@ int main() {
             check(pico.toast("こんにちは") == true or true, "toast")
             check(pico.clipboard_set("a\r\nあ") == true and pico.clipboard_get() == "a\nあ", "clipboard: \\rを捨てて往復")
             check(pico.clipboard_set("") == true and pico.clipboard_get() == "", "clipboard: 空にする")
-            check(pico.clipboard_set(string.rep("x", 5000)) == false and #pico.clipboard_get() == 4096, "clipboard: 4KiBで切る")
+            check(pico.clipboard_set(string.rep("x", 5000)) == false and #pico.clipboard_get() == 1024, "clipboard: 1KiBで切る")
             pico.clipboard_set("")
         )LUA", "ext_util");
         check(ok, "ユーティリティ: スクリプトが成功する");

@@ -30,12 +30,25 @@ class HomeScene : public Scene {
         // ラベルに出しているページ(キーでグリッドがページを送ったときに追いつく)
         int shown_page = -1;
 
+        // タイルの長押し(またはコントローラーのX/Y・キーのm)で出す並べ替えのメニュー。
+        // 前へ/後ろへ/先頭へ/隠す。隠したアプリを戻すのは設定アプリ(その他タブ)
+        void openAppMenu(int app_index);
+        // 隠してよいか(設定アプリは隠すと戻せなくなるので不可、見えている最後の1つも不可)
+        static bool canHide(int app_index);
+        // 開いているメニュー(シーンの切り替えで消えることがあるのでIDで持つ)
+        WidgetId app_menu = WidgetIdTools::Invalid();
+        // 次のフレームで開くメニュー(-1=なし)。長押しで押し込みの絵を戻したフレームにダイアログを重ねると、
+        // 半透明の下は描き直されず押し込みの絵が残る(「ダイアログは1フレーム空ける」と同じ理由)
+        int pending_menu = -1;
+
     public:
+        // 並べ替えのメニューを出すまでの長押しの時間
+        static constexpr unsigned long kLongPressMs = 600;
+
         const char* getName() const override { return "Home"; }
 
         void onEnter() override;
         void onExit() override;
-        void onUpdate() override {
-            if(this->grid && this->page_label && this->grid->getPage() != this->shown_page) this->updatePageLabel();
-        }
+        void onUpdate() override;
+        bool onKey(const KeyInputFunctions::Event& ev) override;
 };

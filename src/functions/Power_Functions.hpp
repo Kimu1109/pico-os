@@ -45,6 +45,12 @@ namespace PowerFunctions {
 
     bool IsSleeping();
 
+    // 今すぐスリープへ入る(電源メニュー)。押している指/ボタンを離した次のフレームで入る
+    // (押したまま入ると、その操作ですぐ起きてしまうため)。
+    // 自分で入ったスリープは、KeepAwake()を呼ぶ画面(SSH・ゲームボーイ等)や音が鳴っていても続き、
+    // タッチ・ボタン・打鍵でだけ起きる
+    void SleepNow();
+
     // 0で無効。今だけ変える(display.cfgへは書かない。呼び出し側がPICO_Config::SetValue()する)
     unsigned long GetSleepTimeoutMs();
     void SetSleepTimeoutMs(unsigned long ms);

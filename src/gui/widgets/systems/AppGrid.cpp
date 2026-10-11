@@ -9,6 +9,7 @@
 #include "util/ScopedClip.hpp"
 
 #include <cstring>
+#include <Arduino.h>
 
 int AppGrid::tileW() const {
     const int avail = this->l_rect.w - kPadding * 2 - kGap * (kCols - 1);
@@ -28,7 +29,7 @@ int AppGrid::tilesPerPage() const {
 
 int AppGrid::pageCount() const {
     const int per_page = tilesPerPage();
-    const int count = AppFunctions::Count();
+    const int count = AppFunctions::VisibleCount();
     if (count <= 0) return 1;
     return (count + per_page - 1) / per_page;
 }
@@ -45,7 +46,7 @@ Rect AppGrid::tileRect(int slot) const {
     };
 }
 
-int AppGrid::hitTile(int local_x, int local_y) const {
+int AppGrid::hitPos(int local_x, int local_y) const {
     const int per_page = tilesPerPage();
 
     for (int slot = 0; slot < per_page; slot++) {
@@ -53,10 +54,50 @@ int AppGrid::hitTile(int local_x, int local_y) const {
         if (local_x < t.x || local_x >= t.x + t.w) continue;
         if (local_y < t.y || local_y >= t.y + t.h) continue;
 
-        const int app_index = page_ * per_page + slot;
-        return (app_index < AppFunctions::Count()) ? app_index : -1;
+        const int pos = page_ * per_page + slot;
+        return (pos < AppFunctions::VisibleCount()) ? pos : -1;
     }
     return -1;
+}
+
+int AppGrid::hitTile(int local_x, int local_y) const {
+    return AppFunctions::VisibleAt(hitPos(local_x, local_y));
+}
+
+int AppGrid::takeLongPress(unsigned long now_ms, unsigned long long_ms) {
+    if (pressed_pos_ < 0 || long_pressed_ || !this->is_pressing) return -1;
+    if (now_ms - press_ms_ < long_ms) return -1;
+    long_pressed_ = true;
+    //押し込みの表示を戻す(メニューが開くので、押したままの見た目にしない)
+    const int index = AppFunctions::VisibleAt(pressed_pos_);
+    pressed_pos_ = -1;
+    this->needsRender();
+    return index;
+}
+
+int AppGrid::focusedApp() const {
+    if (tilesOnPage() == 0) return -1;
+    int slot = focus_slot_ < tilesOnPage() ? focus_slot_ : tilesOnPage() - 1;
+    return AppFunctions::VisibleAt(page_ * tilesPerPage() + slot);
+}
+
+void AppGrid::showApp(int app_index) {
+    const int pos = AppFunctions::VisiblePosition(app_index);
+    if (pos < 0) { layoutChanged(); return; }
+    const int per_page = tilesPerPage();
+    page_ = pos / per_page;
+    focus_slot_ = (int8_t)(pos % per_page);
+    pressed_pos_ = -1;
+    this->needsRender();
+}
+
+void AppGrid::layoutChanged() {
+    if (page_ >= pageCount()) page_ = pageCount() - 1;
+    if (page_ < 0) page_ = 0;
+    const int count = tilesOnPage();
+    if (focus_slot_ >= count) focus_slot_ = (int8_t)(count > 0 ? count - 1 : 0);
+    pressed_pos_ = -1;
+    this->needsRender();
 }
 
 void AppGrid::setW(int w) {
@@ -81,7 +122,7 @@ void AppGrid::setPage(int page) {
     if (page == page_) return;
 
     page_ = page;
-    pressed_index_ = -1;
+    pressed_pos_ = -1;
     this->needsRender();
 }
 
@@ -213,14 +254,14 @@ void AppGrid::render() {
     const int first = page_ * per_page;
 
     for (int slot = 0; slot < per_page; slot++) {
-        const AppEntry* entry = AppFunctions::Get(first + slot);
+        const AppEntry* entry = AppFunctions::Get(AppFunctions::VisibleAt(first + slot));
         if (!entry) break; // 以降は空きスロット
 
         const Rect t = tileRect(slot);
         const int tx = g.x + t.x;
         const int ty = g.y + t.y;
 
-        const bool is_pressed = (first + slot == pressed_index_);
+        const bool is_pressed = (first + slot == pressed_pos_);
         const int fore_color = is_pressed ? PICO_WHITE : PICO_BLACK;
 
         //押下中のタイルは背景を敷いて押し込みを表す
@@ -247,10 +288,12 @@ void AppGrid::render() {
 void AppGrid::causeOnPressStart() {
     Widget::causeOnPressStart();
 
-    pressed_index_ = hitTile(OSData::touchX - this->getScreenX(),
-                             OSData::touchY - this->getScreenY());
-    if (pressed_index_ >= 0) {
-        focus_slot_ = (int8_t)(pressed_index_ - page_ * tilesPerPage());
+    pressed_pos_ = hitPos(OSData::touchX - this->getScreenX(),
+                          OSData::touchY - this->getScreenY());
+    press_ms_ = millis();
+    long_pressed_ = false;
+    if (pressed_pos_ >= 0) {
+        focus_slot_ = (int8_t)(pressed_pos_ - page_ * tilesPerPage());
         this->needsRender();
     }
 }
@@ -258,9 +301,11 @@ void AppGrid::causeOnPressStart() {
 void AppGrid::causeOnPressEnd() {
     Widget::causeOnPressEnd();
 
-    const int index = pressed_index_;
-    pressed_index_ = -1;
+    const int index = AppFunctions::VisibleAt(pressed_pos_);
+    pressed_pos_ = -1;
     this->needsRender();
+    //長押しでメニューを出したタイルは起動しない
+    if (long_pressed_) return;
 
     //起動するとシーンの入れ替えが要求されるので、自分の状態を戻してから呼ぶ
     if (index >= 0 && on_launch_) on_launch_(index);
@@ -268,7 +313,7 @@ void AppGrid::causeOnPressEnd() {
 
 int AppGrid::tilesOnPage() const {
     const int per_page = tilesPerPage();
-    const int n = AppFunctions::Count() - page_ * per_page;
+    const int n = AppFunctions::VisibleCount() - page_ * per_page;
     return n < 0 ? 0 : (n > per_page ? per_page : n);
 }
 
@@ -281,7 +326,7 @@ bool AppGrid::onFocusKey(FocusKey key) {
 
     switch (key) {
         case FocusKey::Activate:
-            if (on_launch_) on_launch_(page_ * tilesPerPage() + slot);
+            if (on_launch_) on_launch_(AppFunctions::VisibleAt(page_ * tilesPerPage() + slot));
             return true;
         case FocusKey::Up:
             if (slot - kCols < 0) return false;

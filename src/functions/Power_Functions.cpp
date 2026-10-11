@@ -18,6 +18,9 @@ namespace {
     unsigned long last_activity_ms = 0;
     // スリープから起こしたタッチを、指を離すまで画面へ渡さない
     bool          swallow_touch    = false;
+    // SleepNow(): 指を離したら入る / 今のスリープは自分で入ったもの(KeepAwake()では起きない)
+    bool          force_pending    = false;
+    bool          forced           = false;
 
     void LoadConfig(){
         if(!OSData::SD_usable) return;
@@ -56,6 +59,7 @@ namespace {
 
     void Leave(){
         sleeping = false;
+        forced   = false;
         //パネルを起こす(120ms待つ)前に、他を戻しておく
         SoundFunctions::SetPowerSave(false);
         NetworkFunctions::SetLowPower(false);
@@ -71,6 +75,8 @@ void PowerFunctions::SetupAt(unsigned long now_ms){
     sleep_timeout_ms = kDefaultSleepTimeoutMs;
     sleeping         = false;
     swallow_touch    = false;
+    force_pending    = false;
+    forced           = false;
     detail::keep_awake = false;
     LoadConfig();
     last_activity_ms = now_ms;
@@ -93,7 +99,7 @@ void PowerFunctions::UpdateAt(unsigned long now_ms){
             //起こした打鍵も画面へ渡さない(暗い画面のどこへ入るか見えないため。タッチと同じ考え方)
             KeyInputFunctions::DiscardPending();
         }
-    }else if(sleeping && kept){
+    }else if(sleeping && kept && !forced){
         //操作が無くても動く画面へ切り替わった/その画面が動き出した。画面を戻す
         Leave();
     }
@@ -109,6 +115,20 @@ void PowerFunctions::UpdateAt(unsigned long now_ms){
         }else{
             swallow_touch = false;
         }
+    }
+
+    //電源メニューのスリープ。押している指/ボタンを離してから入る(音・KeepAwake()の画面でも入る)
+    if(force_pending){
+        if(sleeping){
+            force_pending = false;
+        }else if(!OSData::isTouched && !PadFunctions::IsDown(PadFunctions::kAllButtons)){
+            force_pending = false;
+            KeyInputFunctions::DiscardPending();
+            Enter();
+            forced = true;
+            last_activity_ms = now_ms;
+        }
+        return;
     }
 
     if(!sleeping && sleep_timeout_ms > 0 && !active && !kept
@@ -150,6 +170,8 @@ void PowerFunctions::IdleWait(){
 }
 
 bool PowerFunctions::IsSleeping(){ return sleeping; }
+
+void PowerFunctions::SleepNow(){ force_pending = true; }
 
 unsigned long PowerFunctions::GetSleepTimeoutMs(){ return sleep_timeout_ms; }
 void PowerFunctions::SetSleepTimeoutMs(unsigned long ms){ sleep_timeout_ms = ms; }

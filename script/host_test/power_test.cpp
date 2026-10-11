@@ -189,6 +189,50 @@ int main(){
         check(wait() == kMinFrameMs, "明るくなれば戻る");
     }
 
+    // ---- 電源メニューのスリープ(SleepNow) ----
+    {
+        Reset();
+        Frame(1000, true);
+        PowerFunctions::SleepNow();
+        Frame(1010, true);
+        check(!IsSleeping(), "SleepNow: 指を離すまでは入らない");
+        Frame(1020, false);
+        check(IsSleeping(), "SleepNow: 離したら入る(タイムアウトを待たない)");
+        KeepAwake();
+        Frame(1030, false);
+        check(IsSleeping(), "SleepNow: KeepAwake()の画面でも起きない");
+        Fake::playing = true;
+        Frame(1040, false);
+        check(IsSleeping(), "SleepNow: 音が鳴っていても起きない");
+        Fake::playing = false;
+        Frame(1050, true);
+        check(!IsSleeping(), "SleepNow: タッチで起きる");
+        Frame(1060, false);
+        KeepAwake();
+        Frame(1070, false);
+        check(!IsSleeping(), "起きた後は普段どおり");
+
+        //Wi-Fiの接続中でも入る
+        Reset();
+        NetworkFunctions::currentStatus = NetworkFunctions::NetStatus::TRYING_CONNECT;
+        PowerFunctions::SleepNow();
+        Frame(10, false);
+        check(IsSleeping(), "SleepNow: Wi-Fiの接続中でも入る");
+        NetworkFunctions::currentStatus = NetworkFunctions::NetStatus::SUCCESS;
+    }
+
+    // ---- 時刻の手動設定(TimeFunctions::SetLocalDateTime)。ホストでは母艦の時計を変えずにずれだけ持つ ----
+    {
+        TimeFunctions::ApplyTimezone("JST-9");
+        check(!TimeFunctions::SetLocalDateTime(2026, 2, 30, 0, 0, 0), "時刻: 2/30は断る");
+        check(!TimeFunctions::SetLocalDateTime(2026, 13, 1, 0, 0, 0), "時刻: 13月は断る");
+        check(!TimeFunctions::SetLocalDateTime(2026, 1, 1, 24, 0, 0), "時刻: 24時は断る");
+        check(TimeFunctions::SetLocalDateTime(2026, 3, 1, 9, 0, 0), "時刻: 2026/3/1 9:00(JST)");
+        const long long diff = PicoPcClock::Now() - 1772323200LL; //2026-03-01T00:00:00Z
+        check(diff >= 0 && diff <= 2, "時刻: 現地時刻からエポック秒へ(UTCの0時)");
+        PicoPcClock::offset_sec = 0;
+    }
+
     printf("\n%s (%d failures)\n", failures ? "FAILED" : "ALL PASSED", failures);
     return failures ? 1 : 0;
 }

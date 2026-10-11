@@ -151,13 +151,14 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | Alarm_Functions | アラーム。時計アプリを閉じていても鳴るようOS側で見張る。下記「アラーム」参照 |
 | Notification_Functions | 通知。予約(時間・時刻・電池・Wi-Fi)の見張り、トースト、通知センターの履歴。Luaの`pico.notify`。下記「通知」参照 |
 | Power_Functions | スリープ(省電力)。自動調光のさらに先の段階。下記「スリープ(省電力)」参照 |
-| Clipboard_Functions | OS全体で1つのクリップボード(テキスト4KiBまで、入れた大きさだけmalloc)。下記「テキストエディタ」参照 |
+| Clipboard_Functions | OS全体で1つのクリップボード(テキスト1KiBまで、入れた大きさだけmalloc)。下記「テキストエディタ」参照 |
 | KeyInput_Functions | 物理キーボードの窓口。1打鍵1件の列を持ち、今の画面(`Scene::onKey()`)→開いているキー盤の順に配る。今の入力元はUSBシリアル(PCのキーボード)。下記「物理キーボード」参照 |
 | Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。今の入力元はUSBシリアル(PCのキーボード)。下記「外部コントローラー」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
 | Profiler_Functions | `loop()`の区間ごとの時間とフレーム時間の集計。下記「開発者向けの道具」参照 |
 | CrashDump_Functions | クラッシュダンプ(HardFault・ウォッチドッグ・Luaのエラー)とパンくず。下記「開発者向けの道具」参照 |
 | DevTools_Functions | `/sys/debug.cfg`(プロファイラの表示/ログ・Luaデバッガ・ウォッチドッグ)の窓口 |
+| PowerMenu_Functions | 電源メニュー(スリープ / 再起動)。ステータスバーの長押しと設定アプリの「電源」。下記「時刻の手動設定・電源メニュー」参照 |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Display→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
@@ -264,6 +265,35 @@ KeepAwakeを呼んでいる画面: ゲームボーイ・SSH・チャット(常�
 - **実機では未確認**: `WiFi.aggressiveLowPowerMode()/defaultLowPowerMode()`の名前(arduino-picoのWiFiクラス。ビルドが通らなければここ)・
   `delay()`が実際にCPUを寝かせるか(arduino-picoの`delay()`はWFE/sleep系のはずだが未確認)・SLPINしたILI9341/ST7789への書き込み・
   復帰時の120msで足りるか・消費電流の実測(LiPo/USBの電流計で、スリープ前後を比べること)。
+
+### 時刻の手動設定・電源メニュー (`TimeFunctions::SetClock()` / `PowerMenu_Functions` / `SettingsScene`) (2026-10-11)
+
+- **時刻の手動設定**: 設定アプリの「時刻」タブの4行目([変更])。日付(`PickerDialog`のDate)→1フレーム空けて時刻(Time)を聞き、
+  `TimeFunctions::SetLocalDateTime(y, mon, d, h, mi, s)`(今のタイムゾーンで`mktime`、存在しない日・範囲外はfalse)→`SetClock(epoch)`。
+  NTP同期前(1970年)のままだとアラーム・通知・TLS・カレンダーが全部止まる(どれも2020年=`TimeFunctions::kValidYear`より前を「時計が合っていない」と見る)ため。
+  後でNTPに同期できればそちらで上書きされる。`TimeFunctions::IsClockSet()`も足した。
+  - **実機は`settimeofday()`**(arduino-picoがtime()/gettimeofday()のずれとして持つ。NTPも同じ口)。
+  - **PC/Webは母艦の時計を変えない**(rootで動いていると本当に変わるため)。`pc/compat/PicoPcClock.h`が「ずれ」だけを持ち、
+    **ネイティブのPCビルドは`main_pc.cpp`がlibcの`time()`を差し替えてずれを足す**(src/は`time(nullptr)`しか使っていないので、
+    時計・アラーム・通知・TLSの有効期限が全部合わせた時刻を見る)。Webとホストテストは`time()`を差し替えないので、ずれは記録されるだけ
+    (ホストテストは`PicoPcClock::Now()`で確かめる。`script/host_test/stubs/PicoPcClock.h`はpc/compatのものを取り込むだけ)。
+  - `PickerDialog`のTimeの`DurationPicker`が高さ60pxで▲▼が描かれていなかった(数字48px+上下24px)ので104pxにした(Luaの`pico.show_time`も同じ)。
+- **電源メニュー**(`PowerMenuFunctions::Open()`、`PickerDialog`のChoice「スリープ / 再起動」): ステータスバーを
+  `kLongPressMs`(600ms)押し続けたとき(`main.cpp`が`status->is_pressing`を`UpdateAll()`の後に見張る。開いたら離したときのタップ=通知センター/
+  スクリーンショットは無視)と、設定アプリの上の段の右端「電源」から開く。開いているメニューは`WidgetId`で持ち、二重に開かない。
+  - **スリープ** = `PowerFunctions::SleepNow()`。指/ボタンを離した次のフレームで入る(押したまま入るとその操作で起きるため)。
+    **自分で入ったスリープ(`forced`)は`KeepAwake()`を呼ぶ画面(SSH・ゲームボーイ等)・音・Wi-Fiの接続中でも続き**、タッチ・ボタン・打鍵でだけ起きる。
+  - **再起動** = `RequestReboot()`→次のフレームの`PowerMenuFunctions::Update()`(`loop()`の`SceneFunctions::Update()`の直後。
+    ウィジェットのコールバックの外)で、今の画面の`onExit()`(アラームの編集の保存・ゲームボーイの`.sav`・接続を閉じる等。
+    上に積まれて隠れている画面は隠れたときに`onExit()`済み)→`NotificationFunctions::SaveNow()`→`LogFunctions::Flush()`→
+    **`CrashDumpFunctions::Reboot()`**: パンくず・RAMの記録のmagicとスクラッチレジスタ0〜3を消してから`watchdog_reboot(0,0,0)`
+    (pc=0なので`watchdog_enable_caused_reboot()`は偽。次の起動でクラッシュダンプは書かれない)。
+    PCは`pc_reboot_hook`(ネイティブ: シグナルのマスクを外して`execv("/proc/self/exe")`で同じ引数のまま自分を実行し直す。
+    `--tap`も付いたままなので、試すと再起動を繰り返す。Web: `location.reload()`)。
+- 検証: `power_test`(SleepNow: 離してから入る・KeepAwake/音/Wi-Fi接続中でも入って続く・タッチで起きる。時刻: 2/30・13月・24時を断る、JSTの9時がUTCの0時)、
+  PCビルドの`--tap`/`--shot`(時刻タブから日付→時刻→ステータスバーが変わり、母艦の`date`は変わらない。ステータスバー長押し→スリープ→タッチで復帰し、
+  そのタッチでアプリが開かない。再起動で起動ログが繰り返され、`/crash/`に何も書かれない)。**実機では未確認**(arduino-picoの`settimeofday()`・
+  `watchdog_reboot()`での再起動の後に`hw boot`の reason・SDの書きかけ)。
 
 ### アラーム (`src/functions/Alarm_Functions` / `ClocksScene`の「アラーム」タブ) (2026-09-30)
 
@@ -1143,6 +1173,19 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - 実行中に登録簿を書き換えてもよい(Luaアプリのスキャン等)。ただしランチャの再描画までは面倒を見ないので、表示中に増減させたら`AppGrid`へ`needsRender()`すること。
   実例: `src/lua/LuaAppScanner.cpp`が`/lua/apps/<名前>/main.lua`を走査して`Register()`する(詳細は「Luaバインディング」の「SDを走査したLuaアプリの自動登録」参照)。今のところ`App_List.cpp::Setup()`の起動時1回のみ呼んでおり、起動後の再スキャンには対応していない。
 - `Launch()`は`SceneFunctions::Push`なので、アプリ側から`Pop()`すればランチャへ戻る。
+- **ランチャの並び・非表示(2026-10-11、`/sys/launcher.cfg`)**: 登録簿のindex(`Get`/`Launch`/`LaunchByName`/`NameForDir`)は登録した順のまま変えず、
+  **見せる順番(`launcher_order[]`、登録簿のindexの並べ替え)と隠した印(`launcher_hidden`、32bit)だけを別に持つ**(RAMは36バイト)。
+  ランチャ(`AppGrid`)は`VisibleCount()`/`VisibleAt(pos)`で見えているものだけを並べ、`hitTile()`は登録簿のindexを返す(内部は位置=`hitPos()`)。
+  - `launcher.cfg`は上から順に`app = 名前`/`hidden = 名前`(`SaveLayout()`が一時ファイル→差し替えで丸ごと書く)。`App_List.cpp`の最後で`LoadLayout()`。
+    載っていないアプリ(新しく入れたもの)は後ろへ登録順に、消えたアプリ・知らないキーの行は捨てる。名前が重なれば登録の若いものから当てる。
+    **隠したアプリは並びの中の位置を覚えている**(表示し直すとそこへ戻る)。`MoveApp(index, ±n)`は見えているものだけを数えて動かす。
+  - 操作: **ランチャのタイルの長押し**(`AppGrid::takeLongPress()`を`HomeScene::onUpdate()`が毎フレーム見る。600ms。長押ししたタイルは離しても起動しない。
+    メニューは次のフレームで開く=押し込みの絵がダイアログの下に残らないように)、コントローラーのX/Y・キーの`m`(選んでいるタイル)で
+    「先頭へ/前へ/後ろへ移動・ランチャから隠す」。**設定アプリと、見えている最後の1つは隠せない**(戻す手段が設定アプリにあるため)。
+    戻すのは設定アプリの「その他」タブの最下行([編集]→隠したアプリを選ぶ/並びを元に戻す=`ResetLayout()`でファイルを消す)。
+  - 隠したアプリも`pico.launch_app`・通知からは起動できる。
+  - 検証: `app_test`(移動・先頭へ・隠したものを飛び越す・書いて読み直す・新しいアプリは最後・知らない名前/キー・元に戻す・AppGridが隠したものを並べない)、
+    PCビルドの`--tap`/`--shot`(長押し→移動/隠す→再起動しても残る→設定アプリで表示し直す、`PICOOS_VERIFY_LCD=1`で食い違い0)。
 - `AppGrid`はタイルごとに子ウィジェットを作らず、`render()`で直接描いてタップ位置から逆算する(`ColorDialog`の色グリッドと同じ方式)。`WidgetFunctions::HitTest()`は子から先に判定するため、タイルをIcon+Labelの親として作ると子がタップを奪ってしまう。
 - レイアウトは2列×3行=6個/ページ(タイル111x78px)。3列だとタイル幅72px=日本語4文字しか入らず大半のアプリ名がはみ出したため2列にした。名前は`drawName()`がUTF-8の文字境界で切って最大2行へ折り返す(`DrawPlain()`は折り返さないため自前)。
 
@@ -2215,9 +2258,9 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - **選択範囲 = 起点(`sel_anchor`)〜カーソル**。メニューの「範囲選択」で起点を置き、終わりをタップ(キー盤の←→でも広がる)。物理キーボードはShift+矢印/Home/End/PageUp/PageDown、
   Ctrl+A。`TextView::setSelection()`が背景を水色(`PICO_CYAN`)で塗る。**文字を打つと選択は外れる(置き換えはしない)**。Backspace/Deleteは選択範囲を消す。
   1行ずつキーボードへ渡す作りのため、日本語のキー盤が読みを入力中の打鍵は画面より先にキー盤へ行き、選択を置き換える経路を作れないので揃えた。
-- **コピー/切り取り/貼り付け**は`ClipboardFunctions`(`src/functions/Clipboard_Functions`。OS全体で1つ、テキスト4KiBまで、入れた大きさだけ`malloc`、
+- **コピー/切り取り/貼り付け**は`ClipboardFunctions`(`src/functions/Clipboard_Functions`。OS全体で1つ、テキスト1KiBまで、入れた大きさだけ`malloc`、
   `\r`とNULを捨てる、再起動で消える)。選択が無ければ今の行を改行込みで(切り取りは行ごと消す)。貼り付けは選択範囲を置き換える。
-  容量・行数・1行の長さの上限に当たる操作は`checkLimits()`で先に断り、状態欄へ理由を出す(切り取りは4KiBを超えると断る=クリップボードに入らない分を消さない)。
+  容量・行数・1行の長さの上限に当たる操作は`checkLimits()`で先に断り、状態欄へ理由を出す(切り取りは1KiBを超えると断る=クリップボードに入らない分を消さない)。
 - **検索/置換**: Ctrl+F/Ctrl+H か メニュー → `InputDialog`(開いたらすぐキーボードが出る。`InputDialog::openKeyboard()`を足した)で探す文字列
   (置換はもう1つ、置き換える文字列)。状態欄の下に検索バー`件数 [前][次][置換][全部][×]`が出て本文欄が縮む(置換のボタンは置換のときだけ。見えているボタンを右から詰める)。
   見つけた所は選択範囲として見せ、端で回り込む。大小文字は区別する(バイト列の一致)。Ctrl+G/Ctrl+Shift+Gで次/前、Escで選択の解除→検索バーを閉じる。
@@ -2228,7 +2271,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
   1行の入力欄では改行を空白に、数字のキー盤は使える文字だけ=`physicalPaste()`)。日本語のキー盤が読みを入力中は扱わない(画面へ回る)。
   Luaは`pico.clipboard_get()`/`pico.clipboard_set(text)`。SSHの端末への貼り付けは未(Ctrl+Vはシェルへ^Vとして送られる)。
 - 検証: `edit_history_test`(run.sh の input。乱数の編集400回を1件ずつ写しと突き合わせて戻す・溢れ・まとめ・ひとまとまり・保存した時点・
-  クリップボードの`\r`除去と4KiBの切り方)、`key_input_test`(キー盤のCtrl+C/V/X)、`lua_ext_test`(Lua API)、PCビルドで標準入力へ`key`の行を流して
+  クリップボードの`\r`除去と1KiBの切り方)、`key_input_test`(キー盤のCtrl+C/V/X)、`lua_ext_test`(Lua API)、PCビルドで標準入力へ`key`の行を流して
   `--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 続けて打った分をCtrl+Zで戻す・Shift+Homeで選択→Ctrl+C→Ctrl+V・Ctrl+Fで検索バーと2/4・
   Ctrl+Hですべて置換→Ctrl+Zで全部戻る・編集メニュー。**実機では未確認**(すべて置換の`memmove`の繰り返しの時間)。
 

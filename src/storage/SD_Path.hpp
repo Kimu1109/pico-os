@@ -71,6 +71,8 @@ namespace PICO_Path {
             constexpr const char* SYS_NOTIFY_CFG = "/sys/notify.cfg";
             // 開発者向けの道具("perf-overlay" / "perf-log" / "lua-debugger" / "watchdog" / "watchdog-ms")。DevToolsFunctions参照
             constexpr const char* SYS_DEBUG_CFG = "/sys/debug.cfg";
+            // ランチャの並びと隠したアプリ("app = 名前" / "hidden = 名前" を上から順)。AppFunctions::LoadLayout()参照
+            constexpr const char* SYS_LAUNCHER_CFG = "/sys/launcher.cfg";
         }
 
         namespace IME {

@@ -465,6 +465,8 @@ run_or_die "$OUT/ical_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calendar_scene_test.cpp" \
     "$ROOT/src/gui/scenes/CalendarScene.cpp" \
+    "$ROOT/src/calendar/Calendar_Reminders.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
     "$ROOT/src/gui/widgets/dialogs/EventDetailDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \

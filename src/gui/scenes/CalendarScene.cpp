@@ -1,4 +1,5 @@
 #include "gui/scenes/CalendarScene.hpp"
+#include "calendar/Calendar_Reminders.hpp"
 #include "functions/Power_Functions.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "functions/Scene_Functions.hpp"
@@ -86,6 +87,21 @@ bool CalendarScene::filePath(int file_index, FixedString<PICO_PATH_LEN>& out) co
     return PICO_IO::join(out, PICO_Path::DIR::CALENDAR, this->file_names[file_index].c_str());
 }
 
+void CalendarScene::syncReminders(int32_t from_day, int32_t to_day, int32_t utc_offset_sec){
+    if(this->today_year == 0) return;   //時計が合っていない
+    const CalendarReminders::Settings st = CalendarReminders::LoadSettings();
+    if(!st.enabled){
+        if(CalendarReminders::Count() > 0) CalendarReminders::CancelAll();
+        return;
+    }
+    const int32_t today = Ical::DaysFromCivil(this->today_year, this->today_month, this->today_day);
+    if(today < from_day || today >= to_day) return;
+    //今日より前の日は知らせる回が無いので、今日から
+    const int n = CalendarReminders::Sync(this->cal, today, to_day, (int64_t)time(nullptr),
+                                          utc_offset_sec, st.before_min, "カレンダー");
+    LOG_APP_MSG("カレンダー: 予定の通知 %d件", n);
+}
+
 void CalendarScene::reload(){
     this->cal.clear();
     this->loaded_files = 0;
@@ -161,6 +177,9 @@ void CalendarScene::reload(){
         dd.count = (uint8_t)((total < MonthGrid::kMaxDots) ? total : MonthGrid::kMaxDots);
         for(int k = 0; k < dd.count; k++) dd.colors[k] = distinct[k % nd];
     }
+
+    // ---- 予定の通知(読み込んだ範囲が今日を含むときだけ。範囲の外の予約は残す) ----
+    this->syncReminders(opt.window_from_day, opt.window_to_day, opt.utc_offset_sec);
 
     LOG_APP_MSG("カレンダー: %d年%d月 %d件 (%dファイル, 捨てた%d件, 繰り返し未対応%d件)",
                 this->view_year, this->view_month, this->cal.count, this->loaded_files,

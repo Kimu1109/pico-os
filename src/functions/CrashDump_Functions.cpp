@@ -23,6 +23,7 @@
     #endif
 #else
     #include "hardware/watchdog.h"
+    #include "hardware/structs/watchdog.h"
 #endif
 
 namespace {
@@ -41,6 +42,17 @@ namespace {
     __attribute__((section(".uninitialized_data.pico_os_crumbs")))
     CrashDumpFunctions::Crumbs crumbs;
 #endif
+
+    // ---- ウォッチドッグのスクラッチレジスタ(実機) ----
+    // RAMの記録(上)が次の起動まで残らない場合の控え。watchdog_hw->scratch[0..3]はウォッチドッグの再起動では
+    // 消えない(電源を切る・RUNピンで消える)。scratch[4..7]はpico-sdkが再起動の印に使うので触らない。
+    //   [0] = kScratchTag | kind<<8 | phase    [1] = uptime_ms / pc    [2] = frame_no / lr    [3] = in_lua / cfsr
+    // 毎フレーム書くのはパンくずの3語(BeginFrame/SetPhase)だけ。HardFaultのハンドラは4語とも上書きする
+    constexpr uint32_t kScratchTag = 0x50430000u; // "PC"
+    constexpr uint32_t kScratchTagMask = 0xFFFF0000u;
+
+    // 起動のときに見えたもの(hw boot・ログで見る)。Setup()が埋める
+    CrashDumpFunctions::BootInfo boot_info = {};
 
     const char* last_scene_ptr = nullptr;
     const char* last_lua_ptr = nullptr;
@@ -308,10 +320,46 @@ void CrashDumpFunctions::Setup(){
     }
     if(!have && RecordValid(pending_record)){ r = pending_record; have = true; }
 #else
+    boot_info.reason = watchdog_hw->reason;
+    boot_info.watchdog_caused = watchdog_caused_reboot();
+    boot_info.watchdog_enable_caused = watchdog_enable_caused_reboot();
+    boot_info.record_addr = (uint32_t)(uintptr_t)&pending_record;
+    boot_info.record_magic = pending_record.magic;
+    boot_info.record_valid = RecordValid(pending_record);
+    boot_info.crumbs_magic = crumbs.magic;
+    for(int i = 0; i < 4; i++) boot_info.scratch[i] = watchdog_hw->scratch[i];
+    const uint32_t s0 = boot_info.scratch[0];
+    const bool scratch_ok = (s0 & kScratchTagMask) == kScratchTag;
+    const uint32_t scratch_kind = (s0 >> 8) & 0xFF;
+
     if(RecordValid(pending_record)){
         r = pending_record;
         have = true;
-    }else if(watchdog_enable_caused_reboot() && crumbs.magic == kCrumbsMagic){
+        boot_info.source = "RAM";
+    }else if(scratch_ok && scratch_kind == (uint32_t)Kind::HardFault){
+        //RAMの記録が消えていた。スクラッチレジスタの4語だけで組み立てる
+        memset(&r, 0, sizeof(r));
+        r.kind = (uint32_t)Kind::HardFault;
+        r.phase = s0 & 0xFF;
+        r.pc = boot_info.scratch[1];
+        r.lr = boot_info.scratch[2];
+        r.cfsr = boot_info.scratch[3];
+        SealRecord(r);
+        have = true;
+        boot_info.source = "scratch";
+    }else if(boot_info.watchdog_enable_caused && crumbs.magic != kCrumbsMagic && scratch_ok &&
+             scratch_kind == (uint32_t)Kind::Watchdog){
+        //ウォッチドッグで再起動したが、RAMのパンくずが消えていた。スクラッチレジスタのパンくずで組み立てる
+        memset(&r, 0, sizeof(r));
+        r.kind = (uint32_t)Kind::Watchdog;
+        r.phase = s0 & 0xFF;
+        r.uptime_ms = boot_info.scratch[1];
+        r.frame_no = boot_info.scratch[2];
+        r.in_lua = boot_info.scratch[3] ? 1 : 0;
+        SealRecord(r);
+        have = true;
+        boot_info.source = "scratch";
+    }else if(boot_info.watchdog_enable_caused && crumbs.magic == kCrumbsMagic){
         //ウォッチドッグは再起動の前に何も書けないので、最後のパンくずから組み立てる
         memset(&r, 0, sizeof(r));
         r.kind = (uint32_t)Kind::Watchdog;
@@ -323,7 +371,13 @@ void CrashDumpFunctions::Setup(){
         memcpy(r.lua_app, crumbs.lua_app, sizeof(r.lua_app));
         SealRecord(r);
         have = true;
+        boot_info.source = "RAM";
     }
+    for(int i = 0; i < 4; i++) watchdog_hw->scratch[i] = 0;
+    LOG_SYS_MSG("起動の理由: reason=0x%lx watchdog=%d/%d 記録=%s(RAM magic=0x%08lx at 0x%08lx, crumbs=0x%08lx, scratch0=0x%08lx)",
+        (unsigned long)boot_info.reason, boot_info.watchdog_caused ? 1 : 0, boot_info.watchdog_enable_caused ? 1 : 0,
+        boot_info.source ? boot_info.source : "なし", (unsigned long)boot_info.record_magic,
+        (unsigned long)boot_info.record_addr, (unsigned long)boot_info.crumbs_magic, (unsigned long)s0);
 #endif
     memset(&pending_record, 0, sizeof(pending_record));
 
@@ -338,7 +392,14 @@ void CrashDumpFunctions::Setup(){
     constexpr size_t kTextBytes = 2048;
     char* text = static_cast<char*>(malloc(kTextBytes));
     char path[48] = {};
-    const bool written = text && WriteDump("crash", text, FormatRecord(r, text, kTextBytes), path, sizeof(path));
+    size_t len = text ? FormatRecord(r, text, kTextBytes) : 0;
+    if(text && boot_info.source && strcmp(boot_info.source, "scratch") == 0){
+        Out o{text, kTextBytes, len};
+        o.add("\n(RAMの記録が再起動で消えていたため、ウォッチドッグのスクラッチレジスタの控えから作った簡易版です。"
+              "画面・Luaアプリ・スタックは分かりません)\n");
+        len = o.len;
+    }
+    const bool written = text && WriteDump("crash", text, len, path, sizeof(path));
     free(text);
     if(written){
         CopyStr(last_dump_path, sizeof(last_dump_path), path);
@@ -346,6 +407,10 @@ void CrashDumpFunctions::Setup(){
     }else{
         LOG_SYS_FAIL("前回の起動で異常終了しました(ダンプは書けませんでした): %s", KindName(r.kind));
     }
+}
+
+const CrashDumpFunctions::BootInfo& CrashDumpFunctions::GetBootInfo(){
+    return boot_info;
 }
 
 const char* CrashDumpFunctions::LastDumpPath(){
@@ -427,10 +492,20 @@ void CrashDumpFunctions::Feed(){
 void CrashDumpFunctions::BeginFrame(uint32_t frame_no){
     crumbs.frame_no = frame_no;
     crumbs.uptime_ms = (uint32_t)millis();
+#if !defined(PICOOS_PC)
+    if(watchdog_on){
+        watchdog_hw->scratch[1] = crumbs.uptime_ms;
+        watchdog_hw->scratch[2] = frame_no;
+        watchdog_hw->scratch[3] = crumbs.in_lua;
+    }
+#endif
 }
 
 void CrashDumpFunctions::SetPhase(uint8_t phase){
     crumbs.phase = phase;
+#if !defined(PICOOS_PC)
+    if(watchdog_on) watchdog_hw->scratch[0] = kScratchTag | ((uint32_t)Kind::Watchdog << 8) | phase;
+#endif
 }
 
 void CrashDumpFunctions::SetScene(const char* name){
@@ -511,6 +586,12 @@ extern "C" void __attribute__((used)) pico_os_hardfault_c(uint32_t* frame, uint3
     r.mmfar = *(volatile uint32_t*)0xE000ED34u;
     r.bfar  = *(volatile uint32_t*)0xE000ED38u;
     CrashDumpFunctions::SealRecord(r);
+
+    //RAMの記録が次の起動まで残らなかったときのための控え(Setup()参照)
+    watchdog_hw->scratch[0] = kScratchTag | ((uint32_t)CrashDumpFunctions::Kind::HardFault << 8) | (r.phase & 0xFF);
+    watchdog_hw->scratch[1] = r.pc;
+    watchdog_hw->scratch[2] = r.lr;
+    watchdog_hw->scratch[3] = r.cfsr;
 
     watchdog_reboot(0, 0, 0);
     for(;;){}

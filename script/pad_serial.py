@@ -35,6 +35,8 @@
   代わりに**pico-osのログをこのターミナルへそのまま出す**
 - pico-osが再起動して(書き込み等で)ポートが一度消えても、1秒ごとに開き直す
 - ウィンドウにフォーカスがあるときだけ効く。フォーカスが外れたら全部離す
+- **ターミナルに1行打ってEnterを押すと、その行をそのまま送る**(`hw info`・`dbg pause` 等のコマンド用。
+  ウィンドウではなくターミナルにフォーカスを置いて打つ)
 """
 
 import argparse
@@ -131,6 +133,7 @@ class SerialLink:
         self.port = port
         self.name = port
         self.lock = threading.Lock()
+        self.write_lock = threading.Lock()  # ウィンドウとターミナルの両方から送るので、行が混ざらないように
         self.dev = None
         self.running = True
         threading.Thread(target=self._reader, daemon=True).start()
@@ -166,7 +169,8 @@ class SerialLink:
         if dev is None:
             return
         try:
-            dev.write(data)
+            with self.write_lock:
+                dev.write(data)
         except Exception as e:
             self._drop(e)
 
@@ -234,6 +238,22 @@ class PosixDev:
 
     def close(self):
         os.close(self.fd)
+
+
+def start_console(link):
+    """ターミナルに打った1行をそのままpico-osへ送る(hw info / dbg pause 等)"""
+    def run():
+        for raw in sys.stdin:
+            line = raw.rstrip("\r\n")
+            if not line:
+                continue
+            try:
+                data = (line + "\n").encode("utf-8")
+            except UnicodeEncodeError:
+                continue
+            link.write(data)
+            print(f"[pad_serial] 送りました: {line}", file=sys.stderr)
+    threading.Thread(target=run, daemon=True).start()
 
 
 def list_ports():
@@ -415,6 +435,8 @@ def main():
         if not HAVE_PYSERIAL and os.name == "nt":
             sys.exit("Windowsではpyserialが要ります: pip install pyserial")
         link = SerialLink(port)
+        print("[pad_serial] ターミナルに1行打ってEnterで、その行を送ります(例: hw info)", file=sys.stderr)
+        start_console(link)
 
     PadWindow(link, text_mode=(args.mode == "text")).run()
 

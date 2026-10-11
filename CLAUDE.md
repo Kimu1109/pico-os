@@ -400,6 +400,12 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
   (`PICOOS_NO_CRASH_HANDLER`で無効)。ウォッチドッグはスレッドで真似る(固まったら記録を書いて`_exit(3)`)。Webは対象外。
   `crash.pending`は`<fcntl.h>`の`open()`ではなく`fopen()`で書く(ホストテストのSdFatスタブとO_*の値が食い違う罠を避けるため)。
 - Luaのエラーは落ちていないが`/crash/lua_NNNN.txt`へ残す(1回の起動で8件まで)。
+- **実機でダンプが残らなかった(2026-10-11、`hw trap`/`hw hang`とも再起動はした)**。原因は未特定(arduino-picoの`memmap_default.ld`には
+  `.uninitialized_data (NOLOAD)`があるので、RP2350の起動の途中でRAMの先頭が上書きされる・ハンドラに来ていない等を疑っている)。
+  控えとして**ウォッチドッグのスクラッチレジスタ0〜3**(ウォッチドッグの再起動で消えない。4〜7はpico-sdkが使う)に最小限を書く:
+  `[0]=0x5043<<16|種類<<8|区間`、HardFaultは`[1..3]=pc/lr/CFSR`、ウォッチドッグ(有効なときだけ毎フレーム)は`[1..3]=時刻/フレーム/in_lua`。
+  RAMの記録が無ければこれから簡易版のダンプを書く(画面・Lua・スタックは無し)。起動時の診断(`BootInfo`: reason・RAMの記録の番地とmagic・
+  パンくずのmagic・スクラッチ)をログへ出し、**`hw boot`**でも後から見られる(再起動の直後のログはUSBシリアルを開き直す前に流れて見えないため)。
 
 **Luaサンドボックスの強化(`LuaEngine`)**
 - **打ち切りは握り潰せない**: 命令数の上限で「打ち切り中」(`aborting_`)になり、フックを1命令ごとにして次の命令で投げ直す。
@@ -432,6 +438,19 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 差し替えられるか(既に定義していれば多重定義)・`.uninitialized_data`がarduino-picoのリンカスクリプトにあるか・
 `watchdog_enable_caused_reboot()`の名前・RP2350(Cortex-M33)のnakedのアセンブリ・デバッガの画面の描画と`Font0`・
 プロファイラの実機の値。
+
+### 実機の確認用の道具 (`src/functions/HwTest_Functions` / Luaアプリ「実機チェック」) (2026-10-11)
+
+`HARDWARE_CHECKLIST.md`(実機で確かめる・測る項目の一覧)を回すための道具。
+- **シリアルのコマンド`hw ...`**: `/sys/debug.cfg`の`hw-test = true`のときだけ(既定は切れている。わざと落とすコマンドがあるため。設定アプリには出さない)。
+  `hw info`/`hw mem`(`MemFunctions::Take()`と`HeapTopRoom()`)/`hw trap`(`__builtin_trap()`=未定義命令)/`hw buswrite`(0xF0000000へ書く)/
+  `hw hang`(ウォッチドッグが入っているときだけ止まる)。結果は`[HW]`の行。`PadFunctions::extra_line_handler`はLuaデバッガ(`dbg`)→`hw`の順に試す
+  (`main.cpp`のラムダ)。`HwTest_Functions.cpp`はmain.cppからしか参照しないのでホストテストはリンクしない。
+- **「実機チェック」**(`pc/sdcard/lua/apps/実機チェック/`、`permission_network=true`): コルーチンで1フレームに1つずつ測る(Lua・renderの中の描画・
+  全面の描き直し60フレーム・SD・暗号・JSON・HTTPS・メモリ)。結果は画面・`[HWCHK]`のログ・`results.txt`(追記、`.gitignore`済み)。
+  1つの測定は命令数の上限(1回200万命令)とLuaの予算に収まる量にしてある(表への追加を1万件にしたらPCでLuaのメモリが足りなかった)。
+- 検証: PCビルドで`hw info/mem/help`、`hw trap/buswrite/hang`→次の起動で`/crash/crash_NNNN.txt`と通知、「実機チェック」の「全部」(HTTPSはこの環境では
+  出口のゲートウェイで証明書が差し替わるため失敗するのが正しい)、`PICOOS_VERIFY_LCD=1`で食い違い0、ホストテスト全部。**実機では未確認**(実機ビルドもこの環境ではできない)。
 
 ### スクリーンショット (`src/functions/Screenshot_Functions` / ステータスバー右端のカメラ) (2026-10-02)
 
@@ -1989,6 +2008,8 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   - ポートが消えても(書き込みでの再起動等)1秒ごとに開き直す。フォーカスが外れたら全部離す
   - X11のキーの自動リピートは「離した→押した」を連続で送ってくるので、離したのは30ms待ってから採る
   - `--stdout`でPCビルドの標準入力へパイプできる
+  - **ターミナルに打った1行をそのまま送る**(`start_console()`。`hw info`・`dbg pause`等のコマンド用。2026-10-11)。小窓はキーの押下/離ししか送らないので、
+    ポートを開いたままコマンドを打つ手段がこれしか無かった。書き込みは`write_lock`で、`pad`の行と混ざらない
 - **使っている所**: `GameBoyScene`(画面の`GameBoyPad`とORで重ねる。対応は`gb/Gb_PadMap.hpp`、BはYでも押せる。HOMEで戻る)、
   Lua(`pico.pad_connected/pad_down/pad_pressed/pad_released`、ボタンは小文字の名前。知らない名前はエラー)、
   ステータスバー(つながっている間だけゲームパッドのアイコン。無いのが普通なのでバツは付けない)、
@@ -2092,7 +2113,7 @@ SUMMARY.md未掲載。物理キーボード・外部コントローラーで、�
 - 検証: `focus_test`(run.sh の widget。読む順・矢印・候補にならないもの・押す・消える・タッチ・ダイアログの範囲と戻り・各ウィジェット)、
   PCビルドで標準入力へ`key`の行を流して`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): ランチャのタイルの移動とページ送り、
   Enterで起動、設定アプリ(一覧・ボタン・タブ・スライダー・ドロップダウン・確認ダイアログへ移って閉じたら戻る)、テキストエディタ(Tabでツールバー)。
-  **実機・実物のコントローラーでは未確認**。
+  実機(USBシリアルの入力)で動作を確認済み(2026-10-11)。**実物のコントローラーでは未確認**。
 
 ### 物理キーボードのかな漢字変換 (`src/ime/Romaji_Kana.hpp` / `Keyboard`の物理キーの処理) (2026-10-03)
 

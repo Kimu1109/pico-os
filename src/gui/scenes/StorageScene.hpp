@@ -13,8 +13,11 @@
 // ストレージの使用量。SDの全体/空きと、フォルダの直下にあるもの1つずつの大きさ(フォルダは中身の合計)。
 // ファイルアプリの「他」→「容量」からPush()される(今見ているフォルダから始まる)。
 //
-// - 空きの量(SdFatの freeClusterCount())はFAT32だとFATを全部読むので数秒かかることがある。画面を1回描いてから
-//   1度だけ数え、同じ起動の間は覚えておく(kFreeCacheMs)
+// - SD全体の使用量は、SD全体をSdWalkerで1件ずつたどって「ファイルの大きさをクラスタの大きさへ切り上げた合計」
+//   (フォルダは1クラスタ)として数える(フォルダの中身を数え終わった後、1フレームに kStepBudgetUs ぶんずつ)。
+//   全体の大きさは clusterCount()×bytesPerCluster()(すぐ分かる)で、空き = 全体 - 使用量 の見積もり。
+//   SdFatの freeClusterCount() は使わない: FAT32ではFATを全部読むので大きなSDで数秒〜十数秒止まり、
+//   ウォッチドッグ(既定8秒)で再起動した(2026-10-11、実機)。数えた結果は同じ起動の間覚えておく(kFreeCacheMs)
 // - フォルダの中身の合計は、SdWalkerで1フレームに kStepBudgetUs ぶんずつ数える(フレームを止めない)
 // - 数え終わったら大きい順に並べる。フォルダを2回タップするとその中へ入る。「戻る」は1つ上へ(始めたフォルダなら閉じる)
 class StorageScene : public Scene {
@@ -59,8 +62,12 @@ class StorageScene : public Scene {
         uint64_t total_bytes = 0;
         SdWalker walker;
 
-        bool want_capacity = false;
-        int frames_since_enter = 0;
+        // SD全体の使用量を数えている途中(画面を離れたら捨てて、次に開いたときに数え直す)
+        SdWalker cap_walker;
+        bool cap_counting = false;
+        uint64_t cap_acc = 0;
+        uint64_t cap_bpc = 0;
+        int cap_frames = 0;
 
         Button* back_button = nullptr;
         Label<PICO_STR_L>* path_label = nullptr;
@@ -75,9 +82,21 @@ class StorageScene : public Scene {
         void refreshList();
         void refreshCapacity();
         void goUp();
+        void beginCapacity();
+        void stepCapacity();
 
-        // 同じ起動の間の空き容量の控え
+    public:
+        // 1つのファイル(フォルダ)がSDで占める大きさ(クラスタの大きさへ切り上げる。空のファイルは0)
+        static uint64_t ClusterRound(uint64_t size, bool is_dir, uint64_t bpc);
+        bool capacityKnown() const { return cap_valid; }
+        static uint64_t CapacityTotal() { return cap_total; }
+        static uint64_t CapacityUsed() { return cap_used; }
+        static void ForgetCapacity() { cap_valid = false; }
+
+    private:
+        // 同じ起動の間の使用量の控え
         static inline bool cap_valid = false;
-        static inline uint64_t cap_total = 0, cap_free = 0;
+        static inline bool cap_partial = false;   // 深すぎて中を見なかったフォルダがあった(実際はもっと使っている)
+        static inline uint64_t cap_total = 0, cap_used = 0;
         static inline unsigned long cap_at = 0;
 };

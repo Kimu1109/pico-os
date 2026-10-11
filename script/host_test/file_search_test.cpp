@@ -133,6 +133,24 @@ static void testStorage(){
     check(strcmp(st.entryAt(0).name.c_str(), "screenshots") == 0 && st.entryAt(0).size == 6000, "容量: 大きい順(フォルダは中身の合計)");
     check(strcmp(st.entryAt(1).name.c_str(), "music") == 0 && st.entryAt(1).size == 1050, "容量: 2段下まで足す");
     check(st.totalBytes() == 100 + 1050 + 6000, "容量: 合計(深すぎる所は数えない)");
+
+    // SD全体の使用量: freeClusterCount()(FAT32で数秒止まる)を使わず、たどった大きさをクラスタへ切り上げて足す
+    check(StorageScene::ClusterRound(0, false, 32768) == 0, "容量: 空のファイルは0クラスタ");
+    check(StorageScene::ClusterRound(1, false, 32768) == 32768, "容量: 1バイトでも1クラスタ");
+    check(StorageScene::ClusterRound(32769, false, 32768) == 65536, "容量: 切り上げ");
+    check(StorageScene::ClusterRound(0, true, 32768) == 32768, "容量: フォルダは1クラスタ");
+    int frames = 0;
+    while(!st.capacityKnown() && frames < 500){ st.onUpdate(); frames++; }
+    check(st.capacityKnown(), "容量: SD全体を数え終わる");
+    uint64_t expect = 32768;   // ルート
+    {
+        SdWalker w;
+        w.begin("/");
+        SdWalker::Entry e;
+        while(w.next(e)) expect += StorageScene::ClusterRound(e.size, e.is_dir, 32768);
+    }
+    check(StorageScene::CapacityUsed() == expect, "容量: 使用量はクラスタへ切り上げた合計");
+    check(StorageScene::CapacityTotal() == 1000ull * 32768, "容量: 全体はクラスタ数×クラスタの大きさ");
     st.onExit();
     WidgetFunctions::ClearSceneWidgets();
     HostSd::dirs_enabled = false;

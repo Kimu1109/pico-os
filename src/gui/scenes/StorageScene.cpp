@@ -136,25 +136,83 @@ void StorageScene::refreshList(){
     }
 }
 
+uint64_t StorageScene::ClusterRound(uint64_t size, bool is_dir, uint64_t bpc){
+    if(bpc == 0) return size;
+    if(is_dir) return bpc;
+    return (size + bpc - 1) / bpc * bpc;
+}
+
+void StorageScene::beginCapacity(){
+    this->cap_counting = false;
+    this->cap_walker.end();
+    if(!OSData::SD_usable) return;
+    this->cap_bpc = OSData::SD.bytesPerCluster();
+    // clusterCount()は覚えてある値を返すだけ(freeClusterCount()と違いFATを読まない)
+    cap_total = (uint64_t)OSData::SD.clusterCount() * this->cap_bpc;
+    cap_partial = false;
+    this->cap_acc = this->cap_bpc;   // ルートのフォルダ自身(FAT32では1クラスタ以上)
+    this->cap_frames = 0;
+    if(!this->cap_walker.begin("/")){
+        // たどれなければ全体だけ出す(使用量は分からないまま)
+        cap_used = 0;
+        cap_at = millis();
+        cap_valid = true;
+        return;
+    }
+    this->cap_counting = true;
+}
+
+void StorageScene::stepCapacity(){
+    if(!this->cap_counting) return;
+    StepBudget budget(kStepBudgetUs);
+    SdWalker::Entry e;
+    while(budget.ShouldContinue()){
+        if(!this->cap_walker.next(e)){
+            this->cap_counting = false;
+            this->cap_walker.end();
+            cap_used = this->cap_acc;
+            if(cap_total > 0 && cap_used > cap_total) cap_used = cap_total;
+            cap_at = millis();
+            cap_valid = true;
+            break;
+        }
+        this->cap_acc += ClusterRound(e.size, e.is_dir, this->cap_bpc);
+        if(e.too_deep) cap_partial = true;
+    }
+}
+
 void StorageScene::refreshCapacity(){
     if(!this->capacity_label) return;
     if(!OSData::SD_usable){
         this->capacity_label->setText("SDカードがありません");
         return;
     }
+    char total[16];
+    FormatBytes(cap_total, total, sizeof(total));
+    char buf[PICO_STR_L];
     if(!cap_valid){
-        this->capacity_label->setText("SDの空きを数えています…");
+        if(this->cap_counting){
+            char used[16];
+            FormatBytes(this->cap_acc, used, sizeof(used));
+            snprintf(buf, sizeof(buf), "使用量を数えています… %s/%s", used, total);
+        }else{
+            snprintf(buf, sizeof(buf), "全体%s", total);
+        }
+        this->capacity_label->setText(buf);
+        if(this->bar && cap_total > 0 && this->cap_counting){
+            const uint64_t u = this->cap_acc < cap_total ? this->cap_acc : cap_total;
+            this->bar->setValue((float)((double)u * 100.0 / (double)cap_total));
+        }
         return;
     }
-    char used[16], total[16], fr[16];
-    FormatBytes(cap_total - cap_free, used, sizeof(used));
-    FormatBytes(cap_total, total, sizeof(total));
-    FormatBytes(cap_free, fr, sizeof(fr));
-    char buf[PICO_STR_L];
-    snprintf(buf, sizeof(buf), "%s/%s 空き%s", used, total, fr);
+    char used[16], fr[16];
+    FormatBytes(cap_used, used, sizeof(used));
+    FormatBytes(cap_total - cap_used, fr, sizeof(fr));
+    // 空きは「全体 - ファイルの合計」の見積もり(FATの空きを数えたものではない)
+    snprintf(buf, sizeof(buf), "%s/%s 空き約%s%s", used, total, fr, cap_partial ? "以下" : "");
     this->capacity_label->setText(buf);
     if(this->bar && cap_total > 0){
-        this->bar->setValue((float)((double)(cap_total - cap_free) * 100.0 / (double)cap_total));
+        this->bar->setValue((float)((double)cap_used * 100.0 / (double)cap_total));
     }
 }
 
@@ -220,12 +278,21 @@ void StorageScene::onEnter(){
     WidgetFunctions::Add(this->list);
 
     if(cap_valid && millis() - cap_at > kFreeCacheMs) cap_valid = false;
-    this->frames_since_enter = 0;
+    this->cap_counting = false;
+    this->cap_walker.end();
+    if(!cap_valid && OSData::SD_usable){
+        this->cap_bpc = OSData::SD.bytesPerCluster();
+        cap_total = (uint64_t)OSData::SD.clusterCount() * this->cap_bpc;
+    }
     this->refreshCapacity();
     this->refreshList();
 }
 
 void StorageScene::onExit(){
+    // 数えている途中なら捨てる(次に開いたときに数え直す)
+    this->cap_walker.end();
+    this->cap_counting = false;
+    this->walker.end();
     this->back_button = nullptr;
     this->path_label = nullptr;
     this->capacity_label = nullptr;
@@ -235,19 +302,18 @@ void StorageScene::onExit(){
 }
 
 void StorageScene::onUpdate(){
-    // 空きは画面を1回描いてから数える(FAT32では数秒止まりうるので、「数えています」が見えるように)
-    if(!cap_valid && OSData::SD_usable && ++this->frames_since_enter >= 2){
-        const uint64_t bpc = OSData::SD.bytesPerCluster();
-        const int32_t fc = OSData::SD.freeClusterCount();
-        cap_total = (uint64_t)OSData::SD.clusterCount() * bpc;
-        cap_free = fc > 0 ? (uint64_t)fc * bpc : 0;
-        cap_at = millis();
-        cap_valid = true;
-        this->refreshCapacity();
+    if(!this->sorted){
+        const bool was_listed = this->listed;
+        const int before = this->counting;
+        this->step();
+        if(!was_listed || before != this->counting || this->sorted) this->refreshList();
+        return;
     }
-    if(this->sorted) return;
-    const bool was_listed = this->listed;
-    const int before = this->counting;
-    this->step();
-    if(!was_listed || before != this->counting || this->sorted) this->refreshList();
+    // フォルダの中身を数え終わってから、SD全体の使用量を少しずつ数える(どちらも1フレームに kStepBudgetUs まで)
+    if(!cap_valid && OSData::SD_usable){
+        if(!this->cap_counting) this->beginCapacity();
+        this->stepCapacity();
+        // 表示の更新は数フレームに1回(Labelの組み直しを減らす)
+        if(cap_valid || ++this->cap_frames % 8 == 0) this->refreshCapacity();
+    }
 }

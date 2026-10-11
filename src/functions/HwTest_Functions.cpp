@@ -12,7 +12,7 @@
 
 namespace {
     void PrintHelp(){
-        LOG_SYS_MSG("[HW] コマンド: hw info / hw mem / hw trap / hw buswrite / hw hang");
+        LOG_SYS_MSG("[HW] コマンド: hw info / hw boot / hw mem / hw trap / hw buswrite / hw hang");
     }
 
     void PrintInfo(){
@@ -28,6 +28,21 @@ namespace {
                     NetworkFunctions::currentSSID.c_str());
         LOG_SYS_MSG("[HW] sound rate=%luHz", (unsigned long)SoundFunctions::SampleRate());
         LOG_SYS_MSG("[HW] watchdog=%s", CrashDumpFunctions::WatchdogEnabled() ? "on" : "off");
+    }
+
+    // 起動直後のログはUSBシリアルを開き直す前に流れて見えないので、後から見られるようにする
+    void PrintBoot(){
+        const CrashDumpFunctions::BootInfo& b = CrashDumpFunctions::GetBootInfo();
+        LOG_SYS_MSG("[HW] reason=0x%lx watchdog_caused=%d watchdog_timeout=%d",
+                    (unsigned long)b.reason, b.watchdog_caused ? 1 : 0, b.watchdog_enable_caused ? 1 : 0);
+        LOG_SYS_MSG("[HW] RAMの記録 at 0x%08lx magic=0x%08lx valid=%d crumbs=0x%08lx",
+                    (unsigned long)b.record_addr, (unsigned long)b.record_magic, b.record_valid ? 1 : 0,
+                    (unsigned long)b.crumbs_magic);
+        LOG_SYS_MSG("[HW] scratch=0x%08lx 0x%08lx 0x%08lx 0x%08lx",
+                    (unsigned long)b.scratch[0], (unsigned long)b.scratch[1],
+                    (unsigned long)b.scratch[2], (unsigned long)b.scratch[3]);
+        const char* dump = CrashDumpFunctions::LastDumpPath();
+        LOG_SYS_MSG("[HW] 前回の記録=%s ダンプ=%s", b.source ? b.source : "なし", dump ? dump : "(書いていない)");
     }
 
     void PrintMem(){
@@ -75,6 +90,7 @@ bool HwTestFunctions::FeedSerialLine(const char* line){
 
     if(*cmd == '\0' || strcmp(cmd, "help") == 0) PrintHelp();
     else if(strcmp(cmd, "info") == 0) PrintInfo();
+    else if(strcmp(cmd, "boot") == 0) PrintBoot();
     else if(strcmp(cmd, "mem") == 0) PrintMem();
     else if(strcmp(cmd, "trap") == 0) Trap();
     else if(strcmp(cmd, "buswrite") == 0) BusWrite();

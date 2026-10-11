@@ -7,7 +7,9 @@
 //
 // 落ちた瞬間にはSDへ書けない(割り込み・壊れたヒープの中でSdFatを呼ぶのは危ない)ので、2段に分ける:
 //   1. 落ちた瞬間: 電源を切らない限り消えないRAM(実機は .uninitialized_data = リセットで0クリアされない領域)へ
-//      レジスタ・スタックの先頭・「今どこを処理していたか」(パンくず)を書き、再起動する
+//      レジスタ・スタックの先頭・「今どこを処理していたか」(パンくず)を書き、再起動する。
+//      実機ではRAMの記録が残らなかったので(2026-10-11)、ウォッチドッグのスクラッチレジスタ0〜3にも
+//      最小限(種類・区間・pc/lr/CFSR または 時刻/フレーム)を控える
 //   2. 次の起動: Setup() がそれを見つけたら /crash/crash_NNNN.txt へ文章として書き出し、印を消す。
 //      PostPendingNotice() が通知を出す(タップでファイルビューワーが開く)
 //
@@ -71,8 +73,22 @@ namespace CrashDumpFunctions {
         char lua_app[64];
     };
 
+    // 起動のときに見えたもの(実機の診断用。hw boot で出す)。PCビルドは全部0
+    struct BootInfo {
+        uint32_t reason;               // watchdog_hw->reason
+        bool watchdog_caused;          // watchdog_caused_reboot()
+        bool watchdog_enable_caused;   // watchdog_enable_caused_reboot()(ウォッチドッグの時間切れ)
+        uint32_t record_addr;          // RAMの記録の番地
+        uint32_t record_magic;         // そのときのRAMの記録のmagic
+        bool record_valid;
+        uint32_t crumbs_magic;         // RAMのパンくずのmagic
+        uint32_t scratch[4];           // ウォッチドッグのスクラッチレジスタ0〜3
+        const char* source;            // ダンプを作った元("RAM" / "scratch")。無ければnullptr
+    };
+
     // 起動時(SD・ログの後)。前回の記録があればダンプを書いて印を消す
     void Setup();
+    const BootInfo& GetBootInfo();
     // 落ちたときに捕まえる仕組みを入れる(実機: 何もしない=isr_hardfaultはリンクで差し替わる。
     // PC: シグナルハンドラ)。ホストテストでは呼ばない
     void InstallHandlers();

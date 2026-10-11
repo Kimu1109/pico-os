@@ -76,6 +76,7 @@ src/
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
   todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders)。下記「TODOアプリ」参照
+  store/                     アプリストア。配布物の読み取りと署名の確認(App_Repo)・通信とインストール(App_Store)・焼き込みの公開鍵(App_Repo_Keys)。下記「アプリストア」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索 / Iso_Flow: 流れの場(フローフィールド))。Luaの`pico.iso`。下記「ブロック」「2.5Dエンジンのタワーディフェンス向けの道具」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
@@ -89,9 +90,10 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/file_ops/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana/edit_history等の60本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/file_ops/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana/edit_history/app_repo等の61本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・アプリストアの配布物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/app_store_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
+  build_app_repo.py           アプリストアの配布物を作る(鍵の生成・署名・目録だけの署名(sign)とCIでの組み立て(assemble)・確認。標準ライブラリのみ。APP_REPO.md)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
   pad_serial.py               PCのキーボードを外部コントローラーにする(USBシリアルへ送る。tkinter + pyserial)
   generate_tetris_blocks.py   テトリスのミノの絵(blocks.pimg)とアイコンを作る(標準ライブラリのみ)
@@ -112,6 +114,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
 examples/doc.md                MarkdownView動作確認用サンプル文書
 PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1は一通り実装済み)
 CHAT_PROTOCOL.md               チャットサーバとの通信仕様(下記「チャット」参照)
+APP_REPO.md                    アプリストアの配布物の形式(下記「アプリストア」参照)
 MUSIC_FORMAT.md                曲データ形式(pico-os MML)の仕様(下記「曲データ」参照)
 server/chat/                   自前のチャットサーバ(chat_server.py、標準ライブラリのみ)+ Webクライアント + Raspberry Pi/Let's Encryptの設置手順(README.md)
 ```
@@ -4468,6 +4471,44 @@ OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なの�
   実体も`openNext()`の走査も無いため。`pico.sd_list`/`Doc_Cache::Clear()`と同じ制約)。
   SD無し/ディレクトリが存在しない場合に安全に0件を返すことのみASanで確認し、
   実際の走査結果はPCビルドの`--shot`(上記)で確認する、という役割分担にした。
+
+### アプリストア(`src/store/` / `StoreScene` / `APP_REPO.md` / `script/build_app_repo.py`)(2026-10-11)
+
+ランチャの「ストア」(`StoreScene`、アイコン`IconID::AppStore`)が、Webに置いた配布物からLuaアプリを入れる・更新する・消す。
+**形式は静的なファイルだけ**(catalog.tsv + catalog.sig + `<id>/<版>/files.tsv` + ファイル)なので、GitHub Pages でも
+Raspberry Pi の nginx でも同じ。仕様は`APP_REPO.md`。既定のURLは`https://kimu1109.github.io/pico-os/apps/`(`/sys/store.cfg`の`url`)。
+
+- **守り方**: カタログ(catalog.tsv)だけにEd25519で署名し(`"pico-os-apps-v1\0"`+SHA-256(catalog))、そこから
+  files.tsv(SHA-256)→各ファイル(SHA-256)とつなぐ。鍵は`src/store/App_Repo_Keys.hpp`の`kBuiltin`(今は空の目印1件=全部0。
+  全部0の鍵は信頼しない)か`/sys/store.cfg`の`key = 16進64桁`(4行まで。SDへ書ける人はアプリを直接置けるので弱くならない)。
+  **秘密鍵は利用者のPCにだけ置く**(`build_app_repo.py keygen`。リポジトリ・サーバ・GitHubのSecretsにも置かない)。
+  同じURLで前に見た`serial`より小さい一覧は断る(`/sys/store/state.cfg`。古い署名済みの一覧へ戻される攻撃)。
+  app.cfgの`id`・`version`がカタログと違う、または**権限がカタログの`perms`を超える**ものは入れない(入れる前に`perms`を確認のダイアログで見せる)。
+  署名の確認はMonocypherの`crypto_ed25519_check`(SSHと同じvendor)。署名側の`build_app_repo.py`はRFC 8032を素のPythonで書いたもの
+  (RFCのテストの鍵で一致、Pythonの署名をMonocypherで確かめるのは`app_repo_test`)。
+- **AppStore(`store/App_Store`)**: `HttpRequest`1本をkeep-aliveで使い回す(HTTPSのハンドシェイクを1回に。画面を離れるとき`close()`)。
+  受け取りながらSDへ書いてSHA-256を取る(`FileSink`、大きさの上限付き)。catalog.tsvは`/sys/store/catalog.part`へ取り、確かめてから
+  `catalog.tsv`へ差し替える(失敗しても前の一覧のまま)。インストールは`/sys/store/staging/`へ全部取って確かめてから、
+  **ファイルを1つずつ**`/lua/apps/<dir>/`へ移す(ディレクトリごと移さないのは、更新でアプリが書いたセーブ等を残すため)。
+  前の版の一覧(`/sys/store/installed/<id>.tsv`)にあって新しい版に無いファイルだけ消す。files.tsvは全体をRAMに載せず、
+  1行ずつ読み直す(512バイトの行バッファもスタックではなくメンバ)。カタログ40件で**約16KB**あるので、画面が開いている間だけ`new`する。
+  `Installed`: No / Same / Update / Newer / Foreign(同名のディレクトリにidの無いアプリ=手で入れたもの。上書きの確認を出す) / Conflict(別のid。入れない)。
+- **登録簿**: インストール後すぐランチャに並ぶ(`LuaAppScanner::RegisterOrRefresh()`。既に登録済みなら`AppFunctions::Refresh()`で名前・権限・アイコンだけ差し替え、
+  並びの位置は変えない)。削除は`AppFunctions::Unregister()`(後ろのindexを詰め、ランチャの並び・隠した印も詰める)。
+  `LuaAppScanner::ReadAppConfig()`/`AppInfo`を外へ出した(app.cfgに`id`を足した。走査は`.`で始まるディレクトリを飛ばすようにした)。
+  **登録簿の上限は32件のまま**(静的15+SDのLuaアプリ12で27。ストアで5本より多く入れると、超えた分は次の起動のスキャンでも並ばない。
+  `launcher_hidden`が32bitなので、広げるならそこも)。
+- **配るアプリ**: `pc/sdcard/lua/apps/*/app.cfg`に`id`があるもの(12本全部に付けた)。gitの管理下ならgitが管理しているファイルだけ。
+  ファイル名はASCIIだけ(`[A-Za-z0-9._-]`、4段・95文字)、ディレクトリ名は日本語可(catalog.tsvの`dir`)。
+- **GitHub Pages**: 署名した目録(`build_app_repo.py sign --out store`)を`store/`にコミットすると、`web-pages.yml`が`assemble`で
+  `pc/sdcard/lua/apps/`から中身を写して`_site/apps/`へ置く(**秘密鍵はCIに要らない**)。署名の後で中身が変わったアプリは警告して配らない
+  (`--allow-stale`。Webの公開そのものは止めない)。**`store/`はまだコミットしていない**(利用者の鍵で署名する必要があるため)。
+  github.io の証明書の発行元が焼き込みのルート(DigiCert/Sectigo系)で足りるかは実機で未確認。
+- 検証: `app_repo_test`(run.sh の core。行の読み取り・名前とパスの検査・版・権限・署名)、`app_test`(Refresh/Unregister/FindByArg)、
+  **`app_store_net_test`(run_net.sh。`app_store_fixture.py`が配布物の変種を作り、`python3 -m http.server`が同じURLで中身を張り替えて配る)**:
+  一覧・インストール・手で入れた同名のアプリへの上書き(アプリのファイルが残る)・知らない鍵/壊れた署名/鍵の設定なし・更新(消えたファイル・増えたサブディレクトリ・
+  セーブが残る)・古い一覧・改ざんしたファイル・一覧より強い権限・削除・404・中止。PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)で
+  一覧→確認→インストール→開く→削除(実ファイルシステムでディレクトリが消える)。**実機・GitHub Pages・本物のHTTPSでは未確認**。
 
 ### 動作確認アプリ(`pc/sdcard/lua/apps/動作確認/`、2026-10-10)
 

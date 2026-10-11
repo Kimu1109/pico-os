@@ -48,6 +48,17 @@ namespace PICO_Path {
         // 通知の予約(1行1件のタブ区切り)。NotificationFunctions参照
         constexpr const char* SYS_NOTIFY_RULES = "/sys/notify_rules.tsv";
 
+        // アプリストア(store/App_Store、APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
+        // インストールしたアプリのファイル一覧(installed/<id>.tsv)・取得中の置き場(staging/)
+        constexpr const char* STORE_DIR = "/sys/store";
+        constexpr const char* STORE_CATALOG = "/sys/store/catalog.tsv";
+        constexpr const char* STORE_CATALOG_PART = "/sys/store/catalog.part";
+        constexpr const char* STORE_STATE = "/sys/store/state.cfg";
+        constexpr const char* STORE_INSTALLED_DIR = "/sys/store/installed";
+        constexpr const char* STORE_STAGING = "/sys/store/staging";
+        constexpr const char* STORE_STAGING_FILES = "/sys/store/staging/files.tsv";
+        constexpr const char* STORE_STAGING_APP = "/sys/store/staging/app";
+
         namespace CFG {
             constexpr const char* SYS_NETWORK_CFG = "/sys/network.cfg";
             // 保存済みのWi-Fiネットワークと Wi-FiのON/OFF("enabled" / "ssid1" / "pass1" ...)。net/Wifi_Profiles参照
@@ -55,6 +66,8 @@ namespace PICO_Path {
             constexpr const char* SYS_USER_CFG = "/sys/user.cfg";
             // チャットアプリの接続先("server = https://..." と "token = ...")。ChatClient参照
             constexpr const char* SYS_CHAT_CFG = "/sys/chat.cfg";
+            // アプリストアの取得元("url = https://.../apps/")と信頼する公開鍵("key = 16進64桁"、何行でも)
+            constexpr const char* SYS_STORE_CFG = "/sys/store.cfg";
             // TODOアプリ(Todoist)のトークン("token = enc1:...")と表示の設定。TodoistClient参照
             constexpr const char* SYS_TODOIST_CFG = "/sys/todoist.cfg";
             // 音声出力("output = auto | off" / "volume = 0〜100")。SoundFunctions参照

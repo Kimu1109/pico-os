@@ -1,0 +1,173 @@
+// アプリストアの配布物の読み取り(store/App_Repo)。APP_REPO.md の取り決めを固定する。
+// 通信とインストールは run_net.sh の app_store_net_test。
+#include "store/App_Repo.hpp"
+#include "ssh/Ssh_Sha256.hpp"
+#include "monocypher-ed25519.h"
+
+#include <cstdio>
+#include <cstring>
+#include <string>
+
+static int failures = 0;
+static void check(bool cond, const char* label){
+    printf("%s %s\n", cond ? "[ OK ]" : "[FAIL]", label);
+    if(!cond) failures++;
+}
+
+// 書き換えてよい写しを作って読む(本物は1行ずつのバッファをその場で書き換える)
+static bool CatLine(const char* line, AppRepo::Entry& e, bool& skip){
+    std::string s(line);
+    return AppRepo::ParseCatalogLine(&s[0], e, skip);
+}
+static bool FilesLine(const char* line, AppRepo::FileEntry& f, bool& skip){
+    std::string s(line);
+    return AppRepo::ParseFilesLine(&s[0], f, skip);
+}
+
+static const char* kHash = "6600098b337a694c04a9507cb47efade200ea048993d8fd188b417736d6c9039";
+
+int main(){
+    // ---- 名前 ----
+    check(AppRepo::ValidId("tetris") && AppRepo::ValidId("zombie-td") && AppRepo::ValidId("a_1"), "id: 使える");
+    check(!AppRepo::ValidId("") && !AppRepo::ValidId("Tetris") && !AppRepo::ValidId("a/b")
+          && !AppRepo::ValidId("../x") && !AppRepo::ValidId("aaaaaaaaaaaaaaaaaaaaaaaa"), "id: 使えない");
+    check(AppRepo::ValidVersion("1") && AppRepo::ValidVersion("2.0.10"), "version: 使える");
+    check(!AppRepo::ValidVersion("") && !AppRepo::ValidVersion("1.") && !AppRepo::ValidVersion(".1")
+          && !AppRepo::ValidVersion("1..2") && !AppRepo::ValidVersion("1.0-beta") && !AppRepo::ValidVersion("../1"), "version: 使えない");
+    check(AppRepo::ValidDirName("テトリス") && AppRepo::ValidDirName("ゾンビTD"), "dir: 日本語は使える");
+    check(!AppRepo::ValidDirName("..") && !AppRepo::ValidDirName(".x") && !AppRepo::ValidDirName("a/b")
+          && !AppRepo::ValidDirName("a\\b") && !AppRepo::ValidDirName("a:b") && !AppRepo::ValidDirName("a.")
+          && !AppRepo::ValidDirName("a ") && !AppRepo::ValidDirName("a\nb") && !AppRepo::ValidDirName(""), "dir: 使えない");
+    check(AppRepo::ValidRelPath("main.lua") && AppRepo::ValidRelPath("img/a-b_c.pimg") && AppRepo::ValidRelPath("a/b/c/d.lua"), "path: 使える");
+    check(!AppRepo::ValidRelPath("/main.lua") && !AppRepo::ValidRelPath("../x") && !AppRepo::ValidRelPath("a/../x")
+          && !AppRepo::ValidRelPath("a//b") && !AppRepo::ValidRelPath("a/") && !AppRepo::ValidRelPath(".hidden")
+          && !AppRepo::ValidRelPath("a/./b") && !AppRepo::ValidRelPath("a/b/c/d/e") && !AppRepo::ValidRelPath("日本.lua")
+          && !AppRepo::ValidRelPath("a b") && !AppRepo::ValidRelPath("a\\b") && !AppRepo::ValidRelPath(""), "path: 使えない");
+    {
+        std::string longp(96, 'a');
+        check(!AppRepo::ValidRelPath(longp.c_str()) && AppRepo::ValidRelPath(longp.substr(0, 95).c_str()), "path: 95文字まで");
+    }
+
+    // ---- 版 ----
+    check(AppRepo::CompareVersion("1.0.0", "1.0.0") == 0 && AppRepo::CompareVersion("1", "1.0") == 0, "version: 同じ");
+    check(AppRepo::CompareVersion("1.9", "1.10") < 0 && AppRepo::CompareVersion("2.0", "1.99.9") > 0
+          && AppRepo::CompareVersion("1.0", "1.0.1") < 0, "version: 数として比べる");
+
+    // ---- 権限 ----
+    uint8_t perms = 0xFF;
+    check(AppRepo::ParsePerms("-", perms) && perms == 0, "perms: -");
+    check(AppRepo::ParsePerms("network,notify,sd", perms) && perms == (AppRepo::PermNetwork | AppRepo::PermNotify | AppRepo::PermSd), "perms: 全部");
+    check(!AppRepo::ParsePerms("network,camera", perms), "perms: 知らない権限は断る");
+    FixedString<PICO_STR_M> pt;
+    AppRepo::PermsText(AppRepo::PermNetwork | AppRepo::PermNotify, pt);
+    check(pt == "ネットワーク・通知", "perms: 表示");
+    AppRepo::PermsText(0, pt);
+    check(pt == "なし", "perms: なしの表示");
+
+    // ---- catalog.tsv ----
+    {
+        uint32_t serial = 0;
+        std::string h = "pico-os-apps\t1\t1791704372\r\n";
+        check(AppRepo::ParseCatalogHeader(&h[0], serial) && serial == 1791704372u, "catalog: 1行目");
+        h = "pico-os-apps\t1\t5\tfuture\n";
+        check(AppRepo::ParseCatalogHeader(&h[0], serial) && serial == 5, "catalog: 1行目の後ろの列は無視");
+        h = "pico-os-apps\t2\t5\n";
+        check(!AppRepo::ParseCatalogHeader(&h[0], serial), "catalog: 知らない形式の番号は断る");
+        h = "something\t1\t5\n";
+        check(!AppRepo::ParseCatalogHeader(&h[0], serial), "catalog: 見出しが違う");
+        h = "pico-os-apps\t1\t99999999999\n";
+        check(!AppRepo::ParseCatalogHeader(&h[0], serial), "catalog: serialが32bitを超える");
+
+        AppRepo::Entry e;
+        bool skip = false;
+        std::string line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です\textra\n";
+        check(CatLine(line.c_str(), e, skip), "catalog: 1件読める");
+        check(e.id == "tetris" && e.version == "2.0.0" && e.dir == "テトリス" && e.name == "テトリス"
+              && e.bytes == 21143 && e.perms == AppRepo::PermNetwork && e.description == "説明です", "catalog: 各列");
+        check(e.files_sha256[0] == 0x66 && e.files_sha256[31] == 0x39, "catalog: SHA-256");
+        check(!CatLine("", e, skip) && skip, "catalog: 空行は飛ばす");
+        check(!CatLine("# comment\n", e, skip) && skip, "catalog: #は飛ばす");
+        const char* bad[] = {
+            "tetris\t2.0.0\tテトリス\tテトリス\t21143\n",                                   // 列が足りない
+            "Tetris\t2.0.0\tテトリス\tx\t1\t%s\t-\t\n",                                      // id
+            "tetris\tv2\tテトリス\tx\t1\t%s\t-\t\n",                                         // version
+            "tetris\t2\t../x\tx\t1\t%s\t-\t\n",                                              // dir
+            "tetris\t2\tテトリス\t\t1\t%s\t-\t\n",                                            // name が空
+            "tetris\t2\tテトリス\tx\t-1\t%s\t-\t\n",                                          // bytes
+            "tetris\t2\tテトリス\tx\t9999999\t%s\t-\t\n",                                     // 4MiB超え
+            "tetris\t2\tテトリス\tx\t1\tabcd\t-\t\n",                                         // hash
+            "tetris\t2\tテトリス\tx\t1\t%s\troot\t\n",                                        // 知らない権限
+        };
+        bool all = true;
+        for(const char* fmt : bad){
+            char buf[512];
+            snprintf(buf, sizeof(buf), fmt, kHash);
+            if(CatLine(buf, e, skip) || skip) all = false;
+        }
+        check(all, "catalog: 壊れた行は断る");
+    }
+
+    // ---- files.tsv ----
+    {
+        AppRepo::FileEntry f;
+        bool skip = false;
+        std::string line = std::string("img/a.pimg\t659\t") + kHash + "\n";
+        check(FilesLine(line.c_str(), f, skip) && f.path == "img/a.pimg" && f.bytes == 659 && f.sha256[0] == 0x66, "files: 1行");
+        line = std::string("../a\t1\t") + kHash;
+        check(!FilesLine(line.c_str(), f, skip), "files: 外へ出るパスは断る");
+        line = std::string("a.lua\t2000000\t") + kHash;
+        check(!FilesLine(line.c_str(), f, skip), "files: 1MiB超えは断る");
+        check(!FilesLine("a.lua\t1\n", f, skip) && !skip, "files: 列が足りない");
+    }
+
+    // ---- 署名 ----
+    {
+        uint8_t seed[32];
+        for(int i = 0; i < 32; i++) seed[i] = (uint8_t)(i * 7 + 1);
+        uint8_t sk[64], pk[32];
+        uint8_t seed_copy[32];
+        memcpy(seed_copy, seed, 32);
+        crypto_ed25519_key_pair(sk, pk, seed_copy);
+
+        const char* catalog = "pico-os-apps\t1\t1\n";
+        uint8_t digest[32];
+        Sha256::Hash(catalog, strlen(catalog), digest);
+        uint8_t msg[AppRepo::kSignMessageBytes];
+        memcpy(msg, AppRepo::kSignContext, 16);
+        memcpy(msg + 16, digest, 32);
+        uint8_t sig[64];
+        crypto_ed25519_sign(sig, sk, msg, sizeof(msg));
+
+        char pkhex[65], sighex[129];
+        AppRepo::HexEncode(pk, 32, pkhex);
+        AppRepo::HexEncode(sig, 64, sighex);
+        std::string text = std::string("ed25519 ") + pkhex + "\t" + sighex + "\n";
+        uint8_t pk2[32], sig2[64];
+        check(AppRepo::ParseSignature(text.c_str(), pk2, sig2) && memcmp(pk2, pk, 32) == 0 && memcmp(sig2, sig, 64) == 0, "sig: 読める");
+        check(AppRepo::VerifyCatalog(digest, pk2, sig2), "sig: 正しい署名");
+        uint8_t other[32];
+        memcpy(other, digest, 32);
+        other[0] ^= 1;
+        check(!AppRepo::VerifyCatalog(other, pk2, sig2), "sig: 中身が違えば合わない");
+        sig2[10] ^= 0x40;
+        check(!AppRepo::VerifyCatalog(digest, pk2, sig2), "sig: 署名が壊れていれば合わない");
+        uint8_t zero[32] = {};
+        check(!AppRepo::VerifyCatalog(digest, zero, sig), "sig: 全部0の鍵は使わない");
+        check(!AppRepo::IsBuiltinKey(zero), "sig: 全部0の焼き込み鍵(空の目印)は信頼しない");
+        check(!AppRepo::ParseSignature("rsa abc def", pk2, sig2), "sig: ed25519以外");
+        check(!AppRepo::ParseSignature((std::string("ed25519 ") + pkhex).c_str(), pk2, sig2), "sig: 署名が無い");
+        check(!AppRepo::ParseSignature((text + "x").c_str(), pk2, sig2), "sig: 後ろにゴミ");
+
+        // script/build_app_repo.py(Pythonで書いたEd25519)が作った署名を確かめられること。
+        // 下の値は RFC 8032 のテストの鍵(seed 9d61b1…)で、catalog "pico-os-apps\t1\t1\n" を
+        // build_app_repo.sign_catalog() で署名したもの
+        uint8_t py_pk[32], py_sig[64];
+        const char* py = "ed25519 d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a "
+            "1ccd5435e2841ad9ab14676605cc134b77b22b83c3a5e11a19bc00ebaabe4c07c7ff6fcbedd0c5bc1e414fc9a3c6a62776be5a07f3d5d0f0d5b1e39c319ac606\n";
+        check(AppRepo::ParseSignature(py, py_pk, py_sig) && AppRepo::VerifyCatalog(digest, py_pk, py_sig),
+              "sig: Pythonの署名をMonocypherで確かめられる");
+    }
+
+    printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
+    return failures == 0 ? 0 : 1;
+}

@@ -31,3 +31,6 @@ pc/sdcard/lua/apps/*/results.txt
 pc/sdcard/lua/apps/*/bench.tmp
 # 「ブロック」のセーブ(PCビルドで試すと作られる)
 pc/sdcard/lua/apps/ブロック/worlds/
+# アプリストア(PCビルドで試すと作られる。store.cfg には試すときの url/key を書く)
+pc/sdcard/sys/store/
+pc/sdcard/sys/store.cfg

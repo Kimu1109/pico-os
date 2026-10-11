@@ -15,6 +15,7 @@
 #include "gui/scenes/MusicScene.hpp"
 #include "gui/scenes/SshScene.hpp"
 #include "gui/scenes/NotificationScene.hpp"
+#include "gui/scenes/StoreScene.hpp"
 #include "lua/LuaAppScanner.hpp"
 
 // このOSに載せるアプリの一覧。
@@ -59,6 +60,8 @@ void AppFunctions::Setup(){
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)
     Register("通知", IconID::Bell, &MakeScene<NotificationScene>);
+    //アプリストア。配布元(APP_REPO.md)からLuaアプリを取ってきて /lua/apps/ へ入れる
+    Register(StoreScene::kAppName, IconID::AppStore, &MakeScene<StoreScene>);
     // Luaアプリは下のスキャンで登録する(動作確認用のサンプルは /lua/apps/動作確認/)。
     // 権限が要るものは各アプリの app.cfg に書く
 

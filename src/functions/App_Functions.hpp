@@ -109,6 +109,18 @@ namespace AppFunctions {
 
     int Count();
 
+    // argが一致するアプリの登録簿のindex(無ければ-1)
+    int FindByArg(const char* arg);
+
+    // 登録済みのアプリの名前・権限・アイコンを差し替える(アプリストアで更新したとき)。
+    // ランチャの並び・隠した印はそのまま
+    bool Refresh(int index, const char* name, const LuaPermissions& permissions,
+                 const char* icon_path = nullptr);
+
+    // 登録簿から外す(アプリストアで削除したとき)。後ろのアプリのindexは1つずつ詰まる。
+    // ランチャの並び・隠した印も詰める(launcher.cfg は名前で持つので書き直さなくてよい)
+    bool Unregister(int index);
+
     // 範囲外なら nullptr
     const AppEntry* Get(int index);
 

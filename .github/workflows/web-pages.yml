@@ -84,6 +84,19 @@ jobs:
           ! grep -q "__PICOOS_ASSET_REV__" _site/index.html
           ls -la _site
 
+      # アプリストアの配布物(APP_REPO.md)。署名した目録 store/ がコミットされていれば、
+      # アプリの中身を pc/sdcard/lua/apps/ から写して /apps/ に置く。署名は手元のPCで済ませてある
+      # (build_app_repo.py sign)ので、秘密鍵はここに要らない。署名の後で中身が変わったアプリは
+      # 警告して配らない(sign をやり直すまで)
+      - name: アプリストアの配布物を集める
+        run: |
+          if [ -f store/catalog.tsv ]; then
+            python3 script/build_app_repo.py assemble --index store --out _site/apps --allow-stale
+            python3 script/build_app_repo.py verify --dir _site/apps
+          else
+            echo "store/catalog.tsv が無いので、アプリストアの配布物は置きません"
+          fi
+
       - name: 成果物をアップロードする
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3

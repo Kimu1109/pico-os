@@ -1,5 +1,9 @@
 #pragma once
 
+#include "lua/LuaPermissions.hpp"
+#include "util/FixedString.hpp"
+#include "consts.hpp"
+
 // SD上の `/lua/apps/` を走査し、見つけたLuaアプリをランチャの登録簿
 // (AppFunctions)へ自動登録する。「Luaアプリを増やすたびApp_List.cppへ手で
 // 1行足す」だった従来の唯一の経路に加え、SDへスクリプトを置くだけでランチャに
@@ -42,4 +46,24 @@ namespace LuaAppScanner {
     // 戻り値は実際に登録できた件数(AppFunctions::kMaxAppsの上限に当たった分は
     // Register()側の警告ログに任せ、ここではカウントしない)。
     int Scan();
+
+    // app.cfg の中身(全部省略可)。アプリストア(store/App_Store)もこれを読む
+    struct AppInfo {
+        FixedString<PICO_STR_M> name;         // 空ならディレクトリ名を使う
+        FixedString<PICO_STR_L> description;
+        FixedString<PICO_STR_S> version;
+        FixedString<PICO_STR_S> id;           // アプリストアのid(APP_REPO.md)。手で入れたアプリは空
+        FixedString<PICO_STR_M> icon;         // アプリディレクトリ内の相対パス(.pimg)
+        LuaPermissions permissions;           // 既定は全部false(最小権限)
+    };
+    // config_path(app.cfg)を読んでoutへ。無ければfalse(outは既定値のまま)
+    bool ReadAppConfig(const char* config_path, AppInfo& out);
+
+    // app_dir_path("/lua/apps/<名前>")のアプリを登録簿へ入れる。
+    // 既に同じ main.lua で登録されていれば、名前・権限・アイコンだけを読み直す(ランチャの位置は変えない)。
+    // main.lua が無い/登録できなければfalse。ランチャの再描画は呼び出し側の仕事
+    bool RegisterOrRefresh(const char* app_dir_path);
+
+    // app_dir_path のアプリを登録簿から外す(登録されていなければ何もせずfalse)
+    bool Unregister(const char* app_dir_path);
 }

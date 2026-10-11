@@ -19,6 +19,8 @@
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定(アプリストアの登録/更新/削除も)
 #   app_repo_test … アプリストアの配布物の読み取り(store/App_Repo、APP_REPO.md)。カタログ/ファイル一覧の行・
 #                   名前とパスの検査・版の比較・権限・Ed25519の署名(Pythonの署名をMonocypherで確かめる)
+#   bmp_test      … BMPの読み書き(gui/icons/Bmp_Codec)。1/4/8/16/24/32bpp・上下の並び・窓・OSのパレットへ寄せる/番号のまま/
+#                   フルカラーのまま・断る形式・途中で切れたファイル・スクリーンショットの書き出しと読み直し
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
 #   file_ops_test … ファイルアプリのコピー/移動/名前の変更の下請け(ファイルのコピー・重ならない名前・パスと名前の判定)
 #   touch_filter_test… タッチ座標のmedian-of-3ノイズ抑制(util/TouchFilter.hpp)。
@@ -34,6 +36,8 @@
 #   calendar_sync_secret_test… /calendar/sources.cfgの暗号化保存(CalendarSync::WriteSource/
 #                   ReadSourceがutil/Secret_Cipher.hppを通すこと)。長いURLの往復・複数件・
 #                   同名の上書き・後方互換(平文の既存行がそのまま読める)
+#   file_search_test… ファイル検索(FileSearchScene)・容量(StorageScene)とSDを1件ずつたどる部品(storage/Sd_Walker)。
+#                   深さの上限・名前の比べ方・大きい順・フォルダの中身の合計
 #   chat_proto_test… チャットの応答(1行1件のTSV)の読み取りと本文のエスケープ
 #   chat_scene_test… チャットアプリのGUI配線(ChatLogViewの折り返し/スクロール、
 #                   ChatSceneの生成/解放、chat.cfgが無い/足りないときの案内)
@@ -74,6 +78,8 @@
 #   power_test    … スリープ(PowerFunctions)。操作が無いまま sleep-timeout が過ぎると入り、画面/Wi-Fi/音の
 #                   省電力が掛かること、タッチで起きて起こした指は離すまで画面へ渡さないこと、KeepAwake()・
 #                   音・Wi-Fi接続中は入らないこと
+#   lock_test     … 画面ロック(LockFunctions/LockScreen)。PINの記録(塩+BLAKE2b)・決める/変える/外す・スリープでロック・
+#                   打鍵とタッチ・間違えたときの待ち時間・鳴っているアラームを止める・起動時のロック
 #   notification_test … 通知(NotificationFunctions)の中身。予約の種類ごとの発火、置き換え・上限、履歴、
 #                   控えめ、保存と読み込み、起動理由
 #   alarm_test    … アラーム(AlarmFunctions)。alarm.cfgの読み書き、時刻での発火と確認ダイアログ、
@@ -303,6 +309,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     -o "$OUT/markdown_test"
@@ -351,6 +358,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     -o "$OUT/app_test"
@@ -373,6 +381,16 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/monocypher/src" \
 echo ""
 echo "===== app_repo_test ====="
 run_or_die "$OUT/app_repo_test"
+
+# --- BMPの読み書き ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/bmp_test.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
+    -o "$OUT/bmp_test"
+
+echo ""
+echo "===== bmp_test ====="
+run_or_die "$OUT/bmp_test"
 
 # --- パスの正規化と相対解決 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -451,6 +469,8 @@ run_or_die "$OUT/ical_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calendar_scene_test.cpp" \
     "$ROOT/src/gui/scenes/CalendarScene.cpp" \
+    "$ROOT/src/calendar/Calendar_Reminders.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
     "$ROOT/src/gui/widgets/dialogs/EventDetailDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
@@ -472,6 +492,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -481,6 +502,36 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== calendar_scene_test ====="
 run_or_die "$OUT/calendar_scene_test"
+
+# --- ファイル検索・容量 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/file_search_test.cpp" \
+    "$ROOT/src/gui/scenes/FileSearchScene.cpp" \
+    "$ROOT/src/gui/scenes/StorageScene.cpp" \
+    "$ROOT/src/storage/Sd_Walker.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    -o "$OUT/file_search_test"
+
+echo ""
+echo "===== file_search_test ====="
+run_or_die "$OUT/file_search_test"
 
 # --- カレンダー取得元の暗号化保存 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -529,6 +580,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -576,6 +628,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -774,6 +827,31 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== power_test ====="
 run_or_die "$OUT/power_test"
+
+# --- 画面ロック(PIN) ---
+compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
+    -c "$ROOT/lib/monocypher/src/monocypher.c" -o "$OUT/lock_monocypher.o"
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/lock_test.cpp" \
+    "$ROOT/src/functions/Lock_Functions.cpp" \
+    "$ROOT/src/gui/widgets/systems/LockScreen.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$OUT/lock_monocypher.o" \
+    -o "$OUT/lock_test"
+
+echo ""
+echo "===== lock_test ====="
+run_or_die "$OUT/lock_test"
 fi
 
 
@@ -803,6 +881,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -838,6 +917,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -890,6 +970,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/KeyInput_Functions.cpp" \
@@ -917,6 +998,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     -o "$OUT/focus_test"
@@ -973,6 +1055,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -998,6 +1081,7 @@ run_or_die "$OUT/step_budget_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/alarm_test.cpp" \
     "$ROOT/src/functions/Alarm_Functions.cpp" \
+    "$ROOT/src/functions/Timer_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
@@ -1010,6 +1094,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     -o "$OUT/alarm_test"
@@ -1044,6 +1129,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     -o "$OUT/error_functions_test"
@@ -1164,6 +1250,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -1257,6 +1344,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -1349,6 +1437,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/functions/Font_Functions.cpp" \
     "$ROOT/src/functions/Mem_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
@@ -1463,6 +1552,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/task/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
@@ -1552,6 +1642,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
     "$ROOT/src/task/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \

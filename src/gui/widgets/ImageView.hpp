@@ -2,9 +2,11 @@
 
 #include "gui/widgets/Widget.hpp"
 #include "gui/icons/icon_render.h"
+#include "gui/icons/Bmp_Codec.hpp"
 #include "util/FixedString.hpp"
 
-// .pimg画像の表示欄(汎用)。ファイルビューワーが使う。
+// .pimg / .bmp 画像の表示欄(汎用)。ファイルビューワーが使う。
+// .bmpは開くときにOSのパレット(16色)へ寄せて4bppにする(フルカラーは組織的ディザ)。
 //
 // 以前のファイルビューワーは Image(onRAM=false)をScrollContainerへ入れていたため、
 // 描き直すたびに(=スクロールで1px動くたびに)SDから.pimgを頭から読み直してRLEを
@@ -21,6 +23,8 @@ class ImageView : public Widget {
     private:
         FixedString<PICO_PATH_LEN> path;
         IconRender::PimgHeader header = {0, 0, 0};
+        bool is_bmp = false;
+        Bmp::Info bmp;
         bool loaded = false;
 
         LGFX_Sprite sprite;
@@ -59,6 +63,8 @@ class ImageView : public Widget {
         int getImageH() const { return this->header.height; }
         // 画像全体をメモリに持っているか(falseなら窓だけ)
         bool isFullyLoaded() const { return this->full; }
+        bool isBmp() const { return this->is_bmp; }
+        int getBmpBpp() const { return this->is_bmp ? this->bmp.bpp : 4; }
 
         void causeOnPressStart() override;
         void causeOnPressMove() override;

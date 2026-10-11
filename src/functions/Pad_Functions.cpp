@@ -5,6 +5,8 @@
 #include <Arduino.h>
 #include <cstring>
 
+namespace { bool suppressed = false; }  // SuppressThisFrame()
+
 namespace {
     // ---- 公開する状態 ----
     uint16_t buttons  = 0;
@@ -119,6 +121,7 @@ void PadFunctions::Update(){
 }
 
 void PadFunctions::UpdateAt(unsigned long now_ms){
+    suppressed = false;
     ReadSerial(now_ms);
 
     const uint16_t next = (source == Source::Serial) ? serial_buttons : 0;
@@ -130,10 +133,11 @@ void PadFunctions::UpdateAt(unsigned long now_ms){
 bool PadFunctions::IsConnected(){ return source != Source::None; }
 PadFunctions::Source PadFunctions::GetSource(){ return source; }
 
-uint16_t PadFunctions::Buttons(){ return buttons; }
-bool PadFunctions::IsDown(uint16_t b){ return (buttons & b) != 0; }
-bool PadFunctions::Pressed(uint16_t b){ return (pressed & b) != 0; }
-bool PadFunctions::Released(uint16_t b){ return (released & b) != 0; }
+uint16_t PadFunctions::Buttons(){ return suppressed ? 0 : buttons; }
+void PadFunctions::SuppressThisFrame(){ suppressed = true; }
+bool PadFunctions::IsDown(uint16_t b){ return !suppressed && (buttons & b) != 0; }
+bool PadFunctions::Pressed(uint16_t b){ return !suppressed && (pressed & b) != 0; }
+bool PadFunctions::Released(uint16_t b){ return !suppressed && (released & b) != 0; }
 
 uint16_t PadFunctions::ButtonFromName(const char* name){
     if(!name) return 0;

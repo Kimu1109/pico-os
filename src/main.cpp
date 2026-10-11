@@ -13,6 +13,8 @@
 #include "functions/Sound_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Alarm_Functions.hpp"
+#include "functions/Timer_Functions.hpp"
+#include "functions/Lock_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "functions/Screenshot_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
@@ -118,6 +120,7 @@ void setup() {
     SoundFunctions::Setup(); //sound.cfgを読むのでSDより後
     BatteryFunctions::Setup();
     AlarmFunctions::Setup(); //alarm.cfgを読むのでSDより後
+    TimerFunctions::Setup(); //タイマー/ストップウォッチ(時計アプリを閉じても動く)
 
     TestFunctions::Setup();
 
@@ -134,6 +137,14 @@ void setup() {
     DevToolsFunctions::perf_overlay_visibility = [](bool visible){
         if(perf_overlay) perf_overlay->setVisible(visible);
     };
+
+    //画面ロック(PIN)。全オーバーレイの一番上に置くので最後に作る。PINがあれば起動時からロックする
+    LockFunctions::ringing_query = [](){ return AlarmFunctions::IsRinging() || TimerFunctions::TimerRinging(); };
+    LockFunctions::ringing_stop = [](){
+        if(AlarmFunctions::IsRinging()) AlarmFunctions::Dismiss();
+        if(TimerFunctions::TimerRinging()) TimerFunctions::TimerReset();
+    };
+    LockFunctions::Setup();
 #if !defined(__EMSCRIPTEN__)
     LuaDebugger::SetFrontend(&lua_debug_screen);
 #endif
@@ -178,6 +189,8 @@ void loop() {
     //さらに操作が無ければスリープへ入る/操作で戻す(起こしたタッチはここで握りつぶす)。
     //各画面のonUpdate()が呼ぶKeepAwake()は次のフレームのここで読まれる
     PowerFunctions::Update();
+    //スリープに入ったらロック。ロック中はコントローラーの入力を後ろの画面へ渡さない
+    LockFunctions::Update();
     ProfilerFunctions::Mark(ProfilerFunctions::Section::Power);
 
     //保留中のシーン遷移をフレーム境界で適用する(ウィジェット更新より前)
@@ -226,6 +239,7 @@ void loop() {
     BatteryFunctions::Update();
     //アラームの時刻の見張り(時計アプリを閉じていても鳴らす)。TimeFunctions::Update()より後
     AlarmFunctions::Update();
+    TimerFunctions::Update();
     //通知の予約の見張りとトーストの出し入れ。TimeFunctions::Update()より後
     NotificationFunctions::Update();
     //プロファイラの集計をシリアルへ(perf-log = true のときだけ)

@@ -16,6 +16,8 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
+#include "calendar/Calendar_Reminders.hpp"
+#include "functions/Notification_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -197,8 +199,82 @@ static void testDetailDialog(){
     check(!grid.dirty(), "点が同じなら描き直さない");
 }
 
+// 予定の通知(calendar/Calendar_Reminders)
+static void testReminders(){
+    using namespace NotificationFunctions;
+    NotificationFunctions::CancelAll(CalendarReminders::kOwner);
+    // 2026-10-11 を今日に。JST(+9h)
+    const int32_t today = Ical::DaysFromCivil(2026, 10, 11);
+    const int32_t off = 9 * 3600;
+    const int64_t now = (int64_t)today * 86400 + 8 * 3600 - off;   // 今日の8:00
+    const char* ics =
+        "BEGIN:VCALENDAR\r\n"
+        "BEGIN:VEVENT\r\nUID:a\r\nSUMMARY:朝会\r\nDTSTART:20261011T070000\r\nDTEND:20261011T073000\r\nEND:VEVENT\r\n"   //過ぎた
+        "BEGIN:VEVENT\r\nUID:b\r\nSUMMARY:定例\r\nLOCATION:会議室\r\nDTSTART:20261011T100000\r\nDTEND:20261011T110000\r\nRRULE:FREQ=DAILY\r\nEND:VEVENT\r\n"
+        "BEGIN:VEVENT\r\nUID:c\r\nSUMMARY:終日\r\nDTSTART;VALUE=DATE:20261012\r\nDTEND;VALUE=DATE:20261013\r\nEND:VEVENT\r\n"
+        "BEGIN:VEVENT\r\nUID:d\r\nSUMMARY:昼\r\nDTSTART:20261011T120000\r\nDTEND:20261011T130000\r\nEND:VEVENT\r\n"
+        "END:VCALENDAR\r\n";
+    static IcalCalendar cal;
+    cal.clear();
+    Ical::Options opt;
+    opt.utc_offset_sec = off;
+    opt.window_from_day = today - 3;
+    opt.window_to_day = today + 39;
+    Ical::Parser p(cal, opt);
+    p.feed(ics, strlen(ics));
+    p.finish();
+    check(cal.count == 4, "通知: 4件読める");
+
+    int n = CalendarReminders::Sync(cal, today, today + 39, now, off, 10, "カレンダー");
+    check(n == 4, "通知: 近い順に4件まで");
+    check(CalendarReminders::Count() == 4, "通知: 予約が4件");
+    // 一番近いのは今日の10:00の10分前、次が12:00
+    int64_t first = INT64_MAX;
+    bool has_noon = false, has_allday = false, has_past = false;
+    for(int i = 0; i < RuleCount(); i++){
+        const Rule* r = RuleAt(i);
+        if(strcmp(r->content.owner.c_str(), CalendarReminders::kOwner) != 0) continue;
+        if(r->when.at_epoch < first) first = r->when.at_epoch;
+        if(r->content.title == "昼") has_noon = true;
+        if(r->content.title == "終日") has_allday = true;
+        if(r->content.title == "朝会") has_past = true;
+    }
+    check(first == (int64_t)today * 86400 + 10 * 3600 - off - 600, "通知: 10:00の10分前");
+    check(has_noon, "通知: 12:00の予定も入る");
+    check(!has_allday, "通知: 終日の予定は入れない");
+    check(!has_past, "通知: 過ぎた予定は入れない");
+
+    // もう一度同じ内容で: 変わらない
+    n = CalendarReminders::Sync(cal, today, today + 39, now, off, 10, "カレンダー");
+    check(n == 4 && CalendarReminders::Count() == 4, "通知: 同じなら件数は変わらない");
+
+    // 昼の予定を消した: 範囲の中なので予約も消え、定例の次の回が入る
+    for(int i = 0; i < cal.count; i++) if(cal.events[i].summary == "昼") cal.events[i].cancelled = true;
+    n = CalendarReminders::Sync(cal, today, today + 39, now, off, 10, "カレンダー");
+    has_noon = false;
+    for(int i = 0; i < RuleCount(); i++){
+        const Rule* r = RuleAt(i);
+        if(strcmp(r->content.owner.c_str(), CalendarReminders::kOwner) == 0 && r->content.title == "昼") has_noon = true;
+    }
+    check(!has_noon && n == 4, "通知: 消した予定の予約は消える");
+
+    // 範囲の外(別の月を見ている)なら、今の予約は残す
+    static IcalCalendar empty;
+    empty.clear();
+    n = CalendarReminders::Sync(empty, today + 60, today + 102, now, off, 10, "カレンダー");
+    check(CalendarReminders::Count() == 4, "通知: 範囲の外の予約は残す");
+
+    // 起動時の登録簿との突き合わせで消されない
+    NotificationFunctions::RefreshOwners([](const char*, AppName&){ return false; });
+    check(CalendarReminders::Count() == 4, "通知: '@'の送り主は登録簿で消されない");
+
+    CalendarReminders::CancelAll();
+    check(CalendarReminders::Count() == 0, "通知: 全部取り消せる");
+}
+
 int main(){
     testGridHitTest();
+    testReminders();
     testScene();
     testDetailDialog();
 

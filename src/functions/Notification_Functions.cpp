@@ -669,6 +669,7 @@ void NotificationFunctions::RefreshOwners(bool (*resolve)(const char* owner, App
     for(int i = 0; i < kMaxRules; i++){
         Rule& r = rules[i];
         if(r.id == 0 || r.content.owner.empty()) continue;
+        if(r.content.owner.c_str()[0] == '@') continue;   //OSの機能の送り主("@calendar"等)。登録簿には無い
         AppName app;
         if(!resolve(r.content.owner.c_str(), app)){
             LOG_SYS_MSG("通知: 送り主(%s)が見つからないので予約を消します: %s",

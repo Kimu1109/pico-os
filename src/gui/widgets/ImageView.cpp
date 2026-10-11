@@ -18,6 +18,7 @@ void ImageView::unload(){
     if(this->loaded) this->sprite.deleteSprite();
     this->loaded = false;
     this->header = {0, 0, 0};
+    this->is_bmp = false;
     this->off_x = this->off_y = 0;
     this->win_x = this->win_y = this->win_w = this->win_h = 0;
 }
@@ -26,7 +27,14 @@ bool ImageView::decodeWindow(int x, int y){
     FsFile f = OSData::SD.open(this->path.c_str());
     if(!f) return false;
     this->sprite.fillScreen(0);
-    const bool ok = IconRender::DecodePimgWindow(f, this->header, this->sprite, x, y, this->win_w, this->win_h);
+    bool ok;
+    if(this->is_bmp){
+        Bmp::Options opt;
+        opt.dither = this->bmp.bpp > 8;
+        ok = Bmp::DecodeTo4bpp(f, this->bmp, this->sprite, x, y, this->win_w, this->win_h, opt);
+    }else{
+        ok = IconRender::DecodePimgWindow(f, this->header, this->sprite, x, y, this->win_w, this->win_h);
+    }
     f.close();
     this->win_x = x;
     this->win_y = y;
@@ -52,8 +60,19 @@ bool ImageView::load(const char* path){
 
     FsFile f = OSData::SD.open(path);
     if(!f) return false;
-    IconRender::PimgHeader h;
-    const bool header_ok = IconRender::ReadPimgHeader(f, h);
+    IconRender::PimgHeader h = {0, 0, 0};
+    bool header_ok;
+    //先頭の"BM"でBMPかを見分ける(拡張子に頼らない)
+    uint8_t magic[2] = {0, 0};
+    f.read(magic, 2);
+    this->is_bmp = magic[0] == 'B' && magic[1] == 'M';
+    if(this->is_bmp){
+        header_ok = Bmp::ReadInfo(f, this->bmp);
+        h.width = this->bmp.width;
+        h.height = this->bmp.height;
+    }else{
+        header_ok = IconRender::ReadPimgHeader(f, h);
+    }
     f.close();
     if(!header_ok || h.width == 0 || h.height == 0) return false;
     this->header = h;

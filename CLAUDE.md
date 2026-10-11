@@ -161,7 +161,9 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | Profiler_Functions | `loop()`の区間ごとの時間とフレーム時間の集計。下記「開発者向けの道具」参照 |
 | CrashDump_Functions | クラッシュダンプ(HardFault・ウォッチドッグ・Luaのエラー)とパンくず。下記「開発者向けの道具」参照 |
 | DevTools_Functions | `/sys/debug.cfg`(プロファイラの表示/ログ・Luaデバッガ・ウォッチドッグ)の窓口 |
-| PowerMenu_Functions | 電源メニュー(スリープ / 再起動)。ステータスバーの長押しと設定アプリの「電源」。下記「時刻の手動設定・電源メニュー」参照 |
+| PowerMenu_Functions | 電源メニュー(スリープ / 再起動 / ロック)。ステータスバーの長押しと設定アプリの「電源」。下記「時刻の手動設定・電源メニュー」参照 |
+| Timer_Functions | タイマーとストップウォッチ(ラップ)。時計アプリを閉じても動く。下記「BMP・予定の通知・…・画面ロック」参照 |
+| Lock_Functions | 画面ロック(PIN)。同上 |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Display→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
@@ -316,9 +318,9 @@ SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
 - **UIの編集はSDへ即書きしない**(`Set(idx, a, persist=false)`)。▲▼の長押しは110msごとに値が変わり、
   SDへの書き込みは1回数十msかかるため、`ClocksScene`が最後の変更から600ms後(または画面を離れる/別のアラームを選ぶ/`onExit()`)に
   `Save()`する。時刻を編集したら自動でオンにする。DurationPickerは秒の桁も出るが、変えても0へ戻す(アラームは分単位)。
-- **タイマーの完了音**: `ClocksScene`のタイマーが`Finished`になると、アラームと同じビープ(`AlarmFunctions::PlayBeepStep()`。3拍鳴らして1拍休む)を
-  `kRingMaxMs`(60秒)まで鳴らす。開始/リセットを押すと止まる(点滅は従来どおり)。**音を出すのはこのシーンが動いている間だけ**
-  (タイマー自体がシーンのメンバで、別の画面へ`Push()`している間は進まない既存の制約のまま。アラームのようにOS側へ上げてはいない)。
+- **タイマーの完了音**: タイマーが`Finished`になると、アラームと同じビープ(`AlarmFunctions::PlayBeepStep()`。3拍鳴らして1拍休む)を
+  `kRingMaxMs`(60秒)まで鳴らす。2026-10-11からタイマーはOS側(`Timer_Functions`)にあり、時計アプリを閉じても進んで鳴る
+  (下の「BMP・予定の通知・…・画面ロック」)。
 - **タブ名は半角カナ(`ﾀｲﾏｰ`/`ｽﾄｯﾌﾟ`/`ｱﾗｰﾑ`)**。4タブにすると1タブ約58pxで、全角4文字(64px)が収まらず崩れて折り返した。
 - 検証: `alarm_test`(run.sh。時刻はUpdateAt()へ直接渡す)と、PCビルドの`--tap`/`--shot`(編集→保存、時刻を今の分にして起動すると鳴る)。
   **PCビルドの表示タイムゾーンは`network.cfg`の`timezone`(既定JST)なので、鳴らして試すときは`TZ=JST-9 date +%H:%M`で合わせること**
@@ -492,10 +494,57 @@ SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
 
 - ステータスバーの**右端のカメラのアイコン(右端24px)をタップすると撮る**。それ以外の場所のタップは従来どおり通知センター(`main.cpp`の`status->setOnPressEnd()`が`OSData::touchX`で振り分ける)。
   カメラは自作アイコン(`custom_icons/camera.svg`、`IconID::Camera`は末尾)。未読のベルはカメラの左へ寄せた。
-- `OSData::frame`(合成済みの全画面、4bppパレット)を**.pimg**(`IconRender::EncodePimg()`。4bpp+RLE)で`/screenshots/shot_0001.pimg`,`0002`…へ書く。
-  本体はファイルアプリ→ファイルビューワーで見られ、PCでは`script/pimg2png.py`でPNGへ直せる。書き込みに失敗したら半端なファイルは消す。タップのフレームでは直前に合成した絵が写る(ステータスバーも入る)。
+- `OSData::frame`(合成済みの全画面、4bppパレット)を**4bppのBMP**(`Bmp::Encode4bpp()`。今のパレット16色付き、約38KB)で`/screenshots/shot_0001.bmp`,`0002`…へ書く
+  (2026-10-11に.pimgから変えた。PCの画像ビューアでそのまま開ける)。
+  本体はファイルアプリ→ファイルビューワーで見られる。書き込みに失敗したら半端なファイルは消す。タップのフレームでは直前に合成した絵が写る(ステータスバーも入る)。
 - 結果は通知(`NotificationFunctions::Post()`、音なし)で出す(控えめモードならトーストは出ず通知センターだけ)。成功時は通知の`app`へ`"file:<パス>"`を入れ、**通知をタップするとファイルビューワーで開く**(`Notification_Sources.cpp`の`Launch()`が`file:`接頭辞をアプリ名ではなくファイルとして扱う)。
 - 検証: PCビルドの`--tap 230,8@30:5`で保存・内容を確認。ホストテストは無し。**実機では未確認**(1フレーム76800回の`readPixelValue`+SD書き込みの時間)。
+
+### BMP・予定の通知・ファイル検索/容量・タイマー常駐・ダークテーマ・画面ロック (2026-10-11)
+
+まとめて足した小さめの機能。SUMMARY.mdの「7. 標準アプリ開発」に項目だけ載せてある。
+
+**BMP(`src/gui/icons/Bmp_Codec`)**: 読みは無圧縮(BI_RGB)と BI_BITFIELDS の 1/4/8/16/24/32bpp・上下どちらの並び・窓だけ読む(大きな画像を表示欄の大きさだけ)。
+RLE/JPEG/PNG埋め込みと12バイトの古い見出し(BITMAPCOREHEADER)は断る。一辺8192まで。作業は1行ぶんの`malloc`とパレット(256色x3、ヒープ)だけ。
+出し方は3通り: `DecodeTo4bpp()`(OSのパレットへ寄せる。パレット付きは色の対応表を1回だけ作る、フルカラーは1画素ごとに近い色+任意で4x4の組織的ディザ、
+`raw_indices`なら4bpp以下の番号をそのまま=OS向けに16色で描いた絵)/`DecodeRgb565()`(フルカラーのまま1行ずつ)/`DecodeToSprite16()`。
+近い色は今の`PICO_GFX::COLORS`で探すので、ダークテーマでも見た目の色に寄る。ファイルビューワー(`ImageView`は先頭の`BM`で見分ける。フルカラーはディザ)と
+Luaの`pico.image_load(path, {dither=, raw=})`が使う。**フルカラーのまま画面へ出す口は無い**(frameが4bppのため。`DecodeRgb565()`は液晶へ直接描く用途向けに残した)。
+検証: `bmp_test`(core)、PCビルドでPILで書いた24bppのBMPを表示、スクリーンショットをPILで開いて画素を比較。
+
+**カレンダーの予定の通知(`src/calendar/Calendar_Reminders`)**: Todoistのリマインダーと同じ作り。カレンダーアプリが.icsを読み直すたび(読み込んだ6週間が今日を含むときだけ)、
+時刻つきの予定の回を近い順に4件まで`At`の予約にする(終日は入れない)。**送り主は`"@calendar"`**: `@`で始まる送り主はOSの機能のもので、
+`NotificationFunctions::RefreshOwners()`が登録簿と突き合わせて消さない(送り主ごとに4件の枠がTodoの空の送り主と別になる)。tagは`cal:<UIDのハッシュ>:<日>`。
+読み込んだ範囲の中で消えた/動いた予定の予約は消し、範囲の外は残す。`/sys/calendar.cfg`の`reminders`(既定true)・`remind-before-min`(既定10)。
+**カレンダーアプリを開かない限り予約は更新されない**(.icsの取得もアプリの中だけのため)。検証: `calendar_scene_test`。
+
+**ファイル検索・容量(`storage/Sd_Walker` / `FileSearchScene` / `StorageScene`)**: ファイルアプリの上の段の「他」(名前の変更もここへ移した。「名前」のボタンで溢れたため)。
+`SdWalker`はフォルダの下を1件ずつ深さ優先でたどる(深さ8まで、FsFileを段の数だけ持つ、確保なし)。検索はSD全体を名前の部分一致(ASCIIの大小を区別しない)で、
+1フレーム6msずつ・32件まで。ファイルはビューワー、フォルダは`FileSearchScene::TakeJump()`でファイルアプリへ戻ってそのフォルダを開く
+(ファイルアプリは戻ってきたとき前のフォルダを開き直すようにした)。容量は`SD.clusterCount()/freeClusterCount()/bytesPerCluster()`
+(**FAT32では`freeClusterCount()`がFATを全部読むので数秒かかりうる**。画面を1回描いてから数え、60秒覚える)と、今のフォルダの直下を大きい順(フォルダは中身の合計、48件まで)。
+PCの互換層(`pc/compat/SdFat.h`)は`statvfs`、ホストテストのスタブは固定値。**スタブの`HostSd::dirs_enabled`**を立てるとファイルのパスからフォルダを作って
+`open()`/`openNext()`で列挙できる(既定は今までどおりフォルダ無し)。検証: `file_search_test`(apps)、PCビルドで検索・容量を`--tap`で確認。
+
+**タイマー/ストップウォッチの常駐(`src/functions/Timer_Functions`)**: 状態を`ClocksScene`のメンバからOS側へ移し、`main.cpp`の`loop()`(アラームの直後)で進める。
+タイマーが0になると`AlarmFunctions::PlayBeepStep()`を60秒・`KeepAwake()`、**時計アプリでタイマーを見ていなければ**「止める」の`MsgDialog`(`WidgetId`で持ち、消えたら出し直す)。
+ストップウォッチは**ラップ**(30件、溢れたら古い方から。通し番号は数え続ける)。動いている間は「リセット」が「ラップ」になる。時計アプリはランチャから開くと、
+動いているタイマー/ストップウォッチのタブから始まる。検証: `alarm_test`にタイマー/ストップウォッチ、PCビルドでラップ→ランチャへ戻る→開き直して続いていること。
+
+**ダークテーマ(`PICO_GFX::SetTheme()` / `DARK_COLORS`)**: パレットの番号の意味はそのままに、明暗を入れ替えた色を当てる(0=文字が明るく・15=背景が暗く・7/8の灰と11の水色は暗い側/明るい側へ)。
+`ResetPalette()`の戻り先を`THEME_COLORS`にしたので、Luaアプリの`pico.set_palette`もアプリを閉じるとテーマの色へ戻る。`/sys/display.cfg`の`theme = light|dark`、
+設定アプリ「本体」の6行目、Luaの`pico.theme()`。**画像・アイコンも番号で描くので一緒に反転する**(写真のBMPは今のパレットで近い色を選ぶので見た目は保たれる)。
+ゲームのように自分の色を持つLuaアプリは`set_palette`で入れ直すこと。
+
+**画面ロック(`src/functions/Lock_Functions` / `widgets/systems/LockScreen`)**: PINは数字4〜8桁、`/sys/lock.cfg`の`pin = v1:<塩32桁>:<BLAKE2b-256 64桁>`
+(鍵はファームの固定鍵`PICO_Secret::kKey`、塩は`SecretAead::Random()`)。**起動時とスリープに入ったとき(=起きたらロック画面)**にロックする。
+ロック画面は**全オーバーレイの一番上**(`LockFunctions::Setup()`を最後に呼ぶ)の全画面OPAQUEで、`hitTest()`が常に真なのでタッチを全部取る(ステータスバーの長押し・通知センターも開かない)。
+打鍵は`KeyInputFunctions::intercept`(関数ポインタ。配り先をロックへ依存させないため)で全部ロック画面へ、コントローラーは`PadFunctions::SuppressThisFrame()`
+(`LockFunctions::Update()`が`PowerFunctions::Update()`の直後に呼ぶ。自動調光/スリープの判定はその前に済んでいるのでボタンで起きられる)。後ろの画面は動き続ける。
+5回続けて間違えると30秒、以後間違えるたびに倍(最大5分)待たせる(RAMだけ。再起動しても起動時にロックするので抜け道にはならない)。
+アラーム/タイマーが鳴っていればロック画面に「止める」(`ringing_query/ringing_stop`を`main.cpp`が差す)。PINの決める/変える/外すもロック画面で聞く
+(設定アプリ「本体」の7行目、電源メニューに「ロック」)。**守れるのは画面の操作だけ**: SDを抜けば中身は読め、4桁のPINはハッシュから総当たりで分かる。
+検証: `lock_test`(input。待ち時間が解除後も残るバグをこれで見つけた)、PCビルドでPINを決める→再起動でロック→違うPIN→正しいPIN。**実機では未確認**。
 
 ### バッテリー残量表示(`src/functions/Battery_Functions`) (2026-09-28)
 
@@ -2421,6 +2470,8 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
   **実機では未確認**。
 
 ### ClocksScene 実装詳細
+
+**2026-10-11: タイマー/ストップウォッチの状態は`TimerFunctions`(OS側)へ移した**。以下の「`millis()`の差分で積む」「別の画面へ`Push()`している間は進まない」等の記述は当時のもので、今は`Timer_Functions`が同じ考え方で進め、このシーンは表示とボタンだけを持つ。
 
 画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える1画面のアプリ
 (`Feature` enumとタブのindexを一致させてある)。**新しく画面を足すときの手本として一番新しい。**

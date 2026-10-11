@@ -1,7 +1,7 @@
 ---
 title: "その他"
 weight: 90
-description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast / clipboard / keep_awake"
+description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast / clipboard / keep_awake / theme"
 ---
 
 ## pico.log
@@ -146,3 +146,13 @@ function loop(dt)
     if playing then pico.keep_awake() end
 end
 ```
+
+## pico.theme
+
+<div class="sig">pico.theme() <span class="ret">-> "light" | "dark"</span></div>
+
+OSの配色を返します。設定アプリの「本体」→「ダークテーマ」(`/sys/display.cfg` の `theme`)を入れると `"dark"` です。
+ダークテーマでは**パレットの番号の色が明暗で入れ替わります**(0番=文字の色が明るく、15番=背景の色が暗くなる。
+紺・深緑のような濃い色は明るく、薄い灰・水色は暗く)。番号で色を指定している部品・図形・画像は何もしなくても
+ダークテーマの色で出ます。絵の色を変えたくないゲームは `pico.set_palette` で自分の色を入れてください
+(アプリを閉じるとテーマの色へ戻ります)。

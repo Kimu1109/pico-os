@@ -9,6 +9,7 @@
 //   - 止める / 5分後(スヌーズ) / 放っておくとkRingMaxMsで止まる
 //   - シーン遷移などでダイアログが消えても、鳴っている間は出し直す
 #include "functions/Alarm_Functions.hpp"
+#include "functions/Timer_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -166,6 +167,70 @@ int main(){
     // 書いたものを読み直せる
     SetupAt(0);
     check(Get(2).hour == 9 && Get(2).repeat == Repeat::Weekends && Get(2).enabled, "保存した内容を再起動後に読める");
+
+    // ---- タイマー/ストップウォッチ(TimerFunctions。時計アプリを閉じても動く) ----
+    {
+        using namespace TimerFunctions;
+        Reset(nullptr);
+        while(!WidgetFunctions::dialog_roots.empty()){ WidgetFunctions::DestroyLater(WidgetFunctions::dialog_roots.back()); WidgetFunctions::ProcessPendingDeletes(); }
+        PicoHostClock::now = 10000;
+        TimerFunctions::Setup();
+        TimerStartPause();
+        check(TimerState() == State::Idle, "タイマー: 0秒では始まらない");
+        TimerSet(3000);
+        check(TimerLeftMs() == 3000, "タイマー: 設定すると残りも同じ");
+        TimerStartPause();
+        check(TimerState() == State::Running, "タイマー: 開始");
+        TimerSet(9999);
+        check(TimerSetMs() == 3000, "タイマー: 動いている間は設定を変えない");
+        PicoHostClock::now += 1000; UpdateAt(PicoHostClock::now);
+        check(TimerLeftMs() == 2000, "タイマー: 1秒進む");
+        TimerStartPause();
+        PicoHostClock::now += 5000; UpdateAt(PicoHostClock::now);
+        check(TimerState() == State::Paused && TimerLeftMs() == 2000, "タイマー: 一時停止中は進まない");
+        TimerStartPause();
+        play_count = 0;
+        SetTimerShown(false);
+        PicoHostClock::now += 2500; UpdateAt(PicoHostClock::now);
+        check(TimerState() == State::Finished && TimerRinging(), "タイマー: 0になると鳴る");
+        check(play_count >= 1, "タイマー: 音を鳴らす");
+        check(DialogCount() == 1, "タイマー: 時計アプリを見ていなければ確認ダイアログ");
+        for(int i = 0; i < 10; i++){ PicoHostClock::now += 16; UpdateAt(PicoHostClock::now); }
+        check(DialogCount() == 1, "タイマー: ダイアログは1枚だけ");
+        SetTimerShown(true);
+        PicoHostClock::now += 16; UpdateAt(PicoHostClock::now);
+        WidgetFunctions::ProcessPendingDeletes();
+        check(DialogCount() == 0, "タイマー: 時計アプリで見ている間はダイアログを出さない");
+        SetTimerShown(false);
+        PicoHostClock::now += AlarmFunctions::kRingMaxMs; UpdateAt(PicoHostClock::now);
+        WidgetFunctions::ProcessPendingDeletes();
+        check(!TimerRinging() && DialogCount() == 0 && TimerState() == State::Finished, "タイマー: 放っておくと音は止まる");
+        TimerStartPause();
+        check(TimerState() == State::Running && TimerLeftMs() == 3000, "タイマー: 終わった後の開始は同じ時間でもう一度");
+        TimerReset();
+        check(TimerState() == State::Idle && TimerLeftMs() == 3000, "タイマー: リセット");
+
+        // ストップウォッチ
+        StopwatchStartStop();
+        PicoHostClock::now += 1234; UpdateAt(PicoHostClock::now);
+        check(StopwatchMs() == 1234, "ストップウォッチ: 進む");
+        check(StopwatchLap() && LapCount() == 1 && LapTotalMs(0) == 1234, "ストップウォッチ: ラップ");
+        PicoHostClock::now += 66; UpdateAt(PicoHostClock::now);
+        StopwatchStartStop();
+        check(!StopwatchLap(), "ストップウォッチ: 止めている間はラップしない");
+        PicoHostClock::now += 5000; UpdateAt(PicoHostClock::now);
+        check(StopwatchMs() == 1300, "ストップウォッチ: 止めている間は進まない");
+        StopwatchStartStop();
+        for(int i = 0; i < kMaxLaps + 5; i++){ PicoHostClock::now += 10; StopwatchLap(); }
+        check(LapCount() == kMaxLaps && LapNumber(0) == 7, "ストップウォッチ: 溢れたら古いラップから捨てる");
+        char buf[24];
+        FormatStopwatch(61230, buf, sizeof(buf));
+        check(strcmp(buf, "01:01.23") == 0, "ストップウォッチ: 表記");
+        FormatStopwatch(3723000, buf, sizeof(buf));
+        check(strcmp(buf, "1:02:03") == 0, "ストップウォッチ: 1時間以上の表記");
+        StopwatchReset();
+        check(LapCount() == 0 && StopwatchMs() == 0 && StopwatchState() == State::Idle, "ストップウォッチ: リセット");
+    }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

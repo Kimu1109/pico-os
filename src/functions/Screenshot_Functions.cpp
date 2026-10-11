@@ -1,5 +1,5 @@
 #include "functions/Screenshot_Functions.hpp"
-#include "gui/icons/icon_render.h"
+#include "gui/icons/Bmp_Codec.hpp"
 #include "functions/Log_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
@@ -23,7 +23,7 @@ bool ScreenshotFunctions::Capture(char* out_path, size_t out_size){
     static int next_no = 1;
     char path[40];
     for(;;){
-        snprintf(path, sizeof(path), "%s/shot_%04d.pimg", kDir, next_no);
+        snprintf(path, sizeof(path), "%s/shot_%04d.bmp", kDir, next_no);
         if(!OSData::SD.exists(path)) break;
         if(++next_no > 9999){ fail(out_path, out_size, "空き番号がありません"); return false; }
     }
@@ -31,8 +31,8 @@ bool ScreenshotFunctions::Capture(char* out_path, size_t out_size){
     FsFile f = OSData::SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
     if(!f){ fail(out_path, out_size, "ファイルを作れません"); return false; }
 
-    //.pimg(4bpp+RLE)。パレットはファームの固定16色なのでファイルには含まれない
-    const bool ok = IconRender::EncodePimg(*OSData::frame, SCREEN_WIDTH, SCREEN_HEIGHT, f);
+    //4bppのBMP(今のパレット16色付き)。PCの画像ビューアでそのまま開ける
+    const bool ok = Bmp::Encode4bpp(*OSData::frame, SCREEN_WIDTH, SCREEN_HEIGHT, f);
     f.close();
 
     if(!ok){

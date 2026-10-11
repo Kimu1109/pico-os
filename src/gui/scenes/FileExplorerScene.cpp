@@ -4,6 +4,9 @@
 #include "functions/CrashDump_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "gui/scenes/FileViewerScene.hpp"
+#include "gui/scenes/FileSearchScene.hpp"
+#include "gui/scenes/StorageScene.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "storage/SD_IO.hpp"
 #include "OS_Data.hpp"
@@ -21,7 +24,7 @@ void FileExplorerScene::onEnter(){
     const Rect content = Scene::contentRect();
     const int top = content.y + MARGIN;
 
-    //上の行: [戻る] [コピー][移動][名前][貼付](各ボタンの実測幅で左から詰める)
+    //上の行: [戻る] [コピー][移動][貼付][他](各ボタンの実測幅で左から詰める)
     int x = content.x + MARGIN;
     auto place = [&](Button* b){
         b->setX(x);
@@ -41,13 +44,13 @@ void FileExplorerScene::onEnter(){
     this->move_button->setOnPressEnd([this](){ this->onCopyOrMove(true); });
     place(this->move_button);
 
-    this->rename_button = MakeToolButton("名前", x, top);
-    this->rename_button->setOnPressEnd([this](){ this->onRename(); });
-    place(this->rename_button);
-
     this->paste_button = MakeToolButton("貼付", x, top);
     this->paste_button->setOnPressEnd([this](){ this->onPaste(); });
     place(this->paste_button);
+
+    this->more_button = MakeToolButton("他", x, top);
+    this->more_button->setOnPressEnd([this](){ this->onMore(); });
+    place(this->more_button);
 
     const Rect back_box = this->back_button->getLocalRect();
     const int status_y = top + back_box.h + 1;
@@ -70,15 +73,70 @@ void FileExplorerScene::onEnter(){
     });
     WidgetFunctions::Add(this->explorer);
 
+    //検索でフォルダを選んで戻ってきたらそのフォルダ、そうでなければ前に開いていたフォルダ
+    FixedString<PICO_PATH_LEN> jump;
+    if(FileSearchScene::TakeJump(jump)){
+        this->explorer->setCurrentFolderPath(jump.c_str());
+    }else if(this->saved_folder.length() > 0 && OSData::SD.exists(this->saved_folder.c_str())){
+        this->explorer->setCurrentFolderPath(this->saved_folder.c_str());
+    }
+
     this->showClipStatus();
+}
+
+void FileExplorerScene::onMore(){
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "ファイル", "", "キャンセル");
+    d->addChoice("名前の変更");
+    d->addChoice("検索(SD全体)");
+    d->addChoice("容量");
+    d->layout();
+    WidgetFunctions::AddDialog(d);
+    d->setVisible(true);
+    d->setOnClosed([this, d](bool ok){
+        const int sel = ok ? d->getSelectedIndex() : -1;
+        WidgetFunctions::DestroyLater(d);
+        //ダイアログからダイアログへは1フレーム空ける(閉じたダイアログの跡が残らないように)
+        if(sel == 0){
+            this->pending = Pending::Rename;
+        }else if(sel == 1){
+            this->pending = Pending::Search;
+        }else if(sel == 2){
+            const char* cur = this->explorer ? this->explorer->getCurrentFolderPath() : "/";
+            SceneFunctions::Push(new StorageScene(cur && *cur ? cur : "/"));
+        }
+    });
+}
+
+void FileExplorerScene::onUpdate(){
+    if(this->pending == Pending::None) return;
+    if(++this->pending_frames < 2) return;
+    const Pending p = this->pending;
+    this->pending = Pending::None;
+    this->pending_frames = 0;
+    if(p == Pending::Rename) this->onRename();
+    else if(p == Pending::Search) this->askSearch();
+}
+
+void FileExplorerScene::askSearch(){
+    if(!OSData::SD_usable){ this->setStatus("SDカードがありません", true); return; }
+    auto* d = new InputDialog("探す名前(一部でよい):", true);
+    WidgetFunctions::AddDialog(d);
+    d->setVisible(true);
+    d->openKeyboard();
+    d->setOnClosed([d](bool ok){
+        const auto q = d->getInput();
+        WidgetFunctions::DestroyLater(d);
+        if(ok && q.length() > 0) SceneFunctions::Push(new FileSearchScene("/", q.c_str()));
+    });
 }
 
 void FileExplorerScene::onExit(){
     //クリップボード(clip_path)はメンバなので残す。ウィジェットは破棄されるので忘れる
+    if(this->explorer) this->saved_folder.assign(this->explorer->getCurrentFolderPath());
     this->back_button   = nullptr;
+    this->more_button   = nullptr;
     this->copy_button   = nullptr;
     this->move_button   = nullptr;
-    this->rename_button = nullptr;
     this->paste_button  = nullptr;
     this->status_label  = nullptr;
     this->explorer      = nullptr;

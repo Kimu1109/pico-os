@@ -41,6 +41,9 @@ namespace DisplayFunctions {
     void SetBrightness(int percent);
 
     bool GetAutoDimEnabled();
+    // ダークテーマ(パレットを差し替える。display.cfg の theme = light|dark)。保存は呼び出し側
+    void SetDarkTheme(bool dark);
+    bool IsDarkTheme();
     // 今だけ変える(display.cfgへは書かない)
     void SetAutoDimEnabled(bool enabled);
 

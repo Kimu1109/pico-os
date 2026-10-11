@@ -123,4 +123,6 @@ class CalendarScene : public Scene {
         // .ics の ...Z の時刻を現地時刻へ直すのに使う。newlibには tm_gmtoff が無いので、
         // localtime と gmtime の差から求める
         static int32_t LocalUtcOffsetSec();
+        // 読み込んだ範囲の予定を通知の予約へ流す(calendar/Calendar_Reminders)
+        void syncReminders(int32_t from_day, int32_t to_day, int32_t utc_offset_sec);
 };

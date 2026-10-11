@@ -6,7 +6,7 @@
 //   - 続けて打った文字・Backspace・Deleteはまとめる(1秒を空ける/改行/離れた所はまとめない)
 //   - ひとまとまり(chained)は一度に戻り、一度にやり直す
 //   - 保存した時点へ戻ると atSaved()、やり直しを捨てると戻れなくなる
-//   - クリップボード: \r とNULを捨てる・4KiBで文字の途中で切らない・空にすると返す
+//   - クリップボード: \r とNULを捨てる・1KiBで文字の途中で切らない・空にすると返す
 #include "util/Edit_History.hpp"
 #include "functions/Clipboard_Functions.hpp"
 

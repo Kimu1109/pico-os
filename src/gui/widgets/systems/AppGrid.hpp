@@ -35,9 +35,15 @@ class AppGrid : public Widget {
 
         int page_ = 0;
 
-        // 押下中のタイルのアプリindex(-1=なし)。押し込み表示と、
-        // 離した時にどれを起動するかの記録を兼ねる
-        int pressed_index_ = -1;
+        // 押下中のタイルのランチャ上の位置(AppFunctions::VisibleAt()に渡すもの。-1=なし)。
+        // 押し込み表示と、離した時にどれを起動するかの記録を兼ねる
+        int pressed_pos_ = -1;
+        // 押し始めた時刻と、長押しを知らせ済みか(知らせたら離しても起動しない)
+        unsigned long press_ms_ = 0;
+        bool long_pressed_ = false;
+
+        // ローカル座標にあるタイルのランチャ上の位置。外/空きなら-1
+        int hitPos(int local_x, int local_y) const;
 
         std::function<void(int app_index)> on_launch_ = nullptr;
 
@@ -99,9 +105,19 @@ class AppGrid : public Widget {
         bool nextPage();
         bool prevPage();
 
-        // ローカル座標にあるタイルのアプリindexを返す。
+        // ローカル座標にあるタイルのアプリindex(登録簿の番号)を返す。
         // タイルの外、または空きスロットなら-1
         int hitTile(int local_x, int local_y) const;
+
+        // タイルを押したまま long_ms 経ったら、そのアプリindexを1回だけ返す(それ以外は-1)。
+        // 返したタイルは離しても起動しない。ランチャ(HomeScene)が毎フレーム呼んで並べ替えのメニューを出す
+        int takeLongPress(unsigned long now_ms, unsigned long long_ms);
+        // キー/コントローラーで選んでいるタイルのアプリindex(無ければ-1)
+        int focusedApp() const;
+        // そのアプリが見えるページへ移り、選んでいるタイルにする(並べ替えの後に追いかける)
+        void showApp(int app_index);
+        // 並び・隠したアプリが変わった後に呼ぶ(ページと選んでいるタイルを丸め直して描き直す)
+        void layoutChanged();
 
         void setOnLaunch(std::function<void(int app_index)> callback){
             this->on_launch_ = callback;

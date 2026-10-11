@@ -3,6 +3,10 @@
 #include "storage/SD_IO.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Config_Functions.hpp"
+#include "storage/SD_Path.hpp"
+#include "OS_Data.hpp"
+#include <cstdio>
 
 bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(const AppEntry&),
                             const char* arg, const LuaPermissions& permissions,
@@ -50,6 +54,9 @@ bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(cons
     entry.icon = icon;
     entry.permissions = permissions;
     entry.create = create;
+    //新しいアプリはランチャの並びの最後へ
+    launcher_order[app_count] = (int8_t)app_count;
+    launcher_hidden &= ~(1u << app_count);
     app_count++;
     return true;
 }
@@ -130,4 +137,189 @@ void AppFunctions::Clear(){
         apps[i] = AppEntry{};
     }
     app_count = 0;
+    for(int i = 0; i < kMaxApps; i++) launcher_order[i] = (int8_t)i;
+    launcher_hidden = 0;
+}
+
+// ---------------------------------------------------------------------------
+// ランチャの並び・非表示
+// ---------------------------------------------------------------------------
+
+namespace {
+    bool HiddenBit(int index){ return (AppFunctions::launcher_hidden >> index) & 1u; }
+    // 並びの中での位置(隠したものも数える)。無ければ-1
+    int OrderSlot(int index){
+        for(int i = 0; i < AppFunctions::app_count; i++){
+            if(AppFunctions::launcher_order[i] == index) return i;
+        }
+        return -1;
+    }
+}
+
+int AppFunctions::VisibleCount(){
+    int n = 0;
+    for(int i = 0; i < app_count; i++) if(!HiddenBit(i)) n++;
+    return n;
+}
+
+int AppFunctions::VisibleAt(int pos){
+    if(pos < 0) return -1;
+    for(int i = 0; i < app_count; i++){
+        const int idx = launcher_order[i];
+        if(HiddenBit(idx)) continue;
+        if(pos-- == 0) return idx;
+    }
+    return -1;
+}
+
+int AppFunctions::VisiblePosition(int index){
+    if(index < 0 || index >= app_count || HiddenBit(index)) return -1;
+    int pos = 0;
+    for(int i = 0; i < app_count; i++){
+        const int idx = launcher_order[i];
+        if(idx == index) return pos;
+        if(!HiddenBit(idx)) pos++;
+    }
+    return -1;
+}
+
+bool AppFunctions::IsHidden(int index){
+    return index >= 0 && index < app_count && HiddenBit(index);
+}
+
+int AppFunctions::HiddenCount(){ return app_count - VisibleCount(); }
+
+int AppFunctions::HiddenAt(int n){
+    if(n < 0) return -1;
+    for(int i = 0; i < app_count; i++){
+        const int idx = launcher_order[i];
+        if(!HiddenBit(idx)) continue;
+        if(n-- == 0) return idx;
+    }
+    return -1;
+}
+
+bool AppFunctions::MoveApp(int index, int delta){
+    if(delta == 0 || IsHidden(index)) return false;
+    int slot = OrderSlot(index);
+    if(slot < 0) return false;
+    const int step = delta < 0 ? -1 : 1;
+    int remaining = delta < 0 ? -delta : delta;
+    bool moved = false;
+    //隣の「見えている」アプリを飛び越すまで、1つずつ入れ替えて進める(隠したものとの相対位置は保つ)
+    while(remaining > 0){
+        int target = slot + step;
+        while(target >= 0 && target < app_count && HiddenBit(launcher_order[target])) target += step;
+        if(target < 0 || target >= app_count) break;
+        while(slot != target){
+            const int next = slot + step;
+            const int8_t tmp = launcher_order[slot];
+            launcher_order[slot] = launcher_order[next];
+            launcher_order[next] = tmp;
+            slot = next;
+        }
+        moved = true;
+        remaining--;
+    }
+    if(moved) SaveLayout();
+    return moved;
+}
+
+bool AppFunctions::MoveAppToFront(int index){
+    const int pos = VisiblePosition(index);
+    if(pos <= 0) return false;
+    return MoveApp(index, -pos);
+}
+
+bool AppFunctions::SetHidden(int index, bool hidden){
+    if(index < 0 || index >= app_count || HiddenBit(index) == hidden) return false;
+    if(hidden) launcher_hidden |= (1u << index);
+    else       launcher_hidden &= ~(1u << index);
+    SaveLayout();
+    return true;
+}
+
+void AppFunctions::ResetLayout(){
+    for(int i = 0; i < kMaxApps; i++) launcher_order[i] = (int8_t)i;
+    launcher_hidden = 0;
+    if(OSData::SD_usable && OSData::SD.exists(PICO_Path::FILE::CFG::SYS_LAUNCHER_CFG)){
+        OSData::SD.remove(PICO_Path::FILE::CFG::SYS_LAUNCHER_CFG);
+    }
+}
+
+void AppFunctions::LoadLayout(){
+    for(int i = 0; i < kMaxApps; i++) launcher_order[i] = (int8_t)i;
+    launcher_hidden = 0;
+    if(!OSData::SD_usable) return;
+    const char* path = PICO_Path::FILE::CFG::SYS_LAUNCHER_CFG;
+    if(!OSData::SD.exists(path)) return; //無いのが普通(登録順のまま)
+
+    int8_t order[kMaxApps];
+    int placed_count = 0;
+    uint32_t placed = 0;
+    uint32_t hidden = 0;
+    PICO_Config::ParseFile(path, [&](const char* key, const char* value){
+        const bool is_app = strcmp(key, "app") == 0;
+        const bool is_hidden = strcmp(key, "hidden") == 0;
+        if(!is_app && !is_hidden){
+            LOG_SYS_WARN("launcher.cfg: 知らないキーです: %s", key);
+            return;
+        }
+        //同じ名前が複数あれば、まだ並べていない若いものから当てる。見つからない(消したアプリ)は捨てる
+        for(int i = 0; i < app_count; i++){
+            if(((placed >> i) & 1u) || !(apps[i].name == value)) continue;
+            placed |= (1u << i);
+            order[placed_count++] = (int8_t)i;
+            if(is_hidden) hidden |= (1u << i);
+            return;
+        }
+    });
+    //ファイルに無いアプリ(新しく入れたもの)は後ろへ登録順に
+    for(int i = 0; i < app_count; i++){
+        if(!((placed >> i) & 1u)) order[placed_count++] = (int8_t)i;
+    }
+    for(int i = 0; i < app_count; i++) launcher_order[i] = order[i];
+    launcher_hidden = hidden;
+}
+
+bool AppFunctions::SaveLayout(){
+    if(!OSData::SD_usable) return false;
+    const char* path = PICO_Path::FILE::CFG::SYS_LAUNCHER_CFG;
+    char tmp_path[PICO_PATH_LEN];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+
+    FsFile f = OSData::SD.open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC);
+    if(!f){
+        LOG_SYS_FAIL("ランチャ: %s を作れませんでした", tmp_path);
+        return false;
+    }
+    bool ok = true;
+    auto put = [&](const char* text){
+        const size_t len = strlen(text);
+        if(ok && f.write(text, len) != len) ok = false;
+    };
+    put("# ランチャの並び(上から順)。hidden = の行は隠したアプリ。ランチャの長押し/設定アプリが書き換える\n");
+    char line[PICO_Config::kConfigMaxLineLen];
+    for(int i = 0; i < app_count && ok; i++){
+        const int idx = launcher_order[i];
+        snprintf(line, sizeof(line), "%s = %s\n", HiddenBit(idx) ? "hidden" : "app", apps[idx].name.c_str());
+        put(line);
+    }
+    f.close();
+
+    if(!ok){
+        LOG_SYS_FAIL("ランチャ: launcher.cfgの書き込みに失敗しました");
+        OSData::SD.remove(tmp_path);
+        return false;
+    }
+    if(OSData::SD.exists(path) && !OSData::SD.remove(path)){
+        LOG_SYS_FAIL("ランチャ: 古いlauncher.cfgを消せませんでした");
+        OSData::SD.remove(tmp_path);
+        return false;
+    }
+    if(!OSData::SD.rename(tmp_path, path)){
+        LOG_SYS_FAIL("ランチャ: launcher.cfgへ差し替えられませんでした");
+        return false;
+    }
+    return true;
 }

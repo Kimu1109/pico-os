@@ -47,6 +47,12 @@
 #include "OS_Data.hpp"
 #include <config/LGFX_Config_PC.hpp>         // PICOOS_PC_SCALE(画面の拡大率)
 #include <functions/Touch_Functions_PC.hpp>  // PicoOsTouchScript
+#include <PicoPcClock.h>                     // 設定アプリで合わせた時計のずれ
+#include "functions/CrashDump_Functions.hpp" // 再起動(電源メニュー)の差し込み口
+#if !defined(__EMSCRIPTEN__)
+    #include <unistd.h>                      // execv(再起動)
+    #include <signal.h>                      // pthread_sigmask(再起動)
+#endif
 
 // src/main.cpp が提供する
 void setup(void);
@@ -571,6 +577,8 @@ namespace {
 int main(int, char**)
 {
     printf("[WEB] pico-os build: %s\n", PICOOS_WEB_REV);
+    //電源メニューの「再起動」はページの読み直し(SDの書き込みは消える)
+    CrashDumpFunctions::pc_reboot_hook = [](){ emscripten_run_script("location.reload()"); };
 
     applyQueryParams();
 
@@ -596,8 +604,40 @@ int main(int, char**)
 
 #else
 
+// 設定アプリで時計を合わせたら(TimeFunctions::SetClock() → PicoPcClock::Set())、time()がそのずれを足す。
+// 実機はsettimeofday()で本当に時計を変えるので、PCでもtime(nullptr)を使う全ての所(時計・アラーム・
+// 通知・TLSの有効期限)が同じ時刻を見るよう、実行ファイルでlibcのtime()を上書きする(母艦の時計は変えない)。
+// libcの中からの呼び出しには効かないが、src/は time(nullptr) しか使っていない
+#ifndef __THROW
+    #define __THROW
+#endif
+extern "C" time_t time(time_t* out) __THROW
+{
+    const time_t v = (time_t)PicoPcClock::Now();
+    if (out) *out = v;
+    return v;
+}
+
+// 電源メニューの「再起動」。同じ引数で自分自身を実行し直す(SDLのウィンドウも作り直される)
+static char** g_argv = nullptr;
+static void rebootSelf()
+{
+    fflush(stdout);
+    //シグナルのマスクはexecvを越えて引き継がれる。描画のスレッドはSDLが止めているシグナルがあり、
+    //そのままだと再起動した後にSIGTERM(Ctrl+C・timeout)で終われなくなるので、全部外してから実行し直す
+    sigset_t none;
+    sigemptyset(&none);
+    pthread_sigmask(SIG_SETMASK, &none, nullptr);
+    execv("/proc/self/exe", g_argv);
+    //execvが失敗したら(/procが無い等)終わるだけにする
+    printf("[PC] 再起動できませんでした。終了します\n");
+    exit(0);
+}
+
 int main(int argc, char** argv)
 {
+    g_argv = argv;
+    CrashDumpFunctions::pc_reboot_hook = &rebootSelf;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--tap") == 0 && i + 1 < argc) {
             //"X,Y@FRAME[:HOLD]" を読む

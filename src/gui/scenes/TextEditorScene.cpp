@@ -536,7 +536,7 @@ void TextEditorScene::copySelection(bool cut){
     if(has_sel){
         //入り切らない分まで消してしまわないよう、切り取りはクリップボードの上限まで
         if(cut && b - a > (int)ClipboardFunctions::kMaxBytes){
-            this->refreshStatus("切り取れるのは4KiBまでです");
+            this->refreshStatus("切り取れるのは1KiBまでです");
             return;
         }
         whole = ClipboardFunctions::Set(this->text + a, (size_t)(b - a));
@@ -554,7 +554,7 @@ void TextEditorScene::copySelection(bool cut){
     }
 
     if(!cut){
-        this->refreshStatus(!whole ? "4KiBまでコピーしました" : has_sel ? "コピーしました" : "1行コピーしました");
+        this->refreshStatus(!whole ? "1KiBまでコピーしました" : has_sel ? "コピーしました" : "1行コピーしました");
         return;
     }
     const char* why = this->checkLimits(a, b, "", 0);

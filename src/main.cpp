@@ -27,6 +27,7 @@
 #include "functions/CrashDump_Functions.hpp"
 #include "functions/DevTools_Functions.hpp"
 #include "functions/HwTest_Functions.hpp"
+#include "functions/PowerMenu_Functions.hpp"
 #include "lua/LuaDebugger.hpp"
 #include "lua/LuaDebugScreen.hpp"
 
@@ -39,6 +40,9 @@
 
 //シーンをまたいで常駐させるウィジェットはオーバーレイ層に置く
 static Statusbar* status;
+//ステータスバーを押し始めた時刻と、長押しで電源メニューを開いたか(開いたら離したときのタップは無視する)
+static unsigned long status_press_ms = 0;
+static bool status_long_pressed = false;
 //フレーム時間の表示(/sys/debug.cfg の perf-overlay)。全オーバーレイの一番上
 static PerfOverlay* perf_overlay;
 #if !defined(__EMSCRIPTEN__)
@@ -80,8 +84,14 @@ void setup() {
     //--- 常駐(オーバーレイ層): シーン遷移で破棄されない ---
     status = new Statusbar();
     WidgetFunctions::AddOverlay(status);
-    //ステータスバーの右端のカメラはスクリーンショット、それ以外のタップは通知センターを開く
+    //ステータスバーの右端のカメラはスクリーンショット、それ以外のタップは通知センターを開く。
+    //長押し(PowerMenuFunctions::kLongPressMs)は電源メニュー(loop()で見張る)
+    status->setOnPressStart([](){
+        status_press_ms = millis();
+        status_long_pressed = false;
+    });
     status->setOnPressEnd([](){
+        if(status_long_pressed) return;
         if(OSData::touchX < SCREEN_WIDTH - ScreenshotFunctions::kButtonWidth){
             NotificationFunctions::OpenCenter();
             return;
@@ -182,11 +192,20 @@ void loop() {
     //(半透明のダイアログの下も。MarkDirty()だとFlushDirty()がそこを描き直さない)
     if(LuaDebugger::TakeRedrawRequest()) PICO_GFX::MarkDirtyBelow({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
 
+    //電源メニューで頼まれた再起動(今の画面の後片付けをしてから。戻らない)
+    PowerMenuFunctions::Update();
+
     //物理キーボードの打鍵を今の画面/開いているキー盤へ配る(遷移の適用後、ウィジェット更新の前)
     KeyInputFunctions::Update();
     ProfilerFunctions::Mark(ProfilerFunctions::Section::Scene);
 
     WidgetFunctions::UpdateAll();
+    //ステータスバーの長押しで電源メニュー(指を離す前に開く)
+    if(status->is_pressing && !status_long_pressed
+        && millis() - status_press_ms >= PowerMenuFunctions::kLongPressMs){
+        status_long_pressed = true;
+        PowerMenuFunctions::Open();
+    }
     ProfilerFunctions::Mark(ProfilerFunctions::Section::Widgets);
 
     PICO_GFX::FlushDirty();

@@ -17,6 +17,9 @@
 #include "task/NetworkScan.hpp"
 
 #include "functions/DevTools_Functions.hpp"
+#include "functions/PowerMenu_Functions.hpp"
+#include "functions/App_Functions.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -512,6 +515,136 @@ void SettingsScene::saveAndConnect(const char* ssid, const char* password){
 }
 
 // ---------------------------------------------------------------------------
+// 時刻の手動設定(Wi-Fi・NTPが無いとき用)
+// ---------------------------------------------------------------------------
+
+void SettingsScene::refreshClockLabel(bool force){
+    if(!this->clock_label) return;
+    time_t now = time(nullptr);
+    struct tm t;
+    localtime_r(&now, &t);
+    if(!force && t.tm_min == this->clock_shown_min) return;
+    this->clock_shown_min = t.tm_min;
+
+    static const char* const kWeek[] = { "日", "月", "火", "水", "木", "金", "土" };
+    const bool valid = t.tm_year + 1900 >= TimeFunctions::kValidYear;
+    char buf[PICO_STR_L];
+    if(valid){
+        snprintf(buf, sizeof(buf), "%04d/%02d/%02d(%s) %02d:%02d",
+            t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, kWeek[t.tm_wday % 7], t.tm_hour, t.tm_min);
+    }else{
+        snprintf(buf, sizeof(buf), "時刻が合っていません");
+    }
+    this->clock_label->setText(buf);
+    this->clock_label->setTextColor(valid ? PICO_BLACK : PICO_RED);
+    if(this->clock_note){
+        this->clock_note->setText(valid ? "NTP同期で上書きされます"
+                                        : "「変更」で手動で合わせられます");
+    }
+}
+
+void SettingsScene::openClockDateDialog(){
+    //時計が合っていなければ(1970年)今年の1月1日から選ばせる
+    time_t now = time(nullptr);
+    struct tm t;
+    localtime_r(&now, &t);
+    int y = t.tm_year + 1900, m = t.tm_mon + 1, d = t.tm_mday;
+    if(y < TimeFunctions::kValidYear){ y = 2026; m = 1; d = 1; }
+
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Date, "日付", "次へ", "キャンセル");
+    if(!dialog) return;
+    dialog->setDate(y, m, d);
+    dialog->layout();
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_ok){
+        if(is_ok){
+            this->clock_year  = dialog->getYear();
+            this->clock_month = dialog->getMonth();
+            this->clock_day   = dialog->getDay();
+            //ダイアログからダイアログは1フレーム空ける
+            this->pending = Pending::ClockTime;
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void SettingsScene::openClockTimeDialog(){
+    time_t now = time(nullptr);
+    struct tm t;
+    localtime_r(&now, &t);
+    const bool valid = t.tm_year + 1900 >= TimeFunctions::kValidYear;
+
+    char title[PICO_STR_M];
+    snprintf(title, sizeof(title), "%d/%d の時刻", this->clock_month, this->clock_day);
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Time, title, "設定", "キャンセル");
+    if(!dialog) return;
+    dialog->setTime(valid ? t.tm_hour : 12, valid ? t.tm_min : 0, 0);
+    dialog->layout();
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_ok){
+        if(is_ok){
+            const uint32_t sec = dialog->getTimeSeconds();
+            const bool ok = TimeFunctions::SetLocalDateTime(this->clock_year, this->clock_month, this->clock_day,
+                (int)(sec / 3600) % 24, (int)(sec / 60) % 60, (int)(sec % 60));
+            if(ok){
+                LOG_SYS_MSG("時刻を手動で合わせました: %04d/%02d/%02d %02u:%02u:%02u",
+                    this->clock_year, this->clock_month, this->clock_day,
+                    (unsigned)(sec / 3600), (unsigned)((sec / 60) % 60), (unsigned)(sec % 60));
+            }else{
+                this->showMessageLater("時刻を合わせられませんでした");
+            }
+            this->refreshClockLabel(true);
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// ランチャで隠したアプリ
+// ---------------------------------------------------------------------------
+
+void SettingsScene::refreshLauncherLabel(){
+    if(!this->launcher_label) return;
+    char buf[PICO_STR_L];
+    const int hidden = AppFunctions::HiddenCount();
+    if(hidden > 0) snprintf(buf, sizeof(buf), "ランチャで隠したアプリ: %d", hidden);
+    else           snprintf(buf, sizeof(buf), "ランチャで隠したアプリ: なし");
+    this->launcher_label->setText(buf);
+}
+
+void SettingsScene::openLauncherDialog(){
+    //隠したアプリの一覧(選ぶとランチャへ戻す)+ 最後に「並びを元に戻す」
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, "隠したアプリ", "", "閉じる");
+    if(!dialog) return;
+    const int hidden = AppFunctions::HiddenCount();
+    for(int i = 0; i < hidden; i++){
+        const AppEntry* e = AppFunctions::Get(AppFunctions::HiddenAt(i));
+        char buf[PICO_STR_L];
+        snprintf(buf, sizeof(buf), "表示: %s", e ? e->name.c_str() : "?");
+        dialog->addChoice(buf);
+    }
+    dialog->addChoice("並びを元に戻す");
+    dialog->layout();
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog, hidden](bool is_ok){
+        const int sel = dialog->getSelectedIndex();
+        WidgetFunctions::DestroyLater(dialog);
+        if(!is_ok || sel < 0) return;
+        if(sel < hidden){
+            //開いている間に並びが変わることは無い(ランチャはこの画面の下で止まっている)
+            AppFunctions::SetHidden(AppFunctions::HiddenAt(sel), false);
+        }else{
+            AppFunctions::ResetLayout();
+            this->showMessageLater("ランチャの並びを登録順に戻しました");
+        }
+        this->refreshLauncherLabel();
+    });
+}
+
+// ---------------------------------------------------------------------------
 // 画面の組み立て
 // ---------------------------------------------------------------------------
 
@@ -530,8 +663,16 @@ void SettingsScene::onEnter(){
     const Rect back_box = this->back_button->getLocalRect();
     this->top_row_h = back_box.h;
 
+    //右端の「電源」(スリープ/再起動。ステータスバーの長押しと同じメニュー)
+    this->power_button = new Button(0, content.y + MARGIN, "電源");
+    this->power_button->setFontSize(FontFn::Small);
+    this->power_button->setH(20 + Button::kFrameExtra);
+    this->power_button->setX((int16_t)(content.x + content.w - MARGIN - this->power_button->getLocalRect().w));
+    this->power_button->setOnPressEnd([](){ PowerMenuFunctions::Open(); });
+    WidgetFunctions::Add(this->power_button);
+
     const int16_t battery_x = (int16_t)(content.x + MARGIN + back_box.w + MARGIN);
-    const int16_t battery_w = (int16_t)(content.x + content.w - MARGIN - battery_x);
+    const int16_t battery_w = (int16_t)(this->power_button->getLocalRect().x - MARGIN - battery_x);
     this->battery_label = makeRowLabel<PICO_STR_M>(battery_x, content.y + MARGIN, battery_w, "");
     WidgetFunctions::Add(this->battery_label);
     this->refreshBatteryLabel();
@@ -713,6 +854,19 @@ void SettingsScene::onEnter(){
     addToTab(Tab::Time, this->ntp2_label);
     this->refreshNtp2Label();
 
+    // ---- 時刻の手動設定。時刻の4行目(+下に注意書き) ----
+    this->clock_edit_button = this->makeEditButton(rowY(3));
+    this->clock_edit_button->setText("変更");
+    this->clock_edit_button->setOnPressEnd([this](){ this->openClockDateDialog(); });
+    addToTab(Tab::Time, this->clock_edit_button);
+
+    this->clock_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(3) + 2), label_w, "");
+    addToTab(Tab::Time, this->clock_label);
+    this->clock_note = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(4) + 2), full_w, "");
+    this->clock_note->setTextColor(PICO_DARKGREY);
+    addToTab(Tab::Time, this->clock_note);
+    this->refreshClockLabel(true);
+
     // =====================================================================
     // その他
     // =====================================================================
@@ -757,6 +911,14 @@ void SettingsScene::onEnter(){
     this->watchdog_checkbox->setOnChangeChecked([this](){
         DevToolsFunctions::SetWatchdog(this->watchdog_checkbox->getIsChecked());
     });
+
+    // ランチャで隠したアプリ(並べ替え・隠すのはランチャのタイルの長押し)
+    this->launcher_button = this->makeEditButton(rowY(6));
+    this->launcher_button->setOnPressEnd([this](){ this->openLauncherDialog(); });
+    addToTab(Tab::Other, this->launcher_button);
+    this->launcher_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(6) + 2), label_w, "");
+    addToTab(Tab::Other, this->launcher_label);
+    this->refreshLauncherLabel();
 
     // =====================================================================
     // ドロップダウン(開いた一覧が下の行へ重なるので、当たり判定・描画の両方で最前面に来るよう
@@ -914,6 +1076,7 @@ void SettingsScene::onUpdate(){
     this->pending = Pending::None;
     if(p == Pending::WifiPassword) this->openWifiPasswordDialog();
     else if(p == Pending::Message) this->openMessage();
+    else if(p == Pending::ClockTime) this->openClockTimeDialog();
 
     this->pollWifiScan();
     if(this->tab == Tab::Wifi) this->refreshWifi();
@@ -924,6 +1087,7 @@ void SettingsScene::onUpdate(){
     this->updateSampleRate();
     this->updateTimezone();
     this->refreshBatteryLabel();
+    if(this->tab == Tab::Time) this->refreshClockLabel(false);
 }
 
 void SettingsScene::onExit(){
@@ -958,6 +1122,7 @@ void SettingsScene::onExit(){
     }
 
     this->back_button   = nullptr;
+    this->power_button  = nullptr;
     this->tab_bar       = nullptr;
     this->battery_label = nullptr;
 
@@ -989,6 +1154,12 @@ void SettingsScene::onExit(){
     this->ntp1_edit_button     = nullptr;
     this->ntp2_label           = nullptr;
     this->ntp2_edit_button     = nullptr;
+    this->clock_label          = nullptr;
+    this->clock_edit_button    = nullptr;
+    this->clock_note           = nullptr;
+    this->clock_shown_min      = -1;
+    this->launcher_label       = nullptr;
+    this->launcher_button      = nullptr;
 
     this->home_label           = nullptr;
     this->home_edit_button     = nullptr;

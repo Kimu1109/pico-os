@@ -79,6 +79,8 @@ class PickerDialog : public Widget {
 
         // ---- Time ----
         void setTime(int hour, int minute, int second);
+        // 0時からの秒(Time以外は0)
+        uint32_t getTimeSeconds() const { return time_picker ? time_picker->getTotalSeconds() : 0; }
 
         // ---- Number ----
         void setNumber(const char* text);

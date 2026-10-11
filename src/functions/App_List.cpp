@@ -70,5 +70,8 @@ void AppFunctions::Setup(){
     // していない)
     LuaAppScanner::Scan();
 
+    // ランチャの並べ替え・隠したアプリ(/sys/launcher.cfg)。登録を全部済ませた後に当てる
+    LoadLayout();
+
     LOG_SYS_OK("App Setup has succeeded! (%d apps)", Count());
 }

@@ -75,6 +75,11 @@ namespace AppFunctions {
     inline AppEntry apps[kMaxApps];
     inline int app_count = 0;
 
+    // ランチャの並び(登録簿のindexの並べ替え。0..app_count-1 を1つずつ含む)と、隠したアプリの印(ビット=index)
+    inline int8_t   launcher_order[kMaxApps] = {};
+    inline uint32_t launcher_hidden = 0;
+    static_assert(kMaxApps <= 32, "launcher_hidden のビット数が足りません");
+
     // 型Tのシーンを作るファクトリ。引数を使わないアプリ向け。
     // Register()へ &MakeScene<XxxScene> の形で渡す
     template<typename T>
@@ -124,8 +129,43 @@ namespace AppFunctions {
     // タイルアイコンの.pimgの絶対パスをoutへ。icon_fileが無ければfalse
     bool IconPathOf(const AppEntry& entry, FixedString<PICO_PATH_LEN>& out);
 
-    // 登録簿を空にする(主にテスト用。Setup()の冒頭でも呼ばれる)
+    // 登録簿を空にする(主にテスト用。Setup()の冒頭でも呼ばれる)。ランチャの並びも初期状態へ戻す
     void Clear();
+
+    // ===== ランチャの並び・非表示(/sys/launcher.cfg) =====
+    // 登録簿のindex(Get/Launchに渡すもの)は登録した順のまま変えず、ランチャに見せる順番と
+    // 隠したかどうかだけを別に持つ(並べ替えてもLaunchByName・通知の送り主の対応は変わらない)。
+    // RAMは並び32バイト+隠した印4バイトだけ。
+    //
+    // launcher.cfg(無くてよい。上から順にランチャへ並ぶ。載っていないアプリはその後ろへ登録順に):
+    //   app = 時計
+    //   hidden = 辞書      ← 隠したアプリ(並びの中の位置は覚えておき、表示し直すとそこへ戻る)
+    // アプリは名前で指す(同じ名前が2つあれば、ファイルの順に登録の若いものから当てる)。
+    // 書き換えるのはランチャのタイルの長押しメニューと設定アプリ(その他タブの「ランチャ」)。
+    // 隠したアプリも名前(pico.launch_app)や通知からは起動できる。
+
+    // ランチャに見えている数と、見えている中で pos 番目のアプリの登録簿のindex(範囲外は-1)
+    int VisibleCount();
+    int VisibleAt(int pos);
+    // 登録簿のindexのアプリがランチャの何番目か(隠している/範囲外なら-1)
+    int VisiblePosition(int index);
+
+    bool IsHidden(int index);
+    int  HiddenCount();
+    // 隠した中で n 番目のアプリの登録簿のindex(並びの順)。範囲外は-1
+    int  HiddenAt(int n);
+
+    // 以下は変わったらlauncher.cfgへ書き、変わらなかったら(端・範囲外)falseを返す
+    // 見えているアプリの中で前(delta<0)/後ろ(delta>0)へ1つずつ動かす
+    bool MoveApp(int index, int delta);
+    bool MoveAppToFront(int index);
+    bool SetHidden(int index, bool hidden);
+    // 並びを登録順へ戻し、全部見せる(launcher.cfgを消す)
+    void ResetLayout();
+
+    // launcher.cfgを読む(Setup()の最後で呼ぶ。登録し直したときも)。無ければ登録順のまま
+    void LoadLayout();
+    bool SaveLayout();
 
     // このOSに載せるアプリをまとめて登録する(実装は App_List.cpp)
     void Setup();

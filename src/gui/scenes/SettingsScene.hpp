@@ -19,8 +19,9 @@ class NetworkScan;    // task/NetworkScan.hpp。同上
 // 標準アプリの設定。画面下のタブで大まかな項目ごとに分けてある:
 //   Wi-Fi   … ON/OFF・接続状態・保存済みのネットワークの一覧(接続/削除)・周辺の検索・手入力での追加
 //   本体    … 音量(sound.cfg)・明るさと自動調光・スリープ(display.cfg)
-//   時刻    … タイムゾーン・NTPサーバー(network.cfg)
-//   その他  … ブラウザのホーム(network.cfg)・起動時の自己診断(user.cfg)
+//   時刻    … タイムゾーン・NTPサーバー(network.cfg)・時刻の手動設定(Wi-Fiが無いとき用)
+//   その他  … ブラウザのホーム(network.cfg)・起動時の自己診断(user.cfg)・ランチャで隠したアプリ・開発者向け
+// 上の段の右端の「電源」はスリープ/再起動のメニュー(PowerMenuFunctions。ステータスバーの長押しと同じもの)
 //
 // ウィジェットは全タブぶんをonEnter()で作り、表示中のタブのものだけを見せる
 // (ClocksSceneのapplyVisibility()と同じ考え方。タブごとの持ち物はtab_widgets[]に登録する)。
@@ -45,7 +46,7 @@ class SettingsScene : public Scene {
 
         // ダイアログを閉じた直後に次のダイアログを開くための保留(1フレーム空ける。
         // MarkdownScene::Pendingと同じ理由: TRANSLUCENTの下は同じフレームでは描き直されない)
-        enum class Pending : uint8_t { None, WifiPassword, Message };
+        enum class Pending : uint8_t { None, WifiPassword, Message, ClockTime };
 
         Tab tab = Tab::Wifi; // onExit()を跨いで残す(上へ別のシーンを積んで戻ると同じタブ)
 
@@ -58,6 +59,7 @@ class SettingsScene : public Scene {
         void applyTab();
 
         Button*   back_button = nullptr;
+        Button*   power_button = nullptr;
         TabBar*   tab_bar     = nullptr;
 
         // 戻るボタンと同じ行の右側に表示するバッテリー残量(全タブ共通)
@@ -147,12 +149,28 @@ class SettingsScene : public Scene {
         Label<PICO_STR_L>* ntp2_label           = nullptr;
         Button*            ntp2_edit_button     = nullptr;
 
+        // 時刻の手動設定。日付(PickerDialogのDate)→1フレーム空けて時刻(Time)の順に聞き、TimeFunctions::SetLocalDateTime()
+        Label<PICO_STR_L>* clock_label          = nullptr;
+        Button*            clock_edit_button    = nullptr;
+        Label<PICO_STR_L>* clock_note           = nullptr;
+        int                clock_shown_min      = -1;  // 表示している分(変わったら書き直す)
+        int clock_year = 2026, clock_month = 1, clock_day = 1; // 日付のダイアログで選んだもの
+        void refreshClockLabel(bool force);
+        void openClockDateDialog();
+        void openClockTimeDialog();
+
         // ================= その他 =================
         Label<PICO_STR_L>* home_label           = nullptr;
         Button*            home_edit_button     = nullptr;
 
         Checkbox*          run_test_checkbox    = nullptr;
         Label<PICO_STR_M>* run_test_note        = nullptr;
+
+        // ランチャで隠したアプリ(AppFunctions::SetHidden)。一覧から選んで表示し直す/並びを元に戻す
+        Label<PICO_STR_L>* launcher_label       = nullptr;
+        Button*            launcher_button      = nullptr;
+        void refreshLauncherLabel();
+        void openLauncherDialog();
         // 開発者向け(/sys/debug.cfg)
         Checkbox*          perf_overlay_checkbox = nullptr;
         Checkbox*          lua_debugger_checkbox = nullptr;

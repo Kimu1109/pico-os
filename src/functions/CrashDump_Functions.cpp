@@ -448,6 +448,21 @@ void CrashDumpFunctions::InstallHandlers(){
     //実機: isr_hardfault(下)がリンクで差し替わるので何もしない
 }
 
+void CrashDumpFunctions::Reboot(){
+    //前回のクラッシュの記録・パンくずを「無いもの」にする(次の起動でダンプを書かないように)
+    pending_record.magic = 0;
+    crumbs.magic = 0;
+#if defined(PICOOS_PC)
+    if(pc_reboot_hook) pc_reboot_hook();
+    exit(0);
+#else
+    for(int i = 0; i < 4; i++) watchdog_hw->scratch[i] = 0;
+    //pc=0なのでscratch[4]も0になり、watchdog_enable_caused_reboot()は偽(ウォッチドッグの時間切れとは区別される)
+    watchdog_reboot(0, 0, 0);
+    while(true){}
+#endif
+}
+
 void CrashDumpFunctions::EnableWatchdog(uint32_t ms){
 #if defined(PICOOS_PC)
     watchdog_ms = ms;

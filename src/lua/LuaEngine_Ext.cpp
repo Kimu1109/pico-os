@@ -948,7 +948,7 @@ int LuaEngineExt::l_clipboard_get(lua_State* L) {
 }
 
 // pico.clipboard_set(text) -> bool: 中身を差し替える(""で空に)。'\r'とNULは捨てる。
-// 4KiBを超える分は切り捨ててfalse(確保できなかったときもfalseで、前の中身のまま)
+// 1KiBを超える分は切り捨ててfalse(確保できなかったときもfalseで、前の中身のまま)
 int LuaEngineExt::l_clipboard_set(lua_State* L) {
     size_t n = 0;
     const char* text = luaL_checklstring(L, 1, &n);

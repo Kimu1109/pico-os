@@ -92,6 +92,10 @@ class FileExplorer : public Widget {
         }
 
         const char* getSelectedPath();
+        // 一覧を読み直す(ファイルを外から足した/消した後に)
+        void refresh(){ this->update_list(); }
+        // 名前の一致する項目を選び、見える所までスクロールする。無ければfalse
+        bool selectByName(const char* name);
         const char* getCurrentFolderPath();
 
         void setCurrentFolderPath(const char* path){

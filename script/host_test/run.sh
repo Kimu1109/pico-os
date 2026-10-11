@@ -18,6 +18,7 @@
 #                   ON/OFFの保存・番号ごとの暗号化
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
+#   file_ops_test … ファイルアプリのコピー/移動/名前の変更の下請け(ファイルのコピー・重ならない名前・パスと名前の判定)
 #   touch_filter_test… タッチ座標のmedian-of-3ノイズ抑制(util/TouchFilter.hpp)。
 #                   単発のスパイクを無視すること・滑らかな動きへの追従・タッチ開始ごとの
 #                   履歴リセット
@@ -383,6 +384,16 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== cache_test ====="
 run_or_die "$OUT/cache_test"
+
+# --- ファイルアプリのコピー/移動/名前の変更の下請け ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/file_ops_test.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    -o "$OUT/file_ops_test"
+
+echo ""
+echo "===== file_ops_test ====="
+run_or_die "$OUT/file_ops_test"
 
 # --- URLとHTTPレスポンスの解釈 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

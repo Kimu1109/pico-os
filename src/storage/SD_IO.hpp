@@ -208,6 +208,54 @@ namespace PICO_IO {
     bool removeRecursive(const char* path);
 
     /**
+     * path が dir そのもの、または dir の中(子孫)を指すか。
+     * フォルダを自分の中へコピー/移動するのを断るために使う。
+     * どちらも正規化済み("/"始まり、末尾の"/"無し)の絶対パスを渡すこと。
+     */
+    inline bool isSameOrInside(const char* path, const char* dir)
+    {
+        if (!path || !dir) return false;
+        const size_t dl = strlen(dir);
+        if (dl == 1 && dir[0] == '/') return true; //ルートの中には何でも入っている
+        if (strncmp(path, dir, dl) != 0) return false;
+        return path[dl] == '\0' || path[dl] == '/';
+    }
+
+    /**
+     * ファイル/フォルダの名前として使えるか(名前の変更・貼り付けで使う)。
+     * 空・"."・".."・区切り(/ \)・FATで使えない文字(: * ? " < > |)・制御文字・
+     * 末尾の空白と"."は断る(FATは末尾の空白と"."を捨てるので、別の名前と同じファイルを指す)。
+     */
+    inline bool isValidName(const char* name)
+    {
+        if (!name || !name[0]) return false;
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return false;
+        size_t len = 0;
+        for (const char* p = name; *p; ++p, ++len) {
+            const unsigned char c = (unsigned char)*p;
+            if (c < 0x20 || c == 0x7F) return false;
+            if (strchr("/\\:*?\"<>|", c)) return false;
+        }
+        const char last = name[len - 1];
+        return last != ' ' && last != '.';
+    }
+
+    /**
+     * src(ファイルまたはフォルダ)を dst へ丸ごとコピーする。dst は存在しないこと。
+     * 失敗したら途中まで作ったものは消す。tick は少し進むたびに呼ばれる(ウォッチドッグへの
+     * Feed用。nullptrでよい)。フォルダの深さは kMaxCopyDepth まで。
+     * 呼び出し側は dst が src の中でないことを確かめておくこと(isSameOrInside)。
+     */
+    constexpr int kMaxCopyDepth = 8;
+    bool copyRecursive(const char* src, const char* dst, void (*tick)() = nullptr);
+
+    /**
+     * dir の中で name と重ならない名前のパスを out へ作る。重なれば
+     * "名前 (2).拡張子" "名前 (3).拡張子" … を試す(99まで)。作れなければfalse。
+     */
+    bool uniquePath(FixedString<PICO_PATH_LEN>& out, const char* dir, const char* name);
+
+    /**
      * パスを正規化する
      *
      * "docs/./a/../b.md" -> "/docs/b.md" のように "." と ".." を畳み、

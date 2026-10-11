@@ -16,7 +16,9 @@
 #   wifi_profiles_test… 保存済みのWi-Fiネットワーク(net/Wifi_Profiles、/sys/wifi.cfg)。network.cfgの
 #                   旧形式からの取り込み・追加/更新/上限/削除・接続できたものを先頭へ(自動接続の順番)・
 #                   ON/OFFの保存・番号ごとの暗号化
-#   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定
+#   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定(アプリストアの登録/更新/削除も)
+#   app_repo_test … アプリストアの配布物の読み取り(store/App_Repo、APP_REPO.md)。カタログ/ファイル一覧の行・
+#                   名前とパスの検査・版の比較・権限・Ed25519の署名(Pythonの署名をMonocypherで確かめる)
 #   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
 #   file_ops_test … ファイルアプリのコピー/移動/名前の変更の下請け(ファイルのコピー・重ならない名前・パスと名前の判定)
 #   touch_filter_test… タッチ座標のmedian-of-3ノイズ抑制(util/TouchFilter.hpp)。
@@ -356,6 +358,21 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== app_test ====="
 run_or_die "$OUT/app_test"
+
+# --- アプリストアの配布物の読み取り(Monocypherの署名の確認を含む) ---
+compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
+    -c "$ROOT/lib/monocypher/src/monocypher.c" -o "$OUT/store_monocypher.o"
+compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined -I "$ROOT/lib/monocypher/src" \
+    -c "$ROOT/lib/monocypher/src/monocypher-ed25519.c" -o "$OUT/store_monocypher_ed25519.o"
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/app_repo_test.cpp" \
+    "$ROOT/src/store/App_Repo.cpp" \
+    "$OUT/store_monocypher.o" "$OUT/store_monocypher_ed25519.o" \
+    -o "$OUT/app_repo_test"
+
+echo ""
+echo "===== app_repo_test ====="
+run_or_die "$OUT/app_repo_test"
 
 # --- パスの正規化と相対解決 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

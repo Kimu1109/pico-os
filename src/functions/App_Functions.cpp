@@ -8,6 +8,24 @@
 #include "OS_Data.hpp"
 #include <cstdio>
 
+namespace {
+    //icon_pathはargと違い、失敗してもアプリ自体は動く(既定アイコンへ落とすだけ)ので
+    //登録ごとは拒否しない。覚えるのはargのディレクトリからの相対パスだけ(AppEntry::icon_file参照)
+    void SetIconFile(AppEntry& entry, const char* icon_path){
+        entry.icon_file.clear();
+        if(!icon_path || icon_path[0] == '\0') return;
+        //argの最後の"/"まで(IconPathOf()と同じ切り方)が icon_path の頭と一致すれば、その後ろを覚える
+        const char* slash = entry.arg.empty() ? nullptr : strrchr(entry.arg.c_str(), '/');
+        const size_t dir_len = slash ? (size_t)(slash - entry.arg.c_str()) + 1 : 0;
+        const bool inside = slash && strncmp(icon_path, entry.arg.c_str(), dir_len) == 0 && icon_path[dir_len] != '\0';
+        if(!inside || !entry.icon_file.assign(icon_path + dir_len)){
+            LOG_SYS_WARN("App Register: アイコンはアプリのディレクトリの中の短いパスにしてください。既定アイコンにします (%s: %s)",
+                entry.name.c_str(), icon_path);
+            entry.icon_file.clear();
+        }
+    }
+}
+
 bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(const AppEntry&),
                             const char* arg, const LuaPermissions& permissions,
                             const char* icon_path){
@@ -37,19 +55,7 @@ bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(cons
         return false;
     }
 
-    //icon_pathはargと違い、失敗してもアプリ自体は動く(既定アイコンへ落とすだけ)ので
-    //登録ごとは拒否しない。覚えるのはargのディレクトリからの相対パスだけ(AppEntry::icon_file参照)
-    if(icon_path && icon_path[0] != '\0'){
-        //argの最後の"/"まで(IconPathOf()と同じ切り方)が icon_path の頭と一致すれば、その後ろを覚える
-        const char* slash = entry.arg.empty() ? nullptr : strrchr(entry.arg.c_str(), '/');
-        const size_t dir_len = slash ? (size_t)(slash - entry.arg.c_str()) + 1 : 0;
-        const bool inside = slash && strncmp(icon_path, entry.arg.c_str(), dir_len) == 0 && icon_path[dir_len] != '\0';
-        if(!inside || !entry.icon_file.assign(icon_path + dir_len)){
-            LOG_SYS_WARN("App Register: アイコンはアプリのディレクトリの中の短いパスにしてください。既定アイコンにします (%s: %s)",
-                entry.name.c_str(), icon_path);
-            entry.icon_file.clear();
-        }
-    }
+    SetIconFile(entry, icon_path);
 
     entry.icon = icon;
     entry.permissions = permissions;
@@ -63,6 +69,46 @@ bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(cons
 
 int AppFunctions::Count(){
     return app_count;
+}
+
+int AppFunctions::FindByArg(const char* arg){
+    if(!arg || arg[0] == '\0') return -1;
+    for(int i = 0; i < app_count; i++){
+        if(apps[i].arg == arg) return i;
+    }
+    return -1;
+}
+
+bool AppFunctions::Refresh(int index, const char* name, const LuaPermissions& permissions,
+                           const char* icon_path){
+    if(index < 0 || index >= app_count || !name || !name[0]) return false;
+    AppEntry& entry = apps[index];
+    entry.name.assign(name);
+    entry.permissions = permissions;
+    SetIconFile(entry, icon_path);
+    return true;
+}
+
+bool AppFunctions::Unregister(int index){
+    if(index < 0 || index >= app_count) return false;
+    for(int i = index; i + 1 < app_count; i++) apps[i] = apps[i + 1];
+    apps[app_count - 1] = AppEntry{};
+
+    //並びからindexを抜き、それより後ろのindexを1つずつ詰める
+    int w = 0;
+    for(int i = 0; i < app_count; i++){
+        const int idx = launcher_order[i];
+        if(idx == index) continue;
+        launcher_order[w++] = (int8_t)(idx > index ? idx - 1 : idx);
+    }
+    //隠した印も同じく詰める(index より下のビットはそのまま、上のビットは1つ下へ)
+    const uint32_t low = launcher_hidden & ((1u << index) - 1u);
+    const uint32_t high = (index + 1 < 32) ? (launcher_hidden >> (index + 1)) << index : 0u;
+    launcher_hidden = low | high;
+
+    app_count--;
+    launcher_order[app_count] = (int8_t)app_count;
+    return true;
 }
 
 const AppEntry* AppFunctions::Get(int index){

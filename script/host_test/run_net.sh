@@ -18,6 +18,9 @@
 # (上と同じ使い捨ての証明書)の2つ立てて確かめる。サーバ単体の権限まわり(chat_server_test.py)も
 # ここで回す(同じプロセスの中で 127.0.0.1 の空きポートにサーバを立てる)。
 #
+# アプリストア(app_store_net_test)は app_store_fixture.py が作った配布物を python3 -m http.server で配り、
+# 一覧の取得・署名・インストール・更新・古い一覧/改ざん/権限の拒否を確かめる。
+#
 # SSH(ssh_net_test)は OpenSSH の sshd を使い捨てのホスト鍵・利用者の鍵・設定で 127.0.0.1 に立てて
 # 確かめる(公開鍵認証。sshd が無い環境では飛ばす。Debian/Ubuntuなら apt install openssh-server)。
 # パスワード/keyboard-interactive認証は母艦に利用者を作る必要があるので自動では回さない
@@ -73,8 +76,9 @@ TLS_PID=""
 CHAT_PIDS=""
 TODO_PIDS=""
 SSHD_PID=""
+STORE_PID=""
 cleanup(){
-    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $SSHD_PID 2>/dev/null || true
+    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $SSHD_PID $STORE_PID 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     wait "$BARE_PID" 2>/dev/null || true
     [ -n "$TLS_PID" ] && wait "$TLS_PID" 2>/dev/null || true
@@ -209,6 +213,43 @@ done
 echo ""
 echo "===== todoist_net_test ====="
 "$OUT/todoist_net_test" "$TODO_PORT" "$TODO_TLS_PORT" "$OUT/ca.pem" "$TODO_TOKEN" "$TODO_PAGED_PORT"
+
+# ---- アプリストア(AppStore)。配布物を作って http.server で配る ----
+STORE_PORT=$((PORT + 8))
+STORE_DIR="$OUT/store"
+mkdir -p "$STORE_DIR/www"
+python3 "$ROOT/script/host_test/app_store_fixture.py" "$STORE_DIR" > /dev/null
+gcc -c -g -fsanitize=address,undefined "$ROOT/lib/monocypher/src/monocypher.c" -o "$OUT/store_m.o"
+gcc -c -g -fsanitize=address,undefined -I"$ROOT/lib/monocypher/src" \
+    "$ROOT/lib/monocypher/src/monocypher-ed25519.c" -o "$OUT/store_me.o"
+g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" -I"$ROOT/lib/monocypher/src" -I"$ROOT/lib/lua/src" \
+    "$ROOT/script/host_test/app_store_net_test.cpp" \
+    "$ROOT/src/store/App_Store.cpp" \
+    "$ROOT/src/store/App_Repo.cpp" \
+    "$ROOT/src/lua/LuaAppScanner.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    "$OUT/store_m.o" "$OUT/store_me.o" \
+    -o "$OUT/app_store_net_test" -lssl -lcrypto
+
+python3 -m http.server "$STORE_PORT" --bind 127.0.0.1 --directory "$STORE_DIR/www" \
+    > "$OUT/store_server.log" 2>&1 &
+STORE_PID=$!
+i=0
+while [ $i -lt 50 ]; do
+    if python3 -c "import socket,sys; s=socket.socket(); sys.exit(s.connect_ex(('127.0.0.1', $STORE_PORT)))" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+echo ""
+echo "===== app_store_net_test ====="
+"$OUT/app_store_net_test" "$STORE_PORT" "$STORE_DIR"
+kill "$STORE_PID" 2>/dev/null || true
 
 # ---- SSH(SshClient)。本物の sshd を使い捨ての鍵と設定で立てる ----
 SSHD=$(command -v sshd || ls /usr/sbin/sshd 2>/dev/null || true)

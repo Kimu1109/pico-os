@@ -14,7 +14,7 @@
 | 2 | [汎用基盤](#2-汎用基盤) | ✅ 完了(Resolve()もLua統合から実利用済み) |
 | 3 | [スクリーン管理](#3-スクリーン管理) | 🔨 メモリプールは計測の結果いったん保留 |
 | 4 | [Wi-Fiの管理強化](#4-wi-fiの管理強化) | ✅ 完了 |
-| 5 | [Luaアプリ](#5-luaアプリ) | ✅ LuaEngine/LuaSceneが動作しウィジェット・ダイアログ・SD・画像・ネットワーク・シーン制御・権限管理・実行時間の安全網・SDスキャンによるアプリ自動登録まで実装済み。細部の穴(pico.remove_child/list_add等)も埋まり、既知の欠けは無い。2026-10-05に require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー、さらに TextView/ImageView/MarkdownView/AnalogClock/DurationPicker/MonthGrid/ProgressBar の生成・ジェスチャー・リスト/タブ/ダイアログの拡張・オフスクリーン画像・`pico.ui`/`pico.async`/`pico.tween`・暗号化(XChaCha20-Poly1305/Argon2id)、2026-10-06に2Dゲームの簡易エンジン`pico.game`まで入った(PCで確認。実機は未確認。`CLAUDE.md`「Lua APIの追加」参照) |
+| 5 | [Luaアプリ](#5-luaアプリ) | ✅ LuaEngine/LuaSceneが動作しウィジェット・ダイアログ・SD・画像・ネットワーク・シーン制御・権限管理・実行時間の安全網・SDスキャンによるアプリ自動登録まで実装済み。細部の穴(pico.remove_child/list_add等)も埋まり、既知の欠けは無い。2026-10-05に require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー、さらに TextView/ImageView/MarkdownView/AnalogClock/DurationPicker/MonthGrid/ProgressBar の生成・ジェスチャー・リスト/タブ/ダイアログの拡張・オフスクリーン画像・`pico.ui`/`pico.async`/`pico.tween`・暗号化(XChaCha20-Poly1305/Argon2id)、2026-10-06に2Dゲームの簡易エンジン`pico.game`まで入った(PCで確認。実機は未確認。`CLAUDE.md`「Lua APIの追加」参照)。2026-10-11にアプリストア(`APP_REPO.md`、Webから署名を確かめて入れる)が入った |
 | 6 | [PC/Web動作対応](#6-pcweb動作対応) | ✅ 完了 |
 | 7 | [標準アプリ開発](#7-標準アプリ開発) | ✅ Markdownブラウザ / 時計 / 電卓 / ファイルエクスプローラー / ファイルビューワー / テキストエディタ / 設定 / 辞書が完了 |
 | 8 | [セカンダリアプリ開発](#8-セカンダリアプリ開発) | ⬜ 未完了 |
@@ -99,6 +99,9 @@
   - [x] コンテナからの子の取り外し(pico.remove_child)
   - [x] リストへの項目追加(pico.list_add/list_clear/pico.tab_add)
   - [x] 2Dゲームの簡易エンジン(pico.game)
+- [x] アプリストア(Webから入れる。署名した配布物・更新・削除。APP_REPO.md)
+  - [ ] 実機・GitHub Pagesでの確認
+  - [ ] 投稿・検索(動的なサーバ)
 - [ ] 残タスク
   - [x] 命令単位の実行時間制御(lua_sethook等)
   - [x] SDを走査してLuaアプリを見つける処理
@@ -363,6 +366,11 @@
 `pico.*`以外の周辺機能として、**実行時間の安全網**(`lua_sethook`による命令数打ち切り。
 終わらないループでOSが固まる事故を防ぐ)と、**SDを走査したLuaアプリの自動登録**
 (`LuaAppScanner`。`/lua/apps/<名前>/main.lua`を見つけてランチャへ自動でタイル登録する)も実装済み。
+
+**アプリストア(2026-10-11)**: ランチャの「ストア」が、静的なサーバ(GitHub Pages / Raspberry Pi 等)に置いた
+署名済みの配布物(`APP_REPO.md`)からLuaアプリを入れる・更新する・消す。一覧はEd25519の署名(鍵はファームの焼き込みか
+`/sys/store.cfg`)と版の番号で、ファイルはSHA-256で確かめ、app.cfgの権限が一覧を超えれば入れない。配布物は
+`script/build_app_repo.py`で作る。PCビルドとホストテストで確認、実機とGitHub Pagesでの公開は未確認。
 
 **API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算した。**
 → [7. 標準アプリ開発](#7-標準アプリ開発-1)

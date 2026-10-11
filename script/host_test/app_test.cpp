@@ -470,6 +470,45 @@ int main(){
         eq(grid.getPage(), 0, "layout: 6個目(見えているのは5個)は1ページ目");
     }
 
+    // ---- アプリストアの入れ替え: FindByArg / Refresh / Unregister ----
+    {
+        AppFunctions::Clear();
+        HostSd::files.erase("/sys/launcher.cfg");
+        const char* names[] = {"A", "B", "C", "D", "E"};
+        const char* args[] = {"/lua/apps/a/main.lua", "/lua/apps/b/main.lua", "/lua/apps/c/main.lua",
+                              "/lua/apps/d/main.lua", "/lua/apps/e/main.lua"};
+        for(int i = 0; i < 5; i++){
+            AppFunctions::Register(names[i], IconID::AppBox, &AppFunctions::MakeScene<DummyScene>, args[i]);
+        }
+        eq(AppFunctions::FindByArg("/lua/apps/c/main.lua"), 2, "store: FindByArg");
+        eq(AppFunctions::FindByArg("/lua/apps/x/main.lua"), -1, "store: FindByArg 無ければ-1");
+
+        LuaPermissions perms;
+        perms.network = true;
+        check(AppFunctions::Refresh(2, "C2", perms, "/lua/apps/c/icon.pimg"), "store: Refresh");
+        check(AppFunctions::Get(2)->name == "C2" && AppFunctions::Get(2)->permissions.network
+              && AppFunctions::Get(2)->icon_file == "icon.pimg", "store: Refresh で名前・権限・アイコンが変わる");
+
+        //並び: E D C B A にして、Dを隠す
+        for(int i = 1; i < 5; i++) AppFunctions::MoveAppToFront(i);
+        AppFunctions::SetHidden(3, true);
+        check(AppFunctions::Unregister(2), "store: Unregister");
+        eq(AppFunctions::Count(), 4, "store: 1つ減る");
+        check(AppFunctions::Get(2)->name == "D", "store: 後ろが詰まる");
+        eq(AppFunctions::FindByArg("/lua/apps/e/main.lua"), 3, "store: Eのindexが1つ減る");
+        //見える並びは E B A(Dは隠れたまま)
+        eq(AppFunctions::VisibleCount(), 3, "store: 見えているのは3つ");
+        eq(AppFunctions::VisibleAt(0), 3, "store: 先頭はE");
+        eq(AppFunctions::VisibleAt(1), 1, "store: 次はB");
+        eq(AppFunctions::VisibleAt(2), 0, "store: 最後はA");
+        check(AppFunctions::IsHidden(2) && !AppFunctions::IsHidden(3), "store: 隠した印も詰まる");
+        check(!AppFunctions::Unregister(9), "store: 範囲外はfalse");
+        //詰めた後に足しても並びが壊れない
+        AppFunctions::Register("F", IconID::AppBox, &AppFunctions::MakeScene<DummyScene>, "/lua/apps/f/main.lua");
+        eq(AppFunctions::VisibleAt(3), 4, "store: 足したものは最後");
+        HostSd::files.erase("/sys/launcher.cfg");
+    }
+
     AppFunctions::Clear();
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

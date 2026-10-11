@@ -81,7 +81,7 @@ void FileViewerScene::onEnter(){
     const int status_x = back_box.x + back_box.w + MARGIN;
 
     const char* p = this->path.c_str();
-    const bool editable = OSData::SD_usable && !HasExtension(p, ".pimg");
+    const bool editable = OSData::SD_usable && !HasExtension(p, ".pimg") && !HasExtension(p, ".bmp");
 
     //右端の「編集」(テキスト系だけ)。状態欄はその手前までにする
     int status_right = content.x + content.w - MARGIN;
@@ -121,7 +121,7 @@ void FileViewerScene::onEnter(){
             this->md_view->setVisible(false);
             this->showText(body, "このファイルを開けませんでした");
         }
-    }else if(HasExtension(p, ".pimg")){
+    }else if(HasExtension(p, ".pimg") || HasExtension(p, ".bmp")){
         this->image_view = new ImageView(body.x, body.y, body.w, body.h);
         WidgetFunctions::Add(this->image_view);
         if(!this->image_view->load(p)){

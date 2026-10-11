@@ -32,6 +32,7 @@
 #include "gui/widgets/dialogs/ColorDialog.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/icons/icon_render.h"
+#include "gui/icons/Bmp_Codec.hpp"
 #include "gui/Fill4bpp.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
@@ -3137,8 +3138,17 @@ int LuaEngine::l_image_load(lua_State* L) {
     FsFile f = OSData::SD.open(path, O_RDONLY);
     if (!f) { lua_pushnil(L); return 1; }
 
-    IconRender::PimgHeader header;
-    if (!IconRender::ReadPimgHeader(f, header)) {
+    // 先頭の"BM"ならBMP(OSのパレットへ寄せて4bppにする。2番目の引数 {dither=, raw=})
+    uint8_t magic[2] = {0, 0};
+    f.read(magic, 2);
+    const bool is_bmp = magic[0] == 'B' && magic[1] == 'M';
+    Bmp::Info bmp_info;
+    IconRender::PimgHeader header = {0, 0, 0};
+    if (is_bmp) {
+        if (!Bmp::ReadInfo(f, bmp_info)) { f.close(); lua_pushnil(L); return 1; }
+        header.width = bmp_info.width;
+        header.height = bmp_info.height;
+    } else if (!IconRender::ReadPimgHeader(f, header)) {
         f.close();
         lua_pushnil(L);
         return 1;
@@ -3156,7 +3166,22 @@ int LuaEngine::l_image_load(lua_State* L) {
     }
 
     ImageSlot& slot = self->images_[index];
-    const bool ok = IconRender::LoadPimgToSprite(f, slot.sprite);
+    bool ok;
+    if (is_bmp) {
+        Bmp::Options opt;
+        opt.dither = bmp_info.bpp > 8;
+        if (lua_istable(L, 2)) {
+            lua_getfield(L, 2, "dither");
+            if (!lua_isnil(L, -1)) opt.dither = lua_toboolean(L, -1);
+            lua_pop(L, 1);
+            lua_getfield(L, 2, "raw");
+            opt.raw_indices = lua_toboolean(L, -1);
+            lua_pop(L, 1);
+        }
+        ok = Bmp::LoadToSprite(f, slot.sprite, opt);
+    } else {
+        ok = IconRender::LoadPimgToSprite(f, slot.sprite);
+    }
     f.close();
     if (!ok) { lua_pushnil(L); return 1; }
 

@@ -6,9 +6,18 @@ description: "image_load / image_create / image_target / image_size / draw_image
 
 ## pico.image_load
 
-<div class="sig">pico.image_load(path: string) <span class="ret">-> handle: integer | nil</span></div>
+<div class="sig">pico.image_load(path: string [, opts: table]) <span class="ret">-> handle: integer | nil</span></div>
 
-`.pimg` ファイルをデコードし、整数のイメージハンドルを返します。`WidgetId` とは別の体系の整数です。
+`.pimg` ファイルまたは `.bmp` ファイルをデコードし、整数のイメージハンドルを返します。`WidgetId` とは別の体系の整数です。
+どちらかはファイルの先頭(`BM`)で見分けます。
+
+BMPは無圧縮(と BI_BITFIELDS)の 1/4/8/16/24/32bpp を読めます(RLE圧縮は読めません)。画面は16色なので、
+読むときにOSのパレットの一番近い色へ寄せます。`opts` で寄せ方を選べます:
+
+| キー | 既定 | 意味 |
+|---|---|---|
+| `dither` | フルカラー(16bpp以上)なら `true` | 4x4の組織的ディザを掛ける |
+| `raw` | `false` | 4bpp以下のBMPの番号を、そのままパレットの番号として使う(OS向けに16色で描いた絵。`pico.set_palette` で色を変えても番号が保たれる) |
 
 失敗すると `nil` を返します(エラーにはなりません)。失敗する条件:
 
@@ -16,7 +25,7 @@ description: "image_load / image_create / image_target / image_size / draw_image
 - `sd_outside_app_dir` 権限が無く、`app_dir` の外を指している
 - 同時に保持できる画像数の上限(8枚)に達している
 - 画像用メモリ合計の上限(96KiB)を超える
-- ファイルが存在しない、または `.pimg` として不正
+- ファイルが存在しない、または `.pimg` / `.bmp` として不正
 
 ## pico.image_size
 

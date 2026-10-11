@@ -113,6 +113,19 @@ const char* FileExplorer::getSelectedPath(){
     }
 }
 
+bool FileExplorer::selectByName(const char* name){
+    if(!name) return false;
+    for(int i = 0; i < this->list->getItemCount(); i++){
+        auto item = this->list->itemAt(i);
+        if(item && strcmp(item->text.c_str(), name) == 0){
+            this->list->setSelectedIndex(i);
+            this->list->ensureVisible(i);
+            return true;
+        }
+    }
+    return false;
+}
+
 const char* FileExplorer::getCurrentFolderPath(){
     return this->currentPath.c_str();
 }

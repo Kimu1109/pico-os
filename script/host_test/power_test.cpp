@@ -15,6 +15,7 @@
 #include "functions/Sound_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/Time_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <Arduino.h>

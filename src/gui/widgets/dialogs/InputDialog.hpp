@@ -148,6 +148,10 @@ class InputDialog : public Widget {
         void setInput(const char* input){
             this->input->setText(input);
         }
+        // 入力欄をタップしたのと同じく、キーボードを開く(開いてすぐ打てるように)
+        void openKeyboard(){
+            this->input->causeOnPressStart();
+        }
 
         void render() override;
 

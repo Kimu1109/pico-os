@@ -220,6 +220,14 @@ void TextView::setComposition(size_t start, size_t len){
     this->needsRender();
 }
 
+void TextView::setSelection(size_t start, size_t len){
+    if(len == 0) start = 0;
+    if(start == this->sel_start && len == this->sel_len) return;
+    this->sel_start = start;
+    this->sel_len = len;
+    this->needsRender();
+}
+
 void TextView::setH(int h){
     if(h == this->l_rect.h) return;
     markdirty(this->getScreenRect()); //縮むときは、はみ出していた部分を下の物に描き直させる
@@ -324,6 +332,7 @@ void TextView::render(){
     const int lh = this->line_h;
     const int first = this->scroll_y / lh;
     const size_t comp_end = this->comp_start + this->comp_len;
+    const size_t sel_end = this->sel_start + this->sel_len;
     char buf[kRowBuf];
 
     for(int r = first; r < this->row_count; r++){
@@ -331,6 +340,16 @@ void TextView::render(){
         if(y >= g.y + g.h) break;
         const Row& row = this->rows[r];
         const int x0 = g.x + kPad;
+
+        //選択範囲の背景(行の終わりの改行を含むなら、そこも少しだけ塗る)
+        if(this->sel_len > 0 && this->sel_start <= row.end && sel_end > row.start){
+            const int a = this->sel_start > row.start ? (int)this->sel_start : row.start;
+            const int b = sel_end < row.end ? (int)sel_end : row.end;
+            const int sx = x0 + this->widthOf(row.start, a);
+            int sw = this->widthOf(a, b);
+            if(sel_end > row.end && row.end < this->len && this->text[row.end] == '\n') sw += 4;
+            if(sw > 0) OSData::frame->fillRect(sx, y, sw, lh - 1, PICO_CYAN);
+        }
 
         const int bytes = row.end - row.start;
         memcpy(buf, this->text + row.start, bytes);

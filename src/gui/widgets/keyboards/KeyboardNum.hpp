@@ -220,6 +220,16 @@ class KeyboardNum : public KeyboardPanel {
             const char* s = (cp < 0x80) ? physicalSymbolFor(cp, buf) : nullptr;
             if (s) addInputAtCursor(s);
         }
+        void physicalPaste(const char* utf8) override {
+            //使える文字だけを1文字ずつ(数字・.・記号表にあるもの)
+            for (size_t i = 0; utf8[i] != '\0'; i++) {
+                const uint32_t cp = (uint8_t)utf8[i];
+                if (cp >= 0x80) continue;
+                char buf[2];
+                const char* s = physicalSymbolFor(cp, buf);
+                if (s) addInputAtCursor(s);
+            }
+        }
         void physicalBackspace() override { removeBeforeCursor(); }
         void physicalMove(int delta) override { moveCursor(delta); }
 

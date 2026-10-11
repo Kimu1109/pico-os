@@ -11,7 +11,8 @@
 // 文書は呼び出し側のバッファをそのまま指し、コピーを持たない(寿命は呼び出し側が保証する)。
 //   - 行は枠の幅で折り返し、上下のドラッグでスクロールする
 //   - マークアップ(**や~)は解釈しない。書いてあるとおりに出す
-//   - 任意でカーソル(縦棒、setCursorVisible())と、変換中の読みの下線(setComposition())を描く
+//   - 任意でカーソル(縦棒、setCursorVisible())と、変換中の読みの下線(setComposition())、
+//     選択範囲の背景(setSelection())を描く
 //   - 動かさずに指を離すと、そこに一番近い文字の境目のバイト位置を setOnTap() で知らせる
 //
 // 折り返しの計算は文書が変わったときだけ全体をやり直す(setDocument())。1文字ごとの
@@ -42,6 +43,8 @@ class TextView : public Widget {
         bool truncated = false;
         size_t comp_start = 0;
         size_t comp_len = 0;
+        size_t sel_start = 0;
+        size_t sel_len = 0;
 
         int scroll_y = 0;
         int line_h = 17;
@@ -100,6 +103,8 @@ class TextView : public Widget {
         void scrollToTop();
         void setCursorVisible(bool v);
         void setComposition(size_t start, size_t len);
+        // 選択範囲(背景を塗る。len=0で無し)。getText()上のバイト位置
+        void setSelection(size_t start, size_t len);
 
         void setH(int h);
 

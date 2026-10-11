@@ -89,7 +89,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/file_ops/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana等の59本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/file_ops/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana/edit_history等の60本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
@@ -151,6 +151,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | Alarm_Functions | アラーム。時計アプリを閉じていても鳴るようOS側で見張る。下記「アラーム」参照 |
 | Notification_Functions | 通知。予約(時間・時刻・電池・Wi-Fi)の見張り、トースト、通知センターの履歴。Luaの`pico.notify`。下記「通知」参照 |
 | Power_Functions | スリープ(省電力)。自動調光のさらに先の段階。下記「スリープ(省電力)」参照 |
+| Clipboard_Functions | OS全体で1つのクリップボード(テキスト4KiBまで、入れた大きさだけmalloc)。下記「テキストエディタ」参照 |
 | KeyInput_Functions | 物理キーボードの窓口。1打鍵1件の列を持ち、今の画面(`Scene::onKey()`)→開いているキー盤の順に配る。今の入力元はUSBシリアル(PCのキーボード)。下記「物理キーボード」参照 |
 | Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。今の入力元はUSBシリアル(PCのキーボード)。下記「外部コントローラー」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
@@ -2045,14 +2046,15 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
 - **配り先(`KeyInputFunctions::Update()`、`loop()`で`SceneFunctions::Update()`の後・`WidgetFunctions::UpdateAll()`の前)**:
   1. 今の画面の`Scene::onKey(ev)`(既定はfalse)。SSH(`SshScene`)はここで全部取ってシェルへ送る(Ctrl+文字→制御文字、Alt→ESC前置、
      Esc/Tab/矢印/Home/End(`?1h`ならSS3)/Delete/PageUp/PageDownのエスケープ列。接続前は端末の中の1行へ。Ctrl+Cは中止/打ち直し)。
-     テキストエディタ(`TextEditorScene`)は↑↓/PageUp/PageDown(10行)で行を移り、Ctrl+Sで保存、キーボードが閉じていれば打ったときに開いて
+     テキストエディタ(`TextEditorScene`)は↑↓/PageUp/PageDown(10行)で行を移り、Ctrl+Sで保存、Ctrl+Z/Y・Ctrl+C/X/V/A・Ctrl+F/H/G(上の「テキストエディタ」)、キーボードが閉じていれば打ったときに開いて
      文字そのものはキー盤へ回す(ダイアログを出している間は何もしない)。
   2. 開いているキー盤(`KeyboardFunctions::VisiblePanel()`)の`KeyboardPanel::onPhysicalKey(ev)`。**Textbox/InputDialog/チャット等、
      オンスクリーンキーボードを開いて入力する所はどこでも、入力先側は無改修で打てる**。共通の振る舞いは基底(`KeyboardPanel.cpp`)にあり、
      各キー盤は`physicalInsert/Backspace/Move`(+日本語は`physicalEnter`)で自分の編集操作へ繋ぐだけ:
      文字→カーソル位置 / Enter→単一行は決定・複数行は改行(Ctrl+Enterは常に決定) / Esc→決定して閉じる / Backspace・←→・Home・End /
-     Delete→「右へ1つ動いて前を消す」(末尾なら`ITextInputTarget::onDeleteAtEnd()`。テキストエディタが次の行と繋ぐ)。
-     ↑↓・Tab・Ctrl/Alt付きの文字はキー盤では扱わない。
+     Delete→「右へ1つ動いて前を消す」(末尾なら`ITextInputTarget::onDeleteAtEnd()`。テキストエディタが次の行と繋ぐ) /
+     Ctrl+C・X・V→クリップボード(入力欄の全部/貼り付け)。
+     ↑↓・Tab・Alt付きの文字・それ以外のCtrl付きの文字はキー盤では扱わない。
      - 日本語のキー盤は**ローマ字かな漢字変換をする**(下の「物理キーボードのかな漢字変換」)
      - 数字のキー盤は数字・`.`と、使えるタブの記号表にあるものだけ(`*`→`×`、`/`→`÷`に直す)。英字は断る(他へも回さない)
   3. どちらも取らなければウィジェットのフォーカスへ(Tab・矢印・Enter・Space・Esc。下の「ウィジェットのフォーカス」)。それ以外は捨てる。
@@ -2199,6 +2201,36 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - ダイアログ(保存/開く/破棄の確認)は据え置きのキーボードより奥に出るので、開く前にキーボードを閉じる。
 - 検証はPCビルドの`--tap`/`--shot`(入力・改行・行頭の削除での結合・英字への切り替え・タップでのカーソル移動・
   ボタンでの出し入れ・保存)。**実機では未確認**(1文字ごとに4KiBの折り返しをやり直す重さは実機で見ること)。
+
+**元に戻す・選択・クリップボード・検索/置換(2026-10-11)**:
+- 上の段は`[戻る][開く][保存] … [↶][⋮][キーボード]`。「新規」は幅が足りないので`⋮`(編集メニュー、`PickerDialog`のChoice)の中:
+  元に戻す/やり直し/範囲選択(選択を解除)/すべて選択/コピー/切り取り/貼り付け/検索/置換/新規作成。メニューを開くと据え置きの
+  キーボードは閉じ、終わったら開き直す(ダイアログより手前に出るため)。
+- **文書を書き換えるのは必ず`edit()`**。変わらない頭と尻を除いた差分(UTF-8の文字の境目に揃える)を`util/Edit_History.hpp`
+  (`EditHistory`、シーンのメンバの4KiB)へ記録する。1件=「posから del を ins に置き換えた」で、スナップショットは持たない。
+  続けて打った文字・Backspace/Deleteは1秒以内・改行なし・64バイトまで1件にまとめる。溢れたら古い件から捨てる(戻せる回数が減るだけ)。
+  すべて置換は`chained`でひとまとまり(1回で戻る)。**未保存かどうかは記録の位置で決める**(`markSaved()`/`atSaved()`。元に戻して保存した時点へ戻れば
+  「(未保存)」が消える)。開く/新規で記録は消える。元に戻す/やり直しの後は`moveCursorTo()`がキーボードへ今の行を渡し直す
+  (キーボードとの同期は1行ずつなので、シーン側で文書を変えたら必ずこれを通す)。
+- **選択範囲 = 起点(`sel_anchor`)〜カーソル**。メニューの「範囲選択」で起点を置き、終わりをタップ(キー盤の←→でも広がる)。物理キーボードはShift+矢印/Home/End/PageUp/PageDown、
+  Ctrl+A。`TextView::setSelection()`が背景を水色(`PICO_CYAN`)で塗る。**文字を打つと選択は外れる(置き換えはしない)**。Backspace/Deleteは選択範囲を消す。
+  1行ずつキーボードへ渡す作りのため、日本語のキー盤が読みを入力中の打鍵は画面より先にキー盤へ行き、選択を置き換える経路を作れないので揃えた。
+- **コピー/切り取り/貼り付け**は`ClipboardFunctions`(`src/functions/Clipboard_Functions`。OS全体で1つ、テキスト4KiBまで、入れた大きさだけ`malloc`、
+  `\r`とNULを捨てる、再起動で消える)。選択が無ければ今の行を改行込みで(切り取りは行ごと消す)。貼り付けは選択範囲を置き換える。
+  容量・行数・1行の長さの上限に当たる操作は`checkLimits()`で先に断り、状態欄へ理由を出す(切り取りは4KiBを超えると断る=クリップボードに入らない分を消さない)。
+- **検索/置換**: Ctrl+F/Ctrl+H か メニュー → `InputDialog`(開いたらすぐキーボードが出る。`InputDialog::openKeyboard()`を足した)で探す文字列
+  (置換はもう1つ、置き換える文字列)。状態欄の下に検索バー`件数 [前][次][置換][全部][×]`が出て本文欄が縮む(置換のボタンは置換のときだけ。見えているボタンを右から詰める)。
+  見つけた所は選択範囲として見せ、端で回り込む。大小文字は区別する(バイト列の一致)。Ctrl+G/Ctrl+Shift+Gで次/前、Escで選択の解除→検索バーを閉じる。
+  「置換」は今選んでいる所が一致していれば置き換えて次へ、「全部」はすべて置換(上限に当たったらそこまで)。
+- 物理キーボード: Ctrl+Z(Ctrl+Shift+Z)/Ctrl+Y・Ctrl+C/X/V/A・Ctrl+F/H/G・Ctrl+S。
+- **キー盤のクリップボード**: オンスクリーンキーボードを開いている入力欄(Textbox/InputDialog/チャット等)では、物理キーボードの
+  Ctrl+C=入力欄の全部をコピー、Ctrl+X=全部切り取り、Ctrl+V=カーソル位置へ貼り付け(`KeyboardPanel::clipboardKey()`。入り切る分だけ、
+  1行の入力欄では改行を空白に、数字のキー盤は使える文字だけ=`physicalPaste()`)。日本語のキー盤が読みを入力中は扱わない(画面へ回る)。
+  Luaは`pico.clipboard_get()`/`pico.clipboard_set(text)`。SSHの端末への貼り付けは未(Ctrl+Vはシェルへ^Vとして送られる)。
+- 検証: `edit_history_test`(run.sh の input。乱数の編集400回を1件ずつ写しと突き合わせて戻す・溢れ・まとめ・ひとまとまり・保存した時点・
+  クリップボードの`\r`除去と4KiBの切り方)、`key_input_test`(キー盤のCtrl+C/V/X)、`lua_ext_test`(Lua API)、PCビルドで標準入力へ`key`の行を流して
+  `--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 続けて打った分をCtrl+Zで戻す・Shift+Homeで選択→Ctrl+C→Ctrl+V・Ctrl+Fで検索バーと2/4・
+  Ctrl+Hですべて置換→Ctrl+Zで全部戻る・編集メニュー。**実機では未確認**(すべて置換の`memmove`の繰り返しの時間)。
 
 ### SSHクライアント (`src/ssh/` / `SshScene` / `lib/monocypher/`) (2026-09-30)
 
@@ -4505,7 +4537,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、
   この形へ整理した)。**新しい大項目を足したら冒頭の「全体の進捗」表にも1行足す。**
 - **テストは全て手動**。CIはWebビルドの公開(`.github/workflows/web-pages.yml`)だけで、
-  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、59本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
+  **テストを回すワークフローは無い**。`sh script/host_test/run.sh`(ASan、60本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば

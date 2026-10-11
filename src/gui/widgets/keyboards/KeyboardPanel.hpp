@@ -48,6 +48,12 @@ class KeyboardPanel : public Widget, public ITextInputWidget {
         virtual void physicalEnter();
         // このキー盤へ入れてよい文字か(数字のキー盤は英字を断る)
         virtual bool acceptsPhysicalChar(uint32_t cp) const { (void)cp; return true; }
+        // 貼り付け(Ctrl+V)。既定はまとめて physicalInsert()。1文字ずつしか受けないキー盤は上書きする
+        virtual void physicalPaste(const char* utf8) { this->physicalInsert(utf8); }
+
+        // Ctrl+C(全部コピー)/ Ctrl+X(全部切り取り)/ Ctrl+V(カーソル位置へ貼り付け)。
+        // 扱ったらtrue。それ以外のCtrl+文字は何もせずfalse(ClipboardFunctions)
+        bool clipboardKey(const KeyInputFunctions::Event& ev);
 
         // 自分の高さが変わった(KeyboardNumのタブ数など)ときに呼ぶ
         void setPanelHeight(int h);
@@ -88,7 +94,8 @@ class KeyboardPanel : public Widget, public ITextInputWidget {
 
         // 物理キーボードの打鍵を入力として扱う。扱ったらtrue
         //   文字 → カーソル位置へ / Enter → 決定か改行(Ctrl+Enterは常に決定) / Esc → 決定して閉じる /
-        //   Backspace・Delete・←→・Home・End → 編集。↑↓・Tab・Ctrl/Alt付きの文字は扱わない
+        //   Backspace・Delete・←→・Home・End → 編集。Ctrl+C/X/V → クリップボード(入力欄の全部/貼り付け)。
+        //   ↑↓・Tab・Alt付きの文字・それ以外のCtrl付きの文字は扱わない
         // (扱わないときは状態を一切変えずにfalseを返すこと。KeyInputFunctions::Update()が2回呼ぶことがある)
         virtual bool onPhysicalKey(const KeyInputFunctions::Event& ev);
         // 今の画面(Scene::onKey())より先にこの打鍵を受け取りたいか。

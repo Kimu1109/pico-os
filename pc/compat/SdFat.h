@@ -19,6 +19,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 
 // ---- open フラグ(SdFat互換) ----
@@ -283,4 +284,21 @@ public:
         return ::rename(PicoOsSdHost::toHostPath(oldPath).c_str(),
                         PicoOsSdHost::toHostPath(newPath).c_str()) == 0;
     }
+
+    // 容量(SdFatのFsVolumeと同じ名前)。母艦のSDのルートがあるファイルシステムの値を返す。
+    // クラスタの大きさは32KiB固定にして数を合わせる(SDXCのexFATと同じくらい)
+    static constexpr uint32_t kPcClusterBytes = 32768;
+    uint32_t clusterCount(){
+        struct statvfs v;
+        if(statvfs(PicoOsSdHost::root.c_str(), &v) != 0) return 0;
+        const uint64_t c = (uint64_t)v.f_blocks * v.f_frsize / kPcClusterBytes;
+        return c > 0xFFFFFFFFu ? 0xFFFFFFFFu : (uint32_t)c;
+    }
+    int32_t freeClusterCount(){
+        struct statvfs v;
+        if(statvfs(PicoOsSdHost::root.c_str(), &v) != 0) return -1;
+        const uint64_t c = (uint64_t)v.f_bavail * v.f_frsize / kPcClusterBytes;
+        return c > 0x7FFFFFFFu ? 0x7FFFFFFF : (int32_t)c;
+    }
+    uint32_t bytesPerCluster(){ return kPcClusterBytes; }
 };

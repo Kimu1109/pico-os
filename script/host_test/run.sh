@@ -36,6 +36,8 @@
 #   calendar_sync_secret_test… /calendar/sources.cfgの暗号化保存(CalendarSync::WriteSource/
 #                   ReadSourceがutil/Secret_Cipher.hppを通すこと)。長いURLの往復・複数件・
 #                   同名の上書き・後方互換(平文の既存行がそのまま読める)
+#   file_search_test… ファイル検索(FileSearchScene)・容量(StorageScene)とSDを1件ずつたどる部品(storage/Sd_Walker)。
+#                   深さの上限・名前の比べ方・大きい順・フォルダの中身の合計
 #   chat_proto_test… チャットの応答(1行1件のTSV)の読み取りと本文のエスケープ
 #   chat_scene_test… チャットアプリのGUI配線(ChatLogViewの折り返し/スクロール、
 #                   ChatSceneの生成/解放、chat.cfgが無い/足りないときの案内)
@@ -498,6 +500,36 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== calendar_scene_test ====="
 run_or_die "$OUT/calendar_scene_test"
+
+# --- ファイル検索・容量 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/file_search_test.cpp" \
+    "$ROOT/src/gui/scenes/FileSearchScene.cpp" \
+    "$ROOT/src/gui/scenes/StorageScene.cpp" \
+    "$ROOT/src/storage/Sd_Walker.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    -o "$OUT/file_search_test"
+
+echo ""
+echo "===== file_search_test ====="
+run_or_die "$OUT/file_search_test"
 
 # --- カレンダー取得元の暗号化保存 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -1022,6 +1054,7 @@ run_or_die "$OUT/step_budget_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/alarm_test.cpp" \
     "$ROOT/src/functions/Alarm_Functions.cpp" \
+    "$ROOT/src/functions/Timer_Functions.cpp" \
     "$ROOT/src/functions/Widget_Functions.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \

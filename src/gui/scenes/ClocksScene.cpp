@@ -1,5 +1,6 @@
 #include "gui/scenes/ClocksScene.hpp"
 #include "functions/Alarm_Functions.hpp"
+#include "functions/Timer_Functions.hpp"
 #include "functions/Power_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
@@ -59,6 +60,7 @@ void ClocksScene::applyVisibility(){
     if(this->sw_status) this->sw_status->setVisible(is_sw);
     if(this->sw_start)  this->sw_start->setVisible(is_sw);
     if(this->sw_reset)  this->sw_reset->setVisible(is_sw);
+    if(this->sw_laps)   this->sw_laps->setVisible(is_sw);
 
     if(this->alarm_list)   this->alarm_list->setVisible(is_alarm);
     if(this->alarm_picker) this->alarm_picker->setVisible(is_alarm);
@@ -141,39 +143,39 @@ void ClocksScene::refreshTimerDigits(){
     if(this->feature != Feature::Timer) return;
     if(!this->timer_picker) return;
 
-    const bool idle = (this->timer_state == RunState::Idle);
+    const bool idle = (TimerFunctions::TimerState() == TimerFunctions::State::Idle);
 
     //設定できるのは動かしていない間だけ。動作中は▲▼を消して残り時間だけを見せる。
     //どちらもsetterの中で「変化が無ければ何もしない」ので、毎ティック呼んでよい
     //(DurationPickerは秒が変わらないミリ秒の刻みでは再描画を要求しない)
     this->timer_picker->setEditable(idle);
-    this->timer_picker->setTotalMs(idle ? this->timer_set_ms : this->timer_left_ms);
+    this->timer_picker->setTotalMs(idle ? TimerFunctions::TimerSetMs() : TimerFunctions::TimerLeftMs());
 }
 
-// 状態(RunState)か設定値が変わったときだけ呼ぶ
+// 状態か設定値が変わったときだけ呼ぶ
 void ClocksScene::refreshTimerControls(){
     if(this->feature != Feature::Timer) return;
 
     const char* start_text = "開始";
     const char* status_text = "▲▼で時間を設定";
 
-    switch(this->timer_state){
-        case RunState::Running:
+    switch(TimerFunctions::TimerState()){
+        case TimerFunctions::State::Running:
             start_text  = "一時停止";
             status_text = "カウントダウン中";
             break;
-        case RunState::Paused:
+        case TimerFunctions::State::Paused:
             start_text  = "再開";
             status_text = "一時停止中";
             break;
-        case RunState::Finished:
+        case TimerFunctions::State::Finished:
             start_text  = "開始";
             status_text = "時間になりました";
             break;
-        case RunState::Idle:
+        case TimerFunctions::State::Idle:
         default:
-            if(this->timer_set_ms == 0) status_text = "▲▼で時間を設定";
-            else                        status_text = "開始を押すとカウントダウン";
+            if(TimerFunctions::TimerSetMs() == 0) status_text = "▲▼で時間を設定";
+            else                                  status_text = "開始を押すとカウントダウン";
             break;
     }
 
@@ -182,59 +184,39 @@ void ClocksScene::refreshTimerControls(){
 }
 
 void ClocksScene::updateTimer(){
-    if(this->timer_state == RunState::Running){
-        const unsigned long now = millis();
-
-        //符号なしの引き算なのでmillis()の一周(約49日)をまたいでも正しい差になる。
-        //終了時刻を覚えて比較する方式だと、そのまたぎで一気に鳴ってしまう
-        const unsigned long delta = now - this->timer_last_tick_ms;
-        this->timer_last_tick_ms = now;
-
-        if(delta >= (unsigned long)this->timer_left_ms){
-            this->timer_left_ms  = 0;
-            this->timer_state    = RunState::Finished;
+    //動かしているのはOS(TimerFunctions)。ここは状態の変化を見て表示を合わせるだけ
+    const TimerFunctions::State st = TimerFunctions::TimerState();
+    if(st != this->shown_timer_state){
+        const bool finished_now = (st == TimerFunctions::State::Finished);
+        this->shown_timer_state = st;
+        if(finished_now){
             this->timer_blink_on = true;
-            this->timer_blink_ms = now;
-            this->timer_ring_start_ms = now;
-            this->timer_ring_step     = -1;
-
+            this->timer_blink_ms = millis();
             //別の機能を見ている間に鳴り終わっても気づけるように、タイマーへ引き戻す
             if(this->feature != Feature::Timer){
                 this->feature = Feature::Timer;
                 if(this->feature_tab) this->feature_tab->setSelected((int)Feature::Timer);
                 this->applyFeature();
             }
-
             if(this->timer_picker) this->timer_picker->setTextColor(PICO_RED);
-            this->refreshTimer();
-            return;
+        }else if(this->timer_picker){
+            this->timer_picker->setTextColor(PICO_FORECOLOR);
         }
+        this->refreshTimer();
+        return;
+    }
 
-        this->timer_left_ms -= (uint32_t)delta;
-
+    if(st == TimerFunctions::State::Running){
         //残り時間が変わっただけなのでボタンや状態表示は触らない
         this->refreshTimerDigits();
         return;
     }
 
-    if(this->timer_state == RunState::Finished){
+    if(st == TimerFunctions::State::Finished){
         const unsigned long now = millis();
-
-        //アラームと同じ音を鳴らす。開始/リセットを押すと状態が変わるので止まる
-        const unsigned long ring_ms = now - this->timer_ring_start_ms;
-        if(ring_ms < AlarmFunctions::kRingMaxMs){
-            const long step = (long)(ring_ms / AlarmFunctions::kBeepStepMs);
-            if(step != this->timer_ring_step){
-                this->timer_ring_step = step;
-                AlarmFunctions::PlayBeepStep(step);
-            }
-        }
-
         if(now - this->timer_blink_ms >= BLINK_INTERVAL_MS){
             this->timer_blink_ms = now;
             this->timer_blink_on = !this->timer_blink_on;
-
-            //音が出せないので点滅で知らせる。
             //消す側を背景色にすると枠ごと消えて見えるため、薄い灰色にとどめる
             if(this->timer_picker)
                 this->timer_picker->setTextColor(this->timer_blink_on ? PICO_RED : PICO_LIGHTGREY);
@@ -243,43 +225,13 @@ void ClocksScene::updateTimer(){
 }
 
 void ClocksScene::onTimerStartPressed(){
-    switch(this->timer_state){
-        case RunState::Idle:
-            //0秒のまま開始しても一瞬で鳴るだけなので、設定を促したまま何もしない
-            if(this->timer_set_ms == 0) return;
-            this->timer_left_ms      = this->timer_set_ms;
-            this->timer_state        = RunState::Running;
-            this->timer_last_tick_ms = millis();
-            break;
-
-        case RunState::Running:
-            this->timer_state = RunState::Paused;
-            break;
-
-        case RunState::Paused:
-            this->timer_state        = RunState::Running;
-            this->timer_last_tick_ms = millis();
-            break;
-
-        case RunState::Finished:
-            //同じ設定でもう一度。点滅で変えた文字色を戻しておく
-            if(this->timer_picker) this->timer_picker->setTextColor(PICO_FORECOLOR);
-            this->timer_left_ms      = this->timer_set_ms;
-            this->timer_state        = RunState::Running;
-            this->timer_last_tick_ms = millis();
-            break;
-    }
-
-    this->refreshTimer();
+    TimerFunctions::TimerStartPause();
+    this->updateTimer();
 }
 
 void ClocksScene::onTimerResetPressed(){
-    if(this->timer_picker) this->timer_picker->setTextColor(PICO_FORECOLOR);
-
-    this->timer_state   = RunState::Idle;
-    this->timer_left_ms = this->timer_set_ms;
-
-    this->refreshTimer();
+    TimerFunctions::TimerReset();
+    this->updateTimer();
 }
 
 // ---------------------------------------------------------------------------
@@ -290,35 +242,26 @@ void ClocksScene::onTimerResetPressed(){
 void ClocksScene::refreshStopwatchDigits(){
     if(this->feature != Feature::Stopwatch) return;
     if(!this->sw_time) return;
-
-    const uint32_t ms  = this->sw_elapsed_ms;
-    const uint32_t sec = ms / 1000u;
-
     char buf[PICO_STR_S];
-    if(sec >= 3600u){
-        //1時間を超えたら1/100秒を諦めて時を出す(桁数を増やすと画面幅に収まらない)
-        snprintf(buf, sizeof(buf), "%u:%02u:%02u",
-                 (unsigned)(sec / 3600u), (unsigned)((sec / 60u) % 60u), (unsigned)(sec % 60u));
-    }else{
-        snprintf(buf, sizeof(buf), "%02u:%02u.%02u",
-                 (unsigned)(sec / 60u), (unsigned)(sec % 60u), (unsigned)((ms % 1000u) / 10u));
-    }
+    TimerFunctions::FormatStopwatch(TimerFunctions::StopwatchMs(), buf, sizeof(buf));
     this->sw_time->setText(buf);
 }
 
-// 状態(RunState)が変わったときだけ呼ぶ
+// 状態が変わったときだけ呼ぶ
 void ClocksScene::refreshStopwatchControls(){
     if(this->feature != Feature::Stopwatch) return;
 
     const char* start_text  = "開始";
+    const char* reset_text  = "リセット";
     const char* status_text = "開始を押すと計測";
 
-    switch(this->sw_state){
-        case RunState::Running:
+    switch(TimerFunctions::StopwatchState()){
+        case TimerFunctions::State::Running:
             start_text  = "停止";
+            reset_text  = "ラップ";
             status_text = "計測中";
             break;
-        case RunState::Paused:
+        case TimerFunctions::State::Paused:
             start_text  = "再開";
             status_text = "停止中";
             break;
@@ -327,39 +270,62 @@ void ClocksScene::refreshStopwatchControls(){
     }
 
     if(this->sw_start)  this->sw_start->setText(start_text);
+    if(this->sw_reset)  this->sw_reset->setText(reset_text);
     if(this->sw_status) this->sw_status->setText(status_text);
 }
 
-void ClocksScene::updateStopwatch(){
-    if(this->sw_state != RunState::Running) return;
+// ラップの一覧(新しいものを上に)。ラップが変わったときだけ作り直す
+void ClocksScene::refreshLaps(){
+    if(this->feature != Feature::Stopwatch || !this->sw_laps) return;
+    const uint32_t rev = TimerFunctions::LapRevision();
+    if(rev == this->shown_lap_rev) return;
+    this->shown_lap_rev = rev;
+    this->sw_laps->clear();
+    const int n = TimerFunctions::LapCount();
+    for(int i = n - 1; i >= 0; i--){
+        const uint32_t total = TimerFunctions::LapTotalMs(i);
+        const uint32_t prev = (i > 0) ? TimerFunctions::LapTotalMs(i - 1) : 0;
+        //捨てた古いラップの続きなら、1つ前の通算は分からないので区間は出さない
+        const bool has_prev = (i > 0) || TimerFunctions::LapNumber(0) == 1;
+        char t[PICO_STR_S], d[PICO_STR_S], line[PICO_STR_M];
+        TimerFunctions::FormatStopwatch(total, t, sizeof(t));
+        TimerFunctions::FormatStopwatch(total - prev, d, sizeof(d));
+        if(has_prev) snprintf(line, sizeof(line), "%2d  %s  +%s", TimerFunctions::LapNumber(i), t, d);
+        else         snprintf(line, sizeof(line), "%2d  %s", TimerFunctions::LapNumber(i), t);
+        ScrollListTools::Item item;
+        item.text.assign(line);
+        this->sw_laps->add(item);
+    }
+}
 
-    const unsigned long now = millis();
-    this->sw_elapsed_ms += (uint32_t)(now - this->sw_last_tick_ms);
-    this->sw_last_tick_ms = now;
+void ClocksScene::updateStopwatch(){
+    const TimerFunctions::State st = TimerFunctions::StopwatchState();
+    if(st != this->shown_sw_state){
+        this->shown_sw_state = st;
+        this->refreshStopwatch();
+    }
+    this->refreshLaps();
+    if(st != TimerFunctions::State::Running) return;
 
     //1/100秒まで出すが、毎フレームsetText()するとLabelの再レイアウトが毎回走る。
     //読み取れる速さでもないので間引く
+    const unsigned long now = millis();
     if(now - this->sw_last_draw_ms < SW_DRAW_INTERVAL_MS) return;
     this->sw_last_draw_ms = now;
-
-    //数字が進んだだけなのでボタンや状態表示は触らない
     this->refreshStopwatchDigits();
 }
 
 void ClocksScene::onStopwatchStartPressed(){
-    if(this->sw_state == RunState::Running){
-        this->sw_state = RunState::Paused;
-    }else{
-        this->sw_state        = RunState::Running;
-        this->sw_last_tick_ms = millis();
-    }
-    this->refreshStopwatch();
+    TimerFunctions::StopwatchStartStop();
+    this->updateStopwatch();
 }
 
 void ClocksScene::onStopwatchResetPressed(){
-    this->sw_state       = RunState::Idle;
-    this->sw_elapsed_ms  = 0;
-    this->refreshStopwatch();
+    //動いている間は「ラップ」
+    if(TimerFunctions::StopwatchState() == TimerFunctions::State::Running) TimerFunctions::StopwatchLap();
+    else TimerFunctions::StopwatchReset();
+    this->updateStopwatch();
+    this->refreshStopwatchDigits();
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +364,7 @@ void ClocksScene::refreshAlarmControls(){
 void ClocksScene::selectAlarm(int index){
     if(index < 0 || index >= AlarmFunctions::kMaxAlarms) return;
     this->flushAlarm();
+    TimerFunctions::SetTimerShown(false);
     this->alarm_sel = index;
     this->refreshAlarmControls();
 }
@@ -459,11 +426,18 @@ void ClocksScene::onAlarmRepeatPressed(){
 void ClocksScene::onEnter(){
     const Rect content = Scene::contentRect();
 
-    // Push()で別のシーンへ移っている間はonUpdate()が来ないので、その間の経過は積めない。
-    // 復帰した時に止まっていた時間を一気に差し引かないよう、基準を今へ取り直す
-    this->timer_last_tick_ms = millis();
-    this->sw_last_tick_ms    = millis();
-    this->sw_last_draw_ms    = millis();
+    // タイマー/ストップウォッチはOS(TimerFunctions)が進めるので、別の画面にいた間も止まらない。
+    // 表示は作り直したウィジェットへ入れ直す(下のapplyFeature())
+    this->sw_last_draw_ms   = millis();
+    //ランチャから開いたとき、動いているタイマー/ストップウォッチがあればそのタブから見せる
+    if(!this->entered_once){
+        this->entered_once = true;
+        if(TimerFunctions::TimerState() != TimerFunctions::State::Idle) this->feature = Feature::Timer;
+        else if(TimerFunctions::StopwatchState() != TimerFunctions::State::Idle) this->feature = Feature::Stopwatch;
+    }
+    this->shown_timer_state = TimerFunctions::TimerState();
+    this->shown_sw_state    = TimerFunctions::StopwatchState();
+    this->shown_lap_rev     = 0xFFFFFFFFu;
 
     // ---- 上部の行: [戻る][デジタル|アナログ] ----
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
@@ -652,18 +626,24 @@ void ClocksScene::onEnter(){
     this->timer_picker = new DurationPicker(body.x, body.y, body.w, digits_h);
     this->timer_picker->setOnChanged([this](uint32_t ms){
         //編集できるのは停止中だけなので、ここへ来るのはIdleのときだけ
-        this->timer_set_ms  = ms;
-        this->timer_left_ms = ms;
+        TimerFunctions::TimerSet(ms);
         this->refreshTimer();
     });
+    if(TimerFunctions::TimerState() == TimerFunctions::State::Finished) this->timer_picker->setTextColor(PICO_RED);
     WidgetFunctions::Add(this->timer_picker);
 
-    this->sw_time = new Label<PICO_STR_M>(body.x, 0, "00:00.00");
+    //ストップウォッチは数字を上に寄せ、その下にラップの一覧
+    this->sw_time = new Label<PICO_STR_M>(body.x, body.y + MARGIN, "00:00.00");
     this->sw_time->setMaxWidth(body.w);
     this->sw_time->setFontSize(FontFn::Bigger);
     this->sw_time->setTextAlign(TextAlign::Center);
-    this->sw_time->setY(body.y + (digits_h - this->sw_time->getH()) / 2);
     WidgetFunctions::Add(this->sw_time);
+
+    const int laps_y = this->sw_time->getScreenY() + this->sw_time->getH() + MARGIN;
+    const int laps_h = status_y - MARGIN - laps_y;
+    this->sw_laps = new ScrollList(body.x + MARGIN, (int16_t)laps_y, body.w - MARGIN * 2, (int16_t)(laps_h > 20 ? laps_h : 20));
+    this->sw_laps->setFontSize(FontFn::Small);
+    WidgetFunctions::Add(this->sw_laps);
 
     //どれか1つだけを表示する。ウィジェットは全部作っておき、
     //切り替えは可視/不可視だけで済ませる(切り替えのたびにnew/deleteしない)
@@ -671,8 +651,8 @@ void ClocksScene::onEnter(){
 }
 
 void ClocksScene::onUpdate(){
-    //タイマーが鳴っている間は画面を戻して見せる(鳴る前のスリープ中は時間だけ進めておく)
-    if(this->timer_state == RunState::Finished) PowerFunctions::KeepAwake();
+    //タイマーを見せている間は、鳴っても確認ダイアログを出さない(この画面で点滅して知らせる)
+    TimerFunctions::SetTimerShown(this->feature == Feature::Timer);
 
     this->refresh_time();
 
@@ -710,4 +690,5 @@ void ClocksScene::onExit(){
     this->sw_status = nullptr;
     this->sw_start  = nullptr;
     this->sw_reset  = nullptr;
+    this->sw_laps   = nullptr;
 }

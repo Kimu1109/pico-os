@@ -43,17 +43,52 @@
 namespace HostSd {
     // パス -> 内容。テスト側から登録する
     inline std::map<std::string, std::string> files;
+    // trueのときだけ、filesのパスからフォルダがあることにする(open()でフォルダを開け、openNext()で
+    // 直下を名前順に列挙できる)。既定はfalse(以前からのテストの「フォルダは無い」前提を変えないため)
+    inline bool dirs_enabled = false;
+
+    // pathの直下にある名前(ファイル/フォルダ)を、afterより後の最初のものを返す。無ければ空
+    inline std::string NextChild(const std::string& dir, const std::string& after, bool& is_dir){
+        const std::string prefix = (dir == "/") ? "/" : dir + "/";
+        std::string best;
+        for(const auto& kv : files){
+            const std::string& p = kv.first;
+            if(p.compare(0, prefix.size(), prefix) != 0 || p.size() == prefix.size()) continue;
+            const size_t slash = p.find('/', prefix.size());
+            const std::string name = p.substr(prefix.size(), slash == std::string::npos ? std::string::npos : slash - prefix.size());
+            if(name <= after) continue;
+            if(best.empty() || name < best){ best = name; is_dir = slash != std::string::npos; }
+        }
+        return best;
+    }
+    inline bool IsDir(const std::string& path){
+        if(!dirs_enabled) return false;
+        if(path == "/") return true;
+        const std::string prefix = path + "/";
+        for(const auto& kv : files) if(kv.first.compare(0, prefix.size(), prefix) == 0) return true;
+        return false;
+    }
+}
+
+namespace HostSdCapacity {
+    inline uint32_t clusters = 1000;
+    inline int32_t free_clusters = 400;
+    inline uint32_t bytes_per_cluster = 32768;
 }
 
 struct FsFile {
     const std::string* data_ = nullptr;  // 読み込み元(nullptrなら読み込み不可)
     std::string* wdata_ = nullptr;       // 書き込み先(nullptrなら書き込み不可)
     size_t pos_ = 0;
+    // HostSd::dirs_enabled のときのフォルダ
+    bool is_dir_ = false;
+    std::string path_;       // 開いているフォルダ/ファイルのパス
+    std::string last_child_; // openNext() で最後に返した名前
 
-    bool isDir(){ return false; }
-    bool isDirectory(){ return false; } // SdFatには両方の綴りがある(pc/compat/SdFat.hと同じ)
-    bool isOpen(){ return data_ != nullptr || wdata_ != nullptr; }
-    void close(){ data_ = nullptr; wdata_ = nullptr; pos_ = 0; }
+    bool isDir(){ return is_dir_; }
+    bool isDirectory(){ return is_dir_; } // SdFatには両方の綴りがある(pc/compat/SdFat.hと同じ)
+    bool isOpen(){ return data_ != nullptr || wdata_ != nullptr || is_dir_; }
+    void close(){ data_ = nullptr; wdata_ = nullptr; pos_ = 0; is_dir_ = false; path_.clear(); last_child_.clear(); }
 
     int read(){
         if(!data_ || pos_ >= data_->size()) return -1;
@@ -76,15 +111,37 @@ struct FsFile {
         return true;
     }
     size_t position(){ return pos_; }
-    bool getName(char*, size_t){ return false; }
+    bool getName(char* out, size_t cap){
+        if(path_.empty() || !out || cap == 0) return false;
+        const size_t slash = path_.rfind('/');
+        const std::string name = path_.substr(slash + 1);
+        if(name.size() + 1 > cap) return false;
+        memcpy(out, name.c_str(), name.size() + 1);
+        return true;
+    }
     FsFile openNextFile(){ return FsFile(); }
     // このスタブはパス->内容のフラットなmapで、ディレクトリという実体が無い。
     // ディレクトリの走査(PICO_IO::removeRecursiveが使う)は再現できないので、
     // 「中身が無い」ことにして常にfalseを返す。
     // ディレクトリ操作を伴う経路はPCビルド(pc/compat/SdFat.hは実ファイルシステム)で確かめること
-    bool openNext(FsFile*, int = O_RDONLY){ return false; }
-    void rewindDirectory(){}
-    operator bool() const { return data_ != nullptr || wdata_ != nullptr; }
+    // HostSd::dirs_enabled のときだけ、フォルダの直下を名前順に列挙する
+    bool openNext(FsFile* dir, int = O_RDONLY){
+        close();
+        if(!dir || !dir->is_dir_) return false;
+        bool child_dir = false;
+        const std::string name = HostSd::NextChild(dir->path_, dir->last_child_, child_dir);
+        if(name.empty()) return false;
+        dir->last_child_ = name;
+        path_ = (dir->path_ == "/" ? "/" : dir->path_ + "/") + name;
+        if(child_dir){
+            is_dir_ = true;
+        }else{
+            data_ = &HostSd::files[path_];
+        }
+        return true;
+    }
+    void rewindDirectory(){ last_child_.clear(); }
+    operator bool() const { return data_ != nullptr || wdata_ != nullptr || is_dir_; }
 
     size_t write(const void* src, size_t n){
         if(!wdata_ || !src) return 0;
@@ -133,9 +190,20 @@ struct SdFat {
         }
 
         auto it = HostSd::files.find(path);
-        if(it != HostSd::files.end()) f.data_ = &it->second;
+        if(it != HostSd::files.end()){
+            f.data_ = &it->second;
+            f.path_ = path;
+        }else if(HostSd::IsDir(path)){
+            f.is_dir_ = true;
+            f.path_ = path;
+        }
         return f;
     }
+
+    // 容量(SdFatのFsVolumeと同じ名前)。テストから値を差し替えられる
+    uint32_t clusterCount(){ return HostSdCapacity::clusters; }
+    int32_t freeClusterCount(){ return HostSdCapacity::free_clusters; }
+    uint32_t bytesPerCluster(){ return HostSdCapacity::bytes_per_cluster; }
 
     bool exists(const char* path){
         return path && HostSd::files.count(path) > 0;

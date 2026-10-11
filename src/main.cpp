@@ -13,6 +13,7 @@
 #include "functions/Sound_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Alarm_Functions.hpp"
+#include "functions/Timer_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "functions/Screenshot_Functions.hpp"
 #include "functions/Pad_Functions.hpp"
@@ -118,6 +119,7 @@ void setup() {
     SoundFunctions::Setup(); //sound.cfgを読むのでSDより後
     BatteryFunctions::Setup();
     AlarmFunctions::Setup(); //alarm.cfgを読むのでSDより後
+    TimerFunctions::Setup(); //タイマー/ストップウォッチ(時計アプリを閉じても動く)
 
     TestFunctions::Setup();
 
@@ -226,6 +228,7 @@ void loop() {
     BatteryFunctions::Update();
     //アラームの時刻の見張り(時計アプリを閉じていても鳴らす)。TimeFunctions::Update()より後
     AlarmFunctions::Update();
+    TimerFunctions::Update();
     //通知の予約の見張りとトーストの出し入れ。TimeFunctions::Update()より後
     NotificationFunctions::Update();
     //プロファイラの集計をシリアルへ(perf-log = true のときだけ)

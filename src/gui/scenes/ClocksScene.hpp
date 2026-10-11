@@ -7,6 +7,7 @@
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/apps/AnalogClock.hpp"
 #include "gui/widgets/apps/DurationPicker.hpp"
+#include "functions/Timer_Functions.hpp"
 
 #include <cstdint>
 
@@ -24,15 +25,6 @@ class ClocksScene : public Scene {
         enum class ClockMode : uint8_t {
             Digital = 0,
             Analog  = 1
-        };
-
-        // タイマー/ストップウォッチの共通の状態。
-        // Finishedはタイマーだけが使う(ストップウォッチには終わりが無い)
-        enum class RunState : uint8_t {
-            Idle,
-            Running,
-            Paused,
-            Finished
         };
 
     private:
@@ -60,7 +52,8 @@ class ClocksScene : public Scene {
         Label<PICO_STR_M>* sw_time   = nullptr;
         Label<PICO_STR_M>* sw_status = nullptr;
         Button*            sw_start  = nullptr; // 開始/停止/再開
-        Button*            sw_reset  = nullptr;
+        Button*            sw_reset  = nullptr; // リセット(動いている間はラップ)
+        ScrollList*        sw_laps   = nullptr; // ラップの一覧(新しいものが上)
 
         //アラーム。鳴らす側はOSの AlarmFunctions が持ち(このシーンを閉じていても鳴る)、
         //ここは4件の一覧と、選んだ1件の編集だけ
@@ -83,24 +76,16 @@ class ClocksScene : public Scene {
         Feature   feature = Feature::Clock;
         ClockMode mode    = ClockMode::Digital;
 
-        // ---- タイマーの状態 ----
-        // 経過はmillis()の差分で積む。時計(TimeFunctions)は333msごとにしか更新されず、
-        // そもそもNTP同期でいきなり飛ぶことがあるので計測には使えない
-        RunState timer_state   = RunState::Idle;
-        uint32_t timer_set_ms  = 0;  // ▲▼で設定した時間
-        uint32_t timer_left_ms = 0;  // 残り時間
-        unsigned long timer_last_tick_ms = 0;
-        unsigned long timer_blink_ms     = 0;
+        // ---- タイマー/ストップウォッチ ----
+        // 状態はOS側(TimerFunctions)が持ち、main.cppのloop()で進める(この画面を閉じても動く)。
+        // ここは表示に入れた状態を覚えておき、変わったときだけボタンや状態の行を作り直す
+        TimerFunctions::State shown_timer_state = TimerFunctions::State::Idle;
+        TimerFunctions::State shown_sw_state    = TimerFunctions::State::Idle;
+        uint32_t shown_lap_rev = 0xFFFFFFFFu;
+        unsigned long timer_blink_ms = 0;
         bool timer_blink_on = false;
-        // 完了音。鳴り始めの時刻と、最後に鳴らした拍(-1=まだ)。kRingMaxMsを過ぎたら黙る(点滅は続く)
-        unsigned long timer_ring_start_ms = 0;
-        long          timer_ring_step     = -1;
-
-        // ---- ストップウォッチの状態 ----
-        RunState sw_state      = RunState::Idle;
-        uint32_t sw_elapsed_ms = 0;
-        unsigned long sw_last_tick_ms = 0;
         unsigned long sw_last_draw_ms = 0;
+        bool entered_once = false;
 
         constexpr static int MARGIN = 3;
 
@@ -155,6 +140,7 @@ class ClocksScene : public Scene {
         void refreshStopwatchDigits();
         void refreshStopwatchControls();
         void refreshStopwatch(){ this->refreshStopwatchDigits(); this->refreshStopwatchControls(); }
+        void refreshLaps();
         void updateStopwatch();
         void onStopwatchStartPressed();
         void onStopwatchResetPressed();

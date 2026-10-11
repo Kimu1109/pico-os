@@ -8,6 +8,7 @@
 // をここへ置く。LuaEngine の private メンバは friend struct LuaEngineExt 経由で触る。
 // 暗号化は LuaEngine_Crypto.cpp。
 
+#include "functions/Clipboard_Functions.hpp"
 #include "lua/LuaEngine.hpp"
 
 #include <algorithm>
@@ -111,6 +112,8 @@ struct LuaEngineExt {
 
     // ---------------- 通知・戻る ----------------
     static int l_toast(lua_State* L);
+    static int l_clipboard_get(lua_State* L);
+    static int l_clipboard_set(lua_State* L);
     static int l_keep_awake(lua_State* L);
     static int l_on_back(lua_State* L);
     static int l_go_back(lua_State* L);
@@ -938,6 +941,21 @@ int LuaEngineExt::l_toast(lua_State* L) {
     return 1;
 }
 
+// pico.clipboard_get() -> string: OS全体のクリップボード(空なら"")
+int LuaEngineExt::l_clipboard_get(lua_State* L) {
+    lua_pushlstring(L, ClipboardFunctions::Get(), ClipboardFunctions::Length());
+    return 1;
+}
+
+// pico.clipboard_set(text) -> bool: 中身を差し替える(""で空に)。'\r'とNULは捨てる。
+// 4KiBを超える分は切り捨ててfalse(確保できなかったときもfalseで、前の中身のまま)
+int LuaEngineExt::l_clipboard_set(lua_State* L) {
+    size_t n = 0;
+    const char* text = luaL_checklstring(L, 1, &n);
+    lua_pushboolean(L, ClipboardFunctions::Set(text, n));
+    return 1;
+}
+
 // pico.keep_awake(): このフレームはスリープ(省電力)に入らない。スリープ中なら起きる。
 // 「操作が無くても動き続ける画面」(ゲームの進行中など)が毎フレーム呼ぶ。呼ぶのをやめれば、その後は普通にスリープできる
 int LuaEngineExt::l_keep_awake(lua_State*) {
@@ -1673,6 +1691,8 @@ int LuaEngineExt::l_memory_info(lua_State* L) {
 
 void LuaEngine::RegisterExtApi() {
     // スタックのトップは pico テーブル(registerApi参照)
+    registerFn("clipboard_get", LuaEngineExt::l_clipboard_get);
+    registerFn("clipboard_set", LuaEngineExt::l_clipboard_set);
     registerFn("off", LuaEngineExt::l_off);
     registerFn("text_set", LuaEngineExt::l_text_set);
     registerFn("set_dots", LuaEngineExt::l_set_dots);

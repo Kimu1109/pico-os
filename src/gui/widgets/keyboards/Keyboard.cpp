@@ -406,6 +406,8 @@ bool Keyboard::handlePhysical(const KeyInputFunctions::Event& ev){
             commitAsKana(ev.cp == 'i');
             return true;
         }
+        //クリップボード(読みの途中なら扱わない。テキストエディタ等の画面へ回す)
+        if(!composing && ev.ctrl() && !ev.alt()) return clipboardKey(ev);
         return false;
     }
 

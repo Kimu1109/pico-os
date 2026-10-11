@@ -1,6 +1,9 @@
 #include "gui/widgets/keyboards/KeyboardPanel.hpp"
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
+#include "functions/Clipboard_Functions.hpp"
+
+#include <cstring>
 
 void KeyboardPanel::notifyChanged(bool text_changed){
     KeyboardFunctions::OnPanelChanged(this, text_changed);
@@ -62,6 +65,7 @@ bool KeyboardPanel::onPhysicalKey(const KeyInputFunctions::Event& ev){
 
     switch(ev.key){
         case Key::Char: {
+            if(ev.ctrl() && !ev.alt()) return this->clipboardKey(ev);
             if(!ev.isPlainChar()) return false;
             if(!this->acceptsPhysicalChar(ev.cp)) return true; //断った打鍵は他へ回さない
             char buf[5];
@@ -105,4 +109,41 @@ bool KeyboardPanel::onPhysicalKey(const KeyInputFunctions::Event& ev){
         default:
             return false;
     }
+}
+
+bool KeyboardPanel::clipboardKey(const KeyInputFunctions::Event& ev){
+    uint32_t c = ev.cp;
+    if(c >= 'A' && c <= 'Z') c += 'a' - 'A';
+
+    if(c == 'c' || c == 'x'){
+        const FixedString<PICO_STR_LL> text = this->getText();
+        ClipboardFunctions::Set(text.c_str(), text.length());
+        if(c == 'x'){
+            this->setText(FixedString<PICO_STR_LL>());
+            this->notifyChanged(true);
+        }
+        return true;
+    }
+    if(c != 'v') return false;
+    if(ClipboardFunctions::Empty()) return true;
+
+    //入り切る分だけ(UTF-8の文字の途中では切らない)。1行の入力欄では改行を空白にする
+    const size_t room_total = FixedString<PICO_STR_LL>::capacity();
+    const size_t used = this->getText().length();
+    if(used >= room_total) return true;
+    size_t n = ClipboardFunctions::Length();
+    if(n > room_total - used){
+        n = room_total - used;
+        while(n > 0 && ((unsigned char)ClipboardFunctions::Get()[n] & 0xC0) == 0x80) n--;
+    }
+    if(n == 0) return true;
+    char buf[PICO_STR_LL];
+    memcpy(buf, ClipboardFunctions::Get(), n);
+    buf[n] = '\0';
+    const bool single = !this->target || this->target->getIsSingleLine();
+    for(size_t i = 0; i < n; i++){
+        if(buf[i] == '\n' && single) buf[i] = ' ';
+    }
+    this->physicalPaste(buf);
+    return true;
 }

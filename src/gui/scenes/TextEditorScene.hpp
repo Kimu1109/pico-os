@@ -6,6 +6,7 @@
 #include "gui/widgets/TextView.hpp"
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
 #include "util/FixedString.hpp"
+#include "util/Edit_History.hpp"
 
 #include <functional>
 
@@ -24,6 +25,17 @@
 //
 // 文書は固定長の1本のバッファ(kMaxBytes)に'\n'区切りで持つ(行ごとにヒープを確保しない)。
 // 上限を超えるファイル(容量・行数・1行の長さ)は、保存で内容が消えないよう開かずに断る。
+//
+// 文書を書き換えるのは必ず edit() を通す。edit() が変わった部分だけを EditHistory(4KiB)へ記録するので、
+// 元に戻す/やり直し(Ctrl+Z / Ctrl+Y)ができる。未保存かどうかも記録の位置で決まる(元に戻して保存した時点へ
+// 戻れば未保存でなくなる)。
+//
+// 選択範囲は「選択の起点(sel_anchor)〜カーソル」。メニューの「範囲選択」で起点を置いてから終わりをタップする
+// (物理キーボードはShift+矢印)。文字を打つと選択は外れる(選択範囲を置き換えはしない)。Backspace/Deleteは
+// 選択範囲を消す。コピー/切り取りは選択が無ければ今の行(改行込み)を対象にする。クリップボードはOS全体の
+// ClipboardFunctions。
+//
+// 検索/置換は上部に検索バー(件数・前・次・置換・すべて・閉じる)を出す。見つけた所は選択範囲として見せる。
 class TextEditorScene : public Scene, public ITextInputTarget {
     private:
         static constexpr int kMaxBytes = PICO_STR_32KiB;
@@ -34,7 +46,7 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         static constexpr int MARGIN = 3;
 
         // ダイアログからダイアログへは1フレーム空ける(MarkdownScene::Pendingと同じ理由)
-        enum class Pending { None, OpenPicker };
+        enum class Pending { None, OpenPicker, OpenFind, OpenReplace, OpenReplaceWith, NewDocument };
 
         char text[kMaxBytes + 1] = {0};
         int  len = 0;
@@ -55,24 +67,82 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         Pending pending = Pending::None;
         int pending_wait_frames = 0;
 
+        EditHistory history;
+        // 選択の起点(-1 = 選択していない)。範囲は起点〜カーソル
+        int sel_anchor = -1;
+        // 選択が検索で見つけた所の目印か。カーソルが動いたら(タップ・←→)外す(範囲選択へ広げない)
+        bool sel_from_search = false;
+        int sel_search_cursor = -1;
+
+        // 検索
+        FixedString<PICO_STR_L> find_text;
+        FixedString<PICO_STR_L> replace_text;
+        bool search_open = false;
+        bool replace_mode = false;
+
         Button* back_button = nullptr;
-        Button* new_button = nullptr;
         Button* open_button = nullptr;
         Button* save_button = nullptr;
         Button* kb_button = nullptr;
+        Button* undo_button = nullptr;
+        Button* menu_button = nullptr;
         Label<PICO_STR_L>* status_label = nullptr;
         TextView* view = nullptr;
+
+        // 検索バー
+        Label<PICO_STR_S>* find_count_label = nullptr;
+        Button* find_prev_button = nullptr;
+        Button* find_next_button = nullptr;
+        Button* replace_one_button = nullptr;
+        Button* replace_all_button = nullptr;
+        Button* find_close_button = nullptr;
+        int view_top_normal = 0;   // 検索バーが無いときの本文欄の上端
+        int view_top_search = 0;   // 検索バーがあるとき
+        int last_view_top = -1;
 
         int lineCount() const;
         int lineOfByte(int byte_offset) const;
         // i行目の[start, end)。endは'\n'の位置(または文書の終わり)
         void lineRange(int i, int& start, int& end) const;
-        // [start, end)をsの先頭n バイトで置き換える
+        // [start, end)をsの先頭n バイトで置き換える(記録しない。edit()と元に戻す/やり直しの下請け)
         bool replaceRange(int start, int end, const char* s, int n);
+        // [start, end)をsの先頭nバイトで置き換え、元に戻せるよう記録する。容量を超えるならfalse(何もしない)
+        bool edit(int start, int end, const char* s, int n, bool chained = false);
+        // 置き換えても容量・行数・1行の長さに収まるか。収まらなければ理由
+        const char* checkLimits(int start, int end, const char* s, int n) const;
+        int findForward(const char* needle, int n, int from) const;
+        int findBackward(const char* needle, int n, int before) const;
+
+        // ---- 選択・クリップボード・元に戻す ----
+        int cursorPos() const;
+        bool selection(int& start, int& end) const;
+        void clearSelection();
+        void refreshSelection();
+        // シーン側で文書を書き換えた/カーソルを動かした後。キーボードへ今の行を渡し直す
+        void moveCursorTo(int byte_offset);
+        ITextInputWidget* attachedPanel();
+        void undo();
+        void redo();
+        void copySelection(bool cut);
+        void paste();
+        void deleteSelection();
+        void selectAll();
+        void toggleSelect();
+        void openMenu();
+
+        // ---- 検索/置換 ----
+        void openFindDialog(bool replace);
+        void openReplaceWithDialog();
+        void setSearchOpen(bool open);
+        void refreshFindCount();
+        bool findNext(bool backward);
+        void replaceOne();
+        void replaceAll();
 
         void refreshView();
         void refreshStatus(const char* message = nullptr);
         void setDirty(bool value);
+        void updateDirty() { this->setDirty(!this->history.atSaved()); }
 
         void toggleKeyboard();
         void openKeyboard();
@@ -111,7 +181,8 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         bool onCursorAtEdge(ITextInputWidget* keyboard, int dir) override;
         bool onDeleteAtEnd(ITextInputWidget* keyboard) override;
 
-        // 物理キーボード: ↑↓/PageUp/PageDownで行を移る、Ctrl+Sで保存、
+        // 物理キーボード: ↑↓/PageUp/PageDownで行を移る、Ctrl+Sで保存、Ctrl+Z/Yで元に戻す/やり直し、
+        // Ctrl+C/X/V/Aでクリップボード、Ctrl+F/H/Gで検索・置換・次を検索、Shift+矢印で選択。
         // キーボードが閉じていれば打ったときに開く(文字そのものはキー盤が入れる)
         bool onKey(const KeyInputFunctions::Event& ev) override;
         bool getIsSingleLine() override { return false; }

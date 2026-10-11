@@ -1,7 +1,7 @@
 ---
 title: "その他"
 weight: 90
-description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast / keep_awake"
+description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast / clipboard / keep_awake"
 ---
 
 ## pico.log
@@ -117,6 +117,23 @@ base64です(`data` は12KiB、`text` は16KiBまで)。`url_safe = true` なら
 <div class="sig">pico.toast(text: string) <span class="ret">-> shown: boolean</span></div>
 
 画面の上に短い通知(トースト)を出します。権限は要りません。通知センターの履歴にも残ります。連続して呼ぶと(300ms以内)断られて `false` を返します。アプリを閉じた後に出したい予約の通知は [`pico.notify`](../notify/) です。
+
+## pico.clipboard_get / pico.clipboard_set
+
+<div class="sig">pico.clipboard_get() <span class="ret">-> string</span></div>
+<div class="sig">pico.clipboard_set(text: string) <span class="ret">-> ok: boolean</span></div>
+
+OS全体で1つのクリップボード(テキストだけ)です。テキストエディタのコピー/切り取り/貼り付けや、入力欄での物理キーボードの Ctrl+C / Ctrl+X / Ctrl+V と同じものを読み書きします。権限は要りません。
+
+- `clipboard_get()` は今の中身を返します(空なら `""`)
+- `clipboard_set(text)` は中身を差し替えます。`""` で空にします。`\r` とNULは捨てます(改行は `\n` だけになります)
+- 中身は**4KiBまで**です。超えた分は文字の途中で切らずに切り捨てて `false` を返します
+- 再起動で消えます(SDカードには保存しません)
+
+```lua
+pico.clipboard_set("コピーした文字")
+pico.log(pico.clipboard_get())
+```
 
 ## pico.keep_awake
 

@@ -17,6 +17,8 @@
 #include "functions/Log_Functions.hpp"
 #include "gui/scenes/Scene.hpp"
 #include "gui/widgets/keyboards/KeyboardEng.hpp"
+#include "functions/Clipboard_Functions.hpp"
+#include <string>
 #include "gui/widgets/keyboards/KeyboardNum.hpp"
 #include "gui/widgets/keyboards/Keyboard.hpp"
 #include "functions/IME_Functions.hpp"
@@ -217,8 +219,27 @@ int main(){
     Push(K(IK::Home)); Push(K(IK::Backspace)); Update();
     check(target.bs_at_start == 1, "先頭のBackspaceは入力先へ知らせる");
 
-    Push(Ch('c', Ctrl)); Push(K(IK::Tab)); Update();
-    check(strcmp(eng->getText().c_str(), "\xE3\x81\x82helo") == 0, "Ctrl付きの文字とTabはキー盤では扱わない");
+    Push(Ch('q', Ctrl)); Push(K(IK::Tab)); Update();
+    check(strcmp(eng->getText().c_str(), "\xE3\x81\x82helo") == 0, "Ctrl付きの文字(クリップボード以外)とTabはキー盤では扱わない");
+
+    //クリップボード: Ctrl+Cで全部コピー / Ctrl+Vでカーソル位置へ / Ctrl+Xで全部切り取り
+    Push(Ch('c', Ctrl)); Update();
+    check(strcmp(ClipboardFunctions::Get(), "\xE3\x81\x82helo") == 0, "Ctrl+Cで入力欄の全部をコピー");
+    Push(K(IK::Home)); Push(Ch('V', Ctrl | Shift)); Update();
+    check(strcmp(eng->getText().c_str(), "\xE3\x81\x82helo\xE3\x81\x82helo") == 0, "Ctrl+V(大文字でも)でカーソル位置へ貼り付け");
+    ClipboardFunctions::Set("a\nb");
+    Push(K(IK::End)); Push(Ch('v', Ctrl)); Update();
+    check(strcmp(eng->getText().c_str(), "\xE3\x81\x82helo\xE3\x81\x82heloa b") == 0, "1行の入力欄では改行を空白にする");
+    Push(Ch('x', Ctrl)); Update();
+    check(eng->getText().empty() && strcmp(ClipboardFunctions::Get(), "\xE3\x81\x82helo\xE3\x81\x82heloa b") == 0, "Ctrl+Xで全部切り取り");
+    {
+        std::string big(300, 'z');
+        ClipboardFunctions::Set(big.c_str());
+        Push(Ch('v', Ctrl)); Update();
+        check(eng->getText().length() == FixedString<PICO_STR_LL>::capacity(), "入り切らない分は切って貼る");
+        eng->setText(FixedString<PICO_STR_LL>("\xE3\x81\x82helo"));
+        Push(K(IK::Home)); Update();
+    }
 
     scene.got = 0;
     Push(K(IK::Up)); Push(K(IK::Down)); Update();

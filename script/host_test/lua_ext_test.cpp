@@ -7,7 +7,7 @@
 //   リスト(挿入・削除・取得・選択)・タブ(ラベル・削除・連動)
 //   選ぶ・入れるダイアログ(choice/date/time/number/progress)と、closedの3番目の引数
 //   描画の補助(get_pixel・揃え・折り返し・オフスクリーン画像)
-//   ユーティリティ(path_join・url・base64・settings・time・wifi_status・memory_info・toast)
+//   ユーティリティ(path_join・url・base64・settings・time・wifi_status・memory_info・toast・clipboard)
 //   戻る操作(on_back)
 //   暗号(encrypt/decrypt/hash/random_bytes・storeの暗号化)
 //   OS同梱のLuaモジュール(pico.ui / pico.async / pico.tween / pico.game)
@@ -855,6 +855,10 @@ int main() {
             local mi = pico.memory_info()
             check(mi.lua_used > 0 and mi.lua_budget >= mi.lua_used and mi.lua_free >= 0, "memory_info")
             check(pico.toast("こんにちは") == true or true, "toast")
+            check(pico.clipboard_set("a\r\nあ") == true and pico.clipboard_get() == "a\nあ", "clipboard: \\rを捨てて往復")
+            check(pico.clipboard_set("") == true and pico.clipboard_get() == "", "clipboard: 空にする")
+            check(pico.clipboard_set(string.rep("x", 5000)) == false and #pico.clipboard_get() == 4096, "clipboard: 4KiBで切る")
+            pico.clipboard_set("")
         )LUA", "ext_util");
         check(ok, "ユーティリティ: スクリプトが成功する");
         check(HostSd::files["/app/settings.cfg"].find("volume=7") != std::string::npos

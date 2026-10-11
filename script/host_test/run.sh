@@ -63,6 +63,8 @@
 #                   画面のonKey()→開いているキー盤の順に配ること、キー盤の編集(挿入/削除/移動/決定)、数字のキー盤の制限、
 #                   日本語入力の入り切り(Tab2回・半角/全角・Ctrl+Space)と日本語のキー盤のかな漢字変換(小さい辞書を作って)
 #   romaji_kana_test … ローマ字→かな(ime/Romaji_Kana.hpp)。ん・っ・拗音・記号・送りの印
+#   edit_history_test … テキストエディタの元に戻すの記録(util/Edit_History.hpp)とクリップボード(Clipboard_Functions)。
+#                   乱数の編集を1件ずつ戻す・溢れ・打鍵のまとめ・ひとまとまり・保存した時点、\rの除去と4KiBでの切り方
 #   cardkb_test   … CardKB2(I2Cのキーボード)の入力元。変換・未接続で静か・検出・打鍵・抜き差し
 #   pad_test      … 外部コントローラーの窓口(PadFunctions)。USBシリアルの行("pad XXXX")の読み取り、
 #                   押した/離したのはそのフレームだけ、行が途切れたら外れて押しっぱなしにならないこと、
@@ -702,6 +704,16 @@ echo ""
 echo "===== cardkb_test ====="
 run_or_die "$OUT/cardkb_test"
 
+# --- 元に戻すの記録・クリップボード ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/edit_history_test.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
+    -o "$OUT/edit_history_test"
+
+echo ""
+echo "===== edit_history_test ====="
+run_or_die "$OUT/edit_history_test"
+
 # --- ローマ字→かな ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/romaji_kana_test.cpp" \
@@ -719,6 +731,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/functions/Pad_Functions.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardEng.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
     "$ROOT/src/gui/widgets/keyboards/Keyboard.cpp" \
@@ -855,6 +868,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
@@ -931,6 +945,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/src/gui/widgets/TabBar.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
     "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
     "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
@@ -1067,6 +1082,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/script/host_test/lua_engine_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
@@ -1159,6 +1175,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/script/host_test/lua_ext_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
@@ -1250,6 +1267,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/script/host_test/lua_sandbox_test.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
@@ -1357,6 +1375,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
@@ -1445,6 +1464,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/gui/scenes/LuaScene.cpp" \
     "$ROOT/src/lua/LuaEngine.cpp" \
     "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \

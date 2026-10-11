@@ -26,6 +26,7 @@
 #include "functions/Profiler_Functions.hpp"
 #include "functions/CrashDump_Functions.hpp"
 #include "functions/DevTools_Functions.hpp"
+#include "functions/HwTest_Functions.hpp"
 #include "lua/LuaDebugger.hpp"
 #include "lua/LuaDebugScreen.hpp"
 
@@ -128,7 +129,10 @@ void setup() {
 #endif
     LuaDebugger::SetErrorReporter(&CrashDumpFunctions::SaveLuaError);
     LuaDebugger::SetActivityHook(&CrashDumpFunctions::SetLua);
-    PadFunctions::extra_line_handler = &LuaDebugger::FeedSerialLine;
+    //シリアルの"dbg ..."(Luaデバッガ)と"hw ..."(実機の確認。HARDWARE_CHECKLIST.md)
+    PadFunctions::extra_line_handler = [](const char* line){
+        return LuaDebugger::FeedSerialLine(line) || HwTestFunctions::FeedSerialLine(line);
+    };
     DevToolsFunctions::Setup();
     //前回のクラッシュを知らせる(タップでダンプを開く)
     CrashDumpFunctions::PostPendingNotice();

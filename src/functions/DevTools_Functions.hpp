@@ -9,6 +9,7 @@
 //   lua-debugger = true|false   Luaデバッガ(ブレークポイント・ステップ実行・エラーで止める)
 //   watchdog     = true|false   loop()が watchdog-ms 戻らなければ再起動し、次の起動でダンプを書く
 //   watchdog-ms  = 1000〜8300   既定8000
+//   hw-test      = true|false   実機の確認用のシリアルのコマンド(hw ...。HwTest_Functions.hpp)。ファイルだけで切り替える
 // 設定アプリの「その他」タブから切り替えられる(SetXxx()がその場で反映してdebug.cfgへ書く)。
 namespace DevToolsFunctions {
     // SD・ログ・CrashDumpFunctions::Setup()より後で呼ぶ
@@ -20,6 +21,7 @@ namespace DevToolsFunctions {
     bool PerfLog();
     bool LuaDebuggerEnabled();
     bool Watchdog();
+    bool HwTest();
 
     void SetPerfOverlay(bool on);
     void SetPerfLog(bool on);

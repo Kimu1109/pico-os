@@ -65,6 +65,10 @@ namespace KeyInputFunctions {
 
     constexpr size_t kQueueSize = 32;
 
+    // 打鍵を画面やキー盤より先に全部受け取る係(画面ロック中のロック画面)。trueを返したら取ったもの。
+    // 関数ポインタにしているのは、配り先(KeyInput_Dispatch.cpp)をロックへ依存させないため
+    inline bool (*intercept)(const Event& ev) = nullptr;
+
     void Setup();
 
     // "key ..." の行(改行は含まない)を読む。読めればoutへ入れてtrue

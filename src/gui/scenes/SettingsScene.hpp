@@ -51,7 +51,7 @@ class SettingsScene : public Scene {
         Tab tab = Tab::Wifi; // onExit()を跨いで残す(上へ別のシーンを積んで戻ると同じタブ)
 
         // ---- タブごとのウィジェット(表示の切り替え用。所有はWidgetFunctions) ----
-        static constexpr int kMaxTabWidgets = 12;
+        static constexpr int kMaxTabWidgets = 16;
         Widget* tab_widgets[(int)Tab::Count][kMaxTabWidgets] = {};
         int     tab_widget_count[(int)Tab::Count] = {};
         // WidgetFunctions::Add()してタブへ登録する
@@ -138,6 +138,9 @@ class SettingsScene : public Scene {
         DropdownMenu*      rate_dropdown        = nullptr;
         int                rate_selected_index  = -1;
         Checkbox*          battery_cap_checkbox = nullptr;
+        Checkbox*          dark_checkbox = nullptr;
+        Label<PICO_STR_L>* lock_label    = nullptr;
+        Button*            lock_button   = nullptr;
 
         // ================= 時刻 =================
         Label<PICO_STR_M>* timezone_title       = nullptr;
@@ -171,6 +174,8 @@ class SettingsScene : public Scene {
         Button*            launcher_button      = nullptr;
         void refreshLauncherLabel();
         void openLauncherDialog();
+        void openLockDialog();
+        void refreshLockLabel();
         // 開発者向け(/sys/debug.cfg)
         Checkbox*          perf_overlay_checkbox = nullptr;
         Checkbox*          lua_debugger_checkbox = nullptr;

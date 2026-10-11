@@ -7,6 +7,7 @@
 #include "functions/Time_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "functions/Display_Functions.hpp"
+#include "functions/Lock_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
@@ -927,6 +928,27 @@ void SettingsScene::onEnter(){
     constexpr int16_t kDropdownW = 110;
     const int16_t dropdown_x = (int16_t)(content.x + content.w - MARGIN - kDropdownW);
 
+    // ---- ダークテーマ(display.cfgの theme)。本体タブの6行目 ----
+    // ドロップダウンの一覧がこの行へ重なりうるので、それより先にAdd()する
+    this->dark_checkbox = new Checkbox(left, rowY(5), "ダークテーマ");
+    this->dark_checkbox->setFontSize(FontFn::Small);
+    this->dark_checkbox->setText("ダークテーマ");
+    this->dark_checkbox->setIsChecked(DisplayFunctions::IsDarkTheme());
+    this->dark_checkbox->setOnChangeChecked([this](){
+        const bool dark = this->dark_checkbox->getIsChecked();
+        DisplayFunctions::SetDarkTheme(dark);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "theme", dark ? "dark" : "light");
+    });
+    addToTab(Tab::Device, this->dark_checkbox);
+
+    // ---- 画面ロック(PIN)。本体タブの7行目 ----
+    this->lock_button = this->makeEditButton(rowY(6));
+    this->lock_button->setOnPressEnd([this](){ this->openLockDialog(); });
+    addToTab(Tab::Device, this->lock_button);
+    this->lock_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(6) + 2), label_w, "");
+    addToTab(Tab::Device, this->lock_label);
+    this->refreshLockLabel();
+
     // ---- 電池駆動中に音量を絞る(sound.cfgの battery-cap)。本体タブの5行目 ----
     // 上の2つのドロップダウンの一覧がこの行へ重なるので、それより先にAdd()する
     this->battery_cap_checkbox = new Checkbox(left, rowY(4), "電池で音量を絞る");
@@ -989,6 +1011,33 @@ void SettingsScene::onEnter(){
     addToTab(Tab::Time, this->timezone_dropdown);
 
     this->applyTab();
+}
+
+void SettingsScene::refreshLockLabel(){
+    if(this->lock_label) this->lock_label->setText(LockFunctions::HasPin() ? "画面ロック: PIN" : "画面ロック: なし");
+}
+
+void SettingsScene::openLockDialog(){
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "画面ロック", "", "キャンセル");
+    const bool has = LockFunctions::HasPin();
+    if(has){
+        d->addChoice("PINを変える");
+        d->addChoice("PINを外す");
+        d->addChoice("今すぐロック");
+    }else{
+        d->addChoice("PINを決める");
+    }
+    d->layout();
+    WidgetFunctions::AddDialog(d);
+    d->setVisible(true);
+    d->setOnClosed([d, has](bool ok){
+        const int sel = ok ? d->getSelectedIndex() : -1;
+        WidgetFunctions::DestroyLater(d);
+        //ロック画面は全画面を覆うオーバーレイなので、ダイアログを閉じた同じフレームで出してよい
+        if(sel == 0) LockFunctions::BeginChange();
+        else if(has && sel == 1) LockFunctions::BeginRemove();
+        else if(has && sel == 2) LockFunctions::LockNow();
+    });
 }
 
 void SettingsScene::updateSampleRate(){
@@ -1071,6 +1120,7 @@ void SettingsScene::updateTimezone(){
 
 void SettingsScene::onUpdate(){
     if(this->wifi_scan_task) PowerFunctions::KeepAwake(); // スキャン中はスリープさせない
+    this->refreshLockLabel();   //ロック画面でPINを決めた/外した後に反映
 
     const Pending p = this->pending;
     this->pending = Pending::None;
@@ -1147,6 +1197,9 @@ void SettingsScene::onExit(){
     this->rate_title           = nullptr;
     this->rate_dropdown        = nullptr;
     this->battery_cap_checkbox = nullptr;
+    this->dark_checkbox = nullptr;
+    this->lock_label = nullptr;
+    this->lock_button = nullptr;
 
     this->timezone_title       = nullptr;
     this->timezone_dropdown    = nullptr;

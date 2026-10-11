@@ -43,6 +43,10 @@ namespace {
                     }else{
                         LOG_SYS_WARN("display.cfg: brightness は0〜100の整数です: %s", value);
                     }
+                }else if(strcmp(key, "theme") == 0){
+                    if(strcmp(value, "dark") == 0) PICO_GFX::SetTheme(true);
+                    else if(strcmp(value, "light") == 0) PICO_GFX::SetTheme(false);
+                    else LOG_SYS_WARN("display.cfg: theme は light/dark です: %s", value);
                 }else if(strcmp(key, "auto-dim") == 0){
                     bool enabled = true;
                     if(PICO_Config::ConfigValue::AsBool(value, enabled)){
@@ -55,6 +59,12 @@ namespace {
         );
     }
 }
+
+void DisplayFunctions::SetDarkTheme(bool dark){
+    PICO_GFX::SetTheme(dark);
+}
+
+bool DisplayFunctions::IsDarkTheme(){ return PICO_GFX::darkTheme; }
 
 void DisplayFunctions::Setup(){
     normal_brightness = kDefaultBrightness;

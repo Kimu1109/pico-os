@@ -69,6 +69,10 @@ namespace PadFunctions {
     bool IsConnected();
     Source GetSource();
 
+    // このフレームの残りは何も押していないことにする(画面ロック中。次のUpdate()で解ける)。
+    // 自動調光/スリープの判定はUpdate()の直後に済んでいるので、そちらには効かない
+    void SuppressThisFrame();
+
     uint16_t Buttons();                 // 今押しているもの
     bool IsDown(uint16_t buttons);      // どれか1つでも押していればtrue
     bool Pressed(uint16_t buttons);     // このフレームで押されたものがあればtrue

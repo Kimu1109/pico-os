@@ -71,6 +71,9 @@ void KeyInputFunctions::Update(){
     while(Pop(ev)){
         any = true;
 
+        //画面ロック中はロック画面が全部取る(後ろの画面へ打鍵が漏れないように)
+        if(intercept && intercept(ev)) continue;
+
         //0. 日本語入力の入り切り。キー盤が開いていなければ、Tabだけは普通に配る
         if(CheckImeToggle(ev, (uint32_t)millis())){
             if(KeyboardFunctions::ToggleJapanese()) continue;

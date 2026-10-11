@@ -1,5 +1,6 @@
 #include "functions/PowerMenu_Functions.hpp"
 #include "functions/Power_Functions.hpp"
+#include "functions/Lock_Functions.hpp"
 #include "functions/CrashDump_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
@@ -21,6 +22,7 @@ void PowerMenuFunctions::Open(){
     if(!d) return;
     d->addChoice("スリープ");
     d->addChoice("再起動");
+    if(LockFunctions::HasPin()) d->addChoice("ロック");
     d->layout();
     WidgetFunctions::AddDialog(d);
     d->setVisible(true);
@@ -30,6 +32,7 @@ void PowerMenuFunctions::Open(){
             switch(d->getSelectedIndex()){
                 case 0: PowerFunctions::SleepNow(); break;
                 case 1: RequestReboot(); break;
+                case 2: LockFunctions::LockNow(); break;
                 default: break;
             }
         }

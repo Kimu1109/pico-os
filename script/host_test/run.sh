@@ -78,6 +78,8 @@
 #   power_test    … スリープ(PowerFunctions)。操作が無いまま sleep-timeout が過ぎると入り、画面/Wi-Fi/音の
 #                   省電力が掛かること、タッチで起きて起こした指は離すまで画面へ渡さないこと、KeepAwake()・
 #                   音・Wi-Fi接続中は入らないこと
+#   lock_test     … 画面ロック(LockFunctions/LockScreen)。PINの記録(塩+BLAKE2b)・決める/変える/外す・スリープでロック・
+#                   打鍵とタッチ・間違えたときの待ち時間・鳴っているアラームを止める・起動時のロック
 #   notification_test … 通知(NotificationFunctions)の中身。予約の種類ごとの発火、置き換え・上限、履歴、
 #                   控えめ、保存と読み込み、起動理由
 #   alarm_test    … アラーム(AlarmFunctions)。alarm.cfgの読み書き、時刻での発火と確認ダイアログ、
@@ -825,6 +827,31 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== power_test ====="
 run_or_die "$OUT/power_test"
+
+# --- 画面ロック(PIN) ---
+compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
+    -c "$ROOT/lib/monocypher/src/monocypher.c" -o "$OUT/lock_monocypher.o"
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/lock_test.cpp" \
+    "$ROOT/src/functions/Lock_Functions.cpp" \
+    "$ROOT/src/gui/widgets/systems/LockScreen.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$OUT/lock_monocypher.o" \
+    -o "$OUT/lock_test"
+
+echo ""
+echo "===== lock_test ====="
+run_or_die "$OUT/lock_test"
 fi
 
 

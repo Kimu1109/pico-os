@@ -71,6 +71,7 @@ namespace PICO_Path {
             // TODOアプリ(Todoist)のトークン("token = enc1:...")と表示の設定。TodoistClient参照
             constexpr const char* SYS_TODOIST_CFG = "/sys/todoist.cfg";
             constexpr const char* SYS_CALENDAR_CFG = "/sys/calendar.cfg";
+            constexpr const char* SYS_LOCK_CFG = "/sys/lock.cfg";
             // 音声出力("output = auto | off" / "volume = 0〜100")。SoundFunctions参照
             constexpr const char* SYS_SOUND_CFG = "/sys/sound.cfg";
             // ミュージックアプリの再生のしかた("shuffle = true|false" / "repeat = off|all|one")。MusicScene参照

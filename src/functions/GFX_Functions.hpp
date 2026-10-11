@@ -39,6 +39,39 @@ namespace PICO_GFX {
         return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xFF) >> 3);
     }
 
+    // ダークテーマのパレット。番号の意味(0=文字の色・15=背景の色・7=薄い灰・8=濃い灰…)はそのままに、
+    // 明るさを反転した色を当てる。画面の部品は番号で色を指定しているので、パレットを差し替えるだけで
+    // OS全体の配色が変わる(画像・アイコンも番号で描くので一緒に変わる)。
+    // 濃い色(紺・深緑・えんじ…)は暗い背景で読めるよう明るく、明るい背景用の色(薄い灰・水色)は暗くする
+    constexpr int Rgb565Const(int r, int g, int b){
+        return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xFF) >> 3);
+    }
+    inline const static int DARK_COLORS[16] = {
+        Rgb565Const(235, 235, 235),  // 0  文字(白に近い灰。真っ白はまぶしい)
+        Rgb565Const(120, 150, 255),  // 1  紺 → 明るい青
+        Rgb565Const(100, 220, 120),  // 2  深緑 → 明るい緑
+        Rgb565Const(90, 210, 220),   // 3  暗い水色 → 明るい水色
+        Rgb565Const(255, 120, 120),  // 4  えんじ → 明るい赤
+        Rgb565Const(220, 130, 255),  // 5  紫 → 明るい紫
+        Rgb565Const(220, 210, 90),   // 6  オリーブ → 明るい黄土
+        Rgb565Const(64, 64, 72),     // 7  薄い灰 → 暗い灰(枠・押せない部品)
+        Rgb565Const(170, 170, 176),  // 8  濃い灰 → 明るい灰
+        Rgb565Const(70, 110, 255),   // 9  青
+        Rgb565Const(40, 200, 60),    // 10 緑
+        Rgb565Const(0, 100, 110),    // 11 水色(選択範囲の背景)→ 暗い水色
+        Rgb565Const(255, 70, 70),    // 12 赤
+        Rgb565Const(230, 80, 230),   // 13 マゼンタ
+        Rgb565Const(230, 200, 40),   // 14 黄
+        Rgb565Const(16, 16, 20),     // 15 背景(黒に近い)
+    };
+
+    // 今のテーマのパレット(ResetPalette()の戻り先)。SetTheme()で既定/ダークを切り替える
+    inline int THEME_COLORS[16] = {
+        TFT_BLACK, TFT_NAVY, TFT_DARKGREEN, TFT_DARKCYAN, TFT_MAROON, TFT_PURPLE, TFT_OLIVE, TFT_LIGHTGREY,
+        TFT_DARKGREY, TFT_BLUE, TFT_GREEN, TFT_CYAN, TFT_RED, TFT_MAGENTA, TFT_YELLOW, TFT_WHITE
+    };
+    inline bool darkTheme = false;
+
     // 黒(0)と白(15)は固定。それ以外のindex(1〜14)の色をRGB565で差し替える。範囲外ならfalse
     inline bool SetPaletteColor(int index, int rgb565){
         if(index <= 0 || index >= 15) return false;
@@ -49,14 +82,23 @@ namespace PICO_GFX {
         }
         return true;
     }
-    // 既定のパレットへ戻す(アプリの終了時・画面遷移時)
+    // テーマのパレットへ戻す(アプリの終了時・画面遷移時)
     inline void ResetPalette(){
         for(int i = 0; i < 16; i++){
-            if(COLORS[i] != DEFAULT_COLORS[i]){
-                COLORS[i] = DEFAULT_COLORS[i];
+            if(COLORS[i] != THEME_COLORS[i]){
+                COLORS[i] = THEME_COLORS[i];
                 paletteRevision++;
             }
         }
+    }
+
+    // 既定(明るい)/ダークのテーマにする。パレットはテーマの色へ戻る(Luaアプリが差し替えていた色も)。
+    // 反映(frameのパレット・全画面の描き直し)は次のFlushDirty()
+    inline void SetTheme(bool dark){
+        darkTheme = dark;
+        const int* src = dark ? DARK_COLORS : DEFAULT_COLORS;
+        for(int i = 0; i < 16; i++) THEME_COLORS[i] = src[i];
+        ResetPalette();
     }
 
     inline Rect directRenderRect = {0, 0, 0, 0};

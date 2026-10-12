@@ -2332,7 +2332,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
   いき、尽きると口が壊れる。`UsbDetach()`は`ep_out|0x80`/`ep_in&0x7F`で渡す(FatFSUSBも同じ呼び方で同じ漏れがある)。尽きたら`Start()`が`UsbFailed`。
 - **速さ(2026-10-12、実機のLinux Mintで dd が66KB/秒・ls が固まったように見えた)**: arduino-picoは`tud_task()`を1msごとのタイマーでしか回さず、
   MSCは64バイトの受け渡しごとに`tud_task()`が要るので 64B/ms で頭打ちだった。TinyUSBの弱いシンボル`tud_event_hook_cb`(USBの出来事が積まれたとき、
-  割り込みの中で呼ばれる)を上書きし、貸し出している間は`irq_set_pending(USB.usbTaskIRQ)`ですぐに続きを回す。**実機での速さは未計測**。
+  割り込みの中で呼ばれる)を上書きし、貸し出している間は`irq_set_pending(USB.usbTaskIRQ)`ですぐに続きを回す。実機(Linux Mint)で読み込み・ファイルを開くのが速くなったことを確認した(2026-10-12。ddの数値は未計測)。
   Linuxで手で`mount`すると日本語のファイル名が`????`になるのは`iocharset`の既定のせい(`-o utf8`で直る。ファイルマネージャーの自動マウントはutf8)。
 - 状態: Waiting(口は出したがPCがまだ読みに来ない)/Mounted(読み書きがあった)/Ejected(PCで取り出し=START STOP UNIT。以後`test_unit_ready`は「媒体なし」)。
   画面はPCが使っている(Mounted)間に「終了」を押すと確認を出す。画面を離れる(電源メニューの再起動も)と必ず`Stop()`。貸し出し中は`KeepAwake()`・`keepForeground()`。

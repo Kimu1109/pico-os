@@ -246,8 +246,26 @@ private:
     std::string path_;
 };
 
+// カード(セクタ)の口。PCではセクタ単位で読み書きできないので、大きさだけ答える
+// (USBドライブの画面を動かすため。UsbDriveFunctionsはPCでは口を出さないので読み書きは呼ばれない)
+class SdCard {
+public:
+    uint32_t sectorCount(){
+        struct statvfs v;
+        if(statvfs(PicoOsSdHost::root.c_str(), &v) != 0) return 0;
+        const uint64_t s = (uint64_t)v.f_blocks * v.f_frsize / 512;
+        return s > 0xFFFFFFFFu ? 0xFFFFFFFFu : (uint32_t)s;
+    }
+    bool readSector(uint32_t, uint8_t*){ return false; }
+    bool writeSector(uint32_t, const uint8_t*){ return false; }
+    bool syncDevice(){ return true; }
+};
+
 class SdFat {
 public:
+    void end(){}
+    SdCard* card(){ static SdCard c; return &c; }
+
     template<typename... Args>
     bool begin(Args&&...){
         if(const char* env = getenv("PICOOS_SD_ROOT")) PicoOsSdHost::root = env;

@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <functional>
 
-// Game Boyの操作パッド(十字キー / A / B / SELECT / START / ROM / 戻る)。GameBoyScene専用。
+// Game Boyの操作パッド(十字キー / A / B / SELECT / START / MENU / 戻る)。GameBoyScene専用。
 //
 // 子を持たずrender()で直接描き、タップ位置からボタンを逆算する
 // (AppGrid / TabBar / MonthGrid と同じ方式)。
@@ -14,7 +14,7 @@
 //   ┌────────┬─────────┬─────────┐
 //   │  十字  │ SELECT  │      (A)│
 //   │  キー  │ START   │  (B)    │
-//   │        │ ROM│戻る│         │
+//   │        │MENU│戻る│         │
 //   └────────┴─────────┴─────────┘
 //
 // ---- タッチは1点だけ ----
@@ -22,20 +22,20 @@
 // 指を滑らせると押しているボタンが切り替わる(十字キーの中で指を回す、Aから十字キーへ移る等)。
 // 十字キーは中心からの角度で8方向を取る(斜めは2方向を同時に押した扱い)。
 //
-// ROM / 戻る はゲームのボタンではなく、離した瞬間(その上で離したときだけ)に
-// setOnRom() / setOnBack() のコールバックを呼ぶ。
+// MENU / 戻る はゲームのボタンではなく、離した瞬間(その上で離したときだけ)に
+// setOnMenu() / setOnBack() のコールバックを呼ぶ。
 class GameBoyPad : public Widget {
     public:
         constexpr static int kPadH = 84;
 
     private:
-        enum class Area : uint8_t { None, Game, Rom, Back };
+        enum class Area : uint8_t { None, Game, Menu, Back };
 
         uint8_t pressed = 0;          // GbEmu::Button のOR
         Area press_area = Area::None; // 押し始めた場所
-        bool over_command = false;    // ROM/戻るの上に指が乗っているか(押している表示)
+        bool over_command = false;    // MENU/戻るの上に指が乗っているか(押している表示)
 
-        std::function<void()> on_rom = nullptr;
+        std::function<void()> on_menu = nullptr;
         std::function<void()> on_back = nullptr;
 
         // ローカル座標(px,py)にあるものを返す。ゲームのボタンならbuttonsへ入れる
@@ -53,7 +53,7 @@ class GameBoyPad : public Widget {
         // 今押しているボタン(GbEmu::Button のOR)
         uint8_t getPressed() const { return this->pressed; }
 
-        void setOnRom(std::function<void()> callback){ this->on_rom = callback; }
+        void setOnMenu(std::function<void()> callback){ this->on_menu = callback; }
         void setOnBack(std::function<void()> callback){ this->on_back = callback; }
 
         void causeOnPressStart() override;

@@ -45,6 +45,11 @@ class GameBoyView : public Widget {
         void buildLine(int dy, uint8_t* line) const;
         void drawMessage(const Rect& g);
 
+        // ゲームの画面の上端に重ねる1行(途中保存の結果等。空なら出さない)
+        FixedString<PICO_STR_L> banner;
+        constexpr static int kBannerH = 20;
+        void drawBanner(const Rect& g);
+
     public:
         GameBoyView(int x, int y, GbEmu* emu);
 
@@ -55,6 +60,9 @@ class GameBoyView : public Widget {
         void invalidate(){ this->needsRender(); }
 
         void setMessage(const char* text);
+        // 上端の1行を出す/消す(nullptrか""で消す)。消す時刻はシーンが決める
+        void setBanner(const char* text);
+        bool hasBanner() const { return !this->banner.empty(); }
 
         void render() override;
 

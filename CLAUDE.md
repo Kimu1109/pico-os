@@ -29,7 +29,7 @@ Raspberry Pi Pico 2 W (RP2350, `rpipico2w`) 上で動く自作タッチGUI OS。
 | SPI1(SD専用) | CS=15, SCK=10, MOSI=11, MISO=12, 10MHz |
 | バックライト | TFT_LED=22(PWM調光。LovyanGFXの`Light_PWM`、PWMスライス3のチャンネルA) |
 | 音声(I2S) | MAX98357A: BCLK=2, LRCLK=3(=BCLK+1固定), DIN=4 / 検出=5(アンプ側でGND、内部プルアップ) / 休止(SD)=6(任意)。VINは5V(VBUS/VSYS) |
-| 外部コントローラー(予定) | Wiiクラシックコントローラー(I2C0: SDA=GP0, SCL=GP1、3.3V)。**まだ配線もコードも無い**。今はUSBシリアル経由のPCのキーボードで代用(下記「外部コントローラー」) |
+| 外部コントローラー | Wiiクラシックコントローラー(I2C0: SDA=GP0, SCL=GP1、3.3V、アドレス0x52。CardKB2と同じバス)。ドライバはあるが**実物では未確認**。USBシリアル経由のPCのキーボードでも代用できる(下記「外部コントローラー」) |
 | TFT_MAX_SPEED | 80MHz |
 
 画面/カラー定数は `src/consts.hpp` に集約(`SCREEN_WIDTH=240`, `SCREEN_HEIGHT=320`, PICO-8風16色パレット `PICO_BLACK`〜`PICO_WHITE`、既定は `PICO_BACKGROUND=15` / `PICO_FORECOLOR=0`)。
@@ -156,7 +156,9 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | Power_Functions | スリープ(省電力)。自動調光のさらに先の段階。下記「スリープ(省電力)」参照 |
 | Clipboard_Functions | OS全体で1つのクリップボード(テキスト1KiBまで、入れた大きさだけmalloc)。下記「テキストエディタ」参照 |
 | KeyInput_Functions | 物理キーボードの窓口。1打鍵1件の列を持ち、今の画面(`Scene::onKey()`)→開いているキー盤の順に配る。今の入力元はUSBシリアル(PCのキーボード)。下記「物理キーボード」参照 |
-| Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。今の入力元はUSBシリアル(PCのキーボード)。下記「外部コントローラー」参照 |
+| Pad_Functions | 外部コントローラーの窓口。押しているボタンのビットマスクを`loop()`の頭で1回だけ更新する。入力元はWiiクラシックコントローラー(`WiiClassic_Functions`)とUSBシリアル(PCのキーボード)のOR。下記「外部コントローラー」参照 |
+| WiiClassic_Functions | Wiiクラシックコントローラー(I2C)のドライバ。読んだボタンを`PadFunctions::SetDevice()`へ渡す。I2Cのバスの準備は`I2C_Bus.hpp`(CardKB2と共有) |
+| UsbDrive_Functions | USBドライブ(マスストレージ)。SDをPCへ貸し出す間は`SD_usable=false`、終わったらマウントし直す。下記「USBドライブ」参照 |
 | Error_Functions | 「ユーザーへ見せるべき失敗」をログ+MsgDialogの両方へ出す共通口(`ShowFatal()`)。Lua着手前の受け皿の1つ |
 | Profiler_Functions | `loop()`の区間ごとの時間とフレーム時間の集計。下記「開発者向けの道具」参照 |
 | CrashDump_Functions | クラッシュダンプ(HardFault・ウォッチドッグ・Luaのエラー)とパンくず。下記「開発者向けの道具」参照 |
@@ -168,7 +170,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Display→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
 
-`loop()`: (`ProfilerFunctions::BeginFrame()`/`CrashDumpFunctions::Feed()`) → Touch更新 → Pad更新(外部コントローラー。物理キーボードの打鍵もここで列へ積まれる) → Display更新(自動調光の判定) → Power更新(スリープの判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `KeyInputFunctions::Update()`(打鍵を配る) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound/Battery/Alarm/Notification/DevTools更新 → `PowerFunctions::IdleWait()`(スリープ中だけ少し休む)、という単純なポーリングループ。各処理の後の`ProfilerFunctions::Mark(区間)`はプロファイラとクラッシュダンプのパンくず(下記「開発者向けの道具」)。
+`loop()`: (`ProfilerFunctions::BeginFrame()`/`CrashDumpFunctions::Feed()`) → Touch更新 → Wiiクラシック(I2C)の読み出し → Pad更新(外部コントローラー。物理キーボードの打鍵もここで列へ積まれる) → Display更新(自動調光の判定) → Power更新(スリープの判定) → `SceneFunctions::Update()`(保留中のシーン遷移の適用) → `KeyInputFunctions::Update()`(打鍵を配る) → `WidgetFunctions::UpdateAll()` → `GFX::FlushDirty()` → Task/Log/Time/Network/Sound/Battery/Alarm/Notification/DevTools更新 → `PowerFunctions::IdleWait()`(スリープ中だけ少し休む)、という単純なポーリングループ。各処理の後の`ProfilerFunctions::Mark(区間)`はプロファイラとクラッシュダンプのパンくず(下記「開発者向けの道具」)。
 
 **2コア目(`setup1()`/`loop1()`)は音声専用**(`SoundFunctions::LoopCore1()`だけを回す)。1コア目とは`std::atomic`とロック無しのコマンドの列だけでやり取りする。
 **2コア目からログを出したり、ウィジェット/SD/`OSData`に触ったりしないこと**(どれもロックを持たない1コア目専用の作り)。
@@ -1697,14 +1699,32 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
   - 第2段(未): 先頭16KB+直近のバンク数枚だけをRAMに持ち、無いバンクに当たったらSDから読む(1フレーム程度引っかかる)
   - 第3段(未): SDからFlashの空き領域へ書き、XIPで読む(Pico-GBの方式)。ファームの実サイズとWi-Fi動作中のFlash書き込みの確認が要る
 - **エミュの状態・ROM・セーブは`load()`で確保し`unload()`で全部返す**。`GameBoyScene`は`onExit()`で`unload()`するので、
-  使っていない間は1バイトも持たない(シーン本体は約1.3KB、パス2本ぶん)。上へ別のシーンが載って戻ると同じROMを最初から起動し直す。
+  使っていない間は1バイトも持たない(シーン本体は約1.3KB、パス2本ぶん)。上へ別のシーンが載って戻ると同じROMを開き直し、離れたときの自動の枠(下の「途中保存」)から黙って続ける。
 - **Peanut-GBの誤り通知(`gb_error`)から戻ってはいけない**(戻ると`__builtin_unreachable()`へ落ちる)。
   `GbEmu::runFrame()`の入口で`setjmp`し、`onError()`が`longjmp`で戻る。以降は`crashed()`で止まったまま
   (シーンがエラーダイアログを1回出す)。ホストテストで不正な命令`0xD3`を踏ませて確認している。
 - **セーブ**: カートリッジRAMは`<ROM名>.sav`(拡張子だけ差し替え)。起動時に大きさが一致すれば読み、
   **書き込みがあったときだけ**終了時(`unload()`)に一時ファイル→差し替えで書く。大きさの違う`.sav`は読まず上書きもしない。
-  **遊んでいる途中では保存しない**(SDへの書き込みでゲームが引っかかるため)。電源を落とす前に「戻る」を押す必要がある。
+  **遊んでいる途中でも、書き込みが落ち着いたら書き出す**(2026-10-12、`GbEmu::flushSaveIfIdle()`。最後の書き込みから2秒・前回の書き出しから10秒。
+  以前は「戻る」を押すまで書かず、電池切れで消えた)。ゲームはセーブのときにまとめて書くので、引っかかるのはその1回だけ。
   MBC3の時計(RTC)は合わせていない。
+- **途中保存(ステートセーブ、2026-10-12)**: `GbEmu::saveState(slot)`/`loadState(slot)`。`gb_s`まるごと+画面(5760B)+音源チップの控え+カートリッジRAMを
+  `/gb/states/<ROM名>.st<枠>`(`PICO_Path::DIR::GB_STATES`。ROMの隣に置くとROMの選択に並ぶので分けた)へ書く(DMGで約23KB+セーブ領域)。
+  - 見出しに版・`sizeof(void*)`・`sizeof(gb_s)`・`offsetof(gb_s, wram)`・ROMの大きさ/題名/全体チェックサムを持ち、最後にFNV-1a。**読み込みは1周目で全体を検査してから
+    2周目で今の状態へ写す**(壊れたファイル・別のROMの状態で動いているゲームを壊さない。作業用の確保はせず512Bのスタックだけ)。
+    `gb_s`の関数ポインタ・`direct.priv`・`joypad`は読み込んだ後に今のものへ戻す。**構造体をそのまま写すので、PCと実機の間では読めない**(BadFormat)。
+  - 音源チップは控えを読み戻し、`resyncAudio()`が2コア目の音源を作り直して書き直す(NRx4のトリガーは落とす=鳴っていた音はゲームが次に鳴らすまで止まる)。
+  - **`GbAudioLink`の決まり: begin/endの区切りはフレームの境目にしか置けない**(途中に置くと2コア目が区切りの数を数え違えて`render()`で回り続けた。
+    ROMを読んだ直後=起動時の書き込みがまだ`endFrame()`で閉じられていない間に`loadState()`して踏んだ)。`GbEmu::audio_frame_open`を見て、
+    `end()`の前に`endFrame()`で閉じる(`audioStop()`。フレームを走らせる前に閉じる・エミュが止まった場合の同じ穴もこれで塞いだ)。
+  - 枠: 手動(`.st1`、パッドのMENU=コントローラーのZLの「途中保存/途中から再開」)・自動(`.st0`、`GameBoyScene::autoSave()`: 画面を離れる・ROMを替える・
+    電源メニューのスリープに入った・電池が10%以下で給電されていない間は60秒ごと)。ROMを開いたとき自動の枠があれば「続きから遊びますか」(`PickerDialog`)。
+  - 結果はゲームの画面の上端の1行(`GameBoyView::setBanner()`、1.8秒)で出す(この画面はトーストを出さないため)。
+  - 操作パッドの「ROM」は「MENU」になった(途中保存/途中から再開/ROMを選ぶ)。収まらない名前は`Font0`で描く(`GameBoyPad::drawPill()`)。
+  - スリープ(電源メニュー)の間はエミュを止める(以前は`KeepAwake()`の画面なので寝ている間も進んでいた)。
+  - 検証: `gb_emu_test`(往復で保存した時点のカートリッジRAMへ戻る・全体を描き直す・続きから動く・1バイト壊す/短い/別のROMは断って今の状態のまま・
+    `.sav`の書き出しの間隔・フレーム前の読み戻し/閉じるで区切りをフレームの途中に置かない)、PCビルドの`--tap`/`--shot`(MENU→途中保存→バナー、
+    戻る→開き直す→続きから、`PICOOS_VERIFY_LCD=1`で食い違い0)。**実機では未確認**(SDへ約23KBを書く時間=その間ゲームが止まる)。
 - **画面(`GameBoyView`)**: 160x144を**1.5倍の240x216**(横幅ちょうど)で描く。最近傍で「2画素→3画素」。
   - エミュ側は1画素2bitで詰めて持ち(5760B)、**行ごとに前回と比べて変わった行の範囲だけをdirtyにする**(静止画面なら液晶へ何も送らない)
   - `writePixel()`を5万回呼ぶと実機で数十msかかるので、**`OSData::frame`(4bpp)のバッファへ直接書く**。
@@ -2127,8 +2147,17 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 - 検証: `pad_test`(run.sh。行の読み取り、押した/離したはそのフレームだけ、途切れたら外れる、行が分かれて届く、長すぎる行、1回に読む量、GBの対応)、
   `lua_engine_test`(Lua API)、PCビルドで`pad_serial.py --stdout`→`picoos_pc`をXvfb+xdotoolで通し(十字キー斜め+Bの同時押しで点が斜めに動く)、
   擬似端末を相手にシリアルの経路(pyserial有り/無し、ログの折り返し)。**実機のUSBシリアル(arduino-picoのCDC)では未確認**。
-- 次: Wiiクラシックコントローラーのドライバ(`Source::WiiClassic`。I2Cで6バイト読むだけ、見つからない間は500msごとに探す)。
-  PCビルドにSDLのキーボード/ゲームパッドを直接つなぐのも手軽な追加候補。
+- **Wiiクラシックコントローラーのドライバ(`src/functions/WiiClassic_Functions`、2026-10-12)**: I2C0(`I2C_Bus.hpp`、CardKB2と共有。`begin()`はここで1回)のアドレス0x52。
+  - 見つける: 未接続の間は500msごとに`[F0 55]`→`[FB 00]`(暗号化しない初期化。純正もクローン品も)→`[00]`(変換の開始)を書き、ACKがあれば接続。
+  - 読む: 10msごとに6バイト読み、すぐ次の`[00]`を書く(書いてから読むまでの待ちを1回ずらして吸収する。止まらない)。標準の形式の4・5バイト目がボタン(0=押している)、
+    左スティック(0〜63、つながって最初に読めた値が中心)を±12以上傾けたら十字キーとしても押す。全部0xFF(初期化が外れた)・全部押している、は読めていない扱いで初期化し直す。
+    3回続けて読めなければ外れた扱い(全部離す)。クラシックコントローラーPro・ファミコン/スーファミのミニの付属コントローラーも同じ形式。
+  - `PadFunctions::SetDevice(buttons, connected)`へ渡し、PadはUSBシリアルの入力とORで重ねる(`Source::WiiClassic`が優先して見える)。`main.cpp`は`PadFunctions::Update()`の前に読む。
+  - 1回の読み出しは100kHzで約0.7ms(CardKB2が400kHzに耐えるか分からないのでバスは100kHzのまま)。
+  - PC/ホストテストの`pc/compat/Wire.h`は`PicoPcWire::devices`(アドレス→書き込み/読み出しを答える偽物)と`Wire.write()`を足した。
+  - 検証: `wii_classic_test`(run.sh の input。15ボタンの位置・同時押し・スティック・読めない値・呼びかけの間隔・初期化の書き方・Padへ届く・USBシリアルと重なる・抜き差し)。
+    **実物・実機では未確認**(3.3Vのプルアップ・純正/クローン品の初期化の違い・変換の待ちが10msで足りるか)。
+- 次: PCビルドにSDLのキーボード/ゲームパッドを直接つなぐのも手軽な追加候補。
 
 ### 物理キーボード (`src/functions/KeyInput_Functions` / `KeyInput_Dispatch.cpp`) (2026-10-01)
 
@@ -2274,11 +2303,35 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - **プロトコルはM5Unit-KEYBOARD(`UnitCardKB2`)の実装から**: アドレス0x5F(初代CardKBと同じ)、1バイト読むと押したキーのASCIIが1回(0=押していない)。
   Shift/Sym/Fnは反映済みで届く。リピートは本体側(300ms後から50ms)。**I2CモードではFn+D/Z/X/Cのカーソルキーが出ない**(本体の仕様)。
   初代の0xB4〜0xB7はカーソルキーとして読むが、CardKB2では来ない。UARTモード(Fn+Sym+2)のままだと何も返らず、未接続扱い。
-- 配線はI2C0のGP0(SDA)/GP1(SCL)。`Wire`のピンと`begin()`はここで行う(**Wiiクラシックのドライバを足すときは同じバスなので`begin()`を共通へ移すこと**)。
+- 配線はI2C0のGP0(SDA)/GP1(SCL)。`Wire`のピンと`begin()`は`functions/I2C_Bus.hpp`(Wiiクラシックのドライバと共通、2026-10-12に移した)。
 - 検出: 未接続の間は1秒ごとに0x5F へ呼びかけ(ACKで接続)、接続中は10msごとに読み、読み出しが3回続けて失敗したら外れた扱い。
 - PC/ホストテストは`pc/compat/Wire.h`(`PicoPcWire`で「I2Cの先に居るもの」を表す。既定は誰も居ない)。`script/host_test/stubs/Wire.h`はそれを取り込む。
 - 検証: `cardkb_test`(run.sh)とPCビルドの起動(未接続で静か)。**実機・実物のCardKB2は未確認**
   (3.3V系のバスへ5Vのプルアップが乗らないか・`Wire.setSDA/setSCL`の名前・UARTモード出荷品が無いか)。
+
+### USBドライブ(USBマスストレージ) (`src/functions/UsbDrive_Functions` / `storage/Msc_Sector_Bridge.hpp` / `UsbDriveScene`) (2026-10-12)
+
+ランチャの「USBドライブ」(アイコンはSDカード)。開くとSDカードがPCのドライブとして見え、SDの抜き差しをせずにLuaアプリ・曲・ROMを行き来できる。
+
+- **切り替え式**: SDを2者が同時に書くとFATが壊れるので、貸し出している間はpico-osはSDに触らない。`Start()`: WAVを止める→`LogFunctions::Suspend()`(log.txtを書き出して閉じる。
+  その間のログはシリアルだけ)→`OSData::SD_usable=false`→USBへマスストレージの口を足す。`Stop()`: 口を外す→溜めた書き込みを書いて`syncDevice()`→
+  **`PICO_SD::Remount()`(`SD.end()`→`Setup()`。PCが変えたFAT・フォルダの中身を読み直す)**→`LogFunctions::Resume()`→`LuaAppScanner::Scan()`+`PruneMissing()`
+  (PCで足した/消したLuaアプリをランチャへ反映)。SDを使う処理は`SD_usable`を見て止まる決まりなので、他の画面・サービスは「SDが無い」扱いになる。
+  **`SD_usable`を見ずにSDへ書く処理を足すと、貸し出し中にFATを壊す**ので、新しい常駐の処理は必ず見ること。
+- **USBシリアルは止めない**: arduino-picoのUSBは口を後から足せる(`USB.registerInterface`。`libraries/FatFSUSB`と同じ作り)ので、CDC(ログ・`pad_serial.py`)と同時に使える
+  複合デバイスになる。口を足す/外すときにUSBがつなぎ直しになりシリアルが一瞬切れる(`pad_serial.py`は1秒ごとに開き直す)。`#include <tusb-msc.h>`でPlatformIOが
+  MSCのクラスドライバ(`libraries/tusb-msc`)を拾う。TinyUSBのコールバック(`tud_msc_*_cb`)は`UsbDrive_Functions.cpp`の実機の側にある(`FatFSUSB`は使わない=同じ名前の
+  コールバックが重なるので、**FatFSUSBをincludeしないこと**)。
+- **SDとの間(`MscSectorBridge`、ヘッダだけ・ホストテストできる)**: TinyUSBはREAD10/WRITE10を64バイト(`CFG_TUD_MSC_EP_BUFSIZE`)ずつに分けて呼ぶので、直近の1セクタを持つ
+  (読み: SDを読むのは1セクタ1回。書き: 頭から書き始めたら読まずに溜めて最後に1回、途中から/隙間があれば先にSDから読んで混ぜる。別のセクタへ移る前・`write10_complete`・取り出しで書く)。
+  RAM 1KB。SDの読み書きはUSBの処理(arduino-picoがタイマーの割り込みで回す`tud_task`)の中で同期に行う(FatFSUSBと同じ)。
+- 状態: Waiting(口は出したがPCがまだ読みに来ない)/Mounted(読み書きがあった)/Ejected(PCで取り出し=START STOP UNIT。以後`test_unit_ready`は「媒体なし」)。
+  画面はPCが使っている(Mounted)間に「終了」を押すと確認を出す。画面を離れる(電源メニューの再起動も)と必ず`Stop()`。貸し出し中は`KeepAwake()`・`keepForeground()`。
+- **PC/Webビルド**は本物のUSBが無いので口を出さず、状態だけ真似る(`PICOOS_USB_DRIVE_HOST=1`でMounted)。SDを止めてマウントし直す流れは実機と同じに通る
+  (`pc/compat/SdFat.h`に`end()`と`card()`(`SdCard`、大きさだけ)を足した)。
+- 検証: `msc_bridge_test`(run.sh の core。RAMディスク)、PCビルドの`--tap`/`--shot`(待機→Mounted→確認→終了→`SD Setup`とLuaアプリの走査し直し、`PICOOS_VERIFY_LCD=1`で食い違い0)、
+  実機ファームのビルド(`pio run`。`tud_msc_*_cb`と`mscd_*`がリンクされることを`nm`で確認)。**実機では未確認**(PCからドライブとして見えるか・速さ・
+  Windows/macOSの取り出し・つなぎ直しでシリアルが戻るか・`SD.end()`→`begin()`でマウントし直せるか)。
 
 ### テキストエディタ (`TextEditorScene` / `widgets/TextView`) (2026-09-29)
 

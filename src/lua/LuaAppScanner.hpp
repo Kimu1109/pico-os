@@ -66,4 +66,8 @@ namespace LuaAppScanner {
 
     // app_dir_path のアプリを登録簿から外す(登録されていなければ何もせずfalse)
     bool Unregister(const char* app_dir_path);
+
+    // /lua/apps/ の下のアプリのうち、main.lua が無くなったものを登録簿から外す(外した数)。
+    // USBドライブでPCからアプリを消した後に Scan() と合わせて呼ぶ
+    int PruneMissing();
 }

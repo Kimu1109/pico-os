@@ -178,10 +178,13 @@ struct FakeSink : public GbAudioSink {
     int begins = 0, ends = 0, frames = 0;
     uint8_t active = 0;
     std::vector<W> writes;
-    void begin() override { begins++; writes.clear(); }
-    void write(uint32_t c, uint8_t r, uint8_t v) override { writes.push_back({c, r, v}); }
-    void endFrame() override { frames++; }
-    void end() override { ends++; }
+    // GbAudioLink の決まり: begin/end の区切りはフレームの境目にだけ置ける(書き込みの後は endFrame が先)
+    bool open = false;
+    int misplaced = 0;
+    void begin() override { if(open) misplaced++; begins++; writes.clear(); open = false; }
+    void write(uint32_t c, uint8_t r, uint8_t v) override { writes.push_back({c, r, v}); open = true; }
+    void endFrame() override { frames++; open = false; }
+    void end() override { if(open) misplaced++; ends++; open = false; }
     uint8_t activeChannels() override { return active; }
 };
 
@@ -295,7 +298,7 @@ static void testPad(){
     GameBoyPad pad(0, top, SCREEN_WIDTH);
 
     int rom_calls = 0, back_calls = 0;
-    pad.setOnRom([&](){ rom_calls++; });
+    pad.setOnMenu([&](){ rom_calls++; });
     pad.setOnBack([&](){ back_calls++; });
 
     auto touch = [&](int x, int y){ OSData::touchX = x; OSData::touchY = top + y; };
@@ -351,8 +354,122 @@ static void testPad(){
     pad.renderForce(); // スタブのframeへ描いて落ちないこと
 }
 
+// 途中保存(ステートセーブ)。カートリッジRAMの数を数え続けるROMで、保存した時点へ戻ることを見る
+static void testState(){
+    //   LD A,0x0A / LD (0x0000),A   … RAMを有効にする
+    //   LD HL,0xA000
+    // loop:
+    //   INC (HL) / JR loop
+    const std::vector<uint8_t> code = {
+        0x3E, 0x0A, 0xEA, 0x00, 0x00,
+        0x21, 0x00, 0xA0,
+        0x34, 0x18, 0xFD,
+    };
+    HostSd::files["/gb/st.gb"] = MakeRom(0x03, 0x02, code);
+    HostSd::files.erase("/gb/st.sav");
+    HostSd::files.erase("/gb/states/st.st0");
+    HostSd::files.erase("/gb/states/st.st1");
+
+    GbEmu emu;
+    check(emu.saveState(GbEmu::kManualSlot) == GbEmu::StateError::NotLoaded, "読み込む前は保存できない");
+    check(emu.load("/gb/st.gb") == GbEmu::LoadError::None, "数えるROMを読める");
+    check(!emu.hasState(GbEmu::kManualSlot), "最初は状態が無い");
+    check(emu.loadState(GbEmu::kManualSlot) == GbEmu::StateError::NotFound, "無い状態は読めない");
+
+    FixedString<PICO_PATH_LEN> path;
+    check(emu.statePath(GbEmu::kManualSlot, path) && strcmp(path.c_str(), "/gb/states/st.st1") == 0, "手動の枠は .st1");
+    check(emu.statePath(GbEmu::kAutoSlot, path) && strcmp(path.c_str(), "/gb/states/st.st0") == 0, "自動の枠は .st0");
+
+    RunFrames(emu, 3);
+    check(emu.saveState(GbEmu::kManualSlot) == GbEmu::StateError::None, "途中保存できる");
+    check(emu.hasState(GbEmu::kManualSlot), "保存すると状態がある");
+    check(HostSd::files.count("/gb/states/st.st1.part") == 0, "一時ファイルは残らない");
+    emu.writeSave();
+    const uint8_t at_save = (uint8_t)HostSd::files["/gb/st.sav"][0];
+
+    RunFrames(emu, 5);
+    emu.writeSave();
+    const uint8_t later = (uint8_t)HostSd::files["/gb/st.sav"][0];
+    check(later != at_save, "進めると数が変わる");
+
+    check(emu.loadState(GbEmu::kManualSlot) == GbEmu::StateError::None, "途中から再開できる");
+    check(emu.hasUnsavedData(), "読み戻したセーブ領域は未保存扱い");
+    emu.writeSave();
+    eq_int((uint8_t)HostSd::files["/gb/st.sav"][0], at_save, "保存した時点の数へ戻る");
+    int first = -1, last = -1;
+    check(emu.takeChangedRows(first, last) && first == 0 && last == GbEmu::kHeight - 1, "読み戻すと全体を描き直す");
+    RunFrames(emu, 1);
+    check(!emu.crashed(), "読み戻した後も動く");
+    emu.writeSave();
+    check((uint8_t)HostSd::files["/gb/st.sav"][0] != at_save, "読み戻した続きから数え続ける");
+
+    // 壊れたファイル: 中身を1バイト変えるとチェックサムで断り、今の状態は変わらない
+    emu.writeSave();
+    const uint8_t before_bad = (uint8_t)HostSd::files["/gb/st.sav"][0];
+    std::string good = HostSd::files["/gb/states/st.st1"];
+    std::string bad = good;
+    bad[bad.size() / 2] ^= 0x55;
+    HostSd::files["/gb/states/st.st1"] = bad;
+    check(emu.loadState(GbEmu::kManualSlot) == GbEmu::StateError::BadFormat, "壊れた状態は断る");
+    check(!emu.crashed(), "断っても止まらない");
+    emu.writeSave();
+    eq_int((uint8_t)HostSd::files["/gb/st.sav"][0], before_bad, "断ったときは今の状態のまま");
+    HostSd::files["/gb/states/st.st1"] = good.substr(0, good.size() - 10);
+    check(emu.loadState(GbEmu::kManualSlot) == GbEmu::StateError::BadFormat, "短いファイルは断る");
+    HostSd::files["/gb/states/st.st1"] = good;
+
+    // 別のROMの状態は読まない(同じ大きさのセーブ領域でも)
+    std::string other = MakeRom(0x03, 0x02, kIdle);
+    memcpy(&other[0x134], "OTHERROM", 8);
+    uint8_t x = 0;
+    for(int i = 0x134; i <= 0x14C; i++) x = (uint8_t)(x - (uint8_t)other[i] - 1);
+    other[0x14D] = (char)x;
+    HostSd::files["/gb/other.gb"] = other;
+    HostSd::files["/gb/states/other.st1"] = good;
+    HostSd::files.erase("/gb/other.sav");
+    {
+        GbEmu emu2;
+        check(emu2.load("/gb/other.gb") == GbEmu::LoadError::None, "別のROMを読める");
+        check(emu2.loadState(GbEmu::kManualSlot) == GbEmu::StateError::OtherRom, "別のROMの状態は断る");
+    }
+
+    // 書き込みが落ち着いたら.savを書き出す
+    emu.unload();
+    HostSd::files.erase("/gb/st.sav");
+    check(emu.load("/gb/st.gb") == GbEmu::LoadError::None, "数えるROMを読み直す");
+    RunFrames(emu, 1);                       // カートリッジRAMへ書く
+    check(!emu.flushSaveIfIdle(1000), "書いた直後は書き出さない");
+    check(!emu.flushSaveIfIdle(1000 + GbEmu::kSaveIdleMs - 1), "落ち着くまでは書き出さない");
+    check(emu.flushSaveIfIdle(1000 + GbEmu::kSaveIdleMs), "落ち着いたら書き出す");
+    check(HostSd::files.count("/gb/st.sav") == 1, ".savができる");
+    RunFrames(emu, 1);
+    check(!emu.flushSaveIfIdle(1000 + GbEmu::kSaveIdleMs * 2), "また書いた直後は書き出さない");
+    check(!emu.flushSaveIfIdle(1000 + GbEmu::kSaveIdleMs * 3), "前の書き出しから間が無ければ書き出さない");
+    check(emu.flushSaveIfIdle(1000 + GbEmu::kSaveIdleMs + GbEmu::kSaveMinIntervalMs), "間が空けば書き出す");
+
+    // 音: 読み込んだ直後(フレームを1つも走らせていない=起動時の書き込みが区切られていない)に
+    // 状態を読み戻しても、閉じても、区切りをフレームの途中に置かない(置くと2コア目が回り続けた)
+    {
+        FakeSink sink;
+        GbEmu e2;
+        e2.setAudioSink(&sink);
+        check(e2.load("/gb/st.gb") == GbEmu::LoadError::None, "音付きで読める");
+        check(sink.open, "起動時の書き込みはまだ区切られていない");
+        check(e2.loadState(GbEmu::kManualSlot) == GbEmu::StateError::None, "フレーム前に読み戻せる");
+        eq_int(sink.misplaced, 0, "読み戻しで区切りをフレームの途中に置かない");
+        check(sink.begins == 2 && sink.ends == 1, "音源を作り直す(end→begin)");
+        RunFrames(e2, 2);
+        e2.unload();
+        e2.setAudioSink(&sink);
+        check(e2.load("/gb/st.gb") == GbEmu::LoadError::None, "もう一度読める");
+        e2.unload();
+        eq_int(sink.misplaced, 0, "フレーム前に閉じても区切りをフレームの途中に置かない");
+    }
+}
+
 int main(){
     testLoadErrors();
+    testState();
     testSaveAndJoypad();
     testCrash();
     testSound();

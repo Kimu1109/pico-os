@@ -76,6 +76,25 @@ void GameBoyView::drawMessage(const Rect& g){
     OSData::frame->print(this->message.c_str());
 }
 
+void GameBoyView::setBanner(const char* text){
+    FixedString<PICO_STR_L> next(text ? text : "");
+    if(strcmp(next.c_str(), this->banner.c_str()) == 0) return;
+    this->banner = next;
+    const Rect g = this->getScreenRect();
+    this->markdirty({ g.x, g.y, g.w, (int16_t)kBannerH });
+}
+
+void GameBoyView::drawBanner(const Rect& g){
+    if(this->banner.empty()) return;
+    OSData::frame->fillRect(g.x, g.y, g.w, kBannerH, PICO_BLACK);
+    FontFn::SetSmall();
+    OSData::frame->setTextColor(PICO_WHITE);
+    const int tw = OSData::frame->textWidth(this->banner.c_str());
+    const int th = OSData::frame->fontHeight();
+    OSData::frame->setCursor(g.x + (g.w - tw) / 2, g.y + (kBannerH - th) / 2);
+    OSData::frame->print(this->banner.c_str());
+}
+
 void GameBoyView::render(){
     if(!this->visible) return;
 
@@ -136,4 +155,7 @@ void GameBoyView::render(){
             b = (ax & 1) ? (uint8_t)((b & 0xF0) | c) : (uint8_t)((b & 0x0F) | (c << 4));
         }
     }
+
+    //上端の1行はゲームの画面の上に重ねる(fillRect/printは今のクリップに従う)
+    if(area.y < g.y + kBannerH) this->drawBanner(g);
 }

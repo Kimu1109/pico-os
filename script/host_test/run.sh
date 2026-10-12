@@ -72,6 +72,10 @@
 #   edit_history_test … テキストエディタの元に戻すの記録(util/Edit_History.hpp)とクリップボード(Clipboard_Functions)。
 #                   乱数の編集を1件ずつ戻す・溢れ・打鍵のまとめ・ひとまとまり・保存した時点、\rの除去と4KiBでの切り方
 #   cardkb_test   … CardKB2(I2Cのキーボード)の入力元。変換・未接続で静か・検出・打鍵・抜き差し
+#   msc_bridge_test … USBドライブ(マスストレージ)の64バイトずつの読み書き ⇔ SDの512バイトのセクタ。
+#                   RAMディスクで、読むのは1セクタ1回・頭からの書き込みは溜めて1回・途中からは混ぜる・誤り
+#   wii_classic_test … Wiiクラシックコントローラー(I2C)。6バイトの読み取り・左スティック・初期化の手順・
+#                   検出と抜き差し・PadFunctionsへ渡りUSBシリアルとORで重なること
 #   pad_test      … 外部コントローラーの窓口(PadFunctions)。USBシリアルの行("pad XXXX")の読み取り、
 #                   押した/離したのはそのフレームだけ、行が途切れたら外れて押しっぱなしにならないこと、
 #                   Game Boyのボタンへの対応
@@ -276,6 +280,14 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 
 echo "===== scene_test ====="
 run_or_die "$OUT/scene_test"
+
+# --- USBドライブのセクタの橋渡し ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/msc_bridge_test.cpp" \
+    -o "$OUT/msc_bridge_test"
+
+echo "===== msc_bridge_test ====="
+run_or_die "$OUT/msc_bridge_test"
 
 # --- Labelのレイアウト ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -773,6 +785,18 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== cardkb_test ====="
 run_or_die "$OUT/cardkb_test"
+
+# --- Wiiクラシックコントローラー(I2C) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/wii_classic_test.cpp" \
+    "$ROOT/src/functions/WiiClassic_Functions.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    -o "$OUT/wii_classic_test"
+
+echo ""
+echo "===== wii_classic_test ====="
+run_or_die "$OUT/wii_classic_test"
 
 # --- 元に戻すの記録・クリップボード ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

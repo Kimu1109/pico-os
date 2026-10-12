@@ -157,3 +157,19 @@ int LuaAppScanner::Scan() {
     }
     return found;
 }
+
+int LuaAppScanner::PruneMissing() {
+    if (!OSData::SD_usable) return 0;
+    const size_t prefix_len = strlen(PICO_Path::DIR::LUA_APPS);
+    int removed = 0;
+    for (int i = AppFunctions::Count() - 1; i >= 0; i--) {
+        const AppEntry* e = AppFunctions::Get(i);
+        if (!e || e->create != &MakeLuaAppScene) continue;
+        const char* arg = e->arg.c_str();
+        if (strncmp(arg, PICO_Path::DIR::LUA_APPS, prefix_len) != 0) continue;
+        if (OSData::SD.exists(arg)) continue;
+        LOG_SYS_MSG("LuaAppScanner: %s が無くなったので登録簿から外します", arg);
+        if (AppFunctions::Unregister(i)) removed++;
+    }
+    return removed;
+}

@@ -53,6 +53,11 @@ namespace LogFunctions{
     // 強制フラッシュ(電源断前や明示的な保存タイミングで使用)
     void Flush();
 
+    // log.txt を書き出して閉じる/開き直す(USBドライブの間はSDに触らないため)。
+    // 閉じている間のログはシリアルへだけ出る
+    void Suspend();
+    void Resume();
+
     #define LOG_SYS_OK(...)         LogFunctions::Log(LogFunctions::LogType::SYS_OK, __VA_ARGS__)
     #define LOG_SYS_WARN(...)       LogFunctions::Log(LogFunctions::LogType::SYS_WARN, __VA_ARGS__)
     #define LOG_SYS_FAIL(...)       LogFunctions::Log(LogFunctions::LogType::SYS_FAIL, __VA_ARGS__)

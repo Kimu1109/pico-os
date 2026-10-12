@@ -12,7 +12,7 @@ static constexpr int kDpadX = 4;
 static constexpr int kDpadY = 3;
 static constexpr int kDpadSize = 78;
 static constexpr int kDpadCell = kDpadSize / 3;
-// 中央の列(SELECT / START / ROM・戻る)
+// 中央の列(SELECT / START / MENU・戻る)
 static constexpr int kMidX0 = 84;
 static constexpr int kMidX1 = 158;
 static constexpr int kRowSelectY = 4;
@@ -55,7 +55,7 @@ GameBoyPad::Area GameBoyPad::areaAt(int px, int py, uint8_t& buttons) const {
     if(px < kMidX1){
         if(py < kRowStartY - 2){ buttons = GbEmu::Select; return Area::Game; }
         if(py < kRowCmdY - 2){   buttons = GbEmu::Start;  return Area::Game; }
-        return (px < kMidX0 + kCmdW + kCmdGap / 2) ? Area::Rom : Area::Back;
+        return (px < kMidX0 + kCmdW + kCmdGap / 2) ? Area::Menu : Area::Back;
     }
 
     // A / B: 近いほう
@@ -78,10 +78,10 @@ void GameBoyPad::track(){
     const Area area = this->areaAt(OSData::touchX - g.x, OSData::touchY - g.y, buttons);
 
     if(this->press_area == Area::Game){
-        // ゲームのボタンは指を滑らせると切り替わる。ROM/戻るの上へ滑らせたら何も押さない
+        // ゲームのボタンは指を滑らせると切り替わる。MENU/戻るの上へ滑らせたら何も押さない
         this->setPressed((area == Area::Game) ? buttons : 0, false);
     }else{
-        // ROM/戻るは押し始めたものの上にいる間だけ「押している」
+        // MENU/戻るは押し始めたものの上にいる間だけ「押している」
         this->setPressed(0, area == this->press_area);
     }
 }
@@ -108,7 +108,7 @@ void GameBoyPad::causeOnPressEnd(){
     this->setPressed(0, false);
 
     if(!fire) return;
-    if(started == Area::Rom && this->on_rom) this->on_rom();
+    if(started == Area::Menu && this->on_menu) this->on_menu();
     if(started == Area::Back && this->on_back) this->on_back();
 }
 
@@ -145,10 +145,18 @@ void GameBoyPad::drawPill(int x, int y, int w, int h, const char* label, bool on
     if(on) OSData::frame->fillRect(x, y, w, h, PICO_BLACK);
     else   OSData::frame->drawRect(x, y, w, h, PICO_DARKGREY);
     OSData::frame->setTextColor(on ? PICO_WHITE : PICO_BLACK);
-    const int tw = OSData::frame->textWidth(label);
+    int tw = OSData::frame->textWidth(label);
+    const bool small = tw > w - 4;
+    if(small){
+        //収まらない名前("MENU")だけ小さい英数字のフォントにする(電卓のキーと同じ)
+        OSData::frame->setFont(&fonts::Font0);
+        OSData::frame->setTextSize(1);
+        tw = OSData::frame->textWidth(label);
+    }
     const int th = OSData::frame->fontHeight();
     OSData::frame->setCursor(x + (w - tw) / 2, y + (h - th) / 2);
     OSData::frame->print(label);
+    if(small) FontFn::SetSmall();
 }
 
 void GameBoyPad::render(){
@@ -167,9 +175,9 @@ void GameBoyPad::render(){
     this->drawPill(g.x + kMidX0, g.y + kRowSelectY, mw, kRowH, "SELECT", (this->pressed & GbEmu::Select) != 0);
     this->drawPill(g.x + kMidX0, g.y + kRowStartY,  mw, kRowH, "START",  (this->pressed & GbEmu::Start) != 0);
 
-    const bool rom_on = this->over_command && this->press_area == Area::Rom;
+    const bool menu_on = this->over_command && this->press_area == Area::Menu;
     const bool back_on = this->over_command && this->press_area == Area::Back;
-    this->drawPill(g.x + kMidX0, g.y + kRowCmdY, kCmdW, kCmdH, "ROM", rom_on);
+    this->drawPill(g.x + kMidX0, g.y + kRowCmdY, kCmdW, kCmdH, "MENU", menu_on);
     this->drawPill(g.x + kMidX0 + kCmdW + kCmdGap, g.y + kRowCmdY, kCmdW, kCmdH, "戻る", back_on);
 
     this->drawRoundButton(g.x + kBx, g.y + kBy, "B", (this->pressed & GbEmu::B) != 0);

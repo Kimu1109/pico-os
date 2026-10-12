@@ -20,6 +20,9 @@ namespace PICO_Path {
         // Game Boyエミュ(GameBoyScene)がROM選択の最初に開く場所。
         // セーブ(.sav)はROMと同じ場所に「拡張子だけ変えた名前」で置く
         constexpr const char* GB_ROMS = "/gb/";
+        // Game Boyエミュの途中保存(ステートセーブ)の置き場所。"<ROMの名前>.st0"(自動)/".st1"(手動)。
+        // ROMの隣に置くとROMの選択に並んで紛らわしいので分けた(同じ名前の別ROMは見出しの照合で断る)
+        constexpr const char* GB_STATES = "/gb/states/";
         // 曲(pico-os MML、MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下と1段下のフォルダ(=プレイリスト)の *.mml / *.wav を並べる
         constexpr const char* MUSIC = "/music/";
     };

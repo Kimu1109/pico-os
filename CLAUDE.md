@@ -1052,6 +1052,43 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   「追加」ボタンから実際に名前入力ダイアログが開くことまで確認済み(実際の保存はホストテストの
   SdFatスタブ経由で確認。暗号化ロジック自体は上記の往復検証で担保されている)。
 
+### 端末ごとの鍵(OTP) (`src/functions/DeviceKey_Functions` / `src/util/Device_Key.hpp`) (2026-10-12)
+
+上の「Wi-Fi認証情報の暗号化保存」の固定鍵`kKey`はリポジトリで公開されていて、SDだけを盗まれても読めた。
+**本体のOTPに端末ごとの32バイトの鍵を焼き、以後の暗号化をその鍵で行う**。Secure Bootは使わない(利用者の判断。2026-10-12)。
+
+- **守れるのは「SDカードだけを盗まれた/見られた」場合だけ**。Secure Bootもデバッグ禁止も焼いていないので、本体を持ち去られて
+  BOOTSELで別のファームを書かれればOTPは読める。**鍵はその本体にしか無いので、基板が壊れると端末の鍵で暗号化したもの
+  (Wi-Fiのパスワード・SSHの鍵・トークン等)は二度と読めない**(確認のダイアログで、元の値をPCに控えるよう伝える)。
+- **作り方**: 設定アプリの「画面」タブの7行目「端末の鍵」[作成] → 確認 → `DeviceKeyFunctions::Provision()`。
+  鍵は本体の中でハードウェア乱数から作り(`SecretAead::Random()`)、外へは出さない。作った後は[更新]で`MigrateSecrets()`をやり直せる。
+- **OTPの置き場所**: ページ60(行0xF00〜。3〜61が利用者向け)に2枠(各20行、ECCつき16bit/行): 目印`0x4B44`・版1・鍵16行・確かめの値2行
+  (鍵のBLAKE2bの先頭4バイト)。**鍵→確かめの値→版→目印の順に書く**ので、途中で失敗した枠は「目印が無いのに中身がある」壊れた枠になり、
+  次の枠に作れる。両方壊れたら`State::Broken`(固定鍵のまま)。書く前に枠が全部0か(生の値)を確かめ、書いた後に読み戻して比べる。
+  実機の読み書きはboot ROMの`rom_func_otp_access()`(`pico/bootrom.h`)。ページのロック(PAGEn_LOCK・SW_LOCK)は使っていない。
+- **鍵の使い方**: 端末の鍵そのものは持ち続けず、`Derive()`がBLAKE2b(鍵付き)で用途ごとの鍵を作って`DeviceKey::Install()`する:
+  `cipher_key`(`Secret_Cipher.hpp`の`"enc3:"`。中身の形はenc1:と同じで鍵だけ違う)/ `aead_key`(Luaの暗号のversion 3=パスワード無し)/
+  `pin_key`(画面ロックの`v2:`)。**`Device_Key.hpp`はヘッダだけ**なので、ホストテストは`DeviceKey::Install()`を直接呼べば「鍵がある」状態を作れる
+  (呼ばなければ今までどおり固定鍵)。`main.cpp`は`CrashDumpFunctions::InstallHandlers()`の直後(暗号化された設定を読むものより前)に`Setup()`。
+- **読み方**: enc1:/Luaのversion 1/PINのv1は鍵を作った後も読める。enc3:/version 3/v2は端末の鍵が無いと読めない
+  (`Decrypt()`はfalse、Luaは`NoDeviceKey`)。**PINのv2が確かめられないとき(別の本体のSD・OTPを読めない)はロックしない**
+  (ロックすると二度と解けないため)。PINの変更はそのまま新しいPINへ、解除はそのまま外す。
+- **暗号化し直し(`MigrateSecrets()`)**: wifi.cfg(ssidN/passN)・network.cfg(旧形式のwifi-ssid/password)・chat.cfgのtoken・todoist.cfgのtoken・
+  calendar/sources.cfg(全部の名前)の値のうち、平文かenc1:のもの(`PICO_Secret::NeedsUpgrade()`)を1行ずつ書き直す
+  (コメント・他のキー・行の順は残す。暗号化した値を読み戻して比べ、読む側の値の上限を超えるものは書き直さない。一時ファイル→差し替え)。
+  SSHの鍵は`SshUtil::LoadPrivateKey()`がenc1:を読んだとき端末の鍵で書き直す。**PINはハッシュしか持たないので、次に正しく打ったときに
+  v2へ書き直す**(`LockFunctions::UpgradeRecord`)。Luaの`store.json`等は次に保存したとき。後から古いSDの値を戻しても、Wi-Fi・Todoist・SSHは
+  読んだときに書き直す(それ以外は[更新])。
+- **PC/Webビルド**: OTPはファイル(`DeviceKeyFunctions::pc_otp_file`、既定はSDのルートの隣の`otp_emu.bin`=`pc/otp_emu.bin`、
+  `PICOOS_OTP_FILE`で変えられる。`.gitignore`済み)で真似る(ページ60だけ、書いた行は書き直せない)。ファイルを消すと「鍵の無い本体」を試せる。
+  ホストテストはメモリの中だけ(`Test::ResetOtp/PokeRaw/FailWriteAfter`)。
+- RAM: 静的に約84バイト(用途ごとの鍵)。作る/暗号化し直す間だけ約2KB(行のバッファ)を`malloc`。起動時間はOTPを数十行読むだけ。
+- 検証: `devkey_test`(run.sh の input。作る前は固定鍵・作るとSDの全部の種類がenc3:になり中身は同じ・コメントが残る・2回目は何もしない・
+  Luaのversion 1/3・PINのv1→v2・起動し直しても読める・鍵が無いと読めずPINでロックしない・書きかけの枠は次の枠・両方壊れたらBroken)、
+  PCビルドの`--tap`/`--shot`(設定アプリで作成→「4項目を暗号化し直しました」→再起動で読めてWi-Fiに接続、`otp_emu.bin`を消すと読めない)、
+  実機ファームのビルド(maxgerhardtのplatformで`pio run`。`rom_func_otp_access`がリンクされる)。**実機では未確認**(OTPへの書き込み・
+  ページ60が本当に空いているか・ECCの読み出し)。
+
 ### 保存済みのWi-Fiネットワーク・Wi-FiのON/OFF・自動再接続 (`src/net/Wifi_Profiles` / `NetworkFunctions` / `SettingsScene`) (2026-10-01)
 
 SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/`wifi-password`)のを、複数保存して

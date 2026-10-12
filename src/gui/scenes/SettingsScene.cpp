@@ -8,6 +8,7 @@
 #include "functions/Sound_Functions.hpp"
 #include "functions/Display_Functions.hpp"
 #include "functions/Lock_Functions.hpp"
+#include "functions/DeviceKey_Functions.hpp"
 #include "gui/scenes/TouchCalibScene.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "OS_Data.hpp"
@@ -953,6 +954,14 @@ void SettingsScene::onEnter(){
     addToTab(Tab::Display, this->lock_label);
     this->refreshLockLabel();
 
+    // ---- 端末の鍵(OTP)。画面タブの7行目(画面ロックと同じく本体の守り) ----
+    this->devkey_button = this->makeEditButton(rowY(6));
+    this->devkey_button->setOnPressEnd([this](){ this->openDeviceKeyDialog(); });
+    addToTab(Tab::Display, this->devkey_button);
+    this->devkey_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(6) + 2), label_w, "");
+    addToTab(Tab::Display, this->devkey_label);
+    this->refreshDeviceKeyLabel();
+
     // ---- 電池駆動中に音量を絞る(sound.cfgの battery-cap)。音タブの3行目(+下に説明) ----
     // 音質のドロップダウンの一覧がこの行へ重なるので、それより先にAdd()する
     this->battery_cap_checkbox = new Checkbox(left, rowY(2), "電池で音量を絞る");
@@ -1045,6 +1054,53 @@ void SettingsScene::openLockDialog(){
         if(sel == 0) LockFunctions::BeginChange();
         else if(has && sel == 1) LockFunctions::BeginRemove();
         else if(has && sel == 2) LockFunctions::LockNow();
+    });
+}
+
+void SettingsScene::refreshDeviceKeyLabel(){
+    if(!this->devkey_label) return;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "端末の鍵: %s", DeviceKeyFunctions::StateText());
+    this->devkey_label->setText(buf);
+    if(this->devkey_button){
+        const DeviceKeyFunctions::State st = DeviceKeyFunctions::GetState();
+        this->devkey_button->setText(st == DeviceKeyFunctions::State::None ? "作成" :
+                                     st == DeviceKeyFunctions::State::Ready ? "更新" : "詳細");
+    }
+}
+
+void SettingsScene::openDeviceKeyDialog(){
+    using DeviceKeyFunctions::State;
+    const State st = DeviceKeyFunctions::GetState();
+    if(st == State::Broken){
+        this->showMessageLater("OTPの端末の鍵が壊れていて、作り直す空きもありません。固定鍵のまま暗号化します");
+        return;
+    }
+    const bool ready = (st == State::Ready);
+    auto* dialog = ready
+        ? new MsgDialog("SDの暗号化された設定のうち、まだ端末の鍵で暗号化していないものを暗号化し直します", "やめる", "実行")
+        : new MsgDialog("端末の鍵を作り、本体のOTPへ書き込みます。\n"
+                        "・OTPは消せません(取り消せません)\n"
+                        "・Wi-Fi・SSHの鍵・トークン・カレンダーのURL・PINを、この本体の鍵で暗号化し直します\n"
+                        "・基板が壊れると、それらは二度と読めません。元の値はPCに控えてください\n"
+                        "・守れるのはSDだけを盗まれた場合です(本体ごとは守れません)", "やめる", "作る");
+    dialog->setVisibleIcon(false);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog, ready](bool ok){
+        WidgetFunctions::DestroyLater(dialog);
+        if(!ok) return;
+        char msg[PICO_STR_256B];
+        if(ready){
+            const DeviceKeyFunctions::MigrateResult r = DeviceKeyFunctions::MigrateSecrets();
+            snprintf(msg, sizeof(msg), "%d項目を暗号化し直しました%s%s", r.upgraded,
+                     r.failed ? "(失敗あり。ログを見てください)" : "",
+                     r.pin_pending ? "。PINは次に解除したとき" : "");
+        }else{
+            DeviceKeyFunctions::Provision(msg, sizeof(msg));
+        }
+        this->refreshDeviceKeyLabel();
+        this->showMessageLater(msg);   //ダイアログからダイアログは1フレーム空ける
     });
 }
 

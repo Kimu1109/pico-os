@@ -10,6 +10,7 @@ namespace KeyInputFunctions { struct Event; }
 //
 // - PINは数字4〜8桁。/sys/lock.cfg の pin = v1:<塩 16進32桁>:<ハッシュ 16進64桁>
 //   (BLAKE2b-256。鍵はファームの固定鍵 PICO_Secret::kKey、塩は端末で作った乱数)。PINそのものは保存しない
+//   端末の鍵(OTP。DeviceKeyFunctions)があれば v2:(鍵は端末の鍵)で作る。v1の記録は正しいPINを打ったときに v2 へ書き直す
 // - 守れるのは「本体を手に取った人が画面を操作する」ことだけ。SDカードを抜いて読む・ファームを吸い出す
 //   相手には無力(SDの中身は暗号化していない。暗号化してあるのはWi-Fi/SSH/チャット等の認証情報だけ)。
 //   4桁のPINはハッシュから総当たりで分かる
@@ -67,13 +68,18 @@ namespace LockFunctions {
 
     // ---- 中身(テスト用に出してある) ----
     bool IsValidPin(const char* pin);
-    // PINと塩からハッシュ(32バイト)
-    void HashPin(const char* pin, const uint8_t salt[16], uint8_t out[32]);
-    // lock.cfgの値 "v1:<塩>:<ハッシュ>" を作る/読む
+    // PINと塩からハッシュ(32バイト)。deviceなら端末の鍵(OTP)、偽ならファームの固定鍵で
+    void HashPin(const char* pin, const uint8_t salt[16], uint8_t out[32], bool device = false);
+    // lock.cfgの値 "v1:<塩>:<ハッシュ>"(固定鍵)/"v2:..."(端末の鍵。あればこちらで作る)を作る/読む
     bool FormatRecord(const char* pin, const uint8_t salt[16], char* out, size_t cap);
     bool VerifyRecord(const char* record, const char* pin);
     // 保存せずにPINを入れ替える(テスト用。空ならPIN無し)
     void SetRecordForTest(const char* record);
+    const char* CurrentRecordForTest();
+    // 端末の鍵で作った記録(v2)か
+    bool RecordUsesDeviceKey(const char* record);
+    // PINがあり、まだ固定鍵の記録(v1)か(端末の鍵を作った後、次に正しく打ったときに v2 へ書き直す)
+    bool RecordNeedsDeviceKeyUpgrade();
 
     // アラーム/タイマーが鳴っているか・止める(main.cppが差す。ロックをそれらへ依存させないため)
     inline bool (*ringing_query)() = nullptr;

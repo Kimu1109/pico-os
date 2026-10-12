@@ -85,6 +85,7 @@ bool WifiProfiles::Load(){
     // 番号ごとに一旦置き、最後に番号順で詰める(抜けた番号があっても読めるように)
     Profile slots[kMaxProfiles];
     bool has_ssid[kMaxProfiles] = {};
+    bool upgrade = false;   //平文、または端末の鍵があるのに固定鍵(enc1:)の値があった
 
     const bool opened = PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_WIFI_CFG,
         [&](const char* key, const char* value){
@@ -95,6 +96,7 @@ bool WifiProfiles::Load(){
                 return;
             }
             char purpose[24];
+            if((KeyNumber(key, "ssid") || KeyNumber(key, "pass")) && PICO_Secret::NeedsUpgrade(value)) upgrade = true;
             if(const int n = KeyNumber(key, "ssid")){
                 char buf[PICO_STR_M];
                 PurposeFor(purpose, sizeof(purpose), true, n);
@@ -124,6 +126,8 @@ bool WifiProfiles::Load(){
         profiles[profile_count].password.assign(slots[i].password.c_str());
         profile_count++;
     }
+    //今の鍵で暗号化し直す(端末の鍵を作った後に、古いSDの wifi.cfg を戻した場合など)
+    if(upgrade) Save();
     return true;
 }
 

@@ -33,12 +33,20 @@ void UsbDriveScene::onEnter(){
     WidgetFunctions::Add(this->count_label);
     y += 40;
 
+    this->diag_label = new Label<PICO_STR_LL>(content.x + MARGIN, y, "");
+    this->diag_label->setFontSize(FontFn::Small);
+    this->diag_label->setMaxWidth(content.w - MARGIN * 2);
+    this->diag_label->setMaxHeight(36);
+    this->diag_label->setTextColor(PICO_NAVY);
+    this->diag_label->setDisableAutoTextDecoration(true);
+    WidgetFunctions::Add(this->diag_label);
+    y += 40;
+
     this->help_label = new Label<PICO_STR_LL>(content.x + MARGIN, y,
-        "SDカードがPCのドライブとして見えます。PCで「取り出し」をしてから終了してください。"
-        "その間pico-osはSDを使えません");
+        "PCで「取り出し」をしてから終了してください。その間pico-osはSDを使えません");
     this->help_label->setFontSize(FontFn::Small);
     this->help_label->setMaxWidth(content.w - MARGIN * 2);
-    this->help_label->setMaxHeight(100);
+    this->help_label->setMaxHeight(60);
     this->help_label->setTextColor(PICO_DARKGREY);
     WidgetFunctions::Add(this->help_label);
 
@@ -61,6 +69,7 @@ void UsbDriveScene::onExit(){
     this->state_label = nullptr;
     this->help_label = nullptr;
     this->count_label = nullptr;
+    this->diag_label = nullptr;
     this->exit_button = nullptr;
 }
 
@@ -125,6 +134,23 @@ void UsbDriveScene::refresh(bool force){
             buf[0] = '\0';
         }
         this->count_label->setText(buf);
+    }
+
+    //診断: USBの列挙 → マスストレージの口 → SCSIのコマンド、のどこまで進んだか
+    if(UsbDriveFunctions::IsActive()){
+        const UsbDriveFunctions::Diag d = UsbDriveFunctions::GetDiag();
+        const char* link = !d.usb_connected ? "USB:線なし"
+                         : !d.usb_mounted   ? "USB:列挙待ち"
+                         : !d.msc_open      ? "USB:列挙済/口まだ"
+                         :                    "USB:口OK";
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu 他%lu(%02X) 誤%lu",
+            link, d.ep_in, d.ep_out,
+            (unsigned long)d.inquiry, (unsigned long)d.ready, (unsigned long)d.capacity,
+            (unsigned long)d.other, d.last_other, (unsigned long)d.errors);
+        this->diag_label->setText(buf);
+    }else{
+        this->diag_label->setText("");
     }
 }
 

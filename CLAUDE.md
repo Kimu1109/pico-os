@@ -2325,6 +2325,15 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - **SDとの間(`MscSectorBridge`、ヘッダだけ・ホストテストできる)**: TinyUSBはREAD10/WRITE10を64バイト(`CFG_TUD_MSC_EP_BUFSIZE`)ずつに分けて呼ぶので、直近の1セクタを持つ
   (読み: SDを読むのは1セクタ1回。書き: 頭から書き始めたら読まずに溜めて最後に1回、途中から/隙間があれば先にSDから読んで混ぜる。別のセクタへ移る前・`write10_complete`・取り出しで書く)。
   RAM 1KB。SDの読み書きはUSBの処理(arduino-picoがタイマーの割り込みで回す`tud_task`)の中で同期に行う(FatFSUSBと同じ)。
+- **診断の行(2026-10-12、実機のLinux Mintで「PCに認識されない」報告を受けて)**: 画面の青い2行が「USB:線なし(バスリセットが来ていない)/列挙待ち(構成が選ばれていない)/
+  列挙済/口まだ(MSCのコマンドが1つも来ない)/口OK」と割り当てたエンドポイント、INQUIRY/TEST UNIT READY/READ CAPACITY/それ以外(最後の番号)/読み書きの失敗の数を出す
+  (`UsbDriveFunctions::GetDiag()`。`tud_connected()`/`tud_mounted()`とコールバックの数)。どこで止まったかでPC側(`dmesg`)と突き合わせる。
+  **arduino-picoの`unregisterEndpointIn/Out`は引数の扱いが逆**(Inは`1<<ep`、Outは`1<<(ep-0x80)`で戻す)ので、素直に渡すと何も戻らず、始める/終わるのたびにエンドポイントが減って
+  いき、尽きると口が壊れる。`UsbDetach()`は`ep_out|0x80`/`ep_in&0x7F`で渡す(FatFSUSBも同じ呼び方で同じ漏れがある)。尽きたら`Start()`が`UsbFailed`。
+- **速さ(2026-10-12、実機のLinux Mintで dd が66KB/秒・ls が固まったように見えた)**: arduino-picoは`tud_task()`を1msごとのタイマーでしか回さず、
+  MSCは64バイトの受け渡しごとに`tud_task()`が要るので 64B/ms で頭打ちだった。TinyUSBの弱いシンボル`tud_event_hook_cb`(USBの出来事が積まれたとき、
+  割り込みの中で呼ばれる)を上書きし、貸し出している間は`irq_set_pending(USB.usbTaskIRQ)`ですぐに続きを回す。実機(Linux Mint)で読み込み・ファイルを開くのが速くなったことを確認した(2026-10-12。ddの数値は未計測)。
+  Linuxで手で`mount`すると日本語のファイル名が`????`になるのは`iocharset`の既定のせい(`-o utf8`で直る。ファイルマネージャーの自動マウントはutf8)。
 - 状態: Waiting(口は出したがPCがまだ読みに来ない)/Mounted(読み書きがあった)/Ejected(PCで取り出し=START STOP UNIT。以後`test_unit_ready`は「媒体なし」)。
   画面はPCが使っている(Mounted)間に「終了」を押すと確認を出す。画面を離れる(電源メニューの再起動も)と必ず`Stop()`。貸し出し中は`KeepAwake()`・`keepForeground()`。
 - **PC/Webビルド**は本物のUSBが無いので口を出さず、状態だけ真似る(`PICOOS_USB_DRIVE_HOST=1`でMounted)。SDを止めてマウントし直す流れは実機と同じに通る

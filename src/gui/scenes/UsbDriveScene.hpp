@@ -33,6 +33,7 @@ class UsbDriveScene : public Scene {
         Label<PICO_STR_L>* state_label = nullptr;
         Label<PICO_STR_LL>* help_label = nullptr;
         Label<PICO_STR_L>* count_label = nullptr;
+        Label<PICO_STR_LL>* diag_label = nullptr;   // USBの診断(PCに見えないとき、どこで止まったか)
         Button* exit_button = nullptr;
 
         bool start_pending = false;

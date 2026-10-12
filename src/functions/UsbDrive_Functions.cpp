@@ -68,6 +68,7 @@ namespace {
 #include <class/msc/msc.h>
 #include <device/usbd.h>
 #include <tusb.h>
+#include <hardware/irq.h>
 
 namespace {
     uint8_t usb_itf = 0, ep_in = 0, ep_out = 0;
@@ -108,6 +109,15 @@ namespace {
         d.ep_in = ep_in;
         d.ep_out = ep_out;
     }
+}
+
+// arduino-pico は tud_task() を1msごとのタイマーでしか回さない。マスストレージは64バイトの受け渡しごとに
+// tud_task() が要るので、そのままだと 64バイト/ms ≒ 64KB/秒で頭打ちになる(実機の Linux で dd が 66KB/秒、
+// ls が固まったように見えた)。USBの出来事が積まれたら(USBの割り込みの中で呼ばれる)すぐに USB の処理の
+// 割り込みを起こして、次の1msを待たずに続きを進める。貸し出している間だけ。
+// TinyUSB(libpico の usbd.c)の弱いシンボルを上書きする。
+extern "C" void tud_event_hook_cb(uint8_t, uint32_t, bool){
+    if(active) irq_set_pending(USB.usbTaskIRQ);
 }
 
 extern "C" uint8_t tud_msc_get_maxlun_cb(void){ return 1; }

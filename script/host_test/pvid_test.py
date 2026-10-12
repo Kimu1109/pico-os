@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """script/generate_pvid.py の検証(VIDEO_FORMAT.md の .pvid)。
 
-    python3 script/host_test/pvid_test.py
+    python3 script/host_test/pvid_test.py [pvid_dumpの実行ファイル]
+
+pvid_dump(script/host_test/pvid_dump.cpp。本体の読み取り PvidPlayer)を渡すと、
+同じファイルを本体の側でも解いて、全部のフレームの絵が一致することも確かめる(run.sh が渡す)。
 
 タイルの符号化の往復・書いたファイルを読み直した絵が「本体の画面に出ているはずの絵」と一致すること・
 目録・差分の判定・色選び、ffmpeg があれば動画からの変換まで確かめる。numpy が無ければ飛ばす。
@@ -208,6 +211,91 @@ if shutil.which("ffmpeg") and shutil.which("ffprobe"):
         print("  ffmpeg で試しの動画を作れなかったので、変換は飛ばします")
 else:
     print("  ffmpeg が無いので、動画からの変換は飛ばします")
+
+# ---------------------------------------------------------------- 本体の読み取り(PvidPlayer)と突き合わせる
+DUMP = sys.argv[1] if len(sys.argv) > 1 else None
+
+
+def screen_hash(img):
+    packed = ((img[:, 0::2] << 4) | img[:, 1::2]).astype(np.uint8).tobytes()
+    h = 1469598103934665603
+    for b in packed:
+        h = ((h ^ b) * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return "%016x" % h
+
+
+def dump(path, *args):
+    out = subprocess.run([DUMP, path] + [str(a) for a in args], capture_output=True, text=True)
+    if out.returncode != 0:
+        print(out.stderr)
+    return out.returncode, out.stdout.split("\n")
+
+
+if DUMP:
+    # 差分・キーフレーム・3つのタイルの形が全部入るように作る
+    Wd, Hd = 64, 48
+    seq = []
+    f = rng.integers(16, size=(Hd, Wd)).astype(np.uint8)
+    f[:16, :32] = 5                                    # 1色のタイル
+    f[16:32, :16] = np.where(rng.random((16, 16)) < 0.5, 3, 9)   # 2色のタイル
+    for n in range(23):
+        g = f.copy()
+        g[(n * 3) % Hd, (n * 5) % Wd] = (n * 7) % 16
+        g[20:28, (n * 2) % 56:(n * 2) % 56 + 8] = 14
+        if n == 12:
+            g = rng.integers(16, size=(Hd, Wd)).astype(np.uint8)
+        seq.append(g)
+        f = g
+    enc, v, recons, _ = encode_frames(seq, Wd, Hd, threshold=3, key_every=7)
+    path = os.path.join(TMP, "t.pvid")
+    rc, lines = dump(path)
+    check(rc == 0, "pvid_dump が落ちない")
+    check(lines[0] == "open %d %d 15 1 %d %d" % (Wd, Hd, len(seq), len(seq) * 1000 // 15),
+          "本体: 見出し (%s)" % lines[0])
+    frames_out = [l.split() for l in lines if l.startswith("frame ")]
+    check(len(frames_out) == len(seq), "本体: フレーム数 (%d)" % len(frames_out))
+    for n, (img, _, _) in enumerate(v.frames()):
+        if n < len(frames_out):
+            check(frames_out[n][2] == screen_hash(img), "本体: %d フレーム目の絵が同じ" % n)
+    check("end" in lines, "本体: 最後まで読んで止まる")
+    # 前へも後ろへも飛べる(キーフレームから解き直す/そのまま進める)
+    order = [15, 3, 22, 21, 0, 8, 8]
+    rc, lines = dump(path, "seek", *order)
+    seek_out = [l.split() for l in lines if l.startswith("frame ")]
+    imgs = [img for img, _, _ in v.frames()]
+    check(len(seek_out) == len(order), "本体: 飛んだ回数")
+    for want, got in zip(order, seek_out):
+        check(int(got[1]) == want and got[2] == screen_hash(imgs[want]), "本体: %d へ飛んだ絵" % want)
+
+    # 壊れたファイル: 落ちずに error で止まる(ASan で範囲外の読み書きも見る)
+    good = open(path, "rb").read()
+    corrupt = []
+    for i in range(300):
+        b = bytearray(good)
+        for _ in range(1 + i % 4):
+            pos = int(rng.integers(0, len(b)))
+            b[pos] = int(rng.integers(0, 256))
+        corrupt.append(bytes(b))
+    corrupt.append(good[:len(good) // 2])                       # 途中で切れた
+    corrupt.append(good[:gp.HEADER_SIZE])                       # 見出しだけ
+    b = bytearray(good)
+    struct.pack_into("<H", b, 8, 248)                           # 8の倍数でない…ではなく大きすぎる幅
+    corrupt.append(bytes(b))
+    crashed = 0
+    for i, data in enumerate(corrupt):
+        p2 = os.path.join(TMP, "c.pvid")
+        open(p2, "wb").write(data)
+        rc, lines = dump(p2)
+        if rc != 0:
+            crashed += 1
+        rc, lines = dump(p2, "seek", 20, 2, 13)
+        if rc != 0:
+            crashed += 1
+    check(crashed == 0, "本体: 壊れたファイルで落ちない (%d 回落ちた)" % crashed)
+    rc, lines = dump(os.path.join(TMP, "c.pvid"))
+    check(lines[0].startswith("error open"), "本体: 大きすぎる幅は開かない")
+else:
+    print("  pvid_dump が渡されていないので、本体の読み取りとの突き合わせは飛ばします")
 
 shutil.rmtree(TMP, ignore_errors=True)
 print("  %d 件中 %d 件失敗" % (checks, failures))

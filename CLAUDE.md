@@ -80,6 +80,7 @@ src/
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索 / Iso_Flow: 流れの場(フローフィールド))。Luaの`pico.iso`。下記「ブロック」「2.5Dエンジンのタワーディフェンス向けの道具」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
+  video/                     動画(.pvid)の読み取り(Pvid_Player)。下記「動画(.pvid)」参照
   sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
@@ -95,7 +96,7 @@ script/                       開発補助スクリプト(アイコン生成/SKK
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   build_app_repo.py           アプリストアの配布物を作る(鍵の生成・署名・目録だけの署名(sign)とCIでの組み立て(assemble)・確認。標準ライブラリのみ。APP_REPO.md)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
-  generate_pvid.py            動画を.pvid(16色+8x8タイルの差分)へ変換する(ffmpeg + numpy。VIDEO_FORMAT.md)
+  generate_pvid.py            動画を.pvid(16色+8x8タイルの差分)へ変換する(ffmpeg + numpy。VIDEO_FORMAT.md)。再生は動画アプリ(VideoScene)
   pad_serial.py               PCのキーボードを外部コントローラーにする(USBシリアルへ送る。tkinter + pyserial)
   generate_tetris_blocks.py   テトリスのミノの絵(blocks.pimg)とアイコンを作る(標準ライブラリのみ)
   generate_reversi_tiles.py / generate_minesweeper_tiles.py / generate_breakout_blocks.py   リバーシ・マインスイーパー・ブロック崩しの盤面のタイル画像(tiles*.pimg)を作る(標準ライブラリのみ)。下記「ボードゲーム4本のpico.gameへの移行」
@@ -2159,20 +2160,24 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
   リピート全曲で頭へ戻る、フォーカスで一覧→再生中の欄、`music.cfg`の保存。**実機では未確認**。
 - 未: 曲の並べ替え・プレイリストの編集(フォルダを母艦で作る前提)、アプリを閉じても鳴り続ける再生(OS側へ上げる必要がある)、アルバムアートやタグ。
 
-### 動画(.pvid)(`script/generate_pvid.py` / `VIDEO_FORMAT.md`)(2026-10-12)
+### 動画(.pvid)(`script/generate_pvid.py` / `VIDEO_FORMAT.md` / `src/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
 
 MJPEGは本体でJPEGを解く・フルカラーを16色へ落とす処理が重く、画面(`OSData::frame`)が4bppなので利点も活きないため、
 **PCで「動画ごとの16色(0=黒・15=白は固定、残り14色はL\*a\*b\*のk-means)+画面に固定したBayer 8x8のディザ+8x8タイルの差分」へ
 変換しておく形**にした。本体の仕事は変わったタイル(1色/2色/そのままの3つの形、可逆)を4bppのバッファへ写すだけ。
 ディザを誤差拡散にしないのは、1画素の変化が広がって差分が効かなくなるため。
-- **今あるのは変換スクリプトとその検証まで。本体の再生は無い**(予定は`VIDEO_FORMAT.md`「本体での再生」: `GameBoyView`型の部品、
-  再生中だけパレットを差し替え、`.wav`の`WavPositionMs()`を時計にする)。
 - 差分の判定は「本体の画面に出ているはずの絵」との色の違い(隣の色1つぶんを1とした値)の合計が`--threshold`(既定4)を超えるか、
   1画素でも3を超えるタイル。後者が無いと小さな点が動いても次のキーフレームまで残った(testsrc2で見えた)。
-- 目安: testsrc2の240x128・15fpsで1フレーム平均約2.8KB・約42KB/秒。**実写・アニメでの値と実機の速さは未確認**。
-- `numpy`を使う(他の変換スクリプトは標準ライブラリだけだが、動画の色落としを素のPythonで回すと遅すぎるため)。`script/requirements.txt`へ足した。
-- 検証: `pvid_test`(run.sh の media。タイルの往復・読み直した絵が本体の画面と一致・目録から読み始められる・差分の判定・色選び・
-  壊れたファイル・ffmpegがあればlavfiの動画から変換)。
+- 変換は`numpy`を使う(他の変換スクリプトは標準ライブラリだけだが、動画の色落としを素のPythonで回すと遅すぎるため)。`script/requirements.txt`へ足した。
+- **再生(ランチャの「動画」、ファイルアプリで`.pvid`を2回タップ)**: `PvidPlayer`(描画に依存しない。絵1枚=幅/2×高さと目録を開いている間だけ`malloc`、
+  フレームは512バイトずつ読みながら解く)→`VideoView`(`GameBoyView`と同じく合成の中で4bppのバッファへ`memcpy`、変わったタイルの行の帯だけdirty)。
+  **再生中はパレットの16色全部を動画のものにする**(`PICO_GFX::COLORS`を直接。`SetPaletteColor()`は0/15を変えられないため。ダークテーマでも動画の黒白のまま)。
+  閉じる/画面を離れると`ResetPalette()`。時計は同じ名前の`.wav`の`WavPositionMs()`(無い/先に終わったら`millis()`)、1回に4枚まで解き、8枚より遅れたら`seekTo()`で飛ぶ。
+  詳細は`VIDEO_FORMAT.md`「本体での再生」。アイコンは自作の`custom_icons/video.svg`(`IconID::Video`、末尾)。動画の置き場は`/video/`(`PICO_Path::DIR::VIDEO`)。
+- 目安: testsrc2の240x128・15fpsで1フレーム平均約2.8KB・約42KB/秒。**実写・アニメでの値と実機の速さ(SDの読み込み・解く時間・液晶への転送)は未確認**。
+- 検証: `pvid_test`(run.sh の media。変換のタイルの往復・目録・差分の判定・色選び・壊れたファイル・ffmpegがあればlavfiの動画から変換、
+  **`pvid_dump`(本物の`PvidPlayer`をASan付きで)と全部のフレーム・前後へのシークの絵が一致すること、ランダムに壊した300個のファイルで落ちないこと**)、
+  PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 選ぶ→再生(音あり/なし)・一時停止・+10秒で最後へ・「最初から」・戻るとパレットが戻る。
 
 ### 外部コントローラー (`src/functions/Pad_Functions` / `script/pad_serial.py`) (2026-09-25)
 

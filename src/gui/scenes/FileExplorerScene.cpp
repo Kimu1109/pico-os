@@ -4,6 +4,7 @@
 #include "functions/CrashDump_Functions.hpp"
 #include "functions/Log_Functions.hpp"
 #include "gui/scenes/FileViewerScene.hpp"
+#include "gui/scenes/VideoScene.hpp"
 #include "gui/scenes/FileSearchScene.hpp"
 #include "gui/scenes/StorageScene.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
@@ -67,8 +68,13 @@ void FileExplorerScene::onEnter(){
         content.x, (int16_t)body_y,
         content.w, (int16_t)(content.y + content.h - body_y)
     );
-    //ファイルを2回タップしたら中身を見る(ファイルビューワーを上へ積む。「戻る」でここへ戻る)
+    //ファイルを2回タップしたら中身を見る(ファイルビューワーを上へ積む。「戻る」でここへ戻る)。動画(.pvid)は動画アプリで
     this->explorer->setOnFileTap([](const char* path){
+        const char* dot = strrchr(path, '.');
+        if(dot && strcasecmp(dot, ".pvid") == 0){
+            SceneFunctions::Push(new VideoScene(path));
+            return;
+        }
         SceneFunctions::Push(new FileViewerScene(path));
     });
     WidgetFunctions::Add(this->explorer);

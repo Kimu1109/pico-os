@@ -13,6 +13,7 @@
 #include "gui/scenes/TodoScene.hpp"
 #include "gui/scenes/GameBoyScene.hpp"
 #include "gui/scenes/MusicScene.hpp"
+#include "gui/scenes/VideoScene.hpp"
 #include "gui/scenes/SshScene.hpp"
 #include "gui/scenes/NotificationScene.hpp"
 #include "gui/scenes/StoreScene.hpp"
@@ -57,6 +58,7 @@ void AppFunctions::Setup(){
     Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
     //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(MUSIC_FORMAT.md)
     Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
+    Register("動画", IconID::Video, &MakeScene<VideoScene>);
     //SSHクライアント(端末)。接続先は起動後に端末の中で聞く。鍵は /sys/ssh/id_ed25519(SshScene参照)
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)

@@ -25,6 +25,8 @@ namespace PICO_Path {
         constexpr const char* GB_STATES = "/gb/states/";
         // 曲(pico-os MML、MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下と1段下のフォルダ(=プレイリスト)の *.mml / *.wav を並べる
         constexpr const char* MUSIC = "/music/";
+        // 動画(.pvid、VIDEO_FORMAT.md)の置き場所。動画アプリ(VideoScene)のファイル選択の最初の場所。音は同じ名前の .wav
+        constexpr const char* VIDEO = "/video/";
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";

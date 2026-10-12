@@ -49,6 +49,21 @@
 #include <functions/Touch_Functions_PC.hpp>  // PicoOsTouchScript
 #include <PicoPcClock.h>                     // 設定アプリで合わせた時計のずれ
 #include "functions/CrashDump_Functions.hpp" // 再起動(電源メニュー)の差し込み口
+#include "functions/DeviceKey_Functions.hpp" // OTPの端末の鍵(PCではファイルで真似る)
+
+//OTP(端末の鍵)を真似るファイル。PICOOS_OTP_FILE、無ければSDのルートの隣の otp_emu.bin
+//(SDの中に置くと「SDだけを盗まれても読めない」を試せないので外に置く。Webは仮想FSなので読み直しで消える)
+static void configureOtpFile()
+{
+    static std::string path;
+    if (const char* env = getenv("PICOOS_OTP_FILE")) {
+        path = env;
+    } else {
+        const char* root = getenv("PICOOS_SD_ROOT");
+        path = std::string(root ? root : PICOOS_SD_ROOT_DEFAULT) + "/../otp_emu.bin";
+    }
+    DeviceKeyFunctions::pc_otp_file = path.c_str();
+}
 #if !defined(__EMSCRIPTEN__)
     #include <unistd.h>                      // execv(再起動)
     #include <signal.h>                      // pthread_sigmask(再起動)
@@ -234,6 +249,7 @@ namespace {
         } joiner{core1};
 
         setupPcKeyboard();
+        configureOtpFile();
         setup();
 
         int frame = 0;
@@ -594,6 +610,7 @@ int main(int, char**)
     //ページで文字を打つ(shell.htmlの「文字入力」)ときに画面が回らないよう、左Ctrl+左Altの時だけにする
     lgfx::Panel_sdl::setShortcutKeymod((SDL_Keymod)(KMOD_LCTRL | KMOD_LALT));
 
+    configureOtpFile();
     setup();
     setup1();
 

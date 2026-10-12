@@ -10,6 +10,7 @@
 #include "storage/SD_Path.hpp"
 #include "util/Secret_Cipher.hpp"
 #include "util/Secret_Aead.hpp"
+#include "util/Device_Key.hpp"
 #include "monocypher.h"
 #include "OS_Data.hpp"
 
@@ -21,7 +22,8 @@ namespace {
     using LockFunctions::Step;
     using LockFunctions::Check;
 
-    constexpr const char* kPrefix = "v1:";
+    constexpr const char* kPrefix = "v1:";         // ファームの固定鍵でハッシュした記録
+    constexpr const char* kPrefixDevice = "v2:";   // 端末の鍵(OTP)でハッシュした記録
     constexpr size_t kRecordLen = 3 + 32 + 1 + 64;   // "v1:" + 塩 + ":" + ハッシュ
 
     char record[kRecordLen + 1] = "";
@@ -101,12 +103,25 @@ namespace {
         }
     }
 
+    // 固定鍵の記録(v1)を、端末の鍵があれば同じPINのまま v2 へ書き直す(PINはハッシュしか持たないので、
+    // 正しいPINを打ってもらえたときにしかできない)
+    void UpgradeRecord(const char* pin){
+        if(!DeviceKey::available || LockFunctions::RecordUsesDeviceKey(record)) return;
+        uint8_t salt[16];
+        SecretAead::Random(salt, sizeof(salt));
+        char rec[kRecordLen + 1];
+        if(!LockFunctions::FormatRecord(pin, salt, rec, sizeof(rec))) return;
+        snprintf(record, sizeof(record), "%s", rec);
+        if(SaveRecord(rec)) LOG_SYS_MSG("画面ロックのPINを端末の鍵で保存し直しました");
+    }
+
     Check VerifyThrottled(const char* pin, unsigned long now){
         if(LockFunctions::WaitRemainingMs(now) > 0) return Check::Wait;
         if(LockFunctions::VerifyRecord(record, pin)){
             fails = 0;
             wait_len = 0;
             wait_until = 0;
+            UpgradeRecord(pin);
             return Check::Ok;
         }
         Failed(now);
@@ -131,15 +146,21 @@ bool LockFunctions::IsValidPin(const char* pin){
     return true;
 }
 
-void LockFunctions::HashPin(const char* pin, const uint8_t salt[16], uint8_t out[32]){
-    uint8_t key[16];
-    for(int i = 0; i < 4; i++){
-        const uint32_t k = PICO_Secret::kKey[i];
-        key[i * 4 + 0] = (uint8_t)k; key[i * 4 + 1] = (uint8_t)(k >> 8);
-        key[i * 4 + 2] = (uint8_t)(k >> 16); key[i * 4 + 3] = (uint8_t)(k >> 24);
+void LockFunctions::HashPin(const char* pin, const uint8_t salt[16], uint8_t out[32], bool device){
+    uint8_t key[32];
+    size_t key_len = 16;
+    if(device){
+        memcpy(key, DeviceKey::pin_key, 32);
+        key_len = 32;
+    }else{
+        for(int i = 0; i < 4; i++){
+            const uint32_t k = PICO_Secret::kKey[i];
+            key[i * 4 + 0] = (uint8_t)k; key[i * 4 + 1] = (uint8_t)(k >> 8);
+            key[i * 4 + 2] = (uint8_t)(k >> 16); key[i * 4 + 3] = (uint8_t)(k >> 24);
+        }
     }
     crypto_blake2b_ctx ctx;
-    crypto_blake2b_keyed_init(&ctx, 32, key, sizeof(key));
+    crypto_blake2b_keyed_init(&ctx, 32, key, key_len);
     static const uint8_t tag[] = "pico-os-pin";
     crypto_blake2b_update(&ctx, tag, sizeof(tag));
     crypto_blake2b_update(&ctx, salt, 16);
@@ -150,22 +171,26 @@ void LockFunctions::HashPin(const char* pin, const uint8_t salt[16], uint8_t out
 
 bool LockFunctions::FormatRecord(const char* pin, const uint8_t salt[16], char* out, size_t cap){
     if(!IsValidPin(pin) || cap < kRecordLen + 1) return false;
+    const bool device = DeviceKey::available;
     uint8_t h[32];
-    HashPin(pin, salt, h);
+    HashPin(pin, salt, h, device);
     char sh[33], hh[65];
     ToHex(salt, 16, sh);
     ToHex(h, 32, hh);
-    snprintf(out, cap, "%s%s:%s", kPrefix, sh, hh);
+    snprintf(out, cap, "%s%s:%s", device ? kPrefixDevice : kPrefix, sh, hh);
     crypto_wipe(h, sizeof(h));
     return true;
 }
 
 bool LockFunctions::VerifyRecord(const char* rec, const char* pin){
-    if(!rec || strlen(rec) != kRecordLen || strncmp(rec, kPrefix, 3) != 0 || rec[35] != ':') return false;
+    if(!rec || strlen(rec) != kRecordLen || rec[35] != ':') return false;
+    const bool device = strncmp(rec, kPrefixDevice, 3) == 0;
+    if(!device && strncmp(rec, kPrefix, 3) != 0) return false;
+    if(device && !DeviceKey::available) return false;   //別の本体で決めたPIN(この本体では確かめられない)
     if(!IsValidPin(pin)) return false;
     uint8_t salt[16], want[32], got[32];
     if(!FromHex(rec + 3, salt, 16) || !FromHex(rec + 36, want, 32)) return false;
-    HashPin(pin, salt, got);
+    HashPin(pin, salt, got, device);
     const bool ok = crypto_verify32(got, want) == 0;
     crypto_wipe(got, sizeof(got));
     return ok;
@@ -177,6 +202,9 @@ void LockFunctions::SetRecordForTest(const char* rec){
 }
 
 bool LockFunctions::HasPin(){ return record[0] != '\0'; }
+bool LockFunctions::RecordUsesDeviceKey(const char* rec){ return rec && strncmp(rec, kPrefixDevice, 3) == 0; }
+const char* LockFunctions::CurrentRecordForTest(){ return record; }
+bool LockFunctions::RecordNeedsDeviceKeyUpgrade(){ return HasPin() && !RecordUsesDeviceKey(record); }
 bool LockFunctions::IsLocked(){ return locked; }
 bool LockFunctions::IsShowing(){ return step != Step::None; }
 LockFunctions::Step LockFunctions::CurrentStep(){ return step; }
@@ -191,6 +219,12 @@ unsigned long LockFunctions::WaitRemainingMs(unsigned long now){
 
 void LockFunctions::LockNow(){
     if(!HasPin()) return;
+    //端末の鍵で作ったPINなのに鍵が無い(別の本体のSD・OTPを読めなかった)。確かめようが無いので
+    //ロックすると二度と解けない。ロックしない(SDを持っている相手にはどのみち守れない)
+    if(RecordUsesDeviceKey(record) && !DeviceKey::available){
+        LOG_SYS_WARN("画面ロック: 端末の鍵が無いのでPINを確かめられません。ロックしません");
+        return;
+    }
     locked = true;
     removing = false;
     SetMessage("PINを入力", false);
@@ -200,7 +234,7 @@ void LockFunctions::LockNow(){
 void LockFunctions::BeginChange(){
     if(locked) return;
     removing = false;
-    if(HasPin()){
+    if(HasPin() && !(RecordUsesDeviceKey(record) && !DeviceKey::available)){
         SetMessage("今のPINを入力", false);
         Show(Step::Verify);
     }else{
@@ -211,6 +245,13 @@ void LockFunctions::BeginChange(){
 
 void LockFunctions::BeginRemove(){
     if(locked || !HasPin()) return;
+    if(RecordUsesDeviceKey(record) && !DeviceKey::available){
+        //確かめられないPIN(上のLockNow()と同じ)。そのまま外す
+        record[0] = '\0';
+        SaveRecord("");
+        LOG_SYS_MSG("画面ロックのPINを外しました(端末の鍵が無く確かめられないため)");
+        return;
+    }
     removing = true;
     SetMessage("PINを外すには今のPINを入力", false);
     Show(Step::Verify);
@@ -298,7 +339,7 @@ void LockFunctions::Setup(){
     KeyInputFunctions::intercept = &LockFunctions::HandleKey;
     if(HasPin()){
         LockNow();
-        LOG_SYS_OK("Lock Setup: PINでロックしました");
+        if(locked) LOG_SYS_OK("Lock Setup: PINでロックしました");
     }
 }
 

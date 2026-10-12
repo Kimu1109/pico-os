@@ -100,7 +100,7 @@ class SettingsScene : public Scene {
 
         Pending pending = Pending::None;
         FixedString<PICO_STR_M> pending_wifi_ssid;
-        FixedString<PICO_STR_L> pending_message;
+        FixedString<PICO_STR_256B> pending_message;
 
         void startWifiScan();
         void pollWifiScan();
@@ -142,6 +142,11 @@ class SettingsScene : public Scene {
         Checkbox*          dark_checkbox = nullptr;
         Label<PICO_STR_L>* lock_label    = nullptr;
         Button*            lock_button   = nullptr;
+        // 端末の鍵(OTP。DeviceKeyFunctions)。作る/暗号化し直す
+        Label<PICO_STR_L>* devkey_label  = nullptr;
+        Button*            devkey_button = nullptr;
+        void refreshDeviceKeyLabel();
+        void openDeviceKeyDialog();
 
         // ================= 時刻 =================
         Label<PICO_STR_M>* timezone_title       = nullptr;

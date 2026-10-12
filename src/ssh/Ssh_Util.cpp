@@ -1,6 +1,7 @@
 #include "ssh/Ssh_Util.hpp"
 #include "ssh/Ssh_Sha256.hpp"
 #include "util/Secret_Cipher.hpp"
+#include "util/Device_Key.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>
@@ -223,7 +224,7 @@ namespace {
 
 bool SshUtil::IsEncryptedKeyText(const char* text, size_t len){
     text = SkipSpace(text, len);
-    return len >= 5 && memcmp(text, "enc1:", 5) == 0;
+    return len >= 5 && (memcmp(text, "enc1:", 5) == 0 || memcmp(text, "enc3:", 5) == 0);
 }
 
 bool SshUtil::EncryptKey(const uint8_t secret[64], char* out, size_t outCap){
@@ -243,7 +244,7 @@ bool SshUtil::EncryptKey(const uint8_t secret[64], char* out, size_t outCap){
 
 SshUtil::KeyResult SshUtil::DecryptKey(const char* text, size_t len, uint8_t secret[64], uint8_t pub[32]){
     text = SkipSpace(text, len);
-    if(len < 5 || memcmp(text, "enc1:", 5) != 0) return KeyResult::NotFound;
+    if(!IsEncryptedKeyText(text, len)) return KeyResult::NotFound;
     //1行目だけ(末尾の改行を落とす)
     size_t n = 0;
     while(n < len && text[n] != '\r' && text[n] != '\n') n++;
@@ -328,6 +329,13 @@ SshUtil::KeyResult SshUtil::LoadPrivateKey(const char* path, uint8_t secret[64],
     KeyResult r = KeyResult::Broken;
     if(n > 0 && IsEncryptedKeyText(text, (size_t)n)){
         r = DecryptKey(text, (size_t)n, secret, pub);
+        //固定鍵(enc1:)で暗号化してあり、端末の鍵がある。端末の鍵で書き直す
+        size_t len = (size_t)n;
+        const char* t = SkipSpace(text, len);
+        if(r == KeyResult::Ok && DeviceKey::available && memcmp(t, "enc1:", 5) == 0){
+            const bool ok = RewriteEncrypted(path, secret);
+            if(rewrite) *rewrite = ok ? KeyRewrite::Encrypted : KeyRewrite::Failed;
+        }
     }else if(n > 0){
         r = ParsePrivateKey(text, (size_t)n, secret, pub);
         //平文の鍵だった。次からはSDに平文で残らないよう、暗号化して書き直す

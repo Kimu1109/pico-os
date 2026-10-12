@@ -84,6 +84,8 @@
 #   power_test    … スリープ(PowerFunctions)。操作が無いまま sleep-timeout が過ぎると入り、画面/Wi-Fi/音の
 #                   省電力が掛かること、タッチで起きて起こした指は離すまで画面へ渡さないこと、KeepAwake()・
 #                   音・Wi-Fi接続中は入らないこと
+#   devkey_test   … 端末ごとの鍵(DeviceKeyFunctions、OTPはメモリの中で真似る)。作る前は固定鍵・作るとSDの設定をenc3:へ
+#                   書き直す・起動し直しても読める・鍵が無いとenc3:/Luaのversion 3/PINのv2は読めない・PINのv1→v2・書きかけの枠
 #   lock_test     … 画面ロック(LockFunctions/LockScreen)。PINの記録(塩+BLAKE2b)・決める/変える/外す・スリープでロック・
 #                   打鍵とタッチ・間違えたときの待ち時間・鳴っているアラームを止める・起動時のロック
 #   notification_test … 通知(NotificationFunctions)の中身。予約の種類ごとの発火、置き換え・上限、履歴、
@@ -887,6 +889,31 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/monocypher/src" \
 echo ""
 echo "===== lock_test ====="
 run_or_die "$OUT/lock_test"
+
+# --- 端末ごとの鍵(OTP。DeviceKeyFunctions。OTPはメモリの中で真似る) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/devkey_test.cpp" \
+    "$ROOT/src/functions/DeviceKey_Functions.cpp" \
+    "$ROOT/src/functions/Lock_Functions.cpp" \
+    "$ROOT/src/gui/widgets/systems/LockScreen.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
+    "$ROOT/src/ssh/Ssh_Util.cpp" \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$OUT/lock_monocypher.o" \
+    -o "$OUT/devkey_test"
+
+echo ""
+echo "===== devkey_test ====="
+run_or_die "$OUT/devkey_test"
 fi
 
 

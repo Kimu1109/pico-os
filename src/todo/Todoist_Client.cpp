@@ -109,7 +109,7 @@ bool TodoistClient::loadConfig(){
     const bool opened = PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_TODOIST_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "token") == 0){
-                token_plain = strncmp(value, PICO_Secret::kPrefix, PICO_Secret::kPrefixLen) != 0;
+                token_plain = PICO_Secret::NeedsUpgrade(value);   //平文、または端末の鍵があるのに固定鍵(enc1:)
                 if(!PICO_Secret::Decrypt(kTokenPurpose, value, token, sizeof(token))) token[0] = '\0';
             }else if(strcmp(key, "api") == 0){
                 strncpy(api, value, sizeof(api) - 1);

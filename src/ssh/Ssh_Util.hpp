@@ -32,7 +32,7 @@ namespace SshUtil {
     KeyResult LoadPrivateKey(const char* path, uint8_t secret[64], uint8_t pub[32], KeyRewrite* rewrite = nullptr);
 
     // ---- 鍵ファイルの暗号化(Wi-Fiのパスワードと同じ PICO_Secret。util/Secret_Cipher.hpp) ----
-    // 中身は "enc1:" + 16進の1行。暗号化するのは "pico-ssh-ed25519:" + 秘密鍵64バイトの16進
+    // 中身は "enc1:"(固定鍵)/"enc3:"(端末の鍵) + 16進の1行。暗号化するのは "pico-ssh-ed25519:" + 秘密鍵64バイトの16進
     // (公開鍵は秘密鍵の後半32バイトなので別に持たない)。
     // **守れるのは「SDだけを落とした/見られた」場合だけ**(鍵はファームウェアに焼かれた固定値。
     // Secret_Cipher.hpp の冒頭の注意を参照)。
@@ -40,9 +40,9 @@ namespace SshUtil {
     // 暗号化した1行(終端の'\0'込み。outは kEncryptedKeyCap 以上)
     constexpr size_t kEncryptedKeyCap = 5 + (17 + 128) * 2 + 1;
     bool EncryptKey(const uint8_t secret[64], char* out, size_t outCap);
-    // text が暗号化された鍵ファイルなら読んで Ok、"enc1:" で始まらなければ NotFound(=暗号化されていない)
+    // text が暗号化された鍵ファイルなら読んで Ok、"enc1:"/"enc3:" で始まらなければ NotFound(=暗号化されていない)
     KeyResult DecryptKey(const char* text, size_t len, uint8_t secret[64], uint8_t pub[32]);
-    // 鍵ファイルの中身が暗号化されたものか(先頭の空白を飛ばして "enc1:" で始まるか)
+    // 鍵ファイルの中身が暗号化されたものか(先頭の空白を飛ばして "enc1:"/"enc3:" で始まるか)
     bool IsEncryptedKeyText(const char* text, size_t len);
     // ParsePrivateKey の下請け(Base64を解いた後の "openssh-key-v1" の中身を読む)
     KeyResult ParseDecoded(const uint8_t* raw, int n, uint8_t secret[64], uint8_t pub[32]);

@@ -15,8 +15,10 @@
 // - 鍵はこのリポジトリを見れば誰でも分かる既定値のままなので、「肩越しに
 //   見られた・別人にSDだけ渡した」程度の偶発的な漏洩を防ぐのが目的であり、
 //   本気の攻撃者(ファームウェアの吸い出しを厭わない相手)は防げない。
-//   本格的に守るならRP2350のOTP/Secure Bootでデバイス固有鍵を焼く必要が
-//   あるが、それは別の(実機検証が要る)話としてここでは扱わない。
+//   **2026-10-12: 端末ごとの鍵(RP2350のOTP。DeviceKeyFunctions)を作れば、以後は
+//   その鍵で "enc3:" として書く**(SDだけを盗まれても、リポジトリの固定鍵では読めない)。
+//   作るまでは今までどおり固定鍵の "enc1:"。本体ごと持ち去られた場合はどちらも守れない
+//   (Secure Bootを使っていないので、別のファームを書けばOTPを読める)。
 // - **実運用でリポジトリをforkして使う場合は、下のkKeyを必ず自分だけの
 //   値へ書き換えること。** 既定値のままでは「保護している」という誤った
 //   安心感を生むだけになる。
@@ -45,6 +47,8 @@
 #include <string.h>
 #include <stddef.h>
 
+#include "util/Device_Key.hpp"
+
 namespace PICO_Secret
 {
     // --------------------------------------------------------------------
@@ -60,6 +64,9 @@ namespace PICO_Secret
     constexpr size_t kMaxPlainBytes = 255;
     constexpr const char *kPrefix = "enc1:";
     constexpr size_t kPrefixLen = 5;
+    // 端末ごとの鍵(OTP。util/Device_Key.hpp)で暗号化した値。中身の形はenc1:と同じで、鍵だけが違う。
+    // 端末の鍵があればEncrypt()はこちらで書く。enc1:は読めるが、鍵を作った後は書かない
+    constexpr const char *kPrefixDevice = "enc3:";
 
     // XTEAの1ブロック(64bit=32bit×2)を暗号化する。ストリーム生成専用の下請けで、
     // 単体でのブロック暗号として外から使うことは想定していない。
@@ -88,7 +95,7 @@ namespace PICO_Secret
     }
 
     // data[0..len) を鍵ストリームとXORする(in-place)。対称操作なので暗号化・復号どちらもこれ1つ。
-    inline void XorStream(const char *purpose, uint8_t *data, size_t len)
+    inline void XorStream(const char *purpose, uint8_t *data, size_t len, const uint32_t key[4] = kKey)
     {
         const uint64_t base = Fnv1aHash(purpose);
         const uint32_t base0 = (uint32_t)(base & 0xFFFFFFFFu);
@@ -100,7 +107,7 @@ namespace PICO_Secret
         {
             uint32_t v0 = base0;
             uint32_t v1 = base1 ^ counter;
-            XteaEncryptBlock(v0, v1, kKey);
+            XteaEncryptBlock(v0, v1, key);
 
             uint8_t block[8];
             memcpy(block, &v0, 4);
@@ -129,8 +136,24 @@ namespace PICO_Secret
         return false;
     }
 
+    // 暗号化された値か(enc1: か enc3:)
+    inline bool IsEncrypted(const char *value)
+    {
+        return value && (strncmp(value, kPrefix, kPrefixLen) == 0 ||
+                         strncmp(value, kPrefixDevice, kPrefixLen) == 0);
+    }
+
+    // 今の鍵で暗号化し直すべき値か(平文、または端末の鍵があるのに固定鍵のenc1:)。空は対象外
+    inline bool NeedsUpgrade(const char *value)
+    {
+        if (!value || value[0] == '\0') return false;
+        if (strncmp(value, kPrefixDevice, kPrefixLen) == 0) return false;
+        if (strncmp(value, kPrefix, kPrefixLen) == 0) return DeviceKey::available;
+        return true;
+    }
+
     // --------------------------------------------------------------------
-    // 平文(NUL終端)を暗号化し、"enc1:"+16進文字列(NUL終端)をoutへ書く。
+    // 平文(NUL終端)を暗号化し、"enc1:"(端末の鍵があれば"enc3:")+16進文字列(NUL終端)をoutへ書く。
     // outCapが足りない/平文がkMaxPlainBytesを超える場合はfalseで失敗する
     // (out自体は書き換えない)。
     // --------------------------------------------------------------------
@@ -149,11 +172,12 @@ namespace PICO_Secret
         const size_t needed = kPrefixLen + len * 2 + 1;
         if (outCap < needed) return false;
 
+        const bool device = DeviceKey::available;
         uint8_t buf[kMaxPlainBytes];
         memcpy(buf, plaintext, len);
-        XorStream(purpose, buf, len);
+        XorStream(purpose, buf, len, device ? DeviceKey::cipher_key : kKey);
 
-        memcpy(out, kPrefix, kPrefixLen);
+        memcpy(out, device ? kPrefixDevice : kPrefix, kPrefixLen);
         for (size_t i = 0; i < len; ++i)
         {
             out[kPrefixLen + i * 2]     = HexDigit(buf[i] >> 4);
@@ -165,14 +189,16 @@ namespace PICO_Secret
 
     // --------------------------------------------------------------------
     // Config上のvalueを復号してoutへ書く。
-    // - "enc1:"接頭辞が無ければ「まだ暗号化されていない平文」とみなし、
+    // - "enc1:"は固定鍵、"enc3:"は端末の鍵で解く(端末の鍵が無ければ壊れたデータと同じ扱い)
+    // - 接頭辞が無ければ「まだ暗号化されていない平文」とみなし、
     //   そのままコピーして返す(後方互換。既存のnetwork.cfgを壊さないため)
     // - 接頭辞はあるが16進として不正/長さが奇数/outCap不足の場合は、
     //   壊れたデータとして空文字列を書きfalseを返す
     // --------------------------------------------------------------------
     inline bool Decrypt(const char *purpose, const char *value, char *out, size_t outCap)
     {
-        if (strncmp(value, kPrefix, kPrefixLen) != 0)
+        const bool device = strncmp(value, kPrefixDevice, kPrefixLen) == 0;
+        if (!device && strncmp(value, kPrefix, kPrefixLen) != 0)
         {
             // 後方互換: まだ暗号化されていない平文をそのまま扱う
             const size_t len = strlen(value);
@@ -187,7 +213,7 @@ namespace PICO_Secret
 
         const char *hex = value + kPrefixLen;
         const size_t hexLen = strlen(hex);
-        if (hexLen % 2 != 0 || hexLen / 2 > kMaxPlainBytes)
+        if ((device && !DeviceKey::available) || hexLen % 2 != 0 || hexLen / 2 > kMaxPlainBytes)
         {
             if (outCap > 0) out[0] = '\0';
             return false;
@@ -212,7 +238,7 @@ namespace PICO_Secret
             buf[i] = (uint8_t)((hi << 4) | lo);
         }
 
-        XorStream(purpose, buf, plainLen);
+        XorStream(purpose, buf, plainLen, device ? DeviceKey::cipher_key : kKey);
         memcpy(out, buf, plainLen);
         out[plainLen] = '\0';
         return true;

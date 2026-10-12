@@ -7,6 +7,7 @@
 
 #include "monocypher.h"
 #include "util/Base64.hpp"
+#include "util/Device_Key.hpp"
 #include "util/Secret_Cipher.hpp"
 
 #if !defined(PICOOS_PC)
@@ -21,6 +22,7 @@ const char* SecretAead::ResultToStr(Result r) {
         case Result::NeedPassword: return "パスワードが必要です";
         case Result::TooBig: return "大きすぎます";
         case Result::NoMemory: return "メモリが足りません";
+        case Result::NoDeviceKey: return "この端末の鍵がありません(別の本体で暗号化されたものです)";
     }
     return "?";
 }
@@ -62,8 +64,17 @@ namespace {
     constexpr size_t kMac = 16;
     constexpr size_t kSalt = 16;
 
-    // パスワード無し: 固定鍵とアプリ名から作る
-    void DeviceKey(uint8_t key[32], const char* context) {
+    // パスワード無し(version 3): 端末の鍵(OTP)とアプリ名から作る
+    void OtpContextKey(uint8_t key[32], const char* context) {
+        std::string msg = "pico-lua-aead-v3";
+        msg.push_back('\0');
+        msg += context ? context : "";
+        crypto_blake2b_keyed(key, 32, DeviceKey::aead_key, sizeof(DeviceKey::aead_key),
+                             (const uint8_t*)msg.data(), msg.size());
+    }
+
+    // パスワード無し(version 1): 固定鍵とアプリ名から作る
+    void FixedContextKey(uint8_t key[32], const char* context) {
         std::string msg = "pico-lua-aead-v1";
         msg.push_back('\0');
         for (uint32_t w : PICO_Secret::kKey) {
@@ -104,7 +115,8 @@ SecretAead::Result SecretAead::Encrypt(const uint8_t* plain, size_t n, const cha
     buf.reserve(1 + 3 + kSalt + kNonce + n + kMac);
     uint8_t key[32];
 
-    buf.push_back(use_pw ? kVersionPassword : kVersionDevice);
+    const bool otp = !use_pw && DeviceKey::available;
+    buf.push_back(use_pw ? kVersionPassword : (otp ? kVersionOtp : kVersionDevice));
     if (use_pw) {
         buf.push_back((uint8_t)kArgonPasses);
         buf.push_back((uint8_t)(kArgonBlocks & 0xFF));
@@ -113,8 +125,10 @@ SecretAead::Result SecretAead::Encrypt(const uint8_t* plain, size_t n, const cha
         Random(salt, kSalt);
         buf.insert(buf.end(), salt, salt + kSalt);
         if (!PasswordKey(key, password, salt, kArgonBlocks, kArgonPasses)) return Result::NoMemory;
+    } else if (otp) {
+        OtpContextKey(key, context);
     } else {
-        DeviceKey(key, context);
+        FixedContextKey(key, context);
     }
     const size_t header = buf.size();
 
@@ -161,7 +175,7 @@ SecretAead::Result SecretAead::Decrypt(const char* text, size_t len, const char*
         blocks = (uint32_t)raw[2] | ((uint32_t)raw[3] << 8);
         salt = raw.data() + 4;
         if (passes < 1 || passes > kMaxArgonPasses || blocks < 8 || blocks > kMaxArgonBlocks) return Result::BadFormat;
-    } else if (version != kVersionDevice) {
+    } else if (version != kVersionDevice && version != kVersionOtp) {
         return Result::BadFormat;
     }
     if (raw_len < header + kNonce + kMac) return Result::BadFormat;
@@ -171,8 +185,11 @@ SecretAead::Result SecretAead::Decrypt(const char* text, size_t len, const char*
     if (use_pw) {
         if (!password || !password[0]) return Result::NeedPassword;
         if (!PasswordKey(key, password, salt, blocks, passes)) return Result::NoMemory;
+    } else if (version == kVersionOtp) {
+        if (!DeviceKey::available) return Result::NoDeviceKey;
+        OtpContextKey(key, context);
     } else {
-        DeviceKey(key, context);
+        FixedContextKey(key, context);
     }
 
     const uint8_t* nonce = raw.data() + header;

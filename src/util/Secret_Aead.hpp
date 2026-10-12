@@ -17,7 +17,10 @@
 //    アプリのディレクトリ名から作る。守れるのは「SDだけが盗まれた/見られた」場合と、
 //    「別のアプリが同じデータを復号する」ことだけ(アプリごとに鍵が違う)。ファームを吸い出せる相手、
 //    またはkKeyを知っている相手には無力。forkして使うならkKeyを書き換えること。
-// 3. どちらも、実行中のアプリのメモリを覗ける相手(デバッガ・同じ機械の上のクラッシュダンプ)には無力。
+// 2'. 端末の鍵(OTP。util/Device_Key.hpp)があるとき(version 3): パスワード無しでも鍵は「端末の鍵+アプリ名」。
+//    SDだけを盗まれても固定鍵では読めない。本体ごと持ち去られた場合は守れない(Secure Bootを使っていない)。
+//    version 1 の暗号文も読める(次に保存したときに version 3 になる)。別の本体では読めない。
+// 3. どれも、実行中のアプリのメモリを覗ける相手(デバッガ・同じ機械の上のクラッシュダンプ)には無力。
 //
 // 形式: "enc2:" + base64url( header | nonce(24) | 暗号文 | MAC(16) )
 //   header = version(1) [+ version 2 のとき: Argon2のパス数(1) + ブロック数(2, LE) + salt(16)]
@@ -39,6 +42,7 @@ namespace SecretAead {
 
     constexpr uint8_t kVersionDevice = 1;    // パスワード無し(固定鍵+アプリ名)
     constexpr uint8_t kVersionPassword = 2;  // パスワードからArgon2idで鍵を作る
+    constexpr uint8_t kVersionOtp = 3;       // パスワード無し(端末の鍵(OTP)+アプリ名)。端末の鍵があればこちらで書く
     constexpr uint32_t kArgonBlocks = 64;    // 1ブロック1KiB = 64KiB
     constexpr uint32_t kArgonPasses = 3;
     // 復号するときの上限(壊れた/悪意のあるデータで大量のメモリや時間を使わせないため)
@@ -52,6 +56,7 @@ namespace SecretAead {
         NeedPassword,  // パスワード付きの暗号文なのにパスワードが無い
         TooBig,
         NoMemory,
+        NoDeviceKey,   // 端末の鍵(OTP)で暗号化されたものだが、この本体には端末の鍵が無い
     };
     const char* ResultToStr(Result r);
 

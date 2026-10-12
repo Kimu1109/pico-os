@@ -38,6 +38,7 @@
 #include "gui/widgets/systems/Statusbar.hpp"
 #include "gui/widgets/systems/PerfOverlay.hpp"
 #include "gui/scenes/HomeScene.hpp"
+#include "functions/DeviceKey_Functions.hpp"
 
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -72,6 +73,8 @@ void setup() {
     //前回の起動で落ちていたら /crash/ へダンプを書く(SDとログの後、できるだけ早く)
     CrashDumpFunctions::Setup();
     CrashDumpFunctions::InstallHandlers();
+    //OTPの端末の鍵。暗号化された設定(wifi.cfg・lock.cfg等)を読むものより前に
+    DeviceKeyFunctions::Setup();
     DisplayFunctions::Setup(); //display.cfgを読むのでSDより後
     PowerFunctions::Setup();   //同上(sleep-timeout)
 

@@ -106,6 +106,21 @@ void Flush()
     s_lastFlushMs = millis();
 }
 
+void Suspend()
+{
+    if (!s_fileOpen) return;
+    Flush();
+    s_logFile.close();
+    s_fileOpen = false;
+}
+
+void Resume()
+{
+    if (s_fileOpen || !OSData::SD_usable) return;
+    s_fileOpen = s_logFile.open(PICO_Path::FILE::SYS_LOG_TXT, O_WRITE | O_CREAT | O_APPEND);
+    s_lastFlushMs = millis();
+}
+
 void Update()
 {
     if (!s_fileOpen) return;

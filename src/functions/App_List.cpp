@@ -16,6 +16,7 @@
 #include "gui/scenes/SshScene.hpp"
 #include "gui/scenes/NotificationScene.hpp"
 #include "gui/scenes/StoreScene.hpp"
+#include "gui/scenes/UsbDriveScene.hpp"
 #include "lua/LuaAppScanner.hpp"
 
 // このOSに載せるアプリの一覧。
@@ -62,6 +63,8 @@ void AppFunctions::Setup(){
     Register("通知", IconID::Bell, &MakeScene<NotificationScene>);
     //アプリストア。配布元(APP_REPO.md)からLuaアプリを取ってきて /lua/apps/ へ入れる
     Register(StoreScene::kAppName, IconID::AppStore, &MakeScene<StoreScene>);
+    //PCとUSBでつなぎ、SDカードをドライブとして見せる(SDの抜き差しをせずにファイルを行き来する)
+    Register(UsbDriveScene::kAppName, IconID::SdCard, &MakeScene<UsbDriveScene>);
     // Luaアプリは下のスキャンで登録する(動作確認用のサンプルは /lua/apps/動作確認/)。
     // 権限が要るものは各アプリの app.cfg に書く
 

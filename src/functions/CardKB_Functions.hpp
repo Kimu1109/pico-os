@@ -9,7 +9,7 @@
 // 打鍵は KeyInputFunctions の列へ積むだけで、届け先(画面→キー盤)は USBシリアルのキーボードと共通。
 //
 // ---- 配線 ----
-// I2C0: SDA=GP0, SCL=GP1(外部コントローラー用に取ってある端子。Wiiクラシックと同じバスで、アドレスは別)。
+// I2C0: SDA=GP0, SCL=GP1(functions/I2C_Bus.hpp。Wiiクラシックコントローラーと同じバスで、アドレスは別)。
 // 電源はGroveの5V。CardKB2側のI2Cのプルアップはキーボード側にあるので外付けは要らない(3.3V系のバスに
 // 5Vのプルアップが乗らないか、実機で確かめること)。
 //
@@ -25,14 +25,10 @@
 // 未接続の間は kProbeIntervalMs ごとにアドレスへ呼びかけ、ACKがあれば接続。
 // 接続中は kPollIntervalMs ごとに1バイト読み、読み出し自体が kMissLimit 回続けて失敗したら外れた扱い。
 //
-// Wireのピン割り当てと begin() はここで行う。Wiiクラシックのドライバを足すときは、
-// 同じバスなので begin() を共通の場所へ移すこと。
+// Wireのピン割り当てと begin() は I2cBus::Begin()(Wiiクラシックのドライバと共通)。
 namespace CardKbFunctions {
 
     constexpr uint8_t       kAddress         = 0x5F;
-    constexpr int           kSdaPin          = 0;
-    constexpr int           kSclPin          = 1;
-    constexpr uint32_t      kClockHz         = 100000;
     constexpr unsigned long kProbeIntervalMs = 1000;
     constexpr unsigned long kPollIntervalMs  = 10;
     constexpr int           kMissLimit       = 3;

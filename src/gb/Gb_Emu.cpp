@@ -2,8 +2,11 @@
 
 #include "OS_Data.hpp"
 #include "functions/Log_Functions.hpp"
+#include "storage/SD_Path.hpp"
+#include "storage/SD_IO.hpp"
 
 #include <csetjmp>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -102,6 +105,7 @@ GbEmu::LoadError GbEmu::load(const char* rom_path){
     if(this->audio_sink){
         this->audio_sink->begin();
         this->audio_started = true;
+        this->audio_frame_open = false;
     }
     g_audio_emu = this;
     const enum gb_init_error_e init_err = gb_init(&this->impl->gb,
@@ -134,15 +138,21 @@ GbEmu::LoadError GbEmu::load(const char* rom_path){
     }
 
     // "<ROM>.gb" → "<ROM>.sav"(拡張子が無ければ末尾へ足す)
-    this->save_path.assign(rom_path);
+    this->base_path.assign(rom_path);
     const char* slash = strrchr(rom_path, '/');
     const char* dot = strrchr(rom_path, '.');
     if(dot && (!slash || dot > slash)){
-        this->save_path.assign(rom_path, (size_t)(dot - rom_path));
+        this->base_path.assign(rom_path, (size_t)(dot - rom_path));
     }
+    this->save_path.assign(this->base_path.c_str());
     if(!this->save_path.append(".sav")){
         this->save_path.clear(); //パスが長すぎる。別のファイルを指さないよう保存しない
+        this->base_path.clear();
     }
+    this->rom_checksum = (uint16_t)((this->rom[0x14E] << 8) | this->rom[0x14F]);
+    this->cart_ram_touched = false;
+    this->cart_ram_last_write_ms = 0;
+    this->cart_ram_last_flush_ms = 0;
     if(this->cart_ram_size > 0) this->readSaveFile();
 
     char title_buf[17];
@@ -269,8 +279,12 @@ bool GbEmu::writeSave(){
 }
 
 void GbEmu::audioStop(){
-    if(this->audio_started && this->audio_sink) this->audio_sink->end();
+    if(this->audio_started && this->audio_sink){
+        if(this->audio_frame_open) this->audio_sink->endFrame();
+        this->audio_sink->end();
+    }
     this->audio_started = false;
+    this->audio_frame_open = false;
 }
 
 void GbEmu::unload(){
@@ -292,6 +306,9 @@ void GbEmu::unload(){
     this->crash_message.clear();
     this->title_.clear();
     this->save_path.clear();
+    this->base_path.clear();
+    this->rom_checksum = 0;
+    this->cart_ram_touched = false;
     this->changed_first = -1;
     this->changed_last = -1;
 }
@@ -311,6 +328,7 @@ void GbEmu::runFrame(){
     g_audio_emu = nullptr;
 
     if(this->audio_started && this->audio_sink) this->audio_sink->endFrame();
+    this->audio_frame_open = false;
     this->apu_triggered = 0;
     this->apu_last_cycle = 0;
 }
@@ -384,6 +402,7 @@ void GbEmu::audioWrite(uint16_t addr, uint8_t val){
         if(cycle < this->apu_last_cycle) cycle = this->apu_last_cycle;   //LCDの入り切りで戻らないように
         this->apu_last_cycle = cycle;
         this->audio_sink->write(cycle, off, val);
+        this->audio_frame_open = true;
     }
 }
 
@@ -421,6 +440,7 @@ void GbEmu::writeCartRam(uint32_t addr, uint8_t val){
     if(this->cart_ram[addr] == val) return;
     this->cart_ram[addr] = val;
     this->cart_ram_dirty = true;
+    this->cart_ram_touched = true;
 }
 
 void GbEmu::drawLine(const uint8_t* pixels, int line){
@@ -450,4 +470,251 @@ void GbEmu::onError(int error, uint16_t addr){
     LOG_APP_FAIL("GbEmu: エミュが停止しました: %s", this->crash_message.c_str());
 
     longjmp(this->impl->on_error, 1);
+}
+
+// ================= 途中保存(ステートセーブ) =================
+
+namespace {
+    // ファイルの見出し(ネイティブのバイト順。同じビルドの間でだけ読み書きする)
+    struct StateHeader {
+        char     magic[4];          // "PGBS"
+        uint16_t version;
+        uint8_t  ptr_size;          // sizeof(void*)
+        uint8_t  reserved;
+        uint32_t gb_size;           // sizeof(gb_s)
+        uint32_t wram_offset;       // offsetof(gb_s, wram)(配置の違いを見分ける)
+        uint32_t fb_size;
+        uint32_t rom_size;
+        uint16_t rom_checksum;
+        uint16_t apu_size;
+        uint32_t cart_ram_size;
+        char     title[16];
+    };
+    constexpr uint16_t kStateVersion = 1;
+    constexpr uint32_t kFnvInit = 2166136261u;
+
+    uint32_t Fnv(uint32_t h, const uint8_t* p, size_t n){
+        for(size_t i = 0; i < n; i++){ h ^= p[i]; h *= 16777619u; }
+        return h;
+    }
+
+    bool WriteAll(FsFile& f, const void* p, size_t n, uint32_t& h){
+        h = Fnv(h, static_cast<const uint8_t*>(p), n);
+        return f.write(static_cast<const uint8_t*>(p), n) == n;
+    }
+
+    bool ReadAll(FsFile& f, void* p, size_t n){
+        size_t done = 0;
+        uint8_t* d = static_cast<uint8_t*>(p);
+        while(done < n){
+            const int got = f.read(d + done, n - done);
+            if(got <= 0) return false;
+            done += (size_t)got;
+        }
+        return true;
+    }
+}
+
+const char* GbEmu::stateErrorToStr(StateError e){
+    switch(e){
+        case StateError::None:        return "成功";
+        case StateError::NotLoaded:   return "ゲームが動いていません";
+        case StateError::NoSd:        return "SDカードが使えません";
+        case StateError::NoPath:      return "保存先のパスが長すぎます";
+        case StateError::NotFound:    return "保存した状態がありません";
+        case StateError::WriteFailed: return "状態の書き込みに失敗しました";
+        case StateError::ReadFailed:  return "状態の読み込みに失敗しました";
+        case StateError::BadFormat:   return "状態のファイルが壊れているか、別の版のものです";
+        case StateError::OtherRom:    return "別のROMの状態です";
+    }
+    return "不明な誤り";
+}
+
+bool GbEmu::statePath(int slot, FixedString<PICO_PATH_LEN>& out) const {
+    if(!this->impl || this->base_path.empty() || slot < 0 || slot >= kStateSlots) return false;
+    out.assign(PICO_Path::DIR::GB_STATES);
+    if(!out.append(PICO_IO::filename(this->base_path.c_str()))) return false;
+    char ext[8];
+    snprintf(ext, sizeof(ext), ".st%d", slot);
+    return out.append(ext);
+}
+
+bool GbEmu::hasState(int slot) const {
+    if(!OSData::SD_usable) return false;
+    FixedString<PICO_PATH_LEN> path;
+    if(!this->statePath(slot, path)) return false;
+    return OSData::SD.exists(path.c_str());
+}
+
+GbEmu::StateError GbEmu::saveState(int slot){
+    if(!this->impl || this->crashed_) return StateError::NotLoaded;
+    if(!OSData::SD_usable) return StateError::NoSd;
+    FixedString<PICO_PATH_LEN> path;
+    if(!this->statePath(slot, path)) return StateError::NoPath;
+    FixedString<PICO_PATH_LEN> tmp(path.c_str());
+    if(!tmp.append(".part")) return StateError::NoPath;
+
+    StateHeader h{};
+    memcpy(h.magic, "PGBS", 4);
+    h.version = kStateVersion;
+    h.ptr_size = (uint8_t)sizeof(void*);
+    h.gb_size = (uint32_t)sizeof(struct gb_s);
+    h.wram_offset = (uint32_t)offsetof(struct gb_s, wram);
+    h.fb_size = (uint32_t)sizeof(this->impl->fb);
+    h.rom_size = this->rom_size;
+    h.rom_checksum = this->rom_checksum;
+    h.apu_size = (uint16_t)sizeof(this->apu_regs);
+    h.cart_ram_size = this->cart_ram_size;
+    strncpy(h.title, this->title_.c_str(), sizeof(h.title));
+
+    if(!OSData::SD.exists(PICO_Path::DIR::GB_STATES)) OSData::SD.mkdir(PICO_Path::DIR::GB_STATES);
+    FsFile f = OSData::SD.open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+    if(!f){
+        LOG_APP_FAIL("GbEmu: %s を書き込み用に開けません", tmp.c_str());
+        return StateError::WriteFailed;
+    }
+    uint32_t sum = kFnvInit;
+    bool ok = WriteAll(f, &h, sizeof(h), sum)
+           && WriteAll(f, &this->impl->gb, sizeof(struct gb_s), sum)
+           && WriteAll(f, this->impl->fb, sizeof(this->impl->fb), sum)
+           && WriteAll(f, this->apu_regs, sizeof(this->apu_regs), sum)
+           && (this->cart_ram_size == 0 || WriteAll(f, this->cart_ram, this->cart_ram_size, sum));
+    if(ok){
+        uint32_t dummy = 0;
+        ok = WriteAll(f, &sum, sizeof(sum), dummy);
+    }
+    f.close();
+    if(!ok){
+        LOG_APP_FAIL("GbEmu: 状態の書き込みに失敗しました");
+        OSData::SD.remove(tmp.c_str());
+        return StateError::WriteFailed;
+    }
+    if(OSData::SD.exists(path.c_str()) && !OSData::SD.remove(path.c_str())){
+        OSData::SD.remove(tmp.c_str());
+        return StateError::WriteFailed;
+    }
+    if(!OSData::SD.rename(tmp.c_str(), path.c_str())) return StateError::WriteFailed;
+
+    LOG_APP_OK("GbEmu: 状態を %s へ保存しました", path.c_str());
+    return StateError::None;
+}
+
+GbEmu::StateError GbEmu::loadState(int slot){
+    if(!this->impl) return StateError::NotLoaded;
+    if(!OSData::SD_usable) return StateError::NoSd;
+    FixedString<PICO_PATH_LEN> path;
+    if(!this->statePath(slot, path)) return StateError::NoPath;
+    if(!OSData::SD.exists(path.c_str())) return StateError::NotFound;
+
+    const size_t payload = sizeof(struct gb_s) + sizeof(this->impl->fb) + sizeof(this->apu_regs) + this->cart_ram_size;
+
+    // ---- 1周目: 見出しと全体のチェックサムを確かめる(今の状態には触らない) ----
+    FsFile f = OSData::SD.open(path.c_str());
+    if(!f) return StateError::ReadFailed;
+    StateHeader h{};
+    if(!ReadAll(f, &h, sizeof(h))){ f.close(); return StateError::BadFormat; }
+    if(memcmp(h.magic, "PGBS", 4) != 0 || h.version != kStateVersion
+        || h.ptr_size != sizeof(void*) || h.gb_size != sizeof(struct gb_s)
+        || h.wram_offset != offsetof(struct gb_s, wram)
+        || h.fb_size != sizeof(this->impl->fb) || h.apu_size != sizeof(this->apu_regs)){
+        f.close();
+        return StateError::BadFormat;
+    }
+    if(h.rom_size != this->rom_size || h.rom_checksum != this->rom_checksum
+        || h.cart_ram_size != this->cart_ram_size
+        || strncmp(h.title, this->title_.c_str(), sizeof(h.title)) != 0){
+        f.close();
+        return StateError::OtherRom;
+    }
+    if(f.fileSize() != sizeof(h) + payload + sizeof(uint32_t)){ f.close(); return StateError::BadFormat; }
+
+    uint32_t sum = Fnv(kFnvInit, reinterpret_cast<const uint8_t*>(&h), sizeof(h));
+    {
+        uint8_t buf[512];
+        size_t left = payload;
+        while(left > 0){
+            const size_t want = left < sizeof(buf) ? left : sizeof(buf);
+            if(!ReadAll(f, buf, want)){ f.close(); return StateError::ReadFailed; }
+            sum = Fnv(sum, buf, want);
+            left -= want;
+        }
+        uint32_t stored = 0;
+        if(!ReadAll(f, &stored, sizeof(stored))){ f.close(); return StateError::ReadFailed; }
+        if(stored != sum){ f.close(); return StateError::BadFormat; }
+    }
+
+    // ---- 2周目: 今の状態へ写す ----
+    if(!f.seekSet(sizeof(h))){ f.close(); return StateError::ReadFailed; }
+    struct gb_s& gb = this->impl->gb;
+    // 写すと消えるもの(関数ポインタ・priv)を控える
+    const struct gb_s keep = gb;
+    bool ok = ReadAll(f, &gb, sizeof(gb))
+           && ReadAll(f, this->impl->fb, sizeof(this->impl->fb))
+           && ReadAll(f, this->apu_regs, sizeof(this->apu_regs))
+           && (this->cart_ram_size == 0 || ReadAll(f, this->cart_ram, this->cart_ram_size));
+    f.close();
+
+    gb.gb_rom_read = keep.gb_rom_read;
+    gb.gb_cart_ram_read = keep.gb_cart_ram_read;
+    gb.gb_cart_ram_write = keep.gb_cart_ram_write;
+    gb.gb_error = keep.gb_error;
+    gb.gb_serial_tx = keep.gb_serial_tx;
+    gb.gb_serial_rx = keep.gb_serial_rx;
+    gb.gb_bootrom_read = keep.gb_bootrom_read;
+    gb.display.lcd_draw_line = keep.display.lcd_draw_line;
+    gb.direct.priv = keep.direct.priv;
+    gb.direct.joypad = keep.direct.joypad;
+
+    if(!ok){
+        //検査は通ったのに読めなかった(SDが抜けた等)。途中まで写した状態は信用できないので止める
+        this->crashed_ = true;
+        this->crash_message.assign("状態の読み込みの途中で失敗しました");
+        this->audioStop();
+        return StateError::ReadFailed;
+    }
+
+    if(this->cart_ram_size > 0){
+        this->cart_ram_dirty = true;    //読み戻したセーブ領域も、閉じるときに .sav へ書く
+        this->cart_ram_touched = true;
+    }
+    this->apu_triggered = 0;
+    this->apu_last_cycle = 0;
+    this->resyncAudio();
+    this->changed_first = 0;
+    this->changed_last = kHeight - 1;
+
+    LOG_APP_OK("GbEmu: 状態を %s から読み込みました", path.c_str());
+    return StateError::None;
+}
+
+void GbEmu::resyncAudio(){
+    if(!this->audio_sink) return;
+    // 音源を作り直し、控えの値を書き直す。NRx4のトリガー(bit7)は落とす(鳴っていた音は、
+    // ゲームが次にトリガーするまで止まる。音の途中の位置までは写さないため)
+    this->audioStop();
+    this->audio_sink->begin();
+    this->audio_started = true;
+    this->audio_sink->write(0, 0x16, this->apu_regs[0x16]);
+    this->audio_frame_open = true;
+    if(!(this->apu_regs[0x16] & 0x80)) return;
+    for(uint8_t off = 0; off < 0x30; off++){
+        if(off == 0x16) continue;
+        if(off >= 0x17 && off < 0x20) continue;    //未使用
+        uint8_t v = this->apu_regs[off];
+        if(off == 0x04 || off == 0x09 || off == 0x0E || off == 0x13) v &= 0x7F;
+        this->audio_sink->write(0, off, v);
+    }
+}
+
+bool GbEmu::flushSaveIfIdle(uint32_t now_ms){
+    if(this->cart_ram_touched){
+        this->cart_ram_touched = false;
+        this->cart_ram_last_write_ms = now_ms;
+        return false;
+    }
+    if(!this->cart_ram_dirty || this->crashed_) return false;
+    if(now_ms - this->cart_ram_last_write_ms < kSaveIdleMs) return false;
+    if(this->cart_ram_last_flush_ms != 0 && now_ms - this->cart_ram_last_flush_ms < kSaveMinIntervalMs) return false;
+    this->cart_ram_last_flush_ms = now_ms == 0 ? 1 : now_ms;
+    return this->writeSave();
 }

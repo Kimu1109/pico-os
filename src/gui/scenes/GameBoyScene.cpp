@@ -4,6 +4,8 @@
 #include "gui/widgets/apps/GameBoyView.hpp"
 #include "gui/widgets/apps/GameBoyPad.hpp"
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
+#include "functions/Battery_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
@@ -33,7 +35,7 @@ void GameBoyScene::onEnter(){
     WidgetFunctions::Add(this->view);
 
     this->pad = new GameBoyPad(content.x, content.y + GameBoyView::kViewH, content.w);
-    this->pad->setOnRom([this](){ this->openPicker(); });
+    this->pad->setOnMenu([this](){ this->openMenu(); });
     this->pad->setOnBack([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->pad);
 
@@ -42,24 +44,108 @@ void GameBoyScene::onEnter(){
     this->crash_reported = false;
     this->acc_us = 0;
     this->last_ms = millis();
+    this->banner_until_ms = 0;
+    this->was_sleeping = false;
+    this->last_low_battery_save_ms = this->last_ms;
 
     if(this->rom_path.empty()){
         this->view->setMessage("ROMを選んでください");
         this->pending = Pending::OpenPicker;
         this->pending_wait_frames = 1;
     }else{
+        //上に載った画面から戻ってきた。離れたときの自動の枠から黙って続ける
+        this->resume_silently = true;
         this->loadRom(this->rom_path.c_str());
+        this->resume_silently = false;
     }
 }
 
 void GameBoyScene::onExit(){
-    // セーブの書き出しもunload()の中で行われる
+    this->autoSave("画面を離れる");
+    // セーブ(.sav)の書き出しはunload()の中で行われる
     this->emu.unload();
 
     this->view = nullptr;
     this->pad = nullptr;
     this->picker = nullptr; //ダイアログ本体はシーンの破棄でまとめて消える
+    this->menu = nullptr;
     this->pending = Pending::None;
+}
+
+void GameBoyScene::autoSave(const char* why){
+    if(!this->emu.loaded() || this->emu.crashed()) return;
+    const GbEmu::StateError e = this->emu.saveState(GbEmu::kAutoSlot);
+    if(e != GbEmu::StateError::None){
+        LOG_APP_WARN("GameBoy: 自動の途中保存(%s)に失敗しました: %s", why, GbEmu::stateErrorToStr(e));
+    }
+    this->emu.writeSave();
+}
+
+void GameBoyScene::showBanner(const char* text){
+    if(!this->view) return;
+    this->view->setBanner(text);
+    this->banner_until_ms = millis() + kBannerMs;
+    if(this->banner_until_ms == 0) this->banner_until_ms = 1;
+}
+
+void GameBoyScene::openMenu(){
+    if(this->menu || this->picker || this->pending != Pending::None) return;
+
+    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, "メニュー", "", "キャンセル");
+    if(!d) return;
+    // 項目の番号 → すること(出す項目が状況で変わるため)
+    enum : uint8_t { kSave, kLoad, kRom };
+    uint8_t actions[3];
+    int n = 0;
+    if(this->emu.loaded() && !this->emu.crashed()){
+        d->addChoice("途中保存");
+        actions[n++] = kSave;
+    }
+    if(this->emu.loaded() && this->emu.hasState(GbEmu::kManualSlot)){
+        d->addChoice("途中から再開");
+        actions[n++] = kLoad;
+    }
+    d->addChoice("ROMを選ぶ");
+    actions[n++] = kRom;
+    d->layout();
+
+    this->menu = d;
+    WidgetFunctions::AddDialog(d);
+    d->setVisible(true);
+    d->setOnClosed([this, d, actions, n](bool is_ok){
+        const int i = is_ok ? d->getSelectedIndex() : -1;
+        if(i >= 0 && i < n){
+            switch(actions[i]){
+                case kSave: this->pending = Pending::SaveManual; break;
+                case kLoad: this->pending = Pending::LoadManual; break;
+                default:    this->pending = Pending::OpenPicker; break;
+            }
+            this->pending_wait_frames = 1;
+        }
+        this->menu = nullptr;
+        WidgetFunctions::DestroyLater(d);
+    });
+}
+
+void GameBoyScene::askResume(){
+    if(this->menu) return;
+    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, "続きから遊びますか", "", "");
+    if(!d) return;
+    d->addChoice("前回の続きから");
+    d->addChoice("最初から");
+    d->layout();
+    this->menu = d;
+    WidgetFunctions::AddDialog(d);
+    d->setVisible(true);
+    d->setOnClosed([this, d](bool is_ok){
+        if(is_ok && d->getSelectedIndex() == 0){
+            this->pending = Pending::ResumeAuto;
+            this->pending_wait_frames = 1;
+        }
+        this->menu = nullptr;
+        this->last_ms = millis();   //聞いている間の時間を取り返そうとしない
+        WidgetFunctions::DestroyLater(d);
+    });
 }
 
 void GameBoyScene::openPicker(){
@@ -97,7 +183,8 @@ void GameBoyScene::openPicker(){
 }
 
 void GameBoyScene::loadRom(const char* path){
-    // 先に今のROMを片付ける(セーブも書き出される)。読み込みに失敗してもROM無しの状態になる
+    // 先に今のROMを片付ける(自動の枠とセーブも書き出される)。読み込みに失敗してもROM無しの状態になる
+    if(!this->resume_silently) this->autoSave("ROMを替える");
     this->emu.unload();
     this->crash_reported = false;
 
@@ -120,6 +207,19 @@ void GameBoyScene::loadRom(const char* path){
     this->stat_start_ms = this->last_ms;
     this->stat_frames = 0;
     this->stat_dropped = 0;
+
+    if(this->emu.hasState(GbEmu::kAutoSlot)){
+        if(this->resume_silently){
+            const GbEmu::StateError e = this->emu.loadState(GbEmu::kAutoSlot);
+            if(e != GbEmu::StateError::None){
+                LOG_APP_WARN("GameBoy: 自動の枠から続けられません: %s", GbEmu::stateErrorToStr(e));
+            }
+            this->view->invalidate();
+        }else{
+            this->pending = Pending::AskResume;
+            this->pending_wait_frames = 1;
+        }
+    }
 }
 
 void GameBoyScene::onUpdate(){
@@ -141,6 +241,28 @@ void GameBoyScene::onUpdate(){
             this->openPicker();
         }else if(p == Pending::Load){
             this->loadRom(this->pending_path.c_str());
+        }else if(p == Pending::AskResume){
+            this->askResume();
+        }else if(p == Pending::ResumeAuto || p == Pending::LoadManual){
+            const int slot = (p == Pending::ResumeAuto) ? GbEmu::kAutoSlot : GbEmu::kManualSlot;
+            const GbEmu::StateError e = this->emu.loadState(slot);
+            if(e == GbEmu::StateError::None){
+                this->view->invalidate();
+                this->showBanner(p == Pending::ResumeAuto ? "前回の続きから" : "途中から再開しました");
+            }else{
+                ErrorFunctions::ShowFatal(GbEmu::stateErrorToStr(e));
+            }
+            this->last_ms = millis();
+        }else if(p == Pending::SaveManual){
+            const GbEmu::StateError e = this->emu.saveState(GbEmu::kManualSlot);
+            if(e == GbEmu::StateError::None){
+                this->showBanner("途中保存しました");
+            }else{
+                ErrorFunctions::ShowFatal(GbEmu::stateErrorToStr(e));
+            }
+            this->last_ms = millis();   //書き込みの時間を取り返そうとしない
+        }else if(p == Pending::Cancelled && this->emu.loaded()){
+            //ROMの選び直しをやめた。今のゲームを続ける
         }else if(!this->emu.loaded()){
             // 最初のROM選択をやめた = アプリを開くのをやめた
             SceneFunctions::Pop();
@@ -148,8 +270,19 @@ void GameBoyScene::onUpdate(){
         return;
     }
 
-    // ROM選択中は止めておく
-    if(this->picker || !this->emu.loaded()) return;
+    if(this->banner_until_ms != 0 && (int32_t)(now - this->banner_until_ms) >= 0){
+        this->banner_until_ms = 0;
+        this->view->setBanner(nullptr);
+    }
+
+    // 電源メニューでスリープへ入った: そのまま電池が切れても続きから遊べるよう、入った時点で書く
+    const bool sleeping = PowerFunctions::IsSleeping();
+    if(sleeping && !this->was_sleeping) this->autoSave("スリープ");
+    this->was_sleeping = sleeping;
+    if(sleeping) return;
+
+    // ROM選択中・メニューを開いている間は止めておく
+    if(this->picker || this->menu || !this->emu.loaded()) return;
 
     if(this->emu.crashed()){
         if(!this->crash_reported){
@@ -164,6 +297,11 @@ void GameBoyScene::onUpdate(){
     // 外部コントローラーのHOMEは「戻る」(画面の「戻る」と同じ。セーブはonExit()で書かれる)
     if(PadFunctions::Pressed(PadFunctions::Home)){
         SceneFunctions::Pop();
+        return;
+    }
+    // ZLはメニュー(ゲームのボタンには割り当てていない)
+    if(PadFunctions::Pressed(PadFunctions::ZL)){
+        this->openMenu();
         return;
     }
 
@@ -185,6 +323,18 @@ void GameBoyScene::onUpdate(){
     }
 
     if(frames > 0) this->view->onFrame();
+
+    // ゲームの中のセーブ(.sav)は、書き込みが落ち着いたら書き出す
+    if(this->emu.flushSaveIfIdle(now)) this->last_ms = millis();
+
+    // 電池が少ない間は、いつ切れてもよいように自動の枠へときどき書く
+    if(BatteryFunctions::HasSample() && !BatteryFunctions::IsExternallyPowered()
+        && BatteryFunctions::GetPercent() <= kLowBatteryPercent
+        && now - this->last_low_battery_save_ms >= kLowBatteryAutoSaveMs){
+        this->last_low_battery_save_ms = now;
+        this->autoSave("電池が少ない");
+        this->last_ms = millis();
+    }
 
     this->stat_frames += (uint32_t)frames;
     if(now - this->stat_start_ms >= kStatIntervalMs){

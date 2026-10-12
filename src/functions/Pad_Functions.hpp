@@ -5,12 +5,16 @@
 // 外部コントローラー(SUMMARY.md #10)の入力の窓口。
 //
 // アプリ(GameBoyScene / Lua)が見るのは「今押しているボタンのビットマスク」だけで、
-// それがどこから来たか(USBシリアル / 将来のWiiクラシックコントローラー等)は知らない。
+// それがどこから来たか(USBシリアル / Wiiクラシックコントローラー)は知らない。
+// 両方つながっていれば押しているボタンはORで重なる。
 // 状態は1コア目の loop() の先頭(PICO_Touch::Update()の直後)で1回だけ更新するので、
 // 1フレームの間は IsDown() / Pressed() / Released() の答えが変わらない。
 //
-// ---- 今の入力元: USBシリアル(PCのキーボード) ----
-// 実物のコントローラーがまだ無いので、PC側の script/pad_serial.py がキーボードの状態を
+// ---- 入力元1: Wiiクラシックコントローラー(I2C。WiiClassic_Functions) ----
+// ドライバが SetDevice() で押しているボタンを渡す(Update()より前)。
+//
+// ---- 入力元2: USBシリアル(PCのキーボード) ----
+// 実物のコントローラーが無くても試せるよう、PC側の script/pad_serial.py がキーボードの状態を
 // USBシリアル(ログを出しているのと同じ Serial)で送ってくる。1行1件のテキスト:
 //
 //     pad XXXX\n       XXXX = 押しているボタン(Button のOR)の16進数(1〜4桁、大文字小文字どちらでも)
@@ -53,6 +57,7 @@ namespace PadFunctions {
     enum class Source : uint8_t {
         None,       // 何もつながっていない
         Serial,     // USBシリアル(PCのキーボード)
+        WiiClassic, // Wiiクラシックコントローラー(I2C)。両方あるときはこちらを返す
     };
 
     constexpr unsigned long kSerialTimeoutMs   = 500;
@@ -68,6 +73,10 @@ namespace PadFunctions {
 
     bool IsConnected();
     Source GetSource();
+
+    // I2Cのコントローラーのドライバが毎回の読み出しの後に呼ぶ(connected=falseで外れた)。
+    // 次の Update() で反映する
+    void SetDevice(uint16_t buttons, bool connected);
 
     // このフレームの残りは何も押していないことにする(画面ロック中。次のUpdate()で解ける)。
     // 自動調光/スリープの判定はUpdate()の直後に済んでいるので、そちらには効かない

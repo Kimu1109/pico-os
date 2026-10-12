@@ -20,6 +20,7 @@
 #include "functions/Pad_Functions.hpp"
 #include "functions/KeyInput_Functions.hpp"
 #include "functions/CardKB_Functions.hpp"
+#include "functions/WiiClassic_Functions.hpp"
 #include "functions/Task_Functions.hpp"
 #include "functions/Time_Functions.hpp"
 #include "functions/Test_Functions.hpp"
@@ -80,6 +81,7 @@ void setup() {
     PadFunctions::Setup();
     KeyInputFunctions::Setup();
     CardKbFunctions::Setup();   //あれば使うだけ(CardKB2。無くても何も出さない)
+    WiiClassicFunctions::Setup();   //同じI2Cのバス。あれば外部コントローラーとして使う
     PICO_Task::Setup();
     WidgetFunctions::Setup();
 
@@ -175,7 +177,9 @@ void loop() {
     CrashDumpFunctions::Feed();
 
     PICO_Touch::Update();
-    //外部コントローラー(今はUSBシリアル経由のPCのキーボード)。
+    //Wiiクラシックコントローラー(I2C)。読んだボタンは次のPadFunctions::Update()で反映される
+    WiiClassicFunctions::Update();
+    //外部コントローラー(Wiiクラシック + USBシリアル経由のPCのキーボード)。
     //シーンのonUpdate()より前に読み、1フレームの間は同じ答えを返す。
     //同じSerialで届く物理キーボードの打鍵("key ...")もここで KeyInputFunctions の列へ積まれる
     PadFunctions::Update();

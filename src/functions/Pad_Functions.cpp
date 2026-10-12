@@ -20,6 +20,11 @@ namespace {
     bool   line_overflow = false;   // 長すぎる行は改行まで読み捨てる
     unsigned long serial_last_ms = 0;
     uint16_t serial_buttons = 0;
+    bool serial_active = false;
+
+    // ---- I2Cのコントローラー(SetDevice) ----
+    uint16_t device_buttons = 0;
+    bool device_connected = false;
 
     // Lua等へ見せる名前(Buttonのビット順)
     const char* const kNames[PadFunctions::kButtonCount] = {
@@ -50,8 +55,8 @@ namespace {
 
         serial_buttons = value;
         serial_last_ms = now;
-        if(source != PadFunctions::Source::Serial){
-            source = PadFunctions::Source::Serial;
+        if(!serial_active){
+            serial_active = true;
             LOG_SYS_OK("コントローラー: USBシリアルからの入力を受け付けました");
         }
     }
@@ -77,8 +82,8 @@ namespace {
             line[line_len++] = (char)c;
         }
 
-        if(source == PadFunctions::Source::Serial && now - serial_last_ms > PadFunctions::kSerialTimeoutMs){
-            source = PadFunctions::Source::None;
+        if(serial_active && now - serial_last_ms > PadFunctions::kSerialTimeoutMs){
+            serial_active = false;
             serial_buttons = 0;
             LOG_SYS_MSG("コントローラー: USBシリアルからの入力が途絶えました");
         }
@@ -114,6 +119,14 @@ void PadFunctions::Setup(){
     line_overflow = false;
     serial_buttons = 0;
     serial_last_ms = 0;
+    serial_active = false;
+    device_buttons = 0;
+    device_connected = false;
+}
+
+void PadFunctions::SetDevice(uint16_t b, bool connected){
+    device_connected = connected;
+    device_buttons = connected ? (uint16_t)(b & kAllButtons) : 0;
 }
 
 void PadFunctions::Update(){
@@ -124,7 +137,8 @@ void PadFunctions::UpdateAt(unsigned long now_ms){
     suppressed = false;
     ReadSerial(now_ms);
 
-    const uint16_t next = (source == Source::Serial) ? serial_buttons : 0;
+    source = device_connected ? Source::WiiClassic : serial_active ? Source::Serial : Source::None;
+    const uint16_t next = (serial_active ? serial_buttons : 0) | (device_connected ? device_buttons : 0);
     pressed  = next & ~buttons;
     released = buttons & ~next;
     buttons  = next;

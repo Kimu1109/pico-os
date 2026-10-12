@@ -34,6 +34,14 @@ namespace PICO_SD
         return true;
     }
 
+    // マウントし直す(USBドライブでPCがSDを書き換えた後。SdFatが覚えているFAT・フォルダの中身を捨てる)
+    inline bool Remount()
+    {
+        OSData::SD_usable = false;
+        OSData::SD.end();
+        return Setup();
+    }
+
     template<size_t N>
     inline bool ReadTextFile(const FixedString<PICO_PATH_LEN>& path, FixedString<N>& content)
     {

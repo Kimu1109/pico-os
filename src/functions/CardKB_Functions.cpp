@@ -1,11 +1,11 @@
 #include "functions/CardKB_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "functions/I2C_Bus.hpp"
 
 #include <Arduino.h>
 #include <Wire.h>
 
 namespace {
-    bool wire_started = false;
     bool connected = false;
     int  misses = 0;
     unsigned long last_probe_ms = 0;
@@ -53,13 +53,7 @@ void CardKbFunctions::Setup(){
     connected = false;
     misses = 0;
     first_update = true;
-    if(!wire_started){
-        Wire.setSDA(kSdaPin);
-        Wire.setSCL(kSclPin);
-        Wire.setClock(kClockHz);
-        Wire.begin();
-        wire_started = true;
-    }
+    I2cBus::Begin();
 }
 
 void CardKbFunctions::Update(){
@@ -67,7 +61,7 @@ void CardKbFunctions::Update(){
 }
 
 void CardKbFunctions::UpdateAt(unsigned long now){
-    if(!wire_started) return;
+    if(!I2cBus::started) return;
 
     if(!connected){
         if(!first_update && now - last_probe_ms < kProbeIntervalMs) return;

@@ -118,6 +118,45 @@ class GbEmu {
 
         static const char* loadErrorToStr(LoadError e);
 
+        // ---- 途中保存(ステートセーブ) ----
+        // エミュの状態(CPU・WRAM/VRAM・タイマー・MBCのバンク・RTC)+ 画面 + 音源チップの控え +
+        // カートリッジRAM を1つのファイルへ書く(約23KB + セーブ領域)。置き場は /gb/states/ の
+        // "<ROMの名前>.st<枠>"(枠0 = 自動 .st0、枠1 = 手動 .st1。PICO_Path::DIR::GB_STATES)。
+        //   - 書き出しは一時ファイル→差し替え(書いている途中で電源が落ちても前の状態が残る)
+        //   - 読み込みは**先に全体を読んで検査(大きさ・ROMの題名とチェックサム・FNV-1a)してから**今の状態へ写す
+        //     (壊れたファイルで動いているゲームを壊さない)。作業用の確保はしない(512Bのスタックだけ)
+        //   - gb_s を丸ごと写すので、ポインタの大きさ・構造体の配置が違うビルド(PCと実機)の間では読めない
+        //     (BadFormat で断る)。関数ポインタとprivは読み込んだ後に今のものへ戻す
+        //   - 音源チップは控えを読み戻し、2コア目の音源へ書き直す(鳴っていた音はゲームが次に鳴らすまで止まる)
+        enum class StateError : uint8_t {
+            None,
+            NotLoaded,      // ROMを読んでいない/止まっている
+            NoSd,
+            NoPath,         // パスが長すぎる等で置き場が決まらない
+            NotFound,       // 状態のファイルが無い
+            WriteFailed,
+            ReadFailed,
+            BadFormat,      // 別のビルド/版のもの・壊れている
+            OtherRom,       // 別のROMの状態
+        };
+        constexpr static int kStateSlots = 2;
+        constexpr static int kAutoSlot = 0;
+        constexpr static int kManualSlot = 1;
+
+        StateError saveState(int slot);
+        StateError loadState(int slot);
+        bool hasState(int slot) const;
+        // 状態のファイルのパス(ROMを読んでいなければfalse)
+        bool statePath(int slot, FixedString<PICO_PATH_LEN>& out) const;
+        static const char* stateErrorToStr(StateError e);
+
+        // カートリッジRAMの書き込みが落ち着いたら .sav へ書き出す(遊んでいる途中の電池切れでも
+        // ゲームの中のセーブが残るように)。最後の書き込みから kSaveIdleMs 経ち、かつ前回の書き出しから
+        // kSaveMinIntervalMs 経っていれば書く。毎フレーム呼んでよい。書いたらtrue
+        constexpr static uint32_t kSaveIdleMs = 2000;
+        constexpr static uint32_t kSaveMinIntervalMs = 10000;
+        bool flushSaveIfIdle(uint32_t now_ms);
+
         // 以下はPeanut-GBのコールバック(Gb_Emu.cpp内)から呼ぶ。外からは使わない
         struct Impl;
         uint8_t readRom(uint32_t addr) const;
@@ -137,12 +176,17 @@ class GbEmu {
         uint8_t* cart_ram = nullptr;
         uint32_t cart_ram_size = 0;
         bool cart_ram_dirty = false;
+        uint32_t cart_ram_last_write_ms = 0;   // flushSaveIfIdle()
+        uint32_t cart_ram_last_flush_ms = 0;
+        bool cart_ram_touched = false;          // 前回のflushSaveIfIdle()から書き込みがあった
 
         bool crashed_ = false;
         FixedString<PICO_STR_M> crash_message;
 
         FixedString<PICO_STR_S> title_;
         FixedString<PICO_PATH_LEN> save_path;
+        FixedString<PICO_PATH_LEN> base_path;   // ROMのパスから拡張子を落としたもの
+        uint16_t rom_checksum = 0;              // ヘッダの全体チェックサム(0x14E〜0x14F)
 
         // 音源チップのレジスタの控え(0xFF10〜0xFF3F)
         GbAudioSink* audio_sink = nullptr;
@@ -150,6 +194,10 @@ class GbEmu {
         uint8_t apu_regs[0x30] = {};
         uint8_t apu_triggered = 0;      // このフレームにトリガーしたチャンネル
         uint32_t apu_last_cycle = 0;    // このフレームで最後に書いた時刻(戻らないように)
+        // 前の区切り(begin/endFrame)の後に書き込みを渡した。GbAudioLink は begin/end の区切りを
+        // フレームの境目にしか置けない(途中に置くと2コア目が区切りを数え違えて回り続ける)ので、
+        // end() の前にこれが立っていれば先に endFrame() で閉じる
+        bool audio_frame_open = false;
         uint32_t frameCycle() const;
         void audioStop();
 
@@ -158,4 +206,5 @@ class GbEmu {
 
         LoadError readRomFile(const char* rom_path);
         void readSaveFile();
+        void resyncAudio();
 };

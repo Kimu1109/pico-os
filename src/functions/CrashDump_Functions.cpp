@@ -46,7 +46,8 @@ namespace {
     // ---- ウォッチドッグのスクラッチレジスタ(実機) ----
     // RAMの記録(上)が次の起動まで残らない場合の控え。watchdog_hw->scratch[0..3]はウォッチドッグの再起動では
     // 消えない(電源を切る・RUNピンで消える)。scratch[4..7]はpico-sdkが再起動の印に使うので触らない。
-    //   [0] = kScratchTag | kind<<8 | phase    [1] = uptime_ms / pc    [2] = frame_no / lr    [3] = in_lua / cfsr
+    //   [0] = kScratchTag | kind<<8 | phase    [1] = uptime_ms / pc
+    //   [2] = frame_no(下位31bit) | in_lua<<31 / lr    [3] = 画面の名前の番地(フラッシュの文字列) / cfsr
     // 毎フレーム書くのはパンくずの3語(BeginFrame/SetPhase)だけ。HardFaultのハンドラは4語とも上書きする
     constexpr uint32_t kScratchTag = 0x50430000u; // "PC"
     constexpr uint32_t kScratchTagMask = 0xFFFF0000u;
@@ -55,6 +56,10 @@ namespace {
     CrashDumpFunctions::BootInfo boot_info = {};
 
     const char* last_scene_ptr = nullptr;
+    // 画面の名前(Scene::getName()の文字列リテラル)はフラッシュにあるので、番地だけ控えれば再起動後も読める
+    constexpr uint32_t kFlashBegin = 0x10000000u;
+    constexpr uint32_t kFlashEnd = 0x10400000u;
+    inline bool InFlash(uint32_t addr){ return addr >= kFlashBegin && addr < kFlashEnd - 32; }
     const char* last_lua_ptr = nullptr;
     bool watchdog_on = false;
     uint32_t watchdog_ms = 0;
@@ -209,8 +214,13 @@ size_t CrashDumpFunctions::FormatRecord(const Record& r, char* out, size_t size)
     o.add("種類: %s\n", KindName(r.kind));
     if(r.kind == (uint32_t)Kind::Signal) o.add("シグナル番号: %lu\n", (unsigned long)r.signal);
     AddClock(o);
-    o.add("起動からの時間: %lu.%03lu秒\n", (unsigned long)(r.uptime_ms / 1000), (unsigned long)(r.uptime_ms % 1000));
-    o.add("フレーム: %lu\n", (unsigned long)r.frame_no);
+    //スクラッチレジスタから作ったHardFaultの記録は時刻もフレームも持たない(どちらも0)
+    if(r.uptime_ms == 0 && r.frame_no == 0){
+        o.add("起動からの時間: (不明)\nフレーム: (不明)\n");
+    }else{
+        o.add("起動からの時間: %lu.%03lu秒\n", (unsigned long)(r.uptime_ms / 1000), (unsigned long)(r.uptime_ms % 1000));
+        o.add("フレーム: %lu\n", (unsigned long)r.frame_no);
+    }
     o.add("画面(そのフレームの頭の時点): %s\n", r.scene[0] ? r.scene : "(不明)");
     if(r.phase < (uint32_t)ProfilerFunctions::Section::Count){
         o.add("処理していたところ: %s\n", ProfilerFunctions::SectionName((ProfilerFunctions::Section)r.phase));
@@ -221,17 +231,24 @@ size_t CrashDumpFunctions::FormatRecord(const Record& r, char* out, size_t size)
     }
     if(r.lua_app[0]){
         o.add("Luaアプリ: %s(%s)\n", r.lua_app, r.in_lua ? "実行中だった" : "直近に実行");
+    }else if(r.in_lua){
+        o.add("Luaアプリ: (名前は不明。Luaの実行中だった)\n");
     }
 
     if(r.kind == (uint32_t)Kind::HardFault){
         o.add("\n--- レジスタ ---\n");
         o.add("pc =0x%08lx  lr =0x%08lx\n", (unsigned long)r.pc, (unsigned long)r.lr);
-        o.add("sp =0x%08lx  xpsr=0x%08lx  exc_return=0x%08lx\n",
-            (unsigned long)r.sp, (unsigned long)r.xpsr, (unsigned long)r.exc_return);
-        o.add("r0 =0x%08lx  r1 =0x%08lx  r2 =0x%08lx  r3 =0x%08lx  r12=0x%08lx\n",
-            (unsigned long)r.r0, (unsigned long)r.r1, (unsigned long)r.r2, (unsigned long)r.r3, (unsigned long)r.r12);
-        o.add("CFSR=0x%08lx HFSR=0x%08lx MMFAR=0x%08lx BFAR=0x%08lx\n",
-            (unsigned long)r.cfsr, (unsigned long)r.hfsr, (unsigned long)r.mmfar, (unsigned long)r.bfar);
+        //exc_returnは例外から入ると必ず0でない。0ならスクラッチレジスタの控え(pc/lr/CFSRしか無い)
+        if(r.exc_return != 0){
+            o.add("sp =0x%08lx  xpsr=0x%08lx  exc_return=0x%08lx\n",
+                (unsigned long)r.sp, (unsigned long)r.xpsr, (unsigned long)r.exc_return);
+            o.add("r0 =0x%08lx  r1 =0x%08lx  r2 =0x%08lx  r3 =0x%08lx  r12=0x%08lx\n",
+                (unsigned long)r.r0, (unsigned long)r.r1, (unsigned long)r.r2, (unsigned long)r.r3, (unsigned long)r.r12);
+            o.add("CFSR=0x%08lx HFSR=0x%08lx MMFAR=0x%08lx BFAR=0x%08lx\n",
+                (unsigned long)r.cfsr, (unsigned long)r.hfsr, (unsigned long)r.mmfar, (unsigned long)r.bfar);
+        }else{
+            o.add("CFSR=0x%08lx(ほかのレジスタは控えていない)\n", (unsigned long)r.cfsr);
+        }
         //CFSRの主なビット(ARMv8-M)
         if(r.cfsr & 0x0000FFFF){
             o.add("原因の手がかり:");
@@ -354,8 +371,18 @@ void CrashDumpFunctions::Setup(){
         r.kind = (uint32_t)Kind::Watchdog;
         r.phase = s0 & 0xFF;
         r.uptime_ms = boot_info.scratch[1];
-        r.frame_no = boot_info.scratch[2];
-        r.in_lua = boot_info.scratch[3] ? 1 : 0;
+        r.frame_no = boot_info.scratch[2] & 0x7FFFFFFFu;
+        r.in_lua = (boot_info.scratch[2] >> 31) & 1u;
+        if(InFlash(boot_info.scratch[3])){
+            //フラッシュ上の文字列。表示できる文字だけを写す(番地が古い版のファームのものでも壊れない)
+            const char* src = reinterpret_cast<const char*>((uintptr_t)boot_info.scratch[3]);
+            size_t n = 0;
+            for(; n < sizeof(r.scene) - 1 && src[n]; n++){
+                if((uint8_t)src[n] < 0x20 || (uint8_t)src[n] == 0x7F){ n = 0; break; }
+                r.scene[n] = src[n];
+            }
+            r.scene[n] = '\0';
+        }
         SealRecord(r);
         have = true;
         boot_info.source = "scratch";
@@ -396,7 +423,7 @@ void CrashDumpFunctions::Setup(){
     if(text && boot_info.source && strcmp(boot_info.source, "scratch") == 0){
         Out o{text, kTextBytes, len};
         o.add("\n(RAMの記録が再起動で消えていたため、ウォッチドッグのスクラッチレジスタの控えから作った簡易版です。"
-              "画面・Luaアプリ・スタックは分かりません)\n");
+              "Luaアプリの名前・スタックは分かりません)\n");
         len = o.len;
     }
     const bool written = text && WriteDump("crash", text, len, path, sizeof(path));
@@ -510,8 +537,8 @@ void CrashDumpFunctions::BeginFrame(uint32_t frame_no){
 #if !defined(PICOOS_PC)
     if(watchdog_on){
         watchdog_hw->scratch[1] = crumbs.uptime_ms;
-        watchdog_hw->scratch[2] = frame_no;
-        watchdog_hw->scratch[3] = crumbs.in_lua;
+        watchdog_hw->scratch[2] = (frame_no & 0x7FFFFFFFu) | (crumbs.in_lua ? 0x80000000u : 0u);
+        watchdog_hw->scratch[3] = InFlash((uint32_t)(uintptr_t)last_scene_ptr) ? (uint32_t)(uintptr_t)last_scene_ptr : 0u;
     }
 #endif
 }

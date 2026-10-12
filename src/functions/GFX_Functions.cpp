@@ -250,6 +250,64 @@ void PICO_GFX::VerifyLcdMatchesFrame() {
 }
 #endif
 
+// ---- フルカラースプライト直送モード(ヘッダ参照) ----
+namespace {
+    LGFX_Sprite* fc_sprite = nullptr;
+    int fc_x = 0, fc_y = 0;
+    bool fc_pending = false; // 次のFlushDirty()で必ず送る
+
+    Rect FcRect() {
+        if (!fc_sprite) return Rect{0, 0, 0, 0};
+        return Rect{(int16_t)fc_x, (int16_t)fc_y, (int16_t)fc_sprite->width(), (int16_t)fc_sprite->height()};
+    }
+
+    // 載っていた所をframeから描き直させる(半透明の下まで)
+    void FcRestoreArea(const Rect& r) {
+        PICO_GFX::InvalidateLcdRows(r.y, r.h);
+        PICO_GFX::MarkDirtyBelow(r);
+    }
+
+    // 送って、載せた行を「液晶==frame」ではなくした印を付ける
+    void FcPush() {
+        if (!fc_sprite) return;
+        fc_sprite->pushSprite(OSData::lcd, fc_x, fc_y);
+        const Rect r = FcRect();
+        PICO_GFX::InvalidateLcdRows(r.y, r.h);
+        fc_pending = false;
+    }
+}
+
+void PICO_GFX::EnableFullColorSprite(LGFX_Sprite* sprite, int x, int y) {
+    if (fc_sprite && fc_sprite != sprite) FcRestoreArea(FcRect());
+    fc_sprite = sprite;
+    fc_x = x;
+    fc_y = y;
+    fc_pending = (sprite != nullptr);
+}
+
+void PICO_GFX::MoveFullColorSprite(int x, int y) {
+    if (!fc_sprite || (x == fc_x && y == fc_y)) return;
+    FcRestoreArea(FcRect()); // 元の場所はframeの絵へ戻す
+    fc_x = x;
+    fc_y = y;
+    fc_pending = true;
+}
+
+void PICO_GFX::MarkFullColorSpriteChanged() {
+    if (fc_sprite) fc_pending = true;
+}
+
+void PICO_GFX::DisableFullColorSprite() {
+    if (!fc_sprite) return;
+    FcRestoreArea(FcRect());
+    fc_sprite = nullptr;
+    fc_pending = false;
+}
+
+bool PICO_GFX::IsFullColorSpriteEnabled() {
+    return fc_sprite != nullptr;
+}
+
 void PICO_GFX::FlushDirty() {
     // パレットが変わったら、frameのパレットを合わせて全画面を描き直す。
     // frameの中身(パレット番号)は変わらないので、行を飛ばす最適化も効かせないよう全行を無効にする
@@ -261,7 +319,11 @@ void PICO_GFX::FlushDirty() {
         MarkDirtyBelow({0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
     }
 
-    if (dirtyRectCount == 0 && !dirtyOverflowed) return;
+    if (dirtyRectCount == 0 && !dirtyOverflowed) {
+        // 普通の描画は無いが、スプライトだけ更新されたとき
+        if (fc_pending) FcPush();
+        return;
+    }
 
     //128件を超えた場合は、細切れの矩形を1枚ずつ処理する代わりに画面全体を
     //1枚のdirty矩形として扱う(取りこぼしが無く、128枚の当たり判定・転送より軽い)
@@ -384,12 +446,23 @@ void PICO_GFX::FlushDirty() {
         OSData::lcd->clearClipRect();
         InvalidateLcdRows(directRenderRect.y, directRenderRect.h);
     }
+
+    // ★ 3. フルカラースプライト直送モード: 普通の転送が全部済んだ最後に、スプライトを液晶へ載せる。
+    //       普通の転送がスプライトの矩形にかかっていたら(液晶が上書きされたので)送り直す
+    if (fc_sprite) {
+        const Rect fr = FcRect();
+        for (int i = 0; i < dirtyRectCount && !fc_pending; i++) {
+            if (dirtyRects[i].intersects(fr)) fc_pending = true;
+        }
+        if (fc_pending) FcPush();
+    }
     push_frame_total_ms = millis() - buf_timer_ms;
 
 #if defined(PICOOS_PC)
     // PCビルドだけ: PICOOS_VERIFY_LCD=1 のとき、送り終えた液晶の中身がframeと一致するかを全画素比べる
     // (変わっていない行を送らない最適化が古い絵を残していないかの確認用)
-    if (getenv("PICOOS_VERIFY_LCD")) VerifyLcdMatchesFrame();
+    // (フルカラースプライトを載せている間は液晶がframeと食い違うのが正しいので比べない)
+    if (getenv("PICOOS_VERIFY_LCD") && !fc_sprite) VerifyLcdMatchesFrame();
 #endif
 
     //! DEBUG !

@@ -149,6 +149,22 @@ namespace PICO_GFX {
 
     void FlushDirty();
 
+    // ---- フルカラースプライト直送モード ----
+    // 4bppのframeを通さず、呼び出し側が持つフルカラー(16bit等)のスプライトを、普通の描画・転送が
+    // 全部済んだ後(FlushDirty()の最後)に液晶の(x, y)へそのまま送るモード。
+    // 送るのは、①スプライトが載る矩形に普通の転送がかかったとき(液晶が上書きされるため)、
+    // ②MarkFullColorSpriteChanged()/Enable/Moveで更新を知らせたときだけ。何も変わらなければ送らない。
+    // 液晶の中身はframeと食い違うので、載っている行は「次は必ず送る」にしてある(行ハッシュの最適化と両立)。
+    // スプライトの寿命は呼び出し側の責任: 破棄する前に必ずDisableFullColorSprite()を呼ぶこと
+    // (シーンを離れるonExit()等)。フルカラーのままの絵は画面ロック・ダイアログ等の上にも載る。
+    void EnableFullColorSprite(LGFX_Sprite* sprite, int x, int y);
+    void MoveFullColorSprite(int x, int y);
+    // スプライトの中身を書き換えたら呼ぶ(次のFlushDirty()で送り直す)
+    void MarkFullColorSpriteChanged();
+    // モードを終える。載っていた所はframeから描き直される
+    void DisableFullColorSprite();
+    bool IsFullColorSpriteEnabled();
+
     // FlushDirty()の中身(ホストテストやデバッグ用に外から見えるようにしてある)。
     // 重なる/近いdirty矩形を1枚にまとめる
     void CoalesceDirtyRects();

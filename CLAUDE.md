@@ -95,6 +95,7 @@ script/                       開発補助スクリプト(アイコン生成/SKK
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   build_app_repo.py           アプリストアの配布物を作る(鍵の生成・署名・目録だけの署名(sign)とCIでの組み立て(assemble)・確認。標準ライブラリのみ。APP_REPO.md)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
+  generate_pvid.py            動画を.pvid(16色+8x8タイルの差分)へ変換する(ffmpeg + numpy。VIDEO_FORMAT.md)
   pad_serial.py               PCのキーボードを外部コントローラーにする(USBシリアルへ送る。tkinter + pyserial)
   generate_tetris_blocks.py   テトリスのミノの絵(blocks.pimg)とアイコンを作る(標準ライブラリのみ)
   generate_reversi_tiles.py / generate_minesweeper_tiles.py / generate_breakout_blocks.py   リバーシ・マインスイーパー・ブロック崩しの盤面のタイル画像(tiles*.pimg)を作る(標準ライブラリのみ)。下記「ボードゲーム4本のpico.gameへの移行」
@@ -116,6 +117,7 @@ PROTOCOL.md                    ドキュメントサーバとの通信仕様(v1�
 CHAT_PROTOCOL.md               チャットサーバとの通信仕様(下記「チャット」参照)
 APP_REPO.md                    アプリストアの配布物の形式(下記「アプリストア」参照)
 MUSIC_FORMAT.md                曲データ形式(pico-os MML)の仕様(下記「曲データ」参照)
+VIDEO_FORMAT.md                動画形式(.pvid)の仕様(下記「動画(.pvid)」参照)
 server/chat/                   自前のチャットサーバ(chat_server.py、標準ライブラリのみ)+ Webクライアント + Raspberry Pi/Let's Encryptの設置手順(README.md)
 ```
 `include/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
@@ -2156,6 +2158,21 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
   1回タップで再生、ループするMMLが1周で次のWAVへ進みリピートしないで止まる、読めないMMLの理由の表示と飛ばし、ミックス+[全曲]、`n`/`r`、
   リピート全曲で頭へ戻る、フォーカスで一覧→再生中の欄、`music.cfg`の保存。**実機では未確認**。
 - 未: 曲の並べ替え・プレイリストの編集(フォルダを母艦で作る前提)、アプリを閉じても鳴り続ける再生(OS側へ上げる必要がある)、アルバムアートやタグ。
+
+### 動画(.pvid)(`script/generate_pvid.py` / `VIDEO_FORMAT.md`)(2026-10-12)
+
+MJPEGは本体でJPEGを解く・フルカラーを16色へ落とす処理が重く、画面(`OSData::frame`)が4bppなので利点も活きないため、
+**PCで「動画ごとの16色(0=黒・15=白は固定、残り14色はL\*a\*b\*のk-means)+画面に固定したBayer 8x8のディザ+8x8タイルの差分」へ
+変換しておく形**にした。本体の仕事は変わったタイル(1色/2色/そのままの3つの形、可逆)を4bppのバッファへ写すだけ。
+ディザを誤差拡散にしないのは、1画素の変化が広がって差分が効かなくなるため。
+- **今あるのは変換スクリプトとその検証まで。本体の再生は無い**(予定は`VIDEO_FORMAT.md`「本体での再生」: `GameBoyView`型の部品、
+  再生中だけパレットを差し替え、`.wav`の`WavPositionMs()`を時計にする)。
+- 差分の判定は「本体の画面に出ているはずの絵」との色の違い(隣の色1つぶんを1とした値)の合計が`--threshold`(既定4)を超えるか、
+  1画素でも3を超えるタイル。後者が無いと小さな点が動いても次のキーフレームまで残った(testsrc2で見えた)。
+- 目安: testsrc2の240x128・15fpsで1フレーム平均約2.8KB・約42KB/秒。**実写・アニメでの値と実機の速さは未確認**。
+- `numpy`を使う(他の変換スクリプトは標準ライブラリだけだが、動画の色落としを素のPythonで回すと遅すぎるため)。`script/requirements.txt`へ足した。
+- 検証: `pvid_test`(run.sh の media。タイルの往復・読み直した絵が本体の画面と一致・目録から読み始められる・差分の判定・色選び・
+  壊れたファイル・ffmpegがあればlavfiの動画から変換)。
 
 ### 外部コントローラー (`src/functions/Pad_Functions` / `script/pad_serial.py`) (2026-09-25)
 

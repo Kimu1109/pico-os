@@ -1,6 +1,7 @@
 #pragma once
 
 #include "consts.hpp"
+#include "util/TouchCalib.hpp"
 #include "OS_Data.hpp"
 #include "functions/Log_Functions.hpp"
 
@@ -55,6 +56,12 @@ namespace PicoOsTouchScript {
 
 namespace PICO_Touch
 {
+    // 直近のタッチの「生の値」。PCにはXPT2046が無いので、マウス位置を旧来の式の逆変換で
+    // 実機と同じ形の値にして返す(タッチ補正アプリが動くように)。
+    // PCは補正を座標へ掛けない(マウスは元から正確なため)
+    inline float raw_u = 0.0f;
+    inline float raw_v = 0.0f;
+
     inline int prev_x = 0;
     inline int prev_y = 0;
 
@@ -92,6 +99,8 @@ namespace PICO_Touch
         if(touched){
             OSData::touchX = (int)((x < 0) ? 0 : (x >= SCREEN_WIDTH  ? SCREEN_WIDTH  - 1 : x));
             OSData::touchY = (int)((y < 0) ? 0 : (y >= SCREEN_HEIGHT ? SCREEN_HEIGHT - 1 : y));
+            TouchCalib::DefaultInverse(SCREEN_WIDTH, SCREEN_HEIGHT,
+                (float)OSData::touchX, (float)OSData::touchY, raw_u, raw_v);
         }
 
         if(!touched){

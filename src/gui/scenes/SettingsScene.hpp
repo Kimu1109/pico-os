@@ -18,9 +18,10 @@ class NetworkScan;    // task/NetworkScan.hpp。同上
 
 // 標準アプリの設定。画面下のタブで大まかな項目ごとに分けてある:
 //   Wi-Fi   … ON/OFF・接続状態・保存済みのネットワークの一覧(接続/削除)・周辺の検索・手入力での追加
-//   本体    … 音量(sound.cfg)・明るさと自動調光・スリープ(display.cfg)
+//   画面    … 明るさと自動調光・スリープ・ダークテーマ(display.cfg)・画面ロック(lock.cfg)・タッチ位置の補正(touch.cfg)
+//   音      … 音量・音質(出力の周波数)・電池駆動中に音量を絞る(sound.cfg)
 //   時刻    … タイムゾーン・NTPサーバー(network.cfg)・時刻の手動設定(Wi-Fiが無いとき用)
-//   その他  … ブラウザのホーム(network.cfg)・起動時の自己診断(user.cfg)・ランチャで隠したアプリ・開発者向け
+//   他      … ランチャで隠したアプリ・ブラウザのホーム(network.cfg)・起動時の自己診断(user.cfg)・開発者向け(debug.cfg)
 // 上の段の右端の「電源」はスリープ/再起動のメニュー(PowerMenuFunctions。ステータスバーの長押しと同じもの)
 //
 // ウィジェットは全タブぶんをonEnter()で作り、表示中のタブのものだけを見せる
@@ -34,7 +35,7 @@ class NetworkScan;    // task/NetworkScan.hpp。同上
 // newしてAddDialog()、閉じたらDestroyLater()で破棄する(1つを使い回さない)。
 class SettingsScene : public Scene {
     private:
-        enum class Tab : uint8_t { Wifi = 0, Device, Time, Other, Count };
+        enum class Tab : uint8_t { Wifi = 0, Display, Sound, Time, Other, Count };
 
         // 今どの項目をInputDialogで編集中か。ダイアログのonClosedから書き込み先を振り分ける
         enum class EditField : uint8_t {
@@ -167,7 +168,6 @@ class SettingsScene : public Scene {
         Button*            home_edit_button     = nullptr;
 
         Checkbox*          run_test_checkbox    = nullptr;
-        Label<PICO_STR_M>* run_test_note        = nullptr;
 
         // ランチャで隠したアプリ(AppFunctions::SetHidden)。一覧から選んで表示し直す/並びを元に戻す
         Label<PICO_STR_L>* launcher_label       = nullptr;
@@ -194,7 +194,7 @@ class SettingsScene : public Scene {
         int tz_selected_index = -1; // onUpdate()での変化検出用
 
         constexpr static int MARGIN     = 3;
-        constexpr static int ROW_H      = 30;
+        constexpr static int ROW_H      = 34;
         constexpr static int EDIT_BTN_W = 48;
         constexpr static int EDIT_BTN_H = 20;
         constexpr static int TAB_H      = 28;

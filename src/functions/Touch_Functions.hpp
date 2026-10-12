@@ -12,6 +12,8 @@
 #include "consts.hpp"
 #include "OS_Data.hpp"
 #include "util/TouchFilter.hpp"
+#include "util/TouchCalib.hpp"
+#include <math.h>
 #include "functions/Log_Functions.hpp"
 
 namespace PICO_Touch
@@ -19,10 +21,12 @@ namespace PICO_Touch
     inline SPIClassRP2040 touchSPI(spi0, TOUCH_MISO, TOUCH_CS, TOUCH_SCK, TOUCH_MOSI);
     inline XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
 
-    inline const int TS_MINX = 300;
-    inline const int TS_MAXX = 3800;
-    inline const int TS_MINY = 300;
-    inline const int TS_MAXY = 3800;
+    // 生の値→画面座標の変換はutil/TouchCalib.hpp(既定は昔のmap()と同じ式。
+    // 「タッチ補正」アプリで求めた値が入る)
+
+    // 直近のタッチの生の値(u=p.y, v=p.x)。補正アプリが読む
+    inline float raw_u = 0.0f;
+    inline float raw_v = 0.0f;
 
     // ライブラリ内部のZ_THRESHOLD(400)はごく僅かな接触でも真になり敏感すぎるため、
     // アプリ側でさらに高い閾値を要求する。ライブラリはこれ未満だと座標そのものを
@@ -85,9 +89,17 @@ namespace PICO_Touch
             TS_Point p = ts.getPoint();
             touched = (p.z >= TOUCH_Z_THRESHOLD);
             if(touched){
-                // p.x と p.y を入れ替え、横方向(x)は反転してマッピング
-                int16_t x = map(p.y, TS_MINY, TS_MAXY, SCREEN_W - 1, 0);
-                int16_t y = map(p.x, TS_MINX, TS_MAXX, 0, SCREEN_H - 1);
+                // p.x と p.y を入れ替え、アフィン変換(補正値。既定は横反転のmap()と同じ)で画面座標へ
+                raw_u = (float)p.y;
+                raw_v = (float)p.x;
+                if(!TouchCalib::has_current){
+                    TouchCalib::current = TouchCalib::Default(SCREEN_W, SCREEN_H);
+                    TouchCalib::has_current = true;
+                }
+                float fxf, fyf;
+                TouchCalib::Apply(TouchCalib::current, raw_u, raw_v, fxf, fyf);
+                int16_t x = (int16_t)lroundf(fxf);
+                int16_t y = (int16_t)lroundf(fyf);
 
                 // はみ出し防止
                 x = constrain(x, 0, SCREEN_W - 1);

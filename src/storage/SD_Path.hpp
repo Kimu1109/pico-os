@@ -81,6 +81,8 @@ namespace PICO_Path {
             constexpr const char* SYS_MUSIC_CFG = "/sys/music.cfg";
             // 画面の明るさ("brightness = 0〜100" / "auto-dim = true|false")。DisplayFunctions参照
             constexpr const char* SYS_DISPLAY_CFG = "/sys/display.cfg";
+            // タッチ位置の補正("a"〜"f"の6つの小数)。TouchCalibFunctions参照
+            constexpr const char* SYS_TOUCH_CFG = "/sys/touch.cfg";
             // SSHアプリ("target = user@host:port" / "font = small|large")。SshScene参照
             constexpr const char* SYS_SSH_CFG = "/sys/ssh.cfg";
             // アラーム("alarm1 = 07:30,daily,on" ...)。AlarmFunctions参照

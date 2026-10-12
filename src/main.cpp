@@ -2,6 +2,7 @@
 
 #include "functions/SD_Functions.hpp"
 #include "functions/Touch_Functions.hpp"
+#include "functions/TouchCalib_Functions.hpp"
 #include "functions/GFX_Functions.hpp"
 #include "functions/Display_Functions.hpp"
 #include "functions/Power_Functions.hpp"
@@ -78,6 +79,7 @@ void setup() {
     MemFunctions::Setup();
 
     PICO_Touch::Setup();
+    TouchCalibFunctions::Setup();
     PadFunctions::Setup();
     KeyInputFunctions::Setup();
     CardKbFunctions::Setup();   //あれば使うだけ(CardKB2。無くても何も出さない)

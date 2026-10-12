@@ -8,6 +8,7 @@
 #include "functions/Sound_Functions.hpp"
 #include "functions/Display_Functions.hpp"
 #include "functions/Lock_Functions.hpp"
+#include "gui/scenes/TouchCalibScene.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
@@ -682,9 +683,10 @@ void SettingsScene::onEnter(){
     const int16_t tab_y = (int16_t)(content.y + content.h - MARGIN - TAB_H);
     this->tab_bar = new TabBar(content.x + MARGIN, tab_y, content.w - MARGIN * 2, TAB_H);
     this->tab_bar->addTab("Wi-Fi");
-    this->tab_bar->addTab("本体");
+    this->tab_bar->addTab("画面");
+    this->tab_bar->addTab("音");
     this->tab_bar->addTab("時刻");
-    this->tab_bar->addTab("その他");
+    this->tab_bar->addTab("他");
     this->tab_bar->setSelected((int)this->tab);
     this->tab_bar->setOnChanged([this](int index){
         this->tab = (Tab)index;
@@ -699,7 +701,7 @@ void SettingsScene::onEnter(){
     const int full_w = content.w - MARGIN * 2;
 
     // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、読み込みより前に生成しておく
-    this->run_test_checkbox = new Checkbox(left, rowY(1), "起動時に自己診断を実行");
+    this->run_test_checkbox = new Checkbox(left, rowY(2), "起動時に自己診断を実行");
     this->run_test_checkbox->setFontSize(FontFn::Small);
     this->run_test_checkbox->setOnChangeChecked([this](){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, "run-test",
@@ -775,40 +777,46 @@ void SettingsScene::onEnter(){
     addToTab(Tab::Wifi, this->wifi_list);
 
     // =====================================================================
-    // 本体(画面と音)
+    // 画面・音のスライダー(各タブの1行目。行の幅いっぱいに置く)
     // =====================================================================
     constexpr int16_t kTitleW = 40;
     const int16_t slider_x = (int16_t)(left + kTitleW);
+    const int16_t slider_w = (int16_t)(content.x + content.w - MARGIN - slider_x);
 
-    // ---- 音量(sound.cfgの volume) ----
+    // ---- 音量(sound.cfgの volume)。音タブの1行目 ----
     // 現在値はSoundFunctionsが起動時にsound.cfgから読んだもの(=今鳴っている音量)を出す
     this->volume_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), "音量");
     this->volume_title->setFontSize(FontFn::Small);
-    addToTab(Tab::Device, this->volume_title);
+    addToTab(Tab::Sound, this->volume_title);
 
-    this->volume_slider = new NumberSlider(slider_x, rowY(0), (int16_t)(content.x + content.w - MARGIN - slider_x));
+    this->volume_slider = new NumberSlider(slider_x, rowY(0), slider_w);
     this->volume_slider->setMinValue(0);
     this->volume_slider->setMaxValue(100);
     this->volume_slider->setDecimalPlacesNum(0);
     this->volume_applied = SoundFunctions::GetVolume();
     this->volume_dirty   = false;
     this->volume_slider->setValue((float)this->volume_applied);
-    addToTab(Tab::Device, this->volume_slider);
+    addToTab(Tab::Sound, this->volume_slider);
 
-    // ---- 画面の明るさ(display.cfgの brightness)+ 自動調光(auto-dim) ----
-    this->brightness_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(1) + 2), "輝度");
+    // ---- 画面の明るさ(display.cfgの brightness)。画面タブの1行目 ----
+    this->brightness_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), "輝度");
     this->brightness_title->setFontSize(FontFn::Small);
-    addToTab(Tab::Device, this->brightness_title);
+    addToTab(Tab::Display, this->brightness_title);
 
-    // 自動調光のチェックボックスは幅がテキストから自動計算されるため、先に作って実測してから
-    // 明るさスライダーの幅をその手前までに詰める。setFontSize()自体は再計算しない
-    // (l_rect.wは構築時のフォントのまま)ので、setText()で同じ文字列を渡し直して計算をやり直させる
-    this->auto_dim_checkbox = new Checkbox(0, rowY(1), "自動調光");
+    this->brightness_slider = new NumberSlider(slider_x, rowY(0), slider_w);
+    this->brightness_slider->setMinValue(DisplayFunctions::kMinBrightness);
+    this->brightness_slider->setMaxValue(100);
+    this->brightness_slider->setDecimalPlacesNum(0);
+    this->brightness_applied = DisplayFunctions::GetBrightness();
+    this->brightness_dirty   = false;
+    this->brightness_slider->setValue((float)this->brightness_applied);
+    addToTab(Tab::Display, this->brightness_slider);
+
+    // ---- 自動調光(display.cfgの auto-dim)。画面タブの2行目 ----
+    // setFontSize()は幅を測り直さないので、setText()で同じ文字列を渡し直す(他のチェックボックスと同じ)
+    this->auto_dim_checkbox = new Checkbox(left, rowY(1), "しばらく触らないと暗くする");
     this->auto_dim_checkbox->setFontSize(FontFn::Small);
-    this->auto_dim_checkbox->setText("自動調光");
-    const int16_t auto_dim_w = this->auto_dim_checkbox->getLocalRect().w;
-    const int16_t auto_dim_x = (int16_t)(content.x + content.w - MARGIN - auto_dim_w);
-    this->auto_dim_checkbox->setX(auto_dim_x);
+    this->auto_dim_checkbox->setText("しばらく触らないと暗くする");
     this->auto_dim_checkbox->setIsChecked(DisplayFunctions::GetAutoDimEnabled());
     this->auto_dim_checkbox->setOnChangeChecked([this](){
         const bool enabled = this->auto_dim_checkbox->getIsChecked();
@@ -816,18 +824,7 @@ void SettingsScene::onEnter(){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "auto-dim",
             PICO_Config::ConfigValue::FromBool(enabled));
     });
-    addToTab(Tab::Device, this->auto_dim_checkbox);
-
-    constexpr int16_t kBrightnessGap = 4;
-    const int16_t brightness_slider_w = (int16_t)(auto_dim_x - kBrightnessGap - slider_x);
-    this->brightness_slider = new NumberSlider(slider_x, rowY(1), brightness_slider_w);
-    this->brightness_slider->setMinValue(DisplayFunctions::kMinBrightness);
-    this->brightness_slider->setMaxValue(100);
-    this->brightness_slider->setDecimalPlacesNum(0);
-    this->brightness_applied = DisplayFunctions::GetBrightness();
-    this->brightness_dirty   = false;
-    this->brightness_slider->setValue((float)this->brightness_applied);
-    addToTab(Tab::Device, this->brightness_slider);
+    addToTab(Tab::Display, this->auto_dim_checkbox);
 
     // =====================================================================
     // 時刻(タイムゾーンのドロップダウンは一覧が下の行へ重なるので、最後にAdd()する)
@@ -868,29 +865,45 @@ void SettingsScene::onEnter(){
     addToTab(Tab::Time, this->clock_note);
     this->refreshClockLabel(true);
 
+    // ---- タッチ位置の補正。画面タブの6行目 ----
+    // 押すと補正の画面(TouchCalibScene)へ移る。戻ると設定アプリはこのタブのまま開き直る
+    Button* calib_button = this->makeEditButton(rowY(5));
+    calib_button->setText("補正");
+    calib_button->setOnPressEnd([](){ SceneFunctions::Push(new TouchCalibScene()); });
+    addToTab(Tab::Display, calib_button);
+    addToTab(Tab::Display, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(5) + 2), label_w, "タッチ位置の補正"));
+
     // =====================================================================
     // その他
     // =====================================================================
-    this->home_edit_button = this->makeEditButton(rowY(0));
+    // ランチャで隠したアプリ(並べ替え・隠すのはランチャのタイルの長押し)。1行目
+    this->launcher_button = this->makeEditButton(rowY(0));
+    this->launcher_button->setOnPressEnd([this](){ this->openLauncherDialog(); });
+    addToTab(Tab::Other, this->launcher_button);
+    this->launcher_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(0) + 2), label_w, "");
+    addToTab(Tab::Other, this->launcher_label);
+    this->refreshLauncherLabel();
+
+    // ブラウザのホーム。2行目
+    this->home_edit_button = this->makeEditButton(rowY(1));
     this->home_edit_button->setOnPressEnd([this](){
         // 空欄で決定すると同梱サンプル文書に戻る(commitEdit()参照)
         this->openEditDialog(EditField::BrowserHome, "ブラウザのホームURL", this->home_value.c_str());
     });
     addToTab(Tab::Other, this->home_edit_button);
 
-    this->home_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(0) + 2), label_w, "");
+    this->home_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(1) + 2), label_w, "");
     addToTab(Tab::Other, this->home_label);
     this->refreshHomeLabel();
 
     // 起動時セルフチェック(本体はloadValues()より前で生成済み)
     addToTab(Tab::Other, this->run_test_checkbox);
 
-    this->run_test_note = makeRowLabel<PICO_STR_M>(left,
-        (int16_t)(rowY(1) + this->run_test_checkbox->getH() + 2), full_w, "次回の起動から反映されます");
-    this->run_test_note->setTextColor(PICO_DARKGREY);
-    addToTab(Tab::Other, this->run_test_note);
 
-    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)
+    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)。見出しの下の5〜7行目
+    auto* dev_title = makeRowLabel<PICO_STR_M>(left, (int16_t)(rowY(3) + 10), full_w, "開発者向け");
+    dev_title->setTextColor(PICO_DARKGREY);
+    addToTab(Tab::Other, dev_title);
     auto makeDevCheckbox = [&](int row, const char* text, bool checked) -> Checkbox* {
         Checkbox* cb = new Checkbox(left, rowY(row), text);
         cb->setFontSize(FontFn::Small);
@@ -899,27 +912,19 @@ void SettingsScene::onEnter(){
         addToTab(Tab::Other, cb);
         return cb;
     };
-    this->perf_overlay_checkbox = makeDevCheckbox(3, "フレーム時間を表示", DevToolsFunctions::PerfOverlay());
+    this->perf_overlay_checkbox = makeDevCheckbox(4, "フレーム時間を表示", DevToolsFunctions::PerfOverlay());
     this->perf_overlay_checkbox->setOnChangeChecked([this](){
         DevToolsFunctions::SetPerfOverlay(this->perf_overlay_checkbox->getIsChecked());
     });
-    this->lua_debugger_checkbox = makeDevCheckbox(4, "Luaデバッガ", DevToolsFunctions::LuaDebuggerEnabled());
+    this->lua_debugger_checkbox = makeDevCheckbox(5, "Luaデバッガ", DevToolsFunctions::LuaDebuggerEnabled());
     this->lua_debugger_checkbox->setOnChangeChecked([this](){
         // 次に開いたLuaアプリから効く(今動いているLuaEngineには後から付けない)
         DevToolsFunctions::SetLuaDebugger(this->lua_debugger_checkbox->getIsChecked());
     });
-    this->watchdog_checkbox = makeDevCheckbox(5, "固まったら再起動する", DevToolsFunctions::Watchdog());
+    this->watchdog_checkbox = makeDevCheckbox(6, "固まったら再起動する", DevToolsFunctions::Watchdog());
     this->watchdog_checkbox->setOnChangeChecked([this](){
         DevToolsFunctions::SetWatchdog(this->watchdog_checkbox->getIsChecked());
     });
-
-    // ランチャで隠したアプリ(並べ替え・隠すのはランチャのタイルの長押し)
-    this->launcher_button = this->makeEditButton(rowY(6));
-    this->launcher_button->setOnPressEnd([this](){ this->openLauncherDialog(); });
-    addToTab(Tab::Other, this->launcher_button);
-    this->launcher_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(6) + 2), label_w, "");
-    addToTab(Tab::Other, this->launcher_label);
-    this->refreshLauncherLabel();
 
     // =====================================================================
     // ドロップダウン(開いた一覧が下の行へ重なるので、当たり判定・描画の両方で最前面に来るよう
@@ -928,9 +933,8 @@ void SettingsScene::onEnter(){
     constexpr int16_t kDropdownW = 110;
     const int16_t dropdown_x = (int16_t)(content.x + content.w - MARGIN - kDropdownW);
 
-    // ---- ダークテーマ(display.cfgの theme)。本体タブの6行目 ----
-    // ドロップダウンの一覧がこの行へ重なりうるので、それより先にAdd()する
-    this->dark_checkbox = new Checkbox(left, rowY(5), "ダークテーマ");
+    // ---- ダークテーマ(display.cfgの theme)。画面タブの3行目(明るさの仲間なので近くに) ----
+    this->dark_checkbox = new Checkbox(left, rowY(2), "ダークテーマ");
     this->dark_checkbox->setFontSize(FontFn::Small);
     this->dark_checkbox->setText("ダークテーマ");
     this->dark_checkbox->setIsChecked(DisplayFunctions::IsDarkTheme());
@@ -939,19 +943,19 @@ void SettingsScene::onEnter(){
         DisplayFunctions::SetDarkTheme(dark);
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "theme", dark ? "dark" : "light");
     });
-    addToTab(Tab::Device, this->dark_checkbox);
+    addToTab(Tab::Display, this->dark_checkbox);
 
-    // ---- 画面ロック(PIN)。本体タブの7行目 ----
-    this->lock_button = this->makeEditButton(rowY(6));
+    // ---- 画面ロック(PIN)。画面タブの5行目 ----
+    this->lock_button = this->makeEditButton(rowY(4));
     this->lock_button->setOnPressEnd([this](){ this->openLockDialog(); });
-    addToTab(Tab::Device, this->lock_button);
-    this->lock_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(6) + 2), label_w, "");
-    addToTab(Tab::Device, this->lock_label);
+    addToTab(Tab::Display, this->lock_button);
+    this->lock_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(4) + 2), label_w, "");
+    addToTab(Tab::Display, this->lock_label);
     this->refreshLockLabel();
 
-    // ---- 電池駆動中に音量を絞る(sound.cfgの battery-cap)。本体タブの5行目 ----
-    // 上の2つのドロップダウンの一覧がこの行へ重なるので、それより先にAdd()する
-    this->battery_cap_checkbox = new Checkbox(left, rowY(4), "電池で音量を絞る");
+    // ---- 電池駆動中に音量を絞る(sound.cfgの battery-cap)。音タブの3行目(+下に説明) ----
+    // 音質のドロップダウンの一覧がこの行へ重なるので、それより先にAdd()する
+    this->battery_cap_checkbox = new Checkbox(left, rowY(2), "電池で音量を絞る");
     this->battery_cap_checkbox->setFontSize(FontFn::Small);
     this->battery_cap_checkbox->setText("電池で音量を絞る");
     this->battery_cap_checkbox->setIsChecked(SoundFunctions::GetBatteryCap());
@@ -961,25 +965,29 @@ void SettingsScene::onEnter(){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "battery-cap",
             PICO_Config::ConfigValue::FromBool(enabled));
     });
-    addToTab(Tab::Device, this->battery_cap_checkbox);
+    addToTab(Tab::Sound, this->battery_cap_checkbox);
+    auto* cap_note = makeRowLabel<PICO_STR_L>(left,
+        (int16_t)(rowY(2) + this->battery_cap_checkbox->getH() + 2), full_w, "電池駆動中は最大20%");
+    cap_note->setTextColor(PICO_DARKGREY);
+    addToTab(Tab::Sound, cap_note);
 
-    // ---- 音の周波数(sound.cfgの sample-rate)。本体タブの4行目 ----
-    // スリープのドロップダウンの一覧がこの行へ重なるので、こちらを先にAdd()する
-    this->rate_title = new Label<PICO_STR_S>(left, rowY(3) + 4, "音質");
+    // ---- 音の周波数(sound.cfgの sample-rate)。音タブの2行目 ----
+    this->rate_title = new Label<PICO_STR_S>(left, rowY(1) + 4, "音質");
     this->rate_title->setFontSize(FontFn::Small);
-    this->rate_dropdown = new DropdownMenu(dropdown_x, rowY(3), kDropdownW);
+    this->rate_dropdown = new DropdownMenu(dropdown_x, rowY(1), kDropdownW);
     for(int i = 0; i < kRatePresetCount; i++) this->rate_dropdown->add(kRatePresetLabels[i]);
     this->rate_selected_index = (SoundFunctions::ConfiguredSampleRate() == kRatePresets[1]) ? 1 : 0;
     this->rate_dropdown->setSelectedIndex(this->rate_selected_index);
-    addToTab(Tab::Device, this->rate_title);
-    addToTab(Tab::Device, this->rate_dropdown);
+    addToTab(Tab::Sound, this->rate_title);
+    addToTab(Tab::Sound, this->rate_dropdown);
 
-    // ---- スリープまでの時間(display.cfgの sleep-timeout)。本体タブの3行目 ----
+    // ---- スリープまでの時間(display.cfgの sleep-timeout)。画面タブの4行目 ----
+    // 一覧が下の画面ロック・タッチ補正の行へ重なるので、それらより後にAdd()している
     // 設定値が一覧のどれとも違う(display.cfgを手で書き換えた)ときは、いちばん近い項目を選んで見せる
-    this->sleep_title = new Label<PICO_STR_S>(left, rowY(2) + 4, "スリープ");
+    this->sleep_title = new Label<PICO_STR_S>(left, rowY(3) + 4, "スリープ");
     this->sleep_title->setFontSize(FontFn::Small);
 
-    this->sleep_dropdown = new DropdownMenu(dropdown_x, rowY(2), kDropdownW);
+    this->sleep_dropdown = new DropdownMenu(dropdown_x, rowY(3), kDropdownW);
     for(int i = 0; i < kSleepPresetCount; i++){
         this->sleep_dropdown->add(kSleepPresetLabels[i]);
     }
@@ -995,8 +1003,8 @@ void SettingsScene::onEnter(){
     if(cur_sec == 0) best = 0;
     this->sleep_selected_index = best;
     this->sleep_dropdown->setSelectedIndex(best);
-    addToTab(Tab::Device, this->sleep_title);
-    addToTab(Tab::Device, this->sleep_dropdown);
+    addToTab(Tab::Display, this->sleep_title);
+    addToTab(Tab::Display, this->sleep_dropdown);
 
     // ---- タイムゾーン。時刻の1行目 ----
     this->timezone_title = new Label<PICO_STR_M>(left, rowY(0) + 4, "タイムゾーン");
@@ -1217,7 +1225,6 @@ void SettingsScene::onExit(){
     this->home_label           = nullptr;
     this->home_edit_button     = nullptr;
     this->run_test_checkbox    = nullptr;
-    this->run_test_note        = nullptr;
     this->perf_overlay_checkbox = nullptr;
     this->lua_debugger_checkbox = nullptr;
     this->watchdog_checkbox    = nullptr;

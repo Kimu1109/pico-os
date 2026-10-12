@@ -60,6 +60,7 @@ enum class WidgetType : uint8_t {
     PickerDialog,
     MusicPlayerPanel,
     LockScreen,
+    CalibView,
     Count // 番兵。実際の種類としては使わない
 };
 

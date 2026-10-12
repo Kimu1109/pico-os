@@ -26,6 +26,8 @@
 #   touch_filter_test… タッチ座標のmedian-of-3ノイズ抑制(util/TouchFilter.hpp)。
 #                   単発のスパイクを無視すること・滑らかな動きへの追従・タッチ開始ごとの
 #                   履歴リセット
+#   touch_calib_test… タッチ位置の補正(util/TouchCalib.hpp)。既定の式・最小二乗でずれを消す・
+#                   ノイズ・決まらない点の拒否・押し間違いの検出
 #   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)とマニフェストの引き当て
 #   http_test     … URLの分解/解決と、HTTPレスポンスの解釈(ソケット抜きで検証)
 #   discovery_test… サーバ情報(/.well-known/pico-os)の解釈と前方互換
@@ -421,6 +423,15 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== touch_filter_test ====="
 run_or_die "$OUT/touch_filter_test"
+
+# --- タッチ位置の補正(アフィン変換の最小二乗) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/touch_calib_test.cpp" \
+    -o "$OUT/touch_calib_test"
+
+echo ""
+echo "===== touch_calib_test ====="
+run_or_die "$OUT/touch_calib_test"
 
 # --- 文書キャッシュ ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

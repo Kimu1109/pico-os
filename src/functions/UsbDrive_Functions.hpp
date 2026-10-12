@@ -48,4 +48,19 @@ namespace UsbDriveFunctions {
     uint32_t CapacityMiB();
 
     const char* StartErrorToStr(StartError e);
+
+    // 診断(PCに見えないときに、どこまで進んだかを画面に出す)。USBのコールバックの中で数える
+    struct Diag {
+        bool usb_connected = false;     // PCとUSBの線がつながっている(バスリセットを受けた)
+        bool usb_mounted = false;       // PCが構成を選んだ(列挙が終わった)
+        bool msc_open = false;          // マスストレージの口がPCに開かれた(最初のコマンドが来た)
+        uint32_t inquiry = 0;           // INQUIRY(PCが「何の装置か」を聞いた)
+        uint32_t ready = 0;             // TEST UNIT READY
+        uint32_t capacity = 0;          // READ CAPACITY
+        uint32_t other = 0;             // それ以外のSCSIコマンド
+        uint8_t last_other = 0;         // 最後に来た「それ以外」の番号
+        uint32_t errors = 0;            // 読み書きの失敗
+        uint8_t ep_in = 0, ep_out = 0;  // 割り当てられたエンドポイント
+    };
+    Diag GetDiag();
 }

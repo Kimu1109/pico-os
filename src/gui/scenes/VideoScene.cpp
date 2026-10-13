@@ -1,7 +1,7 @@
 #include "gui/scenes/VideoScene.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
-#include "gui/widgets/ProgressBar.hpp"
+#include "gui/widgets/apps/SeekBar.hpp"
 #include "gui/widgets/apps/VideoView.hpp"
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
 #include "functions/Scene_Functions.hpp"
@@ -21,7 +21,7 @@
 
 namespace {
     constexpr int MARGIN = 6;
-    constexpr int kBarH = 8;
+    constexpr int kBarH = 12;
 
     void FormatTime(char* out, size_t n, uint32_t ms){
         const uint32_t s = ms / 1000;
@@ -79,10 +79,13 @@ void VideoScene::onEnter(){
     WidgetFunctions::Add(this->time_label);
 
     const int bar_w = this->time_label->getLocalRect().x - MARGIN - (content.x + MARGIN);
-    this->bar = new ProgressBar((int16_t)(content.x + MARGIN), (int16_t)(time_y + (time_h - kBarH) / 2),
-                                (int16_t)bar_w, (int16_t)kBarH);
-    this->bar->setMinValue(0);
-    this->bar->setMaxValue(1);
+    this->bar = new SeekBar((int16_t)(content.x + MARGIN), (int16_t)(time_y + (time_h - kBarH) / 2),
+                            (int16_t)bar_w, (int16_t)kBarH);
+    // 離したときに1回だけ飛ぶ(動かすたびにSDを読み直さない)
+    this->bar->setOnSeek([this](float r){
+        if(!this->player.isOpen()) return;
+        this->seekMs((uint32_t)(r * (float)this->player.durationMs()));
+    });
     WidgetFunctions::Add(this->bar);
 
     const char* labels[3] = { "-10秒", "一時停止", "+10秒" };
@@ -326,10 +329,9 @@ void VideoScene::refreshControls(bool force){
         this->time_label->setText(text);
     }
     const uint32_t dur = open ? this->player.durationMs() : 0;
-    //画素の単位に丸める(毎フレーム値が変わるとバーを毎フレーム描き直すため)
-    const int bw = this->bar->getLocalRect().w;
-    const int px = (dur > 0 && bw > 0) ? (int)((uint64_t)(t > dur ? dur : t) * bw / dur) : 0;
-    this->bar->setValue(bw > 0 ? (float)px / (float)bw : 0.0f);
+    //画素が変わったときだけSeekBarが描き直す
+    this->bar->setSeekable(open);
+    this->bar->setRatio(dur > 0 ? (float)(t > dur ? dur : t) / (float)dur : 0.0f);
 }
 
 void VideoScene::onUpdate(){

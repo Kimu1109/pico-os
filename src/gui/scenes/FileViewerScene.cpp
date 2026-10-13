@@ -182,7 +182,7 @@ void FileViewerScene::onEnter(){
 void FileViewerScene::onExit(){
     this->stopMedia();
     this->seek_bar = nullptr;
-    this->rew_button = this->play_button = this->fwd_button = nullptr;
+    this->media_buttons = nullptr;
     this->time_label = nullptr;
     this->back_button  = nullptr;
     this->edit_button  = nullptr;
@@ -200,7 +200,7 @@ uint32_t FileViewerScene::preferredSampleRate() const {
 
 void FileViewerScene::buildMediaControls(const Rect& content){
     constexpr int kBarH = 12;
-    const int btn_h = 20 + Button::kFrameExtra;
+    const int btn_h = MediaButtons::kHeight;
     const int time_h = FontFn::GetFontSize(FontFn::Small);
     // 下から: ボタンの行 → 時間の行(バー+時刻)
     const int ctrl_y = content.y + content.h - MARGIN - btn_h;
@@ -225,20 +225,13 @@ void FileViewerScene::buildMediaControls(const Rect& content){
     });
     WidgetFunctions::Add(this->seek_bar);
 
-    const char* labels[3] = { "-10秒", "再生", "+10秒" };
-    Button** slots[3] = { &this->rew_button, &this->play_button, &this->fwd_button };
-    const int bw = (content.w - MARGIN * 4) / 3;
-    for(int i = 0; i < 3; i++){
-        Button* b = new Button(content.x + MARGIN + i * (bw + MARGIN), ctrl_y, labels[i]);
-        b->setFontSize(FontFn::Small);
-        b->setW(bw);
-        b->setH(btn_h);
-        WidgetFunctions::Add(b);
-        *slots[i] = b;
-    }
-    this->rew_button->setOnPressEnd([this](){ this->skipMedia(-(int32_t)kSkipMs); });
-    this->play_button->setOnPressEnd([this](){ this->toggleMedia(); });
-    this->fwd_button->setOnPressEnd([this](){ this->skipMedia((int32_t)kSkipMs); });
+    this->media_buttons = new MediaButtons(content.x + MARGIN, ctrl_y, content.w - MARGIN * 2);
+    this->media_buttons->setOnButton([this](int b){
+        if(b == MediaButtons::kRew)       this->skipMedia(-(int32_t)kSkipMs);
+        else if(b == MediaButtons::kFwd)  this->skipMedia((int32_t)kSkipMs);
+        else                              this->toggleMedia();
+    });
+    WidgetFunctions::Add(this->media_buttons);
     this->last_playing_label = false;
 }
 
@@ -330,16 +323,12 @@ void FileViewerScene::skipMedia(int32_t delta_ms){
 }
 
 void FileViewerScene::refreshMedia(bool force){
-    if(!this->play_button) return;
+    if(!this->media_buttons) return;
     const bool active = this->mediaActive();
     const bool show_pause = active && !this->mediaPaused();
-    if(force || show_pause != this->last_playing_label){
-        this->play_button->setText(show_pause ? "一時停止" : (this->media_started && !active ? "最初から" : "再生"));
-        this->last_playing_label = show_pause;
-    }
-    const bool can_skip = this->media == Media::Wav && this->media_started;
-    this->rew_button->setEnabled(can_skip);
-    this->fwd_button->setEnabled(can_skip);
+    this->media_buttons->setShowPause(show_pause);
+    this->last_playing_label = show_pause;
+    this->media_buttons->setSkipEnabled(this->media == Media::Wav && this->media_started);
 
     bool loops = false;
     const uint32_t total = this->media_started ? this->mediaTotalMs(&loops) : 0;

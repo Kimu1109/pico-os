@@ -7,6 +7,7 @@
 #include "gui/widgets/ImageView.hpp"
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/widgets/apps/SeekBar.hpp"
+#include "gui/widgets/apps/MediaButtons.hpp"
 #include "functions/Sound_Functions.hpp"
 #include "util/FixedString.hpp"
 
@@ -18,7 +19,7 @@
 //   .md / .markdown … MarkdownView(Markdownブラウザと同じ描画)
 //   .pimg           … ImageView(開いたときに1回だけ解いて、以降はメモリから描く)
 //   .pvid           … 動画アプリ(VideoScene)へ置き換わる(シークバー・再生/一時停止・±10秒つき)
-//   .wav            … 再生(下にシークバー・[-10秒][再生/一時停止][+10秒]。ミュージックアプリと同じ音の出し方)
+//   .wav            … 再生(下にシークバーと再生・一時停止/10秒戻る・進むのアイコンボタン(MediaButtons)。ミュージックアプリと同じ音の出し方)
 //   .mml            … 中身をテキストで見せ(TextView)、同じ操作の欄で再生する。MMLは途中へ飛べないので
 //                      シークバーは進み具合を見せるだけで、±10秒は押せない
 //   それ以外        … TextView(見えている行だけを描くプレーンテキストの表示欄)
@@ -55,9 +56,7 @@ class FileViewerScene : public Scene {
         bool last_playing_label = false;
         int media_h = 0;                // 下の操作の欄が占める高さ(本文の高さから引く)
         SeekBar* seek_bar = nullptr;
-        Button* rew_button = nullptr;
-        Button* play_button = nullptr;
-        Button* fwd_button = nullptr;
+        MediaButtons* media_buttons = nullptr;
         Label<PICO_STR_S>* time_label = nullptr;
 
         void buildMediaControls(const Rect& content);

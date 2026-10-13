@@ -49,3 +49,6 @@ SOFTWARE.
 
 `music/chime.wav` はミュージックアプリのWAV再生の動作サンプル(8bitモノラル11025Hzの短いチャイム。
 22050Hzへ直して鳴らす経路も通る)。このリポジトリのために作ったもので、ライセンス上の制約は無い。
+
+`video/sample.pvid` と `video/sample.wav` は動画アプリ(VideoScene)の動作サンプル。ffmpeg の試験用の絵(`testsrc2`)と
+正弦波から `script/generate_pvid.py` で作った3秒の動画で、著作物は含まない(作り方は `VIDEO_FORMAT.md`)。

@@ -67,6 +67,8 @@
 #   play_queue_test … ミュージックアプリの再生の順番(sound/Play_Queue.hpp)。順番通り/ミックス・リピート(しない/全曲/1曲)
 #   midi2mml_test … MIDI→MMLの変換(script/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
 #                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
+#   pvid_test     … 動画(.pvid)。変換(script/generate_pvid.py、Python+numpy)のタイルの往復・目録・差分の判定と、
+#                   本体の読み取り(video/Pvid_Player、pvid_dump.cpp)が全部のフレーム・シークで同じ絵になること・壊れたファイルで落ちないこと
 #   key_input_test … 物理キーボードの窓口(KeyInputFunctions)。"key ..."の行の読み取り、padの行との同居、
 #                   画面のonKey()→開いているキー盤の順に配ること、キー盤の編集(挿入/削除/移動/決定)、数字のキー盤の制限、
 #                   日本語入力の入り切り(Tab2回・半角/全角・Ctrl+Space)と日本語のキー盤のかな漢字変換(小さい辞書を作って)
@@ -770,6 +772,23 @@ timeout -k 10 "$RUN_TIMEOUT_SEC" python3 "$ROOT/script/host_test/midi2mml_test.p
 if [ "$rc" -ne 0 ]; then
     if [ "$rc" -eq 124 ]; then
         echo "[FATAL] midi2mml_test が${RUN_TIMEOUT_SEC}秒を超えて応答しませんでした" >&2
+    fi
+    exit "$rc"
+fi
+
+# --- 動画(.pvid)。変換(Python)で書いて読み直し、本体の読み取り(PvidPlayer、pvid_dump)でも同じ絵になるか ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/pvid_dump.cpp" \
+    "$ROOT/src/video/Pvid_Player.cpp" \
+    -o "$OUT/pvid_dump"
+
+echo ""
+echo "===== pvid_test ====="
+rc=0
+timeout -k 10 "$RUN_TIMEOUT_SEC" python3 "$ROOT/script/host_test/pvid_test.py" "$OUT/pvid_dump" || rc=$?
+if [ "$rc" -ne 0 ]; then
+    if [ "$rc" -eq 124 ]; then
+        echo "[FATAL] pvid_test が${RUN_TIMEOUT_SEC}秒を超えて応答しませんでした" >&2
     fi
     exit "$rc"
 fi

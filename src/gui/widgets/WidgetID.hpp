@@ -62,6 +62,8 @@ enum class WidgetType : uint8_t {
     LockScreen,
     CalibView,
     VideoView,
+    SeekBar,
+    MediaButtons,
     Count // 番兵。実際の種類としては使わない
 };
 

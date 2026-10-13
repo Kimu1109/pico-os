@@ -8,7 +8,8 @@
 #include <cstdint>
 
 class Button;
-class ProgressBar;
+class SeekBar;
+class MediaButtons;
 class VideoView;
 class FileSelectDialog;
 template<size_t N> class Label;
@@ -17,8 +18,8 @@ template<size_t N> class Label;
 //
 //   [戻る][開く] 題名
 //   動画(VideoView。等倍で真ん中)
-//   ━━━━━━━━━━  0:12 / 1:30
-//   [-10秒][再生/一時停止][+10秒]
+//   ━━━━●━━━━━  0:12 / 1:30   (SeekBar。ドラッグして離した位置へ飛ぶ)
+//   ⏪10  (▶/⏸)  10⏩   (MediaButtons。ミュージックアプリと同じアイコンのボタン)
 //
 // ---- 時計 ----
 // 同じ名前の .wav があれば SoundFunctions::WavPlay() で鳴らし、WavPositionMs() から出すフレームを決める
@@ -50,10 +51,8 @@ class VideoScene : public Scene {
         VideoView* view = nullptr;
         Button* back_button = nullptr;
         Button* open_button = nullptr;
-        Button* play_button = nullptr;
-        Button* rew_button = nullptr;
-        Button* fwd_button = nullptr;
-        ProgressBar* bar = nullptr;
+        MediaButtons* media_buttons = nullptr;
+        SeekBar* bar = nullptr;
         Label<PICO_STR_M>* title_label = nullptr;
         Label<PICO_STR_S>* time_label = nullptr;
         FileSelectDialog* picker = nullptr;

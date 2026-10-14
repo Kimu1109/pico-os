@@ -33,6 +33,9 @@ void SceneFunctions::Push(Scene* s){ push_calls++; delete s; }
 // ファイルビューワーは開くだけ(中身はこのテストの対象外)
 void FileViewerScene::onEnter(){}
 void FileViewerScene::onExit(){}
+void FileViewerScene::onUpdate(){}
+bool FileViewerScene::onKey(const KeyInputFunctions::Event&){ return false; }
+uint32_t FileViewerScene::preferredSampleRate() const { return 0; }
 
 void KeyboardFunctions::RegisterInputTarget(ITextInputTarget*){}
 void KeyboardFunctions::UnregisterInputTarget(ITextInputTarget*){}

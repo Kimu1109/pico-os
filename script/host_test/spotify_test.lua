@@ -15,6 +15,11 @@ function require(n)
 end
 
 local pico = mock.install({ app_dir = DIR })
+-- 本物のアクセストークンは300文字ほどある(json_pick の255バイトを超える。実機で切れて401になった)
+local AT_FILE = "BQA" .. string.rep("f", 320)
+local AT2 = "BQB" .. string.rep("x", 320)
+local AT3 = "BQC" .. string.rep("y", 320)
+local RT_LONG = "AQD" .. string.rep("r", 128)
 assert(loadfile(APP .. "main.lua"))()
 local A, P, V = require("api"), require("player"), require("view")
 
@@ -83,11 +88,12 @@ check(#mock.requests == 0, "未ログイン: 通信しない")
 -- =====================================================================
 local auth_path = DIR .. "/spotify_auth.json"
 mock.sd[auth_path] = pico.json_encode({ version = 1, client_id = "CID", refresh_token = "RT1",
-                                         access_token = "OLD", expires_at = 0, obtained_at = 0 })
+                                         access_token = AT_FILE, expires_at = 0, obtained_at = 0 })
 local bx, by, bw, bh = V.reload_rect()
 tap(bx + bw // 2, by + bh // 2)
 check(mock.sd[auth_path] == nil, "取り込み: 平文のファイルを消す")
 check(type(mock.store) == "table" and mock.store.auth and mock.store.auth.refresh_token == "RT1", "取り込み: 暗号化して保存")
+check(A.auth.access_token == AT_FILE, "取り込み: 255バイトを超えるトークンも切らずに読む")
 check(P.msg:find("取り込みました") ~= nil, "取り込み: 知らせる")
 
 frame()
@@ -96,12 +102,13 @@ check(r and r.url == A.TOKEN_URL and r.method == "POST", "期限切れ: まず�
 check(r.content_type == "application/x-www-form-urlencoded"
       and r.body == "client_id=CID&grant_type=refresh_token&refresh_token=RT1", "取り直し: フォームの本文")
 check(r.opts and r.opts.keep_alive == true, "取り直し: keep_alive")
-mock.respond(ri, true, 200, pico.json_encode({ access_token = "AT2", expires_in = 3600, refresh_token = "RT2" }))
-check(A.auth.access_token == "AT2" and A.auth.refresh_token == "RT2" and mock.store.auth.refresh_token == "RT2",
-      "取り直し: 新しいトークン(refresh tokenも)を保存し直す")
+mock.respond(ri, true, 200, pico.json_encode({ access_token = AT2, token_type = "Bearer", expires_in = 3600,
+                                               refresh_token = RT_LONG, scope = "user-read-playback-state" }))
+check(A.auth.access_token == AT2 and A.auth.refresh_token == RT_LONG and mock.store.auth.refresh_token == RT_LONG,
+      "取り直し: 新しいトークン(refresh tokenも、切らずに)を保存し直す")
 r, ri = last()
 check(r.url:find("/me/player?market=from_token", 1, true) and r.method == "GET"
-      and r.opts.headers.Authorization == "Bearer AT2" and r.opts.keep_alive == true,
+      and r.opts.headers.Authorization == "Bearer " .. AT2 and r.opts.keep_alive == true,
       "取得: GET /me/player を Bearer・keep_alive で")
 mock.respond(ri, true, 200, player_json())
 check(P.st and P.st.playing and P.st.title == "テストの曲" and P.st.artist == "歌手A, 歌手B ほか"
@@ -221,10 +228,10 @@ r, ri = last()
 mock.respond(ri, true, 401, pico.json_encode({ error = { status = 401, message = "The access token expired" } }))
 r, ri = last()
 check(r.url == A.TOKEN_URL, "401: トークンを取り直す")
-mock.respond(ri, true, 200, pico.json_encode({ access_token = "AT3", expires_in = 3600 }))
+mock.respond(ri, true, 200, pico.json_encode({ access_token = AT3, expires_in = 3600 }))
 r, ri = last()
-check(r.url == A.API .. "/me/player/next" and r.opts.headers.Authorization == "Bearer AT3", "401: 新しいトークンで送り直す")
-check(A.auth.refresh_token == "RT2", "401: refresh tokenが返らなければ前のまま")
+check(r.url == A.API .. "/me/player/next" and r.opts.headers.Authorization == "Bearer " .. AT3, "401: 新しいトークンで送り直す")
+check(A.auth.refresh_token == RT_LONG, "401: refresh tokenが返らなければ前のまま")
 mock.respond(ri, true, 204, nil)
 
 -- =====================================================================

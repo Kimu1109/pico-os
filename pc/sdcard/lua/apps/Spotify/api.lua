@@ -28,12 +28,14 @@ function A.load()
     local path = pico.path_join(pico.app_dir(), A.AUTH_FILE)
     local text = pico.sd_read(path)
     if text then
-        local r = pico.json_pick(text, { "client_id", "refresh_token", "access_token", "expires_at" })
-        if not (r and r.client_id and r.refresh_token) then
+        -- トークンは255バイトを超える(json_pick は文字列を255バイトで切る)ので json_decode で読む
+        local r = pico.json_decode(text)
+        if not (type(r) == "table" and type(r.client_id) == "string" and type(r.refresh_token) == "string") then
             return false, A.AUTH_FILE .. " を読めません。作り直してください"
         end
         A.auth = { client_id = r.client_id, refresh_token = r.refresh_token,
-                   access_token = r.access_token or "", expires_at = r.expires_at or 0 }
+                   access_token = type(r.access_token) == "string" and r.access_token or "",
+                   expires_at = math.tointeger(r.expires_at) or 0 }
         A.revoked = false
         if not save() then return true, "ログイン情報を保存できません(SDを確かめてください)" end
         pico.sd_remove(path)   -- 平文の鍵をSDに残さない
@@ -77,13 +79,14 @@ function A.refresh(fn)
     local id = pico.http_request("POST", A.TOKEN_URL, body, "application/x-www-form-urlencoded",
         function(ok, status, text, err)
             if not ok then return finish(false, "トークンを取れません: " .. tostring(err)) end
-            local r = text and pico.json_pick(text, { "access_token", "expires_in", "refresh_token",
-                                                     "error", "error_description" }) or {}
-            if status == 200 and r.access_token and A.auth then
+            -- アクセストークンは300文字ほどあり json_pick(255バイトまで)では切れるので json_decode で読む
+            local r = text and pico.json_decode(text)
+            if type(r) ~= "table" then r = {} end
+            if status == 200 and type(r.access_token) == "string" and A.auth then
                 A.auth.access_token = r.access_token
-                A.auth.expires_at = pico.time() + (r.expires_in or 3600)
+                A.auth.expires_at = pico.time() + (math.tointeger(r.expires_in) or 3600)
                 -- PKCEのrefresh tokenは使うたびに新しいものが返ることがある。返ったら保存し直す
-                if r.refresh_token then A.auth.refresh_token = r.refresh_token end
+                if type(r.refresh_token) == "string" then A.auth.refresh_token = r.refresh_token end
                 save()
                 return finish(true)
             end

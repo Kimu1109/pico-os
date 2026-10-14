@@ -1759,6 +1759,9 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   起動時(か画面の「読み込む」)に`api.lua`が読み、`pico.store_save({auth=}, {encrypt=true})`へ移して平文のファイルを消す。
   アクセストークンは`grant_type=refresh_token`(`pico.form_encode`、client secretなし)で取り直し、返った新しいrefresh tokenを保存し直す。
   401なら1回だけ取り直して送り直す。`invalid_grant`ならログインの案内の画面へ戻る。
+  **トークン(`spotify_auth.json`とトークンの取り直しの応答)は`pico.json_decode`で読む**: アクセストークンは300文字ほどあり、
+  `pico.json_pick`(文字列は255バイトまで)で読むと切れて、取り直しても毎回401(`Missing/invalid/expired access token`)になった(実機で発生)。
+  `pico_mock.lua`の`json_pick`も本物と同じく255バイトで切るようにし、`spotify_test`は300文字超のトークンで確かめる。
 - **状態**: `GET /me/player?market=from_token&additional_types=episode`を3秒ごと(端末が無い204なら10秒、失敗は5秒から倍々で60秒まで)。
   `pico.json_pick`で22個のパスだけ読む。**応答が16KiBを超えたら(err=「書き込みに失敗」。番組の説明が長い回)次から`save_to`でSDへ保存して`pico.sd_json_pick`**。
   再生位置は取った時刻からの経過を足して見せ、再生中は1秒ごとに位置の欄だけ`mark_dirty`。

@@ -366,9 +366,16 @@ function M.install(opts)
     end
     function pico.json_encode(v) local out = {} encode(v, out) return table.concat(out) end
     function pico.json_decode(text, keep_null) return decode(text, keep_null) end
-    -- json_pick: 本物と同じパスの書き方("a.1.b"、"a#" で要素の数)。文字列の切り詰めはしない
+    -- json_pick: 本物と同じパスの書き方("a.1.b"、"a#" で要素の数)。
+    -- 本物と同じく文字列は255バイトまで(UTF-8の文字の途中では切らない)で、切ったパスは2番目の戻り値で知らせる
+    local function cut255(v)
+        if #v <= 255 then return v, false end
+        local n = 255
+        while n > 0 and (v:byte(n + 1) or 0) & 0xC0 == 0x80 do n = n - 1 end
+        return v:sub(1, n), true
+    end
     local function pick(root, paths, o)
-        local out = {}
+        local out, trunc = {}, nil
         for _, p in ipairs(paths) do
             local count = p:sub(-1) == "#"
             local cur = root
@@ -384,9 +391,13 @@ function M.install(opts)
                 if type(cur) == "table" then local c = 0 for _ in pairs(cur) do c = c + 1 end out[p] = c end
             elseif cur == pico.json_null then
                 if o and o.keep_null then out[p] = pico.json_null end
+            elseif type(cur) == "string" then
+                local v, cut = cut255(cur)
+                out[p] = v
+                if cut then trunc = trunc or {} trunc[p] = true end
             elseif type(cur) ~= "table" then out[p] = cur end
         end
-        return out
+        return out, trunc
     end
     function pico.json_pick(text, paths, o)
         local root, e = decode(text, true)

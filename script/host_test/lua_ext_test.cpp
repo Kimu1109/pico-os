@@ -50,6 +50,8 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include "jpeg_test_data.hpp"
+#include "gui/icons/Bmp_Codec.hpp"
 
 // ---- モック(lua_engine_test.cppと同じ方針) ----
 static Rect g_last_dirty{0, 0, 0, 0};
@@ -2585,6 +2587,142 @@ int main() {
             check(E.waves.phase == "wave", "cursor: START で次へ")
         )LUA", "cur");
         check(ok, "game: コントローラーのカーソル");
+    }
+
+    // =====================================================================
+    // Web APIの補助: form_encode / json_pick / sd_json_pick
+    // =====================================================================
+    {
+        // 16KiBを超えるJSON(sd_json_pickで読む)
+        std::string big = "{\"items\":[";
+        for (int i = 1; i <= 800; i++) {
+            if (i > 1) big += ",";
+            big += "{\"id\":" + std::to_string(i) + ",\"name\":\"item" + std::to_string(i) + "\"}";
+        }
+        big += "],\"total\":800,\"next\":null}";
+        HostSd::files["/app/big.json"] = big;
+        HostSd::files["/app/broken.json"] = "{\"a\":[1,2";
+        HostSd::files["/other/x.json"] = "{\"a\":1}";
+        check(big.size() > 16 * 1024, "json_pick: 16KiBを超えるJSONを用意");
+        bool ok = engine.Run(R"LUA(
+            -- form_encode
+            check(pico.form_encode({grant_type = "refresh_token", refresh_token = "a b/c+d", client_id = "x"})
+                  == "client_id=x&grant_type=refresh_token&refresh_token=a+b%2Fc%2Bd", "form_encode: 名前順・空白は+・記号は%XX")
+            check(pico.form_encode({a = {1, 2}, b = true, c = 1.5}) == "a=1&a=2&b=true&c=1.5", "form_encode: 配列は同じキーを繰り返す")
+            check(pico.form_encode({}) == "", "form_encode: 空")
+            check(pico.form_encode({k = "日本"}) == "k=%E6%97%A5%E6%9C%AC", "form_encode: UTF-8")
+            check(not pcall(pico.form_encode, {[1] = "a"}), "form_encode: キーは文字列")
+            check(not pcall(pico.form_encode, {a = {{}}}), "form_encode: 配列の中の表はエラー")
+            check(not pcall(pico.form_encode, {a = function() end}), "form_encode: 関数はエラー")
+
+            -- json_pick
+            local text = [[{"device":{"name":"PC","volume_percent":55},"is_playing":true,"progress_ms":12345,
+              "item":{"name":"曲名 \"A\"","duration_ms":200000,"artists":[{"name":"A1"},{"name":"A2"}],
+              "album":{"images":[{"url":"u640","width":640},{"url":"u64","width":64}]}},"context":null,
+              "f":1.5,"neg":-3}]]
+            local r, tr = pico.json_pick(text, {"is_playing", "progress_ms", "item.name", "item.artists.2.name",
+                "item.artists#", "item.album.images.2.url", "device.volume_percent", "context", "missing", "f", "neg", "item.album.images#"})
+            check(r ~= nil and tr == nil, "json_pick: 読める")
+            check(r.is_playing == true and r.progress_ms == 12345 and math.type(r.progress_ms) == "integer", "json_pick: 真偽値と整数")
+            check(r["item.name"] == '曲名 "A"', "json_pick: 文字列(エスケープ)")
+            check(r["item.artists.2.name"] == "A2" and r["item.artists#"] == 2, "json_pick: 配列は1始まり・#で数")
+            check(r["item.album.images.2.url"] == "u64" and r["item.album.images#"] == 2, "json_pick: 深い所")
+            check(r["device.volume_percent"] == 55 and r.f == 1.5 and r.neg == -3, "json_pick: 数")
+            check(r.context == nil and r.missing == nil, "json_pick: nullと無いものはnil")
+            local rn = pico.json_pick(text, {"context"}, {keep_null = true})
+            check(rn.context == pico.json_null, "json_pick: keep_nullでpico.json_null")
+            local ra = pico.json_pick("[10,[20,30],{\"x\":40}]", {"1", "2.2", "3.x", "#", "2#"})
+            check(ra["1"] == 10 and ra["2.2"] == 30 and ra["3.x"] == 40 and ra["#"] == 3 and ra["2#"] == 2, "json_pick: 一番外が配列")
+            local long = string.rep("あ", 100)
+            local rl, trl = pico.json_pick('{"s":"' .. long .. '"}', {"s"})
+            check(#rl.s < #long and #rl.s <= 255 and trl and trl.s == true, "json_pick: 長い文字列は切り詰めて知らせる")
+            local bad, err = pico.json_pick('{"a":', {"a"})
+            check(bad == nil and type(err) == "string", "json_pick: 途中で切れたJSONは nil, 理由")
+            local bad2, err2 = pico.json_pick('{"a" 1}', {"a"})
+            check(bad2 == nil and type(err2) == "string", "json_pick: 誤ったJSONは nil, 理由")
+            local early = pico.json_pick('{"a":1,"b":', {"a"})
+            check(early and early.a == 1, "json_pick: 頼んだものが揃っていれば後ろが切れていてもよい")
+            check(not pcall(pico.json_pick, "{}", {}), "json_pick: パスが無いとエラー")
+            check(not pcall(pico.json_pick, "{}", {1}), "json_pick: パスは文字列")
+            local many = {}
+            for i = 1, 33 do many[i] = "k" .. i end
+            check(not pcall(pico.json_pick, "{}", many), "json_pick: パスは32個まで")
+
+            -- sd_json_pick
+            local s = pico.sd_json_pick("/app/big.json", {"items.800.id", "items.250.name", "items#", "total"})
+            check(s and s["items.800.id"] == 800 and s["items.250.name"] == "item250" and s["items#"] == 800 and s.total == 800,
+                  "sd_json_pick: 16KiBを超えるファイルを流しながら読む")
+            local s2, e2 = pico.sd_json_pick("/app/broken.json", {"a.3"})
+            check(s2 == nil and type(e2) == "string", "sd_json_pick: 途中で切れたファイル")
+            local s3, e3 = pico.sd_json_pick("/other/x.json", {"a"})
+            check(s3 == nil and type(e3) == "string", "sd_json_pick: アプリのフォルダの外は読めない")
+            local s4, e4 = pico.sd_json_pick("/app/none.json", {"a"})
+            check(s4 == nil and type(e4) == "string", "sd_json_pick: 無いファイル")
+        )LUA", "net_helpers");
+        check(ok, "Web APIの補助: 実行");
+    }
+
+    // =====================================================================
+    // JPEG(pico.image_load)
+    // =====================================================================
+    {
+        OSData::frame->createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
+        HostSd::files["/app/q.jpg"] = std::string((const char*)kJpegQuad32, sizeof(kJpegQuad32));
+        HostSd::files["/app/q64.jpg"] = std::string((const char*)kJpegQuad64x48, sizeof(kJpegQuad64x48));
+        HostSd::files["/app/prog.jpg"] = std::string((const char*)kJpegProgressive, sizeof(kJpegProgressive));
+        HostSd::files["/app/trunc.jpg"] = std::string((const char*)kJpegQuad32, 300);
+        // ホストテストのスタブは TFT_RED 等が色の番号そのもの(RGB565ではない)なので、
+        // このテストの間だけ本物の色のパレットにする(近い色を選ぶ処理を確かめるため)
+        int saved_colors[16];
+        memcpy(saved_colors, PICO_GFX::COLORS, sizeof(saved_colors));
+        static const uint8_t kRealPal[16][3] = {
+            {0,0,0}, {0,0,128}, {0,128,0}, {0,128,128}, {128,0,0}, {128,0,128}, {128,128,0}, {192,192,192},
+            {128,128,128}, {0,0,255}, {0,255,0}, {0,255,255}, {255,0,0}, {255,0,255}, {255,255,0}, {255,255,255},
+        };
+        for (int i = 0; i < 16; i++) PICO_GFX::COLORS[i] = PICO_GFX::Rgb565(kRealPal[i][0], kRealPal[i][1], kRealPal[i][2]);
+        uint8_t pal[16][3];
+        Bmp::CurrentPalette888(pal);
+        lua_pushinteger(L, Bmp::NearestIndex(pal, 255, 0, 0));   lua_setglobal(L, "C_RED");
+        lua_pushinteger(L, Bmp::NearestIndex(pal, 0, 170, 0));   lua_setglobal(L, "C_GREEN");
+        lua_pushinteger(L, Bmp::NearestIndex(pal, 0, 0, 255));   lua_setglobal(L, "C_BLUE");
+        lua_pushinteger(L, Bmp::NearestIndex(pal, 255, 255, 255)); lua_setglobal(L, "C_WHITE");
+        bool ok = engine.Run(R"LUA(
+            check(C_RED == 12 and C_GREEN == 2 and C_BLUE == 9 and C_WHITE == 15, "JPEG: 期待する色の番号")
+            local function quad_ok(img, w, h, what)
+                local iw, ih = pico.image_size(img)
+                check(iw == w and ih == h, what .. ": 大きさ " .. iw .. "x" .. ih)
+                pico.image_target(img)
+                local a, b, c, d = pico.get_pixel(w // 4, h // 4), pico.get_pixel(w * 3 // 4, h // 4),
+                                   pico.get_pixel(w // 4, h * 3 // 4), pico.get_pixel(w * 3 // 4, h * 3 // 4)
+                pico.image_target(nil)
+                check(a == C_RED and b == C_GREEN and c == C_BLUE and d == C_WHITE,
+                      what .. ": 4分割の色 " .. tostring(a) .. "," .. tostring(b) .. "," .. tostring(c) .. "," .. tostring(d))
+            end
+            local img = pico.image_load("/app/q.jpg", {dither = false})
+            check(img ~= nil, "JPEG: 読める(4:4:4)")
+            if img then quad_ok(img, 32, 32, "JPEG 32x32"); pico.image_free(img) end
+            local img2 = pico.image_load("/app/q64.jpg", {dither = false})
+            check(img2 ~= nil, "JPEG: 読める(4:2:0)")
+            if img2 then quad_ok(img2, 64, 48, "JPEG 64x48"); pico.image_free(img2) end
+            local img3 = pico.image_load("/app/q64.jpg", {dither = false, scale = 2})
+            if img3 then quad_ok(img3, 32, 24, "JPEG scale=2"); pico.image_free(img3) end
+            check(img3 ~= nil, "JPEG: scale=2")
+            local img4 = pico.image_load("/app/q64.jpg", {dither = false, max_w = 20})
+            if img4 then quad_ok(img4, 16, 12, "JPEG max_w=20(1/4)"); pico.image_free(img4) end
+            check(img4 ~= nil, "JPEG: max_wに収まるよう縮める")
+            local img5 = pico.image_load("/app/q64.jpg", {scale = 8})
+            local w5, h5 = pico.image_size(img5)
+            check(w5 == 8 and h5 == 6, "JPEG: scale=8")
+            pico.image_free(img5)
+            local img6 = pico.image_load("/app/q.jpg")
+            check(img6 ~= nil, "JPEG: 既定(ディザあり)でも読める")
+            pico.image_free(img6)
+            check(pico.image_load("/app/prog.jpg") == nil, "JPEG: プログレッシブは読めない(nil)")
+            check(pico.image_load("/app/trunc.jpg") == nil, "JPEG: 途中で切れたファイルはnil")
+            check(not pcall(pico.image_load, "/app/q.jpg", {scale = 3}), "JPEG: scaleは1/2/4/8")
+        )LUA", "jpeg");
+        check(ok, "JPEG: 実行");
+        memcpy(PICO_GFX::COLORS, saved_colors, sizeof(saved_colors));
     }
 
     WidgetFunctions::ClearSceneWidgets();

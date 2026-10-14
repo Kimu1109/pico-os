@@ -242,6 +242,8 @@
 // で呼んでから後片付けする。`http_`はLuaScene内でネットワークを使わないアプリに
 // 16KiB×2の固定バッファを常時負担させたくないため、初回の`pico.http_request()`呼び出し
 // まで確保しない(遅延生成。使わないLuaアプリのメモリコストはゼロのまま)。
+// `opts.keep_alive = true`の要求は接続(TLSの約40KBごと)を持っておき、次のkeep_aliveの要求が
+// 同じ相手ならハンドシェイクを飛ばす(`pico.http_close()`で閉じる。LuaEngineを壊せば閉じる)。
 //
 // 実行時間の安全網(暴走防止、2026-09-21実装): OSは単一スレッドのポーリングループ
 // (`main.cpp`の`loop()`)なので、Luaのコールバック(loop(dt)/press_start/…)の中に
@@ -475,6 +477,7 @@ class LuaEngine {
         friend struct LuaEngineExt;
         friend struct LuaEngineCrypto;
         friend struct LuaEngineIso;
+        friend struct LuaEngineNet;
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
         // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
         // TabChangedはウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)
@@ -573,6 +576,7 @@ class LuaEngine {
         void RegisterExtApi();
         void RegisterCryptoApi();
         void RegisterIsoApi();
+        void RegisterNetApi();
 
         // pico.iso(2.5Dの箱庭のエンジン。LuaEngine_Iso.cpp)の状態。初めて pico.iso.* を使ったときに new する
         struct IsoState;
@@ -841,6 +845,7 @@ class LuaEngine {
         // ネットワーク。クラスコメント「ネットワーク」参照
         static int l_http_request(lua_State* L);
         static int l_http_cancel(lua_State* L);
+        static int l_http_close(lua_State* L);
 
         // JSON(pico.json_decode / json_encode)。LuaJson.hpp
         static int l_json_decode(lua_State* L);

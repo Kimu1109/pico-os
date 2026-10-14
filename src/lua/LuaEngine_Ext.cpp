@@ -1765,4 +1765,5 @@ void LuaEngine::RegisterExtApi() {
     registerFn("memory_info", LuaEngineExt::l_memory_info);
     RegisterCryptoApi();
     RegisterIsoApi();
+    RegisterNetApi();
 }

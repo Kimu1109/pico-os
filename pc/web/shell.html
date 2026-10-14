@@ -450,6 +450,10 @@
       Home: 'home', End: 'end', PageUp: 'pageup', PageDown: 'pagedown',
       // 半角/全角(pico-osの日本語入力の入り切り。ブラウザ・OSで名前が違う)
       Zenkaku: 'zenhan', Hankaku: 'zenhan', ZenkakuHankaku: 'zenhan',
+      // メディアキー
+      MediaPlayPause: 'playpause', MediaPlay: 'playpause', MediaPause: 'playpause', MediaStop: 'stop',
+      MediaTrackNext: 'nexttrack', MediaTrackPrevious: 'prevtrack',
+      AudioVolumeUp: 'volumeup', AudioVolumeDown: 'volumedown', AudioVolumeMute: 'mute',
     };
     function textMode() { return kbModeEl.value === 'text'; }
     function sendLine(line) {
@@ -470,6 +474,11 @@
       return 'key ' + mods.toString(16) + ' u+' + cp.toString(16) + '\n';
     }
     window.addEventListener('keydown', function (e) {
+      // メディアキーはコントローラーのモードでも送る(ボタンには割り当てない)
+      if (!textMode() && /^(Media|AudioVolume)/.test(e.key) && NAMED[e.key]) {
+        sendLine('key 0 ' + NAMED[e.key] + '\n');
+        return;
+      }
       if (!textMode() || e.metaKey || e.isComposing) return;
       if (e.target && e.target.closest && e.target.closest('input, select, textarea')) return;
       var line = keyLine(e);

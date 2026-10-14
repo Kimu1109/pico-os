@@ -80,6 +80,7 @@ PASSTHROUGH_PY = {
     ("ppm2png",): "ppm2png.py",
     ("serve",): "reference_server.py",
     ("midi2mml",): "midi2mml.py",
+    ("spotify-auth",): "spotify_auth.py",
     ("dict", "skk"): "convert_skk_dict.py",
     ("dict", "index"): "build_dict_index.py",
     ("dict", "suffix-index"): "build_dict_suffix_index.py",
@@ -192,7 +193,7 @@ def cmd_pc_web_serve(args) -> int:
 
 # ---- パーサ構築 ----
 #
-# pimg/ppm2png/serve/dict skk/dict index/dict suffix-index/dict filter-tofu/pc run は
+# pimg/ppm2png/serve/midi2mml/spotify-auth/dict skk/dict index/dict suffix-index/dict filter-tofu/pc run は
 # try_dispatch_passthrough() が実際の引数解析より先に横取りするため、ここで登録する
 # 対応するサブパーサは「picoos --help」等での一覧表示専用(実引数は持たない)。
 
@@ -210,6 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
   picoos dict skk dic/SKK-JISYO.M                 SKK辞書をIME用tsvへ変換
   picoos serve --root ~/docs --port 8080          Markdownブラウザ用の参照サーバを起動
   picoos midi2mml song.mid -o song.mml            MIDIをpico-os MMLへ変換
+  picoos spotify-auth --client-id XXXX            Spotifyのrefresh tokenを取ってSDへ書く
   picoos test                                     ホストテスト一式(ASan)を実行
   picoos test net                                 HTTP結合テストを実行
   picoos pc build                                 PC(SDL2)版をビルド
@@ -230,6 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("ppm2png", help="--shot が出すPPMをPNGへ変換 (ppm2png.py、引数は転送)")
     sub.add_parser("serve", help="PROTOCOL.md参照実装サーバを起動 (reference_server.py、引数は転送)")
     sub.add_parser("midi2mml", help="MIDI(SMF)をpico-os MMLへ変換 (midi2mml.py、引数は転送)")
+    sub.add_parser("spotify-auth", help="Spotifyの最初のトークンをPCで取りSDへ書く (spotify_auth.py、引数は転送)")
 
     dict_parser = sub.add_parser("dict", help="辞書データ関連 (script/dic, en-ja-and-ja-en.tsv 等)")
     dict_sub = dict_parser.add_subparsers(dest="dict_command", required=True)

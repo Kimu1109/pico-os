@@ -30,7 +30,7 @@ pico-os の Lua は **32bitの整数と単精度(32bit)の小数** で動きま�
 | `pico.http_request()` の送信ボディ上限 | 16KiB |
 | `pico.http_request()` の受信本文上限 | 16KiB(メモリで受ける場合。`save_to` でSDへ保存するなら8MiB) |
 | `pico.http_request()` の順番待ち | 走っている1本 + 待ち4本 |
-| `pico.http_request()` の追加ヘッダ | 合計480バイト |
+| `pico.http_request()` の追加ヘッダ | 合計1000バイト、1行(名前: 値)は512バイト未満 |
 | `pico.after` / `pico.every` のタイマー数 | 16個 |
 | `require` で読む1ファイル | 32KiB(先読みするのは1回のスクリプトにつき最大16モジュール) |
 | `push_scene` の `args` / `pop` の `result` | JSONで1KiB未満 |

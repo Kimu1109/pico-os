@@ -29,6 +29,10 @@ pc/sdcard/lua/apps/*/store.json.tmp
 pc/sdcard/lua/apps/*/settings.cfg
 pc/sdcard/lua/apps/*/results.txt
 pc/sdcard/lua/apps/*/bench.tmp
+pc/sdcard/lua/apps/*/spotify_auth.json
+pc/sdcard/lua/apps/Spotify/art.jpg
+pc/sdcard/lua/apps/Spotify/art.jpg.part
+pc/sdcard/lua/apps/Spotify/player.json
 # 「ブロック」のセーブ(PCビルドで試すと作られる)
 pc/sdcard/lua/apps/ブロック/worlds/
 # アプリストア(PCビルドで試すと作られる。store.cfg には試すときの url/key を書く)

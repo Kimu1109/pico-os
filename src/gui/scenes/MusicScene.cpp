@@ -144,6 +144,14 @@ void MusicScene::onUpdate(){
 }
 
 bool MusicScene::onKey(const KeyInputFunctions::Event& ev){
+    //キーボードのメディアキー
+    switch(ev.key){
+        case KeyInputFunctions::Key::PlayPause: this->onPanelButton(MusicPlayerPanel::kPlay); return true;
+        case KeyInputFunctions::Key::NextTrack: this->onPanelButton(MusicPlayerPanel::kNext); return true;
+        case KeyInputFunctions::Key::PrevTrack: this->onPanelButton(MusicPlayerPanel::kPrev); return true;
+        case KeyInputFunctions::Key::Stop:      this->stopPlayback(); this->refreshPanel(); return true;
+        default: break;
+    }
     if(!ev.isPlainChar()) return false;
     switch(ev.cp){
         case 'n': this->onPanelButton(MusicPlayerPanel::kNext); return true;

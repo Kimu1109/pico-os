@@ -132,10 +132,11 @@ function M.install(opts)
     function pico.set_draw_area() end
     function pico.clear_draw_area() end
     function pico.get_pixel() return 15 end
-    function pico.image_load() return 1 end
+    M.images = {}
+    function pico.image_load(path, o) M.images[#M.images + 1] = { path = path, opts = o } return #M.images end
     function pico.image_create() return 1 end
     function pico.image_size() return 16, 16 end
-    function pico.image_free() end
+    function pico.image_free(h) M.freed = (M.freed or 0) + 1 end
     function pico.image_target() end
     function pico.image_clear() end
 
@@ -157,7 +158,7 @@ function M.install(opts)
 
     -- ---- 時間・タイマー ----
     function pico.millis() return M.clock end
-    function pico.time() return 1790000000 + M.clock // 1000 end
+    function pico.time() return (M.epoch or 1790000000) + M.clock // 1000 end
     function pico.get_time() return { year = 2026, month = 10, day = 5, hour = 12, min = 0, sec = 0, wday = 1 } end
     function pico.after(ms, fn)
         next_timer = next_timer + 1
@@ -226,6 +227,7 @@ function M.install(opts)
         return #M.requests
     end
     function pico.http_cancel() end
+    function pico.http_close() M.http_closed = (M.http_closed or 0) + 1 return false end
     function pico.sound_play(...) M.sounds[#M.sounds + 1] = { ... } return true end
     function pico.sound_stop() end
     function pico.sound_available() return true end
@@ -247,10 +249,170 @@ function M.install(opts)
     function pico.hash(s) return string.format("%064x", #s) end
     function pico.random_bytes(n) return string.rep("\4", n) end
 
-    -- JSON(最小限。テーブルをそのまま往復するだけ)
-    pico.json_null = {}
-    function pico.json_encode(v) M.json_last = v return "<json>" end
-    function pico.json_decode() return M.json_last end
+    -- JSON(本物と同じ形の読み書き。数の範囲・深さの上限などは見ない)
+    pico.json_null = setmetatable({}, { __tostring = function() return "json_null" end })
+    local function decode(text, keep_null)
+        local pos = 1
+        local function ws() pos = text:find("[^ \t\r\n]", pos) or #text + 1 end
+        local function err(msg) error({ json = msg .. " (位置 " .. pos .. ")" }) end
+        local value
+        local function str()
+            local out = {}
+            pos = pos + 1
+            while true do
+                local c = text:sub(pos, pos)
+                if c == "" then err("文字列が終わっていない") end
+                if c == '"' then pos = pos + 1 break end
+                if c == "\\" then
+                    local e = text:sub(pos + 1, pos + 1)
+                    local map = { b = "\b", f = "\f", n = "\n", r = "\r", t = "\t", ['"'] = '"', ["\\"] = "\\", ["/"] = "/" }
+                    if map[e] then out[#out + 1] = map[e] pos = pos + 2
+                    elseif e == "u" then
+                        local cp = tonumber(text:sub(pos + 2, pos + 5), 16) or err("\\uが不正")
+                        pos = pos + 6
+                        if cp >= 0xD800 and cp < 0xDC00 and text:sub(pos, pos + 1) == "\\u" then
+                            local lo = tonumber(text:sub(pos + 2, pos + 5), 16)
+                            if lo and lo >= 0xDC00 and lo < 0xE000 then cp = 0x10000 + (cp - 0xD800) * 0x400 + (lo - 0xDC00) pos = pos + 6 end
+                        end
+                        out[#out + 1] = utf8.char(cp)
+                    else err("エスケープが不正") end
+                else
+                    out[#out + 1] = c
+                    pos = pos + 1
+                end
+            end
+            return table.concat(out)
+        end
+        function value()
+            ws()
+            local c = text:sub(pos, pos)
+            if c == "{" then
+                local t = {}
+                pos = pos + 1 ws()
+                if text:sub(pos, pos) == "}" then pos = pos + 1 return t end
+                while true do
+                    ws()
+                    if text:sub(pos, pos) ~= '"' then err("キーが無い") end
+                    local k = str() ws()
+                    if text:sub(pos, pos) ~= ":" then err(":が無い") end
+                    pos = pos + 1
+                    local v = value()
+                    if v == nil and keep_null then v = pico.json_null end
+                    t[k] = v
+                    ws()
+                    local d = text:sub(pos, pos)
+                    pos = pos + 1
+                    if d == "}" then return t end
+                    if d ~= "," then err(",か}が無い") end
+                end
+            elseif c == "[" then
+                local t, n = {}, 0
+                pos = pos + 1 ws()
+                if text:sub(pos, pos) == "]" then pos = pos + 1 return t end
+                while true do
+                    n = n + 1
+                    local v = value()
+                    if v == nil and keep_null then v = pico.json_null end
+                    t[n] = v
+                    ws()
+                    local d = text:sub(pos, pos)
+                    pos = pos + 1
+                    if d == "]" then return t end
+                    if d ~= "," then err(",か]が無い") end
+                end
+            elseif c == '"' then return str()
+            elseif text:sub(pos, pos + 3) == "true" then pos = pos + 4 return true
+            elseif text:sub(pos, pos + 4) == "false" then pos = pos + 5 return false
+            elseif text:sub(pos, pos + 3) == "null" then pos = pos + 4 return nil
+            else
+                local num = text:match("^-?%d+%.?%d*[eE]?[-+]?%d*", pos)
+                if not num or num == "" then err("値が不正") end
+                pos = pos + #num
+                return math.tointeger(tonumber(num)) or tonumber(num)
+            end
+        end
+        local ok, v = pcall(function()
+            local r = value() ws()
+            if pos <= #text then err("余分な文字") end
+            return r
+        end)
+        if ok then return v end
+        if type(v) == "table" and v.json then return nil, v.json end
+        error(v, 0)
+    end
+    local function encode(v, out)
+        local t = type(v)
+        if v == nil or v == pico.json_null then out[#out + 1] = "null"
+        elseif t == "boolean" or t == "number" then out[#out + 1] = tostring(v)
+        elseif t == "string" then
+            out[#out + 1] = '"' .. v:gsub('[%c"\\]', function(c) return string.format("\\u%04x", c:byte()) end) .. '"'
+        elseif t == "table" then
+            if next(v) == nil or v[1] ~= nil then
+                out[#out + 1] = "["
+                for i, x in ipairs(v) do if i > 1 then out[#out + 1] = "," end encode(x, out) end
+                out[#out + 1] = "]"
+            else
+                local keys = {}
+                for k in pairs(v) do keys[#keys + 1] = k end
+                table.sort(keys)
+                out[#out + 1] = "{"
+                for i, k in ipairs(keys) do
+                    if i > 1 then out[#out + 1] = "," end
+                    encode(tostring(k), out) out[#out + 1] = ":" encode(v[k], out)
+                end
+                out[#out + 1] = "}"
+            end
+        else error("json_encode: 書けない値") end
+    end
+    function pico.json_encode(v) local out = {} encode(v, out) return table.concat(out) end
+    function pico.json_decode(text, keep_null) return decode(text, keep_null) end
+    -- json_pick: 本物と同じパスの書き方("a.1.b"、"a#" で要素の数)。文字列の切り詰めはしない
+    local function pick(root, paths, o)
+        local out = {}
+        for _, p in ipairs(paths) do
+            local count = p:sub(-1) == "#"
+            local cur = root
+            local path = count and p:sub(1, -2) or p
+            if path ~= "" then
+                for seg in path:gmatch("[^.]+") do
+                    if type(cur) ~= "table" then cur = nil break end
+                    local n = tonumber(seg)
+                    if n and cur[1] ~= nil then cur = cur[n] else cur = cur[seg] end
+                end
+            end
+            if count then
+                if type(cur) == "table" then local c = 0 for _ in pairs(cur) do c = c + 1 end out[p] = c end
+            elseif cur == pico.json_null then
+                if o and o.keep_null then out[p] = pico.json_null end
+            elseif type(cur) ~= "table" then out[p] = cur end
+        end
+        return out
+    end
+    function pico.json_pick(text, paths, o)
+        local root, e = decode(text, true)
+        if root == nil and e then return nil, e end
+        return pick(root, paths, o)
+    end
+    function pico.sd_json_pick(path, paths, o)
+        local text = M.sd[path]
+        if not text then return nil, "ファイルを開けません" end
+        return pico.json_pick(text, paths, o)
+    end
+    function pico.form_encode(t)
+        local keys = {}
+        for k in pairs(t) do keys[#keys + 1] = k end
+        table.sort(keys)
+        local function enc(s)
+            return (tostring(s):gsub("[^%w%-_%.%* ]", function(c) return string.format("%%%02X", c:byte()) end):gsub(" ", "+"))
+        end
+        local out = {}
+        for _, k in ipairs(keys) do
+            local v = t[k]
+            if type(v) == "table" then for _, x in ipairs(v) do out[#out + 1] = enc(k) .. "=" .. enc(x) end
+            else out[#out + 1] = enc(k) .. "=" .. enc(v) end
+        end
+        return table.concat(out, "&")
+    end
 
     -- require: テストでは普通のLuaのrequire/dofileを使うので何もしない
     pico.memory_info = function() return { lua_used = 1, lua_budget = 2, lua_free = 1, heap_free = 1, heap_used = 1, image_bytes = 0 } end
@@ -298,6 +460,12 @@ end
 function M.respond(index, ok, status, body, err, headers)
     local r = M.requests[index]
     assert(r, "mock.respond: そのリクエストは無い")
+    -- save_to を付けた要求は、本文を偽のSDへ書いたことにして本文はnilで返す(本物と同じ)
+    local save = r.opts and r.opts.save_to
+    if ok and save then
+        M.sd[save] = body or ""
+        return r.cb(ok, status, nil, err, headers or {}, { size = body and #body or 0, saved = save })
+    end
     return r.cb(ok, status, body, err, headers or {}, { size = body and #body or 0 })
 end
 

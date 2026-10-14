@@ -16,6 +16,7 @@
 //       M    … 修飾キー(Mod のOR)の16進数1桁。1=Ctrl 2=Alt 4=Shift
 //       CODE … u+XXXX(文字。Unicodeの符号位置の16進数、1〜6桁)
 //              または enter backspace tab esc delete left right up down home end pageup pagedown zenhan
+//              playpause stop nexttrack prevtrack volumeup volumedown mute(メディアキー)
 //
 //   例) key 0 u+61   … a       key 4 u+41 … A(Shift付き。文字はShiftを反映済みで送る)
 //       key 1 u+63   … Ctrl+C  key 0 u+3042 … あ(PC側のIMEで確定した文字もそのまま送れる)
@@ -43,6 +44,8 @@ namespace KeyInputFunctions {
         Left, Right, Up, Down,
         Home, End, PageUp, PageDown,
         Zenhan,     // 半角/全角(日本語入力の入り切り)
+        // メディアキー(キーボードの再生/次の曲等。文字入力では使わず、画面の onKey() と Lua の on_key へ届く)
+        PlayPause, Stop, NextTrack, PrevTrack, VolumeUp, VolumeDown, Mute,
     };
 
     enum Mod : uint8_t {

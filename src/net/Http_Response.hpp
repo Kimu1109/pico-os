@@ -89,7 +89,9 @@ class HttpResponse {
         // 応答の後も同じ接続で次の要求を送ってよいか(keep-alive)。
         // 本文の終わりが接続の切断でしか分からない応答や、相手が閉じると言っている場合はfalse
         bool canReuseConnection() const {
-            return state == State::Done && !connection_close && (chunked || content_length >= 0);
+            //204/304は本文を持たないと決まっているので、長さが書かれていなくても境目は分かる
+            return state == State::Done && !connection_close
+                && (chunked || content_length >= 0 || status_code == 204 || status_code == 304);
         }
         uint32_t bodyBytes() const { return body_bytes; }
 

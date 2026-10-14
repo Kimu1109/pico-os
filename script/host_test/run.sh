@@ -262,6 +262,11 @@ group_on() {
 
 # lib/luaのオブジェクトを作る(Luaを使うグループが先頭で呼ぶ。同じOUT内では1回だけ)
 ensure_lua_obj() {
+    # JPEGの読み取り(pico.image_load)が使うTJpgDec(LovyanGFXの写し。stubs/lgfx/utility/README.md)
+    if [ -d "$OUT/lua_obj" ] && [ ! -f "$OUT/lua_obj/lgfx_tjpgd.o" ]; then
+        compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
+            -c "$ROOT/script/host_test/stubs/lgfx/utility/lgfx_tjpgd.c" -o "$OUT/lua_obj/lgfx_tjpgd.o"
+    fi
     [ -d "$OUT/lua_obj" ] && return 0
     mkdir -p "$OUT/lua_obj"
     for f in "$ROOT"/lib/lua/src/*.c; do
@@ -271,6 +276,8 @@ ensure_lua_obj() {
     # Luaの暗号API(Secret_Aead)が使うMonocypher。lua_obj/*.oと一緒にリンクされる
     compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
         -c "$ROOT/lib/monocypher/src/monocypher.c" -o "$OUT/lua_obj/monocypher.o"
+    compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
+        -c "$ROOT/script/host_test/stubs/lgfx/utility/lgfx_tjpgd.c" -o "$OUT/lua_obj/lgfx_tjpgd.o"
 }
 
 if group_on core; then
@@ -1269,6 +1276,9 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
@@ -1363,6 +1373,9 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
@@ -1456,6 +1469,9 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
@@ -1565,6 +1581,9 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
@@ -1655,6 +1674,9 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/functions/Clipboard_Functions.cpp" \
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
     "$ROOT/src/iso/Iso_World.cpp" \
     "$ROOT/src/iso/Iso_Path.cpp" \
@@ -1772,7 +1794,7 @@ echo ""
 echo "===== iso_td_test ====="
 run_or_die "$OUT/iso_td_test" "$ROOT"
 
-for t in reversi_test minesweeper_test breakout_test blocks_test; do
+for t in reversi_test minesweeper_test breakout_test blocks_test spotify_test; do
     echo ""
     echo "===== $t ====="
     run_or_die "$OUT/lua_script_test" "$ROOT/script/host_test/$t.lua" "$ROOT"

@@ -42,7 +42,7 @@ description: "log / show_error / millis / micros / battery / on_key / app_dir / 
 
 `fn(key, mods)`:
 
-- `key`: 文字ならその文字(UTF-8。Shiftやキー配列は反映済み)、特殊キーなら `"enter"` `"backspace"` `"tab"` `"escape"` `"delete"` `"left"` `"right"` `"up"` `"down"` `"home"` `"end"` `"pageup"` `"pagedown"`。
+- `key`: 文字ならその文字(UTF-8。Shiftやキー配列は反映済み)、特殊キーなら `"enter"` `"backspace"` `"tab"` `"escape"` `"delete"` `"left"` `"right"` `"up"` `"down"` `"home"` `"end"` `"pageup"` `"pagedown"`、メディアキーなら `"playpause"` `"stop"` `"nexttrack"` `"prevtrack"` `"volumeup"` `"volumedown"` `"mute"`(メディアキーはオンスクリーンキーボードの入力には使われません)。
 - `mods`: `{ctrl = boolean, alt = boolean, shift = boolean}`。
 - 戻り値が**真なら「取った」扱い**。偽/`nil` なら、開いているオンスクリーンキーボードの入力へ回ります(`pico.show_input` などで文字入力できる)。
 

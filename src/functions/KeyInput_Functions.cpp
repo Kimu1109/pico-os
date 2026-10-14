@@ -29,6 +29,13 @@ namespace {
         { "pageup",    KeyInputFunctions::Key::PageUp },
         { "pagedown",  KeyInputFunctions::Key::PageDown },
         { "zenhan",    KeyInputFunctions::Key::Zenhan },
+        { "playpause", KeyInputFunctions::Key::PlayPause },
+        { "stop",      KeyInputFunctions::Key::Stop },
+        { "nexttrack", KeyInputFunctions::Key::NextTrack },
+        { "prevtrack", KeyInputFunctions::Key::PrevTrack },
+        { "volumeup",  KeyInputFunctions::Key::VolumeUp },
+        { "volumedown", KeyInputFunctions::Key::VolumeDown },
+        { "mute",      KeyInputFunctions::Key::Mute },
     };
 
     int HexDigit(char c){

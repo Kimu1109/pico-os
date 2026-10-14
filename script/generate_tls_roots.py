@@ -35,6 +35,8 @@ ROOTS = [
     ("DigiCert_Global_Root_CA.pem", "DigiCert(旧ルート。まだ多くのサイトが使う)"),
     ("USERTrust_RSA_Certification_Authority.pem", "Sectigo"),
     ("Amazon_Root_CA_1.pem", "Amazon(AWSの証明書。api.todoist.com 等)"),
+    ("Starfield_Root_Certificate_Authority_-_G2.pem", "Starfield(Certainly/Fastly の証明書の上。accounts.spotify.com 等)"),
+    ("DigiCert_Global_Root_G3.pem", "DigiCert(ECDSA。i.scdn.co=Spotifyのアルバム画像 等)"),
 ]
 
 

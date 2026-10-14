@@ -41,11 +41,16 @@ bool HttpRequest::addExtraHeader(const char* name, const char* value){
         const unsigned char c = (unsigned char)*p;
         if((c < 0x20 && c != '\t') || c == 0x7f) return false;
     }
-    FixedString<PICO_STR_512B> next;
-    if(!next.assign(extra_header_)) return false;
-    if(!next.empty() && !next.append("\r\n")) return false;
-    if(!next.append(name) || !next.append(": ") || !next.append(value)) return false;
-    extra_header_.assign(next);
+    //1行は送るときの溜め場所(512B)に収まること。全体は extra_header_ に収まること。
+    //先に長さを数えてから足す(途中で溢れて半端な行が残らないように。大きな一時領域をスタックに取らない)
+    const size_t line = strlen(name) + 2 + strlen(value);
+    if(line + 2 >= kMaxHeaderLineBytes) return false;
+    const size_t need = extra_header_.length() + (extra_header_.empty() ? 0 : 2) + line;
+    if(need >= PICO_STR_1KiB) return false;
+    if(!extra_header_.empty()) extra_header_.append("\r\n");
+    extra_header_.append(name);
+    extra_header_.append(": ");
+    extra_header_.append(value);
     return true;
 }
 
@@ -153,7 +158,7 @@ bool HttpRequest::sendRequestLine(){
         if(req.length() + n + 2 >= PICO_STR_512B){
             if(client.write((const uint8_t*)req.c_str(), req.length()) != req.length()) return false;
             req.clear();
-            if(n + 2 >= PICO_STR_512B) return false;
+            if(n + 2 >= kMaxHeaderLineBytes) return false;
         }
         ok = req.append(p, n) && ok;
         ok = req.append("\r\n") && ok;
@@ -178,6 +183,10 @@ bool HttpRequest::sendRequestLine(){
         ok = req.append("Content-Length: ") && ok;
         ok = req.append(len_buf) && ok;
         ok = req.append("\r\n") && ok;
+    }else if(method_ == Method::POST || method_ == Method::PUT || method_ == Method::PATCH){
+        //本文の無いPOST/PUT/PATCHにも長さを付ける。無いと411(Length Required)を返すサーバがある
+        //(SpotifyのWeb APIの再生/次へ等)。本文を持つメソッドなので0と明示しても害は無い
+        ok = req.append("Content-Length: 0\r\n") && ok;
     }
     ok = req.append("\r\n") && ok;
 

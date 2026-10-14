@@ -1,7 +1,7 @@
 ---
 title: "JSON"
 weight: 75
-description: "json_decode / json_encode / json_null"
+description: "json_decode / json_encode / json_null / json_pick / sd_json_pick"
 ---
 
 HTTPの応答や設定ファイルでよく使うJSONを、LuaのテーブルとC++で相互変換します。純Luaで書くより速く、スクリプトの上限(16KiB)も食いません。
@@ -45,3 +45,35 @@ pico.http_request("POST", url, body, "application/json", on_done)
 <div class="sig">pico.json_null <span class="ret">-- 値(lightuserdata)</span></div>
 
 `json_decode(text, true)` が `null` の代わりに返す目印で、`json_encode` に渡すと `null` になります。
+
+## pico.json_pick
+
+<div class="sig">pico.json_pick(text: string, paths: {string} [, opts: table]) <span class="ret">-> values: table, truncated: table | nil</span><br>
+<span class="ret">-> nil, error: string</span></div>
+
+JSONから**指定したパスの値だけ**を取り出します。`json_decode` は文書全体をLuaの表にするので、数KB〜数十KBの応答から数個の値が欲しいだけのときにLuaのメモリを大きく使います。`json_pick` は流しながら読み(C++側で確保しない)、結果の値だけをLuaに作ります。
+
+- パスはキーを `.` でつなぎ、配列は**1始まり**の番号で書きます(`"item.artists.1.name"`)。一番外が配列なら `"2"`、`"2.x"`。
+- パスの最後に `#` を付けると、その配列/オブジェクトの**要素の数**になります(`"item.artists#"`、一番外は `"#"`)。
+- 結果は `{[パス] = 値}` の表です。値は文字列・数(整数は整数)・真偽値。見つからないパスと `null` は入りません(`opts.keep_null = true` なら `null` は `pico.json_null`)。オブジェクトや配列そのものは取れません(中の値か `#` を指定します)。
+- 文字列は255バイトまでで、長いものは文字の途中で切らずに切り詰めます。切り詰めた値があれば2番目の戻り値に `{[パス] = true}` が入ります(無ければ `nil`)。
+- パスは1〜32個、1つ510バイトまで。キーは47バイトを超える分が切られて比べられます(長いキーの中は取れません)。入れ子は16段まで。
+- JSONが不正なら `nil, 理由`。頼んだ値が全部見つかっていれば、その後ろが途中で切れていても成功にします。
+
+```lua
+local r = pico.json_pick(body, {"is_playing", "progress_ms", "item.name", "item.artists.1.name",
+                                "item.duration_ms", "item.album.images#"})
+if r then
+    title = r["item.name"] or ""
+    artist = r["item.artists.1.name"] or ""
+    playing = r.is_playing == true
+end
+```
+
+## pico.sd_json_pick
+
+<div class="sig">pico.sd_json_pick(path: string, paths: {string} [, opts: table]) <span class="ret">-> values: table, truncated: table | nil</span><br>
+<span class="ret">-> nil, error: string</span></div>
+
+`json_pick` のSDのファイル版です。`pico.http_request` の `save_to` で保存した、16KiBを超える応答を読むのに使います。ファイルは1MiBまで。頼んだ値が全部見つかった時点で残りは読みません。
+`sd_read` と同じく、`sd_outside_app_dir` 権限が無ければアプリのフォルダの外は読めません(`nil, 理由`)。

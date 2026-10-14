@@ -18,6 +18,9 @@
 # (上と同じ使い捨ての証明書)の2つ立てて確かめる。サーバ単体の権限まわり(chat_server_test.py)も
 # ここで回す(同じプロセスの中で 127.0.0.1 の空きポートにサーバを立てる)。
 #
+# Spotifyの認証(spotify_auth_test.py)は script/spotify_auth.py を偽物のトークン/APIのサーバ(127.0.0.1)へ向けて動かし、
+# ブラウザの代わりに戻り先へ code を返して、PKCE・state の照合・書き出したJSONを確かめる(本物のSpotifyへは行かない)。
+#
 # アプリストア(app_store_net_test)は app_store_fixture.py が作った配布物を python3 -m http.server で配り、
 # 一覧の取得・署名・インストール・更新・古い一覧/改ざん/権限の拒否を確かめる。
 #
@@ -213,6 +216,11 @@ done
 echo ""
 echo "===== todoist_net_test ====="
 "$OUT/todoist_net_test" "$TODO_PORT" "$TODO_TLS_PORT" "$OUT/ca.pem" "$TODO_TOKEN" "$TODO_PAGED_PORT"
+
+# ---- Spotifyの最初のトークン(script/spotify_auth.py)。偽物のトークン/APIのサーバを相手に ----
+echo ""
+echo "===== spotify_auth_test ====="
+python3 "$ROOT/script/host_test/spotify_auth_test.py"
 
 # ---- アプリストア(AppStore)。配布物を作って http.server で配る ----
 STORE_PORT=$((PORT + 8))

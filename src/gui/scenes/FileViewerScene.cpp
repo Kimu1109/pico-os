@@ -93,6 +93,7 @@ void FileViewerScene::onEnter(){
     this->last_shown_sec = -1;
 
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });

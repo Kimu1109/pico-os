@@ -25,7 +25,7 @@ local function label(text, lx, ly)
     return l
 end
 
-button("戻る", x + m, y + m, function() pico.pop() end)
+pico.set(button("", x + m, y + m, function() pico.pop() end), "icon_id", 30)  -- ArrowLeft
 label("通知", x + 70, y + m + 6)
 
 local status = label("", x + m, y + 200)

@@ -43,7 +43,7 @@ for i, p in ipairs(PAGES) do
 end
 
 local back = pico.create("Button")
-pico.set(back, "text", "戻る")
+pico.set(back, "icon_id", 30)  -- ArrowLeft
 pico.set(back, "x", x + 8)
 pico.set(back, "y", top + #PAGES * (BTN_H + GAP) + 4)
 pico.set(back, "w", 80)

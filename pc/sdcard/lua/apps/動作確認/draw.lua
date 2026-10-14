@@ -8,7 +8,7 @@ local cx0, cy0, cw, ch = pico.content_rect()
 local back = pico.create("Button")
 pico.set(back, "x", cx0 + 4)
 pico.set(back, "y", cy0 + 2)
-pico.set(back, "text", "戻る")
+pico.set(back, "icon_id", 30)  -- ArrowLeft
 pico.on(back, "press_end", function() pico.pop() end)
 
 local canvas = pico.create("Canvas")

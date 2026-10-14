@@ -24,7 +24,7 @@ local function button(x, y, w, text, fn)
     return b
 end
 
-button(cx + 2, cy + 2, 40, "戻る", function() pico.pop() end)
+pico.set(button(cx + 2, cy + 2, 40, "", function() pico.pop() end), "icon_id", 30)  -- ArrowLeft
 
 local wave_btn
 wave_btn = button(cx + 46, cy + 2, 104, "波形: " .. WAVES[wave_index], function()

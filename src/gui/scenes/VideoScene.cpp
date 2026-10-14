@@ -43,6 +43,7 @@ void VideoScene::onEnter(){
     const int ctrl_h = MediaButtons::kHeight;
 
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(btn_h);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
@@ -50,6 +51,7 @@ void VideoScene::onEnter(){
     const Rect back = this->back_button->getLocalRect();
 
     this->open_button = new Button(back.x + back.w + MARGIN, y0, "開く");
+    this->open_button->setIcon(IconID::FolderOpen, IconSize::Px16);
     this->open_button->setFontSize(FontFn::Small);
     this->open_button->setH(btn_h);
     this->open_button->setOnPressEnd([this](){

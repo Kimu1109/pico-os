@@ -26,7 +26,7 @@ end
 local box = M.box
 
 local BUTTONS = {
-    { id = "back", label = "戻る" }, { id = "hire", label = "雇う" }, { id = "build", label = "建設" },
+    { id = "back" }, { id = "hire", label = "雇う" }, { id = "build", label = "建設" },
     { id = "select", label = "選択" }, { id = "speed" }, { id = "more", label = "他" },
 }
 local SOLDIER_BUTTONS, BUILDING_BUTTONS
@@ -101,8 +101,12 @@ local function render()
         if M.focus == b then pico.draw_rect(CX + b.x, PY + 1, b.w - 2, INFO_H - 2, 14) end
     end
     for _, b in ipairs(BUTTONS) do
-        local label = b.label or (G.speed == 0 and "停止" or ("x" .. G.speed))
+        local label = b.label or (b.id ~= "back" and (G.speed == 0 and "停止" or ("x" .. G.speed))) or nil
         box(CX + b.x + 1, PY + INFO_H + 2, b.w - 2, BTN_H - 4, label, held == b or (b.id == "select" and G.select_mode))
+        if b.id == "back" then   -- 戻るは左向きの矢印
+            local mx, my = CX + b.x + b.w // 2, PY + INFO_H + 2 + (BTN_H - 4) // 2
+            pico.fill_triangle(mx - 6, my, mx + 5, my - 6, mx + 5, my + 6, 0)
+        end
         if M.focus == b then
             pico.draw_rect(CX + b.x + 1, PY + INFO_H + 2, b.w - 2, BTN_H - 4, 14)
             pico.draw_rect(CX + b.x + 2, PY + INFO_H + 3, b.w - 4, BTN_H - 6, 14)

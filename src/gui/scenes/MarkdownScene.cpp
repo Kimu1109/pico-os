@@ -79,10 +79,12 @@ void MarkdownScene::onEnter(){
     placeButton(this->home_button, 0);
 
     this->reload_button = new Button(0, header_y, "更新");
+    this->reload_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->reload_button->setOnPressEnd([this](){ this->reloadCurrent(); });
     placeButton(this->reload_button, 0);
 
     this->search_button = new Button(0, header_y, "検索");
+    this->search_button->setIcon(IconID::Search, IconSize::Px16);
     this->search_button->setOnPressEnd([this](){ this->openSearchInput(); });
     placeButton(this->search_button, 0);
 

@@ -379,7 +379,7 @@ function g:on_draw(ox, oy)
         "St" .. stage_idx .. "/" .. #STAGES.list .. " Sc" .. score .. " L" .. lives, 0, 0)
 end
 
-g:button{ name = "back", x = 2, y = 0, w = 40, h = 22, label = "戻る" }
+g:button{ name = "back", x = 2, y = 0, w = 40, h = 22, label = "left" }
 auto_btn = g:button{ name = "auto", x = cw - 43, y = 0, w = 41, h = 22, draw = function(b, x, y, w, h)
     pico.fill_rect(x + 1, y + 1, w - 2, h - 2, auto and 2 or 8)
     pico.draw_rect(x + 1, y + 1, w - 2, h - 2, 0)

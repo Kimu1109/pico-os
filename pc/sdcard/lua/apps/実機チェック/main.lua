@@ -332,7 +332,7 @@ local ALL = { test_lua, test_draw, test_sd, test_crypto, test_json, test_https, 
 
 button("全部", X + 2, 70, function() start(ALL) end)
 button("描画", X + 76, 70, function() start({ test_draw }) end)
-button("戻る", X + W - 72, 70, function() pico.pop() end)
+pico.set(button("", X + W - 72, 70, function() pico.pop() end), "icon_id", 30)  -- ArrowLeft
 pico.on_back(function() pico.pop() end)
 
 function loop(dt)

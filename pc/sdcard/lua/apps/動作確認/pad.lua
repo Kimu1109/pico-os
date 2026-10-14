@@ -97,7 +97,7 @@ pico.set(back, "x", x + margin)
 pico.set(back, "y", y + h - 32)
 pico.set(back, "w", 80 + BUTTON_FRAME)
 pico.set(back, "h", 26 + BUTTON_FRAME)
-pico.set(back, "text", "戻る")
+pico.set(back, "icon_id", 30)  -- ArrowLeft
 pico.on(back, "press_start", function() pico.go_back() end)
 -- EscキーとコントローラーのHOMEでも戻る(HOMEは下のキー図にも出る)
 pico.on_back(function() pico.pop() end)

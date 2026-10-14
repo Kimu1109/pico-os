@@ -1046,10 +1046,13 @@ void TextEditorScene::onEnter(){
     int x = content.x + MARGIN;
     const int y1 = content.y + MARGIN;
     this->back_button = make_button("戻る", x, y1);
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     x += this->back_button->getLocalRect().w + MARGIN;
     this->open_button = make_button("開く", x, y1);
+    this->open_button->setIcon(IconID::FolderOpen, IconSize::Px16);
     x += this->open_button->getLocalRect().w + MARGIN;
     this->save_button = make_button("保存", x, y1);
+    this->save_button->setIcon(IconID::Save, IconSize::Px16);
 
     const int row_h = this->back_button->getLocalRect().h;
     this->kb_button = new Button(0, y1, "");

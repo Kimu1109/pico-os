@@ -120,19 +120,34 @@ end
 
 local function render()
     local top = Y + 32 + STAT
+    local lo, hi = top, Y + H        -- 一覧を描いてよい縦の範囲(ボタンの帯へはみ出さない)
+    -- 範囲 [y, y+h) を lo..hi に収めて set_draw_area する(収まらなければ false)
+    local function area(x, y, w, h)
+        local y0, y1 = math.max(y, lo), math.min(y + h, hi)
+        if y1 <= y0 then return false end
+        pico.set_draw_area(x, y0, w, y1 - y0)
+        return true
+    end
     for i = 1, #items do
         local ry = top + (i - 1) * ROW - scroll
-        if ry + ROW > Y + 32 and ry < Y + H then
+        if ry + ROW > lo and ry < hi then
             local it = items[i]
-            if i == sel then pico.fill_rect(X, ry, W, ROW - 1, LGREY) end
-            pico.draw_line(X + 4, ry + ROW - 1, X + W - 5, ry + ROW - 1, LGREY)
-            pico.set_draw_area(X + 6, ry + 2, W - 14, 34)
-            pico.draw_text_wrapped(X + 6, ry + 2, W - 14, it.title, 0, 0)
-            pico.clear_draw_area()
+            if i == sel and area(X, ry, W, ROW - 1) then
+                pico.fill_rect(X, ry, W, ROW - 1, LGREY)
+                pico.clear_draw_area()
+            end
+            if ry + ROW - 1 >= lo and ry + ROW - 1 < hi then
+                pico.draw_line(X + 4, ry + ROW - 1, X + W - 5, ry + ROW - 1, LGREY)
+            end
+            if area(X + 6, ry + 2, W - 14, 34) then
+                pico.draw_text_wrapped(X + 6, ry + 2, W - 14, it.title, 0, 0)
+                pico.clear_draw_area()
+            end
             local meta = (it.src ~= "" and it.src or "") .. (it.time ~= "" and ("  " .. it.time) or "")
-            pico.set_draw_area(X + 6, ry + 37, W - 14, 18)
-            pico.draw_text(X + 6, ry + 37, meta, BLUE, 0)
-            pico.clear_draw_area()
+            if area(X + 6, ry + 37, W - 14, 18) then
+                pico.draw_text(X + 6, ry + 37, meta, BLUE, 0)
+                pico.clear_draw_area()
+            end
         end
     end
     -- 上の状態の行(はみ出した行を隠してから描く)

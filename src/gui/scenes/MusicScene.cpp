@@ -7,6 +7,7 @@
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Font_Functions.hpp"
 #include "functions/Config_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -128,6 +129,8 @@ void MusicScene::onUpdate(){
     //曲の終わりを見張る
     if(this->playing_kind != 0){
         const bool wav = this->playing_kind == 2;
+        //曲の切り替わりで一瞬「鳴っていない」と見えた瞬間にスリープへ入らないよう、再生中(一時停止以外)は起こしておく
+        if(!(wav ? SoundFunctions::WavPaused() : SoundFunctions::MusicPaused())) PowerFunctions::KeepAwake();
         if(!(wav ? SoundFunctions::WavPlaying() : SoundFunctions::MusicPlaying())){
             this->advance(false);
         }else if(!wav && this->queue.repeat() != PlayQueue::Repeat::One && !SoundFunctions::MusicPaused()){

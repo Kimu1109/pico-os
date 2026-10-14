@@ -8,6 +8,8 @@
 //
 // 使い方: app_store_net_test <port> <dir>
 #include "store/App_Store.hpp"
+#include "store/App_Repo.hpp"
+#include "store/App_Repo_Keys.hpp"
 #include "functions/App_Functions.hpp"
 #include "functions/Scene_Functions.hpp"
 #include "functions/Log_Functions.hpp"
@@ -151,10 +153,19 @@ int main(int argc, char** argv){
         check(s2.loadCachedCatalog() && s2.catalogSerial() == 100, "refresh: 断ったときは前の一覧のまま");
         check(!Has("/sys/store/catalog.part"), "refresh: 半端なファイルを残さない");
 
-        AppStore nokey; //鍵が無いと何も信頼しない
+        AppStore nokey; //store.cfgの鍵を読まなければ、テストの鍵は信頼しない
         nokey.setBaseUrl(url);
         Use("good");
-        check(!nokey.beginRefresh() && strstr(nokey.message(), "鍵") != nullptr, "refresh: 鍵を設定していなければ通信せずに断る");
+        bool builtin = false; //焼き込みの鍵(全部0の目印は数えない)
+        for(int i = 0; i < AppRepoKeys::kBuiltinCount; i++){
+            builtin = builtin || AppRepo::IsBuiltinKey(AppRepoKeys::kBuiltin[i].pub);
+        }
+        if(builtin){
+            check(nokey.beginRefresh() && !Run(nokey) && strstr(nokey.message(), "信頼") != nullptr,
+                  "refresh: store.cfgの鍵が無ければ、焼き込みの鍵だけを信頼する(テストの鍵の署名は断る)");
+        }else{
+            check(!nokey.beginRefresh() && strstr(nokey.message(), "鍵") != nullptr, "refresh: 鍵を設定していなければ通信せずに断る");
+        }
     }
 
     // ---- 3. 更新 ----

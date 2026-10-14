@@ -2603,6 +2603,15 @@ int main() {
         HostSd::files["/app/big.json"] = big;
         HostSd::files["/app/broken.json"] = "{\"a\":[1,2";
         HostSd::files["/other/x.json"] = "{\"a\":1}";
+        // 16KiBを超えるRSS(sd_xml_pickで読む)
+        std::string bigx = "<?xml version=\"1.0\"?><rss><channel><title>T</title>";
+        for (int i = 1; i <= 400; i++) {
+            bigx += "<item><title>n" + std::to_string(i) + " &amp; x</title><source url=\"u" + std::to_string(i) + "\">s</source></item>";
+        }
+        bigx += "<lastBuildDate>end</lastBuildDate></channel></rss>";
+        HostSd::files["/app/big.xml"] = bigx;
+        HostSd::files["/app/broken.xml"] = "<a><b>1</b><b>2";
+        check(bigx.size() > 16 * 1024, "xml_pick: 16KiBを超えるXMLを用意");
         check(big.size() > 16 * 1024, "json_pick: 16KiBを超えるJSONを用意");
         bool ok = engine.Run(R"LUA(
             -- form_encode
@@ -2658,6 +2667,50 @@ int main() {
             check(s3 == nil and type(e3) == "string", "sd_json_pick: アプリのフォルダの外は読めない")
             local s4, e4 = pico.sd_json_pick("/app/none.json", {"a"})
             check(s4 == nil and type(e4) == "string", "sd_json_pick: 無いファイル")
+
+            -- xml_pick
+            local rss = [==[<?xml version="1.0"?><rss version="2.0"><channel><title>ニュース</title>
+              <item><title>A &amp; B</title><link>http://a/?x=1&amp;y=2</link><source url="http://s1">S1</source></item>
+              <item><title><![CDATA[C <D>]]></title><source url="http://s2">S2</source><media:content url="m"/></item>
+              <item><title>E</title></item></channel></rss>]==]
+            local x, xt = pico.xml_pick(rss, {"rss.channel.title", "rss.channel.item.title", "rss.channel.item.2.title",
+                "rss.channel.item.3.title", "rss.channel.item.1.link", "rss.channel.item.link", "rss.channel.item.2.link",
+                "rss.channel.item.source@url", "rss.channel.item.2.source@url", "rss.channel.item.2.source",
+                "rss.@version", "rss@version", "rss.channel.item#", "rss.channel.title#", "rss.channel.item.4.title",
+                "rss.channel.item.2.media:content@url"})
+            check(x ~= nil and xt == nil, "xml_pick: 読める")
+            check(x["rss.channel.title"] == "ニュース", "xml_pick: 要素の文字")
+            check(x["rss.channel.item.title"] == "A & B" and x["rss.channel.item.2.title"] == "C <D>" and x["rss.channel.item.3.title"] == "E",
+                  "xml_pick: 番号を省くと1番目・番号で選ぶ・実体とCDATA")
+            check(x["rss.channel.item.link"] == "http://a/?x=1&y=2" and x["rss.channel.item.1.link"] == x["rss.channel.item.link"],
+                  "xml_pick: 1番目は番号ありでも同じ")
+            check(x["rss.channel.item.2.link"] == nil and x["rss.channel.item.4.title"] == nil, "xml_pick: 無いものはnil")
+            check(x["rss.channel.item.source@url"] == "http://s1" and x["rss.channel.item.2.source@url"] == "http://s2", "xml_pick: 属性")
+            check(x["rss.channel.item.2.source"] == "S2", "xml_pick: 属性のある要素の文字")
+            check(x["rss@version"] == "2.0" and x["rss.@version"] == nil, "xml_pick: ルートの属性")
+            check(x["rss.channel.item#"] == 3 and x["rss.channel.title#"] == 1, "xml_pick: 同じ名前の子の数")
+            check(x["rss.channel.item.2.media:content@url"] == "m", "xml_pick: 名前空間つきの名前")
+            local xlong, xtr = pico.xml_pick("<a>" .. string.rep("z", 400) .. "</a>", {"a"})
+            check(#xlong.a <= 255 and xtr and xtr.a == true, "xml_pick: 長い文字は切れて第2戻り値に出る")
+            local xb, xe = pico.xml_pick("<a><b></a>", {"a.b"})
+            check(xb == nil and type(xe) == "string", "xml_pick: 誤ったXMLは nil, 理由")
+            local xc, xce = pico.xml_pick("<a><b>1</b><c>", {"a.b"})
+            check(xc and xc["a.b"] == "1", "xml_pick: 頼んだものが揃っていれば後ろが切れていてもよい")
+            local xd, xde = pico.xml_pick("<a><b>1</b><c>", {"a.b", "a.b#"})
+            check(xd == nil and type(xde) == "string", "xml_pick: 数を頼むと最後まで読むので切れていると失敗")
+            check(not pcall(pico.xml_pick, "<a/>", {}), "xml_pick: パスが無いとエラー")
+            check(not pcall(pico.xml_pick, "<a/>", {1}), "xml_pick: パスは文字列")
+
+            -- sd_xml_pick
+            local sx = pico.sd_xml_pick("/app/big.xml", {"rss.channel.item.400.title", "rss.channel.item.250.source@url", "rss.channel.item#", "rss.channel.lastBuildDate"})
+            check(sx and sx["rss.channel.item.400.title"] == "n400 & x" and sx["rss.channel.item.250.source@url"] == "u250"
+                  and sx["rss.channel.item#"] == 400 and sx["rss.channel.lastBuildDate"] == "end", "sd_xml_pick: 16KiBを超えるファイルを流しながら読む")
+            local sx1 = pico.sd_xml_pick("/app/big.xml", {"rss.channel.item.2.title"})
+            check(sx1 and sx1["rss.channel.item.2.title"] == "n2 & x", "sd_xml_pick: 揃ったら残りは読まない")
+            local sx2, sxe2 = pico.sd_xml_pick("/app/broken.xml", {"a.b.3"})
+            check(sx2 == nil and type(sxe2) == "string", "sd_xml_pick: 途中で切れたファイル")
+            local sx3, sxe3 = pico.sd_xml_pick("/other/x.json", {"a"})
+            check(sx3 == nil and type(sxe3) == "string", "sd_xml_pick: アプリのフォルダの外は読めない")
         )LUA", "net_helpers");
         check(ok, "Web APIの補助: 実行");
     }

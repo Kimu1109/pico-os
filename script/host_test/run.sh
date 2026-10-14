@@ -46,6 +46,8 @@
 #   todoist_proto_test… TODOアプリ(Todoist)の応答の読み取り(todo/Todoist_Proto)と、その下のJSONの
 #                   読み取り(util/Json_Reader)。エスケープ/サロゲート/切り詰め/1バイトずつ/誤り、
 #                   一覧から必要なキーだけ拾う・完了済みを飛ばす・next_cursor、期限の読み取りと表記・並べ替え
+#   xml_reader_test… XMLの読み取り(util/Xml_Reader)。RSSから題名/リンクを拾う・実体参照/CDATA/コメント/DOCTYPE・
+#                   1バイトずつ・切り詰め・誤り・壊した入力で落ちない
 #   todo_test     … TODOアプリのリマインダー(todo/Todo_Reminders。本物のNotificationFunctionsへ予約する)と
 #                   TodoSceneの生成/解放・トークンが無いときの案内
 #   gb_emu_test   … Game Boyエミュ(GbEmu/GameBoyPad/GameBoyView)。テスト内で組み立てたROMで、
@@ -634,6 +636,16 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== todoist_proto_test ====="
 run_or_die "$OUT/todoist_proto_test"
+
+# --- XMLの読み取り(util/Xml_Reader。RSSの題名・リンクを拾う形で確かめる) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/xml_reader_test.cpp" \
+    "$ROOT/src/util/Xml_Reader.cpp" \
+    -o "$OUT/xml_reader_test"
+
+echo ""
+echo "===== xml_reader_test ====="
+run_or_die "$OUT/xml_reader_test"
 
 # --- TODO: リマインダーと画面の配線 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \
@@ -1277,6 +1289,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Xml_Reader.cpp" \
     "$ROOT/src/util/Json_Reader.cpp" \
     "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
@@ -1374,6 +1387,7 @@ compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Xml_Reader.cpp" \
     "$ROOT/src/util/Json_Reader.cpp" \
     "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
@@ -1470,6 +1484,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Xml_Reader.cpp" \
     "$ROOT/src/util/Json_Reader.cpp" \
     "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
@@ -1582,6 +1597,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Xml_Reader.cpp" \
     "$ROOT/src/util/Json_Reader.cpp" \
     "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \
@@ -1675,6 +1691,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/mono
     "$ROOT/src/functions/Focus_Functions.cpp" \
     "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
     "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Xml_Reader.cpp" \
     "$ROOT/src/util/Json_Reader.cpp" \
     "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
     "$ROOT/src/lua/LuaEngine_Iso.cpp" \

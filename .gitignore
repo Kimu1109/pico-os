@@ -26,6 +26,9 @@ pc/sdcard/crash/
 # Luaアプリの pico.store_save() が作る保存ファイル(PCビルドで試すと作られる)
 pc/sdcard/lua/apps/*/store.json
 pc/sdcard/lua/apps/*/store.json.tmp
+# ニュースアプリが保存するRSS(save_to。.part は受信中)
+pc/sdcard/lua/apps/*/news.xml
+pc/sdcard/lua/apps/*/news.xml.part
 pc/sdcard/lua/apps/*/settings.cfg
 pc/sdcard/lua/apps/*/results.txt
 pc/sdcard/lua/apps/*/bench.tmp

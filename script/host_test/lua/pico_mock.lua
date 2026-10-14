@@ -409,6 +409,16 @@ function M.install(opts)
         if not text then return nil, "ファイルを開けません" end
         return pico.json_pick(text, paths, o)
     end
+    -- xml_pick / sd_xml_pick は本物の読み取り(C++)を真似ていない。テストでは M.xml_pick_result に
+    -- 返したい表を入れておく(無ければ「未対応」の失敗)。
+    function pico.xml_pick(text, paths, o)
+        if M.xml_pick_result then return M.xml_pick_result end
+        return nil, "pico_mock: xml_pick は未対応です(M.xml_pick_result を設定してください)"
+    end
+    function pico.sd_xml_pick(path, paths, o)
+        if not M.sd[path] then return nil, "ファイルを開けません" end
+        return pico.xml_pick(M.sd[path], paths, o)
+    end
     function pico.form_encode(t)
         local keys = {}
         for k in pairs(t) do keys[#keys + 1] = k end

@@ -342,9 +342,9 @@ void MusicScene::refreshListColors(){
 }
 
 void MusicScene::onListSelect(int index, bool already_selected){
-    //タッチなら1回で、キー/コントローラーで選んでいるときは決定(=2回目)で開く/鳴らす
+    //タッチ(離した瞬間)なら1回で、キー/コントローラーで選んでいるときは決定(=2回目)で開く/鳴らす
     //(↑↓で選ぶたびに曲が変わらないように)
-    if(!OSData::isTouchStart && !already_selected) return;
+    if(!OSData::isTouchEnd && !already_selected) return;
     if(this->view == kLibrary){
         if(index < 0 || index > this->folder_count) return;
         this->showPlaylist(index == 0 ? kAll : index - 1);

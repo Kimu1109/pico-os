@@ -76,57 +76,77 @@ void ScrollList::render(){
     this->needs_redraw = false;
 }
 
+int ScrollList::itemIndexAt(int touch_y) const{
+    const Rect g_rect = this->getScreenRect();
+    const int ITEM_HEIGHT = this->font_h + MARGIN;
+    if(ITEM_HEIGHT <= 0) return -1;
+
+    int start_index = this->scrollY / ITEM_HEIGHT;
+    int draw_y = start_index * ITEM_HEIGHT - this->scrollY;
+    for(int i = start_index; i < (int)this->dataSource.size(); i++){
+        const int draw_start_y = g_rect.y + draw_y - MARGIN * 0.5;
+        if(touch_y > draw_start_y && touch_y <= draw_start_y + ITEM_HEIGHT) return i;
+
+        draw_y += ITEM_HEIGHT;
+        if(draw_y > g_rect.h) break;
+    }
+    return -1;
+}
+
 void ScrollList::causeOnPressStart(){
     Widget::causeOnPressStart();
 
     const Rect g_rect = this->getScreenRect();
 
-    if(OSData::touchX > g_rect.x + g_rect.w - SCROLL_BAR_W){
-        this->is_scrolling = true;
-        this->ref_touch_y = OSData::touchY;
-        this->ref_scroll_y = this->scrollY;
-    }else{
-        const int ITEM_HEIGHT = this->font_h + MARGIN;
-
-        int start_index = this->scrollY / ITEM_HEIGHT;
-        int draw_y = start_index * ITEM_HEIGHT - this->scrollY;
-        for(int i = start_index; i < this->dataSource.size(); i++){
-            const int draw_start_y = g_rect.y + draw_y - MARGIN * 0.5;
-            if(OSData::touchY > draw_start_y && OSData::touchY <= draw_start_y + ITEM_HEIGHT){
-                bool already_selected = i == this->selected_index;
-                this->selected_index = i;
-                this->causeOnSelectItem(already_selected);
-                this->needs_redraw = true;
-                break;
-            }
-
-            draw_y += ITEM_HEIGHT;
-            if(draw_y > g_rect.h) break;
-        }
-    }
+    this->ref_touch_y = OSData::touchY;
+    this->ref_scroll_y = this->scrollY;
+    this->dragged = false;
+    this->pending_index = -1;
+    this->is_scrolling = OSData::touchX > g_rect.x + g_rect.w - SCROLL_BAR_W;
+    // 本体のタップによる選択は、ドラッグでスクロールする可能性があるので離したときに行う
+    if(!this->is_scrolling) this->pending_index = this->itemIndexAt(OSData::touchY);
 }
 
 void ScrollList::causeOnPressMove(){
     Widget::causeOnPressMove();
 
-    if(this->is_scrolling){
-        // スクロールバーのつまみが指に付いてくるよう、指の移動量を
-        // 「全体の高さ/表示領域の高さ」倍して中身の移動量にする
-        const int view_h = this->getScreenRect().h;
-        const int total = (this->font_h + MARGIN) * (int)this->dataSource.size();
-        if(view_h > 0 && total > view_h){
-            this->scrollY = this->ref_scroll_y + (int)((float)(OSData::touchY - this->ref_touch_y) * total / view_h);
-        }
-        // 項目が少なく収まる場合は常に0(下限・上限とも範囲内へ)
-        this->clampScroll();
-        this->needs_redraw = true;
+    const int dy = OSData::touchY - this->ref_touch_y;
+    if(!this->is_scrolling && !this->dragged){
+        if(dy > kDragThreshold || dy < -kDragThreshold) this->dragged = true;
+        else return;
     }
+
+    const int view_h = this->getScreenRect().h;
+    const int total = (this->font_h + MARGIN) * (int)this->dataSource.size();
+    if(view_h > 0 && total > view_h){
+        if(this->is_scrolling){
+            // スクロールバーのつまみが指に付いてくるよう「全体の高さ/表示領域の高さ」倍
+            this->scrollY = this->ref_scroll_y + (int)((float)dy * total / view_h);
+        }else{
+            // 中身が指に付いてくる(下へなぞると上の項目が見える)
+            this->scrollY = this->ref_scroll_y - dy;
+        }
+    }
+    // 項目が少なく収まる場合は常に0(下限・上限とも範囲内へ)
+    this->clampScroll();
+    this->needs_redraw = true;
 }
 
 void ScrollList::causeOnPressEnd(){
     Widget::causeOnPressEnd();
 
+    const bool tap = !this->is_scrolling && !this->dragged && this->pending_index >= 0;
+    const int index = this->pending_index;
     this->is_scrolling = false;
+    this->dragged = false;
+    this->pending_index = -1;
+
+    if(tap){
+        const bool already_selected = index == this->selected_index;
+        this->selected_index = index;
+        this->needs_redraw = true;
+        this->causeOnSelectItem(already_selected);
+    }
 }
 void ScrollList::ensureVisible(int index){
     if(index < 0 || index >= (int)this->dataSource.size()) return;

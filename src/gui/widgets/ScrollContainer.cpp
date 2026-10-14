@@ -27,6 +27,7 @@ void ScrollContainer::causeOnPressStart(){
     sy = OSData::touchY - getScreenY();
 
     is_scrolling = false;
+    body_dragged = false;
     if(vertical_scroll && sx >= this->l_rect.w - SCROLL_L){
         is_scrolling = true;
     }
@@ -34,9 +35,8 @@ void ScrollContainer::causeOnPressStart(){
         is_scrolling = true;
     }
 
-    if(is_scrolling){
-        this->updateContentBounds();
-    }
+    // 本体のドラッグでもスクロールするので、常に範囲を求めておく
+    this->updateContentBounds();
 
     s_scroll_x = scroll_x;
     s_scroll_y = scroll_y;
@@ -45,27 +45,39 @@ void ScrollContainer::causeOnPressStart(){
 void ScrollContainer::causeOnPressMove(){
     Widget::causeOnPressMove();
 
-    if(!is_scrolling) return;
-
     int rx = OSData::touchX - getScreenX();
     int ry = OSData::touchY - getScreenY();
+
+    if(!is_scrolling && !body_dragged){
+        const int ddx = horizontal_scroll ? (rx - sx) : 0;
+        const int ddy = vertical_scroll ? (ry - sy) : 0;
+        if(abs(ddx) > kDragThreshold || abs(ddy) > kDragThreshold) body_dragged = true;
+        else return;
+    }
 
     int old_scroll_x = scroll_x;
     int old_scroll_y = scroll_y;
 
-    // スクロールバーのつまみが指に付いてくるよう、指の移動量を
-    // 「中身の長さ / 表示領域の長さ」倍して中身の移動量にする
     if(horizontal_scroll){
-        const int view_w = this->l_rect.w - (vertical_scroll ? SCROLL_L : 0);
         int new_x = s_scroll_x;
-        if(view_w > 0) new_x += (int)((float)(rx - sx) * (view_w + max_scroll_x) / view_w);
+        if(is_scrolling){
+            // スクロールバーのつまみが指に付いてくるよう、指の移動量を「中身の長さ/表示領域の長さ」倍する
+            const int view_w = this->l_rect.w - (vertical_scroll ? SCROLL_L : 0);
+            if(view_w > 0) new_x += (int)((float)(rx - sx) * (view_w + max_scroll_x) / view_w);
+        }else{
+            new_x -= (rx - sx); // 中身が指に付いてくる
+        }
         scroll_x = constrain(new_x, 0, max_scroll_x);
     }
 
     if(vertical_scroll){
-        const int view_h = this->l_rect.h - (horizontal_scroll ? SCROLL_L : 0);
         int new_y = s_scroll_y;
-        if(view_h > 0) new_y += (int)((float)(ry - sy) * (view_h + max_scroll_y) / view_h);
+        if(is_scrolling){
+            const int view_h = this->l_rect.h - (horizontal_scroll ? SCROLL_L : 0);
+            if(view_h > 0) new_y += (int)((float)(ry - sy) * (view_h + max_scroll_y) / view_h);
+        }else{
+            new_y -= (ry - sy);
+        }
         scroll_y = constrain(new_y, 0, max_scroll_y);
     }
 

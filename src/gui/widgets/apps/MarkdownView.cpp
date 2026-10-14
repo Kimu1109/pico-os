@@ -1384,10 +1384,8 @@ void MarkdownView::causeOnPressStart() {
     moved_beyond_threshold = false;
 
     is_scrolling = (press_start_x >= this->l_rect.w - SCROLL_L);
-    if (is_scrolling) {
-        sy = press_start_y;
-        s_scroll_y = scroll_y;
-    }
+    sy = press_start_y;
+    s_scroll_y = scroll_y;
 }
 
 void MarkdownView::causeOnPressMove() {
@@ -1399,9 +1397,15 @@ void MarkdownView::causeOnPressMove() {
         moved_beyond_threshold = true;
     }
 
-    if (!is_scrolling) return;
-
-    int new_y = s_scroll_y + ((float)(ry - sy) / (float)this->l_rect.h) * max_scroll_y;
+    int new_y;
+    if (is_scrolling) {
+        // スクロールバーの帯: つまみが指に付いてくる
+        new_y = s_scroll_y + ((float)(ry - sy) / (float)this->l_rect.h) * max_scroll_y;
+    } else {
+        // 本体: しきい値を超えて動かしたら、中身が指に付いてくる(リンクのタップとは両立)
+        if (!moved_beyond_threshold) return;
+        new_y = s_scroll_y - (ry - sy);
+    }
     scroll_y = constrain(new_y, 0, max_scroll_y);
 
     unsigned long now = millis();

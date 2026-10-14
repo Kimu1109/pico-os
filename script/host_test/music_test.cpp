@@ -65,7 +65,7 @@ static std::vector<Ev> Events(int ch){
             case Op::Note: v.push_back({buf[pc], ReadU16(buf + pc + 1)}); pc += 3; break;
             case Op::Rest: v.push_back({-1, ReadU16(buf + pc)}); pc += 2; break;
             case Op::Tempo: case Op::LoopBreak: pc += 2; break;
-            case Op::Wave: case Op::Volume: case Op::Envelope: case Op::Gate: case Op::LoopBegin: pc += 1; break;
+            case Op::Wave: case Op::Volume: case Op::Envelope: case Op::Gate: case Op::Pan: case Op::LoopBegin: pc += 1; break;
             default: break;
         }
     }
@@ -226,6 +226,59 @@ static std::vector<int16_t> Play(const std::string& mml, size_t n, ChipSynth::En
     std::vector<int16_t> v(n);
     for(size_t i = 0; i < n; i += step) p.render(e, v.data() + i, std::min(step, n - i));
     return v;
+}
+
+// ステレオ出力: p で左右の定位(左右の最大値)を取る
+static void StereoPeaks(const std::string& mml, ChipSynth::Engine& e, MusicPlayer& pl, int& peak_l, int& peak_r, size_t n = 4000){
+    const MmlResult r = Compile(mml);
+    if(!r.ok) printf("       読み取りに失敗: %s\n", r.message.c_str());
+    pl.start(e, buf, r.size);
+    std::vector<int16_t> v(n * 2);
+    pl.render(e, v.data(), n, true);
+    peak_l = peak_r = 0;
+    for(size_t i = 0; i < n; i++){
+        peak_l = std::max(peak_l, (int)abs(v[i * 2]));
+        peak_r = std::max(peak_r, (int)abs(v[i * 2 + 1]));
+    }
+}
+
+static void TestPan(){
+    printf("--- パン(p) ---\n");
+    ExpectError("A p9 c", 1, 3, "p の後ろは-8〜8", "p の範囲外は誤り");
+    {
+        ChipSynth::Engine e(kRate); MusicPlayer pl(kRate); int l, r;
+        StereoPeaks("A c", e, pl, l, r);
+        check(l > 1000 && l == r, "pを書かなければ中央(左右とも同じ)");
+    }
+    {
+        ChipSynth::Engine e(kRate); MusicPlayer pl(kRate); int l, r;
+        StereoPeaks("A p-8 c", e, pl, l, r);
+        check(l > 1000 && r == 0, "p-8は左だけ");
+    }
+    {
+        ChipSynth::Engine e(kRate); MusicPlayer pl(kRate); int l, r;
+        StereoPeaks("A p8 c", e, pl, l, r);
+        check(r > 1000 && l == 0, "p8は右だけ");
+    }
+    {
+        ChipSynth::Engine e(kRate); MusicPlayer pl(kRate); int l, r;
+        StereoPeaks("A p4 c", e, pl, l, r);
+        check(r > 1000 && l * 2 > r - 50 && l * 2 < r + 50, "p4は右が全開で左が半分");
+    }
+    {
+        ChipSynth::Engine e(kRate); MusicPlayer pl(kRate); int l, r;
+        StereoPeaks("#macro m = p8 c\nA p-8 $m", e, pl, l, r, 2000);
+        check(r > 1000 && l == 0, "マクロの中のpは右へ振る");
+        StereoPeaks("#macro m = p8\nA p-8 $m c", e, pl, l, r, 2000);
+        check(l > 1000 && r == 0, "マクロを出たらpは元(左)へ戻る");
+    }
+    {
+        //モノラル出力ではpは無視(従来と同じ値)
+        ChipSynth::Engine e1(kRate), e2(kRate); MusicPlayer p1(kRate), p2(kRate);
+        const auto a = Play("A c", 2000, e1, p1);
+        const auto b = Play("A p-8 c", 2000, e2, p2);
+        check(a == b, "モノラルの出力ではpを無視する");
+    }
 }
 
 static void TestPlayer(){
@@ -514,6 +567,7 @@ static void TestSoundFunctions(){
 int main(){
     TestCompiler();
     TestPlayer();
+    TestPan();
     TestSoundFunctions();
 
     printf("\n%s (%d件の失敗)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

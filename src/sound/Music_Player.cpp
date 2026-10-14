@@ -85,6 +85,7 @@ void MusicPlayer::fetch(ChipSynth::Engine& engine, int ch){
                 n.freq_x16 = (uint32_t)(f * 16.0f + 0.5f);
                 n.volume = t.volume;
                 n.envelope = t.envelope;
+                n.pan = t.pan;
                 n.length_ms = 0;    //止めるのはこちら(q)の仕事
                 if(!(borrowed_ & (1u << ch))) engine.play((uint8_t)ch, n);
                 t.sounding = true;
@@ -105,6 +106,7 @@ void MusicPlayer::fetch(ChipSynth::Engine& engine, int ch){
             case Op::Volume:   t.volume = data_[t.pc++]; break;
             case Op::Envelope: t.envelope = (int8_t)data_[t.pc++]; break;
             case Op::Gate:     t.gate_q = data_[t.pc++]; break;
+            case Op::Pan:      t.pan = (int8_t)data_[t.pc++]; break;
             case Op::Tempo: {
                 const uint16_t bpm = ReadU16(data_ + t.pc);
                 t.pc += 2;
@@ -144,11 +146,11 @@ void MusicPlayer::fetch(ChipSynth::Engine& engine, int ch){
                 break;
             case Op::SaveState:
                 t.saved_wave = t.wave; t.saved_volume = t.volume;
-                t.saved_envelope = t.envelope; t.saved_q = t.gate_q;
+                t.saved_envelope = t.envelope; t.saved_q = t.gate_q; t.saved_pan = t.pan;
                 break;
             case Op::RestoreState:
                 t.wave = t.saved_wave; t.volume = t.saved_volume;
-                t.envelope = t.saved_envelope; t.gate_q = t.saved_q;
+                t.envelope = t.saved_envelope; t.gate_q = t.saved_q; t.pan = t.saved_pan;
                 break;
             case Op::End:
             default:
@@ -191,16 +193,16 @@ uint32_t MusicPlayer::samplesToNextTick() const {
     return (uint32_t)s;
 }
 
-void MusicPlayer::render(ChipSynth::Engine& engine, int16_t* out, size_t n){
+void MusicPlayer::render(ChipSynth::Engine& engine, int16_t* out, size_t n, bool stereo){
     while(n > 0){
         if(!playing_ || paused_){
-            engine.render(out, n);
+            engine.render(out, n, stereo);
             return;
         }
         size_t k = samplesToNextTick();
         if(k > n) k = n;
-        engine.render(out, k);
-        if(out) out += k;
+        engine.render(out, k, stereo);
+        if(out) out += stereo ? k * 2 : k;
         n -= k;
         elapsed_samples_ += k;
 

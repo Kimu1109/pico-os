@@ -57,7 +57,12 @@ namespace ChipSynth {
         int8_t   envelope = 0;
         // 長さ(ms)。0なら止めるまで鳴り続ける
         uint32_t length_ms = 0;
+        // 左右の定位。-kPanMax(左だけ)〜0(中央)〜+kPanMax(右だけ)。ステレオ出力のときだけ効く
+        // (モノラルの出力では無視)。中央は左右とも全開で、反対側を線形に絞る
+        int8_t   pan = 0;
     };
+
+    constexpr int kPanMax = 8;
 
     // 周波数の上限(サンプル周波数の半分。これを超えると別の高さに聞こえる)
     constexpr uint32_t kMaxToneFreqX16(uint32_t sample_rate){ return sample_rate / 2 * 16; }
@@ -79,7 +84,8 @@ namespace ChipSynth {
         uint8_t masterVolume() const { return master_; }
 
         // n サンプル作る。out が nullptr なら作らずに時間だけ進める(聞こえない間に使う)
-        void render(int16_t* out, size_t n);
+        // stereo=true なら out は左右交互(L,R,L,R…)で n*2 個書く(今は左右とも同じ値。パンは今後)
+        void render(int16_t* out, size_t n, bool stereo = false);
 
         // 鳴っているチャンネルのビット(bit0 = ch0)
         ChannelMask activeMask() const;
@@ -100,6 +106,8 @@ namespace ChipSynth {
             uint32_t remaining = 0;     // 残りサンプル数(infiniteでないとき)
             uint16_t lfsr = 0x7FFF;
             int32_t  gain = 0;          // volume と全体の音量から決まる倍率(>>15して使う)
+            uint8_t  pan_l = kPanMax;   // 左右の倍率(0〜kPanMax、/kPanMaxして使う)
+            uint8_t  pan_r = kPanMax;
         };
 
         void updateGain(Channel& c) const;

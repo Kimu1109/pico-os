@@ -1008,7 +1008,7 @@ int main(){
                 check(math.abs(pico.note_freq(60) - 261.63) < 0.01, "pico.note_freq: 60 = C4")
                 check(pico.note_freq("H4") == nil, "pico.note_freq: 読めない音名はnil")
                 check(pico.note_freq(200) == nil, "pico.note_freq: 範囲外はnil")
-                check(pico.sound_play(2, 220, 0, {wave = "triangle", volume = 10, envelope = -3}) == true,
+                check(pico.sound_play(2, 220, 0, {wave = "triangle", volume = 10, envelope = -3, pan = -99}) == true,
                       "pico.sound_play: 積めたらtrue")
                 check(pico.sound_playing() == true, "pico.sound_playing: 積んだ直後から鳴っている扱い")
                 check(not pcall(pico.sound_play, 0, 440, 100), "pico.sound_play: チャンネル0はエラー(1始まり)")

@@ -28,7 +28,8 @@ public:
     void write(uint8_t reg, uint8_t val);
 
     // n サンプル作って out へ**足す**(16bitで頭打ち)。out が nullptr なら時間だけ進める
-    void renderAdd(int16_t* out, size_t n);
+    // stereo=false: モノラル(左右を足す)。stereo=true: out は左右交互で n*2 個。NR51/NR50の左右をそのまま使う
+    void renderAdd(int16_t* out, size_t n, bool stereo = false);
 
     // 全体の音量(0〜100。sound.cfgのvolume)
     void setMasterVolume(uint8_t volume);
@@ -99,6 +100,7 @@ private:
 
     // 直流を落とす(実機の出力のコンデンサ)。電圧の高い/低いが続いても0へ戻る
     float    hp_cap_ = 0.0f;
+    float    hp_cap_r_ = 0.0f;   // ステレオの右(左は hp_cap_)
     float    hp_coef_ = 0.992f;     // 直流を落とす係数(コンストラクタで周波数から決める)
     int32_t  gain_ = 0;
 };

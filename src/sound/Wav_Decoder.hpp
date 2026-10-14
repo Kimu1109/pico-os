@@ -3,10 +3,11 @@
 #include <cstdint>
 #include <SdFat.h>
 
-// SD上の .wav(RIFF/WAVE)を読み、音源と同じ「モノラル16bit・out_rate Hz」のサンプル列へ直す係(1コア目専用)。
+// SD上の .wav(RIFF/WAVE)を読み、音源と同じ「16bit・out_rate Hz」のサンプル列へ直す係(1コア目専用)。
+// 出力は既定でモノラル。setStereoOutput(true) なら2ch以上のファイルを左右交互のステレオにする。
 //
 // - 対応: 整数PCM 8/16/24/32bit、浮動小数点 32bit(format 3)、WAVE_FORMAT_EXTENSIBLE(中身がそのどちらか)。
-//   チャンネルは1〜8で、全チャンネルの平均をとってモノラルにする。
+//   チャンネルは1〜8で、モノラル出力は全チャンネルの平均。ステレオ出力は偶数番目の平均が左・奇数番目の平均が右(2chならそのまま)。
 //   ADPCM・μ-law等の圧縮形式と64bit浮動小数点は Unsupported で断る
 // - サンプリング周波数は線形補間で out_rate へ直す。**下げるとき(44.1kHz→22050Hz、48kHz→44.1kHz等)は先に低域通過フィルタ
 //   (ハミング窓のFIR、元の周波数で回す)を掛け、out_rate の半分より上の音を削る**。削らずに間引くと、
@@ -43,7 +44,13 @@ public:
     // 終わりまで来たら頭から読み直す(BGM向け)
     void setLoop(bool loop){ this->loop_ = loop; }
 
-    // 最大 max サンプルを書き、書いた数を返す。終わりまで来たら finished() が true になる
+    // 2ch以上のファイルを左右に分けて出す(open()の前に決める)。既定はfalse(全チャンネルの平均のモノラル)。
+    // trueでも1chのファイルはモノラル。実際に出る形は outChannels()
+    void setStereoOutput(bool stereo){ this->stereo_out_ = stereo; }
+    uint8_t outChannels() const { return this->lanes_; }
+
+    // 最大 max フレーム(outChannels() が2なら左右交互なので out は max*2 個)を書き、書いたフレーム数を返す。
+    // 終わりまで来たら finished() が true になる
     size_t read(int16_t* out, size_t max);
     bool finished() const { return this->finished_; }
 
@@ -61,17 +68,20 @@ private:
     bool fail(Error e);
     bool parseHeader();
     bool refill();
-    bool nextSource(int16_t& v);
-    bool rawSource(int16_t& v);
+    struct Frame { int16_t v[2] = {0, 0}; };    // 左右(モノラル出力では v[0] だけが意味を持つ)
+    bool nextSource(Frame& v);
+    bool rawSource(Frame& v);
     void designFilter();
-    void pushHistory(int16_t x);
-    int16_t filterOut() const;
-    int32_t decodeFrame(const uint8_t* p) const;
+    void pushHistory(const Frame& x);
+    int16_t filterOut(int lane) const;
+    void decodeFrame(const uint8_t* p, Frame& out) const;
 
     FsFile f_;
     bool open_ = false;
     bool loop_ = false;
     bool finished_ = false;
+    bool stereo_out_ = false;
+    uint8_t lanes_ = 1;         // 出力のチャンネル数(1 or 2)
     Error error_ = Error::None;
 
     // 見出し
@@ -94,8 +104,8 @@ private:
     // 周波数の変換(16.16)。s0_とs1_の間を frac_ の位置で補間する
     uint32_t step_ = 0;
     uint32_t frac_ = 0;
-    int16_t s0_ = 0;
-    int16_t s1_ = 0;
+    Frame s0_;
+    Frame s1_;
     bool primed_ = false;
     bool ending_ = false;      // 元のサンプルを読み切った(最後の1つを出している)
 
@@ -104,9 +114,9 @@ private:
     // 終わりは最後の値を half_ 回足して出し切る(入れた数と同じ数を出す)
     uint16_t half_ = 0;                 // 0ならフィルタ無し
     int16_t taps_[kMaxHalfTaps + 1];    // taps_[0] が真ん中、taps_[k] が真ん中から k 離れた所
-    int16_t hist_[2 * kMaxTaps];        // 同じ値を2か所へ書き、どこからでも連続で読めるようにした輪
+    Frame   hist_[2 * kMaxTaps];        // 同じ値を2か所へ書き、どこからでも連続で読めるようにした輪
     uint16_t hist_pos_ = 0;
     uint16_t flush_left_ = 0;
-    int16_t last_raw_ = 0;
+    Frame last_raw_;
     bool filt_ready_ = false;
 };

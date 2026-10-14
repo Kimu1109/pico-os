@@ -338,8 +338,63 @@ static int ReadHook(int pin){
     if(pin != AUDIO_DETECT) return -1;
     return plugged ? LOW : HIGH;
 }
+static void TestDecoderStereo(){
+    printf("--- デコーダ: ステレオ出力 ---\n");
+    OSData::SD_usable = true;
+    WavSpec sp; sp.channels = 2;
+    std::vector<int16_t> st;
+    for(int i = 0; i < 100; i++){ st.push_back((int16_t)(i * 10)); st.push_back((int16_t)(-i * 10)); }
+    HostSd::files["/s.wav"] = MakeWav(sp, Pcm16(st));
+    {
+        WavDecoder dec;
+        dec.setStereoOutput(true);
+        int16_t out[400];
+        check(dec.open("/s.wav", 22050) && dec.outChannels() == 2, "2chはステレオ出力になる");
+        const size_t n = dec.read(out, 200);
+        bool ok = n == 100;
+        for(size_t i = 0; ok && i < n; i++) ok = out[i * 2] == (int16_t)(i * 10) && out[i * 2 + 1] == (int16_t)(-(int)i * 10);
+        check(ok, "同じ周波数なら左右がそのまま出る(100フレーム)");
+    }
+    {
+        WavDecoder dec;     //既定はモノラル(左右の平均)
+        int16_t out[200];
+        check(dec.open("/s.wav", 22050) && dec.outChannels() == 1, "既定はモノラル出力");
+        const size_t n = dec.read(out, 200);
+        bool ok = n == 100;
+        for(size_t i = 0; ok && i < n; i++) ok = out[i] == 0;
+        check(ok, "モノラルは左右の平均");
+    }
+    {
+        WavSpec m; HostSd::files["/m.wav"] = MakeWav(m, Pcm16(std::vector<int16_t>(50, 123)));
+        WavDecoder dec;
+        dec.setStereoOutput(true);
+        check(dec.open("/m.wav", 22050) && dec.outChannels() == 1, "1chのファイルはステレオ出力でもモノラルのまま");
+    }
+    {
+        //周波数を下げる(フィルタ+補間)でも左右が混ざらない: 左=一定、右=0
+        WavSpec hi; hi.channels = 2; hi.rate = 44100;
+        std::vector<int16_t> v;
+        for(int i = 0; i < 4000; i++){ v.push_back(8000); v.push_back(0); }
+        HostSd::files["/h.wav"] = MakeWav(hi, Pcm16(v));
+        WavDecoder dec;
+        dec.setStereoOutput(true);
+        std::vector<int16_t> all;
+        int16_t buf[100];
+        check(dec.open("/h.wav", 22050), "44.1kHzのステレオを開ける");
+        while(!dec.finished()){
+            const size_t n = dec.read(buf, 50);
+            all.insert(all.end(), buf, buf + n * 2);
+            if(n == 0) break;
+        }
+        bool ok = all.size() == 4000;   //2000フレーム
+        for(size_t i = 0; ok && i < all.size(); i += 2) ok = all[i] == 8000 && all[i + 1] == 0;
+        check(ok, "周波数を下げても左右が混ざらない");
+    }
+}
+
 static I2S& Out(){ return *I2S::last; }
 static int16_t Left(uint32_t w){ return (int16_t)(w >> 16); }
+static int16_t Right(uint32_t w){ return (int16_t)(w & 0xFFFF); }
 
 static void Step(unsigned long now){
     SoundFunctions::UpdateAt(now);
@@ -410,6 +465,53 @@ static void TestSoundFunctions(uint32_t rate){
         WavPlay("/music/a.wav", false, 20);
         const auto got = Run(now, 100);
         check(Count(got, 1000) == 10000, "WAVの音量20なら1000");
+    }
+
+    printf("--- ステレオ ---\n");
+    {
+        //左=10000、右=-6000 の2ch。全体の音量50・WAVの音量100なら 5000 と -3000
+        WavSpec sp = OutSpec(); sp.channels = 2;
+        std::vector<int16_t> st;
+        for(int i = 0; i < 6000; i++){ st.push_back(10000); st.push_back(-6000); }
+        HostSd::files["/music/st.wav"] = MakeWav(sp, Pcm16(st));
+        const char* err = nullptr;
+        WavInfo info;
+        check(WavPlay("/music/st.wav", false, 100, &err, &info) && info.channels == 2, "ステレオのWAVを鳴らせる");
+        size_t l_ok = 0, r_ok = 0;
+        for(int i = 0; i < 100; i++){
+            Out().consume(Out().queued.size());
+            const size_t before = Out().written.size();
+            now += 1;
+            UpdateAt(now);
+            Core1StepAt(now);
+            for(size_t k = before; k < Out().written.size(); k++){
+                if(Left(Out().written[k]) == 5000) l_ok++;
+                if(Right(Out().written[k]) == -3000) r_ok++;
+            }
+        }
+        printf("       左 %zu 右 %zu\n", l_ok, r_ok);
+        check(l_ok == 6000 && r_ok == 6000, "左右が別々に鳴る(6000フレーム)");
+        check(!WavPlaying() && WavUnderruns() == under0, "鳴り終えて、途切れていない");
+
+        //モノラルのWAVに切り替えると左右とも同じ値で鳴る
+        WavPlay("/music/a.wav", false, 100);
+        size_t same = 0;
+        for(int i = 0; i < 100; i++){
+            Out().consume(Out().queued.size());
+            const size_t before = Out().written.size();
+            now += 1;
+            UpdateAt(now);
+            Core1StepAt(now);
+            for(size_t k = before; k < Out().written.size(); k++)
+                if(Left(Out().written[k]) == 5000 && Right(Out().written[k]) == 5000) same++;
+        }
+        check(same == 10000, "モノラルのWAVは左右とも同じ値");
+
+        //位置: ステレオでもフレームで数える
+        WavPlay("/music/st.wav", false, 100);
+        for(int i = 0; i < 3; i++){ Out().consume(Out().queued.size()); now += 1; UpdateAt(now); Core1StepAt(now); }
+        check(WavPositionMs() <= WavDurationMs() && WavDurationMs() == 6000u * 1000u / rate, "ステレオの長さと位置はフレームで数える");
+        WavStop();
     }
 
     printf("--- 止める ---\n");
@@ -551,6 +653,7 @@ static void TestSoundFunctions(uint32_t rate){
 }
 
 int main(){
+    TestDecoderStereo();
     TestDecoder();
     TestSoundFunctions(SoundFunctions::kSampleRateLow);
     TestSoundFunctions(SoundFunctions::kSampleRateHigh);

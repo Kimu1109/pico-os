@@ -27,7 +27,7 @@ public:
     void setBorrowed(ChipSynth::ChannelMask mask) { borrowed_ = mask; }
 
     // n サンプル進める(曲の出来事を挟みながら engine.render する)。out が nullptr なら作らずに進める
-    void render(ChipSynth::Engine& engine, int16_t* out, size_t n);
+    void render(ChipSynth::Engine& engine, int16_t* out, size_t n, bool stereo = false);
 
     uint16_t tempo() const { return tempo_; }
 
@@ -58,6 +58,7 @@ private:
         bool     sounding = false;  // このトラックが音を鳴らしている
         uint8_t  wave = 2, volume = 15, gate_q = 7;
         int8_t   envelope = 0;
+        int8_t   pan = 0, saved_pan = 0;
         uint8_t  saved_wave = 2, saved_volume = 15, saved_q = 7;
         int8_t   saved_envelope = 0;
         Loop     loops[MusicData::kMaxLoopDepth];

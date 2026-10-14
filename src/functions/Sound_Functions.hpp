@@ -154,7 +154,7 @@ namespace SoundFunctions {
     // 1コア目がSDから少しずつ読んでモノラル・出力の周波数へ直し、列(WavStream、24KB)で2コア目へ渡す。
     // 曲・効果音・GBの音と足し合わせる。同時に鳴らせるWAVは1本(鳴らすと前のWAVは止まる)。
     // 列と読み取り係(合わせて約17KB)は最初に鳴らすときに確保し、以降は持ち続ける。
-    // 読み込みが WavStream::kRingSamples(44100Hzで約280ms、22050Hzで約560ms)より長く止まると途切れる(WavUnderruns())
+    // 読み込みが WavStream::kRingSamples(44100Hzでモノラル約370ms・ステレオ約190ms、22050Hzはその倍)より長く止まると途切れる(WavUnderruns())
     struct WavInfo {
         uint16_t channels = 0;
         uint16_t bits = 0;

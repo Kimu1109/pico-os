@@ -1889,6 +1889,21 @@ SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャ�
 (テスト音: 300ms・約880Hz、デモ曲: 4ch足して最大約12000で音割れなし)。
 **実機(arduino-picoのI2S・2コア目・MAX98357A)では未確認**(このリモート環境には実機もRP2350のボード定義も無い)。**Webビルドも未確認**(emsdkが無い)。
 
+### ステレオ出力とパン (`stereo` 引数 / `ChipSynth::Note::pan` / MMLの`p`) (2026-10-14)
+
+2コア目の出力段は左右交互(L,R,L,R…)のバッファで、I2Sへは左を上位16bit・右を下位16bitに詰めて書く(以前は同じ値を両方へ)。
+- 音を作る関数(`Engine::render` / `MusicPlayer::render` / `GbAudioLink::render` / `GbApu::renderAdd` / `WavStream::renderAdd`)は
+  `bool stereo = false`を取る。省略はモノラル(今までどおり)で、`stereo=true`なら`out`は左右交互で`n*2`個。
+- `GbApu`はステレオのとき、NR51の振り分け・NR50の左右の音量をそのまま左右に出す(片側だけでもモノラルの和と同じ大きさになるよう2倍。最大振幅は変わらない)。
+- チップチューン: `Note::pan`(-8左〜0中央〜8右、`kPanMax`)。中央は左右とも全開で反対側を線形に絞る。MMLは`p n`(`Op::Pan`)、Luaは`pico.sound_play`の`pan`。
+  モノラルの出力では無視。
+- **WAVのステレオ**: `WavDecoder::setStereoOutput(true)`(`SoundFunctions::WavPlay()`が常に立てる)で、2ch以上のファイルは偶数番目のチャンネルの平均=左・
+  奇数番目の平均=右の左右交互で出す(2chはそのまま。1chはモノラルのまま。立てなければ従来の全チャンネル平均のモノラル)。周波数の変換とフィルタは左右それぞれに掛ける。
+  `WavStream`の列は24KB→32KB(`kRingSamples`=16384サンプル。head/tailはint16の数で数え、ステレオは左右の組)。先読みはモノラル44100Hzで約370ms・ステレオ約190ms。
+  形は`setStereo()`で決め(flushを兼ねる)、2コア目は次のflushで取り込む。位置・長さ・`kWavMaxPerUpdate`/`kWavPrefillSamples`はフレームで数える。
+  モノラルのWAVはステレオ出力の左右へ同じ値を足す。
+- 検証: `gb_apu_test` `sound_test` `music_test`(`TestPan`) `lua_engine_test`。**実機のPCM5102Aでの聞こえ方・2コア目の負荷は未確認**。
+
 ### 曲データ (`MUSIC_FORMAT.md` / `src/sound/Mml_Compiler` / `Music_Player` / `MusicScene`) (2026-09-25)
 
 SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML**(pico-os向けの方言。書き方は`MUSIC_FORMAT.md`)。

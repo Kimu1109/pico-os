@@ -364,6 +364,10 @@ bool MmlCompiler::parseSeq(const char* s, int len, int line, int col_base, bool 
                 if(!parseInt(p, end, v, false) || v < 1 || v > 8){ p = at; FAIL("q の後ろは1〜8です"); }
                 if(!emit(Op::Gate) || !emit((uint8_t)v)) OUT_OF_SPACE();
                 break;
+            case 'p':
+                if(!parseInt(p, end, v, true) || v < -ChipSynth::kPanMax || v > ChipSynth::kPanMax){ p = at; FAIL("p の後ろは-%d〜%dです", ChipSynth::kPanMax, ChipSynth::kPanMax); }
+                if(!emit(Op::Pan) || !emit((uint8_t)(int8_t)v)) OUT_OF_SPACE();
+                break;
             case 'k':
                 if(!parseInt(p, end, v, true) || v < -24 || v > 24){ p = at; FAIL("k の後ろは-24〜24です"); }
                 ch_.transpose = v;

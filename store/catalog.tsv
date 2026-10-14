@@ -1,4 +1,5 @@
-pico-os-apps	1	1791710478
+pico-os-apps	1	1791959881
+spotify-remote	1.0.0	Spotify	Spotify	36639	b976e24f45f2a26a1406201fdb600f83186f4543f5eede3428c8aacd80702898	network	スマホ/PCのSpotifyの再生を操作するリモコン(再生/停止・次へ・前へ・シーク・音量・端末の切り替え)。Premiumが必要
 oshite	1.0.0	おしてのぼれ	おしてのぼれ	17045	6600098b337a694c04a9507cb47efade200ea048993d8fd188b417736d6c9039	-	pico.gameの物理(押し合い・積み重ね・ばね・動く足場)を使ったパズルアクション
 jump-action	1.0.0	ジャンプアクション	ジャンプアクション	9398	68a297c3d5d164fdf88950718bde75954301c275cab172400b9ab77acdfad6d1	-	pico.game(2Dゲームの簡易エンジン)で作った横スクロールのジャンプアクション
 scratchpad	1.0.0	スクラッチパッド	スクラッチパッド	10149	2ba27550a8f376c0dc368dfcd6c2aa8c55cb7dbac9e19ea14191132fb096d019	-	黒/青ペンと消しゴムで手書きメモ。保存/読み込み対応

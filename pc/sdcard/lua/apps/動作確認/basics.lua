@@ -118,7 +118,8 @@ local move = button("x/yで平行移動", x + m, top + 120, 140, function()
 end)
 
 -- ---- 戻る ----
-local back = button("戻る", x + m, y + h - 34, 80, function() pico.pop() end)
+local back = button("", x + m, y + h - 34, 80, function() pico.pop() end)
+pico.set(back, "icon_id", 30)  -- ArrowLeft
 
 -- 開いた一覧が下の部品に重なるので、ドロップダウンは最後に作る(後に作ったものが上に描かれる)
 local dropdown = pico.create("DropdownMenu")

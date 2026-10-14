@@ -52,6 +52,7 @@ void TodoScene::onEnter(){
 
     // ---- 上部の行: [戻る] TODO [設定] [更新] ----
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
@@ -59,6 +60,7 @@ void TodoScene::onEnter(){
     const int row_h = this->back_button->getLocalRect().h;
 
     this->refresh_button = new Button(0, y0, "更新");
+    this->refresh_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->refresh_button->setFontSize(FontFn::Small);
     this->refresh_button->setH(20 + Button::kFrameExtra);
     this->refresh_button->setX(content.x + content.w - MARGIN - this->refresh_button->getLocalRect().w);
@@ -76,6 +78,7 @@ void TodoScene::onEnter(){
     WidgetFunctions::Add(this->refresh_button);
 
     this->settings_button = new Button(0, y0, "設定");
+    this->settings_button->setIcon(IconID::Settings, IconSize::Px16);
     this->settings_button->setFontSize(FontFn::Small);
     this->settings_button->setH(20 + Button::kFrameExtra);
     this->settings_button->setX(this->refresh_button->getLocalRect().x - MARGIN - this->settings_button->getLocalRect().w);

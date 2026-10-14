@@ -180,7 +180,7 @@ function g:on_draw(ox, oy)
     pico.draw_text(ox + 8, oy + 32, text, 0, 0)
 end
 
-g:button{ name = "back", x = 8, y = 56, w = 59, h = 31, label = "戻る" }
+g:button{ name = "back", x = 8, y = 56, w = 59, h = 31, label = "left" }
 g:button{ name = "reset", x = 71, y = 56, w = 79, h = 31, label = "リセット" }
 
 g:state("play", {

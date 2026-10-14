@@ -611,6 +611,7 @@ void SshScene::onEnter(){
     int x = content.x + MARGIN;
     const int y1 = content.y + MARGIN;
     this->back_button = make_button("戻る", x, y1);
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     x += this->back_button->getLocalRect().w + MARGIN;
     this->conn_button = make_button("接続", x, y1);
     this->conn_button->setW(this->conn_button->getLocalRect().w + Button::kFrameExtra); //文字が変わっても幅を変えない

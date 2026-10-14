@@ -124,7 +124,7 @@ local bad_btn = ui.Button{ x = x + 8, y = top + 196, w = 150, h = 28, font_size 
 link(3, input, out, enc_btn, dec_btn, bad_btn)
 
 -- ---- 戻る ----
-local back = ui.Button{ x = x + 8, y = y + h - 30, w = 80, h = 26, font_size = 0, text = "戻る",
+local back = ui.Button{ x = x + 8, y = y + h - 30, w = 80, h = 26, font_size = 0, icon_id = 30,
     on_press_end = function() pico.go_back() end }
 pico.on_back(function() pico.pop() end)
 

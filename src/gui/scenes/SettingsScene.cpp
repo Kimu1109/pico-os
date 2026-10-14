@@ -658,6 +658,7 @@ void SettingsScene::onEnter(){
 
     // ---- 上部: [戻る] + バッテリー残量(全タブ共通) ----
     this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
@@ -746,6 +747,8 @@ void SettingsScene::onEnter(){
     int16_t buttons_y = 0;
     for(int i = 0; i < kWifiButtons; i++){
         Button* b = new Button(0, 0, button_texts[i]);
+        if(i == 0) b->setIcon(IconID::Search, IconSize::Px16);
+        if(i == 3) b->setIcon(IconID::Trash, IconSize::Px16);
         b->setFontSize(FontFn::Small);
         b->setAllowTextSpacing(false);
         b->setW(btn_w + Button::kFrameExtraTight);

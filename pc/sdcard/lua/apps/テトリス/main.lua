@@ -444,7 +444,7 @@ for i, n in ipairs({ "left", "down", "right", "up", "b", "a" }) do
     end }
 end
 pause_btn = g:button{ name = "pause", x = SX, y = SH + 6, w = 50, h = 30, label = "停止" }
-g:button{ name = "back", x = SX + 54, y = SH + 6, w = 50, h = 30, label = "戻る" }
+g:button{ name = "back", x = SX + 54, y = SH + 6, w = 50, h = 30, label = "left" }
 
 for i = 1, W * (H + HID) do grid[i] = 0 end
 pico.on_back(leave)

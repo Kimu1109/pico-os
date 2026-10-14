@@ -38,6 +38,7 @@ void DictScene::onEnter(){
     WidgetFunctions::Add(this->search_box);
 
     this->search_button = new Button(box_x + box_w + MARGIN, y, "検索");
+    this->search_button->setIcon(IconID::Search, IconSize::Px16);
     this->search_button->setFontSize(FontFn::Small);
     this->search_button->setAllowTextSpacing(false);
     this->search_button->setW(SEARCH_BUTTON_W + Button::kFrameExtraTight);

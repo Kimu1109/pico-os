@@ -27,6 +27,7 @@ void StoreScene::onEnter(){
 
     // ---- 上部の行: [戻る] アプリストア [設定] [更新] ----
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
@@ -52,6 +53,7 @@ void StoreScene::onEnter(){
     WidgetFunctions::Add(this->refresh_button);
 
     this->settings_button = new Button(0, y0, "設定");
+    this->settings_button->setIcon(IconID::Settings, IconSize::Px16);
     this->settings_button->setFontSize(FontFn::Small);
     this->settings_button->setH(20 + Button::kFrameExtra);
     this->settings_button->setX(this->refresh_button->getLocalRect().x - MARGIN - this->settings_button->getLocalRect().w);

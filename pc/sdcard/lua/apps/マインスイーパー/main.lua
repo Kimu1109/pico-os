@@ -162,7 +162,7 @@ local function button(name, x, y, w, h, label)
     return b
 end
 
-button("back", 4, 2, 42, 28, "戻る")
+button("back", 4, 2, 42, 28, "left")
 button("reset", 50, 2, 76, 28, "リセット")
 button("flag", 130, 2, 64, 28, "旗:OFF")
 button("menu", 198, 2, 38, 28, "難度")

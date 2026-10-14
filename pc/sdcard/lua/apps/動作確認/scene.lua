@@ -92,7 +92,7 @@ pico.set(back, "x", x + 150)
 pico.set(back, "y", y + 232)
 pico.set(back, "w", 80)
 pico.set(back, "h", 34)
-pico.set(back, "text", "戻る")
+pico.set(back, "icon_id", 30)  -- ArrowLeft
 pico.on(back, "press_end", function() pico.pop() end)
 
 -- 離れる前の状態を持ち越す(Pop で戻るとこのスクリプトは最初から実行し直される)

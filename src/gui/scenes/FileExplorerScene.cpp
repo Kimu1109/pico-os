@@ -34,10 +34,12 @@ void FileExplorerScene::onEnter(){
     };
 
     this->back_button = MakeToolButton("戻る", x, top);
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     place(this->back_button);
 
     this->copy_button = MakeToolButton("コピー", x, top);
+    this->copy_button->setIcon(IconID::Copy, IconSize::Px16);
     this->copy_button->setOnPressEnd([this](){ this->onCopyOrMove(false); });
     place(this->copy_button);
 

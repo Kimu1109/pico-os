@@ -165,7 +165,7 @@ end
 function setup()
     -- 上の段: [戻る] Spotify [端末][他]
     local b = pico.create("Button")
-    pico.set(b, "text", "戻る")
+    pico.set(b, "icon_id", 30)  -- ArrowLeft
     pico.set(b, "font_size", 0)
     pico.set(b, "x", X + 4) pico.set(b, "y", Y + 3) pico.set(b, "w", 52) pico.set(b, "h", 26)
     pico.on(b, "press_end", back)

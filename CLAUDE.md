@@ -1777,7 +1777,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
 - 検証: `spotify_test`(run.sh の lua-scene。`pico_mock.lua`の上で、取り込み→取り直し→取得→ジャケット→各操作→Premium/端末なし/401/204/大きな応答/
   通信の失敗の間隔→端末の切り替え→invalid_grant→ログアウト→戻る)。`pico_mock.lua`に本物と同じ形のJSONの読み書き・`json_pick`・`form_encode`・
   `http_close`・`save_to`の偽物を足した。PCビルドでは偽物のSpotifyサーバ(使い捨て)を相手に、本物のLuaエンジンで表示・一時停止・次へ・音量・端末の選択を
-  `--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)。**本物のSpotifyアカウント・実機では未確認**。
+  `--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)。**本物のSpotifyアカウント・実機で動くことを利用者が確認した(2026-10-14。長いトークンが切れる不具合を直した後)**。
 
 ### ゲームボーイ (`src/gb/` / `GameBoyScene` / `lib/peanut_gb/`) (2026-09-24)
 

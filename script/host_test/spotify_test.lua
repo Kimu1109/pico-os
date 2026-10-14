@@ -28,7 +28,7 @@ local canvas, btn = nil, {}
 local function find_widgets()
     for id, w in pairs(mock.widgets) do
         if w.type == "Canvas" then canvas = id end
-        if w.type == "Button" then btn[w.text] = id end
+        if w.type == "Button" then btn[w.icon_id == 30 and "戻る" or w.text] = id end
     end
 end
 local function tap(x, y)

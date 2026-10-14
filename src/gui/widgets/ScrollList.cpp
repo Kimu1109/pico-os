@@ -122,10 +122,15 @@ void ScrollList::causeOnPressMove(){
     Widget::causeOnPressMove();
 
     if(this->is_scrolling){
-        this->scrollY = min(
-            max(this->ref_scroll_y + (OSData::touchY - this->ref_touch_y) * PICO_SCROLL_EX, 0),
-            (this->font_h + MARGIN) * this->dataSource.size() - this->getScreenRect().h
-        );
+        // スクロールバーのつまみが指に付いてくるよう、指の移動量を
+        // 「全体の高さ/表示領域の高さ」倍して中身の移動量にする
+        const int view_h = this->getScreenRect().h;
+        const int total = (this->font_h + MARGIN) * (int)this->dataSource.size();
+        if(view_h > 0 && total > view_h){
+            this->scrollY = this->ref_scroll_y + (int)((float)(OSData::touchY - this->ref_touch_y) * total / view_h);
+        }
+        // 項目が少なく収まる場合は常に0(下限・上限とも範囲内へ)
+        this->clampScroll();
         this->needs_redraw = true;
     }
 }

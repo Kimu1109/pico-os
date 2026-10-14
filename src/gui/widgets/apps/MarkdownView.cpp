@@ -1482,15 +1482,13 @@ void MarkdownView::render() {
     const int bar_w = SCROLL_L;
     const int bar_h = g_rect.h;
 
-    OSData::frame->drawRect(bar_x, bar_y, bar_w, bar_h, PICO_BLACK);
-
     if (max_scroll_y > 0) {
         const int total_h = max_scroll_y + bar_h;
         int thumb_h = std::max(10, (bar_h * bar_h) / total_h);
         if (thumb_h > bar_h) thumb_h = bar_h;
         const int thumb_y = bar_y + (scroll_y * (bar_h - thumb_h)) / max_scroll_y;
 
-        OSData::frame->fillRect(bar_x + 2, thumb_y + 2, bar_w - 4, std::max(1, thumb_h - 4), PICO_BLACK);
+        OSData::frame->fillRect(bar_x + bar_w - kBarThickness, thumb_y, kBarThickness, thumb_h, PICO_LIGHTGREY);
     }
 
     renderDecorations();

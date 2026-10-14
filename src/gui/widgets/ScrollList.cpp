@@ -22,26 +22,14 @@ void ScrollList::render(){
     const int ITEM_HEIGHT = this->font_h + MARGIN;
     const int ITEMS_TOTAL_HEIGHT = ITEM_HEIGHT * (int)this->dataSource.size();
 
-    //スクロールバーの領域
-    OSData::frame->drawRect(g_rect.x + g_rect.w - SCROLL_BAR_W, g_rect.y, SCROLL_BAR_W, g_rect.h, this->border_color);
-
-    // つまみの大きさ/位置。中身が空、または表示領域に収まりきっている間は
-    // スクロールする必要が無いのでつまみを表示領域いっぱいに描く
-    // (ITEMS_TOTAL_HEIGHTが0の除算を避ける意味も兼ねる。0件のまま描画される
-    // ことは実際にある — DictSceneは検索前/結果0件の状態で描画される)
-    int thumb_y = g_rect.y + 2;
-    int thumb_h = g_rect.h - 4;
+    // TextViewと同じ細い薄灰の棒(収まっているときは描かない)
     if(ITEMS_TOTAL_HEIGHT > g_rect.h){
-        thumb_y = g_rect.y + (int)(((float)this->scrollY / (float)ITEMS_TOTAL_HEIGHT) * g_rect.h) + 2;
-        thumb_h = (int)(((float)g_rect.h / (float)ITEMS_TOTAL_HEIGHT) * g_rect.h) - 4;
+        int thumb_h = g_rect.h * g_rect.h / ITEMS_TOTAL_HEIGHT;
+        if(thumb_h < 10) thumb_h = 10;
+        const int max_scroll = ITEMS_TOTAL_HEIGHT - g_rect.h;
+        const int thumb_y = g_rect.y + (g_rect.h - thumb_h) * this->scrollY / max_scroll;
+        OSData::frame->fillRect(g_rect.x + g_rect.w - 3, thumb_y, 3, thumb_h, PICO_LIGHTGREY);
     }
-    OSData::frame->fillRect(
-        g_rect.x + g_rect.w - SCROLL_BAR_W + 2,
-        thumb_y,
-        SCROLL_BAR_W - 4,
-        thumb_h,
-        this->border_color
-    );
 
     //はみ出したテキストの切り取り用
     int32_t orig_x, orig_y, orig_w, orig_h;

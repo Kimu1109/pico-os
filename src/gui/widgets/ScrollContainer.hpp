@@ -28,6 +28,7 @@ class ScrollContainer : public Widget, public IBorderColor {
         void updateContentBounds();
 
         constexpr static int SCROLL_L = 15;
+        constexpr static int kBarThickness = 3; // ツマミの太さ(TextViewと同じ)
 
         // スクロール位置が変わったとき(ドラッグ・setScrollY()どちらも)に呼ぶ
         std::function<void()> on_scrolled = nullptr;

@@ -33,6 +33,7 @@
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/icons/icon_render.h"
 #include "gui/icons/Bmp_Codec.hpp"
+#include "gui/icons/Jpeg_Codec.hpp"
 #include "gui/Fill4bpp.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Error_Functions.hpp"
@@ -136,8 +137,9 @@ namespace {
         }
     };
 
-    // 足せるリクエストヘッダの合計(HttpRequestの溜め場所512Bに、区切りを含めて収まる大きさ)
-    constexpr size_t kMaxHttpHeaderBytes = 480;
+    // 足せるリクエストヘッダの合計(HttpRequestの extra_header_ 1KiBに、区切りを含めて収まる大きさ)。
+    // 1行(名前: 値)は HttpRequest::kMaxHeaderLineBytes 未満(Spotify等のBearerトークン300〜400文字が入る)
+    constexpr size_t kMaxHttpHeaderBytes = 1000;
 
     // Luaから足せないヘッダ(接続の仕組みや本文の長さは自分で決める。Hostを変えると別のサーバへ送れてしまう)
     bool HttpHeaderReserved(const char* name) {
@@ -176,6 +178,7 @@ struct LuaEngine::PendingHttp {
     FixedString<PICO_STR_M> content_type;
     std::vector<std::pair<std::string, std::string>> headers;
     std::string save_to;
+    bool keep_alive = false;
     int callback_ref = LUA_NOREF;
 };
 
@@ -778,7 +781,9 @@ bool LuaEngine::DispatchKey(const KeyInputFunctions::Event& ev) {
     static const char* const kNames[] = {
         nullptr, "enter", "backspace", "tab", "escape", "delete",
         "left", "right", "up", "down", "home", "end", "pageup", "pagedown", "zenhan",
+        "playpause", "stop", "nexttrack", "prevtrack", "volumeup", "volumedown", "mute",
     };
+    static_assert(sizeof(kNames) / sizeof(kNames[0]) == (size_t)Key::Mute + 1, "キーの名前の表がKeyと合っていない");
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, key_callback_ref_);
     // 第1引数: 文字ならその文字(UTF-8)、特殊キーなら名前。第2引数: {ctrl=,alt=,shift=}
@@ -951,6 +956,7 @@ void LuaEngine::registerApi() {
     registerFn("show_color", l_show_color);
     registerFn("http_request", l_http_request);
     registerFn("http_cancel", l_http_cancel);
+    registerFn("http_close", l_http_close);
     registerFn("json_decode", l_json_decode);
     registerFn("json_encode", l_json_encode);
     lua_pushlightuserdata(L, LuaJson::NullValue());
@@ -3142,13 +3148,56 @@ int LuaEngine::l_image_load(lua_State* L) {
     FsFile f = OSData::SD.open(path, O_RDONLY);
     if (!f) { lua_pushnil(L); return 1; }
 
-    // 先頭の"BM"ならBMP(OSのパレットへ寄せて4bppにする。2番目の引数 {dither=, raw=})
+    // 先頭の"BM"ならBMP、FF D8ならJPEG(どちらもOSのパレットへ寄せて4bppにする。
+    // 2番目の引数 {dither=, raw=(BMPだけ), scale=/max_w=/max_h=(JPEGだけ)})
     uint8_t magic[2] = {0, 0};
     f.read(magic, 2);
     const bool is_bmp = magic[0] == 'B' && magic[1] == 'M';
+    const bool is_jpeg = Jpeg::LooksLikeJpeg(magic, 2);
     Bmp::Info bmp_info;
+    Jpeg::Info jpeg_info;
+    uint8_t jpeg_scale = 0;
     IconRender::PimgHeader header = {0, 0, 0};
-    if (is_bmp) {
+    if (is_jpeg) {
+        if (!Jpeg::ReadInfo(f, jpeg_info)) {
+            f.close();
+            LOG_APP_WARN("pico.image_load: %s はJPEGとして読めません(プログレッシブは非対応)", path);
+            lua_pushnil(L);
+            return 1;
+        }
+        // 縮め方: scale(1/2/4/8)を指定すればそれ。無ければ max_w/max_h(既定は画面の大きさ)と
+        // 画像用メモリの残りに収まる一番大きいもの
+        int scale_div = 0, max_w = SCREEN_WIDTH, max_h = SCREEN_HEIGHT;
+        if (lua_istable(L, 2)) {
+            lua_getfield(L, 2, "scale");
+            if (!lua_isnil(L, -1)) scale_div = (int)luaL_checkinteger(L, -1);
+            lua_pop(L, 1);
+            lua_getfield(L, 2, "max_w");
+            if (!lua_isnil(L, -1)) max_w = (int)luaL_checkinteger(L, -1);
+            lua_pop(L, 1);
+            lua_getfield(L, 2, "max_h");
+            if (!lua_isnil(L, -1)) max_h = (int)luaL_checkinteger(L, -1);
+            lua_pop(L, 1);
+        }
+        if (scale_div) {
+            if (scale_div != 1 && scale_div != 2 && scale_div != 4 && scale_div != 8) {
+                f.close();
+                return luaL_error(L, "pico.image_load: scale は 1 / 2 / 4 / 8 のどれかです");
+            }
+            jpeg_scale = (uint8_t)(scale_div == 1 ? 0 : scale_div == 2 ? 1 : scale_div == 4 ? 2 : 3);
+        } else {
+            jpeg_scale = Jpeg::FitScale(jpeg_info, max_w, max_h);
+            const size_t room = kMaxLuaImageBytes - self->image_bytes_used_;
+            while (jpeg_scale < 3) {
+                const size_t b = ((size_t)Jpeg::ScaledSize(jpeg_info.width, jpeg_scale)
+                                  * Jpeg::ScaledSize(jpeg_info.height, jpeg_scale) + 1) / 2;
+                if (b <= room) break;
+                jpeg_scale++;
+            }
+        }
+        header.width = Jpeg::ScaledSize(jpeg_info.width, jpeg_scale);
+        header.height = Jpeg::ScaledSize(jpeg_info.height, jpeg_scale);
+    } else if (is_bmp) {
         if (!Bmp::ReadInfo(f, bmp_info)) { f.close(); lua_pushnil(L); return 1; }
         header.width = bmp_info.width;
         header.height = bmp_info.height;
@@ -3183,6 +3232,15 @@ int LuaEngine::l_image_load(lua_State* L) {
             lua_pop(L, 1);
         }
         ok = Bmp::LoadToSprite(f, slot.sprite, opt);
+    } else if (is_jpeg) {
+        Jpeg::Options opt;
+        opt.scale = jpeg_scale;
+        if (lua_istable(L, 2)) {
+            lua_getfield(L, 2, "dither");
+            if (!lua_isnil(L, -1)) opt.dither = lua_toboolean(L, -1);
+            lua_pop(L, 1);
+        }
+        ok = Jpeg::LoadToSprite(f, slot.sprite, opt);
     } else {
         ok = IconRender::LoadPimgToSprite(f, slot.sprite);
     }
@@ -3846,12 +3904,17 @@ int LuaEngine::l_show_color(lua_State* L) {
 // ヘッダのクラスコメント「ネットワーク」と、冒頭の「2026-10-05」の4を参照。
 //
 //   pico.http_request(method, url, body, content_type, callback [, opts]) -> リクエストID | false
-//     opts = { headers = { ["Authorization"] = "Bearer ..." }, save_to = "/path/to/file" }
+//     opts = { headers = { ["Authorization"] = "Bearer ..." }, save_to = "/path/to/file", keep_alive = true }
 //     callback(ok, status, body, err, headers, info)
 //       headers = 応答ヘッダ(小文字の名前: content-type / location / etag / last-modified / content-length)
-//       info    = { size = 受け取った本文のバイト数, saved = save_toのパス(保存したときだけ) }
+//       info    = { size = 受け取った本文のバイト数, saved = save_toのパス(保存したときだけ),
+//                   reused = 持っていた接続を使い回して送ったか }
 //     走るのは1本だけ。2本目以降は(最大kMaxHttpQueue本)順番に始める。待たせられなければfalse
+//     keep_alive = true の要求は、応答の後も接続(httpsならTLSの約40KBごと)を持っておき、次の
+//     keep_alive = true の要求が同じ相手(ホスト・ポート・http/https)ならハンドシェイクを飛ばして送る。
+//     keep_aliveでない要求を始めると持っていた接続は閉じる。アプリを閉じれば必ず閉じる
 //   pico.http_cancel([id]) -> 取り消せたか(idなしは全部。コールバックは呼ばれない)
+//   pico.http_close() -> 持っていた接続を閉じたか(走っている要求は、終わったときに閉じる)
 
 void LuaEngine::FreePending(lua_State* L, PendingHttp* r) {
     if (!r) return;
@@ -3921,6 +3984,8 @@ bool LuaEngine::StartHttp(PendingHttp* r, const char** why) {
     }
     // 保存するときは、全体の10秒ではなく「何も届かない時間」で打ち切る(大きなファイル向け)
     st->request.setIdleTimeout(!r->save_to.empty());
+    // 接続の使い回し。falseにすると持っていた接続はここで閉じる(begin()の前に決める)
+    st->request.setKeepAlive(r->keep_alive);
 
     if (!st->request.begin(r->url, r->method, sink, body_ptr, body_len, content_type_ptr)) {
         st->file_sink.closeFile();
@@ -3955,7 +4020,14 @@ int LuaEngine::l_http_request(lua_State* L) {
     // opts.headers / opts.save_to の形の誤りはプログラムの誤りとして先にエラーにする
     // (権限や状態による拒否より前。std::vector等はまだ作らない=longjmpで漏らさない)
     const char* save_to = nullptr;
+    bool keep_alive = false;
     if (lua_istable(L, 6)) {
+        lua_getfield(L, 6, "keep_alive");
+        if (!lua_isnil(L, -1)) {
+            if (!lua_isboolean(L, -1)) return luaL_error(L, "pico.http_request: opts.keep_alive は真偽値で指定してください");
+            keep_alive = lua_toboolean(L, -1) != 0;
+        }
+        lua_pop(L, 1);
         lua_getfield(L, 6, "save_to");
         if (!lua_isnil(L, -1)) save_to = luaL_checkstring(L, -1);
         lua_pop(L, 1);   // save_toの文字列は引数のテーブルが保持しているので有効なまま
@@ -3985,6 +4057,10 @@ int LuaEngine::l_http_request(lua_State* L) {
                 }
                 if (HttpHeaderReserved(name)) {
                     return luaL_error(L, "pico.http_request: ヘッダ '%s' は指定できません(自動で付く/変えると危険)", name);
+                }
+                if (strlen(name) + strlen(value) + 4 >= HttpRequest::kMaxHeaderLineBytes) {
+                    return luaL_error(L, "pico.http_request: ヘッダ '%s' が長すぎます(1行%dバイト未満)", name,
+                                      (int)HttpRequest::kMaxHeaderLineBytes - 4);
                 }
                 total += strlen(name) + strlen(value) + 4;
                 if (total > kMaxHttpHeaderBytes) {
@@ -4036,6 +4112,7 @@ int LuaEngine::l_http_request(lua_State* L) {
     if (body && body_len > 0) r->body.assign(body, body_len);
     if (content_type && *content_type) r->content_type.assign(content_type);
     if (save_to) r->save_to = save_to;
+    r->keep_alive = keep_alive;
 
     if (lua_istable(L, 6)) {
         // 上の検査を通っているので型はもう確かめない。ここからはlongjmpしうる関数(lua_next等の
@@ -4109,6 +4186,18 @@ int LuaEngine::l_http_cancel(lua_State* L) {
         }
     }
     lua_pushboolean(L, found);
+    return 1;
+}
+
+int LuaEngine::l_http_close(lua_State* L) {
+    LuaEngine* self = Self(L);
+    bool had = false;
+    if (self->http_) {
+        had = self->http_->request.hasIdleConnection();
+        // 待っている接続は今閉じる。走っている要求があれば、その応答の後で閉じる
+        self->http_->request.setKeepAlive(false);
+    }
+    lua_pushboolean(L, had);
     return 1;
 }
 
@@ -4232,8 +4321,10 @@ void LuaEngine::FinishHttp() {
             lua_setfield(L, -2, "content-length");
         }
     }
-    // 受け取った本文の大きさ(と保存先)
-    lua_createtable(L, 0, 2);
+    // 受け取った本文の大きさ(と保存先・接続を使い回したか)
+    lua_createtable(L, 0, 3);
+    lua_pushboolean(L, st->request.reusedConnection());
+    lua_setfield(L, -2, "reused");
     lua_pushinteger(L, saved ? (lua_Integer)saved_bytes : (lua_Integer)st->sink.body.length());
     lua_setfield(L, -2, "size");
     if (!saved_path.empty()) {

@@ -96,6 +96,10 @@ script/                       開発補助スクリプト(アイコン生成/SKK
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   build_app_repo.py           アプリストアの配布物を作る(鍵の生成・署名・目録だけの署名(sign)とCIでの組み立て(assemble)・確認。標準ライブラリのみ。APP_REPO.md)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
+  spotify_auth.py             SpotifyのWeb APIの最初のトークンをPCのブラウザで取り(PKCE、戻り先は http://127.0.0.1:8888/callback)、
+                              SDの lua/apps/Spotify/spotify_auth.json へ書く(標準ライブラリのみ。`picoos spotify-auth`)。
+                              本体ではOAuthを受けられない(デバイスフローが無く、戻り先はHTTPSかループバックだけ)ための道具。
+                              ファイルは平文なので、Luaアプリは読んだら store_save{encrypt=true} へ移して消す決まり
   generate_pvid.py            動画を.pvid(16色+8x8タイルの差分)へ変換する(ffmpeg + numpy。VIDEO_FORMAT.md)。再生は動画アプリ(VideoScene)
   pad_serial.py               PCのキーボードを外部コントローラーにする(USBシリアルへ送る。tkinter + pyserial)
   generate_tetris_blocks.py   テトリスのミノの絵(blocks.pimg)とアイコンを作る(標準ライブラリのみ)
@@ -111,6 +115,7 @@ pc/                            PC/Web実行用ビルド(CMake + SDL2 / Emscripte
     lua/apps/<名前>/main.lua  LuaAppScannerが走査して自動登録するLuaアプリ(サブディレクトリ1つ=アプリ1つ)
     lua/apps/動作確認/        Lua APIの動作確認をまとめたアプリ(メニューから部品/描画/画面とデータ/コントローラー/音/通知のページを開く。下記「動作確認アプリ」)
     lua/apps/ゾンビTD/        タワーディフェンス(下記「ゾンビTD」)
+    lua/apps/Spotify/         Spotifyのリモコン(下記「Spotifyリモコン」)
     lua/apps/テトリス/        テトリス風ゲーム(下記「テトリス」)。リバーシ/マインスイーパー/ブロック崩しと合わせて4本とも pico.game で作ってある
     music/                    ミュージックアプリが並べる曲(chime.wav、サンプル/demo.mml・sample.mml。直下のフォルダ1つ=プレイリスト1つ。MUSIC_FORMAT.md)
 examples/doc.md                MarkdownView動作確認用サンプル文書
@@ -511,6 +516,14 @@ SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
 ### BMP・予定の通知・ファイル検索/容量・タイマー常駐・ダークテーマ・画面ロック (2026-10-11)
 
 まとめて足した小さめの機能。SUMMARY.mdの「7. 標準アプリ開発」に項目だけ載せてある。
+
+**JPEG(`src/gui/icons/Jpeg_Codec`、2026-10-14)**: Luaの`pico.image_load`が先頭の`FF D8`で見分ける。解くのはLovyanGFX同梱のTJpgDec
+(`lgfx_jd_prepare/decomp`、`#include <lgfx/utility/lgfx_tjpgd.h>`。新しいライブラリは足していない)で、作業場所約3.9KBを解く間だけ`malloc`。
+ベースラインだけ(プログレッシブは断る)。1/2・1/4・1/8に縮めて解ける(`scale`、無ければ`max_w/max_h`(既定は画面)と画像用メモリの残りに収まる一番大きいもの)。
+16色へはBMPと同じ`Bmp::NearestIndex`+4x4の組織的ディザ。**ホストテストはLovyanGFXを持たないので`script/host_test/stubs/lgfx/utility/`に
+TJpgDecの写しを置き、`ensure_lua_obj`が`lua_obj/lgfx_tjpgd.o`にする(LovyanGFXの版を上げたら写し直す)**。スタブの`TFT_RED`等は色の番号そのもの
+(RGB565ではない)なので、近い色の選び方を確かめるテストは`PICO_GFX::COLORS`を本物の色へ差し替えて行う(`lua_ext_test`)。
+ファイルビューワー(`ImageView`)はまだJPEGを開けない。
 
 **BMP(`src/gui/icons/Bmp_Codec`)**: 読みは無圧縮(BI_RGB)と BI_BITFIELDS の 1/4/8/16/24/32bpp・上下どちらの並び・窓だけ読む(大きな画像を表示欄の大きさだけ)。
 RLE/JPEG/PNG埋め込みと12バイトの古い見出し(BITMAPCOREHEADER)は断る。一辺8192まで。作業は1行ぶんの`malloc`とパレット(256色x3、ヒープ)だけ。
@@ -1441,7 +1454,9 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
   (生のソケットが無いので、そもそもTLSも無い)。
 - **信頼するルート**は`script/generate_tls_roots.py`が母艦の`/etc/ssl/certs`から`src/net/Tls_Roots_Data.hpp`へ焼き込む
   (GTS Root R1/R4=Google、ISRG Root X1/X2=Let's Encrypt、DigiCert Global Root G2/CA、USERTrust RSA=Sectigo、
-  Amazon Root CA 1=AWS(api.todoist.com。2026-10-01追加)の8枚)。**`ROOTS`は末尾へ足すこと** — 母艦のストアから消えたルート
+  Amazon Root CA 1=AWS(api.todoist.com。2026-10-01追加)、Starfield Root G2(accounts.spotify.com。Certainly/Fastlyの中間の上。2026-10-14追加)の9枚)。
+  api.spotify.com は DigiCert Global Root G2 の下(足す前から通る)。どちらもTLS 1.2で繋がることを`openssl s_client -tls1_2 -CAfile <焼き込みの9枚>`と
+  PC版の`HttpRequest`(OpenSSL・TLS 1.2固定・焼き込みのルートだけ)で確認した。**`ROOTS`は末尾へ足すこと** — 母艦のストアから消えたルート
   (DigiCert Global Root CAは既に無い)は、今焼き込まれている同じ位置の証明書を引き継いで生成し直す。
   足りない相手(自己署名の自前サーバ等)はSDの**`/sys/tls/ca.pem`**へPEMを置けば足される。
   **フラッシュに置くだけで、RAMへ展開するのは接続中だけ**(1枚あたり約1.5KB)。
@@ -1734,6 +1749,32 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   PCビルドの`--tap`/`--shot`(偽物の`api = http://127.0.0.1:8150`): 一覧・期限切れの赤・選択と詳細・完了の確認→一覧から消える・
   7日間の表示・追加のダイアログ・明日15時のタスクが`notify_rules.tsv`に`At`で入ること。
   **本物のTodoistアカウント・実機(BearSSL)での確認は未**(この環境には本物のトークンも実機も無い)。
+
+### Spotifyリモコン (`pc/sdcard/lua/apps/Spotify/`、Luaアプリ) (2026-10-14)
+
+スマホ/PCのSpotifyで鳴っている再生を Web API で操作する(本体から音は出ない。**操作には Spotify Premium が要る**)。
+- ファイル: `main.lua`(上の段のButtonとCanvas1枚・タップ/キー/コントローラー)/`api.lua`(トークン・`A.call`)/`player.lua`(状態の取得と操作)/
+  `view.lua`(Canvasへ描く・タップの場所)/`icon.pimg`(`script/generate_spotify_icon.py`)。
+- **ログイン**: 本体ではOAuthを受けられないので、PCの`script/spotify_auth.py`(`picoos spotify-auth`)が書いた`spotify_auth.json`をアプリのフォルダに置く。
+  起動時(か画面の「読み込む」)に`api.lua`が読み、`pico.store_save({auth=}, {encrypt=true})`へ移して平文のファイルを消す。
+  アクセストークンは`grant_type=refresh_token`(`pico.form_encode`、client secretなし)で取り直し、返った新しいrefresh tokenを保存し直す。
+  401なら1回だけ取り直して送り直す。`invalid_grant`ならログインの案内の画面へ戻る。
+- **状態**: `GET /me/player?market=from_token&additional_types=episode`を3秒ごと(端末が無い204なら10秒、失敗は5秒から倍々で60秒まで)。
+  `pico.json_pick`で22個のパスだけ読む。**応答が16KiBを超えたら(err=「書き込みに失敗」。番組の説明が長い回)次から`save_to`でSDへ保存して`pico.sd_json_pick`**。
+  再生位置は取った時刻からの経過を足して見せ、再生中は1秒ごとに位置の欄だけ`mark_dirty`。
+- **操作**: すぐ見た目を変えてから送り、0.7〜1.5秒後に取り直す(Spotify側の反映待ち)。前へは3秒より後なら頭へシーク。
+  音量は続けて変えても0.4秒後に最後の値だけ送る。403(`PREMIUM_REQUIRED`)/404(端末が無い)は下の欄に理由を出す。
+  端末は`GET /me/player/devices`→`pico.show_choice`→`PUT /me/player {device_ids, play=true}`。
+- **ジャケット**: 曲の2番目の画像(横300px)を`save_to`で`art.jpg`へ取り、`pico.image_load(..., {max_w=80, max_h=80})`(1/4で75px)。
+  画像のサーバ`i.scdn.co`は**DigiCert Global Root G3**の下なので焼き込みのルートに足した(10枚。上の「HTTPS」)。
+- 通信は全部`keep_alive = true`(api/accountsはホストが違うので切り替えのたびに繋ぎ直しになる)。戻るときに`pico.http_close()`。
+- 入力: キー(`playpause`/Space/k、`nexttrack`/→/n、`prevtrack`/←/p、`volumeup`/↑、`volumedown`/↓、`mute`/m、s、r、d=端末)、
+  コントローラー(A=再生/停止、L/R・←→=前/次、↑↓=音量、X=シャッフル、Y=リピート、SELECT=端末、START=メニュー、B/HOME=戻る)。
+- アプリのフォルダの`settings.cfg`の`api`/`token-url`で向き先を差し替えられる(偽物のサーバで試すとき)。
+- 検証: `spotify_test`(run.sh の lua-scene。`pico_mock.lua`の上で、取り込み→取り直し→取得→ジャケット→各操作→Premium/端末なし/401/204/大きな応答/
+  通信の失敗の間隔→端末の切り替え→invalid_grant→ログアウト→戻る)。`pico_mock.lua`に本物と同じ形のJSONの読み書き・`json_pick`・`form_encode`・
+  `http_close`・`save_to`の偽物を足した。PCビルドでは偽物のSpotifyサーバ(使い捨て)を相手に、本物のLuaエンジンで表示・一時停止・次へ・音量・端末の選択を
+  `--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)。**本物のSpotifyアカウント・実機では未確認**。
 
 ### ゲームボーイ (`src/gb/` / `GameBoyScene` / `lib/peanut_gb/`) (2026-09-24)
 
@@ -2277,6 +2318,10 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
      - 日本語のキー盤は**ローマ字かな漢字変換をする**(下の「物理キーボードのかな漢字変換」)
      - 数字のキー盤は数字・`.`と、使えるタブの記号表にあるものだけ(`*`→`×`、`/`→`÷`に直す)。英字は断る(他へも回さない)
   3. どちらも取らなければウィジェットのフォーカスへ(Tab・矢印・Enter・Space・Esc。下の「ウィジェットのフォーカス」)。それ以外は捨てる。
+- **メディアキー(2026-10-14)**: `key 0 playpause|stop|nexttrack|prevtrack|volumeup|volumedown|mute`(`Key::PlayPause`〜`Mute`。Enumの末尾)。
+  キー盤・フォーカスは使わず、画面の`onKey()`とLuaの`on_key`(同じ名前)へ届く。ミュージックアプリは再生/一時停止・次・前・停止に使う。
+  音量キーはOS全体では扱っていない(配り先がSound/Configへ依存するとホストテストのリンクが広がるため。要るなら画面かLuaで)。
+  入力元: `pad_serial.py`(X11の`XF86Audio*`。コントローラーのモードでも送る。デスクトップが先に取ると届かない)、PCビルド(`SDLK_AUDIO*`)、Webのページ(`Media*`/`AudioVolume*`)。
 - **自動調光/スリープ**: 列に打鍵があれば操作とみなす(`DisplayFunctions`/`PowerFunctions`が`Pending()`を見る)。**スリープから起こした打鍵は捨てる**
   (`DiscardPending()`。暗い画面のどこへ入るか見えないため。タッチの`swallow_touch`と同じ考え方)。
 - **列・行の読み取り(`KeyInput_Functions.cpp`)は何にも依存しない**ので、Pad/Powerのホストテストはこちらだけをリンクする。
@@ -4165,6 +4210,17 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
      保存中は`setIdleTimeout(true)`で「10秒無通信」まで続け、`UpdateHttp()`が1フレームに最大16回・6msまで`update()`を回す)。
      `callback(ok, status, body, err, headers, info)`: `headers`は小文字キー(`content-type`/`content-length`/`etag`/`last-modified`/`location`。`HttpResponse::contentType()`を足した)、
      `info={size=, saved=}`。
+   - **`opts.keep_alive = true`(2026-10-14)**: `HttpRequest::setKeepAlive()`を要求ごとに当て、同じ相手なら接続とTLSのハンドシェイクを使い回す
+     (`info.reused`、`pico.http_close()`で閉じる。keep_aliveでない要求を始めると閉じる)。合わせて`HttpRequest`は**本文の無いPOST/PUT/PATCHにも
+     `Content-Length: 0`を送る**(SpotifyのWeb API等が411を返すため。ChatClient/TodoistClientにも効く)、`HttpResponse::canReuseConnection()`は
+     長さの無い204/304でも使い回せる。検証は`lua_engine_test`(ローカルサーバをkeep-alive対応にし、接続の数・411にならないこと・黙って閉じられた接続の繋ぎ直し)。
+   - **Web APIの補助(2026-10-14、`src/lua/LuaEngine_Net.cpp`)**: `pico.form_encode(tbl)`(名前順・空白は`+`・配列は同じキーを繰り返す)、
+     `pico.json_pick(text, paths[, {keep_null=}])`/`pico.sd_json_pick(path, paths)`(`util/Json_Reader`のSAXで流しながら読み、
+     `"item.artists.1.name"`(配列は1始まり)・`"item.artists#"`(要素の数)の値だけを`{[パス]=値}`で返す。作業場所はLuaのuserdata(OOMでも漏れない)。
+     文字列は255バイトで切り詰めて2番目の戻り値で知らせる。sd_json_pickは1MiBまで・全部見つかったら残りを読まない)。
+     **追加ヘッダの上限を合計1000バイト・1行512バイト未満に広げた**(`HttpRequest::extra_header_`を1KiBに、1行は`kMaxHeaderLineBytes`。
+     Bearerトークン数百文字のため。`addExtraHeader()`は先に長さを数えてから足す=大きな一時領域をスタックに取らない)。
+     ホストテストの`LuaEngine`をリンクする5か所に`LuaEngine_Net.cpp`・`Json_Reader.cpp`・`Jpeg_Codec.cpp`を足した。
    - **同時に走るのは1本のまま**(RAMとTLSの約40KBのため。本物の並列にはしていない)。2本目以降は`PendingHttp`(本文・ヘッダを`std::string`で持つ)として最大`kMaxHttpQueue`=4本待たせ、
      終わるたび`StartQueuedHttp()`が先頭から始める。戻り値は`true`ではなくリクエストID(整数)に**変えた**(旧: 進行中に呼ぶと`false`、今: 順番待ち)。`http_cancel(id)`/`http_cancel()`(全部)。
      始められなかった待ちは失敗としてコールバックへ知らせる。コールバックの中から次の`http_request`を呼んでも待ちの後ろに並ぶ。

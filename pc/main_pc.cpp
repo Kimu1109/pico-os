@@ -200,6 +200,14 @@ namespace {
             case SDLK_END:       name = "end"; break;
             case SDLK_PAGEUP:    name = "pageup"; break;
             case SDLK_PAGEDOWN:  name = "pagedown"; break;
+            //メディアキー
+            case SDLK_AUDIOPLAY:   name = "playpause"; break;
+            case SDLK_AUDIOSTOP:   name = "stop"; break;
+            case SDLK_AUDIONEXT:   name = "nexttrack"; break;
+            case SDLK_AUDIOPREV:   name = "prevtrack"; break;
+            case SDLK_VOLUMEUP:    name = "volumeup"; break;
+            case SDLK_VOLUMEDOWN:  name = "volumedown"; break;
+            case SDLK_AUDIOMUTE: case SDLK_MUTE: name = "mute"; break;
             default: break;
         }
         //半角/全角(日本語キーボード)。SDLにキーコードが無いのでスキャンコード(USB HIDのLANG5)で見る

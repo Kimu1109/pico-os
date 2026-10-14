@@ -43,6 +43,8 @@ class HttpRequest : public Task {
         static constexpr int kMaxRedirects = 3;
         static constexpr unsigned long kLongTransferMaxMs = 30UL * 60UL * 1000UL;
         static constexpr size_t kReadPerUpdate = 1024;
+        // 足すヘッダ1行(名前: 値)の上限。送るときの溜め場所(512B)に収まる長さ
+        static constexpr size_t kMaxHeaderLineBytes = PICO_STR_512B;
 
         enum class Fail : uint8_t {
             None,
@@ -58,7 +60,8 @@ class HttpRequest : public Task {
 
         HttpRequest() = default;
 
-        // body/content_typeはnullptr(またはbody_len=0)ならボディ無しのリクエストになる。
+        // body/content_typeはnullptr(またはbody_len=0)ならボディ無しのリクエストになる
+        // (POST/PUT/PATCHはそのとき`Content-Length: 0`を送る)。
         // body/content_typeの指すメモリの寿命は、呼び出し側がこのリクエストが完了する
         // (getStatus()がPROCESSING以外になる)まで保証すること(IHttpSinkと同じ約束)。
         bool begin(const Url& url, Method method, IHttpSink* sink,
@@ -76,6 +79,7 @@ class HttpRequest : public Task {
         bool setExtraHeader(const char* line);
         // setExtraHeader()の複数行版。"Name: value"を1行ずつ足す(CRLF区切りで溜める)。
         // 名前・値にCR/LFや制御文字があったり、入りきらなければfalse(それまでの分は残る)。
+        // 1行(名前: 値)は kMaxHeaderLineBytes 未満、全部で1KiB未満。
         // setExtraHeader()/要求ごとに clearExtraHeaders() で空にする
         bool addExtraHeader(const char* name, const char* value);
         void clearExtraHeaders(){ extra_header_.clear(); }
@@ -86,6 +90,8 @@ class HttpRequest : public Task {
         void closeConnection();
         // 次のbegin()で使い回せる接続を持っているか
         bool hasIdleConnection() const { return conn_reusable_; }
+        // 今の(直前の)要求は持っていた接続を使い回して送ったか
+        bool reusedConnection() const { return reused_; }
 
         const HttpResponse& response() const { return res; }
         const Url& currentUrl() const { return url; }
@@ -109,7 +115,7 @@ class HttpRequest : public Task {
 
         // ---- keep-alive ----
         bool keep_alive_ = false;
-        FixedString<PICO_STR_512B> extra_header_; //複数行(CRLF区切り、末尾のCRLFは無し)
+        FixedString<PICO_STR_1KiB> extra_header_; //複数行(CRLF区切り、末尾のCRLFは無し。合計1KiB未満、1行は512B未満)
         bool idle_timeout_ = false;
         unsigned long last_activity_ms = 0;
         bool conn_reusable_ = false; // 前の応答の後、接続を開けたまま持っている

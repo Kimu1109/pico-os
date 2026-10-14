@@ -1875,7 +1875,19 @@ int main(){
                 check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {A = {}}}),
                       "pico.http_request: ヘッダの値は文字列か数値")
                 check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {A = string.rep("x", 600)}}),
-                      "pico.http_request: ヘッダの合計に上限がある")
+                      "pico.http_request: 1行の長さに上限がある")
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {A = string.rep("x", 508)}}),
+                      "pico.http_request: 1行は512バイト未満")
+                local id_ok = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = {A = string.rep("x", 506)}})
+                check(type(id_ok) == "number", "pico.http_request: 1行507バイトまでは足せる")
+                pico.http_cancel(id_ok)
+                local long3 = {A = string.rep("a", 300), B = string.rep("b", 300), C = string.rep("c", 300)}
+                local id3 = pico.http_request("GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = long3})
+                check(type(id3) == "number", "pico.http_request: 300バイトのヘッダを3つ(合計900バイト)足せる")
+                pico.http_cancel(id3)
+                local long4 = {A = string.rep("a", 300), B = string.rep("b", 300), C = string.rep("c", 300), D = string.rep("d", 300)}
+                check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, {headers = long4}),
+                      "pico.http_request: ヘッダの合計に上限がある(1000バイト)")
                 check(not pcall(pico.http_request, "GET", "http://127.0.0.1:1/", nil, nil, function() end, 5),
                       "pico.http_request: optsはテーブル")
                 pico.http_cancel() -- 後片付け(接続を試みる前に取り消すので実ソケットには触れない)
@@ -2289,13 +2301,17 @@ int main(){
             Event c; c.key = Key::Char; c.cp = 'x'; c.mods = KeyInputFunctions::Ctrl;
             Event l; l.key = Key::Left; l.mods = KeyInputFunctions::Shift;
             Event t; t.key = Key::Tab;
+            Event m; m.key = Key::NextTrack;
+            Event v; v.key = Key::Mute;
             check(ex.DispatchKey(a), "on_key: 真を返せば取った扱い");
             check(ex.DispatchKey(c), "on_key: Ctrl付きの文字");
             check(ex.DispatchKey(l), "on_key: 特殊キー");
             check(!ex.DispatchKey(t), "on_key: 偽を返せば取らない(キー盤へ回る)");
+            check(ex.DispatchKey(m) && ex.DispatchKey(v), "on_key: メディアキー");
             ok = ex.Run(R"LUA(
                 check(log[1] == 'あ' and log[2] == 'x+C' and log[3] == 'left+S' and log[4] == 'tab',
                       'on_key: 文字はUTF-8・特殊キーは名前・修飾キーが渡る')
+                check(log[5] == 'nexttrack' and log[6] == 'mute', 'on_key: メディアキーの名前')
                 check(not pcall(pico.on_key, 5), 'on_key: 関数以外はエラー')
                 pico.on_key(nil)
             )LUA", "ex_on_key_check");
@@ -2680,6 +2696,7 @@ int main(){
             std::atomic<bool> stop{false};
             std::mutex mu;
             std::vector<std::string> requests;
+            std::atomic<int> conns{0};
             std::thread th;
         } srv;
         srv.lfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -2698,54 +2715,88 @@ int main(){
         check(listening, "HTTPテスト用のローカルサーバを立てる");
         if (listening) {
             srv.th = std::thread([&srv]() {
+                // 1つの接続で何本でも受ける(要求が Connection: keep-alive のときだけ続ける)
+                auto wait_readable = [&srv](int fd) -> bool {
+                    while (!srv.stop) {
+                        fd_set fds;
+                        FD_ZERO(&fds);
+                        FD_SET(fd, &fds);
+                        timeval tv{0, 50000};
+                        if (select(fd + 1, &fds, nullptr, nullptr, &tv) > 0) return true;
+                    }
+                    return false;
+                };
                 while (!srv.stop) {
-                    fd_set fds;
-                    FD_ZERO(&fds);
-                    FD_SET(srv.lfd, &fds);
-                    timeval tv{0, 50000};
-                    if (select(srv.lfd + 1, &fds, nullptr, nullptr, &tv) <= 0) continue;
+                    if (!wait_readable(srv.lfd)) break;
                     int c = accept(srv.lfd, nullptr, nullptr);
                     if (c < 0) continue;
-                    std::string req;
-                    char buf[2048];
-                    size_t body_need = 0;
-                    size_t head_end = std::string::npos;
-                    while (true) {
-                        ssize_t n = recv(c, buf, sizeof(buf), 0);
-                        if (n <= 0) break;
-                        req.append(buf, (size_t)n);
-                        if (head_end == std::string::npos) {
-                            head_end = req.find("\r\n\r\n");
-                            if (head_end != std::string::npos) {
-                                size_t p = req.find("Content-Length: ");
-                                if (p != std::string::npos && p < head_end) body_need = (size_t)atoi(req.c_str() + p + 16);
+                    srv.conns++;
+                    bool keep = true;
+                    while (keep && !srv.stop) {
+                        std::string req;
+                        char buf[2048];
+                        size_t body_need = 0;
+                        size_t head_end = std::string::npos;
+                        bool got = false;
+                        while (wait_readable(c)) {
+                            ssize_t n = recv(c, buf, sizeof(buf), 0);
+                            if (n <= 0) break;
+                            req.append(buf, (size_t)n);
+                            if (head_end == std::string::npos) {
+                                head_end = req.find("\r\n\r\n");
+                                if (head_end != std::string::npos) {
+                                    size_t p = req.find("Content-Length: ");
+                                    if (p != std::string::npos && p < head_end) body_need = (size_t)atoi(req.c_str() + p + 16);
+                                }
                             }
+                            if (head_end != std::string::npos && req.size() >= head_end + 4 + body_need) { got = true; break; }
                         }
-                        if (head_end != std::string::npos && req.size() >= head_end + 4 + body_need) break;
-                    }
-                    { std::lock_guard<std::mutex> lk(srv.mu); srv.requests.push_back(req); }
-                    std::string body, status = "200 OK", ctype = "text/plain";
-                    if (req.compare(0, 10, "GET /hello") == 0) {
-                        body = "hello";
-                    } else if (req.compare(0, 9, "GET /json") == 0) {
-                        body = "{\"ok\":true,\"n\":[1,2,3]}";
-                        ctype = "application/json";
-                    } else if (req.compare(0, 8, "GET /big") == 0) {
-                        body.assign(40000, 'x');
-                    } else if (req.compare(0, 10, "POST /echo") == 0) {
-                        body = req.substr(head_end + 4);
-                    } else {
-                        status = "500 Internal Server Error";
-                        body = "oops";
-                    }
-                    std::string resp = "HTTP/1.1 " + status + "\r\nContent-Type: " + ctype +
-                        "\r\nETag: \"v1\"\r\nContent-Length: " + std::to_string(body.size()) +
-                        "\r\nConnection: close\r\n\r\n" + body;
-                    size_t off = 0;
-                    while (off < resp.size()) {
-                        ssize_t n = send(c, resp.data() + off, resp.size() - off, 0);
-                        if (n <= 0) break;
-                        off += (size_t)n;
+                        if (!got) break;
+                        { std::lock_guard<std::mutex> lk(srv.mu); srv.requests.push_back(req); }
+                        keep = req.find("Connection: keep-alive\r\n") != std::string::npos;
+                        bool bye = false; // keep-aliveと答えた直後に黙って閉じる(相手のアイドル切断の真似)
+                        bool no_content = false;
+                        std::string body, status = "200 OK", ctype = "text/plain";
+                        if (req.compare(0, 10, "GET /hello") == 0) {
+                            body = "hello";
+                        } else if (req.compare(0, 8, "GET /bye") == 0) {
+                            body = "bye";
+                            bye = true;
+                        } else if (req.compare(0, 9, "GET /json") == 0) {
+                            body = "{\"ok\":true,\"n\":[1,2,3]}";
+                            ctype = "application/json";
+                        } else if (req.compare(0, 8, "GET /big") == 0) {
+                            body.assign(40000, 'x');
+                        } else if (req.compare(0, 10, "POST /echo") == 0) {
+                            body = req.substr(head_end + 4);
+                        } else if (req.compare(0, 11, "POST /empty") == 0 || req.compare(0, 10, "PUT /empty") == 0) {
+                            // 本文の無い要求は長さ(Content-Length: 0)が無ければ411(Spotify等の振る舞い)
+                            if (req.find("Content-Length: 0\r\n") != std::string::npos) {
+                                status = "204 No Content";
+                                no_content = true;
+                            } else {
+                                status = "411 Length Required";
+                                body = "length required";
+                            }
+                        } else {
+                            status = "500 Internal Server Error";
+                            body = "oops";
+                        }
+                        std::string resp = "HTTP/1.1 " + status + "\r\n";
+                        if (!no_content) {
+                            // 204は長さを書かない(本文を持たないと決まっている)
+                            resp += "Content-Type: " + ctype + "\r\nETag: \"v1\"\r\nContent-Length: " +
+                                    std::to_string(body.size()) + "\r\n";
+                        }
+                        resp += keep ? "Connection: keep-alive\r\n\r\n" : "Connection: close\r\n\r\n";
+                        resp += body;
+                        size_t off = 0;
+                        while (off < resp.size()) {
+                            ssize_t n = send(c, resp.data() + off, resp.size() - off, 0);
+                            if (n <= 0) break;
+                            off += (size_t)n;
+                        }
+                        if (bye) keep = false;
                     }
                     close(c);
                 }
@@ -2769,7 +2820,8 @@ int main(){
                     order[#order + 1] = 1
                     R.hello = {ok = ok, st = st, body = body, err = err, ct = hdr["content-type"], etag = hdr["etag"],
                                cl = hdr["content-length"], size = info.size}
-                end, {headers = {["X-Test"] = "abc", Authorization = "Bearer tok", ["X-Num"] = 42}})
+                end, {headers = {["X-Test"] = "abc", Authorization = "Bearer tok", ["X-Num"] = 42,
+                                  ["X-Long"] = string.rep("L", 400), ["X-Long2"] = string.rep("M", 400)}})
                 id2 = pico.http_request("POST", BASE .. "/echo", '{"a":1}', "application/json", function(ok, st, body)
                     order[#order + 1] = 2
                     R.echo = {ok = ok, st = st, body = body}
@@ -2816,12 +2868,95 @@ int main(){
                 check(r.find("X-Test: abc\r\n") != std::string::npos, "HTTP: 足したヘッダが送られる");
                 check(r.find("Authorization: Bearer tok\r\n") != std::string::npos, "HTTP: Authorizationが送られる");
                 check(r.find("X-Num: 42\r\n") != std::string::npos, "HTTP: 数値のヘッダ値");
+                check(r.find("X-Long: " + std::string(400, 'L') + "\r\n") != std::string::npos
+                      && r.find("X-Long2: " + std::string(400, 'M') + "\r\n") != std::string::npos,
+                      "HTTP: 400バイトのヘッダを2つ送れる(溜め場所を跨いでも欠けない)");
                 check(r.find("Host: 127.0.0.1") != std::string::npos && r.find("User-Agent: pico-os/1") != std::string::npos,
                       "HTTP: 標準のヘッダも付く");
                 const std::string& r2 = srv.requests.size() > 1 ? srv.requests[1] : std::string();
                 check(r2.find("Content-Type: application/json\r\n") != std::string::npos
                       && r2.find("Content-Length: 7\r\n") != std::string::npos, "HTTP: POSTのContent-Type/Length");
                 check(r2.find("X-Test") == std::string::npos, "HTTP: ヘッダは次のリクエストへ引き継がれない");
+            }
+
+            // 本文の無いPOST/PUTの Content-Length: 0 と、keep-alive(接続の使い回し)
+            {
+                size_t req_base;
+                { std::lock_guard<std::mutex> lk(srv.mu); req_base = srv.requests.size(); }
+                const int conn_base = srv.conns;
+                ok = he.Run(R"LUA(
+                    KA = {}
+                    local function rec(i)
+                        return function(ok, st, body, err, hdr, info)
+                            KA[i] = {ok = ok, st = st, body = body, err = err, reused = info.reused}
+                        end
+                    end
+                    check(not pcall(pico.http_request, "GET", BASE .. "/hello", nil, nil, function() end, {keep_alive = "yes"}),
+                          "keep-alive: opts.keep_alive は真偽値")
+                    pico.http_request("POST", BASE .. "/empty", nil, nil, rec(1), {keep_alive = true})
+                    pico.http_request("PUT", BASE .. "/empty", "", nil, rec(2), {keep_alive = true})
+                    pico.http_request("GET", BASE .. "/hello", nil, nil, rec(3), {keep_alive = true})
+                    pico.http_request("GET", BASE .. "/hello", nil, nil, rec(4))
+                    pico.http_request("POST", BASE .. "/empty", nil, nil, rec(5))
+                )LUA", "http_ka_start");
+                check(ok, "keep-alive: 開始スクリプトが成功する");
+                for (int i = 0; i < 4000 && he.HttpBusy(); i++) { he.UpdateHttp(); usleep(1000); }
+                ok = he.Run(R"LUA(
+                    check(KA[1] and KA[1].ok and KA[1].st == 204 and KA[1].body == nil, "Content-Length: 本文の無いPOSTが411にならない")
+                    check(KA[2] and KA[2].ok and KA[2].st == 204, "Content-Length: 本文が空のPUTも411にならない")
+                    check(KA[5] and KA[5].ok and KA[5].st == 204, "Content-Length: keep-aliveでなくても付く")
+                    check(KA[1].reused == false, "keep-alive: 1本目は新しく繋ぐ")
+                    check(KA[2].reused == true and KA[3].reused == true, "keep-alive: 204の後も同じ接続を使い回す")
+                    check(KA[3].body == "hello", "keep-alive: 使い回した接続でも本文が読める")
+                    check(KA[4].ok and KA[4].reused == false, "keep-alive: keep_aliveでない要求は使い回さない")
+                )LUA", "http_ka_check");
+                check(ok, "keep-alive: 結果の確認が成功する");
+                check(srv.conns - conn_base == 3, "keep-alive: keep_aliveの3本は1本の接続で済み、残り2本は別に繋ぐ");
+                {
+                    std::lock_guard<std::mutex> lk(srv.mu);
+                    check(srv.requests.size() == req_base + 5, "keep-alive: 5本届く");
+                    if (srv.requests.size() == req_base + 5) {
+                        const std::string& p1 = srv.requests[req_base];
+                        check(p1.find("Content-Length: 0\r\n") != std::string::npos && p1.find("Content-Type") == std::string::npos,
+                              "Content-Length: 本文の無いPOSTは長さ0だけを送る");
+                        check(p1.find("Connection: keep-alive\r\n") != std::string::npos, "keep-alive: Connection: keep-aliveを送る");
+                        check(srv.requests[req_base + 2].find("Content-Length") == std::string::npos, "Content-Length: GETには付けない");
+                        check(srv.requests[req_base + 3].find("Connection: close\r\n") != std::string::npos, "keep-alive: 既定はConnection: close");
+                    }
+                }
+
+                // 相手が黙って閉じた接続は1回だけ繋ぎ直す / http_close
+                const int conn_base2 = srv.conns;
+                ok = he.Run(R"LUA(
+                    KB = {}
+                    local function rec(i)
+                        return function(ok, st, body, err, hdr, info) KB[i] = {ok = ok, body = body, reused = info.reused} end
+                    end
+                    pico.http_request("GET", BASE .. "/bye", nil, nil, rec(1), {keep_alive = true})
+                    pico.http_request("GET", BASE .. "/hello", nil, nil, rec(2), {keep_alive = true})
+                    pico.http_request("GET", BASE .. "/hello", nil, nil, rec(3), {keep_alive = true})
+                )LUA", "http_ka2_start");
+                check(ok, "keep-alive: 繋ぎ直しの開始が成功する");
+                for (int i = 0; i < 4000 && he.HttpBusy(); i++) { he.UpdateHttp(); usleep(1000); }
+                ok = he.Run(R"LUA(
+                    check(KB[1] and KB[1].ok and KB[1].body == "bye", "keep-alive: 閉じられる前の応答は読める")
+                    check(KB[2] and KB[2].ok and KB[2].body == "hello" and KB[2].reused == false,
+                          "keep-alive: 閉じられていた接続は繋ぎ直して送る")
+                    check(KB[3] and KB[3].ok and KB[3].reused == true, "keep-alive: 繋ぎ直した接続をまた使い回す")
+                    check(pico.http_close() == true, "http_close: 持っていた接続を閉じるとtrue")
+                    check(pico.http_close() == false, "http_close: 何も持っていなければfalse")
+                    pico.http_request("GET", BASE .. "/hello", nil, nil, function(ok, st, body, err, hdr, info)
+                        KB[4] = {ok = ok, reused = info.reused}
+                    end, {keep_alive = true})
+                )LUA", "http_ka2_check");
+                check(ok, "keep-alive: 繋ぎ直しの確認が成功する");
+                for (int i = 0; i < 4000 && he.HttpBusy(); i++) { he.UpdateHttp(); usleep(1000); }
+                ok = he.Run(R"LUA(
+                    check(KB[4] and KB[4].ok and KB[4].reused == false, "http_close: 閉じた後は新しく繋ぐ")
+                    pico.http_close()
+                )LUA", "http_ka3_check");
+                check(ok, "http_close: 確認が成功する");
+                check(srv.conns - conn_base2 == 3, "keep-alive: /bye・繋ぎ直し・http_closeの後の3回だけ繋ぐ");
             }
 
             // ファイルへ直接保存(16KiBを超えるもの)

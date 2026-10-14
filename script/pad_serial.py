@@ -14,7 +14,8 @@
 - 文字入力(--mode text): 打ったキーを1打鍵1行で送る(形式は src/functions/KeyInput_Functions.hpp):
 
       key M u+XXXX\\n  文字(Mは修飾キー 1=Ctrl 2=Alt 4=Shift)
-      key M left\\n    名前のあるキー(enter backspace tab esc delete left right up down home end pageup pagedown zenhan)
+      key M left\\n    名前のあるキー(enter backspace tab esc delete left right up down home end pageup pagedown zenhan、
+                     メディアキー playpause stop nexttrack prevtrack volumeup volumedown mute)
 
   オンスクリーンキーボードを開いている所(Textbox等)・テキストエディタ・SSHへそのまま入る。
   日本語のキー盤が開いていれば、pico-os側がローマ字かな漢字変換をする(PC側のIMEは切っておく)。
@@ -78,6 +79,13 @@ NAMED_KEYS = {
     # 半角/全角(pico-osの日本語入力の入り切り。X11/Windowsで名前が違う)
     "Zenkaku_Hankaku": "zenhan", "Hankaku": "zenhan", "Zenkaku": "zenhan", "Kanji": "zenhan",
 }
+# メディアキー(X11のkeysym)。コントローラーのモードでも送る(ボタンには割り当てない)
+MEDIA_KEYS = {
+    "XF86AudioPlay": "playpause", "XF86AudioPause": "playpause", "XF86AudioStop": "stop",
+    "XF86AudioNext": "nexttrack", "XF86AudioPrev": "prevtrack",
+    "XF86AudioRaiseVolume": "volumeup", "XF86AudioLowerVolume": "volumedown", "XF86AudioMute": "mute",
+}
+NAMED_KEYS.update(MEDIA_KEYS)
 MOD_CTRL, MOD_ALT, MOD_SHIFT = 1, 2, 4
 
 
@@ -348,6 +356,9 @@ class PadWindow:
     def on_press(self, event):
         if event.keysym == "F1":
             self.toggle_mode()
+            return "break"
+        if not self.text_mode and event.keysym in MEDIA_KEYS:
+            self.link.write(f"key 0 {MEDIA_KEYS[event.keysym]}\n".encode("ascii"))
             return "break"
         if self.text_mode:
             line = key_line(event.keysym, event.char, event.state)

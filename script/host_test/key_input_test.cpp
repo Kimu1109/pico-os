@@ -300,6 +300,10 @@ int main(){
     check(CheckImeToggle(Ch(' ', Ctrl), 4000), "Ctrl+Space");
     check(!CheckImeToggle(Ch(' '), 4000), "ただのSpaceは入り切りではない");
     check(ParseKey("key 0 zenhan", IK::Zenhan, 0), "zenhan の行");
+    check(ParseKey("key 0 playpause", IK::PlayPause, 0) && ParseKey("key 0 stop", IK::Stop, 0)
+          && ParseKey("key 0 nexttrack", IK::NextTrack, 0) && ParseKey("key 0 prevtrack", IK::PrevTrack, 0)
+          && ParseKey("key 0 volumeup", IK::VolumeUp, 0) && ParseKey("key 0 volumedown", IK::VolumeDown, 0)
+          && ParseKey("key 0 mute", IK::Mute, 0), "メディアキーの行");
 
     // ---- 日本語のキー盤 ----
     // 小さい辞書(読みの昇順。送りありは「語幹+印」)

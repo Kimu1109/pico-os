@@ -53,13 +53,19 @@ void ScrollContainer::causeOnPressMove(){
     int old_scroll_x = scroll_x;
     int old_scroll_y = scroll_y;
 
+    // スクロールバーのつまみが指に付いてくるよう、指の移動量を
+    // 「中身の長さ / 表示領域の長さ」倍して中身の移動量にする
     if(horizontal_scroll){
-        int new_x = s_scroll_x + (rx - sx) * PICO_SCROLL_EX;
+        const int view_w = this->l_rect.w - (vertical_scroll ? SCROLL_L : 0);
+        int new_x = s_scroll_x;
+        if(view_w > 0) new_x += (int)((float)(rx - sx) * (view_w + max_scroll_x) / view_w);
         scroll_x = constrain(new_x, 0, max_scroll_x);
     }
 
     if(vertical_scroll){
-        int new_y = s_scroll_y + (ry - sy) * PICO_SCROLL_EX;
+        const int view_h = this->l_rect.h - (horizontal_scroll ? SCROLL_L : 0);
+        int new_y = s_scroll_y;
+        if(view_h > 0) new_y += (int)((float)(ry - sy) * (view_h + max_scroll_y) / view_h);
         scroll_y = constrain(new_y, 0, max_scroll_y);
     }
 

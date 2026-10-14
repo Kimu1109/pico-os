@@ -71,6 +71,7 @@ bool WavDecoder::open(const char* path, uint32_t out_rate){
     this->buf_pos_ = this->buf_len_ = 0;
     this->data_left_ = this->data_size_;
     this->finished_ = false;
+    this->lanes_ = (this->stereo_out_ && this->channels_ >= 2) ? 2 : 1;
     this->designFilter();
     return true;
 }
@@ -106,19 +107,19 @@ void WavDecoder::designFilter(){
     this->half_ = (uint16_t)half;
 }
 
-void WavDecoder::pushHistory(int16_t x){
+void WavDecoder::pushHistory(const Frame& x){
     const uint16_t n = 2 * this->half_ + 1;
     this->hist_[this->hist_pos_] = x;
     this->hist_[this->hist_pos_ + n] = x;
     if(++this->hist_pos_ >= n) this->hist_pos_ = 0;
 }
 
-int16_t WavDecoder::filterOut() const {
+int16_t WavDecoder::filterOut(int lane) const {
     //hist_[hist_pos_] が一番古く、そこから n 個が古い順に並んでいる。左右対称なので両端から足し合わせる
-    const int16_t* p = this->hist_ + this->hist_pos_;
-    int32_t acc = (int32_t)this->taps_[0] * p[this->half_];
+    const Frame* p = this->hist_ + this->hist_pos_;
+    int32_t acc = (int32_t)this->taps_[0] * p[this->half_].v[lane];
     for(uint16_t k = 1; k <= this->half_; k++){
-        acc += (int32_t)this->taps_[k] * ((int32_t)p[this->half_ - k] + p[this->half_ + k]);
+        acc += (int32_t)this->taps_[k] * ((int32_t)p[this->half_ - k].v[lane] + p[this->half_ + k].v[lane]);
     }
     acc = (acc + 16384) >> 15;
     if(acc > 32767) acc = 32767;
@@ -220,8 +221,11 @@ bool WavDecoder::refill(){
     return this->buf_len_ >= this->block_;
 }
 
-int32_t WavDecoder::decodeFrame(const uint8_t* p) const {
-    int32_t sum = 0;
+// 1フレーム(全チャンネル)を読み、lanes_ 個の値にする。モノラル出力は全チャンネルの平均、
+// ステレオ出力(2ch以上のファイル)は偶数番目のチャンネルの平均が左・奇数番目の平均が右(2chならそのまま左右)
+void WavDecoder::decodeFrame(const uint8_t* p, Frame& out) const {
+    int32_t sum[2] = {0, 0};
+    int count[2] = {0, 0};
     const int bytes = this->bits_ / 8;
     for(int c = 0; c < this->channels_; c++, p += bytes){
         int32_t v;
@@ -240,16 +244,19 @@ int32_t WavDecoder::decodeFrame(const uint8_t* p) const {
                 default: v = (int16_t)U16(p + 2); break;
             }
         }
-        sum += v;
+        const int lane = (this->lanes_ == 2) ? (c & 1) : 0;
+        sum[lane] += v;
+        count[lane]++;
     }
-    return sum / this->channels_;
+    out.v[0] = (int16_t)(sum[0] / count[0]);
+    out.v[1] = this->lanes_ == 2 ? (int16_t)(sum[1] / count[1]) : out.v[0];
 }
 
 // 元のサンプルを1つ(フィルタを掛けるならその後の値を)取り出す
-bool WavDecoder::nextSource(int16_t& v){
+bool WavDecoder::nextSource(Frame& v){
     if(this->half_ == 0) return this->rawSource(v);
 
-    int16_t x;
+    Frame x;
     if(!this->filt_ready_){
         //頭: 履歴を最初の値で埋め、その後 half_ 個を読んで最初の値を真ん中に置く
         if(!this->rawSource(x)) return false;
@@ -263,18 +270,20 @@ bool WavDecoder::nextSource(int16_t& v){
             this->pushHistory(this->last_raw_);
         }
         this->filt_ready_ = true;
-        v = this->filterOut();
+        for(int l = 0; l < this->lanes_; l++) v.v[l] = this->filterOut(l);
+        v.v[1] = this->lanes_ == 2 ? v.v[1] : v.v[0];
         return true;
     }
     if(this->rawSource(x)) this->last_raw_ = x;
     else if(this->flush_left_ > 0) this->flush_left_--;    //終わり: 最後の値で残りを出し切る
     else return false;
     this->pushHistory(this->last_raw_);
-    v = this->filterOut();
+    for(int l = 0; l < this->lanes_; l++) v.v[l] = this->filterOut(l);
+    v.v[1] = this->lanes_ == 2 ? v.v[1] : v.v[0];
     return true;
 }
 
-bool WavDecoder::rawSource(int16_t& v){
+bool WavDecoder::rawSource(Frame& v){
     if(this->buf_len_ - this->buf_pos_ < this->block_){
         if(!this->refill()){
             if(!this->loop_) return false;
@@ -284,7 +293,7 @@ bool WavDecoder::rawSource(int16_t& v){
             if(!this->f_.seek(this->data_start_) || !this->refill()) return false;
         }
     }
-    v = (int16_t)this->decodeFrame(this->buf_ + this->buf_pos_);
+    this->decodeFrame(this->buf_ + this->buf_pos_, v);
     this->buf_pos_ += this->block_;
     return true;
 }
@@ -301,6 +310,7 @@ size_t WavDecoder::read(int16_t* out, size_t max){
         this->primed_ = true;
     }
 
+    const int lanes = this->lanes_;
     size_t n = 0;
     while(n < max){
         while(this->frac_ >= 0x10000){
@@ -317,8 +327,11 @@ size_t WavDecoder::read(int16_t* out, size_t max){
             }
         }
         //差は最大65535、frac>>1 は最大32767 なので積は int32 に収まる
-        const int32_t d = (int32_t)this->s1_ - this->s0_;
-        out[n++] = (int16_t)(this->s0_ + ((d * (int32_t)(this->frac_ >> 1)) >> 15));
+        for(int l = 0; l < lanes; l++){
+            const int32_t d = (int32_t)this->s1_.v[l] - this->s0_.v[l];
+            out[n * lanes + l] = (int16_t)(this->s0_.v[l] + ((d * (int32_t)(this->frac_ >> 1)) >> 15));
+        }
+        n++;
         this->frac_ += this->step_;
     }
     return n;

@@ -57,7 +57,7 @@ uint32_t GbAudioLink::samplePos(uint32_t cycle) const {
     return (uint32_t)(((uint64_t)cycle * this->rate_ + this->frac_) / GbApu::kCpuHz);
 }
 
-void GbAudioLink::render(GbApu& apu, int16_t* out, size_t n){
+void GbAudioLink::render(GbApu& apu, int16_t* out, size_t n, bool stereo){
     size_t i = 0;
     while(i < n){
         uint32_t tail = this->tail_.load(std::memory_order_relaxed);
@@ -70,7 +70,7 @@ void GbAudioLink::render(GbApu& apu, int16_t* out, size_t n){
                 if(!this->active_ || this->idle_ >= this->starve_samples_) return;
                 size_t k = n - i;
                 if(k > this->starve_samples_ - this->idle_) k = this->starve_samples_ - this->idle_;
-                apu.renderAdd(out ? out + i : nullptr, k);
+                apu.renderAdd(out ? out + (stereo ? i * 2 : i) : nullptr, k, stereo);
                 this->idle_ += (uint32_t)k;
                 i += k;
                 continue;
@@ -136,7 +136,7 @@ void GbAudioLink::render(GbApu& apu, int16_t* out, size_t n){
 
         size_t k = next_pos - this->frame_pos_;
         if(k > n - i) k = n - i;
-        if(this->active_) apu.renderAdd(out ? out + i : nullptr, k);
+        if(this->active_) apu.renderAdd(out ? out + (stereo ? i * 2 : i) : nullptr, k, stereo);
         this->frame_pos_ += (uint32_t)k;
         i += k;
     }

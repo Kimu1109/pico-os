@@ -36,7 +36,7 @@ public:
 
     // ===== 2コア目 =====
     // n サンプルぶん時刻を進め、音を out へ足す。out が nullptr なら音は作らず時刻だけ進める
-    void render(GbApu& apu, int16_t* out, size_t n);
+    void render(GbApu& apu, int16_t* out, size_t n, bool stereo = false);
     bool active() const { return active_; }                 // 始めてから止めるまで
     // 出力の周波数を変える(SoundFunctions::SetSampleRate())。apu は新しい周波数で作り直したもの。
     // 今のフレームの中の位置は換算して続ける。音源の中身は消えるので、ゲームが次に書くまで鳴らない

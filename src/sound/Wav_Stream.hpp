@@ -6,7 +6,10 @@
 // WAVの再生で、1コア目(SDから読んで直したサンプル)から2コア目(音源の出力へ足す)へ渡す列。
 //
 // - 1対1(積むのは1コア目、取り出すのは2コア目)なので atomic の head/tail だけで足りる(ロック無し)
-// - 中身は音源と同じモノラル16bit(出力の周波数)。kRingSamples(12288 = 24KB。44100Hzで約280ms、22050Hzで約560ms)ぶん先読みできる。
+// - 中身は16bit(出力の周波数)で、モノラル(1フレーム=1サンプル)かステレオ(左右交互、1フレーム=2サンプル)。
+//   head/tail/kRingSamples はサンプル(int16)の数で数える。kRingSamples(16384 = 32KB)ぶん先読みできる:
+//   モノラルで44100Hzなら約370ms、ステレオなら約190ms(22050Hzはその倍)。
+//   形は setStereo() で決め、それは flush() を兼ねる(古い形のサンプルが残らないように)
 //   2のべき乗ではないので、head/tail は 0〜kWrap-1 を巡る数で持つ(32bitの数を桁あふれさせると添字が飛ぶため)
 //   **1コア目がこれより長く止まると(TLSのハンドシェイク等)音が途切れる**(途切れた回数は underruns())
 // - **捨てる(flush)は1コア目からでも安全**: 捨てたい位置(その時点のhead)と世代を書くだけで、
@@ -14,14 +17,18 @@
 // - 音量(0〜100)は2コア目が足すときに掛ける(全体の音量とは別。両方掛かる)
 class WavStream {
 public:
-    static constexpr uint32_t kRingSamples = 12288;
+    static constexpr uint32_t kRingSamples = 16384;
     // head/tail の巡る範囲。kRingSamples の倍数で 2^31 に近いもの(捨てる位置 flush_to_ は古いまま残るので、
     // 範囲が狭いと tail が一巡したときに「まだ先にある」と取り違える。2^31 なら44100Hzで約13時間)
     static constexpr uint32_t kWrap = kRingSamples * (0x80000000u / kRingSamples);
 
     // ===== 1コア目 =====
-    uint32_t freeSpace() const;                     // 今積める数
-    size_t push(const int16_t* src, size_t n);      // 積めた数を返す
+    uint32_t freeSpace() const;                     // 今積めるサンプル数
+    uint32_t freeFrames() const { return this->freeSpace() / this->channels(); }
+    size_t push(const int16_t* src, size_t n);      // サンプルを積む(ステレオは偶数個)。積めた数を返す
+    // モノラル/ステレオを決める(鳴らし始めに、積む前に呼ぶ)。積んだものは捨てる
+    void setStereo(bool stereo);
+    uint8_t channels() const { return this->chs_.load(std::memory_order_relaxed); }
     void flush();                                   // 積んだものを全部捨てる
     bool buffered() const;                          // まだ鳴らしていないものが残っているか
     void setFeeding(bool feeding){ this->feeding_.store(feeding, std::memory_order_release); }
@@ -29,14 +36,16 @@ public:
     // 一時停止: 2コア目が取り出さなくなる(積むのは続くので、列が満杯になったら読み取りも止まる)
     void setPaused(bool paused){ this->paused_.store(paused, std::memory_order_release); }
     bool paused() const { return this->paused_.load(std::memory_order_acquire); }
-    // まだ鳴らしていない(積んだが取り出されていない)サンプル数。再生位置の計算に使う
+    // まだ鳴らしていない(積んだが取り出されていない)フレーム数。再生位置の計算に使う
     uint32_t bufferedSamples() const;
     uint32_t underruns() const { return this->underruns_.load(std::memory_order_relaxed); }
 
     // ===== 2コア目 =====
-    // n サンプルぶん取り出し、master(0〜100)と自分の音量を掛けて out へ足す。
-    // out が nullptr なら足さずに捨てる(鳴らせない間も時間どおりに進める)
-    void renderAdd(int16_t* out, size_t n, uint8_t master);
+    // n フレームぶん取り出し、master(0〜100)と自分の音量を掛けて out へ足す。
+    // out が nullptr なら足さずに捨てる(鳴らせない間も時間どおりに進める)。
+    // stereo は out の形(左右交互か)。モノラルのWAVはステレオの out の左右へ同じ値を足し、
+    // ステレオのWAVはモノラルの out へは左右の平均を足す
+    void renderAdd(int16_t* out, size_t n, uint8_t master, bool stereo = false);
     bool hasData();                                 // 鳴らすものがあるか(省電力の判断用)
 
 private:
@@ -57,6 +66,9 @@ private:
     std::atomic<bool>     feeding_{false};  // 1コア目: まだ積み続けるつもりか(途切れの数え方に使う)
     std::atomic<bool>     paused_{false};
     std::atomic<uint8_t>  volume_{100};
+    std::atomic<uint8_t>  chs_{1};              // 1コア目が決めたチャンネル数(1か2)
+    std::atomic<uint8_t>  chs_pending_{1};      // 2コア目へ: 次の applyFlush で取り込む形
+    uint8_t               rd_chs_ = 1;          // 2コア目が今使っている形
     std::atomic<uint32_t> underruns_{0};
 
     uint32_t seen_gen_ = 0;     // 2コア目だけ

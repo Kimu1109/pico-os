@@ -42,6 +42,7 @@ namespace MusicData {
         Segno      = 0x0B,  // ループ位置(L)
         SaveState  = 0x0C,  // 波形/音量/減衰/qを退避(マクロの入口)
         RestoreState = 0x0D,// 退避したものへ戻す(マクロの出口)
+        Pan        = 0x0E,  // -ChipSynth::kPanMax〜+kPanMax(i8)。左右の定位(ステレオ出力のときだけ効く)
     };
 
     inline uint16_t ReadU16(const uint8_t* p){ return (uint16_t)(p[0] | (p[1] << 8)); }

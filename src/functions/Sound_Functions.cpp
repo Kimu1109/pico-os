@@ -208,11 +208,13 @@ namespace {
         WavStream* wav = wav_stream.load(std::memory_order_relaxed);
         if(!wav || !wav_decoder || !wav_decoder->isOpen()) return;
         int16_t tmp[256];
-        uint32_t want = wav->freeSpace();
+        const uint32_t chs = wav->channels();      //1フレームのサンプル数(ステレオは左右で2)
+        uint32_t want = wav->freeFrames();         //フレームで数える
         if(want > max_samples) want = max_samples;
         while(want > 0){
-            const size_t n = wav_decoder->read(tmp, want < 256 ? want : 256);
-            wav_pushed += wav->push(tmp, n);
+            const size_t max_frames = 256 / chs;
+            const size_t n = wav_decoder->read(tmp, want < max_frames ? want : max_frames);
+            wav_pushed += wav->push(tmp, n * chs) / chs;
             want -= (uint32_t)n;
             if(wav_decoder->finished()){
                 wav_decoder->close();
@@ -243,7 +245,7 @@ namespace {
 
     // I2Sへ書く前の一時置き場
     constexpr size_t kChunk = 64;
-    int16_t chunk[kChunk];
+    int16_t chunk[kChunk * 2];                  // 左右交互(L,R,L,R…)
     size_t chunk_pos = 0;
     size_t chunk_len = 0;
 
@@ -269,10 +271,9 @@ namespace {
         restart_output = true;
     }
 
-    // 左右とも同じ値を1ワードへ詰める(arduino-picoのwrite16()と同じ並び: 上位が左)
-    uint32_t PackStereo(int16_t s){
-        const uint32_t u = (uint16_t)s;
-        return (u << 16) | u;
+    // 左右を1ワードへ詰める(arduino-picoのwrite16()と同じ並び: 上位が左)
+    uint32_t PackStereo(int16_t l, int16_t r){
+        return ((uint32_t)(uint16_t)l << 16) | (uint16_t)r;
     }
 
     void StartOutput(unsigned long now_ms){
@@ -378,13 +379,13 @@ namespace {
         const uint32_t kMaxPerCall = (uint32_t)BufferWords() * kBufferCount;
         for(uint32_t i = 0; i < kMaxPerCall; i++){
             if(chunk_pos == chunk_len){
-                player.render(engine, chunk, kChunk);
-                if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, chunk, kChunk);
-                if(WavStream* wav = wav_stream.load(std::memory_order_acquire)) wav->renderAdd(chunk, kChunk, eff_volume);
+                player.render(engine, chunk, kChunk, true);
+                if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, chunk, kChunk, true);
+                if(WavStream* wav = wav_stream.load(std::memory_order_acquire)) wav->renderAdd(chunk, kChunk, eff_volume, true);
                 chunk_pos = 0;
                 chunk_len = kChunk;
             }
-            if(i2s.write((int32_t)PackStereo(chunk[chunk_pos]), false) == 0) break;   //満杯
+            if(i2s.write((int32_t)PackStereo(chunk[chunk_pos * 2], chunk[chunk_pos * 2 + 1]), false) == 0) break;   //満杯
             chunk_pos++;
             wrote = true;
         }
@@ -758,10 +759,12 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
     wav_duration_ms = 0;
     wav_loaded = false;
     wav_loop = loop;
+    wav_decoder->setStereoOutput(true);     //2ch以上のファイルは左右を残す(1chはモノラルのまま)
     if(!wav_decoder->open(path, out_rate)){
         if(error) *error = wav_decoder->errorText();
         return false;
     }
+    wav->setStereo(wav_decoder->outChannels() == 2);
     wav_decoder->setLoop(loop);
     if(info){
         info->channels = wav_decoder->channels();

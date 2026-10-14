@@ -52,6 +52,59 @@ static std::vector<int16_t> Render(ChipSynth::Engine& e, size_t n){
     return v;
 }
 
+// ステレオ出力は左右交互。今のところ左右は同じ値で、モノラルの出力と同じ
+static void testEngineStereo(){
+    printf("--- 音源のステレオ出力\n");
+    ChipSynth::Engine a(kRate), b(kRate);
+    ChipSynth::Note n{};
+    n.wave = ChipSynth::Wave::Pulse50; n.freq_x16 = 440 * 16; n.volume = 15; n.envelope = 0; n.length_ms = 0;
+    a.play(0, n); b.play(0, n);
+    std::vector<int16_t> mono(256), st(512);
+    a.render(mono.data(), 256);
+    b.render(st.data(), 256, true);
+    bool same = true;
+    for(size_t i = 0; i < 256; i++) if(st[i * 2] != mono[i] || st[i * 2 + 1] != mono[i]) same = false;
+    check(same, "ステレオは左右ともモノラルと同じ");
+    //パン: 左だけ/右だけ/中間
+    auto peaks = [&](int8_t pan, int& pl, int& pr){
+        ChipSynth::Engine e(kRate);
+        ChipSynth::Note q = n; q.pan = pan;
+        e.play(0, q);
+        std::vector<int16_t> v(512);
+        e.render(v.data(), 256, true);
+        pl = pr = 0;
+        for(size_t i = 0; i < 256; i++){ pl = std::max(pl, (int)std::abs(v[i * 2])); pr = std::max(pr, (int)std::abs(v[i * 2 + 1])); }
+    };
+    int pl, pr;
+    peaks(0, pl, pr);
+    check(pl > 1000 && pl == pr, "pan=0は左右とも全開");
+    const int center = pl;
+    peaks(-8, pl, pr);
+    check(pl == center && pr == 0, "pan=-8は左だけ(左の大きさは中央と同じ)");
+    peaks(8, pl, pr);
+    check(pr == center && pl == 0, "pan=8は右だけ");
+    peaks(4, pl, pr);
+    check(pr == center && pl * 2 >= center - 2 && pl * 2 <= center + 2, "pan=4は反対側が半分");
+    peaks(100, pl, pr);
+    check(pr == center && pl == 0, "範囲外のpanは端に丸める");
+    {
+        ChipSynth::Engine e(kRate);
+        ChipSynth::Note q = n; q.pan = -8;
+        e.play(0, q);
+        std::vector<int16_t> v(256);
+        e.render(v.data(), 256);
+        int pk = 0;
+        for(auto x : v) pk = std::max(pk, (int)std::abs(x));
+        check(pk == center, "モノラルの出力ではpanを無視");
+    }
+    ChipSynth::Engine c(kRate);
+    std::vector<int16_t> sil(64, 7);
+    c.render(sil.data(), 32, true);
+    bool zero = true;
+    for(auto x : sil) if(x != 0) zero = false;
+    check(zero, "鳴っていなければ左右とも無音");
+}
+
 static int SignFlips(const std::vector<int16_t>& v){
     int flips = 0;
     for(size_t i = 1; i < v.size(); i++) if((v[i] > 0) != (v[i - 1] > 0)) flips++;
@@ -619,6 +672,7 @@ static void TestSoundFunctions(){
 
 int main(){
     TestSynth();
+    testEngineStereo();
     TestSoundFunctions();
 
     printf("\n%s (%d件の失敗)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

@@ -36,6 +36,12 @@ void Engine::play(uint8_t ch, const Note& note){
     c.phase = 0;
     c.lfsr = 0x7FFF;
 
+    int pan = note.pan;
+    if(pan < -kPanMax) pan = -kPanMax;
+    if(pan > kPanMax) pan = kPanMax;
+    c.pan_l = (uint8_t)(pan > 0 ? kPanMax - pan : kPanMax);
+    c.pan_r = (uint8_t)(pan < 0 ? kPanMax + pan : kPanMax);
+
     c.volume = note.volume > 15 ? 15 : note.volume;
     int8_t env = note.envelope;
     if(env < -7) env = -7;
@@ -104,21 +110,34 @@ void Engine::stepEnvelope(Channel& c){
     updateGain(c);
 }
 
-void Engine::render(int16_t* out, size_t n){
+static inline int32_t Clamp16(int32_t v){ return v > 32767 ? 32767 : (v < -32768 ? -32768 : v); }
+
+void Engine::render(int16_t* out, size_t n, bool stereo){
     //何も鳴っていなければ無音を書くだけ(2コア目が空回りする時間を短くする)
     if(activeMask() == 0){
-        if(out) for(size_t i = 0; i < n; i++) out[i] = 0;
+        if(out){
+            const size_t total = stereo ? n * 2 : n;
+            for(size_t i = 0; i < total; i++) out[i] = 0;
+        }
         return;
     }
 
     for(size_t i = 0; i < n; i++){
-        int32_t mix = 0;
+        int32_t mix = 0, mix_l = 0, mix_r = 0;
         int active_count = 0;
         for(Channel& c : ch_){
             if(!c.active) continue;
             active_count++;
 
-            if(out) mix += (waveValue(c) * c.gain) >> 15;
+            if(out){
+                const int32_t v = (waveValue(c) * c.gain) >> 15;
+                if(stereo){
+                    mix_l += v * c.pan_l / kPanMax;
+                    mix_r += v * c.pan_r / kPanMax;
+                }else{
+                    mix += v;
+                }
+            }
 
             if(c.wave == Wave::Noise || c.wave == Wave::NoiseShort){
                 //ノイズ: 積んだ段数が1(65536)を超えるたびにLFSRを1段進める。
@@ -145,10 +164,15 @@ void Engine::render(int16_t* out, size_t n){
             //の間、つまり従来通りの使い方では一切効かず、音量は変わらない)
             if(active_count > kHeadroomChannels){
                 mix = (int32_t)((int64_t)mix * kHeadroomChannels / active_count);
+                mix_l = (int32_t)((int64_t)mix_l * kHeadroomChannels / active_count);
+                mix_r = (int32_t)((int64_t)mix_r * kHeadroomChannels / active_count);
             }
-            if(mix > 32767) mix = 32767;
-            if(mix < -32768) mix = -32768;
-            out[i] = (int16_t)mix;
+            if(stereo){
+                out[i * 2] = (int16_t)Clamp16(mix_l);
+                out[i * 2 + 1] = (int16_t)Clamp16(mix_r);
+            }else{
+                out[i] = (int16_t)Clamp16(mix);
+            }
         }
     }
 }

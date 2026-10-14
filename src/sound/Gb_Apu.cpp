@@ -53,6 +53,7 @@ void GbApu::reset(){
     this->seq_acc_ = 0;
     this->seq_step_ = 0;
     this->hp_cap_ = 0.0f;
+    this->hp_cap_r_ = 0.0f;
 }
 
 void GbApu::setMasterVolume(uint8_t volume){
@@ -236,7 +237,7 @@ void GbApu::clockEnvelope(){
     this->ch_[3].env.clock();
 }
 
-void GbApu::renderAdd(int16_t* out, size_t n){
+void GbApu::renderAdd(int16_t* out, size_t n, bool stereo){
     for(size_t i = 0; i < n; i++){
         // ---- フレームシーケンサー(512Hz)----
         this->seq_acc_ += 512;
@@ -291,8 +292,8 @@ void GbApu::renderAdd(int16_t* out, size_t n){
             }
         }
 
-        // ---- 左右への振り分け(NR51)と左右の音量(NR50)。モノラルなので足す ----
-        int32_t mix = 0;
+        // ---- 左右への振り分け(NR51)と左右の音量(NR50)。モノラルなら足し、ステレオなら左右別々に出す ----
+        int32_t mix = 0, mix_l = 0, mix_r = 0;
         if(this->power_){
             const uint8_t nr51 = this->regs_[NR51];
             const uint8_t nr50 = this->regs_[NR50];
@@ -301,7 +302,24 @@ void GbApu::renderAdd(int16_t* out, size_t n){
                 if(nr51 & (0x10 << ch)) l += d[ch];
                 if(nr51 & (0x01 << ch)) r += d[ch];
             }
-            mix = l * (((nr50 >> 4) & 7) + 1) + r * ((nr50 & 7) + 1);
+            mix_l = l * (((nr50 >> 4) & 7) + 1);
+            mix_r = r * ((nr50 & 7) + 1);
+            mix = mix_l + mix_r;
+        }
+        if(stereo){
+            //片側だけで鳴らしてもモノラル(左右の和を両方へ)と同じ大きさになるよう2倍する。足し合わせた最大値は変わらない
+            const float xl = (float)(mix_l * 2);
+            const float xr = (float)(mix_r * 2);
+            const float yl = xl - this->hp_cap_;
+            const float yr = xr - this->hp_cap_r_;
+            this->hp_cap_ = xl - yl * this->hp_coef_;
+            this->hp_cap_r_ = xr - yr * this->hp_coef_;
+            if(!out) continue;
+            const int32_t sl = (int32_t)(yl * (float)this->gain_) / 256 + out[i * 2];
+            const int32_t sr = (int32_t)(yr * (float)this->gain_) / 256 + out[i * 2 + 1];
+            out[i * 2] = (int16_t)(sl > 32767 ? 32767 : (sl < -32768 ? -32768 : sl));
+            out[i * 2 + 1] = (int16_t)(sr > 32767 ? 32767 : (sr < -32768 ? -32768 : sr));
+            continue;
         }
         const float x = (float)mix;
         const float y = x - this->hp_cap_;

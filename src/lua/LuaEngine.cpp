@@ -2131,7 +2131,7 @@ namespace {
 }
 
 int LuaEngine::l_sound_play(lua_State* L) {
-    // pico.sound_play(ch, freq, ms [, {wave=, volume=, envelope=}]) -> bool
+    // pico.sound_play(ch, freq, ms [, {wave=, volume=, envelope=, pan=}]) -> bool
     const uint8_t ch = CheckChannel(L, 1);
     const lua_Number freq = luaL_checknumber(L, 2);
     const lua_Integer ms = luaL_checkinteger(L, 3);
@@ -2165,6 +2165,10 @@ int LuaEngine::l_sound_play(lua_State* L) {
 
         lua_getfield(L, 4, "envelope");
         if (!lua_isnil(L, -1)) note.envelope = (int8_t)std::clamp<lua_Integer>(luaL_checkinteger(L, -1), -7, 7);
+        lua_pop(L, 1);
+
+        lua_getfield(L, 4, "pan");
+        if (!lua_isnil(L, -1)) note.pan = (int8_t)std::clamp<lua_Integer>(luaL_checkinteger(L, -1), -ChipSynth::kPanMax, ChipSynth::kPanMax);
         lua_pop(L, 1);
     }
 

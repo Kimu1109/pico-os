@@ -251,6 +251,52 @@ static void testMixer(){
     check(peak < 32767, "4チャンネル全開でも頭打ちしない");
 }
 
+static void testStereo(){
+    printf("--- ステレオ出力\n");
+    auto rmsLR = [](GbApu& apu, double& l, double& r){
+        const size_t n = kRate / 2;
+        std::vector<int16_t> v(n * 2, 0);
+        apu.renderAdd(v.data(), n, true);
+        double sl = 0, sr = 0;
+        for(size_t i = n / 2; i < n; i++){ sl += (double)v[i * 2] * v[i * 2]; sr += (double)v[i * 2 + 1] * v[i * 2 + 1]; }
+        l = std::sqrt(sl / (n / 2)); r = std::sqrt(sr / (n / 2));
+    };
+    double l, r;
+    GbApu apu(kRate);
+    PowerOn(apu);
+    Ch2(apu, 1750, 0x80, 0xF0);
+    rmsLR(apu, l, r);
+    near(l / r, 1.0, 0.02, "左右とも振り分けなら同じ大きさ");
+
+    // 中央のステレオは、モノラルの出力(左右の和)と同じ大きさ
+    GbApu mono(kRate);
+    PowerOn(mono);
+    Ch2(mono, 1750, 0x80, 0xF0);
+    const double m = Rms(Render(mono, kRate / 2), kRate / 4, kRate / 2);
+    near(l / m, 1.0, 0.03, "中央ならモノラルと同じ大きさ");
+
+    apu.write(NR51, 0x20);   // ch2を左だけ
+    rmsLR(apu, l, r);
+    check(l > 3000 && r < 100, "ch2を左だけにすると右は無音");
+    apu.write(NR51, 0x02);   // 右だけ
+    rmsLR(apu, l, r);
+    check(r > 3000 && l < 100, "ch2を右だけにすると左は無音");
+    apu.write(NR51, 0x22);
+    apu.write(NR50, 0x17);   // 左 1+1=2/8、右 7+1=8/8
+    rmsLR(apu, l, r);
+    near(l / r, 0.25, 0.03, "NR50で左右の音量が別々");
+
+    // 既存の内容へ足す(ステレオでも)
+    GbApu add(kRate);
+    PowerOn(add);
+    Ch2(add, 1750, 0x80, 0xF0);
+    std::vector<int16_t> v(20, 1000);
+    add.renderAdd(v.data(), 10, true);
+    bool ok = true;
+    for(size_t i = 0; i < 20; i++) if(v[i] < 1000 - 5000) ok = false;
+    check(ok, "ステレオも足し込み");
+}
+
 // ---- 列 ----
 
 static void testLink(){
@@ -331,6 +377,7 @@ int main(){
     testSweep();
     testWaveAndNoise();
     testMixer();
+    testStereo();
     testLink();
     printf("\n%s (失敗 %d)\n", failures ? "gb_apu_test: 失敗あり" : "gb_apu_test: 全部OK", failures);
     return failures ? 1 : 0;

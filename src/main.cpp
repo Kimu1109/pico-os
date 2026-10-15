@@ -32,6 +32,7 @@
 #include "functions/DevTools_Functions.hpp"
 #include "functions/HwTest_Functions.hpp"
 #include "functions/PowerMenu_Functions.hpp"
+#include "functions/Background_Functions.hpp"
 #include "lua/LuaDebugger.hpp"
 #include "lua/LuaDebugScreen.hpp"
 
@@ -138,6 +139,10 @@ void setup() {
     //トーストを全オーバーレイの一番上に置くのでキーボードより後
     NotificationFunctions::Setup();
 
+    //バックグラウンドの仕事(ミュージックの再生・チャットの未読・Luaアプリの定期スクリプト)。
+    //Luaアプリの仕事を登録簿から拾うので AppFunctions::Setup() より後
+    BackgroundFunctions::Setup();
+
     //--- 開発者向けの道具(/sys/debug.cfg) ---
     perf_overlay = new PerfOverlay();
     WidgetFunctions::AddOverlay(perf_overlay); //トーストよりさらに上
@@ -207,8 +212,12 @@ void loop() {
     {
         Scene* cur = SceneFunctions::Current();
         CrashDumpFunctions::SetScene(cur ? cur->getName() : nullptr);
-        //画面が望む音の出力の周波数(0なら設定のまま)。変わったときだけ切り替わる
-        SoundFunctions::RequestSampleRate(cur ? cur->preferredSampleRate() : 0);
+        //画面が望む音の出力の周波数(0なら設定のまま)。変わったときだけ切り替わる。
+        //画面が何も望まなければ、バックグラウンドで鳴っているもの(ミュージック)の望みを使う
+        //(閉じたアプリの曲が周波数の切り替えで止まらないように)
+        uint32_t rate = cur ? cur->preferredSampleRate() : 0;
+        if(rate == 0) rate = BackgroundFunctions::PreferredSampleRate();
+        SoundFunctions::RequestSampleRate(rate);
     }
     //Luaデバッガで止まっていた間に液晶へ直接描いたので、全体を描き直す
     //(半透明のダイアログの下も。MarkDirty()だとFlushDirty()がそこを描き直さない)
@@ -251,6 +260,8 @@ void loop() {
     TimerFunctions::Update();
     //通知の予約の見張りとトーストの出し入れ。TimeFunctions::Update()より後
     NotificationFunctions::Update();
+    //バックグラウンドの仕事(曲の終わりで次の曲へ・チャットの未読・Luaの定期スクリプト)。SoundFunctions::Update()より後
+    BackgroundFunctions::Update();
     //プロファイラの集計をシリアルへ(perf-log = true のときだけ)
     DevToolsFunctions::Update();
     ProfilerFunctions::Mark(ProfilerFunctions::Section::Services);

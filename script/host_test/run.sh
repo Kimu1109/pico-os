@@ -1471,6 +1471,105 @@ echo ""
 echo "===== lua_ext_test ====="
 run_or_die "$OUT/lua_ext_test"
 
+# --- バックグラウンドの仕事(登録簿・ミュージックの再生・チャットの未読・Luaの定期スクリプト) ---
+compile_or_die g++ $CXXFLAGS -pthread $INCLUDES -I "$ROOT/lib/lua/src" -I "$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/background_test.cpp" \
+    "$ROOT/src/functions/Background_Functions.cpp" \
+    "$ROOT/src/sound/Music_Service.cpp" \
+    "$ROOT/src/chat/Chat_Watch.cpp" \
+    "$ROOT/src/chat/Chat_Proto.cpp" \
+    "$ROOT/src/lua/LuaBackground.cpp" \
+    "$ROOT/src/lua/LuaAppScanner.cpp" \
+    "$ROOT/src/lua/LuaEngine.cpp" \
+    "$ROOT/src/lua/LuaEngine_Ext.cpp" \
+    "$ROOT/src/functions/Clipboard_Functions.cpp" \
+    "$ROOT/src/functions/Focus_Functions.cpp" \
+    "$ROOT/src/lua/LuaEngine_Crypto.cpp" \
+    "$ROOT/src/lua/LuaEngine_Net.cpp" \
+    "$ROOT/src/util/Xml_Reader.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
+    "$ROOT/src/lua/LuaEngine_Iso.cpp" \
+    "$ROOT/src/iso/Iso_World.cpp" \
+    "$ROOT/src/iso/Iso_Path.cpp" \
+    "$ROOT/src/iso/Iso_Flow.cpp" \
+    "$ROOT/src/util/Secret_Aead.cpp" \
+    "$ROOT/src/lua/LuaDebugger.cpp" \
+    "$ROOT/src/functions/Notification_Functions.cpp" \
+    "$ROOT/src/functions/Pad_Functions.cpp" \
+    "$ROOT/src/functions/Sound_Functions.cpp" \
+    "$ROOT/src/functions/Battery_Functions.cpp" \
+    "$ROOT/src/sound/Chip_Synth.cpp" \
+    "$ROOT/src/sound/Mml_Compiler.cpp" \
+    "$ROOT/src/sound/Music_Player.cpp" \
+    "$ROOT/src/sound/Gb_Apu.cpp" \
+    "$ROOT/src/sound/Gb_Audio_Link.cpp" \
+    "$ROOT/src/sound/Wav_Decoder.cpp" \
+    "$ROOT/src/sound/Wav_Stream.cpp" \
+    "$ROOT/src/storage/SD_IO.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/WidgetFactory.cpp" \
+    "$ROOT/src/gui/widgets/ProgressBar.cpp" \
+    "$ROOT/src/gui/widgets/TextView.cpp" \
+    "$ROOT/src/gui/widgets/ImageView.cpp" \
+    "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/apps/AnalogClock.cpp" \
+    "$ROOT/src/gui/widgets/apps/DurationPicker.cpp" \
+    "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
+    "$ROOT/src/gui/widgets/WidgetProperty.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/PickerDialog.cpp" \
+    "$ROOT/src/gui/widgets/Button.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/Textbox.cpp" \
+    "$ROOT/src/gui/widgets/NumberInput.cpp" \
+    "$ROOT/src/gui/widgets/Checkbox.cpp" \
+    "$ROOT/src/gui/widgets/Icon.cpp" \
+    "$ROOT/src/gui/widgets/Image.cpp" \
+    "$ROOT/src/gui/widgets/NumberSlider.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/ScrollList.cpp" \
+    "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
+    "$ROOT/src/gui/widgets/LuaCanvas.cpp" \
+    "$ROOT/src/gui/widgets/RectShape.cpp" \
+    "$ROOT/src/gui/widgets/EllipseShape.cpp" \
+    "$ROOT/src/gui/widgets/LineShape.cpp" \
+    "$ROOT/src/gui/widgets/TriangleShape.cpp" \
+    "$ROOT/src/gui/widgets/LayoutContainer.cpp" \
+    "$ROOT/src/gui/widgets/GridContainer.cpp" \
+    "$ROOT/src/gui/widgets/TabBar.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/InputDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSaveDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/FileSelectDialog.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/ColorDialog.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardNum.cpp" \
+    "$ROOT/src/gui/widgets/keyboards/KeyboardPanel.cpp" \
+    "$ROOT/src/gui/widgets/apps/FileExplorer.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    "$ROOT/src/functions/Widget_Functions.cpp" \
+    "$ROOT/src/functions/Error_Functions.cpp" \
+    "$ROOT/src/functions/Scene_Functions.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/gui/scenes/LuaScene.cpp" \
+    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    "$OUT"/lua_obj/*.o \
+    "$ROOT/src/functions/KeyInput_Functions.cpp" \
+    -o "$OUT/background_test" -lssl -lcrypto
+
+echo ""
+echo "===== background_test ====="
+run_or_die "$OUT/background_test"
+
 fi
 
 if group_on lua-sandbox; then

@@ -19,12 +19,14 @@ class Statusbar : public Widget {
         int16_t last_wifi_icon = -1;    // 電波の段階(IconID)
         int16_t last_battery_icon = -1; // 電池の段階(IconID)。読めていなければ-2
         int8_t  last_sd_usable = -1;
+        // バックグラウンドの仕事の印(BackgroundFunctions::IndicatorIcon())。何も無ければ IconCount
+        int16_t last_bg_icon = -1;
 
         constexpr static int MARGIN = 2;
         constexpr static int ICON_MARGIN_TOP = (STATUSBAR_HEIGHT - 16) / 2;
 
     public:
-        // 時刻・電波・電池・音・未読の変化をrender()で見張る
+        // 時刻・電波・電池・音・未読・バックグラウンドの変化をrender()で見張る
         bool wantsFrameUpdate() const override { return true; }
 
         Statusbar(){

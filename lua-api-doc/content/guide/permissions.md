@@ -19,6 +19,7 @@ struct LuaPermissions {
 | `network` | `pico.http_request` / `pico.http_cancel` | 呼んでも `false` が返るだけ(エラーにはならない) |
 | `sd_outside_app_dir` | `pico.sd_exists/read/write/remove/mkdir/list` / `pico.image_load` / `Image`・`ImageView`・`MarkdownView` の `path` / `pico.canvas_load` | そのアプリの `app_dir`(通常は自分のスクリプトの親ディレクトリ)の配下しかアクセスできない |
 | `notify` | `pico.notify` | 呼んでも `nil, 理由` が返るだけ(通知はアプリを閉じた後にも画面へ出て音も鳴るため、既定では許さない)。`app.cfg` の `permission_notify=true` で許可する |
+| `background` | `app.cfg` の `background`(閉じている間も定期的に動くスクリプト。[バックグラウンド](../../api/background/)) | 書いてあっても動かさない(電池とWi-Fiを使い続けるため、既定では許さない)。`app.cfg` の `permission_background=true` で許可する |
 
 権限は**Luaスクリプトが構築されるとき(=画面が開かれるとき)に1回だけ**決まります。実行中にスクリプト側から変更する手段はありません。パスのホワイトリストやホスト単位の細かい制限は今のところ無く、「持ち場の外へ出られるか出られないか」だけを見る、最初の一歩としての粗い実装です。
 

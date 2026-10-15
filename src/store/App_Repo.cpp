@@ -159,6 +159,7 @@ bool AppRepo::ParsePerms(const char* s, uint8_t& out){
         if(n == 7 && strncmp(p, "network", 7) == 0) out |= PermNetwork;
         else if(n == 6 && strncmp(p, "notify", 6) == 0) out |= PermNotify;
         else if(n == 2 && strncmp(p, "sd", 2) == 0) out |= PermSd;
+        else if(n == 10 && strncmp(p, "background", 10) == 0) out |= PermBackground;
         else return false;
         p += n;
         if(*p == ',') p++;
@@ -166,11 +167,12 @@ bool AppRepo::ParsePerms(const char* s, uint8_t& out){
     return true;
 }
 
-void AppRepo::PermsText(uint8_t perms, FixedString<PICO_STR_M>& out){
+void AppRepo::PermsText(uint8_t perms, FixedString<PICO_STR_L>& out){
     out.clear();
     if(perms & PermNetwork){ out.append("ネットワーク"); }
     if(perms & PermNotify){ if(!out.empty()) out.append("・"); out.append("通知"); }
     if(perms & PermSd){ if(!out.empty()) out.append("・"); out.append("SD全体"); }
+    if(perms & PermBackground){ if(!out.empty()) out.append("・"); out.append("バックグラウンド"); }
     if(out.empty()) out.assign("なし");
 }
 

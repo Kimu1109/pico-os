@@ -14,7 +14,13 @@
 #include "OS_Data.hpp"
 #include "consts.hpp"
 
+void (*LuaAppScanner::apps_changed)() = nullptr;
+
 namespace {
+    void NotifyChanged(){
+        if(LuaAppScanner::apps_changed) LuaAppScanner::apps_changed();
+    }
+
     // アプリディレクトリ配下に置く設定ファイルの相対名。main.lua同様、
     // 絶対パスは呼び出し側がapp_dir_pathと組み立てる
     constexpr const char* kAppConfigFileName = "app.cfg";
@@ -97,6 +103,17 @@ bool LuaAppScanner::ReadAppConfig(const char* config_path, AppInfo& out) {
                                  config_path);
                     out.icon.clear();
                 }
+            } else if (strcmp(key, "background") == 0) {
+                if (!out.background.assign(value)) {
+                    LOG_SYS_WARN("LuaAppScanner: %s のbackgroundが長すぎるため無視しました", config_path);
+                    out.background.clear();
+                }
+            } else if (strcmp(key, "background_interval") == 0) {
+                int v = 0;
+                if (PICO_Config::ConfigValue::AsInt(value, v) && v > 0) out.background_interval_sec = (uint32_t)v;
+                else LOG_SYS_WARN("LuaAppScanner: %s のbackground_intervalが秒数ではありません (%s)", config_path, value);
+            } else if (strcmp(key, "permission_background") == 0) {
+                ReadBool(config_path, key, value, out.permissions.background);
             } else if (strcmp(key, "permission_network") == 0) {
                 ReadBool(config_path, key, value, out.permissions.network);
             } else if (strcmp(key, "permission_notify") == 0) {
@@ -113,7 +130,9 @@ bool LuaAppScanner::ReadAppConfig(const char* config_path, AppInfo& out) {
 
 bool LuaAppScanner::RegisterOrRefresh(const char* app_dir_path) {
     if (!app_dir_path) return false;
-    return RegisterDir(app_dir_path, PICO_IO::filename(app_dir_path), false);
+    const bool ok = RegisterDir(app_dir_path, PICO_IO::filename(app_dir_path), false);
+    NotifyChanged();
+    return ok;
 }
 
 bool LuaAppScanner::Unregister(const char* app_dir_path) {
@@ -121,7 +140,9 @@ bool LuaAppScanner::Unregister(const char* app_dir_path) {
     if (!app_dir_path || !PICO_IO::join(script_path, app_dir_path, "main.lua")) return false;
     const int index = AppFunctions::FindByArg(script_path.c_str());
     if (index < 0) return false;
-    return AppFunctions::Unregister(index);
+    const bool ok = AppFunctions::Unregister(index);
+    NotifyChanged();
+    return ok;
 }
 
 int LuaAppScanner::Scan() {
@@ -155,6 +176,7 @@ int LuaAppScanner::Scan() {
         LOG_SYS_OK("LuaAppScanner: %s から%d件のLuaアプリを登録しました",
                    PICO_Path::DIR::LUA_APPS, found);
     }
+    NotifyChanged();
     return found;
 }
 
@@ -171,5 +193,6 @@ int LuaAppScanner::PruneMissing() {
         LOG_SYS_MSG("LuaAppScanner: %s が無くなったので登録簿から外します", arg);
         if (AppFunctions::Unregister(i)) removed++;
     }
+    if (removed > 0) NotifyChanged();
     return removed;
 }

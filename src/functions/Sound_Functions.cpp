@@ -104,6 +104,8 @@ namespace {
     uint32_t slot_release_seq[2] = {0, 0};  // この数のコマンドが処理されたら、その置き場は空く
     uint32_t music_cmd_seq = 0;             // 最後に積んだ曲のコマンドが何番目か
     bool music_cmd_play = false;            // それが「鳴らす」だったか
+    // 曲/WAVを新しく鳴らした・周波数の切り替えで止めた回数(PlaybackSerial())
+    uint32_t playback_serial = 0;
     FixedString<PICO_STR_M> music_title;
     uint32_t music_total_ms = 0;
     bool music_loops = false;
@@ -507,6 +509,7 @@ namespace {
         WavStop();
         MusicStop();
         StopAll();
+        playback_serial++;
         if(!Push(Command{CmdType::SetRate, 0, {}, nullptr, 0, rate})) return false;
         out_rate = rate;
         LOG_SYS_MSG("Sound: 出力の周波数を%luHzにします", (unsigned long)rate);
@@ -626,6 +629,7 @@ namespace {
         music_cmd_seq = seq;
         music_cmd_play = true;
 
+        playback_serial++;
         music_total_ms = MusicPlayer::MeasureMs(cmd.music, cmd.music_size, &music_loops);
         music_title.assign(r.title.empty() ? fallback_title : r.title.c_str());
         if(!r.warning.empty()) LOG_SYS_WARN("Sound: %s", r.warning.c_str());
@@ -680,6 +684,8 @@ uint32_t SoundFunctions::MusicElapsedMs(){
     if((int32_t)(done - music_cmd_seq) < 0) return 0;
     return core1_music_ms.load(std::memory_order_acquire);
 }
+
+uint32_t SoundFunctions::PlaybackSerial(){ return playback_serial; }
 
 uint32_t SoundFunctions::MusicTotalMs(bool* loops){
     if(loops) *loops = music_loops;
@@ -752,6 +758,7 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
 
     //見出しを先に別の係で確かめると読み取り係が2つ要るので、読めなかったら今のWAVも止まる
     //(読み取り係は1つで、開き直した時点で前のファイルは閉じるため)
+    playback_serial++;
     wav->setFeeding(false);
     wav->setPaused(false);
     wav->flush();

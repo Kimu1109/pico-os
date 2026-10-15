@@ -1764,6 +1764,6 @@ void LuaEngine::RegisterExtApi() {
     registerFn("settings_all", LuaEngineExt::l_settings_all);
     registerFn("memory_info", LuaEngineExt::l_memory_info);
     RegisterCryptoApi();
-    RegisterIsoApi();
+    if (!background_) RegisterIsoApi();   // pico.iso(2.5Dの描画)はバックグラウンドでは使えない
     RegisterNetApi();
 }

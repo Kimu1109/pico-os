@@ -8,6 +8,7 @@
 #include "functions/Pad_Functions.hpp"
 #include "functions/Notification_Functions.hpp"
 #include "functions/Screenshot_Functions.hpp"
+#include "functions/Background_Functions.hpp"
 
 #include "functions/GFX_Functions.hpp"
 #include "OS_Data.hpp"
@@ -58,6 +59,12 @@ void Statusbar::render(){
         const uint8_t wifi_status = (uint8_t)NetworkFunctions::currentStatus;
         if(wifi_status != this->last_wifi_status){
             this->last_wifi_status = wifi_status;
+            this->needsRender();
+        }
+
+        const int16_t bg_icon = (int16_t)BackgroundFunctions::IndicatorIcon();
+        if(bg_icon != this->last_bg_icon){
+            this->last_bg_icon = bg_icon;
             this->needsRender();
         }
 
@@ -144,6 +151,13 @@ void Statusbar::render(){
     //外部コントローラー: つながっているときだけ出す(無いのが普通なのでバツは付けない)
     if(pad_connected){
         IconRender::DrawIcon(IconID::Game, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+        draw_pos += 16 + MARGIN;
+    }
+
+    //バックグラウンドの仕事: 何か動いている間だけ青で出す(ミュージックが鳴っていれば音符、定期の仕事だけなら回る矢印)。
+    //止めるのは設定アプリの「他」→「バックグラウンド」
+    if(this->last_bg_icon >= 0 && this->last_bg_icon < (int16_t)IconID::IconCount){
+        IconRender::DrawIcon((IconID)this->last_bg_icon, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLUE);
         draw_pos += 16 + MARGIN;
     }
 

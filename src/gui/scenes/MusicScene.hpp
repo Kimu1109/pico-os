@@ -2,7 +2,7 @@
 #include "functions/Sound_Functions.hpp"
 
 #include "gui/scenes/Scene.hpp"
-#include "sound/Play_Queue.hpp"
+#include "sound/Music_Service.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -30,12 +30,15 @@ template<size_t N> class Label;
 // - 曲が終わったら次の曲へ。MMLの L で繰り返す曲(終わりが無い)は1周したら次へ進む(1曲リピートなら繰り返し続ける)
 // - 読めない曲: 選んだ曲なら止まって理由を出し続け、曲の終わりで進んだ先なら少し出して次の曲へ飛ばす
 //   (全部読めなければ止まる)。理由は欄に収まらないので、欄の文字をタップすると全文を出す。一覧では赤
-// - MMLとWAVは同時には鳴らさない。アプリを閉じたら曲も止める(このアプリの外から止める手段が無いため)
+// - MMLとWAVは同時には鳴らさない
+// - **再生そのものは MusicService(OS常駐)が持つ**ので、アプリを閉じても曲は鳴り続け、終われば次の曲へ進む。
+//   止めるのはこの画面か、設定アプリの「バックグラウンド」の一覧(ステータスバーの音符の印が動いている合図)。
+//   この画面は MusicService を読んで見せ、ボタンで操作するだけ
 // - 物理キーボード: n=次 p=前 k=再生/一時停止 s=ミックス r=リピート
 class MusicScene : public Scene {
     public:
-        static constexpr int kMaxTracks = PlayQueue::kMax;     // 1つのプレイリストに並べる曲の数
-        static constexpr int kMaxFolders = 16;                  // プレイリスト(フォルダ)の数
+        static constexpr int kMaxTracks = MusicService::kMaxTracks;     // 1つのプレイリストに並べる曲の数
+        static constexpr int kMaxFolders = MusicService::kMaxFolders;   // プレイリスト(フォルダ)の数
 
         const char* getName() const override { return "Music"; }
         void onEnter() override;
@@ -46,10 +49,7 @@ class MusicScene : public Scene {
         uint32_t preferredSampleRate() const override { return SoundFunctions::kSampleRateHigh; }
 
     private:
-        struct Track {
-            FixedString<PICO_STR_M> name;   // ファイル名(拡張子込み)
-            int8_t folder = -1;             // folders[] の番号。-1 = /music/ の直下
-        };
+        using Track = MusicService::Track;
         static constexpr int kAll = -1;     // 「すべての曲」のプレイリスト番号
 
         // ---- 一覧 ----
@@ -63,25 +63,15 @@ class MusicScene : public Scene {
         // 一覧の中の「鳴っている曲」を緑にする
         void refreshListColors();
         void playlistName(int playlist, FixedString<PICO_STR_M>& out) const;
-
-        // ---- 再生 ----
-        // 見ているプレイリストを再生の順番にして track から鳴らす
+        // 見ているプレイリストを再生の順番にして track から鳴らす(-1 = 全曲)
         void startPlaylist(int track);
-        // queue の track を鳴らす。読めなければ、skip_on_error なら理由を少し出して次へ飛ばし
-        // (曲の終わりで進んだとき・全曲)、そうでなければ止まって理由を出し続ける(利用者が選んだ曲)
-        void playTrack(int track, bool skip_on_error);
-        bool tryPlay(int track, FixedString<PICO_STR_256B>& error);
-        void advance(bool by_user);
-        void previous();
-        void togglePlay();
-        void stopPlayback();
-        bool soundActive() const;
         void onPanelButton(int button);
+        void showErrorDetail();
+        // 見ているプレイリストが鳴っている順番と同じか(フォルダの並びが変わっていれば別物)
+        bool viewIsQueue() const;
 
         // ---- 表示 ----
         void refreshPanel();
-        void loadSettings();
-        void saveSettings();
 
         Button* back_button = nullptr;
         Button* play_all_button = nullptr;
@@ -97,25 +87,7 @@ class MusicScene : public Scene {
         int view = kLibrary;
         Track view_tracks[kMaxTracks];
         int view_count = 0;
-
-        // 再生の順番になっているプレイリスト(鳴らした時点のもの)
-        Track queue_tracks[kMaxTracks];
-        int queue_playlist = kLibrary;
-        PlayQueue queue;
-
-        // 今鳴らしているもの(0=無し 1=MML 2=WAV)。終わったことは「鳴っていたのに鳴らなくなった」で知る
-        uint8_t playing_kind = 0;
-        bool finished = false;          // 最後まで鳴らし終えた(リピートしない)
-        int fail_streak = 0;            // 続けて読めなかった曲の数(全部読めなければ止まる)
-        // 読めなかった曲の理由。曲名は error_track、理由(「3行12列: …」)は error_detail。
-        // 再生中の欄には収まらないので、欄の文字をタップすると全文をダイアログで出す(showErrorDetail)
-        FixedString<PICO_STR_M> error_track;
-        FixedString<PICO_STR_256B> error_detail;
-        bool error_sticky = false;      // 利用者が選んだ曲が読めずに止まった(次に鳴らせるまで出し続ける)
-        uint32_t error_until_ms = 0;    // 飛ばしたときに出しておく期限
-        uint64_t failed_mask = 0;       // 再生の順番の中で読めなかった曲(一覧で赤にする)
-        bool errorShown() const;
-        void showErrorDetail();
+        uint32_t seen_revision = 0;
 
         constexpr static int MARGIN = 6;
 };

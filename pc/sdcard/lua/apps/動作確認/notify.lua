@@ -29,7 +29,7 @@ pico.set(button("", x + m, y + m, function() pico.pop() end), "icon_id", 30)  --
 label("通知", x + 70, y + m + 6)
 
 local status = label("", x + m, y + 200)
-local reason = label("", x + m, y + 250)
+local reason = label("", x + m, y + 255)
 
 local function refresh(msg)
     pico.set(status, "text", (msg and (msg .. "\n") or "") .. "予約: " .. #pico.notify_list() .. "件")
@@ -57,6 +57,20 @@ row = row + 45
 button("電池20%未満", x + m, row, function()
     result(pico.notify{ title = "電池が少なくなりました", when = "battery_low", below = 20, tag = "battery" })
 end)
+-- バックグラウンド(background.lua)が動くたびに通知を出すか。動いた回数は background.lua が settings へ書く
+local bg_button
+local function bg_text()
+    local on = pico.settings_get("bg_notify") == "true"
+    return "BG通知:" .. (on and "入" or "切")
+end
+bg_button = button(bg_text(), x + 120, row, function()
+    local on = pico.settings_get("bg_notify") == "true"
+    pico.settings_set("bg_notify", on and "false" or "true")
+    pico.set(bg_button, "text", bg_text())
+end)
+local bg_label = label("", x + m, y + 230)
+pico.set(bg_label, "text", "バックグラウンド: " .. (pico.settings_get("bg_runs") or "0") .. "回(最後 "
+         .. (pico.settings_get("bg_last") or "-") .. ")")
 
 local from = pico.args()
 if from and from.tag then

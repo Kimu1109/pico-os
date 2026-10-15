@@ -1,0 +1,65 @@
+# 実機ファーム(PlatformIO, env:rpipico2w)をビルドして、実機でしか出ないリンクエラー・
+# 多重定義(arduino-pico / pico-sdk 由来のもの)をPRの段階で見つける。
+#
+#   プルリクエスト / main へのpush … ビルドする(約7分。キャッシュがあれば短い)
+#   手動実行                       … Actionsタブの「Run workflow」から
+#
+# platformio.ini の `platform = raspberrypi`(公式)には rpipico2w のボード定義が無いので、
+# ここでだけ maxgerhardt/platform-raspberrypi へ差し替えてビルドする(ファイルは書き換えない)。
+# 版は下の PLATFORM_REF で固定している。上げるときは手元の `pio run` で通してから。
+name: 実機ファームのビルド
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLATFORM_REPO: https://github.com/maxgerhardt/platform-raspberrypi.git
+  PLATFORM_REF: 5d4561a05e3b212660ac6fdd3fbfb328d1988aa1
+
+jobs:
+  build:
+    name: rpipico2w をビルドする
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      # ツールチェイン・arduino-pico・LovyanGFX 等で数百MBあるので丸ごとキャッシュする。
+      # platformio.ini(lib_depsの版)かこのファイル(プラットフォームの版)が変わると作り直す
+      - name: PlatformIO のキャッシュを戻す
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', '.github/workflows/firmware-build.yml') }}
+
+      - name: PlatformIO を入れる
+        run: pipx install platformio
+
+      - name: プラットフォームを maxgerhardt の版へ差し替える
+        run: |
+          sed -i "s|^platform = raspberrypi\$|platform = ${PLATFORM_REPO}#${PLATFORM_REF}|" platformio.ini
+          grep -n '^platform' platformio.ini
+          # 差し替えに失敗していたら(platformio.ini の書き方が変わったら)ここで気づく
+          grep -q "${PLATFORM_REF}" platformio.ini
+
+      - name: ビルドする
+        run: pio run -e rpipico2w
+
+      - name: ファームを保存する(動作確認用)
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-rpipico2w
+          path: |
+            .pio/build/rpipico2w/firmware.uf2
+            .pio/build/rpipico2w/firmware.elf
+          retention-days: 7

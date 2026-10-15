@@ -109,7 +109,7 @@ IconID BackgroundFunctions::IndicatorIcon(){
 uint32_t BackgroundFunctions::PreferredSampleRate(){
     uint32_t rate = 0;
     for(int i = 0; i < service_count; i++){
-        if(!services[i]->active()) continue;
+        if(!services[i]->holdsSampleRate()) continue;
         const uint32_t r = services[i]->preferredSampleRate();
         if(r > rate) rate = r;
     }

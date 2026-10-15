@@ -46,6 +46,9 @@ class BackgroundService {
         virtual const char* appName() const { return nullptr; }
         // 動いている間に望む音の出力の周波数(0=何も望まない)。画面が望まないときに使われる
         virtual uint32_t preferredSampleRate() const { return 0; }
+        // 周波数の要求を保つ間(既定は active() と同じ)。曲の切れ目のように一瞬 active() が偽になる仕事は
+        // 上書きして、その間も望む周波数を取り下げないようにする(取り下げると切り替えで次の曲が止まる)
+        virtual bool holdsSampleRate() const { return active(); }
 };
 
 // バックグラウンドの仕事の登録簿(OS常駐)。

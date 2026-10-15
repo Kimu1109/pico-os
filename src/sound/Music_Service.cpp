@@ -223,6 +223,8 @@ namespace {
             void stop() override { MusicService::Release(); }
             const char* appName() const override { return "ミュージック"; }
             uint32_t preferredSampleRate() const override { return SoundFunctions::kSampleRateHigh; }
+            //曲が終わって次へ進むまでの一瞬も周波数の要求を保つ(さもないと22050Hzへ切り替わって次の曲が止まる)
+            bool holdsSampleRate() const override { return st && st->kind != Kind::None && !st->interrupted; }
     };
     Service service;
 }

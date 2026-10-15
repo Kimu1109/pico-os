@@ -1,17 +1,17 @@
-pico-os-apps	1	1791977982
+pico-os-apps	1	1792058542
 spotify-remote	1.0.0	Spotify	Spotify	36941	bb00f02bebae0953e5c32ff1e6cb5418da9fe6cb0404d18c63c1cc44871f0b4a	network	スマホ/PCのSpotifyの再生を操作するリモコン(再生/停止・次へ・前へ・シーク・音量・端末の切り替え)。Premiumが必要
 oshite	1.0.0	おしてのぼれ	おしてのぼれ	17045	6600098b337a694c04a9507cb47efade200ea048993d8fd188b417736d6c9039	-	pico.gameの物理(押し合い・積み重ね・ばね・動く足場)を使ったパズルアクション
 jump-action	1.0.0	ジャンプアクション	ジャンプアクション	9398	68a297c3d5d164fdf88950718bde75954301c275cab172400b9ab77acdfad6d1	-	pico.game(2Dゲームの簡易エンジン)で作った横スクロールのジャンプアクション
 scratchpad	1.0.0	スクラッチパッド	スクラッチパッド	10149	2ba27550a8f376c0dc368dfcd6c2aa8c55cb7dbac9e19ea14191132fb096d019	-	黒/青ペンと消しゴムで手書きメモ。保存/読み込み対応
 zombie-td	0.2.0	ゾンビTD	ゾンビTD	138440	6a86cc2ed32c80ca199ceea8cdd841058ba4050c7ed7f9671adbf6031fa372f7	-	斜め上から見た箱庭でゾンビのウェーブからベースを守るタワーディフェンス
 tetris	2.0.0	テトリス	テトリス	21141	1509b2998e37162cca7190da90a6914e954441c3f626dd77e5d98815d827391a	-	pico.gameで作ったテトリス風ゲーム。タッチと外部コントローラーで遊べる
-google-news	1.0.0	ニュース	ニュース	11507	4dc453acd7cf089fa734b540d59e86acf2ec55d5a1cd262417cf852026956d13	network	Google ニュースのRSSで見出しを読む(ヘッドライン・分野別・キーワード検索)。APIキーは不要
+google-news	1.0.0	ニュース	ニュース	12136	f2c1f48a7e0b85710ab3d35956587b4aac53ede5c11777d27a8c438f3117bc60	network	Google ニュースのRSSで見出しを読む(ヘッドライン・分野別・キーワード検索)。APIキーは不要
 blocks	1.2.0	ブロック	ブロック	69759	4f03f6e1378fc91b382e4222e79bb78e4b46846804c065f9ab5c8303c7f42201	-	斜め上から見たマインクラフト風の箱庭(Blocks-TI-84の移植)。1024x1024の広い世界をチャンク読み込みで歩き、ブロックを置いて壊せる。
 breakout	2.0.0	ブロック崩し	ブロック崩し	27133	50029ed1e5484e13fb9db58990328d2b6b137e723b7081341fdbe120c6054044	-	pico.gameのタイルマップとスプライトで作る全20ステージのブロック崩し
 paint	1.0.0	ペイント	ペイント	15951	8c23d16568daa3c3132a4689e4be511669fc6bd16f386e919c6caab96d9e524a	-	ペン/図形/塗りつぶしで描いて.pimgで保存/読込できるお絵描き
 minesweeper	2.0.0	マインスイーパー	マインスイーパー	14456	70ca9ffb459297d6f536feb236cc8218c808a76ded0fa20d75eb0029b36e2e67	-	初級/中級/上級の3難易度から選べるマインスイーパー(pico.gameのタイルマップ)
 reversi	2.0.0	リバーシ	リバーシ	9080	ad63ea8998776218a8617c1a1c8fb4d589990405a191cdba31c772941da16900	-	pico.gameのタイルマップで作った、2人交互プレイのリバーシ
-api-test	1.0.0	動作確認	動作確認	38256	6a4b784204bb0cfacd1c5616fef227f46f760bce8d5ba3a0ff13a2dd7b893635	notify	Lua APIの動作確認をまとめたアプリ。部品・描画・画面の受け渡し・コントローラー・音・通知を1画面ずつ試せる
-weather-forecast	1.0.0	天気	天気	10371	7c4ee3809b0ce5763a66db0b5a2c190478c93894991ae1259a745fe081c7c0c9	network	天気予報 API(livedoor 天気互換、weather.tsukumijima.net)で3日分の天気・気温・降水確率を見る
+api-test	1.0.0	動作確認	動作確認	40340	8fd4b5a8dfc753c00ff2d4f58d105406862962a942324948b55ab75ee9995f98	notify,background	Lua APIの動作確認をまとめたアプリ。部品・描画・画面の受け渡し・コントローラー・音・通知を1画面ずつ試せる
+weather-forecast	1.0.0	天気	天気	14825	26ce2774ace4206afd99f6d98e151503a97bc6aba36d9da6cea67b9c510099aa	network	天気予報 API(livedoor 天気互換、weather.tsukumijima.net)で3日分の天気・気温・降水確率を見る
 hw-check	1.0.0	実機チェック	実機チェック	12889	75eca10a8a7a1ccec703a10fa0bd78c47f582f611a195a50dc315b0d8d9afc01	network	実機の速さとメモリを測ってresults.txtへ残す
 battery-test	1.0.0	電池テスト	電池テスト	6891	35f10ce0645601f915abc9d81624ba8893d49af661ba1fbe5b55b88b5ed89e06	-	電池の稼働時間を高/中/低負荷で測りSDへ記録する

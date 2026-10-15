@@ -1,0 +1,66 @@
+# ホストテスト(script/host_test/run.sh)をプルリクエストで回す。
+#
+#   実コードをPCのg++ + ASan/UBSanで動かし、解放漏れ・バッファ越え・未定義動作と
+#   各機能の回帰を見る。実機(RP2350)のビルドとは無関係。
+#
+#   プルリクエスト / main へのpush … 全グループを並列(グループごとに別ジョブ)で回す
+#   手動実行                       … Actionsタブの「Run workflow」から
+#
+# run_net.sh(実通信・OpenSSHのsshd・TLSサーバを使う結合テスト)と
+# run_mem.sh(確保回数の計測)は環境依存が強いので、ここでは回さない。
+name: ホストテスト
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同じ参照への新しいpushで、古い実行は打ち切る
+concurrency:
+  group: host-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-test:
+    name: ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # 1グループが落ちても残りの結果は見たい
+      fail-fast: false
+      matrix:
+        # run.sh --list と同じ並び。グループを足したらここにも足すこと(下の確認ジョブが見張る)
+        group: [core, apps, media, input, calc, widget, lua-base, lua-engine, lua-ext, lua-sandbox, lua-scene, ssh]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 依存を入れる
+        run: |
+          sudo apt-get update
+          # pvid_test(numpy)・midi2mml_test(python3)・ffmpeg(あれば追加の経路を通る)
+          sudo apt-get install -y --no-install-recommends build-essential python3 python3-numpy ffmpeg
+
+      - name: ホストテストを回す(${{ matrix.group }})
+        run: sh script/host_test/run.sh ${{ matrix.group }}
+
+  # run.sh に足したグループが matrix から漏れていないかを見る
+  groups-in-sync:
+    name: グループの一覧が揃っているか
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: matrix と run.sh --list を比べる
+        run: |
+          expected=$(sh script/host_test/run.sh --list | tr ' ' '\n' | sort)
+          actual=$(sed -n 's/^ *group: \[\(.*\)\]$/\1/p' .github/workflows/host-tests.yml | tr -d ' ' | tr ',' '\n' | sort)
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::.github/workflows/host-tests.yml の matrix.group が run.sh --list と食い違っています"
+            diff <(echo "$expected") <(echo "$actual") || true
+            exit 1
+          fi
+          echo "グループの一覧は揃っています: $(echo $expected)"

@@ -81,6 +81,19 @@ PASSTHROUGH_PY = {
     ("serve",): "reference_server.py",
     ("midi2mml",): "midi2mml.py",
     ("spotify-auth",): "spotify_auth.py",
+    ("app-repo",): "build_app_repo.py",
+    ("pvid",): "generate_pvid.py",
+    ("pad",): "pad_serial.py",
+    ("tls-roots",): "generate_tls_roots.py",
+    ("gen", "blocks"): "generate_blocks_sheet.py",
+    ("gen", "breakout"): "generate_breakout_blocks.py",
+    ("gen", "minesweeper"): "generate_minesweeper_tiles.py",
+    ("gen", "physics"): "generate_physics_sheet.py",
+    ("gen", "platformer"): "generate_platformer_sheet.py",
+    ("gen", "reversi"): "generate_reversi_tiles.py",
+    ("gen", "spotify-icon"): "generate_spotify_icon.py",
+    ("gen", "tetris"): "generate_tetris_blocks.py",
+    ("gen", "zombie-td"): "generate_zombie_td_sheet.py",
     ("dict", "skk"): "convert_skk_dict.py",
     ("dict", "index"): "build_dict_index.py",
     ("dict", "suffix-index"): "build_dict_suffix_index.py",
@@ -95,6 +108,8 @@ def try_dispatch_passthrough(argv):
         n = len(prefix)
         if tuple(argv[:n]) == prefix:
             return run_py(script, argv[n:])
+    if tuple(argv[:2]) == ("test", "parallel"):
+        return run(["sh", str(HOST_TEST_DIR / "run_parallel.sh"), *argv[2:]], cwd=REPO_ROOT)
     if tuple(argv[:2]) == ("pc", "run"):
         return cmd_pc_run_raw(argv[2:])
     return None
@@ -193,7 +208,7 @@ def cmd_pc_web_serve(args) -> int:
 
 # ---- パーサ構築 ----
 #
-# pimg/ppm2png/serve/midi2mml/spotify-auth/dict skk/dict index/dict suffix-index/dict filter-tofu/pc run は
+# pimg/ppm2png/serve/midi2mml/spotify-auth/app-repo/pvid/pad/tls-roots/gen */test parallel/dict skk/dict index/dict suffix-index/dict filter-tofu/pc run は
 # try_dispatch_passthrough() が実際の引数解析より先に横取りするため、ここで登録する
 # 対応するサブパーサは「picoos --help」等での一覧表示専用(実引数は持たない)。
 
@@ -212,7 +227,13 @@ def build_parser() -> argparse.ArgumentParser:
   picoos serve --root ~/docs --port 8080          Markdownブラウザ用の参照サーバを起動
   picoos midi2mml song.mid -o song.mml            MIDIをpico-os MMLへ変換
   picoos spotify-auth --client-id XXXX            Spotifyのrefresh tokenを取ってSDへ書く
+  picoos app-repo sign --out store                アプリストアの配布物に署名(build_app_repo.py)
+  picoos pvid in.mp4 out.pvid                     動画を.pvidへ変換
+  picoos pad --mode text                          PCのキーボードを外部コントローラー/物理キーボードにする
+  picoos tls-roots                                焼き込みルート証明書(Tls_Roots_Data.hpp)を再生成
+  picoos gen tetris                               アプリ用画像(.pimg)を生成(gen --help で一覧)
   picoos test                                     ホストテスト一式(ASan)を実行
+  picoos test parallel -j 4                       ホストテストを並列実行
   picoos test net                                 HTTP結合テストを実行
   picoos pc build                                 PC(SDL2)版をビルド
   picoos pc run -- --shot shot.ppm 40             ネイティブ版を実行(引数はそのまま転送)
@@ -234,6 +255,23 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("midi2mml", help="MIDI(SMF)をpico-os MMLへ変換 (midi2mml.py、引数は転送)")
     sub.add_parser("spotify-auth", help="Spotifyの最初のトークンをPCで取りSDへ書く (spotify_auth.py、引数は転送)")
 
+    sub.add_parser("app-repo", help="アプリストアの配布物の鍵生成・署名・組み立て (build_app_repo.py、引数は転送)")
+    sub.add_parser("pvid", help="動画を.pvidへ変換 (generate_pvid.py、要ffmpeg+numpy、引数は転送)")
+    sub.add_parser("pad", help="PCのキーボードを外部コントローラー/物理キーボードにする (pad_serial.py、引数は転送)")
+    sub.add_parser("tls-roots", help="焼き込みルート証明書を生成 (generate_tls_roots.py、引数は転送)")
+
+    gen_parser = sub.add_parser("gen", help="アプリ用の画像(.pimg)生成スクリプト群")
+    gen_sub = gen_parser.add_subparsers(dest="gen_command", required=True)
+    gen_sub.add_parser("blocks", help="「ブロック」の絵 (generate_blocks_sheet.py、引数は転送)")
+    gen_sub.add_parser("breakout", help="ブロック崩しのタイル (generate_breakout_blocks.py、引数は転送)")
+    gen_sub.add_parser("minesweeper", help="マインスイーパーのタイル (generate_minesweeper_tiles.py、引数は転送)")
+    gen_sub.add_parser("physics", help="「おしてのぼれ」の絵 (generate_physics_sheet.py、引数は転送)")
+    gen_sub.add_parser("platformer", help="ジャンプアクションの絵 (generate_platformer_sheet.py、引数は転送)")
+    gen_sub.add_parser("reversi", help="リバーシのタイル (generate_reversi_tiles.py、引数は転送)")
+    gen_sub.add_parser("spotify-icon", help="Spotifyリモコンのアイコン (generate_spotify_icon.py、引数は転送)")
+    gen_sub.add_parser("tetris", help="テトリスのミノ画像 (generate_tetris_blocks.py、引数は転送)")
+    gen_sub.add_parser("zombie-td", help="「ゾンビTD」の絵 (generate_zombie_td_sheet.py、引数は転送)")
+
     dict_parser = sub.add_parser("dict", help="辞書データ関連 (script/dic, en-ja-and-ja-en.tsv 等)")
     dict_sub = dict_parser.add_subparsers(dest="dict_command", required=True)
 
@@ -247,7 +285,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("test", help="ホストテストを実行 (script/host_test/run*.sh のラッパー)")
     p.add_argument("target", nargs="?", choices=list(_TEST_SCRIPTS.keys()), default="unit",
-                    help="unit=ASan本体テスト(既定) / net=HTTP結合テスト / mem=ヒープ確保計測")
+                    help="unit=ASan本体テスト(既定) / net=HTTP結合テスト / mem=ヒープ確保計測"
+                         " / parallel=unitを並列実行(後ろの引数はrun_parallel.shへ転送)")
     p.set_defaults(func=cmd_test)
 
     pc_parser = sub.add_parser("pc", help="PC/Webビルド (pc/、SDL2ネイティブ or WebAssembly)")

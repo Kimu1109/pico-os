@@ -58,9 +58,12 @@ int main(){
     check(AppRepo::ParsePerms("-", perms) && perms == 0, "perms: -");
     check(AppRepo::ParsePerms("network,notify,sd", perms) && perms == (AppRepo::PermNetwork | AppRepo::PermNotify | AppRepo::PermSd), "perms: 全部");
     check(!AppRepo::ParsePerms("network,camera", perms), "perms: 知らない権限は断る");
-    FixedString<PICO_STR_M> pt;
+    check(AppRepo::ParsePerms("background,network", perms) && perms == (AppRepo::PermBackground | AppRepo::PermNetwork), "perms: background");
+    FixedString<PICO_STR_L> pt;
     AppRepo::PermsText(AppRepo::PermNetwork | AppRepo::PermNotify, pt);
     check(pt == "ネットワーク・通知", "perms: 表示");
+    AppRepo::PermsText(AppRepo::PermNetwork | AppRepo::PermNotify | AppRepo::PermSd | AppRepo::PermBackground, pt);
+    check(pt == "ネットワーク・通知・SD全体・バックグラウンド", "perms: 4つとも切れずに表示");
     AppRepo::PermsText(0, pt);
     check(pt == "なし", "perms: なしの表示");
 

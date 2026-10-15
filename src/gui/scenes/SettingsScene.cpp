@@ -10,6 +10,8 @@
 #include "functions/Lock_Functions.hpp"
 #include "functions/DeviceKey_Functions.hpp"
 #include "gui/scenes/TouchCalibScene.hpp"
+#include "gui/scenes/BackgroundScene.hpp"
+#include "functions/Background_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
@@ -703,7 +705,7 @@ void SettingsScene::onEnter(){
     const int full_w = content.w - MARGIN * 2;
 
     // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、読み込みより前に生成しておく
-    this->run_test_checkbox = new Checkbox(left, rowY(2), "起動時に自己診断を実行");
+    this->run_test_checkbox = new Checkbox(left, 0, "起動時に自己診断を実行");
     this->run_test_checkbox->setFontSize(FontFn::Small);
     this->run_test_checkbox->setOnChangeChecked([this](){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, "run-test",
@@ -900,16 +902,33 @@ void SettingsScene::onEnter(){
     addToTab(Tab::Other, this->home_label);
     this->refreshHomeLabel();
 
-    // 起動時セルフチェック(本体はloadValues()より前で生成済み)
-    addToTab(Tab::Other, this->run_test_checkbox);
+    // バックグラウンドの仕事(BackgroundFunctions)。3行目。一覧の画面で止める/入り切りする
+    {
+        Button* bg_button = this->makeEditButton(rowY(2));
+        bg_button->setText("一覧");
+        bg_button->setOnPressEnd([](){ SceneFunctions::Push(new BackgroundScene()); });
+        addToTab(Tab::Other, bg_button);
+        int active = 0;
+        for(int i = 0; i < BackgroundFunctions::Count(); i++) if(BackgroundFunctions::At(i)->active()) active++;
+        char text[64];
+        if(active > 0) snprintf(text, sizeof(text), "バックグラウンド: %d件", active);
+        else snprintf(text, sizeof(text), "バックグラウンド: なし");
+        addToTab(Tab::Other, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(2) + 2), label_w, text));
+    }
 
-
-    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)。見出しの下の5〜7行目
-    auto* dev_title = makeRowLabel<PICO_STR_M>(left, (int16_t)(rowY(3) + 10), full_w, "開発者向け");
+    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)と起動時の自己診断。見出しの下に4行を詰めて並べる
+    // (行の高さ ROW_H のままでは「他」タブに収まらないため kDevRowH)
+    constexpr int kDevRowH = 26;
+    const int16_t dev_y = (int16_t)(rowY(3) + 2);
+    auto* dev_title = makeRowLabel<PICO_STR_M>(left, dev_y, full_w, "開発者向け");
     dev_title->setTextColor(PICO_DARKGREY);
     addToTab(Tab::Other, dev_title);
+    auto devRowY = [&](int i) -> int16_t { return (int16_t)(dev_y + 20 + i * kDevRowH); };
+    // 起動時セルフチェック(本体はloadValues()より前で生成済み)
+    this->run_test_checkbox->setY(devRowY(0));
+    addToTab(Tab::Other, this->run_test_checkbox);
     auto makeDevCheckbox = [&](int row, const char* text, bool checked) -> Checkbox* {
-        Checkbox* cb = new Checkbox(left, rowY(row), text);
+        Checkbox* cb = new Checkbox(left, devRowY(row - 3), text);
         cb->setFontSize(FontFn::Small);
         cb->setText(text); // 小さいフォントで幅を測り直す(Checkboxの幅は構築時のフォントで決まるため)
         cb->setIsChecked(checked);

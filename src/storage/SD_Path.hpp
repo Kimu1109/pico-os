@@ -95,6 +95,8 @@ namespace PICO_Path {
             constexpr const char* SYS_DEBUG_CFG = "/sys/debug.cfg";
             // ランチャの並びと隠したアプリ("app = 名前" / "hidden = 名前" を上から順)。AppFunctions::LoadLayout()参照
             constexpr const char* SYS_LAUNCHER_CFG = "/sys/launcher.cfg";
+            // バックグラウンドの仕事の入り切り("chat = on|off" / "lua:<アプリのフォルダ名> = on|off")。BackgroundFunctions参照
+            constexpr const char* SYS_BACKGROUND_CFG = "/sys/background.cfg";
         }
 
         namespace IME {

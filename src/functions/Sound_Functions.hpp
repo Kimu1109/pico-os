@@ -142,6 +142,11 @@ namespace SoundFunctions {
     // 曲の長さ(ms)。L(ループ位置)がある曲は終わりが無く、*loops が true で、最初に戻るまでの長さを返す
     uint32_t MusicTotalMs(bool* loops = nullptr);
 
+    // 曲(MML)かWAVを新しく鳴らすたび・出力の周波数の切り替えで止まるたびに1つ増える番号。
+    // 鳴らした直後にこれを覚えておけば、後で違っていたら「別の誰かが鳴らした(=自分の曲は差し替えられた)」と分かる
+    // (バックグラウンドの再生 MusicService が、他のアプリに音を取られたことを知るのに使う)。止めるだけでは増えない
+    uint32_t PlaybackSerial();
+
     // ---- ゲームボーイの音(GBエミュ) ----
     // GbEmu::setAudioSink() へ渡す窓口。音源チップ(GbApu)は2コア目にあり、レジスタへの書き込みは
     // 時刻付きの列(GbAudioLink、約4KB)で渡す。列は最初にROMを起動したときに確保し、以降は持ち続ける。

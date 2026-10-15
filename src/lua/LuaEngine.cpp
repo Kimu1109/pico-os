@@ -625,6 +625,17 @@ void LuaEngine::ReportError(const char* fallback) {
         return;
     }
 
+    // バックグラウンドスクリプトは画面を持たないので、ダイアログは出さない(今の画面の上に出ても困る)。
+    // ログ・クラッシュダンプ(/crash/lua_NNNN.txt)・lastError()(バックグラウンドの一覧に出す)へ
+    if (background_) {
+        last_error_.assign(msg);
+        LOG_APP_FAIL("Luaのバックグラウンド(%s): %s", app_dir_.c_str(), msg);
+        if (last_trace_[0]) LOG_APP_FAIL("Luaのスタックトレース:\n%s", last_trace_);
+        LuaDebugger::ReportError(app_dir_.c_str(), msg, last_trace_);
+        lua_pop(L, 1);
+        return;
+    }
+
     FixedString<PICO_STR_512B> shown;
     shown.assign(msg);
     if (last_trace_[0]) {
@@ -647,8 +658,8 @@ void LuaEngine::ReportError(const char* fallback) {
     lua_pop(L, 1);
 }
 
-LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, const char* app_dir)
-    : budget_(budget_bytes), permissions_(permissions) {
+LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, const char* app_dir, bool background)
+    : budget_(budget_bytes), permissions_(permissions), background_(background) {
     if (!PICO_IO::normalize(app_dir_, app_dir)) app_dir_.assign("/");
 
     L = lua_newstate(Alloc, this);
@@ -658,7 +669,8 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
     }
     *static_cast<LuaEngine**>(lua_getextraspace(L)) = this;   // pico.* の Self() が読む
 
-    if (LuaDebugger::GlobalEnabled()) debugger_ = new LuaDebugger();
+    // バックグラウンドスクリプトには付けない(見ていない画面の裏で止まると、OSごと止まって見えるため)
+    if (LuaDebugger::GlobalEnabled() && !background_) debugger_ = new LuaDebugger();
 
     // 以降の全てのLua実行(ライブラリを開くところも含む)に効かせるため、pcallより前に設定する
     ApplyHook(L);
@@ -973,12 +985,67 @@ void LuaEngine::registerApi() {
     registerFn("set_breakpoint", l_set_breakpoint);
     registerFn("clear_breakpoint", l_clear_breakpoint);
     registerFn("debugger_enabled", l_debugger_enabled);
+    registerFn("is_background", l_is_background);
+    registerFn("finish", l_finish);
     RegisterExtApi();
+    if (background_) filterBackgroundApi();
     finishApiTable(api_pico_);
     // グローバルの require は pico.require と同じ関数
     lua_getfield(L, -1, "require");
     lua_setglobal(L, "require");
     lua_setglobal(L, "pico");
+}
+
+// ---------------- バックグラウンドスクリプト ----------------
+
+namespace {
+    // バックグラウンドスクリプトで使える pico.*。画面(ウィジェット・描画・ダイアログ・画面の遷移)・
+    // 入力・音・デバッガは外す(画面を持たず、今前に出ている別のアプリの上で動くため)
+    const char* const kBackgroundApi[] = {
+        "log", "notify", "notify_cancel", "notify_list",
+        "get_time", "time", "millis", "micros", "battery", "wifi_status",
+        "sd_exists", "sd_read", "sd_write", "sd_remove", "sd_mkdir", "sd_list", "sd_stat", "sd_read_part",
+        "config_read", "config_get", "config_write",
+        "http_request", "http_cancel", "http_close",
+        "json_decode", "json_encode", "json_pick", "sd_json_pick", "xml_pick", "sd_xml_pick", "form_encode",
+        "after", "every", "cancel",
+        "store_load", "store_save", "require", "traceback",
+        "app_dir", "path_join", "url_encode", "url_decode", "base64_encode", "base64_decode",
+        "settings_get", "settings_set", "settings_all", "memory_info",
+        "encrypt", "decrypt", "is_encrypted", "hash", "random_bytes",
+        "is_background", "finish",
+    };
+}
+
+void LuaEngine::filterBackgroundApi() {
+    size_t n = 0;
+    for (size_t i = 0; i < api_pico_.size(); i++) {
+        bool keep = false;
+        for (const char* name : kBackgroundApi) {
+            if (strcmp(api_pico_[i].name, name) == 0) { keep = true; break; }
+        }
+        if (keep) api_pico_[n++] = api_pico_[i];
+    }
+    api_pico_.resize(n);
+}
+
+int LuaEngine::l_is_background(lua_State* L) {
+    lua_pushboolean(L, Self(L)->background_);
+    return 1;
+}
+
+int LuaEngine::l_finish(lua_State* L) {
+    LuaEngine* self = Self(L);
+    if (self->background_) self->finish_requested_ = true;
+    lua_pushboolean(L, self->background_);
+    return 1;
+}
+
+bool LuaEngine::timersActive() const {
+    for (const Timer& t : timers_) {
+        if (t.used) return true;
+    }
+    return false;
 }
 
 // ---------------- コールバック中継 ----------------

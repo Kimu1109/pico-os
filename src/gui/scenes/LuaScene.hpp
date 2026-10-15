@@ -100,6 +100,8 @@ class LuaScene : public Scene {
         }
 
         const char* getName() const override { return "Lua"; }
+        // 動かしているスクリプトのSDパス(LuaBackground が「このアプリが前に出ている」を知るのに使う)
+        const char* scriptPath() const { return script_path.c_str(); }
 
         void onEnter() override;
         void onExit() override;

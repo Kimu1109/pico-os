@@ -33,6 +33,10 @@
 //                                    (無指定/読み込み失敗時はIconID::AppBoxへ落ちる)
 //   permission_network            … pico.http_request/http_cancelを許すか(true/false)
 //   permission_sd_outside_app_dir … pico.sd_*/image_loadでapp_dirの外を触れるか
+//   permission_background         … background のスクリプトを定期的に動かしてよいか(LuaBackground)
+//   background                    … バックグラウンドスクリプト(アプリディレクトリ内の相対パス。例 background.lua)。
+//                                    permission_background が無ければ動かさない
+//   background_interval           … それを動かす間隔(秒。既定900、10以上)
 //   strip_debug                   … requireしたモジュールのデバッグ情報を落とす(Luaのメモリを減らす。
 //                                    権限ではない。エラーの行番号が「?」になる)
 // **どちらの権限も未指定なら既定でfalse(最小権限)。** SDに置かれているだけで
@@ -54,6 +58,8 @@ namespace LuaAppScanner {
         FixedString<PICO_STR_S> version;
         FixedString<PICO_STR_S> id;           // アプリストアのid(APP_REPO.md)。手で入れたアプリは空
         FixedString<PICO_STR_M> icon;         // アプリディレクトリ内の相対パス(.pimg)
+        FixedString<PICO_STR_M> background;   // バックグラウンドスクリプト(相対パス)。空なら無し
+        uint32_t background_interval_sec = 0; // 0 = 既定
         LuaPermissions permissions;           // 既定は全部false(最小権限)
     };
     // config_path(app.cfg)を読んでoutへ。無ければfalse(outは既定値のまま)
@@ -70,4 +76,9 @@ namespace LuaAppScanner {
     // /lua/apps/ の下のアプリのうち、main.lua が無くなったものを登録簿から外す(外した数)。
     // USBドライブでPCからアプリを消した後に Scan() と合わせて呼ぶ
     int PruneMissing();
+
+    // 登録簿のLuaアプリが変わった(Scan/RegisterOrRefresh/Unregister/PruneMissing の後)ときに呼ぶ関数。
+    // Background_List.cpp が LuaBackground::Refresh を差す(ここから直接呼ぶと、アプリストアのテストまで
+    // LuaEngine をリンクすることになるため)。nullptr なら何もしない
+    extern void (*apps_changed)();
 }

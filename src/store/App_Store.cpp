@@ -635,6 +635,7 @@ bool AppStore::checkStagedConfig(){
     if(info.permissions.network) perms |= AppRepo::PermNetwork;
     if(info.permissions.notify) perms |= AppRepo::PermNotify;
     if(info.permissions.sd_outside_app_dir) perms |= AppRepo::PermSd;
+    if(info.permissions.background) perms |= AppRepo::PermBackground;
     if((perms & ~e.perms) != 0){
         fail("app.cfg の権限が一覧より多くなっています");
         return false;

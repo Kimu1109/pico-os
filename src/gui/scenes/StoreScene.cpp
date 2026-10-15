@@ -247,7 +247,7 @@ void StoreScene::refreshDetail(){
         case AppStore::Installed::Conflict: text.append(" (同名の別のアプリがあります)"); break;
         default: break;
     }
-    FixedString<PICO_STR_M> perms;
+    FixedString<PICO_STR_L> perms;
     AppRepo::PermsText(e->perms, perms);
     text.appendFormat("\n権限: %s\n%s", perms.c_str(), e->description.c_str());
     this->detail_label->setText(text);
@@ -324,7 +324,7 @@ void StoreScene::confirmInstall(){
         this->setNotice("Wi-Fiに繋がっていません", PICO_RED);
         return;
     }
-    FixedString<PICO_STR_M> perms;
+    FixedString<PICO_STR_L> perms;
     AppRepo::PermsText(e->perms, perms);
     FixedString<PICO_STR_512B> text;
     text.appendFormat("%s %s を入れますか?\n使う権限: %s", e->name.c_str(), e->version.c_str(), perms.c_str());

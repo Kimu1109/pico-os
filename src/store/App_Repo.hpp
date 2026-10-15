@@ -33,6 +33,7 @@ namespace AppRepo {
         PermNetwork = 1 << 0,  // network       / permission_network
         PermNotify  = 1 << 1,  // notify        / permission_notify
         PermSd      = 1 << 2,  // sd            / permission_sd_outside_app_dir
+        PermBackground = 1 << 3, // background  / permission_background(閉じている間も定期的に動く)
     };
 
     struct Entry {
@@ -72,7 +73,7 @@ namespace AppRepo {
     // "network,notify" / "-" → ビット。知らない名前があればfalse(新しい権限を古い本体が黙って許さないため)
     bool ParsePerms(const char* s, uint8_t& out);
     // 表示用 "ネットワーク・通知"(無ければ"なし")
-    void PermsText(uint8_t perms, FixedString<PICO_STR_M>& out);
+    void PermsText(uint8_t perms, FixedString<PICO_STR_L>& out);
 
     // 空行・'#'で始まる行(どの表でも読み飛ばす)
     bool IsSkipLine(const char* line);

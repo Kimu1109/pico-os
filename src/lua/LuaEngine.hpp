@@ -372,9 +372,11 @@ class LuaEngine {
         //          この配下だけに閉じる(PICO_IO::normalize()で正規化して持つ)。
         //          既定の"/"は「制限なし」に相当する(LuaSceneは自分のスクリプトの
         //          親ディレクトリを渡すが、それ以外の呼び出し元は省略してよい)。
+        // background: バックグラウンドスクリプト(LuaBackground)用。画面に触る pico.* を外し
+        //          (kBackgroundApi にあるものだけ)、エラーはダイアログを出さずログと LastError() へ
         // 構築に失敗した場合(予算不足でstate本体すら作れない等)はvalid()がfalseになる。
         explicit LuaEngine(size_t budget_bytes, const LuaPermissions& permissions = LuaPermissions{},
-                            const char* app_dir = "/");
+                            const char* app_dir = "/", bool background = false);
         ~LuaEngine();
 
         // コピー・ムーブ不可(lua_State*と登録済みコールバックの対応が複雑になるため。
@@ -392,6 +394,15 @@ class LuaEngine {
         uint32_t heapRefusals() const { return heap_refusals_; }
 
         size_t usedBytes() const { return used_; }
+
+        // ---- バックグラウンドスクリプト(LuaBackground から) ----
+        bool isBackground() const { return background_; }
+        // pico.finish() が呼ばれた(この回の仕事は終わり)
+        bool finishRequested() const { return finish_requested_; }
+        // 動いている pico.after / pico.every があるか
+        bool timersActive() const;
+        // 最後に捕まえられなかったエラーの文(バックグラウンドのときだけ覚える。無ければ空)
+        const char* lastError() const { return last_error_.c_str(); }
         size_t budgetBytes() const { return budget_; }
 
         // pico.push_scene/change_sceneが同じ持ち場(app_dir)へ遷移する新しいLuaSceneへ
@@ -518,6 +529,13 @@ class LuaEngine {
         // 積まれるのを防ぐ安全弁)。setup()側はRun()と同じく1回きりなので不要
         bool loop_broken_ = false;
         bool used_pad_ = false;
+        bool background_ = false;
+        bool finish_requested_ = false;
+        FixedString<PICO_STR_256B> last_error_;
+        static int l_is_background(lua_State* L);
+        static int l_finish(lua_State* L);
+        // バックグラウンドで使ってよい pico.* だけを残す(registerApi() の最後)
+        void filterBackgroundApi();
 
         // タッチのイベントの移動量(dx,dy)を出すための、直前のタッチ位置
         int last_touch_x_ = 0;

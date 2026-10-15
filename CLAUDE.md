@@ -74,7 +74,7 @@ src/
       systems/               OSのシェル部品(Statusbar / AppGrid / PerfOverlay)
   ime/                       SKK方式かな漢字変換辞書エンジン
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
-  chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client)。下記「チャット」参照
+  chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client) / 閉じている間の未読の見張り(Chat_Watch)。下記「チャット」「バックグラウンド実行の枠組み」参照
   todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders)。下記「TODOアプリ」参照
   store/                     アプリストア。配布物の読み取りと署名の確認(App_Repo)・通信とインストール(App_Store)・焼き込みの公開鍵(App_Repo_Keys)。下記「アプリストア」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
@@ -174,6 +174,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | PowerMenu_Functions | 電源メニュー(スリープ / 再起動 / ロック)。ステータスバーの長押しと設定アプリの「電源」。下記「時刻の手動設定・電源メニュー」参照 |
 | Timer_Functions | タイマーとストップウォッチ(ラップ)。時計アプリを閉じても動く。下記「BMP・予定の通知・…・画面ロック」参照 |
 | Lock_Functions | 画面ロック(PIN)。同上 |
+| Background_Functions | バックグラウンドの仕事(画面を閉じても動くもの)の登録簿と入り切り。登録は`Background_List.cpp`。下記「バックグラウンド実行の枠組み」参照 |
 
 ### 起動・ループ (`main.cpp`)
 `setup()`: GFX→SD→Log→Display→Touch→Task→Network→Keyboard→IME→Time→Sound→Testの順にSetup()を呼び、Statusbar・FileExplorer・MarkdownView・各種ダイアログを生成して`WidgetFunctions`へ登録。
@@ -376,8 +377,64 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
 - 検証: `notification_test`(run.sh。種類ごとの発火・置き換え/上限・履歴の輪・控えめ・保存と読み込み・送り主の掃除・起動理由)、`lua_engine_test`(Lua API)、
   PCビルドの`--tap`/`--shot`(アプリで10秒後を予約→閉じてランチャでトースト→タップでアプリが`launch_reason`付きで開く、ステータスバーから通知センター、
   再起動しても`daily`/`every`の予約が残る、キーボードのダイアログの上でトーストの跡が残らない)。**実機・Webビルドは未確認**。
-- 未: C++の標準アプリからの利用(チャットの未読・カレンダーの予定はシーンを閉じると通信係ごと止まるので、使うにはOS側へ上げる必要がある)、
+- 未: カレンダーの予定を閉じている間に取り直すこと(チャットの未読は下の「バックグラウンド実行の枠組み」の`ChatWatch`で入った)、
   アラーム/タイマーの完了を通知へ統合すること。
+
+### バックグラウンド実行の枠組み (`src/functions/Background_Functions` / `Background_List.cpp` / `BackgroundScene`) (2026-10-15)
+
+画面(シーン)を閉じても動き続ける仕事を登録しておくと、`main.cpp`の`loop()`(`NotificationFunctions::Update()`の後)が毎フレーム
+`BackgroundFunctions::Update()`→各仕事の`update(now)`を呼ぶ。方針は利用者と相談して決めた(2026-10-15): C++のサービスの登録簿 + その上に
+Luaのバックグラウンドスクリプトを「定期の使い捨て」で載せる / 最初の利用者はミュージックの再生とチャットの未読 / 設定アプリの一覧とステータスバーの印。
+
+- **`BackgroundService`**(抽象クラス): `key()`(`/sys/background.cfg`のキーを兼ねる)・`name()`・`icon()`・`update()`・`active()`・`status()`、
+  形は2つ: **今だけの仕事**(`toggleable()`=false。動いている間だけ`active()`、一覧の[停止]で`stop()`。ミュージック)と
+  **入り切りする定期の仕事**(`toggleable()`=true。`setEnabled()`、[今すぐ]=`runNow()`。チャットの未読・Luaのスクリプト)。
+  任意で`appName()`(一覧の[開く])・`preferredSampleRate()`。
+- **登録簿**(`Background_Functions.cpp`、描画にも音にも依存しない): 固定長16件。`Add()`のとき`background.cfg`(`<key> = on|off`)の入り切りを当てる。
+  `SetEnabled()`が書く。`IndicatorIcon()`=今だけの仕事が動いていればその絵(音符)、定期の仕事だけなら`IconID::Refresh`、無ければ`IconCount`。
+  `PreferredSampleRate()`は動いている仕事の望む周波数の最大。**`main.cpp`は画面が何も望まない(0)ときにこれを`RequestSampleRate()`へ渡す**
+  (閉じたミュージックの曲が、ランチャへ戻った途端の周波数の切り替えで止まらないように)。画面がはっきり別の周波数を望めば画面が勝ち、曲は止まる。
+- **登録**は`Background_List.cpp`の`BackgroundFunctions::Setup()`(`App_List.cpp`と同じ役割。`AppFunctions::Setup()`と`NotificationFunctions::Setup()`の後)。
+  仕事を足すときは`BackgroundService`を継承してここで`Add()`するだけ。
+- **一覧**(`BackgroundScene`): 設定アプリ「他」タブの3行目[一覧]から。[停止]/[切る]/[入れる]・[今すぐ]・[開く]。0.5秒ごとに状態を見直す。
+  「他」タブは行が足りなくなったので、開発者向けの見出しの下を詰めた行(`kDevRowH`=26)にし、起動時の自己診断をそこへ移した。
+- **ステータスバーの印**: 何か動いていれば、コントローラーの印の右に`IndicatorIcon()`を青で。
+
+**ミュージック(`src/sound/Music_Service`)**: 再生の順番・曲の終わりで次へ・読めない曲を飛ばす・リピート/ミックスを`MusicScene`から移した
+(画面は`MusicService`を読んで見せ、ボタンを渡すだけになった)。アプリを閉じても鳴り続け、終われば次の曲へ進む。
+- 状態(順番の曲64件・フォルダ名16・`PlayQueue`、約4.2KB)は最初に鳴らすときに`new`、一覧の[停止](`Release()`)で返す。ミックス/リピートは状態の外(`music.cfg`)。
+- **他のアプリに音を取られたら止まった扱い**: `SoundFunctions::PlaybackSerial()`(曲/WAVを新しく鳴らす・周波数の切り替えで1つ増える。新設)を鳴らした直後に覚え、
+  違っていたら`Interrupted()`(次の曲へは進まない。相手の音も止めない)。再生ボタンで続きから鳴らし直せる。
+- 鳴っている間は44100Hzを望む。アプリを開き直すと、鳴っているプレイリストの画面から始まる(名前と番号が一致すれば)。
+
+**チャットの未読(`src/chat/Chat_Watch`)**: チャットアプリを閉じている間、`chat.cfg`の`notify-poll-sec`(既定120秒、30以上)ごとに`GET /api/v1/rooms`
+(取るだけでは既読にならない)を取り、新しい発言で未読が増えた部屋を通知する(タイトル=部屋名、タップでチャットアプリ)。
+- 部屋ごとに「最後に知らせた発言id」をRAMで覚える(16部屋)。再起動後の最初の回は、未読のある部屋を全部知らせる。
+- **接続は使い回さない**。要求の道具(HttpRequest+行バッファ+部屋16件、約4KB)とTLSの約40KBは取りに行く数秒の間だけ。
+  Wi-Fiに繋がっていない・時計が合っていない間は10秒後に見直す。チャットアプリが前に出ている間は取りに行かない(`foreground_query`)。
+- 既定で入っている(`chat.cfg`が無ければ「チャットが設定されていません」で何もしない)。
+
+**Luaのバックグラウンドスクリプト(`src/lua/LuaBackground`)**: app.cfg の`background = background.lua`/`background_interval = 秒`(既定900、10以上)/
+**`permission_background = true`**(新しい権限。無ければ動かさない。アプリストアの`perms`は`background`)。
+- **定期の使い捨て**: 間隔ごとに予算48KB(64bitは×4/3)の新しい`LuaEngine`(`background=true`)を作ってスクリプトを上から1回動かし、
+  `pico.http_request`の応答待ち・`pico.after/every`が残っていれば毎フレーム進め、無くなった/`pico.finish()`/30秒(`kMaxRunMs`)で捨てる。
+  画面のLuaアプリ(200KB)と同時にフルのエンジンを2つ持てないため常駐させない。回をまたぐ値は`store_save`等で持ち越す。スクリプトは16KiBまで(読む間だけ`malloc`)。
+- **`LuaEngine`の`background`モード**: `pico.*`を`kBackgroundApi`(通知・通信・SD・保存・JSON/XML・タイマー・暗号・`log`等)だけに絞る(`filterBackgroundApi()`。
+  `pico.iso`も作らない)。エラーはダイアログを出さず、ログ・`/crash/lua_NNNN.txt`・`lastError()`(一覧の「失敗: …」)へ。
+  新しいAPI: `pico.is_background()`・`pico.finish()`(画面では何もせずfalse)。
+- 同時に1本。起動から30秒後+5秒ずつずらして始める。そのアプリが前に出ている間(`foreground_script`)・SDが無い間・ヒープの残りが
+  予算+`LuaEngine::kHeapReserveBytes`を割る間は見送る/延ばす。
+- 仕事の足し引きは`Refresh()`(登録簿のLuaアプリのapp.cfgを読み直す。スクリプトがアプリのフォルダの外を指していれば断る)。
+  `LuaAppScanner::apps_changed`(関数ポインタ。`Background_List.cpp`が差す)経由で、アプリストアの入れ替え・USBドライブの後にも呼ばれる。
+- ドキュメントは`lua-api-doc/content/api/background.md`。
+
+- 検証: `background_test`(run.sh の lua-ext。登録簿と`background.cfg`、`MusicService`を本物の`SoundFunctions`で: 画面無しで次の曲へ・読めない曲を飛ばす・
+  最後で止まる・選んだ曲が読めなければ止まる・一時停止・他のアプリに取られる・周波数の切り替え・リピート全曲・[停止]、`ChatWatch::OnRooms`と設定が無いとき、
+  `LuaBackground`: 登録・`pico.*`の絞り込み・通知・タイマー待ち・`pico.finish`・時間切れ・エラーでダイアログを出さない・前に出ているアプリは見送る・
+  入り切りの保存・権限/フォルダの外・アプリが無くなったら外す)、`app_repo_test`(`background`の権限)、PCビルドの`--tap`/`--shot`。
+  **実機では未確認**(使い捨てのエンジンを作る時間・ヒープ・スリープ中の通信。チャットの未読を本物のサーバで通しで見ること)。
+- 未: スリープ中に画面を消したまま音楽を鳴らし続けること(今は鳴っている間は自動ではスリープに入らない。電源メニューのスリープなら鳴り続ける)、
+  カレンダーの取り直し・Todoistをバックグラウンドへ載せること。
 
 ### 開発者向けの道具 (プロファイラ / Luaデバッガ / クラッシュダンプ / Luaサンドボックス) (2026-10-03)
 
@@ -2218,7 +2275,7 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
   `MusicTotalMs()`(戻るまでの長さ)を過ぎたら次へ**(1曲リピートの間は繰り返し続け、時間は1周の中の位置と「ループ」を出す)。
   **読めない曲**: 利用者が選んだ曲(タップ・前/次・再生)なら止まって理由を赤で出し続け、曲の終わりで進んだ先・[全曲]なら8秒出して次へ飛ばす
   (続けて全部読めなければ止まる)。欄には頭しか入らないので「(タップで全文)」と出し、欄の文字をタップすると全文を`MsgDialog`(長ければ中でスクロール)で出す
-  (2026-10-10、「理由が見切れて読めない」との指摘で)。読めなかった曲は一覧で赤。アプリを閉じたら止める(従来どおり)。
+  (2026-10-10、「理由が見切れて読めない」との指摘で)。読めなかった曲は一覧で赤。**2026-10-15から再生は`MusicService`(OS常駐)が持ち、アプリを閉じても鳴り続ける**(上の「バックグラウンド実行の枠組み」)。
 - **下の「再生中」の欄(`MusicPlayerPanel`、118px)**: 曲名 / プレイリスト名・n/m曲目(読めない理由は赤で2行まで)/ `0:23 ━━●── 3:45` /
   ミックス・前・再生/一時停止・次・リピート。**子を持たずrender()で直接描く型**で、ボタンの絵(矢印・三角・ループの印)もfillTriangle/drawLine/
   drawRoundRectで描く(tablerに再生系のアイコンが無かったため。アイコンは足していない)。入っているモードは青+下の点、1曲リピートは「1」。
@@ -2234,7 +2291,7 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
 - 検証: `play_queue_test`(run.sh の media)、PCビルドの`--tap`/`--shot`+標準入力の`key`の行(`PICOOS_VERIFY_LCD=1`で食い違い0): ライブラリ→プレイリスト→
   1回タップで再生、ループするMMLが1周で次のWAVへ進みリピートしないで止まる、読めないMMLの理由の表示と飛ばし、ミックス+[全曲]、`n`/`r`、
   リピート全曲で頭へ戻る、フォーカスで一覧→再生中の欄、`music.cfg`の保存。**実機では未確認**。
-- 未: 曲の並べ替え・プレイリストの編集(フォルダを母艦で作る前提)、アプリを閉じても鳴り続ける再生(OS側へ上げる必要がある)、アルバムアートやタグ。
+- 未: 曲の並べ替え・プレイリストの編集(フォルダを母艦で作る前提)、アルバムアートやタグ。(アプリを閉じても鳴り続ける再生は2026-10-15に入った)
 
 ### 動画(.pvid)(`script/generate_pvid.py` / `VIDEO_FORMAT.md` / `src/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
 

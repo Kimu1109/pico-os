@@ -7,42 +7,13 @@
 #include "functions/Scene_Functions.hpp"
 #include "functions/Widget_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
-#include "functions/Power_Functions.hpp"
 #include "functions/Font_Functions.hpp"
-#include "functions/Config_Functions.hpp"
+#include "functions/Power_Functions.hpp"
 #include "functions/Log_Functions.hpp"
-#include "sound/Mml_Compiler.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 
 #include <cstring>
-
-namespace {
-    // 拡張子(".mml"等、小文字で渡す)で終わるか。大小は区別しない
-    bool EndsWith(const char* name, const char* ext){
-        const size_t n = strlen(name), e = strlen(ext);
-        if(n < e) return false;
-        for(size_t i = 0; i < e; i++){
-            char c = name[n - e + i];
-            if(c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
-            if(c != ext[i]) return false;
-        }
-        return true;
-    }
-    bool IsMml(const char* name){ return EndsWith(name, ".mml"); }
-    bool IsWav(const char* name){ return EndsWith(name, ".wav"); }
-
-    // 一覧に出す名前(拡張子を落とす)
-    void DisplayName(const char* file, FixedString<PICO_PATH_LEN>& out){
-        const char* dot = strrchr(file, '.');
-        out.assign(file, dot ? (size_t)(dot - file) : strlen(file));
-    }
-
-    // 1つ前の曲へ戻らず、今の曲の頭へ戻す境目
-    constexpr uint32_t kRestartMs = 3000;
-    // 飛ばした曲の理由を出しておく時間
-    constexpr uint32_t kErrorShowMs = 8000;
-}
 
 // ================================================================ 画面
 
@@ -56,7 +27,7 @@ void MusicScene::onEnter(){
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
-    //プレイリストを見ていればライブラリへ、ライブラリならアプリを閉じる
+    //プレイリストを見ていればライブラリへ、ライブラリならアプリを閉じる(曲は鳴り続ける)
     this->back_button->setOnPressEnd([this](){
         if(this->view == kLibrary) SceneFunctions::Pop();
         else this->showLibrary();
@@ -83,9 +54,7 @@ void MusicScene::onEnter(){
     this->panel = new MusicPlayerPanel(content.x, panel_y, content.w);
     this->panel->setOnButton([this](int b){ this->onPanelButton(b); });
     this->panel->setOnTextTap([this](){ this->showErrorDetail(); });
-    this->panel->setOnSeek([this](uint32_t ms){
-        if(this->playing_kind == 2) SoundFunctions::WavSeekMs(ms);
-    });
+    this->panel->setOnSeek([](uint32_t ms){ MusicService::SeekMs(ms); });
     WidgetFunctions::Add(this->panel);
 
     const int list_y = y0 + row_h + MARGIN;
@@ -99,26 +68,24 @@ void MusicScene::onEnter(){
     this->list->setOnSelectItem([this](int index, bool already){ this->onListSelect(index, already); });
     WidgetFunctions::Add(this->list);
 
-    this->loadSettings();
-    this->queue.seed(millis() ^ 0x5A17u);
-    this->playing_kind = 0;
-    this->finished = false;
-    this->fail_streak = 0;
-    this->error_until_ms = 0;
-    this->error_sticky = false;
-    this->failed_mask = 0;
-    this->queue_playlist = kLibrary;
+    MusicService::LoadSettings();
     this->scanFolders();
-    this->showLibrary();
+    //鳴っているプレイリストがあればそれを開く(アプリを閉じて開き直したとき)
+    int open = kLibrary;
+    if(MusicService::HasQueue()){
+        const int pl = MusicService::Playlist();
+        FixedString<PICO_STR_M> name;
+        this->playlistName(pl, name);
+        if((pl == kAll || (pl >= 0 && pl < this->folder_count)) && strcmp(name.c_str(), MusicService::PlaylistName()) == 0) open = pl;
+    }
+    if(open == kLibrary) this->showLibrary();
+    else this->showPlaylist(open);
+    this->seen_revision = MusicService::Revision();
     this->refreshPanel();
 }
 
 void MusicScene::onExit(){
-    //閉じたら止める(このアプリの外から止める手段が無いため)
-    SoundFunctions::MusicStop();
-    SoundFunctions::WavStop();
-    this->playing_kind = 0;
-
+    //曲は止めない(MusicService が鳴らし続ける)
     this->back_button = nullptr;
     this->play_all_button = nullptr;
     this->title_label = nullptr;
@@ -127,18 +94,15 @@ void MusicScene::onExit(){
 }
 
 void MusicScene::onUpdate(){
-    //曲の終わりを見張る
-    if(this->playing_kind != 0){
-        const bool wav = this->playing_kind == 2;
-        //曲の切り替わりで一瞬「鳴っていない」と見えた瞬間にスリープへ入らないよう、再生中(一時停止以外)は起こしておく
-        if(!(wav ? SoundFunctions::WavPaused() : SoundFunctions::MusicPaused())) PowerFunctions::KeepAwake();
-        if(!(wav ? SoundFunctions::WavPlaying() : SoundFunctions::MusicPlaying())){
-            this->advance(false);
-        }else if(!wav && this->queue.repeat() != PlayQueue::Repeat::One && !SoundFunctions::MusicPaused()){
-            //終わりの無い曲(L で戻る)は1周したら次へ
-            bool loops = false;
-            const uint32_t total = SoundFunctions::MusicTotalMs(&loops);
-            if(loops && total > 0 && SoundFunctions::MusicElapsedMs() >= total) this->advance(false);
+    //曲の終わりで次へ進むのは MusicService(BackgroundFunctions から毎フレーム)。ここは見せるだけ。
+    //この画面を開いている間は、鳴っていればスリープさせない(以前と同じ。閉じていれば、曲の切り替わりで眠ってもよい)
+    if(MusicService::Active() && !MusicService::Paused()) PowerFunctions::KeepAwake();
+    if(MusicService::Revision() != this->seen_revision){
+        this->seen_revision = MusicService::Revision();
+        this->refreshListColors();
+        if(this->viewIsQueue() && MusicService::Current() >= 0){
+            this->list->setSelectedIndex(MusicService::Current());
+            this->list->ensureVisible(MusicService::Current());
         }
     }
     this->refreshPanel();
@@ -150,7 +114,7 @@ bool MusicScene::onKey(const KeyInputFunctions::Event& ev){
         case KeyInputFunctions::Key::PlayPause: this->onPanelButton(MusicPlayerPanel::kPlay); return true;
         case KeyInputFunctions::Key::NextTrack: this->onPanelButton(MusicPlayerPanel::kNext); return true;
         case KeyInputFunctions::Key::PrevTrack: this->onPanelButton(MusicPlayerPanel::kPrev); return true;
-        case KeyInputFunctions::Key::Stop:      this->stopPlayback(); this->refreshPanel(); return true;
+        case KeyInputFunctions::Key::Stop:      MusicService::Stop(); this->refreshPanel(); return true;
         default: break;
     }
     if(!ev.isPlainChar()) return false;
@@ -213,7 +177,7 @@ int MusicScene::scanTracks(int playlist, Track* out){
         FsFile file;
         while(file.openNext(&dir, O_RDONLY)){
             char name[128];
-            const bool ok = file.getName(name, sizeof(name)) && !file.isDirectory() && (IsMml(name) || IsWav(name));
+            const bool ok = file.getName(name, sizeof(name)) && !file.isDirectory() && (MusicService::IsMml(name) || MusicService::IsWav(name));
             file.close();
             if(!ok) continue;
             Track t;
@@ -274,15 +238,15 @@ void MusicScene::showPlaylist(int playlist){
     for(int i = 0; i < this->view_count; i++){
         ScrollListTools::Item item;
         item.icon = IconID::Music;
-        DisplayName(this->view_tracks[i].name.c_str(), item.text);
+        MusicService::DisplayName(this->view_tracks[i].name.c_str(), item.text);
         this->list->add(item);
     }
     this->refreshListColors();
     this->refreshHeader();
 
     //鳴っている曲のプレイリストなら、その曲が見えるように
-    if(this->queue_playlist == playlist && this->playing_kind != 0){
-        const int cur = this->queue.current();
+    if(this->viewIsQueue() && MusicService::Current() >= 0){
+        const int cur = MusicService::Current();
         this->list->setSelectedIndex(cur);
         this->list->ensureVisible(cur);
     }
@@ -315,25 +279,40 @@ void MusicScene::refreshHeader(){
     this->title_label->setText(t.c_str());
 }
 
+bool MusicScene::viewIsQueue() const {
+    if(this->view == kLibrary || !MusicService::HasQueue()) return false;
+    if(MusicService::Playlist() != this->view) return false;
+    FixedString<PICO_STR_M> name;
+    this->playlistName(this->view, name);
+    return strcmp(name.c_str(), MusicService::PlaylistName()) == 0;
+}
+
 void MusicScene::refreshListColors(){
     if(!this->list) return;
-    const int cur = this->playing_kind != 0 ? this->queue.current() : -1;
+    const bool playing = MusicService::Active();
     if(this->view == kLibrary){
         //鳴っているプレイリストを緑に
         for(int i = 0; i <= this->folder_count; i++){
             ScrollListTools::Item* it = this->list->itemAt(i);
             if(!it) break;
             const int pl = i == 0 ? kAll : i - 1;
-            it->color = (this->playing_kind != 0 && pl == this->queue_playlist) ? (int8_t)PICO_DARKGREEN : (int8_t)-1;
+            FixedString<PICO_STR_M> name;
+            this->playlistName(pl, name);
+            const bool same = MusicService::HasQueue() && MusicService::Playlist() == pl
+                              && strcmp(name.c_str(), MusicService::PlaylistName()) == 0;
+            it->color = (playing && same) ? (int8_t)PICO_DARKGREEN : (int8_t)-1;
         }
     }else{
+        const bool same = this->viewIsQueue();
+        const int cur = playing ? MusicService::Current() : -1;
+        const uint64_t failed = MusicService::FailedMask();
         for(int i = 0; i < this->view_count; i++){
             ScrollListTools::Item* it = this->list->itemAt(i);
             if(!it) break;
             int8_t c = -1;
-            if(this->queue_playlist == this->view){
+            if(same){
                 if(i == cur) c = PICO_DARKGREEN;
-                else if(this->failed_mask & ((uint64_t)1 << i)) c = PICO_RED;
+                else if(failed & ((uint64_t)1 << i)) c = PICO_RED;
             }
             it->color = c;
         }
@@ -354,108 +333,22 @@ void MusicScene::onListSelect(int index, bool already_selected){
     this->startPlaylist(index);
 }
 
-// ================================================================ 再生
+// ================================================================ 再生(MusicService へ渡すだけ)
 
 void MusicScene::startPlaylist(int track){
     if(this->view == kLibrary || this->view_count == 0) return;
-    for(int i = 0; i < this->view_count; i++) this->queue_tracks[i] = this->view_tracks[i];
-    this->queue_playlist = this->view;
-    this->queue.reset(this->view_count);
-    this->fail_streak = 0;
-    this->failed_mask = 0;
-    //全曲再生(track<0)は並びの頭から(ミックスなら混ぜた並びの頭 = どれかの曲)。読めない曲は飛ばす
-    const bool all = track < 0;
-    if(!all) this->queue.start(track);
-    this->playTrack(this->queue.current(), all);
-}
-
-bool MusicScene::tryPlay(int track, FixedString<PICO_STR_256B>& error){
-    const Track& t = this->queue_tracks[track];
-    FixedString<PICO_PATH_LEN> path;
-    path.assign(PICO_Path::DIR::MUSIC);
-    if(t.folder >= 0){
-        path.append(this->folders[t.folder].c_str());
-        path.append("/");
-    }
-    path.append(t.name.c_str());
-
-    //MMLとWAVは同時には鳴らさない(このアプリで鳴らすのは1曲ずつ)
-    if(IsWav(t.name.c_str())){
-        const char* err = "";
-        if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err)){
-            error.assign(err && *err ? err : "WAVとして読めません");
-            return false;
-        }
-        SoundFunctions::MusicStop();
-        this->playing_kind = 2;
-        return true;
-    }
-    MmlResult r;
-    if(!SoundFunctions::MusicPlayFile(path.c_str(), &r)){
-        error.assign("");
-        if(r.line > 0) error.appendFormat("%d行%d列: ", r.line, r.col);
-        error.append(r.message.c_str());
-        return false;
-    }
-    SoundFunctions::WavStop();
-    this->playing_kind = 1;
-    return true;
-}
-
-void MusicScene::playTrack(int track, bool skip_on_error){
-    const int n = this->queue.count();
-    while(track >= 0){
-        FixedString<PICO_STR_256B> err;
-        if(this->tryPlay(track, err)){
-            this->fail_streak = 0;
-            this->finished = false;
-            this->error_sticky = false;
-            this->failed_mask &= ~((uint64_t)1 << track);
-            break;
-        }
-        LOG_APP_WARN("ミュージック: %s を読めません: %s", this->queue_tracks[track].name.c_str(), err.c_str());
-        this->failed_mask |= (uint64_t)1 << track;
-        this->error_track.assign(this->queue_tracks[track].name.c_str());
-        this->error_detail = err;
-        //選んだ曲なら止まって理由を出し続ける(飛ばすと何が悪かったのか読めない)
-        if(!skip_on_error){
-            this->stopPlayback();
-            this->error_sticky = true;
-            this->error_until_ms = 0;
-            break;
-        }
-        this->error_sticky = false;
-        this->error_until_ms = millis() + kErrorShowMs;
-        //全部読めなければ止まる
-        if(++this->fail_streak >= n){
-            this->stopPlayback();
-            this->error_sticky = true;
-            break;
-        }
-        track = this->queue.next(true);
-        if(track < 0){
-            this->stopPlayback();
-            this->finished = true;
-            break;
-        }
-    }
+    FixedString<PICO_STR_M> name;
+    this->playlistName(this->view, name);
+    MusicService::StartPlaylist(this->view_tracks, this->view_count, this->folders, this->folder_count,
+                                this->view, name.c_str(), track);
     this->refreshListColors();
-    if(this->view == this->queue_playlist && this->queue.current() >= 0){
-        this->list->setSelectedIndex(this->queue.current());
-        this->list->ensureVisible(this->queue.current());
-    }
-}
-
-bool MusicScene::errorShown() const {
-    if(this->error_sticky) return true;
-    return this->error_until_ms != 0 && (int32_t)(millis() - this->error_until_ms) < 0;
 }
 
 void MusicScene::showErrorDetail(){
-    if(!this->errorShown()) return;
+    if(!MusicService::ErrorShown()) return;
     //理由は欄に収まらないので全文をダイアログで(長ければダイアログの中でスクロールする)
     FixedString<PICO_STR_512B> text;
-    text.appendFormat("%s を読めません\n\n%s", this->error_track.c_str(), this->error_detail.c_str());
+    text.appendFormat("%s を読めません\n\n%s", MusicService::ErrorTrack(), MusicService::ErrorDetail());
     MsgDialog* dialog = new MsgDialog(text.c_str(), "", "閉じる");
     if(!dialog) return;
     dialog->setVisibleIcon(true);
@@ -465,81 +358,21 @@ void MusicScene::showErrorDetail(){
     dialog->setOnClosed([dialog](bool){ WidgetFunctions::DestroyLater(dialog); });
 }
 
-void MusicScene::advance(bool by_user){
-    if(this->queue.count() == 0) return;
-    const int next = this->queue.next(by_user);
-    if(next < 0){
-        //リピートしない: 最後まで鳴らした。次に再生を押したら頭から
-        this->stopPlayback();
-        this->finished = true;
-        this->refreshListColors();
-        return;
-    }
-    //曲の終わりで進んだ先が読めなければ飛ばす。「次へ」で選んだ曲なら止まって理由を出す
-    this->playTrack(next, !by_user);
-}
-
-void MusicScene::previous(){
-    if(this->queue.count() == 0) return;
-    //鳴らし始めて少し経っていれば今の曲の頭へ
-    if(this->playing_kind == 2 && SoundFunctions::WavPositionMs() > kRestartMs){
-        SoundFunctions::WavSeekMs(0);
-        return;
-    }
-    if(this->playing_kind == 1 && SoundFunctions::MusicElapsedMs() > kRestartMs){
-        this->playTrack(this->queue.current(), false);
-        return;
-    }
-    this->playTrack(this->queue.prev(), false);
-}
-
-void MusicScene::togglePlay(){
-    if(this->soundActive()){
-        if(this->playing_kind == 2) SoundFunctions::WavPause(!SoundFunctions::WavPaused());
-        else                        SoundFunctions::MusicPause(!SoundFunctions::MusicPaused());
-        return;
-    }
-    //止まっていれば: 前の順番があれば続き(最後まで行っていたら頭)から、無ければ見ているプレイリストを鳴らす
-    if(this->queue.count() > 0){
-        if(this->finished){
-            this->queue.start(this->queue.orderAt(0));
-            this->finished = false;
-        }
-        this->fail_streak = 0;
-        this->playTrack(this->queue.current(), false);
-        return;
-    }
-    if(this->view == kLibrary){
-        this->showPlaylist(kAll);
-    }
-    this->startPlaylist(-1);
-}
-
-void MusicScene::stopPlayback(){
-    SoundFunctions::MusicStop();
-    SoundFunctions::WavStop();
-    this->playing_kind = 0;
-}
-
-bool MusicScene::soundActive() const {
-    if(this->playing_kind == 2) return SoundFunctions::WavPlaying();
-    if(this->playing_kind == 1) return SoundFunctions::MusicPlaying();
-    return false;
-}
-
 void MusicScene::onPanelButton(int button){
     switch(button){
-        case MusicPlayerPanel::kPlay: this->togglePlay(); break;
-        case MusicPlayerPanel::kNext: if(this->queue.count() > 0){ this->fail_streak = 0; this->advance(true); } break;
-        case MusicPlayerPanel::kPrev: this->fail_streak = 0; this->previous(); break;
-        case MusicPlayerPanel::kShuffle:
-            this->queue.setShuffle(!this->queue.shuffle());
-            this->saveSettings();
+        case MusicPlayerPanel::kPlay:
+            //前の順番があれば続きから、無ければ見ているプレイリスト(ライブラリなら全部の曲)を鳴らす
+            if(MusicService::HasQueue()){
+                MusicService::TogglePlay();
+            }else{
+                if(this->view == kLibrary) this->showPlaylist(kAll);
+                this->startPlaylist(-1);
+            }
             break;
-        case MusicPlayerPanel::kRepeat:
-            this->queue.cycleRepeat();
-            this->saveSettings();
-            break;
+        case MusicPlayerPanel::kNext: MusicService::Next(); break;
+        case MusicPlayerPanel::kPrev: MusicService::Prev(); break;
+        case MusicPlayerPanel::kShuffle: MusicService::SetShuffle(!MusicService::Shuffle()); break;
+        case MusicPlayerPanel::kRepeat: MusicService::CycleRepeat(); break;
         default: break;
     }
     this->refreshPanel();
@@ -549,36 +382,37 @@ void MusicScene::onPanelButton(int button){
 
 void MusicScene::refreshPanel(){
     if(!this->panel) return;
-    const bool active = this->soundActive();
-    const bool wav = this->playing_kind == 2;
-    const bool paused = active && (wav ? SoundFunctions::WavPaused() : SoundFunctions::MusicPaused());
+    const bool active = MusicService::Active();
+    const bool wav = MusicService::PlayingKind() == MusicService::Kind::Wav;
+    const bool paused = MusicService::Paused();
     this->panel->setPlaying(active, paused);
-    this->panel->setModes(this->queue.shuffle(), (uint8_t)this->queue.repeat());
-    this->panel->setHasTracks(this->queue.count() > 0 || (this->view != kLibrary && this->view_count > 0)
+    this->panel->setModes(MusicService::Shuffle(), (uint8_t)MusicService::Repeat());
+    this->panel->setHasTracks(MusicService::HasQueue() || (this->view != kLibrary && this->view_count > 0)
                               || (this->view == kLibrary && OSData::SD_usable));
 
     //曲名と下の行
     FixedString<PICO_PATH_LEN> title;
     FixedString<PICO_STR_256B> sub;
     int8_t sub_color = PICO_DARKGREY;
-    const int cur = this->queue.current();
-    if(cur >= 0 && (active || this->finished || this->playing_kind == 0) && this->queue.count() > 0){
-        DisplayName(this->queue_tracks[cur].name.c_str(), title);
-        FixedString<PICO_STR_M> pl;
-        this->playlistName(this->queue_playlist, pl);
+    const int cur = MusicService::Current();
+    if(cur >= 0 && MusicService::HasQueue()){
+        MusicService::DisplayName(MusicService::TrackAt(cur)->name.c_str(), title);
+        const char* pl = MusicService::PlaylistName();
         if(active){
-            sub.appendFormat("%s · %d/%d", pl.c_str(), this->queue.position() + 1, this->queue.count());
+            sub.appendFormat("%s · %d/%d", pl, MusicService::Position() + 1, MusicService::Count());
             if(paused) sub.append(" 一時停止中");
             //音が出ない本体でも曲は進むので、画面で知らせる
             if(!SoundFunctions::IsAvailable()) sub.append("(音は出ません)");
-        }else if(this->finished){
-            sub.appendFormat("%s · 再生が終わりました", pl.c_str());
+        }else if(MusicService::Finished()){
+            sub.appendFormat("%s · 再生が終わりました", pl);
+        }else if(MusicService::Interrupted()){
+            sub.appendFormat("%s · 他のアプリが音を使ったため止まりました", pl);
         }else{
-            sub.appendFormat("%s · 停止中", pl.c_str());
+            sub.appendFormat("%s · 停止中", pl);
         }
     }else if(!OSData::SD_usable){
         title.assign("SDカードがありません");
-    }else if(this->view == kLibrary && this->folder_count == 0 && this->queue.count() == 0){
+    }else if(this->view == kLibrary && this->folder_count == 0){
         title.assign("曲が選ばれていません");
         sub.assign("/music/ に .mml か .wav を置くか、フォルダ(=プレイリスト)を作ってください");
     }else{
@@ -586,16 +420,14 @@ void MusicScene::refreshPanel(){
         sub.assign("曲をタップすると再生します");
     }
     //読めなかった理由。欄には頭しか入らないので、タップで全文を出せることを1行目に書く
-    if(this->errorShown()){
+    if(MusicService::ErrorShown()){
         FixedString<PICO_PATH_LEN> name;
-        DisplayName(this->error_track.c_str(), name);
+        MusicService::DisplayName(MusicService::ErrorTrack(), name);
         sub.assign("");
-        if(this->error_sticky) sub.append("読めません(タップで全文)\n");
+        if(MusicService::ErrorSticky()) sub.append("読めません(タップで全文)\n");
         else sub.appendFormat("%s を飛ばしました(タップで全文)\n", name.c_str());
-        sub.append(this->error_detail.c_str());
+        sub.append(MusicService::ErrorDetail());
         sub_color = PICO_RED;
-    }else if(this->error_until_ms != 0){
-        this->error_until_ms = 0;
     }
     FixedString<PICO_STR_M> t;
     t.assign(title.c_str());
@@ -609,34 +441,8 @@ void MusicScene::refreshPanel(){
             bool loops = false;
             const uint32_t total = SoundFunctions::MusicTotalMs(&loops);
             //1周で次へ進むときは、1周を曲の長さとして見せる
-            const bool endless = loops && this->queue.repeat() == PlayQueue::Repeat::One;
+            const bool endless = loops && MusicService::Repeat() == PlayQueue::Repeat::One;
             this->panel->setTime(SoundFunctions::MusicElapsedMs(), total, endless, false);
         }
     }
-}
-
-void MusicScene::loadSettings(){
-    bool shuffle = false;
-    PlayQueue::Repeat repeat = PlayQueue::Repeat::Off;
-    //無くてよい(無ければ既定: 順番通り・リピートしない)
-    if(OSData::SD_usable && OSData::SD.exists(PICO_Path::FILE::CFG::SYS_MUSIC_CFG)) PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_MUSIC_CFG, [&](const char* key, const char* value){
-        if(strcmp(key, "shuffle") == 0){
-            bool b;
-            if(PICO_Config::ConfigValue::AsBool(value, b)) shuffle = b;
-        }else if(strcmp(key, "repeat") == 0){
-            if(strcmp(value, "all") == 0) repeat = PlayQueue::Repeat::All;
-            else if(strcmp(value, "one") == 0) repeat = PlayQueue::Repeat::One;
-            else repeat = PlayQueue::Repeat::Off;
-        }
-    });
-    this->queue.setShuffle(shuffle);
-    this->queue.setRepeat(repeat);
-}
-
-void MusicScene::saveSettings(){
-    if(!OSData::SD_usable) return;
-    PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_MUSIC_CFG, "shuffle", PICO_Config::ConfigValue::FromBool(this->queue.shuffle()));
-    const PlayQueue::Repeat r = this->queue.repeat();
-    PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_MUSIC_CFG, "repeat",
-                          r == PlayQueue::Repeat::All ? "all" : (r == PlayQueue::Repeat::One ? "one" : "off"));
 }

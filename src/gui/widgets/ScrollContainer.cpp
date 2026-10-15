@@ -27,6 +27,7 @@ void ScrollContainer::causeOnPressStart(){
     sy = OSData::touchY - getScreenY();
 
     is_scrolling = false;
+    body_dragged = false;
     if(vertical_scroll && sx >= this->l_rect.w - SCROLL_L){
         is_scrolling = true;
     }
@@ -34,9 +35,8 @@ void ScrollContainer::causeOnPressStart(){
         is_scrolling = true;
     }
 
-    if(is_scrolling){
-        this->updateContentBounds();
-    }
+    // 本体のドラッグでもスクロールするので、常に範囲を求めておく
+    this->updateContentBounds();
 
     s_scroll_x = scroll_x;
     s_scroll_y = scroll_y;
@@ -45,21 +45,39 @@ void ScrollContainer::causeOnPressStart(){
 void ScrollContainer::causeOnPressMove(){
     Widget::causeOnPressMove();
 
-    if(!is_scrolling) return;
-
     int rx = OSData::touchX - getScreenX();
     int ry = OSData::touchY - getScreenY();
+
+    if(!is_scrolling && !body_dragged){
+        const int ddx = horizontal_scroll ? (rx - sx) : 0;
+        const int ddy = vertical_scroll ? (ry - sy) : 0;
+        if(abs(ddx) > kDragThreshold || abs(ddy) > kDragThreshold) body_dragged = true;
+        else return;
+    }
 
     int old_scroll_x = scroll_x;
     int old_scroll_y = scroll_y;
 
     if(horizontal_scroll){
-        int new_x = s_scroll_x + (rx - sx) * PICO_SCROLL_EX;
+        int new_x = s_scroll_x;
+        if(is_scrolling){
+            // スクロールバーのつまみが指に付いてくるよう、指の移動量を「中身の長さ/表示領域の長さ」倍する
+            const int view_w = this->l_rect.w - (vertical_scroll ? SCROLL_L : 0);
+            if(view_w > 0) new_x += (int)((float)(rx - sx) * (view_w + max_scroll_x) / view_w);
+        }else{
+            new_x -= (rx - sx); // 中身が指に付いてくる
+        }
         scroll_x = constrain(new_x, 0, max_scroll_x);
     }
 
     if(vertical_scroll){
-        int new_y = s_scroll_y + (ry - sy) * PICO_SCROLL_EX;
+        int new_y = s_scroll_y;
+        if(is_scrolling){
+            const int view_h = this->l_rect.h - (horizontal_scroll ? SCROLL_L : 0);
+            if(view_h > 0) new_y += (int)((float)(ry - sy) * (view_h + max_scroll_y) / view_h);
+        }else{
+            new_y -= (ry - sy);
+        }
         scroll_y = constrain(new_y, 0, max_scroll_y);
     }
 
@@ -100,17 +118,14 @@ void ScrollContainer::render() {
         const int bar_w = SCROLL_L;
         const int bar_h = g_rect.h - (horizontal_scroll ? SCROLL_L : 0);
 
-        // トラック枠
-        OSData::frame->drawRect(bar_x, bar_y, bar_w, bar_h, this->border_color);
-
-        // ツマミ
+        // ツマミ(TextViewと同じ細い薄灰の棒。トラック枠は描かない)
         if(max_scroll_y > 0){
             const int total_h = max_scroll_y + bar_h;
             int thumb_h = std::max(10, (bar_h * bar_h) / total_h);
             if(thumb_h > bar_h) thumb_h = bar_h;
             const int thumb_y = bar_y + (scroll_y * (bar_h - thumb_h)) / max_scroll_y;
 
-            OSData::frame->fillRect(bar_x + 2, thumb_y + 2, bar_w - 4, std::max(1, thumb_h - 4), this->border_color);
+            OSData::frame->fillRect(bar_x + bar_w - kBarThickness, thumb_y, kBarThickness, thumb_h, PICO_LIGHTGREY);
         }
     }
 
@@ -121,17 +136,14 @@ void ScrollContainer::render() {
         const int bar_w = g_rect.w - (vertical_scroll ? SCROLL_L : 0);
         const int bar_h = SCROLL_L;
 
-        // トラック枠
-        OSData::frame->drawRect(bar_x, bar_y, bar_w, bar_h, this->border_color);
-
-        // ツマミ
+        // ツマミ(縦と同じ見た目)
         if(max_scroll_x > 0){
             const int total_w = max_scroll_x + bar_w;
             int thumb_w = std::max(10, (bar_w * bar_w) / total_w);
             if(thumb_w > bar_w) thumb_w = bar_w;
             const int thumb_x = bar_x + (scroll_x * (bar_w - thumb_w)) / max_scroll_x;
 
-            OSData::frame->fillRect(thumb_x + 2, bar_y + 2, std::max(1, thumb_w - 4), bar_h - 4, this->border_color);
+            OSData::frame->fillRect(thumb_x, bar_y + bar_h - kBarThickness, thumb_w, kBarThickness, PICO_LIGHTGREY);
         }
     }
 

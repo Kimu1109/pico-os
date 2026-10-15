@@ -84,6 +84,7 @@ class MarkdownView : public Widget {
         static constexpr int kPadding       = 4;
         static constexpr int kBlockSpacing  = 6;
         static constexpr int SCROLL_L       = 15; // ScrollContainerと同じ見た目に揃える
+        static constexpr int kBarThickness  = 3;  // ツマミの太さ(TextViewと同じ)
 
         // ---------- リスト関連 ----------
         static constexpr int kMaxListLevels   = 6;  // ネストの最大段数（番号カウンタ配列のサイズ。引用の深さもこれで丸める）

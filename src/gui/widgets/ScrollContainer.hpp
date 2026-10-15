@@ -20,7 +20,9 @@ class ScrollContainer : public Widget, public IBorderColor {
         bool horizontal_scroll = false;
         bool vertical_scroll = true;
 
-        bool is_scrolling = false;
+        bool is_scrolling = false;   // 押し始めがスクロールバーの帯(つまみが指に付く比率で動かす)
+        bool body_dragged = false;   // 本体をつまんでしきい値を超えて動かした(中身が指に付く1:1で動かす)
+        constexpr static int kDragThreshold = 6; // px
 
         int max_scroll_x = 0;
         int max_scroll_y = 0;
@@ -28,6 +30,7 @@ class ScrollContainer : public Widget, public IBorderColor {
         void updateContentBounds();
 
         constexpr static int SCROLL_L = 15;
+        constexpr static int kBarThickness = 3; // ツマミの太さ(TextViewと同じ)
 
         // スクロール位置が変わったとき(ドラッグ・setScrollY()どちらも)に呼ぶ
         std::function<void()> on_scrolled = nullptr;

@@ -27,9 +27,15 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         const static int MARGIN = 2;
         const static int SCROLL_BAR_W = 15;
 
-        bool is_scrolling = false;
+        // ドラッグ: スクロールバーの帯は「つまみが指に付く」比率、
+        // 本体は「中身が指に付く」1:1でスクロールする
+        bool is_scrolling = false;   // 押し始めがスクロールバーの帯
+        bool dragged = false;        // 本体をつまんでしきい値を超えて動かした
+        int pending_index = -1;      // 本体を押した位置の項目(動かさず離したときに選ぶ)
         int ref_touch_y = 0;
         int ref_scroll_y = 0;
+        static constexpr int kDragThreshold = 6; // px
+        int itemIndexAt(int touch_y) const;
 
         int font_h = 0;
 

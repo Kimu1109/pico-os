@@ -1384,10 +1384,8 @@ void MarkdownView::causeOnPressStart() {
     moved_beyond_threshold = false;
 
     is_scrolling = (press_start_x >= this->l_rect.w - SCROLL_L);
-    if (is_scrolling) {
-        sy = press_start_y;
-        s_scroll_y = scroll_y;
-    }
+    sy = press_start_y;
+    s_scroll_y = scroll_y;
 }
 
 void MarkdownView::causeOnPressMove() {
@@ -1399,9 +1397,15 @@ void MarkdownView::causeOnPressMove() {
         moved_beyond_threshold = true;
     }
 
-    if (!is_scrolling) return;
-
-    int new_y = s_scroll_y + ((float)(ry - sy) / (float)this->l_rect.h) * max_scroll_y;
+    int new_y;
+    if (is_scrolling) {
+        // スクロールバーの帯: つまみが指に付いてくる
+        new_y = s_scroll_y + ((float)(ry - sy) / (float)this->l_rect.h) * max_scroll_y;
+    } else {
+        // 本体: しきい値を超えて動かしたら、中身が指に付いてくる(リンクのタップとは両立)
+        if (!moved_beyond_threshold) return;
+        new_y = s_scroll_y - (ry - sy);
+    }
     scroll_y = constrain(new_y, 0, max_scroll_y);
 
     unsigned long now = millis();
@@ -1482,15 +1486,13 @@ void MarkdownView::render() {
     const int bar_w = SCROLL_L;
     const int bar_h = g_rect.h;
 
-    OSData::frame->drawRect(bar_x, bar_y, bar_w, bar_h, PICO_BLACK);
-
     if (max_scroll_y > 0) {
         const int total_h = max_scroll_y + bar_h;
         int thumb_h = std::max(10, (bar_h * bar_h) / total_h);
         if (thumb_h > bar_h) thumb_h = bar_h;
         const int thumb_y = bar_y + (scroll_y * (bar_h - thumb_h)) / max_scroll_y;
 
-        OSData::frame->fillRect(bar_x + 2, thumb_y + 2, bar_w - 4, std::max(1, thumb_h - 4), PICO_BLACK);
+        OSData::frame->fillRect(bar_x + bar_w - kBarThickness, thumb_y, kBarThickness, thumb_h, PICO_LIGHTGREY);
     }
 
     renderDecorations();

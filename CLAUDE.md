@@ -639,7 +639,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   読み直しで化ける・gzipの末尾の大きさ・途中で切れる/取り消す/Doneの後に取り消す・前の残りを消す)、`firmware_tool_test.py`(偽の`firmware.bin`から作る・断る場合・**作ったものを`firmware_test`に読ませる**・
   pushのWAIT/OK/DONE/ERRを偽の本体で)、実機ファームのビルド(`board_build.filesystem_size`でLittleFSが`0x1024F000`〜、`picoOTA`がリンクされる、本物の`firmware.bin`を`fwpack`して`verify`)、
   PCビルドの`--tap`/`--shot`(SDから選ぶ→確認→書く→再起動→通知、`firmware_tool.py push`→本体で確認→DONE→再起動)。
-  **実機では未確認**(LittleFSへの1.4MBの書き込みの時間・ローダーでの書き換え・再起動後の通知・Wi-Fiの待ち受け・RP2350でのPicoOTA)。**最初の実機の確認ではBOOTSELで戻せる用意をしておくこと**。
+  **実機でSDからもWi-Fiからも更新できることを利用者が確認した(2026-10-16)**。書き込みの時間は未計測。壊れたファームはBOOTSELで戻す。
 
 ### スクリーンショット (`src/functions/Screenshot_Functions` / ステータスバー右端のカメラ) (2026-10-02)
 

@@ -17,6 +17,7 @@
 #                   旧形式からの取り込み・追加/更新/上限/削除・接続できたものを先頭へ(自動接続の順番)・
 #                   ON/OFFの保存・番号ごとの暗号化
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定(アプリストアの登録/更新/削除も)
+#   home_test     … ホーム画面のウィジェット(並び・詰め方・home.cfg・ウィジェットのタップ・TODOの控え・予定)
 #   app_repo_test … アプリストアの配布物の読み取り(store/App_Repo、APP_REPO.md)。カタログ/ファイル一覧の行・
 #                   名前とパスの検査・版の比較・権限・Ed25519の署名(Pythonの署名をMonocypherで確かめる)
 #   bmp_test      … BMPの読み書き(gui/icons/Bmp_Codec)。1/4/8/16/24/32bpp・上下の並び・窓・OSのパレットへ寄せる/番号のまま/
@@ -378,6 +379,7 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/app_test.cpp" \
     "$ROOT/src/functions/App_Functions.cpp" \
     "$ROOT/src/gui/widgets/systems/AppGrid.cpp" \
+    "$ROOT/src/home/Home_Layout.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/Label.cpp" \
@@ -393,6 +395,33 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== app_test ====="
 run_or_die "$OUT/app_test"
+
+# --- ホーム画面のウィジェット(並び・詰め方・home.cfg・AppGridのウィジェット・TODOの控え・予定) ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/home_test.cpp" \
+    "$ROOT/src/home/Home_Layout.cpp" \
+    "$ROOT/src/home/Home_Agenda.cpp" \
+    "$ROOT/src/todo/Todo_Cache.cpp" \
+    "$ROOT/src/todo/Todoist_Proto.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/calendar/Ical.cpp" \
+    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/gui/widgets/systems/AppGrid.cpp" \
+    "$ROOT/src/gui/widgets/Widget.cpp" \
+    "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
+    "$ROOT/src/gui/widgets/Label.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
+    "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
+    "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
+    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/functions/Mem_Functions.cpp" \
+    -o "$OUT/home_test"
+
+echo ""
+echo "===== home_test ====="
+run_or_die "$OUT/home_test"
 
 # --- アプリストアの配布物の読み取り(Monocypherの署名の確認を含む) ---
 compile_or_die gcc -std=gnu99 -g -fsanitize=address,undefined \
@@ -505,6 +534,7 @@ run_or_die "$OUT/ical_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/calendar_scene_test.cpp" \
     "$ROOT/src/gui/scenes/CalendarScene.cpp" \
+    "$ROOT/src/home/Home_Agenda.cpp" \
     "$ROOT/src/calendar/Calendar_Reminders.cpp" \
     "$ROOT/src/functions/Notification_Functions.cpp" \
     "$ROOT/src/gui/widgets/apps/MonthGrid.cpp" \
@@ -651,6 +681,7 @@ run_or_die "$OUT/xml_reader_test"
 compile_or_die g++ $CXXFLAGS $INCLUDES \
     "$ROOT/script/host_test/todo_test.cpp" \
     "$ROOT/src/gui/scenes/TodoScene.cpp" \
+    "$ROOT/src/todo/Todo_Cache.cpp" \
     "$ROOT/src/todo/Todo_Reminders.cpp" \
     "$ROOT/src/todo/Todoist_Client.cpp" \
     "$ROOT/src/todo/Todoist_Proto.cpp" \

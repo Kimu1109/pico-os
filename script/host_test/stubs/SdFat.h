@@ -193,9 +193,14 @@ struct SdFat {
         if(it != HostSd::files.end()){
             f.data_ = &it->second;
             f.path_ = path;
-        }else if(HostSd::IsDir(path)){
-            f.is_dir_ = true;
-            f.path_ = path;
+        }else{
+            //フォルダは末尾の / があっても開ける(本物のSdFatと同じ)
+            std::string dir = path;
+            while(dir.size() > 1 && dir.back() == '/') dir.pop_back();
+            if(HostSd::IsDir(dir)){
+                f.is_dir_ = true;
+                f.path_ = dir;
+            }
         }
         return f;
     }

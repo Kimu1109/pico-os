@@ -6,6 +6,7 @@
 #include "functions/Widget_Functions.hpp"
 #include "functions/Network_Functions.hpp"
 #include "functions/Log_Functions.hpp"
+#include "todo/Todo_Cache.hpp"
 #include "todo/Todo_Reminders.hpp"
 
 #include <climits>
@@ -456,6 +457,10 @@ void TodoScene::onUpdate(){
     if(this->client.tasksRevision() != this->synced_tasks_rev && this->client.loaded()){
         this->synced_tasks_rev = this->client.tasksRevision();
         this->syncReminders();
+        //ホーム画面のTODOウィジェットへ(今日までの分だけ覚える)
+        TodoCache::Store(&this->client.taskAt(0), this->client.taskCount(),
+                         this->client.loadedView() == TodoistClient::View::Today && !this->client.truncated(),
+                         TodayDay(), (int64_t)time(nullptr));
     }
 
     //日付が変わる/期限を過ぎると見た目(今日/明日・赤)が変わるので、時々見直す

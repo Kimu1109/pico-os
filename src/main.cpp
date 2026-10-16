@@ -39,6 +39,7 @@
 #include "gui/widgets/systems/Statusbar.hpp"
 #include "gui/widgets/systems/PerfOverlay.hpp"
 #include "gui/scenes/HomeScene.hpp"
+#include "home/Home_Widgets.hpp"
 #include "functions/DeviceKey_Functions.hpp"
 
 #include "OS_Data.hpp"
@@ -134,6 +135,8 @@ void setup() {
 
     //ランチャに並べるアプリを登録する(一覧は App_List.cpp)
     AppFunctions::Setup();
+    //ホーム画面のウィジェット(/sys/home.cfg)。並びはアプリの並び(launcher.cfg)に重ねるので AppFunctions::Setup() より後
+    HomeWidgets::Setup();
 
     //通知(予約の読み込みとトースト)。予約の送り主を登録簿と突き合わせるのでAppFunctionsより後、
     //トーストを全オーバーレイの一番上に置くのでキーボードより後

@@ -1,4 +1,5 @@
 #include "gui/scenes/CalendarScene.hpp"
+#include "home/Home_Agenda.hpp"
 #include "calendar/Calendar_Reminders.hpp"
 #include "functions/Power_Functions.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
@@ -647,6 +648,8 @@ void CalendarScene::onUpdate(){
 }
 
 void CalendarScene::onExit(){
+    //.ics を取り直したかもしれないので、ホーム画面の予定は次に開いたとき読み直す
+    HomeAgenda::Invalidate();
     //onUpdate()が来なくなるので取得は打ち切る(手元の .ics はそのまま)。
     //戻ってきたら「更新」で取り直せる
     this->sync.cancel();

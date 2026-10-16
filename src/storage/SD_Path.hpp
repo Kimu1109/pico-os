@@ -52,6 +52,8 @@ namespace PICO_Path {
 
         // 通知の予約(1行1件のタブ区切り)。NotificationFunctions参照
         constexpr const char* SYS_NOTIFY_RULES = "/sys/notify_rules.tsv";
+        // ホーム画面のTODOウィジェットに出す、最後に取ったTodoistの今日のタスク。TodoCache参照
+        constexpr const char* SYS_TODO_CACHE = "/sys/todo_cache.tsv";
 
         // アプリストア(store/App_Store、APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
         // インストールしたアプリのファイル一覧(installed/<id>.tsv)・取得中の置き場(staging/)
@@ -97,6 +99,8 @@ namespace PICO_Path {
             constexpr const char* SYS_LAUNCHER_CFG = "/sys/launcher.cfg";
             // バックグラウンドの仕事の入り切り("chat = on|off" / "lua:<アプリのフォルダ名> = on|off")。BackgroundFunctions参照
             constexpr const char* SYS_BACKGROUND_CFG = "/sys/background.cfg";
+            // ホーム画面のウィジェット("widget1 = clock,2x1,0" ...)。HomeLayout参照
+            constexpr const char* SYS_HOME_CFG = "/sys/home.cfg";
         }
 
         namespace IME {

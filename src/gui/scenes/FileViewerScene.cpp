@@ -1,6 +1,7 @@
 #include "gui/scenes/FileViewerScene.hpp"
 #include "gui/scenes/TextEditorScene.hpp"
 #include "gui/scenes/VideoScene.hpp"
+#include "gui/scenes/FirmwareScene.hpp"
 #include "gui/widgets/Label.hpp"
 #include "functions/Font_Functions.hpp"
 #include "functions/Error_Functions.hpp"
@@ -79,6 +80,11 @@ void FileViewerScene::onEnter(){
     //動画は動画アプリへ置き換わる(「戻る」で元の画面へ戻る)
     if(OSData::SD_usable && HasExtension(this->path.c_str(), ".pvid")){
         SceneFunctions::Change(new VideoScene(this->path.c_str()));
+        return;
+    }
+    //ファームの更新ファイルは「本体の更新」へ置き換わる(確かめてから書き込むかを聞く)
+    if(OSData::SD_usable && HasExtension(this->path.c_str(), ".pfw")){
+        SceneFunctions::Change(new FirmwareScene(this->path.c_str()));
         return;
     }
     this->media = Media::None;

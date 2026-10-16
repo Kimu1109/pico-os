@@ -32,7 +32,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      # ファームの版(通し番号 = git rev-list --count HEAD。script/pio_firmware.py)を正しく数えるため、履歴を全部取る
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # ツールチェイン・arduino-pico・LovyanGFX 等で数百MBあるので丸ごとキャッシュする。
       # platformio.ini(lib_depsの版)かこのファイル(プラットフォームの版)が変わると作り直す
@@ -55,6 +58,11 @@ jobs:
       - name: ビルドする
         run: pio run -e rpipico2w
 
+      # SDに置いて更新する更新ファイル(FIRMWARE_UPDATE.md)。秘密鍵はCIに置かないので署名なし
+      # (本体は /sys/debug.cfg の fw-allow-unsigned = true のときだけ、確認のうえで受け付ける)
+      - name: 更新ファイル(署名なし)を作る
+        run: python3 script/firmware_tool.py pack --unsigned --bin .pio/build/rpipico2w/firmware.bin --out .pio/build/rpipico2w/firmware.pfw
+
       - name: ファームを保存する(動作確認用)
         uses: actions/upload-artifact@v4
         with:
@@ -62,4 +70,5 @@ jobs:
           path: |
             .pio/build/rpipico2w/firmware.uf2
             .pio/build/rpipico2w/firmware.elf
+            .pio/build/rpipico2w/firmware.pfw
           retention-days: 7

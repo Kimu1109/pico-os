@@ -46,9 +46,11 @@ framework = arduino
 lib_deps =
     lovyan03/LovyanGFX@1.2.28
     https://github.com/PaulStoffregen/XPT2046_Touchscreen.git#v1.4
+board_build.filesystem_size = 1728k     ; ファームの更新の置き場(下の「ファームの更新」)
+extra_scripts = pre:script/pio_firmware.py, post:script/pio_firmware_targets.py
 monitor_speed = 115200
 ```
-モニタはUTF-8。
+モニタはUTF-8。`extra_scripts`はファームの版(`git rev-list --count HEAD`等)を埋め込み、`-t fwpack`/`-t fwpush`を足す。
 
 **LovyanGFXの版はこの`lib_deps`が唯一の情報源**で、`pc/CMakeLists.txt`がこの行を読んで同じタグを取得する。
 範囲指定(`^1.2.26`等)だとPlatformIOが実際に落とす版が確定せずPCビルドと食い違うため、**完全固定にしてある**
@@ -80,6 +82,7 @@ src/
   store/                     アプリストア。配布物の読み取りと署名の確認(App_Repo)・通信とインストール(App_Store)・焼き込みの公開鍵(App_Repo_Keys)。下記「アプリストア」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索 / Iso_Flow: 流れの場(フローフィールド))。Luaの`pico.iso`。下記「ブロック」「2.5Dエンジンのタワーディフェンス向けの道具」参照
+  firmware/                  ファームの更新(.pfw)の見出しと署名(Fw_Image)・受け取りの流れ(Fw_Update)・置き場(Fw_Store: 実機はLittleFS+PicoOTA)・版(Fw_Version)・焼き込みの公開鍵(Fw_Keys)。下記「ファームの更新」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   video/                     動画(.pvid)の読み取り(Pvid_Player)。下記「動画(.pvid)」参照
   sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
@@ -96,6 +99,8 @@ script/                       開発補助スクリプト(アイコン生成/SKK
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   build_app_repo.py           アプリストアの配布物を作る(鍵の生成・署名・目録だけの署名(sign)とCIでの組み立て(assemble)・確認。標準ライブラリのみ。APP_REPO.md)
+  firmware_tool.py            ファームの更新ファイル(.pfw)を作る・確かめる・Wi-Fiで本体へ送る/鍵を作る(標準ライブラリのみ。FIRMWARE_UPDATE.md)
+  pio_firmware.py / pio_firmware_targets.py  PlatformIOの追加スクリプト(ファームの版の埋め込み / fwpack・fwpushのターゲット)
   midi2mml.py                 MIDI(SMF)をpico-os MMLへ変換(標準ライブラリのみ。MUSIC_FORMAT.md「MIDIからの変換」)
   spotify_auth.py             SpotifyのWeb APIの最初のトークンをPCのブラウザで取り(PKCE、戻り先は http://127.0.0.1:8888/callback)、
                               SDの lua/apps/Spotify/spotify_auth.json へ書く(標準ライブラリのみ。`picoos spotify-auth`)。
@@ -125,6 +130,7 @@ CHAT_PROTOCOL.md               チャットサーバとの通信仕様(下記「
 APP_REPO.md                    アプリストアの配布物の形式(下記「アプリストア」参照)
 MUSIC_FORMAT.md                曲データ形式(pico-os MML)の仕様(下記「曲データ」参照)
 VIDEO_FORMAT.md                動画形式(.pvid)の仕様(下記「動画(.pvid)」参照)
+FIRMWARE_UPDATE.md             ファームの更新(SD/Wi-Fi)の使い方・更新ファイル(.pfw)とTCPの取り決め(下記「ファームの更新」参照)
 server/chat/                   自前のチャットサーバ(chat_server.py、標準ライブラリのみ)+ Webクライアント + Raspberry Pi/Let's Encryptの設置手順(README.md)
 ```
 `include/`, `test/` はPlatformIO標準雛形ディレクトリで未使用(README以外中身なし)。
@@ -175,6 +181,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | PowerMenu_Functions | 電源メニュー(スリープ / 再起動 / ロック)。ステータスバーの長押しと設定アプリの「電源」。下記「時刻の手動設定・電源メニュー」参照 |
 | Timer_Functions | タイマーとストップウォッチ(ラップ)。時計アプリを閉じても動く。下記「BMP・予定の通知・…・画面ロック」参照 |
 | Lock_Functions | 画面ロック(PIN)。同上 |
+| Firmware_Functions | ファームの更新(SDの`.pfw` / PCからWi-Fiで)のOSへのつなぎ。下記「ファームの更新」参照 |
 | Background_Functions | バックグラウンドの仕事(画面を閉じても動くもの)の登録簿と入り切り。登録は`Background_List.cpp`。下記「バックグラウンド実行の枠組み」参照 |
 
 ### 起動・ループ (`main.cpp`)
@@ -602,6 +609,37 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
   1つの測定は命令数の上限(1回200万命令)とLuaの予算に収まる量にしてある(表への追加を1万件にしたらPCでLuaのメモリが足りなかった)。
 - 検証: PCビルドで`hw info/mem/help`、`hw trap/buswrite/hang`→次の起動で`/crash/crash_NNNN.txt`と通知、「実機チェック」の「全部」(HTTPSはこの環境では
   出口のゲートウェイで証明書が差し替わるため失敗するのが正しい)、`PICOOS_VERIFY_LCD=1`で食い違い0、ホストテスト全部。**実機では未確認**(実機ビルドもこの環境ではできない)。
+
+### ファームの更新 (`src/firmware/` / `Firmware_Functions` / `FirmwareScene` / `script/firmware_tool.py`) (2026-10-16)
+
+使い方・形式・TCPの取り決めは`FIRMWARE_UPDATE.md`。利用者と決めた方針(2026-10-16): arduino-pico標準のOTA(PicoOTA+内蔵フラッシュのLittleFS、自動ロールバック無し=壊れたらBOOTSEL)/
+LittleFSは1728KB / 今回の経路はSDとPCからのWi-Fi(Webから取るのは後) / 独自の見出し+gzip / **常に署名必須、鍵はファーム専用でPCにだけ置き、焼き込みの鍵だけを信頼**(SDの鍵は読まない。
+SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-unsigned`(それでも毎回本体で確認)/ 古い版は確認のうえで許す / 更新後に通知し置き場を片付ける。
+
+- **書き換えはarduino-picoのOTAのローダー**(`framework-arduinopico/ota/ota.c`。どのファームにもフラッシュの先頭12KBに入り、アプリは`0x10003000`から)。起動のたびにLittleFSの`otacommand.bin`を探し、
+  あれば中身(gzipなら`uzlib`で解きながら)を4KBずつ写し(同じページは飛ばす)、終わると指示のブロックを消して再起動する。**途中で電源が落ちても次の起動で続きから**。本体は「中身を置いて指示を書く」だけ(`PicoOTA`)。
+  `__FS_START__`/`__FS_END__`はイメージの`0x2FF0`/`0x2FF4`にあり、`firmware_tool.py`はそこから読んで見出しへ写す(今のファームと違えば本体が断る=割り当てを変えた版はUSBで書く)。
+- **流れ(`Fw_Update`、描画・SD・ソケット・時計に依存しない)**: 見出し192バイト → `Fw_Image::Parse/Check`・署名(`VerifyBuiltin`。全部0の鍵は飛ばす)→ 確認(署名を確かめられない/古い/同じ版、
+  またはSDから選んだとき)→ 置き場へ書きながらSHA-256 → 閉じて照合 → **読み直して**SHA-256・gzipの頭`1f 8b 08`・末尾の大きさ=見出しの`image_bytes`(アプリの領域に収まると確かめた値。
+  ローダーは末尾の大きさだけ書くので、ここが違うとLittleFSを壊しうる)→ 控え(`pico_fw.note`)とローダーへの指示 → Done。失敗・取り消しでは置き場を全部消す。受け取り元(`FwSource`)・置き場(`FwStore`)は差し込み。
+- **OSへのつなぎ(`Firmware_Functions`)**: SDのファイル / TCPの待ち受け(実機は`WiFiServer`、PCはPOSIXのソケット、Webは無し。画面で[受け取る]を押している間だけ、同時に1本、20秒無通信で切る)、
+  電池(給電されていなくて30%未満なら断る)、中身を書き始める前に音を止める(LittleFSの書き込みは`idleOtherCore()`で2コア目を止めるため)、Doneから1.5秒後に`PowerMenuFunctions::RequestReboot()`
+  (電源メニューの再起動と同じ後片付け)。`FwUpdate`は更新の間だけ`new`(約4.6KB)。起動時の`Setup()`(通知の後)が控えを読み、今の版と同じなら「更新しました」、違えば「更新できませんでした」を通知して置き場を消す。
+  毎回LittleFSをマウントする(初めては自動でフォーマット。置き場は更新専用なので消えて困るものは無い)。
+- **版(`Fw_Version`)**: `script/pio_firmware.py`(pre)が`$BUILD_DIR/pico_build_info/Pico_Build_Info.h`へ通し番号・短いハッシュ(手元の変更で`+`)・HEADのコミットの日時(UTC)を、変わったときだけ書く
+  (`Fw_Version.cpp`だけが`__has_include`で読むので、毎回の全ビルドにならない)。同じ値を`PICOOS-BUILD;...`の文字列としてファームに置き、`firmware_tool.py`がそれを探して見出しへ写す。
+  PC/Web/ホストテストは`#0 (dev)`。**CIの`firmware-build.yml`は`fetch-depth: 0`**(浅いクローンだと通し番号が小さくなる)にし、署名なしの`firmware.pfw`も成果物に入れた。
+- **画面(`FirmwareScene`、ランチャの「本体の更新」。ファイルアプリで`.pfw`を開くと`FileViewerScene`から置き換わる)**: 今の版・鍵の登録の有無・状態・進み具合、[SDから選ぶ][受け取る][戻る/やめる]。
+  確認は`MsgDialog`(確認が要らなくなったら閉じる)。更新の途中・待ち受け中・再起動待ちは`keepForeground`。離れるとやめる(再起動待ちのときだけはそのまま=電源メニューの再起動の`onExit()`)。
+  ダイアログを開いたフレームより前に下の画面を書き換える(半透明のダイアログの下は描き直されないため)。
+- **鍵**: `src/firmware/Fw_Keys.hpp`の`kBuiltin`は今は全部0(未登録)。利用者が`firmware_tool.py keygen`して1行を入れ、USBで1回書き込む必要がある(秘密鍵は`~/.pico-os/firmware.key`)。
+  Python側の署名は`build_app_repo.py`のEd25519(RFC 8032)を使い回す。
+- PC/Web: 置き場は`ota_emu/`(SDのルートの隣、`PICOOS_OTA_DIR`。`.gitignore`済み)、本体は書き換えない。ポートは`PICOOS_FW_PORT`。
+- 検証: `firmware_test`(run.sh の core。見出しの検査10通り・署名(信頼/なし/知らない鍵/印と署名の食い違い/署名の後の書き換え)・版の確認・1バイトずつ途切れながら・置き場への書き込みの失敗・
+  読み直しで化ける・gzipの末尾の大きさ・途中で切れる/取り消す/Doneの後に取り消す・前の残りを消す)、`firmware_tool_test.py`(偽の`firmware.bin`から作る・断る場合・**作ったものを`firmware_test`に読ませる**・
+  pushのWAIT/OK/DONE/ERRを偽の本体で)、実機ファームのビルド(`board_build.filesystem_size`でLittleFSが`0x1024F000`〜、`picoOTA`がリンクされる、本物の`firmware.bin`を`fwpack`して`verify`)、
+  PCビルドの`--tap`/`--shot`(SDから選ぶ→確認→書く→再起動→通知、`firmware_tool.py push`→本体で確認→DONE→再起動)。
+  **実機でSDからもWi-Fiからも更新できることを利用者が確認した(2026-10-16)**。書き込みの時間は未計測。壊れたファームはBOOTSELで戻す。
 
 ### スクリーンショット (`src/functions/Screenshot_Functions` / ステータスバー右端のカメラ) (2026-10-02)
 

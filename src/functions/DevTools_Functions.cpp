@@ -16,6 +16,7 @@ namespace {
     bool lua_debugger = false;
     bool watchdog = false;
     bool hw_test = false;
+    bool fw_allow_unsigned = false;
     uint32_t watchdog_ms = CrashDumpFunctions::kDefaultWatchdogMs;
     uint32_t last_log_ms = 0;
 
@@ -37,7 +38,7 @@ namespace {
 }
 
 void DevToolsFunctions::Setup(){
-    perf_overlay = perf_log = lua_debugger = watchdog = hw_test = false;
+    perf_overlay = perf_log = lua_debugger = watchdog = hw_test = fw_allow_unsigned = false;
     watchdog_ms = CrashDumpFunctions::kDefaultWatchdogMs;
 
     if(OSData::SD_usable && OSData::SD.exists(PICO_Path::FILE::CFG::SYS_DEBUG_CFG)){
@@ -47,6 +48,7 @@ void DevToolsFunctions::Setup(){
             else if(strcmp(key, "lua-debugger") == 0) ReadBool(key, value, lua_debugger);
             else if(strcmp(key, "watchdog") == 0) ReadBool(key, value, watchdog);
             else if(strcmp(key, "hw-test") == 0) ReadBool(key, value, hw_test);
+            else if(strcmp(key, "fw-allow-unsigned") == 0) ReadBool(key, value, fw_allow_unsigned);
             else if(strcmp(key, "watchdog-ms") == 0){
                 int v = 0;
                 if(PICO_Config::ConfigValue::AsInt(value, v) && v >= 1000 && v <= 8300) watchdog_ms = (uint32_t)v;
@@ -74,6 +76,7 @@ bool DevToolsFunctions::PerfLog(){ return perf_log; }
 bool DevToolsFunctions::LuaDebuggerEnabled(){ return lua_debugger; }
 bool DevToolsFunctions::Watchdog(){ return watchdog; }
 bool DevToolsFunctions::HwTest(){ return hw_test; }
+bool DevToolsFunctions::FwAllowUnsigned(){ return fw_allow_unsigned; }
 
 void DevToolsFunctions::SetPerfOverlay(bool on){
     perf_overlay = on;

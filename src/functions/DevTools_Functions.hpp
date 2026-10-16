@@ -10,6 +10,8 @@
 //   watchdog     = true|false   loop()が watchdog-ms 戻らなければ再起動し、次の起動でダンプを書く
 //   watchdog-ms  = 1000〜8300   既定8000
 //   hw-test      = true|false   実機の確認用のシリアルのコマンド(hw ...。HwTest_Functions.hpp)。ファイルだけで切り替える
+//   fw-allow-unsigned = true|false  署名の無い(確かめられない)ファームの更新ファイルも受け付ける(毎回本体で確認する)。
+//                                ファイルだけで切り替える(FIRMWARE_UPDATE.md)
 // 設定アプリの「その他」タブから切り替えられる(SetXxx()がその場で反映してdebug.cfgへ書く)。
 namespace DevToolsFunctions {
     // SD・ログ・CrashDumpFunctions::Setup()より後で呼ぶ
@@ -22,6 +24,7 @@ namespace DevToolsFunctions {
     bool LuaDebuggerEnabled();
     bool Watchdog();
     bool HwTest();
+    bool FwAllowUnsigned();
 
     void SetPerfOverlay(bool on);
     void SetPerfLog(bool on);

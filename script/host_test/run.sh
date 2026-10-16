@@ -18,6 +18,9 @@
 #                   ON/OFFの保存・番号ごとの暗号化
 #   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定(アプリストアの登録/更新/削除も)
 #   home_test     … ホーム画面のウィジェット(並び・詰め方・home.cfg・ウィジェットのタップ・TODOの控え・予定)
+#   firmware_test … ファームの更新(firmware/Fw_Image・Fw_Update)。見出しの検査・署名(信頼/なし/知らない鍵/壊れた)・
+#                   版の確認・置き場への書き込みと読み直し・gzipの末尾の大きさ・途中で切れる/化ける/取り消す。
+#                   firmware_tool_test(Python)が script/firmware_tool.py で作ったものも読ませる
 #   app_repo_test … アプリストアの配布物の読み取り(store/App_Repo、APP_REPO.md)。カタログ/ファイル一覧の行・
 #                   名前とパスの検査・版の比較・権限・Ed25519の署名(Pythonの署名をMonocypherで確かめる)
 #   bmp_test      … BMPの読み書き(gui/icons/Bmp_Codec)。1/4/8/16/24/32bpp・上下の並び・窓・OSのパレットへ寄せる/番号のまま/
@@ -437,6 +440,30 @@ compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/monocypher/src" \
 echo ""
 echo "===== app_repo_test ====="
 run_or_die "$OUT/app_repo_test"
+
+# --- ファームの更新(firmware/Fw_Image・Fw_Update、FIRMWARE_UPDATE.md)。Monocypherは上のものを使う ---
+compile_or_die g++ $CXXFLAGS $INCLUDES -I "$ROOT/lib/monocypher/src" \
+    "$ROOT/script/host_test/firmware_test.cpp" \
+    "$ROOT/src/firmware/Fw_Image.cpp" \
+    "$ROOT/src/firmware/Fw_Update.cpp" \
+    "$OUT/store_monocypher.o" "$OUT/store_monocypher_ed25519.o" \
+    -o "$OUT/firmware_test"
+
+echo ""
+echo "===== firmware_test ====="
+run_or_die "$OUT/firmware_test"
+
+# script/firmware_tool.py(作る・送る)。作ったものを firmware_test に読ませて見出しの並び・署名を突き合わせる
+echo ""
+echo "===== firmware_tool_test ====="
+rc=0
+timeout -k 10 "$RUN_TIMEOUT_SEC" python3 "$ROOT/script/host_test/firmware_tool_test.py" "$OUT/firmware_test" "$OUT/firmware_tool_work" || rc=$?
+if [ "$rc" -ne 0 ]; then
+    if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+        echo "[FATAL] firmware_tool_test が${RUN_TIMEOUT_SEC}秒を超えて応答しませんでした" >&2
+    fi
+    exit "$rc"
+fi
 
 # --- BMPの読み書き ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

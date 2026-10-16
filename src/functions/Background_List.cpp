@@ -2,6 +2,7 @@
 #include "functions/Scene_Functions.hpp"
 #include "sound/Music_Service.hpp"
 #include "chat/Chat_Watch.hpp"
+#include "todo/Todo_Watch.hpp"
 #include "lua/LuaBackground.hpp"
 #include "lua/LuaAppScanner.hpp"
 #include "gui/scenes/LuaScene.hpp"
@@ -22,6 +23,13 @@ void BackgroundFunctions::Setup(){
         return cur && strcmp(cur->getName(), "Chat") == 0;
     };
     Add(ChatWatch::Service(), true);
+
+    //ホーム画面のTODOウィジェットの取り直し(ウィジェットを置いている間だけ。TODOアプリが開いている間は画面に任せる)
+    TodoWatch::foreground_query = [](){
+        const Scene* cur = SceneFunctions::Current();
+        return cur && strcmp(cur->getName(), "Todo") == 0;
+    };
+    Add(TodoWatch::Service(), true);
 
     //Luaアプリのバックグラウンドスクリプト(app.cfg の background)
     LuaBackground::foreground_script = []() -> const char* {

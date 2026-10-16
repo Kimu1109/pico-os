@@ -3,6 +3,9 @@
 #include <functional>
 #include "gui/widgets/Widget.hpp"
 #include "functions/App_Functions.hpp"
+#include "home/Home_Layout.hpp"
+
+class HomeWidget;
 
 // 登録済みアプリをタイル状に並べるランチャ用ウィジェット。
 //
@@ -14,6 +17,10 @@
 //     Icon+Labelの親ウィジェットとして作ると子がタップを奪ってしまう
 //
 // 画面に入りきらない数のアプリはページ送りで見せる。
+//
+// ホーム画面のウィジェット(時計・音楽・予定・TODO)もアプリのタイルと同じ並びに混ざる
+// (HomeLayout が並びとマス目への詰め方を持ち、描き方は HomeWidget)。ウィジェットも
+// 子ウィジェットを作らず、マス目の矩形を渡して直接描かせる。
 class AppGrid : public Widget {
     private:
         // 2列にしているのは、3列(タイル幅72px=日本語4文字)だと大半のアプリ名が
@@ -35,25 +42,43 @@ class AppGrid : public Widget {
 
         int page_ = 0;
 
-        // 押下中のタイルのランチャ上の位置(AppFunctions::VisibleAt()に渡すもの。-1=なし)。
-        // 押し込み表示と、離した時にどれを起動するかの記録を兼ねる
-        int pressed_pos_ = -1;
+        // ---- 並べた結果(HomeLayout::Compute)。並び・大きさ・行数が変わったときだけ作り直す ----
+        mutable HomeLayout::Item items_[HomeLayout::kMaxItems];
+        mutable int item_count_ = 0;
+        mutable int pages_ = 1;
+        mutable uint32_t layout_sig_ = 0;
+        // 合わせて作り直す(並び・隠した印・登録簿・ウィジェット・行数のどれかが変わっていたら)
+        void ensureLayout() const;
+        uint32_t layoutSignature() const;
+        // 今のページの、ローカル座標にある項目(items_ の番号。無ければ-1)
+        int hitItem(int local_x, int local_y) const;
+        Rect itemRect(const HomeLayout::Item& it) const;
+        Rect itemScreenRect(const HomeLayout::Item& it) const;
+        HomeWidget* widgetOf(const HomeLayout::Item& it) const;
+
+        // ウィジェットの見た目の印(stamp)。変わったものだけを描き直す
+        uint32_t stamps_[HomeLayout::kMaxItems] = {};
+        uint32_t stamps_page_sig_ = 0;
+
+        // 押している項目(items_ の番号、-1=なし)と、ウィジェットの中で押しているボタン(-1=ボタンの外)
+        int pressed_item_ = -1;
+        int pressed_button_ = -1;
         // 押し始めた時刻と、長押しを知らせ済みか(知らせたら離しても起動しない)
         unsigned long press_ms_ = 0;
         bool long_pressed_ = false;
-
-        // ローカル座標にあるタイルのランチャ上の位置。外/空きなら-1
-        int hitPos(int local_x, int local_y) const;
+        // 長押しした場所(項目の外なら並びの最後へ足す)
+        bool long_on_empty_ = false;
 
         std::function<void(int app_index)> on_launch_ = nullptr;
 
-        // キー/コントローラーで選んでいるタイル(ページ内スロット)。枠はフォーカスの枠が出ている間だけ描く
-        int8_t focus_slot_ = 0;
-        // 今のページに並んでいるタイルの数
-        int tilesOnPage() const;
+        // キー/コントローラーで選んでいる項目(items_ の番号)。枠はフォーカスの枠が出ている間だけ描く
+        int focus_item_ = 0;
+        // 今のページの最初の項目(無ければ-1)
+        int firstItemOnPage(int page) const;
+        void clampFocus();
+        void activate(int item);
 
         int tileW() const;
-        int rowsPerPage() const;
 
         // 名前をタイル幅に合わせて最大kNameLines行で中央揃え描画する。
         // DrawPlain()は折り返さないので、UTF-8の文字境界で切って自前で行を分ける
@@ -69,34 +94,34 @@ class AppGrid : public Widget {
             this->l_rect = {x, y, w, h};
         }
 
-        // ページ内スロット番号(0始まり、行優先)からタイルのローカル矩形を得る。
-        // render()と当たり判定(hitTile)の両方がこれを使う。
+        // ページ内スロット番号(0始まり、行優先)から1マスのローカル矩形を得る。
         // テストから配置と当たり判定の整合を確かめられるよう公開している
         Rect tileRect(int slot) const;
+        // マス目(列,行,幅,高さ)のローカル矩形
+        Rect cellRect(int col, int row, int w, int h) const;
 
         WidgetType getWidgetType() const override { return WidgetType::AppGrid; }
         bool focusableByDefault() const override { return true; }
         bool drawsOwnFocus() const override { return true; }
-        // 矢印/十字キーでタイルを選び(左右の端ではページを送る)、決定で起動する
+        // 矢印/十字キーで項目を選び(左右の端ではページを送る)、決定で起動する
         bool onFocusKey(FocusKey key) override;
-        int getFocusSlot() const { return focus_slot_; }
-        Rect focusRect() const override {
-            const Rect t = tileRect(focus_slot_);
-            return {(int16_t)(getScreenX() + t.x), (int16_t)(getScreenY() + t.y), t.w, t.h};
-        }
+        Rect focusRect() const override;
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
+        // 今のページにウィジェットがあれば、毎フレーム見た目の変化を見張る
+        bool wantsFrameUpdate() const override;
 
         void render() override;
         void causeOnPressStart() override;
         void causeOnPressEnd() override;
 
-        // 1ページに並ぶタイル数
+        // 1ページのマスの数・行の数
         int tilesPerPage() const;
-        // 総ページ数(アプリが0件でも1を返す)
+        int rowsPerPage() const;
+        // 総ページ数(何も無くても1を返す)
         int pageCount() const;
 
         //Widget基底にはサイズ変更が無いので、GridContainerと同じく自前で持つ。
-        //1ページに入るタイル数が変わるため、ページ位置を丸め直す
+        //1ページに入るマスの数が変わるため、ページ位置を丸め直す
         void setW(int w);
         void setH(int h);
 
@@ -106,17 +131,26 @@ class AppGrid : public Widget {
         bool prevPage();
 
         // ローカル座標にあるタイルのアプリindex(登録簿の番号)を返す。
-        // タイルの外、または空きスロットなら-1
+        // アプリのタイルの外(ウィジェット・空き)なら-1
         int hitTile(int local_x, int local_y) const;
 
-        // タイルを押したまま long_ms 経ったら、そのアプリindexを1回だけ返す(それ以外は-1)。
-        // 返したタイルは離しても起動しない。ランチャ(HomeScene)が毎フレーム呼んで並べ替えのメニューを出す
-        int takeLongPress(unsigned long now_ms, unsigned long long_ms);
-        // キー/コントローラーで選んでいるタイルのアプリindex(無ければ-1)
+        // 長押しされた項目
+        struct LongPress {
+            bool on_item = false;               // 偽なら空いた所(足すなら並びの最後へ)
+            HomeLayout::ItemType type = HomeLayout::ItemType::App;
+            int index = -1;                     // App: 登録簿の番号 / Widget: HomeLayout::placed の番号
+        };
+        // 押したまま long_ms 経ったら1回だけ真を返す。返した項目は離しても起動しない。
+        // ランチャ(HomeScene)が毎フレーム呼んでメニューを出す
+        bool takeLongPress(unsigned long now_ms, unsigned long long_ms, LongPress& out);
+        // キー/コントローラーで選んでいる項目(無ければ偽)
+        bool focusedItem(HomeLayout::ItemType& type, int& index) const;
+        // キー/コントローラーで選んでいるタイルのアプリindex(アプリでなければ-1)
         int focusedApp() const;
-        // そのアプリが見えるページへ移り、選んでいるタイルにする(並べ替えの後に追いかける)
-        void showApp(int app_index);
-        // 並び・隠したアプリが変わった後に呼ぶ(ページと選んでいるタイルを丸め直して描き直す)
+        // その項目が見えるページへ移り、選んでいる項目にする(並べ替えの後に追いかける)
+        void showItem(HomeLayout::ItemType type, int index);
+        void showApp(int app_index){ showItem(HomeLayout::ItemType::App, app_index); }
+        // 並び・隠したアプリ・ウィジェットが変わった後に呼ぶ(ページと選んでいる項目を丸め直して描き直す)
         void layoutChanged();
 
         void setOnLaunch(std::function<void(int app_index)> callback){

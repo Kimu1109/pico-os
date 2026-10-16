@@ -7,6 +7,7 @@
 #include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
 #include "util/ScopedClip.hpp"
+#include "home/Home_Widget.hpp"
 
 #include <cstring>
 #include <Arduino.h>
@@ -27,76 +28,146 @@ int AppGrid::tilesPerPage() const {
     return rowsPerPage() * kCols;
 }
 
-int AppGrid::pageCount() const {
-    const int per_page = tilesPerPage();
-    const int count = AppFunctions::VisibleCount();
-    if (count <= 0) return 1;
-    return (count + per_page - 1) / per_page;
+uint32_t AppGrid::layoutSignature() const {
+    uint32_t h = 2166136261u;
+    auto mix = [&h](uint32_t v){ h = (h ^ v) * 16777619u; };
+    mix((uint32_t)rowsPerPage());
+    mix(HomeLayout::Revision());
+    mix((uint32_t)AppFunctions::Count());
+    mix(AppFunctions::launcher_hidden);
+    for (int i = 0; i < AppFunctions::Count(); i++) mix((uint8_t)AppFunctions::launcher_order[i]);
+    return h | 1u; //0は「作っていない」の印
 }
 
-Rect AppGrid::tileRect(int slot) const {
-    const int col = slot % kCols;
-    const int row = slot / kCols;
-    const int w = tileW();
+void AppGrid::ensureLayout() const {
+    const uint32_t sig = layoutSignature();
+    if (sig == layout_sig_) return;
+    item_count_ = HomeLayout::Compute(rowsPerPage(), items_, HomeLayout::kMaxItems, &pages_);
+    layout_sig_ = sig;
+}
+
+int AppGrid::pageCount() const {
+    ensureLayout();
+    return pages_;
+}
+
+Rect AppGrid::cellRect(int col, int row, int w, int h) const {
+    const int tw = tileW();
     return {
-        (int16_t)(kPadding + col * (w + kGap)),
+        (int16_t)(kPadding + col * (tw + kGap)),
         (int16_t)(kPadding + row * (kTileH + kGap)),
-        (int16_t)w,
-        (int16_t)kTileH
+        (int16_t)(w * tw + (w - 1) * kGap),
+        (int16_t)(h * kTileH + (h - 1) * kGap)
     };
 }
 
-int AppGrid::hitPos(int local_x, int local_y) const {
-    const int per_page = tilesPerPage();
+Rect AppGrid::tileRect(int slot) const {
+    return cellRect(slot % kCols, slot / kCols, 1, 1);
+}
 
-    for (int slot = 0; slot < per_page; slot++) {
-        const Rect t = tileRect(slot);
+Rect AppGrid::itemRect(const HomeLayout::Item& it) const {
+    return cellRect(it.col, it.row, it.w, it.h);
+}
+
+Rect AppGrid::itemScreenRect(const HomeLayout::Item& it) const {
+    Rect r = itemRect(it);
+    r.x = (int16_t)(r.x + this->getScreenX());
+    r.y = (int16_t)(r.y + this->getScreenY());
+    return r;
+}
+
+HomeWidget* AppGrid::widgetOf(const HomeLayout::Item& it) const {
+    if (it.type != HomeLayout::ItemType::Widget) return nullptr;
+    if (it.index < 0 || it.index >= HomeLayout::placed_count) return nullptr;
+    return HomeLayout::Impl(HomeLayout::placed[it.index].kind);
+}
+
+int AppGrid::hitItem(int local_x, int local_y) const {
+    ensureLayout();
+    for (int i = 0; i < item_count_; i++) {
+        if (items_[i].page != page_) continue;
+        const Rect t = itemRect(items_[i]);
         if (local_x < t.x || local_x >= t.x + t.w) continue;
         if (local_y < t.y || local_y >= t.y + t.h) continue;
-
-        const int pos = page_ * per_page + slot;
-        return (pos < AppFunctions::VisibleCount()) ? pos : -1;
+        return i;
     }
     return -1;
 }
 
 int AppGrid::hitTile(int local_x, int local_y) const {
-    return AppFunctions::VisibleAt(hitPos(local_x, local_y));
+    const int i = hitItem(local_x, local_y);
+    if (i < 0 || items_[i].type != HomeLayout::ItemType::App) return -1;
+    return items_[i].index;
 }
 
-int AppGrid::takeLongPress(unsigned long now_ms, unsigned long long_ms) {
-    if (pressed_pos_ < 0 || long_pressed_ || !this->is_pressing) return -1;
-    if (now_ms - press_ms_ < long_ms) return -1;
+int AppGrid::firstItemOnPage(int page) const {
+    ensureLayout();
+    for (int i = 0; i < item_count_; i++) if (items_[i].page == page) return i;
+    return -1;
+}
+
+void AppGrid::clampFocus() {
+    ensureLayout();
+    if (focus_item_ >= 0 && focus_item_ < item_count_ && items_[focus_item_].page == page_) return;
+    const int f = firstItemOnPage(page_);
+    focus_item_ = f < 0 ? 0 : f;
+}
+
+bool AppGrid::takeLongPress(unsigned long now_ms, unsigned long long_ms, LongPress& out) {
+    if (!this->is_pressing || long_pressed_) return false;
+    if (now_ms - press_ms_ < long_ms) return false;
     long_pressed_ = true;
+    out = LongPress{};
+    if (pressed_item_ >= 0 && pressed_item_ < item_count_) {
+        out.on_item = true;
+        out.type = items_[pressed_item_].type;
+        out.index = items_[pressed_item_].index;
+    }
     //押し込みの表示を戻す(メニューが開くので、押したままの見た目にしない)
-    const int index = AppFunctions::VisibleAt(pressed_pos_);
-    pressed_pos_ = -1;
+    pressed_item_ = -1;
+    pressed_button_ = -1;
     this->needsRender();
-    return index;
+    return true;
+}
+
+bool AppGrid::focusedItem(HomeLayout::ItemType& type, int& index) const {
+    ensureLayout();
+    int f = focus_item_;
+    if (f < 0 || f >= item_count_ || items_[f].page != page_) f = firstItemOnPage(page_);
+    if (f < 0) return false;
+    type = items_[f].type;
+    index = items_[f].index;
+    return true;
 }
 
 int AppGrid::focusedApp() const {
-    if (tilesOnPage() == 0) return -1;
-    int slot = focus_slot_ < tilesOnPage() ? focus_slot_ : tilesOnPage() - 1;
-    return AppFunctions::VisibleAt(page_ * tilesPerPage() + slot);
+    HomeLayout::ItemType type;
+    int index;
+    if (!focusedItem(type, index) || type != HomeLayout::ItemType::App) return -1;
+    return index;
 }
 
-void AppGrid::showApp(int app_index) {
-    const int pos = AppFunctions::VisiblePosition(app_index);
-    if (pos < 0) { layoutChanged(); return; }
-    const int per_page = tilesPerPage();
-    page_ = pos / per_page;
-    focus_slot_ = (int8_t)(pos % per_page);
-    pressed_pos_ = -1;
-    this->needsRender();
+void AppGrid::showItem(HomeLayout::ItemType type, int index) {
+    ensureLayout();
+    for (int i = 0; i < item_count_; i++) {
+        if (items_[i].type != type || items_[i].index != index) continue;
+        page_ = items_[i].page;
+        focus_item_ = i;
+        pressed_item_ = -1;
+        this->needsRender();
+        return;
+    }
+    layoutChanged();
 }
 
 void AppGrid::layoutChanged() {
-    if (page_ >= pageCount()) page_ = pageCount() - 1;
+    layout_sig_ = 0;
+    ensureLayout();
+    if (page_ >= pages_) page_ = pages_ - 1;
     if (page_ < 0) page_ = 0;
-    const int count = tilesOnPage();
-    if (focus_slot_ >= count) focus_slot_ = (int8_t)(count > 0 ? count - 1 : 0);
-    pressed_pos_ = -1;
+    clampFocus();
+    pressed_item_ = -1;
+    pressed_button_ = -1;
     this->needsRender();
 }
 
@@ -108,7 +179,7 @@ void AppGrid::setW(int w) {
 
 void AppGrid::setH(int h) {
     this->l_rect.h = (int16_t)h;
-    //高さが変わると1ページのタイル数が変わるので、範囲外になったページを戻す
+    //高さが変わると1ページの行数が変わるので、範囲外になったページを戻す
     if (page_ >= pageCount()) {
         page_ = pageCount() - 1;
     }
@@ -122,7 +193,9 @@ void AppGrid::setPage(int page) {
     if (page == page_) return;
 
     page_ = page;
-    pressed_pos_ = -1;
+    pressed_item_ = -1;
+    pressed_button_ = -1;
+    clampFocus();
     this->needsRender();
 }
 
@@ -243,40 +316,88 @@ void AppGrid::drawIcon(const AppEntry& entry, int x, int y, int color) {
     IconRender::DrawIcon(entry.icon, kIconSize, x, y, color);
 }
 
+bool AppGrid::wantsFrameUpdate() const {
+    ensureLayout();
+    for (int i = 0; i < item_count_; i++) {
+        if (items_[i].page == page_ && items_[i].type == HomeLayout::ItemType::Widget) return true;
+    }
+    return false;
+}
+
 void AppGrid::render() {
     if (!this->visible) return;
-    if (!this->needs_redraw) return;
+    ensureLayout();
+    if (page_ >= pages_) page_ = pages_ - 1;
 
     const Rect g = this->getScreenRect();
+
+    //合成の外の回: ウィジェットの見た目が変わっていたら、その矩形だけを描き直してもらう
+    //(合成の中ではMarkDirty()が効かないので、変化はここでだけ見る)
+    if (!PICO_GFX::isDirtyDeactivates) {
+        const uint32_t page_sig = layout_sig_ ^ ((uint32_t)page_ * 2654435761u);
+        const bool fresh = (page_sig != stamps_page_sig_);
+        stamps_page_sig_ = page_sig;
+        for (int i = 0; i < item_count_; i++) {
+            if (items_[i].page != page_) continue;
+            HomeWidget* w = widgetOf(items_[i]);
+            if (!w) continue;
+            const uint32_t st = w->stamp(items_[i].w, items_[i].h);
+            if (st == stamps_[i] && !fresh) continue;
+            stamps_[i] = st;
+            if (!fresh) PICO_GFX::MarkDirty(itemScreenRect(items_[i]));
+        }
+        if (fresh) this->needsRender();
+    }
+
+    if (!this->needs_redraw) return;
+    //合成の外の回は描いても捨てられる(dirtyはneedsRender()で積んである)
+    if (PICO_GFX::render_suppressed) {
+        markdirty(g);
+        this->needs_redraw = false;
+        return;
+    }
+
+    //今のクリップ(合成ではdirty矩形)にかからない項目は描かない
+    int32_t cx = 0, cy = 0, cw = 0, ch = 0;
+    OSData::frame->getClipRect(&cx, &cy, &cw, &ch);
+    const Rect clip = (cw > 0 && ch > 0) ? Rect{(int16_t)cx, (int16_t)cy, (int16_t)cw, (int16_t)ch} : g;
+
     OSData::frame->fillRect(g.x, g.y, g.w, g.h, this->background_color);
 
-    const int per_page = tilesPerPage();
-    const int first = page_ * per_page;
+    for (int i = 0; i < item_count_; i++) {
+        const HomeLayout::Item& it = items_[i];
+        if (it.page != page_) continue;
+        const Rect r = itemScreenRect(it);
+        if (!r.intersects(clip)) continue;
 
-    for (int slot = 0; slot < per_page; slot++) {
-        const AppEntry* entry = AppFunctions::Get(AppFunctions::VisibleAt(first + slot));
-        if (!entry) break; // 以降は空きスロット
-
-        const Rect t = tileRect(slot);
-        const int tx = g.x + t.x;
-        const int ty = g.y + t.y;
-
-        const bool is_pressed = (first + slot == pressed_pos_);
-        const int fore_color = is_pressed ? PICO_WHITE : PICO_BLACK;
-
-        //押下中のタイルは背景を敷いて押し込みを表す
-        if (is_pressed) {
-            OSData::frame->fillRect(tx, ty, t.w, t.h, PICO_BLACK);
+        if (it.type == HomeLayout::ItemType::App) {
+            const AppEntry* entry = AppFunctions::Get(it.index);
+            if (!entry) continue;
+            const bool is_pressed = (i == pressed_item_);
+            const int fore_color = is_pressed ? PICO_WHITE : PICO_BLACK;
+            //押下中のタイルは背景を敷いて押し込みを表す
+            if (is_pressed) OSData::frame->fillRect(r.x, r.y, r.w, r.h, PICO_BLACK);
+            drawIcon(*entry, r.x + (r.w - kIconPx) / 2, r.y + kPadding, fore_color);
+            drawName(entry->name.c_str(), r.x, r.y + kPadding + kIconPx + kLabelGap, r.w, fore_color);
+        } else {
+            //ウィジェット: 角の丸い枠の中を、種類ごとの描き方に任せる。ボタンの外を押している間は枠を太く
+            const bool body_pressed = (i == pressed_item_ && pressed_button_ < 0);
+            OSData::frame->drawRoundRect(r.x, r.y, r.w, r.h, 6, body_pressed ? PICO_BLACK : PICO_LIGHTGREY);
+            if (body_pressed) OSData::frame->drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 5, PICO_BLACK);
+            HomeWidget* w = widgetOf(it);
+            ScopedClip sc(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
+            if (w) {
+                w->draw(r, it.w, it.h, (i == pressed_item_) ? pressed_button_ : -1);
+            } else if (it.index >= 0 && it.index < HomeLayout::placed_count) {
+                const char* name = HomeLayout::Info(HomeLayout::placed[it.index].kind).name;
+                drawName(name, r.x, r.y + r.h / 2 - 8, r.w, PICO_DARKGREY);
+            }
         }
 
-        drawIcon(*entry, tx + (t.w - kIconPx) / 2, ty + kPadding, fore_color);
-
-        drawName(entry->name.c_str(), tx, ty + kPadding + kIconPx + kLabelGap, t.w, fore_color);
-
-        //キー/コントローラーで選んでいるタイル
-        if (slot == focus_slot_ && FocusFunctions::ring_visible && FocusFunctions::focused == this) {
+        //キー/コントローラーで選んでいる項目
+        if (i == focus_item_ && FocusFunctions::ring_visible && FocusFunctions::focused == this) {
             for (int k = 0; k < FocusFunctions::kRingWidth; k++) {
-                OSData::frame->drawRect(tx + k, ty + k, t.w - 2 * k, t.h - 2 * k, FocusFunctions::kRingColor);
+                OSData::frame->drawRect(r.x + k, r.y + k, r.w - 2 * k, r.h - 2 * k, FocusFunctions::kRingColor);
             }
         }
     }
@@ -288,12 +409,17 @@ void AppGrid::render() {
 void AppGrid::causeOnPressStart() {
     Widget::causeOnPressStart();
 
-    pressed_pos_ = hitPos(OSData::touchX - this->getScreenX(),
-                          OSData::touchY - this->getScreenY());
+    pressed_item_ = hitItem(OSData::touchX - this->getScreenX(),
+                            OSData::touchY - this->getScreenY());
+    pressed_button_ = -1;
     press_ms_ = millis();
     long_pressed_ = false;
-    if (pressed_pos_ >= 0) {
-        focus_slot_ = (int8_t)(pressed_pos_ - page_ * tilesPerPage());
+    if (pressed_item_ >= 0) {
+        const HomeLayout::Item& it = items_[pressed_item_];
+        if (HomeWidget* w = widgetOf(it)) {
+            pressed_button_ = w->buttonAt(itemScreenRect(it), it.w, it.h, OSData::touchX, OSData::touchY);
+        }
+        focus_item_ = pressed_item_;
         this->needsRender();
     }
 }
@@ -301,58 +427,110 @@ void AppGrid::causeOnPressStart() {
 void AppGrid::causeOnPressEnd() {
     Widget::causeOnPressEnd();
 
-    const int index = AppFunctions::VisibleAt(pressed_pos_);
-    pressed_pos_ = -1;
+    const int item = pressed_item_;
+    const int button = pressed_button_;
+    pressed_item_ = -1;
+    pressed_button_ = -1;
     this->needsRender();
-    //長押しでメニューを出したタイルは起動しない
-    if (long_pressed_) return;
+    //長押しでメニューを出した項目は起動しない
+    if (long_pressed_ || item < 0 || item >= item_count_) return;
 
-    //起動するとシーンの入れ替えが要求されるので、自分の状態を戻してから呼ぶ
-    if (index >= 0 && on_launch_) on_launch_(index);
+    const HomeLayout::Item& it = items_[item];
+    if (it.type == HomeLayout::ItemType::App) {
+        //起動するとシーンの入れ替えが要求されるので、自分の状態を戻してから呼ぶ
+        if (on_launch_) on_launch_(it.index);
+        return;
+    }
+    HomeWidget* w = widgetOf(it);
+    if (!w) return;
+    const Rect r = itemScreenRect(it);
+    if (button >= 0) {
+        //押したボタンの上で離したときだけ(指をずらしてやめられるように)
+        if (w->buttonAt(r, it.w, it.h, OSData::touchX, OSData::touchY) == button) w->press(button);
+        return;
+    }
+    if (OSData::touchX >= r.x && OSData::touchX < r.x + r.w && OSData::touchY >= r.y && OSData::touchY < r.y + r.h) {
+        activate(item);
+    }
 }
 
-int AppGrid::tilesOnPage() const {
-    const int per_page = tilesPerPage();
-    const int n = AppFunctions::VisibleCount() - page_ * per_page;
-    return n < 0 ? 0 : (n > per_page ? per_page : n);
+void AppGrid::activate(int item) {
+    if (item < 0 || item >= item_count_) return;
+    const HomeLayout::Item& it = items_[item];
+    if (it.type == HomeLayout::ItemType::App) {
+        if (on_launch_) on_launch_(it.index);
+        return;
+    }
+    HomeWidget* w = widgetOf(it);
+    const char* app = w ? w->appName() : nullptr;
+    if (!app || !on_launch_) return;
+    for (int i = 0; i < AppFunctions::Count(); i++) {
+        const AppEntry* e = AppFunctions::Get(i);
+        if (e && e->name == app) { on_launch_(i); return; }
+    }
+}
+
+Rect AppGrid::focusRect() const {
+    ensureLayout();
+    int f = focus_item_;
+    if (f < 0 || f >= item_count_ || items_[f].page != page_) f = firstItemOnPage(page_);
+    if (f < 0) return this->getScreenRect();
+    return itemScreenRect(items_[f]);
 }
 
 bool AppGrid::onFocusKey(FocusKey key) {
-    int count = tilesOnPage();
-    if (count == 0) return false;
-    int slot = focus_slot_ < count ? focus_slot_ : count - 1;
-    const int row = slot / kCols;
-    const int col = slot % kCols;
+    ensureLayout();
+    clampFocus();
+    if (item_count_ == 0 || focus_item_ < 0 || focus_item_ >= item_count_ || items_[focus_item_].page != page_) return false;
 
+    int dx = 0, dy = 0;
     switch (key) {
-        case FocusKey::Activate:
-            if (on_launch_) on_launch_(AppFunctions::VisibleAt(page_ * tilesPerPage() + slot));
-            return true;
-        case FocusKey::Up:
-            if (slot - kCols < 0) return false;
-            slot -= kCols;
-            break;
-        case FocusKey::Down:
-            if (slot + kCols < count) slot += kCols;
-            else if ((count - 1) / kCols > row) slot = count - 1; //下の行が右まで埋まっていない
-            else return false;
-            break;
-        case FocusKey::Left:
-            if (col > 0) { slot--; break; }
-            if (!prevPage()) return false;
-            slot = row * kCols + kCols - 1;
-            break;
-        case FocusKey::Right:
-            if (col < kCols - 1 && slot + 1 < count) { slot++; break; }
-            if (!nextPage()) return false;
-            slot = row * kCols;
-            break;
-        default:
-            return false;
+        case FocusKey::Activate: activate(focus_item_); return true;
+        case FocusKey::Up:    dy = -1; break;
+        case FocusKey::Down:  dy = 1; break;
+        case FocusKey::Left:  dx = -1; break;
+        case FocusKey::Right: dx = 1; break;
+        default: return false;
     }
-    count = tilesOnPage();
-    if (slot >= count) slot = count - 1;
-    focus_slot_ = (int8_t)slot;
+
+    const Rect cur = itemRect(items_[focus_item_]);
+    const int ccx = cur.x + cur.w / 2, ccy = cur.y + cur.h / 2;
+
+    //その向きにある項目のうち「向きの距離 + 横ずれ×3」が一番小さいもの(範囲が重なれば横ずれは0)
+    int best = -1;
+    long best_score = 0;
+    for (int i = 0; i < item_count_; i++) {
+        if (i == focus_item_ || items_[i].page != page_) continue;
+        const Rect r = itemRect(items_[i]);
+        const int ox = r.x + r.w / 2 - ccx;
+        const int oy = r.y + r.h / 2 - ccy;
+        const int along = dx ? ox * dx : oy * dy;
+        if (along <= 0) continue;
+        int perp;
+        if (dx) perp = (r.y < cur.y + cur.h && cur.y < r.y + r.h) ? 0 : (oy < 0 ? -oy : oy);
+        else    perp = (r.x < cur.x + cur.w && cur.x < r.x + r.w) ? 0 : (ox < 0 ? -ox : ox);
+        const long score = along + 3L * perp;
+        if (best < 0 || score < best_score) { best = i; best_score = score; }
+    }
+    if (best >= 0) {
+        focus_item_ = best;
+        this->needsRender();
+        return true;
+    }
+    if (dx == 0) return false;
+
+    //左右の端ではページを送り、同じ高さに近い項目(右へなら左端、左へなら右端)を選ぶ
+    if (dx > 0 ? !nextPage() : !prevPage()) return false;
+    best = -1;
+    for (int i = 0; i < item_count_; i++) {
+        if (items_[i].page != page_) continue;
+        const Rect r = itemRect(items_[i]);
+        const int oy = r.y + r.h / 2 - ccy;
+        const int side = dx > 0 ? r.x : -(r.x + r.w);
+        const long score = 1000L * (oy < 0 ? -oy : oy) + side;
+        if (best < 0 || score < best_score) { best = i; best_score = score; }
+    }
+    if (best >= 0) focus_item_ = best;
     this->needsRender();
     return true;
 }

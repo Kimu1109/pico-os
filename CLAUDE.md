@@ -75,7 +75,8 @@ src/
   ime/                       SKK方式かな漢字変換辞書エンジン
   calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
   chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client) / 閉じている間の未読の見張り(Chat_Watch)。下記「チャット」「バックグラウンド実行の枠組み」参照
-  todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders)。下記「TODOアプリ」参照
+  todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders) / ホーム画面の控え(Todo_Cache)と取り直し(Todo_Watch)。下記「TODOアプリ」参照
+  home/                      ホーム画面(ランチャ)のウィジェット。並びと詰め方・home.cfg(Home_Layout)・描き方(Home_Widget / Home_Widgets)・予定の拾い方(Home_Agenda)。下記「ホーム画面のウィジェット」参照
   store/                     アプリストア。配布物の読み取りと署名の確認(App_Repo)・通信とインストール(App_Store)・焼き込みの公開鍵(App_Repo_Keys)。下記「アプリストア」参照
   ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
   iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索 / Iso_Flow: 流れの場(フローフィールド))。Luaの`pico.iso`。下記「ブロック」「2.5Dエンジンのタワーディフェンス向けの道具」参照
@@ -91,7 +92,7 @@ src/
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/file_ops/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana/edit_history/app_repo等の61本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・アプリストアの配布物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/app_store_net/ssh_net) / run_mem.sh=確保回数の計測)
+  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/home/file_ops/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana/edit_history/app_repo等の61本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・アプリストアの配布物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/app_store_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   build_app_repo.py           アプリストアの配布物を作る(鍵の生成・署名・目録だけの署名(sign)とCIでの組み立て(assemble)・確認。標準ライブラリのみ。APP_REPO.md)
@@ -379,6 +380,50 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
   再起動しても`daily`/`every`の予約が残る、キーボードのダイアログの上でトーストの跡が残らない)。**実機・Webビルドは未確認**。
 - 未: カレンダーの予定を閉じている間に取り直すこと(チャットの未読は下の「バックグラウンド実行の枠組み」の`ChatWatch`で入った)、
   アラーム/タイマーの完了を通知へ統合すること。
+
+### ホーム画面のウィジェット (`src/home/` / `AppGrid` / `HomeScene` / `todo/Todo_Cache` / `todo/Todo_Watch`) (2026-10-16)
+
+ランチャのアプリのタイルと**同じ並びに**ウィジェット(時計・アナログ時計・音楽・予定・TODO)を混ぜて置く。方針は利用者と相談して決めた(2026-10-16):
+グリッドに混ぜる(専用ページ・上部の帯ではなく)/ 最初の種類は時計・音楽・予定・TODO / 今回はC++だけ(Luaアプリのウィジェットは後で)/ 中のボタンも押せる(ボタンの外は対応するアプリを開く)。
+
+- **並び(`HomeLayout`、`Home_Layout.hpp/.cpp`。描画にもSDの中身にも依存しない)**: アプリの並び・隠した印は今までどおり`AppFunctions`(launcher.cfg)。
+  ウィジェットは**「見えているアプリの何番目の前に置くか」(anchor)**だけを`/sys/home.cfg`(`widgetN = 種類,幅x高さ,anchor`、Nの順)に持つ。8個まで(`kMaxWidgets`)。
+  `Sequence()`がアプリとウィジェットを1本の並びにし、`Compute(rows)`が2列のマス目へ詰める:
+  **並びの順に、埋まりきっていない一番前のページの、空いている一番前のマスへ**(大きなウィジェットが次の行/ページへ送られて空いた所を後ろの小さな項目が埋める。
+  最初は「前の項目の後ろからだけ」詰めていたが、2x2が入らないと半ページ空いたので変えた)。そのぶん並びの順と見た目の順は少し入れ替わるので、
+  `Move(type, index, ±1, rows)`は**見た目が動くまで続けて進める**。隣どうしがアプリならアプリの並び(`AppFunctions::MoveApp`)を入れ替え、
+  そうでなければ並びを入れ替えて anchor を付け直す(`Rebuild()`。placed[] は並びの順に並べ直すので**ウィジェットの番号は動かすと変わる**。`new_index`で受け取る)。
+  アプリを隠すときは`HideApp()`(後ろのウィジェットの位置がずれないよう並びから抜いて付け直す)。大きさは種類ごとに決まった組(`KindInfo::sizes`: 1x1/2x1/2x2)だけ。
+- **描き方(`HomeWidget`、`Home_Widget.hpp`)**: 種類ごとに1つの静的なオブジェクト(`Home_Widgets.cpp`、`HomeWidgets::Setup()`が`HomeLayout::SetImpl()`して`Load()`。
+  `main.cpp`で`AppFunctions::Setup()`の直後)。`stamp()`(見た目が変わると変わる値)・`draw(r, w, h, pressed_button)`・`buttonAt()`/`press()`・`appName()`・
+  `onHomeEnter()`(ランチャを開いたとき。SDを読む等)・`tick()`(ランチャを開いている間毎フレーム)。**差していなければ`AppGrid`は枠と名前だけ描く**(ホストテストは偽物を差す)。
+- **`AppGrid`**: 並べた結果(`items_`、並び・隠した印・登録簿・ウィジェット・行数の署名が変わったときだけ`Compute()`し直す)で描き・当たり判定・フォーカスを行う。
+  `tileRect(slot)`/`hitTile()`(アプリだけ)/`tilesPerPage()`はアプリだけのときの今までの形のまま。ウィジェットは角の丸い枠の中を`ScopedClip`して`draw()`。
+  **今のページにウィジェットがあれば`wantsFrameUpdate()`が真**で、合成の外の回に各ウィジェットの`stamp()`を見て、変わったものの矩形だけを`MarkDirty()`する。
+  合成ではクリップ(dirty矩形)にかからない項目は描かない。押したとき`buttonAt()`があればそのボタン(離したときに同じボタンの上なら`press()`)、無ければ本体
+  (離したとき枠の中なら`appName()`のアプリを開く)。長押しは`takeLongPress(now, ms, LongPress&)`(項目か空いた所か)。矢印は向きにある一番近い項目へ(端でページ送り)。
+- **`HomeScene`**: ページ送りは常に作って1ページなら隠す(ウィジェットを足すとページが増えるので。グリッドの高さは常にページ送りの分を引く。1ページの行数は3のまま)。
+  長押し(コントローラーのX/Y・キーの`m`)のメニュー: アプリ=先頭へ/前へ/後ろへ/隠す/ウィジェット追加、ウィジェット=移動/大きさ/削除/ウィジェット追加、
+  空いた所=追加のメニュー(並びの最後へ)。追加は押した項目の前に入る。メニューの字は24pxで約8文字しか入らないので短く書く。
+- **時計**: 1x1=時刻(32px)+日付、2x1=時刻(48px)+日付・曜日・次のアラーム(7日以内、ベルの印+「7:30」「明 7:30」「金 7:30」)。アナログ: 1x1/2x2(三角形の針。`drawWideLine`は使えない)。
+- **音楽**: 2x1/2x2。`MusicService`の曲名・プレイリスト・n/m曲目・進み具合と 前/再生・一時停止/次(`MusicService::Prev/TogglePlay/Next`)。何も選んでいなければボタンを出さず、押すとミュージックアプリ。
+  秒が変わるたびに`stamp()`が変わる(鳴っている間だけ)。
+- **予定(`HomeAgenda`)**: `/calendar/*.ics`(名前順、色はカレンダーアプリと同じ)を、今日から7日の窓で`IcalCalendar`(約16KB、**読む間だけ`new`**)へ読み、
+  見せる分だけ(8件、1件約70B)を静的に持つ。今日の終わった時刻つきの予定・明日以降の「前日からの続き」は入れない。読み直すのは
+  日付が変わったとき(`tick()`)・ランチャを開いたとき`Invalidate()`されていたら(カレンダーアプリの`onExit()`が呼ぶ)。**.icsの取得はカレンダーアプリの仕事のまま**。
+  2x1は今日と明日だけ。
+- **TODO(`TodoCache` / `TodoWatch`)**: 一覧を取ったとき(TODOアプリの`syncReminders()`の隣、バックグラウンドの取り直し)に、今日まで(期限が今日か過ぎた)のタスクを6件+総数だけ
+  覚えて`/sys/todo_cache.tsv`へ書く(再起動しても前回の一覧を出す)。**`TodoWatch`(バックグラウンドの仕事「TODOの取り直し」、`background.cfg`の`todo`、既定で入)は
+  ホーム画面にTODOウィジェットを置いている間だけ**、15分ごとに`TodoistClient`(約20KB+TLS約40KB、取る間だけ`new`)で「今日」を1回取る。
+  todoist.cfgが無ければ何もしない(ログも出さない)。TODOアプリが前に出ている間は画面に任せる。過ぎた期限は日付を赤で出す。
+- RAM: 静的に約1.6KB(並び8件・予定8件・TODO6件・`AppGrid`の並べた結果と印 約480B)。
+- 検証: `home_test`(run.sh の core。並び・詰め方(重ならない・空きを埋める・入らない2x2は次のページ)・動かす(アプリ同士/ウィジェットとアプリ/見た目が動くまで)・
+  先頭へ・隠す・上限・home.cfgの往復と読めない行・AppGridのウィジェットの当たり判定/ボタン/本体でアプリ/長押し/キー/印が変わった矩形だけ描き直す・
+  TodoCacheの絞り込みと往復・HomeAgendaの拾い方と色)、`app_test`(アプリだけのときの今までの形)、PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0):
+  home.cfgを置いて各種類の表示、音楽ウィジェット→ミュージックアプリ→曲を選んで戻ると曲名と進み具合、ウィジェットの一時停止でアプリが開かない、長押しのメニュー→追加。
+  **実機では未確認**(予定の読み直しの時間、TODOの取り直しのヒープ)。
+- 未: Luaアプリのウィジェット(app.cfgに`widget = widget.lua`を書き、使い捨てのエンジンで画像へ描いてホームはそれを貼る、を考えている)、天気等の新しい種類、
+  ウィジェットごとの設定(どのカレンダーか等)、予定・TODOのウィジェットから項目を直接開く。
 
 ### バックグラウンド実行の枠組み (`src/functions/Background_Functions` / `Background_List.cpp` / `BackgroundScene`) (2026-10-15)
 

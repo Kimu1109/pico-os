@@ -81,6 +81,7 @@ struct LGFX_Sprite {
             for(int xx = x; xx < x + w; xx++) writePixel(xx, yy, color);
     }
     void drawRect(int, int, int, int, int){}
+    void drawRoundRect(int, int, int, int, int, int){}
     void drawLine(int, int, int, int, int){}
     void drawPixel(int, int, int){}
     void fillCircle(int, int, int, int){}

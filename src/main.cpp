@@ -30,6 +30,7 @@
 #include "functions/Profiler_Functions.hpp"
 #include "functions/CrashDump_Functions.hpp"
 #include "functions/DevTools_Functions.hpp"
+#include "functions/Firmware_Functions.hpp"
 #include "functions/HwTest_Functions.hpp"
 #include "functions/PowerMenu_Functions.hpp"
 #include "functions/Background_Functions.hpp"
@@ -172,6 +173,8 @@ void setup() {
     DevToolsFunctions::Setup();
     //前回のクラッシュを知らせる(タップでダンプを開く)
     CrashDumpFunctions::PostPendingNotice();
+    //ファームの更新の結果を知らせ、置き場(内蔵フラッシュのLittleFS)を片付ける。通知より後
+    FirmwareFunctions::Setup();
 
     //ここまでの確保は全てOS常駐。シーンアリーナを導入する際の「永続領域」に相当する
     MemFunctions::SealPermanentBaseline();

@@ -18,6 +18,7 @@
 #include "gui/scenes/NotificationScene.hpp"
 #include "gui/scenes/StoreScene.hpp"
 #include "gui/scenes/UsbDriveScene.hpp"
+#include "gui/scenes/FirmwareScene.hpp"
 #include "lua/LuaAppScanner.hpp"
 
 // このOSに載せるアプリの一覧。
@@ -67,6 +68,8 @@ void AppFunctions::Setup(){
     Register(StoreScene::kAppName, IconID::AppStore, &MakeScene<StoreScene>);
     //PCとUSBでつなぎ、SDカードをドライブとして見せる(SDの抜き差しをせずにファイルを行き来する)
     Register(UsbDriveScene::kAppName, IconID::SdCard, &MakeScene<UsbDriveScene>);
+    // ファームの更新(SDの .pfw / PCからWi-Fiで。FIRMWARE_UPDATE.md)
+    Register(FirmwareScene::kAppName, IconID::Refresh, &MakeScene<FirmwareScene>);
     // Luaアプリは下のスキャンで登録する(動作確認用のサンプルは /lua/apps/動作確認/)。
     // 権限が要るものは各アプリの app.cfg に書く
 

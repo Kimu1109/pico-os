@@ -27,6 +27,8 @@ namespace PICO_Path {
         constexpr const char* MUSIC = "/music/";
         // 動画(.pvid、VIDEO_FORMAT.md)の置き場所。動画アプリ(VideoScene)のファイル選択の最初の場所。音は同じ名前の .wav
         constexpr const char* VIDEO = "/video/";
+        // ファームの更新ファイル(.pfw、FIRMWARE_UPDATE.md)を置く場所。「本体の更新」のファイル選択の最初の場所
+        constexpr const char* FIRMWARE = "/firmware/";
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";

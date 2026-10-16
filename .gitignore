@@ -47,4 +47,5 @@ pc/sdcard/sys/store/
 pc/sdcard/sys/store.cfg
 # OTPの端末の鍵(PC/Webビルドが真似るファイル)
 pc/otp_emu.bin
+pc/ota_emu/
 pc/sdcard/lua/apps/*/log.csv

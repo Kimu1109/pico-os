@@ -21,7 +21,7 @@
 | 9 | [GameBoyエミュ](#9-gameboyエミュ) | 🔨 Peanut-GBを採用。第1段(256KBまでのROMをRAMへ丸ごと読む)がPCで動作し、音も鳴る。途中保存(ステートセーブ)も入った。実機は未確認 |
 | 10 | [外部コントローラー](#10-外部コントローラー) | 🔨 入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(Webビルドはページのボタン/キーボード)、GBエミュ・Luaへの組み込みまで。物理キーボードの文字入力もUSBシリアル経由で入った。Wiiクラシックコントローラー(I2C)のドライバも入った(実物では未確認)。キーボードを本体へ直接つなぐのは未 |
 | 11 | [Chiptuneを再生](#11-chiptuneを再生) | 🔨 4チャンネルの音源と曲(MML)が2コア目で鳴り、Luaとミュージックアプリから使える(PCで確認)。MIDIはPCの`midi2mml.py`で取り込める。GBエミュの音も鳴る。WAVも鳴らせる。実機は未確認 |
-| 12 | [開発者向けの道具](#12-開発者向けの道具) | 🔨 プロファイラ(フレーム時間の表示)・Luaデバッガ・クラッシュダンプ・Luaサンドボックスの強化がPCで動作。実機は未確認 |
+| 12 | [開発者向けの道具](#12-開発者向けの道具) | 🔨 プロファイラ(フレーム時間の表示)・Luaデバッガ・クラッシュダンプ・Luaサンドボックスの強化がPCで動作。ファームの更新(SD・Wi-Fi、署名つき)が入った。実機は未確認 |
 
 ---
 
@@ -282,7 +282,9 @@
 - [x] Luaデバッガ(ブレークポイント・ステップ実行・変数・スタックトレース)
 - [x] クラッシュダンプの保存(HardFault・ウォッチドッグ・Luaのエラー)
 - [x] Luaサンドボックスの強化
-- [ ] 実機での確認(HardFaultの捕まえ方・ウォッチドッグ・実機の速さ)
+- [x] ファームの更新(SDの更新ファイル / PCからWi-Fiで。FIRMWARE_UPDATE.md)
+- [ ] ファームの更新をWebから取る(GitHub Pages等に版の一覧を置く)
+- [ ] 実機での確認(HardFaultの捕まえ方・ウォッチドッグ・実機の速さ・ファームの更新)
 
 ---
 
@@ -660,5 +662,6 @@ SSID/パスワードの「編集」行は無くなった(同じSSIDを「追加�
 | フレーム時間の表示 | ✅ `PerfOverlay`(右下、タップは素通り)。fps・平均/最大フレーム時間・Lua・内訳・直近60フレームのグラフ |
 | Luaデバッガ | ✅ `LuaDebugger`+`LuaDebugScreen`。`pico.breakpoint()`/`pico.set_breakpoint()`/シリアルの`dbg b`、エラーで止まる、1行/次へ/抜ける/停止、ローカル変数と上位値、ソースの行。スタックトレースはダイアログ・ログ・`/crash/lua_NNNN.txt`へ |
 | クラッシュダンプ | ✅ `CrashDumpFunctions`。HardFault(`isr_hardfault`)とウォッチドッグ(`watchdog = true`)の記録を消えないRAMに置き、次の起動で`/crash/crash_NNNN.txt`へ書いて通知する。PCビルドはシグナルとスレッドで同じ流れを確かめた |
+| ファームの更新 | ✅ `FirmwareFunctions`+`firmware/`(2026-10-16)。「本体の更新」でSDの`.pfw`を選ぶか、PCの`script/firmware_tool.py push`(`pio run -t fwpush`)をWi-Fiで受け取り、署名(Ed25519、焼き込みの鍵だけ)と中身を確かめて内蔵フラッシュのLittleFS(1728KB)へ置き、再起動するとarduino-picoのOTAのローダーが書き換える。自動のロールバックは無い(BOOTSELで戻す)。PCで流れを確認、実機は未確認。詳細は`FIRMWARE_UPDATE.md` |
 | Luaサンドボックス | ✅ 打ち切りを握り潰せない、`debug`/`io`/`package`/`dofile`/`loadfile`/`os.exit`等/`string.dump`/バイトコードの`load`/`__gc`を外した、入れ子のコールバックで予算を積み直せない |
 | 実機での確認 | ⬜ `isr_hardfault`の差し替え・`.uninitialized_data`・`watchdog_enable_caused_reboot()`・デバッガの画面の描画は実機でビルドもできていない |

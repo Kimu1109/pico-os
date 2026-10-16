@@ -1,4 +1,5 @@
 #include "functions/HwTest_Functions.hpp"
+#include "firmware/Fw_Version.hpp"
 #include "functions/DevTools_Functions.hpp"
 #include "functions/CrashDump_Functions.hpp"
 #include "functions/Mem_Functions.hpp"
@@ -18,6 +19,7 @@ namespace {
     void PrintInfo(){
         const uint32_t ms = millis();
         LOG_SYS_MSG("[HW] uptime=%lu.%03lus", (unsigned long)(ms / 1000), (unsigned long)(ms % 1000));
+        LOG_SYS_MSG("[HW] firmware=%s %s", FwVersion::Text(), FwVersion::Date());
         if(BatteryFunctions::HasSample()){
             LOG_SYS_MSG("[HW] battery=%d%% usb=%s", BatteryFunctions::GetPercent(),
                         BatteryFunctions::IsExternallyPowered() ? "yes" : "no");

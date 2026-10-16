@@ -50,6 +50,7 @@
 #include <PicoPcClock.h>                     // 設定アプリで合わせた時計のずれ
 #include "functions/CrashDump_Functions.hpp" // 再起動(電源メニュー)の差し込み口
 #include "functions/DeviceKey_Functions.hpp" // OTPの端末の鍵(PCではファイルで真似る)
+#include "firmware/Fw_Store.hpp"                // ファームの更新の置き場(PCではディレクトリで真似る)
 
 //OTP(端末の鍵)を真似るファイル。PICOOS_OTP_FILE、無ければSDのルートの隣の otp_emu.bin
 //(SDの中に置くと「SDだけを盗まれても読めない」を試せないので外に置く。Webは仮想FSなので読み直しで消える)
@@ -63,6 +64,20 @@ static void configureOtpFile()
         path = std::string(root ? root : PICOOS_SD_ROOT_DEFAULT) + "/../otp_emu.bin";
     }
     DeviceKeyFunctions::pc_otp_file = path.c_str();
+}
+
+//ファームの更新の置き場(実機は内蔵フラッシュのLittleFS)を真似るディレクトリ。
+//PICOOS_OTA_DIR、無ければSDのルートの隣の ota_emu/(PCでは本体を書き換えない。流れだけ試せる)
+static void configureOtaDir()
+{
+    static std::string path;
+    if (const char* env = getenv("PICOOS_OTA_DIR")) {
+        path = env;
+    } else {
+        const char* root = getenv("PICOOS_SD_ROOT");
+        path = std::string(root ? root : PICOOS_SD_ROOT_DEFAULT) + "/../ota_emu";
+    }
+    FwStorePc::dir = path.c_str();
 }
 #if !defined(__EMSCRIPTEN__)
     #include <unistd.h>                      // execv(再起動)
@@ -258,6 +273,7 @@ namespace {
 
         setupPcKeyboard();
         configureOtpFile();
+        configureOtaDir();
         setup();
 
         int frame = 0;
@@ -619,6 +635,7 @@ int main(int, char**)
     lgfx::Panel_sdl::setShortcutKeymod((SDL_Keymod)(KMOD_LCTRL | KMOD_LALT));
 
     configureOtpFile();
+    configureOtaDir();
     setup();
     setup1();
 

@@ -18,6 +18,7 @@
 #include "gui/scenes/NotificationScene.hpp"
 #include "gui/scenes/StoreScene.hpp"
 #include "gui/scenes/UsbDriveScene.hpp"
+#include "gui/scenes/RecorderScene.hpp"
 #include "gui/scenes/FirmwareScene.hpp"
 #include "lua/LuaAppScanner.hpp"
 
@@ -60,6 +61,8 @@ void AppFunctions::Setup(){
     //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(MUSIC_FORMAT.md)
     Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
     Register("動画", IconID::Video, &MakeScene<VideoScene>);
+    //マイク(SPH0645、GP26〜28)で /recordings/ へWAVを録る
+    Register(RecorderScene::kAppName, IconID::Microphone, &MakeScene<RecorderScene>);
     //SSHクライアント(端末)。接続先は起動後に端末の中で聞く。鍵は /sys/ssh/id_ed25519(SshScene参照)
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)

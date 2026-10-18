@@ -70,6 +70,9 @@
 #   music_test    … 曲データ(pico-os MML、MUSIC_FORMAT.md)。読み取り(音の高さ/長さ/繰り返し/マクロ/
 #                   誤りの行・列/警告)、シーケンサー(サンプル単位の音の位置・テンポ・繰り返し・ループ・
 #                   効果音への貸し出し)、SoundFunctionsの配線(置き場の入れ替え・効果音との同居)
+#   mic_test      … マイク(SPH0645)の入力と録音。計算(sound/Mic_Dsp.hpp: 18bitの取り出し・直流・増幅・間引きで折り返さない・
+#                   信号の有無・列)と MicFunctions(2コア目と1コア目を交互に: 開始/返す・左右の組がずれない・WAVの見出し・
+#                   取りこぼし・見出しの書き直し・I2Sの失敗・mic.cfg)
 #   play_queue_test … ミュージックアプリの再生の順番(sound/Play_Queue.hpp)。順番通り/ミックス・リピート(しない/全曲/1曲)
 #   midi2mml_test … MIDI→MMLの変換(script/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
 #                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
@@ -826,6 +829,17 @@ compile_or_die g++ $CXXFLAGS $INCLUDES \
 echo ""
 echo "===== music_test ====="
 run_or_die "$OUT/music_test"
+
+# --- マイク(SPH0645)の入力と録音 ---
+compile_or_die g++ $CXXFLAGS $INCLUDES \
+    "$ROOT/script/host_test/mic_test.cpp" \
+    "$ROOT/src/functions/Mic_Functions.cpp" \
+    "$ROOT/src/sound/Wav_Writer.cpp" \
+    -o "$OUT/mic_test"
+
+echo ""
+echo "===== mic_test ====="
+run_or_die "$OUT/mic_test"
 
 # --- ミュージックアプリの再生の順番 ---
 compile_or_die g++ $CXXFLAGS $INCLUDES \

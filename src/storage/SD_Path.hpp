@@ -27,6 +27,8 @@ namespace PICO_Path {
         constexpr const char* MUSIC = "/music/";
         // 動画(.pvid、VIDEO_FORMAT.md)の置き場所。動画アプリ(VideoScene)のファイル選択の最初の場所。音は同じ名前の .wav
         constexpr const char* VIDEO = "/video/";
+        // 録音(マイク、RecorderScene)の置き場所。"rec_0001.wav" から順に番号を振る
+        constexpr const char* RECORDINGS = "/recordings/";
         // ファームの更新ファイル(.pfw、FIRMWARE_UPDATE.md)を置く場所。「本体の更新」のファイル選択の最初の場所
         constexpr const char* FIRMWARE = "/firmware/";
     };
@@ -83,6 +85,8 @@ namespace PICO_Path {
             constexpr const char* SYS_LOCK_CFG = "/sys/lock.cfg";
             // 音声出力("output = auto | off" / "volume = 0〜100")。SoundFunctions参照
             constexpr const char* SYS_SOUND_CFG = "/sys/sound.cfg";
+            // マイク(録音)の設定。rate / gain / channel(MicFunctions)
+            constexpr const char* SYS_MIC_CFG = "/sys/mic.cfg";
             // ミュージックアプリの再生のしかた("shuffle = true|false" / "repeat = off|all|one")。MusicScene参照
             constexpr const char* SYS_MUSIC_CFG = "/sys/music.cfg";
             // 画面の明るさ("brightness = 0〜100" / "auto-dim = true|false")。DisplayFunctions参照

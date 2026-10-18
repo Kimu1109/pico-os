@@ -1,0 +1,12 @@
+<!--
+  pico-os 自作アイコン: マイク(録音)
+
+  tablerのmicrophoneは24pxグリッドの細線で16pxでは崩れる(頭と支えがくっつく)ので、
+  16pxグリッドに載る塗りで描き起こした。
+  頭  : x=6..10 / y=1..9 の角の丸い縦長
+  支え: 頭との間を1px空けたU字(x=3..13 / y=6..12)、軸(x=7..9 / y=12..14)、台(x=5..11 / y=14..15)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+  <path d="M6 3a2 2 0 0 1 4 0v4a2 2 0 0 1-4 0z" />
+  <path d="M3 6h1v4h1v1h6v-1h1V6h1v4.5c0 1-1 1.5-2 1.5H9v2h2v1H5v-1h2v-2H5c-1 0-2-.5-2-1.5z" />
+</svg>

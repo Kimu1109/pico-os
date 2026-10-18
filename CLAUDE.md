@@ -29,6 +29,7 @@ Raspberry Pi Pico 2 W (RP2350, `rpipico2w`) 上で動く自作タッチGUI OS。
 | SPI1(SD専用) | CS=15, SCK=10, MOSI=11, MISO=12, 10MHz |
 | バックライト | TFT_LED=22(PWM調光。LovyanGFXの`Light_PWM`、PWMスライス3のチャンネルA) |
 | 音声(I2S) | MAX98357A: BCLK=2, LRCLK=3(=BCLK+1固定), DIN=4 / 検出=5(アンプ側でGND、内部プルアップ) / 休止(SD)=6(任意)。VINは5V(VBUS/VSYS) |
+| 音声入力(I2Sマイク) | SPH0645: BCLK=26, LRCLK=27(=BCLK+1固定), DOUT=28 / SEL=GND(左)/ 3V3・GND。出力とは別のI2S(48kHz・32bitスロット)。下記「マイクと録音」 |
 | 外部コントローラー | Wiiクラシックコントローラー(I2C0: SDA=GP0, SCL=GP1、3.3V、アドレス0x52。CardKB2と同じバス)。ドライバはあるが**実物では未確認**。USBシリアル経由のPCのキーボードでも代用できる(下記「外部コントローラー」) |
 | TFT_MAX_SPEED | 80MHz |
 
@@ -85,7 +86,7 @@ src/
   firmware/                  ファームの更新(.pfw)の見出しと署名(Fw_Image)・受け取りの流れ(Fw_Update)・置き場(Fw_Store: 実機はLittleFS+PicoOTA)・版(Fw_Version)・焼き込みの公開鍵(Fw_Keys)。下記「ファームの更新」参照
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   video/                     動画(.pvid)の読み取り(Pvid_Player)。下記「動画(.pvid)」参照
-  sound/                     チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
+  sound/                     マイクの計算(Mic_Dsp)とWAVへの書き出し(Wav_Writer)・チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査) / Json_Reader(流しながら読むJSON)
@@ -182,6 +183,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | Timer_Functions | タイマーとストップウォッチ(ラップ)。時計アプリを閉じても動く。下記「BMP・予定の通知・…・画面ロック」参照 |
 | Lock_Functions | 画面ロック(PIN)。同上 |
 | Firmware_Functions | ファームの更新(SDの`.pfw` / PCからWi-Fiで)のOSへのつなぎ。下記「ファームの更新」参照 |
+| Mic_Functions | I2Sマイク(SPH0645)の入力とWAVへの録音。2コア目が受け取って列へ、1コア目がSDへ書く。下記「マイクと録音」 |
 | Background_Functions | バックグラウンドの仕事(画面を閉じても動くもの)の登録簿と入り切り。登録は`Background_List.cpp`。下記「バックグラウンド実行の枠組み」参照 |
 
 ### 起動・ループ (`main.cpp`)
@@ -2090,6 +2092,40 @@ SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャ�
 (テスト音: 300ms・約880Hz、デモ曲: 4ch足して最大約12000で音割れなし)。
 **実機(arduino-picoのI2S・2コア目・MAX98357A)では未確認**(このリモート環境には実機もRP2350のボード定義も無い)。**Webビルドも未確認**(emsdkが無い)。
 
+### マイクと録音 (`src/functions/Mic_Functions` / `src/sound/Mic_Dsp.hpp` / `src/sound/Wav_Writer` / `RecorderScene`) (2026-10-18)
+
+SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブレイクアウト等)で `/recordings/rec_NNNN.wav` へ録る。方針は利用者と相談して決めた(2026-10-18): 用途は録音 /
+出力とBCLK/LRCLKを共有せず**別のI2S**にする(SPH0645はBCLK 2.048〜4.096MHz・32bitスロットが要り、出力の16bitスロット・22050Hzでは範囲外。共有するには出力を44.1kHz・32bitへ固定する必要があった)。
+
+- **配線**: BCLK=GP26、LRCLK=GP27(arduino-picoはBCLK+1固定)、DOUT=GP28(`consts.hpp`の`MIC_I2S_*`)、SEL=GND(左)、3V=3V3、GND。
+  GP26〜28は以前「外部コントローラー用に残す」としていたが、コントローラーはI2C(GP0/1)に決まったので使った。
+- **I2S**: arduino-picoの`I2S(INPUT)`、32bit、**48000Hz**(BCLK 3.072MHz)、DMAのバッファ8×512ワード(16KB、約42ms)。PIOのステートマシンを出力とは別に1つ使う。
+  arduino-picoの入力のPIO(`pio_i2s_in`)は最初に`in`を空打ちして**I2Sの1bitの遅れを合わせてある**(#2037)ので、ワードはそのまま左詰めの18bit。
+  SPH0645は「1bit遅い」と言われることがあるが、**実機で確かめるまで補正は入れていない**(声が極端に小さい/割れる・ジーという音なら最初にここを疑う)。
+- **2コア目(`MicFunctions::LoopCore1()`、`main.cpp`の`loop1()`で音声の後)**: I2Sの開始/終了(DMA割り込みが2コア目に付くように)、ワードを読んで
+  `MicDsp::Pipeline`(左/右を選ぶ → 上位18bit → 直流を落とす一次のハイパス約38Hz → 増幅 → 窓付きsincのFIR(8×間引き+1タップ)で16000/24000Hzへ間引く → 16bitへ頭打ち)、
+  録音中は`MicDsp::PcmRing`(16384サンプル=32KB、16kHzで約1秒)へ積む。溢れた分は捨てて数える(`DroppedSamples()`)。メーターの山(`TakePeak()`)と「値が0.5秒変わらない=信号なし」(`HasSignal()`)もここ。
+  I2Sが動いている間は`loop1()`の休みを1msにする(`Core1Busy()`)。左右の組は、奇数個のワードが届いても前の余りを持ち越してずらさない。
+- **1コア目(`MicFunctions::Update()`)**: 列を256サンプル以上溜まったら最大8192ずつ`WavWriter`(16bitモノラル)へ書く。見出しの大きさの欄は5秒ごとに書き直す
+  (電池が切れても途中まで読める。録音アプリの一覧は見出しが0でもファイルの大きさから長さを出す)。止めるときは want_mode を下ろし、
+  2コア目が列へ積まなくなった(`rec_active`が偽)のを見てから残りを書いて閉じ、列を返す(`rec_active`は「真を書く→want_modeを読む」の順一貫の読み書きで、入れ違いで消した列へ書かない)。
+  SDへ書けない・2GB・I2Sの失敗で止まったら`LastStopReason()`。
+- **メモリ**: I2SのDMA 16KBはメーターか録音の間だけ、列32KBは録音の間だけ確保。静的には約1.5KB(読み取りの作業場所)。
+- **録音中はバックグラウンドの仕事を止める**(`BackgroundFunctions::suspend_query`、main.cppが差す)。チャットの未読などのTLSのハンドシェイクで1コア目が1〜2秒止まり、列が溢れるため。
+  ミュージックの曲の終わりで次へ進むのも止まる。
+- **設定**: `/sys/mic.cfg`(無くてよい)の`rate = 16000|24000|48000`(既定16000)、`gain = 0〜36`(dB、既定18。SPH0645は94dB SPLで-26dBFSなので、声には増幅が要る)、
+  `channel = left|right`。録音アプリの右上のボタンで周波数・増幅を切り替えると書く。
+- **録音アプリ(`RecorderScene`、ランチャの「録音」、アイコンは自作の`custom_icons/microphone.svg`=`IconID::Microphone`)**: 開いている間はメーターのため聞き続ける。
+  [録音]/[停止](Space / r / 再生キー)、録った時間、状態(信号なし・取りこぼしは赤)、一覧(新しい順48件、2回タップか[再生]で`FileViewerScene`=WAVを鳴らす、[削除])。
+  録音中は`keepForeground`・`KeepAwake()`。画面を離れると止めて保存する。
+- **PC/Webビルド**: `pc/compat/I2S.h`の入力が、`begin()`からの経過時間の分だけSPH0645と同じ形のワードを返す。`PICOOS_MIC=tone`(既定。440Hz・-30dBFS+雑音+直流)/
+  `silence` / `none`(全部0=「信号なし」)/ `sdl`(PCのマイク。SDLの録音デバイス)。溜まりすぎたら古い分を捨てて`getOverflow()`。
+- 検証: `mic_test`(run.sh の media。計算: 振幅・直流・周波数・増幅・頭打ち・12kHzが折り返さない・3kHzは通る・右チャンネル・信号なし、列、
+  MicFunctions: 使うまでI2Sを持たない/返す、48000Hz・32bit・GP26/28、奇数個ずつ届いても1kHzのまま、WAVの見出し、番号、取りこぼし・DMAの溢れ、録音中の見出しの書き直し、
+  I2Sの失敗で止まる/もう一度試す、SD無し、mic.cfgの読み書き、24000Hz・右)、PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 録音→停止で5.0秒・16000Hz・440Hz・-12dBFS(=-30+18)・直流0のWAV、
+  録音中の表示、`PICOOS_MIC=none`で「信号がありません」、一覧。実機ファームのビルドは通る(`pio run`)。**実機・実物のSPH0645では未確認**(配線・ビット位置・SDの書き込みが追いつくか・2コア目の負荷)。
+- 未: Lua API(`pico.mic_*`)、録音中の一時停止、モノラル以外。
+
 ### ステレオ出力とパン (`stereo` 引数 / `ChipSynth::Note::pan` / MMLの`p`) (2026-10-14)
 
 2コア目の出力段は左右交互(L,R,L,R…)のバッファで、I2Sへは左を上位16bit・右を下位16bitに詰めて書く(以前は同じ値を両方へ)。
@@ -2401,7 +2437,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 検出用のピンが要らない。十字キー/ABXY/L R ZL ZR/START SELECT HOMEが揃い3.3Vで動く)に決めたが、**実物がまだ無い**。
 そこで先に「アプリが読む窓口」と、**USBシリアル経由でPCのキーボードを代わりにする入力元**を作った。
 比べた方式(GPIO直結=ピン不足、SFCパッド=5V・独自コネクタ、UART=相手のファームが要る、Bluetooth=RAMとWi-Fi同居の負担)は
-会話の記録なので割愛する。空きピンはGP0/1/7/8/14/26/27/28の8本(GP23〜25/29は無線チップが使う)。
+会話の記録なので割愛する。空きピンはGP0/1/7/8/14/26/27/28の8本(その後GP0/1はI2C、GP26〜28はマイクに使った。今の空きはGP7/8/14)(GP23〜25/29は無線チップが使う)。
 
 - **窓口(`PadFunctions`)**: 状態は`uint16_t`のビットマスク1つ(`Button`: 十字4 + ABXY + L R ZL ZR + START SELECT HOME の15個)。
   **`loop()`の頭(`PICO_Touch::Update()`の直後、シーンの`onUpdate()`より前)で1回だけ更新**するので、1フレームの間は
@@ -2772,7 +2808,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
     踏み台から繋げない相手は理由付きで失敗・中を閉じると踏み台も閉じる)。PCビルドの`--tap`で踏み台経由のログイン→`exit`を確認。
     **本物のTailscale越しの確認はしていない**(この環境にtailnetが無い。踏み台から先は普通のTCPなので、踏み台のsshdが
     `AllowTcpForwarding`(既定yes)なら同じに動くはず)。
-- アプリ数: SSHを足したところで`AppFunctions::kMaxApps`(24)が静的13+Lua Hello+SDのLuaアプリ10本で埋まっていたので**32へ広げた**
+- アプリ数: SSHを足したところで`AppFunctions::kMaxApps`(24)が静的13+Lua Hello+SDのLuaアプリ10本で埋まっていたので**32へ広げた**(2026-10-18、録音アプリで再び溢れてテトリス等が並ばなくなったので**40へ**。隠した印`launcher_hidden`は64bitにした)
   (約2KBのstatic RAM増)。アイコンはtablerの`terminal-2`(`IconID::Terminal`、末尾へ追加)。
 - 検証: `vt_terminal_test`/`ssh_util_test`(run.sh)、**`ssh_net_test`(run_net.sh。本物のOpenSSH 9.6のsshdを使い捨ての鍵で立てる)**:
   鍵交換→ホスト鍵の確認→公開鍵認証→pty付きシェル→出力が端末に出る・`stty size`で大きさ・数万行の出力(受信窓の調整を跨ぐ)・

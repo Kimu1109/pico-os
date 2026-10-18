@@ -84,11 +84,13 @@ struct FsFile {
     bool is_dir_ = false;
     std::string path_;       // 開いているフォルダ/ファイルのパス
     std::string last_child_; // openNext() で最後に返した名前
+    bool wseek_ = false;     // 書き込み用で seekSet() した(以降は wpos_ へ上書き)
+    size_t wpos_ = 0;
 
     bool isDir(){ return is_dir_; }
     bool isDirectory(){ return is_dir_; } // SdFatには両方の綴りがある(pc/compat/SdFat.hと同じ)
     bool isOpen(){ return data_ != nullptr || wdata_ != nullptr || is_dir_; }
-    void close(){ data_ = nullptr; wdata_ = nullptr; pos_ = 0; is_dir_ = false; path_.clear(); last_child_.clear(); }
+    void close(){ data_ = nullptr; wdata_ = nullptr; pos_ = 0; wseek_ = false; wpos_ = 0; is_dir_ = false; path_.clear(); last_child_.clear(); }
 
     int read(){
         if(!data_ || pos_ >= data_->size()) return -1;
@@ -145,9 +147,17 @@ struct FsFile {
 
     size_t write(const void* src, size_t n){
         if(!wdata_ || !src) return 0;
+        if(wseek_){
+            //seekSet()した後は、その位置へ上書きする(足りなければ伸ばす)
+            if(wpos_ + n > wdata_->size()) wdata_->resize(wpos_ + n);
+            memcpy(&(*wdata_)[wpos_], src, n);
+            wpos_ += n;
+            return n;
+        }
         wdata_->append((const char*)src, n);
         return n;
     }
+    bool sync(){ return wdata_ != nullptr || data_ != nullptr; }
 
     // SdFatと同じく改行文字まで(改行を含めて)読み、読み取ったバイト数を返す
     int fgets(char* buf, int size){
@@ -163,6 +173,12 @@ struct FsFile {
         return n;
     }
     bool seekSet(uint64_t pos){
+        if(wdata_ && !data_){
+            if(pos > wdata_->size()) return false;
+            wseek_ = true;
+            wpos_ = (size_t)pos;
+            return true;
+        }
         if(!data_ || pos > data_->size()) return false;
         pos_ = (size_t)pos;
         return true;

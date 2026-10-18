@@ -62,7 +62,7 @@ bool AppFunctions::Register(const char* name, IconID icon, Scene* (*create)(cons
     entry.create = create;
     //新しいアプリはランチャの並びの最後へ
     launcher_order[app_count] = (int8_t)app_count;
-    launcher_hidden &= ~(1u << app_count);
+    launcher_hidden &= ~(1ull << app_count);
     app_count++;
     return true;
 }
@@ -102,8 +102,8 @@ bool AppFunctions::Unregister(int index){
         launcher_order[w++] = (int8_t)(idx > index ? idx - 1 : idx);
     }
     //隠した印も同じく詰める(index より下のビットはそのまま、上のビットは1つ下へ)
-    const uint32_t low = launcher_hidden & ((1u << index) - 1u);
-    const uint32_t high = (index + 1 < 32) ? (launcher_hidden >> (index + 1)) << index : 0u;
+    const uint64_t low = launcher_hidden & ((1ull << index) - 1ull);
+    const uint64_t high = (index + 1 < 64) ? (launcher_hidden >> (index + 1)) << index : 0ull;
     launcher_hidden = low | high;
 
     app_count--;
@@ -192,7 +192,7 @@ void AppFunctions::Clear(){
 // ---------------------------------------------------------------------------
 
 namespace {
-    bool HiddenBit(int index){ return (AppFunctions::launcher_hidden >> index) & 1u; }
+    bool HiddenBit(int index){ return (AppFunctions::launcher_hidden >> index) & 1ull; }
     // 並びの中での位置(隠したものも数える)。無ければ-1
     int OrderSlot(int index){
         for(int i = 0; i < AppFunctions::app_count; i++){
@@ -279,8 +279,8 @@ bool AppFunctions::MoveAppToFront(int index){
 
 bool AppFunctions::SetHidden(int index, bool hidden){
     if(index < 0 || index >= app_count || HiddenBit(index) == hidden) return false;
-    if(hidden) launcher_hidden |= (1u << index);
-    else       launcher_hidden &= ~(1u << index);
+    if(hidden) launcher_hidden |= (1ull << index);
+    else       launcher_hidden &= ~(1ull << index);
     SaveLayout();
     return true;
 }
@@ -302,8 +302,8 @@ void AppFunctions::LoadLayout(){
 
     int8_t order[kMaxApps];
     int placed_count = 0;
-    uint32_t placed = 0;
-    uint32_t hidden = 0;
+    uint64_t placed = 0;
+    uint64_t hidden = 0;
     PICO_Config::ParseFile(path, [&](const char* key, const char* value){
         const bool is_app = strcmp(key, "app") == 0;
         const bool is_hidden = strcmp(key, "hidden") == 0;
@@ -313,16 +313,16 @@ void AppFunctions::LoadLayout(){
         }
         //同じ名前が複数あれば、まだ並べていない若いものから当てる。見つからない(消したアプリ)は捨てる
         for(int i = 0; i < app_count; i++){
-            if(((placed >> i) & 1u) || !(apps[i].name == value)) continue;
-            placed |= (1u << i);
+            if(((placed >> i) & 1ull) || !(apps[i].name == value)) continue;
+            placed |= (1ull << i);
             order[placed_count++] = (int8_t)i;
-            if(is_hidden) hidden |= (1u << i);
+            if(is_hidden) hidden |= (1ull << i);
             return;
         }
     });
     //ファイルに無いアプリ(新しく入れたもの)は後ろへ登録順に
     for(int i = 0; i < app_count; i++){
-        if(!((placed >> i) & 1u)) order[placed_count++] = (int8_t)i;
+        if(!((placed >> i) & 1ull)) order[placed_count++] = (int8_t)i;
     }
     for(int i = 0; i < app_count; i++) launcher_order[i] = order[i];
     launcher_hidden = hidden;

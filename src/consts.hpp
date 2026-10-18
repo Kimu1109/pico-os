@@ -75,7 +75,7 @@
 
 // --- 音声出力: I2S(MAX98357A) ---
 // arduino-picoのI2SはLRCLKをBCLK+1に固定するので、この2本は必ず隣り合う番号にする。
-// GP14/15はGP15がSDのCSなので使えない。ADCの使えるGP26〜28は外部コントローラー用に残す
+// GP14/15はGP15がSDのCSなので使えない(GP26〜28はマイクの入力に使った。下)
 #define AUDIO_I2S_BCLK  2
 #define AUDIO_I2S_LRCLK 3   // = AUDIO_I2S_BCLK + 1(ソフトからは指定しない。配線の控え)
 #define AUDIO_I2S_DATA  4
@@ -85,3 +85,11 @@
 // MAX98357AのSD(休止)端子。LOWで休止、HIGHで左チャンネル(こちらは常にL=Rで送る)。
 // つながなければ基板の既定((L+R)/2)で鳴るので、配線は任意
 #define AUDIO_SHUTDOWN  6
+
+// --- 音声入力: I2Sマイク(SPH0645)。出力とは別のI2S(別のPIOのステートマシン)で受ける ---
+// 出力とBCLK/LRCLKを共有しないのは、SPH0645がBCLK 2.048〜4.096MHz・32bitスロットを要るため
+// (出力は16bitスロットの22050/44100Hzで、範囲に入らない)。LRCLKはBCLK+1に固定(arduino-picoの決まり)。
+// マイクのSELはGND(左チャンネル)、3VとGNDは本体の3V3/GNDへ
+#define MIC_I2S_BCLK    26
+#define MIC_I2S_LRCLK   27  // = MIC_I2S_BCLK + 1(ソフトからは指定しない。配線の控え)
+#define MIC_I2S_DATA    28  // SPH0645のDOUT

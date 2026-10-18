@@ -12,6 +12,7 @@
 #include "functions/Keyboard_Functions.hpp"
 #include "functions/Network_Functions.hpp"
 #include "functions/Sound_Functions.hpp"
+#include "functions/Mic_Functions.hpp"
 #include "functions/Battery_Functions.hpp"
 #include "functions/Alarm_Functions.hpp"
 #include "functions/Timer_Functions.hpp"
@@ -128,6 +129,7 @@ void setup() {
     IME_Functions::Setup();
     TimeFunctions::Setup();
     SoundFunctions::Setup(); //sound.cfgを読むのでSDより後
+    MicFunctions::Setup();   //mic.cfg(マイクのI2Sは録音/メーターを使うときだけ2コア目が開始する)
     BatteryFunctions::Setup();
     AlarmFunctions::Setup(); //alarm.cfgを読むのでSDより後
     TimerFunctions::Setup(); //タイマー/ストップウォッチ(時計アプリを閉じても動く)
@@ -146,6 +148,8 @@ void setup() {
     //バックグラウンドの仕事(ミュージックの再生・チャットの未読・Luaアプリの定期スクリプト)。
     //Luaアプリの仕事を登録簿から拾うので AppFunctions::Setup() より後
     BackgroundFunctions::Setup();
+    //録音中はバックグラウンドの通信(TLSのハンドシェイクで1〜2秒止まる)を止め、マイクの列を溢れさせない
+    BackgroundFunctions::suspend_query = [](){ return MicFunctions::IsRecording(); };
 
     //--- 開発者向けの道具(/sys/debug.cfg) ---
     perf_overlay = new PerfOverlay();
@@ -259,6 +263,7 @@ void loop() {
     ProfilerFunctions::Mark(ProfilerFunctions::Section::Network);
     //アンプの抜き差しの検出(音そのものは2コア目が作って流す)
     SoundFunctions::Update();
+    MicFunctions::Update();     //録音: 2コア目が積んだ音をSDのWAVへ
     //VSYS電圧の読み取り(内部でkSampleIntervalMsごとに間引く)
     BatteryFunctions::Update();
     //アラームの時刻の見張り(時計アプリを閉じていても鳴らす)。TimeFunctions::Update()より後
@@ -288,5 +293,8 @@ void setup1() {
 void loop1() {
     //I2Sのバッファが埋まっていて何もすることが無ければ少し休む(バッファは約23ms分ある)。
     //スリープ中で何も鳴っていなければI2Sも止まっているので、長めに休む
-    if(!SoundFunctions::LoopCore1()) delay(SoundFunctions::IdleDelayMs());
+    bool busy = SoundFunctions::LoopCore1();
+    //マイク(SPH0645)の受け取り。I2Sが動いている間は休みを1msにする(DMAのバッファは約42ms)
+    busy |= MicFunctions::LoopCore1();
+    if(!busy) delay(MicFunctions::Core1Busy() ? 1 : SoundFunctions::IdleDelayMs());
 }

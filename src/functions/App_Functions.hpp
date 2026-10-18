@@ -68,17 +68,17 @@ namespace AppFunctions {
     // 登録できるアプリ数の上限。固定長配列で持つので、超えた分は警告して捨てる。
     // AppEntry1件が約190B(名前48B + 引数96B + アイコンのファイル名32B + 権限2B + アイコン種別
     // + 関数ポインタ)なので、この配列だけで常時約6KBのstatic RAMを占める
-    // (24件ではSDのLuaアプリと合わせて埋まったので、SSHアプリを足したときに32件へ広げた)。
-    // 上限や文字列長を増やすときはその点に注意すること
-    constexpr int kMaxApps = 32;
+    // (24件ではSDのLuaアプリと合わせて埋まったので、SSHアプリを足したときに32件へ、
+    // 録音アプリを足したときに40件へ広げた)。上限や文字列長を増やすときはその点に注意すること
+    constexpr int kMaxApps = 40;
 
     inline AppEntry apps[kMaxApps];
     inline int app_count = 0;
 
     // ランチャの並び(登録簿のindexの並べ替え。0..app_count-1 を1つずつ含む)と、隠したアプリの印(ビット=index)
     inline int8_t   launcher_order[kMaxApps] = {};
-    inline uint32_t launcher_hidden = 0;
-    static_assert(kMaxApps <= 32, "launcher_hidden のビット数が足りません");
+    inline uint64_t launcher_hidden = 0;
+    static_assert(kMaxApps <= 64, "launcher_hidden のビット数が足りません");
 
     // 型Tのシーンを作るファクトリ。引数を使わないアプリ向け。
     // Register()へ &MakeScene<XxxScene> の形で渡す

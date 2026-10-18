@@ -34,7 +34,8 @@ uint32_t AppGrid::layoutSignature() const {
     mix((uint32_t)rowsPerPage());
     mix(HomeLayout::Revision());
     mix((uint32_t)AppFunctions::Count());
-    mix(AppFunctions::launcher_hidden);
+    mix((uint32_t)AppFunctions::launcher_hidden);
+    mix((uint32_t)(AppFunctions::launcher_hidden >> 32));
     for (int i = 0; i < AppFunctions::Count(); i++) mix((uint8_t)AppFunctions::launcher_order[i]);
     return h | 1u; //0は「作っていない」の印
 }

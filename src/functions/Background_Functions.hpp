@@ -75,6 +75,10 @@ namespace BackgroundFunctions {
     // background.cfg に書かれた入り切り(書いていなければ def)
     bool ConfigEnabled(const char* key, bool def);
 
+    // 真を返す間は Update() で仕事を回さない(録音中。チャットの未読などのTLSで1コア目が1〜2秒止まると
+    // マイクの列が溢れるため)。main.cpp が差す(登録簿を録音へ依存させないための関数ポインタ)
+    inline bool (*suspend_query)() = nullptr;
+
     // 毎フレーム(main.cpp の loop()、サービスの最後のほう)
     void Update();
     void UpdateAt(uint32_t now_ms);

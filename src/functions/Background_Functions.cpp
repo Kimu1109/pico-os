@@ -82,6 +82,7 @@ void BackgroundFunctions::SetEnabled(BackgroundService* s, bool enabled){
 void BackgroundFunctions::Update(){ UpdateAt(millis()); }
 
 void BackgroundFunctions::UpdateAt(uint32_t now_ms){
+    if(suspend_query && suspend_query()) return;
     //update() の中で自分を外す仕事があっても飛ばさないよう、後ろから
     for(int i = service_count - 1; i >= 0; i--){
         if(i < service_count) services[i]->update(now_ms);

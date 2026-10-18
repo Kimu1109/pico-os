@@ -188,6 +188,9 @@ ICONS: list[IconSpec] = [
 
     # --- 動画(2026-10-12)。末尾へ足すこと(上の【重要】参照)。自作 ---
     IconSpec("video",          str(CUSTOM_DIR / "video.svg")),
+
+    # --- 録音(2026-10-18)。末尾へ足すこと(上の【重要】参照)。自作 ---
+    IconSpec("microphone",     str(CUSTOM_DIR / "microphone.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

@@ -107,6 +107,8 @@ namespace PICO_Path {
             constexpr const char* SYS_BACKGROUND_CFG = "/sys/background.cfg";
             // ホーム画面のウィジェット("widget1 = clock,2x1,0" ...)。HomeLayout参照
             constexpr const char* SYS_HOME_CFG = "/sys/home.cfg";
+            // ゲームボーイ("rom-in-flash = auto|always|never")。GameBoyScene参照
+            constexpr const char* SYS_GB_CFG = "/sys/gb.cfg";
         }
 
         namespace IME {

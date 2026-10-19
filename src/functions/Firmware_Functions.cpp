@@ -9,6 +9,7 @@
 #include "functions/Sound_Functions.hpp"
 #include "firmware/Fw_Store.hpp"
 #include "firmware/Fw_Version.hpp"
+#include "storage/Flash_Area.hpp"
 #include "sound/Music_Service.hpp"
 #include "OS_Data.hpp"
 
@@ -263,6 +264,15 @@ namespace {
 void FirmwareFunctions::Setup(){
     LOG_SYS_MSG("ファーム: %s %s", FwVersion::Text(), FwVersion::Date());
     LOG_SYS_DEBUG("%s", FwVersion::Marker());
+
+    // 置き場をゲームボーイのROMが間借りしている(storage/Flash_Area)。マウントに失敗すると
+    // フォーマットされてROMが消えるので触らない(この場合、前回の更新の控えも残っていない)
+    if(const FlashArea* area = DefaultFlashArea()){
+        if(area->holdsRawData()){
+            LOG_SYS_MSG("ファームの更新の置き場: ゲームボーイのROMを置いているので片付けません");
+            return;
+        }
+    }
 
     FwStore& store = DefaultFwStore();
     if(!store.mount()){

@@ -12,12 +12,12 @@
 // peanut_gb.h の実装を取り込むのは Gb_Emu.cpp の1箇所だけで、
 // 他のファイル(シーン/ウィジェット)はこのクラスだけを見る。
 //
-// ---- 第1段: ROMは丸ごとRAMへ読む ----
-// Peanut-GBはROMを1バイトずつコールバックで読むので、SDから都度読むことはできない。
-// 第1段では kMaxRomBytes(256KiB)までのROMをRAMへ丸ごと載せる。
-// テトリス/Dr.マリオ(32KiB)・マリオランド(64KiB)・カービィ(256KiB)が入る。
-// それより大きいROM(ゼルダ512KiB・ポケモン1MiB)は TooLarge で断る
-// (SDからバンク単位で読む/Flashへ書く、は第2段以降。SUMMARY.md #9 参照)。
+// ---- ROMの置き場 ----
+// Peanut-GBはROMを1バイトずつコールバックで読むので、SDから都度読むことはできない。2通りある:
+//   - load(path): kMaxRomBytes(256KiB)までのROMをRAMへ丸ごと載せる。
+//     テトリス/Dr.マリオ(32KiB)・マリオランド(64KiB)・カービィ(256KiB)が入る。それより大きいものは TooLarge
+//   - load(path, image, size): 呼ぶ側が用意したROM(内蔵フラッシュへ書いたもの。gb/Gb_Rom_Flash)を
+//     そのまま読む。ROMにRAMを使わない。image は unload() まで有効でなければならない(解放はしない)
 //
 // ---- メモリ ----
 // load()で確保し、unload()(とデストラクタ)で全部返す。シーンが開いている間だけの寿命。
@@ -83,6 +83,10 @@ class GbEmu {
         // ROMをSDから読んで起動する。既に読み込み済みなら先に unload() する。
         // 同じ場所に「拡張子を.savにしたファイル」があれば、それをカートリッジRAMへ読む
         LoadError load(const char* rom_path);
+        // 用意済みのROM(image, size)で起動する。rom_path は .sav・途中保存の置き場を決めるためだけに使う
+        LoadError load(const char* rom_path, const uint8_t* image, uint32_t size);
+        // ROMを外の置き場(内蔵フラッシュ)から読んでいるか
+        bool romIsExternal() const { return this->rom && !this->rom_owned; }
 
         // 未保存のセーブがあれば書き出してから全部解放する
         void unload();
@@ -170,8 +174,9 @@ class GbEmu {
     private:
         Impl* impl = nullptr;
 
-        uint8_t* rom = nullptr;
+        const uint8_t* rom = nullptr;
         uint32_t rom_size = 0;
+        bool rom_owned = false;   // romをmallocした(unload()でfreeする)
 
         uint8_t* cart_ram = nullptr;
         uint32_t cart_ram_size = 0;
@@ -205,6 +210,7 @@ class GbEmu {
         int changed_last = -1;
 
         LoadError readRomFile(const char* rom_path);
+        LoadError start(const char* rom_path);
         void readSaveFile();
         void resyncAudio();
 };

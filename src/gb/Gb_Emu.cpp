@@ -69,7 +69,7 @@ const char* GbEmu::loadErrorToStr(LoadError e){
         case LoadError::None:            return "成功";
         case LoadError::NoSd:            return "SDカードが使えません";
         case LoadError::NotFound:        return "ROMを開けません";
-        case LoadError::TooLarge:        return "ROMが大きすぎます(今は256KBまで)";
+        case LoadError::TooLarge:        return "ROMが大きすぎます(RAMに載るのは256KBまで)";
         case LoadError::TooSmall:        return "ROMとして短すぎます";
         case LoadError::OutOfMemory:     return "メモリが足りません";
         case LoadError::ReadFailed:      return "ROMの読み込みに失敗しました";
@@ -89,7 +89,20 @@ GbEmu::LoadError GbEmu::load(const char* rom_path){
         this->unload();
         return read_err;
     }
+    return this->start(rom_path);
+}
 
+GbEmu::LoadError GbEmu::load(const char* rom_path, const uint8_t* image, uint32_t size){
+    this->unload();
+    if(!rom_path || !rom_path[0] || !image) return LoadError::NotFound;
+    if(size < kRomHeaderEnd) return LoadError::TooSmall;
+    this->rom = image;
+    this->rom_size = size;
+    this->rom_owned = false;
+    return this->start(rom_path);
+}
+
+GbEmu::LoadError GbEmu::start(const char* rom_path){
     this->impl = static_cast<Impl*>(malloc(sizeof(Impl)));
     if(!this->impl){
         LOG_APP_FAIL("GbEmu: エミュ本体(%uB)を確保できません", (unsigned)sizeof(Impl));
@@ -171,8 +184,9 @@ GbEmu::LoadError GbEmu::load(const char* rom_path){
     this->changed_first = 0;
     this->changed_last = kHeight - 1;
 
-    LOG_APP_OK("GbEmu: %s を起動しました(題名\"%s\" ROM %uB / セーブ %uB)",
-        rom_path, this->title_.c_str(), (unsigned)this->rom_size, (unsigned)this->cart_ram_size);
+    LOG_APP_OK("GbEmu: %s を起動しました(題名\"%s\" ROM %uB(%s) / セーブ %uB)",
+        rom_path, this->title_.c_str(), (unsigned)this->rom_size,
+        this->rom_owned ? "RAM" : "内蔵フラッシュ", (unsigned)this->cart_ram_size);
     return LoadError::None;
 }
 
@@ -196,17 +210,19 @@ GbEmu::LoadError GbEmu::readRomFile(const char* rom_path){
         return LoadError::TooSmall;
     }
 
-    this->rom = static_cast<uint8_t*>(malloc(file_size));
-    if(!this->rom){
+    uint8_t* buf = static_cast<uint8_t*>(malloc(file_size));
+    if(!buf){
         LOG_APP_FAIL("GbEmu: ROM(%uB)を確保できません", (unsigned)file_size);
         f.close();
         return LoadError::OutOfMemory;
     }
+    this->rom = buf;
+    this->rom_owned = true;
 
     size_t done = 0;
     while(done < file_size){
         const size_t want = (file_size - done < 4096) ? (file_size - done) : 4096;
-        const int got = f.read(this->rom + done, want);
+        const int got = f.read(buf + done, want);
         if(got <= 0) break;
         done += (size_t)got;
     }
@@ -294,8 +310,9 @@ void GbEmu::unload(){
 
     free(this->impl);
     this->impl = nullptr;
-    free(this->rom);
+    if(this->rom_owned) free(const_cast<uint8_t*>(this->rom));
     this->rom = nullptr;
+    this->rom_owned = false;
     this->rom_size = 0;
     free(this->cart_ram);
     this->cart_ram = nullptr;

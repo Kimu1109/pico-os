@@ -92,6 +92,8 @@ FwStore& DefaultFwStore(){
 
 #else // PICOOS_PC
 
+#include "storage/Flash_Area.hpp"
+
 #include <string>
 #include <sys/stat.h>
 
@@ -110,6 +112,11 @@ namespace {
             bool mount() override {
                 if(!FwStorePc::dir) return false;
                 mkdir(FwStorePc::dir, 0755);
+                // 実機ではLittleFSのマウントに失敗してフォーマットされ、間借りしているゲームボーイのROMが消える。
+                // 同じことを真似る(storage/Flash_Area)
+                if(FlashArea* area = DefaultFlashArea()){
+                    if(area->holdsRawData()) area->erase(0, FlashArea::kSectorBytes);
+                }
                 return true;
             }
             void unmount() override { closeFile(); }

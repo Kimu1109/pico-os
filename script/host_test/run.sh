@@ -57,7 +57,8 @@
 #   gb_emu_test   … Game Boyエミュ(GbEmu/GameBoyPad/GameBoyView)。テスト内で組み立てたROMで、
 #                   読み込みの断り方・セーブ(.sav)の往復・ボタン・不正な命令で落ちないこと・
 #                   変わった行だけdirtyにすること・操作パッドのタップ位置→ボタン・
-#                   音源チップへの書き込みが時刻付きで渡ること/読み出しの答え方を確認する
+#                   音源チップへの書き込みが時刻付きで渡ること/読み出しの答え方・
+#                   内蔵フラッシュへのROMの置き場(GbRomFlash。NORの偽物へ書く/使い回す/書き直す/失敗)を確認する
 #   gb_apu_test   … ゲームボーイの音源チップ(GbApu)と時刻付きの列(GbAudioLink)。矩形波の高さ/デューティ・
 #                   長さ・エンベロープ・スイープ・波形メモリ・ノイズ・電源・振り分け、フレームの中の位置どおりに
 #                   効くこと・エミュが止まったら無音・溜まりすぎたら追いつく
@@ -752,6 +753,7 @@ if group_on media; then
 compile_or_die g++ $CXXFLAGS $INCLUDES -I"$ROOT/lib/peanut_gb/src" \
     "$ROOT/script/host_test/gb_emu_test.cpp" \
     "$ROOT/src/gb/Gb_Emu.cpp" \
+    "$ROOT/src/gb/Gb_Rom_Flash.cpp" \
     "$ROOT/src/gui/widgets/apps/GameBoyPad.cpp" \
     "$ROOT/src/gui/widgets/apps/GameBoyView.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \

@@ -107,6 +107,7 @@ namespace {
     uint32_t last_header_ms = 0;
     bool logged_running = false, logged_failed = false;
     uint32_t logged_dropped = 0;
+    uint32_t pending_rate = 0;      // 録音の後片付けが終わったら戻す周波数(RestoreSampleRate)
 
     void ApplyWant(){
         const uint8_t m = (rec_state != Rec::Idle && rec_state != Rec::Finishing) ? 2 : (monitor || rec_state == Rec::Finishing ? 1 : 0);
@@ -150,6 +151,10 @@ namespace {
         ring_storage = nullptr;
         rec_state = Rec::Idle;
         ApplyWant();
+        if(pending_rate != 0){
+            MicFunctions::SetSampleRate(pending_rate, false);
+            pending_rate = 0;
+        }
         const uint32_t ms = (uint32_t)((uint64_t)writer.dataBytes() / 2 * 1000 / (cfg_rate ? cfg_rate : 1));
         if(stop_reason == MicFunctions::StopReason::User){
             LOG_SYS_OK("録音: %s を保存しました(%lu.%lu秒)", rec_path.c_str(), (unsigned long)(ms / 1000), (unsigned long)(ms % 1000 / 100));
@@ -307,6 +312,12 @@ uint32_t MicFunctions::Overruns(){ return core1_overruns.load(std::memory_order_
 MicFunctions::StopReason MicFunctions::LastStopReason(){ return stop_reason; }
 
 uint32_t MicFunctions::SampleRate(){ return cfg_rate; }
+void MicFunctions::RestoreSampleRate(uint32_t rate){
+    if(!MicDsp::ValidRate(rate)) return;
+    if(rec_state == Rec::Idle) SetSampleRate(rate, false);
+    else pending_rate = rate;
+}
+
 bool MicFunctions::SetSampleRate(uint32_t rate, bool persist){
     if(!MicDsp::ValidRate(rate) || rec_state != Rec::Idle) return false;
     if(rate != cfg_rate){

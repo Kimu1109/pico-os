@@ -35,6 +35,9 @@ pc/sdcard/lua/apps/*/news.xml
 pc/sdcard/lua/apps/*/news.xml.part
 pc/sdcard/lua/apps/*/settings.cfg
 pc/sdcard/lua/apps/*/results.txt
+# マイクの動作確認(mic.lua)・pico.mic_start() が録るファイルと、録音アプリの置き場
+pc/sdcard/lua/apps/*/rec_*.wav
+pc/sdcard/recordings/
 pc/sdcard/lua/apps/*/bench.tmp
 pc/sdcard/lua/apps/*/spotify_auth.json
 pc/sdcard/lua/apps/Spotify/art.jpg

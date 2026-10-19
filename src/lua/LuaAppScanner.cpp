@@ -116,6 +116,8 @@ bool LuaAppScanner::ReadAppConfig(const char* config_path, AppInfo& out) {
                 ReadBool(config_path, key, value, out.permissions.background);
             } else if (strcmp(key, "permission_network") == 0) {
                 ReadBool(config_path, key, value, out.permissions.network);
+            } else if (strcmp(key, "permission_microphone") == 0) {
+                ReadBool(config_path, key, value, out.permissions.microphone);
             } else if (strcmp(key, "permission_notify") == 0) {
                 ReadBool(config_path, key, value, out.permissions.notify);
             } else if (strcmp(key, "strip_debug") == 0) {

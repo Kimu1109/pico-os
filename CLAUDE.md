@@ -92,7 +92,7 @@ src/
   gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
   video/                     動画(.pvid)の読み取り(Pvid_Player)。下記「動画(.pvid)」参照
   sound/                     マイクの計算(Mic_Dsp)とWAVへの書き出し(Wav_Writer)・チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
-  lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
+  lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso) / LuaEngine_Mic.cpp(pico.mic_*)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査) / Json_Reader(流しながら読むJSON)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
@@ -2188,7 +2188,16 @@ SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブ
   MicFunctions: 使うまでI2Sを持たない/返す、48000Hz・32bit・GP26/28、奇数個ずつ届いても1kHzのまま、WAVの見出し、番号、取りこぼし・DMAの溢れ、録音中の見出しの書き直し、
   I2Sの失敗で止まる/もう一度試す、SD無し、mic.cfgの読み書き、24000Hz・右)、PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 録音→停止で5.0秒・16000Hz・440Hz・-12dBFS(=-30+18)・直流0のWAV、
   録音中の表示、`PICOOS_MIC=none`で「信号がありません」、一覧。実機ファームのビルドは通る(`pio run`)。**実機・実物のSPH0645では未確認**(配線・ビット位置・SDの書き込みが追いつくか・2コア目の負荷)。
-- 未: Lua API(`pico.mic_*`)、録音中の一時停止、モノラル以外。
+- **Lua(`pico.mic_*`、`src/lua/LuaEngine_Mic.cpp`、2026-10-18)**: `mic_start([path][, {rate=, gain=}])`→パス / `mic_stop` / `mic_recording` / `mic_info` /
+  `mic_monitor(on)` / `mic_level()`(0〜1とdBFS。読むと0へ) / `mic_has_signal` / `mic_set_gain`・`mic_gain` / `mic_set_rate`・`mic_rate`。
+  **新しい権限`microphone`**(app.cfgの`permission_microphone`、アプリストアの`perms`は`microphone`、確認の表示は「マイク」)。権限が無ければ`nil, 理由`、引数の誤りは先に`luaL_error`。
+  録音先は`SdWriteAllowed()`(省略すると`<app_dir>/rec_NNNN.wav`、`.wav`以外はエラー、親フォルダは作る)。
+  **増幅・周波数は`persist=false`で変え、`LuaEngine`の破棄(`ReleaseMic()`)で元へ戻す**(mic.cfgへは書かない)。そのアプリが始めた録音・メーターもそこで止める。
+  録音の後片付け中は周波数を変えられないので、戻すのは`MicFunctions::RestoreSampleRate()`(終わってから当てる)。録音中は`LuaScene`が`KeepAwake()`(`MicBusy()`)。
+  バックグラウンドのスクリプトでは使えない。ドキュメントは`lua-api-doc/content/api/mic.md`、動作確認は「動作確認」アプリの「マイク」(`mic.lua`。メニューのボタンは28pxにした)。
+  検証: `lua_ext_test`(権限・引数・録音先・同時に1本・mic_level/info・止める・閉じたらメーター/増幅/周波数を戻す・録音したまま閉じても保存・mic.cfgへ書かない)、
+  `app_repo_test`(`microphone`の権限)、PCビルドの`--tap`/`--shot`(`PICOOS_MIC=tone`でメーター・録音→停止→保存)。
+- 未: 録音中の一時停止、モノラル以外。
 
 ### ステレオ出力とパン (`stereo` 引数 / `ChipSynth::Note::pan` / MMLの`p`) (2026-10-14)
 

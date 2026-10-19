@@ -59,6 +59,12 @@ int main(){
     check(AppRepo::ParsePerms("network,notify,sd", perms) && perms == (AppRepo::PermNetwork | AppRepo::PermNotify | AppRepo::PermSd), "perms: 全部");
     check(!AppRepo::ParsePerms("network,camera", perms), "perms: 知らない権限は断る");
     check(AppRepo::ParsePerms("background,network", perms) && perms == (AppRepo::PermBackground | AppRepo::PermNetwork), "perms: background");
+    check(AppRepo::ParsePerms("microphone", perms) && perms == AppRepo::PermMicrophone, "perms: microphone");
+    {
+        FixedString<PICO_STR_L> t;
+        AppRepo::PermsText(AppRepo::PermMicrophone | AppRepo::PermNetwork, t);
+        check(strcmp(t.c_str(), "ネットワーク・マイク") == 0, "perms: マイクの表示");
+    }
     FixedString<PICO_STR_L> pt;
     AppRepo::PermsText(AppRepo::PermNetwork | AppRepo::PermNotify, pt);
     check(pt == "ネットワーク・通知", "perms: 表示");

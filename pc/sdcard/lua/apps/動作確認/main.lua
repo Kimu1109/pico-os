@@ -10,6 +10,7 @@
 --   pad.lua    … 外部コントローラー
 --   sound.lua  … チップチューン音源の鍵盤とデモ曲(demo.mml)
 --   notify.lua … 通知(pico.notify)。通知から開かれたときは、このメニューが通知のページへ送る
+--   mic.lua    … マイク(pico.mic_*)。メーター・録音・再生・増幅/周波数
 
 local x, y, w, h = pico.content_rect()
 local dir = pico.app_dir()
@@ -26,9 +27,10 @@ local PAGES = {
     { "コントローラー", "pad.lua" },
     { "音",             "sound.lua" },
     { "通知",           "notify.lua" },
+    { "マイク",         "mic.lua" },
 }
 
-local BTN_H = 32
+local BTN_H = 28
 local GAP = 3
 local top = y + 4
 

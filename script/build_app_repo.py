@@ -300,6 +300,8 @@ def collect_apps(apps_dir, only):
             perms.append("sd")
         if truthy(cfg.get("permission_background", "false")):
             perms.append("background")
+        if truthy(cfg.get("permission_microphone", "false")):
+            perms.append("microphone")
         a.perms = ",".join(perms) or "-"
         files = tracked_files(app_dir)
         if "main.lua" not in files or "app.cfg" not in files:

@@ -1,7 +1,7 @@
 ---
 title: "権限モデル"
 weight: 100
-description: "network / sd_outside_app_dir / notify のパーミッション"
+description: "network / sd_outside_app_dir / notify / background / microphone のパーミッション"
 ---
 
 Luaアプリへ許す操作は、all-or-nothingのフラグで決まります。既定は**両方 `false`(最小権限)**です。
@@ -11,6 +11,8 @@ struct LuaPermissions {
     bool network = false;
     bool sd_outside_app_dir = false;
     bool notify = false;
+    bool background = false;
+    bool microphone = false;
 };
 ```
 
@@ -20,6 +22,7 @@ struct LuaPermissions {
 | `sd_outside_app_dir` | `pico.sd_exists/read/write/remove/mkdir/list` / `pico.image_load` / `Image`・`ImageView`・`MarkdownView` の `path` / `pico.canvas_load` | そのアプリの `app_dir`(通常は自分のスクリプトの親ディレクトリ)の配下しかアクセスできない |
 | `notify` | `pico.notify` | 呼んでも `nil, 理由` が返るだけ(通知はアプリを閉じた後にも画面へ出て音も鳴るため、既定では許さない)。`app.cfg` の `permission_notify=true` で許可する |
 | `background` | `app.cfg` の `background`(閉じている間も定期的に動くスクリプト。[バックグラウンド](../../api/background/)) | 書いてあっても動かさない(電池とWi-Fiを使い続けるため、既定では許さない)。`app.cfg` の `permission_background=true` で許可する |
+| `microphone` | `pico.mic_start` / `mic_monitor` / `mic_set_gain` / `mic_set_rate`([マイク](../../api/mic/)) | 呼んでも `nil, 理由` が返るだけ(周りの音を拾うため、既定では許さない)。`app.cfg` の `permission_microphone=true` で許可する。読むだけの `mic_level` / `mic_info` 等は権限が無くても呼べる(聞いていなければ0) |
 
 権限は**Luaスクリプトが構築されるとき(=画面が開かれるとき)に1回だけ**決まります。実行中にスクリプト側から変更する手段はありません。パスのホワイトリストやホスト単位の細かい制限は今のところ無く、「持ち場の外へ出られるか出られないか」だけを見る、最初の一歩としての粗い実装です。
 

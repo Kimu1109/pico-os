@@ -443,6 +443,8 @@ class LuaEngine {
         void UpdateHttp();
         // pico.http_request()が進行中か(スリープさせないかの判断に使う)
         bool HttpBusy() const;
+        // pico.mic_start() で始めた録音が続いているか(LuaSceneがスリープさせない判断に使う)
+        bool MicBusy() const;
         // pico.sound_set_rate() で頼まれた音の出力の周波数(0=設定のまま)。LuaScene::preferredSampleRate() が返す
         uint32_t RequestedSampleRate() const { return requested_rate_; }
         void InheritSampleRate(uint32_t rate){ requested_rate_ = rate; }
@@ -489,6 +491,7 @@ class LuaEngine {
         friend struct LuaEngineCrypto;
         friend struct LuaEngineIso;
         friend struct LuaEngineNet;
+        friend struct LuaEngineMic;
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
         // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
         // TabChangedはウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)
@@ -555,6 +558,13 @@ class LuaEngine {
         // pico.wav_*を使ったか。使ったアプリは閉じるときにWAVを止める
         bool used_wav_ = false;
         bool used_palette_ = false; // pico.set_palette()を呼んだ(閉じるときに既定のパレットへ戻す)
+        // pico.mic_*(LuaEngine_Mic.cpp)。閉じるときに ReleaseMic() が、このアプリが始めた録音・メーターを止め、
+        // 変えた増幅・周波数を元へ戻す(mic.cfg へは書かないので、他のアプリや録音アプリの設定は変わらない)
+        bool mic_recording_ = false;    // このアプリが録音を始めた
+        bool mic_monitor_ = false;      // このアプリがメーターを入れた
+        int  mic_saved_gain_ = -1;      // 変える前の増幅(-1=変えていない)
+        uint32_t mic_saved_rate_ = 0;   // 変える前の周波数(0=変えていない)
+        void ReleaseMic();
         uint32_t requested_rate_ = 0; // pico.sound_set_rate()(0=設定のまま)
 
         std::vector<CallbackBinding> callbacks_;
@@ -595,6 +605,7 @@ class LuaEngine {
         void RegisterCryptoApi();
         void RegisterIsoApi();
         void RegisterNetApi();
+        void RegisterMicApi();
 
         // pico.iso(2.5Dの箱庭のエンジン。LuaEngine_Iso.cpp)の状態。初めて pico.iso.* を使ったときに new する
         struct IsoState;

@@ -1,6 +1,6 @@
 ---
 title: "バックグラウンド"
-weight: 86
+weight: 87
 description: "app.cfg の background / is_background / finish"
 ---
 

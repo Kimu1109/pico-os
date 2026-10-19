@@ -38,5 +38,6 @@ description: "pico.* 全関数のシグネチャ・引数・戻り値。使い�
 | [通知](notify/) | `notify` `notify_cancel` `notify_list` `launch_reason` |
 | [バックグラウンド](background/) | app.cfg の `background`・`is_background` `finish` |
 | [音](sound/) | `sound_play` `sound_stop` `sound_playing` `note_freq` `beep` `sound_available` `music_play` `music_play_text` `music_stop` `music_playing` `wav_play` `wav_stop` `wav_playing` |
+| [マイク](mic/) | `mic_start` `mic_stop` `mic_recording` `mic_info` `mic_monitor` `mic_level` `mic_has_signal` `mic_set_gain` `mic_gain` `mic_set_rate` `mic_rate`(権限 `microphone`) |
 | [デバッグ](debug/) | `traceback` `breakpoint` `set_breakpoint` `clear_breakpoint` `debugger_enabled` |
 | [その他](misc/) | `log` `show_error` `millis` `battery` `on_key` `app_dir` `path_join` `time` `wifi_status` `url_encode` `url_decode` `base64_encode` `base64_decode` `settings_get` `settings_set` `settings_all` `memory_info` `toast` `clipboard_get` `clipboard_set` |

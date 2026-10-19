@@ -95,12 +95,15 @@ namespace SoundFunctions {
     //  - SampleRate():          今の出力の周波数(画面の要求があればそれ、無ければ設定)
     //  - ConfiguredSampleRate(): 利用者の設定(sound.cfgの sample-rate)
     //  - SetSampleRate():       設定を変える(今だけ。sound.cfgへは書かない)
+    //  - RequestedSampleRate(): 今の要求(0=無し)
     //  - RequestSampleRate():   画面の要求(0で取り下げ)。設定より優先する。ふつうは Scene::preferredSampleRate() を
     //                           main.cpp の loop() が毎フレーム渡すので、画面を離れると自動で取り下げられる
     uint32_t SampleRate();
     uint32_t ConfiguredSampleRate();
     bool SetSampleRate(uint32_t rate);
     bool RequestSampleRate(uint32_t rate);
+    // 今の要求(0=無し)。main.cpp が毎フレーム渡した値
+    uint32_t RequestedSampleRate();
 
     // 電池駆動中にkBatteryVolumeCapPercentで頭打ちするか(sound.cfgの battery-cap)。今だけ
     bool GetBatteryCap();

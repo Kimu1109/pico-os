@@ -497,6 +497,7 @@ void SoundFunctions::SetBatteryCap(bool enable){
 }
 
 uint32_t SoundFunctions::ConfiguredSampleRate(){ return configured_rate; }
+uint32_t SoundFunctions::RequestedSampleRate(){ return requested_rate; }
 
 namespace {
     bool ValidRate(uint32_t rate){ return rate == kSampleRateLow || rate == kSampleRateHigh; }

@@ -236,6 +236,42 @@ static void TestMusic(){
     MusicService::TogglePlay();
     check(MusicService::Active(), "SDが戻れば続きから鳴らせる");
 
+    //main.cpp と同じく、画面が周波数を望まない(ホーム画面・動画アプリ)ときはバックグラウンドの望みを毎フレーム渡す
+    {
+        auto main_step = [](int frames){
+            for(int i = 0; i < frames; i++){
+                SoundFunctions::RequestSampleRate(BackgroundFunctions::PreferredSampleRate());
+                Step();
+            }
+        };
+        Step(5);    //前の曲の置き場が空くのを待つ
+        MusicService::StartPlaylist(ok2, 2, nullptr, 0, 3, "旅", 0);
+        main_step(3);
+        check(MusicService::Active() && SoundFunctions::SampleRate() == SoundFunctions::kSampleRateHigh, "ホーム画面でも44100Hzで鳴り続ける");
+        //他のアプリ(周波数を望まない)が曲を鳴らす: 取った側の音が周波数の切り替えで止まらない
+        main_step(5);    //曲の置き場が空くのを待つ
+        check(SoundFunctions::MusicPlayText(other, strlen(other)), "他のアプリが曲を鳴らす(ホーム画面の要求のまま)");
+        main_step(5);
+        check(MusicService::Interrupted() && SoundFunctions::MusicPlaying(), "取った側の音は鳴り続ける");
+        check(SoundFunctions::SampleRate() == SoundFunctions::kSampleRateHigh, "取った側が鳴っている間は周波数を変えない");
+        SoundFunctions::MusicStop();
+        main_step(3);
+        check(SoundFunctions::SampleRate() == SoundFunctions::kSampleRateLow, "鳴り終われば手放して設定の22050Hzへ");
+        //ホーム画面のウィジェットの再生ボタン: 鳴らした直後に周波数の切り替えで止まらない
+        MusicService::TogglePlay();
+        main_step(10);
+        check(MusicService::Active() && !MusicService::Interrupted(), "ウィジェットから鳴らし直しても止まらない");
+        check(SoundFunctions::SampleRate() == SoundFunctions::kSampleRateHigh, "鳴らす前に44100Hzへ切り替える");
+        //画面がはっきり22050Hzを望んでいれば、それを上書きしない
+        MusicService::Stop();
+        SoundFunctions::RequestSampleRate(SoundFunctions::kSampleRateLow);
+        Step(2);
+        MusicService::TogglePlay();
+        check(SoundFunctions::SampleRate() == SoundFunctions::kSampleRateLow && MusicService::Active(), "画面の要求があればその周波数で鳴らす");
+        SoundFunctions::RequestSampleRate(SoundFunctions::kSampleRateHigh);
+        Step(2);
+    }
+
     //一覧の[停止]で止まり、状態を返す
     MusicService::Service()->stop();
     check(!MusicService::HasQueue() && !SoundFunctions::MusicPlaying(), "[停止]で止めて状態を返す");

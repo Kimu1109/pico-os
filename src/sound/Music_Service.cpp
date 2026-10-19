@@ -108,6 +108,11 @@ namespace {
         }
         path.append(t.name.c_str());
 
+        //画面が周波数を望んでいない(ホーム画面のウィジェット等から鳴らした)なら、先に44100Hzへ切り替えておく。
+        //鳴らした後の次のフレームで main.cpp がバックグラウンドの望み(44100Hz)へ切り替えると、その切り替えで
+        //今鳴らした曲が止まり「他のアプリに取られた」扱いになってしまうため
+        if(SoundFunctions::RequestedSampleRate() == 0) SoundFunctions::RequestSampleRate(SoundFunctions::kSampleRateHigh);
+
         //MMLとWAVは同時には鳴らさない(このアプリで鳴らすのは1曲ずつ)
         if(MusicService::IsWav(t.name.c_str())){
             const char* err = "";
@@ -223,8 +228,14 @@ namespace {
             void stop() override { MusicService::Release(); }
             const char* appName() const override { return "ミュージック"; }
             uint32_t preferredSampleRate() const override { return SoundFunctions::kSampleRateHigh; }
-            //曲が終わって次へ進むまでの一瞬も周波数の要求を保つ(さもないと22050Hzへ切り替わって次の曲が止まる)
-            bool holdsSampleRate() const override { return st && st->kind != Kind::None && !st->interrupted; }
+            //曲が終わって次へ進むまでの一瞬も周波数の要求を保つ(さもないと22050Hzへ切り替わって次の曲が止まる)。
+            //他のアプリに取られた後も、そのアプリの曲/WAVが鳴っている間は保つ(手放すと周波数の切り替えで
+            //取った側の音まで止まる。動画アプリの音が鳴らなくなっていた)。鳴り終われば手放す
+            bool holdsSampleRate() const override {
+                if(!st) return false;
+                if(st->interrupted) return SoundFunctions::WavPlaying() || SoundFunctions::MusicPlaying();
+                return st->kind != Kind::None;
+            }
     };
     Service service;
 }

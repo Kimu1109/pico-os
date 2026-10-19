@@ -153,6 +153,8 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 
 ### OSData (`src/OS_Data.hpp`)
 グローバル状態ハブ。`inline`変数として: タッチ状態(touchX/Y/Z, isTouched, isTouchStart/End/Move)、グラフィック(`LGFX* lcd`, `LGFX_Sprite* frame`)、SD(`SdFat SD`, SD_usable)、キーボード3種へのポインタ(keyboard_jpn / keyboard_eng / keyboard_num)を保持。
+**`lcd`と`SD`だけは`extern`で`src/OS_Data.cpp`に定義する**(2026-10-19)。作る処理の要る`inline`変数は、ヘッダを読む`.cpp`ごとに初期化のコードがフラッシュへ入る(1つあたり数百バイト)ため。
+他のヘッダでも、`new`やコンストラクタの要る`inline`変数を増やすときは同じことに気をつけること(ファイルを分けるほど増える)。
 
 ### 層と置き場所 (`script/check_layers.py`) (2026-10-19)
 

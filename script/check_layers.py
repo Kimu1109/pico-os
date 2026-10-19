@@ -34,6 +34,7 @@ LAYERS = {
     # 0 base: どこからでも使える型・定数・グローバル状態(OSの機能を何も知らない)
     "consts.hpp": "base",
     "OS_Data.hpp": "base",
+    "OS_Data.cpp": "base",
     "config": "base",
     "util": "base",
     # 1 system: UI もハードの具体も知らない OS の土台(ログ・設定・時刻・入力の列・通知の中身…)

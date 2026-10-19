@@ -66,6 +66,7 @@ add_library(host_tjpgd STATIC ${CMAKE_CURRENT_SOURCE_DIR}/stubs/lgfx/utility/lgf
 # (どれも今のテストでは使っていない。使うときはスタブを足してからここから外す)
 set(HOST_EXCLUDE
     main.cpp                          # setup()/loop() はテストごとに要らない
+    OS_Data.cpp                       # テストはスタブの OS_Data.hpp(stubs/)を使う
     system/Log_Functions.cpp          # スタブの FsFile に open() が無い(テストは LogFunctions を偽物にする)
     hal/Network_Functions.cpp         # スタブの WiFi に scanNetworks() が無い
     gui/core/GFX_Functions.cpp        # 液晶の設定(LGFX_Config_PC.hpp)が pc/compat にしか無い

@@ -1,4 +1,4 @@
-// LuaEngine の拡張API(src/lua/LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaBuiltinModules.hpp)のテスト。
+// LuaEngine の拡張API(src/lua/LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / src/lua/builtin/*.lua)のテスト。
 //
 //   見送っていたウィジェットのLua生成 → TextView/ImageView/MarkdownView/AnalogClock/DurationPicker/
 //                      MonthGrid/ProgressBarを作り、プロパティ・長い文章・イベントが使えること

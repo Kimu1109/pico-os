@@ -99,7 +99,7 @@ src/
   crypto/                    暗号化して保存する値(Secret_Cipher: enc1:/enc3:)・XChaCha20-Poly1305とArgon2id(Secret_Aead)・端末ごとの鍵の用途別の鍵(Device_Key)
   iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索 / Iso_Flow: 流れの場(フローフィールド))。Luaの`pico.iso`。下記「ブロック」「2.5Dエンジンのタワーディフェンス向けの道具」参照
   sound/                     マイクの計算(Mic_Dsp)とWAVへの書き出し(Wav_Writer)・チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
-  lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso) / LuaEngine_Mic.cpp(pico.mic_*)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
+  lua/                        Lua<->C++バインディング本体(LuaEngine。土台は LuaEngine.cpp、pico.* の本体は分野ごとの LuaEngine_{Widgets,System,Sound,Draw,Sd,Http,Require}.cpp、拡張は LuaEngine_Ext / _Net / _Crypto / _Iso(pico.iso) / _Mic(pico.mic_*)。画像の置き場は LuaImages。同梱モジュールのソースは builtin/*.lua(LuaBuiltinModules.hpp は生成物))。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
   net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / GET(Http_Get)・汎用の要求(Http_Request)・Wi-Fiのスキャン(NetworkScan) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Base64 / Json_Reader・Xml_Reader(流しながら読む)。機能を持たない部品だけ
   storage/                    SDカードI/O・パス定数・フォルダの走査(Sd_Walker)・内蔵フラッシュの生の置き場(Flash_Area)・USBドライブのセクタの受け渡し(Msc_Sector_Bridge)
@@ -3979,7 +3979,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
   **HOLD/BGMのタップは左の欄(x<SX+54)だけ**(移行前は右の欄全体のキャンバスが反応していて、NEXTの絵をタップしてもHOLDが働いた)。
 - 音: BGMは`bgm.mml`(コロベイニキ、ロシア民謡でパブリックドメイン)。効果音は**チャンネル2**(BGMが使わないチャンネル)で鳴らすので曲を借りない。BGM枠のタップで入り切り。
 - 検証: `tetris_test`(run.sh。`script/host_test/tetris_test.lua`を`lua_script_test`(vendorしたLuaで.luaを動かすだけの下請け)で実行する。
-  **`pico.game`は本物(`LuaBuiltinModules.hpp`の`kGame`)で`pico.*`だけ偽物**。`main.lua`の末尾へ`TEST`(ローカル変数を覗く口)を足して読む。ライン消し・テトリス・
+  **`pico.game`は本物(`src/lua/builtin/game.lua`)で`pico.*`だけ偽物**。`main.lua`の末尾へ`TEST`(ローカル変数を覗く口)を足して読む。ライン消し・テトリス・
   壁蹴り・HOLD・長押し・ゲームオーバーとハイスコア保存・一時停止・タッチの操作ボタン(滑らせる)・重力・盤面のタイルとスプライトの位置・16KiB以内)、
   PCビルドの`--tap`で盤面・ミノ・ゴースト・HOLD/NEXTの絵(`PICOOS_VERIFY_LCD=1`で食い違い0)。**実機では未確認**。
 
@@ -4558,7 +4558,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
 6. **ユーティリティ**: `app_dir/path_join/time/wifi_status/url_encode/url_decode/base64_encode/base64_decode/settings_get/set/all/memory_info/toast`、`pico.on_back(fn)`/`pico.go_back()`
    (`LuaScene::onKey()` がEscを、`onUpdate()` がコントローラーのHOMEを「戻る」として渡す。登録が無ければ何もしない)。`util/Base64.hpp` を新設。
    `settings_*` はアプリのフォルダの `settings.cfg`(`PICO_Config`)。`toast` は `NotificationFunctions::Post()` の音なし(履歴にも残る。300msの間隔を空ける)。
-7. **OS同梱のLuaモジュール**(`src/lua/LuaBuiltinModules.hpp`。ソースはフラッシュに置くだけで、`require` されたときだけコンパイルする): `pico.ui`(宣言的なUIの組み立て)・
+7. **OS同梱のLuaモジュール**(ソースは`src/lua/builtin/*.lua`、`script/gen_lua_builtins.py`が`src/lua/LuaBuiltinModules.hpp`(生成物、コミットする)へ埋め込む。直したら生成し直すこと(CIが`--check`で見る)。ソースはフラッシュに置くだけで、`require` されたときだけコンパイルする): `pico.ui`(宣言的なUIの組み立て)・
    `pico.async`(`async.run/await/sleep/http/message/input/choice/date/time/number/...` でコルーチン連携)・`pico.tween`。`preloadModules()` が `pico.` で始まる名前を
    アプリのフォルダより先に同梱ソースから読む(実行中のコンパイルを避ける「先読み」の仕組みに乗せた)。**静的な `require("pico.ui")` の書き方だけ**先読みされる。
 8. **暗号化**(`crypto/Secret_Aead.hpp/.cpp`、`LuaEngine_Crypto.cpp`): `pico.encrypt(plain[, password])` / `decrypt` / `is_encrypted` / `hash`(BLAKE2b-256・鍵付き可)/ `random_bytes`、
@@ -4579,7 +4579,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
 
 ### 2Dゲームの簡易エンジン(`pico.game`、2026-10-06)
 
-`require("pico.game")`。**本体はLuaの同梱モジュール**(`LuaBuiltinModules.hpp`の`kGame`)で、C++へ足したのは重い描画の2つだけ:
+`require("pico.game")`。**本体はLuaの同梱モジュール**(`src/lua/builtin/game.lua`)で、C++へ足したのは重い描画の2つだけ:
 `pico.draw_tilemap(handle, tw, th, data, cols, x, y)`(`LuaEngine_Ext.cpp`。1バイト1マスの文字列を今のクリップにかかるマスだけ
 `DrawPimgSprite()`で描く。`draw_image_part`と同じ「クリップを狭めて画像全体をずらしてpushSprite」)と、
 `pico.draw_image_part`の8・9番目の引数`flip_x/flip_y`(反転はpushSpriteでできないので1画素ずつ。`draw_image_ex`と同じ書き方)。
@@ -4624,7 +4624,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
   ばねは`g:solid(t, "spring", fn)`で`ny==-1`のとき打ち上げる(Aを離して低く跳ぶ処理は自分のジャンプのときだけ。
   ばねの勢いまで切っていた)。押す速さは箱の`friction`で決まる(木箱400で約55px/秒、鉄箱150で約30px/秒)。
   足場は端で0.8秒止まる(止まらないと乗り込めなかった)。検証は`oshite_test`(run.sh。`lua_script_test`で本物のpico.game
-  (`LuaBuiltinModules.hpp`の`kGame`を読む)と偽物のpico.*を使い、操作を流し込んで3ステージを実際に解く。箱が無いと/1つでは
+  (`src/lua/builtin/game.lua`を読む)と偽物のpico.*を使い、操作を流し込んで3ステージを実際に解く。箱が無いと/1つでは
   壁に届かないことも見る)とPCビルドの`--tap`/`--shot`。**実機では未確認**。
 - 未: 坂・スプライトの回転/拡大(`draw_image_ex`を`s.draw`で使えばできる)・パーティクル・効果音の補助・
   タッチパネルでの同時押し(XPT2046が1点しか取れない)。
@@ -4644,7 +4644,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
 | テトリス | タイルマップ10x20(12px) | ミノ・ゴースト=スプライト4枚ずつ | title / play / pause / clear / over | `blocks.pimg`(120x12) |
 | ブロック崩し | タイルマップ8列(29x14px。1〜6=速さの段 7=壊せない灰) | ボール・パドル・アイテム=スプライト | ready / play / clear / over / win | `tiles.pimg`(203x14) |
 
-- **エンジンへ足したもの(`LuaBuiltinModules.hpp`の`kGame`)**: 画面ボタンの`visible = false`(描かず、**タッチも受けない**。画面ごとに見せるボタンを入れ替えるのに。
+- **エンジンへ足したもの(`src/lua/builtin/game.lua`)**: 画面ボタンの`visible = false`(描かず、**タッチも受けない**。画面ごとに見せるボタンを入れ替えるのに。
   それまで`button_at()`は`visible`を見ていなかった)と、ボタンの`draw = function(b, x, y, w, h, on)`(自前の絵。テトリスの操作ボタン・ブロック崩しの「自動」)。
   `pico.game`のドキュメント(`lua-api-doc/content/api/game.md`)と、4本の解説(`examples/tetris.md`・`examples/board-games.md`)を更新した。
 - **ダイアログをやめて`g:state`の枠にした**: リバーシ(パス・結果)とブロック崩し(ステージクリア・ゲームオーバー・全クリア)は`pico.show_message`だった。
@@ -4817,7 +4817,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
     `lua_ext_test`(Lua APIを一通り)。**実機では未確認**(人や物96個・流れの場の作り直しの時間)。ゲーム本体は下の「ゾンビTD」。
 - **ゾンビTD(`pc/sdcard/lua/apps/ゾンビTD/`、2026-10-08〜09、`ZOMBIE_TD.md`の「作る順番」の2〜7)**: 作る順番は全部済み
   (マップ・ゾンビ・兵士・建物・ウェーブ・保存・絵・効果音・説明)とコントローラー/キーボードの操作。未: 実機での速さとメモリの確認。
-  - **地形は`Iso::ARENA`(`kind`=4、`Iso_World.cpp`の`arenaLayout`/`arenaHeight`)**: 8マスごとの格子の高さ4〜9を補間し、水面5より下は水(底は砂)、木は無し。
+  - **地形は`Iso::ARENA`(`kind`=4、`Iso_Gen.cpp`の`arenaLayout`/`arenaHeight`)**: 8マスごとの格子の高さ4〜9を補間し、水面5より下は水(底は砂)、木は無し。
     ベースは z の小さい端の真ん中(`W/2, 4`)で 7x7 を平らな丸石に、出現位置は反対の端(`z = W-3`)に3つで 3x3 を平らな砂利に(半径8/4まで元の高さへなだらかにつなぐ)。
     `create(ARENA)`はベースの中心を返す。Luaは`pico.iso.arena()`→`{base=, spawns=}`。
   - **アプリ(`game.lua`)**: `iso.create(app_dir.."/map", 4, 種, 7)`(56x56。何も書き出さない)→`keep_all`→`pump`を数フレーム→

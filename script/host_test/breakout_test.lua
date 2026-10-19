@@ -1,5 +1,5 @@
 -- 「ブロック崩し」(pc/sdcard/lua/apps/ブロック崩し/)のゲームの規則を、pico.* を差し替えて確かめる。
--- pico.game は本物(src/lua/LuaBuiltinModules.hpp の kGame をそのまま読む)で、描画だけ捨てる。
+-- pico.game は本物(src/lua/builtin/game.lua をそのまま読む)で、描画だけ捨てる。
 -- lua_script_test から run.sh が呼ぶ。見た目はPCビルドの --tap / --shot で確かめること。
 local ROOT = ROOT_DIR .. "/pc/sdcard"
 local APP = "/lua/apps/ブロック崩し/"
@@ -9,10 +9,7 @@ local function check(c, msg)
     if not c then fails = fails + 1 end
 end
 
-local hpp = assert(io.open(ROOT_DIR .. "/src/lua/LuaBuiltinModules.hpp")):read("a")
-local _, s0 = hpp:find('kGame = R"LUA(', 1, true)
-local e0 = hpp:find(')LUA"', s0, true)
-local game = assert(load(hpp:sub(s0 + 1, e0 - 1), "=pico.game"))()
+local game = assert(load(assert(io.open(ROOT_DIR .. "/src/lua/builtin/game.lua")):read("a"), "=pico.game"))()
 
 local pad, pad_prev = {}, {}
 local popped, back_fn, jingles, sounds = false, nil, 0, 0

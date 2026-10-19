@@ -1,7 +1,7 @@
 -- 「おしてのぼれ」(pc/sdcard/lua/apps/おしてのぼれ/)の3つのステージが、操作を流し込むと
 -- 実際に解けることを確かめる(pico.game の軽い物理: 押し合い・積み重ね・ばね・動く足場・
 -- すり抜け床・スイッチ)。pico.* は描画を捨てる偽物に差し替え、pico.game は本物
--- (src/lua/LuaBuiltinModules.hpp の kGame をそのまま読む)。lua_script_test から run.sh が呼ぶ。
+-- (src/lua/builtin/game.lua をそのまま読む)。lua_script_test から run.sh が呼ぶ。
 -- 見た目はPCビルドの --tap / --shot で確かめること。
 local APP = ROOT_DIR .. "/pc/sdcard/lua/apps/おしてのぼれ/"
 local fails = 0
@@ -11,10 +11,7 @@ local function check(c, msg)
 end
 
 -- pico.game の本体を同梱モジュールのソースから取り出す
-local hpp = assert(io.open(ROOT_DIR .. "/src/lua/LuaBuiltinModules.hpp")):read("a")
-local _, s = hpp:find('kGame = R"LUA(', 1, true)
-local e = hpp:find(')LUA"', s, true)
-local game = assert(load(hpp:sub(s + 1, e - 1), "=pico.game"))()
+local game = assert(load(assert(io.open(ROOT_DIR .. "/src/lua/builtin/game.lua")):read("a"), "=pico.game"))()
 
 local nid = 0
 pico = setmetatable({

@@ -37,7 +37,7 @@ struct LuaEngineCrypto {
         SecretAead::Result r;
         {
             std::string out;
-            r = SecretAead::Encrypt((const uint8_t*)plain, n, self->app_dir_.c_str(), password, out);
+            r = SecretAead::Encrypt((const uint8_t*)plain, n, self->appDir(), password, out);
             if (r == SecretAead::Result::Ok) {
                 lua_pushlstring(L, out.data(), out.size());
                 return 1;
@@ -56,7 +56,7 @@ struct LuaEngineCrypto {
         SecretAead::Result r;
         {
             std::string out;
-            r = SecretAead::Decrypt(text, n, self->app_dir_.c_str(), password, out);
+            r = SecretAead::Decrypt(text, n, self->appDir(), password, out);
             if (r == SecretAead::Result::Ok) {
                 lua_pushlstring(L, out.data(), out.size());
                 return 1;

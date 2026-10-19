@@ -92,6 +92,8 @@ namespace MicFunctions {
     // 設定。周波数は録音中は変えられない(false)。persist=true なら mic.cfg へ書く
     uint32_t SampleRate();
     bool SetSampleRate(uint32_t rate, bool persist = true);
+    // 周波数を戻す(mic.cfgへは書かない)。録音中/後片付け中なら終わってから(Luaのアプリを閉じたとき)
+    void RestoreSampleRate(uint32_t rate);
     int GainDb();
     void SetGainDb(int db, bool persist = true);
     bool RightChannel();

@@ -35,7 +35,7 @@ pico-os-apps<TAB>1<TAB><serial>
 | name | 表示名(47バイトまで表示) |
 | bytes | 全部のファイルの合計バイト数(4MiBまで) |
 | files_sha256 | `files.tsv` のSHA-256(16進64桁) |
-| perms | 使う権限。`network` `notify` `sd`(= `permission_sd_outside_app_dir`) `background`(= `permission_background`)のカンマ区切り、無ければ `-`。**知らない名前があればその行を読まない** |
+| perms | 使う権限。`network` `notify` `sd`(= `permission_sd_outside_app_dir`) `background`(= `permission_background`) `microphone`(= `permission_microphone`)のカンマ区切り、無ければ `-`。**知らない名前があればその行を読まない** |
 | description | 説明(190バイトまで表示) |
 
 ### catalog.sig

@@ -34,6 +34,7 @@ namespace AppRepo {
         PermNotify  = 1 << 1,  // notify        / permission_notify
         PermSd      = 1 << 2,  // sd            / permission_sd_outside_app_dir
         PermBackground = 1 << 3, // background  / permission_background(閉じている間も定期的に動く)
+        PermMicrophone = 1 << 4, // microphone  / permission_microphone(マイクで聞く・録音する)
     };
 
     struct Entry {

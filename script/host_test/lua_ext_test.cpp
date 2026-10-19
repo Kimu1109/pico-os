@@ -19,6 +19,9 @@
 #include "system/Notification_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
 #include "system/Pad_Functions.hpp"
+#include "hal/Mic_Functions.hpp"
+#include <I2S.h>
+#include <cmath>
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
 #include "gui/widgets/Button.hpp"
@@ -2776,6 +2779,111 @@ int main() {
         )LUA", "jpeg");
         check(ok, "JPEG: 実行");
         memcpy(PICO_GFX::COLORS, saved_colors, sizeof(saved_colors));
+    }
+
+    // =====================================================================
+    // pico.mic_*(マイク。中身は MicFunctions、I2Sの入力はスタブの rx へ積む)
+    // =====================================================================
+    {
+        OSData::SD_usable = true;
+        MicFunctions::Setup();
+        const int gain0 = MicFunctions::GainDb();
+        const uint32_t rate0 = MicFunctions::SampleRate();
+        auto feed = [](int frames) {
+            static int phase = 0;
+            for (int i = 0; i < frames; i++, phase++) {
+                const int32_t v = (int32_t)lround(20000.0 * sin(2.0 * 3.14159265 * 1000.0 * phase / 48000.0));
+                I2S::last_input->rx.push_back((uint32_t)(v * 16384));
+                I2S::last_input->rx.push_back(0);
+            }
+        };
+        auto pump = [](int n) {
+            for (int i = 0; i < n; i++) { MicFunctions::LoopCore1(); MicFunctions::Update(); }
+        };
+
+        // 権限が無い
+        {
+            LuaEngine ne(64 * 1024, LuaPermissions{}, "/mapp");
+            lua_register(ne.raw(), "check", l_check);
+            const bool ok = ne.Run(R"LUA(
+                local p, e = pico.mic_start()
+                check(p == nil and e:find("権限") ~= nil, "mic: 権限が無ければ録音できない")
+                local m, e2 = pico.mic_monitor(true)
+                check(m == nil and e2 ~= nil, "mic: 権限が無ければメーターも入れられない")
+                check(pico.mic_set_gain(6) == nil, "mic: 権限が無ければ増幅を変えられない")
+                check(not pcall(pico.mic_start, "/mapp/a.txt"), "mic: 録音先が .wav でなければエラー")
+                check(not pcall(pico.mic_set_rate, 22050), "mic: 使えない周波数はエラー")
+                check(not pcall(pico.mic_start, {gain = 99}), "mic: 範囲外の gain はエラー")
+                check(not pcall(pico.mic_monitor, 1), "mic: monitor は真偽値")
+                check(pico.mic_recording() == false, "mic: 録音していない")
+                check(pico.mic_gain() >= 0 and pico.mic_rate() == 16000, "mic: 増幅と周波数は読める")
+            )LUA", "mic_noperm");
+            check(ok, "mic: 権限なしの実行");
+        }
+        check(!MicFunctions::IsRecording(), "mic: 権限が無いと何も始まらない");
+
+        LuaPermissions perm;
+        perm.microphone = true;
+        // 録音・メーター・閉じたら戻る
+        {
+            LuaEngine me(64 * 1024, perm, "/mapp");
+            lua_register(me.raw(), "check", l_check);
+            bool ok = me.Run(R"LUA(
+                local p, e = pico.mic_start("/other/x.wav")
+                check(p == nil and e ~= nil, "mic: app_dir の外へは録音できない")
+                P = pico.mic_start(nil, {rate = 24000, gain = 6})
+                check(P == "/mapp/rec_0001.wav", "mic: 省略するとアプリのフォルダの rec_0001.wav")
+                check(pico.mic_recording(), "mic: 録音中")
+                check(pico.mic_rate() == 24000 and pico.mic_gain() == 6, "mic: rate/gain を当てる")
+                local p2, e2 = pico.mic_start()
+                check(p2 == nil and e2 ~= nil, "mic: 2つ同時には録れない")
+                local r, e3 = pico.mic_set_rate(16000)
+                check(r == nil and e3 ~= nil, "mic: 録音中は周波数を変えられない")
+            )LUA", "mic_rec");
+            check(ok, "mic: 録音の実行");
+            check(me.MicBusy(), "mic: MicBusy(スリープさせない)");
+            pump(1);
+            feed(9600);
+            pump(30);
+            ok = me.Run(R"LUA(
+                local v, db = pico.mic_level()
+                check(v > 0.05 and db < 0, "mic: mic_level で山が読める")
+                local i = pico.mic_info()
+                check(i.recording and i.ms > 0 and i.rate == 24000 and i.input == "running" and i.signal, "mic: mic_info")
+                check(pico.mic_has_signal(), "mic: 信号あり")
+                check(pico.mic_stop() == true, "mic: mic_stop でこのアプリの録音を止める")
+                check(pico.mic_stop() == false, "mic: 2回目の mic_stop は false")
+                check(pico.mic_monitor(true) == true, "mic: メーターを入れる")
+            )LUA", "mic_stop");
+            check(ok, "mic: 止める実行");
+            pump(4);
+            check(!MicFunctions::IsRecording(), "mic: 書き終える");
+            const std::string& f = HostSd::files["/mapp/rec_0001.wav"];
+            check(f.size() == 44 + 4800 * 2, "mic: 0.2秒(24000Hz × 0.2 = 4800サンプル)");
+            check(MicFunctions::InputState() != MicFunctions::Input::Off, "mic: メーターの間はI2Sが動く");
+        }
+        check(MicFunctions::InputState() == MicFunctions::Input::Off, "mic: 閉じるとメーターを止める");
+        check(MicFunctions::GainDb() == gain0 && MicFunctions::SampleRate() == rate0, "mic: 閉じると増幅と周波数を戻す");
+        check(HostSd::files.count("/sys/mic.cfg") == 0, "mic: mic.cfg へは書かない");
+
+        // 録音したまま閉じる → 止めて保存し、周波数は書き終えてから戻す
+        {
+            LuaEngine me(64 * 1024, perm, "/mapp");
+            lua_register(me.raw(), "check", l_check);
+            const bool ok = me.Run(R"LUA(
+                check(pico.mic_start(nil, {rate = 48000}) == "/mapp/rec_0002.wav", "mic: 次の番号")
+            )LUA", "mic_close");
+            check(ok, "mic: 閉じる前の実行");
+            pump(1);
+            feed(4800);
+            pump(10);
+        }
+        check(MicFunctions::IsFinishing(), "mic: 閉じると録音を止める");
+        check(MicFunctions::SampleRate() == 48000, "mic: 書き終えるまで周波数はそのまま");
+        pump(3);
+        check(!MicFunctions::IsRecording(), "mic: 閉じた後も書き終える");
+        check(MicFunctions::SampleRate() == rate0, "mic: 書き終えたら周波数を戻す");
+        check(HostSd::files["/mapp/rec_0002.wav"].size() == 44 + 4800 * 2, "mic: 閉じても保存される(48000Hz × 0.1秒)");
     }
 
     WidgetFunctions::ClearSceneWidgets();

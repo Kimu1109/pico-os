@@ -15,6 +15,8 @@
 //                         画面へ出て音も鳴るので、既定では許さない(app.cfgのpermission_notify)
 //   background         … app.cfg の background に書いたスクリプトを、アプリを閉じている間も定期的に
 //                         動かしてよいか(LuaBackground。app.cfgのpermission_background)。電池とWi-Fiを使うので既定では許さない
+//   microphone         … pico.mic_*(マイクで聞く・録音する)を使えるか。周りの音を拾うので既定では許さない
+//                         (app.cfgのpermission_microphone)
 //
 // 経路ごとの細かい許可(パスのホワイトリスト、ホスト単位のネットワーク制限等)は
 // 今のところ無い。「そのアプリの持ち場の外へ出られるか出られないか」の二値だけを見る、
@@ -24,6 +26,7 @@ struct LuaPermissions {
     bool sd_outside_app_dir = false;
     bool notify = false;
     bool background = false;
+    bool microphone = false;
     // 権限ではないが、アプリごとに決まりLuaSceneまで同じ道で運ばれる設定なのでここに置く:
     //   strip_debug … requireしたモジュールのデバッグ情報(行番号・ローカル変数名)を落として
     //                 Luaのメモリを減らす(app.cfgのstrip_debug)。エラーの行番号は「?」になる

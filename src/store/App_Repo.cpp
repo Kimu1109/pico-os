@@ -160,6 +160,7 @@ bool AppRepo::ParsePerms(const char* s, uint8_t& out){
         else if(n == 6 && strncmp(p, "notify", 6) == 0) out |= PermNotify;
         else if(n == 2 && strncmp(p, "sd", 2) == 0) out |= PermSd;
         else if(n == 10 && strncmp(p, "background", 10) == 0) out |= PermBackground;
+        else if(n == 10 && strncmp(p, "microphone", 10) == 0) out |= PermMicrophone;
         else return false;
         p += n;
         if(*p == ',') p++;
@@ -173,6 +174,7 @@ void AppRepo::PermsText(uint8_t perms, FixedString<PICO_STR_L>& out){
     if(perms & PermNotify){ if(!out.empty()) out.append("・"); out.append("通知"); }
     if(perms & PermSd){ if(!out.empty()) out.append("・"); out.append("SD全体"); }
     if(perms & PermBackground){ if(!out.empty()) out.append("・"); out.append("バックグラウンド"); }
+    if(perms & PermMicrophone){ if(!out.empty()) out.append("・"); out.append("マイク"); }
     if(out.empty()) out.assign("なし");
 }
 

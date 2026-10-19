@@ -172,7 +172,7 @@ void LuaScene::onUpdate() {
     // シリアルから届いたデバッガのコマンド(dbg b main.lua:12 等)。デバッガが無ければ何もしない
     engine->UpdateDebugger();
     //通信中はスリープさせない(Wi-Fiの省電力で通信が遅くなるため)
-    if (engine->HttpBusy()) PowerFunctions::KeepAwake();
+    if (engine->HttpBusy() || engine->MicBusy()) PowerFunctions::KeepAwake();
 
     const unsigned long now = millis();
     // 符号なしの引き算なのでmillis()の一周(約49日)をまたいでも正しい差になる

@@ -8,8 +8,13 @@
 //   - 画面の「変わった行」の受け渡しと、GameBoyViewが積むdirty矩形
 //   - 操作パッドのタップ位置 → ボタン(十字キーの8方向/A/B/SELECT/START/ROM/戻る、指を滑らせたとき)
 //   - 音源チップへの書き込みが時刻付きで GbAudioSink へ渡ること、読み出し(NR52等)の答え方
+//   - 内蔵フラッシュへのROMの置き場(GbRomFlash): 書く・同じROMなら書かない・変わったら/壊れたら書き直す・
+//     途中でやめると置いていない扱い・大きすぎる・書き込みの失敗、そこからの起動(load(path, image, size))。
+//     フラッシュはNORと同じ振る舞い(消すと0xFF、書くとAND)の偽物
 // 実際の描画(1.5倍の拡大)は、PCビルドで dmg-acid2 を表示して確認する。
 #include "gb/Gb_Emu.hpp"
+#include "gb/Gb_Rom_Flash.hpp"
+#include "storage/Flash_Area.hpp"
 #include "gui/widgets/apps/GameBoyPad.hpp"
 #include "gui/widgets/apps/GameBoyView.hpp"
 #include "functions/GFX_Functions.hpp"
@@ -467,6 +472,191 @@ static void testState(){
     }
 }
 
+// ---- 内蔵フラッシュの偽物 ----
+class FakeFlash : public FlashArea {
+    public:
+        explicit FakeFlash(uint32_t sz) : mem(sz, 0xFF) {}
+        uint32_t size() const override { return (uint32_t)mem.size(); }
+        uint32_t baseAddress() const override { return 0x1024F000u; } // 実機と同じく先頭は64KBに揃っていない
+        const uint8_t* data() const override { return mem.data(); }
+        bool erase(uint32_t off, uint32_t len) override {
+            if(off % kSectorBytes || len % kSectorBytes || off + len > mem.size()) { bad++; return false; }
+            if(len == kBlockBytes){
+                block_erases++;
+                if((baseAddress() + off) % kBlockBytes) bad++; // 揃っていない64KB
+            }else if(len == kSectorBytes){
+                sector_erases++;
+            }else{
+                bad++;
+            }
+            memset(&mem[off], 0xFF, len);
+            return true;
+        }
+        bool program(uint32_t off, const uint8_t* p, uint32_t len) override {
+            if(fail_program) return false;
+            if(off % kPageBytes || len % kPageBytes || off + len > mem.size()) { bad++; return false; }
+            for(uint32_t i = 0; i < len; i++){
+                if(mem[off + i] != 0xFF) not_erased++;
+                mem[off + i] &= p[i];
+            }
+            programs++;
+            return true;
+        }
+        std::vector<uint8_t> mem;
+        int block_erases = 0, sector_erases = 0, programs = 0, not_erased = 0, bad = 0;
+        bool fail_program = false;
+        void resetCounts(){ block_erases = sector_erases = programs = not_erased = bad = 0; }
+};
+
+static void RunFlash(GbRomFlash& job){
+    for(int i = 0; i < 100000 && job.state() == GbRomFlash::State::Writing; i++) job.step(0);
+}
+
+static void testRomFlash(){
+    OSData::SD_usable = true;
+    FakeFlash flash(1728u * 1024u);
+    eq_int(GbRomFlash::Capacity(&flash), 1724L * 1024, "置けるのは領域-4KB");
+    eq_int(GbRomFlash::Capacity(nullptr), 0, "領域が無ければ0");
+
+    // 1MiBのMBC1。各バンクの頭にバンク番号を書いておく
+    std::string rom = MakeRom(0x01, 0x00, kIdle, 1024u * 1024u);
+    rom[0x148] = 0x05;
+    {
+        uint8_t x = 0;
+        for(int i = 0x134; i <= 0x14C; i++) x = (uint8_t)(x - (uint8_t)rom[i] - 1);
+        rom[0x14D] = (char)x;
+    }
+    for(uint32_t b = 1; b < 64; b++) rom[b * 0x4000] = (char)b;
+    rom[rom.size() - 1] = 0x5A;
+    HostSd::files["/gb/big1m.gb"] = rom;
+
+    {
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/big1m.gb") == GbRomFlash::State::Writing, "初めては書く");
+        check(!flash.holdsRawData(), "書いている間は見出しが無い");
+        job.step(0);
+        check(job.state() == GbRomFlash::State::Writing && job.written() < job.total(), "1回のstep()では終わらない");
+        RunFlash(job);
+        check(job.state() == GbRomFlash::State::Done, "書き終わる");
+        check(!job.reused(), "書いた");
+        eq_int(job.imageSize(), (long)rom.size(), "大きさ");
+        check(memcmp(job.image(), rom.data(), rom.size()) == 0, "中身がSDと同じ");
+        check(job.image() == flash.data() + GbRomFlash::kDataOffset, "フラッシュをそのまま指す");
+        check(flash.holdsRawData(), "書き終えたら生のデータの印");
+        eq_int(flash.not_erased, 0, "消してある所へだけ書く");
+        eq_int(flash.bad, 0, "消す/書くの揃え方");
+        eq_int(flash.block_erases, 16, "1MiBは64KBの消去16回");
+
+        // そこから起動する
+        GbEmu emu;
+        check(emu.load("/gb/big1m.gb", job.image(), job.imageSize()) == GbEmu::LoadError::None, "フラッシュのROMで起動");
+        check(emu.romIsExternal(), "外の置き場を使っている");
+        eq_int(emu.romSize(), (long)rom.size(), "エミュのROMの大きさ");
+        eq_int(emu.readRom(63u * 0x4000), 63, "最後のバンクを読める");
+        eq_int(emu.readRom((uint32_t)rom.size() - 1), 0x5A, "末尾を読める");
+        RunFrames(emu, 3);
+        check(!emu.crashed(), "動く");
+        emu.unload(); // フラッシュを free しない(ASanで分かる)
+        check(!emu.loaded(), "unload()");
+    }
+
+    // 2回目は書かない
+    flash.resetCounts();
+    {
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/big1m.gb") == GbRomFlash::State::Done, "同じROMは書かずに Done");
+        check(job.reused(), "使い回した");
+        eq_int(flash.block_erases + flash.sector_erases + flash.programs, 0, "消しも書きもしない");
+    }
+
+    // 末尾が変わったら書き直す
+    rom[rom.size() - 2] = 0x33;
+    HostSd::files["/gb/big1m.gb"] = rom;
+    {
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/big1m.gb") == GbRomFlash::State::Writing, "末尾が変わったら書き直す");
+        RunFlash(job);
+        check(job.state() == GbRomFlash::State::Done && memcmp(job.image(), rom.data(), rom.size()) == 0, "書き直した中身");
+    }
+
+    // フラッシュの中身が化けていたら書き直す
+    flash.mem[GbRomFlash::kDataOffset + 500000] ^= 0x01;
+    {
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/big1m.gb") == GbRomFlash::State::Writing, "フラッシュが化けていたら書き直す");
+        RunFlash(job);
+        check(job.state() == GbRomFlash::State::Done && memcmp(job.image(), rom.data(), rom.size()) == 0, "直った");
+    }
+
+    // 途中でやめる → 置いていない扱い → 次は書き直す
+    {
+        GbRomFlash job(&flash);
+        HostSd::files["/gb/small.gb"] = MakeRom(0x00, 0x00, kIdle, 32768);
+        check(job.begin("/gb/small.gb") == GbRomFlash::State::Writing, "別のROM");
+        job.step(0);
+        job.cancel();
+        check(!flash.holdsRawData(), "途中でやめたら置いていない");
+    }
+    {
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/small.gb") == GbRomFlash::State::Writing, "やめた後は書き直す");
+        RunFlash(job);
+        check(job.state() == GbRomFlash::State::Done, "小さなROMも書ける");
+        eq_int(flash.bad, 0, "端の消去は4KB");
+    }
+
+    // 1MiBを超え、領域に入らない
+    HostSd::files["/gb/huge.gb"] = std::string(2u * 1024u * 1024u, '\0');
+    {
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/huge.gb") == GbRomFlash::State::Failed, "2MiBは置けない");
+        check(strstr(job.message(), "1724KB") != nullptr, "置ける大きさを知らせる");
+    }
+    {
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/none.gb") == GbRomFlash::State::Failed, "無いROM");
+        GbRomFlash none(nullptr);
+        check(none.begin("/gb/small.gb") == GbRomFlash::State::Failed, "領域が無い");
+    }
+
+    // 書き込みに失敗する
+    {
+        flash.fail_program = true;
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/big1m.gb") == GbRomFlash::State::Writing, "書き始める");
+        RunFlash(job);
+        check(job.state() == GbRomFlash::State::Failed, "書けなければ Failed");
+        check(!flash.holdsRawData(), "失敗したら置いていない");
+        flash.fail_program = false;
+    }
+
+    // SDが途中で使えなくなる
+    {
+        GbRomFlash job(&flash);
+        check(job.begin("/gb/big1m.gb") == GbRomFlash::State::Writing, "書き始める(2)");
+        job.step(0);
+        OSData::SD_usable = false;
+        job.step(0);
+        check(job.state() == GbRomFlash::State::Failed, "SDが無くなったら Failed");
+        OSData::SD_usable = true;
+    }
+
+    // 無効にする
+    {
+        GbRomFlash job(&flash);
+        job.begin("/gb/small.gb");
+        RunFlash(job);
+        check(flash.holdsRawData(), "置いた");
+        GbRomFlash::Invalidate(&flash);
+        check(!flash.holdsRawData(), "Invalidate()で置いていない");
+    }
+
+    GbEmu emu;
+    check(emu.load("/gb/x.gb", nullptr, 100) == GbEmu::LoadError::NotFound, "imageがnullptr");
+    static const uint8_t tiny[16] = {};
+    check(emu.load("/gb/x.gb", tiny, sizeof(tiny)) == GbEmu::LoadError::TooSmall, "短いimage");
+}
+
 int main(){
     testLoadErrors();
     testState();
@@ -475,6 +665,7 @@ int main(){
     testSound();
     testScreen();
     testPad();
+    testRomFlash();
 
     printf("\n%s (%d件の失敗)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

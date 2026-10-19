@@ -1955,12 +1955,33 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
 - **`peanut_gb.h`の実装を取り込むのは`src/gb/Gb_Emu.cpp`だけ**(2箇所で取り込むと多重定義)。他は`GbEmu`クラスだけを見る。
   `ENABLE_SOUND=1`(音源チップの読み書きを`audio_read()/audio_write()`で受け取る。下記「ゲームボーイの音」)、`PEANUT_GB_12_COLOUR=0`(4段階だけ)。
 - **ROMの置き場所は段階を分ける**。Peanut-GBはROMを1バイトずつコールバックで読むので、SDから都度読むことはできない。
-  - **第1段(実装済み)**: 256KB(`GbEmu::kMaxRomBytes`)までを**RAMへ丸ごと`malloc`**。ROMの大きさは2のべき乗なので、
+  - **第1段(実装済み)**: 256KB(`GbEmu::kMaxRomBytes`)までを**RAMへ丸ごと`malloc`**(`GbEmu::load(path)`)。ROMの大きさは2のべき乗なので、
     境目は実質「256KBまで入る、512KB以上は入らない」(テトリス・Dr.マリオ32KB、マリオランド64KB、カービィ256KB)。
     **実機で256KBを確保できるかは未確認**(OSのピーク約150KB + ROM + エミュ約23KB + セーブ最大32KBで、RP2350の520KBの中で際どい)。
-    確保できなければ`OutOfMemory`で断るだけで落ちない
-  - 第2段(未): 先頭16KB+直近のバンク数枚だけをRAMに持ち、無いバンクに当たったらSDから読む(1フレーム程度引っかかる)
-  - 第3段(未): SDからFlashの空き領域へ書き、XIPで読む(Pico-GBの方式)。ファームの実サイズとWi-Fi動作中のFlash書き込みの確認が要る
+    確保できなければ`OutOfMemory`で断るだけで落ちない(そのときは下の第3段へ回す)
+  - 第2段(未。第3段で足りるので作らない見込み): 先頭16KB+直近のバンク数枚だけをRAMに持ち、無いバンクに当たったらSDから読む
+  - **第3段(実装済み、2026-10-19)**: 内蔵フラッシュへ書いてXIPで読む(Pico-GBの方式)。下の「内蔵フラッシュのROMの置き場」
+- **内蔵フラッシュのROMの置き場(`gb/Gb_Rom_Flash` / `storage/Flash_Area`、2026-10-19)**: ファームの更新のLittleFSの領域
+  (`board_build.filesystem_size = 1728k`、`_FS_start`=0x1024F000〜`_FS_end`)を**ファイルシステムを通さず生で間借り**する。
+  LittleFSのファイルにしないのは、1バイトずつのseek+readが間に合わず、ファイルが連続して置かれる保証も無い(XIPのポインタを取れない)ため。
+  - 置き方: 先頭4KB=見出し(`Header`: 目印`PRAW`+`GBRM`・版・ROMの大きさ・ROMのヘッダ0x100〜0x14F・頭と末尾16KBのハッシュ・全体のハッシュ、FNV-1a)、
+    4KBから先=ROMを連続で(0x10250000は64KBに揃うので、64KBのブロック消去が使える)。置けるのは1724KB=実質1MBまで。
+    `GbEmu::load(path, image, size)`がそのポインタをそのまま読む(ROMにRAMを使わない。`rom_owned`が偽ならfreeしない)。
+  - **同じROMなら書かない**: `GbRomFlash::begin()`がSDから頭と末尾16KBとヘッダだけ読んで見出しと比べ、合えば置いてある全体のハッシュも
+    (フラッシュを読むだけで)確かめて`Done`。SDを全部は読まないので、ROMの途中だけを変えた別物は同じと見なしうる(全体のチェックサムがヘッダにあるので普通の改造ROMなら違いが出る)。
+  - 書き方: 書く前に見出しを消し、`step()`(1フレーム`GameBoyScene::kFlashStepMs`=40ms)がSDから4KBずつ読んで、消した所へ書いてすぐ読み戻して比べる。
+    消去は64KBに揃っていれば64KB(1回で百数十ms、最悪1秒程度割り込みが止まる)、端は4KB。**見出しは最後に書く**ので途中で止まっても「置いていない」になる。
+    消す/書く間はLittleFS(`LittleFS.cpp`)と同じく`noInterrupts()`+`rp2040.idleOtherCore()`なので、`GameBoyScene::startFlash()`が先に音を止める。
+    書いている間はゲームの画面に「ROMを内蔵フラッシュへ書いています n%」を出し、エミュもメニューも止める。`GbRomFlash`(約4.4KB)は書く間だけ`new`。
+  - **ファームの更新との取り合い**: 生のデータを置いている間は領域の先頭が`PRAW`(`FlashArea::holdsRawData()`)。
+    `FirmwareFunctions::Setup()`はこれを見たらLittleFSを**マウントしない**(マウントに失敗するとフォーマットされてROMが消えるため。この場合は前回の更新の控えも無い)。
+    更新を始めると`Fw_Store`のマウントでフォーマットされROMは消える(次に遊ぶときSDから書き直す。PCの`PcFwStore::mount()`は見出しを消して真似る)。
+    arduino-picoのOTAのローダー(`ota/ota.c`の`has_ota()`)は起動のたびに読み取りだけでマウントを試し、失敗すれば何もせず本体を起動するので、生のデータは無害。
+  - 使い分け(`/sys/gb.cfg`の`rom-in-flash`): `auto`(既定。RAMに載らない=`TooLarge`/`OutOfMemory`ならフラッシュ)/ `always`(小さいROMもフラッシュ。RAMを使わない)/ `never`。
+    PCは`ota_emu/gb_flash.bin`をmmap(消すと0xFF、書くとAND)、Webはメモリだけ。
+  - 検証: `gb_emu_test`(NORの偽物へ1MBを書く・64KBの消去16回・消してある所へだけ書く・最後のバンクを読める・同じROMは消しも書きもしない・末尾が変わる/フラッシュが化けると書き直す・
+    途中でやめると置いていない・2MBは断る・書けない/SDが消えると失敗)、PCビルドの`--tap`(512KBのROMを書いて動く→2回目は「そのまま使います」+ファームの置き場を片付けない、
+    auto/always/neverの切り替え)、実機ファームのビルド。**実機では未確認**(書き込みの時間・XIPから読むときの速さ=5秒ごとのフレーム数のログ・割り込みを止める間のWi-Fi/USBシリアル)。
 - **エミュの状態・ROM・セーブは`load()`で確保し`unload()`で全部返す**。`GameBoyScene`は`onExit()`で`unload()`するので、
   使っていない間は1バイトも持たない(シーン本体は約1.3KB、パス2本ぶん)。上へ別のシーンが載って戻ると同じROMを開き直し、離れたときの自動の枠(下の「途中保存」)から黙って続ける。
 - **Peanut-GBの誤り通知(`gb_error`)から戻ってはいけない**(戻ると`__builtin_unreachable()`へ落ちる)。
@@ -3130,7 +3151,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`。関数電卓+グラフ電卓、2026-10-03)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/リバーシ/ブロック崩し/スクラッチパッド/ペイント/テトリスはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照。リバーシ・マインスイーパー・ブロック崩し・テトリスは`pico.game`の上に作り直した=下記「ボードゲーム4本のpico.gameへの移行」)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。**TODO/リマインダーはTodoist連携の`TodoScene`として実装済み**(下記「TODOアプリ」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
-| 9 | GBエミュ | **Peanut-GBを採用し、第1段(256KBまでのROMをRAMへ丸ごと読む)が`GameBoyScene`としてPCで動作**。音も鳴る(#11)。実機での速さ・256KB超のROM・GBCは未(下記「ゲームボーイ」参照)。 |
+| 9 | GBエミュ | **Peanut-GBを採用し、`GameBoyScene`としてPCで動作**。256KBまでのROMはRAMへ、1MBまでは内蔵フラッシュへ書いてXIPで読む。音も鳴る(#11)。実機での速さ・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
 | 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。MIDIはPCの`script/midi2mml.py`で取り込む。GBエミュの音(音源チップの再現)も鳴る。**実機での確認は未**(下記「音声出力」「曲データ」「ゲームボーイの音」参照)。 |
 

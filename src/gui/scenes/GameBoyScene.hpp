@@ -11,6 +11,7 @@ class GameBoyView;
 class GameBoyPad;
 class FileSelectDialog;
 class PickerDialog;
+class GbRomFlash;
 
 // Game Boy(DMG)エミュのアプリ。SUMMARY.md #9 の第1段(ROMを丸ごとRAMへ読む)。
 //
@@ -29,6 +30,13 @@ class PickerDialog;
 //     ROMを開いたとき自動の枠があれば「前回の続きから / 最初から」を聞く
 //   - ゲームの中のセーブ(カートリッジRAM、.sav)は、書き込みが落ち着いたら遊んでいる途中でも書き出す
 //     (GbEmu::flushSaveIfIdle。以前は「戻る」を押すまで書かず、電池切れで消えた)
+//
+// ---- ROMの置き場 ----
+// 256KBまでのROMは今までどおりRAMへ丸ごと読む(GbEmu::load)。それより大きいROM(とRAMが足りなかったとき)は、
+// 内蔵フラッシュ(ファームの更新のLittleFSの領域を間借り。gb/Gb_Rom_Flash)へ書いてそこから読む。
+// 書くのは初回だけで、同じROMなら次から書かずに始まる。書いている間は画面に進み具合を出し、エミュは止めておく
+// (消す/書く間は2コア目が止まるので、先に音を止める)。/sys/gb.cfg の rom-in-flash で変えられる:
+//   auto(既定) … 上のとおり / always … 小さいROMも内蔵フラッシュから読む(RAMを使わない)/ never … 使わない
 //
 // ---- 寿命 ----
 // エミュ(ROM・セーブ込み、最大で約310KB)はシーンが表に出ている間だけ持ち、
@@ -78,6 +86,18 @@ class GameBoyScene : public Scene {
         // 戻ってきたとき(Push()から)は聞かずに自動の枠から続ける
         bool resume_silently = false;
 
+        // 内蔵フラッシュへROMを書いている間だけ new(約4.4KB)
+        GbRomFlash* flash_job = nullptr;
+        FixedString<PICO_PATH_LEN> flash_path;
+        bool flash_resume_silently = false;
+        uint32_t flash_last_percent = 0;
+        enum class RomMode : uint8_t { Auto, Always, Never };
+        RomMode romMode() const;
+        bool startFlash(const char* path);
+        void stepFlash();
+        void stopFlash();
+        void afterLoad(const char* path);
+
         void openPicker();
         void openMenu();
         void askResume();
@@ -89,6 +109,10 @@ class GameBoyScene : public Scene {
         constexpr static uint32_t kBannerMs = 1800;
         constexpr static uint32_t kLowBatteryAutoSaveMs = 60000;
         constexpr static int kLowBatteryPercent = 10;
+        // 内蔵フラッシュへ書くとき、1フレームに使う時間(64KBの消去は1回でこれを超える)
+        constexpr static uint32_t kFlashStepMs = 40;
+
+        ~GameBoyScene() override;
 
         const char* getName() const override { return "GameBoy"; }
         // 画面の上部(ゲームの画面)をトーストで隠さない

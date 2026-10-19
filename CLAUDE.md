@@ -81,7 +81,7 @@ src/
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid / PerfOverlay)
   ime/                       SKK方式かな漢字変換辞書エンジン
-  apps/                      機能ごとの置き場(1フォルダ=1機能)。直下=機能の中身(段は lib)、ui/=その機能専用のウィジェット・ダイアログ(ui)、*Scene=画面(app)。下記「層と置き場所」
+  apps/                      機能ごとの置き場(1フォルダ=1機能)。直下=機能の中身(段は lib)、ui/=その機能専用のウィジェット・ダイアログ(ui)、*Scene(分けたものは *Scene_*.cpp)=画面(app)。下記「層と置き場所」
     browser/                 Markdownブラウザ。取得〜キャッシュの配線(Doc_Fetch)・サーバ情報(Discovery)・検索(Doc_Search)・マニフェスト(Manifest)・文書キャッシュ(Doc_Cache)・画像参照の走査(Md_Scan)・MarkdownScene・ui/SearchDialog
     calculator/              式の評価(Calc_Eval)・CalculatorScene・ui/CalculatorKeypad・ui/GraphView
     calendar/                iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync) / 予定の通知(Calendar_Reminders)・CalendarScene・ui/EventDetailDialog
@@ -167,7 +167,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 | 2 lib | `hal/` と、UIを持たない機能のライブラリ(`storage` `net` `crypto` `task` `sound` `iso` `ime`)と `apps/<機能>/` の直下 | ハードの窓口と機能の中身。同じ段なので互いに使い合ってよい |
 | 3 ui | `gui/`(`core/` `icons/` `widgets/`)と `apps/*/ui/` | 描画・ウィジェット・シーン遷移の仕組みと、機能専用の部品 |
 | 4 service | `services/` `devtools/` `gui/widgets/systems/` `apps/home/`(+`apps/todo/Todo_Watch`) | OSの機能と、それを見せるシェルの部品 |
-| 5 app | `gui/scenes/` `lua/` `apps/store/` と `apps/*/*Scene.*` | 画面(アプリ)とLua |
+| 5 app | `gui/scenes/` `lua/` `apps/store/` と `apps/*/*Scene.*`・`apps/*/*Scene_*.cpp` | 画面(アプリ)とLua |
 | 6 boot | `boot/` `main.cpp` | 起動とつなぎ。全部を知ってよい |
 
 - **下の段から上の段の機能を呼びたいとき**は、下の段に関数ポインタ(差し込み口)を置いて `boot/` で差すか
@@ -1475,6 +1475,9 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - **IDは`getId()`の初回呼び出し時に遅延発行**する。外部から触られないウィジェットはスロットを消費しない。解放は`~Widget()`が`WidgetRegistry::Unregister()`を呼び、スロットのgenerationを進める。
 - `WidgetRegistry::Resolve(id)`はindex範囲・generation・typeの3点を検証して`Widget*`を返す(不一致ならnullptr)。**破棄済みIDの誤参照(use-after-free)はここで弾かれる。**
 - **`Resolve()`はホストテスト(`script/host_test/widget_factory_test.cpp`)で初めて検証された**: 発行済みIDからの解決、type改ざんの検出、破棄済みID(use-after-free)の検出、スロット再利用時のgeneration不一致検出を確認済み。(2026-09-19追記: 実コード側の呼び出し元も`LuaEngine`(`pico.set/get/on/destroy/add_child`等)として実装済み)
+- **種類ごとの情報は `src/gui/widgets/WidgetTypes.cpp` の表(`kTypes`)1か所**(2026-10-19)。1行が「種類・Luaでの名前・作り方・種類固有のプロパティの読み方/書き方」で、
+  `WidgetFactory`(`Create`/`IsCreatable`/`TypeFromName`)と `WidgetProperty`(`Get`/`Set`。X/Y/Visible等の共通のものは先に見る)はこの表を引くだけ。
+  **種類を足すときに直すのは `WidgetType`(WidgetID.hpp)とこの表(関数と1行)だけ**。以下の節の「Factoryの3か所・WidgetPropertyのswitch」は当時の記録。
 - **`WidgetType` → `new Xxx` のファクトリを追加した**(`src/gui/widgets/WidgetFactory.hpp/.cpp`)。`WidgetFactory::Create(WidgetType)`がwidgets/直下の汎用部品15種(Button/Label/Textbox/NumberInput/Checkbox/Icon/Image/NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/TabBar/DropdownMenu)を生成する。widgets/apps・systems・dialogsの専用ウィジェットは対象外(SD走査やシーン固有状態への依存が強いため)。生成直後は仮の位置・大きさなので、呼び出し側がsetX/setY/setW/setH等で整える前提。Textboxは`Textbox.cpp`が明示インスタンス化済みの`N`(`PICO_STR_LL`)に合わせてあり、任意のNは使えない(未使用の組み合わせを増やすには明示インスタンス化をもう1行足す必要がある)。
 - **プロパティのget/setをLuaへ通す共通口(`WidgetProperty.hpp/.cpp`)を追加した(2026-09-19)**。`WidgetProperty::Get/Set(Widget*, Id, Value)`が`WidgetFactory::Create()`対応15種それぞれの代表的なプロパティ(Text/Value/Checked/FontSize/BorderColor等)を読み書きする。Widget基底の仮想関数にはしていない(`setW()`/`setH()`が基底に無く型ごとに意味が違うため。`WidgetFactory`と同じ「WidgetType→switch」形式)。値は`Value{type, i, f, b, FixedString<PICO_PATH_LEN> s}`という固定長のタグ付き共用体もどきで、ヒープを使わない。ホストテストは`script/host_test/widget_property_test.cpp`。
   (2026-09-19追記: この時点では「共通口」自体は揃ったが、Lua側からこれを叩くバインディング本体は

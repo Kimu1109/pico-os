@@ -48,7 +48,7 @@ LAYERS = {
     "iso": "lib",
     "ime": "lib",
     # apps/<機能>/ は機能ごとの置き場。直下は機能の中身(lib)、ui/ はその機能専用の部品(ui)、
-    # *Scene.* は画面(app)。段は APP_PATTERNS が決める(下の段の機能の中身から画面を読まないように)
+    # *Scene.* と *Scene_*.cpp は画面(app)。段は APP_PATTERNS が決める(下の段の機能の中身から画面を読まないように)
     "apps": "lib",
     "apps/home": "service",   # ホーム画面の並びとウィジェット(OSのシェルの部品)
     "apps/store": "app",      # アプリストア(登録簿と Lua アプリの走査を使う)
@@ -89,6 +89,7 @@ APP_PATTERNS = [
     ("apps/*/ui/*", "ui"),
     ("apps/*/*Scene.cpp", "app"),
     ("apps/*/*Scene.hpp", "app"),
+    ("apps/*/*Scene_*.cpp", "app"),   # 大きな画面を分けたもの(TextEditorScene_Edit.cpp 等)
 ]
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)

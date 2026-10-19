@@ -4533,6 +4533,13 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
 登録は `registerApi()` の末尾の `RegisterExtApi()`(同名は後勝ちなので `list_add` は差し替え)。**ホストテストのリンクの一覧にこの2本と `crypto/Secret_Aead.cpp` と
 `lib/monocypher`(`lua_obj/monocypher.o`)を足した**(`LuaEngine.cpp` をリンクする4つの塊すべて)。
 
+**2026-10-19に分け直した**: `LuaEngine.cpp`(約5000行)は実行の土台(予算・サンドボックス・安全網・登録・コールバックの中継・タイマー・画面の受け渡し)だけになり、
+`pico.*` の本体は分野ごとの `LuaEngine_{Widgets,System,Sound,Draw,Sd,Http,Require}.cpp`(クラスのメンバのまま。共有の小さな道具は `LuaEngine_Internal.hpp`)。
+**拡張(`_Ext`/`_Net`/`_Crypto`/`_Iso`/`_Mic`)は `friend` をやめ**、`LuaEngine.hpp` の「拡張が使う口」(`images()`・`appDir()`・`SdPathAllowed/SdWriteAllowed`・
+`markPaletteUsed()`・`UnbindEvent()`・`WireDialogClosed()` 等)だけを通す。拡張ごとの状態は `ExtState`(名前・タブの連動・戻る・ジェスチャー・image_target)/
+`IsoState`/`MicState` で、中身はその `.cpp` だけが知る。画像の置き場は `LuaImages`(`lua/LuaImages.hpp`)。新しい拡張で `LuaEngine` の中身が要るときは、
+`friend` を足さずにこの口へ1つ足すこと。
+
 1. **Luaから作れるウィジェットを7種足した**(合計27種): `ProgressBar`(新設、タップ素通り)・`TextView`・`ImageView`・`MarkdownView`・`AnalogClock`・`DurationPicker`・`MonthGrid`。
    `WidgetFactory`/`WidgetProperty` の表に足した(新しい `Id`: `ScrollX/Y` `MaxScrollX/Y` `ImageW/H` `RowCount` `Hour/Minute/Second` `HandColor` `SecondHandColor` `TotalMs`
    `Editable` `Year/Month/Today/Selected` `HitTransparent` `Enabled`)。足りなかった口を元のウィジェットへ足した: `TextView::setOwnedText()`(Lua用に文書を自分で持つ。16KiB・確保は更新のときだけ)・

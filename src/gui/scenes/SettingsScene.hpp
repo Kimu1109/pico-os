@@ -217,6 +217,22 @@ class SettingsScene : public Scene {
         template <size_t N>
         Label<N>* makeRowLabel(int16_t x, int16_t y, int max_w, const char* text);
 
+        // 本文の行の置き方。onEnter() が決め、各タブの組み立て(build*)が使う
+        struct Layout {
+            Rect content;
+            int16_t body_y = 0, body_bot = 0, left = 0;
+            int full_w = 0;
+            int16_t rowY(int i) const { return (int16_t)(body_y + i * ROW_H); }
+        };
+        // 編集ボタンの左までのラベルの幅(最初の makeEditButton() の後に決まる)
+        int labelW(const Rect& content) const;
+        // 追加順=描画順なので、onEnter() はこの順に呼ぶ
+        void buildWifiTab(const Layout& lay);    // SettingsScene_Wifi.cpp
+        void buildLevelRows(const Layout& lay);  // 音量・明るさ・自動調光
+        void buildTimeRows(const Layout& lay);   // SettingsScene_Time.cpp(NTP・時刻・タッチ補正)
+        void buildOtherTab(const Layout& lay);   // SettingsScene_Other.cpp
+        void buildLateRows(const Layout& lay);   // ダークテーマ・ロック・端末の鍵・電池・ドロップダウン
+
         void refreshNtp1Label();
         void refreshNtp2Label();
         void refreshHomeLabel();
@@ -237,3 +253,12 @@ class SettingsScene : public Scene {
         void onUpdate() override;
         void onExit() override;
 };
+
+template <size_t N>
+inline Label<N>* SettingsScene::makeRowLabel(int16_t x, int16_t y, int max_w, const char* text){
+    auto* l = new Label<N>(x, y, text);
+    l->setFontSize(FontFn::Small);
+    l->setMaxWidth(max_w);
+    l->setMaxHeight(Label<N>::GetLineHeight(FontFn::Small));
+    return l;
+}

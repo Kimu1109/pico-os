@@ -8,7 +8,7 @@
 //   - 保存した時点へ戻ると atSaved()、やり直しを捨てると戻れなくなる
 //   - クリップボード: \r とNULを捨てる・1KiBで文字の途中で切らない・空にすると返す
 #include "util/Edit_History.hpp"
-#include "functions/Clipboard_Functions.hpp"
+#include "system/Clipboard_Functions.hpp"
 
 #include <cstdio>
 #include <cstdlib>

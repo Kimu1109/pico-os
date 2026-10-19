@@ -1,10 +1,10 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
 #include "OS_Data.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Mem_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Focus_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Mem_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 
 #include <cstdlib>
 #include <new>

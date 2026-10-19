@@ -1,7 +1,7 @@
 #pragma once
-#include "functions/Sound_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
 
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "sound/Music_Service.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"

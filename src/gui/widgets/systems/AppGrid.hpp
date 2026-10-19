@@ -2,7 +2,7 @@
 
 #include <functional>
 #include "gui/widgets/Widget.hpp"
-#include "functions/App_Functions.hpp"
+#include "services/App_Functions.hpp"
 #include "home/Home_Layout.hpp"
 
 class HomeWidget;

@@ -7,9 +7,9 @@
 //   - 後から刺すと検出され、押したキーが列へ積まれる
 //   - 押していない(0)は積まない / 1回の更新で読む量に上限がある
 //   - 抜くと kMissLimit 回の失敗で外れ、また刺せば戻る
-#include "functions/CardKB_Functions.hpp"
-#include "functions/KeyInput_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "hal/CardKB_Functions.hpp"
+#include "system/KeyInput_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 #include <Arduino.h>
 #include <Wire.h>

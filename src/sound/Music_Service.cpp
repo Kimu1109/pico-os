@@ -1,9 +1,9 @@
 #include "sound/Music_Service.hpp"
 
-#include "functions/Background_Functions.hpp"
-#include "functions/Sound_Functions.hpp"
-#include "functions/Config_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Background_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
+#include "system/Config_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "sound/Mml_Compiler.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"

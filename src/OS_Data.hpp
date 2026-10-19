@@ -4,7 +4,9 @@
 #include <LovyanGFX.h>
 #include <SdFat.h>
 
-#include "gui/widgets/Widget.hpp"
+// キーボードは Widget のポインタとして持つだけなので前方宣言で足りる
+// (Widget.hpp を読むと、どこからでも使う土台の段が UI の段へ依存してしまう)
+class Widget;
 
 namespace OSData {
     //タッチ系統

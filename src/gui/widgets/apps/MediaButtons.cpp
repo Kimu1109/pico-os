@@ -1,8 +1,8 @@
 #include "gui/widgets/apps/MediaButtons.hpp"
 
-#include "functions/GFX_Functions.hpp"
-#include "functions/Font_Functions.hpp"
-#include "functions/Focus_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
 
 void MediaButtons::setShowPause(bool on){

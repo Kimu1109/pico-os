@@ -1,6 +1,6 @@
 #include "gui/widgets/keyboards/KeyboardEng.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
 
 void KeyboardEng::causeOnPressStart() {

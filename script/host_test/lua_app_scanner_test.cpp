@@ -13,10 +13,10 @@
 // 何もしないこと: SD無しの間はScan()が0を返しクラッシュしないこと、
 // SD使用可能でもディレクトリ自体が無ければ同じく0を返すこと。
 #include "lua/LuaAppScanner.hpp"
-#include "functions/App_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "services/App_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
 #include <cstdarg>

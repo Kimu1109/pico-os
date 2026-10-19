@@ -8,9 +8,9 @@
 //   - 見つけたら暗号化しない初期化([F0 55][FB 00])と変換の開始([00])を書く
 //   - 押したボタンが PadFunctions に届き、USBシリアルの入力とORで重なる
 //   - 抜くと kMissLimit 回の失敗で外れて全部離し、また刺せば戻る
-#include "functions/WiiClassic_Functions.hpp"
-#include "functions/Pad_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "hal/WiiClassic_Functions.hpp"
+#include "system/Pad_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 #include <Arduino.h>
 #include <Wire.h>

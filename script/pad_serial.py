@@ -4,14 +4,14 @@
 小さなウィンドウを開き、そこでのキー操作をpico-osへ1行ずつ送る。2つのモードがあり、F1で切り替える:
 
 - コントローラー(既定): キーの押し下げ/離しをボタンの状態(ビットマスク)にして送る
-  (形式は src/functions/Pad_Functions.hpp):
+  (形式は src/system/Pad_Functions.hpp):
 
       pad XXXX\\n      XXXX = 押しているボタンの16進数
 
   状態が変わったときと、変わらなくても100msごとに送る。pico-os側は500ms届かなければ
   全部離した扱いにするので、このスクリプトを止めればボタンが押しっぱなしになることは無い。
 
-- 文字入力(--mode text): 打ったキーを1打鍵1行で送る(形式は src/functions/KeyInput_Functions.hpp):
+- 文字入力(--mode text): 打ったキーを1打鍵1行で送る(形式は src/system/KeyInput_Functions.hpp):
 
       key M u+XXXX\\n  文字(Mは修飾キー 1=Ctrl 2=Alt 4=Shift)
       key M left\\n    名前のあるキー(enter backspace tab esc delete left right up down home end pageup pagedown zenhan、

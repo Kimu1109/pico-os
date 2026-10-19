@@ -46,10 +46,10 @@
 #include "consts.hpp"
 #include "OS_Data.hpp"
 #include <config/LGFX_Config_PC.hpp>         // PICOOS_PC_SCALE(画面の拡大率)
-#include <functions/Touch_Functions_PC.hpp>  // PicoOsTouchScript
+#include <hal/Touch_Functions_PC.hpp>  // PicoOsTouchScript
 #include <PicoPcClock.h>                     // 設定アプリで合わせた時計のずれ
-#include "functions/CrashDump_Functions.hpp" // 再起動(電源メニュー)の差し込み口
-#include "functions/DeviceKey_Functions.hpp" // OTPの端末の鍵(PCではファイルで真似る)
+#include "devtools/CrashDump_Functions.hpp" // 再起動(電源メニュー)の差し込み口
+#include "services/DeviceKey_Functions.hpp" // OTPの端末の鍵(PCではファイルで真似る)
 #include "firmware/Fw_Store.hpp"                // ファームの更新の置き場(PCではディレクトリで真似る)
 
 //OTP(端末の鍵)を真似るファイル。PICOOS_OTP_FILE、無ければSDのルートの隣の otp_emu.bin

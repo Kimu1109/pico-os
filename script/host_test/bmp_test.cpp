@@ -1,6 +1,6 @@
 // BMPの読み書き(gui/icons/Bmp_Codec)。スクリーンショットの保存(4bpp)と、.bmpの表示(4bppへ寄せる・フルカラーのまま)。
 #include "gui/icons/Bmp_Codec.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>

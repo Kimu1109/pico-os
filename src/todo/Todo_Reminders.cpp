@@ -1,6 +1,6 @@
 #include "todo/Todo_Reminders.hpp"
 
-#include "functions/Notification_Functions.hpp"
+#include "system/Notification_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>

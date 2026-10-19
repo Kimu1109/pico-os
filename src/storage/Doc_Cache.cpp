@@ -2,7 +2,7 @@
 
 #include "OS_Data.hpp"
 #include "storage/SD_IO.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>

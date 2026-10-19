@@ -9,13 +9,13 @@
 //   - 操作のたびにタイマーが振り出しへ戻る
 //   - KeepAwake() / 音が鳴っている / Wi-Fi接続中 は入らない、スリープ中にKeepAwake()が来たら起きる
 //   - タイムアウト0は無効
-#include "functions/Power_Functions.hpp"
-#include "functions/Display_Functions.hpp"
-#include "functions/Network_Functions.hpp"
-#include "functions/Sound_Functions.hpp"
-#include "functions/Pad_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Time_Functions.hpp"
+#include "services/Power_Functions.hpp"
+#include "services/Display_Functions.hpp"
+#include "hal/Network_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
+#include "system/Pad_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "system/Time_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <Arduino.h>

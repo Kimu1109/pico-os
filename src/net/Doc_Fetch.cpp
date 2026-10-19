@@ -1,7 +1,7 @@
 #include "net/Doc_Fetch.hpp"
 
 #include "OS_Data.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 #include <cstring>
 #include <ctime>

@@ -6,7 +6,7 @@
 // (calendar_scene_test/ical_testの担当)。
 #include "calendar/Calendar_Sync.hpp"
 #include "storage/SD_Path.hpp"
-#include "functions/Config_Functions.hpp"
+#include "system/Config_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 

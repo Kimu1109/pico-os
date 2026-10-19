@@ -11,8 +11,8 @@
 //   - 控えめ(quiet)ではトーストも音も出さない
 //   - 保存と読み込み(Delayは保存しない)、壊れた行を捨てる、送り主が消えた予約を捨てる
 //   - Open()で起動し、起動理由は送り主が一致するときに1回だけ受け取れる
-#include "functions/Notification_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Notification_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 

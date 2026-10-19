@@ -1,5 +1,5 @@
 #include "gui/widgets/WidgetRegistry.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 WidgetId WidgetRegistry::Register(WidgetType type, Widget* widget) {
     uint32_t index;

@@ -1,7 +1,7 @@
 #include "todo/Todoist_Client.hpp"
 
-#include "functions/Config_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Config_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "util/Secret_Cipher.hpp"
 #include "OS_Data.hpp"

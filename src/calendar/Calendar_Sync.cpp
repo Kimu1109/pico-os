@@ -1,8 +1,8 @@
 #include "calendar/Calendar_Sync.hpp"
 
 #include "OS_Data.hpp"
-#include "functions/Config_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Config_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
 #include "util/Url.hpp"

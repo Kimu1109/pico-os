@@ -5,9 +5,9 @@
 
 #include "gui/widgets/Label.hpp"
 #include <utility>
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
-#include "util/ScopedClip.hpp"
+#include "gui/ScopedClip.hpp"
 
 template<size_t N>
 void Label<N>::needsRender() {
@@ -593,7 +593,7 @@ void Label<N>::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int 
     OSData::frame->setTextColor(color);
 
     // 右端の切り落としは今のクリップとの重なりで行い、元のクリップへ戻す(clearClipRect()すると、
-    // FlushDirty()のdirty矩形のクリップまで外れる。util/ScopedClip.hpp参照)
+    // FlushDirty()のdirty矩形のクリップまで外れる。gui/ScopedClip.hpp参照)
     if (maxWidth > 0) {
         ScopedClip clip(x, y, maxWidth, OSData::frame->fontHeight());
         OSData::frame->setCursor(x, y);

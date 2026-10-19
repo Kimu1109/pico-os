@@ -1,11 +1,11 @@
 #pragma once
 
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ProgressBar.hpp"
 #include "gui/widgets/WidgetID.hpp"
-#include "functions/Firmware_Functions.hpp"
+#include "services/Firmware_Functions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 

@@ -7,11 +7,11 @@
 //                   処理していた区間・Luaアプリ)、PCビルドの /sys/crash.pending(HardFaultのレジスタ・CFSRの読み解き)、
 //                   壊れた記録は捨てること、通知(タップでダンプを開く)、Luaのエラーの保存と1回の起動の上限
 //   設定          … debug.cfgの読み込みと、切り替えたときの反映・保存
-#include "functions/Profiler_Functions.hpp"
-#include "functions/CrashDump_Functions.hpp"
-#include "functions/DevTools_Functions.hpp"
-#include "functions/Notification_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "devtools/Profiler_Functions.hpp"
+#include "devtools/CrashDump_Functions.hpp"
+#include "devtools/DevTools_Functions.hpp"
+#include "system/Notification_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "lua/LuaDebugger.hpp"
 #include "OS_Data.hpp"
 #include "SdFat.h"

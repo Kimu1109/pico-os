@@ -1,5 +1,5 @@
 #include "gui/widgets/dialogs/EventDetailDialog.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
 EventDetailDialog::EventDetailDialog(){

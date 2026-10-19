@@ -5,13 +5,13 @@
 //   - 端末の鍵が無いと enc3: / version 3 / v2 は読めない(PINはロックしない)
 //   - PINの v1 は正しく打ったときに v2 へ書き直す
 //   - 書きかけの枠は次の枠へ作れる・両方壊れたら Broken
-#include "functions/DeviceKey_Functions.hpp"
-#include "functions/Lock_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Power_Functions.hpp"
-#include "functions/Pad_Functions.hpp"
-#include "functions/Config_Functions.hpp"
+#include "services/DeviceKey_Functions.hpp"
+#include "services/Lock_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "services/Power_Functions.hpp"
+#include "system/Pad_Functions.hpp"
+#include "system/Config_Functions.hpp"
 #include "ssh/Ssh_Util.hpp"
 #include "storage/SD_Path.hpp"
 #include "util/Device_Key.hpp"

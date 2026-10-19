@@ -1,5 +1,5 @@
 #include "gui/widgets/dialogs/WifiScanDialog.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
 void WifiScanDialog::render(){

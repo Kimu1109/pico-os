@@ -1,8 +1,8 @@
 #include "gui/widgets/systems/LockScreen.hpp"
 #include "gui/widgets/Label.hpp"
-#include "functions/KeyInput_Functions.hpp"
-#include "functions/Time_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "system/KeyInput_Functions.hpp"
+#include "system/Time_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include "Arduino.h"

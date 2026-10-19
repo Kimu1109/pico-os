@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gui/widgets/keyboards/KeyboardPanel.hpp"
-#include "functions/Font_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 

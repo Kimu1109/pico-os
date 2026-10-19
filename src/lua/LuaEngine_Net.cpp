@@ -17,7 +17,7 @@
 #include "util/Json_Reader.hpp"
 #include "util/Xml_Reader.hpp"
 #include "lua/LuaJson.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
 namespace {

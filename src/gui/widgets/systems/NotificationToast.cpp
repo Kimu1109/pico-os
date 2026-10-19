@@ -1,7 +1,7 @@
 #include "gui/widgets/systems/NotificationToast.hpp"
 #include "gui/icons/icon_render.h"
-#include "functions/Font_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
 namespace {

@@ -1,11 +1,11 @@
 // ウィジェットのフォーカス(FocusFunctions)。
 // 読む順(Tab)・矢印の向きの移り先・候補にならないもの・押す(真ん中のタップ)・消えたとき・
 // タッチで枠が消えること・ダイアログを開いた/閉じたときの範囲・各ウィジェットのキーの扱いを確かめる
-#include "functions/Focus_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Checkbox.hpp"
 #include "gui/widgets/ScrollList.hpp"

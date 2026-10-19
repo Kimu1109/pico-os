@@ -3,9 +3,9 @@
 #include <SdFat.h>
 #include <cstring>
 
-#include "functions/App_Functions.hpp"
-#include "functions/Config_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "services/App_Functions.hpp"
+#include "system/Config_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "lua/LuaPermissions.hpp"
 #include "storage/SD_IO.hpp"

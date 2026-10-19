@@ -1,12 +1,12 @@
-#include "functions/Focus_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "gui/widgets/systems/AppGrid.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/icons/icon_render.h"
-#include "functions/Font_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
-#include "util/ScopedClip.hpp"
+#include "gui/ScopedClip.hpp"
 #include "home/Home_Widget.hpp"
 
 #include <cstring>

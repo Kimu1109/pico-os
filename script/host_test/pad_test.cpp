@@ -8,8 +8,8 @@
 //   - 1行が複数のUpdate()にまたがって届いてもよい / 長すぎる行は捨てる
 //   - 1回のUpdate()で読む量に上限がある
 //   - Game Boyのボタンへの対応(GbPadMap)
-#include "functions/Pad_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Pad_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "gb/Gb_PadMap.hpp"
 
 #include <Arduino.h>

@@ -25,10 +25,10 @@ OUT=$(mktemp -d)
 g++ -std=gnu++17 -g -Os -fno-rtti \
     -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
     "$ROOT/script/host_test/mem_probe.cpp" \
-    "$ROOT/src/functions/Scene_Functions.cpp" \
-    "$ROOT/src/functions/Mem_Functions.cpp" \
-    "$ROOT/src/functions/Widget_Functions.cpp" \
-    "$ROOT/src/functions/Font_Functions.cpp" \
+    "$ROOT/src/gui/core/Scene_Functions.cpp" \
+    "$ROOT/src/system/Mem_Functions.cpp" \
+    "$ROOT/src/gui/core/Widget_Functions.cpp" \
+    "$ROOT/src/gui/core/Font_Functions.cpp" \
     "$ROOT/src/gui/widgets/Widget.cpp" \
     "$ROOT/src/gui/widgets/WidgetRegistry.cpp" \
     "$ROOT/src/gui/widgets/Button.cpp" \

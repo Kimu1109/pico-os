@@ -13,7 +13,7 @@
 // 繰り返し([ ]n)は展開して、実際に鳴る順に書く(Lは1周目だけ)。
 #include "sound/Mml_Compiler.hpp"
 #include "sound/Music_Data.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include <cstdio>
 #include <fstream>
 #include <sstream>

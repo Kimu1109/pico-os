@@ -1,6 +1,6 @@
 #include "gui/widgets/Checkbox.hpp"
 #include "OS_Data.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "gui/icons/icon_render.h"
 #include "gui/icons/icons_data.h"
 

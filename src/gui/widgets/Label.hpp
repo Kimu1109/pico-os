@@ -4,7 +4,7 @@
 #include "gui/widgets/Widget.hpp"
 #include "consts.hpp"
 #include "Arduino.h"
-#include "functions/Font_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "gui/widgets/interfaces/IFontImplementation.hpp"
 #include "gui/widgets/interfaces/IBorderColor.hpp"
 #include "gui/widgets/interfaces/ITextColor.hpp"

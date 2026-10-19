@@ -15,7 +15,7 @@
 //
 // 使い方: todoist_net_test <httpのport> <httpsのport> <ca.pem> <トークン> <ページ分けしたhttpのport>
 #include "todo/Todoist_Client.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "util/Secret_Cipher.hpp"
 #include "OS_Data.hpp"

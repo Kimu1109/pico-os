@@ -10,10 +10,10 @@
 #include "store/App_Store.hpp"
 #include "store/App_Repo.hpp"
 #include "store/App_Repo_Keys.hpp"
-#include "functions/App_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "gui/scenes/Scene.hpp"
+#include "services/App_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Scene.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

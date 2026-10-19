@@ -8,13 +8,13 @@
 //   - 繰り返し(1回・毎日・平日・土日)、1回だけは鳴ったらoffになって保存される
 //   - 止める / 5分後(スヌーズ) / 放っておくとkRingMaxMsで止まる
 //   - シーン遷移などでダイアログが消えても、鳴っている間は出し直す
-#include "functions/Alarm_Functions.hpp"
-#include "functions/Timer_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Power_Functions.hpp"
-#include "functions/Sound_Functions.hpp"
+#include "services/Alarm_Functions.hpp"
+#include "services/Timer_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "services/Power_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"

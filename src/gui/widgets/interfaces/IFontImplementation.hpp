@@ -1,6 +1,6 @@
 #pragma once
 
-#include "functions/Font_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 
 template<size_t N> class Label;
 

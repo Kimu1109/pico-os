@@ -77,7 +77,7 @@ SDカードの `/lua/apps/` 直下にサブディレクトリを1つ作り、そ
 
 ### 方法B: C++側に手動登録する(強い権限が要る場合)
 
-ネットワークやSD全域へのアクセスが必要なアプリは、`src/functions/App_List.cpp` に専用の生成関数を書いて登録します。
+ネットワークやSD全域へのアクセスが必要なアプリは、`src/boot/App_List.cpp` に専用の生成関数を書いて登録します。
 
 ```cpp
 Scene* MakeMyLuaAppScene(const AppEntry& entry) {

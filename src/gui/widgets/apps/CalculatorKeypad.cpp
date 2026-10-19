@@ -1,6 +1,6 @@
 #include "gui/widgets/apps/CalculatorKeypad.hpp"
-#include "functions/Font_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
 

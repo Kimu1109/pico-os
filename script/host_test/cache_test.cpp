@@ -8,7 +8,7 @@
 #include "storage/Doc_Cache.hpp"
 #include "net/Manifest.hpp"
 #include "storage/SD_Path.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

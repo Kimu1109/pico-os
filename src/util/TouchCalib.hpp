@@ -14,7 +14,7 @@
 // 既定値(Default())はその map() と同じ式なので、補正をしていなくても今までと同じ座標になる。
 //
 // ハードウェアにも描画にも依存しない(ホストテストで単体検証できる)。
-// ファイルへの保存は functions/TouchCalib_Functions.hpp。
+// ファイルへの保存は hal/TouchCalib_Functions.hpp。
 namespace TouchCalib {
     // 昔の map(p.y, MINY, MAXY, W-1, 0) / map(p.x, MINX, MAXX, 0, H-1) の定数
     constexpr int kMinU = 300;   // p.y の下限

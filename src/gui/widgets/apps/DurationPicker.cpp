@@ -1,6 +1,6 @@
 #include "gui/widgets/apps/DurationPicker.hpp"
 
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
 

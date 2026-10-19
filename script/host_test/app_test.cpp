@@ -3,12 +3,12 @@
 // AppGridはタイルごとにウィジェットを持たず、render()で直接描いてタップ位置から
 // 対象を逆算する。つまり「描く位置」と「当たり判定の位置」が別々の計算になっていて、
 // ずれても画面を見るまで気付けない。ここで両者の整合を突き合わせる。
-#include "functions/App_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "services/App_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "gui/widgets/systems/AppGrid.hpp"
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
 #include <cstring>

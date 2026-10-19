@@ -1,6 +1,6 @@
 #include "gui/scenes/DictScene.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
 #include "storage/SD_Path.hpp"
 
 void DictScene::onEnter(){

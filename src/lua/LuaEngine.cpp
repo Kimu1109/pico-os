@@ -1,6 +1,6 @@
 #include "lua/LuaEngine.hpp"
-#include "functions/Power_Functions.hpp"
-#include "functions/Mem_Functions.hpp"
+#include "services/Power_Functions.hpp"
+#include "system/Mem_Functions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -35,31 +35,31 @@
 #include "gui/icons/Bmp_Codec.hpp"
 #include "gui/icons/Jpeg_Codec.hpp"
 #include "gui/Fill4bpp.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Error_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/App_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Error_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "services/App_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Scene.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
-#include "functions/Config_Functions.hpp"
+#include "system/Config_Functions.hpp"
 #include "task/Http_Request.hpp"
 #include "util/Url.hpp"
-#include "functions/Time_Functions.hpp"
-#include "functions/Sound_Functions.hpp"
-#include "functions/Pad_Functions.hpp"
-#include "functions/Battery_Functions.hpp"
-#include "functions/Notification_Functions.hpp"
+#include "system/Time_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
+#include "system/Pad_Functions.hpp"
+#include "hal/Battery_Functions.hpp"
+#include "system/Notification_Functions.hpp"
 #include "sound/Note_Name.hpp"
 #include "sound/Mml_Compiler.hpp"
 #include "lua/LuaDebugger.hpp"
 #include "lua/LuaJson.hpp"
 #include "lua/LuaBuiltinModules.hpp"
 #include "util/Secret_Aead.hpp"
-#include "functions/Profiler_Functions.hpp"
+#include "devtools/Profiler_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
 #include <Arduino.h>
@@ -2094,7 +2094,7 @@ int LuaEngine::l_get_time(lua_State* L) {
 }
 
 int LuaEngine::l_get_touch(lua_State* L) {
-    // OSData::touchX/touchYはWidgetFunctions::HitTest()(src/functions/Widget_Functions.cpp)
+    // OSData::touchX/touchYはWidgetFunctions::HitTest()(src/gui/core/Widget_Functions.cpp)
     // が当たり判定にそのまま使っている絶対スクリーン座標。pico.draw_*やpico.content_rect()
     // と同じ座標系なので、press_start等のコールバック内でそのまま使える。
     // isTouchEnd(離した瞬間)でも座標はリセットされず最後の値を保持したままなので

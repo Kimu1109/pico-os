@@ -1,6 +1,6 @@
 #pragma once
 #include "gb/Gb_Emu.hpp"
-#include "functions/Pad_Functions.hpp"
+#include "system/Pad_Functions.hpp"
 
 // 外部コントローラーのボタン(PadFunctions::Button) → Game Boyのボタン(GbEmu::Button)。
 // Wiiクラシックコントローラーの並び(右がA、下がB、左がY)に合わせ、BはYでも押せる。

@@ -9,19 +9,19 @@
 //   - 日本語入力の入り切り(Tabを素早く2回・半角/全角・Ctrl+Space)
 //   - 日本語のキー盤のかな漢字変換(ローマ字の読み・Spaceで変換・候補の選び方・送り仮名(自動/SKK式)・
 //     読み/変換中は画面より先にキー盤へ配る・キーを畳む)。辞書はテストの中で小さいものを作る
-#include "functions/KeyInput_Functions.hpp"
-#include "functions/Pad_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "gui/scenes/Scene.hpp"
+#include "system/KeyInput_Functions.hpp"
+#include "system/Pad_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Scene.hpp"
 #include "gui/widgets/keyboards/KeyboardEng.hpp"
-#include "functions/Clipboard_Functions.hpp"
+#include "system/Clipboard_Functions.hpp"
 #include <string>
 #include "gui/widgets/keyboards/KeyboardNum.hpp"
 #include "gui/widgets/keyboards/Keyboard.hpp"
-#include "functions/IME_Functions.hpp"
+#include "ime/IME_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <Arduino.h>

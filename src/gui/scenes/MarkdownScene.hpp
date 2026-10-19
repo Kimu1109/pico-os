@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"

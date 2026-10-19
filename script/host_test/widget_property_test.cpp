@@ -10,9 +10,9 @@
 #include "gui/widgets/DropdownMenu.hpp"
 #include "gui/widgets/NumberInput.hpp"
 #include "gui/widgets/ScrollList.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include <cstdio>
 #include <string>
 

@@ -1,10 +1,10 @@
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "OS_Data.hpp"
-#include "util/ScopedClip.hpp"
+#include "gui/ScopedClip.hpp"
 #include "storage/SD_IO.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "gui/icons/icon_render.h"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "SdFat.h"
 
 MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {

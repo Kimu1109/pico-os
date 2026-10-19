@@ -1,12 +1,12 @@
 #include "gui/scenes/StoreScene.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
-#include "functions/Config_Functions.hpp"
-#include "functions/Error_Functions.hpp"
-#include "functions/Network_Functions.hpp"
-#include "functions/Power_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
+#include "system/Config_Functions.hpp"
+#include "gui/core/Error_Functions.hpp"
+#include "hal/Network_Functions.hpp"
+#include "services/Power_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
 #include "storage/SD_Path.hpp"
 
 #include <cstdio>

@@ -8,8 +8,8 @@
 #include "sound/Mml_Compiler.hpp"
 #include "sound/Music_Player.hpp"
 #include "sound/Chip_Synth.hpp"
-#include "functions/Sound_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
 

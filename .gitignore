@@ -49,3 +49,5 @@ pc/sdcard/sys/store.cfg
 pc/otp_emu.bin
 pc/ota_emu/
 pc/sdcard/lua/apps/*/log.csv
+# ホストテストのビルド(script/host_test/run.sh が作る)
+script/host_test/build/

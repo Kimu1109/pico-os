@@ -7,7 +7,7 @@
 // もう1つは「searchの行が無い = 検索非対応」という判定。これを取り違えると、
 // 対応していないサーバで検索ボタンが押せてしまう。
 #include "net/Discovery.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

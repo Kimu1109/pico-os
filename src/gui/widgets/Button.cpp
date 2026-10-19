@@ -1,6 +1,6 @@
 #include "gui/widgets/Button.hpp"
 
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
 void Button::calcTextSize(const char* text, bool reset_box){

@@ -1,7 +1,7 @@
 #include "gb/Gb_Emu.hpp"
 
 #include "OS_Data.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "storage/SD_IO.hpp"
 

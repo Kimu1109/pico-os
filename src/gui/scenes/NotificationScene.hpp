@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 

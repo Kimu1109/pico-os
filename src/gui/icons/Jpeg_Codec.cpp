@@ -1,6 +1,6 @@
 #include "gui/icons/Jpeg_Codec.hpp"
 #include "gui/icons/Bmp_Codec.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 
 #include <stdlib.h>
 #include <string.h>

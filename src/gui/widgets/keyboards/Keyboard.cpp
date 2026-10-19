@@ -1,8 +1,8 @@
 #include "gui/widgets/keyboards/Keyboard.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 
-#include "functions/GFX_Functions.hpp"
-#include "functions/HitBox_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/HitBox_Functions.hpp"
 #include "OS_Data.hpp"
 
 //フォントのスタイルの切り替え(主にキー用)

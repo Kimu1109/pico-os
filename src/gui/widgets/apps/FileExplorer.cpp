@@ -1,7 +1,7 @@
 #include "gui/widgets/apps/FileExplorer.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
-#include "functions/Widget_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_IO.hpp"
 

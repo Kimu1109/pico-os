@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gui/widgets/Widget.hpp"
-#include "functions/Notification_Functions.hpp"
+#include "system/Notification_Functions.hpp"
 #include "consts.hpp"
 
 // 通知のトースト(画面上部に数秒だけ出る帯)。OS常駐のオーバーレイで、全てのオーバーレイの一番上に置く

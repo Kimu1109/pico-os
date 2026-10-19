@@ -36,7 +36,7 @@ struct LuaPermissions {
 
 ### C++側に手動登録したアプリ
 
-`src/functions/App_List.cpp` の `Register()` 呼び出し側が明示的に権限を決めます。
+`src/boot/App_List.cpp` の `Register()` 呼び出し側が明示的に権限を決めます。
 
 ```cpp
 Scene* MakeMyLuaAppScene(const AppEntry& entry) {

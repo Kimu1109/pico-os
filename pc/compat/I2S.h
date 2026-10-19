@@ -1,6 +1,6 @@
 // arduino-picoのI2Sライブラリの代替(PC/Webビルド用)。SDLの音声出力へ流す。
 //
-// src/functions/Sound_Functions.cpp が使う分(setBCLK/setDATA/setBitsPerSample/setBuffers/
+// src/hal/Sound_Functions.cpp が使う分(setBCLK/setDATA/setBitsPerSample/setBuffers/
 // begin/end/write(int32_t, bool))だけを持つ。1ワード = 上位16bitが左、下位16bitが右。
 //
 // アンプの検出(AUDIO_DETECTのピン)もここで引き受ける: PicoPcGpio::read_hook を差し込み、

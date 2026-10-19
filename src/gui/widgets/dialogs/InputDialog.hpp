@@ -6,7 +6,7 @@
 #include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/dialogs/DialogLayout.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 
 // ラベル + テキスト入力 + ボタン(最大2つ)のダイアログ。
 //

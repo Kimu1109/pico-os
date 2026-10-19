@@ -1,6 +1,6 @@
 #include "gui/widgets/LuaCanvas.hpp"
 #include "OS_Data.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 
 LuaCanvas::LuaCanvas(int16_t x, int16_t y, int16_t w, int16_t h) {
     this->l_rect = {x, y, w, h};

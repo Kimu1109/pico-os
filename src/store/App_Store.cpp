@@ -8,9 +8,9 @@
 
 #include "Arduino.h"
 #include "OS_Data.hpp"
-#include "functions/Config_Functions.hpp"
-#include "functions/App_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Config_Functions.hpp"
+#include "services/App_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "lua/LuaAppScanner.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"

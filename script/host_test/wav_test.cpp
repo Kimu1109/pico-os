@@ -5,8 +5,8 @@
 //
 // 後半は SoundFunctions の配線(WavPlay/WavStop/WavPlaying)。sound_test と同じく、1コア目(UpdateAt)と
 // 2コア目(Core1StepAt)を1本のスレッドで交互に呼び、I2Sへ書かれた値を見る。
-#include "functions/Sound_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "sound/Wav_Decoder.hpp"
 #include "sound/Wav_Stream.hpp"
 #include "consts.hpp"

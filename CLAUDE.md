@@ -65,10 +65,15 @@ src/
   OS_Data.hpp               グローバル状態 (OSData namespace)
   consts.hpp                 ピン/画面/パレット定数
   config/LGFX_Config.hpp     LovyanGFXのパネル設定
-  functions/                 「Xxx_Functions」名前空間群
+  system/                    OSの土台の「Xxx_Functions」(ログ・設定・時刻・メモリ・入力の列(KeyInput/Pad)・通知の中身・バックグラウンドの登録簿・クリップボード)
+  hal/                       ハードの窓口の「Xxx_Functions」(タッチ・SD・電池・音声出力・マイク・Wi-Fi・I2Cのバスとその上の入力元)
+  services/                  OSの機能の「Xxx_Functions」(アプリ登録簿・アラーム・タイマー・電源・電源メニュー・ロック・画面の明るさ・スクリーンショット・ファームの更新・USBドライブ・端末の鍵)
+  devtools/                  開発者向けの道具(プロファイラ・クラッシュダンプ・debug.cfg・hwコマンド・起動時の自己診断とフォントのカバレッジ)
+  boot/                      つなぎ: 登録簿の中身(App_List / Background_List)・打鍵の配り先(KeyInput_Dispatch)・通知の出し入れ(Notification_Sources)
   gui/
+    core/                   GUIの仕組みの「Xxx_Functions」(GFX=合成と液晶への転送・Font・Widget・Focus・Scene(+Scene基底)・Keyboard・Error)
     icons/                  アイコンデータ(tabler_iconsから生成)
-    scenes/                 Scene基底と各画面(HomeScene/MarkdownScene/ClocksScene/LuaScene/CalendarScene/GameBoyScene等)
+    scenes/                 各画面(基底のSceneは gui/core/)(HomeScene/MarkdownScene/ClocksScene/LuaScene/CalendarScene/GameBoyScene等)
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
       apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView/GameBoyView/GameBoyPad/TerminalView/TermKeyBar等)
       dialogs/              モーダルダイアログ(オンスクリーンキーボードのダイアログ枠 KeyboardDialog を含む)
@@ -92,11 +97,11 @@ src/
   util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査) / Json_Reader(流しながら読むJSON)
   storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
   task/                       非同期タスク基底 + NetworkScan / HttpGet タスク + StepBudget(実行時間の区切り)
-  test/                       フォントカバレッジチェック等
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
-  host_test/                  PCで実コードを動かす検証(run.sh=ASanで解放漏れ検出、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/home/file_ops/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana/edit_history/app_repo等の61本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・アプリストアの配布物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/app_store_net/ssh_net) / run_mem.sh=確保回数の計測)
+  check_layers.py             src/ の層の決まり(下の段から上の段を include しない)の確認と、段ごとのソースの一覧(上の「層と置き場所」)
+  host_test/                  PCで実コードを動かす検証(run.sh=CMake+CTestでASan付きのテストを回す、説明はREADME.md、scene/label/markdown/config/app/path/cache/http/discovery/calc_eval/calculator/home/file_ops/dict/dict_scene/widget_factory/widget_property/step_budget/error_functions/lua_smoke/lua_stdlib/lua_alloc_budget/lua_engine/lua_ext/pico_mock/lua_sandbox/devtools/lua_scene/lua_app_scanner/ical/calendar_scene/chat_proto/chat_scene/todoist_proto/todo/gb_emu/gb_apu/sound/music/midi2mml/pad/tetris/reversi/minesweeper/breakout/blocks/iso_world/iso_td/vt_terminal/ssh_util/notification/wifi_profiles/key_input/romaji_kana/edit_history/app_repo等の80本 / run_net.sh=参照実装サーバ・テスト用TLSサーバ・チャットサーバ・Todoistの偽物・アプリストアの配布物・OpenSSHのsshd相手の結合テスト(net/calendar_sync/chat_net/todoist_net/app_store_net/ssh_net) / run_mem.sh=確保回数の計測)
   reference_server.py         PROTOCOL.mdの参照実装サーバ(標準ライブラリのみ)。Markdownブラウザの開発相手
   ppm2png.py                  picoos_pcの--shotが書き出すPPMをPNGへ(標準ライブラリのみ)
   build_app_repo.py           アプリストアの配布物を作る(鍵の生成・署名・目録だけの署名(sign)とCIでの組み立て(assemble)・確認。標準ライブラリのみ。APP_REPO.md)
@@ -142,7 +147,38 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 ### OSData (`src/OS_Data.hpp`)
 グローバル状態ハブ。`inline`変数として: タッチ状態(touchX/Y/Z, isTouched, isTouchStart/End/Move)、グラフィック(`LGFX* lcd`, `LGFX_Sprite* frame`)、SD(`SdFat SD`, SD_usable)、キーボード3種へのポインタ(keyboard_jpn / keyboard_eng / keyboard_num)を保持。
 
-### `Xxx_Functions` サブシステム (`src/functions/`)
+### 層と置き場所 (`script/check_layers.py`) (2026-10-19)
+
+`src/` は下の7段に分かれていて、**ファイルは自分と同じ段か下の段のヘッダだけを `#include` してよい**
+(同じ段の中は互いに使ってよい)。`python3 script/check_layers.py` が確かめ、CI(`host-tests.yml` の「層の決まり」)でも回る。
+段の割り当て(ディレクトリごと+1ファイルだけ別の段に置くもの)と、理由付きの例外もこのスクリプトの中にある。
+
+| 段 | 置き場所 | 中身 |
+|---|---|---|
+| 0 base | `consts.hpp` `OS_Data.hpp` `config/` `util/` (+`storage/SD_Path.hpp` `storage/SD_IO.hpp` `gui/icons/icons_data.h` `lua/LuaPermissions.hpp`) | 型・定数・グローバル状態。OSの機能を何も知らない |
+| 1 system | `system/` | UIもハードの具体も知らない土台(ログ・設定・時刻・入力の列・通知の中身・バックグラウンドの登録簿…) |
+| 2 lib | `hal/` と、UIを持たない機能のライブラリ(`storage` `net` `task` `sound` `iso` `ssh` `ime` `dict` `video` `firmware` `gb` `calendar` `chat` `todo`) | ハードの窓口と機能の中身。同じ段なので互いに使い合ってよい |
+| 3 ui | `gui/`(`core/` `icons/` `widgets/`) | 描画・ウィジェット・シーン遷移の仕組み |
+| 4 service | `services/` `devtools/` `gui/widgets/systems/` `home/`(+`todo/Todo_Watch`) | OSの機能と、それを見せるシェルの部品 |
+| 5 app | `gui/scenes/` `lua/` `store/` | 画面(アプリ)とLua |
+| 6 boot | `boot/` `main.cpp` | 起動とつなぎ。全部を知ってよい |
+
+- **下の段から上の段の機能を呼びたいとき**は、下の段に関数ポインタ(差し込み口)を置いて `boot/` で差すか
+  (`KeyInputFunctions::intercept`・`UsbDriveFunctions::sd_remounted`・`LuaAppScanner::apps_changed`)、
+  下の段のヘッダで宣言した関数を `boot/` で定義する(`AppFunctions::Setup()` → `boot/App_List.cpp`、
+  `KeyInputFunctions::Update()` → `boot/KeyInput_Dispatch.cpp`、`NotificationFunctions::Setup()/Update()` → `boot/Notification_Sources.cpp`)。
+  「中身」(`system/Notification_Functions.cpp`・`system/KeyInput_Functions.cpp`)と「つなぎ」(`boot/`)を分けてあるので、
+  中身だけをリンクしてホストテストできる。
+- `OS_Data.hpp` はキーボードを `Widget*` で持つだけなので、`Widget` は前方宣言にしてある(土台の段がUIの段へ依存しないように)。
+  `Widget` の中身が要るファイルは自分で `gui/widgets/Widget.hpp` を読むこと。
+- 例外は今1件(`devtools/DevTools_Functions.cpp` → `lua/LuaDebugger.hpp`。理由はスクリプトの中)。
+  例外を足すときは理由を書く。違反でなくなった例外はスクリプトが「古い例外」として報告する。
+- 段の割り当てを変えたら `script/host_test/CMakeLists.txt` が段ごとのライブラリを作り直す(同じスクリプトの `--sources` を読む)。
+
+### `Xxx_Functions` サブシステム (`system/` `hal/` `gui/core/` `services/` `devtools/` `boot/`)
+
+以前は全部 `src/functions/` にあった(2026-10-19に上の段ごとに分けた。名前空間・ファイル名は変えていない)。
+`IME_Functions.hpp` は `ime/`、`Task_Functions.hpp` は `task/` へ移した。
 各機能は名前空間+`inline`変数/関数のシングルトン的パターン(クラス化しない)。
 
 | モジュール | 役割 |
@@ -196,7 +232,7 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 
 `main.cpp`が直接newするのは**常駐ウィジェット(Statusbar)と最初のシーンだけ**で、画面ごとのウィジェットは各`Scene`の`onEnter()`が生成する。
 
-### 画面の明るさ調整と自動調光 (`src/functions/Display_Functions`) (2026-09-27)
+### 画面の明るさ調整と自動調光 (`src/services/Display_Functions`) (2026-09-27)
 
 SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、この節にだけ残す)。
 
@@ -245,7 +281,7 @@ SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、
   `lgfx::Light_PWM`の未解決や、明るさが効かない/ちらつく場合は、まずここ(pin_bl/pwm_channel、
   他コードがGP22のPWMスライスを使っていないか)を疑うこと。自動調光の30秒閾値の実測も未確認。
 
-### スリープ(省電力)(`src/functions/Power_Functions`) (2026-09-30)
+### スリープ(省電力)(`src/services/Power_Functions`) (2026-09-30)
 
 SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、この節にだけ残す)。
 自動調光(バックライトを絞るだけ)の先に、消費電力そのものを下げる段階を足した。
@@ -321,7 +357,7 @@ KeepAwakeを呼んでいる画面: ゲームボーイ・SSH・チャット(常�
   そのタッチでアプリが開かない。再起動で起動ログが繰り返され、`/crash/`に何も書かれない)。**実機では未確認**(arduino-picoの`settimeofday()`・
   `watchdog_reboot()`での再起動の後に`hw boot`の reason・SDの書きかけ)。
 
-### アラーム (`src/functions/Alarm_Functions` / `ClocksScene`の「アラーム」タブ) (2026-09-30)
+### アラーム (`src/services/Alarm_Functions` / `ClocksScene`の「アラーム」タブ) (2026-09-30)
 
 SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
 
@@ -347,7 +383,7 @@ SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
   **PCビルドの表示タイムゾーンは`network.cfg`の`timezone`(既定JST)なので、鳴らして試すときは`TZ=JST-9 date +%H:%M`で合わせること**
   (`date`だけだとUTCで1分もずれて鳴らない)。**実機では未確認**(I2Sでの音の聞こえ方・スリープからの復帰)。
 
-### 通知 (`src/functions/Notification_Functions` / `Notification_Sources.cpp` / `NotificationScene` / `widgets/systems/NotificationToast`) (2026-09-30)
+### 通知 (`src/system/Notification_Functions` / `Notification_Sources.cpp` / `NotificationScene` / `widgets/systems/NotificationToast`) (2026-09-30)
 
 SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・電池・Wi-Fiの条件で知らせる仕組み。**Luaアプリも`pico.notify`で使える**。
 
@@ -434,7 +470,7 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
 - 未: Luaアプリのウィジェット(app.cfgに`widget = widget.lua`を書き、使い捨てのエンジンで画像へ描いてホームはそれを貼る、を考えている)、天気等の新しい種類、
   ウィジェットごとの設定(どのカレンダーか等)、予定・TODOのウィジェットから項目を直接開く。
 
-### バックグラウンド実行の枠組み (`src/functions/Background_Functions` / `Background_List.cpp` / `BackgroundScene`) (2026-10-15)
+### バックグラウンド実行の枠組み (`src/system/Background_Functions` / `Background_List.cpp` / `BackgroundScene`) (2026-10-15)
 
 画面(シーン)を閉じても動き続ける仕事を登録しておくと、`main.cpp`の`loop()`(`NotificationFunctions::Update()`の後)が毎フレーム
 `BackgroundFunctions::Update()`→各仕事の`update(now)`を呼ぶ。方針は利用者と相談して決めた(2026-10-15): C++のサービスの登録簿 + その上に
@@ -604,7 +640,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 `watchdog_enable_caused_reboot()`の名前・RP2350(Cortex-M33)のnakedのアセンブリ・デバッガの画面の描画と`Font0`・
 プロファイラの実機の値。
 
-### 実機の確認用の道具 (`src/functions/HwTest_Functions` / Luaアプリ「実機チェック」) (2026-10-11)
+### 実機の確認用の道具 (`src/devtools/HwTest_Functions` / Luaアプリ「実機チェック」) (2026-10-11)
 
 `HARDWARE_CHECKLIST.md`(実機で確かめる・測る項目の一覧)を回すための道具。
 - **シリアルのコマンド`hw ...`**: `/sys/debug.cfg`の`hw-test = true`のときだけ(既定は切れている。わざと落とすコマンドがあるため。設定アプリには出さない)。
@@ -648,7 +684,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   PCビルドの`--tap`/`--shot`(SDから選ぶ→確認→書く→再起動→通知、`firmware_tool.py push`→本体で確認→DONE→再起動)。
   **実機でSDからもWi-Fiからも更新できることを利用者が確認した(2026-10-16)**。書き込みの時間は未計測。壊れたファームはBOOTSELで戻す。
 
-### スクリーンショット (`src/functions/Screenshot_Functions` / ステータスバー右端のカメラ) (2026-10-02)
+### スクリーンショット (`src/services/Screenshot_Functions` / ステータスバー右端のカメラ) (2026-10-02)
 
 SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
 
@@ -668,7 +704,7 @@ SUMMARY.md未掲載(小粒の機能のため、この節にだけ残す)。
 (`lgfx_jd_prepare/decomp`、`#include <lgfx/utility/lgfx_tjpgd.h>`。新しいライブラリは足していない)で、作業場所約3.9KBを解く間だけ`malloc`。
 ベースラインだけ(プログレッシブは断る)。1/2・1/4・1/8に縮めて解ける(`scale`、無ければ`max_w/max_h`(既定は画面)と画像用メモリの残りに収まる一番大きいもの)。
 16色へはBMPと同じ`Bmp::NearestIndex`+4x4の組織的ディザ。**ホストテストはLovyanGFXを持たないので`script/host_test/stubs/lgfx/utility/`に
-TJpgDecの写しを置き、`ensure_lua_obj`が`lua_obj/lgfx_tjpgd.o`にする(LovyanGFXの版を上げたら写し直す)**。スタブの`TFT_RED`等は色の番号そのもの
+TJpgDecの写しを置き、`script/host_test/CMakeLists.txt`が`host_tjpgd`にする(LovyanGFXの版を上げたら写し直す)**。スタブの`TFT_RED`等は色の番号そのもの
 (RGB565ではない)なので、近い色の選び方を確かめるテストは`PICO_GFX::COLORS`を本物の色へ差し替えて行う(`lua_ext_test`)。
 ファイルビューワー(`ImageView`)はまだJPEGを開けない。
 
@@ -697,7 +733,7 @@ FATの空きを数えたものではないので、深すぎて(8段)中を見�
 PCの互換層(`pc/compat/SdFat.h`)は`statvfs`、ホストテストのスタブは固定値。**スタブの`HostSd::dirs_enabled`**を立てるとファイルのパスからフォルダを作って
 `open()`/`openNext()`で列挙できる(既定は今までどおりフォルダ無し)。検証: `file_search_test`(apps)、PCビルドで検索・容量を`--tap`で確認。
 
-**タイマー/ストップウォッチの常駐(`src/functions/Timer_Functions`)**: 状態を`ClocksScene`のメンバからOS側へ移し、`main.cpp`の`loop()`(アラームの直後)で進める。
+**タイマー/ストップウォッチの常駐(`src/services/Timer_Functions`)**: 状態を`ClocksScene`のメンバからOS側へ移し、`main.cpp`の`loop()`(アラームの直後)で進める。
 タイマーが0になると`AlarmFunctions::PlayBeepStep()`を60秒・`KeepAwake()`、**時計アプリでタイマーを見ていなければ**「止める」の`MsgDialog`(`WidgetId`で持ち、消えたら出し直す)。
 ストップウォッチは**ラップ**(30件、溢れたら古い方から。通し番号は数え続ける)。動いている間は「リセット」が「ラップ」になる。時計アプリはランチャから開くと、
 動いているタイマー/ストップウォッチのタブから始まる。検証: `alarm_test`にタイマー/ストップウォッチ、PCビルドでラップ→ランチャへ戻る→開き直して続いていること。
@@ -707,7 +743,7 @@ PCの互換層(`pc/compat/SdFat.h`)は`statvfs`、ホストテストのスタブ
 設定アプリ「画面」タブの3行目、Luaの`pico.theme()`。**画像・アイコンも番号で描くので一緒に反転する**(写真のBMPは今のパレットで近い色を選ぶので見た目は保たれる)。
 ゲームのように自分の色を持つLuaアプリは`set_palette`で入れ直すこと。
 
-**画面ロック(`src/functions/Lock_Functions` / `widgets/systems/LockScreen`)**: PINは数字4〜8桁、`/sys/lock.cfg`の`pin = v1:<塩32桁>:<BLAKE2b-256 64桁>`
+**画面ロック(`src/services/Lock_Functions` / `widgets/systems/LockScreen`)**: PINは数字4〜8桁、`/sys/lock.cfg`の`pin = v1:<塩32桁>:<BLAKE2b-256 64桁>`
 (鍵はファームの固定鍵`PICO_Secret::kKey`、塩は`SecretAead::Random()`)。**起動時とスリープに入ったとき(=起きたらロック画面)**にロックする。
 ロック画面は**全オーバーレイの一番上**(`LockFunctions::Setup()`を最後に呼ぶ)の全画面OPAQUEで、`hitTest()`が常に真なのでタッチを全部取る(ステータスバーの長押し・通知センターも開かない)。
 打鍵は`KeyInputFunctions::intercept`(関数ポインタ。配り先をロックへ依存させないため)で全部ロック画面へ、コントローラーは`PadFunctions::SuppressThisFrame()`
@@ -717,7 +753,7 @@ PCの互換層(`pc/compat/SdFat.h`)は`statvfs`、ホストテストのスタブ
 (設定アプリ「画面」タブの5行目、電源メニューに「ロック」)。**守れるのは画面の操作だけ**: SDを抜けば中身は読め、4桁のPINはハッシュから総当たりで分かる。
 検証: `lock_test`(input。待ち時間が解除後も残るバグをこれで見つけた)、PCビルドでPINを決める→再起動でロック→違うPIN→正しいPIN。**実機では未確認**。
 
-### バッテリー残量表示(`src/functions/Battery_Functions`) (2026-09-28)
+### バッテリー残量表示(`src/hal/Battery_Functions`) (2026-09-28)
 
 SUMMARY.md未掲載(小粒の機能のため新規の大項目は起こさず、この節にだけ残す)。
 PiCoLiPoSHIM(Pimoroni LiPo SHIM相当、VBUS/VSYS/GND/3V3_EN/3V3_OUTをジャンパワイヤで
@@ -784,7 +820,7 @@ Picoへ配線)を実際に導入したのを受けて、VSYS電圧からバッ�
     音割れ対策」参照。この確認自体は動作報告の副産物で、残量表示単体の実機検証結果として
     別途まとめたものではない)。
 
-### バッテリー駆動中の音割れ対策(`src/functions/Sound_Functions`) (2026-09-28)
+### バッテリー駆動中の音割れ対策(`src/hal/Sound_Functions`) (2026-09-28)
 
 上のバッテリー残量表示を実機で動かしたユーザーから、「バッテリー駆動中に音が割れる。
 音量を20%以下にすると割れない」という報告を受けて追加した対策。
@@ -810,7 +846,7 @@ Picoへ配線)を実際に導入したのを受けて、VSYS電圧からバッ�
     `battery_cap_active`が立っていれば`kBatteryVolumeCapPercent`で頭打ちしてから
     `engine.setMasterVolume()`/`gb_apu.setMasterVolume()`へ渡す。
   - `SoundFunctions`が`BatteryFunctions`へ依存する形になった(`#include`1本)。
-    どちらも`src/functions/`の対等な`XxxFunctions`同士で、既存の`Display_Functions`→
+    どちらも`XxxFunctions`同士(当時は`src/functions/`、今は`hal/`と`services/`)で、既存の`Display_Functions`→
     `Pad_Functions`の依存と同種(循環はしていない)。
   - 診断用に`SoundFunctions::IsBatteryVolumeCapActive()`を追加したが、**設定画面への
     表示は見送った**(9行で既に画面いっぱいという既存の制約があり、動的なテキスト行を
@@ -873,7 +909,7 @@ Sの字を1ストロークで描いたもの)を確認したところ、人の�
 - **`reset()`は新しいタッチが始まるたびに呼ぶ**(`!OSData::isTouched`の判定を流用。
   下のisTouchStart判定と同じ条件)。履歴を最初の1点で埋め直すので、前のタッチの
   座標が新しいタッチの最初の数フレームへ混ざらない。
-- **実機専用(`src/functions/Touch_Functions.hpp`)にだけ組み込み、PCビルドの
+- **実機専用(`src/hal/Touch_Functions.hpp`)にだけ組み込み、PCビルドの
   マウス入力(`Touch_Functions_PC.hpp`)は変更していない**。マウス/`--tap`は
   そもそもノイズが無く、既存の`--tap`ベースのPC検証(フレーム単位のドラッグ操作等)に
   意図しない遅延を持ち込みたくなかったため。フィルタ自体はプラットフォームに依存しない
@@ -980,7 +1016,7 @@ OS側の洗い出しの結果、次を直した。実機ファームの静的RAM
   PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0: ランチャ・SDのアイコン・電卓・テキストエディタ+日本語キー盤)、
   実機ファームのビルド。`power_test`に暗いときの間隔。**実機での速さ・見た目は未確認**。
 
-### 液晶への転送を減らす(`GFX_Functions::FlushDirty()` / `LuaCanvas` / `util/ScopedClip.hpp`) (2026-10-06)
+### 液晶への転送を減らす(`GFX_Functions::FlushDirty()` / `LuaCanvas` / `gui/ScopedClip.hpp`) (2026-10-06)
 
 「pico.gameのゲームが24fps出ない」の調査。PCビルド(SPIの待ちを実機と同じ速さで真似る)で、カメラが動き続ける場面を
 測ると**1フレームに約15万画素(画面2枚ぶん)を送って11fps**だった。直したもの:
@@ -1001,7 +1037,7 @@ OS側の洗い出しの結果、次を直した。実機ファームの静的RAM
   `IconRender::DrawIconRaw()`・`AppGrid`・`MarkdownView`の表が`setClipRect()`→`clearClipRect()`していたため、
   `FlushDirty()`が掛けた「dirty矩形の内側だけ」のクリップが外れ、その後の描画がdirty矩形の外へはみ出していた
   (送られないのでframeと液晶が食い違い、行を飛ばす最適化と組み合わさると古い絵が残る。テトリスのSCOREの数字で踏んだ)。
-  **`util/ScopedClip.hpp`**(今のクリップとの重なりへ狭め、抜けるときに元へ戻す)に置き換えた。
+  **`gui/ScopedClip.hpp`**(今のクリップとの重なりへ狭め、抜けるときに元へ戻す)に置き換えた。
   `pico.set_draw_area/clear_draw_area`も、描画中(`PICO_GFX::render_clip_active`)は**ウィジェットの描画範囲∩dirty矩形**
   (`render_clip`)の外へ広げない/そこへ戻すようにした。**部品の中で一部だけクリップして描くときは`ScopedClip`を使うこと**(合成の外の空のクリップも保つ。下の「ミュージックアプリ」の「ついでに直したもの」)
   (`clearClipRect()`を描画の途中で呼ばない)。
@@ -1018,7 +1054,7 @@ OS側の洗い出しの結果、次を直した。実機ファームの静的RAM
   75MHz(`80000000`等、75MHz以上を指定)なら約16ms。タッチのノイズの調査で下げたが、ノイズはクロックに依らなかった
   (上の「タッチ座標のノイズ抑制」)。上げるかは実機の安定性次第。
 
-### dirty矩形を固定長配列化(`src/functions/GFX_Functions`) (2026-09-28)
+### dirty矩形を固定長配列化(`src/gui/core/GFX_Functions`) (2026-09-28)
 
 パフォーマンス監査で見つかった、`PICO_GFX::dirtyRects`が`std::vector<Rect>`のままだった点への対応。
 `FlushDirty()`のたびに`dirtyRects.clear()`→次フレームの`push_back()`で伸縮を繰り返しており、
@@ -1215,7 +1251,7 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   「追加」ボタンから実際に名前入力ダイアログが開くことまで確認済み(実際の保存はホストテストの
   SdFatスタブ経由で確認。暗号化ロジック自体は上記の往復検証で担保されている)。
 
-### 端末ごとの鍵(OTP) (`src/functions/DeviceKey_Functions` / `src/util/Device_Key.hpp`) (2026-10-12)
+### 端末ごとの鍵(OTP) (`src/services/DeviceKey_Functions` / `src/util/Device_Key.hpp`) (2026-10-12)
 
 上の「Wi-Fi認証情報の暗号化保存」の固定鍵`kKey`はリポジトリで公開されていて、SDだけを盗まれても読めた。
 **本体のOTPに端末ごとの32バイトの鍵を焼き、以後の暗号化をその鍵で行う**。Secure Bootは使わない(利用者の判断。2026-10-12)。
@@ -1386,7 +1422,9 @@ SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/
 - **includeは常に`src/`起点の絶対パス**(`#include "gui/widgets/apps/MarkdownView.hpp"`)。
   相対includeは使っていないので、フォルダを移してもファイル自身の中身は書き換え不要。
 - **PlatformIOもPCビルドも`src/**.cpp`を再帰的に拾う**ので、ファイルを移動してもビルド定義に触る必要はない。
-  ただし**`script/host_test/*.sh`はソースを1本ずつ明示列挙している**ので、移動したらここだけ直すこと。
+  ホストテスト(`script/host_test/CMakeLists.txt`)も段ごとに `src/` を拾うので直さなくてよい。
+  **`run_net.sh`/`run_mem.sh` だけはソースを1本ずつ並べている**ので、そこへ載っているファイルを移したら直すこと。
+  移したら `python3 script/check_layers.py` で層の決まりを確かめる。
 - `FileExplorer`が`apps/`なのは、`FileSaveDialog`/`FileSelectDialog`から使われていても
   **「SD上のファイルを見せる」という用途に特化した部品**だから。汎用部品の定義は「役割が特定の
   画面に紐付いていないこと」で、「複数箇所から使われていること」ではない。
@@ -1433,10 +1471,10 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
   (2026-09-21追記: 当初「NumberInputの入力値、Icon::opaqueのget、GridContainerのHAlign/VAlignのget等はウィジェット側に対応するgetter/setterが元々無いため未対応」だったが、Lua APIの細部の穴埋めで`NumberInput::getNum/setNum()`・`Icon::getOpaque()`・`GridContainer::getHAlign/getVAlign()`を追加し全て解消した。`ScrollList`/`DropdownMenu`には新たに`item_count`プロパティ(読み取り専用)も足した。詳細は「Luaバインディング」の「コンテナからの取り外し / リストへの項目追加」参照)
 - `Widget::operator new`が確保失敗(nullptr)した際、以前は無言で失敗していたが、唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。個々の`new Xxx(...)`呼び出し元がnullチェックしていない問題そのものは残っている(下記「Lua着手前の受け皿の状態」の「確保失敗(OOM)」参照)。
 
-### アプリの枠組み (`src/functions/App_Functions.hpp`)
+### アプリの枠組み (`src/services/App_Functions.hpp`)
 `AppEntry`(名前/アイコン/引数/シーン生成関数)の固定長テーブルに登録し、`HomeScene`の`AppGrid`がそれを並べる。
 
-- **アプリを増やすときに触るのは `src/functions/App_List.cpp` の `Setup()` に1行足すだけ**。シーン側にも`HomeScene`にも手を入れない。
+- **アプリを増やすときに触るのは `src/boot/App_List.cpp` の `Setup()` に1行足すだけ**。シーン側にも`HomeScene`にも手を入れない。
 - 仕組み(`Register`/`Launch`/`Get`)は`App_Functions.cpp`、載せるアプリの一覧は`App_List.cpp`に分けてある(前者はシーン実装に依存しないのでホストテストが軽い)。
 - 生成関数は`std::function`ではなく素の関数ポインタで、シグネチャは`Scene* (*)(const AppEntry&)`。登録簿を確保ゼロの静的テーブルに保つため。
   - `&AppFunctions::MakeScene<XxxScene>` … 引数なしで生成する
@@ -1498,7 +1536,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
   **通信はしない**(判断は`MarkdownScene`側)。結果は2回タップで開く。
 - `PickerDialog`: 選ぶ・入れる系(Choice/Date/Time/Number/Progress)を1クラスにしたもの(2026-10-05。Luaの `pico.show_choice` 等が使う)。
 - `ColorDialog`: 実装済み(直近コミット)。4×4=16色グリッド(`getIndexToColor(x,y)=x+y*4`)+OK/キャンセル。`selected_color`(未選択-1)、`getSelectedColor()`。
-### オンスクリーンキーボード (`src/gui/widgets/keyboards/` / `dialogs/KeyboardDialog` / `functions/Keyboard_Functions`) (2026-09-29)
+### オンスクリーンキーボード (`src/gui/widgets/keyboards/` / `dialogs/KeyboardDialog` / `gui/core/Keyboard_Functions`) (2026-09-29)
 
 キーボードは**「キー盤」と「ダイアログ枠」に分かれている**。以前は3種とも全画面を覆う1つのウィジェットで、
 背景の斜線・上部の入力欄(共有の`Label`)・キーを全部自分で描いていたが、テキストエディタで
@@ -1524,7 +1562,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
   (以前は切り替えのたびにターゲットへ`onHide`→`onShow`が飛んでいた)。決定キーも`onHide`は1回だけになった
   (以前は決定キーが`onHide`を明示的に呼んだ上で`setVisible(false)`でもう一度呼んでいた)。
 - ホストテストの各`*_test.cpp`は`KeyboardFunctions`の関数を個別にスタブしているので、`Keyboard_Functions.hpp`へ関数を
-  足したら使われるものをスタブへも足すこと。`KeyboardNum.cpp`をリンクするテストは`KeyboardPanel.cpp`も要る。
+  足したら使われるものをスタブへも足すこと(足さないとリンカが本物の`Keyboard_Functions.o`を拾い、スタブと重複定義になる)。
 
 キー盤それぞれの中身:
 
@@ -2035,7 +2073,7 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
   Blargg氏の`cpu_instrs`(リポジトリには含めていない)が正しく動くことを`--tap`/`--shot`で確認。
   **市販ゲームのROMはリポジトリに含めない。**
 
-### 音声出力 (`src/functions/Sound_Functions` / `src/sound/`) (2026-09-25)
+### 音声出力 (`src/hal/Sound_Functions` / `src/sound/`) (2026-09-25)
 
 SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャンネル。2026-09-28に4→任意数対応)+ 2コア目での合成**。曲(MML)は下の「曲データ」、GBエミュの音は「ゲームボーイの音」。
 
@@ -2118,7 +2156,7 @@ SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャ�
 (テスト音: 300ms・約880Hz、デモ曲: 4ch足して最大約12000で音割れなし)。
 **実機(arduino-picoのI2S・2コア目・MAX98357A)では未確認**(このリモート環境には実機もRP2350のボード定義も無い)。**Webビルドも未確認**(emsdkが無い)。
 
-### マイクと録音 (`src/functions/Mic_Functions` / `src/sound/Mic_Dsp.hpp` / `src/sound/Wav_Writer` / `RecorderScene`) (2026-10-18)
+### マイクと録音 (`src/hal/Mic_Functions` / `src/sound/Mic_Dsp.hpp` / `src/sound/Wav_Writer` / `RecorderScene`) (2026-10-18)
 
 SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブレイクアウト等)で `/recordings/rec_NNNN.wav` へ録る。方針は利用者と相談して決めた(2026-10-18): 用途は録音 /
 出力とBCLK/LRCLKを共有せず**別のI2S**にする(SPH0645はBCLK 2.048〜4.096MHz・32bitスロットが要り、出力の16bitスロット・22050Hzでは範囲外。共有するには出力を44.1kHz・32bitへ固定する必要があった)。
@@ -2429,7 +2467,7 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
   キー/コントローラー: 上下でシークバー⇔ボタンの行、左右でボタン(シークバーでは10秒戻る/進む)、決定で押す(枠は自分で描く`drawsOwnFocus`)。
   物理キーボード: `n`次 `p`前 `k`再生/一時停止 `s`ミックス `r`リピート(`MusicScene::onKey()`)。
 - `WidgetType::MusicPlayerPanel`を末尾へ足した。シーン本体は約7KB(曲の控え64件×2)。
-- **ついでに直したもの(`util/ScopedClip.hpp`)**: 合成の外の`render()`(`Widget::update()`がクリップを空にして書き込みを捨てている)で`ScopedClip`を使うと、
+- **ついでに直したもの(`gui/ScopedClip.hpp`)**: 合成の外の`render()`(`Widget::update()`がクリップを空にして書き込みを捨てている)で`ScopedClip`を使うと、
   空のクリップも幅0で返るので「クリップ無し」と取り違え、部品の矩形いっぱいへ広げた上、抜けるときの`clearClipRect()`で**その後の描画まで素通し**に
   なっていた(ScrollListのアイコン→文字が、dirty矩形の外=一覧の下の行へ描かれ、`PICOOS_VERIFY_LCD=1`で液晶と食い違った。どのScrollListでも、
   一番下に半分見えている項目があると起きる)。`PICO_GFX::render_suppressed`の間は空のクリップのまま描かせ、空へ戻すようにした。
@@ -2457,7 +2495,7 @@ MJPEGは本体でJPEGを解く・フルカラーを16色へ落とす処理が重
   **`pvid_dump`(本物の`PvidPlayer`をASan付きで)と全部のフレーム・前後へのシークの絵が一致すること、ランダムに壊した300個のファイルで落ちないこと**)、
   PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 選ぶ→再生(音あり/なし)・一時停止・+10秒で最後へ・「最初から」・戻るとパレットが戻る。
 
-### 外部コントローラー (`src/functions/Pad_Functions` / `script/pad_serial.py`) (2026-09-25)
+### 外部コントローラー (`src/system/Pad_Functions` / `script/pad_serial.py`) (2026-09-25)
 
 SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I2C0のGP0/GP1、アドレス0x52。抜き差しはACKの有無で分かるので
 検出用のピンが要らない。十字キー/ABXY/L R ZL ZR/START SELECT HOMEが揃い3.3Vで動く)に決めたが、**実物がまだ無い**。
@@ -2499,7 +2537,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 - 検証: `pad_test`(run.sh。行の読み取り、押した/離したはそのフレームだけ、途切れたら外れる、行が分かれて届く、長すぎる行、1回に読む量、GBの対応)、
   `lua_engine_test`(Lua API)、PCビルドで`pad_serial.py --stdout`→`picoos_pc`をXvfb+xdotoolで通し(十字キー斜め+Bの同時押しで点が斜めに動く)、
   擬似端末を相手にシリアルの経路(pyserial有り/無し、ログの折り返し)。**実機のUSBシリアル(arduino-picoのCDC)では未確認**。
-- **Wiiクラシックコントローラーのドライバ(`src/functions/WiiClassic_Functions`、2026-10-12)**: I2C0(`I2C_Bus.hpp`、CardKB2と共有。`begin()`はここで1回)のアドレス0x52。
+- **Wiiクラシックコントローラーのドライバ(`src/hal/WiiClassic_Functions`、2026-10-12)**: I2C0(`I2C_Bus.hpp`、CardKB2と共有。`begin()`はここで1回)のアドレス0x52。
   - 見つける: 未接続の間は500msごとに`[F0 55]`→`[FB 00]`(暗号化しない初期化。純正もクローン品も)→`[00]`(変換の開始)を書き、ACKがあれば接続。
   - 読む: 10msごとに6バイト読み、すぐ次の`[00]`を書く(書いてから読むまでの待ちを1回ずらして吸収する。止まらない)。標準の形式の4・5バイト目がボタン(0=押している)、
     左スティック(0〜63、つながって最初に読めた値が中心)を±12以上傾けたら十字キーとしても押す。全部0xFF(初期化が外れた)・全部押している、は読めていない扱いで初期化し直す。
@@ -2511,7 +2549,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
     **実物・実機では未確認**(3.3Vのプルアップ・純正/クローン品の初期化の違い・変換の待ちが10msで足りるか)。
 - 次: PCビルドにSDLのキーボード/ゲームパッドを直接つなぐのも手軽な追加候補。
 
-### 物理キーボード (`src/functions/KeyInput_Functions` / `KeyInput_Dispatch.cpp`) (2026-10-01)
+### 物理キーボード (`src/system/KeyInput_Functions` / `KeyInput_Dispatch.cpp`) (2026-10-01)
 
 SUMMARY.md #10の追加項目。**PCのキーボードを物理キーボードとして使い、そのまま文字を打てるようにした**(第1段: USBシリアル経由)。
 本体へ直接つなぐ方式は比べた上で後回しにした(Bluetoothのキーボード=arduino-picoのBluetoothHIDMasterがあるがBTstackでRAMを数十KB食い、
@@ -2546,9 +2584,8 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
   入力元: `pad_serial.py`(X11の`XF86Audio*`。コントローラーのモードでも送る。デスクトップが先に取ると届かない)、PCビルド(`SDLK_AUDIO*`)、Webのページ(`Media*`/`AudioVolume*`)。
 - **自動調光/スリープ**: 列に打鍵があれば操作とみなす(`DisplayFunctions`/`PowerFunctions`が`Pending()`を見る)。**スリープから起こした打鍵は捨てる**
   (`DiscardPending()`。暗い画面のどこへ入るか見えないため。タッチの`swallow_touch`と同じ考え方)。
-- **列・行の読み取り(`KeyInput_Functions.cpp`)は何にも依存しない**ので、Pad/Powerのホストテストはこちらだけをリンクする。
-  配り先(`KeyInput_Dispatch.cpp`)は`SceneFunctions`/`KeyboardFunctions`に依存する(`Notification_Functions`/`_Sources`と同じ分け方)。
-  **`KeyboardPanel.cpp`をリンクするテストは`KeyInput_Functions.cpp`も要る**(`EncodeUtf8()`)。
+- **列・行の読み取り(`system/KeyInput_Functions.cpp`)は何にも依存しない**ので、Pad/Powerのホストテストはこちらだけを引っ張る。
+  配り先(`boot/KeyInput_Dispatch.cpp`)は`SceneFunctions`/`KeyboardFunctions`に依存する(`Notification_Functions`/`_Sources`と同じ分け方)。
 - **入力元**:
   - 実機: `script/pad_serial.py --mode text`(F1でコントローラー⇔文字入力を切り替え)。tkinterのkeysym/char/stateから行を作る
     (Ctrl+CはcharがETXになるのでkeysymを送る。AltのビットはOSで違う: Windows 0x20000 / X11 0x8 / macOS 0x10)
@@ -2563,7 +2600,7 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
   `pad_serial.py`の行の組み立て、Webのページ(Chromiumで「文字入力」の行とコントローラーのときは送らないこと)。
   **実機のUSBシリアル・Webビルド本体(emsdk無し)・PCビルドの実ウィンドウでのSDLのキー入力(ヘッドレスでは来ない)・実際のSSHサーバ相手は未確認**。
 
-### ウィジェットのフォーカス (`src/functions/Focus_Functions` / `Widget`の`focus_mode`と仮想関数) (2026-10-10)
+### ウィジェットのフォーカス (`src/gui/core/Focus_Functions` / `Widget`の`focus_mode`と仮想関数) (2026-10-10)
 
 SUMMARY.md未掲載。物理キーボード・外部コントローラーで、画面のボタン等を選んで押せるようにした。**RAMは状態だけで約10バイト**
 (`FocusFunctions::focused`・`ring_visible`・`saved_id`(WidgetId)・`saved_ring`、十字キーの繰り返し6バイト)。
@@ -2650,7 +2687,7 @@ SUMMARY.md未掲載。物理キーボード・外部コントローラーで、�
   **実機・本物のSKK辞書・CardKB2・Webビルドでは未確認**(本物の辞書では1回の変換で最大3回辞書を引く。SDの速さは実機で見ること)。
 - **未対応**: 文節の区切り・連文節変換、変換の学習(候補の並び替え)、読みの途中でのカーソル移動、全角英数への変換(F9/F10)。
 
-### CardKB2(`src/functions/CardKB_Functions`) (2026-10-02)
+### CardKB2(`src/hal/CardKB_Functions`) (2026-10-02)
 
 SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit CardKB2(I2Cの小型QWERTY)を**あれば使える程度**で足した入力元。
 外部コントローラーと同じく無いのが普通なので、未接続でもログ・画面に何も出さない(ステータスバーのアイコンも無し)。
@@ -2659,13 +2696,13 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - **プロトコルはM5Unit-KEYBOARD(`UnitCardKB2`)の実装から**: アドレス0x5F(初代CardKBと同じ)、1バイト読むと押したキーのASCIIが1回(0=押していない)。
   Shift/Sym/Fnは反映済みで届く。リピートは本体側(300ms後から50ms)。**I2CモードではFn+D/Z/X/Cのカーソルキーが出ない**(本体の仕様)。
   初代の0xB4〜0xB7はカーソルキーとして読むが、CardKB2では来ない。UARTモード(Fn+Sym+2)のままだと何も返らず、未接続扱い。
-- 配線はI2C0のGP0(SDA)/GP1(SCL)。`Wire`のピンと`begin()`は`functions/I2C_Bus.hpp`(Wiiクラシックのドライバと共通、2026-10-12に移した)。
+- 配線はI2C0のGP0(SDA)/GP1(SCL)。`Wire`のピンと`begin()`は`hal/I2C_Bus.hpp`(Wiiクラシックのドライバと共通、2026-10-12に移した)。
 - 検出: 未接続の間は1秒ごとに0x5F へ呼びかけ(ACKで接続)、接続中は10msごとに読み、読み出しが3回続けて失敗したら外れた扱い。
 - PC/ホストテストは`pc/compat/Wire.h`(`PicoPcWire`で「I2Cの先に居るもの」を表す。既定は誰も居ない)。`script/host_test/stubs/Wire.h`はそれを取り込む。
 - 検証: `cardkb_test`(run.sh)とPCビルドの起動(未接続で静か)。**実機・実物のCardKB2は未確認**
   (3.3V系のバスへ5Vのプルアップが乗らないか・`Wire.setSDA/setSCL`の名前・UARTモード出荷品が無いか)。
 
-### USBドライブ(USBマスストレージ) (`src/functions/UsbDrive_Functions` / `storage/Msc_Sector_Bridge.hpp` / `UsbDriveScene`) (2026-10-12)
+### USBドライブ(USBマスストレージ) (`src/services/UsbDrive_Functions` / `storage/Msc_Sector_Bridge.hpp` / `UsbDriveScene`) (2026-10-12)
 
 ランチャの「USBドライブ」(アイコンはSDカード)。開くとSDカードがPCのドライブとして見え、SDの抜き差しをせずにLuaアプリ・曲・ROMを行き来できる。
 
@@ -2734,7 +2771,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - **選択範囲 = 起点(`sel_anchor`)〜カーソル**。メニューの「範囲選択」で起点を置き、終わりをタップ(キー盤の←→でも広がる)。物理キーボードはShift+矢印/Home/End/PageUp/PageDown、
   Ctrl+A。`TextView::setSelection()`が背景を水色(`PICO_CYAN`)で塗る。**文字を打つと選択は外れる(置き換えはしない)**。Backspace/Deleteは選択範囲を消す。
   1行ずつキーボードへ渡す作りのため、日本語のキー盤が読みを入力中の打鍵は画面より先にキー盤へ行き、選択を置き換える経路を作れないので揃えた。
-- **コピー/切り取り/貼り付け**は`ClipboardFunctions`(`src/functions/Clipboard_Functions`。OS全体で1つ、テキスト1KiBまで、入れた大きさだけ`malloc`、
+- **コピー/切り取り/貼り付け**は`ClipboardFunctions`(`src/system/Clipboard_Functions`。OS全体で1つ、テキスト1KiBまで、入れた大きさだけ`malloc`、
   `\r`とNULを捨てる、再起動で消える)。選択が無ければ今の行を改行込みで(切り取りは行ごと消す)。貼り付けは選択範囲を置き換える。
   容量・行数・1行の長さの上限に当たる操作は`checkLimits()`で先に断り、状態欄へ理由を出す(切り取りは1KiBを超えると断る=クリップボードに入らない分を消さない)。
 - **検索/置換**: Ctrl+F/Ctrl+H か メニュー → `InputDialog`(開いたらすぐキーボードが出る。`InputDialog::openKeyboard()`を足した)で探す文字列
@@ -2949,7 +2986,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - UTF-8境界を跨いで文字が欠けないよう、バイト単位の操作はすべて継続バイト(`10xxxxxx`)を
   巻き戻すガードが入っている。`charCount()`/`byteOffsetOfChar()`/`removeCharAt()`/
   `insertAtChar()` など「文字単位」のAPIを持つ。
-- UTF-8の**文字列操作はFixedStringの担当**、`functions/UTF8_Functions.hpp` は
+- UTF-8の**文字列操作はFixedStringの担当**、`system/UTF8_Functions.hpp` は
   **エンコード/デコードのみ**。`FixedString.hpp` から `UTF8_Functions.hpp` を
   includeしてはいけない(循環include回避)。最下層の `util/Utf8Byte.hpp` だけを使う。
 - 長さは `consts.hpp` のプリセットから選ぶ:
@@ -3014,9 +3051,9 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 - **`src/` のコードは実機とまったく同じものを使う**。差し替えているのは実機ライブラリだけで、
   `pc/compat/` をインクルードパスの先頭に置いて `Arduino.h`/`SPI.h`/`WiFi.h`/`SdFat.h`/
   `XPT2046_Touchscreen.h`/`I2S.h` を置き換える(`script/host_test/stubs` と同じ考え方)。
-- **例外は2ファイルだけ**: `src/config/LGFX_Config.hpp` と `src/functions/Touch_Functions.hpp` が
+- **例外は2ファイルだけ**: `src/config/LGFX_Config.hpp` と `src/hal/Touch_Functions.hpp` が
   `#if defined(PICOOS_PC)` で `pc/compat/` 側(`<config/LGFX_Config_PC.hpp>` /
-  `<functions/Touch_Functions_PC.hpp>`)を取り込む。
+  `<hal/Touch_Functions_PC.hpp>`)を取り込む。
   **山かっこで書くこと** — `"config/..."` だとインクルード元(`src/`)のディレクトリが優先され、
   自分自身を読んで多重定義になる。
 - **ネイティブ関数(`millis`等)はPCビルドのときだけ上書きされる**。`pc/compat/Arduino.h` が
@@ -3192,7 +3229,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 
 ## メモリ計測の結論 (2026-09-12時点、実機RP2350で20回の遷移を計測)
 
-`src/functions/Mem_Functions.hpp` と `script/host_test/run_mem.sh` で実測した結果と判断。
+`src/system/Mem_Functions.hpp` と `script/host_test/run_mem.sh` で実測した結果と判断。
 **同じ議論を繰り返さないために、アリーナを提案する前に必ずここを読むこと。**
 
 - **断片化は起きていない**。`frag=0%` / `max_alloc=65536B以上` / 空きブロック数5〜12で推移し、20回の遷移で増加傾向なし。
@@ -3545,7 +3582,7 @@ registry ref(関数への参照)をラムダへキャプチャすると16Bを超
 
 **最初の実装(`pico.draw_*`をloop()/コールバックから素で呼ぶだけ)は動かなかった。**
 PCビルドの`--shot`で実際に確認したところ、`pico.fill_rect()`で塗った矩形が
-跡形もなく消えた。原因は`PICO_GFX::FlushDirty()`(`src/functions/GFX_Functions.cpp`)の
+跡形もなく消えた。原因は`PICO_GFX::FlushDirty()`(`src/gui/core/GFX_Functions.cpp`)の
 合成方式: dirty矩形ごとに「それを覆うウィジェットが無ければ背景色で塗りつぶし
 (`clear_bg`)、そこに重なるウィジェットだけを`renderForce()`で再描画する」。
 つまり`OSData::frame`はウィジェットが毎回描き直す前提の合成先であって、単純な
@@ -4277,7 +4314,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 - **`pico.get_touch() -> x, y, is_touched`を追加した。** 中身は`OSData::touchX/touchY/
   isTouched`をそのまま返すだけの薄いAPI(`pico.get_time()`と同じく、既存のグローバル状態を
   橋渡しするだけで新しい状態は持たない)。`WidgetFunctions::HitTest()`
-  (`src/functions/Widget_Functions.cpp`)が当たり判定に使っているのと同じ値なので、
+  (`src/gui/core/Widget_Functions.cpp`)が当たり判定に使っているのと同じ値なので、
   `press_start`等のコールバックの中で読めば「そのタップが当たったウィジェットの外側から見た
   絶対スクリーン座標」と一致する(`pico.draw_*`/`pico.content_rect()`と同じ座標系)。
 - **戻り値は`pico.get_time()`のようなテーブルではなく、`pico.content_rect()`と同じ複数戻り値**
@@ -5067,7 +5104,7 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 | コールバック | **意図的に見送り(2026-09-19)**。`std::function<void()>`のまま。上記「メモリ計測の結論」が既に出している判断(「関数ポインタ+`void*`のDelegateへ替える効果は単体では5%程度、旨味が出るのはLuaのコールバックを大量に貼るようになってから」)をそのまま踏襲し、今回は手を入れなかった。今のシグネチャには「引数もコンテキストも無い」という実害(誰が押したか・どのウィジェットのIDかをコールバック側へ渡せない)もあるため、**再設計するならLuaバインディング本体を書く回でシグネチャを一度に決める**(引数無しのまま先にDelegate化だけ済ませても、Lua側の要求で結局signature変更が要る可能性が高く、二度手間になるため) |
 | ~~実行時間の制御~~ | **解消済み(土台2026-09-19、命令単位の打ち切りは2026-09-21)**。`task/StepBudget.hpp`が「一定時間(マイクロ秒)働いたら次のフレームへ回す」ための時間区切りプリミティブを提供する(`Task::update()`内の作業ループを`StepBudget::ShouldContinue()`で区切る。ホストテストは`script/host_test/step_budget_test.cpp`)。**`LuaEngine`側は`lua_sethook(LUA_MASKCOUNT)`でLuaバイトコード命令数を数え、1回の外部呼び出しあたりの上限を超えたら`luaL_error()`で打ち切る**(`StepBudget`とは別物のまま、統合はしていない。詳細は上の「実行時間の安全網(暴走防止)」参照) |
 | ~~確保失敗(OOM)~~ | **Lua向けの経路は解消、内部90箇所は対象外と決定(2026-09-19)**。`WidgetFactory::Create()`はtype非対応時もWidget::operator new失敗時も一貫してnullptrを返す設計になっており(ヘッダのコメントで明記済み)、**Luaが実際に触る唯一の生成経路はこの時点で既に安全**。一方、Scene/Dialog等OS内部の`new Button(...)`等(約90箇所)は個々にnullチェックしていないが、これらは実行時に増減しない固定・既知個数の生成で、「メモリ計測の結論」が示す通り実測で断片化もリークも無く十分な余裕がある。ここへ90箇所分のnullチェックを機械的に足す投資対効果は低いと判断し、**対象外とする**(Luaスクリプトが暴走してウィジェットを大量生成する経路は`WidgetFactory::Create()`1箇所に絞られているため、そこが安全なら実害は無い)。`lua_newstate`のカスタムallocでLuaに上限枠を切る話(下記RAM/Flash予算)は引き続き未着手 |
-| ~~エラーの見せ方~~ | **解消済み(2026-09-19)**。`ErrorFunctions::ShowFatal(message)`(`src/functions/Error_Functions.hpp/.cpp`)がログ(`LOG_APP_FAIL`)とMsgDialog表示の両方を1呼び出しでこなす。`FileExplorer::on_press_delete()`等と同じ「生成→`AddDialog`→`setVisible`→`setOnClosed`で`DestroyLater`」の作法を関数内に閉じ込めてあるので、将来Luaの`pcall`エラーを拾った先はこれを呼ぶだけでよい。ホストテストは`script/host_test/error_functions_test.cpp` |
+| ~~エラーの見せ方~~ | **解消済み(2026-09-19)**。`ErrorFunctions::ShowFatal(message)`(`src/gui/core/Error_Functions.hpp/.cpp`)がログ(`LOG_APP_FAIL`)とMsgDialog表示の両方を1呼び出しでこなす。`FileExplorer::on_press_delete()`等と同じ「生成→`AddDialog`→`setVisible`→`setOnClosed`で`DestroyLater`」の作法を関数内に閉じ込めてあるので、将来Luaの`pcall`エラーを拾った先はこれを呼ぶだけでよい。ホストテストは`script/host_test/error_functions_test.cpp` |
 | RAM/Flash予算 | **暫定枠: Lua用に200KBを割り当てる方針(2026-09-19決定、`lua_newstate`のカスタムallocへ渡す上限)**。開発者が実機で計測した「OS側のヒープ使用量はピークでも150KB程度」を根拠に、RP2350の総SRAM 520KBから逆算した(150KB+200KB=350KBでも170KBの余裕)。**ただし2点未確認**: ①その150KBが`Mem_Functions`(mallinfoベースのヒープ)の値かどうか(フレームバッファ`frame`スプライトやWi-Fi/lwIPスタックがヒープ計測に乗らない確保だと実際の総使用量はもう少し上振れし得る)、②このリモート実行環境には実機もPlatformIOのRP2350ボード定義も無く追試できていない(`platform = raspberrypi`のPlatformIO公式パッケージ1.20.0にはrpipico2wのボード定義が同梱されていない)。**実機が使える時に、Wi-Fi接続中+一番重いシーン(Markdown/Dict)を開いた状態で`MemFunctions`のレポートを取り、200KB確保後も安全か確認すること。** Lua本体はflash 100KB超で、**stateだけでRAM 20〜30KBのオーダーという見積もりはPC上で実測して裏付けた**(空のstate+`luaL_openlibs()`一式でピーク約19.5KB。`script/host_test/lua_alloc_budget_test.cpp`のBudgetAlloc計測)。200KB枠はそこにユーザースクリプト+ウィジェットツリー分の余裕を見込んだ値。**カスタムallocによる予算制御そのものの安全性もPCで確認済み**(下記「ビルドの二重管理」参照)。実機での絶対値(mallinfoの150KBが本当に正しいか)はやはり未確認 |
 | ~~ビルドの二重管理~~ | **LovyanGFXとは別方式で解消済み(2026-09-19)**。Lua 5.4.7本体(`lua.c`/`luac.c`を除く)を`lib/lua/`へvendorした(`lib/lua/README-pico-os.md`に経緯あり: Lua本体の`src/`には`main()`を持つ`lua.c`/`luac.c`が混在しており、`lib_deps`へ生のgit/tarballを指定するとPlatformIOの自動収集がそれも拾ってArduinoコア自身の`main()`と衝突するため、LovyanGFX方式(`lib_deps`+`pc/CMakeLists.txt`が同じタグをそれぞれ取得)は使えなかった)。vendor後は`lib/`配下がPlatformIOの「プロジェクト専用ライブラリ」として自動的にビルドされる(`platformio.ini`への追記は不要)ので、`pc/CMakeLists.txt`もこの同じ`lib/lua/src/`を参照するようにし、**実質1箇所の情報源**に落ち着いた。PCビルドで実際にリンクし、`lua_newstate`/`luaL_openlibs`/`luaL_dostring`/`lua_close`が動くことまで確認済み(`script/host_test/lua_smoke_test.cpp`、PC実行バイナリ`pc/build/picoos_pc`でも起動確認済み)。**言語機能・標準ライブラリの動作確認(2026-09-19追加)**: `script/host_test/lua_stdlib_test.cpp`で数値/文字列/テーブル/クロージャ/メタテーブル/pcall/コルーチン/GCが一通り動くことをASan/UBSan付きで確認(全てpc/CMakeLists.txtと同じ`LUA_USE_LINUX`無しのANSI構成でビルド)。**カスタムアロケータでの予算制御の安全性も確認済み**: `script/host_test/lua_alloc_budget_test.cpp`が`lua_newstate`へ確保量上限付きの`lua_Alloc`を渡し、予算超過時に(a)`lua_newstate`自体は素直に`nullptr`を返す、(b)`pcall`越しの`luaL_openlibs()`は`abort()`せず`LUA_ERRMEM`を返す(`pcall`で保護しないまま直接呼ぶとLuaの仕様上`abort()`する点に注意)、(c)いずれの場合も`lua_close`後は確保量が必ず0に戻る(リーク無し)ことを確認した。これは上記RAM/Flash予算の「200KBで上限を切る」方式が安全に実現できることの裏付けになる。**PlatformIO側(実機)は引き続き未検証**(このリモート実行環境にRP2350のボード定義が無いため。上記RAM/Flash予算の未確認点と同種の制約) |
 
@@ -5137,19 +5174,22 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 - **ホストテストはPR時にCIで回る**(`.github/workflows/host-tests.yml`。`run.sh`のグループごとに別ジョブ。matrixの一覧が`run.sh --list`と
   ずれると`groups-in-sync`ジョブが落ちるので、グループを足したらworkflowのmatrixにも足すこと)。`run_net.sh`/`run_mem.sh`/PCビルドの確認は手動のまま。
   実機ファームのビルド(`pio run -e rpipico2w`)もPR時にCIで回る(`.github/workflows/firmware-build.yml`。`platform = raspberrypi`はCI内でだけ maxgerhardt の版へ差し替える)。
-  CIの他はWebビルドの公開(`.github/workflows/web-pages.yml`)。`sh script/host_test/run.sh`(ASan、60本。グループ名を渡すとそのグループだけ回す: `run.sh core lua-engine`、一覧は`--list`。全部を並列に回すなら`sh script/host_test/run_parallel.sh [-j N] [グループ名...]`、2026-10-05追加)/
+  層の決まり(`python3 script/check_layers.py`)もPR時にCIで回る。
+  CIの他はWebビルドの公開(`.github/workflows/web-pages.yml`)。`sh script/host_test/run.sh`(ASan、80本。グループ名を渡すとそのグループだけ作って回す: `run.sh core lua-engine`、一覧は`--list`、`-j N`。中身は CMake + CTest で、別のグループとは並列に回る。`run_parallel.sh` は今は run.sh へ渡すだけ)/
   `sh script/host_test/run_net.sh`(実通信)/ `sh script/host_test/run_mem.sh`(確保回数)/ PCビルドは
   変更のたびに自分で回すこと。
   **`script/host_test/stubs/SdFat.h`は常に`<fcntl.h>`の`O_CREAT`等を使う(2026-09-23)**。以前は「先に取り込まれていれば
   そちら、無ければ自前の値」で、翻訳単位ごとに値が変わり、inlineの`open()`がどちらの値でリンクされるか次第で
   「書き込み用に開けない」ことがあった(TLSのヘッダ経由で`<fcntl.h>`を取り込むファイルが増えて`run_net.sh`で踏んだ)。
   スタブで`#ifndef`して定数を足すときは同じ罠に注意すること。
-  **`run.sh`はコンパイル・テスト実行の各ステップに`timeout`を掛けてある(2026-09-21追加)**。
-  「まれにrun.shが終わらない」という報告を受けて入れた安全網で、コンパイル1ステップ
-  180秒・テスト実行1本60秒を超えると`[FATAL]`ログを出して明示的にexitする
-  (`timeout -k 10`でSIGTERM無視にも備え、猶予後SIGKILLする)。**`if ! cmd; then rc=$?`や
+  **ホストテストのビルド(2026-10-19に CMake へ移した)**: `script/host_test/CMakeLists.txt` が `src/` を段ごとの静的ライブラリにし、
+  テストは全部を `LINK_GROUP:RESCAN` でリンクする(リンカが要るオブジェクトだけ拾うので、テストごとのリンクの一覧は無い)。
+  テストを足すときは「テストの一覧」に `host_test(<名前> GROUP <グループ>)` を1行。スタブで作れない `src/` のファイルは
+  `HOST_EXCLUDE` に理由付きで。テストの説明は `script/host_test/README.md`。ビルドは `script/host_test/build/` に残る(.gitignore済み)。
+  **`run.sh`はビルド全体に`timeout`(1800秒)、テストは1本60秒(CTestの`TIMEOUT`)を掛けてある(2026-09-21追加)**。
+  「まれにrun.shが終わらない」という報告を受けて入れた安全網(`timeout -k 10`でSIGTERM無視にも備え、猶予後SIGKILLする)。**`if ! cmd; then rc=$?`や
   `if cmd; then ... fi; rc=$?`ではPOSIX上`$?`にcmdの本当の終了コードが乗らない
   (前者は`!`による論理反転、後者は「条件が偽で分岐未実行のifは exit status 0」という
   規定のため)ので、`rc=0; cmd || rc=$?`の形を使うこと**(`run.sh`の
-  `compile_or_die`/`run_or_die`参照。一度この罠を踏んで学んだ教訓なので、
+  `run_step`参照。一度この罠を踏んで学んだ教訓なので、
   同種のラッパーを足す際は再現しないこと)。

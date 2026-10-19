@@ -4,8 +4,8 @@
 // 信号の有無・列(PcmRing)。
 // 後半は MicFunctions の配線: 2コア目(LoopCore1)と1コア目(Update)を1本のスレッドで交互に呼ぶ。
 // I2Sの入力は stubs/I2S.h の rx へテストがワードを積み、録ったWAVは stubs/SdFat.h の HostSd::files で見る。
-#include "functions/Mic_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "hal/Mic_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "sound/Mic_Dsp.hpp"
 #include "sound/Wav_Writer.hpp"
 #include "OS_Data.hpp"

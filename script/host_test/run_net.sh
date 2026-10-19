@@ -236,7 +236,7 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
     "$ROOT/src/store/App_Store.cpp" \
     "$ROOT/src/store/App_Repo.cpp" \
     "$ROOT/src/lua/LuaAppScanner.cpp" \
-    "$ROOT/src/functions/App_Functions.cpp" \
+    "$ROOT/src/services/App_Functions.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     "$ROOT/src/task/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \

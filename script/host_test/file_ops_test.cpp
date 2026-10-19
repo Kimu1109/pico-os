@@ -4,7 +4,7 @@
 // フォルダの再帰コピーはPCビルド(pc/compat/SdFat.hは実ファイルシステム)で確かめる。
 // ここではファイルのコピー・名前の重なりの回避・パスの判定を見る。
 #include "storage/SD_IO.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

@@ -28,10 +28,10 @@ checkFontCoverage() にかけて作った、この辞書専用のリスト
     python3 filter_dict_tofu.py en-ja-and-ja-en.tsv dict_tofu_chars.txt --out en-ja-and-ja-en.filtered.tsv
 
 ---- dict_tofu_chars.txtの作り方 ----
-checkFontCoverage()(src/test/font_coverage_check.hpp)はSD越しにしか
+checkFontCoverage()(src/devtools/font_coverage_check.hpp)はSD越しにしか
 呼べないC++の関数(LovyanGFXの実フォントに対してグリフの有無を1文字ずつ
 問い合わせる)なので、Python単体では作れない。PCビルド(pc/)を使い、
-一時的に src/functions/Test_Functions.hpp の RunAll() へ
+一時的に src/devtools/Test_Functions.hpp の RunAll() へ
     checkFontCoverage(OSData::SD, lgfxJapanGothicP_16,
         PICO_Path::FILE::DICT::DICT_BODY, "/tmp/dict_tofu_missing.txt");
 を足してビルドし直し、user.cfgのrun-test=trueで1回起動すれば

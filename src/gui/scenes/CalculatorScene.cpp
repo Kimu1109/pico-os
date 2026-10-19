@@ -1,8 +1,8 @@
 #include "gui/scenes/CalculatorScene.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Font_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstring>

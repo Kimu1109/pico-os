@@ -1,7 +1,7 @@
 // src/util/Device_Key.hpp
 //
 // 端末ごとの鍵(RP2350のOTPに焼いた32バイト)から作った、用途ごとの鍵の置き場。
-// 中身を入れるのは DeviceKeyFunctions(src/functions/DeviceKey_Functions)だけで、ここは
+// 中身を入れるのは DeviceKeyFunctions(src/services/DeviceKey_Functions)だけで、ここは
 // 「今使える鍵があるか」と鍵そのものを持つだけ(描画にもSDにも暗号ライブラリにも依存しない)。
 // Secret_Cipher.hpp・Secret_Aead・Lock_Functions はこれを見て、鍵があれば端末の鍵で、
 // 無ければ今までどおりファームの固定鍵(PICO_Secret::kKey)で暗号化する。

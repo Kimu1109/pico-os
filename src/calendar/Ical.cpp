@@ -1,7 +1,7 @@
 #include "calendar/Ical.hpp"
 
 #include "OS_Data.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 #include <cstdlib>
 #include <cstring>

@@ -2,8 +2,8 @@
 //
 // PICO_Config::SetValue() は一時ファイルへ書き出してから差し替える方式なので、
 // 「コメントと行順が保たれるか」「重複キーが正しく畳まれるか」「往復できるか」を押さえる。
-#include "functions/Config_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Config_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
 #include <string>

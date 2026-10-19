@@ -5,11 +5,11 @@
 // 実際のウィジェット経路が繋がっていることと、全体走査ぶん(語の途中の一致)が
 // onUpdate()を回すことで一覧へ追記されていくことを確認する。
 #include "gui/scenes/DictScene.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 

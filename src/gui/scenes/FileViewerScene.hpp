@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/TextView.hpp"
@@ -8,7 +8,7 @@
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/widgets/apps/SeekBar.hpp"
 #include "gui/widgets/apps/MediaButtons.hpp"
-#include "functions/Sound_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
 #include "util/FixedString.hpp"
 
 // ファイルビューワー。ファイル1つの中身を見るだけの画面。

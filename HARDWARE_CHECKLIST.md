@@ -22,7 +22,7 @@ PCビルドとホストテストでは確かめられない項目だけを、**1
 
 ### 測るための道具
 
-- **シリアルのコマンド `hw ...`**(`src/functions/HwTest_Functions`。`hw-test = true` のときだけ):
+- **シリアルのコマンド `hw ...`**(`src/devtools/HwTest_Functions`。`hw-test = true` のときだけ):
   `hw info`(電池・Wi-Fi・音・ウォッチドッグ)/ `hw boot`(起動の理由とダンプの元。再起動の直後のログはシリアルを開き直す前に流れて見えないので、こちらで見る)/ `hw mem`(ヒープ: 空き・連続で取れる最大・断片化・末尾の残り)/
   `hw trap`(未定義命令でHardFault)/ `hw buswrite`(存在しない番地へ書いてHardFault)/ `hw hang`(loop()を止めてウォッチドッグ)。
   打ち方は2通り(どちらも行の終わりに改行が要る。ポートは1つのプログラムしか開けない):

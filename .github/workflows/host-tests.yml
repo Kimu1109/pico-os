@@ -1,7 +1,8 @@
-# ホストテスト(script/host_test/run.sh)をプルリクエストで回す。
+# ホストテスト(script/host_test/run.sh)と層の決まり(script/check_layers.py)をプルリクエストで回す。
 #
 #   実コードをPCのg++ + ASan/UBSanで動かし、解放漏れ・バッファ越え・未定義動作と
 #   各機能の回帰を見る。実機(RP2350)のビルドとは無関係。
+#   ビルドは script/host_test/CMakeLists.txt(CMake + CTest)。
 #
 #   プルリクエスト / main へのpush … 全グループを並列(グループごとに別ジョブ)で回す
 #   手動実行                       … Actionsタブの「Run workflow」から
@@ -33,7 +34,8 @@ jobs:
       # 1グループが落ちても残りの結果は見たい
       fail-fast: false
       matrix:
-        # run.sh --list と同じ並び。グループを足したらここにも足すこと(下の確認ジョブが見張る)
+        # run.sh --list(= CMakeLists.txt の HOST_TEST_GROUPS)と同じ並び。
+        # グループを足したらここにも足すこと(下の確認ジョブが見張る)
         group: [core, apps, media, input, calc, widget, lua-base, lua-engine, lua-ext, lua-sandbox, lua-scene, ssh]
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +44,7 @@ jobs:
         run: |
           sudo apt-get update
           # pvid_test(numpy)・midi2mml_test(python3)・ffmpeg(あれば追加の経路を通る)
-          sudo apt-get install -y --no-install-recommends build-essential python3 python3-numpy ffmpeg
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build libssl-dev python3 python3-numpy ffmpeg
 
       - name: ホストテストを回す(${{ matrix.group }})
         run: sh script/host_test/run.sh ${{ matrix.group }}
@@ -64,3 +66,13 @@ jobs:
             exit 1
           fi
           echo "グループの一覧は揃っています: $(echo $expected)"
+
+  # src/ の層の決まり(下の段から上の段へ #include しない)。決まりは script/check_layers.py の先頭
+  layers:
+    name: 層の決まり
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: script/check_layers.py
+        run: python3 script/check_layers.py

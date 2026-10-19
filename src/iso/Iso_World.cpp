@@ -14,7 +14,7 @@
 #include <SdFat.h>
 
 #include "OS_Data.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 namespace Iso {
 

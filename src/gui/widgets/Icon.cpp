@@ -1,5 +1,5 @@
 #include "gui/widgets/Icon.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 
 void Icon::render() {
     if(!this->needs_redraw) return;

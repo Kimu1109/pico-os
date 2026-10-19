@@ -1,6 +1,6 @@
 #include "gui/widgets/systems/PerfOverlay.hpp"
-#include "functions/Profiler_Functions.hpp"
-#include "functions/Font_Functions.hpp"
+#include "devtools/Profiler_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <stdio.h>

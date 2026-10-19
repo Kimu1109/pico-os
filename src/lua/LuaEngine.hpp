@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <vector>
 #include "lua.hpp"
-#include "functions/Power_Functions.hpp"
-#include "functions/KeyInput_Functions.hpp"
+#include "services/Power_Functions.hpp"
+#include "system/KeyInput_Functions.hpp"
 #include "gui/widgets/WidgetID.hpp"
 #include "gui/icons/icon_render.h"
 #include "lua/LuaPermissions.hpp"
@@ -213,7 +213,7 @@
 // のみ」という既存の設計方針。イベントごとに引数の型・個数を変える複雑さを避けるため)。
 // これは維持したまま、「今まさに起きているタッチの座標」を別途問い合わせられる
 // 薄いAPIとして追加した。中身は`OSData::touchX/touchY/isTouched`をそのまま返すだけ
-// (`WidgetFunctions::HitTest()`(`src/functions/Widget_Functions.cpp`)が当たり判定に
+// (`WidgetFunctions::HitTest()`(`src/gui/core/Widget_Functions.cpp`)が当たり判定に
 // 使っているのと同じ値なので、press_start等のコールバック内で読めば「そのタップが
 // 当たったウィジェットの外側から見た絶対スクリーン座標」と一致する。pico.draw_*や
 // pico.content_rect()と同じ座標系)。isTouchEnd(離した瞬間)でも座標はリセットされず

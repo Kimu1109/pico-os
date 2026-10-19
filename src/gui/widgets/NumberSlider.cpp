@@ -1,7 +1,7 @@
 #include "gui/widgets/NumberSlider.hpp"
 #include "OS_Data.hpp"
-#include "functions/Font_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 

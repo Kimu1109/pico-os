@@ -1,5 +1,5 @@
 #include "gui/widgets/Image.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "gui/icons/icon_render.h"
 #include "OS_Data.hpp"
 

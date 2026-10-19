@@ -23,7 +23,7 @@ class FwSource {
 
 // 1回の更新の流れ(見出し → 確認 → 中身を置き場へ → 読み直して確かめる → ローダーへの指示)。
 // 描画・SD・ソケット・時計に依存しない(受け取り元と置き場は差し込む)ので、ホストテストで全部の経路を確かめられる。
-// OSへのつなぎ(SD・TCP・電池・再起動・通知)は functions/Firmware_Functions。
+// OSへのつなぎ(SD・TCP・電池・再起動・通知)は services/Firmware_Functions。
 //
 // TCPの取り決め(script/firmware_tool.py push と揃える):
 //   PC → 見出し+署名(192バイト)

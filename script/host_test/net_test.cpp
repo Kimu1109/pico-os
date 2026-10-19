@@ -15,7 +15,7 @@
 #include "net/Discovery.hpp"
 #include "net/Doc_Search.hpp"
 #include "net/Manifest.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

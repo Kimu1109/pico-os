@@ -3,10 +3,10 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/TabBar.hpp"
-#include "functions/Notification_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Font_Functions.hpp"
+#include "system/Notification_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

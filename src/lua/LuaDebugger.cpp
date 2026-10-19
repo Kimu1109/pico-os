@@ -1,5 +1,5 @@
 #include "lua/LuaDebugger.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <Arduino.h>

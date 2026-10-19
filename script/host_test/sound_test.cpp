@@ -9,9 +9,9 @@
 // 「アンプの抜き差しの見分け方」「刺さっている間だけI2Sを動かすこと」「刺さっていない間も
 // 音が時間どおりに進むこと」「コマンドの列」「sound.cfg」を確かめる。
 // SoundFunctionsの状態は1つしか無いので、1本の筋書きとして順に進める。
-#include "functions/Sound_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Battery_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "hal/Battery_Functions.hpp"
 #include "sound/Chip_Synth.hpp"
 #include "sound/Note_Name.hpp"
 #include "consts.hpp"

@@ -130,13 +130,13 @@ void operator delete(void* p, size_t) noexcept { operator delete(p); }
 void operator delete[](void* p, size_t) noexcept { operator delete(p); }
 
 // ---- ここから下は計測対象。includeはoperator newの定義より後でよい ----
-#include "functions/Scene_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Font_Functions.hpp"
-#include "functions/Mem_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
+#include "system/Mem_Functions.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Textbox.hpp"
@@ -145,7 +145,7 @@ void operator delete[](void* p, size_t) noexcept { operator delete(p); }
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/CanvasRaster.hpp"
 #include "gui/widgets/apps/MarkdownView.hpp"
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "OS_Data.hpp"
 
 // ---- モック ----

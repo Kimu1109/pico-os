@@ -9,15 +9,15 @@
 #include "gui/scenes/CalendarScene.hpp"
 #include "gui/widgets/apps/MonthGrid.hpp"
 #include "gui/widgets/dialogs/EventDetailDialog.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Time_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Time_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
 #include "calendar/Calendar_Reminders.hpp"
-#include "functions/Notification_Functions.hpp"
+#include "system/Notification_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>

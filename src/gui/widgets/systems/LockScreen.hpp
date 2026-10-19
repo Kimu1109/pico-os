@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gui/widgets/Widget.hpp"
-#include "functions/Lock_Functions.hpp"
+#include "services/Lock_Functions.hpp"
 #include "consts.hpp"
 
 namespace KeyInputFunctions { struct Event; }

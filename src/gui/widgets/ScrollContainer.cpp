@@ -1,6 +1,6 @@
 #include "gui/widgets/ScrollContainer.hpp"
 #include "OS_Data.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 
 void ScrollContainer::updateContentBounds() {
     int max_x = 0;

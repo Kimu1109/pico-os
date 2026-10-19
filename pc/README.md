@@ -109,7 +109,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 - 「画面をPNGで保存」ボタンで今の画面を落とせる(不具合の報告用)。
 - Wi-Fiの状態はボタン(＝URLのクエリ)で差し替える。下記参照。
 - **外部コントローラー**: 画面の下のボタン(複数の指で同時押し可)とキーボード(割り当ては `script/pad_serial.py` と同じ)が、USBシリアルと同じ `pad XXXX` の行を100msごとに pico-os の `Serial` へ流す(`main_pc.cpp` の `picoos_serial_push()` 経由)。「コントローラーをつなぐ」を外すと送るのをやめ、0.5秒で外れた扱いになる。
-- **PCのキーボードで文字入力**: 「PCのキーボード」を「文字入力に使う」にすると、打ったキーを物理キーボードの打鍵(`key M u+XXXX` の行。`src/functions/KeyInput_Functions.hpp`)として送る。オンスクリーンキーボードを開いている所・テキストエディタ・SSH にそのまま入る。
+- **PCのキーボードで文字入力**: 「PCのキーボード」を「文字入力に使う」にすると、打ったキーを物理キーボードの打鍵(`key M u+XXXX` の行。`src/system/KeyInput_Functions.hpp`)として送る。オンスクリーンキーボードを開いている所・テキストエディタ・SSH にそのまま入る。
 - 見た目や道具立てを足したいときは `pc/web/shell.html` を書き換える。
 
 ### 設定(環境変数の代わりにURLのクエリ)
@@ -333,8 +333,8 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 | Wi-Fi | 母艦の疎通を見て接続/切断を返す。設定で任意の状態に固定もできる(下記) |
 | NTP / 時刻 | 同期しない。**必要ない** — PCの時計をそのまま使うので最初から正しい時刻が出る |
 | 音声 | `pc/compat/I2S.h` がSDLの音声出力へ流す。実機の2コア目(`setup1()`/`loop1()`)は、ネイティブでは別スレッド、Webではフレームごとに`loop1()`を1回呼んで代わりにする(`main_pc.cpp`)。アンプ(MAX98357A)の検出ピンは「音声デバイスを開けたら刺さっている」として答える。`/sys/sound.cfg` の `pc-sound-state`(`auto`/`connected`/`disconnected`)か `PICOOS_SOUND_STATE` で固定できる。ヘッドレスで音の中身を確かめるなら `SDL_AUDIODRIVER=disk SDL_DISKAUDIOFILE=out.raw`(出力の周波数(既定22050Hz、`sound.cfg`の`sample-rate`)/16bit/ステレオの生データ)。Webはブラウザの自動再生の制限で、最初にクリック等をするまで鳴らない |
-| USBシリアルの受信 | `Serial.available()`/`read()`は**標準入力**を読む(別スレッドで読んで溜める。`pc/compat/Arduino.h`)。外部コントローラー(`PadFunctions`)がこれを使うので、`python3 script/pad_serial.py --stdout \| ./pc/build/picoos_pc` でPCのキーボードがコントローラーになる。ヘッドレスなら `( sleep 1; while :; do echo "pad 0011"; sleep 0.1; done ) \| ./pc/build/picoos_pc ...` のように行を流し込めばよい(`pad XXXX` は押しているボタンの16進数。`src/functions/Pad_Functions.hpp`)。`PICOOS_SERIAL_STDIN=off` で読まない。同じ経路で**物理キーボードの打鍵**(`key M CODE` の行。`src/functions/KeyInput_Functions.hpp`)も読むので、`echo "key 0 u+61"` で「a」を打てるWebは標準入力の代わりに、ページのコントローラー(`pc/web/shell.html`)が `picoos_serial_push()` で1バイトずつ入れる |
-| クラッシュダンプ / ウォッチドッグ | 実機の「消えないRAM」の代わりに、シグナル(SEGV/BUS/FPE/ILL/ABRT)のハンドラが記録を `<SDのルート>/sys/crash.pending` へ書いてから落ち、次の起動で `/crash/crash_NNNN.txt` になる(`src/functions/CrashDump_Functions.cpp`)。`/sys/debug.cfg` の `watchdog = true` ならスレッドが `loop()` の応答を見張り、`watchdog-ms` 戻らなければ記録を書いて終了する。`PICOOS_NO_CRASH_HANDLER=1` でシグナルハンドラを入れない(gdb等で調べるとき)。Webは対象外 |
+| USBシリアルの受信 | `Serial.available()`/`read()`は**標準入力**を読む(別スレッドで読んで溜める。`pc/compat/Arduino.h`)。外部コントローラー(`PadFunctions`)がこれを使うので、`python3 script/pad_serial.py --stdout \| ./pc/build/picoos_pc` でPCのキーボードがコントローラーになる。ヘッドレスなら `( sleep 1; while :; do echo "pad 0011"; sleep 0.1; done ) \| ./pc/build/picoos_pc ...` のように行を流し込めばよい(`pad XXXX` は押しているボタンの16進数。`src/system/Pad_Functions.hpp`)。`PICOOS_SERIAL_STDIN=off` で読まない。同じ経路で**物理キーボードの打鍵**(`key M CODE` の行。`src/system/KeyInput_Functions.hpp`)も読むので、`echo "key 0 u+61"` で「a」を打てるWebは標準入力の代わりに、ページのコントローラー(`pc/web/shell.html`)が `picoos_serial_push()` で1バイトずつ入れる |
+| クラッシュダンプ / ウォッチドッグ | 実機の「消えないRAM」の代わりに、シグナル(SEGV/BUS/FPE/ILL/ABRT)のハンドラが記録を `<SDのルート>/sys/crash.pending` へ書いてから落ち、次の起動で `/crash/crash_NNNN.txt` になる(`src/devtools/CrashDump_Functions.cpp`)。`/sys/debug.cfg` の `watchdog = true` ならスレッドが `loop()` の応答を見張り、`watchdog-ms` 戻らなければ記録を書いて終了する。`PICOOS_NO_CRASH_HANDLER=1` でシグナルハンドラを入れない(gdb等で調べるとき)。Webは対象外 |
 | Luaデバッガ | 止まっている間は `loop()` のスレッドが止まり、画面(`LuaDebugScreen`)はSDLのパネルへ直接描く。`--tap` のフレームはタッチを読んだ回数で数えるので、止まっている間も進む(デバッガのボタンを `--tap` で押せる)。`--shot` は `loop()` のフレームなので止まっている間は撮れない。Webはメインスレッドを止められないので止まらずに続ける |
 | GPIO / SPI | 何もしない空実装(`digitalRead()`は既定でHIGH。音声の検出ピンだけ上のとおり) |
 
@@ -354,10 +354,10 @@ pc/
     XPT2046_Touchscreen.h   使わないが includeが通るように置いてある
     config/LGFX_Config_PC.hpp        SDLパネル設定
     config/Panel_sdl_SpiWait.hpp     液晶への書き込みに実機のSPI転送時間ぶんの待ちを入れるSDLパネル
-    functions/Touch_Functions_PC.hpp マウスをタッチとして読む
+    hal/Touch_Functions_PC.hpp       マウスをタッチとして読む
   sdcard/                   SDカードとして読まれるディレクトリ
 ```
 
-`src/config/LGFX_Config.hpp` と `src/functions/Touch_Functions.hpp` の2つだけは、
+`src/config/LGFX_Config.hpp` と `src/hal/Touch_Functions.hpp` の2つだけは、
 `#if defined(PICOOS_PC)` で `pc/compat/` 側へ切り替える分岐を持っている。
 ハードウェアそのものを触る箇所なので、インクルードパスの差し替えでは吸収できないため。

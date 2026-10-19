@@ -1,9 +1,9 @@
 #pragma once
 
 #include "gui/widgets/keyboards/KeyboardPanel.hpp"
-#include "functions/UTF8_Functions.hpp"
-#include "functions/IME_Functions.hpp"
-#include "functions/Font_Functions.hpp"
+#include "system/UTF8_Functions.hpp"
+#include "ime/IME_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "ime/Romaji_Kana.hpp"
 #include "consts.hpp"
 

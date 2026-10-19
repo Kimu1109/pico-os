@@ -1,7 +1,7 @@
 #include "calendar/Calendar_Reminders.hpp"
 
-#include "functions/Notification_Functions.hpp"
-#include "functions/Config_Functions.hpp"
+#include "system/Notification_Functions.hpp"
+#include "system/Config_Functions.hpp"
 #include "storage/SD_Path.hpp"
 
 #include <cstdio>

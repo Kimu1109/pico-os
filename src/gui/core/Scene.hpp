@@ -1,0 +1,73 @@
+#pragma once
+
+#include "util/Rect.hpp"
+#include "consts.hpp"
+#include "system/KeyInput_Functions.hpp"
+
+// 画面(シーン)1枚を表す基底クラス。
+//
+// レイヤとシーンの関係(WidgetFunctionsの3レイヤ構造に対応):
+//   - widgets      (通常レイヤ)     … シーンの所有物。遷移時に全て破棄される
+//   - dialog_roots (ダイアログ層)   … シーンの所有物。遷移時に全て破棄される
+//                                     (シーン内ウィジェットのthisを捕捉しているため残せない)
+//   - overlays     (オーバーレイ層) … OS常駐。ステータスバー/キーボードはシーンをまたいで生き続ける
+//
+// つまり「常駐させたいものはAddOverlay()に置く」というのがシーン遷移における唯一のルール。
+//
+// ウィジェットの寿命はシーンがアクティブな間だけ。スタックに退避されたシーンも
+// ウィジェットは解放済みで、Pop()で戻ってきた時にonEnter()から作り直される
+// (シーンオブジェクト自体は数十バイトなので積んだままでもRAMを食わない)。
+class Scene {
+    public:
+        virtual ~Scene() = default;
+
+        // ログ表示用のシーン名
+        virtual const char* getName() const = 0;
+
+        // 表示開始時。ここでウィジェットをnewし、WidgetFunctions::Add()で通常レイヤへ登録する。
+        // Pop()で戻ってきた場合も再度呼ばれるので、状態はメンバに持たせて復元すること
+        virtual void onEnter() = 0;
+
+        // 表示終了時。ウィジェット本体の破棄はフレームワーク(SceneFunctions)が一括で行うので、
+        // ここでは「自分が持っている生ポインタのnull化」と「次回復元したい状態の保存」だけを行う。
+        // ここでdeleteしてはいけない(二重解放になる)
+        virtual void onExit() {}
+
+        // アクティブなシーンのみ毎フレーム呼ばれる。
+        // ウィジェットの描画とは独立した軽い処理(ポーリング等)向け
+        virtual void onUpdate() {}
+
+        // 物理キーボードの打鍵(KeyInputFunctions)。扱ったらtrue。
+        // falseを返すと、開いているオンスクリーンキーボードのキー盤へ回る(Textbox等へはそちらで入る)。
+        // シェルへそのまま送りたい(SSH)、↑↓やCtrl+Sを自分で扱いたい(テキストエディタ)画面が使う
+        virtual bool onKey(const KeyInputFunctions::Event& ev) { (void)ev; return false; }
+
+        // この画面がコントローラー(PadFunctions)を自分で読む(ゲーム等)。trueの間は、
+        // コントローラーのボタンでウィジェットのフォーカスを動かさない(FocusFunctions)
+        virtual bool usesPad() const { return false; }
+
+        // この画面の間は通知のトーストと音を控える(ゲーム等、画面の上部を隠されると困る画面)。
+        // 控えた通知もステータスバーの印と通知センターには残る(NotificationFunctions参照)
+        virtual bool quietNotifications() const { return false; }
+
+        // この画面は離れると状態を失う(SSHの接続が切れる、ゲームボーイのROMを閉じる)。
+        // trueの間は、ステータスバーや通知のトーストをタップしても別の画面へ移らない
+        // (トーストのタップは既読にして閉じるだけ)。うっかり触って接続/ゲームを失わないため
+        virtual bool keepForeground() const { return false; }
+
+        // この画面の間に使ってほしい音の出力の周波数(SoundFunctions::kSampleRateLow / kSampleRateHigh)。
+        // 0なら設定(sound.cfg の sample-rate)のまま。main.cpp の loop() が毎フレーム SoundFunctions::RequestSampleRate() へ渡すので、
+        // 画面を離れると設定へ戻る。切り替わるとそのとき鳴っている音は止まるので、変えるなら音を鳴らす前(onEnter())に
+        // RequestSampleRate() も呼んでおくとよい(ミュージックアプリ・Luaの pico.sound_set_rate())
+        virtual uint32_t preferredSampleRate() const { return 0; }
+
+        // ステータスバーを除いたシーンが自由に使える領域
+        static constexpr Rect contentRect() {
+            return {
+                0,
+                STATUSBAR_HEIGHT,
+                SCREEN_WIDTH,
+                (int16_t)(SCREEN_HEIGHT - STATUSBAR_HEIGHT)
+            };
+        }
+};

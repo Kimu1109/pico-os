@@ -1,7 +1,7 @@
 #include "gb/Gb_Rom_Flash.hpp"
 
 #include "storage/Flash_Area.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>

@@ -2,7 +2,7 @@
 
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
-#include "functions/KeyInput_Functions.hpp"
+#include "system/KeyInput_Functions.hpp"
 
 // オンスクリーンキーボードの「キー盤」部分の基底(Keyboard / KeyboardEng / KeyboardNum)。
 //

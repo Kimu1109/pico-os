@@ -7,7 +7,7 @@
 // もう1つは入力の揺れ(CRLF/LFの混在、行の折り返し、BOM、大文字小文字、
 // 1バイトずつ届く場合)で結果が変わらないこと。
 #include "calendar/Ical.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

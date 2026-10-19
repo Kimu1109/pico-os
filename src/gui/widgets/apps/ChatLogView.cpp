@@ -1,6 +1,6 @@
 #include "gui/widgets/apps/ChatLogView.hpp"
 
-#include "functions/Font_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
 

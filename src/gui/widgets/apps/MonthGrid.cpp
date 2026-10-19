@@ -1,7 +1,7 @@
 #include "gui/widgets/apps/MonthGrid.hpp"
 
 #include "calendar/Ical.hpp"
-#include "functions/Font_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

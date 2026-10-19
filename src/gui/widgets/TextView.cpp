@@ -1,7 +1,7 @@
 #include "gui/widgets/TextView.hpp"
 #include <cstdlib>
 #include <cstring>
-#include "functions/Font_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
 

@@ -339,7 +339,7 @@
 
 | 子項目 | 状況 |
 |---|---|
-| 登録簿・入り切り(`/sys/background.cfg`) | ✅ `src/functions/Background_Functions` / `Background_List.cpp` |
+| 登録簿・入り切り(`/sys/background.cfg`) | ✅ `src/system/Background_Functions` / `Background_List.cpp` |
 | ミュージック | ✅ 再生を `MusicService` へ移し、アプリを閉じても次の曲へ進む。他のアプリが音を使ったら止まる |
 | チャットの未読 | ✅ `ChatWatch`。数分おきに部屋の一覧を取り、新しい未読を通知 |
 | Luaのバックグラウンド | ✅ `LuaBackground`。app.cfg の `background`(`permission_background` が要る)を間隔ごとに48KBの使い捨てエンジンで1回動かす |
@@ -372,7 +372,7 @@
 
 | 子項目 | 状況 |
 |---|---|
-| 計測 | ✅ `src/functions/Mem_Functions.hpp` / `script/host_test/run_mem.sh` |
+| 計測 | ✅ `src/system/Mem_Functions.hpp` / `script/host_test/run_mem.sh` |
 | 解放漏れ修正 | ✅ `MarkdownView` / `ScrollList` / `CanvasRaster` |
 | MarkdownViewの占有量削減 | ✅ 実機で93KB → 52KB |
 | アリーナの差し込み口 | ✅ `Widget::operator new/delete`。将来ここの実装を差し替えるだけで済む |

@@ -2,11 +2,11 @@
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ScrollList.hpp"
-#include "functions/Background_Functions.hpp"
-#include "functions/App_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Font_Functions.hpp"
+#include "system/Background_Functions.hpp"
+#include "services/App_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "Arduino.h"
 
 #include <cstring>

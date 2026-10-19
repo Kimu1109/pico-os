@@ -12,7 +12,7 @@
 //
 // 使い方: calendar_sync_test <port> <テスト用CAのPEMファイル>
 #include "calendar/Calendar_Sync.hpp"
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 

@@ -1,7 +1,7 @@
 #include "gui/widgets/CanvasRaster.hpp"
 #include "OS_Data.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <cstring>

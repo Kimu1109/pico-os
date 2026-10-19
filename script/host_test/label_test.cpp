@@ -9,10 +9,10 @@
 // 既定フォントは24pxなので ASCII=12px / 日本語=24px、行高=24px。
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Textbox.hpp"
-#include "functions/Font_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
 

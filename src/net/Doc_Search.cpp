@@ -1,6 +1,6 @@
 #include "net/Doc_Search.hpp"
 
-#include "functions/Log_Functions.hpp"
+#include "system/Log_Functions.hpp"
 
 #include <cstring>
 

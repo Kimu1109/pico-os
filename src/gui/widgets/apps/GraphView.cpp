@@ -1,6 +1,6 @@
 #include "gui/widgets/apps/GraphView.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Font_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cmath>

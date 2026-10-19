@@ -1,6 +1,6 @@
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "OS_Data.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 
 void MsgDialog::render(){
     if(!needs_redraw) return;

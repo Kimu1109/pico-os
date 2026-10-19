@@ -1,5 +1,5 @@
 #include "gui/widgets/apps/TermKeyBar.hpp"
-#include "functions/Font_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "OS_Data.hpp"
 
 namespace {

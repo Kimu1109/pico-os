@@ -77,11 +77,11 @@
 //                      往復できること、icon_size変更でw/h未指定なら箱の大きさも
 //                      追従することを確認する
 #include "lua/LuaEngine.hpp"
-#include "functions/Mem_Functions.hpp"
-#include "functions/Battery_Functions.hpp"
-#include "functions/Notification_Functions.hpp"
-#include "functions/Sound_Functions.hpp"
-#include "functions/Pad_Functions.hpp"
+#include "system/Mem_Functions.hpp"
+#include "hal/Battery_Functions.hpp"
+#include "system/Notification_Functions.hpp"
+#include "hal/Sound_Functions.hpp"
+#include "system/Pad_Functions.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
 #include "gui/widgets/Checkbox.hpp"
@@ -99,11 +99,11 @@
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
 #include "gui/widgets/dialogs/ColorDialog.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
-#include "functions/Time_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
+#include "system/Time_Functions.hpp"
 #include "OS_Data.hpp"
 #include <algorithm>
 #include <cstdarg>
@@ -928,7 +928,7 @@ int main(){
         // OSData::touchX/Y/isTouchedを直接書き換えてから、実際のタップ相当
         // (causeOnPressStart())を発火させ、press_startコールバックの中で
         // pico.get_touch()が同じ値を読めることを確認する(WidgetFunctions::HitTest()
-        // が当たり判定に使う値と同じであることの裏付け。src/functions/Widget_Functions.cpp参照)
+        // が当たり判定に使う値と同じであることの裏付け。src/gui/core/Widget_Functions.cpp参照)
         const bool setup_ok = engine.Run(R"LUA(
             touch_btn = pico.create("Button")
             touch_seen_x, touch_seen_y, touch_seen_touched = nil, nil, nil

@@ -7,13 +7,13 @@
 //   - TodoScene: トークンが無いときの案内、生成/解放で漏れが無いこと(ASan)
 // を見る。
 #include "todo/Todo_Reminders.hpp"
-#include "functions/Notification_Functions.hpp"
+#include "system/Notification_Functions.hpp"
 #include "gui/scenes/TodoScene.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 

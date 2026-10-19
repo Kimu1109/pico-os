@@ -1,10 +1,10 @@
 #include "gui/scenes/ClocksScene.hpp"
-#include "functions/Alarm_Functions.hpp"
-#include "functions/Timer_Functions.hpp"
-#include "functions/Power_Functions.hpp"
-#include "functions/Scene_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Time_Functions.hpp"
+#include "services/Alarm_Functions.hpp"
+#include "services/Timer_Functions.hpp"
+#include "services/Power_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "system/Time_Functions.hpp"
 
 #include "Arduino.h"
 

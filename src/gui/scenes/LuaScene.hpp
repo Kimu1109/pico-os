@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "lua/LuaEngine.hpp"
 #include "lua/LuaPermissions.hpp"
 #include "util/FixedString.hpp"

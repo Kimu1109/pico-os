@@ -1,6 +1,6 @@
 #include "gui/widgets/dialogs/KeyboardDialog.hpp"
 #include "gui/widgets/keyboards/KeyboardPanel.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 
 KeyboardDialog::KeyboardDialog(){
     this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};

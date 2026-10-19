@@ -5,7 +5,7 @@
 // SSID/パスワードが暗号化されてSDに平文で残らないことを確かめる。
 #include "net/Wifi_Profiles.hpp"
 #include "storage/SD_Path.hpp"
-#include "functions/Config_Functions.hpp"
+#include "system/Config_Functions.hpp"
 #include "util/Secret_Cipher.hpp"
 #include <cstdio>
 #include <cstring>

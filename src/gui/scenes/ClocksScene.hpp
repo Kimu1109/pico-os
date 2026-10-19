@@ -1,13 +1,13 @@
 #pragma once
 
-#include "gui/scenes/Scene.hpp"
+#include "gui/core/Scene.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/TabBar.hpp"
 #include "gui/widgets/apps/AnalogClock.hpp"
 #include "gui/widgets/apps/DurationPicker.hpp"
-#include "functions/Timer_Functions.hpp"
+#include "services/Timer_Functions.hpp"
 
 #include <cstdint>
 

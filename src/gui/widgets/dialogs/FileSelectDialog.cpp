@@ -1,5 +1,5 @@
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
-#include "functions/GFX_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_IO.hpp"
 

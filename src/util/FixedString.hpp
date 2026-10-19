@@ -7,7 +7,7 @@
 //
 // 依存関係について:
 //   UTF-8の文字列操作機能(文字数・オフセット・切り出し・削除・置換等)は
-//   本クラスが担当し、functions/UTF8_Functions.hpp にはエンコード/デコードのみを置く。
+//   本クラスが担当し、system/UTF8_Functions.hpp にはエンコード/デコードのみを置く。
 //   FixedString.hpp 側は UTF8_Functions.hpp に依存してはいけない(循環include回避)。
 //   最下層のリードバイト判定ロジック(util/Utf8Byte.hpp)のみを利用する。
 //

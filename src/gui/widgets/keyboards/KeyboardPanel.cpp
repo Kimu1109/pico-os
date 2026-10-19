@@ -1,7 +1,7 @@
 #include "gui/widgets/keyboards/KeyboardPanel.hpp"
-#include "functions/Keyboard_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Clipboard_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Clipboard_Functions.hpp"
 
 #include <cstring>
 

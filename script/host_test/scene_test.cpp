@@ -1,10 +1,10 @@
 // ホスト上でシーン遷移の実コード(Scene_Functions.cpp / Widget_Functions.cpp)を動かす検証用テスト
-#include "functions/Scene_Functions.hpp"
-#include "functions/Widget_Functions.hpp"
-#include "functions/Keyboard_Functions.hpp"
-#include "functions/GFX_Functions.hpp"
-#include "functions/Log_Functions.hpp"
-#include "functions/Mem_Functions.hpp"
+#include "gui/core/Scene_Functions.hpp"
+#include "gui/core/Widget_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
+#include "gui/core/GFX_Functions.hpp"
+#include "system/Log_Functions.hpp"
+#include "system/Mem_Functions.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
 #include <vector>

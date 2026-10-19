@@ -4,7 +4,7 @@
 `src/optional/monocypher-ed25519.{c,h}` を、無改造でそのまま `src/` へ置いたもの。
 ライセンスは BSD-2-Clause か CC0 の選択(`LICENCE.md`)。
 
-SSHクライアント(`src/ssh/`)が使う:
+SSHクライアント(`src/apps/ssh/`)が使う:
 
 | SSHでの用途 | 関数 |
 |---|---|
@@ -12,7 +12,7 @@ SSHクライアント(`src/ssh/`)が使う:
 | ホスト鍵・公開鍵認証 ssh-ed25519 | `crypto_ed25519_check()` / `crypto_ed25519_sign()`(中でSHA-512) |
 | 暗号 chacha20-poly1305@openssh.com | `crypto_chacha20_djb()`(64bitのnonce)/ `crypto_poly1305()` |
 
-SHA-256(鍵交換のハッシュと鍵の導出)はMonocypherに無いので `src/ssh/Ssh_Sha256.hpp` に自前で持つ。
+SHA-256(鍵交換のハッシュと鍵の導出)はMonocypherに無いので `src/apps/ssh/Ssh_Sha256.hpp` に自前で持つ。
 
 ## なぜこれにしたか
 

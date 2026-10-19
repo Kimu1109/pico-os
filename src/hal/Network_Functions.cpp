@@ -1,6 +1,6 @@
 #include "hal/Network_Functions.hpp"
 #include "system/Config_Functions.hpp"
-#include "task/NetworkScan.hpp"
+#include "net/NetworkScan.hpp"
 #include "storage/SD_Path.hpp"
 #include "net/Wifi_Profiles.hpp"
 

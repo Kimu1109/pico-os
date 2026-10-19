@@ -6,8 +6,8 @@
 //   - 一番下を見ている間は新着に付いていき、遡って読んでいる間は動かないこと
 //   - ChatScene が設定の無い/足りない状態で案内を出し、ウィジェットを解放漏れなく片付けること(ASan)
 // を見る。
-#include "gui/scenes/ChatScene.hpp"
-#include "gui/widgets/apps/ChatLogView.hpp"
+#include "apps/chat/ChatScene.hpp"
+#include "apps/chat/ui/ChatLogView.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"

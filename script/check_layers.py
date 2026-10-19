@@ -19,6 +19,7 @@ boot/ で差す(KeyInputFunctions::intercept・LuaAppScanner::apps_changed と�
 
 標準ライブラリだけで動く(CI と手元で同じに回せるように)。
 """
+import fnmatch
 import os
 import re
 import sys
@@ -41,29 +42,25 @@ LAYERS = {
     "hal": "lib",
     "storage": "lib",
     "net": "lib",
+    "crypto": "lib",
     "task": "lib",
     "sound": "lib",
     "iso": "lib",
-    "ssh": "lib",
     "ime": "lib",
-    "dict": "lib",
-    "video": "lib",
-    "firmware": "lib",
-    "gb": "lib",
-    "calendar": "lib",
-    "chat": "lib",
-    "todo": "lib",
+    # apps/<機能>/ は機能ごとの置き場。直下は機能の中身(lib)、ui/ はその機能専用の部品(ui)、
+    # *Scene.* は画面(app)。段は APP_PATTERNS が決める(下の段の機能の中身から画面を読まないように)
+    "apps": "lib",
+    "apps/home": "service",   # ホーム画面の並びとウィジェット(OSのシェルの部品)
+    "apps/store": "app",      # アプリストア(登録簿と Lua アプリの走査を使う)
     # 3 ui: 描画・ウィジェット・シーン遷移の仕組み(OS の機能はまだ知らない)
     "gui": "ui",
     # 4 service: OS の機能(アラーム・電源・ロック…)と、それを見せるシェルの部品
     "services": "service",
     "devtools": "service",
     "gui/widgets/systems": "service",
-    "home": "service",
     # 5 app: 画面(アプリ)と Lua
     "gui/scenes": "app",
     "lua": "app",
-    "store": "app",
     # 6 boot: 起動とつなぎ(登録簿の中身・入力の配り先など、全部を知ってよい所)
     "boot": "boot",
     "main.cpp": "boot",
@@ -76,8 +73,8 @@ FILE_LAYERS = {
     "lua/LuaPermissions.hpp": "base",       # 権限の構造体だけ(アプリ登録簿が持つ)
     "storage/SD_IO.hpp": "base",            # パスの組み立て(join/normalize/resolve)。SdFatに依存しない
     # ホーム画面にTODOウィジェットを置いている間だけ動くバックグラウンドの仕事(ホーム画面の並びを見る)
-    "todo/Todo_Watch.hpp": "service",
-    "todo/Todo_Watch.cpp": "service",
+    "apps/todo/Todo_Watch.hpp": "service",
+    "apps/todo/Todo_Watch.cpp": "service",
 }
 
 # (include する側, include される側) → 理由。理由の無い例外は書かないこと
@@ -87,12 +84,22 @@ EXCEPTIONS = {
         "DevTools は Firmware(service) からも読まれるので boot/ へは上げられない",
 }
 
+# apps/<機能>/ の中の置き場所 → 段(fnmatch。FILE_LAYERS の次、LAYERS より先に見る)
+APP_PATTERNS = [
+    ("apps/*/ui/*", "ui"),
+    ("apps/*/*Scene.cpp", "app"),
+    ("apps/*/*Scene.hpp", "app"),
+]
+
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)
 
 
 def layer_of(rel):
     if rel in FILE_LAYERS:
         return FILE_LAYERS[rel]
+    for pat, layer in APP_PATTERNS:
+        if fnmatch.fnmatchcase(rel, pat):
+            return layer
     best = None
     for key, layer in LAYERS.items():
         if rel == key or rel.startswith(key + "/"):

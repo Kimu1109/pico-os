@@ -6,8 +6,8 @@ pico-os の Markdown ブラウザが文書を取得・検索するための、�
 文書の配信は素の HTTP GET でしかないので、`.md` ファイルを置いただけのサーバでも pico-os から読める。検索やマニフェストは任意で、対応していないサーバでは pico-os 側が該当機能を無効化する。
 
 > **現状**: pico-os 側は **本書の v1 を一通り実装済み**
-> (`util/Url` / `net/Http_Response` / `task/Http_Get` / `storage/Doc_Cache` / `net/Doc_Fetch` /
-> `net/Discovery` / `net/Doc_Search` / `net/Manifest`)。
+> (`util/Url` / `net/Http_Response` / `net/Http_Get` / `apps/browser/Doc_Cache` / `apps/browser/Doc_Fetch` /
+> `apps/browser/Discovery` / `apps/browser/Doc_Search` / `apps/browser/Manifest`)。
 > 本書は実装に先立って全体像を固めるための設計文書であり、クライアントの実装過程で版を上げずに修正されうる。
 >
 > ただしサーバ側は **`script/reference_server.py` に参照実装がある**(標準ライブラリのみ、外部依存なし)。

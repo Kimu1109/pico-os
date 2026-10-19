@@ -1,5 +1,5 @@
 // LuaEngine の暗号API(pico.encrypt / decrypt / is_encrypted / hash / random_bytes と、
-// pico.store_save/store_load の暗号化オプション)。暗号そのものは util/Secret_Aead.hpp。
+// pico.store_save/store_load の暗号化オプション)。暗号そのものは crypto/Secret_Aead.hpp。
 // 鍵の決め方と限界はそちらのコメントを読むこと(パスワードを渡さない場合は「ファームの固定鍵+アプリ名」で、
 // SDだけを盗まれる場合しか守れない)。
 
@@ -8,7 +8,7 @@
 #include <cstring>
 #include <string>
 
-#include "util/Secret_Aead.hpp"
+#include "crypto/Secret_Aead.hpp"
 #include "util/Base64.hpp"
 
 struct LuaEngineCrypto {

@@ -6,9 +6,9 @@
 
 ## 使い方
 
-実装の取り込み(`#include "peanut_gb.h"`)は **`src/gb/Gb_Emu.cpp` の1箇所だけ**で行う
+実装の取り込み(`#include "peanut_gb.h"`)は **`src/apps/gb/Gb_Emu.cpp` の1箇所だけ**で行う
 (ヘッダに実装が入っているので、2箇所で取り込むと多重定義になる)。
-他のファイルは `gb/Gb_Emu.hpp` の `GbEmu` だけを見る。
+他のファイルは `apps/gb/Gb_Emu.hpp` の `GbEmu` だけを見る。
 
 C++としてそのままコンパイルできる(g++ -std=gnu++17 で警告なし)ので、Lua本体のように
 Cとしてビルドする設定は要らない。

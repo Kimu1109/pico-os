@@ -7,10 +7,10 @@
 #include "services/PowerMenu_Functions.hpp"
 #include "services/Power_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
-#include "firmware/Fw_Store.hpp"
-#include "firmware/Fw_Version.hpp"
+#include "apps/firmware/Fw_Store.hpp"
+#include "apps/firmware/Fw_Version.hpp"
 #include "storage/Flash_Area.hpp"
-#include "sound/Music_Service.hpp"
+#include "apps/music/Music_Service.hpp"
 #include "OS_Data.hpp"
 
 #include <Arduino.h>

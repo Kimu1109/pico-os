@@ -156,7 +156,7 @@ target_include_directories(picoos_pc PRIVATE
     "${PICOOS_ROOT}/src"
     "${PICOOS_ROOT}/lib/lua/src"
     "${PICOOS_ROOT}/lib/monocypher/src"
-    # Peanut-GB(ヘッダ1本。実装の取り込みはsrc/gb/Gb_Emu.cppだけ。lib/peanut_gb/README-pico-os.md)
+    # Peanut-GB(ヘッダ1本。実装の取り込みはsrc/apps/gb/Gb_Emu.cppだけ。lib/peanut_gb/README-pico-os.md)
     "${PICOOS_ROOT}/lib/peanut_gb/src"
     "${LOVYANGFX_DIR}/src")
 

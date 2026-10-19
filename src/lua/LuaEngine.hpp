@@ -233,7 +233,7 @@
 // ネットワーク(pico.http_request/http_cancel): 既存の`Http_Get`はMarkdownブラウザの
 // キャッシュ用途(GET専用、200/304以外は本文を捨てて一律失敗扱い)に特化しているため、
 // 汎用のHTTPクライアントとしては使えない。新設した`HttpRequest`
-// (`src/task/Http_Request.hpp`。メソッド・送信ボディを指定でき、ステータスコードに
+// (`src/net/Http_Request.hpp`。メソッド・送信ボディを指定でき、ステータスコードに
 // よらず本文を渡す)をこのLuaEngineインスタンスが1本だけ(`http_`、遅延`new`)保持し、
 // `LuaScene::onUpdate()`から毎フレーム`UpdateHttp()`で進める(`HttpGet`/`HttpRequest`は
 // どちらも`PICO_Task`の全体リストには登録されず、所有側が自分で`update()`を呼ぶ設計の

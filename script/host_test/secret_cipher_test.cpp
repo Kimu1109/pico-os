@@ -1,10 +1,10 @@
-// Wi-Fi SSID/パスワードの暗号化保存(util/Secret_Cipher.hpp)を検証するテスト。
+// Wi-Fi SSID/パスワードの暗号化保存(crypto/Secret_Cipher.hpp)を検証するテスト。
 //
 // 「SDカードだけを紛失/盗難されても network.cfg の平文が読めない」という
 // 限定的な脅威モデルへの対処であることは CLAUDE.md 参照。ここでは往復・
 // 用途による鍵ストリームの違い・後方互換(平文のまま読める)・壊れた
 // データへの安全な失敗を確かめる。
-#include "util/Secret_Cipher.hpp"
+#include "crypto/Secret_Cipher.hpp"
 #include <cstdio>
 #include <cstring>
 #include <string>

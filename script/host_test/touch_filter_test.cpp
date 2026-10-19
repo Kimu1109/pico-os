@@ -4,7 +4,7 @@
 // 実際の効果(ブレッドボード配線でのノイズがどこまで収まるか)は実機での確認が要る
 // (このホストテストが保証するのは、フィルタのアルゴリズム自体が意図通り
 // 動くことだけ)。
-#include "util/TouchFilter.hpp"
+#include "hal/TouchFilter.hpp"
 #include <cstdio>
 #include <cstdlib>
 

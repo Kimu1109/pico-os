@@ -9,7 +9,7 @@
 #include "sound/Gb_Audio_Link.hpp"
 #include "sound/Wav_Decoder.hpp"
 #include "sound/Wav_Stream.hpp"
-#include "gb/Gb_Audio_Sink.hpp"
+#include "apps/gb/Gb_Audio_Sink.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
 

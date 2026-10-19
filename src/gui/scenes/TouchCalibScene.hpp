@@ -4,13 +4,13 @@
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/apps/CalibView.hpp"
-#include "util/TouchCalib.hpp"
+#include "hal/TouchCalib.hpp"
 #include "consts.hpp"
 
 #include <cstdint>
 
 // タッチ補正の画面(設定アプリの「時刻」タブの「タッチ位置の補正」から開く)。画面の5か所に順に出る十字を実際に押してもらい、
-// そのときの生の値から最小二乗法で変換を求める(util/TouchCalib.hpp)。
+// そのときの生の値から最小二乗法で変換を求める(hal/TouchCalib.hpp)。
 //
 //   説明 → 5点を順に押す → 結果(ずれの大きさ)→ 確かめ(押した所に青い点が出る)→ 保存 / 破棄
 //

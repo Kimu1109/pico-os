@@ -34,7 +34,7 @@ python3 script/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
 python3 script/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps --clean
 ```
 
-表示された公開鍵を本体のSDの `/sys/store.cfg` に `key = ...` として書くか、`src/store/App_Repo_Keys.hpp` へ足してファームに焼き込みます。
+表示された公開鍵を本体のSDの `/sys/store.cfg` に `key = ...` として書くか、`src/apps/store/App_Repo_Keys.hpp` へ足してファームに焼き込みます。
 配布元のURLは `/sys/store.cfg` の `url = ...`(ストアの [設定] でも変えられます)。
 
 GitHub Pages で配るときは、署名した目録だけを `store/` にコミットします(アプリの中身は公開のワークフローが写します)。

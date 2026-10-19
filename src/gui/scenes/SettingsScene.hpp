@@ -14,7 +14,7 @@
 #include <cstdint>
 
 class WifiScanDialog; // gui/widgets/dialogs/WifiScanDialog.hpp。ポインタ型でしか使わないので前方宣言で足りる
-class NetworkScan;    // task/NetworkScan.hpp。同上
+class NetworkScan;    // net/NetworkScan.hpp。同上
 
 // 標準アプリの設定。画面下のタブで大まかな項目ごとに分けてある:
 //   Wi-Fi   … ON/OFF・接続状態・保存済みのネットワークの一覧(接続/削除)・周辺の検索・手入力での追加
@@ -93,7 +93,7 @@ class SettingsScene : public Scene {
         // ダイアログはSearchDialog(MarkdownScene)と同じく開くたびにnewし、
         // 閉じたらDestroyLater()する(使い回さない)
         WifiScanDialog* wifi_scan_dialog = nullptr;
-        // スキャンTaskへの生ポインタ。所有権はこちらにある(task/NetworkScan.hppのコメントの通り、
+        // スキャンTaskへの生ポインタ。所有権はこちらにある(net/NetworkScan.hppのコメントの通り、
         // HttpGet等と同じ「生ポインタとして持ち、毎フレーム自分でupdate()を呼び、
         // 終わったら自分でdeleteする」流儀)
         NetworkScan* wifi_scan_task = nullptr;

@@ -73,30 +73,37 @@ src/
   gui/
     core/                   GUIの仕組みの「Xxx_Functions」(GFX=合成と液晶への転送・Font・Widget・Focus・Scene(+Scene基底)・Keyboard・Error)
     icons/                  アイコンデータ(tabler_iconsから生成)
-    scenes/                 各画面(基底のSceneは gui/core/)(HomeScene/MarkdownScene/ClocksScene/LuaScene/CalendarScene/GameBoyScene等)
+    scenes/                 機能の中身を持たない画面(基底のSceneは gui/core/)(LuaScene/ClocksScene/SettingsScene/FileExplorerScene/RecorderScene等)。機能の中身を持つアプリの画面は apps/<機能>/
     widgets/                汎用ウィジェット + 基底 (Widget / WidgetID / WidgetRegistry)
-      apps/                 特定のアプリ専用のウィジェット(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/ChatLogView/GameBoyView/GameBoyPad/TerminalView/TermKeyBar等)
+      apps/                 複数のアプリ・Luaから使う部品のうち、用途が決まっているもの(MarkdownView/FileExplorer/AnalogClock/DurationPicker/MonthGrid/SeekBar/MediaButtons/CalibView)。1つのアプリ専用の部品は apps/<機能>/ui/
       dialogs/              モーダルダイアログ(オンスクリーンキーボードのダイアログ枠 KeyboardDialog を含む)
       keyboards/            オンスクリーンキーボードのキー盤3種(Keyboard/KeyboardEng/KeyboardNum)と基底KeyboardPanel
       interfaces/            ミックスイン的インターフェース
       systems/               OSのシェル部品(Statusbar / AppGrid / PerfOverlay)
   ime/                       SKK方式かな漢字変換辞書エンジン
-  calendar/                  iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync)
-  chat/                      チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client) / 閉じている間の未読の見張り(Chat_Watch)。下記「チャット」「バックグラウンド実行の枠組み」参照
-  todo/                      Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders) / ホーム画面の控え(Todo_Cache)と取り直し(Todo_Watch)。下記「TODOアプリ」参照
-  home/                      ホーム画面(ランチャ)のウィジェット。並びと詰め方・home.cfg(Home_Layout)・描き方(Home_Widget / Home_Widgets)・予定の拾い方(Home_Agenda)。下記「ホーム画面のウィジェット」参照
-  store/                     アプリストア。配布物の読み取りと署名の確認(App_Repo)・通信とインストール(App_Store)・焼き込みの公開鍵(App_Repo_Keys)。下記「アプリストア」参照
-  ssh/                       SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)。下記「SSHクライアント」参照
+  apps/                      機能ごとの置き場(1フォルダ=1機能)。直下=機能の中身(段は lib)、ui/=その機能専用のウィジェット・ダイアログ(ui)、*Scene=画面(app)。下記「層と置き場所」
+    browser/                 Markdownブラウザ。取得〜キャッシュの配線(Doc_Fetch)・サーバ情報(Discovery)・検索(Doc_Search)・マニフェスト(Manifest)・文書キャッシュ(Doc_Cache)・画像参照の走査(Md_Scan)・MarkdownScene・ui/SearchDialog
+    calculator/              式の評価(Calc_Eval)・CalculatorScene・ui/CalculatorKeypad・ui/GraphView
+    calendar/                iCalendar(.ics)の読み取りと繰り返しの引き当て(Ical) / 取得元URLからの取得(Calendar_Sync) / 予定の通知(Calendar_Reminders)・CalendarScene・ui/EventDetailDialog
+    chat/                    チャットサーバの応答の読み取り(Chat_Proto) / 通信係(Chat_Client) / 閉じている間の未読の見張り(Chat_Watch)・ChatScene・ui/ChatLogView。下記「チャット」「バックグラウンド実行の枠組み」参照
+    dict/                    英和/和英辞書(Word_Dict)・DictScene
+    firmware/                ファームの更新(.pfw)の見出しと署名(Fw_Image)・受け取りの流れ(Fw_Update)・置き場(Fw_Store: 実機はLittleFS+PicoOTA)・版(Fw_Version)・焼き込みの公開鍵(Fw_Keys)・FirmwareScene。OSへのつなぎは services/Firmware_Functions。下記「ファームの更新」参照
+    gb/                      Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)・内蔵フラッシュのROMの置き場(Gb_Rom_Flash)・コントローラーのボタンの対応(Gb_PadMap)・GameBoyScene・ui/GameBoyView・ui/GameBoyPad。音源チップは sound/。下記「ゲームボーイ」参照
+    home/                    ホーム画面(ランチャ)。並びと詰め方・home.cfg(Home_Layout)・描き方(Home_Widget / Home_Widgets)・予定の拾い方(Home_Agenda)・AppGrid・HomeScene。直下の段は service。下記「ホーム画面のウィジェット」参照
+    music/                   再生の順番と常駐の再生(Music_Service / Play_Queue)・MusicScene・ui/MusicPlayerPanel。音源とMMLは sound/
+    ssh/                     SSHクライアント(Ssh_Client)・端末エミュレータ(Vt_Terminal)・SHA-256(Ssh_Sha256)・鍵/known_hosts(Ssh_Util)・SshScene・ui/TerminalView・ui/TermKeyBar。下記「SSHクライアント」参照
+    store/                   アプリストア。配布物の読み取りと署名の確認(App_Repo)・通信とインストール(App_Store)・焼き込みの公開鍵(App_Repo_Keys)・StoreScene。直下の段は app。下記「アプリストア」参照
+    texteditor/              元に戻す/やり直しの記録(Edit_History)・TextEditorScene
+    todo/                    Todoist API v1 の応答の読み取りと日付(Todoist_Proto) / 通信係(Todoist_Client) / リマインダー(Todo_Reminders) / ホーム画面の控え(Todo_Cache)と取り直し(Todo_Watch、段は service)・TodoScene。下記「TODOアプリ」参照
+    video/                   動画(.pvid)の読み取り(Pvid_Player)・VideoScene・ui/VideoView。下記「動画(.pvid)」参照
+  crypto/                    暗号化して保存する値(Secret_Cipher: enc1:/enc3:)・XChaCha20-Poly1305とArgon2id(Secret_Aead)・端末ごとの鍵の用途別の鍵(Device_Key)
   iso/                       2.5D(斜め上から見た)ボクセルの箱庭のエンジン(Iso_World: チャンク・生成・保存・描画・影・引き当て・人や物(エンティティ) / Iso_Blit: 面の絵の写し方 / Iso_Path: 条件つきの経路探索 / Iso_Flow: 流れの場(フローフィールド))。Luaの`pico.iso`。下記「ブロック」「2.5Dエンジンのタワーディフェンス向けの道具」参照
-  firmware/                  ファームの更新(.pfw)の見出しと署名(Fw_Image)・受け取りの流れ(Fw_Update)・置き場(Fw_Store: 実機はLittleFS+PicoOTA)・版(Fw_Version)・焼き込みの公開鍵(Fw_Keys)。下記「ファームの更新」参照
-  gb/                        Game Boyエミュ本体(Gb_Emu。lib/peanut_gbを包む)と外部コントローラーのボタンの対応(Gb_PadMap)。下記「ゲームボーイ」参照
-  video/                     動画(.pvid)の読み取り(Pvid_Player)。下記「動画(.pvid)」参照
   sound/                     マイクの計算(Mic_Dsp)とWAVへの書き出し(Wav_Writer)・チップチューン音源(Chip_Synth)・WAVの読み取り(Wav_Decoder)と2コア目への列(Wav_Stream)・音名→周波数(Note_Name)・MMLの読み取り(Mml_Compiler)・2コア目のシーケンサー(Music_Player)と演奏データの取り決め(Music_Data)・ゲームボーイの音源チップ(Gb_Apu)とエミュからの時刻付きの列(Gb_Audio_Link)。下記「音声出力」「曲データ」「ゲームボーイの音」参照
   lua/                        Lua<->C++バインディング本体(LuaEngine。拡張は LuaEngine_Ext.cpp / LuaEngine_Crypto.cpp / LuaEngine_Iso.cpp(pico.iso) / LuaEngine_Mic.cpp(pico.mic_*)、同梱モジュールは LuaBuiltinModules.hpp)。LuaAppScannerはSD走査によるアプリ自動登録。LuaDebugger/LuaDebugScreenはデバッガ
-  net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / 取得〜キャッシュの配線(Doc_Fetch) / サーバ情報(Discovery) / 検索(Doc_Search) / マニフェスト(Manifest) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
-  util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Md_Scan(画像参照の走査) / Json_Reader(流しながら読むJSON)
-  storage/                    SDカードI/O・パス定数・文書キャッシュ(Doc_Cache)
-  task/                       非同期タスク基底 + NetworkScan / HttpGet タスク + StepBudget(実行時間の区切り)
+  net/                        HTTPレスポンスの解釈 / http・httpsの接続(Http_Transport + 焼き込みのルート証明書Tls_Roots_Data) / GET(Http_Get)・汎用の要求(Http_Request)・Wi-Fiのスキャン(NetworkScan) / 保存済みのWi-Fiネットワーク(Wifi_Profiles)
+  util/                       Rect(矩形) / FixedString(固定長文字列) / Utf8Byte / Url / Base64 / Json_Reader・Xml_Reader(流しながら読む)。機能を持たない部品だけ
+  storage/                    SDカードI/O・パス定数・フォルダの走査(Sd_Walker)・内蔵フラッシュの生の置き場(Flash_Area)・USBドライブのセクタの受け渡し(Msc_Sector_Bridge)
+  task/                       非同期タスク基底(Task / Task_Functions) + StepBudget(実行時間の区切り)
 script/                       開発補助スクリプト(アイコン生成/SKK辞書変換/pimg生成等, Python)
   tabler_icons/               アイコン元データ(tabler由来のSVG)
   custom_icons/               アイコン元データ(自作SVG)。tablerが16pxで破綻する場合の受け皿
@@ -157,10 +164,10 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
 |---|---|---|
 | 0 base | `consts.hpp` `OS_Data.hpp` `config/` `util/` (+`storage/SD_Path.hpp` `storage/SD_IO.hpp` `gui/icons/icons_data.h` `lua/LuaPermissions.hpp`) | 型・定数・グローバル状態。OSの機能を何も知らない |
 | 1 system | `system/` | UIもハードの具体も知らない土台(ログ・設定・時刻・入力の列・通知の中身・バックグラウンドの登録簿…) |
-| 2 lib | `hal/` と、UIを持たない機能のライブラリ(`storage` `net` `task` `sound` `iso` `ssh` `ime` `dict` `video` `firmware` `gb` `calendar` `chat` `todo`) | ハードの窓口と機能の中身。同じ段なので互いに使い合ってよい |
-| 3 ui | `gui/`(`core/` `icons/` `widgets/`) | 描画・ウィジェット・シーン遷移の仕組み |
-| 4 service | `services/` `devtools/` `gui/widgets/systems/` `home/`(+`todo/Todo_Watch`) | OSの機能と、それを見せるシェルの部品 |
-| 5 app | `gui/scenes/` `lua/` `store/` | 画面(アプリ)とLua |
+| 2 lib | `hal/` と、UIを持たない機能のライブラリ(`storage` `net` `crypto` `task` `sound` `iso` `ime`)と `apps/<機能>/` の直下 | ハードの窓口と機能の中身。同じ段なので互いに使い合ってよい |
+| 3 ui | `gui/`(`core/` `icons/` `widgets/`)と `apps/*/ui/` | 描画・ウィジェット・シーン遷移の仕組みと、機能専用の部品 |
+| 4 service | `services/` `devtools/` `gui/widgets/systems/` `apps/home/`(+`apps/todo/Todo_Watch`) | OSの機能と、それを見せるシェルの部品 |
+| 5 app | `gui/scenes/` `lua/` `apps/store/` と `apps/*/*Scene.*` | 画面(アプリ)とLua |
 | 6 boot | `boot/` `main.cpp` | 起動とつなぎ。全部を知ってよい |
 
 - **下の段から上の段の機能を呼びたいとき**は、下の段に関数ポインタ(差し込み口)を置いて `boot/` で差すか
@@ -173,6 +180,9 @@ server/chat/                   自前のチャットサーバ(chat_server.py、�
   `Widget` の中身が要るファイルは自分で `gui/widgets/Widget.hpp` を読むこと。
 - 例外は今1件(`devtools/DevTools_Functions.cpp` → `lua/LuaDebugger.hpp`。理由はスクリプトの中)。
   例外を足すときは理由を書く。違反でなくなった例外はスクリプトが「古い例外」として報告する。
+- **機能の置き場は `apps/<機能>/`**(2026-10-19)。中身(通信・読み取り・状態)は直下、その機能だけが使うウィジェット・ダイアログは `ui/`、
+  画面は直下の `XxxScene`。段はこの置き場所で決まる(`check_layers.py` の `APP_PATTERNS`)。ほかのアプリやLuaからも使う部品は
+  `gui/widgets/`、機能の中身を持たない画面(設定・時計・ファイル等)は `gui/scenes/` に置く。新しいアプリで中身(.cpp)を書くなら `apps/` に作る。
 - 段の割り当てを変えたら `script/host_test/CMakeLists.txt` が段ごとのライブラリを作り直す(同じスクリプトの `--sources` を読む)。
 
 ### `Xxx_Functions` サブシステム (`system/` `hal/` `gui/core/` `services/` `devtools/` `boot/`)
@@ -426,7 +436,7 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
 - 未: カレンダーの予定を閉じている間に取り直すこと(チャットの未読は下の「バックグラウンド実行の枠組み」の`ChatWatch`で入った)、
   アラーム/タイマーの完了を通知へ統合すること。
 
-### ホーム画面のウィジェット (`src/home/` / `AppGrid` / `HomeScene` / `todo/Todo_Cache` / `todo/Todo_Watch`) (2026-10-16)
+### ホーム画面のウィジェット (`src/apps/home/` / `AppGrid` / `HomeScene` / `apps/todo/Todo_Cache` / `apps/todo/Todo_Watch`) (2026-10-16)
 
 ランチャのアプリのタイルと**同じ並びに**ウィジェット(時計・アナログ時計・音楽・予定・TODO)を混ぜて置く。方針は利用者と相談して決めた(2026-10-16):
 グリッドに混ぜる(専用ページ・上部の帯ではなく)/ 最初の種類は時計・音楽・予定・TODO / 今回はC++だけ(Luaアプリのウィジェットは後で)/ 中のボタンも押せる(ボタンの外は対応するアプリを開く)。
@@ -490,7 +500,7 @@ Luaのバックグラウンドスクリプトを「定期の使い捨て」で�
   「他」タブは行が足りなくなったので、開発者向けの見出しの下を詰めた行(`kDevRowH`=26)にし、起動時の自己診断をそこへ移した。
 - **ステータスバーの印**: 何か動いていれば、コントローラーの印の右に`IndicatorIcon()`を青で。
 
-**ミュージック(`src/sound/Music_Service`)**: 再生の順番・曲の終わりで次へ・読めない曲を飛ばす・リピート/ミックスを`MusicScene`から移した
+**ミュージック(`src/apps/music/Music_Service`)**: 再生の順番・曲の終わりで次へ・読めない曲を飛ばす・リピート/ミックスを`MusicScene`から移した
 (画面は`MusicService`を読んで見せ、ボタンを渡すだけになった)。アプリを閉じても鳴り続け、終われば次の曲へ進む。
 - 状態(順番の曲64件・フォルダ名16・`PlayQueue`、約4.2KB)は最初に鳴らすときに`new`、一覧の[停止](`Release()`)で返す。ミックス/リピートは状態の外(`music.cfg`)。
 - **他のアプリに音を取られたら止まった扱い**: `SoundFunctions::PlaybackSerial()`(曲/WAVを新しく鳴らす・周波数の切り替えで1つ増える。新設)を鳴らした直後に覚え、
@@ -502,7 +512,7 @@ Luaのバックグラウンドスクリプトを「定期の使い捨て」で�
   22050Hzへの切り替えで取った側の音(動画アプリのWAV)まで止まっていた → 取られた後も相手の曲/WAVが鳴っている間は`holdsSampleRate()`を保つ。
   `background_test`がmain.cppと同じ要求の渡し方で確かめる。
 
-**チャットの未読(`src/chat/Chat_Watch`)**: チャットアプリを閉じている間、`chat.cfg`の`notify-poll-sec`(既定120秒、30以上)ごとに`GET /api/v1/rooms`
+**チャットの未読(`src/apps/chat/Chat_Watch`)**: チャットアプリを閉じている間、`chat.cfg`の`notify-poll-sec`(既定120秒、30以上)ごとに`GET /api/v1/rooms`
 (取るだけでは既読にならない)を取り、新しい発言で未読が増えた部屋を通知する(タイトル=部屋名、タップでチャットアプリ)。
 - 部屋ごとに「最後に知らせた発言id」をRAMで覚える(16部屋)。再起動後の最初の回は、未読のある部屋を全部知らせる。
 - **接続は使い回さない**。要求の道具(HttpRequest+行バッファ+部屋16件、約4KB)とTLSの約40KBは取りに行く数秒の間だけ。
@@ -653,7 +663,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 - 検証: PCビルドで`hw info/mem/help`、`hw trap/buswrite/hang`→次の起動で`/crash/crash_NNNN.txt`と通知、「実機チェック」の「全部」(HTTPSはこの環境では
   出口のゲートウェイで証明書が差し替わるため失敗するのが正しい)、`PICOOS_VERIFY_LCD=1`で食い違い0、ホストテスト全部。**実機では未確認**(実機ビルドもこの環境ではできない)。
 
-### ファームの更新 (`src/firmware/` / `Firmware_Functions` / `FirmwareScene` / `script/firmware_tool.py`) (2026-10-16)
+### ファームの更新 (`src/apps/firmware/` / `Firmware_Functions` / `FirmwareScene` / `script/firmware_tool.py`) (2026-10-16)
 
 使い方・形式・TCPの取り決めは`FIRMWARE_UPDATE.md`。利用者と決めた方針(2026-10-16): arduino-pico標準のOTA(PicoOTA+内蔵フラッシュのLittleFS、自動ロールバック無し=壊れたらBOOTSEL)/
 LittleFSは1728KB / 今回の経路はSDとPCからのWi-Fi(Webから取るのは後) / 独自の見出し+gzip / **常に署名必須、鍵はファーム専用でPCにだけ置き、焼き込みの鍵だけを信頼**(SDの鍵は読まない。
@@ -675,7 +685,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - **画面(`FirmwareScene`、ランチャの「本体の更新」。ファイルアプリで`.pfw`を開くと`FileViewerScene`から置き換わる)**: 今の版・鍵の登録の有無・状態・進み具合、[SDから選ぶ][受け取る][戻る/やめる]。
   確認は`MsgDialog`(確認が要らなくなったら閉じる)。更新の途中・待ち受け中・再起動待ちは`keepForeground`。離れるとやめる(再起動待ちのときだけはそのまま=電源メニューの再起動の`onExit()`)。
   ダイアログを開いたフレームより前に下の画面を書き換える(半透明のダイアログの下は描き直されないため)。
-- **鍵**: `src/firmware/Fw_Keys.hpp`の`kBuiltin`は今は全部0(未登録)。利用者が`firmware_tool.py keygen`して1行を入れ、USBで1回書き込む必要がある(秘密鍵は`~/.pico-os/firmware.key`)。
+- **鍵**: `src/apps/firmware/Fw_Keys.hpp`の`kBuiltin`は今は全部0(未登録)。利用者が`firmware_tool.py keygen`して1行を入れ、USBで1回書き込む必要がある(秘密鍵は`~/.pico-os/firmware.key`)。
   Python側の署名は`build_app_repo.py`のEd25519(RFC 8032)を使い回す。
 - PC/Web: 置き場は`ota_emu/`(SDのルートの隣、`PICOOS_OTA_DIR`。`.gitignore`済み)、本体は書き換えない。ポートは`PICOOS_FW_PORT`。
 - 検証: `firmware_test`(run.sh の core。見出しの検査10通り・署名(信頼/なし/知らない鍵/印と署名の食い違い/署名の後の書き換え)・版の確認・1バイトずつ途切れながら・置き場への書き込みの失敗・
@@ -716,7 +726,7 @@ RLE/JPEG/PNG埋め込みと12バイトの古い見出し(BITMAPCOREHEADER)は断
 Luaの`pico.image_load(path, {dither=, raw=})`が使う。**フルカラーのまま画面へ出す口は無い**(frameが4bppのため。`DecodeRgb565()`は液晶へ直接描く用途向けに残した)。
 検証: `bmp_test`(core)、PCビルドでPILで書いた24bppのBMPを表示、スクリーンショットをPILで開いて画素を比較。
 
-**カレンダーの予定の通知(`src/calendar/Calendar_Reminders`)**: Todoistのリマインダーと同じ作り。カレンダーアプリが.icsを読み直すたび(読み込んだ6週間が今日を含むときだけ)、
+**カレンダーの予定の通知(`src/apps/calendar/Calendar_Reminders`)**: Todoistのリマインダーと同じ作り。カレンダーアプリが.icsを読み直すたび(読み込んだ6週間が今日を含むときだけ)、
 時刻つきの予定の回を近い順に4件まで`At`の予約にする(終日は入れない)。**送り主は`"@calendar"`**: `@`で始まる送り主はOSの機能のもので、
 `NotificationFunctions::RefreshOwners()`が登録簿と突き合わせて消さない(送り主ごとに4件の枠がTodoの空の送り主と別になる)。tagは`cal:<UIDのハッシュ>:<日>`。
 読み込んだ範囲の中で消えた/動いた予定の予約は消し、範囲の外は残す。`/sys/calendar.cfg`の`reminders`(既定true)・`remind-before-min`(既定10)。
@@ -868,7 +878,7 @@ Picoへ配線)を実際に導入したのを受けて、VSYS電圧からバッ�
   効果そのものの再検証(この対策を入れた後、実際に音割れが収まるか)はユーザーからの
   報告待ち**(このリモート環境には実機が無いため確認できない)。
 
-### タッチ位置の補正(`src/util/TouchCalib.hpp` / `TouchCalibScene` / `TouchCalib_Functions`) (2026-10-12)
+### タッチ位置の補正(`src/hal/TouchCalib.hpp` / `TouchCalibScene` / `TouchCalib_Functions`) (2026-10-12)
 
 設定アプリの「画面」タブの6行目「タッチ位置の補正」[補正]から開く(`SceneFunctions::Push`)。画面の5か所(四隅の内側+中央)に出る十字を順に押すと、XPT2046の生の値 (u,v)=(p.y,p.x) から
 画面座標へのアフィン変換 `X=a*u+b*v+c, Y=d*u+e*v+f` を最小二乗法で求める(`TouchCalib::Fit`)。
@@ -883,7 +893,7 @@ Picoへ配線)を実際に導入したのを受けて、VSYS電圧からバッ�
 - **PCビルドは補正を座標へ掛けない**(マウスは元から正確)。生の値は`DefaultInverse()`で実機と同じ形に作るので、画面の操作確認と保存/読み込みはPCで通せる。
 - 検証: `touch_calib_test`(run.sh。既定の式・ずれたパネルを5点で合わせる・ノイズ・決まらない点・押し間違い)、PCビルドの`--tap`で設定アプリ→時刻タブ→[補正]→5点→結果→保存→再起動で読み込み。**実機では未確認**。
 
-### タッチ座標のノイズ抑制(`src/util/TouchFilter`) (2026-09-28)
+### タッチ座標のノイズ抑制(`src/hal/TouchFilter`) (2026-09-28)
 
 バッテリー駆動に切り替えてから、ペイント系アプリで「滑らかに描いたはずの線に規則的な
 棘(とげ)状の乱れが出る」という報告をユーザーから受けた。実機の写真(ブレッドボード上で
@@ -913,7 +923,7 @@ Sの字を1ストロークで描いたもの)を確認したところ、人の�
   マウス入力(`Touch_Functions_PC.hpp`)は変更していない**。マウス/`--tap`は
   そもそもノイズが無く、既存の`--tap`ベースのPC検証(フレーム単位のドラッグ操作等)に
   意図しない遅延を持ち込みたくなかったため。フィルタ自体はプラットフォームに依存しない
-  実装(`src/util/TouchFilter.hpp`)にしてあるので、ホストテストで単体検証できる。
+  実装(`src/hal/TouchFilter.hpp`)にしてあるので、ホストテストで単体検証できる。
 - ホストテストは`script/host_test/touch_filter_test.cpp`(単発スパイクをほぼ無視すること、
   滑らかな動きには過剰な遅れが無いこと、`reset()`で前のタッチの名残りが混ざらないこと、
   `reset()`を呼ばずに`push()`しても安全に自動primeされること)。**実ハードウェアに
@@ -1075,7 +1085,7 @@ OS側の洗い出しの結果、次を直した。実機ファームの静的RAM
   見た目は変わらない)を確認した。ホストテストは無し(`GFX_Functions`は上記
   「画面の明るさ調整と自動調光」と同じ理由でASan対象外)。
 
-### 文書キャッシュ目録(index.tsv)の書き込みをO(n)からほぼO(1)へ (`src/storage/Doc_Cache.cpp`) (2026-09-28)
+### 文書キャッシュ目録(index.tsv)の書き込みをO(n)からほぼO(1)へ (`src/apps/browser/Doc_Cache.cpp`) (2026-09-28)
 
 パフォーマンス監査で見つかった、`PICO_DocCache::SetEntry()`/`RemoveEntry()`が常に
 `rewriteIndex()`(目録全体を読みながら一時ファイルへ書き写し、最後にrenameする)を
@@ -1152,7 +1162,7 @@ host/pathへ初めて`SetEntry()`する)、その時点までに溜まった目�
   dispatchする、最もコールバック数の多いLuaアプリ)を実際に起動し、ゲーム開始・
   ソフトドロップ操作・スコア加算・盤面の差分描画までタップで操作して確認した。
 
-### Wi-Fi認証情報の暗号化保存 (`src/util/Secret_Cipher.hpp`) (2026-09-27)
+### Wi-Fi認証情報の暗号化保存 (`src/crypto/Secret_Cipher.hpp`) (2026-09-27)
 
 SDカードだけを紛失/盗難された場合に、`/sys/network.cfg`の`wifi-ssid`/`wifi-password`を
 テキストエディタでそのまま読まれないようにする対策。相談の発端は「フラッシュに鍵を焼けば
@@ -1251,7 +1261,7 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   「追加」ボタンから実際に名前入力ダイアログが開くことまで確認済み(実際の保存はホストテストの
   SdFatスタブ経由で確認。暗号化ロジック自体は上記の往復検証で担保されている)。
 
-### 端末ごとの鍵(OTP) (`src/services/DeviceKey_Functions` / `src/util/Device_Key.hpp`) (2026-10-12)
+### 端末ごとの鍵(OTP) (`src/services/DeviceKey_Functions` / `src/crypto/Device_Key.hpp`) (2026-10-12)
 
 上の「Wi-Fi認証情報の暗号化保存」の固定鍵`kKey`はリポジトリで公開されていて、SDだけを盗まれても読めた。
 **本体のOTPに端末ごとの32バイトの鍵を焼き、以後の暗号化をその鍵で行う**。Secure Bootは使わない(利用者の判断。2026-10-12)。
@@ -1340,7 +1350,7 @@ SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/
   保存されて接続し一覧の先頭へ、削除の確認、`PICOOS_WIFI_STATE=failed`で「直近のもの→次→直近のもの」と30秒ごとに巡ること。
   **実機では未確認**(`WiFi.disconnect()`後の`beginNoBlock()`での復帰、別のSSIDへ切り替えるときに切断を挟まなくてよいか)。
 
-### Wi-Fiの新規接続(周辺スキャン→選択→パスワード入力→接続) (`SettingsScene` / `task/NetworkScan.hpp` / `gui/widgets/dialogs/WifiScanDialog`) (2026-09-27)
+### Wi-Fiの新規接続(周辺スキャン→選択→パスワード入力→接続) (`SettingsScene` / `net/NetworkScan.hpp` / `gui/widgets/dialogs/WifiScanDialog`) (2026-09-27)
 
 `SettingsScene`のSSID/パスワード編集は元々`InputDialog`への手入力のみだった。
 一般的なスマホ/PCの「Wi-Fi設定」と同じ、周辺をスキャンして一覧から選び、
@@ -1413,8 +1423,9 @@ SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/
 | 置き場所 | 何を入れるか | 中身 |
 |---|---|---|
 | `widgets/` | 汎用部品と基底 | `Widget` / `WidgetID` / `WidgetRegistry` + 下のカタログのうち専用でないもの(`TextView` / `ImageView`を含む) |
-| `widgets/apps/` | **特定のアプリ専用**のウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` / `ChatLogView` / `GameBoyView` / `GameBoyPad` / `CalculatorKeypad` / `GraphView` 等 |
-| `widgets/systems/` | **OSのシェル部品**(特定アプリのものではない) | `Statusbar`(常駐オーバーレイ) / `AppGrid`(ランチャのタイル) |
+| `widgets/apps/` | 用途は決まっているが、複数のアプリ・Luaから使うウィジェット | `MarkdownView` / `FileExplorer` / `AnalogClock` / `DurationPicker` / `MonthGrid` / `SeekBar` / `MediaButtons` 等 |
+| `src/apps/<機能>/ui/` | **1つのアプリ専用**のウィジェット・ダイアログ | `ChatLogView` / `GameBoyView` / `GameBoyPad` / `CalculatorKeypad` / `GraphView` / `TerminalView` / `SearchDialog` 等 |
+| `widgets/systems/` | **OSのシェル部品**(特定アプリのものではない) | `Statusbar`(常駐オーバーレイ) / `PerfOverlay` / `NotificationToast` / `LockScreen`(`AppGrid`は`src/apps/home/`) |
 | `widgets/dialogs/` | モーダルダイアログ(キーボードのダイアログ枠`KeyboardDialog`を含む) | 下記「ダイアログ」参照 |
 | `widgets/keyboards/` | オンスクリーンキーボードのキー盤3種 + 基底`KeyboardPanel` | 下記「オンスクリーンキーボード」参照 |
 | `widgets/interfaces/` | ミックスイン的インターフェース | `IBorderColor` / `IFontImplementation` / `ITextColor` / `ITextInputTarget` |
@@ -1602,7 +1613,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 
 **文書内の参照(画像)は`doc_path`基準で解決する**(`resolveRef()`)。`load(path)`が`doc_path`を覚え、`layoutBlocks()`(画像ヘッダを読んで**ブロックの高さ**を決める)と`bindImageSlot()`(**表示用のパス**)の**2箇所**で使う。片方だけ直すと「高さは合うが表示されない」類のずれ方をするので必ず両方を通すこと。キャッシュがサーバのパスをミラーしているため、この1つの規則でローカルもリモートも足りる(View側にネットワークの知識は不要)。
 
-### 文書キャッシュ (`src/storage/Doc_Cache.hpp`)
+### 文書キャッシュ (`src/apps/browser/Doc_Cache.hpp`)
 サーバから取った文書をSDへ書き、次回以降はSDから読むための層(`PROTOCOL.md`)。
 **MarkdownViewは「SD上のファイルを開く」ことしか知らないままでよく、ネットワークとの境界がファイルシステムで切れる**のが狙い。
 
@@ -1615,7 +1626,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - **追い出し(LRU等)は実装しない。** 1文書8KiBに対しSDはGB単位あり、1000件貯めても8MB程度なので枠を管理する対価に見合わない。全消去の`Clear()`だけ用意してある。
 - **`Clear()`だけはホストテストで検証できていない**。ディレクトリの再帰削除に`isDir()`/`openNext()`が要るが、`script/host_test/stubs/SdFat.h`はパス→内容のフラットな`map`でディレクトリの実体が無いため。PCビルド(`pc/compat/SdFat.h`は実ファイルシステム)側で確かめること。
 
-### HTTPクライアント (`util/Url.hpp` / `net/Http_Response` / `task/Http_Get`)
+### HTTPクライアント (`util/Url.hpp` / `net/Http_Response` / `net/Http_Get`)
 `PROTOCOL.md` のHTTPを喋る側(http/https。HTTPSは下の「HTTPS」参照)。3つに割ってあるのは**テストできる形にするため**。
 
 - **`Url`**: `http://host:port/path?query` を分解して持つ型。`"http://"` を各所で`strncmp`しないための入れ物で、**schemeをここに閉じ込めてある**(実際にHTTPS対応で触ったのは接続処理=`net/Http_Transport`だけで済んだ)。`path`は`PICO_STR_LL`(Googleカレンダーの非公開URLのパスが96Bを超えるため)。パスとクエリを分けて持つのは、相対解決(`PICO_IO::resolve`を再利用)がクエリ内の`/`まで畳んでしまわないようにするため。
@@ -1655,7 +1666,7 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
 - 検証は`run_net.sh`の`calendar_sync_test`(使い捨てのCAを`openssl`で作り、`script/host_test/tls_test_server.py`を
   相手に、chunked転送・ETag→304・信頼していないCA・名前の違う証明書を本物のTLSで確かめる)。
 
-### 取得〜表示の配線 (`src/net/Doc_Fetch.hpp`)
+### 取得〜表示の配線 (`src/apps/browser/Doc_Fetch.hpp`)
 「URLを1本取ってきて、SD上の開けるパスにする」係。`Http_Get`(取得)と`Doc_Cache`(保存)を繋ぐだけの薄い層だが、**ブラウザとして必要な判断はここに集めてある**。
 
 - 手元にキャッシュがあれば検証子を添えて条件付きGETし、**304ならそのまま使う**(`Writer`は`abort()`するので本体に触らない)
@@ -1664,7 +1675,7 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
 - キャッシュのキーは**ポートまで含めたホスト**(`host:port`)。ポートが違えば別のサーバとして扱う
 - `MarkdownView`へ渡すのは常にSD上のパスなので、**View側はネットワークの存在を知らない**
 
-### サーバ情報 (`src/net/Discovery.hpp`)
+### サーバ情報 (`src/apps/browser/Discovery.hpp`)
 `GET /.well-known/pico-os` の中身(`ServerInfo`)。`PROTOCOL.md`「サーバ情報」参照。
 
 - **discoveryを特別扱いしない。** 置き場所が決め打ちなだけで、取得も保存も`Doc_Fetch`/`Doc_Cache`をそのまま通す。おかげで**条件付きGET(304)も、圏外のときに前回の内容を使うことも、何も書かずに手に入る**。
@@ -1673,7 +1684,7 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
 - **404は正常な結果**。「素の静的ファイルサーバと分かった」という確定した答えなので、`checked`を立ててページごとに問い合わせ直さない。
 - `MarkdownScene`は**ホストが変わったときだけ**問い合わせる。`home`が申告されていればヘッダの「ホーム」ボタンの行き先になる(無ければ`network.cfg`の`browser-home`)。
 
-### 検索 (`src/net/Doc_Search.hpp`)
+### 検索 (`src/apps/browser/Doc_Search.hpp`)
 `GET <discoveryのsearch>?q=...&limit=10&offset=N` の応答(1行1件のTSV)を読む。`PROTOCOL.md`「3. 検索」参照。
 
 - **検索だけは`Doc_Cache`を通さない。** キャッシュ上の置き場所は**URLのパスだけで決まりクエリを見ない**ため、
@@ -1689,11 +1700,11 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
 - **404は失敗**(discoveryは404が正常な結果だったが、こちらは違う)。
   `search`の行が無いサーバへは`begin()`が接続すら試さない。
 
-UI側は`gui/widgets/dialogs/SearchDialog`(状態1行 + `ScrollList` + 再検索/次へ/閉じる)。
+UI側は`apps/browser/ui/SearchDialog`(状態1行 + `ScrollList` + 再検索/次へ/閉じる)。
 **通信は一切せず**、何件目から取るかの判断も含めて`MarkdownScene`が持つ。結果は**2回タップで開く**
 (`ScrollList`の流儀。1回目は選択)。
 
-### マニフェスト (`src/net/Manifest.hpp`)
+### マニフェスト (`src/apps/browser/Manifest.hpp`)
 `GET <discoveryのmanifest>` の中身(1行 `path<TAB>version`、**pathの昇順**)。`PROTOCOL.md`「4. マニフェスト」参照。
 
 - **狙いは「開くたびの条件付きGETを省く」こと。** 手元の検証子とマニフェストのversionが一致すれば、
@@ -1727,7 +1738,7 @@ UI側は`gui/widgets/dialogs/SearchDialog`(状態1行 + `ScrollList` + 再検索
 ため、同じフレームで次のダイアログを開くと、閉じたキーボードや前のダイアログの跡がその下に残ったままになる。
 1フレーム空ければ「ダイアログが何も無い状態」で描き直される。
 
-### iCalendarの読み取り (`src/calendar/Ical.hpp`) (2026-09-23)
+### iCalendarの読み取り (`src/apps/calendar/Ical.hpp`) (2026-09-23)
 
 カレンダーアプリの第1段。**Google CalendarのOAuth/APIではなくiCal(.ics)を選んだ**
 (OAuthはHTTPS・トークン管理・JSONパーサが全て要り、いずれも今のコードに無い。
@@ -1761,7 +1772,7 @@ iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で
   `ordinal`(そのファイルで何番目のVEVENTか。読み捨てた分も数える)だけを持ち、詳細を開くときに
   `ReadDescription(path, ordinal, out)`でその1件だけ読み直す(`Parser`の「予定を集めず説明文だけ拾う」読み方。
   目当てのVEVENTを読み終えたらファイルの残りは読まない)。説明文は1論理行の上限(512B)で切れる。
-- 取得は`calendar/Calendar_Sync`(下の「CalendarScene 実装詳細」参照)。
+- 取得は`apps/calendar/Calendar_Sync`(下の「CalendarScene 実装詳細」参照)。
 
 ### CalendarScene 実装詳細 (2026-09-23)
 
@@ -1788,7 +1799,7 @@ iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で
   取得のたびにファイルを差し替えると入れ替わる(=色が変わる)ため**。格子の点(`MonthGrid::setDots()`。
   違うカレンダーの色を先に並べ、余った点は同じ色を繰り返す)と一覧の文字色(`ScrollListTools::Item::color`)に使う。
   .icsが1つだけなら今までどおり(緑の点・黒い文字)。読む.icsは8つまで。
-- **取得(`calendar/Calendar_Sync`)**: `/calendar/sources.cfg`の「名前 = URL」を1件ずつ取り、`/calendar/<名前>.ics`へ置く
+- **取得(`apps/calendar/Calendar_Sync`)**: `/calendar/sources.cfg`の「名前 = URL」を1件ずつ取り、`/calendar/<名前>.ics`へ置く
   (`webcal://`は`https://`として扱う)。**`Doc_Fetch`/`Doc_Cache`は通さない** — キャッシュは1件64KiBで頭打ちなのに
   Googleの非公開URLは過去の予定を全部返して数百KBになる上、`/cache/<ホスト>/<パス>`へミラーすると非公開URLの
   秘密の部分がディレクトリ名としてSDに散らばるため。上限は1件1MB。
@@ -1809,7 +1820,7 @@ iCalは行指向のテキストで、Googleも「iCal形式の非公開URL」で
 **予定そのものは知らず、シーンが`setMonth()`/`setCounts()`で流し込む**(`AnalogClock`と同じ理由)。
 幅を7で割った余りは土曜の列へ足す(`TabBar`と同じ)。「2026年10月」は84pxで2行へ折り返したのでタイトル幅は100px。
 
-### チャット (`src/chat/` / `ChatScene` / `server/chat/`) (2026-09-24)
+### チャット (`src/apps/chat/` / `ChatScene` / `server/chat/`) (2026-09-24)
 
 SUMMARY.md #8の「チャットツール」。**Discordとの連携は見送り、自前のサーバにした。**
 Discordは自分のアカウントでの自動操作(self-bot)が規約違反で、Bot名義での発言にしかならない上、
@@ -1828,8 +1839,8 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
 - **Webクライアント**: `server/chat/web/index.html`(1ファイル、同じサーバが配る)。ロングポーリング(`wait=25`)で即時受信
 - **pico-os側**: `ChatScene`(部屋の一覧 ⇔ 部屋の中を1シーンで切り替え、`applyMode()`)。設定は`/sys/chat.cfg`
   (`server = ...` / `token = ...` / 任意で`poll-ms`)
-  - `chat/Chat_Proto`: 1行1件のTSVの読み取り(本文だけ`\n` `\t` `\\`をエスケープして送る)と行の切り出し(`LineSink`)。ソケットを持たない
-  - `chat/Chat_Client`: `HttpRequest`で問い合わせる係。**同時に1本、優先順は送信 > 開いている部屋の新着(3秒ごと) > 部屋の一覧(10秒ごと)**。
+  - `apps/chat/Chat_Proto`: 1行1件のTSVの読み取り(本文だけ`\n` `\t` `\\`をエスケープして送る)と行の切り出し(`LineSink`)。ソケットを持たない
+  - `apps/chat/Chat_Client`: `HttpRequest`で問い合わせる係。**同時に1本、優先順は送信 > 開いている部屋の新着(3秒ごと) > 部屋の一覧(10秒ごと)**。
     **ロングポーリングにしない**のは、接続が1本しか無く、待っている間は送信できなくなるため。失敗は5秒→60秒で取り直し、401は取り直さない
   - **`HttpRequest`にkeep-alive(`setKeepAlive()`)と任意のヘッダ1行(`setExtraHeader()`)を足した**。HTTPSはハンドシェイクで
     1〜2秒画面が止まるので、使い回さないと数秒ごとに固まる。**使い回している間はTLSの約40KBを持ち続ける**(`ChatScene::onExit()`で閉じる)。
@@ -1877,7 +1888,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   WebクライアントはChromium(Playwright)で作成/検索/参加コード/メンバー管理(追放すると相手の画面から部屋が消える)を確認した。
   **実機(RP2350 + BearSSL)とLet's Encryptの本物の証明書での接続は未確認**
 
-### TODOアプリ(Todoist連携) (`src/todo/` / `TodoScene` / `util/Json_Reader`) (2026-10-01)
+### TODOアプリ(Todoist連携) (`src/apps/todo/` / `TodoScene` / `util/Json_Reader`) (2026-10-01)
 
 ランチャの「TODO」。**Todoist(https://todoist.com)のタスクを見る・足す・完了にする + 時刻つきの期限をOSの通知で知らせる**。
 連携先の比較(Google Tasks/Microsoft To Do=OAuth必須、iCloud=CalDAVのXML、Notion=応答が大きい)の結果、
@@ -1981,7 +1992,7 @@ SUMMARY.md未掲載。Google ニュースのRSS(APIキー不要)を読むため�
 - 検証: `xml_reader_test`(run.sh の apps)、`lua_ext_test`(xml_pick/sd_xml_pick)、PCビルドで偽のRSSサーバ(`base=http://127.0.0.1:8161`)を相手に一覧・詳細・キーでのスクロールを`--tap`/`--shot`
   (`PICOOS_VERIFY_LCD=1`で食い違い0)。**本物のGoogle ニュース(news.google.com のTLS・実機)では未確認**: 焼き込みのルートはGTS Root R1/R4があるので通る見込みだが、この環境からは繋がらない。
 
-### ゲームボーイ (`src/gb/` / `GameBoyScene` / `lib/peanut_gb/`) (2026-09-24)
+### ゲームボーイ (`src/apps/gb/` / `GameBoyScene` / `lib/peanut_gb/`) (2026-09-24)
 
 SUMMARY.md #9。**エミュ本体は[Peanut-GB](https://github.com/deltabeard/Peanut-GB)**(MIT、C99のヘッダ1本、DMG専用)を
 `lib/peanut_gb/src/peanut_gb.h`へ無改造でvendorした(Luaと同じ`lib/<名前>/src/`の形なのでPlatformIOが自動で拾う。
@@ -1990,7 +2001,7 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
 - **選んだ理由**: ROMの読み出しがコールバック(置き場所をOS側で決められる)・1行ずつ描画を渡す(画面全体のバッファが要らない)・
   RP2040でもフルスピード・MIT。比べたもの: Pico-GB(YouMakeTech、MIT。Peanut-GB+SPI液晶+SDで一番近い参考例、ROMはFlashへ書く)、
   pico-peanutGB(GBC対応だがGPL-3でHDMI出力)、gb-rp2350(Rust)、gnuboy(GPL・重い)、SameBoy/Gambatte/mGBA(正確だが重すぎる)。
-- **`peanut_gb.h`の実装を取り込むのは`src/gb/Gb_Emu.cpp`だけ**(2箇所で取り込むと多重定義)。他は`GbEmu`クラスだけを見る。
+- **`peanut_gb.h`の実装を取り込むのは`src/apps/gb/Gb_Emu.cpp`だけ**(2箇所で取り込むと多重定義)。他は`GbEmu`クラスだけを見る。
   `ENABLE_SOUND=1`(音源チップの読み書きを`audio_read()/audio_write()`で受け取る。下記「ゲームボーイの音」)、`PEANUT_GB_12_COLOUR=0`(4段階だけ)。
 - **ROMの置き場所は段階を分ける**。Peanut-GBはROMを1バイトずつコールバックで読むので、SDから都度読むことはできない。
   - **第1段(実装済み)**: 256KB(`GbEmu::kMaxRomBytes`)までを**RAMへ丸ごと`malloc`**(`GbEmu::load(path)`)。ROMの大きさは2のべき乗なので、
@@ -1999,7 +2010,7 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
     確保できなければ`OutOfMemory`で断るだけで落ちない(そのときは下の第3段へ回す)
   - 第2段(未。第3段で足りるので作らない見込み): 先頭16KB+直近のバンク数枚だけをRAMに持ち、無いバンクに当たったらSDから読む
   - **第3段(実装済み、2026-10-19)**: 内蔵フラッシュへ書いてXIPで読む(Pico-GBの方式)。下の「内蔵フラッシュのROMの置き場」
-- **内蔵フラッシュのROMの置き場(`gb/Gb_Rom_Flash` / `storage/Flash_Area`、2026-10-19)**: ファームの更新のLittleFSの領域
+- **内蔵フラッシュのROMの置き場(`apps/gb/Gb_Rom_Flash` / `storage/Flash_Area`、2026-10-19)**: ファームの更新のLittleFSの領域
   (`board_build.filesystem_size = 1728k`、`_FS_start`=0x1024F000〜`_FS_end`)を**ファイルシステムを通さず生で間借り**する。
   LittleFSのファイルにしないのは、1バイトずつのseek+readが間に合わず、ファイルが連続して置かれる保証も無い(XIPのポインタを取れない)ため。
   - 置き方: 先頭4KB=見出し(`Header`: 目印`PRAW`+`GBRM`・版・ROMの大きさ・ROMのヘッダ0x100〜0x14F・頭と末尾16KBのハッシュ・全体のハッシュ、FNV-1a)、
@@ -2311,7 +2322,7 @@ SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML
   実機が無い。音源の合成自体は1サンプルあたりの演算が単純な加算/シフトのみで、
   チャンネル数が倍になっても2コア目の負荷は線形にしか増えない見込み)。
 
-### ゲームボーイの音 (`src/sound/Gb_Apu` / `Gb_Audio_Link` / `gb/Gb_Audio_Sink.hpp`) (2026-09-26)
+### ゲームボーイの音 (`src/sound/Gb_Apu` / `Gb_Audio_Link` / `apps/gb/Gb_Audio_Sink.hpp`) (2026-09-26)
 
 SUMMARY.md #11「GB対応」。Peanut-GBは音源チップ(APU)を持たず、`ENABLE_SOUND=1`で0xFF10〜0xFF3Fの読み書きを
 `audio_read()/audio_write()`へ回すだけなので、**音源チップを自前で書いた**(minigb_apu等をvendorしなかったのは、
@@ -2344,7 +2355,7 @@ SUMMARY.md #11「GB対応」。Peanut-GBは音源チップ(APU)を持たず、`E
 - **読み出し**: 音源は2コア目にあるので、`GbEmu`が書いた値の控え(`apu_regs`)に「読むと常に1のビット」を足して答える
   (Peanut-GBの`ortab`と同じ表)。NR52の下位4bit(鳴っているチャンネル)だけは、2コア目が知らせた値(約1フレーム遅れ)と
   **このフレームにトリガーしたチャンネル**を合わせる。
-- **`GbAudioSink`**(`gb/Gb_Audio_Sink.hpp`): エミュから見た渡し先。実物は`SoundFunctions::GbAudio()`で、`GameBoyScene`が
+- **`GbAudioSink`**(`apps/gb/Gb_Audio_Sink.hpp`): エミュから見た渡し先。実物は`SoundFunctions::GbAudio()`で、`GameBoyScene`が
   `load()`の前に`setAudioSink()`する。エミュ本体を`SoundFunctions`へ直接つながないのは、`gb_emu_test`を音抜きで軽く保つため
   (テストでは記録するだけの偽物を渡す)。渡し先が無くても控えだけで読み書きは動く。
 - 起動ROMは飛ばしているので、`load()`が起動ROMの後の値(NR50=0x77、NR51=0xF3、NR11/NR12)を書いておく(自分で書かないゲームがあるため。トリガーはしない)。
@@ -2450,7 +2461,7 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
   PCビルド: 設定アプリで「音質」を44.1kHzへ→`sound.cfg`に書かれ、再起動しても44100Hzで始まる。44.1kHz・15kHzのWAVをミュージックアプリから鳴らし
   `SDL_AUDIODRIVER=disk`の出力が15kHzのまま。**実機・PCM5102Aでは未確認**。
 
-### ミュージックアプリ(プレイリスト・リピート・ミックス)(`MusicScene` / `widgets/apps/MusicPlayerPanel` / `sound/Play_Queue.hpp`) (2026-10-10)
+### ミュージックアプリ(プレイリスト・リピート・ミックス)(`MusicScene` / `widgets/apps/MusicPlayerPanel` / `apps/music/Play_Queue.hpp`) (2026-10-10)
 
 SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
 
@@ -2485,7 +2496,7 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
   リピート全曲で頭へ戻る、フォーカスで一覧→再生中の欄、`music.cfg`の保存。**実機では未確認**。
 - 未: 曲の並べ替え・プレイリストの編集(フォルダを母艦で作る前提)、アルバムアートやタグ。(アプリを閉じても鳴り続ける再生は2026-10-15に入った)
 
-### 動画(.pvid)(`script/generate_pvid.py` / `VIDEO_FORMAT.md` / `src/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
+### 動画(.pvid)(`script/generate_pvid.py` / `VIDEO_FORMAT.md` / `src/apps/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
 
 MJPEGは本体でJPEGを解く・フルカラーを16色へ落とす処理が重く、画面(`OSData::frame`)が4bppなので利点も活きないため、
 **PCで「動画ごとの16色(0=黒・15=白は固定、残り14色はL\*a\*b\*のk-means)+画面に固定したBayer 8x8のディザ+8x8タイルの差分」へ
@@ -2531,7 +2542,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   - `--stdout`でPCビルドの標準入力へパイプできる
   - **ターミナルに打った1行をそのまま送る**(`start_console()`。`hw info`・`dbg pause`等のコマンド用。2026-10-11)。小窓はキーの押下/離ししか送らないので、
     ポートを開いたままコマンドを打つ手段がこれしか無かった。書き込みは`write_lock`で、`pad`の行と混ざらない
-- **使っている所**: `GameBoyScene`(画面の`GameBoyPad`とORで重ねる。対応は`gb/Gb_PadMap.hpp`、BはYでも押せる。HOMEで戻る)、
+- **使っている所**: `GameBoyScene`(画面の`GameBoyPad`とORで重ねる。対応は`apps/gb/Gb_PadMap.hpp`、BはYでも押せる。HOMEで戻る)、
   Lua(`pico.pad_connected/pad_down/pad_pressed/pad_released`、ボタンは小文字の名前。知らない名前はエラー)、
   ステータスバー(つながっている間だけゲームパッドのアイコン。無いのが普通なのでバツは付けない)、
   動作確認は「動作確認」アプリの「コントローラー」(`pc/sdcard/lua/apps/動作確認/pad.lua`)。
@@ -2771,7 +2782,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - 上の段は`[戻る][開く][保存] … [↶][⋮][キーボード]`。「新規」は幅が足りないので`⋮`(編集メニュー、`PickerDialog`のChoice)の中:
   元に戻す/やり直し/範囲選択(選択を解除)/すべて選択/コピー/切り取り/貼り付け/検索/置換/新規作成。メニューを開くと据え置きの
   キーボードは閉じ、終わったら開き直す(ダイアログより手前に出るため)。
-- **文書を書き換えるのは必ず`edit()`**。変わらない頭と尻を除いた差分(UTF-8の文字の境目に揃える)を`util/Edit_History.hpp`
+- **文書を書き換えるのは必ず`edit()`**。変わらない頭と尻を除いた差分(UTF-8の文字の境目に揃える)を`apps/texteditor/Edit_History.hpp`
   (`EditHistory`、シーンのメンバの4KiB)へ記録する。1件=「posから del を ins に置き換えた」で、スナップショットは持たない。
   続けて打った文字・Backspace/Deleteは1秒以内・改行なし・64バイトまで1件にまとめる。溢れたら古い件から捨てる(戻せる回数が減るだけ)。
   すべて置換は`chained`でひとまとまり(1回で戻る)。**未保存かどうかは記録の位置で決める**(`markSaved()`/`atSaved()`。元に戻して保存した時点へ戻れば
@@ -2797,7 +2808,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
   `--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 続けて打った分をCtrl+Zで戻す・Shift+Homeで選択→Ctrl+C→Ctrl+V・Ctrl+Fで検索バーと2/4・
   Ctrl+Hですべて置換→Ctrl+Zで全部戻る・編集メニュー。**実機では未確認**(すべて置換の`memmove`の繰り返しの時間)。
 
-### SSHクライアント (`src/ssh/` / `SshScene` / `lib/monocypher/`) (2026-09-30)
+### SSHクライアント (`src/apps/ssh/` / `SshScene` / `lib/monocypher/`) (2026-09-30)
 
 ランチャの「SSH」。**画面全体が1つの端末**で、接続先・ホスト鍵の確認・パスワードも端末の中で聞く
 (普通の`ssh`コマンドと同じ流れ。パスワードは画面に出さない)。キーボードは**テキストエディタと同じく
@@ -2847,7 +2858,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
   パスワードへ進む。信頼したホスト鍵は`/sys/ssh/known_hosts`へ追記(**OpenSSHと同じ書き方**。22番以外は`[host]:port`。
   PCの`~/.ssh/known_hosts`の行をそのまま置いてもよい。ハッシュ化された行は読まない)。**鍵が変わったら接続を拒否**し、
   該当する行を消すよう案内する。
-- **秘密鍵の暗号化(2026-09-30)**: Wi-Fiのパスワードと同じ`PICO_Secret`(`util/Secret_Cipher.hpp`、用途文字列`"ssh-id-ed25519"`)。
+- **秘密鍵の暗号化(2026-09-30)**: Wi-Fiのパスワードと同じ`PICO_Secret`(`crypto/Secret_Cipher.hpp`、用途文字列`"ssh-id-ed25519"`)。
   暗号鍵を画面のキーボードで打たせるのは現実的でないので、**PCで作った平文の鍵をSDへそのまま置けばよく、
   読んだときに平文なら暗号化して同じ場所へ書き直す**(`SshUtil::LoadPrivateKey()`。端末に「秘密鍵を暗号化して保存し直しました」)。
   - 見分け方: 暗号化したファイルは`enc1:`+16進の1行、平文は`-----BEGIN OPENSSH PRIVATE KEY-----`で始まる
@@ -2922,7 +2933,7 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - 検証はPCビルドの`--tap`/`--shot`(長いテキストのスクロール、480x600の画像=窓モードのドラッグと読み直し、
   48x24の画像=全体モードで中央、Markdown、「戻る」でファイルアプリへ)。**実機での速さは未計測**。
 
-### 電卓(関数電卓・グラフ電卓) (`CalculatorScene` / `util/Calc_Eval.hpp` / `widgets/apps/CalculatorKeypad` / `widgets/apps/GraphView`) (2026-10-03)
+### 電卓(関数電卓・グラフ電卓) (`CalculatorScene` / `apps/calculator/Calc_Eval.hpp` / `widgets/apps/CalculatorKeypad` / `widgets/apps/GraphView`) (2026-10-03)
 
 タブは「電卓 / グラフ / 履歴」。使える関数の一覧と操作はSUMMARY.md「電卓」。ここには設計の判断だけ残す。
 
@@ -3196,7 +3207,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | 5 | Luaアプリ/API | **2Dゲームの簡易エンジン`pico.game`(2026-10-06)あり**。**`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`。関数電卓+グラフ電卓、2026-10-03)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`SUMMARY.md`「7. 標準アプリ開発」参照。 |
-| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/リバーシ/ブロック崩し/スクラッチパッド/ペイント/テトリスはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照。リバーシ・マインスイーパー・ブロック崩し・テトリスは`pico.game`の上に作り直した=下記「ボードゲーム4本のpico.gameへの移行」)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。**TODO/リマインダーはTodoist連携の`TodoScene`として実装済み**(下記「TODOアプリ」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
+| 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/apps/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/リバーシ/ブロック崩し/スクラッチパッド/ペイント/テトリスはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照。リバーシ・マインスイーパー・ブロック崩し・テトリスは`pico.game`の上に作り直した=下記「ボードゲーム4本のpico.gameへの移行」)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。**TODO/リマインダーはTodoist連携の`TodoScene`として実装済み**(下記「TODOアプリ」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、`GameBoyScene`としてPCで動作**。256KBまでのROMはRAMへ、1MBまでは内蔵フラッシュへ書いてXIPで読む。音も鳴る(#11)。実機での速さ・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
 | 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。MIDIはPCの`script/midi2mml.py`で取り込む。GBエミュの音(音源チップの再現)も鳴る。**実機での確認は未**(下記「音声出力」「曲データ」「ゲームボーイの音」参照)。 |
@@ -3212,12 +3223,12 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 - **Markdownブラウザのブラウザ化**: 仕様は `PROTOCOL.md`(HTTP/行指向TSV/SDをキャッシュにする方式)、サーバの参照実装は `script/reference_server.py`。
   **第1段(リンク追従・履歴・ナビゲーションヘッダー)と第2段(キャッシュ層)は実装済み。**
   第1段: `MarkdownScene`が履歴を自前で持ち、`MarkdownView::setOnLinkTap()`から`PICO_IO::resolve()`で相対パスを解決して同じシーンのまま開き直す。
-  第2段: `storage/Doc_Cache.hpp`(下記)。
-  第3段(HTTPクライアント): `util/Url.hpp` / `net/Http_Response` / `task/Http_Get`(下記)。
-  第4段(取得→キャッシュ→表示の配線): `net/Doc_Fetch`(下記)。**ここまでで「サーバ上の文書を読む」が成立している。**
+  第2段: `apps/browser/Doc_Cache.hpp`(下記)。
+  第3段(HTTPクライアント): `util/Url.hpp` / `net/Http_Response` / `net/Http_Get`(下記)。
+  第4段(取得→キャッシュ→表示の配線): `apps/browser/Doc_Fetch`(下記)。**ここまでで「サーバ上の文書を読む」が成立している。**
   `network.cfg` の `browser-home` にURLを書くと、Markdownアプリがそこを開く。
-  第7段(検索・リロード): `net/Doc_Search` + `dialogs/SearchDialog`(下記「検索」)。
-  第8段(マニフェスト): `net/Manifest`(下記「マニフェスト」)。
+  第7段(検索・リロード): `apps/browser/Doc_Search` + `dialogs/SearchDialog`(下記「検索」)。
+  第8段(マニフェスト): `apps/browser/Manifest`(下記「マニフェスト」)。
   第5段(画像の解決と先読み)・第6段(discovery)も実装済み。
   **`PROTOCOL.md`のv1はこれで一通り実装できている。**
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
@@ -4119,11 +4130,11 @@ Luaスクリプトから表示できるようにした(`SearchDialog`はMarkdown
 ### ネットワーク(2026-09-21実装)
 
 `pico.http_request(method, url, body, content_type, callback)` / `pico.http_cancel()`。
-既存の`Http_Get`(`src/task/Http_Get.hpp`)はMarkdownブラウザのキャッシュ用途に
+既存の`Http_Get`(`src/net/Http_Get.hpp`)はMarkdownブラウザのキャッシュ用途に
 特化していて汎用のHTTPクライアントとしては使えなかった(GET専用でメソッドが
 `sendRequestLine()`にリテラル`"GET "`で埋め込まれている/送信ボディの概念が無い/
 `HttpBodyGate`が`statusCode()==200`以外の本文を黙って捨てる/200・304以外を
-一律`FAILED`扱いにする)ため、新設の`HttpRequest`(`src/task/Http_Request.hpp/.cpp`)を
+一律`FAILED`扱いにする)ため、新設の`HttpRequest`(`src/net/Http_Request.hpp/.cpp`)を
 別クラスとして用意した。
 
 - **`HttpGet`とコード骨格(接続/送信/受信ループ・タイムアウト・リダイレクト追跡)は
@@ -4516,7 +4527,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
 
 **ソースの置き場**: `LuaEngine.cpp` が4400行を超えたので、追加分は `src/lua/LuaEngine_Ext.cpp`(ウィジェット補助・イベント・ジェスチャー・リスト/タブ・ダイアログ・
 描画の補助・ユーティリティ)と `LuaEngine_Crypto.cpp`(暗号API)に置いた。`LuaEngine` の private へは `friend struct LuaEngineExt` / `LuaEngineCrypto` 経由で触る。
-登録は `registerApi()` の末尾の `RegisterExtApi()`(同名は後勝ちなので `list_add` は差し替え)。**ホストテストのリンクの一覧にこの2本と `util/Secret_Aead.cpp` と
+登録は `registerApi()` の末尾の `RegisterExtApi()`(同名は後勝ちなので `list_add` は差し替え)。**ホストテストのリンクの一覧にこの2本と `crypto/Secret_Aead.cpp` と
 `lib/monocypher`(`lua_obj/monocypher.o`)を足した**(`LuaEngine.cpp` をリンクする4つの塊すべて)。
 
 1. **Luaから作れるウィジェットを7種足した**(合計27種): `ProgressBar`(新設、タップ素通り)・`TextView`・`ImageView`・`MarkdownView`・`AnalogClock`・`DurationPicker`・`MonthGrid`。
@@ -4550,7 +4561,7 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
 7. **OS同梱のLuaモジュール**(`src/lua/LuaBuiltinModules.hpp`。ソースはフラッシュに置くだけで、`require` されたときだけコンパイルする): `pico.ui`(宣言的なUIの組み立て)・
    `pico.async`(`async.run/await/sleep/http/message/input/choice/date/time/number/...` でコルーチン連携)・`pico.tween`。`preloadModules()` が `pico.` で始まる名前を
    アプリのフォルダより先に同梱ソースから読む(実行中のコンパイルを避ける「先読み」の仕組みに乗せた)。**静的な `require("pico.ui")` の書き方だけ**先読みされる。
-8. **暗号化**(`util/Secret_Aead.hpp/.cpp`、`LuaEngine_Crypto.cpp`): `pico.encrypt(plain[, password])` / `decrypt` / `is_encrypted` / `hash`(BLAKE2b-256・鍵付き可)/ `random_bytes`、
+8. **暗号化**(`crypto/Secret_Aead.hpp/.cpp`、`LuaEngine_Crypto.cpp`): `pico.encrypt(plain[, password])` / `decrypt` / `is_encrypted` / `hash`(BLAKE2b-256・鍵付き可)/ `random_bytes`、
    `pico.store_save(tbl, {encrypt=, password=})` / `pico.store_load({password=})`。**XChaCha20-Poly1305(Monocypher)+パスワードならArgon2id(64KiB・3パス)**。形式は
    `"enc2:"`+base64url(`version(1)`[+`passes(1)`+`blocks(2)`+`salt(16)`]+`nonce(24)`+暗号文+`MAC(16)`)で、ヘッダもAADに入れて認証する。
    - **パスワード無し**は鍵が「`PICO_Secret::kKey`(ファームに焼かれた固定鍵)+アプリのフォルダ名」なので、守れるのは**SDだけを盗まれる場合と、別のアプリが復号すること**だけ
@@ -5010,21 +5021,21 @@ OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なの�
   SD無し/ディレクトリが存在しない場合に安全に0件を返すことのみASanで確認し、
   実際の走査結果はPCビルドの`--shot`(上記)で確認する、という役割分担にした。
 
-### アプリストア(`src/store/` / `StoreScene` / `APP_REPO.md` / `script/build_app_repo.py`)(2026-10-11)
+### アプリストア(`src/apps/store/` / `StoreScene` / `APP_REPO.md` / `script/build_app_repo.py`)(2026-10-11)
 
 ランチャの「ストア」(`StoreScene`、アイコン`IconID::AppStore`)が、Webに置いた配布物からLuaアプリを入れる・更新する・消す。
 **形式は静的なファイルだけ**(catalog.tsv + catalog.sig + `<id>/<版>/files.tsv` + ファイル)なので、GitHub Pages でも
 Raspberry Pi の nginx でも同じ。仕様は`APP_REPO.md`。既定のURLは`https://kimu1109.github.io/pico-os/apps/`(`/sys/store.cfg`の`url`)。
 
 - **守り方**: カタログ(catalog.tsv)だけにEd25519で署名し(`"pico-os-apps-v1\0"`+SHA-256(catalog))、そこから
-  files.tsv(SHA-256)→各ファイル(SHA-256)とつなぐ。鍵は`src/store/App_Repo_Keys.hpp`の`kBuiltin`(今は空の目印1件=全部0。
+  files.tsv(SHA-256)→各ファイル(SHA-256)とつなぐ。鍵は`src/apps/store/App_Repo_Keys.hpp`の`kBuiltin`(今は空の目印1件=全部0。
   全部0の鍵は信頼しない)か`/sys/store.cfg`の`key = 16進64桁`(4行まで。SDへ書ける人はアプリを直接置けるので弱くならない)。
   **秘密鍵は利用者のPCにだけ置く**(`build_app_repo.py keygen`。リポジトリ・サーバ・GitHubのSecretsにも置かない)。
   同じURLで前に見た`serial`より小さい一覧は断る(`/sys/store/state.cfg`。古い署名済みの一覧へ戻される攻撃)。
   app.cfgの`id`・`version`がカタログと違う、または**権限がカタログの`perms`を超える**ものは入れない(入れる前に`perms`を確認のダイアログで見せる)。
   署名の確認はMonocypherの`crypto_ed25519_check`(SSHと同じvendor)。署名側の`build_app_repo.py`はRFC 8032を素のPythonで書いたもの
   (RFCのテストの鍵で一致、Pythonの署名をMonocypherで確かめるのは`app_repo_test`)。
-- **AppStore(`store/App_Store`)**: `HttpRequest`1本をkeep-aliveで使い回す(HTTPSのハンドシェイクを1回に。画面を離れるとき`close()`)。
+- **AppStore(`apps/store/App_Store`)**: `HttpRequest`1本をkeep-aliveで使い回す(HTTPSのハンドシェイクを1回に。画面を離れるとき`close()`)。
   受け取りながらSDへ書いてSHA-256を取る(`FileSink`、大きさの上限付き)。catalog.tsvは`/sys/store/catalog.part`へ取り、確かめてから
   `catalog.tsv`へ差し替える(失敗しても前の一覧のまま)。インストールは`/sys/store/staging/`へ全部取って確かめてから、
   **ファイルを1つずつ**`/lua/apps/<dir>/`へ移す(ディレクトリごと移さないのは、更新でアプリが書いたセーブ等を残すため)。
@@ -5174,8 +5185,8 @@ Lua向けの土台は「発行側・ファクトリ・プロパティ共通口�
 - 格子状・多ボタンのUIは、部品ごとに`Button`を`new`せず「`render()`で直接描いてタップ位置から逆算する」型へ寄せる
   (`AppGrid`/`ColorDialog`/`KeyboardNum`/`TabBar`/`DurationPicker`)。
 - **新しいウィジェットの置き場所は上記「ウィジェットの置き場所」に従う**。`widgets/`直下は汎用部品専用で、
-  特定のアプリのために作ったものは`widgets/apps/`へ。**汎用かどうか迷ったら`apps/`へ置く**
-  (後で汎用と分かって上げるのは簡単だが、直下に溜まると分類し直す手間が大きい)。
+  1つのアプリのために作ったものは`src/apps/<機能>/ui/`へ。**迷ったらそのアプリの`ui/`へ置く**
+  (後で他のアプリでも使うと分かったら`gui/widgets/apps/`か直下へ上げる。直下に溜まると分類し直す手間が大きい)。
 - 判断に迷ったら `SUMMARY.md`(https://raw.githubusercontent.com/Kimu1109/pico-os/refs/heads/main/SUMMARY.md)と実コードを突き合わせて確認する。
 - **`SUMMARY.md`を書き換えるときは体裁を崩さないこと**。「TODO」は**項目名だけ**の一覧に保ち、
   説明を足したくなったら下の「詳細」側へ書く(TODO欄に長文をぶら下げると一覧として読めなくなるため、

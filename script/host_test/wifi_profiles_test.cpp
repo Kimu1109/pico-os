@@ -6,7 +6,7 @@
 #include "net/Wifi_Profiles.hpp"
 #include "storage/SD_Path.hpp"
 #include "system/Config_Functions.hpp"
-#include "util/Secret_Cipher.hpp"
+#include "crypto/Secret_Cipher.hpp"
 #include <cstdio>
 #include <cstring>
 #include <string>

@@ -1,4 +1,4 @@
-// SSHクライアント(src/ssh/Ssh_Client)の結合テスト。本物の OpenSSH の sshd を相手にする。
+// SSHクライアント(src/apps/ssh/Ssh_Client)の結合テスト。本物の OpenSSH の sshd を相手にする。
 //
 // run_net.sh が使い捨てのホスト鍵・利用者の鍵・設定で sshd を 127.0.0.1 に立ててから呼ぶ。
 // 引数: <port> <利用者の秘密鍵(OpenSSH形式)のパス> <ユーザー名> <ホスト鍵の公開鍵ファイル(.pub)>
@@ -14,9 +14,9 @@
 //     名前(localhost)は踏み台の側で引かれる / 大きな出力が通り道の受信窓(8KB)を跨いでも欠けない /
 //     踏み台から繋げない相手は理由付きで失敗する / 中のSSHを閉じると踏み台も閉じる
 //   - ホスト鍵を信頼しなければ中止される / 鍵が無くパスワードも使えないサーバでは認証に失敗する
-#include "ssh/Ssh_Client.hpp"
-#include "ssh/Ssh_Util.hpp"
-#include "ssh/Vt_Terminal.hpp"
+#include "apps/ssh/Ssh_Client.hpp"
+#include "apps/ssh/Ssh_Util.hpp"
+#include "apps/ssh/Vt_Terminal.hpp"
 #include "OS_Data.hpp"
 
 #include <chrono>

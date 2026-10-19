@@ -5,9 +5,9 @@
 #include <cstring>
 
 // 内蔵フラッシュのLittleFSの領域(platformio.ini の board_build.filesystem_size)を、
-// ファイルシステムを通さず生で読み書きする口。今の利用者はゲームボーイのROMの置き場(gb/Gb_Rom_Flash)。
+// ファイルシステムを通さず生で読み書きする口。今の利用者はゲームボーイのROMの置き場(apps/gb/Gb_Rom_Flash)。
 //
-// この領域は本来ファームの更新(firmware/Fw_Store)の置き場だが、そちらは更新の間だけ使い、起動時に
+// この領域は本来ファームの更新(apps/firmware/Fw_Store)の置き場だが、そちらは更新の間だけ使い、起動時に
 // 片付けて空にする。ゲームボーイのROMはそこを間借りする:
 //   - 生のデータを置いている間は、領域の先頭4バイトを kRawMagic にする(holdsRawData())。
 //     FirmwareFunctions::Setup() はこれを見たらLittleFSをマウントしない(マウントに失敗すると

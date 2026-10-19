@@ -1,7 +1,7 @@
 # PlatformIO の追加スクリプト(platformio.ini の extra_scripts = pre:script/pio_firmware.py)。
 # 2. のターゲットは PROGNAME が決まった後に足す必要があるので post:script/pio_firmware_targets.py に分けてある。
 #
-# 1. ファームの版を $BUILD_DIR/pico_build_info/Pico_Build_Info.h へ書く(src/firmware/Fw_Version.cpp だけが読む)。
+# 1. ファームの版を $BUILD_DIR/pico_build_info/Pico_Build_Info.h へ書く(src/apps/firmware/Fw_Version.cpp だけが読む)。
 #    通し番号 = git rev-list --count HEAD、git = 短いコミットのハッシュ(手元に変更があれば末尾に'+')、
 #    日時 = HEADのコミットの日時(UTC)。中身が変わったときだけ書き直すので、変更が無ければビルドは「最新」のまま。
 #    gitが無い/リポジトリでない場合は 0 / "nogit"。

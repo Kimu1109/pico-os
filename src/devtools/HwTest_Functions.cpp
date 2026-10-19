@@ -1,5 +1,5 @@
 #include "devtools/HwTest_Functions.hpp"
-#include "firmware/Fw_Version.hpp"
+#include "apps/firmware/Fw_Version.hpp"
 #include "devtools/DevTools_Functions.hpp"
 #include "devtools/CrashDump_Functions.hpp"
 #include "system/Mem_Functions.hpp"

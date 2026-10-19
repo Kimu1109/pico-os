@@ -8,9 +8,9 @@
 //      読み戻す、という一連の配線が実際のタッチ経路(causeOnPressStart等)で
 //      動くこと
 // を確認する。
-#include "gui/scenes/CalculatorScene.hpp"
-#include "gui/widgets/apps/CalculatorKeypad.hpp"
-#include "gui/widgets/apps/GraphView.hpp"
+#include "apps/calculator/CalculatorScene.hpp"
+#include "apps/calculator/ui/CalculatorKeypad.hpp"
+#include "apps/calculator/ui/GraphView.hpp"
 #include <cmath>
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"

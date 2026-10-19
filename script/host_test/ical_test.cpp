@@ -1,4 +1,4 @@
-// iCalendar(.ics)の読み取り(src/calendar/Ical)のテスト。
+// iCalendar(.ics)の読み取り(src/apps/calendar/Ical)のテスト。
 //
 // 一番効くのは繰り返し(RRULE)の引き当て。RFC 5545 の例をそのまま使って、
 // 「何日に出るか」を日付単位で固定する。月表示の印はこれで決まるので、
@@ -6,7 +6,7 @@
 //
 // もう1つは入力の揺れ(CRLF/LFの混在、行の折り返し、BOM、大文字小文字、
 // 1バイトずつ届く場合)で結果が変わらないこと。
-#include "calendar/Ical.hpp"
+#include "apps/calendar/Ical.hpp"
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 

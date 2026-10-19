@@ -14,7 +14,7 @@
 //
 // 使い方: chat_net_test <httpのport> <httpsのport> <ca.pem> <aliceのトークン> <bobのトークン>
 //                       <chat_server.py> <DB>(部屋を消すために管理コマンドを呼ぶ)
-#include "chat/Chat_Client.hpp"
+#include "apps/chat/Chat_Client.hpp"
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"

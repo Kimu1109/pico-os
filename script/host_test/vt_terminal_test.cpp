@@ -1,5 +1,5 @@
-// 端末エミュレータ(src/ssh/Vt_Terminal)のホストテスト。描画は無く、文字の格子を直接見る。
-#include "ssh/Vt_Terminal.hpp"
+// 端末エミュレータ(src/apps/ssh/Vt_Terminal)のホストテスト。描画は無く、文字の格子を直接見る。
+#include "apps/ssh/Vt_Terminal.hpp"
 
 #include <cstdio>
 #include <cstring>

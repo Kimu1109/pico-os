@@ -4,16 +4,16 @@
 //   - AppGrid: ウィジェットのマスの当たり判定・中のボタン・押すとアプリが開く・見た目の印(stamp)が変わったら描き直す
 //   - TodoCache: 今日までのタスクだけを覚える・/sys/todo_cache.tsv の往復
 //   - HomeAgenda: /calendar/*.ics から今日から7日間の予定を拾う(終わった予定・7日より先は入れない・ファイルごとの色)
-#include "home/Home_Layout.hpp"
-#include "home/Home_Widget.hpp"
-#include "home/Home_Agenda.hpp"
-#include "home/Home_Time.hpp"
-#include "todo/Todo_Cache.hpp"
+#include "apps/home/Home_Layout.hpp"
+#include "apps/home/Home_Widget.hpp"
+#include "apps/home/Home_Agenda.hpp"
+#include "apps/home/Home_Time.hpp"
+#include "apps/todo/Todo_Cache.hpp"
 #include "services/App_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"
-#include "gui/widgets/systems/AppGrid.hpp"
+#include "apps/home/AppGrid.hpp"
 #include "gui/core/Scene.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"

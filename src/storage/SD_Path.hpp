@@ -59,7 +59,7 @@ namespace PICO_Path {
         // ホーム画面のTODOウィジェットに出す、最後に取ったTodoistの今日のタスク。TodoCache参照
         constexpr const char* SYS_TODO_CACHE = "/sys/todo_cache.tsv";
 
-        // アプリストア(store/App_Store、APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
+        // アプリストア(apps/store/App_Store、APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
         // インストールしたアプリのファイル一覧(installed/<id>.tsv)・取得中の置き場(staging/)
         constexpr const char* STORE_DIR = "/sys/store";
         constexpr const char* STORE_CATALOG = "/sys/store/catalog.tsv";

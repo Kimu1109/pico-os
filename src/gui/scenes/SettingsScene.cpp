@@ -19,7 +19,7 @@
 #include "gui/widgets/dialogs/WifiScanDialog.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "net/Wifi_Profiles.hpp"
-#include "task/NetworkScan.hpp"
+#include "net/NetworkScan.hpp"
 
 #include "devtools/DevTools_Functions.hpp"
 #include "services/PowerMenu_Functions.hpp"
@@ -403,7 +403,7 @@ void SettingsScene::startWifiScan(){
 void SettingsScene::pollWifiScan(){
     if(!this->wifi_scan_task) return;
 
-    // 所有権はこちらにある(task/NetworkScan.hppのコメント参照)ので、
+    // 所有権はこちらにある(net/NetworkScan.hppのコメント参照)ので、
     // 毎フレーム自分でupdate()を呼んで進める
     this->wifi_scan_task->update();
 
@@ -466,7 +466,7 @@ void SettingsScene::openWifiScanDialog(){
 }
 
 void SettingsScene::closeWifiScanDialog(){
-    // 進行中のスキャンTaskの所有権はこちらにある(task/NetworkScan.hpp参照)ので、
+    // 進行中のスキャンTaskの所有権はこちらにある(net/NetworkScan.hpp参照)ので、
     // 完了を待たずに閉じる場合はここで自分から後始末する
     if(this->wifi_scan_task){
         delete this->wifi_scan_task;
@@ -1242,7 +1242,7 @@ void SettingsScene::onExit(){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "brightness", buf);
     }
 
-    // スキャンTaskの所有権はこちらにある(task/NetworkScan.hpp参照)ので、
+    // スキャンTaskの所有権はこちらにある(net/NetworkScan.hpp参照)ので、
     // 完了を待たずシーンごと抜けた場合はここで自分から後始末する
     if(this->wifi_scan_task){
         delete this->wifi_scan_task;

@@ -6,9 +6,9 @@
 //   - SDが無い/ .ics が無い場合に案内を出すこと
 // を見る。SD上の .ics を実際に読んで並べるところは、ホストのSdFatスタブが
 // ディレクトリの走査(openNext)を持たないので、PCビルドの --shot で確認する。
-#include "gui/scenes/CalendarScene.hpp"
+#include "apps/calendar/CalendarScene.hpp"
 #include "gui/widgets/apps/MonthGrid.hpp"
-#include "gui/widgets/dialogs/EventDetailDialog.hpp"
+#include "apps/calendar/ui/EventDetailDialog.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "system/Log_Functions.hpp"
@@ -16,7 +16,7 @@
 #include "system/Time_Functions.hpp"
 #include "gui/core/Keyboard_Functions.hpp"
 #include "OS_Data.hpp"
-#include "calendar/Calendar_Reminders.hpp"
+#include "apps/calendar/Calendar_Reminders.hpp"
 #include "system/Notification_Functions.hpp"
 
 #include <cstdio>
@@ -199,7 +199,7 @@ static void testDetailDialog(){
     check(!grid.dirty(), "点が同じなら描き直さない");
 }
 
-// 予定の通知(calendar/Calendar_Reminders)
+// 予定の通知(apps/calendar/Calendar_Reminders)
 static void testReminders(){
     using namespace NotificationFunctions;
     NotificationFunctions::CancelAll(CalendarReminders::kOwner);

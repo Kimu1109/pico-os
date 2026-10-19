@@ -1,5 +1,5 @@
 -- テトリス(pc/sdcard/lua/apps/テトリス/)のゲームの規則を、pico.* を差し替えて確かめる。
--- pico.game は本物(src/lua/LuaBuiltinModules.hpp の kGame をそのまま読む)で、描画だけ捨てる。
+-- pico.game は本物(src/lua/builtin/game.lua をそのまま読む)で、描画だけ捨てる。
 -- lua_script_test(vendorしたLuaでこのファイルを動かすだけの下請け)から run.sh が呼ぶ。
 -- 見た目はPCビルドの --tap / --shot で確かめること(ここでは描画は数えるだけ)。
 -- main.lua の末尾へ TEST(ローカル変数を覗く口)を足してから読み込む
@@ -8,10 +8,7 @@ local DIR = "/lua/apps/テトリス/"
 local fails = 0
 local function check(c, m) if c then print("[ OK ] " .. m) else print("[FAIL] " .. m) fails = fails + 1 end end
 
-local hpp = assert(io.open(ROOT_DIR .. "/src/lua/LuaBuiltinModules.hpp")):read("a")
-local _, s0 = hpp:find('kGame = R"LUA(', 1, true)
-local e0 = hpp:find(')LUA"', s0, true)
-local game = assert(load(hpp:sub(s0 + 1, e0 - 1), "=pico.game"))()
+local game = assert(load(assert(io.open(ROOT_DIR .. "/src/lua/builtin/game.lua")):read("a"), "=pico.game"))()
 
 local files_written = {}
 local pad, pad_prev = {}, {}

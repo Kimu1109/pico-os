@@ -12,11 +12,11 @@
 //     途中でやめると置いていない扱い・大きすぎる・書き込みの失敗、そこからの起動(load(path, image, size))。
 //     フラッシュはNORと同じ振る舞い(消すと0xFF、書くとAND)の偽物
 // 実際の描画(1.5倍の拡大)は、PCビルドで dmg-acid2 を表示して確認する。
-#include "gb/Gb_Emu.hpp"
-#include "gb/Gb_Rom_Flash.hpp"
+#include "apps/gb/Gb_Emu.hpp"
+#include "apps/gb/Gb_Rom_Flash.hpp"
 #include "storage/Flash_Area.hpp"
-#include "gui/widgets/apps/GameBoyPad.hpp"
-#include "gui/widgets/apps/GameBoyView.hpp"
+#include "apps/gb/ui/GameBoyPad.hpp"
+#include "apps/gb/ui/GameBoyView.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"

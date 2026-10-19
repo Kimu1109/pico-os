@@ -5,8 +5,8 @@
 //
 // SDはstubs/SdFat.hのパス->内容のmapなので、HostSd::filesを直接覗いて
 // 「何が残ったか」をそのまま検査できる。
-#include "storage/Doc_Cache.hpp"
-#include "net/Manifest.hpp"
+#include "apps/browser/Doc_Cache.hpp"
+#include "apps/browser/Manifest.hpp"
 #include "storage/SD_Path.hpp"
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"

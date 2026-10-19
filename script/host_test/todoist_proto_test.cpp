@@ -1,4 +1,4 @@
-// Todoist の応答の読み取り(todo/Todoist_Proto)と、その下の JSON の読み取り(util/Json_Reader)のテスト。run.sh から呼ぶ。
+// Todoist の応答の読み取り(apps/todo/Todoist_Proto)と、その下の JSON の読み取り(util/Json_Reader)のテスト。run.sh から呼ぶ。
 //
 // 通信は run_net.sh の todoist_net_test の担当で、ここではソケット抜きで
 //   - JsonReader: 入れ子・エスケープ(\uXXXX、サロゲートペア)・長い文字列の切り詰め(UTF-8の途中で切らない)・
@@ -7,7 +7,7 @@
 //   - 期限の読み取り(日付だけ/浮動時刻/UTC)と表記、期限切れ、並べ替え
 //   - 失敗の応答から理由を拾う、JSONの文字列の書き出し
 // を見る。
-#include "todo/Todoist_Proto.hpp"
+#include "apps/todo/Todoist_Proto.hpp"
 
 #include <cstdio>
 #include <cstring>

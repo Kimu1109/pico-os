@@ -3,11 +3,11 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "firmware/Fw_Update.hpp"
+#include "apps/firmware/Fw_Update.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// ファームの更新(FIRMWARE_UPDATE.md)のOSへのつなぎ。中身の流れは firmware/Fw_Update。
+// ファームの更新(FIRMWARE_UPDATE.md)のOSへのつなぎ。中身の流れは apps/firmware/Fw_Update。
 //
 //   SDから   … StartFromSd(path)。ファイルアプリで .pfw を開く/「本体の更新」の[SDから選ぶ]
 //   Wi-Fiで  … StartListening()。PCの script/firmware_tool.py push(pio run -t fwpush)がTCPで送ってくる。

@@ -5,7 +5,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-class NetworkScan; // task/NetworkScan.hpp。ここではポインタ型でしか使わないので前方宣言で足りる
+class NetworkScan; // net/NetworkScan.hpp。ここではポインタ型でしか使わないので前方宣言で足りる
 
 namespace NetworkFunctions {
 

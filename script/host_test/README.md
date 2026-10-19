@@ -39,7 +39,7 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   label_test … Labelのテキストレイアウト結果(幅/高さ/文字数/カーソル座標)の固定
   markdown_test … MarkdownViewのブロック高さとLabelの実高さの整合(重なり検出)
   config_test   … 設定ファイル(key=value)の読み書き
-  secret_cipher_test… Wi-Fi SSID/パスワードの暗号化保存(util/Secret_Cipher.hpp)。
+  secret_cipher_test… Wi-Fi SSID/パスワードの暗号化保存(crypto/Secret_Cipher.hpp)。
                   往復・用途(purpose)ごとに鍵ストリームが変わること・enc1:接頭辞の
                   無い値は平文として読める後方互換・壊れたデータへの安全な失敗
   wifi_profiles_test… 保存済みのWi-Fiネットワーク(net/Wifi_Profiles、/sys/wifi.cfg)。network.cfgの
@@ -47,19 +47,19 @@ sh script/host_test/run.sh --list          # グループ名の一覧
                   ON/OFFの保存・番号ごとの暗号化
   app_test      … アプリ登録簿とランチャのタイル配置/当たり判定(アプリストアの登録/更新/削除も)
   home_test     … ホーム画面のウィジェット(並び・詰め方・home.cfg・ウィジェットのタップ・TODOの控え・予定)
-  firmware_test … ファームの更新(firmware/Fw_Image・Fw_Update)。見出しの検査・署名(信頼/なし/知らない鍵/壊れた)・
+  firmware_test … ファームの更新(apps/firmware/Fw_Image・Fw_Update)。見出しの検査・署名(信頼/なし/知らない鍵/壊れた)・
                   版の確認・置き場への書き込みと読み直し・gzipの末尾の大きさ・途中で切れる/化ける/取り消す。
                   firmware_tool_test(Python)が script/firmware_tool.py で作ったものも読ませる
-  app_repo_test … アプリストアの配布物の読み取り(store/App_Repo、APP_REPO.md)。カタログ/ファイル一覧の行・
+  app_repo_test … アプリストアの配布物の読み取り(apps/store/App_Repo、APP_REPO.md)。カタログ/ファイル一覧の行・
                   名前とパスの検査・版の比較・権限・Ed25519の署名(Pythonの署名をMonocypherで確かめる)
   bmp_test      … BMPの読み書き(gui/icons/Bmp_Codec)。1/4/8/16/24/32bpp・上下の並び・窓・OSのパレットへ寄せる/番号のまま/
                   フルカラーのまま・断る形式・途中で切れたファイル・スクリーンショットの書き出しと読み直し
   path_test     … パスの正規化と相対解決(Markdownブラウザのリンク追従の土台)
   file_ops_test … ファイルアプリのコピー/移動/名前の変更の下請け(ファイルのコピー・重ならない名前・パスと名前の判定)
-  touch_filter_test… タッチ座標のmedian-of-3ノイズ抑制(util/TouchFilter.hpp)。
+  touch_filter_test… タッチ座標のmedian-of-3ノイズ抑制(hal/TouchFilter.hpp)。
                   単発のスパイクを無視すること・滑らかな動きへの追従・タッチ開始ごとの
                   履歴リセット
-  touch_calib_test… タッチ位置の補正(util/TouchCalib.hpp)。既定の式・最小二乗でずれを消す・
+  touch_calib_test… タッチ位置の補正(hal/TouchCalib.hpp)。既定の式・最小二乗でずれを消す・
                   ノイズ・決まらない点の拒否・押し間違いの検出
   cache_test    … 文書キャッシュ(半端なファイルを残さないこと/目録の書き換え)とマニフェストの引き当て
   http_test     … URLの分解/解決と、HTTPレスポンスの解釈(ソケット抜きで検証)
@@ -69,19 +69,19 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   calendar_scene_test… カレンダーアプリのGUI配線(MonthGridのタップ位置→日付、
                   CalendarSceneの生成/解放、SDや.icsが無いときの案内)
   calendar_sync_secret_test… /calendar/sources.cfgの暗号化保存(CalendarSync::WriteSource/
-                  ReadSourceがutil/Secret_Cipher.hppを通すこと)。長いURLの往復・複数件・
+                  ReadSourceがcrypto/Secret_Cipher.hppを通すこと)。長いURLの往復・複数件・
                   同名の上書き・後方互換(平文の既存行がそのまま読める)
   file_search_test… ファイル検索(FileSearchScene)・容量(StorageScene)とSDを1件ずつたどる部品(storage/Sd_Walker)。
                   深さの上限・名前の比べ方・大きい順・フォルダの中身の合計
   chat_proto_test… チャットの応答(1行1件のTSV)の読み取りと本文のエスケープ
   chat_scene_test… チャットアプリのGUI配線(ChatLogViewの折り返し/スクロール、
                   ChatSceneの生成/解放、chat.cfgが無い/足りないときの案内)
-  todoist_proto_test… TODOアプリ(Todoist)の応答の読み取り(todo/Todoist_Proto)と、その下のJSONの
+  todoist_proto_test… TODOアプリ(Todoist)の応答の読み取り(apps/todo/Todoist_Proto)と、その下のJSONの
                   読み取り(util/Json_Reader)。エスケープ/サロゲート/切り詰め/1バイトずつ/誤り、
                   一覧から必要なキーだけ拾う・完了済みを飛ばす・next_cursor、期限の読み取りと表記・並べ替え
   xml_reader_test… XMLの読み取り(util/Xml_Reader)。RSSから題名/リンクを拾う・実体参照/CDATA/コメント/DOCTYPE・
                   1バイトずつ・切り詰め・誤り・壊した入力で落ちない
-  todo_test     … TODOアプリのリマインダー(todo/Todo_Reminders。本物のNotificationFunctionsへ予約する)と
+  todo_test     … TODOアプリのリマインダー(apps/todo/Todo_Reminders。本物のNotificationFunctionsへ予約する)と
                   TodoSceneの生成/解放・トークンが無いときの案内
   gb_emu_test   … Game Boyエミュ(GbEmu/GameBoyPad/GameBoyView)。テスト内で組み立てたROMで、
                   読み込みの断り方・セーブ(.sav)の往復・ボタン・不正な命令で落ちないこと・
@@ -103,16 +103,16 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   mic_test      … マイク(SPH0645)の入力と録音。計算(sound/Mic_Dsp.hpp: 18bitの取り出し・直流・増幅・間引きで折り返さない・
                   信号の有無・列)と MicFunctions(2コア目と1コア目を交互に: 開始/返す・左右の組がずれない・WAVの見出し・
                   取りこぼし・見出しの書き直し・I2Sの失敗・mic.cfg)
-  play_queue_test … ミュージックアプリの再生の順番(sound/Play_Queue.hpp)。順番通り/ミックス・リピート(しない/全曲/1曲)
+  play_queue_test … ミュージックアプリの再生の順番(apps/music/Play_Queue.hpp)。順番通り/ミックス・リピート(しない/全曲/1曲)
   midi2mml_test … MIDI→MMLの変換(script/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
   pvid_test     … 動画(.pvid)。変換(script/generate_pvid.py、Python+numpy)のタイルの往復・目録・差分の判定と、
-                  本体の読み取り(video/Pvid_Player、pvid_dump.cpp)が全部のフレーム・シークで同じ絵になること・壊れたファイルで落ちないこと
+                  本体の読み取り(apps/video/Pvid_Player、pvid_dump.cpp)が全部のフレーム・シークで同じ絵になること・壊れたファイルで落ちないこと
   key_input_test … 物理キーボードの窓口(KeyInputFunctions)。"key ..."の行の読み取り、padの行との同居、
                   画面のonKey()→開いているキー盤の順に配ること、キー盤の編集(挿入/削除/移動/決定)、数字のキー盤の制限、
                   日本語入力の入り切り(Tab2回・半角/全角・Ctrl+Space)と日本語のキー盤のかな漢字変換(小さい辞書を作って)
   romaji_kana_test … ローマ字→かな(ime/Romaji_Kana.hpp)。ん・っ・拗音・記号・送りの印
-  edit_history_test … テキストエディタの元に戻すの記録(util/Edit_History.hpp)とクリップボード(Clipboard_Functions)。
+  edit_history_test … テキストエディタの元に戻すの記録(apps/texteditor/Edit_History.hpp)とクリップボード(Clipboard_Functions)。
                   乱数の編集を1件ずつ戻す・溢れ・打鍵のまとめ・ひとまとまり・保存した時点、\rの除去と4KiBでの切り方
   cardkb_test   … CardKB2(I2Cのキーボード)の入力元。変換・未接続で静か・検出・打鍵・抜き差し
   msc_bridge_test … USBドライブ(マスストレージ)の64バイトずつの読み書き ⇔ SDの512バイトのセクタ。
@@ -207,7 +207,7 @@ sh script/host_test/run.sh --list          # グループ名の一覧
                 少しずつ作る)・視線・近くの人や物・押し合い・弾・HPバーと印・世界全体を読み込んだままにする・ARENA の地形(平らな所・道があるか)
   blocks_test… Luaアプリ「ブロック」の画面の流れと操作(pico.iso は偽物)。作る/開く/移す→読み込む→遊ぶ→
                 保存して戻る・置く/壊すの規則・カーソルと視点・タップ・ブロックを選ぶ画面
-  vt_terminal_test… SSHアプリの端末エミュレータ(src/ssh/Vt_Terminal)。折り返し・カーソル移動・
+  vt_terminal_test… SSHアプリの端末エミュレータ(src/apps/ssh/Vt_Terminal)。折り返し・カーソル移動・
                 消去・色(256色/RGB→16色)・全角(2セル)・スクロールバック・範囲スクロール・
                 代替画面・問い合わせ(6n等)への返事・大きさの変更
   ssh_util_test… SSHクライアントの小道具(Ssh_Sha256/Ssh_Util)。SHA-256の既知の値・Base64・

@@ -1,4 +1,6 @@
 #pragma once
+// 生成物: script/gen_lua_builtins.py が src/lua/builtin/*.lua から作る。直接書き換えないこと
+// (直したら python3 script/gen_lua_builtins.py。CI の「層の決まり」が --check で食い違いを見る)
 
 #include <cstring>
 
@@ -9,12 +11,12 @@
 namespace LuaBuiltin {
 
     // ---- pico.ui: 宣言的なUIの組み立て ----
-    //   local ui = require("pico.ui")
-    //   local root, named = ui{ "LayoutContainer", w = 200, h = 120, direction = 0, children = {
-    //       { "Label", text = "名前", name = "title" },
-    //       { "Button", text = "OK", on_press_end = function(id) ... end },
-    //   } }
-    //   ui.Button{ text = "OK" }   -- ui.種類{...} でも書ける
+    // local ui = require("pico.ui")
+    // local root, named = ui{ "LayoutContainer", w = 200, h = 120, direction = 0, children = {
+    // { "Label", text = "名前", name = "title" },
+    // { "Button", text = "OK", on_press_end = function(id) ... end },
+    // } }
+    // ui.Button{ text = "OK" }   -- ui.種類{...} でも書ける
     static const char* const kUi = R"LUA(
 local M = {}
 
@@ -80,12 +82,12 @@ return setmetatable(M, {
 )LUA";
 
     // ---- pico.async: コルーチンで「待つ」を直列に書く ----
-    //   local async = require("pico.async")
-    //   async.run(function()
-    //       async.sleep(500)
-    //       local ok, status, body = async.http("GET", url)
-    //       if async.message("続けますか?", "いいえ", "はい") then ... end
-    //   end)
+    // local async = require("pico.async")
+    // async.run(function()
+    // async.sleep(500)
+    // local ok, status, body = async.http("GET", url)
+    // if async.message("続けますか?", "いいえ", "はい") then ... end
+    // end)
     static const char* const kAsync = R"LUA(
 local M = {}
 
@@ -181,12 +183,11 @@ end
 return M
 )LUA";
 
-
     // ---- pico.tween: 値を一定時間かけて変えていく ----
-    //   local tween = require("pico.tween")
-    //   local h = tween.start{ from = 0, to = 100, duration = 500, ease = "ease_out",
-    //       on_update = function(v) pico.set(bar, "value", v) end, on_done = function() end }
-    //   tween.cancel(h)
+    // local tween = require("pico.tween")
+    // local h = tween.start{ from = 0, to = 100, duration = 500, ease = "ease_out",
+    // on_update = function(v) pico.set(bar, "value", v) end, on_done = function() end }
+    // tween.cancel(h)
     static const char* const kTween = R"LUA(
 local M = {}
 
@@ -226,19 +227,18 @@ function M.cancel(h) pico.cancel(h) end
 return M
 )LUA";
 
-
     // ---- pico.game: 2Dゲーム向けの簡易エンジン ----
-    //   local game = require("pico.game")
-    //   local g = game.new{ bg = 12, pad = true }
-    //   local map = g:tilemap{ image = "tiles.pimg", tile = 16, solid = true,
-    //       legend = { ["#"] = 1 }, rows = { "#....#", "######" } }
-    //   local p = g:sprite{ image = "tiles.pimg", w = 16, h = 16, frame = 4, x = 16, y = 0,
-    //       gravity = 900, solid = true }
-    //   g:follow(p)
-    //   function g:on_update(dt) p.vx = g:axis() * 80 end
+    // local game = require("pico.game")
+    // local g = game.new{ bg = 12, pad = true }
+    // local map = g:tilemap{ image = "tiles.pimg", tile = 16, solid = true,
+    // legend = { ["#"] = 1 }, rows = { "#....#", "######" } }
+    // local p = g:sprite{ image = "tiles.pimg", w = 16, h = 16, frame = 4, x = 16, y = 0,
+    // gravity = 900, solid = true }
+    // g:follow(p)
+    // function g:on_update(dt) p.vx = g:axis() * 80 end
     // 軽い物理: 加速度・空気抵抗・床の摩擦・跳ね返り(bounce)・すり抜け床(oneway)と、
-    //   g:solid(tagA, tagB)でスプライト同士を押し合う(質量の比で押し戻し、速度は撃力で交換。
-    //   乗っている足場の動きに付いていく)。回転と坂は無い
+    // g:solid(tagA, tagB)でスプライト同士を押し合う(質量の比で押し戻し、速度は撃力で交換。
+    // 乗っている足場の動きに付いていく)。回転と坂は無い
     // キャンバス1枚に描き、動いたスプライトの周りだけを描き直す(カメラが動いたら全体)。
     // タイルの描画はC++(pico.draw_tilemap)。詳しくは lua-api-doc の api/game.md
     static const char* const kGame = R"LUA(

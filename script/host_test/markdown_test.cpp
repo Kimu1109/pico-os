@@ -12,7 +12,7 @@
 //   経路なので、他のブロック種別では再現しない)。
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/widgets/Image.hpp"
-#include "util/Md_Scan.hpp"
+#include "apps/browser/Md_Scan.hpp"
 #include "gui/core/Font_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "system/Log_Functions.hpp"

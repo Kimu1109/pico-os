@@ -66,15 +66,19 @@ add_library(host_tjpgd STATIC ${CMAKE_CURRENT_SOURCE_DIR}/stubs/lgfx/utility/lgf
 # (どれも今のテストでは使っていない。使うときはスタブを足してからここから外す)
 set(HOST_EXCLUDE
     main.cpp                          # setup()/loop() はテストごとに要らない
+    OS_Data.cpp                       # テストはスタブの OS_Data.hpp(stubs/)を使う
     system/Log_Functions.cpp          # スタブの FsFile に open() が無い(テストは LogFunctions を偽物にする)
     hal/Network_Functions.cpp         # スタブの WiFi に scanNetworks() が無い
     gui/core/GFX_Functions.cpp        # 液晶の設定(LGFX_Config_PC.hpp)が pc/compat にしか無い
-    gui/widgets/apps/TerminalView.cpp # スタブに fonts::AsciiFont8x16 が無い
+    apps/ssh/ui/TerminalView.cpp      # スタブに fonts::AsciiFont8x16 が無い
     devtools/font_coverage_check.cpp  # スタブに lgfx::IFont が無い
     gui/widgets/systems/Statusbar.cpp # スタブの setCursor() にフォントを取る形が無い
     services/Display_Functions.cpp    # スタブの LGFX に sleep()/wakeup() が無い
     services/UsbDrive_Functions.cpp   # SD_Functions.hpp が SPI.h を読む(スタブに無い)
-    gui/scenes/SettingsScene.cpp      # スタブの WiFi に scanNetworks() が無い
+    gui/scenes/SettingsScene.cpp      # スタブの WiFi に scanNetworks() が無い(_Wifi/_Time/_Other も同じヘッダを読む)
+    gui/scenes/SettingsScene_Wifi.cpp
+    gui/scenes/SettingsScene_Time.cpp
+    gui/scenes/SettingsScene_Other.cpp
     gui/scenes/TouchCalibScene.cpp    # 実機のタッチ(Touch_Functions.hpp)を読む
     lua/LuaDebugScreen.cpp            # 実機のタッチ(Touch_Functions.hpp)を読む
 )

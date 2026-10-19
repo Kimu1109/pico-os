@@ -1,5 +1,5 @@
 // TouchCalib(タッチ位置の補正のアフィン変換)のテスト。ハードウェアに依存しない計算だけを確かめる。
-#include "util/TouchCalib.hpp"
+#include "hal/TouchCalib.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>

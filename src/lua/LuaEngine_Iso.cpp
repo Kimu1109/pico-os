@@ -60,11 +60,11 @@ struct LuaEngineIso {
 
     static LuaEngine::IsoState& St(lua_State* L) {
         LuaEngine* self = Self(L);
-        if (!self->iso_) {
-            self->iso_ = new (std::nothrow) LuaEngine::IsoState();
-            if (!self->iso_) luaL_error(L, "pico.iso: メモリが足りません");
+        if (!self->isoState()) {
+            self->setIsoState(new (std::nothrow) LuaEngine::IsoState());
+            if (!self->isoState()) luaL_error(L, "pico.iso: メモリが足りません");
         }
-        return *self->iso_;
+        return *self->isoState();
     }
 
     static int Int(lua_State* L, int idx) { return (int)luaL_checkinteger(L, idx); }
@@ -100,11 +100,11 @@ struct LuaEngineIso {
     // ---------------- 描き先 ----------------
 
     // 画像のスロット(無効なら nullptr)
-    static LuaEngine::ImageSlot* Image(LuaEngine* self, LuaEngine::IsoState& st) { return Slot(self, st.image); }
-    static LuaEngine::ImageSlot* Slot(LuaEngine* self, uint32_t handle) {
+    static LuaImages::Slot* Image(LuaEngine* self, LuaEngine::IsoState& st) { return Slot(self, st.image); }
+    static LuaImages::Slot* Slot(LuaEngine* self, uint32_t handle) {
         size_t index;
-        if (!handle || !self->ResolveImageHandle(handle, index)) return nullptr;
-        LuaEngine::ImageSlot& slot = self->images_[index];
+        if (!handle || !self->images().resolve(handle, index)) return nullptr;
+        LuaImages::Slot& slot = self->images()[index];
         if (!slot.sprite.usable) return nullptr;
         return &slot;
     }
@@ -114,7 +114,7 @@ struct LuaEngineIso {
     }
 
     // 画像が変わっていたら、面の絵の形と、透けないブロックを調べ直す
-    static void Analyze(LuaEngine::IsoState& st, LuaEngine::ImageSlot& slot) {
+    static void Analyze(LuaEngine::IsoState& st, LuaImages::Slot& slot) {
         LGFX_Sprite& sp = slot.sprite.sprite;
         const void* buf = sp.getBuffer();
         if (buf && buf == st.analyzed) return;
@@ -145,12 +145,12 @@ struct LuaEngineIso {
     struct Ctx {
         LuaEngine* self;
         LuaEngine::IsoState* st;
-        LuaEngine::ImageSlot* faces;
+        LuaImages::Slot* faces;
         bool fast;
         int cx0, cy0, cx1, cy1;
         // 人や物の絵(直前に引いたもの)
         int32_t img = 0;
-        LuaEngine::ImageSlot* islot = nullptr;
+        LuaImages::Slot* islot = nullptr;
         const uint8_t* ibuf = nullptr;
         int istride = 0;
     };
@@ -210,8 +210,8 @@ struct LuaEngineIso {
             c->islot = nullptr;
             c->ibuf = nullptr;
             size_t index;
-            if (image > 0 && c->self->ResolveImageHandle((uint32_t)image, index)) {
-                LuaEngine::ImageSlot& slot = c->self->images_[index];
+            if (image > 0 && c->self->images().resolve((uint32_t)image, index)) {
+                LuaImages::Slot& slot = c->self->images()[index];
                 if (slot.sprite.usable) {
                     c->islot = &slot;
                     if (Is4bpp(slot.sprite.sprite)) {
@@ -221,10 +221,10 @@ struct LuaEngineIso {
                 }
             }
         }
-        const LuaEngine::ImageSlot* s = c->islot;
+        const LuaImages::Slot* s = c->islot;
         if (!s || (unsigned)x >= s->sprite.width || (unsigned)y >= s->sprite.height) return -1;
         const int v = c->ibuf ? (int)Iso::FaceBlitter::Get(c->ibuf + (size_t)y * c->istride, x)
-                              : (int)const_cast<LuaEngine::ImageSlot*>(s)->sprite.sprite.readPixelValue(x, y);
+                              : (int)const_cast<LuaImages::Slot*>(s)->sprite.sprite.readPixelValue(x, y);
         return (v == 0 && s->sprite.transparent) ? -1 : v;
     }
     static void Dirty(void*, int x, int y, int w, int h) { MarkDirty(x, y, w, h); }
@@ -253,7 +253,7 @@ struct LuaEngineIso {
     // クリップ [x0, x1) x [y0, y1) の中へ描く準備をして fn を呼ぶ
     template <class F>
     static void WithSink(LuaEngine* self, LuaEngine::IsoState& st, int x0, int y0, int x1, int y1, F&& fn) {
-        LuaEngine::ImageSlot* slot = Image(self, st);
+        LuaImages::Slot* slot = Image(self, st);
         if (!slot || x0 >= x1 || y0 >= y1) return;
         Analyze(st, *slot);
         LGFX_Sprite& frame = *OSData::frame;
@@ -430,7 +430,7 @@ struct LuaEngineIso {
         LuaEngine::IsoState& st = St(L);
         // 確かめてから差し替える(エラーのときは今の絵のまま)
         const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
-        LuaEngine::ImageSlot* slot = Slot(self, handle);
+        LuaImages::Slot* slot = Slot(self, handle);
         if (!slot) return luaL_error(L, "pico.iso.set_image: 無効なイメージハンドル");
         // 2番目の引数: 画像に並べたブロックの番号の配列(上の段から。カーソルは 26)。無ければ全部の段
         int8_t rows[Iso::kCursorRow + 1];
@@ -619,11 +619,11 @@ struct LuaEngineIso {
     static void CheckImage(lua_State* L, int32_t image, int& w, int& h) {
         LuaEngine* self = Self(L);
         size_t index;
-        if (image <= 0 || !self->ResolveImageHandle((uint32_t)image, index) || !self->images_[index].sprite.usable) {
+        if (image <= 0 || !self->images().resolve((uint32_t)image, index) || !self->images()[index].sprite.usable) {
             luaL_error(L, "pico.iso: 無効なイメージハンドル");
         }
-        w = self->images_[index].sprite.width;
-        h = self->images_[index].sprite.height;
+        w = self->images()[index].sprite.width;
+        h = self->images()[index].sprite.height;
     }
 
     // opts(表 t。0 なら無し)を e へ当てる。adding なら省いた値は既定(画像全体・足元は下の真ん中・箱は絵の大きさから)

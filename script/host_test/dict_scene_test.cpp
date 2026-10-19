@@ -4,7 +4,7 @@
 // ここでは「入力欄→検索ボタン→一覧への反映→一覧タップで詳細欄」という
 // 実際のウィジェット経路が繋がっていることと、全体走査ぶん(語の途中の一致)が
 // onUpdate()を回すことで一覧へ追記されていくことを確認する。
-#include "gui/scenes/DictScene.hpp"
+#include "apps/dict/DictScene.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "system/Log_Functions.hpp"

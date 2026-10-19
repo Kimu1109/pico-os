@@ -53,7 +53,7 @@ FlashArea* DefaultFlashArea(){
 
 #else // PICOOS_PC
 
-#include "firmware/Fw_Store.hpp"
+#include "apps/firmware/Fw_Store.hpp"
 
 #include <cstdlib>
 #include <string>

@@ -19,12 +19,15 @@ namespace OSData {
     inline bool isTouchMove = false;
 
     //グラフィック系統
-    inline LGFX* lcd = new LGFX();
+    // lcd と SD は OS_Data.cpp で1回だけ定義する。inline にすると、作る処理(new LGFX()・SdFatの
+    // コンストラクタ)と「作ったか」の確認がこのヘッダを読む .cpp の数だけフラッシュに入る
+    // (2026-10-19に測ったら1つあたり数百バイト。ファイルを分けるほど増えていた)
+    extern LGFX* lcd;
     inline LGFX_Sprite* frame;
 
     //SD系統
     inline bool SD_usable = false;
-    inline SdFat SD;
+    extern SdFat SD;
 
     //キーボード
     inline Widget* keyboard_jpn;

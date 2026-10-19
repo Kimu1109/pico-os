@@ -11,8 +11,8 @@
 #include <SPI.h>
 #include "consts.hpp"
 #include "OS_Data.hpp"
-#include "util/TouchFilter.hpp"
-#include "util/TouchCalib.hpp"
+#include "hal/TouchFilter.hpp"
+#include "hal/TouchCalib.hpp"
 #include <math.h>
 #include "system/Log_Functions.hpp"
 
@@ -21,7 +21,7 @@ namespace PICO_Touch
     inline SPIClassRP2040 touchSPI(spi0, TOUCH_MISO, TOUCH_CS, TOUCH_SCK, TOUCH_MOSI);
     inline XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
 
-    // 生の値→画面座標の変換はutil/TouchCalib.hpp(既定は昔のmap()と同じ式。
+    // 生の値→画面座標の変換はhal/TouchCalib.hpp(既定は昔のmap()と同じ式。
     // 「タッチ補正」アプリで求めた値が入る)
 
     // 直近のタッチの生の値(u=p.y, v=p.x)。補正アプリが読む
@@ -47,7 +47,7 @@ namespace PICO_Touch
     inline int prev_x = 0;
     inline int prev_y = 0;
 
-    // タッチ座標の単発ノイズ(スパイク)を抑える。util/TouchFilter.hpp参照
+    // タッチ座標の単発ノイズ(スパイク)を抑える。hal/TouchFilter.hpp参照
     inline TouchFilter touch_filter;
 
     inline void Setup(){

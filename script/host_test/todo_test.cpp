@@ -1,4 +1,4 @@
-// TODOアプリのリマインダー(todo/Todo_Reminders)と画面の配線(TodoScene)のテスト。run.sh から呼ぶ。
+// TODOアプリのリマインダー(apps/todo/Todo_Reminders)と画面の配線(TodoScene)のテスト。run.sh から呼ぶ。
 //
 // 応答の読み取りは todoist_proto_test、通信は run_net.sh の todoist_net_test の担当で、ここでは
 //   - リマインダー: 時刻つきの期限を通知(本物の NotificationFunctions)の At の予約にすること、
@@ -6,9 +6,9 @@
 //     変わっていなければ入れ直さない・ほかのC++の予約には触らない
 //   - TodoScene: トークンが無いときの案内、生成/解放で漏れが無いこと(ASan)
 // を見る。
-#include "todo/Todo_Reminders.hpp"
+#include "apps/todo/Todo_Reminders.hpp"
 #include "system/Notification_Functions.hpp"
-#include "gui/scenes/TodoScene.hpp"
+#include "apps/todo/TodoScene.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "system/Log_Functions.hpp"

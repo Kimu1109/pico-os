@@ -1,7 +1,7 @@
-// アプリストアの配布物の読み取り(store/App_Repo)。APP_REPO.md の取り決めを固定する。
+// アプリストアの配布物の読み取り(apps/store/App_Repo)。APP_REPO.md の取り決めを固定する。
 // 通信とインストールは run_net.sh の app_store_net_test。
-#include "store/App_Repo.hpp"
-#include "ssh/Ssh_Sha256.hpp"
+#include "apps/store/App_Repo.hpp"
+#include "apps/ssh/Ssh_Sha256.hpp"
 #include "monocypher-ed25519.h"
 
 #include <cstdio>

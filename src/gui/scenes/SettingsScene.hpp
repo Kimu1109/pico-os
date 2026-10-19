@@ -14,7 +14,7 @@
 #include <cstdint>
 
 class WifiScanDialog; // gui/widgets/dialogs/WifiScanDialog.hpp。ポインタ型でしか使わないので前方宣言で足りる
-class NetworkScan;    // task/NetworkScan.hpp。同上
+class NetworkScan;    // net/NetworkScan.hpp。同上
 
 // 標準アプリの設定。画面下のタブで大まかな項目ごとに分けてある:
 //   Wi-Fi   … ON/OFF・接続状態・保存済みのネットワークの一覧(接続/削除)・周辺の検索・手入力での追加
@@ -93,7 +93,7 @@ class SettingsScene : public Scene {
         // ダイアログはSearchDialog(MarkdownScene)と同じく開くたびにnewし、
         // 閉じたらDestroyLater()する(使い回さない)
         WifiScanDialog* wifi_scan_dialog = nullptr;
-        // スキャンTaskへの生ポインタ。所有権はこちらにある(task/NetworkScan.hppのコメントの通り、
+        // スキャンTaskへの生ポインタ。所有権はこちらにある(net/NetworkScan.hppのコメントの通り、
         // HttpGet等と同じ「生ポインタとして持ち、毎フレーム自分でupdate()を呼び、
         // 終わったら自分でdeleteする」流儀)
         NetworkScan* wifi_scan_task = nullptr;
@@ -217,6 +217,22 @@ class SettingsScene : public Scene {
         template <size_t N>
         Label<N>* makeRowLabel(int16_t x, int16_t y, int max_w, const char* text);
 
+        // 本文の行の置き方。onEnter() が決め、各タブの組み立て(build*)が使う
+        struct Layout {
+            Rect content;
+            int16_t body_y = 0, body_bot = 0, left = 0;
+            int full_w = 0;
+            int16_t rowY(int i) const { return (int16_t)(body_y + i * ROW_H); }
+        };
+        // 編集ボタンの左までのラベルの幅(最初の makeEditButton() の後に決まる)
+        int labelW(const Rect& content) const;
+        // 追加順=描画順なので、onEnter() はこの順に呼ぶ
+        void buildWifiTab(const Layout& lay);    // SettingsScene_Wifi.cpp
+        void buildLevelRows(const Layout& lay);  // 音量・明るさ・自動調光
+        void buildTimeRows(const Layout& lay);   // SettingsScene_Time.cpp(NTP・時刻・タッチ補正)
+        void buildOtherTab(const Layout& lay);   // SettingsScene_Other.cpp
+        void buildLateRows(const Layout& lay);   // ダークテーマ・ロック・端末の鍵・電池・ドロップダウン
+
         void refreshNtp1Label();
         void refreshNtp2Label();
         void refreshHomeLabel();
@@ -237,3 +253,12 @@ class SettingsScene : public Scene {
         void onUpdate() override;
         void onExit() override;
 };
+
+template <size_t N>
+inline Label<N>* SettingsScene::makeRowLabel(int16_t x, int16_t y, int max_w, const char* text){
+    auto* l = new Label<N>(x, y, text);
+    l->setFontSize(FontFn::Small);
+    l->setMaxWidth(max_w);
+    l->setMaxHeight(Label<N>::GetLineHeight(FontFn::Small));
+    return l;
+}

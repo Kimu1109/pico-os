@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/TouchCalib.hpp"
+#include "hal/TouchCalib.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
@@ -10,7 +10,7 @@
 #include <cstring>
 
 // タッチ位置の補正の窓口。補正値は /sys/touch.cfg に a〜f の6つの小数で持つ
-// (無ければ補正なし=旧来の式)。求めかたは util/TouchCalib.hpp、操作の画面は TouchCalibScene。
+// (無ければ補正なし=旧来の式)。求めかたは hal/TouchCalib.hpp、操作の画面は TouchCalibScene。
 namespace TouchCalibFunctions {
     inline void Reset(){
         TouchCalib::current = TouchCalib::Default(SCREEN_WIDTH, SCREEN_HEIGHT);

@@ -16,7 +16,7 @@
 //   - サフィックス索引ファイルが開けない場合は全体走査へ自動フォールバックすること
 //
 // SDはstubs/SdFat.hのパス->内容のmapなので、HostSd::filesへ直接テスト用データを積む。
-#include "dict/Word_Dict.hpp"
+#include "apps/dict/Word_Dict.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

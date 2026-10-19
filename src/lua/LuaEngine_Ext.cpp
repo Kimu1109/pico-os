@@ -5,7 +5,8 @@
 //   - Z順・矩形・有効/無効、トースト、戻る操作
 //   - 描画の補助(get_pixel・揃え・折り返し・オフスクリーン画像)
 //   - 暗号化以外のユーティリティ(パス・時刻・URL・base64・アプリ設定・メモリ情報)
-// をここへ置く。LuaEngine の private メンバは friend struct LuaEngineExt 経由で触る。
+// をここへ置く。LuaEngine は LuaEngine.hpp の「拡張が使う口」だけを通して触る
+// (名前・タブの連動・戻る・ジェスチャー・image_target の状態はここの ExtState)。
 // 暗号化は LuaEngine_Crypto.cpp。
 
 #include "system/Clipboard_Functions.hpp"
@@ -56,6 +57,56 @@
 #include <Arduino.h>
 
 using TextboxT = Textbox<WidgetFactory::kTextboxCapacity>;
+
+// pico.set_name/find・タブの連動・on_back・ジェスチャー・image_target の状態(LuaEngine::ext_)
+struct LuaEngine::ExtState {
+    // pico.set_name(id, name) / pico.find(name)。ウィジェットの数は多くないので線形探索で足りる
+    struct NameEntry { WidgetId id; FixedString<PICO_STR_S> name; };
+    std::vector<NameEntry> names;
+    static constexpr size_t kMaxNames = 128;
+    // pico.tab_link(tab_id, index, widget_id): タブが切り替わったら対応するウィジェットだけ見せる
+    struct TabLink { WidgetId tab; int index; WidgetId target; };
+    std::vector<TabLink> tab_links;
+    static constexpr size_t kMaxTabLinks = 32;
+    // pico.on_back(fn)
+    int back_callback_ref = LUA_NOREF;
+    // ジェスチャー判定の状態(UpdateGestures)
+    struct GestureState {
+        bool active = false;
+        bool long_fired = false;
+        bool moved = false;
+        int sx = 0, sy = 0;
+        uint32_t t0 = 0;
+        uint32_t last_tap_ms = 0;
+        int last_tap_x = -1000, last_tap_y = -1000;
+    } gesture;
+    // 画像スロットへの描き込み(pico.image_target)。activeの間、OSData::frameを画像のスプライトへ差し替える
+    LGFX_Sprite* saved_frame = nullptr;
+    int image_target_index = -1;
+};
+
+void LuaEngine::CreateExt() { ext_ = new ExtState(); }
+
+void LuaEngine::DestroyExt() {
+    if (!ext_) return;
+    EndImageTarget();
+    delete ext_;   // Luaの ref は lua_close() が捨てる
+    ext_ = nullptr;
+}
+
+void LuaEngine::ForgetExt(WidgetId id) {
+    if (!ext_) return;
+    auto& names = ext_->names;
+    names.erase(std::remove_if(names.begin(), names.end(),
+        [id](const ExtState::NameEntry& e) { return e.id == id; }), names.end());
+    auto& links = ext_->tab_links;
+    links.erase(std::remove_if(links.begin(), links.end(),
+        [id](const ExtState::TabLink& e) { return e.tab == id || e.target == id; }), links.end());
+}
+
+bool LuaEngine::isImageTarget(size_t index) const { return ext_ && ext_->image_target_index == (int)index; }
+
+bool LuaEngine::HasBackHandler() const { return ext_ && ext_->back_callback_ref != LUA_NOREF; }
 
 struct LuaEngineExt {
     static LuaEngine* Self(lua_State* L) {
@@ -253,7 +304,7 @@ void LuaEngine::ApplyTabLinks(WidgetId tab) {
     Widget* tw = WidgetRegistry::Resolve(tab);
     if (!tw || tw->getWidgetType() != WidgetType::TabBar) return;
     const int sel = static_cast<TabBar*>(tw)->getSelected();
-    for (const TabLink& l : tab_links_) {
+    for (const ExtState::TabLink& l : ext_->tab_links) {
         if (l.tab != tab) continue;
         if (Widget* target = WidgetRegistry::Resolve(l.target)) target->setVisible(l.index == sel);
     }
@@ -263,21 +314,25 @@ int LuaEngineExt::l_off(lua_State* L) {
     LuaEngine* self = Self(L);
     const WidgetId id = (WidgetId)luaL_checkinteger(L, 1);
     const char* ev = luaL_checkstring(L, 2);
-    LuaEngine::EventKind kind;
-    if (!LuaEngine::EventKindFromName(ev, kind)) return luaL_error(L, "pico.off: 未知のイベント '%s'", ev);
+    const int n = self->UnbindEvent(id, ev);
+    if (n < 0) return luaL_error(L, "pico.off: 未知のイベント '%s'", ev);
+    lua_pushboolean(L, n > 0);
+    return 1;
+}
 
-    auto it = std::lower_bound(self->callbacks_.begin(), self->callbacks_.end(), id,
-        [](const LuaEngine::CallbackBinding& e, WidgetId key) { return e.id < key; });
-    for (; it != self->callbacks_.end() && it->id == id; ++it) {
+int LuaEngine::UnbindEvent(WidgetId id, const char* event_name) {
+    EventKind kind;
+    if (!EventKindFromName(event_name, kind)) return -1;
+    auto it = std::lower_bound(callbacks_.begin(), callbacks_.end(), id,
+        [](const CallbackBinding& e, WidgetId key) { return e.id < key; });
+    for (; it != callbacks_.end() && it->id == id; ++it) {
         if (it->kind == kind) {
             luaL_unref(L, LUA_REGISTRYINDEX, it->ref);
-            self->callbacks_.erase(it);
-            lua_pushboolean(L, true);
+            callbacks_.erase(it);
             return 1;
         }
     }
-    lua_pushboolean(L, false);
-    return 1;
+    return 0;
 }
 
 // ===================================================================
@@ -295,7 +350,7 @@ void LuaEngine::UpdateGestures() {
             break;
         }
     }
-    if (!any) { gesture_.active = false; return; }
+    if (!any) { ext_->gesture.active = false; return; }
 
     constexpr int kSlopPx = 10;            // これ以内の動きは「動いていない」
     constexpr uint32_t kLongPressMs = 500;
@@ -306,7 +361,7 @@ void LuaEngine::UpdateGestures() {
     constexpr uint32_t kSwipeMaxMs = 700;
 
     const uint32_t now = (uint32_t)millis();
-    GestureState& g = gesture_;
+    ExtState::GestureState& g = ext_->gesture;
 
     // 発火先を先に集める(コールバックがpico.on/offでcallbacks_を変えても壊れないように)
     struct Target { WidgetId id; };
@@ -409,23 +464,23 @@ void LuaEngine::UpdateGestures() {
 int LuaEngineExt::l_on_back(lua_State* L) {
     LuaEngine* self = Self(L);
     if (lua_isnoneornil(L, 1)) {
-        if (self->back_callback_ref_ != LUA_NOREF) luaL_unref(L, LUA_REGISTRYINDEX, self->back_callback_ref_);
-        self->back_callback_ref_ = LUA_NOREF;
+        if (self->extState()->back_callback_ref != LUA_NOREF) luaL_unref(L, LUA_REGISTRYINDEX, self->extState()->back_callback_ref);
+        self->extState()->back_callback_ref = LUA_NOREF;
         return 0;
     }
     luaL_checktype(L, 1, LUA_TFUNCTION);
-    if (self->back_callback_ref_ != LUA_NOREF) luaL_unref(L, LUA_REGISTRYINDEX, self->back_callback_ref_);
+    if (self->extState()->back_callback_ref != LUA_NOREF) luaL_unref(L, LUA_REGISTRYINDEX, self->extState()->back_callback_ref);
     lua_pushvalue(L, 1);
-    self->back_callback_ref_ = luaL_ref(L, LUA_REGISTRYINDEX);
+    self->extState()->back_callback_ref = luaL_ref(L, LUA_REGISTRYINDEX);
     return 0;
 }
 
 bool LuaEngine::DispatchBack() {
-    if (!L || back_callback_ref_ == LUA_NOREF) return false;
-    lua_rawgeti(L, LUA_REGISTRYINDEX, back_callback_ref_);
+    if (!L || ext_->back_callback_ref == LUA_NOREF) return false;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, ext_->back_callback_ref);
     if (ProtectedCall(0, 1) != LUA_OK) {
-        luaL_unref(L, LUA_REGISTRYINDEX, back_callback_ref_);
-        back_callback_ref_ = LUA_NOREF;
+        luaL_unref(L, LUA_REGISTRYINDEX, ext_->back_callback_ref);
+        ext_->back_callback_ref = LUA_NOREF;
         ReportError("on_back()の実行時エラー");
         return true;
     }
@@ -499,24 +554,24 @@ int LuaEngineExt::l_set_name(lua_State* L) {
     }
     const WidgetId id = w->getId();
     // 名前は一意。同じ名前が既にあれば付け替える
-    for (auto& e : self->names_) {
+    for (auto& e : self->extState()->names) {
         if (e.name == name) { e.id = id; return 0; }
     }
-    for (auto& e : self->names_) {
+    for (auto& e : self->extState()->names) {
         if (e.id == id) { e.name.assign(name); return 0; }
     }
-    if (self->names_.size() >= LuaEngine::kMaxNames) return luaL_error(L, "pico.set_name: 名前は%zu個までです", LuaEngine::kMaxNames);
-    LuaEngine::NameEntry ne;
+    if (self->extState()->names.size() >= LuaEngine::ExtState::kMaxNames) return luaL_error(L, "pico.set_name: 名前は%zu個までです", LuaEngine::ExtState::kMaxNames);
+    LuaEngine::ExtState::NameEntry ne;
     ne.id = id;
     ne.name.assign(name);
-    self->names_.push_back(ne);
+    self->extState()->names.push_back(ne);
     return 0;
 }
 
 int LuaEngineExt::l_find(lua_State* L) {
     LuaEngine* self = Self(L);
     const char* name = luaL_checkstring(L, 1);
-    for (const auto& e : self->names_) {
+    for (const auto& e : self->extState()->names) {
         if (e.name == name) {
             if (WidgetRegistry::Resolve(e.id)) { lua_pushinteger(L, (lua_Integer)e.id); return 1; }
         }
@@ -865,9 +920,9 @@ int LuaEngineExt::l_tab_remove(lua_State* L) {
     const bool ok = static_cast<TabBar*>(w)->removeTab(index);
     if (ok) {
         // 連動の番号を詰める(消したタブの連動は外す)
-        auto& links = self->tab_links_;
+        auto& links = self->extState()->tab_links;
         links.erase(std::remove_if(links.begin(), links.end(),
-            [id, index](const LuaEngine::TabLink& l) { return l.tab == id && l.index == index; }), links.end());
+            [id, index](const LuaEngine::ExtState::TabLink& l) { return l.tab == id && l.index == index; }), links.end());
         for (auto& l : links) if (l.tab == id && l.index > index) l.index--;
         self->ApplyTabLinks(id);
     }
@@ -881,9 +936,9 @@ int LuaEngineExt::l_tab_clear(lua_State* L) {
     if (w->getWidgetType() != WidgetType::TabBar) return luaL_error(L, "pico.tab_clear: TabBarのみ対応");
     const WidgetId id = w->getId();
     static_cast<TabBar*>(w)->clearTabs();
-    auto& links = self->tab_links_;
+    auto& links = self->extState()->tab_links;
     links.erase(std::remove_if(links.begin(), links.end(),
-        [id](const LuaEngine::TabLink& l) { return l.tab == id; }), links.end());
+        [id](const LuaEngine::ExtState::TabLink& l) { return l.tab == id; }), links.end());
     return 0;
 }
 
@@ -896,14 +951,14 @@ int LuaEngineExt::l_tab_link(lua_State* L) {
     const WidgetId tab = tw->getId();
     const WidgetId tgt = target->getId();
     bool exists = false;
-    for (auto& l : self->tab_links_) {
+    for (auto& l : self->extState()->tab_links) {
         if (l.tab == tab && l.index == index && l.target == tgt) { exists = true; break; }
     }
     if (!exists) {
-        if (self->tab_links_.size() >= LuaEngine::kMaxTabLinks) {
-            return luaL_error(L, "pico.tab_link: 連動は%zu個までです", LuaEngine::kMaxTabLinks);
+        if (self->extState()->tab_links.size() >= LuaEngine::ExtState::kMaxTabLinks) {
+            return luaL_error(L, "pico.tab_link: 連動は%zu個までです", LuaEngine::ExtState::kMaxTabLinks);
         }
-        self->tab_links_.push_back({tab, index, tgt});
+        self->extState()->tab_links.push_back({tab, index, tgt});
     }
     // タブが切り替わったら連動を適用する(pico.on(id,"tab_changed")の有無に関わらず)
     static_cast<TabBar*>(tw)->setOnChanged([self, tab](int) { self->OnTabChanged(tab); });
@@ -917,9 +972,9 @@ int LuaEngineExt::l_tab_unlink(lua_State* L) {
     const WidgetId tab = tw->getId();
     const bool has_index = !lua_isnoneornil(L, 2);
     const int index = has_index ? (int)luaL_checkinteger(L, 2) : 0;
-    auto& links = self->tab_links_;
+    auto& links = self->extState()->tab_links;
     links.erase(std::remove_if(links.begin(), links.end(),
-        [&](const LuaEngine::TabLink& l) { return l.tab == tab && (!has_index || l.index == index); }), links.end());
+        [&](const LuaEngine::ExtState::TabLink& l) { return l.tab == tab && (!has_index || l.index == index); }), links.end());
     return 0;
 }
 
@@ -987,7 +1042,7 @@ int LuaEngineExt::l_get_pixel(lua_State* L) {
 
 // Luaが読み込んだ画像(images_)のパレットを今のパレットへ合わせる(インデックスは変わらず色だけ変わる)
 void LuaEngineExt::SyncImagePalettes(LuaEngine* self) {
-    for (auto& slot : self->images_) {
+    for (auto& slot : self->images()) {
         if (!slot.used || !slot.sprite.usable) continue;
         for (int i = 0; i < 16; i++) slot.sprite.sprite.setPaletteColor(i, PICO_GFX::COLORS[i]);
     }
@@ -1007,7 +1062,7 @@ int LuaEngineExt::l_set_palette(lua_State* L) {
         c[i] = (int)v;
     }
     PICO_GFX::SetPaletteColor((int)index, PICO_GFX::Rgb565(c[0], c[1], c[2]));
-    self->used_palette_ = true;
+    self->markPaletteUsed();
     SyncImagePalettes(self);
     return 0;
 }
@@ -1149,22 +1204,19 @@ int LuaEngineExt::l_measure_text(lua_State* L) {
 //   pico.image_target(handle)の間はpico.draw_*の描き先がこの画像になる
 // 空いているスロットにw x hの4bppの画像を作り、添字を返す(作れなければ警告を出して-1)
 int LuaEngineExt::AllocImageSlot(LuaEngine* self, int w, int h, bool transparent, const char* fn) {
-    size_t index = LuaEngine::kMaxLuaImages;
-    for (size_t i = 0; i < LuaEngine::kMaxLuaImages; ++i) {
-        if (!self->images_[i].used) { index = i; break; }
-    }
-    if (index == LuaEngine::kMaxLuaImages) {
-        LOG_APP_WARN("%s: 同時に保持できる画像数の上限(%zu枚)に達しています", fn, LuaEngine::kMaxLuaImages);
+    const int index = self->images().findFree();
+    if (index < 0) {
+        LOG_APP_WARN("%s: 同時に保持できる画像数の上限(%zu枚)に達しています", fn, LuaImages::kMax);
         return -1;
     }
     const size_t need = ((size_t)w * h + 1) / 2;
-    if (self->image_bytes_used_ + need > LuaEngine::kMaxLuaImageBytes) {
+    if (!self->images().fits(need)) {
         LOG_APP_WARN("%s: 画像用メモリの上限(%uB)を超えます(%uB必要)", fn,
-                     (unsigned)LuaEngine::kMaxLuaImageBytes, (unsigned)need);
+                     (unsigned)LuaImages::kMaxBytes, (unsigned)need);
         return -1;
     }
 
-    LuaEngine::ImageSlot& slot = self->images_[index];
+    LuaImages::Slot& slot = self->images()[index];
     slot.sprite.sprite.setColorDepth(4);
     if (!slot.sprite.sprite.createSprite(w, h)) return -1;
     for (int i = 0; i < 16; i++) slot.sprite.sprite.setPaletteColor(i, PICO_GFX::COLORS[i]);
@@ -1173,12 +1225,9 @@ int LuaEngineExt::AllocImageSlot(LuaEngine* self, int w, int h, bool transparent
     slot.sprite.height = (uint16_t)h;
     slot.sprite.transparent = transparent;
     slot.sprite.usable = true;
-    slot.used = true;
-    slot.bytes = need;
     slot.rot_frames = slot.rot_cols = slot.rot_cell = 0;
-    self->image_bytes_used_ += need;
-    if (slot.generation == 0) slot.generation = 1;
-    return (int)index;
+    self->images().commit((size_t)index, need);
+    return index;
 }
 
 int LuaEngineExt::l_image_create(lua_State* L) {
@@ -1191,7 +1240,7 @@ int LuaEngineExt::l_image_create(lua_State* L) {
     }
     const int index = AllocImageSlot(self, w, h, transparent, "pico.image_create");
     if (index < 0) { lua_pushnil(L); return 1; }
-    lua_pushinteger(L, (lua_Integer)LuaEngine::MakeImageHandle((size_t)index, self->images_[index].generation));
+    lua_pushinteger(L, (lua_Integer)self->images().handleOf((size_t)index));
     return 1;
 }
 
@@ -1215,12 +1264,12 @@ int LuaEngineExt::l_image_rotate(lua_State* L) {
     const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
     const int frames = (int)luaL_optinteger(L, 2, 16);
     size_t src_index;
-    if (!self->ResolveImageHandle(handle, src_index)) {
+    if (!self->images().resolve(handle, src_index)) {
         return luaL_error(L, "pico.image_rotate: 無効なイメージハンドル");
     }
     if (frames < 1 || frames > 64) return luaL_error(L, "pico.image_rotate: コマの数は1〜64です");
 
-    const int iw = self->images_[src_index].sprite.width, ih = self->images_[src_index].sprite.height;
+    const int iw = self->images()[src_index].sprite.width, ih = self->images()[src_index].sprite.height;
     double sx = 1.0, sy = 1.0, ox = iw / 2.0, oy = ih / 2.0, start = 0.0;
     if (lua_istable(L, 3)) {
         auto opt = [&](const char* key, double& v) {
@@ -1265,8 +1314,8 @@ int LuaEngineExt::l_image_rotate(lua_State* L) {
 
     const int index = AllocImageSlot(self, cols * cell, rows * cell, true, "pico.image_rotate");
     if (index < 0) { lua_pushnil(L); return 1; }
-    LuaEngine::ImageSlot& dst = self->images_[index];
-    LuaEngine::ImageSlot& src = self->images_[src_index]; // AllocImageSlotの後に取る(同じ配列の別の要素)
+    LuaImages::Slot& dst = self->images()[index];
+    LuaImages::Slot& src = self->images()[src_index]; // AllocImageSlotの後に取る(同じ配列の別の要素)
     const bool src_transparent = src.sprite.transparent;
 
     // 1回きりの処理なので、描くときの速さより分かりやすさを取る(1画素ずつ逆変換して最近傍)
@@ -1292,7 +1341,7 @@ int LuaEngineExt::l_image_rotate(lua_State* L) {
     dst.rot_cols = (uint16_t)cols;
     dst.rot_cell = (uint16_t)cell;
 
-    lua_pushinteger(L, (lua_Integer)LuaEngine::MakeImageHandle((size_t)index, dst.generation));
+    lua_pushinteger(L, (lua_Integer)self->images().handleOf((size_t)index));
     lua_pushinteger(L, cell);
     return 2;
 }
@@ -1307,10 +1356,10 @@ int LuaEngineExt::l_draw_rotated(lua_State* L) {
     const double y = luaL_checknumber(L, 3);
     const double r = luaL_optnumber(L, 4, 0.0);
     size_t index;
-    if (!self->ResolveImageHandle(handle, index)) {
+    if (!self->images().resolve(handle, index)) {
         return luaL_error(L, "pico.draw_rotated: 無効なイメージハンドル");
     }
-    LuaEngine::ImageSlot& slot = self->images_[index];
+    LuaImages::Slot& slot = self->images()[index];
     if (slot.rot_frames == 0) {
         return luaL_error(L, "pico.draw_rotated: pico.image_rotateで作った画像を渡してください");
     }
@@ -1357,14 +1406,14 @@ int LuaEngineExt::l_draw_tilemap(lua_State* L) {
     const int32_t y = (int32_t)luaL_checkinteger(L, 7);
 
     size_t index;
-    if (!self->ResolveImageHandle(handle, index)) {
+    if (!self->images().resolve(handle, index)) {
         return luaL_error(L, "pico.draw_tilemap: 無効なイメージハンドル");
     }
     if (tw < 1 || th < 1 || tw > 128 || th > 128) return luaL_error(L, "pico.draw_tilemap: タイルの大きさは1〜128です");
     if (cols < 1 || cols > 4096) return luaL_error(L, "pico.draw_tilemap: 列数は1〜4096です");
     if (len == 0) return 0;
 
-    LuaEngine::ImageSlot& slot = self->images_[index];
+    LuaImages::Slot& slot = self->images()[index];
     const int32_t tcols = slot.sprite.width / tw;
     const int32_t trows = slot.sprite.height / th;
     if (tcols < 1 || trows < 1) return luaL_error(L, "pico.draw_tilemap: 画像がタイル1枚より小さいです");
@@ -1411,8 +1460,8 @@ int LuaEngineExt::l_image_clear(lua_State* L) {
     LuaEngine* self = Self(L);
     const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
     size_t index;
-    if (!self->ResolveImageHandle(handle, index)) return luaL_error(L, "pico.image_clear: 無効なイメージハンドル");
-    LuaEngine::ImageSlot& slot = self->images_[index];
+    if (!self->images().resolve(handle, index)) return luaL_error(L, "pico.image_clear: 無効なイメージハンドル");
+    LuaImages::Slot& slot = self->images()[index];
     const int color = (int)luaL_optinteger(L, 2, slot.sprite.transparent ? 0 : PICO_BACKGROUND);
     slot.sprite.sprite.fillScreen(color);
     return 0;
@@ -1428,20 +1477,20 @@ int LuaEngineExt::l_image_target(lua_State* L) {
     }
     const uint32_t handle = (uint32_t)luaL_checkinteger(L, 1);
     size_t index;
-    if (!self->ResolveImageHandle(handle, index)) return luaL_error(L, "pico.image_target: 無効なイメージハンドル");
+    if (!self->images().resolve(handle, index)) return luaL_error(L, "pico.image_target: 無効なイメージハンドル");
     self->EndImageTarget();
-    self->saved_frame_ = OSData::frame;
-    self->image_target_index_ = (int)index;
-    OSData::frame = &self->images_[index].sprite.sprite;
+    self->extState()->saved_frame = OSData::frame;
+    self->extState()->image_target_index = (int)index;
+    OSData::frame = &self->images()[index].sprite.sprite;
     LuaOffscreen::active = true;
     return 0;
 }
 
 void LuaEngine::EndImageTarget() {
-    if (image_target_index_ < 0) return;
-    if (saved_frame_) OSData::frame = saved_frame_;
-    saved_frame_ = nullptr;
-    image_target_index_ = -1;
+    if (ext_->image_target_index < 0) return;
+    if (ext_->saved_frame) OSData::frame = ext_->saved_frame;
+    ext_->saved_frame = nullptr;
+    ext_->image_target_index = -1;
     LuaOffscreen::active = false;
 }
 
@@ -1450,7 +1499,7 @@ void LuaEngine::EndImageTarget() {
 // ===================================================================
 
 int LuaEngineExt::l_app_dir(lua_State* L) {
-    lua_pushstring(L, Self(L)->app_dir_.c_str());
+    lua_pushstring(L, Self(L)->appDir());
     return 1;
 }
 
@@ -1601,7 +1650,7 @@ int LuaEngineExt::l_settings_get(lua_State* L) {
     LuaEngine* self = Self(L);
     const char* key = luaL_checkstring(L, 1);
     FixedString<PICO_PATH_LEN> path;
-    SettingsPath(self, self->app_dir_.c_str(), path);
+    SettingsPath(self, self->appDir(), path);
 
     bool has = false;
     FixedString<PICO_Config::kConfigMaxValueLen> found;
@@ -1619,7 +1668,7 @@ int LuaEngineExt::l_settings_get(lua_State* L) {
 int LuaEngineExt::l_settings_all(lua_State* L) {
     LuaEngine* self = Self(L);
     FixedString<PICO_PATH_LEN> path;
-    SettingsPath(self, self->app_dir_.c_str(), path);
+    SettingsPath(self, self->appDir(), path);
     lua_newtable(L);
     const int t = lua_gettop(L);
     if (OSData::SD_usable && OSData::SD.exists(path.c_str())) {
@@ -1659,7 +1708,7 @@ int LuaEngineExt::l_settings_set(lua_State* L) {
     }
     if (!OSData::SD_usable) { lua_pushboolean(L, false); return 1; }
     FixedString<PICO_PATH_LEN> path;
-    SettingsPath(self, self->app_dir_.c_str(), path);
+    SettingsPath(self, self->appDir(), path);
     lua_pushboolean(L, PICO_Config::SetValue(path.c_str(), key, value));
     return 1;
 }
@@ -1673,21 +1722,21 @@ int LuaEngineExt::l_memory_info(lua_State* L) {
         lua_pushinteger(L, (lua_Integer)room);
         lua_setfield(L, -2, "heap_room");
     }
-    lua_pushinteger(L, (lua_Integer)self->heap_refusals_);
+    lua_pushinteger(L, (lua_Integer)self->heapRefusals());
     lua_setfield(L, -2, "heap_refused");
     lua_pushinteger(L, (lua_Integer)s.stack_headroom);
     lua_setfield(L, -2, "heap_headroom");
-    lua_pushinteger(L, (lua_Integer)self->used_);
+    lua_pushinteger(L, (lua_Integer)self->usedBytes());
     lua_setfield(L, -2, "lua_used");
-    lua_pushinteger(L, (lua_Integer)self->budget_);
+    lua_pushinteger(L, (lua_Integer)self->budgetBytes());
     lua_setfield(L, -2, "lua_budget");
-    lua_pushinteger(L, (lua_Integer)(self->budget_ > self->used_ ? self->budget_ - self->used_ : 0));
+    lua_pushinteger(L, (lua_Integer)(self->budgetBytes() > self->usedBytes() ? self->budgetBytes() - self->usedBytes() : 0));
     lua_setfield(L, -2, "lua_free");
     lua_pushinteger(L, (lua_Integer)s.free_total);
     lua_setfield(L, -2, "heap_free");
     lua_pushinteger(L, (lua_Integer)s.used);
     lua_setfield(L, -2, "heap_used");
-    lua_pushinteger(L, (lua_Integer)self->image_bytes_used_);
+    lua_pushinteger(L, (lua_Integer)self->images().bytesUsed());
     lua_setfield(L, -2, "image_bytes");
     return 1;
 }

@@ -4,7 +4,7 @@
 #include "devtools/CrashDump_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "gui/scenes/FileViewerScene.hpp"
-#include "gui/scenes/VideoScene.hpp"
+#include "apps/video/VideoScene.hpp"
 #include "gui/scenes/FileSearchScene.hpp"
 #include "gui/scenes/StorageScene.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"

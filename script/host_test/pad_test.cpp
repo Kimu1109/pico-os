@@ -10,7 +10,7 @@
 //   - Game Boyのボタンへの対応(GbPadMap)
 #include "system/Pad_Functions.hpp"
 #include "system/Log_Functions.hpp"
-#include "gb/Gb_PadMap.hpp"
+#include "apps/gb/Gb_PadMap.hpp"
 
 #include <Arduino.h>
 #include <cstdio>

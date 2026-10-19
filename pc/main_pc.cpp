@@ -50,7 +50,7 @@
 #include <PicoPcClock.h>                     // 設定アプリで合わせた時計のずれ
 #include "devtools/CrashDump_Functions.hpp" // 再起動(電源メニュー)の差し込み口
 #include "services/DeviceKey_Functions.hpp" // OTPの端末の鍵(PCではファイルで真似る)
-#include "firmware/Fw_Store.hpp"                // ファームの更新の置き場(PCではディレクトリで真似る)
+#include "apps/firmware/Fw_Store.hpp"                // ファームの更新の置き場(PCではディレクトリで真似る)
 
 //OTP(端末の鍵)を真似るファイル。PICOOS_OTP_FILE、無ければSDのルートの隣の otp_emu.bin
 //(SDの中に置くと「SDだけを盗まれても読めない」を試せないので外に置く。Webは仮想FSなので読み直しで消える)

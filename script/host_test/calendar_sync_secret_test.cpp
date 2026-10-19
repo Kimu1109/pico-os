@@ -1,10 +1,10 @@
 // カレンダーの取得元(/calendar/sources.cfg)の暗号化保存(CalendarSync::WriteSource/ReadSource
-// が util/Secret_Cipher.hpp を通すこと)を検証するテスト。
+// が crypto/Secret_Cipher.hpp を通すこと)を検証するテスト。
 //
 // 長いGoogleカレンダー非公開URLを想定した往復・複数件・同名の上書き・後方互換(平文の
 // 既存行がそのまま読める)を確認する。実際の通信(CalendarSync::update()等)はここでは見ない
 // (calendar_scene_test/ical_testの担当)。
-#include "calendar/Calendar_Sync.hpp"
+#include "apps/calendar/Calendar_Sync.hpp"
 #include "storage/SD_Path.hpp"
 #include "system/Config_Functions.hpp"
 #include <cstdio>

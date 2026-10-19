@@ -3,7 +3,7 @@
 // Url.hpp/SD_IOのテストと同じく純粋な文字列処理なので、SDもGUIもFixedStringすら要らない。
 // ×÷√πはUTF-8のマルチバイト文字のままCalculatorKeypadから渡ってくるため、
 // ここでもソースリテラルにそのまま埋め込んで確認する。
-#include "util/Calc_Eval.hpp"
+#include "apps/calculator/Calc_Eval.hpp"
 #include <cstdio>
 #include <cmath>
 

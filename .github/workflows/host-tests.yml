@@ -76,3 +76,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: script/check_layers.py
         run: python3 script/check_layers.py
+      - name: 同梱のLuaモジュールの生成物が .lua と一致しているか
+        run: python3 script/gen_lua_builtins.py --check

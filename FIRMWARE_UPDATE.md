@@ -18,7 +18,7 @@ USBでつながなくても、SDカードに置いたファイルか、PCから�
 python3 script/firmware_tool.py keygen          # ~/.pico-os/firmware.key を作り、公開鍵の1行を表示する
 ```
 
-1. 表示された `{ { 0x.., ... } },` の1行で `src/firmware/Fw_Keys.hpp` の `kBuiltin` を置き換える
+1. 表示された `{ { 0x.., ... } },` の1行で `src/apps/firmware/Fw_Keys.hpp` の `kBuiltin` を置き換える
 2. そのファームを**USBで1回**書き込む(以後はその鍵で署名した更新を受け付ける)
 
 秘密鍵(`~/.pico-os/firmware.key`)は手元のPCにだけ置く。リポジトリにもGitHubのSecretsにも置かない。
@@ -110,7 +110,7 @@ gzip したものが入る大きさとつり合うように決めた(2026-10-16�
 
 署名 = Ed25519(`"pico-os-fw-v1\0\0\0"`(16バイト)+ 見出し128バイト)。署名なしなら印のbit0を0、署名の欄を全部0にする。
 版・コミット・日時は `firmware.bin` の中の `PICOOS-BUILD;serial=..;git=..;date=..;board=..;`
-(`src/firmware/Fw_Version.cpp`)から写すので、見出しと中身の版は必ず一致する。
+(`src/apps/firmware/Fw_Version.cpp`)から写すので、見出しと中身の版は必ず一致する。
 
 ### TCPの取り決め(ポート8370)
 

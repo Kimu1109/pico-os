@@ -7,7 +7,7 @@
 #include "gui/core/Scene_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"
-#include "gui/widgets/systems/AppGrid.hpp"
+#include "apps/home/AppGrid.hpp"
 #include "gui/core/Scene.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>

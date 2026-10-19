@@ -51,7 +51,7 @@ namespace LuaAppScanner {
     // Register()側の警告ログに任せ、ここではカウントしない)。
     int Scan();
 
-    // app.cfg の中身(全部省略可)。アプリストア(store/App_Store)もこれを読む
+    // app.cfg の中身(全部省略可)。アプリストア(apps/store/App_Store)もこれを読む
     struct AppInfo {
         FixedString<PICO_STR_M> name;         // 空ならディレクトリ名を使う
         FixedString<PICO_STR_L> description;

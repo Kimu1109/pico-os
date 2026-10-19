@@ -1,5 +1,5 @@
 -- 「マインスイーパー」(pc/sdcard/lua/apps/マインスイーパー/)のゲームの規則を、pico.* を差し替えて確かめる。
--- pico.game は本物(src/lua/LuaBuiltinModules.hpp の kGame をそのまま読む)で、描画だけ捨てる。
+-- pico.game は本物(src/lua/builtin/game.lua をそのまま読む)で、描画だけ捨てる。
 -- lua_script_test から run.sh が呼ぶ。見た目はPCビルドの --tap / --shot で確かめること。
 local APP = ROOT_DIR .. "/pc/sdcard/lua/apps/マインスイーパー/"
 local fails = 0
@@ -8,10 +8,7 @@ local function check(c, msg)
     if not c then fails = fails + 1 end
 end
 
-local hpp = assert(io.open(ROOT_DIR .. "/src/lua/LuaBuiltinModules.hpp")):read("a")
-local _, s = hpp:find('kGame = R"LUA(', 1, true)
-local e = hpp:find(')LUA"', s, true)
-local game = assert(load(hpp:sub(s + 1, e - 1), "=pico.game"))()
+local game = assert(load(assert(io.open(ROOT_DIR .. "/src/lua/builtin/game.lua")):read("a"), "=pico.game"))()
 
 local nid, popped, music = 0, false, 0
 pico = setmetatable({

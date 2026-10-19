@@ -6,15 +6,15 @@
 //   - 条件付きGETでサーバが304を返し、こちらがそれを304として扱えること
 //   - リダイレクトを追えること
 //   - 404や、繋がらない相手で正しく失敗すること
-#include "task/Http_Get.hpp"
-#include "net/Doc_Fetch.hpp"
-#include "storage/Doc_Cache.hpp"
+#include "net/Http_Get.hpp"
+#include "apps/browser/Doc_Fetch.hpp"
+#include "apps/browser/Doc_Cache.hpp"
 #include "storage/SD_Path.hpp"
 #include "storage/SD_IO.hpp"
-#include "util/Md_Scan.hpp"
-#include "net/Discovery.hpp"
-#include "net/Doc_Search.hpp"
-#include "net/Manifest.hpp"
+#include "apps/browser/Md_Scan.hpp"
+#include "apps/browser/Discovery.hpp"
+#include "apps/browser/Doc_Search.hpp"
+#include "apps/browser/Manifest.hpp"
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 

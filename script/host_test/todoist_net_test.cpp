@@ -14,10 +14,10 @@
 //   - /sys/todoist.cfg を読み、平文のトークンは暗号化して書き直す
 //
 // 使い方: todoist_net_test <httpのport> <httpsのport> <ca.pem> <トークン> <ページ分けしたhttpのport>
-#include "todo/Todoist_Client.hpp"
+#include "apps/todo/Todoist_Client.hpp"
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
-#include "util/Secret_Cipher.hpp"
+#include "crypto/Secret_Cipher.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

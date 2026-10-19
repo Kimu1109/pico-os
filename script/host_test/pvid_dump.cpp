@@ -9,7 +9,7 @@
 //   frame <番号> <ハッシュ> <変わったタイルの行の数>
 //   end
 // ハッシュは今の絵(1行 幅/2 バイト、左の画素が上位4bit)の FNV-1a 64bit。
-#include "video/Pvid_Player.hpp"
+#include "apps/video/Pvid_Player.hpp"
 #include "OS_Data.hpp"
 
 #include <cinttypes>

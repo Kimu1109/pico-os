@@ -2,7 +2,7 @@
 
 pico-os のアプリストア(ランチャの「ストア」)が、Web からLuaアプリを取ってきて `/lua/apps/` へ入れるための取り決め。
 **静的なファイルだけで成り立つ**ので、GitHub Pages・Raspberry Pi の nginx・`python3 -m http.server` のどれでも同じように配れる。
-配る側の道具は `script/build_app_repo.py`、本体側は `src/store/`(`App_Repo` が読み取り、`App_Store` が通信とインストール)と `StoreScene`。
+配る側の道具は `script/build_app_repo.py`、本体側は `src/apps/store/`(`App_Repo` が読み取り、`App_Store` が通信とインストール)と `StoreScene`。
 
 ## 置き方
 
@@ -86,7 +86,7 @@ permission_network=false
 
 署名の鍵は次のどちらかに一致すれば信頼する。どちらにも無ければ一覧を読まない。
 
-- ファームに焼き込んだ鍵: `src/store/App_Repo_Keys.hpp` の `kBuiltin`
+- ファームに焼き込んだ鍵: `src/apps/store/App_Repo_Keys.hpp` の `kBuiltin`
 - SDの `/sys/store.cfg` の `key = <16進64桁>`(4行まで)
 
 SDへ書ける人はアプリを `/lua/apps/` に直接置けるので、SDの鍵を信頼しても守りは弱くならない。

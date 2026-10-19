@@ -1,4 +1,4 @@
-// 元に戻すの記録(src/util/Edit_History.hpp)とクリップボード(Clipboard_Functions)のテスト。
+// 元に戻すの記録(src/apps/texteditor/Edit_History.hpp)とクリップボード(Clipboard_Functions)のテスト。
 //
 // 確かめること:
 //   - 元に戻す/やり直しで文書が1件ずつ前の状態に戻る(乱数の編集で、各時点の写しと突き合わせる)
@@ -7,7 +7,7 @@
 //   - ひとまとまり(chained)は一度に戻り、一度にやり直す
 //   - 保存した時点へ戻ると atSaved()、やり直しを捨てると戻れなくなる
 //   - クリップボード: \r とNULを捨てる・1KiBで文字の途中で切らない・空にすると返す
-#include "util/Edit_History.hpp"
+#include "apps/texteditor/Edit_History.hpp"
 #include "system/Clipboard_Functions.hpp"
 
 #include <cstdio>

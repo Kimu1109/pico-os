@@ -1,4 +1,4 @@
-// アプリストアの通信とインストール(store/App_Store)を、本物のHTTPで確かめる(run_net.sh)。
+// アプリストアの通信とインストール(apps/store/App_Store)を、本物のHTTPで確かめる(run_net.sh)。
 //
 // 配布物は app_store_fixture.py が <dir>/variants/ に作る。http.server が <dir>/www を配り、
 // <dir>/www/apps はその時々の variant へのシンボリックリンク(テストが張り替える)。
@@ -7,9 +7,9 @@
 // SDは stubs/ のメモリ上のもの(ディレクトリの実体が無いので、削除の再帰はここでは確かめない)。
 //
 // 使い方: app_store_net_test <port> <dir>
-#include "store/App_Store.hpp"
-#include "store/App_Repo.hpp"
-#include "store/App_Repo_Keys.hpp"
+#include "apps/store/App_Store.hpp"
+#include "apps/store/App_Repo.hpp"
+#include "apps/store/App_Repo_Keys.hpp"
 #include "services/App_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "system/Log_Functions.hpp"

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "consts.hpp"
-#include "util/TouchCalib.hpp"
+#include "hal/TouchCalib.hpp"
 #include "OS_Data.hpp"
 #include "system/Log_Functions.hpp"
 

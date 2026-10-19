@@ -5,7 +5,7 @@
 //   - 部屋/発言の1行を列に分ける。足りない列・数値でない列は捨てる。増えた列は無視する(前方互換)
 //   - バイト列を好きな切れ目で渡しても同じ行になる(1バイトずつでも)。CRLFのCRは落ちる
 //   - 長すぎる行は捨てて数え、次の行から読み直す
-#include "chat/Chat_Proto.hpp"
+#include "apps/chat/Chat_Proto.hpp"
 
 #include <cstdio>
 #include <cstring>

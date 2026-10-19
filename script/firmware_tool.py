@@ -4,7 +4,7 @@
 
 使い方:
   # 1. 署名の鍵を作る(1回だけ)。秘密鍵は手元のPCにだけ置く(リポジトリ・GitHubに置かない)。
-  #    表示された1行を src/firmware/Fw_Keys.hpp へ足し、USBで1回書き込む
+  #    表示された1行を src/apps/firmware/Fw_Keys.hpp へ足し、USBで1回書き込む
   python3 script/firmware_tool.py keygen
 
   # 2a. SDに置く更新ファイルを作る(pio run の後。pio run -t fwpack でも同じ)
@@ -35,7 +35,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_app_repo import ed25519_public, ed25519_sign, ed25519_verify  # noqa: E402
 
-# ---- 本体(src/firmware/Fw_Image.hpp)と揃える値 ----
+# ---- 本体(src/apps/firmware/Fw_Image.hpp)と揃える値 ----
 MAGIC = b"PICO-FW1"
 HEADER_BYTES = 128
 SIG_BYTES = 64
@@ -49,7 +49,7 @@ BOARD = "rpipico2w"
 DEFAULT_PORT = 8370
 DEFAULT_KEY = os.path.join("~", ".pico-os", "firmware.key")
 
-# src/firmware/Fw_Version.cpp の kMarker
+# src/apps/firmware/Fw_Version.cpp の kMarker
 MARKER_RE = re.compile(rb"PICOOS-BUILD;serial=(\d+);git=([^;\x00]*);date=([^;\x00]*);board=([^;\x00]*);")
 
 
@@ -86,7 +86,7 @@ def find_seed(args_key, required=False):
 def print_pubkey(pub):
     print(f"公開鍵: {pub.hex()}")
     print("")
-    print("src/firmware/Fw_Keys.hpp の kBuiltin をこの1行に置き換え(または足し)、USBで1回書き込んでください:")
+    print("src/apps/firmware/Fw_Keys.hpp の kBuiltin をこの1行に置き換え(または足し)、USBで1回書き込んでください:")
     body = ", ".join(f"0x{b:02x}" for b in pub)
     print(f"        {{ {{ {body} }} }},")
 

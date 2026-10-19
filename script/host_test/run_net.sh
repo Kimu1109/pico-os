@@ -45,14 +45,14 @@ BARE_PORT=$((PORT + 1))
 g++ -std=gnu++17 -g -fsanitize=address,undefined \
     -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
     "$ROOT/script/host_test/net_test.cpp" \
-    "$ROOT/src/task/Http_Get.cpp" \
+    "$ROOT/src/net/Http_Get.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
-    "$ROOT/src/net/Doc_Fetch.cpp" \
-    "$ROOT/src/net/Discovery.cpp" \
-    "$ROOT/src/net/Doc_Search.cpp" \
-    "$ROOT/src/net/Manifest.cpp" \
-    "$ROOT/src/storage/Doc_Cache.cpp" \
+    "$ROOT/src/apps/browser/Doc_Fetch.cpp" \
+    "$ROOT/src/apps/browser/Discovery.cpp" \
+    "$ROOT/src/apps/browser/Doc_Search.cpp" \
+    "$ROOT/src/apps/browser/Manifest.cpp" \
+    "$ROOT/src/apps/browser/Doc_Cache.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
     -o "$OUT/net_test" -lssl -lcrypto
 
@@ -96,8 +96,8 @@ echo "===== net_test ====="
 g++ -std=gnu++17 -g -fsanitize=address,undefined \
     -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
     "$ROOT/script/host_test/calendar_sync_test.cpp" \
-    "$ROOT/src/calendar/Calendar_Sync.cpp" \
-    "$ROOT/src/task/Http_Get.cpp" \
+    "$ROOT/src/apps/calendar/Calendar_Sync.cpp" \
+    "$ROOT/src/net/Http_Get.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     -o "$OUT/calendar_sync_test" -lssl -lcrypto
@@ -136,9 +136,9 @@ CHAT_DB="$OUT/chat.db"
 g++ -std=gnu++17 -g -fsanitize=address,undefined \
     -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
     "$ROOT/script/host_test/chat_net_test.cpp" \
-    "$ROOT/src/chat/Chat_Client.cpp" \
-    "$ROOT/src/chat/Chat_Proto.cpp" \
-    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/apps/chat/Chat_Client.cpp" \
+    "$ROOT/src/apps/chat/Chat_Proto.cpp" \
+    "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     -o "$OUT/chat_net_test" -lssl -lcrypto
@@ -187,10 +187,10 @@ TODO_TOKEN=0123456789abcdef0123456789abcdef01234567
 g++ -std=gnu++17 -g -fsanitize=address,undefined \
     -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
     "$ROOT/script/host_test/todoist_net_test.cpp" \
-    "$ROOT/src/todo/Todoist_Client.cpp" \
-    "$ROOT/src/todo/Todoist_Proto.cpp" \
+    "$ROOT/src/apps/todo/Todoist_Client.cpp" \
+    "$ROOT/src/apps/todo/Todoist_Proto.cpp" \
     "$ROOT/src/util/Json_Reader.cpp" \
-    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     -o "$OUT/todoist_net_test" -lssl -lcrypto
@@ -233,12 +233,12 @@ gcc -c -g -fsanitize=address,undefined -I"$ROOT/lib/monocypher/src" \
 g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
     -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" -I"$ROOT/lib/monocypher/src" -I"$ROOT/lib/lua/src" \
     "$ROOT/script/host_test/app_store_net_test.cpp" \
-    "$ROOT/src/store/App_Store.cpp" \
-    "$ROOT/src/store/App_Repo.cpp" \
+    "$ROOT/src/apps/store/App_Store.cpp" \
+    "$ROOT/src/apps/store/App_Repo.cpp" \
     "$ROOT/src/lua/LuaAppScanner.cpp" \
     "$ROOT/src/services/App_Functions.cpp" \
     "$ROOT/src/storage/SD_IO.cpp" \
-    "$ROOT/src/task/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
     "$OUT/store_m.o" "$OUT/store_me.o" \
@@ -293,9 +293,9 @@ gcc -c -O2 -I"$ROOT/lib/monocypher/src" "$ROOT/lib/monocypher/src/monocypher-ed2
 g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
     -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" -I"$ROOT/lib/monocypher/src" \
     "$ROOT/script/host_test/ssh_net_test.cpp" \
-    "$ROOT/src/ssh/Ssh_Client.cpp" \
-    "$ROOT/src/ssh/Ssh_Util.cpp" \
-    "$ROOT/src/ssh/Vt_Terminal.cpp" \
+    "$ROOT/src/apps/ssh/Ssh_Client.cpp" \
+    "$ROOT/src/apps/ssh/Ssh_Util.cpp" \
+    "$ROOT/src/apps/ssh/Vt_Terminal.cpp" \
     "$OUT/monocypher.o" "$OUT/monocypher-ed25519.o" \
     -o "$OUT/ssh_net_test"
 

@@ -40,8 +40,8 @@
 
 #include "gui/widgets/systems/Statusbar.hpp"
 #include "gui/widgets/systems/PerfOverlay.hpp"
-#include "gui/scenes/HomeScene.hpp"
-#include "home/Home_Widgets.hpp"
+#include "apps/home/HomeScene.hpp"
+#include "apps/home/Home_Widgets.hpp"
 #include "services/DeviceKey_Functions.hpp"
 
 #include "OS_Data.hpp"

@@ -9,6 +9,7 @@
 #include "gui/widgets/WidgetID.hpp"
 #include "gui/icons/icon_render.h"
 #include "lua/LuaPermissions.hpp"
+#include "lua/LuaImages.hpp"
 #include "lua/LuaDebugger.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
@@ -62,11 +63,11 @@
 // 画像(pico.image_load/draw_image/image_size/image_free): ウィジェット(Image)を
 // 介さず、`.pimg`(IconRender参照)を直接デコードしてこのLuaEngineインスタンスが
 // 保持する。ウィジェットではないのでWidgetRegistryは使わず、固定長スロット配列
-// (images_、上限kMaxLuaImages枚)を自分で持つ。ハンドルはWidgetIdと同じ発想の
+// (LuaImages。上限LuaImages::kMax枚)を自分で持つ。ハンドルはWidgetIdと同じ発想の
 // 「generation(上位)+index(下位)」パック整数だが、この配列専用のスコープなので
 // 32bit全体を使う本家の配分(type/generation/index)は真似ず単純化してある。
 // generationはWidgetRegistryと同じく解放(pico.image_free)のたびに1つ進める
-// (使用中かどうかは別途ImageSlot::usedで見る。generationを未使用の合図に
+// (使用中かどうかは別途LuaImages::Slot::usedで見る。generationを未使用の合図に
 // 使い回すと、解放直後に同じスロットを再利用したとき前回と同じハンドル値を
 // 発行してしまい、古い(解放済みの)ハンドルが新しい画像を指す事故になるため)。
 // generation==0は「一度もimage_loadに使われていないスロット」を表す予約値で、
@@ -79,7 +80,7 @@
 // budget_bytes(Alloc経由のLua自体の確保量)には乗らない、素のOSヒープ確保
 // (WidgetFactory::Create()が作るウィジェット本体と同じ扱い)。Luaのメモリ予算とは
 // 別に「同時に保持できる枚数」と「合計バイト数」の両方に頭打ちを設けてあるのは
-// これが理由(kMaxLuaImages/kMaxLuaImageBytes参照)。
+// これが理由(LuaImages::kMax/kMaxBytes参照)。
 //
 // ラスタキャンバスの保存/読み込み(pico.canvas_clear/canvas_save/canvas_load、
 // 2026-09-23実装): `CanvasRaster`(`pico.create("CanvasRaster")`)は`Widget`同様
@@ -233,7 +234,7 @@
 // ネットワーク(pico.http_request/http_cancel): 既存の`Http_Get`はMarkdownブラウザの
 // キャッシュ用途(GET専用、200/304以外は本文を捨てて一律失敗扱い)に特化しているため、
 // 汎用のHTTPクライアントとしては使えない。新設した`HttpRequest`
-// (`src/task/Http_Request.hpp`。メソッド・送信ボディを指定でき、ステータスコードに
+// (`src/net/Http_Request.hpp`。メソッド・送信ボディを指定でき、ステータスコードに
 // よらず本文を渡す)をこのLuaEngineインスタンスが1本だけ(`http_`、遅延`new`)保持し、
 // `LuaScene::onUpdate()`から毎フレーム`UpdateHttp()`で進める(`HttpGet`/`HttpRequest`は
 // どちらも`PICO_Task`の全体リストには登録されず、所有側が自分で`update()`を呼ぶ設計の
@@ -482,16 +483,58 @@ class LuaEngine {
         // pico.on_back(fn)で登録した「戻る」の処理を呼ぶ(Escキー・コントローラーのHOME・pico.go_back())。
         // 登録が無ければfalse(呼び出し側が既定の動き=Popをする)
         bool DispatchBack();
-        bool HasBackHandler() const { return back_callback_ref_ != LUA_NOREF; }
+        bool HasBackHandler() const;
         // pico.pad_* を一度でも使ったか(使うアプリの間はコントローラーでフォーカスを動かさない)
         bool UsedPad() const { return used_pad_; }
 
+        // ---- LuaEngine_<分野>.cpp の拡張(Ext/Iso/Net/Crypto/Mic)が使う口 ----
+        // 拡張は friend を使わず、ここに並べたものだけを通して LuaEngine を触る。
+        // 拡張ごとの状態(ExtState/IsoState/MicState)は中身をその .cpp だけが知る
+        struct ExtState;
+        struct IsoState;
+        struct MicState;
+        ExtState* extState() const { return ext_; }
+        IsoState* isoState() const { return iso_; }
+        void setIsoState(IsoState* s) { iso_ = s; }
+        MicState* micState() const { return mic_; }
+        void setMicState(MicState* s) { mic_ = s; }
+        // 読み込んだ・作った画像の置き場(pico.image_*、pico.iso の面の絵)
+        LuaImages& images() { return images_; }
+        // このアプリのフォルダ(PICO_IO::normalize()済み)。コンストラクタのapp_dir引数参照
+        const char* appDir() const { return app_dir_.c_str(); }
+        void markPaletteUsed() { used_palette_ = true; }
+        // pico.image_target の描き先を画面へ戻す(画像を消すとき・呼び出しの終わり)
+        void EndImageTarget();
+        bool isImageTarget(size_t index) const;
+        // タブの選択に合わせて pico.tab_link のウィジェットを見せる/隠す
+        void ApplyTabLinks(WidgetId tab);
+        // タブが切り替わったとき(pico.tab_link の連動を当て、tab_changed を配る)
+        void OnTabChanged(WidgetId tab);
+        // ダイアログが閉じたときのC++側コールバック配線(pico.show_xxx()内で生成直後に
+        // 必ず呼ぶ。pico.on()の有無に関わらずDestroyLater()までを保証する。
+        // クラスコメント「ダイアログ」参照)
+        void WireDialogClosed(class Widget* dialog, WidgetId id);
+        // pico.off(id, event): 登録を外す。知らないイベント名なら -1、外した数(0か1)を返す
+        int UnbindEvent(WidgetId id, const char* event_name);
+
+        // pico.sd_*/pico.image_loadの共通ガード。permissions_.sd_outside_app_dirが
+        // trueなら常にtrue。falseの間はpathを正規化した上でapp_dir_の配下
+        // (app_dir_自身、またはapp_dir_+"/"で始まる)かどうかを見る。
+        // app_dir_=="/"(既定値)の場合は常にtrue(「制限なし」)。
+        bool SdPathAllowed(const char* path) const;
+        // 書き込み系(sd_write/sd_remove/sd_mkdir/canvas_save/config_write)の共通ガード。
+        // SdPathAllowed()に加えて、アプリの設定ファイル(app.cfg)を守る:
+        //   - 自分のapp_dir直下のapp.cfg、および/lua/apps/<名前>/app.cfg(どのアプリのものでも)
+        //     へは書き込めない。app.cfgは権限(permission_network等)を持つので、書き換えを
+        //     許すとスクリプトが自分(やsd_outside_app_dirを持つ場合は他のアプリ)の権限を
+        //     勝手に上げられてしまうため。読むのは自由(pico.sd_read/config_read)
+        //   - FATは大小を区別せず末尾の'.'/空白も捨てるので、名前はそれを吸収して比べる
+        //   - is_remove(sd_remove)では、app.cfgを丸ごと消せてしまう「それを含むディレクトリ」
+        //     (自分のapp_dirとその祖先、/lua/apps/<名前>とその祖先)の削除も拒否する
+        // 拒否したときはLOG_APP_WARNを出す(apiはログに出す関数名)
+        bool SdWriteAllowed(const char* path, const char* api, bool is_remove = false) const;
+
     private:
-        friend struct LuaEngineExt;
-        friend struct LuaEngineCrypto;
-        friend struct LuaEngineIso;
-        friend struct LuaEngineNet;
-        friend struct LuaEngineMic;
         // Render: LuaCanvas限定。Closed: ダイアログ限定。他4種はWidget基底が
         // 全種別共通で持つ(BindCallback参照)。CheckedChanged/ValueChanged/SelectItem/
         // TabChangedはウィジェット固有イベント(クラスコメント「ウィジェット固有イベント」参照)
@@ -558,44 +601,21 @@ class LuaEngine {
         // pico.wav_*を使ったか。使ったアプリは閉じるときにWAVを止める
         bool used_wav_ = false;
         bool used_palette_ = false; // pico.set_palette()を呼んだ(閉じるときに既定のパレットへ戻す)
-        // pico.mic_*(LuaEngine_Mic.cpp)。閉じるときに ReleaseMic() が、このアプリが始めた録音・メーターを止め、
-        // 変えた増幅・周波数を元へ戻す(mic.cfg へは書かないので、他のアプリや録音アプリの設定は変わらない)
-        bool mic_recording_ = false;    // このアプリが録音を始めた
-        bool mic_monitor_ = false;      // このアプリがメーターを入れた
-        int  mic_saved_gain_ = -1;      // 変える前の増幅(-1=変えていない)
-        uint32_t mic_saved_rate_ = 0;   // 変える前の周波数(0=変えていない)
+        // pico.mic_*(LuaEngine_Mic.cpp)の状態。閉じるときに ReleaseMic() が、このアプリが始めた録音・メーターを止め、
+        // 変えた増幅・周波数を元へ戻す。初めて変えたときに new する
+        MicState* mic_ = nullptr;
         void ReleaseMic();
         uint32_t requested_rate_ = 0; // pico.sound_set_rate()(0=設定のまま)
 
         std::vector<CallbackBinding> callbacks_;
 
-        // ---- 2026-10-05(2): ツリー探索・名前・タブの連動・戻る・ジェスチャー・オフスクリーン ----
-        // pico.set_name(id, name) / pico.find(name)。ウィジェットの数は多くないので線形探索で足りる
-        struct NameEntry { WidgetId id; FixedString<PICO_STR_S> name; };
-        std::vector<NameEntry> names_;
-        static constexpr size_t kMaxNames = 128;
-        // pico.tab_link(tab_id, index, widget_id): タブが切り替わったら対応するウィジェットだけ見せる
-        struct TabLink { WidgetId tab; int index; WidgetId target; };
-        std::vector<TabLink> tab_links_;
-        static constexpr size_t kMaxTabLinks = 32;
-        void ApplyTabLinks(WidgetId tab);
-        void OnTabChanged(WidgetId tab);
-        // pico.on_back(fn)
-        int back_callback_ref_ = LUA_NOREF;
-        // ジェスチャー判定の状態(UpdateGestures)
-        struct GestureState {
-            bool active = false;
-            bool long_fired = false;
-            bool moved = false;
-            int sx = 0, sy = 0;
-            uint32_t t0 = 0;
-            uint32_t last_tap_ms = 0;
-            int last_tap_x = -1000, last_tap_y = -1000;
-        } gesture_;
-        // 画像スロットへの描き込み(pico.image_target)。activeの間、OSData::frameを画像のスプライトへ差し替える
-        LGFX_Sprite* saved_frame_ = nullptr;
-        int image_target_index_ = -1;
-        void EndImageTarget();
+        // pico.set_name/find・タブの連動・on_back・ジェスチャー・image_target の状態(中身は LuaEngine_Ext.cpp)。
+        // コンストラクタで作り、デストラクタで捨てる
+        ExtState* ext_ = nullptr;
+        void CreateExt();
+        void DestroyExt();
+        // ウィジェットが消えたとき、名前とタブの連動から外す(PruneCallbacksFor)
+        void ForgetExt(WidgetId id);
         // 引数付きイベントの共通口。コールバックがあれば関数とidを積んでtrue(呼んだらEndDispatch(追加引数の数))
         bool BeginDispatch(WidgetId id, EventKind kind);
         void EndDispatch(int extra_args);
@@ -608,8 +628,8 @@ class LuaEngine {
         void RegisterMicApi();
 
         // pico.iso(2.5Dの箱庭のエンジン。LuaEngine_Iso.cpp)の状態。初めて pico.iso.* を使ったときに new する
-        struct IsoState;
         IsoState* iso_ = nullptr;
+        LuaImages images_;
         void DestroyIso();
 
         // ---- 画面をまたぐ受け渡し ----
@@ -655,37 +675,6 @@ class LuaEngine {
         char last_trace_[PICO_STR_1KiB] = {};
         LuaDebugger* debugger_ = nullptr;
 
-        // pico.image_* が使う画像スロット。ウィジェットの生成数のように実行時に
-        // 増減する必要が無い(1つのLuaアプリが同時に扱う画像は少数の見込み)ため、
-        // MarkdownViewのプールと同じ「固定長配列」志向で、std::vector等は使わない。
-        struct ImageSlot {
-            IconRender::PimgSprite sprite;
-            bool used = false;
-            // WidgetRegistryと同じ「解放のたびに進める」方式。usedがfalseの間も
-            // 値は保持したままにする(次にこのスロットを使い回したときのハンドルを
-            // 前回発行分と別物にするため。generation==0は「一度も使われていないスロット」
-            // を表す予約値で、初回使用時に1へ進める)
-            uint32_t generation = 0;
-            size_t bytes = 0; // 使用中のバイト数(image_bytes_used_の増減用に覚えておく)
-            // pico.image_rotateで作った「回転済みのコマを並べた画像」なら、コマの数・1行のコマ数・コマの一辺。
-            // 普通の画像は0(pico.draw_rotatedで使えない)。解放したときに0へ戻す
-            uint16_t rot_frames = 0, rot_cols = 0, rot_cell = 0;
-        };
-
-        // 同時に保持できる画像の枚数と合計バイト数の上限。前者はスロット数の頭打ち、
-        // 後者は「小さい画像を大量に」でも予算を使い切れるようにするための頭打ち
-        // (LGFX_Sprite側の確保はLuaEngineのbudget_/Alloc経由の予算に乗らないため、
-        // ここで別枠として管理する。上のクラスコメント参照)。
-        static constexpr size_t kMaxLuaImages = 8;
-        static constexpr size_t kMaxLuaImageBytes = 96 * 1024;
-
-        ImageSlot images_[kMaxLuaImages];
-        size_t image_bytes_used_ = 0;
-
-        // generation(上位24bit)+index(下位8bit、1始まり。0は無効値)のパック整数。
-        // WidgetIdと違いこの配列専用のスコープなので32bit全体を型ビットまで使う必要はない
-        static uint32_t MakeImageHandle(size_t index, uint32_t generation);
-        bool ResolveImageHandle(uint32_t handle, size_t& out_index) const;
 
         // pico.http_request()用の状態(進行中のHttpRequest+受信バッファ+完了コールバック)。
         // 使わないLuaアプリのメモリコストをゼロに保つため、初回のpico.http_request()まで
@@ -701,11 +690,9 @@ class LuaEngine {
         void FinishHttp();
         void StartQueuedHttp();
         static void FreePending(lua_State* L, PendingHttp* r);
+        // 順番待ちの控えと HttpState を捨てる(デストラクタ。型の中身は LuaEngine_Http.cpp にしか無い)
+        void DestroyHttp();
 
-        // ダイアログが閉じたときのC++側コールバック配線(pico.show_xxx()内で生成直後に
-        // 必ず呼ぶ。pico.on()の有無に関わらずDestroyLater()までを保証する。
-        // クラスコメント「ダイアログ」参照)
-        void WireDialogClosed(class Widget* dialog, WidgetId id);
         // EventKind::Closed専用のDispatch。is_okを2つ目の引数としてLua関数へ渡す点だけ
         // 通常のDispatch(id, kind)と異なる(そちらはWidgetIdの1引数固定のまま変えていない)
         void DispatchClosed(WidgetId id, bool is_ok);
@@ -756,23 +743,7 @@ class LuaEngine {
         static int l_clear_breakpoint(lua_State* L);
         static int l_debugger_enabled(lua_State* L);
 
-        // pico.sd_*/pico.image_loadの共通ガード。permissions_.sd_outside_app_dirが
-        // trueなら常にtrue。falseの間はpathを正規化した上でapp_dir_の配下
-        // (app_dir_自身、またはapp_dir_+"/"で始まる)かどうかを見る。
-        // app_dir_=="/"(既定値)の場合は常にtrue(「制限なし」)。
-        bool SdPathAllowed(const char* path) const;
 
-        // 書き込み系(sd_write/sd_remove/sd_mkdir/canvas_save/config_write)の共通ガード。
-        // SdPathAllowed()に加えて、アプリの設定ファイル(app.cfg)を守る:
-        //   - 自分のapp_dir直下のapp.cfg、および/lua/apps/<名前>/app.cfg(どのアプリのものでも)
-        //     へは書き込めない。app.cfgは権限(permission_network等)を持つので、書き換えを
-        //     許すとスクリプトが自分(やsd_outside_app_dirを持つ場合は他のアプリ)の権限を
-        //     勝手に上げられてしまうため。読むのは自由(pico.sd_read/config_read)
-        //   - FATは大小を区別せず末尾の'.'/空白も捨てるので、名前はそれを吸収して比べる
-        //   - is_remove(sd_remove)では、app.cfgを丸ごと消せてしまう「それを含むディレクトリ」
-        //     (自分のapp_dirとその祖先、/lua/apps/<名前>とその祖先)の削除も拒否する
-        // 拒否したときはLOG_APP_WARNを出す(apiはログに出す関数名)
-        bool SdWriteAllowed(const char* path, const char* api, bool is_remove = false) const;
 
         void registerApi();
         void registerFn(const char* name, lua_CFunction fn);

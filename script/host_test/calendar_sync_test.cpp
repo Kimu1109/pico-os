@@ -11,7 +11,7 @@
 //   - 信頼していない証明書・名前の違う証明書では繋がらない(手元の .ics はそのまま)
 //
 // 使い方: calendar_sync_test <port> <テスト用CAのPEMファイル>
-#include "calendar/Calendar_Sync.hpp"
+#include "apps/calendar/Calendar_Sync.hpp"
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"

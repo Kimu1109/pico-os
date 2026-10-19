@@ -1,11 +1,11 @@
-// ファームの更新(firmware/Fw_Image・Fw_Update、FIRMWARE_UPDATE.md)の取り決めを固定する。
+// ファームの更新(apps/firmware/Fw_Image・Fw_Update、FIRMWARE_UPDATE.md)の取り決めを固定する。
 // 置き場(内蔵フラッシュのLittleFS)と受け取り元(SD・TCP)はメモリの偽物。
 //
 //   ./firmware_test                     … C++の中で組み立てた更新ファイルで全部の経路
 //   ./firmware_test <x.pfw> <公開鍵.hex> … script/firmware_tool.py が作ったものを読めること(firmware_tool_test.py が呼ぶ)
-#include "firmware/Fw_Image.hpp"
-#include "firmware/Fw_Update.hpp"
-#include "ssh/Ssh_Sha256.hpp"
+#include "apps/firmware/Fw_Image.hpp"
+#include "apps/firmware/Fw_Update.hpp"
+#include "apps/ssh/Ssh_Sha256.hpp"
 #include "monocypher-ed25519.h"
 
 #include <cstdio>

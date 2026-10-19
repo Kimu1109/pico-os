@@ -8,9 +8,9 @@
 #include "system/Log_Functions.hpp"
 #include "gui/widgets/systems/LockScreen.hpp"
 #include "storage/SD_Path.hpp"
-#include "util/Secret_Cipher.hpp"
-#include "util/Secret_Aead.hpp"
-#include "util/Device_Key.hpp"
+#include "crypto/Secret_Cipher.hpp"
+#include "crypto/Secret_Aead.hpp"
+#include "crypto/Device_Key.hpp"
 #include "monocypher.h"
 #include "OS_Data.hpp"
 

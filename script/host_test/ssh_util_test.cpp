@@ -1,4 +1,4 @@
-// SSHクライアントの小道具(src/ssh/Ssh_Sha256.hpp / Ssh_Util)のホストテスト。
+// SSHクライアントの小道具(src/apps/ssh/Ssh_Sha256.hpp / Ssh_Util)のホストテスト。
 // ソケットを使わない部分だけ(本物のsshd相手の往復は run_net.sh の ssh_net_test)。
 //
 //   - SHA-256 がFIPS 180-4の例と一致する(1バイトずつ食わせても同じ)
@@ -8,8 +8,8 @@
 //   - 鍵ファイルの暗号化: 平文なら読んだときに enc1: の形へ書き直す・2回目は書き直さない・壊れた/
 //     パスフレーズ付きの鍵は書き換えない
 //   - known_hosts の照合(22番は名前だけ・それ以外は[host]:port・カンマ区切り・ハッシュ化された行は無視)
-#include "ssh/Ssh_Sha256.hpp"
-#include "ssh/Ssh_Util.hpp"
+#include "apps/ssh/Ssh_Sha256.hpp"
+#include "apps/ssh/Ssh_Util.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

@@ -31,7 +31,7 @@ import subprocess
 import sys
 import time
 
-# ---- 本体(store/App_Repo.hpp)と揃える値 ----
+# ---- 本体(apps/store/App_Repo.hpp)と揃える値 ----
 MAGIC = "pico-os-apps"
 FORMAT = 1
 SIGN_CONTEXT = b"pico-os-apps-v1\0"  # 16バイト
@@ -191,7 +191,7 @@ def print_pubkey(pub):
     print("本体に信頼させるには、どちらか:")
     print(f"  SDの /sys/store.cfg に  key = {pub.hex()}")
     body = ", ".join(f"0x{b:02x}" for b in pub)
-    print("  src/store/App_Repo_Keys.hpp の kBuiltin に")
+    print("  src/apps/store/App_Repo_Keys.hpp の kBuiltin に")
     print(f"        {{ {{ {body} }} }},")
 
 

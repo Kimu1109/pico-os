@@ -1,4 +1,4 @@
-// 端末ごとの鍵(DeviceKeyFunctions / util/Device_Key.hpp)。OTPはメモリの中で真似る。
+// 端末ごとの鍵(DeviceKeyFunctions / crypto/Device_Key.hpp)。OTPはメモリの中で真似る。
 //   - 鍵を作る前は固定鍵(enc1: / Luaの暗号 version 1 / PINの v1)のまま
 //   - 作るとOTPの枠に書き、SDの暗号化された設定を enc3: へ書き直す(コメント・他のキーは残す)
 //   - 起動し直しても同じ鍵が読める・もう一度は作れない
@@ -12,11 +12,11 @@
 #include "services/Power_Functions.hpp"
 #include "system/Pad_Functions.hpp"
 #include "system/Config_Functions.hpp"
-#include "ssh/Ssh_Util.hpp"
+#include "apps/ssh/Ssh_Util.hpp"
 #include "storage/SD_Path.hpp"
-#include "util/Device_Key.hpp"
-#include "util/Secret_Aead.hpp"
-#include "util/Secret_Cipher.hpp"
+#include "crypto/Device_Key.hpp"
+#include "crypto/Secret_Aead.hpp"
+#include "crypto/Secret_Cipher.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>

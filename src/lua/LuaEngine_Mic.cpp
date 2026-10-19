@@ -21,6 +21,7 @@
 #include "storage/SD_IO.hpp"
 #include "sound/Mic_Dsp.hpp"
 #include "OS_Data.hpp"
+#include <new>
 
 namespace {
     LuaEngine* Self(lua_State* L){ return *static_cast<LuaEngine**>(lua_getextraspace(L)); }
@@ -47,9 +48,27 @@ namespace {
     }
 }
 
+// このアプリが始めた録音・メーターと、変える前の増幅・周波数(閉じるときに ReleaseMic() が戻す)
+struct LuaEngine::MicState {
+    bool recording = false;    // このアプリが録音を始めた
+    bool monitor = false;      // このアプリがメーターを入れた
+    int  saved_gain = -1;      // 変える前の増幅(-1=変えていない)
+    uint32_t saved_rate = 0;   // 変える前の周波数(0=変えていない)
+};
+
 struct LuaEngineMic {
+    // 初めて触ったときに作る(マイクを使わないアプリは何も持たない)
+    static LuaEngine::MicState& St(lua_State* L, LuaEngine* self){
+        if(!self->micState()){
+            LuaEngine::MicState* st = new (std::nothrow) LuaEngine::MicState();
+            if(!st) luaL_error(L, "pico.mic: メモリが足りません");
+            self->setMicState(st);
+        }
+        return *self->micState();
+    }
+
     static bool Denied(lua_State* L, LuaEngine* self, const char* api){
-        if(self->permissions_.microphone) return false;
+        if(self->permissions().microphone) return false;
         LOG_APP_WARN("%s: マイクの権限がありません(app.cfgのpermission_microphone)", api);
         lua_pushnil(L);
         lua_pushstring(L, "マイクの権限がありません");
@@ -57,14 +76,14 @@ struct LuaEngineMic {
     }
 
     // 変える前の値を1回だけ覚えてから変える(閉じるときに戻す)
-    static void SetGain(LuaEngine* self, int db){
-        if(self->mic_saved_gain_ < 0) self->mic_saved_gain_ = MicFunctions::GainDb();
+    static void SetGain(lua_State* L, LuaEngine* self, int db){
+        if(St(L, self).saved_gain < 0) St(L, self).saved_gain = MicFunctions::GainDb();
         MicFunctions::SetGainDb(db, false);
     }
-    static bool SetRate(LuaEngine* self, uint32_t rate){
+    static bool SetRate(lua_State* L, LuaEngine* self, uint32_t rate){
         const uint32_t before = MicFunctions::SampleRate();
         if(!MicFunctions::SetSampleRate(rate, false)) return false;
-        if(self->mic_saved_rate_ == 0 && rate != before) self->mic_saved_rate_ = before;
+        if(St(L, self).saved_rate == 0 && rate != before) St(L, self).saved_rate = before;
         return true;
     }
 
@@ -113,7 +132,7 @@ struct LuaEngineMic {
         char auto_path[PICO_PATH_LEN + 1];
         if(!path){
             //アプリのフォルダの rec_0001.wav から空いている番号
-            const char* dir = self->app_dir_.c_str();
+            const char* dir = self->appDir();
             const bool root = strcmp(dir, "/") == 0;
             bool found = false;
             for(int i = 1; i <= 9999 && !found; i++){
@@ -136,15 +155,15 @@ struct LuaEngineMic {
         char parent[PICO_PATH_LEN + 1];
         if(PICO_IO::parent(parent, path) && strlen(parent) > 1 && !OSData::SD.exists(parent)) OSData::SD.mkdir(parent);
 
-        if(rate > 0) SetRate(self, (uint32_t)rate);
-        if(gain >= 0) SetGain(self, (int)gain);
+        if(rate > 0) SetRate(L, self, (uint32_t)rate);
+        if(gain >= 0) SetGain(L, self, (int)gain);
         const MicFunctions::RecError e = MicFunctions::StartRecording(path);
         if(e != MicFunctions::RecError::None){
             lua_pushnil(L);
             lua_pushstring(L, MicFunctions::RecErrorToStr(e));
             return 2;
         }
-        self->mic_recording_ = true;
+        St(L, self).recording = true;
         lua_pushstring(L, MicFunctions::RecordingPath());
         return 1;
     }
@@ -152,9 +171,9 @@ struct LuaEngineMic {
     static int l_mic_stop(lua_State* L){
         // pico.mic_stop() -> このアプリの録音を止めたら true
         LuaEngine* self = Self(L);
-        const bool mine = self->mic_recording_ && MicFunctions::IsRecording() && !MicFunctions::IsFinishing();
+        const bool mine = St(L, self).recording && MicFunctions::IsRecording() && !MicFunctions::IsFinishing();
         if(mine) MicFunctions::StopRecording();
-        self->mic_recording_ = false;
+        St(L, self).recording = false;
         lua_pushboolean(L, mine);
         return 1;
     }
@@ -192,7 +211,7 @@ struct LuaEngineMic {
         const bool on = lua_toboolean(L, 1);
         if(on && Denied(L, self, "pico.mic_monitor")) return 2;
         MicFunctions::SetMonitor(on);
-        self->mic_monitor_ = on;
+        St(L, self).monitor = on;
         lua_pushboolean(L, 1);
         return 1;
     }
@@ -216,7 +235,7 @@ struct LuaEngineMic {
         LuaEngine* self = Self(L);
         const lua_Integer db = luaL_checkinteger(L, 1);
         if(Denied(L, self, "pico.mic_set_gain")) return 2;
-        SetGain(self, (int)db);
+        SetGain(L, self, (int)db);
         lua_pushboolean(L, 1);
         return 1;
     }
@@ -231,7 +250,7 @@ struct LuaEngineMic {
         LuaEngine* self = Self(L);
         const lua_Integer rate = CheckRate(L, 1, "pico.mic_set_rate");
         if(Denied(L, self, "pico.mic_set_rate")) return 2;
-        if(!SetRate(self, (uint32_t)rate)){
+        if(!SetRate(L, self, (uint32_t)rate)){
             lua_pushnil(L);
             lua_pushstring(L, "録音中は周波数を変えられません");
             return 2;
@@ -247,19 +266,18 @@ struct LuaEngineMic {
 };
 
 void LuaEngine::ReleaseMic(){
-    if(mic_recording_ && MicFunctions::IsRecording() && !MicFunctions::IsFinishing()) MicFunctions::StopRecording();
-    mic_recording_ = false;
-    if(mic_monitor_) MicFunctions::SetMonitor(false);
-    mic_monitor_ = false;
-    if(mic_saved_gain_ >= 0) MicFunctions::SetGainDb(mic_saved_gain_, false);
-    mic_saved_gain_ = -1;
+    if(!mic_) return;
+    if(mic_->recording && MicFunctions::IsRecording() && !MicFunctions::IsFinishing()) MicFunctions::StopRecording();
+    if(mic_->monitor) MicFunctions::SetMonitor(false);
+    if(mic_->saved_gain >= 0) MicFunctions::SetGainDb(mic_->saved_gain, false);
     //録音の後片付けの間は周波数を変えられないので、終わってから戻す
-    if(mic_saved_rate_ != 0) MicFunctions::RestoreSampleRate(mic_saved_rate_);
-    mic_saved_rate_ = 0;
+    if(mic_->saved_rate != 0) MicFunctions::RestoreSampleRate(mic_->saved_rate);
+    delete mic_;
+    mic_ = nullptr;
 }
 
 bool LuaEngine::MicBusy() const {
-    return mic_recording_ && MicFunctions::IsRecording();
+    return mic_ && mic_->recording && MicFunctions::IsRecording();
 }
 
 void LuaEngine::RegisterMicApi(){

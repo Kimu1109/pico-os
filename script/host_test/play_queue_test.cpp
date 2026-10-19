@@ -1,9 +1,9 @@
-// 再生の順番(src/sound/Play_Queue.hpp)のテスト。ミュージックアプリの順番通り/ミックスとリピート。
+// 再生の順番(src/apps/music/Play_Queue.hpp)のテスト。ミュージックアプリの順番通り/ミックスとリピート。
 //
 // 確かめること: 順番通りの次/前・リピートしない/全曲/1曲・利用者の「次へ」は1曲リピートでも進む・
 // ミックスは全部の曲を1回ずつ・今の曲を先頭に置く・切り替えても今の曲が変わらない・
 // 一巡して混ぜ直したとき直前の曲がすぐ続かない・空のプレイリスト
-#include "sound/Play_Queue.hpp"
+#include "apps/music/Play_Queue.hpp"
 #include <cstdio>
 
 static int failures = 0;

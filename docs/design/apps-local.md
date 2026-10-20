@@ -404,3 +404,9 @@ SSID/パスワードの「編集」行は無くなった(同じSSIDを「追加�
   `DropdownMenu::setSelectedIndex()`が表示用ラベルを更新していなかった(選択自体は効くが、
   閉じた時の表示がプレースホルダのまま残る)のを直した。いずれも今回が初の実利用で発覚した。
 
+
+## ファイル一覧の種類別アイコン(2026-10-20)
+
+ファイル一覧(ファイルアプリ・ストレージ・ファイル検索)は拡張子でアイコンを変える。`gui/icons/File_Icon.hpp` の `FileIcon::For(name, is_dir)` が選ぶ。
+画像=`FileImage`(photo)、動画=`FileVideo`(movie)、音声=`FileAudio`(file-music)、テキスト=`FileText`、コード=`FileCode`、圧縮=`FileArchive`(file-zip)。
+どれにも当たらなければ従来の `File`。いずれもtablerで、16pxでも判別できることを目視した。拡張子を足すなら `File_Icon.hpp` の表へ。

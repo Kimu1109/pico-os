@@ -1,3 +1,4 @@
+#include "gui/icons/File_Icon.hpp"
 #include "gui/scenes/StorageScene.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
@@ -111,7 +112,7 @@ void StorageScene::refreshList(){
     for(int i = 0; i < this->entry_count; i++){
         const Entry& e = this->entries[i];
         ScrollListTools::Item item;
-        item.icon = e.is_dir ? IconID::Folder : IconID::File;
+        item.icon = FileIcon::For(e.name.c_str(), e.is_dir);
         char sz[16];
         const bool pending = e.is_dir && !this->counted && i >= this->counting;
         if(pending) snprintf(sz, sizeof(sz), "…");

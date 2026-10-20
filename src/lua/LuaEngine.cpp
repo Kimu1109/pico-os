@@ -2,6 +2,7 @@
 // コールバックの中継・デバッガ・タイマー・画面をまたぐ受け渡し。pico.* の関数本体は LuaEngine_<分野>.cpp
 #include "lua/LuaEngine.hpp"
 #include "lua/LuaEngine_Internal.hpp"
+#include "lua/LuaConstants.hpp"
 #include "services/Power_Functions.hpp"
 #include "system/Mem_Functions.hpp"
 
@@ -699,7 +700,7 @@ void LuaEngine::registerFn(const char* name, lua_CFunction fn) {
 }
 
 // 名前の順に並べ(同じ名前は後から足したもの = 差し替えを残す)、スタックのトップのテーブルの __index にする
-void LuaEngine::finishApiTable(std::vector<luaL_Reg>& api) {
+void LuaEngine::finishApiTable(std::vector<luaL_Reg>& api, int constants) {
     std::stable_sort(api.begin(), api.end(),
                      [](const luaL_Reg& a, const luaL_Reg& b) { return strcmp(a.name, b.name) < 0; });
     size_t n = 0;
@@ -711,7 +712,8 @@ void LuaEngine::finishApiTable(std::vector<luaL_Reg>& api) {
     api.shrink_to_fit();
     lua_createtable(L, 0, 1);
     lua_pushlightuserdata(L, &api);
-    lua_pushcclosure(L, l_api_index, 1);
+    lua_pushinteger(L, constants);
+    lua_pushcclosure(L, l_api_index, 2);
     lua_setfield(L, -2, "__index");
     lua_setmetatable(L, -2);
 }
@@ -723,7 +725,19 @@ int LuaEngine::l_api_index(lua_State* L) {
     const auto* api = static_cast<const std::vector<luaL_Reg>*>(lua_touserdata(L, lua_upvalueindex(1)));
     const auto it = std::lower_bound(api->begin(), api->end(), key,
                                      [](const luaL_Reg& r, const char* k) { return strcmp(r.name, k) < 0; });
-    if (it == api->end() || strcmp(it->name, key) != 0) return 0;
+    if (it == api->end() || strcmp(it->name, key) != 0) {
+        // 関数が無ければ数値定数(pico.COLOR_RED 等)。これも次からは普通に引けるようテーブルへ入れる
+        int32_t v = 0;
+        const lua_Integer kind = lua_tointeger(L, lua_upvalueindex(2));
+        const bool found = kind == 1 ? LuaConstants::FindPico(key, v)
+                         : kind == 2 ? LuaConstants::FindIso(key, v) : false;
+        if (!found) return 0;
+        lua_pushinteger(L, v);
+        lua_pushvalue(L, 2);
+        lua_pushvalue(L, -2);
+        lua_rawset(L, 1);
+        return 1;
+    }
     lua_pushcfunction(L, it->func);
     lua_pushvalue(L, 2);
     lua_pushvalue(L, -2);
@@ -856,7 +870,7 @@ void LuaEngine::registerApi() {
     registerFn("finish", l_finish);
     RegisterExtApi();
     if (background_) filterBackgroundApi();
-    finishApiTable(api_pico_);
+    finishApiTable(api_pico_, 1);
     // グローバルの require は pico.require と同じ関数
     lua_getfield(L, -1, "require");
     lua_setglobal(L, "require");

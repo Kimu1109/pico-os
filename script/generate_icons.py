@@ -427,6 +427,18 @@ def generate_header(icons: list, sizes: list, out_path: Path):
     lines.append("}")
     lines.append("")
 
+    # --- IconID の名前表(Luaの pico.ICON_<名前> 用。IconID の並びと同じ) ---
+    lines.append("inline constexpr const char* kIconNames[] = {")
+    for icon in icons:
+        lines.append(f'    "{to_enum_name(icon.name)}",')
+    lines.append("};")
+    lines.append(
+        "static_assert(sizeof(kIconNames) / sizeof(kIconNames[0]) "
+        "== static_cast<size_t>(IconID::IconCount), "
+        "\"kIconNames count mismatch\");"
+    )
+    lines.append("")
+
     out_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n生成完了: {out_path}  ({total_bytes} bytes のアイコンデータ, "
           f"{len(icons)}アイコン x {len(sizes)}サイズ = {len(icons) * len(sizes)}枚)")

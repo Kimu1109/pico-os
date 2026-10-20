@@ -66,6 +66,8 @@ pico-os の Lua は **32bitの整数と単精度(32bit)の小数** で動きま�
 
 ## 列挙型の値
 
+> 以下の値には名前の定数があります(`pico.COLOR_RED`、`pico.FONT_BIG`、`pico.ICON_Home` など)。一覧は [定数](../../api/constants/) を参照。
+
 ### font_size(FontFn::FontSize)
 
 | 値 | 名前 | 実サイズ |

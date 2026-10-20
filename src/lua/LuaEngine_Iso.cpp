@@ -1363,7 +1363,7 @@ void LuaEngine::RegisterIsoApi() {
     registerFn("shot_remove", LuaEngineIso::l_shot_remove);
     registerFn("shot_clear", LuaEngineIso::l_shot_clear);
     registerFn("shot_count", LuaEngineIso::l_shot_count);
-    finishApiTable(api_iso_);
+    finishApiTable(api_iso_, 2);
     api_cur_ = &api_pico_;
     lua_setfield(L, -2, "iso");
 }

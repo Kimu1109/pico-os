@@ -11,7 +11,7 @@
 // 「SD上のファイルを開く」ことしか知らないままでよく、ネットワークとの境界が
 // ファイルシステムで切れるのが狙い(片方が壊れてももう片方へ波及しない)。
 //
-// 配置は PROTOCOL.md のとおりサーバ上のパスをミラーする:
+// 配置は docs/PROTOCOL.md のとおりサーバ上のパスをミラーする:
 //
 //     /cache/<正規化したホスト>/<サーバ上のパス>
 //     例: /cache/192.168.1.10_8080/docs/pico/intro.md
@@ -28,7 +28,7 @@ namespace PICO_DocCache {
     constexpr int kMaxIndexLineLen = 512;
 
     // 1件あたりの最大バイト数。
-    // PROTOCOL.mdの「巨大なレスポンス」対策で、サーバが何を返してきても
+    // docs/PROTOCOL.mdの「巨大なレスポンス」対策で、サーバが何を返してきても
     // SDを埋め尽くさないようここで頭打ちにする(文書は8KiBだが画像は大きくなりうる)
     constexpr uint32_t kMaxEntryBytes = 64u * 1024u;
 

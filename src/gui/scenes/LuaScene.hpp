@@ -45,7 +45,7 @@ struct AppEntry;
 class LuaScene : public Scene {
     private:
         // このLuaアプリに許すメモリ予算(lua_newstateのカスタムallocへ渡す上限)。
-        // CLAUDE.md「RAM/Flash予算」の暫定枠(実機=32bitで200KB)。
+        // docs/design/lua.md「Lua着手前の受け皿の状態」のRAM/Flash予算の暫定枠(実機=32bitで200KB)。
         // 64bit の PC/Webビルドでは、同じスクリプトがポインタの大きさの分だけ約1.33倍のメモリを使う
         // (ゾンビTDのモジュールを32bit/64bitのLuaで読み比べた実測: 57KB / 76KB)ので、予算も同じ割合で広げて、
         // 実機で収まるアプリがPCで先にメモリ不足にならないようにする
@@ -65,7 +65,7 @@ class LuaScene : public Scene {
         // このアプリに許す権限(既定は両方false=最小権限)。LuaEngineのapp_dirは
         // ここではなくonEnter()でscript_pathから毎回計算し直す(pico.push_scene/
         // change_sceneで別ファイルへ移った場合、そのファイル自身の親ディレクトリを
-        // 見るのが正しいため。CLAUDE.md「Luaバインディング」「権限」参照)
+        // 見るのが正しいため。docs/design/lua.md「Luaバインディング」「権限」参照)
         LuaPermissions permissions;
 
         uint32_t inherited_rate = 0;    // setInheritedSampleRate()

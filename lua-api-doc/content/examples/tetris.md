@@ -10,7 +10,7 @@ description: "pc/sdcard/lua/apps/テトリス/ — pico.game のタイルマッ�
 |---|---|
 | `main.lua` | ゲーム本体(規則・状態・見た目への写し方) |
 | `lib.lua` | ミノの形と壁蹴りの表、操作ボタンの絵、HOLD/NEXTのミノの絵(LuaScene が本体より先に実行し、グローバル変数 `LIB` で渡る) |
-| `blocks.pimg` | ミノの絵。12x12のタイルを横に10枚(I O T S Z J L ゴースト 消えるラインの白 空きマスの黒)。`script/generate_tetris_blocks.py` で作り直せる |
+| `blocks.pimg` | ミノの絵。12x12のタイルを横に10枚(I O T S Z J L ゴースト 消えるラインの白 空きマスの黒)。`script/assets/generate_tetris_blocks.py` で作り直せる |
 | `bgm.mml` | BGM(コロベイニキ。チャンネル2は効果音用に空けてある) |
 | `hiscore.txt` | ハイスコア(ゲームオーバーと「戻る」のときに書く) |
 

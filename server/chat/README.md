@@ -11,7 +11,7 @@ Raspberry Pi で動かして、Let's Encrypt の証明書で HTTPS 化して外�
   部屋を作れる人の設定ができる(下の「サーバ管理者」)。最初に作ったユーザーが自動でサーバ管理者になる
 - 未読の数は人ごと・部屋ごとにサーバが覚える(Pico と Web で共通)
 - Web の画面(`web/index.html`)も同じサーバが配る
-- 通信の仕様はリポジトリ直下の [`CHAT_PROTOCOL.md`](../../CHAT_PROTOCOL.md)
+- 通信の仕様はリポジトリ直下の [`docs/CHAT_PROTOCOL.md`](../../docs/CHAT_PROTOCOL.md)
 
 | ファイル | 中身 |
 |---|---|
@@ -142,7 +142,7 @@ token = (43文字)
 
 ## 部屋の種類と権限
 
-詳しくは [`CHAT_PROTOCOL.md`](../../CHAT_PROTOCOL.md) の「部屋の種類」「参加コード」「役割と権限」。
+詳しくは [`docs/CHAT_PROTOCOL.md`](../../docs/CHAT_PROTOCOL.md) の「部屋の種類」「参加コード」「役割と権限」。
 
 | | オープンチャット | プライベートチャット |
 |---|---|---|

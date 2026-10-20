@@ -15,7 +15,7 @@ description: "pc/sdcard/lua/apps/ 配下の3本 — pico.game のタイルマッ
 
 ## マインスイーパー(`/lua/apps/マインスイーパー/`)
 
-- **盤面はタイルマップ**。難易度ごとにマスの大きさが違う(初級20px・中級16px・上級14px)ので、画像も難易度ごとに1枚(`tiles20.pimg` `tiles16.pimg` `tiles14.pimg`。`script/generate_minesweeper_tiles.py` で作る)。タイルの値は 1=閉じたマス 2=空き 3〜10=数字1〜8 11=旗 12=地雷。0マスの連鎖で何十マス開いても、`map:set()` したマスだけが描き直される
+- **盤面はタイルマップ**。難易度ごとにマスの大きさが違う(初級20px・中級16px・上級14px)ので、画像も難易度ごとに1枚(`tiles20.pimg` `tiles16.pimg` `tiles14.pimg`。`script/assets/generate_minesweeper_tiles.py` で作る)。タイルの値は 1=閉じたマス 2=空き 3〜10=数字1〜8 11=旗 12=地雷。0マスの連鎖で何十マス開いても、`map:set()` したマスだけが描き直される
 - 難易度を選び直すたびに `g:clear()` してタイルマップを作り直す
 - 画面は `menu`(難易度を選ぶ)→ `play` → `done`。状態ごとに `showButtons{...}` で見せる画面ボタンを入れ替える(**隠したボタン(`b.visible = false`)はタッチも受けない**)
 - 最初の1手は必ず安全(最初にタップしたマスを避けて地雷を置く)

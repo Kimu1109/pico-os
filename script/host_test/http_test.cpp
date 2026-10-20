@@ -120,7 +120,7 @@ int main(){
 
     printf("\n---- クエリのパーセントエンコード ----\n");
     {
-        //検索語はそのままではリクエスト行へ書けない(PROTOCOL.md「3. 検索」)
+        //検索語はそのままではリクエスト行へ書けない(docs/PROTOCOL.md「3. 検索」)
         FixedString<PICO_STR_LL> encoded;
 
         UrlTools::EncodeComponent(encoded, "pico-os_2.0~x");

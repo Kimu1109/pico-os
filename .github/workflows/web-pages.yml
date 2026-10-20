@@ -47,16 +47,16 @@ jobs:
           ./emsdk install "$EMSDK_VERSION"
           ./emsdk activate "$EMSDK_VERSION"
 
-      # 辞書(script/en-ja-and-ja-en.tsv + dict_index.tsv)はサイズの都合で
+      # 辞書(script/dict/src/en-ja-and-ja-en.tsv + 索引。索引は script/dict/build.sh が作る)はサイズの都合で
       # pc/sdcard/ には常設していない(IME辞書と同じ扱い。pc/README.md参照)。
       # Webビルドは pc/sdcard/ を丸ごと --preload-file で index.data へ焼き込む
       # (pc/CMakeLists.txt参照)ので、ビルド前にここへ置いて初めて辞書アプリが
       # ブラウザ版でも動く。リポジトリ本体の pc/sdcard/ は汚さない
       - name: 辞書をpc/sdcard/へ配置する
         run: |
+          sh script/dict/build.sh dict
           mkdir -p pc/sdcard/sys/dict
-          cp script/en-ja-and-ja-en.tsv pc/sdcard/sys/dict/en-ja-and-ja-en.tsv
-          cp script/dict_index.tsv pc/sdcard/sys/dict/dict_index.tsv
+          cp script/dict/out/sys/dict/en-ja-and-ja-en.tsv script/dict/out/sys/dict/dict_index.tsv pc/sdcard/sys/dict/
 
       - name: ビルドする
         run: |
@@ -84,7 +84,7 @@ jobs:
           ! grep -q "__PICOOS_ASSET_REV__" _site/index.html
           ls -la _site
 
-      # アプリストアの配布物(APP_REPO.md)。署名した目録 store/ がコミットされていれば、
+      # アプリストアの配布物(docs/APP_REPO.md)。署名した目録 store/ がコミットされていれば、
       # アプリの中身を pc/sdcard/lua/apps/ から写して /apps/ に置く。署名は手元のPCで済ませてある
       # (build_app_repo.py sign)ので、秘密鍵はここに要らない。署名の後で中身が変わったアプリは
       # 警告して配らない(sign をやり直すまで)

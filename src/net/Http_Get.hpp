@@ -11,7 +11,7 @@
 // `loop()`は単純なポーリングなので、受信待ちでブロックすると画面ごと固まる。
 // NetworkScanと同じく「開始してからupdate()で進捗を見る」形にしてある。
 //
-// PROTOCOL.mdの取り決めのうち、ここが担当するもの:
+// docs/PROTOCOL.mdの取り決めのうち、ここが担当するもの:
 //   - http/https のどちらでも繋ぐ(接続の仕方は net/Http_Transport が決める)
 //   - `Connection: close` を送る。`Accept-Encoding` は送らない(圧縮させない)
 //   - リダイレクト(301/302/307/308)を最大3回まで追う
@@ -25,7 +25,7 @@
 // (非同期接続にするにはlwIPを直に叩く必要があり、それは別の段の仕事)
 class HttpGet : public Task {
     public:
-        // PROTOCOL.md「制限値の一覧」より
+        // docs/PROTOCOL.md「制限値の一覧」より
         static constexpr unsigned long kTimeoutMs = 10000;
         static constexpr int kMaxRedirects = 3;
 

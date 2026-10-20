@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""MIDI(SMF)を pico-os MML(MUSIC_FORMAT.md)へ変換する。標準ライブラリだけで動く。
+"""MIDI(SMF)を pico-os MML(docs/MUSIC_FORMAT.md)へ変換する。標準ライブラリだけで動く。
 
 pico-os の音源はチャンネルが複数あるが1チャンネル1音なので、MIDIの全部の音は鳴らせない
 (--channels の既定は4。音源側の上限は ChipSynth::kChannels で、既定は8)。
 このスクリプトは「それらしく鳴る下書き」を作るところまでで、仕上げは人がMMLを直す前提
-(MUSIC_FORMAT.md「なぜMMLか」)。何をどこへ割り当てたかは出力の注釈に残す。
+(docs/MUSIC_FORMAT.md「なぜMMLか」)。何をどこへ割り当てたかは出力の注釈に残す。
 
 使い方:
     python3 script/midi2mml.py song.mid -o pc/sdcard/music/song.mml
@@ -36,7 +36,7 @@ import sys
 
 TICKS_PER_QUARTER = 48
 TICKS_PER_WHOLE = TICKS_PER_QUARTER * 4
-MAX_DATA_BYTES = 6144           # 演奏データの置き場(MUSIC_FORMAT.md「クライアント側の制約」)
+MAX_DATA_BYTES = 6144           # 演奏データの置き場(docs/MUSIC_FORMAT.md「クライアント側の制約」)
 MAX_LINE_BYTES = 512            # 1行の上限
 LINE_SOFT_LIMIT = 300           # これを超えたら次の音から改行する
 BARS_PER_LINE = 4
@@ -48,7 +48,7 @@ MAX_TOKEN_TICKS = 65535         # 音符/休符1つの長さの上限(演奏デ�
 DEVICE_CHANNELS = 8
 
 WAVES = ("pulse12", "pulse25", "pulse50", "pulse75", "triangle", "saw", "noise", "noise_short")
-MAX_CHANNELS = 26   # MMLのチャンネル文字はA〜Zの26種まで(MUSIC_FORMAT.md「同時発音数と音量」)
+MAX_CHANNELS = 26   # MMLのチャンネル文字はA〜Zの26種まで(docs/MUSIC_FORMAT.md「同時発音数と音量」)
 DEFAULT_CHANNELS = 4  # 変換の既定(以前からの挙動を変えないための値。音源側の既定8とは独立)
 CHANNELS = "ABCD"[:DEFAULT_CHANNELS]   # main()が --channels を見て後で差し替える
 NOTE_NAMES = ("c", "c+", "d", "d+", "e", "f", "f+", "g", "g+", "a", "a+", "b")
@@ -945,7 +945,7 @@ def convert(song, args, out_err=None):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="MIDI(SMF)を pico-os MML(MUSIC_FORMAT.md)へ変換する")
+    ap = argparse.ArgumentParser(description="MIDI(SMF)を pico-os MML(docs/MUSIC_FORMAT.md)へ変換する")
     ap.add_argument("input", help="MIDIファイル(.mid)")
     ap.add_argument("-o", "--output", help="書き出す .mml(省けば標準出力)")
     ap.add_argument("--list", action="store_true", help="声部の一覧を出して終わる(番号は --pick で使う)")

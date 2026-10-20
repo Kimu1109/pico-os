@@ -174,7 +174,7 @@ namespace {
                 OSData::frame->fillCircle(cx, cy, big ? 4 : 3, PICO_RED);
             }
         private:
-            //4bppのスプライトでは drawWideLine が使えない(CLAUDE.md「AnalogClock」)ので三角形で描く
+            //4bppのスプライトでは drawWideLine が使えない(docs/design/gui.md「ウィジェットカタログ」のAnalogClock)ので三角形で描く
             static void hand(int cx, int cy, float deg, int len, int half, int color){
                 const float a = deg * 3.14159265f / 180.0f;
                 const float dx = sinf(a), dy = -cosf(a);

@@ -2,7 +2,7 @@
 --   盤面=タイルマップ(blocks.pimg。変わったマスを map:set() するだけ) / 落ちるミノ・ゴースト=スプライト4枚ずつ
 --   HOLD/NEXT/点数=g:on_draw(変わったとき g:dirty) / 操作ボタン=g:button(絵はlib.luaのdrawBtn)
 --   画面=g:state(title / play / pause / clear / over)
--- ミノの形・SRSの壁蹴りの表・ボタンの絵は lib.lua(グローバルLIBで渡る)。画像は script/generate_tetris_blocks.py
+-- ミノの形・SRSの壁蹴りの表・ボタンの絵は lib.lua(グローバルLIBで渡る)。画像は script/assets/generate_tetris_blocks.py
 -- ※LuaSceneが読むのは16KiBまで(日本語コメントは1文字3バイト)。足すときは余裕を見ること
 local game = require("pico.game")
 

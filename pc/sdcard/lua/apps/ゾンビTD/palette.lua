@@ -1,4 +1,4 @@
--- script/generate_blocks_sheet.py が作る。手で直さないこと。
+-- script/assets/generate_blocks_sheet.py が作る。手で直さないこと。
 -- 1〜14番の色(pico.set_palette で入れる)と、空・水・UIに使う番号。
 return {
     colors = {

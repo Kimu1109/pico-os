@@ -3,7 +3,7 @@
 """
 build_dict_suffix_index.py
 
-script/en-ja-and-ja-en.tsv (検索用語句でソート済みの単語辞書) から、
+script/dict/src/en-ja-and-ja-en.tsv (検索用語句でソート済みの単語辞書) から、
 「語の途中に含む」一致(部分一致)を高速に引くためのサフィックスコーパスを作る。
 
 Word_Dict.hpp の前方一致は「1列目(検索用語句)でソート済み」という性質を

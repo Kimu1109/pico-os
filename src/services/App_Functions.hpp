@@ -36,7 +36,7 @@ struct AppEntry {
     // このアプリ(主にLuaアプリ)に許す権限。C++製アプリは既定(両方false)のまま無視してよい。
     // 元はLuaScene生成側(App_List.cpp)が生成関数ごとに手書きしていたが、SDスキャンで
     // 見つけたアプリごとに設定ファイル(app.cfg)から読んだ値を渡せるよう、登録簿側へ
-    // 一般化した(CLAUDE.md「Luaバインディング」「権限」参照)
+    // 一般化した(docs/design/lua.md「Luaバインディング」「権限」参照)
     LuaPermissions permissions;
 
     // シーンを1つ生成する。生成したシーンの所有権はSceneFunctionsへ渡る。

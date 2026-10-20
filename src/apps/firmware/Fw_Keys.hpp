@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-// ファームの更新ファイル(.pfw、FIRMWARE_UPDATE.md)の署名を確かめる公開鍵(Ed25519、32バイト)。
+// ファームの更新ファイル(.pfw、docs/FIRMWARE_UPDATE.md)の署名を確かめる公開鍵(Ed25519、32バイト)。
 //
 // **ファームに焼き込んだものだけを信頼する**(アプリストアと違い、SDの設定ファイルの鍵は読まない。
 // SDへは sd_outside_app_dir の権限を持つLuaアプリも書けるので、SDの鍵を信頼すると

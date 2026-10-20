@@ -15,8 +15,8 @@ generate_minesweeper_tiles.py
 数字・旗・地雷の絵(14x14)はこのファイルに文字で埋め込んである(0は透過)。
 
 使い方:
-    python3 script/generate_minesweeper_tiles.py                     # 既定の場所へ書く
-    python3 script/generate_minesweeper_tiles.py --preview p.ppm     # 確認用のPPM(初級)も書く
+    python3 script/assets/generate_minesweeper_tiles.py                     # 既定の場所へ書く
+    python3 script/assets/generate_minesweeper_tiles.py --preview p.ppm     # 確認用のPPM(初級)も書く
       (PPMは python3 script/ppm2png.py p.ppm p.png 4 でPNGにできる)
 """
 
@@ -280,7 +280,7 @@ def rle(rows):
 
 
 def main():
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="マインスイーパーの盤面の画像(tilesNN.pimg)を作る")
     ap.add_argument("--dir", type=Path, default=root / "pc/sdcard/lua/apps/マインスイーパー",
                     help="書き出し先のディレクトリ")

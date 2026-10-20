@@ -533,7 +533,7 @@ int main(int argc, char** argv){
         //ここが破れると検索語違いの結果が同じファイルへ重なる
         eq_int((long)HostSd::files.size(), 0, "検索の応答はSDへ書かない");
 
-        //一致が無くても200 + 空の本文で返る(404にしない。PROTOCOL.md)
+        //一致が無くても200 + 空の本文で返る(404にしない。docs/PROTOCOL.md)
         DocSearch empty;
         empty.begin(server, "/v1/search", "みつからないはずのことば");
         for(int i = 0; i < 20000 && empty.state() == DocSearch::State::Fetching; i++) empty.update();
@@ -548,7 +548,7 @@ int main(int argc, char** argv){
     }
 
     // ---- discoveryを持たないサーバ(素の静的ファイルサーバ) ----
-    // PROTOCOL.mdで「404を返してもよい。クライアントは検索を無効化して続行する」
+    // docs/PROTOCOL.mdで「404を返してもよい。クライアントは検索を無効化して続行する」
     // と決めている経路。ここが壊れると、対応していないサーバでブラウザが止まる
     {
         HostSd::files.clear();

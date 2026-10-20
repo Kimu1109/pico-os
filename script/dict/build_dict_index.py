@@ -3,7 +3,7 @@
 """
 build_dict_index.py
 
-script/en-ja-and-ja-en.tsv (英和/和英統合の単語辞書。1行 =
+script/dict/src/en-ja-and-ja-en.tsv (英和/和英統合の単語辞書。1行 =
 「検索用語句<TAB>表示用語句<TAB>説明or訳」、検索用語句のバイト順で
 ソート済み) から、部分一致検索用のブロックインデックスを作る。
 

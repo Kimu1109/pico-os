@@ -3,7 +3,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// サーバ情報(`GET /.well-known/pico-os` の中身)。PROTOCOL.md「サーバ情報」参照。
+// サーバ情報(`GET /.well-known/pico-os` の中身)。docs/PROTOCOL.md「サーバ情報」参照。
 //
 // **discoveryは特別扱いせず、ただの文書として取る。** 置き場所が
 // /.well-known/pico-os という決め打ちなだけで、取得も保存も Doc_Fetch /
@@ -39,7 +39,7 @@ struct ServerInfo {
 
 namespace Discovery {
 
-    // discoveryの置き場所。PROTOCOL.mdで決め打ち
+    // discoveryの置き場所。docs/PROTOCOL.mdで決め打ち
     constexpr const char* kPath = "/.well-known/pico-os";
 
     // 目録1行の上限
@@ -47,7 +47,7 @@ namespace Discovery {
 
     // "キー<TAB>値" の1行を解釈してinfoへ反映する。
     // **知らないキーは無視する**(サーバが将来キーを足しても古いクライアントが
-    //  壊れないための、PROTOCOL.mdの前方互換ルール)。
+    //  壊れないための、docs/PROTOCOL.mdの前方互換ルール)。
     // lineは書き換えられる(タブをNULへ置き換えるため)。
     void ParseLine(char* line, ServerInfo& out);
 

@@ -17,7 +17,7 @@ bool DocFetch::begin(const Url& target, bool bypass_cache){
         return false;
     }
     //ディレクトリを指すURL("http://host/" や "http://host/docs/")には開くべき
-    //文書が無い。PROTOCOL.mdは既定の文書名(index.md等)を決めていないので、
+    //文書が無い。docs/PROTOCOL.mdは既定の文書名(index.md等)を決めていないので、
     //こちらで勝手に補わずに断る。PathFor()と同じ理由で弾かれるが、
     //「パスが長すぎます」と出ると原因が分からなくなるため先に見ている
     if(strcmp(url.path.c_str(), "/") == 0){
@@ -36,7 +36,7 @@ bool DocFetch::begin(const Url& target, bool bypass_cache){
         && PICO_DocCache::Lookup(host.c_str(), url.path.c_str(), entry);
 
     //マニフェストが「手元のものが最新」と言っているなら、聞きに行く必要が無い。
-    //これがマニフェストの存在理由(PROTOCOL.md「4. マニフェスト」)
+    //これがマニフェストの存在理由(docs/PROTOCOL.md「4. マニフェスト」)
     if(cached && this->servableFromManifest(entry.validator.c_str())){
         finish(State::Ready, Source::Manifest, "");
         return true;

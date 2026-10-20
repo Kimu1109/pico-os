@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <cstddef>
 
-// .pvid(VIDEO_FORMAT.md)を読んで、今のフレームの絵(4bpp)を持つ係。描画にもLovyanGFXにも依存しない
+// .pvid(docs/VIDEO_FORMAT.md)を読んで、今のフレームの絵(4bpp)を持つ係。描画にもLovyanGFXにも依存しない
 // (ホストテストでは本物をそのまま動かす)。
 //
 // ---- 持つもの ----

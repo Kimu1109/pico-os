@@ -5,7 +5,7 @@ description: "app.cfg の id と version、署名した配布物の作り方、�
 ---
 
 作ったLuaアプリは、PCでSDカードへコピーする代わりに**ランチャの「ストア」から Web 経由で入れる**こともできます。
-配布物の形式は リポジトリの `APP_REPO.md`、作る道具は `script/build_app_repo.py` です。
+配布物の形式は リポジトリの `docs/APP_REPO.md`、作る道具は `script/build_app_repo.py` です。
 
 ## アプリ側で用意するもの
 

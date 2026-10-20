@@ -3,7 +3,7 @@
 generate_pvid.py
 ----------------
 動画(mp4 等、ffmpeg が読めるもの)を pico-os 用の動画形式 .pvid へ変換する。
-形式の仕様は VIDEO_FORMAT.md。
+形式の仕様は docs/VIDEO_FORMAT.md。
 
     本体の画面(OSData::frame)は16色(4bpp)なので、色を落とす重い処理(色選び・ディザ)と
     フレーム間の差分取りは全部ここ(PC)で済ませる。本体は「変わった8x8のタイルを
@@ -33,7 +33,7 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit("numpy が要ります: pip install numpy")
 
-# ------------------------------------------------------------------ 形式の定数(VIDEO_FORMAT.md と一致させる)
+# ------------------------------------------------------------------ 形式の定数(docs/VIDEO_FORMAT.md と一致させる)
 MAGIC = b"PVID"
 VERSION = 1
 TILE = 8
@@ -523,7 +523,7 @@ def cmd_preview(a):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="動画を pico-os の .pvid へ変換する(VIDEO_FORMAT.md)")
+    p = argparse.ArgumentParser(description="動画を pico-os の .pvid へ変換する(docs/VIDEO_FORMAT.md)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     e = sub.add_parser("encode", help="動画を .pvid へ変換する")

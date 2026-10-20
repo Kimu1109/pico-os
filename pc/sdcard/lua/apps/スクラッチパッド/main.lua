@@ -58,7 +58,7 @@ end
 
 -- ツールバー1段: 戻る・黒ペン・青ペン・消しゴム・全消去・保存・読込(7個)。
 -- 戻るは先頭(=画面左上)に置き、他とは独立した「ナビゲーション」であることを示す。
--- 幅で割った余りは最後のボタンへ足す(TabBar/MonthGridと同じ流儀。CLAUDE.md参照)
+-- 幅で割った余りは最後のボタンへ足す(TabBar/MonthGridと同じ流儀。docs/design/gui.md参照)
 local row_y = y + margin
 local col_w = math.floor((w - margin * 2 - gap * 6) / 7)
 local col_last_w = w - margin * 2 - (col_w + gap) * 6 -- 最後の列だけ余り分だけ広い
@@ -108,7 +108,7 @@ local canvas_h = h - (canvas_y - y) - margin
 --
 -- 【重要】このRectは必ずCanvasRasterより先に作ること。WidgetFunctions::HitTest()は
 -- widgetsを「後から作った順(末尾から)」に判定して最初に当たったものを返す
--- (pico.add_childの重なり順の説明と同じ理屈。CLAUDE.md「実装中に見つけて直した
+-- (pico.add_childの重なり順の説明と同じ理屈。docs/design/lua.md「実装中に見つけて直した
 -- 既存のバグ2件」参照)。このRectはCanvasRasterを1px外側から囲む(=CanvasRasterの
 -- 当たり判定を完全に包含する)ため、後から作るとRectが常にCanvasRasterより先に
 -- ヒットしてしまい、キャンバス上のタップが一切CanvasRasterへ届かなくなる

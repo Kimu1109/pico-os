@@ -11,7 +11,7 @@
 // HTTPのURLを分解して持つ。
 //
 // "http://" を各所で strncmp する形にしないための型。scheme をここに閉じ込めておけば、
-// 将来HTTPS対応を入れるときに触るのは Http_Get 側の接続処理だけで済む(PROTOCOL.md)。
+// 将来HTTPS対応を入れるときに触るのは Http_Get 側の接続処理だけで済む(docs/PROTOCOL.md)。
 //
 // パスとクエリは分けて持つ。相対解決(PICO_IO::resolve)はパスにしか効かず、
 // クエリの中の "/" まで畳んでしまうと壊れるため。
@@ -175,7 +175,7 @@ namespace UrlTools {
 
     // クエリの値をパーセントエンコードする。
     // 検索語は日本語なので、そのままではリクエストラインへ書けない
-    // (PROTOCOL.md「3. 検索」の `q` はURLエンコードされたUTF-8)。
+    // (docs/PROTOCOL.md「3. 検索」の `q` はURLエンコードされたUTF-8)。
     // 無変換で通すのは RFC3986 の unreserved(A-Za-z0-9 と - . _ ~)だけにしてある。
     template<size_t N>
     inline bool EncodeComponent(FixedString<N>& out, const char* text)
@@ -202,7 +202,7 @@ namespace UrlTools {
     }
 
     // 表示・ログ用。キャッシュのキーにも使えるよう scheme は含めない
-    // (http時代のキャッシュがhttps移行後も生きるように。PROTOCOL.md参照)
+    // (http時代のキャッシュがhttps移行後も生きるように。docs/PROTOCOL.md参照)
     inline bool Format(FixedString<PICO_PATH_LEN>& out, const Url& url)
     {
         FixedString<PICO_STR_M> hostPart;

@@ -4,8 +4,8 @@
 緑の丸に白い再生の三角と、下に小さな音量の棒(リモコンらしさ)。Spotifyのロゴは使わない。
 色はpico-osの16色パレットの番号で直接描く(generate_pimg.py と同じ .pimg 形式)。
 
-    python3 script/generate_spotify_icon.py            # 既定の場所へ書く
-    python3 script/generate_spotify_icon.py out.pimg
+    python3 script/assets/generate_spotify_icon.py            # 既定の場所へ書く
+    python3 script/assets/generate_spotify_icon.py out.pimg
 """
 import argparse
 import struct
@@ -55,7 +55,7 @@ def rle(rows):
 
 
 def main():
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="Spotifyリモコンのアイコン(icon.pimg、48x48)を作る")
     ap.add_argument("output", nargs="?", type=Path, default=root / "pc/sdcard/lua/apps/Spotify/icon.pimg")
     args = ap.parse_args()

@@ -18,8 +18,8 @@ generate_tetris_blocks.py
 PNGを描いて generate_pimg.py で変換して差し替えればよい。
 
 使い方:
-    python3 script/generate_tetris_blocks.py                      # 既定の場所へ書く
-    python3 script/generate_tetris_blocks.py out.pimg --preview p.ppm   # 確認用のPPMも書く
+    python3 script/assets/generate_tetris_blocks.py                      # 既定の場所へ書く
+    python3 script/assets/generate_tetris_blocks.py out.pimg --preview p.ppm   # 確認用のPPMも書く
       (PPMは python3 script/ppm2png.py p.ppm p.png 8 でPNGにできる)
 """
 
@@ -138,7 +138,7 @@ def rle(rows):
 
 
 def main():
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="テトリスのミノの画像(blocks.pimg)を作る")
     ap.add_argument("output", nargs="?", type=Path,
                     default=root / "pc/sdcard/lua/apps/テトリス/blocks.pimg")

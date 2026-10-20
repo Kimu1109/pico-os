@@ -2,7 +2,7 @@
 //
 // WidgetFactory::Create()で生成した各汎用ウィジェットに対し、代表的なプロパティが
 // 正しく読み書きできること、型不一致・非対応idではfalseを返すことを確認する
-// (CLAUDE.md「Lua着手前の受け皿の状態」の「プロパティのget/set共通口」に対応)。
+// (docs/design/lua.md「Lua着手前の受け皿の状態」の「プロパティのget/set共通口」に対応)。
 #include "gui/widgets/WidgetProperty.hpp"
 #include "gui/widgets/WidgetFactory.hpp"
 #include "gui/widgets/Widget.hpp"

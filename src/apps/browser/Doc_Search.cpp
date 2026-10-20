@@ -43,7 +43,7 @@ void DocSearch::takeLine(){
     char* title_end = strchr(title, '\t');
     if(title_end) *title_end = '\0';
 
-    //サーバ絶対パスでなければ何を基準に解決するか決まらない(PROTOCOL.md)
+    //サーバ絶対パスでなければ何を基準に解決するか決まらない(docs/PROTOCOL.md)
     if(path[0] != '/') return;
 
     SearchHit& out = hits_[count_];

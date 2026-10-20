@@ -7,7 +7,7 @@
 //
 // LovyanGFXのdrawWideLine()はアンチエイリアスのため4bitパレットに無い中間色を
 // 要求するので、OSData::frame(4bitパレットのフレームバッファ)へは使えない
-// (CLAUDE.md「AnalogClockの針」参照)。太さが要る場合は、AnalogClock::drawHand()と
+// (docs/design/gui.md「ウィジェットカタログ」のAnalogClockの針参照)。太さが要る場合は、AnalogClock::drawHand()と
 // 同じく進行方向に垂直な単位ベクトルへオフセットした2枚のfillTriangleで
 // 塗りつぶし四角形を作る(アンチエイリアス無しで単色のまま太らせられる)。
 namespace ShapeDraw {

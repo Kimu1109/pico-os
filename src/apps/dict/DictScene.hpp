@@ -18,7 +18,7 @@
 // State::Scanning/ScanningSuffixとしてupdate()を毎フレーム呼んで少しずつ
 // 拾う**ため、onUpdate()でdict_.update()を回し、新しく見つかった分だけ
 // 一覧へ追記する(全部揃うまで画面が止まらない)。部分一致は通常
-// サフィックスインデックス(dict_suffixes.tsv、script/build_dict_suffix_index.py
+// サフィックスインデックス(dict_suffixes.tsv、script/dict/build_dict_suffix_index.py
 // が生成)経由のScanningSuffixで高速に拾えるが、インデックスが無い/壊れて
 // いる場合のみ旧来のScanning(ファイル全体走査)へ自動フォールバックする
 // (詳細はWord_Dict.hppの設計コメント参照)。

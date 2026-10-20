@@ -14,7 +14,7 @@ class VideoView;
 class FileSelectDialog;
 template<size_t N> class Label;
 
-// 動画(.pvid、VIDEO_FORMAT.md)を再生するアプリ。ランチャの「動画」、ファイルアプリで .pvid を2回タップしても開く。
+// 動画(.pvid、docs/VIDEO_FORMAT.md)を再生するアプリ。ランチャの「動画」、ファイルアプリで .pvid を2回タップしても開く。
 //
 //   [戻る][開く] 題名
 //   動画(VideoView。等倍で真ん中)

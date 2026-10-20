@@ -40,7 +40,7 @@ bool Manifest::VersionOf(const char* manifest_file, const char* path,
         *tab = '\0';
 
         const int cmp = strcmp(line, path);
-        //pathの昇順に並んでいるので、追い越したらこれ以上は無い(PROTOCOL.md)
+        //pathの昇順に並んでいるので、追い越したらこれ以上は無い(docs/PROTOCOL.md)
         if(cmp > 0) break;
         if(cmp != 0) continue;
 

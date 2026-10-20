@@ -10,7 +10,7 @@ namespace {
     // Doc_Cacheの目録は値だけを持ち「どちらのヘッダで来たか」を覚えていないため、
     // 形で判断する。HTTP-dateは必ず "GMT" で終わり、ETagにこの綴りが現れることは
     // 実質無いので、これで足りる。
-    // (PROTOCOL.mdがETagを推奨しているのは、そもそもこの曖昧さと、
+    // (docs/PROTOCOL.mdがETagを推奨しているのは、そもそもこの曖昧さと、
     //  クライアントの時計がNTP同期前には当てにならないため)
     bool looksLikeHttpDate(const char* v){
         return v && strstr(v, "GMT") != nullptr;

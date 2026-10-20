@@ -1,4 +1,4 @@
-// ファームの更新(apps/firmware/Fw_Image・Fw_Update、FIRMWARE_UPDATE.md)の取り決めを固定する。
+// ファームの更新(apps/firmware/Fw_Image・Fw_Update、docs/FIRMWARE_UPDATE.md)の取り決めを固定する。
 // 置き場(内蔵フラッシュのLittleFS)と受け取り元(SD・TCP)はメモリの偽物。
 //
 //   ./firmware_test                     … C++の中で組み立てた更新ファイルで全部の経路

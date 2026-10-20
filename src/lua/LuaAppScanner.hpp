@@ -41,7 +41,7 @@
 //                                    権限ではない。エラーの行番号が「?」になる)
 // **どちらの権限も未指定なら既定でfalse(最小権限)。** SDに置かれているだけで
 // 中身を検証していないスクリプトへ、勝手に強い権限を与えないための判断
-// (CLAUDE.md「権限」参照)。app.cfg自体が無いアプリも同様に両方falseで登録される。
+// (docs/design/lua.md「権限」参照)。app.cfg自体が無いアプリも同様に両方falseで登録される。
 namespace LuaAppScanner {
     // `/lua/apps/` 直下の各サブディレクトリについて、`main.lua` があれば
     // `AppFunctions::Register()` でランチャへ登録する。
@@ -56,7 +56,7 @@ namespace LuaAppScanner {
         FixedString<PICO_STR_M> name;         // 空ならディレクトリ名を使う
         FixedString<PICO_STR_L> description;
         FixedString<PICO_STR_S> version;
-        FixedString<PICO_STR_S> id;           // アプリストアのid(APP_REPO.md)。手で入れたアプリは空
+        FixedString<PICO_STR_S> id;           // アプリストアのid(docs/APP_REPO.md)。手で入れたアプリは空
         FixedString<PICO_STR_M> icon;         // アプリディレクトリ内の相対パス(.pimg)
         FixedString<PICO_STR_M> background;   // バックグラウンドスクリプト(相対パス)。空なら無し
         uint32_t background_interval_sec = 0; // 0 = 既定

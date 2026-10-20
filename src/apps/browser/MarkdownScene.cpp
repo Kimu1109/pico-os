@@ -672,7 +672,7 @@ void MarkdownScene::showSearchResults(){
         return;
     }
 
-    //総件数は返ってこないので「何件目から何件」としか言えない(PROTOCOL.md)
+    //総件数は返ってこないので「何件目から何件」としか言えない(docs/PROTOCOL.md)
     char buf[48];
     snprintf(buf, sizeof(buf), "%d件目から%d件", search.offset() + 1, search.count());
     search_dialog->setMessage(buf);
@@ -685,7 +685,7 @@ void MarkdownScene::onSearchSelect(int index){
     Url base;
     if(!currentAsUrl(base)) return;
 
-    //結果のパスはサーバ絶対パス(PROTOCOL.md)。今のサーバ基準で絶対URLへ直す。
+    //結果のパスはサーバ絶対パス(docs/PROTOCOL.md)。今のサーバ基準で絶対URLへ直す。
     //閉じるとsearchの中身が消えるので、先に行き先を作っておく
     Url target;
     FixedString<PICO_STR_LL> location;

@@ -9,7 +9,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// アプリストアの通信係とインストール係(仕様は APP_REPO.md)。画面(StoreScene)とは分けてあり、
+// アプリストアの通信係とインストール係(仕様は docs/APP_REPO.md)。画面(StoreScene)とは分けてあり、
 // ホストテスト(run_net.sh の app_store_net_test)が本物の通信で一通り動かす。
 //
 // 流れ:

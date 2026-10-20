@@ -20,7 +20,7 @@
 //
 // 経路ごとの細かい許可(パスのホワイトリスト、ホスト単位のネットワーク制限等)は
 // 今のところ無い。「そのアプリの持ち場の外へ出られるか出られないか」の二値だけを見る、
-// 最初の一歩としての粗い実装(CLAUDE.md「Luaアプリの権限管理」参照)。
+// 最初の一歩としての粗い実装(docs/design/lua.md「権限(LuaPermissions)」参照)。
 struct LuaPermissions {
     bool network = false;
     bool sd_outside_app_dir = false;

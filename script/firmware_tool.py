@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pico-os のファームの更新ファイル(.pfw、FIRMWARE_UPDATE.md)を作る・確かめる・本体へ送る。
+"""pico-os のファームの更新ファイル(.pfw、docs/FIRMWARE_UPDATE.md)を作る・確かめる・本体へ送る。
 標準ライブラリだけで動く。
 
 使い方:

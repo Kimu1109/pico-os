@@ -15,8 +15,8 @@ pico.game のサンプル「ジャンプアクション」(pc/sdcard/lua/apps/�
 透過つき(パレット0=黒は描かれない)なので、黒の代わりに濃い灰(8)や紺(1)で縁取っている。
 
 使い方:
-    python3 script/generate_platformer_sheet.py                   # 既定の場所へ書く
-    python3 script/generate_platformer_sheet.py --preview p.ppm   # 確認用のPPMも書く
+    python3 script/assets/generate_platformer_sheet.py                   # 既定の場所へ書く
+    python3 script/assets/generate_platformer_sheet.py --preview p.ppm   # 確認用のPPMも書く
       (PPMは python3 script/ppm2png.py p.ppm p.png 4 でPNGにできる)
 """
 
@@ -333,7 +333,7 @@ def write_pimg(path, w, h, rows, transparent):
 
 
 def main():
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[2]
     app = root / "pc/sdcard/lua/apps/ジャンプアクション"
     ap = argparse.ArgumentParser(description="pico.gameのサンプルの絵(sheet.pimg / icon.pimg)を作る")
     ap.add_argument("output", nargs="?", type=Path, default=app / "sheet.pimg")

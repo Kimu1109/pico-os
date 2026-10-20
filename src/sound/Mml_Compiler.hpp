@@ -5,7 +5,7 @@
 #include "sound/Music_Data.hpp"
 #include "consts.hpp"
 
-// pico-os MML(MUSIC_FORMAT.md)を読み、演奏データ(Music_Data.hpp)へ変換する。1コア目で使う。
+// pico-os MML(docs/MUSIC_FORMAT.md)を読み、演奏データ(Music_Data.hpp)へ変換する。1コア目で使う。
 //
 // - テキストは行ごとに受け取る(MmlLineSource)。チャンネルごとに命令列を続けて書くため、
 //   **チャンネルの数だけ頭から読み直す**(SDのファイルなら全体をRAMへ載せずに済む)

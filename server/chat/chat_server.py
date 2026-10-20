@@ -3,7 +3,7 @@
 chat_server.py
 --------------
 pico-os のチャットアプリ(ChatScene)とWebクライアントの相手をする、自前のチャットサーバ。
-仕様は リポジトリ直下の CHAT_PROTOCOL.md。
+仕様は リポジトリ直下の docs/CHAT_PROTOCOL.md。
 
 標準ライブラリだけで動く(Raspberry Pi OS の python3 そのままでよい)。
 発言・部屋・ユーザーは SQLite の1ファイルへ保存する。
@@ -25,7 +25,7 @@ pico-os のチャットアプリ(ChatScene)とWebクライアントの相手を�
         --http-port 80 --acme-root /var/lib/pico-chat/acme
 
 設計の要点:
-    - 応答は **1行1件のTSV**(pico-os側にJSONパーサが無いため。PROTOCOL.md と同じ考え方)
+    - 応答は **1行1件のTSV**(pico-os側にJSONパーサが無いため。docs/PROTOCOL.md と同じ考え方)
     - **常に Content-Length を付け、HTTP/1.1 の keep-alive に対応する**。pico-os はTLSの
       ハンドシェイクで1〜2秒画面が止まるので、接続を使い回せないと数秒ごとに固まる
     - 証明書は **ファイルが更新されたら次の接続から自動で読み直す**(certbot の更新後に
@@ -53,7 +53,7 @@ import urllib.parse
 
 PROTOCOL_VERSION = 2
 
-# ---- 上限(CHAT_PROTOCOL.md「制限値」と揃えること。pico-os側の固定長バッファの大きさ) ----
+# ---- 上限(docs/CHAT_PROTOCOL.md「制限値」と揃えること。pico-os側の固定長バッファの大きさ) ----
 MAX_TEXT_BYTES = 500        # 発言1件の本文(UTF-8)
 MAX_NAME_BYTES = 45         # 表示名・部屋名(UTF-8)
 MAX_LOGIN_LEN = 32          # ログイン名(英数字と _ -)
@@ -111,7 +111,7 @@ def clean_text(s):
 
 
 def escape_text(s):
-    """TSVの本文欄へ入れるためのエスケープ(CHAT_PROTOCOL.md「本文のエスケープ」)。"""
+    """TSVの本文欄へ入れるためのエスケープ(docs/CHAT_PROTOCOL.md「本文のエスケープ」)。"""
     return s.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t")
 
 
@@ -235,7 +235,7 @@ COMMIT;
 # 役割の強さ。数が大きいほど強い
 ROLE_RANK = {"member": 1, "admin": 2, "owner": 3}
 
-# 操作ごとに要る役割(CHAT_PROTOCOL.md「役割と権限」と揃えること)
+# 操作ごとに要る役割(docs/CHAT_PROTOCOL.md「役割と権限」と揃えること)
 PERMS = {
     "read": "member",            # 発言を読む
     "post": "member",            # 発言する
@@ -1621,7 +1621,7 @@ def cmd_delroom(args, store):
 
 
 def main():
-    p = argparse.ArgumentParser(description="pico-os チャットサーバ (CHAT_PROTOCOL.md)")
+    p = argparse.ArgumentParser(description="pico-os チャットサーバ (docs/CHAT_PROTOCOL.md)")
     p.add_argument("--db", default=os.environ.get("PICO_CHAT_DB", "chat.db"), help="SQLiteのファイル")
     sub = p.add_subparsers(dest="cmd")
 

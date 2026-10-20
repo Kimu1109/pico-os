@@ -1,4 +1,4 @@
-// 曲データ(pico-os MML、MUSIC_FORMAT.md)の検証。
+// 曲データ(pico-os MML、docs/MUSIC_FORMAT.md)の検証。
 //
 // 1. 読み取り(MmlCompiler): 音符の高さと長さ、繰り返し、マクロ、誤りの位置と理由、警告
 // 2. シーケンサー(MusicPlayer): 音源(ChipSynth::Engine)と組み合わせ、音がサンプル単位で

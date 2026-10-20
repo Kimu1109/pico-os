@@ -126,7 +126,7 @@ namespace SoundFunctions {
     // 列が満杯で捨てた要求の数
     uint32_t DroppedCommands();
 
-    // ---- 曲(MUSIC_FORMAT.md) ----
+    // ---- 曲(docs/MUSIC_FORMAT.md) ----
     // MMLを読んで鳴らす(鳴っている曲は差し替え)。読めなければfalseで、今の曲はそのまま。
     // result を渡すと、誤りの位置・理由・警告・曲名が入る
     bool MusicPlayFile(const char* path, MmlResult* result = nullptr);

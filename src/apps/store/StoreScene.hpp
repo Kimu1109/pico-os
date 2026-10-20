@@ -9,7 +9,7 @@
 
 #include <cstdint>
 
-// アプリストア。配布元(APP_REPO.md、既定は GitHub Pages の /apps/)からLuaアプリを取ってきて入れる。
+// アプリストア。配布元(docs/APP_REPO.md、既定は GitHub Pages の /apps/)からLuaアプリを取ってきて入れる。
 //
 //   [戻る] アプリストア      [設定][更新]
 //   一覧(入っている=緑、更新あり=青、入れられない=赤)

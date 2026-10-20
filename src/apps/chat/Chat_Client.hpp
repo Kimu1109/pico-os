@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-// チャットサーバ(CHAT_PROTOCOL.md)との通信係。ChatScene が値メンバとして持ち、毎フレーム update() を呼ぶ。
+// チャットサーバ(docs/CHAT_PROTOCOL.md)との通信係。ChatScene が値メンバとして持ち、毎フレーム update() を呼ぶ。
 //
 // - 設定は SD の /sys/chat.cfg(server = https://..., token = ...)。Webの「pico-os の設定」で出る内容をそのまま置く
 // - **接続は使い回す**(HttpRequest の keep-alive)。HTTPSはハンドシェイクで1〜2秒画面が止まるので、

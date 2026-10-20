@@ -1,33 +1,33 @@
 # pico-os 開発状況
 
-> 最終同期: 2026-09-25(実コードと突き合わせ済み)。
-> このファイルは**何が終わって何が残っているか**の一覧。設計の背景や実装の詳細は `CLAUDE.md`(地図)と `docs/design/`(機能ごとの設計記録)を参照。
->
-> - **TODO** … 項目名だけの一覧。全体像を掴む用。
-> - **詳細** … TODOで補足が要る項目の説明。TODOの見出しからリンクしてある。
+> **何が終わって何が残っているか**の一覧(項目名だけ)。設計の背景・実装の詳細は `docs/design/`(地図は `CLAUDE.md`)。
+> 項目を足すときも説明は書かず、説明が要るなら `docs/design/` の該当ファイルへ書く。新しい大項目を足したら下の表にも1行。
+> 実機・実物のハードでの確認が未完了かどうかの一次情報源はTodoist(`CLAUDE.md`「人にしかできない確認」)。
 
 ## 全体の進捗
 
-| # | 項目 | 状況 |
-|---|---|---|
-| 1 | [ダイアログ系統](#1-ダイアログ系統) | ✅ 完了(betaレベル) |
-| 2 | [汎用基盤](#2-汎用基盤) | ✅ 完了(Resolve()もLua統合から実利用済み) |
-| 3 | [スクリーン管理](#3-スクリーン管理) | 🔨 メモリプールは計測の結果いったん保留 |
-| 4 | [Wi-Fiの管理強化](#4-wi-fiの管理強化) | ✅ 完了 |
-| 5 | [Luaアプリ](#5-luaアプリ) | ✅ LuaEngine/LuaSceneが動作しウィジェット・ダイアログ・SD・画像・ネットワーク・シーン制御・権限管理・実行時間の安全網・SDスキャンによるアプリ自動登録まで実装済み。細部の穴(pico.remove_child/list_add等)も埋まり、既知の欠けは無い。2026-10-05に require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー、さらに TextView/ImageView/MarkdownView/AnalogClock/DurationPicker/MonthGrid/ProgressBar の生成・ジェスチャー・リスト/タブ/ダイアログの拡張・オフスクリーン画像・`pico.ui`/`pico.async`/`pico.tween`・暗号化(XChaCha20-Poly1305/Argon2id)、2026-10-06に2Dゲームの簡易エンジン`pico.game`まで入った(PCで確認。実機は未確認。docs/design/lua-api.md「Lua APIの追加」参照)。2026-10-11にアプリストア(`docs/APP_REPO.md`、Webから署名を確かめて入れる)が入った |
-| 6 | [PC/Web動作対応](#6-pcweb動作対応) | ✅ 完了 |
-| 7 | [標準アプリ開発](#7-標準アプリ開発) | ✅ Markdownブラウザ / 時計 / 電卓 / ファイルエクスプローラー / ファイルビューワー / テキストエディタ / 設定 / 辞書が完了 |
-| 8 | [セカンダリアプリ開発](#8-セカンダリアプリ開発) | ⬜ 未完了 |
-| 9 | [GameBoyエミュ](#9-gameboyエミュ) | 🔨 Peanut-GBを採用。256KBまでのROMはRAMへ、それより大きいROM(1MBまで)は内蔵フラッシュへ書いてそこから読む。PCで動作し、音も鳴る。途中保存(ステートセーブ)も入った。実機は未確認 |
-| 10 | [外部コントローラー](#10-外部コントローラー) | 🔨 入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(Webビルドはページのボタン/キーボード)、GBエミュ・Luaへの組み込みまで。物理キーボードの文字入力もUSBシリアル経由で入った。Wiiクラシックコントローラー(I2C)のドライバも入った(実物では未確認)。キーボードを本体へ直接つなぐのは未 |
-| 11 | [Chiptuneを再生](#11-chiptuneを再生) | 🔨 4チャンネルの音源と曲(MML)が2コア目で鳴り、Luaとミュージックアプリから使える(PCで確認)。MIDIはPCの`midi2mml.py`で取り込める。GBエミュの音も鳴る。WAVも鳴らせる。マイク(SPH0645)でWAVへ録音できる。実機は未確認 |
-| 12 | [開発者向けの道具](#12-開発者向けの道具) | 🔨 プロファイラ(フレーム時間の表示)・Luaデバッガ・クラッシュダンプ・Luaサンドボックスの強化がPCで動作。ファームの更新(SD・Wi-Fi、署名つき)が入り実機で確認済み。他は実機未確認 |
+| # | 項目 | 状況 | 設計記録 |
+|---|---|---|---|
+| 1 | ダイアログ系統 | ✅ 完了 | `gui.md` |
+| 2 | 汎用基盤 | ✅ 完了 | `gui.md` `lua.md` |
+| 3 | スクリーン管理 | 🔨 バックグラウンド実行・ホーム画面のウィジェットは済み。メモリプールは計測の結果保留、PCビルドのヒープ下限の増加は未解決 | `os-services.md` `performance.md` |
+| 4 | Wi-Fiの管理強化 | ✅ 完了 | `security-wifi.md` |
+| 5 | Luaアプリ | ✅ 既知の欠けは無い(`pico.game`・アプリストアまで)。実機のRAM/Flashの実測は未 | `lua.md` `lua-api.md` `lua-apps.md` |
+| 6 | PC/Web動作対応 | ✅ 完了 | `pc-web.md`・`pc/README.md` |
+| 7 | 標準アプリ開発 | ✅ 完了 | `apps-local.md` `browser-net.md` |
+| 8 | セカンダリアプリ開発 | 🔨 ゾンビTDの本体とPICO SHOOTINGが残り | `apps-online.md` `apps-local.md` `lua-apps.md` `iso.md` |
+| 9 | GameBoyエミュ | 🔨 PCで動作(音・途中保存・1MBまでのROM)。実機での速さは未確認 | `gameboy.md` |
+| 10 | 外部コントローラー | 🔨 USBシリアル・Web・Wiiクラシック(実物は未確認)。キーボードの本体への直結は未 | `input.md` |
+| 11 | Chiptuneを再生 | 🔨 音源・MML・GBの音・WAV・動画・録音までPCで動作。実機は未確認 | `sound.md` |
+| 12 | 開発者向けの道具 | 🔨 PCで動作。ファームの更新は実機で確認済み、他は実機未確認 | `devtools.md` |
+
+設計記録はすべて `docs/design/` の下。
 
 ---
 
 # TODO
 
-### 1. [ダイアログ系統](#1-ダイアログ系統-1)
+### 1. ダイアログ系統
 
 - [x] キーボード日本語
 - [x] キーボード英語
@@ -39,7 +39,7 @@
 - [x] ファイル選択ダイアログ
 - [x] 色選択ダイアログ
 
-### 2. [汎用基盤](#2-汎用基盤-1)
+### 2. 汎用基盤
 
 - [x] 新規ウィジェットの汎用化
 - [x] 固定長文字列クラス
@@ -49,7 +49,7 @@
 - [x] 設定ファイルの書き込み
 - [x] アプリの枠組み
 
-### 3. [スクリーン管理](#3-スクリーン管理-1)
+### 3. スクリーン管理
 
 - [x] ウィジェットのメモリ解放
 - [x] シーン遷移
@@ -76,7 +76,7 @@
   - [ ] mid-sceneで生成/破棄されるダイアログの使い回し化
   - [ ] ⚠ PCビルドでのヒープ下限際限増加(未解決)の原因特定・実機での再現確認
 
-### 4. [Wi-Fiの管理強化](#4-wi-fiの管理強化-1)
+### 4. Wi-Fiの管理強化
 
 - [x] 定期的再接続交渉
 - [x] 確実な時刻同期
@@ -85,7 +85,7 @@
 - [x] Wi-FiのON/OFF
 - [x] 未接続時に直近で接続したネットワークへ自動で再接続
 
-### 5. [Luaアプリ](#5-luaアプリ-1)
+### 5. Luaアプリ
 
 - [x] 着手前に塞ぐ穴
   - [x] AppEntryの動的化
@@ -122,7 +122,7 @@
   - [x] スタックトレースとLuaデバッガ
   - [ ] 実機の空きRAM/Flashの実測
 
-### 6. [PC/Web動作対応](#6-pcweb動作対応-1)
+### 6. PC/Web動作対応
 
 - [x] LovyanGFX対応
 - [x] タッチ操作対応
@@ -131,7 +131,7 @@
 - [x] Webビルドの自動公開
 - [ ] その他あれば
 
-### 7. [標準アプリ開発](#7-標準アプリ開発-1)
+### 7. 標準アプリ開発
 
 - [x] 設定アプリ
   - [x] 時刻の手動設定(NTP同期前・Wi-Fi無しでも時計を合わせる)
@@ -172,7 +172,7 @@
   - [x] マニフェストでキャッシュを一括再検証
   - [x] HTTPS(TLS 1.2)とchunked転送
 
-### 8. [セカンダリアプリ開発](#8-11-未着手の大項目)
+### 8. セカンダリアプリ開発
 
 - [x] ペイント
 - [x] スクラッチパッド
@@ -229,7 +229,7 @@
   - [x] 最初のログインはPCで(`picoos spotify-auth`)、トークンは暗号化して保存
   - [x] 本物のSpotifyアカウント・実機での確認
 
-### 9. [GameBoyエミュ](#8-11-未着手の大項目)
+### 9. GameBoyエミュ
 
 - [x] 最適なGBエミュを探せ
 - [ ] GBエミュを適合させよ
@@ -237,7 +237,7 @@
   - [x] ゲームの中のセーブを遊んでいる途中でも書き出す
 - [ ] 快適動作を目指そう
 
-### 10. [外部コントローラー](#8-11-未着手の大項目)
+### 10. 外部コントローラー
 
 - [x] 配線/方式を考えよう
 - [ ] 入力を受け取ろう
@@ -250,7 +250,7 @@
   - [ ] 本体へ直接つなぐ(Bluetooth / PS/2 等)
   - [x] ローマ字かな入力(かな漢字変換も)
 
-### 11. [Chiptuneを再生](#8-11-未着手の大項目)
+### 11. Chiptuneを再生
 
 - [x] とりあえず再生
   - [x] 配線/方式を決める(I2S + MAX98357A)
@@ -280,7 +280,7 @@
     - [x] マインスイーパー
   - [x] 設定アプリで音量を変える
 
-### 12. [開発者向けの道具](#12-開発者向けの道具-1)
+### 12. 開発者向けの道具
 
 - [x] プロファイラ(loop()の区間ごとの時間)
 - [x] フレーム時間のオンスクリーン表示
@@ -290,383 +290,3 @@
 - [x] ファームの更新(SDの更新ファイル / PCからWi-Fiで。docs/FIRMWARE_UPDATE.md)
 - [ ] ファームの更新をWebから取る(GitHub Pages等に版の一覧を置く)
 - [ ] 実機での確認(HardFaultの捕まえ方・ウォッチドッグ・実機の速さ・ファームの更新)
-
----
-
-# 詳細
-
-以下はTODOの補足。**書いていない項目は「名前のとおり」で補足なし。**
-
-## 1. ダイアログ系統
-
-ダイアログの共通の骨格(`children_`で子を保持 / `setOnClosed()`で結果通知 / `setVisible(false)`で終了)は
-`docs/design/gui.md`の「ダイアログ」を参照。
-
-| 項目 | メモ |
-|---|---|
-| キーボード日本語 | フリック入力 + SKK変換。`カナ`/`送り`キーは変換中でないときカーソル移動キーになる |
-| キーボード英語 | 最下段に`←``→`。幅の都合でラベルを `かな` / `enter` / `abc` に短縮し、シフト中も表記を変えない |
-| キーボード数字 | `KeyboardNum`。`Digit`/`Arith`/`Math`の3タブで、使えるタブを呼び出し側から制限できる |
-| キーボードのカーソル移動 | 数字に続き日本語/英語も、挿入・削除がカーソル位置基準になった。位置は`Label::setCursorToByteOffset()`でバイト位置として渡す |
-
-## 2. 汎用基盤
-
-### ウィジェットの固有ID
-
-`WidgetID.hpp` / `WidgetRegistry`。32bitで `type(6bit) / generation(16bit) / index(10bit)`。
-
-- **発行側は実装済み**。`getId()`の初回呼び出しで遅延発行し、`~Widget()`でgenerationを進める。
-- **ファクトリを追加**(`WidgetFactory.hpp/.cpp`)。`WidgetType` → `new Xxx` の対応表で、
-  widgets/直下の汎用部品15種(Button/Label/Textbox/NumberInput/Checkbox/Icon/Image/
-  NumberSlider/ScrollContainer/ScrollList/CanvasRaster/LayoutContainer/GridContainer/
-  TabBar/DropdownMenu)を生成できる。widgets/apps・systems・dialogsの専用ウィジェットは
-  対象外(SD走査やシーン固有状態への依存が強いため)。
-- **`Resolve()`はホストテスト(`widget_factory_test.cpp`)で発行済みIDからの解決・
-  type不一致の検出・破棄済みID(use-after-free)の検出・スロット再利用時のgeneration
-  不一致検出を確認済み**。**その後`LuaEngine`(`pico.set/get/on/destroy/add_child`等)
-  から実際に呼ばれるようになり、実コードでの利用も確立した**。
-- Widget::operator newがnullptr(確保失敗)を返した際、以前は無言で失敗していたが、
-  唯一の確保入口である`Widget.cpp`側でLOG_SYS_FAILを出すようにした。
-  個々の`new Xxx(...)`呼び出し元のnullチェックが無い問題自体は残っている
-  (Lua用allocatorの話と合わせて[5. Luaアプリ](#5-luaアプリ-1)を参照)。
-- 詳細は[5. Luaアプリ](#5-luaアプリ-1)。
-
-## 3. スクリーン管理
-
-### バックグラウンド実行の枠組み
-
-画面(シーン)を閉じても動き続ける仕事の登録簿(`BackgroundFunctions`)。詳しくは docs/design/os-services.md「バックグラウンド実行の枠組み」。
-
-| 子項目 | 状況 |
-|---|---|
-| 登録簿・入り切り(`/sys/background.cfg`) | ✅ `src/system/Background_Functions` / `Background_List.cpp` |
-| ミュージック | ✅ 再生を `MusicService` へ移し、アプリを閉じても次の曲へ進む。他のアプリが音を使ったら止まる |
-| チャットの未読 | ✅ `ChatWatch`。数分おきに部屋の一覧を取り、新しい未読を通知 |
-| Luaのバックグラウンド | ✅ `LuaBackground`。app.cfg の `background`(`permission_background` が要る)を間隔ごとに48KBの使い捨てエンジンで1回動かす |
-| 一覧・印 | ✅ 設定アプリ「他」→「バックグラウンド」(`BackgroundScene`)、ステータスバーの青い印 |
-| 実機 | ⬜ 未確認(使い捨てのエンジンを作る時間・ヒープ・スリープ中の通信) |
-
-### ホーム画面のウィジェット
-
-ランチャ(`HomeScene` / `AppGrid`)のアプリのタイルと同じ並びに、ウィジェットを混ぜて置く。詳しくは docs/design/os-services.md「ホーム画面のウィジェット」。
-
-| 子項目 | 状況 |
-|---|---|
-| 並び・詰め方・保存(`/sys/home.cfg`) | ✅ `src/apps/home/Home_Layout`。2列のマス目へ並びの順に、空いている一番前へ |
-| 操作 | ✅ 長押し(コントローラーのX/Y・キーの`m`)のメニューで追加・前へ/後ろへ/先頭へ・大きさ・削除 |
-| 時計 / アナログ時計 | ✅ 時刻・日付・次のアラーム |
-| 音楽 | ✅ `MusicService` の曲名・進み具合、前/再生・一時停止/次のボタン |
-| 予定 | ✅ `/calendar/*.ics` から今日から7日間(`HomeAgenda`) |
-| TODO | ✅ 最後に取ったTodoistの今日のタスク(`TodoCache`)。置いている間は15分ごとに取り直す(`TodoWatch`) |
-| Luaアプリのウィジェット | ⬜ 未(登録簿の形は足せるようにしてある) |
-| 実機 | ⬜ 未確認 |
-
-### メモリ断片化対策: メモリプール(保留)
-
-**計測の結果、現時点では保留と判断した。** 根拠の全文はdocs/design/performance.mdの「メモリ計測の結論」。
-アリーナを再提案する前に必ずそちらを読むこと。
-
-- 断片化は起きていない(`frag=0%`、20回の遷移で増加傾向なし)。リークも無い。
-- 当初の使用量増加は断片化ではなく解放漏れで、`MarkdownView`/`ScrollList`/`CanvasRaster`の
-  デストラクタ修正で解消済み(Markdownは1訪問あたり約57KBリークしていた)。
-
-| 子項目 | 状況 |
-|---|---|
-| 計測 | ✅ `src/system/Mem_Functions.hpp` / `script/host_test/run_mem.sh` |
-| 解放漏れ修正 | ✅ `MarkdownView` / `ScrollList` / `CanvasRaster` |
-| MarkdownViewの占有量削減 | ✅ 実機で93KB → 52KB |
-| アリーナの差し込み口 | ✅ `Widget::operator new/delete`。将来ここの実装を差し替えるだけで済む |
-| シーンアリーナ本体 | ⏸ 断片化もリークも観測されないため保留。入れる場合の枠は「永続8KiB + シーン56KiB = 64KiB」(実測根拠あり) |
-| vector/functionの確保削減 | ⏸ **「841回中805回」は既に古い数字**。Labelの平坦化後は `MarkdownView + load()` で88回、通常のシーン遷移は1回あたり8回。残る実害は回数ではなく`sizeof`(`std::function`が32B×4本=1ウィジェット128B)で、Delegate化してもMarkdownシーン36個で約2.3KB/46KB。**Luaのコールバックを大量に貼るようになって初めて効く** |
-| ダイアログの使い回し化 | ⏸ 現状の生成箇所は`FileExplorer`の2箇所のみ。効果が測れる規模になってから |
-| PCビルドでのヒープ下限際限増加 | ⚠ **未解決(2026-09-19発見)**。実機の計測では増加傾向が無かったが、PCビルド(`pc/build/picoos_pc`)で同一2画面を`--tap`で機械的に往復させると「ヒープ下限」が回数に比例して際限なく増える(1往復あたり約30〜40KB)。**Luaとは無関係**(`InputTestScene`だけで再現し、Lua関連の変更を含まないコミットでも同じ数値が出た)。原因未特定(候補: LovyanGFXのフォント/グリフキャッシュ、Task/Network_Functions、SDLのイベント処理)。再現手順は`docs/design/performance.md`の該当節を参照。次にScene/Widget基盤・PCビルド周りを触る回で必ず引き継ぐこと |
-
-## 4. Wi-Fiの管理強化
-
-非ブロッキング接続・スキャン(Task化)・NTP同期・電波強度アイコンに加え、
-`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、
-切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。
-
-`SettingsScene`から周辺Wi-Fiのスキャン→一覧から選択→パスワード入力(空欄でオープン
-ネットワークも可)→接続、という一般的な「Wi-Fi設定」と同じ操作ができる
-(`WifiScanDialog`。詳細はdocs/design/security-wifi.md「Wi-Fiの新規接続」参照)。
-
-**複数のネットワークを保存できる**(2026-10-01、`net/Wifi_Profiles`・`/sys/wifi.cfg`、8件まで)。
-並びは「直近で接続できた順」で、接続できるたびにその組を先頭へ繰り上げる。起動時は先頭へ繋ぎ、
-未接続(失敗/圏外)のまま30秒経つたびに先頭から1つずつ自動で試す。Wi-FiのON/OFFも持つ
-(OFFは切断と自動接続の停止。無線チップ自体は止めない)。旧形式(`network.cfg`の`wifi-ssid`/`wifi-password`)は
-`wifi.cfg`が無いときだけ1番として取り込む。詳細はdocs/design/security-wifi.md「保存済みのWi-Fiネットワーク」参照。
-
-## 5. Luaアプリ
-
-`src/lua/LuaEngine`(1インスタンス=1つの`lua_State`=1つのLuaアプリ)と`LuaScene`
-(SD上のスクリプトを読んで実行する画面)が動き、**ランチャから実際にLuaアプリを
-起動できる**(動作確認用のサンプルは`pc/sdcard/lua/apps/動作確認/`)。
-設計の背景・各APIの詳細はdocs/design/lua.mdの「Luaバインディング」を参照。
-
-| 穴/項目 | 状況 |
-|---|---|
-| AppEntryの動的化 | ✅ `create`が`Scene* (*)(const AppEntry&)`になり、`name`/`arg`を`FixedString`でコピー保持する。同じシーン型を別argで何件でも登録でき、寿命の短い文字列からも登録できる(`MakeSceneWithArg<T>`) |
-| ウィジェットのファクトリ | ✅ `WidgetFactory::Create(WidgetType)`。`Resolve()`と合わせて`pico.create/get/set/on`から実際に使われている |
-| プロパティのget/set共通口 | ✅ `WidgetProperty::Get/Set()`。`pico.set/get`から実際に叩かれる |
-| Lua用allocatorでのRAM上限 | ✅ `lua_newstate`へ`budget_bytes`付きカスタムallocを渡す。暫定枠200KB(`LuaScene::kLuaBudgetBytes`) |
-| pcallで拾ったエラーの表示導線 | ✅ `ErrorFunctions::ShowFatal()`。構文/実行時エラーをログ+MsgDialogの両方で見せる |
-| ビルドの二重管理 | ✅ Lua 5.4.7本体を`lib/lua/`へvendor。`platformio.ini`への追記は不要になり、PCビルドも同じ`lib/lua/src/`を参照する実質1箇所の情報源に |
-| 実行時間バジェット | ✅ `task/StepBudget.hpp`(時間で区切る土台)に加え、`LuaEngine`が`lua_sethook(LUA_MASKCOUNT)`でLuaバイトコード命令数を数え、1回の外部呼び出しあたりの上限(暫定200万命令)を超えたら打ち切る。**2026-10-03から`pcall`/`xpcall`/`coroutine`で捕まえても握り潰せない**(打ち切り中は1命令ごとに投げ直す。メッセージハンドラを呼ばないメモリ不足として投げる)。残る限界はC関数の中(重いパターン等)で、そこはウォッチドッグ([12](#12-開発者向けの道具-1))で拾う |
-| SDを走査してLuaアプリを見つける処理 | ✅ `src/lua/LuaAppScanner`。`/lua/apps/<名前>/main.lua`を走査し、ディレクトリ名をそのままタイル名として`AppFunctions::Register()`する。権限は既定(両方false)固定。`App_List.cpp::Setup()`の末尾で1回呼ぶだけ |
-| ウィジェット固有コールバック | ✅ `checked_changed`(Checkbox)/`value_changed`(NumberSlider)/`select_item`(ScrollList)/`tab_changed`(TabBar)/`dropdown_changed`(DropdownMenu)/`text_changed`(Textbox)を`pico.on()`から追加。値自体は既存の`pico.get()`(プロパティ共通口)で読む設計にし、`select_item`の`already_selected`(永続プロパティではない一時値)だけコールバック引数で渡す |
-| 時刻取得 | ✅ `pico.get_time()`。`TimeFunctions::timeinfo`を`{year,month,day,hour,min,sec,wday}`のテーブルで返す薄いラッパー |
-| コンテナからの取り外し/リストへの項目追加 | ✅ `pico.remove_child()`(add_childの逆、破棄せず取り外す)/`pico.list_add()`・`pico.list_clear()`(ScrollList/DropdownMenu)/`pico.tab_add()`(TabBar)。細部の穴埋めとして2026-09-21追加 |
-| 実機の空きRAM/Flashの実測 | ⬜ 200KB枠はPC上の見積もり(空stateのみで約19.5KB)からの逆算。実機RP2350での追試は未実施(このリモート実行環境にRP2350のボード定義が無いため) |
-
-**実装済みのAPI**: ウィジェットの生成/破棄/プロパティ/共通コールバック・ウィジェット固有
-コールバック(`checked_changed`/`value_changed`/`select_item`/`tab_changed`/
-`dropdown_changed`/`text_changed`)・コンテナ操作(`add_child`/`remove_child`)・
-リスト操作(`list_add`/`list_clear`/`tab_add`)・`setup()`/`loop(dt)`呼び出し・
-直接描画(`Canvas`)・SDカードアクセス・画像(`.pimg`)・シーン制御
-(`push_scene`/`change_scene`/`launch_app`)・ダイアログ(`show_message`/`show_input`/
-`show_file_save`/`show_file_select`/`show_color`)・ネットワーク(`http_request`/`http_cancel`)・
-時刻取得(`get_time`)・**権限管理**(`network`/`sd_outside_app_dir`の2値フラグ、既定はどちらも
-拒否。`LuaScene`がスクリプト自身のディレクトリを基準に`pico.sd_*`/`pico.image_load`を閉じ込める)。
-`pico.*`以外の周辺機能として、**実行時間の安全網**(`lua_sethook`による命令数打ち切り。
-終わらないループでOSが固まる事故を防ぐ)と、**SDを走査したLuaアプリの自動登録**
-(`LuaAppScanner`。`/lua/apps/<名前>/main.lua`を見つけてランチャへ自動でタイル登録する)も実装済み。
-
-**アプリストア(2026-10-11)**: ランチャの「ストア」が、静的なサーバ(GitHub Pages / Raspberry Pi 等)に置いた
-署名済みの配布物(`docs/APP_REPO.md`)からLuaアプリを入れる・更新する・消す。一覧はEd25519の署名(鍵はファームの焼き込みか
-`/sys/store.cfg`)と版の番号で、ファイルはSHA-256で確かめ、app.cfgの権限が一覧を超えれば入れない。配布物は
-`script/build_app_repo.py`で作る。PCビルドとホストテストで確認、実機とGitHub Pagesでの公開は未確認。
-
-**API仕様は「C++で標準アプリを1〜2本書いてみて、必要になったもの」から逆算した。**
-→ [7. 標準アプリ開発](#7-標準アプリ開発-1)
-
-## 6. PC/Web動作対応
-
-実機に書き込まずに、PC上のウィンドウでもブラウザでもpico-osを動かせる(`pc/`、CMake + SDL2)。
-**`src/`は実機と同一のまま**で、差し替えているのは実機ライブラリ(`pc/compat/`)だけ。手順は`pc/README.md`。
-
-| 子項目 | メモ |
-|---|---|
-| LovyanGFX対応 | `lgfx::Panel_sdl`。既定で2倍表示 |
-| タッチ操作対応 | SDLのマウスをタッチとして読む。ヘッドレスでは`--tap`で操作を進めて`--shot`で撮る |
-| ネイティブ関数の代替 | `pc/compat/`(Arduino/SPI/WiFi/SdFat/タッチ)。代替の用意漏れはリンクエラーで気づける |
-| WebAssembly | `emcmake cmake -S pc -B pc/build-web`。`emscripten_set_main_loop`で1フレームずつ回す。SDカードは`index.data`へ同梱、設定はURLのクエリ(`?wifi=disconnected`) |
-| 自動公開 | `main`へのpushで https://kimu1109.github.io/pico-os/ へ(`.github/workflows/web-pages.yml`)。プルリクではビルド確認のみ |
-
-**Markdownブラウザのオンライン機能はWebでは動かない**(ブラウザに生TCPソケットが無い)。
-Web公開版で試せるのはSD上のローカル文書まで。
-
-## 7. 標準アプリ開発
-
-アプリ本体は6本。
-**Lua APIの仕様を逆算するための実例が足りていない**のが本質的な課題。
-
-| アプリ | 状況 / 使える部品 |
-|---|---|
-| Markdownブラウザ | ✅ 下記 |
-| 時計 | ✅ 下記 |
-| 電卓 | ✅ 下記 |
-| 設定アプリ | ✅ 下記 |
-| 辞書 | ✅ 下記 |
-| ファイルエクスプローラー | ✅ 下記 |
-
-### 時計(`ClocksScene`)
-
-画面下部の`TabBar`で「時計 / タイマー / ストップウォッチ」を切り替える。
-
-- **時計**: デジタル(`Label`)とアナログ(`AnalogClock`ウィジェット)を上部のタブで切り替え。
-- **タイマー**: `DurationPicker`ウィジェット(▲▼で時/分/秒、長押しで連続加算)で設定する。
-  鳴ったら数字が赤で点滅する(音が出せないため)。**別のタブを見ていても時間は進み**、
-  鳴った時点でタイマーのタブへ引き戻す。
-- **ストップウォッチ**: 1/100秒まで表示。書き換えは50ms間隔へ間引く。
-- **計測はいずれも`millis()`の差分で積む** — `TimeFunctions`は333msごとの更新な上に、
-  NTP同期で時刻が飛ぶため計測には使えない。
-- ⚠ ランチャのアイコンが`IconID::AlertTriangle`のまま(時計のアイコンがまだ無い)。
-  足すなら`script/tabler_icons/`へSVGを置いて`script/generate_icons.py`を回す。
-
-### 電卓(`CalculatorScene`)
-
-上部の`TabBar`で「電卓 / グラフ / 履歴」ページを切り替える1画面のアプリ。関数電卓+グラフ電卓+計算履歴。
-
-- **式の評価**は`apps/calculator/Calc_Eval.hpp`(ヒープ非使用の再帰下降パーサ)が担当。
-  四則演算・累乗(右結合)・mod・nCr/nPr・階乗・%・三角関数と逆関数・双曲線関数と逆関数・log(底の指定可)・ln・
-  √・立方根・n乗根・abs・π・e・Ans・EXP(`1.5E3`)・省略した掛け算(`2π` `3(4+1)` `2sin(30)`)。
-  角度はDEG/RAD/GRA。sin(180°)等の直角の倍数はちょうど0/±1にする。グラフのときだけ変数`x`。
-  ホストテスト(`calc_eval_test`)で優先順位・各関数・定義域/0除算/桁あふれのエラーを固定してある。
-- **キーパッド**(`apps/calculator/ui/CalculatorKeypad`)は7行6列。キーごとにButtonをnewせず、固定長テーブル+
-  タップ位置からの逆算。上3行が関数(SHIFTで逆関数・10^x・e^x・立方根・n乗根・abs・nPr・e、HYPで双曲線関数。
-  どちらも1回きり)、下4行が数字と演算子。関数キーは`sin(`のように括弧ごと入り、DELは括弧ごと消す。
-- **「=」**は閉じ忘れた括弧を自動で閉じて計算する。直後に演算子を押すと`Ans`から続け、数字等を押すと新しい式。
-- **グラフ**: y1〜y3の3本。式を入れる画面(一覧+キーパッド。`mod`の位置が`x`、`=`が[描画])と、
-  グラフを見る画面(`apps/calculator/ui/GraphView`)を切り替える。ドラッグで移動、タップでその位置の値(トレース)、
-  [拡大][縮小][初期化]。値は画素の列ごとに評価して覚え、式・範囲が変わったときだけ計算し直す。漸近線はまたいで繋がない。
-- **物理キーボード**でも打てる(`*`→×、`/`→÷、Enter=計算/描画、Backspace=DEL、Esc=AC、グラフの式は↑↓で選ぶ、
-  グラフ表示中は矢印で移動・+/-で拡大縮小)。
-- **履歴**は`ScrollList`で表示(最大15件、新しい順)。2回タップで式を電卓ページへ読み戻す。
-- **グラフの角度の単位は電卓とは別で、既定はRAD**(度のままだとxが-10〜10の範囲で`sin(x)`がほぼ平らな線になるため)。
-  グラフのページで`DEG`/`RAD`/`GRA`キーを押すとグラフだけが切り替わる。
-- ホストテスト(`calculator_test`)がキーパッドの当たり判定・SHIFT/HYP・入力→表示→履歴・グラフの値/ドラッグ/トレース/
-  拡大/初期化を実際のタッチ経路で検証する。
-- 未: 角度の単位とグラフの式の保存(アプリを閉じると戻る)、分数表示、統計・方程式・複素数、グラフの交点/極値の計算。
-
-### ファイルエクスプローラー(`FileExplorerScene`)
-
-「戻る」ボタンを足して`FileExplorer`ウィジェットを1個生成するだけの薄い皮(ClocksScene/
-CalculatorSceneと同じ形)。一覧・フォルダの作成/削除・親フォルダへ戻る操作は元々`FileExplorer`
-ウィジェット自身が持っているので、シーン側に足したロジックは無い。
-
-- ディレクトリ走査(`FsFile::openNext`)を伴うため、**ホストテストのSdFatスタブでは検証できない**
-  (`Doc_Cache::Clear()`と同じ理由: スタブはパス→内容のフラットな`map`でディレクトリの実体が無い)。
-  動作確認はPCビルド(`pc/`)の`--tap`+`--shot`で行った: ランチャから起動 → SDカードルート
-  (`README.md`/`sys`/`tmp`)の一覧表示 → `tmp`フォルダへ移動 → `←`で親へ戻る →
-  シーンの「戻る」でランチャへ復帰、までを実際のタッチ経路で確認済み。
-- **コピー / 移動 / 名前の変更(2026-10-11)**: 上の行の`[コピー][移動][名前][貼付]`。項目を1回タップで選び
-  [コピー]か[移動]→行き先のフォルダへ移って[貼付]。覚えるのはパス1つ(シーンのメンバ。ファイルビューワーへ行って戻っても残る)で、
-  コピーは何度でも貼れ、移動は1回で消える。同じ名前があれば`名前 (2).拡張子`にする。フォルダは中身ごと(深さ8まで)。
-  フォルダをその中へ置く・同じ場所への移動は断る。[名前]は今の名前を入れた`InputDialog`(`/ \ : * ? " < > |`・末尾の空白と`.`は不可)。
-  - 下請けは`storage/SD_IO`の`copyRecursive()`(パスと512Bの作業場所は静的に1つ。階層ごとにスタックへ積まない)・`uniquePath()`・
-    `isSameOrInside()`・`isValidName()`。移動と名前の変更は`SD.rename()`。コピーは同期で、読み書きのたびに`CrashDumpFunctions::Feed()`。
-  - `FileExplorer`本体(保存/選択のダイアログでも使う)には`refresh()`/`selectByName()`だけを足した。
-  - 検証: `file_ops_test`(run.sh の core。ファイルのコピー・重ならない名前・判定)と、PCビルドの`--tap`/`--shot`(ファイルのコピー、
-    ファイルの移動、フォルダの再帰コピー、名前の変更)。**実機では未確認**(大きいファイルのコピーの時間。その間は画面が止まる)。
-
-### 辞書(`DictScene`)
-
-「入力欄+検索ボタン+状態表示+結果一覧+詳細欄」を並べるだけの薄い皮
-(ClocksScene/FileExplorerSceneと同じ形)。検索ロジック本体は`WordDictionary`
-(`src/apps/dict/`)が持つ。
-
-- **前方一致は`search()`が同期的に即返し、語の途中の一致は`update()`を毎フレーム呼んで
-  少しずつ拾う**(26MB級の辞書ファイルを毎回全部読むと実機のSD帯域では数十秒かかり
-  得るため)。`onUpdate()`で`dict_.update()`を回し、`count()`の増分だけを結果一覧へ
-  追記していくので、前方一致だけで足りる大半の検索は一覧がすぐ埋まり、それ以外は
-  埋まっていく過程がそのまま見える(検索を止めて待たせない)。
-- 結果一覧(`ScrollList`)をタップすると、その場で下の詳細欄へ表示用語句と説明/訳の
-  全文を出す。一覧・詳細を別シーン/別ダイアログへ分けなかったのは、辞書を引く操作は
-  「一覧を見ながら次を引く」往復が多く、都度画面遷移するとかえって使いにくいため。
-- **このシーンのオブジェクトはMarkdownSceneと同じく「数十バイト」の他シーンより大きい**
-  (`WordDictionary`が実測約43KB)。辞書アプリは自分の上へ別シーンをPushしないので、
-  シーンスタックに積まれたまま残り続ける実害は無い。
-- 詳細欄は`detail_title`(表示用語句、太字見出し、スクロールしない固定行)と
-  `detail_label`(説明文、`ScrollContainer`で包んでスクロール可能)の2枚のLabelに
-  分けてある。1枚にまとめず分けた理由は2つ:
-  - 長い説明をスクロールしている間も見出しが常に見えている方が「今何を見ているか」が
-    分かりやすい
-  - **説明文(3列目)はLabelのマークアップ記号(`**`太字/`_`下線/`~`波線/`~~`取り消し線)を
-    普通の文字として使っている**(実データで836行該当。例:「《the~》」「…でも~でもある」)。
-    `detail_label`は`setDisableAutoTextDecoration(true)`でマークアップ解釈そのものを
-    止め、常に生テキストとして表示する(利用者から「`~`が入ると表示が崩れる」との報告で
-    発覚)。表示用語句(2列目)は実データにマークアップ記号を含まないため、
-    `detail_title`側は太字装飾を有効なままにしている。
-- `detail_label`は`ScrollContainer`(それまで未使用だった汎用部品の初めての実利用)で
-  包んである。以前はLabelの`maxHeight`で高さを決め打ちして溢れた分を切り詰めていたが、
-  長い説明の途中で見えなくなる不具合(利用者から報告あり)につながっていた。
-  `detail_label`側は`maxHeight`を持たず、必要な行数ぶんそのまま伸びる。実利用に伴い
-  `ScrollContainer`へ2つ足した: `refreshContentBounds()`(子の大きさが変わった後に
-  スクロール範囲を引き直す。追加時とドラッグ開始時にしか再計算しない元の実装のままだと
-  中身を書き換えるだけの呼び出し元はスクロール範囲が古いままになる)と
-  `scrollToTop()`(表示内容が別物に変わった時に先頭へ戻す)。
-- **辞書データ(`script/dict/src/en-ja-and-ja-en.tsv`)はフォントが描画できない文字(豆腐)を
-  含む行を除いてある。** `script/dict/filter_dict_tofu.py`が`script/dict/src/dict_tofu_chars.txt`
-  (この辞書専用の豆腐文字リスト。**`script/dict/src/tofu-chars.txt`とは別物** —
-  そちらはSKK辞書(`skk_body.tsv`、MLサイズ)向けに`checkFontCoverage()`を
-  かけた結果で、対象辞書が違うため流用すると豆腐を網羅できない。実際、最初
-  `tofu-chars.txt`(162文字)で試みたところ1,827行しか落とせず、この辞書自身を
-  `checkFontCoverage()`にかけ直すと未対応文字は2,086文字・10,572行あった)を使い、
-  検索用語句・表示用語句・説明のどこか1文字でも豆腐化する行を丸ごと落とす
-  (SKK側の変換(`convert_skk_dict.py --exclude-chars-file`)は候補単位で間引いて
-  読みは残すが、こちらは1行=1エントリで部分的に伏せ字にする方法が無いため行ごと落とす)。
-  行を間引くだけなので検索用語句のバイト順ソートは崩れず、`build_dict_index.py`側の
-  再ソートは不要。`dict_tofu_chars.txt`自体の作り方(PCビルドで`checkFontCoverage()`を
-  一時的に呼ぶ手順)は`filter_dict_tofu.py`のモジュールdocstringを参照。辞書を
-  更新するたびに
-  `python3 script/dict/filter_dict_tofu.py <素の辞書> script/dict/src/dict_tofu_chars.txt --out script/dict/src/en-ja-and-ja-en.tsv`
-  → `sh script/dict/build.sh dict` の順で通すこと(SDへ置くファイルは`script/dict/out/`にでき、リポジトリには入れない。`script/dict/README.md`)。
-
-### 設定(`SettingsScene`)
-
-`network.cfg`(Wi-Fi/NTP/ブラウザのホーム/タイムゾーン)と`sound.cfg`(音量)と`user.cfg`(起動時セルフチェック)を
-1画面のフォームで編集する。
-**2026-10-01に画面下のタブ(`Wi-Fi`/`本体`/`時刻`/`その他`)で項目ごとに分けた**。Wi-Fiタブは
-ON/OFF・接続状態・保存済みネットワークの一覧(2回タップで接続)と[検索][追加][接続][削除]。
-SSID/パスワードの「編集」行は無くなった(同じSSIDを「追加」し直すとパスワードの書き換えになる)。
-以下の記述のうちSSID/パスワードの行の話はそれ以前のもの。**`Config_Functions::SetValue()`・`Checkbox`・`DropdownMenu`の
-初めての実利用箇所**(いずれもこれまで発行側/部品のみで、呼び出し元が無かった)。
-
-- **保存ボタンを持たない**。行ごとの操作(編集ダイアログの決定/チェックボックスのタップ/
-  タイムゾーンの選択)のたびに`SetValue()`でその場で書き込む。
-- テキスト項目(SSID/パスワード/NTPサーバー1・2/ブラウザのホーム)は`MarkdownScene`の検索入力と
-  同じ形: 「編集」を押すたびに`InputDialog`を1個newし、閉じたら`DestroyLater()`で破棄する
-  (項目ごとに専用ダイアログを持たない)。
-- **パスワードは平文を保持しない**。表示は「設定済み/未設定」のみで、編集ダイアログも空欄から
-  始まり、空欄のまま決定すると変更しない(既存の値を消せない)。SSID/パスワードを書き換えた
-  直後は、もう一方が分かっていれば`NetworkFunctions::ConnectWiFiAsync()`をその場で呼び直し、
-  再起動なしで新しい設定へ繋ぎ直す(分からなければ次に両方揃った時点で繋がる)。
-- **タイムゾーンは`DropdownMenu`のプリセット選択**(`JST-9`等のPOSIX TZ文字列そのものを項目名に
-  使う)。設定ファイルの値がプリセットのどれとも一致しない場合は、その値自体を末尾に追加して
-  選択する(独自設定を黒く上書きしないため)。`SettingsScene`実装当時の`DropdownMenu`は選択変更を
-  通知するコールバックを持たなかったため、`onUpdate()`で`getSelectedIndex()`を毎フレーム見て
-  変化を検出している(`ClocksScene`の`before_sec`等と同じ「変化検出」の流儀)。
-  ※`DropdownMenu`自体は2026-09-21のLua API穴埋めで`setOnChanged()`
-  (Lua側`dropdown_changed`イベント)を持つようになったが、`SettingsScene.cpp`はこの
-  ポーリング実装のまま未移行(上記「5. Luaアプリ」の`dropdown_changed`参照)。
-- **音量**(`sound.cfg`の`volume`、0〜100)は`NumberSlider`。ドラッグ中は`SoundFunctions::SetVolume()`で
-  その場で反映し、**指を離したときに1回だけ**`SetValue()`で保存して確認音(880Hz)を鳴らす
-  (ドラッグの1フレームごとにSDへ書かないため。離す前に画面を抜けた場合は`onExit()`で保存)。
-  8行を画面へ収めるため行の高さ(`ROW_H`)を34→30pxへ詰めた。
-- ブラウザのホームは空欄も許可する(空にすると`MarkdownScene`が同梱サンプル文書を開く)。
-  他のテキスト項目は空欄のまま決定しても変更しない。
-- **時刻の手動設定**(2026-10-11、時刻タブの4行目「変更」): 日付→時刻の順に`PickerDialog`で聞き、
-  `TimeFunctions::SetLocalDateTime()`(実機は`settimeofday()`)で合わせる。NTP同期前は1970年のままで、
-  アラーム・通知・TLSが全部止まっていたため。後でNTPに同期すればそちらで上書きされる。
-- **電源メニュー**(2026-10-11、上の段の右端「電源」/ステータスバーの長押し): スリープ(指を離したら即入る)/
-  再起動(今の画面の後片付けをしてから`watchdog_reboot()`。クラッシュダンプとは区別される)。
-- **ランチャで隠したアプリ**(2026-10-11、その他タブの最下行「編集」): 隠したアプリを選んで表示し直す/並びを元に戻す。
-  並べ替え・隠すのはランチャのタイルの長押し(コントローラーのX/Y、キーのm)。
-- 実装に伴い部品側の欠けを2つ埋めた: `Checkbox::causeOnPressStart()`がタップ後に
-  `causeOnChangeChecked()`を呼んでいなかった(コールバックを設定しても発火しない)のを配線し、
-  `DropdownMenu::setSelectedIndex()`が表示用ラベルを更新していなかった(選択自体は効くが、
-  閉じた時の表示がプレースホルダのまま残る)のを直した。いずれも今回が初の実利用で発覚した。
-
-### Markdownブラウザ
-
-「mdのウェブブラウザ」にする方針。通信仕様は`docs/PROTOCOL.md`、参照実装サーバは`script/reference_server.py`。
-**docs/PROTOCOL.md の v1 はこれで一通り実装できている。**
-
-| 段 | 内容 |
-|---|---|
-| リンク配線 + 履歴 + ヘッダー | `MarkdownScene`が履歴(8件、パス+スクロール位置)を自前で持ち、`PICO_IO::resolve()`で相対リンクを解決して同じシーンのまま開き直す。ヘッダに`[<][>][ホーム][更新][検索]`…`[終了]`、フッタに現在のパス(エラー時はメッセージ)。**リンクごとに`SceneFunctions::Push`してはいけない**(スタック上限が4で詰む) |
-| キャッシュ層 | `apps/browser/Doc_Cache`。`/cache/<ホスト>/<パス>`へミラーし、目録は`/cache/index.tsv`。`Writer`が一時ファイル(`.part`)→renameで差し替えるので、通信が途中で切れた半端なファイルが残らない。1件64KiBで頭打ち。追い出しは作らない(全消去の`Clear()`だけ) |
-| HTTPクライアント | `util/Url`(URL分解・相対解決) / `net/Http_Response`(ソケット非依存の増分パーサ、chunkedは解く) / `net/Http_Transport`(http/httpsの接続。実機はBearSSL、PCはOpenSSL、TLS 1.2・焼き込みのルート証明書+SDの`/sys/tls/ca.pem`) / `net/Http_Get`(`Task`派生、リダイレクト3回・10秒打ち切り・条件付きGET・3xx/4xxの本文はシンクへ流さない)。`run_net.sh`が参照実装サーバとテスト用TLSサーバ相手に実通信で検証する |
-| 取得→キャッシュ→表示 | `apps/browser/Doc_Fetch`。条件付きGET→304ならキャッシュ据え置き / 200なら差し替え、取得失敗時は古いキャッシュで代用(オフライン表示)。`network.cfg`の`browser-home`でホームを指定できる |
-| 画像の解決と先読み | 文書基準でパスを解決(`MarkdownView::resolveRef`、**レイアウトと表示の2箇所**)。リモート文書では表示前に1フレーム1枚ずつ取得し、1枚失敗したら残りは諦める。1ページ8枚まで、キャッシュ済みは取りに行かない |
-| discovery | `/.well-known/pico-os`。**ただの文書として取る**ので条件付きGETもオフライン時の据え置きもそのまま効く。知らないキーは無視(前方互換)、`search`の行が無ければ検索非対応、404は「素の静的サーバ」として確定扱い |
-| 遷移失敗の巻き戻し | 履歴の現在地は**相対リンクの基準**でもあるので、開けなかった場所を現在地のまま残すと、画面には前の文書が出ているのに次に踏んだリンクだけがその場所を基準に解決される。失敗したら`abortNavigation()`で表示中の位置まで戻す |
-| リロードボタン | ヘッダの「更新」。検証子を送らないので304ではなく200が返り、キャッシュごと差し替わる。**挿絵も引き直す**。履歴は積まずスクロール位置も保つ |
-| 検索 | ヘッダの「検索」→`InputDialog`で語を聞き、`SearchDialog`(`ScrollList`)に結果を出す(2回タップで開く)。**検索だけは`Doc_Cache`を通さない**(キャッシュのキーがクエリを見ないため、通すと検索語違いの結果が同じファイルへ重なる)。10件ずつで「次へ」あり |
-| マニフェスト | `/v1/manifest`。discoveryの直後に1回引き、手元の検証子とversionが一致する文書は**サーバへ何も聞かずに**開く(304の往復も無し)。一致しない/載っていない/非対応サーバなら今までどおり条件付きGETへ落ちる。「更新」を押すとマニフェストも引き直す |
-
-## 8-11. 未着手の大項目
-
-いずれも**土台から設計する前提**(9と11は着手済み)。既存機能の拡張ではないので、相談は設計の段から始まる。
-
-| # | 項目 | 現状 |
-|---|---|---|
-| 8 | セカンダリアプリ開発 | 部品は存在するが、アプリ本体のコードは無い。[7](#7-標準アプリ開発-1)が一巡してから。カレンダーは`.ics`の読み取り(`src/apps/calendar/Ical`)・月表示(`CalendarScene`、SDの`/calendar/*.ics`を読む)・取得元URLからの取得(`Calendar_Sync`、`/calendar/sources.cfg`、HTTPS対応)まで入った(Google CalendarはOAuthではなく非公開のiCal URLで読む方針。`docs/design/apps-online.md`参照)。ペイントはLuaアプリ(`pc/sdcard/lua/apps/ペイント/`)として実装済み: ペン/消しゴム/直線/四角形・楕円(輪郭/塗りつぶし)/塗りつぶし(バケツ)/色(`ColorDialog`)/太さ/元に戻す/新規/`.pimg`の保存(`FileSaveDialog`)・読込(`FileSelectDialog`)。描画の中身は`CanvasRaster`(C++)側に足した。チャットは自前のサーバ(`server/chat/`、Python標準ライブラリのみ、仕様は`docs/CHAT_PROTOCOL.md`)+ Webクライアント + `ChatScene`(`/sys/chat.cfg`)として実装済み。プロトコルv2でオープンチャット(検索で参加)/プライベートチャット(参加者が発行する30分有効の参加コードで参加)と、部屋ごとの役割(owner/admin/member)が入った。v3でサーバ管理者(Webの「サーバ管理」)が入った。Discordは自分のアカウントでの自動操作が規約違反でBot名義になるため見送った(docs/design/apps-online.md「チャット」参照) **テトリス風はLuaアプリ(`/lua/apps/テトリス/`)として実装**: SRSの回転と壁蹴り・7種1巡・HOLD・ゴースト・ハイスコア・BGM(コロベイニキ)。ミノの絵は1枚の`blocks.pimg`に並べ、盤面はタイルマップ(`pico.game`。変わったマスだけエンジンが描き直す)、落ちるミノはスプライトで描く。タッチとコントローラーの両方で遊べる。**リバーシ・マインスイーパー・ブロック崩し・テトリスの4本は`pico.game`(2Dゲームの簡易エンジン)の上に作り直した**(盤面はタイルマップ、画面は`g:state`、画面ボタンは`g:button`。`docs/design/lua-apps.md`「ボードゲーム4本のpico.gameへの移行」参照)。**SSHクライアント**(`SshScene` + `src/apps/ssh/`、暗号は`lib/monocypher`)も実装済み: 端末全体が1画面で、接続先・ホスト鍵の確認・パスワードを端末の中で聞き、キーボードはテキストエディタと同じく据え置き(docs/design/apps-local.md「SSHクライアント」参照)。**TODO/リマインダー**(`TodoScene` + `src/apps/todo/`)はTodoist API v1と連携: 個人用のAPIトークンだけで使え(OAuthは使わない)、応答のJSONは流しながら必要なキーだけ拾う(`util/Json_Reader`)。時刻つきの期限は通知(`NotificationFunctions`)の予約にする(docs/design/apps-online.md「TODOアプリ」参照)。**2.5Dマインクラフト風「ブロック」**はTheScienceElf氏のBlocks-TI-84(MIT)をLuaアプリ(`/lua/apps/ブロック/`)へ移したもの: チャンク読み込みで1024x16x1024の世界・25種類のブロック(松明を含む)・影・松明の光(光源)と昼/夜・半透明の水・自然/平ら/デモの生成・5つのセーブ枠。テクスチャは元の絵を14色のパレット(`pico.set_palette`)へ減色した(`script/assets/generate_blocks_sheet.py`)。**2.5Dのエンジン(ワールドの読み込み・生成・保存・影と松明の光つきの描画・タップ位置の引き当て)はC++**(`src/iso/`、Luaからは`pico.iso`。隠れたブロックを描かず、面の絵は区間ごとに写す。`docs/design/iso.md`「ブロック」参照)。**人や物(エンティティ)**: 好きな画像を小数の位置に立てて置ける(`pico.iso.entity_*`、96個まで)。ブロックとの前後は当たりの箱で決め(壁の裏で隠れ、水の中では沈んで見える)、足元に丸い影を落とす。ゾンビTDのゾンビ・兵士・塔がこれ(`docs/design/iso.md`「人や物(エンティティ)」参照)。**ゾンビのタワーディフェンス**は仕様(`docs/ZOMBIE_TD.md`)とエンジン側の道具(流れの場=フローフィールド・中を通り抜けられるブロック・押し合い・必ず当たる弾・視線・HPバー、`pico.iso.flow_*`等)と、Luaアプリ`/lua/apps/ゾンビTD/`のマップの生成(`pico.iso.create`の`kind`=4)とゾンビ(歩いてベースを攻撃する)まで。兵士・建物・ウェーブはまだ |
-| 9 | GameBoyエミュ | **[Peanut-GB](https://github.com/deltabeard/Peanut-GB)を採用**(MIT・C99のヘッダ1本・ROMの読み出しがコールバック・1行ずつ描画を渡す・RP2040でもフルスピード。`lib/peanut_gb/`へ無改造でvendor)。Pico-GB/pico-peanutGB(GPL-3・HDMI出力)/gnuboy/SameBoy等と比べた経緯は`docs/design/gameboy.md`「ゲームボーイ」参照。**第1段 = ROMをRAMへ丸ごと読む(256KBまで)**が`GameBoyScene`(ランチャの「ゲームボーイ」)として入った: SDの`/gb/`からROMを選び、240x216(1.5倍)で表示、タッチの操作パッド(十字キー8方向/A/B/SELECT/START)、カートリッジRAMは`<ROM名>.sav`へ保存(終了時と、遊んでいる途中でも書き込みが落ち着いたとき)。**途中保存(ステートセーブ)**: MENUボタン(コントローラーのZL)の「途中保存/途中から再開」(`/gb/states/<ROM名>.st1`)と、画面を離れる・スリープ・電池が少ないときの自動の枠(`.st0`、開いたとき「続きから遊びますか」)。音は#11の「GB対応」で鳴るようになった(音源チップを2コア目で再現)。PCビルドでdmg-acid2・cpu_instrsが正しく動き、59.7フレーム/秒が出ることを確認。**256KBを超えるROM(第3段)**: 内蔵フラッシュのLittleFSの領域(ファームの更新の置き場、1728KB)を生で間借りして書き、エミュはそこを直接(XIP)読む(`apps/gb/Gb_Rom_Flash`・`storage/Flash_Area`)。1MBまで、書くのは初回だけ(同じROMなら書かない)。`/sys/gb.cfg`の`rom-in-flash = auto|always|never`。ファームの更新をするとROMは消え、次に遊ぶときSDから書き直す。**残り**: 実機での速さの計測(5秒ごとに実行/捨てたフレーム数をログへ出す。フラッシュから読むROMでも)、内蔵フラッシュへの書き込みの実機での確認と時間、タッチが1点しか取れないため「十字キー+A」の同時押しができない(#10の外部コントローラーで解消する見込み)、GBC |
-| 10 | 外部コントローラー | **方式は市販のWiiクラシックコントローラー(I2C、GP0/GP1、抜き差しはACKで見る)に決めた**が、実物がまだ無い。先に**入力の窓口`PadFunctions`**(15ボタンのビットマスク、押した/離したはそのフレームだけ)と、**USBシリアル経由のPCキーボード入力**(`script/pad_serial.py`が`pad XXXX`の行を100msごとに送る。500ms途切れたら全部離す)を作った。GBエミュ(画面のパッドと重ねるので同時押しができる。HOMEで戻る)・Lua(`pico.pad_*`)・ステータスバーのアイコン・動作確認アプリ(「動作確認」の「コントローラー」)まで。PCビルドでは標準入力がシリアルの代わり、**Webビルドではページのボタン(同時押し可)とキーボードが同じ`pad XXXX`の行を流す**(`pc/web/shell.html` → `picoos_serial_push()`)。**実機のUSBシリアルでは未確認**。**物理キーボードの文字入力(`KeyInputFunctions`)も同じUSBシリアルに相乗りした**: `pad_serial.py --mode text`(F1で切り替え)が1打鍵1行の`key M CODE`を送り、今の画面(`Scene::onKey()`。SSHはシェルへ直接、テキストエディタは↑↓/Ctrl+S)→開いているオンスクリーンキーボードのキー盤の順に配る。PCビルドはウィンドウのキー入力(SDL)、Webビルドはページの「PCのキーボード: 文字入力」が同じ行を作る。日本語のキー盤が開いていれば**pico-os側でローマ字かな漢字変換**をする(Spaceで変換、送り仮名は自動+SKK式の大文字、半角/全角・Ctrl+Space・Tab2回で日本語⇔英字)。本体へ直接つなぐ方式(Bluetooth/PS/2等)は未(docs/design/input.md「物理キーボード」参照)。**Wiiクラシックコントローラーのドライバ(`WiiClassic_Functions`)が入った**: I2C0(CardKB2と共有、`I2C_Bus.hpp`)のアドレス0x52、暗号化しない初期化、6バイトを読んで`PadFunctions::SetDevice()`へ(USBシリアルとORで重なる)、左スティックも十字キー、500msごとに探して抜き差しに追従。ホストテストは`wii_classic_test`、**実物では未確認**(docs/design/input.md「外部コントローラー」参照) |
-| 11 | Chiptuneを再生 | **出力の土台**(`SoundFunctions`): I2S(MAX98357A、BCLK=GP2/LRCLK=GP3/DIN=GP4)、アンプの有無を検出線(GP5、アンプ側でGND)で見て**刺さっている間だけI2Sを動かす**(未接続でも呼び出しは受け付け、音は時間どおりに進むので刺し直すと続きから鳴る)、`/sys/sound.cfg`(`output = auto / off`、`volume`、`battery-cap`)`sample-rate`(22050/44100Hzを設定アプリの「音質」で切り替え、画面ごとにも要求できる=ミュージックアプリは44100Hz・Luaの`pico.sound_set_rate`、2026-10-10。ライン出力のDAC PCM5102Aも同じ配線で使える)、ステータスバーのアイコン、PC/Web版(SDL)。**音源**(`src/sound/Chip_Synth`): 4チャンネル、波形は矩形(12.5/25/50/75%)・三角・のこぎり・ノイズ2種をどのチャンネルでも選べる、ゲームボーイ風の音量エンベロープと長さ。**2コア目(`setup1()/loop1()`)で合成してI2Sへ流す**ので、1コア目の描画やTLSで途切れない(1コア目からは固定長のコマンドの列で渡す)。Luaの`pico.sound_play/sound_stop/sound_playing/note_freq`と、動作確認アプリ(「動作確認」の「音」。鍵盤とデモ曲、`pc/sdcard/lua/apps/動作確認/sound.lua`)。**曲データ**: 標準はMML(`docs/MUSIC_FORMAT.md`)。1コア目で読み取って小さな演奏データへ、2コア目のシーケンサーがサンプル単位で鳴らす(テンポが揺れない)。効果音は曲のチャンネルを借りる。Luaの`pico.music_play/music_play_text/music_stop/music_playing`、ミュージックアプリ(`/music/`の直下のフォルダ=プレイリスト、順番通り/ミックス・リピート(しない/全曲/1曲)・曲の終わりで次へ)。**MIDIの取り込み**: `script/midi2mml.py`(PCで動かす。和音を声部へ分けて4チャンネルへ割り当て、打楽器はノイズへ、6KiBに収まるよう切る。`docs/MUSIC_FORMAT.md`「MIDIからの変換」)。**GB対応**: GBエミュの音源チップ(矩形波+スイープ/矩形波/波形メモリ/ノイズ、長さ・エンベロープ、NR50〜52)を`src/sound/Gb_Apu`として2コア目で再現。エミュ(1コア目)は音源チップへの書き込みに「フレームの頭から何クロック目か」を付けて列(`Gb_Audio_Link`、約4KB、初めてROMを起動したときに確保)へ積み、2コア目はその時刻にあたるサンプルの位置で当てる(音はエミュより約1フレーム遅れる)。曲・効果音と足し合わせて鳴る。エミュが止まったら(ダイアログ・終了・停止)約50msで無音。既存アプリへの効果音はブロック崩し(+ジングル)・マインスイーパーから。設定アプリで音量を変えられる。**WAV**: SDの`.wav`(整数PCM 8/16/24/32bit・float 32bit、何チャンネル/何Hzでもモノラル・出力の周波数へ直す)を1コア目が少しずつ読み、列(`Wav_Stream`、24KB)で2コア目へ渡して曲・効果音と足し合わせる。Luaの`pico.wav_play/wav_stop/wav_playing`、ミュージックアプリ(`/music/*.wav`)。**録音**: I2Sマイク SPH0645(BCLK=GP26/LRCLK=GP27/DOUT=GP28、出力とは別のI2S)を2コア目が48000Hzで受け、直流を落として増幅・16000/24000/48000Hzへ間引き、列(32KB)で1コア目へ渡して`/recordings/rec_NNNN.wav`へ書く(`Mic_Functions`、docs/design/sound.md「マイクと録音」)。録音アプリ(`RecorderScene`)。**動画**: PCの`script/generate_pvid.py`で16色+8x8タイルの差分の`.pvid`(と音の`.wav`)へ変換し、動画アプリ(`VideoScene`)で音に合わせて再生する(`docs/VIDEO_FORMAT.md`)。**残り**: 他の既存アプリへの効果音、実機での確認(2コア目の負荷・市販ゲームでの聞こえ方) |
-
-## 12. 開発者向けの道具
-
-設定は`/sys/debug.cfg`(設定アプリの「他」タブでも切り替えられる)。全部既定で切れている。詳細はdocs/design/devtools.mdの「開発者向けの道具」。
-
-| 項目 | 状況 |
-|---|---|
-| プロファイラ | ✅ `ProfilerFunctions`。`loop()`を入力/電源/シーン/画面更新/描画/タスク/Wi-Fi/サービスの区間に分けて計り、0.5秒の窓で平均・最大・Luaの時間を出す。`perf-log = true`で5秒ごとにシリアルへ |
-| フレーム時間の表示 | ✅ `PerfOverlay`(右下、タップは素通り)。fps・平均/最大フレーム時間・Lua・内訳・直近60フレームのグラフ |
-| Luaデバッガ | ✅ `LuaDebugger`+`LuaDebugScreen`。`pico.breakpoint()`/`pico.set_breakpoint()`/シリアルの`dbg b`、エラーで止まる、1行/次へ/抜ける/停止、ローカル変数と上位値、ソースの行。スタックトレースはダイアログ・ログ・`/crash/lua_NNNN.txt`へ |
-| クラッシュダンプ | ✅ `CrashDumpFunctions`。HardFault(`isr_hardfault`)とウォッチドッグ(`watchdog = true`)の記録を消えないRAMに置き、次の起動で`/crash/crash_NNNN.txt`へ書いて通知する。PCビルドはシグナルとスレッドで同じ流れを確かめた |
-| ファームの更新 | ✅ `FirmwareFunctions`+`firmware/`(2026-10-16)。「本体の更新」でSDの`.pfw`を選ぶか、PCの`script/firmware_tool.py push`(`pio run -t fwpush`)をWi-Fiで受け取り、署名(Ed25519、焼き込みの鍵だけ)と中身を確かめて内蔵フラッシュのLittleFS(1728KB)へ置き、再起動するとarduino-picoのOTAのローダーが書き換える。自動のロールバックは無い(BOOTSELで戻す)。PCで流れを確認し、実機でもSD・Wi-Fiの両方で更新できた(2026-10-16)。詳細は`docs/FIRMWARE_UPDATE.md` |
-| Luaサンドボックス | ✅ 打ち切りを握り潰せない、`debug`/`io`/`package`/`dofile`/`loadfile`/`os.exit`等/`string.dump`/バイトコードの`load`/`__gc`を外した、入れ子のコールバックで予算を積み直せない |
-| 実機での確認 | ⬜ `isr_hardfault`の差し替え・`.uninitialized_data`・`watchdog_enable_caused_reboot()`・デバッガの画面の描画は実機でビルドもできていない |

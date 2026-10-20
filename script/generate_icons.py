@@ -191,6 +191,14 @@ ICONS: list[IconSpec] = [
 
     # --- 録音(2026-10-18)。末尾へ足すこと(上の【重要】参照)。自作 ---
     IconSpec("microphone",     str(CUSTOM_DIR / "microphone.svg")),
+
+    # --- ファイルの種類別アイコン(2026-10-20)。末尾へ足すこと(上の【重要】参照) ---
+    IconSpec("file_image",     str(ICON_DIR / "photo.svg")),
+    IconSpec("file_video",     str(ICON_DIR / "movie.svg")),
+    IconSpec("file_audio",     str(ICON_DIR / "file-music.svg")),
+    IconSpec("file_text",      str(ICON_DIR / "file-text.svg")),
+    IconSpec("file_code",      str(ICON_DIR / "file-code.svg")),
+    IconSpec("file_archive",   str(ICON_DIR / "file-zip.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

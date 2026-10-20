@@ -1,3 +1,4 @@
+#include "gui/icons/File_Icon.hpp"
 #include "gui/widgets/apps/FileExplorer.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
@@ -24,10 +25,7 @@ void FileExplorer::update_list(){
         if (file.getName(name, sizeof(name)))
         {
             ScrollListTools::Item item;
-            if (file.isDirectory())
-                item.icon = IconID::Folder;
-            else
-                item.icon = IconID::File;
+            item.icon = FileIcon::For(name, file.isDirectory());
 
             item.text.assign(name);
 

@@ -1,3 +1,4 @@
+#include "gui/icons/File_Icon.hpp"
 #include "gui/scenes/FileSearchScene.hpp"
 #include "gui/scenes/FileViewerScene.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
@@ -83,10 +84,10 @@ void FileSearchScene::refreshList(){
     }
     for(int i = this->shown_count; i < this->result_count; i++){
         ScrollListTools::Item item;
-        item.icon = this->result_is_dir[i] ? IconID::Folder : IconID::File;
         // 名前の後ろに、どのフォルダにあるか
         const char* p = this->results[i].c_str();
         const char* name = PICO_IO::filename(p);
+        item.icon = FileIcon::For(name, this->result_is_dir[i]);
         item.text.assign(name);
         const size_t dir_len = (size_t)(name - p);
         if(dir_len > 1){

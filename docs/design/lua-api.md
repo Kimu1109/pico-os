@@ -854,3 +854,16 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 ジェスチャー(スワイプ/長押し/ダブルタップ/遅い動き/矩形の外)・スクロール・リスト/タブ/連動・5種のダイアログと `closed` の3番目の引数・オフスクリーン画像(画面のdirtyを積まないこと、抜けると戻ること)・
 描画の補助・ユーティリティ・`on_back`・暗号(往復・改ざん・パスワード違い・別のアプリ・12KiB・BLAKE2bの既知の値・store)・`pico.ui`/`pico.async`/`pico.tween`)、`widget_factory_test`/`widget_property_test`、
 `lua_engine_test`(タブ8個・画像8枚に更新)、`pico_mock_test`。ASan/UBSanで通る。
+
+## 数値定数(2026-10-20)
+
+色・`font_size`・`icon_size`・`icon_id`・`text_align`・`direction`・各種 align・`canvas_mode`・曜日・画面の大きさ・`pico.iso` のブロック/地形の種類を、
+`pico.COLOR_RED` / `pico.ICON_Home` / `pico.iso.BLOCK_TORCH` のように名前で書けるようにした(`src/lua/LuaConstants.hpp`、使い方は `lua-api-doc/content/api/constants.md`)。
+
+- **値はC++の定義(`consts.hpp`・各enum・`Iso_World.hpp`)を直接引く**ので食い違わない。数値を直接書く書き方もそのまま使える。
+- **関数と同じ遅延**: テーブルへは入れず、`l_api_index` が関数の表に無かった名前を定数の表から引いて初めて写す(約150個の定数でLuaの予算を使わない)。
+- **アイコンは `icons_data.h` の `kIconNames`**(`script/generate_icons.py` が `IconID` と同じ並びで出す。`static_assert` で個数を縛る)を引く。
+  `pico.ICON_<IconIDの名前>` で、並び順が変わっても追従する。アイコンを足すと自動で使える。
+- 定数を足したら `LuaConstants.hpp` の表と、`api/constants.md`・`reference/limits.md` を直す。テストは `lua_engine_test.cpp` の「数値定数」。
+- 実機では未確認(PCビルドとホストテストのみ)。
+

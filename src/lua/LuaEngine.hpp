@@ -753,7 +753,9 @@ class LuaEngine {
         std::vector<luaL_Reg> api_pico_;
         std::vector<luaL_Reg> api_iso_;
         std::vector<luaL_Reg>* api_cur_ = &api_pico_;   // registerFn() が足す先
-        void finishApiTable(std::vector<luaL_Reg>& api);  // 並べてトップのテーブルへ __index を付ける
+        // 並べてトップのテーブルへ __index を付ける。constants は名前で引ける数値定数の種類
+        // (0=無し 1=pico 2=pico.iso。LuaConstants.hpp)
+        void finishApiTable(std::vector<luaL_Reg>& api, int constants = 0);
         static int l_api_index(lua_State* L);
 
         // Widgetのコールバックから中継されて呼ばれる(このシグネチャがstd::function<void()>の

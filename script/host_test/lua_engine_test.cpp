@@ -923,6 +923,26 @@ int main(){
         check(ok, "pico.get_time(): スクリプトの実行が成功する");
     }
 
+    // ---- 数値定数(pico.COLOR_* / FONT_* / ICON_* 等、pico.iso.BLOCK_*) ----
+    {
+        const bool ok = engine.Run(R"LUA(
+            check(pico.COLOR_BLACK == 0 and pico.COLOR_RED == 12 and pico.COLOR_WHITE == 15, "定数: 色")
+            check(pico.COLOR_BACKGROUND == 15 and pico.COLOR_FORECOLOR == 0, "定数: 既定の背景/前景")
+            check(pico.FONT_SMALL == 0 and pico.FONT_BIGGER == 3, "定数: font_size")
+            check(pico.ICON_SIZE_16 == 0 and pico.ICON_SIZE_64 == 4, "定数: icon_size")
+            check(pico.ICON_WifiSignal1 == 0 and pico.ICON_Home == 25 and pico.ICON_FileArchive == 91, "定数: IconID")
+            check(pico.ICON_Nothing == nil and pico.NO_SUCH == nil, "定数: 無い名前はnil")
+            check(pico.TEXT_ALIGN_RIGHT == 2 and pico.DIRECTION_HORIZONTAL == 1 and pico.ALIGN_END == 2, "定数: 揃え")
+            check(pico.CANVAS_FILL == 5 and pico.WDAY_SATURDAY == 6, "定数: canvas_mode/wday")
+            check(pico.SCREEN_WIDTH == 240 and pico.SCREEN_HEIGHT == 320, "定数: 画面")
+            check(pico.iso.BLOCK_TORCH == 25 and pico.iso.KIND_ARENA == 4, "定数: iso")
+            local lbl = pico.create("Label")
+            pico.set(lbl, "text_align", pico.TEXT_ALIGN_CENTER)
+            check(pico.get(lbl, "text_align") == 1, "定数: pico.setへ渡せる")
+        )LUA", "constants_test");
+        check(ok, "数値定数: スクリプトの実行が成功する");
+    }
+
     // ---- pico.get_touch() ----
     {
         // OSData::touchX/Y/isTouchedを直接書き換えてから、実際のタップ相当

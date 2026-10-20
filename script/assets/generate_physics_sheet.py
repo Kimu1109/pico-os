@@ -14,8 +14,8 @@ pico.game の物理を使うサンプル「おしてのぼれ」(pc/sdcard/lua/a
 タイルマップの値は frame+1(0は空)。透過つき(パレット0=黒は描かれない)。
 
 使い方:
-    python3 script/generate_physics_sheet.py                   # 既定の場所へ書く
-    python3 script/generate_physics_sheet.py --preview p.ppm   # 確認用のPPMも書く
+    python3 script/assets/generate_physics_sheet.py                   # 既定の場所へ書く
+    python3 script/assets/generate_physics_sheet.py --preview p.ppm   # 確認用のPPMも書く
 """
 
 import argparse
@@ -202,7 +202,7 @@ def build_icon():
 
 
 def main():
-    app = Path(__file__).resolve().parent.parent / "pc" / "sdcard" / "lua" / "apps" / "おしてのぼれ"
+    app = Path(__file__).resolve().parents[2] / "pc" / "sdcard" / "lua" / "apps" / "おしてのぼれ"
     ap = argparse.ArgumentParser(description="「おしてのぼれ」の絵(sheet.pimg / icon.pimg)を作る")
     ap.add_argument("--sheet", type=Path, default=app / "sheet.pimg")
     ap.add_argument("--icon", type=Path, default=app / "icon.pimg")

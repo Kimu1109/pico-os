@@ -123,7 +123,7 @@ namespace {
     char pending_fs_path[512] = {};
 
     // <fcntl.h>のopen()は使わない(ホストテストのSdFatのスタブがO_CREAT等を自前で定義していて、
-    // 翻訳単位ごとに値が食い違うとinlineのopen()が壊れるため。CLAUDE.md「テストは全て手動」参照)
+    // 翻訳単位ごとに値が食い違うとinlineのopen()が壊れるため。CLAUDE.md「Claude Codeへの申し送り」参照)
     void WritePendingFile(const CrashDumpFunctions::Record& r){
         if(!pending_fs_path[0]) return;
         FILE* fp = fopen(pending_fs_path, "wb");

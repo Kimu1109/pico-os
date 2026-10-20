@@ -1,7 +1,7 @@
 -- おしてのぼれ: pico.game の物理を使ったパズルアクション
 --   箱を押して踏み台にし、積み上げ、重い鉄箱でスイッチを押さえ、ばねと動く足場で旗まで行く。
 --   左右で歩く、A(または↑)でジャンプ、↓ですり抜け床から降りる、Bでステージをやり直す。
--- 地図は stages.lua、絵は sheet.pimg(script/generate_physics_sheet.py で作る)。絵の番号は左上から
+-- 地図は stages.lua、絵は sheet.pimg(script/assets/generate_physics_sheet.py で作る)。絵の番号は左上から
 --   0 草 1 土 2 レンガ 3 すり抜け床 4 扉 5,6 スイッチ 7 旗 8〜10 主人公 11 木箱 12 鉄箱 13 ボール 14 ばね 15 星
 -- タイルマップの値は 番号+1(0は空)。
 local game = require("pico.game")

@@ -85,19 +85,19 @@ PASSTHROUGH_PY = {
     ("pvid",): "generate_pvid.py",
     ("pad",): "pad_serial.py",
     ("tls-roots",): "generate_tls_roots.py",
-    ("gen", "blocks"): "generate_blocks_sheet.py",
-    ("gen", "breakout"): "generate_breakout_blocks.py",
-    ("gen", "minesweeper"): "generate_minesweeper_tiles.py",
-    ("gen", "physics"): "generate_physics_sheet.py",
-    ("gen", "platformer"): "generate_platformer_sheet.py",
-    ("gen", "reversi"): "generate_reversi_tiles.py",
-    ("gen", "spotify-icon"): "generate_spotify_icon.py",
-    ("gen", "tetris"): "generate_tetris_blocks.py",
-    ("gen", "zombie-td"): "generate_zombie_td_sheet.py",
-    ("dict", "skk"): "convert_skk_dict.py",
-    ("dict", "index"): "build_dict_index.py",
-    ("dict", "suffix-index"): "build_dict_suffix_index.py",
-    ("dict", "filter-tofu"): "filter_dict_tofu.py",
+    ("gen", "blocks"): "assets/generate_blocks_sheet.py",
+    ("gen", "breakout"): "assets/generate_breakout_blocks.py",
+    ("gen", "minesweeper"): "assets/generate_minesweeper_tiles.py",
+    ("gen", "physics"): "assets/generate_physics_sheet.py",
+    ("gen", "platformer"): "assets/generate_platformer_sheet.py",
+    ("gen", "reversi"): "assets/generate_reversi_tiles.py",
+    ("gen", "spotify-icon"): "assets/generate_spotify_icon.py",
+    ("gen", "tetris"): "assets/generate_tetris_blocks.py",
+    ("gen", "zombie-td"): "assets/generate_zombie_td_sheet.py",
+    ("dict", "skk"): "dict/convert_skk_dict.py",
+    ("dict", "index"): "dict/build_dict_index.py",
+    ("dict", "suffix-index"): "dict/build_dict_suffix_index.py",
+    ("dict", "filter-tofu"): "dict/filter_dict_tofu.py",
 }
 
 
@@ -123,9 +123,9 @@ def cmd_icons(args) -> int:
     return run_py("generate_icons.py", [], cwd=SCRIPT_DIR)
 
 
-def cmd_dict_build_ml(args) -> int:
-    # build_ML.sh は script/ をcwdとした相対パス("dic/SKK-JISYO.ML"等)前提。
-    return run(["sh", str(SCRIPT_DIR / "build_ML.sh")], cwd=SCRIPT_DIR)
+def cmd_dict_build(args) -> int:
+    # 材料(script/dict/src/)からSD用のファイルを script/dict/out/ へ作る。
+    return run(["sh", str(SCRIPT_DIR / "dict" / "build.sh"), *args.kinds])
 
 
 _TEST_SCRIPTS = {
@@ -223,7 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
   picoos pimg photo.png out.pimg --transparent    画像を.pimgへ変換
   picoos pimg2png out.pimg check.png --scale 4    .pimgをPNGへ戻して目視確認
   picoos ppm2png shot.ppm shot.png 2              --shotのPPMをPNGへ(2倍)
-  picoos dict skk dic/SKK-JISYO.M                 SKK辞書をIME用tsvへ変換
+  picoos dict build                                辞書の材料からSD用のファイルを作る
   picoos serve --root ~/docs --port 8080          Markdownブラウザ用の参照サーバを起動
   picoos midi2mml song.mid -o song.mml            MIDIをpico-os MMLへ変換
   picoos spotify-auth --client-id XXXX            Spotifyのrefresh tokenを取ってSDへ書く
@@ -251,7 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("pimg", help="PNG/JPG等を.pimgへ変換 (generate_pimg.py、引数は転送)")
     sub.add_parser("pimg2png", help=".pimgをPNGへ変換(逆変換、目視確認用) (pimg2png.py、引数は転送)")
     sub.add_parser("ppm2png", help="--shot が出すPPMをPNGへ変換 (ppm2png.py、引数は転送)")
-    sub.add_parser("serve", help="PROTOCOL.md参照実装サーバを起動 (reference_server.py、引数は転送)")
+    sub.add_parser("serve", help="docs/PROTOCOL.md参照実装サーバを起動 (reference_server.py、引数は転送)")
     sub.add_parser("midi2mml", help="MIDI(SMF)をpico-os MMLへ変換 (midi2mml.py、引数は転送)")
     sub.add_parser("spotify-auth", help="Spotifyの最初のトークンをPCで取りSDへ書く (spotify_auth.py、引数は転送)")
 
@@ -272,7 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     gen_sub.add_parser("tetris", help="テトリスのミノ画像 (generate_tetris_blocks.py、引数は転送)")
     gen_sub.add_parser("zombie-td", help="「ゾンビTD」の絵 (generate_zombie_td_sheet.py、引数は転送)")
 
-    dict_parser = sub.add_parser("dict", help="辞書データ関連 (script/dic, en-ja-and-ja-en.tsv 等)")
+    dict_parser = sub.add_parser("dict", help="辞書データ関連 (script/dict/)")
     dict_sub = dict_parser.add_subparsers(dest="dict_command", required=True)
 
     dict_sub.add_parser("skk", help="SKK-JISYOをIME用tsvへ変換 (convert_skk_dict.py、引数は転送)")
@@ -280,8 +280,9 @@ def build_parser() -> argparse.ArgumentParser:
     dict_sub.add_parser("suffix-index", help="部分一致用サフィックスコーパスを生成 (build_dict_suffix_index.py、引数は転送)")
     dict_sub.add_parser("filter-tofu", help="フォント非対応文字を含む行を除去 (filter_dict_tofu.py、引数は転送)")
 
-    p = dict_sub.add_parser("build-ml", help="SKK-JISYO.MLをIME用tsvへ変換 (build_ML.sh)")
-    p.set_defaults(func=cmd_dict_build_ml)
+    p = dict_sub.add_parser("build", help="辞書の材料からSD用のファイルを script/dict/out/ へ作る (script/dict/build.sh)")
+    p.add_argument("kinds", nargs="*", choices=["ime", "dict", "suffix"], help="作るもの(省略で全部)")
+    p.set_defaults(func=cmd_dict_build)
 
     p = sub.add_parser("test", help="ホストテストを実行 (script/host_test/run*.sh のラッパー)")
     p.add_argument("target", nargs="?", choices=list(_TEST_SCRIPTS.keys()), default="unit",

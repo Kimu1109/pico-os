@@ -6,7 +6,7 @@
 // 自身では何も描かず、render()のたびにLua側が登録したコールバック
 // (pico.on(id, "render", fn))を呼ぶだけ。
 //
-// なぜこれが要るか(CLAUDE.md「直接描画」参照): PICO_GFX::FlushDirty()はdirty矩形を
+// なぜこれが要るか(docs/design/lua-api.md「直接描画」参照): PICO_GFX::FlushDirty()はdirty矩形を
 // 処理するたび、それを覆うウィジェットが無ければ背景色で塗りつぶしてから、そこに
 // 重なるウィジェットだけを再描画する。ウィジェットに属さない場所への直接描画
 // (pico.draw_*をloop()やコールバックから素で呼ぶだけ)は、次にその領域がdirtyに

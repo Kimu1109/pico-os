@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-// ファームの更新ファイル(.pfw)の見出しを読む係(形式は FIRMWARE_UPDATE.md)。
+// ファームの更新ファイル(.pfw)の見出しを読む係(形式は docs/FIRMWARE_UPDATE.md)。
 //
 //   [見出し 128バイト][署名 64バイト][中身 = firmware.bin を gzip したもの]
 //

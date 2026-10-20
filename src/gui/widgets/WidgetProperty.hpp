@@ -9,7 +9,7 @@ class Widget;
 // ウィジェットの値をWidgetType非依存の共通口から読み書きするための橋渡し。
 // WidgetFactory::Create()と対になる「生成したウィジェットの中身を読み書きする」側で、
 // Lua等の外部からは型ごとに専用バインディングを書かず、この1組の関数だけを通す
-// (CLAUDE.md「Lua着手前の受け皿の状態」の「プロパティのget/set共通口」に対応)。
+// (docs/design/lua.md「Lua着手前の受け皿の状態」の「プロパティのget/set共通口」に対応)。
 //
 // Widget基底の仮想関数にしなかった理由: setW()/setH()はWidget基底に存在せず
 // (LayoutContainer/GridContainerのコメント参照)、ウィジェットごとにシグネチャも

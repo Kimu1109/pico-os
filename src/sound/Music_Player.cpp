@@ -80,7 +80,7 @@ void MusicPlayer::fetch(ChipSynth::Engine& engine, int ch){
                 ChipSynth::Note n;
                 n.wave = (ChipSynth::Wave)t.wave;
                 float f = NoteName::MidiToFreq(midi);
-                //ノイズは音符の高さ×16を「ザー」の粗さにする(MUSIC_FORMAT.md)
+                //ノイズは音符の高さ×16を「ザー」の粗さにする(docs/MUSIC_FORMAT.md)
                 if(n.wave == ChipSynth::Wave::Noise || n.wave == ChipSynth::Wave::NoiseShort) f *= 16.0f;
                 n.freq_x16 = (uint32_t)(f * 16.0f + 0.5f);
                 n.volume = t.volume;

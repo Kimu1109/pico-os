@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-generate_reversi_tiles.py
--------------------------
-リバーシ(pc/sdcard/lua/apps/リバーシ/)の盤面の絵 tiles.pimg を作る。標準ライブラリのみ。
+generate_breakout_blocks.py
+---------------------------
+ブロック崩し(pc/sdcard/lua/apps/ブロック崩し/)のブロックの絵 tiles.pimg を作る。標準ライブラリのみ。
 
-24x24pxのタイルを横に4枚並べた1枚の画像(96x24)。pico.game のタイルマップとして使い、
-盤面の1マス = タイルマップの1マスで、石の有無・色は「タイルの値」そのもの。
+29x14pxのタイルを横に7枚並べた1枚の画像(203x14)。pico.game のタイルマップとして使い、
+盤面の1マス = タイルマップの1マス。ブロック本体は27x12pxで、右と下の2pxは隙間(背景の白)。
 
-    タイルの値: 1=空のマス  2=黒石  3=白石  4=打てる場所の印(小さな点)
+    タイルの値: 1〜6=壊せるブロック(速さの段。1が最速の赤、6が最遅の青)  7=壊せないブロック(灰)
 
 色はpico-osの16色パレットの番号で直接描く(generate_pimg.pyと同じ.pimg形式・同じパレット)。
-透過は使わない(どのタイルもマスの緑で全面を塗る)。
+Lua側(main.lua)の TIER_COLOR と合わせてある。
 
 使い方:
-    python3 script/generate_reversi_tiles.py                      # 既定の場所へ書く
-    python3 script/generate_reversi_tiles.py --preview p.ppm      # 確認用のPPMも書く
+    python3 script/assets/generate_breakout_blocks.py                      # 既定の場所へ書く
+    python3 script/assets/generate_breakout_blocks.py --preview p.ppm      # 確認用のPPMも書く
       (PPMは python3 script/ppm2png.py p.ppm p.png 4 でPNGにできる)
 """
 
@@ -22,49 +22,35 @@ import argparse
 import struct
 from pathlib import Path
 
-T = 24
-
+TW, TH = 29, 14          # タイル(ブロック+隙間)
+BW, BH = 27, 12          # ブロック本体
 PALETTE = [
     (0x00, 0x00, 0x00), (0x00, 0x00, 0x80), (0x00, 0x80, 0x00), (0x00, 0x80, 0x80),
     (0x80, 0x00, 0x00), (0x80, 0x00, 0x80), (0x80, 0x80, 0x00), (0xD3, 0xD3, 0xD3),
     (0x80, 0x80, 0x80), (0x00, 0x00, 0xFF), (0x00, 0xFF, 0x00), (0x00, 0xFF, 0xFF),
     (0xFF, 0x00, 0x00), (0xFF, 0x00, 0xFF), (0xFF, 0xFF, 0x00), (0xFF, 0xFF, 0xFF),
 ]
-BLACK, DKGREEN, LTGREY, WHITE = 0, 2, 7, 15
+WHITE = 15
+# タイル1〜7の色(パレット番号): 赤・マゼンタ・黄・緑・シアン・青、壊せないブロックは濃い灰
+COLORS = [12, 13, 14, 10, 11, 9, 8]
 
 
-def cell():
-    """緑のマス + 黒の格子線(右と下の辺だけ。盤面の左と上の縁はLua側が線で描く)"""
-    t = [[DKGREEN] * T for _ in range(T)]
-    for i in range(T):
-        t[T - 1][i] = BLACK
-        t[i][T - 1] = BLACK
-    return t
-
-
-def disc(t, r, fill, outline=None):
-    cx = cy = T // 2
-    for y in range(T):
-        for x in range(T):
-            d = (x - cx) ** 2 + (y - cy) ** 2
-            if d <= r * r + r:
-                t[y][x] = outline if (outline is not None and d > (r - 1) ** 2 + (r - 1)) else fill
+def block(color):
+    t = [[WHITE] * TW for _ in range(TH)]
+    for y in range(BH):
+        for x in range(BW):
+            t[y][x] = color
     return t
 
 
 def build_sheet():
-    tiles = [
-        cell(),
-        disc(cell(), 9, BLACK),
-        disc(cell(), 9, WHITE, BLACK),
-        disc(cell(), 2, LTGREY),
-    ]
-    w, h = T * len(tiles), T
+    tiles = [block(c) for c in COLORS]
+    w, h = TW * len(tiles), TH
     rows = [[0] * w for _ in range(h)]
     for n, t in enumerate(tiles):
-        for y in range(T):
-            for x in range(T):
-                rows[y][n * T + x] = t[y][x]
+        for y in range(TH):
+            for x in range(TW):
+                rows[y][n * TW + x] = t[y][x]
     return w, h, rows
 
 
@@ -85,10 +71,10 @@ def rle(rows):
 
 
 def main():
-    root = Path(__file__).resolve().parent.parent
-    ap = argparse.ArgumentParser(description="リバーシの盤面の画像(tiles.pimg)を作る")
+    root = Path(__file__).resolve().parents[2]
+    ap = argparse.ArgumentParser(description="ブロック崩しのブロックの画像(tiles.pimg)を作る")
     ap.add_argument("output", nargs="?", type=Path,
-                    default=root / "pc/sdcard/lua/apps/リバーシ/tiles.pimg")
+                    default=root / "pc/sdcard/lua/apps/ブロック崩し/tiles.pimg")
     ap.add_argument("--preview", type=Path, help="確認用のPPM(P6)も書き出す")
     args = ap.parse_args()
 

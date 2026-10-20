@@ -10,7 +10,7 @@
 -- 本体はこのファイル(main.lua は16KiBまでなので、32KiBまで読める require のモジュールにした)。
 -- ワールド(チャンクの読み込み・生成・保存)と描画(影・松明の光・水・タップ位置の引き当て)は C++ のエンジン pico.iso
 -- (src/iso/Iso_World、src/lua/LuaEngine_Iso.cpp)が受け持つ。ここは画面の流れと操作だけ。
--- 色は palette.lua(script/generate_blocks_sheet.py が作る)。
+-- 色は palette.lua(script/assets/generate_blocks_sheet.py が作る)。
 local iso = pico.iso
 local PAL = require("palette")
 local H = 16

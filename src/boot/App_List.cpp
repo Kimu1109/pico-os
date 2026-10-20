@@ -59,7 +59,7 @@ void AppFunctions::Setup(){
     Register(TodoScene::kAppName, IconID::CheckboxOn, &MakeScene<TodoScene>);
     //Game Boy(DMG)エミュ。ROMはSDの /gb/ に置く(256KBまで。SUMMARY.md #9)
     Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
-    //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(MUSIC_FORMAT.md)
+    //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/MUSIC_FORMAT.md)
     Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
     Register("動画", IconID::Video, &MakeScene<VideoScene>);
     //マイク(SPH0645、GP26〜28)で /recordings/ へWAVを録る
@@ -68,11 +68,11 @@ void AppFunctions::Setup(){
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)
     Register("通知", IconID::Bell, &MakeScene<NotificationScene>);
-    //アプリストア。配布元(APP_REPO.md)からLuaアプリを取ってきて /lua/apps/ へ入れる
+    //アプリストア。配布元(docs/APP_REPO.md)からLuaアプリを取ってきて /lua/apps/ へ入れる
     Register(StoreScene::kAppName, IconID::AppStore, &MakeScene<StoreScene>);
     //PCとUSBでつなぎ、SDカードをドライブとして見せる(SDの抜き差しをせずにファイルを行き来する)
     Register(UsbDriveScene::kAppName, IconID::SdCard, &MakeScene<UsbDriveScene>);
-    // ファームの更新(SDの .pfw / PCからWi-Fiで。FIRMWARE_UPDATE.md)
+    // ファームの更新(SDの .pfw / PCからWi-Fiで。docs/FIRMWARE_UPDATE.md)
     Register(FirmwareScene::kAppName, IconID::Refresh, &MakeScene<FirmwareScene>);
     // Luaアプリは下のスキャンで登録する(動作確認用のサンプルは /lua/apps/動作確認/)。
     // 権限が要るものは各アプリの app.cfg に書く

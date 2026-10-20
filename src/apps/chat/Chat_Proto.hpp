@@ -7,14 +7,14 @@
 #include <cstddef>
 #include <cstdint>
 
-// チャットサーバ(server/chat/chat_server.py)の応答を読む部品。仕様は CHAT_PROTOCOL.md。
+// チャットサーバ(server/chat/chat_server.py)の応答を読む部品。仕様は docs/CHAT_PROTOCOL.md。
 //
 // 応答は1行1件のTSVなので、**ソケットを持たずに行を切り出して解釈するだけ**の層にしてある
 // (HttpResponse と同じく、ネットワーク無しでホストテストから全経路を確かめられる。
 //  script/host_test/chat_proto_test.cpp)。
 namespace ChatProto {
 
-    // ---- 上限(CHAT_PROTOCOL.md「制限値」。サーバ側の MAX_* と揃えること) ----
+    // ---- 上限(docs/CHAT_PROTOCOL.md「制限値」。サーバ側の MAX_* と揃えること) ----
     constexpr size_t kMaxTextBytes = 500;  // 発言1件の本文
     constexpr size_t kMaxNameBytes = 45;   // 表示名・部屋名
 
@@ -28,7 +28,7 @@ namespace ChatProto {
     static_assert(PICO_STR_M > kMaxNameBytes, "Name に名前が入りきらない");
     static_assert(PICO_STR_512B > kMaxTextBytes, "Text に本文が入りきらない");
 
-    // 部屋での自分の役割(CHAT_PROTOCOL.md「役割と権限」)。強い順に大きい
+    // 部屋での自分の役割(docs/CHAT_PROTOCOL.md「役割と権限」)。強い順に大きい
     enum class Role : uint8_t { Member = 0, Admin = 1, Owner = 2 };
 
     struct Room {

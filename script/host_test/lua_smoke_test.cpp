@@ -1,7 +1,7 @@
 // lib/lua(vendorしたLua 5.4.7本体)が実際にビルド・リンクでき、
 // lua_newstate/luaL_openlibs/luaL_dostring/lua_closeが動くことを確認するテスト。
 //
-// CLAUDE.md「Lua着手前の受け皿の状態」の「ビルドの二重管理」に対応。
+// docs/design/lua.md「Lua着手前の受け皿の状態」の「ビルドの二重管理」に対応。
 // LovyanGFXと違いgit/tarballをlib_deps経由で取得せず、lua.c/luac.c(main()を持つ
 // ファイル)を除いてlib/lua/src/へvendorしてある(lib/lua/README-pico-os.md参照)。
 // PlatformIO側は`lib/`配下を自動的に「プロジェクト専用ライブラリ」として拾うため、

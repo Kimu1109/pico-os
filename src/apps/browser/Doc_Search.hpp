@@ -5,7 +5,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// 検索結果1件(PROTOCOL.md「3. 検索」のTSV 1行)。
+// 検索結果1件(docs/PROTOCOL.md「3. 検索」のTSV 1行)。
 // 3列目以降(version / snippet)は今の画面では使わないので持たない。
 // 知らない列を読み飛ばすのは前方互換のため(discoveryと同じ扱い)。
 struct SearchHit {
@@ -31,7 +31,7 @@ class DocSearch {
             Failed,
         };
 
-        // 1回に要求する件数。PROTOCOL.mdはクライアントへ20以下を求めている。
+        // 1回に要求する件数。docs/PROTOCOL.mdはクライアントへ20以下を求めている。
         // 1件で約150B使うので、10件なら1.5KB弱
         constexpr static int kMaxHits = 10;
 
@@ -49,7 +49,7 @@ class DocSearch {
         const SearchHit& hit(int index) const { return hits_[index]; }
         int offset() const { return offset_; }
 
-        // 要求ちょうどの件数が返ってきた = 続きがあるかもしれない(PROTOCOL.md)。
+        // 要求ちょうどの件数が返ってきた = 続きがあるかもしれない(docs/PROTOCOL.md)。
         // 総件数は返ってこないので、続きの有無はこれで推し量るしかない
         bool mayHaveMore() const { return count_ >= kMaxHits; }
 
@@ -57,7 +57,7 @@ class DocSearch {
 
     private:
         // 受信したバイト列をそのまま1行ずつ拾う。
-        // 応答全体をバッファへ溜めないで済むよう行指向にしてある(PROTOCOL.md)
+        // 応答全体をバッファへ溜めないで済むよう行指向にしてある(docs/PROTOCOL.md)
         class Sink : public IHttpSink {
             public:
                 DocSearch* owner = nullptr;

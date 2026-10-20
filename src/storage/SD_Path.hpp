@@ -6,7 +6,7 @@ namespace PICO_Path {
         constexpr const char* SYS_IME = "/sys/ime/";
         constexpr const char* SYS_DICT = "/sys/dict/";
         // Markdownブラウザがサーバから取った文書を貯める場所。
-        // 配下は /cache/<ホスト>/<サーバ上のパス> でミラーする(PROTOCOL.md)
+        // 配下は /cache/<ホスト>/<サーバ上のパス> でミラーする(docs/PROTOCOL.md)
         constexpr const char* CACHE = "/cache/";
         // ランチャへ自動登録されるLuaアプリの置き場所(LuaAppScanner参照)。
         // 直下の「サブディレクトリ1つ = アプリ1つ」で、<名前>/main.lua が
@@ -23,13 +23,13 @@ namespace PICO_Path {
         // Game Boyエミュの途中保存(ステートセーブ)の置き場所。"<ROMの名前>.st0"(自動)/".st1"(手動)。
         // ROMの隣に置くとROMの選択に並んで紛らわしいので分けた(同じ名前の別ROMは見出しの照合で断る)
         constexpr const char* GB_STATES = "/gb/states/";
-        // 曲(pico-os MML、MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下と1段下のフォルダ(=プレイリスト)の *.mml / *.wav を並べる
+        // 曲(pico-os MML、docs/MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下と1段下のフォルダ(=プレイリスト)の *.mml / *.wav を並べる
         constexpr const char* MUSIC = "/music/";
-        // 動画(.pvid、VIDEO_FORMAT.md)の置き場所。動画アプリ(VideoScene)のファイル選択の最初の場所。音は同じ名前の .wav
+        // 動画(.pvid、docs/VIDEO_FORMAT.md)の置き場所。動画アプリ(VideoScene)のファイル選択の最初の場所。音は同じ名前の .wav
         constexpr const char* VIDEO = "/video/";
         // 録音(マイク、RecorderScene)の置き場所。"rec_0001.wav" から順に番号を振る
         constexpr const char* RECORDINGS = "/recordings/";
-        // ファームの更新ファイル(.pfw、FIRMWARE_UPDATE.md)を置く場所。「本体の更新」のファイル選択の最初の場所
+        // ファームの更新ファイル(.pfw、docs/FIRMWARE_UPDATE.md)を置く場所。「本体の更新」のファイル選択の最初の場所
         constexpr const char* FIRMWARE = "/firmware/";
     };
     namespace FILE {
@@ -59,7 +59,7 @@ namespace PICO_Path {
         // ホーム画面のTODOウィジェットに出す、最後に取ったTodoistの今日のタスク。TodoCache参照
         constexpr const char* SYS_TODO_CACHE = "/sys/todo_cache.tsv";
 
-        // アプリストア(apps/store/App_Store、APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
+        // アプリストア(apps/store/App_Store、docs/APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
         // インストールしたアプリのファイル一覧(installed/<id>.tsv)・取得中の置き場(staging/)
         constexpr const char* STORE_DIR = "/sys/store";
         constexpr const char* STORE_CATALOG = "/sys/store/catalog.tsv";
@@ -117,12 +117,12 @@ namespace PICO_Path {
         }
 
         namespace DICT {
-            // script/en-ja-and-ja-en.tsv をそのままSDへ置く(検索用語句でソート済み)。
-            // インデックスは script/build_dict_index.py が生成する。
+            // script/dict/src/en-ja-and-ja-en.tsv をそのままSDへ置く(検索用語句でソート済み)。
+            // インデックスは script/dict/build_dict_index.py が生成する。
             constexpr const char* DICT_BODY = "/sys/dict/en-ja-and-ja-en.tsv";
             constexpr const char* DICT_INDEX = "/sys/dict/dict_index.tsv";
             // 部分一致(語の途中一致)検索を高速化するサフィックスインデックス。
-            // script/build_dict_suffix_index.py が生成する。無くても
+            // script/dict/build_dict_suffix_index.py が生成する。無くても
             // WordDictionaryが全体走査へ自動フォールバックするため、
             // 置いていないSDでも壊れない。
             constexpr const char* DICT_SUFFIX_BODY = "/sys/dict/dict_suffixes.tsv";

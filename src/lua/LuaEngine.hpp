@@ -272,7 +272,7 @@
 // 実機の処理速度にも依存して閾値の意味が変わってしまう。命令数なら
 // ホストテストでも`while true do end`を実際に実行してエラーになることを確認でき、
 // 「何がどれだけ実行されたら打ち切るか」がハードウェアに依存しない決定的な基準になる。
-// `kMaxInstructionsPerCall=200万`は暫定値(実機RP2350での実測は未実施。CLAUDE.mdの
+// `kMaxInstructionsPerCall=200万`は暫定値(実機RP2350での実測は未実施。docs/design/lua.mdの
 // 「RAM/Flash予算」と同種の「後で実機で確かめる」枠)。
 //
 // **打ち切りは握り潰せない(2026-10-03)。** 以前は`pcall`で打ち切りのエラーを捕まえて
@@ -938,7 +938,7 @@ class LuaEngine {
         // 呼ぶため、その最中にLua側がメモリ予算超過でエラー(longjmp)するとFsFileの
         // 後始末(close())が飛ばされ得る。ANSI Cのsetjmp/longjmpベースなので
         // C++デストラクタも呼ばれない。ごく小さな読み書きの最中に限られる稀な
-        // エッジケースであり、OS内部の90箇所のOOM未対応(CLAUDE.md参照)と同じ
+        // エッジケースであり、OS内部の90箇所のOOM未対応(docs/design/lua.md「Lua着手前の受け皿の状態」)と同じ
         // 割り切りで対象外とする。
         static int l_sd_exists(lua_State* L);
         static int l_sd_read(lua_State* L);

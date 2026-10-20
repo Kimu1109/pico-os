@@ -50,7 +50,7 @@ namespace HttpTools {
 //
 // 本文の終わりの決め方:
 //   - `Transfer-Encoding: chunked` なら chunk を解いて本文だけをシンクへ渡す
-//     (PROTOCOL.mdの参照サーバは使わないが、HTTPSで繋ぐ一般のサーバ(Googleのカレンダー等)は
+//     (docs/PROTOCOL.mdの参照サーバは使わないが、HTTPSで繋ぐ一般のサーバ(Googleのカレンダー等)は
 //     動的な応答をchunkedで返すため)。chunked以外の転送符号化(gzip等)はエラーにする
 //   - そうでなければ Content-Length があればその長さで終端、無ければ接続が閉じるまで
 //   - 見るヘッダは Content-Length / Content-Type / ETag / Last-Modified / Location / Transfer-Encoding だけ。

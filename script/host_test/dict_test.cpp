@@ -1,4 +1,4 @@
-// 単語辞書(script/en-ja-and-ja-en.tsv形式)の部分一致検索(WordDictionary)のテスト。
+// 単語辞書(script/dict/src/en-ja-and-ja-en.tsv形式)の部分一致検索(WordDictionary)のテスト。
 //
 // 確かめたいのは:
 //   - 前方一致は二分探索+ブロック内走査で即座に(update()を呼ばずに)拾えること
@@ -78,7 +78,7 @@ static const char* kSuffixPath = "/sys/dict/test_dict_suffixes.tsv";
 static const char* kSuffixIndexPath = "/sys/dict/test_dict_suffix_index.tsv";
 
 // termの、UTF-8文字境界かつ位置0以外から始まる接尾辞の開始バイト位置を返す。
-// script/build_dict_suffix_index.py の gen_suffix_offsets() と同じ規則。
+// script/dict/build_dict_suffix_index.py の gen_suffix_offsets() と同じ規則。
 static std::vector<size_t> suffixStartPositions(const std::string& term) {
     std::vector<size_t> starts;
     for (size_t i = 1; i < term.size(); i++) {
@@ -89,7 +89,7 @@ static std::vector<size_t> suffixStartPositions(const std::string& term) {
 }
 
 // writeDict()と同じ本体+本体索引に加えて、部分一致高速化用のサフィックス
-// コーパス+その索引も書き出す(script/build_dict_suffix_index.pyが実機用に
+// コーパス+その索引も書き出す(script/dict/build_dict_suffix_index.pyが実機用に
 // 生成するものと同じ形をテスト用に小さく作る)。suffix_block_sizeを本体より
 // 小さくすると、1エントリの接尾辞群が複数ブロックへまたがる状況を作れる。
 static void writeDictWithSuffix(std::vector<Entry> entries, int block_size, int suffix_block_size) {

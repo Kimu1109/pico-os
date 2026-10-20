@@ -60,7 +60,7 @@
 // 液晶のSPIクロック。LovyanGFX(rp2040)は clk_peri(150MHz)/2 = 75MHz を整数(1+SCR)で割るので、
 // 実際に選べるのは 75 / 37.5 / 25MHz … だけ。37.5〜74.99MHzを指定するとすべて37.5MHzになる
 // (60000000も37.5MHz。全画面1枚の転送が約33ms)。75MHzにするには75000000以上を指定する(約16ms)。
-// CLAUDE.md「液晶への転送を減らす」参照
+// docs/design/performance.md「液晶への転送を減らす」参照
 #define TFT_MAX_SPEED   75000000
 
 // --- SPI1: SD専用 ---

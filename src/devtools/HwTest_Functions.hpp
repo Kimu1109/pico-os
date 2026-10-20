@@ -1,6 +1,6 @@
 #pragma once
 
-// 実機での確認(HARDWARE_CHECKLIST.md)のためのシリアルのコマンド。
+// 実機での確認(docs/HARDWARE_CHECKLIST.md)のためのシリアルのコマンド。
 // /sys/debug.cfg の hw-test = true のときだけ受け付ける(既定は切れている。わざと落とすコマンドがあるため)。
 //
 //   hw help        コマンドの一覧

@@ -2,7 +2,7 @@
 //
 // 「Luaのエラーをpcallで拾った後に出す先が無い」という穴を塞ぐために追加した
 // 関数で、呼ぶとMsgDialogが1枚生成・登録され、閉じると自己破棄することを確認する
-// (CLAUDE.md「Lua着手前の受け皿の状態」の「エラーの見せ方」に対応)。
+// (docs/design/lua.md「Lua着手前の受け皿の状態」の「エラーの見せ方」に対応)。
 #include "gui/core/Error_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"

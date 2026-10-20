@@ -5,7 +5,7 @@
 #    通し番号 = git rev-list --count HEAD、git = 短いコミットのハッシュ(手元に変更があれば末尾に'+')、
 #    日時 = HEADのコミットの日時(UTC)。中身が変わったときだけ書き直すので、変更が無ければビルドは「最新」のまま。
 #    gitが無い/リポジトリでない場合は 0 / "nogit"。
-# 2. ファームの更新ファイルを作る・送るターゲット(FIRMWARE_UPDATE.md):
+# 2. ファームの更新ファイルを作る・送るターゲット(docs/FIRMWARE_UPDATE.md):
 #      pio run -e rpipico2w -t fwpack                       … .pio/build/rpipico2w/firmware.pfw を作る
 #      pio run -e rpipico2w -t fwpush --upload-port <IP>    … Wi-Fiで本体へ送る(本体で[受け取る]を押しておく)
 #    鍵は環境変数 PICOOS_FW_KEY か ~/.pico-os/firmware.key(無ければ署名なし)。

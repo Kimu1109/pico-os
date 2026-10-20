@@ -1,12 +1,12 @@
 #pragma once
 //
 // Word_Dict.hpp
-// script/en-ja-and-ja-en.tsv 形式(英和/和英統合の単語辞書)向けの
+// script/dict/src/en-ja-and-ja-en.tsv 形式(英和/和英統合の単語辞書)向けの
 // 部分一致検索モジュール。
 //
 // ファイル形式:
 //   1行 = 「検索用語句 \t 表示用語句 \t 説明or訳」。検索用語句のバイト順で
-//   ソート済み(script/build_dict_index.py が前提にする)。英単語は
+//   ソート済み(script/dict/build_dict_index.py が前提にする)。英単語は
 //   「小文字化した綴り \t 元の綴り \t 日本語の説明」、日本語単語は
 //   「ひらがな読み \t 元の表記 \t 対応する英単語」という中身になる
 //   (このクラスは中身の意味までは見ず、3列目までタブで割るだけ)。
@@ -18,7 +18,7 @@
 //     ソート済みなので前方一致は必ず連続した1ブロックに収まる。
 //   - 前方一致だけではkMaxHitsを満たさない場合、次に「語の途中に含む」
 //     一致(部分一致)を試す。サフィックスインデックス(dict_suffixes.tsv +
-//     dict_suffix_index.tsv、script/build_dict_suffix_index.pyが生成)が
+//     dict_suffix_index.tsv、script/dict/build_dict_suffix_index.pyが生成)が
 //     あれば、これも前方一致と同じブロックインデックス+二分探索の技法で
 //     引ける — 「各検索用語句の先頭以外から始まる全接尾辞」をバイト順に
 //     ソートしたコーパスなので、「語の途中に含む」検索は「あるエントリの
@@ -68,12 +68,12 @@ public:
 
     // ブロックインデックスの静的配列サイズ。実データ(28万行強、
     // block-size=800なら約360ブロック)に余裕を持たせてある。
-    // script/build_dict_index.py 側もこの値を超えたら警告を出す。
+    // script/dict/build_dict_index.py 側もこの値を超えたら警告を出す。
     static constexpr int kMaxIndexEntries = 400;
 
     // サフィックスインデックス(部分一致用)のブロック配列サイズ。
     // サフィックスコーパスは本体よりずっと行数が多い(実データで本体27万行
-    // に対し接尾辞144万行)分をscript/build_dict_suffix_index.py側の
+    // に対し接尾辞144万行)分をscript/dict/build_dict_suffix_index.py側の
     // block-sizeで吸収する設計のため、本体索引(400)より少なく抑えてRAMを
     // 余分に食わせないようにしてある(実データでblock-size自動算出=8492、
     // 170ブロック)。

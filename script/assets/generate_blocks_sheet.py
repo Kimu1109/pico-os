@@ -5,9 +5,9 @@ generate_blocks_sheet.py
 Luaアプリ「ブロック」(pc/sdcard/lua/apps/ブロック/。TheScienceElf氏の Blocks-TI-84 を
 pico-os へ移したもの)の絵を作る。標準ライブラリのみ(PNGも自前で読む)。
 
-元の絵は script/blocks_assets/ にある Blocks-TI-84 の TextureMap.png(16x16のテクスチャを
+元の絵は script/assets/blocks_assets/ にある Blocks-TI-84 の TextureMap.png(16x16のテクスチャを
 上面/左面/右面の3段で23種類並べたもの)と player.png(カーソル)。どちらも MIT ライセンス
-(script/blocks_assets/LICENSE-Blocks-TI-84.txt)。
+(script/assets/blocks_assets/LICENSE-Blocks-TI-84.txt)。
 
 作るもの:
     faces.pimg   ブロックの面の絵(透過つき)。1種類につき高さ23pxの1段で、横に
@@ -31,8 +31,8 @@ pico-os へ移したもの)の絵を作る。標準ライブラリのみ(PNGも�
     icon.pimg    ランチャのアイコン(48x48、既定のパレット)。
 
 使い方:
-    python3 script/generate_blocks_sheet.py                   # 既定の場所へ書く
-    python3 script/generate_blocks_sheet.py --preview p.ppm   # 確認用のPPM(2倍)も書く
+    python3 script/assets/generate_blocks_sheet.py                   # 既定の場所へ書く
+    python3 script/assets/generate_blocks_sheet.py --preview p.ppm   # 確認用のPPM(2倍)も書く
 """
 
 import argparse
@@ -40,8 +40,8 @@ import struct
 import zlib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-ASSETS = ROOT / "script" / "blocks_assets"
+ROOT = Path(__file__).resolve().parents[2]
+ASSETS = ROOT / "script" / "assets" / "blocks_assets"
 APP = ROOT / "pc" / "sdcard" / "lua" / "apps" / "ブロック"
 
 # 既定のパレット(src/gui/core/GFX_Functions.hpp の DEFAULT_COLORS)
@@ -401,7 +401,7 @@ def write_pimg(path, rows, transparent):
 
 def write_palette(path, pal, info):
     lines = [
-        "-- script/generate_blocks_sheet.py が作る。手で直さないこと。",
+        "-- script/assets/generate_blocks_sheet.py が作る。手で直さないこと。",
         "-- 1〜14番の色(pico.set_palette で入れる)と、空・水・UIに使う番号。",
         "return {",
         "    colors = {",

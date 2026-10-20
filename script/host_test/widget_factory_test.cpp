@@ -1,7 +1,7 @@
 // WidgetFactory(WidgetType -> new Xxx)とWidgetRegistry::Resolve()を検証するテスト。
 //
 // 両方ともLua統合の受け皿として先行実装されていたが、呼び出し元が実コード中に
-// 1つも無くテストも無かった(CLAUDE.md「Lua着手前の受け皿の状態」参照)。
+// 1つも無くテストも無かった(docs/design/lua.md「Lua着手前の受け皿の状態」参照)。
 // Resolve()が実際にgeneration不一致・type不一致・破棄済みIDを弾けるかは、
 // 本物のWidgetを介さないと確かめられない。
 #include "gui/widgets/WidgetFactory.hpp"

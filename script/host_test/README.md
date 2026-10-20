@@ -50,7 +50,7 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   firmware_test … ファームの更新(apps/firmware/Fw_Image・Fw_Update)。見出しの検査・署名(信頼/なし/知らない鍵/壊れた)・
                   版の確認・置き場への書き込みと読み直し・gzipの末尾の大きさ・途中で切れる/化ける/取り消す。
                   firmware_tool_test(Python)が script/firmware_tool.py で作ったものも読ませる
-  app_repo_test … アプリストアの配布物の読み取り(apps/store/App_Repo、APP_REPO.md)。カタログ/ファイル一覧の行・
+  app_repo_test … アプリストアの配布物の読み取り(apps/store/App_Repo、docs/APP_REPO.md)。カタログ/ファイル一覧の行・
                   名前とパスの検査・版の比較・権限・Ed25519の署名(Pythonの署名をMonocypherで確かめる)
   bmp_test      … BMPの読み書き(gui/icons/Bmp_Codec)。1/4/8/16/24/32bpp・上下の並び・窓・OSのパレットへ寄せる/番号のまま/
                   フルカラーのまま・断る形式・途中で切れたファイル・スクリーンショットの書き出しと読み直し
@@ -97,7 +97,7 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   wav_test      … WAVの再生。WavDecoder(形式ごとの変換・チャンネルの平均・周波数の変換・チャンクの読み飛ばし・
                   ループ・断り方)とSoundFunctionsの配線(音量・止める/切り替えで先読みを捨てる・途切れの数え方・
                   アンプが無い間も時間どおりに進む)
-  music_test    … 曲データ(pico-os MML、MUSIC_FORMAT.md)。読み取り(音の高さ/長さ/繰り返し/マクロ/
+  music_test    … 曲データ(pico-os MML、docs/MUSIC_FORMAT.md)。読み取り(音の高さ/長さ/繰り返し/マクロ/
                   誤りの行・列/警告)、シーケンサー(サンプル単位の音の位置・テンポ・繰り返し・ループ・
                   効果音への貸し出し)、SoundFunctionsの配線(置き場の入れ替え・効果音との同居)
   mic_test      … マイク(SPH0645)の入力と録音。計算(sound/Mic_Dsp.hpp: 18bitの取り出し・直流・増幅・間引きで折り返さない・
@@ -182,8 +182,8 @@ sh script/host_test/run.sh --list          # グループ名の一覧
                    ランチャの登録簿へ自動登録する)。ディレクトリの走査自体は
                    ホストのSdFatスタブでは再現できないため、SD無し/ディレクトリ
                    が無い場合に安全に0件を返すことまでを確認する
-                   (完全な走査結果はPCビルドの--shotで確認済み。CLAUDE.md
-                   「SDを走査してLuaアプリを見つける処理」参照)
+                   (完全な走査結果はPCビルドの--shotで確認済み。docs/design/lua.md
+                   「SDを走査したLuaアプリの自動登録」参照)
   pico_mock_test… script/host_test/lua/pico_mock.lua(Luaアプリのゲームの規則やUIを、実機/PCビルド無しで
                 普通のLuaだけで確かめるための、pico.*の偽物)自身のテスト。ウィジェット・イベント・タイマー・
                 ダイアログ・HTTP・SD・保存・画面遷移を記録して返せる

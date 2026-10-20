@@ -11,7 +11,7 @@ class ScrollList;
 class MusicPlayerPanel;
 template<size_t N> class Label;
 
-// ミュージック: SDの /music/ の *.mml(MUSIC_FORMAT.md)と *.wav を鳴らす。
+// ミュージック: SDの /music/ の *.mml(docs/MUSIC_FORMAT.md)と *.wav を鳴らす。
 //
 // プレイリストはファイルで持たず、/music/ の直下のフォルダ1つ = プレイリスト1つ(中の曲を名前順)。
 // 直下に置いた曲は「すべての曲」(直下+全フォルダの曲)にだけ並ぶ。

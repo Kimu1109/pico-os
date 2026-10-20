@@ -3,11 +3,11 @@
 """
 filter_dict_tofu.py
 
-script/en-ja-and-ja-en.tsv から、フォントが描画できない文字(いわゆる豆腐)を
+script/dict/src/en-ja-and-ja-en.tsv から、フォントが描画できない文字(いわゆる豆腐)を
 1文字でも含む行を丸ごと除いて書き出す。
 
-**豆腐文字リストは script/dict_tofu_chars.txt を使うこと。**
-script/tofu-chars.txt は SKK辞書(skk_body.tsv、MLサイズ)向けに
+**豆腐文字リストは script/dict/src/dict_tofu_chars.txt を使うこと。**
+script/dict/src/tofu-chars.txt は SKK辞書(skk_body.tsv、MLサイズ)向けに
 checkFontCoverage() を実行した結果で、対象の辞書が違うため
 en-ja-and-ja-en.tsv側の豆腐文字を網羅できない(実際、2086件中162件しか
 拾えていなかった)。dict_tofu_chars.txt は en-ja-and-ja-en.tsv 自身を

@@ -288,7 +288,7 @@ PICOOS_SD_ROOT=/path/to/sd ./pc/build/picoos_pc
 ```
 
 IMEの辞書(`sys/ime/skk_*.tsv`)はサイズが大きいのでリポジトリには入れていない。
-無くても起動する(変換候補が出ないだけ)。
+無くても起動する(変換候補が出ないだけ)。作り方は `script/dict/README.md`。
 
 ## Wi-Fi
 

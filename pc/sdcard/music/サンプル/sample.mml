@@ -1,4 +1,4 @@
-; pico-os MML の書き方の見本(MUSIC_FORMAT.md)。ほとんどの命令を使っている
+; pico-os MML の書き方の見本(docs/MUSIC_FORMAT.md)。ほとんどの命令を使っている
 #title    書き方の見本
 #composer pico-os
 #tempo    132

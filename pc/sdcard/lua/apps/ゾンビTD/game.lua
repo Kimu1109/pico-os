@@ -1,4 +1,4 @@
--- ゾンビTD: 斜め上から見た箱庭(pico.iso)のタワーディフェンス。仕様は ZOMBIE_TD.md。
+-- ゾンビTD: 斜め上から見た箱庭(pico.iso)のタワーディフェンス。仕様は docs/ZOMBIE_TD.md。
 -- 「作る順番」の2〜7: マップの生成・カメラ・ゾンビ・兵士・建物・ウェーブ(準備時間/次へ/お金)・保存・ハイスコア・効果音・説明。
 --   上の行: ベースの耐久・お金・ウェーブ(準備時間は残り秒と[次へ]、ウェーブ中は残りのゾンビ)・fps
 --   下の欄: ui.lua。地図: タップ=兵士・建物を選ぶ/選んでいる兵士をそこへ動かす/(「建設」で選んだ後)そこへ建てる、
@@ -55,7 +55,7 @@ iso.sky(PAL.sky)
 local DIR = pico.app_dir()
 local faces = pico.image_load(pico.path_join(DIR, "faces.pimg"))
 local units = pico.image_load(pico.path_join(DIR, "units.pimg"))
--- faces.pimg は使うブロックの段だけを並べてある(script/generate_zombie_td_sheet.py の FACE_ROWS と同じ並び。26 = カーソル)
+-- faces.pimg は使うブロックの段だけを並べてある(script/assets/generate_zombie_td_sheet.py の FACE_ROWS と同じ並び。26 = カーソル)
 local FACE_ROWS = { 1, 2, 3, 4, 5, 11, 12, 14, 15, 16, 18, 22, 26 }
 if faces then iso.set_image(faces, FACE_ROWS) else pico.show_error("faces.pimg を読めません") end
 if not units then pico.show_error("units.pimg を読めません") end

@@ -2,7 +2,7 @@
 #include <cstdint>
 #include "sound/Chip_Synth.hpp"
 
-// 演奏データ(MUSIC_FORMAT.md「本体の中での扱い」)。MMLの読み取り(Mml_Compiler)が書き、
+// 演奏データ(docs/MUSIC_FORMAT.md「本体の中での扱い」)。MMLの読み取り(Mml_Compiler)が書き、
 // 2コア目のシーケンサー(Music_Player)が読む、小さなバイト列の取り決め。
 // ファイル形式ではない(SDへは書かない)ので、版を上げずに変えてよい。
 //

@@ -2,7 +2,7 @@
 """
 reference_server.py
 -------------------
-PROTOCOL.md (pico-os ドキュメントサーバ プロトコル v1) の参照実装。
+docs/PROTOCOL.md (pico-os ドキュメントサーバ プロトコル v1) の参照実装。
 
 「文章だけの仕様は必ず解釈が割れる」ので、動く実装を仕様と一緒に置いておくためのもの。
 pico-os 側の開発相手(PCビルドから叩く先)も兼ねる。
@@ -45,7 +45,7 @@ from email.utils import formatdate, parsedate_to_datetime
 
 PROTOCOL_VERSION = 1
 
-# PROTOCOL.md 「制限値の一覧」より。クライアント側の実装上の上限。
+# docs/PROTOCOL.md 「制限値の一覧」より。クライアント側の実装上の上限。
 LIMIT_DOC_BYTES = 8192
 LIMIT_BLOCK_BYTES = 512
 LIMIT_BLOCKS = 128
@@ -74,7 +74,7 @@ def tsv_line(*fields):
 
 
 def compute_etag(data: bytes) -> str:
-    """内容が同じなら同じ値、変われば別の値になりさえすればよい(PROTOCOL.md)。"""
+    """内容が同じなら同じ値、変われば別の値になりさえすればよい(docs/PROTOCOL.md)。"""
     return hashlib.sha1(data).hexdigest()[:16]
 
 
@@ -576,7 +576,7 @@ def main(argv=None):
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     parser = argparse.ArgumentParser(
-        description="pico-os ドキュメントサーバ プロトコル v1 の参照実装 (PROTOCOL.md)")
+        description="pico-os ドキュメントサーバ プロトコル v1 の参照実装 (docs/PROTOCOL.md)")
     parser.add_argument("--root", default=os.path.join(repo_root, "examples"),
                         help="配る文書のディレクトリ (既定: リポジトリの examples/)")
     parser.add_argument("--host", default="0.0.0.0", help="待ち受けアドレス")

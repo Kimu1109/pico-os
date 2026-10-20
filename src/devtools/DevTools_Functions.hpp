@@ -11,7 +11,7 @@
 //   watchdog-ms  = 1000〜8300   既定8000
 //   hw-test      = true|false   実機の確認用のシリアルのコマンド(hw ...。HwTest_Functions.hpp)。ファイルだけで切り替える
 //   fw-allow-unsigned = true|false  署名の無い(確かめられない)ファームの更新ファイルも受け付ける(毎回本体で確認する)。
-//                                ファイルだけで切り替える(FIRMWARE_UPDATE.md)
+//                                ファイルだけで切り替える(docs/FIRMWARE_UPDATE.md)
 // 設定アプリの「その他」タブから切り替えられる(SetXxx()がその場で反映してdebug.cfgへ書く)。
 namespace DevToolsFunctions {
     // SD・ログ・CrashDumpFunctions::Setup()より後で呼ぶ

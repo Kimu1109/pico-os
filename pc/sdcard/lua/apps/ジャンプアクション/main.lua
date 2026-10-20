@@ -1,7 +1,7 @@
 -- ジャンプアクション: pico.game(2Dゲームの簡易エンジン)のサンプル
 --   左右で歩き、A(または↑)でジャンプ。コインを集めてゴールの旗まで行く。
 --   スライムは上から踏むと倒せる。横から当たる・穴に落ちるとミス。
--- 絵は sheet.pimg(script/generate_platformer_sheet.py で作る)。番号は左上から
+-- 絵は sheet.pimg(script/assets/generate_platformer_sheet.py で作る)。番号は左上から
 --   0 草 1 土 2 レンガ 3 旗 4〜6 主人公(立ち/歩き/ジャンプ) 7 雲 8,9 コイン 10,11 スライム
 -- タイルマップの値は 番号+1(0は空)。
 local game = require("pico.game")

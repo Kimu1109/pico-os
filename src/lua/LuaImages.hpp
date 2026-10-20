@@ -5,7 +5,7 @@
 // ハンドルは WidgetId と同じ考え方の「generation(上位24bit)+index+1(下位8bit)」。解放のたびに
 // generation を進めるので、解放済みの古いハンドルが同じスロットに入った新しい画像を指さない。
 // ピクセルのバッファ(LGFX_Sprite)は Lua のメモリ予算の外の素のヒープなので、枚数と合計バイト数の
-// 両方に上限を置く(CLAUDE.md「画像」)。
+// 両方に上限を置く(docs/design/lua-api.md「画像」)。
 #include <cstddef>
 #include <cstdint>
 #include "gui/icons/icon_render.h"

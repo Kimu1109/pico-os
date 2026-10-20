@@ -170,7 +170,7 @@ void setup() {
 #endif
     LuaDebugger::SetErrorReporter(&CrashDumpFunctions::SaveLuaError);
     LuaDebugger::SetActivityHook(&CrashDumpFunctions::SetLua);
-    //シリアルの"dbg ..."(Luaデバッガ)と"hw ..."(実機の確認。HARDWARE_CHECKLIST.md)
+    //シリアルの"dbg ..."(Luaデバッガ)と"hw ..."(実機の確認。docs/HARDWARE_CHECKLIST.md)
     PadFunctions::extra_line_handler = [](const char* line){
         return LuaDebugger::FeedSerialLine(line) || HwTestFunctions::FeedSerialLine(line);
     };

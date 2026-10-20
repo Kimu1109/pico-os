@@ -65,3 +65,11 @@
   SDのファイルの位置がずれて別のファイルの途中を読んだ(公開直後に「ブロック」の`palette.lua:1: unexpected symbol near '<\227>'`として出た)。
   `shell.html`の`<meta name="picoos-asset-rev">`をワークフローが書き換え、`Module.locateFile`がそれを見て名前を差し替える
   (ローカルのビルドは書き換えないので従来の名前のまま)。
+- **Lua APIリファレンスも同じPagesに置く**(2026-10-20): `lua-api-doc/`(Hugo)をワークフローがビルドし、
+  https://kimu1109.github.io/pico-os/lua-api/ に出す。Pagesは1リポジトリ1サイトなので別ワークフローにはせず、
+  `_site/lua-api/` として同じ成果物へ入れる(アプリストアの配布物と同じ扱い)。
+  Hugoの版はワークフローの `HUGO_VERSION` で固定。`hugo.toml` の `baseURL` は手元確認用の `"/"` のままで、
+  公開ビルドだけ `--baseURL` で上書きする(リンクは `relURL`/`RelPermalink` なので崩れない)。
+  プルリクでもビルドして文書の壊れを止める。Webビルドの外枠(`shell.html`)に「Lua API リファレンス」へのリンクを置いた
+  (手元の `pc/build-web` には `lua-api/` が無いのでリンク切れになる)。
+  手元で見るなら `hugo server --source lua-api-doc`。

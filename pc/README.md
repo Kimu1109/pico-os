@@ -361,3 +361,25 @@ pc/
 `src/config/LGFX_Config.hpp` と `src/hal/Touch_Functions.hpp` の2つだけは、
 `#if defined(PICOOS_PC)` で `pc/compat/` 側へ切り替える分岐を持っている。
 ハードウェアそのものを触る箇所なので、インクルードパスの差し替えでは吸収できないため。
+
+### `src/` を書く側の決まり(2026-10-20に CLAUDE.md から移した)
+
+- 2つの分岐(上記)のインクルードは**山かっこで書くこと**(`<config/LGFX_Config_PC.hpp>` / `<hal/Touch_Functions_PC.hpp>`)。
+  `"config/..."` だとインクルード元(`src/`)のディレクトリが優先され、自分自身を読んで多重定義になる。
+- `src/` が使う Arduino API と PC での実装(`pc/compat/Arduino.h`。呼び出し側は書き換えていない):
+
+  | API | PCでの実装 |
+  |---|---|
+  | `millis()` | `steady_clock`の経過ms(起動時刻を原点にする) |
+  | `constrain()` / `min` / `max` | **テンプレート関数**(マクロのままだと `std::min` 等を食い荒らし、LovyanGFXと標準ライブラリのビルドが壊れる) |
+  | `Serial.*` | 書き込みは標準出力へ、`available()`/`read()`は標準入力から(外部コントローラーの代用入力) |
+  | `pinMode()` / `digitalWrite()` | 空実装 |
+  | `digitalRead()` | 既定は`HIGH`(`PicoPcGpio::read_hook`で差し込める。音声のアンプ検出が使う) |
+  | `map()` | そのまま計算 |
+
+- `src/*.cpp` を全部リンクするので、代替を用意し忘れた実機API(`analogRead`/I2C等)は**未定義参照で気づける**。
+  `src/` へ新しい実機依存を足したら `pc/compat/` にも代替を足す(Webビルドではスレッド・生ソケット・ブロッキング待ちが使えない)。
+- `TimeFunctions::Update()` は333msごとにしか更新しないので、`--shot` のフレーム数が少ないと初期値の`00:00`が写る(時刻を見るなら200フレーム以上)。
+- `--tap` によるヘッドレス確認で「リンクをタップしても反応しない」「短い文書を開き直すと前の内容が残る」の2件が見つかっている(ホストテストでは出ない類)。
+- ネットワーク越しの確認: 母艦で `python3 script/reference_server.py` を立て、`sys/network.cfg` の `browser-home` へそのURLを書く。
+  `PICOOS_SD_ROOT` で一時ディレクトリへ向ければリポジトリの `pc/sdcard/` を汚さない。

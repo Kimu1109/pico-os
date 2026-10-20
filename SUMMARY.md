@@ -129,6 +129,7 @@
 - [x] ネイティブ関数の代替関数
 - [x] ブラウザ動作対応(WebAssembly)
 - [x] Webビルドの自動公開
+- [x] Lua APIリファレンスのGitHub Pages公開(/lua-api/)
 - [ ] その他あれば
 
 ### 7. 標準アプリ開発

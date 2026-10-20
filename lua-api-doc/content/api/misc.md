@@ -32,7 +32,7 @@ description: "log / show_error / millis / micros / battery / on_key / app_dir / 
 
 <div class="sig">pico.battery() <span class="ret">-> percent: integer, volts: number, usb: boolean | nil</span></div>
 
-バッテリーの残量(0〜100%)・電圧(V)・USBから給電されているかを返します。まだ読めていなければ `nil`。残量は電圧からの線形の近似(3.0V=0%〜4.2V=100%)で、約60秒ごとに更新されます。`usb` は充電中か充電完了かを区別できません。
+バッテリーの残量(0〜100%)・電圧(V)・USBから給電されているかを返します。まだ読めていなければ `nil`。残量は電圧からの線形の近似(3.0V=0%〜4.2V=100%)で、約1秒ごとに更新されます。`usb` は充電中か充電完了かを区別できません。
 
 ## pico.on_key
 

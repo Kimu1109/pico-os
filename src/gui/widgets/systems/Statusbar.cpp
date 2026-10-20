@@ -28,10 +28,10 @@ void Statusbar::render(){
     //変化の確認は合成の外(UpdateAll()から)の回だけ。合成の中(FlushDirty())ではMarkDirty()が効かないので、
     //そこで変化を見つけて覚えてしまうと描き直しの要求が失われる
     if(!PICO_GFX::isDirtyDeactivates){
-        //時刻は分が変わったときだけ。電波・電池・SDは5秒ごとに見て、段階が変わったときだけ描き直す
-        //(以前は変化が無くても5秒ごとに全体を描き直していた)
+        //時刻は分が変わったときだけ。電波・電池・SDは1秒ごと(電池の読み取り間隔に合わせる)に見て、
+        //段階が変わったときだけ描き直す(以前は変化が無くても5秒ごとに全体を描き直していた)
         if(TimeFunctions::changed_HH_mm) this->needsRender();
-        if(millis() - this->update_interval_time >= 5000){
+        if(millis() - this->update_interval_time >= 1000){
             this->update_interval_time = millis();
             const int16_t wifi_icon = (int16_t)NetworkFunctions::GetWifiStateIconID();
             const int16_t battery_icon = BatteryFunctions::HasSample() ? (int16_t)BatteryIcon(BatteryFunctions::GetPercent()) : -2;

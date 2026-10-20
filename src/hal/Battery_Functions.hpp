@@ -19,7 +19,7 @@
 //   (このリモート環境にはRP2350の実機もボード定義も無いため)。
 namespace BatteryFunctions {
 
-    constexpr unsigned long kSampleIntervalMs = 60000;
+    constexpr unsigned long kSampleIntervalMs = 1000;
     constexpr float kMinVoltage = 3.0f;  // 空(0%)とみなす電圧
     constexpr float kMaxVoltage = 4.2f;  // 満充電(100%)とみなす電圧
 

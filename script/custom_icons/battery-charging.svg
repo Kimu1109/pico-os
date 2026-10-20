@@ -1,0 +1,12 @@
+<!--
+  pico-os 自作アイコン: バッテリー(給電中)
+
+  tablerのbattery-charging-2は枝分かれした細線で、16pxでは潰れて判読できなかった。
+  電池の輪郭の中へ稲妻を置く形で、1pxを単位に描き起こした(塗りのパスのみ)。
+  本体: x=1..14 / y=3..13(輪郭1px)、端子: x=14..16 / y=6..10
+  稲妻: 内側 y=4..12 に8段の階段状(斜めは2px幅にして閾値二値化で欠けないようにしてある)。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+  <path fill-rule="evenodd" d="M1 3h13v3h2v4h-2v3H1z M2 4v8h11V4z" />
+  <path d="M9 4h2v1h-2zM8 5h2v1h-2zM7 6h2v1h-2zM6 7h4v1h-4zM7 8h2v1h-2zM6 9h2v1h-2zM5 10h2v1h-2zM5 11h1v1h-1z" />
+</svg>

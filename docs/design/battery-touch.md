@@ -33,14 +33,12 @@ Picoへ配線)を実際に導入したのを受けて、VSYS電圧からバッ�
   ついでに分かる)が、**SHIM側の「充電完了」を伝える信号線は配線していない**ため、充電中と
   充電完了後どちらでUSBに繋がっているかは区別できない。設定画面ではこれを
   「電池 USB給電中」という文言で表示する。
-- **ステータスバーには残量4段階のアイコン(`Battery0`〜`Battery4`)だけを出し、給電中の
-  区別は出さない。** `IconID::BatteryCharging`(tabler由来の`battery-charging-2.svg`)は
-  16pxで絵柄が崩れて判読できなかった(実際にPCビルドの`--shot`で確認して気づいた。
-  `custom_icons/README.md`が警告している「tablerの絵柄は24pxグリッド前提」の実例が
-  また1つ増えた形)。**自作アイコンへの差し替えはこの機能のスコープ外として見送った**
-  (`Battery0`〜`Battery4`は同じ元絵でも問題なく16pxで読めたため、崩れるのは
-  `battery-charging-2`固有の細い枝分かれ線が原因と見られる)。給電中かどうかは
-  設定画面のテキストでのみ確認できる。
+- **ステータスバーは残量4段階のアイコン(`Battery0`〜`Battery4`)で、USB給電中だけ稲妻入りの
+  `IconID::BatteryCharging`に差し替える**(2026-10-20)。tabler由来の`battery-charging-2`は枝分かれした
+  細線が16pxで潰れて判読できなかったため、`script/custom_icons/battery-charging.svg`へ1px単位で
+  描き起こした(enumの位置は同じなので既存の番号は変わらない)。給電中かどうかは
+  `IsExternallyPowered()`で見る(充電完了後も真のまま)。PCビルドでは`PICOOS_BATTERY_PERCENT=100`で出る。
+  設定画面にもテキストで「電池 USB給電中」と出る。
 - **設定画面(`SettingsScene`)は「戻る」ボタンと同じ上部の行へ横に同居させた**(専用の行を
   割く余白が無いため。8行→9行で既に画面いっぱい、という既存の制約は変えていない)。
   `Label::setText()`は変化が無ければ再レイアウトしないため、`onUpdate()`から毎フレーム

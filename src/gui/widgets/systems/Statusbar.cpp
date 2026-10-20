@@ -34,7 +34,8 @@ void Statusbar::render(){
         if(millis() - this->update_interval_time >= 1000){
             this->update_interval_time = millis();
             const int16_t wifi_icon = (int16_t)NetworkFunctions::GetWifiStateIconID();
-            const int16_t battery_icon = BatteryFunctions::HasSample() ? (int16_t)BatteryIcon(BatteryFunctions::GetPercent()) : -2;
+            const int16_t battery_icon = BatteryFunctions::HasSample()
+                ? (int16_t)(BatteryFunctions::IsExternallyPowered() ? IconID::BatteryCharging : BatteryIcon(BatteryFunctions::GetPercent())) : -2;
             const int8_t sd_usable = OSData::SD_usable ? 1 : 0;
             if(wifi_icon != this->last_wifi_icon || battery_icon != this->last_battery_icon || sd_usable != this->last_sd_usable){
                 this->last_wifi_icon = wifi_icon;
@@ -136,13 +137,10 @@ void Statusbar::render(){
     }
     draw_pos += 16 + MARGIN;
 
-    //バッテリー: 残量に応じた4段階(まだ1回もVSYS読み取りが済んでいなければ何も描かない。
-    //通常はSetup()で即座に読むので起動直後の1フレーム目だけの話)。
-    //給電中かどうかはここでは示さない — IconID::BatteryChargingは16pxではtabler由来の
-    //絵柄が崩れて判読できなかった(自作アイコンに差し替えるまでの間は保留。設定画面には
-    //テキストで「電池 USB給電中」と出る)
+    //バッテリー: 残量に応じた4段階。USB給電中は稲妻入りの自作アイコン(custom_icons/battery-charging.svg)に差し替える
+    //(まだ1回もVSYS読み取りが済んでいなければ何も描かない。通常はSetup()で即座に読むので起動直後の1フレーム目だけの話)
     if(BatteryFunctions::HasSample()){
-        const IconID battery_icon = BatteryIcon(BatteryFunctions::GetPercent());
+        const IconID battery_icon = BatteryFunctions::IsExternallyPowered() ? IconID::BatteryCharging : BatteryIcon(BatteryFunctions::GetPercent());
 
         IconRender::DrawIcon(battery_icon, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
         draw_pos += 16 + MARGIN;

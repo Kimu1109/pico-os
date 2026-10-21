@@ -88,6 +88,7 @@ namespace {
     bool fn_held = false;
     bool sym_held = false, sym_mode = false;
     bool caps_hold = false, caps_one = false, caps_lock = false;
+    bool suppressed = false;
 
     bool SymActive(){ return sym_mode || sym_held; }
     bool CapsActive(){ return caps_one || caps_lock || caps_hold; }
@@ -95,6 +96,7 @@ namespace {
     bool IsModifier(int k){ return k == CardKbUart::kKeyAa || k == CardKbUart::kKeyFn || k == CardKbUart::kKeySym; }
 
     void Emit(int key){
+        if(suppressed) return;
         Event ev;
         if(!CardKbUart::KeyToEvent(key, fn_held, SymActive(), CapsActive(), ev)) return;
         KeyInputFunctions::Push(ev);
@@ -191,6 +193,7 @@ void CardKbUart::Reset(){
     caps_click = ClickDetector{};
     fn_held = sym_held = sym_mode = false;
     caps_hold = caps_one = caps_lock = false;
+    suppressed = false;
 }
 
 void CardKbUart::Feed(uint8_t b, unsigned long now_ms){
@@ -236,6 +239,9 @@ void CardKbUart::Tick(unsigned long now_ms){
         Emit(k);
     }
 }
+
+uint64_t CardKbUart::HeldKeys(){ return held; }
+void CardKbUart::SetSuppressed(bool on){ suppressed = on; }
 
 uint32_t CardKbUart::FramesReceived(){ return frames_ok; }
 uint32_t CardKbUart::BytesDropped(){ return bytes_dropped; }

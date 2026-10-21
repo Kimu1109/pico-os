@@ -94,3 +94,18 @@ PCビルドは`pc/CMakeLists.txt`がインクルードパスを1行足しただ�
   不正な命令で落ちないこと・変わった行だけdirty・パッドの当たり判定)、PCビルドで`pc/sdcard/gb/dmg-acid2.gb`(描画のテストROM。正しければ笑顔)と
   Blargg氏の`cpu_instrs`(リポジトリには含めていない)が正しく動くことを`--tap`/`--shot`で確認。
   **市販ゲームのROMはリポジトリに含めない。**
+
+## キーボードで遊ぶ (`src/apps/gb/Gb_KeyMap.hpp` / `GameBoyScene::onKey()`) (2026-10-21)
+
+物理キーボード(USBシリアルの`key`の行・PCビルドのキー・CardKB2)でもゲームのボタンを押せる。画面の操作パッド・外部コントローラーとORで重ねる。
+
+- 対応: 十字=↑↓←→/WASD(CardKB2のUARTではFn+D/Z/X/Cも)、A=K/X、B=J/Z、START=Enter、SELECT=Space/Backspace、Esc(CardKB2はFn+1)=メニュー。
+  Ctrl/Alt付きと他のキーは使わない(取らずに次へ回す)。
+- **打鍵には「離した」が無い**ので、押している間を2通りで作る:
+  - CardKB2のUARTモード(`docs/design/input.md`「UARTモード」): 本体が押した/離したを送るので`CardKbFunctions::HeldKeys()`を毎フレーム読む(正確・同時押し可)。
+    遊んでいる間は`CardKbFunctions::SetGameMode(true)`でCardKB2の打鍵を文字として配らない(メニュー・ROMの選択・ロック画面・スリープ中は配る)。
+    フラグは`onUpdate()`で立て、次のフレームのCardKB2の読み取りから効く。Fn+1は押した瞬間だけメニュー(メニューを閉じたとき押したままなら開き直さない)。
+  - それ以外(`GbKeyMap::Hold`): 打鍵が来たら最初は350ms、続けて来たら(キーリピート)120msずつ押していることにする。短く叩いても約0.35秒押した扱いになり、
+    離してから止まるまで最大120ms遅れる。PCのキーリピートの開始がこれより遅いと、押しっぱなしで途切れる。正確に遊ぶならUARTモードか`pad_serial.py`のコントローラーのモード。
+- 検証: `gb_keymap_test`(input。対応・CardKB2の同時押しとFn・Holdの時間・UARTの「配らない」モード)、PCビルドで標準入力へ`key`の行を流し、
+  →の連打で押し続ける・K+Wの同時押し・Ctrl+Sとqを無視・Escでメニューを確認(一時的にボタンをログへ出して見た。コミットしていない)。**実機・CardKB2の実物では未確認**(Todoist参照)。

@@ -165,3 +165,6 @@ void CardKbFunctions::UpdateAt(unsigned long now){
 
 bool CardKbFunctions::IsConnected(){ return connected; }
 CardKbFunctions::Mode CardKbFunctions::GetMode(){ return mode; }
+bool CardKbFunctions::UartActive(){ return mode == Mode::Uart && uart && *uart; }
+uint64_t CardKbFunctions::HeldKeys(){ return UartActive() ? CardKbUart::HeldKeys() : 0; }
+void CardKbFunctions::SetGameMode(bool on){ CardKbUart::SetSuppressed(on && UartActive()); }

@@ -53,6 +53,11 @@ namespace CardKbUart {
     // 毎フレーム1回(Feed()の後)。1回押しの確定と繰り返し
     void Tick(unsigned long now_ms);
 
+    // 今押しているキー(番号のビット。修飾キーも含む)。ゲームのように押している間を見たい画面向け
+    uint64_t HeldKeys();
+    // trueの間は打鍵を列へ積まない(押している状態だけ持つ)。ゲームボーイの遊んでいる間
+    void SetSuppressed(bool on);
+
     // 正しく読めたフレームの数 / 捨てたバイトの数(診断・テスト用)
     uint32_t FramesReceived();
     uint32_t BytesDropped();

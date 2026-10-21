@@ -57,6 +57,13 @@ namespace CardKbFunctions {
     bool IsConnected();
     Mode GetMode();
 
+    // UARTで受信できているか(mode = uart で受信を始められた)。押している間が分かるのはこのときだけ
+    bool UartActive();
+    // UARTのとき今押しているキー(CardKbUartの番号のビット)。それ以外は0
+    uint64_t HeldKeys();
+    // trueの間はCardKB2の打鍵を文字として配らない(ゲームのボタンとして HeldKeys() で読む画面向け)。UARTのときだけ効く
+    void SetGameMode(bool on);
+
     // 1バイト → 打鍵。打鍵として扱えない値(0=押していない、範囲外)はfalse
     bool Decode(uint8_t raw, KeyInputFunctions::Event& out);
 }

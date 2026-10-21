@@ -12,6 +12,8 @@
 #include "system/Log_Functions.hpp"
 #include "system/Pad_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
+#include "hal/CardKB_Functions.hpp"
+#include "services/Lock_Functions.hpp"
 #include "apps/gb/Gb_PadMap.hpp"
 #include "apps/gb/Gb_Rom_Flash.hpp"
 #include "storage/Flash_Area.hpp"
@@ -69,7 +71,26 @@ void GameBoyScene::onEnter(){
     }
 }
 
+bool GameBoyScene::acceptsGameKeys() const {
+    return this->emu.loaded() && !this->emu.crashed() && !this->picker && !this->menu && !this->flash_job
+        && this->pending == Pending::None && !PowerFunctions::IsSleeping() && !LockFunctions::IsLocked();
+}
+
+bool GameBoyScene::onKey(const KeyInputFunctions::Event& ev){
+    if(!this->acceptsGameKeys()) return false;
+    if(GbKeyMap::IsMenu(ev)){
+        this->openMenu();
+        return true;
+    }
+    const uint8_t b = GbKeyMap::FromEvent(ev);
+    if(b == GbKeyMap::kNone) return false;
+    this->key_hold.press(b, millis());
+    return true;
+}
+
 void GameBoyScene::onExit(){
+    CardKbFunctions::SetGameMode(false);
+    this->key_hold.clear();
     this->stopFlash();
     this->autoSave("画面を離れる");
     // セーブ(.sav)の書き出しはunload()の中で行われる
@@ -340,6 +361,15 @@ void GameBoyScene::afterLoad(const char* path){
 }
 
 void GameBoyScene::onUpdate(){
+    //遊んでいる間だけCardKB2(UART)の打鍵をゲームのボタンとして読む(次のフレームのCardKB2の読み取りから効く)。
+    //メニュー・ROMの選択・ロック画面ではいつもどおり文字として配る
+    const bool game_keys = this->acceptsGameKeys();
+    CardKbFunctions::SetGameMode(game_keys);
+    if(!game_keys){
+        this->key_hold.clear();
+        //メニューを閉じたときにFn+1を押したままでも、もう一度開かないように
+        this->cardkb_menu_prev = GbKeyMap::CardKbMenu(CardKbFunctions::HeldKeys());
+    }
     //エミュは操作が無くても動き続ける(スリープさせない)
     PowerFunctions::KeepAwake();
     const uint32_t now = millis();
@@ -428,9 +458,21 @@ void GameBoyScene::onUpdate(){
         return;
     }
 
-    // 画面の操作パッドと外部コントローラーを重ねる。
-    // タッチは1点しか取れないので、同時押し(十字キー+A等)は外部コントローラーでしかできない
-    this->emu.setButtons(this->pad->getPressed() | GbPadMap::ToGb(PadFunctions::Buttons()));
+    // CardKB2(UART)のFn+1はメニュー(押した瞬間だけ)
+    const uint64_t kb_held = CardKbFunctions::HeldKeys();
+    const bool kb_menu = GbKeyMap::CardKbMenu(kb_held);
+    const bool kb_menu_pressed = kb_menu && !this->cardkb_menu_prev;
+    this->cardkb_menu_prev = kb_menu;
+    if(kb_menu_pressed){
+        this->openMenu();
+        return;
+    }
+
+    // 画面の操作パッド・外部コントローラー・キーボードを重ねる。
+    // タッチは1点しか取れないので、同時押し(十字キー+A等)は外部コントローラーかキーボードで
+    const uint8_t keys = LockFunctions::IsLocked() ? 0
+        : (uint8_t)(this->key_hold.buttons(now) | GbKeyMap::FromCardKb(kb_held));
+    this->emu.setButtons(this->pad->getPressed() | GbPadMap::ToGb(PadFunctions::Buttons()) | keys);
 
     this->acc_us += elapsed * 1000u;
     int frames = 0;

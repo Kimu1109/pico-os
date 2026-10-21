@@ -2,6 +2,7 @@
 
 #include "gui/core/Scene.hpp"
 #include "apps/gb/Gb_Emu.hpp"
+#include "apps/gb/Gb_KeyMap.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -21,6 +22,8 @@ class GbRomFlash;
 //
 // 開くとまずROMの選択(FileSelectDialog、最初は /gb/)を出す。キャンセルならランチャへ戻る。
 // パッドの「MENU」(コントローラーのZL)で途中保存/途中から再開/別のROM、「戻る」でランチャへ戻る。
+// キーボードでも遊べる(対応は apps/gb/Gb_KeyMap.hpp。Escでメニュー)。CardKB2のUARTモードなら押している間を正確に読み、
+// 遊んでいる間はCardKB2の打鍵を文字として配らない(CardKbFunctions::SetGameMode)。
 //
 // ---- 途中保存(GbEmu::saveState) ----
 //   - 置き場は /gb/states/<ROMの名前>.st0 / .st1(ROMの選択に並ばないよう分けた)
@@ -83,6 +86,13 @@ class GameBoyScene : public Scene {
         uint32_t banner_until_ms = 0;
         bool was_sleeping = false;
         uint32_t last_low_battery_save_ms = 0;
+        // キーボードの打鍵から作る「押している間」(CardKB2のUART以外)
+        GbKeyMap::Hold key_hold;
+        // CardKB2(UART)のFn+1(メニュー)を押した瞬間を見るため
+        bool cardkb_menu_prev = false;
+        // ゲームのボタンをキーボードから受け付けてよいか(ROMを遊んでいて、ダイアログ・ロック画面が出ていない)
+        bool acceptsGameKeys() const;
+
         // 戻ってきたとき(Push()から)は聞かずに自動の枠から続ける
         bool resume_silently = false;
 
@@ -120,6 +130,7 @@ class GameBoyScene : public Scene {
         // 離れるとROMを閉じる(途中の状態は自動の枠へ保存する)
         bool keepForeground() const override { return true; }
         bool usesPad() const override { return true; }
+        bool onKey(const KeyInputFunctions::Event& ev) override;
 
         void onEnter() override;
         void onExit() override;

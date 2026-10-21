@@ -210,6 +210,28 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - 検証: `cardkb_test`(run.sh)とPCビルドの起動(未接続で静か)。**実機・実物のCardKB2は未確認**
   (3.3V系のバスへ5Vのプルアップが乗らないか・`Wire.setSDA/setSCL`の名前・UARTモード出荷品が無いか)。
 
+### UARTモード(`src/hal/CardKB_Uart` / `/sys/cardkb.cfg`) (2026-10-21)
+
+I2CモードではFn+D/Z/X/Cの矢印が出ないので、UARTモード(本体でFn+Sym+2)でも読めるようにした。**`/sys/cardkb.cfg`に`mode = uart`と書いたときだけ**
+(既定はI2Cのまま。起動時に読むだけ)。
+
+- **届くもの**(M5Unit-KEYBOARDの`UnitCardKB2UART`より): 115200bps 8N1、キーの変化ごとに5バイト`AA 03 <番号0〜42> <01押した/02離した> <和の下位8bit>`。
+  **文字ではなく押した/離したしか来ない**ので、キー番号→文字の表(同ライブラリ、MIT)・修飾キー・繰り返しをPico側(`CardKbUart`、描画にもシリアルにも依存しない)でやる。
+  区切りが合わなければ1バイトずらして次の`AA`から読み直す。
+- **修飾キー**: 本体のファームウェア(iot_button)と同じ判定(200ms以内の2回目=2回押し、400ms超え=長押し)で、Aa=押している間/1回押しで次の英字1文字/2回押しで固定、
+  Sym=押している間/1回押しで切り替え、Fn=押している間。本体と違うところ: ①1回押しは**離した瞬間に効かせる**(本体は200ms待つので続けて打った文字に間に合わない)、
+  ②押している間・離した直後に別のキーを打ったらその回を数えない(Aaを押しながら打って離しても1回押しにならない、Aa・英字・Aaを素早く打っても固定にならない)。
+- **Fnの組み合わせ(pico-os独自)**: Fn+D/Z/X/C=↑←↓→、Fn+1=Esc、Fn+Del=Delete、Fn+Space=Tab、Fn+Enter=Enter、Fn+それ以外の英字=Ctrl+英字(小文字)。
+  **Ctrl+D/Z/X/Cは矢印に取られて打てない**(SSHの^CはTermKeyBarで)。Aaが効いている間は矢印にShift(テキストエディタの範囲選択)。Fn+数字(1以外)は割り当てなし。
+- **繰り返し**: I2Cモードの本体と同じ300ms後から50msごと。修飾キーは繰り返さない。線が抜けて離したフレームが来ないと押しっぱなしになるので、10秒で止める。
+- **配線**: CardKB2のTX(Groveの白=SCLの位置)を**GP7**(`CARDKB_UART_RX`)へ。黄(CardKB2のRX)はつながない。ハードのUART0/1のピンが空きと合わないので
+  arduino-picoの`SerialPIO`(PIOのステートマシン1つ)で受け、端子は内部プルアップ。始められなければ(PIOの空き無し)警告を1回出して何もしない。
+  UARTモードの間はCardKB2としてのI2Cの呼びかけはしない(Wiiクラシックは自分でI2Cを始める)。
+- `IsConnected()`はUARTでは「正しいフレームを1つでも受け取ったか」(押したときにしか届かないので抜けたことは分からない)。
+- PC/ホストテストは`pc/compat/SerialPIO.h`(`PicoPcSerialPio::rx`に積んだバイトが届く。`begin_ok=false`で始められない場合)。
+- 検証: `cardkb_uart_test`(run.sh の input。フレーム・ゴミ/途中から/1バイトずつ・Aa/Sym/Fnの各組み合わせ・繰り返し・cfgの切り替え・始められない場合)、
+  PCビルドの起動ログ、実機ファームのビルド。**実機・実物では未確認**(SerialPIOがI2S・マイク・CYW43とPIOを取り合わないか・115200bpsで届くか・キーの手触り)(Todoist参照)。
+
 ## USBドライブ(USBマスストレージ) (`src/services/UsbDrive_Functions` / `storage/Msc_Sector_Bridge.hpp` / `UsbDriveScene`) (2026-10-12)
 
 ランチャの「USBドライブ」(アイコンはSDカード)。開くとSDカードがPCのドライブとして見え、SDの抜き差しをせずにLuaアプリ・曲・ROMを行き来できる。

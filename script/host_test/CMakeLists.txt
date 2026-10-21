@@ -241,6 +241,8 @@ host_py_test(pvid_test GROUP media USES pvid_dump ARGS $<TARGET_FILE:pvid_dump>)
 # --- input: コントローラー・キーボード・電源・ロック・端末の鍵 ---
 host_test(pad_test GROUP input)
 host_test(cardkb_test GROUP input)
+host_test(cardkb_uart_test GROUP input)
+host_test(gb_keymap_test GROUP input)
 host_test(wii_classic_test GROUP input)
 host_test(edit_history_test GROUP input)
 host_test(romaji_kana_test GROUP input)

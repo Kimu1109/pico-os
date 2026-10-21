@@ -22,6 +22,7 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
 | 音声出力(I2S) | MAX98357A: BCLK=2, LRCLK=3, DIN=4 / 検出=5(内部プルアップ) / 休止=6(任意) |
 | マイク(I2S) | SPH0645: BCLK=26, LRCLK=27, DOUT=28(48kHz・32bitスロット) |
 | I2C0 | SDA=0, SCL=1。Wiiクラシックコントローラー(0x52、実物は未確認)とCardKB2 |
+| CardKB2のUART(任意) | RX=7(SerialPIO。`/sys/cardkb.cfg` の `mode = uart` のときだけ) |
 
 画面/パレット定数は `src/consts.hpp`(PICO-8風16色、既定 `PICO_BACKGROUND=15` / `PICO_FORECOLOR=0`)。
 

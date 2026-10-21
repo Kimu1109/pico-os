@@ -83,6 +83,33 @@ void DrawImageRLE4bpp(FsFile& f, int x, int y) {
     }
 }
 
+bool DrawImageRLE4bppScaled(FsFile& f, int x, int y, int box) {
+    PimgHeader header;
+    if (box <= 0 || !ReadPimgHeader(f, header) || header.width == 0 || header.height == 0) return false;
+
+    const bool transparent = header.flags & kPimgFlagTransparent;
+    const int longer = header.width > header.height ? header.width : header.height;
+    const int step = (longer + box - 1) / box;   // 1なら縮めない
+    const int ox = x + (box - ((int)header.width + step - 1) / step) / 2;
+    const int oy = y + (box - ((int)header.height + step - 1) / step) / 2;
+    const int pick = step / 2;                   // 間引く升の真ん中の画素を取る
+
+    uint16_t px = 0, py = 0;
+    uint8_t buf[2];
+    f.seek(kPimgHeaderSize);
+    while (py < header.height && f.read(buf, 2) == 2) {
+        uint8_t run = buf[0];
+        const uint8_t idx = buf[1];
+        while (run--) {
+            if ((py % step) == pick && (px % step) == pick && (!transparent || idx != 0)) {
+                OSData::frame->writePixel(ox + px / step, oy + py / step, idx);
+            }
+            if (++px >= header.width) { px = 0; py++; }
+        }
+    }
+    return true;
+}
+
 bool LoadPimgToSprite(FsFile& f, PimgSprite& out) {
     PimgHeader header;
     f.seek(0);

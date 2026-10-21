@@ -34,6 +34,8 @@ uint32_t AppGrid::layoutSignature() const {
     mix((uint32_t)rowsPerPage());
     mix(HomeLayout::Revision());
     mix((uint32_t)AppFunctions::Count());
+    mix(AppFunctions::layout_revision);
+    mix((uint32_t)(folder_ + 1));
     mix((uint32_t)AppFunctions::launcher_hidden);
     mix((uint32_t)(AppFunctions::launcher_hidden >> 32));
     for (int i = 0; i < AppFunctions::Count(); i++) mix((uint8_t)AppFunctions::launcher_order[i]);
@@ -41,10 +43,33 @@ uint32_t AppGrid::layoutSignature() const {
 }
 
 void AppGrid::ensureLayout() const {
+    //開いているフォルダが消えた/中を全部隠した・出したらトップへ戻る
+    if (folder_ >= 0 && AppFunctions::FolderAppCount(folder_) == 0) folder_ = -1;
     const uint32_t sig = layoutSignature();
     if (sig == layout_sig_) return;
-    item_count_ = HomeLayout::Compute(rowsPerPage(), items_, HomeLayout::kMaxItems, &pages_);
+    if (folder_ >= 0) {
+        item_count_ = HomeLayout::ComputeFolder(folder_, rowsPerPage(), items_, HomeLayout::kMaxItems, &pages_);
+    } else {
+        item_count_ = HomeLayout::Compute(rowsPerPage(), items_, HomeLayout::kMaxItems, &pages_);
+    }
     layout_sig_ = sig;
+}
+
+bool AppGrid::openFolder(int folder) {
+    if (AppFunctions::FolderAppCount(folder) == 0) return false;
+    folder_ = folder;
+    page_ = 0;
+    focus_item_ = 0;
+    layoutChanged();
+    return true;
+}
+
+void AppGrid::closeFolder() {
+    ensureLayout();
+    if (folder_ < 0) return;
+    const int f = folder_;
+    folder_ = -1;
+    showItem(HomeLayout::ItemType::Folder, f);
 }
 
 int AppGrid::pageCount() const {
@@ -317,6 +342,35 @@ void AppGrid::drawIcon(const AppEntry& entry, int x, int y, int color) {
     IconRender::DrawIcon(entry.icon, kIconSize, x, y, color);
 }
 
+void AppGrid::drawSmallIcon(const AppEntry& entry, int x, int y, int box, int color) {
+    FixedString<PICO_PATH_LEN> icon_path;
+    if (OSData::SD_usable && AppFunctions::IconPathOf(entry, icon_path)) {
+        FsFile f = OSData::SD.open(icon_path.c_str(), O_RDONLY);
+        if (f) {
+            ScopedClip clip(x, y, box, box);
+            const bool ok = IconRender::DrawImageRLE4bppScaled(f, x, y, box);
+            f.close();
+            if (ok) return;
+        }
+    }
+    IconRender::DrawIcon(entry.icon, IconSize::Px16, x + (box - 16) / 2, y + (box - 16) / 2, color);
+}
+
+void AppGrid::drawFolderIcon(int folder, int x, int y, bool pressed) {
+    //枠の色は押し込みの背景(黒)の上でも見えるように変える
+    const int frame = pressed ? PICO_DARKGREY : PICO_LIGHTGREY;
+    const int fore = pressed ? PICO_WHITE : PICO_BLACK;
+    OSData::frame->fillRoundRect(x, y, kIconPx, kIconPx, 8, frame);
+    //16pxを2x2に、外側5px・間6px(5+16+6+16+5 = 48)
+    constexpr int kMini = 16, kEdge = 5, kStep = kMini + 6;
+    const int n = AppFunctions::FolderAppCount(folder);
+    for (int i = 0; i < n && i < 4; i++) {
+        const AppEntry* e = AppFunctions::Get(AppFunctions::FolderAppAt(folder, i));
+        if (!e) continue;
+        drawSmallIcon(*e, x + kEdge + (i % 2) * kStep, y + kEdge + (i / 2) * kStep, kMini, fore);
+    }
+}
+
 bool AppGrid::wantsFrameUpdate() const {
     ensureLayout();
     for (int i = 0; i < item_count_; i++) {
@@ -371,7 +425,13 @@ void AppGrid::render() {
         const Rect r = itemScreenRect(it);
         if (!r.intersects(clip)) continue;
 
-        if (it.type == HomeLayout::ItemType::App) {
+        if (it.type == HomeLayout::ItemType::Folder) {
+            const bool is_pressed = (i == pressed_item_);
+            if (is_pressed) OSData::frame->fillRect(r.x, r.y, r.w, r.h, PICO_BLACK);
+            drawFolderIcon(it.index, r.x + (r.w - kIconPx) / 2, r.y + kPadding, is_pressed);
+            drawName(AppFunctions::FolderName(it.index), r.x, r.y + kPadding + kIconPx + kLabelGap, r.w,
+                     is_pressed ? PICO_WHITE : PICO_BLACK);
+        } else if (it.type == HomeLayout::ItemType::App) {
             const AppEntry* entry = AppFunctions::Get(it.index);
             if (!entry) continue;
             const bool is_pressed = (i == pressed_item_);
@@ -442,6 +502,10 @@ void AppGrid::causeOnPressEnd() {
         if (on_launch_) on_launch_(it.index);
         return;
     }
+    if (it.type == HomeLayout::ItemType::Folder) {
+        openFolder(it.index);
+        return;
+    }
     HomeWidget* w = widgetOf(it);
     if (!w) return;
     const Rect r = itemScreenRect(it);
@@ -460,6 +524,10 @@ void AppGrid::activate(int item) {
     const HomeLayout::Item& it = items_[item];
     if (it.type == HomeLayout::ItemType::App) {
         if (on_launch_) on_launch_(it.index);
+        return;
+    }
+    if (it.type == HomeLayout::ItemType::Folder) {
+        openFolder(it.index);
         return;
     }
     HomeWidget* w = widgetOf(it);
@@ -481,6 +549,12 @@ Rect AppGrid::focusRect() const {
 
 bool AppGrid::onFocusKey(FocusKey key) {
     ensureLayout();
+    //戻る: 開いているフォルダを閉じる
+    if (key == FocusKey::Back) {
+        if (folder_ < 0) return false;
+        closeFolder();
+        return true;
+    }
     clampFocus();
     if (item_count_ == 0 || focus_item_ < 0 || focus_item_ >= item_count_ || items_[focus_item_].page != page_) return false;
 

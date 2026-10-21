@@ -17,7 +17,10 @@ class HomeScene : public Scene {
         //アプリが1ページに収まらない時だけ出すページ送り
         Button* prev_button = nullptr;
         Button* next_button = nullptr;
-        Label<PICO_STR_S>* page_label = nullptr;
+        //ページ(フォルダを開いている間はフォルダの名前とページ)
+        Label<PICO_STR_L>* page_label = nullptr;
+        //フォルダを開いている間だけ出す、トップへ戻るボタン(ページ送りの行の左。ページ送りは右へ寄せる)
+        Button* back_button = nullptr;
 
         //アプリが1つも登録されていない時の案内
         Label<PICO_STR_L>* empty_label = nullptr;
@@ -27,17 +30,27 @@ class HomeScene : public Scene {
         constexpr static int PAGER_BUTTON_W = 44;
 
         void updatePageLabel();
-        // ラベルに出しているページ(キーでグリッドがページを送ったときに追いつく)
+        // ラベルに出しているページとフォルダ(キーでグリッドがページを送ったとき・フォルダを開いたときに追いつく)
         int shown_page = -1;
         int shown_pages = -1;
+        int shown_folder = -2;
+        // アプリを開いて戻ってきたときに、開いていたフォルダとページへ戻す
+        int reopen_folder = -1;
+        int reopen_page = 0;
         void openFocusedMenu();
         // 並べ替えた後、並びの seq_pos にあるウィジェットの placed[] の番号(無ければ-1)
         static int findWidgetAfterMove(int seq_pos);
 
         // 項目の長押し(またはコントローラーのX/Y・キーのm)で出すメニュー。
-        // アプリ: 前へ/後ろへ/先頭へ/隠す/ウィジェットを追加。ウィジェット: 移動/大きさ/削除/ウィジェットを追加。
-        // 空いた所の長押しはウィジェットの追加だけ。隠したアプリを戻すのは設定アプリ(他タブ)
+        // アプリ: 前へ/後ろへ/先頭へ/フォルダへ入れる/隠す/ウィジェットを追加。ウィジェット: 移動/大きさ/削除/ウィジェットを追加。
+        // フォルダ: 移動/名前を変える/解除/ウィジェットを追加。フォルダの中のアプリ: 移動(フォルダの中で)/フォルダから出す/
+        // 別のフォルダへ/隠す。空いた所の長押しはウィジェットの追加だけ(フォルダの中では何もしない)。
+        // 隠したアプリを戻すのは設定アプリ(他タブ)
         void openItemMenu(const AppGrid::LongPress& target);
+        // アプリを入れるフォルダを選ぶメニュー(新しいフォルダ/今あるフォルダ)
+        void openFolderPicker(int app_index);
+        // フォルダの名前を聞く。folder < 0 なら app_index を入れた新しいフォルダを作る、そうでなければ名前を変える
+        void openFolderName(int app_index, int folder);
         // ウィジェットの種類と大きさを選ぶメニュー。並びの seq_pos の前へ足す
         void openAddMenu(int seq_pos);
         // 隠してよいか(設定アプリは隠すと戻せなくなるので不可、見えている最後の1つも不可)
@@ -48,8 +61,11 @@ class HomeScene : public Scene {
         // 半透明の下は描き直されず押し込みの絵が残る(「ダイアログは1フレーム空ける」と同じ理由)
         bool has_pending_menu = false;
         AppGrid::LongPress pending_menu;
-        // 次のフレームで開く追加のメニュー(-1=なし。値は並びの位置)
-        int pending_add = -1;
+        // メニューを閉じた次のフレームで開くもの
+        enum class Pending : uint8_t { None, Add, FolderPick, NewFolder, Rename };
+        Pending pending = Pending::None;
+        int pending_value = -1;   // Add: 並びの位置 / FolderPick・NewFolder: 登録簿の番号 / Rename: フォルダの番号
+        void setPending(Pending kind, int value){ pending = kind; pending_value = value; }
 
     public:
         // 並べ替えのメニューを出すまでの長押しの時間

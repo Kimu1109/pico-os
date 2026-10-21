@@ -24,13 +24,13 @@ namespace {
     using namespace HomeLayout;
 
     // 並べ替えた並びから anchor を付け直し、placed[] を並びの順にする。
-    // 並びのアプリの順は AppFunctions の見えている順と同じであること(呼び出し側が揃える)
+    // 並びのアプリ/フォルダの順は AppFunctions のトップの順と同じであること(呼び出し側が揃える)
     void Rebuild(const SeqEntry* seq, int n){
         Placed out[kMaxWidgets];
         int count = 0;
         int apps = 0;
         for(int i = 0; i < n; i++){
-            if(seq[i].type == ItemType::App){ apps++; continue; }
+            if(seq[i].type != ItemType::Widget){ apps++; continue; }
             if(count >= kMaxWidgets) continue;
             out[count] = placed[seq[i].index];
             out[count].anchor = (uint8_t)apps;
@@ -82,7 +82,7 @@ bool HomeLayout::HasKind(Kind k){
 }
 
 int HomeLayout::Sequence(SeqEntry* out, int max){
-    const int v = AppFunctions::VisibleCount();
+    const int v = AppFunctions::TopCount();
     int n = 0;
     for(int pos = 0; pos <= v; pos++){
         for(int i = 0; i < placed_count; i++){
@@ -90,7 +90,10 @@ int HomeLayout::Sequence(SeqEntry* out, int max){
             if(a != pos) continue;
             if(n < max) out[n++] = { ItemType::Widget, (int8_t)i };
         }
-        if(pos < v && n < max) out[n++] = { ItemType::App, (int8_t)AppFunctions::VisibleAt(pos) };
+        AppFunctions::TopItem t;
+        if(pos < v && n < max && AppFunctions::TopAt(pos, t)){
+            out[n++] = { t.is_folder ? ItemType::Folder : ItemType::App, t.index };
+        }
     }
     return n;
 }
@@ -104,11 +107,10 @@ int HomeLayout::SequencePosition(ItemType type, int index){
 
 static int cells_of(int rows){ return rows * HomeLayout::kCols; }
 
-int HomeLayout::Compute(int rows, Item* out, int max, int* pages){
+namespace {
+int ComputeSeq(const HomeLayout::SeqEntry* seq, int n, int rows, HomeLayout::Item* out, int max, int* pages){
     if(rows < 1) rows = 1;
     if(rows > 16) rows = 16; //1ページの使用中のマスを32bitで持つ
-    SeqEntry seq[kMaxItems];
-    const int n = Sequence(seq, kMaxItems);
 
     //ページごとの使用中のマス。項目は並びの順に、空いている一番前の所へ置く
     //(大きなウィジェットが次の行/ページへ送られて空いた所を、後ろの小さな項目が埋める)
@@ -159,6 +161,23 @@ int HomeLayout::Compute(int rows, Item* out, int max, int* pages){
     if(pages) *pages = (n == 0) ? 1 : last_page + 1;
     return count;
 }
+}
+
+int HomeLayout::Compute(int rows, Item* out, int max, int* pages){
+    SeqEntry seq[kMaxItems];
+    const int n = Sequence(seq, kMaxItems);
+    return ComputeSeq(seq, n, rows, out, max, pages);
+}
+
+int HomeLayout::ComputeFolder(int folder, int rows, Item* out, int max, int* pages){
+    SeqEntry seq[AppFunctions::kMaxApps];
+    int n = 0;
+    const int count = AppFunctions::FolderAppCount(folder);
+    for(int i = 0; i < count && n < AppFunctions::kMaxApps; i++){
+        seq[n++] = { ItemType::App, (int8_t)AppFunctions::FolderAppAt(folder, i) };
+    }
+    return ComputeSeq(seq, n, rows, out, max, pages);
+}
 
 int HomeLayout::Add(Kind kind, uint8_t w, uint8_t h, int seq_pos){
     if(placed_count >= kMaxWidgets || !ValidSize(kind, w, h)) return -1;
@@ -206,9 +225,11 @@ namespace {
         for(int i = 0; i < n; i++) if(seq[i].type == type && seq[i].index == index) p = i;
         const int q = p + delta;
         if(p < 0 || q < 0 || q >= n) return false;
-        if(seq[p].type == ItemType::App && seq[q].type == ItemType::App){
-            //アプリ同士はアプリの並びを入れ替えるだけ(ウィジェットの anchor は見えている数で数えるので変わらない)
-            if(!AppFunctions::MoveApp(seq[p].index, delta)) return false;
+        if(seq[p].type != ItemType::Widget && seq[q].type != ItemType::Widget){
+            //アプリ/フォルダ同士はアプリの並びを入れ替えるだけ(ウィジェットの anchor はトップの数で数えるので変わらない)
+            const bool ok = seq[p].type == ItemType::Folder ? AppFunctions::MoveFolder(seq[p].index, delta)
+                                                            : AppFunctions::MoveApp(seq[p].index, delta);
+            if(!ok) return false;
             revision++;
             return true;
         }
@@ -257,9 +278,11 @@ bool HomeLayout::MoveToFront(ItemType type, int index){
     int p = -1;
     for(int i = 0; i < n; i++) if(seq[i].type == type && seq[i].index == index) p = i;
     if(p <= 0) return false;
-    if(type == ItemType::App){
-        //先頭のアプリでなければ、見えているアプリの先頭へ(他のアプリはそのまま1つずつ後ろへずれる)
-        if(AppFunctions::VisiblePosition(index) > 0 && !AppFunctions::MoveAppToFront(index)) return false;
+    if(type != ItemType::Widget){
+        //トップの先頭でなければ、トップの先頭へ(他の項目はそのまま1つずつ後ろへずれる)
+        const bool folder = (type == ItemType::Folder);
+        if(AppFunctions::TopPosition(folder, index) > 0
+           && !(folder ? AppFunctions::MoveFolderToFront(index) : AppFunctions::MoveAppToFront(index))) return false;
     }
     const SeqEntry t = seq[p];
     for(int i = p; i > 0; i--) seq[i] = seq[i - 1];
@@ -269,19 +292,79 @@ bool HomeLayout::MoveToFront(ItemType type, int index){
     return true;
 }
 
-bool HomeLayout::HideApp(int app_index){
-    SeqEntry seq[kMaxItems];
-    int n = Sequence(seq, kMaxItems);
-    if(!AppFunctions::SetHidden(app_index, true)) return false;
-    int w = 0;
-    for(int i = 0; i < n; i++){
-        if(seq[i].type == ItemType::App && seq[i].index == app_index) continue;
-        seq[w++] = seq[i];
+namespace {
+    // アプリの並び(トップ)を変える操作の後、ウィジェットが前と同じ項目の前に残るよう anchor を付け直す。
+    // old は操作の前の並び。前にあった項目が消えた(隠した・フォルダへ入れた)ら、その後ろで残っている項目の前へ。
+    // フォルダへ入れたアプリは、そのフォルダが操作で新しく出てきたならそのフォルダとして数える(作ったとき)
+    void Reanchor(const SeqEntry* old, int n){
+        auto in_old = [&](ItemType t, int idx){
+            for(int i = 0; i < n; i++) if(old[i].type == t && old[i].index == idx) return true;
+            return false;
+        };
+        auto now_pos = [&](const SeqEntry& e) -> int {
+            if(e.type == ItemType::Folder) return AppFunctions::TopPosition(true, e.index);
+            const int p = AppFunctions::TopPosition(false, e.index);
+            if(p >= 0) return p;
+            const int f = AppFunctions::FolderOf(e.index);
+            if(f >= 0 && !in_old(ItemType::Folder, f)) return AppFunctions::TopPosition(true, f);
+            return -1;
+        };
+        const int top = AppFunctions::TopCount();
+        Placed out[kMaxWidgets];
+        int count = 0;
+        for(int i = 0; i < n; i++){
+            if(old[i].type != ItemType::Widget || count >= kMaxWidgets) continue;
+            int a = top;
+            for(int j = i + 1; j < n; j++){
+                if(old[j].type == ItemType::Widget) continue;
+                const int p = now_pos(old[j]);
+                if(p >= 0){ a = p; break; }
+            }
+            out[count] = placed[old[i].index];
+            out[count].anchor = (uint8_t)a;
+            count++;
+        }
+        //anchor の順に並べる(同じなら元の順。挿入ソート)
+        for(int i = 1; i < count; i++){
+            const Placed t = out[i];
+            int j = i;
+            while(j > 0 && out[j - 1].anchor > t.anchor){ out[j] = out[j - 1]; j--; }
+            out[j] = t;
+        }
+        for(int i = 0; i < count; i++) placed[i] = out[i];
+        placed_count = count;
+        revision++;
+        if(count > 0) Save();
     }
-    n = w;
-    Rebuild(seq, n);
-    Save();
-    return true;
+
+    template<typename Op>
+    auto WithReanchor(Op op) -> decltype(op()){
+        SeqEntry seq[kMaxItems];
+        const int n = Sequence(seq, kMaxItems);
+        const auto r = op();
+        Reanchor(seq, n);
+        return r;
+    }
+}
+
+bool HomeLayout::HideApp(int app_index){
+    return WithReanchor([&]{ return AppFunctions::SetHidden(app_index, true); });
+}
+
+int HomeLayout::CreateFolder(int app_index, const char* name){
+    return WithReanchor([&]{ return AppFunctions::CreateFolder(name, app_index); });
+}
+
+bool HomeLayout::MoveToFolder(int app_index, int folder){
+    return WithReanchor([&]{ return AppFunctions::MoveToFolder(app_index, folder); });
+}
+
+bool HomeLayout::RemoveFromFolder(int app_index){
+    return WithReanchor([&]{ return AppFunctions::RemoveFromFolder(app_index); });
+}
+
+bool HomeLayout::DissolveFolder(int folder){
+    return WithReanchor([&]{ return AppFunctions::DissolveFolder(folder); });
 }
 
 uint32_t HomeLayout::Revision(){ return revision; }

@@ -85,7 +85,7 @@ void SettingsScene::openLauncherDialog(){
             AppFunctions::SetHidden(AppFunctions::HiddenAt(sel), false);
         }else{
             AppFunctions::ResetLayout();
-            this->showMessageLater("ランチャの並びを登録順に戻しました");
+            this->showMessageLater("ランチャの並びを登録順に戻しました(フォルダも解除)");
         }
         this->refreshLauncherLabel();
     });

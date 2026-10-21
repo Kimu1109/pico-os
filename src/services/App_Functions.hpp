@@ -80,6 +80,16 @@ namespace AppFunctions {
     inline uint64_t launcher_hidden = 0;
     static_assert(kMaxApps <= 64, "launcher_hidden のビット数が足りません");
 
+    // ランチャのフォルダ(下の「フォルダ」参照)。アプリごとに入っているフォルダの番号(-1=フォルダの外)と、
+    // フォルダの名前・使っている印(ビット=番号)。番号は作ったときに決まり、他のフォルダが消えても変わらない
+    constexpr int kMaxFolders = 8;
+    inline int8_t   launcher_folder[kMaxApps] = {};
+    inline FixedString<PICO_STR_M> folder_names[kMaxFolders];
+    inline uint8_t  folder_used = 0;
+    static_assert(kMaxFolders <= 8, "folder_used のビット数が足りません");
+    // 並び・隠した印・フォルダが変わるたびに増える(ランチャが詰め直す合図)
+    inline uint32_t layout_revision = 1;
+
     // 型Tのシーンを作るファクトリ。引数を使わないアプリ向け。
     // Register()へ &MakeScene<XxxScene> の形で渡す
     template<typename T>
@@ -156,10 +166,11 @@ namespace AppFunctions {
     // 書き換えるのはランチャのタイルの長押しメニューと設定アプリ(その他タブの「ランチャ」)。
     // 隠したアプリも名前(pico.launch_app)や通知からは起動できる。
 
-    // ランチャに見えている数と、見えている中で pos 番目のアプリの登録簿のindex(範囲外は-1)
+    // 隠していないアプリの数と、その中で(並びの順に、フォルダの中も数えて) pos 番目のアプリの登録簿のindex(範囲外は-1)。
+    // ランチャのトップに並ぶ項目は下の TopCount()/TopAt()
     int VisibleCount();
     int VisibleAt(int pos);
-    // 登録簿のindexのアプリがランチャの何番目か(隠している/範囲外なら-1)
+    // 登録簿のindexのアプリが上の数え方で何番目か(隠している/範囲外なら-1)
     int VisiblePosition(int index);
 
     bool IsHidden(int index);
@@ -168,12 +179,56 @@ namespace AppFunctions {
     int  HiddenAt(int n);
 
     // 以下は変わったらlauncher.cfgへ書き、変わらなかったら(端・範囲外)falseを返す
-    // 見えているアプリの中で前(delta<0)/後ろ(delta>0)へ1つずつ動かす
+    // 前(delta<0)/後ろ(delta>0)へ1つずつ動かす。フォルダの外のアプリはトップの項目(見えているアプリとフォルダ)の中で、
+    // フォルダの中のアプリはそのフォルダの見えているアプリの中で動く
     bool MoveApp(int index, int delta);
+    // 上と同じ範囲の先頭へ
     bool MoveAppToFront(int index);
     bool SetHidden(int index, bool hidden);
-    // 並びを登録順へ戻し、全部見せる(launcher.cfgを消す)
+    // 並びを登録順へ戻し、全部見せ、フォルダも無くす(launcher.cfgを消す)
     void ResetLayout();
+
+    // ===== フォルダ =====
+    // フォルダは名前だけを持ち、中身は「アプリごとの launcher_folder」で表す。並びの上では
+    // **フォルダの中のアプリは launcher_order の中で続けて並ぶ**(フォルダを変える操作が並べ直す)。
+    // ランチャの1段目(トップ)には、フォルダの外の見えているアプリと、見えているアプリを1つ以上持つフォルダが
+    // 並びの順に出る(フォルダは中の先頭のアプリの位置)。中のアプリを全部隠したフォルダはトップに出ない。
+    // 中が空になった(最後の1つを出した・登録簿から消えた)フォルダは消える。フォルダの中にフォルダは作れない。
+    // launcher.cfg では `folder = 名前` の行の後に中のアプリを `in = 名前`(隠したものは `in-hidden = 名前`)で書く。
+    // 以下の操作も、変わったらlauncher.cfgへ書き、変わらなかったらfalse(作るものは-1)を返す
+    struct TopItem {
+        bool is_folder = false;
+        int8_t index = -1;   // アプリなら登録簿のindex、フォルダならフォルダの番号
+    };
+    // トップに見えている数と、pos 番目(範囲外は偽)
+    int  TopCount();
+    bool TopAt(int pos, TopItem& out);
+    // トップの何番目か(見えていなければ-1)
+    int  TopPosition(bool is_folder, int index);
+
+    bool FolderExists(int folder);
+    int  FolderCount();
+    const char* FolderName(int folder);
+    // アプリの入っているフォルダ(外なら-1)
+    int  FolderOf(int index);
+    // フォルダの中の見えているアプリの数と、pos 番目の登録簿のindex(範囲外は-1)、アプリの位置(無ければ-1)
+    int  FolderAppCount(int folder);
+    int  FolderAppAt(int folder, int pos);
+    int  FolderAppPosition(int index);
+
+    // アプリ1つを入れたフォルダを、そのアプリの位置に作る(別のフォルダにあれば出してから)。
+    // 名前が空なら「フォルダ」。作ったフォルダの番号(上限・範囲外は-1)
+    int  CreateFolder(const char* name, int index);
+    // 別のフォルダへ入れる(フォルダの中の最後へ)。元のフォルダが空になれば消える
+    bool MoveToFolder(int index, int folder);
+    // フォルダから出す(フォルダのすぐ後ろへ)
+    bool RemoveFromFolder(int index);
+    bool RenameFolder(int folder, const char* name);
+    // フォルダを無くし、中のアプリをその場に出す
+    bool DissolveFolder(int folder);
+    // トップの中で前/後ろへ動かす(フォルダのアプリはまとめて動く)。フォルダの中のアプリは MoveApp
+    bool MoveFolder(int folder, int delta);
+    bool MoveFolderToFront(int folder);
 
     // launcher.cfgを読む(Setup()の最後で呼ぶ。登録し直したときも)。無ければ登録順のまま
     void LoadLayout();

@@ -34,6 +34,9 @@ bool DrawIconRaw(const IconAsset& asset,
 static constexpr uint32_t kPimgHeaderSize = 5;
 
 void DrawImageRLE4bpp(FsFile& f, int x, int y);
+// .pimgを box 四方へ縮めて描く(縦横の長い方が box に収まるよう、整数の間隔で間引く。拡大はしない)。
+// ランチャのフォルダのタイルの小さなアイコン用。ヘッダが読めなければ偽
+bool DrawImageRLE4bppScaled(FsFile& f, int x, int y, int box);
 bool LoadPimgToSprite(FsFile& f, PimgSprite& out);
 
 static constexpr uint8_t kPimgFlagTransparent = 0x01;

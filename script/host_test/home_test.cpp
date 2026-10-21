@@ -2,6 +2,7 @@
 //
 //   - HomeLayout: アプリとウィジェットの並び、マス目への詰め方、足す/消す/動かす/大きさ/アプリを隠す、home.cfgの読み書き
 //   - AppGrid: ウィジェットのマスの当たり判定・中のボタン・押すとアプリが開く・見た目の印(stamp)が変わったら描き直す
+//   - フォルダ: 並びに1マスで出る・作る/入れる/隠すでウィジェットが同じ項目の前に残る・AppGridで開く/閉じる/中を並べる
 //   - TodoCache: 今日までのタスクだけを覚える・/sys/todo_cache.tsv の往復
 //   - HomeAgenda: /calendar/*.ics から今日から7日間の予定を拾う(終わった予定・7日より先は入れない・ファイルごとの色)
 #include "apps/home/Home_Layout.hpp"
@@ -446,10 +447,113 @@ static void testAgenda(){
     HostSd::dirs_enabled = false;
 }
 
+static void testFolders(){
+    printf("---- フォルダ ----\n");
+    HomeLayout::Test::Reset();
+    HostSd::files.clear();
+    registerApps(6);  //登録簿 0..5 = a01..a06
+    //[W] a01 a02 a03 [V] a04 a05 a06
+    HomeLayout::Add(Kind::Clock, 1, 1, 0);
+    HomeLayout::Add(Kind::Analog, 1, 1, 4);
+    HomeLayout::SeqEntry seq[HomeLayout::kMaxItems];
+
+    //a02 の所にフォルダを作る: [W] a01 [F:a02] a03 [V] a04 ...
+    const int f = HomeLayout::CreateFolder(1, "F");
+    check(f >= 0, "作る");
+    int n = HomeLayout::Sequence(seq, HomeLayout::kMaxItems);
+    eq(n, 8, "並びは8つ(アプリ1つがフォルダに替わっただけ)");
+    check(seq[2].type == ItemType::Folder && seq[2].index == f, "フォルダは a02 の位置");
+    check(seq[0].type == ItemType::Widget && seq[4].type == ItemType::Widget, "ウィジェットの位置は同じ");
+
+    //a03 をフォルダへ: [W] a01 [F:a02 a03] [V] a04 ...(Vは a04 の前のまま)
+    check(HomeLayout::MoveToFolder(2, f), "入れる");
+    n = HomeLayout::Sequence(seq, HomeLayout::kMaxItems);
+    eq(n, 7, "並びは7つ");
+    check(seq[3].type == ItemType::Widget && seq[4].type == ItemType::App && seq[4].index == 3,
+          "Vは a04 の前に残る");
+
+    //マス目では1x1
+    HomeLayout::Item items[HomeLayout::kMaxItems];
+    int pages = 0;
+    n = HomeLayout::Compute(3, items, HomeLayout::kMaxItems, &pages);
+    const HomeLayout::Item* fi = findItem(items, n, ItemType::Folder, f);
+    check(fi && fi->w == 1 && fi->h == 1, "フォルダは1マス");
+    //中だけを並べる
+    n = HomeLayout::ComputeFolder(f, 3, items, HomeLayout::kMaxItems, &pages);
+    eq(n, 2, "中は2つ");
+    check(items[0].type == ItemType::App && items[0].index == 1 && items[1].index == 2, "中は a02 a03");
+
+    //フォルダをトップで動かす(ウィジェットとも入れ替わる): [W] [F] a01 [V] a04 ...
+    check(HomeLayout::Move(ItemType::Folder, f, -1, 3), "フォルダを前へ");
+    n = HomeLayout::Sequence(seq, HomeLayout::kMaxItems);
+    check(seq[1].type == ItemType::Folder && seq[2].type == ItemType::App && seq[2].index == 0, "a01 と入れ替わる");
+    check(HomeLayout::MoveToFront(ItemType::Folder, f), "フォルダを先頭へ");
+    n = HomeLayout::Sequence(seq, HomeLayout::kMaxItems);
+    check(seq[0].type == ItemType::Folder, "フォルダが先頭");
+
+    //中のアプリを隠しても並びは同じ。全部隠すとフォルダが消え、後ろのウィジェットは残る
+    check(HomeLayout::HideApp(1), "中の a02 を隠す");
+    eq(HomeLayout::Sequence(seq, HomeLayout::kMaxItems), 7, "並びは同じ");
+    check(HomeLayout::HideApp(2), "中の a03 も隠す");
+    n = HomeLayout::Sequence(seq, HomeLayout::kMaxItems);
+    eq(n, 6, "フォルダがトップから消える");
+    check(seq[0].type == ItemType::Widget, "先頭はウィジェット(フォルダの後ろの項目の前)");
+    AppFunctions::SetHidden(1, false);
+    AppFunctions::SetHidden(2, false);
+
+    //AppGrid: フォルダを押すと中へ、戻るでトップのフォルダへ
+    TestGrid g(0, STATUSBAR_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT - STATUSBAR_HEIGHT - 28);
+    int launched = -1;
+    g.setOnLaunch([&launched](int i){ launched = i; });
+    g.layoutChanged();
+    g.showItem(ItemType::Folder, f);
+    HomeLayout::ItemType ft;
+    int fidx = -1;
+    check(g.focusedItem(ft, fidx) && ft == ItemType::Folder && fidx == f, "フォルダを選べる");
+    check(g.onFocusKey(FocusKey::Activate), "決定でフォルダを開く");
+    eq(g.openedFolder(), f, "開いている");
+    eq(launched, -1, "開くだけでアプリは起動しない");
+    check(!g.wantsFrameUpdate(), "フォルダの中にウィジェットは無い");
+    const Rect t1 = g.tileRect(1);
+    eq(g.hitTile(t1.x + 5, t1.y + 5), 2, "中の2つ目は a03");
+    OSData::touchX = t1.x + 5;
+    OSData::touchY = STATUSBAR_HEIGHT + t1.y + 5;
+    g.causeOnPressStart();
+    g.causeOnPressEnd();
+    eq(launched, 2, "中のアプリを押すと起動");
+    check(g.onFocusKey(FocusKey::Back), "戻るで閉じる");
+    eq(g.openedFolder(), -1, "トップへ戻る");
+    check(g.focusedItem(ft, fidx) && ft == ItemType::Folder && fidx == f, "閉じるとフォルダを選んでいる");
+    check(!g.onFocusKey(FocusKey::Back), "トップで戻るは使わない");
+
+    //タップで開く。長押しは中のアプリ(隠して戻したのでウィジェットWがフォルダの前にいる。選んでいる枠で場所を取る)
+    const Rect fr = g.focusRect();
+    eq(g.hitTile(fr.x + 5, fr.y + 5 - STATUSBAR_HEIGHT), -1, "フォルダのタイルはアプリではない");
+    OSData::touchX = fr.x + 5;
+    OSData::touchY = fr.y + 5;
+    g.causeOnPressStart();
+    g.causeOnPressEnd();
+    eq(g.openedFolder(), f, "タップで開く");
+    g.press();
+    AppGrid::LongPress lp;
+    check(g.takeLongPress(millis() + 10000, 600, lp) && lp.on_item && lp.type == ItemType::App && lp.index == g.hitTile(fr.x + 5, fr.y + 5 - STATUSBAR_HEIGHT) && lp.index >= 0,
+          "中で長押しするとアプリ");
+    g.release();
+
+    //中を全部出すとトップへ戻る
+    HomeLayout::RemoveFromFolder(1);
+    HomeLayout::RemoveFromFolder(2);
+    eq(g.openedFolder(), -1, "空になったらトップへ");
+    eq(AppFunctions::FolderCount(), 0, "フォルダは消える");
+    HomeLayout::Test::Reset();
+    AppFunctions::ResetLayout();
+}
+
 int main(){
     testLayout();
     testPersist();
     testGrid();
+    testFolders();
     testTodoCache();
     testAgenda();
     printf("\n%s (失敗 %d 件)\n", failures == 0 ? "全て成功" : "失敗あり", failures);

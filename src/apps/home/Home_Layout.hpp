@@ -8,9 +8,10 @@ class HomeWidget;
 
 // ホーム画面(ランチャ)の並び: アプリのタイルとウィジェットを1本の並びにして、2列のマス目へ詰める。
 //
-// - アプリの並び・隠した印は今までどおり AppFunctions(/sys/launcher.cfg)が持つ。
-//   ウィジェットは「見えているアプリの何番目の前に置くか」(anchor)だけを持ち、/sys/home.cfg に書く。
-//   同じ anchor のウィジェットは配列の順。見えているアプリの数より大きい anchor は最後に並ぶ
+// - アプリの並び・隠した印・フォルダは今までどおり AppFunctions(/sys/launcher.cfg)が持つ。
+//   ウィジェットは「トップの項目(見えているアプリとフォルダ。AppFunctions::TopAt)の何番目の前に置くか」(anchor)
+//   だけを持ち、/sys/home.cfg に書く。同じ anchor のウィジェットは配列の順。トップの数より大きい anchor は最後に並ぶ
+// - フォルダを開いている間は、そのフォルダの中のアプリだけを並べる(ComputeFolder。ウィジェットは置かない)
 // - 大きさはマス目の数(1x1 = アプリのタイル1枚 / 2x1 = 横いっぱい / 2x2)
 // - 詰め方(Compute): 並びの順に、直前に置いたものの位置から先で最初に入る所へ置く。前に空いた所は
 //   埋め戻さない(並びの順と見た目の順を揃えるため)。ページに入らなければ次のページへ
@@ -49,10 +50,10 @@ namespace HomeLayout {
     bool HasKind(Kind k);
 
     // ---- 並び(アプリとウィジェットを混ぜた順) ----
-    enum class ItemType : uint8_t { App, Widget };
+    enum class ItemType : uint8_t { App, Widget, Folder };
     struct SeqEntry {
         ItemType type;
-        int8_t index;   // App: 登録簿の番号 / Widget: placed[] の番号
+        int8_t index;   // App: 登録簿の番号 / Widget: placed[] の番号 / Folder: フォルダの番号
     };
     // 今の並びを out へ(長さを返す)
     int Sequence(SeqEntry* out, int max);
@@ -67,19 +68,26 @@ namespace HomeLayout {
     };
     // rows = 1ページの行数。並べた数を返し、ページ数を *pages へ(最低1)
     int Compute(int rows, Item* out, int max, int* pages);
+    // フォルダの中の見えているアプリを並べる(全部1x1)
+    int ComputeFolder(int folder, int rows, Item* out, int max, int* pages);
 
     // ---- 操作(変わったら home.cfg / launcher.cfg へ書いて true) ----
     // 並びの seq_pos の前(並びの長さなら最後)にウィジェットを足す。置いた placed[] の番号(失敗は-1)
     int Add(Kind kind, uint8_t w, uint8_t h, int seq_pos);
     bool Remove(int widget_index);
     bool Resize(int widget_index, uint8_t w, uint8_t h);
-    // 並びの中で1つ前/後ろへ(隣がアプリ同士ならアプリの並びを入れ替える)。rows(1ページの行数)を渡すと、
+    // 並びの中で1つ前/後ろへ(隣がアプリ/フォルダ同士ならアプリの並びを入れ替える)。rows(1ページの行数)を渡すと、
     // 詰め方の都合で見た目が変わらないときは見た目が動くまで続けて進める。
     // ウィジェットは並べ直すと placed[] の番号が変わるので、動かした後の番号を *new_index へ
     bool Move(ItemType type, int index, int delta, int rows = 0, int* new_index = nullptr);
     bool MoveToFront(ItemType type, int index);
-    // アプリを隠す(後ろのウィジェットの位置がずれないようにしてから AppFunctions::SetHidden)
+    // アプリを隠す(AppFunctions::SetHidden の後、ウィジェットが同じ項目の前に残るよう anchor を付け直す)
     bool HideApp(int app_index);
+    // フォルダの操作(AppFunctions の同じ名前のもの + ウィジェットの anchor の付け直し)
+    int  CreateFolder(int app_index, const char* name);
+    bool MoveToFolder(int app_index, int folder);
+    bool RemoveFromFolder(int app_index);
+    bool DissolveFolder(int folder);
 
     // 置いたもの・並びが変わるたびに増える(ランチャが詰め直す合図)
     uint32_t Revision();

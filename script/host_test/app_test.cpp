@@ -470,6 +470,125 @@ int main(){
         eq(grid.getPage(), 0, "layout: 6個目(見えているのは5個)は1ページ目");
     }
 
+    // ---- ランチャのフォルダ ----
+    {
+        HostSd::files.clear();
+        OSData::SD_usable = true;
+        AppFunctions::Clear();
+        const char* names[] = { "A", "B", "C", "D", "E", "F" };
+        for(const char* n : names) AppFunctions::Register(n, IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        AppFunctions::LoadLayout();
+        AppFunctions::TopItem t;
+        eq(AppFunctions::TopCount(), 6, "folder: 最初はトップに6つ");
+        eq(AppFunctions::FolderCount(), 0, "folder: 最初はフォルダ無し");
+
+        //Bの位置にフォルダを作る: A [G:B] C D E F
+        const int g = AppFunctions::CreateFolder("  ゲーム ", 1);
+        check(g >= 0, "folder: 作れる");
+        check(strcmp(AppFunctions::FolderName(g), "ゲーム") == 0, "folder: 名前の前後の空白は落とす");
+        eq(AppFunctions::TopCount(), 6, "folder: 作ってもトップの数は同じ");
+        check(AppFunctions::TopAt(1, t) && t.is_folder && t.index == g, "folder: Bの位置にフォルダ");
+        eq(AppFunctions::TopPosition(false, 1), -1, "folder: Bはトップに無い");
+        eq(AppFunctions::FolderOf(1), g, "folder: Bはフォルダの中");
+
+        //Eを入れる(フォルダの最後へ): A [G:B E] C D F
+        check(AppFunctions::MoveToFolder(4, g), "folder: Eを入れる");
+        check(!AppFunctions::MoveToFolder(4, g), "folder: 同じフォルダへは変わらない");
+        eq(AppFunctions::FolderAppCount(g), 2, "folder: 中は2つ");
+        eq(AppFunctions::FolderAppAt(g, 1), 4, "folder: Eは2番目");
+        eq(AppFunctions::TopCount(), 5, "folder: トップは5つ");
+        check(AppFunctions::TopAt(3, t) && !t.is_folder && t.index == 3, "folder: トップの4番目はD");
+        eq(AppFunctions::VisibleCount(), 6, "folder: VisibleCountはフォルダの中も数える");
+
+        //フォルダの中で動かす(トップは変わらない)
+        check(AppFunctions::MoveApp(4, -1), "folder: 中でEを前へ");
+        eq(AppFunctions::FolderAppAt(g, 0), 4, "folder: Eが中の先頭");
+        check(!AppFunctions::MoveApp(4, -1), "folder: 中の先頭より前へは動かない(外へは出ない)");
+        check(AppFunctions::TopAt(1, t) && t.is_folder, "folder: フォルダの位置は同じ");
+
+        //トップのアプリはフォルダをまとめて越える: C を前へ → A C [G] D F
+        check(AppFunctions::MoveApp(2, -1), "folder: Cを前へ");
+        check(AppFunctions::TopAt(1, t) && !t.is_folder && t.index == 2, "folder: Cが2番目");
+        check(AppFunctions::TopAt(2, t) && t.is_folder, "folder: フォルダが3番目");
+        //フォルダを動かす: [G] A C D F
+        check(AppFunctions::MoveFolderToFront(g), "folder: フォルダを先頭へ");
+        check(AppFunctions::TopAt(0, t) && t.is_folder, "folder: フォルダが先頭");
+        check(AppFunctions::MoveFolder(g, +2), "folder: フォルダを2つ後ろへ");
+        eq(AppFunctions::TopPosition(true, g), 2, "folder: フォルダが3番目");    // A C [G] D F
+        eq(AppFunctions::FolderAppAt(g, 1), 1, "folder: 動かしても中身はそのまま");
+
+        //書いて読み直す(もう1つフォルダを作ってから)
+        const int h = AppFunctions::CreateFolder("", 5);                         // A C [G:E B] D [H:F]
+        check(h >= 0 && h != g, "folder: 2つ目");
+        check(strcmp(AppFunctions::FolderName(h), "フォルダ") == 0, "folder: 空の名前は既定");
+        check(AppFunctions::SetHidden(1, true), "folder: 中のBを隠す");
+        eq(AppFunctions::FolderAppCount(g), 1, "folder: 隠すと中の数が減る");
+        const std::string saved = HostSd::files["/sys/launcher.cfg"];
+        check(saved.find("folder = ゲーム\nin = E\nin-hidden = B\n") != std::string::npos, "folder: launcher.cfgの形");
+        AppFunctions::Clear();
+        for(const char* n : names) AppFunctions::Register(n, IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        AppFunctions::LoadLayout();
+        eq(AppFunctions::FolderCount(), 2, "folder: 読み直し フォルダ2つ");
+        eq(AppFunctions::TopCount(), 5, "folder: 読み直し トップ5つ");
+        check(AppFunctions::TopAt(2, t) && t.is_folder && strcmp(AppFunctions::FolderName(t.index), "ゲーム") == 0,
+              "folder: 読み直し ゲームが3番目");
+        const int g2 = t.index;
+        eq(AppFunctions::FolderAppAt(g2, 0), 4, "folder: 読み直し 中はE");
+        check(AppFunctions::IsHidden(1) && AppFunctions::FolderOf(1) == g2, "folder: 読み直し 隠したBも中");
+
+        //中を全部隠すとトップに出ない。表示し直すと戻る
+        check(AppFunctions::SetHidden(4, true), "folder: Eも隠す");
+        eq(AppFunctions::TopCount(), 4, "folder: 全部隠したフォルダはトップに出ない");
+        eq(AppFunctions::FolderCount(), 2, "folder: フォルダ自体は残る");
+        AppFunctions::SetHidden(4, false);
+        AppFunctions::SetHidden(1, false);
+        eq(AppFunctions::TopPosition(true, g2), 2, "folder: 表示し直すと元の位置");
+
+        //出す: フォルダのすぐ後ろへ。最後の1つを出すとフォルダが消える
+        check(AppFunctions::RemoveFromFolder(4), "folder: Eを出す");
+        eq(AppFunctions::TopPosition(false, 4), 3, "folder: Eはフォルダのすぐ後ろ");
+        check(AppFunctions::RemoveFromFolder(1), "folder: Bを出す");
+        check(!AppFunctions::FolderExists(g2), "folder: 空になったフォルダは消える");
+        eq(AppFunctions::FolderCount(), 1, "folder: 残りは1つ");
+
+        //解除: 中のアプリはその場に出る
+        int hf = -1;
+        for(int f = 0; f < AppFunctions::kMaxFolders; f++) if(AppFunctions::FolderExists(f)) hf = f;
+        const int hp = AppFunctions::TopPosition(true, hf);
+        check(AppFunctions::RenameFolder(hf, "道具"), "folder: 名前を変える");
+        check(!AppFunctions::RenameFolder(hf, "道具"), "folder: 同じ名前なら変わらない");
+        check(AppFunctions::DissolveFolder(hf), "folder: 解除");
+        eq(AppFunctions::FolderCount(), 0, "folder: 解除で無くなる");
+        eq(AppFunctions::TopPosition(false, 5), hp, "folder: 中のFはその場に出る");
+
+        //上限
+        for(int i = 0; i < AppFunctions::kMaxFolders && i < 6; i++) AppFunctions::CreateFolder("x", i);
+        eq(AppFunctions::FolderCount(), 6, "folder: 6つ作れる");
+        eq(AppFunctions::TopCount(), 6, "folder: 1つずつ入れたのでトップの数は同じ");
+
+        //登録簿から消えると中が詰まり、空のフォルダは消える
+        AppFunctions::ResetLayout();
+        const int k = AppFunctions::CreateFolder("k", 2);
+        AppFunctions::MoveToFolder(3, k);                                          // A B [k:C D] E F
+        check(AppFunctions::Unregister(2), "folder: Cを消す");
+        eq(AppFunctions::FolderAppAt(k, 0), 2, "folder: 中のDのindexが詰まる");
+        check(AppFunctions::Unregister(2), "folder: Dも消す");
+        eq(AppFunctions::FolderCount(), 0, "folder: 空になったら消える");
+        eq(AppFunctions::TopCount(), 4, "folder: トップは4つ");
+
+        //手で書いたファイル: フォルダの中身が離れていても寄せる・中身の無いフォルダは捨てる
+        AppFunctions::Clear();
+        for(const char* n : names) AppFunctions::Register(n, IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        HostSd::files["/sys/launcher.cfg"] = "folder = 空\nfolder = X\nin = B\napp = A\nin = C\nfolder = Y\nin = Z\n";
+        AppFunctions::LoadLayout();
+        eq(AppFunctions::FolderCount(), 1, "folder: 中身の無いフォルダは捨てる");
+        check(AppFunctions::TopAt(0, t) && t.is_folder && AppFunctions::FolderAppCount(t.index) == 1,
+              "folder: app の行の後の in はフォルダの外");
+        eq(AppFunctions::TopPosition(false, 2), 2, "folder: Cはトップ(Aの後ろ)");
+        HostSd::files.erase("/sys/launcher.cfg");
+        AppFunctions::ResetLayout();
+    }
+
     // ---- アプリストアの入れ替え: FindByArg / Refresh / Unregister ----
     {
         AppFunctions::Clear();

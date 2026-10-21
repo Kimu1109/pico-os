@@ -18,6 +18,9 @@ class HomeWidget;
 //
 // 画面に入りきらない数のアプリはページ送りで見せる。
 //
+// フォルダ(AppFunctions のフォルダ)はアプリと同じ1マスのタイルで、中の先頭4つのアイコンを縮めて描く。
+// 押すとグリッドがそのフォルダの中身に入れ替わる(openFolder。閉じるのは closeFolder、キーの戻る)。
+//
 // ホーム画面のウィジェット(時計・音楽・予定・TODO)もアプリのタイルと同じ並びに混ざる
 // (HomeLayout が並びとマス目への詰め方を持ち、描き方は HomeWidget)。ウィジェットも
 // 子ウィジェットを作らず、マス目の矩形を渡して直接描かせる。
@@ -41,6 +44,8 @@ class AppGrid : public Widget {
         static constexpr int kMaxNameBytes = 64;
 
         int page_ = 0;
+        // 開いているフォルダ(-1=トップ)。中が空になったら ensureLayout() がトップへ戻す
+        mutable int folder_ = -1;
 
         // ---- 並べた結果(HomeLayout::Compute)。並び・大きさ・行数が変わったときだけ作り直す ----
         mutable HomeLayout::Item items_[HomeLayout::kMaxItems];
@@ -88,6 +93,10 @@ class AppGrid : public Widget {
         // 読んで描き(失敗時はentry.iconへフォールバック)、空ならentry.icon
         // (組み込みIconID)をそのまま描く。x,yはkIconPx四方のアイコン枠の左上
         void drawIcon(const AppEntry& entry, int x, int y, int color);
+        // フォルダのタイルのアイコン(kIconPx四方の角の丸い枠に、中の先頭4つを16pxで)
+        void drawFolderIcon(int folder, int x, int y, bool pressed);
+        // アプリのアイコンを box 四方へ縮めて描く(.pimgは間引き、組み込みは16px)
+        void drawSmallIcon(const AppEntry& entry, int x, int y, int box, int color);
 
     public:
         AppGrid(int16_t x, int16_t y, int16_t w, int16_t h){
@@ -131,14 +140,14 @@ class AppGrid : public Widget {
         bool prevPage();
 
         // ローカル座標にあるタイルのアプリindex(登録簿の番号)を返す。
-        // アプリのタイルの外(ウィジェット・空き)なら-1
+        // アプリのタイルの外(ウィジェット・フォルダ・空き)なら-1
         int hitTile(int local_x, int local_y) const;
 
         // 長押しされた項目
         struct LongPress {
             bool on_item = false;               // 偽なら空いた所(足すなら並びの最後へ)
             HomeLayout::ItemType type = HomeLayout::ItemType::App;
-            int index = -1;                     // App: 登録簿の番号 / Widget: HomeLayout::placed の番号
+            int index = -1;                     // App: 登録簿の番号 / Widget: HomeLayout::placed の番号 / Folder: フォルダの番号
         };
         // 押したまま long_ms 経ったら1回だけ真を返す。返した項目は離しても起動しない。
         // ランチャ(HomeScene)が毎フレーム呼んでメニューを出す
@@ -152,6 +161,11 @@ class AppGrid : public Widget {
         void showApp(int app_index){ showItem(HomeLayout::ItemType::App, app_index); }
         // 並び・隠したアプリ・ウィジェットが変わった後に呼ぶ(ページと選んでいる項目を丸め直して描き直す)
         void layoutChanged();
+
+        // フォルダを開く/閉じる(閉じるとトップのそのフォルダのページへ戻る)。開いているフォルダ(-1=トップ)
+        bool openFolder(int folder);
+        void closeFolder();
+        int openedFolder() const { ensureLayout(); return folder_; }
 
         void setOnLaunch(std::function<void(int app_index)> callback){
             this->on_launch_ = callback;

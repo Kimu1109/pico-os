@@ -1,14 +1,14 @@
 {{ $current := . }}
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-brand">
-    <a href="{{ "/" | relLangURL }}">pico-os <span>Lua API</span></a>
+    <a href="{{ .Site.Home.RelPermalink }}">pico-os <span>Lua API</span></a>
   </div>
   <div class="sidebar-search">
     <input type="search" id="nav-filter" placeholder="ページを検索" autocomplete="off">
   </div>
   <ul class="nav-tree">
     <li class="nav-page top{{ if $current.IsHome }} active{{ end }}">
-      <a href="{{ "/" | relLangURL }}">ホーム</a>
+      <a href="{{ .Site.Home.RelPermalink }}">ホーム</a>
     </li>
     {{ range .Site.Sections.ByWeight }}
     <li class="nav-section">

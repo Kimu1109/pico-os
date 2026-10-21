@@ -7,6 +7,7 @@
 
 #include "monocypher.h"
 #include "util/Base64.hpp"
+#include "crypto/Argon2_Split.hpp"
 #include "crypto/Device_Key.hpp"
 #include "crypto/Secret_Cipher.hpp"
 
@@ -85,10 +86,10 @@ namespace {
         crypto_wipe(&msg[0], msg.size());
     }
 
+    // 作業領域(blocks KiB)は Argon2Split が1KiBずつ確保する。crypto_argon2() に1つの連続した塊を
+    // 渡していた頃は、空きの少ない実機で連続64KiBが取れなくなると再起動まで失敗し続けた(Argon2_Split.hpp)
     bool PasswordKey(uint8_t key[32], const char* password, const uint8_t salt[kSalt],
                      uint32_t blocks, uint32_t passes) {
-        void* work = malloc((size_t)blocks * 1024);
-        if (!work) return false;
         crypto_argon2_config cfg;
         cfg.algorithm = CRYPTO_ARGON2_ID;
         cfg.nb_blocks = blocks;
@@ -99,10 +100,7 @@ namespace {
         in.pass_size = (uint32_t)strlen(password);
         in.salt = salt;
         in.salt_size = kSalt;
-        crypto_argon2(key, 32, work, cfg, in, crypto_argon2_no_extras);
-        crypto_wipe(work, (size_t)blocks * 1024);
-        free(work);
-        return true;
+        return Argon2Split::Hash(key, 32, cfg, in, crypto_argon2_no_extras);
     }
 }
 

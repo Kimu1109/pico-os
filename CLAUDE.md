@@ -52,7 +52,7 @@ src/
   gui/core/  GFX(合成と転送)・Font・Widget・Focus・Scene・Keyboard・Error
   gui/widgets/  汎用部品と基底。apps/ dialogs/ keyboards/ interfaces/ systems/ は下の「ウィジェットの置き場所」
   gui/scenes/   機能の中身を持たない画面(設定・時計・ファイル・Lua等)
-  apps/<機能>/  1フォルダ=1機能(browser calculator calendar chat dict firmware gb home music ssh store texteditor todo video)。
+  apps/<機能>/  1フォルダ=1機能(browser calculator calendar chat dict firmware gb home mail music ssh store texteditor todo video)。
                 直下=中身、ui/=その機能専用の部品、*Scene=画面
   lua/       Lua<->C++バインディング(LuaEngine*、builtin/*.lua、LuaAppScanner、デバッガ)
   iso/ sound/ net/ crypto/ ime/ storage/ task/ util/   機能のライブラリ(util/ は機能を持たない部品だけ)
@@ -175,7 +175,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `battery-touch.md` | バッテリー残量・音割れ対策・タッチの補正とノイズ抑制 |
 | `security-wifi.md` | 認証情報の暗号化・端末ごとの鍵(OTP)・保存済みWi-Fi・新規接続 |
 | `browser-net.md` | MarkdownView・文書キャッシュ・HTTP/HTTPS・取得〜表示・サーバ情報・検索・マニフェスト |
-| `apps-online.md` | カレンダー(iCalendar)・チャット・TODO(Todoist)・Spotify・ニュース(XML) |
+| `apps-online.md` | カレンダー(iCalendar)・チャット・TODO(Todoist)・メール(IMAP)・Spotify・ニュース(XML) |
 | `apps-local.md` | テキストエディタ・SSH・ファイルビューワー・電卓・時計 |
 | `sound.md` | 音声出力・マイク・ステレオ・曲データ(MML)・チップチューン・ゲームボーイの音・WAV・出力周波数・ミュージック・動画(.pvid) |
 | `gameboy.md` | ゲームボーイ |

@@ -214,7 +214,7 @@ host_test(file_ops_test GROUP core)
 host_test(http_test GROUP core)
 host_test(discovery_test GROUP core)
 
-# --- apps: カレンダー・ファイル検索・チャット・TODO ---
+# --- apps: カレンダー・ファイル検索・チャット・TODO・メール ---
 host_test(ical_test GROUP apps)
 host_test(calendar_scene_test GROUP apps)
 host_test(file_search_test GROUP apps)
@@ -224,6 +224,8 @@ host_test(chat_scene_test GROUP apps)
 host_test(todoist_proto_test GROUP apps)
 host_test(xml_reader_test GROUP apps)
 host_test(todo_test GROUP apps)
+host_test(mail_proto_test GROUP apps)
+host_test(mail_scene_test GROUP apps)
 
 # --- media: ゲームボーイ・音・マイク・曲・動画 ---
 host_test(gb_emu_test GROUP media)

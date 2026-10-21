@@ -15,7 +15,7 @@
 | 5 | Luaアプリ | ✅ 既知の欠けは無い(`pico.game`・アプリストアまで)。実機のRAM/Flashの実測は未 | `lua.md` `lua-api.md` `lua-apps.md` |
 | 6 | PC/Web動作対応 | ✅ 完了 | `pc-web.md`・`pc/README.md` |
 | 7 | 標準アプリ開発 | ✅ 完了 | `apps-local.md` `browser-net.md` |
-| 8 | セカンダリアプリ開発 | 🔨 ゾンビTDの本体とPICO SHOOTINGが残り | `apps-online.md` `apps-local.md` `lua-apps.md` `iso.md` |
+| 8 | セカンダリアプリ開発 | 🔨 ゾンビTDの本体とPICO SHOOTINGが残り(メールは受信だけ) | `apps-online.md` `apps-local.md` `lua-apps.md` `iso.md` |
 | 9 | GameBoyエミュ | 🔨 PCで動作(音・途中保存・1MBまでのROM)。実機での速さは未確認 | `gameboy.md` |
 | 10 | 外部コントローラー | 🔨 USBシリアル・Web・Wiiクラシック(実物は未確認)。キーボードの本体への直結は未 | `input.md` |
 | 11 | Chiptuneを再生 | 🔨 音源・MML・GBの音・WAV・動画・録音までPCで動作。実機は未確認 | `sound.md` |
@@ -225,6 +225,15 @@
   - [x] APIトークンの暗号化保存
   - [x] 時刻つきの期限をOSの通知で知らせる(アプリを閉じていても)
   - [ ] 実機での確認
+- [x] メール(IMAPの受信ビュー)
+  - [x] IMAPS(993)でログインし、受信箱の新しい20通を一覧(未読/既読・差出人・件名・日時)
+  - [x] 本文(multipartからtext/plain、無ければHTMLを文字に。base64/quoted-printable)と添付の名前
+  - [x] 日本語の文字コード(ISO-2022-JP / Shift_JIS / EUC-JP / UTF-8)とRFC 2047のヘッダー
+  - [x] 開いたら既読(設定で切れる)・数分ごとの新着の確認
+  - [x] パスワードの暗号化保存
+  - [ ] 送信・返信・削除・フォルダの切り替え・古いメールの続き
+  - [ ] OAuth(Outlook.com・Gmailの普段のパスワード)
+  - [ ] 実機・本物のメールサーバでの確認
 - [x] Spotifyリモコン(Luaアプリ)
   - [x] 再生/停止・次へ・前へ・シーク・音量・シャッフル・リピート・端末の切り替え
   - [x] ジャケット画像(JPEG)

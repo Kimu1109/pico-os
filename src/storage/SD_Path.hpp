@@ -93,6 +93,8 @@ namespace PICO_Path {
             constexpr const char* SYS_DISPLAY_CFG = "/sys/display.cfg";
             // タッチ位置の補正("a"〜"f"の6つの小数)。TouchCalibFunctions参照
             constexpr const char* SYS_TOUCH_CFG = "/sys/touch.cfg";
+            // CardKB2の読み方("mode = i2c | uart")。CardKbFunctions参照
+            constexpr const char* SYS_CARDKB_CFG = "/sys/cardkb.cfg";
             // SSHアプリ("target = user@host:port" / "font = small|large")。SshScene参照
             constexpr const char* SYS_SSH_CFG = "/sys/ssh.cfg";
             // アラーム("alarm1 = 07:30,daily,on" ...)。AlarmFunctions参照

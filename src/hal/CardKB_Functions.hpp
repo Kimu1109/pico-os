@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstddef>
 #include "system/KeyInput_Functions.hpp"
 
 // CardKB2(M5Stack Unit CardKB2。42キーのQWERTYをI2Cで読む小型キーボード)の入力元。
@@ -21,6 +22,12 @@
 //   一応カーソルキーとして読むが、CardKB2では来ない
 // - UARTモード(Fn+Sym+2)に切り替わっていると何も返らない(接続されていない扱いになる)
 //
+// ---- UARTモード(/sys/cardkb.cfg に "mode = uart" と書いたときだけ) ----
+// CardKB2をFn+Sym+2でUARTモードにし、CardKB2のTX(Groveの白)を GP7(CARDKB_UART_RX)へ。
+// 115200bpsをSerialPIOで受け、押した/離したのフレームを CardKbUart(hal/CardKB_Uart.hpp)が打鍵へ直す。
+// I2Cモードと違い Fn+D/Z/X/C の矢印・Fn+1のEsc・Fn+英字のCtrlが使える。このときI2Cの呼びかけはしない
+// (同じバスのWiiクラシックは自分でI2Cを始める)。設定は起動時に読むだけ(変えたら再起動)。
+//
 // ---- 接続の検出 ----
 // 未接続の間は kProbeIntervalMs ごとにアドレスへ呼びかけ、ACKがあれば接続。
 // 接続中は kPollIntervalMs ごとに1バイト読み、読み出し自体が kMissLimit 回続けて失敗したら外れた扱い。
@@ -34,13 +41,21 @@ namespace CardKbFunctions {
     constexpr int           kMissLimit       = 3;
     constexpr int           kMaxReadsPerUpdate = 4;
 
+    constexpr unsigned long kUartBaud              = 115200;
+    constexpr size_t        kUartFifoBytes         = 64;    // 12フレーム。毎フレーム読むので十分
+    constexpr int           kUartMaxBytesPerUpdate = 128;
+
+    enum class Mode : uint8_t { I2C, Uart };
+
     void Setup();
     // loop()の先頭付近で毎フレーム(PadFunctions::Update()の後)
     void Update();
     // テスト用: 時刻を外から与える版
     void UpdateAt(unsigned long now_ms);
 
+    // I2C: 今つながっているか / UART: 正しいフレームを1つでも受け取ったか(抜けたことは分からない)
     bool IsConnected();
+    Mode GetMode();
 
     // 1バイト → 打鍵。打鍵として扱えない値(0=押していない、範囲外)はfalse
     bool Decode(uint8_t raw, KeyInputFunctions::Event& out);

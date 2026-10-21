@@ -93,3 +93,8 @@
 #define MIC_I2S_BCLK    26
 #define MIC_I2S_LRCLK   27  // = MIC_I2S_BCLK + 1(ソフトからは指定しない。配線の控え)
 #define MIC_I2S_DATA    28  // SPH0645のDOUT
+
+// --- CardKB2のUARTモードの受信(/sys/cardkb.cfg で mode = uart のときだけ使う) ---
+// CardKB2のTX(Groveの白=SCLの位置)をつなぐ。ハードのUARTの割り当てに空きが合わないので、
+// arduino-picoのSerialPIO(PIOで作るUART)で受ける。I2Cモード(既定)ではGP0/GP1のI2C0
+#define CARDKB_UART_RX  7

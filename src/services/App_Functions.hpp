@@ -143,6 +143,15 @@ namespace AppFunctions {
     // 名前の綴りミスを呼び出し側で検知できるようにするための戻り値)
     bool LaunchByName(const char* name);
 
+    // ===== 起動時に開く画面(PCビルドの --app/--scene、Webの ?app=&scene=。pc/README.md) =====
+    // nameのアプリを起動し、そのアプリへ「最初に開いてほしい画面」の名前sceneを預ける(空なら預けない)。
+    // 画面の名前の意味はアプリごとに決める(スクリーンショット用に、撮る画面まで自動で進めるため)
+    bool LaunchByName(const char* name, const char* scene);
+    // 預けた画面の名前を、起動されたアプリが受け取る(1回きり)。keyはアプリのarg(Luaアプリは
+    // main.luaのパス)か名前で、預けた先と一致したときだけtrue。次のLaunch()で預かりは捨てる。
+    // Luaアプリは LuaScene が受け取り pico.launch_reason() の tag="scene", data=画面の名前 で渡す
+    bool TakeLaunchScene(const char* key, FixedString<PICO_STR_S>& out);
+
     // argの親ディレクトリ(正規化済み)がdirに一致するアプリを探し、その名前をoutへ。
     // Luaアプリ(argがスクリプトのパス)を、そのディレクトリ(LuaEngineのapp_dir)から引く用途。
     // 通知の送り主→タップで起動するアプリ、の対応に使う(NotificationFunctions)

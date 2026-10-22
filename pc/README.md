@@ -67,6 +67,29 @@ SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --shot shot.ppm 40
 フォールバックのパッチを当てて緩和はしてあるが、`offscreen`を使えばそもそも
 毎フレームの作り直し自体が起きない)。
 
+### 起動時に開くアプリ
+
+`--app 名前` で、起動したらランチャの名前のアプリを開いておける(ホーム画面の上へ開くので、戻ればいつものホーム画面)。
+`--scene 画面` を足すと、そのアプリへ「最初に開く画面」を頼める。画面写真を撮るときに、
+撮りたい画面までアプリ自身が進む(ホーム画面の並びや画面の座標に頼る `--tap` を並べなくてよい)。
+Webでは URLのクエリ `?app=テトリス&scene=play` で同じことができる(環境変数 `PICOOS_START_APP` / `PICOOS_START_SCENE`)。
+
+```sh
+SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --app テトリス --scene play --shot tetris.ppm 500
+```
+
+画面の名前の意味はアプリごとに決める。今あるもの:
+
+| アプリ | `--scene` | 開く画面 |
+|---|---|---|
+| テトリス | `play` | タイトルを飛ばしてすぐ始める |
+| ブロック | `nature` | ワールドAへ「自然」のワールドを作って入る(あれば読む) |
+
+足すときは、C++製アプリは `onEnter()` で `AppFunctions::TakeLaunchScene(名前, out)` を読み、
+Luaアプリは `pico.launch_reason()` が `tag == "scene"`(`data` が画面の名前)を返したら進める。
+**実機では使わない口**なので、どちらも受け取れなかったら(ランチャから開いたら)いつもの画面のまま。
+撮る一覧は `script/web_shots.sh`。
+
 ## ブラウザで動かす (WebAssembly)
 
 ### 必要なもの
@@ -130,6 +153,8 @@ index.html?wifi=disconnected&rssi=-85
 | `render` | `PICOOS_RENDER_DRIVER` (`gl` を指定するとGPU描画。既定はソフトウェア描画。下記) |
 | `spi_wait` | `PICOOS_SPI_WAIT` (`on` / `off`。液晶転送の待ち。Webの既定は`off`。下記「実機と違うところ」) |
 | `sound` | `PICOOS_SOUND_STATE` (`auto` / `connected` / `disconnected`。音声のアンプの有無。下記「実機と違うところ」) |
+| `app` | `PICOOS_START_APP` (起動時に開くアプリの名前。上記「起動時に開くアプリ」) |
+| `scene` | `PICOOS_START_SCENE` (そのアプリで最初に開く画面) |
 
 `PICOOS_` で始まるキーはそのまま環境変数名として扱われるので、
 将来増えたものは表に足さなくても `?PICOOS_XXX=...` で渡せる。

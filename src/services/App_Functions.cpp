@@ -22,6 +22,10 @@ namespace {
         layout_revision++;
     }
 
+    // LaunchByName(name, scene)で預けた画面の名前と、預けた先(登録簿のindex。-1=無し)
+    int launch_scene_app = -1;
+    FixedString<PICO_STR_S> launch_scene;
+
     // 中にアプリが1つも無いフォルダを無くす
     void DropEmptyFolders(){
         using namespace AppFunctions;
@@ -121,6 +125,7 @@ bool AppFunctions::Refresh(int index, const char* name, const LuaPermissions& pe
 
 bool AppFunctions::Unregister(int index){
     if(index < 0 || index >= app_count) return false;
+    launch_scene_app = -1;
     for(int i = index; i + 1 < app_count; i++) apps[i] = apps[i + 1];
     apps[app_count - 1] = AppEntry{};
 
@@ -152,6 +157,8 @@ const AppEntry* AppFunctions::Get(int index){
 }
 
 void AppFunctions::Launch(int index){
+    //前の起動で預けた画面は、受け取られなかったら別の起動へ持ち越さない
+    launch_scene_app = -1;
     const AppEntry* entry = Get(index);
     if(!entry){
         LOG_SYS_WARN("App Launch: 範囲外のindexです (%d)", index);
@@ -198,6 +205,32 @@ bool AppFunctions::LaunchByName(const char* name){
     return false;
 }
 
+bool AppFunctions::LaunchByName(const char* name, const char* scene){
+    if(!LaunchByName(name)) return false;
+    if(!scene || scene[0] == '\0') return true;
+    for(int i = 0; i < app_count; i++){
+        if(apps[i].name != name) continue;
+        if(!launch_scene.assign(scene)){
+            LOG_SYS_WARN("App LaunchByName: 画面の名前が長すぎます (%s)", scene);
+            return true;
+        }
+        launch_scene_app = i;
+        break;
+    }
+    return true;
+}
+
+bool AppFunctions::TakeLaunchScene(const char* key, FixedString<PICO_STR_S>& out){
+    if(!key || key[0] == '\0') return false;
+    const AppEntry* entry = Get(launch_scene_app);
+    if(!entry) return false;
+    const bool match = entry->name == key || (!entry->arg.empty() && entry->arg == key);
+    if(!match) return false;
+    out.assign(launch_scene.c_str());
+    launch_scene_app = -1;
+    return true;
+}
+
 bool AppFunctions::NameForDir(const char* dir, FixedString<PICO_STR_M>& out){
     if(!dir || dir[0] == '\0') return false;
     for(int i = 0; i < app_count; i++){
@@ -218,6 +251,7 @@ void AppFunctions::Clear(){
         apps[i] = AppEntry{};
     }
     app_count = 0;
+    launch_scene_app = -1;
     ResetOrder();
 }
 

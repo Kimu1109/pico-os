@@ -628,6 +628,35 @@ int main(){
         HostSd::files.erase("/sys/launcher.cfg");
     }
 
+    // ===== 起動時に開く画面(LaunchByName(name, scene) / TakeLaunchScene) =====
+    {
+        AppFunctions::Clear();
+        AppFunctions::Register("時計", IconID::AppBox, &AppFunctions::MakeScene<DummyScene>);
+        AppFunctions::Register("テトリス", IconID::AppBox, &AppFunctions::MakeScene<DummyScene>,
+                               "/lua/apps/テトリス/main.lua");
+        FixedString<PICO_STR_S> scene;
+
+        check(AppFunctions::LaunchByName("テトリス", "play"), "scene: 起動できる");
+        check(!AppFunctions::TakeLaunchScene("/lua/apps/他/main.lua", scene), "scene: 別のアプリは受け取れない");
+        check(AppFunctions::TakeLaunchScene("/lua/apps/テトリス/main.lua", scene) && scene == "play",
+              "scene: argで受け取れる");
+        check(!AppFunctions::TakeLaunchScene("/lua/apps/テトリス/main.lua", scene), "scene: 1回きり");
+
+        check(AppFunctions::LaunchByName("時計", "alarm"), "scene: C++製アプリも起動できる");
+        check(AppFunctions::TakeLaunchScene("時計", scene) && scene == "alarm", "scene: 名前で受け取れる");
+
+        //受け取られないまま別の起動があったら持ち越さない
+        AppFunctions::LaunchByName("テトリス", "play");
+        AppFunctions::Launch(0);
+        check(!AppFunctions::TakeLaunchScene("/lua/apps/テトリス/main.lua", scene), "scene: 次の起動で捨てる");
+
+        //画面の指定なし・知らない名前
+        AppFunctions::LaunchByName("テトリス", "");
+        check(!AppFunctions::TakeLaunchScene("/lua/apps/テトリス/main.lua", scene), "scene: 空なら預けない");
+        check(!AppFunctions::LaunchByName("無い", "play"), "scene: 知らない名前はfalse");
+        check(!AppFunctions::TakeLaunchScene("", scene), "scene: 空のkeyはfalse");
+    }
+
     AppFunctions::Clear();
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

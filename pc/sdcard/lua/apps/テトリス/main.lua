@@ -448,4 +448,6 @@ g:button{ name = "back", x = SX + 54, y = SH + 6, w = 50, h = 30, label = "left"
 
 for i = 1, W * (H + HID) do grid[i] = 0 end
 pico.on_back(leave)
-g:go("title")
+-- PCビルドの --scene play(画面写真用): タイトルを飛ばしてすぐ始める
+local tag, scene = pico.launch_reason()
+if tag == "scene" and scene == "play" then newGame() else g:go("title") end

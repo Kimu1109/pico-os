@@ -27,6 +27,9 @@
 # アプリストア(app_store_net_test)は app_store_fixture.py が作った配布物を python3 -m http.server で配り、
 # 一覧の取得・署名・インストール・更新・古い一覧/改ざん/権限の拒否を確かめる。
 #
+# 電卓の通貨レート(currency_net_test)は、Frankfurter/open.er-api の形の応答を python3 -m http.server で配り、
+# 取得・SDへの控え・404/形式違いで手元のレートを壊さないことを確かめる(本物の為替のAPIへは行かない)。
+#
 # SSH(ssh_net_test)は OpenSSH の sshd を使い捨てのホスト鍵・利用者の鍵・設定で 127.0.0.1 に立てて
 # 確かめる(公開鍵認証。sshd が無い環境では飛ばす。Debian/Ubuntuなら apt install openssh-server)。
 # パスワード/keyboard-interactive認証は母艦に利用者を作る必要があるので自動では回さない
@@ -296,6 +299,39 @@ echo ""
 echo "===== app_store_net_test ====="
 "$OUT/app_store_net_test" "$STORE_PORT" "$STORE_DIR"
 kill "$STORE_PID" 2>/dev/null || true
+
+# ---- 電卓の通貨レート(CurrencyRates)。応答のJSONを http.server で配る ----
+RATES_PORT=$((PORT + 11))
+RATES_DIR="$OUT/rates"
+mkdir -p "$RATES_DIR"
+printf '{"amount":1.0,"base":"EUR","date":"2026-10-21","rates":{"GBP":0.84,"JPY":177.3,"USD":1.12}}' > "$RATES_DIR/latest"
+printf '{"result":"success","base_code":"JPY","time_last_update_utc":"Wed, 21 Oct 2026 00:02:32 +0000","rates":{"JPY":1,"USD":0.0066,"EUR":0.0056}}' > "$RATES_DIR/erapi"
+printf '<html><body>error</body></html>' > "$RATES_DIR/broken.html"
+g++ -std=gnu++17 -g -fsanitize=address,undefined \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
+    "$ROOT/script/host_test/currency_net_test.cpp" \
+    "$ROOT/src/apps/calculator/Calc_Currency.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/net/Http_Get.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    -o "$OUT/currency_net_test" -lssl -lcrypto
+
+python3 -m http.server "$RATES_PORT" --bind 127.0.0.1 --directory "$RATES_DIR" \
+    > "$OUT/rates_server.log" 2>&1 &
+RATES_PID=$!
+STORE_PID="$STORE_PID $RATES_PID"
+i=0
+while [ $i -lt 50 ]; do
+    if python3 -c "import socket,sys; s=socket.socket(); sys.exit(s.connect_ex(('127.0.0.1', $RATES_PORT)))" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+echo ""
+echo "===== currency_net_test ====="
+"$OUT/currency_net_test" "$RATES_PORT"
+kill "$RATES_PID" 2>/dev/null || true
 
 # ---- SSH(SshClient)。本物の sshd を使い捨ての鍵と設定で立てる ----
 SSHD=$(command -v sshd || ls /usr/sbin/sshd 2>/dev/null || true)

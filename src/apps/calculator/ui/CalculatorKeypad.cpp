@@ -9,10 +9,11 @@
 
 using Kind = CalculatorKeypad::Kind;
 
-// 7行6列。上3行が関数、下4行が数字と四則演算(KeyboardNumのkPadKeysと同じ「行・開始列・列幅」のテーブル形式)。
+namespace {
+// 関数電卓: 7行6列。上3行が関数、下4行が数字と四則演算(KeyboardNumのkPadKeysと同じ「行・開始列・列幅」のテーブル形式)。
 // 表示は実機のフォントで確実に出るASCIIとπ/√/×÷だけにしてある(上付きの²や⁻¹はフォントに無いことがある)。
 // "mod"の位置はグラフの式を入れている間だけ変数"x"になる(labelOf()/insertOf())。
-const CalculatorKeypad::Key CalculatorKeypad::kKeys[] = {
+const CalculatorKeypad::Key kScientificKeys[] = {
     { "SHIFT", "",    nullptr, nullptr, 0, 0, 1, Kind::Shift },
     { "HYP",   "",    nullptr, nullptr, 0, 1, 1, Kind::Hyp },
     { "DEG",   "DRG", nullptr, nullptr, 0, 2, 1, Kind::Command }, // 表示は今の単位(setAngleLabel)
@@ -61,14 +62,111 @@ const CalculatorKeypad::Key CalculatorKeypad::kKeys[] = {
     { "=",   "=",   nullptr, nullptr, 6, 3, 2, Kind::Command },
     { "+",   "+",   nullptr, nullptr, 6, 5, 1, Kind::Insert },
 };
-const int CalculatorKeypad::kKeyCount = sizeof(kKeys) / sizeof(kKeys[0]);
+
+// プログラマ電卓: 7行6列。上3行がビット演算(と16進のA-F)、下4行が数字と四則演算。
+// 演算子の名前は前後に空白を付けて入れる("B AND C"。16進の数字と名前がくっつかないように。Calc_Prog.hpp)
+const CalculatorKeypad::Key kProgrammerKeys[] = {
+    { "AND",  " AND ",  nullptr, nullptr, 0, 0, 1, Kind::Insert },
+    { "OR",   " OR ",   nullptr, nullptr, 0, 1, 1, Kind::Insert },
+    { "XOR",  " XOR ",  nullptr, nullptr, 0, 2, 1, Kind::Insert },
+    { "NOT",  "NOT ",   nullptr, nullptr, 0, 3, 1, Kind::Insert },
+    { "AC",   "AC",     nullptr, nullptr, 0, 4, 1, Kind::Command },
+    { "DEL",  "DEL",    nullptr, nullptr, 0, 5, 1, Kind::Command },
+
+    { "A",    "A",      nullptr, nullptr, 1, 0, 1, Kind::Digit },
+    { "B",    "B",      nullptr, nullptr, 1, 1, 1, Kind::Digit },
+    { "C",    "C",      nullptr, nullptr, 1, 2, 1, Kind::Digit },
+    { "NAND", " NAND ", nullptr, nullptr, 1, 3, 1, Kind::Insert },
+    { "NOR",  " NOR ",  nullptr, nullptr, 1, 4, 1, Kind::Insert },
+    { "<<",   " << ",   nullptr, nullptr, 1, 5, 1, Kind::Insert },
+
+    { "D",    "D",      nullptr, nullptr, 2, 0, 1, Kind::Digit },
+    { "E",    "E",      nullptr, nullptr, 2, 1, 1, Kind::Digit },
+    { "F",    "F",      nullptr, nullptr, 2, 2, 1, Kind::Digit },
+    { "RoL",  " RoL ",  nullptr, nullptr, 2, 3, 1, Kind::Insert },
+    { "RoR",  " RoR ",  nullptr, nullptr, 2, 4, 1, Kind::Insert },
+    { ">>",   " >> ",   nullptr, nullptr, 2, 5, 1, Kind::Insert },
+
+    { "7",    "7",      nullptr, nullptr, 3, 0, 1, Kind::Digit },
+    { "8",    "8",      nullptr, nullptr, 3, 1, 1, Kind::Digit },
+    { "9",    "9",      nullptr, nullptr, 3, 2, 1, Kind::Digit },
+    { "(",    "(",      nullptr, nullptr, 3, 3, 1, Kind::Insert },
+    { ")",    ")",      nullptr, nullptr, 3, 4, 1, Kind::Insert },
+    { "÷",    "÷",      nullptr, nullptr, 3, 5, 1, Kind::Insert },
+
+    { "4",    "4",      nullptr, nullptr, 4, 0, 1, Kind::Digit },
+    { "5",    "5",      nullptr, nullptr, 4, 1, 1, Kind::Digit },
+    { "6",    "6",      nullptr, nullptr, 4, 2, 1, Kind::Digit },
+    { "mod",  " mod ",  nullptr, nullptr, 4, 3, 1, Kind::Insert },
+    { "Ans",  "Ans",    nullptr, nullptr, 4, 4, 1, Kind::Insert },
+    { "×",    "×",      nullptr, nullptr, 4, 5, 1, Kind::Insert },
+
+    { "1",    "1",      nullptr, nullptr, 5, 0, 1, Kind::Digit },
+    { "2",    "2",      nullptr, nullptr, 5, 1, 1, Kind::Digit },
+    { "3",    "3",      nullptr, nullptr, 5, 2, 1, Kind::Digit },
+    { "+",    "+",      nullptr, nullptr, 5, 3, 1, Kind::Insert },
+    { "-",    "-",      nullptr, nullptr, 5, 4, 2, Kind::Insert },
+
+    { "0",    "0",      nullptr, nullptr, 6, 0, 3, Kind::Digit },
+    { "=",    "=",      nullptr, nullptr, 6, 3, 3, Kind::Command },
+};
+
+// 変換: 4行4列。数字と ± と[入替]だけ(単位は画面の上のボタンで選ぶ)
+const CalculatorKeypad::Key kConverterKeys[] = {
+    { "7",   "7",    nullptr, nullptr, 0, 0, 1, Kind::Insert },
+    { "8",   "8",    nullptr, nullptr, 0, 1, 1, Kind::Insert },
+    { "9",   "9",    nullptr, nullptr, 0, 2, 1, Kind::Insert },
+    { "DEL", "DEL",  nullptr, nullptr, 0, 3, 1, Kind::Command },
+    { "4",   "4",    nullptr, nullptr, 1, 0, 1, Kind::Insert },
+    { "5",   "5",    nullptr, nullptr, 1, 1, 1, Kind::Insert },
+    { "6",   "6",    nullptr, nullptr, 1, 2, 1, Kind::Insert },
+    { "AC",  "AC",   nullptr, nullptr, 1, 3, 1, Kind::Command },
+    { "1",   "1",    nullptr, nullptr, 2, 0, 1, Kind::Insert },
+    { "2",   "2",    nullptr, nullptr, 2, 1, 1, Kind::Insert },
+    { "3",   "3",    nullptr, nullptr, 2, 2, 1, Kind::Insert },
+    { "+/-", "NEG",  nullptr, nullptr, 2, 3, 1, Kind::Command },
+    { "0",   "0",    nullptr, nullptr, 3, 0, 1, Kind::Insert },
+    { ".",   ".",    nullptr, nullptr, 3, 1, 1, Kind::Insert },
+    { "EXP", "E",    nullptr, nullptr, 3, 2, 1, Kind::Insert },
+    { "入替", "SWAP", nullptr, nullptr, 3, 3, 1, Kind::Command },
+};
+
+template <typename T, int N>
+constexpr int CountOf(const T (&)[N]){ return N; }
+
+// Digitのキーの値('0'-'9' 'A'-'F')
+int DigitOf(const CalculatorKeypad::Key& key){
+    const char c = key.insert[0];
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return 0;
+}
+}
+
+CalculatorKeypad::CalculatorKeypad(int x, int y, int w, int h, Layout layout){
+    this->l_rect = { (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h };
+    switch (layout) {
+        case Layout::Programmer:
+            this->keys = kProgrammerKeys; this->key_count = CountOf(kProgrammerKeys);
+            this->rows = 7; this->cols = 6; this->fn_rows = 3;
+            break;
+        case Layout::Converter:
+            this->keys = kConverterKeys; this->key_count = CountOf(kConverterKeys);
+            this->rows = 4; this->cols = 4; this->fn_rows = 0;
+            break;
+        default:
+            this->keys = kScientificKeys; this->key_count = CountOf(kScientificKeys);
+            this->rows = 7; this->cols = 6; this->fn_rows = 3;
+            break;
+    }
+}
 
 int CalculatorKeypad::colX(int col) const {
-    return col * (this->l_rect.w / kCols);
+    return col * (this->l_rect.w / this->cols);
 }
 int CalculatorKeypad::colW(int col) const {
-    const int base = this->l_rect.w / kCols;
-    if (col == kCols - 1) return this->l_rect.w - base * (kCols - 1);
+    const int base = this->l_rect.w / this->cols;
+    if (col == this->cols - 1) return this->l_rect.w - base * (this->cols - 1);
     return base;
 }
 int CalculatorKeypad::colSpanW(int col_start, int col_span) const {
@@ -77,17 +175,17 @@ int CalculatorKeypad::colSpanW(int col_start, int col_span) const {
     return total;
 }
 int CalculatorKeypad::rowY(int row) const {
-    return row * (this->l_rect.h / kRows);
+    return row * (this->l_rect.h / this->rows);
 }
 int CalculatorKeypad::rowH(int row) const {
-    const int base = this->l_rect.h / kRows;
-    if (row == kRows - 1) return this->l_rect.h - base * (kRows - 1);
+    const int base = this->l_rect.h / this->rows;
+    if (row == this->rows - 1) return this->l_rect.h - base * (this->rows - 1);
     return base;
 }
 
 const CalculatorKeypad::Key* CalculatorKeypad::hitKey(int local_x, int local_y) const {
-    for (int i = 0; i < kKeyCount; i++) {
-        const Key& key = kKeys[i];
+    for (int i = 0; i < this->key_count; i++) {
+        const Key& key = this->keys[i];
 
         const int y = this->rowY(key.row);
         const int h = this->rowH(key.row);
@@ -131,8 +229,8 @@ const char* CalculatorKeypad::insertOf(const Key& key) const {
 
 bool CalculatorKeypad::keyCenter(const char* label, int& x, int& y) const {
     const Rect g = this->getScreenRect();
-    for (int i = 0; i < kKeyCount; i++) {
-        const Key& key = kKeys[i];
+    for (int i = 0; i < this->key_count; i++) {
+        const Key& key = this->keys[i];
         if (strcmp(this->labelOf(key), label) != 0) continue;
         x = g.x + this->colX(key.col_start) + this->colSpanW(key.col_start, key.col_span) / 2;
         y = g.y + this->rowY(key.row) + this->rowH(key.row) / 2;
@@ -147,6 +245,7 @@ void CalculatorKeypad::causeOnPressStart() {
     const Rect g = this->getScreenRect();
     const Key* key = this->hitKey(OSData::touchX - g.x, OSData::touchY - g.y);
     if (!key) return;
+    if (key->kind == Kind::Digit && DigitOf(*key) >= this->digit_base) return; // 今の基数では使えない数字
 
     switch (key->kind) {
         case Kind::Shift:
@@ -189,8 +288,8 @@ void CalculatorKeypad::render() {
     LGFX_Sprite* f = OSData::frame;
     f->fillRect(g.x, g.y, g.w, g.h, this->background_color);
 
-    for (int i = 0; i < kKeyCount; i++) {
-        const Key& key = kKeys[i];
+    for (int i = 0; i < this->key_count; i++) {
+        const Key& key = this->keys[i];
 
         const int x = g.x + this->colX(key.col_start);
         const int y = g.y + this->rowY(key.row);
@@ -205,7 +304,8 @@ void CalculatorKeypad::render() {
             || (key.kind == Kind::Shift && this->shift)
             || (key.kind == Kind::Hyp && this->hyp);
         // 関数の段は薄い灰色の地にして数字の段と見分けやすくする
-        const bool fn_row = key.row <= 2 && !emphasize;
+        const bool fn_row = key.row < this->fn_rows && key.kind != Kind::Digit && !emphasize;
+        const bool disabled = key.kind == Kind::Digit && DigitOf(key) >= this->digit_base;
         if (emphasize)   f->fillRect(x, y, w, h, PICO_BLACK);
         else if (fn_row) f->fillRect(x, y, w, h, PICO_LIGHTGREY);
         f->drawRect(x, y, w, h, PICO_BLACK);
@@ -214,6 +314,7 @@ void CalculatorKeypad::render() {
         // SHIFTの裏の機能が出ている間はその文字を青にして、表と区別できるようにする
         int color = PICO_BLACK;
         if (emphasize) color = PICO_WHITE;
+        else if (disabled) color = PICO_LIGHTGREY;
         else if (key.kind == Kind::Command && (strcmp(key.insert, "AC") == 0 || strcmp(key.insert, "DEL") == 0)) color = PICO_RED;
         else if (this->shift && (key.shift_label || key.kind == Kind::Trig)) color = PICO_BLUE;
         else if (this->hyp && key.kind == Kind::Trig) color = PICO_BLUE;

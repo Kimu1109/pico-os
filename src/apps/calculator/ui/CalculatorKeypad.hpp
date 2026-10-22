@@ -4,23 +4,26 @@
 
 #include <functional>
 
-// 関数電卓のキーパッド(7行6列)。
+// 電卓のキーパッド。配列(Layout)は3種類:
+//   Scientific … 関数電卓(7行6列)。電卓ページとグラフの式
+//   Programmer … プログラマ電卓(7行6列)。16進の数字A-F・ビット演算。今の基数で使えない数字は灰色で押せない
+//   Converter  … 単位/通貨の変換(4行4列)。数字と ± と[入替]だけ
 //
 // AppGrid/ColorDialog/KeyboardNumと同じく、キー1つごとにButtonをnewせず、
 // 固定長のキー配列+タップ位置からの逆算で処理する(ヒープを使わない、子を持たないので
-// hit_transparentの問題とも無縁)。電卓アプリ専用の部品なのでwidgets/apps/に置く。
+// hit_transparentの問題とも無縁)。
 //
 // SHIFT(逆関数等の裏の機能)とHYP(双曲線関数)はキーパッドの中だけで完結する1回きりの切り替えで、
 // 次のキーを押すと戻る。押されたキーは「式へ足す文字列」(例: "sin(")か、次の命令のどれかで
 // setOnKey()へ渡る:
 //   "AC"(全消去) "DEL"(1つ消す) "="(計算/グラフでは描画) "DRG"(角度の単位を切り替える)
+//   "NEG"(符号を反転。変換) "SWAP"(変換元と変換先を入れ替える。変換)
 class CalculatorKeypad : public Widget {
     public:
-        static constexpr int kRows = 7;
-        static constexpr int kCols = 6;
+        // キーの種類。Insertは式へ足す文字列、Digitは基数で使えるかが変わる数字(進数)、それ以外は命令
+        enum class Kind : uint8_t { Insert, Command, Shift, Hyp, Trig, Digit };
 
-        // キーの種類。Insertは式へ足す文字列、それ以外はキーパッド/シーンへの命令
-        enum class Kind : uint8_t { Insert, Command, Shift, Hyp, Trig };
+        enum class Layout : uint8_t { Scientific, Programmer, Converter };
 
         struct Key {
             const char* label;       // 表
@@ -34,8 +37,12 @@ class CalculatorKeypad : public Widget {
         };
 
     private:
-        static const Key kKeys[];
-        static const int kKeyCount;
+        const Key* keys = nullptr;
+        int key_count = 0;
+        int rows = 7;
+        int cols = 6;
+        int fn_rows = 3;      // 上から何行を関数の段(薄い灰色の地)にするか
+        int digit_base = 16;  // Digitのキーのうち、値がこれ以上のものは押せない
 
         std::function<void(const char* key)> on_key = nullptr;
 
@@ -60,9 +67,7 @@ class CalculatorKeypad : public Widget {
         const char* insertOf(const Key& key) const;
 
     public:
-        CalculatorKeypad(int x, int y, int w, int h){
-            this->l_rect = { (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h };
-        }
+        CalculatorKeypad(int x, int y, int w, int h, Layout layout = Layout::Scientific);
 
         void setOnKey(std::function<void(const char* key)> callback){
             this->on_key = callback;
@@ -70,6 +75,10 @@ class CalculatorKeypad : public Widget {
 
         void setGraphMode(bool on){ if(this->graph_mode != on){ this->graph_mode = on; this->needsRender(); } }
         void setAngleLabel(const char* label){ this->angle_label = label; this->needsRender(); }
+
+        // 進数: 今の基数(2/8/10/16)。使えない数字のキーを灰色にして押せなくする
+        void setDigitBase(int base){ if(this->digit_base != base){ this->digit_base = base; this->needsRender(); } }
+        int getDigitBase() const { return this->digit_base; }
 
         bool isShift() const { return this->shift; }
         bool isHyp() const { return this->hyp; }

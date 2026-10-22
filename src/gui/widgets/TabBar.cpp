@@ -5,15 +5,46 @@
 
 int TabBar::tabX(int index) const {
     if(this->tab_count <= 0) return 0;
+    if(this->fit_valid){
+        int x = 0;
+        for(int i = 0; i < index && i < this->tab_count; i++) x += this->fit_w[i];
+        return x;
+    }
     return index * (this->l_rect.w / this->tab_count);
 }
 
 int TabBar::tabW(int index) const {
     if(this->tab_count <= 0) return 0;
+    if(this->fit_valid) return (index >= 0 && index < this->tab_count) ? this->fit_w[index] : 0;
     const int base = this->l_rect.w / this->tab_count;
     //最後のタブが余りを吸収する(右端に隙間を残さない)
     if(index == this->tab_count - 1) return this->l_rect.w - base * (this->tab_count - 1);
     return base;
+}
+
+void TabBar::relayoutFit(){
+    this->fit_valid = false;
+    if(!this->fit_labels || this->tab_count <= 0) return;
+
+    //文字の実寸+左右の余白。足りなければ均等割り(折り返し)のまま
+    this->fontApply();
+    int total = 0;
+    for(int i = 0; i < this->tab_count; i++){
+        this->fit_w[i] = (int16_t)(OSData::frame->textWidth(this->labels[i].c_str()) + kTextPadding * 2 + 2);
+        total += this->fit_w[i];
+    }
+    this->fontDefault();
+    if(total > this->l_rect.w) return;
+
+    //余りは全部のタブへ均等に配り、割り切れない分は最後のタブへ(右端に隙間を残さない)
+    const int extra = (this->l_rect.w - total) / this->tab_count;
+    int used = 0;
+    for(int i = 0; i < this->tab_count; i++){
+        this->fit_w[i] = (int16_t)(this->fit_w[i] + extra);
+        used += this->fit_w[i];
+    }
+    this->fit_w[this->tab_count - 1] = (int16_t)(this->fit_w[this->tab_count - 1] + (this->l_rect.w - used));
+    this->fit_valid = true;
 }
 
 bool TabBar::addTab(const char* label){
@@ -21,6 +52,7 @@ bool TabBar::addTab(const char* label){
 
     this->labels[this->tab_count].assign(label);
     this->tab_count++;
+    this->relayoutFit();
     this->needsRender();
     return true;
 }
@@ -28,6 +60,7 @@ bool TabBar::addTab(const char* label){
 bool TabBar::setLabel(int index, const char* label){
     if(index < 0 || index >= this->tab_count) return false;
     this->labels[index].assign(label);
+    this->relayoutFit();
     this->needsRender();
     return true;
 }
@@ -39,6 +72,7 @@ bool TabBar::removeTab(int index){
     this->tab_count--;
     if(this->selected > index) this->selected--;
     if(this->selected >= this->tab_count) this->selected = this->tab_count > 0 ? this->tab_count - 1 : 0;
+    this->relayoutFit();
     this->needsRender();
     return true;
 }
@@ -47,6 +81,7 @@ void TabBar::clearTabs(){
     for(int i = 0; i < this->tab_count; i++) this->labels[i].clear();
     this->tab_count = 0;
     this->selected = 0;
+    this->relayoutFit();
     this->needsRender();
 }
 

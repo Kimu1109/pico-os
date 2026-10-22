@@ -11,6 +11,10 @@
 #include "apps/calculator/CalculatorScene.hpp"
 #include "apps/calculator/ui/CalculatorKeypad.hpp"
 #include "apps/calculator/ui/GraphView.hpp"
+#include "apps/calculator/ui/BaseView.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
+#include "storage/SD_Path.hpp"
+#include "hal/Network_Functions.hpp"
 #include <cmath>
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
@@ -358,7 +362,7 @@ static void testCalculatorScene(){
     check(result->getFontSize() == FontFn::Big, "確定した数値の答えは通常のフォントで出る");
 
     // ---- 履歴ページの表示切替と読み戻し ----
-    page_tab->setSelected(2, true); // 「履歴」タブへ切り替え(実際のタップと同じくnotify=trueで呼ぶ)
+    page_tab->setSelected((int)CalculatorScene::Page::History, true); // 「履歴」タブへ切り替え(実際のタップと同じくnotify=trueで呼ぶ)
     check(!kp->getVisible() && history->getVisible(), "履歴タブ: キーパッドが隠れ履歴一覧が出る");
 
     history->setSelectedIndex(0);
@@ -436,7 +440,7 @@ static void testCalculatorScene(){
             check(gkp->getVisible() && !gview->getVisible(), "[式]: 式の入力へ戻る");
         }
     }
-    page_tab->setSelected(2, true);
+    page_tab->setSelected((int)CalculatorScene::Page::History, true);
 
     // ---- 履歴の消去 ----
     clear_button->causeOnPressEnd();
@@ -453,10 +457,261 @@ static void testCalculatorScene(){
     check(WidgetFunctions::widgets.empty(), "onExit()後: ウィジェットが全て解放される");
 }
 
+
+// 一番新しいダイアログ(PickerDialogのChoice)で index 番目を選ぶ。選択肢の文字を label へ
+static bool chooseInDialog(int index, char* label = nullptr, size_t cap = 0){
+    if(WidgetFunctions::dialog_roots.empty()) return false;
+    Widget* d = WidgetFunctions::dialog_roots.back();
+    if(d->getWidgetType() != WidgetType::PickerDialog) return false;
+    ScrollList* list = nullptr;
+    for(Widget* c : d->getChildren()) if(c->getWidgetType() == WidgetType::ScrollList) list = static_cast<ScrollList*>(c);
+    if(!list || !list->itemAt(index)) return false;
+    if(label) snprintf(label, cap, "%s", list->itemAt(index)->text.c_str());
+    list->setSelectedIndex(index);
+    list->causeOnSelectItem(false);
+    WidgetFunctions::ProcessPendingDeletes();
+    return true;
+}
+
+// 見えているLabelをY座標の順に
+static std::vector<Widget*> visibleLabels(){
+    std::vector<Widget*> labels;
+    for(Widget* w : WidgetFunctions::widgets){
+        if(w->getWidgetType() == WidgetType::Label && w->getVisible()) labels.push_back(w);
+    }
+    std::sort(labels.begin(), labels.end(), [](Widget* a, Widget* b){
+        return a->getScreenRect().y < b->getScreenRect().y;
+    });
+    return labels;
+}
+// Labelは文字数ごとに別の型なので、作った側と同じ型で読む
+template<int N = PICO_STR_M>
+static const char* labelText(Widget* w){ return static_cast<Label<N>*>(w)->getText()->c_str(); }
+
+// ---- 変換ページ・進数ページ ----
+static void testConvertAndProgPages(){
+    WidgetFunctions::widgets.clear();
+    WidgetFunctions::dialog_roots.clear();
+    HostSd::files.clear();
+    //前回のレートの控え(onEnterで読む)
+    HostSd::files[PICO_Path::FILE::CFG::SYS_CURRENCY_CFG] =
+        "date = 2026-10-21\nbase = EUR\nEUR = 1\nUSD = 1.25\nJPY = 175\n";
+
+    CalculatorScene* scene = new CalculatorScene();
+    scene->onEnter();
+    TabBar* page_tab = findByType<TabBar>(WidgetType::TabBar);
+    CalculatorKeypad* ckp = findByType<CalculatorKeypad>(WidgetType::CalculatorKeypad, 2);
+    CalculatorKeypad* pkp = findByType<CalculatorKeypad>(WidgetType::CalculatorKeypad, 3);
+    BaseView* bview = findByType<BaseView>(WidgetType::BaseView);
+    check(page_tab && ckp && pkp && bview, "変換/進数: キーパッドとBaseViewが揃っている");
+    if(!page_tab || !ckp || !pkp || !bview) return;
+    eq_str(page_tab->getLabel((int)CalculatorScene::Page::Convert), "変換", "タブ: 変換");
+    eq_str(page_tab->getLabel((int)CalculatorScene::Page::Programmer), "進数", "タブ: 進数");
+    check(!ckp->getVisible() && !pkp->getVisible(), "電卓ページでは変換/進数のキーパッドは隠れている");
+
+    // ================= 変換 =================
+    page_tab->setSelected((int)CalculatorScene::Page::Convert, true);
+    check(ckp->getVisible() && !pkp->getVisible(), "変換タブ: 変換のキーパッドだけ見える");
+    Button* cat = findButtonByText("種類: 長さ");
+    Button* from = findButtonByText("km");
+    Button* to = findButtonByText("mi");
+    Button* update = findButtonByText("更新");
+    check(cat && from && to && update, "変換: 既定は長さ km→mi");
+    if(!cat || !from || !to || !update) return;
+    check(!update->getVisible(), "変換: 単位のときは[更新]が隠れている");
+
+    std::vector<Widget*> labels = visibleLabels();
+    check(labels.size() == 3, "変換: 値2つと説明の3つのLabel");
+    if(labels.size() != 3) return;
+    Widget* from_l = labels[0];
+    Widget* to_l = labels[1];
+    Widget* status_l = labels[2];
+    eq_str(labelText(from_l), "0", "変換: 最初は0");
+    eq_str(labelText<PICO_STR_L>(status_l), "1 km = 0.6213711922 mi", "変換: 1単位の換算を出す");
+
+    pressKeypad(ckp, "4");
+    pressKeypad(ckp, "2");
+    pressKeypad(ckp, ".");
+    pressKeypad(ckp, "1");
+    pressKeypad(ckp, "9");
+    pressKeypad(ckp, "5");
+    eq_str(labelText(from_l), "42.195", "変換: 打った値");
+    eq_str(labelText(to_l), "26.21875746", "変換: 42.195km = 26.21875746mi");
+    pressKeypad(ckp, ".");
+    eq_str(labelText(from_l), "42.195", "変換: 小数点は2つ入らない");
+    pressKeypad(ckp, "入替");
+    eq_str(from->getText().c_str(), "mi", "[入替]: 変換元がmiに");
+    eq_str(to->getText().c_str(), "km", "[入替]: 変換先がkmに");
+    eq_str(labelText(to_l), "67.90627008", "[入替]: 42.195mi = 67.90627008km");
+    pressKeypad(ckp, "DEL");
+    eq_str(labelText(from_l), "42.19", "DEL: 1文字消える");
+    pressKeypad(ckp, "AC");
+    eq_str(labelText(from_l), "0", "AC: 0に戻る");
+    pressKeypad(ckp, "0");
+    pressKeypad(ckp, "5");
+    eq_str(labelText(from_l), "5", "先頭の0は打った数字で置き換わる");
+    pressKeypad(ckp, "EXP");
+    pressKeypad(ckp, "+/-");
+    pressKeypad(ckp, "3");
+    eq_str(labelText(from_l), "5E-3", "EXPの直後の+/-は指数の符号");
+    pressKeypad(ckp, "AC");
+
+    // 種類: 温度(マイナスの値)
+    cat->causeOnPressEnd();
+    char chosen[PICO_STR_M] = "";
+    check(chooseInDialog(4, chosen, sizeof(chosen)), "種類の一覧から5番目を選べる");
+    eq_str(chosen, "温度", "5番目は温度");
+    eq_str(cat->getText().c_str(), "種類: 温度", "種類のボタンが温度に");
+    eq_str(from->getText().c_str(), "°C", "温度の既定: °C→°F");
+    pressKeypad(ckp, "4");
+    pressKeypad(ckp, "0");
+    pressKeypad(ckp, "+/-");
+    eq_str(labelText(from_l), "-40", "+/-で符号が反転");
+    eq_str(labelText(to_l), "-40", "-40°C = -40°F");
+    // 変換先を選び直す
+    to->causeOnPressEnd();
+    check(chooseInDialog(2, chosen, sizeof(chosen)), "変換先の一覧から選べる");
+    eq_str(chosen, "K ケルビン", "一覧は「記号 名前」");
+    eq_str(labelText(to_l), "233.15", "-40°C = 233.15K");
+    pressKeypad(ckp, "AC");
+
+    // 種類: 通貨(控えのレートで換算)
+    cat->causeOnPressEnd();
+    check(chooseInDialog(CalcUnits::kCategoryCount, chosen, sizeof(chosen)), "種類の一覧の最後は通貨");
+    eq_str(chosen, "通貨(為替)", "通貨(為替)");
+    check(update->getVisible(), "通貨: [更新]が見える");
+    eq_str(from->getText().c_str(), "USD", "通貨の既定: USD→JPY");
+    eq_str(to->getText().c_str(), "JPY", "通貨の既定: →JPY");
+    pressKeypad(ckp, "1");
+    pressKeypad(ckp, "0");
+    eq_str(labelText(to_l), "1400", "10USD = 10/1.25×175 = 1400JPY");
+    eq_str(labelText<PICO_STR_L>(status_l), "1 USD = 140 JPY\n2026-10-21 のレート", "通貨: 1単位のレートと日付");
+    from->causeOnPressEnd();
+    check(chooseInDialog(2, chosen, sizeof(chosen)), "通貨の一覧から選べる");
+    eq_str(chosen, "EUR ユーロ", "通貨の一覧は「コード 日本語名」で、よく使う順(JPY USD EUR)");
+    eq_str(labelText(to_l), "1750", "10EUR = 1750JPY");
+    //Wi-Fiが無ければ取りに行かない
+    NetworkFunctions::currentStatus = NetworkFunctions::NetStatus::FAILED;
+    update->causeOnPressEnd();
+    eq_str(labelText<PICO_STR_L>(status_l), "Wi-Fiに繋がっていません", "[更新]: Wi-Fiが無ければ知らせるだけ");
+    check(status_l->getVisible(), "(説明は見えている)");
+
+    // ================= 進数 =================
+    page_tab->setSelected((int)CalculatorScene::Page::Programmer, true);
+    check(pkp->getVisible() && bview->getVisible() && !ckp->getVisible(), "進数タブ: 進数のキーパッドとBaseView");
+    Button* bits = findButtonByText("64bit");
+    check(bits != nullptr, "進数: 語長のボタン(64bit)");
+    if(!bits) return;
+    check(bview->getBase() == 10 && pkp->getDigitBase() == 10, "進数: 既定は10進");
+
+    // 10進では A-F は押せない
+    pressKeypad(pkp, "A");
+    labels = visibleLabels();
+    Widget* pexpr = labels.empty() ? nullptr : labels[0];
+    check(pexpr != nullptr, "進数: 式のLabel");
+    if(!pexpr) return;
+    eq_str(labelText<PICO_STR_LL>(pexpr), "0", "10進では A を押しても入らない");
+
+    pressKeypad(pkp, "2");
+    pressKeypad(pkp, "5");
+    pressKeypad(pkp, "5");
+    char row[80];
+    bview->rowText(0, row, sizeof(row));
+    eq_str(row, "FF", "255 の16進の行は FF");
+    bview->rowText(2, row, sizeof(row));
+    eq_str(row, "377", "8進の行は 377");
+
+    // HEXの行をタップ → 式が16進に書き直され、A-Fが押せる
+    int x = 0, y = 0;
+    bview->rowCenter(0, x, y);
+    tapAt(bview, x, y);
+    check(bview->getBase() == 16 && pkp->getDigitBase() == 16, "HEXの行をタップで16進入力");
+    eq_str(labelText<PICO_STR_LL>(pexpr), "FF", "基数を変えると式は今の値の16進に");
+    pressKeypad(pkp, "AND");
+    pressKeypad(pkp, "F");
+    pressKeypad(pkp, "0");
+    eq_str(labelText<PICO_STR_LL>(pexpr), "FF AND F0", "ビット演算の式");
+    pressKeypad(pkp, "=");
+    bview->rowText(1, row, sizeof(row));
+    eq_str(row, "240", "FF AND F0 = 240");
+    pressKeypad(pkp, "<<");
+    pressKeypad(pkp, "4");
+    eq_str(labelText<PICO_STR_LL>(pexpr), "Ans << 4", "\"=\"の直後の演算子はAnsから続ける");
+    pressKeypad(pkp, "=");
+    bview->rowText(0, row, sizeof(row));
+    eq_str(row, "F00", "Ans << 4 = F00");
+    pressKeypad(pkp, "DEL");
+    eq_str(labelText<PICO_STR_LL>(pexpr), "0", "\"=\"の直後のDELは式を消す");
+
+    // 語長: 64→32→16→8。8bitで NOT 0 は FF / -1
+    bits->causeOnPressEnd();
+    bits->causeOnPressEnd();
+    bits->causeOnPressEnd();
+    eq_str(bits->getText().c_str(), "8bit", "語長のボタンで 64→32→16→8bit");
+    pressKeypad(pkp, "NOT");
+    pressKeypad(pkp, "0");
+    pressKeypad(pkp, "=");
+    bview->rowText(0, row, sizeof(row));
+    eq_str(row, "FF", "8bitの NOT 0 は FF");
+    bview->rowText(1, row, sizeof(row));
+    eq_str(row, "-1", "10進は符号付きで -1");
+    bview->rowText(3, row, sizeof(row));
+    eq_str(row, "11111111", "2進は語長ぶん(8桁)");
+    pressKeypad(pkp, "DEL");
+    eq_str(labelText<PICO_STR_LL>(pexpr), "0", "(準備)式を消す");
+    pressKeypad(pkp, "1");
+    pressKeypad(pkp, "XOR");
+    pressKeypad(pkp, "DEL");
+    eq_str(labelText<PICO_STR_LL>(pexpr), "1", "DEL: \" XOR \"は空白ごと消える");
+
+    // 0除算はBaseViewに赤字で出る
+    pressKeypad(pkp, "÷");
+    pressKeypad(pkp, "0");
+    pressKeypad(pkp, "=");
+    check(!bview->hasValue() && strlen(bview->getError()) > 0, "0除算: 値の欄に誤りを出す");
+
+    // BINの行 → 2進では2-9とA-Fが押せない
+    pressKeypad(pkp, "AC");
+    bview->rowCenter(3, x, y);
+    tapAt(bview, x, y);
+    check(bview->getBase() == 2 && pkp->getDigitBase() == 2, "BINの行をタップで2進入力");
+    pressKeypad(pkp, "2");
+    pressKeypad(pkp, "1");
+    pressKeypad(pkp, "0");
+    eq_str(labelText<PICO_STR_LL>(pexpr), "10", "2進では 2 は入らない");
+
+    // 物理キーボード: 16進の小文字はそのまま数字に、& は AND
+    KeyInputFunctions::Event ev;
+    ev.key = KeyInputFunctions::Key::Up; // BIN→OCT
+    scene->onKey(ev);
+    ev.key = KeyInputFunctions::Key::Up; // OCT→DEC
+    scene->onKey(ev);
+    ev.key = KeyInputFunctions::Key::Up; // DEC→HEX
+    scene->onKey(ev);
+    check(bview->getBase() == 16, "↑で基数の行を選ぶ");
+    ev.key = KeyInputFunctions::Key::Escape;
+    scene->onKey(ev);
+    const char* typed = "ab&f";
+    for(const char* p = typed; *p; p++){
+        ev.key = KeyInputFunctions::Key::Char;
+        ev.cp = (uint32_t)*p;
+        scene->onKey(ev);
+    }
+    eq_str(labelText<PICO_STR_LL>(pexpr), "AB AND F", "キーボード: a-fは16進の数字、&はAND");
+
+    scene->onExit();
+    WidgetFunctions::ClearSceneWidgets();
+    WidgetFunctions::ProcessPendingDeletes();
+    delete scene;
+    check(WidgetFunctions::widgets.empty(), "変換/進数: onExit()後にウィジェットが全て解放される");
+}
+
 int main(){
     testKeypadHitTest();
     printf("\n");
     testCalculatorScene();
+    printf("\n");
+    testConvertAndProgPages();
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

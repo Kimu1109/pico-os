@@ -85,6 +85,7 @@
   `_site/lua-api/` として同じ成果物へ入れる(アプリストアの配布物と同じ扱い)。
   Hugoの版はワークフローの `HUGO_VERSION` で固定。`hugo.toml` の `baseURL` は手元確認用の `"/"` のままで、
   公開ビルドだけ `--baseURL` で上書きする(リンクは `relURL`/`RelPermalink` なので崩れない)。
-  プルリクでもビルドして文書の壊れを止める。Webビルドの外枠(`shell.html`)に「Lua API リファレンス」へのリンクを置いた
+  プルリクでもビルドして文書の壊れを止める。見た目はトップのページ・Playgroundと揃えてある(2026-10-22。`static/css/style.css`。
+  コードの色は`hugo.toml`で`noClasses = false`にしてクラスで出させ、CSSでOSのパレットに塗る。テーマの鍵`picoos-theme`も共通)。Webビルドの外枠(`shell.html`)に「Lua API リファレンス」へのリンクを置いた
   (手元の `pc/build-web` には `lua-api/` が無いのでリンク切れになる)。
   手元で見るなら `hugo server --source lua-api-doc`。

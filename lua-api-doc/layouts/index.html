@@ -1,18 +1,10 @@
-<!doctype html>
-<html lang="ja">
-<head>
-{{ partial "head.html" . }}
-</head>
-<body>
-  <button class="sidebar-toggle" id="sidebar-toggle" aria-label="メニュー">☰</button>
-  <div class="layout">
-    {{ partial "sidebar.html" . }}
-    <main class="content">
-      <article class="doc">
+{{ define "main" }}
+{{/* 中身の字下げは元のまま(<pre>の中の行を動かさないため) */}}
+<article class="doc">
         <div class="doc-body doc-body-wide">
           <div class="hero">
-            <div class="hero-kicker">pico-os / Raspberry Pi Pico 2 W</div>
-            <h1>{{ .Site.Title }}</h1>
+            <div class="kicker px"><span>PICO-OS</span><span>LUA 5.4</span><span>PICO.*</span></div>
+            <h1>LUA API<span class="cur">_</span></h1>
             <p class="lead">{{ .Site.Params.description }}</p>
           </div>
 
@@ -75,9 +67,5 @@ end)</code></pre>
             <li>コード例は実機・PCビルド両対応です。<code>/lua/apps/&lt;アプリ名&gt;/main.lua</code> に置くとランチャへ自動登録されます。</li>
           </ul>
         </div>
-      </article>
-      {{ partial "footer.html" . }}
-    </main>
-  </div>
-</body>
-</html>
+</article>
+{{ end }}

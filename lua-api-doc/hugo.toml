@@ -17,7 +17,8 @@ disableKinds = ["taxonomy", "term", "RSS", "sitemap"]
     [markup.goldmark.renderer]
       unsafe = true
   [markup.highlight]
-    style = "github"
+    # 色は static/css/style.css の .chroma でOSのパレットに塗る(インラインの style だとダークテーマで変えられない)
+    noClasses = false
     lineNos = false
     codeFences = true
     guessSyntax = false

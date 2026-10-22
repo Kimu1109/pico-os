@@ -1,18 +1,21 @@
 {{ define "main" }}
 <article class="doc">
   <div class="doc-body">
+    <div class="kicker px">
+      {{ if .CurrentSection }}<a href="{{ .CurrentSection.RelPermalink }}">{{ upper (replace .Section "-" " ") }}</a>{{ end }}
+    </div>
     <nav class="breadcrumb">
       {{ if .CurrentSection }}<a href="{{ .CurrentSection.RelPermalink }}">{{ .CurrentSection.Title }}</a> / {{ end }}<span>{{ .Title }}</span>
     </nav>
     <h1>{{ .Title }}</h1>
     {{ if .Description }}<p class="lead">{{ .Description }}</p>{{ end }}
     {{ .Content }}
-    {{ with .NextInSection }}<div class="next-page">次へ: <a href="{{ .RelPermalink }}">{{ .Title }} →</a></div>{{ end }}
+    {{ with .NextInSection }}<div class="next-page"><a href="{{ .RelPermalink }}"><span class="px">NEXT</span>{{ .Title }} &gt;</a></div>{{ end }}
   </div>
   {{ $toc := .TableOfContents }}
   {{ if ne (len (printf "%s" $toc)) 0 }}
   <aside class="doc-toc">
-    <div class="doc-toc-title">この項目</div>
+    <div class="doc-toc-title px">ON THIS PAGE</div>
     {{ $toc }}
   </aside>
   {{ end }}

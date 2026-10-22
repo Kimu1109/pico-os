@@ -38,17 +38,19 @@ void HomeScene::onEnter(){
     WidgetFunctions::Add(this->grid);
 
     const int pager_y = content.y + content.h - PAGER_H + 2;
+    //ページ送りは左右とも画面の端へぴったり寄せる(左右の見た目を揃える)
+    const int pager_w = PAGER_BUTTON_W + Button::kFrameExtra;
 
-    this->prev_button = new Button(MARGIN, pager_y, "<");
-    this->prev_button->setW(PAGER_BUTTON_W + Button::kFrameExtra);
+    this->prev_button = new Button(0, pager_y, "<");
+    this->prev_button->setW(pager_w);
     this->prev_button->setH(PAGER_H - 4 + Button::kFrameExtra);
     this->prev_button->setOnPressEnd([this](){
         if(this->grid->prevPage()) this->updatePageLabel();
     });
     WidgetFunctions::Add(this->prev_button);
 
-    this->next_button = new Button(content.w - MARGIN - PAGER_BUTTON_W, pager_y, ">");
-    this->next_button->setW(PAGER_BUTTON_W + Button::kFrameExtra);
+    this->next_button = new Button(content.w - pager_w, pager_y, ">");
+    this->next_button->setW(pager_w);
     this->next_button->setH(PAGER_H - 4 + Button::kFrameExtra);
     this->next_button->setOnPressEnd([this](){
         if(this->grid->nextPage()) this->updatePageLabel();
@@ -56,9 +58,9 @@ void HomeScene::onEnter(){
     WidgetFunctions::Add(this->next_button);
 
     //フォルダを開いている間だけ出す。押すとトップへ戻る
-    this->back_button = new Button(MARGIN, pager_y, "戻る");
+    this->back_button = new Button(0, pager_y, "戻る");
     this->back_button->setFontSize(FontFn::Small);
-    this->back_button->setW(PAGER_BUTTON_W + Button::kFrameExtra);
+    this->back_button->setW(pager_w);
     this->back_button->setH(PAGER_H - 4 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([this](){
         this->grid->closeFolder();
@@ -102,9 +104,10 @@ void HomeScene::updatePageLabel(){
     char buf[96];
     if(in_folder){
         //[戻る] n/m 名前 [<][>](名前が長くてもページは見えるように先に)。ページ送りは右へ寄せる
-        const int prev_x = content.w - MARGIN - PAGER_BUTTON_W * 2 - 4;
+        const int pager_w = PAGER_BUTTON_W + Button::kFrameExtra;
+        const int prev_x = content.w - pager_w * 2 - 4;
         this->prev_button->setX(prev_x);
-        const int label_x = MARGIN + PAGER_BUTTON_W + Button::kFrameExtra + 6;
+        const int label_x = pager_w + 6;
         const int label_right = pager ? prev_x - 4 : content.w - MARGIN;
         this->page_label->setX(label_x);
         this->page_label->setMaxWidth(label_right - label_x);
@@ -113,7 +116,7 @@ void HomeScene::updatePageLabel(){
         else      snprintf(buf, sizeof(buf), "%s", AppFunctions::FolderName(this->shown_folder));
         this->page_label->setVisible(true);
     }else{
-        this->prev_button->setX(MARGIN);
+        this->prev_button->setX(0);
         this->page_label->setX(0);
         this->page_label->setMaxWidth(content.w);
         this->page_label->setTextAlign(TextAlign::Center);

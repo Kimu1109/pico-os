@@ -1,7 +1,7 @@
 {{ define "main" }}
 <article class="doc">
   <div class="doc-body doc-body-wide">
-    <nav class="breadcrumb"><span>{{ .Title }}</span></nav>
+    <div class="kicker px"><span>{{ upper (replace .Section "-" " ") }}</span></div>
     <h1>{{ .Title }}</h1>
     {{ if .Description }}<p class="lead">{{ .Description }}</p>{{ end }}
     {{ .Content }}

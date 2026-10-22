@@ -56,6 +56,9 @@
   **`RuntimeError: divide by zero`で止まった**。`compat/I2S.h`の`end()`が閉じる前にハンドラを空の関数へ差し替える。
 - **ページの外枠**: `pc/web/shell.html`(emscriptenの `--shell-file`)。canvas・ログ欄・
   Wi-Fi状態の切替・画面のPNG保存ボタンを持つ。デバッグ用の道具を足すならここ。
+  見た目はトップのページ(`landing.html`)と揃えてある(2026-10-22。パレット・ボタンの形・フォント・ステータスバー・
+  テーマの切り替えと`localStorage`の鍵`picoos-theme`が共通)ので、片方を変えたらもう片方も合わせる。
+  canvasそのものには枠線・余白を付けず、外側の箱に引く(canvasのCSS上の大きさはSDLの判定に使われるため)。
 - **`src/`へ新しい依存を足すときはWebビルドも通すこと**。ネイティブが通ってもemscriptenで
   落ちる依存(生ソケット/スレッド/ブロッキング待ち)があるため。
 - **公開**: `.github/workflows/web-pages.yml` が `main` へのpushで
@@ -82,6 +85,7 @@
   `_site/lua-api/` として同じ成果物へ入れる(アプリストアの配布物と同じ扱い)。
   Hugoの版はワークフローの `HUGO_VERSION` で固定。`hugo.toml` の `baseURL` は手元確認用の `"/"` のままで、
   公開ビルドだけ `--baseURL` で上書きする(リンクは `relURL`/`RelPermalink` なので崩れない)。
-  プルリクでもビルドして文書の壊れを止める。Webビルドの外枠(`shell.html`)に「Lua API リファレンス」へのリンクを置いた
+  プルリクでもビルドして文書の壊れを止める。見た目はトップのページ・Playgroundと揃えてある(2026-10-22。`static/css/style.css`。
+  コードの色は`hugo.toml`で`noClasses = false`にしてクラスで出させ、CSSでOSのパレットに塗る。テーマの鍵`picoos-theme`も共通)。Webビルドの外枠(`shell.html`)に「Lua API リファレンス」へのリンクを置いた
   (手元の `pc/build-web` には `lua-api/` が無いのでリンク切れになる)。
   手元で見るなら `hugo server --source lua-api-doc`。

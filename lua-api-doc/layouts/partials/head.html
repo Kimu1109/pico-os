@@ -1,6 +1,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>{{ if .IsHome }}{{ .Site.Title }}{{ else }}{{ .Title }} | {{ .Site.Title }}{{ end }}</title>
 <meta name="description" content="{{ if .Description }}{{ .Description }}{{ else }}{{ .Site.Params.description }}{{ end }}">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2218%22 fill=%22%23202946%22/><text x=%2250%22 y=%2268%22 font-size=%2258%22 text-anchor=%22middle%22 fill=%22%2329adff%22 font-family=%22monospace%22>P</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22 shape-rendering=%22crispEdges%22><rect width=%2216%22 height=%2216%22 fill=%22%23000%22/><rect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 fill=%22%23fff%22/><path d=%22M5 4h5v1h1v3h-1v1h-3v3h-2z%22 fill=%22%23000%22/><rect x=%227%22 y=%225%22 width=%223%22 height=%223%22 fill=%22%23fff%22/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script>
+  // 選んだテーマ(トップのページ・Playgroundと共通)を描く前に当てる。保存できない環境では毎回OSの設定に従う
+  try {
+    var savedTheme = localStorage.getItem("picoos-theme");
+    if (savedTheme === "light" || savedTheme === "dark") document.documentElement.dataset.theme = savedTheme;
+  } catch (e) {}
+</script>
 <link rel="stylesheet" href="{{ "css/style.css" | relURL }}">

@@ -1,0 +1,23 @@
+{{/* 上端のステータスバー(トップのページ・Playgroundと同じ形)。サイト(/lua-api/)の1つ上がPagesのトップ */}}
+{{ $top := printf "%s../" .Site.Home.RelPermalink }}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-sun" viewBox="0 0 24 24"><path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7"/></symbol>
+    <symbol id="i-menu-2" viewBox="0 0 24 24"><path d="M4 6l16 0"/><path d="M4 12l16 0"/><path d="M4 18l16 0"/></symbol>
+  </defs>
+</svg>
+<header class="statusbar">
+  <button class="sb-btn sidebar-toggle" id="sidebar-toggle" type="button" aria-label="メニュー" aria-controls="sidebar">
+    <svg class="i"><use href="#i-menu-2"/></svg>
+  </button>
+  <span class="sb-time px" id="sbTime">--:--</span>
+  <a class="sb-title px" href="{{ .Site.Home.RelPermalink }}">LUA API</a>
+  <nav class="sb-nav px" aria-label="ほかのページ">
+    <a href="{{ $top }}">TOP</a>
+    <a href="{{ $top }}playground/">PLAY</a>
+    <a class="opt" href="{{ .Site.Params.repo }}">GITHUB</a>
+    <button class="sb-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える">
+      <svg class="i"><use href="#i-sun"/></svg>
+    </button>
+  </nav>
+</header>

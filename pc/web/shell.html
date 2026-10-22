@@ -7,41 +7,112 @@
 
   画面は pc/compat/config/LGFX_Config_PC.hpp の PICOOS_PC_SCALE 倍で作られるので、
   canvasの実サイズはC++側が決める(ここでは触らない)。
+
+  見た目はトップのページ(pc/web/landing.html)と揃える: OSのパレット16色・白地に黒の2px線・角丸なし・
+  右下に影のボタン・押しているものは白黒反転・上端にステータスバー。フォントは本文 DotGothic16、
+  見出しなど Press Start 2P。色の値やテーマの切り替え(localStorage の "picoos-theme")も landing.html と同じなので、
+  片方を変えたらもう片方も合わせること。
 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="picoos-asset-rev" content="__PICOOS_ASSET_REV__">
-<title>pico-os (Web)</title>
+<meta name="color-scheme" content="light dark">
+<title>pico-os Playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script>
+  // 選んだテーマ(トップのページと共通)を描く前に当てる。保存できない環境では毎回OSの設定に従う
+  try {
+    var savedTheme = localStorage.getItem('picoos-theme');
+    if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
+  } catch (e) {}
+</script>
 <style>
+  /* ---- 色: OSのパレット16色(landing.html と同じ。0=文字・15=背景・7=薄い灰・8=濃い灰) ---- */
   :root {
-    --bg: #1b1d21;
-    --panel: #24272c;
-    --line: #3a3f46;
-    --text: #e6e8ea;
-    --muted: #9aa1a9;
-    --accent: #6cb6ff;
+    --c0: #000000; --c1: #000080; --c2: #008000; --c3: #008080;
+    --c4: #800000; --c5: #800080; --c6: #808000; --c7: #d3d3d3;
+    --c8: #808080; --c9: #0000ff; --c10: #00ff00; --c11: #00ffff;
+    --c12: #ff0000; --c13: #ff00ff; --c14: #ffff00; --c15: #ffffff;
+    --fg: var(--c0);
+    --bg: var(--c15);
+    --muted: #555555;
+    --line: var(--c0);
+    --soft: var(--c7);
+    --accent: var(--c9);
+    --page: #f2f2ee;
+    color-scheme: light;
   }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c0: #ebebeb; --c1: #7896ff; --c2: #64dc78; --c3: #5ad2dc;
+      --c4: #ff7878; --c5: #dc82ff; --c6: #dcd25a; --c7: #404048;
+      --c8: #aaaab0; --c9: #466eff; --c10: #28c83c; --c11: #00646e;
+      --c12: #ff4646; --c13: #e650e6; --c14: #e6c828; --c15: #101014;
+      --accent: var(--c1);
+      --muted: var(--c8);
+      --page: #08080a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --c0: #ebebeb; --c1: #7896ff; --c2: #64dc78; --c3: #5ad2dc;
+    --c4: #ff7878; --c5: #dc82ff; --c6: #dcd25a; --c7: #404048;
+    --c8: #aaaab0; --c9: #466eff; --c10: #28c83c; --c11: #00646e;
+    --c12: #ff4646; --c13: #e650e6; --c14: #e6c828; --c15: #101014;
+    --accent: var(--c1);
+    --muted: var(--c8);
+    --page: #08080a;
+    color-scheme: dark;
+  }
+
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 16px;
-    background: var(--bg);
-    color: var(--text);
-    font: 13px/1.6 system-ui, "Noto Sans JP", sans-serif;
+    background: var(--page);
+    color: var(--fg);
+    font: 15px/1.7 "DotGothic16", system-ui, sans-serif;
   }
-  h1 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
-  h1 .sub { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 12px; }
+  .px { font-family: "Press Start 2P", "DotGothic16", monospace; }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 2px dashed var(--fg); outline-offset: 3px;
+  }
+  svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2;
+          stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  code { font-family: inherit; background: var(--soft); padding: 0 4px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
 
-  .layout { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  /* ---- ステータスバー(landing.html と同じ形) ---- */
+  .statusbar { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 2px solid var(--line); }
+  .statusbar .wrap { display: flex; align-items: center; gap: 12px; height: 44px; }
+  .sb-time { font-size: 14px; }
+  .sb-title { font-size: 10px; }
+  .sb-nav { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+  .sb-nav a { font-size: 10px; color: var(--fg); text-decoration: none; padding: 8px; border: 2px solid transparent; }
+  .sb-nav a:hover { border-color: var(--line); }
+  .theme-btn {
+    display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+    background: var(--bg); color: var(--fg); border: 2px solid var(--line); cursor: pointer;
+  }
+  .theme-btn svg.i { width: 18px; height: 18px; }
+  @media (max-width: 720px) { .sb-nav a.opt, .sb-title { display: none; } }
 
+  .layout { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; padding-top: 24px; padding-bottom: 48px; }
+
+  /* ---- 画面の枠 ---- */
   .screen {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
+    background: var(--bg);
+    border: 2px solid var(--line);
+    box-shadow: 8px 8px 0 var(--line);
     padding: 12px;
+    max-width: 100%;
   }
+  /* 枠線はcanvasではなく外側の箱に引く(canvasのCSS上の大きさはSDLの判定に使われるので、余計なものを足さない) */
+  .canvas-box { border: 2px solid var(--line); background: #000; width: fit-content; max-width: 100%; }
   /* canvasの「解像度」はSDL(C++側)が決める。ここで指定するのは**見た目の大きさだけ**。
      SDLはマウス座標をCSS上の大きさで割り戻すので、縮小表示してもタップはずれない。
      ただし **SDLがウィンドウを作る一瞬だけは話が別** — その瞬間のCSS上の実測値で
@@ -51,7 +122,6 @@
   canvas#canvas {
     display: block;
     background: #000;
-    border-radius: 4px;
     /* 画面からはみ出すときだけ縮める */
     max-width: 100%;
     height: auto;
@@ -61,78 +131,127 @@
     touch-action: none;
     outline: none;
   }
-
-  .side { flex: 1 1 340px; min-width: 300px; display: flex; flex-direction: column; gap: 12px; }
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 12px;
+  .screen .label {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; font-size: 9px; color: var(--muted);
   }
-  .card h2 { font-size: 12px; margin: 0 0 8px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+  .screen .label .led { width: 8px; height: 8px; background: var(--c10); display: inline-block; margin-right: 6px; }
 
-  #status { color: var(--accent); min-height: 1.6em; }
-  progress { width: 100%; height: 6px; }
+  /* ---- 右側の窓(landing.html の節の見出しと同じ形) ---- */
+  .side { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+  .card { background: var(--bg); border: 2px solid var(--line); box-shadow: 6px 6px 0 var(--line); }
+  .card h2 {
+    display: flex; align-items: baseline; gap: 10px;
+    margin: 0; padding: 8px 12px;
+    border-bottom: 2px solid var(--line);
+    font: 11px/1.8 "Press Start 2P", monospace;
+  }
+  .card h2 .jp { font: 14px "DotGothic16", sans-serif; color: var(--muted); }
+  .card .body { padding: 12px; }
 
-  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  #status { min-height: 1.7em; }
+  progress {
+    width: 100%; height: 12px; margin-top: 6px; display: block;
+    appearance: none; -webkit-appearance: none;
+    border: 2px solid var(--line); background: var(--bg);
+  }
+  progress::-webkit-progress-bar { background: var(--bg); }
+  progress::-webkit-progress-value { background: var(--fg); }
+  progress::-moz-progress-bar { background: var(--fg); }
+  progress[hidden] { display: none; }
+
+  /* ---- ボタン(OSのボタン: 白地・黒枠・右下に影。押すと沈む) ---- */
+  .row { display: flex; flex-wrap: wrap; gap: 10px; }
   button, .linkbtn {
-    background: #2f343b;
-    color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 5px 10px;
-    font: inherit;
-    font-size: 12px;
+    display: inline-block;
+    background: var(--bg);
+    color: var(--fg);
+    border: 2px solid var(--line);
+    box-shadow: 3px 3px 0 var(--line);
+    padding: 4px 10px;
+    font: 14px/1.6 "DotGothic16", sans-serif;
     cursor: pointer;
     text-decoration: none;
   }
-  button:hover, .linkbtn:hover { border-color: var(--accent); color: var(--accent); }
+  button:hover, .linkbtn:hover { background: var(--soft); }
+  button:active, .linkbtn:active { transform: translate(3px, 3px); box-shadow: none; }
+  .linkbtn.on { background: var(--fg); color: var(--bg); }
+  select {
+    font: 14px "DotGothic16", sans-serif; color: var(--fg); background: var(--bg);
+    border: 2px solid var(--line); border-radius: 0; padding: 2px 4px;
+  }
+  input[type="checkbox"] { accent-color: var(--fg); width: 16px; height: 16px; margin: 0; }
 
+  /* ---- ログ(Serial の出力先)。OSの端末(SSH)と同じ黒地 ---- */
   #log {
     margin: 0;
     height: 260px;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
-    font-family: ui-monospace, "SF Mono", Consolas, monospace;
-    font-size: 11.5px;
-    line-height: 1.5;
-    color: #cfd4da;
-    background: #16181c;
-    border: 1px solid var(--line);
-    border-radius: 6px;
+    font: 13px/1.6 "DotGothic16", monospace;
+    color: #ebebeb;
+    background: #000;
+    border: 2px solid var(--line);
     padding: 8px;
   }
-  #log .err { color: #ff9a8a; }
-  .hint { color: var(--muted); font-size: 11.5px; margin: 8px 0 0; }
-  code { background: #16181c; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  #log .err { color: #ff7878; }
+  .hint { color: var(--muted); font-size: 13.5px; margin: 8px 0 0; }
 
   /* ---- 外部コントローラー(pico-osの PadFunctions へ USBシリアルの代わりに流す) ---- */
-  .pad { margin-top: 12px; user-select: none; -webkit-user-select: none; touch-action: none; }
+  .pad { margin-top: 16px; user-select: none; -webkit-user-select: none; touch-action: none; }
   .pad-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .pad-main { margin-top: 8px; }
-  .pad-dpad, .pad-face { display: grid; grid-template-columns: repeat(3, 38px); grid-template-rows: repeat(3, 38px); gap: 2px; }
-  .pad-mid { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .pad-main { margin-top: 10px; }
+  .pad-dpad, .pad-face { display: grid; grid-template-columns: repeat(3, 38px); grid-template-rows: repeat(3, 38px); gap: 4px; }
+  .pad-mid { display: flex; flex-direction: column; gap: 8px; align-items: center; }
   .pad button {
-    padding: 0; font-size: 12px; min-width: 38px; height: 38px;
-    background: #2f343b; border-radius: 8px;
+    padding: 0; min-width: 38px; height: 38px;
+    font: 12px "Press Start 2P", monospace;
+    box-shadow: 2px 2px 0 var(--line);
     -webkit-tap-highlight-color: transparent;
   }
-  .pad button:hover { color: var(--text); border-color: var(--line); }
-  .pad .face { border-radius: 50%; font-weight: 700; }
-  .pad .small { height: 26px; min-width: 60px; font-size: 11px; border-radius: 13px; }
-  .pad .shoulder { height: 26px; min-width: 52px; }
-  .pad button.on { background: var(--accent); color: #111; border-color: var(--accent); }
-  .pad-opts { margin-top: 8px; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .pad button:hover { background: var(--bg); }
+  .pad button:active { transform: none; }
+  .pad .small { height: 26px; min-width: 72px; font-size: 8px; }
+  .pad .shoulder { height: 26px; min-width: 52px; font-size: 9px; }
+  /* 押しているボタンは白黒反転して沈める(OSの選択中と同じ) */
+  .pad button.on { background: var(--fg); color: var(--bg); transform: translate(2px, 2px); box-shadow: none; }
+  .pad-opts { margin-top: 10px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  @media (max-width: 420px) {
+    .pad-dpad, .pad-face { grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(3, 34px); }
+    .pad button { min-width: 34px; height: 34px; }
+    .pad .small { min-width: 60px; height: 26px; }
+  }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-sun" viewBox="0 0 24 24"><path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7"/></symbol>
+  </defs>
+</svg>
 
-<h1>pico-os <span class="sub">Web (WebAssembly) ビルド — マウスのドラッグがタッチになる</span></h1>
+<header class="statusbar">
+  <div class="wrap">
+    <span class="sb-time px" id="sbTime">--:--</span>
+    <span class="sb-title px">PLAYGROUND</span>
+    <nav class="sb-nav px" aria-label="ほかのページ">
+      <a href="../">TOP</a>
+      <a class="opt" href="../lua-api/">LUA API</a>
+      <a class="opt" href="https://github.com/Kimu1109/pico-os">GITHUB</a>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える">
+        <svg class="i"><use href="#i-sun"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
 
-<div class="layout">
+<div class="wrap layout">
   <div class="screen">
-    <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+    <div class="canvas-box">
+      <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+    </div>
+    <div class="label px"><span><i class="led"></i>PICO-OS WEB</span><span>DRAG = TOUCH</span></div>
 
     <!-- 外部コントローラー(Wiiクラシックコントローラーと同じボタン)。ボタンもキーボードも同時押しできる -->
     <div class="pad" id="pad" oncontextmenu="event.preventDefault()">
@@ -169,56 +288,89 @@
 
   <div class="side">
     <div class="card">
-      <h2>状態</h2>
-      <div id="status">読み込み中…</div>
-      <progress id="progress" value="0" max="100"></progress>
+      <h2>STATUS <span class="jp">状態</span></h2>
+      <div class="body">
+        <div id="status">読み込み中…</div>
+        <progress id="progress" value="0" max="100"></progress>
+      </div>
     </div>
 
     <div class="card">
-      <h2>Lua アプリ開発</h2>
-      <a class="linkbtn" href="../lua-api/">Lua API リファレンス</a>
-      <p class="hint">GitHub Pages で公開しているときだけ開ける(手元のビルドでは置いていない)。</p>
+      <h2>LUA <span class="jp">Luaアプリ開発</span></h2>
+      <div class="body">
+        <a class="linkbtn" href="../lua-api/">Lua API リファレンス</a>
+        <p class="hint">GitHub Pages で公開しているときだけ開ける(手元のビルドでは置いていない)。</p>
+      </div>
     </div>
 
     <div class="card">
-      <h2>Wi-Fi の状態を差し替えて再読み込み</h2>
-      <div class="row" id="wifi-buttons"></div>
-      <p class="hint">
-        URLのクエリがそのまま環境変数になる(<code>?wifi=disconnected&amp;rssi=-85</code>)。
-        使えるキーは <code>wifi</code> / <code>rssi</code> / <code>ssid</code> / <code>scan</code>。
-      </p>
+      <h2>WI-FI <span class="jp">状態を差し替えて再読み込み</span></h2>
+      <div class="body">
+        <div class="row" id="wifi-buttons"></div>
+        <p class="hint">
+          URLのクエリがそのまま環境変数になる(<code>?wifi=disconnected&amp;rssi=-85</code>)。
+          使えるキーは <code>wifi</code> / <code>rssi</code> / <code>ssid</code> / <code>scan</code>。
+        </p>
+      </div>
     </div>
 
     <div class="card">
-      <h2>外部コントローラー</h2>
-      <p class="hint" style="margin-top:0">
-        画面の下のボタン(マウス・複数の指で同時押しも可)か、キーボードで操作する。
-        実機では USB シリアルの <code>script/pad_serial.py</code> が担う部分で、同じ
-        <code>pad XXXX</code> の行を pico-os へ流している(チェックを外すと 0.5 秒で「外れた」扱いになる)。
-      </p>
-      <p class="hint">
-        十字キー = 矢印 / A = <code>X</code> / B = <code>Z</code> / X = <code>S</code> / Y = <code>A</code> /
-        L・R・ZL・ZR = <code>Q</code> <code>W</code> <code>E</code> <code>R</code> /
-        START = <code>Enter</code> / SELECT = <code>Backspace</code> / HOME = <code>H</code> か <code>Esc</code>
-      </p>
-      <p class="hint">
-        「PCのキーボード」を<b>文字入力</b>にすると、打ったキーを物理キーボードとして送る
-        (<code>key M u+XXXX</code> の行。実機では <code>pad_serial.py --mode text</code> と同じ)。
-        オンスクリーンキーボードを開いている所・テキストエディタ・SSH にそのまま入る
-        (Ctrl+C 等も送るので、ブラウザのショートカットは効かなくなる。Cmd/⌘ 付きはブラウザへ渡す)。
-      </p>
+      <h2>PAD <span class="jp">外部コントローラー</span></h2>
+      <div class="body">
+        <p class="hint" style="margin-top:0">
+          画面の下のボタン(マウス・複数の指で同時押しも可)か、キーボードで操作する。
+          実機では USB シリアルの <code>script/pad_serial.py</code> が担う部分で、同じ
+          <code>pad XXXX</code> の行を pico-os へ流している(チェックを外すと 0.5 秒で「外れた」扱いになる)。
+        </p>
+        <p class="hint">
+          十字キー = 矢印 / A = <code>X</code> / B = <code>Z</code> / X = <code>S</code> / Y = <code>A</code> /
+          L・R・ZL・ZR = <code>Q</code> <code>W</code> <code>E</code> <code>R</code> /
+          START = <code>Enter</code> / SELECT = <code>Backspace</code> / HOME = <code>H</code> か <code>Esc</code>
+        </p>
+        <p class="hint">
+          「PCのキーボード」を<b>文字入力</b>にすると、打ったキーを物理キーボードとして送る
+          (<code>key M u+XXXX</code> の行。実機では <code>pad_serial.py --mode text</code> と同じ)。
+          オンスクリーンキーボードを開いている所・テキストエディタ・SSH にそのまま入る
+          (Ctrl+C 等も送るので、ブラウザのショートカットは効かなくなる。Cmd/⌘ 付きはブラウザへ渡す)。
+        </p>
+      </div>
     </div>
 
     <div class="card">
-      <h2>ログ(Serial の出力先)</h2>
-      <pre id="log"></pre>
-      <div class="row" style="margin-top:8px">
-        <button type="button" id="btn-clear">ログを消す</button>
-        <button type="button" id="btn-shot">画面をPNGで保存</button>
+      <h2>LOG <span class="jp">Serial の出力先</span></h2>
+      <div class="body">
+        <pre id="log"></pre>
+        <div class="row" style="margin-top:12px">
+          <button type="button" id="btn-clear">ログを消す</button>
+          <button type="button" id="btn-shot">画面をPNGで保存</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+<script>
+  // ステータスバーの時刻(OSと同じ HH:MM)
+  (function () {
+    var el = document.getElementById('sbTime');
+    function tick() {
+      var d = new Date();
+      el.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    tick();
+    setInterval(tick, 10000);
+  })();
+
+  // テーマの切り替え(トップのページと同じ鍵に覚える)
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    var root = document.documentElement;
+    var cur = root.dataset.theme ||
+      (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('picoos-theme', next); } catch (e) {}
+  });
+</script>
 
 <script>
   var logEl = document.getElementById('log');
@@ -250,6 +402,7 @@
     a.className = 'linkbtn';
     a.href = location.pathname + p.query;
     a.textContent = p.label;
+    if (location.search === p.query) a.classList.add('on');   // 今の状態
     wifiRow.appendChild(a);
   });
 

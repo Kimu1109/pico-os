@@ -24,4 +24,28 @@
       });
     });
   }
+
+  // ステータスバーの時刻(OSと同じ HH:MM)
+  var timeEl = document.getElementById("sbTime");
+  if (timeEl) {
+    var tick = function () {
+      var d = new Date();
+      timeEl.textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    };
+    tick();
+    setInterval(tick, 10000);
+  }
+
+  // テーマの切り替え(トップのページ・Playgroundと同じ鍵に覚える。読み込み時の適用は head.html)
+  var themeBtn = document.getElementById("themeBtn");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var root = document.documentElement;
+      var cur = root.dataset.theme ||
+        (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var next = cur === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("picoos-theme", next); } catch (e) {}
+    });
+  }
 })();

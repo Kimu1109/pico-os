@@ -56,6 +56,9 @@
   **`RuntimeError: divide by zero`で止まった**。`compat/I2S.h`の`end()`が閉じる前にハンドラを空の関数へ差し替える。
 - **ページの外枠**: `pc/web/shell.html`(emscriptenの `--shell-file`)。canvas・ログ欄・
   Wi-Fi状態の切替・画面のPNG保存ボタンを持つ。デバッグ用の道具を足すならここ。
+  見た目はトップのページ(`landing.html`)と揃えてある(2026-10-22。パレット・ボタンの形・フォント・ステータスバー・
+  テーマの切り替えと`localStorage`の鍵`picoos-theme`が共通)ので、片方を変えたらもう片方も合わせる。
+  canvasそのものには枠線・余白を付けず、外側の箱に引く(canvasのCSS上の大きさはSDLの判定に使われるため)。
 - **`src/`へ新しい依存を足すときはWebビルドも通すこと**。ネイティブが通ってもemscriptenで
   落ちる依存(生ソケット/スレッド/ブロッキング待ち)があるため。
 - **公開**: `.github/workflows/web-pages.yml` が `main` へのpushで

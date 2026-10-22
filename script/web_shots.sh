@@ -7,9 +7,9 @@
 # .github/workflows/web-pages.yml が公開のたびに呼ぶ(写真はリポジトリに置かず、常に今の画面を撮る)。
 # 手元で見るときは出力先を pc/web/ と同じ階層の shots/ にすれば landing.html から読める。
 #
-# タップの座標は等倍(240x320)の画面上の位置で、ホーム画面の並びに依存する
-# (2列3段: 列x=60/178・段y=55/140/225、ページ送り「>」が(215,305))。
-# アプリの並びが変わって別の画面が写ったら、ここの座標を直すこと。
+# アプリは --app で名前を指して開き、撮る画面まではアプリが --scene で自動で進む
+# (ホーム画面の並びに依存しない。画面の名前はアプリごと。pc/README.md「起動時に開くアプリ」)。
+# ランチャのページ(apps)だけはホーム画面をタップで送る(ページ送り「>」が等倍で(215,305))。
 # SDの中身(pc/sdcard/)は一時ディレクトリへ写して使う(ブロックのワールド等の書き込みでリポジトリを汚さない)。
 set -eu
 
@@ -26,7 +26,7 @@ trap 'rm -rf "$work"' EXIT
 
 export SDL_VIDEODRIVER=offscreen
 
-# shot <名前> <撮るフレーム> <拡大率> [--tap ...]
+# shot <名前> <撮るフレーム> <拡大率> [--app ... --scene ... --tap ...]
 shot() {
     name=$1; frames=$2; scale=$3; shift 3
     rm -rf "$work/sd"
@@ -52,20 +52,16 @@ next_pages() {
 
 # 時刻は333msごとにしか更新しないので、200フレーム以上回してから撮る(pc/README.md)
 shot home     250 2
-shot clock    250 1 --tap 178,55@30:5
-shot calc     250 1 --tap 60,140@30:5
-shot markdown 250 1 --tap 60,55@30:5
-# shellcheck disable=SC2046
-shot music    300 1 $(next_pages 2) --tap 178,55@70:5
+shot clock    250 1 --app 時計
+shot calc     250 1 --app 電卓
+shot markdown 250 1 --app Markdown
+shot music    250 1 --app ミュージック
 # shellcheck disable=SC2046
 shot apps     200 1 $(next_pages 4)
-# テトリスは「タップで開始」を押して少し落としてから
-# shellcheck disable=SC2046
-shot tetris   700 1 $(next_pages 4) --tap 178,140@110:5 --tap 60,145@250:5
-# ブロック: ワールドA →「自然」を選び、作り終わるまで回す
-# shellcheck disable=SC2046
-shot blocks  1200 1 $(next_pages 4) --tap 60,140@110:5 --tap 120,90@200:5 --tap 60,133@260:5
-# shellcheck disable=SC2046
-shot zombie   700 1 $(next_pages 4) --tap 178,55@110:5
+# テトリス: タイトルを飛ばして始め、少し落としてから
+shot tetris   500 1 --app テトリス --scene play
+# ブロック: ワールドAへ「自然」を作って入り、チャンクを読み終わるまで回す
+shot blocks  1000 1 --app ブロック --scene nature
+shot zombie   600 1 --app ゾンビTD
 
 ls -l "$out"

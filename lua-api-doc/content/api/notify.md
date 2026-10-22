@@ -72,6 +72,9 @@ pico.notify{ title = "電池が少ない", when = "battery_low", below = 15 }
 
 通知をタップして開かれたとき、その通知の `tag` と `data` を返します。それ以外(ランチャから開いた、`pop()` で戻ってきた)は `nil`。
 
+PC/Web版で最初に開く画面を指定して起動されたとき(`--app 名前 --scene 画面`、Webは `?app=名前&scene=画面`)は、
+`tag` が `"scene"`、`data` がその画面の名前になります。画面写真を撮るときに、撮りたい画面まで自分で進むのに使えます。
+
 ```lua
 local tag, data = pico.launch_reason()
 if tag == "pomodoro" then

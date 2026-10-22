@@ -130,6 +130,7 @@
 - [x] ブラウザ動作対応(WebAssembly)
 - [x] Webビルドの自動公開
 - [x] Lua APIリファレンスのGitHub Pages公開(/lua-api/)
+- [x] 起動時に開くアプリと最初の画面の指定(`--app`/`--scene`、Webは `?app=&scene=`)
 - [ ] その他あれば
 
 ### 7. 標準アプリ開発

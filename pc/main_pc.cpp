@@ -21,9 +21,13 @@
 //                                   ヘッドレスではSDLへマウスが来ないので、
 //                                   撮りたい画面まで操作を進めるために使う。
 //                                   複数回指定できる(最大16件)
+//   picoos_pc --app NAME            起動したらランチャの名前NAMEのアプリを開いておく
+//   picoos_pc --scene SCENE         --app のアプリへ「最初に開く画面」を頼む(撮りたい画面まで
+//                                   自動で進める。意味はアプリごと。pc/README.md「起動時に開くアプリ」)
 //
 // 使い方(Web): index.html を開くだけ。環境変数の代わりにURLのクエリで状態を指定する
 //   index.html?wifi=disconnected&rssi=-85
+//   index.html?app=テトリス&scene=play   (--app / --scene と同じ)
 //   ※--shot / --tap はネイティブ専用(ブラウザではDevToolsと画面のPNG保存を使う)
 #include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
 #include <SDL2/SDL.h>
@@ -51,6 +55,7 @@
 #include "devtools/CrashDump_Functions.hpp" // 再起動(電源メニュー)の差し込み口
 #include "services/DeviceKey_Functions.hpp" // OTPの端末の鍵(PCではファイルで真似る)
 #include "apps/firmware/Fw_Store.hpp"                // ファームの更新の置き場(PCではディレクトリで真似る)
+#include "services/App_Functions.hpp"                // 起動時に開くアプリ(--app / ?app=)
 
 //OTP(端末の鍵)を真似るファイル。PICOOS_OTP_FILE、無ければSDのルートの隣の otp_emu.bin
 //(SDの中に置くと「SDだけを盗まれても読めない」を試せないので外に置く。Webは仮想FSなので読み直しで消える)
@@ -78,6 +83,22 @@ static void configureOtaDir()
         path = std::string(root ? root : PICOOS_SD_ROOT_DEFAULT) + "/../ota_emu";
     }
     FwStorePc::dir = path.c_str();
+}
+
+//起動時に開くアプリ。PICOOS_START_APP(ネイティブは --app、Webは ?app=)の名前のアプリを、
+//PICOOS_START_SCENE(--scene / ?scene=)の画面を頼んで起動する。setup() の後に呼ぶ
+//(ホーム画面の上へPushするので、アプリから戻ればいつものホーム画面になる)
+static void launchStartApp()
+{
+    const char* name = getenv("PICOOS_START_APP");
+    if (!name || !name[0]) return;
+    const char* scene = getenv("PICOOS_START_SCENE");
+    if (!AppFunctions::LaunchByName(name, scene)) {
+        printf("[PC] 起動時に開くアプリが見つかりません: %s\n", name);
+        return;
+    }
+    printf("[PC] 起動時に開くアプリ: %s%s%s\n", name, (scene && scene[0]) ? " 画面: " : "",
+           (scene && scene[0]) ? scene : "");
 }
 #if !defined(__EMSCRIPTEN__)
     #include <unistd.h>                      // execv(再起動)
@@ -275,6 +296,7 @@ namespace {
         configureOtpFile();
         configureOtaDir();
         setup();
+        launchStartApp();
 
         int frame = 0;
         while (*running) {
@@ -322,6 +344,8 @@ namespace {
         { "render", "PICOOS_RENDER_DRIVER" },
         { "spi_wait", "PICOOS_SPI_WAIT" },
         { "sound", "PICOOS_SOUND_STATE" },
+        { "app",   "PICOOS_START_APP"   },
+        { "scene", "PICOOS_START_SCENE" },
     };
 
     // application/x-www-form-urlencoded をほどく(%XX と '+' だけ)
@@ -638,6 +662,7 @@ int main(int, char**)
     configureOtaDir();
     setup();
     setup1();
+    launchStartApp();
 
     //第2引数0 = requestAnimationFrame任せ、第3引数1 = ここで抜けずにループへ入る
     emscripten_set_main_loop(webFrame, 0, 1);
@@ -694,6 +719,15 @@ int main(int argc, char** argv)
                 printf("[PC] --tap が多すぎます(最大%d件)\n", PicoOsTouchScript::kMaxTaps);
                 return 1;
             }
+            continue;
+        }
+        //環境変数(PICOOS_START_APP/SCENE)と同じ扱い。引数のほうを優先する
+        if (strcmp(argv[i], "--app") == 0 && i + 1 < argc) {
+            setenv("PICOOS_START_APP", argv[++i], 1);
+            continue;
+        }
+        if (strcmp(argv[i], "--scene") == 0 && i + 1 < argc) {
+            setenv("PICOOS_START_SCENE", argv[++i], 1);
             continue;
         }
         if (strcmp(argv[i], "--shot") == 0 && i + 1 < argc) {

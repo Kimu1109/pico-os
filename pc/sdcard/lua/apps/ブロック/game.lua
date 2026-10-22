@@ -543,6 +543,14 @@ end)
 
 refresh_slots()
 set_mode("title")
+-- PCビルドの --scene nature(画面写真用): ワールドAへ「自然」のワールドを作って入る(あれば読む)
+do
+    local tag, scene = pico.launch_reason()
+    if tag == "scene" and scene == "nature" then
+        slot = 1
+        start(not exists[1] and 0 or nil)
+    end
+end
 
 if TEST then TEST.env = { act = act, move = move, start = start, scroll = scroll, center_on = center_on,
     save_and_quit = save_and_quit, open_select = open_select, choose = choose, pick_to = pick_to,

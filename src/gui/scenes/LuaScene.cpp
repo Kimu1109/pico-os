@@ -89,6 +89,9 @@ void LuaScene::onEnter() {
         if (PICO_IO::normalize(owner, app_dir.c_str()) &&
             NotificationFunctions::TakeLaunchReason(owner.c_str(), tag, data)) {
             engine->SetLaunchReason(tag.c_str(), data.c_str());
+        } else if (AppFunctions::TakeLaunchScene(script_path.c_str(), data)) {
+            // 起動時に開く画面(PCビルドの --scene。AppFunctions::LaunchByName(name, scene))
+            engine->SetLaunchReason("scene", data.c_str());
         }
     }
 

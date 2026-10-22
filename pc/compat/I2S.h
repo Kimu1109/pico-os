@@ -48,6 +48,10 @@
 #include <string>
 #include <vector>
 
+#if defined(__EMSCRIPTEN__)
+    #include <emscripten.h>
+#endif
+
 #include "Arduino.h"
 #include "SdFat.h"      // PicoOsSdHost::root(sound.cfg を読むため)
 #include "consts.hpp"   // AUDIO_DETECT
@@ -193,6 +197,18 @@ public:
             cap_dev_ = 0;
         }
         if(dev_ != 0){
+#if defined(__EMSCRIPTEN__)
+            //emscriptenのSDL2は閉じるときScriptProcessorNodeをdisconnect()するだけで
+            //onaudioprocessを外さない(録音側は外している)。既に積まれた音声イベントが後から届くと、
+            //解放済みのデバイスでHandleAudioProcessが走って「divide by zero」で止まる
+            //(周波数の切り替え=end()→begin()で起きた)。閉じる前にこちらで外しておく
+            EM_ASM({
+                var SDL2 = Module['SDL2'];
+                if (SDL2 && SDL2.audio && SDL2.audio.scriptProcessorNode) {
+                    SDL2.audio.scriptProcessorNode.onaudioprocess = function(e) {};
+                }
+            });
+#endif
             SDL_CloseAudioDevice(dev_);     //コールバックが終わるまで待ってから戻る
             dev_ = 0;
         }

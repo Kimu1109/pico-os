@@ -50,6 +50,10 @@
   HTTPSも同じ理由で持たない(`compat/WiFiClientSecure.h`が常に失敗するスタブになる)ので、
   カレンダーの取得もWebでは動かない(SDに焼き込んだ`.ics`の表示はできる)。
 - **`delay()`**: 待つとタブが固まるのでWebでは即座に戻る(`src/` は使っていない)。
+- **音声デバイスの開き直し**(2026-10-22): emscriptenのSDL2は出力を閉じるとき`ScriptProcessorNode`を
+  `disconnect()`するだけで`onaudioprocess`を外さない。周波数の切り替え(ミュージック画面を開くと44100Hzへ)で
+  `I2S::end()`→`begin()`すると、積まれていた音声イベントが解放済みのデバイスで`HandleAudioProcess`を呼び
+  **`RuntimeError: divide by zero`で止まった**。`compat/I2S.h`の`end()`が閉じる前にハンドラを空の関数へ差し替える。
 - **ページの外枠**: `pc/web/shell.html`(emscriptenの `--shell-file`)。canvas・ログ欄・
   Wi-Fi状態の切替・画面のPNG保存ボタンを持つ。デバッグ用の道具を足すならここ。
 - **`src/`へ新しい依存を足すときはWebビルドも通すこと**。ネイティブが通ってもemscriptenで

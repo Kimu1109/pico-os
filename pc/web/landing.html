@@ -1,33 +1,689 @@
 <!doctype html>
 <!--
-  GitHub Pages のトップ(https://kimu1109.github.io/pico-os/)。
-  Web版pico-os本体は /playground/ に置いてあり、ここはそこへの入口。
+  GitHub Pages のトップ(https://kimu1109.github.io/pico-os/)。pico-os の紹介と、各ページへの入口。
+  Web版pico-os本体は /playground/、Lua APIリファレンスは /lua-api/ に置いてある。
   ワークフロー(.github/workflows/web-pages.yml)が _site/index.html として置く。
+
+  見た目は pico-os の画面に寄せる: 白地に黒の2px線・角丸なし・押せる部品は右下に影・選択中は白黒反転・
+  上端にステータスバー。色はOSのパレット(src/gui/core/GFX_Functions.hpp の DEFAULT_COLORS / DARK_COLORS)を
+  そのまま --c0〜--c15 に写してあり、ダークテーマも同じ番号の差し替えで作る(OSと同じ考え方)。
+  フォントは本文 DotGothic16、見出しなどの強調 Press Start 2P(英数字しか無いので見出しは英語にする)。
+
+  画面写真(shots/*.png)は公開時にワークフローが PCビルドの --shot で撮る(script/web_shots.sh)。
+  手元で開いて写真が無いときは「NO SIGNAL」の枠になる。
+  アイコンは script/tabler_icons/ の Tabler Icons(MIT)をそのまま埋め込んだもの。
 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pico-os</title>
+<meta name="description" content="Raspberry Pi Pico 2 W(RP2350)で動く自作のタッチGUI OS。ブラウザでそのまま試せます。">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
-  body { margin: 0; background: #1d2b53; color: #fff1e8; font-family: system-ui, sans-serif; }
-  main { max-width: 560px; margin: 0 auto; padding: 48px 16px; }
-  h1 { margin: 0 0 8px; }
-  p { color: #c2c3c7; line-height: 1.6; }
-  a.card { display: block; margin: 12px 0; padding: 16px; border-radius: 8px;
-           background: #2d3a6b; color: #fff1e8; text-decoration: none; }
-  a.card:hover { background: #3a4a85; }
-  a.card b { display: block; font-size: 1.1em; color: #29adff; }
-  a.card span { color: #c2c3c7; font-size: .9em; }
+  /* ---- 色: OSのパレット16色(番号の意味もOSと同じ。0=文字・15=背景・7=薄い灰・8=濃い灰) ---- */
+  :root {
+    --c0: #000000; --c1: #000080; --c2: #008000; --c3: #008080;
+    --c4: #800000; --c5: #800080; --c6: #808000; --c7: #d3d3d3;
+    --c8: #808080; --c9: #0000ff; --c10: #00ff00; --c11: #00ffff;
+    --c12: #ff0000; --c13: #ff00ff; --c14: #ffff00; --c15: #ffffff;
+    --fg: var(--c0);
+    --bg: var(--c15);
+    --muted: #555555;       /* 補足の文字。パレットの8(#808080)は白地の本文には薄すぎるので一段濃く */
+    --line: var(--c0);
+    --soft: var(--c7);
+    --accent: var(--c9);
+    --page: #f2f2ee;        /* 画面の外(机)。OSの白い画面が浮くように少しだけ落とす */
+    --dither: var(--c7);
+    color-scheme: light;
+  }
+  /* ダークテーマ: OSの DARK_COLORS と同じ値 */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c0: #ebebeb; --c1: #7896ff; --c2: #64dc78; --c3: #5ad2dc;
+      --c4: #ff7878; --c5: #dc82ff; --c6: #dcd25a; --c7: #404048;
+      --c8: #aaaab0; --c9: #466eff; --c10: #28c83c; --c11: #00646e;
+      --c12: #ff4646; --c13: #e650e6; --c14: #e6c828; --c15: #101014;
+      --accent: var(--c1);
+      --muted: var(--c8);
+      --page: #08080a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --c0: #ebebeb; --c1: #7896ff; --c2: #64dc78; --c3: #5ad2dc;
+    --c4: #ff7878; --c5: #dc82ff; --c6: #dcd25a; --c7: #404048;
+    --c8: #aaaab0; --c9: #466eff; --c10: #28c83c; --c11: #00646e;
+    --c12: #ff4646; --c13: #e650e6; --c14: #e6c828; --c15: #101014;
+    --accent: var(--c1);
+    --muted: var(--c8);
+    --page: #08080a;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 56px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--fg);
+    font: 16px/1.8 "DotGothic16", system-ui, sans-serif;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+  }
+  .px { font-family: "Press Start 2P", "DotGothic16", monospace; letter-spacing: 0; }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px dashed var(--fg); outline-offset: 3px; }
+  img { image-rendering: pixelated; }
+  svg.i { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2;
+          stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  code { font-family: inherit; background: var(--soft); padding: 0 4px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---- ステータスバー(OSの上端の20pxと同じ構成: 時刻・状態アイコン・右端に道具) ---- */
+  .statusbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg);
+    border-bottom: 2px solid var(--line);
+  }
+  .statusbar .wrap { display: flex; align-items: center; gap: 12px; height: 44px; }
+  .sb-time { font-size: 14px; }
+  .sb-icons { display: flex; gap: 4px; align-items: center; }
+  .sb-icons svg.i { width: 20px; height: 20px; }
+  .sb-icons .ok { color: var(--c9); }
+  .sb-nav { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+  .sb-nav a {
+    font-size: 10px; color: var(--fg); text-decoration: none;
+    padding: 8px 8px; border: 2px solid transparent;
+  }
+  .sb-nav a:hover { border-color: var(--line); }
+  .sb-nav a.on { background: var(--fg); color: var(--bg); }
+  .theme-btn {
+    display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+    background: var(--bg); color: var(--fg); border: 2px solid var(--line); cursor: pointer;
+  }
+  .theme-btn svg.i { width: 18px; height: 18px; }
+  @media (max-width: 720px) {
+    .sb-nav a.opt { display: none; }
+  }
+  @media (max-width: 420px) {
+    .sb-icons .opt { display: none; }
+    .sb-nav a { padding: 8px 4px; font-size: 9px; }
+  }
+
+  /* ---- ボタン(OSのボタン: 白地・黒枠・右下に影。押すと影の分だけ沈む) ---- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+    background: var(--bg); color: var(--fg);
+    border: 2px solid var(--line);
+    box-shadow: 4px 4px 0 var(--line);
+    text-decoration: none;
+    font-family: "Press Start 2P", monospace; font-size: 12px; line-height: 1.4;
+    transition: transform .05s, box-shadow .05s;
+  }
+  .btn:hover { background: var(--soft); }
+  .btn:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--line); }
+  .btn.primary { background: var(--fg); color: var(--bg); }
+  .btn.primary:hover { background: var(--c1); border-color: var(--c1); color: var(--c15); }
+  .btn small { font-family: "DotGothic16", sans-serif; font-size: 14px; }
+
+  /* ---- 画面の枠(白い画面+黒枠。写真は2倍の整数倍で拡大してドットを崩さない) ---- */
+  .device {
+    background: var(--bg);
+    border: 2px solid var(--line);
+    box-shadow: 8px 8px 0 var(--line);
+    padding: 12px;
+    width: fit-content;
+    max-width: 100%;
+  }
+  /* 枠線の内側がちょうど 240x320 の整数倍になるよう content-box にする(枠の分だけ縮むとドットが崩れる) */
+  .screen {
+    position: relative;
+    box-sizing: content-box;
+    width: 480px; max-width: calc(100% - 4px);
+    aspect-ratio: 3 / 4;
+    border: 2px solid var(--line);
+    background: var(--c15);
+    overflow: hidden;
+  }
+  .screen img { display: block; width: 100%; height: 100%; }
+  .screen.small { width: 240px; }
+  /* 写真が無い(手元で開いた)ときの代わり */
+  .screen.nosig img { display: none; }
+  .screen.nosig::after {
+    content: "NO SIGNAL";
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font: 12px "Press Start 2P", monospace; color: var(--muted);
+    background: repeating-conic-gradient(var(--soft) 0 25%, var(--bg) 0 50%) 0 0 / 8px 8px;
+  }
+  .device .label {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; font-size: 9px; color: var(--muted);
+  }
+  .device .label .led { width: 8px; height: 8px; background: var(--c10); display: inline-block; margin-right: 6px; }
+
+  /* ---- ヒーロー ---- */
+  .hero { padding: 56px 0 72px; }
+  .hero .wrap > * { min-width: 0; }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 48px; align-items: center; }
+  .kicker { font-size: 10px; color: var(--muted); margin: 0 0 20px; line-height: 2; }
+  .kicker span { display: inline-block; border: 2px solid var(--line); padding: 2px 6px; margin: 0 4px 6px 0; color: var(--fg); background: var(--bg); }
+  h1.title {
+    margin: 0 0 24px;
+    font: 56px/1.15 "Press Start 2P", monospace;
+    text-shadow: 4px 4px 0 var(--soft);
+  }
+  h1.title .cur { animation: blink 1s steps(1) infinite; color: var(--c12); }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { h1.title .cur { animation: none; } }
+  .lead { font-size: 20px; margin: 0 0 12px; }
+  .nb { white-space: nowrap; }
+  .lead-sub { color: var(--muted); margin: 0 0 32px; max-width: 34em; }
+  .cta { display: flex; flex-wrap: wrap; gap: 16px; }
+  @media (max-width: 900px) {
+    .hero .wrap { grid-template-columns: minmax(0, 1fr); }
+    .hero .device { justify-self: center; }
+    h1.title { font-size: clamp(32px, 9vw, 56px); }
+  }
+  @media (max-width: 540px) {
+    .hero { padding: 32px 0 48px; }
+    .device { padding: 8px; box-shadow: 6px 6px 0 var(--line); }
+  }
+
+  /* ---- 節: OSの画面の見出し(← ボタン + 題名)の形 ---- */
+  section.block { padding: 40px 0; }
+  .win {
+    background: var(--bg);
+    border: 2px solid var(--line);
+    box-shadow: 8px 8px 0 var(--line);
+  }
+  .win-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 2px solid var(--line);
+  }
+  .win-head .no {
+    display: grid; place-items: center; width: 32px; height: 32px; flex: none;
+    border: 2px solid var(--line); font-size: 10px;
+  }
+  .win-head h2 { margin: 0; font: 16px/1.4 "Press Start 2P", monospace; }
+  .win-head .jp { color: var(--muted); font-size: 15px; }
+  .win-head .tail { margin-left: auto; font-size: 9px; color: var(--muted); }
+  .win-body { padding: 24px; }
+  @media (max-width: 540px) {
+    .win { box-shadow: 6px 6px 0 var(--line); }
+    .win-body { padding: 16px; }
+    .win-head .tail { display: none; }
+    .win-head h2 { font-size: 13px; }
+  }
+
+  /* ---- 画面写真のギャラリー(横スクロール + OSと同じ「< 1/8 >」の送り) ---- */
+  .gallery {
+    display: grid; grid-auto-flow: column; grid-auto-columns: max-content; gap: 24px;
+    overflow-x: auto; scroll-snap-type: x mandatory;
+    padding: 4px 4px 16px;
+    position: relative;  /* figure の offsetLeft をギャラリー基準にする */
+    scrollbar-width: none;
+  }
+  .gallery::-webkit-scrollbar { display: none; }
+  .gallery figure { margin: 0; scroll-snap-align: start; }
+  .gallery figcaption { margin-top: 8px; font-size: 15px; }
+  .gallery figcaption b { display: block; font: 10px/2 "Press Start 2P", monospace; }
+  .gallery figcaption span { color: var(--muted); }
+  .pager { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+  .pager button {
+    width: 72px; height: 40px;
+    background: var(--bg); color: var(--fg);
+    border: 2px solid var(--line); box-shadow: 4px 4px 0 var(--line);
+    font: 14px "Press Start 2P", monospace; cursor: pointer;
+  }
+  .pager button:active { transform: translate(4px, 4px); box-shadow: none; }
+  .pager button:disabled { color: var(--soft); border-color: var(--soft); box-shadow: 4px 4px 0 var(--soft); cursor: default; }
+  .pager .count { font: 12px "Press Start 2P", monospace; }
+
+  /* ---- アプリ一覧(ホーム画面のアイコン格子) ---- */
+  .apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0; border-left: 2px solid var(--line); border-top: 2px solid var(--line); }
+  .app {
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    padding: 20px 12px 16px;
+    border-right: 2px solid var(--line); border-bottom: 2px solid var(--line);
+  }
+  .app svg.i { width: 40px; height: 40px; margin-bottom: 8px; }
+  .app .name { font-size: 17px; }
+  .app .desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-top: 4px; }
+  .app:hover { background: var(--fg); color: var(--bg); }
+  .app:hover .desc { color: var(--soft); }
+  .apps-note { margin: 16px 0 0; color: var(--muted); font-size: 14px; }
+
+  /* ---- しくみ(中身の特徴) ---- */
+  .feats { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+  .feat { border: 2px solid var(--line); padding: 16px; position: relative; }
+  .feat h3 { margin: 0 0 8px; font: 11px/1.8 "Press Start 2P", monospace; display: flex; gap: 10px; align-items: center; }
+  .feat h3 .sw { width: 12px; height: 12px; flex: none; border: 2px solid var(--line); }
+  .feat p { margin: 0; font-size: 15px; }
+
+  /* ---- Lua ---- */
+  .lua { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+  @media (max-width: 860px) { .lua { grid-template-columns: 1fr; } }
+  .lua ul { list-style: none; padding: 0; margin: 0 0 24px; }
+  .lua li { padding-left: 24px; position: relative; margin-bottom: 10px; }
+  .lua li::before { content: ""; position: absolute; left: 4px; top: .65em; width: 8px; height: 8px; background: var(--fg); }
+  .term { border: 2px solid var(--line); background: #000; color: #ebebeb; min-width: 0; }
+  .term-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 2px solid #ebebeb; font-size: 13px; }
+  .term-head .px { font-size: 8px; color: #00ff00; }
+  .term pre { margin: 0; padding: 14px 14px 16px; overflow-x: auto; font: 14px/1.7 "DotGothic16", monospace; }
+  .term .cm { color: #808080; } .term .kw { color: #ff7878; } .term .st { color: #ffff00; } .term .fn { color: #00ffff; }
+
+  /* ---- 仕様 ---- */
+  .spec-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 32px; align-items: start; }
+  @media (max-width: 860px) { .spec-grid { grid-template-columns: 1fr; } }
+  table.spec { width: 100%; border-collapse: collapse; font-size: 15px; }
+  table.spec th, table.spec td { border: 2px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  table.spec th { width: 34%; background: var(--soft); font-weight: normal; white-space: nowrap; }
+  @media (max-width: 540px) {
+    table.spec th { white-space: normal; }
+    table.spec th, table.spec td { padding: 6px 8px; font-size: 14px; }
+  }
+  .palette h3 { margin: 0 0 12px; font: 11px/1.8 "Press Start 2P", monospace; }
+  .swatches { display: grid; grid-template-columns: repeat(8, 1fr); border: 2px solid var(--line); }
+  .swatches div { aspect-ratio: 1; position: relative; }
+  .swatches span {
+    position: absolute; left: 3px; top: 3px; font: 8px "Press Start 2P", monospace;
+    background: var(--bg); color: var(--fg); padding: 1px 2px;
+  }
+  .palette p { font-size: 14px; color: var(--muted); margin: 12px 0 0; }
+
+  /* ---- 入口 ---- */
+  .starts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+  a.start {
+    display: block; padding: 20px; text-decoration: none; color: var(--fg);
+    background: var(--bg); border: 2px solid var(--line); box-shadow: 6px 6px 0 var(--line);
+    transition: transform .05s, box-shadow .05s;
+  }
+  a.start:hover { background: var(--fg); color: var(--bg); }
+  a.start:hover .d { color: var(--soft); }
+  a.start:active { transform: translate(6px, 6px); box-shadow: none; }
+  a.start .t { display: flex; align-items: center; gap: 12px; font: 13px/1.6 "Press Start 2P", monospace; margin-bottom: 12px; }
+  a.start .t svg.i { width: 32px; height: 32px; }
+  a.start .d { color: var(--muted); font-size: 15px; }
+  a.start .go { display: block; margin-top: 16px; font: 10px "Press Start 2P", monospace; }
+
+  /* ---- 下端 ---- */
+  footer { margin-top: 48px; border-top: 2px solid var(--line); background: var(--bg); }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; padding-top: 20px; padding-bottom: 28px; font-size: 14px; color: var(--muted); }
+  footer a { color: inherit; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-browser" viewBox="0 0 24 24"><path d="M4 8h16"/><path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12"/><path d="M8 4v4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 7v5l3 3"/></symbol>
+    <symbol id="i-calculator" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -14"/><path d="M8 8a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1v1a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1l0 -1"/><path d="M8 14l0 .01"/><path d="M12 14l0 .01"/><path d="M16 14l0 .01"/><path d="M8 17l0 .01"/><path d="M12 17l0 .01"/><path d="M16 17l0 .01"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0"/><path d="M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0"/><path d="M3 6l0 13"/><path d="M12 6l0 13"/><path d="M21 6l0 13"/></symbol>
+    <symbol id="i-device-gamepad" viewBox="0 0 24 24"><path d="M2 8a2 2 0 0 1 2 -2h16a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2l0 -8"/><path d="M6 12h4m-2 -2v4"/><path d="M15 11l0 .01"/><path d="M18 13l0 .01"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M3 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M13 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M9 17v-13h10v13"/><path d="M9 8h10"/></symbol>
+    <symbol id="i-terminal-2" viewBox="0 0 24 24"><path d="M8 9l3 3l-3 3"/><path d="M13 15l3 0"/><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -12"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/><path d="M11 15h1"/><path d="M12 15v3"/></symbol>
+    <symbol id="i-messages" viewBox="0 0 24 24"><path d="M21 14l-3 -3h-7a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1h9a1 1 0 0 1 1 1v10"/><path d="M14 15v2a1 1 0 0 1 -1 1h-7l-3 3v-10a1 1 0 0 1 1 -1h2"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10z"/><path d="M3 7l9 6l9 -6"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 21a9 9 0 0 1 0 -18c4.97 0 9 3.582 9 8c0 1.06 -.474 2.078 -1.318 2.828c-.844 .75 -1.989 1.172 -3.182 1.172h-2.5a2 2 0 0 0 -1 3.75a1.3 1.3 0 0 1 -1 2.25"/><path d="M7.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M11.5 7.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M15.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/><path d="M12 12l8 -4.5"/><path d="M12 12l0 9"/><path d="M12 12l-8 -4.5"/></symbol>
+    <symbol id="i-file-code" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2"/><path d="M10 13l-1 2l1 2"/><path d="M14 13l1 2l-1 2"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M2 8a2 2 0 0 1 2 -2h16a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2l0 -8"/><path d="M6 10l0 .01"/><path d="M10 10l0 .01"/><path d="M14 10l0 .01"/><path d="M18 10l0 .01"/><path d="M6 14l0 .01"/><path d="M18 14l0 .01"/><path d="M10 14l4 .01"/></symbol>
+    <symbol id="i-language-hiragana" viewBox="0 0 24 24"><path d="M4 5h7"/><path d="M7 4c0 4.846 0 7 .5 8"/><path d="M10 8.5c0 2.286 -2 4.5 -3.5 4.5s-2.5 -1.135 -2.5 -2c0 -2 1 -3 3 -3s5 .57 5 2.857c0 1.524 -.667 2.571 -2 3.143"/><path d="M12 20l4 -9l4 9"/><path d="M19.1 18h-6.2"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 18l.01 0"/><path d="M9.172 15.172a4 4 0 0 1 5.656 0"/><path d="M6.343 12.343a8 8 0 0 1 11.314 0"/><path d="M3.515 9.515c4.686 -4.687 12.284 -4.687 17 0"/></symbol>
+    <symbol id="i-device-sd-card" viewBox="0 0 24 24"><path d="M7 21h10a2 2 0 0 0 2 -2v-14a2 2 0 0 0 -2 -2h-6.172a2 2 0 0 0 -1.414 .586l-3.828 3.828a2 2 0 0 0 -.586 1.414v10.172a2 2 0 0 0 2 2"/><path d="M13 6v2"/><path d="M16 6v2"/><path d="M10 7v1"/></symbol>
+    <symbol id="i-battery-4" viewBox="0 0 24 24"><path d="M6 7h11a2 2 0 0 1 2 2v.5a.5 .5 0 0 0 .5 .5a.5 .5 0 0 1 .5 .5v3a.5 .5 0 0 1 -.5 .5a.5 .5 0 0 0 -.5 .5v.5a2 2 0 0 1 -2 2h-11a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2"/><path d="M7 10l0 4"/><path d="M10 10l0 4"/><path d="M13 10l0 4"/><path d="M16 10l0 4"/></symbol>
+    <symbol id="i-movie" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12"/><path d="M8 4l0 16"/><path d="M16 4l0 16"/><path d="M4 8l4 0"/><path d="M4 16l4 0"/><path d="M4 12l16 0"/><path d="M16 8l4 0"/><path d="M16 16l4 0"/></symbol>
+    <symbol id="i-checkbox" viewBox="0 0 24 24"><path d="M9 11l3 3l8 -8"/><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9"/></symbol>
+    <symbol id="i-apps" viewBox="0 0 24 24"><path d="M4 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M4 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M14 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M14 7l6 0"/><path d="M17 4l0 6"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7"/></symbol>
+  </defs>
+</svg>
+
+<header class="statusbar">
+  <div class="wrap">
+    <span class="sb-time px" id="sbTime">--:--</span>
+    <span class="sb-icons" aria-hidden="true">
+      <svg class="i"><use href="#i-device-sd-card"/></svg>
+      <svg class="i ok opt"><use href="#i-wifi"/></svg>
+      <svg class="i opt"><use href="#i-battery-4"/></svg>
+    </span>
+    <nav class="sb-nav px" aria-label="ページ内の移動">
+      <a class="opt" href="#screens">SCREENS</a>
+      <a class="opt" href="#apps">APPS</a>
+      <a class="opt" href="#lua">LUA</a>
+      <a class="on" href="playground/">PLAY</a>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える">
+        <svg class="i"><use href="#i-sun"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
 <main>
-  <h1>pico-os</h1>
-  <p>Raspberry Pi Pico 2 W 上で動く自作タッチGUI OS。</p>
-  <a class="card" href="playground/"><b>Playground</b><span>ブラウザでpico-osを動かす(WebAssembly版)</span></a>
-  <a class="card" href="lua-api/"><b>Lua API リファレンス</b><span>Luaアプリの作り方とAPI一覧</span></a>
-  <a class="card" href="https://github.com/Kimu1109/pico-os"><b>GitHub リポジトリ</b><span>ソースコードと設計記録</span></a>
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <p class="kicker px"><span>RP2350</span><span>240x320</span><span>TOUCH</span><span>LUA 5.4</span></p>
+        <h1 class="title">PICO<br>-OS<span class="cur">_</span></h1>
+        <p class="lead">Raspberry Pi Pico 2 W で動く、<span class="nb">自作のタッチGUI OS。</span></p>
+        <p class="lead-sub">240×320のちいさな画面に、ホーム画面とアプリ、Luaで書けるアプリ、ゲームボーイまで。
+          ウィジェットも合成も描画も、すべてマイコンの上で自前で動いています。
+          実機とおなじコードをWebAssemblyにして、ブラウザでもそのまま動かせます。</p>
+        <div class="cta">
+          <a class="btn primary" href="playground/">▶ PLAY <small>ブラウザで動かす</small></a>
+          <a class="btn" href="lua-api/">LUA API</a>
+          <a class="btn" href="https://github.com/Kimu1109/pico-os">GITHUB</a>
+        </div>
+      </div>
+      <div class="device">
+        <div class="screen"><img src="shots/home.png" alt="pico-osのホーム画面。アプリのアイコンが2列に並んでいる" width="480" height="640"></div>
+        <div class="label px"><span><i class="led"></i>PICO 2 W</span><span>HOME 1/7</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="screens">
+    <div class="wrap">
+      <div class="win">
+        <div class="win-head">
+          <span class="no px">01</span>
+          <h2>SCREENS</h2>
+          <span class="jp">画面</span>
+          <span class="tail px">PC BUILD --SHOT</span>
+        </div>
+        <div class="win-body">
+          <div class="gallery" id="gallery">
+            <figure><div class="screen small"><img src="shots/clock.png" alt="時計の画面" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>CLOCK</b><span>時計・タイマー・アラーム</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/calc.png" alt="関数電卓の画面" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>CALC</b><span>関数電卓・グラフ・単位変換</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/markdown.png" alt="Markdownブラウザの画面" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>MARKDOWN</b><span>Markdownブラウザ</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/tetris.png" alt="Luaで書かれたテトリスの画面" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>TETRIS</b><span>Luaアプリ(pico.game)</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/blocks.png" alt="2.5Dのブロックの世界" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>BLOCKS</b><span>2.5Dエンジン pico.iso</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/zombie.png" alt="ゾンビTDの画面" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>ZOMBIE TD</b><span>タワーディフェンス</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/music.png" alt="ミュージックの画面" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>MUSIC</b><span>チップチューンとWAV</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/apps.png" alt="ホーム画面の5ページ目" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>HOME 5/7</b><span>SDに置いたLuaアプリも並ぶ</span></figcaption></figure>
+          </div>
+          <div class="pager">
+            <button type="button" id="prevBtn" aria-label="前へ">&lt;</button>
+            <span class="count" id="pageCount">1/8</span>
+            <button type="button" id="nextBtn" aria-label="次へ">&gt;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="apps">
+    <div class="wrap">
+      <div class="win">
+        <div class="win-head">
+          <span class="no px">02</span>
+          <h2>APPS</h2>
+          <span class="jp">アプリ</span>
+          <span class="tail px">C++ / LUA</span>
+        </div>
+        <div class="win-body">
+          <div class="apps">
+            <div class="app"><svg class="i"><use href="#i-browser"/></svg><span class="name">Markdown</span><span class="desc">HTTP/HTTPSで文書を取って表示</span></div>
+            <div class="app"><svg class="i"><use href="#i-clock"/></svg><span class="name">時計</span><span class="desc">デジタル・アナログ・アラーム</span></div>
+            <div class="app"><svg class="i"><use href="#i-calculator"/></svg><span class="name">電卓</span><span class="desc">関数・グラフ・進数・履歴</span></div>
+            <div class="app"><svg class="i"><use href="#i-folder"/></svg><span class="name">ファイル</span><span class="desc">SDカードの中身を見る・動かす</span></div>
+            <div class="app"><svg class="i"><use href="#i-pencil"/></svg><span class="name">テキスト</span><span class="desc">かな漢字変換つきエディタ</span></div>
+            <div class="app"><svg class="i"><use href="#i-language-hiragana"/></svg><span class="name">辞書</span><span class="desc">英和・和英</span></div>
+            <div class="app"><svg class="i"><use href="#i-book"/></svg><span class="name">読書</span><span class="desc">青空文庫をしおりつきで</span></div>
+            <div class="app"><svg class="i"><use href="#i-device-gamepad"/></svg><span class="name">ゲームボーイ</span><span class="desc">音と途中保存つきのエミュ</span></div>
+            <div class="app"><svg class="i"><use href="#i-music"/></svg><span class="name">ミュージック</span><span class="desc">MMLのチップチューン・WAV</span></div>
+            <div class="app"><svg class="i"><use href="#i-movie"/></svg><span class="name">動画</span><span class="desc">独自形式 .pvid の再生</span></div>
+            <div class="app"><svg class="i"><use href="#i-calendar"/></svg><span class="name">カレンダー</span><span class="desc">iCalendarを読む</span></div>
+            <div class="app"><svg class="i"><use href="#i-messages"/></svg><span class="name">チャット</span><span class="desc">自前のチャットサーバへ</span></div>
+            <div class="app"><svg class="i"><use href="#i-checkbox"/></svg><span class="name">TODO</span><span class="desc">Todoistと同期</span></div>
+            <div class="app"><svg class="i"><use href="#i-mail"/></svg><span class="name">メール</span><span class="desc">IMAPで受信</span></div>
+            <div class="app"><svg class="i"><use href="#i-terminal-2"/></svg><span class="name">SSH</span><span class="desc">マイコンからサーバへ</span></div>
+            <div class="app"><svg class="i"><use href="#i-apps"/></svg><span class="name">ストア</span><span class="desc">署名つきのLuaアプリ配布</span></div>
+          </div>
+          <p class="apps-note">ほかに、テトリス・マインスイーパー・リバーシ・ペイント・天気・ニュースなどのLuaアプリ。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="inside">
+    <div class="wrap">
+      <div class="win">
+        <div class="win-head">
+          <span class="no px">03</span>
+          <h2>INSIDE</h2>
+          <span class="jp">しくみ</span>
+          <span class="tail px">520KB SRAM</span>
+        </div>
+        <div class="win-body">
+          <div class="feats">
+            <div class="feat">
+              <h3><i class="sw" style="background:var(--c9)"></i>WIDGETS</h3>
+              <p>ウィジェット・シーン・ダイアログ・キーボード3種まで、GUIフレームワークを自前で実装。書き換わった所だけを合成して液晶へ送ります。</p>
+            </div>
+            <div class="feat">
+              <h3><i class="sw" style="background:var(--c12)"></i>NO HEAP STRINGS</h3>
+              <p>文字列はヒープを使わない固定長。部品はオブジェクトプールで使い回し、小さなRAMで断片化を起こさない作りに。</p>
+            </div>
+            <div class="feat">
+              <h3><i class="sw" style="background:var(--c10)"></i>DUAL CORE</h3>
+              <p>1コア目が画面と入力、2コア目は音声だけを担当。チップチューン・ゲームボーイの音・マイク録音をI2Sで。</p>
+            </div>
+            <div class="feat">
+              <h3><i class="sw" style="background:var(--c14)"></i>JAPANESE</h3>
+              <p>日本語の表示とかな漢字変換を内蔵。オンスクリーンキーボードのほか、CardKB2などの物理キーボードもつながります。</p>
+            </div>
+            <div class="feat">
+              <h3><i class="sw" style="background:var(--c13)"></i>NETWORK</h3>
+              <p>Wi-Fi・HTTPS・SSH・IMAP。認証情報は端末ごとの鍵で暗号化して保存。ファームウェアの更新もSDやWi-Fiから。</p>
+            </div>
+            <div class="feat">
+              <h3><i class="sw" style="background:var(--c11)"></i>SAME CODE</h3>
+              <p>実機とおなじソースを、PC(SDL)とブラウザ(WebAssembly)でも動かせます。差し替えるのはハードの窓口だけ。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="lua">
+    <div class="wrap">
+      <div class="win">
+        <div class="win-head">
+          <span class="no px">04</span>
+          <h2>LUA</h2>
+          <span class="jp">Luaでアプリを作る</span>
+          <span class="tail px">PICO.*</span>
+        </div>
+        <div class="win-body">
+          <div class="lua">
+            <div>
+              <ul>
+                <li>SDカードの <code>/lua/apps/&lt;名前&gt;/main.lua</code> に置くだけで、ホーム画面にアプリが増えます。</li>
+                <li><code>pico.*</code> でウィジェット・描画・タッチ・音・SD・ネットワークを扱えます。</li>
+                <li>ゲーム用の <code>pico.game</code>、2.5Dエンジン <code>pico.iso</code> も。</li>
+                <li>暴走しても止まる実行時間の上限と、アプリごとの権限つき。</li>
+              </ul>
+              <a class="btn" href="lua-api/">LUA API <small>リファレンスを読む</small></a>
+            </div>
+            <div class="term">
+              <div class="term-head"><span>/lua/apps/はじめて/main.lua</span><span class="px">LUA</span></div>
+<pre><span class="cm">-- 画面を開いたときに1回だけ実行される</span>
+<span class="kw">local</span> label = pico.<span class="fn">create</span>(<span class="st">"Label"</span>)
+pico.<span class="fn">set</span>(label, <span class="st">"text"</span>, <span class="st">"Hello, pico-os!"</span>)
+
+<span class="kw">local</span> back = pico.<span class="fn">create</span>(<span class="st">"Button"</span>)
+pico.<span class="fn">set</span>(back, <span class="st">"text"</span>, <span class="st">"戻る"</span>)
+pico.<span class="fn">on</span>(back, <span class="st">"press_start"</span>, <span class="kw">function</span>()
+    pico.<span class="fn">pop</span>()
+<span class="kw">end</span>)
+
+<span class="kw">function</span> <span class="fn">loop</span>(dt)
+    <span class="cm">-- 毎フレーム。dtはミリ秒</span>
+<span class="kw">end</span></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="spec">
+    <div class="wrap">
+      <div class="win">
+        <div class="win-head">
+          <span class="no px">05</span>
+          <h2>SPEC</h2>
+          <span class="jp">ハードウェア</span>
+          <span class="tail px">RPIPICO2W</span>
+        </div>
+        <div class="win-body">
+          <div class="spec-grid">
+            <table class="spec">
+              <tr><th>本体</th><td>Raspberry Pi Pico 2 W(RP2350・Wi-Fi)</td></tr>
+              <tr><th>画面</th><td>240×320 TFT 液晶(SPI 75MHz)・バックライトはPWMで調光</td></tr>
+              <tr><th>タッチ</th><td>XPT2046(抵抗膜)</td></tr>
+              <tr><th>ストレージ</th><td>microSDカード(専用のSPI)</td></tr>
+              <tr><th>音声</th><td>MAX98357A(I2Sアンプ)・SPH0645(I2Sマイク)</td></tr>
+              <tr><th>入力</th><td>Wiiクラシックコントローラー・CardKB2(I2C)・USBシリアル</td></tr>
+              <tr><th>開発</th><td>PlatformIO + Arduino(C++)・LovyanGFX・Lua 5.4.7</td></tr>
+            </table>
+            <div class="palette">
+              <h3>16 COLORS</h3>
+              <div class="swatches" aria-label="OSのパレット16色">
+                <div style="background:var(--c0)"><span>0</span></div><div style="background:var(--c1)"><span>1</span></div>
+                <div style="background:var(--c2)"><span>2</span></div><div style="background:var(--c3)"><span>3</span></div>
+                <div style="background:var(--c4)"><span>4</span></div><div style="background:var(--c5)"><span>5</span></div>
+                <div style="background:var(--c6)"><span>6</span></div><div style="background:var(--c7)"><span>7</span></div>
+                <div style="background:var(--c8)"><span>8</span></div><div style="background:var(--c9)"><span>9</span></div>
+                <div style="background:var(--c10)"><span>10</span></div><div style="background:var(--c11)"><span>11</span></div>
+                <div style="background:var(--c12)"><span>12</span></div><div style="background:var(--c13)"><span>13</span></div>
+                <div style="background:var(--c14)"><span>14</span></div><div style="background:var(--c15)"><span>15</span></div>
+              </div>
+              <p>画面は16色のパレットで描きます。番号ごと色を差し替えるとダークテーマに。このページも同じパレットで塗っています(右上で切り替え)。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="start">
+    <div class="wrap">
+      <div class="starts">
+        <a class="start" href="playground/">
+          <span class="t"><svg class="i"><use href="#i-device-gamepad"/></svg>PLAYGROUND</span>
+          <span class="d">ブラウザでpico-osを動かす。マウスのドラッグがタッチになります。</span>
+          <span class="go">START &gt;</span>
+        </a>
+        <a class="start" href="lua-api/">
+          <span class="t"><svg class="i"><use href="#i-file-code"/></svg>LUA API</span>
+          <span class="d">Luaアプリの作り方と <code>pico.*</code> の一覧。</span>
+          <span class="go">READ &gt;</span>
+        </a>
+        <a class="start" href="https://github.com/Kimu1109/pico-os">
+          <span class="t"><svg class="i"><use href="#i-box"/></svg>GITHUB</span>
+          <span class="d">ソースコードと設計記録。</span>
+          <span class="go">OPEN &gt;</span>
+        </a>
+      </div>
+    </div>
+  </section>
 </main>
+
+<footer>
+  <div class="wrap">
+    <span>pico-os — a touch GUI OS for Raspberry Pi Pico 2 W</span>
+    <span>アイコン: <a href="https://tabler.io/icons">Tabler Icons</a>(MIT)</span>
+  </div>
+</footer>
+
+<script>
+  // ステータスバーの時刻(OSと同じ HH:MM)
+  (function () {
+    var el = document.getElementById("sbTime");
+    function tick() {
+      var d = new Date();
+      el.textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    }
+    tick();
+    setInterval(tick, 10000);
+  })();
+
+  // 画面写真が無い(手元で開いた)ときは「NO SIGNAL」の枠にする
+  document.querySelectorAll(".screen img").forEach(function (img) {
+    function fail() { img.parentNode.classList.add("nosig"); }
+    if (img.complete && img.naturalWidth === 0) fail();
+    else img.addEventListener("error", fail);
+  });
+
+  // テーマ切り替え。選んだテーマはこのブラウザにだけ覚える(保存できない環境では毎回OSの設定に従う)
+  (function () {
+    var root = document.documentElement;
+    try {
+      var saved = localStorage.getItem("picoos-theme");
+      if (saved === "light" || saved === "dark") root.dataset.theme = saved;
+    } catch (e) {}
+    document.getElementById("themeBtn").addEventListener("click", function () {
+      var cur = root.dataset.theme ||
+        (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var next = cur === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("picoos-theme", next); } catch (e) {}
+    });
+  })();
+
+  // ギャラリーの送り(OSのホーム画面の「< 1/7 >」と同じ形)
+  (function () {
+    var g = document.getElementById("gallery");
+    var items = g.querySelectorAll("figure");
+    var prev = document.getElementById("prevBtn");
+    var next = document.getElementById("nextBtn");
+    var count = document.getElementById("pageCount");
+    function current() {
+      var x = g.scrollLeft, best = 0;
+      for (var i = 0; i < items.length; i++) {
+        if (Math.abs(items[i].offsetLeft - 4 - x) < Math.abs(items[best].offsetLeft - 4 - x)) best = i;
+      }
+      return best;
+    }
+    function update() {
+      var i = current();
+      var atEnd = g.scrollLeft + g.clientWidth >= g.scrollWidth - 4;
+      count.textContent = (atEnd ? items.length : i + 1) + "/" + items.length;
+      prev.disabled = g.scrollLeft <= 4;
+      next.disabled = atEnd;
+    }
+    function go(d) {
+      var i = Math.max(0, Math.min(items.length - 1, current() + d));
+      g.scrollTo({ left: items[i].offsetLeft - 4, behavior: "smooth" });
+    }
+    prev.addEventListener("click", function () { go(-1); });
+    next.addEventListener("click", function () { go(1); });
+    g.addEventListener("scroll", function () { requestAnimationFrame(update); }, { passive: true });
+    addEventListener("resize", update);
+    update();
+  })();
+</script>
 </body>
 </html>

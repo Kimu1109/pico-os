@@ -88,6 +88,17 @@ jobs:
           ! grep -q "__PICOOS_ASSET_REV__" _site/playground/index.html
           ls -laR _site
 
+      # トップのページ(pc/web/landing.html)に載せる画面写真。写真はリポジトリに置かず、
+      # 公開のたびにネイティブのPCビルドの --shot で今の画面を撮る(script/web_shots.sh)。
+      # PRでも撮って、撮れなくなった(起動しない・落ちる等)ことにここで気づけるようにする
+      - name: トップのページの画面写真を撮る
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsdl2-dev libssl-dev
+          cmake -S pc -B pc/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build pc/build -j"$(nproc)"
+          sh script/web_shots.sh pc/build/picoos_pc _site/shots
+
       # アプリストアの配布物(docs/APP_REPO.md)。署名した目録 store/ がコミットされていれば、
       # アプリの中身を pc/sdcard/lua/apps/ から写して /apps/ に置く。署名は手元のPCで済ませてある
       # (build_app_repo.py sign)ので、秘密鍵はここに要らない。署名の後で中身が変わったアプリは

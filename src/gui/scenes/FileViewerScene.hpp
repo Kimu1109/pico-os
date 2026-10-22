@@ -19,12 +19,13 @@
 //   .md / .markdown … MarkdownView(Markdownブラウザと同じ描画)
 //   .pimg           … ImageView(開いたときに1回だけ解いて、以降はメモリから描く)
 //   .pvid           … 動画アプリ(VideoScene)へ置き換わる(シークバー・再生/一時停止・±10秒つき)
+//   .txt(Shift_JIS)… 読書アプリ(ReaderScene)へ置き換わる(青空文庫の配布物。ここでは文字化けするため)
 //   .wav            … 再生(下にシークバーと再生・一時停止/10秒戻る・進むのアイコンボタン(MediaButtons)。ミュージックアプリと同じ音の出し方)
 //   .mml            … 中身をテキストで見せ(TextView)、同じ操作の欄で再生する。MMLは途中へ飛べないので
 //                      シークバーは進み具合を見せるだけで、±10秒は押せない
 //   それ以外        … TextView(見えている行だけを描くプレーンテキストの表示欄)
 // テキスト系(.md含む、画像以外)は右上の「編集」でテキストエディタ(TextEditorScene)をその
-// ファイルを開いた状態でPush()する。エディタの「戻る」で戻ると、ここはonEnter()から作り直される
+// ファイルを開いた状態でPush()する。.txt は「読む」で読書アプリ(ReaderScene)をPush()する。エディタの「戻る」で戻ると、ここはonEnter()から作り直される
 // ので、編集した内容が反映された表示になる(画像の編集エディタは今のところ無い)
 // 表示に使う部品は開いたファイルの種類の1つだけを作る(MarkdownViewは約40KBあるため)。
 class FileViewerScene : public Scene {
@@ -38,6 +39,7 @@ class FileViewerScene : public Scene {
 
         Button* back_button = nullptr;
         Button* edit_button = nullptr;
+        Button* read_button = nullptr;
         Label<PICO_STR_L>* status_label = nullptr;
         MarkdownView* md_view = nullptr;
         TextView* text_view = nullptr;

@@ -203,6 +203,9 @@ ICONS: list[IconSpec] = [
     # --- メール(2026-10-21)。末尾へ足すこと(上の【重要】参照)。未読/既読 ---
     IconSpec("mail",           str(ICON_DIR / "mail.svg")),
     IconSpec("mail_opened",    str(ICON_DIR / "mail-opened.svg")),
+
+    # --- 読書アプリ(2026-10-22)。末尾へ足すこと(上の【重要】参照) ---
+    IconSpec("book",           str(ICON_DIR / "book.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

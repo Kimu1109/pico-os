@@ -31,6 +31,8 @@ namespace PICO_Path {
         constexpr const char* RECORDINGS = "/recordings/";
         // ファームの更新ファイル(.pfw、docs/FIRMWARE_UPDATE.md)を置く場所。「本体の更新」のファイル選択の最初の場所
         constexpr const char* FIRMWARE = "/firmware/";
+        // 読書アプリ(ReaderLibraryScene)の本棚に並べる本(*.txt、青空文庫のテキスト等)と、「開く」の最初の場所
+        constexpr const char* BOOKS = "/books/";
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";
@@ -58,6 +60,8 @@ namespace PICO_Path {
         constexpr const char* SYS_NOTIFY_RULES = "/sys/notify_rules.tsv";
         // ホーム画面のTODOウィジェットに出す、最後に取ったTodoistの今日のタスク。TodoCache参照
         constexpr const char* SYS_TODO_CACHE = "/sys/todo_cache.tsv";
+        // 読書アプリの本ごとの続きの位置としおり(1行1件のタブ区切り。ReaderStore参照)
+        constexpr const char* SYS_READER_BOOKS = "/sys/reader_books.tsv";
 
         // アプリストア(apps/store/App_Store、docs/APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
         // インストールしたアプリのファイル一覧(installed/<id>.tsv)・取得中の置き場(staging/)
@@ -115,6 +119,8 @@ namespace PICO_Path {
             constexpr const char* SYS_HOME_CFG = "/sys/home.cfg";
             // ゲームボーイ("rom-in-flash = auto|always|never")。GameBoyScene参照
             constexpr const char* SYS_GB_CFG = "/sys/gb.cfg";
+            // 読書アプリの見た目("font = small | large" / "ruby = on | off")。ReaderStore参照
+            constexpr const char* SYS_READER_CFG = "/sys/reader.cfg";
         }
 
         namespace IME {

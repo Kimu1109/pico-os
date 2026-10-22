@@ -65,6 +65,7 @@ enum class WidgetType : uint8_t {
     SeekBar,
     MediaButtons,
     BaseView,
+    ReaderView,
     Count // 番兵。実際の種類としては使わない
 };
 

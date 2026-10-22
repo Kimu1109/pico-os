@@ -8,6 +8,7 @@
 #include "apps/texteditor/TextEditorScene.hpp"
 #include "gui/scenes/SettingsScene.hpp"
 #include "apps/dict/DictScene.hpp"
+#include "apps/reader/ReaderLibraryScene.hpp"
 #include "apps/calendar/CalendarScene.hpp"
 #include "apps/chat/ChatScene.hpp"
 #include "apps/todo/TodoScene.hpp"
@@ -53,6 +54,8 @@ void AppFunctions::Setup(){
     Register("テキスト", IconID::Pencil, &MakeScene<TextEditorScene>);
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
     Register("辞書", IconID::Language, &MakeScene<DictScene>);
+    //電子書籍・長文(青空文庫のテキスト等)。ページ送り・しおり・続きから。本はSDの /books/ に置く
+    Register(ReaderLibraryScene::kAppName, IconID::Book, &MakeScene<ReaderLibraryScene>);
     Register("カレンダー", IconID::Calendar, &MakeScene<CalendarScene>);
     //自前のチャットサーバ(server/chat/)へ繋ぐ。接続先は /sys/chat.cfg
     Register("チャット", IconID::Messages, &MakeScene<ChatScene>);

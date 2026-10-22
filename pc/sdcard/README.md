@@ -52,3 +52,8 @@ SOFTWARE.
 
 `video/sample.pvid` と `video/sample.wav` は動画アプリ(VideoScene)の動作サンプル。ffmpeg の試験用の絵(`testsrc2`)と
 正弦波から `script/generate_pvid.py` で作った3秒の動画で、著作物は含まない(作り方は `docs/VIDEO_FORMAT.md`)。
+
+`books/蜘蛛の糸.txt` は読書アプリ(`ReaderLibraryScene`)の動作確認用。青空文庫の芥川龍之介「蜘蛛の糸」
+(<https://www.aozora.gr.jp/cards/000879/card92.html> の「ルビあり」の zip を解いたもの。Shift_JIS・CRLF)を
+そのまま置いた。作品は著作権の保護期間が終わっており、青空文庫のファイルは末尾の「底本」等の表示を残せば自由に配れる
+(青空文庫収録ファイルの取り扱い規準)。手元の本は `books/` に `.txt` で置けば本棚に並ぶ。

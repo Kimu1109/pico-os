@@ -2,6 +2,7 @@
 #include "apps/texteditor/TextEditorScene.hpp"
 #include "apps/video/VideoScene.hpp"
 #include "apps/firmware/FirmwareScene.hpp"
+#include "apps/reader/ReaderScene.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/core/Font_Functions.hpp"
 #include "gui/core/Error_Functions.hpp"
@@ -87,6 +88,19 @@ void FileViewerScene::onEnter(){
         SceneFunctions::Change(new FirmwareScene(this->path.c_str()));
         return;
     }
+    //Shift_JIS のテキスト(青空文庫の配布物)はここでは文字化けするので、読書アプリへ置き換わる
+    if(OSData::SD_usable && HasExtension(this->path.c_str(), ".txt")){
+        ReaderFile f;
+        Aozora::Info info;
+        if(f.open(this->path.c_str())){
+            Aozora::Analyze(f, info);
+            f.close();
+            if(info.enc == Aozora::Encoding::ShiftJis){
+                SceneFunctions::Change(new ReaderScene(this->path.c_str()));
+                return;
+            }
+        }
+    }
     this->media = Media::None;
     if(OSData::SD_usable){
         if(HasExtension(this->path.c_str(), ".wav"))      this->media = Media::Wav;
@@ -123,6 +137,18 @@ void FileViewerScene::onEnter(){
         });
         WidgetFunctions::Add(this->edit_button);
         status_right = this->edit_button->getLocalRect().x - MARGIN;
+    }
+    //.txt は「読む」で読書アプリ(ページ送り・しおり・続きから。青空文庫の Shift_JIS も読める)
+    if(OSData::SD_usable && HasExtension(p, ".txt")){
+        this->read_button = new Button(0, content.y + MARGIN, "読む");
+        this->read_button->setFontSize(FontFn::Small);
+        this->read_button->setH(20 + Button::kFrameExtra);
+        this->read_button->setX(status_right - this->read_button->getLocalRect().w);
+        this->read_button->setOnPressEnd([this](){
+            SceneFunctions::Push(new ReaderScene(this->path.c_str()));
+        });
+        WidgetFunctions::Add(this->read_button);
+        status_right = this->read_button->getLocalRect().x - MARGIN;
     }
 
     this->status_label = new Label<PICO_STR_L>(status_x, content.y + MARGIN, "");
@@ -193,6 +219,7 @@ void FileViewerScene::onExit(){
     this->time_label = nullptr;
     this->back_button  = nullptr;
     this->edit_button  = nullptr;
+    this->read_button  = nullptr;
     this->status_label = nullptr;
     this->md_view      = nullptr;
     this->text_view    = nullptr;

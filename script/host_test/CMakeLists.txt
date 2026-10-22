@@ -225,6 +225,7 @@ host_test(todoist_proto_test GROUP apps)
 host_test(xml_reader_test GROUP apps)
 host_test(todo_test GROUP apps)
 host_test(mail_proto_test GROUP apps)
+host_test(reader_test GROUP apps)
 host_test(mail_scene_test GROUP apps)
 
 # --- media: ゲームボーイ・音・マイク・曲・動画 ---

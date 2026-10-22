@@ -4,7 +4,7 @@
 #   プルリクエスト     … ビルドだけして壊れていないかを見る(公開はしない)
 #   手動実行           … Actionsタブの「Run workflow」から
 #
-# 公開先: https://kimu1109.github.io/pico-os/
+# 公開先: https://kimu1109.github.io/pico-os/ (トップは入口のページ。Web版本体は /playground/)
 #
 # **初回だけ、リポジトリの Settings > Pages で Source を「GitHub Actions」にすること。**
 # ワークフローからの自動有効化(configure-pages の enablement)は GITHUB_TOKEN の権限では
@@ -71,20 +71,22 @@ jobs:
       # ビルドディレクトリにはCMakeの中間物も入っているので、配るものだけを集める
       - name: 公開するファイルを集める
         run: |
-          mkdir -p _site
+          # Web版本体は /playground/ に置く。トップ(/)は入口のページ(pc/web/landing.html)
+          mkdir -p _site/playground
+          cp pc/web/landing.html _site/index.html
           # js/wasm/data はリビジョン付きの名前で置く(shell.html の assetRev 参照)。同じ名前のままだと
           # ブラウザが古い index.js と新しい index.data を組み合わせ、SDのファイルの位置がずれて壊れて読める
           rev="${GITHUB_SHA::7}"
           for ext in js wasm data; do
-            cp "pc/build-web/index.$ext" "_site/index.$rev.$ext"
+            cp "pc/build-web/index.$ext" "_site/playground/index.$rev.$ext"
           done
           sed -E -e "s/__PICOOS_ASSET_REV__/$rev/g" \
                  -e "s/src=(\"?)index\.js\1/src=\1index.$rev.js\1/" \
-              pc/build-web/index.html > _site/index.html
+              pc/build-web/index.html > _site/playground/index.html
           # 書き換え漏れ(emscripten の出力の形が変わった等)は公開せずに止める
-          grep -q "index.$rev.js" _site/index.html
-          ! grep -q "__PICOOS_ASSET_REV__" _site/index.html
-          ls -la _site
+          grep -q "index.$rev.js" _site/playground/index.html
+          ! grep -q "__PICOOS_ASSET_REV__" _site/playground/index.html
+          ls -laR _site
 
       # アプリストアの配布物(docs/APP_REPO.md)。署名した目録 store/ がコミットされていれば、
       # アプリの中身を pc/sdcard/lua/apps/ から写して /apps/ に置く。署名は手元のPCで済ませてある

@@ -55,7 +55,10 @@
 - **`src/`へ新しい依存を足すときはWebビルドも通すこと**。ネイティブが通ってもemscriptenで
   落ちる依存(生ソケット/スレッド/ブロッキング待ち)があるため。
 - **公開**: `.github/workflows/web-pages.yml` が `main` へのpushで
-  https://kimu1109.github.io/pico-os/ へ自動デプロイする(プルリクではビルド確認のみ)。
+  https://kimu1109.github.io/pico-os/playground/ へ自動デプロイする(プルリクではビルド確認のみ)。
+  トップ `/` は入口のページ(`pc/web/landing.html`。Playground・Lua APIリファレンス・GitHubへのリンク)で、
+  Web版本体は `/playground/` へ移した(2026-10-22)。`shell.html` のLua APIリンクは `../lua-api/`
+  (手元の `pc/build-web` ではリンク切れ)。
   **リポジトリの Settings > Pages で Source を「GitHub Actions」にしておくことが前提**
   (ワークフローからの自動有効化は`GITHUB_TOKEN`の権限ではできない)。
   emsdkの版はワークフローの `EMSDK_VERSION` で固定。公開中のコミットはページのログ先頭の

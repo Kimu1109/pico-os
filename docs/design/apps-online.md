@@ -1,4 +1,4 @@
-# 通信するアプリ(カレンダー・チャット・TODO・Spotify・ニュース)
+# 通信するアプリ(カレンダー・チャット・TODO・メール・Spotify・ニュース)
 
 > `CLAUDE.md`から分けた設計記録(2026-10-20)。何がどこにあるかの地図は`CLAUDE.md`、進み具合は`SUMMARY.md`。
 > パスはリポジトリのルートから。「上の「〜」」等の参照先が別のファイルにあるときは、`CLAUDE.md`の「設計記録の索引」で節の名前から探すこと。
@@ -210,6 +210,65 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   PCビルドの`--tap`/`--shot`(偽物の`api = http://127.0.0.1:8150`): 一覧・期限切れの赤・選択と詳細・完了の確認→一覧から消える・
   7日間の表示・追加のダイアログ・明日15時のタスクが`notify_rules.tsv`に`At`で入ること。
   **本物のTodoistアカウント・実機(BearSSL)での確認は未**(この環境には本物のトークンも実機も無い)。
+
+## メール(IMAPの受信ビュー) (`src/apps/mail/` / `MailScene`) (2026-10-21)
+
+ランチャの「メール」。**IMAPのサーバから受信箱を読んで見せるだけ**(送信・返信・削除・フォルダの切り替えは無い)。
+
+- **作り**(`src/apps/mail/`。層は中身が段2、`MailScene`が段5):
+  - `Mail_Charset` … 文字コード → UTF-8。UTF-8(壊れた並びは 〓)/ ISO-2022-JP / Shift_JIS(cp932)/ EUC-JP / ISO-8859-1(windows-1252の
+    0x80〜0x9Fも)。日本語の3つは **JIS X 0208 の区点 → Unicode の表(`Mail_Jis_Data.hpp`、94×94×2B=約17KB、フラッシュ)** を引く。
+    表は `script/generate_jis_table.py` がPythonの cp932 の写像から作る(13区のNEC特殊文字 ①㈱ 等と、〜=U+FF5E 等のWindowsの字形。
+    IBM拡張(0xFA〜)とJIS X 0212は 〓)。状態を持つので何回に分けて渡しても同じ結果。ISO-2022-JPは改行でASCIIへ戻す(戻し忘れ対策)
+  - `Mail_Mime` … ヘッダーのRFC 2047(B/Q。隣り合う語は文字コードが同じなら繋いでから直す=UTF-8の1文字を2語に分けるメーラー対策)、
+    差出人の名前、INTERNALDATE/Dateの日時、`charset=`等の引数(RFC 2231の`filename*=`と分割も)。
+    **`TextExtractor`はメール1通を流しながら読む**: 行(1KB)とヘッダー1つ(1KB)の作業場だけで、multipartの境界を4段まで追い、
+    最初の text/plain を本文にする(無ければ text/html をタグ・style・script・head を落として文字に。p/br/li/div等は改行、
+    実体参照も)。base64/quoted-printableを解き、空行は1行に詰める。添付は数と名前だけ。置き場が足りなければ文字の途中で切らずに止める
+  - `Imap_Proto` … IMAPの応答の組み立て(`Imap::Reader`。`{n}`のリテラルを含む1つの応答を4KBの固定長に。小さいリテラル=ヘッダーは
+    中に残し、本文は`Handler`が望めば貯めずに流す。溢れても後ろの応答とずれない)、応答の分類、FETCHの読み取り(知らない項目は
+    入れ子の括弧ごと読み飛ばす)、quoted string
+  - `Imap_Client` … 通信係(下)。`MailScene` … 画面(下)
+- **通信係(`ImapClient`)**: **IMAPS(993、最初からTLS)** を `net/HttpTransport` で繋ぐ(証明書の確かめ方・`/sys/tls/ca.pem`も同じ)。
+  `tls = false` で平文も可(パスワードがそのまま流れるので自前のサーバの試験用)。**STARTTLS は無い**(平文で繋いだソケットを
+  後からTLSへ切り替える口が `WiFiClientSecure` に無いため)。認証は `LOGIN "user" "pass"`(quoted string なので **8bitの文字の
+  ユーザー名/パスワードは断る**。リテラルで送る形は作っていない)。手順は 挨拶 → LOGIN → SELECT → NOOP → FETCH。
+  - 一覧は `FETCH lo:N (UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])` で**新しい方から20通**
+    (`kMaxMessages`)。受信用の配列へ取り終えてから入れ替える(TODOと同じ。20通×2で約13KB)。日時は INTERNALDATE(届いた日時)
+  - 本文は `UID FETCH u (UID FLAGS BODY[]<0.32768>)`。**先頭32KBだけ**取り、届いた分から`TextExtractor`へ流して本文の置き場
+    (12KB)へ文字だけを書く。`mark-read = false` なら `BODY.PEEK[]`(既読にしない)。応答のFLAGSで一覧の既読も直す
+  - **接続は使い回す**(開いている間はTLSの約40KBを持つ。`onExit()`でLOGOUTを送って閉じる)。3分ごとに NOOP で `EXISTS` を見て、
+    増えていれば取り直す([更新]は必ず取り直す)。`EXPUNGE`/`UIDVALIDITY`の変化でも取り直す。失敗は5秒→2分のバックオフ。
+    **LOGINの失敗(NO)は`AuthError`で止まり、[更新]まで繋ぎ直さない**(間違ったパスワードを繰り返し送るとサーバに締め出される)
+  - 受信は`update()`から1フレーム8KBまで。応答30秒で打ち切り。**約33KB**(一覧×2・本文12KB・組み立て4KB・TextExtractor約3.5KB)
+- **設定 `/sys/mail.cfg`**: `host` / `port`(既定993)/ `tls`(既定true)/ `user` / `password`(`PICO_Secret`、用途`"mail-password"`。
+  **平文で置けば読んだときに暗号化して書き直す**)/ `mailbox`(既定INBOX)/ `mark-read`(既定true)。
+  画面の[設定]は サーバ(`host` か `host:port`。`imaps://`も読む)→ ユーザー名 → パスワード(同じユーザーなら空欄で今のまま)を
+  1フレームずつ空けて聞く。PCで試すときの`pc/sdcard/sys/mail.cfg`は`.gitignore`済み。
+- **使えるサーバ**: LOGINで入れるもの。**Gmailは2段階認証を有効にしてアプリパスワードを作る**(普段のパスワードは不可)。
+  **Outlook.com/Hotmail(outlook.jp 等)は2024年からOAuthしか受け付けないので使えない**(OAuth2の XOAUTH2 は未対応。
+  端末でのOAuthはデバイスコードの流れが要り、トークンの更新も持つことになる)。プロバイダのメール(IMAPS対応のもの)・
+  iCloud(アプリ用パスワード)・自前のDovecot等は入れる見込み。**焼き込みのルート証明書に無いCAのサーバは `/sys/tls/ca.pem` に足す**。
+- **画面(`MailScene`)**: 一覧 `[戻る] メール (未読 N) [設定][更新]` / `ScrollList`(未読=閉じた封筒・黒、既読=開いた封筒・灰色。
+  「日付 差出人  件名」。日付は今日なら時刻、今年なら月/日、それより前は年から)/ 状態の1行(「新しい 20 通を表示(全 N 通)」等)。
+  **タップで本文を開く**(TODOと違い1回で開く。壊す操作ではないので)。読む画面は同じシーンの中でウィジェットの表示を切り替える:
+  `[一覧] 件名` / ヘッダー4行(差出人の名前・日時(曜日)・宛先の最初の1人(他N人)・添付の数と名前 か CC)/ 本文の`TextView`
+  (本文の置き場を指すだけでコピーしない)/ 状態の1行(長くて途中まで・HTMLを文字にした)。一覧の行は並び(UIDの列)が同じなら
+  作り直さずに中身だけ書き換える(既読になってもスクロールの位置が保たれる)。物理キーボードは Esc/Backspace で戻る、↑↓/PageUp/
+  PageDown/スペースで本文のスクロール、r で更新。アイコンは `IconID::Mail` / `MailOpened`(tablerの mail / mail-opened。16pxで目視済み)。
+- **未対応**: 送信(SMTP)・返信・転送・削除・フラグ・フォルダの一覧と切り替え(`mailbox`の手書きだけ)・21通目より古いメール・
+  添付の保存・HTMLの表・画像・リンク(文字だけ)・OAuth・STARTTLS・8bitの文字のパスワード・新着の通知(アプリを閉じている間は見ない)・
+  IDLE(押し出しの通知)。
+- 検証: `mail_proto_test`(run.sh。文字コード: 3種の日本語・1バイトずつ・壊れたUTF-8・サロゲート・1252・戻し忘れ、ヘッダー: B/Q・語の分割・
+  空白・折り返し・壊れた語、差出人の名前5形、日時、引数(RFC 2231とその分割)、本文: ISO-2022-JP・multipartの入れ子と添付の名前・HTMLだけ
+  (style/コメント/実体参照/箇条書き)・alternativeの並びが逆・置き場不足で文字の切れ目・1KBを超える行と境界に似た行・ヘッダーだけ、
+  IMAP: 応答の分類・リテラルの組み立て(1バイトずつ/流す/貯めきれない/溢れた行)・FETCH・知らない項目・Quote)、
+  `mail_scene_test`(run.sh。アカウント無しの案内・Wi-Fi無し・生成/解放と入り直し・Esc・サーバ名の読み方・一覧の日付)、
+  **`mail_net_test`(run_net.sh。`script/host_test/imap_fake_server.py`=IMAPの偽物を平文/TLSで立てる)**: パスワード違いで止まり
+  繋ぎ直さない・新しい20通が新しい順・UIDと番号の取り違え・件名/差出人の各文字コード・未読の数・本文(multipart/HTML/ISO-2022-JP)・
+  添付の名前・mark-readの有無・無いUID・取り消した本文を取り違えない・接続の使い回し(LOGINは1回)・新着・mail.cfgの読み込みと暗号化の書き直し・
+  SaveAccount・8bitのパスワードを断る。PCビルドの`--tap`/`--shot`(偽物を `--seed` で立て `host = 127.0.0.1` / `tls = false`)で
+  一覧・4種の本文・既読になって灰色・設定のダイアログを目視した。**実機(BearSSL)と本物のメールサーバ(Gmail等)での確認は未**(Todoist参照)。
 
 ## Spotifyリモコン (`pc/sdcard/lua/apps/Spotify/`、Luaアプリ) (2026-10-14)
 

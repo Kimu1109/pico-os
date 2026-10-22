@@ -199,6 +199,10 @@ ICONS: list[IconSpec] = [
     IconSpec("file_text",      str(ICON_DIR / "file-text.svg")),
     IconSpec("file_code",      str(ICON_DIR / "file-code.svg")),
     IconSpec("file_archive",   str(ICON_DIR / "file-zip.svg")),
+
+    # --- メール(2026-10-21)。末尾へ足すこと(上の【重要】参照)。未読/既読 ---
+    IconSpec("mail",           str(ICON_DIR / "mail.svg")),
+    IconSpec("mail_opened",    str(ICON_DIR / "mail-opened.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

@@ -11,6 +11,7 @@
 #include "apps/calendar/CalendarScene.hpp"
 #include "apps/chat/ChatScene.hpp"
 #include "apps/todo/TodoScene.hpp"
+#include "apps/mail/MailScene.hpp"
 #include "apps/gb/GameBoyScene.hpp"
 #include "apps/music/MusicScene.hpp"
 #include "apps/video/VideoScene.hpp"
@@ -57,6 +58,8 @@ void AppFunctions::Setup(){
     Register("チャット", IconID::Messages, &MakeScene<ChatScene>);
     //Todoistのタスク(TODO/リマインダー)。トークンは /sys/todoist.cfg(アプリの[設定]から入れる)
     Register(TodoScene::kAppName, IconID::CheckboxOn, &MakeScene<TodoScene>);
+    //メールの受信(IMAP)。アカウントは /sys/mail.cfg(アプリの[設定]から入れる)
+    Register(MailScene::kAppName, IconID::Mail, &MakeScene<MailScene>);
     //Game Boy(DMG)エミュ。ROMはSDの /gb/ に置く(256KBまで。SUMMARY.md #9)
     Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
     //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/MUSIC_FORMAT.md)

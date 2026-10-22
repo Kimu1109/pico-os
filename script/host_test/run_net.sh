@@ -21,6 +21,9 @@
 # Spotifyの認証(spotify_auth_test.py)は script/spotify_auth.py を偽物のトークン/APIのサーバ(127.0.0.1)へ向けて動かし、
 # ブラウザの代わりに戻り先へ code を返して、PKCE・state の照合・書き出したJSONを確かめる(本物のSpotifyへは行かない)。
 #
+# メール(mail_net_test)は script/host_test/imap_fake_server.py(IMAPの偽物)を平文とTLS(上と同じ使い捨ての証明書)の
+# 2つ立てて確かめる。本物のメールサーバへは行かない。
+#
 # アプリストア(app_store_net_test)は app_store_fixture.py が作った配布物を python3 -m http.server で配り、
 # 一覧の取得・署名・インストール・更新・古い一覧/改ざん/権限の拒否を確かめる。
 #
@@ -78,10 +81,11 @@ done
 TLS_PID=""
 CHAT_PIDS=""
 TODO_PIDS=""
+MAIL_PIDS=""
 SSHD_PID=""
 STORE_PID=""
 cleanup(){
-    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $SSHD_PID $STORE_PID 2>/dev/null || true
+    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $MAIL_PIDS $SSHD_PID $STORE_PID 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     wait "$BARE_PID" 2>/dev/null || true
     [ -n "$TLS_PID" ] && wait "$TLS_PID" 2>/dev/null || true
@@ -216,6 +220,40 @@ done
 echo ""
 echo "===== todoist_net_test ====="
 "$OUT/todoist_net_test" "$TODO_PORT" "$TODO_TLS_PORT" "$OUT/ca.pem" "$TODO_TOKEN" "$TODO_PAGED_PORT"
+
+# ---- メール(ImapClient)。IMAPの偽物を平文とTLSで立てる ----
+MAIL_PORT=$((PORT + 9))
+MAIL_TLS_PORT=$((PORT + 10))
+MAIL_FAKE="$ROOT/script/host_test/imap_fake_server.py"
+
+g++ -std=gnu++17 -g -fsanitize=address,undefined \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
+    "$ROOT/script/host_test/mail_net_test.cpp" \
+    "$ROOT/src/apps/mail/Imap_Client.cpp" \
+    "$ROOT/src/apps/mail/Imap_Proto.cpp" \
+    "$ROOT/src/apps/mail/Mail_Mime.cpp" \
+    "$ROOT/src/apps/mail/Mail_Charset.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    -o "$OUT/mail_net_test" -lssl -lcrypto
+
+python3 "$MAIL_FAKE" --port "$MAIL_PORT" --spool "$OUT/mail_spool" --seed > "$OUT/mail_server.log" 2>&1 &
+MAIL_PIDS="$!"
+python3 "$MAIL_FAKE" --port "$MAIL_TLS_PORT" --spool "$OUT/mail_tls_spool" --seed \
+    --cert "$OUT/server.pem" --key "$OUT/server.key" > "$OUT/mail_tls_server.log" 2>&1 &
+MAIL_PIDS="$MAIL_PIDS $!"
+
+i=0
+while [ $i -lt 50 ]; do
+    if grep -q "起動しました" "$OUT/mail_server.log" 2>/dev/null \
+       && grep -q "起動しました" "$OUT/mail_tls_server.log" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+echo ""
+echo "===== mail_net_test ====="
+"$OUT/mail_net_test" "$MAIL_PORT" "$MAIL_TLS_PORT" "$OUT/ca.pem" "$OUT/mail_spool"
+kill $MAIL_PIDS 2>/dev/null || true
 
 # ---- Spotifyの最初のトークン(script/spotify_auth.py)。偽物のトークン/APIのサーバを相手に ----
 echo ""

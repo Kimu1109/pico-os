@@ -131,6 +131,8 @@ void CalculatorScene::applyPage(){
     const bool is_calc  = (this->page == Page::Calculator);
     const bool is_graph = (this->page == Page::Graph);
     const bool is_hist  = (this->page == Page::History);
+    const bool is_conv  = (this->page == Page::Convert);
+    const bool is_prog  = (this->page == Page::Programmer);
     const bool g_edit = is_graph && !this->graph_plotting;
     const bool g_plot = is_graph && this->graph_plotting;
 
@@ -150,6 +152,17 @@ void CalculatorScene::applyPage(){
 
     if(this->history_clear_button) this->history_clear_button->setVisible(is_hist);
     if(this->history_list)         this->history_list->setVisible(is_hist);
+
+    Widget* const conv_widgets[] = {
+        this->conv_cat_button, this->conv_from_button, this->conv_to_button,
+        this->conv_from_label, this->conv_to_label, this->conv_status, this->conv_keypad,
+    };
+    for(Widget* w : conv_widgets) if(w) w->setVisible(is_conv);
+    //[更新]は通貨のときだけ
+    if(this->conv_update_button) this->conv_update_button->setVisible(is_conv && this->isCurrency());
+
+    Widget* const prog_widgets[] = { this->prog_bits_button, this->prog_expr_label, this->prog_view, this->prog_keypad };
+    for(Widget* w : prog_widgets) if(w) w->setVisible(is_prog);
 }
 
 void CalculatorScene::cycleAngle(){
@@ -407,6 +420,9 @@ void CalculatorScene::refreshHistoryList(){
 bool CalculatorScene::onKey(const KeyInputFunctions::Event& ev){
     using K = KeyInputFunctions::Key;
 
+    if(this->page == Page::Convert)    return this->onConvKey(ev);
+    if(this->page == Page::Programmer) return this->onProgKey(ev);
+
     //グラフを見ている間: 矢印で動かす、+/-で拡大縮小、Esc/Enterで式へ戻る
     if(this->page == Page::Graph && this->graph_plotting){
         if(!this->graph_view) return false;
@@ -475,8 +491,12 @@ void CalculatorScene::onEnter(){
     const int tab_w = content.x + content.w - MARGIN - tab_x;
 
     this->page_tab = new TabBar(tab_x, content.y + MARGIN, tab_w, this->top_row_h);
+    //5つを均等割りにすると「グラフ」だけが2行に折り返されるので、ラベルの長さに合わせる
+    this->page_tab->setFitToLabels(true);
     this->page_tab->addTab("電卓");
     this->page_tab->addTab("グラフ");
+    this->page_tab->addTab("変換");
+    this->page_tab->addTab("進数");
     this->page_tab->addTab("履歴");
     this->page_tab->setSelected((int)this->page);
     this->page_tab->setOnChanged([this](int index){
@@ -613,6 +633,12 @@ void CalculatorScene::onEnter(){
     });
     WidgetFunctions::Add(this->history_list);
 
+    // ---- 変換ページ・進数ページ(それぞれのファイル) ----
+    //前回のレートの控え(無ければ通貨は[更新]を押すまで使えない)
+    if(!this->currency.hasRates()) this->currency.load();
+    this->buildConvertPage(body);
+    this->buildProgPage(body);
+
     this->refreshHistoryList();
     this->refreshGraphList();
     this->applyPage();
@@ -638,4 +664,31 @@ void CalculatorScene::onExit(){
 
     this->history_clear_button = nullptr;
     this->history_list         = nullptr;
+
+    this->conv_cat_button    = nullptr;
+    this->conv_from_button   = nullptr;
+    this->conv_to_button     = nullptr;
+    this->conv_from_label    = nullptr;
+    this->conv_to_label      = nullptr;
+    this->conv_status        = nullptr;
+    this->conv_update_button = nullptr;
+    this->conv_keypad        = nullptr;
+
+    this->prog_bits_button = nullptr;
+    this->prog_expr_label  = nullptr;
+    this->prog_view        = nullptr;
+    this->prog_keypad      = nullptr;
+
+    //取得の途中で画面を離れたらやめる(通信を続けても結果を見せる先が無い)
+    this->currency.cancel();
+    this->currency_state = this->currency.state();
+}
+
+void CalculatorScene::onUpdate(){
+    this->currency.update();
+    if(this->currency.state() != this->currency_state){
+        this->currency_state = this->currency.state();
+        this->refreshConvStatus();
+        this->refreshConv();
+    }
 }

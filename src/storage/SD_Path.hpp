@@ -99,6 +99,8 @@ namespace PICO_Path {
             constexpr const char* SYS_CARDKB_CFG = "/sys/cardkb.cfg";
             // SSHアプリ("target = user@host:port" / "font = small|large")。SshScene参照
             constexpr const char* SYS_SSH_CFG = "/sys/ssh.cfg";
+            // 電卓の通貨レート(取得するたびに書き直す。"date" / "base" / "USD = 1.16" ...)と、任意の取得元("url = https://...")。CurrencyRates参照
+            constexpr const char* SYS_CURRENCY_CFG = "/sys/currency.cfg";
             // アラーム("alarm1 = 07:30,daily,on" ...)。AlarmFunctions参照
             constexpr const char* SYS_ALARM_CFG = "/sys/alarm.cfg";
             // 通知の見せ方("mode = on | quiet" / "sound = true | false")。NotificationFunctions参照

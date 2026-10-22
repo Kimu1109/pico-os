@@ -7,29 +7,40 @@
 #include "gui/widgets/ScrollList.hpp"
 #include "apps/calculator/ui/CalculatorKeypad.hpp"
 #include "apps/calculator/ui/GraphView.hpp"
+#include "apps/calculator/ui/BaseView.hpp"
 #include "apps/calculator/Calc_Eval.hpp"
+#include "apps/calculator/Calc_Currency.hpp"
+#include "apps/calculator/Calc_Units.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
 #include <cstdint>
 
-// 標準アプリの電卓(関数電卓+グラフ電卓+計算履歴)。
+// 標準アプリの電卓(関数電卓+グラフ電卓+単位/通貨の変換+プログラマ電卓+計算履歴)。
 //
 // ClocksSceneと同じ形: 上部に[戻る]+ページ切替のTabBar、本体はページに応じて
-// 「電卓ページ(式+結果+キーパッド)」「グラフページ」「履歴ページ(ScrollList)」を丸ごと出し分ける。
+// 「電卓ページ(式+結果+キーパッド)」「グラフページ」「変換ページ」「進数ページ」「履歴ページ(ScrollList)」を
+// 丸ごと出し分ける。
 // ウィジェットは全ページ分を onEnter() で作っておき、切替はsetVisible()だけで済ませる
 // (ClocksSceneのapplyVisibility()と同じ狙い: 切り替えのたびにnew/deleteしない)。
 //
 // グラフページは「式を入れる」(3本の式の一覧+キーパッド。=の位置が[描画])と
 // 「グラフを見る」(GraphView+拡大/縮小/初期化)の2つの表示を切り替える。
 // 式の評価はどれも apps/calculator/Calc_Eval.hpp。角度の単位(DEG/RAD/GRA)はどのページでも共通。
+//
+// 変換ページ(CalculatorScene_Convert.cpp)は [種類] [変換元の単位 値] [変換先の単位 値] + 数字のキーパッド。
+// 単位の表は Calc_Units.hpp、通貨のレートは Calc_Currency(取得は[更新]を押したときだけ)。
+// 進数ページ(CalculatorScene_Prog.cpp)は 式 + 4つの基数で並べた値(BaseView) + ビット演算のキーパッド。
+// 評価は Calc_Prog.hpp(整数・語長で折り返す)。進数の計算は履歴には積まない(式の書き方が違うため)。
 class CalculatorScene : public Scene {
     public:
         // 上部のTabBarのタブ順と対応(index == (int)Page)
         enum class Page : uint8_t {
             Calculator = 0,
             Graph      = 1,
-            History    = 2
+            Convert    = 2,
+            Programmer = 3,
+            History    = 4
         };
 
         using Expr = FixedString<PICO_STR_LL>;
@@ -64,6 +75,22 @@ class CalculatorScene : public Scene {
         Button*            graph_zoomout_button = nullptr;
         Button*            graph_reset_button   = nullptr;
 
+        //変換ページ
+        Button*            conv_cat_button    = nullptr; // 種類(長さ/重さ/…/通貨)
+        Button*            conv_from_button   = nullptr; // 変換元の単位
+        Button*            conv_to_button     = nullptr; // 変換先の単位
+        Label<PICO_STR_M>* conv_from_label    = nullptr; // 入力中の値
+        Label<PICO_STR_M>* conv_to_label      = nullptr; // 換算した値
+        Label<PICO_STR_L>* conv_status        = nullptr; // 「1 km = 0.62 mi」/ レートの日付・取得の状態
+        Button*            conv_update_button = nullptr; // 通貨のときだけ: レートを取り直す
+        CalculatorKeypad*  conv_keypad        = nullptr;
+
+        //進数ページ
+        Button*             prog_bits_button = nullptr; // 語長(64/32/16/8bit)
+        Label<PICO_STR_LL>* prog_expr_label  = nullptr;
+        BaseView*           prog_view        = nullptr;
+        CalculatorKeypad*   prog_keypad      = nullptr;
+
         //履歴ページ
         Button*     history_clear_button = nullptr;
         ScrollList* history_list         = nullptr;
@@ -89,6 +116,25 @@ class CalculatorScene : public Scene {
 
         HistoryEntry history[kMaxHistory];
         int history_count = 0;
+
+        // ---- 変換 ----
+        // conv_cat が CalcUnits::kCategoryCount なら通貨。単位は番号、通貨はコードで覚える
+        // (レートを取り直すと並びが変わることがあるため)
+        int conv_cat  = 0;
+        int conv_from = CalcUnits::kCategories[0].default_from;
+        int conv_to   = CalcUnits::kCategories[0].default_to;
+        char conv_from_code[4] = "USD";
+        char conv_to_code[4]   = "JPY";
+        FixedString<PICO_STR_S> conv_input; // 変換元の値(打ったまま。空なら0)
+        CurrencyRates currency;
+        CurrencyRates::State currency_state = CurrencyRates::State::Idle; // 画面へ出した状態
+
+        // ---- 進数 ----
+        Expr prog_expr;
+        int prog_base = 10;
+        int prog_bits = 64;
+        int64_t prog_ans = 0;
+        bool prog_last_was_result = false;
 
         constexpr static int MARGIN = 3;
 
@@ -128,6 +174,35 @@ class CalculatorScene : public Scene {
         void clearHistory();
         void refreshHistoryList();
 
+        // ---- 変換(CalculatorScene_Convert.cpp) ----
+        void buildConvertPage(const Rect& body);
+        bool isCurrency() const;
+        int convUnitCount() const;
+        const char* convUnitSymbol(int i) const;
+        // 今の変換元/変換先の番号(通貨はコードから引く。無ければ-1)
+        int convFromIndex() const;
+        int convToIndex() const;
+        void setConvUnit(bool from, int index);
+        void selectConvCategory(int cat);
+        void openConvCategoryPicker();
+        void openConvUnitPicker(bool from);
+        void handleConvKey(const char* key);
+        void refreshConv();
+        void refreshConvStatus();
+        void startCurrencyUpdate();
+
+        // ---- 進数(CalculatorScene_Prog.cpp) ----
+        void buildProgPage(const Rect& body);
+        void handleProgKey(const char* key);
+        void refreshProg();
+        void commitProg();
+        // 基数/語長を変える。式は今の値を新しい基数で書き直したものに置き換える
+        void setProgBase(int base);
+        void cycleProgBits();
+        void reexpressProg(int new_base, int new_bits);
+        bool onProgKey(const KeyInputFunctions::Event& ev);
+        bool onConvKey(const KeyInputFunctions::Event& ev);
+
     public:
         // ---- 式の組み立て(ホストテストからも使う) ----
         // 開いている(閉じていない)"("の数
@@ -140,10 +215,15 @@ class CalculatorScene : public Scene {
         static bool AppendToken(Expr& e, const char* token);
         // 数値を表示用に("1e+20" は式へ戻せるよう "1E20" にする)
         static void FormatNumber(double v, FixedString<PICO_STR_M>& out);
+        // 進数の式の末尾の1つぶん(" AND "等は空白ごと)を消す
+        static void RemoveLastProgToken(Expr& e);
+        // 変換の値へ1キーぶん("NEG"は符号の反転)。入りきらない/数として壊れる入力はfalse
+        static bool AppendConvInput(FixedString<PICO_STR_S>& in, const char* key);
 
         const char* getName() const override { return "Calculator"; }
 
         void onEnter() override;
         void onExit() override;
+        void onUpdate() override;
         bool onKey(const KeyInputFunctions::Event& ev) override;
 };

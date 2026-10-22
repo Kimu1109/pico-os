@@ -35,6 +35,13 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
         int tabX(int index) const;
         int tabW(int index) const;
 
+        // setFitToLabels(true)のとき: ラベルの幅に合わせて各タブの幅を決める(fit_w[])。
+        // 全部が1行で収まらないなら均等割り(従来どおり折り返す)へ戻す
+        bool fit_labels = false;
+        bool fit_valid = false;
+        int16_t fit_w[kMaxTabs] = {};
+        void relayoutFit();
+
         // ラベルが1行に収まらない場合の折返し位置(先頭からのバイト数)を返す。0 = 折り返さない。
         // フォントが適用済みであること(render()の中からしか呼ばない)
         int wrapOffset(const FixedString<PICO_STR_M>& label, int budget_w) const;
@@ -88,6 +95,15 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
 
         void setFontSize(FontFn::FontSize size) override {
             this->f_size = size;
+            this->relayoutFit();
+            this->needsRender();
+        }
+        // タブの幅をラベルの長さに合わせる(短いラベルは狭く、長いラベルは広く)。
+        // 均等割りだと「グラフ」のような長めのラベルだけが2行に折り返されてしまう場合に使う。
+        // 余った幅はタブ全部へ均等に配る
+        void setFitToLabels(bool on){
+            this->fit_labels = on;
+            this->relayoutFit();
             this->needsRender();
         }
         void setBorderColor(int8_t palette_color) override {
@@ -97,6 +113,7 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
 
         void setW(int w){
             this->l_rect.w = w;
+            this->relayoutFit();
             this->needsRender();
         }
         void setH(int h){

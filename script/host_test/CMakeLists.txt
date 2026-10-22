@@ -256,6 +256,7 @@ host_test(devkey_test GROUP input)
 # --- calc: 電卓・辞書 ---
 host_test(calc_eval_test GROUP calc)
 host_test(calculator_test GROUP calc)
+host_test(calc_modes_test GROUP calc)
 host_test(dict_test GROUP calc)
 host_test(dict_scene_test GROUP calc)
 

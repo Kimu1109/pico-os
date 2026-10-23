@@ -98,7 +98,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 `pico.draw_tilemap(handle, tw, th, data, cols, x, y)`(`LuaEngine_Ext.cpp`。1バイト1マスの文字列を今のクリップにかかるマスだけ
 `DrawPimgSprite()`で描く。`draw_image_part`と同じ「クリップを狭めて画像全体をずらしてpushSprite」)と、
 `pico.draw_image_part`の8・9番目の引数`flip_x/flip_y`(反転はpushSpriteでできないので1画素ずつ。`draw_image_ex`と同じ書き方)。
-ドキュメントは`lua-api-doc/content/api/game.md`、サンプルは`pc/sdcard/lua/apps/ジャンプアクション/`(絵は`script/assets/generate_platformer_sheet.py`)。
+ドキュメントは`lua-api-doc/content/api/game/engine.md`、サンプルは`pc/sdcard/lua/apps/ジャンプアクション/`(絵は`script/assets/generate_platformer_sheet.py`)。
 
 - **構成**: `game.new{...}`がCanvasを1枚作り、`pico.every(1, ...)`で毎フレーム`g:step()`(`manual=true`なら自分で呼ぶ)。
   1回のdtは0.05秒で頭打ち(遅いフレームで壁をすり抜けないため)。順番: 入力 → ゲーム内タイマー → 状態の`update` → `g:on_update` →
@@ -161,7 +161,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 
 - **エンジンへ足したもの(`src/lua/builtin/game.lua`)**: 画面ボタンの`visible = false`(描かず、**タッチも受けない**。画面ごとに見せるボタンを入れ替えるのに。
   それまで`button_at()`は`visible`を見ていなかった)と、ボタンの`draw = function(b, x, y, w, h, on)`(自前の絵。テトリスの操作ボタン・ブロック崩しの「自動」)。
-  `pico.game`のドキュメント(`lua-api-doc/content/api/game.md`)と、4本の解説(`examples/tetris.md`・`examples/board-games.md`)を更新した。
+  `pico.game`のドキュメント(`lua-api-doc/content/api/game/engine.md`)と、4本の解説(`examples/tetris.md`・`examples/board-games.md`)を更新した。
 - **ダイアログをやめて`g:state`の枠にした**: リバーシ(パス・結果)とブロック崩し(ステージクリア・ゲームオーバー・全クリア)は`pico.show_message`だった。
   今は盤面の真ん中へ`draw`で枠を出し、タップ/A/STARTで進む(パスは1.8秒でも進む)。コントローラーでも同じ操作になり、`closed`の自前処理(`pico.destroy`して自分でfnを呼ぶ)が要らなくなった。
 - **マインスイーパーの難易度**は`TabBar`から、最初の`menu`の状態(大きな3ボタン)と、上の「難度」ボタンで`menu`へ戻る形に変えた。選び直すたびに`g:clear()`してタイルマップを作り直す

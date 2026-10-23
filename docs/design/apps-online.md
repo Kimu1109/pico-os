@@ -335,7 +335,7 @@ SUMMARY.md未掲載。Google ニュースのRSS(APIキー不要)を読むため�
 - **`XmlReader`**(`util/Xml_Reader`、SAX型・確保なし・1バイトずつ食わせても同じ結果): `onOpen/onAttribute/onText/onClose`。文字は子要素の直前・要素の終わりで区切り、
   前後の空白を落とし、CDATAも同じ文字に混ぜる。実体は `&lt; &gt; &amp; &quot; &apos; &#N; &#xH;` だけ戻し、`&nbsp;` 等の未定義は書かれたまま。名前空間は解決しない
   (`media:content`のまま)。文字・属性値255B/名前31B/入れ子16段まで。DOCTYPEの内部サブセットは読み飛ばすが、その中のコメントに `[ ]` を書くと数え違える。
-- **Lua**: `pico.xml_pick(text, paths)` / `pico.sd_xml_pick(path, paths)`(`LuaEngine_Net.cpp`。ドキュメントは`lua-api-doc/content/api/xml.md`)。パスはルートから要素名を `.` でつなぎ
+- **Lua**: `pico.xml_pick(text, paths)` / `pico.sd_xml_pick(path, paths)`(`LuaEngine_Net.cpp`。ドキュメントは`lua-api-doc/content/api/data/xml.md`)。パスはルートから要素名を `.` でつなぎ
   (`rss.channel.item.2.title`。同名の兄弟は番号を省くと1番目)、属性は `@名前`、同名の子の数は末尾に `#`(最後まで読む)。JSONの`json_pick`と同じく結果の値だけをLuaに作る。
   同じ要素を指す書き方(番号あり・なし)を両方頼むと両方に入る。数えられる子の名前の種類は親ごとに16まで。
 - **ニュースアプリ**: RSSは数十〜百KBなので`http_request`の`save_to`で`news.xml`へ保存→`sd_xml_pick`で10件ずつ(1回32パスまで)題名・日時・媒体を拾う(最大30件)。

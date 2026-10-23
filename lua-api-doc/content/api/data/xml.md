@@ -5,7 +5,7 @@ weight: 30
 description: "xml_pick / sd_xml_pick"
 ---
 
-RSS/AtomのようなXMLから、必要な値だけを取り出します。文書全体をLuaの表にはしません(C++側で流しながら読み、確保しません)。Google NewsのRSS(`https://news.google.com/rss/search?q=...&hl=ja&gl=JP&ceid=JP:ja`)の題名やリンクを拾う使い方を想定しています。
+RSS/AtomのようなXMLから、必要な値だけを取り出します。文書全体をLuaの表にはせず、先頭から読み流して頼んだ値だけを作ります。Google NewsのRSS(`https://news.google.com/rss/search?q=...&hl=ja&gl=JP&ceid=JP:ja`)の題名やリンクを拾う使い方を想定しています。
 
 ## pico.xml_pick
 

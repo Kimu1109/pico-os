@@ -1,193 +1,62 @@
 ---
-title: "定数・上限一覧"
+title: "上限"
 weight: 50
-description: "メモリ予算・実行時間・各種サイズ上限・列挙型の値"
+description: "メモリ・実行時間・数の範囲・各種サイズの上限"
 ---
 
 ## メモリ・実行時間
 
 | 項目 | 値 | 説明 |
 |---|---|---|
-| Lua stateのメモリ予算 | 200 × 1024 = 204,800 バイト | `LuaScene`が`LuaEngine`を生成する際に渡す上限。state本体+標準ライブラリ+スクリプトの全確保を含む |
-| 命令数の上限(1回の呼び出しあたり) | 2,000,000命令 | 超過するとその呼び出しは実行時エラーとして打ち切られる。[実行時間の安全網](../../guide/app/execution-limits/) 参照 |
-| フック間隔 | 1,000命令 | 上の上限を監視する頻度(内部実装の詳細) |
-| スクリプト本体の読み込み上限 | 16KiB(16,384バイト) | 超過分は切り詰めて実行(警告ログあり) |
+| Luaが使えるメモリ | 200KB(204,800バイト) | 1アプリあたり。コード・テーブル・文字列など全部を含む。ウィジェットと画像は別枠 |
+| 命令数(1回の呼び出しあたり) | 200万命令 | 超えるとその呼び出しはエラーで打ち切られる。[実行時間とメモリの上限](../../guide/app/execution-limits/) |
+| `main.lua` の大きさ | 16KiB | 超えた分は切り捨てて読む(たいてい構文エラーになる) |
+| `require` で読む1ファイル | 32KiB | 先に読み込めるのは1つのスクリプトにつき16モジュールまで |
+| 同時に存在できるウィジェット | 1,023個 | |
+| バックグラウンドのスクリプト | メモリ48KB・1回30秒 | [バックグラウンド](../../api/system/background/) |
 
 ## 数の範囲(32bitのLua)
 
-pico-os の Lua は **32bitの整数と単精度(32bit)の小数** で動きます(`LUA_32BITS`。RP2350 が単精度しかハードウェアで計算できないため)。
+pico-os の Lua は **32bitの整数と32bitの小数(単精度)** で動きます。
 
 - 整数は `math.mininteger`(-2147483648)〜`math.maxinteger`(2147483647)。超えると黙って回ります(`2147483647 + 1 == -2147483648`)。`0xffffffff` は `-1` です
 - 小数の有効桁は約7桁。`16777217.0 == 16777216.0` になります。エポック秒(約17億)や大きなミリ秒を小数で割ると端数が落ちるので、時刻の差は整数のまま引いてから割ってください
 - `tostring` は小数を7桁で書きます(`0.1` → `"0.1"`)。JSONの書き出しも同じ
 - `pico.time()` / `os.time()` のエポック秒は2038年1月まで整数に収まります
 
-## SD・ネットワーク・画像のサイズ上限
+## サイズの上限
 
 | 項目 | 値 |
 |---|---|
-| `pico.sd_read()` の読み込み上限 | 16KiB(超過は`nil`。切り詰めない) |
-| `pico.http_request()` の送信ボディ上限 | 16KiB |
-| `pico.http_request()` の受信本文上限 | 16KiB(メモリで受ける場合。`save_to` でSDへ保存するなら8MiB) |
+| `pico.sd_read()` / `sd_read_part()` で1回に読める大きさ | 16KiB(超えるファイルは `sd_read` が `nil`。切り詰めない) |
+| `pico.http_request()` で送る本文 | 16KiB |
+| `pico.http_request()` で受け取る本文 | 16KiB(メモリで受けるとき。`save_to` でSDへ保存するなら8MiB) |
 | `pico.http_request()` の順番待ち | 走っている1本 + 待ち4本 |
 | `pico.http_request()` の追加ヘッダ | 合計1000バイト、1行(名前: 値)は512バイト未満 |
-| `pico.after` / `pico.every` のタイマー数 | 16個 |
-| `require` で読む1ファイル | 32KiB(先読みするのは1回のスクリプトにつき最大16モジュール) |
+| `pico.after` / `pico.every` のタイマー | 16個 |
 | `push_scene` の `args` / `pop` の `result` | JSONで1KiB未満 |
 | `on_suspend` が返す状態 | JSONで2KiB未満 |
-| `pico.store_save()` の大きさ | JSONで16KiB |
+| `pico.store_save()` | JSONで16KiB(暗号化するときは12KiB) |
 | `pico.json_decode` の入力 / `json_encode` の出力 | 64KiB。入れ子は16段 |
-| 同時に保持できる画像(`pico.image_load`/`pico.image_create`)の枚数 | 8枚 |
-| 画像データの合計サイズ上限 | 96KiB(98,304バイト) |
-| `TabBar` に追加できるタブ数(`pico.tab_add`) | 8個 |
-| `pico.tab_link` の連動の数 | 32個 |
+| `pico.json_pick` / `xml_pick` の文字列の値 | 255バイト(`sd_json_pick` / `sd_xml_pick` のファイルは1MiB) |
+| 同時に持てる画像(`image_load` / `image_create`) | 8枚・合計96KiB |
+| `TabBar` のタブ | 8個 |
+| `pico.tab_link` の連動 | 32個 |
 | `pico.set_name` の名前 | 128個・各23文字まで |
-| `TextView` に渡せる文章(`pico.text_set`) | 16KiB(1024行まで表示) |
-| `MarkdownView` に渡せる文書 | 8KiB・1ブロック約170文字 |
-| `pico.text_set` 以外で `pico.set(id, "text", ...)` に渡せる文字列 | 255バイト |
+| `pico.set(id, "text", ...)` に渡せる文字列 | 255バイト(長い文章は `pico.text_set`) |
+| `TextView` の文章(`pico.text_set`) | 16KiB(1024行まで表示) |
+| `MarkdownView` の文書 | 8KiB |
 | `pico.show_choice` の選択肢 | 64個 |
+| `pico.show_message` の本文 | 512バイト |
 | `pico.draw_text_wrapped` | 2048バイト・64行 |
+| `pico.draw_polygon` / `fill_polygon` | 32点 |
+| `pico.notify` の予約 | 1アプリ4件(OS全体で16件) |
 | `pico.encrypt` の平文 | 12KiB |
-| `pico.store_save` を暗号化するときのJSON | 12KiB |
 | `pico.random_bytes` | 1〜1024バイト |
 | `pico.base64_encode` / `decode` の入力 | 12KiB / 16KiB |
+| `pico.clipboard_set` | 1KiB |
 
-## WidgetIdのビット構成
+## HTTPS
 
-32bit整数のうち、上位から順に次のように使われています。
-
-| ビット範囲 | 内容 | 意味 |
-|---|---|---|
-| `[31:26]`(6bit) | 種別(`WidgetType`) | 最大64種別まで表現可能 |
-| `[25:10]`(16bit) | 世代(generation) | スロット使い回し時の破棄済みID検出に使う |
-| `[9:0]`(10bit) | インデックス | 同時に存在できるウィジェットは最大1,023個 |
-
-`0`(オールゼロ)は常に無効なIDです。
-
-## 列挙型の値
-
-> 以下の値には名前の定数があります(`pico.COLOR_RED`、`pico.FONT_BIG`、`pico.ICON_Home` など)。一覧は [定数](../constants/) を参照。
-
-### font_size(FontFn::FontSize)
-
-| 値 | 名前 | 実サイズ |
-|---|---|---|
-| `0` | Small | 16px |
-| `1` | Normal | 24px(既定) |
-| `2` | Big | 32px |
-| `3` | Bigger | 48px |
-
-### icon_size(IconSize)
-
-| 値 | 実サイズ |
-|---|---|
-| `0` | 16px(既定) |
-| `1` | 24px |
-| `2` | 32px |
-| `3` | 48px |
-| `4` | 64px |
-
-### icon_id(IconID)
-
-`Icon`(`pico.create("Icon")`)と、アイコンボタン化した`Button`(`icon_id`を設定した状態)の`icon_id`に渡す値です。`src/gui/icons/icons_data.h`の`enum class IconID`の並び順(0始まりの連番、明示値なし)そのままです。
-
-> **並び順は将来変わり得ます。** 新しいアイコンは必ず末尾に追加する運用になっていますが、この表はある時点のスナップショットです。数値を確実に合わせたい場合は`src/gui/icons/icons_data.h`(または生成元の`script/generate_icons.py`の`ICONS`リスト)を直接確認してください。
-
-| 値 | 名前 | 値 | 名前 |
-|---|---|---|---|
-| 0 | `WifiSignal1` | 35 | `CheckboxOff` |
-| 1 | `WifiSignal2` | 36 | `CircleDashedPlus` |
-| 2 | `WifiSignal3` | 37 | `Refresh` |
-| 3 | `WifiSignal4` | 38 | `Power` |
-| 4 | `Battery0` | 39 | `Menu` |
-| 5 | `Battery1` | 40 | `DotsVertical` |
-| 6 | `Battery2` | 41 | `ChevronDown` |
-| 7 | `Battery3` | 42 | `ChevronUp` |
-| 8 | `Battery4` | 43 | `Star` |
-| 9 | `BatteryCharging` | 44 | `Share` |
-| 10 | `SdCard` | 45 | `User` |
-| 11 | `VolumeHigh` | 46 | `Send` |
-| 12 | `VolumeLow` | 47 | `Keyboard` |
-| 13 | `VolumeOff` | 48 | `Language` |
-| 14 | `Sun0` | 49 | `Link` |
-| 15 | `Sun1` | 50 | `Save` |
-| 16 | `Sun2` | 51 | `StackPop` |
-| 17 | `Sun3` | 52 | `StackPush` |
-| 18 | `Bell` | 53 | `Brush` |
-| 19 | `BellOff` | 54 | `Eraser` |
-| 20 | `BellRinging` | 55 | `AlertTriangle` |
-| 21 | `Lock` | 56 | `InfoCircle` |
-| 22 | `LockOff` | 57 | `Help` |
-| 23 | `Eye` | 58 | `AppBox` |
-| 24 | `EyeOff` | 59 | `AppStore` |
-| 25 | `Home` | 60 | `Calendar` |
-| 26 | `Search` | 61 | `Game` |
-| 27 | `Settings` | 62 | `Clock` |
-| 28 | `Trash` | 63 | `Calculator` |
-| 29 | `ArrowUp` | 64 | `LanguageHiragana` |
-| 30 | `ArrowLeft` | 65 | `Browser` |
-| 31 | `ArrowDown` | 66 | `Edit` |
-| 32 | `ArrowRight` | 67 | `File` |
-| 33 | `X` | 68 | `Folder` |
-| 34 | `CheckboxOn` | 69 | `Copy` |
-
-| 値 | 名前 | 値 | 名前 |
-|---|---|---|---|
-| 70 | `Pencil` | 75 | `Bucket` |
-| 71 | `Line` | 76 | `Palette` |
-| 72 | `Circle` | 77 | `Undo` |
-| 73 | `SquareFilled` | 78 | `FolderOpen` |
-| 74 | `CircleFilled` | 79 | `FilePlus` |
-
-`35`(`CheckboxOff`)はtablerの`square`(白抜きの四角)なので、四角形の道具のアイコンにも使えます。
-
-### text_align(Label / Textbox)
-
-| 値 | 意味 |
-|---|---|
-| `0` | Left(既定) |
-| `1` | Center |
-| `2` | Right |
-
-### direction(LayoutContainer)
-
-| 値 | 意味 |
-|---|---|
-| `0` | VERTICAL(縦積み) |
-| `1` | HORIZONTAL(横並び) |
-
-### cross_align(LayoutContainer) / h_align・v_align(GridContainer)
-
-| 値 | 意味 |
-|---|---|
-| `0` | START |
-| `1` | CENTER |
-| `2` | END |
-
-### canvas_mode(CanvasRaster)
-
-| 値 | 意味 |
-|---|---|
-| `0` | Line |
-| `1` | Rect |
-| `2` | Ellipse |
-| `3` | Arrow |
-
-### 色パレット(0〜15、PICO-8風)
-
-| 値 | 色 | 値 | 色 |
-|---|---|---|---|
-| 0 | 黒(既定の前景色) | 8 | ダークグレー |
-| 1 | ネイビー | 9 | 青 |
-| 2 | ダークグリーン | 10 | 緑 |
-| 3 | ダークシアン | 11 | シアン |
-| 4 | マルーン | 12 | 赤 |
-| 5 | パープル | 13 | マゼンタ |
-| 6 | オリーブ | 14 | 黄 |
-| 7 | ライトグレー | 15 | 白(既定の背景色) |
-
-## HTTPメソッド・プロトコルの制約
-
-- 対応メソッド: `GET` / `POST` / `PUT` / `PATCH` / `DELETE`
-- `https://` も使えます。信頼するルート証明書は本体に焼き込まれたもの(Google / Let's Encrypt / DigiCert / Sectigo)と、SDの `/sys/tls/ca.pem` です。時計が合う(NTP同期)前は繋がりません。
-- 自動リダイレクト追跡は `GET` のみです。
+- `https://` で信頼するのは、本体に入っているルート証明書(Google / Let's Encrypt / DigiCert / Sectigo)と、SDの `/sys/tls/ca.pem` です。
+- 本体の時計が合う(Wi-Fiにつながって時刻を合わせる)前は繋がりません。

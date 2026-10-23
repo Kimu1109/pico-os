@@ -1,76 +1,45 @@
 ---
 aliases: ["/guide/permissions/"]
-title: "権限モデル"
+title: "権限"
 weight: 10
-description: "network / sd_outside_app_dir / notify / background / microphone のパーミッション"
+description: "network / sd_outside_app_dir / notify / microphone / background の権限"
 ---
 
-Luaアプリへ許す操作は、all-or-nothingのフラグで決まります。既定は**両方 `false`(最小権限)**です。
+アプリができることは、`app.cfg` に書く権限で決まります。どれも既定は `false`(許さない)です。
 
-```cpp
-struct LuaPermissions {
-    bool network = false;
-    bool sd_outside_app_dir = false;
-    bool notify = false;
-    bool background = false;
-    bool microphone = false;
-};
+```
+permission_network=true
+permission_notify=true
 ```
 
-| フラグ | 効果がある関数 | `false`のときの制限 |
+| 権限(`app.cfg` のキー) | 許すこと | 無いときの動き |
 |---|---|---|
-| `network` | `pico.http_request` / `pico.http_cancel` | 呼んでも `false` が返るだけ(エラーにはならない) |
-| `sd_outside_app_dir` | `pico.sd_exists/read/write/remove/mkdir/list` / `pico.image_load` / `Image`・`ImageView`・`MarkdownView` の `path` / `pico.canvas_load` | そのアプリの `app_dir`(通常は自分のスクリプトの親ディレクトリ)の配下しかアクセスできない |
-| `notify` | `pico.notify` | 呼んでも `nil, 理由` が返るだけ(通知はアプリを閉じた後にも画面へ出て音も鳴るため、既定では許さない)。`app.cfg` の `permission_notify=true` で許可する |
-| `background` | `app.cfg` の `background`(閉じている間も定期的に動くスクリプト。[バックグラウンド](../../../api/system/background/)) | 書いてあっても動かさない(電池とWi-Fiを使い続けるため、既定では許さない)。`app.cfg` の `permission_background=true` で許可する |
-| `microphone` | `pico.mic_start` / `mic_monitor` / `mic_set_gain` / `mic_set_rate`([マイク](../../../api/media/mic/)) | 呼んでも `nil, 理由` が返るだけ(周りの音を拾うため、既定では許さない)。`app.cfg` の `permission_microphone=true` で許可する。読むだけの `mic_level` / `mic_info` 等は権限が無くても呼べる(聞いていなければ0) |
+| `permission_network` | HTTP通信(`pico.http_request` / `http_cancel`) | 呼んでも `false` が返るだけ |
+| `permission_sd_outside_app_dir` | アプリのフォルダの外のSDの読み書き(`pico.sd_*` / `config_*` / `image_load` / `canvas_save`・`canvas_load` / `Image`・`ImageView`・`MarkdownView` の `path` など) | アプリのフォルダの中だけ。外を指すと `false` / `nil` |
+| `permission_notify` | 通知(`pico.notify`)。アプリを閉じた後にも画面へ出て音も鳴るため | `nil, 理由` が返るだけ |
+| `permission_microphone` | マイクの録音・メーター(`pico.mic_start` など)。周りの音を拾うため | `nil, 理由` が返るだけ。読むだけの `mic_level` などは呼べる(聞いていなければ0) |
+| `permission_background` | 閉じている間に動くスクリプト(`background`)。電池とWi-Fiを使い続けるため | `background` を書いても動かない |
 
-権限は**Luaスクリプトが構築されるとき(=画面が開かれるとき)に1回だけ**決まります。実行中にスクリプト側から変更する手段はありません。パスのホワイトリストやホスト単位の細かい制限は今のところ無く、「持ち場の外へ出られるか出られないか」だけを見る、最初の一歩としての粗い実装です。
+- 権限が無いときも、エラーではなく失敗の戻り値になります。戻り値を確かめて、利用者に知らせてください。
+- 権限はアプリを開いたときに決まり、スクリプトから変えることはできません。
+- `app.cfg` はスクリプトから書き換えられません(自分で権限を足せないように)。
 
-## 誰が権限を決めるか
+## アプリのフォルダ(app_dir)
 
-### SD走査で自動登録されたアプリ(`/lua/apps/<名前>/main.lua`)
-
-アプリのディレクトリの `app.cfg` に書いた権限(`permission_network=true` 等)が使われます。書いていなければ既定値(全部 `false`)です。
-
-### アプリストアから入れたアプリ
-
-`app.cfg` の権限は一覧(catalog.tsv)にも載り、入れる前に確認のダイアログで利用者へ見せます。
-**一覧に載った権限より強い権限を `app.cfg` が持っていれば、インストールを断ります**([アプリストアで配る](../publishing/))。
-
-### C++側に手動登録したアプリ
-
-`src/boot/App_List.cpp` の `Register()` 呼び出し側が明示的に権限を決めます。
-
-```cpp
-Scene* MakeMyLuaAppScene(const AppEntry& entry) {
-    LuaPermissions permissions;
-    permissions.network = true;
-    permissions.sd_outside_app_dir = true;
-    return new LuaScene(entry.arg.c_str(), permissions);
-}
-
-Register("My App", IconID::AppBox, &MakeMyLuaAppScene, "/lua/my_app.lua");
-```
-
-## app_dir とは
-
-`sd_outside_app_dir == false` の間、SD操作は `app_dir` 配下だけに閉じ込められます。`app_dir` は通常、そのLuaスクリプト自身の親ディレクトリです。
-
-- `/lua/apps/myapp/main.lua` を実行している場合、`app_dir` は `/lua/apps/myapp` になります。
-- `pico.push_scene()` / `pico.change_scene()` で別のスクリプトへ移った場合、`app_dir` は**遷移先スクリプト自身の親ディレクトリ**として計算し直されます(1つ前の画面の `app_dir` を引きずりません)。
+`permission_sd_outside_app_dir` が無い間、SDの読み書きは `pico.app_dir()`(`main.lua` のあるフォルダ)の中だけです。
 
 ```lua
--- app_dir が "/lua/apps/myapp" の場合
-pico.sd_read("/lua/apps/myapp/save.txt")        -- OK
-pico.sd_read("/lua/apps/myapp/sub/data.txt")    -- OK(配下のさらに下も可)
-pico.sd_read("/lua/other_app/save.txt")         -- 拒否(nilが返り、警告ログが出る)
+-- app_dir が "/lua/apps/myapp" のとき
+pico.sd_read("/lua/apps/myapp/save.txt")        -- 読める
+pico.sd_read("/lua/apps/myapp/sub/data.txt")    -- 読める(下のフォルダも可)
+pico.sd_read("/lua/apps/other/save.txt")        -- 読めない(nil。警告がログに出る)
 ```
 
-## app.cfgは書き換えられない
+## 画面を移ったとき
 
-権限は `app.cfg` に書かれるため、スクリプトが自分で権限を足せないよう、`app.cfg` への書き込み・削除は**権限に関わらず拒否**されます(自分のアプリの `app.cfg` と、`/lua/apps/<名前>/app.cfg` すべて)。詳しくは [SDカードアクセス](../../data/sdcard/) を参照してください。
+- `pico.push_scene()` / `pico.change_scene()` で開いた画面も同じアプリなので、権限とアプリのフォルダはそのままです。
+- `pico.launch_app()` で別のアプリを開くと、そのアプリ自身の権限で動きます。
 
-## 権限は「アプリ単位」で引き継がれる
+## アプリストアで配るとき
 
-`pico.push_scene()` / `pico.change_scene()` で複数画面のLuaアプリを作った場合、**画面が変わっても権限(`network` / `sd_outside_app_dir`)はそのまま引き継がれます**。2画面目以降だけ権限が最小権限に落ちることはありません。一方 `pico.launch_app()` で別のアプリへ遷移した場合は、遷移先アプリ自身の権限に切り替わります(独立したアプリとして扱われるため)。
+`app.cfg` の権限はストアの一覧にも載り、入れる前に利用者へ見せます。一覧に載せた権限より強い権限を `app.cfg` に書いたアプリは、入れるときに断られます([アプリストアで配る](../publishing/))。

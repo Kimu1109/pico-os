@@ -2,7 +2,7 @@
 aliases: ["/api/misc/"]
 title: "その他"
 weight: 70
-description: "log / show_error / millis / micros / battery / on_key / app_dir / path_join / time / wifi_status / url・base64 / settings / memory_info / toast / clipboard / keep_awake / theme"
+description: "log / show_error / toast / on_key / app_dir / path_join / settings / clipboard / battery / wifi_status / memory_info / keep_awake / theme / url・base64"
 ---
 
 ## pico.log
@@ -15,19 +15,7 @@ description: "log / show_error / millis / micros / battery / on_key / app_dir / 
 
 <div class="sig">pico.show_error(message: string) <span class="ret">-> (なし)</span></div>
 
-エラーログを出したうえで、メッセージダイアログをその場で表示します。「ユーザーへ見せるべき失敗」を通知する共通の窓口です。Luaスクリプト自体の構文エラー・実行時エラー(捕捉されなかったもの)も、内部的にはこれと同じ経路で表示されます。そのときはメッセージの下にスタックトレースの先頭(数段)も出ます。全部はログと `/crash/lua_NNNN.txt` に残ります。
-
-## pico.millis
-
-<div class="sig">pico.millis() <span class="ret">-> ms: integer</span></div>
-
-起動からのミリ秒。単調に増え、NTPの同期で飛びません(`get_time` は壁時計で飛びます)。経過時間の計測に使います。Luaの整数は32bitなので、約24.8日で負へ回ります(差 `b - a` は回った後も正しい)。
-
-## pico.micros
-
-<div class="sig">pico.micros() <span class="ret">-> us: integer</span></div>
-
-起動からのマイクロ秒(32bitの値で、約36分で負へ回り、約71分で一巡します)。1フレームの中の処理の時間のような、ミリ秒では粗すぎる計測に使います。Luaの整数も32bitで同じく回るので、差は `b - a` でそのまま正しく出ます(約36分より短い間隔なら)。
+エラーをログに出し、メッセージのダイアログを出します。利用者に見せたい失敗を知らせるのに使います。捕まえていないLuaのエラーも同じダイアログで出ます(そのときはスタックトレースの先頭も付き、全部はログと `/crash/lua_NNNN.txt` に残ります)。
 
 ## pico.battery
 
@@ -39,7 +27,7 @@ description: "log / show_error / millis / micros / battery / on_key / app_dir / 
 
 <div class="sig">pico.on_key(fn: function | nil) <span class="ret">-> (なし)</span></div>
 
-物理キーボード(PCのキーボードをUSBシリアル経由で使う入力など)の打鍵を受け取ります。`nil` で解除。
+物理キーボード(CardKB、USBシリアル経由のPCのキーボードなど)の打鍵を受け取ります。`nil` で解除。
 
 `fn(key, mods)`:
 
@@ -73,12 +61,6 @@ end)
 local img = pico.path_join(pico.app_dir(), "img", "title.pimg")
 ```
 
-## pico.time
-
-<div class="sig">pico.time() <span class="ret">-> epoch_seconds: integer | nil</span></div>
-
-現在時刻のUNIX時間(秒)。NTPで時計が合っていなければ `nil`。年月日が欲しいときは `pico.get_time()`。
-
 ## pico.wifi_status
 
 <div class="sig">pico.wifi_status() <span class="ret">-> { connected: boolean, status: string, enabled: boolean, ssid?: string }</span></div>
@@ -111,7 +93,7 @@ base64です(`data` は12KiB、`text` は16KiBまで)。`url_safe = true` なら
 
 <div class="sig">pico.memory_info() <span class="ret">-> table</span></div>
 
-`{ lua_used, lua_budget, lua_free, heap_free, heap_used, heap_headroom, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と予算(既定200KB)、`heap_*` は本体のヒープ(`heap_free` は確保済みのヒープの中の空きの合計、`heap_headroom` はヒープの末尾とスタックの間のまだ使っていない広さ。PCでは0)、`image_bytes` は `image_load`/`image_create` で使っている量です。重いアプリの調整に使います。
+`{ lua_used, lua_budget, lua_free, heap_free, heap_used, heap_headroom, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と上限(200KB)、`heap_*` は本体全体のメモリ、`image_bytes` は `image_load` / `image_create` で使っている量です。重いアプリの調整に使います。
 
 ## pico.toast
 
@@ -152,7 +134,7 @@ end
 
 <div class="sig">pico.theme() <span class="ret">-> "light" | "dark"</span></div>
 
-OSの配色を返します。設定アプリの「画面」→「ダークテーマ」(`/sys/display.cfg` の `theme`)を入れると `"dark"` です。
+OSの配色を返します。設定アプリの「画面」→「ダークテーマ」を入れると `"dark"` です。
 ダークテーマでは**パレットの番号の色が明暗で入れ替わります**(0番=文字の色が明るく、15番=背景の色が暗くなる。
 紺・深緑のような濃い色は明るく、薄い灰・水色は暗く)。番号で色を指定している部品・図形・画像は何もしなくても
 ダークテーマの色で出ます。絵の色を変えたくないゲームは `pico.set_palette` で自分の色を入れてください

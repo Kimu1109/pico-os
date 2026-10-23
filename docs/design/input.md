@@ -142,7 +142,7 @@ SUMMARY.md未掲載。物理キーボード・外部コントローラーで、�
   `ScrollContainer::revealRect()`は隠れた子へ移ったとき見える所までスクロールする。**新しい操作部品を作ったら`focusableByDefault()`と、
   タップの位置で動きが変わるなら`onFocusKey()`を足すこと**(`AppGrid`/`ColorDialog`型の「直接描く」部品は中で選ぶ位置を持つ必要がある)。
   ColorDialog・KeyboardNum・DurationPicker・MonthGrid・CalculatorKeypad・GameBoyPad等の直接描く部品はまだ受けない(枠もタップの位置も合わない)。
-- Lua: `pico.focus(id|nil [, show_ring])` / `pico.get_focus()`、プロパティ`focusable`(`WidgetProperty::Id::Focusable`)。ドキュメントは`lua-api-doc/content/api/widgets.md`。
+- Lua: `pico.focus(id|nil [, show_ring])` / `pico.get_focus()`、プロパティ`focusable`(`WidgetProperty::Id::Focusable`)。ドキュメントは`lua-api-doc/content/api/ui/widgets.md`。
 - 検証: `focus_test`(run.sh の widget。読む順・矢印・候補にならないもの・押す・消える・タッチ・ダイアログの範囲と戻り・各ウィジェット)、
   PCビルドで標準入力へ`key`の行を流して`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): ランチャのタイルの移動とページ送り、
   Enterで起動、設定アプリ(一覧・ボタン・タブ・スライダー・ドロップダウン・確認ダイアログへ移って閉じたら戻る)、テキストエディタ(Tabでツールバー)。

@@ -5,7 +5,7 @@ weight: 50
 description: "ProgressBar / TextView / ImageView / MarkdownView / AnalogClock / DurationPicker / MonthGrid の使い方"
 ---
 
-OSの標準アプリが使っている部品を、`pico.create` でそのまま作れます。生成直後の大きさは仮の値なので、`w` / `h` を設定してください。プロパティの一覧は [プロパティ対応表](../../../reference/widget-properties/) にあります。
+OSの標準アプリと同じ部品を、`pico.create` で作れます。生成直後の大きさは仮の値なので、`w` / `h` を設定してください。プロパティの一覧は [プロパティ対応表](../../../reference/widget-properties/) にあります。
 
 ## ProgressBar
 
@@ -16,7 +16,7 @@ local bar = pico.create("ProgressBar")
 pico.set(bar, "x", 10); pico.set(bar, "y", 40)
 pico.set(bar, "w", 200); pico.set(bar, "h", 14)
 pico.set(bar, "max_value", 100)   -- 既定は0〜100
-pico.set(bar, "color", 10)        -- バーの色(パレット番号)
+pico.set(bar, "color", pico.COLOR_GREEN)  -- バーの色
 pico.set(bar, "value", 35)
 ```
 
@@ -36,7 +36,7 @@ pico.on(log, "text_tap", function(id, byte_offset) ... end)
 
 ## ImageView — スクロールできる画像
 
-`.pimg` を1回だけ読み込んで表示します。表示欄より大きい画像はドラッグで動かせます(大きな画像は表示欄ぶんだけメモリに持ちます)。`pico.image_load` + `Canvas` より手軽で、画像をスロットも消費しません。
+`.pimg` を読み込んで表示します。表示欄より大きい画像はドラッグで動かせます(大きな画像でも表示欄ぶんだけしかメモリを使いません)。`pico.image_load` + `Canvas` より手軽で、`pico.image_load` の枚数の枠も使いません。
 
 ```lua
 local view = pico.create("ImageView")
@@ -103,4 +103,4 @@ end)
 
 月を変えると `today` と `selected` と点は残るので、`today` / `selected` / `set_dots` を入れ直してください。
 
-動くサンプルは `pc/sdcard/lua/apps/動作確認/extra.lua` にあります。
+動くサンプルは「動作確認」アプリの「追加の部品」(`/lua/apps/動作確認/extra.lua`)にあります。

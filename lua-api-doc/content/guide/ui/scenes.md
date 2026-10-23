@@ -1,78 +1,78 @@
 ---
 aliases: ["/guide/scenes/"]
-title: "シーン制御(画面遷移)"
+title: "画面遷移"
 weight: 70
-description: "別のLuaスクリプトや他のアプリへ遷移する"
+description: "別のLuaスクリプトの画面や、他のアプリへ移る"
 ---
 
 ## 一覧
 
 ```lua
-pico.pop()                 -- 自分を起動した画面へ戻る
-pico.push_scene(path)      -- 別のLuaスクリプトへ遷移(戻り先をスタックへ積む)
-pico.change_scene(path)    -- 別のLuaスクリプトへ遷移(スタックを消費しない)
-pico.launch_app(name)      -- ランチャの登録簿にある任意のアプリ(C++製含む)へ遷移
-pico.content_rect()        -- x, y, w, h (ステータスバーを除いた描画可能領域)
+pico.pop([result])               -- 自分を開いた画面へ戻る
+pico.push_scene(path [, args])   -- 別のLuaスクリプトの画面を開く(戻ってこられる)
+pico.change_scene(path [, args]) -- 今の画面を別のLuaスクリプトに置き換える
+pico.launch_app(name)            -- ランチャにある別のアプリを開く
 ```
 
-いずれも**要求を登録するだけ**で、実際の画面遷移は次のフレーム境界まで保留されます。呼び出した直後に今のスクリプトの実行が中断されるわけではないので、呼び出し後に後片付けのコードを続けて書けます。
+どれも**頼むだけ**で、実際に画面が変わるのはそのフレームの終わりです。呼んだ後のコードもそのまま実行されるので、後片付けを続けて書けます。
 
-## push_scene vs change_scene vs pop
+## push_scene・change_scene・pop
 
-- `push_scene(path)` は今の画面をスタックへ退避してから新しい画面を開きます。新しい画面で `pico.pop()` すると、`push_scene` を呼んだ画面へ戻ります。
-- `change_scene(path)` はスタックを消費せず、今の画面をその場で置き換えます。`change_scene` で開いた画面から `pico.pop()` すると、**`change_scene` を呼んだ画面を飛び越して**、その手前の画面へ直接戻ります。
-- `pico.pop()` は「自分を起動した側(ランチャ、または `push_scene` の呼び出し元)」へ戻るための唯一の手段です。
+- `push_scene(path)` は今の画面を残したまま新しい画面を開きます。新しい画面で `pico.pop()` すると、元の画面へ戻ります。
+- `change_scene(path)` は今の画面を置き換えます。置き換えた画面で `pico.pop()` すると、**置き換えられた画面を飛ばして**、その前の画面へ戻ります。
+- `pico.pop()` は、自分を開いた画面(ランチャ、または `push_scene` を呼んだ画面)へ戻ります。
 
 ```
 ランチャ --push_scene--> A --change_scene--> B --pop--> ランチャ
 ```
-(Aは `change_scene` で捨てられているため、Bから戻る先はAではなくランチャ)
 
-## LuaSceneはPopで戻ると最初から実行し直す
+(Aは `change_scene` で置き換えられたので、Bから戻る先はランチャ)
 
-`push_scene` で開いた画面から `pico.pop()` で戻ってきたとき、戻った先の `LuaScene` は**スクリプトを最初から実行し直します**。Lua変数に持たせた状態は画面を出るたびにリセットされます。状態を残したい場合は次のどれかを使います。
+`path` はSDの絶対パスです。同じアプリの別のファイルなら `pico.path_join(pico.app_dir(), "settings.lua")` と書きます。開いた先でもアプリのフォルダ・権限・`require` はそのまま同じです。
 
-- 画面を離れて戻るだけなら、`on_suspend()`(テーブルを返す)→ `on_resume(state)` で持ち越せます。
-- 子の画面へ値を渡す・結果を受け取るなら `push_scene(path, args)` / `pico.args()` / `pico.pop(result)` / `on_result(result)`。
-- アプリを閉じても残したい値は `pico.store_save()` / `pico.store_load()`、または SD へ保存します([SDカードアクセス](../../data/sdcard/) 参照)。
+## 戻ってくると最初から実行し直す
 
-詳しくは [シーン制御API](../../../api/ui/scenes/#画面の間で値を受け渡す) を参照してください。
+`push_scene` で開いた画面から戻ってくると、元の画面のスクリプトは**最初から実行し直されます**。変数に持っていた状態は消えるので、残したいものは次のどれかで受け渡します。
+
+| やりたいこと | 使うもの |
+|---|---|
+| 開く画面に値を渡す | `push_scene(path, args)` → 開いた画面で `pico.args()` |
+| 開いた画面から結果を受け取る | 開いた画面で `pico.pop(result)` → 元の画面の `on_result(result)` |
+| 離れる前の状態を戻ってから復元する | `on_suspend()` が返したテーブル → `on_resume(state)` |
+| アプリを閉じても残す | `pico.store_save()` / `pico.store_load()`、またはSDへ保存 |
+
+書き方の例は [画面遷移API](../../../api/ui/scenes/#画面の間で値を受け渡す) にあります。
 
 ## トップレベルで呼ばない
 
 ```lua
--- NG: この画面に戻ってくるたびに無条件で発火してしまう
+-- だめ: この画面に戻ってくるたびに(最初から実行し直すので)すぐ移ってしまう
 pico.launch_app("電卓")
 
--- OK: ボタン等のイベント越しに呼ぶ
+-- よい: ボタンなどのイベントから呼ぶ
 pico.on(button, "press_start", function()
     pico.launch_app("電卓")
 end)
 ```
 
-`push_scene` / `change_scene` も同じ理由でボタン等のコールバック越しに呼ぶのが安全です。
+`push_scene` / `change_scene` も同じ理由で、イベントから呼んでください。
 
 ## launch_app
 
-C++製アプリを含む、ランチャの登録簿にある任意のアプリへ遷移します。
+ランチャにある別のアプリ(OS標準のアプリを含む)を名前で開きます。
 
 ```lua
-local ok = pico.launch_app("電卓")
-if not ok then
+if not pico.launch_app("電卓") then
     pico.show_error("アプリが見つかりませんでした")
 end
 ```
 
-アプリ名が登録簿に見つからなければ `false` を返します(綴りミスに気付けるようにするための戻り値)。名前が一致すれば `true` を返しますが、実際の画面遷移自体の成否(スタック上限など)までは判定していません。
+名前が見つからなければ `false` を返します。開いたアプリは、そのアプリ自身の権限で動きます。
 
-## 権限の引き継ぎ
-
-`push_scene` / `change_scene` は、今の `LuaEngine` が持つ権限(`LuaPermissions`)をそのまま新しい画面へ引き継ぎます。複数画面のLuaアプリを作る場合、2画面目以降だけ権限が最小権限に落ちることはありません。一方 `launch_app` は遷移先のアプリ自身の権限に委ねます(独立したアプリへの遷移のため)。詳細は [権限モデル](../../app/permissions/) を参照してください。
-
-## content_rect
+## ステータスバーを避ける
 
 ```lua
 local x, y, w, h = pico.content_rect()
 ```
 
-ステータスバーを避けた、C++製アプリと同じ配置基準の矩形を返します。ウィジェットの初期配置は基本的にこれを起点にします。
+画面上部のステータスバーを除いた、アプリが使える範囲を返します。ウィジェットの配置はこれを基準にします。

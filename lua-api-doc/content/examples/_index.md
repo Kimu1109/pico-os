@@ -1,7 +1,7 @@
 ---
 title: "サンプル"
 weight: 50
-description: "実際にPCビルド/実機で動作確認済みのLuaアプリ"
+description: "OSに入っているLuaアプリから、APIの使い方の実例になるもの"
 ---
 
-いずれもリポジトリの `pc/sdcard/lua/` に実ファイルとして入っており、PCビルド(`pc/build/picoos_pc`)でそのまま動かせます。
+どれもOSに入っているアプリで、SDカードの `/lua/apps/<名前>/` にあります(リポジトリでは `pc/sdcard/lua/apps/<名前>/`)。ソースを読みながら、ランチャやPC版・[Playground](../../playground/)で動かして試せます。

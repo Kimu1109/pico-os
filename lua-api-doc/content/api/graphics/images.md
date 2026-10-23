@@ -9,8 +9,7 @@ description: "image_load(.pimg/.bmp/.jpg) / image_create / image_target / image_
 
 <div class="sig">pico.image_load(path: string [, opts: table]) <span class="ret">-> handle: integer | nil</span></div>
 
-`.pimg`・`.bmp`・`.jpg`(JPEG)ファイルをデコードし、整数のイメージハンドルを返します。`WidgetId` とは別の体系の整数です。
-種類はファイルの先頭(`BM` / `FF D8`)で見分けます(拡張子は見ません)。
+`.pimg`・`.bmp`・`.jpg`(JPEG)を読み込み、画像のハンドル(整数。WidgetIdとは別物)を返します。形式はファイルの中身で見分けます(拡張子は見ません)。
 
 BMPは無圧縮(と BI_BITFIELDS)の 1/4/8/16/24/32bpp を読めます(RLE圧縮は読めません)。画面は16色なので、
 読むときにOSのパレットの一番近い色へ寄せます。`opts` で寄せ方を選べます:
@@ -78,7 +77,7 @@ Love2D の `love.graphics.draw(image, x, y, r, sx, sy, ox, oy)` と同じ並び�
 - `r`: 回転(ラジアン、時計回り、既定0)。回転の中心も `(ox, oy)`。
 - `sx`, `sy`: 倍率(既定1)。`sy` を省くと `sx` と同じ。**負にすると反転**(`sx = -1` で左右反転)。倍率は±64まで、0は何もしない。
 - 最近傍で、補間はしません。透過指定の画像は index 0 を描きません。
-- 描くのは今のクリップ(`set_draw_area` / `Canvas` の `render` 中なら dirty 矩形)の内側だけです。
+- 描くのは今のクリップ(`set_draw_area` / `render` の中なら今回描き直す範囲)の内側だけです。
 
 ```lua
 -- 画像の中心を軸に、2倍で45度回して描く
@@ -128,7 +127,7 @@ end)
 
 画像を明示的に解放します。無効なハンドル・解放済みハンドルを渡しても**エラーにはならず黙って無視**されます(`pico.destroy()` と同じ二重解放の扱い)。
 
-呼び忘れても、そのLuaアプリの `LuaEngine` が破棄される(画面が閉じる)タイミングで自動的に回収されます。
+呼ばなくても、アプリを閉じれば全部解放されます。
 
 ## オフスクリーン画像
 
@@ -144,7 +143,7 @@ end)
 
 <div class="sig">pico.image_target(handle: integer | nil) <span class="ret">-> (なし)</span></div>
 
-以降の `pico.draw_*`(`fill_rect` `draw_text` `draw_image` など)の**描き先をその画像に切り替え**ます。`nil` で画面へ戻します。座標は画像の左上が(0,0)です。**コールバックを抜けると自動で画面へ戻ります**(戻し忘れても他の描画が画像に吸い込まれません)。画像へ描いている間は画面のdirtyは積まれません。
+以降の `pico.draw_*`(`fill_rect` `draw_text` `draw_image` など)の**描き先をその画像に切り替え**ます。`nil` で画面へ戻します。座標は画像の左上が(0,0)です。**コールバックを抜けると自動で画面へ戻ります**(戻し忘れても他の描画が画像に吸い込まれません)。画像へ描いている間は、画面は描き直されません。
 
 ### pico.image_clear
 

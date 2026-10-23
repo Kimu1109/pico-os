@@ -1,10 +1,10 @@
 ---
 title: "ペイント"
 weight: 30
-description: "pc/sdcard/lua/apps/ペイント/main.lua — CanvasRasterとダイアログで作るお絵描きアプリ"
+description: "/lua/apps/ペイント/ — CanvasRasterとダイアログで作るお絵描きアプリ"
 ---
 
-ペン・消しゴム・直線・四角形・楕円・塗りつぶし(バケツ)で描き、`.pimg` で保存/読込するアプリです。SDスキャンで自動登録されます(`app.cfg` と `icon.pimg` 付き)。
+ペン・消しゴム・直線・四角形・楕円・塗りつぶし(バケツ)で描き、`.pimg` で保存/読込するアプリです(`app.cfg` と `icon.pimg` 付き)。
 
 描画の中身(ドラッグ中の図形のプレビュー、焼き込み、塗りつぶし、元に戻す)は全て `CanvasRaster` 側の仕事で、スクリプトは道具の切り替えとファイル操作の配線だけを持ちます。
 
@@ -26,7 +26,7 @@ description: "pc/sdcard/lua/apps/ペイント/main.lua — CanvasRasterとダイ
 
 ```lua
 pico.set(canvas, "undo_enabled", true)        -- 元に戻す用の控えを持つ
-pico.set(canvas, "canvas_mode", 5)            -- 0=ペン 1=四角 2=楕円 4=直線 5=塗りつぶし
+pico.set(canvas, "canvas_mode", pico.CANVAS_FILL)  -- LINE / RECT / ELLIPSE / STRAIGHT / FILL
 pico.set(canvas, "filled", true)              -- 四角/楕円を塗りつぶす
 pico.set(canvas, "color", 12)                 -- 消しゴムは color=15(白)のペン
 pico.set(canvas, "brush_radius", 2)
@@ -41,7 +41,7 @@ pico.set(canvas, "brush_radius", 2)
 | 開く | `pico.show_file_select(dir)` → `pico.canvas_load(canvas, path, true)`(キャンバスの大きさを保って読む) |
 | 新規・未保存での終了/開く | `pico.show_message()` で確認 |
 
-**ダイアログを閉じた直後に次のダイアログを開くと、閉じたほうの跡が画面に残ります**(半透明のダイアログの下は描き直されないため)。そこで `closed` の中では次を直接開かず、`loop()` で数フレーム待ってから開いています。
+**ダイアログを閉じた直後に次のダイアログを開くと、閉じたほうの跡が画面に残ります**。そこで `closed` の中では次を直接開かず、`loop()` で数フレーム待ってから開いています。
 
 ```lua
 local pending, pending_frames = nil, 0
@@ -66,8 +66,8 @@ end)
 
 ## 保存先
 
-SDスキャンで登録されたアプリは `sd_outside_app_dir` 権限を持たないので、保存/読込は `/lua/apps/ペイント/` の中だけです(外を選ぶと失敗のダイアログが出ます)。
+`app.cfg` に `permission_sd_outside_app_dir` を書いていないので、保存/読込は `/lua/apps/ペイント/` の中だけです(外を選ぶと失敗のダイアログが出ます)。
 
 ## 注意: スクリプトの大きさ
 
-`LuaScene` が読み込むスクリプトは16KiBまでです(超えると切り詰められて構文エラーになる)。日本語のコメントは1文字3バイトなので、大きめのアプリではコメントの量に気をつけてください。
+`main.lua` は16KiBまでです(超えると切り詰められて構文エラーになる)。日本語のコメントは1文字3バイトなので、大きめのアプリはコメントの量に気をつけるか、[`require`](../../api/system/modules/) でファイルを分けてください。

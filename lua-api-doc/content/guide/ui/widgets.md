@@ -2,35 +2,10 @@
 aliases: ["/guide/widgets/"]
 title: "ウィジェットの生成・操作・破棄"
 weight: 10
-description: "pico.create/destroy/set/getの基本と、WidgetIdの考え方"
+description: "pico.create / set / get / destroy の基本と、WidgetIdの考え方"
 ---
 
-## WidgetIdとは
-
-`pico.create()` はウィジェットを1つ生成し、それを指す**32bit整数のID**(WidgetId)を返します。以降、そのウィジェットへの操作(`pico.set` / `pico.get` / `pico.on` / `pico.destroy` など)はすべてこのIDで行います。C++側のポインタをLuaへ直接渡さないための仕組みで、内部的には「種別 + 世代 + スロット番号」がパックされています。
-
-- **破棄済みのIDを使い回すことはできません。** `pico.destroy()` されたウィジェットのIDを後から操作しようとすると、`pico.set`/`pico.get`/`pico.on` はエラーになります(誤って解放済みのウィジェットを触る事故を検出できます)。
-- IDが無効なとき、`pico.destroy()` だけは黙って無視します(二重destroyを許容)。それ以外(`set`/`get`/`on`/`add_child` など)はエラーになります。
-
 ## ウィジェットを作る
-
-```lua
-local id = pico.create(type_name)
-```
-
-`type_name` は次のいずれかの文字列です(大文字小文字を区別します)。
-
-`Button` / `Label` / `Textbox` / `NumberInput` / `Checkbox` / `Icon` / `Image` / `NumberSlider` / `ScrollContainer` / `ScrollList` / `CanvasRaster` / `LayoutContainer` / `GridContainer` / `TabBar` / `DropdownMenu` / `Canvas` / `Rect` / `Ellipse` / `Line` / `Triangle`
-
-`Rect` / `Ellipse` / `Line` / `Triangle` は矩形・楕円(円)・線分・三角形を描く図形ウィジェットです。詳しい使い方は [図形ウィジェット](../shapes/) を参照してください。
-
-`CanvasRaster` はタッチのドラッグをそのまま自由線として焼き込む、自分専用のピクセルバッファを持つウィジェットです。手書きメモのような用途には [手書き入力(CanvasRaster)](../../graphics/freehand-drawing/) を参照してください。
-
-全種別の詳細(生成直後の初期値・対応プロパティ)は [ウィジェット種別一覧](../../../reference/widget-types/) を参照してください。
-
-未知の種別名を渡す、またはメモリ不足でウィジェット本体の確保に失敗すると `pico.create()` はエラー(`luaL_error`)になります。
-
-> **生成直後の位置・大きさは仮の値です。** 必ず `pico.set()` で `x` / `y` / `w` / `h` を設定してから使ってください。
 
 ```lua
 local button = pico.create("Button")
@@ -41,7 +16,17 @@ pico.set(button, "h", 30)
 pico.set(button, "text", "OK")
 ```
 
-> **`Button` の `w` / `h` は、枠と立体表示を含めたウィジェット全体の大きさです。** 描かれる箱そのものの大きさ(`pico.get(id, "w")` が返す値と同じ)で、文字やアイコンはその内側に収まります(余白と立体表示で縦横とも9px小さくなります)。また、`text` を差し替えても箱は縮まず、これまでで一番大きかった文字に合わせた大きさを保ちます。
+`pico.create(種別名)` はウィジェットを1つ作り、それを指す整数の **WidgetId** を返します。以降の操作(`pico.set` / `pico.get` / `pico.on` / `pico.destroy` など)はすべてこのIDで指定します。
+
+- 種別名は `"Button"` `"Label"` `"Textbox"` `"Canvas"` などの文字列で、大文字小文字を区別します。作れる種別の一覧は [ウィジェット種別一覧](../../../reference/widget-types/) にあります。
+- 知らない種別名を渡したときと、メモリが足りなくて作れなかったときはエラーになります。
+- **作った直後の位置と大きさは仮の値です。** 必ず `x` / `y` / `w` / `h` を設定してください。
+
+ウィジェットを作る・プロパティを並べる・イベントを付ける、をまとめて1つの表で書ける [`pico.ui`](../../../api/system/stdlib/#picoui--宣言的なuiの組み立て) もあります。
+
+### Button の大きさ
+
+`Button` の `w` / `h` は、枠と立体表示を含めた全体の大きさです。文字やアイコンはその内側(縦横とも9px小さい範囲)に収まります。`text` を差し替えても箱は縮まず、それまでで一番大きかった文字に合わせた大きさのままです。
 
 ## プロパティの読み書き
 
@@ -50,19 +35,12 @@ pico.set(id, name, value)
 local value = pico.get(id, name)
 ```
 
-- `name` はプロパティ名の文字列(`snake_case`)です。例: `"x"`, `"text"`, `"font_size"`, `"checked"`。
-- 全ウィジェット共通の名前(`x` / `y` / `w` / `h` / `visible` / `background_color`)と、ウィジェットごとの固有名(`text` / `checked` / `value` など)があります。完全な対応表は [プロパティ対応表](../../../reference/widget-properties/) を参照してください。
-- `pico.set()` に**そのウィジェットが対応していない名前**や**型の合わない値**を渡すとエラーになります。
-- `pico.get()` は**非対応の名前**なら `nil` を返します(存在しないプロパティを問い合わせても落ちません)。ただし**プロパティ名自体が未知**(綴りミス等)の場合はどちらもエラーになります。
-
-### 数値の型について
-
-Lua には整数と浮動小数点数の書き分けがありませんが、内部のプロパティは `Int` か `Float` のどちらかに固定されています。`pico.set()` は数値を渡されると、まず整数として書き込みを試し、失敗したら浮動小数点数として試します。呼び出し側が `1` と書くか `1.0` と書くかを気にする必要はありません。
-
-```lua
-pico.set(slider, "value", 3.5)  -- NumberSlider.value は Float
-pico.set(label, "font_size", 1) -- Label.font_size は Int (FontFn::FontSize)
-```
+- `name` はプロパティ名の文字列(`snake_case`)です。例: `"x"` `"text"` `"font_size"` `"checked"`。
+- どのウィジェットにもある名前(`x` `y` `w` `h` `visible` `enabled` `background_color` など)と、種別ごとの名前(`text` `checked` `value` など)があります。全部の対応は [プロパティ対応表](../../../reference/widget-properties/) にあります。
+- `pico.set()` に、そのウィジェットが持たない名前や型の合わない値を渡すとエラーになります。
+- `pico.get()` は、そのウィジェットが持たない名前なら `nil` を返します。ただし綴りの間違いのように**どのウィジェットにも無い名前**は、`set` も `get` もエラーになります。
+- 数値は `1` と書いても `1.0` と書いてもかまいません(プロパティの型に合わせて変換されます)。
+- 色・文字の大きさ・アイコンなどは、数値の代わりに [定数](../../../reference/constants/)(`pico.COLOR_RED` `pico.FONT_BIG` `pico.ICON_Home` …)で書けます。
 
 ## 破棄する
 
@@ -70,32 +48,46 @@ pico.set(label, "font_size", 1) -- Label.font_size は Int (FontFn::FontSize)
 pico.destroy(id)
 ```
 
-その場では消えず、フレーム境界でまとめて破棄されます(`WidgetFunctions::DestroyLater()` と同じ仕組み)。破棄と同時に、そのIDに登録していた `pico.on()` のコールバックもすべて解除されます。
+破棄はそのフレームの終わりにまとめて行われます。同時に、そのIDに登録した `pico.on()` のコールバックも全部外れます。
+
+- 破棄したウィジェットのIDを `pico.set` / `pico.get` / `pico.on` などに渡すとエラーになります(破棄済みのものを触る間違いに気づけます)。
+- `pico.destroy()` だけは、破棄済みのIDを渡しても何もしません(2回呼んでも安全です)。
+- アプリを閉じると、作ったウィジェットは全部片付きます。閉じる前に自分で消す必要はありません。
 
 ## コンテナへの出し入れ
 
-`LayoutContainer` / `GridContainer` / `ScrollContainer` は子ウィジェットを持てます。
+`LayoutContainer` / `GridContainer` / `ScrollContainer` は子のウィジェットを持てます。
 
 ```lua
 pico.add_child(container_id, child_id)
 pico.remove_child(container_id, child_id)
 ```
 
-- `pico.add_child()` は子の**所有権をコンテナへ移します**。以降、子の位置はコンテナのレイアウトロジック(方向・整列・列数など)に従います。
-- `pico.remove_child()` は子を**破棄せずに**取り外します。取り外した子は次のフレームから独立したルートウィジェットとして描画・タップ判定の対象に戻ります。**x/y座標はコンテナ内での相対値のまま**残るので、必要なら `pico.set(id, "x"/"y", ...)` で置き直してください。
-- 対応していないウィジェット種別(コンテナ以外)を渡すとエラーになります。
-- 指定した子が実際にそのコンテナの子でない場合、`pico.remove_child()` はエラーになります。
+- `add_child` した子は、コンテナが位置を決めます(並べる向き・列数などはコンテナのプロパティ)。コンテナを消すと子も消えます。
+- `remove_child` は子を**破棄せずに**取り外します。取り外した子の `x` / `y` はコンテナの中での値のままなので、必要なら置き直してください。
+- コンテナ以外を渡したとき、子でないものを `remove_child` したときはエラーになります。
 
-コンテナの詳しい使い方(方向・整列・列数などのプロパティ)は [レイアウトコンテナ](../containers/) を参照してください。
+詳しくは [レイアウトコンテナ](../containers/) を見てください。
 
-## リスト系ウィジェットへの項目追加
+## リスト・ドロップダウン・タブの項目
 
-`ScrollList` / `DropdownMenu` / `TabBar` は生成時点では空です。項目を追加する専用APIがあります。
+`ScrollList` / `DropdownMenu` / `TabBar` は作った時点では空です。項目は専用の関数で足します。
 
 ```lua
-pico.list_add(id, text)     -- ScrollList / DropdownMenu
-pico.list_clear(id)         -- ScrollList / DropdownMenu
-pico.tab_add(id, label)     -- TabBar (最大4個。上限超過ならfalseを返す)
+pico.list_add(list, "りんご")                       -- ScrollList / DropdownMenu
+pico.list_add(list, "みかん", { color = pico.COLOR_RED, icon = pico.ICON_Star })  -- 色とアイコン(ScrollListのみ)
+pico.list_clear(list)
+pico.tab_add(tabs, "設定")                          -- TabBar(8個まで。超えると false)
 ```
 
-`pico.list_add()` で追加した `ScrollList` の項目にアイコンは付けられません(既定アイコン固定)。件数は `pico.get(id, "item_count")` で読めます(読み取り専用)。
+件数は `pico.get(id, "item_count")`(`TabBar` は `"tab_count"`)で読めます。挿入・削除・選択などの関数は [ウィジェット操作API](../../../api/ui/widgets/#リストとドロップダウン) にあります。
+
+## 名前で探す
+
+IDを全部変数で持ち回る代わりに、名前を付けて後から引けます。
+
+```lua
+pico.set_name(score_label, "score")
+-- 別の場所で
+pico.set(pico.find("score"), "text", "100")
+```

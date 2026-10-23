@@ -2,32 +2,32 @@
 aliases: ["/api/widgets/"]
 title: "ウィジェット操作"
 weight: 10
-description: "create / destroy / set / get / on / off / add_child / remove_child / リスト・タブ・ツリー・名前・矩形・Z順の操作"
+description: "create / destroy / set / get / on / off / add_child / remove_child / リスト・タブ・名前・矩形・重なり順・フォーカスの操作"
 ---
 
 ## pico.create
 
 <div class="sig">pico.create(type_name: string) <span class="ret">-> id: integer</span></div>
 
-指定した種別のウィジェットを1つ生成し、`WidgetId`(整数)を返します。生成直後の位置・大きさは仮の値です。
+指定した種別のウィジェットを1つ作り、WidgetId(整数)を返します。作った直後の位置・大きさは仮の値です。
 
-- `type_name` が未知の種別名の場合、エラー(`luaL_error`)。
-- メモリ不足でウィジェット本体の確保に失敗した場合も、エラー。
-- 生成できる `type_name` の一覧は [ウィジェット種別一覧](../../../reference/widget-types/) を参照。
+- `type_name` が知らない種別名ならエラー。
+- メモリが足りずに作れなかったときもエラー。
+- 作れる種別は [ウィジェット種別一覧](../../../reference/widget-types/) を参照。
 
 ## pico.destroy
 
 <div class="sig">pico.destroy(id: integer) <span class="ret">-> (なし)</span></div>
 
-ウィジェットを破棄します。実際の解放はフレーム境界でまとめて行われます。登録済みの `pico.on()` コールバックも同時に解除されます。
+ウィジェットを破棄します(実際に消えるのはそのフレームの終わり)。登録した `pico.on()` のコールバックも外れます。コンテナを破棄すると、中の子も消えます。
 
-- `id` が既に無効(未割り当て・破棄済み)な場合は**エラーにならず黙って無視**されます(二重destroyを許容)。
+- 破棄済みの `id` を渡しても**エラーにならず何もしません**(2回呼んでも安全)。
 
 ## pico.set
 
 <div class="sig">pico.set(id: integer, name: string, value: any) <span class="ret">-> (なし)</span></div>
 
-プロパティを書き込みます。`value` は文字列・真偽値・数値のいずれかです(数値は整数として書き込みを試し、失敗したら浮動小数点数として再試行します)。
+プロパティを書き込みます。`value` は文字列・真偽値・数値のどれかです(数値は整数でも小数でもかまいません)。
 
 - `id` が無効: エラー。
 - `name` が未知のプロパティ名: エラー。
@@ -67,25 +67,7 @@ description: "create / destroy / set / get / on / off / add_child / remove_child
 
 - `container_id` がコンテナ種別でない: エラー。
 - `child_id` が実際にそのコンテナの子でない: エラー。
-- 取り外し後、`child_id` は独立したルートウィジェットとして描画・タップ判定の対象に戻ります。座標はコンテナ内での相対値のまま残ります。
-
-## pico.list_add
-
-<div class="sig">pico.list_add(id: integer, text: string) <span class="ret">-> (なし)</span></div>
-
-`ScrollList` または `DropdownMenu` に項目を1つ追加します。アイコンは指定できません(既定アイコン固定)。対応外の種別はエラー。
-
-## pico.list_clear
-
-<div class="sig">pico.list_clear(id: integer) <span class="ret">-> (なし)</span></div>
-
-`ScrollList` または `DropdownMenu` の項目を全て消します。`DropdownMenu` は表示ラベルもプレースホルダへ戻ります。対応外の種別はエラー。
-
-## pico.tab_add
-
-<div class="sig">pico.tab_add(id: integer, label: string) <span class="ret">-> ok: boolean</span></div>
-
-`TabBar` にタブを1つ追加します。最大4個までで、上限に達している場合は `false` を返します(エラーにはなりません)。`TabBar` 以外を渡すとエラー。
+- 取り外した子は、コンテナの外の普通のウィジェットに戻ります。`x` / `y` はコンテナの中での値のままです。
 
 ## pico.off
 
@@ -168,11 +150,11 @@ pico.set_dots(grid, { [3] = {12, 9}, [14] = 10 })  -- 3日に赤と青、14日�
 
 ## リストとドロップダウン
 
-`ScrollList` と `DropdownMenu` の項目の操作です。**番号は0始まり**で、`selected_index` と同じです。
+`ScrollList` と `DropdownMenu` の項目の操作です。**番号は0始まり**で、`selected_index` と同じです。対応していない種別を渡すとエラーです。
 
 <div class="sig">pico.list_add(id: integer, text: string, opts?: table) <span class="ret">-> (なし)</span></div>
 
-末尾に追加します。`opts` は `ScrollList` だけに効き、`{icon = IconID, color = パレット番号}`(項目ごとのアイコンと文字色)。
+末尾に追加します。`opts` は `ScrollList` だけに効き、`{icon = pico.ICON_*, color = 色の番号}`(項目ごとのアイコンと文字色)。
 
 <div class="sig">pico.list_insert(id: integer, index: integer, text: string, opts?: table) <span class="ret">-> (なし)</span></div>
 
@@ -194,9 +176,17 @@ pico.set_dots(grid, { [3] = {12, 9}, [14] = 10 })  -- 3日に赤と青、14日�
 
 `ScrollList` を、その項目が先頭に来る位置までスクロールします。
 
+<div class="sig">pico.list_clear(id: integer) <span class="ret">-> (なし)</span></div>
+
+項目を全部消します。`DropdownMenu` は表示も未選択の状態へ戻ります。
+
 ## タブ
 
 `TabBar` は最大8個のタブを持てます。番号は0始まりです。
+
+<div class="sig">pico.tab_add(id: integer, label: string) <span class="ret">-> ok: boolean</span></div>
+
+タブを1つ足します。8個に達していれば `false`(エラーにはなりません)。`TabBar` 以外を渡すとエラーです。
 
 <div class="sig">pico.tab_label(id, index) <span class="ret">-> label: string | nil</span></div>
 <div class="sig">pico.tab_set_label(id, index, label) <span class="ret">-> ok: boolean</span></div>

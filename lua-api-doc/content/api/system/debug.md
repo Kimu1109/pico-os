@@ -7,7 +7,7 @@ description: "traceback / breakpoint / set_breakpoint / clear_breakpoint / debug
 
 Luaデバッガ(ブレークポイント・ステップ実行・変数の表示)とスタックトレースの関数です。使い方は [デバッガとサンドボックス](../../../guide/app/debugging/) を参照してください。
 
-デバッガは設定アプリの「その他」→「Luaデバッガ」(`/sys/debug.cfg` の `lua-debugger = true`)を入れたときだけ有効です。**有効にした後に開いたLuaアプリから**効きます。無効の間、`breakpoint` / `set_breakpoint` は何もせず `false` を返します。
+デバッガは設定アプリの「その他」→「Luaデバッガ」を入れたときだけ有効です。**有効にした後に開いたLuaアプリから**効きます。無効の間、`breakpoint` / `set_breakpoint` は何もせず `false` を返します。
 
 ## pico.traceback
 

@@ -135,7 +135,7 @@
 | 視線(地形に遮られるか) | `iso.sight` |
 | マップ全体を読み込んだままにする | `iso.keep_all` |
 
-使い方は `lua-api-doc/content/api/iso.md`「タワーディフェンス向けの道具」。
+使い方は `lua-api-doc/content/api/game/iso.md`「タワーディフェンス向けの道具」。
 
 ## 9. 作る順番
 

@@ -36,7 +36,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `font_size` | Int | ✓ | ✓ |
 | `text_color` | Int | ✓ | ✓ |
 | `border_color` | Int | ✓ | ✓ |
-| `icon_id` | Int(`IconID`) | ✓ | ✓ |
+| `icon_id` | Int(`pico.ICON_*`) | ✓ | ✓ |
 | `icon_size` | Int(`0`=16px/`1`=24px/`2`=32px/`3`=48px/`4`=64px) | ✓ | ✓ |
 
 `icon_id`を設定すると、文字の代わりにアイコンを描く「アイコンボタン」になります(`text`は無視されます)。アイコンの色は`text_color`に従います。`w`/`h`を明示的に設定していなければ、箱の大きさも`icon_size`のピクセルサイズへ自動的に合います。
@@ -93,7 +93,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 | name | 型 | get | set |
 |---|---|---|---|
-| `icon_id` | Int(`IconID`) | ✓ | ✓ |
+| `icon_id` | Int(`pico.ICON_*`) | ✓ | ✓ |
 | `icon_size` | Int(`0`=16px/`1`=24px/`2`=32px/`3`=48px/`4`=64px) | ✓ | ✓ |
 | `color` | Int | ✓ | ✓ |
 | `icon_opaque` | Bool | ✓ | ✓ |
@@ -155,7 +155,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `filled` | Bool(四角形/楕円を塗りつぶすか) | ✓ | ✓ |
 | `undo_enabled` | Bool(`pico.canvas_undo`用の控えを持つか) | ✓ | ✓(確保できたかはgetで確認) |
 
-`w`/`h`を設定すると内部のスプライトを作り直すため、**それまで描いた内容は消えます**(白紙に戻ります)。生成直後に一度だけ呼ぶ使い方を想定しており、描き始めた後にリサイズする用途には向きません。
+`w`/`h`を設定すると、**それまで描いた絵は消えます**(白紙に戻ります)。作った直後に1回だけ設定してください。
 
 保存・読み込み・全消去・元に戻すは `pico.canvas_save()` / `pico.canvas_load()` / `pico.canvas_clear()` / `pico.canvas_undo()` を使います。詳細は [ラスタキャンバス](../../api/graphics/canvas/) を参照してください。
 
@@ -203,7 +203,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 `h` の設定には対応していません(内容に応じた固定の高さ)。
 
-## Canvas(`LuaCanvas`)
+## Canvas
 
 | name | 型 | get | set |
 |---|---|---|---|
@@ -212,7 +212,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 これ以外の固有プロパティはありません。内容は `pico.on(id, "render", fn)` で描きます([Canvasと直接描画](../../guide/graphics/drawing/) 参照)。
 
-## Rect(`RectShape`)
+## Rect
 
 | name | 型 | get | set |
 |---|---|---|---|
@@ -222,7 +222,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `filled` | Bool(既定`true`) | ✓ | ✓ |
 | `thickness` | Int(既定`1`。`filled=false`のときの枠線の太さ) | ✓ | ✓ |
 
-## Ellipse(`EllipseShape`)
+## Ellipse
 
 | name | 型 | get | set |
 |---|---|---|---|
@@ -234,7 +234,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 `w`/`h`に内接する楕円(`w==h`なら円)を描きます。
 
-## Line(`LineShape`)
+## Line
 
 | name | 型 | get | set |
 |---|---|---|---|
@@ -247,7 +247,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 `w`/`h`の**設定**には対応していません(`x1`/`y1`/`x2`/`y2`と`thickness`から外接矩形として自動計算されます)。共通プロパティの`x`/`y`は外接矩形の左上を指し、**setすると2点をまとめて平行移動**します(線の向き・長さは変わりません)。線の形そのものを変えたい場合は`x1`/`y1`/`x2`/`y2`を個別に設定してください。
 
-## Triangle(`TriangleShape`)
+## Triangle
 
 | name | 型 | get | set |
 |---|---|---|---|
@@ -332,19 +332,18 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 ## ダイアログ
 
-`pico.show_xxx()` が返すIDに対しては、共通プロパティに加えて次だけ使えます。
+`pico.show_*()` が返すIDには、共通のプロパティに加えて次が使えます。ふつうは `closed` イベントの3番目の引数で結果を受け取れば足ります。
 
-| ダイアログ | name | 型 | get | set |
+| 開いた関数 | name | 型 | get | set |
 |---|---|---|---|---|
-| `InputDialog` | `text` | Str | ✓ | ✓ |
-| `InputDialog` | `is_single_line` | Bool | ✗ | ✓ |
-| `FileSaveDialog` | `path` | Str | ✓ | ✗ |
-| `FileSelectDialog` | `path` | Str | ✓(未選択は`nil`) | ✗ |
-| `ColorDialog` | `value` | Int | ✓(未選択は`-1`) | ✗ |
-| `PickerDialog`(`show_choice`) | `selected_index` / `item_count` | Int | ✓ | ✗ |
-| `PickerDialog`(`show_date`) | `year` / `month` / `selected`(日) / `text`(`"YYYY-MM-DD"`) | Int / Str | ✓ | ✗ |
-| `PickerDialog`(`show_time`/`show_number`) | `text`(`"HH:MM:SS"` / 入力した文字列) | Str | ✓ | ✗ |
-| `PickerDialog`(`show_progress`) | `value`(0〜100) / `text`(メッセージ) | Float / Str | ✓(`text`は✗) | ✓ |
-| `MsgDialog` | (専用プロパティなし。結果は`closed`イベントの`is_ok`のみ) | — | — | — |
+| `show_input` | `text` | Str | ✓ | ✓ |
+| `show_input` | `is_single_line` | Bool | ✗ | ✓ |
+| `show_file_save` / `show_file_select` | `path` | Str | ✓(未選択は`nil`) | ✗ |
+| `show_color` | `value` | Int | ✓(未選択は`-1`) | ✗ |
+| `show_choice` | `selected_index` / `item_count` | Int | ✓ | ✗ |
+| `show_date` | `year` / `month` / `selected`(日) / `text`(`"YYYY-MM-DD"`) | Int / Str | ✓ | ✗ |
+| `show_time` / `show_number` | `text`(`"HH:MM:SS"` / 入力した文字列) | Str | ✓ | ✗ |
+| `show_progress` | `value`(0〜100) / `text`(メッセージ) | Float / Str | ✓(`text`は✗) | ✓ |
+| `show_message` | (専用のプロパティなし。結果は`closed`イベントの`is_ok`) | — | — | — |
 
-`start_dir`(FileSaveDialog/FileSelectDialog)や選択色の初期値など、生成時のみ決まる値は後から差し替えられません。
+`start_dir` など、開くときに渡した値は後から変えられません。

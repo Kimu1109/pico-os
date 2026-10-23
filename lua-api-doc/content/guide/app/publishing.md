@@ -5,8 +5,8 @@ weight: 40
 description: "app.cfg の id と version、署名した配布物の作り方、本体のストアでのインストール"
 ---
 
-作ったLuaアプリは、PCでSDカードへコピーする代わりに**ランチャの「ストア」から Web 経由で入れる**こともできます。
-配布物の形式は リポジトリの `docs/APP_REPO.md`、作る道具は `script/build_app_repo.py` です。
+作ったLuaアプリは、SDカードへコピーする代わりに**ランチャの「ストア」から Web 経由で入れる**こともできます。
+配布物を作る道具はリポジトリの `script/build_app_repo.py`、形式の細かい決まりは `docs/APP_REPO.md` です。
 
 ## アプリ側で用意するもの
 
@@ -22,7 +22,7 @@ permission_network=false
 
 - ファイル名は英数字と `. - _` だけ(日本語のファイル名は配れません)。ディレクトリ名(`/lua/apps/<ここ>`)は日本語でかまいません。
 - 版を上げるときは `version` を増やします。本体は「入っている版 < 一覧の版」なら「更新」を出します。
-- 権限(`permission_network` / `permission_notify` / `permission_sd_outside_app_dir`)は一覧にも載り、入れる前に利用者へ見せます。
+- 権限(`permission_*`)は一覧にも載り、入れる前に利用者へ見せます。
 - `pico.store_save()` のセーブや `pico.sd_write()` で自分のディレクトリに書いたファイルは、**更新しても残ります**(削除すると消えます)。
 
 ## 配布物を作る
@@ -35,10 +35,10 @@ python3 script/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
 python3 script/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps --clean
 ```
 
-表示された公開鍵を本体のSDの `/sys/store.cfg` に `key = ...` として書くか、`src/apps/store/App_Repo_Keys.hpp` へ足してファームに焼き込みます。
-配布元のURLは `/sys/store.cfg` の `url = ...`(ストアの [設定] でも変えられます)。
+表示された公開鍵を、入れる側の本体のSDの `/sys/store.cfg` に `key = ...` として書いてもらいます。
+配布元のURLは `/sys/store.cfg` の `url = ...` です(ストアの [設定] でも変えられます)。
 
-GitHub Pages で配るときは、署名した目録だけを `store/` にコミットします(アプリの中身は公開のワークフローが写します)。
+pico-os のリポジトリの GitHub Pages で配るときは、署名した目録だけを `store/` にコミットします(アプリの中身は公開のワークフローが写します)。
 
 ```sh
 python3 script/build_app_repo.py sign --key ~/.pico-os/app_repo.key --out store

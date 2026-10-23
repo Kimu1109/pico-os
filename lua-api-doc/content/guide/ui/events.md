@@ -2,48 +2,46 @@
 aliases: ["/guide/events/"]
 title: "イベント (pico.on)"
 weight: 20
-description: "タップ・値変更・ダイアログの結果などをコールバックで受け取る"
+description: "タップ・値の変化・ダイアログの結果などをコールバックで受け取る"
 ---
 
 ## 基本形
 
 ```lua
-pico.on(id, event_name, function(...)
+pico.on(id, event_name, function(id, ...)
     -- ...
 end)
 ```
 
-同じ `id` + `event_name` の組み合わせへ `pico.on()` を再度呼ぶと、古いコールバックは破棄されて新しい関数に差し替わります(リークしません)。対応していないイベント名や、そのウィジェット種別に対応しないイベントを指定するとエラーになります。
+- 同じ `id` と `event_name` へもう一度 `pico.on()` すると、前のコールバックと差し替わります。
+- `pico.off(id, event_name)` で外せます。ウィジェットを `pico.destroy` すると全部外れます。
+- 知らないイベント名や、そのウィジェットが出さないイベント(`Button` に `"checked_changed"` など)はエラーになります。
 
-コールバックの引数は「変わった後の値そのもの」ではなく、多くの場合 **WidgetId のみ**です。値は `pico.get(id, "...")` でそのつど読みます(値の型・個数をイベントごとに変える複雑さを避けるための設計です)。例外は `select_item` と `closed` で、2つ目の追加の引数を渡します(下表参照)。
-
-タップ座標だけは例外的に、イベント引数ではなく [`pico.get_touch()`](../../../api/ui/touch/) という別の関数で問い合わせます。コールバックの中から呼べば「今起きたタップの座標」を絶対スクリーン座標で取得できます。
+値が変わるイベントの多くは、引数に `id` しか渡しません。変わった後の値は `pico.get(id, "...")` で読みます。
 
 ```lua
-pico.on(some_id, "press_start", function(id)
-    local x, y = pico.get_touch()
-    pico.log("tapped at " .. x .. "," .. y)
+local checkbox = pico.create("Checkbox")
+pico.on(checkbox, "checked_changed", function(id)
+    pico.log(tostring(pico.get(id, "checked")))
 end)
 ```
 
-## 共通4イベント(全ウィジェット対応)
+## タッチ(全ウィジェット)
 
-タップ操作に関する4つのイベントは、生成できる全ウィジェットで使えます。
+| イベント名 | 起きるとき |
+|---|---|
+| `press_start` | 押し始め |
+| `press_move` | 押したまま動かした |
+| `press_end` | 押した場所の上で離した |
+| `press_out` | 押したまま外へ出た |
 
-| イベント名 | 発生タイミング | コールバック引数 |
-|---|---|---|
-| `press_start` | 押し始め | `(id, x, y, lx, ly, dx, dy)` |
-| `press_end` | 離した瞬間(押した場所の上で) | `(id, x, y, lx, ly, dx, dy)` |
-| `press_move` | 押しながら移動 | `(id, x, y, lx, ly, dx, dy)` |
-| `press_out` | 押したまま当たり判定の外へ出た | `(id, x, y, lx, ly, dx, dy)` |
-
-タッチ座標が引数で届きます。
+コールバックには `(id, x, y, lx, ly, dx, dy)` が届きます。
 
 | 引数 | 意味 |
 |---|---|
-| `x`, `y` | 画面の絶対座標(`pico.get_touch()` と同じ) |
-| `lx`, `ly` | そのウィジェットの左上からの座標。盤面(`Canvas`)のマス目を逆算するときはこれを使います |
-| `dx`, `dy` | 前のタッチのイベントからの移動量。`press_start` では `0`。ドラッグ・スクロールに使います |
+| `x`, `y` | 画面の座標 |
+| `lx`, `ly` | そのウィジェットの左上からの座標。盤面のマス目を求めるのに使う |
+| `dx`, `dy` | 前のタッチのイベントからの移動量(`press_start` では `0`)。ドラッグに使う |
 
 ```lua
 local board = pico.create("Canvas")
@@ -57,63 +55,17 @@ pico.on(board, "press_move", function(id, x, y, lx, ly, dx, dy)
 end)
 ```
 
-引数を使わない `function(id)` の形でも従来どおり動きます。
+使わない引数は書かなくてかまいません(`function(id) ... end`)。タッチ以外のイベントの中や `loop()` から今のタッチ位置を知りたいときは [`pico.get_touch()`](../../../api/ui/touch/) を使います。
 
-```lua
-local button = pico.create("Button")
-pico.on(button, "press_start", function(id)
-    pico.log("押された: " .. id)
-end)
-```
-
-## ウィジェット固有イベント
-
-| イベント名 | 対象ウィジェット | コールバック引数 | 値の読み方 |
-|---|---|---|---|
-| `checked_changed` | `Checkbox` | `(id)` | `pico.get(id, "checked")` |
-| `value_changed` | `NumberSlider` | `(id)` | `pico.get(id, "value")`(ドラッグ中は毎フレーム発火) |
-| `tab_changed` | `TabBar` | `(id)` | `pico.get(id, "tab_selected")`(同じタブの押し直しでは発火しない) |
-| `dropdown_changed` | `DropdownMenu` | `(id)` | `pico.get(id, "selected_index")` |
-| `text_changed` | `Textbox` | `(id)` | `pico.get(id, "text")`(オンスクリーンキーボードを閉じて確定した時のみ。1文字ごとには発火しない) |
-| `select_item` | `ScrollList` | `(id, already_selected)` | `pico.get(id, "selected_index")`。`already_selected` は「同じ項目を2回連続でタップしたか」(2回タップで開く、のようなUIに使う) |
-
-```lua
-local checkbox = pico.create("Checkbox")
-pico.on(checkbox, "checked_changed", function(id)
-    local checked = pico.get(id, "checked")
-    pico.log(tostring(checked))
-end)
-
-local list = pico.create("ScrollList")
-pico.on(list, "select_item", function(id, already_selected)
-    if already_selected then
-        -- 2回目のタップ = 確定操作として扱う
-    end
-end)
-```
-
-対応するウィジェット種別以外へ登録しようとするとエラーになります(例: `Button` へ `"checked_changed"` を登録するとエラー)。
-
-### 新しいウィジェットのイベント
-
-| イベント名 | 対象ウィジェット | コールバック引数 |
-|---|---|---|
-| `text_input` | `Textbox` | `(id)` — 1文字ごと。入力中も `pico.get(id, "text")` が最新になる |
-| `duration_changed` | `DurationPicker` | `(id, total_ms)` |
-| `day_selected` | `MonthGrid` | `(id, day)` |
-| `link_tap` | `MarkdownView` | `(id, path)` |
-| `text_tap` | `TextView` | `(id, byte_offset)` |
-| `scrolled` | `ScrollContainer` | `(id, scroll_y)` |
-
-## ジェスチャー(長押し・ダブルタップ・スワイプ)
-
-どのウィジェットにも登録できます。ウィジェットが `press_*` を使っていても独立して判定されます(同じタッチから `press_end` と `swipe` の両方が届くことがあります)。登録が1つも無いアプリでは判定自体をしません。
+## ジェスチャー(全ウィジェット)
 
 | イベント名 | 条件 | 引数 |
 |---|---|---|
 | `long_press` | 動かさずに0.5秒押し続けた(押している間に1回) | `(id, x, y, lx, ly)` |
-| `double_tap` | 短い(0.4秒以内の)タップが、0.4秒以内・24px以内でもう一度 | `(id, x, y, lx, ly)` |
+| `double_tap` | 0.4秒以内の短いタップを、0.4秒以内・24px以内でもう一度 | `(id, x, y, lx, ly)` |
 | `swipe` | 24px以上を0.7秒以内に動かして離した | `(id, direction, dx, dy, x, y)` |
+
+`direction` は `"left"` `"right"` `"up"` `"down"` です。
 
 ```lua
 pico.on(card, "swipe", function(id, dir)
@@ -122,31 +74,58 @@ end)
 pico.on(card, "long_press", function(id, x, y) show_menu(x, y) end)
 ```
 
-ジェスチャーが届くのは、押し始めた位置にあるウィジェットです(ダイアログが上に重なっている場合は判定が重なることがあります)。無効(`enabled = false`)・非表示のウィジェットには届きません。
+- `press_*` とは別に判定するので、同じタッチから `press_end` と `swipe` の両方が届くことがあります。
+- 届くのは押し始めた位置にあるウィジェットです。無効(`enabled = false`)・非表示のウィジェットには届きません。
 
-`pico.off(id, event_name)` で登録を解除できます。
+## ウィジェットごとのイベント
 
-## `render`(Canvas限定)
-
-`Canvas`(`pico.create("Canvas")`)にのみ登録できます。`FlushDirty()` の合成サイクルの中で呼ばれ、この中でだけ `pico.draw_*` 系が正しく機能します。詳細は [Canvasと直接描画](../../graphics/drawing/) を参照してください。
+| イベント名 | ウィジェット | 引数 | 起きるとき・値の読み方 |
+|---|---|---|---|
+| `checked_changed` | `Checkbox` | `(id)` | `pico.get(id, "checked")` |
+| `value_changed` | `NumberSlider` | `(id)` | `pico.get(id, "value")`。ドラッグ中は毎フレーム |
+| `tab_changed` | `TabBar` | `(id)` | `pico.get(id, "tab_selected")`。同じタブの押し直しでは起きない |
+| `dropdown_changed` | `DropdownMenu` | `(id)` | `pico.get(id, "selected_index")` |
+| `text_changed` | `Textbox` | `(id)` | キーボードを閉じて確定したとき。`pico.get(id, "text")` |
+| `text_input` | `Textbox` | `(id)` | 1文字ごと。入力中も `pico.get(id, "text")` が最新 |
+| `select_item` | `ScrollList` | `(id, already_selected)` | `pico.get(id, "selected_index")`。`already_selected` は同じ項目を続けてタップしたか(2回タップで開く、のようなUIに) |
+| `duration_changed` | `DurationPicker` | `(id, total_ms)` | ▲▼で変わったとき(`pico.set` では起きない) |
+| `day_selected` | `MonthGrid` | `(id, day)` | 日付をタップした |
+| `link_tap` | `MarkdownView` | `(id, path)` | リンクをタップした |
+| `text_tap` | `TextView` | `(id, byte_offset)` | 動かさずにタップした |
+| `scrolled` | `ScrollContainer` | `(id, scroll_y)` | スクロール位置が変わった |
 
 ```lua
-local canvas = pico.create("Canvas")
-pico.on(canvas, "render", function(id)
-    pico.fill_rect(10, 10, 50, 50, 12)
-end)
-```
-
-## `closed`(ダイアログ限定)
-
-`pico.show_message` / `show_input` / `show_file_save` / `show_file_select` / `show_color` / `show_choice` / `show_date` / `show_time` / `show_number` / `show_progress` が返すIDにのみ登録できます。
-
-```lua
-pico.on(dialog_id, "closed", function(id, is_ok, value)
-    if is_ok then
-        -- value に結果が入る(InputDialogなら入力文字列、show_choiceなら選んだ番号など)
+local list = pico.create("ScrollList")
+pico.on(list, "select_item", function(id, already_selected)
+    if already_selected then
+        -- 2回目のタップ = 開く
     end
 end)
 ```
 
-`closed` の実際のダイアログ破棄(`pico.destroy` 相当)は、`pico.on()` の登録有無に関わらず**ダイアログの生成時点で保証済み**です。`pico.on()` を呼ばなくても画面に居座り続けることはありません。詳細は [ダイアログ](../dialogs/) を参照してください。
+## render(Canvas のみ)
+
+`Canvas` の中身を描くコールバックです。描き直しが要るたびに呼ばれ、この中でだけ `pico.draw_*` が正しく描けます。詳しくは [Canvasと直接描画](../../graphics/drawing/) を見てください。
+
+```lua
+local canvas = pico.create("Canvas")
+pico.on(canvas, "render", function(id)
+    pico.fill_rect(10, 10, 50, 50, pico.COLOR_RED)
+end)
+```
+
+## closed(ダイアログのみ)
+
+`pico.show_*` が返すダイアログが閉じたときに呼ばれます。決定で閉じたときは3番目の引数に結果が入ります。
+
+```lua
+pico.on(dialog_id, "closed", function(id, is_ok, value)
+    if is_ok then
+        -- value: 入力した文字列・選んだ番号など
+    end
+end)
+```
+
+ダイアログは閉じると自動で片付くので、`closed` を登録しなくてもかまいません。詳しくは [ダイアログ](../dialogs/) を見てください。
+
+イベントの一覧表は [イベント対応表](../../../reference/widget-events/) にもあります。

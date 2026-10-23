@@ -5,7 +5,7 @@ weight: 50
 description: "require(\"pico.ui\") / require(\"pico.async\") / require(\"pico.tween\")"
 ---
 
-OSに入っているLuaモジュールです(2Dゲーム向けの `pico.game` は[ゲームエンジン](../../game/engine/)のページ)。`require("pico.ui")` のように読みます(アプリのフォルダにあるファイルより優先され、名前は `pico.` で始まります)。スクリプトの先頭で `require("pico.ui")` と**文字列のまま**書いてください(実行中のコンパイルを避けるため、`require` の引数に組み立てた名前は使えません)。
+OSに入っているLuaモジュールです(2Dゲーム向けの `pico.game` は[ゲームエンジン](../../game/engine/)のページ)。`require("pico.ui")` のように読みます(アプリのフォルダにあるファイルより優先され、名前は `pico.` で始まります)。スクリプトの先頭で `require("pico.ui")` と**文字列のまま**書いてください([先読み](../modules/#先読みについて重要)されるように)。
 
 ## pico.ui — 宣言的なUIの組み立て
 

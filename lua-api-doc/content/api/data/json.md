@@ -5,7 +5,7 @@ weight: 20
 description: "json_decode / json_encode / json_null / json_pick / sd_json_pick"
 ---
 
-HTTPの応答や設定ファイルでよく使うJSONを、LuaのテーブルとC++で相互変換します。純Luaで書くより速く、スクリプトの上限(16KiB)も食いません。
+HTTPの応答や設定ファイルでよく使うJSONと、Luaのテーブルを相互に変換します。Luaで書いたJSONライブラリより速く、スクリプトの大きさも食いません。
 
 ## pico.json_decode
 
@@ -52,7 +52,7 @@ pico.http_request("POST", url, body, "application/json", on_done)
 <div class="sig">pico.json_pick(text: string, paths: {string} [, opts: table]) <span class="ret">-> values: table, truncated: table | nil</span><br>
 <span class="ret">-> nil, error: string</span></div>
 
-JSONから**指定したパスの値だけ**を取り出します。`json_decode` は文書全体をLuaの表にするので、数KB〜数十KBの応答から数個の値が欲しいだけのときにLuaのメモリを大きく使います。`json_pick` は流しながら読み(C++側で確保しない)、結果の値だけをLuaに作ります。
+JSONから**指定したパスの値だけ**を取り出します。`json_decode` は文書全体をLuaの表にするので、数KB〜数十KBの応答から数個の値が欲しいだけのときにLuaのメモリを大きく使います。`json_pick` は文書を先頭から読み流し、頼んだ値だけをLuaに作ります。
 
 - パスはキーを `.` でつなぎ、配列は**1始まり**の番号で書きます(`"item.artists.1.name"`)。一番外が配列なら `"2"`、`"2.x"`。
 - パスの最後に `#` を付けると、その配列/オブジェクトの**要素の数**になります(`"item.artists#"`、一番外は `"#"`)。

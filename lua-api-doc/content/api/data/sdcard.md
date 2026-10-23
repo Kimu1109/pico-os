@@ -29,7 +29,7 @@ description: "sd_exists / sd_read / sd_write / sd_remove / sd_mkdir / sd_list / 
 
 <div class="sig">pico.sd_remove(path: string) <span class="ret">-> ok: boolean</span></div>
 
-ファイルなら削除、ディレクトリなら**再帰的に**削除します(`FileExplorer` の削除と同じ挙動)。
+ファイルなら削除、ディレクトリなら**中身ごと**削除します。
 
 ## pico.sd_mkdir
 
@@ -39,7 +39,7 @@ description: "sd_exists / sd_read / sd_write / sd_remove / sd_mkdir / sd_list / 
 
 <div class="sig">pico.sd_list(path: string) <span class="ret">-> entries: table | nil</span></div>
 
-`path` がディレクトリの場合、`{ {name = string, is_dir = boolean, size = integer}, ... }` の配列(`size` はバイト数、ディレクトリは `0`)(1始まりのテーブル)を返します。`path` が存在しない・ディレクトリでない場合は `nil`。
+`path` がディレクトリなら、`{ {name = string, is_dir = boolean, size = integer}, ... }` の配列を返します(`size` はバイト数、ディレクトリは `0`)。`path` が存在しない・ディレクトリでない場合は `nil`。
 
 ```lua
 local entries = pico.sd_list("/lua/apps/myapp")

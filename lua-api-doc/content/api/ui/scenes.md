@@ -1,6 +1,6 @@
 ---
 aliases: ["/api/scenes/"]
-title: "シーン制御"
+title: "画面遷移と保存"
 weight: 30
 description: "pop / push_scene / change_scene / launch_app / content_rect / args / store_load / store_save"
 ---
@@ -9,7 +9,7 @@ description: "pop / push_scene / change_scene / launch_app / content_rect / args
 
 <div class="sig">pico.pop([result]) <span class="ret">-> (なし)</span></div>
 
-自分を起動した画面(ランチャ、または `push_scene` の呼び出し元)へ戻ります。要求はフレーム境界まで保留されます。
+自分を起動した画面(ランチャ、または `push_scene` の呼び出し元)へ戻ります。実際に戻るのはそのフレームの終わりです。
 
 `result`(任意)を渡すと、`push_scene` の呼び出し元の画面の **`on_result(result)`** に渡されます([画面の間で値を受け渡す](#画面の間で値を受け渡す) 参照)。`result` はJSONにできる値(テーブル・文字列・数値・真偽値)で、JSONにして1KiB未満である必要があります。大きすぎる・JSONにできない値はエラーです。ランチャから起動した画面など、戻り先がLuaの画面でなければ結果は捨てられます。
 
@@ -17,7 +17,7 @@ description: "pop / push_scene / change_scene / launch_app / content_rect / args
 
 <div class="sig">pico.push_scene(path: string [, args]) <span class="ret">-> (なし)</span></div>
 
-`path` の Lua スクリプトを新しい画面として開きます。今の画面はスタックへ退避され、新しい画面で `pico.pop()` すれば戻れます。今の `LuaEngine` が持つ権限(`LuaPermissions`)がそのまま引き継がれます。
+`path`(SDの絶対パス)の Lua スクリプトを新しい画面として開きます。新しい画面で `pico.pop()` すれば今の画面へ戻れます。同じアプリとして、権限とアプリのフォルダはそのまま引き継がれます。
 
 `args`(任意)は新しい画面の **`pico.args()`** で受け取れます。`pico.pop` の `result` と同じく、JSONにできる値で1KiB未満です。
 
@@ -37,17 +37,17 @@ description: "pop / push_scene / change_scene / launch_app / content_rect / args
 
 <div class="sig">pico.launch_app(name: string) <span class="ret">-> ok: boolean</span></div>
 
-ランチャの登録簿にある任意のアプリ(C++製アプリを含む)を名前で探し、見つかれば起動します。見つからなければ `false`。見つかった場合の戻り値は `true` ですが、実際の画面遷移自体の成否(スタック上限等)までは判定していません。権限は引き継がれず、遷移先アプリ自身の権限に従います。
+ランチャにあるアプリ(OS標準のアプリを含む)を名前で探して開きます。見つからなければ `false`、見つかれば `true` です。開いたアプリは、そのアプリ自身の権限で動きます。
 
 ## pico.content_rect
 
 <div class="sig">pico.content_rect() <span class="ret">-> x: integer, y: integer, w: integer, h: integer</span></div>
 
-ステータスバーを除いた、アプリが自由に使える描画領域を返します。C++製アプリと同じ基準です。
+ステータスバーを除いた、アプリが使える範囲を返します。
 
 ## 画面の間で値を受け渡す
 
-`push_scene` で別の画面へ移って `pop` で戻ると、**元の画面のスクリプトは最初から実行し直されます**(Luaの状態はC++側から退避できないため)。値を受け渡すための仕組みが3つあります。
+`push_scene` で別の画面へ移って `pop` で戻ると、**元の画面のスクリプトは最初から実行し直されます**。値を受け渡すための仕組みが3つあります。
 
 | やりたいこと | 使うもの |
 |---|---|

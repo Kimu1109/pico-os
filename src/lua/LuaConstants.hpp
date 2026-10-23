@@ -2,7 +2,7 @@
 // Luaから pico.COLOR_RED のように名前で使える定数。数値を直接書かずに済ませるための表。
 // 値は C++ 側の定義(consts.hpp・各 enum・アイコン表)をそのまま引くので、食い違わない。
 // テーブルへは丸ごと入れず、LuaEngine::l_api_index が初めて引かれた名前だけを写す(関数と同じ遅延)。
-// 名前を足したら lua-api-doc/content/reference/limits.md「列挙型の値」と api/constants.md も直すこと
+// 名前を足したら lua-api-doc/content/reference/constants.md も直すこと
 #include <cstddef>
 #include <cstdint>
 #include <cstring>

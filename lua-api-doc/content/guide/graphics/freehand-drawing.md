@@ -5,7 +5,7 @@ weight: 30
 description: "CanvasRasterで自由線を描き、保存・読み込みする"
 ---
 
-`CanvasRaster`(`pico.create("CanvasRaster")`)は、`Canvas`(`LuaCanvas`)と違って**自分専用のピクセルバッファを持ち続ける**ウィジェットです。タッチのドラッグをそのまま線として焼き込むので、`render` コールバックを自分で書く必要がありません。手書きメモ・お絵描き・署名欄のような自由線描画に向いています。
+`CanvasRaster`(`pico.create("CanvasRaster")`)は、`Canvas` と違って**描いた絵を自分で覚えている**ウィジェットです。指でなぞった跡をそのまま線として残すので、`render` コールバックを書く必要がありません。手書きメモ・お絵描き・署名欄のような自由線描画に向いています。
 
 ## 最小構成
 
@@ -17,31 +17,28 @@ pico.set(canvas, "x", x)
 pico.set(canvas, "y", y)
 pico.set(canvas, "w", w)
 pico.set(canvas, "h", h)
-pico.set(canvas, "canvas_mode", 0) -- Line(フリーハンド)
-pico.set(canvas, "color", 0)        -- PICO_BLACK
+pico.set(canvas, "canvas_mode", pico.CANVAS_LINE) -- フリーハンド
+pico.set(canvas, "color", pico.COLOR_BLACK)
 pico.set(canvas, "brush_radius", 2)
 ```
 
 これだけで、指(マウス)でドラッグした軌跡がそのまま線として残ります。`Canvas` のように毎フレーム全部を描き直す必要が無く、過去に描いた線をLua側で覚えておく必要もありません。
 
-**`w`/`h` は生成直後のみ変更してください。** `pico.set(id, "w"/"h", ...)` は内部のバッファを作り直すため、変更するとそれまでの描画内容が消えます。
+**`w`/`h` は作った直後に1回だけ設定してください。** 大きさを変えると、それまでに描いた絵は消えます。
 
 ## ペンの色を変える
 
 ```lua
-pico.set(canvas, "color", 9) -- PICO_BLUE
+pico.set(canvas, "color", pico.COLOR_BLUE)
 ```
 
 ## 消しゴム
 
-専用の「消しゴムモード」はありません。**背景色(`PICO_WHITE` = 15)をペンの色として使う**のが消しゴムです。太めのブラシにしておくと消しやすくなります。
+専用の「消しゴムモード」はありません。**白(`pico.COLOR_WHITE` = 15)をペンの色にする**のが消しゴムです。太めのブラシにしておくと消しやすくなります。
 
 ```lua
-local ERASER_WHITE = 15
-local ERASER_RADIUS = 8
-
-pico.set(canvas, "color", ERASER_WHITE)
-pico.set(canvas, "brush_radius", ERASER_RADIUS)
+pico.set(canvas, "color", pico.COLOR_WHITE)
+pico.set(canvas, "brush_radius", 8)
 ```
 
 ## 全消去
@@ -52,41 +49,43 @@ pico.canvas_clear(canvas)
 
 ## 保存・読み込み
 
-キャンバスの内容は `.pimg`(画像で使うのと同じ4bpp+RLE形式)としてSDへ保存・復元できます。
+キャンバスの絵は `.pimg`(画像と同じ形式)としてSDへ保存し、読み戻せます。
 
 ```lua
-local SAVE_PATH = "/lua/apps/myapp/memo.pimg"
+local SAVE_PATH = pico.path_join(pico.app_dir(), "memo.pimg")
 
 pico.canvas_save(canvas, SAVE_PATH) -- 成功ならtrue
-pico.canvas_load(canvas, SAVE_PATH) -- 成功ならtrue。キャンバスのw/hも保存時のサイズへ合う
+pico.canvas_load(canvas, SAVE_PATH) -- 成功ならtrue。キャンバスの大きさも保存したときの大きさになる
 ```
 
-厳密なシグネチャ・失敗条件は [APIリファレンス: ラスタキャンバス](../../../api/graphics/canvas/) を参照してください。
+引数・失敗する条件・元に戻す(`pico.canvas_undo`)は [APIリファレンス: ラスタキャンバス](../../../api/graphics/canvas/) を参照してください。
 
 ## 描画モード(canvas_mode)
 
-`canvas_mode` を変えると、ドラッグの解釈そのものが変わります。
+`canvas_mode` を変えると、なぞったときに描くものが変わります。
 
-| 値 | モード | 挙動 |
+| 値 | 定数 | 描くもの |
 |---|---|---|
-| `0` | Line | ドラッグの軌跡をそのまま線として焼き込む(既定。手書きに使う) |
-| `1` | Rect | ドラッグの始点〜終点を対角線とする矩形を1つ描く |
-| `2` | Ellipse | ドラッグの始点〜終点を外接矩形とする楕円を1つ描く |
-| `3` | Arrow | ドラッグの始点から終点への矢印を1本描く |
+| `0` | `CANVAS_LINE` | なぞった跡をそのまま線にする(既定。手書きに使う) |
+| `1` | `CANVAS_RECT` | なぞり始めと終わりを対角にした四角 |
+| `2` | `CANVAS_ELLIPSE` | なぞった範囲に内接する楕円 |
+| `3` | `CANVAS_ARROW` | なぞり始めから終わりへの矢印 |
+| `4` | `CANVAS_STRAIGHT` | なぞり始めから終わりへの直線 |
+| `5` | `CANVAS_FILL` | 触れた所とつながった同じ色の範囲を塗りつぶす |
 
-Rect/Ellipse/Arrowは「指を離した瞬間」に1つだけ確定します(ドラッグ中はプレビューが表示されます)。手書きメモには `0`(Line)を使ってください。
+四角・楕円・矢印・直線は、なぞっている間は下書きだけを見せ、指を離したときに描きます。四角・楕円は `filled = true` で塗りつぶしになります。
 
 ## 完成例: 2色ペン+消しゴムのスクラッチパッド
 
-黒ペン・青ペン・消しゴム・全消去・保存・読込のボタンを揃えた最小のメモアプリです。完全な実装は `pc/sdcard/lua/apps/スクラッチパッド/main.lua` を参照してください。ツールバーは描画領域を広く取るため、文字ではなくアイコンのボタン(`pico.set(id, "icon_id", ...)`。[アイコンボタン](../../../reference/widget-properties/#button) 参照)にしてあります。
+黒ペン・青ペン・消しゴム・全消去・保存・読込のボタンを揃えた最小のメモアプリです。全体は「スクラッチパッド」アプリ(`/lua/apps/スクラッチパッド/main.lua`)にあります。描く場所を広く取るため、ツールバーは文字ではなくアイコンのボタン(`pico.set(id, "icon_id", ...)`。[Button](../../../reference/widget-properties/#button))にしてあります。
 
 ```lua
 local canvas = pico.create("CanvasRaster")
 -- (x/y/w/hの設定は省略)
 
 local btn_black = pico.create("Button")
-pico.set(btn_black, "icon_id", 53)   -- Brush(IconIDの一覧は reference/limits.md 参照)
-pico.set(btn_black, "background_color", 0) -- 背景色をペンの色そのものにする
+pico.set(btn_black, "icon_id", pico.ICON_Brush)
+pico.set(btn_black, "background_color", pico.COLOR_BLACK) -- 背景をペンの色にする
 -- (他のボタンも同様。x/y/w/hの設定は省略)
 
 local function selectPen(color, radius)

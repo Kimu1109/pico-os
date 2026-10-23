@@ -1,52 +1,64 @@
 ---
 aliases: ["/guide/images/"]
-title: "画像 (.pimg)"
+title: "画像"
 weight: 20
-description: ".pimgファイルをデコードしてCanvasへ描く"
+description: ".pimg / BMP / JPEG を読み込んでCanvasへ描く"
 ---
 
-pico-os が扱える唯一の画像形式は独自形式の `.pimg`(4bpp + RLE圧縮)です。PNG/BMPなどは対応していません。`.pimg` の生成には `script/generate_pimg.py` を使います。
+## 読める形式
+
+| 形式 | 説明 |
+|---|---|
+| `.pimg` | OS独自の16色・RLE圧縮の形式。一番軽く読める。PNGなどからはリポジトリの `script/generate_pimg.py` で作る |
+| `.bmp` | 無圧縮のBMP(1〜32bpp)。16色へ寄せて読む |
+| `.jpg` | ベースラインのJPEG(プログレッシブは不可)。16色へ寄せ、大きい写真は縮めて読める |
+
+PNGはそのままでは読めません。
 
 ## 読み込み・描画・解放
 
 ```lua
-local handle = pico.image_load("/lua/apps/myapp/icon.pimg")
-if handle then
-    local w, h = pico.image_size(handle)
+local img = pico.image_load(pico.path_join(pico.app_dir(), "icon.pimg"))
+if img then
+    local w, h = pico.image_size(img)
 
     local canvas = pico.create("Canvas")
     pico.set(canvas, "w", w)
     pico.set(canvas, "h", h)
     pico.on(canvas, "render", function(id)
-        pico.draw_image(handle, 0, 0)
+        local x, y = pico.get_rect(id)
+        pico.draw_image(img, x, y)
     end)
 end
-
--- 使い終わったら明示的に解放できる(必須ではない)
-pico.image_free(handle)
 ```
 
 | 関数 | 説明 |
 |---|---|
-| `pico.image_load(path)` | `.pimg`をデコードし整数ハンドルを返す。失敗(SD無し/権限外/壊れたファイル/上限超過)は `nil` |
-| `pico.image_size(handle)` | `width, height` を返す |
-| `pico.draw_image(handle, x, y)` | 描画(他の `pico.draw_*` と同じく `Canvas` の `render` の中で使うこと) |
-| `pico.draw_image_part(handle, x, y, sx, sy, w, h)` | 画像の一部だけを描く(スプライトシートからの切り出し) |
-| `pico.image_free(handle)` | 明示的に解放する |
+| `pico.image_load(path [, opts])` | 画像を読み込み、整数のハンドルを返す。読めなければ `nil` |
+| `pico.image_size(handle)` | 幅と高さ |
+| `pico.draw_image(handle, x, y)` | 描く(Canvasの `render` の中で) |
+| `pico.draw_image_part(handle, x, y, sx, sy, w, h)` | 画像の一部だけ描く(スプライトシートから1コマ切り出す) |
+| `pico.draw_image_ex(handle, x, y, r, sx, sy, ox, oy)` | 回転・拡大縮小・反転して描く |
+| `pico.image_free(handle)` | 解放する |
 
-## 画像はウィジェットではない
+ほかに、画像へ描いておいて後で貼る(オフスクリーン)、回転した絵を先に作っておく、といった関数があります([画像API](../../../api/graphics/images/))。
 
-`pico.image_load()` が返すハンドルは `WidgetId` ではありません。`pico.destroy()` の対象にはならず、専用の `pico.image_free()` で解放します。**解放済みハンドルを2回解放しても無害**ですが、解放済みハンドルを `draw_image` / `image_size` に渡すとエラーになります(ハンドルの取り違えを検出するため)。
+## ハンドルと解放
 
-解放を呼び忘れても、そのLuaアプリが終了すれば(`pico.pop()` で画面を抜ければ)自動的に回収されます。`pico.image_free()` は「使い終わったタイミングが分かっているので、終了を待たず今すぐ解放したい」場合のための明示APIです。
+- `pico.image_load()` が返すのはウィジェットのIDではなく画像のハンドルです。`pico.destroy()` ではなく `pico.image_free()` で解放します。
+- 解放したハンドルを `draw_image` などに渡すとエラーになります(`image_free` を2回呼ぶのは安全です)。
+- アプリを閉じれば全部解放されます。`image_free` は、使い終わった画像の枠をすぐ空けたいときに呼びます。
 
 ## 上限
 
-- 同時に保持できる画像は**最大4枚**(1つの `LuaEngine` インスタンス=1アプリあたり)。
-- 画像データの合計サイズは**64KiB**まで(4bppなので `幅×高さ/2` バイトで概算)。
+- 同時に持てる画像は **8枚** まで、画像データの合計は **96KiB** まで(16色なので `幅×高さ÷2` バイトが目安)。
+- 上限を超えると `pico.image_load()` は `nil` を返します(エラーにはなりません)。
+- 小さい絵がたくさんあるときは1枚の画像に並べ、`draw_image_part` で切り出すと枠を節約できます。
 
-上限に達した状態で `pico.image_load()` を呼ぶと `nil` が返ります(エラーにはなりません)。
+## スクロールして見せるだけなら
+
+画像を表示するだけなら `ImageView` ウィジェットが手軽です(大きい画像はドラッグで動かせ、上の枚数の枠も使いません)。[表示・日付・時計の部品](../../ui/display-widgets/#imageview--スクロールできる画像) を見てください。
 
 ## 権限
 
-`sd_outside_app_dir` 権限が `false`(既定)の間、`pico.image_load()` はそのアプリの `app_dir`(通常は自分の `main.lua` があるディレクトリ)配下しか読めません。詳細は [権限モデル](../../app/permissions/) を参照してください。
+`sd_outside_app_dir` の権限が無いアプリは、アプリのフォルダの中の画像だけを読めます([権限](../../app/permissions/))。

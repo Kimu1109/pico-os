@@ -45,7 +45,7 @@
   `engine->UpdateDebugger()`、止まっている間はFrontendが`pollSerial(L, true)`で処理する。シリアルの1行の上限`PadFunctions::kLineMax`は
   これのため32→96にした。
 - Lua API: `pico.traceback([msg])` / `pico.breakpoint([msg])` / `pico.set_breakpoint(file, line)` / `pico.clear_breakpoint([file, line])` /
-  `pico.debugger_enabled()`。ドキュメントは`lua-api-doc/content/api/debug.md`と`guide/debugging.md`。
+  `pico.debugger_enabled()`。ドキュメントは`lua-api-doc/content/api/system/debug.md`と`guide/app/debugging.md`。
 - **スタックトレース**: 捕まえられなかったエラーは`MessageHandler()`が`BuildTrace()`(`main.lua:12 関数名`の行、10段まで)で
   `last_trace_`(1KB)へ作り、`ReportError()`がダイアログ(メッセージ+先頭4段)・ログ(全部)・`LuaDebugger::ReportError()`
   (=`CrashDumpFunctions::SaveLuaError`、`/crash/lua_NNNN.txt`)へ出す。デバッガが無くても常に効く。

@@ -2,10 +2,10 @@
 aliases: ["/api/dialogs/"]
 title: "ダイアログ"
 weight: 20
-description: "show_message / show_input / show_file_save / show_file_select / show_color"
+description: "show_message / show_input / show_number / show_choice / show_date / show_time / show_color / show_file_select / show_file_save / show_progress"
 ---
 
-いずれも生成した `WidgetId` を返します。閉じたときの通知は `pico.on(id, "closed", function(id, is_ok) ... end)` で受けます([イベント](../../../guide/ui/events/) 参照)。
+どれも開いたダイアログのIDを返します。閉じたときは `pico.on(id, "closed", function(id, is_ok, value) ... end)` で受けます。ダイアログは閉じると自動で片付きます。使い方は [ダイアログのガイド](../../../guide/ui/dialogs/) を見てください。
 
 ## pico.show_message
 

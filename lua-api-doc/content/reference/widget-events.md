@@ -12,7 +12,7 @@ description: "pico.on(id, event_name, fn) に渡せるイベント名と対応�
 | `press_end` | 全種別 | `(id, x, y, lx, ly, dx, dy)` | 押した場所の上で離した |
 | `press_move` | 全種別 | `(id, x, y, lx, ly, dx, dy)` | 押しながら移動 |
 | `press_out` | 全種別 | `(id, x, y, lx, ly, dx, dy)` | 押したまま当たり判定の外へ |
-| `render` | `Canvas` のみ | `(id)` | `FlushDirty()`の合成サイクル中(dirty時) |
+| `render` | `Canvas` のみ | `(id)` | 描き直しが要るとき([Canvasと直接描画](../../guide/graphics/drawing/)) |
 | `closed` | ダイアログ(`pico.show_*`が返すID)のみ | `(id, is_ok, value)` | ダイアログが閉じた。決定で閉じたときは`value`に結果が入る([ダイアログ](../../api/ui/dialogs/)) |
 | `checked_changed` | `Checkbox` のみ | `(id)` | チェック状態が変わった |
 | `value_changed` | `NumberSlider` のみ | `(id)` | 値が変わった(ドラッグ中は毎フレーム) |

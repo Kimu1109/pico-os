@@ -6,7 +6,7 @@
 ## Love2D比較で足した拡張API (2026-10-04)
 
 Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほぼ実装があり橋渡しだけで済むものをまとめて足した。
-ドキュメントは`lua-api-doc/content/api/`(drawing/images/sound/sdcard/misc)。**ハード制約で難しいもの
+ドキュメントは`lua-api-doc/content/api/`(graphics/drawing・graphics/images・media/sound・data/sdcard・system/misc)。**ハード制約で難しいもの
 (半透明・Shader・Mesh・物理エンジン・スレッド・マルチタッチ)と、変換/座標変換のスタック(`translate/rotate/scale/push/pop`)・
 `require`・OGG/MP3・複数WAVの同時再生・Quad/SpriteBatch・フォント差し替えは対象外のまま**。
 
@@ -390,8 +390,8 @@ C++側に元からあったが、**`WidgetProperty::Set()`のButtonケースに`
   別物にすり替わる(この制約自体は`generate_icons.py`にコメントで明記した。
   今回`Save`/`StackPop`/`StackPush`/`Brush`/`Eraser`の5種が追加されているが、
   この時点ではまだLua側が数値のIconIDに依存していなかったため実害は無かった。
-  以降は要注意)。ordinal一覧は`lua-api-doc/content/reference/limits.md`の
-  「icon_id(IconID)」に載せてある(スナップショットである旨を明記)。
+  以降は要注意)。名前の一覧は`lua-api-doc/content/reference/constants.md`の
+  「アイコン」に載せてある(Luaからは `pico.ICON_<名前>` で引くので番号は載せていない)。
 - ホストテストは`lua_engine_test.cpp`の「細部のプロパティ」ブロックへ追加
   (icon_id/icon_sizeのget/set往復、`setIcon()`経由で`has_icon=true`になること、
   `w`/`h`未指定なら箱の大きさが`icon_size`へ追従すること)。実際の見た目は
@@ -731,7 +731,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 ## Lua APIの追加(2026-10-05): require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー
 
 「ウィジェットを使うLuaアプリを書くときに足りない機能」を洗い出した(`pico.*`の不足リスト)うち、実害が出ていた5項目をまとめて入れた。
-ドキュメントは`lua-api-doc/content/api/`(`modules.md`/`json.md`/`timers.md`/`scenes.md`/`network.md`)、動作確認は「動作確認」アプリの「画面とデータ」(`pc/sdcard/lua/apps/動作確認/scene.lua`)。
+ドキュメントは`lua-api-doc/content/api/`(`system/modules.md`/`data/json.md`/`system/timers.md`/`ui/scenes.md`/`data/network.md`)、動作確認は「動作確認」アプリの「画面とデータ」(`pc/sdcard/lua/apps/動作確認/scene.lua`)。
 **実機では未確認**(PCのホストテストとPCビルドのみ)。
 
 1. **`require(name)` / `pico.require(name)`**(`LuaEngine::l_require`、`preloadModules`)
@@ -859,7 +859,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 ## 数値定数(2026-10-20)
 
 色・`font_size`・`icon_size`・`icon_id`・`text_align`・`direction`・各種 align・`canvas_mode`・曜日・画面の大きさ・`pico.iso` のブロック/地形の種類を、
-`pico.COLOR_RED` / `pico.ICON_Home` / `pico.iso.BLOCK_TORCH` のように名前で書けるようにした(`src/lua/LuaConstants.hpp`、使い方は `lua-api-doc/content/api/constants.md`)。
+`pico.COLOR_RED` / `pico.ICON_Home` / `pico.iso.BLOCK_TORCH` のように名前で書けるようにした(`src/lua/LuaConstants.hpp`、使い方は `lua-api-doc/content/reference/constants.md`)。
 
 - **値はC++の定義(`consts.hpp`・各enum・`Iso_World.hpp`)を直接引く**ので食い違わない。数値を直接書く書き方もそのまま使える。
 - **関数と同じ遅延**: テーブルへは入れず、`l_api_index` が関数の表に無かった名前を定数の表から引いて初めて写す(約150個の定数でLuaの予算を使わない)。

@@ -2,10 +2,10 @@
 aliases: ["/api/drawing/"]
 title: "直接描画"
 weight: 10
-description: "draw_* / fill_* / clear_rect / draw_text / text_width / invalidate / mark_dirty / set_draw_area / get_draw_area"
+description: "draw_* / fill_* / clear_rect / draw_text / text_width / get_pixel / パレット / invalidate / set_draw_area"
 ---
 
-> これらの関数は `Canvas`(`pico.create("Canvas")`)の `render` コールバックの中で使うことを前提としています。詳細と理由は [Canvasと直接描画](../../../guide/graphics/drawing/) を参照してください。座標は絶対スクリーン座標、色は0〜15のPICO-8風パレット番号です。
+> これらの関数は `Canvas` の `render` コールバックの中で使います(外で描いてもすぐ消えます。[Canvasと直接描画](../../../guide/graphics/drawing/))。座標は画面の座標、色は0〜15のパレットの番号(`pico.COLOR_*`)です。
 
 ## pico.draw_pixel
 
@@ -81,7 +81,7 @@ pico.fill_arc(150, 150, 20, 0, math.pi / 2, 6) -- 右下の1/4
 
 <div class="sig">pico.text_width(text: string, font_size?: integer) <span class="ret">-> width: integer</span></div>
 
-`draw_text` と同じフォントで1行に描いたときの幅(px)。`font_size` の既定は `1`(`Normal`)。右寄せ・中央寄せの位置決めに使います。
+`draw_text` と同じ文字で1行に描いたときの幅(px)。`font_size` の既定は `1`(`pico.FONT_NORMAL`)。右寄せ・中央寄せの位置決めに使います。
 
 ```lua
 local w = pico.text_width("Score", 1)
@@ -92,15 +92,15 @@ pico.draw_text(240 - w - 4, 4, "Score", 0, 1)
 
 <div class="sig">pico.clear_rect(x: integer, y: integer, w: integer, h: integer, color?: integer) <span class="ret">-> (なし)</span></div>
 
-矩形を塗りつぶします(`fill_rect` と同じ実装)。`color` を省略すると背景色(`PICO_BACKGROUND` = 15)になります。
+矩形を塗りつぶします。`color` を省くと背景色(`pico.COLOR_BACKGROUND` = 15)です。
 
 ## pico.draw_text
 
 <div class="sig">pico.draw_text(x: integer, y: integer, text: string, color?: integer, font_size?: integer) <span class="ret">-> (なし)</span></div>
 
-- `color` の既定値は前景色(`PICO_FORECOLOR` = 0)。
-- `font_size` の既定値は `1`(`Normal`、24px)。値は [定数・上限一覧](../../../reference/limits/) を参照。
-- 描画幅は自動で残りスクリーン幅(`SCREEN_WIDTH - x`)に収まるよう切り詰められます(折り返しはしません)。
+- `color` の既定は文字の色(`pico.COLOR_FORECOLOR` = 0)。
+- `font_size` の既定は `1`(`pico.FONT_NORMAL`、24px)。値は [定数](../../../reference/constants/#文字の大きさfont_size) を参照。
+- 画面の右端で切れます(折り返しません。折り返すなら `draw_text_wrapped`)。
 
 `align` で揃えを選べます(6番目の引数、既定 `"left"`)。`"left"` は `x` が左端、`"center"` は `x` が中心、`"right"` は `x` が右端になります。
 
@@ -128,7 +128,7 @@ pico.draw_text(240 - w - 4, 4, "Score", 0, 1)
 
 <div class="sig">pico.set_palette(index: integer, r: integer, g: integer, b: integer) <span class="ret">-> (なし)</span></div>
 
-パレット番号 `index`(**1〜14**)の色を RGB(各 0〜255)に差し替えます(液晶と同じ RGB565 に丸められます)。画面全体とキャンバス・画像の同じ番号の色が一斉に変わります。**黒(0)と白(15)は変えられず**、`index` が 0・15・範囲外ならエラーです。
+パレット番号 `index`(**1〜14**)の色を RGB(各 0〜255)に差し替えます(少し丸められます)。画面全体とキャンバス・画像の同じ番号の色が一斉に変わります。**黒(0)と白(15)は変えられず**、`index` が 0・15・範囲外ならエラーです。
 
 変えたパレットは、**アプリを閉じるときと別の画面へ移るときに既定のパレットへ自動で戻ります**(`pico.reset_palette()` で自分から戻すこともできます)。
 
@@ -149,19 +149,19 @@ pico.draw_text(240 - w - 4, 4, "Score", 0, 1)
 
 <div class="sig">pico.invalidate(id: integer) <span class="ret">-> (なし)</span></div>
 
-指定したウィジェットの画面矩形を dirty 化します。次の `FlushDirty()` でそのウィジェットの `render`(`Canvas` の場合は登録したコールバック)が呼ばれます。`Canvas` に限らず任意のウィジェットに使える汎用APIです。
+そのウィジェットを次のフレームで描き直させます(`Canvas` なら `render` が呼ばれます)。どのウィジェットにも使えます。
 
 ## pico.mark_dirty
 
 <div class="sig">pico.mark_dirty(x: integer, y: integer, w: integer, h: integer) <span class="ret">-> (なし)</span></div>
 
-任意の矩形を直接dirty化する低レベルAPIです。
+画面の矩形を次のフレームで描き直させます。広い `Canvas` の一部だけが変わったとき、その部分だけを指定すると速くなります(`render` の中で `pico.get_draw_area()` を見て、その範囲だけ描きます)。
 
 ## pico.set_draw_area
 
 <div class="sig">pico.set_draw_area(x: integer, y: integer, w: integer, h: integer) <span class="ret">-> (なし)</span></div>
 
-以降の `pico.draw_*` をこの矩形の内側だけに制限します(クリップ矩形)。`render` コールバックの中では、今回描き直す範囲(Canvasとdirty矩形の重なり)との**重なり**に制限します(その外へは広げられません。描いても液晶へ送られないため)。
+以降の `pico.draw_*` をこの矩形の内側だけに制限します(クリップ)。`render` の中では、今回描き直す範囲との重なりになります(それより広げることはできません)。
 
 ## pico.clear_draw_area
 
@@ -173,7 +173,7 @@ pico.draw_text(240 - w - 4, 4, "Score", 0, 1)
 
 <div class="sig">pico.get_draw_area() <span class="ret">-> x: integer, y: integer, w: integer, h: integer</span></div>
 
-今のクリップ矩形を返します。`render` コールバックの中では「そのCanvasのうち、今回描き直す部分(dirty矩形との重なり)」になるので、**部品の多い絵で、描き直しが要る部分だけを描く**のに使えます(`pico.mark_dirty` で小さな矩形だけをdirtyにした場合、`render` はその矩形ぶんだけ呼ばれます)。クリップが無いときは `w` と `h` が0です。
+今のクリップを返します。`render` の中では「そのCanvasのうち、今回描き直す部分」になるので、**部品の多い絵で、描き直しが要る部分だけを描く**のに使えます(`pico.mark_dirty` で小さな矩形だけを指定したときは、その矩形だけ)。クリップが無いときは `w` と `h` が0です。
 
 ```lua
 pico.on(board, "render", function()

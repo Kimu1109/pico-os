@@ -1,10 +1,10 @@
 ---
 title: "動作確認アプリ"
 weight: 10
-description: "pc/sdcard/lua/apps/動作確認/ — APIを1画面ずつ試せるページをメニューから開くアプリ"
+description: "/lua/apps/動作確認/ — APIを1画面ずつ試せるページをメニューから開くアプリ"
 ---
 
-`pc/sdcard/lua/apps/動作確認/` は、Lua APIの動作確認用の画面を1つにまとめたアプリです。`main.lua` はメニューで、各ページ(同じフォルダの `*.lua`)を `pico.push_scene` で開きます。ページの「戻る」(`pico.pop()`)でメニューへ戻ります。
+「動作確認」(`/lua/apps/動作確認/`)は、Lua APIを試す画面を1つにまとめたアプリです。`main.lua` はメニューで、各ページ(同じフォルダの `*.lua`)を `pico.push_scene` で開きます。ページの「戻る」(`pico.pop()`)でメニューへ戻ります。
 
 | ページ | ファイル | 確かめるもの |
 |---|---|---|

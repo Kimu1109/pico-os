@@ -1,94 +1,80 @@
 ---
 aliases: ["/guide/network/"]
-title: "ネットワーク (HTTP)"
+title: "HTTP通信"
 weight: 20
-description: "pico.http_requestで平文HTTPのリクエストを送る"
+description: "pico.http_request でWeb APIを呼ぶ"
 ---
 
-## 権限が必要
+## 権限が要る
 
-`pico.http_request` / `pico.http_cancel` は `network` 権限(既定 `false`)が無いと使えません。SDカードで自動登録されたアプリ(`/lua/apps/<名前>/main.lua`)は常に権限なしなので、ネットワークを使うアプリは [権限モデル](../../app/permissions/) に従ってC++側へ手動登録する必要があります。権限が無い状態で呼ぶと `false` が返るだけです(エラーにはなりません)。
+HTTP通信には `app.cfg` の `permission_network=true` が要ります([権限](../../app/permissions/))。権限が無いと、`pico.http_request()` は何もせず `false` を返します。
 
 ## 基本形
 
 ```lua
-local ok = pico.http_request(method, url, body, content_type, function(ok, status_code, body_or_nil, error_or_nil)
-    if ok then
-        pico.log("status=" .. status_code)
-        pico.log(body_or_nil or "")
-    else
-        pico.log("失敗: " .. (error_or_nil or "?"))
-    end
-end)
-```
-
-| 引数 | 説明 |
-|---|---|
-| `method` | `"GET"` / `"POST"` / `"PUT"` / `"PATCH"` / `"DELETE"` のいずれか |
-| `url` | `http://` または `https://` のURL |
-| `body` | 送信ボディ。無ければ `nil` |
-| `content_type` | `Content-Type` ヘッダの値。無ければ `nil` |
-| `callback` | 完了時に呼ばれる関数(必須) |
-| `opts` | 任意。`headers`(リクエストヘッダ)・`save_to`(保存先) |
-
-呼び出し自体の戻り値(`bool`)は「リクエストを開始できたか」を表します。実際の成否はコールバックの `ok` 引数で判定してください。
-
-## GET
-
-```lua
-pico.http_request("GET", "http://example.local/api/status", nil, nil, function(ok, status, body)
-    if ok and status == 200 then
-        pico.log(body)
-    end
-end)
-```
-
-## POST(JSON送信の例)
-
-```lua
-local payload = '{"score": 100}'
-pico.http_request("POST", "http://example.local/api/score", payload, "application/json",
+pico.http_request("GET", "https://example.com/api/status", nil, nil,
     function(ok, status, body, err)
-        if ok then
-            pico.log("送信完了: " .. status)
+        if ok and status == 200 then
+            pico.log(body)
+        elseif not ok then
+            pico.log("失敗: " .. err)
         end
     end)
 ```
 
-## ステータスコードにかかわらず本文が読める
+| 引数 | 説明 |
+|---|---|
+| `method` | `"GET"` / `"POST"` / `"PUT"` / `"PATCH"` / `"DELETE"` |
+| `url` | `http://` か `https://` のURL |
+| `body` | 送る本文。無ければ `nil` |
+| `content_type` | `Content-Type` の値。無ければ `nil` |
+| `callback` | 終わったときに1回呼ばれる関数 |
+| `opts` | 任意。`headers`(送るヘッダ)・`save_to`(SDへ保存)・`keep_alive` |
 
-Markdownブラウザ用の内部クライアントと異なり、`pico.http_request` は**2xx以外のステータスコード(404等)でも本文をそのまま渡します**。エラーページの内容を見て挙動を変える、といった使い方ができます。
+- `pico.http_request()` の戻り値は「始められたか」です(始められたらリクエストのID、だめなら `false`)。うまくいったかはコールバックの `ok` で判断します。
+- 通信は裏で進みます。終わるまで待つ必要はなく、その間も画面は動きます(`https://` の接続を始めるときだけ、1〜2秒止まることがあります)。
+- `ok` が `true` なら、404などのエラーのステータスでも本文が届きます。`status` を見て判断してください。
 
-## 同時に走るのは1本、あとは順番待ち
+## JSONを送る・受け取る
 
-走っているリクエストがある間に `pico.http_request()` を呼ぶと、**順番待ち**になります(最大4本。呼んだ順に1本ずつ走ります)。これを超えると `false` が返ります。戻り値は成功時にリクエストID(整数)で、`pico.http_cancel(id)` でそのリクエストだけを取り消せます。**コールバックが呼ばれた時点では次のリクエストを送れます**(コールバックの中から連続してリクエストを送る「チェイン」も可能です)。
+```lua
+local body = pico.json_encode({ score = 100 })
+pico.http_request("POST", "https://example.com/api/score", body, "application/json",
+    function(ok, status, res)
+        if ok and status == 200 then
+            local data = pico.json_decode(res)
+        end
+    end)
+```
+
+大きな応答から数個の値だけ欲しいときは、`pico.json_pick()` のほうがメモリを使いません([JSON](../../../api/data/json/))。
+
+## ヘッダ・大きなファイル
+
+6番目の引数 `opts` で、認証のヘッダを付けたり、本文をSDへ直接保存したりできます。
+
+```lua
+pico.http_request("GET", "https://api.example.com/me", nil, nil, on_done,
+    { headers = { ["Authorization"] = "Bearer " .. token } })
+
+pico.http_request("GET", "https://example.com/big.bin", nil, nil, on_done,
+    { save_to = pico.path_join(pico.app_dir(), "big.bin") })
+```
+
+## 同時に走るのは1本
+
+走っている間に次を呼ぶと順番待ちになります(4本まで。超えると `false`)。コールバックの中から次のリクエストを始めてもかまいません。
 
 ```lua
 local id = pico.http_request("GET", url, nil, nil, on_done)
 pico.http_cancel(id)  -- そのリクエストだけ取り消す
-pico.http_cancel()    -- 走っているものも順番待ちも全部取り消す
+pico.http_cancel()    -- 全部取り消す
 ```
 
-## ヘッダ・応答ヘッダ・ファイルへの保存
+## 上限など
 
-6番目の引数 `opts` で、認証ヘッダなどの任意のリクエストヘッダと、ファイルへの直接保存を指定できます。コールバックの5番目の引数が応答ヘッダ(`content-type` など)、6番目が本文の大きさと保存先です。詳しくは [ネットワークAPI](../../../api/data/network/) を参照してください。
+- 送る本文・メモリで受け取る本文は **16KiB** まで。超えると送る側は `false`、受け取る側は失敗になります(黙って切り詰めません)。大きな応答は `save_to` でSDへ保存してください(8MiBまで)。
+- リダイレクトは `GET` のときだけ自動でたどります。
+- `https://` は、本体の時計が合う(Wi-Fiにつながって時刻を合わせる)まで繋がりません。
 
-```lua
-pico.http_request("GET", "https://api.example.com/me", nil, nil,
-    function(ok, status, body, err, headers)
-        local me = pico.json_decode(body)   -- JSONは pico.json_decode で読む
-    end,
-    { headers = { ["Authorization"] = "Bearer " .. token } })
-```
-
-## サイズの上限
-
-送信ボディ・メモリで受ける受信本文ともに**16KiB**までです。超過した場合、送信側は `false` が返って開始できず、受信側は応答全体が失敗として扱われます(黙って切り詰めることはしません)。それより大きな応答は `opts.save_to` でSDへ直接保存してください(最大8MiB)。
-
-## リダイレクト
-
-`GET` のみ自動でリダイレクトを追跡します。`POST`等でリダイレクト(3xx)が返ってきた場合は、追跡せずそのままコールバックへ渡します。
-
-## メインループとの関係
-
-通信の進行は画面のフレームごとに少しずつ進みます(`LuaScene` が毎フレーム内部で処理を進めています)。呼び出し側が明示的にポーリングする必要はありません。
+引数・コールバックの細かい意味は [ネットワークAPI](../../../api/data/network/) にあります。

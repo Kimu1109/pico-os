@@ -5,21 +5,21 @@ weight: 30
 description: "canvas_clear / canvas_save / canvas_load / canvas_undo(CanvasRaster専用)"
 ---
 
-`CanvasRaster`(`pico.create("CanvasRaster")`)専用の4関数です。他のウィジェットや `Canvas`(`LuaCanvas`)には使えません(渡すとエラーになります)。
+`CanvasRaster`(`pico.create("CanvasRaster")`)専用の関数です。他のウィジェットや `Canvas` に渡すとエラーになります。
 
-`CanvasRaster` は自分専用のピクセルバッファを持ち続けるウィジェットで、`press_move` のドラッグをそのまま線として焼き込みます(手書きメモのような自由線描画に向きます)。詳しい使い方は [手書き入力(CanvasRaster)](../../../guide/graphics/freehand-drawing/) を参照してください。
+`CanvasRaster` は描いた絵を自分で覚えているウィジェットで、指でなぞった跡をそのまま線として残します(手書きメモ・お絵描き向き)。詳しい使い方は [手書き入力(CanvasRaster)](../../../guide/graphics/freehand-drawing/) を参照してください。
 
 ## pico.canvas_clear
 
 <div class="sig">pico.canvas_clear(id: WidgetId) <span class="ret">-> (なし)</span></div>
 
-キャンバスを白紙(`PICO_WHITE`)に戻します。
+キャンバスを白紙(白)に戻します。
 
 ## pico.canvas_save
 
 <div class="sig">pico.canvas_save(id: WidgetId, path: string) <span class="ret">-> ok: boolean</span></div>
 
-キャンバスの内容を `.pimg`(4bpp+RLE。[画像](../images/) が読み込むのと同じ形式)としてSDへ書き出します。
+キャンバスの絵を `.pimg`([画像](../images/) で読めるのと同じ形式)としてSDへ書き出します。
 
 失敗すると `false` を返します(エラーにはなりません)。失敗する条件:
 
@@ -41,7 +41,7 @@ description: "canvas_clear / canvas_save / canvas_load / canvas_undo(CanvasRaste
 - SDカードが使用不可
 - `sd_outside_app_dir` 権限が無く、`app_dir` の外を指している
 - ファイルが存在しない、または `.pimg` として不正
-- 画像の width/height が画面サイズ(`SCREEN_WIDTH`×`SCREEN_HEIGHT`)を超えている(壊れた/不正なファイルによる巨大確保を防ぐための安全策)
+- 画像が画面(240×320)より大きい
 
 ## pico.canvas_undo
 
@@ -49,7 +49,7 @@ description: "canvas_clear / canvas_save / canvas_load / canvas_undo(CanvasRaste
 
 直前の描き込み(ペンの1ストローク・図形1つ・塗りつぶし1回・`canvas_clear`・`keep_size`での読み込み)を取り消します。**もう一度呼ぶとやり直し**になります(1段だけの控えと中身を入れ替えるため)。
 
-あらかじめ `pico.set(id, "undo_enabled", true)` で有効にしておく必要があります。有効な間はキャンバスと同じ大きさ(4bppなので `w*h/2` バイト。240×200で約23KB)の控えをヒープに持ちます。戻せるものが無い/無効なら `false` を返します。
+あらかじめ `pico.set(id, "undo_enabled", true)` で有効にしておきます。有効な間は、キャンバスと同じ大きさの控え(`w*h/2` バイト。240×200で約23KB)のメモリを使います。戻せるものが無い・無効なら `false` を返します。
 
 ```lua
 pico.set(canvas, "undo_enabled", true)
@@ -63,14 +63,14 @@ pico.on(undo_button, "press_start", function() pico.canvas_undo(canvas) end)
 
 ## 描き方(canvas_mode)
 
-| 値 | 道具 | 動き |
+| 値 | 定数 | 動き |
 |---|---|---|
-| `0` | Line | フリーハンド。ドラッグした軌跡をそのまま焼き込む |
-| `1` | Rect | 四角形。ドラッグ中はプレビューだけ出し、指を離したときに焼き込む |
-| `2` | Ellipse | 楕円(ドラッグした範囲に内接)。同上 |
-| `3` | Arrow | 矢印。同上 |
-| `4` | Straight | 直線。同上 |
-| `5` | Fill | 塗りつぶし(バケツ)。触れた点と同じ色で上下左右に繋がった領域を `color` で塗る |
+| `0` | `CANVAS_LINE` | フリーハンド。ドラッグした軌跡をそのまま焼き込む |
+| `1` | `CANVAS_RECT` | 四角形。ドラッグ中はプレビューだけ出し、指を離したときに焼き込む |
+| `2` | `CANVAS_ELLIPSE` | 楕円(ドラッグした範囲に内接)。同上 |
+| `3` | `CANVAS_ARROW` | 矢印。同上 |
+| `4` | `CANVAS_STRAIGHT` | 直線。同上 |
+| `5` | `CANVAS_FILL` | 塗りつぶし(バケツ)。触れた点と同じ色で上下左右に繋がった領域を `color` で塗る |
 
 線の太さは `brush_radius`(`0` で1px、`r` で太さ `2r+1`px)。四角形/楕円は `filled=true` で塗りつぶしになり、`false`(既定)なら `brush_radius` の太さの輪郭になります。消しゴムは「`color` を白(`15`)にした Line」です。
 
@@ -87,7 +87,7 @@ pico.set(canvas, "w", w)
 pico.set(canvas, "h", h)
 ```
 
-**`w`/`h` を変更すると内部のバッファを作り直すため、それまでの描画内容は消えます。** 生成直後、まだ何も描いていない段階で一度だけ呼ぶ使い方を想定しています。
+**`w`/`h` を変えると、それまでに描いた絵は消えます。** 作った直後、まだ何も描いていないうちに1回だけ設定してください。
 
 ## pico.canvas_get_pixel
 

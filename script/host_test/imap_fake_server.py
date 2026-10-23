@@ -4,6 +4,7 @@
 pico-os の ImapClient が使うところだけを真似る(IMAP4rev1、RFC 3501 のごく一部):
 
     LOGIN "user" "pass"           違えば NO [AUTHENTICATIONFAILED]
+    AUTHENTICATE XOAUTH2          "+" の後に base64("user=..^Aauth=Bearer ..^A^A")。--oauth-port のときだけ
     SELECT / EXAMINE "INBOX"      * N EXISTS / * OK [UIDVALIDITY ..]
     NOOP                          spool に増えたメールがあれば * N EXISTS
     FETCH a:b (UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])
@@ -17,6 +18,13 @@ Shift_JIS 等を合わせて25通)を書き出す。
     python3 imap_fake_server.py --port 8143 --user me@example.jp --password secret --spool DIR [--seed]
                                 [--cert server.pem --key server.key]
 
+--oauth-port を付けると、Microsoft のサインイン(login.microsoftonline.com)の偽物も同じプロセスで立てる
+(HTTP。/<tenant>/oauth2/v2.0/devicecode と /<tenant>/oauth2/v2.0/token)。デバイスコードは
+token を2回問い合わせると通る(1回目は authorization_pending)。user_code が DENYME のときは断る。
+アクセストークンは長い(約2.5KB)。発行したものだけを XOAUTH2 で受け付ける。
+
+    --oauth-port 8145 --oauth-client-id test-client
+
 PCビルドで試すときは /sys/mail.cfg に
     host = 127.0.0.1
     port = 8143
@@ -28,6 +36,10 @@ PCビルドで試すときは /sys/mail.cfg に
 import argparse
 import base64
 import datetime
+import http.server
+import json
+import secrets
+import urllib.parse
 import os
 import re
 import socketserver
@@ -37,6 +49,109 @@ import threading
 
 LOCK = threading.Lock()
 UIDVALIDITY = 1700000000
+
+
+class OAuthState:
+    """偽物のサインインの状態(IMAPの側と共有する)。"""
+
+    def __init__(self, client_id, user):
+        self.client_id = client_id
+        self.user = user
+        self.devices = {}      # device_code -> {"polls": n, "user_code": ..}
+        self.access = set()    # 発行したアクセストークン
+        self.refresh = set()   # 使える更新用トークン
+        self.counts = {"devicecode": 0, "device_token": 0, "refresh": 0}
+        self.next_user_code = None   # テストが次のコードを決める("DENYME" で断らせる)
+
+    def new_tokens(self):
+        # 本物と同じく長い(JsonReader の 256B を超える。'/' は "\/" で書いて JSON のエスケープも通す)
+        access = "EwA" + secrets.token_urlsafe(1800) + "/x"
+        refresh = "M.C5_BAY.0.U.-" + secrets.token_urlsafe(700) + "!!*"
+        self.access.add(access)
+        self.refresh.add(refresh)
+        return access, refresh
+
+
+def oauth_handler(state):
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def reply(self, code, obj):
+            body = json.dumps(obj).replace("/", "\\/").encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length", "0"))
+            form = urllib.parse.parse_qs(self.rfile.read(n).decode(), keep_blank_values=True)
+            f = {k: v[0] for k, v in form.items()}
+            path = self.path
+            print("<< POST", path, sorted(f.keys()), flush=True)
+            if f.get("client_id") != state.client_id:
+                return self.reply(400, {"error": "unauthorized_client",
+                                        "error_description": "AADSTS700016: Application not found.\r\nTrace ID: x"})
+            with LOCK:
+                if path.endswith("/oauth2/v2.0/devicecode"):
+                    if "IMAP.AccessAsUser.All" not in f.get("scope", "") or "offline_access" not in f.get("scope", ""):
+                        return self.reply(400, {"error": "invalid_scope", "error_description": "bad scope"})
+                    state.counts["devicecode"] += 1
+                    code = "DC" + secrets.token_urlsafe(300)
+                    user_code = state.next_user_code or "ABCD-1234"
+                    state.devices[code] = {"polls": 0, "user_code": user_code}
+                    return self.reply(200, {"device_code": code, "user_code": user_code,
+                                            "verification_uri": "https://www.microsoft.com/link",
+                                            "expires_in": 900, "interval": 1,
+                                            "message": "To sign in, use a web browser"})
+                if path.endswith("/oauth2/v2.0/token"):
+                    grant = f.get("grant_type", "")
+                    if grant == "urn:ietf:params:oauth:grant-type:device_code":
+                        state.counts["device_token"] += 1
+                        d = state.devices.get(f.get("device_code", ""))
+                        if d is None:
+                            return self.reply(400, {"error": "bad_verification_code"})
+                        if d["user_code"] == "DENYME":
+                            return self.reply(400, {"error": "authorization_declined",
+                                                    "error_description": "The user declined"})
+                        d["polls"] += 1
+                        if d["polls"] < 2:
+                            return self.reply(400, {"error": "authorization_pending",
+                                                    "error_description": "AADSTS70016: pending"})
+                        del state.devices[f["device_code"]]
+                    elif grant == "refresh_token":
+                        state.counts["refresh"] += 1
+                        rt = f.get("refresh_token", "")
+                        if rt not in state.refresh:
+                            return self.reply(400, {"error": "invalid_grant",
+                                                    "error_description": "AADSTS70000: The refresh token was revoked."})
+                        state.refresh.discard(rt)   # 使い回させない(新しいものを保存し直すか見る)
+                    else:
+                        return self.reply(400, {"error": "unsupported_grant_type"})
+                    access, refresh = state.new_tokens()
+                    return self.reply(200, {"token_type": "Bearer",
+                                            "scope": "https://outlook.office.com/IMAP.AccessAsUser.All",
+                                            "expires_in": 3599, "ext_expires_in": 3599,
+                                            "access_token": access, "refresh_token": refresh})
+            self.reply(404, {"error": "not_found"})
+
+        def do_GET(self):
+            # テストの道具: /test/state で数、/test/revoke で全部取り消す、/test/next-code?c=.. で次のコード
+            u = urllib.parse.urlparse(self.path)
+            with LOCK:
+                if u.path == "/test/revoke":
+                    state.access.clear()
+                    state.refresh.clear()
+                elif u.path == "/test/expire-access":
+                    state.access.clear()
+                elif u.path == "/test/next-code":
+                    state.next_user_code = urllib.parse.parse_qs(u.query).get("c", [None])[0]
+                body = {"counts": state.counts, "access": len(state.access), "refresh": len(state.refresh)}
+            self.reply(200, body)
+
+    return H
 
 
 class Store:
@@ -151,6 +266,34 @@ class Handler(socketserver.StreamRequestHandler):
                 cmd = cmd.upper()
             log = line if cmd != "LOGIN" else tag + " LOGIN ***"
             print("<<", log, flush=True)
+
+            if cmd == "AUTHENTICATE":
+                oauth = self.server.oauth
+                if oauth is None or args.strip().upper() != "XOAUTH2":
+                    self.send("%s NO [CANNOT] unsupported mechanism\r\n" % tag)
+                    continue
+                self.send("+ \r\n")
+                resp = self.rfile.readline().decode("ascii", "replace").strip()
+                try:
+                    raw = base64.b64decode(resp, validate=True).decode()
+                except Exception:
+                    self.send("%s BAD invalid base64\r\n" % tag)
+                    continue
+                ok = False
+                m = re.fullmatch(r"user=([^\x01]*)\x01auth=Bearer ([^\x01]*)\x01\x01", raw)
+                with LOCK:
+                    if m and m.group(1) == cfg.user and m.group(2) in oauth.access:
+                        ok = True
+                print("<< (XOAUTH2 user=%s ok=%s)" % (m.group(1) if m else "?", ok), flush=True)
+                if ok:
+                    authed = True
+                    self.send("%s OK AUTHENTICATE completed.\r\n" % tag)
+                else:
+                    err = base64.b64encode(json.dumps({"status": "401", "schemes": "bearer"}).encode()).decode()
+                    self.send("+ %s\r\n" % err)
+                    self.rfile.readline()   # クライアントは空行を返す
+                    self.send("%s NO AUTHENTICATE failed.\r\n" % tag)
+                continue
 
             if cmd == "CAPABILITY":
                 self.send("* CAPABILITY IMAP4rev1\r\n%s OK done\r\n" % tag)
@@ -329,6 +472,8 @@ def main():
     ap.add_argument("--password", default="secret")
     ap.add_argument("--spool", required=True)
     ap.add_argument("--seed", action="store_true")
+    ap.add_argument("--oauth-port", type=int)
+    ap.add_argument("--oauth-client-id", default="test-client")
     ap.add_argument("--cert")
     ap.add_argument("--key")
     cfg = ap.parse_args()
@@ -340,6 +485,11 @@ def main():
     server = Server(("127.0.0.1", cfg.port), Handler)
     server.cfg = cfg
     server.store = Store(cfg.spool)
+    server.oauth = None
+    if cfg.oauth_port:
+        server.oauth = OAuthState(cfg.oauth_client_id, cfg.user)
+        httpd = http.server.ThreadingHTTPServer(("127.0.0.1", cfg.oauth_port), oauth_handler(server.oauth))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
     if cfg.cert:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(cfg.cert, cfg.key)

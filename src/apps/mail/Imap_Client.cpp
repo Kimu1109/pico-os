@@ -5,6 +5,7 @@
 #include "storage/SD_Path.hpp"
 #include "crypto/Secret_Cipher.hpp"
 #include "util/Url.hpp"
+#include "util/Base64.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
 
@@ -37,6 +38,53 @@ namespace {
         return false;
     }
 
+    // XOAUTH2 の中身(user=..^Aauth=Bearer ..^A^A)を base64 にしながら少しずつ送る(トークンは数KBあるので組み立てない)
+    class Base64Writer {
+        public:
+            explicit Base64Writer(HttpTransport& net) : net_(net) {}
+            void put(const char* s, size_t n){
+                for(size_t i = 0; i < n; i++){
+                    carry_[carry_len_++] = (uint8_t)s[i];
+                    if(carry_len_ == 3){
+                        emit(carry_, 3);
+                        carry_len_ = 0;
+                    }
+                }
+            }
+            void put(const char* s){ put(s, strlen(s)); }
+            // 端数を出して CRLF を付ける
+            bool finish(){
+                if(carry_len_ > 0) emit(carry_, carry_len_);
+                carry_len_ = 0;
+                if(len_ + 2 > sizeof(out_)) flush();
+                out_[len_++] = '\r';
+                out_[len_++] = '\n';
+                flush();
+                return ok_;
+            }
+        private:
+            HttpTransport& net_;
+            uint8_t carry_[3] = {};
+            size_t carry_len_ = 0;
+            char out_[256];
+            size_t len_ = 0;
+            bool ok_ = true;
+            void emit(const uint8_t* b, size_t n){
+                if(len_ + 4 > sizeof(out_)) flush();
+                len_ += Base64::Encode(b, n, out_ + len_);
+            }
+            void flush(){
+                if(len_ == 0) return;
+                if(ok_ && net_.write((const uint8_t*)out_, len_) != len_) ok_ = false;
+                len_ = 0;
+            }
+    };
+
+    bool IsMicrosoftHost(const char* host){
+        return strcmp(host, MailOAuth::kImapHost) == 0 || strcmp(host, "imap-mail.outlook.com") == 0
+            || strcmp(host, "outlook.office.com") == 0;
+    }
+
     // サーバの説明("[AUTHENTICATIONFAILED] Invalid credentials")を理由の後ろへ付ける
     void WithServerText(FixedString<PICO_STR_LL>& out, const char* why, const char* text){
         out.assign(why);
@@ -57,7 +105,9 @@ bool ImapClient::configure(const Config& given){
     Config c = given;
     if(c.mailbox.empty()) c.mailbox.assign(kDefaultMailbox);
     //前のアカウントの一覧と本文は捨てる(別のサーバのUIDと混ざらないように)
-    if(c.host != cfg_.host || c.port != cfg_.port || c.user != cfg_.user || c.mailbox != cfg_.mailbox){
+    const bool account_changed = c.host != cfg_.host || c.port != cfg_.port || c.user != cfg_.user
+                              || c.mailbox != cfg_.mailbox || c.auth != cfg_.auth;
+    if(account_changed){
         count_ = 0;
         loaded_ = false;
         list_rev_++;
@@ -69,10 +119,23 @@ bool ImapClient::configure(const Config& given){
         body_[0] = '\0';
         body_rev_++;
     }
+    if(c.auth == Auth::Microsoft && c.host.empty()) c.host.assign(MailOAuth::kImapHost);
+    //別のユーザーのトークンで入らない
+    if(account_changed) oauth_.forget();
     cfg_ = c;
+    oauth_.configure(cfg_.oauth);
+    if(cfg_.auth != Auth::Microsoft){
+        oauth_.cancel();
+        oauth_op_ = OAuthOp::None;
+    }
 
-    if(cfg_.host.empty() || cfg_.user.empty() || cfg_.password.empty()){
+    const bool need_password = cfg_.auth == Auth::Password;
+    if(cfg_.host.empty() || cfg_.user.empty() || (need_password && cfg_.password.empty())){
         setStatus(State::NotConfigured, "メールのアカウントがありません。[設定] から入れてください");
+        return false;
+    }
+    if(cfg_.auth == Auth::Microsoft && cfg_.oauth.client_id.empty()){
+        setStatus(State::NotConfigured, "mail.cfg に oauth-client-id がありません。[設定] から入れてください");
         return false;
     }
     //LOGIN へそのまま入れるので、quoted string にできるか先に確かめる
@@ -81,7 +144,7 @@ bool ImapClient::configure(const Config& given){
         setStatus(State::NotConfigured, "ユーザー名に使えない文字があります(半角英数字と記号だけ)");
         return false;
     }
-    if(!Imap::Quote(cfg_.password.c_str(), q, sizeof(q))){
+    if(need_password && !Imap::Quote(cfg_.password.c_str(), q, sizeof(q))){
         setStatus(State::NotConfigured, "パスワードに使えない文字があります(半角英数字と記号だけ)");
         return false;
     }
@@ -112,7 +175,15 @@ bool ImapClient::loadConfig(){
     bool password_plain = false;
     const bool opened = PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_MAIL_CFG,
         [&](const char* key, const char* value){
-            if(strcmp(key, "host") == 0){
+            if(strcmp(key, "auth") == 0){
+                c.auth = (strcmp(value, "microsoft") == 0 || strcmp(value, "outlook") == 0) ? Auth::Microsoft : Auth::Password;
+            }else if(strcmp(key, "oauth-client-id") == 0){
+                c.oauth.client_id.assign(value);
+            }else if(strcmp(key, "oauth-tenant") == 0){
+                c.oauth.tenant.assign(value);
+            }else if(strcmp(key, "oauth-authority") == 0){
+                c.oauth.authority.assign(value);
+            }else if(strcmp(key, "host") == 0){
                 c.host.assign(value);
             }else if(strcmp(key, "port") == 0){
                 int v = 0;
@@ -140,7 +211,19 @@ bool ImapClient::loadConfig(){
         return false;
     }
     c.password.assign(password);
+    //auth を書いていなくても Outlook のサーバなら Microsoft のサインインで入る
+    if(IsMicrosoftHost(c.host.c_str()) && !c.oauth.client_id.empty()) c.auth = Auth::Microsoft;
     if(!configure(c)) return false;
+
+    if(cfg_.auth == Auth::Microsoft && !oauth_.hasRefreshToken()){
+        char token[MailOAuth::kRefreshTokenCap];
+        bool rewrite = false;
+        if(MailOAuth::LoadRefreshToken(token, sizeof(token), &rewrite)){
+            oauth_.setRefreshToken(token);
+            oauth_saved_refresh_rev_ = oauth_.refreshRevision();
+            if(rewrite && MailOAuth::SaveRefreshToken(token)) LOG_APP_MSG("Mail: サインインを今の鍵で暗号化し直しました");
+        }
+    }
 
     //母艦で平文のまま書かれていたら、暗号化して書き直す(SDだけを落としたときに読まれないように)
     if(password_plain && password[0]){
@@ -152,6 +235,7 @@ bool ImapClient::loadConfig(){
 bool ImapClient::SaveAccount(const char* host, uint16_t port, const char* user, const char* password){
     const char* path = PICO_Path::FILE::CFG::SYS_MAIL_CFG;
     if(host && *host){
+        if(!PICO_Config::SetValue(path, "auth", "password")) return false;
         if(!PICO_Config::SetValue(path, "host", host)) return false;
         char p[8];
         snprintf(p, sizeof(p), "%u", (unsigned)(port ? port : kDefaultPort));
@@ -171,11 +255,37 @@ bool ImapClient::SaveAccount(const char* host, uint16_t port, const char* user, 
     return true;
 }
 
+bool ImapClient::SaveMicrosoftAccount(const char* user, const char* client_id){
+    const char* path = PICO_Path::FILE::CFG::SYS_MAIL_CFG;
+    //ユーザーが変わるなら、前のアカウントのサインインは消す
+    char old_user[PICO_Config::kConfigMaxValueLen] = "";
+    PICO_Config::ParseFile(path, [&](const char* key, const char* value){
+        if(strcmp(key, "user") == 0) snprintf(old_user, sizeof(old_user), "%s", value);
+    });
+    if(!user || strcmp(old_user, user) != 0) MailOAuth::ClearRefreshToken();
+
+    char p[8];
+    snprintf(p, sizeof(p), "%u", (unsigned)kDefaultPort);
+    return PICO_Config::SetValue(path, "auth", "microsoft")
+        && PICO_Config::SetValue(path, "host", MailOAuth::kImapHost)
+        && PICO_Config::SetValue(path, "port", p)
+        && PICO_Config::SetValue(path, "tls", "true")
+        && (!user || !*user || PICO_Config::SetValue(path, "user", user))
+        && (!client_id || !*client_id || PICO_Config::SetValue(path, "oauth-client-id", client_id));
+}
+
 void ImapClient::setStatus(State s, const char* text){
     const bool changed = (s != state_) || strcmp(status_.c_str(), text ? text : "") != 0;
     state_ = s;
     status_.assign(text ? text : "");
     if(changed) status_rev_++;
+}
+
+void ImapClient::failPendingBody(const char* why){
+    if(!want_body_) return;
+    body_req_uid_ = want_body_;
+    want_body_ = 0;
+    finishBody(false, why);
 }
 
 void ImapClient::failLater(const char* why){
@@ -212,6 +322,97 @@ void ImapClient::openMessage(uint32_t uid){
 
 void ImapClient::closeMessage(){
     want_body_ = 0;
+}
+
+bool ImapClient::startSignIn(){
+    if(!configured_ || cfg_.auth != Auth::Microsoft) return false;
+    disconnect();
+    oauth_.forget();
+    oauth_op_ = OAuthOp::SignIn;
+    wait_manual_ = true;   //サインインが終わるまで繋ぎに行かない
+    if(!oauth_.startSignIn()){
+        //すぐに失敗した(client_id が無い等)。理由は updateOAuth() で出す
+        return false;
+    }
+    setStatus(State::SigningIn, "サインインを始めています…");
+    return true;
+}
+
+void ImapClient::cancelSignIn(){
+    if(oauth_op_ != OAuthOp::SignIn) return;
+    oauth_.cancel();
+    oauth_op_ = OAuthOp::None;
+    oauth_seen_rev_ = oauth_.revision();
+    setStatus(State::NeedSignIn, "サインインをやめました。[更新] でサインインし直せます");
+}
+
+bool ImapClient::ensureAccessToken(){
+    if(oauth_.hasAccessToken()) return true;
+    if(oauth_op_ != OAuthOp::None) return false;
+    if(!oauth_.hasRefreshToken()){
+        wait_manual_ = true;
+        failPendingBody("Microsoft のサインインが必要です");
+        setStatus(State::NeedSignIn, "Microsoft のサインインが必要です。[更新] を押してサインインしてください");
+        return false;
+    }
+    oauth_op_ = OAuthOp::Refresh;
+    oauth_.startRefresh();
+    return false;
+}
+
+void ImapClient::updateOAuth(){
+    oauth_.update();
+    if(oauth_op_ == OAuthOp::SignIn && oauth_.phase() == MailOAuth::Phase::WaitUser){
+        //案内(コードと残り時間)を状態の行へ
+        FixedString<PICO_STR_LL> t;
+        t.appendFormat("%s でコード %s を入れてください", oauth_.verificationUri(), oauth_.userCode());
+        if(state_ != State::SigningIn || strcmp(status_.c_str(), t.c_str()) != 0) setStatus(State::SigningIn, t.c_str());
+    }
+    if(oauth_.revision() == oauth_seen_rev_) return;
+    oauth_seen_rev_ = oauth_.revision();
+    if(oauth_.busy()) return;   //途中の知らせ(コードが出た等)
+    const OAuthOp op = oauth_op_;
+    oauth_op_ = OAuthOp::None;
+    if(op == OAuthOp::None) return;
+
+    //更新用トークンが変わったら保存し直す(Microsoft は取り直すたびに新しいものを返す)
+    if(oauth_.refreshRevision() != oauth_saved_refresh_rev_){
+        oauth_saved_refresh_rev_ = oauth_.refreshRevision();
+        if(oauth_.hasRefreshToken()){
+            if(!MailOAuth::SaveRefreshToken(oauth_.refreshToken())) LOG_APP_WARN("Mail: サインインを保存できませんでした");
+        }else{
+            MailOAuth::ClearRefreshToken();
+        }
+    }
+
+    switch(oauth_.result()){
+        case MailOAuth::Result::Ok:
+            if(op == OAuthOp::SignIn){
+                LOG_APP_OK("Mail: Microsoft にサインインしました");
+                auth_retried_ = false;
+                setStatus(State::Ok, "");
+                refreshNow();
+            }
+            return;
+        case MailOAuth::Result::NeedSignIn:
+        case MailOAuth::Result::Denied:
+            wait_manual_ = true;
+            want_list_ = false;
+            want_poll_ = false;
+            failPendingBody(oauth_.errorText());
+            setStatus(State::NeedSignIn, oauth_.errorText());
+            return;
+        case MailOAuth::Result::Failed:
+        case MailOAuth::Result::None:
+        default:
+            if(op == OAuthOp::SignIn){
+                wait_manual_ = true;
+                setStatus(State::NeedSignIn, oauth_.errorText());
+            }else{
+                failLater(oauth_.errorText());
+            }
+            return;
+    }
 }
 
 const Imap::Summary* ImapClient::findMessage(uint32_t uid) const {
@@ -266,6 +467,13 @@ void ImapClient::stop(){
     disconnect();
     want_body_ = 0;
     want_poll_ = false;
+    //アクセストークンを取り直している途中ならやめる(サインインの途中もやめる。コードは出し直せる)
+    if(oauth_op_ != OAuthOp::None){
+        oauth_.cancel();
+        if(oauth_op_ == OAuthOp::SignIn) setStatus(State::NeedSignIn, "サインインをやめました。[更新] でサインインし直せます");
+        oauth_op_ = OAuthOp::None;
+        oauth_seen_rev_ = oauth_.revision();
+    }
 }
 
 bool ImapClient::send(Cmd cmd, const char* args){
@@ -309,6 +517,11 @@ void ImapClient::update(bool network_up){
     if(!configured_) return;
     if(!network_up){
         if(phase_ != Phase::Disconnected) disconnect();
+        if(oauth_op_ == OAuthOp::Refresh){
+            oauth_.cancel();
+            oauth_op_ = OAuthOp::None;
+            oauth_seen_rev_ = oauth_.revision();
+        }
         if(want_body_){
             body_req_uid_ = want_body_;
             want_body_ = 0;
@@ -322,6 +535,10 @@ void ImapClient::update(bool network_up){
         setStatus(State::Ok, "");
         refreshNow();
     }
+    if(cfg_.auth == Auth::Microsoft){
+        updateOAuth();
+        if(oauth_op_ == OAuthOp::SignIn) return;
+    }
 
     const uint32_t now = millis();
     if(phase_ == Phase::Disconnected){
@@ -333,7 +550,7 @@ void ImapClient::update(bool network_up){
             return;
         }
         const bool need = want_body_ != 0 || (!wait_manual_ && (want_list_ || Reached(now, next_poll_ms_)));
-        if(need) connectNow();
+        if(need && (cfg_.auth != Auth::Microsoft || ensureAccessToken())) connectNow();
         return;
     }
 
@@ -398,8 +615,22 @@ void ImapClient::onResponse(const char* text, size_t len, bool overflow){
         case Imap::Kind::Untagged:
             handleUntagged(r, text, len);
             break;
+        case Imap::Kind::Continuation:
+            //AUTHENTICATE XOAUTH2 の続き。1回目はトークンを送り、2回目(断られたときの理由のJSON)には空行を返す
+            if(cmd_ == Cmd::Auth){
+                cmd_started_ms_ = millis();
+                if(!auth_sent_){
+                    auth_sent_ = true;
+                    if(!sendXoauth2()){
+                        failLater("送れません(接続が切れました)");
+                        disconnect();
+                    }
+                }else{
+                    net_.write((const uint8_t*)"\r\n", 2);
+                }
+            }
+            break;
         default:
-            //続きを促す "+" は使わない(LOGIN は quoted string だけで送る)
             break;
     }
 }
@@ -417,7 +648,12 @@ void ImapClient::handleUntagged(const Imap::Response& r, const char* text, size_
 
     if(phase_ == Phase::Greeting){
         char args[PICO_STR_512B];
-        if(r.status == Imap::Status::Ok){
+        if(r.status == Imap::Status::Ok && cfg_.auth == Auth::Microsoft){
+            //SASL-IR は使わず、"+" を待ってから送る(どのサーバでも通る形)
+            auth_sent_ = false;
+            phase_ = Phase::Login;
+            send(Cmd::Auth, "AUTHENTICATE XOAUTH2");
+        }else if(r.status == Imap::Status::Ok){
             char u[PICO_STR_256B], p[PICO_STR_256B];
             Imap::Quote(cfg_.user.c_str(), u, sizeof(u));
             Imap::Quote(cfg_.password.c_str(), p, sizeof(p));
@@ -519,14 +755,35 @@ void ImapClient::handleTagged(const Imap::Response& r){
                 disconnect();
                 return;
             }
-            {
-                char m[PICO_STR_256B];
-                char args[PICO_STR_256B + 16];
-                Imap::Quote(cfg_.mailbox.c_str(), m, sizeof(m));
-                snprintf(args, sizeof(args), "SELECT %s", m);
-                phase_ = Phase::Select;
-                send(Cmd::Select, args);
+            loginSucceeded();
+            return;
+
+        case Cmd::Auth:
+            if(!ok){
+                //トークンが期限より前に無効になった(取り消し等)かもしれない。取ってから時間が経っていれば1回だけ取り直す
+                if(!auth_retried_ && oauth_.accessTokenAgeMs() > 60000u){
+                    LOG_APP_WARN("Mail: XOAUTH2 を断られたのでアクセストークンを取り直します: %s", r.text);
+                    auth_retried_ = true;
+                    oauth_.dropAccessToken();
+                    disconnect();
+                    want_list_ = true;
+                    next_poll_ms_ = millis();
+                    return;
+                }
+                WithServerText(why, "ログインできません", r.text);
+                why.append("(Outlook.com の設定で IMAP を有効にしているか確かめてください)");
+                LOG_APP_WARN("Mail: %s", why.c_str());
+                wait_manual_ = true;
+                want_list_ = false;
+                want_poll_ = false;
+                oauth_.dropAccessToken();
+                failPendingBody(why.c_str());
+                setStatus(State::AuthError, why.c_str());
+                disconnect();
+                return;
             }
+            auth_retried_ = false;
+            loginSucceeded();
             return;
 
         case Cmd::Select:
@@ -619,6 +876,26 @@ void ImapClient::handleTagged(const Imap::Response& r){
         case Cmd::None:
             return;
     }
+}
+
+void ImapClient::loginSucceeded(){
+    char m[PICO_STR_256B];
+    char args[PICO_STR_256B + 16];
+    Imap::Quote(cfg_.mailbox.c_str(), m, sizeof(m));
+    snprintf(args, sizeof(args), "SELECT %s", m);
+    phase_ = Phase::Select;
+    send(Cmd::Select, args);
+}
+
+bool ImapClient::sendXoauth2(){
+    //RFC にはないが Google/Microsoft の決まり: base64("user=" user ^A "auth=Bearer " token ^A ^A)
+    Base64Writer w(net_);
+    w.put("user=");
+    w.put(cfg_.user.c_str());
+    w.put("\x01" "auth=Bearer ");
+    w.put(oauth_.accessToken(), oauth_.accessTokenLength());
+    w.put("\x01\x01");
+    return w.finish();
 }
 
 void ImapClient::finishBody(bool ok, const char* why){

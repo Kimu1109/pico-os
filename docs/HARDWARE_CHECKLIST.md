@@ -97,6 +97,7 @@ PCビルドとホストテストでは確かめられない項目だけを、**1
 | 🔴 | Todoist(Amazon Root CA 1)へ繋がる | TODOアプリ | |
 | 🔴 | 電卓の為替: Frankfurter(api.frankfurter.dev。Cloudflareの証明書)からレートを取れる | 電卓→変換→種類「通貨(為替)」→[更新]。下の行が「1 USD = … JPY (日付)」になり `/sys/currency.cfg` ができる。証明書で弾かれたら(「取得できません: …」)ログの理由を控え、`/sys/tls/ca.pem` にルートを足すか `url = https://open.er-api.com/v6/latest/EUR` を試す。取得中に画面が止まる時間も見る | |
 | 🔴 | メール: 本物のIMAPS(Gmailのアプリパスワード等)で受信箱と本文が読める・日本語(ISO-2022-JP)が化けない・止まる時間 | メールアプリ。[設定]でサーバ・ユーザー・パスワード → 一覧 → 本文。`/sys/mail.cfg` が `enc` で書かれる。証明書で弾かれたら `/sys/tls/ca.pem` にルートを足す | |
+| 🔴 | メール: 本物の Outlook.com(outlook.jp 等)へ Microsoft のサインインで入れる | Microsoft Entra でアプリを登録(個人の Microsoft アカウントを許可・パブリック クライアント フローを許可・API のアクセス許可に Microsoft Graph の IMAP.AccessAsUser.All)。Outlook.com の設定で IMAP を有効に。メールアプリ → [設定] → 「Outlook.com」→ メールアドレス → アプリのID → 画面のコードをスマホの https://www.microsoft.com/link で入れる → 一覧と本文。`/sys/mail_token.cfg` が `enc` で書かれる。アプリを閉じて開き直してもサインインし直さずに入れる。証明書で弾かれたら(login.microsoftonline.com / outlook.office365.com)ログの理由を控え、`/sys/tls/ca.pem` にルートを足す。HTTPSとTLSのIMAPが続く間に止まる時間も見る | |
 | 🔴 | Wi-Fi の OFF → ON で `beginNoBlock()` から復帰する | 設定アプリ「Wi-Fi」 | |
 | 🔴 | 別のSSIDへ切り替えるとき、切断を挟まなくてよいか | 保存済みを2つ用意して切り替え | |
 | 🔴 | 周辺スキャンの結果が実際の電波状況と合う | 設定アプリ「検索」 | |

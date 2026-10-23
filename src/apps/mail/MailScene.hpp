@@ -21,11 +21,13 @@
 //
 // - 一覧は新しい順に ImapClient::kMaxMessages 通。未読は閉じた封筒のアイコンと黒字、既読は開いた封筒と灰色
 // - タップで本文を開く(既読にするかは /sys/mail.cfg の mark-read。既定は既読にする)
-// - [設定] でサーバ → ユーザー名 → パスワード の順に聞いて /sys/mail.cfg へ書く(パスワードは暗号化)
+// - [設定] でアカウントの種類を選ぶ。IMAP(Gmail 等)はサーバ → ユーザー名 → パスワード の順に聞いて /sys/mail.cfg へ書く
+//   (パスワードは暗号化)。Outlook.com(Microsoft)はメールアドレス → アプリのID(client_id)を聞いてサインインを始め、
+//   一覧の場所に「ブラウザで URL を開いてコードを入れる」案内とコードを大きく出す(ImapClient::startSignIn())
 // - 開いている間は数分ごとに新着を確かめる(ImapClient)。閉じたら接続(TLSの約40KB)も返す
 // - 物理キーボード: Esc で一覧へ/アプリを閉じる、↑↓ PageUp/PageDown で本文をスクロール、r で更新
 //
-// **このシーンは約30KBある**(ImapClient が一覧 × 2 と本文12KBを持つ)。TodoScene と同じく
+// **このシーンは約46KBある**(ImapClient が一覧 × 2 と本文12KB、Microsoft のサインインのトークン等で約13KBを持つ)。TodoScene と同じく
 // 「シーン本体は数十バイト」の例外。
 class MailScene : public Scene {
     public:
@@ -35,7 +37,7 @@ class MailScene : public Scene {
     private:
         enum class Mode : uint8_t { List, Read };
         // 設定のダイアログは1つずつ、1フレーム空けて次を出す(MarkdownScene::Pending と同じ理由)
-        enum class Pending : uint8_t { None, User, Password };
+        enum class Pending : uint8_t { None, Host, User, Password, MsUser, MsClientId };
 
         // ---- 両方 ----
         Button* back_button = nullptr;
@@ -48,6 +50,11 @@ class MailScene : public Scene {
         // ---- 読む ----
         Label<PICO_STR_1KiB>* header_label = nullptr;
         TextView* body_view = nullptr;
+        // ---- Microsoft のサインイン(一覧の場所に出す) ----
+        Label<PICO_STR_LL>* signin_label = nullptr;
+        Label<PICO_STR_S>* code_label = nullptr;
+        Label<PICO_STR_M>* signin_left_label = nullptr;
+        uint32_t shown_left_min = 0xFFFFFFFFu;
 
         ImapClient client;
 
@@ -91,6 +98,11 @@ class MailScene : public Scene {
         void openMessage(int row);
         void backToList();
         void openSettings();
+        void openHostDialog();
+        void openMsUserDialog();
+        void openMsClientIdDialog();
+        void refreshSignIn();
+        bool signingIn() const { return this->client.state() == ImapClient::State::SigningIn; }
         void openUserDialog();
         void openPasswordDialog();
         void setNotice(const char* text, int8_t color = PICO_DARKGREY);

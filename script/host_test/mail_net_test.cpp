@@ -11,8 +11,11 @@
 //   - **接続を使い回す**(本文を何通開いても LOGIN し直さない)。TLSでも同じ
 //   - 新着: サーバにメールが増えたら、更新(NOOP → EXISTS)で一覧を取り直す
 //   - /sys/mail.cfg を読み、平文のパスワードは暗号化して書き直す。8bitの文字のパスワードは断る
+//   - Microsoft(auth = microsoft): サインインが無ければ NeedSignIn で繋がない・デバイスコードの流れ(待つ→通る)・
+//     更新用トークンを暗号化して保存・次からは保存したもので取り直す(新しいトークンを保存し直す)・XOAUTH2・
+//     アクセストークンが無効になったら1回だけ取り直す・取り消されたら NeedSignIn・断られた/client_id が違う
 //
-// 使い方: mail_net_test <平文のport> <TLSのport> <ca.pem> <平文のサーバのspool>
+// 使い方: mail_net_test <平文のport> <TLSのport> <ca.pem> <平文のサーバのspool> [<XOAUTH2のIMAPのport> <サインインの偽物のport>]
 #include "apps/mail/Imap_Client.hpp"
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
@@ -26,6 +29,9 @@
 #include <sstream>
 #include <string>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 
 // ---- モック ----
 void LogFunctions::Log(LogType, const char* fmt, ...){
@@ -179,6 +185,140 @@ static void scenario(const char* name, const char* host, uint16_t port, bool tls
     check(!c.connected(), "stop() で切る");
 }
 
+// 偽物のサインインのサーバの道具(/test/...)を叩く
+static std::string httpGet(uint16_t port, const char* path){
+    const int fd = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in a{};
+    a.sin_family = AF_INET;
+    a.sin_port = htons(port);
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    std::string out;
+    if(connect(fd, (sockaddr*)&a, sizeof(a)) == 0){
+        const std::string req = std::string("GET ") + path + " HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
+        (void)!write(fd, req.data(), req.size());
+        char buf[1024];
+        ssize_t n;
+        while((n = read(fd, buf, sizeof(buf))) > 0) out.append(buf, (size_t)n);
+    }
+    close(fd);
+    return out;
+}
+
+// 時計(millis())を進めながら回す(デバイスコードの問い合わせは interval 秒ごとなので)
+static bool runClock(ImapClient& c, const std::function<bool()>& done){
+    for(int i = 0; i < 20000; i++){
+        c.update(true);
+        if(done()) return true;
+        usleep(500);
+        PicoHostClock::now += 5;
+    }
+    return false;
+}
+
+static void oauthScenario(uint16_t imap_port, uint16_t oauth_port){
+    printf("\n---- Microsoft(XOAUTH2) ----\n");
+    const char* cfg = PICO_Path::FILE::CFG::SYS_MAIL_CFG;
+    const char* tok = PICO_Path::FILE::CFG::SYS_MAIL_TOKEN;
+    const std::string base = "auth = microsoft\nhost = 127.0.0.1\nport = " + std::to_string(imap_port)
+        + "\ntls = false\nuser = me@example.jp\noauth-client-id = test-client\noauth-authority = http://127.0.0.1:"
+        + std::to_string(oauth_port) + "\n";
+    HostSd::files[cfg] = base;
+    HostSd::files.erase(tok);
+
+    static ImapClient c;
+    check(c.loadConfig() && c.usesOAuth(), "auth = microsoft を読む(パスワードは要らない)");
+    check(runClock(c, [&]{ return c.state() == S::NeedSignIn; }), "サインインが無ければ NeedSignIn");
+    for(int i = 0; i < 200; i++){ c.update(true); PicoHostClock::now += 5; }
+    check(!c.connected() && !c.busy(), "サインインするまで繋がない");
+
+    check(c.startSignIn(), "サインインを始める");
+    check(runClock(c, [&]{ return c.oauth().phase() == MailOAuth::Phase::WaitUser; }), "コードが出る");
+    eq_str(c.oauth().userCode(), "ABCD-1234", "利用者のコード");
+    eq_str(c.oauth().verificationUri(), "https://www.microsoft.com/link", "開くURL(\\/ を戻す)");
+    contains(c.statusText(), "ABCD-1234", "状態の行にコード");
+    check(c.state() == S::SigningIn, "SigningIn");
+    check(runClock(c, [&]{ return c.loaded() || c.state() == S::Error || c.state() == S::NeedSignIn; }) && c.state() == S::Ok,
+          "通ったら XOAUTH2 で入って一覧を取る");
+    eq_int(c.messageCount(), ImapClient::kMaxMessages, "一覧");
+    check(c.oauth().accessTokenLength() > 2000, "長いアクセストークン(2KB超)を丸ごと受け取る");
+    std::string st = httpGet(oauth_port, "/test/state");
+    contains(st.c_str(), "\"device_token\": 2", "待っている間は間を空けて問い合わせる(1回目は pending)");
+    const std::string saved1 = HostSd::files[tok];
+    check(!saved1.empty() && saved1.find("M.C5_BAY") == std::string::npos, "更新用トークンを暗号化して保存");
+    check(openBody(c, c.messageAt(2).uid) && c.bodyOk(), "本文も読める");
+    c.stop();
+
+    //次からは保存した更新用トークンで取り直す
+    static ImapClient c2;
+    check(c2.loadConfig(), "読み直す");
+    check(runClock(c2, [&]{ return c2.loaded() || c2.state() == S::Error || c2.state() == S::NeedSignIn; }) && c2.state() == S::Ok,
+          "保存した更新用トークンで入る");
+    st = httpGet(oauth_port, "/test/state");
+    contains(st.c_str(), "\"refresh\": 1", "トークンを取り直した");
+    check(HostSd::files[tok] != saved1, "新しい更新用トークンを保存し直す");
+
+    //アクセストークンが期限より前に無効になった: 1回だけ取り直して入り直す
+    c2.stop();
+    httpGet(oauth_port, "/test/expire-access");
+    PicoHostClock::now += 120000;
+    c2.refreshNow();
+    check(runClock(c2, [&]{ return (c2.connected() && !c2.busy() && c2.state() == S::Ok) || c2.state() == S::AuthError; })
+          && c2.state() == S::Ok, "断られたら取り直して入る");
+    st = httpGet(oauth_port, "/test/state");
+    contains(st.c_str(), "\"refresh\": 2", "取り直しは1回");
+    c2.stop();
+
+    //取り消された(パスワードの変更等)
+    httpGet(oauth_port, "/test/revoke");
+    static ImapClient c3;
+    c3.loadConfig();
+    check(runClock(c3, [&]{ return c3.state() == S::NeedSignIn || c3.loaded(); }) && c3.state() == S::NeedSignIn,
+          "取り消されたら NeedSignIn");
+    contains(c3.statusText(), "サインインし直して", "理由");
+    check(HostSd::files.count(tok) == 0, "使えない更新用トークンは消す");
+    for(int i = 0; i < 300; i++){ c3.update(true); PicoHostClock::now += 50; }
+    st = httpGet(oauth_port, "/test/state");
+    contains(st.c_str(), "\"refresh\": 3", "何度も取り直しに行かない");
+
+    //断られた
+    httpGet(oauth_port, "/test/next-code?c=DENYME");
+    check(c3.startSignIn(), "もう一度サインイン");
+    check(runClock(c3, [&]{ return c3.state() == S::NeedSignIn; }), "断られたら NeedSignIn");
+    contains(c3.statusText(), "断られました", "断られた理由");
+    httpGet(oauth_port, "/test/next-code");
+
+    //やめる
+    check(c3.startSignIn() && runClock(c3, [&]{ return c3.oauth().phase() == MailOAuth::Phase::WaitUser; }), "サインインの途中");
+    c3.cancelSignIn();
+    check(c3.state() == S::NeedSignIn && !c3.busy(), "サインインをやめられる");
+    c3.stop();
+
+    //client_id が違う
+    HostSd::files[cfg] = base + "oauth-client-id = nope\n";
+    static ImapClient c4;
+    check(c4.loadConfig(), "別の client_id");
+    c4.startSignIn();
+    check(runClock(c4, [&]{ return c4.state() == S::NeedSignIn && !c4.busy(); }), "client_id が違えば NeedSignIn");
+    contains(c4.statusText(), "Application not found", "サーバの理由");
+    check(strstr(c4.statusText(), "Trace ID") == nullptr, "理由は1行目だけ");
+    c4.stop();
+
+    //設定画面からの保存
+    HostSd::files[cfg] = "host = imap.example.jp\nuser = me@example.jp\npassword = secret\n";
+    HostSd::files[tok] = "old\n";
+    check(ImapClient::SaveMicrosoftAccount("me@example.jp", "cid-1"), "SaveMicrosoftAccount");
+    check(HostSd::files.count(tok) == 1, "同じユーザーならサインインは残す");
+    check(ImapClient::SaveMicrosoftAccount("other@outlook.jp", "cid-1"), "別のユーザー");
+    check(HostSd::files.count(tok) == 0, "別のユーザーならサインインは消す");
+    static ImapClient c5;
+    c5.loadConfig();
+    check(c5.usesOAuth() && c5.config().host == "outlook.office365.com" && c5.config().port == 993 && c5.config().tls
+          && c5.config().oauth.client_id == "cid-1", "Outlook のサーバと client_id");
+    check(ImapClient::SaveAccount("imap.example.jp", 993, "me@example.jp", ""), "パスワードのアカウントへ戻す");
+    static ImapClient c6;
+    check(c6.loadConfig() && !c6.usesOAuth() && c6.config().password == "secret", "auth = password へ戻る(パスワードは残る)");
+}
+
 static void config(uint16_t port){
     printf("\n---- /sys/mail.cfg ----\n");
     const char* path = PICO_Path::FILE::CFG::SYS_MAIL_CFG;
@@ -232,6 +372,7 @@ int main(int argc, char** argv){
     scenario("IMAP(平文、mark-read)", "127.0.0.1", plain, false, true, argv[4]);
     scenario("IMAPS(TLS、mark-read=false)", "localhost", tls, true, false, nullptr);
     config(plain);
+    if(argc >= 7) oauthScenario((uint16_t)atoi(argv[5]), (uint16_t)atoi(argv[6]));
 
     printf("\n%s (失敗 %d件)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

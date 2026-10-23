@@ -228,11 +228,11 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   - `Imap_Proto` … IMAPの応答の組み立て(`Imap::Reader`。`{n}`のリテラルを含む1つの応答を4KBの固定長に。小さいリテラル=ヘッダーは
     中に残し、本文は`Handler`が望めば貯めずに流す。溢れても後ろの応答とずれない)、応答の分類、FETCHの読み取り(知らない項目は
     入れ子の括弧ごと読み飛ばす)、quoted string
-  - `Imap_Client` … 通信係(下)。`MailScene` … 画面(下)
+  - `Imap_Client` … 通信係(下)。`Mail_OAuth` … Microsoft のサインイン(下の「Outlook.com」)。`MailScene` … 画面(下)
 - **通信係(`ImapClient`)**: **IMAPS(993、最初からTLS)** を `net/HttpTransport` で繋ぐ(証明書の確かめ方・`/sys/tls/ca.pem`も同じ)。
   `tls = false` で平文も可(パスワードがそのまま流れるので自前のサーバの試験用)。**STARTTLS は無い**(平文で繋いだソケットを
   後からTLSへ切り替える口が `WiFiClientSecure` に無いため)。認証は `LOGIN "user" "pass"`(quoted string なので **8bitの文字の
-  ユーザー名/パスワードは断る**。リテラルで送る形は作っていない)。手順は 挨拶 → LOGIN → SELECT → NOOP → FETCH。
+  ユーザー名/パスワードは断る**。リテラルで送る形は作っていない)。手順は 挨拶 → LOGIN(か AUTHENTICATE XOAUTH2)→ SELECT → NOOP → FETCH。
   - 一覧は `FETCH lo:N (UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])` で**新しい方から20通**
     (`kMaxMessages`)。受信用の配列へ取り終えてから入れ替える(TODOと同じ。20通×2で約13KB)。日時は INTERNALDATE(届いた日時)
   - 本文は `UID FETCH u (UID FLAGS BODY[]<0.32768>)`。**先頭32KBだけ**取り、届いた分から`TextExtractor`へ流して本文の置き場
@@ -241,14 +241,40 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
     増えていれば取り直す([更新]は必ず取り直す)。`EXPUNGE`/`UIDVALIDITY`の変化でも取り直す。失敗は5秒→2分のバックオフ。
     **LOGINの失敗(NO)は`AuthError`で止まり、[更新]まで繋ぎ直さない**(間違ったパスワードを繰り返し送るとサーバに締め出される)
   - 受信は`update()`から1フレーム8KBまで。応答30秒で打ち切り。**約33KB**(一覧×2・本文12KB・組み立て4KB・TextExtractor約3.5KB)
-- **設定 `/sys/mail.cfg`**: `host` / `port`(既定993)/ `tls`(既定true)/ `user` / `password`(`PICO_Secret`、用途`"mail-password"`。
-  **平文で置けば読んだときに暗号化して書き直す**)/ `mailbox`(既定INBOX)/ `mark-read`(既定true)。
+- **設定 `/sys/mail.cfg`**: `auth`(`password` 既定 / `microsoft`)/ `host` / `port`(既定993)/ `tls`(既定true)/ `user` / `password`(`PICO_Secret`、用途`"mail-password"`。
+  **平文で置けば読んだときに暗号化して書き直す**)/ `oauth-client-id` / `oauth-tenant` / `oauth-authority`(テスト用)/ `mailbox`(既定INBOX)/ `mark-read`(既定true)。
   画面の[設定]は サーバ(`host` か `host:port`。`imaps://`も読む)→ ユーザー名 → パスワード(同じユーザーなら空欄で今のまま)を
   1フレームずつ空けて聞く。PCで試すときの`pc/sdcard/sys/mail.cfg`は`.gitignore`済み。
 - **使えるサーバ**: LOGINで入れるもの。**Gmailは2段階認証を有効にしてアプリパスワードを作る**(普段のパスワードは不可)。
-  **Outlook.com/Hotmail(outlook.jp 等)は2024年からOAuthしか受け付けないので使えない**(OAuth2の XOAUTH2 は未対応。
-  端末でのOAuthはデバイスコードの流れが要り、トークンの更新も持つことになる)。プロバイダのメール(IMAPS対応のもの)・
+  Outlook.com/Hotmail(outlook.jp 等)は下の「Outlook.com」(2026-10-23)。プロバイダのメール(IMAPS対応のもの)・
   iCloud(アプリ用パスワード)・自前のDovecot等は入れる見込み。**焼き込みのルート証明書に無いCAのサーバは `/sys/tls/ca.pem` に足す**。
+- **Outlook.com(Microsoft のアカウント)** (2026-10-23): Outlook.com は2024年からパスワードの LOGIN を受け付けないので、
+  **OAuth2 のアクセストークンを `AUTHENTICATE XOAUTH2` で渡す**(`auth = microsoft`)。
+  - **サインインはデバイスコードの流れ(RFC 8628)**: 本体ではブラウザを開けないので、`login.microsoftonline.com/<tenant>/oauth2/v2.0/devicecode`
+    で「https://www.microsoft.com/link でコード XXXX を入れて」をもらい、画面に大きく出す。利用者がスマホ/PCでサインインする間、
+    `token` を `interval` 秒ごとに問い合わせる(`authorization_pending` は待つ、`slow_down` は5秒延ばす、断られた/期限切れは止める)。
+    scope は `https://outlook.office.com/IMAP.AccessAsUser.All offline_access`(後者で更新用トークンが返る)。client secret は使わない
+  - **client_id は利用者が自分で登録したアプリのもの**(`oauth-client-id`)。Microsoft Entra 管理センター → アプリの登録 →
+    「個人用 Microsoft アカウントのみ」(か職場も含める)・リダイレクトURIなし → 認証で「パブリック クライアント フローを許可する」をはい →
+    API のアクセス許可で Microsoft Graph の委任 `IMAP.AccessAsUser.All` と `offline_access`(足さなくても最初のサインインで同意を聞かれる)。
+    **他のアプリ(Thunderbird 等)の client_id を焼き込むことはしない**(他人のアプリになりすますことになる)。`oauth-tenant` は既定 `consumers`
+    (個人のアカウント。職場/学校も使うなら `common` か テナントのID)
+  - **トークン**: アクセストークンは約1時間で1〜3KB(RAMの4KBの置き場に。期限の5分前から古いとみなす)。更新用トークンは数百B〜1KBで、
+    `mail.cfg` の値(160B)に入らないので **`/sys/mail_token.cfg` に255Bずつ行に分けて `PICO_Secret` で暗号化**(行ごとに用途の文字列
+    `mail-oauth-<n>` を変える。同じ鍵ストリームを使い回さない)。取り直すたびに Microsoft は新しい更新用トークンを返すので保存し直す。
+    平文/古い鍵で書かれていたら読んだときに書き直す(端末の鍵を作った後も)。ユーザーを変えたら消す
+  - **応答のJSONは `JsonReader` で流しながら読む**。アクセストークンは 256B を超えるので、**`JsonReader::Handler::stringBuffer()`(足した口)で
+    その値だけ置き場を差し出す**(読み手の作業場は大きくしない)
+  - **XOAUTH2 の送り方**: SASL-IR は使わず、`AUTHENTICATE XOAUTH2` → `+` を待って `base64("user=" user ^A "auth=Bearer " token ^A ^A)` を送る
+    (どのサーバでも通る形)。中身は数KBあるので組み立てずに base64 にしながら256Bずつ送る。断られると `+ <理由のJSON>` が来るので空行を返す
+  - **流れ(`ImapClient`)**: 繋ぐ前に使えるアクセストークンが無ければ、更新用トークンで取り直してから繋ぐ。更新用トークンが無い/取り消された
+    (`invalid_grant`)なら `NeedSignIn` で止まり繋がない(画面は「[更新] でサインイン」)。XOAUTH2 を断られたら、取ってから1分以上経った
+    トークンなら1回だけ取り直してやり直す(それでも駄目なら `AuthError`。Outlook.com の設定で IMAP が無効のことが多い)
+  - **`MailOAuth` は約13KB**(アクセストークン4KB・更新用トークン2KB×2・デバイスコード1KB・送るボディ4KB)。HTTPSは使い回さない(終わったら返す)。
+    メールのシーンは合わせて約46KB+繋いでいる間のTLS
+  - **画面**: [設定] → 種類(「Outlook.com」/「Gmail・その他」)→ メールアドレス → アプリのID → すぐサインインを始め、一覧の場所に
+    URL・コード(大きい字)・残り分を出す。Esc でやめる。設定は `auth` / `host = outlook.office365.com` / `port = 993` / `oauth-client-id`
+  - 実機と本物の Microsoft のサーバでは未確認(Todoist参照)。焼き込みのルート証明書(DigiCert Global Root G2)で通る見込み
 - **画面(`MailScene`)**: 一覧 `[戻る] メール (未読 N) [設定][更新]` / `ScrollList`(未読=閉じた封筒・黒、既読=開いた封筒・灰色。
   「日付 差出人  件名」。日付は今日なら時刻、今年なら月/日、それより前は年から)/ 状態の1行(「新しい 20 通を表示(全 N 通)」等)。
   **タップで本文を開く**(TODOと違い1回で開く。壊す操作ではないので)。読む画面は同じシーンの中でウィジェットの表示を切り替える:
@@ -257,7 +283,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   作り直さずに中身だけ書き換える(既読になってもスクロールの位置が保たれる)。物理キーボードは Esc/Backspace で戻る、↑↓/PageUp/
   PageDown/スペースで本文のスクロール、r で更新。アイコンは `IconID::Mail` / `MailOpened`(tablerの mail / mail-opened。16pxで目視済み)。
 - **未対応**: 送信(SMTP)・返信・転送・削除・フラグ・フォルダの一覧と切り替え(`mailbox`の手書きだけ)・21通目より古いメール・
-  添付の保存・HTMLの表・画像・リンク(文字だけ)・OAuth・STARTTLS・8bitの文字のパスワード・新着の通知(アプリを閉じている間は見ない)・
+  添付の保存・HTMLの表・画像・リンク(文字だけ)・GmailのOAuth・STARTTLS・8bitの文字のパスワード・新着の通知(アプリを閉じている間は見ない)・
   IDLE(押し出しの通知)。
 - 検証: `mail_proto_test`(run.sh。文字コード: 3種の日本語・1バイトずつ・壊れたUTF-8・サロゲート・1252・戻し忘れ、ヘッダー: B/Q・語の分割・
   空白・折り返し・壊れた語、差出人の名前5形、日時、引数(RFC 2231とその分割)、本文: ISO-2022-JP・multipartの入れ子と添付の名前・HTMLだけ
@@ -267,7 +293,10 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   **`mail_net_test`(run_net.sh。`script/host_test/imap_fake_server.py`=IMAPの偽物を平文/TLSで立てる)**: パスワード違いで止まり
   繋ぎ直さない・新しい20通が新しい順・UIDと番号の取り違え・件名/差出人の各文字コード・未読の数・本文(multipart/HTML/ISO-2022-JP)・
   添付の名前・mark-readの有無・無いUID・取り消した本文を取り違えない・接続の使い回し(LOGINは1回)・新着・mail.cfgの読み込みと暗号化の書き直し・
-  SaveAccount・8bitのパスワードを断る。PCビルドの`--tap`/`--shot`(偽物を `--seed` で立て `host = 127.0.0.1` / `tls = false`)で
+  SaveAccount・8bitのパスワードを断る・**Microsoft(偽物に `--oauth-port` でサインインの偽物も立てる): サインインが無ければ繋がない・
+  デバイスコード(pending→通る)・2KBを超えるアクセストークン・更新用トークンの暗号化保存と取り直し・XOAUTH2・無効になったら1回だけ取り直す・
+  取り消されたら NeedSignIn で何度も取りに行かない・断られた・client_id 違い・SaveMicrosoftAccount**。
+  `mail_proto_test` に JsonReader の stringBuffer・フォームの値・更新用トークンの保存(行の入れ替えで戻らない・壊れたら読まない)も。PCビルドの`--tap`/`--shot`(偽物を `--seed` で立て `host = 127.0.0.1` / `tls = false`)で
   一覧・4種の本文・既読になって灰色・設定のダイアログを目視した。**実機(BearSSL)と本物のメールサーバ(Gmail等)での確認は未**(Todoist参照)。
 
 ## Spotifyリモコン (`pc/sdcard/lua/apps/Spotify/`、Luaアプリ) (2026-10-14)

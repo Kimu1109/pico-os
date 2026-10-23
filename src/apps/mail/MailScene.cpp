@@ -1,5 +1,6 @@
 #include "apps/mail/MailScene.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "services/Power_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
@@ -12,6 +13,8 @@
 
 // 読む画面のヘッダーの行数(差出人 / 日時 / 宛先 / CC・添付)
 static constexpr int kHeaderLines = 4;
+// Microsoft のサインインの案内の行数(URLが2行に折り返す)
+static constexpr int kSignInLines = 6;
 // NTP同期前(1970年付近)は「今日」が分からない
 static constexpr int kMinValidYear = 2020;
 
@@ -89,7 +92,12 @@ void MailScene::onEnter(){
            || this->client.state() == ImapClient::State::AuthError){
             this->client.loadConfig();
         }
-        this->client.refreshNow();
+        if(this->client.state() == ImapClient::State::NeedSignIn){
+            //Microsoft のサインインが要る(切れた・まだ・やめた)。押したらサインインを始める
+            this->client.startSignIn();
+        }else if(!this->signingIn()){
+            this->client.refreshNow();
+        }
         this->notice.clear();
         this->refreshStatus();
     });
@@ -144,6 +152,27 @@ void MailScene::onEnter(){
     this->body_view = new TextView(content.x + MARGIN, body_y, content.w - MARGIN * 2, status_y - MARGIN - body_y);
     WidgetFunctions::Add(this->body_view);
 
+    // ---- Microsoft のサインインの案内(一覧の場所。サインインの途中だけ出す) ----
+    this->signin_label = new Label<PICO_STR_LL>(content.x + MARGIN, list_y + MARGIN, "");
+    this->signin_label->setFontSize(FontFn::Small);
+    this->signin_label->setMaxWidth(content.w - MARGIN * 2);
+    this->signin_label->setMaxHeight(line_h * kSignInLines + 4);
+    this->signin_label->setDisableAutoTextDecoration(true);
+    WidgetFunctions::Add(this->signin_label);
+    const int code_y = list_y + MARGIN + line_h * kSignInLines + 4 + MARGIN * 2;
+    this->code_label = new Label<PICO_STR_S>(content.x + MARGIN, code_y, "");
+    this->code_label->setFontSize(FontFn::Big);
+    this->code_label->setMaxWidth(content.w - MARGIN * 2);
+    this->code_label->setTextAlign(TextAlign::Center);
+    this->code_label->setDisableAutoTextDecoration(true);
+    WidgetFunctions::Add(this->code_label);
+    this->signin_left_label = new Label<PICO_STR_M>(content.x + MARGIN, code_y + FontFn::GetFontSize(FontFn::Big) + MARGIN * 3, "");
+    this->signin_left_label->setFontSize(FontFn::Small);
+    this->signin_left_label->setMaxWidth(content.w - MARGIN * 2);
+    this->signin_left_label->setTextAlign(TextAlign::Center);
+    this->signin_left_label->setTextColor(PICO_DARKGREY);
+    WidgetFunctions::Add(this->signin_left_label);
+
     this->client.loadConfig();
 
     this->seen_list_rev = this->client.listRevision() - 1;
@@ -166,7 +195,7 @@ void MailScene::setMode(Mode m){
     const bool list = (m == Mode::List);
     this->refresh_button->setVisible(list);
     this->settings_button->setVisible(list);
-    this->mail_list->setVisible(list);
+    this->mail_list->setVisible(list && !this->signingIn());
     this->header_label->setVisible(!list);
     this->body_view->setVisible(!list);
     this->back_button->setText(list ? "戻る" : "一覧");
@@ -178,6 +207,7 @@ void MailScene::setMode(Mode m){
     this->title_label->setX(title_x);
     this->title_label->setMaxWidth(right - title_x);
 
+    this->refreshSignIn();
     if(list){
         this->refreshTitle();
     }else{
@@ -185,6 +215,52 @@ void MailScene::setMode(Mode m){
         this->refreshBody();
     }
     this->refreshStatus();
+}
+
+void MailScene::refreshSignIn(){
+    if(!this->signin_label) return;
+    const bool need = this->client.state() == ImapClient::State::NeedSignIn;
+    const bool show = this->mode == Mode::List && (this->signingIn() || need);
+    this->signin_label->setVisible(show);
+    this->code_label->setVisible(show);
+    this->signin_left_label->setVisible(show);
+    this->mail_list->setVisible(this->mode == Mode::List && !show);
+    if(!show){
+        this->shown_left_min = 0xFFFFFFFFu;
+        return;
+    }
+    const MailOAuth& o = this->client.oauth();
+    if(need){
+        //状態の行には入りきらないので、理由と次にすることを一覧の場所へ
+        FixedString<PICO_STR_LL> t(this->client.statusText());
+        if(!strstr(t.c_str(), "[更新]")) t.append("\n[更新] を押すとサインインのコードを出します");
+        this->signin_label->setText(t);
+        this->code_label->setText("");
+        this->signin_left_label->setText("");
+        this->shown_left_min = 0;
+        return;
+    }
+    if(o.phase() != MailOAuth::Phase::WaitUser){
+        if(this->shown_left_min != 0){
+            this->shown_left_min = 0;
+            this->signin_label->setText("Microsoft のサインインを始めています…");
+            this->code_label->setText("");
+            this->signin_left_label->setText("");
+        }
+        return;
+    }
+    FixedString<PICO_STR_LL> t("スマホかパソコンのブラウザで\n");
+    t.append(o.verificationUri());
+    t.append("\nを開き、下のコードを入れてサインインしてください");
+    this->signin_label->setText(t);
+    this->code_label->setText(o.userCode());
+    const uint32_t left_min = (o.secondsLeft() + 59) / 60;
+    if(left_min != this->shown_left_min){
+        this->shown_left_min = left_min;
+        FixedString<PICO_STR_M> l;
+        l.appendFormat("あと %u 分", (unsigned)left_min);
+        this->signin_left_label->setText(l);
+    }
 }
 
 void MailScene::refreshTitle(){
@@ -340,7 +416,8 @@ void MailScene::refreshStatus(){
     if(!this->status_label) return;
     using S = ImapClient::State;
     const S s = this->client.state();
-    const bool bad = (s == S::Error || s == S::AuthError || s == S::NotConfigured || s == S::Offline);
+    const bool bad = (s == S::Error || s == S::AuthError || s == S::NotConfigured || s == S::Offline
+                      || s == S::NeedSignIn);
 
     const char* text = this->client.statusText();
     int8_t color = bad ? PICO_RED : PICO_DARKGREY;
@@ -354,6 +431,12 @@ void MailScene::refreshStatus(){
         else if(have && this->client.bodyFromHtml()) text = "HTMLを文字だけにして表示";
     }else if(!*text && !this->client.loaded()){
         text = "読み込み中…";
+    }else if(this->signingIn()){
+        //案内は一覧の場所に大きく出しているので、状態の行は短く
+        text = "サインインを待っています…";
+        color = PICO_DARKGREY;
+    }else if(s == S::NeedSignIn && this->mode == Mode::List){
+        text = "サインインが必要です";
     }else if(!*text && this->client.loaded()){
         if(this->client.messageCount() == 0){
             text = "メールはありません";
@@ -387,10 +470,65 @@ void MailScene::backToList(){
 }
 
 void MailScene::openSettings(){
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, "アカウントの種類", "", "キャンセル");
+    dialog->addChoice("Outlook.com");
+    dialog->addChoice("Gmail・その他");
+    dialog->layout();
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_ok){
+        if(is_ok){
+            this->pending = dialog->getSelectedIndex() == 0 ? Pending::MsUser : Pending::Host;
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void MailScene::openMsUserDialog(){
+    auto* dialog = new InputDialog("Microsoft のメールアドレス(例: you@outlook.jp):", true);
+    WidgetFunctions::AddDialog(dialog);
+    if(this->client.config().auth == ImapClient::Auth::Microsoft) dialog->setInput(this->client.config().user.c_str());
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        if(is_submit && !dialog->getInput().empty()){
+            this->input_user.assign(dialog->getInput().c_str());
+            this->pending = Pending::MsClientId;
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void MailScene::openMsClientIdDialog(){
+    //Microsoft Entra に登録したアプリのID(docs/design/apps-online.md「メール」)。前に入れたものを初期値に
+    auto* dialog = new InputDialog("アプリ(クライアント)ID(Microsoft Entra に登録したもの):", true);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setInput(this->client.config().oauth.client_id.c_str());
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        if(is_submit){
+            const FixedString<PICO_STR_LL> id = dialog->getInput();
+            if(id.empty()){
+                this->setNotice("アプリのIDが空なので保存しませんでした", PICO_RED);
+            }else if(ImapClient::SaveMicrosoftAccount(this->input_user.c_str(), id.c_str())){
+                this->client.loadConfig();
+                this->list_count = 0;
+                this->mail_list->clear();
+                this->notice.clear();
+                if(!this->client.startSignIn()) this->refreshStatus();
+                this->refreshSignIn();
+            }else{
+                this->setNotice("アカウントを保存できませんでした", PICO_RED);
+            }
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void MailScene::openHostDialog(){
     //今のサーバを初期値にする(パスワードは平文で持たないので空欄から始まる)
     const ImapClient::Config& c = this->client.config();
     FixedString<PICO_STR_L> current;
-    if(!c.host.empty()){
+    if(!c.host.empty() && c.auth == ImapClient::Auth::Password){
         current.assign(c.host);
         if(c.port != ImapClient::kDefaultPort) current.appendFormat(":%u", (unsigned)c.port);
     }
@@ -465,7 +603,11 @@ bool MailScene::onKey(const KeyInputFunctions::Event& ev){
     switch(ev.key){
         case K::Escape:
         case K::Backspace:
-            if(this->mode == Mode::Read) this->backToList();
+            if(this->signingIn()){
+                this->client.cancelSignIn();
+                this->refreshSignIn();
+                this->refreshStatus();
+            }else if(this->mode == Mode::Read) this->backToList();
             else SceneFunctions::Pop();
             return true;
         case K::Up:       if(this->mode == Mode::Read){ this->scrollBody(-line_h * 2); return true; } return false;
@@ -480,7 +622,7 @@ bool MailScene::onKey(const KeyInputFunctions::Event& ev){
         this->scrollBody(page);
         return true;
     }
-    if(ev.isPlainChar() && ev.cp == 'r' && this->mode == Mode::List){
+    if(ev.isPlainChar() && ev.cp == 'r' && this->mode == Mode::List && !this->signingIn()){
         this->client.refreshNow();
         return true;
     }
@@ -496,12 +638,15 @@ void MailScene::onUpdate(){
         return;
     }
 
-    if(this->pending == Pending::User){
-        this->pending = Pending::None;
-        this->openUserDialog();
-    }else if(this->pending == Pending::Password){
-        this->pending = Pending::None;
-        this->openPasswordDialog();
+    const Pending p = this->pending;
+    this->pending = Pending::None;
+    switch(p){
+        case Pending::Host:       this->openHostDialog(); break;
+        case Pending::User:       this->openUserDialog(); break;
+        case Pending::Password:   this->openPasswordDialog(); break;
+        case Pending::MsUser:     this->openMsUserDialog(); break;
+        case Pending::MsClientId: this->openMsClientIdDialog(); break;
+        case Pending::None:       break;
     }
 
     this->client.update(NetworkFunctions::IsConnected());
@@ -522,7 +667,13 @@ void MailScene::onUpdate(){
     }
     if(this->client.statusRevision() != this->seen_status_rev){
         this->seen_status_rev = this->client.statusRevision();
+        this->refreshSignIn();
         this->refreshStatus();
+    }
+    //サインインの残り時間(分が変わったときだけ書き直す)
+    if(this->signingIn() && this->mode == Mode::List
+       && (this->client.oauth().secondsLeft() + 59) / 60 != this->shown_left_min){
+        this->refreshSignIn();
     }
 
     //日付が変わると一覧の日付の出し方(今日なら時刻)が変わる
@@ -552,4 +703,7 @@ void MailScene::onExit(){
     this->mail_list = nullptr;
     this->header_label = nullptr;
     this->body_view = nullptr;
+    this->signin_label = nullptr;
+    this->code_label = nullptr;
+    this->signin_left_label = nullptr;
 }

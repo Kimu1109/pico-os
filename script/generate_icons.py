@@ -88,7 +88,7 @@ ICONS: list[IconSpec] = [
     IconSpec("battery_2",        str(ICON_DIR / "battery-2.svg")),
     IconSpec("battery_3",        str(ICON_DIR / "battery-3.svg")),
     IconSpec("battery_4",        str(ICON_DIR / "battery-4.svg")),
-    IconSpec("battery_charging", str(ICON_DIR / "battery-charging-2.svg")),
+    IconSpec("battery_charging", str(CUSTOM_DIR / "battery-charging.svg")),
     IconSpec("sd_card",          str(ICON_DIR / "device-sd-card.svg")),
     IconSpec("volume_high",      str(ICON_DIR / "volume.svg")),
     IconSpec("volume_low",       str(ICON_DIR / "volume-2.svg")),

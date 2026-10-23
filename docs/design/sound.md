@@ -124,7 +124,7 @@ SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブ
   録音先は`SdWriteAllowed()`(省略すると`<app_dir>/rec_NNNN.wav`、`.wav`以外はエラー、親フォルダは作る)。
   **増幅・周波数は`persist=false`で変え、`LuaEngine`の破棄(`ReleaseMic()`)で元へ戻す**(mic.cfgへは書かない)。そのアプリが始めた録音・メーターもそこで止める。
   録音の後片付け中は周波数を変えられないので、戻すのは`MicFunctions::RestoreSampleRate()`(終わってから当てる)。録音中は`LuaScene`が`KeepAwake()`(`MicBusy()`)。
-  バックグラウンドのスクリプトでは使えない。ドキュメントは`lua-api-doc/content/api/mic.md`、動作確認は「動作確認」アプリの「マイク」(`mic.lua`。メニューのボタンは28pxにした)。
+  バックグラウンドのスクリプトでは使えない。ドキュメントは`lua-api-doc/content/api/media/mic.md`、動作確認は「動作確認」アプリの「マイク」(`mic.lua`。メニューのボタンは28pxにした)。
   検証: `lua_ext_test`(権限・引数・録音先・同時に1本・mic_level/info・止める・閉じたらメーター/増幅/周波数を戻す・録音したまま閉じても保存・mic.cfgへ書かない)、
   `app_repo_test`(`microphone`の権限)、PCビルドの`--tap`/`--shot`(`PICOOS_MIC=tone`でメーター・録音→停止→保存)。
 - 未: 録音中の一時停止、モノラル以外。
@@ -316,7 +316,7 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
   読み取り係は1つなので、**読めないWAVを頼むと今のWAVは止まる**(MMLの「読めなければ今の曲はそのまま」とは違う)。
 - スリープ: `PowerFunctions::Busy()`が`WavPlaying()`を見る。省電力中の2コア目は列に残りがあれば動き続ける(`AnythingSounding()`)。
 - Lua: `pico.wav_play(path[, {loop=, volume=}])` → true / `nil, 理由`(SDの権限に従う。引数の誤りは先に`luaL_error`)、`pico.wav_stop()`、`pico.wav_playing()`。
-  使ったアプリは閉じるときに止める(`used_wav_`)。ドキュメントは`lua-api-doc/content/api/sound.md`「WAV」。
+  使ったアプリは閉じるときに止める(`used_wav_`)。ドキュメントは`lua-api-doc/content/api/media/sound.md`「WAV」。
 - **一時停止・位置・シーク(2026-10-01)**: `WavPause(bool)`/`WavPaused()`/`WavPositionMs()`/`WavDurationMs()`/`WavSeekMs(ms)`。
   - 一時停止は`WavStream::setPaused()`(atomic)で、2コア目が列から取り出さなくなるだけ(積むのは続き、満杯で読み取りも止まる)。
     止めている間は`hasData()`が偽(省電力でI2Sを止めてよい。`Power_Functions::Busy()`も`Paused`を除く)で、途切れとも数えない。

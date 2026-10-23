@@ -1,0 +1,4 @@
+{{/* ホームを除いた祖先(guide / guide/ui …)を上から順に並べる */}}
+<nav class="breadcrumb">
+  {{ range .Ancestors.Reverse }}{{ if not .IsHome }}<a href="{{ .RelPermalink }}">{{ .Title }}</a> / {{ end }}{{ end }}<span>{{ .Title }}</span>
+</nav>

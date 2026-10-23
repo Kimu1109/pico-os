@@ -1,0 +1,255 @@
+---
+aliases: ["/api/sound/"]
+title: "音"
+weight: 10
+description: "sound_play / sound_stop / sound_playing / note_freq / beep / sound_available / music_play / music_play_text / music_stop / music_playing / wav_play / wav_stop / wav_playing"
+---
+
+**スピーカー(アンプ)がつながっていない本体でも、以下の関数はエラーにならず普通に呼べます**(音が出ないだけで、音の長さや「鳴っているか」は時間どおりに進みます)。アンプの有無でスクリプトを書き分ける必要はありません。
+
+音源はゲームボーイ風のチップチューンで、**チャンネルが8つ**あります(`1`〜`8`)。各チャンネルは同時に1音だけ鳴らせ、どのチャンネルでもどの波形でも使えます。音は画面とは別の処理で作られるので、`loop()` が重くても途切れません。
+
+アプリを閉じると、そのアプリが鳴らしていた音は全部止まります。
+
+## pico.sound_play
+
+<div class="sig">pico.sound_play(ch, freq, ms [, opts]) <span class="ret">-> boolean</span></div>
+
+チャンネル `ch` で音を鳴らします。そのチャンネルで鳴っていた音は止めて差し替えます。
+
+| 引数 | 説明 |
+|---|---|
+| `ch` | チャンネル `1`〜`8`。範囲外はエラー |
+| `freq` | 周波数(Hz、小数可)。`0` なら止めるだけ(休符)。上限は出力の周波数の半分(既定の22050Hzなら11025Hz、44100Hzなら22050Hz)。ノイズでは「ザー」の粗さ(大きいほど細かい。〜出力の周波数) |
+| `ms` | 長さ(ミリ秒)。`0` なら `pico.sound_stop()` するまで鳴り続ける。60000で頭打ち |
+| `opts` | 省略可。下の表 |
+
+| `opts` のキー | 既定 | 説明 |
+|---|---|---|
+| `wave` | `"pulse50"` | 波形。`"pulse12"` `"pulse25"` `"pulse50"` `"pulse75"`(矩形波。数字はデューティ%)、`"triangle"`(三角波)、`"saw"`(のこぎり波)、`"noise"`(ノイズ)、`"noise_short"`(周期の短い金属的なノイズ)。不明な名前はエラー |
+| `volume` | `15` | 鳴り始めの音量 `0`〜`15` |
+| `envelope` | `0` | 音量の変化。`0`=一定、`-1`〜`-7`=`|envelope|`/64秒ごとに1段下げる(0になったら音が終わる)、`1`〜`7`=1段ずつ上げる |
+| `pan` | `0` | 左右の定位。`-8`=左だけ、`0`=中央、`8`=右だけ(範囲外は端に丸める)。ステレオ出力のときだけ効く |
+
+戻り値は、要求を受け付けたら `true`。1フレームに大量に呼んで要求の列(32件)があふれると `false` です(その要求は捨てられます)。
+
+```lua
+-- ラ(440Hz)を0.5秒
+pico.sound_play(1, 440, 500)
+
+-- 音名から周波数を引き、三角波のベースを止めるまで鳴らす
+pico.sound_play(3, pico.note_freq("C2"), 0, { wave = "triangle" })
+
+-- ドラム(ノイズを素早く減衰させる)
+pico.sound_play(4, 600, 120, { wave = "noise", volume = 13, envelope = -1 })
+```
+
+設定アプリの音量が最後に掛かります。**4チャンネルまでは、最大の音量で同時に鳴らしても音割れしません**(歪みません)。5チャンネル目以降を同時に鳴らすと、鳴っている数に応じて全体の音量が少しずつ下がります(それでも歪みはしません)。
+
+## pico.sound_stop
+
+<div class="sig">pico.sound_stop([ch]) <span class="ret">-> (なし)</span></div>
+
+チャンネル `ch` の音を止めます。`ch` を省略すると全チャンネルを止めます。
+
+曲(`pico.music_play`)が鳴っている間は、**効果音だけ**を止めます(曲の音は止めません)。曲を止めるのは `pico.music_stop()` です。
+
+## pico.sound_playing
+
+<div class="sig">pico.sound_playing([ch]) <span class="ret">-> boolean</span></div>
+
+チャンネル `ch` が鳴っていれば `true`。`ch` を省略すると、どれか1つでも鳴っていれば `true` です(曲の音も含みます)。長さを指定した音や、減衰して消えた音は、終わった時点で `false` になります。
+
+`ch` を指定した場合は音源が最後に知らせた状態なので、`pico.sound_play()` の直後だけは数ミリ秒遅れて `true` になることがあります(`ch` を省略した場合は直後から `true`)。
+
+## pico.note_freq
+
+<div class="sig">pico.note_freq(note) <span class="ret">-> number | nil</span></div>
+
+音名またはMIDIノート番号から周波数(Hz)を返します(平均律、A4 = 440Hz)。読めなければ `nil`。
+
+| 書き方 | 例 |
+|---|---|
+| 音名 | `"C4"`(真ん中のド)、`"A#3"`、`"Eb5"`。大文字小文字は問わない。オクターブは `-1`〜`9` |
+| ノート番号 | `60`(= C4)、`69`(= A4)。`0`〜`127` |
+
+## pico.beep
+
+<div class="sig">pico.beep(freq, ms) <span class="ret">-> (なし)</span></div>
+
+**チャンネル1**で矩形波(`pulse50`、音量15)を鳴らす簡易版です。`pico.sound_play(1, freq, ms)` とほぼ同じで、長さは10000(10秒)で頭打ちです。`freq` か `ms` が `0` ならチャンネル1を止めます。
+
+## pico.sound_available
+
+<div class="sig">pico.sound_available() <span class="ret">-> boolean</span></div>
+
+実際に音が出る状態なら `true` を返します。次のどちらかなら `false` です。
+
+- アンプがつながっていない
+- 設定アプリで消音にされている
+
+音だけで知らせると、音が出ない本体では何も起きないように見えます。そういう場面では、この値を見て画面でも知らせてください。アンプは実行中に抜き差しできるので、値も途中で変わります。
+
+```lua
+if not pico.sound_available() then
+    pico.set(label, "text", "時間です!")   -- 音の代わりに画面で知らせる
+end
+pico.beep(880, 500)
+```
+
+## pico.sound_rate
+
+<div class="sig">pico.sound_rate() <span class="ret">-> integer</span></div>
+
+今の音の出力の周波数(`22050` か `44100`)を返します。ふだんは設定アプリの「音」→「音質」の値で、`pico.sound_set_rate()` で頼んでいる間はその値です。
+
+## pico.sound_set_rate
+
+<div class="sig">pico.sound_set_rate(rate) <span class="ret">-> boolean</span></div>
+
+| 引数 | 内容 |
+|---|---|
+| `rate` | `44100` / `22050`、または `nil`(`0`)で設定へ戻す。それ以外はエラー |
+
+**このアプリが開いている間だけ**、音の出力の周波数を変えます(設定アプリの値より優先されます。保存はしません)。アプリを閉じる・別のアプリへ移ると設定の値へ戻り、`pico.push_scene()` / `pico.change_scene()` で開いた画面へは引き継がれます。44.1kHzのWAVをそのまま鳴らしたいアプリ向けです(標準のミュージックアプリも開いている間は44100Hzにします)。
+
+切り替えると**鳴っている効果音・曲・WAVは止まります**(出力を開き直すため)。鳴らす前に呼んでください。頼めなかったときは `false`。
+
+```lua
+function setup()
+    pico.sound_set_rate(44100)        -- このアプリの間だけ44.1kHz
+    pico.wav_play(pico.app_dir() .. "/song.wav")
+end
+```
+
+## 曲を鳴らす(pico-os MML)
+
+曲は **MML(テキスト)** で書き、`pico.music_play()` で鳴らします。書き方は [`docs/MUSIC_FORMAT.md`](https://github.com/Kimu1109/pico-os/blob/main/docs/MUSIC_FORMAT.md) を見てください。MIDIファイルは、リポジトリの `script/midi2mml.py`(`python3 script/midi2mml.py song.mid -o song.mml`)でMMLの下書きに変換できます。曲も画面とは別の処理で鳴るので、`loop()` が重くてもテンポは揺れません。
+
+```
+; demo.mml
+#title デモ
+#tempo 150
+A @pulse25 v12 E-4 o5 l8  L c e g e  c e g4
+C @triangle        o3 l4  L c   c    g   g
+```
+
+### pico.music_play
+
+<div class="sig">pico.music_play(path) <span class="ret">-> true | nil, err</span></div>
+
+SDの `.mml` を読んで鳴らします。鳴っている曲は差し替えます。読めなければ `nil` と理由(`"3行12列: v の後ろは0〜15です"` のような、行・列つきの文字列)を返し、鳴っている曲はそのまま鳴り続けます。
+
+SDの権限に従います。`sd_outside_app_dir` の無いアプリは、自分のフォルダの中の曲だけを鳴らせます。
+
+```lua
+local ok, err = pico.music_play("/lua/apps/わたしのゲーム/bgm.mml")
+if not ok then pico.show_error("BGMを読めません\n" .. err) end
+```
+
+### pico.music_play_text
+
+<div class="sig">pico.music_play_text(mml) <span class="ret">-> true | nil, err</span></div>
+
+文字列に書いたMMLをそのまま鳴らします(アプリに短い曲を埋め込む用)。戻り値は `pico.music_play` と同じです。
+
+```lua
+pico.music_play_text([[
+A @pulse50 v12 E-3 o5 l16 c e g > c
+]])
+```
+
+### pico.music_stop
+
+<div class="sig">pico.music_stop() <span class="ret">-> (なし)</span></div>
+
+曲を止めます。効果音は止めません。
+
+### pico.music_playing
+
+<div class="sig">pico.music_playing() <span class="ret">-> boolean</span></div>
+
+曲が鳴っていれば `true`。`pico.music_play()` / `pico.music_stop()` の直後から、その結果の値を返します。`L`(ループ位置)の無い曲は、最後まで行くと `false` になります。
+
+### 効果音との同居
+
+曲を鳴らしている間に `pico.sound_play()` や `pico.beep()` を呼ぶと、**効果音がそのチャンネルを借ります**。借りている間、曲のそのチャンネルは黙りますが進行は止まらず、効果音が終わったら次の音符から曲へ戻ります。BGMと効果音を同時に使うゲームでは、効果音を曲があまり使わないチャンネル(例えば4)で鳴らすと、曲が途切れにくくなります。
+
+アプリを閉じると、曲も効果音も止まります。
+
+## WAV
+
+SDの `.wav` をそのまま鳴らします。読めるのは整数PCM(8/16/24/32bit)と浮動小数点(32bit)で、何チャンネルでも全チャンネルを平均したモノラルで、何Hzでも出力の周波数(設定アプリの「音」→「音質」で22050Hzか44100Hz。既定は22050Hz)へ直して鳴らします(下げるときは高い音を削ってから直します)。ADPCM・MP3等の圧縮形式は読めません。
+
+ファイルは鳴らしながら少しずつSDから読むので、長い曲でもRAMを食いません。ただし、先読みは約0.37秒分なので、`loop()` がそれより長く止まるとその間は音が途切れます(`pico.http_request()` でHTTPSの接続を始めた瞬間など)。
+
+曲(MML)・効果音とは足し合わせて鳴ります(チャンネルの貸し借りはありません)。同時に鳴らせるWAVは1つで、鳴らすと前のWAVは止まります。容量を抑えたいなら、11025Hz・8bit・モノラルで書き出すと1秒あたり約11KBで済みます。
+
+### pico.wav_play
+
+<div class="sig">pico.wav_play(path[, opts]) <span class="ret">-> true | nil, err</span></div>
+
+`opts` は表で、`loop`(真なら終わりまで来たら頭から。既定は偽)と `volume`(0〜100。既定は100。設定アプリの音量と両方掛かります)を書けます。読めなければ `nil` と理由を返します(**そのとき鳴っていたWAVは止まります**)。SDの権限は `pico.music_play` と同じです。
+
+```lua
+local ok, err = pico.wav_play("/lua/apps/わたしのゲーム/bgm.wav", { loop = true, volume = 60 })
+if not ok then pico.log("BGMを鳴らせません: " .. err) end
+```
+
+### pico.wav_stop
+
+<div class="sig">pico.wav_stop() <span class="ret">-> (なし)</span></div>
+
+WAVを止めます。曲と効果音は止めません。
+
+### pico.wav_playing
+
+<div class="sig">pico.wav_playing() <span class="ret">-> boolean</span></div>
+
+WAVを読んでいる途中か、まだ鳴らしていない分が残っていれば `true`。`loop` の無いWAVは最後まで鳴らすと `false` になります。
+
+アプリを閉じるとWAVも止まります。
+
+### pico.wav_pause
+
+<div class="sig">pico.wav_pause(paused?: boolean) <span class="ret">-> boolean</span></div>
+
+WAVを一時停止(`true`、省略時)/再開(`false`)します。鳴らしているWAVがあれば `true`。止めている間も `wav_playing()` は `true` のままで、新しく `wav_play` すると解けます。
+
+### pico.wav_paused
+
+<div class="sig">pico.wav_paused() <span class="ret">-> boolean</span></div>
+
+### pico.wav_position / pico.wav_duration
+
+<div class="sig">pico.wav_position() <span class="ret">-> ms: integer</span></div>
+<div class="sig">pico.wav_duration() <span class="ret">-> ms: integer</span></div>
+
+再生位置と全体の長さ(ミリ秒)。長さは**最後に鳴らしたWAV**のもの(一度も鳴らしていなければ `0`。止めた後も残ります)。位置は出力のバッファ分(約23ms)だけ先を指します。ループ中は長さで巡ります。
+
+### pico.wav_seek
+
+<div class="sig">pico.wav_seek(ms: integer) <span class="ret">-> boolean</span></div>
+
+`ms` ミリ秒の位置へ飛びます。飛べなかったとき(WAVを一度も鳴らしていない・`ms` が負など)は `false`。
+
+
+## 例: 1拍ずつ鳴らす
+
+曲の形式を使わずに、`loop(dt)` で時間を数えて1拍ずつ `pico.sound_play()` することもできます(自動で作る音や、画面の動きに合わせる音向け)。こちらは `loop()` で数えるので、`loop()` が重いとテンポが揺れます。
+
+```lua
+local STEP_MS = 150
+local melody = { "C5", "E5", "G5", "E5" }
+local step, elapsed = 0, 0
+
+function loop(dt)
+    elapsed = elapsed + dt
+    while elapsed >= STEP_MS do
+        elapsed = elapsed - STEP_MS
+        step = step % #melody + 1
+        pico.sound_play(1, pico.note_freq(melody[step]), STEP_MS - 20,
+                        { wave = "pulse25", envelope = -4 })
+    end
+end
+```

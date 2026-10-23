@@ -7,7 +7,7 @@
 --
 -- w/hのリサイズ(pico.set(id,"w"/"h",...))とpico.canvas_clear/save/loadは
 -- このアプリのために新設したLua API。CanvasRasterは元々100×100固定でリサイズも
--- クリア/保存/読み込みの手段も無かった。詳細はlua-api-doc/content/api/canvas.mdと
+-- クリア/保存/読み込みの手段も無かった。詳細はlua-api-doc/content/api/graphics/canvas.mdと
 -- guide/freehand-drawing.md、C++側の設計意図はsrc/lua/LuaEngine.hppの
 -- 「ラスタキャンバスの保存/読み込み」コメントを参照。
 --

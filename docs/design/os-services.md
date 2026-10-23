@@ -63,7 +63,7 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
   1回目のタップで下に詳しく、2回目で開く/取り消す(予約はどのアプリのものでも取り消せる)。`Revision()`が変わったら一覧を作り直す。画面を離れるときに全部既読にする。
 - Lua: `pico.notify{title=, body=, tag=, data=, sound=, delay_ms|at|daily|every_ms|when(+below)}` → id(すぐ出したら0)/ `nil, 理由`(権限無し・上限)、
   `pico.notify_cancel([id|tag])` → 件数、`pico.notify_list()`、`pico.launch_reason()`。**権限`LuaPermissions::notify`(app.cfgの`permission_notify`)が要る**
-  (アプリを閉じた後にも画面と音へ出るため既定では許さない)。引数の誤りは権限より先に`luaL_error`。ドキュメントは`lua-api-doc/content/api/notify.md`。
+  (アプリを閉じた後にも画面と音へ出るため既定では許さない)。引数の誤りは権限より先に`luaL_error`。ドキュメントは`lua-api-doc/content/api/system/notify.md`。
 - 動作確認は「動作確認」アプリの「通知」のページ(`pc/sdcard/lua/apps/動作確認/notify.lua`、`permission_notify=true`)。
 - RAMは静的に約9KB(予約16件×約380B + 履歴8件×約360B)。
 - 検証: `notification_test`(run.sh。種類ごとの発火・置き換え/上限・履歴の輪・控えめ・保存と読み込み・送り主の掃除・起動理由)、`lua_engine_test`(Lua API)、
@@ -167,7 +167,7 @@ Luaのバックグラウンドスクリプトを「定期の使い捨て」で�
   予算+`LuaEngine::kHeapReserveBytes`を割る間は見送る/延ばす。
 - 仕事の足し引きは`Refresh()`(登録簿のLuaアプリのapp.cfgを読み直す。スクリプトがアプリのフォルダの外を指していれば断る)。
   `LuaAppScanner::apps_changed`(関数ポインタ。`Background_List.cpp`が差す)経由で、アプリストアの入れ替え・USBドライブの後にも呼ばれる。
-- ドキュメントは`lua-api-doc/content/api/background.md`。
+- ドキュメントは`lua-api-doc/content/api/system/background.md`。
 
 - 検証: `background_test`(run.sh の lua-ext。登録簿と`background.cfg`、`MusicService`を本物の`SoundFunctions`で: 画面無しで次の曲へ・読めない曲を飛ばす・
   最後で止まる・選んだ曲が読めなければ止まる・一時停止・他のアプリに取られる・周波数の切り替え・リピート全曲・[停止]、`ChatWatch::OnRooms`と設定が無いとき、

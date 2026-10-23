@@ -2,6 +2,7 @@
 <article class="doc">
   <div class="doc-body doc-body-wide">
     <div class="kicker px"><span>{{ upper (replace .Section "-" " ") }}</span></div>
+    {{ if ne .Parent .Site.Home }}{{ partial "breadcrumb.html" . }}{{ end }}
     <h1>{{ .Title }}</h1>
     {{ if .Description }}<p class="lead">{{ .Description }}</p>{{ end }}
     {{ .Content }}

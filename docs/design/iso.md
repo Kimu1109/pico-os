@@ -12,7 +12,7 @@
 
 **2.5Dのエンジン(ワールド・生成・保存・描画・影・引き当て)は C++ にある(2026-10-07に Lua の `view.lua`/`world.lua`/`demo.lua`/`migrate.lua` から移した)**:
 `src/iso/Iso_World.hpp/.cpp`(エンジン本体。LovyanGFXを知らず、描き先は関数ポインタの `Sink`)・`src/iso/Iso_Blit.hpp`(面の絵の写し方)・
-`src/lua/LuaEngine_Iso.cpp`(Luaの `pico.iso.*`。ドキュメントは `lua-api-doc/content/api/iso.md`)。アプリに残るのは
+`src/lua/LuaEngine_Iso.cpp`(Luaの `pico.iso.*`。ドキュメントは `lua-api-doc/content/api/game/iso.md`)。アプリに残るのは
 `main.lua`(`require("game")` だけ)/ `game.lua`(画面の流れ・操作)/ `palette.lua`・`faces.pimg`・`icon.pimg`(`script/assets/generate_blocks_sheet.py` が作る)。
 
 - **移した理由と結果**: Luaでは描画の処理だけでPCで約1.4ms/画面(絵を写す呼び出しを除く)、Luaのメモリがゲーム中に約171〜180KB/200KB
@@ -119,7 +119,7 @@
   検証: `iso_world_test`(段差の上限・頭の上・避けるブロック・値段で道が変わる・斜めの角・edge・partial/上限/誤り・橋の上下・
   **乱数の高さの地形40個で素朴なダイクストラと値段が一致し、道が規則を守ること**)、`lua_ext_test`(Lua APIの引数・回り道・edgeのエラー)。
   **実機での時間は未計測**。ゾンビTDの兵士の移動で使っている。
-- **タワーディフェンス向けの道具(2026-10-08、`docs/ZOMBIE_TD.md`のゲームのため)**: 使い方は`lua-api-doc/content/api/iso.md`「タワーディフェンス向けの道具」。
+- **タワーディフェンス向けの道具(2026-10-08、`docs/ZOMBIE_TD.md`のゲームのため)**: 使い方は`lua-api-doc/content/api/game/iso.md`「タワーディフェンス向けの道具」。
   - **流れの場(`src/iso/Iso_Flow`、`pico.iso.flow_build/flow_step/flow_get/flow_info/flow_clear`)**: 目的地の柱(256個まで)から全部の柱へ
     ダイクストラで「値段」と「次の柱」を求める(大勢が1体ずつ経路探索しない)。規則は`PathRules`そのもの。登り/降りの向きは「歩く側から見た向き」
     (柱 m から目的地側の柱 c へ`CanStep`)で、値段は c へ入る値段(経路探索と同じなので、高さの地形なら`FindPath`と値段が一致することをテストで確かめた)。

@@ -150,6 +150,19 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .nav-page.active > a { background: var(--fg); color: var(--bg); }
 .nav-page.active > a::before { background: var(--bg); }
 .nav-page.hidden { display: none; }
+/* 小分け(api/ui 等)。開け閉めは <details> に任せる */
+.nav-group { margin: 2px 0; }
+.nav-group summary { list-style: none; cursor: pointer; }
+.nav-group summary::-webkit-details-marker { display: none; }
+.nav-group-title { display: flex; align-items: center; padding: 2px 8px 2px 6px; font-size: 14.5px; border: 2px solid transparent; }
+.nav-group-title::before { content: "+"; width: 12px; color: var(--muted); font-family: "Press Start 2P", monospace; font-size: 8px; }
+.nav-group details[open] > .nav-group-title::before { content: "-"; }
+.nav-group-title a { color: var(--muted); text-decoration: none; }
+.nav-group-title a:hover { color: var(--fg); text-decoration: underline; }
+.nav-group-title.active { background: var(--fg); }
+.nav-group-title.active a, .nav-group-title.active::before { color: var(--bg); }
+.nav-group ul { padding-left: 10px; }
+.nav-group.hidden { display: none; }
 
 .sidebar-footer {
   padding: 14px 16px 0;

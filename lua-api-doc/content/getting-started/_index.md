@@ -4,26 +4,53 @@ weight: 10
 description: "最初のLuaアプリを書き、SDカードに置いてランチャから起動するまで"
 ---
 
-## Luaアプリの仕組み
+## アプリを置く場所
 
-pico-os の Lua アプリは、1つの `.lua` ファイルが1つの画面(`LuaScene`)に対応します。`LuaScene` は内部で `LuaEngine`(1つの `lua_State` を持つ実行エンジン)を1つ生成し、スクリプトを最初から最後まで実行します。
+SDカードの `/lua/apps/` の下にフォルダを1つ作り、その中に `main.lua` を置きます。次に起動したとき、ランチャにアプリのタイルが並びます(アプリストアから入れたアプリは再起動しなくても並びます)。
 
-スクリプトのトップレベルコードは、画面が開かれた瞬間(`onEnter()`)に1回だけ実行されます。ウィジェットの生成や `pico.on()` によるイベント登録は、通常このトップレベルで行います。
-
-```lua
--- これはトップレベル。画面が開かれた瞬間に1回だけ実行される
-local label = pico.create("Label")
-pico.set(label, "text", "Hello, pico-os!")
+```
+/lua/apps/はじめてのアプリ/main.lua
 ```
 
-## setup() / loop(dt)
+- フォルダ名がアプリの名前になります(`app.cfg` の `name` で変えられます)。
+- このフォルダがアプリの「持ち場」です。アプリは既定でこのフォルダの中だけを読み書きできます([権限](../guide/app/permissions/))。
+- アイコンや権限などの設定は、同じフォルダの `app.cfg` に書きます([アプリのフォルダと app.cfg](app-folder/))。
 
-Arduino風に、グローバル関数 `setup()` と `loop(dt)` を定義すると呼び出されます。どちらも定義は任意です。
+## 最初のスクリプト
 
-| 関数 | 呼ばれるタイミング |
+ボタンを押すとカウンタが増えるだけのアプリです。
+
+```lua
+local x, y, w, h = pico.content_rect()   -- ステータスバーを除いた、アプリが使える範囲
+
+local count = 0
+local label = pico.create("Label")
+pico.set(label, "x", x + 10)
+pico.set(label, "y", y + 10)
+pico.set(label, "text", "count: 0")
+
+local button = pico.create("Button")
+pico.set(button, "x", x + 10)
+pico.set(button, "y", y + 50)
+pico.set(button, "w", 80)
+pico.set(button, "h", 30)
+pico.set(button, "text", "+1")
+pico.on(button, "press_start", function()
+    count = count + 1
+    pico.set(label, "text", "count: " .. count)
+end)
+```
+
+スクリプトは**アプリを開いた瞬間に上から1回だけ**実行されます。ウィジェットを作る(`pico.create`)・イベントを登録する(`pico.on`)のは、ふつうこのトップレベルで行います。ウィジェットの位置は `pico.content_rect()` を基準にします。
+
+## setup() と loop(dt)
+
+グローバル関数 `setup()` と `loop(dt)` を定義すると、OSが呼びます。どちらも書かなくてかまいません。
+
+| 関数 | 呼ばれるとき |
 |---|---|
 | `setup()` | トップレベルの実行が終わった直後に1回 |
-| `loop(dt)` | 毎フレーム。`dt` は前回の呼び出しからの経過ミリ秒(整数) |
+| `loop(dt)` | 毎フレーム。`dt` は前の呼び出しからの経過ミリ秒(整数) |
 
 ```lua
 function setup()
@@ -31,15 +58,15 @@ function setup()
 end
 
 function loop(dt)
-    -- 毎フレーム呼ばれる。dtはミリ秒
+    -- アニメーションや時間で進む処理を書く
 end
 ```
 
-`loop()` の実行中にエラーが起きると、以降そのアプリの `loop()` は呼ばれなくなります(毎フレーム同じエラーダイアログが積み上がるのを防ぐための安全弁)。`setup()` は1回きりなのでこの仕組みはありません。
+`loop()` の中でエラーが起きると、それ以降そのアプリの `loop()` は呼ばれなくなります(同じエラーのダイアログが毎フレーム出続けないように)。一定時間ごとの処理は [タイマー](../api/system/timers/)(`pico.after` / `pico.every`)でも書けます。
 
 ## 画面を閉じる
 
-ランチャへ戻るには `pico.pop()` を呼びます。C++製アプリの「戻る」ボタンと同じ仕組みで、ボタンの `press_start` イベントから呼ぶのが定番です。
+ランチャへ戻るには `pico.pop()` を呼びます。「戻る」ボタンから呼ぶのが定番です。
 
 ```lua
 local back = pico.create("Button")
@@ -49,56 +76,27 @@ pico.on(back, "press_start", function()
 end)
 ```
 
-`LuaScene` は `Pop()` で戻ってきたときに**スクリプトを最初から実行し直します**。Lua側の変数に持たせた状態(スコア・カウンタなど)は画面を出るたびにリセットされる点に注意してください。実行中の状態を残したい場合は `pico.sd_write()` でSDへ保存し、次回 `pico.sd_read()` で読み戻す設計にします。
+Escキーやコントローラーの HOME でも戻れます(横取りしたいときは [`pico.on_back`](../api/ui/scenes/#picoon_back--picogo_back))。
 
-## ステータスバーを避けて配置する
+**アプリを閉じると、Luaの変数は全部消えます。** 次に開いたときはスクリプトを最初から実行し直します。最高得点や設定のように残したい値は [`pico.store_save()`](../api/ui/scenes/#picostore_load--picostore_save) で保存してください。
 
-`pico.content_rect()` は、画面上部のステータスバーを除いた「アプリが自由に使える領域」を `x, y, w, h` の4値で返します。ウィジェットの初期配置はこれを基準にするのが基本です。
+## エラーとログ
 
-```lua
-local x, y, w, h = pico.content_rect()
-```
+- 捕まえていないエラーは、ファイル名・行番号とスタックトレースつきのダイアログで出ます。
+- `print()` と `pico.log()` はシステムログへ出ます。
+- 詳しい調べ方は [デバッガとサンドボックス](../guide/app/debugging/) にあります。
 
-## SDカードへ配置してランチャに登録する
+## 実行時間とメモリの上限
 
-Luaアプリを置く場所は2通りあります。
+終わらないループ(`while true do end`)を書いてしまってもOSが固まらないよう、1回の呼び出しで実行できる命令数に上限があります。超えるとエラーとして打ち切られます。Luaが使えるメモリも1アプリ200KBまでです。詳しくは [実行時間とメモリの上限](../guide/app/execution-limits/) を見てください。
 
-### 方法A: `/lua/apps/<アプリ名>/main.lua`(推奨)
+## PCで試す
 
-SDカードの `/lua/apps/` 直下にサブディレクトリを1つ作り、その中に `main.lua` を置くだけで、**起動時の自動走査(`LuaAppScanner`)によってランチャにタイルが追加されます**。ディレクトリ名がそのままアプリ名(タイル名)になります。
-
-```
-/lua/apps/マインスイーパー/main.lua
-```
-
-- C++側のコードを一切書かずに済みます。
-- 自動登録されたアプリの権限は常に既定値(`network=false`, `sd_outside_app_dir=false`)です。ネットワークやアプリ専用ディレクトリの外へのSDアクセスが必要な場合は方法Bを使ってください。
-- サブディレクトリ単位で登録されるのは、`main.lua` の親ディレクトリがそのままアプリの「持ち場」(`app_dir`。後述の権限モデル参照)になるためです。他のアプリのファイルを誤って読み書きできないよう、アプリごとにディレクトリを分けます。
-
-### 方法B: C++側に手動登録する(強い権限が要る場合)
-
-ネットワークやSD全域へのアクセスが必要なアプリは、`src/boot/App_List.cpp` に専用の生成関数を書いて登録します。
-
-```cpp
-Scene* MakeMyLuaAppScene(const AppEntry& entry) {
-    LuaPermissions permissions;
-    permissions.network = true;             // pico.http_request を使う場合
-    permissions.sd_outside_app_dir = true;  // app_dir外のSDアクセスが要る場合
-    return new LuaScene(entry.arg.c_str(), permissions);
-}
-
-// App_List.cpp::Setup() 内
-Register("My App", IconID::AppBox, &MakeMyLuaAppScene, "/lua/my_app.lua");
-```
-
-権限の詳細は [権限モデル](../guide/permissions/) を参照してください。
-
-## 実行時間の上限
-
-`while true do end` のような終わらないループを書いてしまった場合に備え、Luaのバイトコード命令数に上限(暫定 200万命令/1回の呼び出し)を設けています。上限に達すると実行時エラーとして打ち切られ、エラーダイアログが表示されます。詳細は [実行時間の安全網](../guide/execution-limits/) を参照してください。
+リポジトリのPC版(`pc/`)でもアプリを動かせます。リポジトリの `pc/sdcard/` がSDカードの代わりなので、`pc/sdcard/lua/apps/<アプリ名>/main.lua` に置いてPC版を起動します(ビルドの仕方はリポジトリの `pc/README.md`)。ブラウザで動く [Playground](../../playground/) では、OSに入っているサンプルアプリを試せます。
 
 ## 次に読むもの
 
-- [ガイド](../guide/) — ウィジェット・描画・SD・通信・ダイアログの使い方を1つずつ解説
-- [APIリファレンス](../api/) — `pico.*` 全関数のシグネチャ
-- [サンプル](../examples/) — 実際に動作確認済みのコード一式
+- [アプリのフォルダと app.cfg](app-folder/) — アイコン・権限・ファイルの分け方
+- [ガイド](../guide/) — ウィジェット・描画・保存・通信の使い方
+- [APIリファレンス](../api/) — `pico.*` 全関数
+- [サンプル](../examples/) — そのまま動くアプリ

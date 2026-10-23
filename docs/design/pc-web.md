@@ -90,3 +90,8 @@
   コードの色は`hugo.toml`で`noClasses = false`にしてクラスで出させ、CSSでOSのパレットに塗る。テーマの鍵`picoos-theme`も共通)。Webビルドの外枠(`shell.html`)に「Lua API リファレンス」へのリンクを置いた
   (手元の `pc/build-web` には `lua-api/` が無いのでリンク切れになる)。
   手元で見るなら `hugo server --source lua-api-doc`。
+- **Lua APIリファレンスの構成**(2026-10-23): 読者は**Luaでアプリを書く人だけ**とし、C++の型名・内部の関数名・`/sys/*.cfg`
+  の中身・実装の経緯は載せない(それはこの `docs/design/` に書く)。ガイドとAPIは機能ごとの小分け
+  (`guide/{ui,graphics,data,app}/`・`api/{ui,graphics,game,data,media,system}/`)にし、サイドバーは小分けを `<details>` で畳んで
+  今のページを含むものだけ開く(`layouts/partials/sidebar.html`)。移したページは front matter の `aliases` で旧URLから飛ばす。
+  定数(`reference/constants.md`)はアイコンを番号ではなく名前だけで載せる(`pico.ICON_<名前>` で引けば番号の変化に追従するため)。

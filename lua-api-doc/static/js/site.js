@@ -18,6 +18,14 @@
         var text = li.textContent.toLowerCase();
         li.classList.toggle("hidden", q.length > 0 && text.indexOf(q) === -1);
       });
+      // 小分けは、検索中は全部開き、当たりが無ければ隠す
+      document.querySelectorAll(".nav-group").forEach(function (g) {
+        var details = g.querySelector("details");
+        if (details.dataset.wasOpen === undefined) details.dataset.wasOpen = details.open ? "1" : "";
+        var anyVisible = g.querySelectorAll(".nav-page:not(.hidden)").length > 0;
+        g.classList.toggle("hidden", q.length > 0 && !anyVisible);
+        details.open = q.length > 0 ? true : details.dataset.wasOpen === "1";
+      });
       document.querySelectorAll(".nav-section").forEach(function (sec) {
         var anyVisible = sec.querySelectorAll(".nav-page:not(.hidden)").length > 0;
         sec.style.display = (q.length > 0 && !anyVisible) ? "none" : "";

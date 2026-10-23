@@ -22,7 +22,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `enabled` | Bool | ✓ | ✓ |
 | `focusable` | Bool | ✓ | ✓ |
 
-`hit_transparent` を `true` にすると、そのウィジェットはタップを受けず下のウィジェットへ素通りさせます(表示専用の部品を上に重ねたいとき)。`enabled` を `false` にすると操作を受け付けなくなります(タップは受け止めるだけで、コールバックは呼ばれず、下へも抜けません)。親が無効なら子も無効です。`Button` は文字が灰色になります。`focusable` はキーボード・コントローラーのフォーカスを受けるか(既定は種類で決まる。[pico.focus](../../api/widgets/#picofocus--picoget_focus))。
+`hit_transparent` を `true` にすると、そのウィジェットはタップを受けず下のウィジェットへ素通りさせます(表示専用の部品を上に重ねたいとき)。`enabled` を `false` にすると操作を受け付けなくなります(タップは受け止めるだけで、コールバックは呼ばれず、下へも抜けません)。親が無効なら子も無効です。`Button` は文字が灰色になります。`focusable` はキーボード・コントローラーのフォーカスを受けるか(既定は種類で決まる。[pico.focus](../../api/ui/widgets/#picofocus--picoget_focus))。
 
 `w` / `h` の**取得**は常にできますが(現在の実寸が返ります)、**設定**できるかはウィジェットごとに異なります。下表で `w`/`h` の行がある種別のみ `pico.set` に対応しています。
 
@@ -157,7 +157,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 `w`/`h`を設定すると内部のスプライトを作り直すため、**それまで描いた内容は消えます**(白紙に戻ります)。生成直後に一度だけ呼ぶ使い方を想定しており、描き始めた後にリサイズする用途には向きません。
 
-保存・読み込み・全消去・元に戻すは `pico.canvas_save()` / `pico.canvas_load()` / `pico.canvas_clear()` / `pico.canvas_undo()` を使います。詳細は [ラスタキャンバス](../../api/canvas/) を参照してください。
+保存・読み込み・全消去・元に戻すは `pico.canvas_save()` / `pico.canvas_load()` / `pico.canvas_clear()` / `pico.canvas_undo()` を使います。詳細は [ラスタキャンバス](../../api/graphics/canvas/) を参照してください。
 
 ## LayoutContainer
 
@@ -210,7 +210,7 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `w` | Int | ✓ | ✓ |
 | `h` | Int | ✓ | ✓ |
 
-これ以外の固有プロパティはありません。内容は `pico.on(id, "render", fn)` で描きます([Canvasと直接描画](../../guide/drawing/) 参照)。
+これ以外の固有プロパティはありません。内容は `pico.on(id, "render", fn)` で描きます([Canvasと直接描画](../../guide/graphics/drawing/) 参照)。
 
 ## Rect(`RectShape`)
 

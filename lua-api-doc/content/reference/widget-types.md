@@ -38,7 +38,7 @@ description: "pico.createで生成できる種別と、生成直後の初期値"
 | `"DurationPicker"` | x=0, y=0, 150×60 | w, h, total_ms, editable, font_size, text_color, border_color |
 | `"MonthGrid"` | x=0, y=0, 210×150 | w, h, year, month, today, selected, border_color, item_count(その月の日数・読み取り専用) |
 
-図形ウィジェット4種(`Rect`/`Ellipse`/`Line`/`Triangle`)の詳しい使い方は [図形ウィジェット](../../guide/shapes/) を参照してください。
+図形ウィジェット4種(`Rect`/`Ellipse`/`Line`/`Triangle`)の詳しい使い方は [図形ウィジェット](../../guide/ui/shapes/) を参照してください。
 
 下の7種(`ProgressBar` `TextView` `ImageView` `MarkdownView` `AnalogClock` `DurationPicker` `MonthGrid`)は、OSの標準アプリが使っているものをLuaにも開いたものです。`TextView` / `MarkdownView` は長い文章を軽く表示できます(見えている行だけを描きます)。`MarkdownView` は1つで約40KBのRAMを使うので、複数同時に作らないでください。`ImageView` はスクロールできる画像で、大きな画像でも表示欄ぶんだけをメモリに持ちます。
 
@@ -46,7 +46,7 @@ description: "pico.createで生成できる種別と、生成直後の初期値"
 
 ## pico.show_xxx() でのみ生成できる6種別
 
-`pico.create()` の対象外です(コンストラクタが必須引数を取るため)。[ダイアログ](../../guide/dialogs/) を参照してください。
+`pico.create()` の対象外です(コンストラクタが必須引数を取るため)。[ダイアログ](../../guide/ui/dialogs/) を参照してください。
 
 | ダイアログ | 生成関数 |
 |---|---|

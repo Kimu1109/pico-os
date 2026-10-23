@@ -91,11 +91,11 @@ Scene* MakeMyLuaAppScene(const AppEntry& entry) {
 Register("My App", IconID::AppBox, &MakeMyLuaAppScene, "/lua/my_app.lua");
 ```
 
-権限の詳細は [権限モデル](../guide/permissions/) を参照してください。
+権限の詳細は [権限モデル](../guide/app/permissions/) を参照してください。
 
 ## 実行時間の上限
 
-`while true do end` のような終わらないループを書いてしまった場合に備え、Luaのバイトコード命令数に上限(暫定 200万命令/1回の呼び出し)を設けています。上限に達すると実行時エラーとして打ち切られ、エラーダイアログが表示されます。詳細は [実行時間の安全網](../guide/execution-limits/) を参照してください。
+`while true do end` のような終わらないループを書いてしまった場合に備え、Luaのバイトコード命令数に上限(暫定 200万命令/1回の呼び出し)を設けています。上限に達すると実行時エラーとして打ち切られ、エラーダイアログが表示されます。詳細は [実行時間の安全網](../guide/app/execution-limits/) を参照してください。
 
 ## 次に読むもの
 

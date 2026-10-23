@@ -18,9 +18,26 @@
       </div>
       <ul>
         {{ range .Pages.ByWeight }}
+        {{ if .IsSection }}
+        {{/* 小分け(api/ui 等)は畳んでおき、今のページを含むものだけ開く */}}
+        {{ $open := or (eq $current.RelPermalink .RelPermalink) ($current.IsDescendant .) }}
+        <li class="nav-group">
+          <details{{ if $open }} open{{ end }}>
+            <summary class="nav-group-title{{ if eq $current.RelPermalink .RelPermalink }} active{{ end }}"><a href="{{ .RelPermalink }}">{{ .Title }}</a></summary>
+            <ul>
+              {{ range .Pages.ByWeight }}
+              <li class="nav-page{{ if eq $current.RelPermalink .RelPermalink }} active{{ end }}">
+                <a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a>
+              </li>
+              {{ end }}
+            </ul>
+          </details>
+        </li>
+        {{ else }}
         <li class="nav-page{{ if eq $current.RelPermalink .RelPermalink }} active{{ end }}">
           <a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a>
         </li>
+        {{ end }}
         {{ end }}
       </ul>
     </li>

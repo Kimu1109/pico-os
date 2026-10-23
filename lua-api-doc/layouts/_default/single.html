@@ -4,9 +4,7 @@
     <div class="kicker px">
       {{ if .CurrentSection }}<a href="{{ .CurrentSection.RelPermalink }}">{{ upper (replace .Section "-" " ") }}</a>{{ end }}
     </div>
-    <nav class="breadcrumb">
-      {{ if .CurrentSection }}<a href="{{ .CurrentSection.RelPermalink }}">{{ .CurrentSection.Title }}</a> / {{ end }}<span>{{ .Title }}</span>
-    </nav>
+    {{ partial "breadcrumb.html" . }}
     <h1>{{ .Title }}</h1>
     {{ if .Description }}<p class="lead">{{ .Description }}</p>{{ end }}
     {{ .Content }}

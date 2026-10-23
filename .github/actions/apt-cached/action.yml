@@ -1,0 +1,78 @@
+# apt のパッケージを .deb ごとキャッシュして入れる(host-tests.yml / web-pages.yml から使う)。
+#
+#   Azure の apt ミラーは時々 60kB/s 程度まで遅くなり、ffmpeg や libsdl2-dev(依存込みで数十MB)の
+#   取得だけで 10〜20 分かかることがあった。一度取れた .deb を actions/cache に置き、次からは
+#   ネットに出ずに dpkg -i で入れる(dpkg なので postinst も普通に走る)。
+#
+#   ランナーのイメージに既にある物は取らないので、キャッシュの中身はイメージの版に依存する。
+#   キーにイメージの版(ImageVersion、週に1度ほど上がる)とパッケージの一覧を入れてある。
+#   キャッシュから入れられなかったとき(版のずれ等)は、普通に apt-get で入れ直す。
+name: apt-cached
+description: apt のパッケージを .deb ごとキャッシュして入れる
+inputs:
+  packages:
+    description: 入れるパッケージ(空白区切り)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: キャッシュのキーを決める
+      id: key
+      shell: bash
+      env:
+        PKGS: ${{ inputs.packages }}
+      run: |
+        hash=$(echo "$PKGS" | tr -s ' ' '\n' | sort -u | sha256sum | cut -c1-16)
+        echo "key=apt-debs-${ImageOS:-unknown}-${ImageVersion:-unknown}-$hash" >> "$GITHUB_OUTPUT"
+        echo "dir=$RUNNER_TEMP/apt-debs" >> "$GITHUB_OUTPUT"
+
+    - name: .deb をキャッシュから戻す
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.key }}
+
+    - name: パッケージを入れる
+      id: install
+      shell: bash
+      env:
+        PKGS: ${{ inputs.packages }}
+        DIR: ${{ steps.key.outputs.dir }}
+        HIT: ${{ steps.restore.outputs.cache-hit }}
+      run: |
+        # 遅いミラーで固まったままにならないよう、取得の打ち切りと再試行を付ける
+        APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+        if [ "$HIT" = "true" ]; then
+          if ls "$DIR"/*.deb >/dev/null 2>&1; then
+            rc=0; sudo dpkg -i "$DIR"/*.deb || rc=$?
+          else
+            rc=0   # イメージに全部入っていた(取る物が無かった)
+          fi
+          if [ "$rc" -eq 0 ]; then
+            echo "キャッシュから入れました"
+            echo "saved=skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::warning::キャッシュの .deb で入れられなかったので apt-get で入れ直します"
+        fi
+        rm -rf "$DIR"
+        mkdir -p "$DIR/partial"
+        sudo apt-get update $APT_OPTS
+        sudo apt-get install -y --no-install-recommends $APT_OPTS -f
+        # 足りない物だけを $DIR へ落としてから、そこから入れる(取り直さない)
+        sudo apt-get install -y --no-install-recommends $APT_OPTS --download-only \
+          -o Dir::Cache::archives="$DIR" $PKGS
+        sudo apt-get install -y --no-install-recommends $APT_OPTS \
+          -o Dir::Cache::archives="$DIR" $PKGS
+        sudo rm -rf "$DIR/partial" "$DIR/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$DIR"
+        # 同じキーが既にある(キャッシュから入れられなかった)ときは置き直せないので置かない
+        [ "$HIT" = "true" ] || echo "saved=yes" >> "$GITHUB_OUTPUT"
+
+    - name: .deb をキャッシュへ置く
+      if: steps.install.outputs.saved == 'yes'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.key }}

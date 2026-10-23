@@ -15,6 +15,8 @@
 //   対になっていないサロゲートと \u0000 は U+FFFD(�)にする(C文字列で扱うため)
 // - 数値は検査を緩くし、文字列のまま渡す(必要な側が strtol 等で読む)
 // - 入れ子は kMaxDepth 段まで。超えたら誤り
+// - kValueBytes より長い文字列(OAuthのトークン等)を丸ごと読みたいときは、Handler::stringBuffer() で
+//   その値だけ置き場を差し出す(読み手の作業場は大きくしない)
 class JsonReader {
     public:
         static constexpr int kMaxDepth = 16;
@@ -26,6 +28,9 @@ class JsonReader {
         class Handler {
             public:
                 virtual ~Handler() = default;
+                // 文字列の値を読み始める前に呼ぶ。置き場(cap バイト。NUL込み)を返すと、その値は内部の
+                // kValueBytes ではなくそこへ書き、onValue() の text もそこを指す。nullptr なら内部の置き場
+                virtual char* stringBuffer(const char* key, int depth, size_t& cap){ (void)key; (void)depth; (void)cap; return nullptr; }
                 // オブジェクト/配列に入った。key は親がオブジェクトならそのキー、そうでなければ nullptr。
                 // depth は入った後の深さ(一番外の {..} の中が1)
                 virtual void onBegin(const char* key, bool is_array, int depth){ (void)key; (void)is_array; (void)depth; }
@@ -78,6 +83,9 @@ class JsonReader {
         bool has_key_ = false;      // 今の値に対応するキーがある(親がオブジェクト)
 
         char value_[kValueBytes] = {};
+        // 今の文字列を書く置き場(ふだんは value_。Handler::stringBuffer() が差し出せばそちら)
+        char* str_buf_ = value_;
+        size_t str_cap_ = kValueBytes;
         size_t value_len_ = 0;
         bool truncated_ = false;
 

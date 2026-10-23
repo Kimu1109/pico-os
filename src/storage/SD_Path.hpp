@@ -87,6 +87,8 @@ namespace PICO_Path {
             constexpr const char* SYS_TODOIST_CFG = "/sys/todoist.cfg";
             // メールアプリ(IMAP)のアカウント("host" / "port" / "user" / "password = enc3:..." 等)。ImapClient参照
             constexpr const char* SYS_MAIL_CFG = "/sys/mail.cfg";
+            // メールアプリの Microsoft(Outlook.com)のサインインで受け取った更新用トークン。暗号化した値を1行255Bずつ並べる。MailOAuth参照
+            constexpr const char* SYS_MAIL_TOKEN = "/sys/mail_token.cfg";
             constexpr const char* SYS_CALENDAR_CFG = "/sys/calendar.cfg";
             constexpr const char* SYS_LOCK_CFG = "/sys/lock.cfg";
             // 音声出力("output = auto | off" / "volume = 0〜100")。SoundFunctions参照

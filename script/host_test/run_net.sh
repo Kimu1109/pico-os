@@ -22,7 +22,8 @@
 # ブラウザの代わりに戻り先へ code を返して、PKCE・state の照合・書き出したJSONを確かめる(本物のSpotifyへは行かない)。
 #
 # メール(mail_net_test)は script/host_test/imap_fake_server.py(IMAPの偽物)を平文とTLS(上と同じ使い捨ての証明書)の
-# 2つ立てて確かめる。本物のメールサーバへは行かない。
+# 2つ立てて確かめる。Microsoft のサインイン(XOAUTH2)は、同じ偽物に --oauth-port でサインインの偽物も立てたものを相手にする。
+# 本物のメールサーバ・login.microsoftonline.com へは行かない。
 #
 # アプリストア(app_store_net_test)は app_store_fixture.py が作った配布物を python3 -m http.server で配り、
 # 一覧の取得・署名・インストール・更新・古い一覧/改ざん/権限の拒否を確かめる。
@@ -227,6 +228,8 @@ echo "===== todoist_net_test ====="
 # ---- メール(ImapClient)。IMAPの偽物を平文とTLSで立てる ----
 MAIL_PORT=$((PORT + 9))
 MAIL_TLS_PORT=$((PORT + 10))
+MAIL_OAUTH_IMAP_PORT=$((PORT + 21))
+MAIL_OAUTH_PORT=$((PORT + 22))
 MAIL_FAKE="$ROOT/script/host_test/imap_fake_server.py"
 
 g++ -std=gnu++17 -g -fsanitize=address,undefined \
@@ -236,6 +239,10 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/apps/mail/Imap_Proto.cpp" \
     "$ROOT/src/apps/mail/Mail_Mime.cpp" \
     "$ROOT/src/apps/mail/Mail_Charset.cpp" \
+    "$ROOT/src/apps/mail/Mail_OAuth.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/net/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     -o "$OUT/mail_net_test" -lssl -lcrypto
 
@@ -244,18 +251,23 @@ MAIL_PIDS="$!"
 python3 "$MAIL_FAKE" --port "$MAIL_TLS_PORT" --spool "$OUT/mail_tls_spool" --seed \
     --cert "$OUT/server.pem" --key "$OUT/server.key" > "$OUT/mail_tls_server.log" 2>&1 &
 MAIL_PIDS="$MAIL_PIDS $!"
+python3 "$MAIL_FAKE" --port "$MAIL_OAUTH_IMAP_PORT" --spool "$OUT/mail_oauth_spool" --seed \
+    --oauth-port "$MAIL_OAUTH_PORT" --oauth-client-id test-client > "$OUT/mail_oauth_server.log" 2>&1 &
+MAIL_PIDS="$MAIL_PIDS $!"
 
 i=0
 while [ $i -lt 50 ]; do
     if grep -q "起動しました" "$OUT/mail_server.log" 2>/dev/null \
-       && grep -q "起動しました" "$OUT/mail_tls_server.log" 2>/dev/null; then break; fi
+       && grep -q "起動しました" "$OUT/mail_tls_server.log" 2>/dev/null \
+       && grep -q "起動しました" "$OUT/mail_oauth_server.log" 2>/dev/null; then break; fi
     i=$((i + 1))
     sleep 0.1
 done
 
 echo ""
 echo "===== mail_net_test ====="
-"$OUT/mail_net_test" "$MAIL_PORT" "$MAIL_TLS_PORT" "$OUT/ca.pem" "$OUT/mail_spool"
+"$OUT/mail_net_test" "$MAIL_PORT" "$MAIL_TLS_PORT" "$OUT/ca.pem" "$OUT/mail_spool" \
+    "$MAIL_OAUTH_IMAP_PORT" "$MAIL_OAUTH_PORT"
 kill $MAIL_PIDS 2>/dev/null || true
 
 # ---- Spotifyの最初のトークン(script/spotify_auth.py)。偽物のトークン/APIのサーバを相手に ----

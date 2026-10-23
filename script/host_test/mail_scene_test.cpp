@@ -2,6 +2,7 @@
 //
 // 読み取りの部品は mail_proto_test、通信は run_net.sh の mail_net_test の担当で、ここでは
 //   - アカウントが無いときの案内、生成/解放で漏れが無いこと(ASan)、入り直しても同じ数のウィジェット
+//   - Microsoft のアカウント(auth = microsoft)はアプリのIDが要り、パスワードは要らない
 //   - [設定] のサーバ名の読み方("host" / "host:port" / "imaps://host:port")
 //   - 一覧の日付の形(今日は時刻、今年は月/日、それより前は年から)
 // を見る。
@@ -100,6 +101,26 @@ static void testScene(){
     for(int i = 0; i < 5; i++) scene->onUpdate();
     check(!anyLabelContains("アカウントがありません"), "設定があれば案内は消える");
     check(anyLabelContains("Wi-Fiに繋がっていません"), "Wi-Fiが無ければ繋ぎに行かずに案内");
+    scene->onExit();
+    WidgetFunctions::ClearSceneWidgets();
+    delete scene;
+
+    //Microsoft のアカウント: アプリのIDが無ければ案内。あればパスワード無しで受け付ける
+    HostSd::files[PICO_Path::FILE::CFG::SYS_MAIL_CFG] = "auth = microsoft\nuser = me@outlook.jp\n";
+    scene = new MailScene();
+    scene->onEnter();
+    for(int i = 0; i < 5; i++) scene->onUpdate();
+    check(anyLabelContains("oauth-client-id"), "Microsoft: アプリのIDが無ければ案内");
+    scene->onExit();
+    WidgetFunctions::ClearSceneWidgets();
+    delete scene;
+    HostSd::files[PICO_Path::FILE::CFG::SYS_MAIL_CFG] = "auth = microsoft\nuser = me@outlook.jp\noauth-client-id = abc\n";
+    scene = new MailScene();
+    scene->onEnter();
+    eq_int((long)WidgetFunctions::widgets.size(), widgets, "Microsoft: ウィジェットの数は同じ");
+    for(int i = 0; i < 5; i++) scene->onUpdate();
+    check(!anyLabelContains("アカウントがありません") && anyLabelContains("Wi-Fiに繋がっていません"),
+          "Microsoft: パスワード無しで受け付ける");
     scene->onExit();
     WidgetFunctions::ClearSceneWidgets();
     delete scene;

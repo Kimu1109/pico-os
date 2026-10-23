@@ -1,6 +1,7 @@
 #pragma once
 
 #include "apps/mail/Imap_Proto.hpp"
+#include "apps/mail/Mail_OAuth.hpp"
 #include "apps/mail/Mail_Mime.hpp"
 #include "net/Http_Transport.hpp"
 #include "util/FixedString.hpp"
@@ -13,9 +14,10 @@
 // - 繋ぎ方は IMAPS(ポート993、最初からTLS)。TLSは net/HttpTransport を借りる(証明書の確かめ方も同じ)。
 //   `tls = false` で平文のIMAP(143)にもできるが、パスワードがそのまま流れるので自前のサーバの試験用。
 //   STARTTLS(平文で繋いでから暗号化に切り替える)は使えない
-// - 認証は LOGIN(ユーザー名とパスワード)だけ。Gmail はアプリパスワード、Outlook.com は
-//   OAuth しか受け付けないので使えない(docs/design/apps-online.md「メール」)
-// - 設定は /sys/mail.cfg(host / port / tls / user / password / mailbox / mark-read)。
+// - 認証は LOGIN(ユーザー名とパスワード。Gmail はアプリパスワード)か、Microsoft のアカウント
+//   (Outlook.com / Hotmail / outlook.jp)の AUTHENTICATE XOAUTH2。後者のトークンは MailOAuth が
+//   デバイスコードの流れで取る(docs/design/apps-online.md「メール」)
+// - 設定は /sys/mail.cfg(auth / host / port / tls / user / password / oauth-client-id / oauth-tenant / mailbox / mark-read)。
 //   パスワードは PICO_Secret で暗号化して置く(平文で書かれていたら、読んだときに暗号化して書き直す)
 // - 一覧は新しい方から kMaxMessages 通(FETCH で UID・既読・日時・大きさ・From/Subject/Date だけ)。
 //   取り終えてから入れ替えるので、途中で失敗しても前の一覧は残る
@@ -27,8 +29,8 @@
 // 受信は update() から少しずつ進める(フレームを止めない)。例外は接続(TLSのハンドシェイク込みで
 // connect() の中で同期的に待つ。HttpTransport と同じ制約)。
 //
-// **約30KBある**(一覧 kMaxMessages 通 × 2(表示中と受信中)+ 本文 kBodyCap + 応答の組み立て4KB +
-// TextExtractor 約3KB)。さらに繋いでいる間はTLSの約40KBを持つ。
+// **約46KBある**(一覧 kMaxMessages 通 × 2(表示中と受信中)+ 本文 kBodyCap + 応答の組み立て4KB +
+// TextExtractor 約3KB + MailOAuth 約13KB)。さらに繋いでいる間はTLSの約40KBを持つ。
 class ImapClient : private Imap::Reader::Handler {
     public:
         constexpr static int kMaxMessages = 20;
@@ -47,9 +49,15 @@ class ImapClient : private Imap::Reader::Handler {
             Ok,            // 最後の問い合わせは成功した
             Error,         // 最後の問い合わせは失敗した(しばらくして取り直す)
             AuthError,     // ログインできない(取り直さない)
+            NeedSignIn,    // Microsoft のサインインが要る(startSignIn() を待つ)
+            SigningIn,     // サインインの途中(利用者がブラウザでコードを入れるのを待っている)
         };
 
+        // 認証のしかた(mail.cfg の auth = password | microsoft)
+        enum class Auth : uint8_t { Password, Microsoft };
+
         struct Config {
+            Auth auth = Auth::Password;
             FixedString<PICO_STR_M> host;
             uint16_t port = kDefaultPort;
             bool tls = true;
@@ -57,6 +65,8 @@ class ImapClient : private Imap::Reader::Handler {
             FixedString<PICO_STR_L> password;
             FixedString<PICO_STR_M> mailbox;
             bool mark_read = true;
+            // auth = microsoft のとき(client_id は必須。tenant / authority は空なら既定)
+            MailOAuth::Config oauth;
         };
 
         ImapClient() = default;
@@ -69,6 +79,9 @@ class ImapClient : private Imap::Reader::Handler {
         bool configure(const Config& c);
         // サーバ・ユーザー名・パスワードを /sys/mail.cfg へ書く(設定画面から)。password が空なら今のまま
         static bool SaveAccount(const char* host, uint16_t port, const char* user, const char* password);
+        // Microsoft のアカウントを /sys/mail.cfg へ書く(サーバは outlook.office365.com:993)。
+        // ユーザーが変わったら保存してあるサインイン(更新用トークン)は消す
+        static bool SaveMicrosoftAccount(const char* user, const char* client_id);
         // 今の設定("host:port" と user。画面の入力欄の初期値)
         const Config& config() const { return cfg_; }
 
@@ -79,12 +92,19 @@ class ImapClient : private Imap::Reader::Handler {
         // 本文の表示をやめた(取得中なら結果を捨てる)
         void closeMessage();
 
+        // ---- Microsoft のサインイン(auth = microsoft のとき) ----
+        bool usesOAuth() const { return configured_ && cfg_.auth == Auth::Microsoft; }
+        // サインインを始める(デバイスコード)。状態は SigningIn になり、oauth().userCode() 等に案内が出る
+        bool startSignIn();
+        void cancelSignIn();
+        const MailOAuth& oauth() const { return oauth_; }
+
         // 毎フレーム呼ぶ。network_up=false(Wi-Fiが切れている)の間は何もせず接続も閉じる
         void update(bool network_up = true);
         // 進行中の問い合わせをやめ、接続も閉じる(onExit用)
         void stop();
         // 通信中か(画面をスリープさせない目安)
-        bool busy() const { return cmd_ != Cmd::None || phase_ == Phase::Greeting; }
+        bool busy() const { return cmd_ != Cmd::None || phase_ == Phase::Greeting || oauth_.busy(); }
 
         State state() const { return state_; }
         const char* statusText() const { return status_.c_str(); }
@@ -120,10 +140,19 @@ class ImapClient : private Imap::Reader::Handler {
 
     private:
         enum class Phase : uint8_t { Disconnected, Greeting, Login, Select, Ready };
-        enum class Cmd : uint8_t { None, Login, Select, Noop, List, Body, Logout };
+        enum class Cmd : uint8_t { None, Login, Auth, Select, Noop, List, Body, Logout };
+        enum class OAuthOp : uint8_t { None, SignIn, Refresh };
 
         Config cfg_;
         bool configured_ = false;
+
+        // ---- Microsoft ----
+        MailOAuth oauth_;
+        OAuthOp oauth_op_ = OAuthOp::None;
+        uint32_t oauth_seen_rev_ = 0;
+        uint32_t oauth_saved_refresh_rev_ = 0;
+        bool auth_sent_ = false;     // AUTHENTICATE の続き("+")へトークンを送った
+        bool auth_retried_ = false;  // 断られたのでアクセストークンを取り直して1回やり直した
 
         HttpTransport net_;
         Imap::Reader reader_;
@@ -184,6 +213,12 @@ class ImapClient : private Imap::Reader::Handler {
         void handleTagged(const Imap::Response& r);
         void handleUntagged(const Imap::Response& r, const char* text, size_t len);
         void finishBody(bool ok, const char* why);
+        void failPendingBody(const char* why);
+        void updateOAuth();
+        // 繋ぐ前に使えるアクセストークンがあるか。無ければ取りに行く(falseの間は繋がない)
+        bool ensureAccessToken();
+        bool sendXoauth2();
+        void loginSucceeded();
         void setStatus(State s, const char* text);
         void failLater(const char* why);
 

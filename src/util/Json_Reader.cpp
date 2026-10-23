@@ -48,6 +48,8 @@ void JsonReader::reset(Handler* handler){
     key_len_ = 0;
     has_key_ = false;
     value_len_ = 0;
+    str_buf_ = value_;
+    str_cap_ = kValueBytes;
     truncated_ = false;
     unicode_ = 0;
     unicode_digits_ = 0;
@@ -71,11 +73,11 @@ bool JsonReader::feed(const void* data, size_t len){
 
 void JsonReader::appendByte(char c){
     if(truncated_) return;
-    if(value_len_ + 1 >= kValueBytes){
+    if(value_len_ + 1 >= str_cap_){
         truncated_ = true;
         return;
     }
-    value_[value_len_++] = c;
+    str_buf_[value_len_++] = c;
 }
 
 void JsonReader::appendCodepoint(uint32_t cp){
@@ -100,11 +102,11 @@ void JsonReader::appendCodepoint(uint32_t cp){
         n = 4;
     }
     //文字の途中で切らない(入りきらなければ丸ごと捨てる)
-    if(truncated_ || value_len_ + n >= kValueBytes){
+    if(truncated_ || value_len_ + n >= str_cap_){
         truncated_ = true;
         return;
     }
-    memcpy(value_ + value_len_, buf, n);
+    memcpy(str_buf_ + value_len_, buf, n);
     value_len_ += n;
 }
 
@@ -130,14 +132,27 @@ bool JsonReader::beginValue(char c){
             state_ = is_array ? State::ValueOrEnd : State::KeyOrEnd;
             return true;
         }
-        case '"':
+        case '"': {
             str_is_key_ = false;
+            str_buf_ = value_;
+            str_cap_ = kValueBytes;
+            if(handler_){
+                size_t cap = 0;
+                char* given = handler_->stringBuffer(currentKey(), depth_, cap);
+                if(given && cap > 0){
+                    str_buf_ = given;
+                    str_cap_ = cap;
+                }
+            }
             value_len_ = 0;
             truncated_ = false;
             high_surrogate_ = 0;
             state_ = State::String;
             return true;
+        }
         default:
+            str_buf_ = value_;
+            str_cap_ = kValueBytes;
             if(c == '-' || (c >= '0' && c <= '9') || c == 't' || c == 'f' || c == 'n'){
                 value_len_ = 0;
                 truncated_ = false;
@@ -151,7 +166,7 @@ bool JsonReader::beginValue(char c){
 
 bool JsonReader::finishString(){
     flushHighSurrogate();
-    size_t len = truncated_ ? TrimPartialUtf8(value_, value_len_) : value_len_;
+    size_t len = truncated_ ? TrimPartialUtf8(str_buf_, value_len_) : value_len_;
     if(str_is_key_){
         if(len >= kKeyBytes) len = TrimPartialUtf8(value_, kKeyBytes - 1);
         memcpy(key_, value_, len);
@@ -161,8 +176,10 @@ bool JsonReader::finishString(){
         state_ = State::Colon;
         return true;
     }
-    value_[len] = '\0';
-    if(handler_) handler_->onValue(currentKey(), Type::String, value_, len, truncated_, depth_);
+    str_buf_[len] = '\0';
+    if(handler_) handler_->onValue(currentKey(), Type::String, str_buf_, len, truncated_, depth_);
+    str_buf_ = value_;
+    str_cap_ = kValueBytes;
     afterValue();
     return true;
 }
@@ -203,6 +220,8 @@ bool JsonReader::step(char c){
             if(state_ == State::KeyOrEnd && c == '}') break;
             if(c != '"') return fail("キーがありません");
             str_is_key_ = true;
+            str_buf_ = value_;
+            str_cap_ = kValueBytes;
             value_len_ = 0;
             truncated_ = false;
             high_surrogate_ = 0;

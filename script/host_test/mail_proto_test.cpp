@@ -6,15 +6,27 @@
 //   - 本文: multipart の入れ子・text/plain を優先・HTMLだけのとき・base64 / quoted-printable・添付の名前(RFC 2231 も)・
 //     置き場が足りないときに文字の途中で切らない
 //   - IMAP: リテラルを含む応答の組み立て(貯める/流す/溢れる)、FETCH の読み取り、quoted string
+//   - Microsoft のサインイン: JsonReader の長い値の置き場(stringBuffer)、フォームの値の書き方、
+//     更新用トークンの保存(暗号化・行に分ける・壊れていれば読まない)
 // を見る。
 #include "apps/mail/Mail_Charset.hpp"
 #include "apps/mail/Mail_Mime.hpp"
 #include "apps/mail/Imap_Proto.hpp"
+#include "apps/mail/Mail_OAuth.hpp"
+#include "util/Json_Reader.hpp"
+#include "storage/SD_Path.hpp"
+#include "system/Log_Functions.hpp"
+#include "OS_Data.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
+
+void LogFunctions::Log(LogType, const char*, ...){}
+void LogFunctions::Setup(){}
+void LogFunctions::Update(){}
+void LogFunctions::Flush(){}
 
 static int failures = 0;
 static void check(bool cond, const char* label){
@@ -386,11 +398,92 @@ static void testImap(){
     check(!Imap::Quote("a\r\nb", q, sizeof(q)), "Quote: 改行は不可");
 }
 
+// ---- Microsoft のサインイン ----
+namespace {
+    struct LongPick : JsonReader::Handler {
+        char token[1200] = {};
+        size_t token_len = 0;
+        bool token_trunc = false;
+        std::string short_value;
+        bool short_trunc = false;
+        char* stringBuffer(const char* key, int depth, size_t& cap) override {
+            if(depth == 1 && key && strcmp(key, "access_token") == 0){ cap = sizeof(token); return token; }
+            return nullptr;
+        }
+        void onValue(const char* key, JsonReader::Type, const char* text, size_t len, bool truncated, int depth) override {
+            if(depth != 1 || !key) return;
+            if(strcmp(key, "access_token") == 0){ token_len = len; token_trunc = truncated; check(text == token, "長い値は差し出した置き場を指す"); }
+            if(strcmp(key, "other") == 0){ short_value = text; short_trunc = truncated; }
+        }
+    };
+}
+
+static void testOAuth(){
+    //長い値(1000文字。\/ のエスケープ込み)を1バイトずつ
+    std::string tok;
+    for(int i = 0; i < 1000; i++) tok += (char)('a' + i % 26);
+    std::string json = "{\"token_type\":\"Bearer\",\"access_token\":\"" + tok.substr(0, 500) + "\\/" + tok.substr(500)
+                     + "\",\"other\":\"" + std::string(300, 'x') + "\",\"expires_in\":3599}";
+    LongPick h;
+    JsonReader r;
+    r.reset(&h);
+    for(char c : json) r.feed(&c, 1);
+    check(r.complete(), "JsonReader: 読み終える");
+    eq_int((long)h.token_len, 1001, "長い値を丸ごと読む");
+    check(!h.token_trunc && std::string(h.token) == tok.substr(0, 500) + "/" + tok.substr(500), "長い値の中身(\\/ も戻す)");
+    check(h.short_trunc && h.short_value.size() == JsonReader::kValueBytes - 1, "ほかの値はこれまでどおり256Bで切る");
+
+    //置き場より長ければ切って truncated
+    std::string big = "{\"access_token\":\"" + std::string(2000, 'z') + "\"}";
+    LongPick h2;
+    r.reset(&h2);
+    r.feed(big.data(), big.size());
+    check(r.complete() && h2.token_trunc && h2.token_len == sizeof(h2.token) - 1, "置き場より長い値は切る");
+
+    FixedString<MailOAuth::kBodyCap> body;
+    check(MailOAuth::AppendFormValue(body, "https://outlook.office.com/IMAP.AccessAsUser.All offline_access"), "フォーム: 書ける");
+    eq_str(body.c_str(), "https%3A%2F%2Foutlook.office.com%2FIMAP.AccessAsUser.All%20offline_access", "フォーム: %XX");
+    body.clear();
+    MailOAuth::AppendFormValue(body, "M.C5_BAY.0.U.-a!!*$~");
+    eq_str(body.c_str(), "M.C5_BAY.0.U.-a%21%21%2A%24~", "フォーム: 記号");
+
+    //更新用トークンの保存
+    OSData::SD_usable = true;
+    const char* path = PICO_Path::FILE::CFG::SYS_MAIL_TOKEN;
+    std::string rt = "M.C5_BAY.0.U.-";
+    for(int i = 0; i < 900; i++) rt += (char)('A' + i % 26);
+    check(MailOAuth::SaveRefreshToken(rt.c_str()), "トークンを保存できる");
+    const std::string saved = HostSd::files[path];
+    check(saved.find("M.C5_BAY") == std::string::npos && saved.find("enc") != std::string::npos, "平文では置かない");
+    int lines = 0;
+    for(char c : saved) if(c == '\n') lines++;
+    eq_int(lines, 1 + 4, "255Bずつの行に分ける(見出し+4行)");
+    char back[MailOAuth::kRefreshTokenCap];
+    bool rewrite = true;
+    check(MailOAuth::LoadRefreshToken(back, sizeof(back), &rewrite) && rt == back, "読み戻せる");
+    check(!rewrite, "今の鍵で書いたものは書き直さない");
+    //行を入れ替えると(用途の文字列が行ごとに違うので)元に戻らない
+    std::string swapped = saved;
+    const size_t a = swapped.find('\n') + 1, b = swapped.find('\n', a) + 1, c = swapped.find('\n', b) + 1;
+    swapped = swapped.substr(0, a) + swapped.substr(b, c - b) + swapped.substr(a, b - a) + swapped.substr(c);
+    HostSd::files[path] = swapped;
+    check(!MailOAuth::LoadRefreshToken(back, sizeof(back)) || rt != back, "行ごとに鍵ストリームが違う");
+    HostSd::files[path] = "# x\nenc1:zz\n";
+    check(!MailOAuth::LoadRefreshToken(back, sizeof(back)) && back[0] == '\0', "壊れていれば読まない");
+    HostSd::files[path] = "plain-token-123\n";
+    check(MailOAuth::LoadRefreshToken(back, sizeof(back), &rewrite) && strcmp(back, "plain-token-123") == 0 && rewrite,
+          "平文で置かれたものは読めて、書き直す印が付く");
+    MailOAuth::ClearRefreshToken();
+    check(HostSd::files.count(path) == 0, "消せる");
+    check(!MailOAuth::LoadRefreshToken(back, sizeof(back)), "無ければ読めない");
+}
+
 int main(){
     testCharset();
     testHeaders();
     testBody();
     testImap();
+    testOAuth();
     if(failures){
         printf("\n%d 件失敗\n", failures);
         return 1;

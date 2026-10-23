@@ -19,6 +19,8 @@ pc/sdcard/sys/todoist.cfg
 pc/sdcard/sys/todoist.cfg.tmp
 # メールアプリのアカウント(PCで試すときに置く。秘密なのでコミットしない)
 pc/sdcard/sys/mail.cfg
+pc/sdcard/sys/mail_token.cfg
+pc/sdcard/sys/mail_token.cfg.tmp
 pc/sdcard/sys/mail.cfg.tmp
 # 開発者向けの道具(/sys/debug.cfg)とクラッシュダンプ。PCビルドで試すと作られる
 pc/sdcard/sys/debug.cfg

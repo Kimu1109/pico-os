@@ -63,6 +63,8 @@ enum {
     WL_DISCONNECTED,
 };
 
+typedef enum { WIFI_OFF = 0, WIFI_STA = 1, WIFI_AP = 2, WIFI_AP_STA = 3 } WiFiMode_t;
+
 namespace PicoOsWifiHost {
 
     enum class Mode {
@@ -240,6 +242,19 @@ public:
     }
     void setDNS(IPAddress d1){ dns_[0] = d1; }
     void setDNS(IPAddress d1, IPAddress d2){ dns_[0] = d1; dns_[1] = d2; }
+    // ---- アクセスポイント(AP設定モード)。PCでは本物のAPは作れないので、作ったことにして覚えるだけ。
+    // 設定のページ自体はPCでも localhost で開ける(services/WifiSetup_Functions) ----
+    void mode(WiFiMode_t m){ mode_ = m; }
+    WiFiMode_t getMode() const { return mode_; }
+    bool softAP(const char* ssid, const char* psk = nullptr, int = 1, int = 0, int = 4){
+        snprintf(ap_ssid_, sizeof(ap_ssid_), "%s", ssid ? ssid : "");
+        printf("[PC] アクセスポイント「%s」(パスワード %s)を作ったことにします\n", ap_ssid_, psk ? psk : "");
+        ap_on_ = true;
+        return true;
+    }
+    bool disconnectAP(){ const bool was = ap_on_; ap_on_ = false; return was; }
+    IPAddress softAPIP(){ return ap_on_ ? IPAddress(192, 168, 42, 1) : IPAddress(); }
+    uint8_t softAPgetStationNum(){ return 0; }
     void setHostname(const char* name){ snprintf(hostname_, sizeof(hostname_), "%s", name ? name : ""); }
     const char* getHostname() const { return hostname_; }
     bool isStaticIp() const { return static_ip_; }
@@ -310,6 +325,9 @@ private:
     bool connect_requested_ = false;
     bool scan_done_ = false;
     bool static_ip_ = false;
+    WiFiMode_t mode_ = WIFI_STA;
+    bool ap_on_ = false;
+    char ap_ssid_[40] = {0};
     IPAddress ip_, gw_, mask_;
     IPAddress dns_[2] = { IPAddress(192, 168, 10, 1), IPAddress() };
     char hostname_[64] = "picoos";

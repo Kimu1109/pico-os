@@ -23,6 +23,7 @@
 #include "net/NetworkScan.hpp"
 #include "util/Net_Addr.hpp"
 #include "net/Captive_Portal.hpp"
+#include "gui/scenes/WifiSetupScene.hpp"
 
 #include "devtools/DevTools_Functions.hpp"
 #include "services/PowerMenu_Functions.hpp"
@@ -157,8 +158,8 @@ void SettingsScene::refreshWifiInfo(){
     NetworkFunctions::CurrentAddress(ip, sizeof(ip));
     char buf[PICO_STR_L];
     // 2行: 本体の名前(mDNS)と今のIPアドレス(1行だと固定IPの長いアドレスが入りきらない)
-    if(ip[0]) snprintf(buf, sizeof(buf), "%s.local\nIP %s", NetworkFunctions::hostname.c_str(), ip);
-    else      snprintf(buf, sizeof(buf), "%s.local\nIP -", NetworkFunctions::hostname.c_str());
+    if(ip[0]) snprintf(buf, sizeof(buf), "%s.local\n%s", NetworkFunctions::hostname.c_str(), ip);
+    else      snprintf(buf, sizeof(buf), "%s.local\n(IP無し)", NetworkFunctions::hostname.c_str());
     this->wifi_info_label->setText(buf);
 }
 
@@ -680,7 +681,20 @@ void SettingsScene::buildWifiTab(const Layout& lay){
                              NetworkFunctions::hostname.c_str());
     });
     addToTab(Tab::Wifi, this->wifi_name_button);
-    this->wifi_info_label = makeRowLabel<PICO_STR_L>(left, info_y, full_w - name_box.w - MARGIN, "");
+
+    // [スマホ]: 本体をアクセスポイントにして、スマホから繋ぎ先を送ってもらう(WifiSetupScene)
+    Button* phone_button = new Button(0, 0, "スマホ");
+    phone_button->setFontSize(FontFn::Small);
+    phone_button->setAllowTextSpacing(false);
+    phone_button->setW(EDIT_BTN_W + Button::kFrameExtraTight);
+    phone_button->setH(EDIT_BTN_H + Button::kFrameExtraTight);
+    phone_button->setX((int16_t)(this->wifi_name_button->getLocalRect().x - MARGIN - phone_button->getLocalRect().w));
+    phone_button->setY(this->wifi_name_button->getLocalRect().y);
+    phone_button->setOnPressEnd([](){ SceneFunctions::Push(new WifiSetupScene()); });
+    addToTab(Tab::Wifi, phone_button);
+
+    this->wifi_info_label = makeRowLabel<PICO_STR_L>(left, info_y,
+        phone_button->getLocalRect().x - MARGIN - left, "");
     this->wifi_info_label->setMaxHeight(info_line_h * 2);
     addToTab(Tab::Wifi, this->wifi_info_label);
     this->refreshWifiInfo();

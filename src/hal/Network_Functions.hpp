@@ -17,6 +17,7 @@ namespace NetworkFunctions {
         FAILED,
         TRYING_CONNECT,
         OFF,            // Wi-FiをOFFにしている(WifiProfiles::IsEnabled()が偽)
+        AP_SETUP,       // 本体がアクセスポイントになっている(AP設定モード。StartSetupAp())
     };
 
     //NOT TO WRITE! READONLY!
@@ -100,6 +101,16 @@ namespace NetworkFunctions {
     inline FixedString<PICO_STR_LL> probeUrl;
     // 今すぐ判定し直す(設定アプリのログインの後など)。未接続なら何もしない
     void RecheckInternet();
+
+    // ---- AP設定モード(services/WifiSetup_Functions が使う) ----
+    // 本体をアクセスポイントにする(WPA2。パスワードは8〜63文字)。今の接続は切り、自動接続も止める
+    // (AP_SETUP の間)。arduino-picoはAPのとき 192.168.42.1 を名乗り、繋いだ端末へDHCPで配る
+    bool StartSetupAp(const char* ssid, const char* password);
+    // APを止め、保存済みのネットワークへの自動接続へ戻す(Wi-FiがOFFだったならOFFへ)
+    void StopSetupAp();
+    // APのアドレス("192.168.42.1")と、今繋いでいる端末の数
+    void SetupApAddress(char* out, size_t cap);
+    int  SetupApClients();
 
     // 今のIPアドレス・ゲートウェイ・DNSを "a.b.c.d" で書く(未接続なら空)。設定アプリの表示用
     void CurrentAddress(char* ip, size_t ip_cap);

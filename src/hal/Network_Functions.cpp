@@ -267,6 +267,7 @@ void NetworkFunctions::Update(){
             break;
 
         case NetStatus::OFF:
+        case NetStatus::AP_SETUP: // APの間は自動接続しない(StopSetupAp()で戻る)
             break;
 
         // SSID_NOT_FOUND / FAILED / TIMEOUT: 未接続。少し置いてから保存済みのネットワークへ自動で繋ぎ直す
@@ -335,6 +336,10 @@ void NetworkFunctions::ConnectWiFiAsync(const char* ssid, const char* password){
     // 手動で選んだ接続先。OFFならONにし、自動接続の順番も先頭から数え直す
     // (ここで失敗したら、次の自動接続は直近で接続できたネットワークから)
     if(!WifiProfiles::IsEnabled()) WifiProfiles::SetEnabled(true);
+    if(currentStatus == NetStatus::AP_SETUP){
+        WiFi.disconnectAP();
+        WiFi.mode(WIFI_STA);
+    }
     retryRank = 0;
     StartConnect(ssid, password);
 };
@@ -353,6 +358,48 @@ bool NetworkFunctions::SetHostname(const char* name){
         if(IsConnected()) StartMdns();
     }
     return true;
+}
+
+bool NetworkFunctions::StartSetupAp(const char* ssid, const char* password){
+    if(!ssid || !ssid[0] || !password || strlen(password) < 8 || strlen(password) > 63) return false;
+    ResetInternet();
+    WiFi.disconnect();
+    currentSSID.clear();
+    currentPassword.clear();
+    WiFi.mode(WIFI_AP);
+    if(!WiFi.softAP(ssid, password)){
+        LOG_SYS_FAIL("Network: アクセスポイントを始められませんでした");
+        WiFi.mode(WIFI_STA);
+        currentStatus = NetStatus::FAILED;
+        retryTimer = millis() - RETRY_INTERVAL; // すぐ自動接続へ戻る
+        return false;
+    }
+    currentStatus = NetStatus::AP_SETUP;
+    LOG_SYS_MSG("Network: アクセスポイント %s を始めました", ssid);
+    return true;
+}
+
+void NetworkFunctions::StopSetupAp(){
+    if(currentStatus != NetStatus::AP_SETUP) return;
+    WiFi.disconnectAP();
+    WiFi.mode(WIFI_STA); // 次の beginNoBlock() がAPを作り直さないように(arduino-picoはAPのモードのままだとAPとして始める)
+    retryRank = 0;
+    if(!WifiProfiles::IsEnabled()){
+        currentStatus = NetStatus::OFF;
+    }else{
+        currentStatus = NetStatus::FAILED;
+        retryTimer = millis() - RETRY_INTERVAL; // 次のUpdate()ですぐ繋ぎに行く
+    }
+    LOG_SYS_MSG("Network: アクセスポイントを止めました");
+}
+
+void NetworkFunctions::SetupApAddress(char* out, size_t cap){
+    if(cap) out[0] = '\0';
+    if(currentStatus == NetStatus::AP_SETUP) FormatIp(WiFi.softAPIP(), out, cap);
+}
+
+int NetworkFunctions::SetupApClients(){
+    return currentStatus == NetStatus::AP_SETUP ? (int)WiFi.softAPgetStationNum() : 0;
 }
 
 void NetworkFunctions::RecheckInternet(){

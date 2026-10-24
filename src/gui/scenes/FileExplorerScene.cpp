@@ -7,9 +7,11 @@
 #include "apps/video/VideoScene.hpp"
 #include "gui/scenes/FileSearchScene.hpp"
 #include "gui/scenes/StorageScene.hpp"
+#include "gui/scenes/RecentFilesScene.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "storage/SD_IO.hpp"
+#include "storage/Recent_Files.hpp"
 #include "OS_Data.hpp"
 
 namespace {
@@ -95,7 +97,9 @@ void FileExplorerScene::onEnter(){
 void FileExplorerScene::onMore(){
     auto* d = new PickerDialog(PickerDialog::Mode::Choice, "ファイル", "", "キャンセル");
     d->addChoice("名前の変更");
-    d->addChoice("検索(SD全体)");
+    d->addChoice("名前で検索(SD全体)");
+    d->addChoice("中身で検索(SD全体)");
+    d->addChoice("最近開いたファイル");
     d->addChoice("容量");
     d->layout();
     WidgetFunctions::AddDialog(d);
@@ -109,6 +113,10 @@ void FileExplorerScene::onMore(){
         }else if(sel == 1){
             this->pending = Pending::Search;
         }else if(sel == 2){
+            this->pending = Pending::SearchContent;
+        }else if(sel == 3){
+            SceneFunctions::Push(new RecentFilesScene());
+        }else if(sel == 4){
             const char* cur = this->explorer ? this->explorer->getCurrentFolderPath() : "/";
             SceneFunctions::Push(new StorageScene(cur && *cur ? cur : "/"));
         }
@@ -122,19 +130,23 @@ void FileExplorerScene::onUpdate(){
     this->pending = Pending::None;
     this->pending_frames = 0;
     if(p == Pending::Rename) this->onRename();
-    else if(p == Pending::Search) this->askSearch();
+    else if(p == Pending::Search) this->askSearch(false);
+    else if(p == Pending::SearchContent) this->askSearch(true);
 }
 
-void FileExplorerScene::askSearch(){
+void FileExplorerScene::askSearch(bool content){
     if(!OSData::SD_usable){ this->setStatus("SDカードがありません", true); return; }
-    auto* d = new InputDialog("探す名前(一部でよい):", true);
+    auto* d = new InputDialog(content ? "中身から探す言葉:" : "探す名前(一部でよい):", true);
     WidgetFunctions::AddDialog(d);
     d->setVisible(true);
     d->openKeyboard();
-    d->setOnClosed([d](bool ok){
+    d->setOnClosed([d, content](bool ok){
         const auto q = d->getInput();
         WidgetFunctions::DestroyLater(d);
-        if(ok && q.length() > 0) SceneFunctions::Push(new FileSearchScene("/", q.c_str()));
+        if(ok && q.length() > 0){
+            SceneFunctions::Push(new FileSearchScene("/", q.c_str(),
+                content ? FileSearchScene::Mode::Content : FileSearchScene::Mode::Name));
+        }
     });
 }
 
@@ -233,6 +245,7 @@ void FileExplorerScene::onPaste(){
     this->explorer->refresh();
     this->explorer->selectByName(PICO_IO::filename(dst.c_str()));
     if(this->clip_is_move){
+        RecentFiles::Rename(src, dst.c_str());
         this->clearClip(); //移動したものは元の場所に無いので忘れる
     }else{
         this->showClipStatus(); //コピーは続けて何度でも貼れる
@@ -286,6 +299,7 @@ void FileExplorerScene::commitRename(const char* old_path, const char* new_name)
         return;
     }
 
+    RecentFiles::Rename(old_path, new_path.c_str());
     //クリップボードがこれ(またはこの中)を指していたら、もう同じパスには無い
     if(!(this->clip_path.length() == 0) && PICO_IO::isSameOrInside(this->clip_path.c_str(), old_path)){
         this->clearClip();

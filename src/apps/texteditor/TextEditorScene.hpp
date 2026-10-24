@@ -46,7 +46,7 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         static constexpr int MARGIN = 3;
 
         // ダイアログからダイアログへは1フレーム空ける(MarkdownScene::Pendingと同じ理由)
-        enum class Pending { None, OpenPicker, OpenFind, OpenReplace, OpenReplaceWith, NewDocument };
+        enum class Pending { None, OpenPicker, OpenFind, OpenReplace, OpenReplaceWith, NewDocument, OpenRecent };
 
         char text[kMaxBytes + 1] = {0};
         int  len = 0;
@@ -56,6 +56,12 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         // 最初のonEnter()で1回だけ読む(Pop()で戻ってきたときに読み直して編集内容を捨てないため)
         FixedString<PICO_PATH_LEN> initial_path;
         bool initial_loaded = false;
+        // initial_path はまだ無いファイル。読まずに空の文書として始め、保存はそこへ(メモアプリの「新規」)
+        bool initial_is_new = false;
+        // 「最近開いたファイル」のダイアログを開いている間だけ確保する一覧
+        FixedString<PICO_PATH_LEN>* recent_paths = nullptr;
+        int recent_count = 0;
+        void freeRecent(){ delete[] this->recent_paths; this->recent_paths = nullptr; this->recent_count = 0; }
 
         // キーボードへ渡している行(キーボードが開いている間だけ意味を持つ)
         int cur_line = 0;
@@ -155,14 +161,18 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         void newDocument();
         bool loadFile(const char* path);
         void openPicker();
+        // 最近開いたファイル(RecentFiles)から選んで開く
+        void openRecentPicker();
         void saveFile();
         void saveAsPicker();
         bool writeFile(const char* path);
 
     public:
-        // initial_pathを渡すと、そのファイルを開いた状態で始まる(開けなければ空の新規文書)
-        explicit TextEditorScene(const char* initial_path = nullptr){
+        // initial_pathを渡すと、そのファイルを開いた状態で始まる(開けなければ空の新規文書)。
+        // create_new なら initial_path はこれから作るファイル(空の文書で始め、[保存]でそこへ書く)
+        explicit TextEditorScene(const char* initial_path = nullptr, bool create_new = false){
             if(initial_path) this->initial_path.assign(initial_path);
+            this->initial_is_new = create_new;
         }
         ~TextEditorScene() override;
 

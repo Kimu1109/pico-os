@@ -236,7 +236,7 @@ void TextEditorScene::openMenu(){
     if(!d) return;
     static const char* const kItems[] = {
         "元に戻す", "やり直し", "範囲選択", "すべて選択",
-        "コピー", "切り取り", "貼り付け", "検索", "置換", "新規作成",
+        "コピー", "切り取り", "貼り付け", "検索", "置換", "新規作成", "最近開いたファイル",
     };
     for(const char* item : kItems){
         if(item == kItems[2] && this->sel_anchor >= 0) d->addChoice("選択を解除");
@@ -260,8 +260,10 @@ void TextEditorScene::openMenu(){
             case 7:
             case 8:
             case 9:
+            case 10:
                 //ダイアログからダイアログへは1フレーム空ける
-                this->pending = idx == 7 ? Pending::OpenFind : idx == 8 ? Pending::OpenReplace : Pending::NewDocument;
+                this->pending = idx == 7 ? Pending::OpenFind : idx == 8 ? Pending::OpenReplace :
+                                idx == 9 ? Pending::NewDocument : Pending::OpenRecent;
                 this->pending_wait_frames = 1;
                 return;
             default: break;

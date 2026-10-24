@@ -243,6 +243,15 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
             this->pending = Pending::WifiPassword;
             break;
         }
+        case EditField::Hostname: {
+            if(input.empty()) break;
+            if(!NetworkFunctions::SetHostname(input.c_str())){
+                this->showMessageLater("名前は英数字とハイフンの63文字までです(先頭と末尾にハイフンは使えません)");
+                break;
+            }
+            this->refreshWifiInfo();
+            break;
+        }
     }
 }
 
@@ -526,8 +535,12 @@ void SettingsScene::onUpdate(){
     if(p == Pending::WifiPassword) this->openWifiPasswordDialog();
     else if(p == Pending::Message) this->openMessage();
     else if(p == Pending::ClockTime) this->openClockTimeDialog();
+    else if(p == Pending::IpGateway) this->openIpGatewayDialog();
+    else if(p == Pending::IpDns) this->openIpDnsDialog();
+    else if(p == Pending::CaptiveInput) this->openCaptiveInputDialog();
 
     this->pollWifiScan();
+    this->pollCaptiveLogin();
     if(this->tab == Tab::Wifi) this->refreshWifi();
 
     this->updateVolume();
@@ -562,6 +575,7 @@ void SettingsScene::onExit(){
         delete this->wifi_scan_task;
         this->wifi_scan_task = nullptr;
     }
+    this->endCaptiveLogin();
     // ダイアログ層はシーン終了時にフレームワーク側がまとめて片付ける(CalendarScene::detail_dialogと同じ)
     this->wifi_scan_dialog = nullptr;
     this->pending = Pending::None;
@@ -584,6 +598,11 @@ void SettingsScene::onExit(){
     this->wifi_add_button      = nullptr;
     this->wifi_connect_button  = nullptr;
     this->wifi_remove_button   = nullptr;
+    this->wifi_ip_button       = nullptr;
+    this->wifi_info_label      = nullptr;
+    this->wifi_name_button     = nullptr;
+    this->wifi_login_button    = nullptr;
+    this->shown_internet       = 0xFF;
     this->shown_status         = 0xFF;
     this->wifi_list_dirty      = true;
 

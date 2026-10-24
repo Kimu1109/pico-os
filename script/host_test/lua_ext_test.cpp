@@ -857,6 +857,7 @@ int main() {
             check(type(pico.time()) == "number" or pico.time() == nil, "time")
             local ws = pico.wifi_status()
             check(type(ws.status) == "string" and type(ws.connected) == "boolean", "wifi_status")
+            check(ws.internet == "unknown" and ws.hostname == "picoos", "wifi_status: internet と hostname")
             local mi = pico.memory_info()
             check(mi.lua_used > 0 and mi.lua_budget >= mi.lua_used and mi.lua_free >= 0, "memory_info")
             check(pico.toast("こんにちは") == true or true, "toast")

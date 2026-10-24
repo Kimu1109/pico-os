@@ -86,6 +86,9 @@ class HttpRequest : public Task {
         // 大きなダウンロード向け: 10秒の全体タイムアウトの代わりに「何も受け取れない時間」が
         // kTimeoutMs続いたときだけ打ち切る(全体はkLongTransferMaxMsまで)。既定はfalse
         void setIdleTimeout(bool on){ idle_timeout_ = on; }
+        // GETの3xxを自動で追うか(既定true)。falseなら3xxをそのまま成功として返す
+        // (キャプティブポータルの判定のように、転送先そのものを知りたいとき用)
+        void setFollowRedirects(bool on){ follow_redirects_ = on; }
         // 使い回すために持っている接続を閉じる(TLSの約40KBを返す)
         void closeConnection();
         // 次のbegin()で使い回せる接続を持っているか
@@ -117,6 +120,7 @@ class HttpRequest : public Task {
         bool keep_alive_ = false;
         FixedString<PICO_STR_1KiB> extra_header_; //複数行(CRLF区切り、末尾のCRLFは無し。合計1KiB未満、1行は512B未満)
         bool idle_timeout_ = false;
+        bool follow_redirects_ = true;
         unsigned long last_activity_ms = 0;
         bool conn_reusable_ = false; // 前の応答の後、接続を開けたまま持っている
         Url conn_url_;               // その接続の相手(ホスト・ポート・schemeだけを見る)

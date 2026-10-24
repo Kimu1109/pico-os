@@ -64,9 +64,11 @@ local img = pico.path_join(pico.app_dir(), "img", "title.pimg")
 
 ## pico.wifi_status
 
-<div class="sig">pico.wifi_status() <span class="ret">-> { connected: boolean, status: string, enabled: boolean, ssid?: string }</span></div>
+<div class="sig">pico.wifi_status() <span class="ret">-> { connected: boolean, status: string, enabled: boolean, ssid?: string, internet: string, hostname: string }</span></div>
 
-Wi-Fiの状態です。`status` は `"connected"` `"connecting"` `"off"` `"failed"` `"timeout"` `"not_found"` のどれか。`ssid` は接続中だけ入ります。
+Wi-Fiの状態です。`status` は `"connected"` `"connecting"` `"off"` `"failed"` `"timeout"` `"not_found"` `"setup_ap"`(設定アプリの[スマホ]で本体がアクセスポイントになっている間)のどれか。`ssid` は接続中だけ入ります。
+
+`internet` はインターネットへ出られるかで、`"online"` `"portal"`(ホテル等のログイン/同意のページを通すまで出られない。設定アプリのWi-Fiタブの[ログイン]で通せます) `"offline"`(Wi-Fiには繋がったが外へ出られない) `"checking"` `"unknown"`(未接続・判定前・判定を止めている)のどれか。`connected` が真でも `"portal"` の間は通信が失敗します。`hostname` は本体の名前(同じLANから `<hostname>.local` で見つかる)。
 
 ## pico.url_encode / pico.url_decode
 

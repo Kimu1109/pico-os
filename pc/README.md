@@ -344,6 +344,16 @@ PICOOS_WIFI_STATE=disconnected ./pc/build/picoos_pc    # 切断アイコンの�
 PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 ```
 
+固定IP/DNS・mDNS・AP設定モード・キャプティブポータル(`docs/design/security-wifi.md`)のPCでの振る舞い:
+
+- **固定IP/DNS**: `WiFi.config()`/`setDNS()` は覚えるだけ(母艦のネットワークは触らない)。設定アプリの2行の表示に、
+  固定IPならそのアドレス、DHCPなら偽の `192.168.10.23` が出る。
+- **mDNS**: 母艦のmDNSとぶつからないよう応答しない(名乗ったことにするだけ)。
+- **AP設定モード**([スマホ]): APは作らず、ページだけ `http://127.0.0.1:8081/` で開ける(`PICOOS_SETUP_PORT` で変更)。
+  `curl -X POST -d "ssid=Home&pass=xxxxxxxx" http://127.0.0.1:8081/save` でスマホから送ったのと同じになる。
+- **キャプティブポータル**: 判定は本物の通信(既定は `http://connectivitycheck.gstatic.com/generate_204`)。偽のポータルで
+  試すときは `network.cfg` に `captive-probe-url = http://127.0.0.1:<port>/generate_204` を書き、そこで302を返すサーバを立てる。
+
 なお `NetworkFunctions::Setup()` は **`wifi-ssid` と `wifi-password` が両方空でないとき**しか
 接続を開始しない。PCでも同じなので、両方に何か入れておくこと(同梱の `network.cfg` は
 埋めてある)。

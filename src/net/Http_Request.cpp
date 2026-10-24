@@ -306,7 +306,7 @@ void HttpRequest::update(){
     if(res.isDone()){
         //GETだけリダイレクトを自動で追う。POST等はボディの再送を一律には決められない
         //ため、3xxが返ってきてもそのまま呼び出し側(Luaスクリプト)へ渡す
-        if(method_ == Method::GET && res.isRedirect()){
+        if(method_ == Method::GET && follow_redirects_ && res.isRedirect()){
             followRedirect();
             return;
         }
@@ -324,7 +324,7 @@ void HttpRequest::update(){
             finishWith(TaskTools::FAILED, Fail::Response);
             return;
         }
-        if(method_ == Method::GET && res.isRedirect()){
+        if(method_ == Method::GET && follow_redirects_ && res.isRedirect()){
             followRedirect();
             return;
         }

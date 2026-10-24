@@ -33,6 +33,8 @@ namespace PICO_Path {
         constexpr const char* FIRMWARE = "/firmware/";
         // 読書アプリ(ReaderLibraryScene)の本棚に並べる本(*.txt、青空文庫のテキスト等)と、「開く」の最初の場所
         constexpr const char* BOOKS = "/books/";
+        // メモアプリ(NotesScene)のメモ(*.txt / *.md)。下のフォルダも見る。新しいメモは直下に作る
+        constexpr const char* NOTES = "/notes/";
     };
     namespace FILE {
         constexpr const char* SYS_LOG_TXT = "/sys/log.txt";
@@ -62,6 +64,8 @@ namespace PICO_Path {
         constexpr const char* SYS_TODO_CACHE = "/sys/todo_cache.tsv";
         // 読書アプリの本ごとの続きの位置としおり(1行1件のタブ区切り。ReaderStore参照)
         constexpr const char* SYS_READER_BOOKS = "/sys/reader_books.tsv";
+        // 最近開いたファイル(1行1パス、新しい順。RecentFiles参照)
+        constexpr const char* SYS_RECENT_FILES = "/sys/recent_files.txt";
 
         // アプリストア(apps/store/App_Store、docs/APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
         // インストールしたアプリのファイル一覧(installed/<id>.tsv)・取得中の置き場(staging/)

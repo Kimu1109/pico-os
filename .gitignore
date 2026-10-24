@@ -29,6 +29,9 @@ pc/sdcard/sys/home.cfg
 pc/sdcard/sys/home.cfg.tmp
 pc/sdcard/sys/todo_cache.tsv
 pc/sdcard/sys/todo_cache.tsv.tmp
+# 最近開いたファイル(RecentFiles)
+pc/sdcard/sys/recent_files.txt
+pc/sdcard/sys/recent_files.txt.tmp
 pc/sdcard/sys/crash.pending
 pc/sdcard/crash/
 

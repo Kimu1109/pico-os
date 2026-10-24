@@ -13,6 +13,8 @@
 #include "gui/core/Error_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "storage/SD_IO.hpp"
+#include "storage/Recent_Files.hpp"
+#include "gui/icons/File_Icon.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
 
@@ -117,6 +119,7 @@ bool TextEditorScene::loadFile(const char* file){
     this->len = out;
     this->text[out] = '\0';
     this->path.assign(file);
+    RecentFiles::Touch(file);
     this->sel_anchor = -1;
     this->history.clear();
     this->refreshView();
@@ -138,6 +141,64 @@ void TextEditorScene::openPicker(){
     });
 }
 
+void TextEditorScene::openRecentPicker(){
+    //一覧はダイアログを開いている間だけ確保する(閉じたら・画面を出たら放す)
+    this->freeRecent();
+    this->recent_paths = new FixedString<PICO_PATH_LEN>[RecentFiles::kMaxFiles];
+    if(!this->recent_paths) return;
+    FixedString<PICO_PATH_LEN>* paths = this->recent_paths;
+    const int n = RecentFiles::List(paths, RecentFiles::kMaxFiles);
+    //エディタで開けそうなもの(文字のファイル)だけ。今開いているものは除く
+    int count = 0;
+    for(int i = 0; i < n; i++){
+        if(!FileIcon::IsText(PICO_IO::filename(paths[i].c_str()))) continue;
+        if(paths[i] == this->path) continue;
+        if(count != i) paths[count] = paths[i];
+        count++;
+    }
+    this->recent_count = count;
+    if(count == 0){
+        this->freeRecent();
+        this->refreshStatus("最近開いたファイルはありません");
+        return;
+    }
+    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, "最近開いたファイル", "", "閉じる");
+    if(!d){ this->freeRecent(); return; }
+    for(int i = 0; i < count; i++){
+        //名前の後ろに、どのフォルダにあるか(ファイル検索と同じ見せ方)
+        const char* p = paths[i].c_str();
+        const char* name = PICO_IO::filename(p);
+        FixedString<PICO_PATH_LEN> label(name);
+        const size_t dir_len = (size_t)(name - p);
+        if(dir_len > 1){
+            (void)label.append("  ");
+            (void)label.append(p, dir_len - 1);
+        }
+        d->addChoice(label.c_str());
+    }
+    d->layout();
+    WidgetFunctions::AddDialog(d);
+    d->setVisible(true);
+    d->setOnClosed([this, d](bool is_ok){
+        const int idx = is_ok ? d->getSelectedIndex() : -1;
+        WidgetFunctions::DestroyLater(d);
+        if(idx < 0 || idx >= this->recent_count || !this->view){
+            this->freeRecent();
+            return;
+        }
+        const FixedString<PICO_PATH_LEN> target = this->recent_paths[idx];
+        this->freeRecent();
+        if(!OSData::SD_usable || !OSData::SD.exists(target.c_str())){
+            RecentFiles::Forget(target.c_str());
+            ErrorFunctions::ShowFatal("ファイルが見つかりません(一覧から外しました)");
+            return;
+        }
+        this->confirmDiscard("保存していない変更があります。破棄して別のファイルを開きますか?", [this, target](){
+            this->loadFile(target.c_str());
+        });
+    });
+}
+
 bool TextEditorScene::writeFile(const char* file){
     if(!OSData::SD_usable) return false;
     FsFile f = OSData::SD.open(file, O_WRONLY | O_CREAT | O_TRUNC);
@@ -155,6 +216,7 @@ void TextEditorScene::saveFile(){
         return;
     }
     if(this->writeFile(this->path.c_str())){
+        RecentFiles::Touch(this->path.c_str());
         this->history.markSaved();
         this->setDirty(false);
     }else{
@@ -175,6 +237,7 @@ void TextEditorScene::saveAsPicker(){
             if(target && *target && target[strlen(target) - 1] != '/'){
                 if(this->writeFile(target)){
                     this->path.assign(target);
+                    RecentFiles::Touch(target);
                     this->history.markSaved();
                     this->setDirty(false);
                 }else{

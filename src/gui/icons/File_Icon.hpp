@@ -20,7 +20,7 @@ inline IconID For(const char* name, bool is_dir){
     static const char* const kImage[]   = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".pimg", nullptr};
     static const char* const kVideo[]   = {".pvid", ".mp4", ".avi", ".mov", nullptr};
     static const char* const kAudio[]   = {".wav", ".mml", ".mid", ".mp3", ".ogg", nullptr};
-    static const char* const kText[]    = {".txt", ".md", ".markdown", ".log", ".csv", ".cfg", ".ini", ".json", nullptr};
+    static const char* const kText[]    = {".txt", ".md", ".markdown", ".log", ".csv", ".tsv", ".cfg", ".ini", ".json", nullptr};
     static const char* const kCode[]    = {".lua", ".c", ".cpp", ".h", ".hpp", ".py", ".js", ".html", nullptr};
     static const char* const kArchive[] = {".zip", ".gz", ".tar", ".7z", nullptr};
     if(ExtIn(dot, kImage))   return IconID::FileImage;
@@ -30,6 +30,12 @@ inline IconID For(const char* name, bool is_dir){
     if(ExtIn(dot, kCode))    return IconID::FileCode;
     if(ExtIn(dot, kArchive)) return IconID::FileArchive;
     return IconID::File;
+}
+
+// 中身が文字のファイルか(全文検索・エディタで開く候補)。アイコンが文書/コードのもの
+inline bool IsText(const char* name){
+    const IconID icon = For(name, false);
+    return icon == IconID::FileText || icon == IconID::FileCode;
 }
 
 } // namespace FileIcon

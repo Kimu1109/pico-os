@@ -35,13 +35,21 @@ bool FileSearchScene::TakeJump(FixedString<PICO_PATH_LEN>& out){
     return true;
 }
 
-FileSearchScene::FileSearchScene(const char* root, const char* query){
+FileSearchScene::FileSearchScene(const char* root, const char* query, Mode mode){
     this->root.assign(root && *root ? root : "/");
     this->query.assign(query ? query : "");
+    this->mode_ = mode;
+}
+
+void FileSearchScene::closeFile(){
+    if(this->file) this->file.close();
+    this->file_path.clear();
 }
 
 void FileSearchScene::restart(){
     this->walker.end();
+    this->closeFile();
+    this->matcher.setNeedle(this->query.c_str());
     this->result_count = 0;
     this->scanned = 0;
     this->overflow = false;
@@ -53,26 +61,71 @@ void FileSearchScene::restart(){
     if(!this->started) this->done = true;
 }
 
+void FileSearchScene::addResult(const char* path, bool is_dir){
+    if(this->result_count >= kMaxResults){
+        this->overflow = true;
+        this->done = true;
+        this->walker.end();
+        this->closeFile();
+        return;
+    }
+    this->results[this->result_count].assign(path);
+    this->result_is_dir[this->result_count] = is_dir;
+    this->result_line[this->result_count] = 0;
+    this->result_snippet[this->result_count].clear();
+    this->result_count++;
+}
+
+void FileSearchScene::stepFile(){
+    char buf[kChunkBytes];
+    const int n = this->file.read((uint8_t*)buf, sizeof(buf));
+    if(n > 0 && !this->matcher.feed(buf, n)) return;   // 続きは次の回
+    if(n > 0 && this->matcher.matched()){
+        //一致した行の抜粋(一致の少し前から読み直す)
+        const uint32_t at = this->matcher.firstPos();
+        const uint32_t from = at > 32 ? at - 32 : 0;
+        char around[PICO_STR_LL];
+        int got = 0;
+        if(this->file.seekSet(from)) got = this->file.read((uint8_t*)around, sizeof(around));
+        char snippet[PICO_STR_L];
+        TextMatcher::MakeSnippet(around, got > 0 ? got : 0, (int)(at - from), snippet, sizeof(snippet));
+        const FixedString<PICO_PATH_LEN> path = this->file_path;
+        this->closeFile();
+        this->addResult(path.c_str(), false);
+        if(this->results[this->result_count - 1] == path){
+            this->result_line[this->result_count - 1] = this->matcher.firstLine();
+            this->result_snippet[this->result_count - 1].assign(snippet);
+        }
+        return;
+    }
+    this->closeFile();   // 終わりまで読んだ(または読めなかった)
+}
+
 void FileSearchScene::step(){
     if(this->done) return;
     StepBudget budget(kStepBudgetUs);
     SdWalker::Entry e;
-    while(budget.ShouldContinue()){
+    while(budget.ShouldContinue() && !this->done){
+        if(this->file){
+            this->stepFile();
+            continue;
+        }
         if(!this->walker.next(e)){
             this->done = true;
             break;
         }
         this->scanned++;
-        if(!NameMatches(e.name, this->query.c_str())) continue;
-        if(this->result_count >= kMaxResults){
-            this->overflow = true;
-            this->done = true;
-            this->walker.end();
-            break;
+        if(this->mode_ == Mode::Name){
+            if(NameMatches(e.name, this->query.c_str())) this->addResult(e.path, e.is_dir);
+            continue;
         }
-        this->results[this->result_count].assign(e.path);
-        this->result_is_dir[this->result_count] = e.is_dir;
-        this->result_count++;
+        //全文検索: 文字のファイルだけ。OSの設定・鍵(/sys/)と大きすぎるものは見ない
+        if(e.is_dir || e.size == 0 || e.size > kMaxContentBytes || !FileIcon::IsText(e.name)) continue;
+        if(PICO_IO::isSameOrInside(e.path, "/sys")) continue;
+        this->file = OSData::SD.open(e.path, O_RDONLY);
+        if(!this->file) continue;
+        this->file_path.assign(e.path);
+        this->matcher.reset();
     }
 }
 
@@ -89,10 +142,18 @@ void FileSearchScene::refreshList(){
         const char* name = PICO_IO::filename(p);
         item.icon = FileIcon::For(name, this->result_is_dir[i]);
         item.text.assign(name);
-        const size_t dir_len = (size_t)(name - p);
-        if(dir_len > 1){
-            item.text.append("  ");
-            item.text.append(p, dir_len - 1);
+        if(this->mode_ == Mode::Content){
+            //名前:行 抜粋(フォルダは名前の検索と違って出さない。抜粋のほうが手がかりになる)
+            char line[16];
+            snprintf(line, sizeof(line), ":%lu ", (unsigned long)this->result_line[i]);
+            (void)item.text.append(line);
+            (void)item.text.append(this->result_snippet[i].c_str());
+        }else{
+            const size_t dir_len = (size_t)(name - p);
+            if(dir_len > 1){
+                item.text.append("  ");
+                item.text.append(p, dir_len - 1);
+            }
         }
         this->list->add(item);
     }
@@ -107,9 +168,11 @@ void FileSearchScene::refreshStatus(){
     }else if(!this->done){
         snprintf(buf, sizeof(buf), "検索中… %lu件中 %d件", (unsigned long)this->scanned, this->result_count);
     }else if(this->overflow){
-        snprintf(buf, sizeof(buf), "「%s」%d件以上(先頭%d件)", this->query.c_str(), kMaxResults, kMaxResults);
+        snprintf(buf, sizeof(buf), "%s「%s」%d件以上(先頭%d件)", this->mode_ == Mode::Content ? "中身に" : "",
+                 this->query.c_str(), kMaxResults, kMaxResults);
     }else{
-        snprintf(buf, sizeof(buf), "「%s」%d件", this->query.c_str(), this->result_count);
+        snprintf(buf, sizeof(buf), "%s「%s」%d件", this->mode_ == Mode::Content ? "中身に" : "",
+                 this->query.c_str(), this->result_count);
     }
     this->status_label->setTextColor((!this->started) ? PICO_RED : PICO_FORECOLOR);
     this->status_label->setText(buf);
@@ -127,7 +190,7 @@ void FileSearchScene::openResult(int index){
 }
 
 void FileSearchScene::askQuery(){
-    auto* d = new InputDialog("探す名前:", true);
+    auto* d = new InputDialog(this->mode_ == Mode::Content ? "探す言葉:" : "探す名前:", true);
     WidgetFunctions::AddDialog(d);
     d->setInput(this->query.c_str());
     d->setVisible(true);

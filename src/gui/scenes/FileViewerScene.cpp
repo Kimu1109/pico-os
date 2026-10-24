@@ -1,5 +1,6 @@
 #include "gui/scenes/FileViewerScene.hpp"
 #include "apps/texteditor/TextEditorScene.hpp"
+#include "storage/Recent_Files.hpp"
 #include "apps/video/VideoScene.hpp"
 #include "apps/firmware/FirmwareScene.hpp"
 #include "apps/reader/ReaderScene.hpp"
@@ -77,6 +78,11 @@ bool FileViewerScene::loadPlainText(const Rect& body, bool& truncated){
 
 void FileViewerScene::onEnter(){
     const Rect content = Scene::contentRect();
+
+    if(!this->recorded){
+        this->recorded = true;
+        if(OSData::SD_usable && OSData::SD.exists(this->path.c_str())) RecentFiles::Touch(this->path.c_str());
+    }
 
     //動画は動画アプリへ置き換わる(「戻る」で元の画面へ戻る)
     if(OSData::SD_usable && HasExtension(this->path.c_str(), ".pvid")){

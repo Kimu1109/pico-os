@@ -36,6 +36,7 @@ class FileViewerScene : public Scene {
         static constexpr int MARGIN = 3;
 
         FixedString<PICO_PATH_LEN> path;
+        bool recorded = false;          // 最近開いたファイル(RecentFiles)へ書いた(最初の onEnter() で1回だけ)
 
         Button* back_button = nullptr;
         Button* edit_button = nullptr;

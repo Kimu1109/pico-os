@@ -6,6 +6,7 @@
 #include "apps/calculator/CalculatorScene.hpp"
 #include "gui/scenes/FileExplorerScene.hpp"
 #include "apps/texteditor/TextEditorScene.hpp"
+#include "apps/notes/NotesScene.hpp"
 #include "gui/scenes/SettingsScene.hpp"
 #include "apps/dict/DictScene.hpp"
 #include "apps/reader/ReaderLibraryScene.hpp"
@@ -52,6 +53,8 @@ void AppFunctions::Setup(){
     //ファイルの中身を見るビューワー(FileViewerScene)は、ファイルアプリでファイルを2回タップして開く
     //行単位のシンプルなテキストエディタ(TextEditorScene参照)
     Register("テキスト", IconID::Pencil, &MakeScene<TextEditorScene>);
+    //SDの /notes/ のメモを一覧・#タグ・全文検索で引く。開くとテキストエディタ(NotesScene参照)
+    Register(NotesScene::kAppName, IconID::Edit, &MakeScene<NotesScene>);
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
     Register("辞書", IconID::Language, &MakeScene<DictScene>);
     //電子書籍・長文(青空文庫のテキスト等)。ページ送り・しおり・続きから。本はSDの /books/ に置く

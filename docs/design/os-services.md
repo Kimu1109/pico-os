@@ -216,6 +216,7 @@ Luaの`pico.image_load(path, {dither=, raw=})`が使う。**フルカラーの�
 **カレンダーアプリを開かない限り予約は更新されない**(.icsの取得もアプリの中だけのため)。検証: `calendar_scene_test`。
 
 **ファイル検索・容量(`storage/Sd_Walker` / `FileSearchScene` / `StorageScene`)**: ファイルアプリの上の段の「他」(名前の変更もここへ移した。「名前」のボタンで溢れたため)。
+(2026-10-24: 中身で探す全文検索と「最近開いたファイル」を足した。`apps-local.md`「メモ・全文検索・最近開いたファイル」)
 `SdWalker`はフォルダの下を1件ずつ深さ優先でたどる(深さ8まで、FsFileを段の数だけ持つ、確保なし)。検索はSD全体を名前の部分一致(ASCIIの大小を区別しない)で、
 1フレーム6msずつ・32件まで。ファイルはビューワー、フォルダは`FileSearchScene::TakeJump()`でファイルアプリへ戻ってそのフォルダを開く
 (ファイルアプリは戻ってきたとき前のフォルダを開き直すようにした)。容量は全体=`SD.clusterCount()×bytesPerCluster()`、

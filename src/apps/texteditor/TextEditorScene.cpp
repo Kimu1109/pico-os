@@ -171,6 +171,7 @@ void TextEditorScene::layoutView(){
 
 TextEditorScene::~TextEditorScene(){
     KeyboardFunctions::UnregisterInputTarget(this);
+    this->freeRecent();
 }
 
 void TextEditorScene::onEnter(){
@@ -305,7 +306,13 @@ void TextEditorScene::onEnter(){
 
     if(!this->initial_loaded){
         this->initial_loaded = true;
-        if(!this->initial_path.empty()) this->loadFile(this->initial_path.c_str());
+        if(this->initial_is_new){
+            this->newDocument();
+            this->path = this->initial_path;
+            this->refreshStatus();
+        }else if(!this->initial_path.empty()){
+            this->loadFile(this->initial_path.c_str());
+        }
     }
 }
 
@@ -327,6 +334,7 @@ void TextEditorScene::onExit(){
     this->replace_all_button = nullptr;
     this->find_close_button = nullptr;
     this->pending = Pending::None;
+    this->freeRecent();
 }
 
 void TextEditorScene::onUpdate(){
@@ -340,6 +348,7 @@ void TextEditorScene::onUpdate(){
     const Pending p = this->pending;
     this->pending = Pending::None;
     if(p == Pending::OpenPicker) this->openPicker();
+    else if(p == Pending::OpenRecent) this->openRecentPicker();
     else if(p == Pending::OpenFind) this->openFindDialog(false);
     else if(p == Pending::OpenReplace) this->openFindDialog(true);
     else if(p == Pending::OpenReplaceWith) this->openReplaceWithDialog();

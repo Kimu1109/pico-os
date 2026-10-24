@@ -8,7 +8,7 @@
   # 2a. 配布物をまるごと作る(Raspberry Pi 等へそのまま置く)
   python3 script/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps
 
-  # 2b. GitHub Pages 向け: 署名した目録(catalog.tsv / catalog.sig / <id>/<版>/files.tsv)だけを
+  # 2b. GitHub Pages 向け: 署名した目録(catalog.tsv / catalog.sig / <id>/<版>/files.tsv・files.sig)だけを
   #     リポジトリの store/ へ書き、コミットする。アプリの中身は Pages のワークフローが
   #     pc/sdcard/lua/apps/ から写す(assemble)。秘密鍵は GitHub に置かなくてよい
   python3 script/build_app_repo.py sign --key ~/.pico-os/app_repo.key --out store
@@ -16,6 +16,9 @@
 
   # 署名を確かめる
   python3 script/build_app_repo.py verify --dir /tmp/apps [--pubkey 16進64桁]
+
+署名は2種類(docs/APP_REPO.md 形式2): catalog.sig はカタログ鍵(--key)、各アプリの files.sig は
+作者の鍵(--author-key。既定は --key と同じ。pico-os の公式アプリは同じ鍵で両方を署名する)。
 
 配るアプリは pc/sdcard/lua/apps/<ディレクトリ>/app.cfg に id = ... があるものだけ
 (--apps-dir で場所を変えられる)。gitの管理下なら、gitが管理しているファイルだけを配る
@@ -33,11 +36,16 @@ import time
 
 # ---- 本体(apps/store/App_Repo.hpp)と揃える値 ----
 MAGIC = "pico-os-apps"
-FORMAT = 1
-SIGN_CONTEXT = b"pico-os-apps-v1\0"  # 16バイト
+FORMAT = 2
+SIGN_CONTEXT = b"pico-os-apps-v2\0"  # 16バイト(カタログ鍵)
+APP_SIGN_CONTEXT = b"pico-os-app-v2\0\0"  # 16バイト(作者の鍵)
+STATUSES = ("-", "yanked", "blocked")
+# 形式1(作者の署名が無い)の目録は、assemble / verify でだけ通す(コミット済みの store/ を
+# sign し直すまで、形式1のファームへ配り続けるため)
+SIGN_CONTEXT_V1 = b"pico-os-apps-v1\0"
 MAX_ENTRIES = 40
 MAX_CATALOG_BYTES = 32 * 1024
-MAX_LINE_BYTES = 510  # 本体は512バイト(改行込み)まで読む
+MAX_LINE_BYTES = 638  # 本体は640バイト(改行込み)まで読む
 MAX_FILES = 64
 MAX_FILES_BYTES = 8 * 1024
 MAX_FILE_BYTES = 1024 * 1024
@@ -46,6 +54,8 @@ MAX_PATH_LEN = 95
 MAX_PATH_DEPTH = 4
 MAX_NAME_BYTES = 47
 MAX_DESC_BYTES = 180
+MAX_AUTHOR_BYTES = 47
+DEFAULT_AUTHOR = "kimu1109"
 
 ID_RE = re.compile(r"^[a-z0-9_-]{1,23}$")
 VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
@@ -303,6 +313,7 @@ def collect_apps(apps_dir, only):
         if truthy(cfg.get("permission_microphone", "false")):
             perms.append("microphone")
         a.perms = ",".join(perms) or "-"
+        a.status = "-"
         files = tracked_files(app_dir)
         if "main.lua" not in files or "app.cfg" not in files:
             raise SystemExit(f"{name}: main.lua と app.cfg が要ります(gitの管理下ならgit addも)")
@@ -342,7 +353,11 @@ def make_catalog(apps, serial):
     lines = [f"{MAGIC}\t{FORMAT}\t{serial}\n"]
     for a in apps:
         h = hashlib.sha256(a.files_tsv).hexdigest()
-        line = f"{a.id}\t{a.version}\t{a.dir}\t{a.name}\t{a.bytes}\t{h}\t{a.perms}\t{a.description}\n"
+        if a.status not in STATUSES:
+            raise SystemExit(f"{a.id}: status は {'/'.join(STATUSES)} のどれかです ({a.status})")
+        author = cut_utf8(a.author.replace("\t", " "), MAX_AUTHOR_BYTES) or "-"
+        line = (f"{a.id}\t{a.version}\t{a.dir}\t{a.name}\t{a.bytes}\t{h}\t{a.perms}\t{a.description}"
+                f"\t{a.author_key}\t{author}\t{a.status}\n")
         if len(line.encode("utf-8")) > MAX_LINE_BYTES:
             raise SystemExit(f"{a.dir}: カタログの1行が長すぎます(名前・説明を短く)")
         lines.append(line)
@@ -359,22 +374,55 @@ def sign_catalog(seed, catalog):
     return f"ed25519 {pub.hex()} {sig.hex()}\n".encode("ascii")
 
 
+def files_message(app_id, version, files_tsv):
+    header = f"{app_id}\t{version}\t{hashlib.sha256(files_tsv).hexdigest()}\n".encode("utf-8")
+    return APP_SIGN_CONTEXT + hashlib.sha256(header).digest()
+
+
+def sign_files(seed, app_id, version, files_tsv):
+    pub = ed25519_public(seed)
+    sig = ed25519_sign(seed, files_message(app_id, version, files_tsv))
+    return f"ed25519 {pub.hex()} {sig.hex()}\n".encode("ascii")
+
+
+def check_files_sig(text, author_key_hex, app_id, version, files_tsv):
+    parts = text.split()
+    if len(parts) != 3 or parts[0] != "ed25519":
+        raise SystemExit(f"{app_id}: files.sig の形式が違います")
+    if parts[1].lower() != author_key_hex.lower():
+        raise SystemExit(f"{app_id}: files.sig の鍵が catalog.tsv の author_key と違います")
+    if not ed25519_verify(bytes.fromhex(parts[1]), files_message(app_id, version, files_tsv), bytes.fromhex(parts[2])):
+        raise SystemExit(f"{app_id}: files.sig の署名が合いません")
+
+
 def write_bytes(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
         f.write(data)
 
 
-def write_index(out, apps, seed, serial):
+def write_index(out, apps, seed, serial, author_seed=None, author=DEFAULT_AUTHOR):
+    """seed=カタログ鍵、author_seed=作者の鍵(既定は seed)。アプリごとに a.author_seed / a.author で替えられる"""
+    for a in apps:
+        a.sign_seed = getattr(a, "author_seed", None) or author_seed or seed
+        a.author_key = ed25519_public(a.sign_seed).hex()
+        if not getattr(a, "author", None):
+            a.author = author
     catalog = make_catalog(apps, serial)
     write_bytes(os.path.join(out, "catalog.tsv"), catalog)
     write_bytes(os.path.join(out, "catalog.sig"), sign_catalog(seed, catalog))
     for a in apps:
-        write_bytes(os.path.join(out, a.id, a.version, "files.tsv"), a.files_tsv)
+        base = os.path.join(out, a.id, a.version)
+        write_bytes(os.path.join(base, "files.tsv"), a.files_tsv)
+        write_bytes(os.path.join(base, "files.sig"), sign_files(a.sign_seed, a.id, a.version, a.files_tsv))
 
 
 def default_serial(args):
     return args.serial if args.serial is not None else int(time.time())
+
+
+def author_seed(args):
+    return load_seed(args.author_key) if args.author_key else None
 
 
 def cmd_build(args):
@@ -382,7 +430,7 @@ def cmd_build(args):
     apps = collect_apps(args.apps_dir, set(args.only.split(",")) if args.only else None)
     if args.clean and os.path.isdir(args.out):
         shutil.rmtree(args.out)
-    write_index(args.out, apps, seed, default_serial(args))
+    write_index(args.out, apps, seed, default_serial(args), author_seed(args), args.author)
     for a in apps:
         for rel, _, _ in a.files:
             dst = os.path.join(args.out, a.id, a.version, rel)
@@ -398,7 +446,7 @@ def cmd_sign(args):
     apps = collect_apps(args.apps_dir, set(args.only.split(",")) if args.only else None)
     if os.path.isdir(args.out):
         shutil.rmtree(args.out)
-    write_index(args.out, apps, seed, default_serial(args))
+    write_index(args.out, apps, seed, default_serial(args), author_seed(args), args.author)
     print(f"{args.out}: {len(apps)}件のアプリの目録に署名しました。コミットしてください")
 
 
@@ -407,18 +455,25 @@ def read_catalog(index_dir):
         catalog = f.read()
     lines = catalog.decode("utf-8").splitlines()
     head = lines[0].split("\t")
-    if head[0] != MAGIC or head[1] != str(FORMAT):
+    if head[0] != MAGIC or head[1] not in ("1", str(FORMAT)):
         raise SystemExit("catalog.tsv の1行目が違います")
+    fmt = int(head[1])
+    if fmt == 1:
+        print("::warning::catalog.tsv が形式1(作者の署名なし)です。形式2のファームは読みません。"
+              "build_app_repo.py sign をやり直してください")
     entries = []
     for line in lines[1:]:
         if not line or line.startswith("#"):
             continue
         c = line.split("\t")
-        entries.append({"id": c[0], "version": c[1], "dir": c[2], "bytes": int(c[4]), "files_sha256": c[5]})
-    return catalog, entries
+        if len(c) < (11 if fmt == 2 else 8):
+            raise SystemExit(f"catalog.tsv の行の列が足りません ({c[0]})")
+        entries.append({"id": c[0], "version": c[1], "dir": c[2], "bytes": int(c[4]), "files_sha256": c[5],
+                        "author_key": c[8] if fmt == 2 else None, "status": c[10] if fmt == 2 else "-"})
+    return catalog, entries, fmt
 
 
-def check_signature(index_dir, catalog, pubkey_hex):
+def check_signature(index_dir, catalog, pubkey_hex, fmt=FORMAT):
     with open(os.path.join(index_dir, "catalog.sig"), "r", encoding="ascii") as f:
         parts = f.read().split()
     if len(parts) != 3 or parts[0] != "ed25519":
@@ -426,15 +481,16 @@ def check_signature(index_dir, catalog, pubkey_hex):
     pub, sig = bytes.fromhex(parts[1]), bytes.fromhex(parts[2])
     if pubkey_hex and pub.hex() != pubkey_hex.lower():
         raise SystemExit("catalog.sig の鍵が指定した公開鍵と違います")
-    if not ed25519_verify(pub, SIGN_CONTEXT + hashlib.sha256(catalog).digest(), sig):
+    context = SIGN_CONTEXT if fmt == FORMAT else SIGN_CONTEXT_V1
+    if not ed25519_verify(pub, context + hashlib.sha256(catalog).digest(), sig):
         raise SystemExit("catalog.sig の署名が合いません")
     return pub
 
 
 def cmd_assemble(args):
     """署名済みの目録(sign の出力)に、アプリの中身を写して配布物にする。中身が目録と違えば止まる"""
-    catalog, entries = read_catalog(args.index)
-    check_signature(args.index, catalog, args.pubkey)
+    catalog, entries, fmt = read_catalog(args.index)
+    check_signature(args.index, catalog, args.pubkey, fmt)
     if os.path.isdir(args.out):
         shutil.rmtree(args.out)
     shutil.copytree(args.index, args.out)
@@ -445,6 +501,9 @@ def cmd_assemble(args):
             files_tsv = f.read()
         if hashlib.sha256(files_tsv).hexdigest() != e["files_sha256"]:
             raise SystemExit(f"{e['id']}: files.tsv が catalog.tsv と合いません")
+        if fmt == FORMAT:
+            with open(os.path.join(args.index, e["id"], e["version"], "files.sig"), "r", encoding="ascii") as f:
+                check_files_sig(f.read(), e["author_key"], e["id"], e["version"], files_tsv)
         src_dir = os.path.join(args.apps_dir, e["dir"])
         for line in files_tsv.decode("ascii").splitlines():
             rel, size, digest = line.split("\t")
@@ -465,8 +524,8 @@ def cmd_assemble(args):
 
 
 def cmd_verify(args):
-    catalog, entries = read_catalog(args.dir)
-    pub = check_signature(args.dir, catalog, args.pubkey)
+    catalog, entries, fmt = read_catalog(args.dir)
+    pub = check_signature(args.dir, catalog, args.pubkey, fmt)
     skipped = 0
     for e in entries:
         base = os.path.join(args.dir, e["id"], e["version"])
@@ -478,6 +537,9 @@ def cmd_verify(args):
             files_tsv = f.read()
         if hashlib.sha256(files_tsv).hexdigest() != e["files_sha256"]:
             raise SystemExit(f"{e['id']}: files.tsv が合いません")
+        if fmt == FORMAT:
+            with open(os.path.join(base, "files.sig"), "r", encoding="ascii") as f:
+                check_files_sig(f.read(), e["author_key"], e["id"], e["version"], files_tsv)
         total = 0
         for line in files_tsv.decode("ascii").splitlines():
             rel, size, digest = line.split("\t")
@@ -509,7 +571,9 @@ def main():
     for name, func, help_text in (("build", cmd_build, "配布物をまるごと作る"),
                                   ("sign", cmd_sign, "署名した目録だけを作る(GitHub Pages向け)")):
         p = sub.add_parser(name, help=help_text)
-        p.add_argument("--key", required=True)
+        p.add_argument("--key", required=True, help="カタログ鍵(catalog.sig)")
+        p.add_argument("--author-key", help="作者の鍵(files.sig)。既定は --key と同じ")
+        p.add_argument("--author", default=DEFAULT_AUTHOR, help=f"表示する作者名(既定 {DEFAULT_AUTHOR})")
         p.add_argument("--out", required=True)
         p.add_argument("--apps-dir", default=DEFAULT_APPS_DIR)
         p.add_argument("--only", help="配るidをカンマ区切りで(既定は id のある全部)")

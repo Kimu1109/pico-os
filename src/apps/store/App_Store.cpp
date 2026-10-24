@@ -41,6 +41,25 @@ namespace {
         return out.assign(STORE_INSTALLED_DIR) && out.append("/") && out.append(id) && out.append(".tsv");
     }
 
+    bool PinnedKeyPath(FixedString<PICO_PATH_LEN>& out, const char* id){
+        return out.assign(STORE_INSTALLED_DIR) && out.append("/") && out.append(id) && out.append(".key");
+    }
+
+    // /sys/store/state.cfg(最後に受け付けた一覧の取得元・鍵・serial)
+    struct SavedState {
+        FixedString<PICO_STR_L> url;
+        FixedString<65> key;
+        uint32_t serial = 0;
+    };
+    void ReadState(SavedState& st){
+        if(!OSData::SD.exists(STORE_STATE)) return;
+        PICO_Config::ParseFile(STORE_STATE, [&](const char* key, const char* value){
+            if(strcmp(key, "url") == 0) st.url.assign(value);
+            else if(strcmp(key, "key") == 0) st.key.assign(value);
+            else if(strcmp(key, "serial") == 0) st.serial = (uint32_t)strtoul(value, nullptr, 10);
+        });
+    }
+
     void SetMsg(FixedString<PICO_STR_LL>& m, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
     void SetMsg(FixedString<PICO_STR_LL>& m, const char* fmt, ...){
         char buf[PICO_STR_LL];
@@ -188,14 +207,11 @@ bool AppStore::parseCatalogFile(const char* path, uint32_t& serial, bool fill){
 bool AppStore::loadCachedCatalog(){
     if(!OSData::SD_usable || !OSData::SD.exists(STORE_CATALOG)) return false;
     //別のURLで取ったカタログは使わない(取得先を変えた直後に古い一覧から入れようとしないため)
-    FixedString<PICO_STR_L> url;
-    uint32_t saved_serial = 0;
     if(!OSData::SD.exists(STORE_STATE)) return false;
-    PICO_Config::ParseFile(STORE_STATE, [&](const char* key, const char* value){
-        if(strcmp(key, "url") == 0) url.assign(value);
-        else if(strcmp(key, "serial") == 0) saved_serial = (uint32_t)strtoul(value, nullptr, 10);
-    });
-    if(!(url == base_url_.c_str())) return false;
+    SavedState saved;
+    ReadState(saved);
+    const uint32_t saved_serial = saved.serial;
+    if(!(saved.url == base_url_.c_str())) return false;
     uint32_t serial = 0;
     if(!parseCatalogFile(STORE_CATALOG, serial, true)){
         count_ = 0;
@@ -217,6 +233,43 @@ AppStore::Installed AppStore::installed(int index) const {
 
 const char* AppStore::installedVersion(int index) const {
     return (index >= 0 && index < count_) ? installed_ver_[index].c_str() : "";
+}
+
+bool AppStore::installable(int index) const {
+    const AppRepo::Entry* e = entry(index);
+    return e && e->status == AppRepo::Status::Normal;
+}
+
+bool AppStore::blockedInstalled(int index) const {
+    const AppRepo::Entry* e = entry(index);
+    if(!e || e->status != AppRepo::Status::Blocked) return false;
+    const Installed st = installed_[index];
+    return st != Installed::No && st != Installed::Foreign && st != Installed::Conflict;
+}
+
+bool AppStore::readPinnedKey(const char* id, uint8_t out[32]){
+    FixedString<PICO_PATH_LEN> path;
+    if(!PinnedKeyPath(path, id) || !OSData::SD.exists(path.c_str())) return false;
+    FsFile f = OSData::SD.open(path.c_str(), O_RDONLY);
+    if(!f) return false;
+    char hex[65] = {};
+    const int n = f.read(hex, 64);
+    f.close();
+    return n == 64 && AppRepo::HexDecode(hex, 64, out, 32);
+}
+
+bool AppStore::writePinnedKey(const char* id, const uint8_t key[32]){
+    FixedString<PICO_PATH_LEN> path;
+    if(!PinnedKeyPath(path, id)) return false;
+    if(!OSData::SD.exists(STORE_INSTALLED_DIR)) OSData::SD.mkdir(STORE_INSTALLED_DIR);
+    FsFile f = OSData::SD.open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+    if(!f) return false;
+    char hex[66];
+    AppRepo::HexEncode(key, 32, hex);
+    hex[64] = '\n';
+    const bool ok = f.write(hex, 65) == 65;
+    f.close();
+    return ok;
 }
 
 bool AppStore::appDir(int index, FixedString<PICO_PATH_LEN>& out) const {
@@ -242,6 +295,11 @@ void AppStore::refreshInstalled(){
             const bool vok = AppRepo::ValidVersion(info.version.c_str());
             const int c = vok ? AppRepo::CompareVersion(info.version.c_str(), entries_[i].version.c_str()) : -1;
             installed_[i] = c < 0 ? Installed::Update : c == 0 ? Installed::Same : Installed::Newer;
+            //入れたときの作者の鍵と違えば更新させない(覚えていなければ=v1で入れたもの、次に入れたときに覚える)
+            uint8_t pinned[32];
+            if(readPinnedKey(entries_[i].id.c_str(), pinned) && memcmp(pinned, entries_[i].author_key, 32) != 0){
+                installed_[i] = Installed::KeyChanged;
+            }
         }
     }
 }
@@ -287,7 +345,8 @@ bool AppStore::startGet(const char* rel_url){
         return false;
     }
     //200の本文だけを書く(転送(3xx)やエラーの本文をSHA-256に混ぜない)
-    gate_.attach(&http_.response(), step_ == Step::Signature ? (IHttpSink*)&mem_sink_ : (IHttpSink*)&file_sink_);
+    const bool small = step_ == Step::Signature || step_ == Step::FilesSig;
+    gate_.attach(&http_.response(), small ? (IHttpSink*)&mem_sink_ : (IHttpSink*)&file_sink_);
     if(!http_.begin(url, HttpRequest::Method::GET, &gate_)){
         fail("取得を始められません");
         return false;
@@ -380,6 +439,7 @@ void AppStore::update(){
         case Step::Catalog:   onCatalog(); break;
         case Step::Signature: onSignature(); break;
         case Step::Files:     onFiles(); break;
+        case Step::FilesSig:  onFilesSig(); break;
         case Step::File:      onFile(); break;
         default: break;
     }
@@ -411,17 +471,14 @@ void AppStore::onSignature(){
         fail("一覧(catalog.tsv)の形式が違います");
         return;
     }
-    //同じURLで前に見た番号より古い一覧は受け付けない(古い署名済みの一覧へ戻されるのを防ぐ)
-    FixedString<PICO_STR_L> url;
-    uint32_t saved = 0;
-    if(OSData::SD.exists(STORE_STATE)){
-        PICO_Config::ParseFile(STORE_STATE, [&](const char* key, const char* value){
-            if(strcmp(key, "url") == 0) url.assign(value);
-            else if(strcmp(key, "serial") == 0) saved = (uint32_t)strtoul(value, nullptr, 10);
-        });
-    }
-    const bool same_url = url == base_url_.c_str();
-    if(same_url && serial < saved){
+    //同じURL・同じ鍵で前に見た番号より古い一覧は受け付けない(古い署名済みの一覧へ戻されるのを防ぐ)。
+    //鍵ごとに数えるのは、漏れた鍵で最大の番号を署名されても、鍵を替えれば数え直せるようにするため
+    char pubhex[65];
+    AppRepo::HexEncode(pub, 32, pubhex);
+    SavedState saved;
+    ReadState(saved);
+    const bool same_source = saved.url == base_url_.c_str() && saved.key == pubhex;
+    if(same_source && serial < saved.serial){
         fail("前に取得したものより古い一覧が返されました");
         return;
     }
@@ -433,6 +490,7 @@ void AppStore::onSignature(){
     char num[16];
     snprintf(num, sizeof(num), "%lu", (unsigned long)serial);
     PICO_Config::SetValue(STORE_STATE, "url", base_url_.c_str());
+    PICO_Config::SetValue(STORE_STATE, "key", pubhex);
     PICO_Config::SetValue(STORE_STATE, "serial", num);
     serial_ = serial;
     parseCatalogFile(STORE_CATALOG, serial, true);
@@ -460,6 +518,22 @@ bool AppStore::beginInstall(int index, bool allow_replace){
     if(st == Installed::Foreign && !allow_replace){
         state_ = State::Failed;
         message_.assign("同じ名前のアプリが入っています(上書きの確認が要ります)");
+        return false;
+    }
+    if(st == Installed::KeyChanged){
+        state_ = State::Failed;
+        message_.assign("作者の鍵が変わりました(削除してから入れ直すと、新しい鍵で入ります)");
+        return false;
+    }
+    //入っている版より古い版は入れない(漏れたカタログ鍵で、作者が昔署名した穴のある版へ戻されるのを防ぐ)
+    if(st == Installed::Newer){
+        state_ = State::Failed;
+        message_.assign("入っている版より古い版は入れられません");
+        return false;
+    }
+    if(e->status != AppRepo::Status::Normal){
+        state_ = State::Failed;
+        message_.assign(e->status == AppRepo::Status::Blocked ? "危険と判断されたアプリです" : "取り下げられたアプリです");
         return false;
     }
     if(!OSData::SD_usable){
@@ -527,6 +601,35 @@ void AppStore::onFiles(){
     file_sink_.digest(digest);
     if(memcmp(digest, e.files_sha256, 32) != 0){
         fail("ファイル一覧(files.tsv)が一覧の署名と合いません");
+        return;
+    }
+    step_ = Step::FilesSig;
+    mem_sink_.reset();
+    FixedString<PICO_STR_L> rel;
+    rel.assign(e.id.c_str());
+    rel.append("/");
+    rel.append(e.version.c_str());
+    rel.append("/files.sig");
+    startGet(rel.c_str());
+}
+
+void AppStore::onFilesSig(){
+    const AppRepo::Entry& e = entries_[target_];
+    uint8_t pub[32], sig[64];
+    if(!AppRepo::ParseSignature(mem_sink_.text(), pub, sig)){
+        fail("作者の署名(files.sig)を読めません");
+        return;
+    }
+    if(memcmp(pub, e.author_key, 32) != 0){
+        fail("作者の署名の鍵が一覧と合いません");
+        return;
+    }
+    if(installed_[target_] == Installed::KeyChanged){
+        fail("作者の鍵が変わりました(削除してから入れ直すと、新しい鍵で入ります)");
+        return;
+    }
+    if(!AppRepo::VerifyFiles(e.id.c_str(), e.version.c_str(), e.files_sha256, pub, sig)){
+        fail("作者の署名が合いません");
         return;
     }
     //全部の行を先に確かめる: 形式・パスの並び(大小を区別せず昇順=重なり無し)・数・合計・必須のファイル
@@ -715,6 +818,10 @@ bool AppStore::commitInstall(){
     if(!OSData::SD.rename(STORE_STAGING_FILES, list_path.c_str())){
         LOG_SYS_WARN("AppStore: インストールしたファイルの一覧を残せません (%s)", list_path.c_str());
     }
+    //次の更新から、この作者の鍵の署名だけを受け付ける
+    if(!writePinnedKey(e.id.c_str(), e.author_key)){
+        LOG_SYS_WARN("AppStore: 作者の鍵を残せません (%s)", e.id.c_str());
+    }
     PICO_IO::removeRecursive(STORE_STAGING);
 
     if(!LuaAppScanner::RegisterOrRefresh(dir.c_str())){
@@ -741,6 +848,8 @@ bool AppStore::remove(int index){
     const bool ok = PICO_IO::removeRecursive(dir.c_str());
     FixedString<PICO_PATH_LEN> list_path;
     if(InstalledListPath(list_path, e->id.c_str())) OSData::SD.remove(list_path.c_str());
+    //覚えていた作者の鍵も忘れる(入れ直せば、そのときの一覧の鍵で入る)
+    if(PinnedKeyPath(list_path, e->id.c_str())) OSData::SD.remove(list_path.c_str());
     refreshInstalled();
     revision_++;
     char m[PICO_STR_LL];

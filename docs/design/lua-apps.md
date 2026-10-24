@@ -189,7 +189,8 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 **形式は静的なファイルだけ**(catalog.tsv + catalog.sig + `<id>/<版>/files.tsv` + ファイル)なので、GitHub Pages でも
 Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURLは`https://kimu1109.github.io/pico-os/apps/`(`/sys/store.cfg`の`url`)。
 
-- **守り方**: カタログ(catalog.tsv)だけにEd25519で署名し(`"pico-os-apps-v1\0"`+SHA-256(catalog))、そこから
+- **守り方**: カタログ(catalog.tsv)にカタログ鍵でEd25519の署名(`"pico-os-apps-v2\0"`+SHA-256(catalog))、
+  各アプリの files.tsv に作者の鍵の署名(files.sig。形式2、2026-10-24。下の「アプリストアの投稿」)をし、そこから
   files.tsv(SHA-256)→各ファイル(SHA-256)とつなぐ。鍵は`src/apps/store/App_Repo_Keys.hpp`の`kBuiltin`(利用者の手元の鍵`cdae7ba2…`の1件。
   全部0の鍵は信頼しない)か`/sys/store.cfg`の`key = 16進64桁`(4行まで。SDへ書ける人はアプリを直接置けるので弱くならない)。
   **秘密鍵は利用者のPCにだけ置く**(`build_app_repo.py keygen`。リポジトリ・サーバ・GitHubのSecretsにも置かない)。
@@ -202,8 +203,9 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
   `catalog.tsv`へ差し替える(失敗しても前の一覧のまま)。インストールは`/sys/store/staging/`へ全部取って確かめてから、
   **ファイルを1つずつ**`/lua/apps/<dir>/`へ移す(ディレクトリごと移さないのは、更新でアプリが書いたセーブ等を残すため)。
   前の版の一覧(`/sys/store/installed/<id>.tsv`)にあって新しい版に無いファイルだけ消す。files.tsvは全体をRAMに載せず、
-  1行ずつ読み直す(512バイトの行バッファもスタックではなくメンバ)。カタログ40件で**約16KB**あるので、画面が開いている間だけ`new`する。
-  `Installed`: No / Same / Update / Newer / Foreign(同名のディレクトリにidの無いアプリ=手で入れたもの。上書きの確認を出す) / Conflict(別のid。入れない)。
+  1行ずつ読み直す(512バイトの行バッファもスタックではなくメンバ)。カタログ40件で**約20KB**(形式2で作者の鍵・作者名が増えた。AppStore全体は約27KB)あるので、画面が開いている間だけ`new`する。
+  `Installed`: No / Same / Update / Newer(古い版は入れない) / Foreign(同名のディレクトリにidの無いアプリ=手で入れたもの。上書きの確認を出す) /
+  Conflict(別のid。入れない) / KeyChanged(覚えた作者の鍵と違う。更新できず、削除すれば入れられる)。
 - **登録簿**: インストール後すぐランチャに並ぶ(`LuaAppScanner::RegisterOrRefresh()`。既に登録済みなら`AppFunctions::Refresh()`で名前・権限・アイコンだけ差し替え、
   並びの位置は変えない)。削除は`AppFunctions::Unregister()`(後ろのindexを詰め、ランチャの並び・隠した印も詰める)。
   `LuaAppScanner::ReadAppConfig()`/`AppInfo`を外へ出した(app.cfgに`id`を足した。走査は`.`で始まるディレクトリを飛ばすようにした)。
@@ -224,7 +226,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
 ## アプリストアの投稿(設計。未実装)(2026-10-24)
 
 他人がアプリを投稿・更新できるようにする。**投稿は GitHub のプルリクエストで受け付け、検査と公開は GitHub Actions に任せる。**
-配布物は今と同じ静的なファイルのまま(形式は`docs/APP_REPO.md`「v2」)。
+配布物は今と同じ静的なファイルのまま(形式は`docs/APP_REPO.md`の形式2)。
 
 ### 選んだ形と理由
 
@@ -299,13 +301,19 @@ script/                build_app_repo.py(pico-os から写す)
 
 ### 今のストアから移る順番
 
-1. 本体: APP_REPO v2(`App_Repo` の形式2・files.sig・`App_Store` の鍵の固定・status・古い版を断る・serial を鍵ごとに)と
-   `StoreScene` の表示(作者名・警告・`KeyChanged`)。`app_repo_test`・`app_store_net_test`・`app_store_fixture.py` を v2 へ。
+1. **済み(2026-10-24)** 本体: APP_REPO 形式2(`App_Repo` の形式2・files.sig・`App_Store` の鍵の固定・status・古い版を断る・serial を鍵ごとに)と
+   `StoreScene` の表示(作者名・警告・`KeyChanged`)。`build_app_repo.py` の `build`/`sign` は形式2を作る(`--author-key`/`--author`)。
+   - `StoreScene` は一覧の行とAppStoreの番号を `rows[]` で対応させる(入っていない取り下げを飛ばし、入っている `blocked` を先頭へ)。
+   - 検証: `app_repo_test`(形式2の行・status・files.sig、Pythonの署名をMonocypherで確かめる)、`app_store_net_test`(壊れた files.sig・
+     一覧と違う作者の鍵・鍵が変わった更新→削除→入れ直し・古い版・yanked/blocked・鍵ごとの serial・鍵を覚えていない形式1のものの更新)。
+     PCビルドの `--tap`/`--shot` で、blocked が先頭に赤・入っていない yanked が出ない・作者名・入れるボタンが押せないことを見た。
+   - **コミット済みの `store/` は形式1のまま**(利用者の鍵で `sign` をやり直す必要がある)。`assemble`/`verify` は形式1も警告つきで通すので
+     Pagesは止まらないが、形式2のファームはそれを読まない。
 2. `build_app_repo.py`: `author-sign`(作者)、`registry-check`・`registry-build`(投稿用リポジトリのCI)。
 3. 一覧のページ分け(SDから1ページずつ読む。40件を超える前に要る)。**ランチャの登録簿の32件**(`launcher_hidden` が32bit)も広げる。
 4. 投稿用リポジトリを作り、ワークフローを置き、今の `store/` の16本を移す(owners は kimu1109、**作者の鍵は今の手元の鍵 `cdae7ba2…`**。
    CIが乗っ取られても、公式アプリの更新は手元の鍵が無いと出せない)。
-5. 既定のURLを投稿用リポジトリの Pages へ替える。pico-os の `store/` と `web-pages.yml` の `assemble` は、v1 のファームのために当面残す。
+5. 既定のURLを投稿用リポジトリの Pages へ替える。pico-os の `store/` と `web-pages.yml` の `assemble` は、移し終えたら消す。
 
 利用者の手が要るもの: リポジトリの作成・Pages の有効化・カタログ鍵を作って Secret に入れる・ルールセットの設定。
 

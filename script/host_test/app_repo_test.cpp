@@ -25,6 +25,8 @@ static bool FilesLine(const char* line, AppRepo::FileEntry& f, bool& skip){
 }
 
 static const char* kHash = "6600098b337a694c04a9507cb47efade200ea048993d8fd188b417736d6c9039";
+// 作者の公開鍵の例(RFC 8032 のテストの鍵)
+static const char* kAuthor = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
 
 int main(){
     // ---- 名前 ----
@@ -76,28 +78,45 @@ int main(){
     // ---- catalog.tsv ----
     {
         uint32_t serial = 0;
-        std::string h = "pico-os-apps\t1\t1791704372\r\n";
+        std::string h = "pico-os-apps\t2\t1791704372\r\n";
         check(AppRepo::ParseCatalogHeader(&h[0], serial) && serial == 1791704372u, "catalog: 1行目");
-        h = "pico-os-apps\t1\t5\tfuture\n";
+        h = "pico-os-apps\t2\t5\tfuture\n";
         check(AppRepo::ParseCatalogHeader(&h[0], serial) && serial == 5, "catalog: 1行目の後ろの列は無視");
-        h = "pico-os-apps\t2\t5\n";
+        h = "pico-os-apps\t1\t5\n";
+        check(!AppRepo::ParseCatalogHeader(&h[0], serial), "catalog: 形式1(作者の署名が無い)は読まない");
+        h = "pico-os-apps\t3\t5\n";
         check(!AppRepo::ParseCatalogHeader(&h[0], serial), "catalog: 知らない形式の番号は断る");
         h = "something\t1\t5\n";
         check(!AppRepo::ParseCatalogHeader(&h[0], serial), "catalog: 見出しが違う");
-        h = "pico-os-apps\t1\t99999999999\n";
+        h = "pico-os-apps\t2\t99999999999\n";
         check(!AppRepo::ParseCatalogHeader(&h[0], serial), "catalog: serialが32bitを超える");
 
         AppRepo::Entry e;
         bool skip = false;
-        std::string line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です\textra\n";
+        const std::string tail = std::string("\t") + kAuthor + "\tkimu1109\t-";
+        std::string line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です" + tail + "\textra\n";
         check(CatLine(line.c_str(), e, skip), "catalog: 1件読める");
         check(e.id == "tetris" && e.version == "2.0.0" && e.dir == "テトリス" && e.name == "テトリス"
               && e.bytes == 21143 && e.perms == AppRepo::PermNetwork && e.description == "説明です", "catalog: 各列");
         check(e.files_sha256[0] == 0x66 && e.files_sha256[31] == 0x39, "catalog: SHA-256");
+        check(e.author_key[0] == 0xd7 && e.author_key[31] == 0x1a && e.author == "kimu1109"
+              && e.status == AppRepo::Status::Normal, "catalog: 作者の鍵・作者名・status");
+        line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\n";
+        check(CatLine(line.c_str(), e, skip) && e.status == AppRepo::Status::Normal, "catalog: 後ろの列が無くても読める");
+        line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です\n";
+        check(!CatLine(line.c_str(), e, skip) && !skip, "catalog: 形式1の8列の行は断る");
+        line = std::string("tetris\t2\tテトリス\tx\t1\t") + kHash + "\t-\t\t" + std::string(64, '0') + "\ta\t-\n";
+        check(!CatLine(line.c_str(), e, skip), "catalog: 全部0の作者の鍵は断る");
+        line = std::string("tetris\t2\tテトリス\tx\t1\t") + kHash + "\t-\t\tabcd\ta\t-\n";
+        check(!CatLine(line.c_str(), e, skip), "catalog: 作者の鍵が64桁でない");
+        check(AppRepo::ParseStatus("-") == AppRepo::Status::Normal && AppRepo::ParseStatus("yanked") == AppRepo::Status::Yanked
+              && AppRepo::ParseStatus("blocked") == AppRepo::Status::Blocked, "status: 3つ");
+        check(AppRepo::ParseStatus("future") == AppRepo::Status::Yanked && AppRepo::ParseStatus("") == AppRepo::Status::Yanked,
+              "status: 知らない値は取り下げと同じ");
         check(!CatLine("", e, skip) && skip, "catalog: 空行は飛ばす");
         check(!CatLine("# comment\n", e, skip) && skip, "catalog: #は飛ばす");
         const char* bad[] = {
-            "tetris\t2.0.0\tテトリス\tテトリス\t21143\n",                                   // 列が足りない
+            "tetris\t2.0.0\tテトリス\tテトリス\t21143\n",                                   // 列が足りない(形式1の行も)
             "Tetris\t2.0.0\tテトリス\tx\t1\t%s\t-\t\n",                                      // id
             "tetris\tv2\tテトリス\tx\t1\t%s\t-\t\n",                                         // version
             "tetris\t2\t../x\tx\t1\t%s\t-\t\n",                                              // dir
@@ -109,8 +128,13 @@ int main(){
         };
         bool all = true;
         for(const char* fmt : bad){
-            char buf[512];
+            char buf[640];
             snprintf(buf, sizeof(buf), fmt, kHash);
+            //作者の鍵などの後ろの3列を足す(壊した列だけで断ることを見るため)
+            std::string b(buf);
+            if(!b.empty() && b.back() == '\n') b.pop_back();
+            b += tail + "\n";
+            snprintf(buf, sizeof(buf), "%s", b.c_str());
             if(CatLine(buf, e, skip) || skip) all = false;
         }
         check(all, "catalog: 壊れた行は断る");
@@ -138,7 +162,7 @@ int main(){
         memcpy(seed_copy, seed, 32);
         crypto_ed25519_key_pair(sk, pk, seed_copy);
 
-        const char* catalog = "pico-os-apps\t1\t1\n";
+        const char* catalog = "pico-os-apps\t2\t1\n";
         uint8_t digest[32];
         Sha256::Hash(catalog, strlen(catalog), digest);
         uint8_t msg[AppRepo::kSignMessageBytes];
@@ -172,9 +196,25 @@ int main(){
         // build_app_repo.sign_catalog() で署名したもの
         uint8_t py_pk[32], py_sig[64];
         const char* py = "ed25519 d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a "
-            "1ccd5435e2841ad9ab14676605cc134b77b22b83c3a5e11a19bc00ebaabe4c07c7ff6fcbedd0c5bc1e414fc9a3c6a62776be5a07f3d5d0f0d5b1e39c319ac606\n";
+            "6889229ae32050f908596d255a372ce4490074634bc31b28f09f1a77967d76fc7c1606e410d69ce9cd6876c5faf383edc1aa7bd4861e583e408a74292fdadb00\n";
         check(AppRepo::ParseSignature(py, py_pk, py_sig) && AppRepo::VerifyCatalog(digest, py_pk, py_sig),
               "sig: Pythonの署名をMonocypherで確かめられる");
+
+        // files.sig: 同じ鍵で、files.tsv "main.lua\t3\t<sha256("abc")>\n" を tetris 2.0.0 として
+        // build_app_repo.sign_files() で署名したもの
+        uint8_t files_sha[32];
+        AppRepo::HexDecode("06eb9bcf53217ab7548b37d1d9212d445e3688f13303e39345f1fa5feb485e4c", 64, files_sha, 32);
+        const char* pyf = "ed25519 d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a "
+            "8dbea9d904caaec99220c026d8949b17831bfbcfd65df8691d43c1529e0c92f3da315ea5cb72675baf94f80826ff71af0c7528e81581c7db30b0bb45d513f709\n";
+        check(AppRepo::ParseSignature(pyf, py_pk, py_sig) && AppRepo::VerifyFiles("tetris", "2.0.0", files_sha, py_pk, py_sig),
+              "files.sig: Pythonの署名を確かめられる");
+        check(!AppRepo::VerifyFiles("reversi", "2.0.0", files_sha, py_pk, py_sig), "files.sig: 別のidへ付け替えられない");
+        check(!AppRepo::VerifyFiles("tetris", "1.0.0", files_sha, py_pk, py_sig), "files.sig: 別の版へ付け替えられない");
+        check(!AppRepo::VerifyCatalog(files_sha, py_pk, py_sig), "files.sig: カタログの署名としては通らない");
+        uint8_t other_sha[32];
+        memcpy(other_sha, files_sha, 32);
+        other_sha[3] ^= 1;
+        check(!AppRepo::VerifyFiles("tetris", "2.0.0", other_sha, py_pk, py_sig), "files.sig: files.tsv が違えば合わない");
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

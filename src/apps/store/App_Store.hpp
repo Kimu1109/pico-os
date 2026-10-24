@@ -15,14 +15,15 @@
 // 流れ:
 //   beginRefresh() … catalog.tsv → catalog.sig を取り、署名と版の番号(serial)を確かめてから
 //                    /sys/store/catalog.tsv へ差し替える。確かめられなければ手元の一覧はそのまま
-//   beginInstall() … files.tsv(カタログのSHA-256と照合)→ 各ファイル(files.tsvのSHA-256と照合)を
-//                    /sys/store/staging/ へ取り、app.cfg の id・版・権限を確かめてから
-//                    /lua/apps/<dir>/ へ1つずつ移し、登録簿へ入れる
+//   beginInstall() … files.tsv(カタログのSHA-256と照合)→ files.sig(作者の鍵の署名)→
+//                    各ファイル(files.tsvのSHA-256と照合)を /sys/store/staging/ へ取り、
+//                    app.cfg の id・版・権限を確かめてから /lua/apps/<dir>/ へ1つずつ移し、登録簿へ入れる。
+//                    初めて入れたときの作者の鍵を覚え(/sys/store/installed/<id>.key)、更新では同じ鍵だけを受け付ける
 //   remove()       … /lua/apps/<dir>/ を消して登録簿から外す(同期)
 //
 // 通信は HttpRequest 1本を keep-alive で使い回す(HTTPSの1〜2秒のハンドシェイクを1回にするため)。
 // 持っている間はTLSの約40KBを持つので、画面を離れるときに close() すること。
-// このクラス自体は約13KB(カタログ40件)なので、画面が開いている間だけ new する。
+// このクラス自体は約27KB(カタログ40件で約20KB。ホストで測った値)なので、画面が開いている間だけ new する。
 class AppStore {
     public:
         enum class State : uint8_t { Idle, Busy, Done, Failed };
@@ -33,6 +34,7 @@ class AppStore {
             Newer,    // カタログより新しい版が入っている(手元で書き換えた等)
             Foreign,  // 同じ名前のディレクトリに、ストアのものでない(idが無い)アプリがある
             Conflict, // 同じ名前のディレクトリに、別のidのアプリがある(入れられない)
+            KeyChanged, // 入れたときと作者の鍵が違う(更新できない。削除すれば新しい鍵で入れられる)
         };
 
         static constexpr const char* kDefaultUrl = "https://kimu1109.github.io/pico-os/apps/";
@@ -76,6 +78,10 @@ class AppStore {
         Installed installed(int index) const;
         // 入っている版(入っていなければ空)
         const char* installedVersion(int index) const;
+        // 新しく入れられるか(取り下げ・危険の印が無い)
+        bool installable(int index) const;
+        // 危険の印(blocked)が付いたアプリが入っているか
+        bool blockedInstalled(int index) const;
         // 入っているアプリを開く(Installed::No/Conflict以外)
         bool launch(int index);
         // インストール先(/lua/apps/<dir>)
@@ -114,7 +120,7 @@ class AppStore {
                 bool overflow_ = false;
         };
 
-        enum class Step : uint8_t { None, Catalog, Signature, Files, File };
+        enum class Step : uint8_t { None, Catalog, Signature, Files, FilesSig, File };
 
         HttpRequest http_;
         FileSink file_sink_;
@@ -156,6 +162,7 @@ class AppStore {
         void onCatalog();
         void onSignature();
         void onFiles();
+        void onFilesSig();
         void onFile();
         bool startNextFile();
         bool checkStagedConfig();
@@ -168,4 +175,7 @@ class AppStore {
         // files.tsv の一覧に rel(大小を区別しない)があるか
         bool listHas(const char* list_path, const char* rel);
         void refreshInstalled();
+        // 覚えている作者の鍵(/sys/store/installed/<id>.key)。無ければfalse
+        bool readPinnedKey(const char* id, uint8_t out[32]);
+        bool writePinnedKey(const char* id, const uint8_t key[32]);
 };

@@ -12,12 +12,13 @@
 // アプリストア。配布元(docs/APP_REPO.md、既定は GitHub Pages の /apps/)からLuaアプリを取ってきて入れる。
 //
 //   [戻る] アプリストア      [設定][更新]
-//   一覧(入っている=緑、更新あり=青、入れられない=赤)
+//   一覧(入っている=緑、更新あり=青、入れられない=赤)。取り下げたアプリは、入っているときだけ並べる
+//   (危険の印が付いて入っているものは先頭に並べ、状態の行で削除をすすめる)
 //   選んだアプリの欄(名前・版・大きさ / 権限 / 説明)
 //   進み具合のバー + 状態の1行
 //   [入れる/更新] [開く] [削除]
 //
-// 通信とインストールは AppStore(apps/store/App_Store)。約20KBあるので、この画面が開いている間だけ new する
+// 通信とインストールは AppStore(apps/store/App_Store)。約27KBあるので、この画面が開いている間だけ new する
 // (シーン本体は数十バイト)。HTTPSの接続(TLSの約40KB)は画面を離れるときに閉じる。
 // 入れる前に、一覧に書かれた権限を確認のダイアログで見せる(インストール時に app.cfg と突き合わせ、
 // それより強い権限が付いていれば入れない)。
@@ -44,6 +45,12 @@ class StoreScene : public Scene {
         FixedString<PICO_STR_S> selected_id;
         // 確認ダイアログの間に一覧が変わっても別のアプリを触らないよう、idで覚える
         FixedString<PICO_STR_S> confirm_id;
+
+        // 一覧の行 → AppStoreの番号(取り下げたアプリを飛ばすので、そのままの番号ではない)
+        int8_t rows[AppRepo::kMaxEntries] = {};
+        int row_count = 0;
+        // 危険の印が付いて入っているアプリの知らせ(無ければ空)
+        FixedString<PICO_STR_LL> blocked_warning;
 
         FixedString<PICO_STR_LL> notice;
         int8_t notice_color = PICO_DARKGREY;

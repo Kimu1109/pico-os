@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """app_store_net_test の配布物を作る(run_net.sh から呼ぶ)。
 
-  python3 app_store_fixture.py <OUT> → <OUT>/variants/<名前>/ に配布物、<OUT>/pubkey.txt に信頼する公開鍵
+  python3 app_store_fixture.py <OUT> → <OUT>/variants/<名前>/ に配布物、<OUT>/pubkey.txt と
+                                      <OUT>/pubkey2.txt に信頼するカタログ鍵
 
 variants:
   good      serial 100 … tetris 2.0.0 / reversi 2.0.0
@@ -11,6 +12,14 @@ variants:
   old       serial 50  … good と同じ中身(古い番号)
   tampered  serial 300 … v2 と同じ一覧で、配った main.lua だけ後から書き換えたもの
   perms     serial 400 … tetris 2.2.0 の app.cfg は permission_network=true なのに一覧は "-"
+  以下は元の tetris 2.0.0 / reversi 2.0.0 から作る
+  badfsig   serial 500 … tetris の files.sig を1ビット壊したもの
+  wrongauth serial 510 … tetris の files.sig を一覧の author_key と違う鍵で署名したもの
+  rekey     serial 600 … reversi 2.1.0 を別の作者の鍵で署名したもの(一覧の author_key も別の鍵)
+  downgrade serial 700 … reversi 2.0.0(rekey と同じ作者の鍵)
+  yanked    serial 800 … tetris は yanked、reversi 2.1.0 は blocked
+  newcat    serial 10  … good と同じ中身を2つ目のカタログ鍵で署名したもの(鍵ごとに serial を数え直す)
+  newcatold serial 5   … newcat と同じ鍵で古い番号
 """
 import os
 import shutil
@@ -30,9 +39,12 @@ def set_cfg(path, key, value):
     open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
 
 
-def build(apps_dir, out, seed, serial):
+def build(apps_dir, out, seed, serial, author_seeds=None, statuses=None):
     apps = b.collect_apps(apps_dir, None)
-    b.write_index(out, apps, seed, serial)
+    for a in apps:
+        a.author_seed = (author_seeds or {}).get(a.id)
+        a.status = (statuses or {}).get(a.id, "-")
+    b.write_index(out, apps, seed, serial, seed, "tester")
     for a in apps:
         for rel, _, _ in a.files:
             dst = os.path.join(out, a.id, a.version, rel)
@@ -44,15 +56,21 @@ def main():
     out = sys.argv[1]
     seed = bytes(range(1, 33))
     other = bytes(range(101, 133))
+    third = bytes(range(201, 233))
     with open(os.path.join(out, "pubkey.txt"), "w") as f:
         f.write(b.ed25519_public(seed).hex())
+    with open(os.path.join(out, "pubkey2.txt"), "w") as f:
+        f.write(b.ed25519_public(third).hex())
 
     src = os.path.join(out, "src")
     shutil.rmtree(src, ignore_errors=True)
     os.makedirs(src)
+    orig = os.path.join(out, "orig")
+    shutil.rmtree(orig, ignore_errors=True)
     for d in ("テトリス", "リバーシ"):
-        shutil.copytree(os.path.join(SRC, d), os.path.join(src, d),
-                        ignore=shutil.ignore_patterns("store.json*", "settings.cfg", "hiscore.txt"))
+        for dst in (src, orig):
+            shutil.copytree(os.path.join(SRC, d), os.path.join(dst, d),
+                            ignore=shutil.ignore_patterns("store.json*", "settings.cfg", "hiscore.txt"))
     var = os.path.join(out, "variants")
     shutil.rmtree(var, ignore_errors=True)
 
@@ -84,12 +102,36 @@ def main():
         if a.id == "tetris":
             a.perms = "-"  # 一覧では権限を隠す(本体は app.cfg と突き合わせて断るはず)
     pout = os.path.join(var, "perms")
-    b.write_index(pout, apps, seed, 400)
+    b.write_index(pout, apps, seed, 400, seed, "tester")
     for a in apps:
         for rel, _, _ in a.files:
             dst = os.path.join(pout, a.id, a.version, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(os.path.join(a.path, rel), dst)
+
+    # ---- 作者の署名 ----
+    build(orig, os.path.join(var, "badfsig"), seed, 500)
+    fsig = os.path.join(var, "badfsig", "tetris", "2.0.0", "files.sig")
+    parts = open(fsig).read().split()
+    s = bytearray(bytes.fromhex(parts[2]))
+    s[7] ^= 0x01
+    open(fsig, "w").write(f"{parts[0]} {parts[1]} {bytes(s).hex()}\n")
+
+    build(orig, os.path.join(var, "wrongauth"), seed, 510)
+    tdir = os.path.join(var, "wrongauth", "tetris", "2.0.0")
+    files_tsv = open(os.path.join(tdir, "files.tsv"), "rb").read()
+    open(os.path.join(tdir, "files.sig"), "wb").write(b.sign_files(other, "tetris", "2.0.0", files_tsv))
+
+    rev = os.path.join(orig, "リバーシ")
+    set_cfg(os.path.join(rev, "app.cfg"), "version", "2.1.0")
+    build(orig, os.path.join(var, "rekey"), seed, 600, {"reversi": other})
+    build(orig, os.path.join(var, "yanked"), seed, 800, {"reversi": other},
+          {"tetris": "yanked", "reversi": "blocked"})
+    set_cfg(os.path.join(rev, "app.cfg"), "version", "2.0.0")
+    build(orig, os.path.join(var, "downgrade"), seed, 700, {"reversi": other})
+
+    build(orig, os.path.join(var, "newcat"), third, 10)
+    build(orig, os.path.join(var, "newcatold"), third, 5)
     print("配布物を作りました:", var)
 
 

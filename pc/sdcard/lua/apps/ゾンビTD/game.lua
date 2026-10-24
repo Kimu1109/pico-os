@@ -339,6 +339,7 @@ zombies.wall_at = buildings.wall_at
 soldiers.ZOMBIE_TAG = zombies.TAG
 buildings.ZOMBIE_TAG = zombies.TAG
 soldiers.blocked = function(x, z) return buildings.at[buildings.col(x, z)] ~= nil end
+soldiers.pressing = zombies.pressing
 
 -- ---------------------------------------------------------------- 描画
 

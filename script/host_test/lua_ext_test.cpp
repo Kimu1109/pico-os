@@ -2016,7 +2016,9 @@ int main() {
                     for _, s in ipairs(S.list) do
                         if s.state == "hold" and s.kind == "melee" then
                             local d = math.sqrt((s.x - s.px) ^ 2 + (s.z - s.pz) ^ 2)
-                            if d > (MAXLEASH or 0) then MAXLEASH = d end
+                            if s.tgt and s.tgt.tgt == s then
+                                if d > (MAXLEASH2 or 0) then MAXLEASH2 = d end   -- 自分を狙う相手は遠くまで追う
+                            elseif d > (MAXLEASH or 0) then MAXLEASH = d end
                         end
                         if s.hp > (LASTHP[s] or s.hp) then HEALED = HEALED + 1 end
                         LASTHP[s] = s.hp
@@ -2101,6 +2103,7 @@ int main() {
             for _, u in ipairs(Z.list) do mk = math.max(mk, keys(u)) end
             check(mk <= 16, "zombies: 表のキーは16個以内 (" .. mk .. ")")
             check(MAXLEASH and MAXLEASH <= 3.6, "soldiers: 近接兵は持ち場から3マスほどまでしか離れない (" .. tostring(MAXLEASH) .. ")")
+            check((MAXLEASH2 or 0) <= 7.6, "soldiers: 自分を狙うゾンビでも持ち場から7マスほどまで (" .. tostring(MAXLEASH2) .. ")")
             check(HEALED > 0, "soldiers: 回復兵が回復する (" .. HEALED .. ")")
             -- 移動中の反撃: 攻撃してきたゾンビが近くにいれば止まって戦う
             Z.clear(); C.clear_shots()
@@ -2141,6 +2144,60 @@ int main() {
             z2.scan = 0
             Z.update(0.01)
             check(z2.tgt == m, "zombies: 近接兵(優先度0)を弓兵(優先度3)より先に狙う")
+            -- 遠距離ゾンビが反撃して来ない相手へ投げ続けても、ENGAGE_MAX 秒で諦めてベースへ向かう(膠着しない)
+            S.clear(); Z.clear()
+            local h = S.hire("melee")
+            h.hp = 100000
+            Z.queue("ranged", 1); Z.update(0.4)
+            local zr = Z.list[1]
+            local placed = false
+            for d = 0, 40 do
+                for _, o in ipairs({{3.6, 0}, {0, 3.6}, {-3.6, 0}, {0, -3.6}}) do
+                    local hx, hz = zr.x + o[1], zr.z + o[2] - d * 0.5
+                    local hy = pico.iso.stand(hx, hz, nil, {height = 2, avoid = {1}})
+                    if not placed and hy and math.abs(hy - zr.gy) < 0.5
+                        and pico.iso.sight(zr.x, zr.gy + 1.2, zr.z, hx, hy + 1, hz) then
+                        h.x, h.y, h.z, h.gy = hx, hy, hz, hy
+                        pico.iso.entity_move(h.id, hx, hy, hz)
+                        placed = true
+                    end
+                end
+                if placed then break end
+                zr.z = zr.z - 0.5; zr.col = -1
+            end
+            zr.scan = 0
+            local ZX0, ZZ0, ZY0 = zr.x, zr.z, zr.gy
+            for _ = 1, 40 do Z.update(0.05); C.step(0.05) end
+            check(placed and zr.tgt == h, "zombies: 遠距離ゾンビが兵士を狙って投げる")
+            local zx, zz = zr.x, zr.z
+            for _ = 1, 140 do Z.update(0.05); C.step(0.05) end
+            check(h.hp < 100000, "zombies: 兵士に石が当たる")
+            check(zr.tgt == false and zr.hp > 0, "zombies: 遠距離ゾンビは投げ続けても諦める(膠着しない)")
+            for _ = 1, 40 do Z.update(0.05); C.step(0.05) end
+            check(math.abs(zr.x - zx) + math.abs(zr.z - zz) > 0.5, "zombies: 諦めた後はベースへ進む")
+            -- 兵士はベースか自分を攻撃しているゾンビを、持ち場から LEASH(3) より遠くまで追う
+            S.pressing = Z.pressing
+            local g = S.restore("melee", 1, 60, h.x, h.z)
+            zr.x, zr.z, zr.gy, zr.y = ZX0, ZZ0, ZY0, ZY0
+            zr.col = math.floor(zr.x) * 1024 + math.floor(zr.z)     -- 次の update で投げる/投げないを引き直させない
+            pico.iso.entity_move(zr.id, zr.x, zr.y, zr.z)
+            zr.tgt, zr.throw, zr.tx = false, false, zr.x
+            g.scan = 0
+            S.update(0.05)
+            check(not g.tgt, "soldiers: 持ち場から3マスより遠い、ベースを攻撃していないゾンビは追わない")
+            zr.throw = true
+            g.scan = 0
+            S.update(0.05)
+            check(g.tgt == zr, "soldiers: ベースへ石を投げているゾンビは持ち場から3マスより遠くても追う")
+            g.tgt = false; zr.throw = false; zr.tgt = g
+            g.scan = 0
+            S.update(0.05)
+            check(g.tgt == zr, "soldiers: 自分を狙っているゾンビも遠くまで追う")
+            g.tgt = false; zr.tgt = BASE     -- 他の誰か(ここではベースの表)へ投げている遠距離ゾンビ
+            g.scan = 0
+            S.update(0.05)
+            check(g.tgt == zr, "soldiers: 他の兵士へ投げている遠距離ゾンビも遠くまで追う")
+            S.pressing = nil
             S.clear(); Z.clear()
             pico.iso.close()
         )LUA", "sol4");

@@ -1,6 +1,7 @@
 -- ゾンビTD: ゾンビ(出現・流れの場をたどって歩く・兵士を狙う・ベースへの攻撃・倒れる)。仕様は docs/ZOMBIE_TD.md。
 -- 道は C++ の流れの場(pico.iso.flow_*)。ゾンビは自分の柱の「次の柱」の真ん中へ向かって歩くだけ。
--- 気づく範囲に兵士かタワーがいれば、優先度と距離の点数で1つを選んで追う(粘着。離れすぎ・近づけないときだけ諦める)。
+-- 気づく範囲に兵士かタワーがいれば、優先度と距離の点数で1つを選んで追う(粘着。離れすぎ・近づけないときだけ諦める。
+-- 遠距離は同じ相手へ ENGAGE_MAX 秒投げたら諦めてベースへ進む)。
 -- バリケード(ブロック)の中は遅くなり(レベルごとの slow)、通っている間はバリケードの耐久を削る。
 -- 中にいる間は身動きが取りにくく、受けるダメージが WALL_EXPOSE 倍になる(タワーと組み合わせる意味を持たせる)。
 -- 押し合いは game.lua が C++(pico.iso.crowd)で行い、その後に M.sync() で位置を読み戻す。
@@ -19,6 +20,9 @@ local GIVE_UP_DIST = AWARE * 1.5   -- これより離れたら諦める
 local GIVE_UP_TIME = 3        -- この秒数攻撃できない(近づけない)なら諦める
 local SCAN_GAP = 0.5          -- 狙う相手を探し直す間隔(秒)
 local COOL_DOWN = 5           -- 諦めた後、次に探すまでの秒
+-- 遠距離ゾンビが同じ相手へ投げ続けてよい秒。過ぎたら諦めてベースへ向かう(COOL_DOWN の間は探さない)。
+-- 兵士が持ち場から届かず、回復兵が回復し続けると、投げ合いが終わらずウェーブが終わらなかったため
+local ENGAGE_MAX = 6
 local MELEE_GAP = 0.25        -- 当たりの円の隙間がこれ以下なら近接で叩ける
 
 -- 種類(数値は初期値。docs/ZOMBIE_TD.md「ゾンビ側」)
@@ -121,7 +125,7 @@ local function spawn_one(kind)
     -- look = コマ(0/1) + 左向きなら2。tgt は無いとき false(キーを消さず、表の大きさを変えない)
     local zb = setmetatable({
         id = id, x = x, y = y, z = z, gy = y, hp = math.floor(t.hp * M.hp_mul),
-        col = -1, tx = x, tz = z, look = 0, atk = 0, tgt = false, scan = math.random() * SCAN_GAP, throw = false,
+        col = -1, tx = x, tz = z, look = 0, atk = 0, tgt = false, scan = math.random() * SCAN_GAP, throw = false, eng = 0,
     }, META[kind])
     list[#list + 1] = zb
     combat.add(zb)
@@ -176,6 +180,11 @@ local function fight(zb, tgt, dt)
         reach = d - zb.r - tgt.r <= MELEE_GAP
     end
     if reach then
+        -- 遠距離は投げ続けた時間を数え、長すぎたら諦める(届かない相手との膠着を終わらせる)
+        if t.reach > 0 then
+            zb.eng = zb.eng + dt
+            if zb.eng > ENGAGE_MAX then return nil end
+        end
         attack(zb, tgt, dt)
         zb.scan = 0
         return false
@@ -232,7 +241,7 @@ local function step(zb, dt)
         zb.scan = zb.scan - dt
         if zb.scan <= 0 then
             tgt = find_target(zb)
-            zb.tgt = tgt
+            zb.tgt, zb.eng = tgt, 0
             zb.scan = tgt and 0 or SCAN_GAP
         end
     end
@@ -306,6 +315,13 @@ function M.sync()
         local x, _, z = iso.entity_pos(zb.id)
         if x then zb.x, zb.z = x, z end
     end
+end
+
+-- 兵士が持ち場から遠くまで追うべき相手か: ベースを攻撃している(石を投げている/ベースの隣で叩いている)か、
+-- 遠距離で誰かへ投げている(近接のゾンビは自分から近づいて来るので含めない)
+function M.pressing(zb)
+    if zb.tgt then return zb.t.reach > 0 end
+    return zb.throw or not zb.tx
 end
 
 -- 倒す(テスト用)

@@ -1,6 +1,8 @@
 -- ゾンビTD: 兵士(雇う・移動の指示・戦い・回復・レベルアップ・売却)。仕様は docs/ZOMBIE_TD.md「兵士」。
 -- 兵士はベースから出てきて、指示された位置(持ち場)へ経路探索(pico.iso.path)の道で歩く。
 -- 持ち場では射程に入ったゾンビを自動で攻撃し、近接兵は持ち場から LEASH マスまで追いかけて、それより離れたら戻る。
+-- ベースを攻撃しているゾンビ・遠くから投げているゾンビ・自分を狙うゾンビだけは LEASH + SIEGE_EXTRA マスまで追う
+-- (持ち場の少し外から石を投げられ続け、回復兵が回復し続けてウェーブが終わらなくならないように)。
 -- 移動中は攻撃されたときだけ反撃する(相手が倒れるか離れたら移動を続ける)。
 -- 押し合いは game.lua が C++(pico.iso.crowd)で行い、その後に M.sync() で位置を読み戻す。
 -- 1人の表は16個以内のキーにする(zombies.lua と同じ理由)。種類ごとに同じ値はメタテーブルに置く。
@@ -12,6 +14,7 @@ local M = {}
 M.MAX = 32                    -- 同時に雇える数
 M.TAG = 3                     -- 人や物の tag(兵士)
 local LEASH = 3               -- 持ち場からこれ以上離れたら追うのをやめて戻る(マス)
+local SIEGE_EXTRA = 4         -- 遠くまで追う相手(上)は、持ち場から LEASH + これまで追う(マス)
 local MELEE_GAP = 0.25        -- 当たりの円の隙間がこれ以下なら近接で叩ける
 local COUNTER_EXTRA = 1.0     -- 移動中の反撃: 間合い + これ以内の相手にだけ向かう
 local GIVE_UP_TIME = 3        -- この秒数攻撃できなければ(近づけなければ)諦める
@@ -66,6 +69,7 @@ M.list = list
 M.stats = { hired = 0, lost = 0 }
 M.on_lost = nil               -- function(兵士) 倒されたとき
 M.blocked = nil               -- function(x, z) その柱に建物があるか(game.lua が入れる。持ち場にも道にもしない)
+M.pressing = nil              -- function(ゾンビ) 遠くまで追うべき相手か(zombies.pressing。game.lua が入れる)
 
 -- 最大の耐久
 local function max_hp(s) return s.t.lv[s.lv].hp end
@@ -80,6 +84,13 @@ end
 local function post_dist(u, s)
     local dx, dz = u.x - s.px, u.z - s.pz
     return math.sqrt(dx * dx + dz * dz)
+end
+
+-- 兵士 s が持ち場からどこまで z を追うか(M.pressing の相手と、s 自身を狙う相手は遠くまで。
+-- 近づくと相手が s を狙い直すので、それでも追うのをやめないように)
+local function leash_for(z, s)
+    if z.tgt == s or (M.pressing and M.pressing(z)) then return LEASH + SIEGE_EXTRA end
+    return LEASH
 end
 
 -- 攻撃の間合い(弓兵は高低差で伸び縮みする。近接は nil)
@@ -98,7 +109,7 @@ local function hurt(s, dmg, src)
     local d = combat.dist(s, src)
     local reach = range_of(s, src) or (s.r + src.r + MELEE_GAP)
     local ok
-    if s.state == "hold" then ok = post_dist(src, s) <= LEASH + (s.t.range or 0)
+    if s.state == "hold" then ok = post_dist(src, s) <= leash_for(src, s) + (s.t.range or 0)
     else ok = d <= reach + COUNTER_EXTRA end
     if ok then s.tgt, s.wait = src, 0 end
 end
@@ -286,12 +297,12 @@ end
 -- 持ち場で攻撃する相手を選ぶ(近い順に、弓兵は間合いに入っている・近接は持ち場から LEASH 以内のゾンビ)
 local function choose(s)
     local range = s.t.range
-    for _, id in ipairs(iso.nearby(s.x, s.z, range and range * 1.5 or LEASH + 1, M.ZOMBIE_TAG, 8)) do
+    for _, id in ipairs(iso.nearby(s.x, s.z, range and range * 1.5 or LEASH + SIEGE_EXTRA + 1, M.ZOMBIE_TAG, 8)) do
         local z = combat.units[id]
         if z and z.hp > 0 then
             if range then
                 if in_reach(s, z, combat.dist(s, z)) then return z end
-            elseif post_dist(z, s) <= LEASH then
+            elseif post_dist(z, s) <= leash_for(z, s) then
                 return z
             end
         end
@@ -322,7 +333,7 @@ local function engage(s, tgt, dt)
     if s.t.range then return nil end
     -- 近接: 持ち場では LEASH まで、移動中は反撃の間合いまで追う
     if s.state == "hold" then
-        if post_dist(tgt, s) > LEASH then return nil end
+        if post_dist(tgt, s) > leash_for(tgt, s) then return nil end
     elseif d > s.r + tgt.r + MELEE_GAP + COUNTER_EXTRA then
         return nil
     end

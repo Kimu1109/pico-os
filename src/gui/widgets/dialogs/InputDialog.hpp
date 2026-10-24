@@ -148,10 +148,17 @@ class InputDialog : public Widget {
         void setInput(const char* input){
             this->input->setText(input);
         }
+        // 英数字の欄(パスワード・URL等)。キーボードを英字で開く(Textbox::setAsciiInput)
+        void setAsciiInput(bool value){
+            this->input->setAsciiInput(value);
+        }
         // 入力欄をタップしたのと同じく、キーボードを開く(開いてすぐ打てるように)
         void openKeyboard(){
             this->input->causeOnPressStart();
         }
+
+        // Esc(Back)でキャンセル、1行の入力欄でEnter(Submit)で決定。ボタンを押したのと同じ
+        bool onFocusKey(FocusKey key) override;
 
         void render() override;
 

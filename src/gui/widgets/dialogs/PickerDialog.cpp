@@ -1,6 +1,7 @@
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "gui/core/Keyboard_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
 #include <cstdio>
 
@@ -9,6 +10,12 @@ Button* PickerDialog::makeButton(const char* text, bool is_ok) {
     b->setOnPressStart([this, is_ok]() { this->finish(is_ok); });
     b->setParent(this);
     return b;
+}
+
+bool PickerDialog::onFocusKey(FocusKey key) {
+    if (key == FocusKey::Submit) return FocusFunctions::Press(ok_button);
+    if (key == FocusKey::Back) return FocusFunctions::Press(cancel_button);
+    return false;
 }
 
 void PickerDialog::finish(bool is_ok) {

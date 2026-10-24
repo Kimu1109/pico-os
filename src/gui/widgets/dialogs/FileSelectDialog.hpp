@@ -58,6 +58,10 @@ class FileSelectDialog : public Widget {
 
             this->setVisible(false);
 
+            //親を辿れるように(フォーカスの範囲・Esc/Enterをダイアログへ届ける。位置は親が画面全体なので変わらない)
+            this->explorer->setParent(this);
+            this->button_ok->setParent(this);
+            this->button_no->setParent(this);
             children_.push_back(this->explorer);
             children_.push_back(this->button_ok);
             children_.push_back(this->button_no);
@@ -72,6 +76,11 @@ class FileSelectDialog : public Widget {
         }
 
         const char* getSelectedPath();
+
+        // Esc(Back)でキャンセル。ボタンを押したのと同じ
+        bool onFocusKey(FocusKey key) override;
+        // 開いたらファイルの一覧から(読む順の最初は「上のフォルダへ」のアイコン)
+        Widget* initialFocus() override { return this->explorer->getList(); }
 
         void render() override;
 

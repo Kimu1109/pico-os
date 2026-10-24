@@ -54,6 +54,7 @@ class NumberInput : public Widget, public ITextInputTarget, public ITextColor, p
 
         WidgetType getWidgetType() const override { return WidgetType::NumberInput; }
         bool focusableByDefault() const override { return true; }
+        bool takesTypedText() const override { return true; }
         
         ~NumberInput() override;
 };

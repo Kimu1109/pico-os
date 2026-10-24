@@ -1,4 +1,5 @@
 #include "gui/core/Keyboard_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
@@ -126,6 +127,8 @@ void KeyboardFunctions::OnPanelShown(KeyboardPanel* panel){
     if(dialog && !docked){
         dialog->attach(panel);
         dialog->setVisible(true);
+        //フォーカスの枠は覆っている間は描かない(GFX_Functions.cpp)。半透明の下に描いてある枠を消す
+        FocusFunctions::MarkRing(FocusFunctions::RingTarget());
     }
 }
 

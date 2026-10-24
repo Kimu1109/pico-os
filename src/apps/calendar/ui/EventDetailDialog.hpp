@@ -60,6 +60,9 @@ class EventDetailDialog : public Widget {
 
         void setOnClosed(std::function<void(bool is_ok)> callback){ this->on_closed = callback; }
 
+        // Esc(Back)で閉じる(「閉じる」を押したのと同じ)
+        bool onFocusKey(FocusKey key) override;
+
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::EventDetailDialog; }

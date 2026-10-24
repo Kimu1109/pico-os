@@ -189,6 +189,7 @@ void SettingsScene::openEditDialog(EditField field, const char* label_text, cons
     // MarkdownSceneの検索入力と同じ形: 押されるたびにnewし、閉じたらDestroyLater()で破棄する
     // (設定項目ごとに専用ダイアログを持つより省メモリで、既存の流儀にも合う)
     auto* dialog = new InputDialog(label_text, true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(prefill ? prefill : "");
     dialog->setVisible(true);

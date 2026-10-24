@@ -34,6 +34,7 @@ description: "log / show_error / toast / on_key / app_dir / path_join / settings
 - `key`: 文字ならその文字(UTF-8。Shiftやキー配列は反映済み)、特殊キーなら `"enter"` `"backspace"` `"tab"` `"escape"` `"delete"` `"left"` `"right"` `"up"` `"down"` `"home"` `"end"` `"pageup"` `"pagedown"`、メディアキーなら `"playpause"` `"stop"` `"nexttrack"` `"prevtrack"` `"volumeup"` `"volumedown"` `"mute"`(メディアキーはオンスクリーンキーボードの入力には使われません)。
 - `mods`: `{ctrl = boolean, alt = boolean, shift = boolean}`。
 - 戻り値が**真なら「取った」扱い**。偽/`nil` なら、開いているオンスクリーンキーボードの入力へ回ります(`pico.show_input` などで文字入力できる)。
+- ダイアログ(`pico.show_msg` `pico.show_input` 等)を開いている間は、メディアキー以外は `fn` へ届かずダイアログが受け取ります(Escでキャンセル・Enterで決定・入力欄へ文字)。
 
 ```lua
 pico.on_key(function(key, mods)

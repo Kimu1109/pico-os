@@ -10,7 +10,8 @@
 enum class FocusKey : uint8_t {
     Activate,   // Enter / Space / A。扱わなければ「真ん中をタップした」として配る
     Up, Down, Left, Right,  // 扱わなければフォーカスがその向きの隣へ移る
-    Back,       // Esc / B。扱わなければ何もしない
+    Back,       // Esc / B。フォーカスのあるものから親へ順に配り、誰も扱わなければ一番上のダイアログへ(閉じる)
+    Submit,     // 1行の入力欄でEnterを押してキーボードが閉じた。Backと同じ順に配る(InputDialogが決定する)
 };
 
 namespace WidgetTools {
@@ -252,6 +253,12 @@ class Widget {
         void setFocusable(bool value){ this->focus_mode = value ? 1 : 2; }
         // フォーカスを持っている間のキー/ボタン。扱ったらtrue(falseなら上の既定の動き)
         virtual bool onFocusKey(FocusKey key) { (void)key; return false; }
+        // 打った文字を受ける入力欄か(Textbox/NumberInput)。フォーカスがあってキーボードが閉じているときに
+        // 文字を打つと、タップと同じくキーボードを開いてその文字を渡す(KeyInput_Dispatch.cpp)
+        virtual bool takesTypedText() const { return false; }
+        // ダイアログ(ダイアログ層の根)が開いたとき最初にフォーカスを置く子。nullptrなら読む順の最初
+        // (日付のダイアログは「<」ボタンより日の格子、ファイルの保存はファイル名の欄から始めたい)
+        virtual Widget* initialFocus() { return nullptr; }
         // フォーカスを得た/失った(開いたドロップダウンを閉じる等)
         virtual void onFocusChanged(bool focused) { (void)focused; }
         // フォーカスの枠を自分で描く(AppGridのタイル等)。真なら共通の枠を描かない

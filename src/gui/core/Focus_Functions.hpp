@@ -15,6 +15,7 @@
 // - 移り先: 受けるもの(Widget::isFocusable())で、見えていて有効なもの。
 //   Tab / L R は読む順(上から、同じ高さなら左から)、矢印 / 十字キーはその向きで一番近いもの
 // - 枠: キーかボタンで動かしたときだけ見せ、タッチで消す(タッチしたものがフォーカスを持つが枠は出さない)。
+//   ダイアログが開いたら、枠が無くてもフォーカスは中へ移す(Escで閉じる・入力欄へそのまま打てるように)。
 //   描くのはFlushDirty()の合成の最後(ウィジェットの上、範囲の外のものには描かない)
 // - 配り先は KeyInput_Dispatch.cpp(打鍵は画面のonKey()・キー盤が取らなかったもの、
 //   コントローラーは画面がScene::usesPad()でないときだけ)
@@ -29,6 +30,10 @@ namespace FocusFunctions {
     inline WidgetId saved_id = 0;
     // そのとき枠が出ていたか(戻したときにも出す)
     inline bool saved_ring = false;
+    // 最後の操作がキー/コントローラーだったか(タッチで下ろす)。ダイアログが開いたとき枠を出すかに使う
+    inline bool key_mode = false;
+    // 前のUpdate()で一番上だったダイアログ(開いた瞬間を見分ける。消えたらOnWidgetGone()が下ろす)
+    inline Widget* shown_dialog = nullptr;
 
     enum class Move : uint8_t { Next, Prev, Up, Down, Left, Right };
 
@@ -68,6 +73,7 @@ namespace FocusFunctions {
 
     // ウィジェットが消える/外れる(~Widget()・WidgetFunctions::Remove系から)
     inline void OnWidgetGone(Widget* w){
+        if(shown_dialog == w) shown_dialog = nullptr;
         if(focused == w){
             focused = nullptr;
             ring_visible = false;
@@ -77,6 +83,7 @@ namespace FocusFunctions {
     // タッチで押したもの(WidgetFunctions::UpdateAll()から)。枠を消し、受けるものならフォーカスを移す
     inline void OnTouchStart(Widget* pressed){
         saved_ring = false;
+        key_mode = false;
         Widget* next = (pressed && pressed->isFocusable()) ? pressed : focused;
         if(next == focused && !ring_visible) return;
         Widget* prev = focused;
@@ -91,6 +98,8 @@ namespace FocusFunctions {
         }
     }
 
+    // ダイアログが開いているか(ダイアログ層に見えているものがある)
+    bool DialogOpen();
     // wが今フォーカスを受けられるか(見えている・有効・大きさがある)
     bool IsCandidate(Widget* w);
     // 今のフォーカス(範囲の外・見えない・無効ならnullptr)
@@ -99,11 +108,17 @@ namespace FocusFunctions {
     void Set(Widget* w, bool show_ring);
     // 移す。フォーカスが無い/枠が出ていなければ、最初のものに枠を出すだけ。移れたらtrue
     bool Navigate(Move m);
-    // フォーカスのあるものを押す(扱えばtrue)
+    // フォーカスのあるものを押す(扱えばtrue)。枠が出ていなければ枠を出すだけ
     bool Activate();
-    // キー(Up〜Back)をフォーカスのあるものへ。扱わない矢印は隣へ移る
+    // wを押す(onFocusKey(Activate)が扱わなければ真ん中のタップ)。枠の有無は見ない。
+    // 押してダイアログが開いた/閉じたら、フォーカスを中の最初のもの/開く前のものへ移す。
+    // ダイアログのEscで「キャンセル」ボタンを押す、入力欄へ打ってキーボードを開く等に使う
+    bool Press(Widget* w);
+    // キー(Up〜Submit)をフォーカスのあるものへ。扱わない矢印は隣へ移る。
+    // Back/Submitは枠が無くても、フォーカスのあるものから親へ順に、最後は一番上のダイアログへ配る
     bool SendKey(FocusKey key);
-    // 毎フレーム(KeyInputFunctions::Update()の後)。枠が出ている間にダイアログが開いた/閉じたら、
-    // 枠を中の最初のもの/開く前のものへ移す(ダイアログが1フレーム遅れて開く画面のため)
+    // 毎フレーム(KeyInputFunctions::Update()の後)。ダイアログが開いたら(1フレーム遅れて開く画面もあるので
+    // 毎フレーム見る)、フォーカスを中の最初のもの(InputDialogなら入力欄)へ移す。キーで操作していた
+    // (key_mode)か枠が出ていれば枠も出す。閉じたら開く前のものへ戻す
     void Update();
 }

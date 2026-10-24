@@ -147,6 +147,10 @@ namespace {
     }
 }
 
+bool FocusFunctions::DialogOpen(){
+    return TopDialog() != nullptr;
+}
+
 bool FocusFunctions::IsCandidate(Widget* w){
     if(!w || !w->isFocusable() || w->getHitTransparent()) return false;
     if(!w->isEffectivelyEnabled()) return false;
@@ -210,20 +214,27 @@ bool FocusFunctions::Activate(){
     LeaveScopeIfNeeded();
     Widget* w = Current();
     if(!w || !ring_visible) return Reveal(false);
+    return Press(w);
+}
 
+bool FocusFunctions::Press(Widget* w){
+    if(!w) return false;
     Widget* dialog_before = TopDialog();
     if(!w->onFocusKey(FocusKey::Activate)) TapCenter(w);
 
     // 押してダイアログが開いた/閉じた: 開いたら中の最初のものへ、閉じたら開く前のものへ
     Widget* dialog_after = TopDialog();
     if(dialog_after != dialog_before){
+        const bool ring = ring_visible || saved_ring;
         LeaveScopeIfNeeded();
         if(!Current()){
-            Widget* first = FirstInReadingOrder(false);
-            if(first) Set(first, true);
+            Widget* first = dialog_after ? dialog_after->initialFocus() : nullptr;
+            if(!first || !IsCandidate(first)) first = FirstInReadingOrder(false);
+            if(first) Set(first, ring);
         }else{
-            Set(focused, true);
+            Set(focused, ring);
         }
+        shown_dialog = dialog_after;
     }
     return true;
 }
@@ -232,10 +243,17 @@ bool FocusFunctions::SendKey(FocusKey key){
     if(key == FocusKey::Activate) return Activate();
     LeaveScopeIfNeeded();
     Widget* w = Current();
-    if(!w || !ring_visible){
-        if(key == FocusKey::Back) return false;
-        return Reveal(false);
+    if(key == FocusKey::Back || key == FocusKey::Submit){
+        // フォーカスのあるものから親へ(開いたドロップダウン → ダイアログ)。枠が無くても配る
+        for(Widget* p = w; p; p = p->getParent()){
+            if(p->onFocusKey(key)) return true;
+        }
+        // フォーカスが無い/ダイアログの外: 一番上のダイアログ(Escで閉じる)
+        Widget* top = TopDialog();
+        if(top && !(w && InScope(w))) return top->onFocusKey(key);
+        return false;
     }
+    if(!w || !ring_visible) return Reveal(false);
     if(w->onFocusKey(key)) return true;
     switch(key){
         case FocusKey::Up:    return Navigate(Move::Up);
@@ -247,8 +265,23 @@ bool FocusFunctions::SendKey(FocusKey key){
 }
 
 void FocusFunctions::Update(){
+    Widget* top = TopDialog();
+    if(top != shown_dialog){
+        shown_dialog = top;
+        if(top){
+            //ダイアログが開いた: 中の最初のものへ。キーで操作していれば枠も出す
+            const bool ring = ring_visible || saved_ring || key_mode;
+            LeaveScopeIfNeeded();
+            if(!Current()){
+                Widget* first = top->initialFocus();
+                if(!first || !IsCandidate(first)) first = FirstInReadingOrder(false);
+                if(first) Set(first, ring);
+            }
+            return;
+        }
+    }
     if(ring_visible && focused && !InScope(focused)){
-        //枠が出ている間にダイアログが開いた
+        //枠が出ている間に範囲が変わった
         LeaveScopeIfNeeded();
         Reveal(false);
     }else if(saved_id != 0 && !TopDialog()){

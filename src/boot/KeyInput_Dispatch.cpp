@@ -11,6 +11,10 @@
 // 列と行の読み取りは KeyInput_Functions.cpp(何にも依存しない)
 
 namespace {
+    bool IsMediaKey(KeyInputFunctions::Key key){
+        return key >= KeyInputFunctions::Key::PlayPause;
+    }
+
     // 画面もキー盤も取らなかった打鍵で、ウィジェットのフォーカスを動かす(FocusFunctions)
     bool DispatchFocus(const KeyInputFunctions::Event& ev){
         using KeyInputFunctions::Key;
@@ -26,6 +30,31 @@ namespace {
             case Key::Char:   return ev.cp == ' ' ? FocusFunctions::Activate() : false;
             default:          return false;
         }
+    }
+
+    // フォーカスのある入力欄(Textbox/NumberInput)へ打った: タップと同じくキーボードを開いて、その打鍵を渡す。
+    // ダイアログの入力欄(開くとフォーカスが入る)やTabで選んだ欄へ、先にEnterを押さなくてもそのまま打てる
+    bool DispatchTyping(const KeyInputFunctions::Event& ev){
+        using KeyInputFunctions::Key;
+        const bool paste = ev.key == Key::Char && ev.ctrl() && !ev.alt() && (ev.cp == 'v' || ev.cp == 'V');
+        if(!ev.isPlainChar() && !paste && ev.key != Key::Backspace) return false;
+        Widget* w = FocusFunctions::Current();
+        if(!w || !w->takesTypedText()) return false;
+        FocusFunctions::Press(w);
+        KeyboardPanel* panel = KeyboardFunctions::VisiblePanel();
+        if(!panel) return false;
+        panel->onPhysicalKey(ev);
+        return true;
+    }
+
+    // キー盤へ配る。Enterで1行の入力欄が決まってキー盤が閉じたら、入力欄の持ち主(InputDialog等)へ
+    // 「決定」を配る(入力欄を決めた後にもう一度Tabで「決定」ボタンへ行かなくて済むように)
+    bool DispatchPanel(KeyboardPanel* panel, const KeyInputFunctions::Event& ev){
+        if(!panel->onPhysicalKey(ev)) return false;
+        if(ev.key != KeyInputFunctions::Key::Enter || KeyboardFunctions::VisiblePanel()) return true;
+        Widget* w = FocusFunctions::Current();
+        if(w && w->takesTypedText()) FocusFunctions::SendKey(FocusKey::Submit);
+        return true;
     }
 
     // 十字キーを押したままにしたときの繰り返し(最初は少し待つ)
@@ -58,6 +87,9 @@ namespace {
                 }
             }
         }
+        constexpr uint16_t kFocusButtons = PadFunctions::Up | PadFunctions::Down | PadFunctions::Left | PadFunctions::Right
+            | PadFunctions::A | PadFunctions::B | PadFunctions::L | PadFunctions::ZL | PadFunctions::R | PadFunctions::ZR;
+        if(PadFunctions::Pressed(kFocusButtons)) FocusFunctions::key_mode = true;
         if(PadFunctions::Pressed(PadFunctions::A)) FocusFunctions::Activate();
         if(PadFunctions::Pressed(PadFunctions::B)) FocusFunctions::SendKey(FocusKey::Back);
         if(PadFunctions::Pressed(PadFunctions::L | PadFunctions::ZL)) FocusFunctions::Navigate(FocusFunctions::Move::Prev);
@@ -73,6 +105,8 @@ void KeyInputFunctions::Update(){
 
         //画面ロック中はロック画面が全部取る(後ろの画面へ打鍵が漏れないように)
         if(intercept && intercept(ev)) continue;
+        //キーで操作している(この後に開いたダイアログは最初から枠を出す)
+        FocusFunctions::key_mode = true;
 
         //0. 日本語入力の入り切り。キー盤が開いていなければ、Tabだけは普通に配る
         if(CheckImeToggle(ev, (uint32_t)millis())){
@@ -82,20 +116,25 @@ void KeyInputFunctions::Update(){
 
         //日本語の読みを入力中/変換中なら、画面より先にキー盤へ
         KeyboardPanel* panel = KeyboardFunctions::VisiblePanel();
-        if(panel && panel->wantsKeyFirst(ev) && panel->onPhysicalKey(ev)) continue;
+        if(panel && panel->wantsKeyFirst(ev) && DispatchPanel(panel, ev)) continue;
 
-        //1. 今の画面
+        //1. 今の画面。ダイアログを開いている間はダイアログが先(Escで閉じる・Enterで押す・入力欄へ打つ)なので、
+        //   画面へはメディアキーだけ渡す(ダイアログの後ろでSSHへ打鍵が漏れる・Escで画面を抜ける等を防ぐ)
         Scene* scene = SceneFunctions::Current();
-        if(scene && scene->onKey(ev)) continue;
+        const bool modal = FocusFunctions::DialogOpen() && !IsMediaKey(ev.key);
+        if(scene && !modal && scene->onKey(ev)) continue;
 
         //2. 開いているキー盤(画面のonKey()の中で開かれた場合もここで受け取る)
         panel = KeyboardFunctions::VisiblePanel();
         if(panel){
-            panel->onPhysicalKey(ev);
+            DispatchPanel(panel, ev);
             continue;
         }
 
-        //3. ウィジェットのフォーカス(Tab・矢印・Enter・Space・Esc)。それ以外は捨てる
+        //3. フォーカスのある入力欄へ打った文字(キーボードを開いて渡す)
+        if(DispatchTyping(ev)) continue;
+
+        //4. ウィジェットのフォーカス(Tab・矢印・Enter・Space・Esc)。それ以外は捨てる
         DispatchFocus(ev);
     }
     detail::SetDispatchedThisFrame(any);

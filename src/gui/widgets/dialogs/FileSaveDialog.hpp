@@ -67,6 +67,11 @@ class FileSaveDialog : public Widget {
 
             this->setVisible(false);
 
+            //親を辿れるように(フォーカスの範囲・Esc/Enterをダイアログへ届ける。位置は親が画面全体なので変わらない)
+            this->explorer->setParent(this);
+            this->textbox_filename->setParent(this);
+            this->button_ok->setParent(this);
+            this->button_no->setParent(this);
             children_.push_back(this->explorer);
             children_.push_back(this->textbox_filename);
             children_.push_back(this->button_ok);
@@ -87,6 +92,11 @@ class FileSaveDialog : public Widget {
         void setFileName(const char* name){
             this->textbox_filename->setText(name ? name : "");
         }
+
+        // Esc(Back)でキャンセル、ファイル名の欄でEnter(Submit)でOK。ボタンを押したのと同じ
+        bool onFocusKey(FocusKey key) override;
+        // 開いたらファイル名の欄から(そのまま打てる)
+        Widget* initialFocus() override { return this->textbox_filename; }
 
         void render() override;
 

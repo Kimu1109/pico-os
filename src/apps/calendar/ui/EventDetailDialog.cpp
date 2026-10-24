@@ -1,6 +1,12 @@
 #include "apps/calendar/ui/EventDetailDialog.hpp"
 #include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
+
+bool EventDetailDialog::onFocusKey(FocusKey key){
+    if(key == FocusKey::Back) return FocusFunctions::Press(this->close_button);
+    return false;
+}
 
 EventDetailDialog::EventDetailDialog(){
     this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};

@@ -85,7 +85,11 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
      ↑↓・Tab・Alt付きの文字・それ以外のCtrl付きの文字はキー盤では扱わない。
      - 日本語のキー盤は**ローマ字かな漢字変換をする**(下の「物理キーボードのかな漢字変換」)
      - 数字のキー盤は数字・`.`と、使えるタブの記号表にあるものだけ(`*`→`×`、`/`→`÷`に直す)。英字は断る(他へも回さない)
-  3. どちらも取らなければウィジェットのフォーカスへ(Tab・矢印・Enter・Space・Esc。下の「ウィジェットのフォーカス」)。それ以外は捨てる。
+  3. フォーカスのある入力欄(Textbox/NumberInput。`Widget::takesTypedText()`)へ打った文字・Backspace・Ctrl+Vは、
+     タップと同じくキーボードを開いてその打鍵を渡す(先にEnterで開かなくてよい。下の「ダイアログを最初からキーボードで」)。
+  4. どれも取らなければウィジェットのフォーカスへ(Tab・矢印・Enter・Space・Esc。下の「ウィジェットのフォーカス」)。それ以外は捨てる。
+  - **ダイアログを開いている間は1.(画面の`onKey()`)へはメディアキーしか渡さない**(2026-10-24。ダイアログの後ろのSSHへ打鍵が漏れる・
+    Escで画面ごと抜ける、を防ぐ。テキストエディタが自分でしていた判定を配り先へ移した形)。Luaの`on_key`も同じ。
 - **メディアキー(2026-10-14)**: `key 0 playpause|stop|nexttrack|prevtrack|volumeup|volumedown|mute`(`Key::PlayPause`〜`Mute`。Enumの末尾)。
   キー盤・フォーカスは使わず、画面の`onKey()`とLuaの`on_key`(同じ名前)へ届く。ミュージックアプリは再生/一時停止・次・前・停止に使う。
   音量キーはOS全体では扱っていない(配り先がSound/Configへ依存するとホストテストのリンクが広がるため。要るなら画面かLuaで)。
@@ -124,14 +128,14 @@ SUMMARY.md未掲載。物理キーボード・外部コントローラーで、�
   (AppGridは選んでいるタイル)。十字キーは押したままで400ms後から110msごとに繰り返す。
 - **押す**: Enter/Space/A。`onFocusKey(Activate)`が扱わなければ**真ん中をタップしたことにする**(`OSData::touchX/Y`を一時的に
   真ん中にして`causeOnPressStart()`→`causeOnPressEnd()`、元へ戻す)。押した中で自分が消えたら(`~Widget()`が`focused`を下ろす)離すは配らない。
-  Esc/Bは`onFocusKey(Back)`(開いたドロップダウンを閉じる)だけ。
+  Esc/Bは`onFocusKey(Back)`を親へ順に配り、最後はダイアログ(開いたドロップダウンを閉じる/ダイアログをキャンセル。下の「ダイアログを最初からキーボードで」)。
 - **枠**: キー/ボタンで動かしたときだけ出す(最初の1回は今の/最初のものに枠を出すだけで、動かしも押しもしない)。**タッチで消える**
   (`WidgetFunctions::UpdateAll()`の押した瞬間に`OnTouchStart()`。押したものが受けるならフォーカスはそこへ移る)。
   描くのは`FlushDirty()`の合成で、dirty矩形ごとに全部のウィジェットを描いた後(子に塗りつぶされないように)、フォーカスのある
   ウィジェットの矩形の**内側**に2pxの青(`kRingColor`)。消す/動かすときは`MarkDirtyBelow()`(半透明のダイアログの下に残らないように)。
   `drawsOwnFocus()`が真のもの(AppGrid)は自分で描く。
-- **ダイアログ**: 枠が出ている間にダイアログが開いたら(1フレーム遅れて開く画面もあるので毎フレームの`FocusFunctions::Update()`で見る)、
-  開く前のものを**WidgetIdで覚えて**中の最初のものへ移る。閉じたら`WidgetRegistry::Resolve()`で戻す(生ポインタだと破棄を見逃す)。
+- **ダイアログ**: ダイアログが開いたら(1フレーム遅れて開く画面もあるので毎フレームの`FocusFunctions::Update()`で見る)、
+  開く前のものを**WidgetIdで覚えて**中の最初のものへ移る(2026-10-24から枠が無くても移る。枠はキーで操作していたときだけ)。閉じたら`WidgetRegistry::Resolve()`で戻す(生ポインタだと破棄を見逃す)。
   タッチで閉じた場合は戻すが枠は出さない。
 - **入力の配り先**(`KeyInput_Dispatch.cpp`): 打鍵は 画面の`onKey()` → 開いているキー盤 → フォーカス の順(画面やキー盤が取ったものは動かさない)。
   コントローラーは**`Scene::usesPad()`が偽の画面だけ**(ゲームボーイと、`pico.pad_*`を一度でも呼んだLuaアプリは真)、キー盤が開いている間もしない。
@@ -141,12 +145,47 @@ SUMMARY.md未掲載。物理キーボード・外部コントローラーで、�
   AppGrid(矢印でタイル、左右の端でページを送る、決定で起動。`HomeScene::onUpdate()`がページの表示を追いかける)。
   `ScrollContainer::revealRect()`は隠れた子へ移ったとき見える所までスクロールする。**新しい操作部品を作ったら`focusableByDefault()`と、
   タップの位置で動きが変わるなら`onFocusKey()`を足すこと**(`AppGrid`/`ColorDialog`型の「直接描く」部品は中で選ぶ位置を持つ必要がある)。
-  ColorDialog・KeyboardNum・DurationPicker・MonthGrid・CalculatorKeypad・GameBoyPad等の直接描く部品はまだ受けない(枠もタップの位置も合わない)。
+  ColorDialog(色の格子。矢印で色、決定でOK)・MonthGrid(←→で1日・↑↓で1週、月の外へ出る向きは隣へ)・DurationPicker(←→で桁・↑↓で増減。
+  編集できないときは受けない)も受ける(2026-10-24。どれも`drawsOwnFocus()`で選んでいるマス/桁に枠を描く)。FileExplorerの上の3つのアイコンも
+  `setFocusable(true)`。KeyboardNum・CalculatorKeypad・GameBoyPad等はまだ受けない(電卓は画面の`onKey()`で打てる)。
+  MarkdownView(↑↓で32pxずつスクロール、端より先は隣へ。決定は取るだけ=真ん中のリンクを開かない)も受ける。ブラウザ(`MarkdownScene::onKey()`)は
+  PageUp/PageDown/Home/Endで本文、Alt+←→・Backspaceで戻る/進む、Ctrl+Rで更新、Ctrl+Fで検索(2026-10-24)。
 - Lua: `pico.focus(id|nil [, show_ring])` / `pico.get_focus()`、プロパティ`focusable`(`WidgetProperty::Id::Focusable`)。ドキュメントは`lua-api-doc/content/api/ui/widgets.md`。
 - 検証: `focus_test`(run.sh の widget。読む順・矢印・候補にならないもの・押す・消える・タッチ・ダイアログの範囲と戻り・各ウィジェット)、
   PCビルドで標準入力へ`key`の行を流して`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): ランチャのタイルの移動とページ送り、
   Enterで起動、設定アプリ(一覧・ボタン・タブ・スライダー・ドロップダウン・確認ダイアログへ移って閉じたら戻る)、テキストエディタ(Tabでツールバー)。
   実機(USBシリアルの入力)で動作を確認済み(2026-10-11)。**実物のコントローラーでは未確認**。
+
+## ダイアログを最初からキーボードで (`Focus_Functions` / `KeyInput_Dispatch.cpp` / 各ダイアログ) (2026-10-24)
+
+SUMMARY.md #10の追加項目。それまではダイアログが開いてもフォーカスは枠が出ているときしか中へ移らず、最初の1打鍵は「枠を出すだけ」、
+入力欄はEnterでキーボードを開いてから打ち、決めた後にTabで「決定」へ移ってもう一度Enter、Escはダイアログを閉じない、だった。
+ログイン(Wi-Fi・メール・チャット・Todoistの認証情報)は全部InputDialogなので、そこをキーボードだけで通せるようにした。
+
+- **開いたら中へ**: `FocusFunctions::Update()`が一番上のダイアログの入れ替わりを見て(`shown_dialog`。消えたら`OnWidgetGone()`が下ろす)、
+  枠が無くてもフォーカスを中へ移す。置き先は`Widget::initialFocus()`(PickerDialog=一覧/日の格子/時刻/数字の欄、FileSelectDialog=ファイルの一覧、
+  FileSaveDialog=ファイル名の欄)、無ければ読む順の最初(InputDialogは入力欄、MsgDialogは上のボタン)。
+  **枠は`key_mode`(最後の操作がキー/コントローラー。タッチで下ろす)のときだけ出す**ので、タッチで使っている人には見た目が変わらない。
+  閉じたら開く前のものへ戻すのは前と同じ。
+- **入力欄へそのまま打つ**: 上の配り先の3.。InputDialogは開くと入力欄にフォーカスがあるので、開いてすぐ打てる。
+- **Esc/Enter(`FocusKey::Back`/`Submit`)**: フォーカスのあるものから親へ順に配り、誰も扱わなければ一番上のダイアログへ(枠が無くても配る)。
+  Backは開いたドロップダウン→ダイアログの「キャンセル」(MsgDialogはOKだけならOK)。Submitは**1行の入力欄をEnterで決めてキーボードが閉じたとき**
+  (`DispatchPanel()`)で、InputDialog・PickerDialog(数字)・FileSaveDialogが「決定」を押す。どれも`FocusFunctions::Press(ボタン)`で
+  ボタンをタップしたのと同じ道を通す(閉じた後のフォーカスの戻しも`Press()`が見る)。キーボードが開いている間のEscはキーボードを閉じるだけ
+  (2回目でキャンセル)。複数行はEnterが改行、Ctrl+Enterで決定。
+- **英数字の欄**: `Textbox::setAsciiInput(true)`(`InputDialog::setAsciiInput()`)でキーボードを英字で開く。物理キーボードで打ったローマ字が
+  かなに変わるとパスワードが通らないため。SSID・Wi-Fiのパスワード・NTP・ホームURL・メールの各欄・チャットのURL/トークン/参加コード・
+  ストアのURL・カレンダーの名前/URL・Todoistのトークンに付けた。日本語で入れたい欄は付けない(半角/全角で切り替えられるのは前と同じ)。
+- **枠とキーボード**: 画面を覆うキーボード(据え置きでないもの)を開いている間は共通の枠を描かない(半透明のキーボードの上に枠が浮くため)。
+  開いたときに`MarkRing()`で下から描き直させる(`KeyboardFunctions::OnPanelShown()`)。
+- 骨格の直し: ColorDialog・FileSelectDialog・FileSaveDialogの子に`setParent(this)`が無く、親を辿れない(=フォーカスの範囲の外・
+  Esc/Enterがダイアログへ届かない)ので足した(親が画面全体なので位置は変わらない)。
+- **新しいダイアログを作ったら**: 子に`setParent(this)`、`onFocusKey(Back)`で閉じるボタンを`FocusFunctions::Press()`、入力欄があれば
+  `Submit`で決定、中身から始めたいなら`initialFocus()`。
+- 検証: `dialog_key_test`(run.sh の input。開いたら入力欄・打つとキーボードが開いて入る・Enterで決定/Escでキャンセル・複数行・タッチの後は枠無し・
+  MsgDialog・PickerDialogの最初のフォーカスとMonthGrid/DurationPicker・ColorDialog・FileSaveDialog・ダイアログの間の画面のonKey())、
+  PCビルドで設定のWi-Fiの「追加」→SSIDを打ってEnter→パスワードのダイアログへ枠が出て打てる(英字のキー盤)、カレンダーの日の格子を矢印で
+  (`PICOOS_VERIFY_LCD=1`で食い違い0)。実機(USBシリアル・CardKB2)では未確認(Todoist参照)。
 
 ## 物理キーボードのかな漢字変換 (`src/ime/Romaji_Kana.hpp` / `Keyboard`の物理キーの処理) (2026-10-03)
 

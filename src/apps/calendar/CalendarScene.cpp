@@ -541,6 +541,7 @@ void CalendarScene::openAddSourceName(){
     // 名前→(1フレーム空けて)URLの順に編集する。MarkdownScene::Pendingと同じ理由で
     // ダイアログからダイアログは1フレーム空ける
     auto* dialog = new InputDialog("カレンダーの名前(英数字と_-、20文字まで):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){
@@ -561,6 +562,7 @@ void CalendarScene::openAddSourceName(){
 
 void CalendarScene::openAddSourceUrl(){
     auto* dialog = new InputDialog("カレンダーのURL(iCal/.ics):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){

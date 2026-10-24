@@ -108,6 +108,9 @@ class MsgDialog : public Widget {
             this->visible = false;
         };
 
+        // Esc(Back)でキャンセル。ボタンが「OK」だけ(お知らせ)ならOKで閉じる
+        bool onFocusKey(FocusKey key) override;
+
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::MsgDialog; }

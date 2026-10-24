@@ -26,6 +26,13 @@ namespace NetworkFunctions {
     inline FixedString<PICO_STR_M> ntpServer1{"ntp.nict.jp"};
     inline FixedString<PICO_STR_M> ntpServer2{"time.google.com"};
 
+    // 本体の名前(network.cfgの hostname)。DHCPで名乗り、mDNSで「<名前>.local」として応答する
+    // (同じLANのPC・スマホから picoos.local でファームの送信等ができる)。英数字とハイフンの1〜63文字
+    constexpr const char* kDefaultHostname = "picoos";
+    inline FixedString<PICO_STR_L> hostname{kDefaultHostname}; // 63文字まで入る大きさ
+    // 名前を変えて保存する(mDNSは名乗り直す。DHCPの名乗りは次の接続から)。正しくない名前ならfalse
+    bool SetHostname(const char* name);
+
     inline unsigned long timer = 0;
 
     // --- 定期的な再接続交渉まわり ---
@@ -76,6 +83,13 @@ namespace NetworkFunctions {
     // 無線チップ自体は止めない(電池の残量表示がVBUSの検出に無線チップのGPIOを使うため。Battery_Functions参照)
     void SetEnabled(bool enabled);
     bool IsEnabled();
+
+    // 今のIPアドレス・ゲートウェイ・DNSを "a.b.c.d" で書く(未接続なら空)。設定アプリの表示用
+    void CurrentAddress(char* ip, size_t ip_cap);
+    void CurrentGateway(char* gw, size_t gw_cap);
+    void CurrentDns(char* dns, size_t dns_cap);
+    // 保存済みのIPの設定を変えたとき、今そのネットワークに繋いでいるなら繋ぎ直して反映する
+    void ReapplyIpConfig(const char* ssid);
     // 戻り値の所有権は呼び出し側に移る(HttpGet/HttpRequestと同じ流儀。
     // PICO_Task::Add()には乗らない)。呼び出し側は毎フレーム update() を呼び、
     // getStatus()がPROCESSING以外になったら結果を読み、自分でdeleteすること

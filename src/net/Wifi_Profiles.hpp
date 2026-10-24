@@ -13,6 +13,7 @@
 //   enabled = true|false
 //   ssid1 = enc1:...    pass1 = enc1:...
 //   ssid2 = ...         pass2 = ...
+//   ip2 = 192.168.1.50/24   gw2 = 192.168.1.1   dns2 = 1.1.1.1,8.8.8.8   (任意。下の IpConfig)
 // **番号の若い順が「最後に接続できた順」**(1番 = 直近で接続したネットワーク)。
 // 接続できるたびにその組を1番へ繰り上げる(MarkConnected)ので、並び自体が
 // 「直近に接続したものから試す」自動接続の順番になる。
@@ -32,10 +33,27 @@ namespace WifiProfiles {
     constexpr size_t kMaxSsidBytes     = 32;
     constexpr size_t kMaxPasswordBytes = 64;
 
+    // ネットワークごとのIPの設定。既定(全部0)はDHCPでアドレスもDNSももらう。
+    //   static_ip … アドレス・マスク・ゲートウェイを固定する(DHCPを使わない)
+    //   dns[]     … 0以外ならDHCPのDNSの代わりに使う(固定IPでなくても指定できる)
+    // アドレスは util/Net_Addr.hpp の形(上位バイトが先頭のオクテット)。秘密ではないので暗号化しない
+    constexpr int kMaxDns = 2;
+    struct IpConfig {
+        bool     static_ip = false;
+        uint32_t ip = 0, mask = 0, gateway = 0;
+        uint32_t dns[kMaxDns] = {};
+        bool isDefault() const { return !static_ip && dns[0] == 0 && dns[1] == 0; }
+    };
+
     struct Profile {
         FixedString<PICO_STR_M> ssid;
         FixedString<PICO_STR_L> password; // 空 = パスワード無し(オープンなネットワーク)
+        IpConfig ip;
     };
+
+    // IpConfigとして正しいか(固定IPなら、使えるアドレス・連続したマスク・ゲートウェイが同じサブネット。
+    // ゲートウェイ0(無し)は許す: 外へ出ない閉じたLAN用)。DNSは0か使えるアドレス
+    bool ValidIpConfig(const IpConfig& c);
 
     // /sys/wifi.cfgを読む。ファイルが無ければ、旧形式(network.cfgの wifi-ssid / wifi-password。
     // 1つだけ持てた頃の設定)を1番として取り込み、wifi.cfgを作る(以後network.cfgの2キーは読まない)。
@@ -65,6 +83,8 @@ namespace WifiProfiles {
     // 接続できたSSIDを先頭へ繰り上げる。並びが変わったときだけ保存する
     // (同じネットワークへ繋がり直すたびにSDへ書かないため)。一覧に無ければ何もしない
     void MarkConnected(const char* ssid);
+    // index 番目のIPの設定を書き換えて保存する。範囲外/正しくない設定ならfalse
+    bool SetIpConfig(int index, const IpConfig& c);
 
     bool IsEnabled();
     // ON/OFFを切り替えて保存する

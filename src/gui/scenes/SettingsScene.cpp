@@ -243,6 +243,15 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
             this->pending = Pending::WifiPassword;
             break;
         }
+        case EditField::Hostname: {
+            if(input.empty()) break;
+            if(!NetworkFunctions::SetHostname(input.c_str())){
+                this->showMessageLater("名前は英数字とハイフンの63文字までです(先頭と末尾にハイフンは使えません)");
+                break;
+            }
+            this->refreshWifiInfo();
+            break;
+        }
     }
 }
 
@@ -526,6 +535,8 @@ void SettingsScene::onUpdate(){
     if(p == Pending::WifiPassword) this->openWifiPasswordDialog();
     else if(p == Pending::Message) this->openMessage();
     else if(p == Pending::ClockTime) this->openClockTimeDialog();
+    else if(p == Pending::IpGateway) this->openIpGatewayDialog();
+    else if(p == Pending::IpDns) this->openIpDnsDialog();
 
     this->pollWifiScan();
     if(this->tab == Tab::Wifi) this->refreshWifi();

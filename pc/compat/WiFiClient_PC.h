@@ -31,8 +31,18 @@
 class IPAddress {
 public:
     IPAddress() = default;
+    // 実機と同じく4オクテットから作れる(固定IPの設定・表示用)
+    IPAddress(uint8_t a, uint8_t b, uint8_t c, uint8_t d){
+        snprintf(text_, sizeof(text_), "%u.%u.%u.%u", a, b, c, d);
+    }
     const char* c_str() const { return text_; }
     bool isSet() const { return text_[0] != 0; }
+    // 実機の operator[] と同じくオクテットを返す(IPv4の数字の文字列でなければ0)
+    uint8_t operator[](int i) const {
+        unsigned v[4] = {0, 0, 0, 0};
+        if(sscanf(text_, "%u.%u.%u.%u", &v[0], &v[1], &v[2], &v[3]) != 4) return 0;
+        return (i >= 0 && i < 4) ? (uint8_t)v[i] : 0;
+    }
     char text_[48] = {0};
 };
 

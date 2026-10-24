@@ -9,6 +9,7 @@
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/TabBar.hpp"
 #include "hal/Sound_Functions.hpp"
+#include "net/Wifi_Profiles.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -44,11 +45,13 @@ class SettingsScene : public Scene {
             Ntp2,
             BrowserHome,
             WifiSsid,     // 「追加」: SSIDの手入力(決定後、1フレーム空けてパスワードを聞く)
+            Hostname,     // 本体の名前(mDNSの <名前>.local)
         };
 
         // ダイアログを閉じた直後に次のダイアログを開くための保留(1フレーム空ける。
         // MarkdownScene::Pendingと同じ理由: TRANSLUCENTの下は同じフレームでは描き直されない)
-        enum class Pending : uint8_t { None, WifiPassword, Message, ClockTime };
+        // IpAddress→IpGateway→IpDns は「IP」ボタンの3つの入力(固定IP・ゲートウェイ・DNS)
+        enum class Pending : uint8_t { None, WifiPassword, Message, ClockTime, IpGateway, IpDns };
 
         Tab tab = Tab::Wifi; // onExit()を跨いで残す(上へ別のシーンを積んで戻ると同じタブ)
 
@@ -77,6 +80,11 @@ class SettingsScene : public Scene {
         Button*            wifi_add_button      = nullptr;
         Button*            wifi_connect_button  = nullptr;
         Button*            wifi_remove_button   = nullptr;
+        Button*            wifi_ip_button       = nullptr;
+        // 本体の名前(<名前>.local)と今のIPアドレスの1行と、名前の[編集]
+        Label<PICO_STR_L>* wifi_info_label      = nullptr;
+        Button*            wifi_name_button     = nullptr;
+        void refreshWifiInfo();
 
         // 状態の1行と一覧は、接続状態/接続先/一覧の中身が変わったときだけ作り直す
         uint8_t                 shown_status = 0xFF;
@@ -89,6 +97,14 @@ class SettingsScene : public Scene {
 
         void connectSelected();
         void confirmRemoveSelected();
+
+        // ---- 選んだ保存済みネットワークのIPの設定(固定IP→ゲートウェイ→DNSの順に聞く) ----
+        FixedString<PICO_STR_M> pending_ip_ssid;   // 聞いている間に並びが変わってもよいようSSIDで覚える
+        WifiProfiles::IpConfig pending_ip;         // 入力の途中の値
+        void openIpAddressDialog();
+        void openIpGatewayDialog();
+        void openIpDnsDialog();
+        void commitIpConfig();
 
         // ---- 周辺Wi-Fiのスキャン→選択→(未保存なら)パスワード入力→保存して接続 ----
         // ダイアログはSearchDialog(MarkdownScene)と同じく開くたびにnewし、

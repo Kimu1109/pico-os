@@ -113,7 +113,7 @@
   - [x] 2Dゲームの簡易エンジン(pico.game)
 - [x] アプリストア(Webから入れる。署名した配布物・更新・削除。docs/APP_REPO.md)
   - [ ] 実機・GitHub Pagesでの確認
-  - [ ] 投稿・検索(動的なサーバ)
+  - [ ] 投稿・検索(投稿用リポジトリ+PR+Actions、作者の署名。設計は lua-apps.md「アプリストアの投稿」・APP_REPO.md「v2」)
 - [ ] 残タスク
   - [x] 命令単位の実行時間制御(lua_sethook等)
   - [x] SDを走査してLuaアプリを見つける処理

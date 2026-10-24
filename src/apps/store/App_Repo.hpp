@@ -13,19 +13,22 @@ namespace AppRepo {
     // ---- 上限(docs/APP_REPO.md「制限値」と揃えること) ----
     constexpr int    kMaxEntries      = 40;           // カタログから読むアプリの数
     constexpr size_t kMaxCatalogBytes = 32 * 1024;
-    constexpr size_t kMaxLineBytes    = 512;           // catalog.tsv / files.tsv の1行
+    constexpr size_t kMaxLineBytes    = 640;           // catalog.tsv / files.tsv の1行
     constexpr int    kMaxFiles        = 64;            // 1アプリのファイル数
     constexpr size_t kMaxFilesBytes   = 8 * 1024;      // files.tsv の大きさ
     constexpr uint32_t kMaxFileBytes  = 1024UL * 1024UL;
     constexpr uint32_t kMaxAppBytes   = 4UL * 1024UL * 1024UL;
     constexpr size_t kMaxPathLen      = 95;            // files.tsv のパス
     constexpr int    kMaxPathDepth    = 4;
-    constexpr size_t kMaxSigBytes     = 256;           // catalog.sig
+    constexpr size_t kMaxSigBytes     = 256;           // catalog.sig / files.sig
 
     constexpr const char* kCatalogMagic = "pico-os-apps";
-    constexpr int kCatalogFormat = 1;
-    // 署名する中身 = kSignContext(16バイト。終端のNULまで) + SHA-256(catalog.tsv)
-    constexpr char kSignContext[16] = "pico-os-apps-v1";
+    constexpr int kCatalogFormat = 2;
+    // カタログ鍵が署名する中身 = kSignContext(16バイト。終端のNULまで) + SHA-256(catalog.tsv)
+    constexpr char kSignContext[16] = "pico-os-apps-v2";
+    // 作者の鍵が署名する中身 = kAppSignContext(16バイト。後ろはNUL) +
+    //   SHA-256("<id>\t<version>\t<files_sha256 16進>\n")
+    constexpr char kAppSignContext[16] = "pico-os-app-v2";
     constexpr size_t kSignMessageBytes = 16 + 32;
 
     // 権限のビット(catalog.tsv の perms 列 / app.cfg の permission_*)
@@ -37,6 +40,13 @@ namespace AppRepo {
         PermMicrophone = 1 << 4, // microphone  / permission_microphone(マイクで聞く・録音する)
     };
 
+    // catalog.tsv の status 列
+    enum class Status : uint8_t {
+        Normal,  // "-"
+        Yanked,  // "yanked"(取り下げ。新しく入れられない。知らない値もこれ)
+        Blocked, // "blocked"(危険と判断した。新しく入れられず、入っていれば削除をすすめる)
+    };
+
     struct Entry {
         FixedString<PICO_STR_S> id;          // 英小文字・数字・'-'・'_'(24バイトまで)
         FixedString<PICO_STR_S> version;     // 数字と'.'
@@ -46,6 +56,9 @@ namespace AppRepo {
         uint8_t files_sha256[32] = {};       // files.tsv のSHA-256
         uint8_t perms = 0;
         FixedString<PICO_STR_LL> description; // 切り詰めてよい
+        uint8_t author_key[32] = {};         // 作者の公開鍵(files.sig の鍵)
+        FixedString<PICO_STR_M> author;      // 表示用の作者名(切り詰めてよい)
+        Status status = Status::Normal;
     };
 
     struct FileEntry {
@@ -81,7 +94,7 @@ namespace AppRepo {
 
     // ---- catalog.tsv ----
     // 行を読む関数はどれも line をその場で書き換える(タブをNULにする)
-    // 1行目 "pico-os-apps<TAB>1<TAB><serial>"
+    // 1行目 "pico-os-apps<TAB>2<TAB><serial>"
     bool ParseCatalogHeader(char* line, uint32_t& serial);
     // 2行目以降の1件。空行・'#'で始まる行は false(skip=true)
     bool ParseCatalogLine(char* line, Entry& out, bool& skip);
@@ -89,11 +102,17 @@ namespace AppRepo {
     // ---- files.tsv ----
     bool ParseFilesLine(char* line, FileEntry& out, bool& skip);
 
-    // ---- catalog.sig ----
+    // "-" / "yanked" / "blocked"(知らない値は Yanked)
+    Status ParseStatus(const char* s);
+
+    // ---- catalog.sig / files.sig ----
     // "ed25519<TAB or 空白><公開鍵64桁><TAB or 空白><署名128桁>"
     bool ParseSignature(const char* text, uint8_t pubkey[32], uint8_t sig[64]);
-    // catalog.tsv のSHA-256 に対する署名を確かめる
+    // catalog.tsv のSHA-256 に対する署名を確かめる(カタログ鍵)
     bool VerifyCatalog(const uint8_t catalog_sha256[32], const uint8_t pubkey[32], const uint8_t sig[64]);
+    // files.sig を確かめる(作者の鍵)。id と版も署名に入るので、別のアプリ・別の版へ付け替えられない
+    bool VerifyFiles(const char* id, const char* version, const uint8_t files_sha256[32],
+                     const uint8_t pubkey[32], const uint8_t sig[64]);
 
     // ---- 信頼する鍵 ----
     // ファームに焼き込んだ鍵(apps/store/App_Repo_Keys.hpp)と、/sys/store.cfg の key = 行

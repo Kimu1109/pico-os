@@ -5,10 +5,11 @@
 #include <cstdlib>
 
 #include "monocypher-ed25519.h"
+#include "apps/ssh/Ssh_Sha256.hpp"
 
 namespace {
     // line をタブで最大 max 個に分ける(その場で書き換える。末尾の\r\nは除く)。最後の列は残り全部。
-    // 分けた数を返す(作業用の写しを取らないのは、1行512バイトをスタックに重ねないため)
+    // 分けた数を返す(作業用の写しを取らないのは、1行640バイトをスタックに重ねないため)
     int SplitTabs(char* line, char** cols, int max){
         size_t n = strlen(line);
         while(n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = '\0';
@@ -192,10 +193,10 @@ bool AppRepo::ParseCatalogHeader(char* line, uint32_t& serial){
 bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip){
     skip = IsSkipLine(line);
     if(skip) return false;
-    char* cols[9];
-    const int n = SplitTabs(line, cols, 9);
-    if(n < 8) return false;
-    //9列目以降は将来の拡張(無視する。description にタブは入らない取り決め)
+    char* cols[12];
+    const int n = SplitTabs(line, cols, 12);
+    if(n < 11) return false;
+    //12列目以降は将来の拡張(無視する。どの列にもタブは入らない取り決め)
     out = Entry{};
     if(!ValidId(cols[0]) || !out.id.assign(cols[0])) return false;
     if(!ValidVersion(cols[1]) || !out.version.assign(cols[1])) return false;
@@ -206,7 +207,16 @@ bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip){
     if(!HexDecode(cols[5], strlen(cols[5]), out.files_sha256, 32)) return false;
     if(!ParsePerms(cols[6], out.perms)) return false;
     out.description.assign(cols[7]);
+    if(!HexDecode(cols[8], strlen(cols[8]), out.author_key, 32) || AllZero(out.author_key, 32)) return false;
+    out.author.assign(cols[9]);
+    out.status = ParseStatus(cols[10]);
     return true;
+}
+
+AppRepo::Status AppRepo::ParseStatus(const char* s){
+    if(strcmp(s, "-") == 0) return Status::Normal;
+    if(strcmp(s, "blocked") == 0) return Status::Blocked;
+    return Status::Yanked; //知らない値(新しい本体向けの印)は、少なくとも新しく入れさせない
 }
 
 bool AppRepo::ParseFilesLine(char* line, FileEntry& out, bool& skip){
@@ -244,6 +254,25 @@ bool AppRepo::VerifyCatalog(const uint8_t catalog_sha256[32], const uint8_t pubk
     uint8_t msg[kSignMessageBytes];
     memcpy(msg, kSignContext, 16);
     memcpy(msg + 16, catalog_sha256, 32);
+    return crypto_ed25519_check(sig, pubkey, msg, sizeof(msg)) == 0;
+}
+
+bool AppRepo::VerifyFiles(const char* id, const char* version, const uint8_t files_sha256[32],
+                          const uint8_t pubkey[32], const uint8_t sig[64]){
+    if(AllZero(pubkey, 32) || !id || !version) return false;
+    char hex[65];
+    HexEncode(files_sha256, 32, hex);
+    Sha256 sha;
+    sha.reset();
+    sha.update(id, strlen(id));
+    sha.update("\t", 1);
+    sha.update(version, strlen(version));
+    sha.update("\t", 1);
+    sha.update(hex, 64);
+    sha.update("\n", 1);
+    uint8_t msg[kSignMessageBytes];
+    memcpy(msg, kAppSignContext, 16);
+    sha.finish(msg + 16);
     return crypto_ed25519_check(sig, pubkey, msg, sizeof(msg)) == 0;
 }
 

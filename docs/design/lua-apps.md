@@ -189,8 +189,9 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 **形式は静的なファイルだけ**(catalog.tsv + catalog.sig + `<id>/<版>/files.tsv` + ファイル)なので、GitHub Pages でも
 Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURLは`https://kimu1109.github.io/pico-os/apps/`(`/sys/store.cfg`の`url`)。
 
-- **守り方**: カタログ(catalog.tsv)だけにEd25519で署名し(`"pico-os-apps-v1\0"`+SHA-256(catalog))、そこから
-  files.tsv(SHA-256)→各ファイル(SHA-256)とつなぐ。鍵は`src/apps/store/App_Repo_Keys.hpp`の`kBuiltin`(今は空の目印1件=全部0。
+- **守り方**: カタログ(catalog.tsv)にカタログ鍵でEd25519の署名(`"pico-os-apps-v2\0"`+SHA-256(catalog))、
+  各アプリの files.tsv に作者の鍵の署名(files.sig。形式2、2026-10-24。下の「アプリストアの投稿」)をし、そこから
+  files.tsv(SHA-256)→各ファイル(SHA-256)とつなぐ。鍵は`src/apps/store/App_Repo_Keys.hpp`の`kBuiltin`(利用者の手元の鍵`cdae7ba2…`の1件。
   全部0の鍵は信頼しない)か`/sys/store.cfg`の`key = 16進64桁`(4行まで。SDへ書ける人はアプリを直接置けるので弱くならない)。
   **秘密鍵は利用者のPCにだけ置く**(`build_app_repo.py keygen`。リポジトリ・サーバ・GitHubのSecretsにも置かない)。
   同じURLで前に見た`serial`より小さい一覧は断る(`/sys/store/state.cfg`。古い署名済みの一覧へ戻される攻撃)。
@@ -202,8 +203,9 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
   `catalog.tsv`へ差し替える(失敗しても前の一覧のまま)。インストールは`/sys/store/staging/`へ全部取って確かめてから、
   **ファイルを1つずつ**`/lua/apps/<dir>/`へ移す(ディレクトリごと移さないのは、更新でアプリが書いたセーブ等を残すため)。
   前の版の一覧(`/sys/store/installed/<id>.tsv`)にあって新しい版に無いファイルだけ消す。files.tsvは全体をRAMに載せず、
-  1行ずつ読み直す(512バイトの行バッファもスタックではなくメンバ)。カタログ40件で**約16KB**あるので、画面が開いている間だけ`new`する。
-  `Installed`: No / Same / Update / Newer / Foreign(同名のディレクトリにidの無いアプリ=手で入れたもの。上書きの確認を出す) / Conflict(別のid。入れない)。
+  1行ずつ読み直す(512バイトの行バッファもスタックではなくメンバ)。カタログ40件で**約20KB**(形式2で作者の鍵・作者名が増えた。AppStore全体は約27KB)あるので、画面が開いている間だけ`new`する。
+  `Installed`: No / Same / Update / Newer(古い版は入れない) / Foreign(同名のディレクトリにidの無いアプリ=手で入れたもの。上書きの確認を出す) /
+  Conflict(別のid。入れない) / KeyChanged(覚えた作者の鍵と違う。更新できず、削除すれば入れられる)。
 - **登録簿**: インストール後すぐランチャに並ぶ(`LuaAppScanner::RegisterOrRefresh()`。既に登録済みなら`AppFunctions::Refresh()`で名前・権限・アイコンだけ差し替え、
   並びの位置は変えない)。削除は`AppFunctions::Unregister()`(後ろのindexを詰め、ランチャの並び・隠した印も詰める)。
   `LuaAppScanner::ReadAppConfig()`/`AppInfo`を外へ出した(app.cfgに`id`を足した。走査は`.`で始まるディレクトリを飛ばすようにした)。
@@ -213,13 +215,113 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
   ファイル名はASCIIだけ(`[A-Za-z0-9._-]`、4段・95文字)、ディレクトリ名は日本語可(catalog.tsvの`dir`)。
 - **GitHub Pages**: 署名した目録(`build_app_repo.py sign --out store`)を`store/`にコミットすると、`web-pages.yml`が`assemble`で
   `pc/sdcard/lua/apps/`から中身を写して`_site/apps/`へ置く(**秘密鍵はCIに要らない**)。署名の後で中身が変わったアプリは警告して配らない
-  (`--allow-stale`。Webの公開そのものは止めない)。**`store/`はまだコミットしていない**(利用者の鍵で署名する必要があるため)。
+  (`--allow-stale`。Webの公開そのものは止めない)。`store/`は利用者の鍵で署名してコミット済み(16本)。
   github.io の証明書の発行元が焼き込みのルート(DigiCert/Sectigo系)で足りるかは実機で未確認。
 - 検証: `app_repo_test`(run.sh の core。行の読み取り・名前とパスの検査・版・権限・署名)、`app_test`(Refresh/Unregister/FindByArg)、
   **`app_store_net_test`(run_net.sh。`app_store_fixture.py`が配布物の変種を作り、`python3 -m http.server`が同じURLで中身を張り替えて配る)**:
   一覧・インストール・手で入れた同名のアプリへの上書き(アプリのファイルが残る)・知らない鍵/壊れた署名/鍵の設定なし・更新(消えたファイル・増えたサブディレクトリ・
   セーブが残る)・古い一覧・改ざんしたファイル・一覧より強い権限・削除・404・中止。PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)で
   一覧→確認→インストール→開く→削除(実ファイルシステムでディレクトリが消える)。**実機・GitHub Pages・本物のHTTPSでは未確認**。
+
+## アプリストアの投稿(設計。未実装)(2026-10-24)
+
+他人がアプリを投稿・更新できるようにする。**投稿は GitHub のプルリクエストで受け付け、検査と公開は GitHub Actions に任せる。**
+配布物は今と同じ静的なファイルのまま(形式は`docs/APP_REPO.md`の形式2)。
+
+### 選んだ形と理由
+
+- **投稿用の別リポジトリ + PR + Actions(選んだ)**: 投稿者の本人確認は GitHub のアカウントで足りる(ログインを作らない)。
+  差分はPRで読めて、履歴はgitに残り、公開は Pages のまま。サーバを持たないので、守るところが少ない。
+- Cloudflare Workers + R2 + D1 + GitHubのOAuth(選ばなかった。次の段): Webのフォームから投稿させたくなったらこれにする。
+  そのときも **Workers が投稿用リポジトリへPRを作る形**にすれば、下の検査と公開はそのまま使える。
+- 自前のサーバ(Raspberry Pi 等)で認証とアップロードを作る(選ばなかった): 守るところが一気に増える。
+
+### 投稿用リポジトリ(`kimu1109/pico-os-apps`、仮の名前)
+
+```
+apps/<id>/meta.cfg     owners = alice, bob   (更新してよいGitHubのアカウント)
+                       key = <作者の公開鍵 16進64桁>
+                       dir = テトリス         (/lua/apps/ の下の名前。catalog.tsv の dir)
+apps/<id>/app/...      アプリのファイル(main.lua, app.cfg, ...)
+apps/<id>/files.tsv    build_app_repo.py author-sign が作る
+apps/<id>/files.sig    〃
+status.tsv             <id> <TAB> <status> <TAB> <理由>(管理者だけが変える。catalog.tsv の status)
+script/                build_app_repo.py(pico-os から写す)
+.github/workflows/     check.yml(PRの検査と自動マージ) / publish.yml(カタログの署名と公開)
+```
+
+- リポジトリに置くのは最新版だけ(本体が取るのは最新版だけ。古い版はgitの履歴にある)。公開のときに`<id>/<version>/`へ並べ替える。
+- アプリのファイルをそのまま置くので、更新のPRの差分がそのまま中身の差分になる(人が読める)。
+
+### 投稿の流れ(作者)
+
+1. `build_app_repo.py keygen --key ~/.pico-os/author.key` で作者の鍵を作る(1回だけ。秘密鍵は手元にだけ置く)。
+2. `apps/<id>/app/` にアプリを置き、新規なら `meta.cfg` も書く。
+3. `build_app_repo.py author-sign --key ~/.pico-os/author.key --app apps/<id>` で files.tsv と files.sig を作る。
+4. PRを出す。
+
+### マージの決まり
+
+次の**全部**を満たすPRは自動でマージする。1つでも外れれば `needs-review` のラベルを付け、管理者が読んでマージする。
+
+- 変えたのが1つの `apps/<id>/` の `app/**`・`files.tsv`・`files.sig` だけ(`meta.cfg`・`status.tsv`・`script/`・`.github/` に触れていない)
+- PRを出したアカウントが、**main の** `meta.cfg` の `owners` にいる
+- 検査に通る(下)。版が main より新しい。権限が main の版より増えていない。status が `-`
+
+新規・権限が増える更新・`meta.cfg` の変更(鍵や owners の差し替え)は、必ず人が見る。見るところ:
+権限の理由・通信先(`pico.http` 等のURL)・難読化していないか・名前やアイコンのなりすまし・大きさ・id と dir の重なり。
+
+### 検査(check.yml)
+
+- files.tsv をファイルから作り直して同じになるか、files.sig が `meta.cfg` の鍵で合うか、app.cfg の `id`・`version`、
+  `docs/APP_REPO.md` の制限値(パス・大きさ・数・必須ファイル)、`.lua` 全部を `luac -p`(lib/lua と同じ 5.4.7)で構文だけ確かめる。
+- **PRの中身は実行しない。** 検査の道具は base(main)から取り、PRの中身は別のディレクトリにデータとして取るだけにする(`python3 -I`)。
+  PRがワークフローや検査の道具を書き換えても、自分の判定を甘くできないようにするため。
+- 判定する役(読み取りの権限だけ・Secretなし)と、マージする役(書き込みの権限)をジョブで分ける。マージする役は判定の結果を読むだけで、
+  **判定した commit のままのときだけ**マージする(判定の後に push されたら、マージしない)。
+- 具体的な設定(イベントの種類・ルールセット・誰がマージできるか)は、作るときに GitHub の今の仕様で確かめる。
+
+### 公開(publish.yml)
+
+- main への push で、`apps/*` と `status.tsv` から catalog.tsv を作り、カタログ鍵で署名して Pages へ出す。アプリのコードは実行しない。
+- serial は max(今のUNIX時刻, 前回+1)。
+- カタログ鍵は **main からしか使えない Environment の Secret** に置く。鍵は手元で作って Secret に入れ、公開鍵を `kBuiltin` へ足す。
+
+### 鍵やアカウントが漏れたとき
+
+| 漏れたもの | できてしまうこと | できないこと | 直し方 |
+|---|---|---|---|
+| カタログ鍵(CI・リポジトリの管理者権限) | 偽の新規アプリを一覧に出す・取り下げの印を付ける・serial を大きくする | 入っているアプリの更新(作者の鍵が要る)・古い版へ戻す(本体が断る) | 鍵を作り直し、ファームの`kBuiltin`と store.cfg を更新。serial は鍵ごとなので数え直せる |
+| 作者の鍵だけ | 無い(マージには owners のアカウントも要る) | — | 作者が鍵を替えるPR(人が見る) |
+| 作者のGitHubアカウントだけ | 無い(署名できない) | — | owners から外すPR(人が見る) |
+| 作者の鍵とアカウントの両方 | そのアプリの偽の版を出す | 他のアプリ | 管理者が status を `blocked` にする |
+
+- 限界: 初めて入れる人は、カタログの `author_key` を信じるしかない(初回の信頼。Androidのアプリの署名と同じ)。
+- 作者が鍵を無くしたら、`meta.cfg` の鍵を替えるPR(人が見る)を出す。入れている端末は `KeyChanged` になり、削除して入れ直す。
+
+### 今のストアから移る順番
+
+1. **済み(2026-10-24)** 本体: APP_REPO 形式2(`App_Repo` の形式2・files.sig・`App_Store` の鍵の固定・status・古い版を断る・serial を鍵ごとに)と
+   `StoreScene` の表示(作者名・警告・`KeyChanged`)。`build_app_repo.py` の `build`/`sign` は形式2を作る(`--author-key`/`--author`)。
+   - `StoreScene` は一覧の行とAppStoreの番号を `rows[]` で対応させる(入っていない取り下げを飛ばし、入っている `blocked` を先頭へ)。
+   - 検証: `app_repo_test`(形式2の行・status・files.sig、Pythonの署名をMonocypherで確かめる)、`app_store_net_test`(壊れた files.sig・
+     一覧と違う作者の鍵・鍵が変わった更新→削除→入れ直し・古い版・yanked/blocked・鍵ごとの serial・鍵を覚えていない形式1のものの更新)。
+     PCビルドの `--tap`/`--shot` で、blocked が先頭に赤・入っていない yanked が出ない・作者名・入れるボタンが押せないことを見た。
+   - **コミット済みの `store/` は形式1のまま**(利用者の鍵で `sign` をやり直す必要がある)。`assemble`/`verify` は形式1も警告つきで通すので
+     Pagesは止まらないが、形式2のファームはそれを読まない。
+2. `build_app_repo.py`: `author-sign`(作者)、`registry-check`・`registry-build`(投稿用リポジトリのCI)。
+3. 一覧のページ分け(SDから1ページずつ読む。40件を超える前に要る)。**ランチャの登録簿の32件**(`launcher_hidden` が32bit)も広げる。
+4. 投稿用リポジトリを作り、ワークフローを置き、今の `store/` の16本を移す(owners は kimu1109、**作者の鍵は今の手元の鍵 `cdae7ba2…`**。
+   CIが乗っ取られても、公式アプリの更新は手元の鍵が無いと出せない)。
+5. 既定のURLを投稿用リポジトリの Pages へ替える。pico-os の `store/` と `web-pages.yml` の `assemble` は、移し終えたら消す。
+
+利用者の手が要るもの: リポジトリの作成・Pages の有効化・カタログ鍵を作って Secret に入れる・ルールセットの設定。
+
+### 今は無いもの
+
+- 鍵の引き継ぎ(古い鍵で新しい鍵に署名して、`KeyChanged` を出さずに替える)。
+- ファームを更新せずにカタログ鍵を失効させること。
+- ダウンロード数・評価・依存関係・本体の版の条件。
 
 ## 動作確認アプリ(`pc/sdcard/lua/apps/動作確認/`、2026-10-10)
 

@@ -121,7 +121,8 @@ void StoreScene::onEnter(){
                                     detail_y - MARGIN - list_y, AppRepo::kMaxEntries);
     this->app_list->setFontSize(FontFn::Small);
     this->app_list->setEnableIcon(true);
-    this->app_list->setOnSelectItem([this](int index, bool already){
+    this->app_list->setOnSelectItem([this](int row, bool already){
+        const int index = (row >= 0 && row < this->row_count) ? this->rows[row] : -1;
         const AppRepo::Entry* e = this->store ? this->store->entry(index) : nullptr;
         if(!e) return;
         this->selected_id.assign(e->id.c_str());
@@ -135,7 +136,7 @@ void StoreScene::onEnter(){
             if(st == AppStore::Installed::No || st == AppStore::Installed::Update || st == AppStore::Installed::Foreign){
                 this->confirmInstall();
             }else if(st != AppStore::Installed::Conflict){
-                this->pending_launch = true;
+                this->pending_launch = true; //Same/Newer/KeyChanged
             }
         }
     });
@@ -191,40 +192,66 @@ int StoreScene::selectedIndex() const {
 void StoreScene::refreshList(){
     if(!this->app_list || !this->store) return;
     this->app_list->clear();
-    for(int i = 0; i < this->store->count(); i++){
-        const AppRepo::Entry* e = this->store->entry(i);
-        ScrollListTools::Item item;
-        item.text.assign(e->name.c_str());
-        switch(this->store->installed(i)){
-            case AppStore::Installed::No:
-                item.icon = IconID::AppStore;
-                break;
-            case AppStore::Installed::Same:
-            case AppStore::Installed::Newer:
-                item.icon = IconID::CheckboxOn;
-                item.color = PICO_DARKGREEN;
-                break;
-            case AppStore::Installed::Update:
-                item.icon = IconID::AppStore;
-                item.color = PICO_BLUE;
-                item.text.append(" (更新)");
-                break;
-            case AppStore::Installed::Foreign:
-                item.icon = IconID::AppBox;
-                break;
-            case AppStore::Installed::Conflict:
-                item.icon = IconID::AppBox;
+    this->row_count = 0;
+    this->blocked_warning.clear();
+    //危険の印が付いて入っているものを先に、それから入れられるもの・入っているもの
+    for(int pass = 0; pass < 2; pass++){
+        for(int i = 0; i < this->store->count(); i++){
+            const bool blocked = this->store->blockedInstalled(i);
+            if(blocked != (pass == 0)) continue;
+            const AppStore::Installed st = this->store->installed(i);
+            const bool present = st == AppStore::Installed::Same || st == AppStore::Installed::Update
+                              || st == AppStore::Installed::Newer || st == AppStore::Installed::KeyChanged;
+            if(!this->store->installable(i) && !present) continue;
+            const AppRepo::Entry* e = this->store->entry(i);
+            ScrollListTools::Item item;
+            item.text.assign(e->name.c_str());
+            switch(st){
+                case AppStore::Installed::No:
+                    item.icon = IconID::AppStore;
+                    break;
+                case AppStore::Installed::Same:
+                case AppStore::Installed::Newer:
+                    item.icon = IconID::CheckboxOn;
+                    item.color = PICO_DARKGREEN;
+                    break;
+                case AppStore::Installed::Update:
+                    item.icon = IconID::AppStore;
+                    item.color = PICO_BLUE;
+                    if(this->store->installable(i)) item.text.append(" (更新)");
+                    break;
+                case AppStore::Installed::Foreign:
+                    item.icon = IconID::AppBox;
+                    break;
+                case AppStore::Installed::Conflict:
+                case AppStore::Installed::KeyChanged:
+                    item.icon = IconID::AppBox;
+                    item.color = PICO_RED;
+                    break;
+            }
+            if(blocked){
                 item.color = PICO_RED;
-                break;
+                item.text.append(" (危険)");
+                if(this->blocked_warning.empty()){
+                    //状態の行は1行なので短く(名前が長ければ後ろが切れる)
+                    this->blocked_warning.assign(e->name.c_str());
+                    this->blocked_warning.append("を削除してください(危険)");
+                }
+            }else if(!this->store->installable(i)){
+                item.text.append(" (取り下げ)");
+            }
+            this->rows[this->row_count++] = (int8_t)i;
+            this->app_list->add(item);
         }
-        this->app_list->add(item);
     }
     const int sel = this->selectedIndex();
-    if(sel >= 0) this->app_list->setSelectedIndex(sel);
+    int sel_row = -1;
+    for(int r = 0; r < this->row_count; r++) if(this->rows[r] == sel) sel_row = r;
+    if(sel_row >= 0) this->app_list->setSelectedIndex(sel_row);
     else this->selected_id.clear();
 
     FixedString<PICO_STR_M> t("アプリストア");
-    if(this->store->count() > 0) t.appendFormat(" (%d)", this->store->count());
+    if(this->row_count > 0) t.appendFormat(" (%d)", this->row_count);
     if(this->title_label) this->title_label->setText(t);
 }
 
@@ -233,7 +260,7 @@ void StoreScene::refreshDetail(){
     const int i = this->selectedIndex();
     const AppRepo::Entry* e = this->store ? this->store->entry(i) : nullptr;
     if(!e){
-        this->detail_label->setText(this->store && this->store->count() > 0 ? "アプリを選んでください" : "");
+        this->detail_label->setText(this->row_count > 0 ? "アプリを選んでください" : "");
         return;
     }
     FixedString<PICO_STR_512B> text;
@@ -245,11 +272,14 @@ void StoreScene::refreshDetail(){
         case AppStore::Installed::Newer:    text.appendFormat(" (新しい%sが入っています)", this->store->installedVersion(i)); break;
         case AppStore::Installed::Foreign:  text.append(" (手で入れた同名のアプリがあります)"); break;
         case AppStore::Installed::Conflict: text.append(" (同名の別のアプリがあります)"); break;
+        case AppStore::Installed::KeyChanged: text.append(" (作者の鍵が変わりました)"); break;
         default: break;
     }
+    if(e->status == AppRepo::Status::Blocked) text.append(" 危険と判断されました");
+    else if(e->status == AppRepo::Status::Yanked) text.append(" 取り下げられました");
     FixedString<PICO_STR_L> perms;
     AppRepo::PermsText(e->perms, perms);
-    text.appendFormat("\n権限: %s\n%s", perms.c_str(), e->description.c_str());
+    text.appendFormat("\n作者: %s  権限: %s\n%s", e->author.c_str(), perms.c_str(), e->description.c_str());
     this->detail_label->setText(text);
 }
 
@@ -271,6 +301,9 @@ void StoreScene::refreshStatus(){
     }else if(st == AppStore::State::Failed){
         this->status_label->setTextColor(PICO_RED);
         this->status_label->setText(this->store->message());
+    }else if(!this->blocked_warning.empty()){
+        this->status_label->setTextColor(PICO_RED);
+        this->status_label->setText(this->blocked_warning);
     }else if(st == AppStore::State::Done){
         this->status_label->setTextColor(PICO_DARKGREEN);
         this->status_label->setText(this->store->message());
@@ -288,12 +321,14 @@ void StoreScene::refreshButtons(){
     const AppStore::Installed st = this->store->installed(i);
     const char* label = "入れる";
     if(st == AppStore::Installed::Update) label = "更新";
-    else if(st == AppStore::Installed::Same || st == AppStore::Installed::Newer) label = "入れ直す";
+    else if(st == AppStore::Installed::Same) label = "入れ直す";
     else if(st == AppStore::Installed::Foreign) label = "上書き";
     this->install_button->setText(label);
     const bool has = i >= 0;
     const bool present = has && st != AppStore::Installed::No && st != AppStore::Installed::Conflict;
-    this->install_button->setEnabled(has && !busy && st != AppStore::Installed::Conflict);
+    const bool can_install = st != AppStore::Installed::Conflict && st != AppStore::Installed::KeyChanged
+                          && st != AppStore::Installed::Newer && this->store->installable(i);
+    this->install_button->setEnabled(has && !busy && can_install);
     this->open_button->setEnabled(present && !busy);
     this->remove_button->setEnabled(present && !busy);
     this->settings_button->setEnabled(!busy);
@@ -320,6 +355,18 @@ void StoreScene::confirmInstall(){
         this->setNotice("同じ名前の別のアプリが入っているので入れられません", PICO_RED);
         return;
     }
+    if(st == AppStore::Installed::KeyChanged){
+        this->setNotice("作者の鍵が変わりました。削除してから入れ直してください", PICO_RED);
+        return;
+    }
+    if(st == AppStore::Installed::Newer){
+        this->setNotice("入っている版より古い版は入れられません", PICO_RED);
+        return;
+    }
+    if(!this->store->installable(i)){
+        this->setNotice("取り下げられたアプリなので入れられません", PICO_RED);
+        return;
+    }
     if(!NetworkFunctions::IsConnected()){
         this->setNotice("Wi-Fiに繋がっていません", PICO_RED);
         return;
@@ -327,7 +374,8 @@ void StoreScene::confirmInstall(){
     FixedString<PICO_STR_L> perms;
     AppRepo::PermsText(e->perms, perms);
     FixedString<PICO_STR_512B> text;
-    text.appendFormat("%s %s を入れますか?\n使う権限: %s", e->name.c_str(), e->version.c_str(), perms.c_str());
+    text.appendFormat("%s %s を入れますか?\n作者: %s\n使う権限: %s", e->name.c_str(), e->version.c_str(),
+                      e->author.c_str(), perms.c_str());
     if(st == AppStore::Installed::Foreign){
         text.appendFormat("\n\n/lua/apps/%s に同じ名前のアプリがあります。上書きします(アプリが書いたファイルは残ります)", e->dir.c_str());
     }

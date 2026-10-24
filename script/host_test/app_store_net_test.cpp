@@ -75,6 +75,14 @@ static int Find(AppStore& s, const char* id){
 
 static bool Has(const char* path){ return HostSd::files.count(path) > 0; }
 
+// SDのスタブは removeRecursive でディレクトリを辿れないので、本物のSDで消えたのと同じにする
+static void EraseDir(const std::string& prefix){
+    for(auto it = HostSd::files.begin(); it != HostSd::files.end();){
+        if(it->first.compare(0, prefix.size(), prefix) == 0) it = HostSd::files.erase(it);
+        else ++it;
+    }
+}
+
 int main(int argc, char** argv){
     if(argc < 3){
         fprintf(stderr, "usage: %s <port> <dir>\n", argv[0]);
@@ -91,8 +99,10 @@ int main(int argc, char** argv){
     const std::string pubhex = ReadHostFile(g_dir + "/pubkey.txt");
     AppRepo::HexDecode(pubhex.c_str(), 64, pub, 32);
 
+    const std::string pubhex2 = ReadHostFile(g_dir + "/pubkey2.txt");
+
     // store.cfg から url と key を読む
-    HostSd::files["/sys/store.cfg"] = std::string("url = ") + url + "\nkey = " + pubhex + "\nkey = zz\n";
+    HostSd::files["/sys/store.cfg"] = std::string("url = ") + url + "\nkey = " + pubhex + "\nkey = zz\nkey = " + pubhex2 + "\n";
 
     const std::string tet_src = g_dir + "/variants/good/tetris/2.0.0/";
     const std::string tet_v2 = g_dir + "/variants/v2/tetris/2.1.0/";
@@ -126,6 +136,8 @@ int main(int argc, char** argv){
         check(HostSd::files["/lua/apps/テトリス/blocks.pimg"] == ReadHostFile(tet_src + "blocks.pimg"), "install: 画像の中身");
         check(Has("/lua/apps/テトリス/bgm.mml"), "install: bgm.mml");
         check(Has("/sys/store/installed/tetris.tsv"), "install: ファイル一覧を残す");
+        check(HostSd::files["/sys/store/installed/tetris.key"] == pubhex + "\n", "install: 作者の鍵を覚える");
+        check(s2.entry(t)->author == "tester", "install: 作者名");
         check(!Has("/sys/store/staging/files.tsv") && !Has("/sys/store/staging/app/main.lua"), "install: 置き場は空");
         check(AppFunctions::FindByArg("/lua/apps/テトリス/main.lua") >= 0, "install: ランチャへ登録");
         check(s2.installed(t) == AppStore::Installed::Same, "install: 同じ版が入っている");
@@ -171,6 +183,8 @@ int main(int argc, char** argv){
     // ---- 3. 更新 ----
     {
         HostSd::files["/lua/apps/テトリス/hiscore.txt"] = "12345";
+        //v1で入れたもの(作者の鍵を覚えていない)も更新でき、そのとき鍵を覚える
+        HostSd::files.erase("/sys/store/installed/tetris.key");
         Use("v2");
         AppStore s;
         s.loadConfig();
@@ -184,6 +198,7 @@ int main(int argc, char** argv){
         check(HostSd::files["/lua/apps/テトリス/hiscore.txt"] == "12345", "update: アプリが書いたファイルは残る");
         check(s.installed(t) == AppStore::Installed::Same, "update: 同じ版になった");
         check(AppFunctions::Count() == apps_before, "update: 登録は増えない(差し替え)");
+        check(HostSd::files["/sys/store/installed/tetris.key"] == pubhex + "\n", "update: 鍵を覚えていなければ覚える");
         s.close();
     }
 
@@ -222,6 +237,8 @@ int main(int argc, char** argv){
         s.remove(t); //SDのスタブはディレクトリを辿れないので、消せたかはPCビルドで確かめる
         check(AppFunctions::FindByArg("/lua/apps/テトリス/main.lua") < 0, "remove: 登録から外れる");
         check(!Has("/sys/store/installed/tetris.tsv"), "remove: ファイル一覧も消える");
+        check(!Has("/sys/store/installed/tetris.key"), "remove: 作者の鍵も忘れる");
+        EraseDir("/lua/apps/テトリス/");
         s.close();
     }
 
@@ -234,6 +251,70 @@ int main(int argc, char** argv){
         s.setBaseUrl(bad);
         check(s.beginRefresh() && !Run(s) && strstr(s.message(), "404") != nullptr, "404: 理由を出す");
         check(s.beginRefresh() && (s.cancel(), s.state() == AppStore::State::Idle), "cancel: 取りやめられる");
+    }
+
+    // ---- 9. 作者の署名 ----
+    {
+        Use("badfsig");
+        AppStore s;
+        s.loadConfig();
+        check(s.beginRefresh() && Run(s), "files.sig: 一覧を取れる");
+        const int t = Find(s, "tetris");
+        check(s.installed(t) == AppStore::Installed::No, "files.sig: tetrisは入っていない");
+        check(s.beginInstall(t) && !Run(s) && strstr(s.message(), "作者の署名が合いません") != nullptr, "files.sig: 壊れた署名は断る");
+        check(!Has("/lua/apps/テトリス/app.cfg") && !Has("/sys/store/installed/tetris.key"), "files.sig: 何も入らない");
+
+        Use("wrongauth");
+        check(s.beginRefresh() && Run(s), "wrongauth: 一覧を取れる");
+        check(s.beginInstall(t) && !Run(s) && strstr(s.message(), "鍵が一覧と合いません") != nullptr,
+              "wrongauth: 一覧の author_key と違う鍵の署名は断る");
+        s.close();
+    }
+
+    // ---- 10. 作者の鍵が変わった ----
+    {
+        Use("rekey");
+        AppStore s;
+        s.loadConfig();
+        check(s.beginRefresh() && Run(s), "rekey: 一覧を取れる");
+        const int r = Find(s, "reversi");
+        check(s.installed(r) == AppStore::Installed::KeyChanged, "rekey: 入れたときと鍵が違えばKeyChanged");
+        check(!s.beginInstall(r) && strstr(s.message(), "作者の鍵が変わりました") != nullptr, "rekey: 更新できない");
+        check(HostSd::files["/lua/apps/リバーシ/app.cfg"].find("2.1.0") == std::string::npos, "rekey: 入っているのは前の版のまま");
+        s.remove(r);
+        check(!Has("/sys/store/installed/reversi.key"), "rekey: 削除すると覚えた鍵も消える");
+        EraseDir("/lua/apps/リバーシ/");
+        check(s.beginInstall(r) && Run(s) && s.installed(r) == AppStore::Installed::Same, "rekey: 削除の後なら新しい鍵で入る");
+        const std::string other = HostSd::files["/sys/store/installed/reversi.key"];
+        check(other.size() == 65 && other != pubhex + "\n", "rekey: 新しい鍵を覚える");
+
+        // ---- 11. 古い版へ戻さない ----
+        Use("downgrade");
+        check(s.beginRefresh() && Run(s), "downgrade: 一覧を取れる");
+        check(s.installed(r) == AppStore::Installed::Newer, "downgrade: 入っている方が新しい");
+        check(!s.beginInstall(r) && strstr(s.message(), "古い版") != nullptr, "downgrade: 古い版は入れない");
+        check(HostSd::files["/lua/apps/リバーシ/app.cfg"].find("2.1.0") != std::string::npos, "downgrade: 2.1.0のまま");
+
+        // ---- 12. 取り下げ・危険 ----
+        Use("yanked");
+        check(s.beginRefresh() && Run(s), "yanked: 一覧を取れる");
+        const int t = Find(s, "tetris");
+        check(t >= 0 && s.entry(t)->status == AppRepo::Status::Yanked && !s.installable(t), "yanked: 入れられない印");
+        check(!s.beginInstall(t) && strstr(s.message(), "取り下げ") != nullptr, "yanked: 入れない");
+        check(s.installed(r) == AppStore::Installed::Same && s.blockedInstalled(r), "blocked: 入っている危険なアプリが分かる");
+        check(!s.blockedInstalled(t), "blocked: 入っていなければ数えない");
+        s.close();
+    }
+
+    // ---- 13. serial はカタログ鍵ごと ----
+    {
+        AppStore s;
+        s.loadConfig();
+        Use("newcat");
+        check(s.beginRefresh() && Run(s) && s.catalogSerial() == 10, "serial: 別の鍵の一覧は番号を数え直す");
+        Use("newcatold");
+        check(s.beginRefresh() && !Run(s) && strstr(s.message(), "古い") != nullptr, "serial: 同じ鍵で古い番号は断る");
+        s.close();
     }
 
     AppFunctions::Clear();

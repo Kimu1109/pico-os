@@ -2,9 +2,13 @@
 -- 準備時間は30秒(最初だけ60秒)。「次へ」で早く呼ぶと残り秒数×2のお金。
 -- ウェーブはそのウェーブのゾンビが全部出て(順番待ちを含む)、全部倒れたら終わりで、30 + 10×ウェーブ数 のお金。
 -- ウェーブが進むほど数が増え、遠距離・重量級の割合と体力・攻撃力が上がる。倒したときのお金は ×(1 + 0.05×(n-1))。
+-- 序盤(W1〜4)は弱いノーマルを多めに出す「稼ぎどき」: 守りを固めておけば倒した分のお金が貯まる
+-- (EARLY_EXTRA × (5 - n) 体を足し、体力は ×0.6〜0.9。W1 は 9 → 17 体で、合計の体力は約1.1倍・お金は約1.9倍)。
 local M = {}
 
 M.FIRST_PREP = 60
+M.EARLY = 4                   -- 稼ぎどきのウェーブ(ここまで)
+local EARLY_EXTRA = 2
 M.PREP = 30
 M.phase = "prep"              -- prep(準備時間)/ wave
 M.n = 1                       -- 今の(準備時間なら次の)ウェーブ
@@ -18,13 +22,17 @@ end
 
 -- n 番目のウェーブの中身: ノーマル・遠距離・重量級の数
 function M.mix(n)
-    local total = 6 + 3 * n
+    local total = 6 + 3 * n + EARLY_EXTRA * math.max(0, M.EARLY + 1 - n)
     local ranged = n >= 2 and math.floor(total * math.min(0.3, 0.08 + 0.02 * n)) or 0
     local heavy = n >= 3 and math.max(1, math.floor(total * math.min(0.25, 0.03 * (n - 2)))) or 0
     return total - ranged - heavy, ranged, heavy
 end
 
-function M.hp_mul(n) return 1 + 0.08 * (n - 1) end
+function M.hp_mul(n)
+    local m = 1 + 0.08 * (n - 1)
+    if n <= M.EARLY then m = m * (0.5 + 0.1 * n) end
+    return m
+end
 function M.dmg_mul(n) return 1 + 0.04 * (n - 1) end
 function M.money_mul(n) return 1 + 0.05 * (n - 1) end
 function M.bonus(n) return 30 + 10 * n end
@@ -36,7 +44,8 @@ function M.preview(n)
     if c > 0 and select(3, M.mix(n - 1)) == 0 then return s .. " 重量級が来る!" end
     if b > 0 and select(2, M.mix(n - 1)) == 0 then return s .. " 遠距離が来る!" end
     if c > 0 then return string.format("%s(遠%d・重%d)", s, b, c) end
-    if b > 0 then return string.format("%s(遠%d)", s, b) end
+    if b > 0 then s = string.format("%s(遠%d)", s, b) end
+    if n <= M.EARLY then s = s .. " 稼ぎどき" end
     return s
 end
 

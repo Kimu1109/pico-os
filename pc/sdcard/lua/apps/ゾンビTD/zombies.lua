@@ -1,7 +1,8 @@
 -- ゾンビTD: ゾンビ(出現・流れの場をたどって歩く・兵士を狙う・ベースへの攻撃・倒れる)。仕様は docs/ZOMBIE_TD.md。
 -- 道は C++ の流れの場(pico.iso.flow_*)。ゾンビは自分の柱の「次の柱」の真ん中へ向かって歩くだけ。
 -- 気づく範囲に兵士かタワーがいれば、優先度と距離の点数で1つを選んで追う(粘着。離れすぎ・近づけないときだけ諦める)。
--- バリケード(ブロック)の中は遅くなり、通っている間はバリケードの耐久を削る。
+-- バリケード(ブロック)の中は遅くなり(レベルごとの slow)、通っている間はバリケードの耐久を削る。
+-- 中にいる間は身動きが取りにくく、受けるダメージが WALL_EXPOSE 倍になる(タワーと組み合わせる意味を持たせる)。
 -- 押し合いは game.lua が C++(pico.iso.crowd)で行い、その後に M.sync() で位置を読み戻す。
 -- 1匹の表は16個以内のキーにする(Luaの表はキーが16個を超えると倍の大きさになり、40匹ぶんで約16KB変わる)。
 -- 種類ごとに同じ値(t・r・お金・hurt)はメタテーブルに置く。
@@ -27,7 +28,8 @@ M.TYPES = {
     ranged = { hp = 20, speed = 0.9, dmg = 4, rate = 1.6, reach = 5, sx = 24, w = 12, h = 22, r = 0.22, mass = 1, money = 7, bmul = 0.5 },
     heavy  = { hp = 90, speed = 0.55, dmg = 12, rate = 1.4, reach = 0, sx = 48, w = 16, h = 26, r = 0.32, mass = 3, money = 12, bmul = 3 },
 }
-local WALL_SLOW = 0.5         -- バリケードの中の速さの倍率
+local WALL_WEAR = 0.5         -- 中を通るときに削る量 = 1秒あたりの攻撃力 × 建物への倍率 × これ
+local WALL_EXPOSE = 1.3       -- バリケードの中で受けるダメージの倍率
 
 local SET = {}                -- entity_set に渡す表(毎回作るとゴミになり、実機でメモリが尽きるので使い回す)
 local img                     -- units.pimg
@@ -44,11 +46,19 @@ M.hunt = false                -- 狙う相手を探すか(兵士もタワーも�
 M.TARGET_TAGS = nil           -- 狙う相手(兵士・タワー)の人や物の tag(game.lua が入れる)
 M.wall_at = nil               -- function(x, z) その柱のバリケード(game.lua が入れる)
 M.hp_mul, M.dmg_mul = 1, 1    -- ウェーブごとの体力・攻撃力の倍率(waves.lua が入れる)
-local slow = 1                -- 今の1匹の速さの倍率(バリケードの中なら WALL_SLOW)
+local slow = 1                -- 今の1匹の速さの倍率(バリケードの中ならそのレベルの slow)
+
+-- 立っている柱のバリケード(高さも合っているもの。無ければ nil)
+local function wall_here(zb)
+    local w = M.wall_at and M.wall_at(zb.x, zb.z)
+    if w and w.y >= zb.gy - 0.5 and w.y <= zb.gy + 1.5 then return w end
+    return nil
+end
 
 -- 叩かれた/弾が当たった(hp が 0 以下 = 倒れた。取り除くのは sweep)
 local function hurt(zb, dmg)
     if zb.hp <= 0 then return end
+    if wall_here(zb) then dmg = math.floor(dmg * WALL_EXPOSE + 0.5) end
     zb.hp = zb.hp - dmg
     if zb.hp <= 0 then return end
     SET.bar = math.floor(zb.hp * 100 / (zb.t.hp * M.hp_mul))
@@ -211,10 +221,10 @@ end
 local function step(zb, dt)
     -- バリケードの中: 遅くなり、通っている間はバリケードを削る
     slow = 1
-    local w = M.wall_at and M.wall_at(zb.x, zb.z)
-    if w and w.y >= zb.gy - 0.5 and w.y <= zb.gy + 1.5 then
-        slow = WALL_SLOW
-        w:hurt(zb.t.dmg / zb.t.rate * zb.t.bmul * dt, zb)
+    local w = wall_here(zb)
+    if w then
+        slow = w.t.lv[w.lv].slow
+        w:hurt(zb.t.dmg / zb.t.rate * zb.t.bmul * WALL_WEAR * dt, zb)
     end
     local tgt = zb.tgt
     if tgt and not combat.alive(tgt) then tgt = false; zb.tgt = false; zb.scan = 0 end

@@ -1,0 +1,13 @@
+<!--
+  pico-os 自作アイコン: イヤホン(ヘッドホン)。ステータスバーで「音はイヤホンから出る」を表す
+
+  tablerのheadphonesは24pxグリッドの細線で、16pxでは頭のバンドが途切れるので、16pxグリッドの塗りで描いた。
+  バンド: 上辺 x=5..10 / y=2..3、肩 x=3..4・11..12 / y=3..4、脇 x=2..3・12..13 / y=4..8(太さ2)
+  耳当て: x=1..4・11..14 / y=9..13(脇より外へ1px張り出して、バンドと見分けやすくする)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+  <path d="M5 2h6v2H5z" />
+  <path d="M3 3h2v2H3zM11 3h2v2h-2z" />
+  <path d="M2 4h2v5H2zM12 4h2v5h-2z" />
+  <path d="M1 9h4v5H1zM11 9h4v5h-4z" />
+</svg>

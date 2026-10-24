@@ -20,6 +20,7 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
 | SPI1(SD専用、SdFat) | CS=15, SCK=10, MOSI=11, MISO=12, 10MHz |
 | バックライト | TFT_LED=22(PWM調光。`Light_PWM`、スライス3のA) |
 | 音声出力(I2S) | MAX98357A: BCLK=2, LRCLK=3, DIN=4 / 検出=5(内部プルアップ) / 休止=6(任意) |
+| イヤホン(任意) | PCM5102Aを同じI2Sの3本へ並べる / XSMT=14 / ジャックの差し込み検出=8(内部プルアップ、LOW=差してある) |
 | マイク(I2S) | SPH0645: BCLK=26, LRCLK=27, DOUT=28(48kHz・32bitスロット) |
 | I2C0 | SDA=0, SCL=1。Wiiクラシックコントローラー(0x52、実物は未確認)とCardKB2 |
 | CardKB2のUART(任意) | RX=7(SerialPIO。`/sys/cardkb.cfg` の `mode = uart` のときだけ) |

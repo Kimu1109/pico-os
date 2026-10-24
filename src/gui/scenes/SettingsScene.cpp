@@ -45,6 +45,12 @@ namespace {
     constexpr uint32_t    kRatePresets[]      = { SoundFunctions::kSampleRateLow, SoundFunctions::kSampleRateHigh };
     constexpr const char* kRatePresetLabels[] = { "22kHz", "44.1kHz" };
     constexpr int kRatePresetCount = sizeof(kRatePresets) / sizeof(kRatePresets[0]);
+
+    // 出力先(sound.cfgの route)
+    constexpr SoundFunctions::RouteMode kRouteModes[] = {
+        SoundFunctions::RouteMode::Auto, SoundFunctions::RouteMode::Speaker, SoundFunctions::RouteMode::Headphone };
+    constexpr const char* kRouteModeLabels[] = { "自動", "スピーカー", "イヤホン" };
+    constexpr int kRouteModeCount = sizeof(kRouteModes) / sizeof(kRouteModes[0]);
 }
 
 void SettingsScene::loadTimezoneItems(const FixedString<PICO_STR_M>& current_tz){
@@ -411,6 +417,33 @@ void SettingsScene::updateSampleRate(){
     SoundFunctions::Beep(880, 120);
 }
 
+void SettingsScene::updateRoute(){
+    if(!this->route_dropdown) return;
+    const int idx = this->route_dropdown->getSelectedIndex();
+    if(idx >= 0 && idx < kRouteModeCount && idx != this->route_selected_index){
+        this->route_selected_index = idx;
+        SoundFunctions::SetRouteMode(kRouteModes[idx]);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "route", SoundFunctions::RouteModeName(kRouteModes[idx]));
+        //新しい出力先の音量で確認音(つながっていなければ鳴らないだけ)
+        SoundFunctions::Beep(880, 120);
+    }
+    this->refreshRouteStatus();
+}
+
+// 今どちらから鳴るか(イヤホンの抜き差しで変わる)。変わったときだけ書き直す
+void SettingsScene::refreshRouteStatus(){
+    if(!this->route_status_label) return;
+    const SoundFunctions::Route route = SoundFunctions::GetRoute();
+    const bool connected = SoundFunctions::IsConnected();
+    const uint8_t shown = (uint8_t)(((uint8_t)route << 1) | (connected ? 1 : 0));
+    if(shown == this->route_status_shown) return;
+    this->route_status_shown = shown;
+    const char* name = (route == SoundFunctions::Route::Headphone) ? "イヤホン" : "スピーカー";
+    char buf[PICO_STR_256B];
+    snprintf(buf, sizeof(buf), connected ? "今は%sから鳴ります" : "%sがつながっていません", name);
+    this->route_status_label->setText(buf);
+}
+
 void SettingsScene::updateSleep(){
     if(!this->sleep_dropdown) return;
     const int idx = this->sleep_dropdown->getSelectedIndex();
@@ -427,10 +460,18 @@ void SettingsScene::updateSleep(){
 void SettingsScene::updateVolume(){
     if(!this->volume_slider) return;
 
+    //鳴らす先が変わったら(イヤホンの抜き差し・出力先の切り替え)、その鳴らす先の音量を出し直す。
+    //動かしている途中なら、指を離して保存するまで待つ
+    if(!this->volume_dirty && SoundFunctions::GetRoute() != this->volume_route){
+        this->volume_route = SoundFunctions::GetRoute();
+        this->volume_applied = SoundFunctions::GetVolume();
+        this->volume_slider->setValue((float)this->volume_applied);
+    }
+
     const int v = (int)(this->volume_slider->getValue() + 0.5f);
     if(v != this->volume_applied){
         this->volume_applied = v;
-        SoundFunctions::SetVolume(v);
+        SoundFunctions::SetVolumeFor(this->volume_route, v);
         this->volume_dirty = true;
     }
 
@@ -439,7 +480,7 @@ void SettingsScene::updateVolume(){
         this->volume_dirty = false;
         char buf[8];
         snprintf(buf, sizeof(buf), "%d", this->volume_applied);
-        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "volume", buf);
+        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, SoundFunctions::VolumeConfigKey(this->volume_route), buf);
         SoundFunctions::Beep(880, 120);
     }
 }
@@ -493,6 +534,7 @@ void SettingsScene::onUpdate(){
     this->updateBrightness();
     this->updateSleep();
     this->updateSampleRate();
+    this->updateRoute();
     this->updateTimezone();
     this->refreshBatteryLabel();
     if(this->tab == Tab::Time) this->refreshClockLabel(false);
@@ -555,6 +597,10 @@ void SettingsScene::onExit(){
     this->rate_title           = nullptr;
     this->rate_dropdown        = nullptr;
     this->battery_cap_checkbox = nullptr;
+    this->route_title          = nullptr;
+    this->route_dropdown       = nullptr;
+    this->route_status_label   = nullptr;
+    this->route_status_shown   = 0xFF;
     this->dark_checkbox = nullptr;
     this->lock_label = nullptr;
     this->lock_button = nullptr;
@@ -607,6 +653,7 @@ void SettingsScene::buildLevelRows(const Layout& lay){
     this->volume_slider->setMinValue(0);
     this->volume_slider->setMaxValue(100);
     this->volume_slider->setDecimalPlacesNum(0);
+    this->volume_route   = SoundFunctions::GetRoute();
     this->volume_applied = SoundFunctions::GetVolume();
     this->volume_dirty   = false;
     this->volume_slider->setValue((float)this->volume_applied);
@@ -696,9 +743,28 @@ void SettingsScene::buildLateRows(const Layout& lay){
     });
     addToTab(Tab::Sound, this->battery_cap_checkbox);
     auto* cap_note = makeRowLabel<PICO_STR_L>(left,
-        (int16_t)(rowY(2) + this->battery_cap_checkbox->getH() + 2), full_w, "電池駆動中は最大20%");
+        (int16_t)(rowY(2) + this->battery_cap_checkbox->getH() + 2), full_w, "電池では最大20%(スピーカー)");
     cap_note->setTextColor(PICO_DARKGREY);
     addToTab(Tab::Sound, cap_note);
+
+    // ---- 出力先(sound.cfgの route)。音タブの4行目(+下に今どちらから鳴るか) ----
+    // 一覧は下へ開くので、上の行の音質のドロップダウンより先にAdd()する(音質の一覧がこの行へ重なる)。
+    // 3項目の一覧が下のタブバーで切れないよう4行目に置き、「スピーカー」が入るよう他より広くする
+    constexpr int16_t kRouteDropdownW = 140;
+    this->route_title = new Label<PICO_STR_S>(left, rowY(3) + 4, "出力先");
+    this->route_title->setFontSize(FontFn::Small);
+    this->route_dropdown = new DropdownMenu((int16_t)(content.x + content.w - MARGIN - kRouteDropdownW), rowY(3), kRouteDropdownW);
+    for(int i = 0; i < kRouteModeCount; i++) this->route_dropdown->add(kRouteModeLabels[i]);
+    this->route_selected_index = 0;
+    for(int i = 0; i < kRouteModeCount; i++) if(kRouteModes[i] == SoundFunctions::GetRouteMode()) this->route_selected_index = i;
+    this->route_dropdown->setSelectedIndex(this->route_selected_index);
+    this->route_status_label = makeRowLabel<PICO_STR_L>(left,
+        (int16_t)(rowY(3) + this->route_dropdown->getH() + 2), full_w, "");
+    this->route_status_label->setTextColor(PICO_DARKGREY);
+    this->refreshRouteStatus();
+    addToTab(Tab::Sound, this->route_status_label);
+    addToTab(Tab::Sound, this->route_title);
+    addToTab(Tab::Sound, this->route_dropdown);
 
     // ---- 音の周波数(sound.cfgの sample-rate)。音タブの2行目 ----
     this->rate_title = new Label<PICO_STR_S>(left, rowY(1) + 4, "音質");

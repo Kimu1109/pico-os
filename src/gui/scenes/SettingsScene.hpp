@@ -8,6 +8,7 @@
 #include "gui/widgets/NumberSlider.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/TabBar.hpp"
+#include "hal/Sound_Functions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -118,8 +119,11 @@ class SettingsScene : public Scene {
         NumberSlider*      volume_slider        = nullptr;
         // 音量はドラッグ中もSoundFunctions::SetVolume()で即座に反映し、sound.cfgへの
         // 書き込みと確認音は指を離したときに1回だけ行う(ドラッグの1フレームごとにSDへ書かないため)
+        // 音量は鳴らす先(スピーカー/イヤホン)ごとに別。スライダーは今の鳴らす先の値を出し、
+        // 鳴らす先が変わったら(イヤホンの抜き差し)触っていない間に出し直す
         int  volume_applied = -1;
         bool volume_dirty   = false;
+        SoundFunctions::Route volume_route = SoundFunctions::Route::Speaker;  // スライダーが今出している鳴らす先
 
         Label<PICO_STR_S>* brightness_title     = nullptr;
         NumberSlider*      brightness_slider    = nullptr;
@@ -139,6 +143,12 @@ class SettingsScene : public Scene {
         DropdownMenu*      rate_dropdown        = nullptr;
         int                rate_selected_index  = -1;
         Checkbox*          battery_cap_checkbox = nullptr;
+        // 出力先(sound.cfgの route)と、今どちらから鳴るかの表示。項目の並びはSettingsScene.cppのkRouteModes
+        Label<PICO_STR_S>* route_title          = nullptr;
+        DropdownMenu*      route_dropdown       = nullptr;
+        int                route_selected_index = -1;
+        Label<PICO_STR_L>* route_status_label   = nullptr;
+        uint8_t            route_status_shown   = 0xFF;    // 表示中の状態(refreshRouteStatus()が変化を見る)
         Checkbox*          dark_checkbox = nullptr;
         Label<PICO_STR_L>* lock_label    = nullptr;
         Button*            lock_button   = nullptr;
@@ -240,6 +250,8 @@ class SettingsScene : public Scene {
         void updateBrightness();
         void updateSleep();
         void updateSampleRate();
+        void updateRoute();
+        void refreshRouteStatus();
         void updateTimezone();
 
         // InputDialogを1つnewして開く。閉じたらcommitEdit()へ渡してから破棄する

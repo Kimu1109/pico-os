@@ -29,8 +29,9 @@ namespace {
 
     std::atomic<bool>     ready{false};         // 1コア目のSetup()が済んだ
     std::atomic<bool>     want_run{false};      // 1コア目→2コア目: I2Sを動かしてほしい
+    std::atomic<bool>     want_headphone{false}; // 1コア目→2コア目: スピーカーでなくイヤホンを鳴らしてほしい
     std::atomic<uint32_t> retry_epoch{0};       // 1コア目→2コア目: 増えたらbegin()の失敗を忘れて試し直す
-    std::atomic<uint8_t>  master_volume{kDefaultVolume};
+    std::atomic<uint8_t>  master_volume{kDefaultVolume};    // 今の鳴らす先の音量(1コア目が鳴らす先に合わせて出し直す)
     // 1コア目→2コア目: バッテリー駆動中か(音割れ防止のkBatteryVolumeCapPercent頭打ちを掛けるかどうか)
     std::atomic<bool>     battery_cap_active{false};
     // 1コア目→2コア目: 省電力中(何も鳴っていなければI2Sを止めてゆっくり回る)
@@ -82,13 +83,36 @@ namespace {
     // ================================================================
 
     Output output = Output::Auto;
+    RouteMode route_mode = RouteMode::Auto;
+    Route route = Route::Speaker;       // 今の鳴らす先(ResolveRoute()が決める)
+    uint8_t volumes[2] = {kDefaultVolume, kDefaultHeadphoneVolume};   // 鳴らす先ごとの音量(Routeで引く)
     uint32_t out_rate = kDefaultSampleRate;     // 1コア目から見た出力の周波数(WAVの読み取り・時間の換算に使う)
     uint32_t configured_rate = kDefaultSampleRate;  // 利用者の設定(sound.cfg の sample-rate)
     uint32_t requested_rate = 0;                // 画面の要求(0=無し)。設定より優先する
     bool battery_cap = true;            // sound.cfgのbattery-cap。MAX98357A向けの電池駆動中の頭打ちを掛けるか
-    bool connected = false;             // 採用済みの状態
-    bool raw_last = false;              // 直近の読み取り
-    uint8_t raw_stable = 0;             // raw_last が何回続いたか
+    bool connected = false;             // 今の鳴らす先がつながっている(採用済みの状態から決めたもの)
+
+    // 検出ピン1本ぶんのばたつき除け。kDetectStableCount 回続けて同じ値のときだけ採用する
+    struct DebouncedPin {
+        bool adopted = false;           // 採用済みの状態
+        bool last = false;              // 直近の読み取り
+        uint8_t stable = 0;             // last が何回続いたか
+        // 読んだ値を入れる。採用した状態が変わったらtrue。force なら続いた回数を待たずに採用する
+        bool feed(bool raw, bool force){
+            if(raw == last){
+                if(stable < 255) stable++;
+            }else{
+                last = raw;
+                stable = 1;
+            }
+            if(!force && stable < kDetectStableCount) return false;
+            const bool changed = raw != adopted;
+            adopted = raw;
+            return changed;
+        }
+    };
+    DebouncedPin amp_pin;               // アンプ(AUDIO_DETECT)
+    DebouncedPin hp_pin;                // イヤホンの差し込み(AUDIO_HP_DETECT)
     unsigned long last_detect_ms = 0;
     bool logged_running = false;        // ログを出した時点の core1_running
     bool logged_failed = false;
@@ -120,8 +144,9 @@ namespace {
     uint32_t logged_wav_underruns = 0;
     unsigned long logged_wav_ms = 0;
 
-    bool ReadDetectPin(){
-        return digitalRead(AUDIO_DETECT) == LOW;
+    // 検出ピンはどれも内部プルアップで読み、LOW=つながっている(何もつながなければ「無し」)
+    bool ReadDetectPin(int pin){
+        return digitalRead(pin) == LOW;
     }
 
     uint32_t cfg_rate = kDefaultSampleRate;     // LoadConfig()の読みかけ(ParseFile()へは捕まえない関数を渡すため)
@@ -129,6 +154,8 @@ namespace {
     void LoadConfig(){
         battery_cap = true;
         cfg_rate = kDefaultSampleRate;
+        route_mode = RouteMode::Auto;
+        volumes[(int)Route::Headphone] = kDefaultHeadphoneVolume;
         //無いのが普通(既定値で動く)。ParseFile()は開けないとFAILを出すので先に確かめる
         if(OSData::SD_usable && OSData::SD.exists(PICO_Path::FILE::CFG::SYS_SOUND_CFG)){
             PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_SOUND_CFG,
@@ -139,8 +166,14 @@ namespace {
                         else LOG_SYS_WARN("sound.cfg: output の値が不明です: %s", value);
                     }else if(strcmp(key, "volume") == 0){
                         int v = 0;
-                        if(PICO_Config::ConfigValue::AsInt(value, v)) SetVolume(v);
+                        if(PICO_Config::ConfigValue::AsInt(value, v)) SetVolumeFor(Route::Speaker, v);
                         else LOG_SYS_WARN("sound.cfg: volume は0〜100の整数です: %s", value);
+                    }else if(strcmp(key, "hp-volume") == 0){
+                        int v = 0;
+                        if(PICO_Config::ConfigValue::AsInt(value, v)) SetVolumeFor(Route::Headphone, v);
+                        else LOG_SYS_WARN("sound.cfg: hp-volume は0〜100の整数です: %s", value);
+                    }else if(strcmp(key, "route") == 0){
+                        if(!ParseRouteMode(value, route_mode)) LOG_SYS_WARN("sound.cfg: route の値が不明です: %s", value);
                     }else if(strcmp(key, "battery-cap") == 0){
                         //スピーカー用のアンプ(MAX98357A)は電池駆動だと音割れするので音量を絞る(既定)。
                         //ライン出力のDAC(PCM5102A等)は割れないので false にしてよい
@@ -163,31 +196,54 @@ namespace {
     }
 
     void PublishWant(){
+        want_headphone.store(route == Route::Headphone, std::memory_order_release);
         want_run.store(connected && output == Output::Auto, std::memory_order_release);
+    }
+
+    // 電池駆動中の頭打ちを掛けるか。MAX98357A(スピーカー)の音割れ対策なので、イヤホンには掛けない
+    void PublishBatteryCap(){
+        battery_cap_active.store(
+            battery_cap && route == Route::Speaker
+                && BatteryFunctions::HasSample() && !BatteryFunctions::IsExternallyPowered(),
+            std::memory_order_relaxed
+        );
+    }
+
+    const char* RouteName(Route r){ return r == Route::Headphone ? "イヤホン" : "スピーカー"; }
+
+    // 採用済みの検出の状態と route から、鳴らす先とそれがつながっているかを決めて2コア目へ出す。
+    // どちらか片方しかつないでいなくても、つながっていない方を選んだときは「未接続」になるだけ
+    // (I2Sを止める。鳴らせる方があっても勝手には移らない。auto ならイヤホンを抜けばスピーカーへ戻る)
+    void ResolveRoute(){
+        Route r = Route::Speaker;
+        if(route_mode == RouteMode::Headphone)  r = Route::Headphone;
+        else if(route_mode == RouteMode::Auto)  r = hp_pin.adopted ? Route::Headphone : Route::Speaker;
+        //イヤホンを決め打ちしたときは差し込み検出を信じない(検出接点の無いジャックや、配線していない場合のため)
+        const bool c = (r == Route::Speaker) ? amp_pin.adopted
+                                             : (hp_pin.adopted || route_mode == RouteMode::Headphone);
+        if(r != route) LOG_SYS_MSG("Sound: 出力先を%sにします", RouteName(r));
+        //つながった/鳴らす先が変わったら、前回のbegin()の失敗を忘れて試し直す
+        if(c != connected || r != route) retry_epoch.fetch_add(1, std::memory_order_release);
+        route = r;
+        connected = c;
+        master_volume.store(volumes[(int)route], std::memory_order_release);
+        PublishBatteryCap();
+        PublishWant();
     }
 
     void Detect(unsigned long now_ms, bool force){
         if(!force && now_ms - last_detect_ms < kDetectIntervalMs) return;
         last_detect_ms = now_ms;
 
-        const bool raw = ReadDetectPin();
-        if(raw == raw_last){
-            if(raw_stable < 255) raw_stable++;
-        }else{
-            raw_last = raw;
-            raw_stable = 1;
+        if(amp_pin.feed(ReadDetectPin(AUDIO_DETECT), force)){
+            if(amp_pin.adopted) LOG_SYS_OK("Sound: アンプを検出しました");
+            else                LOG_SYS_WARN("Sound: アンプが外れました");
         }
-
-        if(force || (raw_stable >= kDetectStableCount && raw != connected)){
-            if(raw != connected){
-                if(raw) LOG_SYS_OK("Sound: アンプを検出しました");
-                else    LOG_SYS_WARN("Sound: アンプが外れました(音は出ません)");
-                //刺し直したら、前回のbegin()の失敗を忘れて試し直す
-                retry_epoch.fetch_add(1, std::memory_order_release);
-            }
-            connected = raw;
-            PublishWant();
+        if(hp_pin.feed(ReadDetectPin(AUDIO_HP_DETECT), force)){
+            if(hp_pin.adopted) LOG_SYS_OK("Sound: イヤホンが差し込まれました");
+            else               LOG_SYS_MSG("Sound: イヤホンが抜かれました");
         }
+        ResolveRoute();
     }
 
     // 2コア目が変えた状態をログへ出す(2コア目はログを出せないため)
@@ -241,6 +297,7 @@ namespace {
 
     bool running = false;
     bool failed = false;
+    bool pins_headphone = false;        // 休止端子をイヤホン側へ向けているか(running の間だけ意味がある)
     uint32_t seen_epoch = 0;
     uint32_t processed = 0;
     uint8_t eff_volume = kDefaultVolume;    // 全体の音量(バッテリーの頭打ち込み)。WAVへ掛ける
@@ -278,6 +335,16 @@ namespace {
         return ((uint32_t)(uint16_t)l << 16) | (uint16_t)r;
     }
 
+    // 鳴らす方の休止端子だけを上げる(MAX98357AのSD / PCM5102AのXSMT)。on=false なら両方とも止める。
+    // 2台を同じI2Sの線に並べているので、どちらが鳴るかはここだけで決まる。つないでいない方の端子を
+    // 上げ下げしても何も起きない(片方しかつないでいなくてよい)
+    void ApplyAmpPins(bool on){
+        const bool hp = on && want_headphone.load(std::memory_order_acquire);
+        digitalWrite(AUDIO_SHUTDOWN, (on && !hp) ? HIGH : LOW);
+        digitalWrite(AUDIO_HP_MUTE, hp ? HIGH : LOW);
+        pins_headphone = hp;
+    }
+
     void StartOutput(unsigned long now_ms){
         i2s.setBCLK(AUDIO_I2S_BCLK);    // LRCLKは自動でBCLK+1
         i2s.setDATA(AUDIO_I2S_DATA);
@@ -288,7 +355,7 @@ namespace {
             core1_failed.store(true, std::memory_order_release);
             return;
         }
-        digitalWrite(AUDIO_SHUTDOWN, HIGH);
+        ApplyAmpPins(true);
         running = true;
         chunk_pos = chunk_len = 0;
         last_step_ms = now_ms;
@@ -296,7 +363,7 @@ namespace {
     }
 
     void StopOutput(unsigned long now_ms){
-        digitalWrite(AUDIO_SHUTDOWN, LOW);
+        ApplyAmpPins(false);
         if(running){
             i2s.end();
             running = false;
@@ -329,6 +396,8 @@ namespace {
         if(want && power_save.load(std::memory_order_acquire) && !AnythingSounding()) want = false;
         if(want && !running)        StartOutput(now_ms);
         else if(!want && running)   StopOutput(now_ms);
+        //鳴らしている間に鳴らす先が変わったら、I2Sはそのまま休止端子だけ切り替える(音は途切れない)
+        else if(running && want_headphone.load(std::memory_order_acquire) != pins_headphone) ApplyAmpPins(true);
     }
 
     bool DrainCommands(){
@@ -416,14 +485,17 @@ void SoundFunctions::SetupAt(unsigned long now_ms){
     pinMode(AUDIO_DETECT, INPUT_PULLUP);
     pinMode(AUDIO_SHUTDOWN, OUTPUT);
     digitalWrite(AUDIO_SHUTDOWN, LOW);
+    pinMode(AUDIO_HP_DETECT, INPUT_PULLUP);
+    pinMode(AUDIO_HP_MUTE, OUTPUT);
+    digitalWrite(AUDIO_HP_MUTE, LOW);
 
     LoadConfig();
 
     //起動時は待たずに今の値を採用する(起動直後から鳴らせるように)
-    raw_last = ReadDetectPin();
-    raw_stable = 1;
     Detect(now_ms, true);
-    if(!connected) LOG_SYS_MSG("Sound: アンプが見つかりません(音は出ません)");
+    if(!connected){
+        LOG_SYS_MSG("Sound: %sが見つかりません(音は出ません)", route == Route::Headphone ? "イヤホン" : "アンプ");
+    }
 
     //ここから2コア目が動き出す
     ready.store(true, std::memory_order_release);
@@ -435,10 +507,7 @@ void SoundFunctions::UpdateAt(unsigned long now_ms){
 
     //VSYSがUSBの5VでなくLiPoセルの電圧になるバッテリー駆動中は、アンプの出力ヘッドルームが
     //下がり音割れする(実機で確認済み)。BatteryFunctionsの直近のサンプル(60秒間隔)で判定する
-    battery_cap_active.store(
-        battery_cap && BatteryFunctions::HasSample() && !BatteryFunctions::IsExternallyPowered(),
-        std::memory_order_relaxed
-    );
+    PublishBatteryCap();
 
     FeedWav(kWavMaxPerUpdate);
     const uint32_t wu = WavUnderruns();
@@ -482,18 +551,47 @@ void SoundFunctions::SetOutput(Output o){
     PublishWant();
 }
 
-uint8_t SoundFunctions::GetVolume(){ return master_volume.load(std::memory_order_relaxed); }
-void SoundFunctions::SetVolume(int v){
+uint8_t SoundFunctions::GetVolume(){ return volumes[(int)route]; }
+void SoundFunctions::SetVolume(int v){ SetVolumeFor(route, v); }
+uint8_t SoundFunctions::GetVolumeFor(Route r){ return volumes[(int)r]; }
+void SoundFunctions::SetVolumeFor(Route r, int v){
     if(v < 0) v = 0;
     if(v > 100) v = 100;
-    master_volume.store((uint8_t)v, std::memory_order_release);
+    volumes[(int)r] = (uint8_t)v;
+    if(r == route) master_volume.store((uint8_t)v, std::memory_order_release);
+}
+const char* SoundFunctions::VolumeConfigKey(Route r){ return r == Route::Headphone ? "hp-volume" : "volume"; }
+
+SoundFunctions::Route SoundFunctions::GetRoute(){ return route; }
+bool SoundFunctions::IsSpeakerConnected(){ return amp_pin.adopted; }
+bool SoundFunctions::IsHeadphoneInserted(){ return hp_pin.adopted; }
+SoundFunctions::RouteMode SoundFunctions::GetRouteMode(){ return route_mode; }
+void SoundFunctions::SetRouteMode(RouteMode m){
+    route_mode = m;
+    ResolveRoute();
+}
+const char* SoundFunctions::RouteModeName(RouteMode m){
+    switch(m){
+        case RouteMode::Speaker:   return "speaker";
+        case RouteMode::Headphone: return "headphone";
+        case RouteMode::Auto:      break;
+    }
+    return "auto";
+}
+bool SoundFunctions::ParseRouteMode(const char* s, RouteMode& out){
+    if(!s) return false;
+    if(strcmp(s, "auto") == 0)              out = RouteMode::Auto;
+    else if(strcmp(s, "speaker") == 0)      out = RouteMode::Speaker;
+    else if(strcmp(s, "headphone") == 0)    out = RouteMode::Headphone;
+    else return false;
+    return true;
 }
 uint32_t SoundFunctions::SampleRate(){ return out_rate; }
 
 bool SoundFunctions::GetBatteryCap(){ return battery_cap; }
 void SoundFunctions::SetBatteryCap(bool enable){
     battery_cap = enable;
-    if(!enable) battery_cap_active.store(false, std::memory_order_relaxed);
+    PublishBatteryCap();
 }
 
 uint32_t SoundFunctions::ConfiguredSampleRate(){ return configured_rate; }

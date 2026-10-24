@@ -44,7 +44,7 @@ void Statusbar::render(){
                 this->needsRender();
             }
         }
-        const uint8_t sound_state = (uint8_t)SoundFunctions::GetState();
+        const uint8_t sound_state = (uint8_t)((uint8_t)SoundFunctions::GetState() | ((uint8_t)SoundFunctions::GetRoute() << 4));
         if(sound_state != this->last_sound_state){
             this->last_sound_state = sound_state;
             this->needsRender();
@@ -122,18 +122,23 @@ void Statusbar::render(){
     draw_pos += 16 + MARGIN;
 
     //音声出力
-    //未接続は「スピーカー + バツ」(SD/Wi-Fiと同じ組み立て方)、output=offは消音のスピーカー
-    switch((SoundFunctions::State)sound_state){
-        case SoundFunctions::State::Active:
-            IconRender::DrawIcon(IconID::VolumeHigh, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
-            break;
-        case SoundFunctions::State::Muted:
-            IconRender::DrawIcon(IconID::VolumeOff, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
-            break;
-        case SoundFunctions::State::Disconnected:
-            IconRender::DrawIcon(IconID::VolumeHigh, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
-            IconRender::DrawIcon(IconID::X, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_RED);
-            break;
+    //未接続は「鳴らす先の絵 + バツ」(SD/Wi-Fiと同じ組み立て方)、output=offは消音のスピーカー。
+    //鳴らす先がイヤホンならスピーカーの代わりにイヤホンの絵
+    {
+        const IconID out_icon = ((SoundFunctions::Route)(sound_state >> 4) == SoundFunctions::Route::Headphone)
+            ? IconID::Headphones : IconID::VolumeHigh;
+        switch((SoundFunctions::State)(sound_state & 0x0F)){
+            case SoundFunctions::State::Active:
+                IconRender::DrawIcon(out_icon, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+                break;
+            case SoundFunctions::State::Muted:
+                IconRender::DrawIcon(IconID::VolumeOff, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+                break;
+            case SoundFunctions::State::Disconnected:
+                IconRender::DrawIcon(out_icon, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_BLACK);
+                IconRender::DrawIcon(IconID::X, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_RED);
+                break;
+        }
     }
     draw_pos += 16 + MARGIN;
 

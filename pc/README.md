@@ -153,6 +153,7 @@ index.html?wifi=disconnected&rssi=-85
 | `render` | `PICOOS_RENDER_DRIVER` (`gl` を指定するとGPU描画。既定はソフトウェア描画。下記) |
 | `spi_wait` | `PICOOS_SPI_WAIT` (`on` / `off`。液晶転送の待ち。Webの既定は`off`。下記「実機と違うところ」) |
 | `sound` | `PICOOS_SOUND_STATE` (`auto` / `connected` / `disconnected`。音声のアンプの有無。下記「実機と違うところ」) |
+| `headphone` | `PICOOS_HEADPHONE` (`inserted` / `none`。イヤホンの差し込み。既定は`none`) |
 | `app` | `PICOOS_START_APP` (起動時に開くアプリの名前。上記「起動時に開くアプリ」) |
 | `scene` | `PICOOS_START_SCENE` (そのアプリで最初に開く画面) |
 
@@ -357,7 +358,7 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 | SDカード | `pc/sdcard/` を実ファイルシステムとして読む |
 | Wi-Fi | 母艦の疎通を見て接続/切断を返す。設定で任意の状態に固定もできる(下記) |
 | NTP / 時刻 | 同期しない。**必要ない** — PCの時計をそのまま使うので最初から正しい時刻が出る |
-| 音声 | `pc/compat/I2S.h` がSDLの音声出力へ流す。実機の2コア目(`setup1()`/`loop1()`)は、ネイティブでは別スレッド、Webではフレームごとに`loop1()`を1回呼んで代わりにする(`main_pc.cpp`)。アンプ(MAX98357A)の検出ピンは「音声デバイスを開けたら刺さっている」として答える。`/sys/sound.cfg` の `pc-sound-state`(`auto`/`connected`/`disconnected`)か `PICOOS_SOUND_STATE` で固定できる。ヘッドレスで音の中身を確かめるなら `SDL_AUDIODRIVER=disk SDL_DISKAUDIOFILE=out.raw`(出力の周波数(既定22050Hz、`sound.cfg`の`sample-rate`)/16bit/ステレオの生データ)。Webはブラウザの自動再生の制限で、最初にクリック等をするまで鳴らない |
+| 音声 | `pc/compat/I2S.h` がSDLの音声出力へ流す。実機の2コア目(`setup1()`/`loop1()`)は、ネイティブでは別スレッド、Webではフレームごとに`loop1()`を1回呼んで代わりにする(`main_pc.cpp`)。アンプ(MAX98357A)の検出ピンは「音声デバイスを開けたら刺さっている」として答える。`/sys/sound.cfg` の `pc-sound-state`(`auto`/`connected`/`disconnected`)か `PICOOS_SOUND_STATE` で固定できる。イヤホンの差し込み検出は `PICOOS_HEADPHONE=inserted` で「差してある」(起動時に決まり、途中で抜き差しはしない。PCではどちらへ向けても同じデバイスから鳴る)。ヘッドレスで音の中身を確かめるなら `SDL_AUDIODRIVER=disk SDL_DISKAUDIOFILE=out.raw`(出力の周波数(既定22050Hz、`sound.cfg`の`sample-rate`)/16bit/ステレオの生データ)。Webはブラウザの自動再生の制限で、最初にクリック等をするまで鳴らない |
 | USBシリアルの受信 | `Serial.available()`/`read()`は**標準入力**を読む(別スレッドで読んで溜める。`pc/compat/Arduino.h`)。外部コントローラー(`PadFunctions`)がこれを使うので、`python3 script/pad_serial.py --stdout \| ./pc/build/picoos_pc` でPCのキーボードがコントローラーになる。ヘッドレスなら `( sleep 1; while :; do echo "pad 0011"; sleep 0.1; done ) \| ./pc/build/picoos_pc ...` のように行を流し込めばよい(`pad XXXX` は押しているボタンの16進数。`src/system/Pad_Functions.hpp`)。`PICOOS_SERIAL_STDIN=off` で読まない。同じ経路で**物理キーボードの打鍵**(`key M CODE` の行。`src/system/KeyInput_Functions.hpp`)も読むので、`echo "key 0 u+61"` で「a」を打てるWebは標準入力の代わりに、ページのコントローラー(`pc/web/shell.html`)が `picoos_serial_push()` で1バイトずつ入れる |
 | クラッシュダンプ / ウォッチドッグ | 実機の「消えないRAM」の代わりに、シグナル(SEGV/BUS/FPE/ILL/ABRT)のハンドラが記録を `<SDのルート>/sys/crash.pending` へ書いてから落ち、次の起動で `/crash/crash_NNNN.txt` になる(`src/devtools/CrashDump_Functions.cpp`)。`/sys/debug.cfg` の `watchdog = true` ならスレッドが `loop()` の応答を見張り、`watchdog-ms` 戻らなければ記録を書いて終了する。`PICOOS_NO_CRASH_HANDLER=1` でシグナルハンドラを入れない(gdb等で調べるとき)。Webは対象外 |
 | Luaデバッガ | 止まっている間は `loop()` のスレッドが止まり、画面(`LuaDebugScreen`)はSDLのパネルへ直接描く。`--tap` のフレームはタッチを読んだ回数で数えるので、止まっている間も進む(デバッガのボタンを `--tap` で押せる)。`--shot` は `loop()` のフレームなので止まっている間は撮れない。Webはメインスレッドを止められないので止まらずに続ける |

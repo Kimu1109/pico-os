@@ -5,7 +5,7 @@
 struct MmlResult;
 class GbAudioSink;
 
-// 音声出力(I2S + MAX98357A)とチップチューン音源(SUMMARY.md #11)。
+// 音声出力(I2S + MAX98357A。任意でイヤホン用のPCM5102A)とチップチューン音源(SUMMARY.md #11)。
 //
 // **1コア目と2コア目で役割を分けてある。**
 //   1コア目(loop()): アンプの抜き差しの検出・設定・アプリからの要求(Play/Stop/Beep)の受付。
@@ -18,11 +18,17 @@ class GbAudioSink;
 // - **アンプの有無はAUDIO_DETECTのピンで見る**(I2Sは一方通行で、信号線からは分からない)。
 //   アンプ側でGNDへ落としておき、内部プルアップで読む。LOW=接続。
 //   kDetectIntervalMs ごとに読み、kDetectStableCount 回続けて同じ値のときだけ採用する。
+// - **イヤホン(任意)**: PCM5102AをMAX98357Aと同じI2Sの3本へ並べ、鳴らす方の休止端子だけを上げる
+//   (MAX98357AはAUDIO_SHUTDOWN、PCM5102AはXSMT=AUDIO_HP_MUTE)。イヤホンの差し込みはAUDIO_HP_DETECT
+//   (LOW=差してある。アンプの検出と同じばたつき除け)。route=auto なら差すとイヤホン・抜くとスピーカーへ移る。
+//   **どちらか片方だけつないでもよい**: 鳴らす先がつながっていなければ「未接続」でI2Sを止めるだけ。
+//   音量は鳴らす先ごとに持ち(volume / hp-volume)、電池駆動中の頭打ち(battery-cap)はスピーカーにだけ掛ける。
 // - **つながっていなくても呼び出しは全て受け付ける**。音源は2コア目で時間どおりに進むので、
 //   途中で刺せばその時点の続きから鳴る。アプリ側は有無で分岐しなくてよい。
 // - **I2Sのバッファ(約2KB)とPIOは、鳴らせる間だけ持つ**。未接続や output=off の間は返し、
 //   休止端子(AUDIO_SHUTDOWN)もLOWにする。
-// - 設定は /sys/sound.cfg(無くてよい): `output = auto | off`、`volume = 0〜100`。
+// - 設定は /sys/sound.cfg(無くてよい): `output = auto | off`、`volume = 0〜100`(スピーカー)、
+//   `hp-volume = 0〜100`(イヤホン)、`route = auto | speaker | headphone`。
 // - 2コア目はログを出さない(LogFunctionsは1コア目専用)。I2Sの開始/失敗は1コア目が見てログへ出す。
 //
 // PC/Webビルドでは pc/compat/I2S.h がSDLの音声出力で置き換え、2コア目は
@@ -34,9 +40,22 @@ namespace SoundFunctions {
         Off,    // 刺さっていても鳴らさない
     };
 
+    // 鳴らす先
+    enum class Route : uint8_t {
+        Speaker,    // MAX98357A
+        Headphone,  // PCM5102A(イヤホン)
+    };
+
+    // 鳴らす先の選び方(sound.cfg の route、設定アプリの「出力先」)
+    enum class RouteMode : uint8_t {
+        Auto,       // イヤホンが差してあればイヤホン、無ければスピーカー
+        Speaker,    // 常にスピーカー
+        Headphone,  // 常にイヤホン。差し込み検出を信じない(検出接点の無いジャック・配線していないとき用)
+    };
+
     enum class State : uint8_t {
-        Disconnected,   // アンプが刺さっていない(またはI2Sを開始できなかった)
-        Muted,          // 刺さっているが output=off
+        Disconnected,   // 鳴らす先がつながっていない(またはI2Sを開始できなかった)
+        Muted,          // つながっているが output=off
         Active,         // 鳴らせる(I2Sが動いている)
     };
 
@@ -56,6 +75,8 @@ namespace SoundFunctions {
     // 1コア目→2コア目のコマンドの列。溢れた要求は捨てる(DroppedCommands()で数える)
     constexpr uint8_t       kCommandQueueSize  = 32;
     constexpr uint8_t       kDefaultVolume     = 50;
+    // イヤホンの既定の音量。ライン出力のDACを直接つなぐと、スピーカーと同じ値ではずっと大きく聞こえる
+    constexpr uint8_t       kDefaultHeadphoneVolume = 25;
     // 省電力中で何も鳴っていないときの2コア目の休み(ms)。要求から音が出るまでこの分まで遅れうる
     constexpr unsigned long kPowerSaveIdleDelayMs = 20;
     // バッテリー駆動中(VSYSがUSBの5VでなくLiPoセルの電圧、最大4.2V)は、MAX98357Aの
@@ -81,14 +102,28 @@ namespace SoundFunctions {
     void Update();
 
     State GetState();
-    bool IsConnected();     // アンプが刺さっているか(output=offでもtrue)
+    bool IsConnected();     // 今の鳴らす先がつながっているか(output=offでもtrue)
     bool IsAvailable();     // 実際に音が出るか
 
     Output GetOutput();
     void SetOutput(Output output);      // 今だけ(sound.cfgへは書かない)
 
+    // 鳴らす先。RouteModeと検出の状態から決まる(検出は kDetectIntervalMs×kDetectStableCount 遅れて採用)
+    Route GetRoute();
+    bool IsSpeakerConnected();          // アンプ(AUDIO_DETECT)が刺さっているか
+    bool IsHeadphoneInserted();         // イヤホンが差してあるか(AUDIO_HP_DETECT)
+    RouteMode GetRouteMode();
+    void SetRouteMode(RouteMode mode);  // 今だけ(sound.cfgへは書かない)
+    const char* RouteModeName(RouteMode mode);              // sound.cfg に書く名前(auto / speaker / headphone)
+    bool ParseRouteMode(const char* name, RouteMode& out);  // 読めなければ false で out はそのまま
+
+    // 今の鳴らす先の音量
     uint8_t GetVolume();
     void SetVolume(int volume);         // 0〜100。今だけ
+    // 鳴らす先ごとの音量(今だけ)と、それを書く sound.cfg のキー(volume / hp-volume)
+    uint8_t GetVolumeFor(Route route);
+    void SetVolumeFor(Route route, int volume);
+    const char* VolumeConfigKey(Route route);
 
     // 出力の周波数(kSampleRateLow / kSampleRateHigh)。周波数が変わると、鳴っている効果音・曲・WAV・GBの音は止まり、
     // 2コア目がI2Sを新しい周波数で開き直す。それ以外の値は false。
@@ -105,10 +140,11 @@ namespace SoundFunctions {
     // 今の要求(0=無し)。main.cpp が毎フレーム渡した値
     uint32_t RequestedSampleRate();
 
-    // 電池駆動中にkBatteryVolumeCapPercentで頭打ちするか(sound.cfgの battery-cap)。今だけ
+    // 電池駆動中にkBatteryVolumeCapPercentで頭打ちするか(sound.cfgの battery-cap)。今だけ。
+    // スピーカー(MAX98357A)の音割れ対策なので、イヤホンへ鳴らしている間は掛けない
     bool GetBatteryCap();
     void SetBatteryCap(bool enable);
-    // 今、バッテリー駆動によるkBatteryVolumeCapPercentの頭打ちが掛かっているか
+    // 今、バッテリー駆動によるkBatteryVolumeCapPercentの頭打ちが掛かっているか(イヤホンの間はfalse)
     // (GetVolume()が返す設定値そのものは変わらない。表示上の注記等に使う想定)
     bool IsBatteryVolumeCapActive();
 

@@ -1549,6 +1549,7 @@ int LuaEngineExt::l_wifi_status(lua_State* L) {
         case NetStatus::TIMEOUT: name = "timeout"; break;
         case NetStatus::SSID_NOT_FOUND: name = "not_found"; break;
         case NetStatus::FAILED: name = "failed"; break;
+        case NetStatus::AP_SETUP: name = "setup_ap"; break;
     }
     lua_pushstring(L, name);
     lua_setfield(L, -2, "status");
@@ -1558,6 +1559,19 @@ int LuaEngineExt::l_wifi_status(lua_State* L) {
         lua_pushstring(L, NetworkFunctions::currentSSID.c_str());
         lua_setfield(L, -2, "ssid");
     }
+    // インターネットへ出られるか(キャプティブポータルの判定。NetworkFunctions::Internet)
+    const char* internet = "unknown";
+    switch (NetworkFunctions::internet) {
+        case NetworkFunctions::Internet::Online:     internet = "online"; break;
+        case NetworkFunctions::Internet::Portal:     internet = "portal"; break;
+        case NetworkFunctions::Internet::NoInternet: internet = "offline"; break;
+        case NetworkFunctions::Internet::Checking:   internet = "checking"; break;
+        case NetworkFunctions::Internet::Unknown:    break;
+    }
+    lua_pushstring(L, internet);
+    lua_setfield(L, -2, "internet");
+    lua_pushstring(L, NetworkFunctions::hostname.c_str());
+    lua_setfield(L, -2, "hostname");
     return 1;
 }
 

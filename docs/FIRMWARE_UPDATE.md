@@ -46,6 +46,8 @@ SDの `/firmware/` に置き(USBドライブ機能でPCから置ける)、「本
    # または
    python3 script/firmware_tool.py push --host 192.168.1.23 --bin .pio/build/rpipico2w/firmware.bin
    ```
+   IPアドレスの代わりに本体の名前(mDNS。既定 `picoos.local`、設定アプリのWi-Fiタブの[名前]で変えられる)も使える:
+   `--upload-port picoos.local`(PCがmDNSを引ける場合。macOS・avahiの入ったLinux・Windows 10以降)
 署名済みで今より新しい版なら、確認なしでそのまま書き込んで再起動する。古い版・同じ版・署名を確かめられない
 ファイルは、本体で確認してから(PCは確認を待つ)。待ち受けるのは[受け取る]を押している間だけで、
 画面を離れるとやめる。

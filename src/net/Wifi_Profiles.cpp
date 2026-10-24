@@ -2,6 +2,7 @@
 #include "system/Config_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "crypto/Secret_Cipher.hpp"
+#include "util/Net_Addr.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -36,6 +37,17 @@ namespace {
         return (int)v;
     }
 
+    void CopyProfile(WifiProfiles::Profile& dst, const WifiProfiles::Profile& src){
+        dst.ssid.assign(src.ssid.c_str());
+        dst.password.assign(src.password.c_str());
+        dst.ip = src.ip;
+    }
+    void ClearProfile(WifiProfiles::Profile& p){
+        p.ssid.clear();
+        p.password.clear();
+        p.ip = WifiProfiles::IpConfig{};
+    }
+
     bool LoadLegacy(){
         // 1つだけ持てた頃の network.cfg(wifi-ssid / wifi-password。用途文字列は番号なし)
         FixedString<PICO_STR_M> ssid;
@@ -63,10 +75,7 @@ namespace {
 }
 
 void WifiProfiles::Reset(){
-    for(int i = 0; i < kMaxProfiles; i++){
-        profiles[i].ssid.clear();
-        profiles[i].password.clear();
-    }
+    for(int i = 0; i < kMaxProfiles; i++) ClearProfile(profiles[i]);
     profile_count = 0;
     enabled = true;
 }
@@ -106,6 +115,27 @@ bool WifiProfiles::Load(){
                 }else{
                     LOG_SYS_WARN("wifi.cfg: %s を読めませんでした", key);
                 }
+            }else if(const int k = KeyNumber(key, "ip")){
+                IpConfig& c = slots[k - 1].ip;
+                if(value[0] == '\0'){
+                    c.static_ip = false;
+                }else if(NetAddr::ParseCidr(value, c.ip, c.mask)){
+                    c.static_ip = true;
+                }else{
+                    LOG_SYS_WARN("wifi.cfg: %s は「192.168.1.50/24」の形です: %s", key, value);
+                }
+            }else if(const int g = KeyNumber(key, "gw")){
+                if(value[0] != '\0' && !NetAddr::Parse(value, slots[g - 1].ip.gateway)){
+                    LOG_SYS_WARN("wifi.cfg: %s を読めませんでした: %s", key, value);
+                }
+            }else if(const int d = KeyNumber(key, "dns")){
+                int n = 0;
+                uint32_t list[kMaxDns] = {};
+                if(NetAddr::ParseList(value, list, kMaxDns, n)){
+                    for(int i = 0; i < kMaxDns; i++) slots[d - 1].ip.dns[i] = list[i];
+                }else{
+                    LOG_SYS_WARN("wifi.cfg: %s はカンマ区切りで%d個までです: %s", key, kMaxDns, value);
+                }
             }else if(const int m = KeyNumber(key, "pass")){
                 char buf[PICO_STR_L];
                 PurposeFor(purpose, sizeof(purpose), false, m);
@@ -122,8 +152,12 @@ bool WifiProfiles::Load(){
     for(int i = 0; i < kMaxProfiles; i++){
         if(!has_ssid[i]) continue;
         if(Find(slots[i].ssid.c_str()) >= 0) continue; // 同じSSIDが2つあれば若い番号を採る
-        profiles[profile_count].ssid.assign(slots[i].ssid.c_str());
-        profiles[profile_count].password.assign(slots[i].password.c_str());
+        if(!ValidIpConfig(slots[i].ip)){
+            // 手で書いた設定が壊れていたら、繋がらなくなるよりDHCPへ戻す
+            LOG_SYS_WARN("wifi.cfg: %d番のIPの設定が正しくないのでDHCPを使います", i + 1);
+            slots[i].ip = IpConfig{};
+        }
+        CopyProfile(profiles[profile_count], slots[i]);
         profile_count++;
     }
     //今の鍵で暗号化し直す(端末の鍵を作った後に、古いSDの wifi.cfg を戻した場合など)
@@ -166,6 +200,30 @@ bool WifiProfiles::Save(){
         if(!PICO_Secret::Encrypt(purpose, profiles[i].password.c_str(), enc, sizeof(enc))){ ok = false; break; }
         snprintf(line, sizeof(line), "pass%d=%s\n", i + 1, enc);
         put(line);
+
+        // IPの設定は既定(DHCP)と違うときだけ書く
+        const IpConfig& c = profiles[i].ip;
+        char a[16], b[16];
+        if(c.static_ip){
+            NetAddr::Format(c.ip, a, sizeof(a));
+            snprintf(line, sizeof(line), "ip%d=%s/%d\n", i + 1, a, NetAddr::MaskToPrefix(c.mask));
+            put(line);
+            if(c.gateway){
+                NetAddr::Format(c.gateway, a, sizeof(a));
+                snprintf(line, sizeof(line), "gw%d=%s\n", i + 1, a);
+                put(line);
+            }
+        }
+        if(c.dns[0] || c.dns[1]){
+            NetAddr::Format(c.dns[0] ? c.dns[0] : c.dns[1], a, sizeof(a));
+            if(c.dns[0] && c.dns[1]){
+                NetAddr::Format(c.dns[1], b, sizeof(b));
+                snprintf(line, sizeof(line), "dns%d=%s,%s\n", i + 1, a, b);
+            }else{
+                snprintf(line, sizeof(line), "dns%d=%s\n", i + 1, a);
+            }
+            put(line);
+        }
     }
     f.close();
 
@@ -211,6 +269,7 @@ WifiProfiles::PutResult WifiProfiles::Put(const char* ssid, const char* password
     if(idx < 0){
         if(profile_count >= kMaxProfiles) return PutResult::Full;
         idx = profile_count++;
+        ClearProfile(profiles[idx]);
         profiles[idx].ssid.assign(ssid);
         result = PutResult::Added;
     }
@@ -222,13 +281,9 @@ WifiProfiles::PutResult WifiProfiles::Put(const char* ssid, const char* password
 
 bool WifiProfiles::Remove(int index){
     if(index < 0 || index >= profile_count) return false;
-    for(int i = index; i + 1 < profile_count; i++){
-        profiles[i].ssid.assign(profiles[i + 1].ssid.c_str());
-        profiles[i].password.assign(profiles[i + 1].password.c_str());
-    }
+    for(int i = index; i + 1 < profile_count; i++) CopyProfile(profiles[i], profiles[i + 1]);
     profile_count--;
-    profiles[profile_count].ssid.clear();
-    profiles[profile_count].password.clear();
+    ClearProfile(profiles[profile_count]);
     Save();
     return true;
 }
@@ -239,15 +294,37 @@ void WifiProfiles::MarkConnected(const char* ssid){
 
     // 先頭へ繰り上げ、間の組を1つずつ後ろへずらす
     Profile moved;
-    moved.ssid.assign(profiles[idx].ssid.c_str());
-    moved.password.assign(profiles[idx].password.c_str());
-    for(int i = idx; i > 0; i--){
-        profiles[i].ssid.assign(profiles[i - 1].ssid.c_str());
-        profiles[i].password.assign(profiles[i - 1].password.c_str());
-    }
-    profiles[0].ssid.assign(moved.ssid.c_str());
-    profiles[0].password.assign(moved.password.c_str());
+    CopyProfile(moved, profiles[idx]);
+    for(int i = idx; i > 0; i--) CopyProfile(profiles[i], profiles[i - 1]);
+    CopyProfile(profiles[0], moved);
     Save();
+}
+
+bool WifiProfiles::ValidIpConfig(const IpConfig& c){
+    for(int i = 0; i < kMaxDns; i++){
+        if(c.dns[i] != 0 && !NetAddr::IsUsableHost(c.dns[i])) return false;
+    }
+    if(!c.static_ip) return true;
+    if(!NetAddr::IsValidHostInSubnet(c.ip, c.mask)) return false;
+    if(c.gateway != 0){
+        if(!NetAddr::IsUsableHost(c.gateway) || c.gateway == c.ip) return false;
+        if(!NetAddr::SameSubnet(c.ip, c.gateway, c.mask)) return false;
+    }
+    return true;
+}
+
+bool WifiProfiles::SetIpConfig(int index, const IpConfig& c){
+    if(index < 0 || index >= profile_count) return false;
+    if(!ValidIpConfig(c)) return false;
+    profiles[index].ip = c;
+    if(!c.static_ip){ // 使わない値は残さない(書き出しと読み直しで同じものになるように)
+        profiles[index].ip.ip = profiles[index].ip.mask = profiles[index].ip.gateway = 0;
+    }
+    if(profiles[index].ip.dns[0] == 0){ // 2つ目だけのときは1つ目へ詰める
+        profiles[index].ip.dns[0] = profiles[index].ip.dns[1];
+        profiles[index].ip.dns[1] = 0;
+    }
+    return Save();
 }
 
 bool WifiProfiles::IsEnabled(){ return enabled; }

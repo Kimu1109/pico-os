@@ -3,6 +3,11 @@
 #include "net/NetworkScan.hpp"
 #include "storage/SD_Path.hpp"
 #include "net/Wifi_Profiles.hpp"
+#include "util/Net_Addr.hpp"
+#include "net/Captive_Portal.hpp"
+#include "system/Notification_Functions.hpp"
+
+#include <SimpleMDNS.h>
 
 IconID NetworkFunctions::GetWifiStateIconID(){
     //圏外でも最弱の棒を返す。バツ印は呼び出し側が重ねる
@@ -16,11 +21,147 @@ IconID NetworkFunctions::GetWifiStateIconID(){
 }
 
 namespace {
+    bool mdns_running = false;
+
+    // ---- キャプティブポータルの判定 ----
+    constexpr unsigned long kProbeDelayMs = 1500;    // 繋がってから(DHCP・DNSが落ち着くまで)
+    constexpr unsigned long kProbeRetryMs = 60000;   // ポータル/出られないときの判定し直し
+    CaptivePortal::CaptiveProbe* probe = nullptr;    // 判定の間だけ new する(約2KB)
+    unsigned long probe_at = 0;                      // 次に判定する時刻(0 = 予定なし)
+    bool portal_notified = false;                    // この接続でポータルの通知を出したか
+
+    bool ProbeEnabled(){ return !(NetworkFunctions::probeUrl == "off"); }
+
+    void ResetInternet(){
+        delete probe;
+        probe = nullptr;
+        probe_at = 0;
+        portal_notified = false;
+        NetworkFunctions::internet = NetworkFunctions::Internet::Unknown;
+        NetworkFunctions::portalUrl.clear();
+    }
+
+    void ScheduleProbe(unsigned long delay_ms){
+        if(!ProbeEnabled()) return;
+        probe_at = millis() + delay_ms;
+        if(probe_at == 0) probe_at = 1;
+    }
+
+    void NotifyPortal(){
+        if(portal_notified) return;
+        portal_notified = true;
+        NotificationFunctions::Content c;
+        NotificationFunctions::Sanitize(c.title, "Wi-Fiのログインが必要です");
+        char body[PICO_STR_L];
+        snprintf(body, sizeof(body), "%s: 設定アプリのWi-Fiから[ログイン]", NetworkFunctions::currentSSID.c_str());
+        NotificationFunctions::Sanitize(c.body, body);
+        c.tag.assign("captive-portal");
+        c.app.assign("設定");
+        NotificationFunctions::Post(c);
+    }
+
+    void UpdateProbe(){
+        using NetworkFunctions::Internet;
+        if(probe){
+            probe->update();
+            if(probe->getStatus() == TaskTools::PROCESSING) return;
+            const CaptivePortal::Verdict v = (probe->getStatus() == TaskTools::SUCCESS)
+                ? probe->verdict() : CaptivePortal::Verdict::NoInternet;
+            switch(v){
+                case CaptivePortal::Verdict::Online:
+                    if(NetworkFunctions::internet != Internet::Online) LOG_SYS_OK("Network: インターネットへ出られます");
+                    NetworkFunctions::internet = Internet::Online;
+                    NetworkFunctions::portalUrl.clear();
+                    probe_at = 0;
+                    break;
+                case CaptivePortal::Verdict::Portal:
+                    NetworkFunctions::internet = Internet::Portal;
+                    NetworkFunctions::portalUrl.assign(probe->portalUrl().c_str());
+                    LOG_SYS_WARN("Network: ログインが必要なWi-Fiです (%s)", NetworkFunctions::portalUrl.c_str());
+                    NotifyPortal();
+                    ScheduleProbe(kProbeRetryMs);
+                    break;
+                case CaptivePortal::Verdict::NoInternet:
+                    NetworkFunctions::internet = Internet::NoInternet;
+                    LOG_SYS_WARN("Network: Wi-Fiには繋がりましたがインターネットへ出られません");
+                    ScheduleProbe(kProbeRetryMs);
+                    break;
+            }
+            delete probe;
+            probe = nullptr;
+            return;
+        }
+        if(probe_at == 0 || (long)(millis() - probe_at) < 0) return;
+        probe_at = 0;
+        probe = new CaptivePortal::CaptiveProbe();
+        if(NetworkFunctions::internet != Internet::Portal && NetworkFunctions::internet != Internet::NoInternet){
+            NetworkFunctions::internet = Internet::Checking;
+        }
+        if(!probe->begin(NetworkFunctions::probeUrl.c_str())){
+            LOG_SYS_WARN("Network: captive-probe-url を読めません: %s", NetworkFunctions::probeUrl.c_str());
+            delete probe;
+            probe = nullptr;
+            NetworkFunctions::internet = Internet::Unknown;
+        }
+    }
+
+    IPAddress ToIp(uint32_t a){
+        return IPAddress(NetAddr::Octet(a, 0), NetAddr::Octet(a, 1), NetAddr::Octet(a, 2), NetAddr::Octet(a, 3));
+    }
+    void FormatIp(const IPAddress& a, char* out, size_t cap){
+        const uint32_t v = NetAddr::Make(a[0], a[1], a[2], a[3]);
+        if(v == 0){ if(cap) out[0] = '\0'; return; }
+        NetAddr::Format(v, out, cap);
+    }
+
+    // 保存済みのネットワークならそのIPの設定(無ければ既定 = DHCP)
+    WifiProfiles::IpConfig IpConfigFor(const char* ssid){
+        const WifiProfiles::Profile* p = WifiProfiles::At(WifiProfiles::Find(ssid));
+        return p ? p->ip : WifiProfiles::IpConfig{};
+    }
+
+    // 接続の前に、固定IPかDHCPかを決める。arduino-picoの config() は無線を止めている間しか効かない
+    // (LwipIntfDev::config()が「begin()の後なら何もしない」)ので、先に disconnect() してから呼ぶ。
+    // beginNoBlock()も内部で同じ切断をするので、切断を1回早めるだけで繋ぎ方は変わらない
+    void ApplyIpConfig(const WifiProfiles::IpConfig& c){
+        WiFi.disconnect();
+        WiFi.setHostname(NetworkFunctions::hostname.c_str());
+        if(c.static_ip){
+            // DNSを指定していなければゲートウェイに聞く(家庭のルーターはたいていDNSも兼ねる)。
+            // 0のままだと、前に繋いだネットワークのDHCPでもらったDNSが残ってしまう
+            const uint32_t dns = c.dns[0] ? c.dns[0] : c.gateway;
+            WiFi.config(ToIp(c.ip), ToIp(dns), ToIp(c.gateway), ToIp(c.mask));
+            char a[16];
+            NetAddr::Format(c.ip, a, sizeof(a));
+            LOG_SYS_MSG("Network Service: 固定IP %s/%d を使います", a, NetAddr::MaskToPrefix(c.mask));
+        }else{
+            WiFi.config(IPAddress(0, 0, 0, 0)); // 0.0.0.0 = DHCPへ戻す
+        }
+    }
+
+    // DNSの上書き。DHCPは繋がったときにDNSを書き換えるので、繋がった後に掛け直す
+    void ApplyDnsOverride(const WifiProfiles::IpConfig& c){
+        if(c.dns[0] == 0) return;
+        if(c.dns[1]) WiFi.setDNS(ToIp(c.dns[0]), ToIp(c.dns[1]));
+        else         WiFi.setDNS(ToIp(c.dns[0]));
+    }
+
+    // mDNS(<hostname>.local)。最初に繋がったときに始める。以後のnetifの出入り(切断・再接続)は
+    // SimpleMDNSがlwIPのコールバックで追うので、繋ぎ直すたびに呼び直す必要はない
+    void StartMdns(){
+        if(mdns_running) return;
+        mdns_running = MDNS.begin(NetworkFunctions::hostname.c_str());
+        if(mdns_running) LOG_SYS_OK("mDNS: %s.local で応答します", NetworkFunctions::hostname.c_str());
+        else             LOG_SYS_WARN("mDNS: 始められませんでした");
+    }
+
     // 接続を始めるだけ(手動か自動かの区別をしない内側の口)
     void StartConnect(const char* ssid, const char* password){
         LOG_SYS_MSG("Network Service: Connecting to Wi-Fi (%s).", ssid);
         NetworkFunctions::currentSSID.assign(ssid);
         NetworkFunctions::currentPassword.assign(password);
+        ResetInternet();
+        ApplyIpConfig(IpConfigFor(ssid));
         WiFi.beginNoBlock(ssid, password);
         NetworkFunctions::timer = millis();
         NetworkFunctions::currentStatus = NetworkFunctions::NetStatus::TRYING_CONNECT;
@@ -38,12 +179,24 @@ namespace {
 }
 
 void NetworkFunctions::Setup(){
+    probeUrl.assign(CaptivePortal::kDefaultProbeUrl);
     PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "ntp-server-1") == 0){
                 ntpServer1.assign(value);
             }else if(strcmp(key, "ntp-server-2") == 0){
                 ntpServer2.assign(value);
+            }else if(strcmp(key, "captive-probe-url") == 0){
+                if(value[0]) probeUrl.assign(value);
+            }else if(strcmp(key, "hostname") == 0){
+                if(NetAddr::IsValidHostname(value)){
+                    char lower[NetAddr::kMaxHostnameLen + 1];
+                    snprintf(lower, sizeof(lower), "%s", value);
+                    NetAddr::ToLowerHostname(lower);
+                    hostname.assign(lower);
+                }else{
+                    LOG_SYS_WARN("network.cfg: hostname は英数字とハイフンの1〜63文字です: %s", value);
+                }
             }
         }
     );
@@ -72,6 +225,9 @@ void NetworkFunctions::Update(){
                 // 直近で接続したネットワークとして先頭へ(次の起動・次の自動接続はここから)
                 WifiProfiles::MarkConnected(currentSSID.c_str());
                 if(low_power) WiFi.aggressiveLowPowerMode(); // 再接続でモードが既定へ戻っていても掛け直す
+                ApplyDnsOverride(IpConfigFor(currentSSID.c_str()));
+                StartMdns();
+                ScheduleProbe(kProbeDelayMs);
                 // 初回接続・再接続どちらの経路でもここを通るので、
                 // 再接続時にもNTPを即座に再同期させて時刻ドリフトを補正する。
                 NTP.begin(ntpServer1.c_str(), ntpServer2.c_str());
@@ -104,11 +260,14 @@ void NetworkFunctions::Update(){
                 if(WiFi.status() != WL_CONNECTED){
                     LOG_SYS_WARN("Wi-Fi disconnected. Trying to reconnect.");
                     StartConnect(currentSSID.c_str(), currentPassword.c_str());
+                    break;
                 }
             }
+            UpdateProbe();
             break;
 
         case NetStatus::OFF:
+        case NetStatus::AP_SETUP: // APの間は自動接続しない(StopSetupAp()で戻る)
             break;
 
         // SSID_NOT_FOUND / FAILED / TIMEOUT: 未接続。少し置いてから保存済みのネットワークへ自動で繋ぎ直す
@@ -126,6 +285,7 @@ void NetworkFunctions::SetEnabled(bool enabled){
     WifiProfiles::SetEnabled(enabled);
     retryRank = 0;
     if(!enabled){
+        ResetInternet();
         WiFi.disconnect();
         currentSSID.clear();
         currentPassword.clear();
@@ -146,6 +306,7 @@ bool NetworkFunctions::RemoveProfile(int index){
         && (currentStatus == NetStatus::SUCCESS || currentStatus == NetStatus::TRYING_CONNECT);
     if(!WifiProfiles::Remove(index)) return false;
     if(current){
+        ResetInternet();
         WiFi.disconnect();
         currentSSID.clear();
         currentPassword.clear();
@@ -175,9 +336,102 @@ void NetworkFunctions::ConnectWiFiAsync(const char* ssid, const char* password){
     // 手動で選んだ接続先。OFFならONにし、自動接続の順番も先頭から数え直す
     // (ここで失敗したら、次の自動接続は直近で接続できたネットワークから)
     if(!WifiProfiles::IsEnabled()) WifiProfiles::SetEnabled(true);
+    if(currentStatus == NetStatus::AP_SETUP){
+        WiFi.disconnectAP();
+        WiFi.mode(WIFI_STA);
+    }
     retryRank = 0;
     StartConnect(ssid, password);
 };
+
+bool NetworkFunctions::SetHostname(const char* name){
+    if(!NetAddr::IsValidHostname(name)) return false;
+    char lower[NetAddr::kMaxHostnameLen + 1];
+    snprintf(lower, sizeof(lower), "%s", name);
+    NetAddr::ToLowerHostname(lower);
+    if(!PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_NETWORK_CFG, "hostname", lower)) return false;
+    hostname.assign(lower);
+    WiFi.setHostname(lower); // DHCPの名乗りは次の接続から
+    if(mdns_running){
+        MDNS.end();
+        mdns_running = false;
+        if(IsConnected()) StartMdns();
+    }
+    return true;
+}
+
+bool NetworkFunctions::StartSetupAp(const char* ssid, const char* password){
+    if(!ssid || !ssid[0] || !password || strlen(password) < 8 || strlen(password) > 63) return false;
+    ResetInternet();
+    WiFi.disconnect();
+    currentSSID.clear();
+    currentPassword.clear();
+    WiFi.mode(WIFI_AP);
+    if(!WiFi.softAP(ssid, password)){
+        LOG_SYS_FAIL("Network: アクセスポイントを始められませんでした");
+        WiFi.mode(WIFI_STA);
+        currentStatus = NetStatus::FAILED;
+        retryTimer = millis() - RETRY_INTERVAL; // すぐ自動接続へ戻る
+        return false;
+    }
+    currentStatus = NetStatus::AP_SETUP;
+    LOG_SYS_MSG("Network: アクセスポイント %s を始めました", ssid);
+    return true;
+}
+
+void NetworkFunctions::StopSetupAp(){
+    if(currentStatus != NetStatus::AP_SETUP) return;
+    WiFi.disconnectAP();
+    WiFi.mode(WIFI_STA); // 次の beginNoBlock() がAPを作り直さないように(arduino-picoはAPのモードのままだとAPとして始める)
+    retryRank = 0;
+    if(!WifiProfiles::IsEnabled()){
+        currentStatus = NetStatus::OFF;
+    }else{
+        currentStatus = NetStatus::FAILED;
+        retryTimer = millis() - RETRY_INTERVAL; // 次のUpdate()ですぐ繋ぎに行く
+    }
+    LOG_SYS_MSG("Network: アクセスポイントを止めました");
+}
+
+void NetworkFunctions::SetupApAddress(char* out, size_t cap){
+    if(cap) out[0] = '\0';
+    if(currentStatus == NetStatus::AP_SETUP) FormatIp(WiFi.softAPIP(), out, cap);
+}
+
+int NetworkFunctions::SetupApClients(){
+    return currentStatus == NetStatus::AP_SETUP ? (int)WiFi.softAPgetStationNum() : 0;
+}
+
+void NetworkFunctions::RecheckInternet(){
+    if(!IsConnected() || !ProbeEnabled()) return;
+    if(probe) return; // 判定中
+    probe_at = millis();
+    if(probe_at == 0) probe_at = 1;
+}
+
+void NetworkFunctions::CurrentAddress(char* ip, size_t cap){
+    if(cap) ip[0] = '\0';
+    if(IsConnected()) FormatIp(WiFi.localIP(), ip, cap);
+}
+void NetworkFunctions::CurrentGateway(char* gw, size_t cap){
+    if(cap) gw[0] = '\0';
+    if(IsConnected()) FormatIp(WiFi.gatewayIP(), gw, cap);
+}
+void NetworkFunctions::CurrentDns(char* dns, size_t cap){
+    if(cap) dns[0] = '\0';
+    if(IsConnected()) FormatIp(WiFi.dnsIP(0), dns, cap);
+}
+
+void NetworkFunctions::ReapplyIpConfig(const char* ssid){
+    if(!ssid || !(currentSSID == ssid)) return;
+    if(currentStatus != NetStatus::SUCCESS && currentStatus != NetStatus::TRYING_CONNECT) return;
+    // 固定IP⇔DHCPの切り替えは繋ぎ直さないと効かない(DNSだけでも、同じ手順で掛け直せば足りる)
+    FixedString<PICO_STR_M> s;
+    FixedString<PICO_STR_L> pw;
+    s.assign(currentSSID.c_str());
+    pw.assign(currentPassword.c_str());
+    StartConnect(s.c_str(), pw.c_str());
+}
 
 NetworkScan* NetworkFunctions::ScanAsync(){
     // HttpGet/HttpRequestと同じ「呼び出し側が生ポインタとして持ち、自分のonUpdate()から

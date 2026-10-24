@@ -139,6 +139,89 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   実機ファームのビルド(maxgerhardtのplatformで`pio run`。`rom_func_otp_access`がリンクされる)。**実機では未確認**(OTPへの書き込み・
   ページ60が本当に空いているか・ECCの読み出し)。
 
+## 固定IP/DNS・本体の名前(mDNS)・キャプティブポータル・AP設定モード (`util/Net_Addr` / `net/Captive_Portal` / `net/Setup_Portal` / `services/WifiSetup_Functions`) (2026-10-24)
+
+「WPA-Enterprise、キャプティブポータル、固定IP/DNS、mDNS(picoos.local)、ホットスポット/AP接続(モバイル設定用)が無い」という改善案への対応。
+**WPA-Enterpriseだけは実装していない**(下の「WPA-Enterpriseを見送った理由」)。
+
+### 固定IP/DNS(保存済みネットワークごと)
+
+- **`wifi.cfg` に `ipN = 192.168.1.50/24`・`gwN`・`dnsN = 1.1.1.1,8.8.8.8` を足した**(`WifiProfiles::IpConfig`。既定=DHCPのときは書かない。
+  秘密ではないので暗号化しない)。固定IPは場所ごとに違うので、全体の設定ではなく保存済みのネットワークごとに持つ。
+  DHCPのままDNSだけ上書きもできる。並べ替え・削除で組がずれないよう、組の写しは `CopyProfile()` に1本化した。
+  手で壊した値(サブネットの合わないゲートウェイ等)は読むときにDHCPへ戻す(繋がらなくなるより良い)。
+- アドレスの読み書き・検査は `util/Net_Addr.hpp`(ヘッダだけ。`/24` と `/255.255.255.0` の両方、`/` を省くと `/24`、
+  ネットワーク部/ブロードキャストのアドレスは不可、プレフィックスは8以上 — arduino-picoの `config()` が
+  「3つ目の引数の先頭が255かどうか」で引数の並びを推測する(`LwipIntf::ipAddressReorder`)ため、/8未満は誤読される)。
+- **適用(`NetworkFunctions::StartConnect()`)**: arduino-picoの `config()` は無線を止めている間しか効かない
+  (`LwipIntfDev::config()` が begin の後なら何もしない)ので、`WiFi.disconnect()` → `config()` → `beginNoBlock()` の順。
+  `beginNoBlock()` も内部で同じ切断をするので、切断を1回早めるだけ。DHCPへは `config(0.0.0.0)` で戻す。
+  固定IPでDNSが空ならゲートウェイをDNSにする(0のままだと前のネットワークのDHCPのDNSが残る)。
+  DNSの上書きはDHCPが繋がったときにDNSを書き換えるので、繋がった後に `setDNS()` で掛け直す。
+- 設定アプリの「Wi-Fi」タブに **[IP]**(下段のボタンを5つにした。検索・削除のアイコンは幅が足りないので外した)。
+  選んだネットワークについて 固定IP(空欄でDHCP)→ゲートウェイ(候補はそのサブネットの .1)→DNS の順に InputDialog で聞き、
+  保存して、今そのネットワークに繋いでいれば繋ぎ直す(`ReapplyIpConfig()`)。一覧に `[固定IP]`/`[DNS]` の印。
+
+### 本体の名前・mDNS
+
+- `network.cfg` の `hostname`(既定 `picoos`。英数字とハイフンの1〜63文字、小文字へ揃える)。DHCPで名乗り(`setHostname()`)、
+  arduino-picoの **SimpleMDNS** で `<名前>.local` に応答する(LEAmDNSより小さい。フラッシュ +約17KB)。
+  `MDNS.begin()` は最初に繋がったときに1回だけ。以後のnetifの出入り(切断・再接続・別のSSID)はSimpleMDNSがlwIPのコールバックで追う。
+  名前を変えたら `MDNS.end()` → `begin()` で名乗り直す。ファームの送信(`fwpush --upload-port picoos.local`)に使える。
+- 「Wi-Fi」タブの一覧の下に2行(`picoos.local` / 今のIP)と[スマホ][名前]。1行だと固定IPの長いアドレスが入りきらなかった。
+- PCビルドは母艦のmDNSとぶつからないよう応答しない(`pc/compat/SimpleMDNS.h` は名乗ったことにするだけ)。
+
+### キャプティブポータル(ホテル・カフェ等のログイン/同意のページ)
+
+- **判定(`CaptivePortal::CaptiveProbe` / `Judge()`)**: 繋がって1.5秒後に `http://connectivitycheck.gstatic.com/generate_204` を
+  **転送を追わずに**GET(`HttpRequest::setFollowRedirects(false)` を足した)。204(と中身の無い200)= 外へ出られる、
+  3xx = ポータル(転送先がログインのページ)、中身のある200 = 横取りされた(プローブのURL自身を開けばポータルが出る)、
+  失敗 = 出られない。HTTPだけなのでTLSの約40KBは使わない。判定の間だけ約2KBを `new`。
+  ポータル/出られないときは1分ごとに判定し直す(外で同意を済ませた・回線が戻ったのを拾う)。`network.cfg` の
+  `captive-probe-url` で変えられる(gstaticに届かない国・自前のサーバ。`off` で判定しない)。
+  状態は `NetworkFunctions::internet`(Lua の `pico.wifi_status().internet` にも出す)。ポータルなら接続ごとに1回通知(タップで設定アプリ)。
+- **ログイン(`CaptiveLogin`)**: このOSのブラウザはHTMLを描けないので、ページを見せる代わりに **最初の `<form>` を読んで送る**。
+  `FormScanner` はHTMLを溜めずに流しながら読む(タグ1つぶん512Bの溜め場所だけ)。`<script>`/`<style>` の中とコメントは飛ばし
+  (中の `"<form"` に騙されない)、属性値の引用符の中の `>` でタグを終えない。隠し項目・チェックボックス(同意の印。チェックして送る)・
+  選ばれたラジオ・最初の送信ボタンの名前と値をそのまま送る。テキスト/パスワードの欄が空なら、設定アプリが1つずつ聞く(部屋番号・メール等)。
+  空欄が無ければ「利用規約に同意して接続しますか?」を確かめてから送る。`<meta refresh>` だけのページは2回まで追う。
+  送った後は判定し直して通ったかを確かめる。**JavaScriptでフォームを組み立てるポータルは通せない**(「JavaScriptで動くポータルは使えません」と出す)。
+  フォームの持ち物(12項目・本文1KiB等、約6KB)はログインの間だけ `new`。
+- 設定アプリの状態の行は「要ログイン: SSID」/「外へ出られません: SSID」(状態を前に置く。SSIDが長いと後ろが切れるため)。
+  ポータルのときだけ見出しの右に[ログイン]。
+- 検証: `captive_portal_test`(判定・フォームの読み取り(まとめて/1バイトずつ)・文字参照・本文と送り先・meta refresh・上限・長すぎるタグ)。
+  PCビルドで偽のポータル(302でログインのページへ転送し、`<script>` やコメントの中に偽のフォーム、隠し項目・同意のチェック・ラジオ・送信ボタン2つ・
+  2つ目のフォームを持つPythonのサーバ。`captive-probe-url` を向ける)に対して、要ログインの表示・通知→[ログイン]→同意→POSTの中身が正しく受理→
+  「インターネットへ出られます」まで、部屋番号の欄があるページでは入力のダイアログ→送信まで通した。**実機・本物のポータルでは未確認(Todoist参照)**。
+
+### AP設定モード(スマホから繋ぎ先を送る)
+
+- 「Wi-Fi」タブの **[スマホ]** → `WifiSetupScene`。開いている間だけ本体がAP「`<名前>-setup`」になる(WPA2、パスワードは毎回ちがう8桁の数字を
+  画面に大きめの字で出す。開いたAPにすると近くの誰でも繋ぎ先を書き込めるため)。arduino-picoのAPだけのモード(192.168.42.1、DHCPサーバつき)。
+  STAとAPを同時に使うモードもあるが、スマホ1台で設定する間だけなのでSTAは切って単純にした(`NetStatus::AP_SETUP` の間は自動接続しない)。
+- **どの名前を聞かれても本体のアドレスを答えるDNS**(`SetupPortal::BuildDnsReply()`。arduino-picoの DNSServer はArduinoの `String` を使うので
+  自前の数十行にした)と、**どのGETにも入力のページを返すHTTP**(`/generate_204` や `/hotspot-detect.html` にも)で、スマホはAPへ繋ぐと
+  「ログインが必要なネットワーク」としてページを自動で開く。開かなければ画面のURL。
+- ページ(`SetupPortal::Respond()`)はSSIDとパスワードの2つの欄だけ。`POST /save` で `WifiProfiles::Put()` し(同じSSIDならパスワードの書き換え)、
+  画面は「受け取りました」を2.5秒見せて閉じ、APを止めてそのネットワークへ繋ぐ。[戻る]で閉じれば元の自動接続へ戻る。
+  HTMLへ埋める文字列(SSID・本体の名前)は文字参照にする。要求は2KBまで(超えたら413)。同時の接続は1本。
+  サーバの持ち物(要求と応答の溜め場所・UDPのバッファ、約4.5KB)は開いている間だけ `new`。
+- arduino-picoはAPのモードのままだと次の `beginNoBlock()` をAPとして始める(`_beginInternal()` の「ESP8266互換」)ので、
+  APを止めたら `WiFi.mode(WIFI_STA)` に戻す。
+- PCビルドはAPを作れないので、ページだけ `http://127.0.0.1:8081/` で開ける(`PICOOS_SETUP_PORT`。母艦の外からは開けない)。
+- 検証: `setup_portal_test`(要求の読み取り・フォームの値の復号・ページの出し分け・文字参照・DNSの応答)。PCビルドで[スマホ]→
+  curlで `GET /generate_204`(入力のページ)・`POST /save`(`Cafe & Co`・`p@ss word`)→保存・画面が「受け取りました」→閉じて
+  そのネットワークへ繋ぎ一覧の先頭へ、まで通した。**実機ではAP・DNS・スマホの自動表示とも未確認(Todoist参照)**。
+
+### WPA-Enterpriseを見送った理由
+
+Pico 2 Wの無線チップ(CYW43439)のarduino-picoのドライバはEAP(802.1X)を持たない(`WiFiClass.h` に
+「EAP is not supported by the driver」とあり `beginEnterprise()` はコメントアウト)。CYW43のファームの中のサプリカントも
+pico-sdkからは使えない。自前でやるには802.1Xのフレームを生で送受信してPEAP/MSCHAPv2(TLSの中でMS-CHAPv2)を組む必要があり、
+ドライバがEAPOLのフレームを上げてこない以上、ドライバの改造から要る。費用に見合わないので、今は対応しない
+(職場・学校のWPA-Enterpriseには、スマホのテザリングや来客用のWPA2-PSKを使ってもらう)。ドライバが対応したら `WifiProfiles` に
+`eapN`(ID・匿名ID)を足し、パスワードと同じく暗号化して持つ形を想定している。
+
 ## 保存済みのWi-Fiネットワーク・Wi-FiのON/OFF・自動再接続 (`src/net/Wifi_Profiles` / `NetworkFunctions` / `SettingsScene`) (2026-10-01)
 
 SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/`wifi-password`)のを、複数保存して

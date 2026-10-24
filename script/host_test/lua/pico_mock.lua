@@ -437,7 +437,7 @@ function M.install(opts)
 
     -- require: テストでは普通のLuaのrequire/dofileを使うので何もしない
     pico.memory_info = function() return { lua_used = 1, lua_budget = 2, lua_free = 1, heap_free = 1, heap_used = 1, image_bytes = 0 } end
-    pico.wifi_status = function() return { connected = true, status = "connected", enabled = true, ssid = "test" } end
+    pico.wifi_status = function() return { connected = true, status = "connected", enabled = true, ssid = "test", internet = "online", hostname = "picoos" } end
     pico.url_encode = function(s) return (s:gsub("[^%w%-_%.~]", function(c) return string.format("%%%02X", c:byte()) end)) end
     pico.url_decode = function(s) return (s:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)) end
 

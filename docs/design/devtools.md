@@ -155,3 +155,16 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   pushのWAIT/OK/DONE/ERRを偽の本体で)、実機ファームのビルド(`board_build.filesystem_size`でLittleFSが`0x1024F000`〜、`picoOTA`がリンクされる、本物の`firmware.bin`を`fwpack`して`verify`)、
   PCビルドの`--tap`/`--shot`(SDから選ぶ→確認→書く→再起動→通知、`firmware_tool.py push`→本体で確認→DONE→再起動)。
   **実機でSDからもWi-Fiからも更新できることを利用者が確認した(2026-10-16)**。書き込みの時間は未計測。壊れたファームはBOOTSELで戻す。
+
+## ナイトリービルド (`.github/workflows/nightly.yml`) (2026-10-24)
+
+利用者の要望: 今のActionsに載せる / 実機ファームのビルドの成果物をそのまま落とせる / 50本ほど残して超えた分は消す。
+
+- **ビルドは `firmware-build.yml` を `workflow_call` で呼ぶ**(手順を二重に持たない)。呼ばれた側は版(`serial`=`git rev-list --count HEAD`・`short`)を出力に出す。
+  `concurrency` の組は `github.workflow`(呼ばれたときは呼び出し元の名前)を含むので、mainへのpushのビルドとナイトリーが互いを取り消さない。
+- **置き場はActionsの成果物ではなくGitHubのリリース(プレリリース、`--latest=false`)**。成果物は最長90日で消え、zipに包まれ、落とすのにログインが要るため。
+  添付は `firmware.uf2`/`firmware.elf`/署名なしの`firmware.pfw`(PRの成果物と同じ中身)。タグは `nightly-<通し番号>-<短いハッシュ>`(軽量タグ、`--target` はビルドしたコミット)。
+- 毎日03:43(日本時間、`cron` は UTC 18:43)。**ナイトリーのタグがすでに今のmainを指していれば作らない**(手動実行の `force` で作り直す。同じタグは消してから作る)。手動実行はmainだけ。
+- 説明は書き込み方の短い案内+`--generate-notes`(前のナイトリーのタグから。PRの一覧になる)。
+- 作った後、`nightly-` のリリースを作った日時の新しい順に並べ、`KEEP`(50)本を超えた分をタグごと消す(`gh release delete --cleanup-tag`)。
+- GitHub上で実際に回るかは未確認(初回はActionsタブから手動実行して確かめる)。

@@ -158,7 +158,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
   テストを足すときは `script/host_test/CMakeLists.txt` の一覧に `host_test(<名前> GROUP <グループ>)` を1行。説明と落とし穴は `script/host_test/README.md`。
 - `run_net.sh`(実通信)/ `run_mem.sh`(確保回数)/ PCビルドはCIに無いので、**変更のたびに自分で回す**。
 - PR時のCI: ホストテスト(`host-tests.yml`。**グループを足したらmatrixにも足す**、ずれると `groups-in-sync` が落ちる)・層の決まり・
-  実機ファームのビルド(`firmware-build.yml`)。他にWebビルドの公開(`web-pages.yml`)。
+  実機ファームのビルド(`firmware-build.yml`)。他にWebビルドの公開(`web-pages.yml`)と、毎晩mainの実機ファームをリリースへ載せるナイトリー(`nightly.yml`、50本まで)。
 - シェルで終了コードを取るときは `rc=0; cmd || rc=$?` の形にする(`if ! cmd; then rc=$?` 等は値が化ける)。
 
 ## 設計記録の索引 (`docs/design/`)
@@ -183,7 +183,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `lua-api.md` | `pico.*` APIの設計記録(描画・SD・画像・キャンバス・ダイアログ・ネットワーク・イベント等) |
 | `lua-apps.md` | Luaアプリと `pico.game`(ペイント・テトリス等・アプリストア・動作確認アプリ) |
 | `iso.md` | 2.5Dエンジン(`pico.iso`)・ブロック・ゾンビTD |
-| `devtools.md` | プロファイラ・Luaデバッガ・クラッシュダンプ・サンドボックス・実機確認の道具・ファームの更新 |
+| `devtools.md` | プロファイラ・Luaデバッガ・クラッシュダンプ・サンドボックス・実機確認の道具・ファームの更新・ナイトリービルド |
 | `performance.md` | 最適化とメモリ計測の記録・解決済みの不具合 |
 | `pc-web.md` | Webビルド(WebAssembly) |
 | `roadmap-ideas.md` | ロードマップと未実装の設計アイデア |

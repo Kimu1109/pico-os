@@ -3,6 +3,7 @@
 #
 #   プルリクエスト / main へのpush … ビルドする(約7分。キャッシュがあれば短い)
 #   手動実行                       … Actionsタブの「Run workflow」から
+#   ほかのワークフローから呼ぶ     … ナイトリービルド(nightly.yml)が同じ成果物をリリースへ載せる
 #
 # platformio.ini の `platform = raspberrypi`(公式)には rpipico2w のボード定義が無いので、
 # ここでだけ maxgerhardt/platform-raspberrypi へ差し替えてビルドする(ファイルは書き換えない)。
@@ -14,12 +15,22 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    outputs:
+      serial:
+        description: ファームの通し番号(git rev-list --count HEAD)
+        value: ${{ jobs.build.outputs.serial }}
+      short:
+        description: 短いコミットのハッシュ
+        value: ${{ jobs.build.outputs.short }}
 
 permissions:
   contents: read
 
+# 呼ばれたときの github.workflow は呼び出し元の名前になるので、呼び出し元ごとに別の組になる
+# (main へのpushのビルドとナイトリービルドが互いを取り消さない)
 concurrency:
-  group: firmware-build-${{ github.ref }}
+  group: firmware-build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -31,11 +42,21 @@ jobs:
     name: rpipico2w をビルドする
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    outputs:
+      serial: ${{ steps.version.outputs.serial }}
+      short: ${{ steps.version.outputs.short }}
     steps:
       # ファームの版(通し番号 = git rev-list --count HEAD。script/pio_firmware.py)を正しく数えるため、履歴を全部取る
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # script/pio_firmware.py と同じ数え方。ナイトリービルドがリリースの名前に使う
+      - name: 版を数える
+        id: version
+        run: |
+          echo "serial=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       # ツールチェイン・arduino-pico・LovyanGFX 等で数百MBあるので丸ごとキャッシュする。
       # platformio.ini(lib_depsの版)かこのファイル(プラットフォームの版)が変わると作り直す

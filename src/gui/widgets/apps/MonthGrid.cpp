@@ -2,6 +2,7 @@
 
 #include "apps/calendar/Ical.hpp"
 #include "gui/core/Font_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
 
 #include <cstdio>
@@ -98,6 +99,35 @@ void MonthGrid::causeOnPressStart(){
     if(this->on_select_day) this->on_select_day(day);
 }
 
+Rect MonthGrid::focusRect() const {
+    const Rect g = this->getScreenRect();
+    const int day = this->selected > 0 ? this->selected : 1;
+    const int i = day - 1 + this->first_wday;
+    const int col = i % kCols;
+    return {(int16_t)(g.x + this->cellX(col)), (int16_t)(g.y + kHeaderH + (i / kCols) * this->cellH()),
+            (int16_t)this->cellW(col), (int16_t)this->cellH()};
+}
+
+bool MonthGrid::onFocusKey(FocusKey key){
+    int day = this->selected;
+    switch(key){
+        case FocusKey::Activate:
+            if(day == 0) day = 1;
+            break;
+        case FocusKey::Left:  day -= 1; break;
+        case FocusKey::Right: day += 1; break;
+        case FocusKey::Up:    day -= kCols; break;
+        case FocusKey::Down:  day += kCols; break;
+        default: return false;
+    }
+    //まだ選んでいなければ、最初の矢印は1日を選ぶだけ
+    if(this->selected == 0) day = 1;
+    if(day < 1 || day > this->days_in_month) return false;
+    this->setSelected(day);
+    if(this->on_select_day) this->on_select_day(day);
+    return true;
+}
+
 void MonthGrid::render(){
     if(!this->needs_redraw) return;
     if(!this->visible) return;
@@ -169,6 +199,14 @@ void MonthGrid::render(){
                 OSData::frame->fillRect(x + (w - dots_w) / 2 + k * (kDotSize + kDotGap), dot_y,
                                         kDotSize, kDotSize, dot_color);
             }
+        }
+    }
+
+    // フォーカスの枠(キー/コントローラーで選んでいる日)
+    if(FocusFunctions::ring_visible && FocusFunctions::focused == this){
+        const Rect r = this->focusRect();
+        for(int k = 0; k < FocusFunctions::kRingWidth; k++){
+            OSData::frame->drawRect(r.x + k, r.y + k, r.w - 2 * k, r.h - 2 * k, FocusFunctions::kRingColor);
         }
     }
 

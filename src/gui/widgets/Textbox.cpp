@@ -7,7 +7,7 @@ template<size_t N>
 void Textbox<N>::causeOnPressStart(){
     Widget::causeOnPressStart();
 
-    KeyboardFunctions::Show(this, KeyboardFunctions::Layout::Japanese);
+    KeyboardFunctions::Show(this, this->ascii_input ? KeyboardFunctions::Layout::English : KeyboardFunctions::Layout::Japanese);
 }
 
 template<size_t N>

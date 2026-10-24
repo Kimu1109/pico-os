@@ -102,6 +102,16 @@ class PickerDialog : public Widget {
         // スクリプト側から閉じる(is_ok=falseとして通知はしない。pico.destroyと同じ後片付けのために使う)
         void close(){ this->setVisible(false); }
 
+        // Esc(Back)でキャンセル、数字の入力欄でEnter(Submit)で決定。ボタンを押したのと同じ
+        bool onFocusKey(FocusKey key) override;
+        // 開いたら中身(一覧・日の格子・時刻・数字の欄)から
+        Widget* initialFocus() override {
+            if (list) return list;
+            if (grid) return grid;
+            if (time_picker) return time_picker;
+            return number;
+        }
+
         void render() override;
 
         WidgetType getWidgetType() const override { return WidgetType::PickerDialog; }

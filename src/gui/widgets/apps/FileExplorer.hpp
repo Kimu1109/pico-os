@@ -46,18 +46,21 @@ class FileExplorer : public Widget {
 
             backToParent = new Icon(0, (20 - 16) / 2, IconID::ArrowLeft, IconSize::Px16);
             backToParent->setParent(this);
+            backToParent->setFocusable(true); //キーボード/コントローラーでも押せるように(Iconは既定では受けない)
             backToParent->setOnPressStart([this](){
                 this->on_press_back();
             });
 
             createFolder = new Icon(w - 20, (20 - 16) / 2, IconID::Folder, IconSize::Px16);
             createFolder->setParent(this);
+            createFolder->setFocusable(true);
             createFolder->setOnPressStart([this](){
                 this->on_press_create();
             });
 
             deleteFile = new Icon(w - 20 * 2, (20 - 16) / 2, IconID::Trash, IconSize::Px16);
             deleteFile->setParent(this);
+            deleteFile->setFocusable(true);
             deleteFile->setOnPressStart([this](){
                 this->on_press_delete();
             });
@@ -97,6 +100,8 @@ class FileExplorer : public Widget {
         // 名前の一致する項目を選び、見える所までスクロールする。無ければfalse
         bool selectByName(const char* name);
         const char* getCurrentFolderPath();
+        // ファイルの一覧(ダイアログが最初にフォーカスを置く相手)
+        ScrollList* getList(){ return this->list; }
 
         void setCurrentFolderPath(const char* path){
             currentPath.assign(path);

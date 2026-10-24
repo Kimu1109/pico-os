@@ -341,6 +341,7 @@ void ChatScene::startSearch(){
 
 void ChatScene::openCodeInput(){
     auto* dialog = new InputDialog("参加コード:", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){
@@ -374,6 +375,7 @@ void ChatScene::openChatSettings(){
     // サーバURL→(1フレーム空けて)トークンの順に編集する。SettingsSceneのWi-Fi編集と
     // 同じ「押されるたびにnew、閉じたらDestroyLater()」の形
     auto* dialog = new InputDialog("チャットサーバURL:", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(this->chat_server_value.c_str());
     dialog->setVisible(true);
@@ -389,6 +391,7 @@ void ChatScene::openTokenDialog(){
     // Wi-Fiパスワードと同じ扱い: 現在のトークンは平文で持たないので、常に空欄から始まる。
     // 空欄のまま決定すると既存のトークンを変更しない(commitChatToken()参照)
     auto* dialog = new InputDialog("トークン(空欄で変更なし):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){

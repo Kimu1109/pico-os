@@ -1,7 +1,14 @@
 #include "gui/widgets/dialogs/FileSaveDialog.hpp"
 #include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_IO.hpp"
+
+bool FileSaveDialog::onFocusKey(FocusKey key){
+    if(key == FocusKey::Submit) return FocusFunctions::Press(this->button_ok);
+    if(key == FocusKey::Back) return FocusFunctions::Press(this->button_no);
+    return false;
+}
 
 void FileSaveDialog::render(){
     if(!this->visible) return;

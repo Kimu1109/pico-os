@@ -1,5 +1,6 @@
 #include "gui/widgets/dialogs/ColorDialog.hpp"
 #include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
 #include "gui/icons/icon_render.h"
 
@@ -28,7 +29,47 @@ void ColorDialog::render(){
         }
     }
 
+    // フォーカスの枠(キー/コントローラーで選んでいるマス)
+    if(FocusFunctions::ring_visible && FocusFunctions::focused == this){
+        const Rect r = this->focusRect();
+        for(int k = 0; k < FocusFunctions::kRingWidth; k++){
+            OSData::frame->drawRect(r.x + k, r.y + k, r.w - 2 * k, r.h - 2 * k, FocusFunctions::kRingColor);
+        }
+    }
+
     this->needs_redraw = false;
+}
+
+Rect ColorDialog::focusRect() const {
+    const int c = this->selected_color < 0 ? 0 : this->selected_color;
+    return {(int16_t)(BASE_X + (c % 4) * COLOR_W), (int16_t)(BASE_Y + TITLE_H + (c / 4) * COLOR_H), (int16_t)COLOR_W, (int16_t)COLOR_H};
+}
+
+bool ColorDialog::onFocusKey(FocusKey key){
+    if(key == FocusKey::Activate){
+        //枠のあるマス(まだ選んでいなければ最初の色)で決める
+        if(this->selected_color < 0) this->selected_color = 0;
+        return FocusFunctions::Press(this->button_ok);
+    }
+    if(key == FocusKey::Back) return FocusFunctions::Press(this->button_no);
+    int x = this->selected_color < 0 ? 0 : this->selected_color % 4;
+    int y = this->selected_color < 0 ? 0 : this->selected_color / 4;
+    switch(key){
+        case FocusKey::Left:  x--; break;
+        case FocusKey::Right: x++; break;
+        case FocusKey::Up:    y--; break;
+        case FocusKey::Down:  y++; break;
+        default: return false;
+    }
+    //格子の外へ出る向きは、隣(下のボタン)へフォーカスを移す
+    if(this->selected_color >= 0 && (x < 0 || x >= 4 || y < 0 || y >= 4)) return false;
+    if(x < 0) x = 0;
+    if(x > 3) x = 3;
+    if(y < 0) y = 0;
+    if(y > 3) y = 3;
+    this->selected_color = getIndexToColor(x, y);
+    this->needsRender();
+    return true;
 }
 
 void ColorDialog::causeOnPressStart(){

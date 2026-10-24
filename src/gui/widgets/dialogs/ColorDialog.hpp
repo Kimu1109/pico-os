@@ -29,7 +29,7 @@ class ColorDialog : public Widget {
         constexpr static int BUTTON_W = DIALOG_W / 2 - BUTTON_MARGIN * 2 - 3;
 
         int selected_color = -1;
-        int getIndexToColor(int x, int y){
+        int getIndexToColor(int x, int y) const {
             return x + y * 4;
         }
   
@@ -64,6 +64,10 @@ class ColorDialog : public Widget {
                 this->setVisible(false);
             });
 
+            //親を辿れるように(フォーカスの範囲・Esc/Enterをダイアログへ届ける。位置は親が画面全体なので変わらない)
+            this->title->setParent(this);
+            this->button_ok->setParent(this);
+            this->button_no->setParent(this);
             children_.push_back(this->title);
             children_.push_back(this->button_ok);
             children_.push_back(this->button_no);
@@ -81,6 +85,14 @@ class ColorDialog : public Widget {
 
         void causeOnPressStart() override;
         void render() override;
+
+        // キーボード/コントローラー: 色の格子そのものがフォーカスを受け、矢印で色を選ぶ(下の端からはボタンへ)。
+        // 決定でOK、Esc(Back)でキャンセル。枠は選んでいる色のマスに自分で描く
+        bool focusableByDefault() const override { return true; }
+        bool drawsOwnFocus() const override { return true; }
+        Rect focusRect() const override;
+        bool onFocusKey(FocusKey key) override;
+        void onFocusChanged(bool) override { this->needsRender(); }
 
         WidgetType getWidgetType() const override { return WidgetType::ColorDialog; }
 

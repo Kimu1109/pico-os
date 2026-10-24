@@ -486,6 +486,7 @@ void MailScene::openSettings(){
 
 void MailScene::openMsUserDialog(){
     auto* dialog = new InputDialog("Microsoft のメールアドレス(例: you@outlook.jp):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     if(this->client.config().auth == ImapClient::Auth::Microsoft) dialog->setInput(this->client.config().user.c_str());
     dialog->setVisible(true);
@@ -501,6 +502,7 @@ void MailScene::openMsUserDialog(){
 void MailScene::openMsClientIdDialog(){
     //Microsoft Entra に登録したアプリのID(docs/design/apps-online.md「メール」)。前に入れたものを初期値に
     auto* dialog = new InputDialog("アプリ(クライアント)ID(Microsoft Entra に登録したもの):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(this->client.config().oauth.client_id.c_str());
     dialog->setVisible(true);
@@ -533,6 +535,7 @@ void MailScene::openHostDialog(){
         if(c.port != ImapClient::kDefaultPort) current.appendFormat(":%u", (unsigned)c.port);
     }
     auto* dialog = new InputDialog("IMAPサーバ(例: imap.gmail.com。ポートが993以外なら :番号):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(current.c_str());
     dialog->setVisible(true);
@@ -550,6 +553,7 @@ void MailScene::openHostDialog(){
 
 void MailScene::openUserDialog(){
     auto* dialog = new InputDialog("ユーザー名(ふつうはメールアドレス):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(this->client.config().user.c_str());
     dialog->setVisible(true);
@@ -567,6 +571,7 @@ void MailScene::openPasswordDialog(){
     const bool keep = !this->client.config().password.empty() && this->client.config().user == this->input_user;
     auto* dialog = new InputDialog(keep ? "パスワード(Gmailはアプリパスワード。空欄で変更なし):"
                                         : "パスワード(Gmailはアプリパスワード):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog, keep](bool is_submit){

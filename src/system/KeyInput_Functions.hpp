@@ -26,10 +26,13 @@
 // - 列は kQueueSize 件の固定長。溢れた分は捨てる(DroppedCount() で数える)
 //
 // ---- 届け先(Update()、KeyInput_Dispatch.cpp) ----
-// 1. 今の画面(Scene::onKey())。SSH(シェルへ送る)・テキストエディタ(↑↓、Ctrl+S)等が先に取る
+// 1. 今の画面(Scene::onKey())。SSH(シェルへ送る)・テキストエディタ(↑↓、Ctrl+S)等が先に取る。
+//    ダイアログを開いている間はメディアキーだけ(ダイアログが先に取る)
 // 2. 開いているオンスクリーンキーボードのキー盤(KeyboardPanel::onPhysicalKey())。
-//    Textbox/InputDialog/チャット等、キーボードを開いて入力する所はどこでもそのまま打てる
-// 3. どちらも取らなければウィジェットのフォーカスへ(Tab・矢印・Enter・Space・Esc。FocusFunctions)。それ以外は捨てる
+//    Textbox/InputDialog/チャット等、キーボードを開いて入力する所はどこでもそのまま打てる。
+//    1行の入力欄をEnterで決めたら、持ち主のダイアログへ「決定」(FocusKey::Submit)
+// 3. フォーカスのある入力欄(Textbox/NumberInput)へ打った文字は、キーボードを開いて渡す
+// 4. どれも取らなければウィジェットのフォーカスへ(Tab・矢印・Enter・Space・Esc。FocusFunctions)。それ以外は捨てる
 // ただし先に:
 // - 日本語入力の入り切り(半角/全角・Ctrl+Space・Tabを素早く2回)は、日本語⇔英字のキー盤の切り替えにする
 // - 日本語のキー盤が読みを入力中/変換中なら、画面より先にキー盤へ配る(KeyboardPanel::wantsKeyFirst())
@@ -44,7 +47,8 @@ namespace KeyInputFunctions {
         Left, Right, Up, Down,
         Home, End, PageUp, PageDown,
         Zenhan,     // 半角/全角(日本語入力の入り切り)
-        // メディアキー(キーボードの再生/次の曲等。文字入力では使わず、画面の onKey() と Lua の on_key へ届く)
+        // メディアキー(キーボードの再生/次の曲等。文字入力では使わず、画面の onKey() と Lua の on_key へ届く)。
+        // 末尾に置くこと(配り先が PlayPause 以降をメディアキーとみなす)
         PlayPause, Stop, NextTrack, PrevTrack, VolumeUp, VolumeDown, Mute,
     };
 

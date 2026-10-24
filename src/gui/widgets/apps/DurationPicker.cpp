@@ -1,6 +1,7 @@
 #include "gui/widgets/apps/DurationPicker.hpp"
 
 #include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
 
@@ -159,6 +160,24 @@ void DurationPicker::causeOnPressEnd(){
     Widget::causeOnPressEnd();
 }
 
+bool DurationPicker::onFocusKey(FocusKey key){
+    if(!this->editable) return false;
+    switch(key){
+        case FocusKey::Up:    this->applyStep(this->focus_field, 1); return true;
+        case FocusKey::Down:  this->applyStep(this->focus_field, -1); return true;
+        case FocusKey::Left:
+        case FocusKey::Right: {
+            const int next = this->focus_field + (key == FocusKey::Left ? -1 : 1);
+            if(next < 0 || next > 2) return false;
+            this->focus_field = (int8_t)next;
+            this->needsRender();
+            return true;
+        }
+        case FocusKey::Activate: return true; //真ん中(分の数字)のタップは何もしないので、取るだけ
+        default: return false;
+    }
+}
+
 void DurationPicker::render(){
     // 長押しの連続加算は「描くかどうか」とは無関係に毎フレーム見る必要がある。
     // update()は非仮想なので、毎フレーム必ず呼ばれるrender()の入口を使う。
@@ -222,6 +241,15 @@ void DurationPicker::render(){
                 cx + kArrowW / 2, lay.arrow_down_y,
                 this->border_color
             );
+        }
+    }
+
+    // フォーカスの枠(キー/コントローラーで選んでいる桁の数字を囲む)
+    if(this->editable && FocusFunctions::ring_visible && FocusFunctions::focused == this){
+        const int x = lay.col_x[this->focus_field] - 2;
+        const int w = lay.col_w + 4;
+        for(int k = 0; k < FocusFunctions::kRingWidth; k++){
+            OSData::frame->drawRect(x + k, lay.digits_y - 2 + k, w - 2 * k, lay.digits_h + 4 - 2 * k, FocusFunctions::kRingColor);
         }
     }
 

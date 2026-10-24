@@ -39,6 +39,7 @@ class DurationPicker : public Widget, public IFontImplementation, public IBorder
         // ---- 長押しの連続加算 ----
         // 25分を1タップずつ積むのは現実的でないので、押しっぱなしで進み続けるようにする
         int repeat_field = -1; // -1 = 押していない
+        int8_t focus_field = 0; // キー/コントローラーで選んでいる桁(0=時 1=分 2=秒)
         int repeat_step  = 0;  // +1 / -1
         unsigned long repeat_started_ms = 0;
         unsigned long repeat_last_ms    = 0;
@@ -88,6 +89,13 @@ class DurationPicker : public Widget, public IFontImplementation, public IBorder
         void causeOnPressEnd() override;
 
         void render() override;
+
+        // キーボード/コントローラー: ←→で桁を選び、↑↓でその桁を進める/戻す(▲▼を押したのと同じ)。
+        // 端の桁より外の向きはフォーカスを隣へ。編集できないとき(カウントダウン中)は受けない
+        bool focusableByDefault() const override { return this->editable; }
+        bool drawsOwnFocus() const override { return true; }
+        bool onFocusKey(FocusKey key) override;
+        void onFocusChanged(bool) override { this->needsRender(); }
 
         WidgetType getWidgetType() const override { return WidgetType::DurationPicker; }
 

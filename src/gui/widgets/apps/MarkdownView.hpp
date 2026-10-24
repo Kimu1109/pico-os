@@ -307,4 +307,22 @@ class MarkdownView : public Widget {
         // 将来の scrollToOffset() (検索結果やアンカーへ飛ぶ) の土台でもある。
         int getScrollY() const { return scroll_y; }
         void setScrollY(int y);
+        // dyだけスクロールする(端で止まる)。動いたらtrue
+        bool scrollBy(int dy){
+            const int before = scroll_y;
+            setScrollY(scroll_y + dy);
+            return scroll_y != before;
+        }
+
+        // ---------- キーボード/コントローラー ----------
+        // ↑↓でスクロール(端より先はフォーカスが隣へ)。決定は取るだけ(真ん中のタップにすると
+        // たまたまそこにあるリンクを開いてしまう)
+        static constexpr int kKeyScrollStep = 32;
+        bool focusableByDefault() const override { return true; }
+        bool onFocusKey(FocusKey key) override {
+            if(key == FocusKey::Activate) return true;
+            if(key == FocusKey::Up) return scrollBy(-kKeyScrollStep);
+            if(key == FocusKey::Down) return scrollBy(kKeyScrollStep);
+            return false;
+        }
 };

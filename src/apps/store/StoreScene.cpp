@@ -377,6 +377,7 @@ void StoreScene::confirmRemove(){
 void StoreScene::openSettings(){
     if(!this->store || this->store->busy()) return;
     auto* dialog = new InputDialog("配布元のURL:", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     dialog->setInput(this->store->baseUrl());
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);

@@ -288,6 +288,7 @@ void SettingsScene::openWifiPasswordDialog(){
               this->pending_wifi_ssid.c_str());
 
     auto* dialog = new InputDialog(label, true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){

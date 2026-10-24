@@ -84,6 +84,14 @@ class MonthGrid : public Widget, public IBorderColor {
         void causeOnPressStart() override;
         void render() override;
 
+        // キーボード/コントローラー: ←→で1日、↑↓で1週ずつ選ぶ日を動かす(タップで選んだのと同じく
+        // on_select_dayを呼ぶ)。月の外へ出る向きはフォーカスを隣(前月/次月のボタン等)へ。枠は選んでいる日に描く
+        bool focusableByDefault() const override { return true; }
+        bool drawsOwnFocus() const override { return true; }
+        Rect focusRect() const override;
+        bool onFocusKey(FocusKey key) override;
+        void onFocusChanged(bool) override { this->needsRender(); }
+
         WidgetType getWidgetType() const override { return WidgetType::MonthGrid; }
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 

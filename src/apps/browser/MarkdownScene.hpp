@@ -211,4 +211,6 @@ class MarkdownScene : public Scene {
         void onEnter() override;
         void onExit() override;
         void onUpdate() override;
+        // PageUp/PageDown/Home/End=本文のスクロール、Alt+←→/Backspace=戻る/進む、Ctrl+R=更新、Ctrl+F=検索
+        bool onKey(const KeyInputFunctions::Event& ev) override;
 };

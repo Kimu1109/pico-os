@@ -1,6 +1,7 @@
 #include "gui/core/Widget_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "gui/core/Focus_Functions.hpp"
+#include "gui/core/Keyboard_Functions.hpp"
 #include "config/LGFX_Config.hpp"
 #include "OS_Data.hpp"
 #include <SPI.h>
@@ -413,8 +414,10 @@ void PICO_GFX::FlushDirty() {
         isDirtyDeactivates = false;
 
         // (c) フォーカスの枠(キー/コントローラーで動かしたときだけ)。子に塗りつぶされないよう全部の後に、
-        //     ウィジェットの矩形の内側へ描く(外へはみ出すとdirty矩形の外が汚れるため)
-        if (Widget* f = FocusFunctions::RingTarget()) {
+        //     ウィジェットの矩形の内側へ描く(外へはみ出すとdirty矩形の外が汚れるため)。
+        //     画面を覆うキーボード(据え置きでないもの)を開いている間は、その上に枠が浮かないよう描かない
+        Widget* ring = (KeyboardFunctions::IsVisible() && !KeyboardFunctions::IsDocked()) ? nullptr : FocusFunctions::RingTarget();
+        if (Widget* f = ring) {
             const Rect clip = f->clippedScreenRect().intersection(d);
             if (clip.w > 0 && clip.h > 0) {
                 const Rect r = f->getScreenRect();

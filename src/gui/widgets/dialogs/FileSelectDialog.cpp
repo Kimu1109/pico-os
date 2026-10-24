@@ -1,7 +1,13 @@
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
 #include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_IO.hpp"
+
+bool FileSelectDialog::onFocusKey(FocusKey key){
+    if(key == FocusKey::Back) return FocusFunctions::Press(this->button_no);
+    return false;
+}
 
 void FileSelectDialog::render(){
     if(!this->visible) return;

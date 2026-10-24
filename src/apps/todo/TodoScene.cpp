@@ -369,6 +369,7 @@ void TodoScene::openDueDialog(){
 void TodoScene::openSettings(){
     //Wi-Fiパスワード・チャットのトークンと同じ扱い: 今のトークンは平文で持たないので空欄から始まる
     auto* dialog = new InputDialog("Todoistのトークン(空欄で変更なし):", true);
+    dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){

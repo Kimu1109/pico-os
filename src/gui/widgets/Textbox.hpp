@@ -7,6 +7,9 @@ template<size_t N>
 class Textbox : public Label<N>, public ITextInputTarget {
     private:
         bool is_single_line = false;
+        // 英数字の欄(パスワード・URL・サーバ名等)。キーボードを日本語でなく英字で開く
+        // (物理キーボードで打ったローマ字がかなに変わらないように)
+        bool ascii_input = false;
 
         // 入力欄がキーボードを閉じて確定した(onHide())ときに呼ばれる。
         // 1文字ごとには呼ばない(onTextChanged()自体が「入力途中は背景を更新しない」
@@ -44,6 +47,9 @@ class Textbox : public Label<N>, public ITextInputTarget {
             this->is_single_line = is_single_line;
         }
 
+        void setAsciiInput(bool value){ this->ascii_input = value; }
+        bool getAsciiInput() const { return this->ascii_input; }
+
         void setOnTextChanged(std::function<void()> callback){
             this->on_text_changed = callback;
         }
@@ -56,4 +62,5 @@ class Textbox : public Label<N>, public ITextInputTarget {
 
         WidgetType getWidgetType() const override { return WidgetType::Textbox; }
         bool focusableByDefault() const override { return true; }
+        bool takesTypedText() const override { return true; }
 };

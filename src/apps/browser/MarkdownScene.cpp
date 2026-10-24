@@ -537,6 +537,32 @@ void MarkdownScene::showDocument(){
     this->refreshChrome();
 }
 
+bool MarkdownScene::onKey(const KeyInputFunctions::Event& ev){
+    using K = KeyInputFunctions::Key;
+    if(!this->view) return false;
+    const int page = this->view->getLocalRect().h - 20;
+    if(ev.ctrl() && !ev.alt() && ev.key == K::Char){
+        const uint32_t c = (ev.cp >= 'A' && ev.cp <= 'Z') ? ev.cp + ('a' - 'A') : ev.cp;
+        if(c == 'r'){ this->reloadCurrent(); return true; }
+        if(c == 'f'){ this->openSearchInput(); return true; }
+        return false;
+    }
+    if(ev.alt() && !ev.ctrl()){
+        if(ev.key == K::Left){ this->goBack(); return true; }
+        if(ev.key == K::Right){ this->goForward(); return true; }
+        return false;
+    }
+    if(ev.ctrl() || ev.alt()) return false;
+    switch(ev.key){
+        case K::PageUp:    this->view->scrollBy(-page); return true;
+        case K::PageDown:  this->view->scrollBy(page); return true;
+        case K::Home:      this->view->setScrollY(0); return true;
+        case K::End:       this->view->scrollBy(0x7FFF); return true;
+        case K::Backspace: this->goBack(); return true;
+        default:           return false;
+    }
+}
+
 void MarkdownScene::goBack(){
     if(!canGoBack()) return;
     this->rememberScroll();

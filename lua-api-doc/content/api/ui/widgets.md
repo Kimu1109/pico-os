@@ -127,11 +127,13 @@ pico.set_dots(grid, { [3] = {12, 9}, [14] = 10 })  -- 3日に赤と青、14日�
 受けないウィジェット(`focusable` が `false`・見えない・無効・開いているダイアログの外)へは移らず `false` を返します。
 
 フォーカスはOSが動かします。**Tab / Shift+Tab**(コントローラーは R / L)で読む順(上から、同じ高さなら左から)に、**矢印 / 十字キー**でその向きの一番近いものへ移り、
-**Enter / Space**(A)で押します(真ん中をタップしたのと同じで、`press_start` / `press_end` が届きます)。**Esc**(B)は開いたドロップダウンを閉じます。
+**Enter / Space**(A)で押します(真ん中をタップしたのと同じで、`press_start` / `press_end` が届きます)。**Esc**(B)は開いたドロップダウンを閉じ、ダイアログ(`pico.show_*`)ならキャンセルします。
+フォーカスのある `Textbox` / `NumberInput` で文字を打つと、キーボードが開いてそのまま入ります。
 枠はキー/ボタンで動かしたときだけ出て、画面をタッチすると消えます(タッチしたものがフォーカスを持ちます)。
-ダイアログが開いている間はその中だけを動き、閉じると開く前のものへ戻ります。
+ダイアログが開くとフォーカスは中(入力欄があれば入力欄)へ移り、その間はその中だけを動き、閉じると開く前のものへ戻ります。
+`pico.show_input` の1行の入力欄はEnterで決定、Escでキャンセルです。
 
-受ける種類の既定は `Button` `Checkbox` `Textbox` `NumberInput` `NumberSlider`(←→で値)`ScrollList`(↑↓で選び、決定で2回目のタップ)`DropdownMenu`(決定で開き、↑↓で選ぶ)`TabBar`(←→でタブ)。
+受ける種類の既定は `Button` `Checkbox` `Textbox` `NumberInput` `NumberSlider`(←→で値)`ScrollList`(↑↓で選び、決定で2回目のタップ)`DropdownMenu`(決定で開き、↑↓で選ぶ)`TabBar`(←→でタブ)`MarkdownView`(↑↓でスクロール)`MonthGrid`(←→で1日・↑↓で1週)`DurationPicker`(←→で桁・↑↓で増減。`editable` が偽なら受けない)。
 ほかの種類(`Canvas` 等)も `pico.set(id, "focusable", true)` で受けるようにできます。
 `pico.pad_*` を使ったアプリでは、コントローラーのボタンはフォーカスを動かしません(ゲームの操作とぶつからないように)。キーボードの矢印は `pico.on_key` で取れば(`true` を返せば)動きません。
 

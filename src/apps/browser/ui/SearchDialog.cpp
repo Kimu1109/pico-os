@@ -1,6 +1,12 @@
 #include "apps/browser/ui/SearchDialog.hpp"
 #include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
+
+bool SearchDialog::onFocusKey(FocusKey key){
+    if(key == FocusKey::Back) return FocusFunctions::Press(this->close_button);
+    return false;
+}
 
 void SearchDialog::render(){
     if(!needs_redraw) return;

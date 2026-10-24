@@ -9,7 +9,7 @@ class Statusbar : public Widget {
         char HH_mm[6];
 
         unsigned long update_interval_time = 0;
-        //音声出力の状態(SoundFunctions::State)。変わったフレームで描き直す
+        //音声出力の状態(下位4bitがSoundFunctions::State、上位4bitがSoundFunctions::Route)。変わったフレームで描き直す
         uint8_t last_sound_state = 0xFF;
         bool last_pad_connected = false;
         //未読の通知の数。変わったフレームで描き直す

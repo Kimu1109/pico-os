@@ -38,6 +38,7 @@ tablerのアイコンは24pxグリッド・`stroke-width="2"`・丸キャップ�
 |---|---|---|
 | `signal-bars-1.svg` 〜 `signal-bars-4.svg` | `IconID::WifiSignal1` 〜 `WifiSignal4` | 電波強度。棒 x=1,5,9,13 / 幅2 / 高さ4,7,10,13 |
 | `battery-charging.svg` | `IconID::BatteryCharging` | 給電中の電池(輪郭+稲妻)。ステータスバーでUSB給電中に残量アイコンの代わりに出す |
+| `headphones.svg` | `IconID::Headphones` | イヤホン(バンド+耳当て)。ステータスバーで、音の出力先がイヤホンのときにスピーカーの代わりに出す |
 
 enum名が `WifiSignal*` のままなのは、意味(Wi-Fiの電波強度)が変わっておらず、
 絵柄だけを差し替えたため。

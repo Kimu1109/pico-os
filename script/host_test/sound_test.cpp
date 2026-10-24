@@ -23,6 +23,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 void LogFunctions::Log(LogType, const char*, ...){}
@@ -309,11 +310,13 @@ static void TestSynth(){
 // SoundFunctions(1コア目と2コア目)
 // ================================================================
 
-// 検出ピンの状態(true=アンプが刺さっている=LOW)
+// 検出ピンの状態(true=アンプが刺さっている=LOW / イヤホンが差してある=LOW)
 static bool plugged = false;
+static bool hp_plugged = false;
 static int ReadHook(int pin){
-    if(pin != AUDIO_DETECT) return -1;
-    return plugged ? LOW : HIGH;
+    if(pin == AUDIO_DETECT)    return plugged ? LOW : HIGH;
+    if(pin == AUDIO_HP_DETECT) return hp_plugged ? LOW : HIGH;
+    return -1;
 }
 
 static I2S& Out(){ return *I2S::last; }
@@ -670,10 +673,130 @@ static void TestSoundFunctions(){
     check(Out().running && !IsPowerSave(), "省電力を解けば動き直す");
 }
 
+// 検出の採用まで(kDetectStableCount 回)進める
+static void Settle(unsigned long& now){
+    for(int i = 0; i < kDetectStableCount; i++){ now += kDetectIntervalMs; Step(now); }
+}
+
+static bool SpeakerPinOn(){ return HostGpio::last_written[AUDIO_SHUTDOWN] == HIGH; }
+static bool HeadphonePinOn(){ return HostGpio::last_written[AUDIO_HP_MUTE] == HIGH; }
+
+// イヤホン(PCM5102A)とスピーカー(MAX98357A)の切り替え。TestSoundFunctions() の続き(アンプが刺さって鳴っている状態)から始める
+static void TestRoute(){
+    unsigned long now = 100000;
+    printf("--- 出力先: 両方つないでいて、イヤホンを差していない ---\n");
+    //SetupAt()は休止端子をLOWへ戻すので、I2Sを止めた状態から始める(実機では起動時に1回だけ呼ぶ)
+    plugged = false; hp_plugged = false;
+    Settle(now);
+    HostSd::files["/sys/sound.cfg"] = "volume = 60\n";
+    plugged = true;
+    SetupAt(now);
+    Settle(now);
+    check(GetRouteMode() == RouteMode::Auto && GetRoute() == Route::Speaker, "既定はautoでスピーカー");
+    check(GetState() == State::Active && Out().running, "鳴らせる");
+    check(SpeakerPinOn() && !HeadphonePinOn(), "MAX98357Aだけ鳴らす(PCM5102Aは消音)");
+    check(GetVolume() == 60 && GetVolumeFor(Route::Headphone) == kDefaultHeadphoneVolume, "音量は鳴らす先ごと(イヤホンは既定25)");
+
+    printf("--- イヤホンを差すとイヤホンへ移る ---\n");
+    const int begins = Out().begin_count;
+    const int ends = Out().end_count;
+    hp_plugged = true;
+    now += kDetectIntervalMs; Step(now);
+    check(GetRoute() == Route::Speaker, "1回だけでは移らない(ばたつき除け)");
+    Settle(now);
+    check(IsHeadphoneInserted() && GetRoute() == Route::Headphone, "採用したらイヤホン");
+    check(!SpeakerPinOn() && HeadphonePinOn(), "MAX98357Aを止めてPCM5102Aを鳴らす");
+    check(Out().running && Out().begin_count == begins && Out().end_count == ends, "I2Sは開き直さない(音は途切れない)");
+    check(GetVolume() == kDefaultHeadphoneVolume, "音量はイヤホンの値");
+    SetVolume(30);
+    check(GetVolumeFor(Route::Headphone) == 30 && GetVolumeFor(Route::Speaker) == 60, "SetVolume()は今の鳴らす先だけを変える");
+    check(strcmp(VolumeConfigKey(Route::Headphone), "hp-volume") == 0 && strcmp(VolumeConfigKey(Route::Speaker), "volume") == 0,
+          "保存するキー");
+    {
+        //イヤホンの音量(30)で鳴る: 振幅が kChannelAmplitude×30% 付近
+        Out().consume(Out().queued.size());
+        Step(now);
+        Out().consume(Out().queued.size());
+        const size_t from = Out().written.size();
+        Beep(1000, 50);
+        DrainTone(now);
+        int peak = 0;
+        for(size_t i = from; i < Out().written.size(); i++) peak = std::max(peak, abs((int)Left(Out().written[i])));
+        const int expect = ChipSynth::Engine::kChannelAmplitude * 30 / 100;
+        printf("       振幅 %d (期待 約%d)\n", peak, expect);
+        check(abs(peak - expect) <= expect / 10 + 2, "イヤホンの音量で鳴る");
+    }
+
+    printf("--- 電池駆動中の頭打ちはスピーカーだけ ---\n");
+    setenv("PICOOS_BATTERY_PERCENT", "80", 1);
+    BatteryFunctions::Setup();
+    UpdateAt(now);
+    check(!IsBatteryVolumeCapActive(), "イヤホンの間は掛けない");
+
+    printf("--- イヤホンを抜くとスピーカーへ戻る ---\n");
+    hp_plugged = false;
+    Settle(now);
+    check(GetRoute() == Route::Speaker && SpeakerPinOn() && !HeadphonePinOn(), "スピーカーへ戻る");
+    check(GetVolume() == 60, "音量はスピーカーの値へ戻る");
+    check(IsBatteryVolumeCapActive(), "スピーカーなら電池駆動中は頭打ち");
+    setenv("PICOOS_BATTERY_PERCENT", "100", 1);
+    BatteryFunctions::Setup();
+    UpdateAt(now);
+
+    printf("--- イヤホンだけ(アンプ無し) ---\n");
+    plugged = false; hp_plugged = false;
+    Settle(now);
+    check(GetState() == State::Disconnected && !Out().running, "差していなければ未接続(I2Sを止める)");
+    check(!SpeakerPinOn() && !HeadphonePinOn(), "どちらの休止端子も止める");
+    hp_plugged = true;
+    Settle(now);
+    check(GetRoute() == Route::Headphone && GetState() == State::Active && Out().running, "差せば鳴らせる");
+    check(!IsSpeakerConnected() && !SpeakerPinOn() && HeadphonePinOn(), "PCM5102Aだけ鳴らす");
+    hp_plugged = false;
+    Settle(now);
+    check(GetRoute() == Route::Speaker && GetState() == State::Disconnected && !Out().running,
+          "抜けば(つながっていない)スピーカーを選んで未接続");
+
+    printf("--- スピーカーだけ(イヤホンの配線無し): 今までどおり ---\n");
+    plugged = true;
+    Settle(now);
+    check(GetRoute() == Route::Speaker && GetState() == State::Active && SpeakerPinOn() && !HeadphonePinOn(), "スピーカーで鳴る");
+
+    printf("--- route = speaker / headphone(決め打ち) ---\n");
+    hp_plugged = true;
+    SetRouteMode(RouteMode::Speaker);
+    Settle(now);
+    check(GetRoute() == Route::Speaker && SpeakerPinOn() && !HeadphonePinOn(), "speakerはイヤホンを差してもスピーカー");
+    hp_plugged = false;
+    plugged = false;
+    SetRouteMode(RouteMode::Headphone);
+    Settle(now);
+    check(GetRoute() == Route::Headphone && IsConnected() && Out().running && HeadphonePinOn(),
+          "headphoneは差し込み検出が無くてもイヤホンで鳴らす(検出接点の無いジャック用)");
+    plugged = true;
+    SetRouteMode(RouteMode::Auto);
+    Settle(now);
+    check(GetRoute() == Route::Speaker && SpeakerPinOn(), "autoへ戻すとスピーカー");
+
+    printf("--- sound.cfg: route / hp-volume ---\n");
+    HostSd::files["/sys/sound.cfg"] = "volume = 60\nhp-volume = 40\nroute = headphone\n";
+    SetupAt(now);
+    check(GetRouteMode() == RouteMode::Headphone && GetRoute() == Route::Headphone, "routeを読む");
+    check(GetVolume() == 40 && GetVolumeFor(Route::Speaker) == 60, "hp-volumeを読む");
+    HostSd::files["/sys/sound.cfg"] = "volume = 60\nroute = earphone\n";
+    SetupAt(now);
+    check(GetRouteMode() == RouteMode::Auto, "読めない値・キーを消すとautoへ戻る");
+    check(GetVolumeFor(Route::Headphone) == kDefaultHeadphoneVolume, "hp-volumeを消すと既定へ戻る");
+    RouteMode m = RouteMode::Auto;
+    check(ParseRouteMode("speaker", m) && m == RouteMode::Speaker && strcmp(RouteModeName(m), "speaker") == 0, "名前と相互に変換");
+    check(!ParseRouteMode("", m) && m == RouteMode::Speaker, "読めなければそのまま");
+}
+
 int main(){
     TestSynth();
     testEngineStereo();
     TestSoundFunctions();
+    TestRoute();
 
     printf("\n%s (%d件の失敗)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

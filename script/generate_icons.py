@@ -203,6 +203,9 @@ ICONS: list[IconSpec] = [
 
     # --- 読書アプリ(2026-10-22)。末尾へ足すこと(上の【重要】参照) ---
     IconSpec("book",           str(ICON_DIR / "book.svg")),
+
+    # --- イヤホン(2026-10-24)。末尾へ足すこと(上の【重要】参照)。自作。ステータスバーの出力先 ---
+    IconSpec("headphones",     str(CUSTOM_DIR / "headphones.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

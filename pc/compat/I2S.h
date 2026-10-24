@@ -15,6 +15,11 @@
 //
 //   PICOOS_SOUND_STATE=disconnected ./pc/build/picoos_pc
 //
+// イヤホンの差し込み(AUDIO_HP_DETECT)は環境変数 PICOOS_HEADPHONE(Webは ?headphone=inserted)で決める。
+// 既定は差していない。PCではどちらへ向けてもSDLの同じ音声デバイスから鳴る(ステータスバーの絵と音量が変わる):
+//
+//   PICOOS_HEADPHONE = inserted … 差してある / none … 差していない(既定)
+//
 // ヘッドレス(SDL_VIDEODRIVER=offscreen)で音の中身を確かめるなら SDL_AUDIODRIVER=disk で
 // sdlaudio.raw へ書き出せる(SDL_DISKAUDIOFILE でファイル名を変えられる)。
 //
@@ -54,7 +59,7 @@
 
 #include "Arduino.h"
 #include "SdFat.h"      // PicoOsSdHost::root(sound.cfg を読むため)
-#include "consts.hpp"   // AUDIO_DETECT
+#include "consts.hpp"   // AUDIO_DETECT / AUDIO_HP_DETECT
 
 namespace PicoPcAudio {
 
@@ -137,9 +142,22 @@ namespace PicoPcAudio {
         return connected;
     }
 
+    // イヤホンが差してあるか(起動後に1回だけ決める)
+    inline bool HeadphoneInserted(){
+        static const bool inserted = [](){
+            const char* v = getenv("PICOOS_HEADPHONE");
+            if(!v || strcmp(v, "none") == 0) return false;
+            if(strcmp(v, "inserted") == 0) return true;
+            printf("[PC] PICOOS_HEADPHONE の値が不明です: %s (none として扱います)\n", v);
+            return false;
+        }();
+        return inserted;
+    }
+
     inline int ReadHook(int pin){
-        if(pin != AUDIO_DETECT) return -1;
-        return AmpConnected() ? LOW : HIGH;
+        if(pin == AUDIO_DETECT)     return AmpConnected() ? LOW : HIGH;
+        if(pin == AUDIO_HP_DETECT)  return HeadphoneInserted() ? LOW : HIGH;
+        return -1;
     }
 
     // このヘッダを取り込んだ時点(=Sound_Functions.cppの静的初期化)でフックを差し込む

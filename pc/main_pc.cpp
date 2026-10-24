@@ -344,6 +344,7 @@ namespace {
         { "render", "PICOOS_RENDER_DRIVER" },
         { "spi_wait", "PICOOS_SPI_WAIT" },
         { "sound", "PICOOS_SOUND_STATE" },
+        { "headphone", "PICOOS_HEADPHONE" },
         { "app",   "PICOOS_START_APP"   },
         { "scene", "PICOOS_START_SCENE" },
     };

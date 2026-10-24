@@ -22,6 +22,7 @@
 #include "net/Wifi_Profiles.hpp"
 #include "net/NetworkScan.hpp"
 #include "util/Net_Addr.hpp"
+#include "net/Captive_Portal.hpp"
 
 #include "devtools/DevTools_Functions.hpp"
 #include "services/PowerMenu_Functions.hpp"
@@ -58,9 +59,11 @@ void SettingsScene::refreshWifi(){
 
     const auto status  = NetworkFunctions::currentStatus;
     const bool enabled = NetworkFunctions::IsEnabled();
+    const auto internet = NetworkFunctions::internet;
     if((uint8_t)status != this->shown_status || !(this->shown_ssid == NetworkFunctions::currentSSID.c_str())
-        || enabled != this->shown_enabled){
+        || enabled != this->shown_enabled || (uint8_t)internet != this->shown_internet){
         this->shown_status = (uint8_t)status;
+        this->shown_internet = (uint8_t)internet;
         this->shown_ssid.assign(NetworkFunctions::currentSSID.c_str());
         this->shown_enabled = enabled;
         this->wifi_list_dirty = true; // 「接続中」の印と並び(接続できたら先頭へ繰り上がる)が変わる
@@ -75,9 +78,14 @@ void SettingsScene::refreshWifi(){
             case NS::OFF:
                 snprintf(buf, sizeof(buf), "OFF");
                 break;
-            case NS::SUCCESS:
-                snprintf(buf, sizeof(buf), "接続中: %s", this->shown_ssid.c_str());
+            case NS::SUCCESS: {
+                using IN = NetworkFunctions::Internet;
+                // 状態を前に置く(SSIDが長いと後ろは切れるため)
+                const char* head = (internet == IN::Portal) ? "要ログイン"
+                                 : (internet == IN::NoInternet) ? "外へ出られません" : "接続中";
+                snprintf(buf, sizeof(buf), "%s: %s", head, this->shown_ssid.c_str());
                 break;
+            }
             case NS::TRYING_CONNECT:
                 snprintf(buf, sizeof(buf), "接続しています: %s", this->shown_ssid.c_str());
                 break;
@@ -87,7 +95,14 @@ void SettingsScene::refreshWifi(){
                 break;
         }
         this->wifi_status_label->setText(buf);
-        this->wifi_status_label->setTextColor(status == NS::SUCCESS ? PICO_DARKGREEN : PICO_BLACK);
+        const bool portal = (status == NS::SUCCESS && internet == NetworkFunctions::Internet::Portal);
+        this->wifi_status_label->setTextColor(
+            portal || (status == NS::SUCCESS && internet == NetworkFunctions::Internet::NoInternet) ? PICO_MAROON
+            : status == NS::SUCCESS ? PICO_DARKGREEN : PICO_BLACK);
+        if(this->wifi_login_button){
+            this->wifi_login_button->setVisible(portal && this->tab == Tab::Wifi);
+            this->wifi_list_dirty = true; // 見出しの長さを切り替える
+        }
         this->refreshWifiInfo();
     }
 
@@ -128,7 +143,10 @@ void SettingsScene::rebuildWifiList(){
     else             this->wifi_list->clearSelectedIndex();
 
     char title[PICO_STR_M];
-    snprintf(title, sizeof(title), "保存済み %d/%d (2回タップで接続)", WifiProfiles::Count(), WifiProfiles::kMaxProfiles);
+    // [ログイン]が出ている間は見出しを短くする(右端にボタンが重なるため)
+    const bool login_shown = this->wifi_login_button && this->wifi_login_button->getVisible();
+    snprintf(title, sizeof(title), login_shown ? "保存済み %d/%d" : "保存済み %d/%d (2回タップで接続)",
+             WifiProfiles::Count(), WifiProfiles::kMaxProfiles);
     if(this->wifi_list_title) this->wifi_list_title->setText(title);
     this->wifi_list->needsRender();
 }
@@ -323,6 +341,105 @@ void SettingsScene::commitIpConfig(){
     this->showMessageLater(this->pending_ip.isDefault() ? "DHCPに戻しました" : "IPの設定を保存しました");
 }
 
+// ---------------------------------------------------------------------------
+// キャプティブポータルへのログイン: ページを取る→(空欄があれば1つずつ聞く/無ければ同意を確かめる)→送る→判定し直す
+// ---------------------------------------------------------------------------
+
+void SettingsScene::startCaptiveLogin(){
+    if(this->captive_login) return;
+    if(NetworkFunctions::internet != NetworkFunctions::Internet::Portal || NetworkFunctions::portalUrl.empty()){
+        this->showMessageLater("ログインの要るネットワークではありません");
+        return;
+    }
+    this->captive_login = new CaptivePortal::CaptiveLogin();
+    this->captive_login->begin(NetworkFunctions::portalUrl.c_str());
+    if(this->wifi_status_label) this->wifi_status_label->setText("ポータルのページを読んでいます...");
+}
+
+void SettingsScene::endCaptiveLogin(){
+    delete this->captive_login;
+    this->captive_login = nullptr;
+    this->shown_status = 0xFF; // 状態の1行を書き直す
+}
+
+void SettingsScene::pollCaptiveLogin(){
+    if(!this->captive_login) return;
+    PowerFunctions::KeepAwake();
+    using Phase = CaptivePortal::CaptiveLogin::Phase;
+    const Phase before = this->captive_login->phase();
+    this->captive_login->update();
+    const Phase now = this->captive_login->phase();
+    if(now == before && now != Phase::Failed && now != Phase::Done) return;
+
+    switch(now){
+        case Phase::NeedsInput:
+            this->pending = Pending::CaptiveInput;
+            break;
+        case Phase::Ready:
+            if(before == Phase::Fetching) this->confirmCaptiveSubmit(); // 空欄の無いフォーム = 同意だけ
+            break;
+        case Phase::Done:
+            this->endCaptiveLogin();
+            NetworkFunctions::RecheckInternet();
+            this->showMessageLater("送信しました。インターネットへ出られるか確かめています");
+            break;
+        case Phase::Failed: {
+            char msg[PICO_STR_LL];
+            snprintf(msg, sizeof(msg), "ログインできませんでした: %s", this->captive_login->failText());
+            this->endCaptiveLogin();
+            this->showMessageLater(msg);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+void SettingsScene::openCaptiveInputDialog(){
+    if(!this->captive_login) return;
+    const int idx = this->captive_login->missingIndex(0);
+    if(idx < 0){ this->submitCaptiveLogin(); return; }
+    const CaptivePortal::Field& f = this->captive_login->form().fields[idx];
+    char label[PICO_STR_LL];
+    snprintf(label, sizeof(label), "ポータルの入力: %s%s", f.label.c_str(),
+             f.kind == CaptivePortal::FieldKind::Password ? "(パスワード)" : "");
+    auto* dialog = new InputDialog(label, true, "次へ", "やめる");
+    dialog->setAsciiInput(true);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog, idx](bool is_submit){
+        if(!is_submit || !this->captive_login){
+            this->endCaptiveLogin();
+        }else{
+            const FixedString<PICO_STR_LL> input = dialog->getInput();
+            this->captive_login->setValue(idx, input.c_str());
+            if(this->captive_login->missingIndex(0) >= 0) this->pending = Pending::CaptiveInput; // 次の空欄
+            else this->submitCaptiveLogin();
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void SettingsScene::confirmCaptiveSubmit(){
+    char msg[PICO_STR_LL];
+    snprintf(msg, sizeof(msg), "「%s」のポータルの利用規約に同意して接続しますか?", NetworkFunctions::currentSSID.c_str());
+    auto* dialog = new MsgDialog(msg, "やめる", "同意する");
+    dialog->setVisibleIcon(false);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_ok){
+        if(is_ok) this->submitCaptiveLogin();
+        else      this->endCaptiveLogin();
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void SettingsScene::submitCaptiveLogin(){
+    if(!this->captive_login) return;
+    if(!this->captive_login->submit()) return; // 失敗はpollCaptiveLogin()がFailedで拾う
+    if(this->wifi_status_label) this->wifi_status_label->setText("ポータルへ送っています...");
+}
+
 void SettingsScene::showMessageLater(const char* text){
     this->pending_message.assign(text);
     this->pending = Pending::Message;
@@ -503,6 +620,19 @@ void SettingsScene::buildWifiTab(const Layout& lay){
     this->wifi_list_title = makeRowLabel<PICO_STR_M>(left, rowY(1), full_w, "");
     this->wifi_list_title->setTextColor(PICO_DARKGREY);
     addToTab(Tab::Wifi, this->wifi_list_title);
+
+    // ポータルと判定されたときだけ見出しの右端に出す[ログイン]
+    this->wifi_login_button = new Button(0, 0, "ログイン");
+    this->wifi_login_button->setFontSize(FontFn::Small);
+    this->wifi_login_button->setAllowTextSpacing(false);
+    this->wifi_login_button->setH(EDIT_BTN_H + Button::kFrameExtraTight);
+    {
+        const Rect box = this->wifi_login_button->getLocalRect();
+        this->wifi_login_button->setX((int16_t)(left + full_w - box.w));
+        this->wifi_login_button->setY((int16_t)(rowY(1) - 3));
+    }
+    this->wifi_login_button->setOnPressEnd([this](){ this->startCaptiveLogin(); });
+    addToTab(Tab::Wifi, this->wifi_login_button);
 
     // 下段のボタン: [検索][追加][接続][IP][削除]
     constexpr int kWifiButtons = 5;

@@ -4,6 +4,8 @@
 #include "storage/SD_Path.hpp"
 #include "net/Wifi_Profiles.hpp"
 #include "util/Net_Addr.hpp"
+#include "net/Captive_Portal.hpp"
+#include "system/Notification_Functions.hpp"
 
 #include <SimpleMDNS.h>
 
@@ -20,6 +22,88 @@ IconID NetworkFunctions::GetWifiStateIconID(){
 
 namespace {
     bool mdns_running = false;
+
+    // ---- キャプティブポータルの判定 ----
+    constexpr unsigned long kProbeDelayMs = 1500;    // 繋がってから(DHCP・DNSが落ち着くまで)
+    constexpr unsigned long kProbeRetryMs = 60000;   // ポータル/出られないときの判定し直し
+    CaptivePortal::CaptiveProbe* probe = nullptr;    // 判定の間だけ new する(約2KB)
+    unsigned long probe_at = 0;                      // 次に判定する時刻(0 = 予定なし)
+    bool portal_notified = false;                    // この接続でポータルの通知を出したか
+
+    bool ProbeEnabled(){ return !(NetworkFunctions::probeUrl == "off"); }
+
+    void ResetInternet(){
+        delete probe;
+        probe = nullptr;
+        probe_at = 0;
+        portal_notified = false;
+        NetworkFunctions::internet = NetworkFunctions::Internet::Unknown;
+        NetworkFunctions::portalUrl.clear();
+    }
+
+    void ScheduleProbe(unsigned long delay_ms){
+        if(!ProbeEnabled()) return;
+        probe_at = millis() + delay_ms;
+        if(probe_at == 0) probe_at = 1;
+    }
+
+    void NotifyPortal(){
+        if(portal_notified) return;
+        portal_notified = true;
+        NotificationFunctions::Content c;
+        NotificationFunctions::Sanitize(c.title, "Wi-Fiのログインが必要です");
+        char body[PICO_STR_L];
+        snprintf(body, sizeof(body), "%s: 設定アプリのWi-Fiから[ログイン]", NetworkFunctions::currentSSID.c_str());
+        NotificationFunctions::Sanitize(c.body, body);
+        c.tag.assign("captive-portal");
+        c.app.assign("設定");
+        NotificationFunctions::Post(c);
+    }
+
+    void UpdateProbe(){
+        using NetworkFunctions::Internet;
+        if(probe){
+            probe->update();
+            if(probe->getStatus() == TaskTools::PROCESSING) return;
+            const CaptivePortal::Verdict v = (probe->getStatus() == TaskTools::SUCCESS)
+                ? probe->verdict() : CaptivePortal::Verdict::NoInternet;
+            switch(v){
+                case CaptivePortal::Verdict::Online:
+                    if(NetworkFunctions::internet != Internet::Online) LOG_SYS_OK("Network: インターネットへ出られます");
+                    NetworkFunctions::internet = Internet::Online;
+                    NetworkFunctions::portalUrl.clear();
+                    probe_at = 0;
+                    break;
+                case CaptivePortal::Verdict::Portal:
+                    NetworkFunctions::internet = Internet::Portal;
+                    NetworkFunctions::portalUrl.assign(probe->portalUrl().c_str());
+                    LOG_SYS_WARN("Network: ログインが必要なWi-Fiです (%s)", NetworkFunctions::portalUrl.c_str());
+                    NotifyPortal();
+                    ScheduleProbe(kProbeRetryMs);
+                    break;
+                case CaptivePortal::Verdict::NoInternet:
+                    NetworkFunctions::internet = Internet::NoInternet;
+                    LOG_SYS_WARN("Network: Wi-Fiには繋がりましたがインターネットへ出られません");
+                    ScheduleProbe(kProbeRetryMs);
+                    break;
+            }
+            delete probe;
+            probe = nullptr;
+            return;
+        }
+        if(probe_at == 0 || (long)(millis() - probe_at) < 0) return;
+        probe_at = 0;
+        probe = new CaptivePortal::CaptiveProbe();
+        if(NetworkFunctions::internet != Internet::Portal && NetworkFunctions::internet != Internet::NoInternet){
+            NetworkFunctions::internet = Internet::Checking;
+        }
+        if(!probe->begin(NetworkFunctions::probeUrl.c_str())){
+            LOG_SYS_WARN("Network: captive-probe-url を読めません: %s", NetworkFunctions::probeUrl.c_str());
+            delete probe;
+            probe = nullptr;
+            NetworkFunctions::internet = Internet::Unknown;
+        }
+    }
 
     IPAddress ToIp(uint32_t a){
         return IPAddress(NetAddr::Octet(a, 0), NetAddr::Octet(a, 1), NetAddr::Octet(a, 2), NetAddr::Octet(a, 3));
@@ -76,6 +160,7 @@ namespace {
         LOG_SYS_MSG("Network Service: Connecting to Wi-Fi (%s).", ssid);
         NetworkFunctions::currentSSID.assign(ssid);
         NetworkFunctions::currentPassword.assign(password);
+        ResetInternet();
         ApplyIpConfig(IpConfigFor(ssid));
         WiFi.beginNoBlock(ssid, password);
         NetworkFunctions::timer = millis();
@@ -94,12 +179,15 @@ namespace {
 }
 
 void NetworkFunctions::Setup(){
+    probeUrl.assign(CaptivePortal::kDefaultProbeUrl);
     PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_NETWORK_CFG,
         [&](const char* key, const char* value){
             if(strcmp(key, "ntp-server-1") == 0){
                 ntpServer1.assign(value);
             }else if(strcmp(key, "ntp-server-2") == 0){
                 ntpServer2.assign(value);
+            }else if(strcmp(key, "captive-probe-url") == 0){
+                if(value[0]) probeUrl.assign(value);
             }else if(strcmp(key, "hostname") == 0){
                 if(NetAddr::IsValidHostname(value)){
                     char lower[NetAddr::kMaxHostnameLen + 1];
@@ -139,6 +227,7 @@ void NetworkFunctions::Update(){
                 if(low_power) WiFi.aggressiveLowPowerMode(); // 再接続でモードが既定へ戻っていても掛け直す
                 ApplyDnsOverride(IpConfigFor(currentSSID.c_str()));
                 StartMdns();
+                ScheduleProbe(kProbeDelayMs);
                 // 初回接続・再接続どちらの経路でもここを通るので、
                 // 再接続時にもNTPを即座に再同期させて時刻ドリフトを補正する。
                 NTP.begin(ntpServer1.c_str(), ntpServer2.c_str());
@@ -171,8 +260,10 @@ void NetworkFunctions::Update(){
                 if(WiFi.status() != WL_CONNECTED){
                     LOG_SYS_WARN("Wi-Fi disconnected. Trying to reconnect.");
                     StartConnect(currentSSID.c_str(), currentPassword.c_str());
+                    break;
                 }
             }
+            UpdateProbe();
             break;
 
         case NetStatus::OFF:
@@ -193,6 +284,7 @@ void NetworkFunctions::SetEnabled(bool enabled){
     WifiProfiles::SetEnabled(enabled);
     retryRank = 0;
     if(!enabled){
+        ResetInternet();
         WiFi.disconnect();
         currentSSID.clear();
         currentPassword.clear();
@@ -213,6 +305,7 @@ bool NetworkFunctions::RemoveProfile(int index){
         && (currentStatus == NetStatus::SUCCESS || currentStatus == NetStatus::TRYING_CONNECT);
     if(!WifiProfiles::Remove(index)) return false;
     if(current){
+        ResetInternet();
         WiFi.disconnect();
         currentSSID.clear();
         currentPassword.clear();
@@ -260,6 +353,13 @@ bool NetworkFunctions::SetHostname(const char* name){
         if(IsConnected()) StartMdns();
     }
     return true;
+}
+
+void NetworkFunctions::RecheckInternet(){
+    if(!IsConnected() || !ProbeEnabled()) return;
+    if(probe) return; // 判定中
+    probe_at = millis();
+    if(probe_at == 0) probe_at = 1;
 }
 
 void NetworkFunctions::CurrentAddress(char* ip, size_t cap){

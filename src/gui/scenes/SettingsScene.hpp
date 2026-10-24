@@ -17,6 +17,7 @@
 
 class WifiScanDialog; // gui/widgets/dialogs/WifiScanDialog.hpp。ポインタ型でしか使わないので前方宣言で足りる
 class NetworkScan;    // net/NetworkScan.hpp。同上
+namespace CaptivePortal { class CaptiveLogin; } // net/Captive_Portal.hpp。同上
 
 // 標準アプリの設定。画面下のタブで大まかな項目ごとに分けてある:
 //   Wi-Fi   … ON/OFF・接続状態・保存済みのネットワークの一覧(接続/削除)・周辺の検索・手入力での追加
@@ -51,7 +52,8 @@ class SettingsScene : public Scene {
         // ダイアログを閉じた直後に次のダイアログを開くための保留(1フレーム空ける。
         // MarkdownScene::Pendingと同じ理由: TRANSLUCENTの下は同じフレームでは描き直されない)
         // IpAddress→IpGateway→IpDns は「IP」ボタンの3つの入力(固定IP・ゲートウェイ・DNS)
-        enum class Pending : uint8_t { None, WifiPassword, Message, ClockTime, IpGateway, IpDns };
+        // CaptiveInput はポータルのフォームの空欄を1つずつ聞く
+        enum class Pending : uint8_t { None, WifiPassword, Message, ClockTime, IpGateway, IpDns, CaptiveInput };
 
         Tab tab = Tab::Wifi; // onExit()を跨いで残す(上へ別のシーンを積んで戻ると同じタブ)
 
@@ -85,6 +87,18 @@ class SettingsScene : public Scene {
         Label<PICO_STR_L>* wifi_info_label      = nullptr;
         Button*            wifi_name_button     = nullptr;
         void refreshWifiInfo();
+
+        // ---- キャプティブポータルへのログイン(ポータルと判定されたときだけ[ログイン]が出る) ----
+        Button*            wifi_login_button    = nullptr;
+        uint8_t            shown_internet       = 0xFF;
+        // ページの取得〜送信の間だけ持つ(所有はこちら。HttpRequest等と同じ流儀)
+        CaptivePortal::CaptiveLogin* captive_login = nullptr;
+        void startCaptiveLogin();
+        void pollCaptiveLogin();
+        void openCaptiveInputDialog();
+        void confirmCaptiveSubmit();
+        void submitCaptiveLogin();
+        void endCaptiveLogin();
 
         // 状態の1行と一覧は、接続状態/接続先/一覧の中身が変わったときだけ作り直す
         uint8_t                 shown_status = 0xFF;

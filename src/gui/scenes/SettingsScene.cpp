@@ -537,8 +537,10 @@ void SettingsScene::onUpdate(){
     else if(p == Pending::ClockTime) this->openClockTimeDialog();
     else if(p == Pending::IpGateway) this->openIpGatewayDialog();
     else if(p == Pending::IpDns) this->openIpDnsDialog();
+    else if(p == Pending::CaptiveInput) this->openCaptiveInputDialog();
 
     this->pollWifiScan();
+    this->pollCaptiveLogin();
     if(this->tab == Tab::Wifi) this->refreshWifi();
 
     this->updateVolume();
@@ -573,6 +575,7 @@ void SettingsScene::onExit(){
         delete this->wifi_scan_task;
         this->wifi_scan_task = nullptr;
     }
+    this->endCaptiveLogin();
     // ダイアログ層はシーン終了時にフレームワーク側がまとめて片付ける(CalendarScene::detail_dialogと同じ)
     this->wifi_scan_dialog = nullptr;
     this->pending = Pending::None;
@@ -595,6 +598,11 @@ void SettingsScene::onExit(){
     this->wifi_add_button      = nullptr;
     this->wifi_connect_button  = nullptr;
     this->wifi_remove_button   = nullptr;
+    this->wifi_ip_button       = nullptr;
+    this->wifi_info_label      = nullptr;
+    this->wifi_name_button     = nullptr;
+    this->wifi_login_button    = nullptr;
+    this->shown_internet       = 0xFF;
     this->shown_status         = 0xFF;
     this->wifi_list_dirty      = true;
 

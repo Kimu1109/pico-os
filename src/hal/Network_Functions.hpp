@@ -84,6 +84,23 @@ namespace NetworkFunctions {
     void SetEnabled(bool enabled);
     bool IsEnabled();
 
+    // ---- インターネットへ出られるか(キャプティブポータルの判定。net/Captive_Portal) ----
+    // 繋がるたびに少し置いてから判定し、ポータル/出られないときは1分ごとに判定し直す
+    // (外で同意を済ませた・回線が戻った、を拾う)。ポータルなら1回だけ通知を出す(タップで設定アプリ)
+    enum class Internet : uint8_t {
+        Unknown,     // 未接続・まだ判定していない・判定を止めている(captive-probe-url = off)
+        Checking,
+        Online,
+        Portal,      // ログイン/同意のページが要る(portalUrl)
+        NoInternet,  // Wi-Fiには繋がったが外へ出られない
+    };
+    inline Internet internet = Internet::Unknown;
+    inline FixedString<PICO_STR_LL> portalUrl;
+    // 判定に使うURL(network.cfgの captive-probe-url。204を返すもの。"off"で判定しない)
+    inline FixedString<PICO_STR_LL> probeUrl;
+    // 今すぐ判定し直す(設定アプリのログインの後など)。未接続なら何もしない
+    void RecheckInternet();
+
     // 今のIPアドレス・ゲートウェイ・DNSを "a.b.c.d" で書く(未接続なら空)。設定アプリの表示用
     void CurrentAddress(char* ip, size_t ip_cap);
     void CurrentGateway(char* gw, size_t gw_cap);

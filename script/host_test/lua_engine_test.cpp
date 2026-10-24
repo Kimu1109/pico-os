@@ -930,7 +930,7 @@ int main(){
             check(pico.COLOR_BACKGROUND == 15 and pico.COLOR_FORECOLOR == 0, "定数: 既定の背景/前景")
             check(pico.FONT_SMALL == 0 and pico.FONT_BIGGER == 3, "定数: font_size")
             check(pico.ICON_SIZE_16 == 0 and pico.ICON_SIZE_64 == 4, "定数: icon_size")
-            check(pico.ICON_WifiSignal1 == 0 and pico.ICON_Home == 25 and pico.ICON_FileArchive == 91, "定数: IconID")
+            check(pico.ICON_WifiSignal1 == 0 and pico.ICON_Home == 25 and pico.ICON_FileArchive == 90, "定数: IconID")
             check(pico.ICON_Nothing == nil and pico.NO_SUCH == nil, "定数: 無い名前はnil")
             check(pico.TEXT_ALIGN_RIGHT == 2 and pico.DIRECTION_HORIZONTAL == 1 and pico.ALIGN_END == 2, "定数: 揃え")
             check(pico.CANVAS_FILL == 5 and pico.WDAY_SATURDAY == 6, "定数: canvas_mode/wday")

@@ -2016,7 +2016,9 @@ int main() {
                     for _, s in ipairs(S.list) do
                         if s.state == "hold" and s.kind == "melee" then
                             local d = math.sqrt((s.x - s.px) ^ 2 + (s.z - s.pz) ^ 2)
-                            if d > (MAXLEASH or 0) then MAXLEASH = d end
+                            if s.tgt and s.tgt.tgt == s then
+                                if d > (MAXLEASH2 or 0) then MAXLEASH2 = d end   -- 自分を狙う相手は遠くまで追う
+                            elseif d > (MAXLEASH or 0) then MAXLEASH = d end
                         end
                         if s.hp > (LASTHP[s] or s.hp) then HEALED = HEALED + 1 end
                         LASTHP[s] = s.hp
@@ -2081,12 +2083,12 @@ int main() {
             local function keys(t) local k = 0 for _ in pairs(t) do k = k + 1 end return k end
             for _, u in ipairs(S.list) do check(keys(u) <= 16, "soldiers: 表のキーは16個以内 (" .. keys(u) .. ")") end
             -- 強化と売却
-            check(S.upgrade_cost(M1) == 40, "soldiers.upgrade_cost")
+            check(S.upgrade_cost(M1) == 50, "soldiers.upgrade_cost")
             M1.hp = 50
             check(S.upgrade(M1) and M1.lv == 2 and S.max_hp(M1) == 90 and M1.hp == 80, "soldiers.upgrade: 最大耐久の増えた分だけ回復")
             S.upgrade(M1); S.upgrade(M1)
             check(M1.lv == 4 and S.upgrade_cost(M1) == nil and not S.upgrade(M1), "soldiers.upgrade: Lv4 が最大")
-            check(S.paid(M1) == 50 + 40 + 70 + 110 and S.sell_value(M1) == 189, "soldiers.sell_value: 払った合計の70%")
+            check(S.paid(M1) == 60 + 50 + 80 + 120 and S.sell_value(M1) == 217, "soldiers.sell_value: 払った合計の70%")
             M1.hp = S.max_hp(M1)
             -- 持ち場をベースの近くへ戻し、ゾンビを呼ぶ
             S.order_group(S.list, BASE.x + 0.5, BASE.z + 5.5)
@@ -2101,6 +2103,7 @@ int main() {
             for _, u in ipairs(Z.list) do mk = math.max(mk, keys(u)) end
             check(mk <= 16, "zombies: 表のキーは16個以内 (" .. mk .. ")")
             check(MAXLEASH and MAXLEASH <= 3.6, "soldiers: 近接兵は持ち場から3マスほどまでしか離れない (" .. tostring(MAXLEASH) .. ")")
+            check((MAXLEASH2 or 0) <= 7.6, "soldiers: 自分を狙うゾンビでも持ち場から7マスほどまで (" .. tostring(MAXLEASH2) .. ")")
             check(HEALED > 0, "soldiers: 回復兵が回復する (" .. HEALED .. ")")
             -- 移動中の反撃: 攻撃してきたゾンビが近くにいれば止まって戦う
             Z.clear(); C.clear_shots()
@@ -2141,6 +2144,60 @@ int main() {
             z2.scan = 0
             Z.update(0.01)
             check(z2.tgt == m, "zombies: 近接兵(優先度0)を弓兵(優先度3)より先に狙う")
+            -- 遠距離ゾンビが反撃して来ない相手へ投げ続けても、ENGAGE_MAX 秒で諦めてベースへ向かう(膠着しない)
+            S.clear(); Z.clear()
+            local h = S.hire("melee")
+            h.hp = 100000
+            Z.queue("ranged", 1); Z.update(0.4)
+            local zr = Z.list[1]
+            local placed = false
+            for d = 0, 40 do
+                for _, o in ipairs({{3.6, 0}, {0, 3.6}, {-3.6, 0}, {0, -3.6}}) do
+                    local hx, hz = zr.x + o[1], zr.z + o[2] - d * 0.5
+                    local hy = pico.iso.stand(hx, hz, nil, {height = 2, avoid = {1}})
+                    if not placed and hy and math.abs(hy - zr.gy) < 0.5
+                        and pico.iso.sight(zr.x, zr.gy + 1.2, zr.z, hx, hy + 1, hz) then
+                        h.x, h.y, h.z, h.gy = hx, hy, hz, hy
+                        pico.iso.entity_move(h.id, hx, hy, hz)
+                        placed = true
+                    end
+                end
+                if placed then break end
+                zr.z = zr.z - 0.5; zr.col = -1
+            end
+            zr.scan = 0
+            local ZX0, ZZ0, ZY0 = zr.x, zr.z, zr.gy
+            for _ = 1, 40 do Z.update(0.05); C.step(0.05) end
+            check(placed and zr.tgt == h, "zombies: 遠距離ゾンビが兵士を狙って投げる")
+            local zx, zz = zr.x, zr.z
+            for _ = 1, 140 do Z.update(0.05); C.step(0.05) end
+            check(h.hp < 100000, "zombies: 兵士に石が当たる")
+            check(zr.tgt == false and zr.hp > 0, "zombies: 遠距離ゾンビは投げ続けても諦める(膠着しない)")
+            for _ = 1, 40 do Z.update(0.05); C.step(0.05) end
+            check(math.abs(zr.x - zx) + math.abs(zr.z - zz) > 0.5, "zombies: 諦めた後はベースへ進む")
+            -- 兵士はベースか自分を攻撃しているゾンビを、持ち場から LEASH(3) より遠くまで追う
+            S.pressing = Z.pressing
+            local g = S.restore("melee", 1, 60, h.x, h.z)
+            zr.x, zr.z, zr.gy, zr.y = ZX0, ZZ0, ZY0, ZY0
+            zr.col = math.floor(zr.x) * 1024 + math.floor(zr.z)     -- 次の update で投げる/投げないを引き直させない
+            pico.iso.entity_move(zr.id, zr.x, zr.y, zr.z)
+            zr.tgt, zr.throw, zr.tx = false, false, zr.x
+            g.scan = 0
+            S.update(0.05)
+            check(not g.tgt, "soldiers: 持ち場から3マスより遠い、ベースを攻撃していないゾンビは追わない")
+            zr.throw = true
+            g.scan = 0
+            S.update(0.05)
+            check(g.tgt == zr, "soldiers: ベースへ石を投げているゾンビは持ち場から3マスより遠くても追う")
+            g.tgt = false; zr.throw = false; zr.tgt = g
+            g.scan = 0
+            S.update(0.05)
+            check(g.tgt == zr, "soldiers: 自分を狙っているゾンビも遠くまで追う")
+            g.tgt = false; zr.tgt = BASE     -- 他の誰か(ここではベースの表)へ投げている遠距離ゾンビ
+            g.scan = 0
+            S.update(0.05)
+            check(g.tgt == zr, "soldiers: 他の兵士へ投げている遠距離ゾンビも遠くまで追う")
+            S.pressing = nil
             S.clear(); Z.clear()
             pico.iso.close()
         )LUA", "sol4");
@@ -2213,34 +2270,34 @@ int main() {
             TX, TZ = b.x, b.z + 5
             while not B.can_place("arrow", TX, TZ, SR) do TX = TX + 1 end
             T1 = B.place("arrow", TX, TZ, SR)
-            check(T1 and T1.state == "build" and T1.hp == 30 and B.max_hp(T1) == 30, "buildings.place: 建設中は完成時の20%の耐久")
+            check(T1 and T1.state == "build" and T1.hp == 80 and B.max_hp(T1) == 80, "buildings.place: 建設中は完成時の40%の耐久")
             check(not B.can_place("wall", TX, TZ, SR), "buildings.can_place: 同じ柱には置けない")
             check(not S.standable(TX, TZ), "soldiers.standable: 建物の柱には立てない")
             check(B.sell_value(T1) == nil and B.upgrade_cost(T1) == nil and B.repair_cost(T1) == nil, "buildings: 建設中は売れない・強化/修理できない")
-            check(B.remaining(T1) == 8, "buildings.remaining: 建設の残り秒")
+            check(B.remaining(T1) == 5, "buildings.remaining: 建設の残り秒")
         )LUA", "bld");
         check(ok, "buildings: 準備");
         ok = ok && te.Run("tick(165)", "tick");
         ok = ok && te.Run(R"LUA(
             local iso = pico.iso
-            check(T1.state == "ready" and T1.hp == 150 and B.max_hp(T1) == 150, "buildings: 建設が終わると耐久が完成時の値になる")
+            check(T1.state == "ready" and T1.hp == 200 and B.max_hp(T1) == 200, "buildings: 建設が終わると耐久が完成時の値になる")
             local _, _, _, o = iso.entity_get(T1.id)
             check(o.sx == 216 and o.h == 36, "buildings: 完成すると塔の絵になる")
             -- 強化: 建設の半分の時間、その間は耐久が低い
-            check(B.upgrade_cost(T1) == 90 and B.upgrade(T1), "buildings.upgrade")
-            check(T1.state == "up" and T1.lv == 2 and B.max_hp(T1) == 34 and T1.hp == 34 and B.remaining(T1) == 4,
+            check(B.upgrade_cost(T1) == 80 and B.upgrade(T1), "buildings.upgrade")
+            check(T1.state == "up" and T1.lv == 2 and B.max_hp(T1) == 92 and T1.hp == 92 and B.remaining(T1) == 2.5,
                   "buildings.upgrade: 強化中は耐久が低い (" .. T1.hp .. ")")
             tick(85)
-            check(T1.state == "ready" and T1.hp == 170, "buildings.upgrade: 終わると耐久が戻る (" .. T1.hp .. ")")
-            -- 修理: 費用 = 減った割合 × 払った合計 × 0.5、3秒かけて戻る
-            T1.hp = 85
-            check(B.repair_cost(T1) == 53, "buildings.repair_cost (" .. tostring(B.repair_cost(T1)) .. ")")
+            check(T1.state == "ready" and T1.hp == 230, "buildings.upgrade: 終わると耐久が戻る (" .. T1.hp .. ")")
+            -- 修理: 費用 = 減った割合 × 払った合計 × 0.3、3秒かけて戻る
+            T1.hp = 115
+            check(B.repair_cost(T1) == 27, "buildings.repair_cost (" .. tostring(B.repair_cost(T1)) .. ")")
             check(B.repair(T1) and B.repair_cost(T1) == nil, "buildings.repair: 修理中は重ねて修理しない")
             tick(30)
-            check(T1.hp > 100 and T1.hp < 170, "buildings.repair: 少しずつ戻る")
+            check(T1.hp > 130 and T1.hp < 230, "buildings.repair: 少しずつ戻る")
             tick(40)
-            check(math.abs(T1.hp - 170) < 0.01 and T1.rr == 0, "buildings.repair: 3秒で戻る")
-            check(B.sell_value(T1) == 147, "buildings.sell_value: 払った合計の70% (" .. B.sell_value(T1) .. ")")
+            check(math.abs(T1.hp - 230) < 0.01 and T1.rr == 0, "buildings.repair: 3秒で戻る")
+            check(B.sell_value(T1) == 126, "buildings.sell_value: 払った合計の70% (" .. B.sell_value(T1) .. ")")
             -- バリケード: ブロックを置き、流れの場を作り直す
             local fz = A.spawns[2].z - 6
             WX, WZ = A.spawns[2].x, fz
@@ -2251,7 +2308,7 @@ int main() {
             check(B.wall_at(WX + 0.3, WZ + 0.7) == W1 and B.wall_at(TX, TZ) == nil, "buildings.wall_at")
             check(iso.stand(WX, WZ, nil, ZR) == W1.y and iso.stand(WX, WZ, nil, SR) == nil, "バリケードの中はゾンビは立てる・兵士は立てない")
             tick(85)
-            check(W1.state == "ready" and W1.hp == 80, "buildings: バリケードの建設が終わる")
+            check(W1.state == "ready" and W1.hp == 150, "buildings: バリケードの建設が終わる")
             -- 兵士の道はタワーの柱を通らない
             local s = S.hire("melee")
             tick(80)
@@ -2273,8 +2330,12 @@ int main() {
             Z.update(0.1)
             local inside = math.sqrt((ZB.x - x0) ^ 2 + (ZB.z - z0) ^ 2)
             check(inside > 0 and inside < 0.55 * 0.1 * 0.6, "zombies: バリケードの中は遅い (" .. inside .. ")")
+            -- 中にいる間は受けるダメージが1.3倍
+            local zh = ZB.hp
+            ZB:hurt(10)
+            check(zh - ZB.hp == 13, "zombies: バリケードの中は傷つきやすい (" .. zh - ZB.hp .. ")")
             -- 強化するとブロックが変わる
-            W1.hp = 80
+            W1.hp = 150
             Z.clear()
             check(B.upgrade(W1) and iso.get(WX, W1.y, WZ) == B.WALLS[2], "buildings.upgrade(wall): ブロックが Lv2 の絵になる")
             tick(45)
@@ -2295,7 +2356,7 @@ int main() {
         ok = ok && te.Run(R"LUA(
             local iso = pico.iso
             check(KILLED > 0, "buildings: 弓塔がゾンビを倒す (" .. KILLED .. ")")
-            check(T1.hp < 170 or LOSTB > 1, "zombies: タワーを狙って攻撃する (" .. T1.hp .. ")")
+            check(T1.hp < 230 or LOSTB > 1, "zombies: タワーを狙って攻撃する (" .. T1.hp .. ")")
             -- 売る
             if T1.hp > 0 and B.sell_value(T1) then
                 local id = T1.id
@@ -2343,7 +2404,10 @@ int main() {
         bool ok = te.Run(R"LUA(
             local Wv = require("waves")
             local a, b, c = Wv.mix(1)
-            check(a == 9 and b == 0 and c == 0, "waves.mix: 1回目はノーマルだけ")
+            check(a == 17 and b == 0 and c == 0, "waves.mix: 1回目はノーマルだけ(稼ぎどきで多め)")
+            check(Wv.preview(1):find("稼ぎどき") ~= nil and Wv.preview(6):find("稼ぎどき") == nil, "waves.preview: 序盤は稼ぎどき")
+            a, b, c = Wv.mix(5)
+            check(a + b + c == 21, "waves.mix: 稼ぎどきの後は 6 + 3×ウェーブ数")
             a, b, c = Wv.mix(10)
             check(a + b + c == 36 and b > 0 and c > 0, "waves.mix: 進むと遠距離・重量級が混ざる")
             check(Wv.preview(3):find("重量級が来る") ~= nil and Wv.preview(2):find("遠距離が来る") ~= nil,
@@ -2392,24 +2456,21 @@ int main() {
             local E = TEST.env
             local G, Wv = E.G, E.waves
             check(G.mode == "play" and G.money == 300 and Wv.n == 1 and Wv.phase == "prep", "game: マップを作って準備時間から始まる")
-            check(E.tutorial.active and E.tutorial.text():find("雇う") ~= nil, "tutorial: 初めてなら説明が始まる")
+            check(E.tutorial.active and E.tutorial.text():find("建設") ~= nil, "tutorial: 初めてなら説明が始まる(建設から)")
             E.orders.hire("melee")
             E.tutorial.update(0.1)
-            check(E.tutorial.text():find("地面をタップ") ~= nil, "tutorial: 雇うと次の案内へ進む")
-            G.moved = true
-            E.tutorial.update(0.1)
-            check(E.tutorial.text():find("建設") ~= nil, "tutorial: 動かすと次の案内へ進む")
-            check(G.money == 250 and E.soldiers.count() == 1, "game: 雇うとお金が減る")
+            check(E.tutorial.text():find("建設") ~= nil, "tutorial: 言われたことをするまで進まない")
+            check(G.money == 240 and E.soldiers.count() == 1, "game: 雇うとお金が減る")
             local left = math.floor(Wv.timer)
             E.next_wave()
-            check(left > 50 and G.money == 250 + left * 2 and Wv.timer == 0, "game: 次へで残り秒数×2 (" .. G.money .. ")")
+            check(left > 50 and G.money == 240 + left * 2 and Wv.timer == 0, "game: 次へで残り秒数×2 (" .. G.money .. ")")
             MONEY_START = G.money
         )LUA", "g1");
         te.CallLoop(50);
         ok = ok && te.Run(R"LUA(
             local E = TEST.env
             local G, Wv = E.G, E.waves
-            check(Wv.phase == "wave" and E.zombies.waiting() + E.zombies.alive() == 9, "game: ウェーブ1が始まる")
+            check(Wv.phase == "wave" and E.zombies.waiting() + E.zombies.alive() == 17, "game: ウェーブ1が始まる")
             local st = pico.store_load()
             check(st and st.game and st.game.w == 1 and st.game.money == MONEY_START and #st.game.s == 1 and st.game.seed == G.seed,
                   "game: ウェーブの始めに保存する")
@@ -2471,7 +2532,7 @@ int main() {
             G.base:hurt(5000)
             check(G.mode == "over", "game: ベースが壊れると終わる")
             st = pico.store_load()
-            check(st.game == nil and st.best and st.best.w == 1, "game: 途中の保存を消して最高記録を残す")
+            check(st.game == nil and st.best and st.best.w == E.waves.n - 1 and st.best.w >= 1, "game: 途中の保存を消して最高記録(耐えたウェーブ数)を残す (" .. tostring(st.best and st.best.w) .. ")")
         )LUA", "g4");
         check(ok, "game: ウェーブと保存の流れ");
         // コントローラー・キーボードのカーソル(cursor.lua)と、地図の上のメニュー(ui.lua)

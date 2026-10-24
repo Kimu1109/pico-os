@@ -316,5 +316,6 @@
 - [x] クラッシュダンプの保存(HardFault・ウォッチドッグ・Luaのエラー)
 - [x] Luaサンドボックスの強化
 - [x] ファームの更新(SDの更新ファイル / PCからWi-Fiで。docs/FIRMWARE_UPDATE.md)
+- [x] ナイトリービルド(毎晩mainをビルドしてGitHubのリリースへ。50本まで)
 - [ ] ファームの更新をWebから取る(GitHub Pages等に版の一覧を置く)
 - [ ] 実機での確認(HardFaultの捕まえ方・ウォッチドッグ・実機の速さ・ファームの更新)

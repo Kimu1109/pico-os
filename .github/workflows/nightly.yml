@@ -1,0 +1,115 @@
+# ナイトリービルド: 毎晩 main を実機ファームとしてビルドし、成果物をGitHubのリリース(プレリリース)へ載せる。
+#
+#   毎日 03:43(日本時間)… 前のナイトリーから main が進んでいればビルドして載せる(進んでいなければ何もしない)
+#   手動実行               … Actionsタブの「Run workflow」から(main だけ。force で同じコミットでも作り直す)
+#
+# ビルドは firmware-build.yml をそのまま呼ぶので、載る中身はPRの「実機ファームのビルド」の成果物と同じ
+# (firmware.uf2 / firmware.elf / 署名なしの firmware.pfw)。リリースの添付なのでzipに包まれず、ログイン無しで落とせる。
+# 一覧: https://github.com/Kimu1109/pico-os/releases (タグは nightly-<通し番号>-<短いハッシュ>)
+#
+# 残すのは新しい順に KEEP 本。超えた分はリリースとタグを古い順に消す。
+name: ナイトリービルド
+
+on:
+  schedule:
+    - cron: "43 18 * * *"  # UTC。日本時間の 03:43
+  workflow_dispatch:
+    inputs:
+      force:
+        description: main が前のナイトリーから進んでいなくても作る
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  KEEP: 50
+
+jobs:
+  check:
+    name: 作る必要があるか調べる
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          # ナイトリーのタグ(軽量タグなので object.sha がコミット)に今の main があれば作らない
+          shas=$(gh api --paginate "repos/${GH_REPO}/git/matching-refs/tags/nightly-" --jq '.[].object.sha')
+          if [ "${FORCE}" != "true" ] && printf '%s\n' "${shas}" | grep -qx "${GITHUB_SHA}"; then
+            echo "main (${GITHUB_SHA}) はナイトリー済み。作らない"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: 実機ファームのビルド
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    uses: ./.github/workflows/firmware-build.yml
+
+  publish:
+    name: リリースへ載せて古いものを消す
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # リリースとタグを作る・消す
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SERIAL: ${{ needs.build.outputs.serial }}
+      SHORT: ${{ needs.build.outputs.short }}
+    steps:
+      - name: 成果物を受け取る
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-rpipico2w
+          path: firmware
+
+      - name: リリースを作る
+        run: |
+          ls -l firmware
+          tag="nightly-${SERIAL}-${SHORT}"
+          date=$(TZ=Asia/Tokyo date '+%Y-%m-%d')
+          # force で同じコミットを作り直すときは前のものを消してから
+          if gh release view "${tag}" > /dev/null 2>&1; then
+            gh release delete "${tag}" --cleanup-tag --yes
+          fi
+          # 変更点は前のナイトリーからの差分(初回は自動の範囲)
+          prev=$(gh release list --limit 200 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("nightly-"))] | sort_by(.createdAt) | reverse | .[0].tagName // ""')
+          start=()
+          if [ -n "${prev}" ]; then start=(--notes-start-tag "${prev}"); fi
+          cat > notes.md <<EOF
+          main の ${SHORT} を ${date} にビルドしたもの(ファームの版 #${SERIAL})。動作は確かめていない。
+
+          - \`firmware.uf2\` … BOOTSELを押しながらUSBでつなぎ、出てきたドライブへ置く
+          - \`firmware.pfw\` … SDの更新ファイル(docs/FIRMWARE_UPDATE.md)。**署名なし**なので \`/sys/debug.cfg\` に \`fw-allow-unsigned = true\` が要る
+          - \`firmware.elf\` … クラッシュダンプの番地を引くとき用
+
+          EOF
+          gh release create "${tag}" firmware/* \
+            --target "${GITHUB_SHA}" \
+            --title "ナイトリー #${SERIAL} (${SHORT}) ${date}" \
+            --notes-file notes.md --generate-notes "${start[@]}" \
+            --prerelease --latest=false
+
+      - name: 古いナイトリーを消す
+        run: |
+          gh release list --limit 1000 --json tagName,createdAt \
+            --jq "[.[] | select(.tagName | startswith(\"nightly-\"))] | sort_by(.createdAt) | reverse | .[${KEEP}:] | .[].tagName" |
+          while read -r old; do
+            echo "消す: ${old}"
+            gh release delete "${old}" --cleanup-tag --yes
+          done

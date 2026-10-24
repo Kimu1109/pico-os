@@ -67,7 +67,7 @@ void AppFunctions::Setup(){
     Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
     //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/MUSIC_FORMAT.md)
     Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
-    Register("動画", IconID::Video, &MakeScene<VideoScene>);
+    Register("動画", IconID::FileVideo, &MakeScene<VideoScene>);
     //マイク(SPH0645、GP26〜28)で /recordings/ へWAVを録る
     Register(RecorderScene::kAppName, IconID::Microphone, &MakeScene<RecorderScene>);
     //SSHクライアント(端末)。接続先は起動後に端末の中で聞く。鍵は /sys/ssh/id_ed25519(SshScene参照)

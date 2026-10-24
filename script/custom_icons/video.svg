@@ -1,9 +1,0 @@
-<!--
-  pico-os 自作アイコン: 動画(動画アプリ)
-
-  画面(角を落とした長方形)の中に再生の三角を抜いた(evenodd)形。
-  本体: x=1..15 / y=3..13、三角: (6,5.5)-(11,8)-(6,10.5)
--->
-<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-  <path fill-rule="evenodd" d="M2 3h12v1h1v8h-1v1H2v-1H1V4h1z M6 5v6l5-3z" />
-</svg>

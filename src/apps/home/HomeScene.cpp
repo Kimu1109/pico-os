@@ -426,6 +426,8 @@ void HomeScene::openAddMenu(int seq_pos){
     if(!d) return;
     static const uint8_t kSizes[3][2] = { {1, 1}, {2, 1}, {2, 2} };
     for(int k = 0; k < HomeLayout::kKindCount; k++){
+        //描き方の無い種類(ビルド時に外したアプリのウィジェット。HomeWidgets::Setup())は出さない
+        if(!HomeLayout::Impl((HomeLayout::Kind)k)) continue;
         const HomeLayout::KindInfo& info = HomeLayout::Info((HomeLayout::Kind)k);
         for(const auto& sz : kSizes){
             if(!(info.sizes & HomeLayout::SizeBitOf(sz[0], sz[1]))) continue;

@@ -217,6 +217,32 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   実機ファームの両方の env のビルド(外した版に `setup1`/`loop1`・`ChipSynth` が無いこと)。外した版の実機での起動は未確認(Todoist参照)。
 - ファームの更新(`.pfw`)は版を区別しないので、載せる機能の違う本体へ送るとその機能が消える/増える(画面の大きさと同じ注意)。
 
+## ビルド時に選ぶ内蔵アプリ (`src/config/App_Config.hpp` の `PICO_APP_*`) (2026-10-25)
+
+利用者の要望: 内蔵のC++アプリをビルド時に有効化/無効化できるように。
+
+- **選べるのは `apps/<機能>/` のアプリ**: `PICO_APP_BROWSER` `CALCULATOR` `CALENDAR` `CHAT` `DICT` `GB` `MAIL` `MUSIC` `NOTES` `READER` `SSH` `STORE` `TEXTEDITOR` `TODO` `VIDEO`
+  (既定は1=載せる。`MUSIC` だけ既定が `PICO_HW_SOUND` で、音声出力なしに1を指定すると `static_assert` で止まる)。
+  OSとして要るもの(設定・ファイル・時計・通知・USBドライブ・ホーム)と本体の更新(ファームを戻す道)は選べない。
+  実機は env の `build_flags` に `-DPICO_APP_GB=0` 等(全部外した例が `env:rpipico2w_lite`)、PCは `cmake -DPICOOS_APP_GB=OFF` 等。
+- **外すのは入口だけ。中身は `#if` で囲まず、リンカに捨てさせる**: arduino-picoは `-ffunction-sections` + `--gc-sections` なので、
+  どこからも呼ばれない関数・静的な表は残らない。入口は次の4か所で、ここを `#if PICO_APP_*` で囲む。
+  - アプリの一覧(`boot/App_List.cpp` の `Register`)
+  - バックグラウンドの仕事(`boot/Background_List.cpp`: ミュージックの再生・チャットの未読・TODOの取り直し)
+  - ホーム画面のウィジェット(`apps/home/Home_Widgets.cpp`: 音楽・予定・TODO。静的なオブジェクトは起動時に作られて残るので、クラスごと囲む)。
+    描き方を差さなかった種類は追加の一覧に出ない。`home.cfg` に置いてあれば名前だけの枠になる(項目のメニューの「削除」で外せる)
+  - ファイルからの関連付け(`FileViewerScene`・`FileExplorerScene`: `.pvid`→動画、Shift_JISの`.txt`と「読む」→読書、「編集」→テキスト)
+  - アプリの `.cpp` 全体を囲む形(ハードウェア機能の本物の実装と同じ)にしなかったのは、アプリどうしが下回りを使い合うため
+    (ホームの予定→`Ical`、読書→`Mail_Charset`、ストア/ファーム→`Ssh_Sha256`、メモ→テキストエディタ、ゲームボーイ/ファーム→`MusicService::Stop` 等)。
+    囲むと組み合わせごとにリンクが壊れる。入口だけなら、残った使い手が要る分だけ残る(メモを残してテキストを外すと、タイルと「編集」だけが消える)。
+- **`#if PICO_APP_*` を読むファイルは `config/App_Config.hpp` を自分で include する**(`script/check_layers.py` がハードウェア機能と同じく見張る)。
+- 大きさ(実機ファーム、2026-10-25): 選べるものを全部外すと **静的RAM −3.4KB(131,288→127,772B)・フラッシュ −353.5KB(2,220,044→1,857,036B)**。
+  既定の版の大きさは変わらない。入口を外しただけでリンカが中身を捨てていることの裏付けにもなっている。
+- 検証: ホストテスト、PCビルドで全部外した版の起動とアプリ数(39→24。ランチャにはOSの6つと動作確認用のLuaアプリだけ)、
+  実機ファームの `rpipico2w_lite` のビルド(CIでもPRとmainへのpushで作る)。外した版の実機での起動は未確認。
+- Luaの `pico.launch_app(name)` は外したアプリを名前で頼むと、登録簿に無いので false が返る(前からある振る舞い)。
+- ファームの更新(`.pfw`)は版を区別しないので、載せるアプリの違う本体へ送るとそのアプリが消える/増える。
+
 ## ナイトリービルド (`.github/workflows/nightly.yml`) (2026-10-24)
 
 利用者の要望: 今のActionsに載せる / 実機ファームのビルドの成果物をそのまま落とせる / 50本ほど残して超えた分は消す。

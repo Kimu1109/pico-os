@@ -86,6 +86,15 @@ SDL_VIDEODRIVER=offscreen ./pc/build-320x480/picoos_pc --app 電卓 --shot calc.
 cmake -S pc -B pc/build-minimal -DPICOOS_HW_SOUND=OFF -DPICOOS_HW_MIC=OFF -DPICOOS_HW_BATTERY=OFF && cmake --build pc/build-minimal -j
 ```
 
+### 内蔵アプリを外す
+
+`PICOOS_APP_<名前>`(`BROWSER` `CALCULATOR` `CALENDAR` `CHAT` `DICT` `GB` `MAIL` `MUSIC` `NOTES` `READER` `SSH` `STORE` `TEXTEDITOR` `TODO` `VIDEO`、既定はON)を
+OFFにすると、実機の `-DPICO_APP_*=0` と同じ版になる(`src/config/App_Config.hpp`、設計は `docs/design/devtools.md` の「ビルド時に選ぶ内蔵アプリ」)。
+
+```sh
+cmake -S pc -B pc/build-lite -DPICOOS_APP_GB=OFF -DPICOOS_APP_MAIL=OFF && cmake --build pc/build-lite -j
+```
+
 ### 起動時に開くアプリ
 
 `--app 名前` で、起動したらランチャの名前のアプリを開いておける(ホーム画面の上へ開くので、戻ればいつものホーム画面)。

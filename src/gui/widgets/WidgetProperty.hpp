@@ -69,6 +69,9 @@ namespace WidgetProperty {
         TotalMs, Editable,
         Year, Month, Today, Selected,
 
+        // QRCodeView
+        Ecc, QrSize,
+
         // Widget基底(型を問わない)
         HitTransparent, Enabled, Focusable,
 

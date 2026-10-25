@@ -36,6 +36,7 @@
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/widgets/apps/DurationPicker.hpp"
 #include "gui/widgets/apps/MonthGrid.hpp"
+#include "gui/widgets/QRCodeView.hpp"
 #include "gui/icons/icon_render.h"
 #include "gui/core/GFX_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
@@ -514,8 +515,12 @@ int LuaEngineExt::l_text_set(lua_State* L) {
             // 8KiBまで(超えた分は切れる)。画像の相対参照はルート基準になる
             lua_pushboolean(L, static_cast<MarkdownView*>(w)->loadText(text, len));
             return 1;
+        case WidgetType::QRCodeView:
+            // 255バイトまで。超えたら切らずに空にする(切れたQRは別の中身を指してしまう)
+            lua_pushboolean(L, static_cast<QRCodeView*>(w)->setText(text, len));
+            return 1;
         default:
-            return luaL_error(L, "pico.text_set: TextView/MarkdownViewのみ対応");
+            return luaL_error(L, "pico.text_set: TextView/MarkdownView/QRCodeのみ対応");
     }
 }
 

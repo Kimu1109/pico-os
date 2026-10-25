@@ -58,6 +58,9 @@ add_library(host_monocypher STATIC
     ${ROOT}/lib/monocypher/src/monocypher-ed25519.c)
 target_include_directories(host_monocypher PUBLIC ${ROOT}/lib/monocypher/src)
 
+add_library(host_qrcodegen STATIC ${ROOT}/lib/qrcodegen/src/qrcodegen.c)
+target_include_directories(host_qrcodegen PUBLIC ${ROOT}/lib/qrcodegen/src)
+
 # JPEGの読み取り(pico.image_load)が使うTJpgDec(LovyanGFXの写し。stubs/lgfx/utility/README.md)
 add_library(host_tjpgd STATIC ${CMAKE_CURRENT_SOURCE_DIR}/stubs/lgfx/utility/lgfx_tjpgd.c)
 
@@ -122,14 +125,14 @@ foreach(layer ${HOST_LAYERS})
     # スタブを src/ より先に(実機の Arduino.h 等をスタブで差し替える)
     target_include_directories(picoos_${layer} PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/stubs ${SRC} ${ROOT}/lib/peanut_gb/src)
-    target_link_libraries(picoos_${layer} PUBLIC host_lua host_monocypher)
+    target_link_libraries(picoos_${layer} PUBLIC host_lua host_monocypher host_qrcodegen)
     list(APPEND HOST_LAYER_LIBS picoos_${layer})
 endforeach()
 
 # テストがリンクするもの。段の間は互いに参照しあう(つなぎの boot が下の段の関数を定義する等)
 # ので、RESCAN の組にしてリンカに何度でも見直させる
 set(HOST_LINK
-    "$<LINK_GROUP:RESCAN,${HOST_LAYER_LIBS},host_lua,host_monocypher,host_tjpgd>"
+    "$<LINK_GROUP:RESCAN,${HOST_LAYER_LIBS},host_lua,host_monocypher,host_qrcodegen,host_tjpgd>"
     OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
 
 # ---- テストの登録 ----
@@ -269,6 +272,7 @@ host_test(dict_scene_test GROUP calc)
 host_test(widget_factory_test GROUP widget)
 host_test(focus_test GROUP widget)
 host_test(widget_property_test GROUP widget)
+host_test(qrcode_test GROUP widget)
 host_test(step_budget_test GROUP widget COMPAT)
 host_test(alarm_test GROUP widget)
 host_test(notification_test GROUP widget)
@@ -299,6 +303,7 @@ host_lua_test(minesweeper_test GROUP lua-scene)
 host_lua_test(breakout_test GROUP lua-scene)
 host_lua_test(blocks_test GROUP lua-scene)
 host_lua_test(spotify_test GROUP lua-scene)
+host_lua_test(qrcode_app_test GROUP lua-scene)
 host_lua_test(pico_mock_test GROUP lua-scene)
 host_lua_test(pico_test_test GROUP lua-scene)
 

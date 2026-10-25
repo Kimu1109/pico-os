@@ -10,10 +10,10 @@ template<size_t N> class Label;
 // スマホから繋ぎ先のWi-Fiを送ってもらう画面(AP設定モード。設定アプリのWi-Fiタブの[スマホ])。
 //
 //   [戻る] スマホから設定
-//   1. スマホのWi-Fiで次へ接続
-//      picoos-setup            ← APの名前とパスワード(大きめの字)
-//      12345678
-//   2. ページが自動で開きます。開かなければ:
+//   1. QRを読むか、Wi-Fiで接続
+//   picoos-setup   [QR]     ← APの名前とパスワード(大きめの字)と、
+//   12345678                  読むとそのAPへ繋がるQR(WIFI:T:WPA;S:…;P:…;;)
+//   2. 自動で開かなければ次を開く
 //      http://192.168.42.1/
 //   3. 繋ぎたいWi-Fiの名前とパスワードを送る
 //   ───────
@@ -41,5 +41,6 @@ class WifiSetupScene : public Scene {
         bool     failed = false;
 
         constexpr static int MARGIN = 6;
+        constexpr static int kQrSize = 93;   // 29升(版3)+余白1升ずつで1升3px
         constexpr static uint32_t kCloseAfterSavedMs = 2500;
 };

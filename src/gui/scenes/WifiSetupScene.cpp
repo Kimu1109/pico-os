@@ -1,6 +1,7 @@
 #include "gui/scenes/WifiSetupScene.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
+#include "gui/widgets/QRCodeView.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Font_Functions.hpp"
@@ -9,6 +10,17 @@
 #include "Arduino.h"
 
 #include <cstdio>
+#include <cstring>
+
+namespace {
+    // スマホのカメラが読む「Wi-Fiへ繋ぐ」QRの文字列の値の部分。\ ; , : " は前に\を付ける
+    void AppendWifiQrEscaped(FixedString<PICO_STR_LL>& out, const char* s){
+        for(; *s; s++){
+            if(std::strchr("\\;,:\"", *s)) out.append('\\');
+            out.append(*s);
+        }
+    }
+}
 
 void WifiSetupScene::onEnter(){
     const Rect content = Scene::contentRect();
@@ -54,24 +66,43 @@ void WifiSetupScene::onEnter(){
         return;
     }
 
-    addText("1. スマホのWi-Fiで次へ接続", 1);
+    addText("1. QRを読むか、Wi-Fiで接続", 1);
+    // 右にAPへ繋ぐQR。読めばスマホがそのまま繋ぎ、ページも自動で開く
+    FixedString<PICO_STR_LL> wifi_qr("WIFI:T:WPA;S:");
+    AppendWifiQrEscaped(wifi_qr, WifiSetupFunctions::ApSsid());
+    wifi_qr.append(";P:");
+    AppendWifiQrEscaped(wifi_qr, WifiSetupFunctions::ApPassword());
+    wifi_qr.append(";;");
+    // QRは自分の余白(地の色)を持つので右端へ寄せる
+    auto* qr = new QRCodeView(content.x + content.w - kQrSize, y, kQrSize);
+    qr->setText(wifi_qr.c_str(), wifi_qr.length());
+    WidgetFunctions::Add(qr);
+    const int row_top = y;
+
     // APの名前とパスワードは打ち写すので大きめの字で
     const int big_h = Label<PICO_STR_M>::GetLineHeight(FontFn::Normal);
-    this->ssid_label = new Label<PICO_STR_M>(content.x + MARGIN * 3, y, WifiSetupFunctions::ApSsid());
+    const int text_w = content.w - kQrSize - MARGIN;
+    this->ssid_label = new Label<PICO_STR_M>(content.x + MARGIN, y, WifiSetupFunctions::ApSsid());
     this->ssid_label->setFontSize(FontFn::Normal);
-    this->ssid_label->setMaxWidth(w - MARGIN * 2);
+    this->ssid_label->setMaxWidth(text_w);   // 長い名前はQRの手前で折り返す
+    this->ssid_label->setMaxHeight(big_h * 2);
     this->ssid_label->setDisableAutoTextDecoration(true);
+    // 大きい字で1行に入らない名前は小さい字に(途中で折り返すと打ち写しにくい)
+    if(this->ssid_label->getH() > big_h) this->ssid_label->setFontSize(FontFn::Small);
     WidgetFunctions::Add(this->ssid_label);
-    y += big_h;
+    // QRの高さの中ほどへ
+    const int text_h = this->ssid_label->getH() + big_h;
+    if(text_h < kQrSize) this->ssid_label->setY(row_top + (kQrSize - text_h) / 2);
+    y = this->ssid_label->getY() + this->ssid_label->getH();
     char pass[PICO_STR_S];
     snprintf(pass, sizeof(pass), "%s", WifiSetupFunctions::ApPassword());
-    this->pass_label = new Label<PICO_STR_S>(content.x + MARGIN * 3, y, pass);
+    this->pass_label = new Label<PICO_STR_S>(content.x + MARGIN, y, pass);
     this->pass_label->setFontSize(FontFn::Normal);
     this->pass_label->setDisableAutoTextDecoration(true);
     WidgetFunctions::Add(this->pass_label);
-    y += big_h + MARGIN;
+    y = row_top + kQrSize + MARGIN;
 
-    addText("2. ページが自動で開きます。開かなければ次のURLを開く:", 2);
+    addText("2. 自動で開かなければ次を開く", 1);
     // URLは折り返さずに1行で見せる(途中で切れると打ち写せない)
     char url[PICO_STR_M];
     snprintf(url, sizeof(url), "   %s", WifiSetupFunctions::PageUrl());

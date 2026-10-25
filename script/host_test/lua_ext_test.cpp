@@ -188,6 +188,21 @@ int main() {
             pico.set(pb, "value", 999)
             check(pico.get(pb, "value") == 50, "ProgressBar: 範囲外はmaxに丸まる")
 
+            -- QRCode
+            local qr = pico.create("QRCode")
+            check(pico.get(qr, "qr_size") == 0, "QRCode: 空なら升目は0")
+            pico.set(qr, "text", "https://example.com/")
+            check(pico.get(qr, "qr_size") == 25 and pico.get(qr, "text") == "https://example.com/", "QRCode: text設定で符号化")
+            pico.set(qr, "ecc", pico.QR_ECC_HIGH)
+            check(pico.get(qr, "ecc") == 3 and pico.get(qr, "qr_size") == 29, "QRCode: 誤り訂正Highで升目が増える")
+            check(not pcall(pico.set, qr, "ecc", 4), "QRCode: eccの範囲外はエラー")
+            check(pico.text_set(qr, string.rep("あ", 85)) == true, "QRCode: text_setは255バイトまで入る")
+            check(pico.text_set(qr, string.rep("x", 256)) == false and pico.get(qr, "qr_size") == 0,
+                  "QRCode: 256バイトはfalseで空になる(切って符号化しない)")
+            check(pico.QR_ECC_LOW == 0 and pico.QR_ECC_MEDIUM == 1 and pico.QR_ECC_QUARTILE == 2,
+                  "QRCode: 誤り訂正の定数")
+            pico.destroy(qr)
+
             -- TextView: 長い文章
             tv = pico.create("TextView")
             pico.set(tv, "w", 120)

@@ -29,6 +29,7 @@
 #include "gui/widgets/ProgressBar.hpp"
 #include "gui/widgets/TextView.hpp"
 #include "gui/widgets/ImageView.hpp"
+#include "gui/widgets/QRCodeView.hpp"
 #include "gui/widgets/apps/MarkdownView.hpp"
 #include "gui/widgets/apps/AnalogClock.hpp"
 #include "gui/widgets/apps/DurationPicker.hpp"
@@ -788,6 +789,42 @@ bool SetTriangleShape(Widget* widget, Id id, const Value& value) {
         }
 }
 
+// ---- QRCodeView ----
+Widget* CreateQRCodeView() { return new QRCodeView(0, 0, 100); }
+bool GetQRCodeView(Widget* widget, Id id, Value& out) {
+        QRCodeView* qr = static_cast<QRCodeView*>(widget);
+        switch (id) {
+            case Id::Text: out = Value::MakeStr(qr->getText()); return true;
+            case Id::Ecc: out = Value::MakeInt((int32_t)qr->getEcc()); return true;
+            case Id::Color: out = Value::MakeInt(qr->getColor()); return true;
+            case Id::QrSize: out = Value::MakeInt(qr->getModuleCount()); return true;
+            default: return false;
+        }
+}
+bool SetQRCodeView(Widget* widget, Id id, const Value& value) {
+        QRCodeView* qr = static_cast<QRCodeView*>(widget);
+        switch (id) {
+            case Id::W:
+                if (value.type != Type::Int) return false;
+                qr->setW(value.i); return true;
+            case Id::H:
+                if (value.type != Type::Int) return false;
+                qr->setH(value.i); return true;
+            case Id::Text:
+                // 255バイト以下は必ず入る(QRCodeView::kMaxVersion)。Valueの器(254バイト)で切れた
+                // 長い文字列を黙って符号化しないよう、長さの分からない文字列は pico.text_set を使う
+                if (value.type != Type::Str) return false;
+                return qr->setText(value.s.c_str(), value.s.length());
+            case Id::Ecc:
+                if (value.type != Type::Int || value.i < 0 || value.i > (int32_t)QRCodeView::Ecc::High) return false;
+                return qr->setEcc((QRCodeView::Ecc)value.i);
+            case Id::Color:
+                if (value.type != Type::Int) return false;
+                qr->setColor((int8_t)value.i); return true;
+            default: return false;
+        }
+}
+
 // ---- ProgressBar ----
 Widget* CreateProgressBar() { return new ProgressBar(0, 0, 100, 12); }
 bool GetProgressBar(Widget* widget, Id id, Value& out) {
@@ -1151,6 +1188,7 @@ const WidgetTypes::Info WidgetTypes::kTypes[] = {
     { WidgetType::LineShape, "Line", CreateLineShape, GetLineShape, SetLineShape },
     { WidgetType::TriangleShape, "Triangle", CreateTriangleShape, GetTriangleShape, SetTriangleShape },
     { WidgetType::ProgressBar, "ProgressBar", CreateProgressBar, GetProgressBar, SetProgressBar },
+    { WidgetType::QRCodeView, "QRCode", CreateQRCodeView, GetQRCodeView, SetQRCodeView },
     { WidgetType::TextView, "TextView", CreateTextView, GetTextView, SetTextView },
     { WidgetType::ImageView, "ImageView", CreateImageView, GetImageView, SetImageView },
     { WidgetType::MarkdownView, "MarkdownView", CreateMarkdownView, GetMarkdownView, SetMarkdownView },

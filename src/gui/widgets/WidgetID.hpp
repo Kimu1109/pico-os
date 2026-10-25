@@ -66,6 +66,7 @@ enum class WidgetType : uint8_t {
     MediaButtons,
     BaseView,
     ReaderView,
+    QRCodeView,
     Count // 番兵。実際の種類としては使わない
 };
 

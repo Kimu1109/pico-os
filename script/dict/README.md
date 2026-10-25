@@ -19,6 +19,8 @@ picoos dict build                  # 同じ(cli-tool/picoos)
 
 ## 材料(`src/`)
 
+**辞書のライセンスは [LICENSES.md](LICENSES.md)**(SKK辞書=GPL-2.0以降、英和/和英=JMdict/EDICT由来でCC BY-SA 4.0)。
+
 - `SKK-JISYO.ML` / `SKK-JISYO.M` … SKK辞書(EUC-JP)。IMEは ML を使う。
 - `tofu-chars.txt` … IMEのフォントで描けない文字(SKK辞書向けに `checkFontCoverage()` で作った)。
 - `en-ja-and-ja-en.tsv` … 英和/和英の単語辞書(1列目でソート済み、豆腐の行は除いてある)。

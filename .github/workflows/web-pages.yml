@@ -58,7 +58,7 @@ jobs:
         run: |
           sh script/dict/build.sh dict
           mkdir -p pc/sdcard/sys/dict
-          cp script/dict/out/sys/dict/en-ja-and-ja-en.tsv script/dict/out/sys/dict/dict_index.tsv pc/sdcard/sys/dict/
+          cp script/dict/out/sys/dict/en-ja-and-ja-en.tsv script/dict/out/sys/dict/dict_index.tsv script/dict/out/sys/dict/LICENSES.md pc/sdcard/sys/dict/
 
       - name: ビルドする
         run: |

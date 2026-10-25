@@ -30,4 +30,7 @@ for what in "$@"; do
     *) echo "知らない種類: $what (ime / dict / suffix)" >&2; exit 2 ;;
     esac
 done
+# 辞書のライセンス(再配布のとき辞書と一緒に置く決まり)
+cp "$DIR/LICENSES.md" "$OUT/sys/ime/LICENSES.md"
+cp "$DIR/LICENSES.md" "$OUT/sys/dict/LICENSES.md"
 echo "[dict] $OUT/sys/ を SD のルートへ写してください" >&2

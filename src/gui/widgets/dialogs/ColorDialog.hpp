@@ -12,8 +12,9 @@ class ColorDialog : public Widget {
 
         constexpr static int DIALOG_W = 200;
 
-        constexpr static int BASE_X = 20;
-        constexpr static int BASE_Y = 85;
+        // 画面の中ほどに置く(240x320で(20,85))
+        constexpr static int BASE_X = (SCREEN_WIDTH - DIALOG_W) / 2;
+        constexpr static int BASE_Y = 85 + (SCREEN_HEIGHT - 320) / 2;
 
         constexpr static int TITLE_H = 30;
 

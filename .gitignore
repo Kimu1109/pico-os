@@ -6,7 +6,8 @@
 .venv
 __pycache__/
 # PC/Webビルド(pc/CMakeLists.txt)の生成物
-pc/build/
+# 画面の大きさ別のビルド(pc/build-320x480 等。pc/README.md「画面の大きさを変える」)も含む
+pc/build*/
 pc/build-web/
 pc/sdcard/sys/log.txt
 pc/sdcard/sys/log.old.txt
@@ -24,6 +25,7 @@ pc/sdcard/sys/mail_token.cfg.tmp
 pc/sdcard/sys/mail.cfg.tmp
 # 開発者向けの道具(/sys/debug.cfg)とクラッシュダンプ。PCビルドで試すと作られる
 pc/sdcard/sys/debug.cfg
+pc/sdcard/sys/notify_rules.tsv
 pc/sdcard/sys/debug.cfg.tmp
 pc/sdcard/sys/home.cfg
 pc/sdcard/sys/home.cfg.tmp

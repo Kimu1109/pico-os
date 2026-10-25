@@ -67,6 +67,16 @@ SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --shot shot.ppm 40
 フォールバックのパッチを当てて緩和はしてあるが、`offscreen`を使えばそもそも
 毎フレームの作り直し自体が起きない)。
 
+### 画面の大きさを変える
+
+既定は実機と同じ240x320。`PICOOS_SCREEN_W`/`PICOOS_SCREEN_H` で `src/consts.hpp` の `SCREEN_WIDTH`/`SCREEN_HEIGHT` を変えて
+ビルドできる(全部のファイルが作り直しになるので、大きさごとにビルドの置き場を分けるとよい)。設計は `docs/design/gui.md` の「画面の大きさ」。
+
+```sh
+cmake -S pc -B pc/build-320x480 -DPICOOS_SCREEN_W=320 -DPICOOS_SCREEN_H=480 && cmake --build pc/build-320x480 -j
+SDL_VIDEODRIVER=offscreen ./pc/build-320x480/picoos_pc --app 電卓 --shot calc.ppm 200
+```
+
 ### 起動時に開くアプリ
 
 `--app 名前` で、起動したらランチャの名前のアプリを開いておける(ホーム画面の上へ開くので、戻ればいつものホーム画面)。

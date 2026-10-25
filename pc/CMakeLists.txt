@@ -154,6 +154,13 @@ add_executable(picoos_pc
 # PICOOS_PC  … pico-os側がPC向けの実装(パネル設定/タッチ取得)へ切り替えるためのフラグ
 target_compile_definitions(picoos_pc PRIVATE LGFX_SDL PICOOS_PC)
 
+# 画面の大きさ(src/consts.hpp の SCREEN_WIDTH/HEIGHT)。既定は実機と同じ240x320。
+# 例: cmake -S pc -B pc/build-320x480 -DPICOOS_SCREEN_W=320 -DPICOOS_SCREEN_H=480
+set(PICOOS_SCREEN_W 240 CACHE STRING "画面の幅(画素)")
+set(PICOOS_SCREEN_H 320 CACHE STRING "画面の高さ(画素)")
+target_compile_definitions(picoos_pc PRIVATE
+    SCREEN_WIDTH=${PICOOS_SCREEN_W} SCREEN_HEIGHT=${PICOOS_SCREEN_H})
+
 # pc/compat を src より前に置くことで、実機ライブラリのヘッダを差し替える
 target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"

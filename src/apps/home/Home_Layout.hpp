@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "services/App_Functions.hpp"
+#include "consts.hpp"
 
 class HomeWidget;
 
@@ -18,7 +19,8 @@ class HomeWidget;
 // - 描画にも SD の中身にも依存しない(Load/Save だけ SD に触る)。ウィジェットの描き方は
 //   SetImpl() で差す(Home_Widgets.cpp の Setup())。差していなければランチャは枠だけ描く
 namespace HomeLayout {
-    constexpr int kCols = 2;
+    // 列の数。タイルが120px程度になるよう画面の幅から決める(240x320で2列)。1ページのマスは32まで(used のビット)
+    constexpr int kCols = (SCREEN_WIDTH / 120 < 2) ? 2 : SCREEN_WIDTH / 120;
     constexpr int kMaxWidgets = 8;
     constexpr int kMaxItems = AppFunctions::kMaxApps + kMaxWidgets;
 

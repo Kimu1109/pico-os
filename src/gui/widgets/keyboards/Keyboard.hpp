@@ -23,8 +23,8 @@ class Keyboard : public KeyboardPanel {
 
         // 物理キーボードで打っている間は、キーを畳んで候補の欄だけにする(画面を広く使うため)
         static constexpr int COMPACT_H = CANDIDATES_H + 1;
-        static constexpr int CANDIDATES_AREA_W = 200;          // 候補を並べる幅(右に←→)
-        static constexpr int COMPACT_AREA_W = 176;             // 畳んだときは右端に「あ」(広げるボタン)を置く
+        static constexpr int CANDIDATES_AREA_W = SCREEN_WIDTH - 40;  // 候補を並べる幅(右に←→。240幅で200)
+        static constexpr int COMPACT_AREA_W = SCREEN_WIDTH - 64;     // 畳んだときは右端に「あ」(広げるボタン)を置く(240幅で176)
         static constexpr int EXPAND_X = SCREEN_WIDTH - 22;
 
         const char* const keys_jpn[4 * 5] = {

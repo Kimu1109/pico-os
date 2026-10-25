@@ -42,10 +42,13 @@ GameBoyScene::~GameBoyScene(){
 void GameBoyScene::onEnter(){
     const Rect content = Scene::contentRect();
 
-    this->view = new GameBoyView(content.x, content.y, &this->emu);
+    // 画面が240より広ければ、ゲームの画面とパッド(どちらも幅240が前提)を左右の真ん中へ置く。
+    // ゲームの画面はframeへバイト単位で写すので、左端は偶数にする
+    const int gx = content.x + (((content.w - GameBoyView::kViewW) / 2) & ~1);
+    this->view = new GameBoyView(gx, content.y, &this->emu);
     WidgetFunctions::Add(this->view);
 
-    this->pad = new GameBoyPad(content.x, content.y + GameBoyView::kViewH, content.w);
+    this->pad = new GameBoyPad(gx, content.y + GameBoyView::kViewH, GameBoyView::kViewW);
     this->pad->setOnMenu([this](){ this->openMenu(); });
     this->pad->setOnBack([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->pad);

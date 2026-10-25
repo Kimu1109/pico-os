@@ -30,6 +30,7 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
 ## ビルド
 
 - `platformio.ini` の `[env:rpipico2w]`。`extra_scripts` がファームの版を埋め込み、`-t fwpack`/`-t fwpush` を足す。
+- 画面の大きさと液晶の種類はビルド時に選ぶ(`SCREEN_WIDTH/HEIGHT`・`PICO_PANEL_*`、env `rpipico2w_320x480` が例)。**配置は `Scene::contentRect()` からの相対で書き、240/320を直書きしない**(`docs/design/gui.md`「画面の大きさ」)。
 - **LovyanGFXの版は `lib_deps` の完全固定の1行が唯一の情報源**(`pc/CMakeLists.txt` がこれを読む。範囲指定に戻すとPCビルドのconfigureが止まる)。
 - PC/Web実行は `pc/`(詳細・`--tap`/`--shot`・Wi-Fiの偽装・SPI待ち・`src/`側の決まりは `pc/README.md`、Webは `docs/design/pc-web.md`):
   ```sh

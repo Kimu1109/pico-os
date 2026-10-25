@@ -13,9 +13,23 @@
 #include <XPT2046_Touchscreen.h>
 #include "consts.hpp"
 
+// --- 液晶の種類 ---
+// platformio.ini の env で -DPICO_PANEL_ST7796 等を足すと切り替わる(既定はILI9341)。
+// 画面の大きさ(SCREEN_WIDTH/HEIGHT、consts.hpp)はパネルの縦向きの大きさと合わせること
+// (setRotation()はしていない)。タッチはXPT2046のまま(Touch_Functions.hpp)。
+#if defined(PICO_PANEL_ST7796)
+  using PicoPanel = lgfx::Panel_ST7796;   // 320x480
+#elif defined(PICO_PANEL_ILI9488)
+  using PicoPanel = lgfx::Panel_ILI9488;  // 320x480
+#elif defined(PICO_PANEL_ST7789)
+  using PicoPanel = lgfx::Panel_ST7789;   // 240x320 / 240x240
+#else
+  using PicoPanel = lgfx::Panel_ILI9341;  // 240x320
+#endif
+
 // --- 液晶用 LGFX（SPI0） ---
 class LGFX : public lgfx::LGFX_Device {
-  lgfx::Panel_ILI9341 _panel_instance;
+  PicoPanel           _panel_instance;
   lgfx::Bus_SPI       _bus_instance;
   lgfx::Light_PWM     _light_instance; // バックライト(TFT_LED)のPWM調光
 public:

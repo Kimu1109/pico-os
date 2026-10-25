@@ -300,6 +300,7 @@ host_lua_test(breakout_test GROUP lua-scene)
 host_lua_test(blocks_test GROUP lua-scene)
 host_lua_test(spotify_test GROUP lua-scene)
 host_lua_test(pico_mock_test GROUP lua-scene)
+host_lua_test(pico_test_test GROUP lua-scene)
 
 # --- ssh: 端末エミュレータと暗号まわりの小道具 ---
 host_test(vt_terminal_test GROUP ssh)

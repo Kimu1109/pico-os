@@ -90,6 +90,22 @@ Luaアプリは `pico.launch_reason()` が `tag == "scene"`(`data` が画面の�
 **実機では使わない口**なので、どちらも受け取れなかったら(ランチャから開いたら)いつもの画面のまま。
 撮る一覧は `script/web_shots.sh`。
 
+### Luaアプリのホットリロード
+
+`--hot-reload` を `--app` と一緒に付けると、開いたLuaアプリのフォルダ(下のフォルダも)の `.lua` と `app.cfg` を
+250msごとに見て、保存されたら同じ引数で起動し直す(電源メニューの「再起動」と同じ `execv`)。
+`picoos pc dev <アプリのフォルダか名前>` が同じことをする。ネイティブ専用(Webには無い)。
+
+```sh
+./pc/build/picoos_pc --app テトリス --hot-reload
+picoos pc dev pc/sdcard/lua/apps/テトリス -- --scene play
+```
+
+- Luaの状態だけ作り直さずプロセスごと起動し直すのは、画面の積み重ね・タイマー・HTTP・画像を確実に片付けるため。
+- アプリが書くファイル(`store.json` 等)では起動し直さない。エディタの「一時ファイルへ書いて置き換え」の途中で拾わないよう、
+  変わった後にもう一度同じに見えてから起動し直す。中身は `pc/HotReload_PC.hpp`。
+- 自動テストは `picoos lua-test`(`script/lua_test/`、lua-api-doc の guide/app/testing.md)。
+
 ## ブラウザで動かす (WebAssembly)
 
 ### 必要なもの

@@ -33,7 +33,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_DIR = REPO_ROOT / "script"
 HOST_TEST_DIR = SCRIPT_DIR / "host_test"
+LUA_TEST_DIR = SCRIPT_DIR / "lua_test"
 PC_DIR = REPO_ROOT / "pc"
+LUA_APPS_DIR = PC_DIR / "sdcard" / "lua" / "apps"
 
 
 def venv_python() -> str:
@@ -202,6 +204,110 @@ def cmd_pc_shot(args) -> int:
     return run_py("ppm2png.py", [args.out_ppm, args.png, str(args.scale)])
 
 
+def _resolve_app_name(app: str) -> str:
+    """--app へ渡す名前。ディレクトリ(pc/sdcard/lua/apps/テトリス 等)なら app.cfg の name、
+    無ければフォルダ名。ディレクトリでなければランチャの名前としてそのまま使う。"""
+    path = Path(app)
+    if not path.is_dir():
+        return app
+    cfg = path / "app.cfg"
+    if cfg.is_file():
+        for line in cfg.read_text(encoding="utf-8", errors="replace").splitlines():
+            key, sep, value = line.partition("=")
+            if sep and key.strip() == "name" and value.strip():
+                return value.strip()
+    return path.resolve().name
+
+
+def cmd_pc_dev(args) -> int:
+    # Luaアプリのホットリロード。picoos_pc の --hot-reload が、開いたLuaアプリのフォルダの
+    # .lua / app.cfg の保存を見張り、変わったら同じ引数で起動し直す(pc/README.md「ホットリロード」)
+    binary = _pc_build_dir(web=False) / "picoos_pc"
+    if not binary.exists():
+        print(f"[picoos] {binary} がありません。先に `picoos pc build` を実行してください。",
+              file=sys.stderr)
+        return 1
+    cmd = [str(binary), "--app", _resolve_app_name(args.app), "--hot-reload"]
+    if args.scene:
+        cmd += ["--scene", args.scene]
+    rest = args.rest[1:] if args.rest[:1] == ["--"] else args.rest
+    cmd += rest
+    return run(cmd, cwd=REPO_ROOT)
+
+
+# ---- Luaアプリのテスト(picoos lua-test) ----
+
+def _lua_test_binary() -> Path:
+    """script/lua_test/pico_lua_test を(無いか古ければ)ccで作って返す。vendorしたLua(lib/lua)を
+    そのままビルドするので、数の扱い(LUA_32BITS)は実機と同じ。失敗したらNone。"""
+    out_dir = LUA_TEST_DIR / "build"
+    binary = out_dir / "pico_lua_test"
+    sources = sorted((REPO_ROOT / "lib" / "lua" / "src").glob("*.c")) + [LUA_TEST_DIR / "pico_lua_test.c"]
+    headers = list((REPO_ROOT / "lib" / "lua" / "src").glob("*.h"))
+    if binary.exists():
+        built = binary.stat().st_mtime
+        if all(p.stat().st_mtime <= built for p in sources + headers):
+            return binary
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cc = os.environ.get("CC", "cc")
+    print(f"[picoos] Luaのテストの下請けを作ります: {binary.relative_to(REPO_ROOT)}", file=sys.stderr)
+    # 出力は失敗したときだけ見せる(loslib.c の tmpnam へのリンカの警告は、os.tmpname を
+    # アプリへ見せないので無関係。LUA_USE_LINUX 等は付けず実機と同じANSI構成のまま作る)
+    cmd = [cc, "-O1", "-std=gnu99", "-w", "-I", str(REPO_ROOT / "lib" / "lua" / "src"),
+           *[str(p) for p in sources], "-lm", "-o", str(binary)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError:
+        print(f"[picoos] Cコンパイラが見つかりません: {cc}(環境変数CCで指定できます)", file=sys.stderr)
+        return None
+    if proc.returncode != 0:
+        sys.stderr.write(proc.stdout + proc.stderr)
+        return None
+    return binary
+
+
+def _find_lua_tests(paths):
+    """引数(ファイルかディレクトリ)から *_test.lua を集める。省略時は pc/sdcard/lua/apps/ の全アプリ。"""
+    if not paths:
+        paths = [str(LUA_APPS_DIR)]
+    files = []
+    for p in paths:
+        path = Path(p)
+        if path.is_file():
+            files.append(path)
+        elif path.is_dir():
+            files += sorted(f for f in path.rglob("*_test.lua") if f.is_file())
+        else:
+            print(f"[picoos] 見つかりません: {p}", file=sys.stderr)
+            return None
+    return files
+
+
+def cmd_lua_test(args) -> int:
+    files = _find_lua_tests(args.paths)
+    if files is None:
+        return 2
+    if not files:
+        print("[picoos] テストファイル(*_test.lua)がありません。アプリのフォルダの tests/ に置いてください"
+              " (lua-api-doc guide/app/testing.md)", file=sys.stderr)
+        return 1
+    if args.list:
+        for f in files:
+            print(os.path.relpath(f))
+        return 0
+    binary = _lua_test_binary()
+    if binary is None:
+        return 1
+    cmd = [str(binary), str(REPO_ROOT)]
+    if args.verbose:
+        cmd.append("-v")
+    if args.k:
+        cmd += ["-k", args.k]
+    # 表示を短くするため、テストファイルは今のディレクトリからの相対パスで渡す
+    cmd += [os.path.relpath(f) for f in files]
+    return run(cmd)
+
+
 def cmd_pc_web_serve(args) -> int:
     return run(["emrun", "--no_browser", "--port", str(args.port), args.dir], cwd=REPO_ROOT)
 
@@ -238,6 +344,8 @@ def build_parser() -> argparse.ArgumentParser:
   picoos pc build                                 PC(SDL2)版をビルド
   picoos pc run -- --shot shot.ppm 40             ネイティブ版を実行(引数はそのまま転送)
   picoos pc shot shot.ppm 40 --png shot.png       ヘッドレスで撮ってPNGまで変換
+  picoos pc dev pc/sdcard/lua/apps/テトリス         Luaアプリを開き、.luaを保存するたびに起動し直す
+  picoos lua-test pc/sdcard/lua/apps/動作確認       Luaアプリの tests/*_test.lua を pico_mock の上で動かす
 
 転送系のサブコマンドは `picoos <サブコマンド> --help` で元スクリプト自身の
 ヘルプが表示される(picoos側でオプションを再定義していないため)。
@@ -310,10 +418,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scale", type=int, default=2, help="--png指定時の拡大率(既定2)")
     p.set_defaults(func=cmd_pc_shot)
 
+    p = pc_sub.add_parser("dev", help="Luaアプリを開いてホットリロード(.lua/app.cfgの保存で起動し直す)")
+    p.add_argument("app", metavar="APP", help="アプリのフォルダ(pc/sdcard/lua/apps/…)かランチャの名前")
+    p.add_argument("--scene", help="--scene と同じ(アプリへ最初に開く画面を頼む)")
+    p.add_argument("rest", nargs=argparse.REMAINDER, help="picoos_pc へそのまま渡す引数(-- の後ろ)")
+    p.set_defaults(func=cmd_pc_dev)
+
     p = pc_sub.add_parser("web-serve", help="Web版をローカルで配信する(emrun)")
     p.add_argument("--port", type=int, default=8080)
     p.add_argument("--dir", default=str(_pc_build_dir(web=True)))
     p.set_defaults(func=cmd_pc_web_serve)
+
+    p = sub.add_parser("lua-test", help="Luaアプリのテスト(*_test.lua)を pico_mock の上で動かす (script/lua_test/)")
+    p.add_argument("paths", nargs="*", metavar="PATH",
+                    help="テストファイルか、*_test.lua を探すディレクトリ(省略で pc/sdcard/lua/apps/ の全部)")
+    p.add_argument("-k", metavar="NAME", help="名前にこの文字列を含むテストだけ動かす")
+    p.add_argument("-v", "--verbose", action="store_true", help="アプリの print とエラーのトレースバックも出す")
+    p.add_argument("--list", action="store_true", help="見つかったテストファイルを並べるだけ")
+    p.set_defaults(func=cmd_lua_test)
 
     return parser
 

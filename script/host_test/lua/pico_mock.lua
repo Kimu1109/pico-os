@@ -10,6 +10,7 @@
 --   mock.find("name")                    -- pico.set_name で付けた名前から
 --   mock.draws                           -- pico.draw_* の呼び出し回数
 --   mock.sd[path] = "..."                -- 偽のSD(sd_read/sd_write/sd_exists/sd_list/store_*)
+--   mock.install({ sd_root = dir })      -- 偽のSDの下に本物のディレクトリを敷く(読むだけ。下記)
 --
 -- 本物と違う所: 描画はしない(数えるだけ)/ ウィジェットはプロパティの入れ物でしかない(レイアウトや
 -- 当たり判定はしない)/ 音・HTTP・ダイアログは呼び出しを記録するだけ(mock.sounds / mock.requests / mock.dialogs)。
@@ -21,6 +22,7 @@ function M.install(opts)
     M.widgets = {}
     M.names = {}
     M.sd = {}
+    M.sd_removed = {}
     M.draws = 0
     M.sounds = {}
     M.requests = {}
@@ -147,6 +149,12 @@ function M.install(opts)
     function pico.change_scene(path, args) M.scene = { kind = "change", path = path, args = args } end
     function pico.launch_app(name) M.scene = { kind = "app", name = name } return true end
     function pico.args() return opts.args end
+    -- launch_reason は1回きり(本物と同じ)。opts.launch_reason = { tag, data }
+    function pico.launch_reason()
+        local r = opts.launch_reason
+        opts.launch_reason = nil
+        if r then return r[1], r[2] end
+    end
     function pico.get_touch() return M.touch.x, M.touch.y, M.touch.down end
     function pico.pad_connected() return opts.pad_connected ~= false end
     function pico.pad_down(n) return M.pad[n] or false end
@@ -173,10 +181,35 @@ function M.install(opts)
     function pico.cancel(h) M.timers[h] = nil end
 
     -- ---- SD・設定・保存 ----
-    function pico.sd_exists(p) return M.sd[p] ~= nil end
-    function pico.sd_read(p) return M.sd[p] end
-    function pico.sd_write(p, s, append) M.sd[p] = (append and (M.sd[p] or "") or "") .. s return true end
-    function pico.sd_remove(p) M.sd[p] = nil return true end
+    -- opts.sd_root(SDのルートに当たる本物のディレクトリ)を渡すと、M.sd に無いパスはそこから読む
+    -- (アプリのフォルダの画像・データ・モジュールを置き直さずに済む)。読むだけで、書き込みと削除は
+    -- M.sd / M.sd_removed に残り本物のファイルは変えない。sd_list は M.sd の分しか見えない。
+    -- sd_root は関数でもよい(SDのパス → 本物のパス。nil なら無いファイル)
+    local function host_read(p)
+        if not opts.sd_root or M.sd_removed[p] then return nil end
+        local host
+        if type(opts.sd_root) == "function" then host = opts.sd_root(p) else host = opts.sd_root .. p end
+        if not host then return nil end
+        local f = io.open(host, "rb")
+        if not f then return nil end
+        local s = f:read("a")  -- ディレクトリは開けても読めない(nil)
+        f:close()
+        return s
+    end
+    M.host_read = host_read
+    local function read(p)
+        local s = M.sd[p]
+        if s == nil then s = host_read(p) end
+        return s
+    end
+    function pico.sd_exists(p) return read(p) ~= nil end
+    function pico.sd_read(p) return read(p) end
+    function pico.sd_write(p, s, append)
+        M.sd[p] = (append and (read(p) or "") or "") .. s
+        M.sd_removed[p] = nil
+        return true
+    end
+    function pico.sd_remove(p) M.sd[p] = nil M.sd_removed[p] = true return true end
     function pico.sd_mkdir() return true end
     function pico.sd_list(dir)
         local out = {}
@@ -405,7 +438,7 @@ function M.install(opts)
         return pick(root, paths, o)
     end
     function pico.sd_json_pick(path, paths, o)
-        local text = M.sd[path]
+        local text = read(path)
         if not text then return nil, "ファイルを開けません" end
         return pico.json_pick(text, paths, o)
     end
@@ -416,8 +449,9 @@ function M.install(opts)
         return nil, "pico_mock: xml_pick は未対応です(M.xml_pick_result を設定してください)"
     end
     function pico.sd_xml_pick(path, paths, o)
-        if not M.sd[path] then return nil, "ファイルを開けません" end
-        return pico.xml_pick(M.sd[path], paths, o)
+        local text = read(path)
+        if not text then return nil, "ファイルを開けません" end
+        return pico.xml_pick(text, paths, o)
     end
     function pico.form_encode(t)
         local keys = {}

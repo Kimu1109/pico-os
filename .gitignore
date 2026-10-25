@@ -64,3 +64,5 @@ pc/sdcard/lua/apps/*/log.csv
 script/host_test/build/
 # 辞書の材料から作ったSD用のファイル(script/dict/build.sh が作る)
 script/dict/out/
+# picoos lua-test が作るLuaのテストの下請け(script/lua_test/pico_lua_test.c)
+script/lua_test/build/

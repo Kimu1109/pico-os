@@ -112,6 +112,38 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 `watchdog_enable_caused_reboot()`の名前・RP2350(Cortex-M33)のnakedのアセンブリ・デバッガの画面の描画と`Font0`・
 プロファイラの実機の値。
 
+## Luaアプリのホットリロードとテストランナー (`pc/HotReload_PC.hpp` / `script/lua_test/`) (2026-10-25)
+
+アプリ作者がPCだけで「書く→見る→確かめる」を回すための2つ。使い方は lua-api-doc の `guide/app/testing.md`。
+
+**ホットリロード(`picoos_pc --app 名前 --hot-reload` / `picoos pc dev`)**
+- `--app` で開いたLuaアプリ(登録簿の `arg` が `.lua`)の親フォルダを `PicoOsSdHost::toHostPath()` でPCのパスにし、
+  250msごとに下4段までの `.lua` と `app.cfg` の 名前・更新時刻・大きさ を混ぜた値を見る。変わって、次の回も同じ値なら
+  `rebootSelf()`(電源メニューの再起動と同じ `execv`。同じ引数なので `--app` がまたそのアプリを開く)。
+- **Luaの状態だけ作り直す方式にしなかった**: 画面の積み重ね(push_sceneしたページ)・タイマー・HTTP・画像・
+  バックグラウンドの登録を全部片付ける口が無く、残ると「直したのに古い挙動」を見ることになる。PCの起動は1秒かからない。
+- 見るファイルを `.lua`/`app.cfg` に絞るのは、アプリ自身が書く `store.json` 等で起動し直し続けないため。2回続けて同じ値を
+  待つのは、エディタの「一時ファイルへ書いて置き換え」の途中で拾わないため。`--shot` のときは見ない。
+- ネイティブ専用(Webはファイルを見張れない)。`src/` には手を入れていない。
+
+**テストランナー(`picoos lua-test`)**
+- `script/lua_test/pico_test.lua` が本体。`script/host_test/lua/pico_mock.lua`(既存の `pico.*` の偽物)の上でアプリを読み、
+  テストファイル(`*_test.lua`)の `test(名前, 関数)` を順に動かす。確かめる関数は `ok/eq/ne/near/raises/fail`、
+  アプリの操作は `load_app()` が返す `app` の `tap/fire/frame/run/key/back/widget/find_all`。
+- 下請け `script/lua_test/pico_lua_test.c` を `cli-tool/picoos` が `cc` で直接作る(`script/lua_test/build/`、ソースが新しければ作り直す)。
+  CMakeのホストテスト一式を作らずに済み、vendorしたLua(`LUA_32BITS`)なので**整数32bit・単精度の小数が実機と同じ**
+  (母艦の `lua5.4` を使わない理由)。
+- アプリは実機のサンドボックスに近い環境で動く: 標準の関数・ライブラリは白リストで写したもの(`io`・`dofile`・`loadfile`・
+  `package`・`debug`・`os.exit`等・`string.dump` が無い)、`setmetatable` は `__gc` を断る、`load` はテキストだけでアプリの環境が既定、
+  `require` は本物と同じ名前の決まりで `pico.*` → `src/lua/builtin/`、他はアプリのフォルダの `a/b.lua` → `a/b/init.lua`。
+  `lib.lua` があれば `main.lua` より先(`LuaScene` と同じ)。アプリのグローバル変数はアプリごとの環境の表に入るので、テストの間で混ざらない。
+- 偽物に無い `pico.*` は `pico_mock に無い関数です` で止める(nilを呼んだときの分かりにくいエラーの代わり)。`stubs` で足せる。
+- `pico_mock.lua` に足したもの: `sd_root`(偽のSDの下に本物のディレクトリを読むだけで敷く。関数も可)・`sd_removed`・`launch_reason`。
+  リポジトリの `pc/sdcard/` の下のアプリはSD全体をそこへ当て、それ以外のフォルダは `/lua/apps/<フォルダ名>` だけを当てる。
+- テストは `tests/` と `*_test.lua` に置く決まりにし、`build_app_repo.py` は配る物から除く(端末に要らない)。
+- 見本は `pc/sdcard/lua/apps/動作確認/tests/menu_test.lua`。検証は `pico_test_test`(lua-scene。`script/host_test/lua/test_app` の
+  わざと失敗するものを含むテストで、数・失敗の文と行・サンドボックス・SDの下敷き・読み込みの失敗、と見本が通ること)。
+
 ## 実機の確認用の道具 (`src/devtools/HwTest_Functions` / Luaアプリ「実機チェック」) (2026-10-11)
 
 `docs/HARDWARE_CHECKLIST.md`(実機で確かめる・測る項目の一覧)を回すための道具。

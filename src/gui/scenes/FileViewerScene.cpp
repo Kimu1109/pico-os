@@ -4,6 +4,7 @@
 #include "apps/video/VideoScene.hpp"
 #include "apps/firmware/FirmwareScene.hpp"
 #include "apps/reader/ReaderScene.hpp"
+#include "config/App_Config.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/core/Font_Functions.hpp"
 #include "gui/core/Error_Functions.hpp"
@@ -85,16 +86,19 @@ void FileViewerScene::onEnter(){
     }
 
     //動画は動画アプリへ置き換わる(「戻る」で元の画面へ戻る)
+#if PICO_APP_VIDEO
     if(OSData::SD_usable && HasExtension(this->path.c_str(), ".pvid")){
         SceneFunctions::Change(new VideoScene(this->path.c_str()));
         return;
     }
+#endif
     //ファームの更新ファイルは「本体の更新」へ置き換わる(確かめてから書き込むかを聞く)
     if(OSData::SD_usable && HasExtension(this->path.c_str(), ".pfw")){
         SceneFunctions::Change(new FirmwareScene(this->path.c_str()));
         return;
     }
     //Shift_JIS のテキスト(青空文庫の配布物)はここでは文字化けするので、読書アプリへ置き換わる
+#if PICO_APP_READER
     if(OSData::SD_usable && HasExtension(this->path.c_str(), ".txt")){
         ReaderFile f;
         Aozora::Info info;
@@ -107,6 +111,7 @@ void FileViewerScene::onEnter(){
             }
         }
     }
+#endif
     this->media = Media::None;
     if(OSData::SD_usable){
         if(HasExtension(this->path.c_str(), ".wav"))      this->media = Media::Wav;
@@ -129,7 +134,8 @@ void FileViewerScene::onEnter(){
     const int status_x = back_box.x + back_box.w + MARGIN;
 
     const char* p = this->path.c_str();
-    const bool editable = OSData::SD_usable && !HasExtension(p, ".pimg") && !HasExtension(p, ".bmp") && this->media != Media::Wav;
+    //エディタはテキスト(PICO_APP_TEXTEDITOR)を外した版には出さない
+    const bool editable = PICO_APP_TEXTEDITOR && OSData::SD_usable && !HasExtension(p, ".pimg") && !HasExtension(p, ".bmp") && this->media != Media::Wav;
 
     //右端の「編集」(テキスト系だけ)。状態欄はその手前までにする
     int status_right = content.x + content.w - MARGIN;
@@ -145,7 +151,7 @@ void FileViewerScene::onEnter(){
         status_right = this->edit_button->getLocalRect().x - MARGIN;
     }
     //.txt は「読む」で読書アプリ(ページ送り・しおり・続きから。青空文庫の Shift_JIS も読める)
-    if(OSData::SD_usable && HasExtension(p, ".txt")){
+    if(PICO_APP_READER && OSData::SD_usable && HasExtension(p, ".txt")){
         this->read_button = new Button(0, content.y + MARGIN, "読む");
         this->read_button->setFontSize(FontFn::Small);
         this->read_button->setH(20 + Button::kFrameExtra);

@@ -14,6 +14,7 @@
 #include "gui/icons/icon_render.h"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
+#include "config/App_Config.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -188,6 +189,7 @@ namespace {
     };
 
     // ================= 音楽 =================
+#if PICO_APP_MUSIC
     class MusicWidget : public HomeWidget {
         public:
             enum Button { Prev = 0, Play = 1, Next = 2 };
@@ -314,7 +316,9 @@ namespace {
                 snprintf(out, cap, "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
             }
     };
+#endif
 
+#if PICO_APP_CALENDAR || PICO_APP_TODO
     // 予定・TODOの1行の左の欄(今日なら時刻、それ以外は曜日+時刻)
     void DayLabel(int32_t day, int32_t today, int32_t sec, bool all_day, char* out, size_t cap){
         char hm[8] = "";
@@ -344,8 +348,10 @@ namespace {
         }
         return y + kRowH;
     }
+#endif
 
     // ================= 予定 =================
+#if PICO_APP_CALENDAR
     class AgendaWidget : public HomeWidget {
         public:
             const char* appName() const override { return "カレンダー"; }
@@ -398,8 +404,10 @@ namespace {
                 }
             }
     };
+#endif
 
     // ================= TODO =================
+#if PICO_APP_TODO
     class TodoWidget : public HomeWidget {
         public:
             const char* appName() const override { return "TODO"; }
@@ -462,19 +470,33 @@ namespace {
         private:
             bool configured_ = false;
     };
+#endif
 
     ClockWidget clock_widget;
     AnalogWidget analog_widget;
+#if PICO_APP_MUSIC
     MusicWidget music_widget;
+#endif
+#if PICO_APP_CALENDAR
     AgendaWidget agenda_widget;
+#endif
+#if PICO_APP_TODO
     TodoWidget todo_widget;
+#endif
 }
 
 void HomeWidgets::Setup(){
     HomeLayout::SetImpl(HomeLayout::Kind::Clock, &clock_widget);
     HomeLayout::SetImpl(HomeLayout::Kind::Analog, &analog_widget);
+    //ビルド時に外したアプリ(config/App_Config.hpp)のウィジェットは差さない(選ぶ一覧に出ない。置いてあれば名前だけ出す)
+#if PICO_APP_MUSIC
     HomeLayout::SetImpl(HomeLayout::Kind::Music, &music_widget);
+#endif
+#if PICO_APP_CALENDAR
     HomeLayout::SetImpl(HomeLayout::Kind::Agenda, &agenda_widget);
+#endif
+#if PICO_APP_TODO
     HomeLayout::SetImpl(HomeLayout::Kind::Todo, &todo_widget);
+#endif
     HomeLayout::Load();
 }

@@ -10,6 +10,7 @@
 #include "gui/scenes/RecentFilesScene.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
+#include "config/App_Config.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/Recent_Files.hpp"
 #include "OS_Data.hpp"
@@ -74,11 +75,13 @@ void FileExplorerScene::onEnter(){
     );
     //ファイルを2回タップしたら中身を見る(ファイルビューワーを上へ積む。「戻る」でここへ戻る)。動画(.pvid)は動画アプリで
     this->explorer->setOnFileTap([](const char* path){
+#if PICO_APP_VIDEO
         const char* dot = strrchr(path, '.');
         if(dot && strcasecmp(dot, ".pvid") == 0){
             SceneFunctions::Push(new VideoScene(path));
             return;
         }
+#endif
         SceneFunctions::Push(new FileViewerScene(path));
     });
     WidgetFunctions::Add(this->explorer);

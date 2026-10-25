@@ -86,6 +86,12 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: pio run -e rpipico2w_minimal
 
+      # 内蔵アプリを全部外した版(src/config/App_Config.hpp)。`#if PICO_APP_*` の囲み忘れ・囲みすぎ
+      # (使わなくなった関数の警告・外したアプリへの参照)は外した版でしか分からないので、同じ条件で作る
+      - name: 内蔵アプリを外した版をビルドする
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: pio run -e rpipico2w_lite
+
       # SDに置いて更新する更新ファイル(docs/FIRMWARE_UPDATE.md)。秘密鍵はCIに置かないので署名なし
       # (本体は /sys/debug.cfg の fw-allow-unsigned = true のときだけ、確認のうえで受け付ける)
       - name: 更新ファイル(署名なし)を作る

@@ -26,10 +26,12 @@
 #include "lua/LuaAppScanner.hpp"
 #include "services/UsbDrive_Functions.hpp"
 #include "config/Hardware_Config.hpp"
+#include "config/App_Config.hpp"
 
 // このOSに載せるアプリの一覧。
 //
 // アプリを増やすときは、シーンのヘッダをincludeして下の並びへ1行足すだけでよい。
+// ビルド時に外せるアプリ(config/App_Config.hpp の PICO_APP_*)は、Register の行を `#if PICO_APP_*` で囲む(include はそのままでよい)。
 // 並べた順にランチャへ表示される。
 //
 // 登録簿の仕組み(Register/Launch等)は App_Functions.cpp にあり、
@@ -47,44 +49,72 @@ void AppFunctions::Setup(){
     // ---- ここへ1行足すとランチャに並ぶ ----
     //引数を渡さないと network.cfg の browser-home を開く(無ければ同梱のサンプル)。
     //特定の文書を固定で開くタイルにしたい場合は MakeSceneWithArg + パス/URL を渡す
+#if PICO_APP_BROWSER
     Register("Markdown",   IconID::Browser,  &MakeScene<MarkdownScene>);
+#endif
     Register("時計", IconID::Clock, &MakeScene<ClocksScene>);
+#if PICO_APP_CALCULATOR
     Register("電卓", IconID::Calculator, &MakeScene<CalculatorScene>);
+#endif
     Register("ファイル", IconID::Folder, &MakeScene<FileExplorerScene>);
     //ファイルの中身を見るビューワー(FileViewerScene)は、ファイルアプリでファイルを2回タップして開く
     //行単位のシンプルなテキストエディタ(TextEditorScene参照)
+#if PICO_APP_TEXTEDITOR
     Register("テキスト", IconID::Pencil, &MakeScene<TextEditorScene>);
+#endif
     //SDの /notes/ のメモを一覧・#タグ・全文検索で引く。開くとテキストエディタ(NotesScene参照)
+#if PICO_APP_NOTES
     Register(NotesScene::kAppName, IconID::Edit, &MakeScene<NotesScene>);
+#endif
     Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
+#if PICO_APP_DICT
     Register("辞書", IconID::Language, &MakeScene<DictScene>);
+#endif
     //電子書籍・長文(青空文庫のテキスト等)。ページ送り・しおり・続きから。本はSDの /books/ に置く
+#if PICO_APP_READER
     Register(ReaderLibraryScene::kAppName, IconID::Book, &MakeScene<ReaderLibraryScene>);
+#endif
+#if PICO_APP_CALENDAR
     Register("カレンダー", IconID::Calendar, &MakeScene<CalendarScene>);
+#endif
     //自前のチャットサーバ(server/chat/)へ繋ぐ。接続先は /sys/chat.cfg
+#if PICO_APP_CHAT
     Register("チャット", IconID::Messages, &MakeScene<ChatScene>);
+#endif
     //Todoistのタスク(TODO/リマインダー)。トークンは /sys/todoist.cfg(アプリの[設定]から入れる)
+#if PICO_APP_TODO
     Register(TodoScene::kAppName, IconID::CheckboxOn, &MakeScene<TodoScene>);
+#endif
     //メールの受信(IMAP)。アカウントは /sys/mail.cfg(アプリの[設定]から入れる)
+#if PICO_APP_MAIL
     Register(MailScene::kAppName, IconID::Mail, &MakeScene<MailScene>);
+#endif
     //Game Boy(DMG)エミュ。ROMはSDの /gb/ に置く(256KBまで。SUMMARY.md #9)
+#if PICO_APP_GB
     Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
+#endif
     //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/MUSIC_FORMAT.md)。
-    //音声出力を載せない版(config/Hardware_Config.hpp)には並べない(動画・ゲームボーイは音なしで動く)
-#if PICO_HW_SOUND
+    //音声出力を載せない版(config/Hardware_Config.hpp)には並べない(PICO_APP_MUSIC の既定が PICO_HW_SOUND。動画・ゲームボーイは音なしで動く)
+#if PICO_APP_MUSIC
     Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
 #endif
+#if PICO_APP_VIDEO
     Register("動画", IconID::FileVideo, &MakeScene<VideoScene>);
+#endif
     //マイク(SPH0645、GP26〜28)で /recordings/ へWAVを録る。マイクを載せない版には並べない
 #if PICO_HW_MIC
     Register(RecorderScene::kAppName, IconID::Microphone, &MakeScene<RecorderScene>);
 #endif
     //SSHクライアント(端末)。接続先は起動後に端末の中で聞く。鍵は /sys/ssh/id_ed25519(SshScene参照)
+#if PICO_APP_SSH
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
+#endif
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)
     Register("通知", IconID::Bell, &MakeScene<NotificationScene>);
     //アプリストア。配布元(docs/APP_REPO.md)からLuaアプリを取ってきて /lua/apps/ へ入れる
+#if PICO_APP_STORE
     Register(StoreScene::kAppName, IconID::AppStore, &MakeScene<StoreScene>);
+#endif
     //PCとUSBでつなぎ、SDカードをドライブとして見せる(SDの抜き差しをせずにファイルを行き来する)
     Register(UsbDriveScene::kAppName, IconID::SdCard, &MakeScene<UsbDriveScene>);
     // ファームの更新(SDの .pfw / PCからWi-Fiで。docs/FIRMWARE_UPDATE.md)

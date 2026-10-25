@@ -174,6 +174,16 @@ foreach(hw SOUND MIC BATTERY)
     endif()
 endforeach()
 
+# 載せる内蔵アプリ(src/config/App_Config.hpp の PICO_APP_*)。既定は全部載せる(ミュージックは音声出力に従う)。
+# 例: cmake -S pc -B pc/build-lite -DPICOOS_APP_GB=OFF -DPICOOS_APP_MAIL=OFF
+set(PICOOS_APPS BROWSER CALCULATOR CALENDAR CHAT DICT GB MAIL MUSIC NOTES READER SSH STORE TEXTEDITOR TODO VIDEO)
+foreach(app ${PICOOS_APPS})
+    option(PICOOS_APP_${app} "内蔵アプリ ${app} を載せる" ON)
+    if(NOT PICOOS_APP_${app})
+        target_compile_definitions(picoos_pc PRIVATE PICO_APP_${app}=0)
+    endif()
+endforeach()
+
 # pc/compat を src より前に置くことで、実機ライブラリのヘッダを差し替える
 target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"

@@ -9,6 +9,7 @@
 #include "system/Notification_Functions.hpp"
 #include "services/Screenshot_Functions.hpp"
 #include "system/Background_Functions.hpp"
+#include "config/Hardware_Config.hpp"
 
 #include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
@@ -123,8 +124,8 @@ void Statusbar::render(){
 
     //音声出力
     //未接続は「鳴らす先の絵 + バツ」(SD/Wi-Fiと同じ組み立て方)、output=offは消音のスピーカー。
-    //鳴らす先がイヤホンならスピーカーの代わりにイヤホンの絵
-    {
+    //鳴らす先がイヤホンならスピーカーの代わりにイヤホンの絵。音声出力を載せない版は何も出さない
+    if constexpr (HardwareConfig::kSound){
         const IconID out_icon = ((SoundFunctions::Route)(sound_state >> 4) == SoundFunctions::Route::Headphone)
             ? IconID::Headphones : IconID::VolumeHigh;
         switch((SoundFunctions::State)(sound_state & 0x0F)){
@@ -139,8 +140,8 @@ void Statusbar::render(){
                 IconRender::DrawIcon(IconID::X, IconSize::Px16, draw_pos, ICON_MARGIN_TOP, PICO_RED);
                 break;
         }
+        draw_pos += 16 + MARGIN;
     }
-    draw_pos += 16 + MARGIN;
 
     //バッテリー: 残量に応じた4段階。USB給電中は稲妻入りの自作アイコン(custom_icons/battery-charging.svg)に差し替える
     //(まだ1回もVSYS読み取りが済んでいなければ何も描かない。通常はSetup()で即座に読むので起動直後の1フレーム目だけの話)

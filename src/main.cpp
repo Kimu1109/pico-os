@@ -45,6 +45,7 @@
 #include "services/DeviceKey_Functions.hpp"
 
 #include "OS_Data.hpp"
+#include "config/Hardware_Config.hpp"
 #include <SPI.h>
 
 //シーンをまたいで常駐させるウィジェットはオーバーレイ層に置く
@@ -59,6 +60,7 @@ static PerfOverlay* perf_overlay;
 static LuaDebugScreen lua_debug_screen;
 #endif
 
+#if PICO_HW_CORE1
 //コア1(音声専用)のスタックをヒープ側の別領域へ切り出す(arduino-pico側の弱いシンボルを上書き)。
 //既定(false)だとコア0/コア1のスタックがSCRATCH_Y/SCRATCH_Xという隣接した4KBバンクに
 //置かれ、コア0側が(Luaのload()での深い再帰等で)スタックを使い切ると、そのままコア1の
@@ -66,6 +68,7 @@ static LuaDebugScreen lua_debug_screen;
 //コア1の音声を巻き込み、二度と直らない雑音が鳴り続く事故が起きたため、コア1のスタックを
 //ヒープ上の独立した領域(8KB)へ分離した
 bool core1_separate_stack = true;
+#endif
 
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -285,6 +288,9 @@ void loop() {
 }
 
 //--- 2コア目: 音声専用 ---
+//音声もマイクも載せない版(config/Hardware_Config.hpp)は setup1/loop1 を定義しない。
+//arduino-picoはどちらも無ければ2コア目を起こさず、そのスタック(8KB)も確保しない
+#if PICO_HW_CORE1
 //音源の計算とI2Sへの書き込みだけをする。1コア目の描画やTLSのハンドシェイクで音が途切れないように
 void setup1() {
     SoundFunctions::SetupCore1();
@@ -298,3 +304,4 @@ void loop1() {
     busy |= MicFunctions::LoopCore1();
     if(!busy) delay(MicFunctions::Core1Busy() ? 1 : SoundFunctions::IdleDelayMs());
 }
+#endif // PICO_HW_CORE1

@@ -79,6 +79,13 @@ jobs:
       - name: ビルドする
         run: pio run -e rpipico2w
 
+      # 音声・マイク・電池を外した版(src/config/Hardware_Config.hpp)。空の実装の付け忘れ
+      # (Sound_Functions.hpp 等へ足した関数が _Off.cpp に無い)はリンクで初めて分かるので、PRとmainへのpushで作る
+      # (ナイトリーから呼ばれたときは作らない。成果物にも載せない)
+      - name: ハードウェア機能を外した版をビルドする
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: pio run -e rpipico2w_minimal
+
       # SDに置いて更新する更新ファイル(docs/FIRMWARE_UPDATE.md)。秘密鍵はCIに置かないので署名なし
       # (本体は /sys/debug.cfg の fw-allow-unsigned = true のときだけ、確認のうえで受け付ける)
       - name: 更新ファイル(署名なし)を作る

@@ -1,8 +1,11 @@
 #include "hal/Battery_Functions.hpp"
+#include "config/Hardware_Config.hpp"
 #include "system/Log_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdlib>
+
+#if PICO_HW_BATTERY
 
 // 実機とPCで読み取り方法が全く異なる(実機はADC+CYW43ロック、PCは環境変数)ため、
 // LGFX_Config.hpp/Touch_Functions.hppと同じ「#if defined(PICOOS_PC)で分岐する」
@@ -134,3 +137,15 @@ float BatteryFunctions::GetVoltage(){
 bool BatteryFunctions::IsExternallyPowered(){
     return last_externally_powered;
 }
+
+#else
+// 電池を載せない版(-DPICO_HW_BATTERY=0。config/Hardware_Config.hpp)。ADCもCYW43のロックも使わない。
+// 一度も読めていない扱い(HasSample()=false)なので、ステータスバー・設定・Luaは残量を出さず、
+// 電池の残りで断る所(ファームの更新・GBの警告)も止めない。常にUSB給電として答える
+void BatteryFunctions::Setup(){ LOG_SYS_MSG("Battery: このファームは電池なしでビルドされています"); }
+void BatteryFunctions::Update(){}
+bool BatteryFunctions::HasSample(){ return false; }
+int BatteryFunctions::GetPercent(){ return 100; }
+float BatteryFunctions::GetVoltage(){ return 0.0f; }
+bool BatteryFunctions::IsExternallyPowered(){ return true; }
+#endif

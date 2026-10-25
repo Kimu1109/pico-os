@@ -31,6 +31,8 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
 
 - `platformio.ini` の `[env:rpipico2w]`。`extra_scripts` がファームの版を埋め込み、`-t fwpack`/`-t fwpush` を足す。
 - 画面の大きさと液晶の種類はビルド時に選ぶ(`SCREEN_WIDTH/HEIGHT`・`PICO_PANEL_*`、env `rpipico2w_320x480` が例)。**配置は `Scene::contentRect()` からの相対で書き、240/320を直書きしない**(`docs/design/gui.md`「画面の大きさ」)。
+- 音声・マイク・電池は `-DPICO_HW_SOUND=0` 等で外せる(`config/Hardware_Config.hpp`、例は env `rpipico2w_minimal`。液晶・タッチ・SDは必須)。
+  外すと空の実装(`hal/*_Off.cpp`)が入る。**`hal/Sound_Functions.hpp` 等へ関数を足したら空の実装にも足す。`#if PICO_HW_*` を読むファイルはそのヘッダを自分で include する**(`docs/design/devtools.md`)。
 - **LovyanGFXの版は `lib_deps` の完全固定の1行が唯一の情報源**(`pc/CMakeLists.txt` がこれを読む。範囲指定に戻すとPCビルドのconfigureが止まる)。
 - PC/Web実行は `pc/`(詳細・`--tap`/`--shot`・Wi-Fiの偽装・SPI待ち・`src/`側の決まりは `pc/README.md`、Webは `docs/design/pc-web.md`):
   ```sh
@@ -185,7 +187,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `lua-api.md` | `pico.*` APIの設計記録(描画・SD・画像・キャンバス・ダイアログ・ネットワーク・イベント等) |
 | `lua-apps.md` | Luaアプリと `pico.game`(ペイント・テトリス等・アプリストア・動作確認アプリ) |
 | `iso.md` | 2.5Dエンジン(`pico.iso`)・ブロック・ゾンビTD |
-| `devtools.md` | プロファイラ・Luaデバッガ・クラッシュダンプ・サンドボックス・実機確認の道具・ファームの更新・ナイトリービルド |
+| `devtools.md` | プロファイラ・Luaデバッガ・クラッシュダンプ・サンドボックス・実機確認の道具・ファームの更新・ビルド時に選ぶハードウェア機能・ナイトリービルド |
 | `performance.md` | 最適化とメモリ計測の記録・解決済みの不具合 |
 | `pc-web.md` | Webビルド(WebAssembly) |
 | `roadmap-ideas.md` | ロードマップと未実装の設計アイデア |

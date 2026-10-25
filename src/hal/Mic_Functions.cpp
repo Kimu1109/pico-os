@@ -1,4 +1,8 @@
 #include "hal/Mic_Functions.hpp"
+#include "config/Hardware_Config.hpp"
+
+// 載せない版(-DPICO_HW_MIC=0)は Mic_Functions_Off.cpp が代わりに入る
+#if PICO_HW_MIC
 #include "system/Config_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
@@ -355,6 +359,7 @@ const char* MicFunctions::RecErrorToStr(RecError e){
         case RecError::NoMemory:   return "メモリが足りません";
         case RecError::OpenFailed: return "録音のファイルを作れません";
         case RecError::NoName:     return "録音の番号が尽きました(rec_9999まで)";
+        case RecError::NoDevice:   return "このファームはマイクなしでビルドされています";
     }
     return "";
 }
@@ -426,3 +431,5 @@ bool MicFunctions::LoopCore1(){
     core1_signal.store(pipeline.hasSignal(), std::memory_order_release);
     return busy;
 }
+
+#endif // PICO_HW_MIC

@@ -241,6 +241,10 @@ host_test(sound_test GROUP media)
 host_test(wav_test GROUP media)
 host_test(music_test GROUP media)
 host_test(mic_test GROUP media)
+# ハードウェア機能を外した版(PICO_HW_*=0)の空の実装。このテストだけ外した定義で作り、空の実装を自分に入れる
+host_test(hw_off_test GROUP media SOURCES
+    ${SRC}/hal/Sound_Functions_Off.cpp ${SRC}/hal/Mic_Functions_Off.cpp ${SRC}/hal/Battery_Functions.cpp)
+target_compile_definitions(hw_off_test PRIVATE PICO_HW_SOUND=0 PICO_HW_MIC=0 PICO_HW_BATTERY=0)
 host_test(play_queue_test GROUP media)
 host_exe(mml_dump)
 host_py_test(midi2mml_test GROUP media USES mml_dump ARGS $<TARGET_FILE:mml_dump>)

@@ -113,9 +113,16 @@ static void launchStartApp()
 void setup(void);
 void loop(void);
 // 2コア目(実機ではarduino-picoが別のコアで回す)。音声専用。
-// ネイティブは別スレッド、Webはフレームごとに1回呼ぶ
+// ネイティブは別スレッド、Webはフレームごとに1回呼ぶ。
+// 音声もマイクも載せない版(src/config/Hardware_Config.hpp)は src/main.cpp に無いので、何もしないもので埋める
+#include "config/Hardware_Config.hpp"
+#if PICO_HW_CORE1
 void setup1(void);
 void loop1(void);
+#else
+static void setup1(void) {}
+static void loop1(void) {}
+#endif
 
 //---- ここからネイティブ専用(--shot とユーザコード用スレッド) ----
 #if !defined(__EMSCRIPTEN__)
@@ -284,6 +291,7 @@ namespace {
     void core1Thread()
     {
         setup1();
+        if (!PICO_HW_CORE1) return;  //2コア目の仕事が無い版(空回りさせない)
         while (g_core1_run.load()) loop1();
     }
 

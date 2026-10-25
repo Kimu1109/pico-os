@@ -13,6 +13,10 @@ include してよい。同じ段の中は互いに include してよい(hal と�
 どうしても上の段へ手を伸ばす必要がある所は EXCEPTIONS に理由付きで書く。
 EXCEPTIONS に書いたのに違反でなくなった行は「古い例外」として報告する(消し忘れ防止)。
 
+ついでに、ビルド時に選ぶハードウェア機能(PICO_HW_* / HardwareConfig::)を読むファイルが
+config/Hardware_Config.hpp を自分で include しているかも見る(未定義のマクロは #if で黙って0になり、
+載せたはずの機能が消えても気づけないため)。
+
 上の段の機能を下の段から呼びたいときは、下の段に関数ポインタ(差し込み口)を置いて
 boot/ で差す(KeyInputFunctions::intercept・LuaAppScanner::apps_changed と同じ形)か、
 下の段のヘッダで宣言した関数を boot/ で定義する(AppFunctions::Setup() と App_List.cpp)。
@@ -94,6 +98,8 @@ APP_PATTERNS = [
 ]
 
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)
+HW_CONFIG = "config/Hardware_Config.hpp"
+HW_USE_RE = re.compile(r'\bPICO_HW_[A-Z0-9_]+\b|\bHardwareConfig::')
 
 
 def layer_of(rel):
@@ -150,6 +156,7 @@ def main():
     unknown = []
     violations = []
     used_exceptions = set()
+    missing_hw = []
     edges = {}
     for f in sorted(source_files()):
         lf = layer_of(f)
@@ -157,6 +164,8 @@ def main():
             unknown.append(f)
             continue
         text = open(os.path.join(SRC, f), encoding="utf-8", errors="replace").read()
+        if f != HW_CONFIG and HW_USE_RE.search(text) and HW_CONFIG not in INCLUDE_RE.findall(text):
+            missing_hw.append(f)
         for m in INCLUDE_RE.finditer(text):
             t = resolve(f, m.group(1))
             if t is None:
@@ -191,6 +200,11 @@ def main():
         for f, line, lf, t, lt in violations:
             print(f"  src/{f}:{line}  [{lf}] → src/{t} [{lt}]")
         print("直し方は script/check_layers.py の先頭のコメントを参照")
+    if missing_hw:
+        ok = False
+        print(f"PICO_HW_* / HardwareConfig:: を読むのに {HW_CONFIG} を include していないファイル:")
+        for f in missing_hw:
+            print("  src/" + f)
     stale = set(EXCEPTIONS) - used_exceptions
     if stale:
         ok = False

@@ -18,32 +18,13 @@
 
 namespace {
     using namespace PICO_Path::FILE;
+    using AppInstall::MakeParent;
+    using AppInstall::JoinRel;
     using namespace PICO_Path::FILE::CFG;
 
     // 1回のupdate()でHTTPを進める回数と時間の上限(1回で最大1KB読む)
     constexpr int kPumpPerUpdate = 8;
     constexpr unsigned long kPumpBudgetMs = 6;
-
-    // path の親ディレクトリを作る(実機のSdFat::mkdirは親も作る)
-    bool MakeParent(const char* path){
-        FixedString<PICO_PATH_LEN> parent;
-        if(!PICO_IO::parent(parent, path)) return false;
-        if(parent.empty() || parent == "/") return true;
-        if(OSData::SD.exists(parent.c_str())) return true;
-        return OSData::SD.mkdir(parent.c_str());
-    }
-
-    bool JoinRel(FixedString<PICO_PATH_LEN>& out, const char* dir, const char* rel){
-        return out.assign(dir) && out.append("/") && out.append(rel);
-    }
-
-    bool InstalledListPath(FixedString<PICO_PATH_LEN>& out, const char* id){
-        return out.assign(STORE_INSTALLED_DIR) && out.append("/") && out.append(id) && out.append(".tsv");
-    }
-
-    bool PinnedKeyPath(FixedString<PICO_PATH_LEN>& out, const char* id){
-        return out.assign(STORE_INSTALLED_DIR) && out.append("/") && out.append(id) && out.append(".key");
-    }
 
     // /sys/store/state.cfg(最後に受け付けた一覧の取得元・鍵・serial)
     struct SavedState {
@@ -173,17 +154,17 @@ bool AppStore::parseCatalogFile(const char* path, uint32_t& serial, bool fill){
     FsFile f = OSData::SD.open(path, O_RDONLY);
     if(!f) return false;
     bool ok = false;
-    int n = f.fgets(line_, sizeof(line_));
-    if(n > 0 && AppRepo::ParseCatalogHeader(line_, serial)){
+    int n = f.fgets(work_.line, sizeof(work_.line));
+    if(n > 0 && AppRepo::ParseCatalogHeader(work_.line, serial)){
         ok = true;
         if(fill) count_ = 0;
         int lineno = 1;
-        while((n = f.fgets(line_, sizeof(line_))) > 0){
+        while((n = f.fgets(work_.line, sizeof(work_.line))) > 0){
             lineno++;
             //1行が長すぎる(途中で切れた)行は、残りごと読み捨てる
-            if(n == (int)sizeof(line_) - 1 && line_[n - 1] != '\n'){
+            if(n == (int)sizeof(work_.line) - 1 && work_.line[n - 1] != '\n'){
                 LOG_SYS_WARN("AppStore: カタログの%d行目が長すぎます", lineno);
-                while((n = f.fgets(line_, sizeof(line_))) > 0 && line_[n - 1] != '\n'){}
+                while((n = f.fgets(work_.line, sizeof(work_.line))) > 0 && work_.line[n - 1] != '\n'){}
                 continue;
             }
             if(!fill) continue;
@@ -192,7 +173,7 @@ bool AppStore::parseCatalogFile(const char* path, uint32_t& serial, bool fill){
                 break;
             }
             bool skip = false;
-            if(AppRepo::ParseCatalogLine(line_, entries_[count_], skip)){
+            if(AppRepo::ParseCatalogLine(work_.line, entries_[count_], skip)){
                 count_++;
             }else if(!skip){
                 //知らない形の行は読み飛ばす(新しい本体向けの行を古い本体が誤読しないため、項目の検査は厳しい)
@@ -247,61 +228,13 @@ bool AppStore::blockedInstalled(int index) const {
     return st != Installed::No && st != Installed::Foreign && st != Installed::Conflict;
 }
 
-bool AppStore::readPinnedKey(const char* id, uint8_t out[32]){
-    FixedString<PICO_PATH_LEN> path;
-    if(!PinnedKeyPath(path, id) || !OSData::SD.exists(path.c_str())) return false;
-    FsFile f = OSData::SD.open(path.c_str(), O_RDONLY);
-    if(!f) return false;
-    char hex[65] = {};
-    const int n = f.read(hex, 64);
-    f.close();
-    return n == 64 && AppRepo::HexDecode(hex, 64, out, 32);
-}
-
-bool AppStore::writePinnedKey(const char* id, const uint8_t key[32]){
-    FixedString<PICO_PATH_LEN> path;
-    if(!PinnedKeyPath(path, id)) return false;
-    if(!OSData::SD.exists(STORE_INSTALLED_DIR)) OSData::SD.mkdir(STORE_INSTALLED_DIR);
-    FsFile f = OSData::SD.open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
-    if(!f) return false;
-    char hex[66];
-    AppRepo::HexEncode(key, 32, hex);
-    hex[64] = '\n';
-    const bool ok = f.write(hex, 65) == 65;
-    f.close();
-    return ok;
-}
-
 bool AppStore::appDir(int index, FixedString<PICO_PATH_LEN>& out) const {
     const AppRepo::Entry* e = entry(index);
-    return e && out.assign("/lua/apps/") && out.append(e->dir.c_str());
+    return e && AppInstall::AppDir(*e, out);
 }
 
 void AppStore::refreshInstalled(){
-    for(int i = 0; i < count_; i++){
-        installed_[i] = Installed::No;
-        installed_ver_[i].clear();
-        FixedString<PICO_PATH_LEN> dir, main_lua, cfg_path;
-        if(!appDir(i, dir) || !PICO_IO::join(main_lua, dir, "main.lua")) continue;
-        if(!OSData::SD.exists(main_lua.c_str())) continue;
-        LuaAppScanner::AppInfo info;
-        if(PICO_IO::join(cfg_path, dir, "app.cfg")) LuaAppScanner::ReadAppConfig(cfg_path.c_str(), info);
-        installed_ver_[i].assign(info.version);
-        if(info.id.empty()){
-            installed_[i] = Installed::Foreign;
-        }else if(!(info.id == entries_[i].id.c_str())){
-            installed_[i] = Installed::Conflict;
-        }else{
-            const bool vok = AppRepo::ValidVersion(info.version.c_str());
-            const int c = vok ? AppRepo::CompareVersion(info.version.c_str(), entries_[i].version.c_str()) : -1;
-            installed_[i] = c < 0 ? Installed::Update : c == 0 ? Installed::Same : Installed::Newer;
-            //入れたときの作者の鍵と違えば更新させない(覚えていなければ=v1で入れたもの、次に入れたときに覚える)
-            uint8_t pinned[32];
-            if(readPinnedKey(entries_[i].id.c_str(), pinned) && memcmp(pinned, entries_[i].author_key, 32) != 0){
-                installed_[i] = Installed::KeyChanged;
-            }
-        }
-    }
+    for(int i = 0; i < count_; i++) installed_[i] = AppInstall::Check(entries_[i], &installed_ver_[i]);
 }
 
 bool AppStore::launch(int index){
@@ -564,37 +497,6 @@ bool AppStore::beginInstall(int index, bool allow_replace){
     return startGet(rel.c_str());
 }
 
-bool AppStore::listHas(const char* list_path, const char* rel){
-    //line_は呼び出し側が使っているので、こちらは別の作業場所で読む(files.tsvの1行は短い)
-    FsFile f = OSData::SD.open(list_path, O_RDONLY);
-    if(!f) return false;
-    bool found = false;
-    while(!found && f.fgets(aux_, sizeof(aux_)) > 0){
-        char* tab = strchr(aux_, '\t');
-        if(tab) *tab = '\0';
-        found = strcasecmp(aux_, rel) == 0;
-    }
-    f.close();
-    return found;
-}
-
-bool AppStore::readFileLine(const char* path, int n, AppRepo::FileEntry& out){
-    FsFile f = OSData::SD.open(path, O_RDONLY);
-    if(!f) return false;
-    int idx = 0;
-    bool found = false;
-    while(f.fgets(line_, sizeof(line_)) > 0){
-        bool skip = false;
-        if(AppRepo::IsSkipLine(line_)) continue;
-        if(idx++ == n){
-            found = AppRepo::ParseFilesLine(line_, out, skip);
-            break;
-        }
-    }
-    f.close();
-    return found;
-}
-
 void AppStore::onFiles(){
     const AppRepo::Entry& e = entries_[target_];
     uint8_t digest[32];
@@ -632,42 +534,9 @@ void AppStore::onFilesSig(){
         fail("作者の署名が合いません");
         return;
     }
-    //全部の行を先に確かめる: 形式・パスの並び(大小を区別せず昇順=重なり無し)・数・合計・必須のファイル
-    FsFile f = OSData::SD.open(STORE_STAGING_FILES, O_RDONLY);
-    if(!f){
-        fail("SDカードから読めません");
-        return;
-    }
-    char prev[AppRepo::kMaxPathLen + 1] = "";
-    uint32_t total = 0;
     int count = 0;
-    bool has_main = false, has_cfg = false, ok = true;
-    int len;
-    while(ok && (len = f.fgets(line_, sizeof(line_))) > 0){
-        if(len == (int)sizeof(line_) - 1 && line_[len - 1] != '\n'){ ok = false; break; }
-        bool skip = false;
-        if(!AppRepo::ParseFilesLine(line_, file_, skip)){
-            if(!skip) ok = false;
-            continue;
-        }
-        if(++count > AppRepo::kMaxFiles){ ok = false; break; }
-        if(prev[0] && strcasecmp(prev, file_.path.c_str()) >= 0){ ok = false; break; }
-        strcpy(prev, file_.path.c_str());
-        total += file_.bytes;
-        if(file_.path == "main.lua") has_main = true;
-        if(file_.path == "app.cfg") has_cfg = true;
-    }
-    f.close();
-    if(!ok){
-        fail("ファイル一覧(files.tsv)の形式が違います");
-        return;
-    }
-    if(!has_main || !has_cfg){
-        fail("main.lua か app.cfg がありません");
-        return;
-    }
-    if(total != e.bytes || total > AppRepo::kMaxAppBytes){
-        fail("ファイルの合計が一覧と合いません");
+    if(const char* err = AppInstall::CheckFilesList(e, work_, count)){
+        fail(err);
         return;
     }
     file_count_ = count;
@@ -679,14 +548,27 @@ void AppStore::onFilesSig(){
 bool AppStore::startNextFile(){
     const AppRepo::Entry& e = entries_[target_];
     if(file_index_ >= file_count_){
-        if(!checkStagedConfig()) return false;
-        if(!commitInstall()) return false;
+        if(const char* err = AppInstall::CheckStagedConfig(e)){
+            fail(err);
+            return false;
+        }
+        message_.assign("インストール中…");
+        if(const char* err = AppInstall::Commit(e, allow_replace_, work_)){
+            fail(err);
+            return false;
+        }
+        refreshInstalled();
+        revision_++;
+        char m[PICO_STR_LL];
+        snprintf(m, sizeof(m), "%s %s を入れました", e.name.c_str(), e.version.c_str());
+        finishOk(m);
         return true;
     }
-    if(!readFileLine(STORE_STAGING_FILES, file_index_, file_)){
+    if(!AppInstall::ReadFileLine(STORE_STAGING_FILES, file_index_, work_)){
         fail("ファイル一覧を読み直せません");
         return false;
     }
+    file_ = work_.file;
     FixedString<PICO_PATH_LEN> dst;
     if(!JoinRel(dst, STORE_STAGING_APP, file_.path.c_str()) || !file_sink_.open(dst.c_str(), file_.bytes)){
         fail("SDカードに書き込めません");
@@ -720,122 +602,6 @@ void AppStore::onFile(){
     startNextFile();
 }
 
-bool AppStore::checkStagedConfig(){
-    const AppRepo::Entry& e = entries_[target_];
-    FixedString<PICO_PATH_LEN> cfg_path;
-    JoinRel(cfg_path, STORE_STAGING_APP, "app.cfg");
-    LuaAppScanner::AppInfo info;
-    if(!LuaAppScanner::ReadAppConfig(cfg_path.c_str(), info)){
-        fail("app.cfg を読めません");
-        return false;
-    }
-    if(!(info.id == e.id.c_str()) || !(info.version == e.version.c_str())){
-        fail("app.cfg の id か版が一覧と合いません");
-        return false;
-    }
-    //一覧で見せた(=利用者が承知した)権限より強い権限は付けない
-    uint8_t perms = 0;
-    if(info.permissions.network) perms |= AppRepo::PermNetwork;
-    if(info.permissions.notify) perms |= AppRepo::PermNotify;
-    if(info.permissions.sd_outside_app_dir) perms |= AppRepo::PermSd;
-    if(info.permissions.background) perms |= AppRepo::PermBackground;
-    if(info.permissions.microphone) perms |= AppRepo::PermMicrophone;
-    if((perms & ~e.perms) != 0){
-        fail("app.cfg の権限が一覧より多くなっています");
-        return false;
-    }
-    return true;
-}
-
-bool AppStore::commitInstall(){
-    const AppRepo::Entry& e = entries_[target_];
-    FixedString<PICO_PATH_LEN> dir;
-    appDir(target_, dir);
-
-    //インストールを始めた後で、同じ名前のディレクトリに別のアプリが置かれていないか
-    {
-        FixedString<PICO_PATH_LEN> cfg_path, main_lua;
-        PICO_IO::join(cfg_path, dir, "app.cfg");
-        PICO_IO::join(main_lua, dir, "main.lua");
-        if(OSData::SD.exists(main_lua.c_str())){
-            LuaAppScanner::AppInfo cur;
-            LuaAppScanner::ReadAppConfig(cfg_path.c_str(), cur);
-            if(cur.id.empty() ? !allow_replace_ : !(cur.id == e.id.c_str())){
-                fail("同じ名前のアプリが入っています");
-                return false;
-            }
-        }
-    }
-
-    message_.assign("インストール中…");
-    //1つずつ移す(ディレクトリごとの移動はしない。更新では、アプリが自分で書いたファイルを残すため)。
-    //途中で失敗すると新旧が混ざるが、files.tsvが残るので入れ直せば揃う
-    {
-        FsFile list = OSData::SD.open(STORE_STAGING_FILES, O_RDONLY);
-        if(!list){
-            fail("ファイル一覧を読み直せません");
-            return false;
-        }
-        bool ok = true;
-        while(ok && list.fgets(line_, sizeof(line_)) > 0){
-            bool skip = false;
-            if(!AppRepo::ParseFilesLine(line_, file_, skip)) continue;
-            FixedString<PICO_PATH_LEN> src, dst;
-            if(!JoinRel(src, STORE_STAGING_APP, file_.path.c_str()) || !JoinRel(dst, dir.c_str(), file_.path.c_str())
-               || !MakeParent(dst.c_str())){
-                ok = false;
-                break;
-            }
-            if(OSData::SD.exists(dst.c_str())) OSData::SD.remove(dst.c_str());
-            if(!OSData::SD.rename(src.c_str(), dst.c_str())) ok = false;
-        }
-        list.close();
-        if(!ok){
-            fail("インストール先へファイルを移せません");
-            return false;
-        }
-    }
-
-    //前の版にあって今の版に無いファイルを消す(前の版の一覧に載っていたものだけ。アプリが書いたファイルは残る)
-    FixedString<PICO_PATH_LEN> list_path;
-    InstalledListPath(list_path, e.id.c_str());
-    if(OSData::SD.exists(list_path.c_str())){
-        FsFile old_list = OSData::SD.open(list_path.c_str(), O_RDONLY);
-        AppRepo::FileEntry old;
-        while(old_list && old_list.fgets(line_, sizeof(line_)) > 0){
-            bool skip = false;
-            if(!AppRepo::ParseFilesLine(line_, old, skip)) continue;
-            FixedString<PICO_PATH_LEN> stale;
-            if(!listHas(STORE_STAGING_FILES, old.path.c_str()) && JoinRel(stale, dir.c_str(), old.path.c_str())){
-                OSData::SD.remove(stale.c_str());
-            }
-        }
-        if(old_list) old_list.close();
-        OSData::SD.remove(list_path.c_str());
-    }
-    MakeParent(list_path.c_str());
-    if(!OSData::SD.exists(STORE_INSTALLED_DIR)) OSData::SD.mkdir(STORE_INSTALLED_DIR);
-    if(!OSData::SD.rename(STORE_STAGING_FILES, list_path.c_str())){
-        LOG_SYS_WARN("AppStore: インストールしたファイルの一覧を残せません (%s)", list_path.c_str());
-    }
-    //次の更新から、この作者の鍵の署名だけを受け付ける
-    if(!writePinnedKey(e.id.c_str(), e.author_key)){
-        LOG_SYS_WARN("AppStore: 作者の鍵を残せません (%s)", e.id.c_str());
-    }
-    PICO_IO::removeRecursive(STORE_STAGING);
-
-    if(!LuaAppScanner::RegisterOrRefresh(dir.c_str())){
-        //ファイルは入っているので、次の起動のスキャンで並ぶ(登録簿の上限に当たった等)
-        LOG_SYS_WARN("AppStore: ランチャへ登録できません (%s)", dir.c_str());
-    }
-    refreshInstalled();
-    revision_++;
-    char m[PICO_STR_LL];
-    snprintf(m, sizeof(m), "%s %s を入れました", e.name.c_str(), e.version.c_str());
-    finishOk(m);
-    return true;
-}
-
 bool AppStore::remove(int index){
     if(busy()) return false;
     const AppRepo::Entry* e = entry(index);
@@ -846,10 +612,7 @@ bool AppStore::remove(int index){
     appDir(index, dir);
     LuaAppScanner::Unregister(dir.c_str());
     const bool ok = PICO_IO::removeRecursive(dir.c_str());
-    FixedString<PICO_PATH_LEN> list_path;
-    if(InstalledListPath(list_path, e->id.c_str())) OSData::SD.remove(list_path.c_str());
-    //覚えていた作者の鍵も忘れる(入れ直せば、そのときの一覧の鍵で入る)
-    if(PinnedKeyPath(list_path, e->id.c_str())) OSData::SD.remove(list_path.c_str());
+    AppInstall::Forget(e->id.c_str());
     refreshInstalled();
     revision_++;
     char m[PICO_STR_LL];

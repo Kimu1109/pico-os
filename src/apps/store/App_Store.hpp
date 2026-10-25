@@ -3,6 +3,7 @@
 #include <SdFat.h>
 
 #include "apps/store/App_Repo.hpp"
+#include "apps/store/App_Install.hpp"
 #include "net/Http_Request.hpp"
 #include "apps/ssh/Ssh_Sha256.hpp"
 #include "util/Url.hpp"
@@ -27,15 +28,7 @@
 class AppStore {
     public:
         enum class State : uint8_t { Idle, Busy, Done, Failed };
-        enum class Installed : uint8_t {
-            No,       // 入っていない
-            Same,     // 同じ版が入っている
-            Update,   // 古い版が入っている
-            Newer,    // カタログより新しい版が入っている(手元で書き換えた等)
-            Foreign,  // 同じ名前のディレクトリに、ストアのものでない(idが無い)アプリがある
-            Conflict, // 同じ名前のディレクトリに、別のidのアプリがある(入れられない)
-            KeyChanged, // 入れたときと作者の鍵が違う(更新できない。削除すれば新しい鍵で入れられる)
-        };
+        using Installed = AppInstall::Installed;
 
         static constexpr const char* kDefaultUrl = "https://kimu1109.github.io/pico-os/apps/";
         static constexpr int kMaxExtraKeys = 4;
@@ -142,8 +135,7 @@ class AppStore {
         uint32_t revision_ = 0;
 
         // catalog.tsv / files.tsv を1行ずつ読む作業場所(スタックに512バイトを置かないため)
-        char line_[AppRepo::kMaxLineBytes + 2];
-        char aux_[AppRepo::kMaxLineBytes + 2];
+        AppInstall::Work work_;
 
         // ---- インストール中 ----
         int target_ = -1;
@@ -165,17 +157,8 @@ class AppStore {
         void onFilesSig();
         void onFile();
         bool startNextFile();
-        bool checkStagedConfig();
-        bool commitInstall();
 
         // カタログのファイル(catalog.tsv)を読み直して entries_ へ。serialを返す
         bool parseCatalogFile(const char* path, uint32_t& serial, bool fill);
-        // files.tsv の n 番目(0始まり)の行を読む
-        bool readFileLine(const char* path, int n, AppRepo::FileEntry& out);
-        // files.tsv の一覧に rel(大小を区別しない)があるか
-        bool listHas(const char* list_path, const char* rel);
         void refreshInstalled();
-        // 覚えている作者の鍵(/sys/store/installed/<id>.key)。無ければfalse
-        bool readPinnedKey(const char* id, uint8_t out[32]);
-        bool writePinnedKey(const char* id, const uint8_t key[32]);
 };

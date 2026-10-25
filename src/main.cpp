@@ -30,6 +30,7 @@
 #include "services/App_Functions.hpp"
 #include "devtools/Profiler_Functions.hpp"
 #include "devtools/CrashDump_Functions.hpp"
+#include "apps/store/App_Package.hpp"
 #include "devtools/DevTools_Functions.hpp"
 #include "services/Firmware_Functions.hpp"
 #include "devtools/HwTest_Functions.hpp"
@@ -180,6 +181,8 @@ void setup() {
     DevToolsFunctions::Setup();
     //前回のクラッシュを知らせる(タップでダンプを開く)
     CrashDumpFunctions::PostPendingNotice();
+    //起動時にSDのパッケージ(*.papp)から入れたアプリを知らせる(入れるのは AppFunctions::Setup() の中)
+    AppPackage::PostPendingNotice();
     //ファームの更新の結果を知らせ、置き場(内蔵フラッシュのLittleFS)を片付ける。通知より後
     FirmwareFunctions::Setup();
 

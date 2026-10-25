@@ -2,7 +2,9 @@
 
 pico-os のアプリストア(ランチャの「ストア」)が、Web からLuaアプリを取ってきて `/lua/apps/` へ入れるための取り決め。
 **静的なファイルだけで成り立つ**ので、GitHub Pages・Raspberry Pi の nginx・`python3 -m http.server` のどれでも同じように配れる。
-配る側の道具は `script/build_app_repo.py`、本体側は `src/apps/store/`(`App_Repo` が読み取り、`App_Store` が通信とインストール)と `StoreScene`。
+配る側の道具は `script/build_app_repo.py`、本体側は `src/apps/store/`(`App_Repo` が読み取り、`App_Store` が通信、`App_Install` がインストール、
+`App_Package` がSDに置いたパッケージから入れる)と `StoreScene`。同じ場所にブラウザで見る一覧のページ(`index.html`)と、
+SDに置けば入るパッケージ(下の「パッケージ(.papp)」)も置く。
 誰でも投稿できるようにする運用(投稿用リポジトリ)は `docs/design/lua-apps.md`「アプリストアの投稿」。
 
 ## 鍵は2種類
@@ -26,7 +28,12 @@ catalog.sig              catalog.tsv の署名(カタログ鍵)
 <id>/<version>/files.tsv そのアプリのファイル一覧
 <id>/<version>/files.sig files.tsv の署名(作者の鍵)
 <id>/<version>/<path>    アプリのファイル(main.lua, app.cfg, ...)
+index.html               ブラウザで見る一覧(build_app_repo.py site。本体は読まない)
+<id>-<version>.papp      パッケージ(同上。下の「パッケージ(.papp)」)
+<id>-<version>.png       一覧のページのアイコン(app.cfg の icon の .pimg から作る)
 ```
+
+id に `.` は入らないので、`<id>/` のディレクトリと `.papp`・`.png` の名前は重ならない。
 
 - 文字コードはUTF-8、改行はLF(CRLFも読む)。列はタブ区切り。空行と `#` で始まる行は読み飛ばす。
 - **知らない列は無視する**(前方互換)。列を足すときは行の後ろへ。どの列にもタブは入れない。
@@ -114,6 +121,34 @@ permission_network=false
 
 途中で失敗・中止したら置き場を消し、入っているものには触らない(移している最中に電源が切れた場合だけ新旧が混ざる。入れ直せば揃う)。
 
+## パッケージ(.papp)
+
+1つのアプリを1ファイルにまとめたもの。Webのアプリストアのページ(配布元のURLの `index.html`)の DOWNLOAD で落とし、
+**SDカードの直下に置くと、次の起動(とUSBドライブを終えたとき)に本体が入れる**(Wi-Fiが無くても入る)。
+作るのは `build_app_repo.py site`(配布物の全部のアプリ)と `package`(手元のアプリ1つ)、読むのは `src/apps/store/App_Package`。
+
+```
+pico-os-app<TAB>1<TAB><files.tsv のバイト数>       1行目: 印・形式の番号・次に続く files.tsv の大きさ
+<catalog.tsv の1行と同じもの>                       2行目: id・版・dir・名前・…・author_key・author・status
+ed25519 <作者の公開鍵> <署名>                       3行目: files.sig と同じもの
+<files.tsv>                                        ちょうど1行目のバイト数
+<各ファイルの中身>                                  files.tsv の行の順に、区切りなしで続ける
+```
+
+- 名前は `<id>-<版>.papp`(本体は名前を見ない。直下の `*.papp` なら大小を問わず全部読む。ブラウザが `(1)` を足しても入る)。
+- 改行はLF(1〜3行目はCRLFも読む)。知らない形式の番号は読まない。最後のファイルの後ろに余分なバイトがあれば断る。
+- 本体が確かめること: ストアから入れるとき(上の「本体が確かめること」の2)と同じ。files.tsv のSHA-256が2行目の
+  `files_sha256` と同じか → 3行目の鍵が `author_key` と同じで署名が合うか → 各ファイルの大きさとSHA-256 →
+  app.cfg の id・版・権限(2行目の perms を超えない)→ 覚えた作者の鍵・古い版・同じ名前の別のidのアプリ。
+  `status` が `-` でないものも入れない。
+- **カタログの署名は無い**。SDへ置ける人はアプリを `/lua/apps/` に直接置けるので、守りは弱くならない。
+  それでも作者の署名は確かめるので、途中で壊れたもの・書き換えたものは入らず、入れた後はストアと同じく
+  覚えた作者の鍵でしか更新できない(ストアから入れたものをパッケージで更新することも、その逆もできる)。
+- 同じ名前のディレクトリに id の無いアプリ(手で入れたもの)があれば、確かめずに上書きする(置いたこと自体を利用者の決定とする。
+  手で置いた他のファイルは残る)。
+- 入れたパッケージは消す。入れられなかったものは `<名前>.err` へ改名し(起動のたびに同じ失敗を繰り返さない)、
+  理由を通知に出す。1回に入れるのは8個まで(残りは次の起動で)。
+
 ## 信頼する鍵
 
 カタログ鍵は次のどちらかに一致すれば信頼する。どちらにも無ければ一覧を読まない。
@@ -144,7 +179,13 @@ python3 script/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
 python3 script/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps --clean
 rsync -a --delete /tmp/apps/ pi:/var/www/pico-os/apps/
 
-# GitHub Pages: 署名した目録だけをコミットする(アプリの中身はワークフローが写す)
+# Webのページ(index.html)とパッケージ(<id>-<版>.papp)・アイコンのPNGを配布物に足す(秘密鍵は要らない)
+python3 script/build_app_repo.py site --dir /tmp/apps
+
+# 手元のアプリを1つパッケージにする(ストアを通さずに渡す。作者の鍵で署名する)
+python3 script/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス
+
+# GitHub Pages: 署名した目録だけをコミットする(アプリの中身・ページ・パッケージはワークフローが作る)
 python3 script/build_app_repo.py sign --key ~/.pico-os/app_repo.key --out store
 git add store && git commit -m "ストアの目録を更新"
 ```
@@ -175,4 +216,4 @@ git add store && git commit -m "ストアの目録を更新"
 - 依存関係・本体の版の条件(`min_os` 等)。必要になったら catalog.tsv に列を足す。
 - 差分の更新(更新は全部のファイルを取り直す)。
 - ダウンロード数・評価(動的なサーバが要る)。
-- アイコンをインストール前に一覧で見せること(今はアイコンの絵はインストール後にランチャで出る)。
+- 本体のストアでアイコンをインストール前に一覧で見せること(今はインストール後にランチャで出る。Webのページでは見せる)。

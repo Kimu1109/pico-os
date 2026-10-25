@@ -279,13 +279,15 @@ end
 
 -- ================= ゲーム =================
 
--- opts: x,y,w,h(画面座標。既定はcontent_rect全体) / bg(背景色。既定0) /
+-- opts: x,y,w,h(画面座標。既定はcontent_rect全体。x/yを省いてw/hだけ渡すとcontent_rectの真ん中に置く。
+--       240x320向けに作った固定の配置を、大きい画面でも真ん中に出すため) / bg(背景色。既定0) /
 --       pad(trueで画面下に操作ボタン) / manual(trueなら自分でg:step(dt)を呼ぶ)
 function M.new(o)
     o = o or {}
     local cx, cy, cw, ch = pico.content_rect()
     local g = setmetatable({}, Game)
-    g.x, g.y = o.x or cx, o.y or cy
+    g.x = o.x or (o.w and cx + max(0, (cw - o.w) // 2)) or cx
+    g.y = o.y or (o.h and cy + max(0, (ch - o.h) // 2)) or cy
     g.w, g.h = o.w or (cx + cw - g.x), o.h or (cy + ch - g.y)
     g.vw, g.vh = g.w, g.h - (o.pad and PAD_H or 0)
     g.bg = o.bg or 0

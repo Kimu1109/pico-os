@@ -19,7 +19,7 @@ local ROT, KJ, KI = LIB.ROT, LIB.KJ, LIB.KI
 
 local DIR = pico.app_dir()
 local HISCORE_PATH = pico.path_join(DIR, "hiscore.txt")
-local g = game.new{ bg = 15 }
+local g = game.new{ bg = 15, w = 240, h = 300 } -- 240x300で作った配置。大きい画面では真ん中に置く
 local img = g:image(pico.path_join(DIR, "blocks.pimg"))
 local map = g:tilemap{ image = img, tile = T, x = BX, y = BY, cols = W,
                        data = string.rep(string.char(T_EMPTY), W * H) }

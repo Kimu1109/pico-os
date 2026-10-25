@@ -45,6 +45,14 @@ description: "pop / push_scene / change_scene / launch_app / content_rect / args
 
 ステータスバーを除いた、アプリが使える範囲を返します。
 
+画面の大きさは本体によって違います(既定は240x320。ビルド時に320x480等にできる)。ウィジェットや絵の位置は、240や320を直接書かずにこの値から決めてください。画面全体の大きさは定数 `pico.SCREEN_WIDTH` / `pico.SCREEN_HEIGHT` です。
+
+```lua
+local x, y, w, h = pico.content_rect()
+local btn = pico.create("Button")
+pico.set(btn, "x", x + w - 64)   -- 右端に寄せる(画面の幅によらない)
+```
+
 ## 画面の間で値を受け渡す
 
 `push_scene` で別の画面へ移って `pop` で戻ると、**元の画面のスクリプトは最初から実行し直されます**。値を受け渡すための仕組みが3つあります。

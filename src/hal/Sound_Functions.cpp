@@ -1,4 +1,8 @@
 #include "hal/Sound_Functions.hpp"
+#include "config/Hardware_Config.hpp"
+
+// 載せない版(-DPICO_HW_SOUND=0)は Sound_Functions_Off.cpp が代わりに入る
+#if PICO_HW_SOUND
 #include "system/Config_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "hal/Battery_Functions.hpp"
@@ -1024,3 +1028,5 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     core1_processed.store(processed, std::memory_order_release);
     return busy;
 }
+
+#endif // PICO_HW_SOUND

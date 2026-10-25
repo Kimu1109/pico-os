@@ -13,6 +13,7 @@
 #include "gui/scenes/BackgroundScene.hpp"
 #include "system/Background_Functions.hpp"
 #include "hal/Battery_Functions.hpp"
+#include "config/Hardware_Config.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_Path.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
@@ -662,21 +663,28 @@ void SettingsScene::buildLevelRows(const Layout& lay){
     const int16_t slider_x = (int16_t)(left + kTitleW);
     const int16_t slider_w = (int16_t)(content.x + content.w - MARGIN - slider_x);
 
-    // ---- 音量(sound.cfgの volume)。音タブの1行目 ----
-    // 現在値はSoundFunctionsが起動時にsound.cfgから読んだもの(=今鳴っている音量)を出す
-    this->volume_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), "音量");
-    this->volume_title->setFontSize(FontFn::Small);
-    addToTab(Tab::Sound, this->volume_title);
+    if constexpr (!HardwareConfig::kSound){
+        // 音声出力を載せない版(config/Hardware_Config.hpp)。音タブはその旨だけ出す
+        auto* none = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(0) + 2), lay.full_w, "音声出力なしのファームです");
+        none->setTextColor(PICO_DARKGREY);
+        addToTab(Tab::Sound, none);
+    }else{
+        // ---- 音量(sound.cfgの volume)。音タブの1行目 ----
+        // 現在値はSoundFunctionsが起動時にsound.cfgから読んだもの(=今鳴っている音量)を出す
+        this->volume_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), "音量");
+        this->volume_title->setFontSize(FontFn::Small);
+        addToTab(Tab::Sound, this->volume_title);
 
-    this->volume_slider = new NumberSlider(slider_x, rowY(0), slider_w);
-    this->volume_slider->setMinValue(0);
-    this->volume_slider->setMaxValue(100);
-    this->volume_slider->setDecimalPlacesNum(0);
-    this->volume_route   = SoundFunctions::GetRoute();
-    this->volume_applied = SoundFunctions::GetVolume();
-    this->volume_dirty   = false;
-    this->volume_slider->setValue((float)this->volume_applied);
-    addToTab(Tab::Sound, this->volume_slider);
+        this->volume_slider = new NumberSlider(slider_x, rowY(0), slider_w);
+        this->volume_slider->setMinValue(0);
+        this->volume_slider->setMaxValue(100);
+        this->volume_slider->setDecimalPlacesNum(0);
+        this->volume_route   = SoundFunctions::GetRoute();
+        this->volume_applied = SoundFunctions::GetVolume();
+        this->volume_dirty   = false;
+        this->volume_slider->setValue((float)this->volume_applied);
+        addToTab(Tab::Sound, this->volume_slider);
+    }
 
     // ---- 画面の明るさ(display.cfgの brightness)。画面タブの1行目 ----
     this->brightness_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), "輝度");
@@ -748,52 +756,58 @@ void SettingsScene::buildLateRows(const Layout& lay){
     addToTab(Tab::Display, this->devkey_label);
     this->refreshDeviceKeyLabel();
 
-    // ---- 電池駆動中に音量を絞る(sound.cfgの battery-cap)。音タブの3行目(+下に説明) ----
-    // 音質のドロップダウンの一覧がこの行へ重なるので、それより先にAdd()する
-    this->battery_cap_checkbox = new Checkbox(left, rowY(2), "電池で音量を絞る");
-    this->battery_cap_checkbox->setFontSize(FontFn::Small);
-    this->battery_cap_checkbox->setText("電池で音量を絞る");
-    this->battery_cap_checkbox->setIsChecked(SoundFunctions::GetBatteryCap());
-    this->battery_cap_checkbox->setOnChangeChecked([this](){
-        const bool enabled = this->battery_cap_checkbox->getIsChecked();
-        SoundFunctions::SetBatteryCap(enabled);
-        PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "battery-cap",
-            PICO_Config::ConfigValue::FromBool(enabled));
-    });
-    addToTab(Tab::Sound, this->battery_cap_checkbox);
-    auto* cap_note = makeRowLabel<PICO_STR_L>(left,
-        (int16_t)(rowY(2) + this->battery_cap_checkbox->getH() + 2), full_w, "電池では最大20%(スピーカー)");
-    cap_note->setTextColor(PICO_DARKGREY);
-    addToTab(Tab::Sound, cap_note);
+    // 音タブの残り(音声出力を載せない版は出さない。config/Hardware_Config.hpp)
+    if constexpr (HardwareConfig::kSound){
+        // ---- 電池駆動中に音量を絞る(sound.cfgの battery-cap)。音タブの3行目(+下に説明) ----
+        if constexpr (HardwareConfig::kBattery){
+            // 音質のドロップダウンの一覧がこの行へ重なるので、それより先にAdd()する。
+            // 電池を載せない版は常にUSB給電なので出さない
+            this->battery_cap_checkbox = new Checkbox(left, rowY(2), "電池で音量を絞る");
+            this->battery_cap_checkbox->setFontSize(FontFn::Small);
+            this->battery_cap_checkbox->setText("電池で音量を絞る");
+            this->battery_cap_checkbox->setIsChecked(SoundFunctions::GetBatteryCap());
+            this->battery_cap_checkbox->setOnChangeChecked([this](){
+                const bool enabled = this->battery_cap_checkbox->getIsChecked();
+                SoundFunctions::SetBatteryCap(enabled);
+                PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "battery-cap",
+                    PICO_Config::ConfigValue::FromBool(enabled));
+            });
+            addToTab(Tab::Sound, this->battery_cap_checkbox);
+            auto* cap_note = makeRowLabel<PICO_STR_L>(left,
+                (int16_t)(rowY(2) + this->battery_cap_checkbox->getH() + 2), full_w, "電池では最大20%(スピーカー)");
+            cap_note->setTextColor(PICO_DARKGREY);
+            addToTab(Tab::Sound, cap_note);
+        }
 
-    // ---- 出力先(sound.cfgの route)。音タブの4行目(+下に今どちらから鳴るか) ----
-    // 一覧は下へ開くので、上の行の音質のドロップダウンより先にAdd()する(音質の一覧がこの行へ重なる)。
-    // 3項目の一覧が下のタブバーで切れないよう4行目に置き、「スピーカー」が入るよう他より広くする
-    constexpr int16_t kRouteDropdownW = 140;
-    this->route_title = new Label<PICO_STR_S>(left, rowY(3) + 4, "出力先");
-    this->route_title->setFontSize(FontFn::Small);
-    this->route_dropdown = new DropdownMenu((int16_t)(content.x + content.w - MARGIN - kRouteDropdownW), rowY(3), kRouteDropdownW);
-    for(int i = 0; i < kRouteModeCount; i++) this->route_dropdown->add(kRouteModeLabels[i]);
-    this->route_selected_index = 0;
-    for(int i = 0; i < kRouteModeCount; i++) if(kRouteModes[i] == SoundFunctions::GetRouteMode()) this->route_selected_index = i;
-    this->route_dropdown->setSelectedIndex(this->route_selected_index);
-    this->route_status_label = makeRowLabel<PICO_STR_L>(left,
-        (int16_t)(rowY(3) + this->route_dropdown->getH() + 2), full_w, "");
-    this->route_status_label->setTextColor(PICO_DARKGREY);
-    this->refreshRouteStatus();
-    addToTab(Tab::Sound, this->route_status_label);
-    addToTab(Tab::Sound, this->route_title);
-    addToTab(Tab::Sound, this->route_dropdown);
+        // ---- 出力先(sound.cfgの route)。音タブの4行目(+下に今どちらから鳴るか) ----
+        // 一覧は下へ開くので、上の行の音質のドロップダウンより先にAdd()する(音質の一覧がこの行へ重なる)。
+        // 3項目の一覧が下のタブバーで切れないよう4行目に置き、「スピーカー」が入るよう他より広くする
+        constexpr int16_t kRouteDropdownW = 140;
+        this->route_title = new Label<PICO_STR_S>(left, rowY(3) + 4, "出力先");
+        this->route_title->setFontSize(FontFn::Small);
+        this->route_dropdown = new DropdownMenu((int16_t)(content.x + content.w - MARGIN - kRouteDropdownW), rowY(3), kRouteDropdownW);
+        for(int i = 0; i < kRouteModeCount; i++) this->route_dropdown->add(kRouteModeLabels[i]);
+        this->route_selected_index = 0;
+        for(int i = 0; i < kRouteModeCount; i++) if(kRouteModes[i] == SoundFunctions::GetRouteMode()) this->route_selected_index = i;
+        this->route_dropdown->setSelectedIndex(this->route_selected_index);
+        this->route_status_label = makeRowLabel<PICO_STR_L>(left,
+            (int16_t)(rowY(3) + this->route_dropdown->getH() + 2), full_w, "");
+        this->route_status_label->setTextColor(PICO_DARKGREY);
+        this->refreshRouteStatus();
+        addToTab(Tab::Sound, this->route_status_label);
+        addToTab(Tab::Sound, this->route_title);
+        addToTab(Tab::Sound, this->route_dropdown);
 
-    // ---- 音の周波数(sound.cfgの sample-rate)。音タブの2行目 ----
-    this->rate_title = new Label<PICO_STR_S>(left, rowY(1) + 4, "音質");
-    this->rate_title->setFontSize(FontFn::Small);
-    this->rate_dropdown = new DropdownMenu(dropdown_x, rowY(1), kDropdownW);
-    for(int i = 0; i < kRatePresetCount; i++) this->rate_dropdown->add(kRatePresetLabels[i]);
-    this->rate_selected_index = (SoundFunctions::ConfiguredSampleRate() == kRatePresets[1]) ? 1 : 0;
-    this->rate_dropdown->setSelectedIndex(this->rate_selected_index);
-    addToTab(Tab::Sound, this->rate_title);
-    addToTab(Tab::Sound, this->rate_dropdown);
+        // ---- 音の周波数(sound.cfgの sample-rate)。音タブの2行目 ----
+        this->rate_title = new Label<PICO_STR_S>(left, rowY(1) + 4, "音質");
+        this->rate_title->setFontSize(FontFn::Small);
+        this->rate_dropdown = new DropdownMenu(dropdown_x, rowY(1), kDropdownW);
+        for(int i = 0; i < kRatePresetCount; i++) this->rate_dropdown->add(kRatePresetLabels[i]);
+        this->rate_selected_index = (SoundFunctions::ConfiguredSampleRate() == kRatePresets[1]) ? 1 : 0;
+        this->rate_dropdown->setSelectedIndex(this->rate_selected_index);
+        addToTab(Tab::Sound, this->rate_title);
+        addToTab(Tab::Sound, this->rate_dropdown);
+    }
 
     // ---- スリープまでの時間(display.cfgの sleep-timeout)。画面タブの4行目 ----
     // 一覧が下の画面ロック・タッチ補正の行へ重なるので、それらより後にAdd()している

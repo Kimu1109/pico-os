@@ -77,6 +77,15 @@ cmake -S pc -B pc/build-320x480 -DPICOOS_SCREEN_W=320 -DPICOOS_SCREEN_H=480 && c
 SDL_VIDEODRIVER=offscreen ./pc/build-320x480/picoos_pc --app 電卓 --shot calc.ppm 200
 ```
 
+### ハードウェア機能を外す
+
+`PICOOS_HW_SOUND` / `PICOOS_HW_MIC` / `PICOOS_HW_BATTERY`(既定はON)をOFFにすると、実機の `-DPICO_HW_*=0` と同じ版になる
+(`src/config/Hardware_Config.hpp`、設計は `docs/design/devtools.md` の「ビルド時に選ぶハードウェア機能」)。
+
+```sh
+cmake -S pc -B pc/build-minimal -DPICOOS_HW_SOUND=OFF -DPICOOS_HW_MIC=OFF -DPICOOS_HW_BATTERY=OFF && cmake --build pc/build-minimal -j
+```
+
 ### 起動時に開くアプリ
 
 `--app 名前` で、起動したらランチャの名前のアプリを開いておける(ホーム画面の上へ開くので、戻ればいつものホーム画面)。

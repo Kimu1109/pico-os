@@ -188,6 +188,35 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   PCビルドの`--tap`/`--shot`(SDから選ぶ→確認→書く→再起動→通知、`firmware_tool.py push`→本体で確認→DONE→再起動)。
   **実機でSDからもWi-Fiからも更新できることを利用者が確認した(2026-10-16)**。書き込みの時間は未計測。壊れたファームはBOOTSELで戻す。
 
+
+## ビルド時に選ぶハードウェア機能 (`src/config/Hardware_Config.hpp` の `PICO_HW_*`) (2026-10-25)
+
+利用者の要望: 音声・マイク・電池を載せない機器では、最初からメモリを食うだけなので外せるように。液晶とSDは無いと動かないので選べなくてよい。
+
+- **選べるのは `PICO_HW_SOUND` / `PICO_HW_MIC` / `PICO_HW_BATTERY`(既定は全部1=載せる)**。液晶・タッチ・SDは選べない
+  (液晶の種類と画面の大きさは `PICO_PANEL_*` / `SCREEN_WIDTH`、`gui.md`「画面の大きさ」)。
+  実機は env の `build_flags` に `-DPICO_HW_SOUND=0` 等(全部外した例が `env:rpipico2w_minimal`)、PCは `cmake -DPICOOS_HW_SOUND=OFF` 等。
+- **外した機能は、実装の代わりに空の実装が入る**(`hal/Sound_Functions_Off.cpp`・`hal/Mic_Functions_Off.cpp`・`hal/Battery_Functions.cpp` の `#else`)。
+  本物の `.cpp` は全体を `#if PICO_HW_*` で囲む。口(ヘッダ)は同じなので、呼び出し側(Lua・GB・動画・アラーム等、30か所ほど)は分岐しない。
+  空の実装は「つながっていない」と答える: 音は `State::Disconnected`・効果音は捨てる・曲/WAVは理由付きで断る・`GbAudio()` は `nullptr`(エミュは音なしで動く)。
+  マイクはメーターを頼むと `Input::Failed`・録音は `RecError::NoDevice`。電池は `HasSample()=false`・常にUSB給電(電池での音量の頭打ち・ファーム更新の残量チェックも掛からない)。
+  設定ファイル(sound.cfg・mic.cfg)は読まない。
+  - 呼び出しの口を `#if` で消す形にしなかったのは、呼び出し側の全部に `#if` が要り、外した版のビルドがすぐ壊れるため。
+    空の実装の付け忘れ(ヘッダへ足した関数が `_Off.cpp` に無い)は外した版のリンクでしか分からないので、CI(`firmware-build.yml`)で `rpipico2w_minimal` も作る。
+- **利用者に見える所からも消す**: アプリの一覧の「ミュージック」(音)・「録音」(マイク)(`boot/App_List.cpp`)、ステータスバーの音のアイコン、
+  設定の音タブ(「音声出力なしのファームです」だけ出す)、設定の「電池で音量を絞る」(電池が無いとき)。電池の残量は `HasSample()=false` で元から出ない。
+  動画・ゲームボーイは音なしで動くので残す。Luaは `pico.sound_available()` が false・`pico.battery()` が nil(前からある口)。
+- **音声もマイクも外すと2コア目を起こさない**: `main.cpp` の `setup1`/`loop1` を定義しない(`PICO_HW_CORE1`)。arduino-picoはどちらも無ければ2コア目を起動せず、
+  そのスタック(`core1_separate_stack` でヒープから取る8KB)も確保しない。PCビルドは2コア目の代わりのスレッドを止める。
+- **`#if PICO_HW_*` を読むファイルは `config/Hardware_Config.hpp` を自分で include する**(未定義のマクロは `#if` で黙って0になる)。
+  `script/check_layers.py` が `PICO_HW_` / `HardwareConfig::` を含むのに include していないファイルを報告する。画面の組み立ては `if constexpr (HardwareConfig::kSound)`。
+- 大きさ(実機ファーム、2026-10-25): 全部外すと **静的RAM −5.3KB(131,288→125,948B)・フラッシュ −55.8KB(2,220,036→2,164,236B)**。
+  ほかに、使い始めに取っていたヒープ(I2Sのバッファ2〜4KB・マイクのDMA 16KB・録音の列32KB・WAVの列等)と2コア目のスタック8KBが要らなくなる。
+  既定の版の大きさは変わらない。
+- 検証: `hw_off_test`(run.sh の media。外した定義で空の実装をリンクし、断り方と既定値を見る)、PCビルドで全部外した版の起動・設定の音タブ・アプリ数(39→37)、
+  実機ファームの両方の env のビルド(外した版に `setup1`/`loop1`・`ChipSynth` が無いこと)。外した版の実機での起動は未確認(Todoist参照)。
+- ファームの更新(`.pfw`)は版を区別しないので、載せる機能の違う本体へ送るとその機能が消える/増える(画面の大きさと同じ注意)。
+
 ## ナイトリービルド (`.github/workflows/nightly.yml`) (2026-10-24)
 
 利用者の要望: 今のActionsに載せる / 実機ファームのビルドの成果物をそのまま落とせる / 50本ほど残して超えた分は消す。

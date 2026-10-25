@@ -25,6 +25,7 @@
 #include "apps/firmware/FirmwareScene.hpp"
 #include "lua/LuaAppScanner.hpp"
 #include "services/UsbDrive_Functions.hpp"
+#include "config/Hardware_Config.hpp"
 
 // このOSに載せるアプリの一覧。
 //
@@ -68,11 +69,16 @@ void AppFunctions::Setup(){
     Register(MailScene::kAppName, IconID::Mail, &MakeScene<MailScene>);
     //Game Boy(DMG)エミュ。ROMはSDの /gb/ に置く(256KBまで。SUMMARY.md #9)
     Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
-    //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/MUSIC_FORMAT.md)
+    //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/MUSIC_FORMAT.md)。
+    //音声出力を載せない版(config/Hardware_Config.hpp)には並べない(動画・ゲームボーイは音なしで動く)
+#if PICO_HW_SOUND
     Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
+#endif
     Register("動画", IconID::FileVideo, &MakeScene<VideoScene>);
-    //マイク(SPH0645、GP26〜28)で /recordings/ へWAVを録る
+    //マイク(SPH0645、GP26〜28)で /recordings/ へWAVを録る。マイクを載せない版には並べない
+#if PICO_HW_MIC
     Register(RecorderScene::kAppName, IconID::Microphone, &MakeScene<RecorderScene>);
+#endif
     //SSHクライアント(端末)。接続先は起動後に端末の中で聞く。鍵は /sys/ssh/id_ed25519(SshScene参照)
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)

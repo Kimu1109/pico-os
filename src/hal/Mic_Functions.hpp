@@ -50,6 +50,7 @@ namespace MicFunctions {
         NoMemory,       // 列を確保できない
         OpenFailed,     // ファイルを作れない
         NoName,         // 空いている番号が無い
+        NoDevice,       // マイクを載せない版のファーム(-DPICO_HW_MIC=0)
     };
 
     // 録音が終わった理由(LastStopReason())

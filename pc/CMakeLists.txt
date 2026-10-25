@@ -161,6 +161,19 @@ set(PICOOS_SCREEN_H 320 CACHE STRING "画面の高さ(画素)")
 target_compile_definitions(picoos_pc PRIVATE
     SCREEN_WIDTH=${PICOOS_SCREEN_W} SCREEN_HEIGHT=${PICOOS_SCREEN_H})
 
+# 載せるハードウェア機能(src/config/Hardware_Config.hpp の PICO_HW_*)。既定は全部載せる。
+# 例: cmake -S pc -B pc/build-minimal -DPICOOS_HW_SOUND=OFF -DPICOOS_HW_MIC=OFF -DPICOOS_HW_BATTERY=OFF
+option(PICOOS_HW_SOUND   "音声出力を載せる" ON)
+option(PICOOS_HW_MIC     "マイクを載せる" ON)
+option(PICOOS_HW_BATTERY "電池の残量を載せる" ON)
+foreach(hw SOUND MIC BATTERY)
+    if(PICOOS_HW_${hw})
+        target_compile_definitions(picoos_pc PRIVATE PICO_HW_${hw}=1)
+    else()
+        target_compile_definitions(picoos_pc PRIVATE PICO_HW_${hw}=0)
+    endif()
+endforeach()
+
 # pc/compat を src より前に置くことで、実機ライブラリのヘッダを差し替える
 target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"

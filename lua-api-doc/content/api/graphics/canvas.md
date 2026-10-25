@@ -41,7 +41,7 @@ description: "canvas_clear / canvas_save / canvas_load / canvas_undo(CanvasRaste
 - SDカードが使用不可
 - `sd_outside_app_dir` 権限が無く、`app_dir` の外を指している
 - ファイルが存在しない、または `.pimg` として不正
-- 画像が画面(240×320)より大きい
+- 画像が画面(`SCREEN_WIDTH`×`SCREEN_HEIGHT`。既定は240×320)より大きい
 
 ## pico.canvas_undo
 

@@ -164,8 +164,8 @@ end
 
 button("back", 4, 2, 42, 28, "left")
 button("reset", 50, 2, 76, 28, "リセット")
-button("flag", 130, 2, 64, 28, "旗:OFF")
-button("menu", 198, 2, 38, 28, "難度")
+button("flag", g.vw - 110, 2, 64, 28, "旗:OFF") -- 右の2つは右端に寄せる(240幅で130・198)
+button("menu", g.vw - 42, 2, 38, 28, "難度")
 for i, d in ipairs(DIFFICULTIES) do
     button("d" .. i, 20, 104 + (i - 1) * 56, g.vw - 40, 44, d.name .. "  " .. d.cols .. "×" .. d.rows .. "  地雷" .. d.mines)
 end

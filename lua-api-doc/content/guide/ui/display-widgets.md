@@ -2,7 +2,7 @@
 aliases: ["/guide/display-widgets/"]
 title: "表示・日付・時計の部品"
 weight: 50
-description: "ProgressBar / TextView / ImageView / MarkdownView / AnalogClock / DurationPicker / MonthGrid の使い方"
+description: "ProgressBar / QRCode / TextView / ImageView / MarkdownView / AnalogClock / DurationPicker / MonthGrid の使い方"
 ---
 
 OSの標準アプリと同じ部品を、`pico.create` で作れます。生成直後の大きさは仮の値なので、`w` / `h` を設定してください。プロパティの一覧は [プロパティ対応表](../../../reference/widget-properties/) にあります。
@@ -19,6 +19,29 @@ pico.set(bar, "max_value", 100)   -- 既定は0〜100
 pico.set(bar, "color", pico.COLOR_GREEN)  -- バーの色
 pico.set(bar, "value", 35)
 ```
+
+## QRCode — QRコードを出す
+
+文字(URLなど)をQRコードにして表示します。スマホのカメラで読み取れます。表示専用で、タップは下のウィジェットへ素通りします。
+
+```lua
+local qr = pico.create("QRCode")
+pico.set(qr, "x", 40); pico.set(qr, "y", 60)
+pico.set(qr, "w", 160); pico.set(qr, "h", 160)
+pico.set(qr, "ecc", pico.QR_ECC_MEDIUM)            -- 誤り訂正の強さ(既定はMEDIUM)
+if not pico.text_set(qr, "https://example.com/") then
+    print("長すぎてQRに入りません")                    -- 255バイトを超えると空になって false
+end
+print(pico.get(qr, "qr_size"))                      -- 1辺の升目の数(21〜85。空なら0)
+```
+
+- 升目は `w` × `h` の中央に正方形で描きます。升1つの大きさは入る範囲で一番大きい整数px で、周りの余白(地の色)は入る範囲で規格の4升まで取ります。升が2px以上になる大きさにすると読み取りやすくなります(升目の数が29なら`w`/`h`を62以上)。
+- 255バイトまでなら、誤り訂正の強さに関係なく必ず入ります。数字だけ・英大文字と一部の記号だけの文字は詰めた形になり、日本語はUTF-8のまま入ります。
+- 誤り訂正は `QR_ECC_LOW`(約7%の欠けまで)・`MEDIUM`(15%)・`QUARTILE`(25%)・`HIGH`(30%)。強いほど升目が増えます。升目の数が変わらない範囲では自動で強めます。
+- 色は `color`(升目)と `background_color`(地、既定は白)。**明るい方を地にして描く**ので、ダークテーマでも反転しません。
+- Wi-Fiへ繋ぐQRは `WIFI:T:WPA;S:<名前>;P:<パスワード>;;`(名前とパスワードの中の `\` `;` `,` `:` `"` は前に `\` を付ける)。
+
+動くサンプルは「QRコード」アプリ(`/lua/apps/QRコード/main.lua`)にあります。
 
 ## TextView — 長い文章を軽く出す
 

@@ -4,7 +4,7 @@
 > パスはリポジトリのルートから。「上の「〜」」等の参照先が別のファイルにあるときは、`CLAUDE.md`の「設計記録の索引」で節の名前から探すこと。
 
 ## ウィジェットカタログ
-Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / TextView(見えている行だけを描くプレーンテキストの表示欄。任意でカーソル) / ImageView(.pimgを1回だけ解いて持ち、ドラッグでスクロール) / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照) / ProgressBar(表示専用の進捗バー。タップ素通り)。
+Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / TextView(見えている行だけを描くプレーンテキストの表示欄。任意でカーソル) / ImageView(.pimgを1回だけ解いて持ち、ドラッグでスクロール) / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照) / ProgressBar(表示専用の進捗バー。タップ素通り) / QRCodeView(QRコードの表示。タップ素通り。Lua側からは`"QRCode"`。下記「QRコード」)。
 **`TextView` / `ImageView` / `MarkdownView` / `AnalogClock` / `DurationPicker` / `MonthGrid` も2026-10-05からLuaの `pico.create` で作れる**(下記「Lua APIの追加(2026-10-05 その2)」)。
 
 `LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
@@ -191,3 +191,27 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
     カーソル移動キーは読みが残っていれば先に確定させてから動く。
   - `KeyboardNum`は電卓向けの数字専用。「0〜9・カーソル移動・決定・削除」を常時固定で表示し、その上に`Digit`(数値入力の補助記号)/`Arith`(四則演算)/`Math`(√π e ^ % ±)の3タブで切り替わる記号行を載せる。`MODE_DIGIT | MODE_ARITH`のようなビットマスクで**使えるタブを呼び出し側から制限できる**(1つだけ許可ならタブ行自体が消えて1行詰まる)。
   - キー1つごとに`Button`を`new`せず、配列テーブル + `causeOnPressStart()`での座標判定で処理する(ヒープ節約。`AppGrid`/`ColorDialog`と同じ方式)。
+
+## QRコード (`src/gui/widgets/QRCodeView` / `lib/qrcodegen`) (2026-10-25)
+
+- **符号化は vendor した Nayuki の qrcodegen 1.8.0(C版、MIT)**(`lib/qrcodegen/README-pico-os.md`)。動的確保をせず、呼び出し側が渡す
+  2本のバッファだけで符号化する。誤り訂正・8種のマスクの評価まで規格どおりで、自前で書くより確か。PlatformIOは `lib/` を自動で拾い、
+  `pc/CMakeLists.txt` と `script/host_test/CMakeLists.txt`(`host_qrcodegen`)が同じコピーを見る。
+- `QRCodeView` は**符号化した升目だけを固定長で持つ**(`kMaxVersion = 17` = 85x85升で905B。文字列256Bと合わせて1つ約1.2KB)。
+  作業用のバッファ(同じ905B)は全部のQRで1本を使い回す(`QRCodeView.cpp` の `g_temp`。1コア目だけが触る)。
+  版17は「255バイトなら誤り訂正Highでも入る」ところから決めた。Luaの `pico.set` の文字列(254B)は必ず入る。
+- 文字は `qrcodegen_encodeText()` に任せる(数字だけ・英大文字と一部の記号だけは詰めた形、他はUTF-8のバイト列)。
+  誤り訂正は升目の数が増えない範囲で自動で強める(`boostEcl`)。`getEcc()` は頼んだ段を返す。
+- **長すぎる文字は切らずに空にして `false`**(途中で切れたQRは別のURL等を指してしまう)。途中にNULのある文字も断る。
+  Luaの `pico.set(qr, "text", …)` は `WidgetProperty::Value` の器で黙って切れるので、長さの分からない文字は `pico.text_set` で入ったかを見る。
+- 描き方: 升の大きさは「升目+余白1升ずつ」が短い辺に入る最大の整数倍を先に決め、その大きさのまま入る範囲で余白を規格の4升へ近づける
+  (小さい升は読みにくい。余白の外も地の色なら読み取り機は困らない)。横に続く黒い升は1回の `fillRect` にまとめる。
+- **色はパレットで明るい方を地にする**(`color` と `background_color` のRGB565のおおよその明るさを比べて入れ替える)。ダークテーマは0と15の
+  明暗を入れ替えるので、そのままだと反転したQR(暗い地に明るい升目)になり、読めない読み取り機がある。
+- 使っている所: Wi-Fiの[スマホ](`WifiSetupScene`)に、読むとAPへ繋がるQR(`WIFI:T:WPA;S:…;P:…;;`、値の中の `\ ; , : "` は前に `\`)。
+  名前とパスワードの右に93px(29升なら1升3px)。名前がQRの手前で1行に入らなければ名前だけ小さい字にする。
+  Luaアプリ「QRコード」(`pc/sdcard/lua/apps/QRコード/`。文字を入れてQRにする。誤り訂正はタブで選ぶ)。
+- 検証: `qrcode_test`(widget。版の決まり方・形式情報のBCHと誤り訂正の段・切り出し記号・タイミング・升目どおりの描画と余白・
+  ダークテーマで地が明るい方・長すぎ/NULで空・プロパティ)、`lua_ext_test`(`pico.create("QRCode")`・`text_set`・`ecc`・定数)。
+  PCビルドの画面写真(等倍)をOpenCVの `QRCodeDetector` で読み、[スマホ]の画面(明るい/ダーク)とLuaアプリ(誤り訂正M/H)が
+  元の文字に戻ることを確かめた(OpenCVは手元で入れただけでリポジトリのテストには入れていない)。**実機の液晶をスマホで読むのは未確認(Todoist参照)**。

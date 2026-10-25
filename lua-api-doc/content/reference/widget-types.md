@@ -4,7 +4,7 @@ weight: 10
 description: "pico.createで生成できる種別と、生成直後の初期値"
 ---
 
-## pico.create で生成できる27種別
+## pico.create で生成できる28種別
 
 生成直後の位置・大きさは仮の値です。実際に配置する前に `pico.set` で `x`/`y`/`w`/`h` 等を設定してください。
 
@@ -31,6 +31,7 @@ description: "pico.createで生成できる種別と、生成直後の初期値"
 | `"Line"` | (0,0)-(40,24) | color, thickness, x1, y1, x2, y2 |
 | `"Triangle"` | (0,20)/(20,0)/(40,20) | color, filled, thickness, x1, y1, x2, y2, x3, y3 |
 | `"ProgressBar"` | x=0, y=0, 100×12(タップは素通り) | w, h, value, min_value, max_value, color, border_color |
+| `"QRCode"` | x=0, y=0, 100×100(タップは素通り) | w, h, text(QRにする文字。255Bまで。長さの分からない文字は`pico.text_set`), ecc, color, qr_size(読み取り専用) |
 | `"TextView"` | x=0, y=0, 100×100 | w, h, text(255Bまで。長文は`pico.text_set`), scroll_y, row_count(読み取り専用) |
 | `"ImageView"` | x=0, y=0, 100×100 | w, h, path(`.pimg`), image_w, image_h(読み取り専用) |
 | `"MarkdownView"` | x=0, y=0, 100×100(約40KB使うので1アプリに1つまで) | w, h, path, text(255Bまで。長文は`pico.text_set`), scroll_y |

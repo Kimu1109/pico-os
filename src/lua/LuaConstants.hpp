@@ -14,6 +14,7 @@
 #include "gui/widgets/GridContainer.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/LayoutContainer.hpp"
+#include "gui/widgets/QRCodeView.hpp"
 #include "iso/Iso_World.hpp"
 
 namespace LuaConstants {
@@ -54,6 +55,9 @@ namespace LuaConstants {
         {"CANVAS_LINE", Canvas::Line},       {"CANVAS_RECT", Canvas::Rect},
         {"CANVAS_ELLIPSE", Canvas::Ellipse}, {"CANVAS_ARROW", Canvas::Arrow},
         {"CANVAS_STRAIGHT", Canvas::Straight}, {"CANVAS_FILL", Canvas::Fill},
+        // ecc(QRCode)
+        {"QR_ECC_LOW", (int)QRCodeView::Ecc::Low},           {"QR_ECC_MEDIUM", (int)QRCodeView::Ecc::Medium},
+        {"QR_ECC_QUARTILE", (int)QRCodeView::Ecc::Quartile}, {"QR_ECC_HIGH", (int)QRCodeView::Ecc::High},
         // pico.get_time() の wday
         {"WDAY_SUNDAY", 0}, {"WDAY_MONDAY", 1}, {"WDAY_TUESDAY", 2}, {"WDAY_WEDNESDAY", 3},
         {"WDAY_THURSDAY", 4}, {"WDAY_FRIDAY", 5}, {"WDAY_SATURDAY", 6},

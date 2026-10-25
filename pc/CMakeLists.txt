@@ -139,12 +139,16 @@ file(GLOB LUA_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/lua/src/*.c")
 # Luaと同じく lib/ にvendorしたものを、PlatformIOと同じコピーのままビルドする
 file(GLOB MONOCYPHER_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/monocypher/src/*.c")
 
+# ---- qrcodegen(QRコードの符号化。lib/qrcodegen/README-pico-os.md)----
+file(GLOB QRCODEGEN_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/qrcodegen/src/*.c")
+
 add_executable(picoos_pc
     "${CMAKE_CURRENT_SOURCE_DIR}/main_pc.cpp"
     ${PICOOS_SOURCES}
     ${LGFX_SOURCES}
     ${LUA_SOURCES}
-    ${MONOCYPHER_SOURCES})
+    ${MONOCYPHER_SOURCES}
+    ${QRCODEGEN_SOURCES})
 
 # LGFX_SDL … LovyanGFX側がSDLパネルを有効にするためのフラグ
 # PICOOS_PC  … pico-os側がPC向けの実装(パネル設定/タッチ取得)へ切り替えるためのフラグ
@@ -156,6 +160,7 @@ target_include_directories(picoos_pc PRIVATE
     "${PICOOS_ROOT}/src"
     "${PICOOS_ROOT}/lib/lua/src"
     "${PICOOS_ROOT}/lib/monocypher/src"
+    "${PICOOS_ROOT}/lib/qrcodegen/src"
     # Peanut-GB(ヘッダ1本。実装の取り込みはsrc/apps/gb/Gb_Emu.cppだけ。lib/peanut_gb/README-pico-os.md)
     "${PICOOS_ROOT}/lib/peanut_gb/src"
     "${LOVYANGFX_DIR}/src")

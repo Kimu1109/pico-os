@@ -274,6 +274,19 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 | `border_color` | Int | ✓ | ✓ |
 | `w` / `h` | Int | ✓ | ✓ |
 
+## QRCode
+
+| name | 型 | get | set |
+|---|---|---|---|
+| `text` | Str | ✓ | ✓(QRにする文字。`""`で空。`pico.set` の文字列の上限を超えると黙って切れるので、長さの分からない文字は `pico.text_set` を使う) |
+| `ecc` | Int(既定`1`=`QR_ECC_MEDIUM`) | ✓ | ✓(誤り訂正の強さ`0`〜`3`。`QR_ECC_LOW`/`MEDIUM`/`QUARTILE`/`HIGH`。範囲外はエラー) |
+| `color` | Int(既定`0`=黒) | ✓ | ✓(升目の色) |
+| `background_color` | Int(既定`15`=白) | ✓ | ✓(地の色。共通プロパティ) |
+| `qr_size` | Int | ✓ | ✗(1辺の升目の数。21〜85。空なら0) |
+| `w` / `h` | Int | ✓ | ✓ |
+
+描くときは `color` と `background_color` のうち**明るい方を地**にします(ダークテーマでも「明るい地に暗い升目」のまま。反転したQRを読めない読み取り機があるため)。
+
 ## TextView
 
 | name | 型 | get | set |

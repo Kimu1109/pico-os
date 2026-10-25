@@ -29,6 +29,7 @@ pico.set(icon, "icon_id", pico.ICON_Home)
 | `DIRECTION_VERTICAL` `DIRECTION_HORIZONTAL` | 0 / 1 | `LayoutContainer` の `direction` |
 | `ALIGN_START` `ALIGN_CENTER` `ALIGN_END` | 0〜2 | `cross_align` / `h_align` / `v_align` |
 | `CANVAS_LINE` `CANVAS_RECT` `CANVAS_ELLIPSE` `CANVAS_ARROW` `CANVAS_STRAIGHT` `CANVAS_FILL` | 0〜5 | `CanvasRaster` の `canvas_mode` |
+| `QR_ECC_LOW` `QR_ECC_MEDIUM` `QR_ECC_QUARTILE` `QR_ECC_HIGH` | 0〜3 | `QRCode` の `ecc`(誤り訂正の強さ) |
 | `WDAY_SUNDAY` … `WDAY_SATURDAY` | 0〜6 | `pico.get_time().wday` |
 | `SCREEN_WIDTH` / `SCREEN_HEIGHT` / `STATUSBAR_HEIGHT` | 240 / 320 / 20 | 画面の大きさ |
 | `iso.KIND_NATURAL` `KIND_FLAT` `KIND_DEMO` `KIND_EMPTY` `KIND_ARENA` | 0〜4 | `pico.iso.create` の `kind` |

@@ -81,6 +81,8 @@ description: "create / destroy / set / get / on / off / add_child / remove_child
 
 `TextView`(16KiBまで)と `MarkdownView`(8KiBまで)に**長い文章**を渡します。`pico.set(id, "text", ...)` は255バイトまでなので、それより長いものはこちらを使います。上限を超えた分は切り捨てられ、`false` を返します。`MarkdownView` に渡した文書の中の相対パス(画像など)は、SDのルートが基準になります(ファイルから読むなら `pico.set(id, "path", ...)`)。
 
+`QRCode` にも使えます(255バイトまで)。こちらは超えたときに**切らずに空にして** `false` を返します(途中で切れたQRは別の中身を指してしまうため)。
+
 ## pico.set_dots
 
 <div class="sig">pico.set_dots(id: integer, dots: table) <span class="ret">-> (なし)</span></div>

@@ -118,6 +118,8 @@ namespace {
         {"year", Id::Year}, {"month", Id::Month}, {"today", Id::Today},
         {"selected", Id::Selected},
 
+        {"ecc", Id::Ecc}, {"qr_size", Id::QrSize},
+
         {"hit_transparent", Id::HitTransparent}, {"enabled", Id::Enabled},
         {"focusable", Id::Focusable},
     };

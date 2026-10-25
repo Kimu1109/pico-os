@@ -1,0 +1,13 @@
+{
+    "name": "qrcodegen",
+    "version": "1.8.0",
+    "description": "Nayuki QR Code generator library 1.8.0 (vendored, c/qrcodegen.{c,h}). Used by the QR code widget (src/gui/widgets/QRCodeView). See README-pico-os.md.",
+    "keywords": ["qrcode", "qr"],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/nayuki/QR-Code-generator.git"
+    },
+    "license": "MIT",
+    "frameworks": "arduino",
+    "platforms": "*"
+}

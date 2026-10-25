@@ -7,7 +7,7 @@ void KeyboardEng::causeOnPressStart() {
     Widget::causeOnPressStart();
 
     int key_y = SCREEN_HEIGHT - key_h * 4;
-    int key_x = 0;
+    int key_x = key_x0;
 
     char mode = this->getMode();
 
@@ -15,7 +15,7 @@ void KeyboardEng::causeOnPressStart() {
         Key key = keyEnv(i);
 
         if(strcmp(key.str, "\n") == 0){
-            key_x = 0;
+            key_x = key_x0;
             key_y += key_h;
             continue;
         }
@@ -94,12 +94,12 @@ void KeyboardEng::render() {
     char mode = this->getMode();
 
     int key_y = SCREEN_HEIGHT - key_h * 4;
-    int key_x = 0;
+    int key_x = key_x0;
     for(int i = 0; i < keys_size; i++){
         Key key = keyEnv(i);
 
         if(strcmp(key.str, "\n") == 0){
-            key_x = 0;
+            key_x = key_x0;
             key_y += key_h;
             continue;
         }

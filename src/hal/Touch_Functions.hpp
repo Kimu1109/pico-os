@@ -41,8 +41,8 @@ namespace PICO_Touch
     // 1MHzから下げた。これで改善するかは実機で様子を見ながら判断すること
     inline const uint32_t TOUCH_SPI_HZ = 1000000;
 
-    inline const int SCREEN_W = 240;
-    inline const int SCREEN_H = 320;
+    inline const int SCREEN_W = SCREEN_WIDTH;
+    inline const int SCREEN_H = SCREEN_HEIGHT;
 
     inline int prev_x = 0;
     inline int prev_y = 0;

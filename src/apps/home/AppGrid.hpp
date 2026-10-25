@@ -29,7 +29,7 @@ class AppGrid : public Widget {
         // 2列にしているのは、3列(タイル幅72px=日本語4文字)だと大半のアプリ名が
         // はみ出してしまうため。2列なら111px=6文字/行あり、下の2行表示と合わせて
         // 12文字程度まで収まる。1ページ6個に減るが、名前が読めないよりはよい
-        static constexpr int kCols      = 2;
+        static constexpr int kCols      = HomeLayout::kCols;
         static constexpr int kPadding   = 6;  // グリッド外周の余白
         static constexpr int kGap       = 6;  // タイル同士の間隔
         static constexpr int kTileH     = 78;

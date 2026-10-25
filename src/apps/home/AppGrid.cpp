@@ -21,7 +21,9 @@ int AppGrid::rowsPerPage() const {
     //最終行の下にはgapが要らないので、その分を足してから割る
     const int avail = this->l_rect.h - kPadding * 2 + kGap;
     const int rows = avail / (kTileH + kGap);
-    return (rows > 0) ? rows : 1;
+    // 1ページのマスは32まで(HomeLayout の used がビットで持つ)
+    constexpr int kMaxRows = 32 / kCols;
+    return (rows > kMaxRows) ? kMaxRows : (rows > 0) ? rows : 1;
 }
 
 int AppGrid::tilesPerPage() const {

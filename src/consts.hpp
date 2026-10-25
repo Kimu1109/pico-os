@@ -38,8 +38,17 @@
 #define PICO_SCROLL_EX  1.30f
 
 // --- スクリーンサイズ ---
-#define SCREEN_WIDTH    240
-#define SCREEN_HEIGHT   320
+// ビルド時に -DSCREEN_WIDTH=... -DSCREEN_HEIGHT=... で変えられる(platformio.ini の env、
+// PCビルドは cmake -DPICOOS_SCREEN_W/H)。画面の配置は Scene::contentRect() 等からの相対で決めること。
+// 部品の大きさ(文字・ボタン)は変わらないので、幅は240以上・高さは240以上を想定している。
+#ifndef SCREEN_WIDTH
+    #define SCREEN_WIDTH    240
+#endif
+#ifndef SCREEN_HEIGHT
+    #define SCREEN_HEIGHT   320
+#endif
+static_assert(SCREEN_WIDTH >= 240 && SCREEN_HEIGHT >= 240, "画面は幅・高さとも240以上を想定している");
+static_assert(SCREEN_WIDTH % 2 == 0, "4bppのframeを1行バイト単位で扱う所があるので幅は偶数");
 
 // --- 常駐UI(オーバーレイ)のサイズ ---
 // シーンが使える領域はステータスバーの下から画面下端まで(Scene::contentRect()参照)

@@ -22,7 +22,8 @@ class EventDetailDialog : public Widget {
         std::vector<Widget*> children_;
 
         constexpr static int DIALOG_WIDTH  = 224;
-        constexpr static int DIALOG_HEIGHT = 280;
+        // 画面が低ければ(横長の画面)縮める。本文はスクロールするので縮めても読める
+        constexpr static int DIALOG_HEIGHT = (SCREEN_HEIGHT - STATUSBAR_HEIGHT - 20 < 280) ? SCREEN_HEIGHT - STATUSBAR_HEIGHT - 20 : 280;
 
         constexpr static int BASE_X = (SCREEN_WIDTH - DIALOG_WIDTH) / 2;
         constexpr static int BASE_Y = STATUSBAR_HEIGHT + (SCREEN_HEIGHT - STATUSBAR_HEIGHT - DIALOG_HEIGHT) / 2;

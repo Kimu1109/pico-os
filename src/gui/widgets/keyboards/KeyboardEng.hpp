@@ -21,7 +21,9 @@ class KeyboardEng : public KeyboardPanel {
     private:
 
         const static int key_h = 28;
-        const static int key_w = 240 / (10 * 2);
+        // 1行は半キー(key_w)20個ぶん。割り切れない余りは左右へ振り分ける(key_x0)
+        const static int key_w = SCREEN_WIDTH / (10 * 2);
+        const static int key_x0 = (SCREEN_WIDTH - key_w * 10 * 2) / 2;
 
         const static int keys_size = 47;
 

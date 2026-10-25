@@ -13,8 +13,8 @@ class FileSelectDialog : public Widget {
         constexpr static int BASE_X = 20;
         constexpr static int BASE_Y = 20;
 
-        constexpr static int DIALOG_H = 280;
-        constexpr static int DIALOG_W = 200;
+        constexpr static int DIALOG_H = SCREEN_HEIGHT - BASE_Y * 2;  // 240x320で280
+        constexpr static int DIALOG_W = SCREEN_WIDTH - BASE_X * 2;   // 240x320で200
 
         constexpr static int BUTTON_H = 26;
 

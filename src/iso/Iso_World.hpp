@@ -443,7 +443,7 @@ private:
     bool keep_all_ = false;
 
     // 表示
-    int vx_ = 0, vy_ = 20, vw_ = 240, vh_ = 204;
+    int vx_ = 0, vy_ = 20, vw_ = SCREEN_WIDTH, vh_ = SCREEN_HEIGHT - 116;   // 既定は240x320で(0,20,240,204)。setView()で変える
     int OX_ = 0, OY_ = 0;
     int cx_ = 0, cy_ = 0, cz_ = 0;
     bool show_cursor_ = true;

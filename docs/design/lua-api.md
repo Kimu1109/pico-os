@@ -848,7 +848,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
    - Argon2の作業領域64KiBは**1KiBのブロックごとに `malloc`** して使い終わったら消す(Luaの予算の外。`crypto/Argon2_Split.hpp`)。実機は2026-10-11の計測で暗号化/復号とも約50〜56ms。
      - **以前は `crypto_argon2()` へ連続した64KiBを1つ渡していて、実機で「時々失敗し、一度失敗すると再起動まで失敗し続ける」不具合になった(2026-10-21)**。空きヒープが全部で80〜100KBしかないところから連続64KiBを毎回取り直していたため、使い終わって空いた穴へ長生きする確保が1つ入るだけで連続64KiBが二度と取れなくなり(アプリを開き直しても戻らない)、「メモリが足りません」で失敗し続けた。計算はMonocypher 4.0.2の `crypto_argon2()` を写してブロックの引き方だけ変えたもので、結果はビット単位で同じ(`argon2_split_test` で突き合わせ。既存の暗号文もそのまま読める)。1回の確保は1KiB(+ブロックを指す表)なので、穴が散らばっていても合計64KiB空いていれば通る。ついでにスタックも約2KiB減らした(最初のブロックの元と最後のブロックの直列化をブロック自身の上で行う)。実機では未確認(Todoist参照)。
    - 乱数は `SecretAead::Random()`(実機は `rp2040.hwrand32()`、PCは `/dev/urandom`。`SshUtil::Random()` と同じ中身を、SSHに依存しないよう複製した)。
-9. **開発体験**: `script/host_test/lua/pico_mock.lua`(Luaアプリのテスト用の `pico.*` の偽物。ウィジェット・イベント・タイマー・ダイアログ・HTTP・SD・保存・画面遷移を記録し、
+9. **開発体験**: `script/host_test/lua/pico_mock.lua`(Luaアプリのテスト用の `pico.*` の偽物。アプリ作者向けには `picoos lua-test` が包む(devtools.md「Luaアプリのホットリロードとテストランナー」)。ウィジェット・イベント・タイマー・ダイアログ・HTTP・SD・保存・画面遷移を記録し、
    `mock.fire/advance/close_dialog/respond` で動かす。`pico_mock_test.lua` が自身のテスト)。`pico.memory_info()` で予算の残りが見える。
 
 **検証**: `lua_ext_test`(新設のグループ `lua-ext`。新ウィジェットのプロパティ・イベント(MonthGrid/TextViewは実際のタップ)・`pico.off`・無効のウィジェットがタップを受けないこと(`UpdateAll()`)・

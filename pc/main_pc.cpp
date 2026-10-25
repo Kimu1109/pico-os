@@ -24,6 +24,8 @@
 //   picoos_pc --app NAME            起動したらランチャの名前NAMEのアプリを開いておく
 //   picoos_pc --scene SCENE         --app のアプリへ「最初に開く画面」を頼む(撮りたい画面まで
 //                                   自動で進める。意味はアプリごと。pc/README.md「起動時に開くアプリ」)
+//   picoos_pc --app NAME --hot-reload  NAMEのLuaアプリのフォルダの .lua / app.cfg を保存するたびに
+//                                   同じ引数で起動し直す(pc/HotReload_PC.hpp、pc/README.md「ホットリロード」)
 //
 // 使い方(Web): index.html を開くだけ。環境変数の代わりにURLのクエリで状態を指定する
 //   index.html?wifi=disconnected&rssi=-85
@@ -103,6 +105,8 @@ static void launchStartApp()
 #if !defined(__EMSCRIPTEN__)
     #include <unistd.h>                      // execv(再起動)
     #include <signal.h>                      // pthread_sigmask(再起動)
+    #include "HotReload_PC.hpp"              // Luaアプリのホットリロード(--hot-reload)
+    static void rebootSelf();                // 下の main() の近く。ホットリロードも同じ道で起動し直す
 #endif
 
 // src/main.cpp が提供する
@@ -297,11 +301,14 @@ namespace {
         configureOtaDir();
         setup();
         launchStartApp();
+        PicoOsHotReload::Start(getenv("PICOOS_START_APP"));
 
         int frame = 0;
         while (*running) {
             loop();
             frame++;
+
+            if (!g_shot_path && PicoOsHotReload::Poll()) rebootSelf();
 
             if (g_shot_path && frame >= g_shot_frames) {
                 writeScreenshot(g_shot_path);
@@ -729,6 +736,10 @@ int main(int argc, char** argv)
         }
         if (strcmp(argv[i], "--scene") == 0 && i + 1 < argc) {
             setenv("PICOOS_START_SCENE", argv[++i], 1);
+            continue;
+        }
+        if (strcmp(argv[i], "--hot-reload") == 0) {
+            PicoOsHotReload::enabled = true;
             continue;
         }
         if (strcmp(argv[i], "--shot") == 0 && i + 1 < argc) {

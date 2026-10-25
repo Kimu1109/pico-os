@@ -252,12 +252,18 @@ def valid_rel_path(p):
     return all(SEG_RE.match(s) for s in segs)
 
 
+def dev_only(rel):
+    """配らないファイル(picoos lua-test のテスト。tests/ の下と *_test.lua)"""
+    return rel.startswith("tests/") or rel.endswith("_test.lua")
+
+
 def tracked_files(app_dir):
-    """gitが管理しているファイル(gitの外ならディレクトリの中の全部)。app_dir からの相対パス"""
+    """gitが管理しているファイル(gitの外ならディレクトリの中の全部)。app_dir からの相対パス。
+    テスト(dev_only)は端末に要らないので除く"""
     try:
         out = subprocess.run(["git", "-C", app_dir, "ls-files", "-z", "--", "."],
                              check=True, capture_output=True).stdout
-        names = [n for n in out.decode("utf-8").split("\0") if n]
+        names = [n for n in out.decode("utf-8").split("\0") if n and not dev_only(n)]
         if names:
             return sorted(names)
     except (OSError, subprocess.CalledProcessError):
@@ -268,7 +274,9 @@ def tracked_files(app_dir):
         for f in files:
             if f.startswith("."):
                 continue
-            result.append(os.path.relpath(os.path.join(base, f), app_dir).replace(os.sep, "/"))
+            rel = os.path.relpath(os.path.join(base, f), app_dir).replace(os.sep, "/")
+            if not dev_only(rel):
+                result.append(rel)
     return sorted(result)
 
 

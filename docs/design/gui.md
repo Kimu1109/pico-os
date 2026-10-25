@@ -117,6 +117,20 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - 実装例: `HomeScene`(ランチャ) / `MarkdownScene`(Markdownブラウザ。下記) / `ClocksScene`(時計。下記) / `InputTestScene`。
 - ホスト側の検証: `sh script/host_test/run.sh`(実コードをPCのg+++ASanで動かし解放漏れを検出。実機ビルドとは独立)。
 
+## 画面の大きさ (`consts.hpp` の `SCREEN_WIDTH/HEIGHT`) (2026-10-25)
+
+- **ビルド時に決める**(動いている最中には変えない)。frame・行ハッシュの配列・`contentRect()` 等が `constexpr` のままで済み、
+  RAMの見積もりもビルドごとに固定できるため。実機は env(`rpipico2w_320x480` が例)、PCは `cmake -DPICOOS_SCREEN_W/H`(`pc/README.md`)。
+- 液晶の種類は `PICO_PANEL_ST7796` / `ILI9488` / `ST7789`(既定はILI9341。`config/LGFX_Config.hpp`)。`setRotation()` はしていないので、
+  `SCREEN_WIDTH/HEIGHT` はパネルの縦向きの大きさに合わせる。タッチは XPT2046 のまま(補正の既定は画面の大きさから作る)。
+- 決まり: **幅は偶数・幅も高さも240以上**(`static_assert`)。文字・ボタンの大きさは変わらないので、広い画面は余白が増え、狭い画面は入りきらない。
+  配置は `Scene::contentRect()` からの相対で書き、240/320を直書きしない。幅240前提で作った部品(ゲームボーイの画面とパッド)は真ん中に置く。
+- frame は4bppなので 幅×高さ÷2 バイト(240x320で37.5KB、320x480で75KB、480x800で188KB)。全画面の転送時間も画素数に比例する。
+- PCビルドで 240x320 / 320x480 / 320x240 / 480x800 の全アプリを撮って確かめた(2026-10-25)。**縦長(高さ320以上)はおおむね崩れない。**
+  横長(320x240)はネイティブの画面も動くが、電卓のキー・本体の更新・ゲームボーイ(パッドが入らない)は高さが足りず詰まる。
+  同梱のLuaアプリの多くは240x320を前提に描いている(画面の大きさを返すAPIはまだ無い)。
+- 実機の別パネル(ST7796等)では未確認(Todoist参照)。
+
 ## ダイアログ (`src/gui/widgets/dialogs/`)
 `WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`ベクタで子を保持」「`setOnClosed(std::function<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
 

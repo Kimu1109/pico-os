@@ -235,7 +235,7 @@ function M.install(opts)
     function pico.settings_set(k, v) settings[k] = tostring(v) return true end
     function pico.settings_all() local o = {} for k, v in pairs(settings) do o[k] = v end return o end
     function pico.store_load() return M.store end
-    function pico.store_save(t) M.store = t return true end
+    function pico.store_save(t, opts) M.store = t M.store_opts = opts return true end
 
     -- ---- ダイアログ・通知(記録するだけ。mock.close_dialog で結果を返せる) ----
     local function dialog(kind, ...)

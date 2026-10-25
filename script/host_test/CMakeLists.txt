@@ -303,6 +303,7 @@ host_lua_test(minesweeper_test GROUP lua-scene)
 host_lua_test(breakout_test GROUP lua-scene)
 host_lua_test(blocks_test GROUP lua-scene)
 host_lua_test(spotify_test GROUP lua-scene)
+host_lua_test(qrcode_app_test GROUP lua-scene)
 host_lua_test(pico_mock_test GROUP lua-scene)
 host_lua_test(pico_test_test GROUP lua-scene)
 

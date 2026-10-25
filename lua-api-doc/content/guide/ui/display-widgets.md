@@ -41,7 +41,9 @@ print(pico.get(qr, "qr_size"))                      -- 1辺の升目の数(21〜
 - 色は `color`(升目)と `background_color`(地、既定は白)。**明るい方を地にして描く**ので、ダークテーマでも反転しません。
 - Wi-Fiへ繋ぐQRは `WIFI:T:WPA;S:<名前>;P:<パスワード>;;`(名前とパスワードの中の `\` `;` `,` `:` `"` は前に `\` を付ける)。
 
-動くサンプルは「QRコード」アプリ(`/lua/apps/QRコード/main.lua`)にあります。
+- 連絡先のQRは vCard(`BEGIN:VCARD` `VERSION:3.0` `FN:名前` `TEL:…` `EMAIL:…` `END:VCARD` を改行でつなぐ。値の中の `\` `,` `;` は前に `\`)。スマホのカメラが連絡先として読みます。
+
+動くサンプルは「QRコード」アプリ(`/lua/apps/QRコード/main.lua`。URL・連絡先・Wi-Fi・テキストを保存して一覧から出す)にあります。
 
 ## TextView — 長い文章を軽く出す
 

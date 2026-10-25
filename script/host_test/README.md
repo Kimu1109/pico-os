@@ -191,6 +191,9 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   pico_mock_test… script/host_test/lua/pico_mock.lua(Luaアプリのゲームの規則やUIを、実機/PCビルド無しで
                 普通のLuaだけで確かめるための、pico.*の偽物)自身のテスト。ウィジェット・イベント・タイマー・
                 ダイアログ・HTTP・SD・保存・画面遷移を記録して返せる
+  qrcode_app_test… Luaアプリ「QRコード」(pico_mock.luaの上で。pico.asyncは本物)。種類ごとの追加・途中のキャンセル・
+                QRにする文字(vCard・Wi-Fiの逃がし・nopass)・長すぎは保存しない・前後の送り・編集・削除・
+                保存の暗号化の指定・壊れた保存の読み飛ばし・50件まで
   pico_test_test… script/lua_test/pico_test.lua(picoos lua-test のテストランナー)自身のテスト。
                 script/host_test/lua/test_app の tests/ を動かして成功/失敗の数と失敗の文・サンドボックス・
                 SDの下敷きを見る。pc/sdcard/lua/apps/*/tests/ の見本が通ることも見る

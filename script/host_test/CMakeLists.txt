@@ -207,6 +207,9 @@ host_test(setup_portal_test GROUP core)
 host_test(app_test GROUP core)
 host_test(home_test GROUP core)
 host_test(app_repo_test GROUP core)
+host_exe(app_package_test)
+host_py_test(app_package_tool_test GROUP core USES app_package_test
+    ARGS $<TARGET_FILE:app_package_test> ${CMAKE_CURRENT_BINARY_DIR}/app_package_work)
 host_test(firmware_test GROUP core)
 host_py_test(firmware_tool_test GROUP core USES firmware_test
     ARGS $<TARGET_FILE:firmware_test> ${CMAKE_CURRENT_BINARY_DIR}/firmware_tool_work)

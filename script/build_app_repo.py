@@ -17,6 +17,12 @@
   # 署名を確かめる
   python3 script/build_app_repo.py verify --dir /tmp/apps [--pubkey 16進64桁]
 
+  # 3. Webのページ(index.html)と、SDに置けば入るパッケージ(<id>-<版>.papp)を配布物に足す
+  python3 script/build_app_repo.py site --dir _site/apps
+
+  # 手元のアプリを1つだけパッケージにする(ストアを通さずに配る。作者の鍵で署名する)
+  python3 script/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス --out tetris.papp
+
 署名は2種類(docs/APP_REPO.md 形式2): catalog.sig はカタログ鍵(--key)、各アプリの files.sig は
 作者の鍵(--author-key。既定は --key と同じ。pico-os の公式アプリは同じ鍵で両方を署名する)。
 
@@ -284,9 +290,11 @@ class App:
     pass
 
 
-def collect_apps(apps_dir, only):
+def collect_apps(apps_dir, only, only_dir=None):
     apps = []
     for name in sorted(os.listdir(apps_dir)):
+        if only_dir is not None and name != only_dir:
+            continue
         app_dir = os.path.join(apps_dir, name)
         cfg_path = os.path.join(app_dir, "app.cfg")
         if not os.path.isdir(app_dir) or not os.path.isfile(cfg_path):
@@ -476,8 +484,10 @@ def read_catalog(index_dir):
         c = line.split("\t")
         if len(c) < (11 if fmt == 2 else 8):
             raise SystemExit(f"catalog.tsv の行の列が足りません ({c[0]})")
-        entries.append({"id": c[0], "version": c[1], "dir": c[2], "bytes": int(c[4]), "files_sha256": c[5],
-                        "author_key": c[8] if fmt == 2 else None, "status": c[10] if fmt == 2 else "-"})
+        entries.append({"id": c[0], "version": c[1], "dir": c[2], "name": c[3], "bytes": int(c[4]), "files_sha256": c[5],
+                        "perms": c[6], "description": c[7],
+                        "author_key": c[8] if fmt == 2 else None, "author": c[9] if fmt == 2 else "-",
+                        "status": c[10] if fmt == 2 else "-", "line": line})
     return catalog, entries, fmt
 
 
@@ -563,6 +573,193 @@ def cmd_verify(args):
     print(f"署名OK(鍵 {pub.hex()})、{len(entries) - skipped}件")
 
 
+# ---------------------------------------------------------------------------
+# パッケージ(.papp。docs/APP_REPO.md「パッケージ(.papp)」)
+# ---------------------------------------------------------------------------
+PACKAGE_MAGIC = "pico-os-app"
+PACKAGE_FORMAT = 1
+PACKAGE_EXT = ".papp"
+
+
+def make_package(catalog_line, files_sig, files_tsv, datas):
+    """catalog_line … catalog.tsv の1行(改行なし)、files_sig … files.sig の中身、
+    datas … files.tsv の順に並べた各ファイルの中身"""
+    sig_line = files_sig.decode("ascii").strip()
+    head = (f"{PACKAGE_MAGIC}\t{PACKAGE_FORMAT}\t{len(files_tsv)}\n{catalog_line}\n{sig_line}\n").encode("utf-8")
+    return head + files_tsv + b"".join(datas)
+
+
+def package_name(app_id, version):
+    return f"{app_id}-{version}{PACKAGE_EXT}"
+
+
+def read_package(data):
+    """make_package の逆(テストと確認用)。(catalog の列, files.sig の行, files.tsv, {path: 中身})"""
+    head = []
+    pos = 0
+    for _ in range(3):
+        end = data.index(b"\n", pos)
+        head.append(data[pos:end].decode("utf-8"))
+        pos = end + 1
+    magic, fmt, n = head[0].split("\t")
+    if magic != PACKAGE_MAGIC or int(fmt) != PACKAGE_FORMAT:
+        raise SystemExit("パッケージではありません")
+    files_tsv = data[pos:pos + int(n)]
+    pos += int(n)
+    files = {}
+    for line in files_tsv.decode("ascii").splitlines():
+        rel, size, _ = line.split("\t")
+        files[rel] = data[pos:pos + int(size)]
+        pos += int(size)
+    if pos != len(data):
+        raise SystemExit("パッケージの後ろに余分なデータがあります")
+    return head[1].split("\t"), head[2], files_tsv, files
+
+
+def cmd_package(args):
+    """手元のアプリを1つパッケージにする(作者の鍵で files.sig を署名する。カタログの署名は要らない)"""
+    app_dir = os.path.normpath(args.app)
+    apps = collect_apps(os.path.dirname(app_dir) or ".", None, os.path.basename(app_dir))
+    if not apps:
+        raise SystemExit(f"{app_dir}: app.cfg に id のあるアプリではありません")
+    a = apps[0]
+    seed = load_seed(args.key)
+    a.author_key = ed25519_public(seed).hex()
+    a.author = args.author
+    line = make_catalog([a], 0).decode("utf-8").splitlines()[1]
+    datas = []
+    for rel, _, _ in a.files:
+        with open(os.path.join(a.path, rel), "rb") as f:
+            datas.append(f.read())
+    out = args.out or package_name(a.id, a.version)
+    write_bytes(os.path.abspath(out), make_package(line, sign_files(seed, a.id, a.version, a.files_tsv), a.files_tsv, datas))
+    print(f"{out}: {a.name} {a.version}({a.bytes}バイト、{len(a.files)}ファイル)")
+    print("SDカードの直下に置くと、次の起動で /lua/apps/ へ入ります")
+
+
+# ---- アイコン(.pimg → PNG)。Pillow を使わずに書く(CIのPythonに無くてよいように) ----
+def _pimg_palette():
+    """script/generate_pimg.py の PALETTE を読む(import すると Pillow が要るので、式だけ取り出す)"""
+    import ast
+    src = open(os.path.join(ROOT, "script", "generate_pimg.py"), encoding="utf-8").read()
+    for node in ast.parse(src).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "PALETTE" for t in node.targets):
+            return ast.literal_eval(node.value)
+    raise SystemExit("generate_pimg.py に PALETTE がありません")
+
+
+def pimg_to_png(data, palette):
+    import struct
+    import zlib
+    if len(data) < 5:
+        return None
+    w, h, flags = struct.unpack_from("<HHB", data, 0)
+    if not (0 < w <= 256 and 0 < h <= 256):
+        return None
+    transparent = bool(flags & 1)
+    idx = bytearray()
+    for i in range(5, len(data) - 1, 2):
+        idx.extend(bytes([data[i + 1] & 15]) * data[i])
+    if len(idx) < w * h:
+        return None
+    raw = bytearray()
+    for y in range(h):
+        raw.append(0)
+        for x in range(w):
+            c = idx[y * w + x]
+            r, g, b = palette[c]
+            raw.extend((r, g, b, 0 if transparent and c == 0 else 255))
+
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b""))
+
+
+# ---- Webのページ ----
+PERM_TEXT = {"network": "ネットワーク", "notify": "通知", "sd": "SD全体", "background": "バックグラウンド",
+             "microphone": "マイク"}
+STORE_PAGE = os.path.join(ROOT, "pc", "web", "store.html")
+
+
+def _size_text(n):
+    return f"{n} B" if n < 1024 else f"{n / 1024:.1f} KB" if n < 1024 * 1024 else f"{n / 1048576:.1f} MB"
+
+
+def render_card(e, icon, pkg, pkg_bytes):
+    from html import escape as esc
+    perms = [p for p in e["perms"].split(",") if p and p != "-"]
+    badges = "".join(f'<span class="perm">{esc(PERM_TEXT.get(p, p))}</span>' for p in perms) \
+        or '<span class="perm none">権限なし</span>'
+    img = (f'<img class="icon" src="{esc(icon)}" alt="" width="48" height="48" loading="lazy">' if icon
+           else '<span class="icon noicon" aria-hidden="true"></span>')
+    search = esc(" ".join((e["name"], e["id"], e["description"], e["author"])).lower())
+    return f"""<article class="card" id="{esc(e['id'])}" data-search="{search}">
+  <div class="card-head">{img}<div><h3>{esc(e['name'])}</h3>
+    <p class="meta px">v{esc(e['version'])} · {esc(e['author'])}</p></div></div>
+  <p class="desc">{esc(e['description']) or '&nbsp;'}</p>
+  <p class="perms">{badges}</p>
+  <div class="card-foot">
+    <a class="btn primary" href="{esc(pkg)}" download>DOWNLOAD <small>{_size_text(pkg_bytes)}</small></a>
+    <span class="id">{esc(e['id'])}</span>
+  </div>
+</article>"""
+
+
+def cmd_site(args):
+    """配布物(assemble/build の出力)に、パッケージ・アイコン・一覧のページ(index.html)を足す"""
+    catalog, entries, fmt = read_catalog(args.dir)
+    check_signature(args.dir, catalog, args.pubkey, fmt)
+    if fmt != FORMAT:
+        raise SystemExit("形式2の目録だけパッケージにできます(build_app_repo.py sign をやり直してください)")
+    palette = _pimg_palette()
+    cards = []
+    for e in entries:
+        base = os.path.join(args.dir, e["id"], e["version"])
+        if e["status"] != "-" or not os.path.isdir(base):
+            continue  # 取り下げ・危険の印のもの・配っていない(中身が古い)ものは載せない
+        with open(os.path.join(base, "files.tsv"), "rb") as f:
+            files_tsv = f.read()
+        with open(os.path.join(base, "files.sig"), "rb") as f:
+            files_sig = f.read()
+        check_files_sig(files_sig.decode("ascii"), e["author_key"], e["id"], e["version"], files_tsv)
+        datas = []
+        icon_png = None
+        cfg = {}
+        for line in files_tsv.decode("ascii").splitlines():
+            rel, size, digest = line.split("\t")
+            with open(os.path.join(base, rel), "rb") as f:
+                data = f.read()
+            if len(data) != int(size) or hashlib.sha256(data).hexdigest() != digest:
+                raise SystemExit(f"{e['id']}/{rel}: 中身が合いません")
+            datas.append(data)
+            if rel == "app.cfg":
+                for l in data.decode("utf-8", errors="replace").splitlines():
+                    if "=" in l and not l.lstrip().startswith("#"):
+                        k, v = l.split("=", 1)
+                        cfg[k.strip()] = v.strip()
+        icon_rel = cfg.get("icon", "")
+        if icon_rel:
+            p = os.path.join(base, icon_rel)
+            if os.path.isfile(p) and icon_rel.lower().endswith(".pimg"):
+                icon_png = pimg_to_png(open(p, "rb").read(), palette)
+        pkg = package_name(e["id"], e["version"])
+        blob = make_package(e["line"], files_sig, files_tsv, datas)
+        write_bytes(os.path.join(args.dir, pkg), blob)
+        icon = None
+        if icon_png:
+            icon = f"{e['id']}-{e['version']}.png"
+            write_bytes(os.path.join(args.dir, icon), icon_png)
+        cards.append(render_card(e, icon, pkg, len(blob)))
+    with open(STORE_PAGE, encoding="utf-8") as f:
+        page = f.read()
+    page = (page.replace("<!--@APPS@-->", "\n".join(cards))
+                .replace("@@COUNT@@", str(len(cards)))
+                .replace("@@UPDATED@@", time.strftime("%Y-%m-%d", time.gmtime())))
+    write_bytes(os.path.join(args.dir, "index.html"), page.encode("utf-8"))
+    print(f"{args.dir}: index.html と {len(cards)}件のパッケージ")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -603,6 +800,18 @@ def main():
     p.add_argument("--dir", required=True)
     p.add_argument("--pubkey")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("site", help="配布物にWebのページとパッケージ(.papp)を足す")
+    p.add_argument("--dir", required=True, help="assemble / build の出力")
+    p.add_argument("--pubkey")
+    p.set_defaults(func=cmd_site)
+
+    p = sub.add_parser("package", help="手元のアプリを1つパッケージ(.papp)にする")
+    p.add_argument("--key", required=True, help="作者の鍵(files.sig)")
+    p.add_argument("--app", required=True, help="アプリのディレクトリ(app.cfg に id があること)")
+    p.add_argument("--author", default=DEFAULT_AUTHOR, help=f"表示する作者名(既定 {DEFAULT_AUTHOR})")
+    p.add_argument("--out", help="書き出す先(既定 <id>-<版>.papp)")
+    p.set_defaults(func=cmd_package)
 
     args = ap.parse_args()
     args.func(args)

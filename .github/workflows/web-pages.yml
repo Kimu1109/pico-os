@@ -107,12 +107,16 @@ jobs:
       # アプリストアの配布物(docs/APP_REPO.md)。署名した目録 store/ がコミットされていれば、
       # アプリの中身を pc/sdcard/lua/apps/ から写して /apps/ に置く。署名は手元のPCで済ませてある
       # (build_app_repo.py sign)ので、秘密鍵はここに要らない。署名の後で中身が変わったアプリは
-      # 警告して配らない(sign をやり直すまで)
+      # 警告して配らない(sign をやり直すまで)。
+      # 同じ /apps/ に、ブラウザで見る一覧(index.html。pc/web/store.html から作る)と、SDの直下に置けば
+      # 次の起動で入るパッケージ(<id>-<版>.papp)・アイコンのPNGも置く(site)
       - name: アプリストアの配布物を集める
         run: |
           if [ -f store/catalog.tsv ]; then
             python3 script/build_app_repo.py assemble --index store --out _site/apps --allow-stale
             python3 script/build_app_repo.py verify --dir _site/apps
+            python3 script/build_app_repo.py site --dir _site/apps
+            test -f _site/apps/index.html
           else
             echo "store/catalog.tsv が無いので、アプリストアの配布物は置きません"
           fi

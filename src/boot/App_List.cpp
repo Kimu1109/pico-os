@@ -20,6 +20,7 @@
 #include "apps/ssh/SshScene.hpp"
 #include "gui/scenes/NotificationScene.hpp"
 #include "apps/store/StoreScene.hpp"
+#include "apps/store/App_Package.hpp"
 #include "gui/scenes/UsbDriveScene.hpp"
 #include "gui/scenes/RecorderScene.hpp"
 #include "apps/firmware/FirmwareScene.hpp"
@@ -129,10 +130,15 @@ void AppFunctions::Setup(){
     // 単純追記なので、実際には2タイル並ぶ点に注意。今のところ名前の重複チェックは
     // していない)
     LuaAppScanner::Scan();
-    // USBドライブを終えてSDをマウントし直したら、PCで足した/消したアプリを反映する
+    // SDの直下に置いたアプリのパッケージ(*.papp。Webのアプリストアから落としたもの)を入れる。
+    // 入れたものはその場で登録簿へ入る。結果の通知は main.cpp が通知の Setup() の後で出す
+    AppPackage::InstallPending();
+    // USBドライブを終えてSDをマウントし直したら、PCで足した/消したアプリ・置いたパッケージを反映する
     UsbDriveFunctions::sd_remounted = [](){
         LuaAppScanner::Scan();
         LuaAppScanner::PruneMissing();
+        AppPackage::InstallPending();
+        AppPackage::PostPendingNotice();
     };
 
     // ランチャの並べ替え・隠したアプリ(/sys/launcher.cfg)。登録を全部済ませた後に当てる

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """投稿用リポジトリ(kimu1109/pico-os-apps)の道具(script/build_app_repo.py の
-author-sign / registry-check / registry-build)のテスト。
+author-sign / sync-official / registry-check / registry-build)のテスト。
 
   python3 registry_tool_test.py <作業ディレクトリ>
 
@@ -10,6 +10,7 @@ author-sign / registry-check / registry-build)のテスト。
 - 検査で落ちるもの(書き換えた中身・別の鍵の署名・リンク・隠しファイル・id とディレクトリの食い違い・dir の重なり・
   status.tsv の知らない id・Luaの構文)
 - serial が前に公開したものより大きくなるか、author-sign が meta.cfg と違う鍵を断るか
+- sync-official が版の上がった公式アプリだけを写して署名するか(他の作者のアプリ・未公開・版の上げ忘れ・古い版・違う鍵)
 """
 import json
 import os
@@ -63,6 +64,13 @@ def judge(reg, base=None, user="alice", luac=None):
     rc, text = run(*args)
     res = json.load(open(out, encoding="utf-8")) if os.path.exists(out) else {"ok": False, "errors": [text]}
     return rc, res, text
+
+
+def read_cfg_version(path):
+    for l in open(path, encoding="utf-8").read().splitlines():
+        if l.replace(" ", "").startswith("version="):
+            return l.split("=", 1)[1].strip()
+    return ""
 
 
 def fork(base, name):
@@ -255,6 +263,47 @@ def main():
     open(os.path.join(pr, "apps", "tetris", "app", "lib2.lua"), "w").write("BAD\n")
     run("author-sign", "--key", ka, "--app", os.path.join(pr, "apps", "tetris"))
     must_fail(pr, "Luaの構文の誤りは落ちる", "lib2.lua", luac=luac)
+
+    # ---- sync-official(公式アプリのうち版が上がったものをまとめて写す) ----
+    src = os.path.join(WORK, "src")
+    if os.path.exists(src):
+        shutil.rmtree(src)
+    for d in ("テトリス", "リバーシ", "マインスイーパー"):
+        shutil.copytree(os.path.join(SRC, d), os.path.join(src, d),
+                        ignore=shutil.ignore_patterns("store.json*", "settings.cfg", "hiscore.txt"))
+
+    def sync(reg, key, *extra):
+        return run("sync-official", "--key", key, "--src", src, "--registry", reg, *extra)
+
+    pr = fork(base, "pr")
+    rc, text = sync(pr, ka)
+    check(rc == 0 and "0件" in text and "変わりなし: 1件" in text, "版が同じで中身も同じなら何もしない")
+    check("reversi" in text and "鍵がこの鍵と違う" in text, "meta.cfg の鍵が違うアプリ(他の作者)には触れない")
+    check("minesweeper" in text and "まだ公開していない" in text, "投稿用リポジトリに無いアプリは写さず一覧に出す")
+    rc, res, _ = judge(pr, base)
+    check(res["ok"] and res["changed"] == [], "何もしなければ投稿用リポジトリは変わらない")
+
+    set_cfg(os.path.join(src, "テトリス", "app.cfg"), "version", "9.0.0")
+    rc, text = sync(pr, ka, "--dry-run")
+    rc2, res, _ = judge(pr, base)
+    check(rc == 0 and "tetris" in text and "9.0.0" in text and res["changed"] == [], "--dry-run は何をするかだけ出して書かない")
+    rc, text = sync(pr, ka)
+    rc2, res, _ = judge(pr, base, "alice")
+    check(rc == 0 and "9.0.0" in text and res["ok"] and res["automerge"], "版を上げたアプリを写して署名し、検査と自動マージの判定に通る")
+    check(read_cfg_version(os.path.join(pr, "apps", "reversi", "app", "app.cfg")) ==
+          read_cfg_version(os.path.join(base, "apps", "reversi", "app", "app.cfg")), "他のアプリは変わらない")
+
+    with open(os.path.join(src, "テトリス", "main.lua"), "a") as f:
+        f.write("-- 版を上げ忘れた変更\n")
+    rc, text = sync(pr, ka)
+    check(rc == 0 and "版 (9.0.0) が同じ" in text, "版を上げずに中身を変えたものは警告して写さない")
+    set_cfg(os.path.join(src, "テトリス", "app.cfg"), "version", "1.0.0")
+    rc, text = sync(pr, ka)
+    check(rc == 0 and "より古い" in text, "投稿用リポジトリより古い版は警告して写さない")
+
+    kc = key_file("c.key", 0x44)
+    rc, text = sync(pr, kc)
+    check(rc != 0 and "1つもありません" in text, "どのアプリの鍵とも合わない鍵は止まる")
 
     print("失敗 %d 件" % failures)
     return 1 if failures else 0

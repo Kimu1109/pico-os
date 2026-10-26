@@ -14,8 +14,10 @@ namespace AppRepoKeys {
     struct Key { uint8_t pub[32]; };
 
     // 例: { { 0x12, 0x34, ... } },
-    // cdae7ba2… は利用者の手元の鍵(公式アプリの作者の鍵と同じ。手元で sign した目録用)。
-    // 投稿用リポジトリ kimu1109/pico-os-apps の CI のカタログ鍵は、作ったらここへ足す(その README「管理者の準備」)。
+    // d7ab6e22… は投稿用リポジトリ kimu1109/pico-os-apps の CI のカタログ鍵(Environment「catalog」の Secret。
+    // その README「管理者の準備」)。鍵を替えたら、ここと pico-os-apps の変数 CATALOG_PUBKEY を揃える。
+    // 移す前に手元で sign した目録(pico-os の store/)の鍵 cdae7ba2… は外した(古いファームだけが読むため)。
+    // 公式アプリの作者の鍵(files.sig)は今も cdae7ba2… だが、そちらは端末が覚える鍵で、ここには要らない。
     inline constexpr Key kBuiltin[] = {
         { { 0xd7, 0xab, 0x6e, 0x22, 0xfa, 0x88, 0x0c, 0xd1, 0x56, 0x56, 0xec, 0xc1, 0xc3, 0xb2, 0x34, 0x0c, 0xdb, 0xe2, 0xa2, 0x7d, 0x28, 0x0f, 0xa4, 0xb8, 0x22, 0x3f, 0x8b, 0xab, 0x38, 0x03, 0x86, 0xff } },
     };

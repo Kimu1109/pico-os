@@ -192,8 +192,8 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
 
 - **守り方**: カタログ(catalog.tsv)にカタログ鍵でEd25519の署名(`"pico-os-apps-v2\0"`+SHA-256(catalog))、
   各アプリの files.tsv に作者の鍵の署名(files.sig。形式2、2026-10-24。下の「アプリストアの投稿」)をし、そこから
-  files.tsv(SHA-256)→各ファイル(SHA-256)とつなぐ。鍵は`src/apps/store/App_Repo_Keys.hpp`の`kBuiltin`(利用者の手元の鍵`cdae7ba2…`の1件。
-  全部0の鍵は信頼しない)か`/sys/store.cfg`の`key = 16進64桁`(4行まで。SDへ書ける人はアプリを直接置けるので弱くならない)。
+  files.tsv(SHA-256)→各ファイル(SHA-256)とつなぐ。鍵は`src/apps/store/App_Repo_Keys.hpp`の`kBuiltin`(投稿用リポジトリのCIのカタログ鍵`d7ab6e22…`の1件。
+  2026-10-26までは利用者の手元の鍵`cdae7ba2…`。全部0の鍵は信頼しない)か`/sys/store.cfg`の`key = 16進64桁`(4行まで。SDへ書ける人はアプリを直接置けるので弱くならない)。
   **秘密鍵は利用者のPCにだけ置く**(`build_app_repo.py keygen`。リポジトリ・サーバ・GitHubのSecretsにも置かない)。
   同じURLで前に見た`serial`より小さい一覧は断る(`/sys/store/state.cfg`。古い署名済みの一覧へ戻される攻撃)。
   app.cfgの`id`・`version`がカタログと違う、または**権限がカタログの`perms`を超える**ものは入れない(入れる前に`perms`を確認のダイアログで見せる)。
@@ -352,15 +352,20 @@ script/                build_app_repo.py(pico-os から写す)
 5. **済み(2026-10-26)** 既定のURLを`https://kimu1109.github.io/pico-os-apps/`へ替えた(`AppStore::kDefaultUrl`)。トップのページの APP STORE も同じ。
    pico-os の`store/`と`web-pages.yml`の`assemble`は、既定のURLが`/pico-os/apps/`のままの古いファームのために残す(もう更新しない)。
    古いファームが無くなったら消す。
-6. **利用者の手が要る(未)**: Pages を「GitHub Actions」にする・カタログ鍵を作って Environment「catalog」の Secret に入れる・
-   その公開鍵を`kBuiltin`と変数`CATALOG_PUBKEY`へ・ルールセット(手順は pico-os-apps の README「管理者の準備」)。
-   **カタログ鍵を`kBuiltin`に足したファームが出るまで、新しいURLの一覧は焼き込みの鍵では信頼されない**(`/sys/store.cfg`の`key`で足せる)。
+6. **済み(2026-10-26、利用者)** Pages を「GitHub Actions」に・カタログ鍵`d7ab6e22…`を Environment「catalog」の Secret と変数`CATALOG_PUBKEY`へ・
+   ルールセット(main・PRを必須・承認0・`検査と判定`)。最初の公開は通り、公開された17本の署名と中身を手元で確かめた。
+   `kBuiltin`は手元の鍵`cdae7ba2…`をカタログ鍵`d7ab6e22…`に置き換えた(手元で sign した`store/`は古いファームだけが読むため)。
+   公式アプリの作者の鍵は`cdae7ba2…`のまま(端末が覚える鍵で、`kBuiltin`とは関係ない)。**投稿の検査と自動マージは、最初の投稿PRまで未確認。**
 
 ### 移したときの決め事(2026-10-26)
 
 - **公式アプリの開発元は pico-os の`pc/sdcard/lua/apps/`のまま。** ホストテスト(`tetris_test`等)・`picoos lua-test`・PC/Webビルドがそこを読むため。
   投稿用リポジトリは「配った版」を持つ。更新は`author-sign --src pc/sdcard/lua/apps/<dir>`で`app/`へ写して署名し、PRを出す
   (owners なので、版が上がっていて権限が増えていなければ自動でマージされる。公式アプリも他の作者と同じ道を通る)。
+  **まとめて更新するときは`sync-official`**(2026-10-26): `pc/sdcard/lua/apps/`のうち、投稿用リポジトリに同じ id があり`meta.cfg`の鍵が
+  `--key`のものだけを見て、版が上がったものを写して署名する。版を上げずに中身が変わったもの・古い版は警告だけ、未公開のアプリは一覧に出すだけ
+  (初めての公開は人が meta.cfg を決めるので`author-sign`で)。どのアプリの鍵とも合わなければ止まる(鍵の取り違え)。`--dry-run`あり。
+  2本以上を1つのPRにすると「2つ以上のアプリ」で`needs-review`になるので、管理者がマージする(利用者と決めた。1本ずつのPRにはしない)。
   `--src`はgitが管理しているファイルだけを写す。投稿用リポジトリの`app/`は全部のファイルを配る(`tests/`・`*_test.lua`を除く。隠しファイルとリンクは断る)。
 - **道具の正本は pico-os。** `build_app_repo.py`・`generate_pimg.py`(.pimg→PNGのパレット)・`pc/web/store.html` を投稿用リポジトリの`script/`・`web/`へ写す。
   形式の値はファームの`App_Repo.hpp`と揃える必要があり、それを確かめるテストが pico-os にあるため。直したら写し直す。

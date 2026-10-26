@@ -194,8 +194,8 @@ python3 script/build_app_repo.py author-sign --key ~/.pico-os/author.key --app .
 
 - `--key` がカタログ鍵、`--author-key` が作者の鍵(既定は `--key` と同じ)、`--author` が表示する作者名(既定 `kimu1109`)。
 - 配るのは `pc/sdcard/lua/apps/*/app.cfg` に `id` があるアプリだけ。gitの管理下ならgitが管理しているファイルだけを配る(遊んでいる間にできたセーブ等を配らない)。
-- **pico-os の `store/`(`sign` の出力)は移行中の古い目録**で、もう更新しない(既定のURLが `/pico-os/apps/` のままの古いファームのために、
-  pico-os の Pages が配り続けている)。署名の後で中身が変わったアプリは、ワークフローが警告を出して配らない(本体では一覧に出るが、入れようとすると404で止まる)。
+- `sign` + `assemble` は、目録の署名と中身の組み立てを別の場所でするとき用(`assemble` は署名の後で中身が変わったアプリを止める。`--allow-stale` なら警告して配らない)。
+  2026-10-26 まで pico-os の `store/` と Pages がこれで `/pico-os/apps/` に配っていたが、投稿用リポジトリへ移したので消した。
 - `assemble`・`verify` は形式1の目録も通す(警告を出す)。形式2のファームは形式1を読まないので、`sign` をやり直すこと。
 - GitHub Pages は `Cache-Control: max-age=600` なので、公開してから最大10分ほど古い一覧が返ることがある。
 - 静的なサーバならどこでもよい。Raspberry Pi 5 + Let's Encrypt なら nginx で `root` を置くだけ(ISRG Root X1/X2 は焼き込みのルートにある)。

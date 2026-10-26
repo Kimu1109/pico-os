@@ -8,11 +8,11 @@
   # 2a. 配布物をまるごと作る(Raspberry Pi 等へそのまま置く)
   python3 script/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps
 
-  # 2b. GitHub Pages 向け: 署名した目録(catalog.tsv / catalog.sig / <id>/<版>/files.tsv・files.sig)だけを
-  #     リポジトリの store/ へ書き、コミットする。アプリの中身は Pages のワークフローが
-  #     pc/sdcard/lua/apps/ から写す(assemble)。秘密鍵は GitHub に置かなくてよい
-  python3 script/build_app_repo.py sign --key ~/.pico-os/app_repo.key --out store
-  python3 script/build_app_repo.py assemble --index store --out _site/apps
+  # 2b. 署名した目録(catalog.tsv / catalog.sig / <id>/<版>/files.tsv・files.sig)だけを作り、
+  #     中身は後で写す(assemble)。秘密鍵の無い場所(CI等)で組み立てたいとき。
+  #     (2026-10-26まで pico-os の store/ と Pages がこれで配っていた。今の配布元は投稿用リポジトリ)
+  python3 script/build_app_repo.py sign --key ~/.pico-os/app_repo.key --out index
+  python3 script/build_app_repo.py assemble --index index --out _site/apps
 
   # 署名を確かめる
   python3 script/build_app_repo.py verify --dir /tmp/apps [--pubkey 16進64桁]

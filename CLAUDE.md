@@ -65,7 +65,7 @@ pc/          PC/Webビルド。pc/sdcard/ がSDの中身(lua/apps/<名前>/main.
 script/      開発補助(cli-tool/picoos が名前で呼び分ける)。host_test/(ホストテスト)・lua_test/(picoos lua-test)・check_layers.py・generate_icons.py・dict/ 等
 docs/        仕様(PROTOCOL / CHAT_PROTOCOL / APP_REPO / MUSIC_FORMAT / VIDEO_FORMAT / FIRMWARE_UPDATE / ZOMBIE_TD / HARDWARE_CHECKLIST)と design/
 lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャットサーバ
-store/       移行中の古いストアの目録(更新しない)。ストアの配布元は別リポジトリ kimu1109/pico-os-apps(lua-apps.md「アプリストアの投稿」)
+(別リポジトリ) kimu1109/pico-os-apps がアプリストアの配布元(投稿・公開。lua-apps.md「アプリストアの投稿」)
 ```
 
 ## コアアーキテクチャ

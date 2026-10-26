@@ -124,7 +124,8 @@
   - [ ] 投稿・検索(投稿用リポジトリ kimu1109/pico-os-apps+PR+Actions。lua-apps.md「アプリストアの投稿」)
     - [x] 形式2(作者の署名・鍵の固定・取り下げ・古い版を断る)
     - [x] 投稿用リポジトリの道具(author-sign・registry-check・registry-build)
-    - [ ] 管理者の準備(Pages・カタログ鍵・ルールセット)と、Actions の上での動作の確認
+    - [x] 管理者の準備(Pages・カタログ鍵・ルールセット)と、Actions の上での動作の確認
+    - [x] pico-os の古い目録(store/)と Pages の /apps/ を消す
     - [ ] 一覧のページ分けと検索、ランチャの登録簿の32件
     - [x] 投稿用リポジトリを作って公式アプリを移す(17本・check.yml・publish.yml・既定のURL)
   - [x] Webのページ(ダウンロード)と、SDの直下に置いたパッケージ(.papp)を起動時に入れる

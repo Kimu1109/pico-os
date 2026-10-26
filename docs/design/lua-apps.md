@@ -187,7 +187,8 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 
 ランチャの「ストア」(`StoreScene`、アイコン`IconID::AppStore`)が、Webに置いた配布物からLuaアプリを入れる・更新する・消す。
 **形式は静的なファイルだけ**(catalog.tsv + catalog.sig + `<id>/<版>/files.tsv` + ファイル)なので、GitHub Pages でも
-Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURLは`https://kimu1109.github.io/pico-os/apps/`(`/sys/store.cfg`の`url`)。
+Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURLは`https://kimu1109.github.io/pico-os-apps/`(`/sys/store.cfg`の`url`。
+2026-10-26に投稿用リポジトリへ移した。下の「アプリストアの投稿」。それより前は`https://kimu1109.github.io/pico-os/apps/`)。
 
 - **守り方**: カタログ(catalog.tsv)にカタログ鍵でEd25519の署名(`"pico-os-apps-v2\0"`+SHA-256(catalog))、
   各アプリの files.tsv に作者の鍵の署名(files.sig。形式2、2026-10-24。下の「アプリストアの投稿」)をし、そこから
@@ -213,7 +214,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
   `launcher_hidden`が32bitなので、広げるならそこも)。
 - **配るアプリ**: `pc/sdcard/lua/apps/*/app.cfg`に`id`があるもの(12本全部に付けた)。gitの管理下ならgitが管理しているファイルだけ。
   ファイル名はASCIIだけ(`[A-Za-z0-9._-]`、4段・95文字)、ディレクトリ名は日本語可(catalog.tsvの`dir`)。
-- **GitHub Pages**: 署名した目録(`build_app_repo.py sign --out store`)を`store/`にコミットすると、`web-pages.yml`が`assemble`で
+- **GitHub Pages**(移す前の配り方。今は古いファームのために残しているだけ。下の「アプリストアの投稿」): 署名した目録(`build_app_repo.py sign --out store`)を`store/`にコミットすると、`web-pages.yml`が`assemble`で
   `pc/sdcard/lua/apps/`から中身を写して`_site/apps/`へ置く(**秘密鍵はCIに要らない**)。署名の後で中身が変わったアプリは警告して配らない
   (`--allow-stale`。Webの公開そのものは止めない)。`store/`は利用者の鍵で署名してコミット済み(16本)。
   github.io の証明書の発行元が焼き込みのルート(DigiCert/Sectigo系)で足りるかは実機で未確認。
@@ -228,7 +229,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
 ブラウザでアプリを見てダウンロードでき、落としたファイルを**そのままSDの直下に置けば次の起動で入る**ようにした。
 形式は`docs/APP_REPO.md`「パッケージ(.papp)」。
 
-- **ページ**: `https://kimu1109.github.io/pico-os/apps/`(本体のストアの既定のURLと同じ場所の`index.html`)。
+- **ページ**: `https://kimu1109.github.io/pico-os-apps/`(本体のストアの既定のURLと同じ場所の`index.html`。2026-10-26までは`/pico-os/apps/`)。
   `build_app_repo.py site`が配布物(`catalog.tsv`等)から静的なHTMLを作る(雛形は`pc/web/store.html`、見た目はトップの`landing.html`と同じ)。
   カードはアイコン・名前・版・作者・説明・権限・DOWNLOAD(パッケージの大きさ)。`status`が`-`でないもの・配っていない(署名の後で中身が変わった)ものは載せない。
   アイコンは`.pimg`をPythonの標準ライブラリだけでPNGにする(CIにPillowが無くてよいように。パレットは`generate_pimg.py`の`PALETTE`を`ast`で読む)。
@@ -258,7 +259,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
   PCビルド(`PICOOS_SD_ROOT`で一時ディレクトリ)で、`tetris-2.0.0 (1).papp`が起動時に入り、1バイト壊したものは`.err`になって通知が出ることを見た。
   ページはChromiumで幅1200/390・ダークで撮って見た(横に溢れない)。**実機・GitHub Pagesに出した後のダウンロードは未確認**(Todoist参照)。
 
-## アプリストアの投稿(設計。未実装)(2026-10-24)
+## アプリストアの投稿(2026-10-24に設計、2026-10-26に投稿用リポジトリへ移した)
 
 他人がアプリを投稿・更新できるようにする。**投稿は GitHub のプルリクエストで受け付け、検査と公開は GitHub Actions に任せる。**
 配布物は今と同じ静的なファイルのまま(形式は`docs/APP_REPO.md`の形式2)。
@@ -271,7 +272,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
   そのときも **Workers が投稿用リポジトリへPRを作る形**にすれば、下の検査と公開はそのまま使える。
 - 自前のサーバ(Raspberry Pi 等)で認証とアップロードを作る(選ばなかった): 守るところが一気に増える。
 
-### 投稿用リポジトリ(`kimu1109/pico-os-apps`、仮の名前)
+### 投稿用リポジトリ([`kimu1109/pico-os-apps`](https://github.com/Kimu1109/pico-os-apps))
 
 ```
 apps/<id>/meta.cfg     owners = alice, bob   (更新してよいGitHubのアカウント)
@@ -344,13 +345,40 @@ script/                build_app_repo.py(pico-os から写す)
      PCビルドの `--tap`/`--shot` で、blocked が先頭に赤・入っていない yanked が出ない・作者名・入れるボタンが押せないことを見た。
    - **コミット済みの `store/` は形式1のまま**(利用者の鍵で `sign` をやり直す必要がある)。`assemble`/`verify` は形式1も警告つきで通すので
      Pagesは止まらないが、形式2のファームはそれを読まない。
-2. `build_app_repo.py`: `author-sign`(作者)、`registry-check`・`registry-build`(投稿用リポジトリのCI)。
-3. 一覧のページ分け(SDから1ページずつ読む。40件を超える前に要る)。**ランチャの登録簿の32件**(`launcher_hidden` が32bit)も広げる。
-4. 投稿用リポジトリを作り、ワークフローを置き、今の `store/` の16本を移す(owners は kimu1109、**作者の鍵は今の手元の鍵 `cdae7ba2…`**。
-   CIが乗っ取られても、公式アプリの更新は手元の鍵が無いと出せない)。
-5. 既定のURLを投稿用リポジトリの Pages へ替える。pico-os の `store/` と `web-pages.yml` の `assemble` は、移し終えたら消す。
+2. **済み(2026-10-26)** `build_app_repo.py`: `author-sign`(作者)、`registry-check`・`registry-build`(投稿用リポジトリのCI)。下の「移したときの決め事」。
+3. 一覧のページ分け(SDから1ページずつ読む。40件を超える前に要る)。**ランチャの登録簿の32件**(`launcher_hidden` が32bit)も広げる。**未着手**。
+4. **済み(2026-10-26)** 投稿用リポジトリに、`store/`の17本(移す前に署名したままの中身。owners は kimu1109、作者の鍵は手元の`cdae7ba2…`)と
+   ワークフロー(`check.yml`・`publish.yml`)・README を置いた。カタログの行は移す前と同じバイト列になる(serial だけ違う)。
+5. **済み(2026-10-26)** 既定のURLを`https://kimu1109.github.io/pico-os-apps/`へ替えた(`AppStore::kDefaultUrl`)。トップのページの APP STORE も同じ。
+   pico-os の`store/`と`web-pages.yml`の`assemble`は、既定のURLが`/pico-os/apps/`のままの古いファームのために残す(もう更新しない)。
+   古いファームが無くなったら消す。
+6. **利用者の手が要る(未)**: Pages を「GitHub Actions」にする・カタログ鍵を作って Environment「catalog」の Secret に入れる・
+   その公開鍵を`kBuiltin`と変数`CATALOG_PUBKEY`へ・ルールセット(手順は pico-os-apps の README「管理者の準備」)。
+   **カタログ鍵を`kBuiltin`に足したファームが出るまで、新しいURLの一覧は焼き込みの鍵では信頼されない**(`/sys/store.cfg`の`key`で足せる)。
 
-利用者の手が要るもの: リポジトリの作成・Pages の有効化・カタログ鍵を作って Secret に入れる・ルールセットの設定。
+### 移したときの決め事(2026-10-26)
+
+- **公式アプリの開発元は pico-os の`pc/sdcard/lua/apps/`のまま。** ホストテスト(`tetris_test`等)・`picoos lua-test`・PC/Webビルドがそこを読むため。
+  投稿用リポジトリは「配った版」を持つ。更新は`author-sign --src pc/sdcard/lua/apps/<dir>`で`app/`へ写して署名し、PRを出す
+  (owners なので、版が上がっていて権限が増えていなければ自動でマージされる。公式アプリも他の作者と同じ道を通る)。
+  `--src`はgitが管理しているファイルだけを写す。投稿用リポジトリの`app/`は全部のファイルを配る(`tests/`・`*_test.lua`を除く。隠しファイルとリンクは断る)。
+- **道具の正本は pico-os。** `build_app_repo.py`・`generate_pimg.py`(.pimg→PNGのパレット)・`pc/web/store.html` を投稿用リポジトリの`script/`・`web/`へ写す。
+  形式の値はファームの`App_Repo.hpp`と揃える必要があり、それを確かめるテストが pico-os にあるため。直したら写し直す。
+  `store.html`は別のサイトに置くので、トップ・PLAY・LUA API へのリンクを絶対URLにした(`site --template`で雛形を選べる)。
+- **`registry-check`**: `meta.cfg`(owners・key・dir・author)・`files.tsv`が`app/`の中身と同じか・`files.sig`が`meta.cfg`の鍵で合うか・
+  app.cfgの`id`がディレクトリ名と同じか・制限値・dirの重なり(大小を区別しない)・`status.tsv`の値。`--luac`で`.lua`の構文。
+  `--base`(main)を付けると自動でマージしてよいかも判定する(変えたファイルを2つの木の中身で比べる。gitは使わない)。
+  **リンクは断る**(PRの中身を読むので、リンクを辿るとCIの中の別のファイルを読んでしまう)。
+- **`check.yml`**: `pull_request_target`で、道具と自分自身は main のもの。PRの中身は`pr/`へ`persist-credentials: false`で取り、`python3 -I`で読むだけ。
+  luac は Ubuntu の`lua5.4`(5.4.6。構文は5.4.7と同じ)。判定(読むだけ)とマージ(書く)をジョブで分け、マージする役は
+  **PRの head と main が判定のときのままのときだけ**マージする(`pulls.merge`の`sha`でも縛る)。下書きのPRはマージしない。
+  **GITHUB_TOKEN でのマージは push のワークフローを起こさない**ので、マージの後に`publish.yml`を`workflow_dispatch`で起こす。
+- **`publish.yml`**: カタログ鍵は Environment「catalog」の Secret`CATALOG_KEY`(main だけ)。serial は max(今の時刻, 公開中の一覧+1)。
+  変数`CATALOG_PUBKEY`があれば、その鍵で署名できたかを`verify --pubkey`で確かめる。
+- 検証: `registry_tool_test`(core。pc/sdcard の2本から作った投稿用リポジトリで、検査・配布物・自動マージの判定の12通り・
+  検査で落ちる12通り・serial・別の鍵の author-sign)。投稿用リポジトリの17本は、`registry-check`(lib/luaで作った構文の検査つき)→
+  `registry-build`→`verify`→`site`が通り、カタログの行が移す前の`store/`と同じことを確かめた。**ワークフローそのもの(Actions の上で動くか・
+  自動マージ・Pages への公開)は、利用者の準備の後でないと動かせず未確認。**
 
 ### 今は無いもの
 

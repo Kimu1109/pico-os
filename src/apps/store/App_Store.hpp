@@ -30,7 +30,7 @@ class AppStore {
         enum class State : uint8_t { Idle, Busy, Done, Failed };
         using Installed = AppInstall::Installed;
 
-        static constexpr const char* kDefaultUrl = "https://kimu1109.github.io/pico-os/apps/";
+        static constexpr const char* kDefaultUrl = "https://kimu1109.github.io/pico-os-apps/";  // 投稿用リポジトリ kimu1109/pico-os-apps の Pages
         static constexpr int kMaxExtraKeys = 4;
 
         AppStore();

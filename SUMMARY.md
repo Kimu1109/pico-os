@@ -121,11 +121,12 @@
   - [x] 2Dゲームの簡易エンジン(pico.game)
 - [x] アプリストア(Webから入れる。署名した配布物・更新・削除。docs/APP_REPO.md)
   - [ ] 実機・GitHub Pagesでの確認
-  - [ ] 投稿・検索(投稿用リポジトリ+PR+Actions。設計は lua-apps.md「アプリストアの投稿」)
+  - [ ] 投稿・検索(投稿用リポジトリ kimu1109/pico-os-apps+PR+Actions。lua-apps.md「アプリストアの投稿」)
     - [x] 形式2(作者の署名・鍵の固定・取り下げ・古い版を断る)
-    - [ ] 投稿用リポジトリの道具(author-sign・registry-check・registry-build)
+    - [x] 投稿用リポジトリの道具(author-sign・registry-check・registry-build)
+    - [ ] 管理者の準備(Pages・カタログ鍵・ルールセット)と、Actions の上での動作の確認
     - [ ] 一覧のページ分けと検索、ランチャの登録簿の32件
-    - [ ] 投稿用リポジトリを作って公式アプリを移す
+    - [x] 投稿用リポジトリを作って公式アプリを移す(17本・check.yml・publish.yml・既定のURL)
   - [x] Webのページ(ダウンロード)と、SDの直下に置いたパッケージ(.papp)を起動時に入れる
 - [ ] 残タスク
   - [x] 命令単位の実行時間制御(lua_sethook等)

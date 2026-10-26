@@ -214,7 +214,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
   `launcher_hidden`が32bitなので、広げるならそこも)。
 - **配るアプリ**: `pc/sdcard/lua/apps/*/app.cfg`に`id`があるもの(12本全部に付けた)。gitの管理下ならgitが管理しているファイルだけ。
   ファイル名はASCIIだけ(`[A-Za-z0-9._-]`、4段・95文字)、ディレクトリ名は日本語可(catalog.tsvの`dir`)。
-- **GitHub Pages**(移す前の配り方。今は古いファームのために残しているだけ。下の「アプリストアの投稿」): 署名した目録(`build_app_repo.py sign --out store`)を`store/`にコミットすると、`web-pages.yml`が`assemble`で
+- **GitHub Pages**(移す前の配り方。2026-10-26に`store/`と`web-pages.yml`の手順ごと消した。下の「アプリストアの投稿」): 署名した目録(`build_app_repo.py sign --out store`)を`store/`にコミットすると、`web-pages.yml`が`assemble`で
   `pc/sdcard/lua/apps/`から中身を写して`_site/apps/`へ置く(**秘密鍵はCIに要らない**)。署名の後で中身が変わったアプリは警告して配らない
   (`--allow-stale`。Webの公開そのものは止めない)。`store/`は利用者の鍵で署名してコミット済み(16本)。
   github.io の証明書が焼き込みのルートで通り、実機でインストールできることを確認済み(2026-10-23)。
@@ -350,12 +350,14 @@ script/                build_app_repo.py(pico-os から写す)
 4. **済み(2026-10-26)** 投稿用リポジトリに、`store/`の17本(移す前に署名したままの中身。owners は kimu1109、作者の鍵は手元の`cdae7ba2…`)と
    ワークフロー(`check.yml`・`publish.yml`)・README を置いた。カタログの行は移す前と同じバイト列になる(serial だけ違う)。
 5. **済み(2026-10-26)** 既定のURLを`https://kimu1109.github.io/pico-os-apps/`へ替えた(`AppStore::kDefaultUrl`)。トップのページの APP STORE も同じ。
-   pico-os の`store/`と`web-pages.yml`の`assemble`は、既定のURLが`/pico-os/apps/`のままの古いファームのために残す(もう更新しない)。
-   古いファームが無くなったら消す。
+   pico-os の`store/`と`web-pages.yml`の`assemble`は、手元の実機を新しいファームにした後で消した(2026-10-26)。
+   `https://kimu1109.github.io/pico-os/apps/`はもう無い(古いファームのストアは一覧を取れない)。
 6. **済み(2026-10-26、利用者)** Pages を「GitHub Actions」に・カタログ鍵`d7ab6e22…`を Environment「catalog」の Secret と変数`CATALOG_PUBKEY`へ・
    ルールセット(main・PRを必須・承認0・`検査と判定`)。最初の公開は通り、公開された17本の署名と中身を手元で確かめた。
    `kBuiltin`は手元の鍵`cdae7ba2…`をカタログ鍵`d7ab6e22…`に置き換えた(手元で sign した`store/`は古いファームだけが読むため)。
-   公式アプリの作者の鍵は`cdae7ba2…`のまま(端末が覚える鍵で、`kBuiltin`とは関係ない)。**投稿の検査と自動マージは、最初の投稿PRまで未確認。**
+   公式アプリの作者の鍵は`cdae7ba2…`のまま(端末が覚える鍵で、`kBuiltin`とは関係ない)。投稿の検査と自動マージも Actions の上で確かめた(2026-10-26): `script/`・README を変えたPR(pico-os-apps#2)は検査に通って
+   `needs-review` とコメントが付き、ゾンビTD 0.3.1 だけを変えたPR(#3、`sync-official`で作成)は自動でマージされ、
+   `workflow_dispatch`で起こした公開が通って一覧に載った。
 
 ### 移したときの決め事(2026-10-26)
 

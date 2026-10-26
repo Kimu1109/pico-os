@@ -333,7 +333,8 @@ def build_parser() -> argparse.ArgumentParser:
   picoos serve --root ~/docs --port 8080          Markdownブラウザ用の参照サーバを起動
   picoos midi2mml song.mid -o song.mml            MIDIをpico-os MMLへ変換
   picoos spotify-auth --client-id XXXX            Spotifyのrefresh tokenを取ってSDへ書く
-  picoos app-repo sign --out store                アプリストアの配布物に署名(build_app_repo.py)
+  picoos app-repo sync-official --key K --src pc/sdcard/lua/apps --registry ../pico-os-apps
+                                                  公式アプリの更新を投稿用リポジトリへ写して署名(build_app_repo.py)
   picoos pvid in.mp4 out.pvid                     動画を.pvidへ変換
   picoos pad --mode text                          PCのキーボードを外部コントローラー/物理キーボードにする
   picoos tls-roots                                焼き込みルート証明書(Tls_Roots_Data.hpp)を再生成

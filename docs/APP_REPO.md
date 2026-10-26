@@ -20,7 +20,8 @@ pico-os の公式アプリは、手元の同じ鍵で両方を署名する。
 
 ## 置き方
 
-配布元のURL(既定 `https://kimu1109.github.io/pico-os/apps/`)の下に:
+配布元のURL(既定 `https://kimu1109.github.io/pico-os-apps/`。投稿用リポジトリ [kimu1109/pico-os-apps](https://github.com/Kimu1109/pico-os-apps) の Pages。
+2026-10-26 より前のファームの既定は `https://kimu1109.github.io/pico-os/apps/`)の下に:
 
 ```
 catalog.tsv              一覧(1行1アプリ)
@@ -163,7 +164,7 @@ SDへ書ける人はアプリを `/lua/apps/` に直接置けるので、SDの�
 ## /sys/store.cfg
 
 ```
-url = https://kimu1109.github.io/pico-os/apps/
+url = https://kimu1109.github.io/pico-os-apps/
 key = 0123...(公開鍵)
 ```
 
@@ -185,14 +186,16 @@ python3 script/build_app_repo.py site --dir /tmp/apps
 # 手元のアプリを1つパッケージにする(ストアを通さずに渡す。作者の鍵で署名する)
 python3 script/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス
 
-# GitHub Pages: 署名した目録だけをコミットする(アプリの中身・ページ・パッケージはワークフローが作る)
-python3 script/build_app_repo.py sign --key ~/.pico-os/app_repo.key --out store
-git add store && git commit -m "ストアの目録を更新"
+# 投稿用リポジトリ(kimu1109/pico-os-apps)へ出す: 作者が apps/<id>/ に署名してPRを出す
+# (カタログの署名と GitHub Pages への公開は、そのリポジトリのCIがする。手順はそのリポジトリの README.md)
+python3 script/build_app_repo.py author-sign --key ~/.pico-os/author.key --app ../pico-os-apps/apps/tetris \
+    --src pc/sdcard/lua/apps/テトリス
 ```
 
 - `--key` がカタログ鍵、`--author-key` が作者の鍵(既定は `--key` と同じ)、`--author` が表示する作者名(既定 `kimu1109`)。
 - 配るのは `pc/sdcard/lua/apps/*/app.cfg` に `id` があるアプリだけ。gitの管理下ならgitが管理しているファイルだけを配る(遊んでいる間にできたセーブ等を配らない)。
-- **GitHub Pages では、アプリを変えたら `sign` をやり直してコミットすること。** 署名の後で中身が変わったアプリは、ワークフローが警告を出して配らない(本体では一覧に出るが、入れようとすると404で止まる)。
+- **pico-os の `store/`(`sign` の出力)は移行中の古い目録**で、もう更新しない(既定のURLが `/pico-os/apps/` のままの古いファームのために、
+  pico-os の Pages が配り続けている)。署名の後で中身が変わったアプリは、ワークフローが警告を出して配らない(本体では一覧に出るが、入れようとすると404で止まる)。
 - `assemble`・`verify` は形式1の目録も通す(警告を出す)。形式2のファームは形式1を読まないので、`sign` をやり直すこと。
 - GitHub Pages は `Cache-Control: max-age=600` なので、公開してから最大10分ほど古い一覧が返ることがある。
 - 静的なサーバならどこでもよい。Raspberry Pi 5 + Let's Encrypt なら nginx で `root` を置くだけ(ISRG Root X1/X2 は焼き込みのルートにある)。

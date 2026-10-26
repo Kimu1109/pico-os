@@ -4,7 +4,7 @@
 #include "consts.hpp"
 
 // SDの直下に置いたアプリのパッケージ(.papp)を入れる係(形式は docs/APP_REPO.md「パッケージ(.papp)」)。
-// Webのアプリストアのページ(https://kimu1109.github.io/pico-os/apps/)から落としたファイルを
+// Webのアプリストアのページ(https://kimu1109.github.io/pico-os-apps/)から落としたファイルを
 // そのままSDの直下へ置けば、次の起動(とUSBドライブを終えたとき)に /lua/apps/<dir>/ へ入る。
 //
 // 確かめることはストアから入れるときと同じ(作者の署名・files.tsv と各ファイルのSHA-256・app.cfg の id/版/権限・

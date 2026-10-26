@@ -23,6 +23,15 @@
   # 手元のアプリを1つだけパッケージにする(ストアを通さずに配る。作者の鍵で署名する)
   python3 script/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス --out tetris.papp
 
+  # 投稿用リポジトリ(kimu1109/pico-os-apps。今のストアの配布元)。作者が手元で apps/<id>/ に署名し、PRを出す。
+  # --src を付けると pico-os の pc/sdcard から app/ へ写してから署名する(公式アプリの更新)
+  python3 script/build_app_repo.py author-sign --key ~/.pico-os/author.key --app apps/tetris \
+      [--src ../pico-os/pc/sdcard/lua/apps/テトリス] [--owner <GitHubのアカウント> --dir テトリス(初めてのとき)]
+  # 同じリポジトリのCIが使う: PRの検査と自動マージの判定 / 配布物を作ってカタログ鍵で署名
+  python3 -I script/build_app_repo.py registry-check --registry pr --base main --user <login> --luac luac5.4 --out result.json
+  python3 script/build_app_repo.py registry-build --registry . --key catalog.key --out _site --prev-catalog prev.tsv
+  # このスクリプトの正本は pico-os。pico-os-apps の script/ はその写し(直したら写し直す)
+
 署名は2種類(docs/APP_REPO.md 形式2): catalog.sig はカタログ鍵(--key)、各アプリの files.sig は
 作者の鍵(--author-key。既定は --key と同じ。pico-os の公式アプリは同じ鍵で両方を署名する)。
 
@@ -300,69 +309,81 @@ def collect_apps(apps_dir, only, only_dir=None):
         if not os.path.isdir(app_dir) or not os.path.isfile(cfg_path):
             continue
         cfg = read_app_cfg(cfg_path)
-        app_id = cfg.get("id", "")
-        if not app_id:
+        if not cfg.get("id", ""):
             continue
-        if only and app_id not in only:
+        if only and cfg["id"] not in only:
             continue
-        where = f"{name}/app.cfg"
-        if not ID_RE.match(app_id):
-            raise SystemExit(f"{where}: id は英小文字・数字・-・_ の23文字までです ({app_id})")
-        version = cfg.get("version", "")
-        if not VERSION_RE.match(version) or len(version) > 23:
-            raise SystemExit(f"{where}: version は 1.2.3 のような数字と.だけにしてください ({version})")
-        if not valid_dir_name(name):
-            raise SystemExit(f"{name}: ディレクトリ名に使えない文字があります")
-        a = App()
-        a.id, a.version, a.dir, a.path = app_id, version, name, app_dir
-        a.name = cut_utf8(cfg.get("name", name).replace("\t", " "), MAX_NAME_BYTES) or name
-        a.description = cut_utf8(cfg.get("description", "").replace("\t", " "), MAX_DESC_BYTES)
-        perms = []
-        if truthy(cfg.get("permission_network", "false")):
-            perms.append("network")
-        if truthy(cfg.get("permission_notify", "false")):
-            perms.append("notify")
-        if truthy(cfg.get("permission_sd_outside_app_dir", "false")):
-            perms.append("sd")
-        if truthy(cfg.get("permission_background", "false")):
-            perms.append("background")
-        if truthy(cfg.get("permission_microphone", "false")):
-            perms.append("microphone")
-        a.perms = ",".join(perms) or "-"
-        a.status = "-"
-        files = tracked_files(app_dir)
-        if "main.lua" not in files or "app.cfg" not in files:
-            raise SystemExit(f"{name}: main.lua と app.cfg が要ります(gitの管理下ならgit addも)")
-        files.sort(key=lambda p: (p.lower(), p))
-        lowered = [p.lower() for p in files]
-        if len(set(lowered)) != len(lowered):
-            raise SystemExit(f"{name}: 大文字小文字だけが違うファイルがあります(SDでは同じ名前になる)")
-        if len(files) > MAX_FILES:
-            raise SystemExit(f"{name}: ファイルは{MAX_FILES}個までです")
-        a.files = []
-        total = 0
-        for rel in files:
-            if not valid_rel_path(rel):
-                raise SystemExit(f"{name}/{rel}: パスは英数字と . - _ で、{MAX_PATH_DEPTH}段・{MAX_PATH_LEN}文字までにしてください")
-            with open(os.path.join(app_dir, rel), "rb") as f:
-                data = f.read()
-            if len(data) > MAX_FILE_BYTES:
-                raise SystemExit(f"{name}/{rel}: 1ファイル{MAX_FILE_BYTES}バイトまでです")
-            total += len(data)
-            a.files.append((rel, len(data), hashlib.sha256(data).hexdigest()))
-        if total > MAX_APP_BYTES:
-            raise SystemExit(f"{name}: 合計{MAX_APP_BYTES}バイトまでです")
-        a.bytes = total
-        a.files_tsv = "".join(f"{p}\t{n}\t{h}\n" for p, n, h in a.files).encode("ascii")
-        if len(a.files_tsv) > MAX_FILES_BYTES:
-            raise SystemExit(f"{name}: files.tsv が大きすぎます")
-        apps.append(a)
+        apps.append(load_app(app_dir, name, tracked_files(app_dir), f"{name}/app.cfg"))
+    check_app_set(apps)
+    return apps
+
+
+def check_app_set(apps):
     ids = [a.id for a in apps]
     if len(set(ids)) != len(ids):
         raise SystemExit("同じ id のアプリが2つあります")
+    dirs = [a.dir.lower() for a in apps]
+    if len(set(dirs)) != len(dirs):
+        raise SystemExit("同じ dir のアプリが2つあります(SDでは大文字小文字も区別しない)")
     if len(apps) > MAX_ENTRIES:
         raise SystemExit(f"アプリは{MAX_ENTRIES}個までです")
-    return apps
+
+
+def load_app(app_dir, name, files, where):
+    """app_dir のアプリを読む。name … catalog.tsv の dir、files … 配るファイル(app_dir からの相対パス)"""
+    cfg = read_app_cfg(os.path.join(app_dir, "app.cfg"))
+    app_id = cfg.get("id", "")
+    if not ID_RE.match(app_id):
+        raise SystemExit(f"{where}: id は英小文字・数字・-・_ の23文字までです ({app_id})")
+    version = cfg.get("version", "")
+    if not VERSION_RE.match(version) or len(version) > 23:
+        raise SystemExit(f"{where}: version は 1.2.3 のような数字と.だけにしてください ({version})")
+    if not valid_dir_name(name):
+        raise SystemExit(f"{name}: ディレクトリ名に使えない文字があります")
+    a = App()
+    a.id, a.version, a.dir, a.path = app_id, version, name, app_dir
+    a.name = cut_utf8(cfg.get("name", name).replace("\t", " "), MAX_NAME_BYTES) or name
+    a.description = cut_utf8(cfg.get("description", "").replace("\t", " "), MAX_DESC_BYTES)
+    perms = []
+    if truthy(cfg.get("permission_network", "false")):
+        perms.append("network")
+    if truthy(cfg.get("permission_notify", "false")):
+        perms.append("notify")
+    if truthy(cfg.get("permission_sd_outside_app_dir", "false")):
+        perms.append("sd")
+    if truthy(cfg.get("permission_background", "false")):
+        perms.append("background")
+    if truthy(cfg.get("permission_microphone", "false")):
+        perms.append("microphone")
+    a.perms = ",".join(perms) or "-"
+    a.status = "-"
+    files = list(files)
+    if "main.lua" not in files or "app.cfg" not in files:
+        raise SystemExit(f"{name}: main.lua と app.cfg が要ります(gitの管理下ならgit addも)")
+    files.sort(key=lambda p: (p.lower(), p))
+    lowered = [p.lower() for p in files]
+    if len(set(lowered)) != len(lowered):
+        raise SystemExit(f"{name}: 大文字小文字だけが違うファイルがあります(SDでは同じ名前になる)")
+    if len(files) > MAX_FILES:
+        raise SystemExit(f"{name}: ファイルは{MAX_FILES}個までです")
+    a.files = []
+    total = 0
+    for rel in files:
+        if not valid_rel_path(rel):
+            raise SystemExit(f"{name}/{rel}: パスは英数字と . - _ で、{MAX_PATH_DEPTH}段・{MAX_PATH_LEN}文字までにしてください")
+        with open(os.path.join(app_dir, rel), "rb") as f:
+            data = f.read()
+        if len(data) > MAX_FILE_BYTES:
+            raise SystemExit(f"{name}/{rel}: 1ファイル{MAX_FILE_BYTES}バイトまでです")
+        total += len(data)
+        a.files.append((rel, len(data), hashlib.sha256(data).hexdigest()))
+    if total > MAX_APP_BYTES:
+        raise SystemExit(f"{name}: 合計{MAX_APP_BYTES}バイトまでです")
+    a.bytes = total
+    a.files_tsv = "".join(f"{p}\t{n}\t{h}\n" for p, n, h in a.files).encode("ascii")
+    if len(a.files_tsv) > MAX_FILES_BYTES:
+        raise SystemExit(f"{name}: files.tsv が大きすぎます")
+    return a
 
 
 def make_catalog(apps, serial):
@@ -574,6 +595,294 @@ def cmd_verify(args):
 
 
 # ---------------------------------------------------------------------------
+# 投稿用リポジトリ(kimu1109/pico-os-apps。docs/design/lua-apps.md「アプリストアの投稿」)
+#
+#   apps/<id>/meta.cfg   owners = alice, bob / key = 作者の公開鍵 / dir = /lua/apps/ の下の名前 / author = 表示名
+#   apps/<id>/app/...    アプリのファイル
+#   apps/<id>/files.tsv  author-sign が作る(files.sig も)
+#   status.tsv           <id> <TAB> <status> <TAB> <理由>
+#
+# registry-check は PR の中身をデータとして読むだけで、実行はしない(luac -p も構文を見るだけ)。
+# ---------------------------------------------------------------------------
+REGISTRY_APP_FILES = ("files.tsv", "files.sig")  # apps/<id>/ の直下で作者が変えてよいもの(と app/ の下)
+
+
+def walk_files(app_dir):
+    """app_dir の下の全部のファイル(相対パス)。PRの中身を読むので、リンクと隠しファイルは断る
+    (リンクを辿るとCIの中の別のファイルを読んでしまう)"""
+    result = []
+    for base, dirs, files in os.walk(app_dir):
+        for n in dirs + files:
+            p = os.path.join(base, n)
+            rel = os.path.relpath(p, app_dir).replace(os.sep, "/")
+            if os.path.islink(p):
+                raise SystemExit(f"{rel}: リンクは置けません")
+            if n.startswith("."):
+                raise SystemExit(f"{rel}: . で始まる名前は置けません")
+        for f in files:
+            rel = os.path.relpath(os.path.join(base, f), app_dir).replace(os.sep, "/")
+            if not dev_only(rel):
+                result.append(rel)
+    return sorted(result)
+
+
+def read_meta(path, where):
+    if os.path.islink(path) or not os.path.isfile(path):
+        raise SystemExit(f"{where}: meta.cfg がありません")
+    cfg = read_app_cfg(path)
+    owners = [o.strip().lower() for o in cfg.get("owners", "").split(",") if o.strip()]
+    if not owners:
+        raise SystemExit(f"{where}: meta.cfg の owners が空です")
+    key = cfg.get("key", "").lower()
+    if not re.match(r"^[0-9a-f]{64}$", key) or key == "0" * 64:
+        raise SystemExit(f"{where}: meta.cfg の key は作者の公開鍵(16進64桁)です")
+    d = cfg.get("dir", "")
+    if not valid_dir_name(d):
+        raise SystemExit(f"{where}: meta.cfg の dir に使えない文字があります ({d})")
+    author = cut_utf8(cfg.get("author", "") or owners[0], MAX_AUTHOR_BYTES)
+    return {"owners": owners, "key": key, "dir": d, "author": author}
+
+
+def read_status(path):
+    """status.tsv → {id: (status, 理由)}。無ければ空"""
+    result = {}
+    if not os.path.isfile(path):
+        return result
+    if os.path.islink(path):
+        raise SystemExit("status.tsv: リンクは置けません")
+    for line in open(path, encoding="utf-8").read().splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        c = line.split("\t")
+        if c[1:2] and c[1] not in STATUSES:
+            raise SystemExit(f"status.tsv: {c[0]} の status は {'/'.join(STATUSES)} のどれかです ({c[1]})")
+        result[c[0]] = (c[1] if len(c) > 1 else "-", c[2] if len(c) > 2 else "")
+    return result
+
+
+def load_registry_app(registry, app_id):
+    """apps/<app_id>/ を読み、files.tsv が中身と合うか・files.sig が meta.cfg の鍵で合うかまで確かめる"""
+    where = f"apps/{app_id}"
+    base = os.path.join(registry, "apps", app_id)
+    if not ID_RE.match(app_id):
+        raise SystemExit(f"{where}: ディレクトリ名(id)は英小文字・数字・-・_ の23文字までです")
+    meta = read_meta(os.path.join(base, "meta.cfg"), where)
+    app_dir = os.path.join(base, "app")
+    if os.path.islink(app_dir) or not os.path.isdir(app_dir):
+        raise SystemExit(f"{where}: app/ がありません")
+    a = load_app(app_dir, meta["dir"], walk_files(app_dir), f"{where}/app/app.cfg")
+    if a.id != app_id:
+        raise SystemExit(f"{where}: app.cfg の id ({a.id}) がディレクトリ名と違います")
+    for name in REGISTRY_APP_FILES:
+        p = os.path.join(base, name)
+        if os.path.islink(p) or not os.path.isfile(p):
+            raise SystemExit(f"{where}: {name} がありません(build_app_repo.py author-sign で作ります)")
+    with open(os.path.join(base, "files.tsv"), "rb") as f:
+        if f.read() != a.files_tsv:
+            raise SystemExit(f"{where}: files.tsv が app/ の中身と合いません(author-sign をやり直してください)")
+    with open(os.path.join(base, "files.sig"), "r", encoding="ascii", errors="replace") as f:
+        a.files_sig = f.read()
+    check_files_sig(a.files_sig, meta["key"], a.id, a.version, a.files_tsv)
+    a.author_key, a.author, a.owners = meta["key"], meta["author"], meta["owners"]
+    return a
+
+
+def load_registry(registry):
+    apps_root = os.path.join(registry, "apps")
+    names = sorted(os.listdir(apps_root)) if os.path.isdir(apps_root) else []
+    # 並びは今までの目録(pc/sdcard のディレクトリ名の順)と同じにする。ストアの一覧はこの順で出る
+    apps = sorted((load_registry_app(registry, n) for n in names), key=lambda a: a.dir)
+    status = read_status(os.path.join(registry, "status.tsv"))
+    for a in apps:
+        a.status = status.get(a.id, ("-", ""))[0]
+    unknown = set(status) - {a.id for a in apps}
+    if unknown:
+        raise SystemExit(f"status.tsv: apps/ に無い id があります ({', '.join(sorted(unknown))})")
+    check_app_set(apps)
+    make_catalog(apps, 0)  # 1行の長さ・全体の大きさ
+    return apps
+
+
+def version_tuple(v):
+    return tuple(int(x) for x in v.split("."))
+
+
+def tree_digest(root):
+    """root の下のファイル → SHA-256(.git は除く。リンクはリンク先の名前で比べる)"""
+    result = {}
+    if not root or not os.path.isdir(root):
+        return result
+    for base, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if not (base == root and d == ".git")]
+        for n in files + [d for d in dirs if os.path.islink(os.path.join(base, d))]:
+            p = os.path.join(base, n)
+            rel = os.path.relpath(p, root).replace(os.sep, "/")
+            data = ("link:" + os.readlink(p)).encode() if os.path.islink(p) else open(p, "rb").read()
+            result[rel] = hashlib.sha256(data).hexdigest()
+    return result
+
+
+def review_reasons(registry, base, user):
+    """自動でマージしてよければ []。だめなら人が見る理由の一覧(registry は検査に通っていること)"""
+    new, old = tree_digest(registry), tree_digest(base)
+    changed = sorted(p for p in set(new) | set(old) if new.get(p) != old.get(p))
+    if not changed:
+        return ["変更がありません"], changed
+    reasons = []
+    ids = set()
+    for p in changed:
+        seg = p.split("/")
+        if len(seg) >= 3 and seg[0] == "apps" and (seg[2] == "app" and len(seg) >= 4 or
+                                                  (len(seg) == 3 and seg[2] in REGISTRY_APP_FILES)):
+            ids.add(seg[1])
+        else:
+            reasons.append(f"アプリの中身と署名の他を変えています: {p}")
+    if len(ids) > 1:
+        reasons.append(f"2つ以上のアプリを変えています: {', '.join(sorted(ids))}")
+    for app_id in sorted(ids):
+        if not os.path.isfile(os.path.join(base, "apps", app_id, "meta.cfg")):
+            reasons.append(f"{app_id}: 新しいアプリです")
+            continue
+        if not os.path.isdir(os.path.join(registry, "apps", app_id)):
+            reasons.append(f"{app_id}: アプリを消しています")
+            continue
+        try:
+            before = load_registry_app(base, app_id)
+        except SystemExit as e:
+            reasons.append(f"{app_id}: main の版が読めません({e})")
+            continue
+        after = load_registry_app(registry, app_id)
+        if (user or "").lower() not in before.owners:
+            reasons.append(f"{app_id}: PRを出したアカウント({user})が main の meta.cfg の owners にいません")
+        if version_tuple(after.version) <= version_tuple(before.version):
+            reasons.append(f"{app_id}: 版が main ({before.version}) より新しくありません ({after.version})")
+        more = set(after.perms.split(",")) - set(before.perms.split(",")) - {"-"}
+        if more:
+            reasons.append(f"{app_id}: 権限が増えています ({', '.join(sorted(more))})")
+        st = read_status(os.path.join(base, "status.tsv")).get(app_id, ("-", ""))[0]
+        if st != "-":
+            reasons.append(f"{app_id}: status が {st} です")
+    return reasons, changed
+
+
+def luac_check(luac, registry, apps):
+    errors = []
+    for a in apps:
+        for rel, _, _ in a.files:
+            if not rel.endswith(".lua"):
+                continue
+            p = os.path.abspath(os.path.join(a.path, rel))
+            try:
+                r = subprocess.run([luac, "-p", "--", p], capture_output=True, text=True)
+            except OSError as e:
+                raise SystemExit(f"{luac} を動かせません ({e})")
+            if r.returncode != 0:
+                errors.append(f"apps/{a.id}/app/{rel}: Luaの構文の誤り: {(r.stderr or r.stdout).strip()}")
+    return errors
+
+
+def cmd_registry_check(args):
+    """投稿用リポジトリ(PRの中身)の検査と、自動でマージしてよいかの判定。結果は --out の JSON"""
+    import json
+    result = {"ok": True, "errors": [], "automerge": False, "reasons": [], "changed": []}
+    apps = []
+    try:
+        apps = load_registry(args.registry)
+    except SystemExit as e:
+        result["errors"].append(str(e))
+    if apps and args.luac:
+        result["errors"] += luac_check(args.luac, args.registry, apps)
+    result["ok"] = not result["errors"]
+    if result["ok"] and args.base:
+        try:
+            result["reasons"], result["changed"] = review_reasons(args.registry, args.base, args.user)
+        except SystemExit as e:
+            result["reasons"] = [f"判定できません: {e}"]
+        result["automerge"] = not result["reasons"]
+    lines = ["## 検査の結果", ""]
+    if result["ok"]:
+        lines.append(f"- 検査: 通りました({len(apps)}件のアプリ)")
+    else:
+        lines.append("- 検査: **落ちました**")
+        lines += [f"  - {e}" for e in result["errors"]]
+    if result["ok"] and args.base:
+        if result["automerge"]:
+            lines.append("- 判定: 自動でマージします")
+        else:
+            lines.append("- 判定: 管理者が見ます(`needs-review`)")
+            lines += [f"  - {r}" for r in result["reasons"]]
+    text = "\n".join(lines) + "\n"
+    print(text)
+    if args.out:
+        write_bytes(os.path.abspath(args.out), json.dumps(result, ensure_ascii=False, indent=1).encode("utf-8"))
+    if args.summary:
+        write_bytes(os.path.abspath(args.summary), text.encode("utf-8"))
+    if not result["ok"]:
+        sys.exit(1)
+
+
+def cmd_registry_build(args):
+    """投稿用リポジトリから配布物(docs/APP_REPO.md)を作り、カタログ鍵で署名する。files.sig は作者のものをそのまま使う"""
+    seed = load_seed(args.key)
+    apps = load_registry(args.registry)
+    serial = args.serial
+    if serial is None:
+        serial = int(time.time())
+        if args.prev_catalog and os.path.isfile(args.prev_catalog):
+            head = open(args.prev_catalog, encoding="utf-8", errors="replace").readline().split("\t")
+            if len(head) >= 3 and head[0] == MAGIC and head[2].strip().isdigit():
+                serial = max(serial, int(head[2]) + 1)
+    if serial >= 2 ** 32:
+        raise SystemExit("serial が32bitを超えます")
+    if os.path.isdir(args.out):
+        shutil.rmtree(args.out)
+    catalog = make_catalog(apps, serial)
+    write_bytes(os.path.join(args.out, "catalog.tsv"), catalog)
+    write_bytes(os.path.join(args.out, "catalog.sig"), sign_catalog(seed, catalog))
+    for a in apps:
+        base = os.path.join(args.out, a.id, a.version)
+        write_bytes(os.path.join(base, "files.tsv"), a.files_tsv)
+        write_bytes(os.path.join(base, "files.sig"), a.files_sig.encode("ascii"))
+        for rel, _, _ in a.files:
+            with open(os.path.join(a.path, rel), "rb") as f:
+                write_bytes(os.path.join(base, rel), f.read())
+    print(f"{args.out}: {len(apps)}件のアプリ(serial {serial}、カタログ鍵 {ed25519_public(seed).hex()})")
+
+
+def cmd_author_sign(args):
+    """投稿用リポジトリの apps/<id>/ に files.tsv と files.sig を作る(作者が手元で)。
+    --src を付けると、先に app/ をそのディレクトリの中身で置き換える(pico-os の pc/sdcard から写すとき)"""
+    seed = load_seed(args.key)
+    pub = ed25519_public(seed).hex()
+    base = os.path.normpath(args.app)
+    app_dir = os.path.join(base, "app")
+    if args.src:
+        files = tracked_files(args.src)
+        if os.path.isdir(app_dir):
+            shutil.rmtree(app_dir)
+        for rel in files:
+            dst = os.path.join(app_dir, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(os.path.join(args.src, rel), dst)
+    meta_path = os.path.join(base, "meta.cfg")
+    if not os.path.isfile(meta_path):
+        if not (args.owner and args.dir):
+            raise SystemExit(f"{meta_path} がありません。初めての投稿なら --owner <GitHubのアカウント> --dir <表示するディレクトリ名> を付けてください")
+        write_bytes(meta_path, f"owners = {args.owner}\nkey = {pub}\ndir = {args.dir}\n".encode("utf-8"))
+        print(f"{meta_path} を作りました")
+    meta = read_meta(meta_path, base)
+    if meta["key"] != pub:
+        raise SystemExit(f"{meta_path} の key ({meta['key']}) とこの鍵 ({pub}) が違います。"
+                         "鍵を替えるなら meta.cfg も直してください(管理者が見ます)")
+    a = load_app(app_dir, meta["dir"], walk_files(app_dir), f"{base}/app/app.cfg")
+    if a.id != os.path.basename(base):
+        raise SystemExit(f"{base}: app.cfg の id ({a.id}) がディレクトリ名と違います")
+    write_bytes(os.path.join(base, "files.tsv"), a.files_tsv)
+    write_bytes(os.path.join(base, "files.sig"), sign_files(seed, a.id, a.version, a.files_tsv))
+    print(f"{base}: {a.name} {a.version}({len(a.files)}ファイル、{a.bytes}バイト、権限 {a.perms})に署名しました")
+
+
+# ---------------------------------------------------------------------------
 # パッケージ(.papp。docs/APP_REPO.md「パッケージ(.papp)」)
 # ---------------------------------------------------------------------------
 PACKAGE_MAGIC = "pico-os-app"
@@ -751,7 +1060,7 @@ def cmd_site(args):
             icon = f"{e['id']}-{e['version']}.png"
             write_bytes(os.path.join(args.dir, icon), icon_png)
         cards.append(render_card(e, icon, pkg, len(blob)))
-    with open(STORE_PAGE, encoding="utf-8") as f:
+    with open(args.template or STORE_PAGE, encoding="utf-8") as f:
         page = f.read()
     page = (page.replace("<!--@APPS@-->", "\n".join(cards))
                 .replace("@@COUNT@@", str(len(cards)))
@@ -804,6 +1113,7 @@ def main():
     p = sub.add_parser("site", help="配布物にWebのページとパッケージ(.papp)を足す")
     p.add_argument("--dir", required=True, help="assemble / build の出力")
     p.add_argument("--pubkey")
+    p.add_argument("--template", help="ページの雛形(既定 pc/web/store.html)")
     p.set_defaults(func=cmd_site)
 
     p = sub.add_parser("package", help="手元のアプリを1つパッケージ(.papp)にする")
@@ -812,6 +1122,31 @@ def main():
     p.add_argument("--author", default=DEFAULT_AUTHOR, help=f"表示する作者名(既定 {DEFAULT_AUTHOR})")
     p.add_argument("--out", help="書き出す先(既定 <id>-<版>.papp)")
     p.set_defaults(func=cmd_package)
+
+    p = sub.add_parser("author-sign", help="投稿用リポジトリの apps/<id>/ に作者の署名をする")
+    p.add_argument("--key", required=True, help="作者の鍵")
+    p.add_argument("--app", required=True, help="apps/<id> のディレクトリ")
+    p.add_argument("--src", help="先に app/ をこのディレクトリの中身で置き換える")
+    p.add_argument("--owner", help="初めての投稿で meta.cfg を作るときの GitHub のアカウント")
+    p.add_argument("--dir", help="初めての投稿で meta.cfg を作るときの /lua/apps/ の下の名前")
+    p.set_defaults(func=cmd_author_sign)
+
+    p = sub.add_parser("registry-check", help="投稿用リポジトリの検査と自動マージの判定(CI)")
+    p.add_argument("--registry", required=True, help="PRの中身")
+    p.add_argument("--base", help="main の中身(付けると自動でマージしてよいかも判定する)")
+    p.add_argument("--user", help="PRを出したアカウント")
+    p.add_argument("--luac", help="luac のパス(付けると .lua の構文を確かめる)")
+    p.add_argument("--out", help="結果の JSON")
+    p.add_argument("--summary", help="結果の Markdown")
+    p.set_defaults(func=cmd_registry_check)
+
+    p = sub.add_parser("registry-build", help="投稿用リポジトリから配布物を作ってカタログに署名する(CI)")
+    p.add_argument("--registry", required=True)
+    p.add_argument("--key", required=True, help="カタログ鍵")
+    p.add_argument("--out", required=True)
+    p.add_argument("--prev-catalog", help="今公開している catalog.tsv(serial をそれより大きくする)")
+    p.add_argument("--serial", type=int)
+    p.set_defaults(func=cmd_registry_build)
 
     args = ap.parse_args()
     args.func(args)

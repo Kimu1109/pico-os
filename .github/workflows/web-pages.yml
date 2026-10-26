@@ -104,6 +104,10 @@ jobs:
           cmake --build pc/build -j"$(nproc)"
           sh script/web_shots.sh pc/build/picoos_pc _site/shots
 
+      # 移行中(2026-10-26〜): アプリストアは投稿用リポジトリ kimu1109/pico-os-apps の Pages へ移した
+      # (docs/design/lua-apps.md「アプリストアの投稿」)。ここは既定のURLが /pico-os/apps/ のままの古いファームのために、
+      # 移す前に署名した store/ を配り続けるだけ(もう更新しない)。古いファームが無くなったら store/ ごと消す。
+      #
       # アプリストアの配布物(docs/APP_REPO.md)。署名した目録 store/ がコミットされていれば、
       # アプリの中身を pc/sdcard/lua/apps/ から写して /apps/ に置く。署名は手元のPCで済ませてある
       # (build_app_repo.py sign)ので、秘密鍵はここに要らない。署名の後で中身が変わったアプリは

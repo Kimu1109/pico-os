@@ -143,7 +143,7 @@ void Statusbar::render(){
         draw_pos += 16 + MARGIN;
     }
 
-    //バッテリー: 残量に応じた4段階。USB給電中は稲妻入りの自作アイコン(custom_icons/battery-charging.svg)に差し替える
+    //バッテリー: 残量に応じた4段階。USB給電中は稲妻入りのアイコン(tablerの battery-charging)に差し替える
     //(まだ1回もVSYS読み取りが済んでいなければ何も描かない。通常はSetup()で即座に読むので起動直後の1フレーム目だけの話)
     if(BatteryFunctions::HasSample()){
         const IconID battery_icon = BatteryFunctions::IsExternallyPowered() ? IconID::BatteryCharging : BatteryIcon(BatteryFunctions::GetPercent());

@@ -136,8 +136,8 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
 - 検証: `devkey_test`(run.sh の input。作る前は固定鍵・作るとSDの全部の種類がenc3:になり中身は同じ・コメントが残る・2回目は何もしない・
   Luaのversion 1/3・PINのv1→v2・起動し直しても読める・鍵が無いと読めずPINでロックしない・書きかけの枠は次の枠・両方壊れたらBroken)、
   PCビルドの`--tap`/`--shot`(設定アプリで作成→「4項目を暗号化し直しました」→再起動で読めてWi-Fiに接続、`otp_emu.bin`を消すと読めない)、
-  実機ファームのビルド(maxgerhardtのplatformで`pio run`。`rom_func_otp_access`がリンクされる)。**実機では未確認**(OTPへの書き込み・
-  ページ60が本当に空いているか・ECCの読み出し)。
+  実機ファームのビルド(maxgerhardtのplatformで`pio run`。`rom_func_otp_access`がリンクされる)。**実機で確認済み(2026-10-19)**(OTPへ書いて
+  再起動後も読め、Wi-Fiに繋がり`/sys/wifi.cfg`が`enc3:`になる)。
 
 ## 固定IP/DNS・本体の名前(mDNS)・キャプティブポータル・AP設定モード (`util/Net_Addr` / `net/Captive_Portal` / `net/Setup_Portal` / `services/WifiSetup_Functions`) (2026-10-24)
 
@@ -170,6 +170,8 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   名前を変えたら `MDNS.end()` → `begin()` で名乗り直す。ファームの送信(`fwpush --upload-port picoos.local`)に使える。
 - 「Wi-Fi」タブの一覧の下に2行(`picoos.local` / 今のIP)と[スマホ][名前]。1行だと固定IPの長いアドレスが入りきらなかった。
 - PCビルドは母艦のmDNSとぶつからないよう応答しない(`pc/compat/SimpleMDNS.h` は名乗ったことにするだけ)。
+- **実機で確認済み(2026-10-25)**: 同じLANのPCから `ping picoos.local` が通る・[名前]で変えた名前でも通る・Wi-Fiの切断→再接続の後も通る・
+  `pio run -t fwpush --upload-port picoos.local` で送れる。
 
 ### キャプティブポータル(ホテル・カフェ等のログイン/同意のページ)
 
@@ -212,7 +214,7 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
 - PCビルドはAPを作れないので、ページだけ `http://127.0.0.1:8081/` で開ける(`PICOOS_SETUP_PORT`。母艦の外からは開けない)。
 - 検証: `setup_portal_test`(要求の読み取り・フォームの値の復号・ページの出し分け・文字参照・DNSの応答)。PCビルドで[スマホ]→
   curlで `GET /generate_204`(入力のページ)・`POST /save`(`Cafe & Co`・`p@ss word`)→保存・画面が「受け取りました」→閉じて
-  そのネットワークへ繋ぎ一覧の先頭へ、まで通した。**実機ではAP・DNS・スマホの自動表示とも未確認(Todoist参照)**。
+  そのネットワークへ繋ぎ一覧の先頭へ、まで通した。**実機で確認済み(2026-10-25)**(AP・DNS・スマホでページが自動で開く・送った先へ繋ぐ・[戻る]で元へ戻る・画面のQRをカメラで読んで繋ぐ。AP中のヒープの数値は控えていない)。
 
 ### WPA-Enterpriseを見送った理由
 

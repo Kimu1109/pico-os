@@ -34,9 +34,9 @@ Picoへ配線)を実際に導入したのを受けて、VSYS電圧からバッ�
   充電完了後どちらでUSBに繋がっているかは区別できない。設定画面ではこれを
   「電池 USB給電中」という文言で表示する。
 - **ステータスバーは残量4段階のアイコン(`Battery0`〜`Battery4`)で、USB給電中だけ稲妻入りの
-  `IconID::BatteryCharging`に差し替える**(2026-10-20)。tabler由来の`battery-charging-2`は枝分かれした
-  細線が16pxで潰れて判読できなかったため、`script/custom_icons/battery-charging.svg`へ1px単位で
-  描き起こした(enumの位置は同じなので既存の番号は変わらない)。給電中かどうかは
+  `IconID::BatteryCharging`に差し替える**(2026-10-20)。絵は最初tablerの`battery-charging-2`(枝分かれした
+  細線が16pxで潰れた)→1px単位で描き起こした自作の`custom_icons/battery-charging.svg`としたが、自作のものは
+  実機の画面で稲妻が全く見えなかったため、利用者がtablerの`battery-charging`へ差し替えた(2026-10-24、b8290ff。enumの位置は同じ)。給電中かどうかは
   `IsExternallyPowered()`で見る(充電完了後も真のまま)。PCビルドでは`PICOOS_BATTERY_PERCENT=100`で出る。
   設定画面にもテキストで「電池 USB給電中」と出る。
 - **設定画面(`SettingsScene`)は「戻る」ボタンと同じ上部の行へ横に同居させた**(専用の行を

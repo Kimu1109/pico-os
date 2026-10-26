@@ -155,6 +155,7 @@ store/       移行中の古いストアの目録(更新しない)。ストア�
 - アイコンは `script/generate_icons.py` が `tabler_icons/` と `custom_icons/` から `gui/icons/icons_data.h` を生成。
   **tablerは16pxで細い線が消えることがあるので生成後に目視**し、破綻したら `custom_icons/` へ描き起こす(基準は `script/custom_icons/README.md`)。
 - 「状態の否定」は専用アイコンを作らず、基底アイコンに `IconID::X` を `PICO_RED` で重ねる(SD無し・Wi-Fi圏外)。
+- ライセンスは MIT(`LICENSE`、著作権者 Kimu1109)。**他者のコード・データ・素材を同梱したら `THIRD_PARTY_LICENSES.md` に1行足す**(GPL等の継承型はファームに組み込まずSDのデータに留める)。
 - 物理キーボードを扱う画面は `Scene::onKey()` を実装する。外部コントローラーの入力元は `PadFunctions` に `Source` を足す(`docs/design/input.md`)。
 
 ## テストとCI

@@ -362,6 +362,10 @@ script/                build_app_repo.py(pico-os から写す)
 - **公式アプリの開発元は pico-os の`pc/sdcard/lua/apps/`のまま。** ホストテスト(`tetris_test`等)・`picoos lua-test`・PC/Webビルドがそこを読むため。
   投稿用リポジトリは「配った版」を持つ。更新は`author-sign --src pc/sdcard/lua/apps/<dir>`で`app/`へ写して署名し、PRを出す
   (owners なので、版が上がっていて権限が増えていなければ自動でマージされる。公式アプリも他の作者と同じ道を通る)。
+  **まとめて更新するときは`sync-official`**(2026-10-26): `pc/sdcard/lua/apps/`のうち、投稿用リポジトリに同じ id があり`meta.cfg`の鍵が
+  `--key`のものだけを見て、版が上がったものを写して署名する。版を上げずに中身が変わったもの・古い版は警告だけ、未公開のアプリは一覧に出すだけ
+  (初めての公開は人が meta.cfg を決めるので`author-sign`で)。どのアプリの鍵とも合わなければ止まる(鍵の取り違え)。`--dry-run`あり。
+  2本以上を1つのPRにすると「2つ以上のアプリ」で`needs-review`になるので、管理者がマージする(利用者と決めた。1本ずつのPRにはしない)。
   `--src`はgitが管理しているファイルだけを写す。投稿用リポジトリの`app/`は全部のファイルを配る(`tests/`・`*_test.lua`を除く。隠しファイルとリンクは断る)。
 - **道具の正本は pico-os。** `build_app_repo.py`・`generate_pimg.py`(.pimg→PNGのパレット)・`pc/web/store.html` を投稿用リポジトリの`script/`・`web/`へ写す。
   形式の値はファームの`App_Repo.hpp`と揃える必要があり、それを確かめるテストが pico-os にあるため。直したら写し直す。

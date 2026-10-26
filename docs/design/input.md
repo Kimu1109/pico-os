@@ -44,7 +44,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   pico-os側は何も変えていない。タブを離れたら(`blur`)全部離す。Chromium(Playwright)で、キーボードとページのボタンの両方でテトリスを操作できることを確認した。
 - 検証: `pad_test`(run.sh。行の読み取り、押した/離したはそのフレームだけ、途切れたら外れる、行が分かれて届く、長すぎる行、1回に読む量、GBの対応)、
   `lua_engine_test`(Lua API)、PCビルドで`pad_serial.py --stdout`→`picoos_pc`をXvfb+xdotoolで通し(十字キー斜め+Bの同時押しで点が斜めに動く)、
-  擬似端末を相手にシリアルの経路(pyserial有り/無し、ログの折り返し)。**実機のUSBシリアル(arduino-picoのCDC)では未確認**。
+  擬似端末を相手にシリアルの経路(pyserial有り/無し、ログの折り返し)。実機のUSBシリアル(arduino-picoのCDC)でも**確認済み(2026-10-23)**。
 - **Wiiクラシックコントローラーのドライバ(`src/hal/WiiClassic_Functions`、2026-10-12)**: I2C0(`I2C_Bus.hpp`、CardKB2と共有。`begin()`はここで1回)のアドレス0x52。
   - 見つける: 未接続の間は500msごとに`[F0 55]`→`[FB 00]`(暗号化しない初期化。純正もクローン品も)→`[00]`(変換の開始)を書き、ACKがあれば接続。
   - 読む: 10msごとに6バイト読み、すぐ次の`[00]`を書く(書いてから読むまでの待ちを1回ずらして吸収する。止まらない)。標準の形式の4・5バイト目がボタン(0=押している)、
@@ -110,7 +110,7 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
   PCビルドで標準入力へ`key`の行を流して: テキストエディタ(打鍵でキーボードが開く・改行・↑End Backspace ← Delete・↓Home)、
   SSH(接続先の入力・Backspace・Ctrl+Cで打ち直し)、入力テストのTextbox(日本語のキー盤へ英字と「あ」)/NumberInput(英字・使えない記号を断る)。
   `pad_serial.py`の行の組み立て、Webのページ(Chromiumで「文字入力」の行とコントローラーのときは送らないこと)。
-  **実機のUSBシリアル・Webビルド本体(emsdk無し)・PCビルドの実ウィンドウでのSDLのキー入力(ヘッドレスでは来ない)・実際のSSHサーバ相手は未確認**。
+  実機のUSBシリアルでの文字入力は**確認済み(2026-10-23)**。**Webビルド本体(emsdk無し)・PCビルドの実ウィンドウでのSDLのキー入力(ヘッドレスでは来ない)・実際のSSHサーバ相手は未確認**。
 
 ## ウィジェットのフォーカス (`src/gui/core/Focus_Functions` / `Widget`の`focus_mode`と仮想関数) (2026-10-10)
 
@@ -185,7 +185,7 @@ SUMMARY.md #10の追加項目。それまではダイアログが開いてもフ
 - 検証: `dialog_key_test`(run.sh の input。開いたら入力欄・打つとキーボードが開いて入る・Enterで決定/Escでキャンセル・複数行・タッチの後は枠無し・
   MsgDialog・PickerDialogの最初のフォーカスとMonthGrid/DurationPicker・ColorDialog・FileSaveDialog・ダイアログの間の画面のonKey())、
   PCビルドで設定のWi-Fiの「追加」→SSIDを打ってEnter→パスワードのダイアログへ枠が出て打てる(英字のキー盤)、カレンダーの日の格子を矢印で
-  (`PICOOS_VERIFY_LCD=1`で食い違い0)。実機(USBシリアル・CardKB2)では未確認(Todoist参照)。
+  (`PICOOS_VERIFY_LCD=1`で食い違い0)。**実機で確認済み(2026-10-25)**。
 
 ## 物理キーボードのかな漢字変換 (`src/ime/Romaji_Kana.hpp` / `Keyboard`の物理キーの処理) (2026-10-03)
 
@@ -231,7 +231,7 @@ SUMMARY.md #10の追加項目。それまではダイアログが開いてもフ
   自動とSKK式の送り仮名・Ctrl+U/I・変換中に打つと確定・画面より先に配ること・Tab2回/半角全角)。そのためスタブに
   `FsFile::seekSet()`とフォント指定の`textWidth()`を足した。PCビルドで標準入力へ`key`の行を流して、テキストエディタ(据え置き・畳んだ候補の欄)と
   入力テストのTextbox(ダイアログ・Tab2回で英字へ・「あ」で広げる)を`--shot`で確認した(辞書は一時的なSDのルートへ小さいものを置いた)。
-  **実機・本物のSKK辞書・CardKB2・Webビルドでは未確認**(本物の辞書では1回の変換で最大3回辞書を引く。SDの速さは実機で見ること)。
+  実機(USBシリアル)と本物のSKK辞書での変換は**確認済み(2026-10-23)**(1回の変換で最大3回辞書を引く待ちも体感で問題なし)。**CardKB2での日本語入力・Webビルドでは未確認**。
 - **未対応**: 文節の区切り・連文節変換、変換の学習(候補の並び替え)、読みの途中でのカーソル移動、全角英数への変換(F9/F10)。
 
 ## CardKB2(`src/hal/CardKB_Functions`) (2026-10-02)
@@ -246,8 +246,8 @@ SUMMARY.md未掲載(小粒のため、この節にだけ残す)。M5Stack Unit C
 - 配線はI2C0のGP0(SDA)/GP1(SCL)。`Wire`のピンと`begin()`は`hal/I2C_Bus.hpp`(Wiiクラシックのドライバと共通、2026-10-12に移した)。
 - 検出: 未接続の間は1秒ごとに0x5F へ呼びかけ(ACKで接続)、接続中は10msごとに読み、読み出しが3回続けて失敗したら外れた扱い。
 - PC/ホストテストは`pc/compat/Wire.h`(`PicoPcWire`で「I2Cの先に居るもの」を表す。既定は誰も居ない)。`script/host_test/stubs/Wire.h`はそれを取り込む。
-- 検証: `cardkb_test`(run.sh)とPCビルドの起動(未接続で静か)。**実機・実物のCardKB2は未確認**
-  (3.3V系のバスへ5Vのプルアップが乗らないか・`Wire.setSDA/setSCL`の名前・UARTモード出荷品が無いか)。
+- 検証: `cardkb_test`(run.sh)とPCビルドの起動(未接続で静か)。**実機・実物のCardKB2で確認済み(2026-10-22)**
+  (3.3V系のバスへ5Vのプルアップが乗らない・`Wire.setSDA/setSCL`の名前)。UARTモードで出荷された品が無いかは未確認。
 
 ### UARTモード(`src/hal/CardKB_Uart` / `/sys/cardkb.cfg`) (2026-10-21)
 
@@ -269,7 +269,7 @@ I2CモードではFn+D/Z/X/Cの矢印が出ないので、UARTモード(本体�
 - `IsConnected()`はUARTでは「正しいフレームを1つでも受け取ったか」(押したときにしか届かないので抜けたことは分からない)。
 - PC/ホストテストは`pc/compat/SerialPIO.h`(`PicoPcSerialPio::rx`に積んだバイトが届く。`begin_ok=false`で始められない場合)。
 - 検証: `cardkb_uart_test`(run.sh の input。フレーム・ゴミ/途中から/1バイトずつ・Aa/Sym/Fnの各組み合わせ・繰り返し・cfgの切り替え・始められない場合)、
-  PCビルドの起動ログ、実機ファームのビルド。**実機・実物では未確認**(SerialPIOがI2S・マイク・CYW43とPIOを取り合わないか・115200bpsで届くか・キーの手触り)(Todoist参照)。
+  PCビルドの起動ログ、実機ファームのビルド。**実機・実物で確認済み(2026-10-22)**(115200bpsで届く・音楽の再生中もWi-Fi接続中も打てる)。
 
 ## USBドライブ(USBマスストレージ) (`src/services/UsbDrive_Functions` / `storage/Msc_Sector_Bridge.hpp` / `UsbDriveScene`) (2026-10-12)
 
@@ -301,5 +301,5 @@ I2CモードではFn+D/Z/X/Cの矢印が出ないので、UARTモード(本体�
 - **PC/Webビルド**は本物のUSBが無いので口を出さず、状態だけ真似る(`PICOOS_USB_DRIVE_HOST=1`でMounted)。SDを止めてマウントし直す流れは実機と同じに通る
   (`pc/compat/SdFat.h`に`end()`と`card()`(`SdCard`、大きさだけ)を足した)。
 - 検証: `msc_bridge_test`(run.sh の core。RAMディスク)、PCビルドの`--tap`/`--shot`(待機→Mounted→確認→終了→`SD Setup`とLuaアプリの走査し直し、`PICOOS_VERIFY_LCD=1`で食い違い0)、
-  実機ファームのビルド(`pio run`。`tud_msc_*_cb`と`mscd_*`がリンクされることを`nm`で確認)。**実機では未確認**(PCからドライブとして見えるか・速さ・
-  Windows/macOSの取り出し・つなぎ直しでシリアルが戻るか・`SD.end()`→`begin()`でマウントし直せるか)。
+  実機ファームのビルド(`pio run`。`tud_msc_*_cb`と`mscd_*`がリンクされることを`nm`で確認)。**実機で確認済み(2026-10-19)**(PCからドライブとして見えて読み書きできる・
+  つなぎ直しでシリアルが戻る・終了で`SD.end()`→`begin()`でマウントし直せる。速さの数値は控えていない)。

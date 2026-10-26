@@ -84,7 +84,7 @@ SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャ�
 後半はSoundFunctionsで、1コア目と2コア目を1本のスレッドで交互に呼ぶ: 検出のばたつき、I2Sの開始は2コア目、コマンドの列の溢れ、
 抜き差しで続きから鳴る、sound.cfg、begin()失敗)、`lua_engine_test`(Lua API)。PCビルドで`SDL_AUDIODRIVER=disk`の出力を確認
 (テスト音: 300ms・約880Hz、デモ曲: 4ch足して最大約12000で音割れなし)。
-**実機(arduino-picoのI2S・2コア目・MAX98357A)では未確認**(このリモート環境には実機もRP2350のボード定義も無い)。**Webビルドも未確認**(emsdkが無い)。
+**実機(arduino-picoのI2S・2コア目・MAX98357A)で確認済み(2026-10-22)**(音が出る・アンプの抜き差しを検出する)。**Webビルドも未確認**(emsdkが無い)。
 
 ## マイクと録音 (`src/hal/Mic_Functions` / `src/sound/Mic_Dsp.hpp` / `src/sound/Wav_Writer` / `RecorderScene`) (2026-10-18)
 
@@ -95,7 +95,7 @@ SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブ
   GP26〜28は以前「外部コントローラー用に残す」としていたが、コントローラーはI2C(GP0/1)に決まったので使った。
 - **I2S**: arduino-picoの`I2S(INPUT)`、32bit、**48000Hz**(BCLK 3.072MHz)、DMAのバッファ8×512ワード(16KB、約42ms)。PIOのステートマシンを出力とは別に1つ使う。
   arduino-picoの入力のPIO(`pio_i2s_in`)は最初に`in`を空打ちして**I2Sの1bitの遅れを合わせてある**(#2037)ので、ワードはそのまま左詰めの18bit。
-  SPH0645は「1bit遅い」と言われることがあるが、**実機で確かめるまで補正は入れていない**(声が極端に小さい/割れる・ジーという音なら最初にここを疑う)。
+  SPH0645は「1bit遅い」と言われることがあるが、**補正は入れていない**(実機で録ったWAVは正しい高さ・向きで聞こえた、2026-10-19。声が極端に小さい/割れる・ジーという音なら最初にここを疑う)。
 - **2コア目(`MicFunctions::LoopCore1()`、`main.cpp`の`loop1()`で音声の後)**: I2Sの開始/終了(DMA割り込みが2コア目に付くように)、ワードを読んで
   `MicDsp::Pipeline`(左/右を選ぶ → 上位18bit → 直流を落とす一次のハイパス約38Hz → 増幅 → 窓付きsincのFIR(8×間引き+1タップ)で16000/24000Hzへ間引く → 16bitへ頭打ち)、
   録音中は`MicDsp::PcmRing`(16384サンプル=32KB、16kHzで約1秒)へ積む。溢れた分は捨てて数える(`DroppedSamples()`)。メーターの山(`TakePeak()`)と「値が0.5秒変わらない=信号なし」(`HasSignal()`)もここ。
@@ -117,7 +117,7 @@ SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブ
 - 検証: `mic_test`(run.sh の media。計算: 振幅・直流・周波数・増幅・頭打ち・12kHzが折り返さない・3kHzは通る・右チャンネル・信号なし、列、
   MicFunctions: 使うまでI2Sを持たない/返す、48000Hz・32bit・GP26/28、奇数個ずつ届いても1kHzのまま、WAVの見出し、番号、取りこぼし・DMAの溢れ、録音中の見出しの書き直し、
   I2Sの失敗で止まる/もう一度試す、SD無し、mic.cfgの読み書き、24000Hz・右)、PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 録音→停止で5.0秒・16000Hz・440Hz・-12dBFS(=-30+18)・直流0のWAV、
-  録音中の表示、`PICOOS_MIC=none`で「信号がありません」、一覧。実機ファームのビルドは通る(`pio run`)。**実機・実物のSPH0645では未確認**(配線・ビット位置・SDの書き込みが追いつくか・2コア目の負荷)。
+  録音中の表示、`PICOOS_MIC=none`で「信号がありません」、一覧。実機ファームのビルドは通る(`pio run`)。**実機・実物のSPH0645で確認済み(2026-10-19)**(メーター・録ったWAVの高さと向き・16kHz/48kHzで取りこぼし無し・増幅+18dBの目安)。
 - **Lua(`pico.mic_*`、`src/lua/LuaEngine_Mic.cpp`、2026-10-18)**: `mic_start([path][, {rate=, gain=}])`→パス / `mic_stop` / `mic_recording` / `mic_info` /
   `mic_monitor(on)` / `mic_level()`(0〜1とdBFS。読むと0へ) / `mic_has_signal` / `mic_set_gain`・`mic_gain` / `mic_set_rate`・`mic_rate`。
   **新しい権限`microphone`**(app.cfgの`permission_microphone`、アプリストアの`perms`は`microphone`、確認の表示は「マイク」)。権限が無ければ`nil, 理由`、引数の誤りは先に`luaL_error`。
@@ -142,7 +142,7 @@ SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブ
   `WavStream`の列は24KB→32KB(`kRingSamples`=16384サンプル。head/tailはint16の数で数え、ステレオは左右の組)。先読みはモノラル44100Hzで約370ms・ステレオ約190ms。
   形は`setStereo()`で決め(flushを兼ねる)、2コア目は次のflushで取り込む。位置・長さ・`kWavMaxPerUpdate`/`kWavPrefillSamples`はフレームで数える。
   モノラルのWAVはステレオ出力の左右へ同じ値を足す。
-- 検証: `gb_apu_test` `sound_test` `music_test`(`TestPan`) `lua_engine_test`。**実機のPCM5102Aでの聞こえ方・2コア目の負荷は未確認**。
+- 検証: `gb_apu_test` `sound_test` `music_test`(`TestPan`) `lua_engine_test`。実機のPCM5102Aで鳴ること(2026-10-19)・2コア目の負荷で途切れないこと(2026-10-22)は確認済み。ステレオの定位の聞こえ方は記録が無い。
 
 ## 曲データ (`docs/MUSIC_FORMAT.md` / `src/sound/Mml_Compiler` / `Music_Player` / `MusicScene`) (2026-09-25)
 
@@ -305,7 +305,7 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
   1〜8チャンネルを平均してモノラルに、周波数は線形補間(16.16の固定小数点)で出力の周波数へ。**下げるとき(44.1kHz→22050Hz、48kHz等)は先に低域通過フィルタ**
   (ハミング窓のFIR、切れ目は出力の半分の9割、タップ数は比の8倍ほど=44.1kHz→22050Hzで33・48kHz→44.1kHzで19・上限63。係数はQ15で左右対称、`open()`で作る)を元の周波数で掛ける
   (2026-10-10。以前は削らずに間引いていて、17kHzが5kHzへ同じ大きさで折り返していた)。頭と終わりは最初/最後の値で埋め、入れた数と同じだけ出す。
-  出力が44100Hzなら44.1kHzのWAVは変換もフィルタも通らない。**実機での時間・聞こえ方の違いは未確認**。fmt/data以外のチャンクは飛ばし、
+  出力が44100Hzなら44.1kHzのWAVは変換もフィルタも通らない。聞こえ方は実機で問題なし(2026-10-22)。変換の時間は未計測。fmt/data以外のチャンクは飛ばし、
   dataの長さがファイルより長い(0xFFFFFFFF等)ならファイルの終わりまで。ADPCM・64bit float・9ch以上は`Unsupported`。
   同じ周波数なら入れたのと同じ数だけ出す(最後の1サンプルも`ending_`で出してから終える)。`setLoop(true)`で頭へ戻る。
 - **`WavStream`の「捨てる」(止める/切り替え)は1コア目から`flush()`するだけ**: 捨てたい位置(その時点のhead)と世代を書き、2コア目が次に読むときに
@@ -339,7 +339,7 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
 - 検証: `wav_test`(run.sh。形式ごとの変換・平均・周波数の変換・チャンクの読み飛ばし・ループ・断り方、SoundFunctionsの配線: 音量・止める/切り替えで
   先読みを捨てる・途切れの数え方・アンプが無い間も時間どおりに進む)、`lua_engine_test`(Lua API)、`power_test`(WAV中はスリープしない)、
   PCビルドで`SDL_AUDIODRIVER=disk`の出力を見てミュージックアプリからchime.wavが約1秒途切れずに鳴ることを確認。
-  **実機では未確認**(SPI1の実効速度・1コア目の引っかかりでの途切れ・Webビルドは1フレームに1回の`loop1()`で足りるか)。
+  1コア目の引っかかり(TLS中・SD書き込み中)でも途切れないことは**実機で確認済み(2026-10-22)**。SPI1の実効速度の数値・Webビルドは1フレームに1回の`loop1()`で足りるかは未確認。
 
 ## 出力の周波数を選ぶ(22050 / 44100Hz、`SoundFunctions::SetSampleRate()` / PCM5102A) (2026-10-10)
 
@@ -367,7 +367,7 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
   捨てる位置(`flush_to_`)は古いまま残ると、tail が巡る範囲の半分を進んだときに「先にある」と取り違えるので、`effectiveTail()`が
   2コア目に追い越されていたら tail へ寄せ直す。
 - PC/Web(`pc/compat/I2S.h`): `begin(rate)`のたびにその周波数で音声デバイスを開く。Webのリングの下限は4096サンプル(44100Hzで約93ms)。
-- **2コア目の計算は44100Hzでほぼ倍**(音源8チャンネル+GBのAPU+WAVの足し合わせ)。**実機の負荷は未計測**(150MHzで足りる見込み)。
+- **2コア目の計算は44100Hzでほぼ倍**(音源8チャンネル+GBのAPU+WAVの足し合わせ)。実機では22050Hz/44100Hzとも途切れない(2026-10-22。負荷の数値は未計測)。
   MMLの曲の長さを数える`MusicPlayer::MeasureMs()`は22050Hzで数えたまま(ミリ秒で返すので周波数に依らない)。
 - **PCM5102Aの配線はMAX98357Aと同じ端子**(BCK=GP2・LRCK=GP3・DIN=GP4)。基板の SCK を GND(内部のPLLでBCKから作る)、FMT=GND(I2S)、
   XSMT=3.3V(または GP6。休止端子と同じ向きで HIGH=鳴らす。MAX98357Aと並べてイヤホン用にするなら GP14。下の「イヤホンとスピーカーの切り替え」)、FLT/DEMP=GND。**アンプの検出(GP5をGNDへ落とす)は基板側に無いので、GP5をGNDへ配線すること**
@@ -378,7 +378,7 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
   44100Hzで長さを数える・`sample-rate`の読み込みと読めない値・`battery-cap`)、`wav_test`(SoundFunctions経由のテストを22050Hzと44100Hzの両方で。
   列が何周も巡る・2コア目が止まったまま積み直す)、`gb_apu_test`(44100Hzの高さと直流の戻る速さ。係数を定数のままにすると失敗することを確かめた)。
   PCビルド: 設定アプリで「音質」を44.1kHzへ→`sound.cfg`に書かれ、再起動しても44100Hzで始まる。44.1kHz・15kHzのWAVをミュージックアプリから鳴らし
-  `SDL_AUDIODRIVER=disk`の出力が15kHzのまま。**実機・PCM5102Aでは未確認**。
+  `SDL_AUDIODRIVER=disk`の出力が15kHzのまま。実機・PCM5102Aの44.1kHzで鳴ることを確認済み(2026-10-19)。
 
 ## イヤホンとスピーカーの切り替え(`SoundFunctions::Route` / PCM5102A + 差し込み検出) (2026-10-24)
 
@@ -410,7 +410,8 @@ SUMMARY.md #11。**スピーカー(MAX98357A)とイヤホン(PCM5102A)を両方�
 - PC: `PICOOS_HEADPHONE=inserted`(Webは `?headphone=inserted`)で差してある扱い(起動時に決まる)。PCではどちらへ向けても同じ音声デバイスから鳴る。
 - 検証: `sound_test` の `TestRoute`(差す/抜くで休止端子が入れ替わりI2Sは開き直さない・ばたつき除け・イヤホンの音量の振幅・頭打ちはスピーカーだけ・
   イヤホンだけ/スピーカーだけ・決め打ち・`route`/`hp-volume` の読み込み)。PCビルドで設定アプリの表示とステータスバーの絵。
-  **実機では未確認(配線・聞こえ方・切り替えのプチ音)(Todoist参照)**。
+  片方だけつないだ場合(MAX98357Aだけ・PCM5102Aだけ・検出接点が無く「出力先」で決め打ち)は**実機で確認済み(2026-10-25)**。
+  **両方を並べた自動切り替え(配線・聞こえ方・切り替えのプチ音)は実機では未確認(Todoist参照)**。
 
 ## ミュージックアプリ(プレイリスト・リピート・ミックス)(`MusicScene` / `widgets/apps/MusicPlayerPanel` / `apps/music/Play_Queue.hpp`) (2026-10-10)
 
@@ -444,7 +445,7 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
   一番下に半分見えている項目があると起きる)。`PICO_GFX::render_suppressed`の間は空のクリップのまま描かせ、空へ戻すようにした。
 - 検証: `play_queue_test`(run.sh の media)、PCビルドの`--tap`/`--shot`+標準入力の`key`の行(`PICOOS_VERIFY_LCD=1`で食い違い0): ライブラリ→プレイリスト→
   1回タップで再生、ループするMMLが1周で次のWAVへ進みリピートしないで止まる、読めないMMLの理由の表示と飛ばし、ミックス+[全曲]、`n`/`r`、
-  リピート全曲で頭へ戻る、フォーカスで一覧→再生中の欄、`music.cfg`の保存。**実機では未確認**。
+  リピート全曲で頭へ戻る、フォーカスで一覧→再生中の欄、`music.cfg`の保存。再生・シークバー・リピートは**実機で確認済み(2026-10-25)**。
 - 未: 曲の並べ替え・プレイリストの編集(フォルダを母艦で作る前提)、アルバムアートやタグ。(アプリを閉じても鳴り続ける再生は2026-10-15に入った)
 
 ## 動画(.pvid)(`script/generate_pvid.py` / `docs/VIDEO_FORMAT.md` / `src/apps/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
@@ -460,8 +461,8 @@ MJPEGは本体でJPEGを解く・フルカラーを16色へ落とす処理が重
   フレームは512バイトずつ読みながら解く)→`VideoView`(`GameBoyView`と同じく合成の中で4bppのバッファへ`memcpy`、変わったタイルの行の帯だけdirty)。
   **再生中はパレットの16色全部を動画のものにする**(`PICO_GFX::COLORS`を直接。`SetPaletteColor()`は0/15を変えられないため。ダークテーマでも動画の黒白のまま)。
   閉じる/画面を離れると`ResetPalette()`。時計は同じ名前の`.wav`の`WavPositionMs()`(無い/先に終わったら`millis()`)、1回に4枚まで解き、8枚より遅れたら`seekTo()`で飛ぶ。
-  詳細は`docs/VIDEO_FORMAT.md`「本体での再生」。アイコンは自作の`custom_icons/video.svg`(`IconID::Video`、末尾)。動画の置き場は`/video/`(`PICO_Path::DIR::VIDEO`)。
-- 目安: testsrc2の240x128・15fpsで1フレーム平均約2.8KB・約42KB/秒。**実写・アニメでの値と実機の速さ(SDの読み込み・解く時間・液晶への転送)は未確認**。
+  詳細は`docs/VIDEO_FORMAT.md`「本体での再生」。アイコンはtablerの`IconID::FileVideo`(自作の`video.svg`は2026-10-24に外した)。動画の置き場は`/video/`(`PICO_Path::DIR::VIDEO`)。
+- 目安: testsrc2の240x128・15fpsで1フレーム平均約2.8KB・約42KB/秒。実機での再生の速さ(SDの読み込み・解く時間・液晶への転送)は問題なし(2026-10-23、数値は控えていない)。**実写・アニメでの値は未確認**。
 - 検証: `pvid_test`(run.sh の media。変換のタイルの往復・目録・差分の判定・色選び・壊れたファイル・ffmpegがあればlavfiの動画から変換、
   **`pvid_dump`(本物の`PvidPlayer`をASan付きで)と全部のフレーム・前後へのシークの絵が一致すること、ランダムに壊した300個のファイルで落ちないこと**)、
   PCビルドの`--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0): 選ぶ→再生(音あり/なし)・一時停止・+10秒で最後へ・「最初から」・戻るとパレットが戻る。

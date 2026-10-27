@@ -137,7 +137,7 @@ class MarkdownView : public Widget {
 
         Label<kMdBlockTextBytes>* measure_label; // レイアウト計算専用(表示用のLabelと同じ容量にすること)（レンダリングツリーには含めない）
 
-        std::vector<Widget*> children_; // getChildren()用（プール全部への参照）
+        WidgetList children_; // getChildren()用（プール全部への参照）
 
         // スクロール状態
         int sy = 0;
@@ -250,7 +250,7 @@ class MarkdownView : public Widget {
         bool moved_beyond_threshold = false;
         static constexpr int kTapThreshold = 6; // px
 
-        std::function<void(FixedString<PICO_PATH_LEN>)> on_link_tap = nullptr;
+        InplaceFunction<void(FixedString<PICO_PATH_LEN>)> on_link_tap = nullptr;
 
     public:
 
@@ -278,14 +278,14 @@ class MarkdownView : public Widget {
         void causeOnPressMove() override;
         void causeOnPressEnd() override;
 
-        void setOnLinkTap(std::function<void(FixedString<PICO_PATH_LEN>)> callback) {
+        void setOnLinkTap(InplaceFunction<void(FixedString<PICO_PATH_LEN>)> callback) {
             this->on_link_tap = callback;
         }
         void clearOnLinkTap(){
             this->on_link_tap = nullptr;
         }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 

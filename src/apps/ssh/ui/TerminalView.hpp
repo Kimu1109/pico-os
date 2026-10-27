@@ -4,7 +4,7 @@
 #include "apps/ssh/Vt_Terminal.hpp"
 #include "util/FixedString.hpp"
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // 端末の画面(SSHアプリ専用)。VtTerminalの文字の格子をそのまま描く。
 //
@@ -38,7 +38,7 @@ class TerminalView : public Widget {
         // 毎フレーム呼ぶ。変わった行だけをdirtyにする
         void onFrame();
 
-        void setOnTap(std::function<void()> fn){ this->on_tap = fn; }
+        void setOnTap(InplaceFunction<void()> fn){ this->on_tap = fn; }
 
         void causeOnPressStart() override;
         void causeOnPressMove() override;
@@ -63,7 +63,7 @@ class TerminalView : public Widget {
         int ref_touch_y = 0;
         int ref_scroll_back = 0;
         bool dragging = false;
-        std::function<void()> on_tap = nullptr;
+        InplaceFunction<void()> on_tap = nullptr;
 
         void markRow(int r);
         const VtTerminal::Cell* lineAt(int r) const;

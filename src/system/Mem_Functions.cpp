@@ -385,6 +385,10 @@ void MemFunctions::LogReport(){
         (unsigned long)worst_widget,
         (unsigned long)(worst_widget + worst_widget * 3 / 10));
 
+    LOG_SYS_DEBUG("[MEM] シーンアリーナ: 塊%lu個(最大%lu個) 渡した%lu回(うち使い回し%lu回) ヒープへ回した%lu回",
+        (unsigned long)arena_chunks, (unsigned long)arena_peak_chunks,
+        (unsigned long)arena_served, (unsigned long)arena_reused, (unsigned long)arena_fallback);
+
     //リーク判定の本命。シーンのウィジェットが無い瞬間のusedを毎回同じ条件で比べる
     if(floor_samples > 0){
         LOG_SYS_DEBUG("[MEM] ヒープ下限(シーン破棄直後/%lu回): 初回=%luB 最新=%luB 最大=%luB 差%+ldB",

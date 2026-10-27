@@ -1,5 +1,7 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
+#include "gui/widgets/WidgetArena.hpp"
+#include "util/ChunkArena.hpp"
 #include "OS_Data.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "system/Mem_Functions.hpp"
@@ -9,8 +11,43 @@
 #include <cstdlib>
 #include <new>
 
+namespace {
+    ChunkArena<WidgetArena::kChunkBytes, WidgetArena::kMaxChunks> scene_arena;
+    bool arena_enabled = false;
+
+    void PublishArenaStats() {
+        const auto& st = scene_arena.stats();
+        MemFunctions::arena_chunks = st.chunks;
+        MemFunctions::arena_peak_chunks = st.peak_chunks;
+        MemFunctions::arena_reused = st.reused;
+        MemFunctions::arena_served = st.served;
+        MemFunctions::arena_fallback = st.fallback;
+    }
+}
+
+void WidgetArena::Enable(bool enable) { arena_enabled = enable; }
+bool WidgetArena::IsEnabled() { return arena_enabled; }
+
+void WidgetArena::OnSceneExit() {
+    scene_arena.releaseEmpty();
+    // シーンの物は全部消えたはず。残るのはシーンをまたいで生きる物(シーンの途中で作った常駐の部品)だけで、
+    // その塊はヒープへ返せない。ふつうは0
+    if (scene_arena.stats().live > 0) {
+        LOG_SYS_DEBUG("[MEM] シーン破棄後もアリーナに%lu個残っています(塊%lu個)",
+            (unsigned long)scene_arena.stats().live, (unsigned long)scene_arena.stats().chunks);
+    }
+    PublishArenaStats();
+}
+
+size_t WidgetArena::ChunkCount() { return scene_arena.stats().chunks; }
+size_t WidgetArena::LiveCount() { return scene_arena.stats().live; }
+size_t WidgetArena::BorrowedCount() { return scene_arena.stats().borrowed; }
+
 void* Widget::operator new(size_t bytes) noexcept {
-    void* ptr = malloc(bytes ? bytes : 1);
+    if (bytes == 0) bytes = 1;
+    void* ptr = arena_enabled ? scene_arena.alloc(bytes) : nullptr;
+    if (arena_enabled) PublishArenaStats();
+    if (!ptr) ptr = malloc(bytes);
     if(!ptr) {
         // 組み込みでは例外を投げずnullptrを返す(呼び出し側で落ちる)。
         // 全ウィジェットの確保がここを通る唯一の入口なので、失敗を1箇所でログしておく
@@ -24,7 +61,10 @@ void* Widget::operator new(size_t bytes) noexcept {
 
 void Widget::operator delete(void* ptr, size_t bytes) noexcept {
     if(!ptr) return;
+    if (bytes == 0) bytes = 1;
     MemFunctions::OnWidgetFree(bytes);
+    // アリーナを切った後でも、切る前にアリーナへ置いた物はアリーナへ返す
+    if (scene_arena.release(ptr, bytes)) { PublishArenaStats(); return; }
     free(ptr);
 }
 
@@ -73,7 +113,7 @@ void Widget::causeOnPressStart() {
 void Widget::clearOnPressStart(){
     on_press_start = nullptr;
 }
-void Widget::setOnPressStart(std::function<void()> callback) {
+void Widget::setOnPressStart(InplaceFunction<void()> callback) {
     this->on_press_start = callback;
 }
 
@@ -83,7 +123,7 @@ void Widget::causeOnPressEnd(){
 void Widget::clearOnPressEnd(){
     on_press_end = nullptr;
 }
-void Widget::setOnPressEnd(std::function<void()> callback) {
+void Widget::setOnPressEnd(InplaceFunction<void()> callback) {
     this->on_press_end = callback;
 }
 
@@ -93,7 +133,7 @@ void Widget::causeOnPressMove(){
 void Widget::clearOnPressMove(){
     on_press_move = nullptr;
 }
-void Widget::setOnPressMove(std::function<void()> callback) {
+void Widget::setOnPressMove(InplaceFunction<void()> callback) {
     this->on_press_move = callback;
 }
 
@@ -103,7 +143,7 @@ void Widget::causeOnPressOut(){
 void Widget::clearOnPressOut(){
     on_press_out = nullptr;
 }
-void Widget::setOnPressOut(std::function<void()> callback){
+void Widget::setOnPressOut(InplaceFunction<void()> callback){
     this->on_press_out = callback;
 }
 

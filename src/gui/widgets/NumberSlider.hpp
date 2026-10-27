@@ -18,7 +18,7 @@ class NumberSlider : public Widget {
 
         void updateTextW();
 
-        std::function<void()> on_value_changed = nullptr;
+        InplaceFunction<void()> on_value_changed = nullptr;
 
     public:
 
@@ -95,7 +95,7 @@ class NumberSlider : public Widget {
             return this->decimalPlacesNum;
         }
 
-        void setOnValueChanged(std::function<void()> callback){
+        void setOnValueChanged(InplaceFunction<void()> callback){
             this->on_value_changed = callback;
         }
         void clearOnValueChanged(){

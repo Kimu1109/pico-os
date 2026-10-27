@@ -286,6 +286,7 @@ host_test(step_budget_test GROUP widget COMPAT)
 host_test(alarm_test GROUP widget)
 host_test(notification_test GROUP widget)
 host_test(error_functions_test GROUP widget)
+host_test(widget_arena_test GROUP widget)
 
 # --- lua-base: vendorしたLua本体 ---
 host_test(lua_smoke_test GROUP lua-base)

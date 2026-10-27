@@ -32,7 +32,7 @@ class PickerDialog : public Widget {
         constexpr static int MARGIN = DialogLayout::kMargin;
 
         Mode mode_;
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         Rect dlg = DialogLayout::Place(kDialogWidth, 120);
 
@@ -53,7 +53,7 @@ class PickerDialog : public Widget {
         float progress_ = 0.0f;
         bool closed_ = false;
 
-        std::function<void(bool is_ok)> on_closed = nullptr;
+        InplaceFunction<void(bool is_ok)> on_closed = nullptr;
 
         int buttonCount() const { return (ok_button ? 1 : 0) + (cancel_button ? 1 : 0); }
         Button* makeButton(const char* text, bool is_ok);
@@ -96,7 +96,7 @@ class PickerDialog : public Widget {
         // 中身が出そろったあとで呼ぶ(addChoice等のあと)。大きさと位置を決め直す
         void layout();
 
-        void setOnClosed(std::function<void(bool is_ok)> callback){ this->on_closed = callback; }
+        void setOnClosed(InplaceFunction<void(bool is_ok)> callback){ this->on_closed = callback; }
         void clearOnClosed(){ this->on_closed = nullptr; }
         void causeOnClosed(bool is_ok){ if(this->on_closed) this->on_closed(is_ok); }
         // スクリプト側から閉じる(is_ok=falseとして通知はしない。pico.destroyと同じ後片付けのために使う)
@@ -117,5 +117,5 @@ class PickerDialog : public Widget {
         WidgetType getWidgetType() const override { return WidgetType::PickerDialog; }
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
-        const std::vector<Widget*>& getChildren() const override { return children_; }
+        const WidgetList& getChildren() const override { return children_; }
 };

@@ -45,7 +45,7 @@ void LogFunctions::Flush(){}
 static int widget_alive = 0;
 class TestWidget : public Widget {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
     public:
         TestWidget(){ widget_alive++; l_rect = {0, 0, 10, 10}; }
         ~TestWidget() override {
@@ -53,7 +53,7 @@ class TestWidget : public Widget {
             widget_alive--;
         }
         void addChild(Widget* c){ c->setParent(this); children_.push_back(c); }
-        const std::vector<Widget*>& getChildren() const override { return children_; }
+        const WidgetList& getChildren() const override { return children_; }
         void removeChild(Widget* child) override {
             for(size_t i = 0; i < children_.size(); i++){
                 if(children_[i] == child){ children_.erase(children_.begin() + i); return; }

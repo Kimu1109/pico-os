@@ -2,7 +2,7 @@
 
 #include "gui/widgets/Widget.hpp"
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // プレーンテキストの表示欄(汎用)。テキストエディタの本文欄とファイルビューワーが使う。
 //
@@ -53,7 +53,7 @@ class TextView : public Widget {
         int ref_scroll_y = 0;
         bool dragging = false;
 
-        std::function<void(size_t byte_offset)> on_tap = nullptr;
+        InplaceFunction<void(size_t byte_offset)> on_tap = nullptr;
 
         // setOwnedText()が確保した文書(Luaなど、呼び出し側が文書を持ち続けられない場合用)。
         // 確保するのは文書が変わるときだけ。textがこれを指している間だけ有効
@@ -111,7 +111,7 @@ class TextView : public Widget {
         // カーソルが見える位置までスクロールする
         void ensureCursorVisible();
 
-        void setOnTap(std::function<void(size_t byte_offset)> callback) { this->on_tap = callback; }
+        void setOnTap(InplaceFunction<void(size_t byte_offset)> callback) { this->on_tap = callback; }
 
         void causeOnPressStart() override;
         void causeOnPressMove() override;

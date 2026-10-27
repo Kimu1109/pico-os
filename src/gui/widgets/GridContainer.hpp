@@ -18,7 +18,7 @@ namespace GridContainerTools {
 
 class GridContainer : public Widget {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         int cols_;
         int16_t gap_ = 0;
@@ -45,7 +45,7 @@ class GridContainer : public Widget {
 
         WidgetType getWidgetType() const override { return WidgetType::GridContainer; }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 

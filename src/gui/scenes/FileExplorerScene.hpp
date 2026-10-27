@@ -47,6 +47,8 @@ class FileExplorerScene : public Scene {
         void onMore();
         void askSearch(bool content);
         void commitRename(const char* old_path, const char* new_name);
+        // 名前を聞いている間に一覧が変わっても、どれを変えるかは聞いた時点のパスで決める
+        FixedString<PICO_PATH_LEN> rename_path;
 
         void setStatus(const char* text, bool is_error = false);
         void showClipStatus();

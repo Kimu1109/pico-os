@@ -32,7 +32,7 @@ class KeyboardNum : public KeyboardPanel {
         static constexpr uint8_t MODE_ALL   = MODE_DIGIT | MODE_ARITH | MODE_MATH;
 
     protected:
-        std::vector<Widget*> children_;
+        WidgetList children_;
         ITextInputTarget* target = nullptr;
 
     private:

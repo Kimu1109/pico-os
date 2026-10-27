@@ -57,6 +57,18 @@ class HomeScene : public Scene {
         static bool canHide(int app_index);
         // 開いているメニュー(シーンの切り替えで消えることがあるのでIDで持つ)
         WidgetId app_menu = WidgetIdTools::Invalid();
+        // 開いているメニュー(上のapp_menu、1度に1つ)の「行 → すること」と、閉じたときに要る値。
+        // 閉じたときのコールバックはthisだけを持ってここを読む(配列を値でキャプチャすると
+        // コールバックの箱(InplaceFunction)に収まらない。以前はstd::functionがヒープへ逃がしていた)
+        struct MenuRow { int8_t value; uint8_t w, h; };   // value: すること / フォルダの番号(-1=新しく作る) / ウィジェットの種類
+        static constexpr int kMaxMenuRows = (HomeLayout::kKindCount * 3 > AppFunctions::kMaxFolders + 1)
+                                          ? HomeLayout::kKindCount * 3 : AppFunctions::kMaxFolders + 1;
+        MenuRow menu_rows[kMaxMenuRows < 16 ? 16 : kMaxMenuRows];
+        int menu_count = 0;
+        AppGrid::LongPress menu_target;  // openItemMenu: 長押しした項目
+        int menu_value = 0;              // openItemMenu: 並びの中の位置 / openFolderPicker: アプリの番号 / openAddMenu: 足す位置
+        bool menu_in_folder = false;     // openItemMenu: フォルダの中で開いたか
+        int menu_folder = -1;            // openFolderName: 名前を変えるフォルダ(-1 = 新しく作る)
         // 次のフレームで開くメニュー。長押しで押し込みの絵を戻したフレームにダイアログを重ねると、
         // 半透明の下は描き直されず押し込みの絵が残る(「ダイアログは1フレーム空ける」と同じ理由)
         bool has_pending_menu = false;

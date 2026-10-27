@@ -86,10 +86,10 @@ static inline size_t nextUtf8Char(const char* s, size_t n, size_t i, char out[5]
 }
 
 template<size_t N>
-std::vector<TextRun> Label<N>::parseMarkup(const char* src, size_t n, uint16_t base_offset) {
-    std::vector<TextRun> runs;
+void Label<N>::parseMarkup(const char* src, size_t n, uint16_t base_offset, ParsedRuns& runs) {
+    runs.clear();
     TextRun cur;
-    if (!src) return runs;
+    if (!src) return;
 
     size_t i = 0;
     size_t run_start = 0; // 今の区間がsrcの何バイト目から始まっているか
@@ -144,12 +144,12 @@ std::vector<TextRun> Label<N>::parseMarkup(const char* src, size_t n, uint16_t b
         }
     }
     flush();
-    return runs;
 }
 
 template<size_t N>
-void Label<N>::computeLineOffsets(const std::vector<TextRun>& src_runs, int src_line_count,
-                                   int box_width, std::vector<int>& out) {
+template<typename Runs, typename Offsets>
+void Label<N>::computeLineOffsets(const Runs& src_runs, int src_line_count,
+                                   int box_width, Offsets& out) {
     //左揃えならオフセットは全て0なので、テーブル自体を作らない。
     //描画側は範囲外を0として扱うので、空のままで支障がない(既定の左揃えで1確保減る)
     out.clear();
@@ -213,7 +213,8 @@ void Label<N>::relayout() {
         while (para_end < total && s[para_end] != '\n') para_end++;
         last_paragraph = (para_end >= total);
 
-        std::vector<TextRun> runs = parseMarkup(s + para_start, para_end - para_start, (uint16_t)para_start);
+        ParsedRuns runs;
+        parseMarkup(s + para_start, para_end - para_start, (uint16_t)para_start, runs);
 
         int curWidth = 0;
         TextRun piece;
@@ -332,7 +333,8 @@ void Label<N>::relayoutPlaceholder() {
     uint16_t cur_line = 0;
 
     const char* ps = placeholder_text.c_str();
-    std::vector<TextRun> runs = parseMarkup(ps, placeholder_text.length(), 0);
+    ParsedRuns runs;
+    parseMarkup(ps, placeholder_text.length(), 0, runs);
     int curWidth = 0;
     TextRun piece;
 
@@ -541,9 +543,12 @@ void Label<N>::render() {
     int cy = g_rect.y;
 
     bool show_placeholder = this->raw_text.length() == 0 && this->placeholder_text.length() > 0;
-    auto& render_runs = show_placeholder ? this->placeholder_runs_flat : this->runs_flat;
+    //本文とplaceholderでは内に持つ数が違う(型が違う)ので、先頭と個数で受ける
+    const TextRun* render_runs = show_placeholder ? this->placeholder_runs_flat.data() : this->runs_flat.data();
+    const size_t render_run_count = show_placeholder ? this->placeholder_runs_flat.size() : this->runs_flat.size();
     const int render_line_count = show_placeholder ? this->placeholder_line_count : this->line_count;
-    auto& render_offsets = show_placeholder ? this->placeholder_line_offsets : this->line_offsets;
+    const int* render_offsets = show_placeholder ? this->placeholder_line_offsets.data() : this->line_offsets.data();
+    const size_t render_offset_count = show_placeholder ? this->placeholder_line_offsets.size() : this->line_offsets.size();
     //runが参照している元テキスト。renderRun()が終端を一時的に差し替えるので非constで持つ
     char* render_src = const_cast<char*>(show_placeholder
         ? this->placeholder_text.c_str() : this->raw_text.c_str());
@@ -558,9 +563,9 @@ void Label<N>::render() {
         if (this->max_height > 0 && cy >= g_rect.y + g_rect.h) break;
 
         //左揃えではオフセットテーブルを作らないので、範囲外は0として扱う
-        int offset = ((size_t)line_idx < render_offsets.size()) ? render_offsets[line_idx] : 0;
+        int offset = ((size_t)line_idx < render_offset_count) ? render_offsets[line_idx] : 0;
         int cx = g_rect.x + offset;
-        while (ri < render_runs.size() && render_runs[ri].line == (uint16_t)line_idx) {
+        while (ri < render_run_count && render_runs[ri].line == (uint16_t)line_idx) {
             const TextRun& run = render_runs[ri];
             renderRun(render_src, run, cx, cy);
             int rw = run.width; // relayout()側で計算済みの幅を再利用(再計測しない)

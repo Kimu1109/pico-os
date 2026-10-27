@@ -5,7 +5,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // 読書アプリの本文の1ページを描くウィジェット。ReaderScene専用。
 //
@@ -45,8 +45,8 @@ class ReaderView : public Widget {
         void setMenuBands(int top_h, int bottom_h);
 
         // dir: +1 = 次のページ / -1 = 前のページ
-        void setOnTurn(std::function<void(int dir)> cb){ on_turn_ = cb; }
-        void setOnMenu(std::function<void()> cb){ on_menu_ = cb; }
+        void setOnTurn(InplaceFunction<void(int dir)> cb){ on_turn_ = cb; }
+        void setOnMenu(InplaceFunction<void()> cb){ on_menu_ = cb; }
 
         void causeOnPressStart() override;
         void causeOnPressEnd() override;
@@ -71,8 +71,8 @@ class ReaderView : public Widget {
         int start_x_ = 0;
         int start_y_ = 0;
 
-        std::function<void(int)> on_turn_ = nullptr;
-        std::function<void()> on_menu_ = nullptr;
+        InplaceFunction<void(int)> on_turn_ = nullptr;
+        InplaceFunction<void()> on_menu_ = nullptr;
 
         // 文字の幅の控え
         int8_t ascii_w_[128];

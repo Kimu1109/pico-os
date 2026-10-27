@@ -104,6 +104,7 @@ class SettingsScene : public Scene {
         uint8_t                 shown_status = 0xFF;
         FixedString<PICO_STR_M> shown_ssid;
         bool                    wifi_list_dirty = true;
+        FixedString<PICO_STR_M> removing_ssid;     // 削除を確かめているネットワーク(並びが変わってもSSIDで消す)
         bool                    shown_enabled = true;
         void refreshWifi();
         void rebuildWifiList();

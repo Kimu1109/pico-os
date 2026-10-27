@@ -40,6 +40,8 @@ g++ -std=gnu++17 -g -Os -fno-rtti \
     "$ROOT/src/gui/widgets/ScrollList.cpp" \
     "$ROOT/src/gui/widgets/CanvasRaster.cpp" \
     "$ROOT/src/gui/widgets/apps/MarkdownView.cpp" \
+    "$ROOT/src/gui/widgets/ScrollContainer.cpp" \
+    "$ROOT/src/gui/widgets/dialogs/MsgDialog.cpp" \
     "$ROOT/src/gui/widgets/interfaces/ITextColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \

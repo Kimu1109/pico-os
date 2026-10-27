@@ -19,7 +19,7 @@ class EventDetailDialog : public Widget {
         using Body = FixedString<PICO_STR_1KiB>;
 
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         constexpr static int DIALOG_WIDTH  = 224;
         // 画面が低ければ(横長の画面)縮める。本文はスクロールするので縮めても読める
@@ -51,7 +51,7 @@ class EventDetailDialog : public Widget {
         Label<PICO_STR_1KiB>* body;   // 所有権は body_scroll にある
         Button* close_button;
 
-        std::function<void(bool is_ok)> on_closed = nullptr;
+        InplaceFunction<void(bool is_ok)> on_closed = nullptr;
 
     public:
         EventDetailDialog();
@@ -59,7 +59,7 @@ class EventDetailDialog : public Widget {
 
         void setContent(const char* title_text, const char* body_text);
 
-        void setOnClosed(std::function<void(bool is_ok)> callback){ this->on_closed = callback; }
+        void setOnClosed(InplaceFunction<void(bool is_ok)> callback){ this->on_closed = callback; }
 
         // Esc(Back)で閉じる(「閉じる」を押したのと同じ)
         bool onFocusKey(FocusKey key) override;
@@ -69,5 +69,5 @@ class EventDetailDialog : public Widget {
         WidgetType getWidgetType() const override { return WidgetType::EventDetailDialog; }
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
-        const std::vector<Widget*>& getChildren() const override { return children_; }
+        const WidgetList& getChildren() const override { return children_; }
 };

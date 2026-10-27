@@ -13,7 +13,7 @@
 class WifiScanDialog : public Widget {
 
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         constexpr static int DIALOG_WIDTH  = 210;
         constexpr static int DIALOG_HEIGHT = 250;
@@ -44,9 +44,9 @@ class WifiScanDialog : public Widget {
         Button* rescan_button;
         Button* close_button;
 
-        std::function<void(const char* ssid)> on_select = nullptr;
-        std::function<void()> on_rescan = nullptr;
-        std::function<void(bool is_ok)> on_closed = nullptr;
+        InplaceFunction<void(const char* ssid)> on_select = nullptr;
+        InplaceFunction<void()> on_rescan = nullptr;
+        InplaceFunction<void(bool is_ok)> on_closed = nullptr;
 
         Button* makeButton(const char* text, int x, int w){
             auto* b = new Button(x, BUTTON_Y, text);
@@ -127,9 +127,9 @@ class WifiScanDialog : public Widget {
             this->list->add(item);
         }
 
-        void setOnSelect(std::function<void(const char* ssid)> callback){ this->on_select = callback; }
-        void setOnRescan(std::function<void()> callback){ this->on_rescan = callback; }
-        void setOnClosed(std::function<void(bool is_ok)> callback){ this->on_closed = callback; }
+        void setOnSelect(InplaceFunction<void(const char* ssid)> callback){ this->on_select = callback; }
+        void setOnRescan(InplaceFunction<void()> callback){ this->on_rescan = callback; }
+        void setOnClosed(InplaceFunction<void(bool is_ok)> callback){ this->on_closed = callback; }
 
         // Esc(Back)で閉じる(「閉じる」を押したのと同じ)
         bool onFocusKey(FocusKey key) override;
@@ -140,7 +140,7 @@ class WifiScanDialog : public Widget {
 
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 

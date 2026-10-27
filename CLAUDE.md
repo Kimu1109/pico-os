@@ -136,7 +136,8 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
   (`ClearSceneWidgets()` はルートしか消さないので、デストラクタが無いと丸ごとリークする。過去に複数回発生)。
 - **`MarkdownView` はオブジェクトプール方式**(起動時に固定長配列を確保し、スロットを使い回す)。
   **開発者は断片化回避のため固定長バッファ/プールを志向している。安易な `new`/`delete` 追加よりこのパターンに寄せた提案を優先する。**
-- `Widget::operator new/delete`(`Widget.cpp`)が全ウィジェットの確保の唯一の入口(今は `malloc` + `MemFunctions` への通知)。
+- `Widget::operator new/delete`(`Widget.cpp`)が全ウィジェットの確保の唯一の入口。シーンの物はシーンアリーナ(`gui/widgets/WidgetArena.hpp`、4KiBの塊を借りて返す)へ置く。
+- **ウィジェットのコールバックは `InplaceFunction`(キャプチャはポインタ3つまで、超えるとコンパイルエラー。大きな値はシーンのメンバへ)、子の一覧は `WidgetList`(`SmallVector`)。`std::function`/`std::vector` を足さない**(`performance.md`「シーンアリーナ」)。
 - ウィジェットIDはLua等の外部向け。OS内部の参照は生ポインタ。
 
 ### 文字列

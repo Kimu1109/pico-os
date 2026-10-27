@@ -7,9 +7,9 @@
 
 class FileSaveDialog : public Widget {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
-        std::function<void(bool is_ok)> on_close = nullptr; 
+        InplaceFunction<void(bool is_ok)> on_close = nullptr; 
 
         constexpr static int BASE_X = 20;
         constexpr static int BASE_Y = 20;
@@ -78,11 +78,11 @@ class FileSaveDialog : public Widget {
             children_.push_back(this->button_no);
         }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 
-        void setOnClose(std::function<void(bool is_ok)> callback){
+        void setOnClose(InplaceFunction<void(bool is_ok)> callback){
             this->on_close = callback;
         }
 

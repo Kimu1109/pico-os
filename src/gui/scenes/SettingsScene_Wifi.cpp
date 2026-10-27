@@ -195,11 +195,10 @@ void SettingsScene::confirmRemoveSelected(){
     dialog->setVisible(true);
 
     // 確認中に並びが変わっても(接続できて先頭へ繰り上がる等)別の組を消さないよう、SSIDで覚えておく
-    FixedString<PICO_STR_M> ssid;
-    ssid.assign(p->ssid.c_str());
-    dialog->setOnClosed([this, dialog, ssid](bool is_ok){
+    this->removing_ssid.assign(p->ssid.c_str());
+    dialog->setOnClosed([this, dialog](bool is_ok){
         if(is_ok){
-            const int i = WifiProfiles::Find(ssid.c_str());
+            const int i = WifiProfiles::Find(this->removing_ssid.c_str());
             if(i >= 0) NetworkFunctions::RemoveProfile(i);
             if(this->wifi_list) this->wifi_list->clearSelectedIndex();
             this->wifi_list_dirty = true;

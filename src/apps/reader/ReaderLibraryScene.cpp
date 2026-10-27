@@ -137,8 +137,8 @@ void ReaderLibraryScene::reload(){
         label.assign("続きから: ");
         (void)label.append(title.c_str());   // 長い題名は切れてよい
         this->continue_button_->setText(label.c_str());
-        const FixedString<PICO_PATH_LEN> path = r.path;
-        this->continue_button_->setOnPressEnd([this, path](){ this->openBook(path.c_str()); });
+        this->continue_path_ = r.path;
+        this->continue_button_->setOnPressEnd([this](){ this->openBook(this->continue_path_.c_str()); });
         this->continue_button_->setVisible(true);
     }else{
         this->continue_button_->setVisible(false);

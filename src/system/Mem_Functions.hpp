@@ -7,7 +7,7 @@
 
 // ヒープの使用量と断片化を実測するための診断モジュール。
 //
-// 目的: シーン単位のメモリプール(アリーナ)を導入する前の「ステップ0」として、
+// 目的: シーン単位のメモリプール(アリーナ。2026-10-27に gui/widgets/WidgetArena.hpp として導入)の前の「ステップ0」として、
 //   (1) 本当に断片化しているのか、それとも単なるリークなのかを切り分ける
 //   (2) アリーナの枠を何バイトで確保すればよいかを実測で決める
 // この2点を数値で押さえる。計測せずに枠サイズを決めると、大きすぎればRAMの無駄、
@@ -141,7 +141,7 @@ namespace MemFunctions {
     void Setup();
 
     // 常駐ウィジェット(Statusbar/キーボード)の確保が終わった時点を記録する。
-    // ここまでの used が、将来アリーナを2分割する際の「常駐領域」に必要なサイズになる
+    // ここまでのウィジェットはふつうのヒープに置く常駐の物(この後で main.cpp がシーンアリーナを有効にする)
     void SealPermanentBaseline();
 
     // メインループから毎フレーム呼ぶ。現シーン滞在中のピーク使用量を追う(mallinfoのみで軽い)
@@ -199,6 +199,13 @@ namespace MemFunctions {
     // --- ウィジェット本体の確保量(Widget::operator newが積算する) ---
     inline uint32_t widget_live_bytes = 0;  // 現在生存しているウィジェット本体の合計
     inline uint32_t widget_live_count = 0;
-    // 常駐ウィジェット(Statusbar/キーボード)ぶん。アリーナを分割する場合の永続領域
+    // 常駐ウィジェット(Statusbar/キーボード)ぶん。シーンアリーナの外に置く
     inline uint32_t widget_permanent_bytes = 0;
+
+    // --- シーンアリーナ(gui/widgets/WidgetArena.hpp)の様子。Widget.cpp が書き、LogReport() が出す ---
+    inline uint32_t arena_chunks = 0;       // いま借りている塊
+    inline uint32_t arena_peak_chunks = 0;  // 借りた塊の最大
+    inline uint32_t arena_served = 0;       // アリーナから渡した回数(累計)
+    inline uint32_t arena_reused = 0;       // うち閉じたダイアログ等の跡の使い回し
+    inline uint32_t arena_fallback = 0;     // 大きすぎる・塊が足りない等でふつうのヒープへ回した回数(累計)
 }

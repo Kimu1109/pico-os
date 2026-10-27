@@ -277,16 +277,24 @@ void HomeScene::openItemMenu(const AppGrid::LongPress& target){
     d->setVisible(true);
     this->app_menu = d->getId();
 
-    const AppGrid::LongPress t = target;
-    d->setOnClosed([this, d, t, pos, actions, count, in_folder](bool is_ok){
+    static_assert(kMaxActions <= kMaxMenuRows, "menu_rowsが足りない");
+    for(int i = 0; i < count; i++) this->menu_rows[i].value = (int8_t)actions[i];
+    this->menu_count = count;
+    this->menu_target = target;
+    this->menu_value = pos;
+    this->menu_in_folder = in_folder;
+    d->setOnClosed([this, d](bool is_ok){
         const int sel = d->getSelectedIndex();
         WidgetFunctions::DestroyLater(d);
         this->app_menu = WidgetIdTools::Invalid();
-        if(!is_ok || sel < 0 || sel >= count || !this->grid) return;
+        if(!is_ok || sel < 0 || sel >= this->menu_count || !this->grid) return;
+        const AppGrid::LongPress t = this->menu_target;
+        const int pos = this->menu_value;
+        const bool in_folder = this->menu_in_folder;
         const int rows = this->grid->rowsPerPage();
         int idx = t.index;
         bool follow = true;
-        switch(actions[sel]){
+        switch((Action)this->menu_rows[sel].value){
             case Action::Front:
                 if(in_folder){ AppFunctions::MoveAppToFront(t.index); break; }
                 HomeLayout::MoveToFront(t.type, t.index);
@@ -359,18 +367,23 @@ void HomeScene::openFolderPicker(int app_index){
     d->setVisible(true);
     this->app_menu = d->getId();
 
-    d->setOnClosed([this, d, folders, count, app_index](bool is_ok){
+    for(int i = 0; i < count; i++) this->menu_rows[i].value = (int8_t)folders[i];
+    this->menu_count = count;
+    this->menu_value = app_index;
+    d->setOnClosed([this, d](bool is_ok){
         const int sel = d->getSelectedIndex();
         WidgetFunctions::DestroyLater(d);
         this->app_menu = WidgetIdTools::Invalid();
-        if(!is_ok || sel < 0 || sel >= count || !this->grid) return;
-        if(folders[sel] < 0){
+        if(!is_ok || sel < 0 || sel >= this->menu_count || !this->grid) return;
+        const int app_index = this->menu_value;
+        const int folder = this->menu_rows[sel].value;
+        if(folder < 0){
             this->setPending(Pending::NewFolder, app_index);
             return;
         }
-        HomeLayout::MoveToFolder(app_index, folders[sel]);
+        HomeLayout::MoveToFolder(app_index, folder);
         //トップから入れたときは入れた先のフォルダを見せる。フォルダの中からなら今のフォルダのまま
-        if(this->grid->openedFolder() < 0) this->grid->showItem(HomeLayout::ItemType::Folder, folders[sel]);
+        if(this->grid->openedFolder() < 0) this->grid->showItem(HomeLayout::ItemType::Folder, folder);
         else                               this->grid->layoutChanged();
         this->updatePageLabel();
     });
@@ -389,11 +402,16 @@ void HomeScene::openFolderName(int app_index, int folder){
     d->openKeyboard();
     this->app_menu = d->getId();
 
-    d->setOnClosed([this, d, rename, folder, app_index](bool is_ok){
+    this->menu_value = app_index;
+    this->menu_folder = folder;
+    d->setOnClosed([this, d](bool is_ok){
         const auto name = d->getInput();
         WidgetFunctions::DestroyLater(d);
         this->app_menu = WidgetIdTools::Invalid();
         if(!is_ok || !this->grid) return;
+        const int app_index = this->menu_value;
+        const int folder = this->menu_folder;
+        const bool rename = folder >= 0;
         if(rename){
             AppFunctions::RenameFolder(folder, name.c_str());
             this->grid->layoutChanged();
@@ -442,14 +460,20 @@ void HomeScene::openAddMenu(int seq_pos){
     d->setVisible(true);
     this->app_menu = d->getId();
 
-    d->setOnClosed([this, d, choices, count, seq_pos](bool is_ok){
+    static_assert(kMaxChoices <= kMaxMenuRows, "menu_rowsが足りない");
+    for(int i = 0; i < count; i++) this->menu_rows[i] = MenuRow{ (int8_t)choices[i].kind, choices[i].w, choices[i].h };
+    this->menu_count = count;
+    this->menu_value = seq_pos;
+    d->setOnClosed([this, d](bool is_ok){
         const int sel = d->getSelectedIndex();
         WidgetFunctions::DestroyLater(d);
         this->app_menu = WidgetIdTools::Invalid();
-        if(!is_ok || sel < 0 || sel >= count || !this->grid) return;
-        const int idx = HomeLayout::Add(choices[sel].kind, choices[sel].w, choices[sel].h, seq_pos);
+        if(!is_ok || sel < 0 || sel >= this->menu_count || !this->grid) return;
+        const MenuRow row = this->menu_rows[sel];
+        const HomeLayout::Kind kind = (HomeLayout::Kind)row.value;
+        const int idx = HomeLayout::Add(kind, row.w, row.h, this->menu_value);
         if(idx < 0) return;
-        if(HomeWidget* w = HomeLayout::Impl(choices[sel].kind)) w->onHomeEnter();
+        if(HomeWidget* w = HomeLayout::Impl(kind)) w->onHomeEnter();
         this->grid->showItem(HomeLayout::ItemType::Widget, idx);
         this->updatePageLabel();
     });

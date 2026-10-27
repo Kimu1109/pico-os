@@ -34,6 +34,7 @@ class ReaderLibraryScene : public Scene {
         Button* back_button_ = nullptr;
         Button* open_button_ = nullptr;
         Button* continue_button_ = nullptr;
+        FixedString<PICO_PATH_LEN> continue_path_;   // 「続きから」で開く本
         Label<PICO_STR_L>* empty_label_ = nullptr;
         ScrollList* list_ = nullptr;
         FileSelectDialog* picker_ = nullptr;

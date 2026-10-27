@@ -6,7 +6,7 @@
 
 class ScrollContainer : public Widget, public IBorderColor {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         int sx;
         int sy;
@@ -33,7 +33,7 @@ class ScrollContainer : public Widget, public IBorderColor {
         constexpr static int kBarThickness = 3; // ツマミの太さ(TextViewと同じ)
 
         // スクロール位置が変わったとき(ドラッグ・setScrollY()どちらも)に呼ぶ
-        std::function<void()> on_scrolled = nullptr;
+        InplaceFunction<void()> on_scrolled = nullptr;
         void applyScroll(int new_x, int new_y);
 
     public:
@@ -75,7 +75,7 @@ class ScrollContainer : public Widget, public IBorderColor {
         void causeOnPressStart() override;
         void causeOnPressMove() override;
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 
@@ -143,7 +143,7 @@ class ScrollContainer : public Widget, public IBorderColor {
             this->setScroll(this->scroll_x, child->getLocalRect().y);
             return true;
         }
-        void setOnScrolled(std::function<void()> cb){ this->on_scrolled = cb; }
+        void setOnScrolled(InplaceFunction<void()> cb){ this->on_scrolled = cb; }
 
         // 表示中の中身が別物に変わった(=前回のスクロール位置に意味が無い)
         // ときに、先頭へ戻す。

@@ -2,7 +2,7 @@
 
 #include "gui/widgets/Widget.hpp"
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // 端末用の補助キーの列(SSHアプリ専用)。オンスクリーンキーボードに無いキーを並べる:
 //   Esc / Tab / Ctrl(次の1文字を制御文字にする。押すと点灯) / ↑ ↓ ← → / ^C
@@ -16,7 +16,7 @@ class TermKeyBar : public Widget {
             this->background_color = PICO_LIGHTGREY;
         }
 
-        void setOnKey(std::function<void(Key)> fn){ this->on_key = fn; }
+        void setOnKey(InplaceFunction<void(Key)> fn){ this->on_key = fn; }
         void setCtrl(bool on){
             if(on == this->ctrl) return;
             this->ctrl = on;
@@ -33,7 +33,7 @@ class TermKeyBar : public Widget {
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
 
     private:
-        std::function<void(Key)> on_key = nullptr;
+        InplaceFunction<void(Key)> on_key = nullptr;
         bool ctrl = false;
         int pressed = -1;
 

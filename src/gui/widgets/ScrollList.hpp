@@ -42,7 +42,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         int selected_index = -1;
         bool enable_icon = false;
 
-        std::function<void(int index, bool already_selected)> on_selectitem = nullptr;
+        InplaceFunction<void(int index, bool already_selected)> on_selectitem = nullptr;
 
     public:
 
@@ -114,7 +114,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         void causeOnPressMove() override;
         void causeOnPressEnd() override;
 
-        void setOnSelectItem(std::function<void(int index, bool already_selected)> on_selectitem) {
+        void setOnSelectItem(InplaceFunction<void(int index, bool already_selected)> on_selectitem) {
             this->on_selectitem = on_selectitem;
         }
         void causeOnSelectItem(bool already_selected){

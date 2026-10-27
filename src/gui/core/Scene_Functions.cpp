@@ -1,5 +1,6 @@
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
+#include "gui/widgets/WidgetArena.hpp"
 #include "gui/core/Keyboard_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "system/Log_Functions.hpp"
@@ -19,6 +20,8 @@ namespace {
 
         // 通常レイヤ・ダイアログ層はシーンの所有物なので一括破棄する
         WidgetFunctions::ClearSceneWidgets();
+        // 空いたアリーナの塊をヒープへ返す(下の計測より前。返した分も「戻った」として数える)
+        WidgetArena::OnSceneExit();
 
         //破棄しきった直後のヒープを見て、戻らなかった分をリーク候補として記録する
         MemFunctions::OnSceneExit();

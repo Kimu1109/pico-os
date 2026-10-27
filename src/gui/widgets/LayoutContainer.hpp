@@ -22,7 +22,7 @@ namespace LayoutContainerTools {
 
 class LayoutContainer : public Widget {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         LayoutContainerTools::Direction direction_;
         LayoutContainerTools::CrossAlign cross_align_ = LayoutContainerTools::START;
@@ -49,7 +49,7 @@ class LayoutContainer : public Widget {
 
         WidgetType getWidgetType() const override { return WidgetType::LayoutContainer; }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 

@@ -248,7 +248,7 @@ bool LuaEngine::CheckExtEventTarget(EventKind kind, Widget* w, const char** why)
 }
 
 void LuaEngine::BindExtCallback(Widget* w, WidgetId id, EventKind kind) {
-    // どれもキャプチャはthis(LuaEngine*)とid(4B)だけなので、std::functionの小バッファに収まる
+    // どれもキャプチャはthis(LuaEngine*)とid(4B)だけなので、InplaceFunctionの箱に収まる
     switch (kind) {
         case EventKind::DurationChanged:
             static_cast<DurationPicker*>(w)->setOnChanged([this, id](uint32_t ms) {
@@ -595,7 +595,7 @@ int LuaEngineExt::l_parent(lua_State* L) {
 
 int LuaEngineExt::l_children(lua_State* L) {
     Widget* w = WidgetArg(L, 1, "pico.children");
-    const std::vector<Widget*>& ch = w->getChildren();
+    const WidgetList& ch = w->getChildren();
     lua_createtable(L, (int)ch.size(), 0);
     int n = 0;
     for (Widget* c : ch) {

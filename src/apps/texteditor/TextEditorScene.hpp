@@ -8,7 +8,7 @@
 #include "util/FixedString.hpp"
 #include "apps/texteditor/Edit_History.hpp"
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // シンプルなテキストエディタ。
 //
@@ -157,7 +157,12 @@ class TextEditorScene : public Scene, public ITextInputTarget {
         void syncFromKeyboard(ITextInputWidget* kb);
         void layoutView();
 
-        void confirmDiscard(const char* msg, std::function<void()> then);
+        // 変更があれば確かめてから then を呼ぶ。then はダイアログを閉じるまで discard_then に置く
+        // (ダイアログのコールバックの箱に入れるとthisとdialogで埋まるため)
+        void confirmDiscard(const char* msg, InplaceFunction<void()> then);
+        InplaceFunction<void()> discard_then;
+        // 最近開いたファイルから選んだ、変更を破棄してから開くファイル
+        FixedString<PICO_PATH_LEN> discard_open_path;
         void newDocument();
         bool loadFile(const char* path);
         void openPicker();

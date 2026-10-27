@@ -3,7 +3,7 @@
 #include "gui/widgets/Widget.hpp"
 #include "consts.hpp"
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // 再生の操作ボタン3つ: 10秒戻る / 再生・一時停止 / 10秒進む。ミュージックアプリ(MusicPlayerPanel)と同じ見た目で、
 // 絵(三角・棒・黒い丸)は自分で描く(tablerに再生系のアイコンが無いため)。ファイルビューワーと動画アプリが使う。
@@ -22,7 +22,7 @@ class MediaButtons : public Widget {
         // 戻す/進めるを押せるか(MMLや何も開いていないときは偽)
         void setSkipEnabled(bool on);
         void setPlayEnabled(bool on);
-        void setOnButton(std::function<void(int)> cb){ on_button = cb; }
+        void setOnButton(InplaceFunction<void(int)> cb){ on_button = cb; }
 
         WidgetType getWidgetType() const override { return WidgetType::MediaButtons; }
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::OPAQUE; }
@@ -49,5 +49,5 @@ class MediaButtons : public Widget {
         bool play_enabled = true;
         int8_t pressed = -1;
         int8_t focus_slot = kPlay;
-        std::function<void(int)> on_button = nullptr;
+        InplaceFunction<void(int)> on_button = nullptr;
 };

@@ -40,6 +40,7 @@
 #include "lua/LuaDebugScreen.hpp"
 
 #include "gui/widgets/systems/Statusbar.hpp"
+#include "gui/widgets/WidgetArena.hpp"
 #include "gui/widgets/systems/PerfOverlay.hpp"
 #include "apps/home/HomeScene.hpp"
 #include "apps/home/Home_Widgets.hpp"
@@ -186,8 +187,9 @@ void setup() {
     //ファームの更新の結果を知らせ、置き場(内蔵フラッシュのLittleFS)を片付ける。通知より後
     FirmwareFunctions::Setup();
 
-    //ここまでの確保は全てOS常駐。シーンアリーナを導入する際の「永続領域」に相当する
+    //ここまでの確保は全てOS常駐(ふつうのヒープ)。ここから先のウィジェットはシーンアリーナへ置く
     MemFunctions::SealPermanentBaseline();
+    WidgetArena::Enable(true);
 
     //--- ここから先はシーンの所有物 ---
     SceneFunctions::Setup(new HomeScene());

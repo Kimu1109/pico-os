@@ -5,7 +5,7 @@
 #include "consts.hpp"
 
 #include <cstdint>
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // カレンダーアプリの月表示(曜日の見出し1行 + 日付の格子6行)。
 //
@@ -46,7 +46,7 @@ class MonthGrid : public Widget, public IBorderColor {
 
         DayDots dots[32];        // [日] = 描く点。[0]は使わない
 
-        std::function<void(int day)> on_select_day = nullptr;
+        InplaceFunction<void(int day)> on_select_day = nullptr;
 
         int cellX(int col) const;
         int cellW(int col) const;
@@ -77,7 +77,7 @@ class MonthGrid : public Widget, public IBorderColor {
         void setDots(const DayDots* dots_by_day);
 
         // タップで日付が選ばれたとき(同じ日を押し直しても呼ぶ)
-        void setOnSelectDay(std::function<void(int day)> callback){
+        void setOnSelectDay(InplaceFunction<void(int day)> callback){
             this->on_select_day = callback;
         }
 

@@ -16,7 +16,7 @@
 class SearchDialog : public Widget {
 
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         constexpr static int DIALOG_WIDTH  = 210;
         constexpr static int DIALOG_HEIGHT = 250;
@@ -49,10 +49,10 @@ class SearchDialog : public Widget {
         Button* next_button;
         Button* close_button;
 
-        std::function<void(int index)> on_select = nullptr;
-        std::function<void()> on_research = nullptr;
-        std::function<void()> on_next = nullptr;
-        std::function<void(bool is_ok)> on_closed = nullptr;
+        InplaceFunction<void(int index)> on_select = nullptr;
+        InplaceFunction<void()> on_research = nullptr;
+        InplaceFunction<void()> on_next = nullptr;
+        InplaceFunction<void(bool is_ok)> on_closed = nullptr;
 
         Button* makeButton(const char* text, int x, int w){
             auto* b = new Button(x, BUTTON_Y, text);
@@ -137,10 +137,10 @@ class SearchDialog : public Widget {
             this->needsRender();
         }
 
-        void setOnSelect(std::function<void(int index)> callback){ this->on_select = callback; }
-        void setOnResearch(std::function<void()> callback){ this->on_research = callback; }
-        void setOnNext(std::function<void()> callback){ this->on_next = callback; }
-        void setOnClosed(std::function<void(bool is_ok)> callback){ this->on_closed = callback; }
+        void setOnSelect(InplaceFunction<void(int index)> callback){ this->on_select = callback; }
+        void setOnResearch(InplaceFunction<void()> callback){ this->on_research = callback; }
+        void setOnNext(InplaceFunction<void()> callback){ this->on_next = callback; }
+        void setOnClosed(InplaceFunction<void(bool is_ok)> callback){ this->on_closed = callback; }
 
         // Esc(Back)で閉じる(「閉じる」を押したのと同じ)
         bool onFocusKey(FocusKey key) override;
@@ -151,7 +151,7 @@ class SearchDialog : public Widget {
 
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 

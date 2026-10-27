@@ -145,6 +145,9 @@ void operator delete[](void* p, size_t) noexcept { operator delete(p); }
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/CanvasRaster.hpp"
 #include "gui/widgets/apps/MarkdownView.hpp"
+#include "gui/widgets/dialogs/MsgDialog.hpp"
+#include "gui/widgets/WidgetArena.hpp"
+#include "gui/core/Focus_Functions.hpp"
 #include "gui/core/Scene.hpp"
 #include "OS_Data.hpp"
 
@@ -153,6 +156,9 @@ void PICO_GFX::MarkDirty(const Rect&){}
 void PICO_GFX::Setup(){}
 void PICO_GFX::FlushDirty(){}
 void PICO_GFX::DrawDialogBackground(){}
+
+//MsgDialog::onFocusKey()が呼ぶ(計測では使わない)
+bool FocusFunctions::Press(Widget*){ return false; }
 
 void KeyboardFunctions::HideAll(){}
 void KeyboardFunctions::Setup(){}
@@ -231,9 +237,9 @@ static void PrintCaseTable(){
         if(c.residue != 0) leaking_cases++;
     }
     printf("\nallocs=生成〜破棄で走った確保回数 / inner=そのうちオブジェクト本体以外\n");
-    printf("innerが0でない = 本体をプールへ移してもその回数ぶんの小確保はヒープに残る。\n");
-    printf("Labelのlines/line_offsets/cursor_slots(std::vector)と\n");
-    printf("Widget基底のstd::function 4つが、その正体。\n");
+    printf("innerが0でない = 本体をアリーナへ置いてもその回数ぶんの小確保はヒープに残る。\n");
+    printf("(コールバックはInplaceFunction、Labelの行データと子の一覧はSmallVectorにしたので、\n");
+    printf(" 短い文のLabel・Button等は0。MarkdownView等は子のウィジェットの数がそのまま出る)\n");
 }
 
 static void PrintBuckets(const char* title){
@@ -441,11 +447,9 @@ int main(){
     printf("期間中の生存ピーク=%lldB\n", loop_peak);
     printf("\n差が0付近ならリークなし。単調増加するなら解放漏れで、\n");
     printf("その場合は断片化対策より先に解放漏れを潰すこと。\n");
-    printf("\n-> 「1遷移あたり%ld回のmalloc/free」がシーンアリーナで消せる対象。\n",
+    printf("\n-> 「1遷移あたり%ld回のmalloc/free」(アリーナを切った状態)。\n",
         loop_allocs / kLoops);
-    printf("   ただしアリーナ化で0回になるのはウィジェット本体だけで、内部の\n");
-    printf("   vector/std::functionは上の表のinner列ぶんだけ残る。\n");
-    printf("   そこまで消すにはSceneAllocatorや固定長化が要る。\n");
+    printf("   アリーナを入れたときの数は下の「シーンアリーナを入れたとき」。\n");
 
     // 後片付け
     while(SceneFunctions::CanPop()){
@@ -453,6 +457,55 @@ int main(){
         SceneFunctions::Update();
     }
     WidgetFunctions::ClearSceneWidgets();
+
+    // --- (5) シーンアリーナを入れたとき(main.cppと同じくEnable(true)) ---
+    // ウィジェット本体はアリーナへ入るので、ヒープを叩くのは「塊を借りた回数」+「本体以外の確保」だけになる。
+    // 本体の確保はWidget::operator newがobserver経由で数えるので、ここでは外して本体以外だけを数える
+    {
+        MemFunctions::widget_alloc_observer = nullptr;
+        WidgetArena::Enable(true);
+        const uint32_t borrowed_before = MemFunctions::arena_served;   // 渡した回数(本体の確保回数)
+        Probe::ResetWindow();
+        const long long live_before = Probe::live_bytes;
+
+        for(int i = 0; i < kLoops; i++){
+            SceneFunctions::Change(new ProbeScene());
+            SceneFunctions::Update();
+        }
+        const long scene_heap = Probe::alloc_count;
+        const uint32_t served = MemFunctions::arena_served - borrowed_before;
+
+        // シーンの途中で開いて閉じるダイアログ(ErrorFunctions::ShowFatalと同じ MsgDialog)
+        Probe::ResetWindow();
+        const uint32_t reused_before = MemFunctions::arena_reused;
+        for(int i = 0; i < kLoops; i++){
+            auto* d = new MsgDialog("確認", "やめる", "OK");
+            WidgetFunctions::AddDialog(d);
+            WidgetFunctions::DestroyLater(d);
+            WidgetFunctions::ProcessPendingDeletes();
+        }
+        const long dialog_heap = Probe::alloc_count;
+
+        WidgetFunctions::ClearSceneWidgets();
+        WidgetArena::OnSceneExit();
+        const long long residue = Probe::live_bytes - live_before;
+
+        PrintHeader("シーンアリーナを入れたとき");
+        printf("シーン遷移%d回: ウィジェット本体%u個はアリーナから(塊は最大%u個) / 本体以外のヒープ確保=%ld回(シーンのオブジェクト)\n",
+            kLoops, served, MemFunctions::arena_peak_chunks, scene_heap);
+        printf("ダイアログを%d回開閉: 本体以外のヒープ確保=%ld回 / 空きの使い回し=%u回(塊が空になれば先頭から切り直す)\n",
+            kLoops, dialog_heap, MemFunctions::arena_reused - reused_before);
+        printf("塊をヒープから借りた回数(累計)=%u回 / 後片付け後の塊=%u個 / 残留=%lldB(削除待ちの一覧の領域)\n",
+            (unsigned)WidgetArena::BorrowedCount(), (unsigned)WidgetArena::ChunkCount(), residue);
+        printf("-> 遷移1回あたり、ヒープを叩くのは塊の貸し借り(数個)だけになる\n");
+        WidgetArena::Enable(false);
+        MemFunctions::widget_alloc_observer = &ObserveWidgetAlloc;
+        // 残留は削除待ちの一覧(WidgetFunctions::ProcessPendingDeletes)が持ち回す領域のぶんだけ残る(数十B)
+        if(WidgetArena::ChunkCount() != 0 || residue > 64){
+            printf("アリーナの後片付けが済んでいません\n");
+            return 1;
+        }
+    }
 
     // シーンアリーナが実際に抱えることになる量(= ウィジェット本体だけ)を出す。
     // シーン全体のピークには内部のstd::vector/std::functionも含まれており、

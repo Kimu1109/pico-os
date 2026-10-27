@@ -28,7 +28,7 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
         int selected = 0;
 
         // 選択が「変わったとき」だけ呼ばれる(同じタブを押し直しても飛ばない)
-        std::function<void(int index)> on_changed = nullptr;
+        InplaceFunction<void(int index)> on_changed = nullptr;
 
         // 幅をタブ数で割った余りは最後のタブへ足す。
         // 均等割りのまま切り捨てると右端に隙間が残り、罫線が1本浮いて見えるため
@@ -72,7 +72,7 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
         // 選択を変える。notify=trueならon_changedも呼ぶ(タップ経由と同じ扱いになる)
         void setSelected(int index, bool notify = false);
 
-        void setOnChanged(std::function<void(int index)> callback){
+        void setOnChanged(InplaceFunction<void(int index)> callback){
             this->on_changed = callback;
         }
 

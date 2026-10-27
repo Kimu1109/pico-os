@@ -54,6 +54,7 @@ class RecorderScene : public Scene {
 
         bool was_recording = false;
         bool confirming = false;
+        FixedString<PICO_STR_S> confirming_name;   // 削除を確かめているファイル
         float meter_level = 0;
         uint32_t last_meter_ms = 0, last_status_ms = 0;
         uint32_t shown_sec = 0xFFFFFFFFu;

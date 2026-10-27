@@ -76,9 +76,11 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         // 行数ぶん確保が走っていた。全ランを1本に連結し、行番号はTextRun側に持たせる。
         // ランは行番号の昇順に並ぶので、描画は先頭から舐めながら行が変わったら改行すればよい。
         // 空行(空段落)はランを持たないため、行数は別に数える必要がある。
-        std::vector<TextRun> runs_flat;
+        //
+        // ラベルの大半は1〜2ラン・1〜2行なので、その分は自分の中に持ってヒープを叩かない(SmallVector)
+        SmallVector<TextRun, 2> runs_flat;
         uint16_t line_count = 0;
-        std::vector<TextRun> placeholder_runs_flat;
+        SmallVector<TextRun, 1> placeholder_runs_flat;
         uint16_t placeholder_line_count = 0;
 
         FixedString<N> placeholder_text;
@@ -90,8 +92,8 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         int line_height = 0;
         int line_spacing = 0;                      // 行間ピクセル数（デフォルト0）
         TextAlign text_align = TextAlign::Left;    // 行揃え（デフォルト左揃え）
-        std::vector<int> line_offsets;             // 各行の描画開始Xオフセット（relayout時に更新）
-        std::vector<int> placeholder_line_offsets; // placeholder各行のXオフセット
+        SmallVector<int, 2> line_offsets;             // 各行の描画開始Xオフセット（relayout時に更新）
+        SmallVector<int, 1> placeholder_line_offsets; // placeholder各行のXオフセット
 
         bool disable_auto_text_decoration = false; // マークアップ自動装飾の無効化フラグ
         bool has_background = false;
@@ -104,7 +106,7 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         unsigned long cursor_blink_interval_ms = 500; // 点滅間隔(ms)
         unsigned long cursor_last_blink_ms = 0;
         uint16_t cursor_color = PICO_BLACK;
-        std::vector<CursorSlot> cursor_slots;      // 各カーソル位置の描画スロット（relayout時に算出）
+        SmallVector<CursorSlot, 0> cursor_slots;   // 各カーソル位置の描画スロット（relayout時に算出。入力欄だけが使う）
         Rect prev_cursor_rect = {0, 0, 0, 0};      // 前回描画したカーソルの領域（差分消去用）
 
         static constexpr int kCursorWidth = 1;     // カーソル縦線の幅(px)
@@ -114,7 +116,9 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         // srcはNUL終端でなくてよい(raw_textの部分文字列をコピーせず渡すため、長さを明示する)。
         // base_offsetは src が元テキストの何バイト目を指しているか。
         // TextRunのsrcOffsetは元テキスト先頭からの絶対位置で持つ
-        std::vector<TextRun> parseMarkup(const char* src, size_t n, uint16_t base_offset);
+        // 結果はoutへ(1段落のランはたいてい数個なので、呼び出し側のスタックの SmallVector に受ける)
+        using ParsedRuns = SmallVector<TextRun, 8>;
+        void parseMarkup(const char* src, size_t n, uint16_t base_offset, ParsedRuns& out);
         void relayout();
         void relayoutPlaceholder();
 
@@ -145,8 +149,9 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         // invalidateLayout()が「消すべき古い領域」をdirty登録するために使う。
         // ここでgetScreenRect()を使うとensureLayout()が走ってしまい遅延の意味が無くなる
         Rect staleScreenRect() const;
-        void computeLineOffsets(const std::vector<TextRun>& src_runs, int src_line_count,
-                                 int box_width, std::vector<int>& out);
+        template<typename Runs, typename Offsets>
+        void computeLineOffsets(const Runs& src_runs, int src_line_count,
+                                 int box_width, Offsets& out);
 
         // src_bufはrunが参照している元テキストのバッファ(raw_text または placeholder_text)。
         // 非constなのは、print()がNUL終端を要求するため描画の間だけ終端を差し替えるから

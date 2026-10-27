@@ -3,7 +3,7 @@
 #include "gui/widgets/Widget.hpp"
 #include "consts.hpp"
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // 再生位置のシークバー(ファイルビューワーの音・動画、動画アプリ)。
 //
@@ -18,7 +18,7 @@ class SeekBar : public Widget {
         bool dragging = false;
         bool seekable = true;
         int shown_px = -1;
-        std::function<void(float)> on_seek = nullptr;
+        InplaceFunction<void(float)> on_seek = nullptr;
 
         float ratioAt(int screen_x) const;
         int pxOf(float r) const;
@@ -30,7 +30,7 @@ class SeekBar : public Widget {
             this->l_rect = {x, y, w, h};
         }
 
-        void setOnSeek(std::function<void(float)> cb){ this->on_seek = cb; }
+        void setOnSeek(InplaceFunction<void(float)> cb){ this->on_seek = cb; }
         // 毎フレーム呼んでよい(画素が変わったときだけ描き直す)
         void setRatio(float r);
         void setSeekable(bool on);

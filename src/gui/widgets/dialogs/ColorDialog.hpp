@@ -6,9 +6,9 @@
 
 class ColorDialog : public Widget {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
-        std::function<void(bool is_ok)> on_close = nullptr;
+        InplaceFunction<void(bool is_ok)> on_close = nullptr;
 
         constexpr static int DIALOG_W = 200;
 
@@ -76,7 +76,7 @@ class ColorDialog : public Widget {
             this->setVisible(false);
         }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 
@@ -97,7 +97,7 @@ class ColorDialog : public Widget {
 
         WidgetType getWidgetType() const override { return WidgetType::ColorDialog; }
 
-        void setOnClose(std::function<void(bool is_ok)> callback){
+        void setOnClose(InplaceFunction<void(bool is_ok)> callback){
             this->on_close = callback;
         }
 

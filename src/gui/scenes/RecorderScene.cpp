@@ -373,15 +373,15 @@ void RecorderScene::deleteSelected(){
     auto* dialog = new MsgDialog(msg, "キャンセル", "削除");
     if(!dialog) return;
     this->confirming = true;
-    FixedString<PICO_STR_S> name = this->files[i];
+    this->confirming_name = this->files[i];
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
-    dialog->setOnClosed([this, dialog, name](bool is_ok){
+    dialog->setOnClosed([this, dialog](bool is_ok){
         this->confirming = false;
         WidgetFunctions::DestroyLater(dialog);
         if(!is_ok) return;
         char path[PICO_PATH_LEN + 1];
-        snprintf(path, sizeof(path), "%s%s", PICO_Path::DIR::RECORDINGS, name.c_str());
+        snprintf(path, sizeof(path), "%s%s", PICO_Path::DIR::RECORDINGS, this->confirming_name.c_str());
         if(!OSData::SD.remove(path)) ErrorFunctions::ShowFatal("削除できませんでした");
         this->reloadList();
         this->refreshButtons();

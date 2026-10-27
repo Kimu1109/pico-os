@@ -55,9 +55,9 @@
 // abort()はしない(luaL_openlibs()を直接pcall無しで呼んだ場合を除く。
 // このクラスは内部で必ずpcall越しに呼ぶので安全)。
 //
-// コールバック(pico.on): Widgetのon_press_start等(std::function<void()>)は
+// コールバック(pico.on): Widgetのon_press_start等(InplaceFunction<void()>)は
 // 引数もコンテキストも持てないが、キャプチャするのは「LuaEngine* + WidgetId」
-// (12B程度)だけなのでstd::functionの小バッファに収まりヒープ確保は起きない
+// (8〜16B)だけなのでInplaceFunctionの箱(ポインタ3つぶん)に収まる
 // (lua_State*やregistry refをウィジェット側へ持たせない設計にしたため)。
 //
 // 画像(pico.image_load/draw_image/image_size/image_free): ウィジェット(Image)を
@@ -758,8 +758,8 @@ class LuaEngine {
         void finishApiTable(std::vector<luaL_Reg>& api, int constants = 0);
         static int l_api_index(lua_State* L);
 
-        // Widgetのコールバックから中継されて呼ばれる(このシグネチャがstd::function<void()>の
-        // 小バッファに収まる理由については上のクラスコメント参照)
+        // Widgetのコールバックから中継されて呼ばれる(このシグネチャがInplaceFunction<void()>の
+        // 箱に収まる理由については上のクラスコメント参照)
         void Dispatch(WidgetId id, EventKind kind);
         void BindCallback(class Widget* w, WidgetId id, EventKind kind, int ref);
         void PruneCallbacksFor(WidgetId id);

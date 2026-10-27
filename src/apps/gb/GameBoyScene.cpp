@@ -129,7 +129,7 @@ void GameBoyScene::openMenu(){
     if(!d) return;
     // 項目の番号 → すること(出す項目が状況で変わるため)
     enum : uint8_t { kSave, kLoad, kRom };
-    uint8_t actions[3];
+    uint8_t* actions = this->menu_actions;
     int n = 0;
     if(this->emu.loaded() && !this->emu.crashed()){
         d->addChoice("途中保存");
@@ -142,14 +142,15 @@ void GameBoyScene::openMenu(){
     d->addChoice("ROMを選ぶ");
     actions[n++] = kRom;
     d->layout();
+    this->menu_action_count = n;
 
     this->menu = d;
     WidgetFunctions::AddDialog(d);
     d->setVisible(true);
-    d->setOnClosed([this, d, actions, n](bool is_ok){
+    d->setOnClosed([this, d](bool is_ok){
         const int i = is_ok ? d->getSelectedIndex() : -1;
-        if(i >= 0 && i < n){
-            switch(actions[i]){
+        if(i >= 0 && i < this->menu_action_count){
+            switch(this->menu_actions[i]){
                 case kSave: this->pending = Pending::SaveManual; break;
                 case kLoad: this->pending = Pending::LoadManual; break;
                 default:    this->pending = Pending::OpenPicker; break;

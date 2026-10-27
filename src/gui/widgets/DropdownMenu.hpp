@@ -3,12 +3,12 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/Label.hpp"
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 class DropdownMenu : public Widget {
 
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         ScrollList *dropdown;
         Label<PICO_STR_L> *value;
@@ -22,7 +22,7 @@ class DropdownMenu : public Widget {
         // 「同じ項目をもう一度タップ」は開き直しでしかなく確定にならないため、
         // TabBar::on_changedと同じ「引数無しで変化を知らせるだけ」の形にしてある
         // (選ばれた中身はpico.get(id,"selected_index")で読む)
-        std::function<void()> on_changed = nullptr;
+        InplaceFunction<void()> on_changed = nullptr;
 
         void relayout(){
             this->dropdown->setW(this->l_rect.w);
@@ -212,7 +212,7 @@ class DropdownMenu : public Widget {
             return true;
         }
 
-        void setOnChanged(std::function<void()> callback){
+        void setOnChanged(InplaceFunction<void()> callback){
             this->on_changed = callback;
         }
 
@@ -235,7 +235,7 @@ class DropdownMenu : public Widget {
             return this->dropdown->itemAt(index);
         }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 

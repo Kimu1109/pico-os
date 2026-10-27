@@ -12,7 +12,7 @@ class ITextInputWidget;
 // OS常駐のオーバーレイ(KeyboardFunctions::Setup()が作る)で、表示/非表示もKeyboardFunctionsが決める。
 class KeyboardDialog : public Widget {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
         Label<PICO_STR_LL>* preview;
 
         static constexpr int MARGIN = 10;
@@ -42,7 +42,7 @@ class KeyboardDialog : public Widget {
             Widget::setVisible(visible);
         }
 
-        const std::vector<Widget*>& getChildren() const override { return children_; }
+        const WidgetList& getChildren() const override { return children_; }
 
         WidgetType getWidgetType() const override { return WidgetType::KeyboardDialog; }
         WidgetTools::RenderMode getRenderMode() const override {

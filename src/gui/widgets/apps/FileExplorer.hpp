@@ -8,7 +8,7 @@
 
 class FileExplorer : public Widget {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         FixedString<PICO_PATH_LEN> currentPath{"/"};
 
@@ -38,7 +38,7 @@ class FileExplorer : public Widget {
         // FileSaveDialog/FileSelectDialogは「選択→別のOKボタンで確定」という
         // 流儀なので既定はnullptrのまま(挙動は変わらない)。ファイルビューワーのように
         // タップ即開きたい利用者だけがsetOnFileTap()で受け取る。
-        std::function<void(const char*)> on_file_tap = nullptr;
+        InplaceFunction<void(const char*)> on_file_tap = nullptr;
 
     public:
         FileExplorer(int16_t x, int16_t y, int16_t w, int16_t h){
@@ -90,7 +90,7 @@ class FileExplorer : public Widget {
             this->update_list();
         }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 
@@ -108,7 +108,7 @@ class FileExplorer : public Widget {
             this->update_list();
         }
 
-        void setOnFileTap(std::function<void(const char*)> callback){
+        void setOnFileTap(InplaceFunction<void(const char*)> callback){
             this->on_file_tap = callback;
         }
 

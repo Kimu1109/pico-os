@@ -5,7 +5,7 @@
 #include "consts.hpp"
 
 #include <cstdint>
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // プログラマ電卓の「同じ値を4つの基数で並べる」表示(電卓アプリ専用)。
 //
@@ -39,7 +39,7 @@ class BaseView : public Widget {
         bool has_value = false;
         FixedString<PICO_STR_M> error;
 
-        std::function<void(int base)> on_select_base = nullptr;
+        InplaceFunction<void(int base)> on_select_base = nullptr;
 
         int rowY(int row) const;
         int rowH(int row) const;
@@ -63,7 +63,7 @@ class BaseView : public Widget {
         // テスト用: 行の中心(画面座標)
         void rowCenter(int row, int& x, int& y) const;
 
-        void setOnSelectBase(std::function<void(int base)> callback){ this->on_select_base = callback; }
+        void setOnSelectBase(InplaceFunction<void(int base)> callback){ this->on_select_base = callback; }
 
         void causeOnPressStart() override;
         void render() override;

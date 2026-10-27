@@ -17,7 +17,7 @@
 class InputDialog : public Widget {
 
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         // 既定の大きさ。ラベルが収まらなければ DialogLayout::FitDialog が広げる
         constexpr static int DIALOG_HEIGHT = 200;
@@ -42,7 +42,7 @@ class InputDialog : public Widget {
         ScrollContainer* label_box;
         Label<PICO_STR_512B>* label; // 所有権は label_box にある
 
-        std::function<void(bool is_submit)> on_closed = nullptr;
+        InplaceFunction<void(bool is_submit)> on_closed = nullptr;
 
         int buttonCount() const { return (submit_button ? 1 : 0) + (cancel_button ? 1 : 0); }
 
@@ -132,7 +132,7 @@ class InputDialog : public Widget {
             this->needsRender();
         }
 
-        void setOnClosed(std::function<void(bool is_submit)> callback){
+        void setOnClosed(InplaceFunction<void(bool is_submit)> callback){
             this->on_closed = callback;
         }
         void clearOnClosed(){
@@ -166,7 +166,7 @@ class InputDialog : public Widget {
 
         WidgetTools::RenderMode getRenderMode() const override { return WidgetTools::TRANSLUCENT; }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 

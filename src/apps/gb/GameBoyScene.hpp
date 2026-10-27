@@ -58,6 +58,9 @@ class GameBoyScene : public Scene {
         GameBoyPad* pad = nullptr;
         FileSelectDialog* picker = nullptr;
         PickerDialog* menu = nullptr;
+        // メニューの項目の番号 → すること(出す項目が状況で変わるため)。閉じたときのコールバックはthisだけを持ってここを読む
+        uint8_t menu_actions[3] = {};
+        int menu_action_count = 0;
 
         // 選んだROM(空 = まだ選んでいない)
         FixedString<PICO_PATH_LEN> rom_path;

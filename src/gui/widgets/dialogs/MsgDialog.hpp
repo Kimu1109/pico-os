@@ -16,7 +16,7 @@
 //   両方とも空だと閉じる手段が無くなるので、そのときだけ「OK」を出す。
 class MsgDialog : public Widget {
     private:
-        std::vector<Widget*> children_;
+        WidgetList children_;
 
         ScrollContainer* msg_box;
         Label<PICO_STR_512B>* msg_label; // 所有権は msg_box にある
@@ -27,7 +27,7 @@ class MsgDialog : public Widget {
         bool icon_visible = false;
         IconID icon_id = IconID::AppBox;
 
-        std::function<void(bool is_ok)> on_closed = nullptr;
+        InplaceFunction<void(bool is_ok)> on_closed = nullptr;
 
         // 既定の大きさ。本文が収まらなければ DialogLayout::FitDialog が広げる
         constexpr static int DIALOG_HEIGHT = 180;
@@ -129,7 +129,7 @@ class MsgDialog : public Widget {
             this->updateWidgets();
         }
 
-        const std::vector<Widget*>& getChildren() const override {
+        const WidgetList& getChildren() const override {
             return children_;
         }
 
@@ -140,7 +140,7 @@ class MsgDialog : public Widget {
             delete msg_icon;
         }
 
-        void setOnClosed(std::function<void(bool is_ok)> callback){
+        void setOnClosed(InplaceFunction<void(bool is_ok)> callback){
             this->on_closed = callback;
         }
         void clearOnClosed(){

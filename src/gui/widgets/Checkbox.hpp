@@ -28,7 +28,7 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
         // 現在のtextとフォント設定から l_rect のサイズを決める
         void recalcSize();
 
-        std::function<void()> on_change_checked = nullptr;
+        InplaceFunction<void()> on_change_checked = nullptr;
 
     public:
 
@@ -58,7 +58,7 @@ class Checkbox : public Widget, public IFontImplementation, public ITextColor {
         void causeOnChangeChecked() {
             if(on_change_checked) on_change_checked();
         }
-        void setOnChangeChecked(std::function<void()> callback){
+        void setOnChangeChecked(InplaceFunction<void()> callback){
             on_change_checked = callback;
         }
 

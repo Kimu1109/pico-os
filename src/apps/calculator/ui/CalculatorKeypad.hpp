@@ -2,7 +2,7 @@
 
 #include "gui/widgets/Widget.hpp"
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // 電卓のキーパッド。配列(Layout)は3種類:
 //   Scientific … 関数電卓(7行6列)。電卓ページとグラフの式
@@ -44,7 +44,7 @@ class CalculatorKeypad : public Widget {
         int fn_rows = 3;      // 上から何行を関数の段(薄い灰色の地)にするか
         int digit_base = 16;  // Digitのキーのうち、値がこれ以上のものは押せない
 
-        std::function<void(const char* key)> on_key = nullptr;
+        InplaceFunction<void(const char* key)> on_key = nullptr;
 
         bool shift = false;
         bool hyp = false;
@@ -69,7 +69,7 @@ class CalculatorKeypad : public Widget {
     public:
         CalculatorKeypad(int x, int y, int w, int h, Layout layout = Layout::Scientific);
 
-        void setOnKey(std::function<void(const char* key)> callback){
+        void setOnKey(InplaceFunction<void(const char* key)> callback){
             this->on_key = callback;
         }
 

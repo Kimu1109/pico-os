@@ -1,6 +1,6 @@
 #pragma once
 
-#include <functional>
+#include "util/InplaceFunction.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "services/App_Functions.hpp"
 #include "apps/home/Home_Layout.hpp"
@@ -74,7 +74,7 @@ class AppGrid : public Widget {
         // 長押しした場所(項目の外なら並びの最後へ足す)
         bool long_on_empty_ = false;
 
-        std::function<void(int app_index)> on_launch_ = nullptr;
+        InplaceFunction<void(int app_index)> on_launch_ = nullptr;
 
         // キー/コントローラーで選んでいる項目(items_ の番号)。枠はフォーカスの枠が出ている間だけ描く
         int focus_item_ = 0;
@@ -167,7 +167,7 @@ class AppGrid : public Widget {
         void closeFolder();
         int openedFolder() const { ensureLayout(); return folder_; }
 
-        void setOnLaunch(std::function<void(int app_index)> callback){
+        void setOnLaunch(InplaceFunction<void(int app_index)> callback){
             this->on_launch_ = callback;
         }
 };

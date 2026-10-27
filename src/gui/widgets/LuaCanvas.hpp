@@ -23,7 +23,7 @@
 // WidgetFactory::TypeFromName()で"Canvas"に割り当てている(pico.create("Canvas"))。
 class LuaCanvas : public Widget {
     private:
-        std::function<void()> on_render = nullptr;
+        InplaceFunction<void()> on_render = nullptr;
 
     public:
         LuaCanvas(int16_t x, int16_t y, int16_t w, int16_t h);
@@ -42,6 +42,6 @@ class LuaCanvas : public Widget {
         void setW(int w) { this->l_rect.w = (int16_t)w; this->needsRender(); }
         void setH(int h) { this->l_rect.h = (int16_t)h; this->needsRender(); }
 
-        void setOnRender(std::function<void()> callback) { this->on_render = callback; }
+        void setOnRender(InplaceFunction<void()> callback) { this->on_render = callback; }
         void clearOnRender() { this->on_render = nullptr; }
 };

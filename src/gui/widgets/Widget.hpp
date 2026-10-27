@@ -1,7 +1,8 @@
 #pragma once
 
 #include <vector>
-#include <functional>
+#include "util/InplaceFunction.hpp"
+#include "util/SmallVector.hpp"
 #include "util/Rect.hpp"
 #include "consts.hpp"
 #include "gui/widgets/WidgetID.hpp"
@@ -21,6 +22,12 @@ namespace WidgetTools {
         TRANSLUCENT    // 部分的に透明、背景は再描画しない
     };
 };
+
+class Widget;
+
+// 子ウィジェットの一覧(getChildren())。ダイアログ・コンテナの子はたいてい数個なので、
+// 8個までは自分の中に持ち、確保をしない(超えたら1回だけヒープへ移る)
+using WidgetList = SmallVector<Widget*, 8>;
 
 class Widget {
     protected:
@@ -59,10 +66,10 @@ class Widget {
         //Luaなど外部から参照するためのID。getId()呼び出し時に遅延発行する(未使用なら発行しない)
         mutable WidgetId cached_id = WidgetIdTools::Invalid();
 
-        std::function<void()> on_press_start = nullptr;
-        std::function<void()> on_press_move = nullptr;
-        std::function<void()> on_press_end = nullptr;
-        std::function<void()> on_press_out = nullptr;
+        InplaceFunction<void()> on_press_start = nullptr;
+        InplaceFunction<void()> on_press_move = nullptr;
+        InplaceFunction<void()> on_press_end = nullptr;
+        InplaceFunction<void()> on_press_out = nullptr;
     
     public:
         bool is_pressing = false;
@@ -70,8 +77,7 @@ class Widget {
         virtual ~Widget();
 
         // 全ウィジェットの確保をここへ集約する。
-        // 現状は計測(MemFunctions)へ通知するだけでグローバルヒープをそのまま使うが、
-        // シーンアリーナを導入する際はこの2つの実装をアリーナへ差し替えるだけで済む。
+        // シーンの物はシーンアリーナ(gui/widgets/WidgetArena.hpp)へ置き、計測(MemFunctions)へ通知する。
         // 派生クラスも継承するので new Button(...) のような既存コードは書き換え不要。
         //
         // sized deallocation版のoperator deleteを使うことで、仮想デストラクタ経由の
@@ -87,8 +93,8 @@ class Widget {
         //外部(Luaなど)から参照するためのID。初回呼び出し時にWidgetRegistryへ登録する
         WidgetId getId() const;
 
-        virtual const std::vector<Widget*>& getChildren() const {
-            static const std::vector<Widget*> empty;
+        virtual const WidgetList& getChildren() const {
+            static const WidgetList empty;
             return empty;
         }
 
@@ -115,22 +121,22 @@ class Widget {
         //タッチ開始
         virtual void causeOnPressStart();
         virtual void clearOnPressStart();
-        virtual void setOnPressStart(std::function<void()> callback);
+        virtual void setOnPressStart(InplaceFunction<void()> callback);
 
         //タッチ終了
         virtual void causeOnPressEnd();
         virtual void clearOnPressEnd();
-        virtual void setOnPressEnd(std::function<void()> callback);
+        virtual void setOnPressEnd(InplaceFunction<void()> callback);
 
         //タッチ中
         virtual void causeOnPressMove();
         virtual void clearOnPressMove();
-        virtual void setOnPressMove(std::function<void()> callback);
+        virtual void setOnPressMove(InplaceFunction<void()> callback);
 
         //他ウィジェットをタッチ開始
         virtual void causeOnPressOut();
         virtual void clearOnPressOut();
-        virtual void setOnPressOut(std::function<void()> callback);
+        virtual void setOnPressOut(InplaceFunction<void()> callback);
 
         //描画
         virtual void render() = 0;

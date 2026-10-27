@@ -261,14 +261,15 @@ void FileExplorerScene::onRename(){
     if(!path){ this->setStatus("先にファイルかフォルダを選んでください", true); return; }
 
     //ダイアログが閉じるまでに一覧が変わっても、どれを変えるかは覚えた時点のパスで決める
-    FixedString<PICO_PATH_LEN> old_path(path);
+    this->rename_path.assign(path);
     auto dialog = new InputDialog("新しい名前:", true);
-    dialog->setInput(PICO_IO::filename(old_path.c_str()));
+    dialog->setInput(PICO_IO::filename(this->rename_path.c_str()));
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
-    dialog->setOnClosed([this, dialog, old_path](bool is_submit){
+    dialog->setOnClosed([this, dialog](bool is_submit){
         if(is_submit){
             const FixedString<PICO_STR_LL> name = dialog->getInput();
+            const FixedString<PICO_PATH_LEN> old_path = this->rename_path;
             this->commitRename(old_path.c_str(), name.c_str());
         }
         WidgetFunctions::DestroyLater(dialog);

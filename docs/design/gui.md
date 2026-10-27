@@ -137,7 +137,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 - 実機の別パネル(ST7796等)では未確認(Todoist参照)。
 
 ## ダイアログ (`src/gui/widgets/dialogs/`)
-`WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`ベクタで子を保持」「`setOnClosed(std::function<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
+`WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`(`WidgetList`)で子を保持」「`setOnClosed(InplaceFunction<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
 
 - **本文とボタンの配置は`dialogs/DialogLayout.hpp`で共通化**(MsgDialog/InputDialog、2026-10-02):
   - 本文は`ScrollContainer`で包んだ`Label`(512Bまで)。`FitDialog()`がまず既定の大きさ・大きい文字(24px)で置き、収まらなければ

@@ -167,13 +167,21 @@ void WidgetFunctions::ProcessPendingDeletes()
 {
     if (pending_deletes.empty()) return;
 
-    std::vector<Widget*> to_delete = std::move(pending_deletes);
-    pending_deletes.clear();
+    // 以前は std::move で中身ごと持ち出していたため、ダイアログを閉じるたびに pending_deletes が
+    // 確保し直されていた。2本の領域を入れ替えて持ち回し、確保は最初の数回だけにする。
+    // delete の中から DestroyLater() されたものは pending_deletes(空にした方)へ積まれ、次の回に消える
+    static std::vector<Widget*> to_delete;
+    static bool processing = false;
+    if (processing) return;   //delete の中から呼び返されたら、外側の回に任せる
+    processing = true;
+    to_delete.swap(pending_deletes);
 
     for (auto* w : to_delete) {
         RemoveAny(w);
         delete w;
     }
+    to_delete.clear();
+    processing = false;
 }
 
 void WidgetFunctions::ClearSceneWidgets()

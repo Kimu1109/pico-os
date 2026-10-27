@@ -25,7 +25,7 @@
 
 // ---------------------------------------------------------------- ファイル
 
-void TextEditorScene::confirmDiscard(const char* msg, std::function<void()> then){
+void TextEditorScene::confirmDiscard(const char* msg, InplaceFunction<void()> then){
     if(!this->dirty){
         then();
         return;
@@ -37,9 +37,13 @@ void TextEditorScene::confirmDiscard(const char* msg, std::function<void()> then
     dialog->setIconId(IconID::AlertTriangle);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
-    dialog->setOnClosed([dialog, then](bool is_ok){
+    this->discard_then = then;
+    dialog->setOnClosed([this, dialog](bool is_ok){
         WidgetFunctions::DestroyLater(dialog);
-        if(is_ok) then();
+        //呼ぶ前に外す(thenの中でまたconfirmDiscardを呼んでもよいように)
+        InplaceFunction<void()> next = this->discard_then;
+        this->discard_then = nullptr;
+        if(is_ok && next) next();
     });
 }
 
@@ -193,8 +197,9 @@ void TextEditorScene::openRecentPicker(){
             ErrorFunctions::ShowFatal("ファイルが見つかりません(一覧から外しました)");
             return;
         }
-        this->confirmDiscard("保存していない変更があります。破棄して別のファイルを開きますか?", [this, target](){
-            this->loadFile(target.c_str());
+        this->discard_open_path = target;
+        this->confirmDiscard("保存していない変更があります。破棄して別のファイルを開きますか?", [this](){
+            this->loadFile(this->discard_open_path.c_str());
         });
     });
 }

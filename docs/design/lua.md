@@ -136,6 +136,9 @@ Luaアプリの権限管理の第一歩として、`network`/`sd_outside_app_dir
 
 ### コールバック中継の設計(ヒープを使わない理由)
 
+> 2026-10-27: ウィジェットのコールバックは `std::function` から `InplaceFunction`(箱に収まらないキャプチャはコンパイルエラー)へ替えた
+> (`performance.md`「シーンアリーナ」)。下の中継の設計はそのまま、キャプチャ「`LuaEngine*`+`WidgetId`」が箱に収まる。
+
 `Widget::on_press_start`等は`std::function<void()>`のままシグネチャを変えていない
 (前回のセッションでは再設計を見送ると決めていた箇所)。素朴に`lua_State*`とLuaの
 registry ref(関数への参照)をラムダへキャプチャすると16Bを超え、`std::function`の

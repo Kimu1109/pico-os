@@ -7,7 +7,7 @@
 #include "consts.hpp"
 
 #include <cstdint>
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // 「時:分:秒」を大きく表示する時間の表示/入力欄。
 //
@@ -34,7 +34,7 @@ class DurationPicker : public Widget, public IFontImplementation, public IBorder
 
         // 値が▲▼で変わったときだけ呼ばれる(setTotalMs()では呼ばれない)。
         // setTotalMs()でも飛ばすと、シーン側が表示を流し込むたびに再入する
-        std::function<void(uint32_t total_ms)> on_changed = nullptr;
+        InplaceFunction<void(uint32_t total_ms)> on_changed = nullptr;
 
         // ---- 長押しの連続加算 ----
         // 25分を1タップずつ積むのは現実的でないので、押しっぱなしで進み続けるようにする
@@ -115,7 +115,7 @@ class DurationPicker : public Widget, public IFontImplementation, public IBorder
         // ▲▼の表示/非表示。数字の位置も変わる(▲▼のぶんだけ縦に詰まる)
         void setEditable(bool v);
 
-        void setOnChanged(std::function<void(uint32_t total_ms)> callback){
+        void setOnChanged(InplaceFunction<void(uint32_t total_ms)> callback){
             this->on_changed = callback;
         }
 

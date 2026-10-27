@@ -976,7 +976,7 @@ LuaEngine::CallbackBinding* LuaEngine::FindCallback(WidgetId id, EventKind kind)
 void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
     if (CallbackBinding* existing = FindCallback(id, kind)) {
         // 同じid+kindへ再度onした場合は古いrefを捨てて差し替える(リーク防止)。
-        // Widget側のstd::functionは初回のBindCallbackで既に配線済みなので繋ぎ直し不要
+        // Widget側のコールバックは初回のBindCallbackで既に配線済みなので繋ぎ直し不要
         luaL_unref(L, LUA_REGISTRYINDEX, existing->ref);
         existing->ref = ref;
         return;
@@ -989,7 +989,7 @@ void LuaEngine::BindCallback(Widget* w, WidgetId id, EventKind kind, int ref) {
     callbacks_.insert(pos, {id, kind, ref});
 
     // キャプチャするのはthis(LuaEngine*)とid(WidgetId=uint32_t)だけなので、
-    // std::functionの小バッファに収まりヒープ確保は起きない(クラスコメント参照)
+    // InplaceFunctionの箱に収まる(クラスコメント参照)
     switch (kind) {
         case EventKind::PressStart:
             w->setOnPressStart([this, id]() { this->Dispatch(id, EventKind::PressStart); });
@@ -1183,7 +1183,7 @@ void LuaEngine::DispatchSelectItem(WidgetId id, bool already_selected) {
 
 void LuaEngine::WireDialogClosed(Widget* dialog, WidgetId id) {
     // キャプチャはthis(LuaEngine*)+id(WidgetId)だけなので、他のBindCallback同様
-    // std::functionの小バッファに収まる
+    // InplaceFunctionの箱に収まる
     auto handler = [this, id](bool is_ok) { this->DispatchClosed(id, is_ok); };
     switch (dialog->getWidgetType()) {
         case WidgetType::MsgDialog:

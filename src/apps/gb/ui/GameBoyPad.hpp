@@ -4,7 +4,7 @@
 #include "consts.hpp"
 
 #include <cstdint>
-#include <functional>
+#include "util/InplaceFunction.hpp"
 
 // Game Boyの操作パッド(十字キー / A / B / SELECT / START / MENU / 戻る)。GameBoyScene専用。
 //
@@ -35,8 +35,8 @@ class GameBoyPad : public Widget {
         Area press_area = Area::None; // 押し始めた場所
         bool over_command = false;    // MENU/戻るの上に指が乗っているか(押している表示)
 
-        std::function<void()> on_menu = nullptr;
-        std::function<void()> on_back = nullptr;
+        InplaceFunction<void()> on_menu = nullptr;
+        InplaceFunction<void()> on_back = nullptr;
 
         // ローカル座標(px,py)にあるものを返す。ゲームのボタンならbuttonsへ入れる
         Area areaAt(int px, int py, uint8_t& buttons) const;
@@ -53,8 +53,8 @@ class GameBoyPad : public Widget {
         // 今押しているボタン(GbEmu::Button のOR)
         uint8_t getPressed() const { return this->pressed; }
 
-        void setOnMenu(std::function<void()> callback){ this->on_menu = callback; }
-        void setOnBack(std::function<void()> callback){ this->on_back = callback; }
+        void setOnMenu(InplaceFunction<void()> callback){ this->on_menu = callback; }
+        void setOnBack(InplaceFunction<void()> callback){ this->on_back = callback; }
 
         void causeOnPressStart() override;
         void causeOnPressMove() override;

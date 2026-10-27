@@ -15,8 +15,9 @@
 //                               ?k=<キー> はページのJSがクッキーへ移し、URLから消す(QRで開くとき)
 //   GET  /api/info            … {"name":"<本体の名前>"}(キーの確かめにも使う)
 //   GET  /api/ls?p=<フォルダ>  … 1行1つ「名前\t種類(f/d)\t大きさ」(TSV)
-//   GET  /f/<パス>            … ダウンロード(?dl=1 で保存のダイアログ)
-//   PUT  /f/<パス>            … アップロード。本文がファイルの中身そのもの(Content-Length が要る)
+//   GET  /f/<パス>            … ダウンロード(?dl=1 で保存のダイアログ)。Range(1つだけ)で続きから/途中から
+//   PUT  /f/<パス>            … アップロード。本文がファイルの中身そのもの(Content-Length が要る)。
+//                               ?mkdirs=1 で無い親のフォルダを作る(フォルダごとのアップロード)
 //   POST /api/mkdir?p= / rm?p= / mv?p=&to=
 //
 // 守り(docs/design/file-share.md):
@@ -47,6 +48,7 @@ namespace FileShare {
             const char* host() const { return host_.c_str(); }
             const char* cookie() const { return cookie_.c_str(); }
             const char* key() const { return key_.c_str(); }      // X-Pico-Key
+            const char* range() const { return range_.c_str(); }  // Range(無ければ "")
             bool hasLength() const { return has_length_; }
             uint64_t contentLength() const { return content_length_; }
 
@@ -60,6 +62,7 @@ namespace FileShare {
             FixedString<PICO_STR_L> host_;
             FixedString<PICO_STR_256B> cookie_;
             FixedString<PICO_STR_S> key_;
+            FixedString<PICO_STR_M> range_;
             uint64_t content_length_ = 0;
             bool has_length_ = false;
             State state_ = State::Reading;
@@ -147,6 +150,13 @@ namespace FileShare {
             uint32_t since_ = 0;
             bool locked_ = false;
     };
+
+    // ---- Range ----
+    enum class RangeResult : uint8_t { Whole, Partial, Unsatisfiable };
+    // Range 見出し("bytes=0-99" / "bytes=100-" / "bytes=-50")を大きさ size のファイルに当てる。
+    // 1つの範囲だけ読む。無い・読めない・複数(","入り)は Whole(全体を200で返してよい、RFC 9110)。
+    // Partial なら first..last(どちらも含む)。範囲がファイルの外なら Unsatisfiable(416)
+    RangeResult ParseRange(const char* header, uint64_t size, uint64_t& first, uint64_t& last);
 
     // ---- 応答 ----
     // 拡張子から Content-Type

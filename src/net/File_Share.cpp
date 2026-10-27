@@ -3,6 +3,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <strings.h>
 
 namespace FileShare {
 
@@ -45,6 +46,7 @@ void RequestHead::reset(){
     host_.clear();
     cookie_.clear();
     key_.clear();
+    range_.clear();
     content_length_ = 0;
     has_length_ = false;
     state_ = State::Reading;
@@ -108,6 +110,8 @@ bool RequestHead::parse(){
                 AssignTrimmed(cookie_, v, vlen); // 長すぎるクッキーは無いものとして扱う(キーが無い=断る)
             }else if(EqualsNoCase(p, nlen, "x-pico-key")){
                 if(!AssignTrimmed(key_, v, vlen)) key_.clear();
+            }else if(EqualsNoCase(p, nlen, "range")){
+                if(!AssignTrimmed(range_, v, vlen)) range_.clear(); // 長すぎる Range は無いものとして全体を返す
             }else if(EqualsNoCase(p, nlen, "content-length")){
                 FixedString<PICO_STR_S> num;
                 if(!AssignTrimmed(num, v, vlen) || num.empty()) return false;
@@ -304,6 +308,53 @@ void MakeKey(const uint8_t* rnd, char (&out)[kKeyLen + 1]){
     out[kKeyLen] = '\0';
 }
 
+// ---------- Range ----------
+
+namespace {
+    // 10進の数を読む(1桁以上。桁あふれは false)。p は読んだ後ろへ進む
+    bool ReadNumber(const char*& p, uint64_t& out){
+        if(*p < '0' || *p > '9') return false;
+        uint64_t n = 0;
+        while(*p >= '0' && *p <= '9'){
+            if(n > (UINT64_MAX - 9) / 10) return false;
+            n = n * 10 + (uint64_t)(*p - '0');
+            p++;
+        }
+        out = n;
+        return true;
+    }
+}
+
+RangeResult ParseRange(const char* header, uint64_t size, uint64_t& first, uint64_t& last){
+    if(!header || !header[0]) return RangeResult::Whole;
+    if(strncasecmp(header, "bytes=", 6) != 0) return RangeResult::Whole;
+    const char* p = header + 6;
+    while(*p == ' ') p++;
+    if(strchr(p, ',')) return RangeResult::Whole; // 複数の範囲は読まない
+    if(*p == '-'){
+        // 後ろから n バイト
+        p++;
+        uint64_t n = 0;
+        if(!ReadNumber(p, n) || *p) return RangeResult::Whole;
+        if(n == 0 || size == 0) return RangeResult::Unsatisfiable;
+        first = (n >= size) ? 0 : size - n;
+        last = size - 1;
+        return RangeResult::Partial;
+    }
+    uint64_t a = 0;
+    if(!ReadNumber(p, a) || *p != '-') return RangeResult::Whole;
+    p++;
+    uint64_t b = UINT64_MAX;
+    if(*p){
+        if(!ReadNumber(p, b) || *p) return RangeResult::Whole;
+        if(b < a) return RangeResult::Whole; // 壊れた範囲は無視する
+    }
+    if(a >= size) return RangeResult::Unsatisfiable;
+    first = a;
+    last = (b >= size) ? size - 1 : b;
+    return RangeResult::Partial;
+}
+
 // ---------- 応答 ----------
 
 const char* ContentType(const char* name){
@@ -332,6 +383,7 @@ const char* StatusText(int status){
         case 200: return "OK";
         case 201: return "Created";
         case 204: return "No Content";
+        case 206: return "Partial Content";
         case 303: return "See Other";
         case 400: return "Bad Request";
         case 401: return "Unauthorized";
@@ -342,6 +394,7 @@ const char* StatusText(int status){
         case 409: return "Conflict";
         case 411: return "Length Required";
         case 413: return "Payload Too Large";
+        case 416: return "Range Not Satisfiable";
         case 423: return "Locked";
         case 429: return "Too Many Requests";
         case 431: return "Request Header Fields Too Large";

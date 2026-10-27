@@ -254,7 +254,11 @@ public:
     }
     bool disconnectAP(){ const bool was = ap_on_; ap_on_ = false; return was; }
     IPAddress softAPIP(){ return ap_on_ ? IPAddress(192, 168, 42, 1) : IPAddress(); }
-    uint8_t softAPgetStationNum(){ return 0; }
+    // APに繋いだ端末の数。PCでは繋ぐ端末が無いので、確かめるときは PICOOS_AP_STATIONS で決める
+    uint8_t softAPgetStationNum(){
+        const char* env = getenv("PICOOS_AP_STATIONS");
+        return (ap_on_ && env) ? (uint8_t)atoi(env) : 0;
+    }
     void setHostname(const char* name){ snprintf(hostname_, sizeof(hostname_), "%s", name ? name : ""); }
     const char* getHostname() const { return hostname_; }
     bool isStaticIp() const { return static_ip_; }

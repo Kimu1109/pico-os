@@ -4,6 +4,7 @@
 // 中身はSDの名前を表示するだけなので、名前は必ず textContent で入れる(innerHTML へ入れない)。
 // キーはクッキー pk に持ち、書き換える要求には X-Pico-Key 見出しでも送る。
 // アップロードは1つずつ順に送る(本体は同時に1本しか相手をしない)。進み具合が要るので fetch ではなく XHR。
+// フォルダごと(選ぶ・落とす)は中のファイルを「フォルダ/中/名前」で ?mkdirs=1 を付けて送り、本体が親のフォルダを作る。
 namespace FileShare {
 
 const char kPageHtml[] = R"PAGE(<!doctype html>
@@ -25,7 +26,7 @@ td.ops{white-space:nowrap;width:1%}
 td a{color:#1d2b53}
 #msg{min-height:1.4em;margin:6px 0;color:#5f574f}
 #msg.err{color:#ff004d}
-#queue div{font-size:90%;color:#5f574f}
+#queue{font-size:90%;color:#5f574f;min-height:1.6em}
 #login{display:none;background:#fff;padding:16px;border-radius:8px}
 #drop{outline:3px dashed transparent}
 #drop.over{outline-color:#29adff}
@@ -40,18 +41,19 @@ input[type=text]{font:inherit;padding:5px;width:12em}
 <div id="crumb"></div>
 <div id="bar">
 <label class="btn">アップロード<input type="file" id="files" multiple hidden></label>
+<label class="btn">フォルダをアップロード<input type="file" id="dirs" webkitdirectory multiple hidden></label>
 <button id="mkdir">新しいフォルダ</button>
 <button id="reload">更新</button>
 </div>
 <div id="msg"></div>
-<div id="queue"></div>
+<div id="queue"><span id="qline"></span> <button id="cancel" style="display:none">やめる</button></div>
 <div id="drop"><table><tbody id="list"></tbody></table></div>
 </div>
 </main>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
-let cwd="/",busy=false;
+let cwd="/",busy=null,sent=0,total=0;
 const queue=[];
 function key(){const m=document.cookie.match(/(?:^|; )pk=([^;]*)/);return m?m[1]:""}
 function setKey(k){document.cookie="pk="+encodeURIComponent(k)+"; path=/; SameSite=Strict"}
@@ -118,28 +120,46 @@ $("mkdir").onclick=async()=>{
   try{await post("mkdir","p="+encodeURIComponent(join(cwd,n)));await load(cwd)}catch(e){msg(e.message,true)}
 };
 $("reload").onclick=()=>load(cwd);
-function enqueue(files){for(const f of files)queue.push({file:f,dir:cwd});pump()}
-$("files").onchange=e=>{enqueue(e.target.files);e.target.value=""};
+// rel はフォルダごとのときの「フォルダ/中/名前」(無ければ名前だけ)
+function enqueue(items){for(const it of items){queue.push({file:it.file,dir:cwd,rel:it.rel||it.file.name});total++}pump()}
+$("files").onchange=e=>{enqueue([...e.target.files].map(f=>({file:f})));e.target.value=""};
+$("dirs").onchange=e=>{enqueue([...e.target.files].map(f=>({file:f,rel:f.webkitRelativePath||f.name})));e.target.value=""};
+// 落とされたフォルダは中を辿る(readEntries は少しずつ返すので空になるまで読む)
+async function walk(entry,prefix,out){
+  if(entry.isFile){out.push({file:await new Promise((ok,ng)=>entry.file(ok,ng)),rel:prefix+entry.name});return}
+  if(!entry.isDirectory)return;
+  const rd=entry.createReader();
+  for(;;){const list=await new Promise((ok,ng)=>rd.readEntries(ok,ng));if(!list.length)break;for(const c of list)await walk(c,prefix+entry.name+"/",out)}
+}
 const drop=$("drop");
 drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};
 drop.ondragleave=()=>drop.classList.remove("over");
-drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");enqueue(e.dataTransfer.files)};
+drop.ondrop=async e=>{
+  e.preventDefault();drop.classList.remove("over");
+  const items=[...(e.dataTransfer.items||[])];
+  const entries=items.map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(x=>x);
+  if(!entries.length){enqueue([...e.dataTransfer.files].map(f=>({file:f})));return}
+  const out=[];
+  try{for(const en of entries)await walk(en,"",out)}catch(err){msg("フォルダを読めませんでした",true);return}
+  enqueue(out);
+};
+$("cancel").onclick=()=>{queue.length=0;if(busy)busy.abort()};
 function pump(){
-  const q=$("queue");
+  const line=$("qline"),cancel=$("cancel");
   if(busy)return;
   const job=queue.shift();
-  if(!job){q.textContent="";load(cwd);return}
-  busy=true;
-  const line=document.createElement("div");q.textContent="";q.appendChild(line);
-  const left=()=>queue.length?"(あと"+queue.length+"個)":"";
-  line.textContent=job.file.name+" 0% "+left();
-  const x=new XMLHttpRequest();
-  x.open("PUT","/f"+enc(join(job.dir,job.file.name)));
+  if(!job){line.textContent="";cancel.style.display="none";sent=total=0;load(cwd);return}
+  cancel.style.display="";
+  const head=()=>(total>1?(sent+1)+"/"+total+" ":"")+job.rel;
+  line.textContent=head()+" 0%";
+  const x=new XMLHttpRequest();busy=x;
+  x.open("PUT","/f"+enc(join(job.dir,job.rel))+(job.rel.includes("/")?"?mkdirs=1":""));
   x.setRequestHeader("X-Pico-Key",key());
-  x.upload.onprogress=e=>{if(e.lengthComputable)line.textContent=job.file.name+" "+Math.floor(e.loaded*100/e.total)+"% "+left()};
-  const done=err=>{busy=false;if(err)msg(job.file.name+": "+err,true);pump()};
-  x.onload=()=>{if(x.status===401){queue.length=0;busy=false;showLogin();return}done(x.status<300?"":(x.responseText||"エラー "+x.status))};
+  x.upload.onprogress=e=>{if(e.lengthComputable)line.textContent=head()+" "+Math.floor(e.loaded*100/e.total)+"%"};
+  const done=err=>{busy=null;sent++;if(err)msg(job.rel+": "+err,true);pump()};
+  x.onload=()=>{if(x.status===401){queue.length=0;busy=null;showLogin();return}done(x.status<300?"":(x.responseText||"エラー "+x.status))};
   x.onerror=()=>done("送れませんでした");
+  x.onabort=()=>done("やめました");
   x.send(job.file);
 }
 const k=new URLSearchParams(location.search).get("k");

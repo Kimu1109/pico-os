@@ -40,6 +40,9 @@ namespace {
     uint32_t revision = 0;
     bool modified = false;   // 何か書き換えた(Stop() で sd_changed() を呼ぶ)
     FileShare::Throttle throttle;
+    bool direct = false;     // 本体がAPになっている(直接つなぐ)
+    char ap_ssid[33] = "";   // SSIDは32バイトまで
+    char ap_password[12] = "";
 
     constexpr uint32_t kDrainMs = 2000;  // 断った要求の本文を読み捨てて待つ上限(読まずに閉じると相手に応答が届かない)
 
@@ -289,6 +292,21 @@ namespace {
         CloseClient();
     }
 
+    // path の親のフォルダを頭から順に作る(?mkdirs=1。フォルダごとのアップロード)。途中にファイルがあれば false
+    bool MakeParents(const char* path){
+        FixedString<PICO_PATH_LEN> prefix;
+        for(const char* p = strchr(path + 1, '/'); p; p = strchr(p + 1, '/')){
+            prefix.assign(path, (size_t)(p - path));
+            if(OSData::SD.exists(prefix.c_str())){
+                if(!IsDir(prefix.c_str())) return false;
+                continue;
+            }
+            if(!OSData::SD.mkdir(prefix.c_str())) return false;
+            modified = true;
+        }
+        return true;
+    }
+
     // ---- アップロード ----
     void FinishUpload(){
         ShareServer& s = *server;
@@ -330,6 +348,12 @@ namespace {
         const auto c = FileShare::PathFromUrl(file_part, strlen(file_part), s.path);
         if(c != FileShare::PathCheck::Ok){ RespondPathError(c); return; }
         if(strcmp(s.path.c_str(), "/") == 0 || IsDir(s.path.c_str())){ RespondText(409, "同じ名前のフォルダがあります"); return; }
+        char mk[4];
+        if(FileShare::QueryValue(s.head.query(), "mkdirs", mk, sizeof(mk)) && strcmp(mk, "1") == 0 &&
+           !MakeParents(s.path.c_str())){
+            RespondText(409, "送り先のフォルダを作れません(同じ名前のファイルがあります)");
+            return;
+        }
         if(!ParentIsDir(s.path.c_str())){ RespondText(409, "送り先のフォルダがありません"); return; }
         if(Busy(s.path.c_str())){ RespondText(409, "使っているファイルなので書き換えられません"); return; }
         s.part.assign(s.path);
@@ -357,20 +381,36 @@ namespace {
         if(s.file.isDir()){ s.file.close(); RespondText(400, "フォルダはダウンロードできません"); return; }
         const char* name = PICO_IO::filename(p.c_str());
         const uint64_t size = s.file.fileSize();
-        FixedString<PICO_STR_1KiB> extra;
+        // Range(続きからのダウンロード・音声のシーク)。1つの範囲だけ読み、ほかは全体を返す
+        uint64_t first = 0, last = size ? size - 1 : 0;
+        const auto range = FileShare::ParseRange(s.head.range(), size, first, last);
+        FixedString<PICO_STR_1KiB> extra("Accept-Ranges: bytes\r\n");
+        if(range == FileShare::RangeResult::Unsatisfiable){
+            s.file.close();
+            extra.appendFormat("Content-Range: bytes */%llu\r\n", (unsigned long long)size);
+            BeginResponse(416, "text/plain; charset=utf-8", 0, extra.c_str());
+            return;
+        }
+        const bool partial = (range == FileShare::RangeResult::Partial);
+        if(partial){
+            if(!s.file.seekSet(first)){ s.file.close(); RespondText(500, "SDカードを読めません"); return; }
+            extra.appendFormat("Content-Range: bytes %llu-%llu/%llu\r\n",
+                               (unsigned long long)first, (unsigned long long)last, (unsigned long long)size);
+        }
         char dl[4];
         if(FileShare::QueryValue(s.head.query(), "dl", dl, sizeof(dl)) && strcmp(dl, "1") == 0){
-            extra.assign("Content-Disposition: attachment; filename*=UTF-8''");
+            extra.append("Content-Disposition: attachment; filename*=UTF-8''");
             FileShare::AppendPercentEncoded(extra, name);
             extra.append("\r\n");
         }
-        BeginResponse(200, FileShare::ContentType(name), (int64_t)size, extra.empty() ? nullptr : extra.c_str());
+        const uint64_t length = partial ? last - first + 1 : size;
+        BeginResponse(partial ? 206 : 200, FileShare::ContentType(name), (int64_t)length, extra.c_str());
         if(head_only){ s.file.close(); return; }
         s.body = Body::File;
-        s.remaining = size;
+        s.remaining = length;
         current.op = Op::Download;
         current.name.assign(name);
-        current.done = 0;
+        current.done = partial ? first : 0;
         current.total = size;
         revision++;
     }
@@ -463,7 +503,8 @@ namespace {
 #if defined(PICOOS_PC)
         strcpy(ip, "127.0.0.1");
 #else
-        if(NetworkFunctions::IsConnected()) NetworkFunctions::CurrentAddress(ip, sizeof(ip));
+        if(direct) NetworkFunctions::SetupApAddress(ip, sizeof(ip));
+        else if(NetworkFunctions::IsConnected()) NetworkFunctions::CurrentAddress(ip, sizeof(ip));
 #endif
         if(!FileShare::HostAllowed(s.head.host(), NetworkFunctions::hostname.c_str(), ip, ListenPort())){
             RespondText(403, "この名前では開けません(本体の名前かIPアドレスで開いてください)");
@@ -681,6 +722,10 @@ void FileShareFunctions::Stop(){
         delete server;
         server = nullptr;
     }
+    if(direct){
+        NetworkFunctions::StopSetupAp(); // 保存済みのWi-Fiへの自動接続へ戻る
+        direct = false;
+    }
     state = State::Idle;
     share_key[0] = '\0';
     revision++;
@@ -688,6 +733,46 @@ void FileShareFunctions::Stop(){
     if(modified && sd_changed) sd_changed();
     modified = false;
 }
+
+bool FileShareFunctions::SetDirect(bool on, FixedString<PICO_STR_LL>& err){
+    if(state != State::Running || !server) return false;
+    if(on == direct) return true;
+    // 途中の転送はやめ、待ち受けも作り直す(Wi-Fiの役割を替えると、今の接続は使えなくなる)
+    if(server->has_client){
+        if(server->phase == Phase::Receive) AbortUpload("Wi-Fiを切り替えました");
+        CloseClient();
+    }
+    server->conn.end();
+    if(on){
+        snprintf(ap_ssid, sizeof(ap_ssid), "%.26s-share", NetworkFunctions::hostname.c_str());
+        uint8_t rnd[8];
+        SecretAead::Random(rnd, sizeof(rnd));
+        for(int i = 0; i < 8; i++) ap_password[i] = (char)('0' + rnd[i] % 10);
+        ap_password[8] = '\0';
+        if(!NetworkFunctions::StartSetupAp(ap_ssid, ap_password)){
+            err.assign("アクセスポイントを始められませんでした");
+            server->conn.begin(err); // 元のWi-Fiのまま続ける
+            return false;
+        }
+        direct = true;
+        LOG_SYS_MSG("Wi-Fi転送: アクセスポイント %s で待っています", ap_ssid);
+    }else{
+        NetworkFunctions::StopSetupAp();
+        direct = false;
+        LOG_SYS_MSG("Wi-Fi転送: 保存済みのWi-Fiへ戻ります");
+    }
+    revision++;
+    if(!server->conn.begin(err)){
+        LOG_SYS_WARN("Wi-Fi転送: 待ち受けを始め直せませんでした(%s)", err.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool FileShareFunctions::IsDirect(){ return direct; }
+const char* FileShareFunctions::ApSsid(){ return ap_ssid; }
+const char* FileShareFunctions::ApPassword(){ return ap_password; }
+int FileShareFunctions::ApClients(){ return direct ? NetworkFunctions::SetupApClients() : 0; }
 
 FileShareFunctions::State FileShareFunctions::GetState(){ return state; }
 
@@ -699,6 +784,13 @@ void FileShareFunctions::PageUrls(FixedString<PICO_STR_L>& by_name, FixedString<
     snprintf(url, sizeof(url), "http://127.0.0.1:%u/", (unsigned)ListenPort());
     by_ip.assign(url);
 #else
+    if(direct){
+        // 本体のAPには名前を引く仕組み(DNS・mDNS)が無いのでIPだけ
+        char ip[20] = "";
+        NetworkFunctions::SetupApAddress(ip, sizeof(ip));
+        if(ip[0]) by_ip.appendFormat("http://%s/", ip);
+        return;
+    }
     by_name.appendFormat("http://%s.local/", NetworkFunctions::hostname.c_str());
     if(NetworkFunctions::IsConnected()){
         char ip[20] = "";

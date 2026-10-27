@@ -18,7 +18,8 @@
 // - 接続は同時に1本(ページのJSが1つずつ送る)。来た順に相手をする
 // - アップロードは <パス>.part へ書き、最後まで届いたら置き換える(途中で切れたら消す)
 // - 画面ロックの間は要求を受けない(423)
-// - サーバの持ち物(要求の見出し・送受の溜め場所、約8KB)は Start() で new し Stop() で返す
+// - SetDirect() で本体がAPになれる(家のWi-Fiが無い所で、スマホと本体だけで)
+// - サーバの持ち物(要求の見出し・送受の溜め場所、約9KB)は Start() で new し Stop() で返す
 // PCビルドは http://127.0.0.1:8082/ で開ける(PICOOS_SHARE_PORT で変更。母艦の外からは開けない)。Webビルドでは使えない。
 namespace FileShareFunctions {
     constexpr uint16_t kHttpPort = 80;
@@ -41,6 +42,16 @@ namespace FileShareFunctions {
     bool Start(FixedString<PICO_STR_LL>& err);
     void Update();
     void Stop();
+
+    // 直接つなぐ: 本体がWi-Fiのアクセスポイント(「<名前>-share」、パスワードは毎回ちがう8桁の数字)になり、
+    // 家のWi-Fiが無い所でもスマホと本体だけで使う。切ると保存済みのWi-Fiへの自動接続へ戻る。
+    // 途中の転送はやめる。APのアドレスは 192.168.42.1(arduino-pico)。DNSには答えない
+    // (答えるとスマホが「ログインが要るネットワーク」の小さなブラウザで開き、そこではファイルの選択・保存ができない)
+    bool SetDirect(bool on, FixedString<PICO_STR_LL>& err);
+    bool IsDirect();
+    const char* ApSsid();
+    const char* ApPassword();
+    int ApClients();   // APに繋いでいる端末の数
 
     State GetState();
     // 開くURL("http://picoos.local/")と、IPのURL("http://192.168.1.23/"。Wi-Fiに繋がっていなければ空)

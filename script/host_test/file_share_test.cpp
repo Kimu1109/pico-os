@@ -2,7 +2,8 @@
 //
 // 要求の見出しの読み取り(細切れに届く・本文の頭を残す・大きすぎる/壊れた要求・Content-Lengthの読み方)、
 // どの要求か(Classify)、%XX・query・クッキーの読み方、パスの確かめ(.. で外へ出ない・/sys を断る・
-// FATで使えない名前)、Host の確かめ、キーの比べ方と作り方、総当たりを遅くする数え方、応答の見出し・一覧の1行を確かめる。
+// FATで使えない名前)、Host の確かめ、キーの比べ方と作り方、総当たりを遅くする数え方、Range の読み方、
+// 応答の見出し・一覧の1行を確かめる。
 // ソケット越しの往復(アップロード・ダウンロード・削除等)はPCビルドで curl とブラウザから確かめた(docs/design/file-share.md)。
 #include "net/File_Share.hpp"
 
@@ -50,6 +51,7 @@ static void TestRequestHead(){
         "x-pico-key:  abcd2345 \r\n"
         "Cookie: a=1; pk=abcd2345\r\n"
         "Content-Length: 11\r\n"
+        "Range: bytes=5-\r\n"
         "\r\n"
         "hello world";
     for(size_t chunk : {1, 7, 4096}){
@@ -67,6 +69,8 @@ static void TestRequestHead(){
     eqStr(r.key(), "abcd2345", "見出し: 名前の大文字小文字を問わず、値の前後の空白を除く");
     eqStr(r.cookie(), "a=1; pk=abcd2345", "見出し: Cookie");
     check(r.hasLength() && r.contentLength() == 11, "見出し: Content-Length");
+    eqStr(r.range(), "bytes=5-", "見出し: Range");
+    check(FeedAll(r, "GET /f/a HTTP/1.1\r\n\r\n", 8) == RequestHead::State::Done && r.range()[0] == '\0', "見出し: Range が無ければ空");
 
     check(FeedAll(r, "GET / HTTP/1.1\r\nHost: x\r\n\r\n", 3) == RequestHead::State::Done && r.method() == Method::Get &&
           !r.hasLength() && r.query()[0] == '\0', "見出し: GET(本文なし)");
@@ -200,6 +204,28 @@ static void TestGuards(){
     check(!t.blocked(40000), "Throttle: 合えば数え直す");
 }
 
+static void TestRange(){
+    uint64_t a = 99, b = 99;
+    check(ParseRange("", 100, a, b) == RangeResult::Whole, "Range: 無ければ全体");
+    check(ParseRange("bytes=0-9", 100, a, b) == RangeResult::Partial && a == 0 && b == 9, "Range: 0-9");
+    check(ParseRange("bytes=90-", 100, a, b) == RangeResult::Partial && a == 90 && b == 99, "Range: 90-(最後まで。curl -C - と同じ)");
+    check(ParseRange("bytes=-10", 100, a, b) == RangeResult::Partial && a == 90 && b == 99, "Range: 後ろの10バイト");
+    check(ParseRange("bytes=-500", 100, a, b) == RangeResult::Partial && a == 0 && b == 99, "Range: 大きさより大きい後ろの指定は全体");
+    check(ParseRange("bytes=50-500", 100, a, b) == RangeResult::Partial && a == 50 && b == 99, "Range: 終わりがはみ出せば最後まで");
+    check(ParseRange("Bytes=1-1", 100, a, b) == RangeResult::Partial && a == 1 && b == 1, "Range: 単位の大文字小文字を問わない");
+    check(ParseRange("bytes=100-", 100, a, b) == RangeResult::Unsatisfiable, "Range: 頭がファイルの外なら416");
+    check(ParseRange("bytes=-0", 100, a, b) == RangeResult::Unsatisfiable, "Range: 後ろの0バイトは416");
+    check(ParseRange("bytes=0-", 0, a, b) == RangeResult::Unsatisfiable, "Range: 空のファイルに範囲は416");
+    check(ParseRange("bytes=0-1,5-6", 100, a, b) == RangeResult::Whole, "Range: 複数の範囲は読まずに全体");
+    check(ParseRange("bytes=9-3", 100, a, b) == RangeResult::Whole, "Range: 逆さまの範囲は無視して全体");
+    check(ParseRange("items=0-1", 100, a, b) == RangeResult::Whole, "Range: bytes 以外の単位は全体");
+    check(ParseRange("bytes=x-1", 100, a, b) == RangeResult::Whole, "Range: 数でなければ全体");
+    check(ParseRange("bytes=1-2x", 100, a, b) == RangeResult::Whole, "Range: 後ろにごみがあれば全体");
+    check(ParseRange("bytes=99999999999999999999999-", 100, a, b) == RangeResult::Whole, "Range: 桁あふれは全体");
+    check(ParseRange("bytes=4294967296-", 5000000000ull, a, b) == RangeResult::Partial && a == 4294967296ull && b == 4999999999ull,
+          "Range: 4GBを超える位置");
+}
+
 static void TestResponse(){
     char head[512];
     FormatHeader(201, nullptr, 0, nullptr, head, sizeof(head));
@@ -214,6 +240,7 @@ static void TestResponse(){
     FormatHeader(200, "text/plain", 1, nullptr, tiny, sizeof(tiny));
     check(strlen(tiny) < sizeof(tiny), "FormatHeader: 入らなくてもはみ出さない");
 
+    check(strcmp(StatusText(206), "Partial Content") == 0 && strcmp(StatusText(416), "Range Not Satisfiable") == 0, "StatusText: 206/416");
     eqStr(ContentType("a.TXT"), "text/plain; charset=utf-8", "ContentType: 大文字の拡張子");
     eqStr(ContentType("a.png"), "image/png", "ContentType: png");
     eqStr(ContentType("index.html"), "text/plain; charset=utf-8", "ContentType: SDのHTMLはページとして動かさない");
@@ -235,6 +262,7 @@ int main(){
     TestStrings();
     TestPaths();
     TestGuards();
+    TestRange();
     TestResponse();
     printf("\n%s(失敗 %d)\n", failures == 0 ? "すべて成功" : "失敗あり", failures);
     return failures == 0 ? 0 : 1;

@@ -8,6 +8,7 @@
 #include "services/FileShare_Functions.hpp"
 #include "services/Power_Functions.hpp"
 #include "hal/Network_Functions.hpp"
+#include "util/Wifi_Qr.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -65,6 +66,15 @@ void FileShareScene::onEnter(){
         return;
     }
 
+    // 題の行の右端に[直接つなぐ](本体がAPになる)/[LANへ戻す]
+    this->direct_button = new Button(0, y0, "直接つなぐ");
+    this->direct_button->setFontSize(FontFn::Small);
+    this->direct_button->setW(kDirectButtonW);
+    this->direct_button->setH(back_box.h);
+    this->direct_button->setX(content.x + content.w - MARGIN - kDirectButtonW);
+    this->direct_button->setOnPressEnd([this](){ this->toggleDirect(); });
+    WidgetFunctions::Add(this->direct_button);
+
     // 右にキー付きのURLのQR、左にキー(打ち写す人向け)。URLは長いのでQRの下へ横いっぱいに
     this->qr = new QRCodeView(content.x + content.w - kQrSize, y, kQrSize);
     WidgetFunctions::Add(this->qr);
@@ -89,7 +99,7 @@ void FileShareScene::onEnter(){
     this->key_label->setDisableAutoTextDecoration(true);
     WidgetFunctions::Add(this->key_label);
     y += big_h + 2;
-    addSmall("QRならキーは不要", 1, text_w, PICO_DARKGREY);
+    this->hint_label = addSmall("", 1, text_w, PICO_DARKGREY);
     if(y < row_top + kQrSize) y = row_top + kQrSize;
     y += 2;
 
@@ -123,7 +133,7 @@ void FileShareScene::onEnter(){
     this->recent_label->setDisableAutoTextDecoration(true);
     WidgetFunctions::Add(this->recent_label);
 
-    this->shown_connected = -1;
+    this->shown_address = -1;
     this->shown_revision = 0xFFFFFFFFu;
     this->shown_done = UINT64_MAX;
     this->refreshAddress(true);
@@ -131,24 +141,76 @@ void FileShareScene::onEnter(){
 }
 
 void FileShareScene::refreshAddress(bool force){
-    const int8_t connected = Connected() ? 1 : 0;
-    if(!force && connected == this->shown_connected) return;
-    this->shown_connected = connected;
+    const bool direct = FileShareFunctions::IsDirect();
+    // APに繋いだ端末の数は無線チップへ問い合わせるので、毎フレームではなく間を置いて見る
+    const uint32_t now = millis();
+    if(!direct) this->ap_joined = false;
+    else if(force || now - this->clients_checked_ms >= kClientsCheckMs){
+        this->clients_checked_ms = now;
+        this->ap_joined = FileShareFunctions::ApClients() > 0;
+    }
+    const bool joined = this->ap_joined;
+    const bool connected = direct || Connected();
+    const int8_t key = (int8_t)((connected ? 1 : 0) | (direct ? 2 : 0) | (joined ? 4 : 0));
+    if(!force && key == this->shown_address) return;
+    this->shown_address = key;
+    this->direct_button->setText(direct ? "LANへ戻す" : "直接つなぐ");
+
     FixedString<PICO_STR_L> by_name, by_ip;
     FileShareFunctions::PageUrls(by_name, by_ip);
-    if(connected){
-        this->url_ip_label->setTextColor(PICO_FORECOLOR);
+    FixedString<PICO_STR_LL> url;
+    FileShareFunctions::KeyUrl(url);
+    // APの名前とパスワードは打ち写すことがあるので、切れないように2行に分ける
+    // (「繋」はフォントに無いので画面の文字は「つなぐ」にしている)
+    FixedString<PICO_STR_LL> ap_name, ap_pass;
+    if(direct){
+        ap_name.appendFormat("Wi-Fi %s", FileShareFunctions::ApSsid());
+        ap_pass.appendFormat("パス %s", FileShareFunctions::ApPassword());
+    }
+
+    this->url_ip_label->setTextColor(PICO_FORECOLOR);
+    this->url_name_label->setTextColor(PICO_DARKGREY);
+    if(direct && !joined){
+        // まず本体のWi-Fiへ繋いでもらう(QRはWi-Fiへ繋ぐもの)。繋いだらQRがページのものに替わる
+        this->url_ip_label->setText(ap_name.c_str());
+        this->url_name_label->setTextColor(PICO_FORECOLOR);
+        this->url_name_label->setText(ap_pass.c_str());
+        FixedString<PICO_STR_LL> qr;
+        WifiQr::Build(qr, FileShareFunctions::ApSsid(), FileShareFunctions::ApPassword());
+        this->qr->setText(qr.c_str(), qr.length());
+        this->hint_label->setText("QRで本体のWi-Fiへ");   // つないだらQRが替わる
+    }else if(direct){
+        // 2台目のスマホのために、パスワードを先に出す(長い名前は後ろが切れる)
+        FixedString<PICO_STR_LL> ap(ap_pass);
+        ap.append(" / ");
+        ap.append(FileShareFunctions::ApSsid());
+        this->url_ip_label->setText(by_ip.c_str());
+        this->url_name_label->setText(ap.c_str());
+        this->qr->setText(url.c_str(), url.length());
+        this->hint_label->setText("QRならキーは不要");
+    }else if(connected){
         this->url_ip_label->setText(by_ip.empty() ? by_name.c_str() : by_ip.c_str());
         this->url_name_label->setText(by_ip.empty() ? "" : by_name.c_str());
-        FixedString<PICO_STR_LL> url;
-        FileShareFunctions::KeyUrl(url);
         this->qr->setText(url.c_str(), url.length());
+        this->hint_label->setText("QRならキーは不要");
     }else{
         this->url_ip_label->setTextColor(PICO_RED);
-        this->url_ip_label->setText("Wi-Fiに繋がっていません。設定のWi-Fiタブで繋いでください");
-        this->url_name_label->setText("");
+        this->url_ip_label->setText("Wi-Fiにつながっていません");
+        this->url_name_label->setText("[直接つなぐ]ならスマホと本体だけで使えます");
         this->qr->setText("");
+        this->hint_label->setText("");
     }
+}
+
+void FileShareScene::toggleDirect(){
+    FixedString<PICO_STR_LL> err;
+    if(!FileShareFunctions::SetDirect(!FileShareFunctions::IsDirect(), err)){
+        this->refreshAddress(true);
+        this->url_name_label->setTextColor(PICO_RED);
+        this->url_name_label->setText(err.c_str());
+        return;
+    }
+    this->refreshAddress(true);
 }
 
 void FileShareScene::refreshActivity(bool force){
@@ -200,4 +262,6 @@ void FileShareScene::onExit(){
     this->current_label = nullptr;
     this->recent_label = nullptr;
     this->qr = nullptr;
+    this->hint_label = nullptr;
+    this->direct_button = nullptr;
 }

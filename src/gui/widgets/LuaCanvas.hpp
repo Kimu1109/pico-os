@@ -26,6 +26,10 @@ class LuaCanvas : public Widget {
         InplaceFunction<void()> on_render = nullptr;
 
     public:
+        // 今 render コールバックを呼んでいる Canvas(呼んでいないときは null)。
+        // pico.draw_image のフルカラーの直描きが、どの Canvas の上に描くのか(上に何か載っていないか)を知るため
+        static inline LuaCanvas* rendering = nullptr;
+
         LuaCanvas(int16_t x, int16_t y, int16_t w, int16_t h);
 
         void render() override;

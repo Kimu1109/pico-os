@@ -2891,6 +2891,112 @@ int main() {
     }
 
     // =====================================================================
+    // フルカラーの直描き(pico.image_load の full_color + Canvas の render の中の pico.draw_image)
+    // =====================================================================
+    {
+        HostSd::files["/app/q.png"] = std::string((const char*)kPngQuad64x48, sizeof(kPngQuad64x48));
+        HostSd::files["/app/q.jpg"] = std::string((const char*)kJpegQuad32, sizeof(kJpegQuad32));
+        bool ok = engine.Run(R"LUA(
+            FC = pico.image_load("/app/q.png", {full_color = true, scale = 2})   -- 32x24
+            P16 = pico.image_load("/app/q.png", {scale = 2})                     -- full_color 無し
+            FC_X, DRAW16, DRAW_FC = 20, false, true
+            FC_CANVAS = pico.create("Canvas")
+            pico.set(FC_CANVAS, "x", 10) pico.set(FC_CANVAS, "y", 40)
+            pico.set(FC_CANVAS, "w", 100) pico.set(FC_CANVAS, "h", 100)
+            pico.on(FC_CANVAS, "render", function()
+                if DRAW_FC then pico.draw_image(FC, FC_X, 50) end
+                if DRAW16 then pico.draw_image(P16, 60, 100) end
+            end)
+        )LUA", "fullcolor_setup");
+        check(ok, "フルカラー: 準備");
+        Widget* canvas = WidgetRegistry::Resolve((WidgetId)GlobalInt(L, "FC_CANVAS"));
+        check(canvas != nullptr, "フルカラー: Canvas");
+        // FlushDirty() が dirty 矩形 d でこの Canvas を描き直すのを模す
+        auto render = [&](const Rect& d) {
+            const Rect clip = canvas->clippedScreenRect().intersection(d);
+            OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
+            PICO_GFX::render_clip = clip;
+            PICO_GFX::render_clip_active = true;
+            PICO_GFX::isDirtyDeactivates = true;
+            canvas->renderForce();
+            PICO_GFX::isDirtyDeactivates = false;
+            PICO_GFX::render_clip_active = false;
+            OSData::frame->clearClipRect();
+        };
+        // RunDirectPaint() を模す(液晶へは描かずに描いた印だけ)
+        auto paint = []() {
+            PICO_GFX::directPaint.pending = false;
+            PICO_GFX::directPaint.painted = PICO_GFX::directPaint.rect;
+        };
+        const PICO_GFX::DirectPaint& d = PICO_GFX::directPaint;
+        PICO_GFX::directPaint = PICO_GFX::DirectPaint();
+        if (canvas) {
+            render({10, 40, 100, 100});
+            check(d.pending && d.fn == &LuaEngine::PaintFullColor, "フルカラー: Canvasのrenderでdraw_imageすると直描きを頼む");
+            check(d.rect == Rect{20, 50, 32, 24}, "フルカラー: 頼む矩形は画像の大きさ");
+            paint();
+            const void* owner = d.ctx;
+
+            // 画像にかからない所だけ描き直したときは頼まない(SDから解き直さない)
+            render({10, 120, 100, 20});
+            check(!d.pending, "フルカラー: dirty矩形が画像にかからなければ頼まない");
+            // 一部にかかったら画像全体を頼む
+            render({10, 60, 100, 4});
+            check(d.pending && d.rect == Rect{20, 50, 32, 24}, "フルカラー: 一部にかかれば画像全体");
+            paint();
+
+            // Canvas からはみ出した所は描かない
+            ok = engine.Run("FC_X = 90", "fc_move");
+            render({10, 40, 100, 100});
+            check(d.pending && d.rect == Rect{90, 50, 20, 24}, "フルカラー: Canvasの外へはみ出した所は頼まない");
+            paint();
+            ok = engine.Run("FC_X = 20", "fc_move2");
+            render({10, 40, 100, 100});
+            paint();
+
+            // full_color を付けていない画像は16色だけ(持ち主は変わらない)
+            ok = engine.Run("DRAW_FC, DRAW16 = false, true", "fc_16");
+            render({10, 40, 100, 100});
+            check(!d.pending && d.ctx == owner, "フルカラー: full_color無しの画像は頼まない");
+            ok = engine.Run("DRAW_FC, DRAW16 = true, false", "fc_16b");
+
+            // 上に部品が載っている間は16色のまま
+            ok = engine.Run(R"LUA(
+                FC_COVER = pico.create("Label")
+                pico.set(FC_COVER, "x", 30) pico.set(FC_COVER, "y", 55)
+                pico.set(FC_COVER, "text", "x")
+            )LUA", "fc_cover");
+            check(ok, "フルカラー: 上に載せる部品");
+            render({10, 40, 100, 100});
+            check(!d.pending, "フルカラー: 上に部品が載っていれば頼まない");
+            ok = engine.Run("pico.destroy(FC_COVER)", "fc_uncover");
+            WidgetFunctions::ProcessPendingDeletes();
+            render({10, 40, 100, 100});
+            check(d.pending, "フルカラー: 載っていた部品がどけば頼む");
+            paint();
+        }
+
+        // render の外・画像へ描いている間は頼まない。2枚目まで覚える。.pimg・解放
+        PICO_GFX::directPaint.pending = false;
+        ok = engine.Run(R"LUA(
+            pico.draw_image(FC, 20, 50)
+            FC_OUTSIDE = true
+            local j = pico.image_load("/app/q.jpg", {full_color = true})
+            check(j ~= nil, "フルカラー: JPEGも読める")
+            local k = pico.image_load("/app/q.jpg", {full_color = true})
+            check(k ~= nil, "フルカラー: 覚えられる枚数を超えても16色で読める")
+            pico.image_free(j) pico.image_free(k)
+            pico.image_free(P16)
+        )LUA", "fullcolor_outside");
+        check(ok, "フルカラー: renderの外");
+        check(!d.pending, "フルカラー: renderの外のdraw_imageは頼まない");
+        ok = engine.Run("pico.image_free(FC)", "fullcolor_free");
+        check(ok && d.fn == nullptr && d.painted.w == 0, "フルカラー: image_freeで直描きをやめる");
+        WidgetFunctions::ClearSceneWidgets();
+        HostSd::files.clear();
+    }
+
+    // =====================================================================
     // pico.mic_*(マイク。中身は MicFunctions、I2Sの入力はスタブの rx へ積む)
     // =====================================================================
     {

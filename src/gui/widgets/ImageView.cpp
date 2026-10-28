@@ -124,29 +124,34 @@ void PushToLcd(void* ctx, int x, int y, int w, int h, const uint16_t* rgb){
 }
 }
 
-// PICO_GFX::FlushDirty() の最後に呼ばれる。見えている所の画像を、SDから解きながら液晶へ送る
-void ImageView::paintFullColor(void* ctx, const Rect& clip){
-    ImageView* self = static_cast<ImageView*>(ctx);
-    if(!self->loaded) return;
-    const Rect g = self->getScreenRect();
-    int ox, oy;
-    self->imageOrigin(g, ox, oy);
+bool ImageView::PaintToLcd(const char* path, const ImageCodec::Info& info, const ImageCodec::Options& opt,
+                           int ox, int oy, int img_w, int img_h, const Rect& clip){
     // 画像の中で見えている範囲(画像座標)
     int x0 = clip.x - ox, y0 = clip.y - oy;
     int x1 = x0 + clip.w, y1 = y0 + clip.h;
     if(x0 < 0) x0 = 0;
     if(y0 < 0) y0 = 0;
-    if(x1 > self->img_w) x1 = self->img_w;
-    if(y1 > self->img_h) y1 = self->img_h;
-    if(x0 >= x1 || y0 >= y1) return;
+    if(x1 > img_w) x1 = img_w;
+    if(y1 > img_h) y1 = img_h;
+    if(x0 >= x1 || y0 >= y1) return true;
 
-    FsFile f = OSData::SD.open(self->path.c_str());
-    if(!f) return;
+    FsFile f = OSData::SD.open(path);
+    if(!f) return false;
     PaintCtx p = { ox + x0, oy + y0 };
-    if(!ImageCodec::DecodeRgb565(f, self->info, x0, y0, x1 - x0, y1 - y0, self->opt, &PushToLcd, &p)){
+    const bool ok = ImageCodec::DecodeRgb565(f, info, x0, y0, x1 - x0, y1 - y0, opt, &PushToLcd, &p);
+    f.close();
+    return ok;
+}
+
+// PICO_GFX::FlushDirty() の最後に呼ばれる。見えている所の画像を、SDから解きながら液晶へ送る
+void ImageView::paintFullColor(void* ctx, const Rect& clip){
+    ImageView* self = static_cast<ImageView*>(ctx);
+    if(!self->loaded) return;
+    int ox, oy;
+    self->imageOrigin(self->getScreenRect(), ox, oy);
+    if(!PaintToLcd(self->path.c_str(), self->info, self->opt, ox, oy, self->img_w, self->img_h, clip)){
         LOG_SYS_WARN("ImageView: %s をフルカラーで描けませんでした", self->path.c_str());
     }
-    f.close();
 }
 
 void ImageView::armFullColor(const Rect& g){

@@ -25,7 +25,12 @@ void LuaCanvas::render() {
     }
     needs_redraw = false;
 
-    if (on_render) on_render();
+    if (on_render) {
+        LuaCanvas* const outer = rendering;
+        rendering = this;
+        on_render();
+        rendering = outer;
+    }
 
     // pico.set_draw_area()の呼び忘れ対策の安全弁。OSData::frameは全ウィジェット共有の
     // スプライトで、クリップ矩形も1個しか持たないため、Lua側のrenderコールバックが

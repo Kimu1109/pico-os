@@ -210,6 +210,7 @@ OSと同じ`key=value`書式(`Config_Functions`)で読み書きできるよう�
   (PNG/BMP等)は最初から対象外(このOSでは`.pimg`だけが唯一の画像形式)。
   **その後 BMP・JPEG、2026-10-28に PNG を足し、今は全形式を `ImageCodec::LoadToSprite()` で読む**
   (`gui.md`「画像の形式とフルカラーの直描き」。オプションは `dither`/`raw`/`scale`/`max_w`/`max_h`/`transparent`)。
+  **2026-10-28に `full_color`/`background` を足した**(下の「フルカラーの画像(full_color)」)。
 - **ウィジェットではないので`WidgetRegistry`は使わず、`LuaEngine`インスタンスごとの
   固定長スロット配列(`images_`、上限`kMaxLuaImages=4`)を持つ。** MarkdownViewの
   `labelPool`/`imagePool`と同じ「固定長配列」志向で、任意個数の`std::vector<Widget*>`的な
@@ -870,3 +871,27 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 - 定数を足したら `LuaConstants.hpp` の表と、`api/constants.md`・`reference/limits.md` を直す。テストは `lua_engine_test.cpp` の「数値定数」。
 - 実機では未確認(PCビルドとホストテストのみ)。
 
+## フルカラーの画像(full_color) (2026-10-28)
+
+`pico.image_load(path, {full_color = true})` で読んだ JPEG・PNG・8bpp以上のBMPを、Canvas の `render` の中の `pico.draw_image` で
+**液晶へフルカラーで直接描く**。仕組みは ImageView と同じ `PICO_GFX::ArmDirectPaint`(`gui.md`「画像の形式とフルカラーの直描き」)で、
+写真を16bppで持たずに、frameの転送の後にSDから解きながら `pushImage` する(16色の絵は今までどおり持って frame へ描く=下書き)。
+
+- **覚え書きは `LuaImages::FullColor`(パス・`ImageCodec::Info`・縮め方・最後に描いた位置とCanvas)を `kMaxFullColor=2` 個だけ**。
+  パス(256B)を全8スロットに持たせると約2KBになるので分けた。超えたら警告して16色で読む(`nil` にはしない)。
+  `image_free`(`LuaImages::release`)・`image_target`/`image_clear`(ファイルの絵と食い違う)・`~LuaImages` で `CancelDirectPaint` して外す。
+- **頼むのは「今描き直している所(`PICO_GFX::render_clip`)に画像がかかったとき」だけ**。Spotifyの再生位置の欄のように、画像にかからない所だけを
+  1秒ごとに描き直す使い方で、毎回SDから解き直さないため。かかったときは画像の見えている所全体(dirty矩形の外も)を描かせる。
+  描き直さなかった所の液晶にはフルカラーが残っている(frameと食い違うが、`RunDirectPaint` が行を「次は必ず送る」にしてある)。
+- **どの Canvas の上か**は `LuaCanvas::rendering`(`render()` が Lua の関数を呼ぶ間だけ自分を入れる)で知る。render の外・`image_target` の間
+  (`LuaOffscreen::active`)は頼まない。矩形は Canvas の `clippedScreenRect()` で切り、`WidgetFunctions::IsCoveredAbove(canvas, …)` なら頼まない。
+- **液晶に直描きできるのは画面に1枚だけ**(`directPaint` が1つ)。ほかの持ち主が描いている(`painted`)・描こうとしている(`pending`)間は奪わない。
+  奪うと奪われた側の跡が `MarkDirtyBelow` で frame の絵へ戻され、その描き直しでまた奪い返す…を毎フレーム繰り返すため。
+  例外として、このアプリの別の画像が持ち主でも、それを最後に描いた Canvas が消えた・隠れたなら譲ってもらう(`FullColor::canvas` の WidgetId を引く)。
+  ImageView はこの決まりを見ずに奪うが、奪われた Canvas は描き直しで譲るので交互にはならない。
+- 透過のPNGは、フルカラーでは透過せず `background`(既定は白)と混ぜて描く(下に何が描いてあるかは液晶から読めないため)。
+- 描く関数は ImageView と共通の `ImageView::PaintToLcd()`(画像の左上の位置・縮めた後の大きさ・クリップから、見えている窓だけを解いて送る)。
+- 検証: `lua_ext_test`(頼む矩形・かからない描き直しでは頼まない・一部にかかれば全体・Canvasの外を切る・full_color無し・上に部品が載っている間・
+  renderの外・覚えられる枚数を超えた・image_freeでやめる)。PCビルドで、Spotifyの画面と同じ描き方(`view.lua`)のジャケットがフルカラーで出ること、
+  再生位置の欄を毎フレーム描き直してもフルカラーが残ること、上に Label を載せている間は16色・どけたらフルカラーへ戻ることを `--shot` で確認した。
+  **実機の速さ(75x75のJPEGを描き直すのにかかる時間)は未確認(Todoist参照)**。

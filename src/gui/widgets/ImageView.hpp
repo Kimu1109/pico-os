@@ -88,6 +88,12 @@ class ImageView : public Widget {
         // 今フルカラーで見せられる画像か
         bool isFullColorImage() const { return this->loaded && this->full_color && ImageCodec::IsFullColor(this->info); }
 
+        // 画像(縮めた後の大きさ img_w x img_h)の左上を液晶の(ox, oy)に置いたとして、clip(液晶の座標)に入る所を
+        // SDから解きながら液晶へそのままの色で送る。ArmDirectPaint の関数から呼ぶ(Lua の pico.draw_image も使う)。
+        // 開けない・途中で読めなくなったらfalse
+        static bool PaintToLcd(const char* path, const ImageCodec::Info& info, const ImageCodec::Options& opt,
+                               int ox, int oy, int img_w, int img_h, const Rect& clip);
+
         void setVisible(bool v) override;
         void causeOnPressStart() override;
         void causeOnPressMove() override;

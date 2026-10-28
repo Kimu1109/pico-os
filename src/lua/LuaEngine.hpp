@@ -500,6 +500,10 @@ class LuaEngine {
         void setMicState(MicState* s) { mic_ = s; }
         // 読み込んだ・作った画像の置き場(pico.image_*、pico.iso の面の絵)
         LuaImages& images() { return images_; }
+        // pico.draw_image のフルカラーの直描き(LuaEngine_Draw.cpp の l_draw_image の下)。
+        // PaintFullColor は PICO_GFX::ArmDirectPaint に渡す関数(ホストテストが持ち主の印に見る)
+        static void ArmFullColor(LuaEngine* self, LuaImages::FullColor& fc, const LuaImages::Slot& slot, int16_t x, int16_t y);
+        static void PaintFullColor(void* ctx, const Rect& clip);
         // このアプリのフォルダ(PICO_IO::normalize()済み)。コンストラクタのapp_dir引数参照
         const char* appDir() const { return app_dir_.c_str(); }
         void markPaletteUsed() { used_palette_ = true; }

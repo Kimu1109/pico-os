@@ -5,6 +5,7 @@
 // 後半は MicFunctions の配線: 2コア目(LoopCore1)と1コア目(Update)を1本のスレッドで交互に呼ぶ。
 // I2Sの入力は stubs/I2S.h の rx へテストがワードを積み、録ったWAVは stubs/SdFat.h の HostSd::files で見る。
 #include "hal/Mic_Functions.hpp"
+#include "hal/Clock_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "sound/Mic_Dsp.hpp"
 #include "sound/Wav_Writer.hpp"
@@ -175,10 +176,16 @@ static void TestRecording(){
     Step();
     check(!In()->running, "録音: 何も頼まなければ開始しない");
 
-    //メーター
+    //メーター。スリープ中にクロックを下げていても(ClockFunctions)、I2Sを始める前に通常へ戻す
+    ClockFunctions::Setup();
+    ClockFunctions::Request(3);
+    ClockFunctions::Apply(!MicFunctions::Core1Busy());
+    check(ClockFunctions::Divider() == 3, "メーター: (クロックを下げておく)");
     MicFunctions::SetMonitor(true);
     check(MicFunctions::InputState() == MicFunctions::Input::Starting, "メーター: 2コア目が開始するまでStarting");
     Step();
+    check(ClockFunctions::Divider() == 1 && MicFunctions::Core1Busy(), "メーター: I2Sを始める前にクロックを戻す");
+    ClockFunctions::Request(1);
     check(In()->running && In()->bps == 32 && In()->sample_rate == 48000, "メーター: 48000Hz・32bitで開始");
     check(In()->bclk == MIC_I2S_BCLK && In()->data == MIC_I2S_DATA, "メーター: GP26/GP28");
     check(MicFunctions::InputState() == MicFunctions::Input::Running, "メーター: Running");

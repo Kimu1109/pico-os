@@ -2,6 +2,8 @@
 #include "services/Display_Functions.hpp"
 #include "hal/Network_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
+#include "hal/Clock_Functions.hpp"
+#include "hal/CardKB_Functions.hpp"
 #include "system/Pad_Functions.hpp"
 #include "system/KeyInput_Functions.hpp"
 #include "system/Config_Functions.hpp"
@@ -21,6 +23,11 @@ namespace {
     // SleepNow(): 指を離したら入る / 今のスリープは自分で入ったもの(KeepAwake()では起きない)
     bool          force_pending    = false;
     bool          forced           = false;
+    // スリープ中のCPUクロック(MHz。0で下げない)と、その分周の数(1なら下げない)
+    unsigned long sleep_cpu_mhz    = 0;
+    uint32_t      sleep_clock_div  = 1;
+    // 最後にログへ出した分周(2コア目が切り替えるので、1コア目が変化を見てログにする)
+    uint32_t      logged_div       = 1;
 
     void LoadConfig(){
         if(!OSData::SD_usable) return;
@@ -36,6 +43,13 @@ namespace {
                     }else{
                         LOG_SYS_WARN("display.cfg: sleep-timeout は0〜86400(秒)の整数です: %s", value);
                     }
+                }else if(strcmp(key, "sleep-cpu-mhz") == 0){
+                    int v = 0;
+                    if(PICO_Config::ConfigValue::AsInt(value, v) && v >= 0 && v <= 1000){
+                        sleep_cpu_mhz = (unsigned long)v;
+                    }else{
+                        LOG_SYS_WARN("display.cfg: sleep-cpu-mhz は0(下げない)かMHzの整数です: %s", value);
+                    }
                 }
             }
         );
@@ -49,8 +63,17 @@ namespace {
             || NetworkFunctions::currentStatus == NetworkFunctions::NetStatus::TRYING_CONNECT;
     }
 
+    // スリープ中にクロックを下げるよう頼む/やめる。切り替えるのは2コア目(ClockFunctions)。
+    // CardKB2のUART(SerialPIO)は分周が狂うと打鍵を読めず起こせなくなるので、そのときは頼まない
+    void RequestClock(bool low){
+        const bool ok = low && sleep_clock_div > 1 && ClockFunctions::Available()
+                     && CardKbFunctions::GetMode() != CardKbFunctions::Mode::Uart;
+        ClockFunctions::Request(ok ? sleep_clock_div : 1);
+    }
+
     void Enter(){
         sleeping = true;
+        RequestClock(true);
         DisplayFunctions::SetSleeping(true);
         NetworkFunctions::SetLowPower(true);
         SoundFunctions::SetPowerSave(true);
@@ -60,6 +83,8 @@ namespace {
     void Leave(){
         sleeping = false;
         forced   = false;
+        //クロックは2コア目が次の周回(最大 kPowerSaveIdleDelayMs)で戻す。戻るまでの間は遅いだけで動く
+        RequestClock(false);
         //パネルを起こす(120ms待つ)前に、他を戻しておく
         SoundFunctions::SetPowerSave(false);
         NetworkFunctions::SetLowPower(false);
@@ -78,12 +103,34 @@ void PowerFunctions::SetupAt(unsigned long now_ms){
     force_pending    = false;
     forced           = false;
     detail::keep_awake = false;
+    sleep_cpu_mhz    = 0;
     LoadConfig();
+    sleep_clock_div  = ClockFunctions::DividerForMhz((uint32_t)sleep_cpu_mhz);
+    logged_div       = 1;
+    ClockFunctions::Request(1);
+    if(sleep_cpu_mhz > 0 && sleep_clock_div <= 1){
+        LOG_SYS_WARN("Power: sleep-cpu-mhz = %lu では下げられません(下限 %luMHz)",
+            sleep_cpu_mhz, (unsigned long)(ClockFunctions::MinHz() / 1000000u));
+    }else if(sleep_clock_div > 1){
+        if(ClockFunctions::Available()){
+            LOG_SYS_MSG("Power: スリープ中はCPUを %luMHz へ下げます(1/%lu)",
+                (unsigned long)(ClockFunctions::NormalHz() / sleep_clock_div / 1000000u), (unsigned long)sleep_clock_div);
+        }else{
+            LOG_SYS_WARN("Power: clk_sysがpll_sysから来ていないので、sleep-cpu-mhz は使えません");
+        }
+    }
     last_activity_ms = now_ms;
     LOG_SYS_OK("Power Setup has succeeded!");
 }
 
 void PowerFunctions::UpdateAt(unsigned long now_ms){
+    //2コア目がクロックを切り替えたらログへ(2コア目はログに触れないため)
+    const uint32_t div = ClockFunctions::Divider();
+    if(div != logged_div){
+        logged_div = div;
+        LOG_SYS_MSG("Power: CPUクロック %luMHz", (unsigned long)(ClockFunctions::CurrentHz() / 1000000u));
+    }
+
     const bool touched = OSData::isTouched;
     const bool active  = touched || PadFunctions::IsDown(PadFunctions::kAllButtons)
                        || KeyInputFunctions::Pending() > 0; //このフレームの打鍵(配るのはこの後)
@@ -172,6 +219,13 @@ void PowerFunctions::IdleWait(){
 bool PowerFunctions::IsSleeping(){ return sleeping; }
 
 void PowerFunctions::SleepNow(){ force_pending = true; }
+
+unsigned long PowerFunctions::GetSleepCpuMhz(){ return sleep_cpu_mhz; }
+void PowerFunctions::SetSleepCpuMhz(unsigned long mhz){
+    sleep_cpu_mhz   = mhz;
+    sleep_clock_div = ClockFunctions::DividerForMhz((uint32_t)mhz);
+    if(sleeping) RequestClock(true);
+}
 
 unsigned long PowerFunctions::GetSleepTimeoutMs(){ return sleep_timeout_ms; }
 void PowerFunctions::SetSleepTimeoutMs(unsigned long ms){ sleep_timeout_ms = ms; }

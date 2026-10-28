@@ -148,7 +148,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 `docs/HARDWARE_CHECKLIST.md`(実機で確かめる・測る項目の一覧)を回すための道具。
 - **シリアルのコマンド`hw ...`**: `/sys/debug.cfg`の`hw-test = true`のときだけ(既定は切れている。わざと落とすコマンドがあるため。設定アプリには出さない)。
   `hw info`/`hw mem`(`MemFunctions::Take()`と`HeapTopRoom()`)/`hw trap`(`__builtin_trap()`=未定義命令)/`hw buswrite`(0xF0000000へ書く)/
-  `hw hang`(ウォッチドッグが入っているときだけ止まる)。結果は`[HW]`の行。`PadFunctions::extra_line_handler`はLuaデバッガ(`dbg`)→`hw`の順に試す
+  `hw hang`(ウォッチドッグが入っているときだけ止まる)/`hw clock [MHz]`・`hw sleep`(スリープ中のクロック低減を測る。`power-display.md`「スリープ中のクロック低減」)。結果は`[HW]`の行。`PadFunctions::extra_line_handler`はLuaデバッガ(`dbg`)→`hw`の順に試す
   (`main.cpp`のラムダ)。`HwTest_Functions.cpp`はmain.cppからしか参照しないのでホストテストはリンクしない。
 - **「実機チェック」**(`pc/sdcard/lua/apps/実機チェック/`、`permission_network=true`): コルーチンで1フレームに1つずつ測る(Lua・renderの中の描画・
   全面の描き直し60フレーム・SD・暗号・JSON・HTTPS・メモリ)。結果は画面・`[HWCHK]`のログ・`results.txt`(追記、`.gitignore`済み)。

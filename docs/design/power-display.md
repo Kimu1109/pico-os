@@ -70,7 +70,7 @@ Active → (30秒: kIdleTimeoutMs) → Dim(DisplayFunctions) → (sleep-timeout�
 3. **何も鳴っていなければI2Sとアンプ(休止端子)を止め、2コア目をゆっくり回す**(`SoundFunctions::SetPowerSave()`。
    鳴っているものが無い間だけ`want`を偽にする。要求が来れば次の周回で動き直す。2コア目の休みは1ms→`kPowerSaveIdleDelayMs`=20ms)。
 4. **1コア目のloop()を間引く**(`IdleWait()`が`delay(kSleepLoopDelayMs=30)`。タッチで起きるまでの最大の遅れ)。
-   CPUクロックは変えていない(SPI/I2S/CYW43のPIOの分周が`clk_sys`基準で、変えると全部の再初期化が要るため。効果を実測してから検討)。
+5. **`sleep-cpu-mhz`を決めていればCPUのクロックを下げる**(既定は下げない。下の「スリープ中のクロック低減」)。
 
 **スリープへ入らない条件**: 各画面が**毎フレーム`PowerFunctions::KeepAwake()`を呼ぶ**(ヘッダの`inline`関数で、フラグを立てるだけ。
 前のフレームに呼ばれたかで判断するので、**呼び忘れても「スリープに入る」だけで戻し忘れの事故が無い**。`Power_Functions.cpp`をリンクせずに
@@ -99,6 +99,38 @@ KeepAwakeを呼んでいる画面: ゲームボーイ・SSH・チャット(常�
   復帰の120msについては、復帰直後に画面化けすることがあるが、ほとんどが部分的で日常用途では問題ない範囲(2026-10-23、利用者の判断)。
 - **実機では未確認**: `delay()`が実際にCPUを寝かせるか(arduino-picoの`delay()`はWFE/sleep系のはずだが未確認)・
   消費電流の実測(LiPo/USBの電流計で、スリープ前後を比べること)(Todoist参照)。
+
+### スリープ中のクロック低減 (`src/hal/Clock_Functions` / `sleep-cpu-mhz`) (2026-10-28)
+
+消費電流を測って効き目を確かめるための仕組み。**既定は下げない**(`/sys/display.cfg`の`sleep-cpu-mhz = 50`で有効。0で無効)。
+- **やり方は`clk_sys`の分周だけ**(`clock_configure()`でpll_sysのまま1/N。PLLは止めないのでロック待ちが無く、戻すのは分周を1へ戻すだけ)。
+  `set_sys_clock_khz()`でPLLを作り直す案は、clk_periまで付け替える(下記)・戻りが遅いので採らなかった。
+- **下限はclk_peri**: arduino-picoは起動時の`set_sys_clock_khz()`でclk_periを**pll_usb(48MHz)へ付け替える**
+  (`PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK`が0。libpico.aの`set_sys_clock_pll`を逆アセンブルして確認)。SPI(PL022)は
+  「clk_peri ≤ clk_sys」が要るので、clk_sysは48MHz未満に下げない → **150MHzからは1/3=50MHzが下限**(`ClockFunctions::MinHz()`。
+  clk_periがclk_sysから来ている作りなら一緒に下がるので、下限は`kMinMhz`=12MHzだけ)。値は「150MHzを整数で割った値のうち指定と下限を下回らない一番低いもの」(50→50、40→50、75→75)。
+  - ついでに分かったこと: clk_periが48MHzなら、液晶のSPI(LovyanGFXの`FreqToClockDiv()`はclk_peri/2が上限)は**24MHz**のはずで、
+    `consts.hpp`の「clk_peri(150MHz)/2=75MHz」と食い違う。`hw clock`の`clk_peri=`で実機の値を確かめること(Todoist参照)。
+- **影響を受けるもの**: SPI0/SPI1はclk_periなので速さは変わらない。I2C(CardKB2・Wii・RTC)・CYW43のPIOのSPI・PWMは1/Nで遅くなるだけで動く
+  (Wi-Fiの接続は保つ。バックライトはスリープ中は消してある)。millis()/delay()・ウォッチドッグはclk_ref(水晶)、USBはpll_usbなので無関係。
+  **I2S(音声・マイク)とSerialPIO(CardKB2のUART)は周波数が狂う**ので:
+  - **切り替えは2コア目(`loop1()`)がする**。I2Sを始めるのも2コア目なので「下げた直後にI2Sが始まり、狂った`clock_get_hz(clk_sys)`で分周を計算する」入れ違いが無い。
+    1コア目(`PowerFunctions`)は`ClockFunctions::Request(N)`で頼むだけ。2コア目は毎周回`Apply(出力もマイクも止まっている)`で合わせる。
+  - **I2Sを始める直前に必ず戻す**(`SoundFunctions`/`MicFunctions`の開始の中で`EnsureFull()`)。電源メニューのスリープ中に曲が鳴っていれば
+    出力が動いているので下げない。
+  - **CardKB2を`mode = uart`でつないでいれば頼まない**(打鍵を読めず起こせなくなるため)。
+  - 2コア目を持たない版(音声もマイクも外した版)はI2Sが無いので、1コア目の`loop()`が`Apply(true)`を呼ぶ。
+  - 2コア目はログに触れないので、切り替わったことは1コア目の`PowerFunctions::Update()`が見て`Power: CPUクロック 50MHz`とログへ出す。
+    起きると次の2コア目の周回(最大20ms)で戻る。その間は遅いだけで動く。
+- **測り方**: `hw clock`(今のclk_sys・clk_peri・下限・スリープ中の行き先)/`hw clock 50`(`sleep-cpu-mhz`を今だけ変える。0で下げない)/
+  `hw sleep`(今すぐスリープ)。`hw clock 0`→`hw sleep`と`hw clock 50`→`hw sleep`で電流計の値を比べる(`docs/HARDWARE_CHECKLIST.md`の3章)。
+- **やっていないこと**: dormant(水晶まで止めてGPIOで起きる)は、タイマー・USB・Wi-Fiの接続が全部止まり、起きた後の作り直しが要るので見送り
+  (タッチのIRQ=GP9で起こすことはできる。Wi-Fiを切っている時だけの「深い休止」として、クロック低減の効き目を測った後に検討)。
+  電圧を下げる(`vreg_set_voltage()`)も、クロック低減の効き目を測ってから。
+- ホストテスト: `power_test`(既定では頼まない・スリープで頼み起きれば戻す・出力/マイクが動いている間は下げない・下限で丸める・スリープ中の設定変更がすぐ効く)、
+  `sound_test`/`mic_test`(下げていてもI2Sを始める前に戻す)。PCビルド: `sleep-timeout = 2`・`sleep-cpu-mhz = 50`で`Power: CPUクロック 50MHz`→タップで`150MHz`、
+  `hw clock`/`hw sleep`をシリアル(標準入力)から。実機ファーム(通常版・`rpipico2w_minimal`)のビルドが通ることを確認。
+- **実機では未確認**: 下げている間の消費電流・Wi-Fiの接続が保たれるか・タッチ/I2Cのコントローラーで起きるか・起きた後に音とマイクが正しい高さか(Todoist参照)。
 
 ## 時刻の手動設定・電源メニュー (`TimeFunctions::SetClock()` / `PowerMenu_Functions` / `SettingsScene`) (2026-10-11)
 

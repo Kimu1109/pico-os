@@ -6,6 +6,7 @@
 #include "system/Config_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "hal/Battery_Functions.hpp"
+#include "hal/Clock_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "sound/Mml_Compiler.hpp"
 #include "sound/Music_Player.hpp"
@@ -354,6 +355,8 @@ namespace {
         i2s.setDATA(AUDIO_I2S_DATA);
         i2s.setBitsPerSample(16);
         i2s.setBuffers(kBufferCount, BufferWords());
+        //スリープ中にクロックを下げていたら、I2Sの分周を計算する前に戻す
+        ClockFunctions::EnsureFull();
         if(!i2s.begin(core1_rate)){
             failed = true;
             core1_failed.store(true, std::memory_order_release);
@@ -968,6 +971,7 @@ uint32_t SoundFunctions::WavUnderruns(){
 
 void SoundFunctions::SetupCore1(){}
 bool SoundFunctions::LoopCore1(){ return Core1StepAt(millis()); }
+bool SoundFunctions::Core1OutputRunning(){ return running; }
 
 unsigned long SoundFunctions::IdleDelayMs(){
     //省電力中でI2Sも止まっていれば長く休む。動いている間は今までどおり1ms(バッファ切れを避ける)

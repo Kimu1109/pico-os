@@ -1469,6 +1469,7 @@ int LuaEngineExt::l_image_clear(lua_State* L) {
     LuaImages::Slot& slot = self->images()[index];
     const int color = (int)luaL_optinteger(L, 2, slot.sprite.transparent ? 0 : PICO_BACKGROUND);
     slot.sprite.sprite.fillScreen(color);
+    self->images().dropFullColor(index);   // ファイルの絵ではなくなった
     return 0;
 }
 
@@ -1484,6 +1485,7 @@ int LuaEngineExt::l_image_target(lua_State* L) {
     size_t index;
     if (!self->images().resolve(handle, index)) return luaL_error(L, "pico.image_target: 無効なイメージハンドル");
     self->EndImageTarget();
+    self->images().dropFullColor(index);   // 描き足すとファイルの絵と食い違うので16色だけにする
     self->extState()->saved_frame = OSData::frame;
     self->extState()->image_target_index = (int)index;
     OSData::frame = &self->images()[index].sprite.sprite;

@@ -39,9 +39,25 @@ BMPは無圧縮(と BI_BITFIELDS)の 1/4/8/16/24/32bpp を読めます(RLE圧縮
 
 PNGを解く間だけ約45KBの作業場所を使います(展開の辞書32KBなど。読み終えたら返します)。
 
+**フルカラーで描く**: 画面のバッファは16色ですが、`full_color = true` を付けて読んだ JPEG・PNG・フルカラーのBMP(8bpp以上)は、
+`Canvas` の `render` の中で `pico.draw_image` すると、16色の絵を描いた上に**SDから解きながら液晶へそのままの色で直接描きます**
+(フルカラーの絵はメモリに持ちません。持つのは今までどおり16色の絵だけ)。
+
+| キー | 既定 | 意味 |
+|---|---|---|
+| `full_color` | `false` | `pico.draw_image` でフルカラーでも描く。`.pimg`・4bpp以下のBMPは16色の絵そのものなので、付けても変わりません |
+| `background` | 白(15) | 透過にしない画像の半透明の画素を混ぜる色(パレットの番号)。透過のPNGも、フルカラーで描く分は透過せずこの色と混ぜます |
+
+- フルカラーで描くのは `pico.draw_image` だけです(`draw_image_part` / `draw_image_ex` / `pico.game` のスプライトは16色)。
+- 描き直すたびにSDから解き直すので、**画像にかからない所だけを描き直すときは解き直しません**(`pico.mark_dirty` で変わった所だけを描き直すと速い)。
+  画像に少しでもかかると、画像全体を描き直します。
+- 液晶へ直接描けるのは画面に1枚だけです。2枚目は16色の絵のまま見えます。フルカラーで覚えておけるのは同時に2枚まで(超えても読めて、16色で描きます)。
+- `Canvas` の上に部品・ダイアログ・トーストが重なっている間は、16色の絵が見えます(直描きは上に載ったものを塗りつぶしてしまうため。どけば戻ります)。
+- `pico.image_target` で描き足したり `pico.image_clear` したりした画像は、ファイルの絵と違うので16色だけになります。
+
 ```lua
--- 640x640のジャケット画像を、80x80に収めて読む(1/8)
-local art = pico.image_load(pico.app_dir() .. "/cover.jpg", { max_w = 80, max_h = 80 })
+-- 640x640のジャケット画像を、80x80に収めて読む(1/8)。Canvas の render で draw_image するとフルカラーで見える
+local art = pico.image_load(pico.app_dir() .. "/cover.jpg", { max_w = 80, max_h = 80, full_color = true })
 ```
 
 失敗すると `nil` を返します(エラーにはなりません)。失敗する条件:
@@ -64,6 +80,7 @@ local art = pico.image_load(pico.app_dir() .. "/cover.jpg", { max_w = 80, max_h 
 <div class="sig">pico.draw_image(handle: integer, x: integer, y: integer) <span class="ret">-> (なし)</span></div>
 
 画像を描画します。他の `pico.draw_*` と同様、`Canvas` の `render` コールバックの中で使うこと([直接描画](../drawing/) 参照)。無効なハンドルを渡すとエラーになります。
+`full_color = true` で読んだ写真は、液晶へフルカラーでも描きます(上の `pico.image_load` の「フルカラーで描く」)。
 
 ## pico.draw_image_part
 

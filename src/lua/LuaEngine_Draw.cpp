@@ -21,6 +21,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Textbox.hpp"
 #include "gui/widgets/LuaCanvas.hpp"
+#include "gui/widgets/ImageView.hpp"
 #include "gui/widgets/CanvasRaster.hpp"
 #include "gui/widgets/Checkbox.hpp"
 #include "gui/widgets/NumberSlider.hpp"
@@ -214,7 +215,58 @@ int LuaEngine::l_draw_image(lua_State* L) {
     LuaImages::Slot& slot = self->images()[index];
     IconRender::DrawPimgSprite(slot.sprite, x, y);
     LuaMarkDirty({x, y, (int16_t)slot.sprite.width, (int16_t)slot.sprite.height});
+    if (LuaImages::FullColor* fc = self->images().fullColorOf(index)) {
+        ArmFullColor(self, *fc, slot, x, y);
+    }
     return 0;
+}
+
+// ---- フルカラーの直描き(pico.image_load の full_color) ----
+// 16色の絵を frame へ描いた上で、FlushDirty() の最後に SD から解きながら液晶へそのままの色で描かせる
+// (ImageView と同じ PICO_GFX::ArmDirectPaint。docs/design/gui.md「画像の形式とフルカラーの直描き」)。
+// 頼むのは Canvas の render の中で、今描き直している所(dirty 矩形)に画像がかかったときだけ。
+// 1秒ごとに再生位置の欄だけ描き直すような使い方で、かからない画像を毎回SDから解き直さないように。
+// 頼むときは画像の見えている所全体(dirty 矩形の外も)を描かせる。
+
+void LuaEngine::PaintFullColor(void* ctx, const Rect& clip) {
+    const LuaImages::FullColor* fc = static_cast<const LuaImages::FullColor*>(ctx);
+    if (!fc->used) return;
+    const int w = ImageCodec::ScaledW(fc->info, fc->opt.scale);
+    const int h = ImageCodec::ScaledH(fc->info, fc->opt.scale);
+    if (!ImageView::PaintToLcd(fc->path.c_str(), fc->info, fc->opt, fc->x, fc->y, w, h, clip)) {
+        LOG_APP_WARN("pico.draw_image: %s をフルカラーで描けませんでした", fc->path.c_str());
+    }
+}
+
+void LuaEngine::ArmFullColor(LuaEngine* self, LuaImages::FullColor& fc, const LuaImages::Slot& slot, int16_t x, int16_t y) {
+    LuaCanvas* canvas = LuaCanvas::rendering;
+    // Canvas の render の外(loop から素で描いた等)・画像へ描いている間は16色のまま
+    if (!canvas || LuaOffscreen::active || !PICO_GFX::render_clip_active) return;
+    const Rect img = { x, y, (int16_t)slot.sprite.width, (int16_t)slot.sprite.height };
+    if (!img.intersects(PICO_GFX::render_clip)) return;
+    const Rect area = img.intersection(canvas->clippedScreenRect());
+    if (area.w <= 0 || area.h <= 0) return;
+    // 上にダイアログ・ほかの部品が載っていれば16色の絵のまま(直描きは上に載ったものを塗りつぶすため)。
+    // どけばその跡の描き直しでまたここへ来る
+    if (WidgetFunctions::IsCoveredAbove(canvas, area)) return;
+
+    // 液晶に直描きできるのは画面に1枚だけ。ほかの持ち主が描いている(描こうとしている)間は奪わない
+    // (奪うと、奪われた側の跡が frame の絵へ戻されて描き直され、また奪い返す…を繰り返す)。
+    // このアプリの別の画像が持ち主でも、それを描いた Canvas が消えていれば譲ってもらう
+    const PICO_GFX::DirectPaint& d = PICO_GFX::directPaint;
+    if (d.fn && d.ctx != &fc && (d.pending || d.painted.w > 0)) {
+        bool owner_gone = false;
+        if (self->images().isFullColorOwner(d.ctx)) {
+            Widget* w = WidgetRegistry::Resolve(static_cast<const LuaImages::FullColor*>(d.ctx)->canvas);
+            owner_gone = !d.pending && (!w || !w->getVisible());
+        }
+        if (!owner_gone) return;
+    }
+
+    fc.x = x;
+    fc.y = y;
+    fc.canvas = canvas->getId();
+    PICO_GFX::ArmDirectPaint(&LuaEngine::PaintFullColor, &fc, area);
 }
 
 // 画像の一部(sx,sy,w,h)だけを(x,y)へ描く。スプライトシート(同じ大きさのタイルを並べた
@@ -724,6 +776,7 @@ int LuaEngine::l_image_load(lua_State* L) {
         return 1;
     }
     ImageCodec::Options opt;
+    bool full_color = false;
     if (lua_istable(L, 2)) {
         lua_getfield(L, 2, "dither");
         if (!lua_isnil(L, -1)) opt.dither = lua_toboolean(L, -1) ? 1 : 0;
@@ -733,6 +786,12 @@ int LuaEngine::l_image_load(lua_State* L) {
         lua_pop(L, 1);
         lua_getfield(L, 2, "transparent");
         if (!lua_isnil(L, -1)) opt.transparent = lua_toboolean(L, -1) ? 1 : 0;
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "full_color");
+        full_color = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "background");
+        if (!lua_isnil(L, -1)) opt.background = (uint8_t)(luaL_checkinteger(L, -1) & 0x0F);
         lua_pop(L, 1);
     }
     if (ImageCodec::CanScale(info)) {
@@ -778,7 +837,14 @@ int LuaEngine::l_image_load(lua_State* L) {
     f.close();
     if (!ok) { lua_pushnil(L); return 1; }
 
-    lua_pushinteger(L, (lua_Integer)self->images().commit(index, need_bytes));
+    const uint32_t handle = self->images().commit(index, need_bytes);
+    // full_color: 16色に収まらない絵(JPEG・PNG・8bpp以上のBMP)は、pico.draw_image で液晶へそのままの色でも描く。
+    // .pimg・4bpp以下のBMPは16色の絵そのものなので覚えない(エラーにもしない)
+    if (full_color && ImageCodec::IsFullColor(info) && !self->images().addFullColor(index, path, info, opt)) {
+        LOG_APP_WARN("pico.image_load: フルカラーで描ける画像は%zu枚までです(16色で描きます): %s",
+            LuaImages::kMaxFullColor, path);
+    }
+    lua_pushinteger(L, (lua_Integer)handle);
     return 1;
 }
 

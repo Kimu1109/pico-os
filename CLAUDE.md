@@ -22,7 +22,7 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
 | 音声出力(I2S) | MAX98357A: BCLK=2, LRCLK=3, DIN=4 / 検出=5(内部プルアップ) / 休止=6(任意) |
 | イヤホン(任意) | PCM5102Aを同じI2Sの3本へ並べる / XSMT=14 / ジャックの差し込み検出=8(内部プルアップ、LOW=差してある) |
 | マイク(I2S) | SPH0645: BCLK=26, LRCLK=27, DOUT=28(48kHz・32bitスロット) |
-| I2C0 | SDA=0, SCL=1。Wiiクラシックコントローラー(0x52、実物は未確認)とCardKB2 |
+| I2C0 | SDA=0, SCL=1。Wiiクラシックコントローラー(0x52、実物は未確認)・CardKB2・RTC DS3231(0x68、任意) |
 | CardKB2のUART(任意) | RX=7(SerialPIO。`/sys/cardkb.cfg` の `mode = uart` のときだけ) |
 
 画面/パレット定数は `src/consts.hpp`(PICO-8風16色、既定 `PICO_BACKGROUND=15` / `PICO_FORECOLOR=0`)。
@@ -177,7 +177,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 |---|---|
 | `gui.md` | ウィジェットカタログ・ウィジェットID・アプリの枠組み・シーン・ダイアログ・オンスクリーンキーボード |
 | `input.md` | 外部コントローラー・物理キーボード・フォーカス・かな漢字変換・CardKB2・USBドライブ |
-| `power-display.md` | 画面の明るさと自動調光・スリープ・時刻の手動設定・電源メニュー |
+| `power-display.md` | 画面の明るさと自動調光・スリープ・時刻の手動設定・電源メニュー・電源を切っても時刻を保つ(RTC) |
 | `os-services.md` | アラーム・通知・ホーム画面のウィジェット・バックグラウンド実行・スクリーンショット・タイマー・ダークテーマ・画面ロック |
 | `battery-touch.md` | バッテリー残量・音割れ対策・タッチの補正とノイズ抑制 |
 | `security-wifi.md` | 認証情報の暗号化・端末ごとの鍵(OTP)・保存済みWi-Fi・新規接続・固定IP/DNS・mDNS・キャプティブポータル・AP設定モード |

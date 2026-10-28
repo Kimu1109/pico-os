@@ -320,6 +320,10 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
 - **ジャケット**: 曲の2番目の画像(横300px)を`save_to`で`art.jpg`へ取り、`pico.image_load(..., {max_w=80, max_h=80})`(1/4で75px)。
   **2026-10-28から `full_color = true` で読み、液晶へフルカラーで描く**(`lua-api.md`「フルカラーの画像(full_color)」)。
   描き直すたびにSDから解き直すので、シーク・音量のつまみを動かしている間は Canvas 全体ではなくその欄だけを `mark_dirty` する(`V.progress_rect`/`V.volume_rect`)。
+  **3秒ごとの取り直し・操作で描き直すときも、ジャケットが変わっていなければその欄を外して `mark_dirty` する**(`V.rects_except_art()`。
+  右の文字の欄とその下の2枚。辺で接するだけなので1枚にまとめられない)。Canvas 全体を描き直すのは `P.art_dirty`(ジャケットが変わった・
+  ログインの状態が変わった)のときだけ。以前は取り直しのたびに全体を描き直していて、実機では3〜5秒ごとにジャケットが解き直され、
+  そのたびに液晶が少しちらついた(利用者の報告、2026-10-28)。
   画像のサーバ`i.scdn.co`は**DigiCert Global Root G3**の下なので焼き込みのルートに足した(10枚。上の「HTTPS」)。
 - 通信は全部`keep_alive = true`(api/accountsはホストが違うので切り替えのたびに繋ぎ直しになる)。戻るときに`pico.http_close()`。
 - 入力: キー(`playpause`/Space/k、`nexttrack`/→/n、`prevtrack`/←/p、`volumeup`/↑、`volumedown`/↓、`mute`/m、s、r、d=端末)、

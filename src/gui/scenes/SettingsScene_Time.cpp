@@ -6,6 +6,7 @@
 #include "system/Config_Functions.hpp"
 #include "hal/Network_Functions.hpp"
 #include "system/Time_Functions.hpp"
+#include "hal/Rtc_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
 #include "services/Display_Functions.hpp"
 #include "services/Lock_Functions.hpp"
@@ -72,8 +73,14 @@ void SettingsScene::refreshClockLabel(bool force){
     this->clock_label->setText(buf);
     this->clock_label->setTextColor(valid ? PICO_BLACK : PICO_RED);
     if(this->clock_note){
-        this->clock_note->setText(valid ? "NTP同期で上書きされます"
-                                        : "「変更」で手動で合わせられます");
+        //時刻の控え(hal/Rtc_Functions.hpp)がどこまで効くか
+        const char* note;
+        if(!valid)                              note = RtcFunctions::HasDs3231() ? "合わせるとDS3231へ控えます"
+                                                                                 : "「変更」で手動で合わせられます";
+        else if(RtcFunctions::Ds3231Valid())    note = "DS3231で電源を切っても保持";
+        else if(RtcFunctions::HasAon())         note = "再起動では消えません";
+        else                                    note = "NTP同期で上書きされます";
+        this->clock_note->setText(note);
     }
 }
 
@@ -126,6 +133,8 @@ void SettingsScene::openClockTimeDialog(){
                 LOG_SYS_MSG("時刻を手動で合わせました: %04d/%02d/%02d %02u:%02u:%02u",
                     this->clock_year, this->clock_month, this->clock_day,
                     (unsigned)(sec / 3600), (unsigned)((sec / 60) % 60), (unsigned)(sec % 60));
+                //RTCへすぐ控える(RtcFunctions::Update() も飛びを見て書くが、下の表示を先に合わせるため)
+                RtcFunctions::SaveNow(time(nullptr));
             }else{
                 this->showMessageLater("時刻を合わせられませんでした");
             }

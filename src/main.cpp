@@ -23,6 +23,7 @@
 #include "system/KeyInput_Functions.hpp"
 #include "hal/CardKB_Functions.hpp"
 #include "hal/WiiClassic_Functions.hpp"
+#include "hal/Rtc_Functions.hpp"
 #include "task/Task_Functions.hpp"
 #include "system/Time_Functions.hpp"
 #include "devtools/Test_Functions.hpp"
@@ -133,6 +134,7 @@ void setup() {
     KeyboardFunctions::Setup(); //キーボード3種もAddOverlay()される
     IME_Functions::Setup();
     TimeFunctions::Setup();
+    RtcFunctions::Setup();   //DS3231(あれば)・AONタイマーから時刻を戻す。I2C0はCardKB2/Wiiと共有
     SoundFunctions::Setup(); //sound.cfgを読むのでSDより後
     MicFunctions::Setup();   //mic.cfg(マイクのI2Sは録音/メーターを使うときだけ2コア目が開始する)
     BatteryFunctions::Setup();
@@ -266,6 +268,7 @@ void loop() {
     PICO_Task::Update();
     LogFunctions::Update();
     TimeFunctions::Update();
+    RtcFunctions::Update();  //時計が合わせ直されたら(NTP・手動)RTC/AONタイマーへ控える。1秒に1回
     ProfilerFunctions::Mark(ProfilerFunctions::Section::Tasks);
     NetworkFunctions::Update();
     ProfilerFunctions::Mark(ProfilerFunctions::Section::Network);

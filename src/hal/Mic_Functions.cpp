@@ -6,6 +6,7 @@
 #include "system/Config_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
+#include "hal/Clock_Functions.hpp"
 #include "sound/Mic_Dsp.hpp"
 #include "sound/Wav_Writer.hpp"
 #include "util/FixedString.hpp"
@@ -79,6 +80,8 @@ namespace {
         mic_i2s.setDATA(MIC_I2S_DATA);
         mic_i2s.setBitsPerSample(32);
         mic_i2s.setBuffers(MicFunctions::kBufferCount, MicFunctions::kBufferWords);
+        //スリープ中にクロックを下げていたら、I2Sの分周を計算する前に戻す
+        ClockFunctions::EnsureFull();
         if(!mic_i2s.begin(MicDsp::kCaptureRate)){
             failed = true;
             failed_epoch = ep;

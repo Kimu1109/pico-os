@@ -9,10 +9,13 @@
 //   - 操作のたびにタイマーが振り出しへ戻る
 //   - KeepAwake() / 音が鳴っている / Wi-Fi接続中 は入らない、スリープ中にKeepAwake()が来たら起きる
 //   - タイムアウト0は無効
+//   - sleep-cpu-mhz: スリープ中だけクロックを下げるよう頼み、起きれば戻す。切り替え(Apply)は出力・マイクが
+//     止まっている間だけ。下限(clk_peri)を割らない。CardKB2のUARTのときは頼まない
 #include "services/Power_Functions.hpp"
 #include "services/Display_Functions.hpp"
 #include "hal/Network_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
+#include "hal/Clock_Functions.hpp"
 #include "system/Pad_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "system/Time_Functions.hpp"
@@ -72,6 +75,7 @@ static void Frame(unsigned long now, bool touch){
 
 int main(){
     using namespace PowerFunctions;
+    ClockFunctions::Setup();
 
     // ---- 既定値と入り方 ----
     Reset();
@@ -220,6 +224,53 @@ int main(){
         Frame(10, false);
         check(IsSleeping(), "SleepNow: Wi-Fiの接続中でも入る");
         NetworkFunctions::currentStatus = NetworkFunctions::NetStatus::SUCCESS;
+    }
+
+    // ---- スリープ中のクロック低減(sleep-cpu-mhz) ----
+    {
+        using namespace ClockFunctions;
+        check(NormalHz() == 150000000u && MinHz() == 48000000u, "クロック: 通常150MHz、下限はclk_peri(48MHz)");
+        check(DividerForMhz(0) == 1, "クロック: 0は下げない");
+        check(DividerForMhz(50) == 3, "クロック: 50MHz → 1/3");
+        check(DividerForMhz(40) == 3 && DividerForMhz(12) == 3, "クロック: 下限を割る指定は50MHzへ丸める");
+        check(DividerForMhz(75) == 2, "クロック: 75MHz → 1/2");
+        check(DividerForMhz(100) == 1 && DividerForMhz(150) == 1 && DividerForMhz(1000) == 1, "クロック: 通常に届かない分周は下げない");
+
+        Reset();
+        check(GetSleepCpuMhz() == 0, "クロック: 既定は下げない");
+        Frame(kDefaultSleepTimeoutMs, false);
+        check(IsSleeping() && Requested() == 1, "クロック: 既定ではスリープ中も頼まない");
+
+        Reset();
+        SetSleepCpuMhz(50);
+        Frame(1000, false);
+        check(Requested() == 1, "クロック: 起きている間は頼まない");
+        Frame(kDefaultSleepTimeoutMs, false);
+        check(IsSleeping() && Requested() == 3, "クロック: スリープに入ると1/3を頼む");
+        Apply(false);
+        check(Divider() == 1, "クロック: 出力・マイクが動いている間は下げない");
+        Apply(true);
+        check(Divider() == 3 && CurrentHz() == 50000000u, "クロック: 止まっていれば50MHzへ");
+        EnsureFull();
+        check(Divider() == 1, "クロック: I2Sを始める前に戻す");
+        Apply(true);
+        check(Divider() == 3, "クロック: 止まればまた下げる");
+        Frame(kDefaultSleepTimeoutMs + 1000, true);
+        check(!IsSleeping() && Requested() == 1, "クロック: 起きれば戻すよう頼む");
+        Apply(true);
+        check(Divider() == 1, "クロック: 次の切り替えで通常へ");
+        Frame(kDefaultSleepTimeoutMs + 1016, false);
+
+        // スリープ中に設定を変えたら、すぐ頼み直す
+        Reset();
+        Frame(kDefaultSleepTimeoutMs, false);
+        SetSleepCpuMhz(75);
+        check(Requested() == 2, "クロック: スリープ中の変更はすぐ効く");
+        SetSleepCpuMhz(0);
+        check(Requested() == 1, "クロック: 0にすれば戻す");
+        Apply(true);
+        check(Divider() == 1, "クロック: 戻った");
+        SetSleepCpuMhz(0);
     }
 
     // ---- 時刻の手動設定(TimeFunctions::SetLocalDateTime)。ホストでは母艦の時計を変えずにずれだけ持つ ----

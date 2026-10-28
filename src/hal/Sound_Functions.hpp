@@ -240,6 +240,8 @@ namespace SoundFunctions {
     bool LoopCore1();
     // LoopCore1()がfalseのとき休む長さ(ms)。省電力中で何も鳴っていなければ長く休む
     unsigned long IdleDelayMs();
+    // I2Sの出力が動いているか(2コア目の持ち物を読む。クロックを下げてよいかの判断。ClockFunctions)
+    bool Core1OutputRunning();
 
     // ===== テスト用(時刻を外から与える。ホストテストのmillis()は常に0のため) =====
     void SetupAt(unsigned long now_ms);

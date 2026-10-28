@@ -10,6 +10,7 @@
 // 音が時間どおりに進むこと」「コマンドの列」「sound.cfg」を確かめる。
 // SoundFunctionsの状態は1つしか無いので、1本の筋書きとして順に進める。
 #include "hal/Sound_Functions.hpp"
+#include "hal/Clock_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "hal/Battery_Functions.hpp"
 #include "sound/Chip_Synth.hpp"
@@ -667,6 +668,22 @@ static void TestSoundFunctions(){
     Out().consume(Out().queued.size());
     for(int i = 0; i < 20 && Out().running; i++){ now += 20; Out().consume(Out().queued.size()); Step(now); }
     check(!Out().running, "鳴り終わったらまた止める");
+
+    //スリープ中にクロックを下げていても(ClockFunctions)、I2Sを始める前に通常へ戻す
+    check(!Core1OutputRunning(), "止まっている(クロックを下げてよい)");
+    ClockFunctions::Setup();
+    ClockFunctions::Request(3);
+    ClockFunctions::Apply(!Core1OutputRunning());
+    check(ClockFunctions::Divider() == 3, "クロックを下げた");
+    Beep(880, 100);
+    Step(now);
+    check(Out().running && Core1OutputRunning() && ClockFunctions::Divider() == 1, "I2Sを始める前にクロックを戻す");
+    ClockFunctions::Apply(!Core1OutputRunning());
+    check(ClockFunctions::Divider() == 1, "鳴っている間は下げない");
+    ClockFunctions::Request(1);
+    now += 200;
+    Step(now);
+    for(int i = 0; i < 20 && Out().running; i++){ now += 20; Out().consume(Out().queued.size()); Step(now); }
 
     SetPowerSave(false);
     Step(now);

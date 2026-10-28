@@ -14,6 +14,7 @@
 #include "hal/Sound_Functions.hpp"
 #include "hal/Mic_Functions.hpp"
 #include "hal/Battery_Functions.hpp"
+#include "hal/Clock_Functions.hpp"
 #include "services/Alarm_Functions.hpp"
 #include "services/Timer_Functions.hpp"
 #include "services/Lock_Functions.hpp"
@@ -86,7 +87,8 @@ void setup() {
     //OTPの端末の鍵。暗号化された設定(wifi.cfg・lock.cfg等)を読むものより前に
     DeviceKeyFunctions::Setup();
     DisplayFunctions::Setup(); //display.cfgを読むのでSDより後
-    PowerFunctions::Setup();   //同上(sleep-timeout)
+    ClockFunctions::Setup();   //起動時のclk_sysを覚える(スリープ中のクロック低減。PowerFunctionsより前)
+    PowerFunctions::Setup();   //同上(sleep-timeout・sleep-cpu-mhz)
 
     //以降のSetupがどれだけヒープを食うかを見るための基準点
     MemFunctions::Setup();
@@ -223,6 +225,10 @@ void loop() {
     //さらに操作が無ければスリープへ入る/操作で戻す(起こしたタッチはここで握りつぶす)。
     //各画面のonUpdate()が呼ぶKeepAwake()は次のフレームのここで読まれる
     PowerFunctions::Update();
+#if !PICO_HW_CORE1
+    //2コア目を持たない版(I2Sが無い)は、スリープ中のクロックの切り替えをここでする。ある版は loop1()
+    ClockFunctions::Apply(true);
+#endif
     //スリープに入ったらロック。ロック中はコントローラーの入力を後ろの画面へ渡さない
     LockFunctions::Update();
     ProfilerFunctions::Mark(ProfilerFunctions::Section::Power);
@@ -310,6 +316,9 @@ void loop1() {
     bool busy = SoundFunctions::LoopCore1();
     //マイク(SPH0645)の受け取り。I2Sが動いている間は休みを1msにする(DMAのバッファは約42ms)
     busy |= MicFunctions::LoopCore1();
+    //スリープ中のクロック低減(PowerFunctionsが頼む)。I2Sを始めるのもこのコアなので、ここで切り替えれば
+    //入れ違わない。出力かマイクが動いている間は下げない(始めるときはSound/Micが EnsureFull() で戻す)
+    ClockFunctions::Apply(!SoundFunctions::Core1OutputRunning() && !MicFunctions::Core1Busy());
     if(!busy) delay(MicFunctions::Core1Busy() ? 1 : SoundFunctions::IdleDelayMs());
 }
 #endif // PICO_HW_CORE1

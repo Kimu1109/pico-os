@@ -6,14 +6,17 @@
 #include "hal/Battery_Functions.hpp"
 #include "hal/Network_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
+#include "hal/Clock_Functions.hpp"
+#include "services/Power_Functions.hpp"
 #include "system/Log_Functions.hpp"
 
 #include <Arduino.h>
 #include <string.h>
+#include <stdlib.h>
 
 namespace {
     void PrintHelp(){
-        LOG_SYS_MSG("[HW] コマンド: hw info / hw boot / hw mem / hw trap / hw buswrite / hw hang");
+        LOG_SYS_MSG("[HW] コマンド: hw info / hw boot / hw mem / hw clock [MHz] / hw sleep / hw trap / hw buswrite / hw hang");
     }
 
     void PrintInfo(){
@@ -59,6 +62,29 @@ namespace {
         else LOG_SYS_MSG("[HW] heap top room=%lu", (unsigned long)room);
     }
 
+    // スリープ中のクロック低減の様子。MHzを付けると sleep-cpu-mhz を今だけ変える(display.cfgへは書かない)
+    void Clock(const char* arg){
+        while(*arg == ' ') ++arg;
+        if(*arg != '\0'){
+            char* end = nullptr;
+            const long v = strtol(arg, &end, 10);
+            if(end == arg || *end != '\0' || v < 0 || v > 1000){
+                LOG_SYS_WARN("[HW] hw clock の後は0(下げない)かMHzの整数です: %s", arg);
+                return;
+            }
+            PowerFunctions::SetSleepCpuMhz((unsigned long)v);
+        }
+        const uint32_t div = ClockFunctions::DividerForMhz((uint32_t)PowerFunctions::GetSleepCpuMhz());
+        LOG_SYS_MSG("[HW] clk_sys=%luHz normal=%luHz clk_peri=%luHz min=%luHz available=%s",
+                    (unsigned long)ClockFunctions::CurrentHz(), (unsigned long)ClockFunctions::NormalHz(),
+                    (unsigned long)ClockFunctions::PeriHz(), (unsigned long)ClockFunctions::MinHz(),
+                    ClockFunctions::Available() ? "yes" : "no");
+        LOG_SYS_MSG("[HW] sleep-cpu-mhz=%lu → スリープ中 %luHz(1/%lu) sleeping=%s",
+                    (unsigned long)PowerFunctions::GetSleepCpuMhz(),
+                    (unsigned long)(ClockFunctions::NormalHz() / div), (unsigned long)div,
+                    PowerFunctions::IsSleeping() ? "yes" : "no");
+    }
+
     [[noreturn]] void Trap(){
         LOG_SYS_MSG("[HW] 未定義命令を実行します(HardFault)");
         __builtin_trap();
@@ -94,6 +120,11 @@ bool HwTestFunctions::FeedSerialLine(const char* line){
     else if(strcmp(cmd, "info") == 0) PrintInfo();
     else if(strcmp(cmd, "boot") == 0) PrintBoot();
     else if(strcmp(cmd, "mem") == 0) PrintMem();
+    else if(strncmp(cmd, "clock", 5) == 0 && (cmd[5] == ' ' || cmd[5] == '\0')) Clock(cmd + 5);
+    else if(strcmp(cmd, "sleep") == 0){
+        LOG_SYS_MSG("[HW] スリープへ入ります(タッチ・ボタン・打鍵で起きる)");
+        PowerFunctions::SleepNow();
+    }
     else if(strcmp(cmd, "trap") == 0) Trap();
     else if(strcmp(cmd, "buswrite") == 0) BusWrite();
     else if(strcmp(cmd, "hang") == 0) Hang();

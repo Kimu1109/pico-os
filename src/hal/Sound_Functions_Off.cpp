@@ -119,6 +119,7 @@ bool SoundFunctions::IsPowerSave(){ return false; }
 void SoundFunctions::SetupCore1(){}
 bool SoundFunctions::LoopCore1(){ return false; }
 unsigned long SoundFunctions::IdleDelayMs(){ return kPowerSaveIdleDelayMs; }
+bool SoundFunctions::Core1OutputRunning(){ return false; }
 
 void SoundFunctions::SetupAt(unsigned long){ Setup(); }
 void SoundFunctions::UpdateAt(unsigned long){}

@@ -11,6 +11,8 @@
 //   2. Wi-Fiチップを積極的な省電力へ(NetworkFunctions::SetLowPower。接続は保つ)
 //   3. 何も鳴っていなければI2Sとアンプを止め、2コア目をゆっくり回す(SoundFunctions::SetPowerSave)
 //   4. 1コア目のloop()を間引く(IdleWait()。CPUがほぼ寝る。タッチ検出は最大kSleepLoopDelayMsの遅れ)
+//   5. sleep-cpu-mhz を決めていれば、CPUのクロックをそこまで下げる(ClockFunctions。既定は下げない。
+//      I2Sの出力・マイクが動いている間と、CardKB2をUARTでつないでいるときは下げない)
 //
 // **スリープへ入らない条件**(どれか1つでもあれば入らない/起きる):
 //   - 各画面が毎フレームKeepAwake()を呼んでいる(ゲームボーイ・SSH・チャット・通信中・計測中など、
@@ -22,6 +24,7 @@
 // 指を離すまで無かったことにする)。コントローラーのボタンは渡す。
 //
 // 設定は /sys/display.cfg の `sleep-timeout = 秒`(0で無効。既定120秒)。SettingsSceneが編集する。
+// `sleep-cpu-mhz = MHz`(0で下げない。既定0。通常のクロック(150MHz)を整数で割った値のうち、指定とClockFunctions::MinHz()を下回らない一番低いものになる。実機はclk_periが48MHzなので50MHzが下限: 50→50、40→50)。消費電流を測って決めるための設定。
 // タイムアウトは最後の操作からの通算(自動調光が切れていてもスリープは別に効く)。
 namespace PowerFunctions {
 
@@ -54,6 +57,9 @@ namespace PowerFunctions {
     // 0で無効。今だけ変える(display.cfgへは書かない。呼び出し側がPICO_Config::SetValue()する)
     unsigned long GetSleepTimeoutMs();
     void SetSleepTimeoutMs(unsigned long ms);
+    // スリープ中のCPUクロック(MHz。0で下げない)。今だけ変える(同上)
+    unsigned long GetSleepCpuMhz();
+    void SetSleepCpuMhz(unsigned long mhz);
 
     namespace detail {
         // KeepAwake()が立てる印。Update()が読んで下ろす

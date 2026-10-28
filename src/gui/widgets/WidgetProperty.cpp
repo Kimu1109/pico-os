@@ -110,7 +110,7 @@ namespace {
 
         {"scroll_x", Id::ScrollX}, {"max_scroll_x", Id::MaxScrollX}, {"max_scroll_y", Id::MaxScrollY},
         {"scroll_y", Id::ScrollY}, {"image_w", Id::ImageW}, {"image_h", Id::ImageH},
-        {"row_count", Id::RowCount},
+        {"row_count", Id::RowCount}, {"full_color", Id::FullColor},
 
         {"hour", Id::Hour}, {"minute", Id::Minute}, {"second", Id::Second},
         {"hand_color", Id::HandColor}, {"second_hand_color", Id::SecondHandColor},

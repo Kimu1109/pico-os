@@ -31,6 +31,8 @@ namespace lgfx { namespace v1 { struct U8g2font {
     explicit U8g2font(int px) : px(px) {}
 }; } }
 using U8g2font = lgfx::v1::U8g2font;
+// 色の型(ImageView が液晶へ RGB565 を送るときの印。中身は見ない)
+namespace lgfx { struct rgb565_t { uint16_t raw; }; }
 
 //実機と同じ名前でフォント実体を用意する(Font_Functions.cppがこの名前を参照する)
 inline const lgfx::v1::U8g2font lgfxJapanGothicP_16{16};

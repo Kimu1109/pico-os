@@ -121,11 +121,11 @@ void CurrentPalette888(uint8_t (*out)[3]){
     }
 }
 
-uint8_t NearestIndex(const uint8_t (*pal)[3], int r, int g, int b){
+uint8_t NearestIndex(const uint8_t (*pal)[3], int r, int g, int b, int first){
     // 人の目に合わせて緑を重く(おおよその輝度の重み)
-    int best = 0;
+    int best = first;
     int32_t best_d = INT32_MAX;
-    for(int i = 0; i < 16; i++){
+    for(int i = first; i < 16; i++){
         const int dr = r - pal[i][0], dg = g - pal[i][1], db = b - pal[i][2];
         const int32_t d = dr * dr * 3 + dg * dg * 4 + db * db * 2;
         if(d < best_d){ best_d = d; best = i; }

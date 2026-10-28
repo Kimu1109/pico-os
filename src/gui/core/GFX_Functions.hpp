@@ -165,6 +165,44 @@ namespace PICO_GFX {
     void DisableFullColorSprite();
     bool IsFullColorSpriteEnabled();
 
+    // ---- フルカラーの直描き(写真をメモリに持たずに液晶へ) ----
+    // 4bppのframeでは出せない色の絵を、普通の転送が全部済んだ後(FlushDirty()の最後)に、呼び出し側の関数で
+    // 液晶へ直接描かせる(SDから解きながら送る。ImageView の JPEG/PNG/フルカラーBMP)。同時に1つだけ。
+    //   - 描かせるのは ArmDirectPaint() した後の1回だけ。普通の転送が矩形にかかっても描き直さない
+    //     (上に載ったダイアログ・トーストを写真で塗りつぶさないため。かかった所は frame の絵=4bppの代わりが見える)。
+    //     描き直してほしいときは持ち主がまた Arm する(ImageView は自分を描き直すたび。上に何か載っていれば Arm しない)
+    //   - 描いた行は「次は必ず送る」にする(行ハッシュの最適化が、frameと食い違う液晶を残さないように)
+    //   - 持ち主は消える前に CancelDirectPaint() を呼ぶ(描いていた所は frame の絵へ戻す)
+    // 状態だけをヘッダに置いているのは、GFX_Functions.cpp を持たないホストテストでも ImageView をそのまま使えるように
+    using DirectPaintFn = void (*)(void* ctx, const Rect& clip);
+    struct DirectPaint {
+        DirectPaintFn fn = nullptr;
+        void* ctx = nullptr;
+        Rect rect = {0, 0, 0, 0};      // 描かせる矩形(液晶の座標。クリップもここ)
+        bool pending = false;          // 次の FlushDirty() で描かせる
+        Rect painted = {0, 0, 0, 0};   // 最後に描かせた矩形(戻すとき用)
+    };
+    inline DirectPaint directPaint;
+
+    inline void ArmDirectPaint(DirectPaintFn fn, void* ctx, const Rect& area){
+        const Rect rect = area.intersection(Rect{0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
+        // 別の持ち主・別の場所に描いていたら、そこは frame の絵へ戻す
+        if(directPaint.painted.w > 0 && (directPaint.ctx != ctx || directPaint.painted != rect)) MarkDirtyBelow(directPaint.painted);
+        if(directPaint.ctx != ctx || directPaint.painted != rect) directPaint.painted = {0, 0, 0, 0};
+        directPaint.fn = fn;
+        directPaint.ctx = ctx;
+        directPaint.rect = rect;
+        directPaint.pending = fn != nullptr && rect.w > 0 && rect.h > 0;
+    }
+    // 持ち主が ctx のときだけ止める。描いていた所は frame の絵へ戻す
+    inline void CancelDirectPaint(void* ctx){
+        if(directPaint.ctx != ctx) return;
+        if(directPaint.painted.w > 0) MarkDirtyBelow(directPaint.painted);
+        directPaint = DirectPaint();
+    }
+    // 今、液晶に frame と違う絵(直描き)が載っているか
+    inline bool IsDirectPainted(){ return directPaint.fn != nullptr && directPaint.painted.w > 0; }
+
     // FlushDirty()の中身(ホストテストやデバッグ用に外から見えるようにしてある)。
     // 重なる/近いdirty矩形を1枚にまとめる
     void CoalesceDirtyRects();

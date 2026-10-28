@@ -2,14 +2,14 @@
 aliases: ["/api/images/"]
 title: "画像"
 weight: 20
-description: "image_load(.pimg/.bmp/.jpg) / image_create / image_target / image_size / draw_image / draw_image_part / image_free"
+description: "image_load(.pimg/.bmp/.jpg/.png) / image_create / image_target / image_size / draw_image / draw_image_part / image_free"
 ---
 
 ## pico.image_load
 
 <div class="sig">pico.image_load(path: string [, opts: table]) <span class="ret">-> handle: integer | nil</span></div>
 
-`.pimg`・`.bmp`・`.jpg`(JPEG)を読み込み、画像のハンドル(整数。WidgetIdとは別物)を返します。形式はファイルの中身で見分けます(拡張子は見ません)。
+`.pimg`・`.bmp`・`.jpg`(JPEG)・`.png`(PNG)を読み込み、画像のハンドル(整数。WidgetIdとは別物)を返します。形式はファイルの中身で見分けます(拡張子は見ません)。
 
 BMPは無圧縮(と BI_BITFIELDS)の 1/4/8/16/24/32bpp を読めます(RLE圧縮は読めません)。画面は16色なので、
 読むときにOSのパレットの一番近い色へ寄せます。`opts` で寄せ方を選べます:
@@ -27,6 +27,18 @@ BMPは無圧縮(と BI_BITFIELDS)の 1/4/8/16/24/32bpp を読めます(RLE圧縮
 | `scale` | (自動) | `1` / `2` / `4` / `8` で、その分の1に縮める。それ以外はエラー |
 | `max_w` / `max_h` | 画面の大きさ(240 / 320) | `scale` を指定しないとき、この大きさに収まる一番大きい縮め方を選ぶ。画像用メモリの残りに収まらなければさらに縮める |
 
+**PNG** は色の種類を問わず読めます(グレー・パレット・RGB・アルファ付き、1〜16bit、インターレース)。JPEGと同じく 1/2・1/4・1/8 に縮められ(四角の中を平均。インターレースの絵は間引き)、`scale` / `max_w` / `max_h` も同じ意味です。
+
+| キー | 既定 | 意味 |
+|---|---|---|
+| `dither` | `true` | 4x4の組織的ディザを掛ける |
+| `transparent` | アルファの列があれば `true` | 透過の画像にする(アルファが96未満の画素が透過=0番になり、`draw_image` で描かない。不透明な画素は0番以外の色へ寄せる)。パレットの `tRNS` で透過を指定したPNGは `true` を渡す。`false` なら半透明の画素を背景の色と混ぜる |
+| `scale` / `max_w` / `max_h` | | JPEGと同じ |
+
+ディザはJPEG・PNGとも、**パレットの色にほぼ等しい画素には掛けません**(16色で描いたドット絵のPNGをそのまま読んでも汚れません)。
+
+PNGを解く間だけ約45KBの作業場所を使います(展開の辞書32KBなど。読み終えたら返します)。
+
 ```lua
 -- 640x640のジャケット画像を、80x80に収めて読む(1/8)
 local art = pico.image_load(pico.app_dir() .. "/cover.jpg", { max_w = 80, max_h = 80 })
@@ -38,7 +50,8 @@ local art = pico.image_load(pico.app_dir() .. "/cover.jpg", { max_w = 80, max_h 
 - `sd_outside_app_dir` 権限が無く、`app_dir` の外を指している
 - 同時に保持できる画像数の上限(8枚)に達している
 - 画像用メモリ合計の上限(96KiB)を超える
-- ファイルが存在しない、または `.pimg` / `.bmp` / `.jpg` として不正(プログレッシブJPEGを含む)
+- ファイルが存在しない、または `.pimg` / `.bmp` / `.jpg` / `.png` として不正(プログレッシブJPEG・途中で切れたファイルを含む)
+- PNGの作業場所(約45KB)をまとめて取れない
 
 ## pico.image_size
 

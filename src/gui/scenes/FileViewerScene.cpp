@@ -26,6 +26,12 @@ namespace {
         if(ext_len > path_len) return false;
         return strcasecmp(path + (path_len - ext_len), ext) == 0;
     }
+
+    //ImageView で開く画像(中身の形式は ImageView がファイルの先頭で見分ける)
+    bool IsImagePath(const char* path){
+        return HasExtension(path, ".pimg") || HasExtension(path, ".bmp") || HasExtension(path, ".png")
+            || HasExtension(path, ".jpg") || HasExtension(path, ".jpeg");
+    }
 }
 
 Rect FileViewerScene::bodyRect(int top_row_h) const {
@@ -135,7 +141,7 @@ void FileViewerScene::onEnter(){
 
     const char* p = this->path.c_str();
     //エディタはテキスト(PICO_APP_TEXTEDITOR)を外した版には出さない
-    const bool editable = PICO_APP_TEXTEDITOR && OSData::SD_usable && !HasExtension(p, ".pimg") && !HasExtension(p, ".bmp") && this->media != Media::Wav;
+    const bool editable = PICO_APP_TEXTEDITOR && OSData::SD_usable && !IsImagePath(p) && this->media != Media::Wav;
 
     //右端の「編集」(テキスト系だけ)。状態欄はその手前までにする
     int status_right = content.x + content.w - MARGIN;
@@ -196,16 +202,23 @@ void FileViewerScene::onEnter(){
             this->showText(body, msg.c_str());
         }
         this->startMedia();
-    }else if(HasExtension(p, ".pimg") || HasExtension(p, ".bmp")){
+    }else if(IsImagePath(p)){
         this->image_view = new ImageView(body.x, body.y, body.w, body.h);
         WidgetFunctions::Add(this->image_view);
         if(!this->image_view->load(p)){
             this->image_view->setVisible(false);
             this->showText(body, "この画像を開けませんでした");
         }else{
+            //元の大きさ。縮めて見せていれば「(1/4)」を足す
             char buf[PICO_STR_L];
-            snprintf(buf, sizeof(buf), "%s %dx%d", name,
-                this->image_view->getImageW(), this->image_view->getImageH());
+            const int div = this->image_view->getScaleDiv();
+            if(div > 1){
+                snprintf(buf, sizeof(buf), "%s %dx%d(1/%d)", name,
+                    this->image_view->getSourceW(), this->image_view->getSourceH(), div);
+            }else{
+                snprintf(buf, sizeof(buf), "%s %dx%d", name,
+                    this->image_view->getSourceW(), this->image_view->getSourceH());
+            }
             this->status_label->setText(buf);
         }
     }else{

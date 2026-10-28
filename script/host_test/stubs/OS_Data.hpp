@@ -4,7 +4,8 @@
 #include <SdFat.h>
 #include "gui/widgets/Widget.hpp"
 struct LGFX { void init(){} void setBaseColor(int){} void clear(int){} void setFont(const void*){}
-    void setTextColor(int){} void setClipRect(int,int,int,int){} void clearClipRect(){} };
+    void setTextColor(int){} void setClipRect(int,int,int,int){} void clearClipRect(){}
+    template<typename T> void pushImage(int,int,int,int,const T*){} };
 namespace OSData {
     inline int touchX = 0, touchY = 0, touchZ = 0;
     inline bool isTouched = false, isTouchStart = false, isTouchEnd = false, isTouchMove = false;

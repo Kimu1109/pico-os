@@ -35,7 +35,7 @@
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/icons/icon_render.h"
 #include "gui/icons/Bmp_Codec.hpp"
-#include "gui/icons/Jpeg_Codec.hpp"
+#include "gui/icons/Image_Codec.hpp"
 #include "gui/Fill4bpp.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Error_Functions.hpp"
@@ -688,9 +688,9 @@ int LuaEngine::l_get_draw_area(lua_State* L) {
 }
 
 // ---------------- 画像 ----------------
-// ヘッダのクラスコメント「画像」参照。`.pimg`のデコードそのものは
-// IconRender::LoadPimgToSprite()(Imageウィジェットのonram=trueと同じ経路)を
-// そのまま使い、このLuaEngineインスタンスの固定長スロットで持つだけ。
+// ヘッダのクラスコメント「画像」参照。デコードそのものは ImageCodec::LoadToSprite()
+// (.pimg / BMP / JPEG / PNG。ImageView・Image と同じ経路)をそのまま使い、
+// このLuaEngineインスタンスの固定長スロットで持つだけ。
 
 int LuaEngine::l_image_load(lua_State* L) {
     LuaEngine* self = Self(L);
@@ -714,23 +714,28 @@ int LuaEngine::l_image_load(lua_State* L) {
     FsFile f = OSData::SD.open(path, O_RDONLY);
     if (!f) { lua_pushnil(L); return 1; }
 
-    // 先頭の"BM"ならBMP、FF D8ならJPEG(どちらもOSのパレットへ寄せて4bppにする。
-    // 2番目の引数 {dither=, raw=(BMPだけ), scale=/max_w=/max_h=(JPEGだけ)})
-    uint8_t magic[2] = {0, 0};
-    f.read(magic, 2);
-    const bool is_bmp = magic[0] == 'B' && magic[1] == 'M';
-    const bool is_jpeg = Jpeg::LooksLikeJpeg(magic, 2);
-    Bmp::Info bmp_info;
-    Jpeg::Info jpeg_info;
-    uint8_t jpeg_scale = 0;
-    IconRender::PimgHeader header = {0, 0, 0};
-    if (is_jpeg) {
-        if (!Jpeg::ReadInfo(f, jpeg_info)) {
-            f.close();
-            LOG_APP_WARN("pico.image_load: %s はJPEGとして読めません(プログレッシブは非対応)", path);
-            lua_pushnil(L);
-            return 1;
-        }
+    // 形式はファイルの先頭で見分ける(.pimg / BMP / JPEG / PNG)。BMP・JPEG・PNG はOSのパレットへ寄せて4bppにする。
+    // 2番目の引数 {dither=, raw=(BMPだけ), scale=/max_w=/max_h=(JPEG・PNGだけ), transparent=(PNGだけ)}
+    ImageCodec::Info info;
+    if (!ImageCodec::ReadInfo(f, info)) {
+        f.close();
+        LOG_APP_WARN("pico.image_load: %s は画像として読めません(JPEGのプログレッシブは非対応)", path);
+        lua_pushnil(L);
+        return 1;
+    }
+    ImageCodec::Options opt;
+    if (lua_istable(L, 2)) {
+        lua_getfield(L, 2, "dither");
+        if (!lua_isnil(L, -1)) opt.dither = lua_toboolean(L, -1) ? 1 : 0;
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "raw");
+        opt.raw_indices = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "transparent");
+        if (!lua_isnil(L, -1)) opt.transparent = lua_toboolean(L, -1) ? 1 : 0;
+        lua_pop(L, 1);
+    }
+    if (ImageCodec::CanScale(info)) {
         // 縮め方: scale(1/2/4/8)を指定すればそれ。無ければ max_w/max_h(既定は画面の大きさ)と
         // 画像用メモリの残りに収まる一番大きいもの
         int scale_div = 0, max_w = SCREEN_WIDTH, max_h = SCREEN_HEIGHT;
@@ -750,32 +755,15 @@ int LuaEngine::l_image_load(lua_State* L) {
                 f.close();
                 return luaL_error(L, "pico.image_load: scale は 1 / 2 / 4 / 8 のどれかです");
             }
-            jpeg_scale = (uint8_t)(scale_div == 1 ? 0 : scale_div == 2 ? 1 : scale_div == 4 ? 2 : 3);
+            opt.scale = (uint8_t)(scale_div == 1 ? 0 : scale_div == 2 ? 1 : scale_div == 4 ? 2 : 3);
         } else {
-            jpeg_scale = Jpeg::FitScale(jpeg_info, max_w, max_h);
-            const size_t room = self->images().room();
-            while (jpeg_scale < 3) {
-                const size_t b = ((size_t)Jpeg::ScaledSize(jpeg_info.width, jpeg_scale)
-                                  * Jpeg::ScaledSize(jpeg_info.height, jpeg_scale) + 1) / 2;
-                if (b <= room) break;
-                jpeg_scale++;
-            }
+            opt.scale = ImageCodec::FitScale(info, max_w, max_h, self->images().room());
         }
-        header.width = Jpeg::ScaledSize(jpeg_info.width, jpeg_scale);
-        header.height = Jpeg::ScaledSize(jpeg_info.height, jpeg_scale);
-    } else if (is_bmp) {
-        if (!Bmp::ReadInfo(f, bmp_info)) { f.close(); lua_pushnil(L); return 1; }
-        header.width = bmp_info.width;
-        header.height = bmp_info.height;
-    } else if (!IconRender::ReadPimgHeader(f, header)) {
-        f.close();
-        lua_pushnil(L);
-        return 1;
     }
 
     // 4bpp(1ピクセル半バイト)なので端数切り上げでバイト数を見積もる。
     // LGFX_Sprite側の実際の確保量は多少前後し得るが、予算チェックとしては十分な精度
-    const size_t need_bytes = (static_cast<size_t>(header.width) * header.height + 1) / 2;
+    const size_t need_bytes = ImageCodec::Bytes4bpp(ImageCodec::ScaledW(info, opt.scale), ImageCodec::ScaledH(info, opt.scale));
     if (!self->images().fits(need_bytes)) {
         f.close();
         LOG_APP_WARN("pico.image_load: %s の読み込みで画像用メモリの上限(%uB)を超えます",
@@ -786,31 +774,7 @@ int LuaEngine::l_image_load(lua_State* L) {
 
     const size_t index = (size_t)free_slot;
     LuaImages::Slot& slot = self->images()[index];
-    bool ok;
-    if (is_bmp) {
-        Bmp::Options opt;
-        opt.dither = bmp_info.bpp > 8;
-        if (lua_istable(L, 2)) {
-            lua_getfield(L, 2, "dither");
-            if (!lua_isnil(L, -1)) opt.dither = lua_toboolean(L, -1);
-            lua_pop(L, 1);
-            lua_getfield(L, 2, "raw");
-            opt.raw_indices = lua_toboolean(L, -1);
-            lua_pop(L, 1);
-        }
-        ok = Bmp::LoadToSprite(f, slot.sprite, opt);
-    } else if (is_jpeg) {
-        Jpeg::Options opt;
-        opt.scale = jpeg_scale;
-        if (lua_istable(L, 2)) {
-            lua_getfield(L, 2, "dither");
-            if (!lua_isnil(L, -1)) opt.dither = lua_toboolean(L, -1);
-            lua_pop(L, 1);
-        }
-        ok = Jpeg::LoadToSprite(f, slot.sprite, opt);
-    } else {
-        ok = IconRender::LoadPimgToSprite(f, slot.sprite);
-    }
+    const bool ok = ImageCodec::LoadToSprite(f, info, slot.sprite, opt);
     f.close();
     if (!ok) { lua_pushnil(L); return 1; }
 

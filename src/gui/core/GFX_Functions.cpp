@@ -309,6 +309,22 @@ bool PICO_GFX::IsFullColorSpriteEnabled() {
     return fc_sprite != nullptr;
 }
 
+// ---- フルカラーの直描き(ヘッダ参照) ----
+namespace {
+    void RunDirectPaint() {
+        PICO_GFX::DirectPaint& d = PICO_GFX::directPaint;
+        if (!d.fn || !d.pending) return;
+        d.pending = false;
+        const Rect r = d.rect.intersection(Rect{0, 0, SCREEN_WIDTH, SCREEN_HEIGHT});
+        if (r.w <= 0 || r.h <= 0) return;
+        OSData::lcd->setClipRect(r.x, r.y, r.w, r.h);
+        d.fn(d.ctx, r);
+        OSData::lcd->clearClipRect();
+        PICO_GFX::InvalidateLcdRows(r.y, r.h);
+        d.painted = r;
+    }
+}
+
 void PICO_GFX::FlushDirty() {
     // パレットが変わったら、frameのパレットを合わせて全画面を描き直す。
     // frameの中身(パレット番号)は変わらないので、行を飛ばす最適化も効かせないよう全行を無効にする
@@ -321,8 +337,9 @@ void PICO_GFX::FlushDirty() {
     }
 
     if (dirtyRectCount == 0 && !dirtyOverflowed) {
-        // 普通の描画は無いが、スプライトだけ更新されたとき
+        // 普通の描画は無いが、スプライト・直描きだけ更新されたとき
         if (fc_pending) FcPush();
+        RunDirectPaint();
         return;
     }
 
@@ -459,13 +476,14 @@ void PICO_GFX::FlushDirty() {
         }
         if (fc_pending) FcPush();
     }
+    RunDirectPaint();
     push_frame_total_ms = millis() - buf_timer_ms;
 
 #if defined(PICOOS_PC)
     // PCビルドだけ: PICOOS_VERIFY_LCD=1 のとき、送り終えた液晶の中身がframeと一致するかを全画素比べる
     // (変わっていない行を送らない最適化が古い絵を残していないかの確認用)
     // (フルカラースプライトを載せている間は液晶がframeと食い違うのが正しいので比べない)
-    if (getenv("PICOOS_VERIFY_LCD") && !fc_sprite) VerifyLcdMatchesFrame();
+    if (getenv("PICOOS_VERIFY_LCD") && !fc_sprite && !IsDirectPainted()) VerifyLcdMatchesFrame();
 #endif
 
     //! DEBUG !

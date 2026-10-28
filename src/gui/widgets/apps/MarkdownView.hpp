@@ -79,6 +79,8 @@ class MarkdownView : public Widget {
     private:
         static constexpr int kLabelPoolSize = 16;
         static constexpr int kImagePoolSize = 2;
+        // .bmp/.jpg/.png を解いて持つときの1枚の上限(4bpp。JPEG・PNGはこれと本文の幅に収まるよう縮める)
+        static constexpr size_t kImageMaxBytes = 24 * 1024;
         static constexpr int kMaxBlocks     = 128;
 
         static constexpr int kPadding       = 4;

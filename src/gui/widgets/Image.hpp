@@ -5,16 +5,30 @@
 #include "util/FixedString.hpp"
 #include "SdFat.h"
 
+// SDの画像を1枚置く。onRAM=false は .pimg を描くたびにSDから読む(RAMを使わない)、true は開いたときにスプライトへ解いて持つ。
+// .bmp / .jpg / .png(ImageCodec)は onRAM に関わらずスプライトへ解いて持つ(描くたびに解くと重すぎるため)。
+// そのとき JPEG・PNG は setMaxSize() の幅と大きさ(4bppのバイト数)に収まるよう 1/2〜1/8 に縮める
+// (MarkdownView が本文の幅に合わせる。画像の数はプールの数までなので、持つ量は 枚数 x 上限 で決まる)。
 class Image : public Widget {
+    public:
+        static constexpr size_t kDefaultMaxBytes = 32 * 1024;
+
+        // path を開いたときの大きさ(.pimg はそのまま、JPEG・PNG は縮めた後)。読めなければfalse
+        static bool DisplaySize(const char* path, int max_w, size_t max_bytes, uint16_t& w, uint16_t& h);
+
     private:
         FixedString<PICO_PATH_LEN> path;
         FsFile imgFile;
         bool onRAM;
+        bool decoded = false;   // onRAM=false でも、.pimg 以外はスプライトに持つ
+        int16_t max_w = 0;      // 0なら幅は見ない
+        size_t max_bytes = kDefaultMaxBytes;
 
         IconRender::PimgSprite sprite;
 
         void updatePath();
         void updateSprite();
+        bool loadSprite(FsFile& f);
 
     public:
         template<size_t N>
@@ -32,6 +46,9 @@ class Image : public Widget {
             : Image(FixedString<PICO_PATH_LEN>(path), x, y, onRAM) {}
 
         void render() override;
+
+        // 次に開く画像から効く(今の画像は開き直さない)
+        void setMaxSize(int max_w, size_t max_bytes = kDefaultMaxBytes){ this->max_w = (int16_t)max_w; this->max_bytes = max_bytes; }
 
         WidgetType getWidgetType() const override { return WidgetType::Image; }
 

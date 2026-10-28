@@ -1,18 +1,15 @@
 // Jpeg_Codec.hpp
-// SDの.jpgを、OSのパレット(PICO_GFX::COLORS)の16色へ寄せた4bppのスプライトへ読む(Luaの pico.image_load)。
+// SDの.jpgを解く。4bppへ寄せる・フルカラーのまま描くのは Image_Codec(ここは解いた四角を順に渡すだけ)。
 //
 // 解くのは LovyanGFX に入っている TJpgDec(lgfx_jd_prepare / lgfx_jd_decomp。ChaN氏のもの)。新しいライブラリは足していない。
 // - ベースライン(順次)のJPEGだけ。プログレッシブ・算術符号は TJpgDec が断る(false)
-// - 1/1・1/2・1/4・1/8 に縮めて解ける(Options::scale)。縮めるとき8x8の中を平均するので、大きな写真を小さく見せても汚くならない
-// - フルカラーを16色へ寄せるので、既定で4x4の組織的ディザを掛ける(Bmp_Codec と同じ考え方・同じ近い色の選び方)
+// - 1/1・1/2・1/4・1/8 に縮めて解ける(Decode()の scale)。縮めるとき8x8の中を平均するので、大きな写真を小さく見せても汚くならない
 // - 作業に使うのは TJpgDec の作業場所(約3.9KB、解く間だけmalloc)だけ。出てくるのは8x8〜16x16の小さな四角ごと
 #pragma once
 
 #include <stdint.h>
 #include <stddef.h>
 #include "SdFat.h"
-#include <LovyanGFX.hpp>
-#include "gui/icons/icon_render.h"
 
 namespace Jpeg {
 
@@ -32,15 +29,12 @@ inline uint16_t ScaledSize(uint16_t v, uint8_t scale){
     return (uint16_t)((v + (1u << scale) - 1) >> scale);
 }
 
-// max_w x max_h に収まる一番小さい縮め方(0〜3。1/8でも収まらなければ3)。0以下の上限は見ない
-uint8_t FitScale(const Info& info, int max_w, int max_h);
+// 縮めた後の小さな四角(8x8〜16x16)を受け取る。rgb は r,g,b の順に w*h*3 バイト(行の幅は w)。
+// 四角は上の行から順(左から右)に来る。falseを返すとそこで打ち切る(もう要らない。成功として扱う)
+using BlockFn = bool (*)(void* ctx, int x, int y, int w, int h, const uint8_t* rgb);
 
-struct Options {
-    bool dither = true;   // 16色へ寄せるとき組織的ディザを掛ける
-    uint8_t scale = 0;    // 0〜3
-};
-
-// 画像全体を新しい4bppのスプライトへ読む(ファイルの頭から)。LoadPimgToSprite()/Bmp::LoadToSprite()のJPEG版
-bool LoadToSprite(FsFile& f, IconRender::PimgSprite& out, const Options& opt = Options());
+// ファイルの頭から縮めて(scale 0〜3)解き、四角を fn へ渡す。stop_y より下の四角に来たら残りを解かずに終える(-1なら最後まで)。
+// 読めない・対応していない・途中で切れていたらfalse(渡したところまでは残る)
+bool Decode(FsFile& f, uint8_t scale, BlockFn fn, void* ctx, int stop_y = -1);
 
 }  // namespace Jpeg

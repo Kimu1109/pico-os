@@ -35,6 +35,10 @@ namespace WidgetFunctions
     // 呼び出しはSceneFunctions::Update()のフレーム境界からのみとする
     void ClearSceneWidgets();
 
+    // w より上に描かれる、見えているウィジェット(通常の層で w より後・ダイアログ・オーバーレイ)が r にかかるか。
+    // frameを通さず液晶へ直接描くもの(ImageView のフルカラー)が、上に載ったものを塗りつぶさないために使う
+    bool IsCoveredAbove(const Widget* w, const Rect& r);
+
     void BringToFront(Widget *w);
     // wとその子孫を、描画順(通常レイヤ)の一番上/一番下へ移す。順序は保つ。
     // 親子はこのリストでは親が先・子が後なので、まとめて動かさないと子が親の裏に隠れる。

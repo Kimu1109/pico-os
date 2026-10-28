@@ -66,8 +66,9 @@ bool LoadToSprite(FsFile& f, IconRender::PimgSprite& out, const Options& opt = O
 // 4bppのスプライトの(0,0,w,h)を、今のOSのパレット(16色)付きの4bpp BMPとして書く
 bool Encode4bpp(LGFX_Sprite& src, uint16_t w, uint16_t h, FsFile& f);
 
-// RGB(8bitずつ)に一番近いOSのパレットの番号。pal888 は16色ぶんの{r,g,b}
-uint8_t NearestIndex(const uint8_t (*pal888)[3], int r, int g, int b);
+// RGB(8bitずつ)に一番近いOSのパレットの番号。pal888 は16色ぶんの{r,g,b}。
+// first より前の番号は選ばない(透過の絵で0番を透過に取っておくときは1)
+uint8_t NearestIndex(const uint8_t (*pal888)[3], int r, int g, int b, int first = 0);
 // PICO_GFX::COLORS(RGB565)を{r,g,b}へ広げる
 void CurrentPalette888(uint8_t (*out)[3]);
 

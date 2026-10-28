@@ -300,8 +300,9 @@ description: "pico.set / pico.get で読み書きできるプロパティの、�
 
 | name | 型 | get | set |
 |---|---|---|---|
-| `path` | Str | ✓ | ✓(`.pimg`を読み込む。読めなければエラー。`""`で閉じる。`sd_outside_app_dir`権限が要るのは`pico.image_load`と同じ) |
-| `image_w` / `image_h` | Int | ✓ | ✗(読み込んだ画像の大きさ。未読込は0) |
+| `path` | Str | ✓ | ✓(`.pimg`/`.bmp`/`.jpg`/`.png`を読み込む。読めなければエラー。`""`で閉じる。`sd_outside_app_dir`権限が要るのは`pico.image_load`と同じ) |
+| `image_w` / `image_h` | Int | ✓ | ✗(見せている画像の大きさ。JPEG・PNGは縮めた後。未読込は0) |
+| `full_color` | Bool | ✓ | ✓(JPEG・PNG・フルカラーのBMPを液晶へフルカラーで直接描く。既定 `true`。`false` で16色の絵だけ) |
 | `w` / `h` | Int | ✓ | ✓(表示欄の大きさ。変えると読み直す) |
 
 ## MarkdownView

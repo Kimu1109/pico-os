@@ -23,9 +23,11 @@ MarkdownView::MarkdownView(int16_t x, int16_t y, int16_t w, int16_t h) {
         children_.push_back(labelPool[i]);
     }
     for (int i = 0; i < kImagePoolSize; i++) {
-        //onRAM=false: SDから都度ストリーミングして描画する。
+        //onRAM=false: .pimgはSDから都度ストリーミングして描画する。
         //RAMに載せるとスプライトのピクセルバッファが画像サイズぶん必要になり、
-        //MarkdownViewの占有量が「開いた文書次第」で青天井になってしまう
+        //MarkdownViewの占有量が「開いた文書次第」で青天井になってしまう。
+        //.bmp/.jpg/.pngだけはスプライトへ解いて持つが、1枚 kImageMaxBytes までに縮めるので
+        //占有量は kImagePoolSize x kImageMaxBytes で止まる(幅は bindImageSlot() で本文の幅に合わせる)
         imagePool[i] = new Image("", kPadding, 0, false);
         imagePool[i]->setParent(this);
         imagePool[i]->setVisible(false);
@@ -983,13 +985,9 @@ void MarkdownView::layoutBlocks() {
         if (b.type == MdBlockType::Image) {
             FixedString<PICO_PATH_LEN> path;
             resolveRef(doc_text.c_str() + b.srcOffset, b.srcLength, path);
-            uint16_t h = kPadding;
-            FsFile f = OSData::SD.open(path.c_str());
-            if (f) {
-                IconRender::PimgHeader head;
-                if (IconRender::ReadPimgHeader(f, head)) h = head.height;
-                f.close();
-            }
+            uint16_t w = 0, h = kPadding;
+            //bindImageSlot()と同じ幅・大きさの上限で測る(JPEG・PNGは縮めた後の高さ)
+            if (!Image::DisplaySize(path.c_str(), viewport_w, kImageMaxBytes, w, h)) h = kPadding;
             b.height = h;
         }
         else if (b.type == MdBlockType::HorizontalRule) {
@@ -1196,6 +1194,7 @@ void MarkdownView::bindImageSlot(int slot, int blockIdx, bool force) {
 
     FixedString<PICO_PATH_LEN> imgPath;
     resolveRef(doc_text.c_str() + b.srcOffset, b.srcLength, imgPath);
+    img->setMaxSize(this->l_rect.w - SCROLL_L - kPadding * 2, kImageMaxBytes);  // layoutBlocks()の viewport_w と同じ
     img->setPath(imgPath);
     img->setX(kPadding);
     img->setY(b.y);

@@ -61,7 +61,7 @@
 // (lua_State*やregistry refをウィジェット側へ持たせない設計にしたため)。
 //
 // 画像(pico.image_load/draw_image/image_size/image_free): ウィジェット(Image)を
-// 介さず、`.pimg`(IconRender参照)を直接デコードしてこのLuaEngineインスタンスが
+// 介さず、`.pimg`/BMP/JPEG/PNG(ImageCodec参照。4bppへ寄せる)を直接デコードしてこのLuaEngineインスタンスが
 // 保持する。ウィジェットではないのでWidgetRegistryは使わず、固定長スロット配列
 // (LuaImages。上限LuaImages::kMax枚)を自分で持つ。ハンドルはWidgetIdと同じ発想の
 // 「generation(上位)+index(下位)」パック整数だが、この配列専用のスコープなので

@@ -37,7 +37,7 @@
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/icons/icon_render.h"
 #include "gui/icons/Bmp_Codec.hpp"
-#include "gui/icons/Jpeg_Codec.hpp"
+#include "gui/icons/Image_Codec.hpp"
 #include "gui/Fill4bpp.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Error_Functions.hpp"

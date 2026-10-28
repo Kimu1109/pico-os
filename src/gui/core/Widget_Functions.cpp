@@ -347,6 +347,29 @@ void WidgetFunctions::UpdateAll()
     ProcessPendingDeletes();
 }
 
+bool WidgetFunctions::IsCoveredAbove(const Widget* w, const Rect& r)
+{
+    if (r.w <= 0 || r.h <= 0) return false;
+    bool covered = false;
+    auto check = [&covered, &r, w](Widget* o) {
+        if (covered || !o || o == w || !o->getVisible()) return;
+        const Rect sr = o->getScreenRect();
+        if (sr.w > 0 && sr.h > 0 && sr.intersects(r)) covered = true;
+    };
+    bool above = false;
+    for (size_t i = 0; i < widgets.size() && !covered; i++) {
+        if (widgets[i] == w) { above = true; continue; }
+        if (above) check(widgets[i]);
+    }
+    for (size_t d = 0; d < dialog_roots.size() && !covered; d++) {
+        if (dialog_roots[d] && dialog_roots[d]->getVisible()) dialog_roots[d]->visitAll(check);
+    }
+    for (size_t o = 0; o < overlays.size() && !covered; o++) {
+        if (overlays[o] && overlays[o]->getVisible()) overlays[o]->visitAll(check);
+    }
+    return covered;
+}
+
 // タッチは上から順に判定
 Widget *WidgetFunctions::HitTest(int16_t x, int16_t y)
 {

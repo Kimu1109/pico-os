@@ -4,7 +4,7 @@
 > パスはリポジトリのルートから。「上の「〜」」等の参照先が別のファイルにあるときは、`CLAUDE.md`の「設計記録の索引」で節の名前から探すこと。
 
 ## ウィジェットカタログ
-Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / TextView(見えている行だけを描くプレーンテキストの表示欄。任意でカーソル) / ImageView(.pimgを1回だけ解いて持ち、ドラッグでスクロール) / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照) / ProgressBar(表示専用の進捗バー。タップ素通り) / QRCodeView(QRコードの表示。タップ素通り。Lua側からは`"QRCode"`。下記「QRコード」)。
+Button / Label / Textbox(Labelを継承、単一行/複数行対応の入力欄) / NumberInput(数字キーボード専用の1行入力欄) / Checkbox / Icon(tabler_icons由来、`IconSize`指定) / Image / NumberSlider / ScrollContainer / ScrollList / CanvasRaster(ピクセル単位描画) / LayoutContainer(縦横1方向の自動整列) / GridContainer(列数固定の2次元流し込み) / AppGrid(ランチャのアプリタイル) / TabBar(横並びのタブ) / AnalogClock(アナログ時計の文字盤) / DurationPicker(「時:分:秒」の表示/入力欄) / DropdownMenu / FileExplorer(SDのファイル一覧・作成/削除/選択、`currentPath`は`FixedString<PICO_PATH_LEN>`) / MarkdownView(最も作り込まれたウィジェット) / Statusbar / TextView(見えている行だけを描くプレーンテキストの表示欄。任意でカーソル) / ImageView(.pimg/.bmp/.jpg/.pngを1回だけ解いて持ち、ドラッグでスクロール。写真はフルカラーで液晶へ直描き。下記「画像の形式とフルカラーの直描き」) / LuaCanvas(中身を持たず`render()`でLua側コールバックを呼ぶだけ。Lua側からは`"Canvas"`。詳細は下記「直接描画」参照) / ProgressBar(表示専用の進捗バー。タップ素通り) / QRCodeView(QRコードの表示。タップ素通り。Lua側からは`"QRCode"`。下記「QRコード」)。
 **`TextView` / `ImageView` / `MarkdownView` / `AnalogClock` / `DurationPicker` / `MonthGrid` も2026-10-05からLuaの `pico.create` で作れる**(下記「Lua APIの追加(2026-10-05 その2)」)。
 
 `LayoutContainer` / `GridContainer` は**Luaアプリが子を動的に積むこと**を想定して足したコンテナ。`add()`で所有権を引き取りデストラクタで`delete`する。子の位置(x/y)だけを面倒見てサイズは子自身に委ねる(`Widget`基底に`setW`/`setH`が無いため)。コンストラクタの`reserve_hint`は上限ではなく単なるヒントで、超えても`std::vector`の再確保で動き続ける。
@@ -234,3 +234,42 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
   ダークテーマで地が明るい方・長すぎ/NULで空・プロパティ)、`lua_ext_test`(`pico.create("QRCode")`・`text_set`・`ecc`・定数)。
   PCビルドの画面写真(等倍)をOpenCVの `QRCodeDetector` で読み、[スマホ]の画面(明るい/ダーク)とLuaアプリ(誤り訂正M/H)が
   元の文字に戻ることを確かめた(OpenCVは手元で入れただけでリポジトリのテストには入れていない)。**実機の液晶をiPhone/Androidのカメラで読めることを確認済み(2026-10-25)**。
+
+## 画像の形式とフルカラーの直描き (`src/gui/icons/Image_Codec` / `Png_Codec` / `ImageView`) (2026-10-28)
+
+それまで読めたのは `.pimg`・BMP・JPEG(`pico.image_load` だけ)で、**PNGが無かった**。ブラウザ(MarkdownView)やLuaで扱う外の画像はPNGが多い。
+
+- **PNGは LovyanGFX に入っている pngle(`lgfx_pngle_*`)で解く。新しいライブラリは足していない。** 展開は同じく同梱の miniz の tinfl
+  (`lgfx_miniz`)で、**zip/gzipの展開を足すときも同じ tinfl が使える**(`roadmap-ideas.md` の青空文庫のzip)。pngle は色の種類を全部
+  (グレー/パレット/RGB/α、1〜16bit、tRNS、Adam7)読む。作業場所は1つの塊で約45KB(展開の辞書32KB + 展開器11KB + 1行)を**解く間だけ** malloc する。
+  LovyanGFX の `drawPng` は「繰り返すと確保に失敗する」として pngle を static に持ちっぱなしにしているが、45KBを常に取っておくのは重いので、
+  ここでは毎回取って返す(取れなければ読めない=nil/表示できない、で止まる)。**実機の断片化で取れなくなるかは未確認(Todoist参照)**。
+- **`ImageCodec`(`gui/icons/Image_Codec`)が全形式の窓口。** 先頭の数バイトで BMP/JPEG/PNG を見分け、どれでもなければ `.pimg`(印が無いため。今までどおり)。
+  `pico.image_load`・`ImageView`・`Image`(MarkdownViewの画像)がこれを通る(以前は `l_image_load` と ImageView が別々に BMP/JPEG を見分けていた)。
+  - `Jpeg::Decode()` / `Png::Decode()` は「縮めた後の画素を順に渡す」だけにし、16色へ寄せる側(`Sink4`)とフルカラーのまま渡す側(`Sink565`)を
+    ImageCodec に1つずつ置いた。どちらも**窓**(画像の一部)を受け取り、窓の最後の行を過ぎたら残りを解かずに止める(JPEGは出力関数が0を返して`JDR_INTR`、
+    PNGは読み込み関数が0を返して pngle を「足りない」で止める。どちらも自分で止めた印を見て成功扱い)。
+  - PNGの縮小: インターレースでない絵は四角の中を平均(縮めた後の幅 x 8Bの足し算の場所)、インターレースの絵は四角の左上の1画素を取る(画素が飛び飛びに届くため)。
+  - 透過は generate_pimg.py と同じ(α<96 を0番、不透明な画素は0番以外へ寄せる。`Bmp::NearestIndex(..., first=1)`)。PNGは**αの列があれば既定で透過**、
+    パレットの`tRNS`は解くまで分からないので `transparent=true` で頼む。透過にしない絵の半透明は背景の色と混ぜる。
+  - **ディザは、パレットの色にほぼ等しい(各色およそ8以内)画素には掛けない。** 16色で描いたドット絵のPNGを既定のまま読んでも汚れないように。
+- **フルカラーの直描き(`PICO_GFX::ArmDirectPaint`)**: frameは4bppなので写真は16色に落ちる。写真を16bppで持つと240x300で約140KBになるので、
+  **持たずに、frameの転送が済んだ後(`FlushDirty()`の最後)にSDから解きながら液晶へ`pushImage`する**。
+  - ImageView は今までどおり16色の絵をframeへ描き(下書き)、`render()` のたびに `ArmDirectPaint()` で「この矩形を1回描いて」と頼む。
+    `FlushDirty()` は普通の転送の後にそれを呼び、描いた行を `InvalidateLcdRows()` する(液晶がframeと食い違うので、行ハッシュの最適化で古い絵が残らないように)。
+  - **普通の転送がその矩形にかかっても自分からは描き直さない。** 直描きはframeの外なので、上に載ったダイアログ・トースト等を写真で塗りつぶしてしまう。
+    代わりに ImageView は描き直しのたびに `WidgetFunctions::IsCoveredAbove()`(通常の層で自分より後・ダイアログ・オーバーレイのうち見えているものが重なるか)を見て、
+    重なっていれば頼まない(16色の下書きが見える)。重なっていたものがどくと、その跡のdirty矩形で ImageView が描き直され、また頼む。
+    FlushDirty は dirty 矩形にかかるウィジェットを `renderForce()` するので、この「どいたら描き直される」は特別な仕掛け無しで起きる。
+  - ドラッグ中は頼まない(1pxごとにSDから解き直さない)。指を離したら頼む。消える・隠れるときは `CancelDirectPaint()`(描いた所を `MarkDirtyBelow` でframeの絵へ戻す)。
+  - 状態はヘッダの inline 変数だけ(`GFX_Functions.cpp` を持たないホストテストでも ImageView をそのまま使えるように)。既にあった
+    `EnableFullColorSprite`(16bppのスプライトを持つ版。使っている所は無い)とは別。
+  - 描き直すたびにSDから解き直すので、写真の上で頻繁に描き直す部品を重ねると重い(重なっている間は頼まないので、実際には下書きのまま)。
+    **実機の速さ(JPEG 160x120・BMP 240x300 を描くのにかかる時間)は未確認(Todoist参照)**。
+- **MarkdownView の画像**: `.pimg` は今までどおり描くたびにSDから読む(RAMを使わない)。BMP/JPEG/PNG は描くたびに解けないので、
+  `Image` が開いたときに4bppのスプライトへ解いて持つ。JPEG・PNGは本文の幅と `MarkdownView::kImageMaxBytes`(24KiB)に収まるよう縮めるので、
+  持つ量は画像のプール(2枚)x 24KiB で止まる。高さを決める `layoutBlocks()` と表示の `bindImageSlot()` は同じ上限で測る(`Image::DisplaySize()`)。
+- 検証: `image_codec_test`(PNGの色の種類・16bit・インターレース・縮小・窓・透過・tRNS・RGB565・途中で切れたファイル。PNGは
+  `script/host_test/gen_png_test_data.py` が標準ライブラリだけで作る)、`lua_ext_test`(`pico.image_load` のPNG)。PCビルドで、JPEG 640x480(1/4)・
+  αつきPNGを背景色に混ぜる・480x600の24bit BMPをドラッグした後の窓・写真の上のダイアログ(閉じたらフルカラーへ戻る)・MarkdownViewのPNG/JPEGを `--shot` で確認した。
+  ホストテストは pngle/miniz の写し(`stubs/lgfx/utility/`)を UBSan 無しで組む(写しの中の符号付きシフト・4バイト単位の読みで止まらないように)。

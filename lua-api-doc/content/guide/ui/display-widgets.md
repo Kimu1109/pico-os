@@ -61,13 +61,15 @@ pico.on(log, "text_tap", function(id, byte_offset) ... end)
 
 ## ImageView — スクロールできる画像
 
-`.pimg` を読み込んで表示します。表示欄より大きい画像はドラッグで動かせます(大きな画像でも表示欄ぶんだけしかメモリを使いません)。`pico.image_load` + `Canvas` より手軽で、`pico.image_load` の枚数の枠も使いません。
+`.pimg`・`.bmp`・`.jpg`・`.png` を読み込んで表示します(形式はファイルの中身で見分けます)。表示欄より大きい画像はドラッグで動かせます(大きな画像でも表示欄ぶんだけしかメモリを使いません)。JPEG・PNG は表示欄に収まる一番大きい段(1/1・1/2・1/4・1/8)へ縮めて開きます。`pico.image_load` + `Canvas` より手軽で、`pico.image_load` の枚数の枠も使いません。
+
+**写真はフルカラーで見えます。** JPEG・PNG・フルカラーのBMPは、16色へ寄せた絵を描いた上に、SDから解きながら液晶へそのままの色で直接描きます(絵をメモリに持ちません)。ドラッグ中と、上にダイアログ・トースト・ほかの部品が重なっている間は16色の絵になります(直描きは上に載ったものを塗りつぶしてしまうため。どけば元に戻ります)。描き直すたびにSDから解き直すので、写真の上で頻繁に描き直す部品は重ねないでください。16色の絵だけでよければ `full_color` を `false` にします。
 
 ```lua
 local view = pico.create("ImageView")
 pico.set(view, "w", 200); pico.set(view, "h", 150)
 pico.set(view, "path", pico.path_join(pico.app_dir(), "map.pimg"))  -- 読めなければエラー
-print(pico.get(view, "image_w"), pico.get(view, "image_h"))
+print(pico.get(view, "image_w"), pico.get(view, "image_h"))  -- 縮めた後の大きさ
 ```
 
 ## MarkdownView

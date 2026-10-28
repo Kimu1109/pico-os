@@ -63,6 +63,7 @@ namespace WidgetProperty {
 
         // TextView / MarkdownView / ImageView
         ScrollY, ImageW, ImageH, RowCount, ScrollX, MaxScrollX, MaxScrollY,
+        FullColor,
 
         // AnalogClock / DurationPicker / MonthGrid
         Hour, Minute, Second, HandColor, SecondHandColor,

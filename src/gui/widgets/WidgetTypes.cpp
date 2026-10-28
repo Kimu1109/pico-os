@@ -905,6 +905,7 @@ bool GetImageView(Widget* widget, Id id, Value& out) {
             case Id::Path: out = Value::MakeStr(iv->getPath()); return true;
             case Id::ImageW: out = Value::MakeInt(iv->getImageW()); return true;
             case Id::ImageH: out = Value::MakeInt(iv->getImageH()); return true;
+            case Id::FullColor: out = Value::MakeBool(iv->getFullColor()); return true;
             default: return false;
         }
 }
@@ -922,6 +923,9 @@ bool SetImageView(Widget* widget, Id id, const Value& value) {
                 if (value.type != Type::Str) return false;
                 if (value.s.empty()) { iv->unload(); return true; }
                 return iv->load(value.s.c_str());
+            case Id::FullColor:
+                if (value.type != Type::Bool) return false;
+                iv->setFullColor(value.b); return true;
             default: return false;
         }
 }

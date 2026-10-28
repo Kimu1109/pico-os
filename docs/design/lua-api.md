@@ -208,6 +208,8 @@ OSと同じ`key=value`書式(`Config_Functions`)で読み書きできるよう�
   (`src/gui/icons/icon_render.h/.cpp`)をそのまま呼ぶ。** `Image`ウィジェットの
   `onRAM=true`のとき(`Image::updateSprite()`)と全く同じ経路で、`.pimg`以外の画像形式
   (PNG/BMP等)は最初から対象外(このOSでは`.pimg`だけが唯一の画像形式)。
+  **その後 BMP・JPEG、2026-10-28に PNG を足し、今は全形式を `ImageCodec::LoadToSprite()` で読む**
+  (`gui.md`「画像の形式とフルカラーの直描き」。オプションは `dither`/`raw`/`scale`/`max_w`/`max_h`/`transparent`)。
 - **ウィジェットではないので`WidgetRegistry`は使わず、`LuaEngine`インスタンスごとの
   固定長スロット配列(`images_`、上限`kMaxLuaImages=4`)を持つ。** MarkdownViewの
   `labelPool`/`imagePool`と同じ「固定長配列」志向で、任意個数の`std::vector<Widget*>`的な

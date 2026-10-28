@@ -54,6 +54,7 @@
 #include <iterator>
 #include <string>
 #include "jpeg_test_data.hpp"
+#include "png_test_data.hpp"
 #include "gui/icons/Bmp_Codec.hpp"
 
 // ---- モック(lua_engine_test.cppと同じ方針) ----
@@ -2804,6 +2805,10 @@ int main() {
         HostSd::files["/app/q64.jpg"] = std::string((const char*)kJpegQuad64x48, sizeof(kJpegQuad64x48));
         HostSd::files["/app/prog.jpg"] = std::string((const char*)kJpegProgressive, sizeof(kJpegProgressive));
         HostSd::files["/app/trunc.jpg"] = std::string((const char*)kJpegQuad32, 300);
+        HostSd::files["/app/q.png"] = std::string((const char*)kPngQuad64x48, sizeof(kPngQuad64x48));
+        HostSd::files["/app/qa.png"] = std::string((const char*)kPngQuadAlpha, sizeof(kPngQuadAlpha));
+        HostSd::files["/app/qp.png"] = std::string((const char*)kPngQuadPalette, sizeof(kPngQuadPalette));
+        HostSd::files["/app/trunc.png"] = std::string((const char*)kPngQuad64x48, 80);
         // ホストテストのスタブは TFT_RED 等が色の番号そのもの(RGB565ではない)なので、
         // このテストの間だけ本物の色のパレットにする(近い色を選ぶ処理を確かめるため)
         int saved_colors[16];
@@ -2853,6 +2858,33 @@ int main() {
             check(pico.image_load("/app/prog.jpg") == nil, "JPEG: プログレッシブは読めない(nil)")
             check(pico.image_load("/app/trunc.jpg") == nil, "JPEG: 途中で切れたファイルはnil")
             check(not pcall(pico.image_load, "/app/q.jpg", {scale = 3}), "JPEG: scaleは1/2/4/8")
+
+            -- PNG(同じ口で読める。縮め方・透過)
+            local p1 = pico.image_load("/app/q.png", {dither = false})
+            check(p1 ~= nil, "PNG: 読める")
+            if p1 then quad_ok(p1, 64, 48, "PNG 64x48"); pico.image_free(p1) end
+            local p2 = pico.image_load("/app/q.png", {dither = false, scale = 4})
+            if p2 then quad_ok(p2, 16, 12, "PNG scale=4"); pico.image_free(p2) end
+            check(p2 ~= nil, "PNG: scale=4")
+            local p3 = pico.image_load("/app/q.png", {dither = false, max_w = 40})
+            if p3 then quad_ok(p3, 32, 24, "PNG max_w=40(1/2)"); pico.image_free(p3) end
+            local pa = pico.image_load("/app/qa.png", {dither = false})
+            check(pa ~= nil, "PNG: アルファ付き")
+            if pa then
+                pico.image_target(pa)
+                check(pico.get_pixel(4, 4) == 0 and pico.get_pixel(24, 24) == C_WHITE, "PNG: α=0は透過(0番)")
+                pico.image_target(nil)
+                pico.image_free(pa)
+            end
+            local pp = pico.image_load("/app/qp.png", {dither = false, transparent = true})
+            if pp then
+                pico.image_target(pp)
+                check(pico.get_pixel(2, 2) == 0 and pico.get_pixel(12, 2) == C_GREEN, "PNG: tRNSを transparent=true で透過")
+                pico.image_target(nil)
+                pico.image_free(pp)
+            end
+            check(pp ~= nil, "PNG: パレット+tRNS")
+            check(pico.image_load("/app/trunc.png") == nil, "PNG: 途中で切れたファイルはnil")
         )LUA", "jpeg");
         check(ok, "JPEG: 実行");
         memcpy(PICO_GFX::COLORS, saved_colors, sizeof(saved_colors));

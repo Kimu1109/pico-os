@@ -63,6 +63,12 @@ target_include_directories(host_qrcodegen PUBLIC ${ROOT}/lib/qrcodegen/src)
 
 # JPEGの読み取り(pico.image_load)が使うTJpgDec(LovyanGFXの写し。stubs/lgfx/utility/README.md)
 add_library(host_tjpgd STATIC ${CMAKE_CURRENT_SOURCE_DIR}/stubs/lgfx/utility/lgfx_tjpgd.c)
+# PNGの読み取りが使う pngle と、その展開に使う miniz(どちらもLovyanGFXの写し。同じREADME)
+add_library(host_pngle STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/stubs/lgfx/utility/lgfx_pngle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/stubs/lgfx/utility/lgfx_miniz.c)
+# 写しには手を入れないので、中のUB(4バイト単位の読み・符号付きのシフト。実機のCPUでは問題にならない)はUBSanで見ない
+target_compile_options(host_pngle PRIVATE -fno-sanitize=undefined)
 
 # ---- src/ を層ごとのライブラリに ----
 # ホストのスタブ(stubs/)では作れないもの。src/ にあってもテストには入れない
@@ -132,7 +138,7 @@ endforeach()
 # テストがリンクするもの。段の間は互いに参照しあう(つなぎの boot が下の段の関数を定義する等)
 # ので、RESCAN の組にしてリンカに何度でも見直させる
 set(HOST_LINK
-    "$<LINK_GROUP:RESCAN,${HOST_LAYER_LIBS},host_lua,host_monocypher,host_qrcodegen,host_tjpgd>"
+    "$<LINK_GROUP:RESCAN,${HOST_LAYER_LIBS},host_lua,host_monocypher,host_qrcodegen,host_tjpgd,host_pngle>"
     OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
 
 # ---- テストの登録 ----
@@ -216,6 +222,7 @@ host_test(firmware_test GROUP core)
 host_py_test(firmware_tool_test GROUP core USES firmware_test
     ARGS $<TARGET_FILE:firmware_test> ${CMAKE_CURRENT_BINARY_DIR}/firmware_tool_work)
 host_test(bmp_test GROUP core)
+host_test(image_codec_test GROUP core)
 host_test(path_test GROUP core)
 host_test(touch_filter_test GROUP core)
 host_test(touch_calib_test GROUP core)

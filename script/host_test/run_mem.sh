@@ -46,6 +46,13 @@ g++ -std=gnu++17 -g -Os -fno-rtti \
     "$ROOT/src/gui/widgets/interfaces/IBorderColor.cpp" \
     "$ROOT/src/gui/widgets/interfaces/IFontImplementation.cpp" \
     "$ROOT/src/gui/icons/icon_render.cpp" \
+    "$ROOT/src/gui/icons/Image_Codec.cpp" \
+    "$ROOT/src/gui/icons/Bmp_Codec.cpp" \
+    "$ROOT/src/gui/icons/Jpeg_Codec.cpp" \
+    "$ROOT/src/gui/icons/Png_Codec.cpp" \
+    -x c "$ROOT/script/host_test/stubs/lgfx/utility/lgfx_tjpgd.c" \
+    "$ROOT/script/host_test/stubs/lgfx/utility/lgfx_pngle.c" \
+    "$ROOT/script/host_test/stubs/lgfx/utility/lgfx_miniz.c" -x none \
     -o "$OUT/mem_probe"
 
 "$OUT/mem_probe"

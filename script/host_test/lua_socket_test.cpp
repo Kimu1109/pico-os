@@ -7,6 +7,7 @@
 //   同時に開ける数の上限 / コールバックの中で閉じる / アプリを閉じると挨拶して閉じる / バックグラウンドには無い
 //   サンプルアプリ「MQTTリモコン」(pc/sdcard/lua/apps/MQTTリモコン/main.lua)を本物のまま動かす
 //   (引数はリポジトリのルート。retain の状態が届く・点け消しを送る・遺言と online/offline・戻ると DISCONNECT)
+//   サンプルアプリ「HAパネル」(WebSocket)を偽物の Home Assistant(FakeHaServer)へ繋いで動かす
 //
 // 部品そのものの細かい振る舞い(枠・パケット・時間切れ)は socket_test の担当。
 #include "lua/LuaEngine.hpp"
@@ -423,6 +424,97 @@ int main(int argc, char** argv){
             for(const auto& l : mqtt.log) fprintf(stderr, "broker: %s\n", l.c_str());
         }
         check(mqtt.saw("pub:pico/remote/ptest/status:0:retain:offline"), "remote: 戻る前に offline を置く");
+    }
+
+    // ---- サンプルアプリ「HAパネル」(WebSocket) ----
+    {
+        FakeServers::FakeHaServer ha;
+        check(ha.start(), "ha: 偽物のHome Assistantを立てる");
+        std::ifstream f(root + "/pc/sdcard/lua/apps/HAパネル/main.lua");
+        std::stringstream ss;
+        ss << f.rdbuf();
+        std::string src = ss.str();
+        check(!src.empty(), "ha: main.lua を読む");
+        src += "\nTEST = { toggle = toggle, back = back, authed = function() return authed end,"
+               " ent = function(i) return ent[i] end, pending = function(i) return pending[i] end,"
+               " conn = function() return conn_text end, log = function() return log end,"
+               " retrying = function() return retry_timer ~= nil end, label = label_of }\n";
+
+        // Luaの式が真になるまで回す
+        auto until = [](LuaEngine& e, const char* expr) {
+            const std::string code = std::string("until_ok = (") + expr + ") and true or false";
+            for(int i = 0; i < 4000; i++){
+                e.Run(code.c_str(), "until");
+                if(GlobalTrue(e, "until_ok")) return true;
+                e.UpdateSockets();
+                PicoHostClock::now += 1;
+                usleep(200);
+            }
+            return false;
+        };
+
+        OSData::SD_usable = true;
+        {
+            LuaEngine e(256 * 1024, net, "/hapanel");
+            lua_register(e.raw(), "check", l_check);
+            SetInt(e, "HA_PORT", ha.port);
+            bool ok = e.Run(R"LUA(
+                check(pico.store_save({ url = "ws://127.0.0.1:" .. HA_PORT .. "/api/websocket", token = "good",
+                                        entities = { { "", "light.living_room" }, { "扇風機", "switch.fan" },
+                                                     { "", "sensor.temp" }, { "", "light.missing" } } },
+                                      { encrypt = true }), "ha: 設定を暗号化して置く")
+            )LUA", "ha_cfg");
+            check(ok && e.Run(src.c_str(), "/hapanel/main.lua"), "ha: main.lua を動かす");
+            check(until(e, "TEST.authed() and TEST.ent(1).state ~= nil"), "ha: 認証して、今の状態が届く");
+            check(ha.saw("auth:good"), "ha: トークンを送る");
+            check(ha.saw("sub:[\"light.living_room\",\"switch.fan\",\"sensor.temp\",\"light.missing\"]"),
+                  "ha: 設定したエンティティだけを subscribe_entities");
+            ok = e.Run(R"LUA(
+                check(TEST.conn() == "接続中: HA 2026.10.0", "ha: 接続中の表示に版")
+                check(TEST.ent(1).state == "on" and TEST.ent(1).name == "living_room", "ha: 状態と friendly_name")
+                check(TEST.label(1) == "ON" and TEST.label(2) == "OFF", "ha: on/off の表示")
+                check(TEST.label(3) == "21.5 °C", "ha: センサーは値と単位")
+                check(TEST.label(4) == "不明", "ha: 無いエンティティは不明のまま")
+                TEST.toggle(1)
+                check(TEST.pending(1) ~= nil and TEST.label(1) == "…", "ha: 送ったら返るまで「…」")
+                TEST.toggle(3)
+                check(TEST.pending(3) == nil, "ha: センサーは点け消ししない")
+                TEST.toggle(4)
+            )LUA", "ha1");
+            check(ok, "ha: 点け消しの実行");
+            check(until(e, "TEST.ent(1).state == 'off' and TEST.pending(1) == nil"), "ha: 変わった分(\"c\")で状態が変わる");
+            check(ha.saw("call:homeassistant.toggle:light.living_room") && !ha.saw("call:homeassistant.toggle:sensor.temp"),
+                  "ha: homeassistant.toggle を呼ぶ(センサーには呼ばない)");
+            check(until(e, "TEST.pending(4) == nil"), "ha: 失敗の result で「…」を消す");
+            ok = e.Run(R"LUA(
+                local found_fail, found_change = false, false
+                for _, l in ipairs(TEST.log()) do
+                    if l == "失敗: Entity not found" then found_fail = true end
+                    if l == "light.living_room → off" then found_change = true end
+                end
+                check(found_fail and found_change, "ha: 変化と失敗を記録に出す")
+                TEST.back()
+            )LUA", "ha2");
+            check(ok, "ha: 戻るの実行");
+            for(int i = 0; i < 50; i++){ e.UpdateSockets(); PicoHostClock::now += 1; usleep(200); }
+            bool closed = false;
+            for(int i = 0; i < 3000 && !closed; i++){ closed = ha.saw("close"); usleep(500); }
+            check(closed, "ha: 戻ると close を送る");
+        }
+        {
+            LuaEngine e(256 * 1024, net, "/hapanel2");
+            lua_register(e.raw(), "check", l_check);
+            SetInt(e, "HA_PORT", ha.port);
+            e.Run(R"LUA(
+                pico.store_save({ url = "ws://127.0.0.1:" .. HA_PORT .. "/api/websocket", token = "wrong",
+                                  entities = { { "", "switch.fan" } } }, { encrypt = true })
+            )LUA", "ha_cfg2");
+            check(e.Run(src.c_str(), "/hapanel2/main.lua"), "ha: 違うトークンで動かす");
+            check(until(e, "TEST.conn():find('トークンが違います') == 1 and pico.socket.state(1) == nil"),
+                  "ha: auth_invalid で閉じてトークンが違うと出す");
+            check(until(e, "not TEST.retrying()"), "ha: トークンが違うときは繋ぎ直さない");
+        }
+        ha.stop();
     }
 
     tcp.stop();

@@ -460,3 +460,23 @@ MQTTのブローカへ繋ぎ、機器(最大6台)を2列のタイルで点け消
   不具合が見つかり、`MqttClient::disconnect()` で先に読み捨てるようにした。
 - 実機・本物の Home Assistant では未確認(Todoist参照)。
 - アイコンは `script/assets/generate_mqtt_remote_icon.py`(紺の角丸に電源の印と電波)。
+
+## HAパネル(`pc/sdcard/lua/apps/HAパネル/`、2026-10-29)
+
+`pico.socket.websocket` のサンプル(使い方の説明は `lua-api-doc/content/examples/ha-panel.md`)。
+Home Assistant の WebSocket API へ直接繋ぎ、選んだエンティティ(最大6つ)の状態を即座に映し、タップで点け消しする。
+MQTTリモコンと違い、HA側にMQTTの設定が要らない(長期アクセストークンだけ)。
+
+- **流れ**: `auth_required` → `auth`(トークン)→ `auth_ok` → `subscribe_entities`(設定したentity_idだけ)。
+  最初の event の `"a"` に今の状態と属性(friendly_name・単位)、以後は `"c"` の `"+"` に変わった分だけが届く。
+  **`get_states` は使わない**(HAの全エンティティで数百KBになり、メッセージの上限64KiBを超える)。
+- **点け消し**は `call_service` の `homeassistant.toggle`(light / switch / fan / input_boolean / automation / cover)。
+  ドメインごとのサービスを選ばずに済む。送った後は状態の変化か失敗の `result` が届くまで「…」。sensor 等は表示だけ(値と単位)。
+- **トークンが違う**(`auth_invalid`)・未設定のときは繋ぎ直さない(間違ったトークンで叩き続けると、HAは送り元を締め出す)。
+  それ以外で切れたら5秒から最大60秒の間隔で繋ぎ直す。メッセージの上限は16KiB(最初の一括は1エンティティ数百B)。
+- 設定(URL・トークン・エンティティ)は `store.json` へ暗号化して保存。`main.lua` は約14KB(LuaSceneが読むのは16KiBまで)。
+- **検証**: `lua_socket_test` が `main.lua` をそのまま偽物の Home Assistant(`socket_fake_servers.hpp` の `FakeHaServer`)へ繋ぎ、
+  認証・頼んだエンティティだけの購読・状態と単位の表示・toggle と変化の反映・失敗の result・戻ると close・
+  違うトークンで繋ぎ直さないことを確かめる。PCビルドでは使い捨ての偽物で6つ並べ、タップで切り替わるところまで見た。
+- 実機・本物の Home Assistant では未確認(Todoist参照)。
+- アイコンは `script/assets/generate_ha_panel_icon.py`(水色の角丸に白い家と電波)。

@@ -7,6 +7,7 @@
 //   FakeWsServer … WebSocketの開始の挨拶に答え、テキスト/バイナリをそのまま返す(8KiBまで)。
 //                  "ping-me" → こちらからpingを送る / "close-me" → 1000 "bye" で閉じる /
 //                  "big" → 2000バイトを2つの枠に分けて送る / "huge" → 70000バイトを送る(上限超え)
+//   FakeHaServer … Home Assistant の WebSocket API の真似(auth・subscribe_entities・call_service)
 //   FakeMqttBroker … CONNECT(username "u" なら password "p" だけ通す)・SUBSCRIBE(最大QoS 1。retain の控えも送る)・
 //                  PUBLISH(QoS 1にはPUBACK。購読と合えばQoS 1で送り返す)・PINGREQ・DISCONNECT
 //
@@ -196,6 +197,61 @@ namespace FakeServers {
                 if(len) SendAll(c, data, len);
             }
 
+            // クライアントの枠を1つ読む(マスクを外す)。切れた・マスクの無い枠なら false
+            bool readFrame(int c, uint8_t& op, std::string& payload){
+                uint8_t h[2];
+                if(!ReadAll(c, h, 2, stop_flag)) return false;
+                op = h[0] & 0x0F;
+                const bool masked = (h[1] & 0x80) != 0;
+                uint64_t len = h[1] & 0x7F;
+                if(len == 126){
+                    uint8_t e[2];
+                    if(!ReadAll(c, e, 2, stop_flag)) return false;
+                    len = ((uint64_t)e[0] << 8) | e[1];
+                }else if(len == 127){
+                    uint8_t e[8];
+                    if(!ReadAll(c, e, 8, stop_flag)) return false;
+                    len = 0;
+                    for(int i = 0; i < 8; i++) len = (len << 8) | e[i];
+                }
+                if(!masked){ note("unmasked"); return false; }
+                uint8_t mask[4];
+                if(!ReadAll(c, mask, 4, stop_flag)) return false;
+                payload.assign((size_t)len, '\0');
+                if(len && !ReadAll(c, &payload[0], (size_t)len, stop_flag)) return false;
+                WsFrame::ApplyMask((uint8_t*)&payload[0], (size_t)len, mask);
+                return true;
+            }
+
+            // 開始の挨拶を受けて101を返す(first があれば同じ送信にテキストの枠として載せる)
+            bool acceptHandshake(int c, const std::string& first){
+                std::string req;
+                char buf[1024];
+                while(req.find("\r\n\r\n") == std::string::npos){
+                    if(!WaitReadable(c, stop_flag)) return false;
+                    const ssize_t n = recv(c, buf, sizeof(buf), 0);
+                    if(n <= 0) return false;
+                    req.append(buf, (size_t)n);
+                }
+                { std::lock_guard<std::mutex> lk(mu); last_request = req; }
+                const size_t kp = req.find("Sec-WebSocket-Key: ");
+                if(kp == std::string::npos) return false;
+                char accept[WsFrame::kAcceptChars + 1];
+                WsFrame::AcceptFor(req.substr(kp + 19, WsFrame::kKeyChars).c_str(), accept);
+                std::string res = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                                  "Sec-WebSocket-Accept: ";
+                res += accept;
+                res += "\r\n\r\n";
+                if(!first.empty()){
+                    uint8_t head[WsFrame::kMaxHeaderBytes];
+                    const size_t hn = WsFrame::EncodeHeader(head, WsFrame::Text, true, first.size(), nullptr);
+                    res.append((const char*)head, hn);
+                    res += first;
+                }
+                SendAll(c, res.data(), res.size());
+                return true;
+            }
+
             void serve(int c) override {
                 //開始の挨拶
                 std::string req;
@@ -234,27 +290,9 @@ namespace FakeServers {
                 note("open");
 
                 while(!stop_flag){
-                    uint8_t h[2];
-                    if(!ReadAll(c, h, 2, stop_flag)) break;
-                    const uint8_t op = h[0] & 0x0F;
-                    const bool masked = (h[1] & 0x80) != 0;
-                    uint64_t len = h[1] & 0x7F;
-                    if(len == 126){
-                        uint8_t e[2];
-                        if(!ReadAll(c, e, 2, stop_flag)) break;
-                        len = ((uint64_t)e[0] << 8) | e[1];
-                    }else if(len == 127){
-                        uint8_t e[8];
-                        if(!ReadAll(c, e, 8, stop_flag)) break;
-                        len = 0;
-                        for(int i = 0; i < 8; i++) len = (len << 8) | e[i];
-                    }
-                    if(!masked){ note("unmasked"); break; }
-                    uint8_t mask[4];
-                    if(!ReadAll(c, mask, 4, stop_flag)) break;
-                    std::string payload((size_t)len, '\0');
-                    if(len && !ReadAll(c, &payload[0], (size_t)len, stop_flag)) break;
-                    WsFrame::ApplyMask((uint8_t*)&payload[0], (size_t)len, mask);
+                    uint8_t op = 0;
+                    std::string payload;
+                    if(!readFrame(c, op, payload)) break;
 
                     if(op == WsFrame::Close){
                         const unsigned code = payload.size() >= 2 ? (((uint8_t)payload[0] << 8) | (uint8_t)payload[1]) : 0;
@@ -287,6 +325,99 @@ namespace FakeServers {
                         break; //closeを送らずに切る
                     }else if(payload.size() <= 8192){ //クライアントの既定の上限(8KiB)を超えるものは返さない
                         sendFrame(c, op, payload.data(), payload.size());
+                    }
+                }
+                note("end");
+            }
+    };
+
+    // Home Assistant の WebSocket API の真似(使う分だけ)。
+    //   auth(token "good" だけ通す)/ subscribe_entities(頼まれたものの今の状態を "a" で返す)/
+    //   call_service homeassistant.toggle(on⇔off を入れ替えて "c" で配る)/ 知らない entity は result の失敗
+    // JSONはクライアント(Luaの json_encode)のキーの順に頼らず、部分文字列で見る
+    class FakeHaServer : public FakeWsServer {
+        public:
+            // entity_id → 状態。friendly_name は entity_id の後ろ半分
+            std::vector<std::pair<std::string, std::string>> states = {
+                {"light.living_room", "on"}, {"switch.fan", "off"}, {"sensor.temp", "21.5"},
+            };
+
+        protected:
+            static std::string Field(const std::string& m, const std::string& key){
+                const std::string k = "\"" + key + "\":";
+                const size_t p = m.find(k);
+                if(p == std::string::npos) return "";
+                size_t v = p + k.size();
+                if(v < m.size() && m[v] == '"'){
+                    const size_t e = m.find('"', v + 1);
+                    return m.substr(v + 1, e - v - 1);
+                }
+                size_t e = v;
+                while(e < m.size() && m[e] != ',' && m[e] != '}') e++;
+                return m.substr(v, e - v);
+            }
+            void sendText(int c, const std::string& t){ sendFrame(c, WsFrame::Text, t.data(), t.size()); }
+            std::string* find(const std::string& eid){
+                for(auto& s : states) if(s.first == eid) return &s.second;
+                return nullptr;
+            }
+
+            void serve(int c) override {
+                if(!acceptHandshake(c, "{\"type\":\"auth_required\",\"ha_version\":\"2026.10.0\"}")) return;
+                note("open");
+                std::string sub_id;
+                while(!stop_flag){
+                    uint8_t op = 0;
+                    std::string m;
+                    if(!readFrame(c, op, m)) break;
+                    if(op == WsFrame::Close){
+                        note("close");
+                        sendFrame(c, WsFrame::Close, m.data(), m.size() >= 2 ? 2 : 0);
+                        break;
+                    }
+                    if(op != WsFrame::Text) continue;
+                    const std::string type = Field(m, "type");
+                    if(type == "auth"){
+                        const std::string tok = Field(m, "access_token");
+                        note("auth:" + tok);
+                        if(tok == "good"){
+                            sendText(c, "{\"type\":\"auth_ok\",\"ha_version\":\"2026.10.0\"}");
+                        }else{
+                            sendText(c, "{\"type\":\"auth_invalid\",\"message\":\"Invalid access token\"}");
+                            break;
+                        }
+                    }else if(type == "subscribe_entities"){
+                        sub_id = Field(m, "id");
+                        const size_t lb = m.find('['), rb = m.find(']', lb);
+                        note("sub:" + m.substr(lb, rb - lb + 1)); //配列だけ(キーの順はLuaの表の順で毎回変わる)
+                        sendText(c, "{\"id\":" + sub_id + ",\"type\":\"result\",\"success\":true,\"result\":null}");
+                        std::string a;
+                        for(const auto& s : states){
+                            if(m.find("\"" + s.first + "\"") == std::string::npos) continue;
+                            if(!a.empty()) a += ",";
+                            const std::string fname = s.first.substr(s.first.find('.') + 1);
+                            a += "\"" + s.first + "\":{\"s\":\"" + s.second + "\",\"a\":{\"friendly_name\":\"" + fname + "\"" +
+                                 (s.first.rfind("sensor.", 0) == 0 ? ",\"unit_of_measurement\":\"°C\"" : "") +
+                                 "},\"c\":\"x\",\"lc\":1}";
+                        }
+                        sendText(c, "{\"id\":" + sub_id + ",\"type\":\"event\",\"event\":{\"a\":{" + a + "}}}");
+                    }else if(type == "call_service"){
+                        const std::string id = Field(m, "id");
+                        const std::string eid = Field(m, "entity_id");
+                        note("call:" + Field(m, "domain") + "." + Field(m, "service") + ":" + eid);
+                        std::string* st = find(eid);
+                        if(!st){
+                            sendText(c, "{\"id\":" + id + ",\"type\":\"result\",\"success\":false,"
+                                        "\"error\":{\"code\":\"not_found\",\"message\":\"Entity not found\"}}");
+                            continue;
+                        }
+                        *st = (*st == "on") ? "off" : "on";
+                        //状態の変化を先に配ってから結果を返す(本物の順と同じ)
+                        if(!sub_id.empty()){
+                            sendText(c, "{\"id\":" + sub_id + ",\"type\":\"event\",\"event\":{\"c\":{\"" + eid +
+                                        "\":{\"+\":{\"s\":\"" + *st + "\",\"lc\":2}}}}}");
+                        }
+                        sendText(c, "{\"id\":" + id + ",\"type\":\"result\",\"success\":true,\"result\":{}}");
                     }
                 }
                 note("end");

@@ -22,10 +22,14 @@
 #include "apps/store/StoreScene.hpp"
 #include "apps/store/App_Package.hpp"
 #include "gui/scenes/UsbDriveScene.hpp"
+#include "gui/scenes/FileShareScene.hpp"
 #include "gui/scenes/RecorderScene.hpp"
 #include "apps/firmware/FirmwareScene.hpp"
 #include "lua/LuaAppScanner.hpp"
 #include "services/UsbDrive_Functions.hpp"
+#include "services/FileShare_Functions.hpp"
+#include "apps/music/Music_Service.hpp"
+#include "storage/SD_IO.hpp"
 #include "config/Hardware_Config.hpp"
 #include "config/App_Config.hpp"
 
@@ -118,6 +122,8 @@ void AppFunctions::Setup(){
 #endif
     //PCとUSBでつなぎ、SDカードをドライブとして見せる(SDの抜き差しをせずにファイルを行き来する)
     Register(UsbDriveScene::kAppName, IconID::SdCard, &MakeScene<UsbDriveScene>);
+    //同じLANのブラウザからSDのファイルを読み書きする(開いている間だけ。docs/design/file-share.md)
+    Register(FileShareScene::kAppName, IconID::Share, &MakeScene<FileShareScene>);
     // ファームの更新(SDの .pfw / PCからWi-Fiで。docs/FIRMWARE_UPDATE.md)
     Register(FirmwareScene::kAppName, IconID::Refresh, &MakeScene<FirmwareScene>);
     // Luaアプリは下のスキャンで登録する(動作確認用のサンプルは /lua/apps/動作確認/)。
@@ -134,12 +140,21 @@ void AppFunctions::Setup(){
     // 入れたものはその場で登録簿へ入る。結果の通知は main.cpp が通知の Setup() の後で出す
     AppPackage::InstallPending();
     // USBドライブを終えてSDをマウントし直したら、PCで足した/消したアプリ・置いたパッケージを反映する
+    // Wi-Fi転送で書き換えたときも同じ
     UsbDriveFunctions::sd_remounted = [](){
         LuaAppScanner::Scan();
         LuaAppScanner::PruneMissing();
         AppPackage::InstallPending();
         AppPackage::PostPendingNotice();
     };
+    FileShareFunctions::sd_changed = UsbDriveFunctions::sd_remounted;
+#if PICO_APP_MUSIC
+    // 鳴らしている間は /music/ の中(と、/music/ を含むフォルダ)を書き換えさせない
+    FileShareFunctions::path_busy = [](const char* p){
+        return MusicService::Active() &&
+               (PICO_IO::isSameOrInside(p, "/music") || PICO_IO::isSameOrInside("/music", p));
+    };
+#endif
 
     // ランチャの並べ替え・隠したアプリ(/sys/launcher.cfg)。登録を全部済ませた後に当てる
     LoadLayout();

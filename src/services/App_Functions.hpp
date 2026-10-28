@@ -67,10 +67,10 @@ struct AppEntry {
 namespace AppFunctions {
     // 登録できるアプリ数の上限。固定長配列で持つので、超えた分は警告して捨てる。
     // AppEntry1件が約190B(名前48B + 引数96B + アイコンのファイル名32B + 権限2B + アイコン種別
-    // + 関数ポインタ)なので、この配列だけで常時約6KBのstatic RAMを占める
+    // + 関数ポインタ)なので、この配列だけで常時約9KBのstatic RAMを占める
     // (24件ではSDのLuaアプリと合わせて埋まったので、SSHアプリを足したときに32件へ、
-    // 録音アプリを足したときに40件へ広げた)。上限や文字列長を増やすときはその点に注意すること
-    constexpr int kMaxApps = 40;
+    // 録音アプリを足したときに40件へ、Wi-Fi転送を足したときに48件へ広げた)。上限や文字列長を増やすときはその点に注意すること
+    constexpr int kMaxApps = 48;
 
     inline AppEntry apps[kMaxApps];
     inline int app_count = 0;

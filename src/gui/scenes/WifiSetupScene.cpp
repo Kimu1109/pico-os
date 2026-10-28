@@ -7,20 +7,11 @@
 #include "gui/core/Font_Functions.hpp"
 #include "services/WifiSetup_Functions.hpp"
 #include "services/Power_Functions.hpp"
+#include "util/Wifi_Qr.hpp"
 #include "Arduino.h"
 
 #include <cstdio>
 #include <cstring>
-
-namespace {
-    // スマホのカメラが読む「Wi-Fiへ繋ぐ」QRの文字列の値の部分。\ ; , : " は前に\を付ける
-    void AppendWifiQrEscaped(FixedString<PICO_STR_LL>& out, const char* s){
-        for(; *s; s++){
-            if(std::strchr("\\;,:\"", *s)) out.append('\\');
-            out.append(*s);
-        }
-    }
-}
 
 void WifiSetupScene::onEnter(){
     const Rect content = Scene::contentRect();
@@ -68,11 +59,8 @@ void WifiSetupScene::onEnter(){
 
     addText("1. QRを読むか、Wi-Fiで接続", 1);
     // 右にAPへ繋ぐQR。読めばスマホがそのまま繋ぎ、ページも自動で開く
-    FixedString<PICO_STR_LL> wifi_qr("WIFI:T:WPA;S:");
-    AppendWifiQrEscaped(wifi_qr, WifiSetupFunctions::ApSsid());
-    wifi_qr.append(";P:");
-    AppendWifiQrEscaped(wifi_qr, WifiSetupFunctions::ApPassword());
-    wifi_qr.append(";;");
+    FixedString<PICO_STR_LL> wifi_qr;
+    WifiQr::Build(wifi_qr, WifiSetupFunctions::ApSsid(), WifiSetupFunctions::ApPassword());
     // QRは自分の余白(地の色)を持つので右端へ寄せる
     auto* qr = new QRCodeView(content.x + content.w - kQrSize, y, kQrSize);
     qr->setText(wifi_qr.c_str(), wifi_qr.length());

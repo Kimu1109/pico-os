@@ -50,7 +50,7 @@ src/
   main.cpp / OS_Data.hpp(グローバル状態) / consts.hpp / config/
   system/    土台の Xxx_Functions(ログ・設定・時刻・メモリ・入力の列KeyInput/Pad・通知の中身・バックグラウンドの登録簿・クリップボード)
   hal/       ハードの窓口(タッチ・SD・電池・音声・マイク・Wi-Fi・I2C)
-  services/  OSの機能(アプリ登録簿・アラーム・タイマー・電源・ロック・明るさ・スクショ・ファーム更新・USBドライブ・端末の鍵・スマホからのWi-Fi設定)
+  services/  OSの機能(アプリ登録簿・アラーム・タイマー・電源・ロック・明るさ・スクショ・ファーム更新・USBドライブ・Wi-Fi転送・端末の鍵・スマホからのWi-Fi設定)
   devtools/  プロファイラ・クラッシュダンプ・debug.cfg・自己診断
   boot/      つなぎ(App_List / Background_List / KeyInput_Dispatch / Notification_Sources)
   gui/core/  GFX(合成と転送)・Font・Widget・Focus・Scene・Keyboard・Error
@@ -181,6 +181,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `os-services.md` | アラーム・通知・ホーム画面のウィジェット・バックグラウンド実行・スクリーンショット・タイマー・ダークテーマ・画面ロック |
 | `battery-touch.md` | バッテリー残量・音割れ対策・タッチの補正とノイズ抑制 |
 | `security-wifi.md` | 認証情報の暗号化・端末ごとの鍵(OTP)・保存済みWi-Fi・新規接続・固定IP/DNS・mDNS・キャプティブポータル・AP設定モード |
+| `file-share.md` | Wi-Fi転送(ブラウザ・curlからSDのファイルを読み書きする。キー・/sys・Hostの守り) |
 | `browser-net.md` | MarkdownView・文書キャッシュ・HTTP/HTTPS・取得〜表示・サーバ情報・検索・マニフェスト |
 | `apps-online.md` | カレンダー(iCalendar)・チャット・TODO(Todoist)・メール(IMAP)・Spotify・ニュース(XML) |
 | `apps-local.md` | テキストエディタ・メモ(タグ・全文検索・最近開いたファイル)・SSH・ファイルビューワー・読書(青空文庫)・電卓・時計 |

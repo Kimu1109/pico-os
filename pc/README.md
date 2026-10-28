@@ -395,6 +395,9 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 - **mDNS**: 母艦のmDNSとぶつからないよう応答しない(名乗ったことにするだけ)。
 - **AP設定モード**([スマホ]): APは作らず、ページだけ `http://127.0.0.1:8081/` で開ける(`PICOOS_SETUP_PORT` で変更)。
   `curl -X POST -d "ssid=Home&pass=xxxxxxxx" http://127.0.0.1:8081/save` でスマホから送ったのと同じになる。
+- **Wi-Fi転送**(ランチャの「Wi-Fi転送」、`docs/design/file-share.md`): `http://127.0.0.1:8082/` で開ける(`PICOOS_SHARE_PORT` で変更)。
+  `PICOOS_SHARE_KEY=abcd2345` でキーを決めておくと curl で叩ける: `curl -H X-Pico-Key:abcd2345 -T a.txt http://127.0.0.1:8082/f/tmp/a.txt`。
+  [直接つなぐ]はAPを作ったことにするだけ(ページは同じ 127.0.0.1)。APに繋いだ端末の数は `PICOOS_AP_STATIONS=1` で決める(QRがページのものに替わる)。
 - **キャプティブポータル**: 判定は本物の通信(既定は `http://connectivitycheck.gstatic.com/generate_204`)。偽のポータルで
   試すときは `network.cfg` に `captive-probe-url = http://127.0.0.1:<port>/generate_204` を書き、そこで302を返すサーバを立てる。
 

@@ -182,7 +182,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `battery-touch.md` | バッテリー残量・音割れ対策・タッチの補正とノイズ抑制 |
 | `security-wifi.md` | 認証情報の暗号化・端末ごとの鍵(OTP)・保存済みWi-Fi・新規接続・固定IP/DNS・mDNS・キャプティブポータル・AP設定モード |
 | `file-share.md` | Wi-Fi転送(ブラウザ・curlからSDのファイルを読み書きする。キー・/sys・Hostの守り) |
-| `browser-net.md` | MarkdownView・文書キャッシュ・HTTP/HTTPS・取得〜表示・サーバ情報・検索・マニフェスト |
+| `browser-net.md` | MarkdownView・文書キャッシュ・HTTP/HTTPS・取得〜表示・サーバ情報・検索・マニフェスト・ソケット(TCP/UDP/WebSocket/MQTT) |
 | `apps-online.md` | カレンダー(iCalendar)・チャット・TODO(Todoist)・メール(IMAP)・Spotify・ニュース(XML) |
 | `apps-local.md` | テキストエディタ・メモ(タグ・全文検索・最近開いたファイル)・SSH・ファイルビューワー・読書(青空文庫)・電卓・時計 |
 | `sound.md` | 音声出力・マイク・ステレオ・曲データ(MML)・チップチューン・ゲームボーイの音・WAV・出力周波数・ミュージック・動画(.pvid) |

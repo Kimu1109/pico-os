@@ -7,7 +7,7 @@
 // LuaScene(1つのLuaアプリ=1つのLuaEngine)の構築時に1回だけ決まり、実行中に
 // スクリプト側から変更する手段は無い(pico.*には対応するsetterを生やしていない)。
 //
-//   network            … pico.http_request/pico.http_cancelを使えるか
+//   network            … pico.http_request/pico.http_cancelとpico.socket.*(TCP/UDP/WebSocket/MQTT)を使えるか
 //   sd_outside_app_dir … pico.sd_*/pico.image_loadで、スクリプト自身のディレクトリ
 //                         (LuaEngineのapp_dir。通常はスクリプトの親ディレクトリ)の
 //                         外を読み書きできるか。falseの間はapp_dir配下だけに閉じる

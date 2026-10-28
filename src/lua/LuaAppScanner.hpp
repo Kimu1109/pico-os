@@ -31,7 +31,7 @@
 //   icon                          … アプリディレクトリ内の相対パス(.pimg形式)。
 //                                    指定があればランチャのタイルアイコンとして使う
 //                                    (無指定/読み込み失敗時はIconID::AppBoxへ落ちる)
-//   permission_network            … pico.http_request/http_cancelを許すか(true/false)
+//   permission_network            … pico.http_request/http_cancel・pico.socket.*を許すか(true/false)
 //   permission_sd_outside_app_dir … pico.sd_*/image_loadでapp_dirの外を触れるか
 //   permission_background         … background のスクリプトを定期的に動かしてよいか(LuaBackground)
 //   background                    … バックグラウンドスクリプト(アプリディレクトリ内の相対パス。例 background.lua)。

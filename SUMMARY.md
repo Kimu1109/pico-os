@@ -115,6 +115,8 @@
   - [x] シーン制御(push_scene/change_scene/launch_app)
   - [x] ダイアログ
   - [x] ネットワーク(HTTPリクエスト)
+  - [x] ソケット(pico.socket: TCP・UDP・WebSocket・MQTT)
+    - [ ] 実機での確認(UDP・wss/mqtts・Home Assistant)
   - [x] 権限管理(ネットワーク/app_dir外SDアクセス、粗いフラグ)
   - [x] ウィジェット固有コールバック(Checkbox/NumberSlider/ScrollList/TabBar/DropdownMenu/Textbox)
   - [x] 時刻取得(pico.get_time())

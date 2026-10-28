@@ -229,6 +229,7 @@ host_test(touch_calib_test GROUP core)
 host_test(cache_test GROUP core)
 host_test(file_ops_test GROUP core)
 host_test(http_test GROUP core)
+host_test(socket_test GROUP core)
 host_test(discovery_test GROUP core)
 
 # --- apps: カレンダー・ファイル検索・チャット・TODO・メール ---
@@ -304,6 +305,7 @@ host_test(lua_alloc_budget_test GROUP lua-base)
 # --- lua-engine / lua-ext / lua-sandbox: LuaEngine(pico.*)---
 host_test(lua_engine_test GROUP lua-engine)
 host_test(lua_ext_test GROUP lua-ext)
+host_test(lua_socket_test GROUP lua-ext)
 host_test(background_test GROUP lua-ext)
 host_test(lua_sandbox_test GROUP lua-sandbox)
 host_test(devtools_test GROUP lua-sandbox)

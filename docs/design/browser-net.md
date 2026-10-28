@@ -1,4 +1,4 @@
-# Markdownブラウザと通信(HTTP/HTTPS)
+# Markdownブラウザと通信(HTTP/HTTPS・ソケット)
 
 > `CLAUDE.md`から分けた設計記録(2026-10-20)。何がどこにあるかの地図は`CLAUDE.md`、進み具合は`SUMMARY.md`。
 > パスはリポジトリのルートから。「上の「〜」」等の参照先が別のファイルにあるときは、`CLAUDE.md`の「設計記録の索引」で節の名前から探すこと。
@@ -132,3 +132,44 @@ UI側は`apps/browser/ui/SearchDialog`(状態1行 + `ScrollList` + 再検索/次
 `PICO_GFX::FlushDirty()`は**TRANSLUCENTなウィジェットの下を描き直さない**(半透明の下は変わらない前提の最適化)
 ため、同じフレームで次のダイアログを開くと、閉じたキーボードや前のダイアログの跡がその下に残ったままになる。
 1フレーム空ければ「ダイアログが何も無い状態」で描き直される。
+
+## ソケット(pico.socket)・WebSocket・MQTT・UDP (2026-10-28)
+
+HTTP(1回聞いて1回答える)だけでは、Home Assistant の通知・IoT機器のリモコン・リアルタイムのチャットのように
+**繋いだままサーバから即座に届くもの**が扱えなかった。部品を `src/net/` に足し、Luaへは `pico.socket.*` で出した
+(利用者向けの説明は `lua-api-doc/content/api/data/socket.md`)。
+
+| 部品 | 中身 |
+|---|---|
+| `crypto/Sha1.hpp` | WebSocketの開始の確認(`Sec-WebSocket-Accept`)専用のSHA-1。署名・鍵には使わない |
+| `net/Ws_Frame` | RFC 6455 の枠の組み立てと読み取り(通信しない)。分割のつなぎ・制御の枠・規約違反の判定 |
+| `net/WebSocket_Client` | `ws://`/`wss://`。開始の挨拶・自動のpong・こちらからのping・閉じ方 |
+| `net/Mqtt_Packet` | MQTT 3.1.1 のパケットの組み立てと読み取り(通信しない) |
+| `net/Mqtt_Client` | `mqtt://`(1883)/`mqtts://`(8883)。CONNECT/CONNACK・購読・QoS 0/1の送信・0/1/2の受信・keepalive |
+| `net/Udp_Socket` | 実機は arduino-pico の `WiFiUDP`、PCは `pc/compat/WiFiUdp_PC.h`(本物のソケット) |
+| `lua/LuaEngine_Socket.cpp` | `pico.socket.tcp/udp/websocket/mqtt` と送る・閉じる関数 |
+
+- **繋ぎ方はHTTPと共通**: TCP/TLSは `HttpTransport` をそのまま使う(`wss`/`mqtts`/`tcp{tls=true}` も
+  同じルート証明書・時計の確認・接続中だけ約40KB)。接続とTLSのハンドシェイクは同期的(最大3秒)という制約も同じ。
+- **イベントは「引き出す」形**: `WebSocketClient`/`MqttClient` は `poll(Event&)` を false が返るまで回す。
+  コールバックを中から呼ばないので、Luaのコールバックの中で閉じる・作るをしても、走査中の物を壊さない
+  (解放は `LuaEngine::UpdateSockets()` が `"close"` を渡し終えた後だけ)。
+  `begin()` が通ったら最後に必ず1回 `Closed` を出す(`abort()` を除く)ので、Lua側も「必ず1回 `"close"`」と約束できる。
+- **溜め場所は固定長を1回だけ new**: WebSocketはメッセージの上限(既定8KiB)、MQTTはパケットの上限(既定4KiB)を
+  `begin()` で確保して閉じたら返す。WebSocketの開始の挨拶の応答も同じ溜め場所で受ける(1KiB未満にはしない)。
+  上限を超えたら、WebSocketは1009で閉じ、MQTTは読み捨てて `dropped()` を数える(QoS 1/2 には答える。答えないと送り直され続ける)。
+- **1回の `poll()` で読むのは1回まで**(WebSocket 1KiB、MQTT 512B)。Lua側は1本につき1フレーム16イベントまで、
+  TCPは1472バイト×4回まで。続きは次のフレームへ持ち越す(画面を止めない)。
+- **MQTTは送り直しをしない**: QoS 1 の PUBACK を待つ控えを持たない(持てば溜め場所が要る)。切れたら届いたかは分からない。
+  自動の繋ぎ直しもしない(Lua側が `"close"` を見てやり直す)。QoS 2 は受けるだけ(PUBREC/PUBCOMP に答える。重複はありうる)。
+- **WebSocketの割り切り**: 拡張(permessage-deflate)は申し出ない(勝手に付けられたら閉じる)。テキストのUTF-8は確かめない。
+  ping は「何も届かない時間」が間隔を超えたときだけ送る(家のルーターのNATが黙って経路を忘れる対策)。
+- **Luaの約束**: 同時に4本まで。権限は `network`(HTTPと同じ)。**バックグラウンドには出さない**(常駐の接続で
+  電池とWi-Fiを使い続けるため)。アプリを閉じると MQTT は DISCONNECT(遺言を流させない)、WebSocket は 1001 を送ってから切る。
+  **繋ぎかけの間だけスリープさせない**(`SocketBusy()`)。スリープ中もWi-Fiとループは動くので、繋がった後は眠っても続く。
+- **UDP**: 送るときの名前解決は同期的。1データグラム1472バイトまで(分割しない)。受けるのは1フレーム16個まで。
+  Webビルドには生のソケットが無いので、TCPと同じく繋がらない(呼び方だけ通る)。
+- **検証**: `socket_test`(core。SHA-1・RFCのAcceptの例・枠/パケットを1バイトずつ・規約違反、127.0.0.1 の偽物
+  `script/host_test/socket_fake_servers.hpp` とWebSocket/MQTT/UDPを往復)と `lua_socket_test`(lua-ext。Luaから同じ偽物へ)。
+  どちらも `run.sh` に入る(CIで回る)。
+- 実機では未確認(WiFiUDP・wss/mqtts のTLS・本物の Home Assistant / Mosquitto)(Todoist参照)。

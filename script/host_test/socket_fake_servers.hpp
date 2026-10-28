@@ -7,7 +7,7 @@
 //   FakeWsServer … WebSocketの開始の挨拶に答え、テキスト/バイナリをそのまま返す(8KiBまで)。
 //                  "ping-me" → こちらからpingを送る / "close-me" → 1000 "bye" で閉じる /
 //                  "big" → 2000バイトを2つの枠に分けて送る / "huge" → 70000バイトを送る(上限超え)
-//   FakeMqttBroker … CONNECT(username "u" なら password "p" だけ通す)・SUBSCRIBE(最大QoS 1)・
+//   FakeMqttBroker … CONNECT(username "u" なら password "p" だけ通す)・SUBSCRIBE(最大QoS 1。retain の控えも送る)・
 //                  PUBLISH(QoS 1にはPUBACK。購読と合えばQoS 1で送り返す)・PINGREQ・DISCONNECT
 //
 // どれも1本ずつ接続を受ける(同時の接続は順番待ち)。stop() で止める。
@@ -301,6 +301,8 @@ namespace FakeServers {
 
         protected:
             std::vector<std::string> subs_;
+            // retain つきで届いた最後の中身(話題 → 中身)。接続をまたいで持ち、購読したときに送る
+            std::vector<std::pair<std::string, std::string>> retained_;
 
             // 段(/区切り)ごとに比べる。+ は1段、# は残り全部
             static bool Match(const std::string& filter, const std::string& topic){
@@ -386,6 +388,14 @@ namespace FakeServers {
                         ack.push_back((char)id);
                         ack.push_back((char)(qos > 1 ? 1 : qos));
                         Packet(c, 0x90, ack);
+                        for(const auto& r : retained_){
+                            if(!Match(topic, r.first)) continue;
+                            std::string out;
+                            out.push_back((char)(r.first.size() >> 8));
+                            out.push_back((char)r.first.size());
+                            out += r.first + r.second;
+                            Packet(c, 0x31, out);   //QoS 0・retain
+                        }
                     }else if(type == 10){ //UNSUBSCRIBE
                         const std::string id = body.substr(0, 2);
                         pos = 2;
@@ -402,6 +412,11 @@ namespace FakeServers {
                         note("pub:" + topic + ":" + std::to_string(qos) + ((h & 1) ? ":retain" : "") + ":" +
                              (payload.size() > 64 ? std::to_string(payload.size()) + "B" : payload));
                         if(qos == 1) Packet(c, 0x40, id);
+                        if(h & 1){
+                            bool found = false;
+                            for(auto& r : retained_) if(r.first == topic){ r.second = payload; found = true; }
+                            if(!found) retained_.emplace_back(topic, payload);
+                        }
                         for(const auto& f : subs_){
                             if(!Match(f, topic)) continue;
                             std::string out;

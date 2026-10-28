@@ -4,6 +4,8 @@ weight: 45
 description: "pico.socket: TCP / UDP / WebSocket / MQTT"
 ---
 
+使い方のまとまった例は [MQTTリモコン](../../../examples/mqtt-remote/) を見てください。
+
 `pico.http_request` が「1回聞いて1回答えをもらう」ためのものなのに対し、`pico.socket` は**繋いだままにして何度もやり取りする**ためのものです。Home Assistant の WebSocket API・MQTTのブローカ(Mosquitto)・LANの中のIoT機器・リアルタイムのチャットなどに使います。
 
 - `network` 権限が要ります。無いアプリでは作る関数が `nil, "ネットワークの権限がありません"` を返します([権限モデル](../../../guide/app/permissions/) 参照)。

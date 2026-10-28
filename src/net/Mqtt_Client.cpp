@@ -125,6 +125,11 @@ void MqttClient::finish(const char* error){
 
 void MqttClient::disconnect(){
     if(state_ == State::Connected){
+        //読み残し(届いたばかりのPUBACK等)を抱えたまま閉じると、TCPはRSTを送ってDISCONNECTが捨てられうる。
+        //そうなるとブローカは「異常な切断」とみなして遺言を流すので、先に読み捨ててから送る
+        while(conn_.available() > 0){
+            if(conn_.read(rx_, sizeof(rx_)) <= 0) break;
+        }
         uint8_t p[2];
         MqttPacket::EncodeEmpty(p, MqttPacket::DISCONNECT);
         conn_.write(p, sizeof(p));

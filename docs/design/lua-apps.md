@@ -440,3 +440,23 @@ APIごとに増えていた動作確認用のアプリを1つにまとめた。`
 - 検証: `qrcode_app_test`(lua-scene。pico_mockの上で追加・キャンセル・編集・削除・送り・長すぎ・暗号化の指定・読み飛ばし・50件)。
   PCビルドで4種を表示してOpenCVで読み、元の文字(vCard・逃がしたWi-Fi・日本語の複数行)に戻ることと、削除→`enc2:`で保存→開き直して戻ることを確かめた。
   **実機の画面をスマホのカメラで読めることを確認済み(2026-10-25)**。
+
+## MQTTリモコン(`pc/sdcard/lua/apps/MQTTリモコン/`、2026-10-29)
+
+`pico.socket.mqtt` のサンプル(使い方の説明は `lua-api-doc/content/examples/mqtt-remote.md`)。
+MQTTのブローカへ繋ぎ、機器(最大6台)を2列のタイルで点け消しする。
+
+- **話題の約束**: 機器ごとに話題 `<t>` を1つ決め、`<t>/state` を購読(QoS 1)して状態を受け、タップで `<t>/set` へ
+  今の逆("ON"/"OFF")を QoS 1 で送る。送った後は状態が返ってくるまで「…」(機器の本当の状態だけを見せる。楽観的には変えない)。
+  `{"state":"ON"}`(Zigbee2MQTT)と `1`/`true` も読む。Home Assistant の MQTT スイッチ・Tasmota・ESPHome で作りやすい形を選んだ。
+- **自分の生死**: `pico/remote/<クライアントID>/status` へ繋いだら "online"、遺言で "offline"(どちらも retain)。
+  戻る操作で閉じるときは DISCONNECT で遺言が流れないので、先に "offline" を置いてから閉じる。
+- **繋ぎ直し**: `"close"` を受けたら5秒後から、続けて失敗すると倍にして最大60秒。設定を変えたら繋ぎ直す。
+- **設定**は `store.json` へ暗号化して保存(パスワードを含むため)。機器の一覧は複数行の入力に「名前=話題」を1行ずつ。
+  クライアントIDは初回に乱数で作って覚える(同じブローカへ2台繋いでも追い出し合わない)。
+- **検証**: `lua_socket_test` が `main.lua` をそのまま偽物のブローカ(retain つき)へ繋ぎ、retain の状態が届く・JSONの形を読む・
+  点け消しを送る・online/offline・戻ると DISCONNECT を確かめる。PCビルドでは使い捨てのブローカ(機器の真似つき)で
+  タップ→状態が返って色が変わるところまで見た。この確認で、**読み残しを抱えたまま閉じるとRSTでDISCONNECTが捨てられる**
+  不具合が見つかり、`MqttClient::disconnect()` で先に読み捨てるようにした。
+- 実機・本物の Home Assistant では未確認(Todoist参照)。
+- アイコンは `script/assets/generate_mqtt_remote_icon.py`(紺の角丸に電源の印と電波)。

@@ -5,6 +5,8 @@
 //   TCP(open → data → 相手が閉じて close) / UDP(sendto → data, 送り元) /
 //   WebSocket(open → message → close の番号と理由) / MQTT(connect → subscribed → message → published → close)
 //   同時に開ける数の上限 / コールバックの中で閉じる / アプリを閉じると挨拶して閉じる / バックグラウンドには無い
+//   サンプルアプリ「MQTTリモコン」(pc/sdcard/lua/apps/MQTTリモコン/main.lua)を本物のまま動かす
+//   (引数はリポジトリのルート。retain の状態が届く・点け消しを送る・遺言と online/offline・戻ると DISCONNECT)
 //
 // 部品そのものの細かい振る舞い(枠・パケット・時間切れ)は socket_test の担当。
 #include "lua/LuaEngine.hpp"
@@ -14,6 +16,8 @@
 #include "gui/widgets/interfaces/ITextInputTarget.hpp"
 #include "gui/widgets/Widget.hpp"
 #include "gui/core/Widget_Functions.hpp"
+#include "net/Mqtt_Client.hpp"
+#include "OS_Data.hpp"
 #include "socket_fake_servers.hpp"
 
 #include <Arduino.h>
@@ -21,6 +25,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <string>
 
 // ---- モック(lua_ext_test.cppと同じ方針) ----
@@ -84,7 +90,8 @@ static bool PumpUntil(LuaEngine& e, const char* flag, int rounds = 4000){
     return GlobalTrue(e, flag);
 }
 
-int main(){
+int main(int argc, char** argv){
+    const std::string root = argc > 1 ? argv[1] : ".";
     FakeServers::FakeTcpEcho tcp;
     FakeServers::FakeUdpEcho udp;
     FakeServers::FakeWsServer ws;
@@ -317,6 +324,105 @@ int main(){
         bool saw = false;
         for(int i = 0; i < 3000 && !saw; i++){ saw = mqtt.count("disconnect") > before; usleep(500); }
         check(saw, "mqtt: アプリを閉じると DISCONNECT");
+    }
+
+    // ---- サンプルアプリ「MQTTリモコン」 ----
+    {
+        // 機器の状態を retain で置いておく(本物の機器が流しておく状態の代わり)
+        {
+            MqttClient dev;
+            MqttClient::Options o;
+            o.client_id.assign("device");
+            dev.begin(("mqtt://127.0.0.1:" + std::to_string(mqtt.port)).c_str(), o);
+            bool sent = false, done = false;
+            for(int i = 0; i < 4000 && !done; i++){
+                MqttClient::Event ev;
+                while(dev.poll(ev)){
+                    if(ev.type == MqttClient::EventType::Connected){
+                        dev.publish("t/light/state", "ON", 2, 0, true);
+                        dev.publish("t/fan/state", "{\"state\":\"OFF\"}", 15, 0, true);
+                        dev.disconnect();
+                        sent = true;
+                    }
+                    if(ev.type == MqttClient::EventType::Closed) done = true;
+                }
+                PicoHostClock::now += 1;
+                usleep(200);
+            }
+            check(sent && done, "remote: 機器の状態を retain で置く");
+        }
+
+        std::ifstream f(root + "/pc/sdcard/lua/apps/MQTTリモコン/main.lua");
+        std::stringstream ss;
+        ss << f.rdbuf();
+        std::string src = ss.str();
+        check(!src.empty(), "remote: main.lua を読む");
+        // 末尾へ、ローカル変数を覗く口を足す(reversi_test.lua と同じやり方)
+        src += "\nTEST = { toggle = toggle, back = back, online = function() return online end,"
+               " state = function(i) return state[i] end, pending = function(i) return pending[i] end,"
+               " conn = function() return conn_text end, log = function() return log end }\n";
+
+        OSData::SD_usable = true;   // 設定は store.json(stubs/ のメモリ上のSD)
+        LuaEngine e(256 * 1024, net, "/remote");
+        lua_register(e.raw(), "check", l_check);
+        SetInt(e, "MQTT_PORT", mqtt.port);
+        bool ok = e.Run(R"LUA(
+            check(pico.store_save({ url = "mqtt://127.0.0.1:" .. MQTT_PORT, user = "u", pass = "p", client_id = "ptest",
+                                    devices = { { "照明", "t/light" }, { "扇風機", "t/fan" }, { "テレビ", "t/tv" } } },
+                                  { encrypt = true }), "remote: 設定を暗号化して置く")
+        )LUA", "remote_cfg");
+        check(ok, "remote: 設定の実行");
+        ok = e.Run(src.c_str(), "/remote/main.lua");
+        check(ok, "remote: main.lua を動かす");
+        ok = e.Run(R"LUA(
+            check(TEST.conn() == "接続しています…", "remote: 最初は接続しています")
+            check(TEST.state(1) == nil, "remote: 状態は届くまで不明")
+        )LUA", "remote1");
+        check(ok, "remote: 起動直後の確認");
+        e.Run("function remote_ready() ready = TEST.online() and TEST.state(1) ~= nil and TEST.state(2) ~= nil end", "fn");
+        bool ready = false;
+        for(int i = 0; i < 4000 && !ready; i++){
+            e.Run("remote_ready()", "poll");
+            ready = GlobalTrue(e, "ready");
+            e.UpdateSockets();
+            PicoHostClock::now += 1;
+            usleep(200);
+        }
+        check(ready, "remote: 繋いで、retain の状態が届く");
+        check(mqtt.saw("connect:ptest:u:p:ka60:clean:will=pico/remote/ptest/status=offline"), "remote: CONNECT(認証・遺言)");
+        check(mqtt.saw("sub:t/light/state:1") && mqtt.saw("sub:t/tv/state:1"), "remote: 機器ごとに <話題>/state を購読");
+        check(mqtt.saw("pub:pico/remote/ptest/status:0:retain:online"), "remote: online を retain で置く");
+        ok = e.Run(R"LUA(
+            check(TEST.state(1) == "ON", "remote: ON がそのまま")
+            check(TEST.state(2) == "OFF", 'remote: {"state":"OFF"} の形も読む')
+            check(TEST.state(3) == nil, "remote: 流していない機器は不明のまま")
+            check(TEST.conn():find("接続中") == 1, "remote: 接続中の表示")
+            check(#TEST.log() == 2, "remote: 届いたものの記録")
+            TEST.toggle(1)
+            check(TEST.pending(1) == true, "remote: 送ったら状態が返るまで待ちの印")
+            TEST.toggle(2)
+        )LUA", "remote2");
+        check(ok, "remote: 点け消しの実行");
+        bool sent = false;
+        for(int i = 0; i < 4000 && !sent; i++){
+            sent = mqtt.saw("pub:t/light/set:1:OFF") && mqtt.saw("pub:t/fan/set:1:ON");
+            e.UpdateSockets();
+            PicoHostClock::now += 1;
+            usleep(200);
+        }
+        check(sent, "remote: 今の状態の逆を <話題>/set へ QoS 1 で送る");
+        const int disc = mqtt.count("disconnect");
+        ok = e.Run("TEST.back()", "remote3");
+        check(ok, "remote: 戻るの実行");
+        for(int i = 0; i < 50; i++){ e.UpdateSockets(); PicoHostClock::now += 1; usleep(200); }
+        bool closed = false;
+        for(int i = 0; i < 3000 && !closed; i++){ closed = mqtt.count("disconnect") > disc; usleep(500); }
+        check(closed, "remote: 戻ると DISCONNECT");
+        if(!closed && getenv("LUA_TEST_VERBOSE")){
+            std::lock_guard<std::mutex> lk(mqtt.mu);
+            for(const auto& l : mqtt.log) fprintf(stderr, "broker: %s\n", l.c_str());
+        }
+        check(mqtt.saw("pub:pico/remote/ptest/status:0:retain:offline"), "remote: 戻る前に offline を置く");
     }
 
     tcp.stop();

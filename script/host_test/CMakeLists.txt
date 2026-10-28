@@ -305,7 +305,7 @@ host_test(lua_alloc_budget_test GROUP lua-base)
 # --- lua-engine / lua-ext / lua-sandbox: LuaEngine(pico.*)---
 host_test(lua_engine_test GROUP lua-engine)
 host_test(lua_ext_test GROUP lua-ext)
-host_test(lua_socket_test GROUP lua-ext)
+host_test(lua_socket_test GROUP lua-ext ARGS ${ROOT})
 host_test(background_test GROUP lua-ext)
 host_test(lua_sandbox_test GROUP lua-sandbox)
 host_test(devtools_test GROUP lua-sandbox)

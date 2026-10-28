@@ -280,6 +280,8 @@
   - [x] Outlook.com(Microsoftのアカウント): デバイスコードでサインインし、XOAUTH2で入る
   - [ ] GmailのOAuth(今はアプリパスワード)
   - [ ] 実機・本物のメールサーバでの確認
+- [x] MQTTリモコン(Luaアプリ。pico.socket のサンプル)
+  - [ ] 実機・本物のブローカ(Home Assistant の Mosquitto)での確認
 - [x] Spotifyリモコン(Luaアプリ)
   - [x] 再生/停止・次へ・前へ・シーク・音量・シャッフル・リピート・端末の切り替え
   - [x] ジャケット画像(JPEG)

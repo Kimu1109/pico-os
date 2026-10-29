@@ -8,6 +8,7 @@
 //   サンプルアプリ「MQTTリモコン」(pc/sdcard/lua/apps/MQTTリモコン/main.lua)を本物のまま動かす
 //   (引数はリポジトリのルート。retain の状態が届く・点け消しを送る・遺言と online/offline・戻ると DISCONNECT)
 //   サンプルアプリ「HAパネル」(WebSocket)を偽物の Home Assistant(FakeHaServer)へ繋いで動かす
+//   サンプルアプリ「UDPツール」を UDP の echo へ向けて動かす(送受信・Wake on LAN のマジックパケット)
 //
 // 部品そのものの細かい振る舞い(枠・パケット・時間切れ)は socket_test の担当。
 #include "lua/LuaEngine.hpp"
@@ -515,6 +516,66 @@ int main(int argc, char** argv){
             check(until(e, "not TEST.retrying()"), "ha: トークンが違うときは繋ぎ直さない");
         }
         ha.stop();
+    }
+
+    // ---- サンプルアプリ「UDPツール」 ----
+    {
+        std::ifstream f(root + "/pc/sdcard/lua/apps/UDPツール/main.lua");
+        std::stringstream ss;
+        ss << f.rdbuf();
+        std::string src = ss.str();
+        check(!src.empty(), "udp-tool: main.lua を読む");
+        src += "\nTEST = { send = send_text, wake = wake, log = function() return log end,"
+               " status = function() return status end, show = show, mac = parse_mac, split = split_target,"
+               " retarget = function(t) cfg.target = t end }\n";
+
+        OSData::SD_usable = true;
+        LuaEngine e(256 * 1024, net, "/udptool");
+        lua_register(e.raw(), "check", l_check);
+        SetInt(e, "UDP_PORT", udp.port);
+        bool ok = e.Run(R"LUA(
+            local to = "127.0.0.1:" .. UDP_PORT
+            check(pico.store_save({ target = to, wol_addr = to, local_port = 0,
+                                    wol = { { "居間のPC", "00:11:22:33:44:55" } } }), "udp-tool: 設定を置く")
+        )LUA", "udp_cfg");
+        check(ok && e.Run(src.c_str(), "/udptool/main.lua"), "udp-tool: main.lua を動かす");
+        ok = e.Run(R"LUA(
+            check(TEST.status() == "待ち受け: 返事だけ受ける", "udp-tool: 空いている番号で待つ")
+            check(TEST.show("a\nb") == "a\\nb", "udp-tool: 改行は \\n で見せる")
+            check(TEST.show("\0\1\255") == "[3B] 00 01 FF ", "udp-tool: 読めないものは16進")
+            check(#TEST.mac("aa-bb-cc-dd-ee-ff") == 6 and TEST.mac("AABBCCDDEEFF") ~= nil, "udp-tool: MACの書き方")
+            check(TEST.mac("00:11:22:33:44") == nil and TEST.mac("zz:11:22:33:44:55") == nil, "udp-tool: 違うMACは読まない")
+            check(TEST.split("h:0") == nil and TEST.split("nohost") == nil and TEST.split(" h:9 ") == "h", "udp-tool: 宛先の形")
+            check(TEST.send("hello"), "udp-tool: 送る")
+            check(TEST.log()[1][1] == "→ hello", "udp-tool: 送ったものを記録")
+        )LUA", "udp1");
+        check(ok, "udp-tool: 送るの実行");
+        auto until = [&e](const char* expr) {
+            const std::string code = std::string("until_ok = (") + expr + ") and true or false";
+            for(int i = 0; i < 4000; i++){
+                e.Run(code.c_str(), "until");
+                if(GlobalTrue(e, "until_ok")) return true;
+                e.UpdateSockets();
+                PicoHostClock::now += 1;
+                usleep(200);
+            }
+            return false;
+        };
+        check(until("TEST.log()[1][1] == '← echo:hello'"), "udp-tool: 宛先からの返事を並べる(送り元は省く)");
+        check(udp.saw("hello"), "udp-tool: 相手に届く");
+
+        ok = e.Run(R"LUA( check(TEST.wake(1), "udp-tool: WoLを送る") )LUA", "udp2");
+        check(ok, "udp-tool: WoLの実行");
+        std::string magic(6, '\xff');
+        for(int i = 0; i < 16; i++) magic += std::string("\x00\x11\x22\x33\x44\x55", 6);
+        bool saw = false;
+        for(int i = 0; i < 3000 && !saw; i++){ saw = udp.saw(magic); usleep(500); }
+        check(saw, "udp-tool: マジックパケット(FF×6 + MAC×16 = 102バイト)");
+        check(until("TEST.log()[1][1]:find('← [107B] 65 63 68 6F 3A FF', 1, true) == 1"), "udp-tool: 読めない返事は16進で並べる");
+        // 宛先と違う相手からのもの(宛先を名前で書いた・別の機器)は送り元を付ける
+        ok = e.Run(R"LUA( TEST.retarget("localhost:" .. UDP_PORT) TEST.send("x") )LUA", "udp4");
+        check(ok, "udp-tool: 宛先を名前にして送る");
+        check(until("TEST.log()[1][1] == '← 127.0.0.1:' .. UDP_PORT .. '  echo:x'"), "udp-tool: 宛先と違う送り元は付ける");
     }
 
     tcp.stop();

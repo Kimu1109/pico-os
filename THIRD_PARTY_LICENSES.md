@@ -10,6 +10,7 @@ pico-os のために書いたファイルは [MIT ライセンス](LICENSE)(Copy
 | もの | 置き場所 | ライセンス | 著作権者 | ライセンス文 |
 |---|---|---|---|---|
 | Lua 5.4.7 | `lib/lua/` | MIT | Lua.org, PUC-Rio | `lib/lua/LICENSE` |
+| minimp3 | `lib/minimp3/` | CC0-1.0(パブリックドメインへの献呈) | lieff | `lib/minimp3/LICENSE` |
 | Monocypher | `lib/monocypher/` | BSD-2-Clause または CC0-1.0 の選択 | Loup Vaillant ほか | `lib/monocypher/LICENCE.md` |
 | Peanut-GB | `lib/peanut_gb/` | MIT | Mahyar Koshkouei | `lib/peanut_gb/LICENSE` |
 | QR Code generator library | `lib/qrcodegen/` | MIT | Project Nayuki | `lib/qrcodegen/LICENSE` |

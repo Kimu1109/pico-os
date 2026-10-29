@@ -21,7 +21,7 @@
 //                      JPEG・PNG・フルカラーBMPはSDから解きながら液晶へフルカラーで直接描く)
 //   .pvid           … 動画アプリ(VideoScene)へ置き換わる(シークバー・再生/一時停止・±10秒つき)
 //   .txt(Shift_JIS)… 読書アプリ(ReaderScene)へ置き換わる(青空文庫の配布物。ここでは文字化けするため)
-//   .wav            … 再生(下にシークバーと再生・一時停止/10秒戻る・進むのアイコンボタン(MediaButtons)。ミュージックアプリと同じ音の出し方)
+//   .wav / .mp3     … 再生(下にシークバーと再生・一時停止/10秒戻る・進むのアイコンボタン(MediaButtons)。ミュージックアプリと同じ音の出し方)
 //   .mml            … 中身をテキストで見せ(TextView)、同じ操作の欄で再生する。MMLは途中へ飛べないので
 //                      シークバーは進み具合を見せるだけで、±10秒は押せない
 //   それ以外        … TextView(見えている行だけを描くプレーンテキストの表示欄)
@@ -50,7 +50,7 @@ class FileViewerScene : public Scene {
         // TextViewが指す本文。シーンのメンバなので、表示中は必ず生きている
         FixedString<kMaxTextBytes> text_buf;
 
-        // ---- 音の再生(.wav / .mml) ----
+        // ---- 音の再生(.wav / .mp3 / .mml) ----
         enum class Media : uint8_t { None, Wav, Mml };
         static constexpr uint32_t kSkipMs = 10000;
         Media media = Media::None;

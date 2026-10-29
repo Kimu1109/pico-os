@@ -194,10 +194,12 @@ namespace SoundFunctions {
     // 列が満杯で捨てた書き込みの数
     uint32_t GbDroppedWrites();
 
-    // ---- WAV(SDの .wav をそのまま鳴らす) ----
-    // 1コア目がSDから少しずつ読んでモノラル・出力の周波数へ直し、列(WavStream、24KB)で2コア目へ渡す。
+    // ---- WAV/MP3(SDの .wav / .mp3 をそのまま鳴らす) ----
+    // 1コア目がSDから少しずつ読んで(MP3は展開して)出力の周波数へ直し、列(WavStream、24KB)で2コア目へ渡す。
+    // .mp3(拡張子の大小は区別しない)は Mp3Decoder、それ以外は WavDecoder で読む。以下「WAV」はどちらも指す。
     // 曲・効果音・GBの音と足し合わせる。同時に鳴らせるWAVは1本(鳴らすと前のWAVは止まる)。
-    // 列と読み取り係(合わせて約17KB)は最初に鳴らすときに確保し、以降は持ち続ける。
+    // 列とWAVの読み取り係(合わせて約17KB)は最初に鳴らすときに確保し、以降は持ち続ける。
+    // MP3の読み取り係(約31KB)は .mp3 を鳴らす間だけ持つ(.wav を鳴らす・WavStop() で返す)。
     // 読み込みが WavStream::kRingSamples(44100Hzでモノラル約370ms・ステレオ約190ms、22050Hzはその倍)より長く止まると途切れる(WavUnderruns())
     struct WavInfo {
         uint16_t channels = 0;

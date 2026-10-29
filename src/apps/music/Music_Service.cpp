@@ -113,11 +113,11 @@ namespace {
         //今鳴らした曲が止まり「他のアプリに取られた」扱いになってしまうため
         if(SoundFunctions::RequestedSampleRate() == 0) SoundFunctions::RequestSampleRate(SoundFunctions::kSampleRateHigh);
 
-        //MMLとWAVは同時には鳴らさない(このアプリで鳴らすのは1曲ずつ)
-        if(MusicService::IsWav(t.name.c_str())){
+        //MMLとWAV/MP3は同時には鳴らさない(このアプリで鳴らすのは1曲ずつ)
+        if(MusicService::IsWavOrMp3(t.name.c_str())){
             const char* err = "";
             if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err)){
-                error.assign(err && *err ? err : "WAVとして読めません");
+                error.assign(err && *err ? err : "読めない音のファイルです");
                 return false;
             }
             SoundFunctions::MusicStop();
@@ -412,7 +412,7 @@ void MusicService::DisplayName(const char* file, FixedString<PICO_PATH_LEN>& out
     out.assign(file, dot ? (size_t)(dot - file) : strlen(file));
 }
 bool MusicService::IsMml(const char* name){ return EndsWith(name, ".mml"); }
-bool MusicService::IsWav(const char* name){ return EndsWith(name, ".wav"); }
+bool MusicService::IsWavOrMp3(const char* name){ return EndsWith(name, ".wav") || EndsWith(name, ".mp3"); }
 
 BackgroundService* MusicService::Service(){ return &service; }
 

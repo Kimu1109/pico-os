@@ -12,6 +12,7 @@
 #include "sound/Music_Player.hpp"
 #include "sound/Gb_Apu.hpp"
 #include "sound/Gb_Audio_Link.hpp"
+#include "sound/Mp3_Decoder.hpp"
 #include "sound/Wav_Decoder.hpp"
 #include "sound/Wav_Stream.hpp"
 #include "apps/gb/Gb_Audio_Sink.hpp"
@@ -24,6 +25,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include <strings.h>
 
 using namespace SoundFunctions;
 
@@ -141,6 +143,8 @@ namespace {
 
     // --- WAV(1コア目側) ---
     WavDecoder* wav_decoder = nullptr;      //最初にWAVを鳴らすときに確保し、以降は持ち続ける
+    Mp3Decoder* mp3_decoder = nullptr;      //.mp3 を鳴らす間だけ確保する(約31KB。.wav を鳴らす・止めると返す)
+    PcmFileDecoder* pcm_decoder = nullptr;  //今のファイルを読んでいる係(wav_decoder か mp3_decoder)
     FixedString<PICO_STR_M> wav_title;
     uint64_t wav_pushed = 0;                // 列へ積んだサンプル数(鳴らし始め/飛んだ位置から数える)
     uint32_t wav_duration_ms = 0;
@@ -269,23 +273,37 @@ namespace {
     // WAVを読んで列へ積む(最大 max_samples)。読み終えたら読み取り係を閉じる
     void FeedWav(uint32_t max_samples){
         WavStream* wav = wav_stream.load(std::memory_order_relaxed);
-        if(!wav || !wav_decoder || !wav_decoder->isOpen()) return;
+        if(!wav || !pcm_decoder || !pcm_decoder->isOpen()) return;
         int16_t tmp[256];
         const uint32_t chs = wav->channels();      //1フレームのサンプル数(ステレオは左右で2)
         uint32_t want = wav->freeFrames();         //フレームで数える
         if(want > max_samples) want = max_samples;
         while(want > 0){
             const size_t max_frames = 256 / chs;
-            const size_t n = wav_decoder->read(tmp, want < max_frames ? want : max_frames);
+            const size_t n = pcm_decoder->read(tmp, want < max_frames ? want : max_frames);
             wav_pushed += wav->push(tmp, n * chs) / chs;
             want -= (uint32_t)n;
-            if(wav_decoder->finished()){
-                wav_decoder->close();
+            if(pcm_decoder->finished()){
+                pcm_decoder->close();
                 wav->setFeeding(false);     //ここから先は鳴らし切るだけ(足りなくても途切れとは数えない)
                 break;
             }
             if(n == 0) break;
         }
+    }
+
+    bool IsMp3Path(const char* path){
+        const size_t n = strlen(path);
+        return n >= 4 && strcasecmp(path + n - 4, ".mp3") == 0;
+    }
+
+    // MP3の係を返す(大きいので鳴らす間だけ持つ。係は1コア目しか触らないので、いつ返してもよい)
+    void ReleaseMp3Decoder(){
+        if(!mp3_decoder) return;
+        if(pcm_decoder == mp3_decoder) pcm_decoder = nullptr;
+        mp3_decoder->~Mp3Decoder();
+        free(mp3_decoder);
+        mp3_decoder = nullptr;
     }
 
     // ================================================================
@@ -853,13 +871,28 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
         wav = new (mem) WavStream();
         wav_stream.store(wav, std::memory_order_release);
     }
-    if(!wav_decoder){
-        void* mem = malloc(sizeof(WavDecoder));
-        if(!mem){
-            if(error) *error = "WAVを鳴らすためのメモリが足りません";
-            return false;
+    if(IsMp3Path(path)){
+        if(!mp3_decoder){
+            void* mem = malloc(sizeof(Mp3Decoder));
+            if(!mem){
+                if(error) *error = "MP3を鳴らすためのメモリが足りません";
+                return false;
+            }
+            mp3_decoder = new (mem) Mp3Decoder();
         }
-        wav_decoder = new (mem) WavDecoder();
+        if(wav_decoder) wav_decoder->close();
+        pcm_decoder = mp3_decoder;
+    }else{
+        ReleaseMp3Decoder();
+        if(!wav_decoder){
+            void* mem = malloc(sizeof(WavDecoder));
+            if(!mem){
+                if(error) *error = "WAVを鳴らすためのメモリが足りません";
+                return false;
+            }
+            wav_decoder = new (mem) WavDecoder();
+        }
+        pcm_decoder = wav_decoder;
     }
 
     //見出しを先に別の係で確かめると読み取り係が2つ要るので、読めなかったら今のWAVも止まる
@@ -872,20 +905,20 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
     wav_duration_ms = 0;
     wav_loaded = false;
     wav_loop = loop;
-    wav_decoder->setStereoOutput(true);     //2ch以上のファイルは左右を残す(1chはモノラルのまま)
-    if(!wav_decoder->open(path, out_rate)){
-        if(error) *error = wav_decoder->errorText();
+    pcm_decoder->setStereoOutput(true);     //2ch以上のファイルは左右を残す(1chはモノラルのまま)
+    if(!pcm_decoder->open(path, out_rate)){
+        if(error) *error = pcm_decoder->errorText();
         return false;
     }
-    wav->setStereo(wav_decoder->outChannels() == 2);
-    wav_decoder->setLoop(loop);
+    wav->setStereo(pcm_decoder->outChannels() == 2);
+    pcm_decoder->setLoop(loop);
     if(info){
-        info->channels = wav_decoder->channels();
-        info->bits = wav_decoder->bitsPerSample();
-        info->sample_rate = wav_decoder->sampleRate();
-        info->duration_ms = wav_decoder->durationMs();
+        info->channels = pcm_decoder->channels();
+        info->bits = pcm_decoder->bitsPerSample();
+        info->sample_rate = pcm_decoder->sampleRate();
+        info->duration_ms = pcm_decoder->durationMs();
     }
-    wav_duration_ms = wav_decoder->durationMs();
+    wav_duration_ms = pcm_decoder->durationMs();
     wav_loaded = true;
     const char* slash = strrchr(path, '/');
     wav_title.assign(slash ? slash + 1 : path);
@@ -904,6 +937,7 @@ void SoundFunctions::WavStop(){
     wav->flush();
     wav_loaded = false;
     if(wav_decoder) wav_decoder->close();
+    ReleaseMp3Decoder();
 }
 
 bool SoundFunctions::WavPause(bool pause){
@@ -935,15 +969,15 @@ uint32_t SoundFunctions::WavPositionMs(){
 
 bool SoundFunctions::WavSeekMs(uint32_t ms){
     WavStream* wav = wav_stream.load(std::memory_order_relaxed);
-    if(!wav || !wav_decoder || wav_duration_ms == 0) return false;
+    if(!wav || !pcm_decoder || wav_duration_ms == 0) return false;
     if(ms >= wav_duration_ms) ms = wav_duration_ms - 1;
     if(!wav_loaded) return false;
 
     wav->setFeeding(false);
     wav->flush();
-    if(!wav_decoder->seekMs(ms)){
+    if(!pcm_decoder->seekMs(ms)){
         //飛べなければ止める(読み取り係が中途半端な状態で残らないように)
-        wav_decoder->close();
+        pcm_decoder->close();
         return false;
     }
     wav_pushed = (uint64_t)ms * out_rate / 1000;
@@ -955,7 +989,7 @@ bool SoundFunctions::WavSeekMs(uint32_t ms){
 bool SoundFunctions::WavPlaying(){
     WavStream* wav = wav_stream.load(std::memory_order_relaxed);
     if(!wav) return false;
-    return (wav_decoder && wav_decoder->isOpen()) || wav->buffered();
+    return (pcm_decoder && pcm_decoder->isOpen()) || wav->buffered();
 }
 
 const char* SoundFunctions::WavTitle(){ return wav_title.c_str(); }

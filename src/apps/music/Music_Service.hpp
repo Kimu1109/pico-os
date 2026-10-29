@@ -81,7 +81,8 @@ namespace MusicService {
     // 曲の見せる名前(拡張子を落とす)
     void DisplayName(const char* file, FixedString<PICO_PATH_LEN>& out);
     bool IsMml(const char* name);
-    bool IsWav(const char* name);
+    // WAVの経路(SoundFunctions::WavPlay)で鳴らすファイル(.wav / .mp3)か
+    bool IsWavOrMp3(const char* name);
 
     // BackgroundFunctions へ登録する口
     BackgroundService* Service();

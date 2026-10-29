@@ -1,0 +1,13 @@
+{
+    "name": "minimp3",
+    "version": "0.0.0+ea99364",
+    "description": "lieff/minimp3 (vendored, minimp3.h at commit ea99364, scratch moved off the stack). Used by the MP3 player (src/sound/Mp3_Decoder). See README-pico-os.md.",
+    "keywords": ["mp3", "audio", "decoder"],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/lieff/minimp3.git"
+    },
+    "license": "CC0-1.0",
+    "frameworks": "arduino",
+    "platforms": "*"
+}

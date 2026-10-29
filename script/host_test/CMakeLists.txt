@@ -221,6 +221,9 @@ host_py_test(registry_tool_test GROUP core ARGS ${CMAKE_CURRENT_BINARY_DIR}/regi
 host_test(firmware_test GROUP core)
 host_py_test(firmware_tool_test GROUP core USES firmware_test
     ARGS $<TARGET_FILE:firmware_test> ${CMAKE_CURRENT_BINARY_DIR}/firmware_tool_work)
+host_test(fw_index_test GROUP core)
+host_py_test(fw_index_tool_test GROUP core USES fw_index_test
+    ARGS $<TARGET_FILE:fw_index_test> ${CMAKE_CURRENT_BINARY_DIR}/fw_index_tool_work)
 host_test(bmp_test GROUP core)
 host_test(image_codec_test GROUP core)
 host_test(path_test GROUP core)

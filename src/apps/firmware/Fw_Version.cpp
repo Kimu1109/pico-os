@@ -17,6 +17,9 @@
 #ifndef PICOOS_BUILD_DATE
     #define PICOOS_BUILD_DATE ""
 #endif
+#ifndef PICOOS_BUILD_ENV
+    #define PICOOS_BUILD_ENV ""
+#endif
 
 #define PICOOS_STR2(x) #x
 #define PICOOS_STR(x) PICOOS_STR2(x)
@@ -25,12 +28,13 @@ namespace {
     // script/firmware_tool.py が firmware.bin の中からこの並びを探す(書き方を変えるときは両方を直す)。
     // 参照されないとリンクで消えるので、Marker()から返す
     const char kMarker[] = "PICOOS-BUILD;serial=" PICOOS_STR(PICOOS_BUILD_SERIAL)
-                           ";git=" PICOOS_BUILD_GIT ";date=" PICOOS_BUILD_DATE ";board=rpipico2w;";
+                           ";git=" PICOOS_BUILD_GIT ";date=" PICOOS_BUILD_DATE ";board=rpipico2w;env=" PICOOS_BUILD_ENV ";";
 }
 
 uint32_t FwVersion::Serial(){ return (uint32_t)PICOOS_BUILD_SERIAL; }
 const char* FwVersion::Git(){ return PICOOS_BUILD_GIT; }
 const char* FwVersion::Date(){ return PICOOS_BUILD_DATE; }
+const char* FwVersion::Env(){ return PICOOS_BUILD_ENV; }
 const char* FwVersion::Marker(){ return kMarker; }
 
 const char* FwVersion::Text(){

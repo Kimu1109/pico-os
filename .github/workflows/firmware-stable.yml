@@ -1,0 +1,108 @@
+# ファームの安定版を出す: ナイトリーのリリースを1つ選び、同じ添付で安定版のリリース(v<通し番号>)を作る。
+#
+#   手動実行 … Actionsタブの「Run workflow」から、安定版にするナイトリーのタグ(nightly-<通し番号>-<短いハッシュ>)を入れる
+#
+# ナイトリーは KEEP 本を超えると消えるが、安定版(v*)は消さない。本体の「本体の更新」→[Webから]の一覧には
+# 新しい安定版が5本・ナイトリーが3本載る(web-pages.yml・script/build_fw_index.py)。
+# firmware.pfw は Secrets の FIRMWARE_SIGNING_KEY で署名し直してから載せる(ナイトリーを署名なしで作った後に
+# 鍵を登録した場合も、安定版は必ず署名済みになる)。鍵が無い・焼き込みの鍵と違えば止める。
+# 最後に Pages の公開(web-pages.yml)を動かして版の一覧を作り直させる。
+name: ファームの安定版を出す
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 安定版にするナイトリーのタグ(nightly-<通し番号>-<短いハッシュ>)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-stable
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: 安定版のリリースを作る
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # リリースとタグを作る
+      actions: write   # Pages の公開(web-pages.yml)を動かす
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: タグを確かめる
+        id: tag
+        run: |
+          if ! printf '%s' "${TAG}" | grep -Eqx 'nightly-[0-9]+-[0-9a-f]+'; then
+            echo "::error::ナイトリーのタグ(nightly-<通し番号>-<短いハッシュ>)を入れてください: ${TAG}"
+            exit 1
+          fi
+          serial=$(printf '%s' "${TAG}" | cut -d- -f2)
+          short=$(printf '%s' "${TAG}" | cut -d- -f3)
+          sha=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" --jq .object.sha)
+          if gh release view "v${serial}" > /dev/null 2>&1; then
+            echo "::error::v${serial} はもうあります"
+            exit 1
+          fi
+          {
+            echo "serial=${serial}"
+            echo "short=${short}"
+            echo "sha=${sha}"
+          } >> "$GITHUB_OUTPUT"
+
+      # 署名の道具と、そのナイトリーをビルドしたコミットの焼き込みの鍵(Fw_Keys.hpp)を使う
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.sha }}
+
+      - name: ナイトリーの添付を落とす
+        run: |
+          gh release download "${TAG}" --dir firmware
+          ls -l firmware
+          test -f firmware/firmware.pfw
+
+      - name: 更新ファイルに署名する
+        env:
+          FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
+        run: |
+          if [ -z "${FIRMWARE_SIGNING_KEY}" ]; then
+            echo "::error::Secrets に FIRMWARE_SIGNING_KEY がありません(安定版は署名済みでしか出さない。docs/FIRMWARE_UPDATE.md)"
+            exit 1
+          fi
+          key="${RUNNER_TEMP}/firmware.key"
+          (umask 077; printf '%s\n' "${FIRMWARE_SIGNING_KEY}" > "${key}")
+          rc=0
+          python3 script/firmware_tool.py sign firmware/firmware.pfw --key "${key}" \
+            --expect-keys src/apps/firmware/Fw_Keys.hpp || rc=$?
+          rm -f "${key}"
+          exit "${rc}"
+
+      - name: リリースを作る
+        env:
+          SERIAL: ${{ steps.tag.outputs.serial }}
+          SHORT: ${{ steps.tag.outputs.short }}
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          date=$(TZ=Asia/Tokyo date '+%Y-%m-%d')
+          cat > notes.md <<EOF
+          ナイトリー ${TAG} を ${date} に安定版にしたもの(ファームの版 #${SERIAL})。
+
+          - \`firmware.uf2\` … BOOTSELを押しながらUSBでつなぎ、出てきたドライブへ置く
+          - \`firmware.pfw\` … SDの更新ファイル(docs/FIRMWARE_UPDATE.md)。署名済み。本体の「本体の更新」→[Webから]でも選べる
+          - \`firmware.elf\` … クラッシュダンプの番地を引くとき用
+          EOF
+          gh release create "v${SERIAL}" firmware/* \
+            --target "${SHA}" \
+            --title "安定版 #${SERIAL} (${SHORT})" \
+            --notes-file notes.md \
+            --latest
+
+      - name: Webからの更新の版の一覧を作り直す
+        run: gh workflow run web-pages.yml --ref main

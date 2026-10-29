@@ -6,6 +6,7 @@
 - 版の印とLittleFSの範囲を入れた偽の firmware.bin から作り、verify・gzipの往復・断る場合を見る
 - 作ったものを C++ の firmware_test(本物の Fw_Image/Fw_Update)に読ませる(見出しの並び・署名が両方で同じか)
 - push のTCPの取り決め(WAIT/OK/DONE/ERR)を偽の本体で確かめる
+- sign(できている署名なしの更新ファイルに後から署名する。ナイトリーがCIで使う)と、その結果を firmware_test に読ませる
 """
 import gzip
 import os
@@ -38,11 +39,12 @@ def expect_exit(fn, part, label):
     check(False, label + "(断らなかった)")
 
 
-def fake_bin(serial=4321, git="beef123+", fs=(0x1024F000, 0x103FF000), size=300000, marker=True):
+def fake_bin(serial=4321, git="beef123+", fs=(0x1024F000, 0x103FF000), size=300000, marker=True, env=None):
     data = bytearray(os.urandom(size // 2) + bytes(size - size // 2))  # 半分は縮む
     struct.pack_into("<IIII", data, ft.FS_WORDS_OFFSET, fs[0], fs[1], 0x103FF000, 0x24F000)
     if marker:
-        m = f"PICOOS-BUILD;serial={serial};git={git};date=2026-10-16 05:22;board=rpipico2w;\0".encode()
+        tail = f"env={env};" if env is not None else ""
+        m = f"PICOOS-BUILD;serial={serial};git={git};date=2026-10-16 05:22;board=rpipico2w;{tail}\0".encode()
         data[0x5000:0x5000 + len(m)] = m
     return bytes(data)
 
@@ -86,6 +88,56 @@ def main():
     out = r.stdout.decode("utf-8", "replace")
     print(out.rstrip())
     check(r.returncode == 0, "C++ の Fw_Image/Fw_Update が python の更新ファイルを読める")
+
+    # ---- 版の印の env=(2026-10-29から) ----
+    info = ft.read_build_info(fake_bin(env="rpipico2w_lite"))
+    check(info[4] == "rpipico2w_lite" and info[0] == 4321, "版の印の env= を読む")
+    check(ft.read_build_info(fake_bin())[4] == "", "env= の無い古い印も読める(構成は空)")
+    check(ft.payload_build_info(ft.parse(ft.pack(fake_bin(env="rpipico2w"), None, log=quiet)))["env"] == "rpipico2w",
+          "更新ファイルの中身から版の印を読める")
+
+    # ---- 後から署名する ----
+    unsigned_blob = ft.pack(data, None, log=quiet)
+    signed_later = ft.sign_blob(unsigned_blob, seed)
+    sp = ft.parse(signed_later)
+    check(sp["flags"] & ft.FLAG_SIGNED and ft.ed25519_verify(pub, ft.SIGN_CONTEXT + sp["header"], sp["sig"]),
+          "sign: 署名なしの更新ファイルに後から署名できる")
+    check(sp["payload"] == unsigned["payload"] and sp["header"][16:] == unsigned["header"][16:],
+          "sign: 中身と見出しの他の値は変えない")
+    check(ft.sign_blob(signed_later, seed) == signed_later, "sign: 署名済みに署名し直しても同じ")
+    broken = bytearray(unsigned_blob)
+    broken[-10] ^= 0xFF
+    expect_exit(lambda: ft.sign_blob(bytes(broken), seed), "合いません", "sign: 壊れた更新ファイルには署名しない")
+    expect_exit(lambda: ft.sign_blob(b"xx", seed), "読めません", "sign: 更新ファイルでないものは断る")
+
+    keys_hpp = os.path.join(work, "Fw_Keys.hpp")
+    with open(keys_hpp, "w") as f:
+        f.write("    inline constexpr Key kBuiltin[] = {\n")
+        f.write("        { { " + ", ".join(["0x00"] * 32) + " } },\n")
+        f.write("        { { " + ", ".join(f"0x{b:02x}" for b in pub) + " } },\n    };\n")
+    check(ft.builtin_keys(keys_hpp) == [pub], "Fw_Keys.hpp の鍵を読む(全部0の未登録は除く)")
+    real_keys = ft.builtin_keys(os.path.join(HERE, "..", "..", "src", "apps", "firmware", "Fw_Keys.hpp"))
+    check(len(real_keys) >= 1 and all(len(k) == 32 for k in real_keys), "本物の Fw_Keys.hpp の鍵を読める")
+    keyfile = os.path.join(work, "seed.key")
+    with open(keyfile, "w") as f:
+        f.write(seed.hex() + "\n")
+    in_pfw = os.path.join(work, "unsigned.pfw")
+    out_pfw = os.path.join(work, "signed_later.pfw")
+    with open(in_pfw, "wb") as f:
+        f.write(unsigned_blob)
+    tool = os.path.join(HERE, "..", "firmware_tool.py")
+    r = subprocess.run([sys.executable, tool, "sign", in_pfw, "--out", out_pfw, "--key", keyfile,
+                        "--expect-keys", keys_hpp], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+    check(r.returncode == 0 and open(out_pfw, "rb").read() == signed_later, "sign: コマンドで署名できる")
+    other = os.path.join(work, "other.key")
+    with open(other, "w") as f:
+        f.write(bytes(range(2, 34)).hex() + "\n")
+    r = subprocess.run([sys.executable, tool, "sign", in_pfw, "--out", out_pfw + ".x", "--key", other,
+                        "--expect-keys", keys_hpp], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+    check(r.returncode != 0 and "違います" in r.stdout.decode("utf-8", "replace") and not os.path.exists(out_pfw + ".x"),
+          "sign: 焼き込みの鍵と違う鍵では断る")
+    r = subprocess.run([firmware_test, out_pfw, keyf], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+    check(r.returncode == 0, "C++ の Fw_Image/Fw_Update が後から署名した更新ファイルを読める")
 
     # ---- push(偽の本体) ----
     def fake_device(replies_after_header, replies_after_payload, got):

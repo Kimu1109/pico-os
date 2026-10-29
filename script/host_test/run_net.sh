@@ -28,6 +28,9 @@
 # アプリストア(app_store_net_test)は app_store_fixture.py が作った配布物を python3 -m http.server で配り、
 # 一覧の取得・署名・インストール・更新・古い一覧/改ざん/権限の拒否を確かめる。
 #
+# Webからのファームの更新(fw_download_net_test)は、版の一覧と更新ファイルをテストが書いて python3 -m http.server で配り、
+# 一覧の取得・SDへ落とす・SHA-256/大きさ/404/取り消し・構成違いを確かめる(本物の GitHub Pages へは行かない)。
+#
 # 電卓の通貨レート(currency_net_test)は、Frankfurter/open.er-api の形の応答を python3 -m http.server で配り、
 # 取得・SDへの控え・404/形式違いで手元のレートを壊さないことを確かめる(本物の為替のAPIへは行かない)。
 #
@@ -345,6 +348,35 @@ echo ""
 echo "===== currency_net_test ====="
 "$OUT/currency_net_test" "$RATES_PORT"
 kill "$RATES_PID" 2>/dev/null || true
+
+# ---- Webからのファームの更新の取得(FwDownload)。置き場は http.server で配る(中身はテストが書く) ----
+FW_PORT=$((PORT + 12))
+FW_DIR="$OUT/fwweb"
+mkdir -p "$FW_DIR/www/firmware" "$FW_DIR/www/notindex"
+g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
+    "$ROOT/script/host_test/fw_download_net_test.cpp" \
+    "$ROOT/src/apps/firmware/Fw_Download.cpp" \
+    "$ROOT/src/apps/firmware/Fw_Index.cpp" \
+    "$ROOT/src/net/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    -o "$OUT/fw_download_net_test" -lssl -lcrypto
+
+python3 -m http.server "$FW_PORT" --bind 127.0.0.1 --directory "$FW_DIR/www" \
+    > "$OUT/fw_server.log" 2>&1 &
+FW_PID=$!
+i=0
+while [ $i -lt 50 ]; do
+    if python3 -c "import socket,sys; s=socket.socket(); sys.exit(s.connect_ex(('127.0.0.1', $FW_PORT)))" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+echo ""
+echo "===== fw_download_net_test ====="
+"$OUT/fw_download_net_test" "$FW_PORT" "$FW_DIR"
+kill "$FW_PID" 2>/dev/null || true
 
 # ---- SSH(SshClient)。本物の sshd を使い捨ての鍵と設定で立てる ----
 SSHD=$(command -v sshd || ls /usr/sbin/sshd 2>/dev/null || true)

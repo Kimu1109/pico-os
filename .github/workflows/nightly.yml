@@ -4,10 +4,16 @@
 #   手動実行               … Actionsタブの「Run workflow」から(main だけ。force で同じコミットでも作り直す)
 #
 # ビルドは firmware-build.yml をそのまま呼ぶので、載る中身はPRの「実機ファームのビルド」の成果物と同じ
-# (firmware.uf2 / firmware.elf / 署名なしの firmware.pfw)。リリースの添付なのでzipに包まれず、ログイン無しで落とせる。
+# (firmware.uf2 / firmware.elf / firmware.pfw)。リリースの添付なのでzipに包まれず、ログイン無しで落とせる。
 # 一覧: https://github.com/Kimu1109/pico-os/releases (タグは nightly-<通し番号>-<短いハッシュ>)
 #
+# firmware.pfw は載せる前に、Secrets の FIRMWARE_SIGNING_KEY(script/firmware_tool.py keygen の秘密鍵)で署名する
+# (docs/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。Secrets に無ければ署名なしのまま載せて警告を出す。
+# 鍵が Fw_Keys.hpp に焼き込んだ公開鍵と違えば止める(本体が受け付けない更新ファイルを配らないように)。
+#
 # 残すのは新しい順に KEEP 本。超えた分はリリースとタグを古い順に消す。
+# 最後に Pages の公開(web-pages.yml)を動かし、Webからの更新の版の一覧(/firmware/)を作り直させる
+# (GITHUB_TOKEN で作ったリリースでは他のワークフローが動かないため、明示的に動かす)。
 name: ナイトリービルド
 
 on:
@@ -65,17 +71,39 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # リリースとタグを作る・消す
+      actions: write   # Pages の公開(web-pages.yml)を動かす
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       SERIAL: ${{ needs.build.outputs.serial }}
       SHORT: ${{ needs.build.outputs.short }}
     steps:
+      # 署名の道具(script/firmware_tool.py)と、ビルドしたコミットの焼き込みの鍵(Fw_Keys.hpp)を使う
+      - uses: actions/checkout@v4
+
       - name: 成果物を受け取る
         uses: actions/download-artifact@v4
         with:
           name: firmware-rpipico2w
           path: firmware
+
+      - name: 更新ファイルに署名する
+        env:
+          FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
+        run: |
+          if [ -z "${FIRMWARE_SIGNING_KEY}" ]; then
+            echo "::warning::Secrets に FIRMWARE_SIGNING_KEY が無いので、firmware.pfw は署名なしのまま載せます(docs/FIRMWARE_UPDATE.md)"
+            echo "SIGNED=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          key="${RUNNER_TEMP}/firmware.key"
+          (umask 077; printf '%s\n' "${FIRMWARE_SIGNING_KEY}" > "${key}")
+          rc=0
+          python3 script/firmware_tool.py sign firmware/firmware.pfw --key "${key}" \
+            --expect-keys src/apps/firmware/Fw_Keys.hpp || rc=$?
+          rm -f "${key}"
+          [ "${rc}" -eq 0 ] || exit "${rc}"
+          echo "SIGNED=true" >> "$GITHUB_ENV"
 
       - name: リリースを作る
         run: |
@@ -91,11 +119,16 @@ jobs:
             --jq '[.[] | select(.tagName | startswith("nightly-"))] | sort_by(.createdAt) | reverse | .[0].tagName // ""')
           start=()
           if [ -n "${prev}" ]; then start=(--notes-start-tag "${prev}"); fi
+          if [ "${SIGNED}" = "true" ]; then
+            pfw_note="SDの更新ファイル(docs/FIRMWARE_UPDATE.md)。署名済み。本体の「本体の更新」→[Webから]でも選べる"
+          else
+            pfw_note="SDの更新ファイル(docs/FIRMWARE_UPDATE.md)。**署名なし**なので \`/sys/debug.cfg\` に \`fw-allow-unsigned = true\` が要る"
+          fi
           cat > notes.md <<EOF
           main の ${SHORT} を ${date} にビルドしたもの(ファームの版 #${SERIAL})。動作は確かめていない。
 
           - \`firmware.uf2\` … BOOTSELを押しながらUSBでつなぎ、出てきたドライブへ置く
-          - \`firmware.pfw\` … SDの更新ファイル(docs/FIRMWARE_UPDATE.md)。**署名なし**なので \`/sys/debug.cfg\` に \`fw-allow-unsigned = true\` が要る
+          - \`firmware.pfw\` … ${pfw_note}
           - \`firmware.elf\` … クラッシュダンプの番地を引くとき用
 
           EOF
@@ -113,3 +146,6 @@ jobs:
             echo "消す: ${old}"
             gh release delete "${old}" --cleanup-tag --yes
           done
+
+      - name: Webからの更新の版の一覧を作り直す
+        run: gh workflow run web-pages.yml --ref main

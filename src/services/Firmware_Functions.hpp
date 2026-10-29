@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "apps/firmware/Fw_Download.hpp"
 #include "apps/firmware/Fw_Update.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
@@ -12,6 +13,8 @@
 //   SDから   … StartFromSd(path)。ファイルアプリで .pfw を開く/「本体の更新」の[SDから選ぶ]
 //   Wi-Fiで  … StartListening()。PCの script/firmware_tool.py push(pio run -t fwpush)がTCPで送ってくる。
 //               「本体の更新」の画面で[受け取る]を押している間だけ待ち受ける
+//   Webから  … StartWebIndex() → StartWebFile()。GitHub Pages の版の一覧(apps/firmware/Fw_Download)から選んで
+//               SDの /firmware/ へ落とし、落とせたらSDからと同じ流れへ移る。書き込みの準備ができたら落としたファイルは消す
 //
 // どちらも 見出しを読む → 署名・版・大きさを確かめる → (要るなら本体で確認)→ 内蔵フラッシュのLittleFSへ置く →
 // 読み直して確かめる → arduino-picoのOTAのローダーへの指示を書く → 再起動(電源メニューの再起動と同じ後片付け)。
@@ -58,4 +61,22 @@ namespace FirmwareFunctions {
     bool PowerOk(FixedString<PICO_STR_LL>& err);
     // 署名を確かめられない更新ファイルも受け付けるか(/sys/debug.cfg の fw-allow-unsigned)
     bool AllowUnsigned();
+
+    // ---- Webから(docs/FIRMWARE_UPDATE.md「Webから取る」) ----
+    // 版の一覧を取り始める(置き場は /sys/firmware.cfg の url、無ければ FwDownload::kDefaultUrl)。
+    // 一覧には今の本体と同じ構成(CurrentEnv())の版だけ、署名なしは AllowUnsigned() のときだけ残る
+    bool StartWebIndex(FixedString<PICO_STR_LL>& err);
+    // 一覧の index 番目を SD の /firmware/ へ落とし始める。落とせたら Update() がSDからの更新を始める
+    bool StartWebFile(int index, FixedString<PICO_STR_LL>& err);
+    // 一覧を持っている間・取得中(無ければnullptr。SDからの更新へ移ったら捨てる)
+    FwDownload* Web();
+    bool WebBusy();
+    // 取得をやめる(一覧は残す)
+    void CancelWeb();
+    // 一覧も捨てる(TLSの約40KBと一覧の約12KBを返す)
+    void CloseWeb();
+    // 落とした後にSDからの更新を始められなかった理由(無ければ空。読んだら消える)
+    bool TakeWebError(FixedString<PICO_STR_LL>& out);
+    // 今の本体の構成(FwVersion::Env()。分からないとき(PC/Webビルド)は環境変数 PICOOS_FW_ENV か "rpipico2w")
+    const char* CurrentEnv();
 }

@@ -159,7 +159,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 ## ファームの更新 (`src/apps/firmware/` / `Firmware_Functions` / `FirmwareScene` / `script/firmware_tool.py`) (2026-10-16)
 
 使い方・形式・TCPの取り決めは`docs/FIRMWARE_UPDATE.md`。利用者と決めた方針(2026-10-16): arduino-pico標準のOTA(PicoOTA+内蔵フラッシュのLittleFS、自動ロールバック無し=壊れたらBOOTSEL)/
-LittleFSは1728KB / 今回の経路はSDとPCからのWi-Fi(Webから取るのは後) / 独自の見出し+gzip / **常に署名必須、鍵はファーム専用でPCにだけ置き、焼き込みの鍵だけを信頼**(SDの鍵は読まない。
+LittleFSは1728KB / 今回の経路はSDとPCからのWi-Fi(Webから取るのは後。下の「Webから取る」で2026-10-29に足した) / 独自の見出し+gzip / **常に署名必須、鍵はファーム専用で焼き込みの鍵だけを信頼**(SDの鍵は読まない。
 SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-unsigned`(それでも毎回本体で確認)/ 古い版は確認のうえで許す / 更新後に通知し置き場を片付ける。
 
 - **書き換えはarduino-picoのOTAのローダー**(`framework-arduinopico/ota/ota.c`。どのファームにもフラッシュの先頭12KBに入り、アプリは`0x10003000`から)。起動のたびにLittleFSの`otacommand.bin`を探し、
@@ -178,14 +178,42 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - **画面(`FirmwareScene`、ランチャの「本体の更新」。ファイルアプリで`.pfw`を開くと`FileViewerScene`から置き換わる)**: 今の版・鍵の登録の有無・状態・進み具合、[SDから選ぶ][受け取る][戻る/やめる]。
   確認は`MsgDialog`(確認が要らなくなったら閉じる)。更新の途中・待ち受け中・再起動待ちは`keepForeground`。離れるとやめる(再起動待ちのときだけはそのまま=電源メニューの再起動の`onExit()`)。
   ダイアログを開いたフレームより前に下の画面を書き換える(半透明のダイアログの下は描き直されないため)。
-- **鍵**: `src/apps/firmware/Fw_Keys.hpp`の`kBuiltin`は今は全部0(未登録)。利用者が`firmware_tool.py keygen`して1行を入れ、USBで1回書き込む必要がある(秘密鍵は`~/.pico-os/firmware.key`)。
-  Python側の署名は`build_app_repo.py`のEd25519(RFC 8032)を使い回す。
+- **鍵**: `src/apps/firmware/Fw_Keys.hpp`の`kBuiltin`に利用者の鍵が1つ入っている(`firmware_tool.py keygen`で作り、USBで1回書き込む。秘密鍵は`~/.pico-os/firmware.key`)。
+  当初は「PCにだけ置き、GitHubのSecretsにも置かない」としたが、**2026-10-29に利用者と見直し、Secrets(`FIRMWARE_SIGNING_KEY`)にも置いてナイトリーで署名する**ことにした
+  (手元で毎回署名して上げるより圧倒的に手間が少ないため。下の「Webから取る」)。Python側の署名は`build_app_repo.py`のEd25519(RFC 8032)を使い回す。
 - PC/Web: 置き場は`ota_emu/`(SDのルートの隣、`PICOOS_OTA_DIR`。`.gitignore`済み)、本体は書き換えない。ポートは`PICOOS_FW_PORT`。
 - 検証: `firmware_test`(run.sh の core。見出しの検査10通り・署名(信頼/なし/知らない鍵/印と署名の食い違い/署名の後の書き換え)・版の確認・1バイトずつ途切れながら・置き場への書き込みの失敗・
   読み直しで化ける・gzipの末尾の大きさ・途中で切れる/取り消す/Doneの後に取り消す・前の残りを消す)、`firmware_tool_test.py`(偽の`firmware.bin`から作る・断る場合・**作ったものを`firmware_test`に読ませる**・
   pushのWAIT/OK/DONE/ERRを偽の本体で)、実機ファームのビルド(`board_build.filesystem_size`でLittleFSが`0x1024F000`〜、`picoOTA`がリンクされる、本物の`firmware.bin`を`fwpack`して`verify`)、
   PCビルドの`--tap`/`--shot`(SDから選ぶ→確認→書く→再起動→通知、`firmware_tool.py push`→本体で確認→DONE→再起動)。
   **実機でSDからもWi-Fiからも更新できることを利用者が確認した(2026-10-16)**。書き込みの時間はWi-Fi・SDとも30秒弱で、更新後の通知もどちらも届いた(2026-10-23)。壊れたファームはBOOTSELで戻す。
+
+### Webから取る (`apps/firmware/Fw_Index` / `Fw_Download` / `script/build_fw_index.py` / `firmware-stable.yml`) (2026-10-29)
+
+使い方・一覧の形式・CIの流れは`docs/FIRMWARE_UPDATE.md`「Webから取る」。利用者と決めた方針(2026-10-29): **署名の鍵はSecretsに置いてCIで署名**(上の「鍵」) /
+一覧に載せるのは新しい安定版5本+ナイトリー3本 / 本体と同じ構成(env)の版だけを出す / 新しい版の通知はしない(「本体の更新」を開いたときだけ取る) / 書き込みの準備ができたら落としたファイルは消す。
+
+- **置き場はGitHub Pages(`https://kimu1109.github.io/pico-os/firmware/`)**。元はリリースだが、リリースの添付は`release-assets.githubusercontent.com`への302で、
+  飛び先に数百文字の署名付きクエリが付き、`Url::query`(192バイト)に入らない。飛び先のTLSのルート証明書も未確認。Pagesはアプリストアと同じホストで実機のHTTPSの実績がある。
+  `web-pages.yml`は毎回サイトを丸ごと差し替えるので、公開のたびにリリースから`firmware.pfw`を落として写し直す。GITHUB_TOKENで作ったリリースでは他のワークフローが動かないので、
+  ナイトリー・安定版のワークフローが最後に`gh workflow run web-pages.yml`する(`actions: write`)。
+- **一覧には署名しない**。各`.pfw`の署名(焼き込みの鍵)を`Fw_Update`がいつも通り確かめるため、偽の一覧でできるのは古い署名済みの版を勧めることくらいで、それは「古い版は確認」で止まる。
+  SHA-256は落としたものが壊れていないかを書き込みの前に見るため。
+- **HTTPを`FwUpdate`へ直接流さず、一度SDの`/firmware/`へ落とす**。確認のダイアログで止まっている間に受信が止まりサーバに切られるのと、電池・署名・置き場の検査と確認を
+  `StartFromSd()`のまま使えるため。代わりにSDへの書き込みと読み直しの分だけ長くなる。`.part`へ書き、大きさとSHA-256が一覧と合ったら名前を変える。
+  置き場へ写し終えた(`FwUpdate::Done`)ら落としたファイルを消し、失敗・取り消しでは残す([SDから]で選び直せる)。
+- **構成(env)**: `script/pio_firmware.py`が`PIOENV`を`PICOOS_BUILD_ENV`として書き、`FwVersion::Env()`と版の印(`env=`)に入る。`build_fw_index.py`は`.pfw`の中身をgunzipして印を読む
+  (見出しの形式は変えない)。印に`env=`の無い古いファームは`rpipico2w`(ナイトリーは既定の構成しか配っていない)。PC/Webビルドは`rpipico2w`扱い(`PICOOS_FW_ENV`)。
+- **後から署名**: `firmware_tool.py sign`は見出しの印を立てて署名を付けるだけ(見出しに中身のSHA-256があるので、作り直さずに付けられる)。`--expect-keys Fw_Keys.hpp`で
+  鍵が焼き込みの公開鍵のどれとも違えば断る(本体が受け付けないものを配らないように)。ナイトリーはSecretsに鍵が無ければ署名なしで載せて警告、安定版は鍵が無ければ止める。
+- **本体**: `Fw_Index`(段2、一覧の読み取り。16件・8KBまで、行は320バイトまで、10列目より後ろは読み飛ばす、ファイル名は英数字と`. _ -`で`.pfw`)、
+  `Fw_Download`(段2、`HttpRequest`をkeep-aliveと無通信の打ち切り(`setIdleTimeout`)で使う。一覧8KBの溜め場所+16件で約13KB、TLSは別に約40KB。画面が開いている間だけ`new`)、
+  `Firmware_Functions`の`StartWebIndex`/`StartWebFile`/`CloseWeb`(落とせたら`FwDownload`を消してTLSを返してから`StartFromSd`)。
+  `FirmwareScene`は[Webから][SDから][受け取る]の3つ。一覧は`PickerDialog`のChoiceで「#523 夜間 10/28」(幅が狭いので「(今)」「(古)」「無署名」は日付の代わりに出す)。
+- 検証: `fw_index_test`(core。値・1行目・構成と署名で外す・読めない行17通り・増えた列・ファイル名)、`fw_index_tool_test.py`(select・build・**作った一覧をC++に読ませる**)、
+  `firmware_tool_test.py`に`sign`と`env=`、`run_net.sh`の`fw_download_net_test`(http.serverで一覧・1.5MBの取得・SHA-256/大きさ/404/取り消し/大きすぎる一覧/繋がらない)、
+  PCビルドの`--tap`/`--shot`(`/sys/firmware.cfg`を手元のhttp.serverへ向けて、一覧→選ぶ→落とす→確認→置き場→落としたファイルを消す→再起動→通知、構成違いの表示)、
+  `web-pages.yml`の一覧作りの手順を偽の`gh`で。**実機・本物のPages・CIでの署名は未確認(Todoist参照)**。
 
 
 ## ビルド時に選ぶハードウェア機能 (`src/config/Hardware_Config.hpp` の `PICO_HW_*`) (2026-10-25)
@@ -252,5 +280,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   添付は `firmware.uf2`/`firmware.elf`/署名なしの`firmware.pfw`(PRの成果物と同じ中身)。タグは `nightly-<通し番号>-<短いハッシュ>`(軽量タグ、`--target` はビルドしたコミット)。
 - 毎日03:43(日本時間、`cron` は UTC 18:43)。**ナイトリーのタグがすでに今のmainを指していれば作らない**(手動実行の `force` で作り直す。同じタグは消してから作る)。手動実行はmainだけ。
 - 説明は書き込み方の短い案内+`--generate-notes`(前のナイトリーのタグから。PRの一覧になる)。
+- **`firmware.pfw`は載せる前にSecretsの`FIRMWARE_SIGNING_KEY`で署名する**(2026-10-29。上の「Webから取る」)。鍵が無ければ署名なしで載せて警告、`Fw_Keys.hpp`と違えば止める。
+  最後に`web-pages.yml`を動かしてWebの版の一覧を作り直す。
 - 作った後、`nightly-` のリリースを作った日時の新しい順に並べ、`KEEP`(50)本を超えた分をタグごと消す(`gh release delete --cleanup-tag`)。
 - GitHub上で実際に回るかは未確認(初回はActionsタブから手動実行して確かめる)。

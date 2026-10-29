@@ -1,6 +1,7 @@
 #include "apps/firmware/FirmwareScene.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "gui/widgets/dialogs/FileSelectDialog.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Error_Functions.hpp"
@@ -68,22 +69,29 @@ void FirmwareScene::onEnter(){
     this->detail_label->setDisableAutoTextDecoration(true);
     WidgetFunctions::Add(this->detail_label);
 
-    // 下の段: [SDから選ぶ][受け取る] / [戻る]
+    // 下の段: [Webから][SDから][受け取る] / [戻る]
     constexpr int kButtonH = 40;
     const int16_t row2 = (int16_t)(content.y + content.h - MARGIN - kButtonH);
     const int16_t row1 = (int16_t)(row2 - MARGIN - kButtonH);
-    const int half = (w - MARGIN) / 2;
+    const int third = (w - MARGIN * 2) / 3;
 
-    this->sd_button = new Button(x, row1, "SDから選ぶ");
+    this->web_button = new Button(x, row1, "Webから");
+    this->web_button->setFontSize(FontFn::Small);
+    this->web_button->setW(third);
+    this->web_button->setH(kButtonH);
+    this->web_button->setOnPressEnd([this](){ this->startWeb(); });
+    WidgetFunctions::Add(this->web_button);
+
+    this->sd_button = new Button((int16_t)(x + third + MARGIN), row1, "SDから");
     this->sd_button->setFontSize(FontFn::Small);
-    this->sd_button->setW(half);
+    this->sd_button->setW(third);
     this->sd_button->setH(kButtonH);
     this->sd_button->setOnPressEnd([this](){ this->openPicker(); });
     WidgetFunctions::Add(this->sd_button);
 
-    this->listen_button = new Button((int16_t)(x + half + MARGIN), row1, "受け取る");
+    this->listen_button = new Button((int16_t)(x + (third + MARGIN) * 2), row1, "受け取る");
     this->listen_button->setFontSize(FontFn::Small);
-    this->listen_button->setW(w - half - MARGIN);
+    this->listen_button->setW(w - (third + MARGIN) * 2);
     this->listen_button->setH(kButtonH);
     this->listen_button->setOnPressEnd([this](){ this->toggleListen(); });
     WidgetFunctions::Add(this->listen_button);
@@ -95,6 +103,8 @@ void FirmwareScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
 
     this->confirm_open = false;
+    this->web_pick_pending = false;
+    this->picker_open = false;
     this->shown_state = -1;
     this->shown_done = 0xFFFFFFFFu;
     // 開いたフレームは描くだけにして、次のフレームで始める(ファイルアプリから渡されたとき)
@@ -109,11 +119,14 @@ void FirmwareScene::onExit(){
         FirmwareFunctions::Cancel();
         FirmwareFunctions::Dismiss();
     }
+    // 一覧と接続(TLS)は再起動待ちでも要らない
+    FirmwareFunctions::CloseWeb();
     this->version_label = nullptr;
     this->key_label = nullptr;
     this->status_label = nullptr;
     this->detail_label = nullptr;
     this->progress = nullptr;
+    this->web_button = nullptr;
     this->sd_button = nullptr;
     this->listen_button = nullptr;
     this->back_button = nullptr;
@@ -128,6 +141,27 @@ void FirmwareScene::onUpdate(){
         return;
     }
     FirmwareFunctions::Update();
+
+    FixedString<PICO_STR_LL> web_err;
+    if(FirmwareFunctions::TakeWebError(web_err)){
+        this->refresh(true);
+        this->showError(web_err.c_str());
+        return;
+    }
+    if(this->web_pick_pending){
+        FwDownload* web = FirmwareFunctions::Web();
+        if(!web || web->state() != FwDownload::State::Index){
+            this->web_pick_pending = false;
+            this->refresh(true);
+            // 先に下の画面を書き換えてから、次のフレームで出す(半透明のダイアログの下は描き直されないため)
+            if(web && web->state() == FwDownload::State::Listed && web->count() > 0) this->picker_open = true;
+            return;
+        }
+    }
+    if(this->picker_open && !WidgetRegistry::Resolve(this->confirm_dialog)){
+        this->openWebPicker();
+        return;
+    }
 
     FwUpdate* job = FirmwareFunctions::Job();
     // 先に下の画面を書き換える(半透明のダイアログを開いた後だと、その下は描き直されないため)
@@ -160,8 +194,63 @@ void FirmwareScene::startFromSd(const char* path){
     this->refresh(true);
 }
 
+void FirmwareScene::startWeb(){
+    if(FirmwareFunctions::Busy() || FirmwareFunctions::WebBusy() || FirmwareFunctions::RebootPending()) return;
+    FwDownload* web = FirmwareFunctions::Web();
+    // 一覧を取ってあれば選び直すだけ(取り直したいときは画面を開き直す)
+    if(web && web->count() > 0 && (web->state() == FwDownload::State::Listed || web->state() == FwDownload::State::Failed)){
+        this->picker_open = true;
+        return;
+    }
+    FirmwareFunctions::Dismiss();
+    FixedString<PICO_STR_LL> err;
+    if(!FirmwareFunctions::StartWebIndex(err)){
+        this->showError(err.c_str());
+    }else{
+        this->web_pick_pending = true;
+    }
+    this->refresh(true);
+}
+
+void FirmwareScene::openWebPicker(){
+    this->picker_open = false;
+    FwDownload* web = FirmwareFunctions::Web();
+    if(!web || web->count() <= 0) return;
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "書き込む版を選ぶ", "", "やめる");
+    if(!d) return;
+    const uint32_t current = FwVersion::Serial();
+    for(int i = 0; i < web->count(); i++){
+        const FwIndex::Entry* e = web->entry(i);
+        // "#523 夜間 10/28"。幅が狭いので、印(今の版・古い・署名なし)があれば日付の代わりに出す
+        // (日付は選んだ後の確認のダイアログにも出る)
+        const char* date = e->date.c_str();
+        char tail[16] = "";
+        if(!e->signed_flag) snprintf(tail, sizeof(tail), "無署名");
+        else if(current > 0 && e->serial == current && strcmp(e->git.c_str(), FwVersion::Git()) == 0) snprintf(tail, sizeof(tail), "(今)");
+        else if(current > 0 && e->serial < current) snprintf(tail, sizeof(tail), "(古)");
+        else if(e->date.length() >= 10) snprintf(tail, sizeof(tail), "%.2s/%.2s", date + 5, date + 8);
+        char text[96];
+        snprintf(text, sizeof(text), "#%lu %s %s", (unsigned long)e->serial, FwIndex::ChannelText(e->channel), tail);
+        d->addChoice(text);
+    }
+    d->layout();
+    WidgetFunctions::AddDialog(d);
+    d->setVisible(true);
+    this->confirm_dialog = d->getId();
+    d->setOnClosed([this, d](bool is_ok){
+        const int index = is_ok ? d->getSelectedIndex() : -1;
+        this->confirm_dialog = WidgetIdTools::Invalid();
+        WidgetFunctions::DestroyLater(d);
+        if(index >= 0){
+            FixedString<PICO_STR_LL> err;
+            if(!FirmwareFunctions::StartWebFile(index, err)) this->showError(err.c_str());
+        }
+        this->refresh(true);
+    });
+}
+
 void FirmwareScene::openPicker(){
-    if(FirmwareFunctions::Busy() || FirmwareFunctions::RebootPending()) return;
+    if(FirmwareFunctions::Busy() || FirmwareFunctions::WebBusy() || FirmwareFunctions::RebootPending()) return;
     if(!OSData::SD_usable){ this->showError("SDカードが使えません"); return; }
     const char* dir = OSData::SD.exists(PICO_Path::DIR::FIRMWARE) ? PICO_Path::DIR::FIRMWARE : "/";
     auto* d = new FileSelectDialog(dir);
@@ -182,7 +271,7 @@ void FirmwareScene::openPicker(){
 }
 
 void FirmwareScene::toggleListen(){
-    if(FirmwareFunctions::RebootPending()) return;
+    if(FirmwareFunctions::RebootPending() || FirmwareFunctions::WebBusy()) return;
     if(FirmwareFunctions::Listening()){
         FirmwareFunctions::StopListening();
     }else{
@@ -240,15 +329,23 @@ void FirmwareScene::goBack(){
         this->refresh(true);
         return;
     }
+    if(FirmwareFunctions::WebBusy()){
+        FirmwareFunctions::CancelWeb();
+        this->web_pick_pending = false;
+        this->refresh(true);
+        return;
+    }
     SceneFunctions::Pop();
 }
 
 void FirmwareScene::refresh(bool force){
     if(!this->status_label) return;
     FwUpdate* job = FirmwareFunctions::Job();
+    FwDownload* web = job ? nullptr : FirmwareFunctions::Web();
     const bool listening = FirmwareFunctions::Listening();
-    const int state = job ? (int)job->state() : -1;
-    const uint32_t done = job ? job->progressDone() : 0;
+    // 更新の状態と取得の状態を1つの数にまとめる(変わったときだけ書き直す)
+    const int state = job ? (int)job->state() : (web ? 16 + (int)web->state() : -1);
+    const uint32_t done = job ? job->progressDone() : (web ? web->progressDone() : 0);
 
     if(force || state != this->shown_state || listening != this->shown_listening){
         this->shown_state = state;
@@ -264,35 +361,42 @@ void FirmwareScene::refresh(bool force){
         }else if(job && job->state() == FwUpdate::State::Failed){
             snprintf(text, sizeof(text), "%s", job->message());
             color = PICO_RED;
+        }else if(web && web->state() != FwDownload::State::Idle){
+            snprintf(text, sizeof(text), "%s", web->message());
+            if(web->state() == FwDownload::State::Failed) color = PICO_RED;
+            else if(web->state() == FwDownload::State::Listed) color = web->count() > 0 ? PICO_BLUE : PICO_DARKGREY;
         }else if(listening){
             char addr[40];
             FirmwareFunctions::ListenAddress(addr, sizeof(addr));
             snprintf(text, sizeof(text), "PCからの更新を待っています\n%s", addr);
             color = PICO_BLUE;
         }else{
-            snprintf(text, sizeof(text), "更新ファイル(.pfw)をSDから選ぶか、PCから送ってください");
+            snprintf(text, sizeof(text), "Webの版の一覧から選ぶか、更新ファイル(.pfw)をSDから選ぶか、PCから送ってください");
             color = PICO_DARKGREY;
         }
         this->status_label->setText(text);
         this->status_label->setTextColor(color);
 
         const bool busy = FirmwareFunctions::Busy() || FirmwareFunctions::RebootPending();
-        this->sd_button->setEnabled(!busy && !listening);
-        this->listen_button->setEnabled(!busy || listening);
+        const bool web_busy = FirmwareFunctions::WebBusy();
+        this->web_button->setEnabled(!busy && !web_busy && !listening);
+        this->sd_button->setEnabled(!busy && !web_busy && !listening);
+        this->listen_button->setEnabled((!busy && !web_busy) || listening);
         this->listen_button->setText(listening ? "待ち受けをやめる" : "受け取る");
         this->back_button->setEnabled(!FirmwareFunctions::RebootPending());
-        this->back_button->setText(busy ? "やめる" : "戻る");
+        this->back_button->setText(busy || web_busy ? "やめる" : "戻る");
         force = true;
     }
 
     if(force || done != this->shown_done){
         this->shown_done = done;
-        const uint32_t total = job ? job->progressTotal() : 0;
-        const bool show = job && total > 0 &&
+        const uint32_t total = job ? job->progressTotal() : (web ? web->progressTotal() : 0);
+        const bool show = total > 0 && (job ?
             (job->state() == FwUpdate::State::Payload || job->state() == FwUpdate::State::Verify ||
-             job->state() == FwUpdate::State::Done);
+             job->state() == FwUpdate::State::Done) :
+            (web && web->state() == FwDownload::State::File));
         this->progress->setMaxValue(show ? (float)total : 1.0f);
-        this->progress->setValue(show ? (float)(job->state() == FwUpdate::State::Done ? total : done) : 0.0f);
+        this->progress->setValue(show ? (float)(job && job->state() == FwUpdate::State::Done ? total : done) : 0.0f);
         char text[64] = "";
         if(show) snprintf(text, sizeof(text), "%lu / %luKB", (unsigned long)(done / 1024), (unsigned long)(total / 1024));
         this->detail_label->setText(text);

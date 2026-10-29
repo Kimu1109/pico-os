@@ -3,7 +3,8 @@
 標準ライブラリだけで動く。
 
 使い方:
-  # 1. 署名の鍵を作る(1回だけ)。秘密鍵は手元のPCにだけ置く(リポジトリ・GitHubに置かない)。
+  # 1. 署名の鍵を作る(1回だけ)。秘密鍵はリポジトリに置かない(手元のPCと、ナイトリーが署名に使う
+  #    GitHubのSecrets FIRMWARE_SIGNING_KEY にだけ置く。docs/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。
   #    表示された1行を src/apps/firmware/Fw_Keys.hpp へ足し、USBで1回書き込む
   python3 script/firmware_tool.py keygen
 
@@ -15,6 +16,11 @@
 
   # 確かめる
   python3 script/firmware_tool.py verify firmware.pfw [--pubkey 16進64桁]
+
+  # できている更新ファイル(CIが作った署名なしのもの等)に署名する。署名は見出しだけに掛かり、
+  # 見出しに中身のSHA-256が入っているので、作り直さずに後から付けられる。
+  # --expect-keys を付けると、鍵が Fw_Keys.hpp に焼き込んだ公開鍵のどれとも違うときに断る
+  python3 script/firmware_tool.py sign firmware.pfw [--out signed.pfw] [--expect-keys src/apps/firmware/Fw_Keys.hpp]
 
 鍵は --key で指定する。無ければ環境変数 PICOOS_FW_KEY、それも無ければ ~/.pico-os/firmware.key
 (あれば)を使う。鍵が無ければ署名なしで作る(本体は debug.cfg の fw-allow-unsigned = true のときだけ、
@@ -49,8 +55,9 @@ BOARD = "rpipico2w"
 DEFAULT_PORT = 8370
 DEFAULT_KEY = os.path.join("~", ".pico-os", "firmware.key")
 
-# src/apps/firmware/Fw_Version.cpp の kMarker
-MARKER_RE = re.compile(rb"PICOOS-BUILD;serial=(\d+);git=([^;\x00]*);date=([^;\x00]*);board=([^;\x00]*);")
+# src/apps/firmware/Fw_Version.cpp の kMarker(env= は2026-10-29から。それより前のファームには無い)
+MARKER_RE = re.compile(rb"PICOOS-BUILD;serial=(\d+);git=([^;\x00]*);date=([^;\x00]*);board=([^;\x00]*);"
+                       rb"(?:env=([^;\x00]*);)?")
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +127,8 @@ def read_build_info(data):
     git = m.group(2).decode("ascii", "replace")
     date = m.group(3).decode("ascii", "replace")
     board = m.group(4).decode("ascii", "replace")
-    return serial, git, date, board
+    env = (m.group(5) or b"").decode("ascii", "replace")
+    return serial, git, date, board, env
 
 
 def parse_date(date):
@@ -152,7 +160,7 @@ def make_header(fields, signed):
 def pack(data, seed, log=print):
     if len(data) <= APP_OFFSET + 16:
         raise SystemExit("firmware.bin が小さすぎます")
-    serial, git, date, board = read_build_info(data)
+    serial, git, date, board, _env = read_build_info(data)
     fs_start, fs_end = struct.unpack_from("<II", data, FS_WORDS_OFFSET)
     if not (FLASH_BASE < fs_start <= fs_end):
         raise SystemExit(f"LittleFSの範囲が読めません(0x{fs_start:08x}〜0x{fs_end:08x})")
@@ -243,6 +251,70 @@ def cmd_verify(args):
         print("署名: なし")
     if not ok:
         raise SystemExit(1)
+
+
+# ---------------------------------------------------------------------------
+# 後から署名する
+# ---------------------------------------------------------------------------
+KEYS_HPP_RE = re.compile(r"\{\s*\{((?:\s*0x[0-9a-fA-F]{2}\s*,?){32})\s*\}\s*\}")
+
+
+def builtin_keys(path):
+    """src/apps/firmware/Fw_Keys.hpp の kBuiltin(全部0の「未登録」は除く)"""
+    with open(path, "r", encoding="utf-8") as f:
+        text = f.read()
+    keys = []
+    for m in KEYS_HPP_RE.finditer(text):
+        key = bytes(int(v, 16) for v in re.findall(r"0x([0-9a-fA-F]{2})", m.group(1)))
+        if any(key):
+            keys.append(key)
+    return keys
+
+
+def sign_blob(blob, seed):
+    """できている更新ファイルに署名し直す(中身が見出しと合わなければ断る)"""
+    try:
+        p = parse(blob)
+    except ValueError as e:
+        raise SystemExit(f"更新ファイルを読めません: {e}")
+    if len(p["payload"]) != p["payload_bytes"] or hashlib.sha256(p["payload"]).digest() != p["sha256"]:
+        raise SystemExit("中身が見出しと合いません(壊れた更新ファイルには署名しない)")
+    header = bytearray(p["header"])
+    struct.pack_into("<I", header, 12, p["flags"] | FLAG_SIGNED)
+    header = bytes(header)
+    sig = ed25519_sign(seed, SIGN_CONTEXT + header)
+    return header + sig + p["payload"]
+
+
+def cmd_sign(args):
+    seed = find_seed(args.key, required=True)
+    pub = ed25519_public(seed)
+    if args.expect_keys:
+        keys = builtin_keys(args.expect_keys)
+        if pub not in keys:
+            raise SystemExit(f"鍵(公開鍵 {pub.hex()})が {args.expect_keys} のどの鍵とも違います。"
+                             "この鍵で署名しても本体は受け付けません")
+    with open(args.file, "rb") as f:
+        blob = f.read()
+    signed = sign_blob(blob, seed)
+    out = args.out or args.file
+    with open(out, "wb") as f:
+        f.write(signed)
+    p = parse(signed)
+    print(f"署名しました: {out}(版 #{p['serial']} ({p['git']})、公開鍵 {pub.hex()})")
+
+
+def payload_build_info(p):
+    """更新ファイルの中身(firmware.bin)の版の印。読めなければ None"""
+    try:
+        data = gzip.decompress(p["payload"])
+    except OSError:
+        return None
+    try:
+        serial, git, date, board, env = read_build_info(data)
+    except SystemExit:
+        return None
+    return dict(serial=serial, git=git, date=date, board=board, env=env)
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +413,13 @@ def main():
     p.add_argument("file")
     p.add_argument("--pubkey")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("sign", help="できている更新ファイルに署名する")
+    p.add_argument("file")
+    p.add_argument("--out", help="書き出す先(無ければ上書き)")
+    p.add_argument("--key")
+    p.add_argument("--expect-keys", help="Fw_Keys.hpp。鍵がここに焼き込んだもののどれとも違えば断る")
+    p.set_defaults(func=cmd_sign)
 
     p = sub.add_parser("push", help="Wi-Fiで本体へ送る")
     p.add_argument("--host", help="本体のIPアドレス(host:port でも可)")

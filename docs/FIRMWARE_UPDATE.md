@@ -1,6 +1,6 @@
-# ファームの更新(SD / Wi-Fi)
+# ファームの更新(Web / SD / Wi-Fi)
 
-USBでつながなくても、SDカードに置いたファイルか、PCからのWi-Fi経由でファームを書き換えられる。
+USBでつながなくても、Webの版の一覧から選ぶか、SDカードに置いたファイルか、PCからのWi-Fi経由でファームを書き換えられる。
 ランチャの「**本体の更新**」から行う(ファイルアプリで `.pfw` を開いても同じ画面へ来る)。
 
 - 書き換えそのものは arduino-pico のOTAのローダー(どのファームにも入っている、フラッシュの先頭の約12KB)が、
@@ -21,9 +21,64 @@ python3 script/firmware_tool.py keygen          # ~/.pico-os/firmware.key を作
 
 1. 表示された `{ { 0x.., ... } },` の1行で `src/apps/firmware/Fw_Keys.hpp` の `kBuiltin` を置き換える
 2. そのファームを**USBで1回**書き込む(以後はその鍵で署名した更新を受け付ける)
+3. **ナイトリーに署名させるため**、`~/.pico-os/firmware.key` の中身(16進64桁の1行)を
+   GitHubのリポジトリの Settings → Secrets and variables → Actions → New repository secret に
+   名前 `FIRMWARE_SIGNING_KEY` で登録する(下の「Webから取る」)
 
-秘密鍵(`~/.pico-os/firmware.key`)は手元のPCにだけ置く。リポジトリにもGitHubのSecretsにも置かない。
+秘密鍵は手元のPCとGitHubのSecretsにだけ置く。リポジトリには置かない。
 別の場所に置くなら `--key` か環境変数 `PICOOS_FW_KEY` で指定する。
+Secretsに置くのは利用者と決めた(2026-10-29。ナイトリーとWebからの更新を署名済みで回すため)。
+鍵を渡すのは main で動くナイトリーと安定版のワークフローだけで、PRのビルド(`firmware-build.yml`)には渡さない。
+鍵が漏れたら `keygen --force` で作り直し、`Fw_Keys.hpp` を差し替えたファームをUSBで書き込み、Secretsも替える。
+
+## Webから取る
+
+「本体の更新」→[**Webから**]で、GitHub Pages に置いた版の一覧
+(`https://kimu1109.github.io/pico-os/firmware/index.tsv`)を取り、選んだ版を書き込む。Wi-Fiと時計(HTTPSの証明書の期限を見るため)が要る。
+
+1. 一覧には、**今の本体と同じ構成**(`platformio.ini` の env。版の情報に入っている)で**署名のある**版だけが出る。
+   `fw-allow-unsigned = true` のときは署名なしも「無署名」と付けて出る。今の版は「(今)」、古い版は「(古)」
+2. 選ぶと SD の `/firmware/<ファイル名>.part` へ落としながら SHA-256 を取り、一覧の大きさ・SHA-256 と合えば `.part` を外す
+3. あとは「SDから選ぶ」と同じ流れ(内容を確かめるダイアログ → 置き場へ写す → 再起動)。
+   **置き場へ写し終えたら落としたファイルは消す**(失敗・取り消しのときは残るので、[SDから]で選び直せる)
+
+一覧の置き場は SD の `/sys/firmware.cfg` で変えられる(自前の置き場・PCビルドでの確認用):
+
+```
+url = https://example.com/pico-os/firmware/
+```
+
+### 一覧を作る側(CI)
+
+```
+ナイトリー(nightly.yml)  ─┐   GitHubのリリース            web-pages.yml が写す         本体
+安定版(firmware-stable.yml)┴─→ nightly-* / v<通し番号> ──→ Pages の /firmware/ ──────→ [Webから]
+                               firmware.pfw(署名済み)     index.tsv + *.pfw
+```
+
+- **ナイトリー**は `firmware.pfw` を Secrets の `FIRMWARE_SIGNING_KEY` で署名してからリリースへ載せる
+  (`script/firmware_tool.py sign`。署名は見出しだけに掛かり、見出しに中身のSHA-256が入っているので、ビルドした後から付けられる)。
+  Secretsに鍵が無ければ署名なしのまま載せて警告を出す。鍵が `Fw_Keys.hpp` の公開鍵と違えば止まる
+- **安定版**は Actions の「ファームの安定版を出す」を手動で実行し、安定版にするナイトリーのタグ(`nightly-<通し番号>-<短いハッシュ>`)を入れる。
+  同じ添付を署名し直して `v<通し番号>` のリリースを作る(ナイトリーは50本を超えると消えるが、安定版は消さない)
+- どちらも最後に Pages の公開(`web-pages.yml`)を動かす。公開のたびに `script/build_fw_index.py` が
+  **新しい安定版5本とナイトリー3本**の `firmware.pfw` を落として `/firmware/` へ写し、`index.tsv` を作る。
+  同じ版が安定版とナイトリーの両方にあれば安定版の1行にする。読めない・壊れた更新ファイルは飛ばす
+- リリースから直接落とさないのは、リリースの添付が別のホストへの長いURLの転送になり、本体のURL(クエリ192バイト)に入らないため。
+  Pagesはアプリストアと同じホスト(`kimu1109.github.io`)
+
+### 一覧の形式(index.tsv)
+
+```
+# pico-os-fw-index 1
+<通し番号>\t<git>\t<日時(UTC)>\t<stable|nightly>\t<構成>\t<署名 1|0>\t<バイト数>\t<SHA-256>\t<ファイル名>
+```
+
+- 新しい順。本体は上から16件まで読む。10列目より後ろは読み飛ばす(列を足しても古い本体が読める)。読めない行は飛ばす
+- 構成は更新ファイルの中身(`firmware.bin`)の版の印 `env=` から取る。2026-10-29より前のファームには無いので `rpipico2w` とみなす
+- バイト数とSHA-256は更新ファイル(`.pfw`)全体のもの。ファイル名は英数字と `. _ -` だけで `.pfw` で終わる
+- **一覧そのものには署名しない**。書き込む前に、落とした更新ファイルの署名(焼き込みの鍵)をいつも通り確かめるため。
+  偽の一覧でできるのは古い署名済みの版を勧めることくらいで、それは「古い版は本体で確認する」で止まる
 
 ## 更新ファイルを作る(SDに置く)
 
@@ -62,7 +117,8 @@ fw-allow-unsigned = true
 
 と書くと、署名の無い(確かめられない)更新ファイルも受け付ける。**その場合も毎回本体で確認する**
 (Luaアプリが debug.cfg を書き換えても、本体の画面で押さない限り書き込まれない)。
-CIが作る更新ファイル(Actionsの「実機ファームのビルド」の成果物 `firmware.pfw`、ナイトリービルドのリリースに添付されるもの)は署名なし。
+CIのPRのビルド(Actionsの「実機ファームのビルド」の成果物 `firmware.pfw`)は署名なし。
+ナイトリー・安定版のリリースに添付されるものは、Secretsに鍵があれば署名済み(上の「Webから取る」)。
 
 ## 断る場合
 
@@ -129,6 +185,7 @@ PC   → "OK" を受け取ってから中身
 
 ビルドのたびに `script/pio_firmware.py`(`platformio.ini` の `extra_scripts`)が通し番号・コミット・日時を
 `$BUILD_DIR/pico_build_info/Pico_Build_Info.h` へ書く。版は「本体の更新」の画面・起動時のログ・シリアルの `hw info` で見られる。
+ビルドの構成(env の名前)も書き、`PICOOS-BUILD;...;board=rpipico2w;env=<構成>;` としてファームに置く(Webの一覧が同じ構成の版を選ぶのに使う)。
 通し番号は履歴の数なので、浅いクローン(`git clone --depth`)では小さくなる(CIは `fetch-depth: 0` で全部取る)。
 PC/Webビルドは `#0 (dev)`。
 
@@ -137,3 +194,5 @@ PC/Webビルドは `#0 (dev)`。
 置き場はSDのルートの隣の `ota_emu/`(`PICOOS_OTA_DIR` で変えられる)で真似る。選ぶ→確認→置き場へ書く→読み直す→
 再起動、まで通るが、**本体は書き換わらない**(起動すると「PCビルドは本体を書き換えません」と出る)。
 待ち受けのポートは `PICOOS_FW_PORT` で変えられる。Webビルドは待ち受けられない(生のソケットが無い)。
+[Webから]は `/sys/firmware.cfg` の `url` を手元の `python3 -m http.server` へ向けて確かめられる。PCビルドの構成は
+`rpipico2w` として扱う(`PICOOS_FW_ENV` で変えられる)。

@@ -9,6 +9,8 @@
 #include "hal/Sound_Functions.hpp"
 #include "apps/firmware/Fw_Store.hpp"
 #include "apps/firmware/Fw_Version.hpp"
+#include "system/Config_Functions.hpp"
+#include "storage/SD_Path.hpp"
 #include "storage/Flash_Area.hpp"
 #include "apps/music/Music_Service.hpp"
 #include "OS_Data.hpp"
@@ -208,6 +210,11 @@ namespace {
     uint32_t done_ms = 0;
     bool prepared = false;        // 書き込みの前の後片付け(音を止める)を済ませたか
 
+    // ---- Webから ----
+    FwDownload* web = nullptr;    // 一覧を持っている間・取得中だけ new(約13KB。TLSは別に約40KB)
+    FixedString<PICO_PATH_LEN> web_file; // Webから落として今の更新に使っているファイル(準備ができたら消す)
+    FixedString<PICO_STR_LL> web_error;
+
     void EndSource(){
         if(job_is_net) net.drop();
         else sd_source.close();
@@ -235,6 +242,7 @@ namespace {
         delete job;
         job = nullptr;
         prepared = false;
+        web_file.clear();
         job = new FwUpdate();
         return job != nullptr;
     }
@@ -333,6 +341,77 @@ bool FirmwareFunctions::StartFromSd(const char* path, FixedString<PICO_STR_LL>& 
     return true;
 }
 
+const char* FirmwareFunctions::CurrentEnv(){
+    const char* env = FwVersion::Env();
+    if(env[0]) return env;
+#if defined(PICOOS_PC) && !defined(__EMSCRIPTEN__)
+    const char* e = getenv("PICOOS_FW_ENV");
+    if(e && e[0]) return e;
+#endif
+    // 版の情報に構成が無い(PC/Webビルド・ホストテスト)ときは既定の構成として扱う
+    return "rpipico2w";
+}
+
+bool FirmwareFunctions::StartWebIndex(FixedString<PICO_STR_LL>& err){
+    if(Busy() || reboot_pending || WebBusy()){ err.assign("別の更新を進めています"); return false; }
+    if(!NetworkFunctions::IsConnected()){ err.assign("Wi-Fiに繋がっていません"); return false; }
+    if(!web){
+        web = new FwDownload();
+        if(!web){ err.assign("メモリが足りません"); return false; }
+        if(OSData::SD_usable && OSData::SD.exists(PICO_Path::FILE::CFG::SYS_FIRMWARE_CFG)){
+            PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_FIRMWARE_CFG, [](const char* key, const char* value){
+                if(strcmp(key, "url") == 0 && !web->setBaseUrl(value)){
+                    LOG_SYS_WARN("ファームの更新: firmware.cfg の url が読めません (%s)", value);
+                }
+            });
+        }
+    }
+    FwIndex::Filter filter;
+    filter.env = CurrentEnv();
+    filter.allow_unsigned = AllowUnsigned();
+    if(!web->beginIndex(filter)){
+        err.assign(web->message()[0] ? web->message() : "取得を始められません");
+        return false;
+    }
+    LOG_SYS_MSG("ファームの更新: %s%s を取ります", web->baseUrl(), FwIndex::kFileName);
+    return true;
+}
+
+bool FirmwareFunctions::StartWebFile(int index, FixedString<PICO_STR_LL>& err){
+    if(!web || web->busy() || Busy() || reboot_pending){ err.assign("別の更新を進めています"); return false; }
+    if(!OSData::SD_usable){ err.assign("SDカードが使えません"); return false; }
+    if(!PowerOk(err)) return false;
+    // 前の更新の結果(失敗)は捨てる
+    Dismiss();
+    const char* dir = PICO_Path::DIR::FIRMWARE;
+    // "/firmware/" の末尾の / を落として作る(mkdir は末尾の / を嫌う)
+    char dir_buf[32];
+    snprintf(dir_buf, sizeof(dir_buf), "%s", dir);
+    const size_t n = strlen(dir_buf);
+    if(n > 1 && dir_buf[n - 1] == '/') dir_buf[n - 1] = '\0';
+    if(!web->beginFile(index, dir_buf)){
+        err.assign(web->message()[0] ? web->message() : "取得を始められません");
+        return false;
+    }
+    return true;
+}
+
+FwDownload* FirmwareFunctions::Web(){ return web; }
+bool FirmwareFunctions::WebBusy(){ return web && web->busy(); }
+void FirmwareFunctions::CancelWeb(){ if(web) web->cancel(); }
+
+void FirmwareFunctions::CloseWeb(){
+    delete web; // デストラクタが取得をやめて接続を閉じる
+    web = nullptr;
+}
+
+bool FirmwareFunctions::TakeWebError(FixedString<PICO_STR_LL>& out){
+    if(web_error.empty()) return false;
+    out = web_error;
+    web_error.clear();
+    return true;
+}
+
 bool FirmwareFunctions::StartListening(FixedString<PICO_STR_LL>& err){
     if(!net.begin(err)) return false;
     LOG_SYS_MSG("ファームの更新: ポート%uで待ち受けます", (unsigned)kPort);
@@ -372,6 +451,23 @@ void FirmwareFunctions::Dismiss(){
 }
 
 void FirmwareFunctions::Update(){
+    if(web){
+        web->update();
+        if(web->state() == FwDownload::State::Done){
+            // 落とせた。一覧と接続(TLSの約40KB)を返してから、SDからの更新と同じ流れへ
+            FixedString<PICO_PATH_LEN> path;
+            path.assign(web->path());
+            CloseWeb();
+            FixedString<PICO_STR_LL> err;
+            if(StartFromSd(path.c_str(), err)){
+                web_file = path;
+            }else{
+                web_error = err;
+                LOG_SYS_WARN("ファームの更新: %s を始められません(%s)", path.c_str(), err.c_str());
+            }
+        }
+    }
+
     // 新しい接続(更新の途中・再起動待ちでなければ受け取る)
     if(net.listening() && !Busy() && !reboot_pending && net.accept()){
         if(NewJob()){
@@ -410,6 +506,13 @@ void FirmwareFunctions::Update(){
             EndSource();
         }else if(job->state() == FwUpdate::State::Done){
             LOG_SYS_OK("ファームの更新: %s(%s)", job->message(), job->header().git);
+            // Webから落としたファイルは、中身を置き場へ写し終えたので要らない(失敗したときは残して、SDから選び直せるように)
+            if(!web_file.empty()){
+                sd_source.close();
+                OSData::SD.remove(web_file.c_str());
+                LOG_SYS_MSG("ファームの更新: 落とした %s を消しました", web_file.c_str());
+                web_file.clear();
+            }
             done_ms = millis();
             reboot_pending = true;
         }

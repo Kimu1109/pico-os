@@ -165,7 +165,8 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
   テストを足すときは `script/host_test/CMakeLists.txt` の一覧に `host_test(<名前> GROUP <グループ>)` を1行。説明と落とし穴は `script/host_test/README.md`。
 - `run_net.sh`(実通信)/ `run_mem.sh`(確保回数)/ PCビルドはCIに無いので、**変更のたびに自分で回す**。
 - PR時のCI: ホストテスト(`host-tests.yml`。**グループを足したらmatrixにも足す**、ずれると `groups-in-sync` が落ちる)・層の決まり・
-  実機ファームのビルド(`firmware-build.yml`)。他にWebビルドの公開(`web-pages.yml`)と、毎晩mainの実機ファームをリリースへ載せるナイトリー(`nightly.yml`、50本まで)。
+  実機ファームのビルド(`firmware-build.yml`)。他にWebビルドとWebからのファーム更新の一覧の公開(`web-pages.yml`)と、毎晩mainの実機ファームを署名してリリースへ載せるナイトリー(`nightly.yml`、50本まで)・
+  安定版を出す手動のワークフロー(`firmware-stable.yml`)。
 - シェルで終了コードを取るときは `rc=0; cmd || rc=$?` の形にする(`if ! cmd; then rc=$?` 等は値が化ける)。
 
 ## 設計記録の索引 (`docs/design/`)

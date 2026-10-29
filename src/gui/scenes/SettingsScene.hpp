@@ -169,6 +169,10 @@ class SettingsScene : public Scene {
         DropdownMenu*      sleep_dropdown       = nullptr;
         int                sleep_selected_index = -1; // onUpdate()での変化検出用
 
+        // 本文の文字の大きさ(display.cfgの text-size)。画面タブの3行目、ダークテーマの右
+        DropdownMenu*      text_size_dropdown   = nullptr;
+        int                text_size_selected_index = -1;
+
         // 音の周波数(sound.cfgの sample-rate)と、電池駆動中の音量の頭打ち(battery-cap)
         Label<PICO_STR_S>* rate_title           = nullptr;
         DropdownMenu*      rate_dropdown        = nullptr;
@@ -280,6 +284,7 @@ class SettingsScene : public Scene {
         void updateVolume();
         void updateBrightness();
         void updateSleep();
+        void updateTextSize();
         void updateSampleRate();
         void updateRoute();
         void refreshRouteStatus();

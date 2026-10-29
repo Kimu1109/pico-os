@@ -152,7 +152,7 @@ void TodoScene::onEnter(){
     const int list_y = tab_y + row_h + MARGIN;
     this->task_list = new ScrollList(content.x + MARGIN, list_y, content.w - MARGIN * 2,
                                      detail_y - MARGIN - list_y, TodoistClient::kMaxTasks);
-    this->task_list->setFontSize(FontFn::Small);
+    this->task_list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->task_list->setEnableIcon(true);
     this->task_list->setOnSelectItem([this](int index, bool already){ this->onListTap(index, already); });
     WidgetFunctions::Add(this->task_list);

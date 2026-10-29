@@ -135,6 +135,8 @@ class MarkdownView : public Widget {
         int boundImageBlock[kImagePoolSize];
         int boundCheckboxIconBlock[kCheckboxIconPoolSize];
 
+        // 本文(見出し以外)の文字。既定はSmall、OSの読む所は setBodyFontSize(FontFn::Text)
+        FontFn::FontSize body_font_ = FontFn::Small;
         int checkboxIconPx = 0; // チェックボックスアイコン1辺のピクセルサイズ（起動時にキャッシュ）
 
         Label<kMdBlockTextBytes>* measure_label; // レイアウト計算専用(表示用のLabelと同じ容量にすること)（レンダリングツリーには含めない）
@@ -270,6 +272,9 @@ class MarkdownView : public Widget {
         void setSize(int w, int h);
         void setW(int w){ setSize(w, this->l_rect.h); }
         void setH(int h){ setSize(this->l_rect.w, h); }
+        // 本文の文字(Small か Text=文字の大きさの設定に従う)。読み込む前に呼ぶこと
+        // (後から変えても、次に読み込むまで今の組み方のまま)
+        void setBodyFontSize(FontFn::FontSize size){ this->body_font_ = (size == FontFn::Text) ? FontFn::Text : FontFn::Small; }
         bool finishLoad(const char* path_for_log);
 
         void render() override;

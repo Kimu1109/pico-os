@@ -135,7 +135,7 @@ void ChatScene::onEnter(){
 
     this->room_list = new ScrollList(content.x + MARGIN, this->body_top, content.w - MARGIN * 2, 10,
                                      kMaxListRows);
-    this->room_list->setFontSize(FontFn::Small);
+    this->room_list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->room_list->setEnableIcon(true);
     //部屋は1回のタップで開く(選ぶだけの操作が無いので)
     this->room_list->setOnSelectItem([this](int index, bool){ this->onListTap(index); });

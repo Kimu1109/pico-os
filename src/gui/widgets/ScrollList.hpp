@@ -38,6 +38,9 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         int itemIndexAt(int touch_y) const;
 
         int font_h = 0;
+        // 1行の文字の高さ(render()が測った値。まだ描いていなければここで測る)。
+        // GetFontSize()の公称値(16/24)は実際の高さより低く、一覧の高さを見積もると最後の行が欠けるため
+        int itemFontH();
 
         int selected_index = -1;
         bool enable_icon = false;
@@ -83,8 +86,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         // index番目の項目が見える位置までスクロールする(一番上に寄せる)
         void scrollToIndex(int index){
             if(index < 0 || index >= (int)dataSource.size()) return;
-            if(this->font_h == 0) this->font_h = FontFn::GetFontSize(getFontSize());
-            this->scrollY = index * (this->font_h + MARGIN);
+            this->scrollY = index * (this->itemFontH() + MARGIN);
             this->clampScroll();
             this->needsRender();
         }
@@ -103,7 +105,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
     private:
         // 項目数・表示領域が変わったあとにscrollYを範囲内へ戻す
         void clampScroll(){
-            const int total = (this->font_h + MARGIN) * (int)this->dataSource.size();
+            const int total = (this->itemFontH() + MARGIN) * (int)this->dataSource.size();
             const int max_scroll = total > this->l_rect.h ? total - this->l_rect.h : 0;
             if(this->scrollY > max_scroll) this->scrollY = max_scroll;
             if(this->scrollY < 0) this->scrollY = 0;
@@ -125,6 +127,7 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
 
         void setFontSize(FontFn::FontSize size) override {
             this->f_size = size;
+            this->font_h = 0; // 次に使うときに測り直す
             this->needsRender();
         }
         void setBorderColor(int8_t palette_color){
@@ -169,9 +172,6 @@ class ScrollList : public Widget, public IFontImplementation, public IBorderColo
         int getItemCount() const { return (int)this->dataSource.size(); }
 
         int getFittingHeight(){
-            if(this->font_h == 0){
-                this->font_h = FontFn::GetFontSize(getFontSize());
-            }
-            return min(this->dataSource.size() * (this->font_h + MARGIN), SCREEN_HEIGHT - this->getScreenY());
+            return min(this->dataSource.size() * (this->itemFontH() + MARGIN), SCREEN_HEIGHT - this->getScreenY());
         }      
 };

@@ -107,7 +107,7 @@ void ChatLogView::refresh(){
     const int use = (n < kMaxEntries) ? n : kMaxEntries;
     const int first = n - use;
 
-    FontFn::SetSmall();
+    FontFn::SetText(); //本文は文字の大きさの設定に従う
 
     //測ったことのある発言は控えを使い回す(新着1件で全件を折り返し直さない)
     uint32_t new_ids[kMaxEntries];
@@ -190,7 +190,7 @@ void ChatLogView::render(){
     const Rect clip = orig.intersection(g);
     OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
 
-    FontFn::SetSmall();
+    FontFn::SetText(); //本文は文字の大きさの設定に従う
     const int lh = this->lineH();
 
     if(this->count == 0 || !this->source){

@@ -136,6 +136,36 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
   テトリス(高さ300が要る)・電池テスト・Spotify・ペイント等が詰まる。
 - 実機の別パネル(ST7796等)では未確認(Todoist参照)。
 
+## 文字の大きさの設定 (`FontFn::Text` / `display.cfg` の `text-size`) (2026-10-29)
+
+- 設定の「画面」タブ(ダークテーマの右)で「標準の字/大きい字」を選ぶ。`/sys/display.cfg` の `text-size = normal|large`
+  (`DisplayFunctions` が起動時に読み、`FontFn::SetLargeText()` へ渡す)。**変えた後に組み直したところから効く**
+  (シーンに入り直す・文書を開き直す)。開いている画面は組み直さない(設定画面の部品は従わないので見た目は変わらない)。
+- **本文だけが従う**: `FontFn::FontSize` に `Text`(本文)を足し、標準=16px(Smallと同じ)/大=20px。
+  読む所だけが `Text` を選び、ボタン・タブ・ステータスバー・キーボード・見出しは今の大きさのまま(崩れにくさを優先)。
+  `Text` を選んでいるのは今のところ次の所(段階的に広げる):
+  - 本文: `TextView`(テキストエディタ・メモ・ファイルビューワー・メールの本文。`setFontSize(FontFn::Text)`)、
+    `MarkdownView`(Markdownアプリ・ファイルビューワー。`setBodyFontSize()`。表は列が狭いので16pxのまま、見出しは元から大きい)、
+    チャットのログ(`ChatLogView`)
+  - 一覧(`ScrollList`。行の高さは文字の高さに追従する): メモ・通知・最近のファイル・ファイル検索・ストレージ・メール・本棚・
+    ミュージック・ストア・TODO・カレンダーの予定・チャットの部屋・辞書。**高さを固定の行数で取っている一覧**
+    (時計のアラーム・電卓のグラフ/履歴・設定のWi-Fi)は従わせていない。
+  - 読書(`ReaderView`)・SSHの端末は元から自分の「文字:大/小」を持つので従わせない。
+- **Luaは従わない**: Luaのアプリはピクセルで配置しているため。Luaから来る文字の大きさの整数は `FontFn::FromInt()` を通し、
+  Small〜Bigger 以外(`Text` の値を含む)は Small にする(描画・`text_width`・ウィジェットの `font_size`)。
+  Luaから作った `TextView`/`MarkdownView` は既定の Small のまま。
+- **20pxの日本語フォント(`lgfxJapanGothicP_20`)をファームへ足した**: 約215KB(LovyanGFX 1.2.28で測った配列の大きさ。
+  16px=約161KB・24px=約277KB・28px=約337KB)。参照は `FontFn::GetText()` だけで、設定が標準でもリンクされる。
+  24pxを使い回す案(フラッシュは増えない)は、240px幅で1行が全角10文字になり(16pxは15文字、20pxは12文字)、
+  本文と見出し(Normal)の差もなくなるので採らなかった。
+- 20pxの文字に合わせるアイコンは16px(`IconRender::GetIconSize(20)`。24pxだと行からはみ出す)。
+- `TextView` の文字幅の控えは1つのフォントぶん。違うフォントの `TextView` が測ると控えを捨てて作り直す。
+- ついでに直したこと: `ScrollList` は描く前の一覧の高さを `GetFontSize()` の公称値(24等)で見積もっていたため、実際の文字の高さより低く、
+  ドロップダウンの2項目の一覧にスクロールバーが出て最後の行が欠けていた。今は描く前でも文字を当てて測る(`itemFontH()`)。
+- 確認はPCビルドの `--shot`(`/sys/display.cfg` に `text-size = large`)と、ホストテスト `text_size_test`。実機では未確認(Todoist参照)。
+- 次に広げる候補: ホーム画面のウィジェット・ファイルアプリ(`FileExplorer`)・設定の各行のラベル・ダイアログの本文。
+  ボタン・タブまで広げるなら、高さの直書き(`setH(20 + Button::kFrameExtra)` 等、約60か所)を文字の高さから求める形へ直してから。
+
 ## ダイアログ (`src/gui/widgets/dialogs/`)
 `WidgetFunctions`内で`dialog_roots`という独立リストで管理(当たり判定・描画順ともに最優先)。共通の骨格: 「`children_`(`WidgetList`)で子を保持」「`setOnClosed(InplaceFunction<void(bool is_ok)>)`で結果通知」「`setVisible(false)`で自身を隠して終了」。**新規ダイアログを提案する際はこの型に合わせる。**
 

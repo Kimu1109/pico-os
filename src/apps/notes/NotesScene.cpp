@@ -425,7 +425,7 @@ void NotesScene::onEnter(){
 
     const int body_y = y2 + this->clear_button_->getLocalRect().h + MARGIN;
     this->list_ = new ScrollList(content.x, (int16_t)body_y, content.w, (int16_t)(content.y + content.h - body_y));
-    this->list_->setFontSize(FontFn::Small);
+    this->list_->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う(行の高さは文字に追従する)
     this->list_->setEnableIcon(true);
     this->list_->setOnSelectItem([this](int index, bool already){
         if(already) this->open(index);

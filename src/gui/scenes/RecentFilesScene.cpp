@@ -28,7 +28,7 @@ void RecentFilesScene::onEnter(){
 
     const int body_y = top + bb.h + MARGIN;
     this->list_ = new ScrollList(content.x, (int16_t)body_y, content.w, (int16_t)(content.y + content.h - body_y));
-    this->list_->setFontSize(FontFn::Small);
+    this->list_->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->list_->setEnableIcon(true);
     this->list_->setOnSelectItem([this](int index, bool already){
         if(already) this->open(index);

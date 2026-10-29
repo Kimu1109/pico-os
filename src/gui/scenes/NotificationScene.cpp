@@ -158,7 +158,7 @@ void NotificationScene::onEnter(){
     const int list_y = tab_y + kTabH + MARGIN;
     this->list = new ScrollList(content.x + MARGIN, list_y,
                                 content.w - MARGIN * 2, detail_y - MARGIN - list_y, kMaxRows);
-    this->list->setFontSize(FontFn::Small);
+    this->list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->list->setEnableIcon(true);
     this->list->setOnSelectItem([this](int index, bool already_selected){
         this->selected_key = this->keyAt(index);

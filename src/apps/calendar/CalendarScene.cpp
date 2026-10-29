@@ -518,7 +518,7 @@ void CalendarScene::onEnter(){
         content.w - MARGIN * 2, content.y + content.h - MARGIN - list_y,
         kMaxEventsPerDay
     );
-    this->event_list->setFontSize(FontFn::Small);
+    this->event_list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     //1回目のタップで選択、2回目で詳細を開く(ScrollListの流儀。SearchDialogと同じ)
     this->event_list->setOnSelectItem([this](int index, bool already_selected){
         if(already_selected) this->showDetail(index);

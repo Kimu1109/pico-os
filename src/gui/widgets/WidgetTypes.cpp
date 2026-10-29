@@ -78,7 +78,7 @@ bool SetButton(Widget* widget, Id id, const Value& value) {
                 b->setH(value.i); return true;
             case Id::FontSize:
                 if (value.type != Type::Int) return false;
-                b->setFontSize((FontFn::FontSize)value.i); return true;
+                b->setFontSize(FontFn::FromInt(value.i)); return true;
             case Id::TextColor:
                 if (value.type != Type::Int) return false;
                 b->setTextColor((int8_t)value.i); return true;
@@ -126,7 +126,7 @@ bool SetLabel(Widget* widget, Id id, const Value& value) {
                 l->setPlaceholder(value.s.c_str()); return true;
             case Id::FontSize:
                 if (value.type != Type::Int) return false;
-                l->setFontSize((FontFn::FontSize)value.i); return true;
+                l->setFontSize(FontFn::FromInt(value.i)); return true;
             case Id::TextColor:
                 if (value.type != Type::Int) return false;
                 l->setTextColor((int8_t)value.i); return true;
@@ -173,7 +173,7 @@ bool SetTextbox(Widget* widget, Id id, const Value& value) {
                 t->setPlaceholder(value.s.c_str()); return true;
             case Id::FontSize:
                 if (value.type != Type::Int) return false;
-                t->setFontSize((FontFn::FontSize)value.i); return true;
+                t->setFontSize(FontFn::FromInt(value.i)); return true;
             case Id::TextColor:
                 if (value.type != Type::Int) return false;
                 t->setTextColor((int8_t)value.i); return true;
@@ -215,7 +215,7 @@ bool SetNumberInput(Widget* widget, Id id, const Value& value) {
                 n->setNum(value.s.c_str()); return true;
             case Id::FontSize:
                 if (value.type != Type::Int) return false;
-                n->setFontSize((FontFn::FontSize)value.i); return true;
+                n->setFontSize(FontFn::FromInt(value.i)); return true;
             case Id::TextColor:
                 if (value.type != Type::Int) return false;
                 n->setTextColor((int8_t)value.i); return true;
@@ -249,7 +249,7 @@ bool SetCheckbox(Widget* widget, Id id, const Value& value) {
                 c->setIsChecked(value.b); return true;
             case Id::FontSize:
                 if (value.type != Type::Int) return false;
-                c->setFontSize((FontFn::FontSize)value.i); return true;
+                c->setFontSize(FontFn::FromInt(value.i)); return true;
             case Id::TextColor:
                 if (value.type != Type::Int) return false;
                 c->setTextColor((int8_t)value.i); return true;
@@ -415,7 +415,7 @@ bool SetScrollList(Widget* widget, Id id, const Value& value) {
                 sl->setH(value.i); return true;
             case Id::FontSize:
                 if (value.type != Type::Int) return false;
-                sl->setFontSize((FontFn::FontSize)value.i); return true;
+                sl->setFontSize(FontFn::FromInt(value.i)); return true;
             case Id::TextColor:
                 if (value.type != Type::Int) return false;
                 sl->setTextColor((int8_t)value.i); return true;
@@ -587,7 +587,7 @@ bool SetTabBar(Widget* widget, Id id, const Value& value) {
                 tb->setSelected(value.i, true); return true;
             case Id::FontSize:
                 if (value.type != Type::Int) return false;
-                tb->setFontSize((FontFn::FontSize)value.i); return true;
+                tb->setFontSize(FontFn::FromInt(value.i)); return true;
             case Id::BorderColor:
                 if (value.type != Type::Int) return false;
                 tb->setBorderColor((int8_t)value.i); return true;
@@ -1026,7 +1026,7 @@ bool SetDurationPicker(Widget* widget, Id id, const Value& value) {
                 dp->setEditable(value.b); return true;
             case Id::FontSize:
                 if (value.type != Type::Int) return false;
-                dp->setFontSize((FontFn::FontSize)value.i); return true;
+                dp->setFontSize(FontFn::FromInt(value.i)); return true;
             case Id::TextColor:
                 if (value.type != Type::Int) return false;
                 dp->setTextColor((int8_t)value.i); return true;

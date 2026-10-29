@@ -1146,7 +1146,7 @@ int LuaEngineExt::l_draw_text_wrapped(lua_State* L) {
     size_t len = 0;
     const char* text = luaL_checklstring(L, 4, &len);
     const int8_t color = (int8_t)luaL_optinteger(L, 5, PICO_FORECOLOR);
-    const FontFn::FontSize size = (FontFn::FontSize)luaL_optinteger(L, 6, (lua_Integer)FontFn::Normal);
+    const FontFn::FontSize size = FontFn::FromInt((int)luaL_optinteger(L, 6, (lua_Integer)FontFn::Normal));
     const char* align = luaL_optstring(L, 7, "left");
     const int gap = (int)luaL_optinteger(L, 8, 0);
     if (w <= 0) return luaL_error(L, "pico.draw_text_wrapped: 幅は1以上です");
@@ -1185,7 +1185,7 @@ int LuaEngineExt::l_measure_text(lua_State* L) {
     size_t len = 0;
     const char* text = luaL_checklstring(L, 1, &len);
     const int w = (int)luaL_checkinteger(L, 2);
-    const FontFn::FontSize size = (FontFn::FontSize)luaL_optinteger(L, 3, (lua_Integer)FontFn::Normal);
+    const FontFn::FontSize size = FontFn::FromInt((int)luaL_optinteger(L, 3, (lua_Integer)FontFn::Normal));
     const int gap = (int)luaL_optinteger(L, 4, 0);
     if (w <= 0) return luaL_error(L, "pico.measure_text: 幅は1以上です");
     if (len > 2048) len = 2048;

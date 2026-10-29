@@ -996,7 +996,7 @@ void MarkdownView::layoutBlocks() {
         }
         else if (b.type == MdBlockType::CodeBlock) {
             measure_label->setMaxWidth(viewport_w - kPadding * 2); // 内側に余白を持たせる
-            measure_label->setFontSize(FontFn::Small);
+            measure_label->setFontSize(this->body_font_);
             measure_label->setText(getFormattedBlockText((int)idx, b));
             // 背景ボックス分の余白。続きのある(分けた)コードブロックは余白を付けず、
             // 次の分と箱を隙間なく繋げる
@@ -1004,7 +1004,7 @@ void MarkdownView::layoutBlocks() {
         }
         else if (b.type == MdBlockType::Link) {
             measure_label->setMaxWidth(viewport_w);
-            measure_label->setFontSize(FontFn::Small);
+            measure_label->setFontSize(this->body_font_);
             measure_label->setText(getFormattedBlockText((int)idx, b));
             b.height = measure_label->getH();
         }
@@ -1070,15 +1070,14 @@ void MarkdownView::layoutBlocks() {
 }
 
 FontFn::FontSize MarkdownView::fontSizeForBlock(MdBlockType type) const {
-    // ※ Font_Functions.hpp の実際のenum値に合わせて要調整（プレースホルダー）
     switch (type) {
         case MdBlockType::H1:       return FontFn::Bigger;
         case MdBlockType::H2:       return FontFn::Big;
         case MdBlockType::H3:       return FontFn::Normal;
-        case MdBlockType::ListItem: return FontFn::Small;
-        case MdBlockType::Quote:    return FontFn::Small;
-        case MdBlockType::TableRow: return FontFn::Small;
-        default:                    return FontFn::Small;
+        case MdBlockType::ListItem: return this->body_font_;
+        case MdBlockType::Quote:    return this->body_font_;
+        case MdBlockType::TableRow: return FontFn::Small; // 表は列の幅が狭いので本文の設定に従わせない
+        default:                    return this->body_font_;
     }
 }
 
@@ -1137,7 +1136,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
         lbl->setMaxWidth(this->l_rect.w - SCROLL_L - kPadding * 4);
         lbl->setBackgroundColor(PICO_LIGHTGREY);
         lbl->setBorder(PICO_DARKGREY, 1);
-        lbl->setFontSize(FontFn::Small);
+        lbl->setFontSize(this->body_font_);
         lbl->setText(getFormattedBlockText(blockIdx, b));
         lbl->setX(kPadding);
     } else if (b.type == MdBlockType::Link) {
@@ -1145,7 +1144,7 @@ void MarkdownView::bindLabelSlot(int slot, int blockIdx, bool force) {
             lbl->setDisableAutoTextDecoration(false);
         lbl->setMaxWidth(this->l_rect.w - SCROLL_L - kPadding * 2);
         lbl->setTextColor(PICO_BLUE);
-        lbl->setFontSize(FontFn::Small);
+        lbl->setFontSize(this->body_font_);
         lbl->setText(getFormattedBlockText(blockIdx, b));
         lbl->setX(kPadding);
     } else if (b.type == MdBlockType::ListItem) {

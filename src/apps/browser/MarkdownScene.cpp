@@ -102,6 +102,7 @@ void MarkdownScene::onEnter(){
 
     // ---- 本文 ----
     this->view = new MarkdownView(0, view_y, content.w, view_h);
+    this->view->setBodyFontSize(FontFn::Text); //本文は文字の大きさの設定に従う
     this->view->setOnLinkTap([this](FixedString<PICO_PATH_LEN> ref){
         this->onLinkTap(ref);
     });

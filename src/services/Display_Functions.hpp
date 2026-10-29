@@ -13,6 +13,8 @@
 // - 設定は /sys/display.cfg(無くてよい。既定値で動く):
 //     brightness = 0〜100
 //     auto-dim   = true | false
+//     theme      = light | dark
+//     text-size  = normal | large(本文の文字を16px→20pxにする。FontFn::Text)
 //   SettingsSceneが音量と同じ「操作の都度PICO_Config::SetValue()でその場に書く」流儀で書き込む。
 namespace DisplayFunctions {
 
@@ -44,6 +46,10 @@ namespace DisplayFunctions {
     // ダークテーマ(パレットを差し替える。display.cfg の theme = light|dark)。保存は呼び出し側
     void SetDarkTheme(bool dark);
     bool IsDarkTheme();
+    // 本文の文字を大きくする(display.cfg の text-size = normal|large)。保存は呼び出し側。
+    // 読む所(FontFn::Text を選んだ部品)だけに、次に組み直すときから効く
+    void SetLargeText(bool large);
+    bool IsLargeText();
     // 今だけ変える(display.cfgへは書かない)
     void SetAutoDimEnabled(bool enabled);
 

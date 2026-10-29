@@ -36,6 +36,7 @@ namespace lgfx { struct rgb565_t { uint16_t raw; }; }
 
 //実機と同じ名前でフォント実体を用意する(Font_Functions.cppがこの名前を参照する)
 inline const lgfx::v1::U8g2font lgfxJapanGothicP_16{16};
+inline const lgfx::v1::U8g2font lgfxJapanGothicP_20{20};
 inline const lgfx::v1::U8g2font lgfxJapanGothicP_24{24};
 //LovyanGFX組み込みの6x8の英数字フォント(PerfOverlay/GraphView等が使う)
 namespace fonts { inline const lgfx::v1::U8g2font Font0{8}; }

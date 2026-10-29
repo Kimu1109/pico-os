@@ -236,7 +236,7 @@ void FileSearchScene::onEnter(){
 
     const int body_y = top + bb.h + MARGIN;
     this->list = new ScrollList(content.x, (int16_t)body_y, content.w, (int16_t)(content.y + content.h - body_y));
-    this->list->setFontSize(FontFn::Small);
+    this->list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->list->setEnableIcon(true);
     this->list->setOnSelectItem([this](int index, bool already){
         if(already) this->openResult(index);

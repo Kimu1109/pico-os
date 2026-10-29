@@ -1,5 +1,6 @@
 #include "services/Display_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "system/Config_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "system/Pad_Functions.hpp"
@@ -47,6 +48,10 @@ namespace {
                     if(strcmp(value, "dark") == 0) PICO_GFX::SetTheme(true);
                     else if(strcmp(value, "light") == 0) PICO_GFX::SetTheme(false);
                     else LOG_SYS_WARN("display.cfg: theme は light/dark です: %s", value);
+                }else if(strcmp(key, "text-size") == 0){
+                    if(strcmp(value, "large") == 0) FontFn::SetLargeText(true);
+                    else if(strcmp(value, "normal") == 0) FontFn::SetLargeText(false);
+                    else LOG_SYS_WARN("display.cfg: text-size は normal/large です: %s", value);
                 }else if(strcmp(key, "auto-dim") == 0){
                     bool enabled = true;
                     if(PICO_Config::ConfigValue::AsBool(value, enabled)){
@@ -65,6 +70,9 @@ void DisplayFunctions::SetDarkTheme(bool dark){
 }
 
 bool DisplayFunctions::IsDarkTheme(){ return PICO_GFX::darkTheme; }
+
+void DisplayFunctions::SetLargeText(bool large){ FontFn::SetLargeText(large); }
+bool DisplayFunctions::IsLargeText(){ return FontFn::IsLargeText(); }
 
 void DisplayFunctions::Setup(){
     normal_brightness = kDefaultBrightness;

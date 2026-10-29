@@ -44,6 +44,7 @@ void FileViewerScene::showText(const Rect& body, const char* message){
     this->text_buf.assign(message);
     if(!this->text_view){
         this->text_view = new TextView(body.x, body.y, body.w, body.h);
+        this->text_view->setFontSize(FontFn::Text);
         WidgetFunctions::Add(this->text_view);
     }
     this->text_view->setDocument(this->text_buf.c_str(), (int)this->text_buf.length());
@@ -77,6 +78,7 @@ bool FileViewerScene::loadPlainText(const Rect& body, bool& truncated){
     f.close();
 
     this->text_view = new TextView(body.x, body.y, body.w, body.h);
+    this->text_view->setFontSize(FontFn::Text); //本文は文字の大きさの設定に従う
     WidgetFunctions::Add(this->text_view);
     this->text_view->setDocument(this->text_buf.c_str(), (int)this->text_buf.length());
     if(this->text_view->isTruncated()) truncated = true;
@@ -189,6 +191,7 @@ void FileViewerScene::onEnter(){
 
     if(HasExtension(p, ".md") || HasExtension(p, ".markdown")){
         this->md_view = new MarkdownView(body.x, body.y, body.w, body.h);
+        this->md_view->setBodyFontSize(FontFn::Text);
         WidgetFunctions::Add(this->md_view);
         if(!this->md_view->load(p)){
             this->md_view->setVisible(false);

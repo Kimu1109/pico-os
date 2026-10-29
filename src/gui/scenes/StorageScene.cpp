@@ -268,7 +268,7 @@ void StorageScene::onEnter(){
     y += 18;
 
     this->list = new ScrollList(content.x, (int16_t)y, content.w, (int16_t)(content.y + content.h - y));
-    this->list->setFontSize(FontFn::Small);
+    this->list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->list->setEnableIcon(true);
     this->list->setOnSelectItem([this](int index, bool already){
         if(!already || index < 0 || index >= this->entry_count) return;

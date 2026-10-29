@@ -71,7 +71,7 @@ void ReaderLibraryScene::onEnter(){
     this->list_bottom_ = content.y + content.h - MARGIN;
 
     this->list_ = new ScrollList(content.x + MARGIN, y, content.w - MARGIN * 2, content.y + content.h - MARGIN - y);
-    this->list_->setFontSize(FontFn::Small);
+    this->list_->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->list_->setEnableIcon(true);
     this->list_->setOnSelectItem([this](int index, bool){
         if(index >= 0 && index < this->count_) this->openBook(this->paths_[index].c_str());

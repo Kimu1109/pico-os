@@ -133,7 +133,7 @@ void MailScene::onEnter(){
     const int list_y = y0 + row_h + MARGIN;
     this->mail_list = new ScrollList(content.x + MARGIN, list_y, content.w - MARGIN * 2,
                                      status_y - MARGIN - list_y, ImapClient::kMaxMessages);
-    this->mail_list->setFontSize(FontFn::Small);
+    this->mail_list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->mail_list->setEnableIcon(true);
     this->mail_list->setOnSelectItem([this](int index, bool){ this->openMessage(index); });
     WidgetFunctions::Add(this->mail_list);
@@ -150,6 +150,7 @@ void MailScene::onEnter(){
 
     const int body_y = list_y + line_h * kHeaderLines + 4 + MARGIN;
     this->body_view = new TextView(content.x + MARGIN, body_y, content.w - MARGIN * 2, status_y - MARGIN - body_y);
+    this->body_view->setFontSize(FontFn::Text); //本文は文字の大きさの設定に従う
     WidgetFunctions::Add(this->body_view);
 
     // ---- Microsoft のサインインの案内(一覧の場所。サインインの途中だけ出す) ----
@@ -603,7 +604,7 @@ void MailScene::scrollBody(int dy){
 
 bool MailScene::onKey(const KeyInputFunctions::Event& ev){
     using K = KeyInputFunctions::Key;
-    const int line_h = FontFn::GetFontSize(FontFn::Small) + 2;
+    const int line_h = FontFn::GetFontSize(FontFn::Text) + 2;
     const int page = this->body_view ? this->body_view->getLocalRect().h - line_h : 100;
     switch(ev.key){
         case K::Escape:

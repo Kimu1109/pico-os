@@ -63,7 +63,7 @@ void MusicScene::onEnter(){
         content.w - MARGIN * 2, panel_y - MARGIN - list_y,
         kMaxTracks
     );
-    this->list->setFontSize(FontFn::Small);
+    this->list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->list->setEnableIcon(true);
     this->list->setOnSelectItem([this](int index, bool already){ this->onListSelect(index, already); });
     WidgetFunctions::Add(this->list);

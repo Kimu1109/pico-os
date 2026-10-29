@@ -253,6 +253,7 @@ void TextEditorScene::onEnter(){
 
     const int start_top = this->search_open ? this->view_top_search : view_y;
     this->view = new TextView(content.x, start_top, content.w, content.y + content.h - start_top);
+    this->view->setFontSize(FontFn::Text); //本文は文字の大きさの設定に従う
     this->view->setCursorVisible(true);
     this->view->setOnTap([this](size_t byte_offset){
         this->view->setCursor(byte_offset);

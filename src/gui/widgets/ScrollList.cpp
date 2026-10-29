@@ -44,7 +44,8 @@ void ScrollList::render(){
     int start_index = this->scrollY / ITEM_HEIGHT;
     int draw_y = start_index * ITEM_HEIGHT - this->scrollY;
 
-    int icon_size = FontFn::GetFontSize(this->getFontSize());
+    const IconSize icon_kind = IconRender::GetIconSize(FontFn::GetFontSize(this->getFontSize()));
+    const int icon_size = IconRender::IconPixelSize(icon_kind);
 
     for(int i = start_index; i < this->dataSource.size(); i++){
         const int8_t item_color = this->dataSource.at(i).color;
@@ -54,7 +55,7 @@ void ScrollList::render(){
             l_text_color = this->background_color;
         }
         if(this->enable_icon)
-            IconRender::DrawIcon(this->dataSource.at(i).icon, IconRender::GetIconSize(icon_size), g_rect.x + MARGIN, g_rect.y + draw_y + (ITEM_HEIGHT - icon_size) / 2, l_text_color);
+            IconRender::DrawIcon(this->dataSource.at(i).icon, icon_kind, g_rect.x + MARGIN, g_rect.y + draw_y + (ITEM_HEIGHT - icon_size) / 2, l_text_color);
 
         OSData::frame->setCursor(g_rect.x + MARGIN + (this->enable_icon ? (icon_size + MARGIN) : 0), g_rect.y + draw_y);
         OSData::frame->setTextColor(l_text_color);
@@ -117,7 +118,7 @@ void ScrollList::causeOnPressMove(){
     }
 
     const int view_h = this->getScreenRect().h;
-    const int total = (this->font_h + MARGIN) * (int)this->dataSource.size();
+    const int total = (this->itemFontH() + MARGIN) * (int)this->dataSource.size();
     if(view_h > 0 && total > view_h){
         if(this->is_scrolling){
             // スクロールバーのつまみが指に付いてくるよう「全体の高さ/表示領域の高さ」倍
@@ -148,10 +149,18 @@ void ScrollList::causeOnPressEnd(){
         this->causeOnSelectItem(already_selected);
     }
 }
+int ScrollList::itemFontH(){
+    if(this->font_h == 0){
+        this->fontApply();
+        this->font_h = OSData::frame->fontHeight();
+        this->fontDefault();
+    }
+    return this->font_h;
+}
+
 void ScrollList::ensureVisible(int index){
     if(index < 0 || index >= (int)this->dataSource.size()) return;
-    if(this->font_h == 0) this->font_h = FontFn::GetFontSize(getFontSize());
-    const int item_h = this->font_h + MARGIN;
+    const int item_h = this->itemFontH() + MARGIN;
     const int top = index * item_h;
     if(top < this->scrollY) this->scrollY = top;
     else if(top + item_h > this->scrollY + this->l_rect.h) this->scrollY = top + item_h - this->l_rect.h;

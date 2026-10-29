@@ -208,7 +208,8 @@ namespace {
 
             void draw(const Rect& r, uint8_t, uint8_t h, int pressed) override {
                 const bool big = h >= 2;
-                const FontFn::FontSize title_font = big ? FontFn::Normal : FontFn::Small;
+                //曲名は本文の文字(文字の大きさの設定に従う)。大きい枠は元から24px
+                const FontFn::FontSize title_font = big ? FontFn::Normal : FontFn::Text;
                 const int x = r.x + kPad + 2, wmax = r.w - 2 * kPad - 4;
                 int y = r.y + (big ? 12 : 5);
 
@@ -338,6 +339,18 @@ namespace {
     // 予定・TODOの1行の高さ(16pxの字。横長の78pxに見出し+3行を入れるため、フォントの行の高さより詰める)
     constexpr int kRowH = 18;
 
+    // 予定・TODOの1行。題名は本文の文字(文字の大きさの設定に従う)、左の欄(時刻・曜日)は幅が狭いので16pxのまま。
+    // 大きい字では行を文字に合わせて広げ(枠に入る行は減る)、左の欄を行の真ん中へ寄せる
+    struct Row {
+        int h = kRowH;
+        int label_dy = 0;
+        Row(){
+            if(!FontFn::IsLargeText()) return;
+            this->h = LineH(FontFn::Text) + 2;
+            this->label_dy = (this->h - LineH(FontFn::Small)) / 2;
+        }
+    };
+
     // 見出し(左上の小さな文字)を描いて、本文の始まりの y を返す
     int Header(const Rect& r, const char* left, const char* right){
         const int y = r.y + 3;
@@ -376,11 +389,12 @@ namespace {
                     head[0] = '\0';
                 }
                 int y = Header(r, "予定", head);
-                const int lh = kRowH;
+                const Row row;
+                const int lh = row.h;
                 const int lines = (r.y + r.h - 2 - y) / lh;
 
-                if(today < 0){ DrawText(FontFn::Small, PICO_DARKGREY, x, y, wmax, "時計が合っていません"); return; }
-                if(HomeAgenda::NoFiles()){ DrawText(FontFn::Small, PICO_DARKGREY, x, y, wmax, "カレンダーがありません"); return; }
+                if(today < 0){ DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, "時計が合っていません"); return; }
+                if(HomeAgenda::NoFiles()){ DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, "カレンダーがありません"); return; }
 
                 int shown = 0;
                 const int col_w = h >= 2 ? 72 : 60;
@@ -394,13 +408,13 @@ namespace {
                     if(e.continued) snprintf(label, sizeof(label), "続き");
                     else DayLabel(e.day, today, e.start_sec, e.start_sec < 0, label, sizeof(label));
                     OSData::frame->fillRect(x, y + 3, 3, lh - 6, e.color);
-                    DrawText(FontFn::Small, e.day == today ? PICO_BLACK : PICO_DARKGREY, x + 6, y, col_w - 6, label);
-                    DrawText(FontFn::Small, PICO_BLACK, x + col_w, y, wmax - col_w, e.title.c_str());
+                    DrawText(FontFn::Small, e.day == today ? PICO_BLACK : PICO_DARKGREY, x + 6, y + row.label_dy, col_w - 6, label);
+                    DrawText(FontFn::Text, PICO_BLACK, x + col_w, y, wmax - col_w, e.title.c_str());
                     y += lh;
                     shown++;
                 }
                 if(shown == 0){
-                    DrawText(FontFn::Small, PICO_DARKGREY, x, y, wmax, h >= 2 ? "7日以内に予定はありません" : "今日・明日の予定はありません");
+                    DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, h >= 2 ? "7日以内に予定はありません" : "今日・明日の予定はありません");
                 }
             }
     };
@@ -425,15 +439,16 @@ namespace {
                 char right[24] = "";
                 if(TodoCache::Has()) snprintf(right, sizeof(right), "%d件", TodoCache::Total());
                 int y = Header(r, "TODO 今日", right);
-                const int lh = kRowH;
+                const Row row;
+                const int lh = row.h;
                 int lines = (r.y + r.h - 2 - y) / lh;
 
                 if(!TodoCache::Has()){
-                    DrawText(FontFn::Small, PICO_DARKGREY, x, y, wmax, configured_ ? "まだ取得していません" : "TODOアプリで設定してください");
+                    DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, configured_ ? "まだ取得していません" : "TODOアプリで設定してください");
                     return;
                 }
                 if(TodoCache::Count() == 0){
-                    DrawText(FontFn::Small, PICO_DARKGREEN, x, y, wmax, "今日のタスクはありません");
+                    DrawText(FontFn::Text, PICO_DARKGREEN, x, y, wmax, "今日のタスクはありません");
                     y += lh;
                 }
                 //大きいときは最後の行に取得した時刻
@@ -454,8 +469,8 @@ namespace {
                     }
                     else if(e.due.has_time) snprintf(label, sizeof(label), "%d:%02d", (int)(e.due.sec / 3600), (int)(e.due.sec / 60 % 60));
                     else snprintf(label, sizeof(label), "今日");
-                    DrawText(FontFn::Small, overdue ? PICO_RED : PICO_DARKGREY, x + 13, y, col_w - 13, label);
-                    DrawText(FontFn::Small, PICO_BLACK, x + col_w, y, wmax - col_w, e.content.c_str());
+                    DrawText(FontFn::Small, overdue ? PICO_RED : PICO_DARKGREY, x + 13, y + row.label_dy, col_w - 13, label);
+                    DrawText(FontFn::Text, PICO_BLACK, x + col_w, y, wmax - col_w, e.content.c_str());
                     y += lh;
                 }
                 if(h >= 2 && TodoCache::FetchedEpoch() > 0){

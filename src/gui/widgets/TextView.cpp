@@ -8,7 +8,7 @@
 #include <cstring>
 
 namespace {
-    // 文字の幅の控え(Smallフォント専用)。ASCIIは表で、それ以外はUTF-8のバイト列を
+    // 文字の幅の控え(Smallの文字を cache_scale 倍したもの)。ASCIIは表で、それ以外はUTF-8のバイト列を
     // 32bitへ詰めた値をキーに直接写像で覚える(衝突したら上書きするだけ)
     int8_t ascii_w[128];
     bool ascii_ready = false;
@@ -19,6 +19,19 @@ namespace {
     // 確保できなければ控えを使わず毎回測る
     WideEntry* wide_w = nullptr;
     int width_cache_users = 0;
+    // 控えを作った拡大率。違う拡大率で測るときは控えを捨てて作り直す
+    // (同時に生きるTextViewはふつう同じ拡大率なので、作り直しは文字の大きさを変えたときくらい)
+    float cache_scale = 0;
+
+    // 今の拡大率に左右されないよう、scale倍で測ってから元へ戻す
+    // (LovyanGFXの textWidth(文字列, フォント) は今の setTextSize() の倍率で幅を出す)
+    int MeasureScaled(const char* s, float scale){
+        const float old = OSData::frame->getTextSizeX();
+        OSData::frame->setTextSize(scale);
+        const int w = OSData::frame->textWidth(s, FontFn::GetSmall());
+        OSData::frame->setTextSize(old);
+        return w;
+    }
 }
 
 void TextView::AcquireWidthCache(){
@@ -34,7 +47,16 @@ void TextView::ReleaseWidthCache(){
     }
 }
 
-int TextView::CharWidth(const char* s, int n){
+float TextView::scale() const {
+    return this->font_size == FontFn::Text ? FontFn::GetTextScale() : 1.0f;
+}
+
+int TextView::CharWidth(float scale, const char* s, int n){
+    if(scale != cache_scale){
+        cache_scale = scale;
+        ascii_ready = false;
+        if(wide_w) memset(wide_w, 0, sizeof(WideEntry) * kWideSlots);
+    }
     if(n == 1 && (uint8_t)s[0] < 128){
         if(!ascii_ready){
             memset(ascii_w, -1, sizeof(ascii_w));
@@ -43,7 +65,7 @@ int TextView::CharWidth(const char* s, int n){
         int8_t& w = ascii_w[(uint8_t)s[0]];
         if(w < 0){
             char one[2] = { s[0], '\0' };
-            w = (int8_t)OSData::frame->textWidth(one, FontFn::GetSmall());
+            w = (int8_t)MeasureScaled(one, scale);
         }
         return w;
     }
@@ -52,14 +74,14 @@ int TextView::CharWidth(const char* s, int n){
     char buf[5];
     memcpy(buf, s, n);
     buf[n] = '\0';
-    if(!wide_w) return OSData::frame->textWidth(buf, FontFn::GetSmall());
+    if(!wide_w) return MeasureScaled(buf, scale);
 
     uint32_t key = 0;
     for(int i = 0; i < n; i++) key = (key << 8) | (uint8_t)s[i];
     WideEntry& e = wide_w[(key ^ (key >> 11)) % kWideSlots];
     if(e.key != key || e.key == 0){
         e.key = key;
-        e.w = (uint8_t)OSData::frame->textWidth(buf, FontFn::GetSmall());
+        e.w = (uint8_t)MeasureScaled(buf, scale);
     }
     return e.w;
 }
@@ -68,10 +90,11 @@ void TextView::layout(){
     if(!this->layout_dirty) return;
     this->layout_dirty = false;
 
-    FontFn::SetSmall();
+    FontFn::SetFontSize(this->font_size);
     this->line_h = OSData::frame->fontHeight() + 1;
     FontFn::SetDefault();
 
+    const float f = this->scale();
     const int max_w = this->contentW();
     int count = 0;
     int start = 0;
@@ -87,7 +110,7 @@ void TextView::layout(){
         }
         int n = Utf8CharBytesFromLeadByte((uint8_t)this->text[i]);
         if(i + n > this->len) n = this->len - i;
-        const int cw = CharWidth(this->text + i, n);
+        const int cw = CharWidth(f, this->text + i, n);
         //幅を超える / 描くときの一時バッファを超えるなら折り返す(1文字も入らない行は作らない)
         if(i > start && (x + cw > max_w || i - start + n >= kRowBuf)){
             this->rows[count++] = { (uint16_t)start, (uint16_t)i };
@@ -124,12 +147,13 @@ int TextView::rowOf(size_t byte_offset){
 }
 
 int TextView::widthOf(int from, int to) const {
+    const float f = this->scale();
     int w = 0;
     int i = from;
     while(i < to){
         int n = Utf8CharBytesFromLeadByte((uint8_t)this->text[i]);
         if(i + n > to) n = to - i;
-        w += CharWidth(this->text + i, n);
+        w += CharWidth(f, this->text + i, n);
         i += n;
     }
     return w;
@@ -228,6 +252,14 @@ void TextView::setSelection(size_t start, size_t len){
     this->needsRender();
 }
 
+void TextView::setFontSize(FontFn::FontSize size){
+    if(size != FontFn::Text) size = FontFn::Small;
+    if(size == this->font_size) return;
+    this->font_size = size;
+    this->layout_dirty = true;
+    this->needsRender();
+}
+
 void TextView::setH(int h){
     if(h == this->l_rect.h) return;
     markdirty(this->getScreenRect()); //縮むときは、はみ出していた部分を下の物に描き直させる
@@ -295,13 +327,14 @@ void TextView::causeOnPressEnd(){
     if(r >= this->row_count) r = this->row_count - 1;
 
     const Row& row = this->rows[r];
+    const float f = this->scale();
     const int tx = OSData::touchX - g.x - kPad;
     int x = 0;
     int i = row.start;
     while(i < row.end){
         int n = Utf8CharBytesFromLeadByte((uint8_t)this->text[i]);
         if(i + n > row.end) n = row.end - i;
-        const int cw = CharWidth(this->text + i, n);
+        const int cw = CharWidth(f, this->text + i, n);
         if(tx < x + cw / 2) break;
         x += cw;
         i += n;
@@ -326,7 +359,7 @@ void TextView::render(){
     const Rect clip = orig.intersection(g);
     OSData::frame->setClipRect(clip.x, clip.y, clip.w, clip.h);
 
-    FontFn::SetSmall();
+    FontFn::SetFontSize(this->font_size);
     OSData::frame->setTextColor(PICO_BLACK);
 
     const int lh = this->line_h;

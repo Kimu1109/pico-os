@@ -119,7 +119,7 @@ void StoreScene::onEnter(){
     const int list_y = y0 + row_h + MARGIN;
     this->app_list = new ScrollList(content.x + MARGIN, list_y, content.w - MARGIN * 2,
                                     detail_y - MARGIN - list_y, AppRepo::kMaxEntries);
-    this->app_list->setFontSize(FontFn::Small);
+    this->app_list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->app_list->setEnableIcon(true);
     this->app_list->setOnSelectItem([this](int row, bool already){
         const int index = (row >= 0 && row < this->row_count) ? this->rows[row] : -1;

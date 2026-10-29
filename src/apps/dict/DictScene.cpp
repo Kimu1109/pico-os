@@ -62,7 +62,7 @@ void DictScene::onEnter(){
         (int16_t)(content.w - MARGIN * 2), LIST_H,
         WordDictionary::kMaxHits
     );
-    this->result_list->setFontSize(FontFn::Small);
+    this->result_list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->result_list->setOnSelectItem([this](int index, bool /*already_selected*/){
         this->showDetail(index);
     });

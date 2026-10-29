@@ -467,6 +467,19 @@ void SettingsScene::updateSleep(){
     PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "sleep-timeout", buf);
 }
 
+void SettingsScene::updateTextSize(){
+    if(!this->text_size_dropdown) return;
+    const int idx = this->text_size_dropdown->getSelectedIndex();
+    if(idx < 0 || idx > 1 || idx == this->text_size_selected_index) return;
+    this->text_size_selected_index = idx;
+
+    // 開いている画面は組み直さない(この設定画面の部品は従わないので見た目は変わらない)。
+    // 読む所はシーンに入り直したときに新しい大きさで組む
+    const bool large = (idx == 1);
+    DisplayFunctions::SetLargeText(large);
+    PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "text-size", large ? "large" : "normal");
+}
+
 void SettingsScene::updateVolume(){
     if(!this->volume_slider) return;
 
@@ -547,6 +560,7 @@ void SettingsScene::onUpdate(){
     this->updateVolume();
     this->updateBrightness();
     this->updateSleep();
+    this->updateTextSize();
     this->updateSampleRate();
     this->updateRoute();
     this->updateTimezone();
@@ -614,6 +628,7 @@ void SettingsScene::onExit(){
     this->auto_dim_checkbox    = nullptr;
     this->sleep_title          = nullptr;
     this->sleep_dropdown       = nullptr;
+    this->text_size_dropdown   = nullptr;
     this->rate_title           = nullptr;
     this->rate_dropdown        = nullptr;
     this->battery_cap_checkbox = nullptr;
@@ -833,6 +848,15 @@ void SettingsScene::buildLateRows(const Layout& lay){
     this->sleep_dropdown->setSelectedIndex(best);
     addToTab(Tab::Display, this->sleep_title);
     addToTab(Tab::Display, this->sleep_dropdown);
+
+    // ---- 本文の文字の大きさ(display.cfgの text-size)。画面タブの3行目、ダークテーマの右 ----
+    // 一覧が下のスリープの行へ重なるので、スリープより後にAdd()する
+    this->text_size_dropdown = new DropdownMenu(dropdown_x, rowY(2), kDropdownW);
+    this->text_size_dropdown->add("標準の字");
+    this->text_size_dropdown->add("大きい字");
+    this->text_size_selected_index = DisplayFunctions::IsLargeText() ? 1 : 0;
+    this->text_size_dropdown->setSelectedIndex(this->text_size_selected_index);
+    addToTab(Tab::Display, this->text_size_dropdown);
 
     // ---- タイムゾーン。時刻の1行目 ----
     this->timezone_title = new Label<PICO_STR_M>(left, rowY(0) + 4, "タイムゾーン");

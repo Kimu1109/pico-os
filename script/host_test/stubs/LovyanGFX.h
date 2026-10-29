@@ -42,7 +42,7 @@ namespace fonts { inline const lgfx::v1::U8g2font Font0{8}; }
 
 struct LGFX_Sprite {
     int font_px = 24;   //現在のフォントの1文字高(px)
-    int text_size = 1;  //拡大率
+    float text_size = 1;  //拡大率(実機と同じく小数も取る。文字の大きさの設定の1.25倍)
 
     // writePixel/readPixelValueだけは実際にバッファへ読み書きする(1byte/pixelの
     // 簡略版。実機/PCビルドは4bppだが、ここではパレット番号0〜15を素直に格納できれば
@@ -69,7 +69,8 @@ struct LGFX_Sprite {
     void setFont(const void* font){
         if(font) font_px = ((const lgfx::v1::U8g2font*)font)->px;
     }
-    void setTextSize(int size){ text_size = (size > 0) ? size : 1; }
+    void setTextSize(float size){ text_size = (size > 0) ? size : 1; }
+    float getTextSizeX() const { return text_size; }
     void setTextColor(int, int = 0){}
     void setTextWrap(bool, bool = false){}
     // クリップ矩形は覚えるだけ(描き込みには効かせない)。getClipRect()は
@@ -117,7 +118,7 @@ struct LGFX_Sprite {
     //ASCIIは半角(fontHeightの半分)、UTF-8マルチバイト文字は全角として概算する
     int textWidth(const char* s){
         if(!s) return 0;
-        const int full = font_px * text_size;
+        const int full = (int)(font_px * text_size);
         int width = 0;
         for(const unsigned char* p = (const unsigned char*)s; *p; p++){
             if((*p & 0xC0) == 0x80) continue; //継続バイトは数えない
@@ -127,7 +128,7 @@ struct LGFX_Sprite {
     }
     // フォントを指定する版(フォントは見ずに今の大きさで概算する)
     template<typename F> int textWidth(const char* s, F){ return textWidth(s); }
-    int fontHeight(){ return font_px * text_size; }
+    int fontHeight(){ return (int)(font_px * text_size); }
     int drawString(const char*, int, int){ return 0; }
     void setCursor(int, int){}
     int print(const char*){ return 0; }

@@ -177,7 +177,7 @@ int LuaEngine::l_draw_text(lua_State* L) {
     const int16_t y = (int16_t)luaL_checkinteger(L, 2);
     const char* text = luaL_checkstring(L, 3);
     const int8_t color = (int8_t)luaL_optinteger(L, 4, PICO_FORECOLOR);
-    const FontFn::FontSize size = (FontFn::FontSize)luaL_optinteger(L, 5, (lua_Integer)FontFn::Normal);
+    const FontFn::FontSize size = FontFn::FromInt((int)luaL_optinteger(L, 5, (lua_Integer)FontFn::Normal));
     // 6番目: 揃え。"left"(既定)はxが左端、"center"はxが中心、"right"はxが右端
     const char* align = luaL_optstring(L, 6, "left");
 
@@ -554,7 +554,7 @@ int LuaEngine::l_fill_arc(lua_State* L) {
 
 int LuaEngine::l_text_width(lua_State* L) {
     const char* text = luaL_checkstring(L, 1);
-    const FontFn::FontSize size = (FontFn::FontSize)luaL_optinteger(L, 2, (lua_Integer)FontFn::Normal);
+    const FontFn::FontSize size = FontFn::FromInt((int)luaL_optinteger(L, 2, (lua_Integer)FontFn::Normal));
     lua_pushinteger(L, Label<PICO_STR_M>::GetTextWidth(size, text));
     return 1;
 }

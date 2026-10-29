@@ -8,9 +8,11 @@
 // SDへは sd_outside_app_dir の権限を持つLuaアプリも書けるので、SDの鍵を信頼すると
 // アプリがファームを差し込めてしまうため)。
 //
-// 鍵を作るのは script/firmware_tool.py keygen(秘密鍵は手元のPCにだけ置く。リポジトリにも
-// GitHubのSecretsにも置かないこと)。表示された1行をここへ足し、USBで1回書き込めば、
-// 以後はその鍵で署名した更新を受け付ける。
+// 鍵を作るのは script/firmware_tool.py keygen(秘密鍵は手元のPCと、ナイトリーが署名に使う
+// GitHubのSecrets FIRMWARE_SIGNING_KEY にだけ置く。リポジトリには置かないこと)。
+// 表示された1行をここへ足し、USBで1回書き込めば、以後はその鍵で署名した更新を受け付ける。
+// ナイトリー・安定版のワークフローは、Secretsの鍵がここのどれとも違えば署名せずに止まる
+// (firmware_tool.py sign --expect-keys がこのファイルを読む。書き方を変えるときはそちらも)。
 //
 // 全部0の鍵は「まだ登録していない」目印で、信頼しない。
 namespace FwKeys {

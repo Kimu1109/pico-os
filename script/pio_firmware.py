@@ -3,7 +3,8 @@
 #
 # 1. ファームの版を $BUILD_DIR/pico_build_info/Pico_Build_Info.h へ書く(src/apps/firmware/Fw_Version.cpp だけが読む)。
 #    通し番号 = git rev-list --count HEAD、git = 短いコミットのハッシュ(手元に変更があれば末尾に'+')、
-#    日時 = HEADのコミットの日時(UTC)。中身が変わったときだけ書き直すので、変更が無ければビルドは「最新」のまま。
+#    日時 = HEADのコミットの日時(UTC)、構成 = env の名前(PIOENV。Webの版の一覧が同じ構成のものを選ぶのに使う)。
+#    中身が変わったときだけ書き直すので、変更が無ければビルドは「最新」のまま。
 #    gitが無い/リポジトリでない場合は 0 / "nogit"。
 # 2. ファームの更新ファイルを作る・送るターゲット(docs/FIRMWARE_UPDATE.md):
 #      pio run -e rpipico2w -t fwpack                       … .pio/build/rpipico2w/firmware.pfw を作る
@@ -40,12 +41,14 @@ def build_info():
 
 def write_header():
     serial, short, date = build_info()
+    pioenv = env.subst("$PIOENV")  # noqa: F821
     text = (
         "// script/pio_firmware.py が書く(手で直さない)\n"
         "#pragma once\n"
         f"#define PICOOS_BUILD_SERIAL {serial}\n"
         f"#define PICOOS_BUILD_GIT \"{short}\"\n"
         f"#define PICOOS_BUILD_DATE \"{date}\"\n"
+        f"#define PICOOS_BUILD_ENV \"{pioenv}\"\n"
     )
     out_dir = os.path.join(BUILD_DIR, "pico_build_info")
     os.makedirs(out_dir, exist_ok=True)
@@ -57,7 +60,7 @@ def write_header():
     if old != text:
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
-    print(f"pico-os ファームの版: #{serial} ({short}) {date}")
+    print(f"pico-os ファームの版: #{serial} ({short}) {date} [{pioenv}]")
     return out_dir
 
 

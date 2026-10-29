@@ -5,6 +5,8 @@
 #   手動実行           … Actionsタブの「Run workflow」から
 #
 # 公開先: https://kimu1109.github.io/pico-os/ (トップは入口のページ。Web版本体は /playground/)
+# /firmware/ は本体の「本体の更新」→[Webから]が読む版の一覧と更新ファイル(元はGitHubのリリース。
+# ナイトリー・安定版のワークフローがリリースを変えた後にこのワークフローを動かす)
 #
 # **初回だけ、リポジトリの Settings > Pages で Source を「GitHub Actions」にすること。**
 # ワークフローからの自動有効化(configure-pages の enablement)は GITHUB_TOKEN の権限では
@@ -116,6 +118,30 @@ jobs:
             --baseURL "https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/lua-api/" \
             --minify
           test -f _site/lua-api/index.html
+
+      # Webからのファームの更新(docs/FIRMWARE_UPDATE.md「Webから取る」)の版の一覧を /firmware/ に置く。
+      # 元はGitHubのリリース(安定版 = プレリリースでないもの、ナイトリー = nightly-*)。リリースの添付は
+      # 別のホストへの長いURLの転送になり本体のURLに入らないので、Pagesへ写す(本体はPagesだけを見る)。
+      # PRでも作って、道具(script/build_fw_index.py)の壊れにここで気づけるようにする
+      - name: ファームの版の一覧を作る
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          work="${RUNNER_TEMP}/fw"
+          mkdir -p "${work}"
+          gh release list --limit 200 --json tagName,isPrerelease,isDraft,createdAt > "${work}/releases.json"
+          python3 script/build_fw_index.py select "${work}/releases.json" --stable 5 --nightly 3 > "${work}/picked.tsv"
+          : > "${work}/got.tsv"
+          while IFS=$'\t' read -r channel tag; do
+            if gh release download "${tag}" --pattern firmware.pfw --dir "${work}/${tag}"; then
+              printf '%s\t%s\n' "${channel}" "${work}/${tag}/firmware.pfw" >> "${work}/got.tsv"
+            else
+              echo "::warning::${tag} から firmware.pfw を落とせません"
+            fi
+          done < "${work}/picked.tsv"
+          python3 script/build_fw_index.py build "${work}/got.tsv" --out _site/firmware
+          test -f _site/firmware/index.tsv
 
       - name: 成果物をアップロードする
         if: github.ref == 'refs/heads/main'

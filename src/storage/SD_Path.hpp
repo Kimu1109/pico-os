@@ -87,6 +87,8 @@ namespace PICO_Path {
             constexpr const char* SYS_CHAT_CFG = "/sys/chat.cfg";
             // アプリストアの取得元("url = https://.../apps/")と信頼する公開鍵("key = 16進64桁"、何行でも)
             constexpr const char* SYS_STORE_CFG = "/sys/store.cfg";
+            // Webからのファームの更新の取得元("url = https://.../firmware/"。無ければ GitHub Pages)。FwDownload参照
+            constexpr const char* SYS_FIRMWARE_CFG = "/sys/firmware.cfg";
             // TODOアプリ(Todoist)のトークン("token = enc1:...")と表示の設定。TodoistClient参照
             constexpr const char* SYS_TODOIST_CFG = "/sys/todoist.cfg";
             // メールアプリ(IMAP)のアカウント("host" / "port" / "user" / "password = enc3:..." 等)。ImapClient参照

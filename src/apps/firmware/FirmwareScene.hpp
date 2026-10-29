@@ -14,10 +14,11 @@
 // 「本体の更新」の画面(ランチャ。ファイルアプリで .pfw を開いたときもここへ来る)。
 // 中身の処理は FirmwareFunctions。この画面は今の版・進み具合の表示と、確認のダイアログだけを持つ。
 //
-//   [SDから選ぶ] … /firmware/ から .pfw を選ぶ
-//   [受け取る]   … PCからの更新(script/firmware_tool.py push / pio run -t fwpush)を待ち受ける
+//   [Webから]  … Webの版の一覧(GitHub Pages)から選び、SDの /firmware/ へ落としてからSDと同じ流れで書く
+//   [SDから]   … /firmware/ から .pfw を選ぶ
+//   [受け取る] … PCからの更新(script/firmware_tool.py push / pio run -t fwpush)を待ち受ける
 //
-// 更新の途中・待ち受け中は別の画面へ移らない(keepForeground)。画面を離れるとやめる
+// 更新の途中・取得中・待ち受け中は別の画面へ移らない(keepForeground)。画面を離れるとやめる
 // (準備ができて再起動を待っているときだけはそのまま)。
 class FirmwareScene : public Scene {
     public:
@@ -29,7 +30,8 @@ class FirmwareScene : public Scene {
 
         const char* getName() const override { return "Firmware"; }
         bool keepForeground() const override {
-            return FirmwareFunctions::Busy() || FirmwareFunctions::Listening() || FirmwareFunctions::RebootPending();
+            return FirmwareFunctions::Busy() || FirmwareFunctions::WebBusy() ||
+                   FirmwareFunctions::Listening() || FirmwareFunctions::RebootPending();
         }
 
         void onEnter() override;
@@ -45,6 +47,7 @@ class FirmwareScene : public Scene {
         Label<PICO_STR_LL>* status_label = nullptr;
         Label<PICO_STR_L>* detail_label = nullptr;
         ProgressBar* progress = nullptr;
+        Button* web_button = nullptr;
         Button* sd_button = nullptr;
         Button* listen_button = nullptr;
         Button* back_button = nullptr;
@@ -56,8 +59,13 @@ class FirmwareScene : public Scene {
         int shown_state = -1;
         uint32_t shown_done = 0xFFFFFFFFu;
         bool shown_listening = false;
+        // 一覧を取り終えたら選ぶダイアログを出す(取り始めたときに立てる)
+        bool web_pick_pending = false;
+        bool picker_open = false;
 
         void startFromSd(const char* path);
+        void startWeb();
+        void openWebPicker();
         void openPicker();
         void toggleListen();
         void openConfirm();

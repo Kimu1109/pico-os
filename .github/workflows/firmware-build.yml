@@ -75,6 +75,8 @@ jobs:
           grep -n '^platform' platformio.ini
           # 差し替えに失敗していたら(platformio.ini の書き方が変わったら)ここで気づく
           grep -q "${PLATFORM_REF}" platformio.ini
+          # 書き換えた platformio.ini を「手元の変更」と数えない(script/pio_firmware.py が版の git に '+' を付けないように)
+          git update-index --assume-unchanged platformio.ini
 
       - name: ビルドする
         run: pio run -e rpipico2w

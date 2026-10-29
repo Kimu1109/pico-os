@@ -213,7 +213,8 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - 検証: `fw_index_test`(core。値・1行目・構成と署名で外す・読めない行17通り・増えた列・ファイル名)、`fw_index_tool_test.py`(select・build・**作った一覧をC++に読ませる**)、
   `firmware_tool_test.py`に`sign`と`env=`、`run_net.sh`の`fw_download_net_test`(http.serverで一覧・1.5MBの取得・SHA-256/大きさ/404/取り消し/大きすぎる一覧/繋がらない)、
   PCビルドの`--tap`/`--shot`(`/sys/firmware.cfg`を手元のhttp.serverへ向けて、一覧→選ぶ→落とす→確認→置き場→落としたファイルを消す→再起動→通知、構成違いの表示)、
-  `web-pages.yml`の一覧作りの手順を偽の`gh`で。**CIでの署名と本物のPagesの一覧は確認済み(2026-10-29。ナイトリー#665が署名済みで載り、Pagesの`.pfw`は焼き込みの鍵で`verify`が通る。ナイトリーからPagesの公開まで約16分)。実機での書き込みは未確認(Todoist参照)**。
+  `web-pages.yml`の一覧作りの手順を偽の`gh`で。**CIでの署名と本物のPagesの一覧は確認済み(2026-10-29。ナイトリー#665が署名済みで載り、Pagesの`.pfw`は焼き込みの鍵で`verify`が通る。ナイトリーからPagesの公開まで約16分)。実機でも、[Webから]で最新のナイトリーが一覧に出てダウンロード→書き込み→再起動まで通ることを利用者が確認した(2026-10-29)**。
+- CIで作った版の git に `+`(手元の変更あり)が付いていた(`firmware-build.yml` がプラットフォームの差し替えで `platformio.ini` を書き換えるため)。書き換えた後に `git update-index --assume-unchanged platformio.ini` して数えないようにした(2026-10-29)。
 
 
 ## ビルド時に選ぶハードウェア機能 (`src/config/Hardware_Config.hpp` の `PICO_HW_*`) (2026-10-25)

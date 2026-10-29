@@ -73,6 +73,8 @@ void FileExplorerScene::onEnter(){
         content.x, (int16_t)body_y,
         content.w, (int16_t)(content.y + content.h - body_y)
     );
+    //一覧の文字は文字の大きさの設定に従う(ファイルの保存/選択ダイアログ・Luaの FileExplorer は Small のまま)
+    this->explorer->getList()->setFontSize(FontFn::Text);
     //ファイルを2回タップしたら中身を見る(ファイルビューワーを上へ積む。「戻る」でここへ戻る)。動画(.pvid)は動画アプリで
     this->explorer->setOnFileTap([](const char* path){
 #if PICO_APP_VIDEO

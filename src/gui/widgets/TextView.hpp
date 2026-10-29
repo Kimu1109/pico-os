@@ -17,7 +17,7 @@
 //   - 動かさずに指を離すと、そこに一番近い文字の境目のバイト位置を setOnTap() で知らせる
 //
 // 折り返しの計算は文書が変わったときだけ全体をやり直す(setDocument())。1文字ごとの
-// textWidth()は重いので、文字の幅は小さな表に覚えておく(表は1つのフォントぶん。違うフォントの
+// textWidth()は重いので、文字の幅は小さな表に覚えておく(表は1つの拡大率ぶん。違う拡大率の
 // TextViewが測ると作り直す)。文字は既定でSmall、OSの読む所は setFontSize(FontFn::Text) で
 // 文字の大きさの設定に従わせる(Luaから作るものはSmallのまま)。
 // 行の表は固定長(kMaxRows、1行4バイト)で、溢れた分は表示しない(isTruncated())。
@@ -70,8 +70,9 @@ class TextView : public Widget {
         int rowOf(size_t byte_offset);
         int widthOf(int from, int to) const;
 
-        const lgfx::v1::U8g2font* font() const;
-        static int CharWidth(const lgfx::v1::U8g2font* f, const char* s, int n);
+        // 文字の拡大率(Small=1、Text=文字の大きさの設定)。文字はどちらも16px
+        float scale() const;
+        static int CharWidth(float scale, const char* s, int n);
         // 全角等の文字幅の控え(約2KB)は、TextViewが1つでも生きている間だけ持つ
         static void AcquireWidthCache();
         static void ReleaseWidthCache();

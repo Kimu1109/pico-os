@@ -22,8 +22,8 @@ void FontFn::SetBigger(){
     OSData::frame->setTextSize(2);
 }
 void FontFn::SetText(){
-    OSData::frame->setFont(GetText());
-    OSData::frame->setTextSize(1);
+    OSData::frame->setFont(&lgfxJapanGothicP_16);
+    OSData::frame->setTextSize(GetTextScale());
 }
 void FontFn::SetDefault(){
     SetNormal();
@@ -77,9 +77,10 @@ const lgfx::v1::U8g2font* FontFn::GetSmall() {
 const lgfx::v1::U8g2font* FontFn::GetNormal() {
     return &lgfxJapanGothicP_24;
 }
-const lgfx::v1::U8g2font* FontFn::GetText() {
-    // 20pxは本文を大きくしたときだけ使う(フラッシュに約215KB。16px=約160KB、24px=約275KB)
-    return large_text ? &lgfxJapanGothicP_20 : &lgfxJapanGothicP_16;
+float FontFn::GetTextScale() {
+    // 20pxの日本語フォント(lgfxJapanGothicP_20)は約215KBあり、ファームがフラッシュの上限を超えるので、
+    // 16pxを1.25倍に拡大して20px相当にする(線の太さが少し不揃いになる)
+    return large_text ? 1.25f : 1.0f;
 }
 
 void FontFn::SetLargeText(bool large){ large_text = large; }

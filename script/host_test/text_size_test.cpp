@@ -1,6 +1,6 @@
 // 文字の大きさの設定(FontFn::Text / SetLargeText)のテスト。
 //
-// - FontFn::Text は設定に従って16px/20pxになる(Small等は変わらない)
+// - FontFn::Text は設定に従って16px/20px相当(16pxの1.25倍)になる(Small等は変わらない)
 // - Lua等から来た整数(FontFn::FromInt)は Small〜Bigger だけを通し、Text にはならない
 //   (Luaのウィジェットのプロパティ font_size も同じ)
 // - TextView・ScrollList は Text を選ぶと設定に従って行の高さが変わる
@@ -60,10 +60,11 @@ static void testFontFn(){
     check(!FontFn::IsLargeText(), "既定は標準の大きさ");
     check(FontFn::GetFontSize(FontFn::Text) == 16, "標準: Text は16px");
     check(fontHeightOf(FontFn::Text) == 16, "標準: Text の実際の高さは16px");
-    check(FontFn::GetText() == FontFn::GetSmall(), "標準: Text の文字は Small と同じ");
+    check(FontFn::GetTextScale() == 1.0f, "標準: Text は拡大しない");
 
     FontFn::SetLargeText(true);
     check(FontFn::GetFontSize(FontFn::Text) == 20, "大: Text は20px");
+    check(FontFn::GetTextScale() == 1.25f, "大: Text は16pxを1.25倍にする");
     check(fontHeightOf(FontFn::Text) == 20, "大: Text の実際の高さは20px");
     check(FontFn::GetFontSize(FontFn::Small) == 16, "大: Small は16pxのまま");
     check(fontHeightOf(FontFn::Small) == 16, "大: Small の実際の高さは16pxのまま");
@@ -101,6 +102,8 @@ static void testTextView(){
     text_view.setDocument(doc, (int)strlen(doc));
     const int small_max = maxScrollOf(small_view);
     const int large_max = maxScrollOf(text_view);
+    // 測った後も、測る前の拡大率に戻っている(他の部品の描画へ漏らさない)
+    check(OSData::frame->getTextSizeX() == 1.0f, "TextView: 測った後は拡大率を元に戻す");
     check(small_view.getRowCount() == text_view.getRowCount(), "TextView: 改行だけなら行数は同じ");
     check(large_max > small_max, "TextView: 大のとき Text の行は Small より高い");
 

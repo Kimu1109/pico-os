@@ -8,7 +8,7 @@
 #include <cstring>
 
 namespace {
-    // 文字の幅の控え(cache_fontの文字1つぶん)。ASCIIは表で、それ以外はUTF-8のバイト列を
+    // 文字の幅の控え(Smallの文字を cache_scale 倍したもの)。ASCIIは表で、それ以外はUTF-8のバイト列を
     // 32bitへ詰めた値をキーに直接写像で覚える(衝突したら上書きするだけ)
     int8_t ascii_w[128];
     bool ascii_ready = false;
@@ -19,9 +19,19 @@ namespace {
     // 確保できなければ控えを使わず毎回測る
     WideEntry* wide_w = nullptr;
     int width_cache_users = 0;
-    // 控えを作ったフォント。違うフォントで測るときは控えを捨てて作り直す
-    // (同時に生きるTextViewはふつう同じフォントなので、作り直しは文字の大きさを変えたときくらい)
-    const lgfx::v1::U8g2font* cache_font = nullptr;
+    // 控えを作った拡大率。違う拡大率で測るときは控えを捨てて作り直す
+    // (同時に生きるTextViewはふつう同じ拡大率なので、作り直しは文字の大きさを変えたときくらい)
+    float cache_scale = 0;
+
+    // 今の拡大率に左右されないよう、scale倍で測ってから元へ戻す
+    // (LovyanGFXの textWidth(文字列, フォント) は今の setTextSize() の倍率で幅を出す)
+    int MeasureScaled(const char* s, float scale){
+        const float old = OSData::frame->getTextSizeX();
+        OSData::frame->setTextSize(scale);
+        const int w = OSData::frame->textWidth(s, FontFn::GetSmall());
+        OSData::frame->setTextSize(old);
+        return w;
+    }
 }
 
 void TextView::AcquireWidthCache(){
@@ -37,13 +47,13 @@ void TextView::ReleaseWidthCache(){
     }
 }
 
-const lgfx::v1::U8g2font* TextView::font() const {
-    return this->font_size == FontFn::Text ? FontFn::GetText() : FontFn::GetSmall();
+float TextView::scale() const {
+    return this->font_size == FontFn::Text ? FontFn::GetTextScale() : 1.0f;
 }
 
-int TextView::CharWidth(const lgfx::v1::U8g2font* f, const char* s, int n){
-    if(f != cache_font){
-        cache_font = f;
+int TextView::CharWidth(float scale, const char* s, int n){
+    if(scale != cache_scale){
+        cache_scale = scale;
         ascii_ready = false;
         if(wide_w) memset(wide_w, 0, sizeof(WideEntry) * kWideSlots);
     }
@@ -55,7 +65,7 @@ int TextView::CharWidth(const lgfx::v1::U8g2font* f, const char* s, int n){
         int8_t& w = ascii_w[(uint8_t)s[0]];
         if(w < 0){
             char one[2] = { s[0], '\0' };
-            w = (int8_t)OSData::frame->textWidth(one, f);
+            w = (int8_t)MeasureScaled(one, scale);
         }
         return w;
     }
@@ -64,14 +74,14 @@ int TextView::CharWidth(const lgfx::v1::U8g2font* f, const char* s, int n){
     char buf[5];
     memcpy(buf, s, n);
     buf[n] = '\0';
-    if(!wide_w) return OSData::frame->textWidth(buf, f);
+    if(!wide_w) return MeasureScaled(buf, scale);
 
     uint32_t key = 0;
     for(int i = 0; i < n; i++) key = (key << 8) | (uint8_t)s[i];
     WideEntry& e = wide_w[(key ^ (key >> 11)) % kWideSlots];
     if(e.key != key || e.key == 0){
         e.key = key;
-        e.w = (uint8_t)OSData::frame->textWidth(buf, f);
+        e.w = (uint8_t)MeasureScaled(buf, scale);
     }
     return e.w;
 }
@@ -84,7 +94,7 @@ void TextView::layout(){
     this->line_h = OSData::frame->fontHeight() + 1;
     FontFn::SetDefault();
 
-    const lgfx::v1::U8g2font* f = this->font();
+    const float f = this->scale();
     const int max_w = this->contentW();
     int count = 0;
     int start = 0;
@@ -137,7 +147,7 @@ int TextView::rowOf(size_t byte_offset){
 }
 
 int TextView::widthOf(int from, int to) const {
-    const lgfx::v1::U8g2font* f = this->font();
+    const float f = this->scale();
     int w = 0;
     int i = from;
     while(i < to){
@@ -317,7 +327,7 @@ void TextView::causeOnPressEnd(){
     if(r >= this->row_count) r = this->row_count - 1;
 
     const Row& row = this->rows[r];
-    const lgfx::v1::U8g2font* f = this->font();
+    const float f = this->scale();
     const int tx = OSData::touchX - g.x - kPad;
     int x = 0;
     int i = row.start;

@@ -9,7 +9,8 @@ namespace FontFn {
         Normal,
         Big,
         Bigger,
-        // 本文(読む所の文字)。文字の大きさの設定(SetLargeText())に従って16px/20pxになる。
+        // 本文(読む所の文字)。文字の大きさの設定(SetLargeText())に従って16px/20px相当になる
+        // (20pxは16pxの文字を1.25倍に拡大する。20pxのフォントはフラッシュに入らないため)。
         // 部品・ボタン・タブ等の文字は従わせないので、読む所だけがこれを選ぶ
         // (docs/design/gui.md「文字の大きさの設定」)。Luaからは選べない(FromInt())
         Text
@@ -27,7 +28,7 @@ namespace FontFn {
     //48px(24px * 2)
     void SetBigger();
 
-    //16px または 20px(SetLargeText())
+    //16px または 16pxの1.25倍(SetLargeText())
     void SetText();
 
     //24px
@@ -35,8 +36,8 @@ namespace FontFn {
 
     const lgfx::v1::U8g2font* GetSmall();
     const lgfx::v1::U8g2font* GetNormal();
-    // 本文の文字(今の設定のもの)。倍率は常に1
-    const lgfx::v1::U8g2font* GetText();
+    // 本文の拡大率(標準=1、大きい字=1.25)。本文の文字そのものは GetSmall()
+    float GetTextScale();
 
     void SetFontSize(FontSize size);
     int GetFontSize(FontSize size);

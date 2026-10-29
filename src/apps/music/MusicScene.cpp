@@ -177,7 +177,7 @@ int MusicScene::scanTracks(int playlist, Track* out){
         FsFile file;
         while(file.openNext(&dir, O_RDONLY)){
             char name[128];
-            const bool ok = file.getName(name, sizeof(name)) && !file.isDirectory() && (MusicService::IsMml(name) || MusicService::IsWav(name));
+            const bool ok = file.getName(name, sizeof(name)) && !file.isDirectory() && (MusicService::IsMml(name) || MusicService::IsWavOrMp3(name));
             file.close();
             if(!ok) continue;
             Track t;

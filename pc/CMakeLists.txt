@@ -142,13 +142,17 @@ file(GLOB MONOCYPHER_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/monocypher/sr
 # ---- qrcodegen(QRコードの符号化。lib/qrcodegen/README-pico-os.md)----
 file(GLOB QRCODEGEN_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/qrcodegen/src/*.c")
 
+# ---- minimp3(MP3の展開。lib/minimp3/README-pico-os.md)----
+file(GLOB MINIMP3_SOURCES CONFIGURE_DEPENDS "${PICOOS_ROOT}/lib/minimp3/src/*.c")
+
 add_executable(picoos_pc
     "${CMAKE_CURRENT_SOURCE_DIR}/main_pc.cpp"
     ${PICOOS_SOURCES}
     ${LGFX_SOURCES}
     ${LUA_SOURCES}
     ${MONOCYPHER_SOURCES}
-    ${QRCODEGEN_SOURCES})
+    ${QRCODEGEN_SOURCES}
+    ${MINIMP3_SOURCES})
 
 # LGFX_SDL … LovyanGFX側がSDLパネルを有効にするためのフラグ
 # PICOOS_PC  … pico-os側がPC向けの実装(パネル設定/タッチ取得)へ切り替えるためのフラグ
@@ -191,6 +195,7 @@ target_include_directories(picoos_pc PRIVATE
     "${PICOOS_ROOT}/lib/lua/src"
     "${PICOOS_ROOT}/lib/monocypher/src"
     "${PICOOS_ROOT}/lib/qrcodegen/src"
+    "${PICOOS_ROOT}/lib/minimp3/src"
     # Peanut-GB(ヘッダ1本。実装の取り込みはsrc/apps/gb/Gb_Emu.cppだけ。lib/peanut_gb/README-pico-os.md)
     "${PICOOS_ROOT}/lib/peanut_gb/src"
     "${LOVYANGFX_DIR}/src")

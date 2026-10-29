@@ -61,6 +61,9 @@ target_include_directories(host_monocypher PUBLIC ${ROOT}/lib/monocypher/src)
 add_library(host_qrcodegen STATIC ${ROOT}/lib/qrcodegen/src/qrcodegen.c)
 target_include_directories(host_qrcodegen PUBLIC ${ROOT}/lib/qrcodegen/src)
 
+add_library(host_minimp3 STATIC ${ROOT}/lib/minimp3/src/minimp3_pico.c)
+target_include_directories(host_minimp3 PUBLIC ${ROOT}/lib/minimp3/src)
+
 # JPEGの読み取り(pico.image_load)が使うTJpgDec(LovyanGFXの写し。stubs/lgfx/utility/README.md)
 add_library(host_tjpgd STATIC ${CMAKE_CURRENT_SOURCE_DIR}/stubs/lgfx/utility/lgfx_tjpgd.c)
 # PNGの読み取りが使う pngle と、その展開に使う miniz(どちらもLovyanGFXの写し。同じREADME)
@@ -131,14 +134,14 @@ foreach(layer ${HOST_LAYERS})
     # スタブを src/ より先に(実機の Arduino.h 等をスタブで差し替える)
     target_include_directories(picoos_${layer} PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/stubs ${SRC} ${ROOT}/lib/peanut_gb/src)
-    target_link_libraries(picoos_${layer} PUBLIC host_lua host_monocypher host_qrcodegen)
+    target_link_libraries(picoos_${layer} PUBLIC host_lua host_monocypher host_qrcodegen host_minimp3)
     list(APPEND HOST_LAYER_LIBS picoos_${layer})
 endforeach()
 
 # テストがリンクするもの。段の間は互いに参照しあう(つなぎの boot が下の段の関数を定義する等)
 # ので、RESCAN の組にしてリンカに何度でも見直させる
 set(HOST_LINK
-    "$<LINK_GROUP:RESCAN,${HOST_LAYER_LIBS},host_lua,host_monocypher,host_qrcodegen,host_tjpgd,host_pngle>"
+    "$<LINK_GROUP:RESCAN,${HOST_LAYER_LIBS},host_lua,host_monocypher,host_qrcodegen,host_minimp3,host_tjpgd,host_pngle>"
     OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
 
 # ---- テストの登録 ----
@@ -255,6 +258,7 @@ host_test(gb_emu_test GROUP media)
 host_test(gb_apu_test GROUP media)
 host_test(sound_test GROUP media)
 host_test(wav_test GROUP media)
+host_test(mp3_test GROUP media)
 host_test(music_test GROUP media)
 host_test(mic_test GROUP media)
 # ハードウェア機能を外した版(PICO_HW_*=0)の空の実装。このテストだけ外した定義で作り、空の実装を自分に入れる

@@ -370,7 +370,7 @@ const char* ContentType(const char* name){
         {".html", "text/plain; charset=utf-8"}, // SDのHTMLを本体のページとして動かさない
         {".png", "image/png"}, {".jpg", "image/jpeg"}, {".jpeg", "image/jpeg"},
         {".bmp", "image/bmp"}, {".gif", "image/gif"},
-        {".wav", "audio/wav"},
+        {".wav", "audio/wav"}, {".mp3", "audio/mpeg"},
     };
     for(const Ext& e : kTypes){
         if(EqualsNoCase(dot, strlen(dot), e.ext)) return e.type;

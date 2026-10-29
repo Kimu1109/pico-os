@@ -8,7 +8,8 @@
 Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほぼ実装があり橋渡しだけで済むものをまとめて足した。
 ドキュメントは`lua-api-doc/content/api/`(graphics/drawing・graphics/images・media/sound・data/sdcard・system/misc)。**ハード制約で難しいもの
 (半透明・Shader・Mesh・物理エンジン・スレッド・マルチタッチ)と、変換/座標変換のスタック(`translate/rotate/scale/push/pop`)・
-`require`・OGG/MP3・複数WAVの同時再生・Quad/SpriteBatch・フォント差し替えは対象外のまま**。
+`require`・OGG・複数WAVの同時再生・Quad/SpriteBatch・フォント差し替えは対象外のまま**
+(MP3は2026-10-29に`pico.wav_play`で鳴らせるようになった。`sound.md`「MP3の再生」)。
 
 - **図形**: `pico.draw_ellipse/fill_ellipse`、`draw_triangle/fill_triangle`、`draw_polygon/fill_polygon`(`{x1,y1,...}`の平らな配列、3〜32点。
   塗りは偶奇規則のスキャンラインで凹んだ形も塗れる)、`draw_arc/fill_arc`(ラジアン、0=右・時計回り。扇形は中心+円弧の多角形)。

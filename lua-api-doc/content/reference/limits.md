@@ -33,6 +33,10 @@ pico-os の Lua は **32bitの整数と32bitの小数(単精度)** で動きま�
 | `pico.http_request()` で受け取る本文 | 16KiB(メモリで受けるとき。`save_to` でSDへ保存するなら8MiB) |
 | `pico.http_request()` の順番待ち | 走っている1本 + 待ち4本 |
 | `pico.http_request()` の追加ヘッダ | 合計1000バイト、1行(名前: 値)は512バイト未満 |
+| `pico.socket` の同時に開ける数 | 4本(TCP・UDP・WebSocket・MQTTの合計) |
+| `pico.socket.send()` / `publish()` で1回に送る量 | 16KiB(UDPの `sendto()` は1472バイト) |
+| `pico.socket.websocket()` で受けるメッセージ | 既定8KiB(`max_message` で1KiB〜64KiB) |
+| `pico.socket.mqtt()` で受けるパケット | 既定4KiB(`max_packet` で1KiB〜64KiB。超えたものは読み捨て) |
 | `pico.after` / `pico.every` のタイマー | 16個 |
 | `push_scene` の `args` / `pop` の `result` | JSONで1KiB未満 |
 | `on_suspend` が返す状態 | JSONで2KiB未満 |

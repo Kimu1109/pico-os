@@ -115,6 +115,8 @@
   - [x] シーン制御(push_scene/change_scene/launch_app)
   - [x] ダイアログ
   - [x] ネットワーク(HTTPリクエスト)
+  - [x] ソケット(pico.socket: TCP・UDP・WebSocket・MQTT)
+    - [ ] 実機での確認(UDP・wss/mqtts・Home Assistant)
   - [x] 権限管理(ネットワーク/app_dir外SDアクセス、粗いフラグ)
   - [x] ウィジェット固有コールバック(Checkbox/NumberSlider/ScrollList/TabBar/DropdownMenu/Textbox)
   - [x] 時刻取得(pico.get_time())
@@ -278,6 +280,12 @@
   - [x] Outlook.com(Microsoftのアカウント): デバイスコードでサインインし、XOAUTH2で入る
   - [ ] GmailのOAuth(今はアプリパスワード)
   - [ ] 実機・本物のメールサーバでの確認
+- [x] MQTTリモコン(Luaアプリ。pico.socket のサンプル)
+  - [ ] 実機・本物のブローカ(Home Assistant の Mosquitto)での確認
+- [x] HAパネル(Luaアプリ。Home Assistant の WebSocket API、pico.socket.websocket のサンプル)
+  - [ ] 実機・本物の Home Assistant での確認
+- [x] UDPツール(Luaアプリ。UDPの送受信と Wake on LAN、pico.socket.udp のサンプル)
+  - [ ] 実機での確認(ブロードキャストの送信・WoLで本物のPCが起きるか)
 - [x] Spotifyリモコン(Luaアプリ)
   - [x] 再生/停止・次へ・前へ・シーク・音量・シャッフル・リピート・端末の切り替え
   - [x] ジャケット画像(JPEG)

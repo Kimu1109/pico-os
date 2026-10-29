@@ -14,7 +14,7 @@ permission_notify=true
 
 | 権限(`app.cfg` のキー) | 許すこと | 無いときの動き |
 |---|---|---|
-| `permission_network` | HTTP通信(`pico.http_request` / `http_cancel`) | 呼んでも `false` が返るだけ |
+| `permission_network` | HTTP通信(`pico.http_request` / `http_cancel`)とソケット(`pico.socket.*`) | 呼んでも `false` が返るだけ(`pico.socket` の作る関数は `nil, 理由`) |
 | `permission_sd_outside_app_dir` | アプリのフォルダの外のSDの読み書き(`pico.sd_*` / `config_*` / `image_load` / `canvas_save`・`canvas_load` / `Image`・`ImageView`・`MarkdownView` の `path` など) | アプリのフォルダの中だけ。外を指すと `false` / `nil` |
 | `permission_notify` | 通知(`pico.notify`)。アプリを閉じた後にも画面へ出て音も鳴るため | `nil, 理由` が返るだけ |
 | `permission_microphone` | マイクの録音・メーター(`pico.mic_start` など)。周りの音を拾うため | `nil, 理由` が返るだけ。読むだけの `mic_level` などは呼べる(聞いていなければ0) |

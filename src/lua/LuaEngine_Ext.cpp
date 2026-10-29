@@ -1836,5 +1836,7 @@ void LuaEngine::RegisterExtApi() {
     RegisterCryptoApi();
     if (!background_) RegisterIsoApi();   // pico.iso(2.5Dの描画)はバックグラウンドでは使えない
     RegisterNetApi();
+    // pico.socket(TCP/UDP/WebSocket/MQTT)。常駐の接続になるのでバックグラウンドでは使えない
+    if (!background_) RegisterSocketApi();
     RegisterMicApi();
 }

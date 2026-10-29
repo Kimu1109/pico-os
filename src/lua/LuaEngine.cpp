@@ -571,6 +571,7 @@ LuaEngine::~LuaEngine() {
     // パレットを変えたアプリは閉じる/別の画面へ移るときに既定へ戻す
     if (used_palette_) PICO_GFX::ResetPalette();
     DestroyHttp(); // lua_close()より前でも後でも問題ない(HttpStateはLuaと無関係のC++側の状態)
+    DestroySockets(); // 同上。開いている接続を閉じる
     if (L) {
         // __gcはsetmetatableで断っているが、念のため打ち切り中にしてから閉じる
         // (閉じる途中でLuaのコードが動いても確保できずにすぐ終わる)

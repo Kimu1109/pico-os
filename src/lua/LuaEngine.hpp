@@ -446,6 +446,12 @@ class LuaEngine {
         bool HttpBusy() const;
         // pico.mic_start() で始めた録音が続いているか(LuaSceneがスリープさせない判断に使う)
         bool MicBusy() const;
+        // pico.socket.*(LuaEngine_Socket.cpp)の接続を1フレーム分進め、届いたものをコールバックへ渡す。
+        // LuaScene::onUpdate() から毎フレーム呼ぶ。ソケットが無ければ何もしない
+        void UpdateSockets();
+        // 繋ぎかけ(接続・開始の挨拶の途中)のソケットがあるか(スリープさせない判断に使う。
+        // 繋がった後は眠っても接続は保たれるので含めない)
+        bool SocketBusy() const;
         // pico.sound_set_rate() で頼まれた音の出力の周波数(0=設定のまま)。LuaScene::preferredSampleRate() が返す
         uint32_t RequestedSampleRate() const { return requested_rate_; }
         void InheritSampleRate(uint32_t rate){ requested_rate_ = rate; }
@@ -493,11 +499,14 @@ class LuaEngine {
         struct ExtState;
         struct IsoState;
         struct MicState;
+        struct SocketState;
         ExtState* extState() const { return ext_; }
         IsoState* isoState() const { return iso_; }
         void setIsoState(IsoState* s) { iso_ = s; }
         MicState* micState() const { return mic_; }
         void setMicState(MicState* s) { mic_ = s; }
+        SocketState* socketState() const { return socket_; }
+        void setSocketState(SocketState* s) { socket_ = s; }
         // 読み込んだ・作った画像の置き場(pico.image_*、pico.iso の面の絵)
         LuaImages& images() { return images_; }
         // pico.draw_image のフルカラーの直描き(LuaEngine_Draw.cpp の l_draw_image の下)。
@@ -609,6 +618,12 @@ class LuaEngine {
         // 変えた増幅・周波数を元へ戻す。初めて変えたときに new する
         MicState* mic_ = nullptr;
         void ReleaseMic();
+        // pico.socket.*(LuaEngine_Socket.cpp)の状態。初めてソケットを作るときに new し、閉じるときに
+        // DestroySockets() が全部閉じる
+        SocketState* socket_ = nullptr;
+        void DestroySockets();
+        // ソケットのコールバックを呼ぶ(関数と引数を積んだ状態で。エラーは ReportError())
+        void CallSocket(int nargs);
         uint32_t requested_rate_ = 0; // pico.sound_set_rate()(0=設定のまま)
 
         std::vector<CallbackBinding> callbacks_;
@@ -630,6 +645,7 @@ class LuaEngine {
         void RegisterIsoApi();
         void RegisterNetApi();
         void RegisterMicApi();
+        void RegisterSocketApi();
 
         // pico.iso(2.5Dの箱庭のエンジン。LuaEngine_Iso.cpp)の状態。初めて pico.iso.* を使ったときに new する
         IsoState* iso_ = nullptr;
@@ -756,6 +772,7 @@ class LuaEngine {
         // テーブルへ写す。約320個の関数の表と名前で実機のLuaの予算から約15KBを使っていたため
         std::vector<luaL_Reg> api_pico_;
         std::vector<luaL_Reg> api_iso_;
+        std::vector<luaL_Reg> api_socket_;
         std::vector<luaL_Reg>* api_cur_ = &api_pico_;   // registerFn() が足す先
         // 並べてトップのテーブルへ __index を付ける。constants は名前で引ける数値定数の種類
         // (0=無し 1=pico 2=pico.iso。LuaConstants.hpp)

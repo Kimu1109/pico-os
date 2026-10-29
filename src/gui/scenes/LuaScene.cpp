@@ -172,10 +172,12 @@ void LuaScene::onUpdate() {
     // 関わらず毎フレーム呼ぶ(HttpRequestはPICO_Taskの全体リストに乗らず、
     // 所有側が自分でupdate()する設計のため。LuaEngineクラスコメント「ネットワーク」参照)
     engine->UpdateHttp();
+    // pico.socket.* の接続(TCP/UDP/WebSocket/MQTT)。届いたものをコールバックへ渡す
+    engine->UpdateSockets();
     // シリアルから届いたデバッガのコマンド(dbg b main.lua:12 等)。デバッガが無ければ何もしない
     engine->UpdateDebugger();
     //通信中はスリープさせない(Wi-Fiの省電力で通信が遅くなるため)
-    if (engine->HttpBusy() || engine->MicBusy()) PowerFunctions::KeepAwake();
+    if (engine->HttpBusy() || engine->MicBusy() || engine->SocketBusy()) PowerFunctions::KeepAwake();
 
     const unsigned long now = millis();
     // 符号なしの引き算なのでmillis()の一周(約49日)をまたいでも正しい差になる

@@ -440,3 +440,59 @@ APIごとに増えていた動作確認用のアプリを1つにまとめた。`
 - 検証: `qrcode_app_test`(lua-scene。pico_mockの上で追加・キャンセル・編集・削除・送り・長すぎ・暗号化の指定・読み飛ばし・50件)。
   PCビルドで4種を表示してOpenCVで読み、元の文字(vCard・逃がしたWi-Fi・日本語の複数行)に戻ることと、削除→`enc2:`で保存→開き直して戻ることを確かめた。
   **実機の画面をスマホのカメラで読めることを確認済み(2026-10-25)**。
+
+## MQTTリモコン(`pc/sdcard/lua/apps/MQTTリモコン/`、2026-10-29)
+
+`pico.socket.mqtt` のサンプル(使い方の説明は `lua-api-doc/content/examples/mqtt-remote.md`)。
+MQTTのブローカへ繋ぎ、機器(最大6台)を2列のタイルで点け消しする。
+
+- **話題の約束**: 機器ごとに話題 `<t>` を1つ決め、`<t>/state` を購読(QoS 1)して状態を受け、タップで `<t>/set` へ
+  今の逆("ON"/"OFF")を QoS 1 で送る。送った後は状態が返ってくるまで「…」(機器の本当の状態だけを見せる。楽観的には変えない)。
+  `{"state":"ON"}`(Zigbee2MQTT)と `1`/`true` も読む。Home Assistant の MQTT スイッチ・Tasmota・ESPHome で作りやすい形を選んだ。
+- **自分の生死**: `pico/remote/<クライアントID>/status` へ繋いだら "online"、遺言で "offline"(どちらも retain)。
+  戻る操作で閉じるときは DISCONNECT で遺言が流れないので、先に "offline" を置いてから閉じる。
+- **繋ぎ直し**: `"close"` を受けたら5秒後から、続けて失敗すると倍にして最大60秒。設定を変えたら繋ぎ直す。
+- **設定**は `store.json` へ暗号化して保存(パスワードを含むため)。機器の一覧は複数行の入力に「名前=話題」を1行ずつ。
+  クライアントIDは初回に乱数で作って覚える(同じブローカへ2台繋いでも追い出し合わない)。
+- **検証**: `lua_socket_test` が `main.lua` をそのまま偽物のブローカ(retain つき)へ繋ぎ、retain の状態が届く・JSONの形を読む・
+  点け消しを送る・online/offline・戻ると DISCONNECT を確かめる。PCビルドでは使い捨てのブローカ(機器の真似つき)で
+  タップ→状態が返って色が変わるところまで見た。この確認で、**読み残しを抱えたまま閉じるとRSTでDISCONNECTが捨てられる**
+  不具合が見つかり、`MqttClient::disconnect()` で先に読み捨てるようにした。
+- 実機・本物の Home Assistant では未確認(Todoist参照)。
+- アイコンは `script/assets/generate_mqtt_remote_icon.py`(紺の角丸に電源の印と電波)。
+
+## HAパネル(`pc/sdcard/lua/apps/HAパネル/`、2026-10-29)
+
+`pico.socket.websocket` のサンプル(使い方の説明は `lua-api-doc/content/examples/ha-panel.md`)。
+Home Assistant の WebSocket API へ直接繋ぎ、選んだエンティティ(最大6つ)の状態を即座に映し、タップで点け消しする。
+MQTTリモコンと違い、HA側にMQTTの設定が要らない(長期アクセストークンだけ)。
+
+- **流れ**: `auth_required` → `auth`(トークン)→ `auth_ok` → `subscribe_entities`(設定したentity_idだけ)。
+  最初の event の `"a"` に今の状態と属性(friendly_name・単位)、以後は `"c"` の `"+"` に変わった分だけが届く。
+  **`get_states` は使わない**(HAの全エンティティで数百KBになり、メッセージの上限64KiBを超える)。
+- **点け消し**は `call_service` の `homeassistant.toggle`(light / switch / fan / input_boolean / automation / cover)。
+  ドメインごとのサービスを選ばずに済む。送った後は状態の変化か失敗の `result` が届くまで「…」。sensor 等は表示だけ(値と単位)。
+- **トークンが違う**(`auth_invalid`)・未設定のときは繋ぎ直さない(間違ったトークンで叩き続けると、HAは送り元を締め出す)。
+  それ以外で切れたら5秒から最大60秒の間隔で繋ぎ直す。メッセージの上限は16KiB(最初の一括は1エンティティ数百B)。
+- 設定(URL・トークン・エンティティ)は `store.json` へ暗号化して保存。`main.lua` は約14KB(LuaSceneが読むのは16KiBまで)。
+- **検証**: `lua_socket_test` が `main.lua` をそのまま偽物の Home Assistant(`socket_fake_servers.hpp` の `FakeHaServer`)へ繋ぎ、
+  認証・頼んだエンティティだけの購読・状態と単位の表示・toggle と変化の反映・失敗の result・戻ると close・
+  違うトークンで繋ぎ直さないことを確かめる。PCビルドでは使い捨ての偽物で6つ並べ、タップで切り替わるところまで見た。
+- 実機・本物の Home Assistant では未確認(Todoist参照)。
+- アイコンは `script/assets/generate_ha_panel_icon.py`(水色の角丸に白い家と電波)。
+
+## UDPツール(`pc/sdcard/lua/apps/UDPツール/`、2026-10-29)
+
+`pico.socket.udp` のサンプル(使い方の説明は `lua-api-doc/content/examples/udp-tool.md`)。
+
+- **送受信**: 宛先(`ホスト:ポート`)へ入れた文字を `sendto` し、届いたデータグラムを新しい順に並べる(最大40行)。
+  宛先からの返事は送り元を省き(上に出ている)、それ以外の相手からのものは送り元を付ける。
+  文字として読めない(UTF-8でない・制御文字)ものは長さと先頭24バイトの16進で見せる。
+  待ち受けの番号を決めればそこへ届くものも受ける(0 = 空いている番号で返事だけ)。
+- **Wake on LAN**: 登録したPC(`名前=MAC`)へマジックパケット(FF×6 + MAC×16 = 102バイト)を送る。
+  宛先は既定でブロードキャスト `255.255.255.255:9`。**実機の WiFiUDP でブロードキャストが出せるかは未確認**
+  (PCは `WiFiUdp_PC.h` で `SO_BROADCAST` を立てている)。出せなければ LAN のブロードキャストアドレスやPCのIPを書けばよい。
+- 設定は `store.json`(秘密が無いので暗号化しない)。
+- **検証**: `lua_socket_test` が `main.lua` をそのまま UDP の echo へ向け、送る・返事を並べる・16進・宛先と違う送り元・
+  マジックパケットのバイト列を確かめる。PCビルドでは小さな echo を相手に記録の並びを見た。
+- 実機では未確認(Todoist参照)。アイコンは `script/assets/generate_udp_tool_icon.py`(緑の角丸に送る/受けるの矢印)。

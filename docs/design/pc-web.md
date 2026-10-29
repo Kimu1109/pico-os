@@ -45,6 +45,7 @@
 - **Wi-Fiの疎通判定**: ソケットが無いので `navigator.onLine` を見る(`compat/WiFi.h`)。
 - **Markdownブラウザのオンライン機能はWebでは動かない**。`compat/WiFiClient_PC.h` は生のTCP
   ソケットを使うが、ブラウザにはそれが無い(emscriptenはWebSocket経由へ流すので中継サーバが要る)。
+  Luaの `pico.socket.*`(TCP/UDP/WebSocket/MQTT。`compat/WiFiUdp_PC.h` も同じ)も同じ理由で繋がらない。
   コンパイルは通り、SDから読む分(`/tmp/doc.md`)は普通に動くが、`browser-home` を設定したり
   「更新」「検索」を押してもサーバへは繋がらない。**Web公開版で試せるのはローカル文書まで。**
   HTTPSも同じ理由で持たない(`compat/WiFiClientSecure.h`が常に失敗するスタブになる)ので、

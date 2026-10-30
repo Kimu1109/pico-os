@@ -504,7 +504,7 @@ void StoreScene::chooseRollbackOrRemove(){
     FixedString<PICO_STR_L> title;
     title.appendFormat("%s をどうしますか?", e->name.c_str());
     FixedString<PICO_STR_M> back;
-    back.appendFormat("前の版 %s に戻す", prev.c_str());
+    back.appendFormat("%s に戻す", prev.c_str()); //一覧の幅に収まるよう短く(題と欄で前の版だと分かる)
     this->confirm_id.assign(e->id.c_str());
     auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, title.c_str(), "", "やめる");
     dialog->addChoice(back.c_str());

@@ -7,6 +7,8 @@
 #include "gui/core/Font_Functions.hpp"
 #include "services/FileShare_Functions.hpp"
 #include "services/Power_Functions.hpp"
+#include "lua/LuaHotReload.hpp"
+#include "system/Background_Functions.hpp"
 #include "hal/Network_Functions.hpp"
 #include "util/Wifi_Qr.hpp"
 
@@ -42,7 +44,9 @@ void FileShareScene::onEnter(){
     WidgetFunctions::Add(back);
     const Rect back_box = back->getLocalRect();
 
-    auto* title = new Label<PICO_STR_M>(back_box.x + back_box.w + MARGIN, y0, kAppName);
+    //Luaのホットリロード(debug.cfg の lua-hot-reload)の間は、閉じても待ち受けを続けることを題に出す
+    auto* title = new Label<PICO_STR_M>(back_box.x + back_box.w + MARGIN, y0,
+                                        LuaHotReload::Enabled() ? "転送(裏で続く)" : kAppName);
     title->setFontSize(FontFn::Small);
     title->setY(y0 + (back_box.h - FontFn::GetFontSize(FontFn::Small)) / 2);
     title->setDisableAutoTextDecoration(true);
@@ -53,7 +57,8 @@ void FileShareScene::onEnter(){
     int y = y0 + back_box.h + MARGIN * 2;
 
     FixedString<PICO_STR_LL> err;
-    this->failed = !FileShareFunctions::Start(err);
+    this->failed = !FileShareFunctions::Start(err);   // 裏で続けていたら、そのまま(同じキー)
+    FileShareFunctions::SetBackground(false);           // 開いている間は画面が回す
     if(this->failed){
         char msg[PICO_STR_256B];
         snprintf(msg, sizeof(msg), "始められませんでした: %s", err.c_str());
@@ -255,7 +260,13 @@ void FileShareScene::onUpdate(){
 }
 
 void FileShareScene::onExit(){
-    FileShareFunctions::Stop();
+    //ホットリロードの間は止めずに裏へ回す(LuaHotReload の仕事が回し、バックグラウンドの一覧の[停止]でやめる)
+    if(!this->failed && LuaHotReload::Enabled()){
+        FileShareFunctions::SetBackground(true);
+        BackgroundFunctions::Add(LuaHotReload::Service()); // 2回目からは登録済み(falseが返るだけ)
+    }else{
+        FileShareFunctions::Stop();
+    }
     this->url_ip_label = nullptr;
     this->url_name_label = nullptr;
     this->key_label = nullptr;

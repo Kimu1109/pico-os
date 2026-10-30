@@ -324,6 +324,7 @@ host_test(devtools_test GROUP lua-sandbox)
 # --- lua-scene: LuaScene・アプリの走査・Luaアプリのゲームの規則・2.5Dエンジン ---
 host_test(lua_scene_test GROUP lua-scene)
 host_test(lua_app_scanner_test GROUP lua-scene)
+host_test(lua_hot_reload_test GROUP lua-scene)
 host_exe(lua_script_test)
 host_lua_test(tetris_test GROUP lua-scene)
 host_lua_test(oshite_test GROUP lua-scene)

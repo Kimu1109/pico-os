@@ -1,5 +1,7 @@
 #pragma once
 
+#include "services/FileShare_Functions.hpp"
+
 #include "gui/core/Scene.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
@@ -29,7 +31,7 @@ template<size_t N> class Label;
 // 開いている間は眠らない・別の画面へ移らない(keepForeground)。閉じると待ち受けをやめる。
 class FileShareScene : public Scene {
     public:
-        static constexpr const char* kAppName = "Wi-Fi転送";
+        static constexpr const char* kAppName = FileShareFunctions::kAppName;
 
         const char* getName() const override { return "FileShare"; }
         bool keepForeground() const override { return true; }

@@ -304,6 +304,7 @@ host_test(alarm_test GROUP widget)
 host_test(notification_test GROUP widget)
 host_test(error_functions_test GROUP widget)
 host_test(widget_arena_test GROUP widget)
+host_test(scene_cycle_test GROUP widget)
 host_test(text_size_test GROUP widget)
 
 # --- lua-base: vendorしたLua本体 ---

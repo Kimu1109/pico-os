@@ -2,9 +2,8 @@
 
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
-#include "crypto/Secret_Cipher.hpp"
+#include "crypto/Secret_File.hpp"
 #include "util/Url.hpp"
-#include "OS_Data.hpp"
 #include "Arduino.h"
 
 #include <cstdio>
@@ -16,16 +15,8 @@ namespace {
         return (int32_t)(now - at) >= 0;
     }
 
-    // 更新用トークンを1行に何バイトずつ置くか(PICO_Secret の平文の上限)
-    constexpr size_t kChunkBytes = PICO_Secret::kMaxPlainBytes;
-    constexpr int kMaxChunks = (int)((MailOAuth::kRefreshTokenCap + kChunkBytes - 1) / kChunkBytes);
-    // 暗号化した1行("enc3:" + 16進 + 改行)
-    constexpr size_t kLineCap = PICO_Secret::kPrefixLen + kChunkBytes * 2 + 4;
-
-    // 行ごとに違う鍵ストリームにする(同じ用途の文字列を使い回すと、2行をXORして平文同士のXORが漏れる)
-    void ChunkPurpose(int i, char* out, size_t cap){
-        snprintf(out, cap, "mail-oauth-%d", i);
-    }
+    // 更新用トークンの暗号化の用途(行ごとに "mail-oauth-0", "mail-oauth-1", …)
+    constexpr const char* kTokenPurpose = "mail-oauth";
 
     constexpr const char* kDeviceGrant = "urn:ietf:params:oauth:grant-type:device_code";
 }
@@ -113,81 +104,17 @@ bool MailOAuth::AppendFormValue(FixedString<kBodyCap>& out, const char* value){
 // ---------------------------------------------------------------------------
 
 bool MailOAuth::LoadRefreshToken(char* out, size_t cap, bool* needs_rewrite){
-    if(needs_rewrite) *needs_rewrite = false;
-    if(cap == 0) return false;
-    out[0] = '\0';
-    if(!OSData::SD_usable) return false;
-    FsFile f = OSData::SD.open(PICO_Path::FILE::CFG::SYS_MAIL_TOKEN, O_RDONLY);
-    if(!f) return false;
-    size_t len = 0;
-    bool ok = true;
-    char line[kLineCap];
-    int i = 0;
-    while(ok){
-        const int n = f.fgets(line, sizeof(line));
-        if(n <= 0) break;
-        size_t ll = strlen(line);
-        while(ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r' || line[ll - 1] == ' ')) line[--ll] = '\0';
-        if(ll == 0 || line[0] == '#') continue;
-        if(i >= kMaxChunks){ ok = false; break; }
-        if(needs_rewrite && PICO_Secret::NeedsUpgrade(line)) *needs_rewrite = true;
-        char purpose[24];
-        ChunkPurpose(i, purpose, sizeof(purpose));
-        char plain[kChunkBytes + 1];
-        if(!PICO_Secret::Decrypt(purpose, line, plain, sizeof(plain))){ ok = false; break; }
-        const size_t pl = strlen(plain);
-        if(len + pl >= cap){ ok = false; break; }
-        memcpy(out + len, plain, pl);
-        len += pl;
-        i++;
-    }
-    f.close();
-    if(!ok){
-        out[0] = '\0';
-        return false;
-    }
-    out[len] = '\0';
-    return len > 0;
+    return PICO_SecretFile::Load(PICO_Path::FILE::CFG::SYS_MAIL_TOKEN, kTokenPurpose, out, cap, needs_rewrite);
 }
 
 bool MailOAuth::SaveRefreshToken(const char* token){
-    if(!OSData::SD_usable || !token) return false;
-    const size_t n = strlen(token);
-    if(n == 0 || n >= kRefreshTokenCap) return false;
-    const char* path = PICO_Path::FILE::CFG::SYS_MAIL_TOKEN;
-    char tmp[PICO_PATH_LEN];
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    FsFile f = OSData::SD.open(tmp, O_WRONLY | O_CREAT | O_TRUNC);
-    if(!f) return false;
-    bool ok = true;
-    const char* head = "# メールの Microsoft のサインイン(暗号化した更新用トークン)\n";
-    ok = f.write(head, strlen(head)) == strlen(head);
-    for(size_t off = 0, i = 0; ok && off < n; off += kChunkBytes, i++){
-        char plain[kChunkBytes + 1];
-        const size_t m = (n - off) < kChunkBytes ? (n - off) : kChunkBytes;
-        memcpy(plain, token + off, m);
-        plain[m] = '\0';
-        char purpose[24];
-        ChunkPurpose((int)i, purpose, sizeof(purpose));
-        char line[kLineCap];
-        if(!PICO_Secret::Encrypt(purpose, plain, line, sizeof(line) - 1)){ ok = false; break; }
-        const size_t ll = strlen(line);
-        line[ll] = '\n';
-        ok = f.write(line, ll + 1) == ll + 1;
-    }
-    f.close();
-    if(!ok){
-        OSData::SD.remove(tmp);
-        return false;
-    }
-    if(OSData::SD.exists(path)) OSData::SD.remove(path);
-    return OSData::SD.rename(tmp, path);
+    if(!token || strlen(token) >= kRefreshTokenCap) return false;
+    return PICO_SecretFile::Save(PICO_Path::FILE::CFG::SYS_MAIL_TOKEN, kTokenPurpose,
+                                 "# メールの Microsoft のサインイン(暗号化した更新用トークン)", token);
 }
 
 void MailOAuth::ClearRefreshToken(){
-    if(!OSData::SD_usable) return;
-    const char* path = PICO_Path::FILE::CFG::SYS_MAIL_TOKEN;
-    if(OSData::SD.exists(path)) OSData::SD.remove(path);
+    PICO_SecretFile::Remove(PICO_Path::FILE::CFG::SYS_MAIL_TOKEN);
 }
 
 // ---------------------------------------------------------------------------

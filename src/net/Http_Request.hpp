@@ -34,6 +34,21 @@
 //   - 相手が黙って閉じていた場合(アイドルのタイムアウト等)は、何も受け取れなかった時点で
 //     1回だけ繋ぎ直して送り直す。**POSTも送り直す**ので、相手が処理した直後に閉じた
 //     ごくまれな場合は二重に届き得る(チャット程度なら許容する割り切り)
+//
+// **送る本文をRAMに持たずに流すこともできる**(beginStream()。IHttpBodySourceから少しずつ読んで送る)。
+// 録音のWAV(数MB)を文字起こしのAPIへ送るためのもの。1回のupdate()で送るのはkSendPerUpdateまでで、
+// 送っている間もフレームは回る。送り終える前に相手が応答して閉じた(401等)ときは、その応答を読んで返す。
+class IHttpBodySource {
+    public:
+        virtual ~IHttpBodySource() = default;
+        // 本文の全長(Content-Lengthに出す)
+        virtual size_t size() const = 0;
+        // 続きを buf へ最大 cap バイト入れ、入れた数を返す。0は終わり、負は読めない
+        virtual int read(uint8_t* buf, size_t cap) = 0;
+        // 最初から読み直す(接続し直して送り直すとき)。できなければfalse
+        virtual bool rewind() = 0;
+};
+
 class HttpRequest : public Task {
     public:
         enum class Method : uint8_t { GET, POST, PUT, PATCH, Delete };
@@ -43,6 +58,8 @@ class HttpRequest : public Task {
         static constexpr int kMaxRedirects = 3;
         static constexpr unsigned long kLongTransferMaxMs = 30UL * 60UL * 1000UL;
         static constexpr size_t kReadPerUpdate = 1024;
+        // beginStream()の本文を1回のupdate()で送る上限
+        static constexpr size_t kSendPerUpdate = 8192;
         // 足すヘッダ1行(名前: 値)の上限。送るときの溜め場所(512B)に収まる長さ
         static constexpr size_t kMaxHeaderLineBytes = PICO_STR_512B;
 
@@ -52,6 +69,7 @@ class HttpRequest : public Task {
             TlsFailed,      // 証明書が信頼できない等(詳細はfailureToStr())
             ConnectFailed,
             SendFailed,
+            BodyRead,       // beginStream()の本文を読めない(SDのファイルが読めない・短い)
             Timeout,
             TooManyRedirects,
             BadRedirect,
@@ -67,6 +85,11 @@ class HttpRequest : public Task {
         bool begin(const Url& url, Method method, IHttpSink* sink,
                    const void* body = nullptr, size_t body_len = 0,
                    const char* content_type = nullptr);
+
+        // 本文を source から少しずつ読んで送る(大きなファイル向け)。source の寿命は begin() の body と同じ約束。
+        // source->size() が0なら本文の無い要求と同じ
+        bool beginStream(const Url& url, Method method, IHttpSink* sink,
+                         IHttpBodySource* source, const char* content_type);
 
         void update() override;
         // 進行中の要求をやめる。持っている接続も閉じる
@@ -86,6 +109,14 @@ class HttpRequest : public Task {
         // 大きなダウンロード向け: 10秒の全体タイムアウトの代わりに「何も受け取れない時間」が
         // kTimeoutMs続いたときだけ打ち切る(全体はkLongTransferMaxMsまで)。既定はfalse
         void setIdleTimeout(bool on){ idle_timeout_ = on; }
+        // 打ち切るまでの時間(既定 kTimeoutMs)。setIdleTimeout(true) なら「何も届かない時間」の上限になる。
+        // 送り終えてから相手が考え込む(音声の文字起こし等)ときに延ばす
+        void setTimeoutMs(unsigned long ms){ timeout_ms_ = ms > 0 ? ms : kTimeoutMs; }
+        // beginStream()の本文を送ったバイト数と全長(進み具合の表示用)
+        size_t bodySent() const { return body_sent_; }
+        size_t bodyTotal() const { return body_src_ ? body_src_->size() : body_len_; }
+        // 本文を送り終えて、応答を待っている/読んでいる
+        bool waitingResponse() const { return phase == Phase::Receiving; }
         // GETの3xxを自動で追うか(既定true)。falseなら3xxをそのまま成功として返す
         // (キャプティブポータルの判定のように、転送先そのものを知りたいとき用)
         void setFollowRedirects(bool on){ follow_redirects_ = on; }
@@ -104,7 +135,7 @@ class HttpRequest : public Task {
         static const char* MethodToStr(Method m);
 
     private:
-        enum class Phase : uint8_t { Idle, Connecting, Sending, Receiving, Ended };
+        enum class Phase : uint8_t { Idle, Connecting, Sending, SendingBody, Receiving, Ended };
 
         HttpTransport client;
         HttpResponse res;
@@ -114,12 +145,16 @@ class HttpRequest : public Task {
         Method method_ = Method::GET;
         const void* body_ = nullptr;
         size_t body_len_ = 0;
-        FixedString<PICO_STR_M> content_type_;
+        IHttpBodySource* body_src_ = nullptr;
+        size_t body_sent_ = 0;
+        // multipart の "multipart/form-data; boundary=…"(約60B)が入る大きさ
+        FixedString<PICO_STR_L> content_type_;
 
         // ---- keep-alive ----
         bool keep_alive_ = false;
         FixedString<PICO_STR_1KiB> extra_header_; //複数行(CRLF区切り、末尾のCRLFは無し。合計1KiB未満、1行は512B未満)
         bool idle_timeout_ = false;
+        unsigned long timeout_ms_ = kTimeoutMs;
         bool follow_redirects_ = true;
         unsigned long last_activity_ms = 0;
         bool conn_reusable_ = false; // 前の応答の後、接続を開けたまま持っている
@@ -137,6 +172,10 @@ class HttpRequest : public Task {
         // 使い回した接続が死んでいたとき、1回だけ繋ぎ直して送り直す
         bool retryOnFreshConnection();
         bool sendRequestLine();
+        // beginStream()の本文の続きを送る。送り終えたら Receiving へ進む
+        void sendBodyChunk();
+        // begin()/beginStream()の共通の下準備。持っていた接続を使い回すならtrue
+        bool beginCommon(const Url& url, Method method, IHttpSink* sink, const char* content_type);
         void finishWith(TaskTools::Status s, Fail f);
         bool followRedirect();
 };

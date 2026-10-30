@@ -1,7 +1,9 @@
 #include "gui/scenes/RecorderScene.hpp"
 #include "gui/scenes/FileViewerScene.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
+#include "gui/widgets/dialogs/InputDialog.hpp"
 #include "hal/Mic_Functions.hpp"
+#include "hal/Network_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Error_Functions.hpp"
@@ -119,19 +121,38 @@ void RecorderScene::onEnter(){
     });
     WidgetFunctions::Add(this->list);
 
-    this->delete_button = new Button(x0, content.y + content.h - MARGIN - bottom_h, "削除");
+    //下の段: [削除][再生][文字起こし][キー]。240x320でも収まるよう小さい字で幅を決めて並べる。
+    //文字起こしの文言は「文字起こし」「文章」「やめる」と変わるので、いちばん長いものの幅にしておく
+    constexpr int kDeleteW = 44, kOpenW = 44, kTranscribeW = 80, kKeyW = 40;
+    const int bottom_y = content.y + content.h - MARGIN - bottom_h;
+    auto small_button = [&](int x, int bw, const char* text){
+        auto* b = new Button(x, bottom_y, text);
+        b->setFontSize(FontFn::Small);
+        b->setW(bw);
+        b->setH(bottom_h);
+        WidgetFunctions::Add(b);
+        return b;
+    };
+    this->delete_button = small_button(x0, kDeleteW, "削除");
     this->delete_button->setOnPressEnd([this](){ this->deleteSelected(); });
-    WidgetFunctions::Add(this->delete_button);
 
-    auto* open_button = new Button(this->delete_button->getLocalRect().x + this->delete_button->getLocalRect().w + 6,
-                                   content.y + content.h - MARGIN - bottom_h, "再生");
+    auto* open_button = small_button(x0 + kDeleteW + 4, kOpenW, "再生");
     open_button->setOnPressEnd([this](){ this->openSelected(); });
-    WidgetFunctions::Add(open_button);
+
+    this->transcribe_button = small_button(x0 + kDeleteW + kOpenW + 8, kTranscribeW, "文字起こし");
+    this->transcribe_button->setOnPressEnd([this](){ this->transcribeSelected(); });
+
+    //APIキーを入れる(右端)
+    auto* key_button = small_button(content.x + content.w - MARGIN - kKeyW, kKeyW, "キー");
+    key_button->setOnPressEnd([this](){ this->openKeySettings(); });
 
     this->was_recording = MicFunctions::IsRecording();
     this->confirming = false;
     this->meter_level = 0;
     this->shown_sec = 0xFFFFFFFFu;
+    this->shown_tr_percent = -1;
+    this->transcriber.loadConfig();
+    this->shown_tr_state = this->transcriber.state();
     MicFunctions::SetMonitor(true);
     MicFunctions::TakePeak();
     this->reloadList();
@@ -143,6 +164,7 @@ void RecorderScene::onExit(){
     //画面を離れたら録音を止める(後片付けと保存は MicFunctions::Update() が続ける)
     if(MicFunctions::IsRecording()) MicFunctions::StopRecording();
     MicFunctions::SetMonitor(false);
+    this->transcriber.cancel();
     this->time_label = nullptr;
     this->status_label = nullptr;
     this->meter = nullptr;
@@ -150,6 +172,7 @@ void RecorderScene::onExit(){
     this->rate_button = nullptr;
     this->gain_button = nullptr;
     this->delete_button = nullptr;
+    this->transcribe_button = nullptr;
     this->list = nullptr;
 }
 
@@ -169,9 +192,10 @@ void RecorderScene::onUpdate(){
         }
     }
     this->was_recording = recording;
+    this->updateTranscriber();
 
     const uint32_t now = millis();
-    if(now - this->last_meter_ms >= kMeterMs){
+    if(!this->transcriber.busy() && now - this->last_meter_ms >= kMeterMs){
         this->last_meter_ms = now;
         this->updateMeter(now);
     }
@@ -187,6 +211,10 @@ bool RecorderScene::onKey(const KeyInputFunctions::Event& ev){
         this->toggleRecording();
         return true;
     }
+    if(ev.key == Key::Char && !ev.ctrl() && ev.cp == 't'){
+        this->transcribeSelected();
+        return true;
+    }
     if(ev.key == Key::Escape){
         SceneFunctions::Pop();
         return true;
@@ -195,7 +223,7 @@ bool RecorderScene::onKey(const KeyInputFunctions::Event& ev){
 }
 
 void RecorderScene::toggleRecording(){
-    if(MicFunctions::IsFinishing()) return;
+    if(MicFunctions::IsFinishing() || this->transcriber.busy()) return;
     if(MicFunctions::IsRecording()){
         MicFunctions::StopRecording();
     }else{
@@ -236,6 +264,7 @@ void RecorderScene::refreshButtons(){
     const bool recording = MicFunctions::IsRecording();
     this->rec_button->setText(MicFunctions::IsFinishing() ? "保存中…" : recording ? "停止" : "録音");
     this->rec_button->setTextColor(recording ? PICO_RED : PICO_FORECOLOR);
+    this->rec_button->setEnabled(!this->transcriber.busy());
     char buf[16];
     snprintf(buf, sizeof(buf), "%lukHz", (unsigned long)(MicFunctions::SampleRate() / 1000));
     this->rate_button->setText(buf);
@@ -243,7 +272,11 @@ void RecorderScene::refreshButtons(){
     snprintf(buf, sizeof(buf), "+%ddB", MicFunctions::GainDb());
     this->gain_button->setText(buf);
     const bool has_sel = this->list && this->list->getSelectedIndex() >= 0 && this->list->getSelectedIndex() < this->file_count;
-    this->delete_button->setEnabled(!recording && has_sel);
+    const bool busy = this->transcriber.busy();
+    this->delete_button->setEnabled(!recording && !busy && has_sel);
+    const bool sel_has_text = has_sel && this->has_text[this->list->getSelectedIndex()];
+    this->transcribe_button->setText(busy ? "やめる" : sel_has_text ? "文章" : "文字起こし");
+    this->transcribe_button->setEnabled(busy || (!recording && has_sel));
 }
 
 void RecorderScene::refreshStatus(){
@@ -280,6 +313,27 @@ void RecorderScene::refreshStatus(){
         }else{
             snprintf(buf, sizeof(buf), "録音中 %s", name);
             color = PICO_FORECOLOR;
+        }
+    }else if(this->transcriber.busy() || this->transcriber.state() == TranscribeClient::State::Failed
+             || this->transcriber.state() == TranscribeClient::State::Done){
+        const char* name = strrchr(this->transcriber.wavPath(), '/');
+        name = name ? name + 1 : this->transcriber.wavPath();
+        switch(this->transcriber.state()){
+            case TranscribeClient::State::Sending:
+                snprintf(buf, sizeof(buf), "文字起こし: %s を送っています %d%%", name, this->transcriber.progressPercent());
+                color = PICO_FORECOLOR;
+                break;
+            case TranscribeClient::State::Waiting:
+                snprintf(buf, sizeof(buf), "文字起こし: 返事を待っています…");
+                color = PICO_FORECOLOR;
+                break;
+            case TranscribeClient::State::Failed:
+                snprintf(buf, sizeof(buf), "文字起こし: %s", this->transcriber.message());
+                color = PICO_RED;
+                break;
+            default:
+                snprintf(buf, sizeof(buf), "文字起こし: %s", this->transcriber.message());
+                break;
         }
     }else if(in == MicFunctions::Input::Starting){
         snprintf(buf, sizeof(buf), "マイクを準備しています…");
@@ -346,7 +400,9 @@ void RecorderScene::reloadList(){
         char t[16];
         FormatTime(t, sizeof(t), WavDurationMs(path), false);
         ScrollListTools::Item item;
-        item.icon = IconID::Microphone;
+        char txt[PICO_PATH_LEN + 1];
+        this->has_text[i] = TranscribeClient::TextPathFor(path, txt, sizeof(txt)) && OSData::SD.exists(txt);
+        item.icon = this->has_text[i] ? IconID::FileText : IconID::Microphone;
         char text[64];
         const size_t base_len = this->files[i].length() - 4;    // ".wav" を落とす
         snprintf(text, sizeof(text), "%.*s  %s", (int)base_len, this->files[i].c_str(), t);
@@ -355,21 +411,28 @@ void RecorderScene::reloadList(){
     }
 }
 
-void RecorderScene::openSelected(){
-    if(MicFunctions::IsRecording() || !this->list) return;
+bool RecorderScene::selectedPath(char* out, size_t cap){
+    if(!this->list) return false;
     const int i = this->list->getSelectedIndex();
-    if(i < 0 || i >= this->file_count) return;
+    if(i < 0 || i >= this->file_count) return false;
+    snprintf(out, cap, "%s%s", PICO_Path::DIR::RECORDINGS, this->files[i].c_str());
+    return true;
+}
+
+void RecorderScene::openSelected(){
+    if(MicFunctions::IsRecording()) return;
     char path[PICO_PATH_LEN + 1];
-    snprintf(path, sizeof(path), "%s%s", PICO_Path::DIR::RECORDINGS, this->files[i].c_str());
+    if(!this->selectedPath(path, sizeof(path))) return;
     SceneFunctions::Push(new FileViewerScene(path));
 }
 
 void RecorderScene::deleteSelected(){
-    if(MicFunctions::IsRecording() || this->confirming || !this->list) return;
+    if(MicFunctions::IsRecording() || this->transcriber.busy() || this->confirming || !this->list) return;
     const int i = this->list->getSelectedIndex();
     if(i < 0 || i >= this->file_count) return;
-    char msg[96];
-    snprintf(msg, sizeof(msg), "%s を削除しますか?", this->files[i].c_str());
+    char msg[128];
+    if(this->has_text[i]) snprintf(msg, sizeof(msg), "%s を削除しますか?\n(文字起こしの文章も消えます)", this->files[i].c_str());
+    else snprintf(msg, sizeof(msg), "%s を削除しますか?", this->files[i].c_str());
     auto* dialog = new MsgDialog(msg, "キャンセル", "削除");
     if(!dialog) return;
     this->confirming = true;
@@ -383,7 +446,106 @@ void RecorderScene::deleteSelected(){
         char path[PICO_PATH_LEN + 1];
         snprintf(path, sizeof(path), "%s%s", PICO_Path::DIR::RECORDINGS, this->confirming_name.c_str());
         if(!OSData::SD.remove(path)) ErrorFunctions::ShowFatal("削除できませんでした");
+        char txt[PICO_PATH_LEN + 1];
+        if(TranscribeClient::TextPathFor(path, txt, sizeof(txt)) && OSData::SD.exists(txt)) OSData::SD.remove(txt);
         this->reloadList();
         this->refreshButtons();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// 文字起こし
+// ---------------------------------------------------------------------------
+
+void RecorderScene::transcribeSelected(){
+    if(this->transcriber.busy()){
+        this->transcriber.cancel();
+        MicFunctions::SetMonitor(true);
+        this->refreshButtons();
+        this->refreshStatus();
+        return;
+    }
+    if(MicFunctions::IsRecording() || MicFunctions::IsFinishing()) return;
+    char path[PICO_PATH_LEN + 1];
+    if(!this->selectedPath(path, sizeof(path))) return;
+
+    //済みなら文章を開く(もう一度送りたいときは .txt を消す)
+    char txt[PICO_PATH_LEN + 1];
+    if(TranscribeClient::TextPathFor(path, txt, sizeof(txt)) && OSData::SD.exists(txt)){
+        SceneFunctions::Push(new FileViewerScene(txt));
+        return;
+    }
+    if(this->transcriber.state() == TranscribeClient::State::NotConfigured){
+        //案内(キーが無い等)を出し、キーの欄を開く
+        this->openKeySettings();
+        return;
+    }
+    if(!NetworkFunctions::IsConnected()){
+        ErrorFunctions::ShowFatal("文字起こしはオンラインが前提です。Wi-Fiに接続してください");
+        return;
+    }
+    //送っている間はメーターを止める(I2SのDMAを返して、TLSの場所を空ける)
+    MicFunctions::SetMonitor(false);
+    if(!this->transcriber.start(path)) MicFunctions::SetMonitor(true);
+    this->shown_tr_percent = -1;
+    this->refreshButtons();
+    this->refreshStatus();
+}
+
+void RecorderScene::updateTranscriber(){
+    const TranscribeClient::State before = this->shown_tr_state;
+    this->transcriber.update(NetworkFunctions::IsConnected());
+    const TranscribeClient::State now = this->transcriber.state();
+    if(this->transcriber.busy()) PowerFunctions::KeepAwake();
+
+    //送った割合が変わったら状態の行を書き直す(250msごとの見直しを待たない)
+    const int percent = this->transcriber.progressPercent();
+    if(now == TranscribeClient::State::Sending && percent != this->shown_tr_percent){
+        this->shown_tr_percent = percent;
+        this->refreshStatus();
+    }
+    if(now == before) return;
+    this->shown_tr_state = now;
+
+    const bool was_busy = before == TranscribeClient::State::Sending || before == TranscribeClient::State::Waiting;
+    if(was_busy && !this->transcriber.busy()){
+        MicFunctions::SetMonitor(true);
+        if(now == TranscribeClient::State::Done){
+            //一覧のアイコンを文書へ変え(選んでいたものはそのまま)、文章を開く
+            const int sel = this->list ? this->list->getSelectedIndex() : -1;
+            this->reloadList();
+            if(this->list && sel >= 0 && sel < this->file_count) this->list->setSelectedIndex(sel);
+            SceneFunctions::Push(new FileViewerScene(this->transcriber.textPath()));
+        }
+    }
+    this->refreshButtons();
+    this->refreshStatus();
+}
+
+void RecorderScene::openKeySettings(){
+    if(this->transcriber.busy()) return;
+    char prompt[160];
+    if(this->transcriber.state() == TranscribeClient::State::NotConfigured && this->transcriber.message()[0]){
+        snprintf(prompt, sizeof(prompt), "%s\nAPIキー(空欄で変更なし):", this->transcriber.message());
+    }else{
+        snprintf(prompt, sizeof(prompt), "文字起こしのAPIキー(空欄で変更なし):");
+    }
+    //Wi-Fiパスワード・Todoistのトークンと同じ扱い: 今のキーは平文で持たないので空欄から始まる
+    auto* dialog = new InputDialog(prompt, true);
+    dialog->setAsciiInput(true);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        if(is_submit && !dialog->getInput().empty()){
+            if(TranscribeClient::SaveKey(dialog->getInput().c_str())){
+                this->transcriber.loadConfig();
+                this->shown_tr_state = this->transcriber.state();
+            }else{
+                ErrorFunctions::ShowFatal("APIキーを保存できませんでした(英数字と - _ . だけ)");
+            }
+        }
+        WidgetFunctions::DestroyLater(dialog);
+        this->refreshButtons();
+        this->refreshStatus();
     });
 }

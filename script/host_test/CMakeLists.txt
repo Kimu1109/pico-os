@@ -238,7 +238,7 @@ host_test(http_test GROUP core)
 host_test(socket_test GROUP core)
 host_test(discovery_test GROUP core)
 
-# --- apps: カレンダー・ファイル検索・チャット・TODO・メール ---
+# --- apps: カレンダー・ファイル検索・チャット・TODO・メール・文字起こし ---
 host_test(ical_test GROUP apps)
 host_test(calendar_scene_test GROUP apps)
 host_test(file_search_test GROUP apps)
@@ -250,6 +250,7 @@ host_test(todoist_proto_test GROUP apps)
 host_test(xml_reader_test GROUP apps)
 host_test(todo_test GROUP apps)
 host_test(mail_proto_test GROUP apps)
+host_test(transcribe_test GROUP apps)
 host_test(reader_test GROUP apps)
 host_test(mail_scene_test GROUP apps)
 

@@ -101,6 +101,10 @@ namespace PICO_Path {
             constexpr const char* SYS_SOUND_CFG = "/sys/sound.cfg";
             // マイク(録音)の設定。rate / gain / channel(MicFunctions)
             constexpr const char* SYS_MIC_CFG = "/sys/mic.cfg";
+            // 録音の文字起こしの送り先("api = https://api.openai.com/v1" / "model" / "language" / "prompt")。TranscribeClient参照
+            constexpr const char* SYS_TRANSCRIBE_CFG = "/sys/transcribe.cfg";
+            // 文字起こしのAPIキー。暗号化した値を1行255Bずつ並べる(平文の1行で置いてもよい)。TranscribeClient参照
+            constexpr const char* SYS_TRANSCRIBE_KEY = "/sys/transcribe_key.cfg";
             // ミュージックアプリの再生のしかた("shuffle = true|false" / "repeat = off|all|one")。MusicScene参照
             constexpr const char* SYS_MUSIC_CFG = "/sys/music.cfg";
             // 画面の明るさ("brightness = 0〜100" / "auto-dim = true|false")。DisplayFunctions参照

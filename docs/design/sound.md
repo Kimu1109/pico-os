@@ -129,6 +129,47 @@ SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブ
   `app_repo_test`(`microphone`の権限)、PCビルドの`--tap`/`--shot`(`PICOOS_MIC=tone`でメーター・録音→停止→保存)。
 - 未: 録音中の一時停止、モノラル以外。
 
+## 録音の文字起こし (`src/apps/recorder/Transcribe_Proto` / `Transcribe_Client` / `RecorderScene`) (2026-10-30)
+
+録音アプリで選んだ録音を外の音声認識のAPIへ送り、返ってきた文章を WAV の隣の `.txt` へ置く。**オンラインが前提**
+(本体の中では認識しない)。方針は利用者と相談して決めた(2026-10-30): 送り先は**OpenAI互換のAPI**、結果は**WAVの隣の .txt**、
+送るのは**ボタンを押したときだけ**(通信量・料金を利用者が決める。自動で送る設定は作っていない)。
+
+- **送り先**: `POST <api>/audio/transcriptions`(multipart/form-data。`model`・`language`・`prompt`・`response_format=text`・`file`)。
+  OpenAIの形に揃えたのは、`api` を変えるだけで OpenAI(`https://api.openai.com/v1`。既定)・Groq(`https://api.groq.com/openai/v1`、
+  `model = whisper-large-v3-turbo`)・自前の whisper.cpp のサーバ(`--inference-path /v1/audio/transcriptions` で立て、`api = http://<PC>:<port>/v1`)の
+  どれにも向けられるため。既定の model は `gpt-4o-mini-transcribe`、language は `ja`(空にすると相手が自動で判定)。
+  Google Cloud STT は base64のJSONで1分までの同期認識しかなく、長いものはGCSを経由するので見送った。
+- **`response_format=text`**: 成功の返事が本文そのものになるので、長い文章でもJSONの文字列をRAMへ載せずにそのままSDへ流せる。
+  200の本文は `<名前>.txt.part` へ書き、終わったら `.txt` へ入れ替える(途中で失敗しても前の `.txt` は壊れない)。
+  200以外は先頭512Bだけ取り、`{"error":{"message"}}`(OpenAI/Groq)・`{"error":"…"}`(whisper.cpp)・`detail`・JSONでなければ1行目から理由を拾う。
+- **WAVはRAMへ載せない**: multipartの前後(1KiB未満)だけを作り、間はSDから少しずつ流す。そのために `HttpRequest` に
+  **`beginStream()` と `IHttpBodySource`** を足した(1回の`update()`で8KBまで送るのでフレームは止まらない。送り終える前に
+  相手が応答してきたら(401・413等)送るのをやめてその応答を読む。`setTimeoutMs()` で待ち時間を延ばせる)。
+  送り終えてから返事が来るまでは長い録音だと数十秒かかるので、何も届かない時間の上限を180秒にしている。
+  `HttpRequest` の `Content-Type` の置き場は multipart の区切りが入るよう48Bから96Bへ広げた。
+- **上限**: OpenAIの25MB(16kHzのモノラルで約13分、48kHzで約4分)。超えるものは送る前に断る。間引いて送る(48kHz→16kHz)のは未。
+- **設定**: `/sys/transcribe.cfg`(`api` / `model` / `language` / `prompt`)。**APIキーは `/sys/transcribe_key.cfg`**
+  (`crypto/Secret_File`。OpenAIのキーは約164文字あり、設定ファイルの1つの値(平文で約77文字まで)には入らないため、
+  暗号化した行を255Bずつ並べる。メールのMicrosoftのサインインの更新用トークンと同じ形で、その処理をここへ切り出して共用にした)。
+  **母艦やWi-Fi転送で平文の1行を置いてもよく、読んだときに暗号化して書き直す**(長いキーを画面のキーボードで打たなくて済むように)。
+  画面の[キー]からも入れられる(192文字未満)。キーの無い送り先(手元のサーバ)なら無くてよい。
+- **画面**: 下の段に `[削除][再生][文字起こし][キー]`(240x320に収まるよう小さい字)。文字起こし済みの録音は一覧のアイコンが文書になり、
+  ボタンが[文章](`.txt` をファイルビューワーで開く)に変わる。送っている間は[やめる]、状態の行に「送っています NN%」→「返事を待っています…」、
+  失敗は赤で理由(例:「APIキーが違います(HTTP 401: …)」)。終わると文章を開く。キーが無いときに[文字起こし]を押すとキーの欄を開く。
+  キーボードの `t` でも同じ。もう一度送りたいときは `.txt` を消す。録音を削除すると `.txt` も消す。
+- **録音と同時には使わない**: 送っている間は録音できず、メーターも止める(I2SのDMAの16KBを返し、TLSの約40KBの場所を空ける。
+  TLSの処理で1コア目が止まると録音の列が溢れるため)。画面を離れたら送るのをやめる。送っている間は `KeepAwake()`。
+- **TLS**: api.openai.com・api.groq.com は Cloudflare の下で、証明書は Google Trust Services(GTS Root R4 等)の見込み(焼き込みのルートにある)。
+  このリモート環境からは出口のゲートウェイが証明書を差し替えるので確かめられていない。**実機で本物のAPIへ送れるかは未確認**(Todoist参照)。
+- 検証: `transcribe_test`(run.sh の apps。multipartの形・空の値は送らない・改行や " を断る・失敗の理由の拾い方(1バイトずつも)・説明・
+  .txtのパス・設定(既定はキーが要る/手元ならキー無し/使えない文字)・設定ファイルと平文のキーの暗号化し直し(2行に分かれる)・
+  送る本文を半端な大きさで読む/読み直す・始められない場合とやめたとき)、**`transcribe_net_test`(run_net.sh。
+  `script/host_test/transcribe_fake_server.py`=OpenAI互換の偽物を平文/HTTPS/上限を小さくしたもので立てる)**: 400KBを流して送り、
+  相手が受け取ったWAVの長さとSHA-256が手元と同じ・割合が進む・.partを残さない・401/500の理由・前の.txtを壊さない・
+  送り終える前の413・途中でやめる・設定ファイルから。PCビルドの`--tap`/`--shot`(偽物へ向けて): 録音→選ぶ→[文字起こし]→文章が開く→
+  戻ると一覧のアイコンが文書。**実機ファームのビルドはこの環境ではできない**(ボードの定義が無い。CIの`firmware-build.yml`で通す)。
+
 ## ステレオ出力とパン (`stereo` 引数 / `ChipSynth::Note::pan` / MMLの`p`) (2026-10-14)
 
 2コア目の出力段は左右交互(L,R,L,R…)のバッファで、I2Sへは左を上位16bit・右を下位16bitに詰めて書く(以前は同じ値を両方へ)。

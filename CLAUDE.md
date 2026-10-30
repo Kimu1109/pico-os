@@ -56,7 +56,7 @@ src/
   gui/core/  GFX(合成と転送)・Font・Widget・Focus・Scene・Keyboard・Error
   gui/widgets/  汎用部品と基底。apps/ dialogs/ keyboards/ interfaces/ systems/ は下の「ウィジェットの置き場所」
   gui/scenes/   機能の中身を持たない画面(設定・時計・ファイル・Lua等)
-  apps/<機能>/  1フォルダ=1機能(browser calculator calendar chat dict firmware gb home mail music notes reader ssh store texteditor todo video)。
+  apps/<機能>/  1フォルダ=1機能(browser calculator calendar chat dict firmware gb home mail music notes reader recorder ssh store texteditor todo video)。
                 直下=中身、ui/=その機能専用の部品、*Scene=画面
   lua/       Lua<->C++バインディング(LuaEngine*、builtin/*.lua、LuaAppScanner、デバッガ)
   iso/ sound/ net/ crypto/ ime/ storage/ task/ util/   機能のライブラリ(util/ は機能を持たない部品だけ)
@@ -186,7 +186,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `browser-net.md` | MarkdownView・文書キャッシュ・HTTP/HTTPS・取得〜表示・サーバ情報・検索・マニフェスト・ソケット(TCP/UDP/WebSocket/MQTT) |
 | `apps-online.md` | カレンダー(iCalendar)・チャット・TODO(Todoist)・メール(IMAP)・Spotify・ニュース(XML) |
 | `apps-local.md` | テキストエディタ・メモ(タグ・全文検索・最近開いたファイル)・SSH・ファイルビューワー・読書(青空文庫)・電卓・時計 |
-| `sound.md` | 音声出力・マイク・ステレオ・曲データ(MML)・チップチューン・ゲームボーイの音・WAV・出力周波数・ミュージック・動画(.pvid) |
+| `sound.md` | 音声出力・マイク・録音の文字起こし・ステレオ・曲データ(MML)・チップチューン・ゲームボーイの音・WAV・出力周波数・ミュージック・動画(.pvid) |
 | `gameboy.md` | ゲームボーイ |
 | `lua.md` | Luaバインディングの土台(ライフサイクル・権限・コールバック中継・LuaScene・メモリ・暴走防止・自動登録) |
 | `lua-api.md` | `pico.*` APIの設計記録(描画・SD・画像・キャンバス・ダイアログ・ネットワーク・イベント等) |

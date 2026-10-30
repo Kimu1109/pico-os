@@ -65,7 +65,8 @@
 - **公開**: `.github/workflows/web-pages.yml` が `main` へのpushで
   https://kimu1109.github.io/pico-os/playground/ へ自動デプロイする(プルリクではビルド確認のみ)。
   トップ `/` は入口のページ(`pc/web/landing.html`。Playground・Lua APIリファレンス・GitHubへのリンク)で、
-  Web版本体は `/playground/` へ移した(2026-10-22)。
+  Web版本体は `/playground/` へ移した(2026-10-22)。ファームのダウンロードのページ `/download/`(`pc/web/download.html`、
+  見た目はトップと同じ。中身は `docs/design/devtools.md`「Webから取る」)を足した(2026-10-30)。
   入口のページは紹介ページにした(2026-10-22): 見た目はOSの画面に寄せ(白地・黒の2px線・右下に影のボタン・反転タブ・
   ステータスバー)、色はOSのパレット16色をそのまま使い、ダークテーマも`DARK_COLORS`と同じ値。フォントは本文DotGothic16・
   見出しPress Start 2P(英数字のみなので見出しは英語)。画面写真はリポジトリに置かず、ワークフローが公開のたびにネイティブの

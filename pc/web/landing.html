@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
   GitHub Pages のトップ(https://kimu1109.github.io/pico-os/)。pico-os の紹介と、各ページへの入口。
-  Web版pico-os本体は /playground/、Lua APIリファレンスは /lua-api/、アプリストアのページは投稿用リポジトリの Pages(https://kimu1109.github.io/pico-os-apps/)にある。
+  Web版pico-os本体は /playground/、Lua APIリファレンスは /lua-api/、ファームのダウンロードは /download/(pc/web/download.html)、アプリストアのページは投稿用リポジトリの Pages(https://kimu1109.github.io/pico-os-apps/)にある。
   ワークフロー(.github/workflows/web-pages.yml)が _site/index.html として置く。
 
   見た目は pico-os の画面に寄せる: 白地に黒の2px線・角丸なし・押せる部品は右下に影・選択中は白黒反転・
@@ -348,6 +348,7 @@
     <symbol id="i-apps" viewBox="0 0 24 24"><path d="M4 5a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M4 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M14 15a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1l0 -4"/><path d="M14 7l6 0"/><path d="M17 4l0 6"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1"/><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415"/><path d="M16 5l3 3"/></symbol>
     <symbol id="i-microphone" viewBox="0 0 24 24"><path d="M9 5a3 3 0 0 1 3 -3a3 3 0 0 1 3 3v5a3 3 0 0 1 -3 3a3 3 0 0 1 -3 -3l0 -5"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M8 21l8 0"/><path d="M12 17l0 4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/></symbol>
     <symbol id="i-sun" viewBox="0 0 24 24"><path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7"/></symbol>
   </defs>
 </svg>
@@ -365,6 +366,7 @@
       <a class="opt" href="#apps">APPS</a>
       <a class="opt" href="#lua">LUA</a>
       <a class="opt" href="https://kimu1109.github.io/pico-os-apps/">STORE</a>
+      <a class="opt" href="download/">DOWNLOAD</a>
       <a class="on" href="playground/">PLAY</a>
       <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える">
         <svg class="i"><use href="#i-sun"/></svg>
@@ -385,6 +387,7 @@
           実機とおなじコードをWebAssemblyにして、ブラウザでもそのまま動かせます。</p>
         <div class="cta">
           <a class="btn primary" href="playground/">▶ PLAY <small>ブラウザで動かす</small></a>
+          <a class="btn" href="download/">DOWNLOAD</a>
           <a class="btn" href="lua-api/">LUA API</a>
           <a class="btn" href="https://kimu1109.github.io/pico-os-apps/">APP STORE</a>
           <a class="btn" href="https://github.com/Kimu1109/pico-os">GITHUB</a>
@@ -603,6 +606,11 @@ pico.<span class="fn">on</span>(back, <span class="st">"press_start"</span>, <sp
           <span class="t"><svg class="i"><use href="#i-device-gamepad"/></svg>PLAYGROUND</span>
           <span class="d">ブラウザでpico-osを動かす。マウスのドラッグがタッチになります。</span>
           <span class="go">START &gt;</span>
+        </a>
+        <a class="start" href="download/">
+          <span class="t"><svg class="i"><use href="#i-download"/></svg>DOWNLOAD</span>
+          <span class="d">ファームウェア(<code>.uf2</code> / <code>.pfw</code>)を落として、実機に書き込む。</span>
+          <span class="go">GET &gt;</span>
         </a>
         <a class="start" href="lua-api/">
           <span class="t"><svg class="i"><use href="#i-file-code"/></svg>LUA API</span>

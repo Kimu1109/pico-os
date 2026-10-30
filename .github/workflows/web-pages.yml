@@ -5,8 +5,9 @@
 #   手動実行           … Actionsタブの「Run workflow」から
 #
 # 公開先: https://kimu1109.github.io/pico-os/ (トップは入口のページ。Web版本体は /playground/)
-# /firmware/ は本体の「本体の更新」→[Webから]が読む版の一覧と更新ファイル(元はGitHubのリリース。
+# /firmware/ は本体の「本体の更新」→[Webから]が読む版の一覧と更新ファイル、と書き込み用の .uf2(元はGitHubのリリース。
 # ナイトリー・安定版のワークフローがリリースを変えた後にこのワークフローを動かす)
+# /download/ はファームのダウンロードのページ(pc/web/download.html。/firmware/downloads.json を読む)
 #
 # **初回だけ、リポジトリの Settings > Pages で Source を「GitHub Actions」にすること。**
 # ワークフローからの自動有効化(configure-pages の enablement)は GITHUB_TOKEN の権限では
@@ -74,8 +75,9 @@ jobs:
       - name: 公開するファイルを集める
         run: |
           # Web版本体は /playground/ に置く。トップ(/)は入口のページ(pc/web/landing.html)
-          mkdir -p _site/playground
+          mkdir -p _site/playground _site/download
           cp pc/web/landing.html _site/index.html
+          cp pc/web/download.html _site/download/index.html
           # js/wasm/data はリビジョン付きの名前で置く(shell.html の assetRev 参照)。同じ名前のままだと
           # ブラウザが古い index.js と新しい index.data を組み合わせ、SDのファイルの位置がずれて壊れて読める
           rev="${GITHUB_SHA::7}"
@@ -122,6 +124,7 @@ jobs:
       # Webからのファームの更新(docs/FIRMWARE_UPDATE.md「Webから取る」)の版の一覧を /firmware/ に置く。
       # 元はGitHubのリリース(安定版 = プレリリースでないもの、ナイトリー = nightly-*)。リリースの添付は
       # 別のホストへの長いURLの転送になり本体のURLに入らないので、Pagesへ写す(本体はPagesだけを見る)。
+      # firmware.uf2 も一緒に写し、ダウンロードのページ(/download/)が downloads.json から並べる。
       # PRでも作って、道具(script/build_fw_index.py)の壊れにここで気づけるようにする
       - name: ファームの版の一覧を作る
         env:
@@ -134,14 +137,17 @@ jobs:
           python3 script/build_fw_index.py select "${work}/releases.json" --stable 5 --nightly 3 > "${work}/picked.tsv"
           : > "${work}/got.tsv"
           while IFS=$'\t' read -r channel tag; do
-            if gh release download "${tag}" --pattern firmware.pfw --dir "${work}/${tag}"; then
-              printf '%s\t%s\n' "${channel}" "${work}/${tag}/firmware.pfw" >> "${work}/got.tsv"
+            if gh release download "${tag}" --pattern firmware.pfw --pattern firmware.uf2 --dir "${work}/${tag}"; then
+              uf2="${work}/${tag}/firmware.uf2"
+              [ -f "${uf2}" ] || { echo "::warning::${tag} に firmware.uf2 がありません"; uf2=-; }
+              printf '%s\t%s\t%s\t%s\n' "${channel}" "${work}/${tag}/firmware.pfw" "${uf2}" "${tag}" >> "${work}/got.tsv"
             else
               echo "::warning::${tag} から firmware.pfw を落とせません"
             fi
           done < "${work}/picked.tsv"
           python3 script/build_fw_index.py build "${work}/got.tsv" --out _site/firmware
           test -f _site/firmware/index.tsv
+          test -f _site/firmware/downloads.json
 
       - name: 成果物をアップロードする
         if: github.ref == 'refs/heads/main'

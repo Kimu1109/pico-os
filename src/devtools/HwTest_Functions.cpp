@@ -43,14 +43,23 @@ namespace {
         LOG_SYS_MSG("[HW] I2C0 SDA(GP%d)=%d SCL(GP%d)=%d(何もしていない時は両方1。0ならプルアップが無いかGNDへ短絡)",
                     I2cBus::kSdaPin, sda, I2cBus::kSclPin, scl);
 #endif
+        // 接触不良だと応答したりしなかったりするので、何回かやって数える
+        constexpr int kPasses = 5;
+        uint8_t hits[0x78] = {};
+        for(int pass = 0; pass < kPasses; pass++){
+            for(uint8_t addr = 0x08; addr <= 0x77; addr++){
+                Wire.beginTransmission(addr);
+                if(Wire.endTransmission() == 0) hits[addr]++;
+            }
+            delay(20);
+        }
         int found = 0;
         bool wii = false;
         for(uint8_t addr = 0x08; addr <= 0x77; addr++){
-            Wire.beginTransmission(addr);
-            if(Wire.endTransmission() != 0) continue;
+            if(hits[addr] == 0) continue;
             found++;
             if(addr == WiiClassicFunctions::kAddress) wii = true;
-            LOG_SYS_MSG("[HW] I2C 0x%02X 応答あり %s", addr, I2cName(addr));
+            LOG_SYS_MSG("[HW] I2C 0x%02X 応答あり %d/%d回 %s", addr, hits[addr], kPasses, I2cName(addr));
         }
         if(found == 0){
             LOG_SYS_WARN("[HW] I2C 応答する機器がありません(電源3.3V・SDA/SCLの入れ替え・プルアップ・プラグの接触・断線を確認)");

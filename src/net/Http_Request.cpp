@@ -23,7 +23,8 @@ bool HttpRequest::SameEndpoint(const Url& a, const Url& b){
 
 void HttpRequest::setKeepAlive(bool on){
     keep_alive_ = on;
-    if(!on && phase != Phase::Connecting && phase != Phase::Sending && phase != Phase::Receiving){
+    if(!on && phase != Phase::Connecting && phase != Phase::Sending && phase != Phase::SendingBody
+       && phase != Phase::Receiving){
         closeConnection();
     }
 }
@@ -75,6 +76,20 @@ void HttpRequest::closeConnection(){
 
 bool HttpRequest::begin(const Url& target, Method method, IHttpSink* sink,
                          const void* body, size_t body_len, const char* content_type){
+    const bool reuse = beginCommon(target, method, sink, content_type);
+    body_ = (body && body_len > 0) ? body : nullptr;
+    body_len_ = body_ ? body_len : 0;
+    return startRequest(reuse);
+}
+
+bool HttpRequest::beginStream(const Url& target, Method method, IHttpSink* sink,
+                              IHttpBodySource* source, const char* content_type){
+    const bool reuse = beginCommon(target, method, sink, content_type);
+    body_src_ = (source && source->size() > 0) ? source : nullptr;
+    return startRequest(reuse);
+}
+
+bool HttpRequest::beginCommon(const Url& target, Method method, IHttpSink* sink, const char* content_type){
     //前の応答の後に持っておいた接続が、同じ相手へそのまま使えるか。
     //受信待ちのバイトが残っている接続は、前の応答との境目が狂っているので使わない
     const bool reuse = keep_alive_ && conn_reusable_ && phase == Phase::Ended
@@ -90,8 +105,10 @@ bool HttpRequest::begin(const Url& target, Method method, IHttpSink* sink,
     url = target;
     method_ = method;
     sink_ = sink;
-    body_ = (body && body_len > 0) ? body : nullptr;
-    body_len_ = body_ ? body_len : 0;
+    body_ = nullptr;
+    body_len_ = 0;
+    body_src_ = nullptr;
+    body_sent_ = 0;
 
     content_type_.clear();
     if(content_type && *content_type){
@@ -103,8 +120,7 @@ bool HttpRequest::begin(const Url& target, Method method, IHttpSink* sink,
     status = TaskTools::PROCESSING;
     started_ms = millis();
     last_activity_ms = started_ms;
-
-    return startRequest(reuse);
+    return reuse;
 }
 
 bool HttpRequest::startRequest(bool reuse){
@@ -112,6 +128,14 @@ bool HttpRequest::startRequest(bool reuse){
     res.reset(sink_);
     got_bytes_ = false;
     conn_reusable_ = false;
+    //流す本文は送り直すたびに頭から読む
+    if(body_src_ && body_sent_ > 0){
+        if(!body_src_->rewind()){
+            finishWith(TaskTools::FAILED, Fail::BodyRead);
+            return false;
+        }
+    }
+    body_sent_ = 0;
 
     if(reuse){
         reused_ = true;
@@ -166,20 +190,21 @@ bool HttpRequest::sendRequestLine(){
         if(end) p += 2;
     }
 
-    //Content-Type/Content-Length/終端の空行が入る余地(content_type_は48B以内)を残す
+    //Content-Type/Content-Length/終端の空行が入る余地(content_type_は96B未満。合わせて160B以内)を残す
     if(req.length() + 160 >= PICO_STR_512B){
         if(client.write((const uint8_t*)req.c_str(), req.length()) != req.length()) return false;
         req.clear();
     }
 
-    if(body_ && body_len_ > 0){
+    const size_t body_total = body_src_ ? body_src_->size() : body_len_;
+    if(body_total > 0){
         if(!content_type_.empty()){
             ok = req.append("Content-Type: ") && ok;
             ok = req.append(content_type_) && ok;
             ok = req.append("\r\n") && ok;
         }
-        char len_buf[16];
-        snprintf(len_buf, sizeof(len_buf), "%u", (unsigned)body_len_);
+        char len_buf[24];
+        snprintf(len_buf, sizeof(len_buf), "%lu", (unsigned long)body_total);
         ok = req.append("Content-Length: ") && ok;
         ok = req.append(len_buf) && ok;
         ok = req.append("\r\n") && ok;
@@ -199,6 +224,40 @@ bool HttpRequest::sendRequestLine(){
         if(client.write((const uint8_t*)body_, body_len_) != body_len_) return false;
     }
     return true;
+}
+
+void HttpRequest::sendBodyChunk(){
+    uint8_t buf[1024];
+    const size_t total = body_src_->size();
+    size_t sent_now = 0;
+    while(body_sent_ < total && sent_now < kSendPerUpdate){
+        //送り終える前に相手が応答してきた(401や413で読まずに閉じる等)。その応答を返す
+        if(client.available() > 0){
+            phase = Phase::Receiving;
+            return;
+        }
+        size_t want = total - body_sent_;
+        if(want > sizeof(buf)) want = sizeof(buf);
+        const int got = body_src_->read(buf, want);
+        if(got <= 0){
+            LOG_SYS_WARN("HttpRequest: 送る本文を読めません (%lu/%lu)", (unsigned long)body_sent_, (unsigned long)total);
+            finishWith(TaskTools::FAILED, Fail::BodyRead);
+            return;
+        }
+        if(client.write(buf, (size_t)got) != (size_t)got){
+            //相手が先に閉じたなら、届いている応答を読む
+            if(client.available() > 0){
+                phase = Phase::Receiving;
+                return;
+            }
+            finishWith(TaskTools::FAILED, Fail::SendFailed);
+            return;
+        }
+        body_sent_ += (size_t)got;
+        sent_now += (size_t)got;
+        last_activity_ms = millis();
+    }
+    if(body_sent_ >= total) phase = Phase::Receiving;
 }
 
 void HttpRequest::finishWith(TaskTools::Status s, Fail f){
@@ -241,8 +300,8 @@ void HttpRequest::update(){
     {
         const unsigned long now = millis();
         const bool timed_out = idle_timeout_
-            ? (now - last_activity_ms > kTimeoutMs || now - started_ms > kLongTransferMaxMs)
-            : (now - started_ms > kTimeoutMs);
+            ? (now - last_activity_ms > timeout_ms_ || now - started_ms > kLongTransferMaxMs)
+            : (now - started_ms > timeout_ms_);
         if(timed_out){
             finishWith(TaskTools::FAILED, Fail::Timeout);
             return;
@@ -272,7 +331,12 @@ void HttpRequest::update(){
             finishWith(TaskTools::FAILED, Fail::SendFailed);
             return;
         }
-        phase = Phase::Receiving;
+        phase = body_src_ ? Phase::SendingBody : Phase::Receiving;
+        return;
+    }
+
+    if(phase == Phase::SendingBody){
+        sendBodyChunk();
         return;
     }
 
@@ -342,6 +406,8 @@ void HttpRequest::cancel(){
     sink_ = nullptr;
     body_ = nullptr;
     body_len_ = 0;
+    body_src_ = nullptr;
+    body_sent_ = 0;
     status = TaskTools::PROCESSING;
 }
 
@@ -352,6 +418,7 @@ const char* HttpRequest::failureToStr() const {
         case Fail::TlsFailed:        return client.errorText();
         case Fail::ConnectFailed:    return "接続できない";
         case Fail::SendFailed:       return "リクエストを送れない";
+        case Fail::BodyRead:         return "送るファイルを読めない";
         case Fail::Timeout:          return "応答がない";
         case Fail::TooManyRedirects: return "リダイレクトが多すぎる";
         case Fail::BadRedirect:      return "転送先が不正";

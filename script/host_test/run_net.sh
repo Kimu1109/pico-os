@@ -21,6 +21,10 @@
 # Spotifyの認証(spotify_auth_test.py)は script/spotify_auth.py を偽物のトークン/APIのサーバ(127.0.0.1)へ向けて動かし、
 # ブラウザの代わりに戻り先へ code を返して、PKCE・state の照合・書き出したJSONを確かめる(本物のSpotifyへは行かない)。
 #
+# 録音の文字起こし(transcribe_net_test)は script/host_test/transcribe_fake_server.py(OpenAI互換の
+# /v1/audio/transcriptions の偽物)を平文・HTTPS(上と同じ使い捨ての証明書)・上限を小さくしたものの3つ立てて確かめる。
+# 本物の api.openai.com へは行かない。
+#
 # メール(mail_net_test)は script/host_test/imap_fake_server.py(IMAPの偽物)を平文とTLS(上と同じ使い捨ての証明書)の
 # 2つ立てて確かめる。Microsoft のサインイン(XOAUTH2)は、同じ偽物に --oauth-port でサインインの偽物も立てたものを相手にする。
 # 本物のメールサーバ・login.microsoftonline.com へは行かない。
@@ -88,11 +92,12 @@ done
 TLS_PID=""
 CHAT_PIDS=""
 TODO_PIDS=""
+TR_PIDS=""
 MAIL_PIDS=""
 SSHD_PID=""
 STORE_PID=""
 cleanup(){
-    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $MAIL_PIDS $SSHD_PID $STORE_PID 2>/dev/null || true
+    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $TR_PIDS $MAIL_PIDS $SSHD_PID $STORE_PID 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     wait "$BARE_PID" 2>/dev/null || true
     [ -n "$TLS_PID" ] && wait "$TLS_PID" 2>/dev/null || true
@@ -228,6 +233,47 @@ echo ""
 echo "===== todoist_net_test ====="
 "$OUT/todoist_net_test" "$TODO_PORT" "$TODO_TLS_PORT" "$OUT/ca.pem" "$TODO_TOKEN" "$TODO_PAGED_PORT"
 
+# ---- 録音の文字起こし(TranscribeClient)。OpenAI互換の偽物を平文・HTTPS・上限を小さくしたものの3つ立てる ----
+TR_PORT=$((PORT + 13))
+TR_TLS_PORT=$((PORT + 14))
+TR_SMALL_PORT=$((PORT + 15))
+TR_FAKE="$ROOT/script/host_test/transcribe_fake_server.py"
+TR_KEY=sk-proj-test_0123456789.abcdef
+
+g++ -std=gnu++17 -g -fsanitize=address,undefined \
+    -I"$ROOT/script/host_test/stubs" -I"$ROOT/src" \
+    "$ROOT/script/host_test/transcribe_net_test.cpp" \
+    "$ROOT/src/apps/recorder/Transcribe_Client.cpp" \
+    "$ROOT/src/apps/recorder/Transcribe_Proto.cpp" \
+    "$ROOT/src/crypto/Secret_File.cpp" \
+    "$ROOT/src/util/Json_Reader.cpp" \
+    "$ROOT/src/net/Http_Request.cpp" \
+    "$ROOT/src/net/Http_Transport.cpp" \
+    "$ROOT/src/net/Http_Response.cpp" \
+    -o "$OUT/transcribe_net_test" -lssl -lcrypto
+
+python3 "$TR_FAKE" --port "$TR_PORT" --key "$TR_KEY" > "$OUT/tr_server.log" 2>&1 &
+TR_PIDS="$!"
+python3 "$TR_FAKE" --port "$TR_TLS_PORT" --key "$TR_KEY" \
+    --cert "$OUT/server.pem" --key-file "$OUT/server.key" > "$OUT/tr_tls_server.log" 2>&1 &
+TR_PIDS="$TR_PIDS $!"
+python3 "$TR_FAKE" --port "$TR_SMALL_PORT" --key "$TR_KEY" --max-bytes 100000 > "$OUT/tr_small_server.log" 2>&1 &
+TR_PIDS="$TR_PIDS $!"
+
+i=0
+while [ $i -lt 50 ]; do
+    if grep -q "起動しました" "$OUT/tr_server.log" 2>/dev/null \
+       && grep -q "起動しました" "$OUT/tr_tls_server.log" 2>/dev/null \
+       && grep -q "起動しました" "$OUT/tr_small_server.log" 2>/dev/null; then break; fi
+    i=$((i + 1))
+    sleep 0.1
+done
+
+echo ""
+echo "===== transcribe_net_test ====="
+"$OUT/transcribe_net_test" "$TR_PORT" "$TR_TLS_PORT" "$OUT/ca.pem" "$TR_KEY" "$TR_SMALL_PORT"
+kill $TR_PIDS 2>/dev/null || true
+
 # ---- メール(ImapClient)。IMAPの偽物を平文とTLSで立てる ----
 MAIL_PORT=$((PORT + 9))
 MAIL_TLS_PORT=$((PORT + 10))
@@ -243,6 +289,7 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/apps/mail/Mail_Mime.cpp" \
     "$ROOT/src/apps/mail/Mail_Charset.cpp" \
     "$ROOT/src/apps/mail/Mail_OAuth.cpp" \
+    "$ROOT/src/crypto/Secret_File.cpp" \
     "$ROOT/src/util/Json_Reader.cpp" \
     "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \

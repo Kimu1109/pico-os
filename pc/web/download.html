@@ -1,0 +1,495 @@
+<!doctype html>
+<!--
+  ファームウェアのダウンロードのページ(https://kimu1109.github.io/pico-os/download/)。
+  ワークフロー(.github/workflows/web-pages.yml)が _site/download/index.html として置く。
+
+  版の一覧は同じサイトの ../firmware/downloads.json(script/build_fw_index.py の write_downloads() が作る。
+  元はGitHubのリリースの安定版5本・ナイトリー3本)を読んで並べる。読めないとき(手元で開いた・まだ一度も
+  リリースが無い)は、GitHubのリリースの一覧へのリンクだけを出す。
+  .uf2 は初めて書き込むとき(BOOTSEL)、.pfw は本体の「本体の更新」から入れるとき(docs/FIRMWARE_UPDATE.md)。
+
+  見た目はトップ(pc/web/landing.html)と同じ: OSのパレット・2px線・右下に影・DotGothic16 / Press Start 2P・
+  ステータスバー・テーマの切り替え(localStorage の鍵 picoos-theme も共通)。トップのCSSを変えたらこちらも合わせる。
+  アイコンは Tabler Icons(MIT)。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pico-os Download</title>
+<meta name="description" content="pico-os のファームウェア(.uf2 / .pfw)をダウンロードできます。">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  /* ---- 色: OSのパレット16色(トップと同じ) ---- */
+  :root {
+    --c0: #000000; --c1: #000080; --c2: #008000; --c3: #008080;
+    --c4: #800000; --c5: #800080; --c6: #808000; --c7: #d3d3d3;
+    --c8: #808080; --c9: #0000ff; --c10: #00ff00; --c11: #00ffff;
+    --c12: #ff0000; --c13: #ff00ff; --c14: #ffff00; --c15: #ffffff;
+    --fg: var(--c0);
+    --bg: var(--c15);
+    --muted: #555555;
+    --line: var(--c0);
+    --soft: var(--c7);
+    --accent: var(--c9);
+    --page: #f2f2ee;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c0: #ebebeb; --c1: #7896ff; --c2: #64dc78; --c3: #5ad2dc;
+      --c4: #ff7878; --c5: #dc82ff; --c6: #dcd25a; --c7: #404048;
+      --c8: #aaaab0; --c9: #466eff; --c10: #28c83c; --c11: #00646e;
+      --c12: #ff4646; --c13: #e650e6; --c14: #e6c828; --c15: #101014;
+      --accent: var(--c1);
+      --muted: var(--c8);
+      --page: #08080a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --c0: #ebebeb; --c1: #7896ff; --c2: #64dc78; --c3: #5ad2dc;
+    --c4: #ff7878; --c5: #dc82ff; --c6: #dcd25a; --c7: #404048;
+    --c8: #aaaab0; --c9: #466eff; --c10: #28c83c; --c11: #00646e;
+    --c12: #ff4646; --c13: #e650e6; --c14: #e6c828; --c15: #101014;
+    --accent: var(--c1);
+    --muted: var(--c8);
+    --page: #08080a;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 56px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--fg);
+    font: 16px/1.8 "DotGothic16", system-ui, sans-serif;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+  }
+  .px { font-family: "Press Start 2P", "DotGothic16", monospace; letter-spacing: 0; }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px dashed var(--fg); outline-offset: 3px; }
+  svg.i { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2;
+          stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  code { font-family: inherit; background: var(--soft); padding: 0 4px; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---- ステータスバー ---- */
+  .statusbar { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 2px solid var(--line); }
+  .statusbar .wrap { display: flex; align-items: center; gap: 12px; height: 44px; }
+  .sb-time { font-size: 14px; }
+  .sb-icons { display: flex; gap: 4px; align-items: center; }
+  .sb-icons svg.i { width: 20px; height: 20px; }
+  .sb-icons .ok { color: var(--c9); }
+  .sb-nav { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+  .sb-nav a { font-size: 10px; color: var(--fg); text-decoration: none; padding: 8px 8px; border: 2px solid transparent; }
+  .sb-nav a:hover { border-color: var(--line); }
+  .sb-nav a.on { background: var(--fg); color: var(--bg); }
+  .theme-btn {
+    display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+    background: var(--bg); color: var(--fg); border: 2px solid var(--line); cursor: pointer;
+  }
+  .theme-btn svg.i { width: 18px; height: 18px; }
+  @media (max-width: 720px) { .sb-nav a.opt { display: none; } }
+  @media (max-width: 420px) {
+    .sb-icons .opt { display: none; }
+    .sb-nav a { padding: 8px 4px; font-size: 9px; }
+  }
+
+  /* ---- ボタン ---- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+    background: var(--bg); color: var(--fg);
+    border: 2px solid var(--line);
+    box-shadow: 4px 4px 0 var(--line);
+    text-decoration: none;
+    font-family: "Press Start 2P", monospace; font-size: 12px; line-height: 1.4;
+    transition: transform .05s, box-shadow .05s;
+  }
+  .btn:hover { background: var(--soft); }
+  .btn:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--line); }
+  .btn.primary { background: var(--fg); color: var(--bg); }
+  .btn.primary:hover { background: var(--c1); border-color: var(--c1); color: var(--c15); }
+  .btn small { font-family: "DotGothic16", sans-serif; font-size: 14px; }
+  .btn svg.i { width: 20px; height: 20px; }
+
+  /* ---- 見出し(トップのヒーローを小さくしたもの) ---- */
+  .hero { padding: 48px 0 24px; }
+  .kicker { font-size: 10px; color: var(--muted); margin: 0 0 20px; line-height: 2; }
+  .kicker span { display: inline-block; border: 2px solid var(--line); padding: 2px 6px; margin: 0 4px 6px 0; color: var(--fg); background: var(--bg); }
+  h1.title {
+    margin: 0 0 24px;
+    font: 48px/1.15 "Press Start 2P", monospace;
+    text-shadow: 4px 4px 0 var(--soft);
+  }
+  h1.title .cur { animation: blink 1s steps(1) infinite; color: var(--c12); }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { h1.title .cur { animation: none; } }
+  .lead { font-size: 20px; margin: 0 0 12px; }
+  .lead-sub { color: var(--muted); margin: 0; max-width: 40em; }
+  @media (max-width: 900px) { h1.title { font-size: clamp(28px, 8vw, 48px); } }
+  @media (max-width: 540px) { .hero { padding: 32px 0 16px; } }
+
+  /* ---- 節(トップと同じ窓の形) ---- */
+  section.block { padding: 24px 0; }
+  .win { background: var(--bg); border: 2px solid var(--line); box-shadow: 8px 8px 0 var(--line); }
+  .win-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 2px solid var(--line); }
+  .win-head .no { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 2px solid var(--line); font-size: 10px; }
+  .win-head h2 { margin: 0; font: 16px/1.4 "Press Start 2P", monospace; }
+  .win-head .jp { color: var(--muted); font-size: 15px; }
+  .win-head .tail { margin-left: auto; font-size: 9px; color: var(--muted); }
+  .win-body { padding: 24px; }
+  @media (max-width: 540px) {
+    .win { box-shadow: 6px 6px 0 var(--line); }
+    .win-body { padding: 16px; }
+    .win-head .tail { display: none; }
+    .win-head h2 { font-size: 13px; }
+  }
+
+  /* ---- 最新の版のカード ---- */
+  .latest { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+  .rel { border: 2px solid var(--line); padding: 20px; min-width: 0; }
+  .rel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+  .rel-head .ver { font: 20px/1.4 "Press Start 2P", monospace; }
+  .tag { display: inline-block; font: 9px/1 "Press Start 2P", monospace; padding: 5px 6px; border: 2px solid var(--line); }
+  .tag.stable { background: var(--fg); color: var(--bg); }
+  .tag.nightly { background: var(--c14); color: #000; border-color: var(--line); }
+  .tag.unsigned { color: var(--c12); border-color: var(--c12); }
+  .rel-meta { margin: 0 0 20px; color: var(--muted); font-size: 15px; }
+  .rel-meta b { color: var(--fg); font-weight: normal; }
+  .rel-meta .nb { white-space: nowrap; }
+  .rel-dl { display: flex; flex-wrap: wrap; gap: 16px; }
+  .rel-note { margin: 16px 0 0; font-size: 14px; color: var(--muted); }
+  .empty { border: 2px dashed var(--line); padding: 20px; }
+  .empty p { margin: 0 0 16px; }
+
+  /* ---- 書き込み方 ---- */
+  .howto { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+  .how { border: 2px solid var(--line); padding: 16px; }
+  .how h3 { margin: 0 0 12px; font: 11px/1.8 "Press Start 2P", monospace; display: flex; gap: 10px; align-items: center; }
+  .how h3 .sw { width: 12px; height: 12px; flex: none; border: 2px solid var(--line); }
+  .how ol { margin: 0; padding-left: 1.6em; font-size: 15px; }
+  .how li { margin-bottom: 6px; }
+  .how p { margin: 12px 0 0; font-size: 14px; color: var(--muted); }
+
+  /* ---- すべての版 ---- */
+  .tbl-wrap { overflow-x: auto; }
+  table.vers { width: 100%; border-collapse: collapse; font-size: 15px; }
+  table.vers th, table.vers td { border: 2px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: middle; white-space: nowrap; }
+  table.vers th { background: var(--soft); font-weight: normal; }
+  table.vers td.files a, table.vers td.files span { margin-right: 12px; }
+  table.vers tr:hover td { background: var(--soft); }
+  table.vers .sha { font-size: 13px; color: var(--muted); }
+  @media (max-width: 540px) { table.vers th, table.vers td { padding: 6px 8px; font-size: 14px; } }
+  .more { margin: 16px 0 0; font-size: 14px; color: var(--muted); }
+
+  /* ---- 下端 ---- */
+  footer { margin-top: 48px; border-top: 2px solid var(--line); background: var(--bg); }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; padding-top: 20px; padding-bottom: 28px; font-size: 14px; color: var(--muted); }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-device-sd-card" viewBox="0 0 24 24"><path d="M7 21h10a2 2 0 0 0 2 -2v-14a2 2 0 0 0 -2 -2h-6.172a2 2 0 0 0 -1.414 .586l-3.828 3.828a2 2 0 0 0 -.586 1.414v10.172a2 2 0 0 0 2 2"/><path d="M13 6v2"/><path d="M16 6v2"/><path d="M10 7v1"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 18l.01 0"/><path d="M9.172 15.172a4 4 0 0 1 5.656 0"/><path d="M6.343 12.343a8 8 0 0 1 11.314 0"/><path d="M3.515 9.515c4.686 -4.687 12.284 -4.687 17 0"/></symbol>
+    <symbol id="i-battery-4" viewBox="0 0 24 24"><path d="M6 7h11a2 2 0 0 1 2 2v.5a.5 .5 0 0 0 .5 .5a.5 .5 0 0 1 .5 .5v3a.5 .5 0 0 1 -.5 .5a.5 .5 0 0 0 -.5 .5v.5a2 2 0 0 1 -2 2h-11a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2"/><path d="M7 10l0 4"/><path d="M10 10l0 4"/><path d="M13 10l0 4"/><path d="M16 10l0 4"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/></symbol>
+  </defs>
+</svg>
+
+<header class="statusbar">
+  <div class="wrap">
+    <span class="sb-time px" id="sbTime">--:--</span>
+    <span class="sb-icons" aria-hidden="true">
+      <svg class="i"><use href="#i-device-sd-card"/></svg>
+      <svg class="i ok opt"><use href="#i-wifi"/></svg>
+      <svg class="i opt"><use href="#i-battery-4"/></svg>
+    </span>
+    <nav class="sb-nav px" aria-label="ページの移動">
+      <a href="../">TOP</a>
+      <a class="opt" href="../lua-api/">LUA</a>
+      <a class="opt" href="https://kimu1109.github.io/pico-os-apps/">STORE</a>
+      <a class="on" href="./">DOWNLOAD</a>
+      <a class="opt" href="../playground/">PLAY</a>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える">
+        <svg class="i"><use href="#i-sun"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <p class="kicker px"><span>RPIPICO2W</span><span>.UF2</span><span>.PFW</span></p>
+      <h1 class="title">DOWNLOAD<span class="cur">_</span></h1>
+      <p class="lead">pico-os のファームウェアをダウンロード。</p>
+      <p class="lead-sub">初めて書き込むときは <code>.uf2</code>、すでに pico-os が動いている本体を更新するときは <code>.pfw</code> を使います。
+        書き込み方は下の「HOW TO」へ。</p>
+    </div>
+  </section>
+
+  <section class="block" id="latest">
+    <div class="wrap">
+      <div class="win">
+        <div class="win-head">
+          <span class="no px">01</span>
+          <h2>LATEST</h2>
+          <span class="jp">最新の版</span>
+          <span class="tail px" id="latestTail">RASPBERRY PI PICO 2 W</span>
+        </div>
+        <div class="win-body">
+          <div class="latest" id="latestBox">
+            <div class="empty" id="loading"><p>版の一覧を読んでいます…</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="howto">
+    <div class="wrap">
+      <div class="win">
+        <div class="win-head">
+          <span class="no px">02</span>
+          <h2>HOW TO</h2>
+          <span class="jp">書き込み方</span>
+          <span class="tail px">BOOTSEL / SD / WI-FI</span>
+        </div>
+        <div class="win-body">
+          <div class="howto">
+            <div class="how">
+              <h3><i class="sw" style="background:var(--c9)"></i>FIRST TIME .UF2</h3>
+              <ol>
+                <li><code>.uf2</code> をダウンロードする。</li>
+                <li>Pico 2 W の <b>BOOTSEL</b> ボタンを押したまま、USBケーブルでPCにつなぐ。</li>
+                <li><code>RP2350</code> という名前のドライブが出てくるので、<code>.uf2</code> をそこへコピーする。</li>
+                <li>コピーが終わると自動で再起動し、pico-os が立ち上がります。</li>
+              </ol>
+              <p>前の版に戻したいときも同じ手順で、前の版の <code>.uf2</code> を置きます。</p>
+            </div>
+            <div class="how">
+              <h3><i class="sw" style="background:var(--c10)"></i>UPDATE .PFW</h3>
+              <ol>
+                <li>本体の「<b>本体の更新</b>」→[<b>Webから</b>]なら、ここからのダウンロードは要りません(Wi-Fiで同じ一覧を取ります)。</li>
+                <li>PCから入れるときは、<code>.pfw</code> をSDカードの <code>/firmware/</code> に置く(USBドライブ機能でも置けます)。</li>
+                <li>「本体の更新」→[<b>SDから選ぶ</b>]で選ぶと、中身を確かめてから書き込み、再起動します。</li>
+              </ol>
+              <p><code>.pfw</code> は署名つき。署名の無い版(「無署名」の印)は、そのままでは本体が受け付けません。</p>
+            </div>
+            <div class="how">
+              <h3><i class="sw" style="background:var(--c14)"></i>STABLE / NIGHTLY</h3>
+              <ol>
+                <li><b>安定版</b>は、ナイトリーのうち使えると確かめたものを選んで出した版です。迷ったらこちら。</li>
+                <li><b>ナイトリー</b>は、毎晩その日の最新のソースを自動でビルドしたもの。新しい機能を早く試せますが、動作は確かめていません。</li>
+              </ol>
+              <p>ここには新しい安定版5本とナイトリー3本を載せています。それより前の版はGitHubのリリースから。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="all">
+    <div class="wrap">
+      <div class="win">
+        <div class="win-head">
+          <span class="no px">03</span>
+          <h2>ALL VERSIONS</h2>
+          <span class="jp">すべての版</span>
+          <span class="tail px" id="allTail"></span>
+        </div>
+        <div class="win-body">
+          <div class="tbl-wrap">
+            <table class="vers" id="versTable" hidden>
+              <thead><tr><th>版</th><th>種類</th><th>日時(UTC)</th><th>コミット</th><th>ダウンロード</th></tr></thead>
+              <tbody id="versBody"></tbody>
+            </table>
+          </div>
+          <p class="more" id="allEmpty">版の一覧を読んでいます…</p>
+          <p class="more">それより前の版・変更点・クラッシュダンプ用の <code>.elf</code> は
+            <a href="https://github.com/Kimu1109/pico-os/releases">GitHubのリリース</a>にあります。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>pico-os — a touch GUI OS for Raspberry Pi Pico 2 W</span>
+    <span><a href="../">トップへ</a> · <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/FIRMWARE_UPDATE.md">ファームの更新(詳しく)</a></span>
+    <span>アイコン: <a href="https://tabler.io/icons">Tabler Icons</a>(MIT)</span>
+  </div>
+</footer>
+
+<script>
+  // ステータスバーの時刻(OSと同じ HH:MM)
+  (function () {
+    var el = document.getElementById("sbTime");
+    function tick() {
+      var d = new Date();
+      el.textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    }
+    tick();
+    setInterval(tick, 10000);
+  })();
+
+  // テーマ切り替え(トップと同じ鍵に覚える)
+  (function () {
+    var root = document.documentElement;
+    try {
+      var saved = localStorage.getItem("picoos-theme");
+      if (saved === "light" || saved === "dark") root.dataset.theme = saved;
+    } catch (e) {}
+    document.getElementById("themeBtn").addEventListener("click", function () {
+      var cur = root.dataset.theme ||
+        (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var next = cur === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("picoos-theme", next); } catch (e) {}
+    });
+  })();
+
+  // 版の一覧(../firmware/downloads.json。形は script/build_fw_index.py の write_downloads())
+  (function () {
+    var BASE = "../firmware/";
+    var RELEASES = "https://github.com/Kimu1109/pico-os/releases";
+    var DEFAULT_ENV = "rpipico2w";
+
+    function el(tag, attrs, kids) {
+      var e = document.createElement(tag);
+      for (var k in attrs || {}) {
+        if (k === "text") e.textContent = attrs[k];
+        else if (k === "html") e.innerHTML = attrs[k];  // 固定の文字列だけに使う
+        else e.setAttribute(k, attrs[k]);
+      }
+      (kids || []).forEach(function (c) { if (c) e.appendChild(c); });
+      return e;
+    }
+    function size(n) {
+      return n >= 1048576 ? (n / 1048576).toFixed(2) + " MB" : Math.round(n / 1024) + " KB";
+    }
+    // ファイル名は道具が英数字と . _ - だけにしてある。念のためそれ以外は使わない
+    function safe(name) { return /^[A-Za-z0-9._-]+$/.test(name || "") ? name : null; }
+    var ICON_DL = '<svg class="i"><use href="#i-download"/></svg>';
+
+    function tags(v) {
+      var out = [el("span", { "class": "tag " + v.channel + " px", text: v.channel === "stable" ? "STABLE" : "NIGHTLY" })];
+      if (!v.signed) out.push(el("span", { "class": "tag unsigned px", text: "UNSIGNED", title: "署名なし" }));
+      if (v.env !== DEFAULT_ENV) out.push(el("span", { "class": "tag px", text: v.env, title: "構成(ビルドのenv)" }));
+      return out;
+    }
+    function relLink(v) {
+      return v.tag ? el("a", { href: RELEASES + "/tag/" + encodeURIComponent(v.tag), text: v.tag }) : null;
+    }
+
+    function card(v, note) {
+      var dl = el("div", { "class": "rel-dl" });
+      var uf2 = v.uf2 && safe(v.uf2.file);
+      var pfw = v.pfw && safe(v.pfw.file);
+      if (uf2) {
+        var a = el("a", { "class": "btn primary", href: BASE + uf2, download: uf2 });
+        a.innerHTML = ICON_DL + ".UF2 ";
+        a.appendChild(el("small", { text: "初めて書き込む · " + size(v.uf2.bytes) }));
+        dl.appendChild(a);
+      }
+      if (pfw) {
+        var b = el("a", { "class": "btn", href: BASE + pfw, download: pfw });
+        b.innerHTML = ICON_DL + ".PFW ";
+        b.appendChild(el("small", { text: "更新ファイル · " + size(v.pfw.bytes) }));
+        dl.appendChild(b);
+      }
+      // 項目の途中では折り返さない(「リリー/ス」にならないように)
+      function item(label, node) {
+        return el("span", { "class": "nb" }, [document.createTextNode(label + " "), node]);
+      }
+      var meta = el("p", { "class": "rel-meta" });
+      meta.appendChild(item("ビルド", el("b", { text: v.date + " UTC" })));
+      meta.appendChild(document.createTextNode(" · "));
+      meta.appendChild(item("コミット", el("a", { href: "https://github.com/Kimu1109/pico-os/commit/" + encodeURIComponent(v.git.replace(/\+$/, "")), text: v.git })));
+      var rl = relLink(v);
+      if (rl) { meta.appendChild(document.createTextNode(" · ")); meta.appendChild(item("リリース", rl)); }
+      return el("div", { "class": "rel" }, [
+        el("div", { "class": "rel-head" }, [el("span", { "class": "ver", text: "#" + v.serial })].concat(tags(v))),
+        meta, dl,
+        note ? el("p", { "class": "rel-note", text: note }) : null
+      ]);
+    }
+
+    function showEmpty(msg) {
+      var box = document.getElementById("latestBox");
+      box.textContent = "";
+      var e = el("div", { "class": "empty" }, [el("p", { text: msg })]);
+      var a = el("a", { "class": "btn", href: RELEASES });
+      a.innerHTML = ICON_DL + "GITHUB RELEASES";
+      e.appendChild(a);
+      box.appendChild(e);
+      document.getElementById("allEmpty").textContent = "ここに載せている版はありません。";
+    }
+
+    function render(data) {
+      var vs = (data && data.versions) || [];
+      if (!vs.length) { showEmpty("ここに載せている版はまだありません。GitHubのリリースを見てください。"); return; }
+
+      // 最新: 既定の構成の安定版と、それより新しいナイトリー(あれば)
+      var mine = vs.filter(function (v) { return v.env === DEFAULT_ENV; });
+      if (!mine.length) mine = vs;
+      var stable = null, nightly = null;
+      mine.forEach(function (v) {
+        if (v.channel === "stable" && !stable) stable = v;
+        if (v.channel === "nightly" && !nightly) nightly = v;
+      });
+      if (stable && nightly && nightly.serial <= stable.serial) nightly = null;
+      var box = document.getElementById("latestBox");
+      box.textContent = "";
+      if (stable) box.appendChild(card(stable, "おすすめ。迷ったらこちら。"));
+      if (nightly) box.appendChild(card(nightly, stable
+        ? "安定版より新しい毎晩のビルド。動作は確かめていません。"
+        : "まだ安定版がありません。毎晩のビルドで、動作は確かめていません。"));
+
+      // すべての版
+      var body = document.getElementById("versBody");
+      vs.forEach(function (v) {
+        var files = el("td", { "class": "files" });
+        [["uf2", ".uf2"], ["pfw", ".pfw"]].forEach(function (k) {
+          var f = v[k[0]] && safe(v[k[0]].file);
+          if (f) files.appendChild(el("a", { href: BASE + f, download: f, title: size(v[k[0]].bytes), text: k[1] }));
+        });
+        if (v.pfw && v.pfw.sha256) files.appendChild(el("span", { "class": "sha", title: "SHA-256(.pfw): " + v.pfw.sha256, text: v.pfw.sha256.slice(0, 8) }));
+        var rl = relLink(v);
+        body.appendChild(el("tr", {}, [
+          el("td", {}, [rl ? el("a", { href: rl.href, text: "#" + v.serial }) : el("span", { text: "#" + v.serial })]),
+          el("td", {}, tags(v)),
+          el("td", { text: v.date }),
+          el("td", { text: v.git }),
+          files
+        ]));
+      });
+      document.getElementById("versTable").hidden = false;
+      document.getElementById("allEmpty").hidden = true;
+      document.getElementById("allTail").textContent = vs.length + " BUILDS";
+    }
+
+    fetch(BASE + "downloads.json", { cache: "no-cache" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) {
+        if (!d || d.format !== 1) throw new Error("format");
+        render(d);
+      })
+      .catch(function () { showEmpty("版の一覧を読めませんでした。GitHubのリリースから直接ダウンロードできます。"); });
+  })();
+</script>
+</body>
+</html>

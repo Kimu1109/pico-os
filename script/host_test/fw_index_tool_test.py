@@ -6,9 +6,11 @@
 - select: gh release list の出力から、新しい順に安定版N本・ナイトリーN本を選ぶ(下書き・他のプレリリースは除く)
 - build: 偽の firmware.bin から作った更新ファイルで一覧と置き場を作る(同じ版は安定版に寄せる・壊れたものは飛ばす・
   構成は中身の版の印から・古い印は既定の構成)
+- build: .uf2 を渡した版は同じ名前の .uf2 も置き、downloads.json(Webのダウンロードのページ用)に載せる
 - 作った一覧を C++ の fw_index_test(本物の Fw_Index)に読ませ、列の並び・値が両方で同じかを見る
 """
 import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -69,8 +71,12 @@ def main():
     p_broken = write("broken.pfw", bytes(broken))
     p_junk = write("junk.pfw", b"<html>not found</html>")
 
+    u412 = write("n412.uf2", b"UF2\n" * 64)
+    u405 = write("v405.uf2", b"UF2 405")
     out = os.path.join(work, "site", "firmware")
-    rows = bi.build([("nightly", p412_nightly), ("stable", p412_stable), ("nightly", p410), ("stable", p405),
+    # 412 の .uf2 はナイトリーの方にだけ渡す(安定版の行に寄せても .uf2 は残る)。405 の .uf2 は無いパス(警告して無しに)
+    rows = bi.build([("nightly", p412_nightly, u412, "nightly-412-bbbbbbb"), ("stable", p412_stable, None, "v412"),
+                     ("nightly", p410), ("stable", p405, os.path.join(work, "missing.uf2"), "v405"),
                      ("nightly", p_broken), ("nightly", p_junk), ("weird", p410)], out)
     check([(r["serial"], r["channel"]) for r in rows] == [(412, "stable"), (410, "nightly"), (405, "stable")],
           "build: 新しい順・同じ版は安定版の1行・壊れたもの/知らない種類は飛ばす")
@@ -87,7 +93,24 @@ def main():
     with open(os.path.join(out, "index.tsv"), "r", encoding="utf-8") as f:
         index_lines = f.read().splitlines()
     check(index_lines[0] == bi.INDEX_MAGIC and len(index_lines) == 4, "build: 1行目は形式の印、続いて3行")
-    check(sorted(os.listdir(out)) == sorted(["index.tsv"] + [r["file"] for r in rows]), "build: 置き場には一覧と載せたものだけ")
+    check(sorted(os.listdir(out)) == sorted(["index.tsv", "downloads.json", "pico-os-412-bbbbbbb.uf2"] +
+                                            [r["file"] for r in rows]), "build: 置き場には一覧と載せたものだけ")
+    with open(os.path.join(out, "pico-os-412-bbbbbbb.uf2"), "rb") as f:
+        check(f.read() == b"UF2\n" * 64, "build: .uf2 は更新ファイルと同じ名前で拡張子だけ替えて写す")
+    with open(os.path.join(out, "downloads.json"), "r", encoding="utf-8") as f:
+        dl = json.load(f)
+    v = dl["versions"]
+    check(dl["format"] == 1 and [x["serial"] for x in v] == [412, 410, 405], "downloads.json: index.tsv と同じ並び")
+    check(v[0]["channel"] == "stable" and v[0]["tag"] == "v412" and v[0]["signed"] is True and
+          v[0]["pfw"] == {"file": rows[0]["file"], "bytes": rows[0]["bytes"], "sha256": rows[0]["sha256"]} and
+          v[0]["uf2"] == {"file": "pico-os-412-bbbbbbb.uf2", "bytes": 256},
+          f"downloads.json: 安定版の行にナイトリーの .uf2 を寄せる({v[0]})")
+    check(v[1]["tag"] is None and v[1]["uf2"] is None and v[1]["signed"] is False and v[2]["uf2"] is None and
+          v[2]["env"] == "rpipico2w_lite", "downloads.json: .uf2 が無い・タグが分からない版は null")
+    # 作り直すと、載せなくなった .uf2 は消える
+    bi.build([("stable", p405, u405, "v405")], os.path.join(work, "site2"))
+    bi.build([("stable", p405)], os.path.join(work, "site2"))
+    check(not any(n.endswith(".uf2") for n in os.listdir(os.path.join(work, "site2"))), "build: 作り直すと古い .uf2 は消す")
     empty = os.path.join(work, "empty")
     check(bi.build([], empty) == [] and open(os.path.join(empty, "index.tsv")).read() == bi.INDEX_MAGIC + "\n",
           "build: 何も無くても見出しだけの一覧を作る")

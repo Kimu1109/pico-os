@@ -4,7 +4,8 @@
   トップのページ(pc/web/landing.html)と Playground(pc/web/shell.html)に揃える:
   OSのパレット16色(src/gui/core/GFX_Functions.hpp の DEFAULT_COLORS / DARK_COLORS)・白地に黒の2px線・角丸なし・
   右下に影のある部品・選んでいるものは白黒反転・上端にステータスバー。
-  フォントは本文 DotGothic16、英字の見出しなど Press Start 2P(日本語の字を持たないので、和文の見出しは DotGothic16 のまま)。
+  フォントは英字の見出しなど強調に Press Start 2P(ドットの字。日本語の字を持たない)。本文・和文の見出し・コードは読みやすさを優先して
+  ドットの字にしない(2026-10-30。本文は Noto Sans JP、コードは等幅のシステムフォント。--font-body / --font-code)。
   色の値とテーマの切り替え(localStorage の "picoos-theme")は3つのページで共通なので、変えるときは揃えること。
 */
 
@@ -24,6 +25,9 @@
   --bar-h: 46px;
   --sidebar-w: 272px;
   --toc-w: 220px;
+  --font-body: "Noto Sans JP", system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+  /* 和文のコメントは等幅のフォントに字が無いので本文のフォントで出る */
+  --font-code: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Noto Sans JP", monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -57,9 +61,9 @@ html, body {
   padding: 0;
   background: var(--page);
   color: var(--fg);
-  font: 16px/1.8 "DotGothic16", system-ui, sans-serif;
+  font: 16px/1.8 var(--font-body);
 }
-.px { font-family: "Press Start 2P", "DotGothic16", monospace; }
+.px { font-family: "Press Start 2P", var(--font-body); }
 
 a { color: var(--accent); text-underline-offset: 3px; }
 a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px dashed var(--fg); outline-offset: 3px; }
@@ -115,7 +119,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   padding: 4px 8px;
   border: 2px solid var(--line);
   border-radius: 0;
-  font: 14px "DotGothic16", sans-serif;
+  font: 14px var(--font-body);
   background: var(--bg);
   color: var(--fg);
 }
@@ -197,27 +201,27 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .breadcrumb { font-size: 14px; color: var(--muted); margin-bottom: 6px; }
 .breadcrumb a { color: var(--muted); }
 
-h1 { font-size: 32px; line-height: 1.4; margin: 0 0 10px; font-weight: normal; text-shadow: 3px 3px 0 var(--soft); }
+h1 { font-size: 32px; line-height: 1.4; margin: 0 0 10px; font-weight: 700; text-shadow: 3px 3px 0 var(--soft); }
 h2 {
-  font-size: 22px; font-weight: normal; line-height: 1.5;
+  font-size: 22px; font-weight: 700; line-height: 1.5;
   margin: 44px 0 14px; padding: 0 0 6px 22px;
   border-bottom: 2px solid var(--line);
   position: relative;
 }
 h2::before { content: ""; position: absolute; left: 0; top: .5em; width: 12px; height: 12px; background: var(--fg); }
-h3 { font-size: 18px; font-weight: normal; margin: 30px 0 8px; padding-left: 18px; position: relative; }
+h3 { font-size: 18px; font-weight: 700; margin: 30px 0 8px; padding-left: 18px; position: relative; }
 h3::before { content: ""; position: absolute; left: 0; top: .55em; width: 8px; height: 8px; background: var(--accent); }
-h4 { font-size: 16px; font-weight: normal; margin: 22px 0 6px; text-decoration: underline; text-underline-offset: 4px; }
+h4 { font-size: 16px; font-weight: 700; margin: 22px 0 6px; text-decoration: underline; text-underline-offset: 4px; }
 h2 code, h3 code, h4 code { font-size: .95em; }
 
 .lead { font-size: 17px; color: var(--muted); margin-top: 0; }
 p, li { font-size: 15.5px; }
-strong { font-weight: normal; background: linear-gradient(transparent 60%, var(--soft) 60%); }
+strong { font-weight: 700; background: linear-gradient(transparent 60%, var(--soft) 60%); }
 
 code {
   background: var(--soft);
   padding: 0 4px;
-  font-family: "DotGothic16", monospace;
+  font-family: var(--font-code);
   font-size: .95em;
 }
 
@@ -228,7 +232,7 @@ pre {
   border: 2px solid var(--line);
   padding: 14px 16px;
   overflow-x: auto;
-  font: 14px/1.7 "DotGothic16", monospace;
+  font: 14px/1.7 var(--font-code);
   tab-size: 4;
 }
 pre code { background: none; padding: 0; font-size: 1em; color: inherit; }
@@ -365,7 +369,7 @@ hr { border: none; border-top: 2px dashed var(--line); margin: 32px 0; }
   border: 2px solid var(--line);
   border-left-width: 8px;
   padding: 10px 14px;
-  font: 14px/1.7 "DotGothic16", monospace;
+  font: 14px/1.7 var(--font-code);
   margin: 12px 0 16px;
   overflow-x: auto;
   white-space: pre;
@@ -374,7 +378,7 @@ hr { border: none; border-top: 2px dashed var(--line); margin: 32px 0; }
 
 .badge {
   display: inline-block;
-  font: 12px/1.6 "DotGothic16", sans-serif;
+  font: 12px/1.6 var(--font-body);
   padding: 0 6px;
   border: 2px solid var(--line);
   margin-left: 6px;

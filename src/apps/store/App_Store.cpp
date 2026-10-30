@@ -218,7 +218,12 @@ const char* AppStore::installedVersion(int index) const {
 
 bool AppStore::installable(int index) const {
     const AppRepo::Entry* e = entry(index);
-    return e && e->status == AppRepo::Status::Normal;
+    return e && e->status == AppRepo::Status::Normal && !AppInstall::CheckOs(*e);
+}
+
+bool AppStore::needsNewerOs(int index) const {
+    const AppRepo::Entry* e = entry(index);
+    return e && AppInstall::CheckOs(*e) != nullptr;
 }
 
 bool AppStore::blockedInstalled(int index) const {
@@ -234,7 +239,119 @@ bool AppStore::appDir(int index, FixedString<PICO_PATH_LEN>& out) const {
 }
 
 void AppStore::refreshInstalled(){
-    for(int i = 0; i < count_; i++) installed_[i] = AppInstall::Check(entries_[i], &installed_ver_[i]);
+    held_mask_ = 0;
+    for(int i = 0; i < count_; i++){
+        installed_[i] = AppInstall::Check(entries_[i], &installed_ver_[i], &installed_perms_[i]);
+        FixedString<PICO_STR_S> hold;
+        if(installed_[i] == Installed::Update && AppInstall::HeldVersion(entries_[i].id.c_str(), hold)
+           && AppRepo::CompareVersion(entries_[i].version.c_str(), hold.c_str()) <= 0){
+            held_mask_ |= (uint64_t)1 << i;
+        }
+    }
+}
+
+bool AppStore::held(int index) const {
+    return index >= 0 && index < count_ && (held_mask_ >> index) & 1;
+}
+
+bool AppStore::permsGrow(int index) const {
+    const AppRepo::Entry* e = entry(index);
+    return e && (e->perms & ~installed_perms_[index]) != 0;
+}
+
+bool AppStore::batchUpdatable(int index) const {
+    return installed(index) == Installed::Update && installable(index) && !held(index) && !permsGrow(index);
+}
+
+int AppStore::batchCount() const {
+    int n = 0;
+    for(int i = 0; i < count_; i++) if(batchUpdatable(i)) n++;
+    return n;
+}
+
+int AppStore::updateCount() const {
+    int n = 0;
+    for(int i = 0; i < count_; i++) if(installed_[i] == Installed::Update && installable(i) && !held(i)) n++;
+    return n;
+}
+
+bool AppStore::beginUpdateAll(){
+    if(busy() || batchRunning()) return false;
+    batch_mask_ = 0;
+    for(int i = 0; i < count_; i++) if(batchUpdatable(i)) batch_mask_ |= (uint64_t)1 << i;
+    if(batch_mask_ == 0) return false;
+    batch_ok_ = batch_failed_ = 0;
+    batch_first_error_.clear();
+    advanceBatch();
+    return true;
+}
+
+// 1つ終わるたび(と始め)に呼ぶ。次を始めるか、全部済んだら結果の1行を出す
+void AppStore::advanceBatch(){
+    if(batch_current_ >= 0){
+        const AppRepo::Entry* e = entry(batch_current_);
+        if(state_ == State::Done){
+            batch_ok_++;
+        }else{
+            batch_failed_++;
+            if(batch_first_error_.empty() && e){
+                batch_first_error_.assign(e->name.c_str());
+                batch_first_error_.append(": ");
+                batch_first_error_.append(message_.c_str());
+            }
+        }
+        batch_current_ = -1;
+    }
+    while(batch_mask_ != 0){
+        int i = 0;
+        while(!((batch_mask_ >> i) & 1)) i++;
+        batch_mask_ &= ~((uint64_t)1 << i);
+        //一覧を取り直した等で入れられなくなっていれば飛ばす
+        if(!batchUpdatable(i)) continue;
+        batch_current_ = i;
+        if(beginInstall(i)) return;
+        advanceBatch(); //始められなかった(失敗として数えて次へ)
+        return;
+    }
+    char m[PICO_STR_LL];
+    if(batch_failed_ == 0){
+        snprintf(m, sizeof(m), "%d件のアプリを更新しました", batch_ok_);
+        finishOk(m);
+    }else{
+        snprintf(m, sizeof(m), "%d件を更新、%d件は失敗 (%s)", batch_ok_, batch_failed_, batch_first_error_.c_str());
+        state_ = State::Failed;
+        message_.assign(m);
+        LOG_SYS_WARN("AppStore: %s", m);
+    }
+}
+
+bool AppStore::previousVersion(int index, FixedString<PICO_STR_S>& out) const {
+    out.clear();
+    const AppRepo::Entry* e = entry(index);
+    const Installed st = installed(index);
+    if(!e || st == Installed::No || st == Installed::Foreign || st == Installed::Conflict) return false;
+    return AppInstall::PreviousVersion(e->id.c_str(), out);
+}
+
+bool AppStore::rollback(int index){
+    if(busy() || batchRunning()) return false;
+    const AppRepo::Entry* e = entry(index);
+    FixedString<PICO_STR_S> prev;
+    FixedString<PICO_PATH_LEN> dir;
+    if(!e || !previousVersion(index, prev) || !appDir(index, dir)) return false;
+    FixedString<PICO_STR_S> restored;
+    const char* err = AppInstall::Rollback(e->id.c_str(), dir.c_str(), work_, &restored);
+    refreshInstalled();
+    revision_++;
+    if(err){
+        state_ = State::Failed;
+        message_.assign(err);
+        return false;
+    }
+    char m[PICO_STR_LL];
+    snprintf(m, sizeof(m), "%s を %s へ戻しました", e->name.c_str(), restored.c_str());
+    finishOk(m);
+    return true;
 }
 
 bool AppStore::launch(int index){
@@ -288,7 +405,7 @@ bool AppStore::startGet(const char* rel_url){
 }
 
 bool AppStore::beginRefresh(){
-    if(busy()) return false;
+    if(busy() || batchRunning()) return false;
     if(!OSData::SD_usable){
         state_ = State::Failed;
         message_.assign("SDカードがありません");
@@ -318,6 +435,8 @@ bool AppStore::beginRefresh(){
 }
 
 void AppStore::cancel(){
+    batch_mask_ = 0;
+    batch_current_ = -1;
     if(!busy()) return;
     file_sink_.close();
     http_.cancel();
@@ -334,6 +453,10 @@ void AppStore::close(){
 }
 
 void AppStore::update(){
+    if(batch_current_ >= 0 && state_ != State::Busy){
+        advanceBatch();
+        return;
+    }
     if(state_ != State::Busy || step_ == Step::None) return;
     const unsigned long start = millis();
     for(int i = 0; i < kPumpPerUpdate; i++){
@@ -439,7 +562,7 @@ void AppStore::onSignature(){
 // ---------------------------------------------------------------------------
 
 bool AppStore::beginInstall(int index, bool allow_replace){
-    if(busy()) return false;
+    if(state_ == State::Busy || (batch_current_ >= 0 && batch_current_ != index)) return false;
     const AppRepo::Entry* e = entry(index);
     if(!e) return false;
     const Installed st = installed_[index];
@@ -467,6 +590,11 @@ bool AppStore::beginInstall(int index, bool allow_replace){
     if(e->status != AppRepo::Status::Normal){
         state_ = State::Failed;
         message_.assign(e->status == AppRepo::Status::Blocked ? "危険と判断されたアプリです" : "取り下げられたアプリです");
+        return false;
+    }
+    if(const char* err = AppInstall::CheckOs(*e)){
+        state_ = State::Failed;
+        message_.assign(err);
         return false;
     }
     if(!OSData::SD_usable){
@@ -603,7 +731,7 @@ void AppStore::onFile(){
 }
 
 bool AppStore::remove(int index){
-    if(busy()) return false;
+    if(busy() || batchRunning()) return false;
     const AppRepo::Entry* e = entry(index);
     if(!e) return false;
     const Installed st = installed_[index];

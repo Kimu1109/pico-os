@@ -1,6 +1,7 @@
 #include "apps/store/StoreScene.hpp"
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "system/Config_Functions.hpp"
 #include "gui/core/Error_Functions.hpp"
 #include "hal/Network_Functions.hpp"
@@ -90,7 +91,7 @@ void StoreScene::onEnter(){
         this->pending_launch = true;
     });
     this->remove_button = action(2, "削除");
-    this->remove_button->setOnPressEnd([this](){ this->confirmRemove(); });
+    this->remove_button->setOnPressEnd([this](){ this->chooseRollbackOrRemove(); });
 
     // ---- 状態の1行・進み具合・選んだアプリの欄 ----
     const int status_y = action_y - MARGIN - line_h;
@@ -118,11 +119,15 @@ void StoreScene::onEnter(){
     // ---- 一覧 ----
     const int list_y = y0 + row_h + MARGIN;
     this->app_list = new ScrollList(content.x + MARGIN, list_y, content.w - MARGIN * 2,
-                                    detail_y - MARGIN - list_y, AppRepo::kMaxEntries);
+                                    detail_y - MARGIN - list_y, AppRepo::kMaxEntries + 1);
     this->app_list->setFontSize(FontFn::Text); //一覧の文字は文字の大きさの設定に従う
     this->app_list->setEnableIcon(true);
     this->app_list->setOnSelectItem([this](int row, bool already){
         const int index = (row >= 0 && row < this->row_count) ? this->rows[row] : -1;
+        if(index == kRowUpdateAll){
+            this->confirmUpdateAll();
+            return;
+        }
         const AppRepo::Entry* e = this->store ? this->store->entry(index) : nullptr;
         if(!e) return;
         this->selected_id.assign(e->id.c_str());
@@ -194,6 +199,15 @@ void StoreScene::refreshList(){
     this->app_list->clear();
     this->row_count = 0;
     this->blocked_warning.clear();
+    const int batch = this->store->busy() ? 0 : this->store->batchCount();
+    if(batch > 0){
+        ScrollListTools::Item item;
+        item.text.appendFormat("すべて更新 (%d件)", batch);
+        item.icon = IconID::Refresh;
+        item.color = PICO_BLUE;
+        this->rows[this->row_count++] = kRowUpdateAll;
+        this->app_list->add(item);
+    }
     //危険の印が付いて入っているものを先に、それから入れられるもの・入っているもの
     for(int pass = 0; pass < 2; pass++){
         for(int i = 0; i < this->store->count(); i++){
@@ -202,7 +216,9 @@ void StoreScene::refreshList(){
             const AppStore::Installed st = this->store->installed(i);
             const bool present = st == AppStore::Installed::Same || st == AppStore::Installed::Update
                               || st == AppStore::Installed::Newer || st == AppStore::Installed::KeyChanged;
-            if(!this->store->installable(i) && !present) continue;
+            //本体が古くて入れられないものも並べる(本体を更新すれば入れられると分かるように)
+            const bool old_os = this->store->needsNewerOs(i) && this->store->entry(i)->status == AppRepo::Status::Normal;
+            if(!this->store->installable(i) && !present && !old_os) continue;
             const AppRepo::Entry* e = this->store->entry(i);
             ScrollListTools::Item item;
             item.text.assign(e->name.c_str());
@@ -218,7 +234,8 @@ void StoreScene::refreshList(){
                 case AppStore::Installed::Update:
                     item.icon = IconID::AppStore;
                     item.color = PICO_BLUE;
-                    if(this->store->installable(i)) item.text.append(" (更新)");
+                    if(this->store->held(i)) item.text.append(" (見送り中)");
+                    else if(this->store->installable(i)) item.text.append(" (更新)");
                     break;
                 case AppStore::Installed::Foreign:
                     item.icon = IconID::AppBox;
@@ -237,6 +254,8 @@ void StoreScene::refreshList(){
                     this->blocked_warning.assign(e->name.c_str());
                     this->blocked_warning.append("を削除してください(危険)");
                 }
+            }else if(old_os){
+                item.text.append(" (本体が古い)");
             }else if(!this->store->installable(i)){
                 item.text.append(" (取り下げ)");
             }
@@ -246,12 +265,13 @@ void StoreScene::refreshList(){
     }
     const int sel = this->selectedIndex();
     int sel_row = -1;
-    for(int r = 0; r < this->row_count; r++) if(this->rows[r] == sel) sel_row = r;
+    for(int r = 0; r < this->row_count; r++) if(sel >= 0 && this->rows[r] == sel) sel_row = r;
     if(sel_row >= 0) this->app_list->setSelectedIndex(sel_row);
     else this->selected_id.clear();
 
     FixedString<PICO_STR_M> t("アプリストア");
-    if(this->row_count > 0) t.appendFormat(" (%d)", this->row_count);
+    const int apps = this->row_count - (batch > 0 ? 1 : 0);
+    if(apps > 0) t.appendFormat(" (%d)", apps);
     if(this->title_label) this->title_label->setText(t);
 }
 
@@ -277,6 +297,10 @@ void StoreScene::refreshDetail(){
     }
     if(e->status == AppRepo::Status::Blocked) text.append(" 危険と判断されました");
     else if(e->status == AppRepo::Status::Yanked) text.append(" 取り下げられました");
+    if(this->store->needsNewerOs(i)) text.appendFormat(" 本体#%lu以降が要ります", (unsigned long)e->min_os);
+    if(this->store->held(i)) text.append(" この版は見送り中");
+    FixedString<PICO_STR_S> prev;
+    if(this->store->previousVersion(i, prev)) text.appendFormat(" 前の版%sに戻せます", prev.c_str());
     FixedString<PICO_STR_L> perms;
     AppRepo::PermsText(e->perms, perms);
     text.appendFormat("\n作者: %s  権限: %s\n%s", e->author.c_str(), perms.c_str(), e->description.c_str());
@@ -330,6 +354,8 @@ void StoreScene::refreshButtons(){
                           && st != AppStore::Installed::Newer && this->store->installable(i);
     this->install_button->setEnabled(has && !busy && can_install);
     this->open_button->setEnabled(present && !busy);
+    FixedString<PICO_STR_S> prev;
+    this->remove_button->setText(present && this->store->previousVersion(i, prev) ? "戻す/削除" : "削除");
     this->remove_button->setEnabled(present && !busy);
     this->settings_button->setEnabled(!busy);
 }
@@ -363,6 +389,12 @@ void StoreScene::confirmInstall(){
         this->setNotice("入っている版より古い版は入れられません", PICO_RED);
         return;
     }
+    if(this->store->needsNewerOs(i)){
+        FixedString<PICO_STR_LL> m;
+        m.appendFormat("本体の更新が要ります(#%lu以降)", (unsigned long)e->min_os);
+        this->setNotice(m.c_str(), PICO_RED);
+        return;
+    }
     if(!this->store->installable(i)){
         this->setNotice("取り下げられたアプリなので入れられません", PICO_RED);
         return;
@@ -376,6 +408,9 @@ void StoreScene::confirmInstall(){
     FixedString<PICO_STR_512B> text;
     text.appendFormat("%s %s を入れますか?\n作者: %s\n使う権限: %s", e->name.c_str(), e->version.c_str(),
                       e->author.c_str(), perms.c_str());
+    if(st == AppStore::Installed::Update && this->store->permsGrow(i)){
+        text.append("\n※この更新で使う権限が増えます");
+    }
     if(st == AppStore::Installed::Foreign){
         text.appendFormat("\n\n/lua/apps/%s に同じ名前のアプリがあります。上書きします(アプリが書いたファイルは残ります)", e->dir.c_str());
     }
@@ -416,6 +451,96 @@ void StoreScene::confirmRemove(){
         if(ok && this->store && this->selected_id == this->confirm_id.c_str()){
             this->notice.clear();
             this->store->remove(this->selectedIndex());
+        }
+        this->confirm_id.clear();
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void StoreScene::confirmUpdateAll(){
+    if(!this->store || this->store->busy()) return;
+    const int n = this->store->batchCount();
+    if(n <= 0) return;
+    if(!NetworkFunctions::IsConnected()){
+        this->setNotice("Wi-Fiに繋がっていません", PICO_RED);
+        return;
+    }
+    //名前を並べる(長ければ切れる。ダイアログの中で折り返す)
+    FixedString<PICO_STR_512B> text;
+    text.appendFormat("%d件のアプリを更新しますか?\n", n);
+    int listed = 0;
+    for(int i = 0; i < this->store->count(); i++){
+        if(!this->store->batchUpdatable(i)) continue;
+        const AppRepo::Entry* e = this->store->entry(i);
+        if(listed++ > 0) text.append("、");
+        text.appendFormat("%s %s", e->name.c_str(), e->version.c_str());
+    }
+    text.append("\n(権限が増える更新は1つずつ入れてください)");
+    auto* dialog = new MsgDialog(text.c_str(), "やめる", "更新");
+    dialog->setIconId(IconID::Refresh);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool ok){
+        if(ok && this->store){
+            this->notice.clear();
+            if(!this->store->beginUpdateAll()) this->setNotice("今は更新できません", PICO_RED);
+            this->refreshList();
+            this->refreshStatus();
+            this->refreshButtons();
+        }
+        WidgetFunctions::DestroyLater(dialog);
+    });
+}
+
+void StoreScene::chooseRollbackOrRemove(){
+    const int i = this->selectedIndex();
+    if(i < 0 || !this->store || this->store->busy()) return;
+    FixedString<PICO_STR_S> prev;
+    if(!this->store->previousVersion(i, prev)){
+        this->confirmRemove();
+        return;
+    }
+    const AppRepo::Entry* e = this->store->entry(i);
+    FixedString<PICO_STR_L> title;
+    title.appendFormat("%s をどうしますか?", e->name.c_str());
+    FixedString<PICO_STR_M> back;
+    back.appendFormat("前の版 %s に戻す", prev.c_str());
+    this->confirm_id.assign(e->id.c_str());
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, title.c_str(), "", "やめる");
+    dialog->addChoice(back.c_str());
+    dialog->addChoice("削除する");
+    dialog->layout();
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool ok){
+        const int choice = dialog->getSelectedIndex();
+        const bool same = this->store && this->selected_id == this->confirm_id.c_str();
+        this->confirm_id.clear();
+        WidgetFunctions::DestroyLater(dialog);
+        if(!ok || !same) return;
+        if(choice == 0) this->confirmRollback();
+        else if(choice == 1) this->confirmRemove();
+    });
+}
+
+void StoreScene::confirmRollback(){
+    const int i = this->selectedIndex();
+    FixedString<PICO_STR_S> prev;
+    if(i < 0 || !this->store || this->store->busy() || !this->store->previousVersion(i, prev)) return;
+    const AppRepo::Entry* e = this->store->entry(i);
+    FixedString<PICO_STR_512B> text;
+    text.appendFormat("%s を %s から %s へ戻しますか?\n"
+                      "アプリが書いたファイル(セーブ等)はそのまま残ります。%s は、[更新] を押すまで更新の知らせに出しません",
+                      e->name.c_str(), this->store->installedVersion(i), prev.c_str(), this->store->installedVersion(i));
+    this->confirm_id.assign(e->id.c_str());
+    auto* dialog = new MsgDialog(text.c_str(), "やめる", "戻す");
+    dialog->setIconId(IconID::Refresh);
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool ok){
+        if(ok && this->store && this->selected_id == this->confirm_id.c_str()){
+            this->notice.clear();
+            this->store->rollback(this->selectedIndex());
         }
         this->confirm_id.clear();
         WidgetFunctions::DestroyLater(dialog);

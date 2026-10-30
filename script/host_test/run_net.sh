@@ -338,6 +338,7 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
     "$ROOT/script/host_test/app_store_net_test.cpp" \
     "$ROOT/src/apps/store/App_Store.cpp" \
     "$ROOT/src/apps/store/App_Install.cpp" \
+    "$ROOT/src/apps/firmware/Fw_Version.cpp" \
     "$ROOT/src/apps/store/App_Repo.cpp" \
     "$ROOT/src/lua/LuaAppScanner.cpp" \
     "$ROOT/src/services/App_Functions.cpp" \

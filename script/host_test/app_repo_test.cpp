@@ -94,15 +94,25 @@ int main(){
         AppRepo::Entry e;
         bool skip = false;
         const std::string tail = std::string("\t") + kAuthor + "\tkimu1109\t-";
-        std::string line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です" + tail + "\textra\n";
-        check(CatLine(line.c_str(), e, skip), "catalog: 1件読める");
+        std::string line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です" + tail + "\t-\textra\n";
+        check(CatLine(line.c_str(), e, skip), "catalog: 1件読める(13列目以降は無視)");
         check(e.id == "tetris" && e.version == "2.0.0" && e.dir == "テトリス" && e.name == "テトリス"
               && e.bytes == 21143 && e.perms == AppRepo::PermNetwork && e.description == "説明です", "catalog: 各列");
         check(e.files_sha256[0] == 0x66 && e.files_sha256[31] == 0x39, "catalog: SHA-256");
         check(e.author_key[0] == 0xd7 && e.author_key[31] == 0x1a && e.author == "kimu1109"
               && e.status == AppRepo::Status::Normal, "catalog: 作者の鍵・作者名・status");
         line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\n";
-        check(CatLine(line.c_str(), e, skip) && e.status == AppRepo::Status::Normal, "catalog: 後ろの列が無くても読める");
+        check(CatLine(line.c_str(), e, skip) && e.status == AppRepo::Status::Normal && e.min_os == 0,
+              "catalog: 後ろの列が無くても読める(min_os の列が無ければ条件なし)");
+        line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\t1234\n";
+        check(CatLine(line.c_str(), e, skip) && e.min_os == 1234, "catalog: min_os(12列目)");
+        check(!AppRepo::OsTooOld(e, 1234) && !AppRepo::OsTooOld(e, 2000) && AppRepo::OsTooOld(e, 1233),
+              "min_os: 本体の通し番号が足りなければ動かせない");
+        check(!AppRepo::OsTooOld(e, 0), "min_os: 通し番号0(PC・手元のビルド)は条件を見ない");
+        line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\t-\n";
+        check(CatLine(line.c_str(), e, skip) && e.min_os == 0, "catalog: min_os が - なら条件なし");
+        line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\t1.2\n";
+        check(!CatLine(line.c_str(), e, skip) && !skip, "catalog: 読めない min_os の行は読まない");
         line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です\n";
         check(!CatLine(line.c_str(), e, skip) && !skip, "catalog: 形式1の8列の行は断る");
         line = std::string("tetris\t2\tテトリス\tx\t1\t") + kHash + "\t-\t\t" + std::string(64, '0') + "\ta\t-\n";

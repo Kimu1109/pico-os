@@ -193,10 +193,10 @@ bool AppRepo::ParseCatalogHeader(char* line, uint32_t& serial){
 bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip){
     skip = IsSkipLine(line);
     if(skip) return false;
-    char* cols[12];
-    const int n = SplitTabs(line, cols, 12);
+    char* cols[13];
+    const int n = SplitTabs(line, cols, 13);
     if(n < 11) return false;
-    //12列目以降は将来の拡張(無視する。どの列にもタブは入らない取り決め)
+    //13列目以降は将来の拡張(無視する。どの列にもタブは入らない取り決め)
     out = Entry{};
     if(!ValidId(cols[0]) || !out.id.assign(cols[0])) return false;
     if(!ValidVersion(cols[1]) || !out.version.assign(cols[1])) return false;
@@ -210,7 +210,15 @@ bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip){
     if(!HexDecode(cols[8], strlen(cols[8]), out.author_key, 32) || AllZero(out.author_key, 32)) return false;
     out.author.assign(cols[9]);
     out.status = ParseStatus(cols[10]);
+    //12列目 min_os(2026-10-30に足した。無い・"-" なら条件なし。読めない値はその行ごと読まない)
+    if(n >= 12 && *cols[11] && strcmp(cols[11], "-") != 0){
+        if(!ParseU32(cols[11], out.min_os)) return false;
+    }
     return true;
+}
+
+bool AppRepo::OsTooOld(const Entry& e, uint32_t os_serial){
+    return os_serial != 0 && e.min_os > os_serial;
 }
 
 AppRepo::Status AppRepo::ParseStatus(const char* s){

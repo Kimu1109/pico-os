@@ -3,6 +3,7 @@
 #include "apps/music/Music_Service.hpp"
 #include "apps/chat/Chat_Watch.hpp"
 #include "apps/todo/Todo_Watch.hpp"
+#include "apps/store/Store_Watch.hpp"
 #include "lua/LuaBackground.hpp"
 #include "lua/LuaAppScanner.hpp"
 #include "gui/scenes/LuaScene.hpp"
@@ -37,6 +38,15 @@ void BackgroundFunctions::Setup(){
         return cur && strcmp(cur->getName(), "Todo") == 0;
     };
     Add(TodoWatch::Service(), true);
+#endif
+
+    //アプリストアの更新の確認(1日1回。更新があれば通知する。ストアが開いている間は画面に任せる)
+#if PICO_APP_STORE
+    StoreWatch::foreground_query = [](){
+        const Scene* cur = SceneFunctions::Current();
+        return cur && strcmp(cur->getName(), "Store") == 0;
+    };
+    Add(StoreWatch::Service(), true);
 #endif
 
     //Luaアプリのバックグラウンドスクリプト(app.cfg の background)

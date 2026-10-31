@@ -12,6 +12,7 @@
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 
@@ -23,7 +24,7 @@ void MusicScene::onEnter(){
     const Rect content = Scene::contentRect();
     const int y0 = content.y + MARGIN;
 
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -36,7 +37,7 @@ void MusicScene::onEnter(){
     const Rect back = this->back_button->getLocalRect();
     const int row_h = back.h;
 
-    this->play_all_button = new Button(0, y0, "全曲");
+    this->play_all_button = new Button(0, y0, TR("全曲"));
     this->play_all_button->setFontSize(FontFn::Small);
     this->play_all_button->setH(20 + Button::kFrameExtra);
     this->play_all_button->setX(content.x + content.w - MARGIN - this->play_all_button->getLocalRect().w);
@@ -206,9 +207,9 @@ int MusicScene::scanTracks(int playlist, Track* out){
 }
 
 void MusicScene::playlistName(int playlist, FixedString<PICO_STR_M>& out) const {
-    if(playlist == kAll) out.assign("すべての曲");
+    if(playlist == kAll) out.assign(TR("すべての曲"));
     else if(playlist >= 0 && playlist < this->folder_count) out.assign(this->folders[playlist].c_str());
-    else out.assign("ミュージック");
+    else out.assign(TR("ミュージック"));
 }
 
 void MusicScene::showLibrary(){
@@ -218,7 +219,7 @@ void MusicScene::showLibrary(){
     if(OSData::SD_usable){
         ScrollListTools::Item all;
         all.icon = IconID::Music;
-        all.text.assign("すべての曲");
+        all.text.assign(TR("すべての曲"));
         this->list->add(all);
         for(int i = 0; i < this->folder_count; i++){
             ScrollListTools::Item item;
@@ -260,7 +261,7 @@ void MusicScene::refreshHeader(){
 
     FixedString<PICO_STR_M> name, count;
     if(this->view == kLibrary){
-        name.assign("ミュージック");
+        name.assign(TR("ミュージック"));
     }else{
         this->playlistName(this->view, name);
         count.appendFormat(" (%d)", this->view_count);
@@ -348,8 +349,8 @@ void MusicScene::showErrorDetail(){
     if(!MusicService::ErrorShown()) return;
     //理由は欄に収まらないので全文をダイアログで(長ければダイアログの中でスクロールする)
     FixedString<PICO_STR_512B> text;
-    text.appendFormat("%s を読めません\n\n%s", MusicService::ErrorTrack(), MusicService::ErrorDetail());
-    MsgDialog* dialog = new MsgDialog(text.c_str(), "", "閉じる");
+    text.appendFormat(TR("%s を読めません\n\n%s"), MusicService::ErrorTrack(), MusicService::ErrorDetail());
+    MsgDialog* dialog = new MsgDialog(text.c_str(), "", TR("閉じる"));
     if(!dialog) return;
     dialog->setVisibleIcon(true);
     dialog->setIconId(IconID::AlertTriangle);
@@ -400,32 +401,32 @@ void MusicScene::refreshPanel(){
         const char* pl = MusicService::PlaylistName();
         if(active){
             sub.appendFormat("%s · %d/%d", pl, MusicService::Position() + 1, MusicService::Count());
-            if(paused) sub.append(" 一時停止中");
+            if(paused) sub.append(TR(" 一時停止中"));
             //音が出ない本体でも曲は進むので、画面で知らせる
-            if(!SoundFunctions::IsAvailable()) sub.append("(音は出ません)");
+            if(!SoundFunctions::IsAvailable()) sub.append(TR("(音は出ません)"));
         }else if(MusicService::Finished()){
-            sub.appendFormat("%s · 再生が終わりました", pl);
+            sub.appendFormat(TR("%s · 再生が終わりました"), pl);
         }else if(MusicService::Interrupted()){
-            sub.appendFormat("%s · 他のアプリが音を使ったため止まりました", pl);
+            sub.appendFormat(TR("%s · 他のアプリが音を使ったため止まりました"), pl);
         }else{
-            sub.appendFormat("%s · 停止中", pl);
+            sub.appendFormat(TR("%s · 停止中"), pl);
         }
     }else if(!OSData::SD_usable){
-        title.assign("SDカードがありません");
+        title.assign(TR("SDカードがありません"));
     }else if(this->view == kLibrary && this->folder_count == 0){
-        title.assign("曲が選ばれていません");
-        sub.assign("/music/ に .mml か .wav を置くか、フォルダ(=プレイリスト)を作ってください");
+        title.assign(TR("曲が選ばれていません"));
+        sub.assign(TR("/music/ に .mml か .wav を置くか、フォルダ(=プレイリスト)を作ってください"));
     }else{
-        title.assign("曲が選ばれていません");
-        sub.assign("曲をタップすると再生します");
+        title.assign(TR("曲が選ばれていません"));
+        sub.assign(TR("曲をタップすると再生します"));
     }
     //読めなかった理由。欄には頭しか入らないので、タップで全文を出せることを1行目に書く
     if(MusicService::ErrorShown()){
         FixedString<PICO_PATH_LEN> name;
         MusicService::DisplayName(MusicService::ErrorTrack(), name);
         sub.assign("");
-        if(MusicService::ErrorSticky()) sub.append("読めません(タップで全文)\n");
-        else sub.appendFormat("%s を飛ばしました(タップで全文)\n", name.c_str());
+        if(MusicService::ErrorSticky()) sub.append(TR("読めません(タップで全文)\n"));
+        else sub.appendFormat(TR("%s を飛ばしました(タップで全文)\n"), name.c_str());
         sub.append(MusicService::ErrorDetail());
         sub_color = PICO_RED;
     }

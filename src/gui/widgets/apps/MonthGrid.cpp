@@ -4,11 +4,12 @@
 #include "gui/core/Font_Functions.hpp"
 #include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
 
-static const char* const WDAY_JP[7] = { "日", "月", "火", "水", "木", "金", "土" };
+static const char* const WDAY_JP[7] = { TR_NOOP("日"), TR_NOOP("月"), TR_NOOP("火"), TR_NOOP("水"), TR_NOOP("木"), TR_NOOP("金"), TR_NOOP("土") };
 
 // 予定の点の大きさ
 static constexpr int kDotSize = 3;
@@ -153,9 +154,10 @@ void MonthGrid::render(){
         const int x = g.x + this->cellX(c);
         const int w = this->cellW(c);
         OSData::frame->setTextColor(wday_color(c));
-        OSData::frame->setCursor(x + (w - OSData::frame->textWidth(WDAY_JP[c])) / 2,
+        const char* wday = I18nFunctions::Tr(WDAY_JP[c]);
+        OSData::frame->setCursor(x + (w - OSData::frame->textWidth(wday)) / 2,
                                  g.y + (kHeaderH - str_h) / 2);
-        OSData::frame->print(WDAY_JP[c]);
+        OSData::frame->print(wday);
     }
     OSData::frame->drawFastHLine(g.x, g.y + kHeaderH - 1, g.w, this->border_color);
 

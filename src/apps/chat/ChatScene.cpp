@@ -10,6 +10,7 @@
 #include "system/Config_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "crypto/Secret_Cipher.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -28,7 +29,7 @@ void ChatScene::onEnter(){
     const int y0 = content.y + MARGIN;
 
     // ---- 上部の行: [戻る] タイトル [招待] [更新] ----
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -39,7 +40,7 @@ void ChatScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
     this->row_h = this->back_button->getLocalRect().h;
 
-    this->refresh_button = new Button(0, y0, "更新");
+    this->refresh_button = new Button(0, y0, TR("更新"));
     this->refresh_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->refresh_button->setFontSize(FontFn::Small);
     this->refresh_button->setH(20 + Button::kFrameExtra);
@@ -57,18 +58,19 @@ void ChatScene::onEnter(){
     WidgetFunctions::Add(this->refresh_button);
 
     //プライベートチャットの中でだけ出す
-    this->invite_button = new Button(0, y0, "招待");
+    this->invite_button = new Button(0, y0, TR("招待"));
+    this->invite_button->setIcon(IconID::Share, IconSize::Px16);
     this->invite_button->setFontSize(FontFn::Small);
     this->invite_button->setH(20 + Button::kFrameExtra);
     this->invite_button->setX(this->refresh_button->getLocalRect().x - MARGIN - this->invite_button->getLocalRect().w);
     this->invite_button->setOnPressEnd([this](){
-        if(this->client.requestInvite()) this->setNotice("参加コードを発行しています…");
-        else if(this->client.actionBusy()) this->setNotice("前の操作が終わるまで待ってください", PICO_RED);
+        if(this->client.requestInvite()) this->setNotice(TR("参加コードを発行しています…"));
+        else if(this->client.actionBusy()) this->setNotice(TR("前の操作が終わるまで待ってください"), PICO_RED);
     });
     WidgetFunctions::Add(this->invite_button);
 
     //一覧を見ている間だけ、[招待]と同じ位置に出す(部屋の中では招待、一覧では設定という切り替え)
-    this->settings_button = new Button(0, y0, "設定");
+    this->settings_button = new Button(0, y0, TR("設定"));
     this->settings_button->setIcon(IconID::Settings, IconSize::Px16);
     this->settings_button->setFontSize(FontFn::Small);
     this->settings_button->setH(20 + Button::kFrameExtra);
@@ -92,7 +94,7 @@ void ChatScene::onEnter(){
 
     // ---- 一覧の下の行: [部屋を探す] [コードで参加] ----
     const int half_w = (content.w - MARGIN * 3) / 2;
-    this->search_button = new Button(content.x + MARGIN, this->action_row_y, "部屋を探す");
+    this->search_button = new Button(content.x + MARGIN, this->action_row_y, TR("部屋を探す"));
     this->search_button->setFontSize(FontFn::Small);
     this->search_button->setAllowTextSpacing(false);
     this->search_button->setH(kActionH + Button::kFrameExtraTight);
@@ -100,7 +102,7 @@ void ChatScene::onEnter(){
     this->search_button->setOnPressEnd([this](){ this->openSearchInput(); });
     WidgetFunctions::Add(this->search_button);
 
-    this->code_button = new Button(content.x + MARGIN * 2 + half_w, this->action_row_y, "コードで参加");
+    this->code_button = new Button(content.x + MARGIN * 2 + half_w, this->action_row_y, TR("コードで参加"));
     this->code_button->setFontSize(FontFn::Small);
     this->code_button->setAllowTextSpacing(false);
     this->code_button->setH(kActionH + Button::kFrameExtraTight);
@@ -109,11 +111,10 @@ void ChatScene::onEnter(){
     WidgetFunctions::Add(this->code_button);
 
     // ---- 部屋の中: 入力欄 + [送信] ----
-    this->send_button = new Button(0, this->input_row_y, "送信中");
+    this->send_button = new Button(0, this->input_row_y, TR("送信"));
+    this->send_button->setIcon(IconID::Send, IconSize::Px16);
     this->send_button->setFontSize(FontFn::Small);
     this->send_button->setH(kInputH + Button::kFrameExtra);
-    //押すと文字が変わる(送信/送信中)ので、長いほうで幅を固定する
-    this->send_button->setW(this->send_button->getLocalRect().w + Button::kFrameExtra);
     this->send_button->setX(content.x + content.w - MARGIN - this->send_button->getLocalRect().w);
     this->send_button->setOnPressEnd([this](){ this->sendDraft(); });
     WidgetFunctions::Add(this->send_button);
@@ -122,7 +123,7 @@ void ChatScene::onEnter(){
     this->input = new Textbox<PICO_STR_LL>(this->draft.c_str(), content.x + MARGIN, this->input_row_y,
                                            input_w, kInputH, true);
     this->input->setFontSize(FontFn::Small);
-    this->input->setPlaceholder("メッセージ");
+    this->input->setPlaceholder(TR("メッセージ"));
     this->input->setDefaultHeight(kInputH);
     WidgetFunctions::Add(this->input);
 
@@ -172,7 +173,7 @@ void ChatScene::applyMode(){
     this->send_button->setVisible(in_room);
     this->search_button->setVisible(!in_room);
     this->code_button->setVisible(this->mode == Mode::List);
-    this->search_button->setText(searching ? "別の語で探す" : "部屋を探す");
+    this->search_button->setText(searching ? TR("別の語で探す") : TR("部屋を探す"));
 
     const ChatProto::Room* r = in_room ? this->client.findRoom(this->client.room()) : nullptr;
     this->invite_button->setVisible(r && r->is_private);
@@ -209,9 +210,9 @@ void ChatScene::refreshTitle(){
         t.append(r ? r->name.c_str() : "");
         this->title_label->setText(t);
     }else if(this->mode == Mode::Search){
-        this->title_label->setText("部屋を探す");
+        this->title_label->setText(TR("部屋を探す"));
     }else{
-        this->title_label->setText("チャット");
+        this->title_label->setText(TR("チャット"));
     }
 }
 
@@ -226,7 +227,7 @@ void ChatScene::refreshRoomList(){
             ScrollListTools::Item item;
             item.icon = IconID::Messages;
             item.text.append(h.name);
-            item.text.appendFormat(" (%lu人)", (unsigned long)h.members);
+            item.text.appendFormat(TR(" (%lu人)"), (unsigned long)h.members);
             //参加済みは灰色(タップすると開くだけ)
             if(h.joined) item.color = PICO_DARKGREY;
             this->room_list->add(item);
@@ -267,7 +268,7 @@ void ChatScene::refreshStatus(){
         text = this->notice.c_str();
         color = this->notice_color;
     }else if(!bad && this->mode == Mode::List && this->client.roomCount() == 0 && this->client.roomsRevision() != 0){
-        text = "参加している部屋がありません。下のボタンから探すか、参加コードで入れます";
+        text = TR("参加している部屋がありません。下のボタンから探すか、参加コードで入れます");
     }
     this->status_label->setTextColor(color);
     this->status_label->setText(text);
@@ -275,15 +276,16 @@ void ChatScene::refreshStatus(){
 
 void ChatScene::refreshPlaceholder(){
     if(!this->log_view) return;
-    if(this->client.messagesLoaded()) this->log_view->setPlaceholder("まだ発言がありません");
-    else this->log_view->setPlaceholder("読み込み中…");
+    if(this->client.messagesLoaded()) this->log_view->setPlaceholder(TR("まだ発言がありません"));
+    else this->log_view->setPlaceholder(TR("読み込み中…"));
 }
 
 void ChatScene::refreshSendButton(){
     if(!this->send_button) return;
     const bool sending = this->client.sending();
     this->seen_sending = sending;
-    this->send_button->setText(sending ? "送信中" : "送信");
+    //送っている間は灰色にして押せなくする(アイコンなので「送信中」の文字の代わり)
+    this->send_button->setEnabled(!sending);
 }
 
 void ChatScene::openRoom(uint32_t room_id){
@@ -314,12 +316,12 @@ void ChatScene::onListTap(int index){
         this->openRoom(id);
         return;
     }
-    if(this->client.joinOpen(id)) this->setNotice("参加しています…");
-    else this->setNotice("前の操作が終わるまで待ってください", PICO_RED);
+    if(this->client.joinOpen(id)) this->setNotice(TR("参加しています…"));
+    else this->setNotice(TR("前の操作が終わるまで待ってください"), PICO_RED);
 }
 
 void ChatScene::openSearchInput(){
-    auto* dialog = new InputDialog("探す部屋の名前:", true);
+    auto* dialog = new InputDialog(TR("探す部屋の名前:"), true);
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(this->search_query.c_str()); //前回の語から直せるようにしておく
     dialog->setVisible(true);
@@ -335,12 +337,12 @@ void ChatScene::openSearchInput(){
 }
 
 void ChatScene::startSearch(){
-    if(this->client.search(this->search_query.c_str())) this->setNotice("探しています…");
-    else this->setNotice("前の操作が終わるまで待ってください", PICO_RED);
+    if(this->client.search(this->search_query.c_str())) this->setNotice(TR("探しています…"));
+    else this->setNotice(TR("前の操作が終わるまで待ってください"), PICO_RED);
 }
 
 void ChatScene::openCodeInput(){
-    auto* dialog = new InputDialog("参加コード:", true);
+    auto* dialog = new InputDialog(TR("参加コード:"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -350,10 +352,10 @@ void ChatScene::openCodeInput(){
             if(code.empty()){
                 //何もしない
             }else if(this->client.joinByCode(code.c_str())){
-                this->setNotice("参加しています…");
+                this->setNotice(TR("参加しています…"));
             }else{
-                this->setNotice(this->client.actionBusy() ? "前の操作が終わるまで待ってください"
-                                                          : "参加コードが長すぎます", PICO_RED);
+                this->setNotice(this->client.actionBusy() ? TR("前の操作が終わるまで待ってください")
+                                                          : TR("参加コードが長すぎます"), PICO_RED);
             }
         }
         WidgetFunctions::DestroyLater(dialog);
@@ -374,7 +376,7 @@ void ChatScene::loadChatConfigValues(){
 void ChatScene::openChatSettings(){
     // サーバURL→(1フレーム空けて)トークンの順に編集する。SettingsSceneのWi-Fi編集と
     // 同じ「押されるたびにnew、閉じたらDestroyLater()」の形
-    auto* dialog = new InputDialog("チャットサーバURL:", true);
+    auto* dialog = new InputDialog(TR("チャットサーバURL:"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(this->chat_server_value.c_str());
@@ -390,7 +392,7 @@ void ChatScene::openChatSettings(){
 void ChatScene::openTokenDialog(){
     // Wi-Fiパスワードと同じ扱い: 現在のトークンは平文で持たないので、常に空欄から始まる。
     // 空欄のまま決定すると既存のトークンを変更しない(commitChatToken()参照)
-    auto* dialog = new InputDialog("トークン(空欄で変更なし):", true);
+    auto* dialog = new InputDialog(TR("トークン(空欄で変更なし):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -426,14 +428,14 @@ void ChatScene::showInvite(){
     const time_t now = time(nullptr);
     struct tm tm_local;
     if(now > 1577836800 && localtime_r(&expires, &tm_local)){
-        snprintf(text, sizeof(text), "参加コード\n%s\n%02d:%02dまで有効", this->client.inviteCode(),
+        snprintf(text, sizeof(text), TR("参加コード\n%s\n%02d:%02dまで有効"), this->client.inviteCode(),
                  tm_local.tm_hour, tm_local.tm_min);
     }else{
-        snprintf(text, sizeof(text), "参加コード\n%s\n30分で無効", this->client.inviteCode());
+        snprintf(text, sizeof(text), TR("参加コード\n%s\n30分で無効"), this->client.inviteCode());
     }
     LOG_APP_MSG("チャット: 参加コードを発行しました(%s)", this->client.inviteCode());
 
-    auto* dialog = new MsgDialog(text, "閉じる", "OK");
+    auto* dialog = new MsgDialog(text, TR("閉じる"), "OK");
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([dialog](bool){ WidgetFunctions::DestroyLater(dialog); });
@@ -449,7 +451,7 @@ void ChatScene::onActionDone(){
     switch(a){
         case Action::Search:
             if(this->mode == Mode::Search) this->refreshRoomList();
-            this->setNotice(this->client.searchCount() == 0 ? "見つかりませんでした" : "");
+            this->setNotice(this->client.searchCount() == 0 ? TR("見つかりませんでした") : "");
             break;
         case Action::JoinOpen:
         case Action::JoinCode:
@@ -473,7 +475,7 @@ void ChatScene::sendDraft(){
 
     if(!this->client.send(text->c_str())){
         this->status_label->setTextColor(PICO_RED);
-        this->status_label->setText(this->client.sending() ? "前の発言を送っています" : "送れません");
+        this->status_label->setText(this->client.sending() ? TR("前の発言を送っています") : TR("送れません"));
         return;
     }
     this->input->setText("");

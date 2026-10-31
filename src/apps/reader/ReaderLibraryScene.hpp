@@ -4,6 +4,7 @@
 #include "gui/widgets/Label.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 class Button;
 class ScrollList;
@@ -19,7 +20,7 @@ class FileSelectDialog;
 // 一覧のパスは画面を出している間だけ確保する(本を読む画面へ行くと onExit() で放す)。
 class ReaderLibraryScene : public Scene {
     public:
-        static constexpr const char* kAppName = "読書";
+        static constexpr const char* kAppName = TR_NOOP("読書"); //登録名(launcher.cfg 等の識別子)は原文のまま。見せるときに I18nFunctions::Tr()
 
         const char* getName() const override { return "ReaderLibrary"; }
 

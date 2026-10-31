@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include "system/I18n_Functions.hpp"
 
 // 一覧の下のボタンの行の高さ
 static constexpr int kActionH = 24;
@@ -52,7 +53,7 @@ void TodoScene::onEnter(){
     const int line_h = FontFn::GetFontSize(FontFn::Small) + 2;
 
     // ---- 上部の行: [戻る] TODO [設定] [更新] ----
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -60,7 +61,7 @@ void TodoScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
     const int row_h = this->back_button->getLocalRect().h;
 
-    this->refresh_button = new Button(0, y0, "更新");
+    this->refresh_button = new Button(0, y0, TR("更新"));
     this->refresh_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->refresh_button->setFontSize(FontFn::Small);
     this->refresh_button->setH(20 + Button::kFrameExtra);
@@ -78,7 +79,7 @@ void TodoScene::onEnter(){
     });
     WidgetFunctions::Add(this->refresh_button);
 
-    this->settings_button = new Button(0, y0, "設定");
+    this->settings_button = new Button(0, y0, TR("設定"));
     this->settings_button->setIcon(IconID::Settings, IconSize::Px16);
     this->settings_button->setFontSize(FontFn::Small);
     this->settings_button->setH(20 + Button::kFrameExtra);
@@ -98,9 +99,9 @@ void TodoScene::onEnter(){
     // ---- 表示の切り替え ----
     const int tab_y = y0 + row_h + MARGIN;
     this->view_tab = new TabBar(content.x + MARGIN, tab_y, content.w - MARGIN * 2, row_h);
-    this->view_tab->addTab("今日");
-    this->view_tab->addTab("7日間");
-    this->view_tab->addTab("すべて");
+    this->view_tab->addTab(IconID::CalendarEvent, TR("今日"));
+    this->view_tab->addTab(IconID::CalendarWeek, TR("7日間"));
+    this->view_tab->addTab(IconID::List, TR("すべて"));
     this->view_tab->setSelected((int)this->view);
     this->view_tab->setOnChanged([this](int index){
         this->view = (TodoistClient::View)index;
@@ -116,14 +117,14 @@ void TodoScene::onEnter(){
     // ---- 一番下: [追加] [完了] ----
     const int action_y = content.y + content.h - MARGIN - kActionH;
     const int half_w = (content.w - MARGIN * 3) / 2;
-    this->add_button = new Button(content.x + MARGIN, action_y, "追加");
+    this->add_button = new Button(content.x + MARGIN, action_y, TR("追加"));
     this->add_button->setFontSize(FontFn::Small);
     this->add_button->setH(kActionH + Button::kFrameExtra);
     this->add_button->setW(half_w + Button::kFrameExtra);
     this->add_button->setOnPressEnd([this](){ this->openAddDialog(); });
     WidgetFunctions::Add(this->add_button);
 
-    this->done_button = new Button(content.x + MARGIN * 2 + half_w, action_y, "完了");
+    this->done_button = new Button(content.x + MARGIN * 2 + half_w, action_y, TR("完了"));
     this->done_button->setFontSize(FontFn::Small);
     this->done_button->setH(kActionH + Button::kFrameExtra);
     this->done_button->setW(half_w + Button::kFrameExtra);
@@ -239,9 +240,9 @@ void TodoScene::refreshDetail(){
     if(!t){
         this->detail_label->setTextColor(PICO_DARKGREY);
         if(this->client.loaded() && this->client.taskCount() == 0){
-            this->detail_label->setText("タスクはありません。[追加] で足せます");
+            this->detail_label->setText(TR("タスクはありません。[追加] で足せます"));
         }else if(this->client.loaded()){
-            this->detail_label->setText("タップで選択、もう一度タップで完了");
+            this->detail_label->setText(TR("タップで選択、もう一度タップで完了"));
         }else{
             this->detail_label->setText("");
         }
@@ -254,12 +255,12 @@ void TodoScene::refreshDetail(){
     if(t->due.has){
         char due[48];
         Todoist::FormatDue(t->due, TodayDay(), due, sizeof(due));
-        text.appendFormat("期限 %s", due);
+        text.appendFormat(TR("期限 %s"), due);
         //繰り返しは Todoist の書き方("毎日 9:30")をそのまま見せる
         if(t->due.recurring && !t->due.text.empty()) text.appendFormat("(%s)", t->due.text.c_str());
         text.append("  ");
     }else{
-        text.append("期限なし  ");
+        text.append(TR("期限なし  "));
     }
     text.appendFormat("P%d", 5 - t->priority);
     this->detail_label->setTextColor(PICO_BLACK);
@@ -284,9 +285,9 @@ void TodoScene::refreshStatus(){
         text = this->notice.c_str();
         color = this->notice_color;
     }else if(!*text && !this->client.loaded()){
-        text = "読み込み中…";
+        text = TR("読み込み中…");
     }else if(!*text && this->client.truncated()){
-        text = "多すぎるので一部だけ表示しています";
+        text = TR("多すぎるので一部だけ表示しています");
     }
     this->status_label->setTextColor(color);
     this->status_label->setText(text);
@@ -303,26 +304,26 @@ void TodoScene::onListTap(int index, bool already_selected){
 void TodoScene::confirmClose(){
     const Todoist::Task* t = this->selectedTask();
     if(!t){
-        this->setNotice("完了にするタスクを選んでください", PICO_RED);
+        this->setNotice(TR("完了にするタスクを選んでください"), PICO_RED);
         return;
     }
     if(this->client.actionBusy()){
-        this->setNotice("前の操作が終わるまで待ってください", PICO_RED);
+        this->setNotice(TR("前の操作が終わるまで待ってください"), PICO_RED);
         return;
     }
     //長い名前は MsgDialog が小さい文字/スクロールで見せてくれるので、そのまま出す
     FixedString<PICO_STR_512B> text;
-    text.appendFormat("「%s」を完了にしますか?", t->content.c_str());
+    text.appendFormat(TR("「%s」を完了にしますか?"), t->content.c_str());
     this->confirm_id = t->id;
 
-    auto* dialog = new MsgDialog(text.c_str(), "やめる", "完了");
+    auto* dialog = new MsgDialog(text.c_str(), TR("やめる"), TR("完了"));
     dialog->setIconId(IconID::CheckboxOn);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool ok){
         if(ok && !this->confirm_id.empty()){
-            if(this->client.close(this->confirm_id.c_str())) this->setNotice("完了にしています…");
-            else this->setNotice("前の操作が終わるまで待ってください", PICO_RED);
+            if(this->client.close(this->confirm_id.c_str())) this->setNotice(TR("完了にしています…"));
+            else this->setNotice(TR("前の操作が終わるまで待ってください"), PICO_RED);
         }
         this->confirm_id.clear();
         WidgetFunctions::DestroyLater(dialog);
@@ -331,10 +332,10 @@ void TodoScene::confirmClose(){
 
 void TodoScene::openAddDialog(){
     if(this->client.state() == TodoistClient::State::NotConfigured){
-        this->setNotice("先に [設定] でトークンを入れてください", PICO_RED);
+        this->setNotice(TR("先に [設定] でトークンを入れてください"), PICO_RED);
         return;
     }
-    auto* dialog = new InputDialog("新しいタスク:", true);
+    auto* dialog = new InputDialog(TR("新しいタスク:"), true);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){
@@ -347,18 +348,18 @@ void TodoScene::openAddDialog(){
 }
 
 void TodoScene::openDueDialog(){
-    auto* dialog = new InputDialog("期限(例: 明日 15時。空欄で無し):", true);
+    auto* dialog = new InputDialog(TR("期限(例: 明日 15時。空欄で無し):"), true);
     WidgetFunctions::AddDialog(dialog);
     //今日の表示から足すなら、期限は今日にしておく(消せば期限なし)
-    if(this->view == TodoistClient::View::Today) dialog->setInput("今日");
+    if(this->view == TodoistClient::View::Today) dialog->setInput(TR("今日"));
     dialog->setVisible(true);
     dialog->setOnClosed([this, dialog](bool is_submit){
         if(is_submit){
             if(this->client.add(this->pending_content.c_str(), dialog->getInput().c_str())){
-                this->setNotice("追加しています…");
+                this->setNotice(TR("追加しています…"));
             }else{
-                this->setNotice(this->client.actionBusy() ? "前の操作が終わるまで待ってください"
-                                                          : "タスクを追加できません", PICO_RED);
+                this->setNotice(this->client.actionBusy() ? TR("前の操作が終わるまで待ってください")
+                                                          : TR("タスクを追加できません"), PICO_RED);
             }
         }
         this->pending_content.clear();
@@ -368,7 +369,7 @@ void TodoScene::openDueDialog(){
 
 void TodoScene::openSettings(){
     //Wi-Fiパスワード・チャットのトークンと同じ扱い: 今のトークンは平文で持たないので空欄から始まる
-    auto* dialog = new InputDialog("Todoistのトークン(空欄で変更なし):", true);
+    auto* dialog = new InputDialog(TR("Todoistのトークン(空欄で変更なし):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -378,9 +379,9 @@ void TodoScene::openSettings(){
                 this->client.loadConfig();
                 this->client.setUtcOffset(LocalUtcOffsetSec());
                 this->client.refreshNow();
-                this->setNotice("トークンを保存しました");
+                this->setNotice(TR("トークンを保存しました"));
             }else{
-                this->setNotice("トークンを保存できませんでした", PICO_RED);
+                this->setNotice(TR("トークンを保存できませんでした"), PICO_RED);
             }
         }
         WidgetFunctions::DestroyLater(dialog);
@@ -396,10 +397,10 @@ void TodoScene::onActionDone(){
     if(this->client.lastAction() == A::Close){
         TodoReminders::Cancel(this->client.lastClosedId());
         if(this->selected_id == this->client.lastClosedId()) this->selected_id.clear();
-        this->setNotice("完了にしました");
+        this->setNotice(TR("完了にしました"));
         this->refreshDetail();
     }else if(this->client.lastAction() == A::Add){
-        this->setNotice("追加しました");
+        this->setNotice(TR("追加しました"));
     }
 }
 

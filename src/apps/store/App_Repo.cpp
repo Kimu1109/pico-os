@@ -6,6 +6,7 @@
 
 #include "monocypher-ed25519.h"
 #include "apps/ssh/Ssh_Sha256.hpp"
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // line をタブで最大 max 個に分ける(その場で書き換える。末尾の\r\nは除く)。最後の列は残り全部。
@@ -171,12 +172,12 @@ bool AppRepo::ParsePerms(const char* s, uint8_t& out){
 
 void AppRepo::PermsText(uint8_t perms, FixedString<PICO_STR_L>& out){
     out.clear();
-    if(perms & PermNetwork){ out.append("ネットワーク"); }
-    if(perms & PermNotify){ if(!out.empty()) out.append("・"); out.append("通知"); }
-    if(perms & PermSd){ if(!out.empty()) out.append("・"); out.append("SD全体"); }
-    if(perms & PermBackground){ if(!out.empty()) out.append("・"); out.append("バックグラウンド"); }
-    if(perms & PermMicrophone){ if(!out.empty()) out.append("・"); out.append("マイク"); }
-    if(out.empty()) out.assign("なし");
+    if(perms & PermNetwork){ out.append(TR("ネットワーク")); }
+    if(perms & PermNotify){ if(!out.empty()) out.append(TR("・")); out.append(TR("通知")); }
+    if(perms & PermSd){ if(!out.empty()) out.append(TR("・")); out.append(TR("SD全体")); }
+    if(perms & PermBackground){ if(!out.empty()) out.append(TR("・")); out.append(TR("バックグラウンド")); }
+    if(perms & PermMicrophone){ if(!out.empty()) out.append(TR("・")); out.append(TR("マイク")); }
+    if(out.empty()) out.assign(TR("なし"));
 }
 
 bool AppRepo::ParseCatalogHeader(char* line, uint32_t& serial){

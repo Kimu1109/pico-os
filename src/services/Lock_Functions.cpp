@@ -15,6 +15,7 @@
 #include "OS_Data.hpp"
 
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -131,9 +132,9 @@ namespace {
     void WrongMessage(unsigned long now){
         char m[64];
         const unsigned long w = LockFunctions::WaitRemainingMs(now);
-        if(w > 0) snprintf(m, sizeof(m), "違います。%lu秒待ってください", (w + 999) / 1000);
-        else if(fails >= LockFunctions::kFreeTries - 2) snprintf(m, sizeof(m), "違います(あと%d回で待ち時間)", LockFunctions::kFreeTries - fails);
-        else snprintf(m, sizeof(m), "PINが違います");
+        if(w > 0) snprintf(m, sizeof(m), TR("違います。%lu秒待ってください"), (w + 999) / 1000);
+        else if(fails >= LockFunctions::kFreeTries - 2) snprintf(m, sizeof(m), TR("違います(あと%d回で待ち時間)"), LockFunctions::kFreeTries - fails);
+        else snprintf(m, sizeof(m), TR("PINが違います"));
         SetMessage(m, true);
     }
 }
@@ -227,7 +228,7 @@ void LockFunctions::LockNow(){
     }
     locked = true;
     removing = false;
-    SetMessage("PINを入力", false);
+    SetMessage(TR("PINを入力"), false);
     Show(Step::Unlock);
 }
 
@@ -235,10 +236,10 @@ void LockFunctions::BeginChange(){
     if(locked) return;
     removing = false;
     if(HasPin() && !(RecordUsesDeviceKey(record) && !DeviceKey::available)){
-        SetMessage("今のPINを入力", false);
+        SetMessage(TR("今のPINを入力"), false);
         Show(Step::Verify);
     }else{
-        SetMessage("新しいPIN(数字4〜8桁)", false);
+        SetMessage(TR("新しいPIN(数字4〜8桁)"), false);
         Show(Step::NewPin);
     }
 }
@@ -253,7 +254,7 @@ void LockFunctions::BeginRemove(){
         return;
     }
     removing = true;
-    SetMessage("PINを外すには今のPINを入力", false);
+    SetMessage(TR("PINを外すには今のPINを入力"), false);
     Show(Step::Verify);
 }
 
@@ -284,23 +285,23 @@ Check LockFunctions::Submit(const char* pin, unsigned long now){
                 LOG_SYS_MSG("画面ロックのPINを外しました");
                 Hide();
             }else{
-                SetMessage("新しいPIN(数字4〜8桁)", false);
+                SetMessage(TR("新しいPIN(数字4〜8桁)"), false);
                 step = Step::NewPin;
                 if(screen) screen->reset();
             }
             return c;
         }
         case Step::NewPin:
-            if(!IsValidPin(pin)){ SetMessage("数字4〜8桁にしてください", true); return Check::Invalid; }
+            if(!IsValidPin(pin)){ SetMessage(TR("数字4〜8桁にしてください"), true); return Check::Invalid; }
             snprintf(new_pin, sizeof(new_pin), "%s", pin);
-            SetMessage("もう一度入力", false);
+            SetMessage(TR("もう一度入力"), false);
             step = Step::Confirm;
             if(screen) screen->reset();
             return Check::Ok;
         case Step::Confirm: {
             if(strcmp(pin, new_pin) != 0){
                 memset(new_pin, 0, sizeof(new_pin));
-                SetMessage("一致しません。新しいPINから", true);
+                SetMessage(TR("一致しません。新しいPINから"), true);
                 step = Step::NewPin;
                 if(screen) screen->reset();
                 return Check::Wrong;

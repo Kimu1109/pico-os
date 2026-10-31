@@ -53,11 +53,21 @@ void Button::drawContent(const Rect& g_rect, int text_spacing, int pressOffset) 
         );
     }else{
         if(fg != this->text_color) OSData::frame->setTextColor(fg);
+        //幅を決めたボタンに文字が入りきらないとき(訳した文字列が原文より長い等)は、横だけ縮めて箱に収める
+        int draw_w = this->text_w;
+        const float sx = OSData::frame->getTextSizeX();
+        const float sy = OSData::frame->getTextSizeY();
+        const bool squeeze = this->text_w > this->l_rect.w && this->l_rect.w > 0;
+        if(squeeze){
+            OSData::frame->setTextSize(sx * this->l_rect.w / this->text_w, sy);
+            draw_w = this->l_rect.w;
+        }
         OSData::frame->setCursor(
-            g_rect.x + pressOffset + text_spacing * 0.5 + (this->l_rect.w - this->text_w) * 0.5,
+            g_rect.x + pressOffset + text_spacing * 0.5 + (this->l_rect.w - draw_w) * 0.5,
             g_rect.y + pressOffset + text_spacing * 0.5 + (this->l_rect.h - this->text_h) * 0.5
         );
         OSData::frame->print(this->text.c_str());
+        if(squeeze) OSData::frame->setTextSize(sx, sy);
     }
 }
 

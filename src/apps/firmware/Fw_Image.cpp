@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "monocypher-ed25519.h"
+#include "system/I18n_Functions.hpp"
 
 // 見出しの並び(リトルエンディアン。script/firmware_tool.py と揃える)
 //   0  magic[8]        "PICO-FW1"
@@ -49,23 +50,23 @@ namespace {
 
 const char* FwImage::ErrorText(Error e){
     switch(e){
-        case Error::None:       return "問題なし";
-        case Error::BadMagic:   return "ファームの更新ファイルではありません";
-        case Error::BadFormat:  return "更新ファイルの形式が違うか、壊れています";
-        case Error::WrongBoard: return "別の基板向けのファームです";
-        case Error::BadSize:    return "更新ファイルの大きさがおかしいです";
-        case Error::FsMismatch: return "フラッシュの割り当てが今のファームと違います(USBで書き込んでください)";
-        case Error::TooLarge:   return "更新ファイルが置き場に入りません";
+        case Error::None:       return TR("問題なし");
+        case Error::BadMagic:   return TR("ファームの更新ファイルではありません");
+        case Error::BadFormat:  return TR("更新ファイルの形式が違うか、壊れています");
+        case Error::WrongBoard: return TR("別の基板向けのファームです");
+        case Error::BadSize:    return TR("更新ファイルの大きさがおかしいです");
+        case Error::FsMismatch: return TR("フラッシュの割り当てが今のファームと違います(USBで書き込んでください)");
+        case Error::TooLarge:   return TR("更新ファイルが置き場に入りません");
     }
-    return "不明な誤り";
+    return TR("不明な誤り");
 }
 
 const char* FwImage::SigText(Sig s){
     switch(s){
-        case Sig::Trusted:    return "署名を確かめました";
-        case Sig::Unsigned:   return "署名がありません";
-        case Sig::UnknownKey: return "知らない鍵の署名です";
-        case Sig::Bad:        return "署名が合いません(壊れているか、書き換えられています)";
+        case Sig::Trusted:    return TR("署名を確かめました");
+        case Sig::Unsigned:   return TR("署名がありません");
+        case Sig::UnknownKey: return TR("知らない鍵の署名です");
+        case Sig::Bad:        return TR("署名が合いません(壊れているか、書き換えられています)");
     }
     return "?";
 }

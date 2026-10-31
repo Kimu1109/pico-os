@@ -9,6 +9,7 @@
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -126,9 +127,9 @@ namespace {
 
         char text[PICO_STR_M];
         const Alarm& a = alarms[(ring_index >= 0) ? ring_index : 0];
-        snprintf(text, sizeof(text), "アラーム %02d:%02d", a.hour, a.minute);
+        snprintf(text, sizeof(text), TR("アラーム %02d:%02d"), a.hour, a.minute);
 
-        MsgDialog* d = new MsgDialog(text, "5分後", "止める");
+        MsgDialog* d = new MsgDialog(text, TR("5分後"), TR("止める"));
         if(!d) return;
         d->setVisibleIcon(true);
         d->setIconId(IconID::AlertTriangle);
@@ -189,12 +190,12 @@ void AlarmFunctions::PlayBeepStep(long step){
 
 const char* AlarmFunctions::RepeatToStr(Repeat r){
     switch(r){
-        case Repeat::Once:     return "1回";
-        case Repeat::Daily:    return "毎日";
-        case Repeat::Weekdays: return "平日";
-        case Repeat::Weekends: return "土日";
+        case Repeat::Once:     return TR("1回");
+        case Repeat::Daily:    return TR("毎日");
+        case Repeat::Weekdays: return TR("平日");
+        case Repeat::Weekends: return TR("土日");
     }
-    return "1回";
+    return TR("1回");
 }
 
 bool AlarmFunctions::RepeatMatches(Repeat r, int wday){

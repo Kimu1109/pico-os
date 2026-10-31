@@ -8,6 +8,7 @@
 #include "OS_Data.hpp"
 #include "gui/ScopedClip.hpp"
 #include "apps/home/Home_Widget.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 #include <Arduino.h>
@@ -441,7 +442,7 @@ void AppGrid::render() {
             //押下中のタイルは背景を敷いて押し込みを表す
             if (is_pressed) OSData::frame->fillRect(r.x, r.y, r.w, r.h, PICO_BLACK);
             drawIcon(*entry, r.x + (r.w - kIconPx) / 2, r.y + kPadding, fore_color);
-            drawName(entry->name.c_str(), r.x, r.y + kPadding + kIconPx + kLabelGap, r.w, fore_color);
+            drawName(AppFunctions::DisplayName(*entry), r.x, r.y + kPadding + kIconPx + kLabelGap, r.w, fore_color);
         } else {
             //ウィジェット: 角の丸い枠の中を、種類ごとの描き方に任せる。ボタンの外を押している間は枠を太く
             const bool body_pressed = (i == pressed_item_ && pressed_button_ < 0);
@@ -452,7 +453,7 @@ void AppGrid::render() {
             if (w) {
                 w->draw(r, it.w, it.h, (i == pressed_item_) ? pressed_button_ : -1);
             } else if (it.index >= 0 && it.index < HomeLayout::placed_count) {
-                const char* name = HomeLayout::Info(HomeLayout::placed[it.index].kind).name;
+                const char* name = I18nFunctions::Tr(HomeLayout::Info(HomeLayout::placed[it.index].kind).name);
                 drawName(name, r.x, r.y + r.h / 2 - 8, r.w, PICO_DARKGREY);
             }
         }

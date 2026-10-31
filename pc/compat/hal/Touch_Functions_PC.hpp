@@ -24,6 +24,9 @@ namespace PicoOsTouchScript {
         int hold = 3;    // 何フレーム押し続けるか
         int x = 0;
         int y = 0;
+        // 離す位置(--drag)。押している間に(x,y)からここへまっすぐ動かす。--tapは押した位置のまま
+        int x2 = 0;
+        int y2 = 0;
     };
 
     constexpr int kMaxTaps = 16;
@@ -33,11 +36,14 @@ namespace PicoOsTouchScript {
     inline int frame = 0;   // PICO_Touch::Update()が呼ばれた回数
     inline bool enabled = false;
 
-    inline bool Add(int x, int y, int at_frame, int hold){
+    inline bool AddDrag(int x, int y, int x2, int y2, int at_frame, int hold){
         if(count >= kMaxTaps) return false;
-        taps[count++] = Tap{at_frame, (hold > 0 ? hold : 1), x, y};
+        taps[count++] = Tap{at_frame, (hold > 0 ? hold : 1), x, y, x2, y2};
         enabled = true;
         return true;
+    }
+    inline bool Add(int x, int y, int at_frame, int hold){
+        return AddDrag(x, y, x, y, at_frame, hold);
     }
 
     // 今のフレームで押されている座標があれば true
@@ -45,8 +51,11 @@ namespace PicoOsTouchScript {
         for(int i = 0; i < count; i++){
             const Tap& t = taps[i];
             if(frame >= t.frame && frame < t.frame + t.hold){
-                x = t.x;
-                y = t.y;
+                //最初のフレームは押した位置、最後のフレームで離す位置に着く
+                const int step = frame - t.frame;
+                const int span = t.hold > 1 ? t.hold - 1 : 1;
+                x = t.x + (t.x2 - t.x) * step / span;
+                y = t.y + (t.y2 - t.y) * step / span;
                 return true;
             }
         }

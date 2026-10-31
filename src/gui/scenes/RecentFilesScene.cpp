@@ -8,12 +8,13 @@
 #include "storage/Recent_Files.hpp"
 #include "storage/SD_IO.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 void RecentFilesScene::onEnter(){
     const Rect content = Scene::contentRect();
     const int top = content.y + MARGIN;
 
-    this->back_button_ = new Button(content.x + MARGIN, top, "戻る");
+    this->back_button_ = new Button(content.x + MARGIN, top, TR("戻る"));
     this->back_button_->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button_->setFontSize(FontFn::Small);
     this->back_button_->setH(20 + Button::kFrameExtra);
@@ -21,7 +22,7 @@ void RecentFilesScene::onEnter(){
     WidgetFunctions::Add(this->back_button_);
     const Rect bb = this->back_button_->getLocalRect();
 
-    auto* title = new Label<PICO_STR_L>(bb.x + bb.w + MARGIN * 2, top + 3, "最近開いたファイル");
+    auto* title = new Label<PICO_STR_L>(bb.x + bb.w + MARGIN * 2, top + 3, TR("最近開いたファイル"));
     title->setFontSize(FontFn::Small);
     title->setHitTransparent(true);
     WidgetFunctions::Add(title);
@@ -36,7 +37,7 @@ void RecentFilesScene::onEnter(){
     WidgetFunctions::Add(this->list_);
 
     this->empty_label_ = new Label<PICO_STR_L>(content.x + MARGIN * 2, body_y + MARGIN,
-                                               "まだありません。エディタやファイルアプリで開いたファイルがここに並びます");
+                                               TR("まだありません。エディタやファイルアプリで開いたファイルがここに並びます"));
     this->empty_label_->setFontSize(FontFn::Small);
     this->empty_label_->setMaxWidth(content.w - MARGIN * 4);
     this->empty_label_->setTextColor(PICO_DARKGREY);

@@ -5,6 +5,7 @@
 #include "crypto/Secret_Aead.hpp"
 #include "system/Log_Functions.hpp"
 #include "util/Net_Addr.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -77,7 +78,7 @@ namespace {
     }
     bool SetupServer::begin(FixedString<PICO_STR_LL>& err){
         listen_fd = ::socket(AF_INET, SOCK_STREAM, 0);
-        if(listen_fd < 0){ err.assign("待ち受けを始められません"); return false; }
+        if(listen_fd < 0){ err.assign(TR("待ち受けを始められません")); return false; }
         const int one = 1;
         ::setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
         sockaddr_in addr{};
@@ -87,7 +88,7 @@ namespace {
         if(::bind(listen_fd, (sockaddr*)&addr, sizeof(addr)) != 0 || ::listen(listen_fd, 2) != 0){
             ::close(listen_fd);
             listen_fd = -1;
-            err.assign("待ち受けの番号(ポート)が使えません");
+            err.assign(TR("待ち受けの番号(ポート)が使えません"));
             return false;
         }
         ::fcntl(listen_fd, F_SETFL, ::fcntl(listen_fd, F_GETFL, 0) | O_NONBLOCK);
@@ -130,7 +131,7 @@ namespace {
     bool SetupServer::begin(FixedString<PICO_STR_LL>& err){
         char ip[16];
         NetworkFunctions::SetupApAddress(ip, sizeof(ip));
-        if(!NetAddr::Parse(ip, ap_ip)){ err.assign("アクセスポイントのアドレスが分かりません"); return false; }
+        if(!NetAddr::Parse(ip, ap_ip)){ err.assign(TR("アクセスポイントのアドレスが分かりません")); return false; }
         http.begin();
         if(!dns.begin(WifiSetupFunctions::kDnsPort)){
             // DNSが無くても、URLを打てばページは開ける
@@ -182,7 +183,7 @@ namespace {
         dns.endPacket();
     }
 #else // Web
-    bool SetupServer::begin(FixedString<PICO_STR_LL>& err){ err.assign("Web版では使えません"); return false; }
+    bool SetupServer::begin(FixedString<PICO_STR_LL>& err){ err.assign(TR("Web版では使えません")); return false; }
     void SetupServer::end(){}
     bool SetupServer::accept(){ return false; }
     void SetupServer::drop(){}
@@ -247,7 +248,7 @@ bool WifiSetupFunctions::Start(FixedString<PICO_STR_LL>& err){
     ap_password[8] = '\0';
 
     if(!NetworkFunctions::StartSetupAp(ap_ssid.c_str(), ap_password)){
-        err.assign("アクセスポイントを始められませんでした");
+        err.assign(TR("アクセスポイントを始められませんでした"));
         return false;
     }
     server = new SetupServer();

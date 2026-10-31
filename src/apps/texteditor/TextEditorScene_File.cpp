@@ -17,6 +17,7 @@
 #include "gui/icons/File_Icon.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -31,7 +32,7 @@ void TextEditorScene::confirmDiscard(const char* msg, InplaceFunction<void()> th
         return;
     }
     KeyboardFunctions::HideAll(); //キーボードはダイアログより手前に出るので先に閉じる
-    MsgDialog* dialog = new MsgDialog(msg, "キャンセル", "破棄する");
+    MsgDialog* dialog = new MsgDialog(msg, TR("キャンセル"), TR("破棄する"));
     if(!dialog) return;
     dialog->setVisibleIcon(true);
     dialog->setIconId(IconID::AlertTriangle);
@@ -62,17 +63,17 @@ void TextEditorScene::newDocument(){
 
 bool TextEditorScene::loadFile(const char* file){
     if(!OSData::SD_usable){
-        ErrorFunctions::ShowFatal("SDカードが使えません");
+        ErrorFunctions::ShowFatal(TR("SDカードが使えません"));
         return false;
     }
     FsFile f = OSData::SD.open(file);
     if(!f){
-        ErrorFunctions::ShowFatal("ファイルを開けませんでした");
+        ErrorFunctions::ShowFatal(TR("ファイルを開けませんでした"));
         return false;
     }
     if(f.fileSize() > (uint32_t)kMaxBytes){
         f.close();
-        ErrorFunctions::ShowFatal("大きすぎて開けません(32KiBまで)");
+        ErrorFunctions::ShowFatal(TR("大きすぎて開けません(32KiBまで)"));
         return false;
     }
 
@@ -92,7 +93,7 @@ bool TextEditorScene::loadFile(const char* file){
                 line_bytes = 0;
             }else if(++line_bytes > kMaxLineBytes){
                 f.close();
-                ErrorFunctions::ShowFatal("1行が長すぎて開けません(191バイトまで)");
+                ErrorFunctions::ShowFatal(TR("1行が長すぎて開けません(191バイトまで)"));
                 return false;
             }
             out++;
@@ -105,7 +106,7 @@ bool TextEditorScene::loadFile(const char* file){
     }
     if(lines > kMaxLines){
         f.close();
-        ErrorFunctions::ShowFatal("行数が多すぎて開けません(1000行まで)");
+        ErrorFunctions::ShowFatal(TR("行数が多すぎて開けません(1000行まで)"));
         return false;
     }
 
@@ -163,10 +164,10 @@ void TextEditorScene::openRecentPicker(){
     this->recent_count = count;
     if(count == 0){
         this->freeRecent();
-        this->refreshStatus("最近開いたファイルはありません");
+        this->refreshStatus(TR("最近開いたファイルはありません"));
         return;
     }
-    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, "最近開いたファイル", "", "閉じる");
+    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, TR("最近開いたファイル"), "", TR("閉じる"));
     if(!d){ this->freeRecent(); return; }
     for(int i = 0; i < count; i++){
         //名前の後ろに、どのフォルダにあるか(ファイル検索と同じ見せ方)
@@ -194,11 +195,11 @@ void TextEditorScene::openRecentPicker(){
         this->freeRecent();
         if(!OSData::SD_usable || !OSData::SD.exists(target.c_str())){
             RecentFiles::Forget(target.c_str());
-            ErrorFunctions::ShowFatal("ファイルが見つかりません(一覧から外しました)");
+            ErrorFunctions::ShowFatal(TR("ファイルが見つかりません(一覧から外しました)"));
             return;
         }
         this->discard_open_path = target;
-        this->confirmDiscard("保存していない変更があります。破棄して別のファイルを開きますか?", [this](){
+        this->confirmDiscard(TR("保存していない変更があります。破棄して別のファイルを開きますか?"), [this](){
             this->loadFile(this->discard_open_path.c_str());
         });
     });
@@ -225,7 +226,7 @@ void TextEditorScene::saveFile(){
         this->history.markSaved();
         this->setDirty(false);
     }else{
-        ErrorFunctions::ShowFatal("保存に失敗しました");
+        ErrorFunctions::ShowFatal(TR("保存に失敗しました"));
     }
 }
 
@@ -246,7 +247,7 @@ void TextEditorScene::saveAsPicker(){
                     this->history.markSaved();
                     this->setDirty(false);
                 }else{
-                    ErrorFunctions::ShowFatal("保存に失敗しました");
+                    ErrorFunctions::ShowFatal(TR("保存に失敗しました"));
                 }
             }
         }

@@ -40,7 +40,7 @@ lines = {}
 pass, failed = T.run_files({ ROOT_DIR .. "/pc/sdcard/lua/apps/動作確認/tests/menu_test.lua" },
                            { out = function(s) lines[#lines + 1] = s end })
 print(table.concat(lines, "\n"))
-check(pass == 4 and failed == 0, "見本(動作確認)のテストが通る")
+check(pass == 5 and failed == 0, "見本(動作確認)のテストが通る")
 
 if fails > 0 then os.exit(1) end
 print("pico_test_test: OK")

@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "system/I18n_Functions.hpp"
 
 // 受け取った本文の行き先。
 // 文書ならDoc_Cache::Writerへ、検索やdiscoveryならTSVの行パーサへ、と差し替える。
@@ -31,14 +32,14 @@ namespace HttpTools {
 
     inline const char* ErrorToStr(Error e){
         switch(e){
-            case Error::None:          return "なし";
-            case Error::BadStatusLine: return "ステータス行が不正";
-            case Error::LineTooLong:   return "ヘッダ行が長すぎる";
-            case Error::BadChunk:      return "chunked転送が壊れている";
-            case Error::Encoding:      return "未対応の転送符号化";
-            case Error::Truncated:     return "本文が途中で切れた";
-            case Error::SinkFailed:    return "書き込みに失敗";
-            default:                   return "不明";
+            case Error::None:          return TR("なし");
+            case Error::BadStatusLine: return TR("ステータス行が不正");
+            case Error::LineTooLong:   return TR("ヘッダ行が長すぎる");
+            case Error::BadChunk:      return TR("chunked転送が壊れている");
+            case Error::Encoding:      return TR("未対応の転送符号化");
+            case Error::Truncated:     return TR("本文が途中で切れた");
+            case Error::SinkFailed:    return TR("書き込みに失敗");
+            default:                   return TR("不明");
         }
     }
 }

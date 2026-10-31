@@ -8,6 +8,7 @@
 #include "devtools/DevTools_Functions.hpp"
 #include "system/Background_Functions.hpp"
 #include "system/Log_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 #include "storage/SD_IO.hpp"
 #include "Arduino.h"
 
@@ -76,7 +77,7 @@ namespace {
     class Service : public BackgroundService {
         public:
             const char* key() const override { return "lua-hot-reload"; }
-            const char* name() const override { return "Luaのホットリロード"; }
+            const char* name() const override { return TR("Luaのホットリロード"); }
             IconID icon() const override { return IconID::Share; }
             const char* appName() const override { return FileShareFunctions::kAppName; }
             // 画面を閉じたWi-Fi転送を続けている間だけ一覧に「動いている」と出す
@@ -86,9 +87,9 @@ namespace {
             void stop() override { FileShareFunctions::Stop(); }
             void status(FixedString<PICO_STR_LL>& out) const override {
                 out.clear();
-                if(!active()){ out.assign("Wi-Fi転送の画面を閉じると待ち受けを続けます"); return; }
-                out.appendFormat("キー %s", FileShareFunctions::Key());
-                if(!last_reloaded.empty()) out.appendFormat(" / 最後: %s", last_reloaded.c_str());
+                if(!active()){ out.assign(TR("Wi-Fi転送の画面を閉じると待ち受けを続けます")); return; }
+                out.appendFormat(TR("キー %s"), FileShareFunctions::Key());
+                if(!last_reloaded.empty()) out.appendFormat(TR(" / 最後: %s"), last_reloaded.c_str());
             }
             void update(uint32_t now) override {
                 if(!LuaHotReload::Enabled()) return;

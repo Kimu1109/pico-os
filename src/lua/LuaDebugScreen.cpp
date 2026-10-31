@@ -10,6 +10,7 @@
 #include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     constexpr int kLineH = 17; // 16pxのフォントの"_"は下へ1pxはみ出すので1px空ける
@@ -26,7 +27,7 @@ namespace {
     constexpr int kVarLines = (kButtonY - 2 - kVarsY) / kLineH;
     constexpr int kButtons = 5;
 
-    const char* const kButtonLabels[kButtons] = {"続行", "1行", "次へ", "抜ける", "停止"};
+    const char* const kButtonLabels[kButtons] = {TR_NOOP("続行"), TR_NOOP("1行"), TR_NOOP("次へ"), TR_NOOP("抜ける"), TR_NOOP("停止")};
     const LuaDebugger::Command kButtonCommands[kButtons] = {
         LuaDebugger::Command::Continue, LuaDebugger::Command::StepInto, LuaDebugger::Command::StepOver,
         LuaDebugger::Command::StepOut, LuaDebugger::Command::Abort,
@@ -34,13 +35,13 @@ namespace {
 
     const char* ReasonTitle(LuaDebugger::Reason r){
         switch(r){
-            case LuaDebugger::Reason::Breakpoint: return "停止: ブレークポイント";
-            case LuaDebugger::Reason::Step:       return "停止: ステップ";
-            case LuaDebugger::Reason::Pause:      return "停止: 一時停止";
-            case LuaDebugger::Reason::Error:      return "停止: エラー";
-            case LuaDebugger::Reason::Api:        return "停止: pico.breakpoint()";
+            case LuaDebugger::Reason::Breakpoint: return TR("停止: ブレークポイント");
+            case LuaDebugger::Reason::Step:       return TR("停止: ステップ");
+            case LuaDebugger::Reason::Pause:      return TR("停止: 一時停止");
+            case LuaDebugger::Reason::Error:      return TR("停止: エラー");
+            case LuaDebugger::Reason::Api:        return TR("停止: pico.breakpoint()");
         }
-        return "停止";
+        return TR("停止");
     }
 
     // 1行を幅に収めて描く(はみ出しは切る)
@@ -71,7 +72,7 @@ void LuaDebugScreen::draw(const LuaDebugger::PauseInfo& info, int selected_frame
         const LuaDebugger::Frame& f = info.frames[selected_frame];
         snprintf(line, sizeof(line), "%s  %s", f.where.c_str(), f.name.c_str());
     }else{
-        snprintf(line, sizeof(line), "(Luaの場所が分かりません)");
+        snprintf(line, sizeof(line), TR("(Luaの場所が分かりません)"));
     }
     Text(0, kLocY, W, line, TFT_BLACK, TFT_LIGHTGREY);
     Text(0, kMsgY, W, info.message.c_str(), TFT_RED, TFT_WHITE);
@@ -85,7 +86,7 @@ void LuaDebugScreen::draw(const LuaDebugger::PauseInfo& info, int selected_frame
             snprintf(line, sizeof(line), "%3d %s", no, source_[i].c_str());
             Text(0, y, W, line, TFT_BLACK, cur ? TFT_YELLOW : TFT_WHITE);
         }else if(i == 0 && source_count_ == 0){
-            Text(0, y, W, "(ソースを読めません)", TFT_DARKGREY, TFT_WHITE);
+            Text(0, y, W, TR("(ソースを読めません)"), TFT_DARKGREY, TFT_WHITE);
         }else{
             lcd->fillRect(0, y, W, kLineH, TFT_WHITE);
         }
@@ -116,7 +117,7 @@ void LuaDebugScreen::draw(const LuaDebugger::PauseInfo& info, int selected_frame
             snprintf(line, sizeof(line), "%s = %s", info.vars[idx].name.c_str(), info.vars[idx].value.c_str());
             Text(0, y, W, line, TFT_BLACK, TFT_WHITE);
         }else if(idx == 0){
-            Text(0, y, W, "(変数なし)", TFT_DARKGREY, TFT_WHITE);
+            Text(0, y, W, TR("(変数なし)"), TFT_DARKGREY, TFT_WHITE);
         }else{
             lcd->fillRect(0, y, W, kLineH, TFT_WHITE);
         }
@@ -137,7 +138,7 @@ void LuaDebugScreen::draw(const LuaDebugger::PauseInfo& info, int selected_frame
         lcd->fillRect(x, kButtonY, w, kButtonH, bg);
         lcd->drawRect(x, kButtonY, w, kButtonH, TFT_WHITE);
         lcd->setTextColor(TFT_WHITE, bg);
-        lcd->drawCenterString(kButtonLabels[i], x + w / 2, kButtonY + (kButtonH - kLineH) / 2);
+        lcd->drawCenterString(I18nFunctions::Tr(kButtonLabels[i]), x + w / 2, kButtonY + (kButtonH - kLineH) / 2);
     }
     lcd->endWrite();
 }

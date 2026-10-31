@@ -6,6 +6,7 @@
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/TextView.hpp"
 #include "apps/mail/Imap_Client.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdint>
 
@@ -32,7 +33,7 @@
 class MailScene : public Scene {
     public:
         // ランチャの名前(App_List.cpp と揃える)
-        static constexpr const char* kAppName = "メール";
+        static constexpr const char* kAppName = TR_NOOP("メール"); //登録名(launcher.cfg 等の識別子)は原文のまま。見せるときに I18nFunctions::Tr()
 
     private:
         enum class Mode : uint8_t { List, Read };

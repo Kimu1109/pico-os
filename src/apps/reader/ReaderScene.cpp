@@ -11,6 +11,7 @@
 #include "system/Log_Functions.hpp"
 #include "storage/SD_IO.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -114,8 +115,8 @@ void ReaderScene::onEnter(){
     this->setMenu(false);
 
     if(!this->openBook()){
-        this->view_->setMessage("本を開けません");
-        ErrorFunctions::ShowFatal("本を開けません(SDカードとファイルを確かめてください)");
+        this->view_->setMessage(TR("本を開けません"));
+        ErrorFunctions::ShowFatal(TR("本を開けません(SDカードとファイルを確かめてください)"));
         return;
     }
     this->title_label_->setText(this->title_.c_str());
@@ -137,7 +138,7 @@ void ReaderScene::buildMenu(){
     const Rect content = Scene::contentRect();
     const int btn_h = 20 + Button::kFrameExtra;
 
-    this->back_button_ = new Button(content.x + MARGIN, content.y + 2, "本棚");
+    this->back_button_ = new Button(content.x + MARGIN, content.y + 2, TR("本棚"));
     this->back_button_->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button_->setFontSize(FontFn::Small);
     this->back_button_->setH(kTopBand - 4);
@@ -168,7 +169,7 @@ void ReaderScene::buildMenu(){
 
     // 下の段のボタン(しおり / 一覧 / 文字 / ルビ)を均等に並べる
     const int row_y = band_y + 4 + 14 + 6;
-    const char* labels[4] = { "しおり", "一覧", "文字", "ルビ" };
+    const char* labels[4] = { TR("しおり"), TR("一覧"), TR("文字"), TR("ルビ") };
     Button** slots[4] = { &this->mark_button_, &this->list_button_, &this->font_button_, &this->ruby_button_ };
     const int cell = (content.w - MARGIN) / 4;
     for(int i = 0; i < 4; i++){
@@ -214,7 +215,7 @@ void ReaderScene::refresh(){
     this->view_->setBookmarked(this->markOnPage() >= 0);
     if(this->menu_){
         this->seek_->setRatio(this->book_->progress());
-        this->mark_button_->setText(this->markOnPage() >= 0 ? "外す" : "しおり");
+        this->mark_button_->setText(this->markOnPage() >= 0 ? TR("外す") : TR("しおり"));
         this->ruby_button_->setTextColor(this->settings_.ruby ? PICO_BLACK : PICO_DARKGREY);
     }
     this->refreshFooter();
@@ -313,7 +314,7 @@ void ReaderScene::toggleMark(){
         this->mark_count_--;
     }else{
         if(this->mark_count_ >= ReaderStore::kMaxMarks){
-            ErrorFunctions::ShowFatal("しおりがいっぱいです(先に外してください)");
+            ErrorFunctions::ShowFatal(TR("しおりがいっぱいです(先に外してください)"));
             return;
         }
         // 位置の順に並べておく
@@ -357,15 +358,15 @@ void ReaderScene::openList(){
     }
 
     PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice,
-                                       complete ? "目次・しおり" : "目次・しおり(目次は読み込み中)", "", "閉じる");
+                                       complete ? TR("目次・しおり") : TR("目次・しおり(目次は読み込み中)"), "", TR("閉じる"));
     if(!d) return;
     this->list_count_ = count;
-    if(count == 0) d->addChoice("(見出し・しおりはありません)");
+    if(count == 0) d->addChoice(TR("(見出し・しおりはありません)"));
     for(int i = 0; i < count; i++){
         char text[PICO_STR_LL];
         if(items[i].mark){
             const ReaderStore::Mark& m = this->marks_[items[i].index];
-            snprintf(text, sizeof(text), "しおり: %s", m.label.empty() ? "(空行)" : m.label.c_str());
+            snprintf(text, sizeof(text), TR("しおり: %s"), m.label.empty() ? TR("(空行)") : m.label.c_str());
         }else{
             snprintf(text, sizeof(text), "%s", toc.at(items[i].index).title);
         }

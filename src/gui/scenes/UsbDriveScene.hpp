@@ -5,6 +5,7 @@
 #include "gui/widgets/Label.hpp"
 #include "services/UsbDrive_Functions.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdint>
 
@@ -17,7 +18,7 @@
 //   - 貸し出している間はスリープしない・別の画面へ移らない(keepForeground)
 class UsbDriveScene : public Scene {
     public:
-        static constexpr const char* kAppName = "USBドライブ";
+        static constexpr const char* kAppName = TR_NOOP("USBドライブ"); //登録名(launcher.cfg 等の識別子)は原文のまま。見せるときに I18nFunctions::Tr()
 
         const char* getName() const override { return "UsbDrive"; }
         bool keepForeground() const override { return true; }

@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <cstdio>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 static constexpr char kKind[4] = { 'G', 'B', 'R', 'M' };
 static constexpr uint32_t kFnvBasis = 2166136261u;
@@ -97,22 +98,22 @@ GbRomFlash::State GbRomFlash::begin(const char* rom_path){
     this->full_hash_ = kFnvBasis;
 
     const uint32_t cap = Capacity(this->area_);
-    if(cap == 0){ this->fail("ROMを置く内蔵フラッシュの領域がありません"); return this->state_; }
-    if(!OSData::SD_usable){ this->fail("SDカードが使えません"); return this->state_; }
-    if(!rom_path || !rom_path[0]){ this->fail("ROMを開けません"); return this->state_; }
+    if(cap == 0){ this->fail(TR("ROMを置く内蔵フラッシュの領域がありません")); return this->state_; }
+    if(!OSData::SD_usable){ this->fail(TR("SDカードが使えません")); return this->state_; }
+    if(!rom_path || !rom_path[0]){ this->fail(TR("ROMを開けません")); return this->state_; }
 
     this->file_ = OSData::SD.open(rom_path, O_RDONLY);
-    if(!this->file_ || this->file_.isDirectory()){ this->fail("ROMを開けません"); return this->state_; }
+    if(!this->file_ || this->file_.isDirectory()){ this->fail(TR("ROMを開けません")); return this->state_; }
     const uint64_t file_size = this->file_.fileSize();
-    if(file_size < kRomHeaderEnd){ this->fail("ROMとして短すぎます"); return this->state_; }
+    if(file_size < kRomHeaderEnd){ this->fail(TR("ROMとして短すぎます")); return this->state_; }
     if(file_size > cap){
         char text[96];
-        snprintf(text, sizeof(text), "ROMが大きすぎます(内蔵フラッシュに置けるのは%luKBまで)", (unsigned long)(cap / 1024));
+        snprintf(text, sizeof(text), TR("ROMが大きすぎます(内蔵フラッシュに置けるのは%luKBまで)"), (unsigned long)(cap / 1024));
         this->fail(text);
         return this->state_;
     }
     this->size_ = (uint32_t)file_size;
-    if(!this->computeSample()){ this->fail("ROMの読み込みに失敗しました"); return this->state_; }
+    if(!this->computeSample()){ this->fail(TR("ROMの読み込みに失敗しました")); return this->state_; }
 
     Header h;
     if(this->readHeader(h) && h.rom_size == this->size_ && h.sample_hash == this->sample_hash_
@@ -127,8 +128,8 @@ GbRomFlash::State GbRomFlash::begin(const char* rom_path){
     }
 
     // 書き始める前に見出しを消す(途中で止まっても古い見出しが新しい中身を名乗らないように)
-    if(!this->area_->erase(0, FlashArea::kSectorBytes)){ this->fail("内蔵フラッシュを消せません"); return this->state_; }
-    if(!this->file_.seekSet(0)){ this->fail("ROMの読み込みに失敗しました"); return this->state_; }
+    if(!this->area_->erase(0, FlashArea::kSectorBytes)){ this->fail(TR("内蔵フラッシュを消せません")); return this->state_; }
+    if(!this->file_.seekSet(0)){ this->fail(TR("ROMの読み込みに失敗しました")); return this->state_; }
     this->state_ = State::Writing;
     LOG_APP_MSG("GbRomFlash: %s(%luB)を内蔵フラッシュへ書きます", rom_path, (unsigned long)this->size_);
     return this->state_;
@@ -152,7 +153,7 @@ bool GbRomFlash::writeChunk(){
     uint32_t got_all = 0;
     while(got_all < n){
         const int got = this->file_.read(this->buf_ + got_all, n - got_all);
-        if(got <= 0){ this->fail("ROMの読み込みに失敗しました"); return false; }
+        if(got <= 0){ this->fail(TR("ROMの読み込みに失敗しました")); return false; }
         got_all += (uint32_t)got;
     }
     this->full_hash_ = Fnv(this->full_hash_, this->buf_, n);
@@ -160,9 +161,9 @@ bool GbRomFlash::writeChunk(){
     const uint32_t padded = (n + FlashArea::kPageBytes - 1) / FlashArea::kPageBytes * FlashArea::kPageBytes;
     if(padded > n) memset(this->buf_ + n, 0xFF, padded - n);
     const uint32_t off = kDataOffset + this->pos_;
-    if(!this->area_->program(off, this->buf_, padded)){ this->fail("内蔵フラッシュへ書けません"); return false; }
+    if(!this->area_->program(off, this->buf_, padded)){ this->fail(TR("内蔵フラッシュへ書けません")); return false; }
     if(memcmp(this->area_->data() + off, this->buf_, n) != 0){
-        this->fail("内蔵フラッシュに書いた内容が合いません");
+        this->fail(TR("内蔵フラッシュに書いた内容が合いません"));
         return false;
     }
     this->pos_ += n;
@@ -187,7 +188,7 @@ bool GbRomFlash::writeHeader(){
     memcpy(this->buf_, &h, sizeof(h));
     if(!this->area_->program(0, this->buf_, FlashArea::kPageBytes)
        || memcmp(this->area_->data(), this->buf_, FlashArea::kPageBytes) != 0){
-        this->fail("内蔵フラッシュへ見出しを書けません");
+        this->fail(TR("内蔵フラッシュへ見出しを書けません"));
         return false;
     }
     return true;
@@ -195,7 +196,7 @@ bool GbRomFlash::writeHeader(){
 
 void GbRomFlash::step(uint32_t budget_ms){
     if(this->state_ != State::Writing) return;
-    if(!OSData::SD_usable){ this->fail("SDカードが使えません"); return; }
+    if(!OSData::SD_usable){ this->fail(TR("SDカードが使えません")); return; }
     const uint32_t start = millis();
     do{
         if(this->pos_ >= this->size_){
@@ -206,7 +207,7 @@ void GbRomFlash::step(uint32_t budget_ms){
             return;
         }
         if(this->pos_ + kChunkBytes > this->erased_to_ && this->erased_to_ < this->size_){
-            if(!this->eraseNext()){ this->fail("内蔵フラッシュを消せません"); return; }
+            if(!this->eraseNext()){ this->fail(TR("内蔵フラッシュを消せません")); return; }
         }else if(!this->writeChunk()){
             return;
         }

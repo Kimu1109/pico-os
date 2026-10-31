@@ -6,6 +6,7 @@
 #include "crypto/Secret_File.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -43,12 +44,12 @@ bool TranscribeClient::configure(const Config& given, const char* key){
     while(n > 0 && cfg_.api.c_str()[n - 1] == '/') n--;
     snprintf(url, sizeof(url), "%.*s/audio/transcriptions", (int)n, cfg_.api.c_str());
     if(!UrlTools::Parse(endpoint_, url)){
-        message_.assign("transcribe.cfg の api が URL ではありません");
+        message_.assign(TR("transcribe.cfg の api が URL ではありません"));
         return false;
     }
     if(!Transcribe::SafeFieldValue(cfg_.model.c_str()) || !Transcribe::SafeFieldValue(cfg_.language.c_str())
        || !Transcribe::SafeFieldValue(cfg_.prompt.c_str())){
-        message_.assign("transcribe.cfg の model / language / prompt に使えない文字があります");
+        message_.assign(TR("transcribe.cfg の model / language / prompt に使えない文字があります"));
         return false;
     }
 
@@ -57,18 +58,18 @@ bool TranscribeClient::configure(const Config& given, const char* key){
     if(!has_key){
         //OpenAI等の公開のAPIはキーが要る。手元のサーバ(api を変えたとき)なら無くてよい
         if(strcasecmp(cfg_.api.c_str(), kDefaultApi) == 0){
-            message_.assign("APIキーがありません。[キー] から入れてください");
+            message_.assign(TR("APIキーがありません。[キー] から入れてください"));
             return false;
         }
     }else{
         if(strlen(key) > kMaxKeyBytes || !ValidKey(key)){
-            message_.assign("APIキーに使えない文字があるか、長すぎます");
+            message_.assign(TR("APIキーに使えない文字があるか、長すぎます"));
             return false;
         }
         char auth[kMaxKeyBytes + 8];
         snprintf(auth, sizeof(auth), "Bearer %s", key);
         if(!req_.addExtraHeader("Authorization", auth)){
-            message_.assign("APIキーが長すぎます");
+            message_.assign(TR("APIキーが長すぎます"));
             return false;
         }
     }
@@ -85,7 +86,7 @@ bool TranscribeClient::loadConfig(){
     if(!OSData::SD_usable){
         state_ = State::NotConfigured;
         configured_ = false;
-        message_.assign("SDカードがありません");
+        message_.assign(TR("SDカードがありません"));
         return false;
     }
     Config c;
@@ -144,24 +145,24 @@ bool TranscribeClient::start(const char* wav_path){
     wav_path_.assign(wav_path ? wav_path : "");
     char txt[PICO_PATH_LEN + 1];
     if(!TextPathFor(wav_path, txt, sizeof(txt))){
-        fail("WAVではありません");
+        fail(TR("WAVではありません"));
         return false;
     }
     text_path_.assign(txt);
 
     wav_ = OSData::SD.open(wav_path, O_RDONLY);
     if(!wav_){
-        fail("録音を開けません");
+        fail(TR("録音を開けません"));
         return false;
     }
     const uint64_t size = wav_.size();
     if(size <= 44){
-        fail("録音が空です");
+        fail(TR("録音が空です"));
         return false;
     }
     if(size > kMaxUploadBytes){
         char msg[96];
-        snprintf(msg, sizeof(msg), "録音が大きすぎます(%luMB。上限25MB)", (unsigned long)(size / (1024 * 1024)));
+        snprintf(msg, sizeof(msg), TR("録音が大きすぎます(%luMB。上限25MB)"), (unsigned long)(size / (1024 * 1024)));
         fail(msg);
         return false;
     }
@@ -176,7 +177,7 @@ bool TranscribeClient::start(const char* wav_path){
     f.language = cfg_.language.c_str();
     f.prompt = cfg_.prompt.c_str();
     if(!Transcribe::BuildHead(head_, boundary, f, name) || !Transcribe::BuildTail(tail_, boundary)){
-        fail("送る内容を作れません(model / prompt が長すぎる?)");
+        fail(TR("送る内容を作れません(model / prompt が長すぎる?)"));
         return false;
     }
     char content_type[PICO_STR_L];
@@ -188,7 +189,7 @@ bool TranscribeClient::start(const char* wav_path){
     message_.clear();
     state_ = State::Sending;
     if(!req_.beginStream(endpoint_, HttpRequest::Method::POST, this, this, content_type)){
-        fail("送り始められません");
+        fail(TR("送り始められません"));
         return false;
     }
     LOG_APP_MSG("Transcribe: %s を送ります(%luB → %s)", name, (unsigned long)wav_size_, endpoint_.host.c_str());
@@ -267,7 +268,7 @@ void TranscribeClient::update(bool network_up){
     if(!busy()) return;
     if(!network_up){
         req_.cancel();
-        fail("Wi-Fiが切れました");
+        fail(TR("Wi-Fiが切れました"));
         return;
     }
     req_.update();
@@ -278,10 +279,10 @@ void TranscribeClient::update(bool network_up){
 void TranscribeClient::finish(){
     if(req_.getStatus() == TaskTools::FAILED){
         if(out_failed_){
-            fail("文章をSDへ書けません");
+            fail(TR("文章をSDへ書けません"));
         }else{
             char msg[160];
-            snprintf(msg, sizeof(msg), "送れませんでした: %s", req_.failureToStr());
+            snprintf(msg, sizeof(msg), TR("送れませんでした: %s"), req_.failureToStr());
             fail(msg);
         }
         req_.closeConnection();
@@ -306,13 +307,13 @@ void TranscribeClient::finish(){
         out_ = OSData::SD.open(part, O_WRONLY | O_CREAT | O_TRUNC);
     }
     if(!out_){
-        fail("文章をSDへ書けません");
+        fail(TR("文章をSDへ書けません"));
         return;
     }
     closeFiles(true);
     if(state_ == State::Failed) return;
     state_ = State::Done;
-    message_.assign("文字起こしが終わりました");
+    message_.assign(TR("文字起こしが終わりました"));
     LOG_APP_MSG("Transcribe: %s へ置きました", text_path_.c_str());
 }
 
@@ -325,11 +326,11 @@ void TranscribeClient::closeFiles(bool keep_text){
     partPath(part, sizeof(part));
     if(!keep_text || !wrote_ok){
         OSData::SD.remove(part);
-        if(keep_text) fail("文章をSDへ書けません");
+        if(keep_text) fail(TR("文章をSDへ書けません"));
         return;
     }
     if(OSData::SD.exists(text_path_.c_str())) OSData::SD.remove(text_path_.c_str());
-    if(!OSData::SD.rename(part, text_path_.c_str())) fail("文章をSDへ書けません");
+    if(!OSData::SD.rename(part, text_path_.c_str())) fail(TR("文章をSDへ書けません"));
 }
 
 void TranscribeClient::fail(const char* text){
@@ -343,7 +344,7 @@ void TranscribeClient::cancel(){
     req_.cancel();
     closeFiles(false);
     state_ = configured_ ? State::Ready : State::NotConfigured;
-    message_.assign("やめました");
+    message_.assign(TR("やめました"));
 }
 
 int TranscribeClient::progressPercent() const {

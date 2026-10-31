@@ -6,6 +6,7 @@
 #include "gui/core/Font_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "services/Power_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 
@@ -25,7 +26,7 @@ void TouchCalibScene::onEnter(){
     const int bw = content.w - MARGIN * 2;
     const int bh = 40;
     int y = content.y + content.h - (bh + 6) * 3 - 4;
-    this->btn_a = new Button(content.x + MARGIN, y, "開始");
+    this->btn_a = new Button(content.x + MARGIN, y, TR("開始"));
     this->btn_a->setW(bw); this->btn_a->setH(bh);
     this->btn_a->setOnPressEnd([this](){
         if(this->phase == Phase::Intro) this->startCapture();
@@ -34,11 +35,11 @@ void TouchCalibScene::onEnter(){
             if(TouchCalibFunctions::Save(this->fitted)){
                 this->saved = true;
                 this->backup = this->fitted;
-                this->setMessage("保存しました。次の起動からもこの補正を使います", PICO_DARKGREEN);
+                this->setMessage(TR("保存しました。次の起動からもこの補正を使います"), PICO_DARKGREEN);
                 this->btn_a->setVisible(false);
-                this->btn_c->setText("設定へ戻る");
+                this->btn_c->setText(TR("設定へ戻る"));
             }else{
-                this->setMessage("保存できませんでした(SDカードを確認してください)", PICO_RED);
+                this->setMessage(TR("保存できませんでした(SDカードを確認してください)"), PICO_RED);
             }
         }else{
             this->startCapture(); // Failed: やり直し
@@ -47,22 +48,22 @@ void TouchCalibScene::onEnter(){
     WidgetFunctions::Add(this->btn_a);
 
     y += bh + 6;
-    this->btn_b = new Button(content.x + MARGIN, y, "既定に戻す");
+    this->btn_b = new Button(content.x + MARGIN, y, TR("既定に戻す"));
     this->btn_b->setW(bw); this->btn_b->setH(bh);
     this->btn_b->setOnPressEnd([this](){
         if(this->phase == Phase::Intro){
             TouchCalibFunctions::Clear();
             this->backup = TouchCalib::current;
-            this->setMessage("補正を外して、初期の設定に戻しました", PICO_DARKGREEN);
+            this->setMessage(TR("補正を外して、初期の設定に戻しました"), PICO_DARKGREEN);
         }else{
-            this->btn_c->setText("破棄して戻る");
+            this->btn_c->setText(TR("破棄して戻る"));
             this->startCapture(); // Result: やり直し
         }
     });
     WidgetFunctions::Add(this->btn_b);
 
     y += bh + 6;
-    this->btn_c = new Button(content.x + MARGIN, y, "戻る");
+    this->btn_c = new Button(content.x + MARGIN, y, TR("戻る"));
     this->btn_c->setW(bw); this->btn_c->setH(bh);
     this->btn_c->setOnPressEnd([this](){
         // Result で未保存なら、押した「破棄」は元に戻して戻る(onExitでも戻す)
@@ -107,29 +108,29 @@ void TouchCalibScene::showPhase(){
 
     switch(this->phase){
         case Phase::Intro:
-            this->btn_a->setText("開始");
-            this->btn_b->setText("既定に戻す");
-            this->btn_c->setText("戻る");
-            this->setMessage("画面に出る十字の中心を、指先かタッチペンで順に5回押してください。"
-                             "押すたびに少し止めると正確になります。", PICO_FORECOLOR);
+            this->btn_a->setText(TR("開始"));
+            this->btn_b->setText(TR("既定に戻す"));
+            this->btn_c->setText(TR("戻る"));
+            this->setMessage(TR("画面に出る十字の中心を、指先かタッチペンで順に5回押してください。"
+                             "押すたびに少し止めると正確になります。"), PICO_FORECOLOR);
             break;
         case Phase::Result: {
             char buf[PICO_STR_LL];
             snprintf(buf, sizeof(buf),
-                "補正できました(ずれ 平均%.1fpx / 最大%.1fpx)。画面のどこかを押して、"
-                "青い点が指の位置に出るか確かめてください。", this->err_mean, this->err_max);
-            this->btn_a->setText("保存");
-            this->btn_b->setText("やり直し");
-            this->btn_c->setText("破棄して戻る");
+                TR("補正できました(ずれ 平均%.1fpx / 最大%.1fpx)。画面のどこかを押して、"
+                "青い点が指の位置に出るか確かめてください。"), this->err_mean, this->err_max);
+            this->btn_a->setText(TR("保存"));
+            this->btn_b->setText(TR("やり直し"));
+            this->btn_c->setText(TR("破棄して戻る"));
             this->setMessage(buf, PICO_FORECOLOR);
             break;
         }
         case Phase::Failed:
-            this->btn_a->setText("やり直し");
+            this->btn_a->setText(TR("やり直し"));
             this->btn_b->setVisible(false);
-            this->btn_c->setText("戻る");
-            this->setMessage("押した位置がうまく合いませんでした。十字の真ん中をもう一度、"
-                             "順番どおりに押してください。", PICO_RED);
+            this->btn_c->setText(TR("戻る"));
+            this->setMessage(TR("押した位置がうまく合いませんでした。十字の真ん中をもう一度、"
+                             "順番どおりに押してください。"), PICO_RED);
             break;
         case Phase::Capture:
             break;

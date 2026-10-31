@@ -4,10 +4,12 @@
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ProgressBar.hpp"
+#include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/WidgetID.hpp"
 #include "services/Firmware_Functions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdint>
 
@@ -22,7 +24,7 @@
 // (準備ができて再起動を待っているときだけはそのまま)。
 class FirmwareScene : public Scene {
     public:
-        static constexpr const char* kAppName = "本体の更新";
+        static constexpr const char* kAppName = TR_NOOP("本体の更新"); //登録名(launcher.cfg 等の識別子)は原文のまま。見せるときに I18nFunctions::Tr()
 
         FirmwareScene() = default;
         // SDの更新ファイルを開いた状態で始める(ファイルアプリから)
@@ -42,6 +44,8 @@ class FirmwareScene : public Scene {
     private:
         static constexpr int MARGIN = 6;
 
+        // 題名と下のボタンの間(版・鍵・状態・進み具合)。行を詰めずに置き、入りきらない分はスクロール
+        ScrollContainer* info_scroll = nullptr;
         Label<PICO_STR_L>* version_label = nullptr;
         Label<PICO_STR_LL>* key_label = nullptr;
         Label<PICO_STR_LL>* status_label = nullptr;

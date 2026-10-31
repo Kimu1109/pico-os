@@ -27,6 +27,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 // 1回のonUpdate()で進める最大フレーム数。これより遅れたぶんは捨てる
 static constexpr int kMaxFramesPerUpdate = 2;
@@ -63,7 +64,7 @@ void GameBoyScene::onEnter(){
     this->last_low_battery_save_ms = this->last_ms;
 
     if(this->rom_path.empty()){
-        this->view->setMessage("ROMを選んでください");
+        this->view->setMessage(TR("ROMを選んでください"));
         this->pending = Pending::OpenPicker;
         this->pending_wait_frames = 1;
     }else{
@@ -125,21 +126,21 @@ void GameBoyScene::showBanner(const char* text){
 void GameBoyScene::openMenu(){
     if(this->menu || this->picker || this->flash_job || this->pending != Pending::None) return;
 
-    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, "メニュー", "", "キャンセル");
+    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, TR("メニュー"), "", TR("キャンセル"));
     if(!d) return;
     // 項目の番号 → すること(出す項目が状況で変わるため)
     enum : uint8_t { kSave, kLoad, kRom };
     uint8_t* actions = this->menu_actions;
     int n = 0;
     if(this->emu.loaded() && !this->emu.crashed()){
-        d->addChoice("途中保存");
+        d->addChoice(TR("途中保存"));
         actions[n++] = kSave;
     }
     if(this->emu.loaded() && this->emu.hasState(GbEmu::kManualSlot)){
-        d->addChoice("途中から再開");
+        d->addChoice(TR("途中から再開"));
         actions[n++] = kLoad;
     }
-    d->addChoice("ROMを選ぶ");
+    d->addChoice(TR("ROMを選ぶ"));
     actions[n++] = kRom;
     d->layout();
     this->menu_action_count = n;
@@ -164,10 +165,10 @@ void GameBoyScene::openMenu(){
 
 void GameBoyScene::askResume(){
     if(this->menu) return;
-    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, "続きから遊びますか", "", "");
+    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, TR("続きから遊びますか"), "", "");
     if(!d) return;
-    d->addChoice("前回の続きから");
-    d->addChoice("最初から");
+    d->addChoice(TR("前回の続きから"));
+    d->addChoice(TR("最初から"));
     d->layout();
     this->menu = d;
     WidgetFunctions::AddDialog(d);
@@ -242,7 +243,7 @@ void GameBoyScene::loadRom(const char* path){
     }
     if(err != GbEmu::LoadError::None){
         LOG_APP_FAIL("GameBoy: %s を開けません: %s", path, GbEmu::loadErrorToStr(err));
-        this->view->setMessage("ROMを選んでください");
+        this->view->setMessage(TR("ROMを選んでください"));
         this->view->invalidate();
         ErrorFunctions::ShowFatal(GbEmu::loadErrorToStr(err));
         return;
@@ -266,7 +267,7 @@ bool GameBoyScene::startFlash(const char* path){
     this->stopFlash();
     this->flash_job = new GbRomFlash(DefaultFlashArea());
     if(!this->flash_job){
-        ErrorFunctions::ShowFatal("メモリが足りません");
+        ErrorFunctions::ShowFatal(TR("メモリが足りません"));
         return false;
     }
     // 消す/書く間は2コア目が止まる(音がぶつぶつ切れる)ので、先に止めておく
@@ -280,7 +281,7 @@ bool GameBoyScene::startFlash(const char* path){
     this->flash_last_percent = 0;
     const GbRomFlash::State st = this->flash_job->begin(path);
     if(st == GbRomFlash::State::Writing){
-        this->view->setMessage("ROMを内蔵フラッシュへ書いています 0%");
+        this->view->setMessage(TR("ROMを内蔵フラッシュへ書いています 0%"));
         this->view->invalidate();
         return true;
     }
@@ -298,7 +299,7 @@ void GameBoyScene::stepFlash(){
         if(pct != this->flash_last_percent){
             this->flash_last_percent = pct;
             char text[64];
-            snprintf(text, sizeof(text), "ROMを内蔵フラッシュへ書いています %lu%%", (unsigned long)pct);
+            snprintf(text, sizeof(text), TR("ROMを内蔵フラッシュへ書いています %lu%%"), (unsigned long)pct);
             this->view->setMessage(text);
         }
         return;
@@ -308,7 +309,7 @@ void GameBoyScene::stepFlash(){
         FixedString<PICO_STR_LL> msg(this->flash_job->message());
         this->stopFlash();
         LOG_APP_FAIL("GameBoy: %s を開けません: %s", this->flash_path.c_str(), msg.c_str());
-        this->view->setMessage("ROMを選んでください");
+        this->view->setMessage(TR("ROMを選んでください"));
         this->view->invalidate();
         ErrorFunctions::ShowFatal(msg.c_str());
         return;
@@ -322,7 +323,7 @@ void GameBoyScene::stepFlash(){
     const GbEmu::LoadError err = this->emu.load(this->flash_path.c_str(), image, size);
     if(err != GbEmu::LoadError::None){
         LOG_APP_FAIL("GameBoy: %s を開けません: %s", this->flash_path.c_str(), GbEmu::loadErrorToStr(err));
-        this->view->setMessage("ROMを選んでください");
+        this->view->setMessage(TR("ROMを選んでください"));
         this->view->invalidate();
         ErrorFunctions::ShowFatal(GbEmu::loadErrorToStr(err));
         return;
@@ -405,7 +406,7 @@ void GameBoyScene::onUpdate(){
             const GbEmu::StateError e = this->emu.loadState(slot);
             if(e == GbEmu::StateError::None){
                 this->view->invalidate();
-                this->showBanner(p == Pending::ResumeAuto ? "前回の続きから" : "途中から再開しました");
+                this->showBanner(p == Pending::ResumeAuto ? TR("前回の続きから") : TR("途中から再開しました"));
             }else{
                 ErrorFunctions::ShowFatal(GbEmu::stateErrorToStr(e));
             }
@@ -413,7 +414,7 @@ void GameBoyScene::onUpdate(){
         }else if(p == Pending::SaveManual){
             const GbEmu::StateError e = this->emu.saveState(GbEmu::kManualSlot);
             if(e == GbEmu::StateError::None){
-                this->showBanner("途中保存しました");
+                this->showBanner(TR("途中保存しました"));
             }else{
                 ErrorFunctions::ShowFatal(GbEmu::stateErrorToStr(e));
             }
@@ -444,7 +445,7 @@ void GameBoyScene::onUpdate(){
     if(this->emu.crashed()){
         if(!this->crash_reported){
             this->crash_reported = true;
-            FixedString<PICO_STR_L> msg("エミュが停止しました: ");
+            FixedString<PICO_STR_L> msg(TR("エミュが停止しました: "));
             msg.append(this->emu.crashMessage());
             ErrorFunctions::ShowFatal(msg.c_str());
         }

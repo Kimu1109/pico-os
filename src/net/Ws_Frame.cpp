@@ -4,6 +4,7 @@
 #include "util/Base64.hpp"
 
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // RFC 6455 1.3 で決まっている固定の文字列
@@ -77,9 +78,9 @@ size_t WsFrame::Parser::headerNeed() const {
 WsFrame::Parser::Result WsFrame::Parser::beginFrame(){
     fin_ = (hdr_[0] & 0x80) != 0;
     op_ = hdr_[0] & 0x0F;
-    if(hdr_[0] & 0x70) return fail(kCloseProtocol, "拡張の印(RSV)が立った枠を受けた");
+    if(hdr_[0] & 0x70) return fail(kCloseProtocol, TR("拡張の印(RSV)が立った枠を受けた"));
     //サーバからの枠はマスクしてはいけない(RFC 6455 5.1)
-    if(hdr_[1] & 0x80) return fail(kCloseProtocol, "マスクされた枠を受けた");
+    if(hdr_[1] & 0x80) return fail(kCloseProtocol, TR("マスクされた枠を受けた"));
 
     const uint8_t len7 = hdr_[1] & 0x7F;
     uint64_t len = len7;
@@ -100,20 +101,20 @@ WsFrame::Parser::Result WsFrame::Parser::beginFrame(){
 
     const bool control = (op_ & 0x08) != 0;
     if(control){
-        if(op_ != Close && op_ != Ping && op_ != Pong) return fail(kCloseProtocol, "知らない制御の枠を受けた");
-        if(!fin_ || len > kMaxControlPayload) return fail(kCloseProtocol, "制御の枠が分割されている/長すぎる");
+        if(op_ != Close && op_ != Ping && op_ != Pong) return fail(kCloseProtocol, TR("知らない制御の枠を受けた"));
+        if(!fin_ || len > kMaxControlPayload) return fail(kCloseProtocol, TR("制御の枠が分割されている/長すぎる"));
         ctrl_len_ = 0;
         ctrl_skip_ = 0;
     }else if(op_ == Continuation){
-        if(msg_op_ == 0) return fail(kCloseProtocol, "始まりの無い継続の枠を受けた");
+        if(msg_op_ == 0) return fail(kCloseProtocol, TR("始まりの無い継続の枠を受けた"));
     }else if(op_ == Text || op_ == Binary){
-        if(msg_op_ != 0) return fail(kCloseProtocol, "前のメッセージが終わる前に次が始まった");
+        if(msg_op_ != 0) return fail(kCloseProtocol, TR("前のメッセージが終わる前に次が始まった"));
         msg_op_ = op_;
         msg_len_ = 0;
     }else{
-        return fail(kCloseProtocol, "知らない種類の枠を受けた");
+        return fail(kCloseProtocol, TR("知らない種類の枠を受けた"));
     }
-    if(!control && msg_len_ + len > cap_) return fail(kCloseTooBig, "メッセージが大きすぎる");
+    if(!control && msg_len_ + len > cap_) return fail(kCloseTooBig, TR("メッセージが大きすぎる"));
     phase_ = Phase::Payload;
     return Result::NeedMore;
 }
@@ -126,7 +127,7 @@ WsFrame::Parser::Result WsFrame::Parser::endFrame(){
         case Ping: return Result::Ping;
         case Pong: return Result::Pong;
         case Close:
-            if(ctrl_len_ == 1) return fail(kCloseProtocol, "closeの番号が欠けている");
+            if(ctrl_len_ == 1) return fail(kCloseProtocol, TR("closeの番号が欠けている"));
             if(ctrl_len_ >= 2){
                 close_code_ = (uint16_t)((ctrl_[0] << 8) | ctrl_[1]);
                 ctrl_skip_ = 2;

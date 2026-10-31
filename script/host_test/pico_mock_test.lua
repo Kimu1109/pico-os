@@ -63,4 +63,11 @@ pico.on_back(function() return false end)
 pico.go_back()
 check(mock.popped ~= nil, "on_backがfalseならpop")
 
+
+-- 表示言語(pico.lang / pico.tr)。既定は日本語で原文のまま、opts.lang なら <app_dir>/lang/<言語>.lua を引く
+check(pico.lang() == "ja" and pico.tr("点") == "点" and pico.tr("%d点", 3) == "3点", "pico.tr: 既定は原文")
+mock.install({ lang = "en", app_dir = "/lua/apps/t" })
+mock.sd["/lua/apps/t/lang/en.lua"] = 'return { ["%d点"] = "%d pts" }'
+check(pico.lang() == "en" and pico.tr("%d点", 3) == "3 pts" and pico.tr("無い") == "無い", "pico.tr: lang/en.lua を引く")
+
 if fails > 0 then os.exit(1) end

@@ -3,6 +3,7 @@
 #include "gui/core/Keyboard_Functions.hpp"
 #include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 #include <cstdio>
 
 Button* PickerDialog::makeButton(const char* text, bool is_ok) {
@@ -41,8 +42,8 @@ PickerDialog::PickerDialog(Mode mode, const char* title_text, const char* ok_tex
     if (DialogLayout::HasText(cancel_text)) cancel_button = makeButton(cancel_text, false);
     // 閉じる手段が無くなる組み合わせ(Progressは除く)は、キャンセルを必ず出す
     if (mode != Mode::Progress && !ok_button && !cancel_button) {
-        if (wants_ok) ok_button = makeButton("決定", true);
-        else cancel_button = makeButton("キャンセル", false);
+        if (wants_ok) ok_button = makeButton(TR("決定"), true);
+        else cancel_button = makeButton(TR("キャンセル"), false);
     }
 
     switch (mode) {
@@ -58,12 +59,14 @@ PickerDialog::PickerDialog(Mode mode, const char* title_text, const char* ok_tex
             break;
         case Mode::Date:
             prev_button = new Button(0, 0, "<");
+            prev_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
             prev_button->setOnPressStart([this]() {
                 if (--month_ < 1) { month_ = 12; year_--; }
                 this->refreshMonth();
             });
             prev_button->setParent(this);
             next_button = new Button(0, 0, ">");
+            next_button->setIcon(IconID::ArrowRight, IconSize::Px16);
             next_button->setOnPressStart([this]() {
                 if (++month_ > 12) { month_ = 1; year_++; }
                 this->refreshMonth();
@@ -132,7 +135,7 @@ void PickerDialog::refreshMonth() {
     if (day_ < 1) day_ = 1;
     grid->setSelected(day_);
     char buf[PICO_STR_S];
-    snprintf(buf, sizeof(buf), "%d年%d月", year_, month_);
+    snprintf(buf, sizeof(buf), TR("%d年%d月"), year_, month_);
     month_label->setText(buf);
     this->layout(); // 月ラベルの幅が変わるので中央へ置き直す
 }

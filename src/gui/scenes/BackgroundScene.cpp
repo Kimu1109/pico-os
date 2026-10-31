@@ -8,6 +8,7 @@
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Font_Functions.hpp"
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 
@@ -17,8 +18,8 @@ namespace {
     // 一覧の1行(名前 + 状態の一言)
     void RowText(BackgroundService* s, FixedString<PICO_PATH_LEN>& out){
         out.assign(s->name());
-        if(s->toggleable()) out.append(s->enabled() ? "  [入]" : "  [切]");
-        else if(s->active()) out.append("  [動作中]");
+        if(s->toggleable()) out.append(s->enabled() ? TR("  [入]") : TR("  [切]"));
+        else if(s->active()) out.append(TR("  [動作中]"));
     }
 }
 
@@ -26,7 +27,7 @@ void BackgroundScene::onEnter(){
     const Rect content = Scene::contentRect();
     const int y0 = content.y + MARGIN;
 
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -34,7 +35,7 @@ void BackgroundScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
     const Rect back = this->back_button->getLocalRect();
 
-    this->title_label = new Label<PICO_STR_M>(back.x + back.w + MARGIN, y0, "バックグラウンド");
+    this->title_label = new Label<PICO_STR_M>(back.x + back.w + MARGIN, y0, TR("バックグラウンド"));
     this->title_label->setFontSize(FontFn::Small);
     this->title_label->setY(y0 + (back.h - FontFn::GetFontSize(FontFn::Small)) / 2);
     this->title_label->setDisableAutoTextDecoration(true);
@@ -52,11 +53,11 @@ void BackgroundScene::onEnter(){
         WidgetFunctions::Add(b);
         return b;
     };
-    this->toggle_button = makeAction(0, "停止");
+    this->toggle_button = makeAction(0, TR("停止"));
     this->toggle_button->setOnPressEnd([this](){ this->onToggle(); });
-    this->run_button = makeAction(1, "今すぐ");
+    this->run_button = makeAction(1, TR("今すぐ"));
     this->run_button->setOnPressEnd([this](){ this->onRunNow(); });
-    this->open_button = makeAction(2, "開く");
+    this->open_button = makeAction(2, TR("開く"));
     this->open_button->setOnPressEnd([this](){ this->onOpen(); });
 
     const int line_h = Label<PICO_STR_512B>::GetLineHeight(FontFn::Small);
@@ -149,8 +150,8 @@ void BackgroundScene::refreshTexts(bool force){
     if(i < 0){
         this->detail_label->setTextColor(PICO_DARKGREY);
         this->detail_label->setText(BackgroundFunctions::Count() == 0
-            ? "バックグラウンドで動くものはありません"
-            : "一覧から選んでください");
+            ? TR("バックグラウンドで動くものはありません")
+            : TR("一覧から選んでください"));
     }else{
         BackgroundService* s = BackgroundFunctions::At(i);
         FixedString<PICO_STR_LL> st;
@@ -173,10 +174,10 @@ void BackgroundScene::refreshButtons(){
         return;
     }
     if(s->toggleable()){
-        this->toggle_button->setText(s->enabled() ? "切る" : "入れる");
+        this->toggle_button->setText(s->enabled() ? TR("切る") : TR("入れる"));
         this->toggle_button->setVisible(true);
     }else{
-        this->toggle_button->setText("停止");
+        this->toggle_button->setText(TR("停止"));
         this->toggle_button->setVisible(s->active());
     }
     this->run_button->setVisible(s->toggleable() && s->enabled());

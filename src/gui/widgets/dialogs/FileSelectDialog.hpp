@@ -3,6 +3,7 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/apps/FileExplorer.hpp"
 #include "gui/widgets/Button.hpp"
+#include "system/I18n_Functions.hpp"
 
 class FileSelectDialog : public Widget {
     private:
@@ -46,7 +47,7 @@ class FileSelectDialog : public Widget {
                 this->setVisible(false);
             });
 
-            this->button_no = new Button(BASE_X + BUTTON_MARGIN, BUTTON_Y - 3, "キャンセル");
+            this->button_no = new Button(BASE_X + BUTTON_MARGIN, BUTTON_Y - 3, TR("キャンセル"));
             this->button_no->setAllowTextSpacing(false);
             this->button_no->setFontSize(FontFn::Small);
             this->button_no->setW(BUTTON_W + Button::kFrameExtraTight);

@@ -7,6 +7,7 @@
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "hal/Network_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 #include <cstdio>
@@ -101,7 +102,7 @@ int CalculatorScene::convUnitCount() const {
 const char* CalculatorScene::convUnitSymbol(int i) const {
     if(this->isCurrency()) return (i >= 0) ? this->currency.codeAt(i) : "---";
     const CalcUnits::Category& c = CalcUnits::kCategories[this->conv_cat];
-    return (i >= 0 && i < c.count) ? c.units[i].symbol : "";
+    return (i >= 0 && i < c.count) ? I18nFunctions::Tr(c.units[i].symbol) : ""; //尺・坪等の日本の単位は記号も訳す
 }
 
 int CalculatorScene::convFromIndex() const {
@@ -137,10 +138,10 @@ void CalculatorScene::selectConvCategory(int cat){
 }
 
 void CalculatorScene::openConvCategoryPicker(){
-    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, "変換の種類", "", "キャンセル");
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, TR("変換の種類"), "", TR("キャンセル"));
     if(!dialog) return;
-    for(int i = 0; i < CalcUnits::kCategoryCount; i++) dialog->addChoice(CalcUnits::kCategories[i].name);
-    dialog->addChoice("通貨(為替)");
+    for(int i = 0; i < CalcUnits::kCategoryCount; i++) dialog->addChoice(I18nFunctions::Tr(CalcUnits::kCategories[i].name));
+    dialog->addChoice(TR("通貨(為替)"));
     dialog->layout();
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -158,18 +159,18 @@ void CalculatorScene::openConvUnitPicker(bool from){
         this->refreshConvStatus();
         return;
     }
-    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, from ? "変換元" : "変換先", "", "キャンセル");
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, from ? TR("変換元") : TR("変換先"), "", TR("キャンセル"));
     if(!dialog) return;
     for(int i = 0; i < n; i++){
         char buf[PICO_STR_M];
         if(this->isCurrency()){
             const char* code = this->currency.codeAt(i);
             const char* name = CurrencyRates::NameOf(code);
-            snprintf(buf, sizeof(buf), "%s %s", code, name ? name : "");
+            snprintf(buf, sizeof(buf), "%s %s", code, name ? I18nFunctions::Tr(name) : "");
         }else{
             const CalcUnits::Unit& u = CalcUnits::kCategories[this->conv_cat].units[i];
-            if(strcmp(u.symbol, u.name) == 0) snprintf(buf, sizeof(buf), "%s", u.name);
-            else                              snprintf(buf, sizeof(buf), "%s %s", u.symbol, u.name);
+            if(strcmp(u.symbol, u.name) == 0) snprintf(buf, sizeof(buf), "%s", I18nFunctions::Tr(u.name));
+            else                              snprintf(buf, sizeof(buf), "%s %s", I18nFunctions::Tr(u.symbol), I18nFunctions::Tr(u.name));
         }
         dialog->addChoice(buf);
     }
@@ -188,7 +189,7 @@ void CalculatorScene::startCurrencyUpdate(){
     if(!NetworkFunctions::IsConnected()){
         if(this->conv_status){
             this->conv_status->setTextColor(PICO_RED);
-            this->conv_status->setText("Wi-Fiに繋がっていません");
+            this->conv_status->setText(TR("Wi-Fiに繋がっていません"));
         }
         return;
     }
@@ -207,8 +208,8 @@ void CalculatorScene::refreshConv(){
 
     if(this->conv_cat_button){
         char buf[PICO_STR_M];
-        snprintf(buf, sizeof(buf), "種類: %s",
-                 this->isCurrency() ? "通貨(為替)" : CalcUnits::kCategories[this->conv_cat].name);
+        snprintf(buf, sizeof(buf), TR("種類: %s"),
+                 this->isCurrency() ? TR("通貨(為替)") : I18nFunctions::Tr(CalcUnits::kCategories[this->conv_cat].name));
         this->conv_cat_button->setText(buf);
     }
     if(this->conv_from_button) this->conv_from_button->setText(this->convUnitSymbol(from));
@@ -246,12 +247,12 @@ void CalculatorScene::refreshConvStatus(){
             msg.assign(this->currency.message());
             color = PICO_RED;
         }else if(!this->currency.hasRates()){
-            msg.assign("レート未取得。[更新]で取得");
+            msg.assign(TR("レート未取得。[更新]で取得"));
         }else{
             double one = 0.0;
             FixedString<PICO_STR_M> num;
             if(from >= 0 && to >= 0 && this->currency.convert(from, to, 1.0, one)) FormatNumber(one, num);
-            msg.appendFormat("1 %s = %s %s\n%s のレート", this->convUnitSymbol(from), num.c_str(),
+            msg.appendFormat(TR("1 %s = %s %s\n%s のレート"), this->convUnitSymbol(from), num.c_str(),
                              this->convUnitSymbol(to), this->currency.date());
         }
     }else{
@@ -316,7 +317,7 @@ void CalculatorScene::buildConvertPage(const Rect& body){
 
     // ---- 種類 ----
     int y = body.y + MARGIN;
-    this->conv_cat_button = new Button(body.x + MARGIN, y, "種類");
+    this->conv_cat_button = new Button(body.x + MARGIN, y, TR("種類"));
     this->conv_cat_button->setFontSize(FontFn::Small);
     this->conv_cat_button->setW(body.w - MARGIN * 2);
     this->conv_cat_button->setH(btn_h);
@@ -358,7 +359,8 @@ void CalculatorScene::buildConvertPage(const Rect& body){
     // ---- 「1 km = 0.62 mi」/ レート + [更新] ----
     const int status_h = Label<PICO_STR_M>::GetLineHeight(FontFn::Small);
     const int update_w = 48;
-    this->conv_update_button = new Button(body.x + body.w - MARGIN - update_w, y, "更新");
+    this->conv_update_button = new Button(body.x + body.w - MARGIN - update_w, y, TR("更新"));
+    this->conv_update_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->conv_update_button->setFontSize(FontFn::Small);
     this->conv_update_button->setW(update_w);
     this->conv_update_button->setH(btn_h);

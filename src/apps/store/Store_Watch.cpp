@@ -6,6 +6,7 @@
 #include "system/Notification_Functions.hpp"
 #include "system/Time_Functions.hpp"
 #include "system/Log_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 #include "hal/Network_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
@@ -56,7 +57,7 @@ namespace {
     class Service : public BackgroundService {
         public:
             const char* key() const override { return "store-update"; }
-            const char* name() const override { return "アプリの更新の確認"; }
+            const char* name() const override { return TR("アプリの更新の確認"); }
             IconID icon() const override { return IconID::AppStore; }
             bool toggleable() const override { return true; }
             bool enabled() const override { return enabled_; }
@@ -76,16 +77,16 @@ namespace {
 
             void status(FixedString<PICO_STR_LL>& out) const override {
                 out.clear();
-                if(!enabled_){ out.assign("切っています"); return; }
-                if(store_){ out.assign("一覧を取っています…"); return; }
-                if(last_error_[0]){ out.appendFormat("失敗: %s", last_error_); return; }
+                if(!enabled_){ out.assign(TR("切っています")); return; }
+                if(store_){ out.assign(TR("一覧を取っています…")); return; }
+                if(last_error_[0]){ out.appendFormat(TR("失敗: %s"), last_error_); return; }
                 if(last_ok_ms_ != 0){
                     const uint32_t ago = (millis() - last_ok_ms_) / 60000;
-                    if(last_updates_ > 0) out.appendFormat("%lu分前に確認(更新%d件)", (unsigned long)ago, last_updates_);
-                    else out.appendFormat("%lu分前に確認(更新なし)", (unsigned long)ago);
+                    if(last_updates_ > 0) out.appendFormat(TR("%lu分前に確認(更新%d件)"), (unsigned long)ago, last_updates_);
+                    else out.appendFormat(TR("%lu分前に確認(更新なし)"), (unsigned long)ago);
                     return;
                 }
-                out.assign("1日1回、入っているアプリの更新を確かめます");
+                out.assign(TR("1日1回、入っているアプリの更新を確かめます"));
             }
 
             void update(uint32_t now) override {
@@ -146,7 +147,7 @@ namespace {
                 force_ = false;
                 store_ = new (std::nothrow) AppStore();
                 if(!store_){
-                    setError("メモリが足りません");
+                    setError(TR("メモリが足りません"));
                     next_ms_ = now + kFailRetryMs;
                     return;
                 }
@@ -166,7 +167,7 @@ namespace {
                 if(store_->state() == AppStore::State::Done){
                     finish(now);
                 }else{
-                    setError(store_->busy() ? "時間切れ" : store_->message());
+                    setError(store_->busy() ? TR("時間切れ") : store_->message());
                     next_ms_ = now + kFailRetryMs;
                 }
                 drop();
@@ -192,10 +193,10 @@ namespace {
                 ReadWatchState(checked, notified);
                 if(n > 0 && fp != notified){
                     NotificationFunctions::Content c;
-                    NotificationFunctions::Sanitize(c.title, "アプリの更新があります");
+                    NotificationFunctions::Sanitize(c.title, TR("アプリの更新があります"));
                     char body[PICO_STR_L];
-                    if(n == 1) snprintf(body, sizeof(body), "%s の新しい版があります", first_name);
-                    else snprintf(body, sizeof(body), "%s など%d件のアプリに新しい版があります", first_name, n);
+                    if(n == 1) snprintf(body, sizeof(body), TR("%s の新しい版があります"), first_name);
+                    else snprintf(body, sizeof(body), TR("%s など%d件のアプリに新しい版があります"), first_name, n);
                     NotificationFunctions::Sanitize(c.body, body);
                     NotificationFunctions::Sanitize(c.app, AppStore::kAppName);
                     c.sound = false;

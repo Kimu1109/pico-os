@@ -65,6 +65,7 @@
 #include "OS_Data.hpp"
 #include "consts.hpp"
 #include <Arduino.h>
+#include "system/I18n_Functions.hpp"
 
 
 using namespace LuaInternal;
@@ -91,8 +92,10 @@ namespace {
     // 応答全体を失敗させる(pico.sd_readと同じく黙って切り詰めない方針)
     struct LuaHttpSink : IHttpSink {
         FixedString<kMaxHttpResponseBytes> body;
+        // 上限を超えて断った(info.too_large。誤りの文は言語で変わるので、アプリはこちらで見分ける)
+        bool too_large = false;
         bool write(const void* data, size_t len) override {
-            if (body.length() + len > kMaxHttpResponseBytes) return false;
+            if (body.length() + len > kMaxHttpResponseBytes) { too_large = true; return false; }
             return body.append((const char*)data, len);
         }
     };
@@ -214,6 +217,7 @@ bool LuaEngine::StartHttp(PendingHttp* r, const char** why) {
     HttpState* st = http_;
 
     st->sink.body.clear();
+    st->sink.too_large = false;
     st->body_buf.clear();
     st->content_type_buf.clear();
     st->save_path.clear();
@@ -240,7 +244,7 @@ bool LuaEngine::StartHttp(PendingHttp* r, const char** why) {
     st->request.clearExtraHeaders();
     for (const auto& h : r->headers) {
         if (!st->request.addExtraHeader(h.first.c_str(), h.second.c_str())) {
-            *why = "リクエストヘッダが長すぎる/不正";
+            *why = TR("リクエストヘッダが長すぎる/不正");
             return false;
         }
     }
@@ -252,14 +256,14 @@ bool LuaEngine::StartHttp(PendingHttp* r, const char** why) {
         st->save_part.assign(r->save_to.c_str());
         if (!st->save_part.append(".part")) {
             st->save_path.clear();
-            *why = "保存先のパスが長すぎる";
+            *why = TR("保存先のパスが長すぎる");
             return false;
         }
         st->file_sink.file = OSData::SD.open(st->save_part.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
         if (!st->file_sink.file) {
             st->save_path.clear();
             st->save_part.clear();
-            *why = "保存先を開けない";
+            *why = TR("保存先を開けない");
             return false;
         }
         st->file_sink.is_open = true;
@@ -275,7 +279,7 @@ bool LuaEngine::StartHttp(PendingHttp* r, const char** why) {
         if (st->saving()) OSData::SD.remove(st->save_part.c_str());
         st->save_path.clear();
         st->save_part.clear();
-        *why = "リクエストを開始できない";
+        *why = TR("リクエストを開始できない");
         return false;
     }
 
@@ -509,7 +513,7 @@ void LuaEngine::StartQueuedHttp() {
         lua_pushnil(L);
         lua_pushstring(L, why);
         if (ProtectedCall(4) != LUA_OK) {
-            ReportError("pico.http_requestのコールバックでエラーが発生しました");
+            ReportError(TR("pico.http_requestのコールバックでエラーが発生しました"));
         }
         luaL_unref(L, LUA_REGISTRYINDEX, ref);
     }
@@ -554,7 +558,7 @@ void LuaEngine::FinishHttp() {
                 saved_path.assign(st->save_path);
             } else {
                 ok = false;
-                err_text = "保存先へ差し替えられない";
+                err_text = TR("保存先へ差し替えられない");
                 OSData::SD.remove(st->save_part.c_str());
             }
         } else {
@@ -580,7 +584,7 @@ void LuaEngine::FinishHttp() {
     } else {
         lua_pushnil(L);
     }
-    if (!ok) lua_pushstring(L, err_text ? err_text : "失敗");
+    if (!ok) lua_pushstring(L, err_text ? err_text : TR("失敗"));
     else lua_pushnil(L);
 
     // 応答ヘッダ(小文字の名前)
@@ -605,9 +609,13 @@ void LuaEngine::FinishHttp() {
         }
     }
     // 受け取った本文の大きさ(と保存先・接続を使い回したか)
-    lua_createtable(L, 0, 3);
+    lua_createtable(L, 0, 4);
     lua_pushboolean(L, st->request.reusedConnection());
     lua_setfield(L, -2, "reused");
+    if (!ok && !saved && st->sink.too_large) {
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "too_large");
+    }
     lua_pushinteger(L, saved ? (lua_Integer)saved_bytes : (lua_Integer)st->sink.body.length());
     lua_setfield(L, -2, "size");
     if (!saved_path.empty()) {
@@ -616,7 +624,7 @@ void LuaEngine::FinishHttp() {
     }
 
     if (ProtectedCall(6) != LUA_OK) {
-        ReportError("pico.http_requestのコールバックでエラーが発生しました");
+        ReportError(TR("pico.http_requestのコールバックでエラーが発生しました"));
     }
 
     luaL_unref(L, LUA_REGISTRYINDEX, ref);
@@ -632,7 +640,7 @@ int LuaEngine::l_json_decode(lua_State* L) {
     size_t pos = 0;
     if (!LuaJson::Decode(L, s, len, keep_null, err, pos)) {
         lua_pushnil(L);
-        lua_pushfstring(L, "%s (位置 %d)", err, (int)pos);
+        lua_pushfstring(L, TR("%s (位置 %d)"), err, (int)pos);
         return 2;
     }
     return 1;
@@ -646,7 +654,7 @@ int LuaEngine::l_json_encode(lua_State* L) {
     lua_settop(L, 1);
     if (!ok) {
         lua_pushnil(L);
-        lua_pushstring(L, err ? err : "失敗");
+        lua_pushstring(L, err ? err : TR("失敗"));
         return 2;
     }
     // (メモリ不足でlua_pushlstringがlongjmpするとoutが漏れるが、その時はアプリごと閉じるので許容する)

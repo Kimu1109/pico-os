@@ -6,6 +6,7 @@
 #include "storage/SD_IO.hpp"
 #include "task/StepBudget.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -127,11 +128,11 @@ void StorageScene::refreshList(){
     if(this->status_label){
         char buf[PICO_STR_L];
         if(!this->counted){
-            snprintf(buf, sizeof(buf), "数えています… %d/%d", this->counting < 0 ? 0 : this->counting, this->entry_count);
+            snprintf(buf, sizeof(buf), TR("数えています… %d/%d"), this->counting < 0 ? 0 : this->counting, this->entry_count);
         }else{
             char t[16];
             FormatBytes(this->total_bytes, t, sizeof(t));
-            snprintf(buf, sizeof(buf), "%d件 合計%s%s", this->entry_count, t, this->more_entries ? "(多すぎて一部)" : "");
+            snprintf(buf, sizeof(buf), TR("%d件 合計%s%s"), this->entry_count, t, this->more_entries ? TR("(多すぎて一部)") : "");
         }
         this->status_label->setText(buf);
     }
@@ -185,7 +186,7 @@ void StorageScene::stepCapacity(){
 void StorageScene::refreshCapacity(){
     if(!this->capacity_label) return;
     if(!OSData::SD_usable){
-        this->capacity_label->setText("SDカードがありません");
+        this->capacity_label->setText(TR("SDカードがありません"));
         return;
     }
     char total[16];
@@ -195,9 +196,9 @@ void StorageScene::refreshCapacity(){
         if(this->cap_counting){
             char used[16];
             FormatBytes(this->cap_acc, used, sizeof(used));
-            snprintf(buf, sizeof(buf), "使用量を数えています… %s/%s", used, total);
+            snprintf(buf, sizeof(buf), TR("使用量を数えています… %s/%s"), used, total);
         }else{
-            snprintf(buf, sizeof(buf), "全体%s", total);
+            snprintf(buf, sizeof(buf), TR("全体%s"), total);
         }
         this->capacity_label->setText(buf);
         if(this->bar && cap_total > 0 && this->cap_counting){
@@ -210,7 +211,7 @@ void StorageScene::refreshCapacity(){
     FormatBytes(cap_used, used, sizeof(used));
     FormatBytes(cap_total - cap_used, fr, sizeof(fr));
     // 空きは「全体 - ファイルの合計」の見積もり(FATの空きを数えたものではない)
-    snprintf(buf, sizeof(buf), "%s/%s 空き約%s%s", used, total, fr, cap_partial ? "以下" : "");
+    snprintf(buf, sizeof(buf), TR("%s/%s 空き約%s%s"), used, total, fr, cap_partial ? TR("以下") : "");
     this->capacity_label->setText(buf);
     if(this->bar && cap_total > 0){
         this->bar->setValue((float)((double)cap_used * 100.0 / (double)cap_total));
@@ -231,7 +232,7 @@ void StorageScene::onEnter(){
     const Rect content = Scene::contentRect();
     const int top = content.y + MARGIN;
 
-    this->back_button = new Button(content.x + MARGIN, top, "戻る");
+    this->back_button = new Button(content.x + MARGIN, top, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);

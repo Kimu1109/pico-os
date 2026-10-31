@@ -1,6 +1,7 @@
 #include "util/Json_Reader.hpp"
 
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     bool IsSpace(char c){ return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
@@ -124,7 +125,7 @@ bool JsonReader::beginValue(char c){
     switch(c){
         case '{':
         case '[': {
-            if(depth_ >= kMaxDepth) return fail("入れ子が深すぎます");
+            if(depth_ >= kMaxDepth) return fail(TR("入れ子が深すぎます"));
             const bool is_array = (c == '[');
             if(handler_) handler_->onBegin(currentKey(), is_array, depth_ + 1);
             stack_is_array_[depth_++] = is_array;
@@ -160,7 +161,7 @@ bool JsonReader::beginValue(char c){
                 state_ = State::Literal;
                 return true;
             }
-            return fail("値がありません");
+            return fail(TR("値がありません"));
     }
 }
 
@@ -185,7 +186,7 @@ bool JsonReader::finishString(){
 }
 
 bool JsonReader::finishLiteral(){
-    if(truncated_) return fail("数値が長すぎます");
+    if(truncated_) return fail(TR("数値が長すぎます"));
     value_[value_len_] = '\0';
     Type t;
     if(strcmp(value_, "true") == 0) t = Type::True;
@@ -193,11 +194,11 @@ bool JsonReader::finishLiteral(){
     else if(strcmp(value_, "null") == 0) t = Type::Null;
     else{
         const char c0 = value_[0];
-        if(!(c0 == '-' || (c0 >= '0' && c0 <= '9'))) return fail("知らない値です");
+        if(!(c0 == '-' || (c0 >= '0' && c0 <= '9'))) return fail(TR("知らない値です"));
         for(size_t i = 0; i < value_len_; i++){
             const char c = value_[i];
             const bool ok = (c >= '0' && c <= '9') || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E';
-            if(!ok) return fail("数値として読めません");
+            if(!ok) return fail(TR("数値として読めません"));
         }
         t = Type::Number;
     }
@@ -230,7 +231,7 @@ bool JsonReader::step(char c){
 
         case State::Colon:
             if(IsSpace(c)) return true;
-            if(c != ':') return fail("':' がありません");
+            if(c != ':') return fail(TR("':' がありません"));
             state_ = State::Value;
             return true;
 
@@ -246,13 +247,13 @@ bool JsonReader::step(char c){
                 return true;
             }
             if(c == '}' || c == ']') break;
-            return fail("',' がありません");
+            return fail(TR("',' がありません"));
 
         case State::String:
             if(high_surrogate_ != 0 && c != '\\') flushHighSurrogate();
             if(c == '"') return finishString();
             if(c == '\\'){ state_ = State::Escape; return true; }
-            if((uint8_t)c < 0x20) return fail("文字列に制御文字があります");
+            if((uint8_t)c < 0x20) return fail(TR("文字列に制御文字があります"));
             appendByte(c);
             return true;
 
@@ -274,7 +275,7 @@ bool JsonReader::step(char c){
                     state_ = State::Unicode;
                     return true;
                 default:
-                    return fail("知らないエスケープです");
+                    return fail(TR("知らないエスケープです"));
             }
             appendByte(out);
             state_ = State::String;
@@ -283,7 +284,7 @@ bool JsonReader::step(char c){
 
         case State::Unicode: {
             const int v = HexValue(c);
-            if(v < 0) return fail("\\u の後が16進数ではありません");
+            if(v < 0) return fail(TR("\\u の後が16進数ではありません"));
             unicode_ = (unicode_ << 4) | (uint32_t)v;
             if(++unicode_digits_ < 4) return true;
             state_ = State::String;
@@ -316,7 +317,7 @@ bool JsonReader::step(char c){
 
         case State::Done:
             if(IsSpace(c)) return true;
-            return fail("値の後に余計なものがあります");
+            return fail(TR("値の後に余計なものがあります"));
 
         case State::Error:
             return false;
@@ -324,7 +325,7 @@ bool JsonReader::step(char c){
 
     // ---- 閉じ括弧('}' / ']') ----
     const bool is_array = (c == ']');
-    if(depth_ == 0 || stack_is_array_[depth_ - 1] != is_array) return fail("括弧の対応が合いません");
+    if(depth_ == 0 || stack_is_array_[depth_ - 1] != is_array) return fail(TR("括弧の対応が合いません"));
     const int inner = depth_;
     depth_--;
     if(handler_) handler_->onEnd(is_array, inner);

@@ -22,6 +22,7 @@
 #include "sound/Mic_Dsp.hpp"
 #include "OS_Data.hpp"
 #include <new>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     LuaEngine* Self(lua_State* L){ return *static_cast<LuaEngine**>(lua_getextraspace(L)); }
@@ -71,7 +72,7 @@ struct LuaEngineMic {
         if(self->permissions().microphone) return false;
         LOG_APP_WARN("%s: マイクの権限がありません(app.cfgのpermission_microphone)", api);
         lua_pushnil(L);
-        lua_pushstring(L, "マイクの権限がありません");
+        lua_pushstring(L, TR("マイクの権限がありません"));
         return true;
     }
 
@@ -125,7 +126,7 @@ struct LuaEngineMic {
         }
         if(!OSData::SD_usable){
             lua_pushnil(L);
-            lua_pushstring(L, "SDカードが使えません");
+            lua_pushstring(L, TR("SDカードが使えません"));
             return 2;
         }
 
@@ -148,7 +149,7 @@ struct LuaEngineMic {
         }
         if(!self->SdWriteAllowed(path, "pico.mic_start")){
             lua_pushnil(L);
-            lua_pushstring(L, "このアプリからは書けない場所です");
+            lua_pushstring(L, TR("このアプリからは書けない場所です"));
             return 2;
         }
         //置き場のフォルダが無ければ作る(SdWriteAllowed を通った場所の親なので、持ち場の中)
@@ -252,7 +253,7 @@ struct LuaEngineMic {
         if(Denied(L, self, "pico.mic_set_rate")) return 2;
         if(!SetRate(L, self, (uint32_t)rate)){
             lua_pushnil(L);
-            lua_pushstring(L, "録音中は周波数を変えられません");
+            lua_pushstring(L, TR("録音中は周波数を変えられません"));
             return 2;
         }
         lua_pushboolean(L, 1);

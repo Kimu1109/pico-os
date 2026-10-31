@@ -5,17 +5,18 @@
 #include <Arduino.h>
 #include <cstring>
 #include <new>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // CONNACK の返事の番号(3.2.2.3)
     const char* ConnackText(uint8_t code){
         switch(code){
-            case 1: return "ブローカがMQTT 3.1.1を話せない";
-            case 2: return "クライアントIDを断られた";
-            case 3: return "ブローカが使えない状態";
-            case 4: return "ユーザー名かパスワードが違う";
-            case 5: return "接続を許されていない(認証)";
-            default: return "ブローカに断られた";
+            case 1: return TR("ブローカがMQTT 3.1.1を話せない");
+            case 2: return TR("クライアントIDを断られた");
+            case 3: return TR("ブローカが使えない状態");
+            case 4: return TR("ユーザー名かパスワードが違う");
+            case 5: return TR("接続を許されていない(認証)");
+            default: return TR("ブローカに断られた");
         }
     }
 }
@@ -74,7 +75,7 @@ uint16_t MqttClient::nextId(){
 
 bool MqttClient::sendRaw(const uint8_t* p, size_t n){
     if(conn_.write(p, n) != n){
-        finish("送れない(切れた)");
+        finish(TR("送れない(切れた)"));
         return false;
     }
     last_tx_ms_ = millis();
@@ -186,7 +187,7 @@ bool MqttClient::poll(Event& ev){
                 return poll(ev);
             }
             if(!sendConnect()){
-                finish("CONNECTを送れない(長すぎる/切れた)");
+                finish(TR("CONNECTを送れない(長すぎる/切れた)"));
                 return poll(ev);
             }
             parser_.reset(buf_, cap_);
@@ -208,7 +209,7 @@ bool MqttClient::handlePacket(Event& ev){
 
     if(state_ == State::WaitConnack){
         if(parser_.type() != CONNACK || len < 2){
-            finish("ブローカの返事がCONNACKでない");
+            finish(TR("ブローカの返事がCONNACKでない"));
             return poll(ev);
         }
         if(body[1] != 0){
@@ -226,7 +227,7 @@ bool MqttClient::handlePacket(Event& ev){
         case PUBLISH: {
             Publish pub;
             if(!ParsePublish(parser_.flags(), body, len, pub)){
-                finish("ブローカから壊れたPUBLISHが届いた");
+                finish(TR("ブローカから壊れたPUBLISHが届いた"));
                 return poll(ev);
             }
             //受け取ったと答える(読み捨てるものにも答える。答えないとブローカが送り直し続ける)
@@ -296,7 +297,7 @@ bool MqttClient::handlePacket(Event& ev){
         case PINGRESP:
             return false;
         default:
-            finish("ブローカから想定外のパケットが届いた");
+            finish(TR("ブローカから想定外のパケットが届いた"));
             return poll(ev);
     }
 }
@@ -309,7 +310,7 @@ bool MqttClient::pollConnected(Event& ev){
             const MqttPacket::Parser::Result r = parser_.feed(rx_ + rx_pos_, rx_len_ - rx_pos_, used);
             rx_pos_ += used;
             if(r == MqttPacket::Parser::Result::Error){
-                finish("ブローカから壊れたパケットが届いた");
+                finish(TR("ブローカから壊れたパケットが届いた"));
                 return poll(ev);
             }
             if(r == MqttPacket::Parser::Result::Packet){
@@ -330,7 +331,7 @@ bool MqttClient::pollConnected(Event& ev){
             }
         }
         if(!conn_.connected()){
-            finish("接続が切れた");
+            finish(TR("接続が切れた"));
             return poll(ev);
         }
         break;
@@ -339,7 +340,7 @@ bool MqttClient::pollConnected(Event& ev){
     const unsigned long now = millis();
     if(state_ == State::WaitConnack){
         if(now - started_ms_ >= kConnackTimeoutMs){
-            finish("ブローカの返事が無い(CONNACK)");
+            finish(TR("ブローカの返事が無い(CONNACK)"));
             return poll(ev);
         }
         return false;
@@ -347,7 +348,7 @@ bool MqttClient::pollConnected(Event& ev){
     if(opts_.keepalive_s > 0){
         const unsigned long ka = (unsigned long)opts_.keepalive_s * 1000UL;
         if(now - last_rx_ms_ >= ka + ka / 2){
-            finish("ブローカの返事が無い(keepalive)");
+            finish(TR("ブローカの返事が無い(keepalive)"));
             return poll(ev);
         }
         if(now - last_tx_ms_ >= ka){

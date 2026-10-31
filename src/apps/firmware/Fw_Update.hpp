@@ -8,6 +8,7 @@
 #include "apps/ssh/Ssh_Sha256.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 // 更新ファイルを受け取る元(SDのファイル・PCからのTCP接続)
 class FwSource {
@@ -59,7 +60,7 @@ class FwUpdate {
         // Confirm のときの答え
         void confirm(bool yes);
         // やめる(置き場を片付ける。Done の後なら指示も消す)
-        void cancel(const char* reason = "取り消しました");
+        void cancel(const char* reason = TR("取り消しました"));
 
         State state() const { return state_; }
         bool finished() const { return state_ == State::Done || state_ == State::Failed; }

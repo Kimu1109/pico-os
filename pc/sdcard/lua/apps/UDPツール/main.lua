@@ -61,7 +61,7 @@ end
 
 local function listen()
     if not pico.socket then
-        status = "このファームは pico.socket に対応していません"
+        status = pico.tr("このファームは pico.socket に対応していません")
         redraw()
         return
     end
@@ -70,9 +70,9 @@ local function listen()
     sock, err = pico.socket.udp(on_event, cfg.local_port > 0 and { port = cfg.local_port } or nil)
     if sock then
         bound_port = cfg.local_port
-        status = bound_port > 0 and ("待ち受け :" .. bound_port) or "待ち受け: 返事だけ受ける"
+        status = bound_port > 0 and pico.tr("待ち受け :%s", bound_port) or pico.tr("待ち受け: 返事だけ受ける")
     else
-        status = "待ち受けを始められません: " .. tostring(err)
+        status = pico.tr("待ち受けを始められません: ") .. tostring(err)
     end
     redraw()
 end
@@ -80,7 +80,7 @@ end
 local function send_text(text)
     local host, port = split_target(cfg.target)
     if not host then
-        add("宛先が「ホスト:ポート」の形になっていません", RED)
+        add(pico.tr("宛先が「ホスト:ポート」の形になっていません"), RED)
         return false
     end
     if not sock then listen() end
@@ -88,7 +88,7 @@ local function send_text(text)
         add("→ " .. show(text), BLUE)
         return true
     end
-    add("送れませんでした(" .. host .. ":" .. port .. ")", RED)
+    add(pico.tr("送れませんでした(%s:%s)", host, port), RED)
     return false
 end
 
@@ -108,7 +108,7 @@ local function wake(i)
     local mac = d and parse_mac(d[2])
     local host, port = split_target(cfg.wol_addr)
     if not mac or not host then
-        add("MACアドレスかWoLの宛先が正しくありません", RED)
+        add(pico.tr("MACアドレスかWoLの宛先が正しくありません"), RED)
         return false
     end
     if not sock then listen() end
@@ -116,7 +116,7 @@ local function wake(i)
         add("→ WoL " .. d[1] .. "(" .. d[2] .. ")", BLUE)
         return true
     end
-    add("送れませんでした(" .. host .. ":" .. port .. ")", RED)
+    add(pico.tr("送れませんでした(%s:%s)", host, port), RED)
     return false
 end
 
@@ -136,13 +136,13 @@ local function fit(text, w)
 end
 
 local function render()
-    pico.draw_text(X + 4, TOP + 2, fit("宛先 " .. cfg.target, W - 8), BLACK, 0)
+    pico.draw_text(X + 4, TOP + 2, fit(pico.tr("宛先 ") .. cfg.target, W - 8), BLACK, 0)
     pico.draw_text(X + 4, TOP + 2 + LINE, fit(status, W - 8), DGREY, 0)
     local y0 = TOP + 2 + LINE * 2 + 4
     pico.draw_line(X + 4, y0 - 3, X + W - 5, y0 - 3, LGREY)
     if #log == 0 then
         pico.draw_text_wrapped(X + 6, y0 + 4, W - 12,
-            "「送信」で宛先へ文字を送ります。届いたものはここに並びます。「起動」は Wake on LAN です", DGREY, 0)
+            pico.tr("「送信」で宛先へ文字を送ります。届いたものはここに並びます。「起動」は Wake on LAN です"), DGREY, 0)
         return
     end
     local rows = (Y + H - y0) // LINE
@@ -160,15 +160,15 @@ local function ask(title, initial, fn)
 end
 
 local function settings()
-    local items = { "宛先(ホスト:ポート)", "待ち受けの番号(0 = 返事だけ)", "WoLの宛先", "WoLの機器(名前=MAC)", "記録を消す" }
-    local dlg = pico.show_choice("設定", items)
+    local items = { pico.tr("宛先(ホスト:ポート)"), pico.tr("待ち受けの番号(0 = 返事だけ)"), pico.tr("WoLの宛先"), pico.tr("WoLの機器(名前=MAC)"), pico.tr("記録を消す") }
+    local dlg = pico.show_choice(pico.tr("設定"), items)
     pico.on(dlg, "closed", function(_, ok, idx)
         if not ok then return end
         pico.after(50, function()   -- ダイアログからダイアログへは1フレーム空ける
             if idx == 0 then
                 ask(items[1], cfg.target, function(v)
                     if not split_target(v) then
-                        pico.show_message("「ホスト:ポート」の形で入れてください(例 192.168.1.50:4210)", "", "OK")
+                        pico.show_message(pico.tr("「ホスト:ポート」の形で入れてください(例 192.168.1.50:4210)"), "", "OK")
                         return
                     end
                     cfg.target = v; save(); redraw()
@@ -187,7 +187,7 @@ local function settings()
             elseif idx == 3 then
                 local lines = {}
                 for _, d in ipairs(cfg.wol) do lines[#lines + 1] = d[1] .. "=" .. d[2] end
-                local d = pico.show_input("1行に1台、名前=MACアドレス", table.concat(lines, "\n"), false)
+                local d = pico.show_input(pico.tr("1行に1台、名前=MACアドレス"), table.concat(lines, "\n"), false)
                 pico.on(d, "closed", function(id, ok2)
                     if not ok2 then return end
                     local out = {}
@@ -207,12 +207,12 @@ end
 
 local function wol_menu()
     if #cfg.wol == 0 then
-        pico.show_message("「設定」の「WoLの機器」で、名前=MACアドレス を登録してください", "", "OK")
+        pico.show_message(pico.tr("「設定」の「WoLの機器」で、名前=MACアドレス を登録してください"), "", "OK")
         return
     end
     local names = {}
     for i, d in ipairs(cfg.wol) do names[i] = d[1] .. "(" .. d[2] .. ")" end
-    local dlg = pico.show_choice("起こすPC", names)
+    local dlg = pico.show_choice(pico.tr("起こすPC"), names)
     pico.on(dlg, "closed", function(_, ok, idx)
         if ok then wake(idx + 1) end
     end)
@@ -235,15 +235,15 @@ local function button(text, x, w, fn)
 end
 
 local bw = (W - 6) // 4
-button("戻る", X, bw, back)
-button("設定", X + bw + 2, bw, settings)
-button("送信", X + (bw + 2) * 2, bw, function()
-    ask("送る文字(" .. cfg.target .. " へ)", cfg.last or "", function(v)
+button(pico.tr("戻る"), X, bw, back)
+button(pico.tr("設定"), X + bw + 2, bw, settings)
+button(pico.tr("送信"), X + (bw + 2) * 2, bw, function()
+    ask(pico.tr("送る文字(%s へ)", cfg.target), cfg.last or "", function(v)
         cfg.last = v; save()
         send_text(v)
     end)
 end)
-button("起動", X + (bw + 2) * 3, bw, wol_menu)
+button(pico.tr("起動"), X + (bw + 2) * 3, bw, wol_menu)
 
 canvas = pico.create("Canvas")
 pico.set(canvas, "x", X)

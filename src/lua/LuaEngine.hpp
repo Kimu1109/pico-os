@@ -820,6 +820,11 @@ class LuaEngine {
         static int l_push_scene(lua_State* L);
         static int l_change_scene(lua_State* L);
         static int l_launch_app(lua_State* L);
+        // 表示言語(LuaEngine_I18n.cpp)。pico.lang() / pico.tr(text, ...)
+        static int l_lang(lua_State* L);
+        static int l_tr(lua_State* L);
+        // 今の言語の訳の表(<app_dir>/lang/<言語>.lua)を積む。無ければ nil を積む
+        void pushLangTable(lua_State* L);
         static int l_content_rect(lua_State* L);
         // 時刻。クラスコメント「時刻取得」参照
         static int l_get_time(lua_State* L);

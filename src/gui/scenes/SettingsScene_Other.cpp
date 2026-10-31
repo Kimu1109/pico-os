@@ -26,6 +26,7 @@
 #include "services/PowerMenu_Functions.hpp"
 #include "services/App_Functions.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
+#include "system/I18n_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -39,7 +40,7 @@ namespace {
 
     // スリープまでの時間(秒、0=無効)と表示名。最後の操作からの通算(自動調光の30秒より後ろの値を選ぶ)
     constexpr unsigned long kSleepPresetsSec[] = { 0, 60, 120, 300, 600, 1800 };
-    constexpr const char*   kSleepPresetLabels[] = { "しない", "1分", "2分", "5分", "10分", "30分" };
+    constexpr const char*   kSleepPresetLabels[] = { TR_NOOP("しない"), TR_NOOP("1分"), TR_NOOP("2分"), TR_NOOP("5分"), TR_NOOP("10分"), TR_NOOP("30分") };
     constexpr int kSleepPresetCount = sizeof(kSleepPresetsSec) / sizeof(kSleepPresetsSec[0]);
 
     // 音の周波数(sound.cfgの sample-rate)。44.1kHzはライン出力のDAC(PCM5102A等)向けで、2コア目の計算が倍になる
@@ -56,23 +57,23 @@ void SettingsScene::refreshLauncherLabel(){
     if(!this->launcher_label) return;
     char buf[PICO_STR_L];
     const int hidden = AppFunctions::HiddenCount();
-    if(hidden > 0) snprintf(buf, sizeof(buf), "ランチャで隠したアプリ: %d", hidden);
-    else           snprintf(buf, sizeof(buf), "ランチャで隠したアプリ: なし");
+    if(hidden > 0) snprintf(buf, sizeof(buf), TR("ランチャで隠したアプリ: %d"), hidden);
+    else           snprintf(buf, sizeof(buf), TR("ランチャで隠したアプリ: なし"));
     this->launcher_label->setText(buf);
 }
 
 void SettingsScene::openLauncherDialog(){
     //隠したアプリの一覧(選ぶとランチャへ戻す)+ 最後に「並びを元に戻す」
-    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, "隠したアプリ", "", "閉じる");
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, TR("隠したアプリ"), "", TR("閉じる"));
     if(!dialog) return;
     const int hidden = AppFunctions::HiddenCount();
     for(int i = 0; i < hidden; i++){
         const AppEntry* e = AppFunctions::Get(AppFunctions::HiddenAt(i));
         char buf[PICO_STR_L];
-        snprintf(buf, sizeof(buf), "表示: %s", e ? e->name.c_str() : "?");
+        snprintf(buf, sizeof(buf), TR("表示: %s"), e ? AppFunctions::DisplayName(*e) : "?");
         dialog->addChoice(buf);
     }
-    dialog->addChoice("並びを元に戻す");
+    dialog->addChoice(TR("並びを元に戻す"));
     dialog->layout();
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -85,7 +86,7 @@ void SettingsScene::openLauncherDialog(){
             AppFunctions::SetHidden(AppFunctions::HiddenAt(sel), false);
         }else{
             AppFunctions::ResetLayout();
-            this->showMessageLater("ランチャの並びを登録順に戻しました(フォルダも解除)");
+            this->showMessageLater(TR("ランチャの並びを登録順に戻しました(フォルダも解除)"));
         }
         this->refreshLauncherLabel();
     });
@@ -104,45 +105,46 @@ void SettingsScene::buildOtherTab(const Layout& lay){
     // =====================================================================
     // その他
     // =====================================================================
-    // ランチャで隠したアプリ(並べ替え・隠すのはランチャのタイルの長押し)。1行目
-    this->launcher_button = this->makeEditButton(rowY(0));
+    // 1行目は表示言語(ドロップダウンは一覧が下の行へ重なるので buildLateRows() で作る)
+    // ランチャで隠したアプリ(並べ替え・隠すのはランチャのタイルの長押し)。2行目
+    this->launcher_button = this->makeEditButton(rowY(1));
     this->launcher_button->setOnPressEnd([this](){ this->openLauncherDialog(); });
     addToTab(Tab::Other, this->launcher_button);
-    this->launcher_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(0) + 2), label_w, "");
+    this->launcher_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(1) + 2), label_w, "");
     addToTab(Tab::Other, this->launcher_label);
     this->refreshLauncherLabel();
 
-    // ブラウザのホーム。2行目
-    this->home_edit_button = this->makeEditButton(rowY(1));
+    // ブラウザのホーム。3行目
+    this->home_edit_button = this->makeEditButton(rowY(2));
     this->home_edit_button->setOnPressEnd([this](){
         // 空欄で決定すると同梱サンプル文書に戻る(commitEdit()参照)
-        this->openEditDialog(EditField::BrowserHome, "ブラウザのホームURL", this->home_value.c_str());
+        this->openEditDialog(EditField::BrowserHome, TR("ブラウザのホームURL"), this->home_value.c_str());
     });
     addToTab(Tab::Other, this->home_edit_button);
 
-    this->home_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(1) + 2), label_w, "");
+    this->home_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(2) + 2), label_w, "");
     addToTab(Tab::Other, this->home_label);
     this->refreshHomeLabel();
 
-    // バックグラウンドの仕事(BackgroundFunctions)。3行目。一覧の画面で止める/入り切りする
+    // バックグラウンドの仕事(BackgroundFunctions)。4行目。一覧の画面で止める/入り切りする
     {
-        Button* bg_button = this->makeEditButton(rowY(2));
-        bg_button->setText("一覧");
+        Button* bg_button = this->makeEditButton(rowY(3));
+        bg_button->setText(TR("一覧"));
         bg_button->setOnPressEnd([](){ SceneFunctions::Push(new BackgroundScene()); });
         addToTab(Tab::Other, bg_button);
         int active = 0;
         for(int i = 0; i < BackgroundFunctions::Count(); i++) if(BackgroundFunctions::At(i)->active()) active++;
         char text[64];
-        if(active > 0) snprintf(text, sizeof(text), "バックグラウンド: %d件", active);
-        else snprintf(text, sizeof(text), "バックグラウンド: なし");
-        addToTab(Tab::Other, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(2) + 2), label_w, text));
+        if(active > 0) snprintf(text, sizeof(text), TR("バックグラウンド: %d件"), active);
+        else snprintf(text, sizeof(text), TR("バックグラウンド: なし"));
+        addToTab(Tab::Other, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(3) + 2), label_w, text));
     }
 
-    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)と起動時の自己診断。見出しの下に4行を詰めて並べる
-    // (行の高さ ROW_H のままでは「他」タブに収まらないため kDevRowH)
-    constexpr int kDevRowH = 26;
-    const int16_t dev_y = (int16_t)(rowY(3) + 2);
-    auto* dev_title = makeRowLabel<PICO_STR_M>(left, dev_y, full_w, "開発者向け");
+    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)と起動時の自己診断。見出しの下に4行を並べる
+    // (チェックボックスだけの行なので ROW_H より少し詰める。入りきらない分はスクロール)
+    constexpr int kDevRowH = 32;
+    const int16_t dev_y = (int16_t)(rowY(4) + 2);
+    auto* dev_title = makeRowLabel<PICO_STR_M>(left, dev_y, full_w, TR("開発者向け"));
     dev_title->setTextColor(PICO_DARKGREY);
     addToTab(Tab::Other, dev_title);
     auto devRowY = [&](int i) -> int16_t { return (int16_t)(dev_y + 20 + i * kDevRowH); };
@@ -157,16 +159,16 @@ void SettingsScene::buildOtherTab(const Layout& lay){
         addToTab(Tab::Other, cb);
         return cb;
     };
-    this->perf_overlay_checkbox = makeDevCheckbox(4, "フレーム時間を表示", DevToolsFunctions::PerfOverlay());
+    this->perf_overlay_checkbox = makeDevCheckbox(4, TR("フレーム時間を表示"), DevToolsFunctions::PerfOverlay());
     this->perf_overlay_checkbox->setOnChangeChecked([this](){
         DevToolsFunctions::SetPerfOverlay(this->perf_overlay_checkbox->getIsChecked());
     });
-    this->lua_debugger_checkbox = makeDevCheckbox(5, "Luaデバッガ", DevToolsFunctions::LuaDebuggerEnabled());
+    this->lua_debugger_checkbox = makeDevCheckbox(5, TR("Luaデバッガ"), DevToolsFunctions::LuaDebuggerEnabled());
     this->lua_debugger_checkbox->setOnChangeChecked([this](){
         // 次に開いたLuaアプリから効く(今動いているLuaEngineには後から付けない)
         DevToolsFunctions::SetLuaDebugger(this->lua_debugger_checkbox->getIsChecked());
     });
-    this->watchdog_checkbox = makeDevCheckbox(6, "固まったら再起動する", DevToolsFunctions::Watchdog());
+    this->watchdog_checkbox = makeDevCheckbox(6, TR("固まったら再起動する"), DevToolsFunctions::Watchdog());
     this->watchdog_checkbox->setOnChangeChecked([this](){
         DevToolsFunctions::SetWatchdog(this->watchdog_checkbox->getIsChecked());
     });

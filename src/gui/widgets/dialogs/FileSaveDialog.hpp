@@ -4,6 +4,7 @@
 #include "gui/widgets/apps/FileExplorer.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Textbox.hpp"
+#include "system/I18n_Functions.hpp"
 
 class FileSaveDialog : public Widget {
     private:
@@ -41,7 +42,7 @@ class FileSaveDialog : public Widget {
             this->explorer->setCurrentFolderPath(path);
 
             this->textbox_filename = new Textbox<PICO_PATH_LEN>("", BASE_X, TEXTBOX_Y, DIALOG_W, TEXTBOX_H, true);
-            this->textbox_filename->setPlaceholder("ファイル名を入力...");
+            this->textbox_filename->setPlaceholder(TR("ファイル名を入力..."));
             this->textbox_filename->setFontSize(FontFn::Small);
             this->textbox_filename->setMaxHeight(TEXTBOX_H);
 
@@ -55,7 +56,7 @@ class FileSaveDialog : public Widget {
                 this->setVisible(false);
             });
 
-            this->button_no = new Button(BASE_X + BUTTON_MARGIN, BUTTON_Y - 3, "キャンセル");
+            this->button_no = new Button(BASE_X + BUTTON_MARGIN, BUTTON_Y - 3, TR("キャンセル"));
             this->button_no->setAllowTextSpacing(false);
             this->button_no->setFontSize(FontFn::Small);
             this->button_no->setW(BUTTON_W + Button::kFrameExtraTight);

@@ -15,6 +15,7 @@
 #include "storage/SD_IO.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -77,7 +78,7 @@ void TextEditorScene::syncFromKeyboard(ITextInputWidget* kb){
             kb->setText(joined);
             kb->setCursorByteOffset((size_t)p);
             this->syncing = false;
-            this->refreshStatus("これ以上行を増やせません");
+            this->refreshStatus(TR("これ以上行を増やせません"));
             this->syncFromKeyboard(kb);
             return;
         }
@@ -100,7 +101,7 @@ void TextEditorScene::syncFromKeyboard(ITextInputWidget* kb){
             kb->setText(old);
             kb->setCursorByteOffset(c);
             this->syncing = false;
-            this->refreshStatus("容量の上限(32KiB)です");
+            this->refreshStatus(TR("容量の上限(32KiB)です"));
             s = old;
             cursor = c;
         }else{
@@ -149,7 +150,7 @@ bool TextEditorScene::onBackspaceAtStart(ITextInputWidget* keyboard){
     this->lineRange(this->cur_line - 1, ps, pe);
     this->lineRange(this->cur_line, cs, ce);
     if((pe - ps) + (ce - cs) > kMaxLineBytes){
-        this->refreshStatus("1行が長くなりすぎるため繋げられません");
+        this->refreshStatus(TR("1行が長くなりすぎるため繋げられません"));
         return true;
     }
 
@@ -180,7 +181,7 @@ bool TextEditorScene::onDeleteAtEnd(ITextInputWidget* keyboard){
     this->lineRange(this->cur_line, cs, ce);
     this->lineRange(this->cur_line + 1, ns, ne);
     if((ce - cs) + (ne - ns) > kMaxLineBytes){
-        this->refreshStatus("1行が長くなりすぎるため繋げられません");
+        this->refreshStatus(TR("1行が長くなりすぎるため繋げられません"));
         return true;
     }
 

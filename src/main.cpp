@@ -18,6 +18,7 @@
 #include "services/Alarm_Functions.hpp"
 #include "services/Timer_Functions.hpp"
 #include "services/Lock_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 #include "system/Notification_Functions.hpp"
 #include "services/Screenshot_Functions.hpp"
 #include "system/Pad_Functions.hpp"
@@ -86,6 +87,7 @@ void setup() {
     CrashDumpFunctions::InstallHandlers();
     //OTPの端末の鍵。暗号化された設定(wifi.cfg・lock.cfg等)を読むものより前に
     DeviceKeyFunctions::Setup();
+    I18nFunctions::Setup();    //表示言語(user.cfgの language)。文字列を作るどの画面・常駐の部品よりも前に
     DisplayFunctions::Setup(); //display.cfgを読むのでSDより後
     ClockFunctions::Setup();   //起動時のclk_sysを覚える(スリープ中のクロック低減。PowerFunctionsより前)
     PowerFunctions::Setup();   //同上(sleep-timeout・sleep-cpu-mhz)
@@ -120,7 +122,7 @@ void setup() {
         char path[48];
         const bool ok = ScreenshotFunctions::Capture(path, sizeof(path));
         NotificationFunctions::Content c;
-        NotificationFunctions::Sanitize(c.title, ok ? "スクリーンショット" : "スクリーンショット失敗");
+        NotificationFunctions::Sanitize(c.title, ok ? TR("スクリーンショット") : TR("スクリーンショット失敗"));
         NotificationFunctions::Sanitize(c.body, path);
         //通知をタップしたらスクリーンショットをビューワーで開く("file:"+パス。Notification_Sources.cppが解釈する)
         if(ok){

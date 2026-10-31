@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include "system/I18n_Functions.hpp"
 
 const char* (*LuaBackground::foreground_script)() = nullptr;
 
@@ -35,15 +36,15 @@ namespace {
     // path(kMaxScriptBytes まで)を読んで malloc した文字列で返す。失敗は nullptr と理由(why)
     char* ReadScript(const char* path, const char*& why){
         FsFile f = OSData::SD.open(path, O_RDONLY);
-        if(!f){ why = "スクリプトを開けません"; return nullptr; }
+        if(!f){ why = TR("スクリプトを開けません"); return nullptr; }
         const size_t size = (size_t)f.fileSize();
         if(size > LuaBackground::kMaxScriptBytes){
             f.close();
-            why = "スクリプトが大きすぎます(16KiBまで)";
+            why = TR("スクリプトが大きすぎます(16KiBまで)");
             return nullptr;
         }
         char* buf = (char*)malloc(size + 1);
-        if(!buf){ f.close(); why = "スクリプトを読むメモリが足りません"; return nullptr; }
+        if(!buf){ f.close(); why = TR("スクリプトを読むメモリが足りません"); return nullptr; }
         size_t got = 0;
         while(got < size){
             const int n = f.read((uint8_t*)buf + got, size - got);
@@ -54,7 +55,7 @@ namespace {
         buf[got] = '\0';
         if(got != size){
             free(buf);
-            why = "スクリプトを最後まで読めません";
+            why = TR("スクリプトを最後まで読めません");
             return nullptr;
         }
         return buf;
@@ -83,7 +84,7 @@ namespace {
             bool enabled() const override { return enabled_; }
             void setEnabled(bool on) override {
                 enabled_ = on;
-                if(!on && running == this) finishRun("止めました");
+                if(!on && running == this) finishRun(TR("止めました"));
             }
             bool active() const override { return enabled_; }
             bool runNow() override {
@@ -95,16 +96,16 @@ namespace {
 
             void status(FixedString<PICO_STR_LL>& out) const override {
                 out.clear();
-                if(!enabled_){ out.assign("切っています"); return; }
-                if(running == this){ out.assign("動いています…"); return; }
-                if(!last_error_.empty()){ out.appendFormat("失敗: %s", last_error_.c_str()); return; }
+                if(!enabled_){ out.assign(TR("切っています")); return; }
+                if(running == this){ out.assign(TR("動いています…")); return; }
+                if(!last_error_.empty()){ out.appendFormat(TR("失敗: %s"), last_error_.c_str()); return; }
                 if(!note_.empty()){ out.assign(note_.c_str()); return; }
                 const int32_t left = (int32_t)(next_ms_ - millis());
                 const uint32_t sec = left > 0 ? (uint32_t)left / 1000 : 0;
-                if(runs_ == 0) out.assign("まだ動いていません");
-                else out.appendFormat("%lu回動きました", (unsigned long)runs_);
-                if(sec >= 60) out.appendFormat("・次は%lu分後", (unsigned long)(sec / 60));
-                else out.appendFormat("・次は%lu秒後", (unsigned long)sec);
+                if(runs_ == 0) out.assign(TR("まだ動いていません"));
+                else out.appendFormat(TR("%lu回動きました"), (unsigned long)runs_);
+                if(sec >= 60) out.appendFormat(TR("・次は%lu分後"), (unsigned long)(sec / 60));
+                else out.appendFormat(TR("・次は%lu秒後"), (unsigned long)sec);
             }
 
             void update(uint32_t now) override {
@@ -134,20 +135,20 @@ namespace {
                     const char* fg = LuaBackground::foreground_script();
                     const size_t n = app_dir_.length();
                     if(fg && strncmp(fg, app_dir_.c_str(), n) == 0 && fg[n] == '/'){
-                        note_.assign("アプリを開いているので見送りました");
+                        note_.assign(TR("アプリを開いているので見送りました"));
                         next_ms_ = now + interval_ms_;
                         return;
                     }
                 }
                 if(!OSData::SD_usable){
-                    note_.assign("SDカードが使えません");
+                    note_.assign(TR("SDカードが使えません"));
                     next_ms_ = now + kRetryMs;
                     return;
                 }
                 //ヒープの残りが足りなければ延ばす(画面のアプリの邪魔をしない)
                 const size_t room = MemFunctions::HeapTopRoom();
                 if(room != MemFunctions::kRoomUnknown && room < LuaBackground::kBudgetBytes + LuaEngine::kHeapReserveBytes){
-                    note_.assign("メモリが足りないので延ばしました");
+                    note_.assign(TR("メモリが足りないので延ばしました"));
                     next_ms_ = now + kRetryMs;
                     return;
                 }
@@ -164,7 +165,7 @@ namespace {
                     delete engine;
                     engine = nullptr;
                     free(src);
-                    last_error_.assign("Luaを起動できません(メモリ不足)");
+                    last_error_.assign(TR("Luaを起動できません(メモリ不足)"));
                     return;
                 }
                 running = this;
@@ -186,7 +187,7 @@ namespace {
                 if(Reached(now, run_started_ms + LuaBackground::kMaxRunMs)){
                     LOG_APP_WARN("Luaのバックグラウンド(%s): %lu秒を過ぎたので止めました", app_dir_.c_str(),
                                  (unsigned long)(LuaBackground::kMaxRunMs / 1000));
-                    finishRun("時間切れ(通信やタイマーが終わりませんでした)");
+                    finishRun(TR("時間切れ(通信やタイマーが終わりませんでした)"));
                     return;
                 }
                 done(now);
@@ -206,7 +207,7 @@ namespace {
 
     void DropJob(int i){
         Job* j = jobs[i];
-        if(running == j) j->finishRun("アプリが無くなりました");
+        if(running == j) j->finishRun(TR("アプリが無くなりました"));
         BackgroundFunctions::Remove(j);
         delete j;
         for(int k = i; k + 1 < job_count; k++) jobs[k] = jobs[k + 1];

@@ -16,8 +16,9 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include "system/I18n_Functions.hpp"
 
-static const char* const WDAY_JP[7] = { "日", "月", "火", "水", "木", "金", "土" };
+static const char* const WDAY_JP[7] = { TR_NOOP("日"), TR_NOOP("月"), TR_NOOP("火"), TR_NOOP("水"), TR_NOOP("木"), TR_NOOP("金"), TR_NOOP("土") };
 
 // 格子1行の高さ。16pxの数字 + 予定の点(3px) + 余白
 static constexpr int kGridRowH = 24;
@@ -99,7 +100,7 @@ void CalendarScene::syncReminders(int32_t from_day, int32_t to_day, int32_t utc_
     if(today < from_day || today >= to_day) return;
     //今日より前の日は知らせる回が無いので、今日から
     const int n = CalendarReminders::Sync(this->cal, today, to_day, (int64_t)time(nullptr),
-                                          utc_offset_sec, st.before_min, "カレンダー");
+                                          utc_offset_sec, st.before_min, TR("カレンダー"));
     LOG_APP_MSG("カレンダー: 予定の通知 %d件", n);
 }
 
@@ -193,7 +194,7 @@ void CalendarScene::reload(){
 
 void CalendarScene::refreshView(){
     char buf[PICO_STR_S];
-    snprintf(buf, sizeof(buf), "%d年%d月", this->view_year, this->view_month);
+    snprintf(buf, sizeof(buf), TR("%d年%d月"), this->view_year, this->view_month);
     if(this->title_label) this->title_label->setText(buf);
 
     if(this->grid){
@@ -212,7 +213,7 @@ void CalendarScene::formatTime(const IcalEvent& ev, int32_t day, FixedString<PIC
     //「~02:00」にしないのは、16pxフォントの「~」が上線のような形で読めないため
     out.clear();
     if(ev.start.isAllDay()){
-        out.append("終日");
+        out.append(TR("終日"));
         return;
     }
 
@@ -232,9 +233,9 @@ void CalendarScene::formatTime(const IcalEvent& ev, int32_t day, FixedString<PIC
         if(!ends_today)                     out.append("-");
         else if(ev.end.sec != ev.start.sec) out.appendFormat("-%02d:%02d", (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
     }else if(ends_today){
-        out.appendFormat("%02d:%02dまで", (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
+        out.appendFormat(TR("%02d:%02dまで"), (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
     }else{
-        out.append("(続き)");
+        out.append(TR("(続き)"));
     }
 }
 
@@ -245,11 +246,11 @@ void CalendarScene::refreshDayList(){
     this->list_count = 0;
 
     if(!OSData::SD_usable){
-        this->day_label->setText("SDカードがありません");
+        this->day_label->setText(TR("SDカードがありません"));
         return;
     }
     if(this->loaded_files == 0){
-        this->day_label->setText("/calendar/ に .ics を置いてください");
+        this->day_label->setText(TR("/calendar/ に .ics を置いてください"));
         return;
     }
 
@@ -261,11 +262,11 @@ void CalendarScene::refreshDayList(){
 
     char head[PICO_STR_M];
     if(n == 0){
-        snprintf(head, sizeof(head), "%d月%d日(%s) 予定なし",
-                 this->view_month, this->selected_day, WDAY_JP[Ical::Weekday(day)]);
+        snprintf(head, sizeof(head), TR("%d月%d日(%s) 予定なし"),
+                 this->view_month, this->selected_day, I18nFunctions::Tr(WDAY_JP[Ical::Weekday(day)]));
     }else{
-        snprintf(head, sizeof(head), "%d月%d日(%s) %d件",
-                 this->view_month, this->selected_day, WDAY_JP[Ical::Weekday(day)], n);
+        snprintf(head, sizeof(head), TR("%d月%d日(%s) %d件"),
+                 this->view_month, this->selected_day, I18nFunctions::Tr(WDAY_JP[Ical::Weekday(day)]), n);
     }
     this->day_label->setText(head);
 
@@ -277,7 +278,7 @@ void CalendarScene::refreshDayList(){
         this->formatTime(ev, day, time);
         item.text.append(time);
         item.text.append(" ");
-        item.text.append(ev.summary.empty() ? "(無題)" : ev.summary.c_str());
+        item.text.append(ev.summary.empty() ? TR("(無題)") : ev.summary.c_str());
         if(!ev.location.empty()){
             item.text.append(" @");
             item.text.append(ev.location.c_str());
@@ -304,7 +305,7 @@ void CalendarScene::showDetail(int index){
     auto append_date = [&](int32_t d){
         int y, m, dd;
         Ical::CivilFromDays(d, y, m, dd);
-        body.appendFormat("%d月%d日(%s)", m, dd, WDAY_JP[Ical::Weekday(d)]);
+        body.appendFormat(TR("%d月%d日(%s)"), m, dd, I18nFunctions::Tr(WDAY_JP[Ical::Weekday(d)]));
     };
     if(span <= 0 || (!ev.start.isAllDay() && span == 1 && ev.end.sec == 0)){
         FixedString<PICO_STR_M> time;
@@ -320,27 +321,27 @@ void CalendarScene::showDetail(int index){
         }
         append_date(occ);
         if(!ev.start.isAllDay()) body.appendFormat(" %02d:%02d", (int)(ev.start.sec / 3600), (int)(ev.start.sec / 60 % 60));
-        body.append(" から\n");
+        body.append(TR(" から\n"));
         append_date(occ + span);
         if(!ev.end.isAllDay()) body.appendFormat(" %02d:%02d", (int)(ev.end.sec / 3600), (int)(ev.end.sec / 60 % 60));
-        body.append(" まで");
+        body.append(TR(" まで"));
     }
     body.append("\n");
 
     if(!ev.location.empty()){
-        body.append("場所: ");
+        body.append(TR("場所: "));
         body.append(ev.location.c_str());
         body.append("\n");
     }
 
     if(ev.rule.freq != IcalRule::Freq::None){
-        static const char* const kFreq[] = { "", "毎日", "毎週", "毎月", "毎年" };
-        body.append("繰り返し: ");
-        body.append(kFreq[(int)ev.rule.freq]);
-        if(ev.rule.interval > 1) body.appendFormat("(%d回に1回)", (int)ev.rule.interval);
+        static const char* const kFreq[] = { "", TR_NOOP("毎日"), TR_NOOP("毎週"), TR_NOOP("毎月"), TR_NOOP("毎年") };
+        body.append(TR("繰り返し: "));
+        body.append(I18nFunctions::Tr(kFreq[(int)ev.rule.freq]));
+        if(ev.rule.interval > 1) body.appendFormat(TR("(%d回に1回)"), (int)ev.rule.interval);
         body.append("\n");
     }else if(!ev.rule.supported){
-        body.append("繰り返し: 未対応の規則のため初回だけ表示しています\n");
+        body.append(TR("繰り返し: 未対応の規則のため初回だけ表示しています\n"));
     }
 
     //どのカレンダーの予定か(ファイル名から .ics を落としたもの)
@@ -348,7 +349,7 @@ void CalendarScene::showDetail(int index){
         const FixedString<PICO_STR_M>& fname = this->file_names[ev.file_index];
         FixedString<PICO_STR_M> cal_name;
         cal_name.assign(fname.c_str(), fname.length() >= 4 ? fname.length() - 4 : fname.length());
-        body.append("カレンダー: ");
+        body.append(TR("カレンダー: "));
         body.append(cal_name);
         body.append("\n");
     }
@@ -362,7 +363,7 @@ void CalendarScene::showDetail(int index){
     }
 
     this->detail_dialog = new EventDetailDialog();
-    this->detail_dialog->setContent(ev.summary.empty() ? "(無題)" : ev.summary.c_str(), body.c_str());
+    this->detail_dialog->setContent(ev.summary.empty() ? TR("(無題)") : ev.summary.c_str(), body.c_str());
     WidgetFunctions::AddDialog(this->detail_dialog);
     this->detail_dialog->setVisible(true);
     EventDetailDialog* dialog = this->detail_dialog;
@@ -423,7 +424,8 @@ void CalendarScene::onEnter(){
     // ---- 上部の行: [戻る] … [<] 2026年9月 [>] [今日] ----
     const int y0 = content.y + MARGIN;
 
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){
@@ -440,7 +442,7 @@ void CalendarScene::onEnter(){
         b->setH(20 + Button::kFrameExtra);
         return b;
     };
-    this->today_button = make_button("今日");
+    this->today_button = make_button(TR("今日"));
     this->next_button  = make_button(">");
     this->prev_button  = make_button("<");
 
@@ -462,7 +464,7 @@ void CalendarScene::onEnter(){
     WidgetFunctions::Add(this->next_button);
     WidgetFunctions::Add(this->today_button);
 
-    this->title_label = new Label<PICO_STR_S>(title_x, y0, "2026年12月");
+    this->title_label = new Label<PICO_STR_S>(title_x, y0, TR("2026年12月"));
     this->title_label->setFontSize(FontFn::Small);
     this->title_label->setMaxWidth(kTitleW);
     this->title_label->setTextAlign(TextAlign::Center);
@@ -484,7 +486,7 @@ void CalendarScene::onEnter(){
     const int day_row_y = grid_y + grid_h + MARGIN;
 
     //押すたびに文字が変わる(更新/取得中/再試行)ので、一番長い文字で幅を固定する
-    this->sync_button = make_button("取得中");
+    this->sync_button = make_button(TR("取得中"));
     this->sync_button->setW(this->sync_button->getLocalRect().w + Button::kFrameExtra);
     this->sync_button->setX(content.x + content.w - MARGIN - this->sync_button->getLocalRect().w);
     this->sync_button->setY(day_row_y);
@@ -492,7 +494,7 @@ void CalendarScene::onEnter(){
     WidgetFunctions::Add(this->sync_button);
 
     //取得元(名前+URL)を1件登録する。source_countが0でも(=まだ何も無くても)常に押せる
-    this->add_source_button = make_button("追加");
+    this->add_source_button = make_button(TR("追加"));
     this->add_source_button->setY(day_row_y);
     this->add_source_button->setOnPressEnd([this](){ this->openAddSourceName(); });
     WidgetFunctions::Add(this->add_source_button);
@@ -540,7 +542,7 @@ void CalendarScene::onEnter(){
 void CalendarScene::openAddSourceName(){
     // 名前→(1フレーム空けて)URLの順に編集する。MarkdownScene::Pendingと同じ理由で
     // ダイアログからダイアログは1フレーム空ける
-    auto* dialog = new InputDialog("カレンダーの名前(英数字と_-、20文字まで):", true);
+    auto* dialog = new InputDialog(TR("カレンダーの名前(英数字と_-、20文字まで):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -552,7 +554,7 @@ void CalendarScene::openAddSourceName(){
                     this->pending_add_name.assign(name.c_str());
                     this->pending_add_url_dialog = true;
                 }else{
-                    ErrorFunctions::ShowFatal("使えない名前です(英数字と _ - のみ、20文字まで)");
+                    ErrorFunctions::ShowFatal(TR("使えない名前です(英数字と _ - のみ、20文字まで)"));
                 }
             }
         }
@@ -561,7 +563,7 @@ void CalendarScene::openAddSourceName(){
 }
 
 void CalendarScene::openAddSourceUrl(){
-    auto* dialog = new InputDialog("カレンダーのURL(iCal/.ics):", true);
+    auto* dialog = new InputDialog(TR("カレンダーのURL(iCal/.ics):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -573,7 +575,7 @@ void CalendarScene::openAddSourceUrl(){
                     this->source_count = CalendarSync::CountSources();
                     if(this->sync_button) this->sync_button->setVisible(this->source_count > 0);
                 }else{
-                    ErrorFunctions::ShowFatal("保存できませんでした(SD無しか、URLが長すぎます)");
+                    ErrorFunctions::ShowFatal(TR("保存できませんでした(SD無しか、URLが長すぎます)"));
                 }
             }
         }
@@ -594,9 +596,9 @@ void CalendarScene::startSync(){
 
 void CalendarScene::refreshSyncButton(){
     if(!this->sync_button) return;
-    const char* text = "更新";
-    if(this->sync.state() == CalendarSync::State::Running) text = "取得中";
-    else if(this->last_sync_failed)                        text = "再試行";
+    const char* text = TR("更新");
+    if(this->sync.state() == CalendarSync::State::Running) text = TR("取得中");
+    else if(this->last_sync_failed)                        text = TR("再試行");
     this->sync_button->setText(text);
     this->sync_button->setTextColor(this->last_sync_failed ? PICO_RED : PICO_BLACK);
 }

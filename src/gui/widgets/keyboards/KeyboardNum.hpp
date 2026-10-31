@@ -4,6 +4,7 @@
 #include "gui/core/Font_Functions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 // 電卓等で使う数字専用キーボード。
 // 「0〜9・カーソル移動・決定・削除」は常時固定で表示し、
@@ -87,10 +88,10 @@ class KeyboardNum : public KeyboardPanel {
         }
         const char* labelFor(SymbolMode m) const {
             switch (m) {
-                case SymbolMode::Arith: return "四則演算";
-                case SymbolMode::Math:  return "数学記号";
+                case SymbolMode::Arith: return TR("四則演算");
+                case SymbolMode::Math:  return TR("数学記号");
                 case SymbolMode::Digit:
-                default:                return "数字";
+                default:                return TR("数字");
             }
         }
         uint8_t flagFor(SymbolMode m) const {

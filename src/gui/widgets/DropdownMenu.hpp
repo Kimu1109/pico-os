@@ -4,6 +4,7 @@
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/Label.hpp"
 #include "util/InplaceFunction.hpp"
+#include "system/I18n_Functions.hpp"
 
 class DropdownMenu : public Widget {
 
@@ -61,7 +62,7 @@ class DropdownMenu : public Widget {
             this->value = new Label<PICO_STR_L>("");
             this->value->setX(0);
             this->value->setY(0);
-            this->value->setPlaceholder("タップして選択...");
+            this->value->setPlaceholder(TR("タップして選択..."));
             this->value->setBackgroundColor(PICO_BACKGROUND);
             this->value->setBorderWidth(1);
             this->value->setBorderColor(PICO_BLACK);
@@ -148,6 +149,8 @@ class DropdownMenu : public Widget {
         void onFocusChanged(bool focused) override {
             if(!focused) this->closeList();
         }
+        // 一覧を開いているか(開くと下の行へ重なる大きさになる。スクロールの中に置く呼び出し元が見せる位置を合わせる用)
+        bool isOpen() const { return this->open_state; }
         void closeList(){
             if(!this->open_state) return;
             this->open_state = false;

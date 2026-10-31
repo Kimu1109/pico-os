@@ -7,6 +7,7 @@
 #include "util/FixedString.hpp"
 #include "util/Text_Matcher.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 class Button;
 class ScrollList;
@@ -26,7 +27,7 @@ class ScrollList;
 //   覚えておくのは絞り込み(タグの名前と検索語)だけ
 class NotesScene : public Scene {
     public:
-        static constexpr const char* kAppName = "メモ";
+        static constexpr const char* kAppName = TR_NOOP("メモ"); //登録名(launcher.cfg 等の識別子)は原文のまま。見せるときに I18nFunctions::Tr()
         static constexpr int kMaxNotes = 64;
         static constexpr int kMaxTags = 32;
         static constexpr uint32_t kStepBudgetUs = 6000;

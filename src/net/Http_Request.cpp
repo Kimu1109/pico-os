@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <strings.h>
+#include "system/I18n_Functions.hpp"
 
 const char* HttpRequest::MethodToStr(Method m){
     switch(m){
@@ -413,16 +414,16 @@ void HttpRequest::cancel(){
 
 const char* HttpRequest::failureToStr() const {
     switch(fail_){
-        case Fail::None:             return "なし";
-        case Fail::ClockNotSet:      return "時計が合っていない(NTP同期前)";
+        case Fail::None:             return TR("なし");
+        case Fail::ClockNotSet:      return TR("時計が合っていない(NTP同期前)");
         case Fail::TlsFailed:        return client.errorText();
-        case Fail::ConnectFailed:    return "接続できない";
-        case Fail::SendFailed:       return "リクエストを送れない";
-        case Fail::BodyRead:         return "送るファイルを読めない";
-        case Fail::Timeout:          return "応答がない";
-        case Fail::TooManyRedirects: return "リダイレクトが多すぎる";
-        case Fail::BadRedirect:      return "転送先が不正";
+        case Fail::ConnectFailed:    return TR("接続できない");
+        case Fail::SendFailed:       return TR("リクエストを送れない");
+        case Fail::BodyRead:         return TR("送るファイルを読めない");
+        case Fail::Timeout:          return TR("応答がない");
+        case Fail::TooManyRedirects: return TR("リダイレクトが多すぎる");
+        case Fail::BadRedirect:      return TR("転送先が不正");
         case Fail::Response:         return HttpTools::ErrorToStr(res.error());
-        default:                     return "不明";
+        default:                     return TR("不明");
     }
 }

@@ -4,6 +4,7 @@
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -11,10 +12,10 @@
 
 namespace {
     const HomeLayout::KindInfo kKinds[HomeLayout::kKindCount] = {
-        { "clock",  "時計",           HomeLayout::S1x1 | HomeLayout::S2x1 },
-        { "analog", "アナログ時計",   HomeLayout::S1x1 | HomeLayout::S2x2 },
-        { "music",  "音楽",           HomeLayout::S2x1 | HomeLayout::S2x2 },
-        { "agenda", "予定",           HomeLayout::S2x1 | HomeLayout::S2x2 },
+        { "clock",  TR_NOOP("時計"),           HomeLayout::S1x1 | HomeLayout::S2x1 },
+        { "analog", TR_NOOP("アナログ時計"),   HomeLayout::S1x1 | HomeLayout::S2x2 },
+        { "music",  TR_NOOP("音楽"),           HomeLayout::S2x1 | HomeLayout::S2x2 },
+        { "agenda", TR_NOOP("予定"),           HomeLayout::S2x1 | HomeLayout::S2x2 },
         { "todo",   "TODO",           HomeLayout::S2x1 | HomeLayout::S2x2 },
     };
 
@@ -69,9 +70,9 @@ uint8_t HomeLayout::SizeBitOf(uint8_t w, uint8_t h){
 
 const char* HomeLayout::SizeName(uint8_t w, uint8_t h){
     switch(SizeBitOf(w, h)){
-        case S1x1: return "小";
-        case S2x1: return "横長";
-        case S2x2: return "大";
+        case S1x1: return TR("小");
+        case S2x1: return TR("横長");
+        case S2x2: return TR("大");
         default:   return "?";
     }
 }

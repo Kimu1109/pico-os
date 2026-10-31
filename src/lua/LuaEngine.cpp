@@ -67,6 +67,7 @@
 #include "OS_Data.hpp"
 #include "consts.hpp"
 #include <Arduino.h>
+#include "system/I18n_Functions.hpp"
 
 
 using namespace LuaInternal;
@@ -344,7 +345,7 @@ int LuaEngine::RaiseAbort(lua_State* L) {
 void LuaEngine::BeginAbort(const char* msg) {
     if (!aborting_) {
         aborting_ = true;
-        abort_msg_.assign(msg ? msg : "スクリプトを打ち切りました");
+        abort_msg_.assign(msg ? msg : TR("スクリプトを打ち切りました"));
     }
     ApplyHook(L);
 }
@@ -382,7 +383,7 @@ void LuaEngine::InstructionHook(lua_State* L, lua_Debug* ar) {
         if (self->debugger_) {
             const LuaDebugger::Command c = self->debugger_->onLine(L, ar);
             if (c == LuaDebugger::Command::Abort) {
-                self->BeginAbort("デバッガで停止しました");
+                self->BeginAbort(TR("デバッガで停止しました"));
                 self->loop_broken_ = true;
                 RaiseAbort(L);
                 return;
@@ -397,8 +398,8 @@ void LuaEngine::InstructionHook(lua_State* L, lua_Debug* ar) {
         // 打ち切りに入る。以降はpcall等で捕まえても投げ直される(l_guarded_call)ので、
         // ProtectedCall()(C++側の一番外のlua_pcall)まで必ず戻る
         char msg[PICO_STR_256B];
-        snprintf(msg, sizeof(msg), "スクリプトの実行が命令数の上限(%u)を超えたため打ち切りました"
-                 "(無限ループの可能性があります)", (unsigned)kMaxInstructionsPerCall);
+        snprintf(msg, sizeof(msg), TR("スクリプトの実行が命令数の上限(%u)を超えたため打ち切りました"
+                    "(無限ループの可能性があります)"), (unsigned)kMaxInstructionsPerCall);
         // luaL_whereで場所(main.lua:12:)を付ける
         luaL_where(L, 0); // フックの中では段0が実行中の関数
         lua_pushstring(L, msg);
@@ -421,8 +422,8 @@ int LuaEngine::MessageHandler(lua_State* L) {
 
     // エラーの値を文字列にそろえる(error({...})等。__tostringはLuaのコードなので呼ばない)
     if (lua_type(L, 1) != LUA_TSTRING && lua_type(L, 1) != LUA_TNUMBER) {
-        if (lua_isnil(L, 1)) lua_pushstring(L, "エラー(nil)");
-        else lua_pushfstring(L, "エラー(値の種類: %s)", luaL_typename(L, 1));
+        if (lua_isnil(L, 1)) lua_pushstring(L, TR("エラー(nil)"));
+        else lua_pushfstring(L, TR("エラー(値の種類: %s)"), luaL_typename(L, 1));
         lua_replace(L, 1);
     }
     const char* msg = lua_tostring(L, 1);
@@ -575,7 +576,7 @@ LuaEngine::~LuaEngine() {
     if (L) {
         // __gcはsetmetatableで断っているが、念のため打ち切り中にしてから閉じる
         // (閉じる途中でLuaのコードが動いても確保できずにすぐ終わる)
-        BeginAbort("アプリを閉じています");
+        BeginAbort(TR("アプリを閉じています"));
         lua_close(L);
     }
     delete debugger_;
@@ -608,12 +609,12 @@ bool LuaEngine::Run(const char* script, const char* chunkname) {
     // テキストだけ受け付ける(バイトコードはVMを壊せるため。サンドボックス参照)
     if (luaL_loadbufferx(L, script, strlen(script), name.c_str(), "t") != LUA_OK) {
         last_trace_[0] = '\0';
-        ReportError("Luaスクリプトの構文エラー");
+        ReportError(TR("Luaスクリプトの構文エラー"));
         return false;
     }
 
     if (ProtectedCall(0) != LUA_OK) {
-        ReportError("Luaスクリプトの実行時エラー");
+        ReportError(TR("Luaスクリプトの実行時エラー"));
         return false;
     }
 
@@ -630,7 +631,7 @@ void LuaEngine::callGlobalNoArgs(const char* name) {
     }
 
     if (ProtectedCall(0) != LUA_OK) {
-        ReportError("Luaスクリプトの実行時エラー");
+        ReportError(TR("Luaスクリプトの実行時エラー"));
     }
 }
 
@@ -651,7 +652,7 @@ void LuaEngine::CallLoop(uint32_t dt_ms) {
     if (ProtectedCall(1) != LUA_OK) {
         // 毎フレーム同じエラーダイアログが積まれ続けないよう、以降はloop()を呼ばない
         loop_broken_ = true;
-        ReportError("loop()の実行時エラー");
+        ReportError(TR("loop()の実行時エラー"));
     }
 }
 
@@ -683,7 +684,7 @@ bool LuaEngine::DispatchKey(const KeyInputFunctions::Event& ev) {
         // 毎打鍵同じエラーのダイアログが積まれないよう、以降は呼ばない(loop()と同じ安全弁)
         luaL_unref(L, LUA_REGISTRYINDEX, key_callback_ref_);
         key_callback_ref_ = LUA_NOREF;
-        ReportError("on_key()の実行時エラー");
+        ReportError(TR("on_key()の実行時エラー"));
         return true; // 打鍵はここで消費した扱い(キー盤へ回さない)
     }
     const bool handled = lua_toboolean(L, -1) != 0;
@@ -765,6 +766,8 @@ void LuaEngine::registerApi() {
     registerFn("push_scene", l_push_scene);
     registerFn("change_scene", l_change_scene);
     registerFn("launch_app", l_launch_app);
+    registerFn("lang", l_lang);
+    registerFn("tr", l_tr);
     registerFn("notify", l_notify);
     registerFn("notify_cancel", l_notify_cancel);
     registerFn("notify_list", l_notify_list);
@@ -1118,7 +1121,7 @@ void LuaEngine::Dispatch(WidgetId id, EventKind kind) {
     }
 
     if (ProtectedCall(nargs) != LUA_OK) {
-        ReportError("Luaコールバックでエラーが発生しました");
+        ReportError(TR("Luaコールバックでエラーが発生しました"));
     }
 }
 
@@ -1159,7 +1162,7 @@ void LuaEngine::DispatchClosed(WidgetId id, bool is_ok) {
             }
         }
         if (ProtectedCall(nargs) != LUA_OK) {
-            ReportError("Luaコールバックでエラーが発生しました");
+            ReportError(TR("Luaコールバックでエラーが発生しました"));
         }
     }
     // pico.on(id,"closed",fn)を呼んでいなくても、ダイアログは必ずここで片付ける
@@ -1178,7 +1181,7 @@ void LuaEngine::DispatchSelectItem(WidgetId id, bool already_selected) {
     lua_pushinteger(L, (lua_Integer)id);
     lua_pushboolean(L, already_selected);
     if (ProtectedCall(2) != LUA_OK) {
-        ReportError("Luaコールバックでエラーが発生しました");
+        ReportError(TR("Luaコールバックでエラーが発生しました"));
     }
 }
 
@@ -1233,7 +1236,7 @@ int LuaEngine::l_breakpoint(lua_State* L) {
     }
     const LuaDebugger::Command c = self->debugger_->pause(L, LuaDebugger::Reason::Api, 1, msg);
     if (c == LuaDebugger::Command::Abort) {
-        self->BeginAbort("デバッガで停止しました");
+        self->BeginAbort(TR("デバッガで停止しました"));
         self->loop_broken_ = true;
         return RaiseAbort(L);
     }
@@ -1376,7 +1379,7 @@ void LuaEngine::UpdateTimers(uint32_t dt_ms) {
         if (failed) {
             // 同じエラーが毎回出ないよう、繰り返しのタイマーはここで止める
             if (!one_shot_ref_owned && timers_[i].used && timers_[i].generation == gen) ReleaseTimer(i);
-            ReportError("タイマーのコールバックでエラーが発生しました");
+            ReportError(TR("タイマーのコールバックでエラーが発生しました"));
         }
         if (one_shot_ref_owned) luaL_unref(L, LUA_REGISTRYINDEX, ref);
     }
@@ -1428,7 +1431,7 @@ void LuaEngine::CallWithJson(const char* name, const char* json) {
     }
     // スタック: [fn, value]
     if (ProtectedCall(1) != LUA_OK) {
-        ReportError("Luaスクリプトの実行時エラー");
+        ReportError(TR("Luaスクリプトの実行時エラー"));
     }
 }
 

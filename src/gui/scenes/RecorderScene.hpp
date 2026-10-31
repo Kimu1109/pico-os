@@ -8,6 +8,7 @@
 #include "apps/recorder/Transcribe_Client.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdint>
 
@@ -27,7 +28,7 @@
 // - キー: Space / r = 録音・停止、t = 文字起こし、Esc = 戻る(録音中なら止めてから)
 class RecorderScene : public Scene {
     public:
-        static constexpr const char* kAppName = "録音";
+        static constexpr const char* kAppName = TR_NOOP("録音"); //登録名(launcher.cfg 等の識別子)は原文のまま。見せるときに I18nFunctions::Tr()
 
         const char* getName() const override { return "Recorder"; }
         bool keepForeground() const override;

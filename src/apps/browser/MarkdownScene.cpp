@@ -10,6 +10,7 @@
 #include "apps/browser/Doc_Cache.hpp"
 #include "apps/browser/Md_Scan.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -64,32 +65,34 @@ void MarkdownScene::onEnter(){
         WidgetFunctions::Add(b);
     };
 
-    //「<」「>」はHomeSceneのページ送りと同じ流儀(Buttonはアイコンを持てないため、
-    // フォントに確実に含まれるASCIIで済ませている)
     this->back_button = new Button(0, header_y, "<");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setOnPressEnd([this](){ this->goBack(); });
     placeButton(this->back_button, NAV_BUTTON_W);
 
     this->forward_button = new Button(0, header_y, ">");
+    this->forward_button->setIcon(IconID::ArrowRight, IconSize::Px16);
     this->forward_button->setOnPressEnd([this](){ this->goForward(); });
     placeButton(this->forward_button, NAV_BUTTON_W);
 
-    this->home_button = new Button(0, header_y, "ホーム");
+    this->home_button = new Button(0, header_y, TR("ホーム"));
+    this->home_button->setIcon(IconID::Home, IconSize::Px16);
     this->home_button->setOnPressEnd([this](){ this->goHome(); });
     placeButton(this->home_button, 0);
 
-    this->reload_button = new Button(0, header_y, "更新");
+    this->reload_button = new Button(0, header_y, TR("更新"));
     this->reload_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->reload_button->setOnPressEnd([this](){ this->reloadCurrent(); });
     placeButton(this->reload_button, 0);
 
-    this->search_button = new Button(0, header_y, "検索");
+    this->search_button = new Button(0, header_y, TR("検索"));
     this->search_button->setIcon(IconID::Search, IconSize::Px16);
     this->search_button->setOnPressEnd([this](){ this->openSearchInput(); });
     placeButton(this->search_button, 0);
 
     //「終了」だけは右端に寄せる(並びの端で、他と用途が違うため)
-    this->exit_button = new Button(0, header_y, "終了");
+    this->exit_button = new Button(0, header_y, TR("終了"));
+    this->exit_button->setIcon(IconID::X, IconSize::Px16);
     this->exit_button->setFontSize(FontFn::Small);
     this->exit_button->setAllowTextSpacing(false);
     this->exit_button->setH(BUTTON_H + Button::kFrameExtraTight);
@@ -175,7 +178,7 @@ void MarkdownScene::onUpdate(){
             if(!server_info.name.empty()){
                 LOG_SYS_MSG("Markdown: %s (protocol v%d, 検索%s)",
                     server_info.name.c_str(), server_info.version,
-                    server_info.hasSearch() ? "対応" : "非対応");
+                    server_info.hasSearch() ? TR("対応") : TR("非対応"));
             }
         }
         server_info.checked = true;
@@ -307,7 +310,7 @@ bool MarkdownScene::openCurrent(){
     Url url;
     if(currentAsUrl(url)){
         //リモート: まず文書を取りに行く。結果はonUpdate()経由で処理する
-        this->showStatus("読み込み中...", PICO_DARKGREY);
+        this->showStatus(TR("読み込み中..."), PICO_DARKGREY);
         this->refreshChrome();
 
         doc_url = url;
@@ -345,7 +348,7 @@ bool MarkdownScene::openCurrent(){
     const HistoryEntry& entry = history[history_pos];
     if(!view->load(entry.location.c_str())){
         LOG_SYS_WARN("Markdown: 読み込みに失敗しました (%s)", entry.location.c_str());
-        this->showStatus("開けませんでした", PICO_RED);
+        this->showStatus(TR("開けませんでした"), PICO_RED);
         this->abortNavigation();
         return false;
     }
@@ -362,14 +365,14 @@ void MarkdownScene::onFetchFinished(){
     if(!view || history_pos < 0) return;
 
     if(fetch.state() != DocFetch::State::Ready){
-        this->showStatus(fetch.message()[0] ? fetch.message() : "取得できませんでした", PICO_RED);
+        this->showStatus(fetch.message()[0] ? fetch.message() : TR("取得できませんでした"), PICO_RED);
         this->abortNavigation();
         return;
     }
 
     //本文の置き場所を控える(この後fetchは画像の取得に使い回すため)
     if(!doc_cache_path.assign(fetch.path())){
-        this->showStatus("パスが長すぎます", PICO_RED);
+        this->showStatus(TR("パスが長すぎます"), PICO_RED);
         this->abortNavigation();
         return;
     }
@@ -378,7 +381,7 @@ void MarkdownScene::onFetchFinished(){
     //(同じ相手へ繋がらないため)
     if(fetch.source() == DocFetch::Source::CacheAfterError){
         this->showDocument();
-        this->showStatus("オフライン表示(保存済み)", PICO_OLIVE);
+        this->showStatus(TR("オフライン表示(保存済み)"), PICO_OLIVE);
         return;
     }
 
@@ -455,7 +458,7 @@ void MarkdownScene::goHome(){
     phase = Phase::Idle;
 
     if(!this->pushHistory(target.c_str())){
-        this->showStatus("場所が長すぎます", PICO_RED);
+        this->showStatus(TR("場所が長すぎます"), PICO_RED);
         return;
     }
     this->openCurrent();
@@ -517,7 +520,7 @@ bool MarkdownScene::startNextImage(){
     if(!UrlTools::Resolve(image_url, doc_url, pending_images[pending_index].c_str())) return false;
 
     char buf[48];
-    snprintf(buf, sizeof(buf), "画像を取得中 %d/%d", pending_index + 1, pending_count);
+    snprintf(buf, sizeof(buf), TR("画像を取得中 %d/%d"), pending_index + 1, pending_count);
     this->showStatus(buf, PICO_DARKGREY);
 
     return fetch.begin(image_url, bypass_cache);
@@ -529,7 +532,7 @@ void MarkdownScene::showDocument(){
     if(!view || history_pos < 0) return;
 
     if(doc_cache_path.empty() || !view->load(doc_cache_path.c_str())){
-        this->showStatus("開けませんでした", PICO_RED);
+        this->showStatus(TR("開けませんでした"), PICO_RED);
         this->abortNavigation();
         return;
     }
@@ -620,16 +623,16 @@ bool MarkdownScene::currentServerCanSearch() const {
 
 void MarkdownScene::openSearchInput(){
     if(!this->currentServerCanSearch()){
-        this->showStatus("このサーバは検索に対応していません", PICO_RED);
+        this->showStatus(TR("このサーバは検索に対応していません"), PICO_RED);
         return;
     }
     if(phase != Phase::Idle){
         //文書の取得と同時には走らせない(同じ相手へ2本繋ぎに行かないため)
-        this->showStatus("読み込み中です", PICO_OLIVE);
+        this->showStatus(TR("読み込み中です"), PICO_OLIVE);
         return;
     }
 
-    auto* input = new InputDialog("検索語:", true);
+    auto* input = new InputDialog(TR("検索語:"), true);
     WidgetFunctions::AddDialog(input);
     input->setInput(this->search_query.c_str()); //前回の語から直せるようにしておく
     input->setVisible(true);
@@ -668,7 +671,7 @@ void MarkdownScene::startSearch(int offset){
 
     search_dialog->clearResults();
     search_dialog->setHasNext(false);
-    search_dialog->setMessage("検索中...");
+    search_dialog->setMessage(TR("検索中..."));
 
     if(!search.begin(url, server_info.search.c_str(), search_query.c_str(), offset)){
         //begin()の時点で確定した失敗をそのまま出す
@@ -686,7 +689,7 @@ void MarkdownScene::showSearchResults(){
     search_dialog->setHasNext(false);
 
     if(search.state() != DocSearch::State::Ready){
-        search_dialog->setMessage(search.message()[0] ? search.message() : "検索できませんでした");
+        search_dialog->setMessage(search.message()[0] ? search.message() : TR("検索できませんでした"));
         return;
     }
 
@@ -695,13 +698,13 @@ void MarkdownScene::showSearchResults(){
     }
 
     if(search.count() == 0){
-        search_dialog->setMessage("見つかりませんでした");
+        search_dialog->setMessage(TR("見つかりませんでした"));
         return;
     }
 
     //総件数は返ってこないので「何件目から何件」としか言えない(docs/PROTOCOL.md)
     char buf[48];
-    snprintf(buf, sizeof(buf), "%d件目から%d件", search.offset() + 1, search.count());
+    snprintf(buf, sizeof(buf), TR("%d件目から%d件"), search.offset() + 1, search.count());
     search_dialog->setMessage(buf);
     search_dialog->setHasNext(search.mayHaveMore());
 }
@@ -722,13 +725,13 @@ void MarkdownScene::onSearchSelect(int index){
     this->closeSearchDialog();
 
     if(!ok){
-        this->showStatus("結果を開けません", PICO_RED);
+        this->showStatus(TR("結果を開けません"), PICO_RED);
         return;
     }
 
     this->rememberScroll();
     if(!this->pushHistory(location.c_str())){
-        this->showStatus("場所が長すぎます", PICO_RED);
+        this->showStatus(TR("場所が長すぎます"), PICO_RED);
         return;
     }
     this->openCurrent();
@@ -754,11 +757,11 @@ void MarkdownScene::onLinkTap(const FixedString<PICO_PATH_LEN>& ref){
         //リモートからの参照。絶対URLでも相対でもUrlTools側が面倒を見る
         Url target;
         if(!UrlTools::Resolve(target, base, ref.c_str())){
-            this->showStatus("リンクを解決できません", PICO_RED);
+            this->showStatus(TR("リンクを解決できません"), PICO_RED);
             return;
         }
         if(!UrlTools::FormatFull(next, target)){
-            this->showStatus("URLが長すぎます", PICO_RED);
+            this->showStatus(TR("URLが長すぎます"), PICO_RED);
             return;
         }
     }else{
@@ -766,7 +769,7 @@ void MarkdownScene::onLinkTap(const FixedString<PICO_PATH_LEN>& ref){
         Url absolute;
         if(UrlTools::Parse(absolute, ref.c_str())){
             if(!next.assign(ref.c_str())){
-                this->showStatus("URLが長すぎます", PICO_RED);
+                this->showStatus(TR("URLが長すぎます"), PICO_RED);
                 return;
             }
         }else{
@@ -774,17 +777,17 @@ void MarkdownScene::onLinkTap(const FixedString<PICO_PATH_LEN>& ref){
 
             FixedString<PICO_PATH_LEN> resolved;
             if(!PICO_IO::resolve(resolved, here, ref.c_str())){
-                this->showStatus("パスを解決できません", PICO_RED);
+                this->showStatus(TR("パスを解決できません"), PICO_RED);
                 return;
             }
             //存在しないリンクで履歴を汚さないよう、積む前に確かめる
             //(リモートは取ってみるまで分からないので、この確認はローカルだけ)
             if(!OSData::SD.exists(resolved.c_str())){
-                this->showStatus("見つかりません", PICO_RED);
+                this->showStatus(TR("見つかりません"), PICO_RED);
                 return;
             }
             if(!next.assign(resolved.c_str())){
-                this->showStatus("パスが長すぎます", PICO_RED);
+                this->showStatus(TR("パスが長すぎます"), PICO_RED);
                 return;
             }
         }
@@ -794,7 +797,7 @@ void MarkdownScene::onLinkTap(const FixedString<PICO_PATH_LEN>& ref){
     this->rememberScroll();
 
     if(!this->pushHistory(next.c_str())){
-        this->showStatus("場所が長すぎます", PICO_RED);
+        this->showStatus(TR("場所が長すぎます"), PICO_RED);
         return;
     }
 

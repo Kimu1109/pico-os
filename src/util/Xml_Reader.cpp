@@ -1,6 +1,7 @@
 #include "util/Xml_Reader.hpp"
 
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     bool IsSpace(char c){ return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
@@ -123,7 +124,7 @@ void XmlReader::flushText(){
 }
 
 bool XmlReader::openTag(){
-    if(depth_ >= kMaxDepth) return fail("入れ子が深すぎます");
+    if(depth_ >= kMaxDepth) return fail(TR("入れ子が深すぎます"));
     memcpy(names_[depth_], name_, name_len_ + 1);
     depth_++;
     if(handler_) handler_->onOpen(names_[depth_ - 1], depth_);
@@ -137,8 +138,8 @@ void XmlReader::closeTop(){
 }
 
 bool XmlReader::closeTag(){
-    if(depth_ == 0) return fail("開いていない要素を閉じています");
-    if(strcmp(name_, names_[depth_ - 1]) != 0) return fail("閉じタグが開きタグと合いません");
+    if(depth_ == 0) return fail(TR("開いていない要素を閉じています"));
+    if(strcmp(name_, names_[depth_ - 1]) != 0) return fail(TR("閉じタグが開きタグと合いません"));
     closeTop();
     return true;
 }
@@ -203,7 +204,7 @@ bool XmlReader::step(char c){
             if(depth_ == 0){
                 // 要素の外は空白(とBOM)だけ許す
                 if(IsSpace(c) || (uint8_t)c == 0xEF || (uint8_t)c == 0xBB || (uint8_t)c == 0xBF) return true;
-                return fail("ルート要素の外に文字があります");
+                return fail(TR("ルート要素の外に文字があります"));
             }
             if(c == '&'){
                 entity_len_ = 0;
@@ -225,7 +226,7 @@ bool XmlReader::step(char c){
             if(c == '!'){ bang_len_ = 0; state_ = State::Bang; return true; }
             if(c == '?'){ dashes_ = 0; state_ = State::Pi; return true; }
             if(IsNameStart(c)){
-                if(root_done_) return fail("ルート要素が2つあります");
+                if(root_done_) return fail(TR("ルート要素が2つあります"));
                 flushText();
                 name_len_ = 0;
                 name_[0] = '\0';
@@ -233,7 +234,7 @@ bool XmlReader::step(char c){
                 state_ = State::TagName;
                 return true;
             }
-            return fail("'<' の後ろが読めません");
+            return fail(TR("'<' の後ろが読めません"));
 
         case State::TagName:
             if(IsSpace(c)){ if(!openTag()) return false; state_ = State::InTag; return true; }
@@ -253,19 +254,19 @@ bool XmlReader::step(char c){
                 state_ = State::AttrName;
                 return true;
             }
-            return fail("属性名が読めません");
+            return fail(TR("属性名が読めません"));
 
         case State::AttrName:
             if(c == '='){ state_ = State::BeforeValue; return true; }
             if(IsSpace(c)){ state_ = State::AfterAttrName; return true; }
-            if(c == '>' || c == '/') return fail("値のない属性です");
+            if(c == '>' || c == '/') return fail(TR("値のない属性です"));
             AddName(attr_name_, attr_name_len_, c);
             return true;
 
         case State::AfterAttrName:
             if(IsSpace(c)) return true;
             if(c == '='){ state_ = State::BeforeValue; return true; }
-            return fail("属性に = がありません");
+            return fail(TR("属性に = がありません"));
 
         case State::BeforeValue:
             if(IsSpace(c)) return true;
@@ -276,11 +277,11 @@ bool XmlReader::step(char c){
                 state_ = State::AttrValue;
                 return true;
             }
-            return fail("属性値が引用符で囲まれていません");
+            return fail(TR("属性値が引用符で囲まれていません"));
 
         case State::AttrValue:
             if(c == quote_){ emitAttribute(); state_ = State::InTag; return true; }
-            if(c == '<') return fail("属性値に '<' があります");
+            if(c == '<') return fail(TR("属性値に '<' があります"));
             if(c == '&'){
                 entity_len_ = 0;
                 entity_return_ = State::AttrValue;
@@ -292,7 +293,7 @@ bool XmlReader::step(char c){
             return true;
 
         case State::SelfClose:
-            if(c != '>') return fail("'/' の後ろに '>' がありません");
+            if(c != '>') return fail(TR("'/' の後ろに '>' がありません"));
             closeTop();
             state_ = State::Text;
             return true;
@@ -306,19 +307,19 @@ bool XmlReader::step(char c){
         case State::CloseAfter:
             if(IsSpace(c)) return true;
             if(c == '>'){ state_ = State::Text; return true; }
-            return fail("閉じタグの中に余分な文字があります");
+            return fail(TR("閉じタグの中に余分な文字があります"));
 
         case State::Bang:
             if(bang_len_ < sizeof(bang_)) bang_[bang_len_++] = c;
             if(bang_len_ == 1){
-                if(c != '-' && c != '[' && c != 'D') return fail("'<!' の後ろが読めません");
+                if(c != '-' && c != '[' && c != 'D') return fail(TR("'<!' の後ろが読めません"));
             }else if(bang_len_ == 2 && bang_[0] == '-'){
-                if(bang_[1] != '-') return fail("コメントの始まりが読めません");
+                if(bang_[1] != '-') return fail(TR("コメントの始まりが読めません"));
                 dashes_ = 0;
                 state_ = State::Comment;
             }else if(bang_len_ == 7){
                 if(memcmp(bang_, "[CDATA[", 7) == 0){
-                    if(depth_ == 0) return fail("ルート要素の外にCDATAがあります");
+                    if(depth_ == 0) return fail(TR("ルート要素の外にCDATAがあります"));
                     dashes_ = 0;
                     state_ = State::CData;
                 }else if(memcmp(bang_, "DOCTYPE", 7) == 0){
@@ -326,7 +327,7 @@ bool XmlReader::step(char c){
                     doctype_quote_ = 0;
                     state_ = State::Doctype;
                 }else{
-                    return fail("'<!' の後ろが読めません");
+                    return fail(TR("'<!' の後ろが読めません"));
                 }
             }
             return true;

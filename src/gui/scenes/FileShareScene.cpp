@@ -11,6 +11,7 @@
 #include "system/Background_Functions.hpp"
 #include "hal/Network_Functions.hpp"
 #include "util/Wifi_Qr.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -36,7 +37,7 @@ void FileShareScene::onEnter(){
     const int y0 = content.y + MARGIN;
     const int w = content.w - MARGIN * 2;
 
-    Button* back = new Button(content.x + MARGIN, y0, "戻る");
+    Button* back = new Button(content.x + MARGIN, y0, TR("戻る"));
     back->setIcon(IconID::ArrowLeft, IconSize::Px16);
     back->setFontSize(FontFn::Small);
     back->setH(20 + Button::kFrameExtra);
@@ -46,7 +47,7 @@ void FileShareScene::onEnter(){
 
     //Luaのホットリロード(debug.cfg の lua-hot-reload)の間は、閉じても待ち受けを続けることを題に出す
     auto* title = new Label<PICO_STR_M>(back_box.x + back_box.w + MARGIN, y0,
-                                        LuaHotReload::Enabled() ? "転送(裏で続く)" : kAppName);
+                                        LuaHotReload::Enabled() ? TR("転送(裏で続く)") : I18nFunctions::Tr(kAppName));
     title->setFontSize(FontFn::Small);
     title->setY(y0 + (back_box.h - FontFn::GetFontSize(FontFn::Small)) / 2);
     title->setDisableAutoTextDecoration(true);
@@ -61,7 +62,7 @@ void FileShareScene::onEnter(){
     FileShareFunctions::SetBackground(false);           // 開いている間は画面が回す
     if(this->failed){
         char msg[PICO_STR_256B];
-        snprintf(msg, sizeof(msg), "始められませんでした: %s", err.c_str());
+        snprintf(msg, sizeof(msg), TR("始められませんでした: %s"), err.c_str());
         auto* l = new Label<PICO_STR_256B>(content.x + MARGIN, y, msg);
         l->setFontSize(FontFn::Small);
         l->setMaxWidth(w);
@@ -72,7 +73,7 @@ void FileShareScene::onEnter(){
     }
 
     // 題の行の右端に[直接つなぐ](本体がAPになる)/[LANへ戻す]
-    this->direct_button = new Button(0, y0, "直接つなぐ");
+    this->direct_button = new Button(0, y0, TR("直接つなぐ"));
     this->direct_button->setFontSize(FontFn::Small);
     this->direct_button->setW(kDirectButtonW);
     this->direct_button->setH(back_box.h);
@@ -98,7 +99,7 @@ void FileShareScene::onEnter(){
         return l;
     };
 
-    addSmall("ブラウザで開いてキーを入れる", 2, text_w, PICO_FORECOLOR);
+    addSmall(TR("ブラウザで開いてキーを入れる"), 2, text_w, PICO_FORECOLOR);
     this->key_label = new Label<PICO_STR_M>(content.x + MARGIN, y, FileShareFunctions::Key());
     this->key_label->setFontSize(FontFn::Normal);
     this->key_label->setDisableAutoTextDecoration(true);
@@ -118,7 +119,7 @@ void FileShareScene::onEnter(){
 
     // 注意書きは下へ寄せ、最近の操作はその間に入るだけ
     auto* note = new Label<PICO_STR_256B>(content.x + MARGIN, y,
-        "暗号化しない送り方です。信頼できるWi-Fiで使ってください");
+        TR("暗号化しない送り方です。信頼できるWi-Fiで使ってください"));
     note->setFontSize(FontFn::Small);
     note->setMaxWidth(w);
     note->setTextColor(PICO_DARKGREY);
@@ -159,7 +160,7 @@ void FileShareScene::refreshAddress(bool force){
     const int8_t key = (int8_t)((connected ? 1 : 0) | (direct ? 2 : 0) | (joined ? 4 : 0));
     if(!force && key == this->shown_address) return;
     this->shown_address = key;
-    this->direct_button->setText(direct ? "LANへ戻す" : "直接つなぐ");
+    this->direct_button->setText(direct ? TR("LANへ戻す") : TR("直接つなぐ"));
 
     FixedString<PICO_STR_L> by_name, by_ip;
     FileShareFunctions::PageUrls(by_name, by_ip);
@@ -170,7 +171,7 @@ void FileShareScene::refreshAddress(bool force){
     FixedString<PICO_STR_LL> ap_name, ap_pass;
     if(direct){
         ap_name.appendFormat("Wi-Fi %s", FileShareFunctions::ApSsid());
-        ap_pass.appendFormat("パス %s", FileShareFunctions::ApPassword());
+        ap_pass.appendFormat(TR("パス %s"), FileShareFunctions::ApPassword());
     }
 
     this->url_ip_label->setTextColor(PICO_FORECOLOR);
@@ -183,7 +184,7 @@ void FileShareScene::refreshAddress(bool force){
         FixedString<PICO_STR_LL> qr;
         WifiQr::Build(qr, FileShareFunctions::ApSsid(), FileShareFunctions::ApPassword());
         this->qr->setText(qr.c_str(), qr.length());
-        this->hint_label->setText("QRで本体のWi-Fiへ");   // つないだらQRが替わる
+        this->hint_label->setText(TR("QRで本体のWi-Fiへ"));   // つないだらQRが替わる
     }else if(direct){
         // 2台目のスマホのために、パスワードを先に出す(長い名前は後ろが切れる)
         FixedString<PICO_STR_LL> ap(ap_pass);
@@ -192,16 +193,16 @@ void FileShareScene::refreshAddress(bool force){
         this->url_ip_label->setText(by_ip.c_str());
         this->url_name_label->setText(ap.c_str());
         this->qr->setText(url.c_str(), url.length());
-        this->hint_label->setText("QRならキーは不要");
+        this->hint_label->setText(TR("QRならキーは不要"));
     }else if(connected){
         this->url_ip_label->setText(by_ip.empty() ? by_name.c_str() : by_ip.c_str());
         this->url_name_label->setText(by_ip.empty() ? "" : by_name.c_str());
         this->qr->setText(url.c_str(), url.length());
-        this->hint_label->setText("QRならキーは不要");
+        this->hint_label->setText(TR("QRならキーは不要"));
     }else{
         this->url_ip_label->setTextColor(PICO_RED);
-        this->url_ip_label->setText("Wi-Fiにつながっていません");
-        this->url_name_label->setText("[直接つなぐ]ならスマホと本体だけで使えます");
+        this->url_ip_label->setText(TR("Wi-Fiにつながっていません"));
+        this->url_name_label->setText(TR("[直接つなぐ]ならスマホと本体だけで使えます"));
         this->qr->setText("");
         this->hint_label->setText("");
     }
@@ -234,7 +235,7 @@ void FileShareScene::refreshActivity(bool force){
             if(i > 0) text.append("\n");
             text.append(FileShareFunctions::Recent(i));
         }
-        this->recent_label->setText(n > 0 ? text.c_str() : "まだ何も送っていません");
+        this->recent_label->setText(n > 0 ? text.c_str() : TR("まだ何も送っていません"));
     }
 
     this->shown_done = cur.done;

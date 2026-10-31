@@ -27,6 +27,7 @@
 #include "services/PowerMenu_Functions.hpp"
 #include "services/App_Functions.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
+#include "system/I18n_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -40,7 +41,7 @@ namespace {
 
     // スリープまでの時間(秒、0=無効)と表示名。最後の操作からの通算(自動調光の30秒より後ろの値を選ぶ)
     constexpr unsigned long kSleepPresetsSec[] = { 0, 60, 120, 300, 600, 1800 };
-    constexpr const char*   kSleepPresetLabels[] = { "しない", "1分", "2分", "5分", "10分", "30分" };
+    constexpr const char*   kSleepPresetLabels[] = { TR_NOOP("しない"), TR_NOOP("1分"), TR_NOOP("2分"), TR_NOOP("5分"), TR_NOOP("10分"), TR_NOOP("30分") };
     constexpr int kSleepPresetCount = sizeof(kSleepPresetsSec) / sizeof(kSleepPresetsSec[0]);
 
     // 音の周波数(sound.cfgの sample-rate)。44.1kHzはライン出力のDAC(PCM5102A等)向けで、2コア目の計算が倍になる
@@ -61,25 +62,25 @@ void SettingsScene::refreshClockLabel(bool force){
     if(!force && t.tm_min == this->clock_shown_min) return;
     this->clock_shown_min = t.tm_min;
 
-    static const char* const kWeek[] = { "日", "月", "火", "水", "木", "金", "土" };
+    static const char* const kWeek[] = { TR_NOOP("日"), TR_NOOP("月"), TR_NOOP("火"), TR_NOOP("水"), TR_NOOP("木"), TR_NOOP("金"), TR_NOOP("土") };
     const bool valid = t.tm_year + 1900 >= TimeFunctions::kValidYear;
     char buf[PICO_STR_L];
     if(valid){
         snprintf(buf, sizeof(buf), "%04d/%02d/%02d(%s) %02d:%02d",
-            t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, kWeek[t.tm_wday % 7], t.tm_hour, t.tm_min);
+            t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, I18nFunctions::Tr(kWeek[t.tm_wday % 7]), t.tm_hour, t.tm_min);
     }else{
-        snprintf(buf, sizeof(buf), "時刻が合っていません");
+        snprintf(buf, sizeof(buf), TR("時刻が合っていません"));
     }
     this->clock_label->setText(buf);
     this->clock_label->setTextColor(valid ? PICO_BLACK : PICO_RED);
     if(this->clock_note){
         //時刻の控え(hal/Rtc_Functions.hpp)がどこまで効くか
         const char* note;
-        if(!valid)                              note = RtcFunctions::HasDs3231() ? "合わせるとDS3231へ控えます"
-                                                                                 : "「変更」で手動で合わせられます";
-        else if(RtcFunctions::Ds3231Valid())    note = "DS3231で電源を切っても保持";
-        else if(RtcFunctions::HasAon())         note = "再起動では消えません";
-        else                                    note = "NTP同期で上書きされます";
+        if(!valid)                              note = RtcFunctions::HasDs3231() ? TR("合わせるとDS3231へ控えます")
+                                                                                 : TR("「変更」で手動で合わせられます");
+        else if(RtcFunctions::Ds3231Valid())    note = TR("DS3231で電源を切っても保持");
+        else if(RtcFunctions::HasAon())         note = TR("再起動では消えません");
+        else                                    note = TR("NTP同期で上書きされます");
         this->clock_note->setText(note);
     }
 }
@@ -92,7 +93,7 @@ void SettingsScene::openClockDateDialog(){
     int y = t.tm_year + 1900, m = t.tm_mon + 1, d = t.tm_mday;
     if(y < TimeFunctions::kValidYear){ y = 2026; m = 1; d = 1; }
 
-    auto* dialog = new PickerDialog(PickerDialog::Mode::Date, "日付", "次へ", "キャンセル");
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Date, TR("日付"), TR("次へ"), TR("キャンセル"));
     if(!dialog) return;
     dialog->setDate(y, m, d);
     dialog->layout();
@@ -117,8 +118,8 @@ void SettingsScene::openClockTimeDialog(){
     const bool valid = t.tm_year + 1900 >= TimeFunctions::kValidYear;
 
     char title[PICO_STR_M];
-    snprintf(title, sizeof(title), "%d/%d の時刻", this->clock_month, this->clock_day);
-    auto* dialog = new PickerDialog(PickerDialog::Mode::Time, title, "設定", "キャンセル");
+    snprintf(title, sizeof(title), TR("%d/%d の時刻"), this->clock_month, this->clock_day);
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Time, title, TR("設定"), TR("キャンセル"));
     if(!dialog) return;
     dialog->setTime(valid ? t.tm_hour : 12, valid ? t.tm_min : 0, 0);
     dialog->layout();
@@ -136,7 +137,7 @@ void SettingsScene::openClockTimeDialog(){
                 //RTCへすぐ控える(RtcFunctions::Update() も飛びを見て書くが、下の表示を先に合わせるため)
                 RtcFunctions::SaveNow(time(nullptr));
             }else{
-                this->showMessageLater("時刻を合わせられませんでした");
+                this->showMessageLater(TR("時刻を合わせられませんでした"));
             }
             this->refreshClockLabel(true);
         }
@@ -158,7 +159,7 @@ void SettingsScene::buildTimeRows(const Layout& lay){
     // =====================================================================
     this->ntp1_edit_button = this->makeEditButton(rowY(1));
     this->ntp1_edit_button->setOnPressEnd([this](){
-        this->openEditDialog(EditField::Ntp1, "NTPサーバー1", this->ntp1_value.c_str());
+        this->openEditDialog(EditField::Ntp1, TR("NTPサーバー1"), this->ntp1_value.c_str());
     });
     addToTab(Tab::Time, this->ntp1_edit_button);
 
@@ -171,7 +172,7 @@ void SettingsScene::buildTimeRows(const Layout& lay){
 
     this->ntp2_edit_button = this->makeEditButton(rowY(2));
     this->ntp2_edit_button->setOnPressEnd([this](){
-        this->openEditDialog(EditField::Ntp2, "NTPサーバー2", this->ntp2_value.c_str());
+        this->openEditDialog(EditField::Ntp2, TR("NTPサーバー2"), this->ntp2_value.c_str());
     });
     addToTab(Tab::Time, this->ntp2_edit_button);
 
@@ -181,7 +182,7 @@ void SettingsScene::buildTimeRows(const Layout& lay){
 
     // ---- 時刻の手動設定。時刻の4行目(+下に注意書き) ----
     this->clock_edit_button = this->makeEditButton(rowY(3));
-    this->clock_edit_button->setText("変更");
+    this->clock_edit_button->setText(TR("変更"));
     this->clock_edit_button->setOnPressEnd([this](){ this->openClockDateDialog(); });
     addToTab(Tab::Time, this->clock_edit_button);
 
@@ -196,8 +197,8 @@ void SettingsScene::buildTimeRows(const Layout& lay){
     // ---- タッチ位置の補正。画面タブの6行目 ----
     // 押すと補正の画面(TouchCalibScene)へ移る。戻ると設定アプリはこのタブのまま開き直る
     Button* calib_button = this->makeEditButton(rowY(5));
-    calib_button->setText("補正");
+    calib_button->setText(TR("補正"));
     calib_button->setOnPressEnd([](){ SceneFunctions::Push(new TouchCalibScene()); });
     addToTab(Tab::Display, calib_button);
-    addToTab(Tab::Display, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(5) + 2), label_w, "タッチ位置の補正"));
+    addToTab(Tab::Display, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(5) + 2), label_w, TR("タッチ位置の補正")));
 }

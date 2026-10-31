@@ -8,6 +8,7 @@
 #include <cstring>
 #include <new>
 #include <strings.h>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // 応答ヘッダから name の値を探す(大文字小文字を区別しない)。見つかれば先頭と長さ
@@ -164,26 +165,26 @@ bool WebSocketClient::checkHandshake(size_t header_len){
         int status = 0;
         if(header_len >= 12) status = atoi(head + 9);
         LOG_SYS_WARN("WebSocket: %s が切り替えを断りました (HTTP %d)", url_.host.c_str(), status);
-        closed_error_ = (status == 401 || status == 403) ? "サーバに断られた(認証)" : "サーバがWebSocketに切り替えない";
+        closed_error_ = (status == 401 || status == 403) ? TR("サーバに断られた(認証)") : TR("サーバがWebSocketに切り替えない");
         return false;
     }
     const char* v = nullptr;
     size_t vlen = 0;
     if(!FindHeader(head, header_len, "Upgrade", v, vlen) || !HasToken(v, vlen, "websocket")
        || !FindHeader(head, header_len, "Connection", v, vlen) || !HasToken(v, vlen, "upgrade")){
-        closed_error_ = "サーバの応答がWebSocketの形でない";
+        closed_error_ = TR("サーバの応答がWebSocketの形でない");
         return false;
     }
     char expect[WsFrame::kAcceptChars + 1];
     WsFrame::AcceptFor(key_, expect);
     if(!FindHeader(head, header_len, "Sec-WebSocket-Accept", v, vlen)
        || vlen != WsFrame::kAcceptChars || memcmp(v, expect, vlen) != 0){
-        closed_error_ = "サーバの応答の確認(Accept)が合わない";
+        closed_error_ = TR("サーバの応答の確認(Accept)が合わない");
         return false;
     }
     //拡張は申し出ていないので、勝手に付けられたら話せない
     if(FindHeader(head, header_len, "Sec-WebSocket-Extensions", v, vlen) && vlen > 0){
-        closed_error_ = "申し出ていない拡張をサーバが使おうとした";
+        closed_error_ = TR("申し出ていない拡張をサーバが使おうとした");
         return false;
     }
     if(FindHeader(head, header_len, "Sec-WebSocket-Protocol", v, vlen)){
@@ -199,7 +200,7 @@ int WebSocketClient::readHandshake(){
         size_t room = msg_cap_ - hs_len_;
         if(room > kReadPerPoll) room = kReadPerPoll;
         if(room == 0){
-            closed_error_ = "サーバの応答ヘッダが大きすぎる";
+            closed_error_ = TR("サーバの応答ヘッダが大きすぎる");
             return -1;
         }
         const int n = conn_.read(msg_ + hs_len_, room);
@@ -222,7 +223,7 @@ int WebSocketClient::readHandshake(){
         if((size_t)n < room) break;
     }
     if(!conn_.connected() && conn_.available() <= 0){
-        closed_error_ = "開始の挨拶の途中で切れた";
+        closed_error_ = TR("開始の挨拶の途中で切れた");
         return -1;
     }
     return 0;
@@ -236,7 +237,7 @@ bool WebSocketClient::sendFrame(WsFrame::Opcode op, const void* data, size_t len
     uint8_t head[WsFrame::kMaxHeaderBytes];
     const size_t hn = WsFrame::EncodeHeader(head, op, true, len, mask);
     if(conn_.write(head, hn) != hn){
-        finish(WsFrame::kCloseAbnormal, "送れない(切れた)");
+        finish(WsFrame::kCloseAbnormal, TR("送れない(切れた)"));
         return false;
     }
     //マスクは送る直前に小分けでかける(呼び出し側の本文は書き換えない)
@@ -249,7 +250,7 @@ bool WebSocketClient::sendFrame(WsFrame::Opcode op, const void* data, size_t len
         memcpy(chunk, src + off, n);
         WsFrame::ApplyMask(chunk, n, mask, off);
         if(conn_.write(chunk, n) != n){
-            finish(WsFrame::kCloseAbnormal, "送れない(切れた)");
+            finish(WsFrame::kCloseAbnormal, TR("送れない(切れた)"));
             return false;
         }
         off += n;
@@ -337,7 +338,7 @@ bool WebSocketClient::poll(Event& ev){
                 return poll(ev);
             }
             if(!sendHandshake()){
-                finish(WsFrame::kCloseAbnormal, "開始の挨拶を送れない");
+                finish(WsFrame::kCloseAbnormal, TR("開始の挨拶を送れない"));
                 return poll(ev);
             }
             state_ = State::Handshake;
@@ -353,7 +354,7 @@ bool WebSocketClient::poll(Event& ev){
             }
             if(r == 0){
                 if(millis() - started_ms_ >= kHandshakeTimeoutMs){
-                    finish(WsFrame::kCloseAbnormal, "サーバの応答が無い(開始の挨拶)");
+                    finish(WsFrame::kCloseAbnormal, TR("サーバの応答が無い(開始の挨拶)"));
                     return poll(ev);
                 }
                 return false;
@@ -434,7 +435,7 @@ bool WebSocketClient::pollOpen(Event& ev){
             }
         }
         if(!conn_.connected()){
-            finish(WsFrame::kCloseAbnormal, state_ == State::Closing ? nullptr : "接続が切れた");
+            finish(WsFrame::kCloseAbnormal, state_ == State::Closing ? nullptr : TR("接続が切れた"));
             return poll(ev);
         }
         break;
@@ -451,7 +452,7 @@ bool WebSocketClient::pollOpen(Event& ev){
     if(ping_interval_ms_ > 0){
         if(ping_waiting_ && now - last_ping_ms_ >= ping_interval_ms_){
             state_ = State::Closing;
-            finish(WsFrame::kCloseAbnormal, "サーバの応答が無い(pingに答えない)");
+            finish(WsFrame::kCloseAbnormal, TR("サーバの応答が無い(pingに答えない)"));
             return poll(ev);
         }
         if(!ping_waiting_ && now - last_rx_ms_ >= ping_interval_ms_ && now - last_ping_ms_ >= ping_interval_ms_){

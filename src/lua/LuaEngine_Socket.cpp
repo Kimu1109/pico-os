@@ -41,6 +41,7 @@
 
 #include <cstring>
 #include <new>
+#include "system/I18n_Functions.hpp"
 
 using namespace LuaInternal;
 
@@ -134,7 +135,7 @@ namespace LuaEngineSocket {
         if(!self->permissions().network){
             LOG_APP_WARN("%s: このアプリにはネットワーク権限がありません", api);
             lua_pushnil(L);
-            lua_pushstring(L, "ネットワークの権限がありません");
+            lua_pushstring(L, TR("ネットワークの権限がありません"));
             return false;
         }
         LuaEngine::SocketState* st = State(self);
@@ -144,7 +145,7 @@ namespace LuaEngineSocket {
         }
         if(!st || used >= kMaxSockets){
             lua_pushnil(L);
-            lua_pushstring(L, st ? "同時に開けるソケットの数を超えています" : "メモリが足りません");
+            lua_pushstring(L, st ? TR("同時に開けるソケットの数を超えています") : TR("メモリが足りません"));
             return false;
         }
         return true;
@@ -227,14 +228,14 @@ namespace LuaEngineSocket {
         if(!Precheck(L, "pico.socket.tcp")) return 2;
 
         LuaSocket* s = new (std::nothrow) LuaSocket();
-        if(!s) return Fail(L, nullptr, "メモリが足りません");
+        if(!s) return Fail(L, nullptr, TR("メモリが足りません"));
         s->kind = Kind::Tcp;
-        if(!*host || !s->tcp_url.host.assign(host)) return Fail(L, s, "ホスト名が空か長すぎます");
+        if(!*host || !s->tcp_url.host.assign(host)) return Fail(L, s, TR("ホスト名が空か長すぎます"));
         s->tcp_url.port = (uint16_t)port;
         s->tcp_url.secure = tls;
         s->tcp_url.path.assign("/");
         s->tcp = new (std::nothrow) HttpTransport();
-        if(!s->tcp) return Fail(L, s, "メモリが足りません");
+        if(!s->tcp) return Fail(L, s, TR("メモリが足りません"));
         return Register(L, s, 3);
     }
 
@@ -245,11 +246,11 @@ namespace LuaEngineSocket {
         if(!Precheck(L, "pico.socket.udp")) return 2;
 
         LuaSocket* s = new (std::nothrow) LuaSocket();
-        if(!s) return Fail(L, nullptr, "メモリが足りません");
+        if(!s) return Fail(L, nullptr, TR("メモリが足りません"));
         s->kind = Kind::Udp;
         s->udp = new (std::nothrow) UdpSocket();
-        if(!s->udp) return Fail(L, s, "メモリが足りません");
-        if(!s->udp->begin((uint16_t)port)) return Fail(L, s, "UDPの待ち受けを始められません(番号が使用中?)");
+        if(!s->udp) return Fail(L, s, TR("メモリが足りません"));
+        if(!s->udp->begin((uint16_t)port)) return Fail(L, s, TR("UDPの待ち受けを始められません(番号が使用中?)"));
         return Register(L, s, 1);
     }
 
@@ -282,11 +283,11 @@ namespace LuaEngineSocket {
         if(!Precheck(L, "pico.socket.websocket")) return 2;
 
         LuaSocket* s = new (std::nothrow) LuaSocket();
-        if(!s) return Fail(L, nullptr, "メモリが足りません");
+        if(!s) return Fail(L, nullptr, TR("メモリが足りません"));
         s->kind = Kind::WebSocket;
         s->ws = new (std::nothrow) WebSocketClient();
-        if(!s->ws) return Fail(L, s, "メモリが足りません");
-        if(!s->ws->setProtocol(protocol.c_str())) return Fail(L, s, "opts.protocol に使えない文字があります");
+        if(!s->ws) return Fail(L, s, TR("メモリが足りません"));
+        if(!s->ws->setProtocol(protocol.c_str())) return Fail(L, s, TR("opts.protocol に使えない文字があります"));
         if(lua_istable(L, 3)){
             lua_getfield(L, 3, "headers");
             if(lua_istable(L, -1)){
@@ -296,14 +297,14 @@ namespace LuaEngineSocket {
                     lua_pop(L, 1);
                     if(!ok){
                         lua_pop(L, 2);
-                        return Fail(L, s, "ヘッダが長すぎるか、使えない名前・文字があります");
+                        return Fail(L, s, TR("ヘッダが長すぎるか、使えない名前・文字があります"));
                     }
                 }
             }
             lua_pop(L, 1);
         }
         s->ws->setPingInterval((unsigned long)ping_s * 1000UL);
-        if(!s->ws->begin(url, (size_t)max_message)) return Fail(L, s, "URLが ws:// か wss:// でない、またはメモリが足りません");
+        if(!s->ws->begin(url, (size_t)max_message)) return Fail(L, s, TR("URLが ws:// か wss:// でない、またはメモリが足りません"));
         return Register(L, s, 2);
     }
 
@@ -345,12 +346,12 @@ namespace LuaEngineSocket {
         }
 
         LuaSocket* s = new (std::nothrow) LuaSocket();
-        if(!s) return Fail(L, nullptr, "メモリが足りません");
+        if(!s) return Fail(L, nullptr, TR("メモリが足りません"));
         s->kind = Kind::Mqtt;
         s->mqtt = new (std::nothrow) MqttClient();
         const bool ok = s->mqtt && s->mqtt->begin(url, *o, (size_t)max_packet);
         lua_settop(L, top - 1); // Options のuserdataを捨てる(begin() が写した)
-        if(!ok) return Fail(L, s, "URLが mqtt:// か mqtts:// でない、またはメモリが足りません");
+        if(!ok) return Fail(L, s, TR("URLが mqtt:// か mqtts:// でない、またはメモリが足りません"));
         return Register(L, s, 2);
     }
 
@@ -542,7 +543,7 @@ void LuaEngine::DestroySockets(){
 // s のコールバックを呼ぶ(関数・イベント名・引数を積んだ状態で。nargs はイベント名を含む引数の数)
 void LuaEngine::CallSocket(int nargs){
     if(ProtectedCall(nargs) != LUA_OK){
-        ReportError("pico.socket のコールバックでエラーが発生しました");
+        ReportError(TR("pico.socket のコールバックでエラーが発生しました"));
     }
 }
 

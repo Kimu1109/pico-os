@@ -5,6 +5,7 @@
 #include "OS_Data.hpp"
 
 #include <cstdlib>
+#include "system/I18n_Functions.hpp"
 
 // ---- 配置(ローカル座標、幅240・高さ84が前提) ----
 // 十字キー: 左の列(x < kMidX0)
@@ -178,7 +179,7 @@ void GameBoyPad::render(){
     const bool menu_on = this->over_command && this->press_area == Area::Menu;
     const bool back_on = this->over_command && this->press_area == Area::Back;
     this->drawPill(g.x + kMidX0, g.y + kRowCmdY, kCmdW, kCmdH, "MENU", menu_on);
-    this->drawPill(g.x + kMidX0 + kCmdW + kCmdGap, g.y + kRowCmdY, kCmdW, kCmdH, "戻る", back_on);
+    this->drawPill(g.x + kMidX0 + kCmdW + kCmdGap, g.y + kRowCmdY, kCmdW, kCmdH, TR("戻る"), back_on);
 
     this->drawRoundButton(g.x + kBx, g.y + kBy, "B", (this->pressed & GbEmu::B) != 0);
     this->drawRoundButton(g.x + kAx, g.y + kAy, "A", (this->pressed & GbEmu::A) != 0);

@@ -5,6 +5,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <stdio.h>
 
 namespace {
     bool connected = false;
@@ -14,6 +15,7 @@ namespace {
     unsigned long last_poll_ms  = 0;
     uint16_t buttons = 0;
     int center_x = -1, center_y = -1;     // つながった直後の左スティック(-1 = まだ)
+    char last_fail[64] = "";              // 直近の失敗の理由(途絶えた時にログへ出す)
 
     bool WriteBytes(const uint8_t* data, size_t len){
         Wire.beginTransmission(WiiClassicFunctions::kAddress);
@@ -49,7 +51,7 @@ namespace {
         misses = 0;
         last_probe_ms = now;
         PadFunctions::SetDevice(0, false);
-        LOG_SYS_MSG("Wiiクラシックコントローラー: 接続が途絶えました");
+        LOG_SYS_MSG("Wiiクラシックコントローラー: 接続が途絶えました(%s)", last_fail[0] ? last_fail : "理由なし");
     }
 }
 
@@ -96,6 +98,7 @@ void WiiClassicFunctions::Setup(){
     misses = 0;
     buttons = 0;
     center_x = center_y = -1;
+    last_fail[0] = '\0';
     I2cBus::Begin();
 }
 
@@ -128,6 +131,7 @@ void WiiClassicFunctions::UpdateAt(unsigned long now){
     uint8_t data[6];
     uint16_t next = 0;
     if(!ReadSample(data)){
+        snprintf(last_fail, sizeof(last_fail), "6バイトを読めない");
         if(++misses >= kMissLimit) Lost(now);
         return;
     }
@@ -137,6 +141,8 @@ void WiiClassicFunctions::UpdateAt(unsigned long now){
         center_y = data[1] & 0x3F;
     }
     if(!Decode(data, center_x, center_y, next)){
+        snprintf(last_fail, sizeof(last_fail), "読めない値 %02X %02X %02X %02X %02X %02X",
+                 data[0], data[1], data[2], data[3], data[4], data[5]);
         //抜けかけ・初期化が外れた。初期化し直して様子を見る
         if(++misses >= kMissLimit){
             Lost(now);

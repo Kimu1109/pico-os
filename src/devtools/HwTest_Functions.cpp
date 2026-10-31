@@ -7,16 +7,121 @@
 #include "hal/Network_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
 #include "hal/Clock_Functions.hpp"
+#include "hal/I2C_Bus.hpp"
+#include "hal/CardKB_Functions.hpp"
+#include "hal/Rtc_Functions.hpp"
+#include "hal/WiiClassic_Functions.hpp"
 #include "services/Power_Functions.hpp"
 #include "system/Log_Functions.hpp"
 
 #include <Arduino.h>
+#include <Wire.h>
 #include <string.h>
 #include <stdlib.h>
+#if !defined(PICOOS_PC)
+#include <hardware/gpio.h>
+#endif
 
 namespace {
     void PrintHelp(){
-        LOG_SYS_MSG("[HW] コマンド: hw info / hw boot / hw mem / hw clock [MHz] / hw sleep / hw trap / hw buswrite / hw hang");
+        LOG_SYS_MSG("[HW] コマンド: hw info / hw boot / hw mem / hw clock [MHz] / hw i2c / hw sleep / hw trap / hw buswrite / hw hang");
+    }
+
+    const char* I2cName(uint8_t addr){
+        if(addr == WiiClassicFunctions::kAddress) return "Wiiクラシック/ヌンチャク";
+        if(addr == CardKbFunctions::kAddress)     return "CardKB2";
+        if(addr == RtcFunctions::kDs3231Address)  return "DS3231(RTC)";
+        return "";
+    }
+
+    // I2C0(GP0/GP1)のスキャン。つないだ機器が見えるか・プルアップが効いているかを確かめる。
+    // 0x52が見えたら暗号化なしの初期化をして機器のIDを読む(クラシックとヌンチャクの見分け)
+    void I2c(){
+        I2cBus::Begin();
+#if !defined(PICOOS_PC)
+        const int sda = gpio_get(I2cBus::kSdaPin), scl = gpio_get(I2cBus::kSclPin);
+        LOG_SYS_MSG("[HW] I2C0 SDA(GP%d)=%d SCL(GP%d)=%d(何もしていない時は両方1。0ならプルアップが無いかGNDへ短絡)",
+                    I2cBus::kSdaPin, sda, I2cBus::kSclPin, scl);
+#endif
+        // 接触不良だと応答したりしなかったりするので、何回かやって数える
+        constexpr int kPasses = 5;
+        uint8_t hits[0x78] = {};
+        for(int pass = 0; pass < kPasses; pass++){
+            for(uint8_t addr = 0x08; addr <= 0x77; addr++){
+                Wire.beginTransmission(addr);
+                if(Wire.endTransmission() == 0) hits[addr]++;
+            }
+            delay(20);
+        }
+        int found = 0;
+        bool wii = false;
+        for(uint8_t addr = 0x08; addr <= 0x77; addr++){
+            if(hits[addr] == 0) continue;
+            found++;
+            if(addr == WiiClassicFunctions::kAddress) wii = true;
+            LOG_SYS_MSG("[HW] I2C 0x%02X 応答あり %d/%d回 %s", addr, hits[addr], kPasses, I2cName(addr));
+        }
+        if(found == 0){
+            LOG_SYS_WARN("[HW] I2C 応答する機器がありません(電源3.3V・SDA/SCLの入れ替え・プルアップ・プラグの接触・断線を確認)");
+            return;
+        }
+        if(!wii) return;
+
+        // 0x52: 暗号化なしの初期化 → 0xFA から6バイトがID(クラシック=...A4 20 01 01、ヌンチャク=...A4 20 00 00)
+        static const uint8_t kInit1[] = { 0xF0, 0x55 };
+        static const uint8_t kInit2[] = { 0xFB, 0x00 };
+        bool ok = true;
+        Wire.beginTransmission(WiiClassicFunctions::kAddress);
+        for(uint8_t b : kInit1) Wire.write(b);
+        ok = ok && Wire.endTransmission() == 0;
+        Wire.beginTransmission(WiiClassicFunctions::kAddress);
+        for(uint8_t b : kInit2) Wire.write(b);
+        ok = ok && Wire.endTransmission() == 0;
+        if(!ok){
+            LOG_SYS_WARN("[HW] 0x52 初期化の書き込みがNACKでした");
+            return;
+        }
+        delay(5);
+        Wire.beginTransmission(WiiClassicFunctions::kAddress);
+        Wire.write((uint8_t)0xFA);
+        Wire.endTransmission();
+        delay(1);
+        uint8_t id[6] = {};
+        int n = 0;
+        if(Wire.requestFrom(WiiClassicFunctions::kAddress, (uint8_t)6) == 6){
+            for(; n < 6; n++){
+                const int v = Wire.read();
+                if(v < 0) break;
+                id[n] = (uint8_t)v;
+            }
+        }
+        if(n < 6){
+            LOG_SYS_WARN("[HW] 0x52 IDが読めません(%dバイト)", n);
+            return;
+        }
+        const char* kind = "不明";
+        if(id[2] == 0xA4 && id[3] == 0x20){
+            if(id[4] == 0x01 && id[5] == 0x01) kind = "Wiiクラシックコントローラー";
+            else if(id[4] == 0x00 && id[5] == 0x00) kind = "ヌンチャク";
+        }
+        LOG_SYS_MSG("[HW] 0x52 ID=%02X %02X %02X %02X %02X %02X → %s", id[0], id[1], id[2], id[3], id[4], id[5], kind);
+
+        // 状態も1回読む(ボタンは0=押している。何も押していなければ [4][5] は FF 近く)
+        Wire.beginTransmission(WiiClassicFunctions::kAddress);
+        Wire.write((uint8_t)0x00);
+        Wire.endTransmission();
+        delay(5);
+        uint8_t d[6] = {};
+        n = 0;
+        if(Wire.requestFrom(WiiClassicFunctions::kAddress, (uint8_t)6) == 6){
+            for(; n < 6; n++){
+                const int v = Wire.read();
+                if(v < 0) break;
+                d[n] = (uint8_t)v;
+            }
+        }
+        if(n == 6) LOG_SYS_MSG("[HW] 0x52 状態=%02X %02X %02X %02X %02X %02X", d[0], d[1], d[2], d[3], d[4], d[5]);
+        else LOG_SYS_WARN("[HW] 0x52 状態が読めません(%dバイト)", n);
     }
 
     void PrintInfo(){
@@ -121,6 +226,7 @@ bool HwTestFunctions::FeedSerialLine(const char* line){
     else if(strcmp(cmd, "boot") == 0) PrintBoot();
     else if(strcmp(cmd, "mem") == 0) PrintMem();
     else if(strncmp(cmd, "clock", 5) == 0 && (cmd[5] == ' ' || cmd[5] == '\0')) Clock(cmd + 5);
+    else if(strcmp(cmd, "i2c") == 0) I2c();
     else if(strcmp(cmd, "sleep") == 0){
         LOG_SYS_MSG("[HW] スリープへ入ります(タッチ・ボタン・打鍵で起きる)");
         PowerFunctions::SleepNow();

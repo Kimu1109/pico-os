@@ -291,7 +291,7 @@
 
 <script>
   // 英語の訳(鍵は data-i18n / data-i18n-attr の値。日本語はHTMLにあるもの)。
-  // アプリの名前・説明は作者が書いたものなので訳さない。権限の印(perm.*)は render_card() が鍵を付ける
+  // 権限の印(perm.*)は render_card() が鍵を付ける。アプリの名前・説明の訳は下の「アプリの訳」
   I18n.init({
     "meta.desc": "Find and download Lua apps for pico-os. Put one in the root of the SD card and it installs on the next boot.",
     "nav": "Pages",
@@ -317,7 +317,21 @@
     "perm.background": "Background", "perm.microphone": "Microphone"
   });
 
-  // 絞り込み(カードの data-search に名前・id・説明・作者を小文字で入れてある)
+  // アプリの訳: 作者が app.cfg に name_en / description_en を書いたアプリは、render_card() がその訳を data-en に入れてある。
+  // 英語のときはそれに差し替え、日本語に戻すときは最初に覚えた原文(data-ja)へ戻す。訳の無いアプリは原文のまま
+  (function () {
+    function applyAppText(l) {
+      document.querySelectorAll("#cards [data-en]").forEach(function (n) {
+        if (!n.hasAttribute("data-ja")) n.setAttribute("data-ja", n.textContent);
+        var v = n.getAttribute(l === "en" ? "data-en" : "data-ja");
+        if (n.textContent !== v) n.textContent = v;
+      });
+    }
+    I18n.onChange(applyAppText);
+    applyAppText(I18n.lang);
+  })();
+
+  // 絞り込み(カードの data-search に名前・id・説明・作者と、名前・説明の訳を小文字で入れてある)
   (function () {
     var q = document.getElementById("q");
     var cards = document.querySelectorAll("#cards .card");

@@ -5,6 +5,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ProgressBar.hpp"
 #include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/ScrollContainer.hpp"
 #include "apps/store/App_Store.hpp"
 #include "system/I18n_Functions.hpp"
 
@@ -35,7 +36,8 @@ class StoreScene : public Scene {
         Button* settings_button = nullptr;
         Label<PICO_STR_M>* title_label = nullptr;
         ScrollList* app_list = nullptr;
-        Label<PICO_STR_512B>* detail_label = nullptr;
+        Label<PICO_STR_512B>* detail_label = nullptr;   // detail_scroll の子
+        ScrollContainer* detail_scroll = nullptr;
         ProgressBar* progress = nullptr;
         Label<PICO_STR_LL>* status_label = nullptr;
         Button* install_button = nullptr;
@@ -70,6 +72,8 @@ class StoreScene : public Scene {
         int selectedIndex() const;
         void refreshList();
         void refreshDetail();
+        // 選んだアプリの欄の文を差し替え、頭までスクロールを戻す
+        void setDetail(const char* text);
         void refreshStatus();
         void refreshButtons();
         void setNotice(const char* text, int8_t color = PICO_DARKGREY);

@@ -19,6 +19,11 @@ static bool CatLine(const char* line, AppRepo::Entry& e, bool& skip){
     std::string s(line);
     return AppRepo::ParseCatalogLine(&s[0], e, skip);
 }
+static bool CatLineLang(const char* line, AppRepo::Entry& e, I18nFunctions::Lang lang){
+    std::string s(line);
+    bool skip = false;
+    return AppRepo::ParseCatalogLine(&s[0], e, skip, lang);
+}
 static bool FilesLine(const char* line, AppRepo::FileEntry& f, bool& skip){
     std::string s(line);
     return AppRepo::ParseFilesLine(&s[0], f, skip);
@@ -119,6 +124,41 @@ int main(){
         check(!CatLine(line.c_str(), e, skip), "catalog: 全部0の作者の鍵は断る");
         line = std::string("tetris\t2\tテトリス\tx\t1\t") + kHash + "\t-\t\tabcd\ta\t-\n";
         check(!CatLine(line.c_str(), e, skip), "catalog: 作者の鍵が64桁でない");
+        // ---- 訳(13列目からの name_<言語>= / description_<言語>=) ----
+        {
+            using L = I18nFunctions::Lang;
+            //訳は12列目の min_os の後ろ(13列目)から
+            const std::string base = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明です" + tail + "\t-";
+            line = base + "\tname_en=Tetris\tdescription_en=A falling blocks game\n";
+            check(CatLineLang(line.c_str(), e, L::En) && e.name == "Tetris" && e.description == "A falling blocks game"
+                  && e.dir == "テトリス", "catalog: 英語のときは訳の名前・説明");
+            check(CatLineLang(line.c_str(), e, L::Ja) && e.name == "テトリス" && e.description == "説明です",
+                  "catalog: 日本語のときは原文");
+            line = base + "\tdescription_en=Only description\n";
+            check(CatLineLang(line.c_str(), e, L::En) && e.name == "テトリス" && e.description == "Only description",
+                  "catalog: 名前の訳が無ければ原文の名前");
+            line = base + "\tfuture\tx=1\tname_en=\tname_fr=Tetris FR\tname_en-US=US\tname_=x\tdescription_en=Desc=with=eq\n";
+            check(CatLineLang(line.c_str(), e, L::En) && e.name == "テトリス" && e.description == "Desc=with=eq",
+                  "catalog: 空の訳・知らない言語・知らない列は無視し、値の中の=はそのまま");
+            line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明です" + tail + "\t12\tname_en=Tetris\n";
+            check(CatLineLang(line.c_str(), e, L::En) && e.min_os == 12 && e.name == "Tetris", "catalog: min_os と訳を両方読む");
+            line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明です" + tail + "\tname_en=Tetris\n";
+            check(!CatLineLang(line.c_str(), e, L::En), "catalog: min_os の列を飛ばして訳を置いた行は読まない(min_os として読めない)");
+            line = base + "\tdescription_en=A\tdescription_en=B\n";
+            check(CatLineLang(line.c_str(), e, L::En) && e.description == "B", "catalog: 同じ鍵は後ろが勝つ");
+            //読む列の数を超えた後ろの列は読まない(行の残りを1つに置いたまま)
+            std::string many = base;
+            for(int i = 0; i < AppRepo::kMaxExtraColumns; i++) many += "\tpad=1";
+            check(CatLineLang((many + "\tname_en=Late\n").c_str(), e, L::En) && e.name == "テトリス",
+                  "catalog: 読む列の数より後ろの訳は読まない");
+            std::string fit = base;
+            for(int i = 0; i < AppRepo::kMaxExtraColumns - 1; i++) fit += "\tpad=1";
+            check(CatLineLang((fit + "\tname_en=Last\n").c_str(), e, L::En) && e.name == "Last",
+                  "catalog: 読む列の数の最後までは読む");
+            //長い訳は切り詰める(表示だけ)
+            line = base + "\tdescription_en=" + std::string(300, 'a') + "\n";
+            check(CatLineLang(line.c_str(), e, L::En) && e.description.length() == PICO_STR_LL - 1, "catalog: 長い説明の訳は切り詰める");
+        }
         check(AppRepo::ParseStatus("-") == AppRepo::Status::Normal && AppRepo::ParseStatus("yanked") == AppRepo::Status::Yanked
               && AppRepo::ParseStatus("blocked") == AppRepo::Status::Blocked, "status: 3つ");
         check(AppRepo::ParseStatus("future") == AppRepo::Status::Yanked && AppRepo::ParseStatus("") == AppRepo::Status::Yanked,

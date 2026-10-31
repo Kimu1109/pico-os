@@ -21,6 +21,8 @@
 //                                   ヘッドレスではSDLへマウスが来ないので、
 //                                   撮りたい画面まで操作を進めるために使う。
 //                                   複数回指定できる(最大16件)
+//   picoos_pc --drag X1,Y1-X2,Y2@F[:H]  Fフレーム目に(X1,Y1)を押し、Hフレームかけて(X2,Y2)まで
+//                                   動かして離す(既定H=10。スクロールの確認用。--tapと合わせて16件まで)
 //   picoos_pc --app NAME            起動したらランチャの名前NAMEのアプリを開いておく
 //   picoos_pc --scene SCENE         --app のアプリへ「最初に開く画面」を頼む(撮りたい画面まで
 //                                   自動で進める。意味はアプリごと。pc/README.md「起動時に開くアプリ」)
@@ -733,6 +735,21 @@ int main(int argc, char** argv)
             }
             if (!PicoOsTouchScript::Add(x, y, frame, hold)) {
                 printf("[PC] --tap が多すぎます(最大%d件)\n", PicoOsTouchScript::kMaxTaps);
+                return 1;
+            }
+            continue;
+        }
+        if (strcmp(argv[i], "--drag") == 0 && i + 1 < argc) {
+            //"X1,Y1-X2,Y2@FRAME[:HOLD]" を読む
+            const char* spec = argv[++i];
+            int x1 = 0, y1 = 0, x2 = 0, y2 = 0, frame = 0, hold = 10;
+            const int got = sscanf(spec, "%d,%d-%d,%d@%d:%d", &x1, &y1, &x2, &y2, &frame, &hold);
+            if (got < 5) {
+                printf("[PC] --drag の書式は X1,Y1-X2,Y2@FRAME[:HOLD] です: %s\n", spec);
+                return 1;
+            }
+            if (!PicoOsTouchScript::AddDrag(x1, y1, x2, y2, frame, hold)) {
+                printf("[PC] --tap/--drag が多すぎます(最大%d件)\n", PicoOsTouchScript::kMaxTaps);
                 return 1;
             }
             continue;

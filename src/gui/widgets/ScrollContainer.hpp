@@ -31,14 +31,25 @@ class ScrollContainer : public Widget, public IBorderColor {
 
         constexpr static int SCROLL_L = 15;
         constexpr static int kBarThickness = 3; // ツマミの太さ(TextViewと同じ)
+        // スクロールバーの帯の幅(中身の幅から引かれ、押すとつまみが指に付く)。既定はSCROLL_L
+        int bar_l = SCROLL_L;
 
         // スクロール位置が変わったとき(ドラッグ・setScrollY()どちらも)に呼ぶ
         InplaceFunction<void()> on_scrolled = nullptr;
         void applyScroll(int new_x, int new_y);
 
     public:
-        // 縦スクロールバーの幅。中身の幅を見込む呼び出し元向け
+        // 縦スクロールバーの幅(既定)。中身の幅を見込む呼び出し元向け
         constexpr static int kScrollBarWidth = SCROLL_L;
+
+        // スクロールバーの帯の幅を変える(本体のドラッグでも動かせるので、狭い画面では細くしてよい)。
+        // つまみの太さ(kBarThickness)より細くはしない
+        void setScrollBarWidth(int w){
+            this->bar_l = w < kBarThickness ? kBarThickness : w;
+            this->updateContentBounds();
+            this->needsRender();
+        }
+        int getScrollBarWidth() const { return this->bar_l; }
 
         ScrollContainer(int16_t x, int16_t y, int16_t w, int16_t h){
             this->l_rect = {x, y, w, h};
@@ -157,10 +168,10 @@ class ScrollContainer : public Widget, public IBorderColor {
         Rect getScreenClipRect() const override {
             Rect dst = this->getScreenRect();
             if(horizontal_scroll){
-                dst.h -= SCROLL_L;
+                dst.h -= bar_l;
             }
             if(vertical_scroll){
-                dst.w -= SCROLL_L;
+                dst.w -= bar_l;
             }
             // 親がいる場合は親のクリップ範囲と交差させる
             if(parent){

@@ -155,9 +155,8 @@ Button* SettingsScene::makeEditButton(int16_t y){
 
     // 全行で同じ右端に揃えるので、xは最初の1回だけ実測して覚えておく
     if(this->edit_btn_x == 0){
-        const Rect content = Scene::contentRect();
         const Rect box = b->getLocalRect();
-        this->edit_btn_x = content.x + content.w - MARGIN - box.w;
+        this->edit_btn_x = this->row_right - box.w;
     }
     b->setX(this->edit_btn_x);
     b->setY(y);
@@ -166,8 +165,10 @@ Button* SettingsScene::makeEditButton(int16_t y){
 
 
 void SettingsScene::addToTab(Tab t, Widget* w){
-    WidgetFunctions::Add(w);
     const int ti = (int)t;
+    //表示だけのラベルは当たり判定を素通りさせ、押したまま動かすと容器ごとスクロールするようにする
+    if(w->getWidgetType() == WidgetType::Label) w->setHitTransparent(true);
+    this->tab_scroll[ti]->add(w); //所有は容器へ移る(onEnter()の最後に容器ごとAdd()する)
     if(this->tab_widget_count[ti] < kMaxTabWidgets){
         this->tab_widgets[ti][this->tab_widget_count[ti]++] = w;
     }else{
@@ -179,10 +180,15 @@ void SettingsScene::applyTab(){
     // 先に隠してから見せる(隠す側のdirtyと見せる側のdirtyが同じフレームにまとまる)
     for(int t = 0; t < (int)Tab::Count; t++){
         if(t == (int)this->tab) continue;
-        for(int i = 0; i < this->tab_widget_count[t]; i++) this->tab_widgets[t][i]->setVisible(false);
+        this->tab_scroll[t]->setVisible(false); //子もまとめて隠れる
     }
     const int cur = (int)this->tab;
+    this->tab_scroll[cur]->setVisible(true);
+    //容器のsetVisible()は子孫の表示を一律に立てるので、開閉の状態を持つ部品(ドロップダウンの一覧等)は
+    //自分のsetVisible()で整え直す
     for(int i = 0; i < this->tab_widget_count[cur]; i++) this->tab_widgets[cur][i]->setVisible(true);
+    this->tab_scroll[cur]->refreshContentBounds();
+    this->shown_open_dropdown = nullptr;
 
     if(this->tab == Tab::Wifi){
         // 隠れている間は更新していないので、見せる側を今の状態で埋め直す
@@ -309,13 +315,25 @@ void SettingsScene::onEnter(){
     });
     WidgetFunctions::Add(this->tab_bar);
 
-    // 本文の行の置き方(各タブの組み立てが使う)
+    // ---- 本文: タブごとの縦スクロールの容器(上の段とタブの間) ----
+    const int16_t body_top = (int16_t)(content.y + MARGIN + this->top_row_h + MARGIN);
+    const int16_t body_h   = (int16_t)(tab_y - MARGIN - body_top);
+    for(int t = 0; t < (int)Tab::Count; t++){
+        auto* sc = new ScrollContainer(content.x, body_top, content.w, body_h);
+        sc->setScrollBarWidth(SCROLL_BAR_W);
+        sc->setBorderColor(PICO_BACKGROUND); //枠は描かない(背景と同じ色)
+        this->tab_scroll[t] = sc;
+    }
+
+    // 本文の行の置き方(各タブの組み立てが使う。座標は容器の中)
+    const int16_t view_w = (int16_t)(content.w - SCROLL_BAR_W);
     Layout lay;
-    lay.content  = content;
-    lay.body_y   = (int16_t)(content.y + MARGIN + this->top_row_h + MARGIN);
-    lay.body_bot = (int16_t)(tab_y - MARGIN);
-    lay.left     = (int16_t)(content.x + MARGIN);
-    lay.full_w   = content.w - MARGIN * 2;
+    lay.content  = { 0, 0, view_w, body_h };
+    lay.body_y   = MARGIN;
+    lay.body_bot = body_h;
+    lay.left     = MARGIN;
+    lay.full_w   = view_w - MARGIN * 2;
+    this->row_right = view_w - MARGIN;
     const int16_t left = lay.left;
 
     // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、読み込みより前に生成しておく
@@ -336,7 +354,28 @@ void SettingsScene::onEnter(){
     this->buildOtherTab(lay);
     this->buildLateRows(lay);
 
+    //中身を入れ終えてから容器ごと登録する(子は容器へ足した順=描画順のまま並ぶ)
+    for(int t = 0; t < (int)Tab::Count; t++) WidgetFunctions::Add(this->tab_scroll[t]);
+
     this->applyTab();
+}
+
+void SettingsScene::revealOpenDropdown(){
+    ScrollContainer* sc = this->tab_scroll[(int)this->tab];
+    if(!sc) return;
+    DropdownMenu* const dropdowns[] = {
+        this->rate_dropdown, this->route_dropdown, this->sleep_dropdown,
+        this->text_size_dropdown, this->timezone_dropdown,
+    };
+    DropdownMenu* open = nullptr;
+    for(DropdownMenu* d : dropdowns){
+        if(d && d->getVisible() && d->isOpen()) open = d;
+    }
+    if(open == this->shown_open_dropdown) return;
+    this->shown_open_dropdown = open;
+    //開くと一覧の大きさへ伸び、閉じると戻るので、スクロールの範囲を測り直す
+    sc->refreshContentBounds();
+    if(open) sc->revealRect(open->getScreenRect());
 }
 
 
@@ -564,6 +603,7 @@ void SettingsScene::onUpdate(){
     this->updateSampleRate();
     this->updateRoute();
     this->updateTimezone();
+    this->revealOpenDropdown();
     this->refreshBatteryLabel();
     if(this->tab == Tab::Time) this->refreshClockLabel(false);
 }
@@ -598,6 +638,7 @@ void SettingsScene::onExit(){
     for(int t = 0; t < (int)Tab::Count; t++){
         for(int i = 0; i < kMaxTabWidgets; i++) this->tab_widgets[t][i] = nullptr;
         this->tab_widget_count[t] = 0;
+        this->tab_scroll[t] = nullptr; //容器と中身はシーンの片付けが消す
     }
 
     this->back_button   = nullptr;
@@ -661,6 +702,7 @@ void SettingsScene::onExit(){
     this->watchdog_checkbox    = nullptr;
 
     this->edit_btn_x = 0;
+    this->shown_open_dropdown = nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -796,17 +838,19 @@ void SettingsScene::buildLateRows(const Layout& lay){
 
         // ---- 出力先(sound.cfgの route)。音タブの4行目(+下に今どちらから鳴るか) ----
         // 一覧は下へ開くので、上の行の音質のドロップダウンより先にAdd()する(音質の一覧がこの行へ重なる)。
-        // 3項目の一覧が下のタブバーで切れないよう4行目に置き、「スピーカー」が入るよう他より広くする
+        // 「スピーカー」が入るよう他より広くする(開いて下が切れるときはrevealOpenDropdown()がスクロールする)
         constexpr int16_t kRouteDropdownW = 140;
-        this->route_title = new Label<PICO_STR_S>(left, rowY(3) + 4, "出力先");
+        //電池の行は下に説明が付くので、出力先はその分(半行)下げる
+        const int16_t route_y = (int16_t)(rowY(3) + (HardwareConfig::kBattery ? ROW_H / 2 : 0));
+        this->route_title = new Label<PICO_STR_S>(left, route_y + 4, "出力先");
         this->route_title->setFontSize(FontFn::Small);
-        this->route_dropdown = new DropdownMenu((int16_t)(content.x + content.w - MARGIN - kRouteDropdownW), rowY(3), kRouteDropdownW);
+        this->route_dropdown = new DropdownMenu((int16_t)(content.x + content.w - MARGIN - kRouteDropdownW), route_y, kRouteDropdownW);
         for(int i = 0; i < kRouteModeCount; i++) this->route_dropdown->add(kRouteModeLabels[i]);
         this->route_selected_index = 0;
         for(int i = 0; i < kRouteModeCount; i++) if(kRouteModes[i] == SoundFunctions::GetRouteMode()) this->route_selected_index = i;
         this->route_dropdown->setSelectedIndex(this->route_selected_index);
         this->route_status_label = makeRowLabel<PICO_STR_L>(left,
-            (int16_t)(rowY(3) + this->route_dropdown->getH() + 2), full_w, "");
+            (int16_t)(route_y + this->route_dropdown->getH() + 2), full_w, "");
         this->route_status_label->setTextColor(PICO_DARKGREY);
         this->refreshRouteStatus();
         addToTab(Tab::Sound, this->route_status_label);

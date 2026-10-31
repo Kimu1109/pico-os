@@ -19,60 +19,79 @@ void FirmwareScene::onEnter(){
     const Rect content = Scene::contentRect();
     const int w = content.w - MARGIN * 2;
     const int16_t x = (int16_t)(content.x + MARGIN);
-    int y = content.y + MARGIN;
+    const int y0 = content.y + MARGIN;
 
-    auto* title = new Label<PICO_STR_L>(x, y, kAppName);
+    auto* title = new Label<PICO_STR_L>(x, y0, kAppName);
     title->setFontSize(FontFn::Normal);
     WidgetFunctions::Add(title);
-    y += 32;
+
+    // 下の段: [Webから][SDから][受け取る] / [戻る](操作はいつも見えるよう、スクロールの外で下に固定)
+    constexpr int kButtonH = 40;
+    const int16_t row2 = (int16_t)(content.y + content.h - MARGIN - kButtonH);
+    const int16_t row1 = (int16_t)(row2 - MARGIN - kButtonH);
+
+    // ---- 題名とボタンの間: 版・鍵・状態・進み具合。座標は容器の中(左上が(0,0)) ----
+    constexpr int kScrollBarW = 6;   // 本体のドラッグでも動くので細く
+    const int info_y = y0 + 30;
+    this->info_scroll = new ScrollContainer(x, (int16_t)info_y, (int16_t)w, (int16_t)(row1 - MARGIN - info_y));
+    this->info_scroll->setScrollBarWidth(kScrollBarW);
+    this->info_scroll->setBorderColor(PICO_BACKGROUND); //枠は描かない
+    const int iw = w - kScrollBarW - 2;
+    const int line_h = Label<PICO_STR_L>::GetLineHeight(FontFn::Small);
+    constexpr int kGap = 8;   // 項目の間
+    int y = 0;
+    //表示だけの部品なので当たり判定を素通りさせ、上でのドラッグでも容器ごとスクロールする
+    auto addInfo = [this](Widget* wd){
+        wd->setHitTransparent(true);
+        this->info_scroll->add(wd);
+    };
 
     char text[96];
     snprintf(text, sizeof(text), "今の版 %s\n%s", FwVersion::Text(), FwVersion::Date()[0] ? FwVersion::Date() : "");
-    this->version_label = new Label<PICO_STR_L>(x, y, text);
+    this->version_label = new Label<PICO_STR_L>(0, y, text);
     this->version_label->setFontSize(FontFn::Small);
-    this->version_label->setMaxWidth(w);
-    this->version_label->setMaxHeight(36);
+    this->version_label->setMaxWidth(iw);
+    this->version_label->setMaxHeight(line_h * 2);
     this->version_label->setDisableAutoTextDecoration(true);
-    WidgetFunctions::Add(this->version_label);
-    y += 38;
+    addInfo(this->version_label);
+    y += line_h * 2 + kGap;
 
     const bool has_key = FwImage::HasBuiltinKey();
     snprintf(text, sizeof(text), "署名の鍵: %s%s", has_key ? "登録済み" : "未登録",
         FirmwareFunctions::AllowUnsigned() ? "\n署名なしも確認して受け付ける" : "");
-    this->key_label = new Label<PICO_STR_LL>(x, y, text);
+    this->key_label = new Label<PICO_STR_LL>(0, y, text);
     this->key_label->setFontSize(FontFn::Small);
-    this->key_label->setMaxWidth(w);
-    this->key_label->setMaxHeight(36);
+    this->key_label->setMaxWidth(iw);
+    this->key_label->setMaxHeight(line_h * 2);
     this->key_label->setTextColor(PICO_DARKGREY);
     this->key_label->setDisableAutoTextDecoration(true);
-    WidgetFunctions::Add(this->key_label);
-    y += 40;
+    addInfo(this->key_label);
+    y += line_h * (FirmwareFunctions::AllowUnsigned() ? 2 : 1) + kGap;
 
-    this->status_label = new Label<PICO_STR_LL>(x, y, "");
+    //状態は長い説明が入るので4行ぶん取る
+    this->status_label = new Label<PICO_STR_LL>(0, y, "");
     this->status_label->setFontSize(FontFn::Small);
-    this->status_label->setMaxWidth(w);
-    this->status_label->setMaxHeight(54);
+    this->status_label->setMaxWidth(iw);
+    this->status_label->setMaxHeight(line_h * 4);
     this->status_label->setDisableAutoTextDecoration(true);
-    WidgetFunctions::Add(this->status_label);
-    y += 56;
+    addInfo(this->status_label);
+    y += line_h * 4 + kGap;
 
-    this->progress = new ProgressBar(x, (int16_t)y, (int16_t)w, 12);
+    this->progress = new ProgressBar(0, (int16_t)y, (int16_t)iw, 12);
     this->progress->setColor(PICO_BLUE);
-    WidgetFunctions::Add(this->progress);
-    y += 16;
+    addInfo(this->progress);
+    y += 12 + 4;
 
-    this->detail_label = new Label<PICO_STR_L>(x, y, "");
+    this->detail_label = new Label<PICO_STR_L>(0, y, "");
     this->detail_label->setFontSize(FontFn::Small);
-    this->detail_label->setMaxWidth(w);
-    this->detail_label->setMaxHeight(20);
+    this->detail_label->setMaxWidth(iw);
+    this->detail_label->setMaxHeight(line_h);
+    this->detail_label->setDefaultHeight(line_h); //空のうちもスクロールの範囲に入れておく
     this->detail_label->setTextColor(PICO_DARKGREY);
     this->detail_label->setDisableAutoTextDecoration(true);
-    WidgetFunctions::Add(this->detail_label);
+    addInfo(this->detail_label);
+    WidgetFunctions::Add(this->info_scroll); //子もまとめて登録される
 
-    // 下の段: [Webから][SDから][受け取る] / [戻る]
-    constexpr int kButtonH = 40;
-    const int16_t row2 = (int16_t)(content.y + content.h - MARGIN - kButtonH);
-    const int16_t row1 = (int16_t)(row2 - MARGIN - kButtonH);
     const int third = (w - MARGIN * 2) / 3;
 
     this->web_button = new Button(x, row1, "Webから");
@@ -121,6 +140,7 @@ void FirmwareScene::onExit(){
     }
     // 一覧と接続(TLS)は再起動待ちでも要らない
     FirmwareFunctions::CloseWeb();
+    this->info_scroll = nullptr;
     this->version_label = nullptr;
     this->key_label = nullptr;
     this->status_label = nullptr;

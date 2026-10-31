@@ -67,8 +67,8 @@ FlashArea* DefaultFlashArea(){
 
 namespace {
     // 実機の割り当て(Fw_Store.cpp の PcFwStore と同じ値)
-    constexpr uint32_t kBase = 0x1024F000u;
-    constexpr uint32_t kSize = 0x103FF000u - 0x1024F000u;
+    constexpr uint32_t kBase = 0x1025F000u;
+    constexpr uint32_t kSize = 0x103FF000u - 0x1025F000u;
 
     class PcFlashArea : public FlashArea {
         public:

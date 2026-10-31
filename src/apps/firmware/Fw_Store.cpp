@@ -102,9 +102,9 @@ namespace FwStorePc {
 }
 
 namespace {
-    // 実機の割り当て(フラッシュ4MB、filesystem_size = 1728k)と同じ値を名乗る。
+    // 実機の割り当て(フラッシュ4MB、filesystem_size = 1664k)と同じ値を名乗る。
     // PCで作った更新ファイル(firmware_tool.py pack --pc)の見出しもこの値になる
-    constexpr uint32_t kFsStart = 0x1024F000u;
+    constexpr uint32_t kFsStart = 0x1025F000u;
     constexpr uint32_t kFsEnd   = 0x103FF000u;
 
     class PcFwStore : public FwStore {

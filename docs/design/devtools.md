@@ -176,7 +176,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 ## ファームの更新 (`src/apps/firmware/` / `Firmware_Functions` / `FirmwareScene` / `script/firmware_tool.py`) (2026-10-16)
 
 使い方・形式・TCPの取り決めは`docs/FIRMWARE_UPDATE.md`。利用者と決めた方針(2026-10-16): arduino-pico標準のOTA(PicoOTA+内蔵フラッシュのLittleFS、自動ロールバック無し=壊れたらBOOTSEL)/
-LittleFSは1728KB / 今回の経路はSDとPCからのWi-Fi(Webから取るのは後。下の「Webから取る」で2026-10-29に足した) / 独自の見出し+gzip / **常に署名必須、鍵はファーム専用で焼き込みの鍵だけを信頼**(SDの鍵は読まない。
+LittleFSは1664KB(2026-10-31に1728KBから縮めた) / 今回の経路はSDとPCからのWi-Fi(Webから取るのは後。下の「Webから取る」で2026-10-29に足した) / 独自の見出し+gzip / **常に署名必須、鍵はファーム専用で焼き込みの鍵だけを信頼**(SDの鍵は読まない。
 SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-unsigned`(それでも毎回本体で確認)/ 古い版は確認のうえで許す / 更新後に通知し置き場を片付ける。
 
 - **書き換えはarduino-picoのOTAのローダー**(`framework-arduinopico/ota/ota.c`。どのファームにもフラッシュの先頭12KBに入り、アプリは`0x10003000`から)。起動のたびにLittleFSの`otacommand.bin`を探し、
@@ -201,7 +201,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - PC/Web: 置き場は`ota_emu/`(SDのルートの隣、`PICOOS_OTA_DIR`。`.gitignore`済み)、本体は書き換えない。ポートは`PICOOS_FW_PORT`。
 - 検証: `firmware_test`(run.sh の core。見出しの検査10通り・署名(信頼/なし/知らない鍵/印と署名の食い違い/署名の後の書き換え)・版の確認・1バイトずつ途切れながら・置き場への書き込みの失敗・
   読み直しで化ける・gzipの末尾の大きさ・途中で切れる/取り消す/Doneの後に取り消す・前の残りを消す)、`firmware_tool_test.py`(偽の`firmware.bin`から作る・断る場合・**作ったものを`firmware_test`に読ませる**・
-  pushのWAIT/OK/DONE/ERRを偽の本体で)、実機ファームのビルド(`board_build.filesystem_size`でLittleFSが`0x1024F000`〜、`picoOTA`がリンクされる、本物の`firmware.bin`を`fwpack`して`verify`)、
+  pushのWAIT/OK/DONE/ERRを偽の本体で)、実機ファームのビルド(`board_build.filesystem_size`でLittleFSが`0x1025F000`〜、`picoOTA`がリンクされる、本物の`firmware.bin`を`fwpack`して`verify`)、
   PCビルドの`--tap`/`--shot`(SDから選ぶ→確認→書く→再起動→通知、`firmware_tool.py push`→本体で確認→DONE→再起動)。
   **実機でSDからもWi-Fiからも更新できることを利用者が確認した(2026-10-16)**。書き込みの時間はWi-Fi・SDとも30秒弱で、更新後の通知もどちらも届いた(2026-10-23)。壊れたファームはBOOTSELで戻す。
 

@@ -17,7 +17,9 @@
 // 一番下のボタンの行の高さ
 static constexpr int kActionH = 24;
 // 選んだアプリの欄の行数(名前と版 / 権限 / 説明2行)
-static constexpr int kDetailLines = 4;
+static constexpr int kDetailLines = 4;      // 選んだアプリの欄の見える行数
+static constexpr int kDetailMaxLines = 16;  // その中身の行数の上限(説明の訳まで入る。超えた分は切れる)
+static constexpr int kDetailBarW = 6;
 // 進み具合のバーの高さ
 static constexpr int kProgressH = 6;
 
@@ -108,13 +110,20 @@ void StoreScene::onEnter(){
     this->progress->setVisible(false);
     WidgetFunctions::Add(this->progress);
 
+    // 選んだアプリの欄は説明が長いと入りきらないので、上下にドラッグして読めるようにする(FirmwareScene と同じ形)
     const int detail_y = progress_y - MARGIN - line_h * kDetailLines;
-    this->detail_label = new Label<PICO_STR_512B>(content.x + MARGIN, detail_y, "");
+    const int detail_w = content.w - MARGIN * 2;
+    this->detail_scroll = new ScrollContainer(content.x + MARGIN, detail_y, detail_w, line_h * kDetailLines);
+    this->detail_scroll->setScrollBarWidth(kDetailBarW); //本体のドラッグでも動くので細く
+    this->detail_scroll->setBorderColor(PICO_BACKGROUND); //枠は描かない
+    this->detail_label = new Label<PICO_STR_512B>(0, 0, "");
     this->detail_label->setFontSize(FontFn::Small);
-    this->detail_label->setMaxWidth(content.w - MARGIN * 2);
-    this->detail_label->setMaxHeight(line_h * kDetailLines);
+    this->detail_label->setMaxWidth(detail_w - kDetailBarW - 2);
+    this->detail_label->setMaxHeight(line_h * kDetailMaxLines);
     this->detail_label->setDisableAutoTextDecoration(true);
-    WidgetFunctions::Add(this->detail_label);
+    this->detail_label->setHitTransparent(true); //上でのドラッグでも容器ごとスクロールする
+    this->detail_scroll->add(this->detail_label);
+    WidgetFunctions::Add(this->detail_scroll); //子もまとめて登録される
 
     // ---- 一覧 ----
     const int list_y = y0 + row_h + MARGIN;
@@ -178,6 +187,7 @@ void StoreScene::onExit(){
     this->title_label = nullptr;
     this->app_list = nullptr;
     this->detail_label = nullptr;
+    this->detail_scroll = nullptr;
     this->progress = nullptr;
     this->status_label = nullptr;
 }
@@ -261,7 +271,7 @@ void StoreScene::refreshDetail(){
     const int i = this->selectedIndex();
     const AppRepo::Entry* e = this->store ? this->store->entry(i) : nullptr;
     if(!e){
-        this->detail_label->setText(this->row_count > 0 ? TR("アプリを選んでください") : "");
+        this->setDetail(this->row_count > 0 ? TR("アプリを選んでください") : "");
         return;
     }
     FixedString<PICO_STR_512B> text;
@@ -280,8 +290,20 @@ void StoreScene::refreshDetail(){
     else if(e->status == AppRepo::Status::Yanked) text.append(TR(" 取り下げられました"));
     FixedString<PICO_STR_L> perms;
     AppRepo::PermsText(e->perms, perms);
-    text.appendFormat(TR("\n作者: %s  権限: %s\n%s"), e->author.c_str(), perms.c_str(), e->description.c_str());
+    //説明(今の言語の訳があればそれ)を先に、作者と権限を後ろに置く
+    if(!e->description.empty()) text.appendFormat("\n%s", e->description.c_str());
+    text.appendFormat(TR("\n作者: %s  権限: %s"), e->author.c_str(), perms.c_str());
+    this->setDetail(text.c_str());
+}
+
+void StoreScene::setDetail(const char* text){
+    if(!this->detail_label) return;
     this->detail_label->setText(text);
+    if(this->detail_scroll){
+        //別のアプリを選んだら頭から読む
+        this->detail_scroll->scrollToTop();
+        this->detail_scroll->refreshContentBounds();
+    }
 }
 
 void StoreScene::setNotice(const char* text, int8_t color){

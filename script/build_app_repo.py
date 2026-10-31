@@ -73,6 +73,11 @@ MAX_NAME_BYTES = 47
 MAX_DESC_BYTES = 180
 MAX_AUTHOR_BYTES = 47
 DEFAULT_AUTHOR = "kimu1109"
+# 訳(app.cfg の name_<言語> / description_<言語>。catalog.tsv の12列目から "<キー>=<値>" で並べる)。
+# 本体の I18nFunctions::Lang のうち日本語(原文)を除いたもの
+LOCAL_LANGS = ("en",)
+LOCAL_KEY_RE = re.compile(r"^(name|description)_([A-Za-z-]+)$")
+MAX_EXTRA_COLUMNS = 8  # 本体(App_Repo.hpp の kMaxExtraColumns)が12列目から読む列の数
 
 ID_RE = re.compile(r"^[a-z0-9_-]{1,23}$")
 VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
@@ -346,6 +351,7 @@ def load_app(app_dir, name, files, where):
     a.id, a.version, a.dir, a.path = app_id, version, name, app_dir
     a.name = cut_utf8(cfg.get("name", name).replace("\t", " "), MAX_NAME_BYTES) or name
     a.description = cut_utf8(cfg.get("description", "").replace("\t", " "), MAX_DESC_BYTES)
+    a.local = local_texts(cfg, where)
     perms = []
     if truthy(cfg.get("permission_network", "false")):
         perms.append("network")
@@ -388,6 +394,42 @@ def load_app(app_dir, name, files, where):
     return a
 
 
+def local_texts(cfg, where):
+    """app.cfg の name_en / description_en 等 → [(キー, 値)](名前が先。空の値は持たない)"""
+    result = []
+    for kind, limit in (("name", MAX_NAME_BYTES), ("description", MAX_DESC_BYTES)):
+        for lang in LOCAL_LANGS:
+            v = cut_utf8(cfg.get(f"{kind}_{lang}", "").replace("\t", " ").strip(), limit)
+            if v:
+                result.append((f"{kind}_{lang}", v))
+    for k in cfg:
+        m = LOCAL_KEY_RE.match(k)
+        if m and m.group(2) not in LOCAL_LANGS:
+            print(f"::warning::{where}: {k} は本体の知らない言語なのでカタログに載せません", file=sys.stderr)
+    return result
+
+
+def catalog_line(a, h, author):
+    """catalog.tsv の1行。訳の列は、古い本体(2026-10-31より前。12列目からを読まない)も読める
+    MAX_LINE_BYTES に収まる分だけ足す(説明の訳は後ろを切り詰める)"""
+    line = (f"{a.id}\t{a.version}\t{a.dir}\t{a.name}\t{a.bytes}\t{h}\t{a.perms}\t{a.description}"
+            f"\t{a.author_key}\t{author}\t{a.status}")
+    if len(line.encode("utf-8")) + 1 > MAX_LINE_BYTES:
+        raise SystemExit(f"{a.dir}: カタログの1行が長すぎます(名前・説明を短く)")
+    for k, v in getattr(a, "local", [])[:MAX_EXTRA_COLUMNS]:
+        col = f"\t{k}={v}"
+        room = MAX_LINE_BYTES - 1 - len(line.encode("utf-8"))
+        if len(col.encode("utf-8")) > room:
+            cut = cut_utf8(v, room - len(f"\t{k}=".encode("utf-8"))) if k.startswith("description_") else ""
+            if not cut:
+                print(f"::warning::{a.dir}: カタログの1行に入りきらないので {k} を載せません(名前・説明を短く)", file=sys.stderr)
+                continue
+            print(f"::warning::{a.dir}: カタログの1行に入りきらないので {k} を切り詰めました(説明を短く)", file=sys.stderr)
+            col = f"\t{k}={cut}"
+        line += col
+    return line + "\n"
+
+
 def make_catalog(apps, serial):
     lines = [f"{MAGIC}\t{FORMAT}\t{serial}\n"]
     for a in apps:
@@ -395,11 +437,7 @@ def make_catalog(apps, serial):
         if a.status not in STATUSES:
             raise SystemExit(f"{a.id}: status は {'/'.join(STATUSES)} のどれかです ({a.status})")
         author = cut_utf8(a.author.replace("\t", " "), MAX_AUTHOR_BYTES) or "-"
-        line = (f"{a.id}\t{a.version}\t{a.dir}\t{a.name}\t{a.bytes}\t{h}\t{a.perms}\t{a.description}"
-                f"\t{a.author_key}\t{author}\t{a.status}\n")
-        if len(line.encode("utf-8")) > MAX_LINE_BYTES:
-            raise SystemExit(f"{a.dir}: カタログの1行が長すぎます(名前・説明を短く)")
-        lines.append(line)
+        lines.append(catalog_line(a, h, author))
     data = "".join(lines).encode("utf-8")
     if len(data) > MAX_CATALOG_BYTES:
         raise SystemExit("catalog.tsv が大きすぎます")
@@ -510,8 +548,20 @@ def read_catalog(index_dir):
         entries.append({"id": c[0], "version": c[1], "dir": c[2], "name": c[3], "bytes": int(c[4]), "files_sha256": c[5],
                         "perms": c[6], "description": c[7],
                         "author_key": c[8] if fmt == 2 else None, "author": c[9] if fmt == 2 else "-",
-                        "status": c[10] if fmt == 2 else "-", "line": line})
+                        "status": c[10] if fmt == 2 else "-", "line": line,
+                        "local": parse_local(c[11:]) if fmt == 2 else {}})
     return catalog, entries, fmt
+
+
+def parse_local(cols):
+    """catalog.tsv の12列目から → {"name_en": …, "description_en": …}(本体と同じく知らない列・空の値は無視)"""
+    result = {}
+    for c in cols[:MAX_EXTRA_COLUMNS]:
+        k, sep, v = c.partition("=")
+        m = LOCAL_KEY_RE.match(k)
+        if sep and v and m and m.group(2) in LOCAL_LANGS:
+            result[k] = v
+    return result
 
 
 def check_signature(index_dir, catalog, pubkey_hex, fmt=FORMAT):
@@ -1080,11 +1130,16 @@ def render_card(e, icon, pkg, pkg_bytes):
         or '<span class="perm none" data-i18n="perm.none">権限なし</span>'
     img = (f'<img class="icon" src="{esc(icon)}" alt="" width="48" height="48" loading="lazy">' if icon
            else '<span class="icon noicon" aria-hidden="true"></span>')
-    search = esc(" ".join((e["name"], e["id"], e["description"], e["author"])).lower())
+    local = e.get("local", {})
+    # 訳(app.cfg の name_en / description_en)は data-en に置き、store.html が英語のときに差し替える。探すときは両方の言語で当たる
+    search = esc(" ".join((e["name"], e["id"], e["description"], e["author"], *local.values())).lower())
+
+    def en(key):
+        return f' data-en="{esc(local[key])}"' if key in local else ""
     return f"""<article class="card" id="{esc(e['id'])}" data-search="{search}">
-  <div class="card-head">{img}<div><h3>{esc(e['name'])}</h3>
+  <div class="card-head">{img}<div><h3{en("name_en")}>{esc(e['name'])}</h3>
     <p class="meta px">v{esc(e['version'])} · {esc(e['author'])}</p></div></div>
-  <p class="desc">{esc(e['description']) or '&nbsp;'}</p>
+  <p class="desc"{en("description_en")}>{esc(e['description']) or '&nbsp;'}</p>
   <p class="perms">{badges}</p>
   <div class="card-foot">
     <a class="btn primary" href="{esc(pkg)}" download>DOWNLOAD <small>{_size_text(pkg_bytes)}</small></a>

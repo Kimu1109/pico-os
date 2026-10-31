@@ -545,6 +545,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x607c0d99u, "Invalid host key signature" }, // ホスト鍵の署名が正しくありません
     { 0x608128b1u, "Sat" }, // 土
     { 0x60b6bd2bu, "Exit" }, // 終了
+    { 0x6108b164u, "\nAuthor: %s  Permissions: %s" }, // \n作者: %s  権限: %s
     { 0x610de476u, "Stop waiting" }, // 待ち受けをやめる
     { 0x6124246fu, "close code is missing" }, // closeの番号が欠けている
     { 0x6128a03fu, "QR: join the device's Wi-Fi" }, // QRで本体のWi-Fiへ
@@ -1242,7 +1243,6 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xdc93e2f8u, "%s does not match the list" }, // %s の中身が一覧と合いません
     { 0xdcb6280au, "%d+ (narrow it down)" }, // %d件以上(絞り込み推奨)
     { 0xdd01716cu, "Bad signature (broken or tampered)" }, // 署名が合いません(壊れているか、書き換えられています)
-    { 0xdd2d7baau, "\nAuthor: %s  Permissions: %s\n%s" }, // \n作者: %s  権限: %s\n%s
     { 0xdd576738u, "Does not look like an SSH server" }, // SSHサーバではないようです
     { 0xdd9803c0u, "Room name to find:" }, // 探す部屋の名前:
     { 0xddded743u, "unsigned" }, // 無署名

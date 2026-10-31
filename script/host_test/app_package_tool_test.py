@@ -152,6 +152,8 @@ def main():
     copy_app("テトリス", apps_dir)
     rev = copy_app("リバーシ", apps_dir)
     set_cfg(os.path.join(rev, "app.cfg"), "description", "<b>太字</b> & \"引用\"")
+    set_cfg(os.path.join(rev, "app.cfg"), "name_en", "Reversi <EN>")
+    set_cfg(os.path.join(rev, "app.cfg"), "description_en", "Two players & \"quotes\"")
     site = os.path.join(work, "site")
     apps = b.collect_apps(apps_dir, None)
     for a in apps:
@@ -175,6 +177,11 @@ def main():
           "site: 取り下げたものは載せない")
     check("&lt;b&gt;太字&lt;/b&gt; &amp; &quot;引用&quot;" in html and "<b>太字" not in html, "site: 説明はHTMLとして逃がす")
     check("@@" not in html and "@APPS@" not in html, "site: 埋め込みの印が残らない")
+    check('<h3 data-en="Reversi &lt;EN&gt;">' in html and 'data-en="Two players &amp; &quot;quotes&quot;"' in html,
+          "site: 名前・説明の訳を data-en に逃がして置く")
+    check("two players" in html, "site: 探す文字に訳も入る")
+    cat = open(os.path.join(site, "catalog.tsv"), encoding="utf-8").read()
+    check("\tname_en=Reversi <EN>\tdescription_en=Two players & \"quotes\"\n" in cat, "site: カタログの12列目から訳を並べる")
     pkg = open(os.path.join(site, "reversi-2.0.0.papp"), "rb").read() if os.path.isfile(os.path.join(site, "reversi-2.0.0.papp")) else b""
     if pkg:
         cols, _, _, files = b.read_package(pkg)
@@ -182,6 +189,24 @@ def main():
         catalog_line = [l for l in open(os.path.join(site, "catalog.tsv"), encoding="utf-8").read().splitlines()
                         if l.startswith("reversi\t")][0]
         check("\t".join(cols) == catalog_line, "site: パッケージの2行目はカタログの行そのもの")
+
+    # ---- 訳の列と1行の長さ(古い本体は640バイトを超える行を読まない) ----
+    a = b.App()
+    a.id, a.version, a.dir, a.name, a.bytes, a.perms, a.status = "x", "1", "x", "名前", 1, "-", "-"
+    a.description, a.author_key = "あ" * 60, "ab" * 32
+    a.local = [("name_en", "Name"), ("description_en", "d" * 180)]
+    line = b.catalog_line(a, "00" * 32, "me")
+    check(len(line.encode("utf-8")) <= b.MAX_LINE_BYTES and "\tname_en=Name\tdescription_en=ddd" in line
+          and line.endswith("d\n"), "catalog: 入りきらない説明の訳は切り詰めて640バイトに収める")
+    cols = line.rstrip("\n").split("\t")
+    check(len(cols) == 13 and cols[3] == "名前" and cols[7] == a.description and cols[10] == "-",
+          "catalog: 訳の列は11列(原文)の後ろに足すだけ")
+    a.description = "あ" * 60
+    a.local = []
+    cfg = {"name_en": "N", "description_en": "D\tE", "name_fr": "F", "description": "x"}
+    check(b.local_texts(cfg, "t") == [("name_en", "N"), ("description_en", "D E")], "local_texts: 知る言語だけ・タブは空白に")
+    check(b.parse_local(["name_en=N", "x=1", "name_fr=F", "description_en=", "description_en=a=b"]) == {"name_en": "N", "description_en": "a=b"},
+          "parse_local: 本体と同じく知らない列・空の値は無視")
 
     print("")
     print("ALL PASSED" if failures == 0 else f"FAILED ({failures} failures)")

@@ -46,6 +46,25 @@ namespace {
         return -1;
     }
 
+    // 12列目からの1列 "name_<言語>=…" / "description_<言語>=…" が lang のものなら e へ当てる(空の訳は当てない)。
+    // 日本語の原文(name / description の列)を置き換えるだけなので、日本語のときは呼ばない
+    void ApplyLocalized(const char* col, I18nFunctions::Lang lang, AppRepo::Entry& e){
+        const char* eq = strchr(col, '=');
+        if(!eq || eq[1] == '\0') return;
+        const size_t key_len = (size_t)(eq - col);
+        const char* code;
+        bool is_name;
+        if(key_len > 5 && strncmp(col, "name_", 5) == 0){ code = col + 5; is_name = true; }
+        else if(key_len > 12 && strncmp(col, "description_", 12) == 0){ code = col + 12; is_name = false; }
+        else return;
+        //キーの言語の部分("en")が lang のコードとちょうど同じものだけ("en-US" のような書き方は使わない)
+        const char* want = I18nFunctions::Code(lang);
+        const size_t code_len = (size_t)(eq - code);
+        if(code_len != strlen(want) || strncmp(code, want, code_len) != 0) return;
+        if(is_name) e.name.assign(eq + 1); //表示だけなので切り詰めてよい
+        else e.description.assign(eq + 1);
+    }
+
     bool AllZero(const uint8_t* p, size_t n){
         uint8_t acc = 0;
         for(size_t i = 0; i < n; i++) acc |= p[i];
@@ -192,12 +211,18 @@ bool AppRepo::ParseCatalogHeader(char* line, uint32_t& serial){
 }
 
 bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip){
+    return ParseCatalogLine(line, out, skip, I18nFunctions::Current());
+}
+
+bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip, I18nFunctions::Lang lang){
     skip = IsSkipLine(line);
     if(skip) return false;
-    char* cols[12];
-    const int n = SplitTabs(line, cols, 12);
+    constexpr int kCols = 11 + kMaxExtraColumns + 1; //最後の1つは読まない残り(タブで分けずに置く)
+    char* cols[kCols];
+    const int n = SplitTabs(line, cols, kCols);
     if(n < 11) return false;
-    //12列目以降は将来の拡張(無視する。どの列にもタブは入らない取り決め)
+    //12列目以降は "<キー>=<値>"(今は訳だけ。知らないキー・"=" の無い列は将来の拡張として無視する。
+    //どの列にもタブは入らない取り決め)
     out = Entry{};
     if(!ValidId(cols[0]) || !out.id.assign(cols[0])) return false;
     if(!ValidVersion(cols[1]) || !out.version.assign(cols[1])) return false;
@@ -211,6 +236,10 @@ bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip){
     if(!HexDecode(cols[8], strlen(cols[8]), out.author_key, 32) || AllZero(out.author_key, 32)) return false;
     out.author.assign(cols[9]);
     out.status = ParseStatus(cols[10]);
+    const int extra_end = n < 11 + kMaxExtraColumns ? n : 11 + kMaxExtraColumns;
+    for(int i = 11; i < extra_end && lang != I18nFunctions::Lang::Ja; i++){
+        ApplyLocalized(cols[i], lang, out);
+    }
     return true;
 }
 

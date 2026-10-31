@@ -3163,8 +3163,8 @@ msgid " 取り下げられました"
 msgstr " Withdrawn"
 
 #: src/apps/store/StoreScene.cpp
-msgid "\n作者: %s  権限: %s\n%s"
-msgstr "\nAuthor: %s  Permissions: %s\n%s"
+msgid "\n作者: %s  権限: %s"
+msgstr "\nAuthor: %s  Permissions: %s"
 
 #: src/apps/store/StoreScene.cpp
 msgid "入れ直す"

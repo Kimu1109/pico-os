@@ -15,6 +15,9 @@ local pad, pad_prev = {}, {}
 local popped, back_fn, jingles, sounds = false, nil, 0, 0
 local nid = 0
 pico = setmetatable({
+    -- 表示言語(本物は LuaEngine_I18n.cpp)。ここは日本語のまま: 原文を返し、引数があれば format する
+    lang = function() return "ja" end,
+    tr = function(s, ...) if select("#", ...) > 0 then return string.format(s, ...) end return s end,
     content_rect = function() return 0, 20, 240, 300 end,
     create = function() nid = nid + 1 return nid end,
     millis = function() return 0 end,

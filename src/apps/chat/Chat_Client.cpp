@@ -6,6 +6,7 @@
 #include "crypto/Secret_Cipher.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -27,11 +28,11 @@ bool ChatClient::configure(const char* server, const char* token, uint32_t poll_
     auth_.clear();
 
     if(!server || !*server || !token || !*token){
-        setStatus(State::NotConfigured, "/sys/chat.cfg に server と token を書いてください");
+        setStatus(State::NotConfigured, TR("/sys/chat.cfg に server と token を書いてください"));
         return false;
     }
     if(!UrlTools::Parse(server_, server)){
-        setStatus(State::NotConfigured, "chat.cfg の server が URL ではありません");
+        setStatus(State::NotConfigured, TR("chat.cfg の server が URL ではありません"));
         return false;
     }
     //末尾の / は落としておく(後ろへ "/api/v1/..." を足すため)。
@@ -47,13 +48,13 @@ bool ChatClient::configure(const char* server, const char* token, uint32_t poll_
         const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
                      || c == '-' || c == '_';
         if(!ok){
-            setStatus(State::NotConfigured, "chat.cfg の token に使えない文字があります");
+            setStatus(State::NotConfigured, TR("chat.cfg の token に使えない文字があります"));
             return false;
         }
     }
     if(!auth_.assign("Authorization: Bearer ") || !auth_.append(token)
        || !req_.setExtraHeader(auth_.c_str())){
-        setStatus(State::NotConfigured, "chat.cfg の token が長すぎます");
+        setStatus(State::NotConfigured, TR("chat.cfg の token が長すぎます"));
         return false;
     }
 
@@ -69,7 +70,7 @@ bool ChatClient::configure(const char* server, const char* token, uint32_t poll_
 
 bool ChatClient::loadConfig(){
     if(!OSData::SD_usable){
-        setStatus(State::NotConfigured, "SDカードがありません");
+        setStatus(State::NotConfigured, TR("SDカードがありません"));
         configured_ = false;
         return false;
     }
@@ -93,7 +94,7 @@ bool ChatClient::loadConfig(){
             }
         });
     if(!opened){
-        setStatus(State::NotConfigured, "/sys/chat.cfg がありません");
+        setStatus(State::NotConfigured, TR("/sys/chat.cfg がありません"));
         configured_ = false;
         return false;
     }
@@ -195,7 +196,7 @@ bool ChatClient::begin(Kind kind, HttpRequest::Method method, const char* path, 
     Url url = server_;
     url.query.clear();
     if(!url.path.append(path) || (query && !url.query.assign(query))){
-        failLater("URLが長すぎます");
+        failLater(TR("URLが長すぎます"));
         return false;
     }
 
@@ -322,7 +323,7 @@ void ChatClient::beginAction(){
             FixedString<PICO_STR_LL> enc;
             if(!UrlTools::EncodeComponent(enc, action_text_.c_str())
                || !query.appendFormat("limit=%d&q=", kMaxSearchHits) || !query.append(enc)){
-                finishAction(kind, false, "検索語が長すぎます");
+                finishAction(kind, false, TR("検索語が長すぎます"));
                 return;
             }
             q = query.c_str();
@@ -349,7 +350,7 @@ void ChatClient::beginAction(){
     const HttpRequest::Method method = (kind == Kind::Search) ? HttpRequest::Method::GET : HttpRequest::Method::POST;
     begin(kind, method, path, q, body, body_len);
     //URLが組み立てられずに始まらなかった(kind_ が立っていない)なら、ここで失敗を返す
-    if(kind_ == Kind::None) finishAction(kind, false, "URLが長すぎます");
+    if(kind_ == Kind::None) finishAction(kind, false, TR("URLが長すぎます"));
 }
 
 void ChatClient::finish(){
@@ -357,7 +358,7 @@ void ChatClient::finish(){
     kind_ = Kind::None;
 
     if(req_.getStatus() != TaskTools::SUCCESS){
-        FixedString<PICO_STR_LL> why("通信に失敗: ");
+        FixedString<PICO_STR_LL> why(TR("通信に失敗: "));
         why.append(req_.failureToStr());
         LOG_APP_WARN("チャット: %s", why.c_str());
         //送信は失敗したら諦めず、次の機会にもう一度送る(入力し直させない)
@@ -372,7 +373,7 @@ void ChatClient::finish(){
     if(code < 200 || code >= 300){
         FixedString<PICO_STR_LL> why;
         if(!error_line_.empty()) why.assign(error_line_);
-        else why.appendFormat("サーバの応答が %d です", code);
+        else why.appendFormat(TR("サーバの応答が %d です"), code);
         LOG_APP_WARN("チャット: HTTP %d %s", code, why.c_str());
 
         if(code == 401){
@@ -444,7 +445,7 @@ void ChatClient::finish(){
         case Kind::JoinOpen:
         case Kind::JoinCode:
             if(!joined_ok_){
-                finishAction(kind, false, "サーバの応答を読めませんでした");
+                finishAction(kind, false, TR("サーバの応答を読めませんでした"));
                 break;
             }
             //一覧を取り直すまで待たずに足しておく(開いた部屋の名前を出すため)
@@ -453,7 +454,7 @@ void ChatClient::finish(){
             finishAction(kind, true, nullptr);
             break;
         case Kind::Invite:
-            finishAction(kind, invite_ok_, invite_ok_ ? nullptr : "サーバの応答を読めませんでした");
+            finishAction(kind, invite_ok_, invite_ok_ ? nullptr : TR("サーバの応答を読めませんでした"));
             break;
         default:
             break;
@@ -496,7 +497,7 @@ void ChatClient::update(bool network_up){
 
     if(!network_up){
         if(state_ != State::Offline) req_.closeConnection();
-        setStatus(State::Offline, "Wi-Fiに接続していません");
+        setStatus(State::Offline, TR("Wi-Fiに接続していません"));
         return;
     }
     if(state_ == State::Offline){

@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <new>
+#include "system/I18n_Functions.hpp"
 
 // 一番下のボタンの行の高さ
 static constexpr int kActionH = 24;
@@ -26,7 +27,7 @@ void StoreScene::onEnter(){
     const int line_h = FontFn::GetFontSize(FontFn::Small) + 2;
 
     // ---- 上部の行: [戻る] アプリストア [設定] [更新] ----
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -34,7 +35,7 @@ void StoreScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
     const int row_h = this->back_button->getLocalRect().h;
 
-    this->refresh_button = new Button(0, y0, "更新");
+    this->refresh_button = new Button(0, y0, TR("更新"));
     this->refresh_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->refresh_button->setFontSize(FontFn::Small);
     this->refresh_button->setH(20 + Button::kFrameExtra);
@@ -52,7 +53,7 @@ void StoreScene::onEnter(){
     });
     WidgetFunctions::Add(this->refresh_button);
 
-    this->settings_button = new Button(0, y0, "設定");
+    this->settings_button = new Button(0, y0, TR("設定"));
     this->settings_button->setIcon(IconID::Settings, IconSize::Px16);
     this->settings_button->setFontSize(FontFn::Small);
     this->settings_button->setH(20 + Button::kFrameExtra);
@@ -62,7 +63,7 @@ void StoreScene::onEnter(){
 
     const int title_x = this->back_button->getLocalRect().x + this->back_button->getLocalRect().w + MARGIN * 2;
     const int title_w = this->settings_button->getLocalRect().x - MARGIN * 2 - title_x;
-    this->title_label = new Label<PICO_STR_M>(title_x, y0, "アプリストア");
+    this->title_label = new Label<PICO_STR_M>(title_x, y0, TR("アプリストア"));
     this->title_label->setFontSize(FontFn::Small);
     this->title_label->setMaxWidth(title_w);
     this->title_label->setMaxHeight(line_h);
@@ -80,16 +81,16 @@ void StoreScene::onEnter(){
         WidgetFunctions::Add(b);
         return b;
     };
-    this->install_button = action(0, "入れる");
+    this->install_button = action(0, TR("入れる"));
     this->install_button->setOnPressEnd([this](){ this->confirmInstall(); });
-    this->open_button = action(1, "開く");
+    this->open_button = action(1, TR("開く"));
     this->open_button->setOnPressEnd([this](){
         const int i = this->selectedIndex();
         if(i < 0 || !this->store) return;
         //押した指を離したフレームのうちに別の画面へ移ると、ボタンの押し込みの絵が戻る前に消えるので次のフレームで
         this->pending_launch = true;
     });
-    this->remove_button = action(2, "削除");
+    this->remove_button = action(2, TR("削除"));
     this->remove_button->setOnPressEnd([this](){ this->confirmRemove(); });
 
     // ---- 状態の1行・進み具合・選んだアプリの欄 ----
@@ -144,7 +145,7 @@ void StoreScene::onEnter(){
 
     this->store = new (std::nothrow) AppStore();
     if(!this->store){
-        ErrorFunctions::ShowFatal("メモリが足りないため、アプリストアを開けません");
+        ErrorFunctions::ShowFatal(TR("メモリが足りないため、アプリストアを開けません"));
     }else{
         this->store->loadConfig();
         this->store->loadCachedCatalog();
@@ -156,7 +157,7 @@ void StoreScene::onEnter(){
     //Wi-Fiに繋がっていれば開いたときに1回取りに行く(1回描いてから。TLSの接続で止まる前に画面を見せる)
     this->auto_refresh = this->store != nullptr && NetworkFunctions::IsConnected();
     if(this->store && !this->auto_refresh && this->store->count() == 0){
-        this->setNotice("Wi-Fiに繋いで [更新] を押してください");
+        this->setNotice(TR("Wi-Fiに繋いで [更新] を押してください"));
     }
 
     this->refreshList();
@@ -218,7 +219,7 @@ void StoreScene::refreshList(){
                 case AppStore::Installed::Update:
                     item.icon = IconID::AppStore;
                     item.color = PICO_BLUE;
-                    if(this->store->installable(i)) item.text.append(" (更新)");
+                    if(this->store->installable(i)) item.text.append(TR(" (更新)"));
                     break;
                 case AppStore::Installed::Foreign:
                     item.icon = IconID::AppBox;
@@ -231,14 +232,14 @@ void StoreScene::refreshList(){
             }
             if(blocked){
                 item.color = PICO_RED;
-                item.text.append(" (危険)");
+                item.text.append(TR(" (危険)"));
                 if(this->blocked_warning.empty()){
                     //状態の行は1行なので短く(名前が長ければ後ろが切れる)
                     this->blocked_warning.assign(e->name.c_str());
-                    this->blocked_warning.append("を削除してください(危険)");
+                    this->blocked_warning.append(TR("を削除してください(危険)"));
                 }
             }else if(!this->store->installable(i)){
-                item.text.append(" (取り下げ)");
+                item.text.append(TR(" (取り下げ)"));
             }
             this->rows[this->row_count++] = (int8_t)i;
             this->app_list->add(item);
@@ -250,7 +251,7 @@ void StoreScene::refreshList(){
     if(sel_row >= 0) this->app_list->setSelectedIndex(sel_row);
     else this->selected_id.clear();
 
-    FixedString<PICO_STR_M> t("アプリストア");
+    FixedString<PICO_STR_M> t(TR("アプリストア"));
     if(this->row_count > 0) t.appendFormat(" (%d)", this->row_count);
     if(this->title_label) this->title_label->setText(t);
 }
@@ -260,26 +261,26 @@ void StoreScene::refreshDetail(){
     const int i = this->selectedIndex();
     const AppRepo::Entry* e = this->store ? this->store->entry(i) : nullptr;
     if(!e){
-        this->detail_label->setText(this->row_count > 0 ? "アプリを選んでください" : "");
+        this->detail_label->setText(this->row_count > 0 ? TR("アプリを選んでください") : "");
         return;
     }
     FixedString<PICO_STR_512B> text;
     text.appendFormat("%s  %s  %luKB", e->name.c_str(), e->version.c_str(),
                       (unsigned long)((e->bytes + 1023) / 1024));
     switch(this->store->installed(i)){
-        case AppStore::Installed::Same:     text.append(" (入っています)"); break;
-        case AppStore::Installed::Update:   text.appendFormat(" (%s が入っています)", this->store->installedVersion(i)); break;
-        case AppStore::Installed::Newer:    text.appendFormat(" (新しい%sが入っています)", this->store->installedVersion(i)); break;
-        case AppStore::Installed::Foreign:  text.append(" (手で入れた同名のアプリがあります)"); break;
-        case AppStore::Installed::Conflict: text.append(" (同名の別のアプリがあります)"); break;
-        case AppStore::Installed::KeyChanged: text.append(" (作者の鍵が変わりました)"); break;
+        case AppStore::Installed::Same:     text.append(TR(" (入っています)")); break;
+        case AppStore::Installed::Update:   text.appendFormat(TR(" (%s が入っています)"), this->store->installedVersion(i)); break;
+        case AppStore::Installed::Newer:    text.appendFormat(TR(" (新しい%sが入っています)"), this->store->installedVersion(i)); break;
+        case AppStore::Installed::Foreign:  text.append(TR(" (手で入れた同名のアプリがあります)")); break;
+        case AppStore::Installed::Conflict: text.append(TR(" (同名の別のアプリがあります)")); break;
+        case AppStore::Installed::KeyChanged: text.append(TR(" (作者の鍵が変わりました)")); break;
         default: break;
     }
-    if(e->status == AppRepo::Status::Blocked) text.append(" 危険と判断されました");
-    else if(e->status == AppRepo::Status::Yanked) text.append(" 取り下げられました");
+    if(e->status == AppRepo::Status::Blocked) text.append(TR(" 危険と判断されました"));
+    else if(e->status == AppRepo::Status::Yanked) text.append(TR(" 取り下げられました"));
     FixedString<PICO_STR_L> perms;
     AppRepo::PermsText(e->perms, perms);
-    text.appendFormat("\n作者: %s  権限: %s\n%s", e->author.c_str(), perms.c_str(), e->description.c_str());
+    text.appendFormat(TR("\n作者: %s  権限: %s\n%s"), e->author.c_str(), perms.c_str(), e->description.c_str());
     this->detail_label->setText(text);
 }
 
@@ -320,10 +321,10 @@ void StoreScene::refreshButtons(){
     this->refresh_button->setIcon(busy ? IconID::X : IconID::Refresh, IconSize::Px16);
     const int i = this->selectedIndex();
     const AppStore::Installed st = this->store->installed(i);
-    const char* label = "入れる";
-    if(st == AppStore::Installed::Update) label = "更新";
-    else if(st == AppStore::Installed::Same) label = "入れ直す";
-    else if(st == AppStore::Installed::Foreign) label = "上書き";
+    const char* label = TR("入れる");
+    if(st == AppStore::Installed::Update) label = TR("更新");
+    else if(st == AppStore::Installed::Same) label = TR("入れ直す");
+    else if(st == AppStore::Installed::Foreign) label = TR("上書き");
     this->install_button->setText(label);
     const bool has = i >= 0;
     const bool present = has && st != AppStore::Installed::No && st != AppStore::Installed::Conflict;
@@ -339,7 +340,7 @@ void StoreScene::startRefresh(){
     if(!this->store) return;
     this->notice.clear();
     if(!NetworkFunctions::IsConnected()){
-        this->setNotice("Wi-Fiに繋がっていません", PICO_RED);
+        this->setNotice(TR("Wi-Fiに繋がっていません"), PICO_RED);
         return;
     }
     this->store->beginRefresh();
@@ -353,36 +354,36 @@ void StoreScene::confirmInstall(){
     const AppRepo::Entry* e = this->store->entry(i);
     const AppStore::Installed st = this->store->installed(i);
     if(st == AppStore::Installed::Conflict){
-        this->setNotice("同じ名前の別のアプリが入っているので入れられません", PICO_RED);
+        this->setNotice(TR("同じ名前の別のアプリが入っているので入れられません"), PICO_RED);
         return;
     }
     if(st == AppStore::Installed::KeyChanged){
-        this->setNotice("作者の鍵が変わりました。削除してから入れ直してください", PICO_RED);
+        this->setNotice(TR("作者の鍵が変わりました。削除してから入れ直してください"), PICO_RED);
         return;
     }
     if(st == AppStore::Installed::Newer){
-        this->setNotice("入っている版より古い版は入れられません", PICO_RED);
+        this->setNotice(TR("入っている版より古い版は入れられません"), PICO_RED);
         return;
     }
     if(!this->store->installable(i)){
-        this->setNotice("取り下げられたアプリなので入れられません", PICO_RED);
+        this->setNotice(TR("取り下げられたアプリなので入れられません"), PICO_RED);
         return;
     }
     if(!NetworkFunctions::IsConnected()){
-        this->setNotice("Wi-Fiに繋がっていません", PICO_RED);
+        this->setNotice(TR("Wi-Fiに繋がっていません"), PICO_RED);
         return;
     }
     FixedString<PICO_STR_L> perms;
     AppRepo::PermsText(e->perms, perms);
     FixedString<PICO_STR_512B> text;
-    text.appendFormat("%s %s を入れますか?\n作者: %s\n使う権限: %s", e->name.c_str(), e->version.c_str(),
+    text.appendFormat(TR("%s %s を入れますか?\n作者: %s\n使う権限: %s"), e->name.c_str(), e->version.c_str(),
                       e->author.c_str(), perms.c_str());
     if(st == AppStore::Installed::Foreign){
-        text.appendFormat("\n\n/lua/apps/%s に同じ名前のアプリがあります。上書きします(アプリが書いたファイルは残ります)", e->dir.c_str());
+        text.appendFormat(TR("\n\n/lua/apps/%s に同じ名前のアプリがあります。上書きします(アプリが書いたファイルは残ります)"), e->dir.c_str());
     }
     this->confirm_id.assign(e->id.c_str());
-    auto* dialog = new MsgDialog(text.c_str(), "やめる",
-                                 st == AppStore::Installed::Update ? "更新" : "入れる");
+    auto* dialog = new MsgDialog(text.c_str(), TR("やめる"),
+                                 st == AppStore::Installed::Update ? TR("更新") : TR("入れる"));
     dialog->setIconId(IconID::AppStore);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -391,7 +392,7 @@ void StoreScene::confirmInstall(){
             const int idx = this->selectedIndex();
             const bool replace = this->store->installed(idx) == AppStore::Installed::Foreign;
             this->notice.clear();
-            if(this->store->busy()) this->setNotice("一覧の取得が終わってから入れてください", PICO_RED);
+            if(this->store->busy()) this->setNotice(TR("一覧の取得が終わってから入れてください"), PICO_RED);
             else this->store->beginInstall(idx, replace);
             this->refreshStatus();
             this->refreshButtons();
@@ -406,10 +407,10 @@ void StoreScene::confirmRemove(){
     if(i < 0 || !this->store || this->store->busy()) return;
     const AppRepo::Entry* e = this->store->entry(i);
     FixedString<PICO_STR_512B> text;
-    text.appendFormat("%s を削除しますか?\n/lua/apps/%s を丸ごと消します(セーブデータ等も消えます)",
+    text.appendFormat(TR("%s を削除しますか?\n/lua/apps/%s を丸ごと消します(セーブデータ等も消えます)"),
                       e->name.c_str(), e->dir.c_str());
     this->confirm_id.assign(e->id.c_str());
-    auto* dialog = new MsgDialog(text.c_str(), "やめる", "削除");
+    auto* dialog = new MsgDialog(text.c_str(), TR("やめる"), TR("削除"));
     dialog->setIconId(IconID::Trash);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -425,7 +426,7 @@ void StoreScene::confirmRemove(){
 
 void StoreScene::openSettings(){
     if(!this->store || this->store->busy()) return;
-    auto* dialog = new InputDialog("配布元のURL:", true);
+    auto* dialog = new InputDialog(TR("配布元のURL:"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     dialog->setInput(this->store->baseUrl());
     WidgetFunctions::AddDialog(dialog);
@@ -446,9 +447,9 @@ void StoreScene::openSettings(){
                     this->selected_id.clear();
                     this->seen_revision = this->store->revision() - 1;
                 }
-                this->setNotice("配布元を変えました。[更新] で取得します");
+                this->setNotice(TR("配布元を変えました。[更新] で取得します"));
             }else{
-                this->setNotice("URLを読めません(http:// か https:// で始めてください)", PICO_RED);
+                this->setNotice(TR("URLを読めません(http:// か https:// で始めてください)"), PICO_RED);
             }
         }
         WidgetFunctions::DestroyLater(dialog);
@@ -471,7 +472,7 @@ void StoreScene::onUpdate(){
         this->pending_launch = false;
         const int i = this->selectedIndex();
         if(i >= 0 && !this->store->launch(i)){
-            this->setNotice("ランチャに登録されていません(再起動すると並びます)", PICO_RED);
+            this->setNotice(TR("ランチャに登録されていません(再起動すると並びます)"), PICO_RED);
         }
         return;
     }

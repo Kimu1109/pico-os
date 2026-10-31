@@ -21,6 +21,7 @@ static void audio_write(const uint16_t addr, const uint8_t val);
 #define PEANUT_GB_12_COLOUR 0
 // peanut_gb.hの実装を取り込むのはこのファイルだけ(README-pico-os.md参照)
 #include "peanut_gb.h"
+#include "system/I18n_Functions.hpp"
 
 struct GbEmu::Impl {
     struct gb_s gb;
@@ -66,18 +67,18 @@ static constexpr uint32_t kRomHeaderEnd = 0x150;
 
 const char* GbEmu::loadErrorToStr(LoadError e){
     switch(e){
-        case LoadError::None:            return "成功";
-        case LoadError::NoSd:            return "SDカードが使えません";
-        case LoadError::NotFound:        return "ROMを開けません";
-        case LoadError::TooLarge:        return "ROMが大きすぎます(RAMに載るのは256KBまで)";
-        case LoadError::TooSmall:        return "ROMとして短すぎます";
-        case LoadError::OutOfMemory:     return "メモリが足りません";
-        case LoadError::ReadFailed:      return "ROMの読み込みに失敗しました";
-        case LoadError::InvalidChecksum: return "ROMのヘッダが壊れています";
-        case LoadError::Unsupported:     return "対応していないカートリッジです";
-        case LoadError::SaveTooLarge:    return "セーブ領域が大きすぎます(32KBまで)";
+        case LoadError::None:            return TR("成功");
+        case LoadError::NoSd:            return TR("SDカードが使えません");
+        case LoadError::NotFound:        return TR("ROMを開けません");
+        case LoadError::TooLarge:        return TR("ROMが大きすぎます(RAMに載るのは256KBまで)");
+        case LoadError::TooSmall:        return TR("ROMとして短すぎます");
+        case LoadError::OutOfMemory:     return TR("メモリが足りません");
+        case LoadError::ReadFailed:      return TR("ROMの読み込みに失敗しました");
+        case LoadError::InvalidChecksum: return TR("ROMのヘッダが壊れています");
+        case LoadError::Unsupported:     return TR("対応していないカートリッジです");
+        case LoadError::SaveTooLarge:    return TR("セーブ領域が大きすぎます(32KBまで)");
     }
-    return "不明な誤り";
+    return TR("不明な誤り");
 }
 
 GbEmu::LoadError GbEmu::load(const char* rom_path){
@@ -186,7 +187,7 @@ GbEmu::LoadError GbEmu::start(const char* rom_path){
 
     LOG_APP_OK("GbEmu: %s を起動しました(題名\"%s\" ROM %uB(%s) / セーブ %uB)",
         rom_path, this->title_.c_str(), (unsigned)this->rom_size,
-        this->rom_owned ? "RAM" : "内蔵フラッシュ", (unsigned)this->cart_ram_size);
+        this->rom_owned ? "RAM" : TR("内蔵フラッシュ"), (unsigned)this->cart_ram_size);
     return LoadError::None;
 }
 
@@ -478,12 +479,12 @@ void GbEmu::drawLine(const uint8_t* pixels, int line){
 }
 
 void GbEmu::onError(int error, uint16_t addr){
-    static const char* const kNames[] = { "不明な誤り", "不正な命令", "不正な読み出し", "不正な書き込み" };
+    static const char* const kNames[] = { TR_NOOP("不明な誤り"), TR_NOOP("不正な命令"), TR_NOOP("不正な読み出し"), TR_NOOP("不正な書き込み") };
     const char* name = (error >= 0 && error < 4) ? kNames[error] : kNames[0];
 
     this->crashed_ = true;
     this->crash_message.clear();
-    this->crash_message.appendFormat("%s (0x%04X)", name, (unsigned)addr);
+    this->crash_message.appendFormat("%s (0x%04X)", I18nFunctions::Tr(name), (unsigned)addr);
     LOG_APP_FAIL("GbEmu: エミュが停止しました: %s", this->crash_message.c_str());
 
     longjmp(this->impl->on_error, 1);
@@ -534,17 +535,17 @@ namespace {
 
 const char* GbEmu::stateErrorToStr(StateError e){
     switch(e){
-        case StateError::None:        return "成功";
-        case StateError::NotLoaded:   return "ゲームが動いていません";
-        case StateError::NoSd:        return "SDカードが使えません";
-        case StateError::NoPath:      return "保存先のパスが長すぎます";
-        case StateError::NotFound:    return "保存した状態がありません";
-        case StateError::WriteFailed: return "状態の書き込みに失敗しました";
-        case StateError::ReadFailed:  return "状態の読み込みに失敗しました";
-        case StateError::BadFormat:   return "状態のファイルが壊れているか、別の版のものです";
-        case StateError::OtherRom:    return "別のROMの状態です";
+        case StateError::None:        return TR("成功");
+        case StateError::NotLoaded:   return TR("ゲームが動いていません");
+        case StateError::NoSd:        return TR("SDカードが使えません");
+        case StateError::NoPath:      return TR("保存先のパスが長すぎます");
+        case StateError::NotFound:    return TR("保存した状態がありません");
+        case StateError::WriteFailed: return TR("状態の書き込みに失敗しました");
+        case StateError::ReadFailed:  return TR("状態の読み込みに失敗しました");
+        case StateError::BadFormat:   return TR("状態のファイルが壊れているか、別の版のものです");
+        case StateError::OtherRom:    return TR("別のROMの状態です");
     }
-    return "不明な誤り";
+    return TR("不明な誤り");
 }
 
 bool GbEmu::statePath(int slot, FixedString<PICO_PATH_LEN>& out) const {
@@ -685,7 +686,7 @@ GbEmu::StateError GbEmu::loadState(int slot){
     if(!ok){
         //検査は通ったのに読めなかった(SDが抜けた等)。途中まで写した状態は信用できないので止める
         this->crashed_ = true;
-        this->crash_message.assign("状態の読み込みの途中で失敗しました");
+        this->crash_message.assign(TR("状態の読み込みの途中で失敗しました"));
         this->audioStop();
         return StateError::ReadFailed;
     }

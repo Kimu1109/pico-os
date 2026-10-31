@@ -14,6 +14,7 @@
 #include <cstring>
 #include <ctime>
 #include <new>
+#include "system/I18n_Functions.hpp"
 
 bool (*TodoWatch::foreground_query)() = nullptr;
 
@@ -23,7 +24,7 @@ namespace {
     class Service : public BackgroundService {
         public:
             const char* key() const override { return "todo"; }
-            const char* name() const override { return "TODOの取り直し"; }
+            const char* name() const override { return TR("TODOの取り直し"); }
             IconID icon() const override { return IconID::CheckboxOn; }
             bool toggleable() const override { return true; }
             bool enabled() const override { return enabled_; }
@@ -43,17 +44,17 @@ namespace {
 
             void status(FixedString<PICO_STR_LL>& out) const override {
                 out.clear();
-                if(!enabled_){ out.assign("切っています"); return; }
-                if(!HomeLayout::HasKind(HomeLayout::Kind::Todo)){ out.assign("ホーム画面にTODOウィジェットがありません"); return; }
-                if(!configured_){ out.assign("Todoistが設定されていません"); return; }
-                if(client_){ out.assign("取っています…"); return; }
-                if(last_error_[0]){ out.appendFormat("失敗: %s", last_error_); return; }
+                if(!enabled_){ out.assign(TR("切っています")); return; }
+                if(!HomeLayout::HasKind(HomeLayout::Kind::Todo)){ out.assign(TR("ホーム画面にTODOウィジェットがありません")); return; }
+                if(!configured_){ out.assign(TR("Todoistが設定されていません")); return; }
+                if(client_){ out.assign(TR("取っています…")); return; }
+                if(last_error_[0]){ out.appendFormat(TR("失敗: %s"), last_error_); return; }
                 if(last_ok_ms_ != 0){
                     const uint32_t ago = (millis() - last_ok_ms_) / 60000;
-                    out.appendFormat("%lu分前に取得(%d件)", (unsigned long)ago, TodoCache::Total());
+                    out.appendFormat(TR("%lu分前に取得(%d件)"), (unsigned long)ago, TodoCache::Total());
                     return;
                 }
-                out.assign("まだ取っていません");
+                out.assign(TR("まだ取っていません"));
             }
 
             void update(uint32_t now) override {
@@ -85,7 +86,7 @@ namespace {
                 }
                 client_ = new (std::nothrow) TodoistClient();
                 if(!client_){
-                    setError("メモリが足りません");
+                    setError(TR("メモリが足りません"));
                     next_ms_ = now + TodoWatch::kRetryMs;
                     return;
                 }
@@ -119,7 +120,7 @@ namespace {
                                  && (st == TodoistClient::State::Error || st == TodoistClient::State::AuthError
                                      || st == TodoistClient::State::Offline);
                 if(failed || Reached(now, started_ms_ + TodoWatch::kGiveUpMs)){
-                    setError(failed ? client_->statusText() : "時間切れ");
+                    setError(failed ? client_->statusText() : TR("時間切れ"));
                     drop();
                     next_ms_ = now + (st == TodoistClient::State::AuthError ? TodoWatch::kIntervalMs : TodoWatch::kRetryMs);
                 }

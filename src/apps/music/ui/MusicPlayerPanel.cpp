@@ -5,6 +5,7 @@
 #include "gui/core/Font_Functions.hpp"
 #include "gui/core/Focus_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // 時間の表示は m:ss(1時間を超えたら h:mm:ss)
@@ -367,7 +368,7 @@ void MusicPlayerPanel::render(){
         f->setCursor(g.x + kPad, g.y + kTimeY);
         f->print(t.c_str());
 
-        if(this->loops) t.assign("ループ");
+        if(this->loops) t.assign(TR("ループ"));
         else FormatTime(t, this->total_ms);
         f->setCursor(g.x + g.w - kPad - f->textWidth(t.c_str()), g.y + kTimeY);
         f->print(t.c_str());

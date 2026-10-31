@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     constexpr int kHeaderSize = 64;
@@ -20,17 +21,17 @@ namespace {
 
 const char* PvidPlayer::ErrorToStr(Error e){
     switch(e){
-        case Error::None:        return "問題なし";
-        case Error::NoSd:        return "SDカードがありません";
-        case Error::Open:        return "ファイルを開けません";
-        case Error::BadHeader:   return ".pvidの動画ではありません";
-        case Error::Unsupported: return "対応していない版・大きさの動画です";
-        case Error::BadIndex:    return "動画の目録が壊れています";
-        case Error::OutOfMemory: return "メモリが足りません";
-        case Error::BadFrame:    return "動画のデータが壊れています";
-        case Error::Ended:       return "最後まで再生しました";
+        case Error::None:        return TR("問題なし");
+        case Error::NoSd:        return TR("SDカードがありません");
+        case Error::Open:        return TR("ファイルを開けません");
+        case Error::BadHeader:   return TR(".pvidの動画ではありません");
+        case Error::Unsupported: return TR("対応していない版・大きさの動画です");
+        case Error::BadIndex:    return TR("動画の目録が壊れています");
+        case Error::OutOfMemory: return TR("メモリが足りません");
+        case Error::BadFrame:    return TR("動画のデータが壊れています");
+        case Error::Ended:       return TR("最後まで再生しました");
     }
-    return "不明な誤り";
+    return TR("不明な誤り");
 }
 
 void PvidPlayer::close(){

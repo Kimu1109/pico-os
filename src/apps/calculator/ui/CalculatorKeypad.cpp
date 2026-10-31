@@ -3,6 +3,7 @@
 #include "gui/core/GFX_Functions.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 #include <cstdio>
@@ -128,7 +129,7 @@ const CalculatorKeypad::Key kConverterKeys[] = {
     { "0",   "0",    nullptr, nullptr, 3, 0, 1, Kind::Insert },
     { ".",   ".",    nullptr, nullptr, 3, 1, 1, Kind::Insert },
     { "EXP", "E",    nullptr, nullptr, 3, 2, 1, Kind::Insert },
-    { "入替", "SWAP", nullptr, nullptr, 3, 3, 1, Kind::Command },
+    { TR_NOOP("入替"), "SWAP", nullptr, nullptr, 3, 3, 1, Kind::Command },
 };
 
 template <typename T, int N>
@@ -209,13 +210,14 @@ const char* CalculatorKeypad::labelOf(const Key& key) const {
         return buf;
     }
     if (key.kind == Kind::Command && strcmp(key.insert, "DRG") == 0) return this->angle_label;
-    if (key.kind == Kind::Command && strcmp(key.insert, "=") == 0) return this->graph_mode ? "描画" : "=";
+    if (key.kind == Kind::Command && strcmp(key.insert, "=") == 0) return this->graph_mode ? TR("描画") : "=";
     if (strcmp(key.insert, "mod") == 0) {
         if (this->graph_mode) return this->shift ? "mod" : "x";
         return "mod";
     }
-    if (this->shift && key.shift_label) return key.shift_label;
-    return key.label;
+    //「入替」等の日本語の札だけ訳す(英字・記号の札は表に無いのでそのまま)
+    if (this->shift && key.shift_label) return I18nFunctions::Tr(key.shift_label);
+    return I18nFunctions::Tr(key.label);
 }
 
 const char* CalculatorKeypad::insertOf(const Key& key) const {

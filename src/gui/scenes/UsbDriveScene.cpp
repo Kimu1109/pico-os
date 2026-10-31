@@ -5,6 +5,7 @@
 #include "gui/core/Error_Functions.hpp"
 #include "gui/core/Font_Functions.hpp"
 #include "services/Power_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -13,12 +14,12 @@ void UsbDriveScene::onEnter(){
     const Rect content = Scene::contentRect();
     int y = content.y + MARGIN;
 
-    auto* title = new Label<PICO_STR_L>(content.x + MARGIN, y, "USBドライブ");
+    auto* title = new Label<PICO_STR_L>(content.x + MARGIN, y, TR("USBドライブ"));
     title->setFontSize(FontFn::Normal);
     WidgetFunctions::Add(title);
     y += 32;
 
-    this->state_label = new Label<PICO_STR_L>(content.x + MARGIN, y, "準備しています…");
+    this->state_label = new Label<PICO_STR_L>(content.x + MARGIN, y, TR("準備しています…"));
     this->state_label->setFontSize(FontFn::Small);
     this->state_label->setMaxWidth(content.w - MARGIN * 2);
     this->state_label->setMaxHeight(36);
@@ -43,14 +44,14 @@ void UsbDriveScene::onEnter(){
     y += 40;
 
     this->help_label = new Label<PICO_STR_LL>(content.x + MARGIN, y,
-        "PCで「取り出し」をしてから終了してください。その間pico-osはSDを使えません");
+        TR("PCで「取り出し」をしてから終了してください。その間pico-osはSDを使えません"));
     this->help_label->setFontSize(FontFn::Small);
     this->help_label->setMaxWidth(content.w - MARGIN * 2);
     this->help_label->setMaxHeight(60);
     this->help_label->setTextColor(PICO_DARKGREY);
     WidgetFunctions::Add(this->help_label);
 
-    this->exit_button = new Button(content.x + MARGIN, content.y + content.h - 48 - MARGIN, "終了");
+    this->exit_button = new Button(content.x + MARGIN, content.y + content.h - 48 - MARGIN, TR("終了"));
     this->exit_button->setW(content.w - MARGIN * 2);
     this->exit_button->setH(48);
     this->exit_button->setOnPressEnd([this](){ this->requestExit(); });
@@ -105,16 +106,16 @@ void UsbDriveScene::refresh(bool force){
         int8_t color = PICO_FORECOLOR;
         switch(st){
             case State::Off:
-                text = this->start_failed ? "始められませんでした" : "準備しています…";
+                text = this->start_failed ? TR("始められませんでした") : TR("準備しています…");
                 color = this->start_failed ? PICO_RED : PICO_FORECOLOR;
                 break;
-            case State::Waiting: text = "PCとUSBでつないでください"; break;
-            case State::Mounted: text = "PCにつながっています"; color = PICO_DARKGREEN; break;
-            case State::Ejected: text = "PCで取り出されました。終了してよいです"; color = PICO_BLUE; break;
+            case State::Waiting: text = TR("PCとUSBでつないでください"); break;
+            case State::Mounted: text = TR("PCにつながっています"); color = PICO_DARKGREEN; break;
+            case State::Ejected: text = TR("PCで取り出されました。終了してよいです"); color = PICO_BLUE; break;
         }
         this->state_label->setText(text);
         this->state_label->setTextColor(color);
-        this->exit_button->setText(st == State::Off ? "戻る" : "終了");
+        this->exit_button->setText(st == State::Off ? TR("戻る") : TR("終了"));
     }
 
     const uint32_t r = UsbDriveFunctions::SectorsRead();
@@ -128,7 +129,7 @@ void UsbDriveScene::refresh(bool force){
             char cap[16];
             if(mib >= 1024) snprintf(cap, sizeof(cap), "%lu.%luGB", (unsigned long)(mib / 1024), (unsigned long)(mib % 1024 * 10 / 1024));
             else snprintf(cap, sizeof(cap), "%luMB", (unsigned long)mib);
-            snprintf(buf, sizeof(buf), "容量 %s\n読み %luKB / 書き %luKB",
+            snprintf(buf, sizeof(buf), TR("容量 %s\n読み %luKB / 書き %luKB"),
                 cap, (unsigned long)(r / 2), (unsigned long)(w / 2));
         }else{
             buf[0] = '\0';
@@ -139,12 +140,12 @@ void UsbDriveScene::refresh(bool force){
     //診断: USBの列挙 → マスストレージの口 → SCSIのコマンド、のどこまで進んだか
     if(UsbDriveFunctions::IsActive()){
         const UsbDriveFunctions::Diag d = UsbDriveFunctions::GetDiag();
-        const char* link = !d.usb_connected ? "USB:線なし"
-                         : !d.usb_mounted   ? "USB:列挙待ち"
-                         : !d.msc_open      ? "USB:列挙済/口まだ"
-                         :                    "USB:口OK";
+        const char* link = !d.usb_connected ? TR("USB:線なし")
+                         : !d.usb_mounted   ? TR("USB:列挙待ち")
+                         : !d.msc_open      ? TR("USB:列挙済/口まだ")
+                         :                    TR("USB:口OK");
         char buf[128];
-        snprintf(buf, sizeof(buf), "%s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu 他%lu(%02X) 誤%lu",
+        snprintf(buf, sizeof(buf), TR("%s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu 他%lu(%02X) 誤%lu"),
             link, d.ep_in, d.ep_out,
             (unsigned long)d.inquiry, (unsigned long)d.ready, (unsigned long)d.capacity,
             (unsigned long)d.other, d.last_other, (unsigned long)d.errors);
@@ -162,7 +163,7 @@ void UsbDriveScene::requestExit(){
     }
     //PCがまだ使っている。書きかけのまま取り戻すとPC側で壊れたファイルになりうる
     this->confirming = true;
-    auto* dialog = new MsgDialog("PCで「取り出し」をしてから終了してください。\nこのまま終了しますか?", "キャンセル", "終了");
+    auto* dialog = new MsgDialog(TR("PCで「取り出し」をしてから終了してください。\nこのまま終了しますか?"), TR("キャンセル"), TR("終了"));
     if(!dialog){ this->confirming = false; return; }
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);

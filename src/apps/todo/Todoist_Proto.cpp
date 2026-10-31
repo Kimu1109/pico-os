@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // 数字をちょうど n 桁読む
@@ -122,7 +123,7 @@ void Todoist::FormatDue(const Due& due, int32_t today_day, char* out, size_t out
     out[0] = '\0';
     if(!due.has) return;
 
-    static const char* const kWeek[7] = {"日", "月", "火", "水", "木", "金", "土"};
+    static const char* const kWeek[7] = {TR_NOOP("日"), TR_NOOP("月"), TR_NOOP("火"), TR_NOOP("水"), TR_NOOP("木"), TR_NOOP("金"), TR_NOOP("土")};
     int y, m, d;
     CivilFromDays(due.day, y, m, d);
 
@@ -133,10 +134,10 @@ void Todoist::FormatDue(const Due& due, int32_t today_day, char* out, size_t out
         const int32_t diff = due.day - today_day;
         int ty, tm, td;
         CivilFromDays(today_day, ty, tm, td);
-        if(diff == 0)       n = snprintf(out, out_size, "今日");
-        else if(diff == 1)  n = snprintf(out, out_size, "明日");
-        else if(diff == -1) n = snprintf(out, out_size, "昨日");
-        else if(y == ty)    n = snprintf(out, out_size, "%d/%d(%s)", m, d, kWeek[Weekday(due.day)]);
+        if(diff == 0)       n = snprintf(out, out_size, TR("今日"));
+        else if(diff == 1)  n = snprintf(out, out_size, TR("明日"));
+        else if(diff == -1) n = snprintf(out, out_size, TR("昨日"));
+        else if(y == ty)    n = snprintf(out, out_size, "%d/%d(%s)", m, d, I18nFunctions::Tr(kWeek[Weekday(due.day)]));
         else                n = snprintf(out, out_size, "%d/%d/%d", y, m, d);
     }
     if(n < 0 || (size_t)n >= out_size || !due.has_time) return;

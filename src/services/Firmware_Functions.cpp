@@ -14,6 +14,7 @@
 #include "storage/Flash_Area.hpp"
 #include "apps/music/Music_Service.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -86,7 +87,7 @@ namespace {
     bool NetLink::begin(FixedString<PICO_STR_LL>& err){
         if(listening_) return true;
         server_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
-        if(server_fd_ < 0){ err.assign("待ち受けを始められません"); return false; }
+        if(server_fd_ < 0){ err.assign(TR("待ち受けを始められません")); return false; }
         const int one = 1;
         ::setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
         sockaddr_in addr{};
@@ -96,7 +97,7 @@ namespace {
         if(::bind(server_fd_, (sockaddr*)&addr, sizeof(addr)) != 0 || ::listen(server_fd_, 1) != 0){
             ::close(server_fd_);
             server_fd_ = -1;
-            err.assign("待ち受けの番号(ポート)が使えません");
+            err.assign(TR("待ち受けの番号(ポート)が使えません"));
             return false;
         }
         ::fcntl(server_fd_, F_SETFL, ::fcntl(server_fd_, F_GETFL, 0) | O_NONBLOCK);
@@ -149,9 +150,9 @@ namespace {
 #elif !defined(PICOOS_PC)
     bool NetLink::begin(FixedString<PICO_STR_LL>& err){
         if(listening_) return true;
-        if(!NetworkFunctions::IsConnected()){ err.assign("Wi-Fiに繋がっていません"); return false; }
+        if(!NetworkFunctions::IsConnected()){ err.assign(TR("Wi-Fiに繋がっていません")); return false; }
         server_ = new WiFiServer(FirmwareFunctions::kPort);
-        if(!server_){ err.assign("メモリが足りません"); return false; }
+        if(!server_){ err.assign(TR("メモリが足りません")); return false; }
         server_->begin();
         listening_ = true;
         return true;
@@ -191,7 +192,7 @@ namespace {
     }
     bool NetLink::closed(){ return !client_ || (!client_.connected() && client_.available() <= 0); }
 #else // Web(生のソケットが無い)
-    bool NetLink::begin(FixedString<PICO_STR_LL>& err){ err.assign("Web版では受け取れません"); return false; }
+    bool NetLink::begin(FixedString<PICO_STR_LL>& err){ err.assign(TR("Web版では受け取れません")); return false; }
     void NetLink::end(){}
     bool NetLink::accept(){ return false; }
     void NetLink::drop(){}
@@ -300,15 +301,15 @@ void FirmwareFunctions::Setup(){
     if(serial == FwVersion::Serial() && strcmp(git, FwVersion::Git()) == 0){
         snprintf(body, sizeof(body), "#%lu (%s)", (unsigned long)serial, git);
         LOG_SYS_OK("ファームを %s に更新しました", body);
-        Notify("ファームを更新しました", body);
+        Notify(TR("ファームを更新しました"), body);
     }else{
 #if defined(PICOOS_PC)
-        snprintf(body, sizeof(body), "PCビルドは本体を書き換えません(#%lu %s)", (unsigned long)serial, git);
+        snprintf(body, sizeof(body), TR("PCビルドは本体を書き換えません(#%lu %s)"), (unsigned long)serial, git);
 #else
-        snprintf(body, sizeof(body), "今は %s のままです(#%lu %s を書けませんでした)", FwVersion::Text(), (unsigned long)serial, git);
+        snprintf(body, sizeof(body), TR("今は %s のままです(#%lu %s を書けませんでした)"), FwVersion::Text(), (unsigned long)serial, git);
 #endif
         LOG_SYS_WARN("ファームの更新: %s", body);
-        Notify("ファームを更新できませんでした", body);
+        Notify(TR("ファームを更新できませんでした"), body);
     }
 }
 
@@ -318,7 +319,7 @@ bool FirmwareFunctions::PowerOk(FixedString<PICO_STR_LL>& err){
     if(BatteryFunctions::HasSample() && !BatteryFunctions::IsExternallyPowered() &&
        BatteryFunctions::GetPercent() < kMinBatteryPercent){
         char text[96];
-        snprintf(text, sizeof(text), "電池の残りが少ないです(%d%%)。USBに繋ぐか充電してください", BatteryFunctions::GetPercent());
+        snprintf(text, sizeof(text), TR("電池の残りが少ないです(%d%%)。USBに繋ぐか充電してください"), BatteryFunctions::GetPercent());
         err.assign(text);
         return false;
     }
@@ -326,14 +327,14 @@ bool FirmwareFunctions::PowerOk(FixedString<PICO_STR_LL>& err){
 }
 
 bool FirmwareFunctions::StartFromSd(const char* path, FixedString<PICO_STR_LL>& err){
-    if(Busy() || reboot_pending){ err.assign("別の更新を進めています"); return false; }
-    if(!OSData::SD_usable){ err.assign("SDカードが使えません"); return false; }
+    if(Busy() || reboot_pending){ err.assign(TR("別の更新を進めています")); return false; }
+    if(!OSData::SD_usable){ err.assign(TR("SDカードが使えません")); return false; }
     if(!PowerOk(err)) return false;
-    if(!NewJob()){ err.assign("メモリが足りません"); return false; }
+    if(!NewJob()){ err.assign(TR("メモリが足りません")); return false; }
     job_is_net = false;
     if(!sd_source.open(path)){
         FreeJob();
-        err.assign("更新ファイルを開けません");
+        err.assign(TR("更新ファイルを開けません"));
         return false;
     }
     job->start(&sd_source, &DefaultFwStore(), MakeEnv(true));
@@ -353,11 +354,11 @@ const char* FirmwareFunctions::CurrentEnv(){
 }
 
 bool FirmwareFunctions::StartWebIndex(FixedString<PICO_STR_LL>& err){
-    if(Busy() || reboot_pending || WebBusy()){ err.assign("別の更新を進めています"); return false; }
-    if(!NetworkFunctions::IsConnected()){ err.assign("Wi-Fiに繋がっていません"); return false; }
+    if(Busy() || reboot_pending || WebBusy()){ err.assign(TR("別の更新を進めています")); return false; }
+    if(!NetworkFunctions::IsConnected()){ err.assign(TR("Wi-Fiに繋がっていません")); return false; }
     if(!web){
         web = new FwDownload();
-        if(!web){ err.assign("メモリが足りません"); return false; }
+        if(!web){ err.assign(TR("メモリが足りません")); return false; }
         if(OSData::SD_usable && OSData::SD.exists(PICO_Path::FILE::CFG::SYS_FIRMWARE_CFG)){
             PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_FIRMWARE_CFG, [](const char* key, const char* value){
                 if(strcmp(key, "url") == 0 && !web->setBaseUrl(value)){
@@ -370,7 +371,7 @@ bool FirmwareFunctions::StartWebIndex(FixedString<PICO_STR_LL>& err){
     filter.env = CurrentEnv();
     filter.allow_unsigned = AllowUnsigned();
     if(!web->beginIndex(filter)){
-        err.assign(web->message()[0] ? web->message() : "取得を始められません");
+        err.assign(web->message()[0] ? web->message() : TR("取得を始められません"));
         return false;
     }
     LOG_SYS_MSG("ファームの更新: %s%s を取ります", web->baseUrl(), FwIndex::kFileName);
@@ -378,8 +379,8 @@ bool FirmwareFunctions::StartWebIndex(FixedString<PICO_STR_LL>& err){
 }
 
 bool FirmwareFunctions::StartWebFile(int index, FixedString<PICO_STR_LL>& err){
-    if(!web || web->busy() || Busy() || reboot_pending){ err.assign("別の更新を進めています"); return false; }
-    if(!OSData::SD_usable){ err.assign("SDカードが使えません"); return false; }
+    if(!web || web->busy() || Busy() || reboot_pending){ err.assign(TR("別の更新を進めています")); return false; }
+    if(!OSData::SD_usable){ err.assign(TR("SDカードが使えません")); return false; }
     if(!PowerOk(err)) return false;
     // 前の更新の結果(失敗)は捨てる
     Dismiss();
@@ -390,7 +391,7 @@ bool FirmwareFunctions::StartWebFile(int index, FixedString<PICO_STR_LL>& err){
     const size_t n = strlen(dir_buf);
     if(n > 1 && dir_buf[n - 1] == '/') dir_buf[n - 1] = '\0';
     if(!web->beginFile(index, dir_buf)){
-        err.assign(web->message()[0] ? web->message() : "取得を始められません");
+        err.assign(web->message()[0] ? web->message() : TR("取得を始められません"));
         return false;
     }
     return true;
@@ -419,7 +420,7 @@ bool FirmwareFunctions::StartListening(FixedString<PICO_STR_LL>& err){
 }
 
 void FirmwareFunctions::StopListening(){
-    if(job && job_is_net && !job->finished()) job->cancel("待ち受けをやめました");
+    if(job && job_is_net && !job->finished()) job->cancel(TR("待ち受けをやめました"));
     if(job && job_is_net && job->state() != FwUpdate::State::Done) FreeJob();
     net.end();
 }

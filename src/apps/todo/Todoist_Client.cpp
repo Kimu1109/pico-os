@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // millis() の巻き戻り(約49日)を跨いでも正しく比べる
@@ -35,12 +36,12 @@ bool TodoistClient::configure(const char* token, const char* api){
     auth_.clear();
 
     if(!token || !*token){
-        setStatus(State::NotConfigured, "Todoistのトークンがありません。[設定] から入れてください");
+        setStatus(State::NotConfigured, TR("Todoistのトークンがありません。[設定] から入れてください"));
         return false;
     }
     if(!api || !*api) api = kDefaultApi;
     if(!UrlTools::Parse(api_, api)){
-        setStatus(State::NotConfigured, "todoist.cfg の api が URL ではありません");
+        setStatus(State::NotConfigured, TR("todoist.cfg の api が URL ではありません"));
         return false;
     }
     //末尾の / は落としておく(後ろへ "/api/v1/..." を足すため)
@@ -52,7 +53,7 @@ bool TodoistClient::configure(const char* token, const char* api){
     //ヘッダへそのまま入れるので、英数字と - _ 以外は受け付けない(Todoistのトークンは16進40文字)
     const size_t n = strlen(token);
     if(n > kMaxTokenBytes){
-        setStatus(State::NotConfigured, "トークンが長すぎます");
+        setStatus(State::NotConfigured, TR("トークンが長すぎます"));
         return false;
     }
     for(const char* p = token; *p; p++){
@@ -60,13 +61,13 @@ bool TodoistClient::configure(const char* token, const char* api){
         const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
                      || c == '-' || c == '_';
         if(!ok){
-            setStatus(State::NotConfigured, "トークンに使えない文字があります");
+            setStatus(State::NotConfigured, TR("トークンに使えない文字があります"));
             return false;
         }
     }
     if(!auth_.assign("Authorization: Bearer ") || !auth_.append(token)
        || !req_.setExtraHeader(auth_.c_str())){
-        setStatus(State::NotConfigured, "トークンが長すぎます");
+        setStatus(State::NotConfigured, TR("トークンが長すぎます"));
         return false;
     }
 
@@ -93,7 +94,7 @@ const TodoistClient::Filter& TodoistClient::filterFor(View v) const {
 
 bool TodoistClient::loadConfig(){
     if(!OSData::SD_usable){
-        setStatus(State::NotConfigured, "SDカードがありません");
+        setStatus(State::NotConfigured, TR("SDカードがありません"));
         configured_ = false;
         return false;
     }
@@ -126,7 +127,7 @@ bool TodoistClient::loadConfig(){
             }
         });
     if(!opened){
-        setStatus(State::NotConfigured, "Todoistのトークンがありません。[設定] から入れてください");
+        setStatus(State::NotConfigured, TR("Todoistのトークンがありません。[設定] から入れてください"));
         configured_ = false;
         return false;
     }
@@ -238,7 +239,7 @@ bool TodoistClient::begin(Kind kind, HttpRequest::Method method, const char* pat
     Url url = api_;
     url.query.clear();
     if(!url.path.append(path) || (query && !url.query.assign(query))){
-        failLater("URLが長すぎます");
+        failLater(TR("URLが長すぎます"));
         return false;
     }
 
@@ -267,7 +268,7 @@ bool TodoistClient::beginList(){
         FixedString<PICO_STR_256B> enc;
         if(!UrlTools::EncodeComponent(enc, filterFor(req_view_).c_str())
            || !query.append("query=") || !query.append(enc) || !query.append("&")){
-            failLater("フィルタが長すぎます");
+            failLater(TR("フィルタが長すぎます"));
             return false;
         }
     }
@@ -275,7 +276,7 @@ bool TodoistClient::beginList(){
     if(!cursor_.empty()){
         FixedString<PICO_STR_256B> enc;
         if(!UrlTools::EncodeComponent(enc, cursor_.c_str()) || !query.append("&cursor=") || !query.append(enc)){
-            failLater("URLが長すぎます");
+            failLater(TR("URLが長すぎます"));
             return false;
         }
     }
@@ -290,7 +291,7 @@ void TodoistClient::beginAction(){
         char path[64];
         snprintf(path, sizeof(path), "/api/v1/tasks/%s/close", close_id_.c_str());
         begin(Kind::Close, HttpRequest::Method::POST, path, nullptr);
-        if(kind_ == Kind::None) finishAction(Kind::Close, false, "URLが長すぎます");
+        if(kind_ == Kind::None) finishAction(Kind::Close, false, TR("URLが長すぎます"));
         return;
     }
     if(a != Action::Add) return;
@@ -305,11 +306,11 @@ void TodoistClient::beginAction(){
     }
     ok = ok && body_.append("}");
     if(!ok){
-        finishAction(Kind::Add, false, "タスクの名前が長すぎます");
+        finishAction(Kind::Add, false, TR("タスクの名前が長すぎます"));
         return;
     }
     begin(Kind::Add, HttpRequest::Method::POST, "/api/v1/tasks", nullptr, body_.c_str(), body_.length());
-    if(kind_ == Kind::None) finishAction(Kind::Add, false, "URLが長すぎます");
+    if(kind_ == Kind::None) finishAction(Kind::Add, false, TR("URLが長すぎます"));
 }
 
 bool TodoistClient::write(const void* data, size_t len){
@@ -346,8 +347,8 @@ void TodoistClient::finishAction(Kind kind, bool ok, const char* why){
 
 void TodoistClient::finishList(){
     if(!parse_ok_ || !parser_.complete()){
-        FixedString<PICO_STR_LL> why("応答を読めませんでした: ");
-        why.append(parse_ok_ ? "途中で終わっています" : parser_.error());
+        FixedString<PICO_STR_LL> why(TR("応答を読めませんでした: "));
+        why.append(parse_ok_ ? TR("途中で終わっています") : parser_.error());
         LOG_APP_WARN("Todoist: %s", why.c_str());
         failLater(why.c_str());
         return;
@@ -396,7 +397,7 @@ void TodoistClient::finish(){
     const bool is_action = (kind == Kind::Add || kind == Kind::Close);
 
     if(req_.getStatus() != TaskTools::SUCCESS){
-        FixedString<PICO_STR_LL> why("通信に失敗: ");
+        FixedString<PICO_STR_LL> why(TR("通信に失敗: "));
         why.append(req_.failureToStr());
         LOG_APP_WARN("Todoist: %s", why.c_str());
         //利用者の操作は勝手にやり直さない(押し直してもらう)
@@ -409,7 +410,7 @@ void TodoistClient::finish(){
     if(code < 200 || code >= 300){
         FixedString<PICO_STR_LL> why;
         if(*err_.message()) why.appendFormat("%s (HTTP %d)", err_.message(), code);
-        else why.appendFormat("サーバの応答が %d です", code);
+        else why.appendFormat(TR("サーバの応答が %d です"), code);
         LOG_APP_WARN("Todoist: HTTP %d %s", code, why.c_str());
 
         if(code == 401 || code == 403){
@@ -418,8 +419,8 @@ void TodoistClient::finish(){
             pending_ = Action::None;
             page_ = 0;
             cursor_.clear();
-            if(is_action) finishAction(kind, false, "トークンが違います");
-            setStatus(State::AuthError, "トークンが違います。[設定] から入れ直してください");
+            if(is_action) finishAction(kind, false, TR("トークンが違います"));
+            setStatus(State::AuthError, TR("トークンが違います。[設定] から入れ直してください"));
             return;
         }
         if(is_action){
@@ -472,7 +473,7 @@ void TodoistClient::update(bool network_up){
         if(state_ != State::Offline) req_.closeConnection();
         page_ = 0;
         cursor_.clear();
-        setStatus(State::Offline, "Wi-Fiに接続していません");
+        setStatus(State::Offline, TR("Wi-Fiに接続していません"));
         return;
     }
     if(state_ == State::Offline){

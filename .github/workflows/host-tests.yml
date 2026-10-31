@@ -89,3 +89,5 @@ jobs:
         run: python3 script/check_layers.py
       - name: 同梱のLuaモジュールの生成物が .lua と一致しているか
         run: python3 script/gen_lua_builtins.py --check
+      - name: 表示の訳(i18n/*.po と I18n_Table_*.cpp)が src/ の TR() と一致しているか
+        run: python3 script/i18n.py --check

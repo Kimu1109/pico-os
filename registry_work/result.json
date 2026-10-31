@@ -1,0 +1,12 @@
+{
+ "ok": true,
+ "errors": [],
+ "automerge": true,
+ "reasons": [],
+ "changed": [
+  "apps/tetris/app/app.cfg",
+  "apps/tetris/app/lang/en.lua",
+  "apps/tetris/files.sig",
+  "apps/tetris/files.tsv"
+ ]
+}

@@ -29,6 +29,7 @@
 #include "services/PowerMenu_Functions.hpp"
 #include "services/App_Functions.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
+#include "system/I18n_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -42,7 +43,7 @@ namespace {
 
     // スリープまでの時間(秒、0=無効)と表示名。最後の操作からの通算(自動調光の30秒より後ろの値を選ぶ)
     constexpr unsigned long kSleepPresetsSec[] = { 0, 60, 120, 300, 600, 1800 };
-    constexpr const char*   kSleepPresetLabels[] = { "しない", "1分", "2分", "5分", "10分", "30分" };
+    constexpr const char*   kSleepPresetLabels[] = { TR_NOOP("しない"), TR_NOOP("1分"), TR_NOOP("2分"), TR_NOOP("5分"), TR_NOOP("10分"), TR_NOOP("30分") };
     constexpr int kSleepPresetCount = sizeof(kSleepPresetsSec) / sizeof(kSleepPresetsSec[0]);
 
     // 音の周波数(sound.cfgの sample-rate)。44.1kHzはライン出力のDAC(PCM5102A等)向けで、2コア目の計算が倍になる
@@ -82,17 +83,17 @@ void SettingsScene::refreshWifi(){
             case NS::SUCCESS: {
                 using IN = NetworkFunctions::Internet;
                 // 状態を前に置く(SSIDが長いと後ろは切れるため)
-                const char* head = (internet == IN::Portal) ? "要ログイン"
-                                 : (internet == IN::NoInternet) ? "外へ出られません" : "接続中";
+                const char* head = (internet == IN::Portal) ? TR("要ログイン")
+                                 : (internet == IN::NoInternet) ? TR("外へ出られません") : TR("接続中");
                 snprintf(buf, sizeof(buf), "%s: %s", head, this->shown_ssid.c_str());
                 break;
             }
             case NS::TRYING_CONNECT:
-                snprintf(buf, sizeof(buf), "接続しています: %s", this->shown_ssid.c_str());
+                snprintf(buf, sizeof(buf), TR("接続しています: %s"), this->shown_ssid.c_str());
                 break;
             default:
                 snprintf(buf, sizeof(buf), "%s",
-                    WifiProfiles::Count() > 0 ? "未接続(自動で再接続します)" : "未接続");
+                    WifiProfiles::Count() > 0 ? TR("未接続(自動で再接続します)") : TR("未接続"));
                 break;
         }
         this->wifi_status_label->setText(buf);
@@ -127,14 +128,14 @@ void SettingsScene::rebuildWifiList(){
         ScrollListTools::Item item;
         item.icon = p->password.empty() ? IconID::WifiSignal4 : IconID::Lock;
         item.text.assign(p->ssid.c_str());
-        if(p->ip.static_ip) item.text.append(" [固定IP]");
+        if(p->ip.static_ip) item.text.append(TR(" [固定IP]"));
         else if(!p->ip.isDefault()) item.text.append(" [DNS]");
         if(p->ssid == NetworkFunctions::currentSSID.c_str()){
             if(status == NetworkFunctions::NetStatus::SUCCESS){
-                item.text.append(" (接続中)");
+                item.text.append(TR(" (接続中)"));
                 item.color = PICO_DARKGREEN;
             }else if(status == NetworkFunctions::NetStatus::TRYING_CONNECT){
-                item.text.append(" (接続しています)");
+                item.text.append(TR(" (接続しています)"));
             }
         }
         this->wifi_list->add(item);
@@ -146,7 +147,7 @@ void SettingsScene::rebuildWifiList(){
     char title[PICO_STR_M];
     // [ログイン]が出ている間は見出しを短くする(右端にボタンが重なるため)
     const bool login_shown = this->wifi_login_button && this->wifi_login_button->getVisible();
-    snprintf(title, sizeof(title), login_shown ? "保存済み %d/%d" : "保存済み %d/%d (2回タップで接続)",
+    snprintf(title, sizeof(title), login_shown ? TR("保存済み %d/%d") : TR("保存済み %d/%d (2回タップで接続)"),
              WifiProfiles::Count(), WifiProfiles::kMaxProfiles);
     if(this->wifi_list_title) this->wifi_list_title->setText(title);
     this->wifi_list->needsRender();
@@ -159,7 +160,7 @@ void SettingsScene::refreshWifiInfo(){
     char buf[PICO_STR_L];
     // 2行: 本体の名前(mDNS)と今のIPアドレス(1行だと固定IPの長いアドレスが入りきらない)
     if(ip[0]) snprintf(buf, sizeof(buf), "%s.local\n%s", NetworkFunctions::hostname.c_str(), ip);
-    else      snprintf(buf, sizeof(buf), "%s.local\n(IP無し)", NetworkFunctions::hostname.c_str());
+    else      snprintf(buf, sizeof(buf), TR("%s.local\n(IP無し)"), NetworkFunctions::hostname.c_str());
     this->wifi_info_label->setText(buf);
 }
 
@@ -172,7 +173,7 @@ int SettingsScene::selectedProfile(){
 void SettingsScene::connectSelected(){
     const int idx = this->selectedProfile();
     if(idx < 0){
-        this->showMessageLater("接続するネットワークを一覧から選んでください");
+        this->showMessageLater(TR("接続するネットワークを一覧から選んでください"));
         return;
     }
     NetworkFunctions::ConnectProfile(idx);
@@ -183,13 +184,13 @@ void SettingsScene::confirmRemoveSelected(){
     const int idx = this->selectedProfile();
     const WifiProfiles::Profile* p = WifiProfiles::At(idx);
     if(!p){
-        this->showMessageLater("削除するネットワークを一覧から選んでください");
+        this->showMessageLater(TR("削除するネットワークを一覧から選んでください"));
         return;
     }
 
     char msg[PICO_STR_LL];
-    snprintf(msg, sizeof(msg), "「%s」を削除しますか?", p->ssid.c_str());
-    auto* dialog = new MsgDialog(msg, "やめる", "削除");
+    snprintf(msg, sizeof(msg), TR("「%s」を削除しますか?"), p->ssid.c_str());
+    auto* dialog = new MsgDialog(msg, TR("やめる"), TR("削除"));
     dialog->setVisibleIcon(false);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -217,7 +218,7 @@ void SettingsScene::openIpAddressDialog(){
     const int idx = this->selectedProfile();
     const WifiProfiles::Profile* p = WifiProfiles::At(idx);
     if(!p){
-        this->showMessageLater("IPを設定するネットワークを一覧から選んでください");
+        this->showMessageLater(TR("IPを設定するネットワークを一覧から選んでください"));
         return;
     }
     this->pending_ip_ssid.assign(p->ssid.c_str());
@@ -230,7 +231,7 @@ void SettingsScene::openIpAddressDialog(){
         snprintf(prefill, sizeof(prefill), "%s/%d", a, NetAddr::MaskToPrefix(p->ip.mask));
     }
     char label[PICO_STR_LL];
-    snprintf(label, sizeof(label), "「%s」の固定IP(例 192.168.1.50/24。空欄でDHCP):", p->ssid.c_str());
+    snprintf(label, sizeof(label), TR("「%s」の固定IP(例 192.168.1.50/24。空欄でDHCP):"), p->ssid.c_str());
     auto* dialog = new InputDialog(label, true);
     dialog->setAsciiInput(true);
     WidgetFunctions::AddDialog(dialog);
@@ -258,7 +259,7 @@ void SettingsScene::openIpAddressDialog(){
                 this->pending_ip.mask = mask;
                 this->pending = Pending::IpGateway;
             }else{
-                this->showMessageLater("IPアドレスは「192.168.1.50/24」の形で入れてください");
+                this->showMessageLater(TR("IPアドレスは「192.168.1.50/24」の形で入れてください"));
             }
         }
         WidgetFunctions::DestroyLater(dialog);
@@ -268,7 +269,7 @@ void SettingsScene::openIpAddressDialog(){
 void SettingsScene::openIpGatewayDialog(){
     char prefill[16] = "";
     if(this->pending_ip.gateway) NetAddr::Format(this->pending_ip.gateway, prefill, sizeof(prefill));
-    auto* dialog = new InputDialog("ゲートウェイ(ルーター)のIP(空欄で無し):", true);
+    auto* dialog = new InputDialog(TR("ゲートウェイ(ルーター)のIP(空欄で無し):"), true);
     dialog->setAsciiInput(true);
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(prefill);
@@ -283,7 +284,7 @@ void SettingsScene::openIpGatewayDialog(){
                 this->pending_ip.gateway = (n == 0) ? 0 : gw[0];
                 this->pending = Pending::IpDns;
             }else{
-                this->showMessageLater("ゲートウェイはIPアドレスと同じサブネットのアドレスにしてください");
+                this->showMessageLater(TR("ゲートウェイはIPアドレスと同じサブネットのアドレスにしてください"));
             }
         }
         WidgetFunctions::DestroyLater(dialog);
@@ -303,8 +304,8 @@ void SettingsScene::openIpDnsDialog(){
         }
     }
     auto* dialog = new InputDialog(this->pending_ip.static_ip
-        ? "DNS(カンマ区切りで2つまで。空欄でゲートウェイ):"
-        : "DNS(カンマ区切りで2つまで。空欄で自動):", true);
+        ? TR("DNS(カンマ区切りで2つまで。空欄でゲートウェイ):")
+        : TR("DNS(カンマ区切りで2つまで。空欄で自動):"), true);
     dialog->setAsciiInput(true);
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(prefill);
@@ -319,7 +320,7 @@ void SettingsScene::openIpDnsDialog(){
                 for(int i = 0; i < WifiProfiles::kMaxDns; i++) this->pending_ip.dns[i] = list[i];
                 this->commitIpConfig();
             }else{
-                this->showMessageLater("DNSは「1.1.1.1,8.8.8.8」のように2つまで入れてください");
+                this->showMessageLater(TR("DNSは「1.1.1.1,8.8.8.8」のように2つまで入れてください"));
             }
         }
         WidgetFunctions::DestroyLater(dialog);
@@ -329,16 +330,16 @@ void SettingsScene::openIpDnsDialog(){
 void SettingsScene::commitIpConfig(){
     const int idx = WifiProfiles::Find(this->pending_ip_ssid.c_str());
     if(idx < 0){
-        this->showMessageLater("ネットワークが削除されたので保存しませんでした");
+        this->showMessageLater(TR("ネットワークが削除されたので保存しませんでした"));
         return;
     }
     if(!WifiProfiles::SetIpConfig(idx, this->pending_ip)){
-        this->showMessageLater("IPの設定を保存できませんでした");
+        this->showMessageLater(TR("IPの設定を保存できませんでした"));
         return;
     }
     NetworkFunctions::ReapplyIpConfig(this->pending_ip_ssid.c_str()); // 繋いでいるなら繋ぎ直して反映
     this->wifi_list_dirty = true;
-    this->showMessageLater(this->pending_ip.isDefault() ? "DHCPに戻しました" : "IPの設定を保存しました");
+    this->showMessageLater(this->pending_ip.isDefault() ? TR("DHCPに戻しました") : TR("IPの設定を保存しました"));
 }
 
 // ---------------------------------------------------------------------------
@@ -348,12 +349,12 @@ void SettingsScene::commitIpConfig(){
 void SettingsScene::startCaptiveLogin(){
     if(this->captive_login) return;
     if(NetworkFunctions::internet != NetworkFunctions::Internet::Portal || NetworkFunctions::portalUrl.empty()){
-        this->showMessageLater("ログインの要るネットワークではありません");
+        this->showMessageLater(TR("ログインの要るネットワークではありません"));
         return;
     }
     this->captive_login = new CaptivePortal::CaptiveLogin();
     this->captive_login->begin(NetworkFunctions::portalUrl.c_str());
-    if(this->wifi_status_label) this->wifi_status_label->setText("ポータルのページを読んでいます...");
+    if(this->wifi_status_label) this->wifi_status_label->setText(TR("ポータルのページを読んでいます..."));
 }
 
 void SettingsScene::endCaptiveLogin(){
@@ -381,11 +382,11 @@ void SettingsScene::pollCaptiveLogin(){
         case Phase::Done:
             this->endCaptiveLogin();
             NetworkFunctions::RecheckInternet();
-            this->showMessageLater("送信しました。インターネットへ出られるか確かめています");
+            this->showMessageLater(TR("送信しました。インターネットへ出られるか確かめています"));
             break;
         case Phase::Failed: {
             char msg[PICO_STR_LL];
-            snprintf(msg, sizeof(msg), "ログインできませんでした: %s", this->captive_login->failText());
+            snprintf(msg, sizeof(msg), TR("ログインできませんでした: %s"), this->captive_login->failText());
             this->endCaptiveLogin();
             this->showMessageLater(msg);
             break;
@@ -401,9 +402,9 @@ void SettingsScene::openCaptiveInputDialog(){
     if(idx < 0){ this->submitCaptiveLogin(); return; }
     const CaptivePortal::Field& f = this->captive_login->form().fields[idx];
     char label[PICO_STR_LL];
-    snprintf(label, sizeof(label), "ポータルの入力: %s%s", f.label.c_str(),
-             f.kind == CaptivePortal::FieldKind::Password ? "(パスワード)" : "");
-    auto* dialog = new InputDialog(label, true, "次へ", "やめる");
+    snprintf(label, sizeof(label), TR("ポータルの入力: %s%s"), f.label.c_str(),
+             f.kind == CaptivePortal::FieldKind::Password ? TR("(パスワード)") : "");
+    auto* dialog = new InputDialog(label, true, TR("次へ"), TR("やめる"));
     dialog->setAsciiInput(true);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -422,8 +423,8 @@ void SettingsScene::openCaptiveInputDialog(){
 
 void SettingsScene::confirmCaptiveSubmit(){
     char msg[PICO_STR_LL];
-    snprintf(msg, sizeof(msg), "「%s」のポータルの利用規約に同意して接続しますか?", NetworkFunctions::currentSSID.c_str());
-    auto* dialog = new MsgDialog(msg, "やめる", "同意する");
+    snprintf(msg, sizeof(msg), TR("「%s」のポータルの利用規約に同意して接続しますか?"), NetworkFunctions::currentSSID.c_str());
+    auto* dialog = new MsgDialog(msg, TR("やめる"), TR("同意する"));
     dialog->setVisibleIcon(false);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -437,7 +438,7 @@ void SettingsScene::confirmCaptiveSubmit(){
 void SettingsScene::submitCaptiveLogin(){
     if(!this->captive_login) return;
     if(!this->captive_login->submit()) return; // 失敗はpollCaptiveLogin()がFailedで拾う
-    if(this->wifi_status_label) this->wifi_status_label->setText("ポータルへ送っています...");
+    if(this->wifi_status_label) this->wifi_status_label->setText(TR("ポータルへ送っています..."));
 }
 
 void SettingsScene::showMessageLater(const char* text){
@@ -446,7 +447,7 @@ void SettingsScene::showMessageLater(const char* text){
 }
 
 void SettingsScene::openMessage(){
-    auto* dialog = new MsgDialog(this->pending_message.c_str(), "閉じる", "OK");
+    auto* dialog = new MsgDialog(this->pending_message.c_str(), TR("閉じる"), "OK");
     dialog->setVisibleIcon(false);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -461,7 +462,7 @@ void SettingsScene::startWifiScan(){
     if(this->wifi_scan_task) return; //既にスキャン中なら何もしない(再スキャンの二重起動防止)
     if(this->wifi_scan_dialog){
         this->wifi_scan_dialog->clearResults();
-        this->wifi_scan_dialog->setMessage("スキャン中...");
+        this->wifi_scan_dialog->setMessage(TR("スキャン中..."));
     }
     this->wifi_scan_task = NetworkFunctions::ScanAsync();
 }
@@ -486,13 +487,13 @@ void SettingsScene::pollWifiScan(){
             }
             char buf[32];
             if(count == 0){
-                this->wifi_scan_dialog->setMessage("見つかりませんでした");
+                this->wifi_scan_dialog->setMessage(TR("見つかりませんでした"));
             }else{
-                snprintf(buf, sizeof(buf), "%d件見つかりました", count);
+                snprintf(buf, sizeof(buf), TR("%d件見つかりました"), count);
                 this->wifi_scan_dialog->setMessage(buf);
             }
         }else{
-            this->wifi_scan_dialog->setMessage("スキャンに失敗しました");
+            this->wifi_scan_dialog->setMessage(TR("スキャンに失敗しました"));
         }
     }
 
@@ -502,7 +503,7 @@ void SettingsScene::pollWifiScan(){
 
 void SettingsScene::openWifiScanDialog(){
     if(!NetworkFunctions::IsEnabled()){
-        this->showMessageLater("Wi-FiがOFFです。ONにしてから検索してください");
+        this->showMessageLater(TR("Wi-FiがOFFです。ONにしてから検索してください"));
         return;
     }
     // SearchDialog(MarkdownScene)と同じく開くたびにnewし、閉じたらDestroyLater()する
@@ -549,7 +550,7 @@ void SettingsScene::openWifiPasswordDialog(){
     // ラベル文字列(日本語)+SSID(最大32B)を余裕を持って収める。
     // 表示側はどのみちInputDialogのLabel<PICO_STR_L>(96B)で切り詰まる
     char label[PICO_STR_LL];
-    snprintf(label, sizeof(label), "「%s」のパスワード(不要なら空欄のまま決定):",
+    snprintf(label, sizeof(label), TR("「%s」のパスワード(不要なら空欄のまま決定):"),
               this->pending_wifi_ssid.c_str());
 
     auto* dialog = new InputDialog(label, true);
@@ -571,13 +572,13 @@ void SettingsScene::saveAndConnect(const char* ssid, const char* password){
             break;
         case WifiProfiles::PutResult::Full: {
             char msg[PICO_STR_L];
-            snprintf(msg, sizeof(msg), "保存できるのは%d件までです。不要なものを削除してください",
+            snprintf(msg, sizeof(msg), TR("保存できるのは%d件までです。不要なものを削除してください"),
                 WifiProfiles::kMaxProfiles);
             this->showMessageLater(msg);
             return;
         }
         case WifiProfiles::PutResult::Invalid:
-            this->showMessageLater("SSIDかパスワードが長すぎます(パスワードは64文字まで)");
+            this->showMessageLater(TR("SSIDかパスワードが長すぎます(パスワードは64文字まで)"));
             return;
     }
 
@@ -622,7 +623,7 @@ void SettingsScene::buildWifiTab(const Layout& lay){
     addToTab(Tab::Wifi, this->wifi_list_title);
 
     // ポータルと判定されたときだけ見出しの右端に出す[ログイン]
-    this->wifi_login_button = new Button(0, 0, "ログイン");
+    this->wifi_login_button = new Button(0, 0, TR("ログイン"));
     this->wifi_login_button->setFontSize(FontFn::Small);
     this->wifi_login_button->setAllowTextSpacing(false);
     this->wifi_login_button->setH(EDIT_BTN_H + Button::kFrameExtraTight);
@@ -653,7 +654,7 @@ void SettingsScene::buildWifiTab(const Layout& lay){
         &this->wifi_scan_button, &this->wifi_add_button, &this->wifi_connect_button, &this->wifi_ip_button,
         &this->wifi_remove_button
     };
-    const char* button_texts[kWifiButtons] = { "検索", "追加", "接続", "IP", "削除" };
+    const char* button_texts[kWifiButtons] = { TR("検索"), TR("追加"), TR("接続"), "IP", TR("削除") };
     for(int i = 0; i < kWifiButtons; i++){
         Button* b = new Button(0, 0, button_texts[i]);
         b->setFontSize(FontFn::Small);
@@ -667,14 +668,14 @@ void SettingsScene::buildWifiTab(const Layout& lay){
     }
     this->wifi_scan_button->setOnPressEnd([this](){ this->openWifiScanDialog(); });
     this->wifi_add_button->setOnPressEnd([this](){
-        this->openEditDialog(EditField::WifiSsid, "追加するWi-FiのSSID", "");
+        this->openEditDialog(EditField::WifiSsid, TR("追加するWi-FiのSSID"), "");
     });
     this->wifi_connect_button->setOnPressEnd([this](){ this->connectSelected(); });
     this->wifi_remove_button->setOnPressEnd([this](){ this->confirmRemoveSelected(); });
     this->wifi_ip_button->setOnPressEnd([this](){ this->openIpAddressDialog(); });
 
     // ボタンの上の1行: 「picoos.local  192.168.1.50」と、名前の[名前]ボタン
-    this->wifi_name_button = new Button(0, 0, "名前");
+    this->wifi_name_button = new Button(0, 0, TR("名前"));
     this->wifi_name_button->setFontSize(FontFn::Small);
     this->wifi_name_button->setAllowTextSpacing(false);
     this->wifi_name_button->setW(EDIT_BTN_W + Button::kFrameExtraTight);
@@ -683,13 +684,13 @@ void SettingsScene::buildWifiTab(const Layout& lay){
     this->wifi_name_button->setX((int16_t)(left + full_w - name_box.w));
     this->wifi_name_button->setY((int16_t)(info_y + (info_line_h * 2 - name_box.h) / 2));
     this->wifi_name_button->setOnPressEnd([this](){
-        this->openEditDialog(EditField::Hostname, "本体の名前(<名前>.local で見つかる。英数字とハイフン)",
+        this->openEditDialog(EditField::Hostname, TR("本体の名前(<名前>.local で見つかる。英数字とハイフン)"),
                              NetworkFunctions::hostname.c_str());
     });
     addToTab(Tab::Wifi, this->wifi_name_button);
 
     // [スマホ]: 本体をアクセスポイントにして、スマホから繋ぎ先を送ってもらう(WifiSetupScene)
-    Button* phone_button = new Button(0, 0, "スマホ");
+    Button* phone_button = new Button(0, 0, TR("スマホ"));
     phone_button->setFontSize(FontFn::Small);
     phone_button->setAllowTextSpacing(false);
     phone_button->setW(EDIT_BTN_W + Button::kFrameExtraTight);

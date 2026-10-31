@@ -13,6 +13,8 @@
 // 何もしないこと: SD無しの間はScan()が0を返しクラッシュしないこと、
 // SD使用可能でもディレクトリ自体が無ければ同じく0を返すこと。
 #include "lua/LuaAppScanner.hpp"
+#include "system/I18n_Functions.hpp"
+#include <cstring>
 #include "services/App_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"
@@ -62,6 +64,23 @@ int main(){
     const int found_no_dir = LuaAppScanner::Scan();
     check(found_no_dir == 0, "Scan(): \"/lua/apps/\"が無ければ0件(クラッシュしない)");
     check(AppFunctions::Count() == 0, "Scan(): ディレクトリが無い間は登録簿も増えない");
+
+    // app.cfg の name_en: 英語のときだけランチャ等で見せる名前。登録名(name)は言語で変えない
+    HostSd::files["/lua/apps/tet/main.lua"] = "";
+    HostSd::files["/lua/apps/tet/app.cfg"] = "name = テトリス\nname_en = Tetris\nname_xx = ignored\n";
+    check(LuaAppScanner::RegisterOrRefresh("/lua/apps/tet"), "name_en: 登録できる");
+    const int ti = AppFunctions::FindByArg("/lua/apps/tet/main.lua");
+    const AppEntry* te = AppFunctions::Get(ti);
+    check(te && te->name == "テトリス", "name_en: 登録名は name のまま");
+    I18nFunctions::current_lang = I18nFunctions::Lang::Ja;
+    check(te && strcmp(AppFunctions::DisplayName(*te), "テトリス") == 0, "name_en: 日本語では name");
+    I18nFunctions::current_lang = I18nFunctions::Lang::En;
+    check(te && strcmp(AppFunctions::DisplayName(*te), "Tetris") == 0, "name_en: 英語では name_en");
+    //name_en を消して読み直すと、英語でも name に戻る
+    HostSd::files["/lua/apps/tet/app.cfg"] = "name = テトリス\n";
+    check(LuaAppScanner::RegisterOrRefresh("/lua/apps/tet"), "name_en: 読み直せる");
+    check(te && strcmp(AppFunctions::DisplayName(*te), "テトリス") == 0, "name_en: 消したら name に戻る");
+    I18nFunctions::current_lang = I18nFunctions::Lang::Ja;
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);
     return failures == 0 ? 0 : 1;

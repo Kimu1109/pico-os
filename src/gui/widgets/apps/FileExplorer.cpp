@@ -5,6 +5,7 @@
 #include "gui/core/Widget_Functions.hpp"
 #include "OS_Data.hpp"
 #include "storage/SD_IO.hpp"
+#include "system/I18n_Functions.hpp"
 
 void FileExplorer::update_list(){
     if(!OSData::SD_usable) return;
@@ -42,7 +43,7 @@ void FileExplorer::on_press_back(){
     this->update_list();
 }
 void FileExplorer::on_press_create(){
-    auto folder_create = new InputDialog("新しくフォルダを作成\n名前:", true);
+    auto folder_create = new InputDialog(TR("新しくフォルダを作成\n名前:"), true);
     WidgetFunctions::AddDialog(folder_create);
     folder_create->setVisible(true);
     folder_create->setOnClosed([this, folder_create](bool is_submit){
@@ -58,7 +59,7 @@ void FileExplorer::on_press_create(){
 void FileExplorer::on_press_delete(){
     auto item = this->list->itemAt(this->list->getSelectedIndex());
     if(item){
-        auto sure_dialog = new MsgDialog("本当に削除しますか?", "いいえ", "はい");
+        auto sure_dialog = new MsgDialog(TR("本当に削除しますか?"), TR("いいえ"), TR("はい"));
         WidgetFunctions::AddDialog(sure_dialog);
         sure_dialog->setVisible(true);
         sure_dialog->setOnClosed([this, sure_dialog, item](bool is_ok){

@@ -7,8 +7,9 @@
 #include "system/Time_Functions.hpp"
 
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
-static const char* const WDAY_JP[7] = { "日", "月", "火", "水", "木", "金", "土" };
+static const char* const WDAY_JP[7] = { TR_NOOP("日"), TR_NOOP("月"), TR_NOOP("火"), TR_NOOP("水"), TR_NOOP("木"), TR_NOOP("金"), TR_NOOP("土") };
 
 // 操作ボタン(開始/リセット)1つぶんの文字領域の幅。
 // 「一時停止」(16px x 4文字)が収まる大きさにしてあり、押すたびに文字が変わっても
@@ -71,8 +72,8 @@ void ClocksScene::applyVisibility(){
 void ClocksScene::applyFeature(){
     if(this->title_label && this->feature != Feature::Clock){
         this->title_label->setText(
-            (this->feature == Feature::Timer)     ? "タイマー" :
-            (this->feature == Feature::Stopwatch) ? "ストップウォッチ" : "アラーム"
+            (this->feature == Feature::Timer)     ? TR("タイマー") :
+            (this->feature == Feature::Stopwatch) ? TR("ストップウォッチ") : TR("アラーム")
         );
     }
 
@@ -128,8 +129,8 @@ void ClocksScene::refresh_time(){
         char buf[PICO_STR_M];
         this->before_mday = t.tm_mday;
         const int wday = (t.tm_wday >= 0 && t.tm_wday < 7) ? t.tm_wday : 0;
-        snprintf(buf, sizeof(buf), "%d月%d日(%s)",
-                 t.tm_mon + 1, t.tm_mday, WDAY_JP[wday]);
+        snprintf(buf, sizeof(buf), TR("%d月%d日(%s)"),
+                 t.tm_mon + 1, t.tm_mday, I18nFunctions::Tr(WDAY_JP[wday]));
         this->date_label->setText(buf);
     }
 }
@@ -156,26 +157,26 @@ void ClocksScene::refreshTimerDigits(){
 void ClocksScene::refreshTimerControls(){
     if(this->feature != Feature::Timer) return;
 
-    const char* start_text = "開始";
-    const char* status_text = "▲▼で時間を設定";
+    const char* start_text = TR("開始");
+    const char* status_text = TR("▲▼で時間を設定");
 
     switch(TimerFunctions::TimerState()){
         case TimerFunctions::State::Running:
-            start_text  = "一時停止";
-            status_text = "カウントダウン中";
+            start_text  = TR("一時停止");
+            status_text = TR("カウントダウン中");
             break;
         case TimerFunctions::State::Paused:
-            start_text  = "再開";
-            status_text = "一時停止中";
+            start_text  = TR("再開");
+            status_text = TR("一時停止中");
             break;
         case TimerFunctions::State::Finished:
-            start_text  = "開始";
-            status_text = "時間になりました";
+            start_text  = TR("開始");
+            status_text = TR("時間になりました");
             break;
         case TimerFunctions::State::Idle:
         default:
-            if(TimerFunctions::TimerSetMs() == 0) status_text = "▲▼で時間を設定";
-            else                                  status_text = "開始を押すとカウントダウン";
+            if(TimerFunctions::TimerSetMs() == 0) status_text = TR("▲▼で時間を設定");
+            else                                  status_text = TR("開始を押すとカウントダウン");
             break;
     }
 
@@ -251,19 +252,19 @@ void ClocksScene::refreshStopwatchDigits(){
 void ClocksScene::refreshStopwatchControls(){
     if(this->feature != Feature::Stopwatch) return;
 
-    const char* start_text  = "開始";
-    const char* reset_text  = "リセット";
-    const char* status_text = "開始を押すと計測";
+    const char* start_text  = TR("開始");
+    const char* reset_text  = TR("リセット");
+    const char* status_text = TR("開始を押すと計測");
 
     switch(TimerFunctions::StopwatchState()){
         case TimerFunctions::State::Running:
-            start_text  = "停止";
-            reset_text  = "ラップ";
-            status_text = "計測中";
+            start_text  = TR("停止");
+            reset_text  = TR("ラップ");
+            status_text = TR("計測中");
             break;
         case TimerFunctions::State::Paused:
-            start_text  = "再開";
-            status_text = "停止中";
+            start_text  = TR("再開");
+            status_text = TR("停止中");
             break;
         default:
             break;
@@ -341,7 +342,7 @@ void ClocksScene::refreshAlarmList(){
         const AlarmFunctions::Alarm& a = AlarmFunctions::Get(i);
         char buf[PICO_STR_M];
         snprintf(buf, sizeof(buf), "%d  %02d:%02d  %s  %s", i + 1, a.hour, a.minute,
-                 AlarmFunctions::RepeatToStr(a.repeat), a.enabled ? "オン" : "オフ");
+                 AlarmFunctions::RepeatToStr(a.repeat), a.enabled ? TR("オン") : TR("オフ"));
         item->text.assign(buf);
         //オフの行は薄くして、鳴る予定のものと見分ける
         item->color = a.enabled ? -1 : PICO_DARKGREY;
@@ -357,7 +358,7 @@ void ClocksScene::refreshAlarmControls(){
         this->alarm_picker->setEditable(true);
         this->alarm_picker->setTotalMs(((uint32_t)a.hour * 60u + a.minute) * 60000u);
     }
-    if(this->alarm_toggle) this->alarm_toggle->setText(a.enabled ? "オン" : "オフ");
+    if(this->alarm_toggle) this->alarm_toggle->setText(a.enabled ? TR("オン") : TR("オフ"));
     if(this->alarm_repeat) this->alarm_repeat->setText(AlarmFunctions::RepeatToStr(a.repeat));
 }
 
@@ -440,7 +441,7 @@ void ClocksScene::onEnter(){
     this->shown_lap_rev     = 0xFFFFFFFFu;
 
     // ---- 上部の行: [戻る][デジタル|アナログ] ----
-    this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
+    this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -457,8 +458,8 @@ void ClocksScene::onEnter(){
     const int tab_w = content.x + content.w - MARGIN - tab_x;
 
     this->mode_tab = new TabBar(tab_x, content.y + MARGIN, tab_w, this->top_row_h);
-    this->mode_tab->addTab("デジタル");
-    this->mode_tab->addTab("アナログ");
+    this->mode_tab->addTab(TR("デジタル"));
+    this->mode_tab->addTab(TR("アナログ"));
     this->mode_tab->setSelected((int)this->mode);
     this->mode_tab->setOnChanged([this](int index){
         this->mode = (ClockMode)index;
@@ -467,7 +468,7 @@ void ClocksScene::onEnter(){
     WidgetFunctions::Add(this->mode_tab);
 
     //mode_tabと同じ場所。時計以外ではタブの代わりに機能名を出す
-    this->title_label = new Label<PICO_STR_M>(tab_x, content.y + MARGIN, "タイマー");
+    this->title_label = new Label<PICO_STR_M>(tab_x, content.y + MARGIN, TR("タイマー"));
     //Normalだと「ストップウォッチ」(24px x 8文字)が幅を超えて2行になり、上部の行からはみ出す
     this->title_label->setFontSize(FontFn::Small);
     this->title_label->setMaxWidth(tab_w);
@@ -482,10 +483,10 @@ void ClocksScene::onEnter(){
         content.w - MARGIN * 2,
         FEATURE_TAB_H
     );
-    this->feature_tab->addTab("時計");
-    this->feature_tab->addTab("ﾀｲﾏｰ");
-    this->feature_tab->addTab("ｽﾄｯﾌﾟ");
-    this->feature_tab->addTab("ｱﾗｰﾑ");
+    this->feature_tab->addTab(IconID::Clock, TR("時計"));
+    this->feature_tab->addTab(IconID::Hourglass, TR("ﾀｲﾏｰ"));
+    this->feature_tab->addTab(IconID::Stopwatch, TR("ｽﾄｯﾌﾟ"));
+    this->feature_tab->addTab(IconID::Alarm, TR("ｱﾗｰﾑ"));
     this->feature_tab->setSelected((int)this->feature);
     this->feature_tab->setOnChanged([this](int index){
         this->feature = (Feature)index;
@@ -500,7 +501,7 @@ void ClocksScene::onEnter(){
 
     this->date_label = new Label<PICO_STR_M>(
         body.x, body.y + (body.h - date_time_height) / 2,
-        "1月1日(月)"
+        TR("1月1日(月)")
     );
     this->date_label->setMaxWidth(body.w);
     this->date_label->setFontSize(FontFn::Normal);
@@ -530,7 +531,7 @@ void ClocksScene::onEnter(){
     // ---- タイマー / ストップウォッチ ----
     // どちらも「大きな数字 + 状態の1行 + 操作ボタン2つ」で同じ組み方をする。
     // 位置は実測値から下詰めで決める(フォントを変えても崩れないように)
-    this->timer_start = new Button(0, 0, "一時停止");
+    this->timer_start = new Button(0, 0, TR("一時停止"));
     this->timer_start->setFontSize(FontFn::Small);
     this->timer_start->setW(ACTION_BUTTON_W + Button::kFrameExtra);
     this->timer_start->setH(ACTION_BUTTON_H + Button::kFrameExtra);
@@ -547,21 +548,21 @@ void ClocksScene::onEnter(){
     this->timer_start->setY(action_y);
     WidgetFunctions::Add(this->timer_start);
 
-    this->timer_reset = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, "リセット");
+    this->timer_reset = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, TR("リセット"));
     this->timer_reset->setFontSize(FontFn::Small);
     this->timer_reset->setW(ACTION_BUTTON_W + Button::kFrameExtra);
     this->timer_reset->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->timer_reset->setOnPressEnd([this](){ this->onTimerResetPressed(); });
     WidgetFunctions::Add(this->timer_reset);
 
-    this->sw_start = new Button(action_left, action_y, "開始");
+    this->sw_start = new Button(action_left, action_y, TR("開始"));
     this->sw_start->setFontSize(FontFn::Small);
     this->sw_start->setW(ACTION_BUTTON_W + Button::kFrameExtra);
     this->sw_start->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->sw_start->setOnPressEnd([this](){ this->onStopwatchStartPressed(); });
     WidgetFunctions::Add(this->sw_start);
 
-    this->sw_reset = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, "リセット");
+    this->sw_reset = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, TR("リセット"));
     this->sw_reset->setFontSize(FontFn::Small);
     this->sw_reset->setW(ACTION_BUTTON_W + Button::kFrameExtra);
     this->sw_reset->setH(ACTION_BUTTON_H + Button::kFrameExtra);
@@ -569,7 +570,7 @@ void ClocksScene::onEnter(){
     WidgetFunctions::Add(this->sw_reset);
 
     //状態の1行はボタンのすぐ上
-    this->timer_status = new Label<PICO_STR_M>(body.x, 0, "▲▼で時間を設定");
+    this->timer_status = new Label<PICO_STR_M>(body.x, 0, TR("▲▼で時間を設定"));
     this->timer_status->setFontSize(FontFn::Small);
     this->timer_status->setMaxWidth(body.w);
     this->timer_status->setTextAlign(TextAlign::Center);
@@ -580,7 +581,7 @@ void ClocksScene::onEnter(){
     this->timer_status->setY(status_y);
     WidgetFunctions::Add(this->timer_status);
 
-    this->sw_status = new Label<PICO_STR_M>(body.x, status_y, "開始を押すと計測");
+    this->sw_status = new Label<PICO_STR_M>(body.x, status_y, TR("開始を押すと計測"));
     this->sw_status->setFontSize(FontFn::Small);
     this->sw_status->setMaxWidth(body.w);
     this->sw_status->setTextAlign(TextAlign::Center);
@@ -602,14 +603,14 @@ void ClocksScene::onEnter(){
     });
     WidgetFunctions::Add(this->alarm_list);
 
-    this->alarm_toggle = new Button(action_left, action_y, "オフ");
+    this->alarm_toggle = new Button(action_left, action_y, TR("オフ"));
     this->alarm_toggle->setFontSize(FontFn::Small);
     this->alarm_toggle->setW(ACTION_BUTTON_W + Button::kFrameExtra);
     this->alarm_toggle->setH(ACTION_BUTTON_H + Button::kFrameExtra);
     this->alarm_toggle->setOnPressEnd([this](){ this->onAlarmToggled(); });
     WidgetFunctions::Add(this->alarm_toggle);
 
-    this->alarm_repeat = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, "1回");
+    this->alarm_repeat = new Button(action_left + action_box_w + ACTION_BUTTON_GAP, action_y, TR("1回"));
     this->alarm_repeat->setFontSize(FontFn::Small);
     this->alarm_repeat->setW(ACTION_BUTTON_W + Button::kFrameExtra);
     this->alarm_repeat->setH(ACTION_BUTTON_H + Button::kFrameExtra);

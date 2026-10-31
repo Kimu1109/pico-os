@@ -1,6 +1,7 @@
 #include "gui/widgets/keyboards/KeyboardNum.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // 数字パッド(常時固定)のキー1つ分の定義
@@ -17,7 +18,7 @@ namespace {
         { "7", 0, 0, 1 }, { "8", 0, 1, 1 }, { "9", 0, 2, 1 }, { "←", 0, 3, 1 },
         { "4", 1, 0, 1 }, { "5", 1, 1, 1 }, { "6", 1, 2, 1 }, { "→", 1, 3, 1 },
         { "1", 2, 0, 1 }, { "2", 2, 1, 1 }, { "3", 2, 2, 1 }, { "X", 2, 3, 1 },
-        { "0", 3, 0, 2 }, { ".", 3, 2, 1 }, { "決定", 3, 3, 1 },
+        { "0", 3, 0, 2 }, { ".", 3, 2, 1 }, { TR_NOOP("決定"), 3, 3, 1 },
     };
     const int kPadKeyCount = sizeof(kPadKeys) / sizeof(kPadKeys[0]);
 }
@@ -145,10 +146,11 @@ void KeyboardNum::render() {
 
         OSData::frame->drawRect(x, y, w + 1, PAD_H + 1, PICO_BLACK);
 
-        int str_w = OSData::frame->textWidth(key.str);
+        const char* label = I18nFunctions::Tr(key.str); //「決定」(識別は原文の key.str のまま)
+        int str_w = OSData::frame->textWidth(label);
         int str_h = OSData::frame->fontHeight();
         OSData::frame->setCursor(x + (w - str_w) / 2, y + (PAD_H - str_h) / 2);
-        OSData::frame->print(key.str);
+        OSData::frame->print(label);
     }
 
     FontFn::SetDefault();

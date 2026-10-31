@@ -1,0 +1,5359 @@
+# pico-os の表示の訳。原文(msgid)は src/ の TR("…") の日本語そのもの。
+# 訳(msgstr)を書いたら python3 script/i18n.py update で src/system/I18n_Table_*.cpp を作り直す。
+# 訳を空にした原文は日本語のまま出る。%d 等の書式は原文と同じ並びに保つ(違うと --check が落ちる)。
+# 画面は240px幅が基本なので、訳は原文の幅に近い短い言い方を選ぶ。
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+#: src/main.cpp
+msgid "スクリーンショット"
+msgstr "Screenshot"
+
+#: src/main.cpp
+msgid "スクリーンショット失敗"
+msgstr "Screenshot failed"
+
+#: src/apps/browser/Doc_Fetch.cpp src/apps/browser/MarkdownScene.cpp src/apps/chat/Chat_Client.cpp src/apps/chat/Chat_Watch.cpp src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/apps/todo/Todoist_Client.cpp
+msgid "URLが長すぎます"
+msgstr "URL is too long"
+
+#: src/apps/browser/Doc_Fetch.cpp
+msgid "文書を指していないURLです"
+msgstr "This URL does not point to a document"
+
+#: src/apps/browser/Doc_Fetch.cpp src/apps/browser/MarkdownScene.cpp src/apps/store/App_Package.cpp
+msgid "パスが長すぎます"
+msgstr "Path is too long"
+
+#: src/apps/browser/Doc_Fetch.cpp
+msgid "保存先を用意できません"
+msgstr "Cannot prepare the save location"
+
+#: src/apps/browser/Doc_Fetch.cpp src/apps/calendar/Calendar_Sync.cpp
+msgid "サーバが %d を返しました"
+msgstr "Server returned %d"
+
+#: src/apps/browser/Doc_Fetch.cpp
+msgid "キャッシュが見つかりません"
+msgstr "Cache not found"
+
+#: src/apps/browser/Doc_Fetch.cpp src/apps/texteditor/TextEditorScene_File.cpp
+msgid "保存に失敗しました"
+msgstr "Save failed"
+
+#: src/apps/browser/Doc_Search.cpp src/apps/browser/MarkdownScene.cpp
+msgid "このサーバは検索に対応していません"
+msgstr "This server does not support search"
+
+#: src/apps/browser/Doc_Search.cpp
+msgid "検索語が空です"
+msgstr "Search term is empty"
+
+#: src/apps/browser/Doc_Search.cpp
+msgid "検索URLが長すぎます"
+msgstr "Search URL is too long"
+
+#: src/apps/browser/Doc_Search.cpp src/apps/chat/Chat_Client.cpp
+msgid "検索語が長すぎます"
+msgstr "Search term is too long"
+
+#: src/apps/browser/Doc_Search.cpp
+msgid "検索に失敗しました (%d)"
+msgstr "Search failed (%d)"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "ホーム"
+msgstr "Home"
+
+#: src/apps/browser/MarkdownScene.cpp src/apps/calculator/CalculatorScene_Convert.cpp src/apps/calendar/CalendarScene.cpp src/apps/chat/ChatScene.cpp src/apps/mail/MailScene.cpp src/apps/store/StoreScene.cpp src/apps/todo/TodoScene.cpp src/gui/scenes/SettingsScene.cpp
+msgid "更新"
+msgstr "Update"
+
+#: src/apps/browser/MarkdownScene.cpp src/apps/dict/DictScene.cpp src/apps/notes/NotesScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "検索"
+msgstr "Scan"
+
+#: src/apps/browser/MarkdownScene.cpp src/gui/scenes/UsbDriveScene.cpp
+msgid "終了"
+msgstr "Exit"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "対応"
+msgstr "Yes"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "非対応"
+msgstr "No"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "読み込み中..."
+msgstr "Loading..."
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "開けませんでした"
+msgstr "Could not open"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "取得できませんでした"
+msgstr "Could not fetch"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "オフライン表示(保存済み)"
+msgstr "Offline (saved copy)"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "場所が長すぎます"
+msgstr "Location is too long"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "画像を取得中 %d/%d"
+msgstr "Fetching images %d/%d"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "読み込み中です"
+msgstr "Loading"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "検索語:"
+msgstr "Search for:"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "検索中..."
+msgstr "Searching..."
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "検索できませんでした"
+msgstr "Search failed"
+
+#: src/apps/browser/MarkdownScene.cpp src/apps/chat/ChatScene.cpp src/apps/dict/DictScene.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "見つかりませんでした"
+msgstr "None found"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "%d件目から%d件"
+msgstr "%d to %d"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "結果を開けません"
+msgstr "Cannot open the result"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "リンクを解決できません"
+msgstr "Cannot resolve the link"
+
+#: src/apps/browser/MarkdownScene.cpp
+msgid "パスを解決できません"
+msgstr "Cannot resolve the path"
+
+#: src/apps/browser/MarkdownScene.cpp src/apps/texteditor/TextEditorScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "見つかりません"
+msgstr "Not found"
+
+#: src/apps/browser/ui/SearchDialog.hpp src/gui/scenes/FileSearchScene.cpp
+msgid "再検索"
+msgstr "Search again"
+
+#: src/apps/browser/ui/SearchDialog.hpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp src/lua/LuaDebugScreen.cpp
+msgid "次へ"
+msgstr "Next"
+
+#: src/apps/browser/ui/SearchDialog.hpp src/apps/chat/ChatScene.cpp src/apps/music/MusicScene.cpp src/apps/notes/NotesScene.cpp src/apps/reader/ReaderScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/core/Error_Functions.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Wifi.cpp src/gui/widgets/dialogs/WifiScanDialog.hpp
+msgid "閉じる"
+msgstr "Close"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "日本円"
+msgstr "Japanese yen"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "米ドル"
+msgstr "US dollar"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "ユーロ"
+msgstr "Euro"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "英ポンド"
+msgstr "British pound"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "人民元"
+msgstr "Chinese yuan"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "韓国ウォン"
+msgstr "Korean won"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "台湾ドル"
+msgstr "Taiwan dollar"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "香港ドル"
+msgstr "Hong Kong dollar"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "豪ドル"
+msgstr "Australian dollar"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "カナダドル"
+msgstr "Canadian dollar"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "スイスフラン"
+msgstr "Swiss franc"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "シンガポールドル"
+msgstr "Singapore dollar"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "タイバーツ"
+msgstr "Thai baht"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "インドルピー"
+msgstr "Indian rupee"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "インドネシアルピア"
+msgstr "Indonesian rupiah"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "マレーシアリンギット"
+msgstr "Malaysian ringgit"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "フィリピンペソ"
+msgstr "Philippine peso"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "ベトナムドン"
+msgstr "Vietnamese dong"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "NZドル"
+msgstr "NZ dollar"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "スウェーデンクローナ"
+msgstr "Swedish krona"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "ノルウェークローネ"
+msgstr "Norwegian krone"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "デンマーククローネ"
+msgstr "Danish krone"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "ポーランドズロチ"
+msgstr "Polish zloty"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "チェココルナ"
+msgstr "Czech koruna"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "ハンガリーフォリント"
+msgstr "Hungarian forint"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "ルーマニアレウ"
+msgstr "Romanian leu"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "アイスランドクローナ"
+msgstr "Icelandic krona"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "トルコリラ"
+msgstr "Turkish lira"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "イスラエルシェケル"
+msgstr "Israeli shekel"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "メキシコペソ"
+msgstr "Mexican peso"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "ブラジルレアル"
+msgstr "Brazilian real"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "南アフリカランド"
+msgstr "South African rand"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "ロシアルーブル"
+msgstr "Russian ruble"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "UAEディルハム"
+msgstr "UAE dirham"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "サウジリヤル"
+msgstr "Saudi riyal"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "取得元のURLを解釈できません"
+msgstr "Cannot parse the source URL"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "取得できません: "
+msgstr "Cannot fetch: "
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "レートを取得中…"
+msgstr "Fetching rates…"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "取得できません(サーバが %d を返しました)"
+msgstr "Cannot fetch (server returned %d)"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "レートの形式が違います"
+msgstr "Unexpected rate format"
+
+#: src/apps/calculator/Calc_Currency.cpp
+msgid "%s のレートに更新しました"
+msgstr "Updated to rates of %s"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "メートル"
+msgstr "meter"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キロメートル"
+msgstr "kilometer"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "センチメートル"
+msgstr "centimeter"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ミリメートル"
+msgstr "millimeter"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "インチ"
+msgstr "inch"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "フィート"
+msgstr "foot"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ヤード"
+msgstr "yard"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "マイル"
+msgstr "mile"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "海里"
+msgstr "nautical mile"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "尺"
+msgstr "shaku"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "寸"
+msgstr "sun"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "里"
+msgstr "ri"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キログラム"
+msgstr "kilogram"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "グラム"
+msgstr "gram"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ミリグラム"
+msgstr "milligram"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "トン"
+msgstr "tonne"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ポンド"
+msgstr "pound"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "オンス"
+msgstr "ounce"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "カラット"
+msgstr "carat"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "貫"
+msgstr "kan"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "匁"
+msgstr "monme"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "平方メートル"
+msgstr "square meter"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "平方キロメートル"
+msgstr "square kilometer"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "平方センチメートル"
+msgstr "square centimeter"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "アール"
+msgstr "are"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ヘクタール"
+msgstr "hectare"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "平方フィート"
+msgstr "square foot"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "エーカー"
+msgstr "acre"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "坪"
+msgstr "tsubo"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "畳"
+msgstr "jo (tatami)"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "リットル"
+msgstr "liter"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ミリリットル"
+msgstr "milliliter"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "立方メートル"
+msgstr "cubic meter"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ガロン(米)"
+msgstr "gallon (US)"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "クォート(米)"
+msgstr "quart (US)"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "カップ(米)"
+msgstr "cup (US)"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "液量オンス(米)"
+msgstr "fluid ounce (US)"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "大さじ"
+msgstr "tbsp"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "小さじ"
+msgstr "tsp"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "合"
+msgstr "go"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "升"
+msgstr "sho"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "摂氏"
+msgstr "Celsius"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "華氏"
+msgstr "Fahrenheit"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ケルビン"
+msgstr "Kelvin"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キロメートル毎時"
+msgstr "kilometers per hour"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "メートル毎秒"
+msgstr "meters per second"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "マイル毎時"
+msgstr "miles per hour"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ノット"
+msgstr "knot"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "フィート毎秒"
+msgstr "feet per second"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "マッハ"
+msgstr "Mach"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "マッハ(15°C)"
+msgstr "Mach (15°C)"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "秒"
+msgstr "s"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ミリ秒"
+msgstr "millisecond"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "分"
+msgstr "min"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "時間"
+msgstr "h"
+
+#: src/apps/calculator/Calc_Units.hpp src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/apps/mail/MailScene.cpp src/apps/todo/Todoist_Proto.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "日"
+msgstr "Sun"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "週"
+msgstr "wk"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "年"
+msgstr "yr"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "年(365日)"
+msgstr "year (365 days)"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "バイト"
+msgstr "byte"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ビット"
+msgstr "bit"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キロバイト"
+msgstr "kilobyte"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "メガバイト"
+msgstr "megabyte"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ギガバイト"
+msgstr "gigabyte"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "テラバイト"
+msgstr "terabyte"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キビバイト"
+msgstr "kibibyte"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "メビバイト"
+msgstr "mebibyte"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ギビバイト"
+msgstr "gibibyte"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ヘクトパスカル"
+msgstr "hectopascal"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "パスカル"
+msgstr "pascal"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キロパスカル"
+msgstr "kilopascal"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "メガパスカル"
+msgstr "megapascal"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "気圧"
+msgstr "atmosphere"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "バール"
+msgstr "bar"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "水銀柱ミリメートル"
+msgstr "millimeter of mercury"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "重量ポンド毎平方インチ"
+msgstr "pound per square inch"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キロカロリー"
+msgstr "kilocalorie"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キロジュール"
+msgstr "kilojoule"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ジュール"
+msgstr "joule"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "カロリー"
+msgstr "calorie"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ワット時"
+msgstr "watt-hour"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "キロワット時"
+msgstr "kilowatt-hour"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "電子ボルト"
+msgstr "electronvolt"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "度"
+msgstr "degree"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "ラジアン"
+msgstr "radian"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "グラード"
+msgstr "gradian"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "分(角度)"
+msgstr "arcminute"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "秒(角度)"
+msgstr "arcsecond"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "回転"
+msgstr "turn"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "長さ"
+msgstr "Length"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "重さ"
+msgstr "Mass"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "面積"
+msgstr "Area"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "体積"
+msgstr "Volume"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "温度"
+msgstr "Temperature"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "速さ"
+msgstr "Speed"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "データ量"
+msgstr "Data"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "圧力"
+msgstr "Pressure"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "エネルギー"
+msgstr "Energy"
+
+#: src/apps/calculator/Calc_Units.hpp
+msgid "角度"
+msgstr "Angle"
+
+#: src/apps/calculator/CalculatorScene.cpp src/apps/calculator/CalculatorScene_Prog.cpp
+msgid "0で割ることはできません"
+msgstr "Cannot divide by 0"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "計算できません(定義域の外)"
+msgstr "Cannot compute (out of domain)"
+
+#: src/apps/calculator/CalculatorScene.cpp src/apps/calculator/CalculatorScene_Prog.cpp
+msgid "式が複雑すぎます"
+msgstr "Expression too complex"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "桁があふれました"
+msgstr "Overflow"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "xはグラフでだけ使えます"
+msgstr "x is only for graphs"
+
+#: src/apps/calculator/CalculatorScene.cpp src/apps/calculator/CalculatorScene_Prog.cpp
+msgid "式が正しくありません"
+msgstr "Invalid expression"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "y%dの式を入力 (x キーで変数)"
+msgstr "Enter y%d (x key for the variable)"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "[描画]でグラフ (%s)"
+msgstr "[Plot] to graph (%s)"
+
+#: src/apps/calculator/CalculatorScene.cpp src/apps/calendar/CalendarScene.cpp src/apps/chat/ChatScene.cpp src/apps/firmware/FirmwareScene.cpp src/apps/gb/ui/GameBoyPad.cpp src/apps/home/HomeScene.cpp src/apps/mail/MailScene.cpp src/apps/music/MusicScene.cpp src/apps/notes/NotesScene.cpp src/apps/reader/ReaderLibraryScene.cpp src/apps/ssh/SshScene.cpp src/apps/store/StoreScene.cpp src/apps/texteditor/TextEditorScene.cpp src/apps/todo/TodoScene.cpp src/apps/video/VideoScene.cpp src/gui/scenes/BackgroundScene.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/FileSearchScene.cpp src/gui/scenes/FileShareScene.cpp src/gui/scenes/FileViewerScene.cpp src/gui/scenes/NotificationScene.cpp src/gui/scenes/RecentFilesScene.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene.cpp src/gui/scenes/StorageScene.cpp src/gui/scenes/TouchCalibScene.cpp src/gui/scenes/UsbDriveScene.cpp src/gui/scenes/WifiSetupScene.cpp
+msgid "戻る"
+msgstr "Back"
+
+#: src/apps/calculator/CalculatorScene.cpp src/boot/App_List.cpp
+msgid "電卓"
+msgstr "Calc"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "グラフ"
+msgstr "Graph"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "変換"
+msgstr "Conv"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "進数"
+msgstr "Base"
+
+#: src/apps/calculator/CalculatorScene.cpp src/gui/scenes/NotificationScene.cpp
+msgid "履歴"
+msgstr "Log"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "式"
+msgstr "Expr"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "拡大"
+msgstr "Zoom+"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "縮小"
+msgstr "Zoom-"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "初期化"
+msgstr "Reset"
+
+#: src/apps/calculator/CalculatorScene.cpp
+msgid "履歴を消去"
+msgstr "Clear history"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp
+msgid "変換の種類"
+msgstr "Conversion type"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp src/apps/gb/GameBoyScene.cpp src/apps/home/HomeScene.cpp src/apps/mail/MailScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/UsbDriveScene.cpp src/gui/widgets/dialogs/ColorDialog.hpp src/gui/widgets/dialogs/FileSaveDialog.hpp src/gui/widgets/dialogs/FileSelectDialog.hpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/lua/LuaEngine_Ext.cpp src/lua/LuaEngine_Widgets.cpp src/services/PowerMenu_Functions.cpp
+msgid "キャンセル"
+msgstr "Cancel"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp
+msgid "通貨(為替)"
+msgstr "Currency"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp
+msgid "変換元"
+msgstr "From"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp
+msgid "変換先"
+msgstr "To"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp src/apps/mail/Imap_Client.cpp src/apps/store/StoreScene.cpp src/services/Firmware_Functions.cpp
+msgid "Wi-Fiに繋がっていません"
+msgstr "Wi-Fi is not connected"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp
+msgid "種類: %s"
+msgstr "Type: %s"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp
+msgid "レート未取得。[更新]で取得"
+msgstr "No rates yet. Fetch with [Update]"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp
+msgid "1 %s = %s %s\n%s のレート"
+msgstr "1 %s = %s %s\nRates of %s"
+
+#: src/apps/calculator/CalculatorScene_Convert.cpp
+msgid "種類"
+msgstr "Type"
+
+#: src/apps/calculator/CalculatorScene_Prog.cpp
+msgid "この基数では使えない数字です"
+msgstr "Digit not valid in this base"
+
+#: src/apps/calculator/CalculatorScene_Prog.cpp
+msgid "64bitに収まりません"
+msgstr "Does not fit in 64 bits"
+
+#: src/apps/calculator/ui/CalculatorKeypad.cpp
+msgid "入替"
+msgstr "Swap"
+
+#: src/apps/calculator/ui/CalculatorKeypad.cpp
+msgid "描画"
+msgstr "Plot"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/apps/mail/MailScene.cpp src/apps/todo/Todoist_Proto.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "月"
+msgstr "Mon"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/apps/mail/MailScene.cpp src/apps/todo/Todoist_Proto.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "火"
+msgstr "Tue"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/apps/mail/MailScene.cpp src/apps/todo/Todoist_Proto.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "水"
+msgstr "Wed"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/apps/mail/MailScene.cpp src/apps/todo/Todoist_Proto.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "木"
+msgstr "Thu"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/apps/mail/MailScene.cpp src/apps/todo/Todoist_Proto.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "金"
+msgstr "Fri"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/apps/mail/MailScene.cpp src/apps/todo/Todoist_Proto.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "土"
+msgstr "Sat"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/boot/App_List.cpp
+msgid "カレンダー"
+msgstr "Calendar"
+
+#: src/apps/calendar/CalendarScene.cpp src/gui/widgets/dialogs/PickerDialog.cpp
+msgid "%d年%d月"
+msgstr "%d-%02d"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp
+msgid "終日"
+msgstr "All day"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "%02d:%02dまで"
+msgstr "until %02d:%02d"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "(続き)"
+msgstr "(cont.)"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/chat/Chat_Client.cpp src/apps/chat/Chat_Watch.cpp src/apps/mail/Imap_Client.cpp src/apps/music/MusicScene.cpp src/apps/recorder/Transcribe_Client.cpp src/apps/store/App_Store.cpp src/apps/todo/Todoist_Client.cpp src/apps/video/Pvid_Player.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/StorageScene.cpp src/lua/LuaEngine_Iso.cpp src/services/Screenshot_Functions.cpp
+msgid "SDカードがありません"
+msgstr "No SD card"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "/calendar/ に .ics を置いてください"
+msgstr "Put .ics files in /calendar/"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "%d月%d日(%s) 予定なし"
+msgstr "%d/%d (%s) no events"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "%d月%d日(%s) %d件"
+msgstr "%d/%d (%s) %d events"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "(無題)"
+msgstr "(untitled)"
+
+#: src/apps/calendar/CalendarScene.cpp src/gui/scenes/ClocksScene.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "%d月%d日(%s)"
+msgstr "%d/%d (%s)"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid " から\n"
+msgstr " from\n"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid " まで"
+msgstr " until"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "場所: "
+msgstr "Place: "
+
+#: src/apps/calendar/CalendarScene.cpp src/services/Alarm_Functions.cpp
+msgid "毎日"
+msgstr "Daily"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "毎週"
+msgstr "Weekly"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "毎月"
+msgstr "Monthly"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "毎年"
+msgstr "Yearly"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "繰り返し: "
+msgstr "Repeats: "
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "(%d回に1回)"
+msgstr " (every %d)"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "繰り返し: 未対応の規則のため初回だけ表示しています\n"
+msgstr "Repeats: unsupported rule, showing the first only\n"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "カレンダー: "
+msgstr "Calendar: "
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/home/Home_Widgets.cpp src/apps/todo/TodoScene.cpp src/apps/todo/Todoist_Proto.cpp
+msgid "今日"
+msgstr "Today"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "2026年12月"
+msgstr "2026-12"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "取得中"
+msgstr "Fetching"
+
+#: src/apps/calendar/CalendarScene.cpp src/apps/todo/TodoScene.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "追加"
+msgstr "Add"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "カレンダーの名前(英数字と_-、20文字まで):"
+msgstr "Calendar name (letters, digits, _ -; up to 20):"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "使えない名前です(英数字と _ - のみ、20文字まで)"
+msgstr "Invalid name (letters, digits, _ - only; up to 20)"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "カレンダーのURL(iCal/.ics):"
+msgstr "Calendar URL (iCal/.ics):"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "保存できませんでした(SD無しか、URLが長すぎます)"
+msgstr "Could not save (no SD, or URL too long)"
+
+#: src/apps/calendar/CalendarScene.cpp
+msgid "再試行"
+msgstr "Retry"
+
+#: src/apps/calendar/Calendar_Reminders.cpp
+msgid "(無題の予定)"
+msgstr "(untitled event)"
+
+#: src/apps/calendar/Calendar_Reminders.cpp
+msgid "%02d:%02dから(%d分前)"
+msgstr "at %02d:%02d (in %d min)"
+
+#: src/apps/calendar/Calendar_Reminders.cpp
+msgid "%02d:%02dから"
+msgstr "at %02d:%02d"
+
+#: src/apps/calendar/Calendar_Sync.cpp
+msgid "取得元を読めない"
+msgstr "Cannot read the source"
+
+#: src/apps/calendar/Calendar_Sync.cpp
+msgid "URLを解釈できない(長すぎるか http(s):// で始まっていない)"
+msgstr "Cannot parse the URL (too long or not http(s)://)"
+
+#: src/apps/calendar/Calendar_Sync.cpp
+msgid "書き込み先を用意できない"
+msgstr "Cannot prepare the destination"
+
+#: src/apps/calendar/Calendar_Sync.cpp
+msgid "大きすぎる(1MB超)か、書き込みに失敗した"
+msgstr "Too large (over 1MB) or write failed"
+
+#: src/apps/calendar/Calendar_Sync.cpp
+msgid "iCalendarではない応答(URLを確かめてください)"
+msgstr "Not an iCalendar response (check the URL)"
+
+#: src/apps/calendar/Calendar_Sync.cpp
+msgid "古いファイルを消せない"
+msgstr "Cannot delete the old file"
+
+#: src/apps/calendar/Calendar_Sync.cpp
+msgid "保存に失敗した"
+msgstr "Save failed"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "招待"
+msgstr "Invite"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "参加コードを発行しています…"
+msgstr "Issuing an invite code…"
+
+#: src/apps/chat/ChatScene.cpp src/apps/todo/TodoScene.cpp
+msgid "前の操作が終わるまで待ってください"
+msgstr "Wait for the previous action to finish"
+
+#: src/apps/chat/ChatScene.cpp src/apps/mail/MailScene.cpp src/apps/store/StoreScene.cpp src/apps/todo/TodoScene.cpp src/boot/App_List.cpp src/gui/scenes/SettingsScene_Time.cpp
+msgid "設定"
+msgstr "Settings"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "部屋を探す"
+msgstr "Find rooms"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "コードで参加"
+msgstr "Join by code"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "送信"
+msgstr "Send"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "メッセージ"
+msgstr "Message"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "別の語で探す"
+msgstr "Search again"
+
+#: src/apps/chat/ChatScene.cpp src/apps/chat/Chat_Watch.cpp src/boot/App_List.cpp
+msgid "チャット"
+msgstr "Chat"
+
+#: src/apps/chat/ChatScene.cpp
+msgid " (%lu人)"
+msgstr " (%lu)"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "参加している部屋がありません。下のボタンから探すか、参加コードで入れます"
+msgstr "You are in no rooms. Find one below or join with a code"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "まだ発言がありません"
+msgstr "No messages yet"
+
+#: src/apps/chat/ChatScene.cpp src/apps/mail/MailScene.cpp src/apps/todo/TodoScene.cpp
+msgid "読み込み中…"
+msgstr "Loading…"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "参加しています…"
+msgstr "Joining…"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "探す部屋の名前:"
+msgstr "Room name to find:"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "探しています…"
+msgstr "Searching…"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "参加コード:"
+msgstr "Invite code:"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "参加コードが長すぎます"
+msgstr "Invite code is too long"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "チャットサーバURL:"
+msgstr "Chat server URL:"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "トークン(空欄で変更なし):"
+msgstr "Token (blank to keep):"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "参加コード\n%s\n%02d:%02dまで有効"
+msgstr "Invite code\n%s\nValid until %02d:%02d"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "参加コード\n%s\n30分で無効"
+msgstr "Invite code\n%s\nExpires in 30 min"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "前の発言を送っています"
+msgstr "Sending the previous message"
+
+#: src/apps/chat/ChatScene.cpp
+msgid "送れません"
+msgstr "Cannot send"
+
+#: src/apps/chat/Chat_Client.cpp
+msgid "/sys/chat.cfg に server と token を書いてください"
+msgstr "Write server and token in /sys/chat.cfg"
+
+#: src/apps/chat/Chat_Client.cpp src/apps/chat/Chat_Watch.cpp
+msgid "chat.cfg の server が URL ではありません"
+msgstr "server in chat.cfg is not a URL"
+
+#: src/apps/chat/Chat_Client.cpp src/apps/chat/Chat_Watch.cpp
+msgid "chat.cfg の token に使えない文字があります"
+msgstr "token in chat.cfg has invalid characters"
+
+#: src/apps/chat/Chat_Client.cpp
+msgid "chat.cfg の token が長すぎます"
+msgstr "token in chat.cfg is too long"
+
+#: src/apps/chat/Chat_Client.cpp
+msgid "/sys/chat.cfg がありません"
+msgstr "/sys/chat.cfg not found"
+
+#: src/apps/chat/Chat_Client.cpp src/apps/todo/Todoist_Client.cpp
+msgid "通信に失敗: "
+msgstr "Network error: "
+
+#: src/apps/chat/Chat_Client.cpp src/apps/todo/Todoist_Client.cpp
+msgid "サーバの応答が %d です"
+msgstr "Server responded %d"
+
+#: src/apps/chat/Chat_Client.cpp
+msgid "サーバの応答を読めませんでした"
+msgstr "Could not read the server response"
+
+#: src/apps/chat/Chat_Client.cpp src/apps/todo/Todoist_Client.cpp
+msgid "Wi-Fiに接続していません"
+msgstr "Wi-Fi is not connected"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "チャットが設定されていません"
+msgstr "Chat is not set up"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "chat.cfg に server と token がありません"
+msgstr "chat.cfg has no server and token"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "token が長すぎます"
+msgstr "token is too long"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "チャットの未読"
+msgstr "Unread chat"
+
+#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp src/lua/LuaBackground.cpp
+msgid "切っています"
+msgstr "Off"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "確認しています…"
+msgstr "Checking…"
+
+#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp src/lua/LuaBackground.cpp
+msgid "失敗: %s"
+msgstr "Failed: %s"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "%lu秒前に確認(%d部屋)"
+msgstr "Checked %lus ago (%d rooms)"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "%lu分前に確認(%d部屋)"
+msgstr "Checked %lum ago (%d rooms)"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "まだ確認していません"
+msgstr "Not checked yet"
+
+#: src/apps/chat/Chat_Watch.cpp src/apps/gb/GameBoyScene.cpp src/apps/gb/Gb_Emu.cpp src/apps/todo/Todo_Watch.cpp src/apps/video/Pvid_Player.cpp src/lua/LuaEngine_Iso.cpp src/lua/LuaEngine_Socket.cpp src/services/Firmware_Functions.cpp
+msgid "メモリが足りません"
+msgstr "Out of memory"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "要求を始められません"
+msgstr "Cannot start the request"
+
+#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp
+msgid "時間切れ"
+msgstr "Timed out"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "トークンが違います(HTTP %d)"
+msgstr "Wrong token (HTTP %d)"
+
+#: src/apps/chat/Chat_Watch.cpp
+msgid "チャット: 未読 %lu件"
+msgstr "Chat: %lu unread"
+
+#: src/apps/dict/DictScene.cpp
+msgid "語句を入力し検索を押す"
+msgstr "Type a word and press Search"
+
+#: src/apps/dict/DictScene.cpp
+msgid "辞書ファイルが開けません"
+msgstr "Cannot open the dictionary"
+
+#: src/apps/dict/DictScene.cpp
+msgid "語句を入力してください"
+msgstr "Type a word"
+
+#: src/apps/dict/DictScene.cpp
+msgid "検索中… %d%%(%d件)"
+msgstr "Searching… %d%% (%d)"
+
+#: src/apps/dict/DictScene.cpp
+msgid "%d件以上(絞り込み推奨)"
+msgstr "%d+ (narrow it down)"
+
+#: src/apps/dict/DictScene.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "%d件見つかりました"
+msgstr "Found %d"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "今の版 %s\n%s"
+msgstr "Current %s\n%s"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "署名の鍵: %s%s"
+msgstr "Signing key: %s%s"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "登録済み"
+msgstr "set"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "未登録"
+msgstr "not set"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "\n署名なしも確認して受け付ける"
+msgstr "\nUnsigned files accepted after a prompt"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "Webから"
+msgstr "Web"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "SDから"
+msgstr "SD"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "受け取る"
+msgstr "Receive"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "書き込む版を選ぶ"
+msgstr "Choose a version"
+
+#: src/apps/firmware/FirmwareScene.cpp src/apps/store/StoreScene.cpp src/apps/todo/TodoScene.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "やめる"
+msgstr "Cancel"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "無署名"
+msgstr "unsigned"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "(今)"
+msgstr "(now)"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "(古)"
+msgstr "(old)"
+
+#: src/apps/firmware/FirmwareScene.cpp src/apps/firmware/Fw_Download.cpp src/apps/gb/Gb_Emu.cpp src/apps/gb/Gb_Rom_Flash.cpp src/apps/notes/NotesScene.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileViewerScene.cpp src/lua/LuaBackground.cpp src/lua/LuaEngine_Mic.cpp src/lua/LuaEngine_Net.cpp src/lua/LuaEngine_Sound.cpp src/services/Firmware_Functions.cpp src/services/UsbDrive_Functions.cpp
+msgid "SDカードが使えません"
+msgstr "SD card unavailable"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "新しい版: #%lu (%s)\n%s%s%luKB\n今の版: %s\n書き込みますか?"
+msgstr "New: #%lu (%s)\n%s%s%luKB\nCurrent: %s\nWrite it?"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "\n\n注意: %s"
+msgstr "\n\nNote: %s"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "書き込む"
+msgstr "Write"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "再起動します"
+msgstr "Restarting"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "PCからの更新を待っています\n%s"
+msgstr "Waiting for an update from the PC\n%s"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "Webの版の一覧から選ぶか、更新ファイル(.pfw)をSDから選ぶか、PCから送ってください"
+msgstr "Pick a version from the Web, choose an update file (.pfw) on the SD, or send one from a PC"
+
+#: src/apps/firmware/FirmwareScene.cpp
+msgid "待ち受けをやめる"
+msgstr "Stop waiting"
+
+#: src/apps/firmware/FirmwareScene.hpp
+msgid "本体の更新"
+msgstr "Update"
+
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/services/Firmware_Functions.cpp
+msgid "取得を始められません"
+msgstr "Cannot start the download"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "版の一覧を取得中…"
+msgstr "Fetching versions…"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "置き場所のパスが長すぎます"
+msgstr "Destination path is too long"
+
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp
+msgid "SDカードに書き込めません"
+msgstr "Cannot write to the SD card"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "#%lu (%s) をダウンロード中…"
+msgstr "Downloading #%lu (%s)…"
+
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp
+msgid "取りやめました"
+msgstr "Cancelled"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "版の一覧が大きすぎます"
+msgstr "Version list is too large"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "更新ファイルが一覧の大きさより大きいです"
+msgstr "Update file is larger than listed"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "SDカードに書き込めません(空きが足りない?)"
+msgstr "Cannot write to the SD card (out of space?)"
+
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp
+msgid "通信に失敗しました: "
+msgstr "Network error: "
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "配布元に見つかりません(404)"
+msgstr "Not found on the server (404)"
+
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp
+msgid "配布元が %d を返しました"
+msgstr "Server returned %d"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "版の一覧の形式が違います(本体が古い・配布元が違う?)"
+msgstr "Unexpected version list (old firmware or wrong server?)"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "%d個の版があります"
+msgstr "%d versions"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "この構成(%s)向けの配布はありません"
+msgstr "No builds for this config (%s)"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "署名のある版がありません"
+msgstr "No signed versions"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "配布されている版がありません"
+msgstr "No versions available"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "更新ファイルが途中で切れています"
+msgstr "Update file is truncated"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "更新ファイルの中身が一覧と合いません(取得の途中で配布元が更新された?)"
+msgstr "Update file does not match the list (server updated during download?)"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "更新ファイルを保存できません"
+msgstr "Cannot save the update file"
+
+#: src/apps/firmware/Fw_Download.cpp
+msgid "#%lu (%s) をダウンロードしました"
+msgstr "Downloaded #%lu (%s)"
+
+#: src/apps/firmware/Fw_Image.cpp src/apps/video/Pvid_Player.cpp
+msgid "問題なし"
+msgstr "OK"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "ファームの更新ファイルではありません"
+msgstr "Not a firmware update file"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "更新ファイルの形式が違うか、壊れています"
+msgstr "Update file has a wrong format or is broken"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "別の基板向けのファームです"
+msgstr "Firmware for a different board"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "更新ファイルの大きさがおかしいです"
+msgstr "Update file has a bad size"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "フラッシュの割り当てが今のファームと違います(USBで書き込んでください)"
+msgstr "Flash layout differs from the current firmware (flash over USB)"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "更新ファイルが置き場に入りません"
+msgstr "Update file does not fit in the staging area"
+
+#: src/apps/firmware/Fw_Image.cpp src/apps/gb/Gb_Emu.cpp src/apps/video/Pvid_Player.cpp src/services/UsbDrive_Functions.cpp
+msgid "不明な誤り"
+msgstr "Unknown error"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "署名を確かめました"
+msgstr "Signature verified"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "署名がありません"
+msgstr "Not signed"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "知らない鍵の署名です"
+msgstr "Signed with an unknown key"
+
+#: src/apps/firmware/Fw_Image.cpp
+msgid "署名が合いません(壊れているか、書き換えられています)"
+msgstr "Bad signature (broken or tampered)"
+
+#: src/apps/firmware/Fw_Index.cpp
+msgid "安定"
+msgstr "Stable"
+
+#: src/apps/firmware/Fw_Index.cpp
+msgid "夜間"
+msgstr "Nightly"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "更新ファイルを読んでいます"
+msgstr "Reading the update file"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "相手が接続を切りました"
+msgstr "The peer closed the connection"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "更新ファイルが空です"
+msgstr "Update file is empty"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "更新ファイルが短すぎます"
+msgstr "Update file is too short"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "署名の無い更新ファイルは受け付けません"
+msgstr "Unsigned update files are not accepted"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "登録されていない鍵で署名されています"
+msgstr "Signed with an unregistered key"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "置き場(内蔵フラッシュ)を開けません"
+msgstr "Cannot open the staging area (flash)"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "今より古い版です"
+msgstr "Older than the current version"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "今と同じ版です"
+msgstr "Same as the current version"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "確認を待っています"
+msgstr "Waiting for confirmation"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "本体で確認してください"
+msgstr "Confirm on the device"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "本体で取り消されました"
+msgstr "Cancelled on the device"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "置き場に書き込めません"
+msgstr "Cannot write to the staging area"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "書き込んでいます"
+msgstr "Writing"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "更新ファイルが途中で切れました"
+msgstr "Update file was cut off"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "置き場への書き込みに失敗しました(空きが足りない?)"
+msgstr "Write to the staging area failed (out of space?)"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "置き場への書き込みに失敗しました"
+msgstr "Write to the staging area failed"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "中身が見出しと合いません(壊れています)"
+msgstr "Content does not match the header (broken)"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "置き場を読み直せません"
+msgstr "Cannot re-read the staging area"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "書いた中身を確かめています"
+msgstr "Verifying what was written"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "置き場の中身が長すぎます"
+msgstr "Staged content is too long"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "置き場の中身が短すぎます"
+msgstr "Staged content is too short"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "置き場から読み直した中身が合いません"
+msgstr "Re-read content does not match"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "中身がgzipではありません"
+msgstr "Content is not gzip"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "中身の大きさが見出しと合いません"
+msgstr "Content size does not match the header"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "書き換えの指示を書けませんでした"
+msgstr "Could not write the update request"
+
+#: src/apps/firmware/Fw_Update.cpp
+msgid "準備ができました。再起動して書き換えます"
+msgstr "Ready. Restarting to update"
+
+#: src/apps/firmware/Fw_Update.hpp
+msgid "取り消しました"
+msgstr "Cancelled"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "ROMを選んでください"
+msgstr "Choose a ROM"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "メニュー"
+msgstr "Menu"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "途中保存"
+msgstr "Save state"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "途中から再開"
+msgstr "Load state"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "ROMを選ぶ"
+msgstr "Choose ROM"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "続きから遊びますか"
+msgstr "Continue where you left off?"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "前回の続きから"
+msgstr "Continue"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "最初から"
+msgstr "Start over"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "ROMを内蔵フラッシュへ書いています 0%"
+msgstr "Writing ROM to flash 0%"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "ROMを内蔵フラッシュへ書いています %lu%%"
+msgstr "Writing ROM to flash %lu%%"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "途中から再開しました"
+msgstr "State loaded"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "途中保存しました"
+msgstr "State saved"
+
+#: src/apps/gb/GameBoyScene.cpp
+msgid "エミュが停止しました: "
+msgstr "Emulator stopped: "
+
+#: src/apps/gb/Gb_Emu.cpp src/services/UsbDrive_Functions.cpp
+msgid "成功"
+msgstr "Success"
+
+#: src/apps/gb/Gb_Emu.cpp src/apps/gb/Gb_Rom_Flash.cpp
+msgid "ROMを開けません"
+msgstr "Cannot open the ROM"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "ROMが大きすぎます(RAMに載るのは256KBまで)"
+msgstr "ROM too large (256KB max in RAM)"
+
+#: src/apps/gb/Gb_Emu.cpp src/apps/gb/Gb_Rom_Flash.cpp
+msgid "ROMとして短すぎます"
+msgstr "Too short for a ROM"
+
+#: src/apps/gb/Gb_Emu.cpp src/apps/gb/Gb_Rom_Flash.cpp
+msgid "ROMの読み込みに失敗しました"
+msgstr "Failed to load the ROM"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "ROMのヘッダが壊れています"
+msgstr "ROM header is broken"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "対応していないカートリッジです"
+msgstr "Unsupported cartridge"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "セーブ領域が大きすぎます(32KBまで)"
+msgstr "Save RAM too large (32KB max)"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "内蔵フラッシュ"
+msgstr "Internal flash"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "不正な命令"
+msgstr "Invalid opcode"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "不正な読み出し"
+msgstr "Invalid read"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "不正な書き込み"
+msgstr "Invalid write"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "ゲームが動いていません"
+msgstr "No game running"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "保存先のパスが長すぎます"
+msgstr "Save path is too long"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "保存した状態がありません"
+msgstr "No saved state"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "状態の書き込みに失敗しました"
+msgstr "Failed to write the state"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "状態の読み込みに失敗しました"
+msgstr "Failed to read the state"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "状態のファイルが壊れているか、別の版のものです"
+msgstr "State file is broken or from another version"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "別のROMの状態です"
+msgstr "State is from another ROM"
+
+#: src/apps/gb/Gb_Emu.cpp
+msgid "状態の読み込みの途中で失敗しました"
+msgstr "Failed while reading the state"
+
+#: src/apps/gb/Gb_Rom_Flash.cpp
+msgid "ROMを置く内蔵フラッシュの領域がありません"
+msgstr "No flash area for ROMs"
+
+#: src/apps/gb/Gb_Rom_Flash.cpp
+msgid "ROMが大きすぎます(内蔵フラッシュに置けるのは%luKBまで)"
+msgstr "ROM too large (flash holds up to %luKB)"
+
+#: src/apps/gb/Gb_Rom_Flash.cpp
+msgid "内蔵フラッシュを消せません"
+msgstr "Cannot erase the flash"
+
+#: src/apps/gb/Gb_Rom_Flash.cpp
+msgid "内蔵フラッシュへ書けません"
+msgstr "Cannot write to the flash"
+
+#: src/apps/gb/Gb_Rom_Flash.cpp
+msgid "内蔵フラッシュに書いた内容が合いません"
+msgstr "Flash contents do not match"
+
+#: src/apps/gb/Gb_Rom_Flash.cpp
+msgid "内蔵フラッシュへ見出しを書けません"
+msgstr "Cannot write the header to flash"
+
+#: src/apps/home/HomeScene.cpp
+msgid "アプリが登録されていません。\nApp_List.cpp のSetup()へ追加してください。"
+msgstr "No apps registered.\nAdd them in Setup() of App_List.cpp."
+
+#: src/apps/home/HomeScene.cpp
+msgid "先頭へ移動"
+msgstr "Move to top"
+
+#: src/apps/home/HomeScene.cpp
+msgid "前へ移動"
+msgstr "Move back"
+
+#: src/apps/home/HomeScene.cpp
+msgid "後ろへ移動"
+msgstr "Move forward"
+
+#: src/apps/home/HomeScene.cpp
+msgid "大きさ: 小"
+msgstr "Size: small"
+
+#: src/apps/home/HomeScene.cpp
+msgid "大きさ: 横長"
+msgstr "Size: wide"
+
+#: src/apps/home/HomeScene.cpp
+msgid "大きさ: 大"
+msgstr "Size: large"
+
+#: src/apps/home/HomeScene.cpp src/apps/store/StoreScene.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "削除"
+msgstr "Del"
+
+#: src/apps/home/HomeScene.cpp
+msgid "名前を変える"
+msgstr "Rename"
+
+#: src/apps/home/HomeScene.cpp
+msgid "フォルダを解除"
+msgstr "Ungroup folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "別のフォルダへ"
+msgstr "Move to folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "フォルダへ入れる"
+msgstr "Add to folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "フォルダから出す"
+msgstr "Remove from folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "ランチャから隠す"
+msgstr "Hide from launcher"
+
+#: src/apps/home/HomeScene.cpp
+msgid "ウィジェット追加"
+msgstr "Add widget"
+
+#: src/apps/home/HomeScene.cpp
+msgid "どのフォルダへ"
+msgstr "Which folder?"
+
+#: src/apps/home/HomeScene.cpp
+msgid "新しいフォルダ"
+msgstr "New folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "フォルダ名:"
+msgstr "Folder name:"
+
+#: src/apps/home/HomeScene.cpp
+msgid "ウィジェット"
+msgstr "Widget"
+
+#: src/apps/home/Home_Layout.cpp src/apps/home/Home_Widgets.cpp src/boot/App_List.cpp src/gui/scenes/ClocksScene.cpp
+msgid "時計"
+msgstr "Clock"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "アナログ時計"
+msgstr "Analog clock"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "音楽"
+msgstr "Music"
+
+#: src/apps/home/Home_Layout.cpp src/apps/home/Home_Widgets.cpp
+msgid "予定"
+msgstr "Agenda"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "小"
+msgstr "Small"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "横長"
+msgstr "Wide"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "大"
+msgstr "Large"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "明 %d:%02d"
+msgstr "Tmrw %d:%02d"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "時計が未設定"
+msgstr "Clock not set"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "%s曜日"
+msgstr "%s"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "%d月%d日"
+msgstr "%d/%d"
+
+#: src/apps/home/Home_Widgets.cpp src/apps/music/MusicScene.cpp src/apps/music/Music_Service.cpp src/boot/App_List.cpp
+msgid "ミュージック"
+msgstr "Music"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "タップして曲を選ぶ"
+msgstr "Tap to pick a song"
+
+#: src/apps/home/Home_Widgets.cpp src/apps/todo/Todoist_Proto.cpp
+msgid "明日"
+msgstr "Tomorrow"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "明 %s"
+msgstr "Tmrw %s"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "時計が合っていません"
+msgstr "Clock is not set"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "カレンダーがありません"
+msgstr "No calendars"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "続き"
+msgstr "Cont."
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "7日以内に予定はありません"
+msgstr "No events in 7 days"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "今日・明日の予定はありません"
+msgstr "Nothing today or tomorrow"
+
+#: src/apps/home/Home_Widgets.cpp src/apps/notes/NotesScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "%d件"
+msgstr "%d"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "TODO 今日"
+msgstr "TODO today"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "まだ取得していません"
+msgstr "Not fetched yet"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "TODOアプリで設定してください"
+msgstr "Set up in the TODO app"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "今日のタスクはありません"
+msgstr "No tasks today"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "取得 %d/%d %d:%02d"
+msgstr "Fetched %d/%d %d:%02d"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "メールのアカウントがありません。[設定] から入れてください"
+msgstr "No account. Add it in [Setup]"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "mail.cfg に oauth-client-id がありません。[設定] から入れてください"
+msgstr "mail.cfg has no oauth-client-id. Add it in [Setup]"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "ユーザー名に使えない文字があります(半角英数字と記号だけ)"
+msgstr "User name has invalid characters (ASCII only)"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "パスワードに使えない文字があります(半角英数字と記号だけ)"
+msgstr "Password has invalid characters (ASCII only)"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "mail.cfg の mailbox に使えない文字があります"
+msgstr "mailbox in mail.cfg has invalid characters"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "サインインを始めています…"
+msgstr "Starting sign-in…"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "サインインをやめました。[更新] でサインインし直せます"
+msgstr "Sign-in cancelled. Sign in again with [Update]"
+
+#: src/apps/mail/Imap_Client.cpp src/apps/mail/Mail_OAuth.cpp
+msgid "Microsoft のサインインが必要です"
+msgstr "Microsoft sign-in required"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "Microsoft のサインインが必要です。[更新] を押してサインインしてください"
+msgstr "Microsoft sign-in required. Press [Update] to sign in"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "%s でコード %s を入れてください"
+msgstr "Enter code %s at %s"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "コマンドが長すぎます"
+msgstr "Command is too long"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "送れません(接続が切れました)"
+msgstr "Cannot send (disconnected)"
+
+#: src/apps/mail/Imap_Client.cpp src/apps/ssh/SshScene.cpp src/apps/ssh/Ssh_Client.cpp
+msgid "接続が切れました"
+msgstr "Disconnected"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "サーバが応答しません"
+msgstr "Server not responding"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "サーバに切られました"
+msgstr "Disconnected by the server"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "IMAPのサーバではないようです"
+msgstr "Does not look like an IMAP server"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "ログインできません"
+msgstr "Login failed"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "(Outlook.com の設定で IMAP を有効にしているか確かめてください)"
+msgstr "(Check that IMAP is enabled in Outlook.com settings)"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "メールボックス「"
+msgstr "Mailbox \""
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "」を開けません"
+msgstr "\" cannot be opened"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "新着を確かめられません"
+msgstr "Cannot check for new mail"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "一覧を取れません"
+msgstr "Cannot get the list"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "メールを取れません"
+msgstr "Cannot get the message"
+
+#: src/apps/mail/Imap_Client.cpp
+msgid "メールが見つかりません(削除されたかもしれません)"
+msgstr "Message not found (it may have been deleted)"
+
+#: src/apps/mail/MailScene.cpp src/apps/reader/ReaderScene.cpp src/gui/scenes/SettingsScene_Other.cpp
+msgid "一覧"
+msgstr "List"
+
+#: src/apps/mail/MailScene.cpp
+msgid "[更新]"
+msgstr "[Update]"
+
+#: src/apps/mail/MailScene.cpp
+msgid "\n[更新] を押すとサインインのコードを出します"
+msgstr "\nPress [Update] to show a sign-in code"
+
+#: src/apps/mail/MailScene.cpp
+msgid "Microsoft のサインインを始めています…"
+msgstr "Starting Microsoft sign-in…"
+
+#: src/apps/mail/MailScene.cpp
+msgid "スマホかパソコンのブラウザで\n"
+msgstr "In a browser on a phone or PC, open\n"
+
+#: src/apps/mail/MailScene.cpp
+msgid "\nを開き、下のコードを入れてサインインしてください"
+msgstr "\nand enter the code below to sign in"
+
+#: src/apps/mail/MailScene.cpp
+msgid "あと %u 分"
+msgstr "%u min left"
+
+#: src/apps/mail/MailScene.cpp
+msgid "(件名なし)"
+msgstr "(no subject)"
+
+#: src/apps/mail/MailScene.cpp src/apps/mail/MailScene.hpp
+msgid "メール"
+msgstr "Mail"
+
+#: src/apps/mail/MailScene.cpp
+msgid " (未読 %d)"
+msgstr " (%d unread)"
+
+#: src/apps/mail/MailScene.cpp
+msgid "(差出人なし)"
+msgstr "(no sender)"
+
+#: src/apps/mail/MailScene.cpp
+msgid " 他%d人"
+msgstr " +%d"
+
+#: src/apps/mail/MailScene.cpp
+msgid "差出人: "
+msgstr "From: "
+
+#: src/apps/mail/MailScene.cpp
+msgid "日時: %d/%02d/%02d(%s) %02d:%02d\n"
+msgstr "Date: %d/%02d/%02d (%s) %02d:%02d\n"
+
+#: src/apps/mail/MailScene.cpp
+msgid "日時: \n"
+msgstr "Date: \n"
+
+#: src/apps/mail/MailScene.cpp
+msgid "宛先: "
+msgstr "To: "
+
+#: src/apps/mail/MailScene.cpp
+msgid "添付: %d件(%s)"
+msgstr "Attachments: %d (%s)"
+
+#: src/apps/mail/MailScene.cpp
+msgid "(本文がありません)"
+msgstr "(no body)"
+
+#: src/apps/mail/MailScene.cpp
+msgid "読めませんでした: "
+msgstr "Could not read: "
+
+#: src/apps/mail/MailScene.cpp
+msgid "長いので途中までを表示"
+msgstr "Long message, showing the start"
+
+#: src/apps/mail/MailScene.cpp
+msgid "HTMLを文字だけにして表示"
+msgstr "HTML shown as plain text"
+
+#: src/apps/mail/MailScene.cpp
+msgid "サインインを待っています…"
+msgstr "Waiting for sign-in…"
+
+#: src/apps/mail/MailScene.cpp
+msgid "サインインが必要です"
+msgstr "Sign-in required"
+
+#: src/apps/mail/MailScene.cpp
+msgid "メールはありません"
+msgstr "No mail"
+
+#: src/apps/mail/MailScene.cpp
+msgid "新しい %d 通を表示(全 %u 通)"
+msgstr "Showing newest %d (of %u)"
+
+#: src/apps/mail/MailScene.cpp
+msgid "アカウントの種類"
+msgstr "Account type"
+
+#: src/apps/mail/MailScene.cpp
+msgid "Gmail・その他"
+msgstr "Gmail / other"
+
+#: src/apps/mail/MailScene.cpp
+msgid "Microsoft のメールアドレス(例: you@outlook.jp):"
+msgstr "Microsoft email address (e.g. you@outlook.com):"
+
+#: src/apps/mail/MailScene.cpp
+msgid "アプリ(クライアント)ID(Microsoft Entra に登録したもの):"
+msgstr "App (client) ID registered in Microsoft Entra:"
+
+#: src/apps/mail/MailScene.cpp
+msgid "アプリのIDが空なので保存しませんでした"
+msgstr "Not saved: the app ID is empty"
+
+#: src/apps/mail/MailScene.cpp
+msgid "アカウントを保存できませんでした"
+msgstr "Could not save the account"
+
+#: src/apps/mail/MailScene.cpp
+msgid "IMAPサーバ(例: imap.gmail.com。ポートが993以外なら :番号):"
+msgstr "IMAP server (e.g. imap.gmail.com; add :port if not 993):"
+
+#: src/apps/mail/MailScene.cpp
+msgid "サーバの名前が読めません(例: imap.example.com:993)"
+msgstr "Cannot read the server name (e.g. imap.example.com:993)"
+
+#: src/apps/mail/MailScene.cpp
+msgid "ユーザー名(ふつうはメールアドレス):"
+msgstr "User name (usually your email):"
+
+#: src/apps/mail/MailScene.cpp
+msgid "パスワード(Gmailはアプリパスワード。空欄で変更なし):"
+msgstr "Password (app password for Gmail; blank to keep):"
+
+#: src/apps/mail/MailScene.cpp
+msgid "パスワード(Gmailはアプリパスワード):"
+msgstr "Password (app password for Gmail):"
+
+#: src/apps/mail/MailScene.cpp
+msgid "パスワードが空なので保存しませんでした"
+msgstr "Not saved: the password is empty"
+
+#: src/apps/mail/MailScene.cpp
+msgid "アカウントを保存しました"
+msgstr "Account saved"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインのサーバのURLが読めません"
+msgstr "Cannot read the sign-in server URL"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインのサーバへ送れません"
+msgstr "Cannot reach the sign-in server"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "mail.cfg に oauth-client-id がありません"
+msgstr "mail.cfg has no oauth-client-id"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "送る内容が長すぎます"
+msgstr "Request is too long"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "コードの期限が切れました。もう一度サインインしてください"
+msgstr "The code expired. Sign in again"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインのサーバと通信できません: "
+msgstr "Cannot talk to the sign-in server: "
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインのサーバの応答が読めません (HTTP %d)"
+msgstr "Cannot read the sign-in server response (HTTP %d)"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインを始められません: %s"
+msgstr "Cannot start sign-in: %s"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインを始められません (HTTP %d)"
+msgstr "Cannot start sign-in (HTTP %d)"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "アクセストークンが長すぎます"
+msgstr "Access token is too long"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインが断られました"
+msgstr "Sign-in was declined"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインできません: %s"
+msgstr "Sign-in failed: %s"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "サインインできません: %s (HTTP %d)"
+msgstr "Sign-in failed: %s (HTTP %d)"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "Microsoft のサインインが切れました。[更新] を押してサインインし直してください"
+msgstr "Microsoft sign-in expired. Press [Update] to sign in again"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "アクセストークンを取れません: %s"
+msgstr "Cannot get an access token: %s"
+
+#: src/apps/mail/Mail_OAuth.cpp
+msgid "アクセストークンを取れません (HTTP %d)"
+msgstr "Cannot get an access token (HTTP %d)"
+
+#: src/apps/music/MusicScene.cpp
+msgid "全曲"
+msgstr "All"
+
+#: src/apps/music/MusicScene.cpp
+msgid "すべての曲"
+msgstr "All songs"
+
+#: src/apps/music/MusicScene.cpp
+msgid "%s を読めません\n\n%s"
+msgstr "Cannot read %s\n\n%s"
+
+#: src/apps/music/MusicScene.cpp
+msgid " 一時停止中"
+msgstr " Paused"
+
+#: src/apps/music/MusicScene.cpp
+msgid "(音は出ません)"
+msgstr "(no sound)"
+
+#: src/apps/music/MusicScene.cpp
+msgid "%s · 再生が終わりました"
+msgstr "%s · Finished"
+
+#: src/apps/music/MusicScene.cpp
+msgid "%s · 他のアプリが音を使ったため止まりました"
+msgstr "%s · Stopped: another app used audio"
+
+#: src/apps/music/MusicScene.cpp
+msgid "%s · 停止中"
+msgstr "%s · Stopped"
+
+#: src/apps/music/MusicScene.cpp
+msgid "曲が選ばれていません"
+msgstr "No song selected"
+
+#: src/apps/music/MusicScene.cpp
+msgid "/music/ に .mml か .wav を置くか、フォルダ(=プレイリスト)を作ってください"
+msgstr "Put .mml or .wav files in /music/, or make folders (playlists)"
+
+#: src/apps/music/MusicScene.cpp
+msgid "曲をタップすると再生します"
+msgstr "Tap a song to play"
+
+#: src/apps/music/MusicScene.cpp
+msgid "読めません(タップで全文)\n"
+msgstr "Cannot read (tap for details)\n"
+
+#: src/apps/music/MusicScene.cpp
+msgid "%s を飛ばしました(タップで全文)\n"
+msgstr "Skipped %s (tap for details)\n"
+
+#: src/apps/music/Music_Service.cpp
+msgid "読めない音のファイルです"
+msgstr "Unreadable audio file"
+
+#: src/apps/music/Music_Service.cpp src/gui/scenes/FileViewerScene.cpp
+msgid "%d行%d列: "
+msgstr "Line %d, col %d: "
+
+#: src/apps/music/Music_Service.cpp
+msgid "止まっています"
+msgstr "Stopped"
+
+#: src/apps/music/Music_Service.cpp
+msgid "一時停止 "
+msgstr "Paused "
+
+#: src/apps/music/Music_Service.cpp
+msgid "他のアプリが音を使ったため止まりました"
+msgstr "Stopped: another app used audio"
+
+#: src/apps/music/Music_Service.cpp
+msgid "停止中 %s"
+msgstr "Stopped %s"
+
+#: src/apps/music/ui/MusicPlayerPanel.cpp
+msgid "ループ"
+msgstr "Loop"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "当てはまるメモはありません"
+msgstr "No matching notes"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "メモがありません。[新規]で作るか、SDの /notes/ に .txt / .md を置いてください。本文に #タグ と書くと[タグ]で絞り込めます"
+msgstr "No notes. Create one with [New] or put .txt / .md files in /notes/ on the SD. Write #tag in a note to filter with [Tags]"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "読み込み中… %d件"
+msgstr "Loading… %d"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "メモ "
+msgstr "Notes "
+
+#: src/apps/notes/NotesScene.cpp
+msgid "(先頭%d件まで)"
+msgstr "(first %d)"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "メモが見つかりません"
+msgstr "Note not found"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "/notes/ を作れませんでした"
+msgstr "Could not create /notes/"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "新しいメモの名前を作れません"
+msgstr "Cannot name the new note"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "中身から探す(空で解除):"
+msgstr "Search contents (blank to clear):"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "タグはまだありません(本文に #タグ と書く)"
+msgstr "No tags yet (write #tag in a note)"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "タグ"
+msgstr "Tags"
+
+#: src/apps/notes/NotesScene.cpp src/apps/todo/TodoScene.cpp
+msgid "すべて"
+msgstr "All"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "新規"
+msgstr "New"
+
+#: src/apps/notes/NotesScene.cpp
+msgid "#タグ"
+msgstr "#Tags"
+
+#: src/apps/notes/NotesScene.hpp
+msgid "メモ"
+msgstr "Notes"
+
+#: src/apps/reader/ReaderLibraryScene.cpp src/apps/reader/ReaderScene.cpp
+msgid "本棚"
+msgstr "Library"
+
+#: src/apps/reader/ReaderLibraryScene.cpp src/apps/store/StoreScene.cpp src/apps/texteditor/TextEditorScene.cpp src/apps/video/VideoScene.cpp src/gui/scenes/BackgroundScene.cpp src/gui/scenes/NotificationScene.cpp
+msgid "開く"
+msgstr "Open"
+
+#: src/apps/reader/ReaderLibraryScene.cpp
+msgid "続きから読む"
+msgstr "Resume"
+
+#: src/apps/reader/ReaderLibraryScene.cpp
+msgid "本がありません。SDの /books/ に青空文庫のテキスト(.txt)を置くか、[開く]から選んでください"
+msgstr "No books. Put Aozora Bunko texts (.txt) in /books/ on the SD, or pick one with [Open]"
+
+#: src/apps/reader/ReaderLibraryScene.cpp
+msgid "続きから: "
+msgstr "Resume: "
+
+#: src/apps/reader/ReaderLibraryScene.cpp
+msgid "本が見つかりません(消すか移したため、一覧から外しました)"
+msgstr "Book not found (deleted or moved; removed from the list)"
+
+#: src/apps/reader/ReaderLibraryScene.hpp
+msgid "読書"
+msgstr "Reader"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "本を開けません"
+msgstr "Cannot open the book"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "本を開けません(SDカードとファイルを確かめてください)"
+msgstr "Cannot open the book (check the SD card and file)"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "しおり"
+msgstr "Mark"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "文字"
+msgstr "Text"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "ルビ"
+msgstr "Ruby"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "外す"
+msgstr "Remove"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "しおりがいっぱいです(先に外してください)"
+msgstr "Bookmarks are full (remove one first)"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "目次・しおり"
+msgstr "Contents & marks"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "目次・しおり(目次は読み込み中)"
+msgstr "Contents & marks (loading contents)"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "(見出し・しおりはありません)"
+msgstr "(no headings or bookmarks)"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "しおり: %s"
+msgstr "Mark: %s"
+
+#: src/apps/reader/ReaderScene.cpp
+msgid "(空行)"
+msgstr "(blank line)"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "transcribe.cfg の api が URL ではありません"
+msgstr "api in transcribe.cfg is not a URL"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "transcribe.cfg の model / language / prompt に使えない文字があります"
+msgstr "model / language / prompt in transcribe.cfg has invalid characters"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "APIキーがありません。[キー] から入れてください"
+msgstr "No API key. Enter one with [Key]"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "APIキーに使えない文字があるか、長すぎます"
+msgstr "API key has invalid characters or is too long"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "APIキーが長すぎます"
+msgstr "API key is too long"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "WAVではありません"
+msgstr "Not a WAV file"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "録音を開けません"
+msgstr "Cannot open the recording"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "録音が空です"
+msgstr "Recording is empty"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "録音が大きすぎます(%luMB。上限25MB)"
+msgstr "Recording too large (%luMB; 25MB max)"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "送る内容を作れません(model / prompt が長すぎる?)"
+msgstr "Cannot build the request (model / prompt too long?)"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "送り始められません"
+msgstr "Cannot start sending"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "Wi-Fiが切れました"
+msgstr "Wi-Fi disconnected"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "文章をSDへ書けません"
+msgstr "Cannot write the text to the SD"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "送れませんでした: %s"
+msgstr "Send failed: %s"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "文字起こしが終わりました"
+msgstr "Transcription done"
+
+#: src/apps/recorder/Transcribe_Client.cpp
+msgid "やめました"
+msgstr "Stopped"
+
+#: src/apps/recorder/Transcribe_Proto.cpp
+msgid "受け付けられませんでした"
+msgstr "Rejected"
+
+#: src/apps/recorder/Transcribe_Proto.cpp
+msgid "APIキーが違います"
+msgstr "Wrong API key"
+
+#: src/apps/recorder/Transcribe_Proto.cpp
+msgid "使う権限がありません"
+msgstr "Not permitted"
+
+#: src/apps/recorder/Transcribe_Proto.cpp
+msgid "送り先が見つかりません(api / model を確認)"
+msgstr "Endpoint not found (check api / model)"
+
+#: src/apps/recorder/Transcribe_Proto.cpp
+msgid "録音が大きすぎます"
+msgstr "Recording too large"
+
+#: src/apps/recorder/Transcribe_Proto.cpp
+msgid "回数か残高の上限です"
+msgstr "Rate or balance limit reached"
+
+#: src/apps/recorder/Transcribe_Proto.cpp
+msgid "相手のサーバの不調です"
+msgstr "Server error"
+
+#: src/apps/recorder/Transcribe_Proto.cpp
+msgid "失敗しました"
+msgstr "Failed"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "切断"
+msgstr "Close"
+
+#: src/apps/ssh/SshScene.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "接続"
+msgstr "Join"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "文字:小"
+msgstr "Font:S"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "文字:大"
+msgstr "Font:L"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\r\n接続先 (ユーザー@ホスト[:ポート] [-J 踏み台]): "
+msgstr "\r\nConnect to (user@host[:port] [-J jump]): "
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\r\n接続先 [%s]: "
+msgstr "\r\nConnect to [%s]: "
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[91m「ユーザー名@ホスト[:ポート]」の形で入力してください。踏み台を通すときは後ろに「 -J ユーザー名@踏み台[:ポート]」\033[0m"
+msgstr "\033[91mEnter it as \"user@host[:port]\". To go through a jump host, add \" -J user@jump[:port]\"\033[0m"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "踏み台 %s:%u へ接続しています...\r\n"
+msgstr "Connecting to jump host %s:%u...\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "%s:%u へ接続しています...\r\n"
+msgstr "Connecting to %s:%u...\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "known_hosts へ追加しました\r\n"
+msgstr "Added to known_hosts\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[93m(known_hosts へ書き込めませんでした。次回も確認します)\033[0m\r\n"
+msgstr "\033[93m(Could not write known_hosts; you will be asked again)\033[0m\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[93m秘密鍵を暗号化して保存し直しました\033[0m\r\n"
+msgstr "\033[93mRe-saved the private key encrypted\033[0m\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[93m秘密鍵を暗号化して保存し直せませんでした(平文のままです)\033[0m\r\n"
+msgstr "\033[93mCould not re-save the private key encrypted (still plain)\033[0m\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[93m鍵がパスフレーズ付きのため使えません(パスワードで続けます)\033[0m\r\n"
+msgstr "\033[93mThe key has a passphrase and cannot be used (using password)\033[0m\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[93m鍵の種類が ssh-ed25519 ではないため使えません\033[0m\r\n"
+msgstr "\033[93mThe key is not ssh-ed25519 and cannot be used\033[0m\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[93m鍵ファイルを読めませんでした\033[0m\r\n"
+msgstr "\033[93mCould not read the key file\033[0m\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[91mWi-Fiに繋がっていません\033[0m\r\n"
+msgstr "\033[91mWi-Fi is not connected\033[0m\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "踏み台経由で %s:%u へ接続しています...\r\n"
+msgstr "Connecting to %s:%u via the jump host...\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\033[91m警告: %s のホスト鍵が以前と違います!\r\nなりすましの可能性があります。心当たりがあれば\r\n%s から該当する行を消してください。\r\n今の鍵: %s\033[0m\r\n"
+msgstr "\033[91mWARNING: the host key of %s has changed!\r\nSomeone may be impersonating it. If you expected this,\r\nremove the matching line from %s.\r\nCurrent key: %s\033[0m\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "%s%s は初めて接続するホストです。\r\nED25519の鍵の指紋:\r\n%s\r\n"
+msgstr "%s%s is a new host.\r\nED25519 key fingerprint:\r\n%s\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "踏み台 "
+msgstr "Jump host "
+
+#: src/apps/ssh/SshScene.cpp
+msgid "このホストを信頼して接続しますか? (yes/no): "
+msgstr "Trust this host and connect? (yes/no): "
+
+#: src/apps/ssh/SshScene.cpp
+msgid "%s@%s の%s"
+msgstr "%s@%s %s"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "踏み台: "
+msgstr "Jump: "
+
+#: src/apps/ssh/SshScene.cpp
+msgid "(公開鍵認証を使うには /sys/ssh/id_ed25519 に鍵を置きます)\r\n"
+msgstr "(For public key auth, put a key in /sys/ssh/id_ed25519)\r\n"
+
+#: src/apps/ssh/SshScene.cpp
+msgid "\r\n\033[93m切断しました\033[0m\r\n"
+msgstr "\r\n\033[93mDisconnected\033[0m\r\n"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "送信に失敗しました"
+msgstr "Send failed"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "名前を解決できませんでした: "
+msgstr "Could not resolve the name: "
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "接続できませんでした(到達しない/ポートが閉じている)"
+msgstr "Could not connect (unreachable or port closed)"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "切断しました"
+msgstr "Disconnected"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "送信するパケットが大きすぎます"
+msgstr "Outgoing packet too large"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "サーバから応答がありません(時間切れ)"
+msgstr "No response from the server (timeout)"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "SSHサーバではないようです"
+msgstr "Does not look like an SSH server"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "SSH2に対応していないサーバです"
+msgstr "Server does not support SSH2"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "サーバから大きすぎるパケットが届きました"
+msgstr "Server sent a packet that is too large"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "受信したデータの改ざんを検出しました"
+msgstr "Received data was tampered with"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "壊れたパケットが届きました"
+msgstr "Received a broken packet"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "空のパケットが届きました"
+msgstr "Received an empty packet"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "鍵交換の途中で想定外のメッセージが届きました"
+msgstr "Unexpected message during key exchange"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "サーバが切断しました: %.*s"
+msgstr "Server disconnected: %.*s"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "鍵交換の順序が正しくありません"
+msgstr "Key exchange out of order"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "パスワードの変更を求められました(未対応)"
+msgstr "Password change requested (not supported)"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "接続を閉じました(終了コード %d)"
+msgstr "Connection closed (exit code %d)"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "接続を閉じました"
+msgstr "Connection closed"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "鍵交換の準備に失敗しました"
+msgstr "Failed to prepare the key exchange"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "鍵交換の途中で鍵交換を求められました"
+msgstr "Key exchange requested during key exchange"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "鍵交換のメッセージが壊れています"
+msgstr "Broken key exchange message"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "サーバが curve25519-sha256 の鍵交換に対応していません"
+msgstr "Server does not support curve25519-sha256 key exchange"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "サーバに ssh-ed25519 のホスト鍵がありません"
+msgstr "Server has no ssh-ed25519 host key"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "サーバが %s に対応していません"
+msgstr "Server does not support %s"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "サーバが圧縮なしの通信に対応していません"
+msgstr "Server does not support uncompressed transport"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "想定外の鍵交換の応答が届きました"
+msgstr "Unexpected key exchange reply"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "鍵交換の応答が壊れています"
+msgstr "Broken key exchange reply"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "ホスト鍵の形式が ssh-ed25519 ではありません"
+msgstr "Host key is not ssh-ed25519"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "鍵交換に失敗しました(不正な公開値)"
+msgstr "Key exchange failed (invalid public value)"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "ホスト鍵の署名が正しくありません"
+msgstr "Invalid host key signature"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "鍵の交換し直しでホスト鍵が変わりました"
+msgstr "Host key changed during rekey"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "ホスト鍵を信頼しなかったため中止しました"
+msgstr "Aborted: host key not trusted"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "想定外の NEWKEYS が届きました"
+msgstr "Unexpected NEWKEYS"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "公開鍵は受け付けられませんでした"
+msgstr "Public key was rejected"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "パスワードが違います"
+msgstr "Wrong password"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "認証に失敗しました"
+msgstr "Authentication failed"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "パスワード: "
+msgstr "Password: "
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "認証に失敗しました(サーバが受け付ける方式: %s)"
+msgstr "Authentication failed (server accepts: %s)"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "ユーザー名が長すぎます"
+msgstr "User name is too long"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "認証の問い合わせを読めませんでした"
+msgstr "Could not read the auth prompt"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "シェルを開けませんでした(チャネルを拒否されました)"
+msgstr "Could not open a shell (channel refused)"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "踏み台から %s:%u へ繋げませんでした(%.*s)"
+msgstr "Jump host could not reach %s:%u (%.*s)"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "チャネルの応答が壊れています"
+msgstr "Broken channel reply"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "端末(pty)を確保できませんでした"
+msgstr "Could not allocate a pty"
+
+#: src/apps/ssh/Ssh_Client.cpp
+msgid "シェルを開けませんでした"
+msgstr "Could not open a shell"
+
+#: src/apps/store/App_Install.cpp
+msgid "SDカードから読めません"
+msgstr "Cannot read from the SD card"
+
+#: src/apps/store/App_Install.cpp
+msgid "ファイル一覧(files.tsv)の形式が違います"
+msgstr "Unexpected file list (files.tsv)"
+
+#: src/apps/store/App_Install.cpp
+msgid "main.lua か app.cfg がありません"
+msgstr "main.lua or app.cfg is missing"
+
+#: src/apps/store/App_Install.cpp
+msgid "ファイルの合計が一覧と合いません"
+msgstr "File total does not match the list"
+
+#: src/apps/store/App_Install.cpp
+msgid "app.cfg を読めません"
+msgstr "Cannot read app.cfg"
+
+#: src/apps/store/App_Install.cpp
+msgid "app.cfg の id か版が一覧と合いません"
+msgstr "id or version in app.cfg does not match the list"
+
+#: src/apps/store/App_Install.cpp
+msgid "app.cfg の権限が一覧より多くなっています"
+msgstr "app.cfg asks for more permissions than listed"
+
+#: src/apps/store/App_Install.cpp
+msgid "インストール先の名前が長すぎます"
+msgstr "Install folder name is too long"
+
+#: src/apps/store/App_Install.cpp
+msgid "同じ名前のアプリが入っています"
+msgstr "An app with the same name is installed"
+
+#: src/apps/store/App_Install.cpp src/apps/store/App_Package.cpp src/apps/store/App_Store.cpp
+msgid "ファイル一覧を読み直せません"
+msgstr "Cannot re-read the file list"
+
+#: src/apps/store/App_Install.cpp
+msgid "インストール先へファイルを移せません"
+msgstr "Cannot move files into place"
+
+#: src/apps/store/App_Package.cpp
+msgid "パッケージではありません"
+msgstr "Not a package"
+
+#: src/apps/store/App_Package.cpp
+msgid "知らない形式のパッケージです(本体の更新が要ります)"
+msgstr "Unknown package format (update the firmware)"
+
+#: src/apps/store/App_Package.cpp
+msgid "パッケージの見出しが壊れています"
+msgstr "Package header is broken"
+
+#: src/apps/store/App_Package.cpp
+msgid "パッケージのアプリの情報を読めません"
+msgstr "Cannot read the app info in the package"
+
+#: src/apps/store/App_Package.cpp src/apps/store/App_Store.cpp
+msgid "危険と判断されたアプリです"
+msgstr "This app was flagged as dangerous"
+
+#: src/apps/store/App_Package.cpp src/apps/store/App_Store.cpp
+msgid "取り下げられたアプリです"
+msgstr "This app was withdrawn"
+
+#: src/apps/store/App_Package.cpp
+msgid "作者の署名を読めません"
+msgstr "Cannot read the author signature"
+
+#: src/apps/store/App_Package.cpp
+msgid "作者の署名の鍵がアプリの情報と合いません"
+msgstr "Author key does not match the app info"
+
+#: src/apps/store/App_Package.cpp src/apps/store/App_Store.cpp
+msgid "同じ名前の別のアプリが入っています"
+msgstr "A different app with the same name is installed"
+
+#: src/apps/store/App_Package.cpp
+msgid "作者の鍵が変わりました(アプリを削除してから置き直してください)"
+msgstr "Author key changed (delete the app, then install again)"
+
+#: src/apps/store/App_Package.cpp src/apps/store/App_Store.cpp src/apps/store/StoreScene.cpp
+msgid "入っている版より古い版は入れられません"
+msgstr "Cannot install an older version"
+
+#: src/apps/store/App_Package.cpp
+msgid "%s %s を入れています"
+msgstr "Installing %s %s"
+
+#: src/apps/store/App_Package.cpp
+msgid "パッケージが途中で切れています"
+msgstr "Package is truncated"
+
+#: src/apps/store/App_Package.cpp
+msgid "ファイル一覧(files.tsv)がアプリの情報と合いません"
+msgstr "File list (files.tsv) does not match the app info"
+
+#: src/apps/store/App_Package.cpp src/apps/store/App_Store.cpp
+msgid "作者の署名が合いません"
+msgstr "Bad author signature"
+
+#: src/apps/store/App_Package.cpp src/apps/store/App_Store.cpp
+msgid "%s の中身が一覧と合いません"
+msgstr "%s does not match the list"
+
+#: src/apps/store/App_Package.cpp
+msgid "パッケージの後ろに余分なデータがあります"
+msgstr "Extra data after the package"
+
+#: src/apps/store/App_Package.cpp
+msgid "パッケージを開けません"
+msgstr "Cannot open the package"
+
+#: src/apps/store/App_Package.cpp src/apps/store/App_Store.cpp
+msgid "%s %s を入れました"
+msgstr "Installed %s %s"
+
+#: src/apps/store/App_Package.cpp
+msgid "%s ほか%d件"
+msgstr "%s and %d more"
+
+#: src/apps/store/App_Package.cpp
+msgid "アプリを入れました"
+msgstr "App installed"
+
+#: src/apps/store/App_Package.cpp
+msgid "アプリを入れられません"
+msgstr "Cannot install the app"
+
+#: src/apps/store/App_Package.cpp
+msgid "入れられないアプリがあります"
+msgstr "Some apps could not be installed"
+
+#: src/apps/store/App_Repo.cpp
+msgid "ネットワーク"
+msgstr "Network"
+
+#: src/apps/store/App_Repo.cpp
+msgid "・"
+msgstr ", "
+
+#: src/apps/store/App_Repo.cpp src/boot/App_List.cpp src/gui/scenes/NotificationScene.cpp
+msgid "通知"
+msgstr "Notices"
+
+#: src/apps/store/App_Repo.cpp
+msgid "SD全体"
+msgstr "Whole SD"
+
+#: src/apps/store/App_Repo.cpp src/gui/scenes/BackgroundScene.cpp
+msgid "バックグラウンド"
+msgstr "Background"
+
+#: src/apps/store/App_Repo.cpp
+msgid "マイク"
+msgstr "Mic"
+
+#: src/apps/store/App_Repo.cpp
+msgid "なし"
+msgstr "None"
+
+#: src/apps/store/App_Store.cpp
+msgid "信頼する鍵がありません(/sys/store.cfg の key)"
+msgstr "No trusted key (key in /sys/store.cfg)"
+
+#: src/apps/store/App_Store.cpp
+msgid "一覧を取得中…"
+msgstr "Fetching the list…"
+
+#: src/apps/store/App_Store.cpp
+msgid "%s の中身が一覧と合いません(大きすぎます)"
+msgstr "%s does not match the list (too large)"
+
+#: src/apps/store/App_Store.cpp
+msgid "配布元のファイルが大きすぎます"
+msgstr "File on the server is too large"
+
+#: src/apps/store/App_Store.cpp
+msgid "署名(catalog.sig)を読めません"
+msgstr "Cannot read the signature (catalog.sig)"
+
+#: src/apps/store/App_Store.cpp
+msgid "署名の鍵が信頼されていません(store.cfgのkeyを確かめてください)"
+msgstr "Signing key not trusted (check key in store.cfg)"
+
+#: src/apps/store/App_Store.cpp
+msgid "一覧の署名が合いません(改ざん・取得の途中で更新された可能性)"
+msgstr "Bad list signature (tampered, or updated during download)"
+
+#: src/apps/store/App_Store.cpp
+msgid "一覧(catalog.tsv)の形式が違います"
+msgstr "Unexpected list format (catalog.tsv)"
+
+#: src/apps/store/App_Store.cpp
+msgid "前に取得したものより古い一覧が返されました"
+msgstr "Got an older list than before"
+
+#: src/apps/store/App_Store.cpp
+msgid "一覧を保存できません"
+msgstr "Cannot save the list"
+
+#: src/apps/store/App_Store.cpp
+msgid "%d件のアプリ"
+msgstr "%d apps"
+
+#: src/apps/store/App_Store.cpp
+msgid "同じ名前のアプリが入っています(上書きの確認が要ります)"
+msgstr "An app with the same name is installed (confirm to overwrite)"
+
+#: src/apps/store/App_Store.cpp
+msgid "作者の鍵が変わりました(削除してから入れ直すと、新しい鍵で入ります)"
+msgstr "Author key changed (delete and reinstall to use the new key)"
+
+#: src/apps/store/App_Store.cpp
+msgid "%s を取得中…"
+msgstr "Fetching %s…"
+
+#: src/apps/store/App_Store.cpp
+msgid "ファイル一覧(files.tsv)が一覧の署名と合いません"
+msgstr "File list (files.tsv) does not match the signed list"
+
+#: src/apps/store/App_Store.cpp
+msgid "作者の署名(files.sig)を読めません"
+msgstr "Cannot read the author signature (files.sig)"
+
+#: src/apps/store/App_Store.cpp
+msgid "作者の署名の鍵が一覧と合いません"
+msgstr "Author key does not match the list"
+
+#: src/apps/store/App_Store.cpp
+msgid "インストール中…"
+msgstr "Installing…"
+
+#: src/apps/store/App_Store.cpp
+msgid "%s を取得中 (%d/%d)"
+msgstr "Fetching %s (%d/%d)"
+
+#: src/apps/store/App_Store.cpp
+msgid "%s を削除しました"
+msgstr "Deleted %s"
+
+#: src/apps/store/App_Store.cpp
+msgid "%s を削除しきれませんでした"
+msgstr "Could not fully delete %s"
+
+#: src/apps/store/StoreScene.cpp
+msgid "アプリストア"
+msgstr "App Store"
+
+#: src/apps/store/StoreScene.cpp src/gui/scenes/BackgroundScene.cpp
+msgid "入れる"
+msgstr "Install"
+
+#: src/apps/store/StoreScene.cpp
+msgid "メモリが足りないため、アプリストアを開けません"
+msgstr "Not enough memory to open the App Store"
+
+#: src/apps/store/StoreScene.cpp
+msgid "Wi-Fiに繋いで [更新] を押してください"
+msgstr "Join Wi-Fi, press [Update]"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (更新)"
+msgstr " (update)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (危険)"
+msgstr " (danger)"
+
+#: src/apps/store/StoreScene.cpp
+msgid "を削除してください(危険)"
+msgstr " - please delete (danger)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (取り下げ)"
+msgstr " (withdrawn)"
+
+#: src/apps/store/StoreScene.cpp
+msgid "アプリを選んでください"
+msgstr "Choose an app"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (入っています)"
+msgstr " (installed)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (%s が入っています)"
+msgstr " (%s installed)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (新しい%sが入っています)"
+msgstr " (newer %s installed)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (手で入れた同名のアプリがあります)"
+msgstr " (a manually added app has this name)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (同名の別のアプリがあります)"
+msgstr " (another app has this name)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (作者の鍵が変わりました)"
+msgstr " (author key changed)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " 危険と判断されました"
+msgstr " Flagged as dangerous"
+
+#: src/apps/store/StoreScene.cpp
+msgid " 取り下げられました"
+msgstr " Withdrawn"
+
+#: src/apps/store/StoreScene.cpp
+msgid "\n作者: %s  権限: %s\n%s"
+msgstr "\nAuthor: %s  Permissions: %s\n%s"
+
+#: src/apps/store/StoreScene.cpp
+msgid "入れ直す"
+msgstr "Reinstall"
+
+#: src/apps/store/StoreScene.cpp
+msgid "上書き"
+msgstr "Overwrite"
+
+#: src/apps/store/StoreScene.cpp
+msgid "同じ名前の別のアプリが入っているので入れられません"
+msgstr "Cannot install: a different app has this name"
+
+#: src/apps/store/StoreScene.cpp
+msgid "作者の鍵が変わりました。削除してから入れ直してください"
+msgstr "Author key changed. Delete it, then install again"
+
+#: src/apps/store/StoreScene.cpp
+msgid "取り下げられたアプリなので入れられません"
+msgstr "Cannot install a withdrawn app"
+
+#: src/apps/store/StoreScene.cpp
+msgid "%s %s を入れますか?\n作者: %s\n使う権限: %s"
+msgstr "Install %s %s?\nAuthor: %s\nPermissions: %s"
+
+#: src/apps/store/StoreScene.cpp
+msgid "\n\n/lua/apps/%s に同じ名前のアプリがあります。上書きします(アプリが書いたファイルは残ります)"
+msgstr "\n\nAn app with this name is in /lua/apps/%s. It will be overwritten (files the app wrote are kept)"
+
+#: src/apps/store/StoreScene.cpp
+msgid "一覧の取得が終わってから入れてください"
+msgstr "Wait for the list to finish loading"
+
+#: src/apps/store/StoreScene.cpp
+msgid "%s を削除しますか?\n/lua/apps/%s を丸ごと消します(セーブデータ等も消えます)"
+msgstr "Delete %s?\nThis removes all of /lua/apps/%s (including save data)"
+
+#: src/apps/store/StoreScene.cpp
+msgid "配布元のURL:"
+msgstr "Source URL:"
+
+#: src/apps/store/StoreScene.cpp
+msgid "配布元を変えました。[更新] で取得します"
+msgstr "Source changed. Fetch with [Update]"
+
+#: src/apps/store/StoreScene.cpp
+msgid "URLを読めません(http:// か https:// で始めてください)"
+msgstr "Cannot read the URL (start with http:// or https://)"
+
+#: src/apps/store/StoreScene.cpp
+msgid "ランチャに登録されていません(再起動すると並びます)"
+msgstr "Not in the launcher yet (appears after a restart)"
+
+#: src/apps/store/StoreScene.hpp
+msgid "ストア"
+msgstr "Store"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "容量の上限(32KiB)を超えます"
+msgstr "Exceeds the size limit (32KiB)"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "行数の上限(1000行)を超えます"
+msgstr "Exceeds the line limit (1000)"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "1行が長くなりすぎます(191バイトまで)"
+msgstr "Line too long (191 bytes max)"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "(新規)"
+msgstr "(new)"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid " (未保存)"
+msgstr " (unsaved)"
+
+#: src/apps/texteditor/TextEditorScene.cpp src/gui/scenes/TouchCalibScene.cpp
+msgid "保存"
+msgstr "Save"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "全部"
+msgstr "All"
+
+#: src/apps/texteditor/TextEditorScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "置換"
+msgstr "Replace"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "次"
+msgstr "Next"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "前"
+msgstr "Prev"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "保存していない変更があります。破棄して戻りますか?"
+msgstr "You have unsaved changes. Discard and go back?"
+
+#: src/apps/texteditor/TextEditorScene.cpp src/apps/texteditor/TextEditorScene_File.cpp
+msgid "保存していない変更があります。破棄して別のファイルを開きますか?"
+msgstr "You have unsaved changes. Discard and open another file?"
+
+#: src/apps/texteditor/TextEditorScene.cpp
+msgid "保存していない変更があります。破棄して新規作成しますか?"
+msgstr "You have unsaved changes. Discard and start a new file?"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "これ以上元に戻せません"
+msgstr "Nothing more to undo"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "やり直せる操作がありません"
+msgstr "Nothing to redo"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "切り取れるのは1KiBまでです"
+msgstr "Can cut up to 1KiB"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "1KiBまでコピーしました"
+msgstr "Copied the first 1KiB"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "コピーしました"
+msgstr "Copied"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "1行コピーしました"
+msgstr "Copied a line"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "切り取りました"
+msgstr "Cut"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "クリップボードは空です"
+msgstr "Clipboard is empty"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "選択を解除しました"
+msgstr "Selection cleared"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "範囲選択: 終わりの位置をタップ"
+msgstr "Select: tap the end position"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp src/gui/scenes/FileViewerScene.cpp src/gui/scenes/SettingsScene.cpp
+msgid "編集"
+msgstr "Edit"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "元に戻す"
+msgstr "Undo"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp src/gui/scenes/TouchCalibScene.cpp
+msgid "やり直し"
+msgstr "Redo"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "範囲選択"
+msgstr "Select"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "すべて選択"
+msgstr "Select all"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp src/gui/scenes/FileExplorerScene.cpp
+msgid "コピー"
+msgstr "Copy"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "切り取り"
+msgstr "Cut"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "貼り付け"
+msgstr "Paste"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "新規作成"
+msgstr "New"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/RecentFilesScene.cpp
+msgid "最近開いたファイル"
+msgstr "Recent files"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "選択を解除"
+msgstr "Deselect"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "置換: 探す文字列"
+msgstr "Replace: find"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "検索する文字列"
+msgstr "Find"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/gui/widgets/keyboards/KeyboardNum.cpp src/lua/LuaEngine_Ext.cpp src/lua/LuaEngine_Widgets.cpp
+msgid "決定"
+msgstr "OK"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "置き換える文字列(空なら消す)"
+msgstr "Replace with (blank to delete)"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "0件"
+msgstr "0 found"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "すべて置換しました"
+msgstr "Replaced all"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "%d件置換(残りは%s)"
+msgstr "Replaced %d (%s left)"
+
+#: src/apps/texteditor/TextEditorScene_Edit.cpp
+msgid "%d件置換しました"
+msgstr "Replaced %d"
+
+#: src/apps/texteditor/TextEditorScene_File.cpp
+msgid "破棄する"
+msgstr "Discard"
+
+#: src/apps/texteditor/TextEditorScene_File.cpp
+msgid "ファイルを開けませんでした"
+msgstr "Could not open the file"
+
+#: src/apps/texteditor/TextEditorScene_File.cpp
+msgid "大きすぎて開けません(32KiBまで)"
+msgstr "Too large to open (32KiB max)"
+
+#: src/apps/texteditor/TextEditorScene_File.cpp
+msgid "1行が長すぎて開けません(191バイトまで)"
+msgstr "A line is too long to open (191 bytes max)"
+
+#: src/apps/texteditor/TextEditorScene_File.cpp
+msgid "行数が多すぎて開けません(1000行まで)"
+msgstr "Too many lines to open (1000 max)"
+
+#: src/apps/texteditor/TextEditorScene_File.cpp
+msgid "最近開いたファイルはありません"
+msgstr "No recent files"
+
+#: src/apps/texteditor/TextEditorScene_File.cpp
+msgid "ファイルが見つかりません(一覧から外しました)"
+msgstr "File not found (removed from the list)"
+
+#: src/apps/texteditor/TextEditorScene_Input.cpp
+msgid "これ以上行を増やせません"
+msgstr "Cannot add more lines"
+
+#: src/apps/texteditor/TextEditorScene_Input.cpp
+msgid "容量の上限(32KiB)です"
+msgstr "Size limit reached (32KiB)"
+
+#: src/apps/texteditor/TextEditorScene_Input.cpp
+msgid "1行が長くなりすぎるため繋げられません"
+msgstr "Cannot join: the line would be too long"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "7日間"
+msgstr "7 days"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "完了"
+msgstr "Done"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "タスクはありません。[追加] で足せます"
+msgstr "No tasks. Add one with [Add]"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "タップで選択、もう一度タップで完了"
+msgstr "Tap to select, tap again to complete"
+
+#: src/apps/todo/TodoScene.cpp src/apps/todo/Todo_Reminders.cpp
+msgid "期限 %s"
+msgstr "Due %s"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "期限なし  "
+msgstr "No due  "
+
+#: src/apps/todo/TodoScene.cpp
+msgid "多すぎるので一部だけ表示しています"
+msgstr "Too many; showing some"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "完了にするタスクを選んでください"
+msgstr "Choose a task to complete"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "「%s」を完了にしますか?"
+msgstr "Complete \"%s\"?"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "完了にしています…"
+msgstr "Completing…"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "先に [設定] でトークンを入れてください"
+msgstr "Enter a token in [Settings] first"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "新しいタスク:"
+msgstr "New task:"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "期限(例: 明日 15時。空欄で無し):"
+msgstr "Due (e.g. tomorrow 3pm; blank for none):"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "追加しています…"
+msgstr "Adding…"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "タスクを追加できません"
+msgstr "Cannot add the task"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "Todoistのトークン(空欄で変更なし):"
+msgstr "Todoist token (blank to keep):"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "トークンを保存しました"
+msgstr "Token saved"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "トークンを保存できませんでした"
+msgstr "Could not save the token"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "完了にしました"
+msgstr "Completed"
+
+#: src/apps/todo/TodoScene.cpp
+msgid "追加しました"
+msgstr "Added"
+
+#: src/apps/todo/Todo_Reminders.cpp
+msgid "期限 %s(%d分前)"
+msgstr "Due %s (in %d min)"
+
+#: src/apps/todo/Todo_Watch.cpp
+msgid "TODOの取り直し"
+msgstr "TODO refresh"
+
+#: src/apps/todo/Todo_Watch.cpp
+msgid "ホーム画面にTODOウィジェットがありません"
+msgstr "No TODO widget on the home screen"
+
+#: src/apps/todo/Todo_Watch.cpp
+msgid "Todoistが設定されていません"
+msgstr "Todoist is not set up"
+
+#: src/apps/todo/Todo_Watch.cpp
+msgid "取っています…"
+msgstr "Fetching…"
+
+#: src/apps/todo/Todo_Watch.cpp
+msgid "%lu分前に取得(%d件)"
+msgstr "Fetched %lum ago (%d)"
+
+#: src/apps/todo/Todo_Watch.cpp
+msgid "まだ取っていません"
+msgstr "Not fetched yet"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "Todoistのトークンがありません。[設定] から入れてください"
+msgstr "No token. Set it in [Settings]"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "todoist.cfg の api が URL ではありません"
+msgstr "api in todoist.cfg is not a URL"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "トークンが長すぎます"
+msgstr "Token is too long"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "トークンに使えない文字があります"
+msgstr "Token has invalid characters"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "フィルタが長すぎます"
+msgstr "Filter is too long"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "タスクの名前が長すぎます"
+msgstr "Task name is too long"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "応答を読めませんでした: "
+msgstr "Could not read the response: "
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "途中で終わっています"
+msgstr "Response was cut off"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "トークンが違います"
+msgstr "Wrong token"
+
+#: src/apps/todo/Todoist_Client.cpp
+msgid "トークンが違います。[設定] から入れ直してください"
+msgstr "Wrong token. Enter it again in [Settings]"
+
+#: src/apps/todo/Todoist_Proto.cpp
+msgid "昨日"
+msgstr "Yesterday"
+
+#: src/apps/video/Pvid_Player.cpp src/lua/LuaEngine_Net.cpp
+msgid "ファイルを開けません"
+msgstr "Cannot open the file"
+
+#: src/apps/video/Pvid_Player.cpp
+msgid ".pvidの動画ではありません"
+msgstr "Not a .pvid video"
+
+#: src/apps/video/Pvid_Player.cpp
+msgid "対応していない版・大きさの動画です"
+msgstr "Unsupported video version or size"
+
+#: src/apps/video/Pvid_Player.cpp
+msgid "動画の目録が壊れています"
+msgstr "Video index is broken"
+
+#: src/apps/video/Pvid_Player.cpp
+msgid "動画のデータが壊れています"
+msgstr "Video data is broken"
+
+#: src/apps/video/Pvid_Player.cpp
+msgid "最後まで再生しました"
+msgstr "Finished"
+
+#: src/apps/video/VideoScene.cpp
+msgid "動画を選んでください"
+msgstr "Choose a video"
+
+#: src/apps/video/VideoScene.cpp
+msgid " (音あり)"
+msgstr " (sound)"
+
+#: src/boot/App_List.cpp src/gui/scenes/FileExplorerScene.cpp
+msgid "ファイル"
+msgstr "Files"
+
+#: src/boot/App_List.cpp
+msgid "テキスト"
+msgstr "Text"
+
+#: src/boot/App_List.cpp
+msgid "辞書"
+msgstr "Dictionary"
+
+#: src/boot/App_List.cpp
+msgid "ゲームボーイ"
+msgstr "Game Boy"
+
+#: src/boot/App_List.cpp
+msgid "動画"
+msgstr "Video"
+
+#: src/gui/core/Error_Functions.cpp
+msgid "エラーが発生しました"
+msgstr "An error occurred"
+
+#: src/gui/scenes/BackgroundScene.cpp
+msgid "  [入]"
+msgstr "  [on]"
+
+#: src/gui/scenes/BackgroundScene.cpp
+msgid "  [切]"
+msgstr "  [off]"
+
+#: src/gui/scenes/BackgroundScene.cpp
+msgid "  [動作中]"
+msgstr "  [running]"
+
+#: src/gui/scenes/BackgroundScene.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/RecorderScene.cpp src/lua/LuaDebugScreen.cpp
+msgid "停止"
+msgstr "Stop"
+
+#: src/gui/scenes/BackgroundScene.cpp
+msgid "今すぐ"
+msgstr "Now"
+
+#: src/gui/scenes/BackgroundScene.cpp
+msgid "バックグラウンドで動くものはありません"
+msgstr "Nothing runs in the background"
+
+#: src/gui/scenes/BackgroundScene.cpp
+msgid "一覧から選んでください"
+msgstr "Choose one from the list"
+
+#: src/gui/scenes/BackgroundScene.cpp
+msgid "切る"
+msgstr "Off"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "タイマー"
+msgstr "Timer"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "ストップウォッチ"
+msgstr "Stopwatch"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "アラーム"
+msgstr "Alarm"
+
+#: src/gui/scenes/ClocksScene.cpp src/gui/scenes/TouchCalibScene.cpp
+msgid "開始"
+msgstr "Start"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "▲▼で時間を設定"
+msgstr "Set time with ▲▼"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "一時停止"
+msgstr "Pause"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "カウントダウン中"
+msgstr "Counting down"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "再開"
+msgstr "Resume"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "一時停止中"
+msgstr "Paused"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "時間になりました"
+msgstr "Time is up"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "開始を押すとカウントダウン"
+msgstr "Press Start to count down"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "リセット"
+msgstr "Reset"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "開始を押すと計測"
+msgstr "Press Start to time"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "ラップ"
+msgstr "Lap"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "計測中"
+msgstr "Running"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "停止中"
+msgstr "Stopped"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "オン"
+msgstr "On"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "オフ"
+msgstr "Off"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "デジタル"
+msgstr "Digital"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "アナログ"
+msgstr "Analog"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "ﾀｲﾏｰ"
+msgstr "Timer"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "ｽﾄｯﾌﾟ"
+msgstr "Stopw"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "ｱﾗｰﾑ"
+msgstr "Alarm"
+
+#: src/gui/scenes/ClocksScene.cpp
+msgid "1月1日(月)"
+msgstr "1/1 (Mon)"
+
+#: src/gui/scenes/ClocksScene.cpp src/services/Alarm_Functions.cpp
+msgid "1回"
+msgstr "Once"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "移動"
+msgstr "Move"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "貼付"
+msgstr "Paste"
+
+#: src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/SettingsScene.cpp
+msgid "他"
+msgstr "Other"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "名前の変更"
+msgstr "Rename"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "名前で検索(SD全体)"
+msgstr "Search names (whole SD)"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "中身で検索(SD全体)"
+msgstr "Search contents (whole SD)"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "容量"
+msgstr "Storage"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "中身から探す言葉:"
+msgstr "Search contents for:"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "探す名前(一部でよい):"
+msgstr "Name to find (partial OK):"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "選んでコピー/移動→貼付"
+msgstr "Select, Copy/Move, then Paste"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "先にファイルかフォルダを選んでください"
+msgstr "Select a file or folder first"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "元のファイルが見つかりません"
+msgstr "Source file not found"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "フォルダをその中へは置けません"
+msgstr "Cannot put a folder inside itself"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "貼り付け先の名前を作れません"
+msgstr "Cannot name the pasted item"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "コピー中..."
+msgstr "Copying..."
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "移動できませんでした"
+msgstr "Could not move"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "コピーできませんでした"
+msgstr "Could not copy"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "新しい名前:"
+msgstr "New name:"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "その名前は使えません"
+msgstr "That name is not allowed"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "名前が長すぎます"
+msgstr "Name is too long"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "同じ名前があります"
+msgstr "That name already exists"
+
+#: src/gui/scenes/FileExplorerScene.cpp
+msgid "名前を変えられませんでした"
+msgstr "Could not rename"
+
+#: src/gui/scenes/FileSearchScene.cpp
+msgid "%s を開けません"
+msgstr "Cannot open %s"
+
+#: src/gui/scenes/FileSearchScene.cpp
+msgid "検索中… %lu件中 %d件"
+msgstr "Searching… %lu checked, %d found"
+
+#: src/gui/scenes/FileSearchScene.cpp
+msgid "%s「%s」%d件以上(先頭%d件)"
+msgstr "%s\"%s\": %d+ (first %d)"
+
+#: src/gui/scenes/FileSearchScene.cpp
+msgid "中身に"
+msgstr "Contents "
+
+#: src/gui/scenes/FileSearchScene.cpp
+msgid "%s「%s」%d件"
+msgstr "%s\"%s\": %d"
+
+#: src/gui/scenes/FileSearchScene.cpp
+msgid "探す言葉:"
+msgstr "Search for:"
+
+#: src/gui/scenes/FileSearchScene.cpp
+msgid "探す名前:"
+msgstr "Name to find:"
+
+#: src/gui/scenes/FileShareScene.cpp src/gui/scenes/WifiSetupScene.cpp
+msgid "始められませんでした: %s"
+msgstr "Could not start: %s"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "直接つなぐ"
+msgstr "Direct"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "ブラウザで開いてキーを入れる"
+msgstr "Open it, enter the key"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "暗号化しない送り方です。信頼できるWi-Fiで使ってください"
+msgstr "Transfers are not encrypted. Use a trusted Wi-Fi"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "LANへ戻す"
+msgstr "Back to LAN"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "パス %s"
+msgstr "Pass %s"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "QRで本体のWi-Fiへ"
+msgstr "QR: join the device's Wi-Fi"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "QRならキーは不要"
+msgstr "QR: no key"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "Wi-Fiにつながっていません"
+msgstr "Wi-Fi is not connected"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "[直接つなぐ]ならスマホと本体だけで使えます"
+msgstr "[Direct] works with just a phone and the device"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "まだ何も送っていません"
+msgstr "Nothing transferred yet"
+
+#: src/gui/scenes/FileShareScene.hpp
+msgid "Wi-Fi転送"
+msgstr "Wi-Fi Share"
+
+#: src/gui/scenes/FileViewerScene.cpp
+msgid "読む"
+msgstr "Read"
+
+#: src/gui/scenes/FileViewerScene.cpp
+msgid "このファイルを開けませんでした"
+msgstr "Could not open this file"
+
+#: src/gui/scenes/FileViewerScene.cpp
+msgid "この画像を開けませんでした"
+msgstr "Could not open this image"
+
+#: src/gui/scenes/FileViewerScene.cpp
+msgid "%s(途中まで)"
+msgstr "%s (partial)"
+
+#: src/gui/scenes/FileViewerScene.cpp
+msgid "WAVとして読めません"
+msgstr "Cannot read as WAV"
+
+#: src/gui/scenes/LuaScene.cpp
+msgid "Luaの初期化に失敗しました(メモリ不足の可能性があります)"
+msgstr "Lua failed to start (possibly out of memory)"
+
+#: src/gui/scenes/LuaScene.cpp
+msgid "スクリプトを開けません(パスを確認してください)"
+msgstr "Cannot open the script (check the path)"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "あと%ld時間%ld分"
+msgstr "in %ldh %ldm"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "あと%ld分%ld秒"
+msgstr "in %ldm %lds"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "あと%ld秒"
+msgstr "in %lds"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "毎日%02u:%02u"
+msgstr "Daily %02u:%02u"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "%lu時間ごと"
+msgstr "Every %luh"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "%lu分ごと"
+msgstr "Every %lum"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "%lu秒ごと"
+msgstr "Every %lus"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "電池%u%%未満"
+msgstr "Battery < %u%%"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "Wi-Fi接続時"
+msgstr "On Wi-Fi connect"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "Wi-Fi切断時"
+msgstr "On Wi-Fi disconnect"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "全消去"
+msgstr "Clear"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "既読"
+msgstr "Read"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "予約"
+msgstr "Scheduled"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "控えめ"
+msgstr "Quiet"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "音なし"
+msgstr "Silent"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "取り消す"
+msgstr "Cancel"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "通知はありません"
+msgstr "No notices"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "予約はありません"
+msgstr "Nothing scheduled"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "2回タップで開く"
+msgstr "Double-tap to open"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "2回タップで取り消す"
+msgstr "Double-tap to cancel"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "システム"
+msgstr "System"
+
+#: src/gui/scenes/NotificationScene.cpp
+msgid "通常"
+msgstr "Normal"
+
+#: src/gui/scenes/RecentFilesScene.cpp
+msgid "まだありません。エディタやファイルアプリで開いたファイルがここに並びます"
+msgstr "Nothing yet. Files you open in the editor or Files app appear here"
+
+#: src/gui/scenes/RecorderScene.cpp src/gui/scenes/RecorderScene.hpp
+msgid "録音"
+msgstr "Record"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "再生"
+msgstr "Play"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "文字起こし"
+msgstr "Transcribe"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "キー"
+msgstr "Key"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "録音を途中で止めました: %s\n(%s までは保存されています)"
+msgstr "Recording stopped: %s\n(saved up to %s)"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "保存中…"
+msgstr "Saving…"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "文章"
+msgstr "Text"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "マイクのI2Sを開始できませんでした"
+msgstr "Could not start the mic I2S"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "マイクの信号がありません(配線を確認)"
+msgstr "No mic signal (check the wiring)"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "録音中 %s\n取りこぼし %lums(SDが遅い?)"
+msgstr "Recording %s\nDropped %lums (slow SD?)"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "録音中 %s"
+msgstr "Recording %s"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "文字起こし: %s を送っています %d%%"
+msgstr "Transcribe: sending %s %d%%"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "文字起こし: 返事を待っています…"
+msgstr "Transcribe: waiting for reply…"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "文字起こし: %s"
+msgstr "Transcribe: %s"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "マイクを準備しています…"
+msgstr "Preparing the mic…"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "待機中(Space / r で録音)"
+msgstr "Ready (Space / r to record)"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "%s を削除しますか?\n(文字起こしの文章も消えます)"
+msgstr "Delete %s?\n(the transcript is deleted too)"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "%s を削除しますか?"
+msgstr "Delete %s?"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "削除できませんでした"
+msgstr "Could not delete"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "文字起こしはオンラインが前提です。Wi-Fiに接続してください"
+msgstr "Transcription needs a connection. Connect to Wi-Fi"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "%s\nAPIキー(空欄で変更なし):"
+msgstr "%s\nAPI key (blank to keep):"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "文字起こしのAPIキー(空欄で変更なし):"
+msgstr "Transcription API key (blank to keep):"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "APIキーを保存できませんでした(英数字と - _ . だけ)"
+msgstr "Could not save the API key (letters, digits, - _ . only)"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "しない"
+msgstr "Never"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "1分"
+msgstr "1 min"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "2分"
+msgstr "2 min"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "5分"
+msgstr "5 min"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "10分"
+msgstr "10 min"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "30分"
+msgstr "30 min"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "自動"
+msgstr "Auto"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "スピーカー"
+msgstr "Speaker"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "イヤホン"
+msgstr "Headphones"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "NTPサーバー1: %s"
+msgstr "NTP server 1: %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "NTPサーバー2: %s"
+msgstr "NTP server 2: %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "ホーム: %s"
+msgstr "Home: %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "(未設定)"
+msgstr "(not set)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "電池 USB給電中"
+msgstr "Battery: USB power"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "電池 %d%% (%.2fV)"
+msgstr "Battery %d%% (%.2fV)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "SSIDが長すぎます(32バイトまで)"
+msgstr "SSID is too long (32 bytes max)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "名前は英数字とハイフンの63文字までです(先頭と末尾にハイフンは使えません)"
+msgstr "Use up to 63 letters, digits and hyphens (no hyphen at either end)"
+
+#: src/gui/scenes/SettingsScene.cpp src/services/PowerMenu_Functions.cpp
+msgid "電源"
+msgstr "Power"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "画面"
+msgstr "LCD"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "音"
+msgstr "Audio"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "時刻"
+msgstr "Time"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "起動時に自己診断を実行"
+msgstr "Run self-test at boot"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "画面ロック: PIN"
+msgstr "Screen lock: PIN"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "画面ロック: なし"
+msgstr "Screen lock: none"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "画面ロック"
+msgstr "Screen lock"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "PINを変える"
+msgstr "Change PIN"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "PINを外す"
+msgstr "Remove PIN"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "今すぐロック"
+msgstr "Lock now"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "PINを決める"
+msgstr "Set PIN"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "端末の鍵: %s"
+msgstr "Device key: %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "作成"
+msgstr "Create"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "詳細"
+msgstr "Details"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "OTPの端末の鍵が壊れていて、作り直す空きもありません。固定鍵のまま暗号化します"
+msgstr "The device key in OTP is broken and there is no room to make a new one. The fixed key stays in use"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "SDの暗号化された設定のうち、まだ端末の鍵で暗号化していないものを暗号化し直します"
+msgstr "Re-encrypts the settings on the SD that are not yet encrypted with the device key"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "実行"
+msgstr "Run"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "端末の鍵を作り、本体のOTPへ書き込みます。\n・OTPは消せません(取り消せません)\n・Wi-Fi・SSHの鍵・トークン・カレンダーのURL・PINを、この本体の鍵で暗号化し直します\n・基板が壊れると、それらは二度と読めません。元の値はPCに控えてください\n・守れるのはSDだけを盗まれた場合です(本体ごとは守れません)"
+msgstr "Creates a device key and writes it to the OTP.\n- OTP cannot be erased (no undo)\n- Wi-Fi, SSH keys, tokens, calendar URLs and the PIN are re-encrypted with this key\n- If the board breaks, they can never be read again. Keep copies on a PC\n- This only protects against a stolen SD card (not the whole device)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "作る"
+msgstr "Create"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "%d項目を暗号化し直しました%s%s"
+msgstr "Re-encrypted %d items%s%s"
+
+#: src/gui/scenes/SettingsScene.cpp src/services/DeviceKey_Functions.cpp
+msgid "(失敗あり。ログを見てください)"
+msgstr " (some failed; see the log)"
+
+#: src/gui/scenes/SettingsScene.cpp src/services/DeviceKey_Functions.cpp
+msgid "。PINは次に解除したとき"
+msgstr ". The PIN follows at next unlock"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "今は%sから鳴ります"
+msgstr "Playing from %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "%sがつながっていません"
+msgstr "%s not connected"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "音量"
+msgstr "Volume"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "輝度"
+msgstr "Bright"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "音声出力なしのファームです"
+msgstr "Firmware without audio"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "しばらく触らないと暗くする"
+msgstr "Dim when idle"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "ダークテーマ"
+msgstr "Dark theme"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "電池で音量を絞る"
+msgstr "Lower volume on battery"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "電池では最大20%(スピーカー)"
+msgstr "Max 20%, speaker, on battery"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "出力先"
+msgstr "Output"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "音質"
+msgstr "Quality"
+
+#: src/gui/scenes/SettingsScene.cpp src/services/PowerMenu_Functions.cpp
+msgid "スリープ"
+msgstr "Sleep"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "標準の字"
+msgstr "Normal"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "大きい字"
+msgstr "Large"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "タイムゾーン"
+msgstr "Time zone"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "ランチャで隠したアプリ: %d"
+msgstr "Hidden apps: %d"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "ランチャで隠したアプリ: なし"
+msgstr "Hidden apps: none"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "隠したアプリ"
+msgstr "Hidden apps"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "表示: %s"
+msgstr "Show: %s"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "並びを元に戻す"
+msgstr "Reset order"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "ランチャの並びを登録順に戻しました(フォルダも解除)"
+msgstr "Launcher order reset (folders removed)"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "ブラウザのホームURL"
+msgstr "Browser home URL"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "バックグラウンド: %d件"
+msgstr "Background: %d"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "バックグラウンド: なし"
+msgstr "Background: none"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "開発者向け"
+msgstr "Developer"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "フレーム時間を表示"
+msgstr "Show frame time"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "Luaデバッガ"
+msgstr "Lua debugger"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "固まったら再起動する"
+msgstr "Restart when frozen"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "時刻が合っていません"
+msgstr "Clock is not set"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "合わせるとDS3231へ控えます"
+msgstr "Saved to the DS3231 when set"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "「変更」で手動で合わせられます"
+msgstr "Set it by hand with \"Change\""
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "DS3231で電源を切っても保持"
+msgstr "Kept by the DS3231 when off"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "再起動では消えません"
+msgstr "Kept across restarts"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "NTP同期で上書きされます"
+msgstr "Overwritten by NTP sync"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "日付"
+msgstr "Date"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "%d/%d の時刻"
+msgstr "Time on %d/%d"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "時刻を合わせられませんでした"
+msgstr "Could not set the time"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "NTPサーバー1"
+msgstr "NTP server 1"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "NTPサーバー2"
+msgstr "NTP server 2"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "変更"
+msgstr "Change"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "補正"
+msgstr "Calib."
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "タッチ位置の補正"
+msgstr "Touch calibration"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "要ログイン"
+msgstr "Login"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "外へ出られません"
+msgstr "Offline"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "接続中"
+msgstr "Online"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "接続しています: %s"
+msgstr "Joining: %s"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "未接続(自動で再接続します)"
+msgstr "Disconnected (will reconnect)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "未接続"
+msgstr "Disconnected"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid " [固定IP]"
+msgstr " [static IP]"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid " (接続中)"
+msgstr " (connected)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid " (接続しています)"
+msgstr " (connecting)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "保存済み %d/%d"
+msgstr "Saved %d/%d"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "保存済み %d/%d (2回タップで接続)"
+msgstr "Saved %d/%d (double-tap to join)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "%s.local\n(IP無し)"
+msgstr "%s.local\n(no IP)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "接続するネットワークを一覧から選んでください"
+msgstr "Pick a network to join from the list"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "削除するネットワークを一覧から選んでください"
+msgstr "Pick a network to delete from the list"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "「%s」を削除しますか?"
+msgstr "Delete \"%s\"?"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "IPを設定するネットワークを一覧から選んでください"
+msgstr "Pick a network to set its IP"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "「%s」の固定IP(例 192.168.1.50/24。空欄でDHCP):"
+msgstr "Static IP for \"%s\" (e.g. 192.168.1.50/24, blank for DHCP):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "IPアドレスは「192.168.1.50/24」の形で入れてください"
+msgstr "Enter the IP address like \"192.168.1.50/24\""
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ゲートウェイ(ルーター)のIP(空欄で無し):"
+msgstr "Gateway (router) IP (blank for none):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ゲートウェイはIPアドレスと同じサブネットのアドレスにしてください"
+msgstr "The gateway must be in the same subnet as the IP address"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "DNS(カンマ区切りで2つまで。空欄でゲートウェイ):"
+msgstr "DNS (up to 2, comma separated; blank for gateway):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "DNS(カンマ区切りで2つまで。空欄で自動):"
+msgstr "DNS (up to 2, comma separated; blank for auto):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "DNSは「1.1.1.1,8.8.8.8」のように2つまで入れてください"
+msgstr "Enter up to 2 DNS servers like \"1.1.1.1,8.8.8.8\""
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ネットワークが削除されたので保存しませんでした"
+msgstr "Not saved: the network was deleted"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "IPの設定を保存できませんでした"
+msgstr "Could not save the IP settings"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "DHCPに戻しました"
+msgstr "Back to DHCP"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "IPの設定を保存しました"
+msgstr "IP settings saved"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ログインの要るネットワークではありません"
+msgstr "This network needs no login"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ポータルのページを読んでいます..."
+msgstr "Loading the portal page..."
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "送信しました。インターネットへ出られるか確かめています"
+msgstr "Sent. Checking the internet connection"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ログインできませんでした: %s"
+msgstr "Login failed: %s"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ポータルの入力: %s%s"
+msgstr "Portal field: %s%s"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "(パスワード)"
+msgstr " (password)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "「%s」のポータルの利用規約に同意して接続しますか?"
+msgstr "Accept the terms of the \"%s\" portal and connect?"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "同意する"
+msgstr "Accept"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ポータルへ送っています..."
+msgstr "Sending to the portal..."
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "スキャン中..."
+msgstr "Scanning..."
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "スキャンに失敗しました"
+msgstr "Scan failed"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "Wi-FiがOFFです。ONにしてから検索してください"
+msgstr "Wi-Fi is off. Turn it on before scanning"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "「%s」のパスワード(不要なら空欄のまま決定):"
+msgstr "Password for \"%s\" (leave blank if none):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "保存できるのは%d件までです。不要なものを削除してください"
+msgstr "Up to %d networks can be saved. Delete one you don't need"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "SSIDかパスワードが長すぎます(パスワードは64文字まで)"
+msgstr "SSID or password too long (password: 64 chars max)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ログイン"
+msgstr "Login"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "追加するWi-FiのSSID"
+msgstr "SSID of the Wi-Fi to add"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "名前"
+msgstr "Name"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "本体の名前(<名前>.local で見つかる。英数字とハイフン)"
+msgstr "Device name (found as <name>.local; letters, digits, hyphens)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "スマホ"
+msgstr "Phone"
+
+#: src/gui/scenes/StorageScene.cpp
+msgid "数えています… %d/%d"
+msgstr "Counting… %d/%d"
+
+#: src/gui/scenes/StorageScene.cpp
+msgid "%d件 合計%s%s"
+msgstr "%d items, total %s%s"
+
+#: src/gui/scenes/StorageScene.cpp
+msgid "(多すぎて一部)"
+msgstr " (partial)"
+
+#: src/gui/scenes/StorageScene.cpp
+msgid "使用量を数えています… %s/%s"
+msgstr "Measuring usage… %s/%s"
+
+#: src/gui/scenes/StorageScene.cpp
+msgid "全体%s"
+msgstr "Total %s"
+
+#: src/gui/scenes/StorageScene.cpp
+msgid "%s/%s 空き約%s%s"
+msgstr "%s/%s, about %s%s free"
+
+#: src/gui/scenes/StorageScene.cpp
+msgid "以下"
+msgstr " or less"
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "保存しました。次の起動からもこの補正を使います"
+msgstr "Saved. This calibration is used from now on"
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "設定へ戻る"
+msgstr "Back to Settings"
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "保存できませんでした(SDカードを確認してください)"
+msgstr "Could not save (check the SD card)"
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "既定に戻す"
+msgstr "Defaults"
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "補正を外して、初期の設定に戻しました"
+msgstr "Calibration removed; back to defaults"
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "破棄して戻る"
+msgstr "Discard"
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "画面に出る十字の中心を、指先かタッチペンで順に5回押してください。押すたびに少し止めると正確になります。"
+msgstr "Press the center of each cross with a fingertip or stylus, 5 times in order. Hold briefly on each for accuracy."
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "補正できました(ずれ 平均%.1fpx / 最大%.1fpx)。画面のどこかを押して、青い点が指の位置に出るか確かめてください。"
+msgstr "Calibrated (error avg %.1fpx / max %.1fpx). Touch the screen and check that the blue dot follows your finger."
+
+#: src/gui/scenes/TouchCalibScene.cpp
+msgid "押した位置がうまく合いませんでした。十字の真ん中をもう一度、順番どおりに押してください。"
+msgstr "The touches did not line up. Press the center of each cross again, in order."
+
+#: src/gui/scenes/UsbDriveScene.cpp src/gui/scenes/UsbDriveScene.hpp
+msgid "USBドライブ"
+msgstr "USB Drive"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "準備しています…"
+msgstr "Preparing…"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "PCで「取り出し」をしてから終了してください。その間pico-osはSDを使えません"
+msgstr "Eject on the PC before exiting. pico-os cannot use the SD meanwhile"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "始められませんでした"
+msgstr "Could not start"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "PCとUSBでつないでください"
+msgstr "Connect to a PC over USB"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "PCにつながっています"
+msgstr "Connected to the PC"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "PCで取り出されました。終了してよいです"
+msgstr "Ejected on the PC. You can exit"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "容量 %s\n読み %luKB / 書き %luKB"
+msgstr "Size %s\nRead %luKB / Write %luKB"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "USB:線なし"
+msgstr "USB: no cable"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "USB:列挙待ち"
+msgstr "USB: enumerating"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "USB:列挙済/口まだ"
+msgstr "USB: enumerated, no port"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "USB:口OK"
+msgstr "USB: port OK"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "%s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu 他%lu(%02X) 誤%lu"
+msgstr "%s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu oth%lu(%02X) err%lu"
+
+#: src/gui/scenes/UsbDriveScene.cpp
+msgid "PCで「取り出し」をしてから終了してください。\nこのまま終了しますか?"
+msgstr "Eject on the PC before exiting.\nExit anyway?"
+
+#: src/gui/scenes/WifiSetupScene.cpp
+msgid "スマホから設定"
+msgstr "Set up from phone"
+
+#: src/gui/scenes/WifiSetupScene.cpp
+msgid "1. QRを読むか、Wi-Fiで接続"
+msgstr "1. Scan the QR or join the Wi-Fi"
+
+#: src/gui/scenes/WifiSetupScene.cpp
+msgid "2. 自動で開かなければ次を開く"
+msgstr "2. If nothing opens, open this"
+
+#: src/gui/scenes/WifiSetupScene.cpp
+msgid "3. 本体を接続したいWi-Fiの名前とパスワードを入れて送る"
+msgstr "3. Enter the Wi-Fi name and password for the device and send"
+
+#: src/gui/scenes/WifiSetupScene.cpp
+msgid "「%s」を受け取りました。接続します"
+msgstr "Got \"%s\". Connecting"
+
+#: src/gui/scenes/WifiSetupScene.cpp
+msgid "待っています(接続している端末: %d台)"
+msgstr "Waiting (%d devices connected)"
+
+#: src/gui/scenes/WifiSetupScene.cpp
+msgid "待っています"
+msgstr "Waiting"
+
+#: src/gui/widgets/DropdownMenu.hpp
+msgid "タップして選択..."
+msgstr "Tap to choose..."
+
+#: src/gui/widgets/apps/FileExplorer.cpp
+msgid "新しくフォルダを作成\n名前:"
+msgstr "Create a new folder\nName:"
+
+#: src/gui/widgets/apps/FileExplorer.cpp
+msgid "本当に削除しますか?"
+msgstr "Really delete?"
+
+#: src/gui/widgets/apps/FileExplorer.cpp
+msgid "いいえ"
+msgstr "No"
+
+#: src/gui/widgets/apps/FileExplorer.cpp
+msgid "はい"
+msgstr "Yes"
+
+#: src/gui/widgets/dialogs/ColorDialog.hpp
+msgid "色を選択"
+msgstr "Pick a color"
+
+#: src/gui/widgets/dialogs/FileSaveDialog.hpp
+msgid "ファイル名を入力..."
+msgstr "File name..."
+
+#: src/gui/widgets/dialogs/InputDialog.hpp
+msgid "ここに入力..."
+msgstr "Type here..."
+
+#: src/gui/widgets/dialogs/WifiScanDialog.hpp
+msgid "再スキャン"
+msgstr "Rescan"
+
+#: src/gui/widgets/keyboards/KeyboardNum.hpp
+msgid "四則演算"
+msgstr "Arithmetic"
+
+#: src/gui/widgets/keyboards/KeyboardNum.hpp
+msgid "数学記号"
+msgstr "Math"
+
+#: src/gui/widgets/keyboards/KeyboardNum.hpp
+msgid "数字"
+msgstr "Digits"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "%lu秒待ってください"
+msgstr "Wait %lu s"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "アラーム/タイマーを止める"
+msgstr "Stop alarm/timer"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "取消"
+msgstr "Cancel"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "消す"
+msgstr "Del"
+
+#: src/lua/LuaBackground.cpp
+msgid "スクリプトを開けません"
+msgstr "Cannot open the script"
+
+#: src/lua/LuaBackground.cpp
+msgid "スクリプトが大きすぎます(16KiBまで)"
+msgstr "Script too large (16KiB max)"
+
+#: src/lua/LuaBackground.cpp
+msgid "スクリプトを読むメモリが足りません"
+msgstr "Not enough memory to read the script"
+
+#: src/lua/LuaBackground.cpp
+msgid "スクリプトを最後まで読めません"
+msgstr "Could not read the whole script"
+
+#: src/lua/LuaBackground.cpp
+msgid "止めました"
+msgstr "Stopped"
+
+#: src/lua/LuaBackground.cpp
+msgid "動いています…"
+msgstr "Running…"
+
+#: src/lua/LuaBackground.cpp
+msgid "まだ動いていません"
+msgstr "Not run yet"
+
+#: src/lua/LuaBackground.cpp
+msgid "%lu回動きました"
+msgstr "Ran %lu times"
+
+#: src/lua/LuaBackground.cpp
+msgid "・次は%lu分後"
+msgstr ", next in %lum"
+
+#: src/lua/LuaBackground.cpp
+msgid "・次は%lu秒後"
+msgstr ", next in %lus"
+
+#: src/lua/LuaBackground.cpp
+msgid "アプリを開いているので見送りました"
+msgstr "Skipped: the app is open"
+
+#: src/lua/LuaBackground.cpp
+msgid "メモリが足りないので延ばしました"
+msgstr "Postponed: low memory"
+
+#: src/lua/LuaBackground.cpp
+msgid "Luaを起動できません(メモリ不足)"
+msgstr "Cannot start Lua (out of memory)"
+
+#: src/lua/LuaBackground.cpp
+msgid "時間切れ(通信やタイマーが終わりませんでした)"
+msgstr "Timed out (network or timers did not finish)"
+
+#: src/lua/LuaBackground.cpp
+msgid "アプリが無くなりました"
+msgstr "The app was removed"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "続行"
+msgstr "Cont"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "1行"
+msgstr "Step"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "抜ける"
+msgstr "Out"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: ブレークポイント"
+msgstr "Stopped: breakpoint"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: ステップ"
+msgstr "Stopped: step"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: 一時停止"
+msgstr "Stopped: paused"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: エラー"
+msgstr "Stopped: error"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: pico.breakpoint()"
+msgstr "Stopped: pico.breakpoint()"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "(Luaの場所が分かりません)"
+msgstr "(unknown Lua location)"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "(ソースを読めません)"
+msgstr "(cannot read the source)"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "(変数なし)"
+msgstr "(no variables)"
+
+#: src/lua/LuaEngine.cpp
+msgid "スクリプトを打ち切りました"
+msgstr "Script aborted"
+
+#: src/lua/LuaEngine.cpp
+msgid "デバッガで停止しました"
+msgstr "Stopped in the debugger"
+
+#: src/lua/LuaEngine.cpp
+msgid "スクリプトの実行が命令数の上限(%u)を超えたため打ち切りました(無限ループの可能性があります)"
+msgstr "Script aborted: exceeded the instruction limit (%u) (possible infinite loop)"
+
+#: src/lua/LuaEngine.cpp
+msgid "エラー(nil)"
+msgstr "Error (nil)"
+
+#: src/lua/LuaEngine.cpp
+msgid "エラー(値の種類: %s)"
+msgstr "Error (value type: %s)"
+
+#: src/lua/LuaEngine.cpp
+msgid "アプリを閉じています"
+msgstr "Closing the app"
+
+#: src/lua/LuaEngine.cpp
+msgid "Luaスクリプトの構文エラー"
+msgstr "Lua syntax error"
+
+#: src/lua/LuaEngine.cpp
+msgid "Luaスクリプトの実行時エラー"
+msgstr "Lua runtime error"
+
+#: src/lua/LuaEngine.cpp
+msgid "loop()の実行時エラー"
+msgstr "Runtime error in loop()"
+
+#: src/lua/LuaEngine.cpp
+msgid "on_key()の実行時エラー"
+msgstr "Runtime error in on_key()"
+
+#: src/lua/LuaEngine.cpp src/lua/LuaEngine_Ext.cpp
+msgid "Luaコールバックでエラーが発生しました"
+msgstr "Error in a Lua callback"
+
+#: src/lua/LuaEngine.cpp
+msgid "タイマーのコールバックでエラーが発生しました"
+msgstr "Error in a timer callback"
+
+#: src/lua/LuaEngine_Ext.cpp
+msgid "on_back()の実行時エラー"
+msgstr "Runtime error in on_back()"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "リクエストヘッダが長すぎる/不正"
+msgstr "Request headers too long or invalid"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "保存先のパスが長すぎる"
+msgstr "Save path too long"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "保存先を開けない"
+msgstr "Cannot open the save location"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "リクエストを開始できない"
+msgstr "Cannot start the request"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "pico.http_requestのコールバックでエラーが発生しました"
+msgstr "Error in a pico.http_request callback"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "保存先へ差し替えられない"
+msgstr "Cannot replace the saved file"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "失敗"
+msgstr "Failed"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "%s (位置 %d)"
+msgstr "%s (at %d)"
+
+#: src/lua/LuaEngine_Iso.cpp
+msgid "権限がありません"
+msgstr "Permission denied"
+
+#: src/lua/LuaEngine_Iso.cpp
+msgid "置けるのは %d 個までです"
+msgstr "Up to %d can be placed"
+
+#: src/lua/LuaEngine_Iso.cpp
+msgid "世界が広すぎます"
+msgstr "The world is too wide"
+
+#: src/lua/LuaEngine_Iso.cpp
+msgid "弾は %d 個までです"
+msgstr "Up to %d shots"
+
+#: src/lua/LuaEngine_Mic.cpp
+msgid "マイクの権限がありません"
+msgstr "No microphone permission"
+
+#: src/lua/LuaEngine_Mic.cpp
+msgid "このアプリからは書けない場所です"
+msgstr "This app cannot write there"
+
+#: src/lua/LuaEngine_Mic.cpp
+msgid "録音中は周波数を変えられません"
+msgstr "Cannot change the rate while recording"
+
+#: src/lua/LuaEngine_Net.cpp
+msgid "JSONが途中で切れています"
+msgstr "JSON is truncated"
+
+#: src/lua/LuaEngine_Net.cpp
+msgid "このパスは読めません(権限)"
+msgstr "Cannot read this path (permission)"
+
+#: src/lua/LuaEngine_Net.cpp
+msgid "ファイルが大きすぎます(1MiBまで)"
+msgstr "File too large (1MiB max)"
+
+#: src/lua/LuaEngine_Net.cpp
+msgid "XMLが途中で切れています"
+msgstr "XML is truncated"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "ネットワークの権限がありません"
+msgstr "No network permission"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "同時に開けるソケットの数を超えています"
+msgstr "Too many open sockets"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "ホスト名が空か長すぎます"
+msgstr "Host name is empty or too long"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "UDPの待ち受けを始められません(番号が使用中?)"
+msgstr "Cannot listen on UDP (port in use?)"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "opts.protocol に使えない文字があります"
+msgstr "opts.protocol has invalid characters"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "ヘッダが長すぎるか、使えない名前・文字があります"
+msgstr "Headers too long, or invalid names or characters"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "URLが ws:// か wss:// でない、またはメモリが足りません"
+msgstr "URL is not ws:// or wss://, or out of memory"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "URLが mqtt:// か mqtts:// でない、またはメモリが足りません"
+msgstr "URL is not mqtt:// or mqtts://, or out of memory"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "pico.socket のコールバックでエラーが発生しました"
+msgstr "Error in a pico.socket callback"
+
+#: src/lua/LuaEngine_Sound.cpp
+msgid "%d行%d列: %s"
+msgstr "Line %d, col %d: %s"
+
+#: src/lua/LuaEngine_Sound.cpp
+msgid "このアプリからは読めない場所です"
+msgstr "This app cannot read there"
+
+#: src/lua/LuaEngine_System.cpp
+msgid "通知の権限がありません"
+msgstr "No notification permission"
+
+#: src/services/Alarm_Functions.cpp
+msgid "アラーム %02d:%02d"
+msgstr "Alarm %02d:%02d"
+
+#: src/services/Alarm_Functions.cpp
+msgid "5分後"
+msgstr "Snooze 5m"
+
+#: src/services/Alarm_Functions.cpp src/services/Timer_Functions.cpp
+msgid "止める"
+msgstr "Stop"
+
+#: src/services/Alarm_Functions.cpp
+msgid "平日"
+msgstr "Weekdays"
+
+#: src/services/Alarm_Functions.cpp
+msgid "土日"
+msgstr "Weekends"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "作成済み"
+msgstr "created"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "壊れています"
+msgstr "broken"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "未作成"
+msgstr "not created"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "端末の鍵はもうあります"
+msgstr "The device key already exists"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "OTPに空きがありません"
+msgstr "No free space in OTP"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "乱数を作れませんでした"
+msgstr "Could not generate random numbers"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "OTPへ書けませんでした%s"
+msgstr "Could not write to OTP%s"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "(空きもありません)"
+msgstr " (no space left)"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "(もう一度試せます)"
+msgstr " (you can retry)"
+
+#: src/services/DeviceKey_Functions.cpp
+msgid "端末の鍵を作りました。%d項目を暗号化し直しました%s%s"
+msgstr "Device key created. Re-encrypted %d items%s%s"
+
+#: src/services/Firmware_Functions.cpp src/services/WifiSetup_Functions.cpp
+msgid "待ち受けを始められません"
+msgstr "Cannot start listening"
+
+#: src/services/Firmware_Functions.cpp src/services/WifiSetup_Functions.cpp
+msgid "待ち受けの番号(ポート)が使えません"
+msgstr "The port is not available"
+
+#: src/services/Firmware_Functions.cpp
+msgid "Web版では受け取れません"
+msgstr "Not available in the Web version"
+
+#: src/services/Firmware_Functions.cpp
+msgid "ファームを更新しました"
+msgstr "Firmware updated"
+
+#: src/services/Firmware_Functions.cpp
+msgid "PCビルドは本体を書き換えません(#%lu %s)"
+msgstr "The PC build does not rewrite itself (#%lu %s)"
+
+#: src/services/Firmware_Functions.cpp
+msgid "今は %s のままです(#%lu %s を書けませんでした)"
+msgstr "Still on %s (could not write #%lu %s)"
+
+#: src/services/Firmware_Functions.cpp
+msgid "ファームを更新できませんでした"
+msgstr "Firmware update failed"
+
+#: src/services/Firmware_Functions.cpp
+msgid "電池の残りが少ないです(%d%%)。USBに繋ぐか充電してください"
+msgstr "Battery is low (%d%%). Connect USB or charge"
+
+#: src/services/Firmware_Functions.cpp
+msgid "別の更新を進めています"
+msgstr "Another update is in progress"
+
+#: src/services/Firmware_Functions.cpp
+msgid "更新ファイルを開けません"
+msgstr "Cannot open the update file"
+
+#: src/services/Firmware_Functions.cpp
+msgid "待ち受けをやめました"
+msgstr "Stopped listening"
+
+#: src/services/Lock_Functions.cpp
+msgid "違います。%lu秒待ってください"
+msgstr "Wrong. Wait %lu s"
+
+#: src/services/Lock_Functions.cpp
+msgid "違います(あと%d回で待ち時間)"
+msgstr "Wrong (%d tries before a wait)"
+
+#: src/services/Lock_Functions.cpp
+msgid "PINが違います"
+msgstr "Wrong PIN"
+
+#: src/services/Lock_Functions.cpp
+msgid "PINを入力"
+msgstr "Enter PIN"
+
+#: src/services/Lock_Functions.cpp
+msgid "今のPINを入力"
+msgstr "Enter current PIN"
+
+#: src/services/Lock_Functions.cpp
+msgid "新しいPIN(数字4〜8桁)"
+msgstr "New PIN (4-8 digits)"
+
+#: src/services/Lock_Functions.cpp
+msgid "PINを外すには今のPINを入力"
+msgstr "Enter current PIN to remove it"
+
+#: src/services/Lock_Functions.cpp
+msgid "数字4〜8桁にしてください"
+msgstr "Use 4-8 digits"
+
+#: src/services/Lock_Functions.cpp
+msgid "もう一度入力"
+msgstr "Enter again"
+
+#: src/services/Lock_Functions.cpp
+msgid "一致しません。新しいPINから"
+msgstr "No match. Start with the new PIN"
+
+#: src/services/PowerMenu_Functions.cpp
+msgid "再起動"
+msgstr "Restart"
+
+#: src/services/PowerMenu_Functions.cpp
+msgid "ロック"
+msgstr "Lock"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "画面がありません"
+msgstr "No screen"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "空き番号がありません"
+msgstr "No free file number"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "ファイルを作れません"
+msgstr "Cannot create the file"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "書き込みに失敗しました"
+msgstr "Write failed"
+
+#: src/services/Timer_Functions.cpp
+msgid "タイマー: 時間になりました"
+msgstr "Timer: time is up"
+
+#: src/services/UsbDrive_Functions.cpp
+msgid "すでにUSBドライブになっています"
+msgstr "Already a USB drive"
+
+#: src/services/UsbDrive_Functions.cpp
+msgid "USBの準備に失敗しました"
+msgstr "USB setup failed"
+
+#: src/services/WifiSetup_Functions.cpp
+msgid "アクセスポイントのアドレスが分かりません"
+msgstr "Unknown access point address"
+
+#: src/services/WifiSetup_Functions.cpp
+msgid "Web版では使えません"
+msgstr "Not available in the Web version"
+
+#: src/services/WifiSetup_Functions.cpp
+msgid "アクセスポイントを始められませんでした"
+msgstr "Could not start the access point"
+
+#: src/system/Notification_Functions.cpp
+msgid "通知の予約がいっぱいです"
+msgstr "Too many scheduled notices"
+
+#: src/system/Notification_Functions.cpp
+msgid "このアプリの通知の予約が上限です"
+msgstr "This app has too many scheduled notices"
+
+#: src/system/Notification_Functions.cpp
+msgid "通知の指定が正しくありません"
+msgstr "Invalid notice"

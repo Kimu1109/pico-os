@@ -28,6 +28,7 @@
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 struct LuaEngine::IsoState {
     Iso::World world;
@@ -289,13 +290,13 @@ struct LuaEngineIso {
         LuaEngine::IsoState& st = St(L);
         if (!DirAllowed(self, dir, "pico.iso.create")) {
             lua_pushnil(L);
-            lua_pushstring(L, "権限がありません");
+            lua_pushstring(L, TR("権限がありません"));
             return 2;
         }
         int x, y, z;
         if (!st.world.create(dir, (uint8_t)kind, seed, k, x, y, z)) {
             lua_pushnil(L);
-            lua_pushstring(L, "メモリが足りません");
+            lua_pushstring(L, TR("メモリが足りません"));
             return 2;
         }
         lua_pushinteger(L, x);
@@ -309,9 +310,9 @@ struct LuaEngineIso {
         LuaEngine* self = Self(L);
         const char* dir = luaL_checkstring(L, 1);
         LuaEngine::IsoState& st = St(L);
-        const char* err = "権限がありません";
+        const char* err = TR("権限がありません");
         int x, y, z, cur;
-        if (!OSData::SD_usable) err = "SDカードがありません";
+        if (!OSData::SD_usable) err = TR("SDカードがありません");
         else if (DirAllowed(self, dir, "pico.iso.open") && st.world.open(dir, x, y, z, cur, err)) {
             lua_pushinteger(L, x);
             lua_pushinteger(L, y);
@@ -357,7 +358,7 @@ struct LuaEngineIso {
         const char* old = luaL_checkstring(L, 1);
         const char* dir = luaL_checkstring(L, 2);
         LuaEngine::IsoState& st = St(L);
-        const char* err = "権限がありません";
+        const char* err = TR("権限がありません");
         if (self->SdWriteAllowed(old, "pico.iso.migrate", true) && DirAllowed(self, dir, "pico.iso.migrate")
             && st.world.migrate(old, dir, err)) {
             lua_pushboolean(L, 1);
@@ -731,8 +732,8 @@ struct LuaEngineIso {
         }
         if (!h) {
             lua_pushnil(L);
-            if (st.world.entityCount() >= Iso::kMaxEntities) lua_pushfstring(L, "置けるのは %d 個までです", Iso::kMaxEntities);
-            else lua_pushstring(L, "メモリが足りません");
+            if (st.world.entityCount() >= Iso::kMaxEntities) lua_pushfstring(L, TR("置けるのは %d 個までです"), Iso::kMaxEntities);
+            else lua_pushstring(L, TR("メモリが足りません"));
             return 2;
         }
         lua_pushinteger(L, h);
@@ -1062,7 +1063,7 @@ struct LuaEngineIso {
         for (int pass = 0; pass < 2; pass++) {
             if (pass == 1 && !st.flow.begin(st.world, r) && (CollectForRetry(L), !st.flow.begin(st.world, r))) {
                 lua_pushnil(L);
-                lua_pushstring(L, st.world.width() > Iso::kMaxFlowWidth ? "世界が広すぎます" : "メモリが足りません");
+                lua_pushstring(L, st.world.width() > Iso::kMaxFlowWidth ? TR("世界が広すぎます") : TR("メモリが足りません"));
                 return 2;
             }
             for (lua_Integer i = 1; i <= n; i++) {
@@ -1082,7 +1083,7 @@ struct LuaEngineIso {
             while (st.flow.building()) st.flow.step(st.world, 1 << 20);
             if (st.flow.failed()) {
                 lua_pushnil(L);
-                lua_pushstring(L, "メモリが足りません");
+                lua_pushstring(L, TR("メモリが足りません"));
                 return 2;
             }
         }
@@ -1244,7 +1245,7 @@ struct LuaEngineIso {
         const int h = st.world.shotAdd(DirtySink(c), sh);
         if (!h) {
             lua_pushnil(L);
-            lua_pushfstring(L, "弾は %d 個までです", Iso::kMaxShots);
+            lua_pushfstring(L, TR("弾は %d 個までです"), Iso::kMaxShots);
             return 2;
         }
         lua_pushinteger(L, h);

@@ -65,6 +65,7 @@
 #include "OS_Data.hpp"
 #include "consts.hpp"
 #include <Arduino.h>
+#include "system/I18n_Functions.hpp"
 
 
 using namespace LuaInternal;
@@ -456,8 +457,8 @@ int LuaEngine::l_show_input(lua_State* L) {
     const bool is_single_line = lua_isnoneornil(L, 3) ? true : (bool)lua_toboolean(L, 3);
 
     // ボタンの文字。省略時は従来どおり「決定」「キャンセル」、空文字列ならそのボタンを出さない
-    const char* submit_text = luaL_optstring(L, 4, "決定");
-    const char* cancel_text = luaL_optstring(L, 5, "キャンセル");
+    const char* submit_text = luaL_optstring(L, 4, TR("決定"));
+    const char* cancel_text = luaL_optstring(L, 5, TR("キャンセル"));
 
     InputDialog* dialog = new InputDialog(label, is_single_line, submit_text, cancel_text);
     if (!dialog) return luaL_error(L, "pico.show_input: 生成に失敗しました(メモリ不足の可能性)");

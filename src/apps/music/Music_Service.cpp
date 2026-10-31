@@ -8,6 +8,7 @@
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <climits>
 #include <cstdlib>
@@ -117,7 +118,7 @@ namespace {
         if(MusicService::IsWavOrMp3(t.name.c_str())){
             const char* err = "";
             if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err)){
-                error.assign(err && *err ? err : "読めない音のファイルです");
+                error.assign(err && *err ? err : TR("読めない音のファイルです"));
                 return false;
             }
             SoundFunctions::MusicStop();
@@ -126,7 +127,7 @@ namespace {
             MmlResult r;
             if(!SoundFunctions::MusicPlayFile(path.c_str(), &r)){
                 error.assign("");
-                if(r.line > 0) error.appendFormat("%d行%d列: ", r.line, r.col);
+                if(r.line > 0) error.appendFormat(TR("%d行%d列: "), r.line, r.col);
                 error.append(r.message.c_str());
                 return false;
             }
@@ -204,29 +205,29 @@ namespace {
     class Service : public BackgroundService {
         public:
             const char* key() const override { return "music"; }
-            const char* name() const override { return "ミュージック"; }
+            const char* name() const override { return TR("ミュージック"); }
             IconID icon() const override { return IconID::Music; }
             void update(uint32_t) override { MusicService::Update(); }
             bool active() const override { return MusicService::Active(); }
             void status(FixedString<PICO_STR_LL>& out) const override {
                 out.clear();
                 if(!st || st->queue.count() == 0 || st->queue.current() < 0){
-                    out.assign("止まっています");
+                    out.assign(TR("止まっています"));
                     return;
                 }
                 FixedString<PICO_PATH_LEN> name;
                 MusicService::DisplayName(st->tracks[st->queue.current()].name.c_str(), name);
                 if(MusicService::Active()){
-                    out.appendFormat("%s%d/%d %s", MusicService::Paused() ? "一時停止 " : "",
+                    out.appendFormat("%s%d/%d %s", MusicService::Paused() ? TR("一時停止 ") : "",
                                      st->queue.position() + 1, st->queue.count(), name.c_str());
                 }else if(st->interrupted){
-                    out.assign("他のアプリが音を使ったため止まりました");
+                    out.assign(TR("他のアプリが音を使ったため止まりました"));
                 }else{
-                    out.appendFormat("停止中 %s", name.c_str());
+                    out.appendFormat(TR("停止中 %s"), name.c_str());
                 }
             }
             void stop() override { MusicService::Release(); }
-            const char* appName() const override { return "ミュージック"; }
+            const char* appName() const override { return TR("ミュージック"); }
             uint32_t preferredSampleRate() const override { return SoundFunctions::kSampleRateHigh; }
             //曲が終わって次へ進むまでの一瞬も周波数の要求を保つ(さもないと22050Hzへ切り替わって次の曲が止まる)。
             //他のアプリに取られた後も、そのアプリの曲/WAVが鳴っている間は保つ(手放すと周波数の切り替えで

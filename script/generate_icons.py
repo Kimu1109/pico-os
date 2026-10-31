@@ -206,6 +206,20 @@ ICONS: list[IconSpec] = [
 
     # --- イヤホン(2026-10-24)。末尾へ足すこと(上の【重要】参照)。自作。ステータスバーの出力先 ---
     IconSpec("headphones",     str(CUSTOM_DIR / "headphones.svg")),
+    # --- タブ(2026-10-31。英語のUIで文字が入りきらないタブを絵に置き換えた。docs/design/i18n.md) ---
+    IconSpec("display",        str(ICON_DIR / "device-desktop.svg")),
+    IconSpec("dots",           str(ICON_DIR / "dots.svg")),
+    IconSpec("chart_line",     str(ICON_DIR / "chart-line.svg")),
+    IconSpec("arrows_exchange", str(ICON_DIR / "arrows-exchange.svg")),
+    IconSpec("binary",         str(ICON_DIR / "binary.svg")),
+    IconSpec("history",        str(ICON_DIR / "history.svg")),
+    IconSpec("hourglass",      str(ICON_DIR / "hourglass.svg")),
+    IconSpec("stopwatch",      str(ICON_DIR / "stopwatch.svg")),
+    IconSpec("alarm",          str(ICON_DIR / "alarm.svg")),
+    IconSpec("calendar_event", str(ICON_DIR / "calendar-event.svg")),
+    IconSpec("calendar_week",  str(ICON_DIR / "calendar-week.svg")),
+    IconSpec("list",           str(ICON_DIR / "list.svg")),
+    IconSpec("calendar_time",  str(ICON_DIR / "calendar-time.svg")),
 ]
 
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。

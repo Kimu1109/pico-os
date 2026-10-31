@@ -19,6 +19,7 @@
 #include "lua/LuaJson.hpp"
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 namespace {
     constexpr int kMaxPickPaths = 32;
@@ -479,7 +480,7 @@ struct LuaEngineNet {
         if (ok && !w->reader.complete()) {
             // 一番外の値が終わっていない(切れた応答)。頼んだものが全部見つかっていれば許す
             ok = w->h.allDone();
-            err = "JSONが途中で切れています";
+            err = TR("JSONが途中で切れています");
         }
         return finishPick(L, w, ok, err);
     }
@@ -489,16 +490,16 @@ struct LuaEngineNet {
         LuaEngine* self = Self(L);
         const char* file = luaL_checkstring(L, 1);
         PickWork* w = beginPick<PickWork>(L, 2, 3, "pico.sd_json_pick");
-        if (!OSData::SD_usable) return finishPick(L, w, false, "SDカードが使えません");
+        if (!OSData::SD_usable) return finishPick(L, w, false, TR("SDカードが使えません"));
         if (!self->SdPathAllowed(file)) {
             LOG_APP_WARN("pico.sd_json_pick: アプリディレクトリ外へのアクセスは許可されていません: %s", file);
-            return finishPick(L, w, false, "このパスは読めません(権限)");
+            return finishPick(L, w, false, TR("このパスは読めません(権限)"));
         }
         FsFile f = OSData::SD.open(file, O_RDONLY);
-        if (!f) return finishPick(L, w, false, "ファイルを開けません");
+        if (!f) return finishPick(L, w, false, TR("ファイルを開けません"));
         if ((size_t)f.fileSize() > kMaxPickFileBytes) {
             f.close();
-            return finishPick(L, w, false, "ファイルが大きすぎます(1MiBまで)");
+            return finishPick(L, w, false, TR("ファイルが大きすぎます(1MiBまで)"));
         }
         bool ok = true;
         const char* err = "";
@@ -514,7 +515,7 @@ struct LuaEngineNet {
         f.close();
         if (ok && !w->h.allDone() && !w->reader.complete()) {
             ok = false;
-            err = "JSONが途中で切れています";
+            err = TR("JSONが途中で切れています");
         }
         return finishPick(L, w, ok, err);
     }
@@ -528,7 +529,7 @@ struct LuaEngineNet {
         const char* err = w->reader.error();
         if (ok && !w->reader.complete()) {
             ok = w->h.allDone();
-            err = "XMLが途中で切れています";
+            err = TR("XMLが途中で切れています");
         }
         return finishPick(L, w, ok, err);
     }
@@ -538,16 +539,16 @@ struct LuaEngineNet {
         LuaEngine* self = Self(L);
         const char* file = luaL_checkstring(L, 1);
         XmlPickWork* w = beginPick<XmlPickWork>(L, 2, 3, "pico.sd_xml_pick");
-        if (!OSData::SD_usable) return finishPick(L, w, false, "SDカードが使えません");
+        if (!OSData::SD_usable) return finishPick(L, w, false, TR("SDカードが使えません"));
         if (!self->SdPathAllowed(file)) {
             LOG_APP_WARN("pico.sd_xml_pick: アプリディレクトリ外へのアクセスは許可されていません: %s", file);
-            return finishPick(L, w, false, "このパスは読めません(権限)");
+            return finishPick(L, w, false, TR("このパスは読めません(権限)"));
         }
         FsFile f = OSData::SD.open(file, O_RDONLY);
-        if (!f) return finishPick(L, w, false, "ファイルを開けません");
+        if (!f) return finishPick(L, w, false, TR("ファイルを開けません"));
         if ((size_t)f.fileSize() > kMaxPickFileBytes) {
             f.close();
-            return finishPick(L, w, false, "ファイルが大きすぎます(1MiBまで)");
+            return finishPick(L, w, false, TR("ファイルが大きすぎます(1MiBまで)"));
         }
         bool ok = true;
         const char* err = "";
@@ -562,7 +563,7 @@ struct LuaEngineNet {
         f.close();
         if (ok && !w->h.allDone() && !w->reader.complete()) {
             ok = false;
-            err = "XMLが途中で切れています";
+            err = TR("XMLが途中で切れています");
         }
         return finishPick(L, w, ok, err);
     }

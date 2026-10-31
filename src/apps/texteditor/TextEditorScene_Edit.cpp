@@ -15,6 +15,7 @@
 #include "storage/SD_IO.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -88,7 +89,7 @@ void TextEditorScene::undo(){
         if(!st.chained) break;
     }
     if(cursor < 0){
-        this->refreshStatus("これ以上元に戻せません");
+        this->refreshStatus(TR("これ以上元に戻せません"));
         return;
     }
     this->sel_anchor = -1;
@@ -107,7 +108,7 @@ void TextEditorScene::redo(){
         cursor = st.pos + st.ins_n;
     }while(this->history.nextRedoChained());
     if(cursor < 0){
-        this->refreshStatus("やり直せる操作がありません");
+        this->refreshStatus(TR("やり直せる操作がありません"));
         return;
     }
     this->sel_anchor = -1;
@@ -124,7 +125,7 @@ void TextEditorScene::copySelection(bool cut){
     if(has_sel){
         //入り切らない分まで消してしまわないよう、切り取りはクリップボードの上限まで
         if(cut && b - a > (int)ClipboardFunctions::kMaxBytes){
-            this->refreshStatus("切り取れるのは1KiBまでです");
+            this->refreshStatus(TR("切り取れるのは1KiBまでです"));
             return;
         }
         whole = ClipboardFunctions::Set(this->text + a, (size_t)(b - a));
@@ -142,7 +143,7 @@ void TextEditorScene::copySelection(bool cut){
     }
 
     if(!cut){
-        this->refreshStatus(!whole ? "1KiBまでコピーしました" : has_sel ? "コピーしました" : "1行コピーしました");
+        this->refreshStatus(!whole ? TR("1KiBまでコピーしました") : has_sel ? TR("コピーしました") : TR("1行コピーしました"));
         return;
     }
     const char* why = this->checkLimits(a, b, "", 0);
@@ -162,13 +163,13 @@ void TextEditorScene::copySelection(bool cut){
     }
     this->moveCursorTo(to);
     this->updateDirty();
-    this->refreshStatus("切り取りました");
+    this->refreshStatus(TR("切り取りました"));
     if(this->search_open) this->refreshFindCount();
 }
 
 void TextEditorScene::paste(){
     if(ClipboardFunctions::Empty()){
-        this->refreshStatus("クリップボードは空です");
+        this->refreshStatus(TR("クリップボードは空です"));
         return;
     }
     const char* clip = ClipboardFunctions::Get();
@@ -218,13 +219,13 @@ void TextEditorScene::selectAll(){
 void TextEditorScene::toggleSelect(){
     if(this->sel_anchor >= 0){
         this->clearSelection();
-        this->refreshStatus("選択を解除しました");
+        this->refreshStatus(TR("選択を解除しました"));
         return;
     }
     this->sel_from_search = false;
     this->sel_anchor = this->cursorPos();
     this->refreshSelection();
-    this->refreshStatus("範囲選択: 終わりの位置をタップ");
+    this->refreshStatus(TR("範囲選択: 終わりの位置をタップ"));
 }
 
 void TextEditorScene::openMenu(){
@@ -232,15 +233,15 @@ void TextEditorScene::openMenu(){
     const bool reopen = KeyboardFunctions::IsDocked();
     KeyboardFunctions::HideAll();
 
-    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, "編集", "", "閉じる");
+    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, TR("編集"), "", TR("閉じる"));
     if(!d) return;
     static const char* const kItems[] = {
-        "元に戻す", "やり直し", "範囲選択", "すべて選択",
-        "コピー", "切り取り", "貼り付け", "検索", "置換", "新規作成", "最近開いたファイル",
+        TR_NOOP("元に戻す"), TR_NOOP("やり直し"), TR_NOOP("範囲選択"), TR_NOOP("すべて選択"),
+        TR_NOOP("コピー"), TR_NOOP("切り取り"), TR_NOOP("貼り付け"), TR_NOOP("検索"), TR_NOOP("置換"), TR_NOOP("新規作成"), TR_NOOP("最近開いたファイル"),
     };
     for(const char* item : kItems){
-        if(item == kItems[2] && this->sel_anchor >= 0) d->addChoice("選択を解除");
-        else d->addChoice(item);
+        if(item == kItems[2] && this->sel_anchor >= 0) d->addChoice(TR("選択を解除"));
+        else d->addChoice(I18nFunctions::Tr(item));
     }
     d->layout();
     WidgetFunctions::AddDialog(d);
@@ -285,7 +286,7 @@ void TextEditorScene::openFindDialog(bool replace){
         this->pending_wait_frames = 1;
         return;
     }
-    InputDialog* d = new InputDialog(replace ? "置換: 探す文字列" : "検索する文字列", true, "決定", "キャンセル");
+    InputDialog* d = new InputDialog(replace ? TR("置換: 探す文字列") : TR("検索する文字列"), true, TR("決定"), TR("キャンセル"));
     if(!d) return;
     d->setInput(this->find_text.c_str());
     WidgetFunctions::AddDialog(d);
@@ -303,12 +304,12 @@ void TextEditorScene::openFindDialog(bool replace){
         }
         this->replace_mode = false;
         this->setSearchOpen(true);
-        if(!this->findNext(false)) this->refreshStatus("見つかりません");
+        if(!this->findNext(false)) this->refreshStatus(TR("見つかりません"));
     });
 }
 
 void TextEditorScene::openReplaceWithDialog(){
-    InputDialog* d = new InputDialog("置き換える文字列(空なら消す)", true, "決定", "キャンセル");
+    InputDialog* d = new InputDialog(TR("置き換える文字列(空なら消す)"), true, TR("決定"), TR("キャンセル"));
     if(!d) return;
     d->setInput(this->replace_text.c_str());
     WidgetFunctions::AddDialog(d);
@@ -321,7 +322,7 @@ void TextEditorScene::openReplaceWithDialog(){
         this->replace_text.assign(input.c_str());
         this->replace_mode = true;
         this->setSearchOpen(true);
-        if(!this->findNext(false)) this->refreshStatus("見つかりません");
+        if(!this->findNext(false)) this->refreshStatus(TR("見つかりません"));
     });
 }
 
@@ -359,9 +360,9 @@ void TextEditorScene::refreshFindCount(){
         if(on_match && p == a) index = total;
     }
     char buf[PICO_STR_S];
-    if(total == 0) snprintf(buf, sizeof(buf), "0件");
+    if(total == 0) snprintf(buf, sizeof(buf), TR("0件"));
     else if(index > 0) snprintf(buf, sizeof(buf), "%d/%d", index, total);
-    else snprintf(buf, sizeof(buf), "%d件", total);
+    else snprintf(buf, sizeof(buf), TR("%d件"), total);
     this->find_count_label->setText(buf);
 }
 
@@ -397,7 +398,7 @@ void TextEditorScene::replaceOne(){
     int a, b;
     if(!(this->selection(a, b) && b - a == n && memcmp(this->text + a, this->find_text.c_str(), n) == 0)){
         //選んでいる所が一致していなければ、まず次を探すだけ
-        if(!this->findNext(false)) this->refreshStatus("見つかりません");
+        if(!this->findNext(false)) this->refreshStatus(TR("見つかりません"));
         return;
     }
     const int rn = (int)this->replace_text.length();
@@ -413,7 +414,7 @@ void TextEditorScene::replaceOne(){
     this->refreshView();
     this->sel_anchor = -1;
     this->moveCursorTo(a + rn);
-    if(!this->findNext(false)) this->refreshStatus("すべて置換しました");
+    if(!this->findNext(false)) this->refreshStatus(TR("すべて置換しました"));
 }
 
 void TextEditorScene::replaceAll(){
@@ -435,7 +436,7 @@ void TextEditorScene::replaceAll(){
     }
     this->history.breakMerge();
     if(count == 0){
-        this->refreshStatus(why ? why : "見つかりません");
+        this->refreshStatus(why ? why : TR("見つかりません"));
         return;
     }
     this->sel_anchor = -1;
@@ -444,7 +445,7 @@ void TextEditorScene::replaceAll(){
     this->updateDirty();
     this->refreshFindCount();
     char buf[PICO_STR_L];
-    if(why) snprintf(buf, sizeof(buf), "%d件置換(残りは%s)", count, why);
-    else snprintf(buf, sizeof(buf), "%d件置換しました", count);
+    if(why) snprintf(buf, sizeof(buf), TR("%d件置換(残りは%s)"), count, why);
+    else snprintf(buf, sizeof(buf), TR("%d件置換しました"), count);
     this->refreshStatus(buf);
 }

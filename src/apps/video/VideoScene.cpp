@@ -19,6 +19,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     constexpr int MARGIN = 6;
@@ -42,7 +43,7 @@ void VideoScene::onEnter(){
     const int btn_h = 20 + Button::kFrameExtra;
     const int ctrl_h = MediaButtons::kHeight;
 
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(btn_h);
@@ -50,7 +51,7 @@ void VideoScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
     const Rect back = this->back_button->getLocalRect();
 
-    this->open_button = new Button(back.x + back.w + MARGIN, y0, "開く");
+    this->open_button = new Button(back.x + back.w + MARGIN, y0, TR("開く"));
     this->open_button->setIcon(IconID::FolderOpen, IconSize::Px16);
     this->open_button->setFontSize(FontFn::Small);
     this->open_button->setH(btn_h);
@@ -119,7 +120,7 @@ void VideoScene::onEnter(){
         this->pending_wait_frames = 1;
     }else{
         // シーンの切り替えと同じフレームで半透明のダイアログを出すと下の絵が残るので1フレーム空ける
-        this->view->setMessage("動画を選んでください");
+        this->view->setMessage(TR("動画を選んでください"));
         this->pending = Pending::OpenPicker;
         this->pending_wait_frames = 1;
     }
@@ -187,7 +188,7 @@ bool VideoScene::load(const char* p, uint32_t at_ms){
     const PvidPlayer::Error e = this->player.open(p);
     if(e != PvidPlayer::Error::None){
         LOG_APP_FAIL("Video: %s を開けません: %s", p, PvidPlayer::ErrorToStr(e));
-        this->view->setMessage("動画を選んでください");
+        this->view->setMessage(TR("動画を選んでください"));
         this->title_label->setText("");
         this->path.clear();
         this->refreshControls(true);
@@ -246,7 +247,7 @@ bool VideoScene::load(const char* p, uint32_t at_ms){
     this->playing = true;
     LOG_APP_MSG("Video: %s %dx%d %u/%u fps %u フレーム%s", p, this->player.width(), this->player.height(),
                 this->player.fpsNum(), this->player.fpsDen(), (unsigned)this->player.frameCount(),
-                this->audio_active ? " (音あり)" : "");
+                this->audio_active ? TR(" (音あり)") : "");
     this->refreshControls(true);
     return true;
 }

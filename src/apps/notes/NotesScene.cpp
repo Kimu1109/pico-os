@@ -13,6 +13,7 @@
 #include "system/Time_Functions.hpp"
 #include "task/StepBudget.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -261,9 +262,9 @@ void NotesScene::refreshList(){
         this->empty_label_->setVisible(empty);
         if(empty){
             const bool filtered = !this->query_.empty() || !this->tag_filter_.empty();
-            this->empty_label_->setText(filtered ? "当てはまるメモはありません" :
-                "メモがありません。[新規]で作るか、SDの /notes/ に .txt / .md を置いてください。"
-                "本文に #タグ と書くと[タグ]で絞り込めます");
+            this->empty_label_->setText(filtered ? TR("当てはまるメモはありません") :
+                TR("メモがありません。[新規]で作るか、SDの /notes/ に .txt / .md を置いてください。"
+                "本文に #タグ と書くと[タグ]で絞り込めます"));
         }
     }
 }
@@ -272,13 +273,13 @@ void NotesScene::refreshStatus(){
     if(!this->status_label_) return;
     FixedString<PICO_STR_L> s;
     if(this->scanning_){
-        s.appendFormat("読み込み中… %d件", this->index_ ? this->index_->count : 0);
+        s.appendFormat(TR("読み込み中… %d件"), this->index_ ? this->index_->count : 0);
     }else{
         if(!this->tag_filter_.empty()) s.appendFormat("#%s ", this->tag_filter_.c_str());
         if(!this->query_.empty()) s.appendFormat("「%s」", this->query_.c_str());
-        if(s.empty()) s.assign("メモ ");
-        s.appendFormat("%d件", this->shownCount());
-        if(this->index_ && this->index_->overflow) s.appendFormat("(先頭%d件まで)", kMaxNotes);
+        if(s.empty()) s.assign(TR("メモ "));
+        s.appendFormat(TR("%d件"), this->shownCount());
+        if(this->index_ && this->index_->overflow) s.appendFormat(TR("(先頭%d件まで)"), kMaxNotes);
     }
     this->status_label_->setText(s.c_str());
     if(this->clear_button_){
@@ -292,7 +293,7 @@ void NotesScene::open(int shown_index){
     const Note* n = this->shownAt(shown_index);
     if(!n) return;
     if(!OSData::SD_usable || !OSData::SD.exists(n->path.c_str())){
-        ErrorFunctions::ShowFatal("メモが見つかりません");
+        ErrorFunctions::ShowFatal(TR("メモが見つかりません"));
         this->rescan_ = true;
         return;
     }
@@ -301,25 +302,25 @@ void NotesScene::open(int shown_index){
 
 void NotesScene::onNew(){
     if(!OSData::SD_usable){
-        ErrorFunctions::ShowFatal("SDカードが使えません");
+        ErrorFunctions::ShowFatal(TR("SDカードが使えません"));
         return;
     }
     FixedString<PICO_PATH_LEN> root;
     NotesRoot(root);
     if(!OSData::SD.exists(root.c_str()) && !OSData::SD.mkdir(root.c_str())){
-        ErrorFunctions::ShowFatal("/notes/ を作れませんでした");
+        ErrorFunctions::ShowFatal(TR("/notes/ を作れませんでした"));
         return;
     }
     FixedString<PICO_PATH_LEN> path;
     if(!MakeNewNotePath(path)){
-        ErrorFunctions::ShowFatal("新しいメモの名前を作れません");
+        ErrorFunctions::ShowFatal(TR("新しいメモの名前を作れません"));
         return;
     }
     SceneFunctions::Push(new TextEditorScene(path.c_str(), true));
 }
 
 void NotesScene::askQuery(){
-    auto* d = new InputDialog("中身から探す(空で解除):", true);
+    auto* d = new InputDialog(TR("中身から探す(空で解除):"), true);
     WidgetFunctions::AddDialog(d);
     d->setInput(this->query_.c_str());
     d->setVisible(true);
@@ -347,11 +348,11 @@ int NotesScene::sortedTags(int* order) const {
 void NotesScene::pickTag(){
     if(!this->index_ || this->scanning_) return;
     if(this->index_->tag_count == 0){
-        if(this->status_label_) this->status_label_->setText("タグはまだありません(本文に #タグ と書く)");
+        if(this->status_label_) this->status_label_->setText(TR("タグはまだありません(本文に #タグ と書く)"));
         return;
     }
-    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "タグ", "", "閉じる");
-    d->addChoice("すべて");
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, TR("タグ"), "", TR("閉じる"));
+    d->addChoice(TR("すべて"));
     int order[kMaxTags];
     const int tn = this->sortedTags(order);
     for(int i = 0; i < tn; i++){
@@ -393,13 +394,13 @@ void NotesScene::onEnter(){
         WidgetFunctions::Add(b);
         return b;
     };
-    this->back_button_ = make("戻る", IconID::ArrowLeft, true);
+    this->back_button_ = make(TR("戻る"), IconID::ArrowLeft, true);
     this->back_button_->setOnPressEnd([](){ SceneFunctions::Pop(); });
-    this->new_button_ = make("新規", IconID::FilePlus, true);
+    this->new_button_ = make(TR("新規"), IconID::FilePlus, true);
     this->new_button_->setOnPressEnd([this](){ this->onNew(); });
-    this->search_button_ = make("検索", IconID::Search, true);
+    this->search_button_ = make(TR("検索"), IconID::Search, true);
     this->search_button_->setOnPressEnd([this](){ this->askQuery(); });
-    this->tag_button_ = make("#タグ", IconID::AppBox, false);
+    this->tag_button_ = make(TR("#タグ"), IconID::AppBox, false);
     this->tag_button_->setOnPressEnd([this](){ this->pickTag(); });
 
     // 2段目: 今の絞り込みと件数 … [×]

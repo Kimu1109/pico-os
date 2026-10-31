@@ -4,6 +4,7 @@
 #include "gui/core/Font_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 
@@ -12,13 +13,13 @@ namespace {
     // (refreshDisplays()側は黙って空欄にするだけ)
     const char* ErrorMessage(CalcEval::Error e){
         switch(e){
-            case CalcEval::Error::DivByZero:  return "0で割ることはできません";
-            case CalcEval::Error::Domain:     return "計算できません(定義域の外)";
-            case CalcEval::Error::TooComplex: return "式が複雑すぎます";
-            case CalcEval::Error::Overflow:   return "桁があふれました";
-            case CalcEval::Error::NoVariable: return "xはグラフでだけ使えます";
+            case CalcEval::Error::DivByZero:  return TR("0で割ることはできません");
+            case CalcEval::Error::Domain:     return TR("計算できません(定義域の外)");
+            case CalcEval::Error::TooComplex: return TR("式が複雑すぎます");
+            case CalcEval::Error::Overflow:   return TR("桁があふれました");
+            case CalcEval::Error::NoVariable: return TR("xはグラフでだけ使えます");
             case CalcEval::Error::Syntax:
-            default:                          return "式が正しくありません";
+            default:                          return TR("式が正しくありません");
         }
     }
 
@@ -362,7 +363,7 @@ void CalculatorScene::refreshGraphStatus(){
     const Expr& e = this->graph_exprs[this->graph_sel];
     int8_t color = PICO_DARKGREY;
     if(e.empty()){
-        msg.appendFormat("y%dの式を入力 (x キーで変数)", this->graph_sel + 1);
+        msg.appendFormat(TR("y%dの式を入力 (x キーで変数)"), this->graph_sel + 1);
     }else{
         Expr closed;
         CloseParens(e, closed);
@@ -375,7 +376,7 @@ void CalculatorScene::refreshGraphStatus(){
             msg.assign(ErrorMessage(r.error));
             color = PICO_RED;
         }else{
-            msg.appendFormat("[描画]でグラフ (%s)", AngleLabel(this->graph_angle));
+            msg.appendFormat(TR("[描画]でグラフ (%s)"), AngleLabel(this->graph_angle));
         }
     }
     this->graph_status->setTextColor(color);
@@ -477,7 +478,7 @@ void CalculatorScene::onEnter(){
     const Rect content = Scene::contentRect();
 
     // ---- 上部: [戻る][電卓|グラフ|履歴] ----
-    this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
+    this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -493,11 +494,11 @@ void CalculatorScene::onEnter(){
     this->page_tab = new TabBar(tab_x, content.y + MARGIN, tab_w, this->top_row_h);
     //5つを均等割りにすると「グラフ」だけが2行に折り返されるので、ラベルの長さに合わせる
     this->page_tab->setFitToLabels(true);
-    this->page_tab->addTab("電卓");
-    this->page_tab->addTab("グラフ");
-    this->page_tab->addTab("変換");
-    this->page_tab->addTab("進数");
-    this->page_tab->addTab("履歴");
+    this->page_tab->addTab(IconID::Calculator, TR("電卓"));
+    this->page_tab->addTab(IconID::ChartLine, TR("グラフ"));
+    this->page_tab->addTab(IconID::ArrowsExchange, TR("変換"));
+    this->page_tab->addTab(IconID::Binary, TR("進数"));
+    this->page_tab->addTab(IconID::History, TR("履歴"));
     this->page_tab->setSelected((int)this->page);
     this->page_tab->setOnChanged([this](int index){
         this->page = (Page)index;
@@ -581,10 +582,10 @@ void CalculatorScene::onEnter(){
 
     struct Spec { Button** slot; const char* text; };
     const Spec specs[] = {
-        { &this->graph_edit_button,    "式" },
-        { &this->graph_zoomin_button,  "拡大" },
-        { &this->graph_zoomout_button, "縮小" },
-        { &this->graph_reset_button,   "初期化" },
+        { &this->graph_edit_button,    TR("式") },
+        { &this->graph_zoomin_button,  TR("拡大") },
+        { &this->graph_zoomout_button, TR("縮小") },
+        { &this->graph_reset_button,   TR("初期化") },
     };
     const int n_btn = sizeof(specs) / sizeof(specs[0]);
     const int btn_w = (body.w - MARGIN * (n_btn + 1)) / n_btn;
@@ -606,7 +607,7 @@ void CalculatorScene::onEnter(){
     });
 
     // ---- 履歴ページ: 消去ボタン + 一覧 ----
-    this->history_clear_button = new Button(body.x + MARGIN, body.y + MARGIN, "履歴を消去");
+    this->history_clear_button = new Button(body.x + MARGIN, body.y + MARGIN, TR("履歴を消去"));
     this->history_clear_button->setIcon(IconID::Trash, IconSize::Px16);
     this->history_clear_button->setFontSize(FontFn::Small);
     this->history_clear_button->setH(20 + Button::kFrameExtra);

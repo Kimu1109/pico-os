@@ -1,6 +1,7 @@
 #include "apps/browser/Doc_Search.hpp"
 
 #include "system/Log_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 
@@ -64,25 +65,25 @@ bool DocSearch::begin(const Url& server, const char* search_path, const char* qu
     offset_ = (offset > 0) ? offset : 0;
 
     if(!search_path || search_path[0] == '\0'){
-        finish(State::Failed, "このサーバは検索に対応していません");
+        finish(State::Failed, TR("このサーバは検索に対応していません"));
         return false;
     }
     if(!query || query[0] == '\0'){
-        finish(State::Failed, "検索語が空です");
+        finish(State::Failed, TR("検索語が空です"));
         return false;
     }
 
     Url target = server;
     target.query.clear();
     if(!target.path.assign(search_path)){
-        finish(State::Failed, "検索URLが長すぎます");
+        finish(State::Failed, TR("検索URLが長すぎます"));
         return false;
     }
 
     //検索語は日本語なので、そのままではリクエストラインへ書けない
     FixedString<PICO_STR_LL> encoded;
     if(!UrlTools::EncodeComponent(encoded, query)){
-        finish(State::Failed, "検索語が長すぎます");
+        finish(State::Failed, TR("検索語が長すぎます"));
         return false;
     }
 
@@ -91,7 +92,7 @@ bool DocSearch::begin(const Url& server, const char* search_path, const char* qu
     ok = target.query.append(encoded) && ok;
     ok = target.query.appendFormat("&limit=%d&offset=%d", kMaxHits, offset_) && ok;
     if(!ok){
-        finish(State::Failed, "検索語が長すぎます");
+        finish(State::Failed, TR("検索語が長すぎます"));
         return false;
     }
 
@@ -120,7 +121,7 @@ void DocSearch::update(){
         const int code = http.response().statusCode();
         if(code >= 400){
             static char buf[48];
-            snprintf(buf, sizeof(buf), "検索に失敗しました (%d)", code);
+            snprintf(buf, sizeof(buf), TR("検索に失敗しました (%d)"), code);
             LOG_SYS_WARN("DocSearch: %s", buf);
             finish(State::Failed, buf);
         }else{

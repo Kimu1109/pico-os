@@ -113,6 +113,35 @@ int main(){
         eq(l.getH(), expectH(3), "折返し2行+段落1行で3行");
     }
 
+    // ---- 英語は語の切れ目で折り返す ----
+    {
+        //ASCII 1文字12px、max_width=100なら1行に8文字(96px)まで。
+        //文字単位なら "hello wo|rld foo" の2行だが、語の前で折り返して "hello |world |foo" の3行
+        Label<PICO_STR_L> l(0, 0, "hello world foo");
+        l.setMaxWidth(100);
+        eq(l.getH(), expectH(3), "英語は語の途中で切らない(3行)");
+        eq(l.getTextLength(), 15, "語で折り返しても文字数は変わらない");
+    }
+    {
+        //1行より長い語は文字の途中で切る(16文字=192px → 8文字ずつ2行)
+        Label<PICO_STR_L> l(0, 0, "abcdefghijklmnop");
+        l.setMaxWidth(100);
+        eq(l.getH(), expectH(2), "1行より長い語は文字で切る");
+    }
+    {
+        //行末で溢れた空白はぶら下げ、次の行の頭へ送らない("abcdefgh" + " " + "ij" で2行)
+        Label<PICO_STR_L> l(0, 0, "abcdefgh ij");
+        l.setMaxWidth(100);
+        eq(l.getH(), expectH(2), "溢れた空白で行を増やさない");
+    }
+    {
+        //日本語の後ろの英語の語も、入らなければ語の前で折り返す。"あい " | "abcdefg " | "xy" の3行
+        //(文字単位なら "あい abc" | "defg xy" の2行)
+        Label<PICO_STR_L> l(0, 0, "あい abcdefg xy");
+        l.setMaxWidth(100);
+        eq(l.getH(), expectH(3), "日本語+英語の語(3行)");
+    }
+
     // ---- マークアップ ----
     {
         //**で囲むと太字。太字は1文字ごとに幅+1される

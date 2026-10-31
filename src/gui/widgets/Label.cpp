@@ -177,6 +177,64 @@ void Label<N>::computeLineOffsets(const Runs& src_runs, int src_line_count,
     }
 }
 
+// 英字の語を行の途中で切らないための折り返しの判定(relayout()/relayoutPlaceholder() 共通)。
+//
+// 日本語は1文字ずつ折り返してよいが、英語(訳した文字列等)を同じにすると「browse / r」のように語の途中で行が変わる。
+// そこで英字の語(空白以外の ASCII が続くところ)の頭で語の幅を測り、今の行に入らず次の行なら入るときは
+// 語の前で折り返す。1行より長い語(URL等)は従来どおり文字の途中で切る。
+// 行末で溢れた空白は次の行の頭へ送らず、前の行の後ろへぶら下げる(次の行の頭がずれないように)。
+//
+// ASCII の文字幅は同じフォントの間は一定なので覚えておく(語の幅を測る分の textWidth() を増やさないため)
+class WordWrapper {
+    public:
+        WordWrapper(){ for (int16_t& w : ascii_w_) w = -1; }
+
+        int charWidth(const char* ch){
+            const uint8_t c = (uint8_t)ch[0];
+            if (c >= 0x20 && c < 0x7F && ch[1] == '\0') {
+                int16_t& w = ascii_w_[c - 0x20];
+                if (w < 0) w = (int16_t)OSData::frame->textWidth(ch);
+                return w;
+            }
+            return OSData::frame->textWidth(ch);
+        }
+
+        // 今の文字(ch。rp[char_start..]から始まる)の前で行を変えるか。cw は太字の分を含む文字幅
+        bool shouldBreak(const char* rp, size_t rn, size_t char_start, const char* ch, int cw,
+                         int cur_width, int max_width, bool bold){
+            const bool word = IsWordByte(ch[0]);
+            const bool head = word && !prev_word_;
+            prev_word_ = word;
+            if (max_width <= 0 || cur_width <= 0) return false;
+            if (cur_width + cw > max_width) {
+                //溢れた最初の空白はぶら下げる。2つ目からは折り返す(空白だけが延々と伸びないように)
+                return ch[0] != ' ' || cur_width > max_width;
+            }
+            if (!head) return false;
+            const int ww = wordWidth(rp, rn, char_start, bold);
+            return cur_width + ww > max_width && ww <= max_width;
+        }
+
+        // 段落の頭で呼ぶ(前の段落の最後の語と繋げない)
+        void newParagraph(){ prev_word_ = false; }
+
+    private:
+        int16_t ascii_w_[0x7F - 0x20];
+        bool prev_word_ = false;
+
+        static bool IsWordByte(char c){ return (uint8_t)c > 0x20 && (uint8_t)c < 0x7F; }
+
+        int wordWidth(const char* rp, size_t rn, size_t i, bool bold){
+            int w = 0;
+            char one[2] = { 0, 0 };
+            for (; i < rn && IsWordByte(rp[i]); i++) {
+                one[0] = rp[i];
+                w += charWidth(one) + (bold ? 1 : 0);
+            }
+            return w;
+        }
+};
+
 template<size_t N>
 void Label<N>::relayout() {
     //先に下ろしておく。この関数の末尾のneedsRender()がgetScreenRect()経由で
@@ -206,9 +264,11 @@ void Label<N>::relayout() {
         cursor_slots.push_back(head);
     }
 
+    WordWrapper wrap;
     size_t para_start = 0;
     bool last_paragraph = false;
     while (!last_paragraph) {
+        wrap.newParagraph();
         size_t para_end = para_start;
         while (para_end < total && s[para_end] != '\n') para_end++;
         last_paragraph = (para_end >= total);
@@ -240,10 +300,10 @@ void Label<N>::relayout() {
                 // computeLineOffsets()/render()側でtextWidth(run.text.c_str())を
                 // 呼んだ場合と同じ値になるようにする(太字分の+1はそれらの呼び出し側で
                 // 1回だけ加算される想定のため、ここで重ねて加算しない)。
-                int chW = OSData::frame->textWidth(ch);
+                int chW = wrap.charWidth(ch);
                 int cw = chW + (run.bold ? 1 : 0); // 折り返し判定用(太字は従来通り1文字ごとに+1)
 
-                if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
+                if (wrap.shouldBreak(rp, rn, char_start, ch, cw, curWidth, max_width, run.bold)) {
                     if (piece.srcLength > 0) { piece.line = cur_line; runs_flat.push_back(piece); }
                     //折り返した先の区間はこの文字から始まる
                     piece.srcOffset = (uint16_t)(run.srcOffset + char_start);
@@ -335,6 +395,7 @@ void Label<N>::relayoutPlaceholder() {
     const char* ps = placeholder_text.c_str();
     ParsedRuns runs;
     parseMarkup(ps, placeholder_text.length(), 0, runs);
+    WordWrapper wrap;
     int curWidth = 0;
     TextRun piece;
 
@@ -355,10 +416,10 @@ void Label<N>::relayoutPlaceholder() {
             const size_t char_start = ci;
             ci = nextUtf8Char(rp, rn, ci, ch, chLen);
 
-            int chW = OSData::frame->textWidth(ch);
+            int chW = wrap.charWidth(ch);
             int cw = chW + (run.bold ? 1 : 0);
 
-            if (max_width > 0 && curWidth > 0 && curWidth + cw > max_width) {
+            if (wrap.shouldBreak(rp, rn, char_start, ch, cw, curWidth, max_width, run.bold)) {
                 if (piece.srcLength > 0) { piece.line = cur_line; placeholder_runs_flat.push_back(piece); }
                 piece.srcOffset = (uint16_t)(run.srcOffset + char_start);
                 piece.srcLength = 0;

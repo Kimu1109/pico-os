@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <strings.h>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // 暗号化の用途文字列は名前ごとに分ける(同じ鍵ストリームを複数の値で使い回すと、
@@ -236,7 +237,7 @@ void CalendarSync::startCurrent(){
     Source src;
     if(!ReadSource(index_, src)){
         name_.assign("?");
-        this->failCurrent("取得元を読めない");
+        this->failCurrent(TR("取得元を読めない"));
         return;
     }
     name_.assign(src.name);
@@ -252,7 +253,7 @@ void CalendarSync::startCurrent(){
 
     Url url;
     if(!UrlTools::Parse(url, src.url.c_str())){
-        this->failCurrent("URLを解釈できない(長すぎるか http(s):// で始まっていない)");
+        this->failCurrent(TR("URLを解釈できない(長すぎるか http(s):// で始まっていない)"));
         return;
     }
 
@@ -274,7 +275,7 @@ void CalendarSync::startCurrent(){
     OSData::SD.mkdir(PICO_Path::DIR::CALENDAR);
     part = OSData::SD.open(part_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
     if(!part){
-        this->failCurrent("書き込み先を用意できない");
+        this->failCurrent(TR("書き込み先を用意できない"));
         return;
     }
     sink.reset(&part);
@@ -312,10 +313,10 @@ void CalendarSync::finishCurrent(){
     if(http.getStatus() == TaskTools::FAILED){
         const int code = http.response().statusCode();
         if(sink.failed){
-            this->failCurrent("大きすぎる(1MB超)か、書き込みに失敗した");
+            this->failCurrent(TR("大きすぎる(1MB超)か、書き込みに失敗した"));
         }else if(code >= 400){
             char buf[48];
-            snprintf(buf, sizeof(buf), "サーバが %d を返しました", code);
+            snprintf(buf, sizeof(buf), TR("サーバが %d を返しました"), code);
             this->failCurrent(buf);
         }else{
             this->failCurrent(http.failureToStr());
@@ -331,21 +332,21 @@ void CalendarSync::finishCurrent(){
 
     part.close();
     if(sink.failed){
-        this->failCurrent("大きすぎる(1MB超)か、書き込みに失敗した");
+        this->failCurrent(TR("大きすぎる(1MB超)か、書き込みに失敗した"));
         return;
     }
     if(!LooksLikeIcal(sink.head, sink.head_len)){
-        this->failCurrent("iCalendarではない応答(URLを確かめてください)");
+        this->failCurrent(TR("iCalendarではない応答(URLを確かめてください)"));
         return;
     }
 
     //差し替え。ここまで来て初めて手元の .ics に触る
     if(OSData::SD.exists(final_path.c_str()) && !OSData::SD.remove(final_path.c_str())){
-        this->failCurrent("古いファイルを消せない");
+        this->failCurrent(TR("古いファイルを消せない"));
         return;
     }
     if(!OSData::SD.rename(part_path.c_str(), final_path.c_str())){
-        this->failCurrent("保存に失敗した");
+        this->failCurrent(TR("保存に失敗した"));
         return;
     }
 

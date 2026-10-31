@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     uint32_t Le32(const uint8_t* p){
@@ -14,7 +15,7 @@ void FwUpdate::start(FwSource* src, FwStore* store, const Env& env){
     store_ = store;
     env_ = env;
     state_ = State::Header;
-    message_.assign("更新ファイルを読んでいます");
+    message_.assign(TR("更新ファイルを読んでいます"));
     confirm_.clear();
     header_ = FwImage::Header{};
     sig_ = FwImage::Sig::Unsigned;
@@ -50,7 +51,7 @@ void FwUpdate::step(size_t budget){
     switch(state_){
         case State::Header:  stepHeader(); break;
         case State::Confirm:
-            if(src_->closed()) fail("相手が接続を切りました");
+            if(src_->closed()) fail(TR("相手が接続を切りました"));
             break;
         case State::Payload: stepPayload(budget); break;
         case State::Verify:  stepVerify(budget); break;
@@ -61,7 +62,7 @@ void FwUpdate::step(size_t budget){
 void FwUpdate::stepHeader(){
     while(prefix_len_ < sizeof(prefix_)){
         const int n = src_->read(prefix_ + prefix_len_, sizeof(prefix_) - prefix_len_);
-        if(n < 0){ fail(prefix_len_ == 0 ? "更新ファイルが空です" : "更新ファイルが短すぎます"); return; }
+        if(n < 0){ fail(prefix_len_ == 0 ? TR("更新ファイルが空です") : TR("更新ファイルが短すぎます")); return; }
         if(n == 0) return;
         prefix_len_ += (size_t)n;
     }
@@ -74,13 +75,13 @@ void FwUpdate::stepHeader(){
     if(sig_ == FwImage::Sig::Bad){ fail(FwImage::SigText(sig_)); return; }
     const bool unverified = sig_ != FwImage::Sig::Trusted;
     if(unverified && !env_.allow_unsigned){
-        fail(sig_ == FwImage::Sig::Unsigned ? "署名の無い更新ファイルは受け付けません"
-                                            : "登録されていない鍵で署名されています");
+        fail(sig_ == FwImage::Sig::Unsigned ? TR("署名の無い更新ファイルは受け付けません")
+                                            : TR("登録されていない鍵で署名されています"));
         return;
     }
 
     // 置き場を空けてから、入るかどうかを見る(前の更新の残りがあれば消える)
-    if(!store_->mount()){ fail("置き場(内蔵フラッシュ)を開けません"); return; }
+    if(!store_->mount()){ fail(TR("置き場(内蔵フラッシュ)を開けません")); return; }
     mounted_ = true;
     store_->clear();
     e = FwImage::Check(header_, store_->fsStart(), store_->fsEnd(), store_->capacity());
@@ -93,14 +94,14 @@ void FwUpdate::stepHeader(){
         confirm_.append(t);
     };
     if(unverified) add(FwImage::SigText(sig_));
-    if(header_.serial < env_.current_serial) add("今より古い版です");
-    else if(header_.serial == env_.current_serial && strcmp(header_.git, env_.current_git) == 0) add("今と同じ版です");
+    if(header_.serial < env_.current_serial) add(TR("今より古い版です"));
+    else if(header_.serial == env_.current_serial && strcmp(header_.git, env_.current_git) == 0) add(TR("今と同じ版です"));
 
     if(!confirm_.empty() || env_.always_confirm){
         state_ = State::Confirm;
-        message_.assign("確認を待っています");
+        message_.assign(TR("確認を待っています"));
         char line[PICO_STR_LL + 8];
-        snprintf(line, sizeof(line), "WAIT %s", confirm_.empty() ? "本体で確認してください" : confirm_.c_str());
+        snprintf(line, sizeof(line), "WAIT %s", confirm_.empty() ? TR("本体で確認してください") : confirm_.c_str());
         // 改行を含むと行が分かれるので、TCPへは空白にして送る
         for(char* p = line; *p; ++p) if(*p == '\n') *p = ' ';
         src_->reply(line);
@@ -111,17 +112,17 @@ void FwUpdate::stepHeader(){
 
 void FwUpdate::confirm(bool yes){
     if(state_ != State::Confirm) return;
-    if(!yes){ fail("本体で取り消されました"); return; }
+    if(!yes){ fail(TR("本体で取り消されました")); return; }
     beginPayload();
 }
 
 void FwUpdate::beginPayload(){
-    if(!store_->openWrite()){ fail("置き場に書き込めません"); return; }
+    if(!store_->openWrite()){ fail(TR("置き場に書き込めません")); return; }
     writing_ = true;
     sha_.reset();
     received_ = 0;
     state_ = State::Payload;
-    message_.assign("書き込んでいます");
+    message_.assign(TR("書き込んでいます"));
     src_->reply("OK");
 }
 
@@ -131,28 +132,28 @@ void FwUpdate::stepPayload(size_t budget){
         size_t want = header_.payload_bytes - received_;
         if(want > sizeof(buf_)) want = sizeof(buf_);
         const int n = src_->read(buf_, want);
-        if(n < 0){ fail("更新ファイルが途中で切れました"); return; }
+        if(n < 0){ fail(TR("更新ファイルが途中で切れました")); return; }
         if(n == 0) return;
         sha_.update(buf_, (size_t)n);
-        if(!store_->write(buf_, (size_t)n)){ fail("置き場への書き込みに失敗しました(空きが足りない?)"); return; }
+        if(!store_->write(buf_, (size_t)n)){ fail(TR("置き場への書き込みに失敗しました(空きが足りない?)")); return; }
         received_ += (uint32_t)n;
         used += (size_t)n;
     }
     if(received_ < header_.payload_bytes) return;
 
     writing_ = false;
-    if(!store_->closeWrite()){ fail("置き場への書き込みに失敗しました"); return; }
+    if(!store_->closeWrite()){ fail(TR("置き場への書き込みに失敗しました")); return; }
     uint8_t digest[32];
     sha_.finish(digest);
-    if(memcmp(digest, header_.payload_sha256, 32) != 0){ fail("中身が見出しと合いません(壊れています)"); return; }
+    if(memcmp(digest, header_.payload_sha256, 32) != 0){ fail(TR("中身が見出しと合いません(壊れています)")); return; }
 
     // 書いたものを読み直して確かめる(フラッシュへの書き込みの失敗・化けを見つけるため)
-    if(!store_->openRead()){ fail("置き場を読み直せません"); return; }
+    if(!store_->openRead()){ fail(TR("置き場を読み直せません")); return; }
     reading_ = true;
     sha_.reset();
     verified_ = 0;
     state_ = State::Verify;
-    message_.assign("書いた中身を確かめています");
+    message_.assign(TR("書いた中身を確かめています"));
 }
 
 void FwUpdate::stepVerify(size_t budget){
@@ -160,9 +161,9 @@ void FwUpdate::stepVerify(size_t budget){
     bool eof = false;
     while(used < budget){
         const int n = store_->read(buf_, sizeof(buf_));
-        if(n < 0){ fail("置き場を読み直せません"); return; }
+        if(n < 0){ fail(TR("置き場を読み直せません")); return; }
         if(n == 0){ eof = true; break; }
-        if(verified_ + (uint32_t)n > header_.payload_bytes){ fail("置き場の中身が長すぎます"); return; }
+        if(verified_ + (uint32_t)n > header_.payload_bytes){ fail(TR("置き場の中身が長すぎます")); return; }
         // gzipの頭3バイトと末尾4バイト(解いた大きさ)を拾う
         for(int i = 0; i < n; i++){
             const uint32_t pos = verified_ + (uint32_t)i;
@@ -177,20 +178,20 @@ void FwUpdate::stepVerify(size_t budget){
 
     reading_ = false;
     store_->closeRead();
-    if(verified_ != header_.payload_bytes){ fail("置き場の中身が短すぎます"); return; }
+    if(verified_ != header_.payload_bytes){ fail(TR("置き場の中身が短すぎます")); return; }
     uint8_t digest[32];
     sha_.finish(digest);
-    if(memcmp(digest, header_.payload_sha256, 32) != 0){ fail("置き場から読み直した中身が合いません"); return; }
+    if(memcmp(digest, header_.payload_sha256, 32) != 0){ fail(TR("置き場から読み直した中身が合いません")); return; }
     // ローダーはgzipの末尾の大きさだけ書く。見出しの大きさ(=アプリの領域に収まると確かめた値)と同じであること
-    if(gz_head_[0] != 0x1f || gz_head_[1] != 0x8b || gz_head_[2] != 0x08){ fail("中身がgzipではありません"); return; }
-    if(Le32(gz_tail_) != header_.image_bytes){ fail("中身の大きさが見出しと合いません"); return; }
+    if(gz_head_[0] != 0x1f || gz_head_[1] != 0x8b || gz_head_[2] != 0x08){ fail(TR("中身がgzipではありません")); return; }
+    if(Le32(gz_tail_) != header_.image_bytes){ fail(TR("中身の大きさが見出しと合いません")); return; }
 
     char note[96];
     snprintf(note, sizeof(note), "serial=%lu git=%s", (unsigned long)header_.serial, header_.git);
-    if(!store_->commit(note)){ fail("書き換えの指示を書けませんでした"); return; }
+    if(!store_->commit(note)){ fail(TR("書き換えの指示を書けませんでした")); return; }
     store_->unmount();
     mounted_ = false;
     state_ = State::Done;
-    message_.assign("準備ができました。再起動して書き換えます");
+    message_.assign(TR("準備ができました。再起動して書き換えます"));
     src_->reply("DONE");
 }

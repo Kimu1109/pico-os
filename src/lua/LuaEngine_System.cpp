@@ -65,6 +65,7 @@
 #include "OS_Data.hpp"
 #include "consts.hpp"
 #include <Arduino.h>
+#include "system/I18n_Functions.hpp"
 
 
 using namespace LuaInternal;
@@ -307,7 +308,7 @@ int LuaEngine::l_notify(lua_State* L) {
     if (!self->permissions_.notify) {
         LOG_APP_WARN("pico.notify: 通知の権限がありません(app.cfgのpermission_notify)");
         lua_pushnil(L);
-        lua_pushstring(L, "通知の権限がありません");
+        lua_pushstring(L, TR("通知の権限がありません"));
         return 2;
     }
 

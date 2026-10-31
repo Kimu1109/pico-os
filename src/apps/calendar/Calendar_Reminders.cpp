@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     using namespace NotificationFunctions;
@@ -142,12 +143,12 @@ int CalendarReminders::Sync(const IcalCalendar& cal, int32_t from_day, int32_t t
         const IcalEvent& ev = *items[i].ev;
 
         Content c;
-        Sanitize(c.title, ev.summary.empty() ? "(無題の予定)" : ev.summary.c_str());
+        Sanitize(c.title, ev.summary.empty() ? TR("(無題の予定)") : ev.summary.c_str());
         const int hh = ev.start.sec / 3600, mm = (ev.start.sec / 60) % 60;
         char body[96];
         int len = (before_min > 0)
-            ? snprintf(body, sizeof(body), "%02d:%02dから(%d分前)", hh, mm, before_min)
-            : snprintf(body, sizeof(body), "%02d:%02dから", hh, mm);
+            ? snprintf(body, sizeof(body), TR("%02d:%02dから(%d分前)"), hh, mm, before_min)
+            : snprintf(body, sizeof(body), TR("%02d:%02dから"), hh, mm);
         if(!ev.location.empty() && len > 0 && len < (int)sizeof(body)){
             snprintf(body + len, sizeof(body) - len, " %s", ev.location.c_str());
         }

@@ -11,6 +11,7 @@
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -41,18 +42,18 @@ void ReaderLibraryScene::onEnter(){
     const int y0 = content.y + MARGIN;
     const int btn_h = 20 + Button::kFrameExtra;
 
-    this->back_button_ = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button_ = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button_->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button_->setH(btn_h);
     this->back_button_->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button_);
     const Rect back = this->back_button_->getLocalRect();
 
-    auto* title = new Label<PICO_STR_L>(back.x + back.w + MARGIN * 2, y0 + (back.h - 24) / 2, "本棚");
+    auto* title = new Label<PICO_STR_L>(back.x + back.w + MARGIN * 2, y0 + (back.h - 24) / 2, TR("本棚"));
     title->setHitTransparent(true);
     WidgetFunctions::Add(title);
 
-    this->open_button_ = new Button(0, y0, "開く");
+    this->open_button_ = new Button(0, y0, TR("開く"));
     this->open_button_->setIcon(IconID::FolderOpen, IconSize::Px16);
     this->open_button_->setH(btn_h);
     this->open_button_->setX(content.x + content.w - MARGIN - this->open_button_->getLocalRect().w);
@@ -61,7 +62,7 @@ void ReaderLibraryScene::onEnter(){
 
     int y = y0 + back.h + MARGIN;
     this->list_top_ = y;
-    this->continue_button_ = new Button(content.x + MARGIN, y, "続きから読む");
+    this->continue_button_ = new Button(content.x + MARGIN, y, TR("続きから読む"));
     this->continue_button_->setFontSize(FontFn::Small);
     this->continue_button_->setW(content.w - MARGIN * 2);
     this->continue_button_->setH(34);
@@ -79,7 +80,7 @@ void ReaderLibraryScene::onEnter(){
     WidgetFunctions::Add(this->list_);
 
     this->empty_label_ = new Label<PICO_STR_L>(content.x + MARGIN * 2, y + MARGIN,
-                                               "本がありません。SDの /books/ に青空文庫のテキスト(.txt)を置くか、[開く]から選んでください");
+                                               TR("本がありません。SDの /books/ に青空文庫のテキスト(.txt)を置くか、[開く]から選んでください"));
     this->empty_label_->setFontSize(FontFn::Small);
     this->empty_label_->setMaxWidth(content.w - MARGIN * 4);
     this->empty_label_->setTextColor(PICO_DARKGREY);
@@ -134,7 +135,7 @@ void ReaderLibraryScene::reload(){
         if(!r.title.empty()) title.assign(r.title.c_str());
         else TitleOf(r.path.c_str(), title);
         FixedString<PICO_STR_M> label;
-        label.assign("続きから: ");
+        label.assign(TR("続きから: "));
         (void)label.append(title.c_str());   // 長い題名は切れてよい
         this->continue_button_->setText(label.c_str());
         this->continue_path_ = r.path;
@@ -184,7 +185,7 @@ void ReaderLibraryScene::openBook(const char* path){
     if(!OSData::SD_usable || !OSData::SD.exists(path)){
         // 消された・移された本は一覧から忘れる
         ReaderStore::ForgetBook(path);
-        ErrorFunctions::ShowFatal("本が見つかりません(消すか移したため、一覧から外しました)");
+        ErrorFunctions::ShowFatal(TR("本が見つかりません(消すか移したため、一覧から外しました)"));
         this->reload();
         return;
     }

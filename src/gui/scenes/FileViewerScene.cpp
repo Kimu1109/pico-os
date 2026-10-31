@@ -14,6 +14,7 @@
 #include "system/Log_Functions.hpp"
 #include "storage/SD_IO.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -131,7 +132,7 @@ void FileViewerScene::onEnter(){
     this->media_started = this->media_ended = false;
     this->last_shown_sec = -1;
 
-    this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
+    this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -148,7 +149,7 @@ void FileViewerScene::onEnter(){
     //右端の「編集」(テキスト系だけ)。状態欄はその手前までにする
     int status_right = content.x + content.w - MARGIN;
     if(editable){
-        this->edit_button = new Button(0, content.y + MARGIN, "編集");
+        this->edit_button = new Button(0, content.y + MARGIN, TR("編集"));
         this->edit_button->setIcon(IconID::Pencil, IconSize::Px16);
         this->edit_button->setFontSize(FontFn::Small);
         this->edit_button->setH(20 + Button::kFrameExtra);
@@ -161,7 +162,7 @@ void FileViewerScene::onEnter(){
     }
     //.txt は「読む」で読書アプリ(ページ送り・しおり・続きから。青空文庫の Shift_JIS も読める)
     if(PICO_APP_READER && OSData::SD_usable && HasExtension(p, ".txt")){
-        this->read_button = new Button(0, content.y + MARGIN, "読む");
+        this->read_button = new Button(0, content.y + MARGIN, TR("読む"));
         this->read_button->setIcon(IconID::Book, IconSize::Px16);
         this->read_button->setFontSize(FontFn::Small);
         this->read_button->setH(20 + Button::kFrameExtra);
@@ -187,7 +188,7 @@ void FileViewerScene::onEnter(){
     this->status_label->setText(name);
 
     if(!OSData::SD_usable){
-        this->showText(body, "SDカードが使えません");
+        this->showText(body, TR("SDカードが使えません"));
         return;
     }
 
@@ -197,7 +198,7 @@ void FileViewerScene::onEnter(){
         WidgetFunctions::Add(this->md_view);
         if(!this->md_view->load(p)){
             this->md_view->setVisible(false);
-            this->showText(body, "このファイルを開けませんでした");
+            this->showText(body, TR("このファイルを開けませんでした"));
         }
     }else if(this->media == Media::Wav){
         //WAVは見せる中身が無いので、ファイル名だけを真ん中に
@@ -212,7 +213,7 @@ void FileViewerScene::onEnter(){
         WidgetFunctions::Add(this->image_view);
         if(!this->image_view->load(p)){
             this->image_view->setVisible(false);
-            this->showText(body, "この画像を開けませんでした");
+            this->showText(body, TR("この画像を開けませんでした"));
         }else{
             //元の大きさ。縮めて見せていれば「(1/4)」を足す
             char buf[PICO_STR_L];
@@ -229,10 +230,10 @@ void FileViewerScene::onEnter(){
     }else{
         bool truncated = false;
         if(!this->loadPlainText(body, truncated)){
-            this->showText(body, "このファイルを開けませんでした");
+            this->showText(body, TR("このファイルを開けませんでした"));
         }else if(truncated){
             char buf[PICO_STR_L];
-            snprintf(buf, sizeof(buf), "%s(途中まで)", name);
+            snprintf(buf, sizeof(buf), TR("%s(途中まで)"), name);
             this->status_label->setText(buf);
             LOG_SYS_WARN("FileViewer: %s は大きすぎるため途中までしか表示しません", p);
         }
@@ -304,7 +305,7 @@ bool FileViewerScene::startMedia(){
     if(this->media == Media::Wav){
         const char* err = "";
         if(!SoundFunctions::WavPlay(this->path.c_str(), false, 100, &err)){
-            ErrorFunctions::ShowFatal(err && *err ? err : "WAVとして読めません");
+            ErrorFunctions::ShowFatal(err && *err ? err : TR("WAVとして読めません"));
             this->media_started = false;
             return false;
         }
@@ -313,7 +314,7 @@ bool FileViewerScene::startMedia(){
         MmlResult r;
         if(!SoundFunctions::MusicPlayFile(this->path.c_str(), &r)){
             FixedString<PICO_STR_256B> msg;
-            if(r.line > 0) msg.appendFormat("%d行%d列: ", r.line, r.col);
+            if(r.line > 0) msg.appendFormat(TR("%d行%d列: "), r.line, r.col);
             msg.append(r.message.c_str());
             ErrorFunctions::ShowFatal(msg.c_str());
             this->media_started = false;

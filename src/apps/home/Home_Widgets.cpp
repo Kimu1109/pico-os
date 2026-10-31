@@ -15,6 +15,7 @@
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 #include "config/App_Config.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -24,7 +25,7 @@
 namespace {
     using Text = Label<PICO_STR_M>;
     constexpr int kPad = 6;
-    const char* const kWeekdays[7] = { "日", "月", "火", "水", "木", "金", "土" };
+    const char* const kWeekdays[7] = { TR_NOOP("日"), TR_NOOP("月"), TR_NOOP("火"), TR_NOOP("水"), TR_NOOP("木"), TR_NOOP("金"), TR_NOOP("土") };
 
     void DrawText(FontFn::FontSize size, int color, int x, int y, int max_w, const char* s){
         if(max_w <= 0) return;
@@ -71,8 +72,8 @@ namespace {
         }
         if(best < 0) return false;
         if(best == 0)      snprintf(out, cap, "%d:%02d", best_min / 60, best_min % 60);
-        else if(best == 1) snprintf(out, cap, "明 %d:%02d", best_min / 60, best_min % 60);
-        else               snprintf(out, cap, "%s %d:%02d", kWeekdays[(t.tm_wday + best) % 7], best_min / 60, best_min % 60);
+        else if(best == 1) snprintf(out, cap, TR("明 %d:%02d"), best_min / 60, best_min % 60);
+        else               snprintf(out, cap, "%s %d:%02d", I18nFunctions::Tr(kWeekdays[(t.tm_wday + best) % 7]), best_min / 60, best_min % 60);
         if(key) *key = (uint32_t)(best * 1440 + best_min + 1);
         return true;
     }
@@ -80,7 +81,7 @@ namespace {
     // ================= 時計(デジタル) =================
     class ClockWidget : public HomeWidget {
         public:
-            const char* appName() const override { return "時計"; }
+            const char* appName() const override { return TR("時計"); }
             uint32_t stamp(uint8_t, uint8_t) override {
                 uint32_t key = 0;
                 char buf[24];
@@ -92,11 +93,11 @@ namespace {
                 char hm[8], date[24];
                 if(ClockSet()){
                     snprintf(hm, sizeof(hm), "%d:%02d", t.tm_hour, t.tm_min);
-                    if(w == 1) snprintf(date, sizeof(date), "%d/%d(%s)", t.tm_mon + 1, t.tm_mday, kWeekdays[t.tm_wday % 7]);
+                    if(w == 1) snprintf(date, sizeof(date), "%d/%d(%s)", t.tm_mon + 1, t.tm_mday, I18nFunctions::Tr(kWeekdays[t.tm_wday % 7]));
                     else       snprintf(date, sizeof(date), "%d/%d", t.tm_mon + 1, t.tm_mday);
                 }else{
                     snprintf(hm, sizeof(hm), "--:--");
-                    snprintf(date, sizeof(date), "時計が未設定");
+                    snprintf(date, sizeof(date), TR("時計が未設定"));
                 }
                 char alarm[24];
                 const bool has_alarm = NextAlarm(alarm, sizeof(alarm));
@@ -119,7 +120,7 @@ namespace {
                 if(ClockSet()){
                     DrawText(FontFn::Small, PICO_BLACK, rx, y, rw, date);
                     char wd[16];
-                    snprintf(wd, sizeof(wd), "%s曜日", kWeekdays[t.tm_wday % 7]);
+                    snprintf(wd, sizeof(wd), TR("%s曜日"), I18nFunctions::Tr(kWeekdays[t.tm_wday % 7]));
                     DrawText(FontFn::Small, t.tm_wday == 0 ? PICO_RED : t.tm_wday == 6 ? PICO_BLUE : PICO_DARKGREY,
                              rx, y + sh, rw, wd);
                 }else{
@@ -136,7 +137,7 @@ namespace {
     // ================= アナログ時計 =================
     class AnalogWidget : public HomeWidget {
         public:
-            const char* appName() const override { return "時計"; }
+            const char* appName() const override { return TR("時計"); }
             uint32_t stamp(uint8_t, uint8_t) override { return ClockStamp(); }
             void draw(const Rect& r, uint8_t w, uint8_t h, int) override {
                 const struct tm& t = TimeFunctions::timeinfo;
@@ -152,9 +153,9 @@ namespace {
                         const int rx = cx + rad + 10;
                         const int rw = r.x + r.w - kPad - rx;
                         char buf[24];
-                        snprintf(buf, sizeof(buf), "%d月%d日", t.tm_mon + 1, t.tm_mday);
+                        snprintf(buf, sizeof(buf), TR("%d月%d日"), t.tm_mon + 1, t.tm_mday);
                         DrawText(FontFn::Small, PICO_BLACK, rx, cy - 18, rw, buf);
-                        snprintf(buf, sizeof(buf), "%s曜日", kWeekdays[t.tm_wday % 7]);
+                        snprintf(buf, sizeof(buf), TR("%s曜日"), I18nFunctions::Tr(kWeekdays[t.tm_wday % 7]));
                         DrawText(FontFn::Small, PICO_DARKGREY, rx, cy + 2, rw, buf);
                     }
                 }
@@ -194,7 +195,7 @@ namespace {
         public:
             enum Button { Prev = 0, Play = 1, Next = 2 };
 
-            const char* appName() const override { return "ミュージック"; }
+            const char* appName() const override { return TR("ミュージック"); }
 
             uint32_t stamp(uint8_t, uint8_t) override {
                 uint32_t s = MusicService::Revision() * 7u;
@@ -222,8 +223,8 @@ namespace {
                     snprintf(sub, sizeof(sub), "%s  %d/%d", MusicService::PlaylistName(),
                              MusicService::Position() + 1, MusicService::Count());
                 }else{
-                    title.assign("ミュージック");
-                    snprintf(sub, sizeof(sub), "タップして曲を選ぶ");
+                    title.assign(TR("ミュージック"));
+                    snprintf(sub, sizeof(sub), TR("タップして曲を選ぶ"));
                 }
                 DrawText(title_font, PICO_BLACK, x, y, wmax, title.c_str());
                 y += LineH(title_font) + (big ? 4 : 0);
@@ -325,12 +326,12 @@ namespace {
         char hm[8] = "";
         if(!all_day && sec >= 0) snprintf(hm, sizeof(hm), "%d:%02d", (int)(sec / 3600), (int)(sec / 60 % 60));
         if(day == today){
-            snprintf(out, cap, "%s", all_day ? "終日" : hm);
+            snprintf(out, cap, "%s", all_day ? TR("終日") : hm);
         }else if(day == today + 1){
-            if(all_day) snprintf(out, cap, "明日");
-            else        snprintf(out, cap, "明 %s", hm);
+            if(all_day) snprintf(out, cap, TR("明日"));
+            else        snprintf(out, cap, TR("明 %s"), hm);
         }else{
-            const char* wd = kWeekdays[((day % 7) + 7 + 4) % 7]; //1970-01-01は木曜
+            const char* wd = I18nFunctions::Tr(kWeekdays[((day % 7) + 7 + 4) % 7]); //1970-01-01は木曜
             if(all_day) snprintf(out, cap, "%s", wd);
             else        snprintf(out, cap, "%s %s", wd, hm);
         }
@@ -367,7 +368,7 @@ namespace {
 #if PICO_APP_CALENDAR
     class AgendaWidget : public HomeWidget {
         public:
-            const char* appName() const override { return "カレンダー"; }
+            const char* appName() const override { return TR("カレンダー"); }
             void onHomeEnter() override { HomeAgenda::RefreshIfStale(); }
             void tick() override {
                 //日付が変わったら読み直す(ランチャを開いたまま0時を回ったとき)
@@ -384,17 +385,17 @@ namespace {
                 char head[32];
                 if(today >= 0){
                     const struct tm& t = TimeFunctions::timeinfo;
-                    snprintf(head, sizeof(head), "%d/%d(%s)", t.tm_mon + 1, t.tm_mday, kWeekdays[t.tm_wday % 7]);
+                    snprintf(head, sizeof(head), "%d/%d(%s)", t.tm_mon + 1, t.tm_mday, I18nFunctions::Tr(kWeekdays[t.tm_wday % 7]));
                 }else{
                     head[0] = '\0';
                 }
-                int y = Header(r, "予定", head);
+                int y = Header(r, TR("予定"), head);
                 const Row row;
                 const int lh = row.h;
                 const int lines = (r.y + r.h - 2 - y) / lh;
 
-                if(today < 0){ DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, "時計が合っていません"); return; }
-                if(HomeAgenda::NoFiles()){ DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, "カレンダーがありません"); return; }
+                if(today < 0){ DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, TR("時計が合っていません")); return; }
+                if(HomeAgenda::NoFiles()){ DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, TR("カレンダーがありません")); return; }
 
                 int shown = 0;
                 const int col_w = h >= 2 ? 72 : 60;
@@ -405,7 +406,7 @@ namespace {
                     //横長は今日と明日だけ
                     if(h < 2 && e.day > today + 1) break;
                     char label[24];
-                    if(e.continued) snprintf(label, sizeof(label), "続き");
+                    if(e.continued) snprintf(label, sizeof(label), TR("続き"));
                     else DayLabel(e.day, today, e.start_sec, e.start_sec < 0, label, sizeof(label));
                     OSData::frame->fillRect(x, y + 3, 3, lh - 6, e.color);
                     DrawText(FontFn::Small, e.day == today ? PICO_BLACK : PICO_DARKGREY, x + 6, y + row.label_dy, col_w - 6, label);
@@ -414,7 +415,7 @@ namespace {
                     shown++;
                 }
                 if(shown == 0){
-                    DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, h >= 2 ? "7日以内に予定はありません" : "今日・明日の予定はありません");
+                    DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, h >= 2 ? TR("7日以内に予定はありません") : TR("今日・明日の予定はありません"));
                 }
             }
     };
@@ -437,18 +438,18 @@ namespace {
                 const int32_t today = HomeTime::Today(&now_sec);
                 const int x = r.x + kPad + 2, wmax = r.w - 2 * kPad - 4;
                 char right[24] = "";
-                if(TodoCache::Has()) snprintf(right, sizeof(right), "%d件", TodoCache::Total());
-                int y = Header(r, "TODO 今日", right);
+                if(TodoCache::Has()) snprintf(right, sizeof(right), TR("%d件"), TodoCache::Total());
+                int y = Header(r, TR("TODO 今日"), right);
                 const Row row;
                 const int lh = row.h;
                 int lines = (r.y + r.h - 2 - y) / lh;
 
                 if(!TodoCache::Has()){
-                    DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, configured_ ? "まだ取得していません" : "TODOアプリで設定してください");
+                    DrawText(FontFn::Text, PICO_DARKGREY, x, y, wmax, configured_ ? TR("まだ取得していません") : TR("TODOアプリで設定してください"));
                     return;
                 }
                 if(TodoCache::Count() == 0){
-                    DrawText(FontFn::Text, PICO_DARKGREEN, x, y, wmax, "今日のタスクはありません");
+                    DrawText(FontFn::Text, PICO_DARKGREEN, x, y, wmax, TR("今日のタスクはありません"));
                     y += lh;
                 }
                 //大きいときは最後の行に取得した時刻
@@ -468,7 +469,7 @@ namespace {
                         snprintf(label, sizeof(label), "%d/%d", mo, d);
                     }
                     else if(e.due.has_time) snprintf(label, sizeof(label), "%d:%02d", (int)(e.due.sec / 3600), (int)(e.due.sec / 60 % 60));
-                    else snprintf(label, sizeof(label), "今日");
+                    else snprintf(label, sizeof(label), TR("今日"));
                     DrawText(FontFn::Small, overdue ? PICO_RED : PICO_DARKGREY, x + 13, y + row.label_dy, col_w - 13, label);
                     DrawText(FontFn::Text, PICO_BLACK, x + col_w, y, wmax - col_w, e.content.c_str());
                     y += lh;
@@ -478,7 +479,7 @@ namespace {
                     struct tm l;
                     localtime_r(&ep, &l);
                     char buf[32];
-                    snprintf(buf, sizeof(buf), "取得 %d/%d %d:%02d", l.tm_mon + 1, l.tm_mday, l.tm_hour, l.tm_min);
+                    snprintf(buf, sizeof(buf), TR("取得 %d/%d %d:%02d"), l.tm_mon + 1, l.tm_mday, l.tm_hour, l.tm_min);
                     DrawText(FontFn::Small, PICO_LIGHTGREY, x, r.y + r.h - 2 - lh, wmax, buf);
                 }
             }

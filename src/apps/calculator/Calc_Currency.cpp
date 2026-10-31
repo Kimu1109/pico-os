@@ -4,6 +4,7 @@
 #include "storage/SD_Path.hpp"
 #include "util/Url.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdlib>
 #include <cstring>
@@ -16,18 +17,18 @@ namespace {
 
     struct NameEntry { const char* code; const char* name; };
     const NameEntry kNames[] = {
-        { "JPY", "日本円" },         { "USD", "米ドル" },         { "EUR", "ユーロ" },
-        { "GBP", "英ポンド" },       { "CNY", "人民元" },         { "KRW", "韓国ウォン" },
-        { "TWD", "台湾ドル" },       { "HKD", "香港ドル" },       { "AUD", "豪ドル" },
-        { "CAD", "カナダドル" },     { "CHF", "スイスフラン" },   { "SGD", "シンガポールドル" },
-        { "THB", "タイバーツ" },     { "INR", "インドルピー" },   { "IDR", "インドネシアルピア" },
-        { "MYR", "マレーシアリンギット" }, { "PHP", "フィリピンペソ" }, { "VND", "ベトナムドン" },
-        { "NZD", "NZドル" },         { "SEK", "スウェーデンクローナ" }, { "NOK", "ノルウェークローネ" },
-        { "DKK", "デンマーククローネ" }, { "PLN", "ポーランドズロチ" }, { "CZK", "チェココルナ" },
-        { "HUF", "ハンガリーフォリント" }, { "RON", "ルーマニアレウ" }, { "ISK", "アイスランドクローナ" },
-        { "TRY", "トルコリラ" },     { "ILS", "イスラエルシェケル" }, { "MXN", "メキシコペソ" },
-        { "BRL", "ブラジルレアル" }, { "ZAR", "南アフリカランド" }, { "RUB", "ロシアルーブル" },
-        { "AED", "UAEディルハム" },  { "SAR", "サウジリヤル" },
+        { "JPY", TR_NOOP("日本円") },         { "USD", TR_NOOP("米ドル") },         { "EUR", TR_NOOP("ユーロ") },
+        { "GBP", TR_NOOP("英ポンド") },       { "CNY", TR_NOOP("人民元") },         { "KRW", TR_NOOP("韓国ウォン") },
+        { "TWD", TR_NOOP("台湾ドル") },       { "HKD", TR_NOOP("香港ドル") },       { "AUD", TR_NOOP("豪ドル") },
+        { "CAD", TR_NOOP("カナダドル") },     { "CHF", TR_NOOP("スイスフラン") },   { "SGD", TR_NOOP("シンガポールドル") },
+        { "THB", TR_NOOP("タイバーツ") },     { "INR", TR_NOOP("インドルピー") },   { "IDR", TR_NOOP("インドネシアルピア") },
+        { "MYR", TR_NOOP("マレーシアリンギット") }, { "PHP", TR_NOOP("フィリピンペソ") }, { "VND", TR_NOOP("ベトナムドン") },
+        { "NZD", TR_NOOP("NZドル") },         { "SEK", TR_NOOP("スウェーデンクローナ") }, { "NOK", TR_NOOP("ノルウェークローネ") },
+        { "DKK", TR_NOOP("デンマーククローネ") }, { "PLN", TR_NOOP("ポーランドズロチ") }, { "CZK", TR_NOOP("チェココルナ") },
+        { "HUF", TR_NOOP("ハンガリーフォリント") }, { "RON", TR_NOOP("ルーマニアレウ") }, { "ISK", TR_NOOP("アイスランドクローナ") },
+        { "TRY", TR_NOOP("トルコリラ") },     { "ILS", TR_NOOP("イスラエルシェケル") }, { "MXN", TR_NOOP("メキシコペソ") },
+        { "BRL", TR_NOOP("ブラジルレアル") }, { "ZAR", TR_NOOP("南アフリカランド") }, { "RUB", TR_NOOP("ロシアルーブル") },
+        { "AED", TR_NOOP("UAEディルハム") },  { "SAR", TR_NOOP("サウジリヤル") },
     };
 
     int PreferredRank(const char* code){
@@ -241,19 +242,19 @@ bool CurrencyRates::beginFetch(){
     Url u;
     if(!UrlTools::Parse(u, this->url())){
         state_ = State::Failed;
-        message_.assign("取得元のURLを解釈できません");
+        message_.assign(TR("取得元のURLを解釈できません"));
         return false;
     }
     this->beginParse();
     if(!http_.begin(u, this)){
         state_ = State::Failed;
-        message_.assign("取得できません: ");
+        message_.assign(TR("取得できません: "));
         message_.append(http_.failureToStr());
         LOG_APP_WARN("電卓: レートの取得を始められません (%s)", http_.failureToStr());
         return false;
     }
     state_ = State::Fetching;
-    message_.assign("レートを取得中…");
+    message_.assign(TR("レートを取得中…"));
     LOG_APP_MSG("電卓: レートを取得します (%s)", this->url());
     return true;
 }
@@ -268,11 +269,11 @@ void CurrencyRates::update(){
         state_ = State::Failed;
         if(code >= 400){
             message_.clear();
-            message_.appendFormat("取得できません(サーバが %d を返しました)", code);
+            message_.appendFormat(TR("取得できません(サーバが %d を返しました)"), code);
         }else if(json_.failed() || body_bytes_ > kMaxBodyBytes){
-            message_.assign("レートの形式が違います");
+            message_.assign(TR("レートの形式が違います"));
         }else{
-            message_.assign("取得できません: ");
+            message_.assign(TR("取得できません: "));
             message_.append(http_.failureToStr());
         }
         LOG_APP_WARN("電卓: %s", message_.c_str());
@@ -281,13 +282,13 @@ void CurrencyRates::update(){
 
     if(!this->commitParse()){
         state_ = State::Failed;
-        message_.assign("レートの形式が違います");
+        message_.assign(TR("レートの形式が違います"));
         LOG_APP_WARN("電卓: レートを読めませんでした (%u B)", (unsigned)body_bytes_);
         return;
     }
     state_ = State::Done;
     message_.clear();
-    message_.appendFormat("%s のレートに更新しました", date_.c_str());
+    message_.appendFormat(TR("%s のレートに更新しました"), date_.c_str());
     if(!this->save()) LOG_APP_WARN("電卓: レートをSDへ保存できませんでした");
     LOG_APP_OK("電卓: レートを更新しました (%s, %d通貨)", date_.c_str(), count_);
 }

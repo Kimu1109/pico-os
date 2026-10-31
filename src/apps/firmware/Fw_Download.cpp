@@ -7,6 +7,7 @@
 #include <Arduino.h>
 #include <cstdio>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 // ---------------------------------------------------------------------------
 // 受け取り口
@@ -98,13 +99,13 @@ bool FwDownload::startGet(const char* name, IHttpSink* sink){
     FixedString<PICO_STR_256B> full;
     Url url;
     if(!full.assign(base_url_.c_str()) || !full.append(name) || !UrlTools::Parse(url, full.c_str())){
-        fail("URLが長すぎます");
+        fail(TR("URLが長すぎます"));
         return false;
     }
     // 200の本文だけを書く(転送(3xx)やエラーの本文をSHA-256・一覧に混ぜない)
     gate_.attach(&http_.response(), sink);
     if(!http_.begin(url, HttpRequest::Method::GET, &gate_)){
-        fail("取得を始められません");
+        fail(TR("取得を始められません"));
         return false;
     }
     return true;
@@ -122,7 +123,7 @@ bool FwDownload::beginIndex(const FwIndex::Filter& filter){
     part_path_.clear();
     mem_sink_.reset();
     state_ = State::Index;
-    message_.assign("版の一覧を取得中…");
+    message_.assign(TR("版の一覧を取得中…"));
     return startGet(FwIndex::kFileName, &mem_sink_);
 }
 
@@ -130,7 +131,7 @@ bool FwDownload::beginFile(int index, const char* dir){
     if(busy() || state_ == State::Idle || index < 0 || index >= count_) return false;
     if(!OSData::SD_usable){
         state_ = State::Failed;
-        message_.assign("SDカードが使えません");
+        message_.assign(TR("SDカードが使えません"));
         return false;
     }
     const FwIndex::Entry& e = entries_[index];
@@ -142,15 +143,15 @@ bool FwDownload::beginFile(int index, const char* dir){
     if(!PICO_IO::join(path_, dir, e.file.c_str()) || !part_name.append(".part") ||
        !PICO_IO::join(part_path_, dir, part_name.c_str())){
         part_path_.clear();
-        fail("置き場所のパスが長すぎます");
+        fail(TR("置き場所のパスが長すぎます"));
         return false;
     }
     if(!file_sink_.open(part_path_.c_str(), e.bytes)){
-        fail("SDカードに書き込めません");
+        fail(TR("SDカードに書き込めません"));
         return false;
     }
     char m[PICO_STR_LL];
-    snprintf(m, sizeof(m), "#%lu (%s) をダウンロード中…", (unsigned long)e.serial, e.git.c_str());
+    snprintf(m, sizeof(m), TR("#%lu (%s) をダウンロード中…"), (unsigned long)e.serial, e.git.c_str());
     message_.assign(m);
     LOG_SYS_MSG("FwDownload: %s%s を %s へ", base_url_.c_str(), e.file.c_str(), path_.c_str());
     return startGet(e.file.c_str(), &file_sink_);
@@ -165,7 +166,7 @@ void FwDownload::cancel(){
     // 一覧を取れていれば選び直せるようにする
     state_ = (file && count_ > 0) ? State::Listed : State::Idle;
     target_ = -1;
-    message_.assign("取りやめました");
+    message_.assign(TR("取りやめました"));
 }
 
 void FwDownload::close(){
@@ -185,14 +186,14 @@ void FwDownload::update(){
     file_sink_.close();
     if(http_.getStatus() != TaskTools::SUCCESS){
         if(state_ == State::Index && mem_sink_.overflowed()){
-            fail("版の一覧が大きすぎます");
+            fail(TR("版の一覧が大きすぎます"));
         }else if(state_ == State::File && file_sink_.overflowed()){
-            fail("更新ファイルが一覧の大きさより大きいです");
+            fail(TR("更新ファイルが一覧の大きさより大きいです"));
         }else if(state_ == State::File && file_sink_.failed()){
-            fail("SDカードに書き込めません(空きが足りない?)");
+            fail(TR("SDカードに書き込めません(空きが足りない?)"));
         }else{
             FixedString<PICO_STR_LL> m;
-            m.assign("通信に失敗しました: ");
+            m.assign(TR("通信に失敗しました: "));
             m.append(http_.failureToStr());
             fail(m.c_str());
         }
@@ -201,7 +202,7 @@ void FwDownload::update(){
     const int code = http_.response().statusCode();
     if(code != 200){
         char m[64];
-        snprintf(m, sizeof(m), code == 404 ? "配布元に見つかりません(404)" : "配布元が %d を返しました", code);
+        snprintf(m, sizeof(m), code == 404 ? TR("配布元に見つかりません(404)") : TR("配布元が %d を返しました"), code);
         fail(m);
         return;
     }
@@ -211,20 +212,20 @@ void FwDownload::update(){
 
 void FwDownload::onIndex(){
     if(!FwIndex::Parse(mem_sink_.data(), mem_sink_.size(), filter_, entries_, FwIndex::kMaxEntries, result_)){
-        fail("版の一覧の形式が違います(本体が古い・配布元が違う?)");
+        fail(TR("版の一覧の形式が違います(本体が古い・配布元が違う?)"));
         return;
     }
     count_ = result_.count;
     state_ = State::Listed;
     char m[PICO_STR_LL];
     if(count_ > 0){
-        snprintf(m, sizeof(m), "%d個の版があります", count_);
+        snprintf(m, sizeof(m), TR("%d個の版があります"), count_);
     }else if(result_.hidden_env > 0 && result_.hidden_unsigned == 0){
-        snprintf(m, sizeof(m), "この構成(%s)向けの配布はありません", filter_env_.c_str());
+        snprintf(m, sizeof(m), TR("この構成(%s)向けの配布はありません"), filter_env_.c_str());
     }else if(result_.hidden_unsigned > 0){
-        snprintf(m, sizeof(m), "署名のある版がありません");
+        snprintf(m, sizeof(m), TR("署名のある版がありません"));
     }else{
-        snprintf(m, sizeof(m), "配布されている版がありません");
+        snprintf(m, sizeof(m), TR("配布されている版がありません"));
     }
     message_.assign(m);
     LOG_SYS_MSG("FwDownload: 一覧 %d件(構成違い%d・署名なし%d・読めない行%d)", count_,
@@ -236,22 +237,22 @@ void FwDownload::onFile(){
     uint8_t digest[32];
     file_sink_.digest(digest);
     if(file_sink_.bytes() != e.bytes){
-        fail("更新ファイルが途中で切れています");
+        fail(TR("更新ファイルが途中で切れています"));
         return;
     }
     if(memcmp(digest, e.sha256, 32) != 0){
-        fail("更新ファイルの中身が一覧と合いません(取得の途中で配布元が更新された?)");
+        fail(TR("更新ファイルの中身が一覧と合いません(取得の途中で配布元が更新された?)"));
         return;
     }
     if(OSData::SD.exists(path_.c_str())) OSData::SD.remove(path_.c_str());
     if(!OSData::SD.rename(part_path_.c_str(), path_.c_str())){
-        fail("更新ファイルを保存できません");
+        fail(TR("更新ファイルを保存できません"));
         return;
     }
     part_path_.clear();
     state_ = State::Done;
     char m[PICO_STR_LL];
-    snprintf(m, sizeof(m), "#%lu (%s) をダウンロードしました", (unsigned long)e.serial, e.git.c_str());
+    snprintf(m, sizeof(m), TR("#%lu (%s) をダウンロードしました"), (unsigned long)e.serial, e.git.c_str());
     message_.assign(m);
     LOG_SYS_OK("FwDownload: %s", path_.c_str());
 }

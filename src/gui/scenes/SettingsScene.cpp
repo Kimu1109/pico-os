@@ -26,6 +26,7 @@
 #include "services/PowerMenu_Functions.hpp"
 #include "services/App_Functions.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
+#include "system/I18n_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -39,7 +40,7 @@ namespace {
 
     // スリープまでの時間(秒、0=無効)と表示名。最後の操作からの通算(自動調光の30秒より後ろの値を選ぶ)
     constexpr unsigned long kSleepPresetsSec[] = { 0, 60, 120, 300, 600, 1800 };
-    constexpr const char*   kSleepPresetLabels[] = { "しない", "1分", "2分", "5分", "10分", "30分" };
+    constexpr const char*   kSleepPresetLabels[] = { TR_NOOP("しない"), TR_NOOP("1分"), TR_NOOP("2分"), TR_NOOP("5分"), TR_NOOP("10分"), TR_NOOP("30分") };
     constexpr int kSleepPresetCount = sizeof(kSleepPresetsSec) / sizeof(kSleepPresetsSec[0]);
 
     // 音の周波数(sound.cfgの sample-rate)。44.1kHzはライン出力のDAC(PCM5102A等)向けで、2コア目の計算が倍になる
@@ -50,7 +51,7 @@ namespace {
     // 出力先(sound.cfgの route)
     constexpr SoundFunctions::RouteMode kRouteModes[] = {
         SoundFunctions::RouteMode::Auto, SoundFunctions::RouteMode::Speaker, SoundFunctions::RouteMode::Headphone };
-    constexpr const char* kRouteModeLabels[] = { "自動", "スピーカー", "イヤホン" };
+    constexpr const char* kRouteModeLabels[] = { TR_NOOP("自動"), TR_NOOP("スピーカー"), TR_NOOP("イヤホン") };
     constexpr int kRouteModeCount = sizeof(kRouteModes) / sizeof(kRouteModes[0]);
 }
 
@@ -114,21 +115,21 @@ void SettingsScene::loadValues(){
 void SettingsScene::refreshNtp1Label(){
     if(!this->ntp1_label) return;
     char buf[PICO_STR_L];
-    snprintf(buf, sizeof(buf), "NTPサーバー1: %s", this->ntp1_value.c_str());
+    snprintf(buf, sizeof(buf), TR("NTPサーバー1: %s"), this->ntp1_value.c_str());
     this->ntp1_label->setText(buf);
 }
 
 void SettingsScene::refreshNtp2Label(){
     if(!this->ntp2_label) return;
     char buf[PICO_STR_L];
-    snprintf(buf, sizeof(buf), "NTPサーバー2: %s", this->ntp2_value.c_str());
+    snprintf(buf, sizeof(buf), TR("NTPサーバー2: %s"), this->ntp2_value.c_str());
     this->ntp2_label->setText(buf);
 }
 
 void SettingsScene::refreshHomeLabel(){
     if(!this->home_label) return;
     char buf[PICO_STR_L];
-    snprintf(buf, sizeof(buf), "ホーム: %s", this->home_value.empty() ? "(未設定)" : this->home_value.c_str());
+    snprintf(buf, sizeof(buf), TR("ホーム: %s"), this->home_value.empty() ? TR("(未設定)") : this->home_value.c_str());
     this->home_label->setText(buf);
 }
 
@@ -138,16 +139,16 @@ void SettingsScene::refreshBatteryLabel(){
     if(!BatteryFunctions::HasSample()){
         buf[0] = '\0';
     }else if(BatteryFunctions::IsExternallyPowered()){
-        snprintf(buf, sizeof(buf), "電池 USB給電中");
+        snprintf(buf, sizeof(buf), TR("電池 USB給電中"));
     }else{
-        snprintf(buf, sizeof(buf), "電池 %d%% (%.2fV)",
+        snprintf(buf, sizeof(buf), TR("電池 %d%% (%.2fV)"),
             BatteryFunctions::GetPercent(), BatteryFunctions::GetVoltage());
     }
     this->battery_label->setText(buf);
 }
 
 Button* SettingsScene::makeEditButton(int16_t y){
-    Button* b = new Button("編集");
+    Button* b = new Button(TR("編集"));
     b->setIcon(IconID::Pencil, IconSize::Px16);
     b->setFontSize(FontFn::Small);
     b->setAllowTextSpacing(false);
@@ -243,7 +244,7 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
         case EditField::WifiSsid: {
             if(input.empty()) break;
             if(input.length() > WifiProfiles::kMaxSsidBytes){
-                this->showMessageLater("SSIDが長すぎます(32バイトまで)");
+                this->showMessageLater(TR("SSIDが長すぎます(32バイトまで)"));
                 break;
             }
             // ダイアログからダイアログは1フレーム空ける
@@ -254,7 +255,7 @@ void SettingsScene::commitEdit(EditField field, const FixedString<PICO_STR_LL>& 
         case EditField::Hostname: {
             if(input.empty()) break;
             if(!NetworkFunctions::SetHostname(input.c_str())){
-                this->showMessageLater("名前は英数字とハイフンの63文字までです(先頭と末尾にハイフンは使えません)");
+                this->showMessageLater(TR("名前は英数字とハイフンの63文字までです(先頭と末尾にハイフンは使えません)"));
                 break;
             }
             this->refreshWifiInfo();
@@ -277,7 +278,7 @@ void SettingsScene::onEnter(){
     for(int t = 0; t < (int)Tab::Count; t++) this->tab_widget_count[t] = 0;
 
     // ---- 上部: [戻る] + バッテリー残量(全タブ共通) ----
-    this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, "戻る");
+    this->back_button = new Button(content.x + MARGIN, content.y + MARGIN, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -288,7 +289,7 @@ void SettingsScene::onEnter(){
     this->top_row_h = back_box.h;
 
     //右端の「電源」(スリープ/再起動。ステータスバーの長押しと同じメニュー)
-    this->power_button = new Button(0, content.y + MARGIN, "電源");
+    this->power_button = new Button(0, content.y + MARGIN, TR("電源"));
     this->power_button->setIcon(IconID::Power, IconSize::Px16);
     this->power_button->setFontSize(FontFn::Small);
     this->power_button->setH(20 + Button::kFrameExtra);
@@ -305,11 +306,11 @@ void SettingsScene::onEnter(){
     // ---- 下部: タブ ----
     const int16_t tab_y = (int16_t)(content.y + content.h - MARGIN - TAB_H);
     this->tab_bar = new TabBar(content.x + MARGIN, tab_y, content.w - MARGIN * 2, TAB_H);
-    this->tab_bar->addTab("Wi-Fi");
-    this->tab_bar->addTab("画面");
-    this->tab_bar->addTab("音");
-    this->tab_bar->addTab("時刻");
-    this->tab_bar->addTab("他");
+    this->tab_bar->addTab(IconID::WifiSignal4, "Wi-Fi");
+    this->tab_bar->addTab(IconID::Display, TR("画面"));
+    this->tab_bar->addTab(IconID::VolumeHigh, TR("音"));
+    this->tab_bar->addTab(IconID::Clock, TR("時刻"));
+    this->tab_bar->addTab(IconID::Dots, TR("他"));
     this->tab_bar->setSelected((int)this->tab);
     this->tab_bar->setOnChanged([this](int index){
         this->tab = (Tab)index;
@@ -339,7 +340,7 @@ void SettingsScene::onEnter(){
     const int16_t left = lay.left;
 
     // 起動時セルフチェックはloadValues()がチェック状態を直接流し込むので、読み込みより前に生成しておく
-    this->run_test_checkbox = new Checkbox(left, 0, "起動時に自己診断を実行");
+    this->run_test_checkbox = new Checkbox(left, 0, TR("起動時に自己診断を実行"));
     this->run_test_checkbox->setFontSize(FontFn::Small);
     this->run_test_checkbox->setOnChangeChecked([this](){
         PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, "run-test",
@@ -367,7 +368,7 @@ void SettingsScene::revealOpenDropdown(){
     if(!sc) return;
     DropdownMenu* const dropdowns[] = {
         this->rate_dropdown, this->route_dropdown, this->sleep_dropdown,
-        this->text_size_dropdown, this->timezone_dropdown,
+        this->text_size_dropdown, this->timezone_dropdown, this->lang_dropdown,
     };
     DropdownMenu* open = nullptr;
     for(DropdownMenu* d : dropdowns){
@@ -382,18 +383,18 @@ void SettingsScene::revealOpenDropdown(){
 
 
 void SettingsScene::refreshLockLabel(){
-    if(this->lock_label) this->lock_label->setText(LockFunctions::HasPin() ? "画面ロック: PIN" : "画面ロック: なし");
+    if(this->lock_label) this->lock_label->setText(LockFunctions::HasPin() ? TR("画面ロック: PIN") : TR("画面ロック: なし"));
 }
 
 void SettingsScene::openLockDialog(){
-    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "画面ロック", "", "キャンセル");
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, TR("画面ロック"), "", TR("キャンセル"));
     const bool has = LockFunctions::HasPin();
     if(has){
-        d->addChoice("PINを変える");
-        d->addChoice("PINを外す");
-        d->addChoice("今すぐロック");
+        d->addChoice(TR("PINを変える"));
+        d->addChoice(TR("PINを外す"));
+        d->addChoice(TR("今すぐロック"));
     }else{
-        d->addChoice("PINを決める");
+        d->addChoice(TR("PINを決める"));
     }
     d->layout();
     WidgetFunctions::AddDialog(d);
@@ -411,12 +412,12 @@ void SettingsScene::openLockDialog(){
 void SettingsScene::refreshDeviceKeyLabel(){
     if(!this->devkey_label) return;
     char buf[64];
-    snprintf(buf, sizeof(buf), "端末の鍵: %s", DeviceKeyFunctions::StateText());
+    snprintf(buf, sizeof(buf), TR("端末の鍵: %s"), DeviceKeyFunctions::StateText());
     this->devkey_label->setText(buf);
     if(this->devkey_button){
         const DeviceKeyFunctions::State st = DeviceKeyFunctions::GetState();
-        this->devkey_button->setText(st == DeviceKeyFunctions::State::None ? "作成" :
-                                     st == DeviceKeyFunctions::State::Ready ? "更新" : "詳細");
+        this->devkey_button->setText(st == DeviceKeyFunctions::State::None ? TR("作成") :
+                                     st == DeviceKeyFunctions::State::Ready ? TR("更新") : TR("詳細"));
     }
 }
 
@@ -424,17 +425,17 @@ void SettingsScene::openDeviceKeyDialog(){
     using DeviceKeyFunctions::State;
     const State st = DeviceKeyFunctions::GetState();
     if(st == State::Broken){
-        this->showMessageLater("OTPの端末の鍵が壊れていて、作り直す空きもありません。固定鍵のまま暗号化します");
+        this->showMessageLater(TR("OTPの端末の鍵が壊れていて、作り直す空きもありません。固定鍵のまま暗号化します"));
         return;
     }
     const bool ready = (st == State::Ready);
     auto* dialog = ready
-        ? new MsgDialog("SDの暗号化された設定のうち、まだ端末の鍵で暗号化していないものを暗号化し直します", "やめる", "実行")
-        : new MsgDialog("端末の鍵を作り、本体のOTPへ書き込みます。\n"
+        ? new MsgDialog(TR("SDの暗号化された設定のうち、まだ端末の鍵で暗号化していないものを暗号化し直します"), TR("やめる"), TR("実行"))
+        : new MsgDialog(TR("端末の鍵を作り、本体のOTPへ書き込みます。\n"
                         "・OTPは消せません(取り消せません)\n"
                         "・Wi-Fi・SSHの鍵・トークン・カレンダーのURL・PINを、この本体の鍵で暗号化し直します\n"
                         "・基板が壊れると、それらは二度と読めません。元の値はPCに控えてください\n"
-                        "・守れるのはSDだけを盗まれた場合です(本体ごとは守れません)", "やめる", "作る");
+                        "・守れるのはSDだけを盗まれた場合です(本体ごとは守れません)"), TR("やめる"), TR("作る"));
     dialog->setVisibleIcon(false);
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -444,9 +445,9 @@ void SettingsScene::openDeviceKeyDialog(){
         char msg[PICO_STR_256B];
         if(ready){
             const DeviceKeyFunctions::MigrateResult r = DeviceKeyFunctions::MigrateSecrets();
-            snprintf(msg, sizeof(msg), "%d項目を暗号化し直しました%s%s", r.upgraded,
-                     r.failed ? "(失敗あり。ログを見てください)" : "",
-                     r.pin_pending ? "。PINは次に解除したとき" : "");
+            snprintf(msg, sizeof(msg), TR("%d項目を暗号化し直しました%s%s"), r.upgraded,
+                     r.failed ? TR("(失敗あり。ログを見てください)") : "",
+                     r.pin_pending ? TR("。PINは次に解除したとき") : "");
         }else{
             DeviceKeyFunctions::Provision(msg, sizeof(msg));
         }
@@ -489,9 +490,9 @@ void SettingsScene::refreshRouteStatus(){
     const uint8_t shown = (uint8_t)(((uint8_t)route << 1) | (connected ? 1 : 0));
     if(shown == this->route_status_shown) return;
     this->route_status_shown = shown;
-    const char* name = (route == SoundFunctions::Route::Headphone) ? "イヤホン" : "スピーカー";
+    const char* name = (route == SoundFunctions::Route::Headphone) ? TR("イヤホン") : TR("スピーカー");
     char buf[PICO_STR_256B];
-    snprintf(buf, sizeof(buf), connected ? "今は%sから鳴ります" : "%sがつながっていません", name);
+    snprintf(buf, sizeof(buf), connected ? TR("今は%sから鳴ります") : TR("%sがつながっていません"), name);
     this->route_status_label->setText(buf);
 }
 
@@ -519,6 +520,17 @@ void SettingsScene::updateTextSize(){
     const bool large = (idx == 1);
     DisplayFunctions::SetLargeText(large);
     PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "text-size", large ? "large" : "normal");
+}
+
+void SettingsScene::updateLanguage(){
+    if(!this->lang_dropdown) return;
+    const int idx = this->lang_dropdown->getSelectedIndex();
+    if(idx < 0 || idx >= (int)I18nFunctions::Lang::Count || idx == this->lang_selected_index) return;
+    this->lang_selected_index = idx;
+    I18nFunctions::SetLanguage((I18nFunctions::Lang)idx, true);
+    //出ている文字列は作ったときの言語なので、この画面を作り直す(タブはメンバに残るので「他」のまま)。
+    //下に積んだホーム画面は戻ったときに作り直される
+    SceneFunctions::Reload();
 }
 
 void SettingsScene::updateVolume(){
@@ -602,6 +614,7 @@ void SettingsScene::onUpdate(){
     this->updateBrightness();
     this->updateSleep();
     this->updateTextSize();
+    this->updateLanguage();
     this->updateSampleRate();
     this->updateRoute();
     this->updateTimezone();
@@ -718,19 +731,25 @@ void SettingsScene::buildLevelRows(const Layout& lay){
     // =====================================================================
     // 画面・音のスライダー(各タブの1行目。行の幅いっぱいに置く)
     // =====================================================================
-    constexpr int16_t kTitleW = 40;
+    // 見出しの幅は日本語(2文字)なら40px。訳した見出しが長ければその分スライダーを右へ寄せる
+    FontFn::SetSmall();
+    int title_w = OSData::frame->textWidth(TR("音量"));
+    const int bright_w = OSData::frame->textWidth(TR("輝度"));
+    if(bright_w > title_w) title_w = bright_w;
+    FontFn::SetDefault();
+    const int16_t kTitleW = (int16_t)(title_w + 8 > 40 ? title_w + 8 : 40);
     const int16_t slider_x = (int16_t)(left + kTitleW);
     const int16_t slider_w = (int16_t)(content.x + content.w - MARGIN - slider_x);
 
     if constexpr (!HardwareConfig::kSound){
         // 音声出力を載せない版(config/Hardware_Config.hpp)。音タブはその旨だけ出す
-        auto* none = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(0) + 2), lay.full_w, "音声出力なしのファームです");
+        auto* none = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(0) + 2), lay.full_w, TR("音声出力なしのファームです"));
         none->setTextColor(PICO_DARKGREY);
         addToTab(Tab::Sound, none);
     }else{
         // ---- 音量(sound.cfgの volume)。音タブの1行目 ----
         // 現在値はSoundFunctionsが起動時にsound.cfgから読んだもの(=今鳴っている音量)を出す
-        this->volume_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), "音量");
+        this->volume_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), TR("音量"));
         this->volume_title->setFontSize(FontFn::Small);
         addToTab(Tab::Sound, this->volume_title);
 
@@ -746,7 +765,7 @@ void SettingsScene::buildLevelRows(const Layout& lay){
     }
 
     // ---- 画面の明るさ(display.cfgの brightness)。画面タブの1行目 ----
-    this->brightness_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), "輝度");
+    this->brightness_title = new Label<PICO_STR_S>(left, (int16_t)(rowY(0) + 2), TR("輝度"));
     this->brightness_title->setFontSize(FontFn::Small);
     addToTab(Tab::Display, this->brightness_title);
 
@@ -761,9 +780,9 @@ void SettingsScene::buildLevelRows(const Layout& lay){
 
     // ---- 自動調光(display.cfgの auto-dim)。画面タブの2行目 ----
     // setFontSize()は幅を測り直さないので、setText()で同じ文字列を渡し直す(他のチェックボックスと同じ)
-    this->auto_dim_checkbox = new Checkbox(left, rowY(1), "しばらく触らないと暗くする");
+    this->auto_dim_checkbox = new Checkbox(left, rowY(1), TR("しばらく触らないと暗くする"));
     this->auto_dim_checkbox->setFontSize(FontFn::Small);
-    this->auto_dim_checkbox->setText("しばらく触らないと暗くする");
+    this->auto_dim_checkbox->setText(TR("しばらく触らないと暗くする"));
     this->auto_dim_checkbox->setIsChecked(DisplayFunctions::GetAutoDimEnabled());
     this->auto_dim_checkbox->setOnChangeChecked([this](){
         const bool enabled = this->auto_dim_checkbox->getIsChecked();
@@ -788,9 +807,9 @@ void SettingsScene::buildLateRows(const Layout& lay){
     const int16_t dropdown_x = (int16_t)(content.x + content.w - MARGIN - kDropdownW);
 
     // ---- ダークテーマ(display.cfgの theme)。画面タブの3行目(明るさの仲間なので近くに) ----
-    this->dark_checkbox = new Checkbox(left, rowY(2), "ダークテーマ");
+    this->dark_checkbox = new Checkbox(left, rowY(2), TR("ダークテーマ"));
     this->dark_checkbox->setFontSize(FontFn::Small);
-    this->dark_checkbox->setText("ダークテーマ");
+    this->dark_checkbox->setText(TR("ダークテーマ"));
     this->dark_checkbox->setIsChecked(DisplayFunctions::IsDarkTheme());
     this->dark_checkbox->setOnChangeChecked([this](){
         const bool dark = this->dark_checkbox->getIsChecked();
@@ -821,9 +840,9 @@ void SettingsScene::buildLateRows(const Layout& lay){
         if constexpr (HardwareConfig::kBattery){
             // 音質のドロップダウンの一覧がこの行へ重なるので、それより先にAdd()する。
             // 電池を載せない版は常にUSB給電なので出さない
-            this->battery_cap_checkbox = new Checkbox(left, rowY(2), "電池で音量を絞る");
+            this->battery_cap_checkbox = new Checkbox(left, rowY(2), TR("電池で音量を絞る"));
             this->battery_cap_checkbox->setFontSize(FontFn::Small);
-            this->battery_cap_checkbox->setText("電池で音量を絞る");
+            this->battery_cap_checkbox->setText(TR("電池で音量を絞る"));
             this->battery_cap_checkbox->setIsChecked(SoundFunctions::GetBatteryCap());
             this->battery_cap_checkbox->setOnChangeChecked([this](){
                 const bool enabled = this->battery_cap_checkbox->getIsChecked();
@@ -833,7 +852,7 @@ void SettingsScene::buildLateRows(const Layout& lay){
             });
             addToTab(Tab::Sound, this->battery_cap_checkbox);
             auto* cap_note = makeRowLabel<PICO_STR_L>(left,
-                (int16_t)(rowY(2) + this->battery_cap_checkbox->getH() + 2), full_w, "電池では最大20%(スピーカー)");
+                (int16_t)(rowY(2) + this->battery_cap_checkbox->getH() + 2), full_w, TR("電池では最大20%(スピーカー)"));
             cap_note->setTextColor(PICO_DARKGREY);
             addToTab(Tab::Sound, cap_note);
         }
@@ -844,10 +863,10 @@ void SettingsScene::buildLateRows(const Layout& lay){
         constexpr int16_t kRouteDropdownW = 140;
         //電池の行は下に説明が付くので、出力先はその分(半行)下げる
         const int16_t route_y = (int16_t)(rowY(3) + (HardwareConfig::kBattery ? ROW_H / 2 : 0));
-        this->route_title = new Label<PICO_STR_S>(left, route_y + 4, "出力先");
+        this->route_title = new Label<PICO_STR_S>(left, route_y + 4, TR("出力先"));
         this->route_title->setFontSize(FontFn::Small);
         this->route_dropdown = new DropdownMenu((int16_t)(content.x + content.w - MARGIN - kRouteDropdownW), route_y, kRouteDropdownW);
-        for(int i = 0; i < kRouteModeCount; i++) this->route_dropdown->add(kRouteModeLabels[i]);
+        for(int i = 0; i < kRouteModeCount; i++) this->route_dropdown->add(I18nFunctions::Tr(kRouteModeLabels[i]));
         this->route_selected_index = 0;
         for(int i = 0; i < kRouteModeCount; i++) if(kRouteModes[i] == SoundFunctions::GetRouteMode()) this->route_selected_index = i;
         this->route_dropdown->setSelectedIndex(this->route_selected_index);
@@ -860,7 +879,7 @@ void SettingsScene::buildLateRows(const Layout& lay){
         addToTab(Tab::Sound, this->route_dropdown);
 
         // ---- 音の周波数(sound.cfgの sample-rate)。音タブの2行目 ----
-        this->rate_title = new Label<PICO_STR_S>(left, rowY(1) + 4, "音質");
+        this->rate_title = new Label<PICO_STR_S>(left, rowY(1) + 4, TR("音質"));
         this->rate_title->setFontSize(FontFn::Small);
         this->rate_dropdown = new DropdownMenu(dropdown_x, rowY(1), kDropdownW);
         for(int i = 0; i < kRatePresetCount; i++) this->rate_dropdown->add(kRatePresetLabels[i]);
@@ -873,12 +892,12 @@ void SettingsScene::buildLateRows(const Layout& lay){
     // ---- スリープまでの時間(display.cfgの sleep-timeout)。画面タブの4行目 ----
     // 一覧が下の画面ロック・タッチ補正の行へ重なるので、それらより後にAdd()している
     // 設定値が一覧のどれとも違う(display.cfgを手で書き換えた)ときは、いちばん近い項目を選んで見せる
-    this->sleep_title = new Label<PICO_STR_S>(left, rowY(3) + 4, "スリープ");
+    this->sleep_title = new Label<PICO_STR_S>(left, rowY(3) + 4, TR("スリープ"));
     this->sleep_title->setFontSize(FontFn::Small);
 
     this->sleep_dropdown = new DropdownMenu(dropdown_x, rowY(3), kDropdownW);
     for(int i = 0; i < kSleepPresetCount; i++){
-        this->sleep_dropdown->add(kSleepPresetLabels[i]);
+        this->sleep_dropdown->add(I18nFunctions::Tr(kSleepPresetLabels[i]));
     }
     const unsigned long cur_sec = PowerFunctions::GetSleepTimeoutMs() / 1000UL;
     int best = 0;
@@ -898,14 +917,14 @@ void SettingsScene::buildLateRows(const Layout& lay){
     // ---- 本文の文字の大きさ(display.cfgの text-size)。画面タブの3行目、ダークテーマの右 ----
     // 一覧が下のスリープの行へ重なるので、スリープより後にAdd()する
     this->text_size_dropdown = new DropdownMenu(dropdown_x, rowY(2), kDropdownW);
-    this->text_size_dropdown->add("標準の字");
-    this->text_size_dropdown->add("大きい字");
+    this->text_size_dropdown->add(TR("標準の字"));
+    this->text_size_dropdown->add(TR("大きい字"));
     this->text_size_selected_index = DisplayFunctions::IsLargeText() ? 1 : 0;
     this->text_size_dropdown->setSelectedIndex(this->text_size_selected_index);
     addToTab(Tab::Display, this->text_size_dropdown);
 
     // ---- タイムゾーン。時刻の1行目 ----
-    this->timezone_title = new Label<PICO_STR_M>(left, rowY(0) + 4, "タイムゾーン");
+    this->timezone_title = new Label<PICO_STR_M>(left, rowY(0) + 4, TR("タイムゾーン"));
     this->timezone_title->setFontSize(FontFn::Small);
 
     this->timezone_dropdown = new DropdownMenu(dropdown_x, rowY(0), kDropdownW);
@@ -915,4 +934,17 @@ void SettingsScene::buildLateRows(const Layout& lay){
     this->timezone_dropdown->setSelectedIndex(this->tz_selected_index);
     addToTab(Tab::Time, this->timezone_title);
     addToTab(Tab::Time, this->timezone_dropdown);
+
+    // ---- 表示言語(user.cfgの language)。他タブの1行目 ----
+    // 見出しは今の言語を読めない人にも分かるよう両方の言語で書き、訳さない。項目は各言語の自分の名前
+    this->lang_title = new Label<PICO_STR_M>(left, rowY(0) + 4, "言語/Language");
+    this->lang_title->setFontSize(FontFn::Small);
+    this->lang_dropdown = new DropdownMenu(dropdown_x, rowY(0), kDropdownW);
+    for(int i = 0; i < (int)I18nFunctions::Lang::Count; i++){
+        this->lang_dropdown->add(I18nFunctions::NativeName((I18nFunctions::Lang)i));
+    }
+    this->lang_selected_index = (int)I18nFunctions::Current();
+    this->lang_dropdown->setSelectedIndex(this->lang_selected_index);
+    addToTab(Tab::Other, this->lang_title);
+    addToTab(Tab::Other, this->lang_dropdown);
 }

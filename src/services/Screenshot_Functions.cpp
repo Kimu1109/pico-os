@@ -3,6 +3,7 @@
 #include "system/Log_Functions.hpp"
 #include "OS_Data.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -14,8 +15,8 @@ namespace {
 }
 
 bool ScreenshotFunctions::Capture(char* out_path, size_t out_size){
-    if(!OSData::SD_usable){ fail(out_path, out_size, "SDカードがありません"); return false; }
-    if(OSData::frame == nullptr){ fail(out_path, out_size, "画面がありません"); return false; }
+    if(!OSData::SD_usable){ fail(out_path, out_size, TR("SDカードがありません")); return false; }
+    if(OSData::frame == nullptr){ fail(out_path, out_size, TR("画面がありません")); return false; }
 
     if(!OSData::SD.exists(kDir)) OSData::SD.mkdir(kDir);
 
@@ -25,11 +26,11 @@ bool ScreenshotFunctions::Capture(char* out_path, size_t out_size){
     for(;;){
         snprintf(path, sizeof(path), "%s/shot_%04d.bmp", kDir, next_no);
         if(!OSData::SD.exists(path)) break;
-        if(++next_no > 9999){ fail(out_path, out_size, "空き番号がありません"); return false; }
+        if(++next_no > 9999){ fail(out_path, out_size, TR("空き番号がありません")); return false; }
     }
 
     FsFile f = OSData::SD.open(path, O_WRONLY | O_CREAT | O_TRUNC);
-    if(!f){ fail(out_path, out_size, "ファイルを作れません"); return false; }
+    if(!f){ fail(out_path, out_size, TR("ファイルを作れません")); return false; }
 
     //4bppのBMP(今のパレット16色付き)。PCの画像ビューアでそのまま開ける
     const bool ok = Bmp::Encode4bpp(*OSData::frame, SCREEN_WIDTH, SCREEN_HEIGHT, f);
@@ -37,7 +38,7 @@ bool ScreenshotFunctions::Capture(char* out_path, size_t out_size){
 
     if(!ok){
         OSData::SD.remove(path);   //半端なファイルを残さない
-        fail(out_path, out_size, "書き込みに失敗しました");
+        fail(out_path, out_size, TR("書き込みに失敗しました"));
         return false;
     }
 

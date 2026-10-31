@@ -14,6 +14,7 @@
 #include "storage/SD_IO.hpp"
 #include "storage/Recent_Files.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 namespace {
     Button* MakeToolButton(const char* text, int x, int y){
@@ -36,25 +37,25 @@ void FileExplorerScene::onEnter(){
         WidgetFunctions::Add(b);
     };
 
-    this->back_button = MakeToolButton("戻る", x, top);
+    this->back_button = MakeToolButton(TR("戻る"), x, top);
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     place(this->back_button);
 
-    this->copy_button = MakeToolButton("コピー", x, top);
+    this->copy_button = MakeToolButton(TR("コピー"), x, top);
     this->copy_button->setIcon(IconID::Copy, IconSize::Px16);
     this->copy_button->setOnPressEnd([this](){ this->onCopyOrMove(false); });
     place(this->copy_button);
 
-    this->move_button = MakeToolButton("移動", x, top);
+    this->move_button = MakeToolButton(TR("移動"), x, top);
     this->move_button->setOnPressEnd([this](){ this->onCopyOrMove(true); });
     place(this->move_button);
 
-    this->paste_button = MakeToolButton("貼付", x, top);
+    this->paste_button = MakeToolButton(TR("貼付"), x, top);
     this->paste_button->setOnPressEnd([this](){ this->onPaste(); });
     place(this->paste_button);
 
-    this->more_button = MakeToolButton("他", x, top);
+    this->more_button = MakeToolButton(TR("他"), x, top);
     this->more_button->setIcon(IconID::DotsVertical, IconSize::Px16);
     this->more_button->setOnPressEnd([this](){ this->onMore(); });
     place(this->more_button);
@@ -101,12 +102,12 @@ void FileExplorerScene::onEnter(){
 }
 
 void FileExplorerScene::onMore(){
-    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "ファイル", "", "キャンセル");
-    d->addChoice("名前の変更");
-    d->addChoice("名前で検索(SD全体)");
-    d->addChoice("中身で検索(SD全体)");
-    d->addChoice("最近開いたファイル");
-    d->addChoice("容量");
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, TR("ファイル"), "", TR("キャンセル"));
+    d->addChoice(TR("名前の変更"));
+    d->addChoice(TR("名前で検索(SD全体)"));
+    d->addChoice(TR("中身で検索(SD全体)"));
+    d->addChoice(TR("最近開いたファイル"));
+    d->addChoice(TR("容量"));
     d->layout();
     WidgetFunctions::AddDialog(d);
     d->setVisible(true);
@@ -141,8 +142,8 @@ void FileExplorerScene::onUpdate(){
 }
 
 void FileExplorerScene::askSearch(bool content){
-    if(!OSData::SD_usable){ this->setStatus("SDカードがありません", true); return; }
-    auto* d = new InputDialog(content ? "中身から探す言葉:" : "探す名前(一部でよい):", true);
+    if(!OSData::SD_usable){ this->setStatus(TR("SDカードがありません"), true); return; }
+    auto* d = new InputDialog(content ? TR("中身から探す言葉:") : TR("探す名前(一部でよい):"), true);
     WidgetFunctions::AddDialog(d);
     d->setVisible(true);
     d->openKeyboard();
@@ -177,11 +178,11 @@ void FileExplorerScene::setStatus(const char* text, bool is_error){
 void FileExplorerScene::showClipStatus(){
     if(this->paste_button) this->paste_button->setEnabled(!(this->clip_path.length() == 0));
     if((this->clip_path.length() == 0)){
-        this->setStatus("選んでコピー/移動→貼付");
+        this->setStatus(TR("選んでコピー/移動→貼付"));
         return;
     }
     char buf[PICO_STR_LL];
-    snprintf(buf, sizeof(buf), "%s: %s", this->clip_is_move ? "移動" : "コピー",
+    snprintf(buf, sizeof(buf), "%s: %s", this->clip_is_move ? TR("移動") : TR("コピー"),
              PICO_IO::filename(this->clip_path.c_str()));
     this->setStatus(buf);
 }
@@ -193,9 +194,9 @@ void FileExplorerScene::clearClip(){
 }
 
 void FileExplorerScene::onCopyOrMove(bool is_move){
-    if(!OSData::SD_usable){ this->setStatus("SDカードがありません", true); return; }
+    if(!OSData::SD_usable){ this->setStatus(TR("SDカードがありません"), true); return; }
     const char* path = this->explorer ? this->explorer->getSelectedPath() : nullptr;
-    if(!path){ this->setStatus("先にファイルかフォルダを選んでください", true); return; }
+    if(!path){ this->setStatus(TR("先にファイルかフォルダを選んでください"), true); return; }
     this->clip_path.assign(path);
     this->clip_is_move = is_move;
     this->showClipStatus();
@@ -203,12 +204,12 @@ void FileExplorerScene::onCopyOrMove(bool is_move){
 
 void FileExplorerScene::onPaste(){
     if((this->clip_path.length() == 0) || !this->explorer) return;
-    if(!OSData::SD_usable){ this->setStatus("SDカードがありません", true); return; }
+    if(!OSData::SD_usable){ this->setStatus(TR("SDカードがありません"), true); return; }
 
     const char* src = this->clip_path.c_str();
     if(!OSData::SD.exists(src)){
         this->clearClip();
-        this->setStatus("元のファイルが見つかりません", true);
+        this->setStatus(TR("元のファイルが見つかりません"), true);
         return;
     }
 
@@ -216,7 +217,7 @@ void FileExplorerScene::onPaste(){
 
     //フォルダを自分自身の中へは入れられない
     if(PICO_IO::isSameOrInside(dest_dir.c_str(), src)){
-        this->setStatus("フォルダをその中へは置けません", true);
+        this->setStatus(TR("フォルダをその中へは置けません"), true);
         return;
     }
 
@@ -230,7 +231,7 @@ void FileExplorerScene::onPaste(){
 
     FixedString<PICO_PATH_LEN> dst;
     if(!PICO_IO::uniquePath(dst, dest_dir.c_str(), PICO_IO::filename(src))){
-        this->setStatus("貼り付け先の名前を作れません", true);
+        this->setStatus(TR("貼り付け先の名前を作れません"), true);
         return;
     }
 
@@ -238,13 +239,13 @@ void FileExplorerScene::onPaste(){
     if(this->clip_is_move){
         ok = OSData::SD.rename(src, dst.c_str());
     }else{
-        this->setStatus("コピー中...");
+        this->setStatus(TR("コピー中..."));
         ok = PICO_IO::copyRecursive(src, dst.c_str(), &CrashDumpFunctions::Feed);
     }
 
     if(!ok){
         LOG_APP_WARN("ファイル: %sに失敗 %s -> %s", this->clip_is_move ? "移動" : "コピー", src, dst.c_str());
-        this->setStatus(this->clip_is_move ? "移動できませんでした" : "コピーできませんでした", true);
+        this->setStatus(this->clip_is_move ? TR("移動できませんでした") : TR("コピーできませんでした"), true);
         return;
     }
 
@@ -259,13 +260,13 @@ void FileExplorerScene::onPaste(){
 }
 
 void FileExplorerScene::onRename(){
-    if(!OSData::SD_usable){ this->setStatus("SDカードがありません", true); return; }
+    if(!OSData::SD_usable){ this->setStatus(TR("SDカードがありません"), true); return; }
     const char* path = this->explorer ? this->explorer->getSelectedPath() : nullptr;
-    if(!path){ this->setStatus("先にファイルかフォルダを選んでください", true); return; }
+    if(!path){ this->setStatus(TR("先にファイルかフォルダを選んでください"), true); return; }
 
     //ダイアログが閉じるまでに一覧が変わっても、どれを変えるかは覚えた時点のパスで決める
     this->rename_path.assign(path);
-    auto dialog = new InputDialog("新しい名前:", true);
+    auto dialog = new InputDialog(TR("新しい名前:"), true);
     dialog->setInput(PICO_IO::filename(this->rename_path.c_str()));
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -282,7 +283,7 @@ void FileExplorerScene::onRename(){
 void FileExplorerScene::commitRename(const char* old_path, const char* new_name){
     if(!this->explorer) return;
     if(!PICO_IO::isValidName(new_name)){
-        this->setStatus("その名前は使えません", true);
+        this->setStatus(TR("その名前は使えません"), true);
         return;
     }
     if(strcmp(PICO_IO::filename(old_path), new_name) == 0) return; //変えていない
@@ -291,18 +292,18 @@ void FileExplorerScene::commitRename(const char* old_path, const char* new_name)
     FixedString<PICO_PATH_LEN> new_path;
     PICO_IO::parent(dir, old_path);
     if(!PICO_IO::join(new_path, dir.c_str(), new_name)){
-        this->setStatus("名前が長すぎます", true);
+        this->setStatus(TR("名前が長すぎます"), true);
         return;
     }
     //FATは大文字小文字を区別しないので、大小だけ変える場合は exists() が自分自身を指す
     const bool only_case = strcasecmp(PICO_IO::filename(old_path), new_name) == 0;
     if(!only_case && OSData::SD.exists(new_path.c_str())){
-        this->setStatus("同じ名前があります", true);
+        this->setStatus(TR("同じ名前があります"), true);
         return;
     }
     if(!OSData::SD.rename(old_path, new_path.c_str())){
         LOG_APP_WARN("ファイル: 名前の変更に失敗 %s -> %s", old_path, new_path.c_str());
-        this->setStatus("名前を変えられませんでした", true);
+        this->setStatus(TR("名前を変えられませんでした"), true);
         return;
     }
 

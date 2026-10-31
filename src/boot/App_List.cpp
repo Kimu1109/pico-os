@@ -1,5 +1,6 @@
 #include "services/App_Functions.hpp"
 #include "system/Log_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include "apps/browser/MarkdownScene.hpp"
 #include "gui/scenes/ClocksScene.hpp"
@@ -52,39 +53,41 @@ void AppFunctions::Setup(){
     Clear();
 
     // ---- ここへ1行足すとランチャに並ぶ ----
+    //名前は日本語の原文のまま登録する(launcher.cfg・pico.launch_app・通知の送り主の識別子)。
+    //TR_NOOP() は訳の一覧(i18n/)へ載せる印で、ランチャ等が見せるときに I18nFunctions::Tr() で訳す
     //引数を渡さないと network.cfg の browser-home を開く(無ければ同梱のサンプル)。
     //特定の文書を固定で開くタイルにしたい場合は MakeSceneWithArg + パス/URL を渡す
 #if PICO_APP_BROWSER
     Register("Markdown",   IconID::Browser,  &MakeScene<MarkdownScene>);
 #endif
-    Register("時計", IconID::Clock, &MakeScene<ClocksScene>);
+    Register(TR_NOOP("時計"), IconID::Clock, &MakeScene<ClocksScene>);
 #if PICO_APP_CALCULATOR
-    Register("電卓", IconID::Calculator, &MakeScene<CalculatorScene>);
+    Register(TR_NOOP("電卓"), IconID::Calculator, &MakeScene<CalculatorScene>);
 #endif
-    Register("ファイル", IconID::Folder, &MakeScene<FileExplorerScene>);
+    Register(TR_NOOP("ファイル"), IconID::Folder, &MakeScene<FileExplorerScene>);
     //ファイルの中身を見るビューワー(FileViewerScene)は、ファイルアプリでファイルを2回タップして開く
     //行単位のシンプルなテキストエディタ(TextEditorScene参照)
 #if PICO_APP_TEXTEDITOR
-    Register("テキスト", IconID::Pencil, &MakeScene<TextEditorScene>);
+    Register(TR_NOOP("テキスト"), IconID::Pencil, &MakeScene<TextEditorScene>);
 #endif
     //SDの /notes/ のメモを一覧・#タグ・全文検索で引く。開くとテキストエディタ(NotesScene参照)
 #if PICO_APP_NOTES
     Register(NotesScene::kAppName, IconID::Edit, &MakeScene<NotesScene>);
 #endif
-    Register("設定", IconID::Settings, &MakeScene<SettingsScene>);
+    Register(TR_NOOP("設定"), IconID::Settings, &MakeScene<SettingsScene>);
 #if PICO_APP_DICT
-    Register("辞書", IconID::Language, &MakeScene<DictScene>);
+    Register(TR_NOOP("辞書"), IconID::Language, &MakeScene<DictScene>);
 #endif
     //電子書籍・長文(青空文庫のテキスト等)。ページ送り・しおり・続きから。本はSDの /books/ に置く
 #if PICO_APP_READER
     Register(ReaderLibraryScene::kAppName, IconID::Book, &MakeScene<ReaderLibraryScene>);
 #endif
 #if PICO_APP_CALENDAR
-    Register("カレンダー", IconID::Calendar, &MakeScene<CalendarScene>);
+    Register(TR_NOOP("カレンダー"), IconID::Calendar, &MakeScene<CalendarScene>);
 #endif
     //自前のチャットサーバ(server/chat/)へ繋ぐ。接続先は /sys/chat.cfg
 #if PICO_APP_CHAT
-    Register("チャット", IconID::Messages, &MakeScene<ChatScene>);
+    Register(TR_NOOP("チャット"), IconID::Messages, &MakeScene<ChatScene>);
 #endif
     //Todoistのタスク(TODO/リマインダー)。トークンは /sys/todoist.cfg(アプリの[設定]から入れる)
 #if PICO_APP_TODO
@@ -96,15 +99,15 @@ void AppFunctions::Setup(){
 #endif
     //Game Boy(DMG)エミュ。ROMはSDの /gb/ に置く(256KBまで。SUMMARY.md #9)
 #if PICO_APP_GB
-    Register("ゲームボーイ", IconID::Game, &MakeScene<GameBoyScene>);
+    Register(TR_NOOP("ゲームボーイ"), IconID::Game, &MakeScene<GameBoyScene>);
 #endif
     //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/MUSIC_FORMAT.md)。
     //音声出力を載せない版(config/Hardware_Config.hpp)には並べない(PICO_APP_MUSIC の既定が PICO_HW_SOUND。動画・ゲームボーイは音なしで動く)
 #if PICO_APP_MUSIC
-    Register("ミュージック", IconID::Music, &MakeScene<MusicScene>);
+    Register(TR_NOOP("ミュージック"), IconID::Music, &MakeScene<MusicScene>);
 #endif
 #if PICO_APP_VIDEO
-    Register("動画", IconID::FileVideo, &MakeScene<VideoScene>);
+    Register(TR_NOOP("動画"), IconID::FileVideo, &MakeScene<VideoScene>);
 #endif
     //マイク(SPH0645、GP26〜28)で /recordings/ へWAVを録る。マイクを載せない版には並べない
 #if PICO_HW_MIC
@@ -115,7 +118,7 @@ void AppFunctions::Setup(){
     Register("SSH", IconID::Terminal, &MakeScene<SshScene>);
 #endif
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)
-    Register("通知", IconID::Bell, &MakeScene<NotificationScene>);
+    Register(TR_NOOP("通知"), IconID::Bell, &MakeScene<NotificationScene>);
     //アプリストア。配布元(docs/APP_REPO.md)からLuaアプリを取ってきて /lua/apps/ へ入れる
 #if PICO_APP_STORE
     Register(StoreScene::kAppName, IconID::AppStore, &MakeScene<StoreScene>);

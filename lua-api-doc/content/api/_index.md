@@ -39,6 +39,7 @@ description: "pico.* 全関数の引数・戻り値・失敗したときの動�
 | [バックグラウンド](system/background/) | `is_background` `finish`(+ `app.cfg` の `background`) |
 | [モジュール](system/modules/) | `require` `pico.require` |
 | [同梱モジュール](system/stdlib/) | `pico.ui` `pico.async` `pico.tween` |
+| [多言語対応](system/i18n/) | `lang` `tr`(+ `lang/<言語>.lua`・`app.cfg` の `name_en`) |
 | [デバッグ](system/debug/) | `traceback` `breakpoint` `set_breakpoint` `clear_breakpoint` `debugger_enabled` |
 | [その他](system/misc/) | `log` `show_error` `toast` `on_key` `app_dir` `path_join` `settings_get` `settings_set` `settings_all` `clipboard_get` `clipboard_set` `battery` `wifi_status` `memory_info` `keep_awake` `theme` `url_encode` `url_decode` `base64_encode` `base64_decode` |
 | [定数](../reference/constants/) | `COLOR_*` `FONT_*` `ICON_*` `TEXT_ALIGN_*` `CANVAS_*` `SCREEN_*` など |

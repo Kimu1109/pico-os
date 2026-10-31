@@ -24,6 +24,79 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
 <script>
+  // ---- 表示言語(日本語/英語)。landing / download / shell / store の4ページで同じ中身。直したら合わせる ----
+  // 決め方: URLの ?lang=ja|en > このブラウザで選んだ言語(localStorage "picoos-lang"。4ページとWeb版のOSで共通) >
+  // ブラウザの言語(ja 以外は英語。Web版のOSの既定と同じ考え方)。?lang= で来たときも覚える(ページを移っても同じ言語)。
+  // 訳す要素には data-i18n="鍵"(中身を差し替える。訳は固定の文字列だけなのでHTMLのまま入れる)、
+  // 属性は data-i18n-attr="属性=鍵;属性=鍵"。日本語はHTMLに書いたものをそのまま使い、訳の表は英語だけ持つ。
+  // JSで作る文は I18n.t("日本語", "English")
+  var I18n = (function () {
+    var KEY = "picoos-lang";
+    function norm(v) { v = String(v || "").toLowerCase(); return v === "ja" || v === "en" ? v : null; }
+    function save(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+    var lang = null;
+    try { lang = norm(new URLSearchParams(location.search).get("lang")); } catch (e) {}
+    if (lang) save(lang);
+    if (!lang) { try { lang = norm(localStorage.getItem(KEY)); } catch (e) {} }
+    if (!lang) lang = /^ja/i.test(navigator.language || "") ? "ja" : "en";
+    document.documentElement.lang = lang;
+    var en = {}, orig = new Map(), hooks = [];
+    function pick(node, slot, key, cur) {
+      var m = orig.get(node);
+      if (!m) { m = {}; orig.set(node, m); }
+      if (!(slot in m)) m[slot] = cur;
+      return lang === "en" && key in en ? en[key] : m[slot];
+    }
+    function apply() {
+      document.documentElement.lang = lang;
+      document.querySelectorAll("[data-i18n]").forEach(function (n) {
+        var v = pick(n, "", n.dataset.i18n, n.innerHTML);
+        if (n.innerHTML !== v) n.innerHTML = v;
+      });
+      document.querySelectorAll("[data-i18n-attr]").forEach(function (n) {
+        n.dataset.i18nAttr.split(";").forEach(function (pair) {
+          var kv = pair.split("=");
+          if (kv.length === 2) n.setAttribute(kv[0], pick(n, "@" + kv[0], kv[1], n.getAttribute(kv[0]) || ""));
+        });
+      });
+      var b = document.getElementById("langBtn");
+      if (b) {
+        b.textContent = lang === "ja" ? "EN" : "JA";
+        b.title = lang === "ja" ? "English" : "日本語";
+        b.setAttribute("aria-label", lang === "ja" ? "Switch to English" : "日本語に切り替える");
+      }
+      hooks.forEach(function (fn) { fn(lang); });
+    }
+    return {
+      get lang() { return lang; },
+      t: function (ja, enText) { return lang === "en" ? enText : ja; },
+      // 訳の表を渡して当てる。言語の切り替えボタン(id="langBtn")があればつなぐ。onToggle を渡すとボタンの動きを差し替える
+      init: function (dict, onToggle) {
+        en = dict || {};
+        var b = document.getElementById("langBtn");
+        if (b) b.addEventListener("click", function () {
+          var next = lang === "ja" ? "en" : "ja";
+          if (onToggle) { save(next); onToggle(next); } else I18n.set(next);
+        });
+        apply();
+      },
+      set: function (v) {
+        v = norm(v);
+        if (!v) return;
+        lang = v;
+        save(v);
+        // URLに ?lang= が残っていると、読み込み直したときに戻ってしまうので消す
+        try {
+          var u = new URL(location.href);
+          if (u.searchParams.has("lang")) { u.searchParams.delete("lang"); history.replaceState(null, "", u); }
+        } catch (e) {}
+        apply();
+      },
+      onChange: function (fn) { hooks.push(fn); }
+    };
+  })();
+</script>
+<script>
   // 選んだテーマ(トップのページと共通)を描く前に当てる。保存できない環境では毎回OSの設定に従う
   try {
     var savedTheme = localStorage.getItem('picoos-theme');
@@ -99,6 +172,7 @@
     background: var(--bg); color: var(--fg); border: 2px solid var(--line); cursor: pointer;
   }
   .theme-btn svg.i { width: 18px; height: 18px; }
+  .lang-btn { width: auto; min-width: 32px; padding: 0 6px; font: 9px "Press Start 2P", monospace; }
   @media (max-width: 720px) { .sb-nav a.opt, .sb-title { display: none; } }
 
   .layout { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; padding-top: 24px; padding-bottom: 48px; }
@@ -235,11 +309,12 @@
   <div class="wrap">
     <span class="sb-time px" id="sbTime">--:--</span>
     <span class="sb-title px">PLAYGROUND</span>
-    <nav class="sb-nav px" aria-label="ほかのページ">
+    <nav class="sb-nav px" aria-label="ほかのページ" data-i18n-attr="aria-label=nav">
       <a href="../">TOP</a>
       <a class="opt" href="../lua-api/">LUA API</a>
       <a class="opt" href="https://github.com/Kimu1109/pico-os">GITHUB</a>
-      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える">
+      <button class="theme-btn lang-btn" id="langBtn" type="button">EN</button>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える" data-i18n-attr="aria-label=theme.aria;title=theme.title">
         <svg class="i"><use href="#i-sun"/></svg>
       </button>
     </nav>
@@ -276,11 +351,11 @@
           <span></span><button type="button" class="face" data-btn="b">B</button><span></span>
         </div>
       </div>
-      <label class="pad-opts"><input type="checkbox" id="pad-enable" checked> コントローラーをつなぐ</label>
-      <label class="pad-opts">PCのキーボード:
+      <label class="pad-opts"><input type="checkbox" id="pad-enable" checked> <span data-i18n="pad.enable">コントローラーをつなぐ</span></label>
+      <label class="pad-opts"><span data-i18n="kb.label">PCのキーボード:</span>
         <select id="kb-mode">
-          <option value="pad">コントローラーとして使う</option>
-          <option value="text">文字入力に使う</option>
+          <option value="pad" data-i18n="kb.pad">コントローラーとして使う</option>
+          <option value="text" data-i18n="kb.text">文字入力に使う</option>
         </select>
       </label>
     </div>
@@ -288,26 +363,26 @@
 
   <div class="side">
     <div class="card">
-      <h2>STATUS <span class="jp">状態</span></h2>
+      <h2>STATUS <span class="jp" data-i18n="h.status">状態</span></h2>
       <div class="body">
-        <div id="status">読み込み中…</div>
+        <div id="status" data-i18n="loading">読み込み中…</div>
         <progress id="progress" value="0" max="100"></progress>
       </div>
     </div>
 
     <div class="card">
-      <h2>LUA <span class="jp">Luaアプリ開発</span></h2>
+      <h2>LUA <span class="jp" data-i18n="h.lua">Luaアプリ開発</span></h2>
       <div class="body">
-        <a class="linkbtn" href="../lua-api/">Lua API リファレンス</a>
-        <p class="hint">GitHub Pages で公開しているときだけ開ける(手元のビルドでは置いていない)。</p>
+        <a class="linkbtn" href="../lua-api/" data-i18n="lua.btn">Lua API リファレンス</a>
+        <p class="hint" data-i18n="lua.hint">GitHub Pages で公開しているときだけ開ける(手元のビルドでは置いていない)。</p>
       </div>
     </div>
 
     <div class="card">
-      <h2>WI-FI <span class="jp">状態を差し替えて再読み込み</span></h2>
+      <h2>WI-FI <span class="jp" data-i18n="h.wifi">状態を差し替えて再読み込み</span></h2>
       <div class="body">
         <div class="row" id="wifi-buttons"></div>
-        <p class="hint">
+        <p class="hint" data-i18n="wifi.hint0">
           URLのクエリがそのまま環境変数になる(<code>?wifi=disconnected&amp;rssi=-85</code>)。
           使えるキーは <code>wifi</code> / <code>rssi</code> / <code>ssid</code> / <code>scan</code>。
         </p>
@@ -315,19 +390,19 @@
     </div>
 
     <div class="card">
-      <h2>PAD <span class="jp">外部コントローラー</span></h2>
+      <h2>PAD <span class="jp" data-i18n="h.pad">外部コントローラー</span></h2>
       <div class="body">
-        <p class="hint" style="margin-top:0">
+        <p class="hint" style="margin-top:0" data-i18n="pad.hint0">
           画面の下のボタン(マウス・複数の指で同時押しも可)か、キーボードで操作する。
           実機では USB シリアルの <code>script/pad_serial.py</code> が担う部分で、同じ
           <code>pad XXXX</code> の行を pico-os へ流している(チェックを外すと 0.5 秒で「外れた」扱いになる)。
         </p>
-        <p class="hint">
+        <p class="hint" data-i18n="pad.hint1">
           十字キー = 矢印 / A = <code>X</code> / B = <code>Z</code> / X = <code>S</code> / Y = <code>A</code> /
           L・R・ZL・ZR = <code>Q</code> <code>W</code> <code>E</code> <code>R</code> /
           START = <code>Enter</code> / SELECT = <code>Backspace</code> / HOME = <code>H</code> か <code>Esc</code>
         </p>
-        <p class="hint">
+        <p class="hint" data-i18n="pad.hint2">
           「PCのキーボード」を<b>文字入力</b>にすると、打ったキーを物理キーボードとして送る
           (<code>key M u+XXXX</code> の行。実機では <code>pad_serial.py --mode text</code> と同じ)。
           オンスクリーンキーボードを開いている所・テキストエディタ・SSH にそのまま入る
@@ -337,12 +412,12 @@
     </div>
 
     <div class="card">
-      <h2>LOG <span class="jp">Serial の出力先</span></h2>
+      <h2>LOG <span class="jp" data-i18n="h.log">Serial の出力先</span></h2>
       <div class="body">
         <pre id="log"></pre>
         <div class="row" style="margin-top:12px">
-          <button type="button" id="btn-clear">ログを消す</button>
-          <button type="button" id="btn-shot">画面をPNGで保存</button>
+          <button type="button" id="btn-clear" data-i18n="log.clear">ログを消す</button>
+          <button type="button" id="btn-shot" data-i18n="log.shot">画面をPNGで保存</button>
         </div>
       </div>
     </div>
@@ -350,6 +425,45 @@
 </div>
 
 <script>
+  // 英語の訳(鍵は data-i18n / data-i18n-attr の値。日本語はHTMLにあるもの)。JSで作る文は I18n.t()。
+  // 言語を切り替えたら ?lang= を付けて読み込み直す(pico-os本体の表示言語も起動時にしか決まらないため。
+  // ?lang= は本体では /sys/user.cfg より優先され、保存はされない。docs/design/i18n.md「言語の選び方」)
+  I18n.init({
+    "nav": "Other pages",
+    "theme.aria": "Switch between light and dark theme",
+    "theme.title": "Switch theme",
+    "pad.enable": "Connect the controller",
+    "kb.label": "PC keyboard:",
+    "kb.pad": "Use as the controller",
+    "kb.text": "Use for typing",
+    "h.status": "Status",
+    "loading": "Loading…",
+    "h.lua": "Build Lua apps",
+    "lua.btn": "Lua API reference",
+    "lua.hint": "Only available on the GitHub Pages site (not included in local builds).",
+    "h.wifi": "Fake the state and reload",
+    "wifi.hint0": "The URL query becomes environment variables as is (<code>?wifi=disconnected&amp;rssi=-85</code>). " +
+      "Available keys: <code>wifi</code> / <code>rssi</code> / <code>ssid</code> / <code>scan</code>.",
+    "h.pad": "External controller",
+    "pad.hint0": "Use the buttons below the screen (mouse, or several fingers at once) or the keyboard. " +
+      "On real hardware this is the job of <code>script/pad_serial.py</code> over USB serial; the page sends pico-os the same " +
+      "<code>pad XXXX</code> lines (untick the box and it counts as unplugged after 0.5 s).",
+    "pad.hint1": "D-pad = arrow keys / A = <code>X</code> / B = <code>Z</code> / X = <code>S</code> / Y = <code>A</code> / " +
+      "L, R, ZL, ZR = <code>Q</code> <code>W</code> <code>E</code> <code>R</code> / " +
+      "START = <code>Enter</code> / SELECT = <code>Backspace</code> / HOME = <code>H</code> or <code>Esc</code>",
+    "pad.hint2": "Set “PC keyboard” to <b>typing</b> to send your keys as a physical keyboard " +
+      "(<code>key M u+XXXX</code> lines, same as <code>pad_serial.py --mode text</code> on real hardware). " +
+      "They go straight into the on-screen keyboard, the text editor and SSH " +
+      "(Ctrl+C and the like are sent too, so browser shortcuts stop working; anything with Cmd/⌘ still goes to the browser).",
+    "h.log": "Serial output",
+    "log.clear": "Clear log",
+    "log.shot": "Save screen as PNG"
+  }, function (next) {
+    var u = new URL(location.href);
+    u.searchParams.set('lang', next);
+    location.href = u.href;
+  });
+
   // ステータスバーの時刻(OSと同じ HH:MM)
   (function () {
     var el = document.getElementById('sbTime');
@@ -389,20 +503,27 @@
 
   // Wi-Fi状態の切り替えはURLのクエリ経由(C++側が起動時にsetenvする)なので、
   // ボタンはクエリを差し替えて再読み込みするだけ
+  // (表示言語の ?lang= は付けたまま残し、今の状態かどうかの比べからは外す)
   var wifiPresets = [
-    { label: '疎通で判定(既定)', query: '' },
-    { label: '接続',             query: '?wifi=connected' },
-    { label: '切断',             query: '?wifi=disconnected' },
-    { label: 'SSIDなし',         query: '?wifi=ssid-not-found' },
-    { label: '電波1本',          query: '?wifi=connected&rssi=-88' },
+    { label: I18n.t('疎通で判定(既定)', 'Probe (default)'), query: '' },
+    { label: I18n.t('接続', 'Connected'),                 query: '?wifi=connected' },
+    { label: I18n.t('切断', 'Disconnected'),              query: '?wifi=disconnected' },
+    { label: I18n.t('SSIDなし', 'SSID not found'),        query: '?wifi=ssid-not-found' },
+    { label: I18n.t('電波1本', 'Weak signal'),            query: '?wifi=connected&rssi=-88' },
   ];
   var wifiRow = document.getElementById('wifi-buttons');
+  var langQuery = new URLSearchParams(location.search).get('lang');
+  var curQuery = new URLSearchParams(location.search);
+  curQuery.delete('lang');
+  curQuery = curQuery.toString();
   wifiPresets.forEach(function (p) {
+    var q = new URLSearchParams(p.query);
     var a = document.createElement('a');
     a.className = 'linkbtn';
-    a.href = location.pathname + p.query;
+    if (curQuery === q.toString()) a.classList.add('on');   // 今の状態
+    if (langQuery) q.set('lang', langQuery);
+    a.href = location.pathname + (q.toString() ? '?' + q.toString() : '');
     a.textContent = p.label;
-    if (location.search === p.query) a.classList.add('on');   // 今の状態
     wifiRow.appendChild(a);
   });
 
@@ -415,7 +536,7 @@
   // ここで止めて理由をログへ出す
   document.getElementById('btn-shot').addEventListener('click', function () {
     if (!canvasEl.width || !canvasEl.height) {
-      appendLog('[PAGE] 画面がまだ作られていないので保存できません'
+      appendLog('[PAGE] ' + I18n.t('画面がまだ作られていないので保存できません', 'The screen has not been created yet, so it cannot be saved')
                 + ' (canvas ' + canvasEl.width + 'x' + canvasEl.height + ')', true);
       return;
     }
@@ -423,11 +544,11 @@
     try {
       url = canvasEl.toDataURL('image/png');
     } catch (e) {
-      appendLog('[PAGE] 画面を取り出せませんでした: ' + e.message, true);
+      appendLog('[PAGE] ' + I18n.t('画面を取り出せませんでした: ', 'Could not capture the screen: ') + e.message, true);
       return;
     }
     if (!url || url.indexOf('data:image/png') !== 0) {
-      appendLog('[PAGE] 画面を取り出せませんでした(PNGになりませんでした)', true);
+      appendLog('[PAGE] ' + I18n.t('画面を取り出せませんでした(PNGになりませんでした)', 'Could not capture the screen (did not get a PNG)'), true);
       return;
     }
     var a = document.createElement('a');
@@ -454,24 +575,25 @@
     var frames = window.picoosFrames | 0;
     if (frames > 0 && canvasEl.width > 0) return;   // 正常
 
-    appendLog('[PAGE] 画面が出ていないようなので、状態を書き出します:', true);
+    appendLog('[PAGE] ' + I18n.t('画面が出ていないようなので、状態を書き出します:', 'The screen does not seem to appear. Dumping the state:'), true);
     var box = canvasEl.getBoundingClientRect();
-    appendLog('       フレーム数=' + frames
+    appendLog('       ' + I18n.t('フレーム数=', 'frames=') + frames
               + ' / canvas=' + canvasEl.width + 'x' + canvasEl.height
-              + ' / CSS上は' + box.width.toFixed(4) + 'x' + box.height.toFixed(4)
-              + ' / 描画=' + (window.picoosRenderDriver || '(未設定)')
-              + ' / WebGL=' + (webglAvailable() ? 'あり' : 'なし')
+              + ' / ' + I18n.t('CSS上は', 'CSS ') + box.width.toFixed(4) + 'x' + box.height.toFixed(4)
+              + ' / ' + I18n.t('描画=', 'render=') + (window.picoosRenderDriver || I18n.t('(未設定)', '(unset)'))
+              + ' / WebGL=' + (webglAvailable() ? I18n.t('あり', 'yes') : I18n.t('なし', 'no'))
               + ' / dpr=' + window.devicePixelRatio, true);
     appendLog('       ' + navigator.userAgent, true);
     // canvasが0x0ならSDLのウィンドウが作られていない。C++側のログ([WEB]の行)に
     // SDLのエラーが出ているので、そこまで含めて開発者へ渡してもらう
     if (canvasEl.width === 0 && window.picoosRenderDriver === 'gl') {
-      appendLog('       GPU描画(?render=gl)で失敗しています。'
-                + 'クエリを外して読み込み直すと既定のソフトウェア描画になります', true);
+      appendLog('       ' + I18n.t('GPU描画(?render=gl)で失敗しています。'
+                + 'クエリを外して読み込み直すと既定のソフトウェア描画になります',
+                'GPU rendering (?render=gl) failed. Remove the query and reload to use the default software rendering'), true);
     }
     Module.setStatus(frames === 0
-      ? '描画ループが始まっていません(上のログを開発者へ)'
-      : '画面が作られていません(上のログを開発者へ)');
+      ? I18n.t('描画ループが始まっていません(上のログを開発者へ)', 'The render loop has not started (please send the log above to the developer)')
+      : I18n.t('画面が作られていません(上のログを開発者へ)', 'The screen was not created (please send the log above to the developer)'));
   }, 4000);
 
   // 公開版(.github/workflows/web-pages.yml)は index.js / index.wasm / index.data をリビジョン付きの名前
@@ -494,7 +616,7 @@
     print: function (text) { console.log(text); appendLog(text, false); },
     printErr: function (text) { console.error(text); appendLog(text, true); },
     setStatus: function (text) {
-      statusEl.textContent = text || '実行中';
+      statusEl.textContent = text || I18n.t('実行中', 'Running');
       // "... (12/34)" の形なら進捗として読む
       var m = /([0-9.]+)\/([0-9.]+)/.exec(text);
       if (m) {
@@ -509,7 +631,7 @@
     monitorRunDependencies: function (left) {
       this.totalDependencies = Math.max(this.totalDependencies, left);
       Module.setStatus(left
-        ? '準備中… (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
+        ? I18n.t('準備中… (', 'Preparing… (') + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
         : '');
     },
   };
@@ -679,7 +801,7 @@
   })();
 
   window.onerror = function (message) {
-    Module.setStatus('エラー: 詳細はブラウザのコンソールを見てください');
+    Module.setStatus(I18n.t('エラー: 詳細はブラウザのコンソールを見てください', 'Error: see the browser console for details'));
     appendLog(String(message), true);
   };
 </script>

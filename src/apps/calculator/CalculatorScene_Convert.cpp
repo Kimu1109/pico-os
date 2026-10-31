@@ -359,6 +359,7 @@ void CalculatorScene::buildConvertPage(const Rect& body){
     const int status_h = Label<PICO_STR_M>::GetLineHeight(FontFn::Small);
     const int update_w = 48;
     this->conv_update_button = new Button(body.x + body.w - MARGIN - update_w, y, "更新");
+    this->conv_update_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->conv_update_button->setFontSize(FontFn::Small);
     this->conv_update_button->setW(update_w);
     this->conv_update_button->setH(btn_h);

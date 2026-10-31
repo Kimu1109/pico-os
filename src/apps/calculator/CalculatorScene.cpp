@@ -607,6 +607,7 @@ void CalculatorScene::onEnter(){
 
     // ---- 履歴ページ: 消去ボタン + 一覧 ----
     this->history_clear_button = new Button(body.x + MARGIN, body.y + MARGIN, "履歴を消去");
+    this->history_clear_button->setIcon(IconID::Trash, IconSize::Px16);
     this->history_clear_button->setFontSize(FontFn::Small);
     this->history_clear_button->setH(20 + Button::kFrameExtra);
     this->history_clear_button->setOnPressEnd([this](){ this->clearHistory(); });

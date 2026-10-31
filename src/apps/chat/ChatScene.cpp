@@ -58,6 +58,7 @@ void ChatScene::onEnter(){
 
     //プライベートチャットの中でだけ出す
     this->invite_button = new Button(0, y0, "招待");
+    this->invite_button->setIcon(IconID::Share, IconSize::Px16);
     this->invite_button->setFontSize(FontFn::Small);
     this->invite_button->setH(20 + Button::kFrameExtra);
     this->invite_button->setX(this->refresh_button->getLocalRect().x - MARGIN - this->invite_button->getLocalRect().w);
@@ -109,11 +110,10 @@ void ChatScene::onEnter(){
     WidgetFunctions::Add(this->code_button);
 
     // ---- 部屋の中: 入力欄 + [送信] ----
-    this->send_button = new Button(0, this->input_row_y, "送信中");
+    this->send_button = new Button(0, this->input_row_y, "送信");
+    this->send_button->setIcon(IconID::Send, IconSize::Px16);
     this->send_button->setFontSize(FontFn::Small);
     this->send_button->setH(kInputH + Button::kFrameExtra);
-    //押すと文字が変わる(送信/送信中)ので、長いほうで幅を固定する
-    this->send_button->setW(this->send_button->getLocalRect().w + Button::kFrameExtra);
     this->send_button->setX(content.x + content.w - MARGIN - this->send_button->getLocalRect().w);
     this->send_button->setOnPressEnd([this](){ this->sendDraft(); });
     WidgetFunctions::Add(this->send_button);
@@ -283,7 +283,8 @@ void ChatScene::refreshSendButton(){
     if(!this->send_button) return;
     const bool sending = this->client.sending();
     this->seen_sending = sending;
-    this->send_button->setText(sending ? "送信中" : "送信");
+    //送っている間は灰色にして押せなくする(アイコンなので「送信中」の文字の代わり)
+    this->send_button->setEnabled(!sending);
 }
 
 void ChatScene::openRoom(uint32_t room_id){

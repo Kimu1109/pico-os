@@ -58,12 +58,14 @@ PickerDialog::PickerDialog(Mode mode, const char* title_text, const char* ok_tex
             break;
         case Mode::Date:
             prev_button = new Button(0, 0, "<");
+            prev_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
             prev_button->setOnPressStart([this]() {
                 if (--month_ < 1) { month_ = 12; year_--; }
                 this->refreshMonth();
             });
             prev_button->setParent(this);
             next_button = new Button(0, 0, ">");
+            next_button->setIcon(IconID::ArrowRight, IconSize::Px16);
             next_button->setOnPressStart([this]() {
                 if (++month_ > 12) { month_ = 1; year_++; }
                 this->refreshMonth();

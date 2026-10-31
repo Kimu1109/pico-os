@@ -1,0 +1,1087 @@
+# pico-os の表示の訳。原文(msgid)は src/ の TR("…") の日本語そのもの。
+# 訳(msgstr)を書いたら python3 script/i18n.py update で src/system/I18n_Table_*.cpp を作り直す。
+# 訳を空にした原文は日本語のまま出る。%d 等の書式は原文と同じ並びに保つ(違うと --check が落ちる)。
+# 画面は240px幅が基本なので、訳は原文の幅に近い短い言い方を選ぶ。
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+#: src/main.cpp
+msgid "スクリーンショット"
+msgstr "Screenshot"
+
+#: src/main.cpp
+msgid "スクリーンショット失敗"
+msgstr "Screenshot failed"
+
+#: src/apps/firmware/FirmwareScene.hpp
+msgid "本体の更新"
+msgstr "Update"
+
+#: src/apps/home/HomeScene.cpp
+msgid "アプリが登録されていません。\nApp_List.cpp のSetup()へ追加してください。"
+msgstr "No apps registered.\nAdd them in Setup() of App_List.cpp."
+
+#: src/apps/home/HomeScene.cpp src/gui/scenes/SettingsScene.cpp
+msgid "戻る"
+msgstr "Back"
+
+#: src/apps/home/HomeScene.cpp src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/dialogs/ColorDialog.hpp src/gui/widgets/dialogs/FileSaveDialog.hpp src/gui/widgets/dialogs/FileSelectDialog.hpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/services/PowerMenu_Functions.cpp
+msgid "キャンセル"
+msgstr "Cancel"
+
+#: src/apps/home/HomeScene.cpp
+msgid "先頭へ移動"
+msgstr "Move to top"
+
+#: src/apps/home/HomeScene.cpp
+msgid "前へ移動"
+msgstr "Move back"
+
+#: src/apps/home/HomeScene.cpp
+msgid "後ろへ移動"
+msgstr "Move forward"
+
+#: src/apps/home/HomeScene.cpp
+msgid "大きさ: 小"
+msgstr "Size: small"
+
+#: src/apps/home/HomeScene.cpp
+msgid "大きさ: 横長"
+msgstr "Size: wide"
+
+#: src/apps/home/HomeScene.cpp
+msgid "大きさ: 大"
+msgstr "Size: large"
+
+#: src/apps/home/HomeScene.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "削除"
+msgstr "Del"
+
+#: src/apps/home/HomeScene.cpp
+msgid "名前を変える"
+msgstr "Rename"
+
+#: src/apps/home/HomeScene.cpp
+msgid "フォルダを解除"
+msgstr "Ungroup folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "別のフォルダへ"
+msgstr "Move to folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "フォルダへ入れる"
+msgstr "Add to folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "フォルダから出す"
+msgstr "Remove from folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "ランチャから隠す"
+msgstr "Hide from launcher"
+
+#: src/apps/home/HomeScene.cpp
+msgid "ウィジェット追加"
+msgstr "Add widget"
+
+#: src/apps/home/HomeScene.cpp
+msgid "どのフォルダへ"
+msgstr "Which folder?"
+
+#: src/apps/home/HomeScene.cpp
+msgid "新しいフォルダ"
+msgstr "New folder"
+
+#: src/apps/home/HomeScene.cpp
+msgid "フォルダ名:"
+msgstr "Folder name:"
+
+#: src/apps/home/HomeScene.cpp
+msgid "ウィジェット"
+msgstr "Widget"
+
+#: src/apps/home/Home_Layout.cpp src/apps/home/Home_Widgets.cpp src/boot/App_List.cpp
+msgid "時計"
+msgstr "Clock"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "アナログ時計"
+msgstr "Analog clock"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "音楽"
+msgstr "Music"
+
+#: src/apps/home/Home_Layout.cpp src/apps/home/Home_Widgets.cpp
+msgid "予定"
+msgstr "Agenda"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "小"
+msgstr "Small"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "横長"
+msgstr "Wide"
+
+#: src/apps/home/Home_Layout.cpp
+msgid "大"
+msgstr "Large"
+
+#: src/apps/home/Home_Widgets.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "日"
+msgstr "Sun"
+
+#: src/apps/home/Home_Widgets.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "月"
+msgstr "Mon"
+
+#: src/apps/home/Home_Widgets.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "火"
+msgstr "Tue"
+
+#: src/apps/home/Home_Widgets.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "水"
+msgstr "Wed"
+
+#: src/apps/home/Home_Widgets.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "木"
+msgstr "Thu"
+
+#: src/apps/home/Home_Widgets.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "金"
+msgstr "Fri"
+
+#: src/apps/home/Home_Widgets.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/widgets/apps/MonthGrid.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "土"
+msgstr "Sat"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "明 %d:%02d"
+msgstr "Tmrw %d:%02d"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "時計が未設定"
+msgstr "Clock not set"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "%s曜日"
+msgstr "%s"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "%d月%d日"
+msgstr "%d/%d"
+
+#: src/apps/home/Home_Widgets.cpp src/boot/App_List.cpp
+msgid "ミュージック"
+msgstr "Music"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "タップして曲を選ぶ"
+msgstr "Tap to pick a song"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "終日"
+msgstr "All day"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "明日"
+msgstr "Tomorrow"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "明 %s"
+msgstr "Tmrw %s"
+
+#: src/apps/home/Home_Widgets.cpp src/boot/App_List.cpp
+msgid "カレンダー"
+msgstr "Calendar"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "時計が合っていません"
+msgstr "Clock is not set"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "カレンダーがありません"
+msgstr "No calendars"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "続き"
+msgstr "Cont."
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "7日以内に予定はありません"
+msgstr "No events in 7 days"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "今日・明日の予定はありません"
+msgstr "Nothing today or tomorrow"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "%d件"
+msgstr "%d"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "TODO 今日"
+msgstr "TODO today"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "まだ取得していません"
+msgstr "Not fetched yet"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "TODOアプリで設定してください"
+msgstr "Set up in the TODO app"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "今日のタスクはありません"
+msgstr "No tasks today"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "今日"
+msgstr "Today"
+
+#: src/apps/home/Home_Widgets.cpp
+msgid "取得 %d/%d %d:%02d"
+msgstr "Fetched %d/%d %d:%02d"
+
+#: src/apps/mail/MailScene.hpp
+msgid "メール"
+msgstr "Mail"
+
+#: src/apps/notes/NotesScene.hpp
+msgid "メモ"
+msgstr "Notes"
+
+#: src/apps/reader/ReaderLibraryScene.hpp
+msgid "読書"
+msgstr "Reader"
+
+#: src/apps/store/StoreScene.hpp
+msgid "ストア"
+msgstr "Store"
+
+#: src/boot/App_List.cpp
+msgid "電卓"
+msgstr "Calculator"
+
+#: src/boot/App_List.cpp
+msgid "ファイル"
+msgstr "Files"
+
+#: src/boot/App_List.cpp
+msgid "テキスト"
+msgstr "Text"
+
+#: src/boot/App_List.cpp src/gui/scenes/SettingsScene_Time.cpp
+msgid "設定"
+msgstr "Settings"
+
+#: src/boot/App_List.cpp
+msgid "辞書"
+msgstr "Dictionary"
+
+#: src/boot/App_List.cpp
+msgid "チャット"
+msgstr "Chat"
+
+#: src/boot/App_List.cpp
+msgid "ゲームボーイ"
+msgstr "Game Boy"
+
+#: src/boot/App_List.cpp
+msgid "動画"
+msgstr "Video"
+
+#: src/boot/App_List.cpp
+msgid "通知"
+msgstr "Notices"
+
+#: src/gui/core/Error_Functions.cpp
+msgid "エラーが発生しました"
+msgstr "An error occurred"
+
+#: src/gui/core/Error_Functions.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Wifi.cpp src/gui/widgets/dialogs/WifiScanDialog.hpp
+msgid "閉じる"
+msgstr "Close"
+
+#: src/gui/scenes/FileShareScene.hpp
+msgid "Wi-Fi転送"
+msgstr "Wi-Fi Share"
+
+#: src/gui/scenes/RecorderScene.hpp
+msgid "録音"
+msgstr "Recorder"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "しない"
+msgstr "Never"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "1分"
+msgstr "1 min"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "2分"
+msgstr "2 min"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "5分"
+msgstr "5 min"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "10分"
+msgstr "10 min"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Other.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "30分"
+msgstr "30 min"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "自動"
+msgstr "Auto"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "スピーカー"
+msgstr "Speaker"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "イヤホン"
+msgstr "Headphones"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "NTPサーバー1: %s"
+msgstr "NTP server 1: %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "NTPサーバー2: %s"
+msgstr "NTP server 2: %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "ホーム: %s"
+msgstr "Home: %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "(未設定)"
+msgstr "(not set)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "電池 USB給電中"
+msgstr "Battery: USB power"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "電池 %d%% (%.2fV)"
+msgstr "Battery %d%% (%.2fV)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "編集"
+msgstr "Edit"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "SSIDが長すぎます(32バイトまで)"
+msgstr "SSID is too long (32 bytes max)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "名前は英数字とハイフンの63文字までです(先頭と末尾にハイフンは使えません)"
+msgstr "Use up to 63 letters, digits and hyphens (no hyphen at either end)"
+
+#: src/gui/scenes/SettingsScene.cpp src/services/PowerMenu_Functions.cpp
+msgid "電源"
+msgstr "Power"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "画面"
+msgstr "LCD"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "音"
+msgstr "Audio"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "時刻"
+msgstr "Time"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "他"
+msgstr "Other"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "起動時に自己診断を実行"
+msgstr "Run self-test at boot"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "画面ロック: PIN"
+msgstr "Screen lock: PIN"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "画面ロック: なし"
+msgstr "Screen lock: none"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/widgets/systems/LockScreen.cpp
+msgid "画面ロック"
+msgstr "Screen lock"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "PINを変える"
+msgstr "Change PIN"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "PINを外す"
+msgstr "Remove PIN"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "今すぐロック"
+msgstr "Lock now"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "PINを決める"
+msgstr "Set PIN"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "端末の鍵: %s"
+msgstr "Device key: %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "作成"
+msgstr "Create"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "更新"
+msgstr "Update"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "詳細"
+msgstr "Details"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "OTPの端末の鍵が壊れていて、作り直す空きもありません。固定鍵のまま暗号化します"
+msgstr "The device key in OTP is broken and there is no room to make a new one. The fixed key stays in use"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "SDの暗号化された設定のうち、まだ端末の鍵で暗号化していないものを暗号化し直します"
+msgstr "Re-encrypts the settings on the SD that are not yet encrypted with the device key"
+
+#: src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "やめる"
+msgstr "Cancel"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "実行"
+msgstr "Run"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "端末の鍵を作り、本体のOTPへ書き込みます。\n・OTPは消せません(取り消せません)\n・Wi-Fi・SSHの鍵・トークン・カレンダーのURL・PINを、この本体の鍵で暗号化し直します\n・基板が壊れると、それらは二度と読めません。元の値はPCに控えてください\n・守れるのはSDだけを盗まれた場合です(本体ごとは守れません)"
+msgstr "Creates a device key and writes it to the OTP.\n- OTP cannot be erased (no undo)\n- Wi-Fi, SSH keys, tokens, calendar URLs and the PIN are re-encrypted with this key\n- If the board breaks, they can never be read again. Keep copies on a PC\n- This only protects against a stolen SD card (not the whole device)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "作る"
+msgstr "Create"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "%d項目を暗号化し直しました%s%s"
+msgstr "Re-encrypted %d items%s%s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "(失敗あり。ログを見てください)"
+msgstr " (some failed; see the log)"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "。PINは次に解除したとき"
+msgstr ". The PIN follows at next unlock"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "今は%sから鳴ります"
+msgstr "Playing from %s"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "%sがつながっていません"
+msgstr "%s not connected"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "音量"
+msgstr "Volume"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "輝度"
+msgstr "Bright"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "音声出力なしのファームです"
+msgstr "Firmware without audio"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "しばらく触らないと暗くする"
+msgstr "Dim when idle"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "ダークテーマ"
+msgstr "Dark theme"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "電池で音量を絞る"
+msgstr "Lower volume on battery"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "電池では最大20%(スピーカー)"
+msgstr "Max 20%, speaker, on battery"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "出力先"
+msgstr "Output"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "音質"
+msgstr "Quality"
+
+#: src/gui/scenes/SettingsScene.cpp src/services/PowerMenu_Functions.cpp
+msgid "スリープ"
+msgstr "Sleep"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "標準の字"
+msgstr "Normal"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "大きい字"
+msgstr "Large"
+
+#: src/gui/scenes/SettingsScene.cpp
+msgid "タイムゾーン"
+msgstr "Time zone"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "ランチャで隠したアプリ: %d"
+msgstr "Hidden apps: %d"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "ランチャで隠したアプリ: なし"
+msgstr "Hidden apps: none"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "隠したアプリ"
+msgstr "Hidden apps"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "表示: %s"
+msgstr "Show: %s"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "並びを元に戻す"
+msgstr "Reset order"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "ランチャの並びを登録順に戻しました(フォルダも解除)"
+msgstr "Launcher order reset (folders removed)"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "ブラウザのホームURL"
+msgstr "Browser home URL"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "一覧"
+msgstr "List"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "バックグラウンド: %d件"
+msgstr "Background: %d"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "バックグラウンド: なし"
+msgstr "Background: none"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "開発者向け"
+msgstr "Developer"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "フレーム時間を表示"
+msgstr "Show frame time"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "Luaデバッガ"
+msgstr "Lua debugger"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "固まったら再起動する"
+msgstr "Restart when frozen"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "時刻が合っていません"
+msgstr "Clock is not set"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "合わせるとDS3231へ控えます"
+msgstr "Saved to the DS3231 when set"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "「変更」で手動で合わせられます"
+msgstr "Set it by hand with \"Change\""
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "DS3231で電源を切っても保持"
+msgstr "Kept by the DS3231 when off"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "再起動では消えません"
+msgstr "Kept across restarts"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "NTP同期で上書きされます"
+msgstr "Overwritten by NTP sync"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "日付"
+msgstr "Date"
+
+#: src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "次へ"
+msgstr "Next"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "%d/%d の時刻"
+msgstr "Time on %d/%d"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "時刻を合わせられませんでした"
+msgstr "Could not set the time"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "NTPサーバー1"
+msgstr "NTP server 1"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "NTPサーバー2"
+msgstr "NTP server 2"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "変更"
+msgstr "Change"
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "補正"
+msgstr "Calib."
+
+#: src/gui/scenes/SettingsScene_Time.cpp
+msgid "タッチ位置の補正"
+msgstr "Touch calibration"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "要ログイン"
+msgstr "Login"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "外へ出られません"
+msgstr "Offline"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "接続中"
+msgstr "Online"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "接続しています: %s"
+msgstr "Joining: %s"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "未接続(自動で再接続します)"
+msgstr "Disconnected (will reconnect)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "未接続"
+msgstr "Disconnected"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid " [固定IP]"
+msgstr " [static IP]"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid " (接続中)"
+msgstr " (connected)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid " (接続しています)"
+msgstr " (connecting)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "保存済み %d/%d"
+msgstr "Saved %d/%d"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "保存済み %d/%d (2回タップで接続)"
+msgstr "Saved %d/%d (double-tap to join)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "%s.local\n(IP無し)"
+msgstr "%s.local\n(no IP)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "接続するネットワークを一覧から選んでください"
+msgstr "Pick a network to join from the list"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "削除するネットワークを一覧から選んでください"
+msgstr "Pick a network to delete from the list"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "「%s」を削除しますか?"
+msgstr "Delete \"%s\"?"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "IPを設定するネットワークを一覧から選んでください"
+msgstr "Pick a network to set its IP"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "「%s」の固定IP(例 192.168.1.50/24。空欄でDHCP):"
+msgstr "Static IP for \"%s\" (e.g. 192.168.1.50/24, blank for DHCP):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "IPアドレスは「192.168.1.50/24」の形で入れてください"
+msgstr "Enter the IP address like \"192.168.1.50/24\""
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ゲートウェイ(ルーター)のIP(空欄で無し):"
+msgstr "Gateway (router) IP (blank for none):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ゲートウェイはIPアドレスと同じサブネットのアドレスにしてください"
+msgstr "The gateway must be in the same subnet as the IP address"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "DNS(カンマ区切りで2つまで。空欄でゲートウェイ):"
+msgstr "DNS (up to 2, comma separated; blank for gateway):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "DNS(カンマ区切りで2つまで。空欄で自動):"
+msgstr "DNS (up to 2, comma separated; blank for auto):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "DNSは「1.1.1.1,8.8.8.8」のように2つまで入れてください"
+msgstr "Enter up to 2 DNS servers like \"1.1.1.1,8.8.8.8\""
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ネットワークが削除されたので保存しませんでした"
+msgstr "Not saved: the network was deleted"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "IPの設定を保存できませんでした"
+msgstr "Could not save the IP settings"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "DHCPに戻しました"
+msgstr "Back to DHCP"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "IPの設定を保存しました"
+msgstr "IP settings saved"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ログインの要るネットワークではありません"
+msgstr "This network needs no login"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ポータルのページを読んでいます..."
+msgstr "Loading the portal page..."
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "送信しました。インターネットへ出られるか確かめています"
+msgstr "Sent. Checking the internet connection"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ログインできませんでした: %s"
+msgstr "Login failed: %s"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ポータルの入力: %s%s"
+msgstr "Portal field: %s%s"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "(パスワード)"
+msgstr " (password)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "「%s」のポータルの利用規約に同意して接続しますか?"
+msgstr "Accept the terms of the \"%s\" portal and connect?"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "同意する"
+msgstr "Accept"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ポータルへ送っています..."
+msgstr "Sending to the portal..."
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "スキャン中..."
+msgstr "Scanning..."
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "見つかりませんでした"
+msgstr "None found"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "%d件見つかりました"
+msgstr "Found %d"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "スキャンに失敗しました"
+msgstr "Scan failed"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "Wi-FiがOFFです。ONにしてから検索してください"
+msgstr "Wi-Fi is off. Turn it on before scanning"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "「%s」のパスワード(不要なら空欄のまま決定):"
+msgstr "Password for \"%s\" (leave blank if none):"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "保存できるのは%d件までです。不要なものを削除してください"
+msgstr "Up to %d networks can be saved. Delete one you don't need"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "SSIDかパスワードが長すぎます(パスワードは64文字まで)"
+msgstr "SSID or password too long (password: 64 chars max)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "ログイン"
+msgstr "Login"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "検索"
+msgstr "Scan"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "追加"
+msgstr "Add"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "接続"
+msgstr "Join"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "追加するWi-FiのSSID"
+msgstr "SSID of the Wi-Fi to add"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "名前"
+msgstr "Name"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "本体の名前(<名前>.local で見つかる。英数字とハイフン)"
+msgstr "Device name (found as <name>.local; letters, digits, hyphens)"
+
+#: src/gui/scenes/SettingsScene_Wifi.cpp
+msgid "スマホ"
+msgstr "Phone"
+
+#: src/gui/scenes/UsbDriveScene.hpp
+msgid "USBドライブ"
+msgstr "USB Drive"
+
+#: src/gui/widgets/DropdownMenu.hpp
+msgid "タップして選択..."
+msgstr "Tap to choose..."
+
+#: src/gui/widgets/apps/FileExplorer.cpp
+msgid "新しくフォルダを作成\n名前:"
+msgstr "Create a new folder\nName:"
+
+#: src/gui/widgets/apps/FileExplorer.cpp
+msgid "本当に削除しますか?"
+msgstr "Really delete?"
+
+#: src/gui/widgets/apps/FileExplorer.cpp
+msgid "いいえ"
+msgstr "No"
+
+#: src/gui/widgets/apps/FileExplorer.cpp
+msgid "はい"
+msgstr "Yes"
+
+#: src/gui/widgets/dialogs/ColorDialog.hpp
+msgid "色を選択"
+msgstr "Pick a color"
+
+#: src/gui/widgets/dialogs/FileSaveDialog.hpp
+msgid "ファイル名を入力..."
+msgstr "File name..."
+
+#: src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/gui/widgets/keyboards/KeyboardNum.cpp
+msgid "決定"
+msgstr "OK"
+
+#: src/gui/widgets/dialogs/InputDialog.hpp
+msgid "ここに入力..."
+msgstr "Type here..."
+
+#: src/gui/widgets/dialogs/PickerDialog.cpp
+msgid "%d年%d月"
+msgstr "%d-%02d"
+
+#: src/gui/widgets/dialogs/WifiScanDialog.hpp
+msgid "再スキャン"
+msgstr "Rescan"
+
+#: src/gui/widgets/keyboards/KeyboardNum.hpp
+msgid "四則演算"
+msgstr "Arithmetic"
+
+#: src/gui/widgets/keyboards/KeyboardNum.hpp
+msgid "数学記号"
+msgstr "Math"
+
+#: src/gui/widgets/keyboards/KeyboardNum.hpp
+msgid "数字"
+msgstr "Digits"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "%d月%d日(%s)"
+msgstr "%d/%d (%s)"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "%lu秒待ってください"
+msgstr "Wait %lu s"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "アラーム/タイマーを止める"
+msgstr "Stop alarm/timer"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "取消"
+msgstr "Cancel"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "消す"
+msgstr "Del"
+
+#: src/services/Alarm_Functions.cpp
+msgid "アラーム %02d:%02d"
+msgstr "Alarm %02d:%02d"
+
+#: src/services/Alarm_Functions.cpp
+msgid "5分後"
+msgstr "Snooze 5m"
+
+#: src/services/Alarm_Functions.cpp src/services/Timer_Functions.cpp
+msgid "止める"
+msgstr "Stop"
+
+#: src/services/Alarm_Functions.cpp
+msgid "1回"
+msgstr "Once"
+
+#: src/services/Alarm_Functions.cpp
+msgid "毎日"
+msgstr "Daily"
+
+#: src/services/Alarm_Functions.cpp
+msgid "平日"
+msgstr "Weekdays"
+
+#: src/services/Alarm_Functions.cpp
+msgid "土日"
+msgstr "Weekends"
+
+#: src/services/Lock_Functions.cpp
+msgid "違います。%lu秒待ってください"
+msgstr "Wrong. Wait %lu s"
+
+#: src/services/Lock_Functions.cpp
+msgid "違います(あと%d回で待ち時間)"
+msgstr "Wrong (%d tries before a wait)"
+
+#: src/services/Lock_Functions.cpp
+msgid "PINが違います"
+msgstr "Wrong PIN"
+
+#: src/services/Lock_Functions.cpp
+msgid "PINを入力"
+msgstr "Enter PIN"
+
+#: src/services/Lock_Functions.cpp
+msgid "今のPINを入力"
+msgstr "Enter current PIN"
+
+#: src/services/Lock_Functions.cpp
+msgid "新しいPIN(数字4〜8桁)"
+msgstr "New PIN (4-8 digits)"
+
+#: src/services/Lock_Functions.cpp
+msgid "PINを外すには今のPINを入力"
+msgstr "Enter current PIN to remove it"
+
+#: src/services/Lock_Functions.cpp
+msgid "数字4〜8桁にしてください"
+msgstr "Use 4-8 digits"
+
+#: src/services/Lock_Functions.cpp
+msgid "もう一度入力"
+msgstr "Enter again"
+
+#: src/services/Lock_Functions.cpp
+msgid "一致しません。新しいPINから"
+msgstr "No match. Start with the new PIN"
+
+#: src/services/PowerMenu_Functions.cpp
+msgid "再起動"
+msgstr "Restart"
+
+#: src/services/PowerMenu_Functions.cpp
+msgid "ロック"
+msgstr "Lock"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "SDカードがありません"
+msgstr "No SD card"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "画面がありません"
+msgstr "No screen"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "空き番号がありません"
+msgstr "No free file number"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "ファイルを作れません"
+msgstr "Cannot create the file"
+
+#: src/services/Screenshot_Functions.cpp
+msgid "書き込みに失敗しました"
+msgstr "Write failed"
+
+#: src/services/Timer_Functions.cpp
+msgid "タイマー: 時間になりました"
+msgstr "Timer: time is up"
+
+#: src/services/UsbDrive_Functions.cpp
+msgid "成功"
+msgstr "Success"
+
+#: src/services/UsbDrive_Functions.cpp
+msgid "SDカードが使えません"
+msgstr "SD card unavailable"
+
+#: src/services/UsbDrive_Functions.cpp
+msgid "すでにUSBドライブになっています"
+msgstr "Already a USB drive"
+
+#: src/services/UsbDrive_Functions.cpp
+msgid "USBの準備に失敗しました"
+msgstr "USB setup failed"
+
+#: src/services/UsbDrive_Functions.cpp
+msgid "不明な誤り"
+msgstr "Unknown error"
+
+#: src/system/Notification_Functions.cpp
+msgid "通知の予約がいっぱいです"
+msgstr "Too many scheduled notices"
+
+#: src/system/Notification_Functions.cpp
+msgid "このアプリの通知の予約が上限です"
+msgstr "This app has too many scheduled notices"
+
+#: src/system/Notification_Functions.cpp
+msgid "通知の指定が正しくありません"
+msgstr "Invalid notice"

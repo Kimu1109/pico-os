@@ -81,6 +81,10 @@ void SceneFunctions::Pop(){
     AcceptRequest(RequestType::Pop, nullptr);
 }
 
+void SceneFunctions::Reload(){
+    AcceptRequest(RequestType::Reload, nullptr);
+}
+
 bool SceneFunctions::CanPop(){
     return stack_depth > 0;
 }
@@ -141,6 +145,14 @@ void SceneFunctions::Update(){
                 delete leaving;
                 entering = stack[--stack_depth];
                 stack[stack_depth] = nullptr;
+                break;
+            }
+            case RequestType::Reload: {
+                if(!current) break;
+                Scene* again = current;
+                TeardownCurrent();
+                current = nullptr;
+                entering = again;
                 break;
             }
             case RequestType::None:

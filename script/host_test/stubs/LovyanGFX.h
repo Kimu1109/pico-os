@@ -42,6 +42,7 @@ namespace fonts { inline const lgfx::v1::U8g2font Font0{8}; }
 
 struct LGFX_Sprite {
     int font_px = 24;   //現在のフォントの1文字高(px)
+    float text_size_x = 0; //0 = text_size と同じ
     float text_size = 1;  //拡大率(実機と同じく小数も取る。文字の大きさの設定の1.25倍)
 
     // writePixel/readPixelValueだけは実際にバッファへ読み書きする(1byte/pixelの
@@ -69,8 +70,11 @@ struct LGFX_Sprite {
     void setFont(const void* font){
         if(font) font_px = ((const lgfx::v1::U8g2font*)font)->px;
     }
-    void setTextSize(float size){ text_size = (size > 0) ? size : 1; }
-    float getTextSizeX() const { return text_size; }
+    void setTextSize(float size){ text_size = (size > 0) ? size : 1; text_size_x = 0; }
+    // 横だけの拡大率(入りきらない文字を横に縮める Button/TabBar が使う)。縦は text_size のまま
+    void setTextSize(float sx, float sy){ text_size = (sy > 0) ? sy : 1; text_size_x = (sx > 0) ? sx : 1; }
+    float getTextSizeX() const { return text_size_x > 0 ? text_size_x : text_size; }
+    float getTextSizeY() const { return text_size; }
     void setTextColor(int, int = 0){}
     void setTextWrap(bool, bool = false){}
     // クリップ矩形は覚えるだけ(描き込みには効かせない)。getClipRect()は

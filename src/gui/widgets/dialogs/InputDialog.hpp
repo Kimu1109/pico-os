@@ -7,6 +7,7 @@
 #include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/dialogs/DialogLayout.hpp"
 #include "gui/core/Keyboard_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 
 // ラベル + テキスト入力 + ボタン(最大2つ)のダイアログ。
 //
@@ -92,7 +93,7 @@ class InputDialog : public Widget {
     public:
 
         InputDialog(const char* label_content, bool isSingleLine,
-                    const char* submit_text = "決定", const char* cancel_text = "キャンセル"){
+                    const char* submit_text = TR("決定"), const char* cancel_text = TR("キャンセル")){
             this->isSingleLine = isSingleLine;
 
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
@@ -103,7 +104,7 @@ class InputDialog : public Widget {
             this->label_box->add(this->label); //所有権は label_box へ移る
 
             this->input = new Textbox<PICO_STR_LL>("", 0, 0, 0, 0, true);
-            this->input->setPlaceholder("ここに入力...");
+            this->input->setPlaceholder(TR("ここに入力..."));
             this->input->setParent(this);
 
             const bool has_submit = DialogLayout::HasText(submit_text);
@@ -111,7 +112,7 @@ class InputDialog : public Widget {
             if(has_submit) this->submit_button = makeButton(submit_text, true);
             if(has_cancel) this->cancel_button = makeButton(cancel_text, false);
             //どちらも空だと閉じられなくなるので、決定だけは出す
-            if(!has_submit && !has_cancel) this->submit_button = makeButton("決定", true);
+            if(!has_submit && !has_cancel) this->submit_button = makeButton(TR("決定"), true);
 
             this->updatePlaces();
 

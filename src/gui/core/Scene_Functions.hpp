@@ -17,7 +17,8 @@ namespace SceneFunctions {
         None,
         Change, // 現シーンを破棄して置き換える(スタックは変化しない)
         Push,   // 現シーンをスタックへ退避して新シーンへ進む(Pop()で戻れる)
-        Pop     // 現シーンを破棄して一つ前のシーンへ戻る
+        Pop,    // 現シーンを破棄して一つ前のシーンへ戻る
+        Reload  // 現シーンのウィジェットを捨ててonEnter()で作り直す(シーンオブジェクトとスタックはそのまま)
     };
 
     inline Scene* current = nullptr;
@@ -35,6 +36,8 @@ namespace SceneFunctions {
     void Change(Scene* next);
     void Push(Scene* next);
     void Pop();
+    // 表示言語を切り替えたときなど、今の画面を作り直す(onExit()→onEnter()。シーンのメンバは残る)
+    void Reload();
 
     bool CanPop();
     Scene* Current();

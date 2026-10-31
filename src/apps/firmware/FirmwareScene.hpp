@@ -9,6 +9,7 @@
 #include "services/Firmware_Functions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdint>
 
@@ -23,7 +24,7 @@
 // (準備ができて再起動を待っているときだけはそのまま)。
 class FirmwareScene : public Scene {
     public:
-        static constexpr const char* kAppName = "本体の更新";
+        static constexpr const char* kAppName = TR_NOOP("本体の更新"); //登録名(launcher.cfg 等の識別子)は原文のまま。見せるときに I18nFunctions::Tr()
 
         FirmwareScene() = default;
         // SDの更新ファイルを開いた状態で始める(ファイルアプリから)

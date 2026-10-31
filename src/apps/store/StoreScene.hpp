@@ -6,6 +6,7 @@
 #include "gui/widgets/ProgressBar.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "apps/store/App_Store.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdint>
 
@@ -24,7 +25,7 @@
 // それより強い権限が付いていれば入れない)。
 class StoreScene : public Scene {
     public:
-        static constexpr const char* kAppName = "ストア";
+        static constexpr const char* kAppName = TR_NOOP("ストア"); //登録名(launcher.cfg 等の識別子)は原文のまま。見せるときに I18nFunctions::Tr()
 
     private:
         Button* back_button = nullptr;

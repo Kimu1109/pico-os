@@ -6,11 +6,12 @@
 #include "OS_Data.hpp"
 
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 
 namespace {
-    const char* const kWday[7] = { "日", "月", "火", "水", "木", "金", "土" };
+    const char* const kWday[7] = { TR("日"), TR("月"), TR("火"), TR("水"), TR("木"), TR("金"), TR("土") };
     constexpr int kSideMargin = 6;
     constexpr int kCols = 3;
 }
@@ -149,16 +150,16 @@ void LockScreen::render(){
         char buf[32];
         snprintf(buf, sizeof(buf), "%02d:%02d", t.tm_hour, t.tm_min);
         center(FontFn::Big, PICO_FORECOLOR, 12, buf);
-        snprintf(buf, sizeof(buf), "%d月%d日(%s)", t.tm_mon + 1, t.tm_mday, kWday[t.tm_wday % 7]);
+        snprintf(buf, sizeof(buf), TR("%d月%d日(%s)"), t.tm_mon + 1, t.tm_mday, kWday[t.tm_wday % 7]);
         center(FontFn::Small, PICO_DARKGREY, 46, buf);
     }else{
-        center(FontFn::Normal, PICO_FORECOLOR, 22, "画面ロック");
+        center(FontFn::Normal, PICO_FORECOLOR, 22, TR("画面ロック"));
     }
 
     // 文言
     char msg[80];
     const unsigned long wait = (LockFunctions::WaitRemainingMs(millis()) + 999) / 1000;
-    if(wait > 0) snprintf(msg, sizeof(msg), "%lu秒待ってください", wait);
+    if(wait > 0) snprintf(msg, sizeof(msg), TR("%lu秒待ってください"), wait);
     else snprintf(msg, sizeof(msg), "%s", LockFunctions::Message());
     center(FontFn::Small, (wait > 0 || LockFunctions::MessageIsError()) ? PICO_RED : PICO_FORECOLOR, 66, msg);
 
@@ -184,12 +185,12 @@ void LockScreen::render(){
         Label<PICO_STR_S>::DrawPlain(size, down ? PICO_BACKGROUND : fg, x + (w - tw) / 2, y + (h - th) / 2, w, label);
     };
 
-    if(this->shown_ringing) key(kKeyRing, "アラーム/タイマーを止める", PICO_RED);
+    if(this->shown_ringing) key(kKeyRing, TR("アラーム/タイマーを止める"), PICO_RED);
 
     static const char* const digits[9] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
     for(int k = 0; k < 9; k++) key(k, digits[k], PICO_FORECOLOR);
     const bool cancel = (this->len == 0 && !LockFunctions::IsLocked());
-    key(kKeyBack, cancel ? "取消" : "消す", PICO_FORECOLOR);
+    key(kKeyBack, cancel ? TR("取消") : TR("消す"), PICO_FORECOLOR);
     key(kKeyZero, "0", PICO_FORECOLOR);
     key(kKeyOk, "OK", PICO_FORECOLOR);
 

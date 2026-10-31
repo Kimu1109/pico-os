@@ -42,6 +42,8 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
         int16_t fit_w[kMaxTabs] = {};
         void relayoutFit();
 
+        // 空白も日本語も含まない英字だけの1語か(折り返さずに横へ縮めて1行に収めるもの)
+        static bool isSingleLatinWord(const char* s);
         // ラベルが1行に収まらない場合の折返し位置(先頭からのバイト数)を返す。0 = 折り返さない。
         // フォントが適用済みであること(render()の中からしか呼ばない)
         int wrapOffset(const FixedString<PICO_STR_M>& label, int budget_w) const;

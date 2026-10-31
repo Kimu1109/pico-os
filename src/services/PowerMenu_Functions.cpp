@@ -8,6 +8,7 @@
 #include "system/Log_Functions.hpp"
 #include "gui/widgets/WidgetRegistry.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // 開いているメニュー(シーンの切り替えでダイアログごと消えることがあるのでIDで持つ)
@@ -18,11 +19,11 @@ namespace {
 void PowerMenuFunctions::Open(){
     if(WidgetRegistry::Resolve(open_menu)) return;
 
-    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "電源", "", "キャンセル");
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, TR("電源"), "", TR("キャンセル"));
     if(!d) return;
-    d->addChoice("スリープ");
-    d->addChoice("再起動");
-    if(LockFunctions::HasPin()) d->addChoice("ロック");
+    d->addChoice(TR("スリープ"));
+    d->addChoice(TR("再起動"));
+    if(LockFunctions::HasPin()) d->addChoice(TR("ロック"));
     d->layout();
     WidgetFunctions::AddDialog(d);
     d->setVisible(true);

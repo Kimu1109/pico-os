@@ -4,6 +4,7 @@
 #include "hal/Sound_Functions.hpp"
 #include "storage/Msc_Sector_Bridge.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdlib>
@@ -184,12 +185,12 @@ extern "C" int32_t tud_msc_scsi_cb(uint8_t lun, uint8_t const scsi_cmd[16], void
 
 const char* UsbDriveFunctions::StartErrorToStr(StartError e){
     switch(e){
-        case StartError::None:          return "成功";
-        case StartError::NoSd:          return "SDカードが使えません";
-        case StartError::AlreadyActive: return "すでにUSBドライブになっています";
-        case StartError::UsbFailed:     return "USBの準備に失敗しました";
+        case StartError::None:          return TR("成功");
+        case StartError::NoSd:          return TR("SDカードが使えません");
+        case StartError::AlreadyActive: return TR("すでにUSBドライブになっています");
+        case StartError::UsbFailed:     return TR("USBの準備に失敗しました");
     }
-    return "不明な誤り";
+    return TR("不明な誤り");
 }
 
 UsbDriveFunctions::StartError UsbDriveFunctions::Start(){

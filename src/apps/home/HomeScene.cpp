@@ -8,6 +8,7 @@
 #include "gui/widgets/dialogs/InputDialog.hpp"
 #include "apps/home/Home_Layout.hpp"
 #include "apps/home/Home_Widget.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -17,7 +18,7 @@ void HomeScene::onEnter(){
 
     if(AppFunctions::VisibleCount() == 0){
         this->empty_label = new Label<PICO_STR_L>(MARGIN, content.y + MARGIN,
-            "アプリが登録されていません。\nApp_List.cpp のSetup()へ追加してください。");
+            TR("アプリが登録されていません。\nApp_List.cpp のSetup()へ追加してください。"));
         this->empty_label->setMaxWidth(content.w - MARGIN * 2);
         WidgetFunctions::Add(this->empty_label);
         return;
@@ -58,7 +59,7 @@ void HomeScene::onEnter(){
     WidgetFunctions::Add(this->next_button);
 
     //フォルダを開いている間だけ出す。押すとトップへ戻る
-    this->back_button = new Button(0, pager_y, "戻る");
+    this->back_button = new Button(0, pager_y, TR("戻る"));
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setW(pager_w);
     this->back_button->setH(PAGER_H - 4 + Button::kFrameExtra);
@@ -223,14 +224,14 @@ void HomeScene::openItemMenu(const AppGrid::LongPress& target){
     const char* title = "";
     if(is_widget){
         if(target.index < 0 || target.index >= HomeLayout::placed_count) return;
-        title = HomeLayout::Info(HomeLayout::placed[target.index].kind).name;
+        title = I18nFunctions::Tr(HomeLayout::Info(HomeLayout::placed[target.index].kind).name);
     }else if(is_folder){
         if(!AppFunctions::FolderExists(target.index)) return;
         title = AppFunctions::FolderName(target.index);
     }else{
         const AppEntry* entry = AppFunctions::Get(target.index);
         if(!entry) return;
-        title = entry->name.c_str();
+        title = I18nFunctions::Tr(entry->name.c_str()); //登録名は日本語のまま(launcher.cfg 等の識別子)。見せるときだけ訳す
     }
 
     //並びの中の位置と長さ(フォルダの中ではフォルダの中の見えているアプリ)
@@ -244,33 +245,33 @@ void HomeScene::openItemMenu(const AppGrid::LongPress& target){
         pos = HomeLayout::SequencePosition(target.type, target.index);
     }
 
-    auto* d = new PickerDialog(PickerDialog::Mode::Choice, title, "", "キャンセル");
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, title, "", TR("キャンセル"));
     if(!d) return;
-    if(pos > 1)     { d->addChoice("先頭へ移動"); actions[count++] = Action::Front; }
-    if(pos > 0)     { d->addChoice("前へ移動");   actions[count++] = Action::Prev; }
-    if(pos >= 0 && pos < n - 1) { d->addChoice("後ろへ移動"); actions[count++] = Action::Next; }
+    if(pos > 1)     { d->addChoice(TR("先頭へ移動")); actions[count++] = Action::Front; }
+    if(pos > 0)     { d->addChoice(TR("前へ移動"));   actions[count++] = Action::Prev; }
+    if(pos >= 0 && pos < n - 1) { d->addChoice(TR("後ろへ移動")); actions[count++] = Action::Next; }
     if(is_widget){
         const HomeLayout::Placed& p = HomeLayout::placed[target.index];
         const uint8_t sizes = HomeLayout::Info(p.kind).sizes;
         const uint8_t cur = HomeLayout::SizeBitOf(p.w, p.h);
-        if((sizes & HomeLayout::S1x1) && cur != HomeLayout::S1x1){ d->addChoice("大きさ: 小");   actions[count++] = Action::Size1x1; }
-        if((sizes & HomeLayout::S2x1) && cur != HomeLayout::S2x1){ d->addChoice("大きさ: 横長"); actions[count++] = Action::Size2x1; }
-        if((sizes & HomeLayout::S2x2) && cur != HomeLayout::S2x2){ d->addChoice("大きさ: 大");   actions[count++] = Action::Size2x2; }
-        d->addChoice("削除"); actions[count++] = Action::Remove;
+        if((sizes & HomeLayout::S1x1) && cur != HomeLayout::S1x1){ d->addChoice(TR("大きさ: 小"));   actions[count++] = Action::Size1x1; }
+        if((sizes & HomeLayout::S2x1) && cur != HomeLayout::S2x1){ d->addChoice(TR("大きさ: 横長")); actions[count++] = Action::Size2x1; }
+        if((sizes & HomeLayout::S2x2) && cur != HomeLayout::S2x2){ d->addChoice(TR("大きさ: 大"));   actions[count++] = Action::Size2x2; }
+        d->addChoice(TR("削除")); actions[count++] = Action::Remove;
     }else if(is_folder){
-        d->addChoice("名前を変える");   actions[count++] = Action::Rename;
-        d->addChoice("フォルダを解除"); actions[count++] = Action::Dissolve;
+        d->addChoice(TR("名前を変える"));   actions[count++] = Action::Rename;
+        d->addChoice(TR("フォルダを解除")); actions[count++] = Action::Dissolve;
     }else{
         //別のフォルダへ移せるのは、他にフォルダがあるか、新しく作れるとき
         const int others = AppFunctions::FolderCount() - (in_folder ? 1 : 0);
         if(others > 0 || AppFunctions::FolderCount() < AppFunctions::kMaxFolders){
-            d->addChoice(in_folder ? "別のフォルダへ" : "フォルダへ入れる"); actions[count++] = Action::ToFolder;
+            d->addChoice(in_folder ? TR("別のフォルダへ") : TR("フォルダへ入れる")); actions[count++] = Action::ToFolder;
         }
-        if(in_folder){ d->addChoice("フォルダから出す"); actions[count++] = Action::OutOfFolder; }
-        if(canHide(target.index)){ d->addChoice("ランチャから隠す"); actions[count++] = Action::Hide; }
+        if(in_folder){ d->addChoice(TR("フォルダから出す")); actions[count++] = Action::OutOfFolder; }
+        if(canHide(target.index)){ d->addChoice(TR("ランチャから隠す")); actions[count++] = Action::Hide; }
     }
     if(!in_folder && HomeLayout::placed_count < HomeLayout::kMaxWidgets){
-        d->addChoice("ウィジェット追加"); actions[count++] = Action::Add;
+        d->addChoice(TR("ウィジェット追加")); actions[count++] = Action::Add;
     }
     d->layout();
     WidgetFunctions::AddDialog(d);
@@ -351,10 +352,10 @@ void HomeScene::openFolderPicker(int app_index){
     if(!can_create && AppFunctions::FolderCount() - (current >= 0 ? 1 : 0) <= 0) return;
     int folders[AppFunctions::kMaxFolders + 1];
     int count = 0;
-    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "どのフォルダへ", "", "キャンセル");
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, TR("どのフォルダへ"), "", TR("キャンセル"));
     if(!d) return;
     if(can_create){
-        d->addChoice("新しいフォルダ");
+        d->addChoice(TR("新しいフォルダ"));
         folders[count++] = -1;
     }
     for(int f = 0; f < AppFunctions::kMaxFolders; f++){
@@ -394,7 +395,7 @@ void HomeScene::openFolderName(int app_index, int folder){
     const bool rename = folder >= 0;
     if(rename ? !AppFunctions::FolderExists(folder) : !AppFunctions::Get(app_index)) return;
 
-    auto* d = new InputDialog("フォルダ名:", true);
+    auto* d = new InputDialog(TR("フォルダ名:"), true);
     if(!d) return;
     if(rename) d->setInput(AppFunctions::FolderName(folder));
     WidgetFunctions::AddDialog(d);
@@ -440,7 +441,7 @@ void HomeScene::openAddMenu(int seq_pos){
     Choice choices[kMaxChoices];
     int count = 0;
 
-    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "ウィジェット", "", "キャンセル");
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, TR("ウィジェット"), "", TR("キャンセル"));
     if(!d) return;
     static const uint8_t kSizes[3][2] = { {1, 1}, {2, 1}, {2, 2} };
     for(int k = 0; k < HomeLayout::kKindCount; k++){
@@ -450,7 +451,7 @@ void HomeScene::openAddMenu(int seq_pos){
         for(const auto& sz : kSizes){
             if(!(info.sizes & HomeLayout::SizeBitOf(sz[0], sz[1]))) continue;
             char label[48];
-            snprintf(label, sizeof(label), "%s(%s)", info.name, HomeLayout::SizeName(sz[0], sz[1]));
+            snprintf(label, sizeof(label), "%s(%s)", I18nFunctions::Tr(info.name), HomeLayout::SizeName(sz[0], sz[1]));
             d->addChoice(label);
             choices[count++] = Choice{ (HomeLayout::Kind)k, sz[0], sz[1] };
         }

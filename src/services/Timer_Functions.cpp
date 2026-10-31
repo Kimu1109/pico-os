@@ -7,6 +7,7 @@
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 #include <cstdio>
 
 namespace {
@@ -45,7 +46,7 @@ namespace {
 
     void ShowDialog(){
         if(WidgetRegistry::Resolve(t_dialog)) return;
-        MsgDialog* d = new MsgDialog("タイマー: 時間になりました", "", "止める");
+        MsgDialog* d = new MsgDialog(TR("タイマー: 時間になりました"), "", TR("止める"));
         if(!d) return;
         d->setVisibleIcon(true);
         d->setIconId(IconID::AlertTriangle);

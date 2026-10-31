@@ -25,7 +25,7 @@ namespace CaptivePortal { class CaptiveLogin; } // net/Captive_Portal.hpp。同�
 //   画面    … 明るさと自動調光・スリープ・ダークテーマ(display.cfg)・画面ロック(lock.cfg)・タッチ位置の補正(touch.cfg)
 //   音      … 音量・音質(出力の周波数)・電池駆動中に音量を絞る(sound.cfg)
 //   時刻    … タイムゾーン・NTPサーバー(network.cfg)・時刻の手動設定(Wi-Fiが無いとき用)
-//   他      … ランチャで隠したアプリ・ブラウザのホーム(network.cfg)・バックグラウンドの一覧(BackgroundScene)・起動時の自己診断(user.cfg)・開発者向け(debug.cfg)
+//   他      … 表示言語(user.cfg)・ランチャで隠したアプリ・ブラウザのホーム(network.cfg)・バックグラウンドの一覧(BackgroundScene)・起動時の自己診断(user.cfg)・開発者向け(debug.cfg)
 // 上の段の右端の「電源」はスリープ/再起動のメニュー(PowerMenuFunctions。ステータスバーの長押しと同じもの)
 //
 // ウィジェットは全タブぶんをonEnter()で作り、表示中のタブのものだけを見せる
@@ -239,6 +239,10 @@ class SettingsScene : public Scene {
         Checkbox*          perf_overlay_checkbox = nullptr;
         Checkbox*          lua_debugger_checkbox = nullptr;
         Checkbox*          watchdog_checkbox    = nullptr;
+        // 表示言語(user.cfgの language)。選んだらこの画面を作り直す(I18nFunctions)
+        Label<PICO_STR_M>* lang_title           = nullptr;
+        DropdownMenu*      lang_dropdown        = nullptr;
+        int                lang_selected_index  = -1;
 
         // network.cfg / user.cfgから読んだ現在値
         FixedString<PICO_STR_M>  ntp1_value;
@@ -297,6 +301,7 @@ class SettingsScene : public Scene {
         void updateBrightness();
         void updateSleep();
         void updateTextSize();
+        void updateLanguage();
         void updateSampleRate();
         void updateRoute();
         void refreshRouteStatus();

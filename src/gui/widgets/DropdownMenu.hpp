@@ -4,6 +4,7 @@
 #include "gui/widgets/ScrollList.hpp"
 #include "gui/widgets/Label.hpp"
 #include "util/InplaceFunction.hpp"
+#include "system/I18n_Functions.hpp"
 
 class DropdownMenu : public Widget {
 
@@ -61,7 +62,7 @@ class DropdownMenu : public Widget {
             this->value = new Label<PICO_STR_L>("");
             this->value->setX(0);
             this->value->setY(0);
-            this->value->setPlaceholder("タップして選択...");
+            this->value->setPlaceholder(TR("タップして選択..."));
             this->value->setBackgroundColor(PICO_BACKGROUND);
             this->value->setBorderWidth(1);
             this->value->setBorderColor(PICO_BLACK);

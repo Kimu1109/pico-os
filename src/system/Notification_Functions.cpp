@@ -3,6 +3,7 @@
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -399,9 +400,9 @@ const char* NotificationFunctions::TriggerToStr(Trigger t){
 const char* NotificationFunctions::ResultToStr(Result r){
     switch(r){
         case Result::Ok:         return "ok";
-        case Result::Full:       return "通知の予約がいっぱいです";
-        case Result::OwnerQuota: return "このアプリの通知の予約が上限です";
-        case Result::Invalid:    return "通知の指定が正しくありません";
+        case Result::Full:       return TR("通知の予約がいっぱいです");
+        case Result::OwnerQuota: return TR("このアプリの通知の予約が上限です");
+        case Result::Invalid:    return TR("通知の指定が正しくありません");
     }
     return "?";
 }

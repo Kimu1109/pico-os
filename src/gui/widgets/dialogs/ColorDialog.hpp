@@ -3,6 +3,7 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
+#include "system/I18n_Functions.hpp"
 
 class ColorDialog : public Widget {
     private:
@@ -43,7 +44,7 @@ class ColorDialog : public Widget {
         ColorDialog(){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
-            this->title = new Label<PICO_STR_S>(BASE_X, BASE_Y, "色を選択");
+            this->title = new Label<PICO_STR_S>(BASE_X, BASE_Y, TR("色を選択"));
 
             this->button_ok = new Button(BASE_X + DIALOG_W / 2 + BUTTON_MARGIN, BUTTON_Y - 3, "OK");
             this->button_ok->setAllowTextSpacing(false);
@@ -55,7 +56,7 @@ class ColorDialog : public Widget {
                 this->setVisible(false);
             });
 
-            this->button_no = new Button(BASE_X + BUTTON_MARGIN, BUTTON_Y - 3, "キャンセル");
+            this->button_no = new Button(BASE_X + BUTTON_MARGIN, BUTTON_Y - 3, TR("キャンセル"));
             this->button_no->setAllowTextSpacing(false);
             this->button_no->setFontSize(FontFn::Small);
             this->button_no->setW(BUTTON_W + Button::kFrameExtraTight);

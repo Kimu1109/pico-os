@@ -110,12 +110,22 @@ void TabBar::causeOnPressStart(){
     }
 }
 
+bool TabBar::isSingleLatinWord(const char* s){
+    if(!*s) return false;
+    for(; *s; ++s){
+        if(*s == ' ' || (uint8_t)*s >= 0x80) return false;
+    }
+    return true;
+}
+
 int TabBar::wrapOffset(const FixedString<PICO_STR_M>& label, int budget_w) const {
     //フォントはfontApply()済みである前提(呼び出し元のrender()が一度だけ適用する)
     if(OSData::frame->textWidth(label.c_str()) <= budget_w) return 0;
 
     const int chars = FixedString<PICO_STR_M>::charCount(label.c_str());
     if(chars <= 1) return 0; //1文字で溢れるなら折り返しても意味が無い
+    //空白の無い英字の1語(訳した "Display" 等)は語の途中で切らず、render() が横に縮めて1行に収める
+    if(isSingleLatinWord(label.c_str())) return 0;
 
     //収まる最大の文字数を探す。バイトではなく文字単位で刻むのは、
     //UTF-8の途中で切ると文字が丸ごと化けるため
@@ -127,6 +137,11 @@ int TabBar::wrapOffset(const FixedString<PICO_STR_M>& label, int budget_w) const
         head.assign(label.c_str(), (size_t)bytes);
         if(OSData::frame->textWidth(head.c_str()) > budget_w) break;
         last_fit = bytes;
+    }
+
+    //英語等の語の区切り(空白)があれば、入りきる範囲の最後の空白で折り返す(次の行は空白の後から)
+    for(int b = last_fit; b > 0; b--){
+        if(label.c_str()[b] == ' ') return b + 1;
     }
 
     //先頭1文字すら入らない場合は諦めて1行のまま(はみ出させる)
@@ -168,14 +183,27 @@ void TabBar::render(){
 
         if(split == 0){
             const char* label = this->labels[i].c_str();
-            const int str_w = OSData::frame->textWidth(label);
+            int str_w = OSData::frame->textWidth(label);
+            //入りきらない英字の1語は横だけ縮める(wrapOffset() 参照)
+            const int budget_w = w - kTextPadding * 2;
+            const float sx = OSData::frame->getTextSizeX();
+            const float sy = OSData::frame->getTextSizeY();
+            const bool squeeze = str_w > budget_w && budget_w > 0 && isSingleLatinWord(label);
+            if(squeeze){
+                OSData::frame->setTextSize(sx * budget_w / str_w, sy);
+                str_w = budget_w;
+            }
             OSData::frame->setCursor(x + (w - str_w) / 2, g_rect.y + (g_rect.h - str_h) / 2);
             OSData::frame->print(label);
+            if(squeeze) OSData::frame->setTextSize(sx, sy);
         }else{
             FixedString<PICO_STR_M> line;
             const int top = g_rect.y + (g_rect.h - str_h * 2) / 2;
 
-            line.assign(this->labels[i].c_str(), (size_t)split);
+            //空白で折り返したときは1行目の末尾の空白を落とす(中央へ寄せるときにずれないように)
+            size_t head_len = (size_t)split;
+            while(head_len > 0 && this->labels[i].c_str()[head_len - 1] == ' ') head_len--;
+            line.assign(this->labels[i].c_str(), head_len);
             OSData::frame->setCursor(x + (w - OSData::frame->textWidth(line.c_str())) / 2, top);
             OSData::frame->print(line.c_str());
 

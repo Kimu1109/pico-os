@@ -4,6 +4,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/ScrollList.hpp"
+#include "system/I18n_Functions.hpp"
 
 // 周辺のWi-Fiをスキャンし、一覧から選んで接続するダイアログ(SettingsScene専用)。
 //
@@ -89,12 +90,12 @@ class WifiScanDialog : public Widget {
                 this->setVisible(false);
             });
 
-            this->rescan_button = makeButton("再スキャン", BASE_X + MARGIN, RESCAN_W);
+            this->rescan_button = makeButton(TR("再スキャン"), BASE_X + MARGIN, RESCAN_W);
             this->rescan_button->setOnPressStart([this](){
                 if(this->on_rescan) this->on_rescan();
             });
 
-            this->close_button = makeButton("閉じる",
+            this->close_button = makeButton(TR("閉じる"),
                 BASE_X + DIALOG_WIDTH - MARGIN - CLOSE_W - BUTTON_EDGE, CLOSE_W);
             this->close_button->setOnPressStart([this](){
                 if(this->on_closed) this->on_closed(false);

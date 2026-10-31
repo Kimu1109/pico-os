@@ -121,6 +121,15 @@ Luaアプリは `pico.launch_reason()` が `tag == "scene"`(`data` が画面の�
 **実機では使わない口**なので、どちらも受け取れなかったら(ランチャから開いたら)いつもの画面のまま。
 撮る一覧は `script/web_shots.sh`。
 
+### 表示言語
+
+`--lang en` で英語のUIで起動する(`/sys/user.cfg` の `language` より優先し、保存はしない)。Webでは `?lang=en`、
+指定が無ければブラウザの言語(`ja` 以外は英語)を user.cfg に language が無いときの既定にする。仕組みは `docs/design/i18n.md`。
+
+```sh
+SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --lang en --app 設定 --shot settings-en.ppm 150
+```
+
 ### Luaアプリのホットリロード
 
 `--hot-reload` を `--app` と一緒に付けると、開いたLuaアプリのフォルダ(下のフォルダも)の `.lua` と `app.cfg` を

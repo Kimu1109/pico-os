@@ -26,12 +26,14 @@
 //   picoos_pc --app NAME            起動したらランチャの名前NAMEのアプリを開いておく
 //   picoos_pc --scene SCENE         --app のアプリへ「最初に開く画面」を頼む(撮りたい画面まで
 //                                   自動で進める。意味はアプリごと。pc/README.md「起動時に開くアプリ」)
+//   picoos_pc --lang en             表示言語(ja / en)。/sys/user.cfg の language より優先し、保存はしない
 //   picoos_pc --app NAME --hot-reload  NAMEのLuaアプリのフォルダの .lua / app.cfg を保存するたびに
 //                                   同じ引数で起動し直す(pc/HotReload_PC.hpp、pc/README.md「ホットリロード」)
 //
 // 使い方(Web): index.html を開くだけ。環境変数の代わりにURLのクエリで状態を指定する
 //   index.html?wifi=disconnected&rssi=-85
 //   index.html?app=テトリス&scene=play   (--app / --scene と同じ)
+//   index.html?lang=en                   (--lang と同じ。無ければブラウザの言語が既定)
 //   ※--shot / --tap はネイティブ専用(ブラウザではDevToolsと画面のPNG保存を使う)
 #include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
 #include <SDL2/SDL.h>
@@ -60,6 +62,7 @@
 #include "services/DeviceKey_Functions.hpp" // OTPの端末の鍵(PCではファイルで真似る)
 #include "apps/firmware/Fw_Store.hpp"                // ファームの更新の置き場(PCではディレクトリで真似る)
 #include "services/App_Functions.hpp"                // 起動時に開くアプリ(--app / ?app=)
+#include "system/I18n_Functions.hpp"                 // 表示言語(--lang / ?lang=)
 
 //OTP(端末の鍵)を真似るファイル。PICOOS_OTP_FILE、無ければSDのルートの隣の otp_emu.bin
 //(SDの中に置くと「SDだけを盗まれても読めない」を試せないので外に置く。Webは仮想FSなので読み直しで消える)
@@ -87,6 +90,21 @@ static void configureOtaDir()
         path = std::string(root ? root : PICOOS_SD_ROOT_DEFAULT) + "/../ota_emu";
     }
     FwStorePc::dir = path.c_str();
+}
+
+//表示言語。PICOOS_LANG(ネイティブは --lang、Webは ?lang=)は /sys/user.cfg より優先する(保存はしない)。
+//Webでは指定が無ければブラウザの言語を、user.cfg に language が無いときの既定にする
+//(海外から触る人には英語で見せる。ja 以外の言語は英語)。setup() より前に呼ぶ
+static void configureLanguage()
+{
+    if (const char* env = getenv("PICOOS_LANG")) {
+        if (env[0]) I18nFunctions::override_code = env;
+    }
+#if defined(__EMSCRIPTEN__)
+    static char browser_lang[16];
+    EM_ASM({ stringToUTF8((navigator.language || ""), $0, $1); }, browser_lang, (int)sizeof(browser_lang));
+    if (browser_lang[0]) I18nFunctions::default_code = browser_lang;
+#endif
 }
 
 //起動時に開くアプリ。PICOOS_START_APP(ネイティブは --app、Webは ?app=)の名前のアプリを、
@@ -309,6 +327,7 @@ namespace {
         setupPcKeyboard();
         configureOtpFile();
         configureOtaDir();
+        configureLanguage();
         setup();
         launchStartApp();
         PicoOsHotReload::Start(getenv("PICOOS_START_APP"));
@@ -364,6 +383,7 @@ namespace {
         { "headphone", "PICOOS_HEADPHONE" },
         { "app",   "PICOOS_START_APP"   },
         { "scene", "PICOOS_START_SCENE" },
+        { "lang",  "PICOOS_LANG" },
     };
 
     // application/x-www-form-urlencoded をほどく(%XX と '+' だけ)
@@ -678,6 +698,7 @@ int main(int, char**)
 
     configureOtpFile();
     configureOtaDir();
+    configureLanguage();
     setup();
     setup1();
     launchStartApp();
@@ -757,6 +778,10 @@ int main(int argc, char** argv)
         //環境変数(PICOOS_START_APP/SCENE)と同じ扱い。引数のほうを優先する
         if (strcmp(argv[i], "--app") == 0 && i + 1 < argc) {
             setenv("PICOOS_START_APP", argv[++i], 1);
+            continue;
+        }
+        if (strcmp(argv[i], "--lang") == 0 && i + 1 < argc) {
+            setenv("PICOOS_LANG", argv[++i], 1);
             continue;
         }
         if (strcmp(argv[i], "--scene") == 0 && i + 1 < argc) {

@@ -157,6 +157,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
   **tablerは16pxで細い線が消えることがあるので生成後に目視**し、破綻したら `custom_icons/` へ描き起こす(基準は `script/custom_icons/README.md`)。
 - 「状態の否定」は専用アイコンを作らず、基底アイコンに `IconID::X` を `PICO_RED` で重ねる(SD無し・Wi-Fi圏外)。
 - ライセンスは MIT(`LICENSE`、著作権者 Kimu1109)。**他者のコード・データ・素材を同梱したら `THIRD_PARTY_LICENSES.md` に1行足す**(GPL等の継承型はファームに組み込まずSDのデータに留める)。
+- **画面に出す日本語の文字列は `TR("…")` で包み、`python3 script/i18n.py update` で `i18n/en.po` へ訳を書く**(静的な表は `TR_NOOP()` + 使う所で `I18nFunctions::Tr()`。アプリの登録名は訳さず見せる所で訳す。`docs/design/i18n.md`)。
 - 物理キーボードを扱う画面は `Scene::onKey()` を実装する。外部コントローラーの入力元は `PadFunctions` に `Source` を足す(`docs/design/input.md`)。
 
 ## テストとCI
@@ -195,6 +196,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `devtools.md` | プロファイラ・Luaデバッガ・クラッシュダンプ・サンドボックス・実機確認の道具・ファームの更新・ビルド時に選ぶハードウェア機能・ナイトリービルド |
 | `performance.md` | 最適化とメモリ計測の記録・解決済みの不具合 |
 | `pc-web.md` | Webビルド(WebAssembly) |
+| `i18n.md` | 表示言語の切り替え(`TR()`・`i18n/en.po`・`script/i18n.py`・言語の選び方) |
 | `roadmap-ideas.md` | ロードマップと未実装の設計アイデア |
 
 ## Claude Codeへの申し送り

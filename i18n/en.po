@@ -1054,7 +1054,7 @@ msgstr "Issuing an invite code…"
 msgid "前の操作が終わるまで待ってください"
 msgstr "Wait for the previous action to finish"
 
-#: src/apps/chat/ChatScene.cpp src/apps/mail/MailScene.cpp src/apps/store/StoreScene.cpp src/apps/todo/TodoScene.cpp src/boot/App_List.cpp src/gui/scenes/SettingsScene_Time.cpp
+#: src/apps/chat/ChatScene.cpp src/apps/mail/MailScene.cpp src/apps/store/StoreScene.cpp src/apps/todo/TodoScene.cpp src/boot/App_List.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene_Time.cpp
 msgid "設定"
 msgstr "Settings"
 
@@ -2475,8 +2475,8 @@ msgid "transcribe.cfg の model / language / prompt に使えない文字があ�
 msgstr "model / language / prompt in transcribe.cfg has invalid characters"
 
 #: src/apps/recorder/Transcribe_Client.cpp
-msgid "APIキーがありません。[キー] から入れてください"
-msgstr "No API key. Enter one with [Key]"
+msgid "APIキーがありません。[設定] から入れてください"
+msgstr "No API key. Enter one with [Settings]"
 
 #: src/apps/recorder/Transcribe_Client.cpp
 msgid "APIキーに使えない文字があるか、長すぎます"
@@ -4199,10 +4199,6 @@ msgid "文字起こし"
 msgstr "Transcribe"
 
 #: src/gui/scenes/RecorderScene.cpp
-msgid "キー"
-msgstr "Key"
-
-#: src/gui/scenes/RecorderScene.cpp
 msgid "録音を途中で止めました: %s\n(%s までは保存されています)"
 msgstr "Recording stopped: %s\n(saved up to %s)"
 
@@ -4265,6 +4261,14 @@ msgstr "Could not delete"
 #: src/gui/scenes/RecorderScene.cpp
 msgid "文字起こしはオンラインが前提です。Wi-Fiに接続してください"
 msgstr "Transcription needs a connection. Connect to Wi-Fi"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "文字起こしの送り先(ホスト)\n例: 192.168.1.10:8080 / http://pc.local:8080\n空欄で既定(OpenAI)に戻す。変えないなら そのまま[決定]"
+msgstr "Transcription server (host)\ne.g. 192.168.1.10:8080 / http://pc.local:8080\nLeave empty to go back to the default (OpenAI). To keep it, just press [OK]"
+
+#: src/gui/scenes/RecorderScene.cpp
+msgid "送り先を保存できませんでした(空白を含まないURLかホスト名で)"
+msgstr "Could not save the server (use a URL or host name without spaces)"
 
 #: src/gui/scenes/RecorderScene.cpp
 msgid "%s\nAPIキー(空欄で変更なし):"

@@ -186,6 +186,40 @@ static void testConfig(){
     check(TranscribeClient::SaveKey("gsk_abc123") && HostSd::files.count(PICO_Path::FILE::CFG::SYS_TRANSCRIBE_KEY) == 1,
           "画面から入れたキーを保存できる");
     check(!TranscribeClient::SaveKey("bad key"), "使えない文字のキーは保存しない");
+
+    //画面から入れる送り先(ホスト)
+    {
+        char out[PICO_STR_LL];
+        check(TranscribeClient::NormalizeApi("192.168.1.10:8080", out, sizeof(out)), "ホスト:ポートだけでも通る");
+        eq_str(out, "https://192.168.1.10:8080/v1", "scheme が無ければ https、パスが無ければ /v1");
+        check(TranscribeClient::NormalizeApi("  http://pc.local:8080/  ", out, sizeof(out)), "前後の空白と末尾の / は落とす");
+        eq_str(out, "http://pc.local:8080/v1", "http:// は書いたとおり");
+        check(TranscribeClient::NormalizeApi("https://api.groq.com/openai/v1/", out, sizeof(out)), "パスがあればそのまま");
+        eq_str(out, "https://api.groq.com/openai/v1", "末尾の / だけ落とす");
+        check(!TranscribeClient::NormalizeApi("", out, sizeof(out)), "空は断る");
+        check(!TranscribeClient::NormalizeApi("   ", out, sizeof(out)), "空白だけは断る");
+        check(!TranscribeClient::NormalizeApi("a b", out, sizeof(out)), "中に空白があれば断る");
+        check(!TranscribeClient::NormalizeApi("host\r\nX: 1", out, sizeof(out)), "改行があれば断る");
+        check(!TranscribeClient::NormalizeApi("http://h\"x", out, sizeof(out)), "\" があれば断る");
+        check(!TranscribeClient::NormalizeApi("192.168.1.10", out, 8), "入りきらなければ断る");
+        std::string longhost = "http://";
+        longhost.append(300, 'a');
+        check(!TranscribeClient::NormalizeApi(longhost.c_str(), out, sizeof(out)), "長すぎれば断る");
+    }
+    HostSd::files.erase(PICO_Path::FILE::CFG::SYS_TRANSCRIBE_CFG);
+    check(TranscribeClient::SaveApi("192.168.1.10:8080"), "送り先を保存できる");
+    {
+        TranscribeClient c;
+        check(c.loadConfig() && c.state() == S::Ready, "手元のサーバならキー無しで読める");
+        eq_str(c.config().api.c_str(), "https://192.168.1.10:8080/v1", "保存した api を読み戻せる");
+    }
+    check(!TranscribeClient::SaveApi("bad host") , "使えない送り先は保存しない");
+    check(TranscribeClient::SaveApi("") , "空なら既定へ戻す");
+    {
+        TranscribeClient c;
+        c.loadConfig();
+        eq_str(c.config().api.c_str(), TranscribeClient::kDefaultApi, "既定(OpenAI)へ戻る");
+    }
     OSData::SD_usable = false;
     {
         TranscribeClient c;

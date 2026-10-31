@@ -62,6 +62,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/net/Http_Get.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     "$ROOT/src/apps/browser/Doc_Fetch.cpp" \
     "$ROOT/src/apps/browser/Discovery.cpp" \
     "$ROOT/src/apps/browser/Doc_Search.cpp" \
@@ -116,6 +118,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/net/Http_Get.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     -o "$OUT/calendar_sync_test" -lssl -lcrypto
 
 # 使い捨てのCAと、それで署名した localhost 用のサーバ証明書
@@ -157,6 +161,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     -o "$OUT/chat_net_test" -lssl -lcrypto
 
 ALICE=$(python3 "$CHAT" --db "$CHAT_DB" adduser alice --display ありす --password password1 | tail -1 | tr -d ' ')
@@ -209,6 +215,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     -o "$OUT/todoist_net_test" -lssl -lcrypto
 
 python3 "$TODO_FAKE" --port "$TODO_PORT" --token "$TODO_TOKEN" > "$OUT/todo_server.log" 2>&1 &
@@ -250,6 +258,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     -o "$OUT/transcribe_net_test" -lssl -lcrypto
 
 python3 "$TR_FAKE" --port "$TR_PORT" --key "$TR_KEY" > "$OUT/tr_server.log" 2>&1 &
@@ -293,6 +303,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/util/Json_Reader.cpp" \
     "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     -o "$OUT/mail_net_test" -lssl -lcrypto
 
@@ -345,6 +357,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
     "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     "$OUT/store_m.o" "$OUT/store_me.o" \
     -o "$OUT/app_store_net_test" -lssl -lcrypto
 
@@ -378,6 +392,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     "$ROOT/src/net/Http_Get.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     -o "$OUT/currency_net_test" -lssl -lcrypto
 
 python3 -m http.server "$RATES_PORT" --bind 127.0.0.1 --directory "$RATES_DIR" \
@@ -408,6 +424,8 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined -DPICOOS_PC \
     "$ROOT/src/net/Http_Request.cpp" \
     "$ROOT/src/net/Http_Transport.cpp" \
     "$ROOT/src/net/Http_Response.cpp" \
+    "$ROOT/src/system/I18n_Functions.cpp" \
+    "$ROOT/src/system/I18n_Table_En.cpp" \
     -o "$OUT/fw_download_net_test" -lssl -lcrypto
 
 python3 -m http.server "$FW_PORT" --bind 127.0.0.1 --directory "$FW_DIR/www" \

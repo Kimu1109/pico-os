@@ -113,6 +113,22 @@ int main(){
         Respond(req, &FakeSave, "picoos", body, saved);
         check(saved.empty() && saved_ssid_arg == "unchanged", "空のSSIDは保存へ渡さない");
 
+        // ページの言語はスマホの Accept-Language(ja で始まる・無ければ日本語、ほかは英語)
+        FeedAll(req, "GET / HTTP/1.1\r\nAccept-Language: en-US,en;q=0.9\r\n\r\n", 64);
+        check(!req.japanese(), "Accept-Language: en なら英語");
+        Respond(req, &FakeSave, "picoos", body, saved);
+        check(strstr(body.c_str(), "lang=\"en\"") && strstr(body.c_str(), "Wi-Fi setup for picoos")
+              && strstr(body.c_str(), "Send to device") && !strstr(body.c_str(), "本体へ送る"), "英語のページ");
+        FeedAll(req, "GET / HTTP/1.1\r\naccept-language: ja-JP,en;q=0.5\r\n\r\n", 64);
+        check(req.japanese(), "accept-language: ja(小文字の見出し)なら日本語");
+        FeedAll(req, "GET / HTTP/1.1\r\n\r\n", 64);
+        check(req.japanese(), "Accept-Language が無ければ日本語");
+        next_result = SaveResult::Full;
+        const std::string post_en = "POST /save HTTP/1.1\r\nAccept-Language: fr\r\nContent-Length: " + std::to_string(post_body.size()) + "\r\n\r\n" + post_body;
+        FeedAll(req, post_en, 64);
+        Respond(req, &FakeSave, "picoos", body, saved);
+        check(strstr(body.c_str(), "No room to save more") != nullptr, "英語(ja 以外)の誤りの文");
+
         char head[200];
         FormatHeader(200, 1234, head, sizeof(head));
         check(strstr(head, "HTTP/1.1 200 OK\r\n") == head && strstr(head, "Content-Length: 1234\r\n") != nullptr

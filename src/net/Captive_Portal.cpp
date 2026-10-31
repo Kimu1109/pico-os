@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     using namespace CaptivePortal;
@@ -417,11 +418,11 @@ bool CaptivePortal::CaptiveLogin::begin(const char* portal_url){
     fail_.clear();
     Url url;
     if(!UrlTools::Parse(url, portal_url)){
-        fail("ポータルのURLを読めません");
+        fail(TR("ポータルのURLを読めません"));
         return false;
     }
     if(!fetch(url)){
-        fail("ポータルへ繋げません");
+        fail(TR("ポータルへ繋げません"));
         return false;
     }
     return true;
@@ -448,12 +449,12 @@ void CaptivePortal::CaptiveLogin::setValue(int field_index, const char* value){
 bool CaptivePortal::CaptiveLogin::submit(){
     if(phase_ != Phase::Ready && phase_ != Phase::NeedsInput) return false;
     if(!BuildBody(form_, body_)){
-        fail("送る値が長すぎます");
+        fail(TR("送る値が長すぎます"));
         return false;
     }
     Url target;
     if(!BuildTarget(form_, page_, body_, target)){
-        fail("送り先のURLを作れません");
+        fail(TR("送り先のURLを作れません"));
         return false;
     }
     phase_ = Phase::Submitting;
@@ -462,7 +463,7 @@ bool CaptivePortal::CaptiveLogin::submit(){
                      "application/x-www-form-urlencoded")
         : req_.begin(target, HttpRequest::Method::GET, &discard_);
     if(!ok){
-        fail("ポータルへ送れません");
+        fail(TR("ポータルへ送れません"));
         return false;
     }
     return true;
@@ -482,7 +483,7 @@ void CaptivePortal::CaptiveLogin::update(){
             status = TaskTools::SUCCESS;
         }else{
             FixedString<PICO_STR_L> t;
-            t.assign("送れませんでした: ");
+            t.assign(TR("送れませんでした: "));
             t.append(req_.failureToStr());
             fail(t.c_str());
         }
@@ -492,7 +493,7 @@ void CaptivePortal::CaptiveLogin::update(){
     // Fetching
     if(s != TaskTools::SUCCESS){
         FixedString<PICO_STR_L> t;
-        t.assign("ページを取れませんでした: ");
+        t.assign(TR("ページを取れませんでした: "));
         t.append(req_.failureToStr());
         fail(t.c_str());
         return;
@@ -507,8 +508,8 @@ void CaptivePortal::CaptiveLogin::update(){
                 if(fetch(next)) return;
             }
         }
-        fail(form_.has_script ? "フォームが無いページです(JavaScriptで動くポータルは使えません)"
-                              : "ページにフォームがありません");
+        fail(form_.has_script ? TR("フォームが無いページです(JavaScriptで動くポータルは使えません)")
+                              : TR("ページにフォームがありません"));
         return;
     }
     phase_ = form_.missingInputs() > 0 ? Phase::NeedsInput : Phase::Ready;

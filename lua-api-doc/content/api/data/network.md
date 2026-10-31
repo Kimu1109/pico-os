@@ -68,7 +68,7 @@ description: "http_request / http_cancel / http_close / form_encode"
 | `last-modified` | `etag` が無いときだけ |
 | `location` | リダイレクト先(POST等で3xxが返ったとき) |
 
-`info` は `{ size = 受け取った本文のバイト数, saved = 保存先のパス, reused = 接続を使い回したか }` です(`saved` は `save_to` で保存できたときだけ)。`save_to` を使ったときの `body` は `nil` です。
+`info` は `{ size = 受け取った本文のバイト数, saved = 保存先のパス, reused = 接続を使い回したか, too_large = true }` です(`saved` は `save_to` で保存できたときだけ。`too_large` は本文が16KiBを超えて失敗したときだけで、`save_to` で取り直す目印に使えます。`error` の文は表示言語で変わるので、文で見分けないでください)。`save_to` を使ったときの `body` は `nil` です。
 
 ```lua
 pico.http_request("GET", "https://api.example.com/items", nil, nil,

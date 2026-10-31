@@ -248,7 +248,7 @@ mock.respond(ri, true, 204, nil)
 check(P.st == nil and P.msg:find("端末がありません") and P.art == nil, "204: 再生中の端末が無い(画像も外す)")
 -- 16KiBを超えた応答 → SDへ保存して読み直す
 r, ri = poll_now()
-mock.respond(ri, false, 0, nil, "書き込みに失敗")
+mock.respond(ri, false, 0, nil, "Write failed", nil, { too_large = true })   -- 文は言語で変わるので info.too_large で見分ける
 frame()
 r, ri = last()
 check(r.url:find("/me/player?", 1, true) and r.opts.save_to == DIR .. "/player.json", "大きな応答: SDへ保存して取り直す")

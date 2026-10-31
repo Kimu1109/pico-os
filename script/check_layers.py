@@ -73,6 +73,7 @@ LAYERS = {
 
 # ディレクトリの段と違う段に置く1ファイル(中身が型・定数だけのヘッダ)
 FILE_LAYERS = {
+    "system/I18n_Functions.hpp": "base",  # TR() の宣言とハッシュだけ(依存なし)。util/ のパーサーの誤りの文も訳すため。引き当ては system の I18n_Functions.cpp
     "storage/SD_Path.hpp": "base",          # SD 上のパスの定数だけ
     "gui/icons/icons_data.h": "base",       # IconID の列挙と絵のデータだけ(生成物)
     "lua/LuaPermissions.hpp": "base",       # 権限の構造体だけ(アプリ登録簿が持つ)

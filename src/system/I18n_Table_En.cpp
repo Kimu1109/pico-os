@@ -209,7 +209,6 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x1fe29312u, "The page has no form" }, // ページにフォームがありません
     { 0x203c0767u, "UAE dirham" }, // UAEディルハム
     { 0x20433713u, "No signed versions" }, // 署名のある版がありません
-    { 0x20d10d49u, "No API key. Enter one with [Key]" }, // APIキーがありません。[キー] から入れてください
     { 0x20eea1b5u, "Cannot erase the flash" }, // 内蔵フラッシュを消せません
     { 0x211b42d4u, "kilometers per hour" }, // キロメートル毎時
     { 0x215c8a5au, "Signing key: %s%s" }, // 署名の鍵: %s%s
@@ -477,6 +476,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x50c03867u, "Cannot resolve the path" }, // パスを解決できません
     { 0x50da7870u, "inch" }, // インチ
     { 0x50fde3e8u, "Open" }, // 開く
+    { 0x516a2312u, "Could not save the server (use a URL or host name without spaces)" }, // 送り先を保存できませんでした(空白を含まないURLかホスト名で)
     { 0x519ceb75u, "Overwrite" }, // 上書き
     { 0x51f5616cu, "No rates yet. Fetch with [Update]" }, // レート未取得。[更新]で取得
     { 0x52417fa5u, "Mark" }, // しおり
@@ -754,6 +754,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x82006ae3u, "Move" }, // 移動
     { 0x8221e92du, "%s (partial)" }, // %s(途中まで)
     { 0x822833e2u, "byte" }, // バイト
+    { 0x82325859u, "No API key. Enter one with [Settings]" }, // APIキーがありません。[設定] から入れてください
     { 0x824954f6u, "Alarm" }, // ｱﾗｰﾑ
     { 0x82642529u, "Off" }, // 切る
     { 0x8268b0d6u, "Search for:" }, // 検索語:
@@ -788,6 +789,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x87d0629cu, "No recent files" }, // 最近開いたファイルはありません
     { 0x87fcc70au, "Time zone" }, // タイムゾーン
     { 0x8818717fu, "Searching..." }, // 検索中...
+    { 0x8820abb4u, "Transcription server (host)\ne.g. 192.168.1.10:8080 / http://pc.local:8080\nLeave empty to go back to the default (OpenAI). To keep it, just press [OK]" }, // 文字起こしの送り先(ホスト)\n例: 192.168.1.10:8080 / http://pc.local:8080\n空欄で既定(OpenAI)に戻す。変えないなら そのまま[決定]
     { 0x88256f1cu, " until" }, //  まで
     { 0x882b6ffdu, "Could not save the token" }, // トークンを保存できませんでした
     { 0x8837677au, "New" }, // 新規
@@ -1373,7 +1375,6 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xefd63865u, "To: " }, // 宛先: 
     { 0xf015d76du, "Small" }, // 小
     { 0xf0919720u, "Fetching the list…" }, // 一覧を取得中…
-    { 0xf0a53633u, "Key" }, // キー
     { 0xf0d817ebu, "Jump: " }, // 踏み台: 
     { 0xf0e495f5u, "Same as the current version" }, // 今と同じ版です
     { 0xf0f6765cu, "Cannot read after '<'" }, // '<' の後ろが読めません
@@ -1466,4 +1467,4 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xffdae38bu, "Fetching %s…" }, // %s を取得中…
     { 0xfff3714fu, "No" }, // いいえ
 };
-const size_t I18nFunctions::kTableEnCount = 1462;
+const size_t I18nFunctions::kTableEnCount = 1463;

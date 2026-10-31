@@ -125,7 +125,7 @@ void RecorderScene::onEnter(){
     });
     WidgetFunctions::Add(this->list);
 
-    //下の段: [削除][再生][文字起こし][キー]。240x320でも収まるよう小さい字で幅を決めて並べる。
+    //下の段: [削除][再生][文字起こし][設定]。240x320でも収まるよう小さい字で幅を決めて並べる。
     //文字起こしの文言は「文字起こし」「文章」「やめる」と変わるので、いちばん長いものの幅にしておく
     constexpr int kDeleteW = 44, kOpenW = 44, kTranscribeW = 80, kKeyW = 40;
     const int bottom_y = content.y + content.h - MARGIN - bottom_h;
@@ -147,9 +147,9 @@ void RecorderScene::onEnter(){
     this->transcribe_button = small_button(x0 + kDeleteW + kOpenW + 8, kTranscribeW, TR("文字起こし"));
     this->transcribe_button->setOnPressEnd([this](){ this->transcribeSelected(); });
 
-    //APIキーを入れる(右端)
-    auto* key_button = small_button(content.x + content.w - MARGIN - kKeyW, kKeyW, TR("キー"));
-    key_button->setOnPressEnd([this](){ this->openKeySettings(); });
+    //送り先(ホスト)とAPIキーを入れる(右端)
+    auto* key_button = small_button(content.x + content.w - MARGIN - kKeyW, kKeyW, TR("設定"));
+    key_button->setOnPressEnd([this](){ this->openApiSettings(); });
 
     this->was_recording = MicFunctions::IsRecording();
     this->confirming = false;
@@ -525,6 +525,38 @@ void RecorderScene::updateTranscriber(){
     }
     this->refreshButtons();
     this->refreshStatus();
+}
+
+void RecorderScene::openApiSettings(){
+    if(this->transcriber.busy()) return;
+    char prompt[PICO_STR_M];
+    snprintf(prompt, sizeof(prompt),
+             TR("文字起こしの送り先(ホスト)\n例: 192.168.1.10:8080 / http://pc.local:8080\n空欄で既定(OpenAI)に戻す。変えないなら そのまま[決定]"));
+    auto* dialog = new InputDialog(prompt, true);
+    dialog->setAsciiInput(true);
+    dialog->setInput(this->transcriber.config().api.empty() ? TranscribeClient::kDefaultApi
+                                                            : this->transcriber.config().api.c_str());
+    WidgetFunctions::AddDialog(dialog);
+    dialog->setVisible(true);
+    dialog->setOnClosed([this, dialog](bool is_submit){
+        const FixedString<PICO_STR_LL> input = dialog->getInput();
+        WidgetFunctions::DestroyLater(dialog);
+        if(!is_submit){
+            this->refreshButtons();
+            this->refreshStatus();
+            return;
+        }
+        if(!TranscribeClient::SaveApi(input.c_str())){
+            ErrorFunctions::ShowFatal(TR("送り先を保存できませんでした(空白を含まないURLかホスト名で)"));
+            this->refreshButtons();
+            this->refreshStatus();
+            return;
+        }
+        this->transcriber.loadConfig();
+        this->shown_tr_state = this->transcriber.state();
+        //続けてAPIキー(手元のサーバならキーは空欄でよい)
+        this->openKeySettings();
+    });
 }
 
 void RecorderScene::openKeySettings(){

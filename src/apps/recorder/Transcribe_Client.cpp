@@ -58,7 +58,7 @@ bool TranscribeClient::configure(const Config& given, const char* key){
     if(!has_key){
         //OpenAI等の公開のAPIはキーが要る。手元のサーバ(api を変えたとき)なら無くてよい
         if(strcasecmp(cfg_.api.c_str(), kDefaultApi) == 0){
-            message_.assign(TR("APIキーがありません。[キー] から入れてください"));
+            message_.assign(TR("APIキーがありません。[設定] から入れてください"));
             return false;
         }
     }else{
@@ -117,6 +117,45 @@ bool TranscribeClient::SaveKey(const char* key){
     if(!key || !*key || strlen(key) > kMaxKeyBytes || !ValidKey(key)) return false;
     return PICO_SecretFile::Save(PICO_Path::FILE::CFG::SYS_TRANSCRIBE_KEY, kKeyPurpose,
                                  "# 文字起こしのAPIキー(暗号化)", key);
+}
+
+bool TranscribeClient::NormalizeApi(const char* in, char* out, size_t cap){
+    if(!in || !out || cap == 0) return false;
+    //前後の空白を落とす。中に空白・制御文字・" があれば断る(設定ファイルの1行を壊さない)
+    while(*in == ' ' || *in == '\t') in++;
+    size_t n = strlen(in);
+    while(n > 0 && (in[n - 1] == ' ' || in[n - 1] == '\t' || in[n - 1] == '\r' || in[n - 1] == '\n')) n--;
+    while(n > 0 && in[n - 1] == '/') n--;
+    if(n == 0) return false;
+    for(size_t i = 0; i < n; i++){
+        const unsigned char c = (unsigned char)in[i];
+        if(c <= ' ' || c == 0x7F || c == '"') return false;
+    }
+
+    char buf[PICO_STR_LL + 16];
+    const char* sep = strstr(in, "://");
+    const bool has_scheme = sep != nullptr && sep < in + n;
+    const char* host_part = has_scheme ? sep + 3 : in;
+    //ホストだけ(パスが無い)なら OpenAI 互換の /v1 を足す
+    const bool has_path = memchr(host_part, '/', (size_t)(in + n - host_part)) != nullptr;
+    const int len = snprintf(buf, sizeof(buf), "%s%.*s%s", has_scheme ? "" : "https://", (int)n, in, has_path ? "" : "/v1");
+    if(len <= 0 || (size_t)len >= sizeof(buf) || (size_t)len > PICO_STR_LL - 1 || (size_t)len + 1 > cap) return false;
+    Url probe;
+    char test[PICO_STR_LL + 32];
+    snprintf(test, sizeof(test), "%s/audio/transcriptions", buf);
+    if(!UrlTools::Parse(probe, test)) return false;
+    memcpy(out, buf, strlen(buf) + 1);
+    return true;
+}
+
+bool TranscribeClient::SaveApi(const char* input){
+    char api[PICO_STR_LL];
+    if(!input || !*input){
+        snprintf(api, sizeof(api), "%s", kDefaultApi);
+    }else if(!NormalizeApi(input, api, sizeof(api))){
+        return false;
+    }
+    return PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_TRANSCRIBE_CFG, "api", api);
 }
 
 bool TranscribeClient::TextPathFor(const char* wav_path, char* out, size_t cap){

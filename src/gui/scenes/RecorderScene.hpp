@@ -20,7 +20,7 @@
 //   メーター: 音の大きさ(-60〜0dBFS)。この画面を開いている間はずっと聞いている
 //   [録音] / [停止]
 //   録ったものの一覧(新しい順。文字起こし済みはアイコンが文書)。2回タップで開く(ファイルビューワーで鳴らす)
-//   [削除] [再生] [文字起こし](済みなら[文章]で .txt を開く。送っている間は[やめる]) [キー]
+//   [削除] [再生] [文字起こし](済みなら[文章]で .txt を開く。送っている間は[やめる]) [設定](送り先→APIキー)
 //
 // - 録音中は別の画面へ移らない(keepForeground)・スリープしない。画面を離れたら録音を止めて保存する
 // - 文字起こし(TranscribeClient)は録音を外のAPIへ送る。オンラインが前提。送っている間は録音できず、
@@ -81,6 +81,7 @@ class RecorderScene : public Scene {
         void deleteSelected();
         // 選んだ録音を文字起こしする(済みなら文章を開く。送っている間ならやめる)
         void transcribeSelected();
+        void openApiSettings();
         void openKeySettings();
         void updateTranscriber();
         // 選んでいる録音のパス。無ければ false

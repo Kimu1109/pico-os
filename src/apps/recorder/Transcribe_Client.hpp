@@ -59,6 +59,14 @@ class TranscribeClient : public IHttpSink, public IHttpBodySource {
         bool configure(const Config& cfg, const char* key);
         // キーを暗号化して /sys/transcribe_key.cfg へ書く(画面から)
         static bool SaveKey(const char* key);
+        // 画面で入れた送り先を api として使える形に整える。
+        //   "192.168.1.10:8080" → "https://192.168.1.10:8080/v1"(http:// を付けたいときは自分で書く)
+        //   "http://pc.local:8080" → "http://pc.local:8080/v1"(パスが無ければ /v1 を足す)
+        //   "https://api.groq.com/openai/v1/" → 末尾の / だけ落とす
+        // 空・空白や制御文字を含む・URLにならない・入りきらないときは false
+        static bool NormalizeApi(const char* in, char* out, size_t cap);
+        // 整えた送り先を /sys/transcribe.cfg の api へ書く。空なら既定(OpenAI)へ戻す
+        static bool SaveApi(const char* input);
 
         // wav_path(/recordings/rec_0001.wav 等)を送る。始められなければ false(理由は message())
         bool start(const char* wav_path);

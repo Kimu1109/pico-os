@@ -4,6 +4,7 @@
 #include "Arduino.h"
 #include "monocypher.h"
 #include "monocypher-ed25519.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -179,7 +180,7 @@ bool SshClient::sendHello(){
     char hello[32];
     const int n = snprintf(hello, sizeof(hello), "%s\r\n", kClientVersion);
     if(!this->ioWrite((const uint8_t*)hello, (size_t)n)){
-        this->fail("送信に失敗しました");
+        this->fail(TR("送信に失敗しました"));
         return false;
     }
     this->state_ = State::Handshake;
@@ -234,7 +235,7 @@ bool SshClient::connect(const char* host, uint16_t port, const char* user, unsig
     // 名前の解決(DNS)と接続を分けて、どちらで失敗したか分かるようにする
     IPAddress ip;
     if(WiFi.hostByName(host, ip, (uint32_t)timeout_ms) != 1){
-        this->err_.assign("名前を解決できませんでした: ");
+        this->err_.assign(TR("名前を解決できませんでした: "));
         this->err_.append(host);
         this->state_ = State::Closed;
         return false;
@@ -242,7 +243,7 @@ bool SshClient::connect(const char* host, uint16_t port, const char* user, unsig
 
     this->sock_.setTimeout(timeout_ms);
     if(this->sock_.connect(ip, port) != 1){
-        this->err_.assign("接続できませんでした(到達しない/ポートが閉じている)");
+        this->err_.assign(TR("接続できませんでした(到達しない/ポートが閉じている)"));
         this->state_ = State::Closed;
         return false;
     }
@@ -259,7 +260,7 @@ void SshClient::disconnect(){
         this->putCStr("");
         this->sendPacket();
     }
-    this->fail("切断しました");
+    this->fail(TR("切断しました"));
 }
 
 // ---------------------------------------------------------------- パケットを組む
@@ -308,7 +309,7 @@ void SshClient::putMpint(const uint8_t* be, size_t n){
 
 bool SshClient::sendPacket(){
     if(this->tx_overflow_){
-        this->fail("送信するパケットが大きすぎます");
+        this->fail(TR("送信するパケットが大きすぎます"));
         return false;
     }
     const size_t payload = this->tx_pos_ - 5;
@@ -336,7 +337,7 @@ bool SshClient::sendPacket(){
     this->tx_seq_++;
 
     if(!this->ioWrite(this->tx_, total)){
-        this->fail("送信に失敗しました");
+        this->fail(TR("送信に失敗しました"));
         return false;
     }
     return true;
@@ -357,14 +358,14 @@ void SshClient::update(){
     if(this->state_ == State::Closed) return;
 
     if(!this->ioConnected() && this->ioAvailable() <= 0){
-        this->fail("接続が切れました");
+        this->fail(TR("接続が切れました"));
         return;
     }
 
     const bool waiting_user = (this->state_ == State::HostKeyCheck || this->state_ == State::NeedPassword);
     if(!waiting_user && this->state_ != State::Open &&
        (unsigned long)(millis() - this->phase_start_) > kHandshakeTimeoutMs){
-        this->fail("サーバから応答がありません(時間切れ)");
+        this->fail(TR("サーバから応答がありません(時間切れ)"));
     }
 }
 
@@ -385,7 +386,7 @@ bool SshClient::parseVersion(){
         size_t nl = 0;
         while(nl < this->rx_len_ && this->rx_[nl] != '\n') nl++;
         if(nl >= this->rx_len_){
-            if(this->rx_len_ > 1024) this->fail("SSHサーバではないようです");
+            if(this->rx_len_ > 1024) this->fail(TR("SSHサーバではないようです"));
             return false;
         }
         size_t len = nl;
@@ -394,7 +395,7 @@ bool SshClient::parseVersion(){
         if(is_version){
             if(!(len >= 8 && memcmp(this->rx_, "SSH-2.0-", 8) == 0) &&
                !(len >= 9 && memcmp(this->rx_, "SSH-1.99-", 9) == 0)){
-                this->fail("SSH2に対応していないサーバです");
+                this->fail(TR("SSH2に対応していないサーバです"));
                 return false;
             }
             if(len > 253) len = 253;
@@ -426,7 +427,7 @@ bool SshClient::parsePacket(){
     }
     const size_t tag = this->rx_keys_.on ? 16 : 0;
     if(packet_len < 5 || packet_len > kRxCap - 4 - tag){
-        this->fail("サーバから大きすぎるパケットが届きました");
+        this->fail(TR("サーバから大きすぎるパケットが届きました"));
         return false;
     }
     const size_t need = 4 + packet_len + tag;
@@ -439,7 +440,7 @@ bool SshClient::parsePacket(){
         crypto_poly1305(mac, this->rx_, 4 + packet_len, poly_key);
         crypto_wipe(poly_key, sizeof(poly_key));
         if(crypto_verify16(mac, this->rx_ + 4 + packet_len) != 0){
-            this->fail("受信したデータの改ざんを検出しました");
+            this->fail(TR("受信したデータの改ざんを検出しました"));
             return false;
         }
         crypto_chacha20_djb(this->rx_ + 4, this->rx_ + 4, packet_len, this->rx_keys_.main, nonce, 1);
@@ -447,7 +448,7 @@ bool SshClient::parsePacket(){
 
     const uint8_t pad = this->rx_[4];
     if((uint32_t)pad + 1 > packet_len){
-        this->fail("壊れたパケットが届きました");
+        this->fail(TR("壊れたパケットが届きました"));
         return false;
     }
     const uint32_t seq = this->rx_seq_++;
@@ -461,7 +462,7 @@ bool SshClient::parsePacket(){
 
 void SshClient::handle(const uint8_t* p, size_t n, uint32_t seq){
     if(n == 0){
-        this->fail("空のパケットが届きました");
+        this->fail(TR("空のパケットが届きました"));
         return;
     }
     const uint8_t msg = p[0];
@@ -470,7 +471,7 @@ void SshClient::handle(const uint8_t* p, size_t n, uint32_t seq){
     // kex-strict: 最初の鍵交換の間は、鍵交換のメッセージ以外を受け付けない(Terrapin対策)
     if(this->strict_kex_ && !this->first_kex_done_ &&
        msg != MSG_KEXINIT && msg != MSG_KEX_ECDH_REPLY && msg != MSG_NEWKEYS && msg != MSG_DISCONNECT){
-        this->fail("鍵交換の途中で想定外のメッセージが届きました");
+        this->fail(TR("鍵交換の途中で想定外のメッセージが届きました"));
         return;
     }
 
@@ -481,7 +482,7 @@ void SshClient::handle(const uint8_t* p, size_t n, uint32_t seq){
             const uint8_t* d = r.str(dn);
             char buf[PICO_STR_L];
             if(dn > 60) dn = 60;
-            snprintf(buf, sizeof(buf), "サーバが切断しました: %.*s", (int)dn, (const char*)d);
+            snprintf(buf, sizeof(buf), TR("サーバが切断しました: %.*s"), (int)dn, (const char*)d);
             this->fail(buf);
             return;
         }
@@ -498,7 +499,7 @@ void SshClient::handle(const uint8_t* p, size_t n, uint32_t seq){
             this->onKexInit(p, n);
             // kex-strict: 最初の KEXINIT は最初のパケットでなければならない
             if(this->strict_kex_ && !this->first_kex_done_ && seq != 0){
-                this->fail("鍵交換の順序が正しくありません");
+                this->fail(TR("鍵交換の順序が正しくありません"));
             }
             return;
         case MSG_KEX_ECDH_REPLY:
@@ -537,7 +538,7 @@ void SshClient::handle(const uint8_t* p, size_t n, uint32_t seq){
             if(this->auth_method_ == AuthMethod::Keyboard){
                 this->onInfoRequest(p + 1, n - 1);
             }else if(this->auth_method_ == AuthMethod::Password){
-                this->fail("パスワードの変更を求められました(未対応)");
+                this->fail(TR("パスワードの変更を求められました(未対応)"));
             }
             return;
 
@@ -602,8 +603,8 @@ void SshClient::handle(const uint8_t* p, size_t n, uint32_t seq){
                 this->close_sent_ = true;
             }
             char buf[PICO_STR_L];
-            if(this->exit_status_ >= 0) snprintf(buf, sizeof(buf), "接続を閉じました(終了コード %d)", this->exit_status_);
-            else snprintf(buf, sizeof(buf), "接続を閉じました");
+            if(this->exit_status_ >= 0) snprintf(buf, sizeof(buf), TR("接続を閉じました(終了コード %d)"), this->exit_status_);
+            else snprintf(buf, sizeof(buf), TR("接続を閉じました"));
             this->fail(buf);
             return;
         }
@@ -662,7 +663,7 @@ void SshClient::sendKexInit(){
     //交換ハッシュに使うので、暗号化される前に控えておく
     this->kexinit_c_len_ = this->tx_pos_ - 5;
     if(this->kexinit_c_len_ > sizeof(this->kexinit_c_)){
-        this->fail("鍵交換の準備に失敗しました");
+        this->fail(TR("鍵交換の準備に失敗しました"));
         return;
     }
     memcpy(this->kexinit_c_, this->tx_ + 5, this->kexinit_c_len_);
@@ -674,7 +675,7 @@ void SshClient::sendKexInit(){
 
 void SshClient::onKexInit(const uint8_t* p, size_t n){
     if(this->kex_in_progress_ && this->kex_reply_done_){
-        this->fail("鍵交換の途中で鍵交換を求められました");
+        this->fail(TR("鍵交換の途中で鍵交換を求められました"));
         return;
     }
     if(!this->kexinit_sent_){
@@ -689,26 +690,26 @@ void SshClient::onKexInit(const uint8_t* p, size_t n){
     const uint8_t* lists[10];
     for(int i = 0; i < 10; i++) lists[i] = r.str(len[i]);
     if(!r.ok){
-        this->fail("鍵交換のメッセージが壊れています");
+        this->fail(TR("鍵交換のメッセージが壊れています"));
         return;
     }
 
     char buf[PICO_STR_LL];
     if(!ListHas(lists[0], len[0], "curve25519-sha256") && !ListHas(lists[0], len[0], "curve25519-sha256@libssh.org")){
-        this->fail("サーバが curve25519-sha256 の鍵交換に対応していません");
+        this->fail(TR("サーバが curve25519-sha256 の鍵交換に対応していません"));
         return;
     }
     if(!ListHas(lists[1], len[1], "ssh-ed25519")){
-        this->fail("サーバに ssh-ed25519 のホスト鍵がありません");
+        this->fail(TR("サーバに ssh-ed25519 のホスト鍵がありません"));
         return;
     }
     if(!ListHas(lists[2], len[2], kCipher) || !ListHas(lists[3], len[3], kCipher)){
-        snprintf(buf, sizeof(buf), "サーバが %s に対応していません", kCipher);
+        snprintf(buf, sizeof(buf), TR("サーバが %s に対応していません"), kCipher);
         this->fail(buf);
         return;
     }
     if(!ListHas(lists[6], len[6], "none") || !ListHas(lists[7], len[7], "none")){
-        this->fail("サーバが圧縮なしの通信に対応していません");
+        this->fail(TR("サーバが圧縮なしの通信に対応していません"));
         return;
     }
     if(!this->first_kex_done_ && ListHas(lists[0], len[0], "kex-strict-s-v00@openssh.com")){
@@ -742,7 +743,7 @@ void SshClient::onKexInit(const uint8_t* p, size_t n){
 
 void SshClient::onKexReply(const uint8_t* p, size_t n){
     if(!this->kex_in_progress_ || this->kex_reply_done_){
-        this->fail("想定外の鍵交換の応答が届きました");
+        this->fail(TR("想定外の鍵交換の応答が届きました"));
         return;
     }
     Reader r(p, n);
@@ -751,7 +752,7 @@ void SshClient::onKexReply(const uint8_t* p, size_t n){
     const uint8_t* qs = r.str(qs_n);
     const uint8_t* sig = r.str(sig_n);
     if(!r.ok || qs_n != 32){
-        this->fail("鍵交換の応答が壊れています");
+        this->fail(TR("鍵交換の応答が壊れています"));
         return;
     }
 
@@ -760,7 +761,7 @@ void SshClient::onKexReply(const uint8_t* p, size_t n){
     const uint8_t* type = kr.str(type_n);
     const uint8_t* pub = kr.str(pub_n);
     if(!kr.ok || !StrEq(type, type_n, "ssh-ed25519") || pub_n != 32){
-        this->fail("ホスト鍵の形式が ssh-ed25519 ではありません");
+        this->fail(TR("ホスト鍵の形式が ssh-ed25519 ではありません"));
         return;
     }
 
@@ -770,7 +771,7 @@ void SshClient::onKexReply(const uint8_t* p, size_t n){
     uint8_t zero_or = 0;
     for(int i = 0; i < 32; i++) zero_or |= shared[i];
     if(zero_or == 0){
-        this->fail("鍵交換に失敗しました(不正な公開値)");
+        this->fail(TR("鍵交換に失敗しました(不正な公開値)"));
         return;
     }
 
@@ -812,7 +813,7 @@ void SshClient::onKexReply(const uint8_t* p, size_t n){
     if(!sr.ok || !StrEq(st, st_n, "ssh-ed25519") || sv_n != 64 ||
        crypto_ed25519_check(sv, pub, h, sizeof(h)) != 0){
         crypto_wipe(kmp, sizeof(kmp));
-        this->fail("ホスト鍵の署名が正しくありません");
+        this->fail(TR("ホスト鍵の署名が正しくありません"));
         return;
     }
 
@@ -828,7 +829,7 @@ void SshClient::onKexReply(const uint8_t* p, size_t n){
         return;
     }
     if(memcmp(this->host_pub_, pub, 32) != 0){
-        this->fail("鍵の交換し直しでホスト鍵が変わりました");
+        this->fail(TR("鍵の交換し直しでホスト鍵が変わりました"));
         return;
     }
     this->sendNewKeys();
@@ -856,7 +857,7 @@ void SshClient::deriveKeys(const uint8_t* k_mpint, size_t k_len, const uint8_t h
 void SshClient::acceptHostKey(bool accept){
     if(this->state_ != State::HostKeyCheck) return;
     if(!accept){
-        this->fail("ホスト鍵を信頼しなかったため中止しました");
+        this->fail(TR("ホスト鍵を信頼しなかったため中止しました"));
         return;
     }
     this->state_ = State::Handshake;
@@ -879,7 +880,7 @@ void SshClient::sendNewKeys(){
 
 void SshClient::onNewKeys(){
     if(!this->kex_in_progress_ || !this->kex_reply_done_ || this->newkeys_recv_){
-        this->fail("想定外の NEWKEYS が届きました");
+        this->fail(TR("想定外の NEWKEYS が届きました"));
         return;
     }
     memcpy(this->rx_keys_.main, this->next_rx_, 32);
@@ -927,9 +928,9 @@ void SshClient::onAuthFailure(const uint8_t* p, size_t n){
     methods.assign((const char*)m, mn);
 
     switch(this->auth_method_){
-        case AuthMethod::PublicKey: this->notice("公開鍵は受け付けられませんでした"); break;
-        case AuthMethod::Password: this->notice("パスワードが違います"); break;
-        case AuthMethod::Keyboard: this->notice("認証に失敗しました"); break;
+        case AuthMethod::PublicKey: this->notice(TR("公開鍵は受け付けられませんでした")); break;
+        case AuthMethod::Password: this->notice(TR("パスワードが違います")); break;
+        case AuthMethod::Keyboard: this->notice(TR("認証に失敗しました")); break;
         default: break;
     }
     this->nextAuth(methods.c_str());
@@ -943,7 +944,7 @@ void SshClient::nextAuth(const char* methods){
     }
     if(ListHas(methods, "password") && this->password_attempts_ < 3){
         this->auth_method_ = AuthMethod::Password;
-        this->prompt_.assign("パスワード: ");
+        this->prompt_.assign(TR("パスワード: "));
         this->prompt_echo_ = false;
         this->state_ = State::NeedPassword;
         return;
@@ -953,7 +954,7 @@ void SshClient::nextAuth(const char* methods){
         return;
     }
     char buf[PICO_STR_LL];
-    snprintf(buf, sizeof(buf), "認証に失敗しました(サーバが受け付ける方式: %s)", methods);
+    snprintf(buf, sizeof(buf), TR("認証に失敗しました(サーバが受け付ける方式: %s)"), methods);
     this->fail(buf);
 }
 
@@ -980,7 +981,7 @@ void SshClient::sendAuthPublicKey(){
     uint8_t msg[36 + 256];
     const size_t body = this->tx_pos_ - 5;
     if(body > sizeof(msg) - 36){
-        this->fail("ユーザー名が長すぎます");
+        this->fail(TR("ユーザー名が長すぎます"));
         return;
     }
     PutBe32(msg, 32);
@@ -1026,7 +1027,7 @@ void SshClient::onInfoRequest(const uint8_t* p, size_t n){
     r.str(lang_n);
     const uint32_t count = r.u32();
     if(!r.ok || count > (uint32_t)kMaxPrompts){
-        this->fail("認証の問い合わせを読めませんでした");
+        this->fail(TR("認証の問い合わせを読めませんでした"));
         return;
     }
     for(uint32_t i = 0; i < count; i++){
@@ -1036,7 +1037,7 @@ void SshClient::onInfoRequest(const uint8_t* p, size_t n){
         this->prompts_[i].assign((const char*)pr, pn);
     }
     if(!r.ok){
-        this->fail("認証の問い合わせを読めませんでした");
+        this->fail(TR("認証の問い合わせを読めませんでした"));
         return;
     }
 
@@ -1122,7 +1123,7 @@ void SshClient::openChannel(){
 void SshClient::onChannelOpenFailure(const uint8_t* p, size_t n){
     char buf[PICO_STR_LL];
     if(this->fwd_host_.empty()){
-        this->fail("シェルを開けませんでした(チャネルを拒否されました)");
+        this->fail(TR("シェルを開けませんでした(チャネルを拒否されました)"));
         return;
     }
     Reader r(p, n);
@@ -1132,7 +1133,7 @@ void SshClient::onChannelOpenFailure(const uint8_t* p, size_t n){
     const uint8_t* d = r.str(dn);
     if(!r.ok) dn = 0;
     if(dn > 80) dn = 80;
-    snprintf(buf, sizeof(buf), "踏み台から %s:%u へ繋げませんでした(%.*s)",
+    snprintf(buf, sizeof(buf), TR("踏み台から %s:%u へ繋げませんでした(%.*s)"),
              this->fwd_host_.c_str(), (unsigned)this->fwd_port_, (int)dn, (const char*)d);
     this->fail(buf);
 }
@@ -1144,7 +1145,7 @@ void SshClient::onChannelOpenConfirm(const uint8_t* p, size_t n){
     this->remote_window_ = r.u32();
     this->remote_max_ = r.u32();
     if(!r.ok){
-        this->fail("チャネルの応答が壊れています");
+        this->fail(TR("チャネルの応答が壊れています"));
         return;
     }
     if(!this->fwd_host_.empty()){
@@ -1182,11 +1183,11 @@ void SshClient::onChannelReply(bool ok){
     if(this->replies_seen_ >= this->replies_expected_) return;
     this->replies_seen_++;
     if(this->replies_seen_ == 1){
-        if(!ok) this->notice("端末(pty)を確保できませんでした");
+        if(!ok) this->notice(TR("端末(pty)を確保できませんでした"));
         return;
     }
     if(!ok){
-        this->fail("シェルを開けませんでした");
+        this->fail(TR("シェルを開けませんでした"));
         return;
     }
     this->state_ = State::Open;

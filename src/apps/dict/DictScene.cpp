@@ -2,6 +2,7 @@
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "storage/SD_Path.hpp"
+#include "system/I18n_Functions.hpp"
 
 void DictScene::onEnter(){
     const Rect content = Scene::contentRect();
@@ -37,7 +38,7 @@ void DictScene::onEnter(){
     this->search_box->setFontSize(FontFn::Small);
     WidgetFunctions::Add(this->search_box);
 
-    this->search_button = new Button(box_x + box_w + MARGIN, y, "検索");
+    this->search_button = new Button(box_x + box_w + MARGIN, y, TR("検索"));
     this->search_button->setIcon(IconID::Search, IconSize::Px16);
     this->search_button->setFontSize(FontFn::Small);
     this->search_button->setAllowTextSpacing(false);
@@ -51,7 +52,7 @@ void DictScene::onEnter(){
     // 2行になった分の高さをこの下のresult_listの位置計算が見込んでいないため、
     // はみ出した2行目がresult_listの背景で隠れてしまう。--shotで実際に確認して気付いた)
     this->status_label = new Label<PICO_STR_L>(content.x + MARGIN, y,
-        dict_ready ? "語句を入力し検索を押す" : "辞書ファイルが開けません");
+        dict_ready ? TR("語句を入力し検索を押す") : TR("辞書ファイルが開けません"));
     this->status_label->setFontSize(FontFn::Small);
     this->status_label->setMaxWidth(content.w - MARGIN * 2);
     WidgetFunctions::Add(this->status_label);
@@ -135,7 +136,7 @@ void DictScene::startSearch(){
     this->shown_count_ = 0;
 
     if(query.length() == 0){
-        this->status_label->setText("語句を入力してください");
+        this->status_label->setText(TR("語句を入力してください"));
         return;
     }
     // ↑これも1行に収まる長さ(status_labelのコメント参照)。以下の各状態文言も同様
@@ -166,17 +167,17 @@ void DictScene::refreshResults(){
     switch(this->dict_.state()){
         case WordDictionary::State::Scanning:
         case WordDictionary::State::ScanningSuffix:
-            status.appendFormat("検索中… %d%%(%d件)",
+            status.appendFormat(TR("検索中… %d%%(%d件)"),
                 (int)(this->dict_.progress() * 100.0f), this->dict_.count());
             break;
 
         case WordDictionary::State::Done:
             if(this->dict_.count() == 0){
-                status.assign("見つかりませんでした");
+                status.assign(TR("見つかりませんでした"));
             } else if(this->dict_.mayHaveMore()){
-                status.appendFormat("%d件以上(絞り込み推奨)", this->dict_.count());
+                status.appendFormat(TR("%d件以上(絞り込み推奨)"), this->dict_.count());
             } else {
-                status.appendFormat("%d件見つかりました", this->dict_.count());
+                status.appendFormat(TR("%d件見つかりました"), this->dict_.count());
             }
             break;
 

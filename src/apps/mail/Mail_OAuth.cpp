@@ -5,6 +5,7 @@
 #include "crypto/Secret_File.hpp"
 #include "util/Url.hpp"
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -141,7 +142,7 @@ bool MailOAuth::post(const char* path){
     full.append(cfg_.tenant);
     full.append(path);
     if(!UrlTools::Parse(url, full.c_str())){
-        finishWith(Result::Failed, "サインインのサーバのURLが読めません");
+        finishWith(Result::Failed, TR("サインインのサーバのURLが読めません"));
         return false;
     }
     json_.reset(this);
@@ -150,7 +151,7 @@ bool MailOAuth::post(const char* path){
     if(!req_.begin(url, HttpRequest::Method::POST, this, body_.c_str(), body_.length(),
                    "application/x-www-form-urlencoded")){
         in_flight_ = false;
-        finishWith(Result::Failed, "サインインのサーバへ送れません");
+        finishWith(Result::Failed, TR("サインインのサーバへ送れません"));
         return false;
     }
     return true;
@@ -159,14 +160,14 @@ bool MailOAuth::post(const char* path){
 bool MailOAuth::startSignIn(){
     cancel();
     if(cfg_.client_id.empty()){
-        finishWith(Result::Failed, "mail.cfg に oauth-client-id がありません");
+        finishWith(Result::Failed, TR("mail.cfg に oauth-client-id がありません"));
         return false;
     }
     body_.assign("client_id=");
     bool ok = AppendFormValue(body_, cfg_.client_id.c_str());
     ok = ok && body_.append("&scope=") && AppendFormValue(body_, kScope);
     if(!ok){
-        finishWith(Result::Failed, "送る内容が長すぎます");
+        finishWith(Result::Failed, TR("送る内容が長すぎます"));
         return false;
     }
     device_code_[0] = '\0';
@@ -180,11 +181,11 @@ bool MailOAuth::startSignIn(){
 bool MailOAuth::startRefresh(){
     cancel();
     if(cfg_.client_id.empty()){
-        finishWith(Result::Failed, "mail.cfg に oauth-client-id がありません");
+        finishWith(Result::Failed, TR("mail.cfg に oauth-client-id がありません"));
         return false;
     }
     if(refresh_len_ == 0){
-        finishWith(Result::NeedSignIn, "Microsoft のサインインが必要です");
+        finishWith(Result::NeedSignIn, TR("Microsoft のサインインが必要です"));
         return false;
     }
     body_.assign("grant_type=refresh_token&client_id=");
@@ -192,7 +193,7 @@ bool MailOAuth::startRefresh(){
     ok = ok && body_.append("&refresh_token=") && AppendFormValue(body_, refresh_);
     ok = ok && body_.append("&scope=") && AppendFormValue(body_, kScope);
     if(!ok){
-        finishWith(Result::Failed, "送る内容が長すぎます");
+        finishWith(Result::Failed, TR("送る内容が長すぎます"));
         return false;
     }
     resetParsed();
@@ -206,7 +207,7 @@ void MailOAuth::beginTokenPoll(){
     ok = ok && body_.append("&client_id=") && AppendFormValue(body_, cfg_.client_id.c_str());
     ok = ok && body_.append("&device_code=") && AppendFormValue(body_, device_code_);
     if(!ok){
-        finishWith(Result::Failed, "送る内容が長すぎます");
+        finishWith(Result::Failed, TR("送る内容が長すぎます"));
         return;
     }
     resetParsed();
@@ -236,7 +237,7 @@ void MailOAuth::update(){
         //WaitUser の問い合わせの合間
         if(phase_ != Phase::WaitUser) return;
         if(secondsLeft() == 0){
-            finishWith(Result::Denied, "コードの期限が切れました。もう一度サインインしてください");
+            finishWith(Result::Denied, TR("コードの期限が切れました。もう一度サインインしてください"));
             return;
         }
         if(Reached(millis(), next_poll_ms_)) beginTokenPoll();
@@ -249,7 +250,7 @@ void MailOAuth::update(){
 void MailOAuth::finish(){
     in_flight_ = false;
     if(req_.getStatus() != TaskTools::SUCCESS){
-        FixedString<PICO_STR_LL> why("サインインのサーバと通信できません: ");
+        FixedString<PICO_STR_LL> why(TR("サインインのサーバと通信できません: "));
         why.append(req_.failureToStr());
         if(phase_ == Phase::WaitUser){
             //待っている間の一時的な失敗は、期限まで問い合わせ続ける
@@ -264,7 +265,7 @@ void MailOAuth::finish(){
     const bool http_ok = code >= 200 && code < 300;
     if(!json_ok_ || (!json_.complete() && http_ok)){
         FixedString<PICO_STR_LL> why;
-        why.appendFormat("サインインのサーバの応答が読めません (HTTP %d)", code);
+        why.appendFormat(TR("サインインのサーバの応答が読めません (HTTP %d)"), code);
         if(phase_ == Phase::WaitUser){
             next_poll_ms_ = millis() + interval_sec_ * 1000u;
             return;
@@ -277,8 +278,8 @@ void MailOAuth::finish(){
     switch(phase_){
         case Phase::RequestCode:
             if(!http_ok || device_code_[0] == '\0' || user_code_.empty()){
-                if(!got_error_desc_.empty()) why.appendFormat("サインインを始められません: %s", got_error_desc_.c_str());
-                else why.appendFormat("サインインを始められません (HTTP %d)", code);
+                if(!got_error_desc_.empty()) why.appendFormat(TR("サインインを始められません: %s"), got_error_desc_.c_str());
+                else why.appendFormat(TR("サインインを始められません (HTTP %d)"), code);
                 //client_id が違う等。何度やっても同じ
                 finishWith(Result::Denied, why.c_str());
                 return;
@@ -316,7 +317,7 @@ void MailOAuth::finish(){
     if(http_ok && access_truncated_){
         access_len_ = 0;
         access_[0] = '\0';
-        finishWith(Result::Failed, "アクセストークンが長すぎます");
+        finishWith(Result::Failed, TR("アクセストークンが長すぎます"));
         return;
     }
 
@@ -334,12 +335,12 @@ void MailOAuth::finish(){
         }
         device_code_[0] = '\0';
         if(strcmp(err, "authorization_declined") == 0 || strcmp(err, "access_denied") == 0){
-            finishWith(Result::Denied, "サインインが断られました");
+            finishWith(Result::Denied, TR("サインインが断られました"));
         }else if(strcmp(err, "expired_token") == 0 || strcmp(err, "code_expired") == 0){
-            finishWith(Result::Denied, "コードの期限が切れました。もう一度サインインしてください");
+            finishWith(Result::Denied, TR("コードの期限が切れました。もう一度サインインしてください"));
         }else{
-            if(!got_error_desc_.empty()) why.appendFormat("サインインできません: %s", got_error_desc_.c_str());
-            else why.appendFormat("サインインできません: %s (HTTP %d)", *err ? err : "?", code);
+            if(!got_error_desc_.empty()) why.appendFormat(TR("サインインできません: %s"), got_error_desc_.c_str());
+            else why.appendFormat(TR("サインインできません: %s (HTTP %d)"), *err ? err : "?", code);
             finishWith(Result::Denied, why.c_str());
         }
         return;
@@ -352,11 +353,11 @@ void MailOAuth::finish(){
         refresh_len_ = 0;
         refresh_[0] = '\0';
         refresh_rev_++;
-        finishWith(Result::NeedSignIn, "Microsoft のサインインが切れました。[更新] を押してサインインし直してください");
+        finishWith(Result::NeedSignIn, TR("Microsoft のサインインが切れました。[更新] を押してサインインし直してください"));
         return;
     }
-    if(!got_error_desc_.empty()) why.appendFormat("アクセストークンを取れません: %s", got_error_desc_.c_str());
-    else why.appendFormat("アクセストークンを取れません (HTTP %d)", code);
+    if(!got_error_desc_.empty()) why.appendFormat(TR("アクセストークンを取れません: %s"), got_error_desc_.c_str());
+    else why.appendFormat(TR("アクセストークンを取れません (HTTP %d)"), code);
     finishWith(Result::Failed, why.c_str());
 }
 

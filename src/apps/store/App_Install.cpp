@@ -8,6 +8,7 @@
 #include "lua/LuaAppScanner.hpp"
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
+#include "system/I18n_Functions.hpp"
 
 namespace {
     using namespace PICO_Path::FILE;
@@ -121,7 +122,7 @@ bool AppInstall::ReadFileLine(const char* path, int n, Work& w){
 
 const char* AppInstall::CheckFilesList(const AppRepo::Entry& e, Work& w, int& count){
     FsFile f = OSData::SD.open(STORE_STAGING_FILES, O_RDONLY);
-    if(!f) return "SDカードから読めません";
+    if(!f) return TR("SDカードから読めません");
     char prev[AppRepo::kMaxPathLen + 1] = "";
     uint32_t total = 0;
     count = 0;
@@ -142,9 +143,9 @@ const char* AppInstall::CheckFilesList(const AppRepo::Entry& e, Work& w, int& co
         if(w.file.path == "app.cfg") has_cfg = true;
     }
     f.close();
-    if(!ok) return "ファイル一覧(files.tsv)の形式が違います";
-    if(!has_main || !has_cfg) return "main.lua か app.cfg がありません";
-    if(total != e.bytes || total > AppRepo::kMaxAppBytes) return "ファイルの合計が一覧と合いません";
+    if(!ok) return TR("ファイル一覧(files.tsv)の形式が違います");
+    if(!has_main || !has_cfg) return TR("main.lua か app.cfg がありません");
+    if(total != e.bytes || total > AppRepo::kMaxAppBytes) return TR("ファイルの合計が一覧と合いません");
     return nullptr;
 }
 
@@ -152,8 +153,8 @@ const char* AppInstall::CheckStagedConfig(const AppRepo::Entry& e){
     FixedString<PICO_PATH_LEN> cfg_path;
     JoinRel(cfg_path, STORE_STAGING_APP, "app.cfg");
     LuaAppScanner::AppInfo info;
-    if(!LuaAppScanner::ReadAppConfig(cfg_path.c_str(), info)) return "app.cfg を読めません";
-    if(!(info.id == e.id.c_str()) || !(info.version == e.version.c_str())) return "app.cfg の id か版が一覧と合いません";
+    if(!LuaAppScanner::ReadAppConfig(cfg_path.c_str(), info)) return TR("app.cfg を読めません");
+    if(!(info.id == e.id.c_str()) || !(info.version == e.version.c_str())) return TR("app.cfg の id か版が一覧と合いません");
     //一覧で見せた(=利用者が承知した)権限より強い権限は付けない
     uint8_t perms = 0;
     if(info.permissions.network) perms |= AppRepo::PermNetwork;
@@ -161,13 +162,13 @@ const char* AppInstall::CheckStagedConfig(const AppRepo::Entry& e){
     if(info.permissions.sd_outside_app_dir) perms |= AppRepo::PermSd;
     if(info.permissions.background) perms |= AppRepo::PermBackground;
     if(info.permissions.microphone) perms |= AppRepo::PermMicrophone;
-    if((perms & ~e.perms) != 0) return "app.cfg の権限が一覧より多くなっています";
+    if((perms & ~e.perms) != 0) return TR("app.cfg の権限が一覧より多くなっています");
     return nullptr;
 }
 
 const char* AppInstall::Commit(const AppRepo::Entry& e, bool allow_replace, Work& w){
     FixedString<PICO_PATH_LEN> dir;
-    if(!AppDir(e, dir)) return "インストール先の名前が長すぎます";
+    if(!AppDir(e, dir)) return TR("インストール先の名前が長すぎます");
 
     //確かめている間に、同じ名前のディレクトリに別のアプリが置かれていないか
     {
@@ -177,7 +178,7 @@ const char* AppInstall::Commit(const AppRepo::Entry& e, bool allow_replace, Work
         if(OSData::SD.exists(main_lua.c_str())){
             LuaAppScanner::AppInfo cur;
             LuaAppScanner::ReadAppConfig(cfg_path.c_str(), cur);
-            if(cur.id.empty() ? !allow_replace : !(cur.id == e.id.c_str())) return "同じ名前のアプリが入っています";
+            if(cur.id.empty() ? !allow_replace : !(cur.id == e.id.c_str())) return TR("同じ名前のアプリが入っています");
         }
     }
 
@@ -185,7 +186,7 @@ const char* AppInstall::Commit(const AppRepo::Entry& e, bool allow_replace, Work
     //途中で失敗すると新旧が混ざるが、files.tsvが残るので入れ直せば揃う
     {
         FsFile list = OSData::SD.open(STORE_STAGING_FILES, O_RDONLY);
-        if(!list) return "ファイル一覧を読み直せません";
+        if(!list) return TR("ファイル一覧を読み直せません");
         bool ok = true;
         while(ok && list.fgets(w.line, sizeof(w.line)) > 0){
             bool skip = false;
@@ -200,7 +201,7 @@ const char* AppInstall::Commit(const AppRepo::Entry& e, bool allow_replace, Work
             if(!OSData::SD.rename(src.c_str(), dst.c_str())) ok = false;
         }
         list.close();
-        if(!ok) return "インストール先へファイルを移せません";
+        if(!ok) return TR("インストール先へファイルを移せません");
     }
 
     //前の版にあって今の版に無いファイルを消す(前の版の一覧に載っていたものだけ。アプリが書いたファイルは残る)

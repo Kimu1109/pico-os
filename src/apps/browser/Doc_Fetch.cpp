@@ -2,6 +2,7 @@
 
 #include "OS_Data.hpp"
 #include "system/Log_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 #include <ctime>
@@ -13,7 +14,7 @@ bool DocFetch::begin(const Url& target, bool bypass_cache){
 
     //キャッシュのキーはポートまで含めた形。ポートが違えば別のサーバとして扱う
     if(!UrlTools::HostHeader(host, url)){
-        finish(State::Failed, Source::None, "URLが長すぎます");
+        finish(State::Failed, Source::None, TR("URLが長すぎます"));
         return false;
     }
     //ディレクトリを指すURL("http://host/" や "http://host/docs/")には開くべき
@@ -21,11 +22,11 @@ bool DocFetch::begin(const Url& target, bool bypass_cache){
     //こちらで勝手に補わずに断る。PathFor()と同じ理由で弾かれるが、
     //「パスが長すぎます」と出ると原因が分からなくなるため先に見ている
     if(strcmp(url.path.c_str(), "/") == 0){
-        finish(State::Failed, Source::None, "文書を指していないURLです");
+        finish(State::Failed, Source::None, TR("文書を指していないURLです"));
         return false;
     }
     if(!PICO_DocCache::PathFor(cache_path, host.c_str(), url.path.c_str())){
-        finish(State::Failed, Source::None, "パスが長すぎます");
+        finish(State::Failed, Source::None, TR("パスが長すぎます"));
         return false;
     }
 
@@ -45,7 +46,7 @@ bool DocFetch::begin(const Url& target, bool bypass_cache){
     if(!writer.begin(host.c_str(), url.path.c_str())){
         //書き込み先を用意できない(SDが無い等)。取得しても置き場所が無いので、
         //キャッシュがあればそれを開く
-        return fallbackToCache("保存先を用意できません");
+        return fallbackToCache(TR("保存先を用意できません"));
     }
     sink.writer = &writer;
 
@@ -74,7 +75,7 @@ void DocFetch::update(){
         const int code = http.response().statusCode();
         if(code >= 400){
             static char buf[48];
-            snprintf(buf, sizeof(buf), "サーバが %d を返しました", code);
+            snprintf(buf, sizeof(buf), TR("サーバが %d を返しました"), code);
             fallbackToCache(buf);
         }else{
             fallbackToCache(http.failureToStr());
@@ -92,7 +93,7 @@ void DocFetch::update(){
         }else{
             //304なのに手元に無い = 目録と本体がずれている。次回は取り直しになる
             PICO_DocCache::RemoveEntry(host.c_str(), url.path.c_str());
-            finish(State::Failed, Source::None, "キャッシュが見つかりません");
+            finish(State::Failed, Source::None, TR("キャッシュが見つかりません"));
         }
         return;
     }
@@ -102,7 +103,7 @@ void DocFetch::update(){
     const uint32_t epoch = (uint32_t)time(nullptr);
 
     if(!writer.commit(http.response().validator().c_str(), epoch)){
-        fallbackToCache("保存に失敗しました");
+        fallbackToCache(TR("保存に失敗しました"));
         return;
     }
 

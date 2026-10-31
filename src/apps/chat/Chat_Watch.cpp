@@ -12,6 +12,7 @@
 #include "util/Url.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -56,8 +57,8 @@ namespace {
     // chat.cfg を読んで URL とヘッダを作る。使えなければ理由を why へ
     bool LoadConfig(Url& url, FixedString<PICO_STR_LL>& auth, uint32_t& interval_ms, const char*& why){
         interval_ms = ChatWatch::kDefaultIntervalSec * 1000;
-        if(!OSData::SD_usable){ why = "SDカードがありません"; return false; }
-        if(!OSData::SD.exists(PICO_Path::FILE::CFG::SYS_CHAT_CFG)){ why = "チャットが設定されていません"; return false; }
+        if(!OSData::SD_usable){ why = TR("SDカードがありません"); return false; }
+        if(!OSData::SD.exists(PICO_Path::FILE::CFG::SYS_CHAT_CFG)){ why = TR("チャットが設定されていません"); return false; }
         char server[PICO_Config::kConfigMaxValueLen] = "";
         char token[PICO_Config::kConfigMaxValueLen] = "";
         int sec = (int)ChatWatch::kDefaultIntervalSec;
@@ -74,12 +75,12 @@ namespace {
         });
         if(sec < (int)ChatWatch::kMinIntervalSec) sec = (int)ChatWatch::kMinIntervalSec;
         interval_ms = (uint32_t)sec * 1000;
-        if(!server[0] || !token[0]){ why = "chat.cfg に server と token がありません"; return false; }
-        if(!UrlTools::Parse(url, server)){ why = "chat.cfg の server が URL ではありません"; return false; }
+        if(!server[0] || !token[0]){ why = TR("chat.cfg に server と token がありません"); return false; }
+        if(!UrlTools::Parse(url, server)){ why = TR("chat.cfg の server が URL ではありません"); return false; }
         for(const char* p = token; *p; p++){
             const char c = *p;
             const bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
-            if(!ok){ why = "chat.cfg の token に使えない文字があります"; return false; }
+            if(!ok){ why = TR("chat.cfg の token に使えない文字があります"); return false; }
         }
         //末尾の / を落としてから "/api/v1/rooms" を足す(ChatClient と同じ)
         while(url.path.length() > 0 && url.path.c_str()[url.path.length() - 1] == '/'){
@@ -88,15 +89,15 @@ namespace {
             url.path = trimmed;
         }
         url.query.clear();
-        if(!url.path.append("/api/v1/rooms")){ why = "URLが長すぎます"; return false; }
-        if(!auth.assign("Authorization: Bearer ") || !auth.append(token)){ why = "token が長すぎます"; return false; }
+        if(!url.path.append("/api/v1/rooms")){ why = TR("URLが長すぎます"); return false; }
+        if(!auth.assign("Authorization: Bearer ") || !auth.append(token)){ why = TR("token が長すぎます"); return false; }
         return true;
     }
 
     class Service : public BackgroundService {
         public:
             const char* key() const override { return "chat"; }
-            const char* name() const override { return "チャットの未読"; }
+            const char* name() const override { return TR("チャットの未読"); }
             IconID icon() const override { return IconID::Messages; }
             bool toggleable() const override { return true; }
             bool enabled() const override { return enabled_; }
@@ -105,7 +106,7 @@ namespace {
                 if(!on) dropJob();
                 next_ms_ = millis();
             }
-            const char* appName() const override { return "チャット"; }
+            const char* appName() const override { return TR("チャット"); }
             // 入っていて、設定がある間は動いている扱い
             bool active() const override { return enabled_ && configured_; }
             bool runNow() override {
@@ -116,17 +117,17 @@ namespace {
 
             void status(FixedString<PICO_STR_LL>& out) const override {
                 out.clear();
-                if(!enabled_){ out.assign("切っています"); return; }
+                if(!enabled_){ out.assign(TR("切っています")); return; }
                 if(!configured_ && why_[0]){ out.assign(why_); return; }
-                if(job_){ out.assign("確認しています…"); return; }
-                if(last_error_[0]){ out.appendFormat("失敗: %s", last_error_); return; }
+                if(job_){ out.assign(TR("確認しています…")); return; }
+                if(last_error_[0]){ out.appendFormat(TR("失敗: %s"), last_error_); return; }
                 if(last_ok_ms_ != 0){
                     const uint32_t ago = (millis() - last_ok_ms_) / 1000;
-                    if(ago < 60) out.appendFormat("%lu秒前に確認(%d部屋)", (unsigned long)ago, rooms_);
-                    else out.appendFormat("%lu分前に確認(%d部屋)", (unsigned long)(ago / 60), rooms_);
+                    if(ago < 60) out.appendFormat(TR("%lu秒前に確認(%d部屋)"), (unsigned long)ago, rooms_);
+                    else out.appendFormat(TR("%lu分前に確認(%d部屋)"), (unsigned long)(ago / 60), rooms_);
                     return;
                 }
-                out.assign("まだ確認していません");
+                out.assign(TR("まだ確認していません"));
             }
 
             void update(uint32_t now) override {
@@ -160,7 +161,7 @@ namespace {
                 }
                 job_ = new (std::nothrow) Job();
                 if(!job_){
-                    setError("メモリが足りません");
+                    setError(TR("メモリが足りません"));
                     next_ms_ = now + kRetryMs;
                     return;
                 }
@@ -169,7 +170,7 @@ namespace {
                 job_->req.setKeepAlive(false);
                 if(!job_->req.setExtraHeader(job_->auth.c_str())
                    || !job_->req.begin(url, HttpRequest::Method::GET, job_)){
-                    setError("要求を始められません");
+                    setError(TR("要求を始められません"));
                     dropJob();
                     next_ms_ = now + kRetryMs;
                 }
@@ -179,7 +180,7 @@ namespace {
                 job_->req.update();
                 if(job_->req.getStatus() == TaskTools::PROCESSING){
                     if(Reached(now, job_->started_ms + kGiveUpMs)){
-                        setError("時間切れ");
+                        setError(TR("時間切れ"));
                         dropJob();
                         next_ms_ = now + kRetryMs;
                     }
@@ -194,7 +195,7 @@ namespace {
                 const int code = job_->req.response().statusCode();
                 if(code < 200 || code >= 300){
                     char buf[48];
-                    snprintf(buf, sizeof(buf), code == 401 ? "トークンが違います(HTTP %d)" : "HTTP %d", code);
+                    snprintf(buf, sizeof(buf), code == 401 ? TR("トークンが違います(HTTP %d)") : "HTTP %d", code);
                     setError(buf);
                     dropJob();
                     next_ms_ = now + interval_ms_;
@@ -256,12 +257,12 @@ int ChatWatch::OnRooms(const ChatProto::Room* rooms, int count){
         NotificationFunctions::Content c;
         NotificationFunctions::Sanitize(c.title, r.name.c_str());
         char body[64];
-        snprintf(body, sizeof(body), "チャット: 未読 %lu件", (unsigned long)r.unread);
+        snprintf(body, sizeof(body), TR("チャット: 未読 %lu件"), (unsigned long)r.unread);
         NotificationFunctions::Sanitize(c.body, body);
         char tag[24];
         snprintf(tag, sizeof(tag), "chat:%lu", (unsigned long)r.id);
         NotificationFunctions::Sanitize(c.tag, tag);
-        NotificationFunctions::Sanitize(c.app, "チャット");
+        NotificationFunctions::Sanitize(c.app, TR("チャット"));
         if(NotificationFunctions::Post(c) != 0) posted++;
     }
     return posted;

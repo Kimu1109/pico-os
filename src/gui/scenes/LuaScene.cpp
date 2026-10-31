@@ -10,6 +10,7 @@
 #include "storage/SD_IO.hpp"
 
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 
@@ -68,7 +69,7 @@ void LuaScene::onEnter() {
     if (!engine || !engine->valid()) {
         // LuaEngineのコンストラクタ内で既にLOG_APP_FAILは出ている。
         // 画面側にも見える形で伝える
-        ErrorFunctions::ShowFatal("Luaの初期化に失敗しました(メモリ不足の可能性があります)");
+        ErrorFunctions::ShowFatal(TR("Luaの初期化に失敗しました(メモリ不足の可能性があります)"));
         return;
     }
 
@@ -126,7 +127,7 @@ void LuaScene::onEnter() {
 bool LuaScene::runFile(const char* path) {
     FsFile f = OSData::SD.open(path);
     if (!f) {
-        ErrorFunctions::ShowFatal("スクリプトを開けません(パスを確認してください)");
+        ErrorFunctions::ShowFatal(TR("スクリプトを開けません(パスを確認してください)"));
         return false;
     }
 

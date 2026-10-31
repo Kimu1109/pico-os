@@ -8,6 +8,7 @@
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Font_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <ctime>
@@ -32,9 +33,9 @@ namespace {
             case Trigger::Delay: {
                 const long left = (long)(r.due_ms - now_ms);
                 const long sec = left > 0 ? (left + 999) / 1000 : 0;
-                if(sec >= 3600) snprintf(out, cap, "あと%ld時間%ld分", sec / 3600, (sec % 3600) / 60);
-                else if(sec >= 60) snprintf(out, cap, "あと%ld分%ld秒", sec / 60, sec % 60);
-                else snprintf(out, cap, "あと%ld秒", sec);
+                if(sec >= 3600) snprintf(out, cap, TR("あと%ld時間%ld分"), sec / 3600, (sec % 3600) / 60);
+                else if(sec >= 60) snprintf(out, cap, TR("あと%ld分%ld秒"), sec / 60, sec % 60);
+                else snprintf(out, cap, TR("あと%ld秒"), sec);
                 break;
             }
             case Trigger::At: {
@@ -43,17 +44,17 @@ namespace {
                 snprintf(out, cap, "%s", t);
                 break;
             }
-            case Trigger::Daily: snprintf(out, cap, "毎日%02u:%02u", w.hour, w.minute); break;
+            case Trigger::Daily: snprintf(out, cap, TR("毎日%02u:%02u"), w.hour, w.minute); break;
             case Trigger::Every: {
                 const unsigned long sec = w.every_ms / 1000;
-                if(sec >= 3600 && sec % 3600 == 0) snprintf(out, cap, "%lu時間ごと", sec / 3600);
-                else if(sec >= 60 && sec % 60 == 0) snprintf(out, cap, "%lu分ごと", sec / 60);
-                else snprintf(out, cap, "%lu秒ごと", sec);
+                if(sec >= 3600 && sec % 3600 == 0) snprintf(out, cap, TR("%lu時間ごと"), sec / 3600);
+                else if(sec >= 60 && sec % 60 == 0) snprintf(out, cap, TR("%lu分ごと"), sec / 60);
+                else snprintf(out, cap, TR("%lu秒ごと"), sec);
                 break;
             }
-            case Trigger::BatteryLow: snprintf(out, cap, "電池%u%%未満", w.below); break;
-            case Trigger::WifiConnected: snprintf(out, cap, "Wi-Fi接続時"); break;
-            case Trigger::WifiDisconnected: snprintf(out, cap, "Wi-Fi切断時"); break;
+            case Trigger::BatteryLow: snprintf(out, cap, TR("電池%u%%未満"), w.below); break;
+            case Trigger::WifiConnected: snprintf(out, cap, TR("Wi-Fi接続時")); break;
+            case Trigger::WifiDisconnected: snprintf(out, cap, TR("Wi-Fi切断時")); break;
             case Trigger::Now: snprintf(out, cap, "-"); break;
         }
     }
@@ -64,7 +65,7 @@ void NotificationScene::onEnter(){
     const int y0 = content.y + MARGIN;
 
     // ---- 上の行 ----
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -74,12 +75,12 @@ void NotificationScene::onEnter(){
     const Rect back = this->back_button->getLocalRect();
     const int row_h = back.h;
 
-    auto* title_label = new Label<PICO_STR_M>(back.x + back.w + MARGIN * 2, y0, "通知");
+    auto* title_label = new Label<PICO_STR_M>(back.x + back.w + MARGIN * 2, y0, TR("通知"));
     title_label->setFontSize(FontFn::Small);
     title_label->setY(y0 + (row_h - FontFn::GetFontSize(FontFn::Small)) / 2);
     WidgetFunctions::Add(title_label);
 
-    this->clear_button = new Button(0, y0, "全消去");
+    this->clear_button = new Button(0, y0, TR("全消去"));
     this->clear_button->setIcon(IconID::Trash, IconSize::Px16);
     this->clear_button->setFontSize(FontFn::Small);
     this->clear_button->setH(20 + Button::kFrameExtra);
@@ -90,7 +91,7 @@ void NotificationScene::onEnter(){
     });
     WidgetFunctions::Add(this->clear_button);
 
-    this->read_button = new Button(0, y0, "既読");
+    this->read_button = new Button(0, y0, TR("既読"));
     this->read_button->setFontSize(FontFn::Small);
     this->read_button->setH(20 + Button::kFrameExtra);
     this->read_button->setX(this->clear_button->getLocalRect().x - MARGIN - this->read_button->getLocalRect().w);
@@ -102,8 +103,8 @@ void NotificationScene::onEnter(){
     constexpr int kTabH = 22;
     this->tab = new TabBar(content.x + MARGIN, tab_y, content.w - MARGIN * 2, kTabH);
     this->tab->setFontSize(FontFn::Small);
-    this->tab->addTab("履歴");
-    this->tab->addTab("予約");
+    this->tab->addTab(TR("履歴"));
+    this->tab->addTab(TR("予約"));
     this->tab->setSelected((int)this->current_tab);
     this->tab->setOnChanged([this](int index){
         this->current_tab = (Tab)index;
@@ -114,7 +115,7 @@ void NotificationScene::onEnter(){
 
     // ---- 下の行: [表示] [音] … [開く] ----
     const int bottom_y = content.y + content.h - MARGIN - row_h - 4;
-    this->mode_button = new Button(content.x + MARGIN, bottom_y, "控えめ");
+    this->mode_button = new Button(content.x + MARGIN, bottom_y, TR("控えめ"));
     this->mode_button->setFontSize(FontFn::Small);
     this->mode_button->setH(20 + Button::kFrameExtra);
     this->mode_button->setW(this->mode_button->getLocalRect().w + Button::kFrameExtra);
@@ -125,7 +126,7 @@ void NotificationScene::onEnter(){
     WidgetFunctions::Add(this->mode_button);
 
     const Rect mode_box = this->mode_button->getLocalRect();
-    this->sound_button = new Button(mode_box.x + mode_box.w + MARGIN, bottom_y, "音なし");
+    this->sound_button = new Button(mode_box.x + mode_box.w + MARGIN, bottom_y, TR("音なし"));
     this->sound_button->setIcon(IconID::VolumeOff, IconSize::Px16);
     this->sound_button->setFontSize(FontFn::Small);
     this->sound_button->setH(20 + Button::kFrameExtra);
@@ -135,7 +136,7 @@ void NotificationScene::onEnter(){
     });
     WidgetFunctions::Add(this->sound_button);
 
-    this->action_button = new Button(0, bottom_y, "取り消す");
+    this->action_button = new Button(0, bottom_y, TR("取り消す"));
     this->action_button->setFontSize(FontFn::Small);
     this->action_button->setH(20 + Button::kFrameExtra);
     const int action_w = this->action_button->getLocalRect().w;
@@ -250,7 +251,7 @@ void NotificationScene::rebuild(){
     else this->selected_key = 0;
     this->list->needsRender();
 
-    this->action_button->setText(this->current_tab == Tab::History ? "開く" : "取り消す");
+    this->action_button->setText(this->current_tab == Tab::History ? TR("開く") : TR("取り消す"));
     this->refreshDetail();
 }
 
@@ -260,9 +261,9 @@ void NotificationScene::refreshDetail(){
 
     if(this->selected_key == 0){
         if(this->key_count == 0){
-            text.assign(this->current_tab == Tab::History ? "通知はありません" : "予約はありません");
+            text.assign(this->current_tab == Tab::History ? TR("通知はありません") : TR("予約はありません"));
         }else{
-            text.assign(this->current_tab == Tab::History ? "2回タップで開く" : "2回タップで取り消す");
+            text.assign(this->current_tab == Tab::History ? TR("2回タップで開く") : TR("2回タップで取り消す"));
         }
     }else if(this->current_tab == Tab::History){
         const Entry* e = FindEntry(this->selected_key);
@@ -270,7 +271,7 @@ void NotificationScene::refreshDetail(){
             char t[24];
             FormatTime(e->epoch, t, sizeof(t));
             text.appendFormat("%s  %s\n%s\n%s", t,
-                e->content.app.empty() ? "システム" : e->content.app.c_str(),
+                e->content.app.empty() ? TR("システム") : e->content.app.c_str(),
                 e->content.title.c_str(), e->content.body.c_str());
         }
     }else{
@@ -279,7 +280,7 @@ void NotificationScene::refreshDetail(){
             char when[32];
             DescribeWhen(*r, millis(), when, sizeof(when));
             text.appendFormat("%s  %s\n%s\n%s", when,
-                r->content.app.empty() ? "システム" : r->content.app.c_str(),
+                r->content.app.empty() ? TR("システム") : r->content.app.c_str(),
                 r->content.title.c_str(), r->content.body.c_str());
         }
     }
@@ -288,7 +289,7 @@ void NotificationScene::refreshDetail(){
 
 void NotificationScene::refreshSettingButtons(){
     //表示の箱の幅は作ったときの文字(長いほう)で固定してあるので、並びはずれない
-    if(this->mode_button) this->mode_button->setText(GetMode() == Mode::On ? "通常" : "控えめ");
+    if(this->mode_button) this->mode_button->setText(GetMode() == Mode::On ? TR("通常") : TR("控えめ"));
     //音はアイコンで今の状態を見せる(鳴る=スピーカー、鳴らない=斜線つき)
     if(this->sound_button) this->sound_button->setIcon(GetSoundEnabled() ? IconID::VolumeHigh : IconID::VolumeOff, IconSize::Px16);
 }

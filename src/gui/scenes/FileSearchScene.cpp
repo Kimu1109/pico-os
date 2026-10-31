@@ -8,6 +8,7 @@
 #include "storage/SD_IO.hpp"
 #include "task/StepBudget.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -164,14 +165,14 @@ void FileSearchScene::refreshStatus(){
     if(!this->status_label) return;
     char buf[PICO_STR_L];
     if(!this->started){
-        snprintf(buf, sizeof(buf), "%s を開けません", this->root.c_str());
+        snprintf(buf, sizeof(buf), TR("%s を開けません"), this->root.c_str());
     }else if(!this->done){
-        snprintf(buf, sizeof(buf), "検索中… %lu件中 %d件", (unsigned long)this->scanned, this->result_count);
+        snprintf(buf, sizeof(buf), TR("検索中… %lu件中 %d件"), (unsigned long)this->scanned, this->result_count);
     }else if(this->overflow){
-        snprintf(buf, sizeof(buf), "%s「%s」%d件以上(先頭%d件)", this->mode_ == Mode::Content ? "中身に" : "",
+        snprintf(buf, sizeof(buf), TR("%s「%s」%d件以上(先頭%d件)"), this->mode_ == Mode::Content ? TR("中身に") : "",
                  this->query.c_str(), kMaxResults, kMaxResults);
     }else{
-        snprintf(buf, sizeof(buf), "%s「%s」%d件", this->mode_ == Mode::Content ? "中身に" : "",
+        snprintf(buf, sizeof(buf), TR("%s「%s」%d件"), this->mode_ == Mode::Content ? TR("中身に") : "",
                  this->query.c_str(), this->result_count);
     }
     this->status_label->setTextColor((!this->started) ? PICO_RED : PICO_FORECOLOR);
@@ -190,7 +191,7 @@ void FileSearchScene::openResult(int index){
 }
 
 void FileSearchScene::askQuery(){
-    auto* d = new InputDialog(this->mode_ == Mode::Content ? "探す言葉:" : "探す名前:", true);
+    auto* d = new InputDialog(this->mode_ == Mode::Content ? TR("探す言葉:") : TR("探す名前:"), true);
     WidgetFunctions::AddDialog(d);
     d->setInput(this->query.c_str());
     d->setVisible(true);
@@ -211,14 +212,14 @@ void FileSearchScene::onEnter(){
     const Rect content = Scene::contentRect();
     const int top = content.y + MARGIN;
 
-    this->back_button = new Button(content.x + MARGIN, top, "戻る");
+    this->back_button = new Button(content.x + MARGIN, top, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(this->back_button);
 
-    this->again_button = new Button(0, top, "再検索");
+    this->again_button = new Button(0, top, TR("再検索"));
     this->again_button->setIcon(IconID::Search, IconSize::Px16);
     this->again_button->setFontSize(FontFn::Small);
     this->again_button->setH(20 + Button::kFrameExtra);

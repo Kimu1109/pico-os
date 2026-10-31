@@ -9,6 +9,7 @@
 #include "services/Power_Functions.hpp"
 #include "util/Wifi_Qr.hpp"
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -18,7 +19,7 @@ void WifiSetupScene::onEnter(){
     const int y0 = content.y + MARGIN;
     const int w = content.w - MARGIN * 2;
 
-    Button* back = new Button(content.x + MARGIN, y0, "戻る");
+    Button* back = new Button(content.x + MARGIN, y0, TR("戻る"));
     back->setIcon(IconID::ArrowLeft, IconSize::Px16);
     back->setFontSize(FontFn::Small);
     back->setH(20 + Button::kFrameExtra);
@@ -26,7 +27,7 @@ void WifiSetupScene::onEnter(){
     WidgetFunctions::Add(back);
     const Rect back_box = back->getLocalRect();
 
-    auto* title = new Label<PICO_STR_M>(back_box.x + back_box.w + MARGIN, y0, "スマホから設定");
+    auto* title = new Label<PICO_STR_M>(back_box.x + back_box.w + MARGIN, y0, TR("スマホから設定"));
     title->setFontSize(FontFn::Small);
     title->setY(y0 + (back_box.h - FontFn::GetFontSize(FontFn::Small)) / 2);
     title->setDisableAutoTextDecoration(true);
@@ -52,12 +53,12 @@ void WifiSetupScene::onEnter(){
 
     if(this->failed){
         char msg[PICO_STR_256B];
-        snprintf(msg, sizeof(msg), "始められませんでした: %s", err.c_str());
+        snprintf(msg, sizeof(msg), TR("始められませんでした: %s"), err.c_str());
         this->guide_label = addText(msg, 4);
         return;
     }
 
-    addText("1. QRを読むか、Wi-Fiで接続", 1);
+    addText(TR("1. QRを読むか、Wi-Fiで接続"), 1);
     // 右にAPへ繋ぐQR。読めばスマホがそのまま繋ぎ、ページも自動で開く
     FixedString<PICO_STR_LL> wifi_qr;
     WifiQr::Build(wifi_qr, WifiSetupFunctions::ApSsid(), WifiSetupFunctions::ApPassword());
@@ -90,12 +91,12 @@ void WifiSetupScene::onEnter(){
     WidgetFunctions::Add(this->pass_label);
     y = row_top + kQrSize + MARGIN;
 
-    addText("2. 自動で開かなければ次を開く", 1);
+    addText(TR("2. 自動で開かなければ次を開く"), 1);
     // URLは折り返さずに1行で見せる(途中で切れると打ち写せない)
     char url[PICO_STR_M];
     snprintf(url, sizeof(url), "   %s", WifiSetupFunctions::PageUrl());
     addText(url, 1);
-    addText("3. 本体を接続したいWi-Fiの名前とパスワードを入れて送る", 2);
+    addText(TR("3. 本体を接続したいWi-Fiの名前とパスワードを入れて送る"), 2);
 
     this->status_label = new Label<PICO_STR_LL>(content.x + MARGIN, y + MARGIN, "");
     this->status_label->setFontSize(FontFn::Small);
@@ -117,12 +118,12 @@ void WifiSetupScene::refreshStatus(){
     this->shown_clients = clients;
     char buf[PICO_STR_LL];
     if(st == WifiSetupFunctions::State::Saved){
-        snprintf(buf, sizeof(buf), "「%s」を受け取りました。接続します", WifiSetupFunctions::SavedSsid());
+        snprintf(buf, sizeof(buf), TR("「%s」を受け取りました。接続します"), WifiSetupFunctions::SavedSsid());
         this->status_label->setTextColor(PICO_DARKGREEN);
     }else if(clients > 0){
-        snprintf(buf, sizeof(buf), "待っています(接続している端末: %d台)", clients);
+        snprintf(buf, sizeof(buf), TR("待っています(接続している端末: %d台)"), clients);
     }else{
-        snprintf(buf, sizeof(buf), "待っています");
+        snprintf(buf, sizeof(buf), TR("待っています"));
     }
     this->status_label->setText(buf);
 }

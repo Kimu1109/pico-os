@@ -1,15 +1,10 @@
+// 引き当てと言語コードだけ(SDもログも使わない)。TR() を使うどのファイルからもリンクされるので、
+// 設定ファイルを読み書きする Setup()/SetLanguage() は I18n_Setup.cpp に分けてある
 #include "system/I18n_Functions.hpp"
-#include "system/Config_Functions.hpp"
-#include "system/Log_Functions.hpp"
-#include "storage/SD_Path.hpp"
 
 #include <cstring>
 
 namespace {
-    I18nFunctions::Lang current = I18nFunctions::Lang::Ja;
-
-    constexpr const char* kUserCfgKey = "language";
-
     const I18nFunctions::Entry* tableOf(I18nFunctions::Lang lang, size_t& count){
         switch(lang){
             case I18nFunctions::Lang::En:
@@ -23,9 +18,9 @@ namespace {
 }
 
 const char* I18nFunctions::Lookup(uint32_t hash, const char* src){
-    if(current == Lang::Ja) return src;
+    if(current_lang == Lang::Ja) return src;
     size_t count = 0;
-    const Entry* table = tableOf(current, count);
+    const Entry* table = tableOf(current_lang, count);
     //hash の昇順(生成時に重複が無いことを確かめてある)
     size_t lo = 0, hi = count;
     while(lo < hi){
@@ -39,42 +34,12 @@ const char* I18nFunctions::Lookup(uint32_t hash, const char* src){
 }
 
 const char* I18nFunctions::Tr(const char* src){
-    if(!src || current == Lang::Ja) return src;
+    if(!src || current_lang == Lang::Ja) return src;
     return Lookup(Hash(src), src);
 }
 
-void I18nFunctions::Setup(){
-    Lang lang = Lang::Ja;
-    if(override_code){
-        if(!FromCode(override_code, lang)){
-            LOG_SYS_WARN("I18n: 知らない言語です (%s)。日本語にします", override_code);
-        }
-    }else{
-        bool found = false;
-        PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_USER_CFG,
-            [&](const char* key, const char* value){
-                if(strcmp(key, kUserCfgKey) != 0) return;
-                found = FromCode(value, lang);
-                if(!found){
-                    LOG_SYS_WARN("I18n: user.cfg の language が読めません (%s)", value);
-                }
-            }
-        );
-        //知らない言語(ブラウザが fr 等)は日本語ではなく英語で見せる
-        if(!found && default_code && !FromCode(default_code, lang)) lang = Lang::En;
-    }
-    current = lang;
-    LOG_SYS_OK("I18n Setup has succeeded! (%s)", Code(current));
-}
-
 I18nFunctions::Lang I18nFunctions::Current(){
-    return current;
-}
-
-void I18nFunctions::SetLanguage(Lang lang, bool save){
-    if(lang >= Lang::Count) return;
-    current = lang;
-    if(save) PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, kUserCfgKey, Code(lang));
+    return current_lang;
 }
 
 const char* I18nFunctions::Code(Lang lang){

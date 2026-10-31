@@ -11,6 +11,7 @@
 #include "storage/SD_Path.hpp"
 #include "util/Utf8Byte.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -31,9 +32,9 @@ void SshScene::loadConfig(){
 void SshScene::refreshButtons(){
     if(this->conn_button){
         const bool active = this->isActive();
-        this->conn_button->setText(active ? "切断" : "接続");
+        this->conn_button->setText(active ? TR("切断") : TR("接続"));
     }
-    if(this->font_button) this->font_button->setText(this->small_font ? "文字:小" : "文字:大");
+    if(this->font_button) this->font_button->setText(this->small_font ? TR("文字:小") : TR("文字:大"));
 }
 
 void SshScene::layout(){
@@ -74,9 +75,9 @@ void SshScene::startPrompt(Prompt p, const char* text, bool echo){
 void SshScene::startTargetPrompt(){
     char buf[PICO_STR_LL];
     if(this->target_default.empty()){
-        snprintf(buf, sizeof(buf), "\r\n接続先 (ユーザー@ホスト[:ポート] [-J 踏み台]): ");
+        snprintf(buf, sizeof(buf), TR("\r\n接続先 (ユーザー@ホスト[:ポート] [-J 踏み台]): "));
     }else{
-        snprintf(buf, sizeof(buf), "\r\n接続先 [%s]: ", this->target_default.c_str());
+        snprintf(buf, sizeof(buf), TR("\r\n接続先 [%s]: "), this->target_default.c_str());
     }
     this->startPrompt(Prompt::Target, buf, true);
 }
@@ -146,8 +147,8 @@ void SshScene::submitLine(){
                 return;
             }
             if(!this->parseTarget(t.c_str())){
-                this->say("\x1b[91m「ユーザー名@ホスト[:ポート]」の形で入力してください。"
-                          "踏み台を通すときは後ろに「 -J ユーザー名@踏み台[:ポート]」\x1b[0m");
+                this->say(TR("\x1b[91m「ユーザー名@ホスト[:ポート]」の形で入力してください。"
+                          "踏み台を通すときは後ろに「 -J ユーザー名@踏み台[:ポート]」\x1b[0m"));
                 this->startTargetPrompt();
                 return;
             }
@@ -157,10 +158,10 @@ void SshScene::submitLine(){
             }
             char buf[PICO_STR_LL];
             if(this->use_jump){
-                snprintf(buf, sizeof(buf), "踏み台 %s:%u へ接続しています...\r\n",
+                snprintf(buf, sizeof(buf), TR("踏み台 %s:%u へ接続しています...\r\n"),
                          this->jump_host.c_str(), (unsigned)this->jump_port);
             }else{
-                snprintf(buf, sizeof(buf), "%s:%u へ接続しています...\r\n", this->host.c_str(), (unsigned)this->port);
+                snprintf(buf, sizeof(buf), TR("%s:%u へ接続しています...\r\n"), this->host.c_str(), (unsigned)this->port);
             }
             this->say(buf);
             this->connect_wait_frames = 2;
@@ -173,9 +174,9 @@ void SshScene::submitLine(){
             this->hostOf(c, h, pt, u);
             if(this->line == "yes" || this->line == "y" || this->line == "YES"){
                 if(SshUtil::AddKnownHost(PICO_Path::FILE::SSH_KNOWN_HOSTS, h, pt, c->hostKey())){
-                    this->say("known_hosts へ追加しました\r\n");
+                    this->say(TR("known_hosts へ追加しました\r\n"));
                 }else{
-                    this->say("\x1b[93m(known_hosts へ書き込めませんでした。次回も確認します)\x1b[0m\r\n");
+                    this->say(TR("\x1b[93m(known_hosts へ書き込めませんでした。次回も確認します)\x1b[0m\r\n"));
                 }
                 c->acceptHostKey(true);
             }else{
@@ -236,23 +237,23 @@ SshClient* SshScene::newClient(){
         case SshUtil::KeyResult::Ok:
             c->setIdentity(secret, pub);
             if(rewrite == SshUtil::KeyRewrite::Encrypted){
-                this->say("\x1b[93m秘密鍵を暗号化して保存し直しました\x1b[0m\r\n");
+                this->say(TR("\x1b[93m秘密鍵を暗号化して保存し直しました\x1b[0m\r\n"));
                 LOG_APP_MSG("SSH: 秘密鍵を暗号化して保存し直しました");
             }else if(rewrite == SshUtil::KeyRewrite::Failed){
-                this->say("\x1b[93m秘密鍵を暗号化して保存し直せませんでした(平文のままです)\x1b[0m\r\n");
+                this->say(TR("\x1b[93m秘密鍵を暗号化して保存し直せませんでした(平文のままです)\x1b[0m\r\n"));
                 LOG_APP_WARN("SSH: 秘密鍵を暗号化して保存し直せませんでした");
             }
             break;
         case SshUtil::KeyResult::NotFound:
             break;
         case SshUtil::KeyResult::Encrypted:
-            this->say("\x1b[93m鍵がパスフレーズ付きのため使えません(パスワードで続けます)\x1b[0m\r\n");
+            this->say(TR("\x1b[93m鍵がパスフレーズ付きのため使えません(パスワードで続けます)\x1b[0m\r\n"));
             break;
         case SshUtil::KeyResult::Unsupported:
-            this->say("\x1b[93m鍵の種類が ssh-ed25519 ではないため使えません\x1b[0m\r\n");
+            this->say(TR("\x1b[93m鍵の種類が ssh-ed25519 ではないため使えません\x1b[0m\r\n"));
             break;
         case SshUtil::KeyResult::Broken:
-            this->say("\x1b[93m鍵ファイルを読めませんでした\x1b[0m\r\n");
+            this->say(TR("\x1b[93m鍵ファイルを読めませんでした\x1b[0m\r\n"));
             break;
     }
     memset(secret, 0, sizeof(secret));
@@ -263,7 +264,7 @@ void SshScene::beginConnect(){
     this->dropClient();
 
     if(!NetworkFunctions::IsConnected()){
-        this->say("\x1b[91mWi-Fiに繋がっていません\x1b[0m\r\n");
+        this->say(TR("\x1b[91mWi-Fiに繋がっていません\x1b[0m\r\n"));
         this->startTargetPrompt();
         return;
     }
@@ -299,7 +300,7 @@ void SshScene::beginConnect(){
 void SshScene::onJumpOpen(){
     //踏み台の通り道が開いた。その上で相手とSSHする
     char buf[PICO_STR_LL];
-    snprintf(buf, sizeof(buf), "踏み台経由で %s:%u へ接続しています...\r\n", this->host.c_str(), (unsigned)this->port);
+    snprintf(buf, sizeof(buf), TR("踏み台経由で %s:%u へ接続しています...\r\n"), this->host.c_str(), (unsigned)this->port);
     this->say(buf);
     this->client = this->newClient();
     if(this->view){
@@ -327,24 +328,24 @@ void SshScene::onStateChanged(SshClient* c, SshClient::State s){
             }
             if(st == SshUtil::HostStatus::Mismatch){
                 snprintf(buf, sizeof(buf),
-                    "\x1b[91m警告: %s のホスト鍵が以前と違います!\r\n"
+                    TR("\x1b[91m警告: %s のホスト鍵が以前と違います!\r\n"
                     "なりすましの可能性があります。心当たりがあれば\r\n"
                     "%s から該当する行を消してください。\r\n"
-                    "今の鍵: %s\x1b[0m\r\n",
+                    "今の鍵: %s\x1b[0m\r\n"),
                     h, PICO_Path::FILE::SSH_KNOWN_HOSTS, fp);
                 this->say(buf);
                 c->acceptHostKey(false);
                 return;
             }
             snprintf(buf, sizeof(buf),
-                "%s%s は初めて接続するホストです。\r\nED25519の鍵の指紋:\r\n%s\r\n", is_jump ? "踏み台 " : "", h, fp);
+                TR("%s%s は初めて接続するホストです。\r\nED25519の鍵の指紋:\r\n%s\r\n"), is_jump ? TR("踏み台 ") : "", h, fp);
             this->say(buf);
             this->prompt_client = c;
-            this->startPrompt(Prompt::HostKey, "このホストを信頼して接続しますか? (yes/no): ", true);
+            this->startPrompt(Prompt::HostKey, TR("このホストを信頼して接続しますか? (yes/no): "), true);
             return;
         }
         case SshClient::State::NeedPassword: {
-            snprintf(buf, sizeof(buf), "%s@%s の%s", u, h, c->promptText());
+            snprintf(buf, sizeof(buf), TR("%s@%s の%s"), u, h, c->promptText());
             this->prompt_client = c;
             this->startPrompt(Prompt::Secret, buf, c->promptEcho());
             return;
@@ -358,10 +359,10 @@ void SshScene::onStateChanged(SshClient* c, SshClient::State s){
             //踏み台が先に切れた場合は、中の「接続が切れました」より踏み台の理由の方が役に立つ
             const char* why = c->errorText();
             if(!is_jump && this->jump && this->jump->state() == SshClient::State::Closed &&
-               strcmp(why, "接続が切れました") == 0){
+               strcmp(why, TR("接続が切れました")) == 0){ //Ssh_Client が同じ TR() で書く
                 why = this->jump->errorText();
             }
-            snprintf(buf, sizeof(buf), "\r\n\x1b[0m\x1b[93m%s%s\x1b[0m\r\n", is_jump ? "踏み台: " : "", why);
+            snprintf(buf, sizeof(buf), "\r\n\x1b[0m\x1b[93m%s%s\x1b[0m\r\n", is_jump ? TR("踏み台: ") : "", why);
             //代替画面(vim等)の途中で切れた場合に備えて、普通の画面へ戻す
             //(スクロール範囲の指定を戻すとカーソルが左上へ飛ぶので、保存/復元で挟む)
             this->say("\x1b[?1049l\x1b[?25h\x1b" "7\x1b[r\x1b" "8");
@@ -610,13 +611,13 @@ void SshScene::onEnter(){
     // 上の段: 戻る 接続/切断 文字の大きさ … キーボードの出し入れ(右端)
     int x = content.x + MARGIN;
     const int y1 = content.y + MARGIN;
-    this->back_button = make_button("戻る", x, y1);
+    this->back_button = make_button(TR("戻る"), x, y1);
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     x += this->back_button->getLocalRect().w + MARGIN;
-    this->conn_button = make_button("接続", x, y1);
+    this->conn_button = make_button(TR("接続"), x, y1);
     this->conn_button->setW(this->conn_button->getLocalRect().w + Button::kFrameExtra); //文字が変わっても幅を変えない
     x += this->conn_button->getLocalRect().w + MARGIN;
-    this->font_button = make_button("文字:大", x, y1);
+    this->font_button = make_button(TR("文字:大"), x, y1);
     this->font_button->setW(this->font_button->getLocalRect().w + Button::kFrameExtra);
 
     const int row_h = this->back_button->getLocalRect().h;
@@ -670,7 +671,7 @@ void SshScene::onEnter(){
         this->started = true;
         this->say("\x1b[1mpico-os SSH\x1b[0m\r\n");
         if(!OSData::SD.exists(PICO_Path::FILE::SSH_ID_ED25519)){
-            this->say("(公開鍵認証を使うには /sys/ssh/id_ed25519 に鍵を置きます)\r\n");
+            this->say(TR("(公開鍵認証を使うには /sys/ssh/id_ed25519 に鍵を置きます)\r\n"));
         }
         this->startTargetPrompt();
     }
@@ -689,7 +690,7 @@ void SshScene::onExit(){
     //画面を離れたら切る(受信を進める者がいなくなるため)
     if(this->client || this->jump){
         this->dropClient();
-        this->say("\r\n\x1b[93m切断しました\x1b[0m\r\n");
+        this->say(TR("\r\n\x1b[93m切断しました\x1b[0m\r\n"));
         this->startTargetPrompt();
     }
     this->connect_wait_frames = -1;

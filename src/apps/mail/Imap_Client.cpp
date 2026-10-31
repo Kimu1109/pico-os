@@ -8,6 +8,7 @@
 #include "util/Base64.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -131,25 +132,25 @@ bool ImapClient::configure(const Config& given){
 
     const bool need_password = cfg_.auth == Auth::Password;
     if(cfg_.host.empty() || cfg_.user.empty() || (need_password && cfg_.password.empty())){
-        setStatus(State::NotConfigured, "メールのアカウントがありません。[設定] から入れてください");
+        setStatus(State::NotConfigured, TR("メールのアカウントがありません。[設定] から入れてください"));
         return false;
     }
     if(cfg_.auth == Auth::Microsoft && cfg_.oauth.client_id.empty()){
-        setStatus(State::NotConfigured, "mail.cfg に oauth-client-id がありません。[設定] から入れてください");
+        setStatus(State::NotConfigured, TR("mail.cfg に oauth-client-id がありません。[設定] から入れてください"));
         return false;
     }
     //LOGIN へそのまま入れるので、quoted string にできるか先に確かめる
     char q[PICO_STR_256B];
     if(!Imap::Quote(cfg_.user.c_str(), q, sizeof(q))){
-        setStatus(State::NotConfigured, "ユーザー名に使えない文字があります(半角英数字と記号だけ)");
+        setStatus(State::NotConfigured, TR("ユーザー名に使えない文字があります(半角英数字と記号だけ)"));
         return false;
     }
     if(need_password && !Imap::Quote(cfg_.password.c_str(), q, sizeof(q))){
-        setStatus(State::NotConfigured, "パスワードに使えない文字があります(半角英数字と記号だけ)");
+        setStatus(State::NotConfigured, TR("パスワードに使えない文字があります(半角英数字と記号だけ)"));
         return false;
     }
     if(!Imap::Quote(cfg_.mailbox.c_str(), q, sizeof(q))){
-        setStatus(State::NotConfigured, "mail.cfg の mailbox に使えない文字があります");
+        setStatus(State::NotConfigured, TR("mail.cfg の mailbox に使えない文字があります"));
         return false;
     }
 
@@ -166,7 +167,7 @@ bool ImapClient::loadConfig(){
     if(!OSData::SD_usable){
         disconnect();
         configured_ = false;
-        setStatus(State::NotConfigured, "SDカードがありません");
+        setStatus(State::NotConfigured, TR("SDカードがありません"));
         return false;
     }
 
@@ -207,7 +208,7 @@ bool ImapClient::loadConfig(){
         disconnect();
         configured_ = false;
         cfg_ = Config{};
-        setStatus(State::NotConfigured, "メールのアカウントがありません。[設定] から入れてください");
+        setStatus(State::NotConfigured, TR("メールのアカウントがありません。[設定] から入れてください"));
         return false;
     }
     c.password.assign(password);
@@ -334,7 +335,7 @@ bool ImapClient::startSignIn(){
         //すぐに失敗した(client_id が無い等)。理由は updateOAuth() で出す
         return false;
     }
-    setStatus(State::SigningIn, "サインインを始めています…");
+    setStatus(State::SigningIn, TR("サインインを始めています…"));
     return true;
 }
 
@@ -343,7 +344,7 @@ void ImapClient::cancelSignIn(){
     oauth_.cancel();
     oauth_op_ = OAuthOp::None;
     oauth_seen_rev_ = oauth_.revision();
-    setStatus(State::NeedSignIn, "サインインをやめました。[更新] でサインインし直せます");
+    setStatus(State::NeedSignIn, TR("サインインをやめました。[更新] でサインインし直せます"));
 }
 
 bool ImapClient::ensureAccessToken(){
@@ -351,8 +352,8 @@ bool ImapClient::ensureAccessToken(){
     if(oauth_op_ != OAuthOp::None) return false;
     if(!oauth_.hasRefreshToken()){
         wait_manual_ = true;
-        failPendingBody("Microsoft のサインインが必要です");
-        setStatus(State::NeedSignIn, "Microsoft のサインインが必要です。[更新] を押してサインインしてください");
+        failPendingBody(TR("Microsoft のサインインが必要です"));
+        setStatus(State::NeedSignIn, TR("Microsoft のサインインが必要です。[更新] を押してサインインしてください"));
         return false;
     }
     oauth_op_ = OAuthOp::Refresh;
@@ -365,7 +366,7 @@ void ImapClient::updateOAuth(){
     if(oauth_op_ == OAuthOp::SignIn && oauth_.phase() == MailOAuth::Phase::WaitUser){
         //案内(コードと残り時間)を状態の行へ
         FixedString<PICO_STR_LL> t;
-        t.appendFormat("%s でコード %s を入れてください", oauth_.verificationUri(), oauth_.userCode());
+        t.appendFormat(TR("%s でコード %s を入れてください"), oauth_.verificationUri(), oauth_.userCode());
         if(state_ != State::SigningIn || strcmp(status_.c_str(), t.c_str()) != 0) setStatus(State::SigningIn, t.c_str());
     }
     if(oauth_.revision() == oauth_seen_rev_) return;
@@ -470,7 +471,7 @@ void ImapClient::stop(){
     //アクセストークンを取り直している途中ならやめる(サインインの途中もやめる。コードは出し直せる)
     if(oauth_op_ != OAuthOp::None){
         oauth_.cancel();
-        if(oauth_op_ == OAuthOp::SignIn) setStatus(State::NeedSignIn, "サインインをやめました。[更新] でサインインし直せます");
+        if(oauth_op_ == OAuthOp::SignIn) setStatus(State::NeedSignIn, TR("サインインをやめました。[更新] でサインインし直せます"));
         oauth_op_ = OAuthOp::None;
         oauth_seen_rev_ = oauth_.revision();
     }
@@ -480,12 +481,12 @@ bool ImapClient::send(Cmd cmd, const char* args){
     char line[512];
     const int n = snprintf(line, sizeof(line), "a%u %s\r\n", (unsigned)++tag_, args);
     if(n <= 0 || (size_t)n >= sizeof(line)){
-        failLater("コマンドが長すぎます");
+        failLater(TR("コマンドが長すぎます"));
         disconnect();
         return false;
     }
     if(net_.write((const uint8_t*)line, (size_t)n) != (size_t)n){
-        failLater("送れません(接続が切れました)");
+        failLater(TR("送れません(接続が切れました)"));
         disconnect();
         return false;
     }
@@ -525,9 +526,9 @@ void ImapClient::update(bool network_up){
         if(want_body_){
             body_req_uid_ = want_body_;
             want_body_ = 0;
-            finishBody(false, "Wi-Fiに繋がっていません");
+            finishBody(false, TR("Wi-Fiに繋がっていません"));
         }
-        if(state_ != State::Offline) setStatus(State::Offline, "Wi-Fiに繋がっていません");
+        if(state_ != State::Offline) setStatus(State::Offline, TR("Wi-Fiに繋がっていません"));
         return;
     }
     if(state_ == State::Offline){
@@ -566,12 +567,12 @@ void ImapClient::update(bool network_up){
 
     if(!net_.connected() && net_.available() <= 0){
         const bool active = cmd_ != Cmd::None || phase_ != Phase::Ready;
-        if(active) failLater("接続が切れました");
+        if(active) failLater(TR("接続が切れました"));
         disconnect();
         return;
     }
     if((cmd_ != Cmd::None || phase_ == Phase::Greeting) && Reached(now, cmd_started_ms_ + kResponseTimeoutMs)){
-        failLater("サーバが応答しません");
+        failLater(TR("サーバが応答しません"));
         disconnect();
         return;
     }
@@ -622,7 +623,7 @@ void ImapClient::onResponse(const char* text, size_t len, bool overflow){
                 if(!auth_sent_){
                     auth_sent_ = true;
                     if(!sendXoauth2()){
-                        failLater("送れません(接続が切れました)");
+                        failLater(TR("送れません(接続が切れました)"));
                         disconnect();
                     }
                 }else{
@@ -639,7 +640,7 @@ void ImapClient::handleUntagged(const Imap::Response& r, const char* text, size_
     if(r.status == Imap::Status::Bye){
         if(phase_ == Phase::Greeting || cmd_ != Cmd::None){
             FixedString<PICO_STR_LL> why;
-            WithServerText(why, "サーバに切られました", r.text);
+            WithServerText(why, TR("サーバに切られました"), r.text);
             failLater(why.c_str());
         }
         disconnect();
@@ -667,7 +668,7 @@ void ImapClient::handleUntagged(const Imap::Response& r, const char* text, size_
             phase_ = Phase::Select;
             send(Cmd::Select, args);
         }else{
-            failLater("IMAPのサーバではないようです");
+            failLater(TR("IMAPのサーバではないようです"));
             disconnect();
         }
         return;
@@ -740,7 +741,7 @@ void ImapClient::handleTagged(const Imap::Response& r){
     switch(cmd){
         case Cmd::Login:
             if(!ok){
-                WithServerText(why, "ログインできません", r.text);
+                WithServerText(why, TR("ログインできません"), r.text);
                 LOG_APP_WARN("Mail: %s", why.c_str());
                 //間違ったパスワードを繰り返し送らない(サーバに締め出される)。[更新] で再開する
                 wait_manual_ = true;
@@ -770,8 +771,8 @@ void ImapClient::handleTagged(const Imap::Response& r){
                     next_poll_ms_ = millis();
                     return;
                 }
-                WithServerText(why, "ログインできません", r.text);
-                why.append("(Outlook.com の設定で IMAP を有効にしているか確かめてください)");
+                WithServerText(why, TR("ログインできません"), r.text);
+                why.append(TR("(Outlook.com の設定で IMAP を有効にしているか確かめてください)"));
                 LOG_APP_WARN("Mail: %s", why.c_str());
                 wait_manual_ = true;
                 want_list_ = false;
@@ -788,9 +789,9 @@ void ImapClient::handleTagged(const Imap::Response& r){
 
         case Cmd::Select:
             if(!ok){
-                why.assign("メールボックス「");
+                why.assign(TR("メールボックス「"));
                 why.append(cfg_.mailbox);
-                why.append("」を開けません");
+                why.append(TR("」を開けません"));
                 if(*r.text){ why.append(": "); why.append(r.text); }
                 failLater(why.c_str());
                 disconnect();
@@ -803,7 +804,7 @@ void ImapClient::handleTagged(const Imap::Response& r){
 
         case Cmd::Noop:
             if(!ok){
-                WithServerText(why, "新着を確かめられません", r.text);
+                WithServerText(why, TR("新着を確かめられません"), r.text);
                 failLater(why.c_str());
                 disconnect();
                 return;
@@ -837,7 +838,7 @@ void ImapClient::handleTagged(const Imap::Response& r){
         case Cmd::List:
             if(!ok){
                 listed_exists_ = 0xFFFFFFFFu;
-                WithServerText(why, "一覧を取れません", r.text);
+                WithServerText(why, TR("一覧を取れません"), r.text);
                 failLater(why.c_str());
                 disconnect();
                 return;
@@ -861,12 +862,12 @@ void ImapClient::handleTagged(const Imap::Response& r){
 
         case Cmd::Body:
             if(!ok){
-                WithServerText(why, "メールを取れません", r.text);
+                WithServerText(why, TR("メールを取れません"), r.text);
                 finishBody(false, why.c_str());
                 return;
             }
             if(!body_got_){
-                finishBody(false, "メールが見つかりません(削除されたかもしれません)");
+                finishBody(false, TR("メールが見つかりません(削除されたかもしれません)"));
                 return;
             }
             finishBody(true, "");

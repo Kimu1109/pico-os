@@ -5,6 +5,7 @@
 #include "gui/core/Widget_Functions.hpp"
 #include "gui/core/Font_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstring>
 #include <cstdio>
@@ -12,12 +13,12 @@
 namespace {
     const char* ProgErrorMessage(CalcProg::Error e){
         switch(e){
-            case CalcProg::Error::DivByZero:  return "0で割ることはできません";
-            case CalcProg::Error::BadDigit:   return "この基数では使えない数字です";
-            case CalcProg::Error::Overflow:   return "64bitに収まりません";
-            case CalcProg::Error::TooComplex: return "式が複雑すぎます";
+            case CalcProg::Error::DivByZero:  return TR("0で割ることはできません");
+            case CalcProg::Error::BadDigit:   return TR("この基数では使えない数字です");
+            case CalcProg::Error::Overflow:   return TR("64bitに収まりません");
+            case CalcProg::Error::TooComplex: return TR("式が複雑すぎます");
             case CalcProg::Error::Syntax:
-            default:                          return "式が正しくありません";
+            default:                          return TR("式が正しくありません");
         }
     }
 

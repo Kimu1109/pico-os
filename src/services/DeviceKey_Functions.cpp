@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 #if !defined(PICOOS_PC)
 #include "pico/bootrom.h"
@@ -338,15 +339,15 @@ DeviceKeyFunctions::State DeviceKeyFunctions::GetState(){ return state; }
 
 const char* DeviceKeyFunctions::StateText(){
     switch(state){
-        case State::Ready: return "作成済み";
-        case State::Broken: return "壊れています";
+        case State::Ready: return TR("作成済み");
+        case State::Broken: return TR("壊れています");
         case State::None:
-        default: return "未作成";
+        default: return TR("未作成");
     }
 }
 
 bool DeviceKeyFunctions::Provision(char* msg, size_t cap){
-    if(state == State::Ready){ snprintf(msg, cap, "端末の鍵はもうあります"); return false; }
+    if(state == State::Ready){ snprintf(msg, cap, TR("端末の鍵はもうあります")); return false; }
     int slot = -1;
     for(int s = 0; s < kSlots && slot < 0; s++){
         uint8_t key[kKeyBytes];
@@ -355,7 +356,7 @@ bool DeviceKeyFunctions::Provision(char* msg, size_t cap){
     }
     if(slot < 0){
         state = State::Broken;
-        snprintf(msg, cap, "OTPに空きがありません");
+        snprintf(msg, cap, TR("OTPに空きがありません"));
         return false;
     }
 
@@ -365,7 +366,7 @@ bool DeviceKeyFunctions::Provision(char* msg, size_t cap){
         SecretAead::Random(key, sizeof(key));
         for(int i = 0; i < kKeyBytes; i++) if(key[i] != 0) zero = false;
     }
-    if(zero){ snprintf(msg, cap, "乱数を作れませんでした"); return false; }
+    if(zero){ snprintf(msg, cap, TR("乱数を作れませんでした")); return false; }
 
     const bool wrote = WriteSlot(slot, key);
     uint8_t back[kKeyBytes];
@@ -375,7 +376,7 @@ bool DeviceKeyFunctions::Provision(char* msg, size_t cap){
         crypto_wipe(key, sizeof(key));
         LOG_SYS_FAIL("DeviceKey: OTPへの書き込みに失敗しました(枠%d)", slot + 1);
         Setup();   //書きかけの枠を壊れた枠として数え直す
-        snprintf(msg, cap, "OTPへ書けませんでした%s", state == State::Broken ? "(空きもありません)" : "(もう一度試せます)");
+        snprintf(msg, cap, TR("OTPへ書けませんでした%s"), state == State::Broken ? TR("(空きもありません)") : TR("(もう一度試せます)"));
         return false;
     }
     Derive(key);
@@ -384,9 +385,9 @@ bool DeviceKeyFunctions::Provision(char* msg, size_t cap){
     LOG_SYS_OK("DeviceKey: 端末の鍵を作りました(枠%d)", slot + 1);
 
     const MigrateResult r = MigrateSecrets();
-    snprintf(msg, cap, "端末の鍵を作りました。%d項目を暗号化し直しました%s%s", r.upgraded,
-             r.failed ? "(失敗あり。ログを見てください)" : "",
-             r.pin_pending ? "。PINは次に解除したとき" : "");
+    snprintf(msg, cap, TR("端末の鍵を作りました。%d項目を暗号化し直しました%s%s"), r.upgraded,
+             r.failed ? TR("(失敗あり。ログを見てください)") : "",
+             r.pin_pending ? TR("。PINは次に解除したとき") : "");
     return true;
 }
 

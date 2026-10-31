@@ -14,6 +14,7 @@
 #include "storage/SD_IO.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "OS_Data.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <Arduino.h>
 #include <cstdio>
@@ -85,12 +86,12 @@ bool TextEditorScene::edit(int start, int end, const char* s, int n, bool chaine
 }
 
 const char* TextEditorScene::checkLimits(int start, int end, const char* s, int n) const {
-    if(this->len - (end - start) + n > kMaxBytes) return "容量の上限(32KiB)を超えます";
+    if(this->len - (end - start) + n > kMaxBytes) return TR("容量の上限(32KiB)を超えます");
 
     int lines = this->lineCount();
     for(int i = start; i < end; i++) if(this->text[i] == '\n') lines--;
     for(int i = 0; i < n; i++) if(s[i] == '\n') lines++;
-    if(lines > kMaxLines) return "行数の上限(1000行)を超えます";
+    if(lines > kMaxLines) return TR("行数の上限(1000行)を超えます");
 
     int ls, le, es, ee;
     this->lineRange(this->lineOfByte(start), ls, le);
@@ -98,13 +99,13 @@ const char* TextEditorScene::checkLimits(int start, int end, const char* s, int 
     int cur = start - ls;
     for(int i = 0; i < n; i++){
         if(s[i] == '\n'){
-            if(cur > kMaxLineBytes) return "1行が長くなりすぎます(191バイトまで)";
+            if(cur > kMaxLineBytes) return TR("1行が長くなりすぎます(191バイトまで)");
             cur = 0;
         }else{
             cur++;
         }
     }
-    if(cur + (ee - end) > kMaxLineBytes) return "1行が長くなりすぎます(191バイトまで)";
+    if(cur + (ee - end) > kMaxLineBytes) return TR("1行が長くなりすぎます(191バイトまで)");
     return nullptr;
 }
 
@@ -139,8 +140,8 @@ void TextEditorScene::refreshStatus(const char* message){
         snprintf(buf, sizeof(buf), "%s", message);
     }else{
         snprintf(buf, sizeof(buf), "%s%s",
-            this->path.empty() ? "(新規)" : PICO_IO::filename(this->path.c_str()),
-            this->dirty ? " (未保存)" : "");
+            this->path.empty() ? TR("(新規)") : PICO_IO::filename(this->path.c_str()),
+            this->dirty ? TR(" (未保存)") : "");
     }
     this->status_label->setText(buf);
 }
@@ -189,13 +190,13 @@ void TextEditorScene::onEnter(){
     // 「新規」は幅が足りないので編集メニューの中
     int x = content.x + MARGIN;
     const int y1 = content.y + MARGIN;
-    this->back_button = make_button("戻る", x, y1);
+    this->back_button = make_button(TR("戻る"), x, y1);
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     x += this->back_button->getLocalRect().w + MARGIN;
-    this->open_button = make_button("開く", x, y1);
+    this->open_button = make_button(TR("開く"), x, y1);
     this->open_button->setIcon(IconID::FolderOpen, IconSize::Px16);
     x += this->open_button->getLocalRect().w + MARGIN;
-    this->save_button = make_button("保存", x, y1);
+    this->save_button = make_button(TR("保存"), x, y1);
     this->save_button->setIcon(IconID::Save, IconSize::Px16);
 
     const int row_h = this->back_button->getLocalRect().h;
@@ -244,10 +245,10 @@ void TextEditorScene::onEnter(){
         return b;
     };
     this->find_close_button = make_bar_button("×");
-    this->replace_all_button = make_bar_button("全部");
-    this->replace_one_button = make_bar_button("置換");
-    this->find_next_button = make_bar_button("次");
-    this->find_prev_button = make_bar_button("前");
+    this->replace_all_button = make_bar_button(TR("全部"));
+    this->replace_one_button = make_bar_button(TR("置換"));
+    this->find_next_button = make_bar_button(TR("次"));
+    this->find_prev_button = make_bar_button(TR("前"));
     this->view_top_normal = view_y;
     this->view_top_search = y3 + row_h + MARGIN;
 
@@ -276,12 +277,12 @@ void TextEditorScene::onEnter(){
     WidgetFunctions::Add(this->view);
 
     this->back_button->setOnPressEnd([this](){
-        this->confirmDiscard("保存していない変更があります。破棄して戻りますか?", [](){
+        this->confirmDiscard(TR("保存していない変更があります。破棄して戻りますか?"), [](){
             SceneFunctions::Pop();
         });
     });
     this->open_button->setOnPressEnd([this](){
-        this->confirmDiscard("保存していない変更があります。破棄して別のファイルを開きますか?", [this](){
+        this->confirmDiscard(TR("保存していない変更があります。破棄して別のファイルを開きますか?"), [this](){
             KeyboardFunctions::HideAll();
             this->pending = Pending::OpenPicker;
             this->pending_wait_frames = 1;
@@ -291,8 +292,8 @@ void TextEditorScene::onEnter(){
     this->kb_button->setOnPressEnd([this](){ this->toggleKeyboard(); });
     this->undo_button->setOnPressEnd([this](){ this->undo(); });
     this->menu_button->setOnPressEnd([this](){ this->openMenu(); });
-    this->find_prev_button->setOnPressEnd([this](){ if(!this->findNext(true)) this->refreshStatus("見つかりません"); });
-    this->find_next_button->setOnPressEnd([this](){ if(!this->findNext(false)) this->refreshStatus("見つかりません"); });
+    this->find_prev_button->setOnPressEnd([this](){ if(!this->findNext(true)) this->refreshStatus(TR("見つかりません")); });
+    this->find_next_button->setOnPressEnd([this](){ if(!this->findNext(false)) this->refreshStatus(TR("見つかりません")); });
     this->replace_one_button->setOnPressEnd([this](){ this->replaceOne(); });
     this->replace_all_button->setOnPressEnd([this](){ this->replaceAll(); });
     this->find_close_button->setOnPressEnd([this](){ this->setSearchOpen(false); });
@@ -354,7 +355,7 @@ void TextEditorScene::onUpdate(){
     else if(p == Pending::OpenReplace) this->openFindDialog(true);
     else if(p == Pending::OpenReplaceWith) this->openReplaceWithDialog();
     else if(p == Pending::NewDocument){
-        this->confirmDiscard("保存していない変更があります。破棄して新規作成しますか?", [this](){
+        this->confirmDiscard(TR("保存していない変更があります。破棄して新規作成しますか?"), [this](){
             this->newDocument();
         });
     }

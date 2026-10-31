@@ -1,4 +1,5 @@
 #include "apps/recorder/Transcribe_Proto.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -129,13 +130,13 @@ void Transcribe::ErrorParser::onValue(const char* key, JsonReader::Type type, co
 void Transcribe::DescribeFailure(char* out, size_t cap, int status, const char* reason){
     const char* what;
     switch(status){
-        case 400: what = "受け付けられませんでした"; break;
-        case 401: what = "APIキーが違います"; break;
-        case 403: what = "使う権限がありません"; break;
-        case 404: what = "送り先が見つかりません(api / model を確認)"; break;
-        case 413: what = "録音が大きすぎます"; break;
-        case 429: what = "回数か残高の上限です"; break;
-        default:  what = status >= 500 ? "相手のサーバの不調です" : "失敗しました"; break;
+        case 400: what = TR("受け付けられませんでした"); break;
+        case 401: what = TR("APIキーが違います"); break;
+        case 403: what = TR("使う権限がありません"); break;
+        case 404: what = TR("送り先が見つかりません(api / model を確認)"); break;
+        case 413: what = TR("録音が大きすぎます"); break;
+        case 429: what = TR("回数か残高の上限です"); break;
+        default:  what = status >= 500 ? TR("相手のサーバの不調です") : TR("失敗しました"); break;
     }
     if(reason && *reason) snprintf(out, cap, "%s(HTTP %d: %s)", what, status, reason);
     else snprintf(out, cap, "%s(HTTP %d)", what, status);

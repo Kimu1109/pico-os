@@ -4,6 +4,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/ScrollList.hpp"
+#include "system/I18n_Functions.hpp"
 
 // 検索結果を出すダイアログ(docs/PROTOCOL.md「3. 検索」)。
 //
@@ -85,19 +86,19 @@ class SearchDialog : public Widget {
                 this->setVisible(false);
             });
 
-            this->research_button = makeButton("再検索", BASE_X + MARGIN, RESEARCH_W);
+            this->research_button = makeButton(TR("再検索"), BASE_X + MARGIN, RESEARCH_W);
             this->research_button->setOnPressStart([this](){
                 if(this->on_research) this->on_research();
             });
 
-            this->next_button = makeButton("次へ",
+            this->next_button = makeButton(TR("次へ"),
                 BASE_X + (DIALOG_WIDTH - NEXT_W - BUTTON_EDGE) / 2, NEXT_W);
             this->next_button->setOnPressStart([this](){
                 if(this->on_next) this->on_next();
             });
             this->next_button->setVisible(false);
 
-            this->close_button = makeButton("閉じる",
+            this->close_button = makeButton(TR("閉じる"),
                 BASE_X + DIALOG_WIDTH - MARGIN - CLOSE_W - BUTTON_EDGE, CLOSE_W);
             this->close_button->setOnPressStart([this](){
                 if(this->on_closed) this->on_closed(false);

@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     constexpr int kColumns = 9;
@@ -75,7 +76,7 @@ namespace {
 }
 
 const char* FwIndex::ChannelText(Channel c){
-    return c == Channel::Stable ? "安定" : "夜間";
+    return c == Channel::Stable ? TR("安定") : TR("夜間");
 }
 
 bool FwIndex::SafeFileName(const char* name){

@@ -15,6 +15,7 @@
 #include "storage/SD_IO.hpp"
 #include "storage/SD_Path.hpp"
 #include "apps/store/App_Repo_Keys.hpp"
+#include "system/I18n_Functions.hpp"
 
 namespace {
     using namespace PICO_Path::FILE;
@@ -274,14 +275,14 @@ bool AppStore::startGet(const char* rel_url){
     FixedString<PICO_STR_256B> full;
     Url url;
     if(!full.assign(base_url_.c_str()) || !full.append(rel_url) || !UrlTools::Parse(url, full.c_str())){
-        fail("URLが長すぎます");
+        fail(TR("URLが長すぎます"));
         return false;
     }
     //200の本文だけを書く(転送(3xx)やエラーの本文をSHA-256に混ぜない)
     const bool small = step_ == Step::Signature || step_ == Step::FilesSig;
     gate_.attach(&http_.response(), small ? (IHttpSink*)&mem_sink_ : (IHttpSink*)&file_sink_);
     if(!http_.begin(url, HttpRequest::Method::GET, &gate_)){
-        fail("取得を始められません");
+        fail(TR("取得を始められません"));
         return false;
     }
     return true;
@@ -291,7 +292,7 @@ bool AppStore::beginRefresh(){
     if(busy()) return false;
     if(!OSData::SD_usable){
         state_ = State::Failed;
-        message_.assign("SDカードがありません");
+        message_.assign(TR("SDカードがありません"));
         return false;
     }
     bool any_key = key_count_ > 0;
@@ -300,17 +301,17 @@ bool AppStore::beginRefresh(){
     }
     if(!any_key){
         state_ = State::Failed;
-        message_.assign("信頼する鍵がありません(/sys/store.cfg の key)");
+        message_.assign(TR("信頼する鍵がありません(/sys/store.cfg の key)"));
         return false;
     }
     state_ = State::Busy;
     target_ = -1;
     progress_done_ = 0;
     progress_total_ = 0;
-    message_.assign("一覧を取得中…");
+    message_.assign(TR("一覧を取得中…"));
     if(!OSData::SD.exists(STORE_DIR)) OSData::SD.mkdir(STORE_DIR);
     if(!file_sink_.open(STORE_CATALOG_PART, (uint32_t)AppRepo::kMaxCatalogBytes)){
-        fail("SDカードに書き込めません");
+        fail(TR("SDカードに書き込めません"));
         return false;
     }
     step_ = Step::Catalog;
@@ -326,7 +327,7 @@ void AppStore::cancel(){
     step_ = Step::None;
     target_ = -1;
     state_ = State::Idle;
-    message_.assign("取りやめました");
+    message_.assign(TR("取りやめました"));
 }
 
 void AppStore::close(){
@@ -348,15 +349,15 @@ void AppStore::update(){
         if(file_sink_.overflowed()){
             if(step_ == Step::File){
                 char m[PICO_STR_LL];
-                snprintf(m, sizeof(m), "%s の中身が一覧と合いません(大きすぎます)", file_.path.c_str());
+                snprintf(m, sizeof(m), TR("%s の中身が一覧と合いません(大きすぎます)"), file_.path.c_str());
                 fail(m);
             }else{
-                fail("配布元のファイルが大きすぎます");
+                fail(TR("配布元のファイルが大きすぎます"));
             }
             return;
         }
         FixedString<PICO_STR_LL> m;
-        m.assign("通信に失敗しました: ");
+        m.assign(TR("通信に失敗しました: "));
         m.append(http_.failureToStr());
         fail(m.c_str());
         return;
@@ -364,7 +365,7 @@ void AppStore::update(){
     const int code = http_.response().statusCode();
     if(code != 200){
         char m[64];
-        snprintf(m, sizeof(m), "配布元が %d を返しました", code);
+        snprintf(m, sizeof(m), TR("配布元が %d を返しました"), code);
         fail(m);
         return;
     }
@@ -388,20 +389,20 @@ void AppStore::onSignature(){
     uint8_t digest[32], pub[32], sig[64];
     file_sink_.digest(digest);
     if(!AppRepo::ParseSignature(mem_sink_.text(), pub, sig)){
-        fail("署名(catalog.sig)を読めません");
+        fail(TR("署名(catalog.sig)を読めません"));
         return;
     }
     if(!trustedKey(pub)){
-        fail("署名の鍵が信頼されていません(store.cfgのkeyを確かめてください)");
+        fail(TR("署名の鍵が信頼されていません(store.cfgのkeyを確かめてください)"));
         return;
     }
     if(!AppRepo::VerifyCatalog(digest, pub, sig)){
-        fail("一覧の署名が合いません(改ざん・取得の途中で更新された可能性)");
+        fail(TR("一覧の署名が合いません(改ざん・取得の途中で更新された可能性)"));
         return;
     }
     uint32_t serial = 0;
     if(!parseCatalogFile(STORE_CATALOG_PART, serial, false)){
-        fail("一覧(catalog.tsv)の形式が違います");
+        fail(TR("一覧(catalog.tsv)の形式が違います"));
         return;
     }
     //同じURL・同じ鍵で前に見た番号より古い一覧は受け付けない(古い署名済みの一覧へ戻されるのを防ぐ)。
@@ -412,12 +413,12 @@ void AppStore::onSignature(){
     ReadState(saved);
     const bool same_source = saved.url == base_url_.c_str() && saved.key == pubhex;
     if(same_source && serial < saved.serial){
-        fail("前に取得したものより古い一覧が返されました");
+        fail(TR("前に取得したものより古い一覧が返されました"));
         return;
     }
     if(OSData::SD.exists(STORE_CATALOG)) OSData::SD.remove(STORE_CATALOG);
     if(!OSData::SD.rename(STORE_CATALOG_PART, STORE_CATALOG)){
-        fail("一覧を保存できません");
+        fail(TR("一覧を保存できません"));
         return;
     }
     char num[16];
@@ -430,7 +431,7 @@ void AppStore::onSignature(){
     refreshInstalled();
     revision_++;
     char m[64];
-    snprintf(m, sizeof(m), "%d件のアプリ", count_);
+    snprintf(m, sizeof(m), TR("%d件のアプリ"), count_);
     finishOk(m);
 }
 
@@ -445,33 +446,33 @@ bool AppStore::beginInstall(int index, bool allow_replace){
     const Installed st = installed_[index];
     if(st == Installed::Conflict){
         state_ = State::Failed;
-        message_.assign("同じ名前の別のアプリが入っています");
+        message_.assign(TR("同じ名前の別のアプリが入っています"));
         return false;
     }
     if(st == Installed::Foreign && !allow_replace){
         state_ = State::Failed;
-        message_.assign("同じ名前のアプリが入っています(上書きの確認が要ります)");
+        message_.assign(TR("同じ名前のアプリが入っています(上書きの確認が要ります)"));
         return false;
     }
     if(st == Installed::KeyChanged){
         state_ = State::Failed;
-        message_.assign("作者の鍵が変わりました(削除してから入れ直すと、新しい鍵で入ります)");
+        message_.assign(TR("作者の鍵が変わりました(削除してから入れ直すと、新しい鍵で入ります)"));
         return false;
     }
     //入っている版より古い版は入れない(漏れたカタログ鍵で、作者が昔署名した穴のある版へ戻されるのを防ぐ)
     if(st == Installed::Newer){
         state_ = State::Failed;
-        message_.assign("入っている版より古い版は入れられません");
+        message_.assign(TR("入っている版より古い版は入れられません"));
         return false;
     }
     if(e->status != AppRepo::Status::Normal){
         state_ = State::Failed;
-        message_.assign(e->status == AppRepo::Status::Blocked ? "危険と判断されたアプリです" : "取り下げられたアプリです");
+        message_.assign(e->status == AppRepo::Status::Blocked ? TR("危険と判断されたアプリです") : TR("取り下げられたアプリです"));
         return false;
     }
     if(!OSData::SD_usable){
         state_ = State::Failed;
-        message_.assign("SDカードがありません");
+        message_.assign(TR("SDカードがありません"));
         return false;
     }
     target_ = index;
@@ -481,11 +482,11 @@ bool AppStore::beginInstall(int index, bool allow_replace){
     progress_total_ = e->bytes;
     file_index_ = 0;
     file_count_ = 0;
-    SetMsg(message_, "%s を取得中…", e->name.c_str());
+    SetMsg(message_, TR("%s を取得中…"), e->name.c_str());
 
     PICO_IO::removeRecursive(STORE_STAGING); //前回の取り残し
     if(!file_sink_.open(STORE_STAGING_FILES, (uint32_t)AppRepo::kMaxFilesBytes)){
-        fail("SDカードに書き込めません");
+        fail(TR("SDカードに書き込めません"));
         return false;
     }
     step_ = Step::Files;
@@ -502,7 +503,7 @@ void AppStore::onFiles(){
     uint8_t digest[32];
     file_sink_.digest(digest);
     if(memcmp(digest, e.files_sha256, 32) != 0){
-        fail("ファイル一覧(files.tsv)が一覧の署名と合いません");
+        fail(TR("ファイル一覧(files.tsv)が一覧の署名と合いません"));
         return;
     }
     step_ = Step::FilesSig;
@@ -519,19 +520,19 @@ void AppStore::onFilesSig(){
     const AppRepo::Entry& e = entries_[target_];
     uint8_t pub[32], sig[64];
     if(!AppRepo::ParseSignature(mem_sink_.text(), pub, sig)){
-        fail("作者の署名(files.sig)を読めません");
+        fail(TR("作者の署名(files.sig)を読めません"));
         return;
     }
     if(memcmp(pub, e.author_key, 32) != 0){
-        fail("作者の署名の鍵が一覧と合いません");
+        fail(TR("作者の署名の鍵が一覧と合いません"));
         return;
     }
     if(installed_[target_] == Installed::KeyChanged){
-        fail("作者の鍵が変わりました(削除してから入れ直すと、新しい鍵で入ります)");
+        fail(TR("作者の鍵が変わりました(削除してから入れ直すと、新しい鍵で入ります)"));
         return;
     }
     if(!AppRepo::VerifyFiles(e.id.c_str(), e.version.c_str(), e.files_sha256, pub, sig)){
-        fail("作者の署名が合いません");
+        fail(TR("作者の署名が合いません"));
         return;
     }
     int count = 0;
@@ -552,7 +553,7 @@ bool AppStore::startNextFile(){
             fail(err);
             return false;
         }
-        message_.assign("インストール中…");
+        message_.assign(TR("インストール中…"));
         if(const char* err = AppInstall::Commit(e, allow_replace_, work_)){
             fail(err);
             return false;
@@ -560,21 +561,21 @@ bool AppStore::startNextFile(){
         refreshInstalled();
         revision_++;
         char m[PICO_STR_LL];
-        snprintf(m, sizeof(m), "%s %s を入れました", e.name.c_str(), e.version.c_str());
+        snprintf(m, sizeof(m), TR("%s %s を入れました"), e.name.c_str(), e.version.c_str());
         finishOk(m);
         return true;
     }
     if(!AppInstall::ReadFileLine(STORE_STAGING_FILES, file_index_, work_)){
-        fail("ファイル一覧を読み直せません");
+        fail(TR("ファイル一覧を読み直せません"));
         return false;
     }
     file_ = work_.file;
     FixedString<PICO_PATH_LEN> dst;
     if(!JoinRel(dst, STORE_STAGING_APP, file_.path.c_str()) || !file_sink_.open(dst.c_str(), file_.bytes)){
-        fail("SDカードに書き込めません");
+        fail(TR("SDカードに書き込めません"));
         return false;
     }
-    SetMsg(message_, "%s を取得中 (%d/%d)", e.name.c_str(), file_index_ + 1, file_count_);
+    SetMsg(message_, TR("%s を取得中 (%d/%d)"), e.name.c_str(), file_index_ + 1, file_count_);
     step_ = Step::File;
     FixedString<PICO_STR_256B> rel;
     rel.assign(e.id.c_str());
@@ -582,7 +583,7 @@ bool AppStore::startNextFile(){
     rel.append(e.version.c_str());
     rel.append("/");
     if(!rel.append(file_.path.c_str())){
-        fail("URLが長すぎます");
+        fail(TR("URLが長すぎます"));
         return false;
     }
     return startGet(rel.c_str());
@@ -593,7 +594,7 @@ void AppStore::onFile(){
     file_sink_.digest(digest);
     if(file_sink_.bytes() != file_.bytes || memcmp(digest, file_.sha256, 32) != 0){
         char m[PICO_STR_LL];
-        snprintf(m, sizeof(m), "%s の中身が一覧と合いません", file_.path.c_str());
+        snprintf(m, sizeof(m), TR("%s の中身が一覧と合いません"), file_.path.c_str());
         fail(m);
         return;
     }
@@ -616,7 +617,7 @@ bool AppStore::remove(int index){
     refreshInstalled();
     revision_++;
     char m[PICO_STR_LL];
-    snprintf(m, sizeof(m), ok ? "%s を削除しました" : "%s を削除しきれませんでした", e->name.c_str());
+    snprintf(m, sizeof(m), ok ? TR("%s を削除しました") : TR("%s を削除しきれませんでした"), e->name.c_str());
     state_ = ok ? State::Done : State::Failed;
     message_.assign(m);
     return ok;

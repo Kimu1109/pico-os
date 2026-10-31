@@ -5,6 +5,7 @@
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "hal/Network_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -70,7 +71,7 @@ void MailScene::onEnter(){
     const int line_h = FontFn::GetFontSize(FontFn::Small) + 2;
 
     // ---- 上部の行: [戻る] 題名 [設定] [更新] ----
-    this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button = new Button(content.x + MARGIN, y0, TR("戻る"));
     this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
@@ -81,7 +82,7 @@ void MailScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
     const int row_h = this->back_button->getLocalRect().h;
 
-    this->refresh_button = new Button(0, y0, "更新");
+    this->refresh_button = new Button(0, y0, TR("更新"));
     this->refresh_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->refresh_button->setFontSize(FontFn::Small);
     this->refresh_button->setH(20 + Button::kFrameExtra);
@@ -103,7 +104,7 @@ void MailScene::onEnter(){
     });
     WidgetFunctions::Add(this->refresh_button);
 
-    this->settings_button = new Button(0, y0, "設定");
+    this->settings_button = new Button(0, y0, TR("設定"));
     this->settings_button->setIcon(IconID::Settings, IconSize::Px16);
     this->settings_button->setFontSize(FontFn::Small);
     this->settings_button->setH(20 + Button::kFrameExtra);
@@ -199,7 +200,7 @@ void MailScene::setMode(Mode m){
     this->mail_list->setVisible(list && !this->signingIn());
     this->header_label->setVisible(!list);
     this->body_view->setVisible(!list);
-    this->back_button->setText(list ? "戻る" : "一覧");
+    this->back_button->setText(list ? TR("戻る") : TR("一覧"));
 
     //題名の幅は右のボタンの有無で変わる
     const Rect content = Scene::contentRect();
@@ -234,7 +235,7 @@ void MailScene::refreshSignIn(){
     if(need){
         //状態の行には入りきらないので、理由と次にすることを一覧の場所へ
         FixedString<PICO_STR_LL> t(this->client.statusText());
-        if(!strstr(t.c_str(), "[更新]")) t.append("\n[更新] を押すとサインインのコードを出します");
+        if(!strstr(t.c_str(), TR("[更新]"))) t.append(TR("\n[更新] を押すとサインインのコードを出します"));
         this->signin_label->setText(t);
         this->code_label->setText("");
         this->signin_left_label->setText("");
@@ -244,22 +245,22 @@ void MailScene::refreshSignIn(){
     if(o.phase() != MailOAuth::Phase::WaitUser){
         if(this->shown_left_min != 0){
             this->shown_left_min = 0;
-            this->signin_label->setText("Microsoft のサインインを始めています…");
+            this->signin_label->setText(TR("Microsoft のサインインを始めています…"));
             this->code_label->setText("");
             this->signin_left_label->setText("");
         }
         return;
     }
-    FixedString<PICO_STR_LL> t("スマホかパソコンのブラウザで\n");
+    FixedString<PICO_STR_LL> t(TR("スマホかパソコンのブラウザで\n"));
     t.append(o.verificationUri());
-    t.append("\nを開き、下のコードを入れてサインインしてください");
+    t.append(TR("\nを開き、下のコードを入れてサインインしてください"));
     this->signin_label->setText(t);
     this->code_label->setText(o.userCode());
     const uint32_t left_min = (o.secondsLeft() + 59) / 60;
     if(left_min != this->shown_left_min){
         this->shown_left_min = left_min;
         FixedString<PICO_STR_M> l;
-        l.appendFormat("あと %u 分", (unsigned)left_min);
+        l.appendFormat(TR("あと %u 分"), (unsigned)left_min);
         this->signin_left_label->setText(l);
     }
 }
@@ -271,13 +272,13 @@ void MailScene::refreshTitle(){
         const char* subject = (this->client.bodyUid() == this->reading_uid && this->client.bodyOk())
                             ? this->client.bodyInfo().subject() : (s ? s->subject.c_str() : "");
         this->title_label->setTextColor(PICO_BLACK);
-        this->title_label->setText(*subject ? subject : "(件名なし)");
+        this->title_label->setText(*subject ? subject : TR("(件名なし)"));
         return;
     }
-    FixedString<PICO_STR_LL> t("メール");
+    FixedString<PICO_STR_LL> t(TR("メール"));
     if(this->client.loaded()){
         const int unseen = this->client.unseenCount();
-        if(unseen > 0) t.appendFormat(" (未読 %d)", unseen);
+        if(unseen > 0) t.appendFormat(TR(" (未読 %d)"), unseen);
     }
     this->title_label->setTextColor(PICO_BLACK);
     this->title_label->setText(t);
@@ -305,9 +306,9 @@ void MailScene::refreshList(){
         char date[24];
         FormatListDate(m.date, date, sizeof(date));
         if(date[0]){ item.text.append(date); item.text.append(' '); }
-        item.text.append(m.from.empty() ? "(差出人なし)" : m.from.c_str());
+        item.text.append(m.from.empty() ? TR("(差出人なし)") : m.from.c_str());
         item.text.append("  ");
-        item.text.append(m.subject.empty() ? "(件名なし)" : m.subject.c_str());
+        item.text.append(m.subject.empty() ? TR("(件名なし)") : m.subject.c_str());
         item.color = m.seen ? PICO_DARKGREY : -1;
 
         if(same){
@@ -339,7 +340,7 @@ static void ShortRecipients(const char* decoded, FixedString<PICO_STR_256B>& out
         else if(!quoted && *p == '>' && angle > 0) angle--;
         else if(!quoted && angle == 0 && *p == ',') others++;
     }
-    if(others > 0) out.appendFormat(" 他%d人", others);
+    if(others > 0) out.appendFormat(TR(" 他%d人"), others);
 }
 
 void MailScene::refreshHeader(){
@@ -353,7 +354,7 @@ void MailScene::refreshHeader(){
     FixedString<PICO_STR_256B> who;
     if(have && *info.from()) ShortRecipients(info.from(), who);
     else if(s) who.assign(s->from);
-    text.append("差出人: ");
+    text.append(TR("差出人: "));
     text.append(who);
     text.append('\n');
 
@@ -363,19 +364,19 @@ void MailScene::refreshHeader(){
         const time_t t = (time_t)epoch;
         struct tm m;
         localtime_r(&t, &m);
-        static const char* const kWeek[] = {"日", "月", "火", "水", "木", "金", "土"};
-        text.appendFormat("日時: %d/%02d/%02d(%s) %02d:%02d\n", m.tm_year + 1900, m.tm_mon + 1, m.tm_mday,
-                          kWeek[m.tm_wday], m.tm_hour, m.tm_min);
+        static const char* const kWeek[] = {TR_NOOP("日"), TR_NOOP("月"), TR_NOOP("火"), TR_NOOP("水"), TR_NOOP("木"), TR_NOOP("金"), TR_NOOP("土")};
+        text.appendFormat(TR("日時: %d/%02d/%02d(%s) %02d:%02d\n"), m.tm_year + 1900, m.tm_mon + 1, m.tm_mday,
+                          I18nFunctions::Tr(kWeek[m.tm_wday]), m.tm_hour, m.tm_min);
     }else{
-        text.append("日時: \n");
+        text.append(TR("日時: \n"));
     }
     if(have){
         ShortRecipients(info.to(), who);
-        text.append("宛先: ");
+        text.append(TR("宛先: "));
         text.append(who);
         text.append('\n');
         if(info.attachmentCount() > 0){
-            text.appendFormat("添付: %d件(%s)", info.attachmentCount(), info.attachmentNames());
+            text.appendFormat(TR("添付: %d件(%s)"), info.attachmentCount(), info.attachmentNames());
         }else if(*info.cc()){
             ShortRecipients(info.cc(), who);
             text.append("CC: ");
@@ -392,16 +393,16 @@ void MailScene::refreshBody(){
             if(this->client.bodyLength() > 0){
                 this->body_view->setDocument(this->client.bodyText(), (int)this->client.bodyLength());
             }else{
-                this->body_message.assign("(本文がありません)");
+                this->body_message.assign(TR("(本文がありません)"));
                 this->body_view->setDocument(this->body_message.c_str(), (int)this->body_message.length());
             }
         }else{
-            this->body_message.assign("読めませんでした: ");
+            this->body_message.assign(TR("読めませんでした: "));
             this->body_message.append(this->client.bodyError());
             this->body_view->setDocument(this->body_message.c_str(), (int)this->body_message.length());
         }
     }else{
-        this->body_message.assign("読み込み中…");
+        this->body_message.assign(TR("読み込み中…"));
         this->body_view->setDocument(this->body_message.c_str(), (int)this->body_message.length());
     }
     this->body_view->scrollToTop();
@@ -428,21 +429,21 @@ void MailScene::refreshStatus(){
         color = this->notice_color;
     }else if(!*text && this->mode == Mode::Read){
         const bool have = this->client.bodyUid() == this->reading_uid && this->client.bodyOk();
-        if(have && this->client.bodyTruncated()) text = "長いので途中までを表示";
-        else if(have && this->client.bodyFromHtml()) text = "HTMLを文字だけにして表示";
+        if(have && this->client.bodyTruncated()) text = TR("長いので途中までを表示");
+        else if(have && this->client.bodyFromHtml()) text = TR("HTMLを文字だけにして表示");
     }else if(!*text && !this->client.loaded()){
-        text = "読み込み中…";
+        text = TR("読み込み中…");
     }else if(this->signingIn()){
         //案内は一覧の場所に大きく出しているので、状態の行は短く
-        text = "サインインを待っています…";
+        text = TR("サインインを待っています…");
         color = PICO_DARKGREY;
     }else if(s == S::NeedSignIn && this->mode == Mode::List){
-        text = "サインインが必要です";
+        text = TR("サインインが必要です");
     }else if(!*text && this->client.loaded()){
         if(this->client.messageCount() == 0){
-            text = "メールはありません";
+            text = TR("メールはありません");
         }else if(this->client.totalCount() > (uint32_t)this->client.messageCount()){
-            buf.appendFormat("新しい %d 通を表示(全 %u 通)", this->client.messageCount(),
+            buf.appendFormat(TR("新しい %d 通を表示(全 %u 通)"), this->client.messageCount(),
                              (unsigned)this->client.totalCount());
             text = buf.c_str();
         }
@@ -471,9 +472,9 @@ void MailScene::backToList(){
 }
 
 void MailScene::openSettings(){
-    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, "アカウントの種類", "", "キャンセル");
+    auto* dialog = new PickerDialog(PickerDialog::Mode::Choice, TR("アカウントの種類"), "", TR("キャンセル"));
     dialog->addChoice("Outlook.com");
-    dialog->addChoice("Gmail・その他");
+    dialog->addChoice(TR("Gmail・その他"));
     dialog->layout();
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -486,7 +487,7 @@ void MailScene::openSettings(){
 }
 
 void MailScene::openMsUserDialog(){
-    auto* dialog = new InputDialog("Microsoft のメールアドレス(例: you@outlook.jp):", true);
+    auto* dialog = new InputDialog(TR("Microsoft のメールアドレス(例: you@outlook.jp):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     if(this->client.config().auth == ImapClient::Auth::Microsoft) dialog->setInput(this->client.config().user.c_str());
@@ -502,7 +503,7 @@ void MailScene::openMsUserDialog(){
 
 void MailScene::openMsClientIdDialog(){
     //Microsoft Entra に登録したアプリのID(docs/design/apps-online.md「メール」)。前に入れたものを初期値に
-    auto* dialog = new InputDialog("アプリ(クライアント)ID(Microsoft Entra に登録したもの):", true);
+    auto* dialog = new InputDialog(TR("アプリ(クライアント)ID(Microsoft Entra に登録したもの):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(this->client.config().oauth.client_id.c_str());
@@ -511,7 +512,7 @@ void MailScene::openMsClientIdDialog(){
         if(is_submit){
             const FixedString<PICO_STR_LL> id = dialog->getInput();
             if(id.empty()){
-                this->setNotice("アプリのIDが空なので保存しませんでした", PICO_RED);
+                this->setNotice(TR("アプリのIDが空なので保存しませんでした"), PICO_RED);
             }else if(ImapClient::SaveMicrosoftAccount(this->input_user.c_str(), id.c_str())){
                 this->client.loadConfig();
                 this->list_count = 0;
@@ -520,7 +521,7 @@ void MailScene::openMsClientIdDialog(){
                 if(!this->client.startSignIn()) this->refreshStatus();
                 this->refreshSignIn();
             }else{
-                this->setNotice("アカウントを保存できませんでした", PICO_RED);
+                this->setNotice(TR("アカウントを保存できませんでした"), PICO_RED);
             }
         }
         WidgetFunctions::DestroyLater(dialog);
@@ -535,7 +536,7 @@ void MailScene::openHostDialog(){
         current.assign(c.host);
         if(c.port != ImapClient::kDefaultPort) current.appendFormat(":%u", (unsigned)c.port);
     }
-    auto* dialog = new InputDialog("IMAPサーバ(例: imap.gmail.com。ポートが993以外なら :番号):", true);
+    auto* dialog = new InputDialog(TR("IMAPサーバ(例: imap.gmail.com。ポートが993以外なら :番号):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(current.c_str());
@@ -545,7 +546,7 @@ void MailScene::openHostDialog(){
             if(ParseHostPort(dialog->getInput().c_str(), this->input_host, this->input_port)){
                 this->pending = Pending::User;
             }else{
-                this->setNotice("サーバの名前が読めません(例: imap.example.com:993)", PICO_RED);
+                this->setNotice(TR("サーバの名前が読めません(例: imap.example.com:993)"), PICO_RED);
             }
         }
         WidgetFunctions::DestroyLater(dialog);
@@ -553,7 +554,7 @@ void MailScene::openHostDialog(){
 }
 
 void MailScene::openUserDialog(){
-    auto* dialog = new InputDialog("ユーザー名(ふつうはメールアドレス):", true);
+    auto* dialog = new InputDialog(TR("ユーザー名(ふつうはメールアドレス):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setInput(this->client.config().user.c_str());
@@ -570,8 +571,8 @@ void MailScene::openUserDialog(){
 void MailScene::openPasswordDialog(){
     //Gmail等は普段のパスワードでは入れない(アプリパスワードを作る)ので、ここで一言添える
     const bool keep = !this->client.config().password.empty() && this->client.config().user == this->input_user;
-    auto* dialog = new InputDialog(keep ? "パスワード(Gmailはアプリパスワード。空欄で変更なし):"
-                                        : "パスワード(Gmailはアプリパスワード):", true);
+    auto* dialog = new InputDialog(keep ? TR("パスワード(Gmailはアプリパスワード。空欄で変更なし):")
+                                        : TR("パスワード(Gmailはアプリパスワード):"), true);
     dialog->setAsciiInput(true); //英数字の欄(キーボードを英字で開く)
     WidgetFunctions::AddDialog(dialog);
     dialog->setVisible(true);
@@ -579,16 +580,16 @@ void MailScene::openPasswordDialog(){
         if(is_submit){
             const FixedString<PICO_STR_LL> pw = dialog->getInput();
             if(pw.empty() && !keep){
-                this->setNotice("パスワードが空なので保存しませんでした", PICO_RED);
+                this->setNotice(TR("パスワードが空なので保存しませんでした"), PICO_RED);
             }else if(ImapClient::SaveAccount(this->input_host.c_str(), this->input_port,
                                              this->input_user.c_str(), pw.c_str())){
                 this->client.loadConfig();
                 this->client.refreshNow();
                 this->list_count = 0;
                 this->mail_list->clear();
-                this->setNotice("アカウントを保存しました");
+                this->setNotice(TR("アカウントを保存しました"));
             }else{
-                this->setNotice("アカウントを保存できませんでした", PICO_RED);
+                this->setNotice(TR("アカウントを保存できませんでした"), PICO_RED);
             }
         }
         WidgetFunctions::DestroyLater(dialog);

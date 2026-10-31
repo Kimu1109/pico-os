@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     using namespace NotificationFunctions;
@@ -128,8 +129,8 @@ int TodoReminders::Sync(const Todoist::Task* tasks, int count, int64_t now_epoch
         char when[48];
         Todoist::FormatDue(t.due, -1, when, sizeof(when));
         char body[96];
-        if(before_min > 0) snprintf(body, sizeof(body), "期限 %s(%d分前)", when, before_min);
-        else snprintf(body, sizeof(body), "期限 %s", when);
+        if(before_min > 0) snprintf(body, sizeof(body), TR("期限 %s(%d分前)"), when, before_min);
+        else snprintf(body, sizeof(body), TR("期限 %s"), when);
         Sanitize(c.body, body);
         c.tag.assign(kTagPrefix);
         c.tag.append(t.id);

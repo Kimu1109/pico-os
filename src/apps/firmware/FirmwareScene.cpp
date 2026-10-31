@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <ctime>
+#include "system/I18n_Functions.hpp"
 
 void FirmwareScene::onEnter(){
     const Rect content = Scene::contentRect();
@@ -21,7 +22,7 @@ void FirmwareScene::onEnter(){
     const int16_t x = (int16_t)(content.x + MARGIN);
     const int y0 = content.y + MARGIN;
 
-    auto* title = new Label<PICO_STR_L>(x, y0, kAppName);
+    auto* title = new Label<PICO_STR_L>(x, y0, I18nFunctions::Tr(kAppName));
     title->setFontSize(FontFn::Normal);
     WidgetFunctions::Add(title);
 
@@ -47,7 +48,7 @@ void FirmwareScene::onEnter(){
     };
 
     char text[96];
-    snprintf(text, sizeof(text), "今の版 %s\n%s", FwVersion::Text(), FwVersion::Date()[0] ? FwVersion::Date() : "");
+    snprintf(text, sizeof(text), TR("今の版 %s\n%s"), FwVersion::Text(), FwVersion::Date()[0] ? FwVersion::Date() : "");
     this->version_label = new Label<PICO_STR_L>(0, y, text);
     this->version_label->setFontSize(FontFn::Small);
     this->version_label->setMaxWidth(iw);
@@ -57,8 +58,8 @@ void FirmwareScene::onEnter(){
     y += line_h * 2 + kGap;
 
     const bool has_key = FwImage::HasBuiltinKey();
-    snprintf(text, sizeof(text), "署名の鍵: %s%s", has_key ? "登録済み" : "未登録",
-        FirmwareFunctions::AllowUnsigned() ? "\n署名なしも確認して受け付ける" : "");
+    snprintf(text, sizeof(text), TR("署名の鍵: %s%s"), has_key ? TR("登録済み") : TR("未登録"),
+        FirmwareFunctions::AllowUnsigned() ? TR("\n署名なしも確認して受け付ける") : "");
     this->key_label = new Label<PICO_STR_LL>(0, y, text);
     this->key_label->setFontSize(FontFn::Small);
     this->key_label->setMaxWidth(iw);
@@ -94,28 +95,28 @@ void FirmwareScene::onEnter(){
 
     const int third = (w - MARGIN * 2) / 3;
 
-    this->web_button = new Button(x, row1, "Webから");
+    this->web_button = new Button(x, row1, TR("Webから"));
     this->web_button->setFontSize(FontFn::Small);
     this->web_button->setW(third);
     this->web_button->setH(kButtonH);
     this->web_button->setOnPressEnd([this](){ this->startWeb(); });
     WidgetFunctions::Add(this->web_button);
 
-    this->sd_button = new Button((int16_t)(x + third + MARGIN), row1, "SDから");
+    this->sd_button = new Button((int16_t)(x + third + MARGIN), row1, TR("SDから"));
     this->sd_button->setFontSize(FontFn::Small);
     this->sd_button->setW(third);
     this->sd_button->setH(kButtonH);
     this->sd_button->setOnPressEnd([this](){ this->openPicker(); });
     WidgetFunctions::Add(this->sd_button);
 
-    this->listen_button = new Button((int16_t)(x + (third + MARGIN) * 2), row1, "受け取る");
+    this->listen_button = new Button((int16_t)(x + (third + MARGIN) * 2), row1, TR("受け取る"));
     this->listen_button->setFontSize(FontFn::Small);
     this->listen_button->setW(w - (third + MARGIN) * 2);
     this->listen_button->setH(kButtonH);
     this->listen_button->setOnPressEnd([this](){ this->toggleListen(); });
     WidgetFunctions::Add(this->listen_button);
 
-    this->back_button = new Button(x, row2, "戻る");
+    this->back_button = new Button(x, row2, TR("戻る"));
     this->back_button->setW(w);
     this->back_button->setH(kButtonH);
     this->back_button->setOnPressEnd([this](){ this->goBack(); });
@@ -236,7 +237,7 @@ void FirmwareScene::openWebPicker(){
     this->picker_open = false;
     FwDownload* web = FirmwareFunctions::Web();
     if(!web || web->count() <= 0) return;
-    auto* d = new PickerDialog(PickerDialog::Mode::Choice, "書き込む版を選ぶ", "", "やめる");
+    auto* d = new PickerDialog(PickerDialog::Mode::Choice, TR("書き込む版を選ぶ"), "", TR("やめる"));
     if(!d) return;
     const uint32_t current = FwVersion::Serial();
     for(int i = 0; i < web->count(); i++){
@@ -245,9 +246,9 @@ void FirmwareScene::openWebPicker(){
         // (日付は選んだ後の確認のダイアログにも出る)
         const char* date = e->date.c_str();
         char tail[16] = "";
-        if(!e->signed_flag) snprintf(tail, sizeof(tail), "無署名");
-        else if(current > 0 && e->serial == current && strcmp(e->git.c_str(), FwVersion::Git()) == 0) snprintf(tail, sizeof(tail), "(今)");
-        else if(current > 0 && e->serial < current) snprintf(tail, sizeof(tail), "(古)");
+        if(!e->signed_flag) snprintf(tail, sizeof(tail), TR("無署名"));
+        else if(current > 0 && e->serial == current && strcmp(e->git.c_str(), FwVersion::Git()) == 0) snprintf(tail, sizeof(tail), TR("(今)"));
+        else if(current > 0 && e->serial < current) snprintf(tail, sizeof(tail), TR("(古)"));
         else if(e->date.length() >= 10) snprintf(tail, sizeof(tail), "%.2s/%.2s", date + 5, date + 8);
         char text[96];
         snprintf(text, sizeof(text), "#%lu %s %s", (unsigned long)e->serial, FwIndex::ChannelText(e->channel), tail);
@@ -271,7 +272,7 @@ void FirmwareScene::openWebPicker(){
 
 void FirmwareScene::openPicker(){
     if(FirmwareFunctions::Busy() || FirmwareFunctions::WebBusy() || FirmwareFunctions::RebootPending()) return;
-    if(!OSData::SD_usable){ this->showError("SDカードが使えません"); return; }
+    if(!OSData::SD_usable){ this->showError(TR("SDカードが使えません")); return; }
     const char* dir = OSData::SD.exists(PICO_Path::DIR::FIRMWARE) ? PICO_Path::DIR::FIRMWARE : "/";
     auto* d = new FileSelectDialog(dir);
     if(!d) return;
@@ -317,16 +318,16 @@ void FirmwareScene::openConfirm(){
             tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min);
     }
     char text[480];
-    int n = snprintf(text, sizeof(text), "新しい版: #%lu (%s)\n%s%s%luKB\n今の版: %s\n書き込みますか?",
+    int n = snprintf(text, sizeof(text), TR("新しい版: #%lu (%s)\n%s%s%luKB\n今の版: %s\n書き込みますか?"),
         (unsigned long)h.serial, h.git, date, date[0] ? " / " : "",
         (unsigned long)(h.image_bytes / 1024), FwVersion::Text());
     if(n > 0 && (size_t)n < sizeof(text)){
         // 署名を確かめられないときは注意書きの方に出る
-        if(job->confirmText()[0]) snprintf(text + n, sizeof(text) - (size_t)n, "\n\n注意: %s", job->confirmText());
+        if(job->confirmText()[0]) snprintf(text + n, sizeof(text) - (size_t)n, TR("\n\n注意: %s"), job->confirmText());
         else snprintf(text + n, sizeof(text) - (size_t)n, "\n(%s)", FwImage::SigText(job->signature()));
     }
 
-    auto* dialog = new MsgDialog(text, "やめる", "書き込む");
+    auto* dialog = new MsgDialog(text, TR("やめる"), TR("書き込む"));
     if(!dialog){ FirmwareFunctions::Confirm(false); return; }
     this->confirm_open = true;
     WidgetFunctions::AddDialog(dialog);
@@ -374,7 +375,7 @@ void FirmwareScene::refresh(bool force){
         char text[PICO_STR_LL];
         int8_t color = PICO_FORECOLOR;
         if(FirmwareFunctions::RebootPending()){
-            snprintf(text, sizeof(text), "%s", job ? job->message() : "再起動します");
+            snprintf(text, sizeof(text), "%s", job ? job->message() : TR("再起動します"));
             color = PICO_DARKGREEN;
         }else if(job && !job->finished()){
             snprintf(text, sizeof(text), "%s", job->message());
@@ -388,10 +389,10 @@ void FirmwareScene::refresh(bool force){
         }else if(listening){
             char addr[40];
             FirmwareFunctions::ListenAddress(addr, sizeof(addr));
-            snprintf(text, sizeof(text), "PCからの更新を待っています\n%s", addr);
+            snprintf(text, sizeof(text), TR("PCからの更新を待っています\n%s"), addr);
             color = PICO_BLUE;
         }else{
-            snprintf(text, sizeof(text), "Webの版の一覧から選ぶか、更新ファイル(.pfw)をSDから選ぶか、PCから送ってください");
+            snprintf(text, sizeof(text), TR("Webの版の一覧から選ぶか、更新ファイル(.pfw)をSDから選ぶか、PCから送ってください"));
             color = PICO_DARKGREY;
         }
         this->status_label->setText(text);
@@ -402,9 +403,9 @@ void FirmwareScene::refresh(bool force){
         this->web_button->setEnabled(!busy && !web_busy && !listening);
         this->sd_button->setEnabled(!busy && !web_busy && !listening);
         this->listen_button->setEnabled((!busy && !web_busy) || listening);
-        this->listen_button->setText(listening ? "待ち受けをやめる" : "受け取る");
+        this->listen_button->setText(listening ? TR("待ち受けをやめる") : TR("受け取る"));
         this->back_button->setEnabled(!FirmwareFunctions::RebootPending());
-        this->back_button->setText(busy || web_busy ? "やめる" : "戻る");
+        this->back_button->setText(busy || web_busy ? TR("やめる") : TR("戻る"));
         force = true;
     }
 

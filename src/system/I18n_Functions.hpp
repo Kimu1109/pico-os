@@ -60,6 +60,9 @@ namespace I18nFunctions {
     // 言語の名前をその言語で("日本語" / "English")。言語の選択肢に出す
     const char* NativeName(Lang lang);
 
+    // 今の言語(Current() で読む。書き換えは SetLanguage()/Setup() から)
+    inline Lang current_lang = Lang::Ja;
+
     // PCビルドが setup() より前に差す値。override_code(--lang / ?lang=)は user.cfg より優先し、
     // default_code(Webではブラウザの言語)は user.cfg に language が無いときだけ使う。どちらも保存はしない
     inline const char* override_code = nullptr;

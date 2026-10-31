@@ -73,11 +73,11 @@ MAX_NAME_BYTES = 47
 MAX_DESC_BYTES = 180
 MAX_AUTHOR_BYTES = 47
 DEFAULT_AUTHOR = "kimu1109"
-# 訳(app.cfg の name_<言語> / description_<言語>。catalog.tsv の12列目から "<キー>=<値>" で並べる)。
+# 訳(app.cfg の name_<言語> / description_<言語>。catalog.tsv の13列目(min_os の後ろ)から "<キー>=<値>" で並べる)。
 # 本体の I18nFunctions::Lang のうち日本語(原文)を除いたもの
 LOCAL_LANGS = ("en",)
 LOCAL_KEY_RE = re.compile(r"^(name|description)_([A-Za-z-]+)$")
-MAX_EXTRA_COLUMNS = 8  # 本体(App_Repo.hpp の kMaxExtraColumns)が12列目から読む列の数
+MAX_EXTRA_COLUMNS = 8  # 本体(App_Repo.hpp の kMaxExtraColumns)が13列目から読む列の数
 
 ID_RE = re.compile(r"^[a-z0-9_-]{1,23}$")
 VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
@@ -365,6 +365,14 @@ def load_app(app_dir, name, files, where):
         perms.append("microphone")
     a.perms = ",".join(perms) or "-"
     a.status = "-"
+    # 動かすのに要る本体の通し番号(ファームの #123 の 123。設定の「端末の情報」・ファームの更新の画面に出る)
+    min_os = cfg.get("min_os", "").strip()
+    if min_os in ("", "-", "0"):
+        a.min_os = "-"
+    elif min_os.isdigit() and int(min_os) < 2 ** 32:
+        a.min_os = str(int(min_os))
+    else:
+        raise SystemExit(f"{where}: min_os は本体の通し番号(数字)にしてください ({min_os})")
     files = list(files)
     if "main.lua" not in files or "app.cfg" not in files:
         raise SystemExit(f"{name}: main.lua と app.cfg が要ります(gitの管理下ならgit addも)")
@@ -410,10 +418,10 @@ def local_texts(cfg, where):
 
 
 def catalog_line(a, h, author):
-    """catalog.tsv の1行。訳の列は、古い本体(2026-10-31より前。12列目からを読まない)も読める
+    """catalog.tsv の1行。12列目は min_os(無ければ "-")で、訳はその後ろの13列目から。訳の列は、古い本体(2026-10-31より前。13列目からを読まない)も読める
     MAX_LINE_BYTES に収まる分だけ足す(説明の訳は後ろを切り詰める)"""
     line = (f"{a.id}\t{a.version}\t{a.dir}\t{a.name}\t{a.bytes}\t{h}\t{a.perms}\t{a.description}"
-            f"\t{a.author_key}\t{author}\t{a.status}")
+            f"\t{a.author_key}\t{author}\t{a.status}\t{getattr(a, 'min_os', '-')}")
     if len(line.encode("utf-8")) + 1 > MAX_LINE_BYTES:
         raise SystemExit(f"{a.dir}: カタログの1行が長すぎます(名前・説明を短く)")
     for k, v in getattr(a, "local", [])[:MAX_EXTRA_COLUMNS]:
@@ -548,13 +556,14 @@ def read_catalog(index_dir):
         entries.append({"id": c[0], "version": c[1], "dir": c[2], "name": c[3], "bytes": int(c[4]), "files_sha256": c[5],
                         "perms": c[6], "description": c[7],
                         "author_key": c[8] if fmt == 2 else None, "author": c[9] if fmt == 2 else "-",
-                        "status": c[10] if fmt == 2 else "-", "line": line,
-                        "local": parse_local(c[11:]) if fmt == 2 else {}})
+                        "status": c[10] if fmt == 2 else "-",
+                        "min_os": c[11] if fmt == 2 and len(c) > 11 and c[11].isdigit() else "-", "line": line,
+                        "local": parse_local(c[12:]) if fmt == 2 else {}})
     return catalog, entries, fmt
 
 
 def parse_local(cols):
-    """catalog.tsv の12列目から → {"name_en": …, "description_en": …}(本体と同じく知らない列・空の値は無視)"""
+    """catalog.tsv の13列目から → {"name_en": …, "description_en": …}(本体と同じく知らない列・空の値は無視)"""
     result = {}
     for c in cols[:MAX_EXTRA_COLUMNS]:
         k, sep, v = c.partition("=")
@@ -1133,12 +1142,13 @@ def render_card(e, icon, pkg, pkg_bytes):
     local = e.get("local", {})
     # 訳(app.cfg の name_en / description_en)は data-en に置き、store.html が英語のときに差し替える。探すときは両方の言語で当たる
     search = esc(" ".join((e["name"], e["id"], e["description"], e["author"], *local.values())).lower())
+    min_os = f" · 本体 #{esc(e['min_os'])} 以降" if e.get("min_os", "-") != "-" else ""
 
     def en(key):
         return f' data-en="{esc(local[key])}"' if key in local else ""
     return f"""<article class="card" id="{esc(e['id'])}" data-search="{search}">
   <div class="card-head">{img}<div><h3{en("name_en")}>{esc(e['name'])}</h3>
-    <p class="meta px">v{esc(e['version'])} · {esc(e['author'])}</p></div></div>
+    <p class="meta px">v{esc(e['version'])} · {esc(e['author'])}{min_os}</p></div></div>
   <p class="desc"{en("description_en")}>{esc(e['description']) or '&nbsp;'}</p>
   <p class="perms">{badges}</p>
   <div class="card-foot">

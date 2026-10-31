@@ -30,6 +30,7 @@ class AppStore {
         enum class State : uint8_t { Idle, Busy, Done, Failed };
         using Installed = AppInstall::Installed;
 
+        static constexpr const char* kAppName = "ストア";  // 登録簿の名前(StoreScene::kAppName。通知から開く)
         static constexpr const char* kDefaultUrl = "https://kimu1109.github.io/pico-os-apps/";  // 投稿用リポジトリ kimu1109/pico-os-apps の Pages
         static constexpr int kMaxExtraKeys = 4;
 
@@ -57,7 +58,8 @@ class AppStore {
         void close();
 
         State state() const { return state_; }
-        bool busy() const { return state_ == State::Busy; }
+        // 通信中か、まとめて更新の途中(1つ入れ終えて次を始める前の1回も含む)
+        bool busy() const { return state_ == State::Busy || batch_current_ >= 0; }
         // 結果・進み具合の1行。日本語でそのまま画面へ出せる
         const char* message() const { return message_.c_str(); }
         // 取得中の合計とそのうち済んだバイト数(インストール中だけ意味を持つ)
@@ -71,8 +73,27 @@ class AppStore {
         Installed installed(int index) const;
         // 入っている版(入っていなければ空)
         const char* installedVersion(int index) const;
-        // 新しく入れられるか(取り下げ・危険の印が無い)
+        // 新しく入れられるか(取り下げ・危険の印が無く、本体の版の条件 min_os を満たす)
         bool installable(int index) const;
+        // 本体が古くて入れられない(min_os)
+        bool needsNewerOs(int index) const;
+        // 一覧の版を見送っている(前の版へ戻したときの版。まとめて更新・更新の知らせから外す)
+        bool held(int index) const;
+        // 更新で権限が増える(まとめて更新には入れず、1つずつ確かめてもらう)
+        bool permsGrow(int index) const;
+        // まとめて更新に入れられるか: 古い版が入っていて、入れられて、見送っておらず、権限が増えない
+        bool batchUpdatable(int index) const;
+        int batchCount() const;
+        // 更新のある(見送っておらず、本体の条件も満たす)アプリの数。権限が増えるものも数える(更新の知らせ用)
+        int updateCount() const;
+        // batchUpdatable() なものを順に全部入れる(1つが失敗しても続ける)
+        bool beginUpdateAll();
+        bool batchRunning() const { return batch_mask_ != 0 || batch_current_ >= 0; }
+
+        // 前の版(更新の前に残したもの)。無ければfalse
+        bool previousVersion(int index, FixedString<PICO_STR_S>& out) const;
+        // 前の版へ戻す(同期)
+        bool rollback(int index);
         // 危険の印(blocked)が付いたアプリが入っているか
         bool blockedInstalled(int index) const;
         // 入っているアプリを開く(Installed::No/Conflict以外)
@@ -130,12 +151,23 @@ class AppStore {
         AppRepo::Entry entries_[AppRepo::kMaxEntries];
         Installed installed_[AppRepo::kMaxEntries] = {};
         FixedString<PICO_STR_S> installed_ver_[AppRepo::kMaxEntries];
+        uint8_t installed_perms_[AppRepo::kMaxEntries] = {};
+        uint64_t held_mask_ = 0;   // 見送っている版(held())の印。kMaxEntries <= 64
         int count_ = 0;
         uint32_t serial_ = 0;
         uint32_t revision_ = 0;
 
         // catalog.tsv / files.tsv を1行ずつ読む作業場所(スタックに512バイトを置かないため)
         AppInstall::Work work_;
+
+        // ---- まとめて更新 ----
+        static_assert(AppRepo::kMaxEntries <= 64, "まとめて更新の印は64件まで");
+        uint64_t batch_mask_ = 0;  // これから入れるもの(番号のビット)
+        int batch_current_ = -1;   // いま入れているもの
+        int batch_ok_ = 0;
+        int batch_failed_ = 0;
+        FixedString<PICO_STR_LL> batch_first_error_;
+        void advanceBatch();
 
         // ---- インストール中 ----
         int target_ = -1;

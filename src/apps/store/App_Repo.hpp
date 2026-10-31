@@ -22,7 +22,7 @@ namespace AppRepo {
     constexpr size_t kMaxPathLen      = 95;            // files.tsv のパス
     constexpr int    kMaxPathDepth    = 4;
     constexpr size_t kMaxSigBytes     = 256;           // catalog.sig / files.sig
-    constexpr int    kMaxExtraColumns = 8;             // catalog.tsv の12列目から読む列(訳。これより後ろは無視する)
+    constexpr int    kMaxExtraColumns = 8;             // catalog.tsv の13列目(min_os の後ろ)から読む列(訳。これより後ろは無視する)
 
     constexpr const char* kCatalogMagic = "pico-os-apps";
     constexpr int kCatalogFormat = 2;
@@ -61,6 +61,7 @@ namespace AppRepo {
         uint8_t author_key[32] = {};         // 作者の公開鍵(files.sig の鍵)
         FixedString<PICO_STR_M> author;      // 表示用の作者名(切り詰めてよい)
         Status status = Status::Normal;
+        uint32_t min_os = 0;                 // 動かすのに要る本体の通し番号(FwVersion::Serial()。0=条件なし。12列目)
     };
 
     struct FileEntry {
@@ -81,6 +82,9 @@ namespace AppRepo {
     // 版の比較(数字を"."で区切って左から数として比べる。足りない所は0)。a<b なら負
     int CompareVersion(const char* a, const char* b);
 
+    // 本体(通し番号 os_serial)が古くて e を動かせないか。os_serial が0(PC/Webビルド・手元のビルド)なら条件を見ない
+    bool OsTooOld(const Entry& e, uint32_t os_serial);
+
     // ---- 16進 ----
     bool HexDecode(const char* hex, size_t hex_len, uint8_t* out, size_t out_len);
     void HexEncode(const uint8_t* in, size_t len, char* out); // out は len*2+1
@@ -99,7 +103,7 @@ namespace AppRepo {
     // 1行目 "pico-os-apps<TAB>2<TAB><serial>"
     bool ParseCatalogHeader(char* line, uint32_t& serial);
     // 2行目以降の1件。空行・'#'で始まる行は false(skip=true)。
-    // 12列目からの "name_<言語>=…" / "description_<言語>=…"(任意。docs/APP_REPO.md「訳」)のうち lang のものがあれば、
+    // 13列目からの "name_<言語>=…" / "description_<言語>=…"(任意。docs/APP_REPO.md「訳」)のうち lang のものがあれば、
     // name / description をその訳で置き換える(表示にしか使わないので、1件に1言語分だけ持つ)。知らない列は無視する
     bool ParseCatalogLine(char* line, Entry& out, bool& skip, I18nFunctions::Lang lang);
     // 今の言語(I18nFunctions::Current())で読む

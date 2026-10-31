@@ -46,7 +46,7 @@ namespace {
         return -1;
     }
 
-    // 12列目からの1列 "name_<言語>=…" / "description_<言語>=…" が lang のものなら e へ当てる(空の訳は当てない)。
+    // 13列目からの1列 "name_<言語>=…" / "description_<言語>=…" が lang のものなら e へ当てる(空の訳は当てない)。
     // 日本語の原文(name / description の列)を置き換えるだけなので、日本語のときは呼ばない
     void ApplyLocalized(const char* col, I18nFunctions::Lang lang, AppRepo::Entry& e){
         const char* eq = strchr(col, '=');
@@ -217,11 +217,11 @@ bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip){
 bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip, I18nFunctions::Lang lang){
     skip = IsSkipLine(line);
     if(skip) return false;
-    constexpr int kCols = 11 + kMaxExtraColumns + 1; //最後の1つは読まない残り(タブで分けずに置く)
+    constexpr int kCols = 12 + kMaxExtraColumns + 1; //最後の1つは読まない残り(タブで分けずに置く)
     char* cols[kCols];
     const int n = SplitTabs(line, cols, kCols);
     if(n < 11) return false;
-    //12列目以降は "<キー>=<値>"(今は訳だけ。知らないキー・"=" の無い列は将来の拡張として無視する。
+    //13列目以降は "<キー>=<値>"(今は訳だけ。知らないキー・"=" の無い列は将来の拡張として無視する。
     //どの列にもタブは入らない取り決め)
     out = Entry{};
     if(!ValidId(cols[0]) || !out.id.assign(cols[0])) return false;
@@ -236,11 +236,20 @@ bool AppRepo::ParseCatalogLine(char* line, Entry& out, bool& skip, I18nFunctions
     if(!HexDecode(cols[8], strlen(cols[8]), out.author_key, 32) || AllZero(out.author_key, 32)) return false;
     out.author.assign(cols[9]);
     out.status = ParseStatus(cols[10]);
-    const int extra_end = n < 11 + kMaxExtraColumns ? n : 11 + kMaxExtraColumns;
-    for(int i = 11; i < extra_end && lang != I18nFunctions::Lang::Ja; i++){
+    //12列目 min_os(2026-10-30に足した。無い・"-" なら条件なし。読めない値はその行ごと読まない)
+    if(n >= 12 && *cols[11] && strcmp(cols[11], "-") != 0){
+        if(!ParseU32(cols[11], out.min_os)) return false;
+    }
+    //13列目からの訳(min_os の列の後ろ。min_os を読む本体が訳を min_os と読み違えないように)
+    const int extra_end = n < 12 + kMaxExtraColumns ? n : 12 + kMaxExtraColumns;
+    for(int i = 12; i < extra_end && lang != I18nFunctions::Lang::Ja; i++){
         ApplyLocalized(cols[i], lang, out);
     }
     return true;
+}
+
+bool AppRepo::OsTooOld(const Entry& e, uint32_t os_serial){
+    return os_serial != 0 && e.min_os > os_serial;
 }
 
 AppRepo::Status AppRepo::ParseStatus(const char* s){

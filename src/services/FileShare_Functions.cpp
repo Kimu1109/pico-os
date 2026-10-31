@@ -26,6 +26,7 @@
 namespace FileShareFunctions {
     bool (*path_busy)(const char* path) = nullptr;
     void (*sd_changed)() = nullptr;
+    void (*file_changed)(const char* path) = nullptr;
 }
 
 namespace {
@@ -39,6 +40,7 @@ namespace {
     int recent_count = 0;
     uint32_t revision = 0;
     bool modified = false;   // 何か書き換えた(Stop() で sd_changed() を呼ぶ)
+    bool background = false; // 画面を閉じても続けている(SetBackground)
     FileShare::Throttle throttle;
     bool direct = false;     // 本体がAPになっている(直接つなぐ)
     char ap_ssid[33] = "";   // SSIDは32バイトまで
@@ -202,6 +204,7 @@ namespace {
     ShareServer* server = nullptr;
 
     bool Busy(const char* p){ return path_busy && path_busy(p); }
+    void Changed(const char* path){ if(file_changed) file_changed(path); }
 
     bool IsDir(const char* p){
         FsFile f = OSData::SD.open(p);
@@ -321,6 +324,7 @@ namespace {
             return;
         }
         modified = true;
+        Changed(s.path.c_str());
         char sz[16];
         FormatSize(current.total, sz, sizeof(sz));
         AddRecent("↑ %s(%s)", current.name.c_str(), sz);
@@ -472,6 +476,7 @@ namespace {
         if(Busy(p.c_str())){ RespondText(409, "使っているので消せません"); return; }
         if(!PICO_IO::removeRecursive(p.c_str())){ RespondText(500, "消せませんでした"); return; }
         modified = true;
+        Changed(p.c_str());
         AddRecent("- %s", PICO_IO::filename(p.c_str()));
         LOG_SYS_MSG("Wi-Fi転送: %s を消しました", p.c_str());
         RespondText(204, "");
@@ -487,6 +492,8 @@ namespace {
         if(Busy(from.c_str()) || Busy(to.c_str())){ RespondText(409, "使っているので動かせません"); return; }
         if(!OSData::SD.rename(from.c_str(), to.c_str())){ RespondText(500, "名前を変えられませんでした"); return; }
         modified = true;
+        Changed(from.c_str());
+        Changed(to.c_str());
         AddRecent("→ %s", PICO_IO::filename(to.c_str()));
         RespondText(204, "");
     }
@@ -727,12 +734,19 @@ void FileShareFunctions::Stop(){
         direct = false;
     }
     state = State::Idle;
+    background = false;
     share_key[0] = '\0';
     revision++;
     LOG_SYS_MSG("Wi-Fi転送: 待ち受けをやめました");
     if(modified && sd_changed) sd_changed();
     modified = false;
 }
+
+void FileShareFunctions::SetBackground(bool on){
+    background = on && state == State::Running;
+}
+
+bool FileShareFunctions::InBackground(){ return background; }
 
 bool FileShareFunctions::SetDirect(bool on, FixedString<PICO_STR_LL>& err){
     if(state != State::Running || !server) return false;

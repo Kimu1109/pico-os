@@ -181,7 +181,7 @@ def main():
           "site: 名前・説明の訳を data-en に逃がして置く")
     check("two players" in html, "site: 探す文字に訳も入る")
     cat = open(os.path.join(site, "catalog.tsv"), encoding="utf-8").read()
-    check("\tname_en=Reversi <EN>\tdescription_en=Two players & \"quotes\"\n" in cat, "site: カタログの12列目から訳を並べる")
+    check("\tname_en=Reversi <EN>\tdescription_en=Two players & \"quotes\"\n" in cat, "site: カタログの13列目から訳を並べる")
     pkg = open(os.path.join(site, "reversi-2.0.0.papp"), "rb").read() if os.path.isfile(os.path.join(site, "reversi-2.0.0.papp")) else b""
     if pkg:
         cols, _, _, files = b.read_package(pkg)
@@ -199,8 +199,8 @@ def main():
     check(len(line.encode("utf-8")) <= b.MAX_LINE_BYTES and "\tname_en=Name\tdescription_en=ddd" in line
           and line.endswith("d\n"), "catalog: 入りきらない説明の訳は切り詰めて640バイトに収める")
     cols = line.rstrip("\n").split("\t")
-    check(len(cols) == 13 and cols[3] == "名前" and cols[7] == a.description and cols[10] == "-",
-          "catalog: 訳の列は11列(原文)の後ろに足すだけ")
+    check(len(cols) == 14 and cols[3] == "名前" and cols[7] == a.description and cols[10] == "-" and cols[11] == "-",
+          "catalog: 訳の列は12列(原文と min_os)の後ろに足すだけ")
     a.description = "あ" * 60
     a.local = []
     cfg = {"name_en": "N", "description_en": "D\tE", "name_fr": "F", "description": "x"}

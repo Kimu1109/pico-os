@@ -60,6 +60,8 @@ LANの中の平文のHTTPなので、「同じWi-Fiの誰でも書き込める�
   (曲ごとではなくフォルダごと。どの曲が開いているかを外から引く口が無いため)。この画面が前にいる間は、ほかのシーンは止まっているのでそれ以外は気にしない。
 - **閉じたときに何か書き換えていたら `sd_changed`(boot/ が差す。USBドライブの `sd_remounted` と同じもの)**を呼び、
   `LuaAppScanner::Scan()`+`PruneMissing()`・`AppPackage::InstallPending()` でランチャへ反映する。
+- `file_changed`(boot/ が差す): 1つ受け取った・消した・動かした(元と先の両方)直後に呼ぶ。実機のLuaのホットリロードが使う。
+  `SetBackground(true)` で画面を閉じても待ち受けを続ける(`/sys/debug.cfg` の `lua-hot-reload` のときだけ。devtools.md「Luaアプリのホットリロードとテストランナー」)。
 - サーバの持ち物(要求の見出し4.5KB・送受の溜め場所4KB・パス等、約9KB)は `Start()` で `new` し `Stop()` で返す。常に持つのは最近の操作4行(約0.8KB)とキー等だけ。
 - ランチャの登録簿は、このアプリを足したところでPCのSD(Luaアプリ17本)と合わせて40件ちょうどになり、
   新しいLuaアプリが入らなくなったので `AppFunctions::kMaxApps` を40→48へ広げた(+約1.5KBのstatic RAM)。

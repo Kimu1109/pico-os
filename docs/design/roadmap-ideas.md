@@ -13,7 +13,7 @@
 |---|---|---|
 | 1 | ダイアログ系統 | **全て実装済み(betaレベル)**。上記ダイアログカタログ参照。数字専用(電卓用)キーボード`KeyboardNum`も実装済み。 |
 | 2 | 汎用基盤 | **実装済み**。ウィジェットIDはファクトリ・`Resolve()`ともに実装され、`Resolve()`は`LuaEngine`(`pico.set/get/on/destroy/add_child`等)から実際に呼ばれている。 |
-| 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)はシーンアリーナとして実装済み**(`performance.md`「シーンアリーナ」)。**⚠ PCビルドでシーン遷移を繰り返すとヒープ下限が際限なく増える未解決の問題あり**(下記「メモリ計測の結論」内の該当節参照)。 |
+| 3 | スクリーン管理 | メモリ解放(`DestroyLater`)・パネル/グリッドレイアウト(`LayoutContainer`/`GridContainer`)・**シーン遷移+画面スタック(`Scene`/`SceneFunctions`)は実装済み**。**メモリプール化(汎用)はシーンアリーナとして実装済み**(`performance.md`「シーンアリーナ」)。PCビルドでシーン遷移を繰り返すとヒープ下限が増える件は解決済み(LovyanGFXのSDLのパネル。`performance.md`)、回帰テストは `scene_cycle_test`。 |
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。`SettingsScene`から周辺スキャン→選択→パスワード入力→接続まで一般的な「Wi-Fi設定」と同じ操作でできる(下記「Wi-Fiの新規接続」参照)。**複数のネットワークの保存・ON/OFF・未接続時の自動再接続(直近で接続したものから)も実装済み**(「保存済みのWi-Fiネットワーク」参照)。 |
 | 5 | Luaアプリ/API | **2Dゲームの簡易エンジン`pico.game`(2026-10-06)あり**。**`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |

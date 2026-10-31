@@ -99,25 +99,36 @@ int main(){
         AppRepo::Entry e;
         bool skip = false;
         const std::string tail = std::string("\t") + kAuthor + "\tkimu1109\t-";
-        std::string line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です" + tail + "\textra\n";
-        check(CatLine(line.c_str(), e, skip), "catalog: 1件読める");
+        std::string line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です" + tail + "\t-\textra\n";
+        check(CatLine(line.c_str(), e, skip), "catalog: 1件読める(13列目以降は無視)");
         check(e.id == "tetris" && e.version == "2.0.0" && e.dir == "テトリス" && e.name == "テトリス"
               && e.bytes == 21143 && e.perms == AppRepo::PermNetwork && e.description == "説明です", "catalog: 各列");
         check(e.files_sha256[0] == 0x66 && e.files_sha256[31] == 0x39, "catalog: SHA-256");
         check(e.author_key[0] == 0xd7 && e.author_key[31] == 0x1a && e.author == "kimu1109"
               && e.status == AppRepo::Status::Normal, "catalog: 作者の鍵・作者名・status");
         line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\n";
-        check(CatLine(line.c_str(), e, skip) && e.status == AppRepo::Status::Normal, "catalog: 後ろの列が無くても読める");
+        check(CatLine(line.c_str(), e, skip) && e.status == AppRepo::Status::Normal && e.min_os == 0,
+              "catalog: 後ろの列が無くても読める(min_os の列が無ければ条件なし)");
+        line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\t1234\n";
+        check(CatLine(line.c_str(), e, skip) && e.min_os == 1234, "catalog: min_os(12列目)");
+        check(!AppRepo::OsTooOld(e, 1234) && !AppRepo::OsTooOld(e, 2000) && AppRepo::OsTooOld(e, 1233),
+              "min_os: 本体の通し番号が足りなければ動かせない");
+        check(!AppRepo::OsTooOld(e, 0), "min_os: 通し番号0(PC・手元のビルド)は条件を見ない");
+        line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\t-\n";
+        check(CatLine(line.c_str(), e, skip) && e.min_os == 0, "catalog: min_os が - なら条件なし");
+        line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明" + tail + "\t1.2\n";
+        check(!CatLine(line.c_str(), e, skip) && !skip, "catalog: 読めない min_os の行は読まない");
         line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\tnetwork\t説明です\n";
         check(!CatLine(line.c_str(), e, skip) && !skip, "catalog: 形式1の8列の行は断る");
         line = std::string("tetris\t2\tテトリス\tx\t1\t") + kHash + "\t-\t\t" + std::string(64, '0') + "\ta\t-\n";
         check(!CatLine(line.c_str(), e, skip), "catalog: 全部0の作者の鍵は断る");
         line = std::string("tetris\t2\tテトリス\tx\t1\t") + kHash + "\t-\t\tabcd\ta\t-\n";
         check(!CatLine(line.c_str(), e, skip), "catalog: 作者の鍵が64桁でない");
-        // ---- 訳(12列目からの name_<言語>= / description_<言語>=) ----
+        // ---- 訳(13列目からの name_<言語>= / description_<言語>=) ----
         {
             using L = I18nFunctions::Lang;
-            const std::string base = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明です" + tail;
+            //訳は12列目の min_os の後ろ(13列目)から
+            const std::string base = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明です" + tail + "\t-";
             line = base + "\tname_en=Tetris\tdescription_en=A falling blocks game\n";
             check(CatLineLang(line.c_str(), e, L::En) && e.name == "Tetris" && e.description == "A falling blocks game"
                   && e.dir == "テトリス", "catalog: 英語のときは訳の名前・説明");
@@ -129,6 +140,10 @@ int main(){
             line = base + "\tfuture\tx=1\tname_en=\tname_fr=Tetris FR\tname_en-US=US\tname_=x\tdescription_en=Desc=with=eq\n";
             check(CatLineLang(line.c_str(), e, L::En) && e.name == "テトリス" && e.description == "Desc=with=eq",
                   "catalog: 空の訳・知らない言語・知らない列は無視し、値の中の=はそのまま");
+            line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明です" + tail + "\t12\tname_en=Tetris\n";
+            check(CatLineLang(line.c_str(), e, L::En) && e.min_os == 12 && e.name == "Tetris", "catalog: min_os と訳を両方読む");
+            line = std::string("tetris\t2.0.0\tテトリス\tテトリス\t21143\t") + kHash + "\t-\t説明です" + tail + "\tname_en=Tetris\n";
+            check(!CatLineLang(line.c_str(), e, L::En), "catalog: min_os の列を飛ばして訳を置いた行は読まない(min_os として読めない)");
             line = base + "\tdescription_en=A\tdescription_en=B\n";
             check(CatLineLang(line.c_str(), e, L::En) && e.description == "B", "catalog: 同じ鍵は後ろが勝つ");
             //読む列の数を超えた後ろの列は読まない(行の残りを1つに置いたまま)

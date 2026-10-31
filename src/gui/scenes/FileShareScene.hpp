@@ -1,5 +1,7 @@
 #pragma once
 
+#include "services/FileShare_Functions.hpp"
+
 #include "gui/core/Scene.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"

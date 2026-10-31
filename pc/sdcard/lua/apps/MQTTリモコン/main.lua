@@ -12,10 +12,10 @@ local X, Y, W, H = pico.content_rect()
 
 local MAX_DEVICES = 6
 local DEFAULT_DEVICES = {
-    { "居間の照明", "home/living/light" },
-    { "寝室の照明", "home/bedroom/light" },
-    { "扇風機", "home/fan" },
-    { "加湿器", "home/humidifier" },
+    { pico.tr("居間の照明"), "home/living/light" },
+    { pico.tr("寝室の照明"), "home/bedroom/light" },
+    { pico.tr("扇風機"), "home/fan" },
+    { pico.tr("加湿器"), "home/humidifier" },
 }
 
 local function hex(s)
@@ -34,7 +34,7 @@ local function status_topic() return "pico/remote/" .. cfg.client_id .. "/status
 
 local sock = nil            -- 接続のid(繋いでいなければ nil)
 local online = false        -- CONNACK を受けた
-local conn_text = "未接続"
+local conn_text = pico.tr("未接続")
 local leaving = false       -- 戻る操作で閉じている(繋ぎ直さない)
 local retry_ms, retry_timer = 5000, nil
 local state = {}            -- 機器の番号 → "ON" / "OFF" / その他の文字列
@@ -66,7 +66,7 @@ local connect -- 下で決める
 
 local function schedule_retry()
     if leaving or retry_timer then return end
-    conn_text = conn_text .. "(" .. (retry_ms // 1000) .. "秒後に再接続)"
+    conn_text = conn_text .. pico.tr("(%s秒後に再接続)", retry_ms // 1000)
     retry_timer = pico.after(retry_ms, function()
         retry_timer = nil
         connect()
@@ -78,7 +78,7 @@ local function on_event(ev, a, b, c)
     if ev == "connect" then
         online = true
         retry_ms = 5000
-        conn_text = "接続中: " .. cfg.url
+        conn_text = pico.tr("接続中: ") .. cfg.url
         for _, d in ipairs(cfg.devices) do pico.socket.subscribe(sock, d[2] .. "/state", 1) end
         pico.socket.publish(sock, status_topic(), "online", { retain = true })
     elseif ev == "message" then
@@ -93,7 +93,7 @@ local function on_event(ev, a, b, c)
         sock, online = nil, false
         pending = {}
         if leaving then return end
-        conn_text = "切断: " .. (a or "ブローカが閉じました")
+        conn_text = pico.tr("切断: ") .. (a or pico.tr("ブローカが閉じました"))
         schedule_retry()
     end
     redraw()
@@ -101,7 +101,7 @@ end
 
 connect = function()
     if not pico.socket then
-        conn_text = "このファームは pico.socket に対応していません"
+        conn_text = pico.tr("このファームは pico.socket に対応していません")
         redraw()
         return
     end
@@ -116,9 +116,9 @@ connect = function()
     })
     online = false
     if sock then
-        conn_text = "接続しています…"
+        conn_text = pico.tr("接続しています…")
     else
-        conn_text = "繋げません: " .. tostring(err)
+        conn_text = pico.tr("繋げません: ") .. tostring(err)
         schedule_retry()
     end
     redraw()
@@ -129,7 +129,7 @@ local function toggle(i)
     local d = cfg.devices[i]
     if not d then return end
     if not online then
-        pico.toast("ブローカに繋がっていません")
+        pico.toast(pico.tr("ブローカに繋がっていません"))
         return
     end
     local want = state[i] == "ON" and "OFF" or "ON"
@@ -182,11 +182,11 @@ local function render()
         pico.fill_rect(x, y, w, h, on and DKGREEN or LGREY)
         pico.draw_rect(x, y, w, h, on and BLACK or DGREY)
         pico.draw_text(x + 6, y + 5, fit(d[1], w - 12, 0), on and WHITE or BLACK, 0)
-        local label = pending[i] and "…" or (s == nil and "不明" or (on and "ON" or (s == "OFF" and "OFF" or s)))
+        local label = pending[i] and "…" or (s == nil and pico.tr("不明") or (on and "ON" or (s == "OFF" and "OFF" or s)))
         pico.draw_text(x + 6, y + h - 30, fit(label, w - 12, 1), on and WHITE or (s == nil and DGREY or BLACK), 1)
     end
     if #cfg.devices == 0 then
-        pico.draw_text_wrapped(X + 8, TOP + STATUS_H + 8, W - 16, "機器がありません。「設定」の「機器の一覧」で足してください", DGREY, 0)
+        pico.draw_text_wrapped(X + 8, TOP + STATUS_H + 8, W - 16, pico.tr("機器がありません。「設定」の「機器の一覧」で足してください"), DGREY, 0)
     end
 
     local ly = Y + H - LOG_H
@@ -227,14 +227,14 @@ local function apply(changed_conn)
 end
 
 local function settings()
-    local items = { "ブローカのURL", "ユーザー名", "パスワード", "機器の一覧(名前=話題)" }
-    local dlg = pico.show_choice("設定", items)
+    local items = { pico.tr("ブローカのURL"), pico.tr("ユーザー名"), pico.tr("パスワード"), pico.tr("機器の一覧(名前=話題)") }
+    local dlg = pico.show_choice(pico.tr("設定"), items)
     pico.on(dlg, "closed", function(_, ok, idx)
         if not ok then return end
         -- ダイアログからダイアログへは1フレーム空ける
         pico.after(50, function()
             if idx == 3 then
-                local d = pico.show_input("1行に1台、名前=話題(最大" .. MAX_DEVICES .. "台)", devices_text(), false)
+                local d = pico.show_input(pico.tr("1行に1台、名前=話題(最大%s台)", MAX_DEVICES), devices_text(), false)
                 pico.on(d, "closed", function(id, ok2)
                     if not ok2 then return end
                     cfg.devices = parse_devices(pico.get(id, "text"))
@@ -249,7 +249,7 @@ local function settings()
                 if not ok2 then return end
                 local v = pico.get(id, "text")
                 if key == "url" and not (v:match("^mqtts?://.+")) then
-                    pico.show_message("URLは mqtt://ホスト[:ポート] か mqtts://… の形で入れてください", "", "OK")
+                    pico.show_message(pico.tr("URLは mqtt://ホスト[:ポート] か mqtts://… の形で入れてください"), "", "OK")
                     return
                 end
                 cfg[key] = v
@@ -283,9 +283,9 @@ local function button(text, x, w, fn)
 end
 
 local bw = (W - 4) // 3
-button("戻る", X, bw, back)
-button("設定", X + bw + 2, bw, settings)
-button("再接続", X + (bw + 2) * 2, bw, function()
+button(pico.tr("戻る"), X, bw, back)
+button(pico.tr("設定"), X + bw + 2, bw, settings)
+button(pico.tr("再接続"), X + (bw + 2) * 2, bw, function()
     retry_ms = 5000
     if retry_timer then pico.cancel(retry_timer); retry_timer = nil end
     connect()

@@ -6,6 +6,8 @@
     python3 script/i18n.py --check   … 上の2つが src/ と食い違っていないか(CI)。書式の食い違い・
                                        ハッシュの衝突もここで落とす。訳の無い数は表示するだけ(落とさない)
     python3 script/i18n.py missing [言語]  … 訳の無い原文と、それを使うファイルを出す
+    python3 script/i18n.py lua <アプリのフォルダ>...  … Luaアプリの pico.tr("…") を拾って lang/en.lua へ原文を足す
+                                       (訳の無い原文は「-- TODO」の行で足す。--check は同梱アプリの lang/ も確かめる)
 
 .po は gettext の形の一部だけ(msgid / msgstr / "#:" の出どころ)。Poedit 等でも開ける。
 1つの原文は1行の文字列にする(複数行に分けた msgid "" "…" も読めるが、書き戻すときは1行にする)。
@@ -314,8 +316,146 @@ def check_entries(lang, uses, translations):
     return errors
 
 
+# ---------------------------------------------------------------------------
+# Luaアプリ(pico.tr と lang/<言語>.lua。docs/design/i18n.md「Luaアプリ」)
+# ---------------------------------------------------------------------------
+
+LUA_APPS = os.path.join(ROOT, "pc", "sdcard", "lua", "apps")
+_LUA_TR = re.compile(r"""pico\.tr\(\s*("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')""")
+_LUA_ENTRY = re.compile(r'^\s*\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"\s*,?\s*$')
+_LUA_TODO = re.compile(r'^\s*--\s*TODO\s')
+
+
+def lua_unescape(body):
+    """Luaの文字列リテラルの中身(引用符の内側)をバイト列へ。使うのは \\n \\t \\" \\' \\\\ くらい"""
+    return c_unescape(body)
+
+
+def lua_escape(data):
+    return c_escape(data)
+
+
+def lua_app_files(app_dir):
+    """アプリのフォルダの .lua(lang/ と tests/ は除く)をファイル名順に"""
+    out = []
+    for root, dirs, files in os.walk(app_dir):
+        rel = os.path.relpath(root, app_dir).replace(os.sep, "/")
+        if rel.split("/")[0] in ("lang", "tests"):
+            continue
+        dirs.sort()
+        for f in sorted(files):
+            if f.endswith(".lua"):
+                out.append(os.path.join(root, f))
+    return out
+
+
+def scan_lua_app(app_dir):
+    """pico.tr の原文(バイト列)を出てきた順に(重複なし)"""
+    found = []
+    for path in lua_app_files(app_dir):
+        for line in open(path, encoding="utf-8"):
+            code = line
+            # 行のコメントは捨てる(文字列の中の -- は気にしない: pico.tr の引数に -- を書かないこと)
+            if "--" in code:
+                head = code.split("--", 1)[0]
+                if "pico.tr" not in head:
+                    continue
+                code = head if head.count('"') % 2 == 0 else code
+            for m in _LUA_TR.finditer(code):
+                msg = lua_unescape(m.group(1)[1:-1])
+                if msg not in found:
+                    found.append(msg)
+    return found
+
+
+def read_lua_lang(path):
+    """lang/<言語>.lua の ["原文"] = "訳" の行を読む(TODO の行は訳なし)"""
+    entries = {}
+    if not os.path.exists(path):
+        return entries
+    for line in open(path, encoding="utf-8"):
+        if _LUA_TODO.match(line):
+            continue
+        m = _LUA_ENTRY.match(line)
+        if m:
+            entries[lua_unescape(m.group(1))] = lua_unescape(m.group(2))
+    return entries
+
+
+def render_lua_lang(app_name, lang, msgs, entries):
+    out = ["-- %s の%sの表示(pico.tr の原文 → 訳)。原文は python3 script/i18n.py lua で足す\n" % (
+        app_name, "英語" if lang == "en" else lang), "return {\n"]
+    for msg in msgs:
+        tr = entries.get(msg)
+        if tr:
+            out.append('    ["%s"] = "%s",\n' % (lua_escape(msg), lua_escape(tr)))
+        else:
+            out.append('    -- TODO ["%s"] = "",\n' % lua_escape(msg))
+    out.append("}\n")
+    return "".join(out)
+
+
+def lua_app(app_dir, lang, write):
+    """1つのアプリの lang/<言語>.lua を作り直す(write=False なら食い違いと誤りを返すだけ)"""
+    msgs = scan_lua_app(app_dir)
+    path = os.path.join(app_dir, "lang", lang + ".lua")
+    entries = read_lua_lang(path)
+    errors = []
+    for msg in msgs:
+        tr = entries.get(msg)
+        if tr and format_specs(tr) != format_specs(msg):
+            errors.append("%s: 書式が原文と違います: %r → %r" % (os.path.relpath(path, ROOT), msg.decode(), tr.decode()))
+    text = render_lua_lang(os.path.basename(os.path.normpath(app_dir)), lang, msgs, entries)
+    missing = [m for m in msgs if not entries.get(m)]
+    if write and msgs and not errors:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+    cur = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+    stale = bool(msgs) and cur != text
+    return msgs, missing, errors, stale
+
+
+def main_lua(argv):
+    dirs = argv[2:]
+    if not dirs:
+        print("使い方: python3 script/i18n.py lua <アプリのフォルダ>...")
+        return 2
+    rc = 0
+    for d in dirs:
+        msgs, missing, errors, _ = lua_app(d, "en", True)
+        for e in errors:
+            print("エラー: " + e)
+            rc = 1
+        print("%s: 原文 %d / 訳なし %d" % (os.path.relpath(d, ROOT), len(msgs), len(missing)))
+    return rc
+
+
+def check_lua_apps():
+    """同梱アプリのうち lang/ を持つものが pico.tr と合っているか(訳し漏れ・書式の食い違い)"""
+    rc = 0
+    if not os.path.isdir(LUA_APPS):
+        return 0
+    for name in sorted(os.listdir(LUA_APPS)):
+        d = os.path.join(LUA_APPS, name)
+        if not os.path.isdir(os.path.join(d, "lang")):
+            continue
+        msgs, missing, errors, stale = lua_app(d, "en", False)
+        for e in errors:
+            print("エラー: " + e)
+            rc = 1
+        if missing or stale:
+            print("エラー: %s の lang/en.lua が pico.tr と合っていません(訳なし %d)。"
+                  "python3 script/i18n.py lua %s を回して訳を書いてください"
+                  % (name, len(missing), os.path.relpath(d, ROOT)))
+            rc = 1
+    return rc
+
+
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "--help"
+    if cmd == "lua":
+        return main_lua(argv)
     if cmd not in ("update", "--check", "missing"):
         print(__doc__)
         return 0 if cmd in ("-h", "--help") else 2
@@ -369,6 +509,8 @@ def main(argv):
                       % (table_path, os.path.relpath(po_path, ROOT)))
                 rc = 1
             print("%s: 原文 %d / 訳なし %d" % (lang, len(uses), len(missing)))
+    if cmd == "--check" and check_lua_apps() != 0:
+        rc = 1
     return rc
 
 

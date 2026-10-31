@@ -154,7 +154,7 @@ msgstr "Not found"
 msgid "再検索"
 msgstr "Search again"
 
-#: src/apps/browser/ui/SearchDialog.hpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp
+#: src/apps/browser/ui/SearchDialog.hpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/SettingsScene_Wifi.cpp src/lua/LuaDebugScreen.cpp
 msgid "次へ"
 msgstr "Next"
 
@@ -802,7 +802,7 @@ msgstr "Clear history"
 msgid "変換の種類"
 msgstr "Conversion type"
 
-#: src/apps/calculator/CalculatorScene_Convert.cpp src/apps/gb/GameBoyScene.cpp src/apps/home/HomeScene.cpp src/apps/mail/MailScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/UsbDriveScene.cpp src/gui/widgets/dialogs/ColorDialog.hpp src/gui/widgets/dialogs/FileSaveDialog.hpp src/gui/widgets/dialogs/FileSelectDialog.hpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/services/PowerMenu_Functions.cpp
+#: src/apps/calculator/CalculatorScene_Convert.cpp src/apps/gb/GameBoyScene.cpp src/apps/home/HomeScene.cpp src/apps/mail/MailScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/UsbDriveScene.cpp src/gui/widgets/dialogs/ColorDialog.hpp src/gui/widgets/dialogs/FileSaveDialog.hpp src/gui/widgets/dialogs/FileSelectDialog.hpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/lua/LuaEngine_Ext.cpp src/lua/LuaEngine_Widgets.cpp src/services/PowerMenu_Functions.cpp
 msgid "キャンセル"
 msgstr "Cancel"
 
@@ -898,7 +898,7 @@ msgstr "until %02d:%02d"
 msgid "(続き)"
 msgstr "(cont.)"
 
-#: src/apps/calendar/CalendarScene.cpp src/apps/chat/Chat_Client.cpp src/apps/chat/Chat_Watch.cpp src/apps/mail/Imap_Client.cpp src/apps/music/MusicScene.cpp src/apps/recorder/Transcribe_Client.cpp src/apps/store/App_Store.cpp src/apps/todo/Todoist_Client.cpp src/apps/video/Pvid_Player.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/StorageScene.cpp src/services/Screenshot_Functions.cpp
+#: src/apps/calendar/CalendarScene.cpp src/apps/chat/Chat_Client.cpp src/apps/chat/Chat_Watch.cpp src/apps/mail/Imap_Client.cpp src/apps/music/MusicScene.cpp src/apps/recorder/Transcribe_Client.cpp src/apps/store/App_Store.cpp src/apps/todo/Todoist_Client.cpp src/apps/video/Pvid_Player.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/StorageScene.cpp src/lua/LuaEngine_Iso.cpp src/services/Screenshot_Functions.cpp
 msgid "SDカードがありません"
 msgstr "No SD card"
 
@@ -1194,7 +1194,7 @@ msgstr "token is too long"
 msgid "チャットの未読"
 msgstr "Unread chat"
 
-#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp
+#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp src/lua/LuaBackground.cpp
 msgid "切っています"
 msgstr "Off"
 
@@ -1202,7 +1202,7 @@ msgstr "Off"
 msgid "確認しています…"
 msgstr "Checking…"
 
-#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp
+#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp src/lua/LuaBackground.cpp
 msgid "失敗: %s"
 msgstr "Failed: %s"
 
@@ -1218,7 +1218,7 @@ msgstr "Checked %lum ago (%d rooms)"
 msgid "まだ確認していません"
 msgstr "Not checked yet"
 
-#: src/apps/chat/Chat_Watch.cpp src/apps/gb/GameBoyScene.cpp src/apps/gb/Gb_Emu.cpp src/apps/todo/Todo_Watch.cpp src/apps/video/Pvid_Player.cpp src/services/Firmware_Functions.cpp
+#: src/apps/chat/Chat_Watch.cpp src/apps/gb/GameBoyScene.cpp src/apps/gb/Gb_Emu.cpp src/apps/todo/Todo_Watch.cpp src/apps/video/Pvid_Player.cpp src/lua/LuaEngine_Iso.cpp src/lua/LuaEngine_Socket.cpp src/services/Firmware_Functions.cpp
 msgid "メモリが足りません"
 msgstr "Out of memory"
 
@@ -1314,7 +1314,7 @@ msgstr "(now)"
 msgid "(古)"
 msgstr "(old)"
 
-#: src/apps/firmware/FirmwareScene.cpp src/apps/firmware/Fw_Download.cpp src/apps/gb/Gb_Emu.cpp src/apps/gb/Gb_Rom_Flash.cpp src/apps/notes/NotesScene.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileViewerScene.cpp src/services/Firmware_Functions.cpp src/services/UsbDrive_Functions.cpp
+#: src/apps/firmware/FirmwareScene.cpp src/apps/firmware/Fw_Download.cpp src/apps/gb/Gb_Emu.cpp src/apps/gb/Gb_Rom_Flash.cpp src/apps/notes/NotesScene.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileViewerScene.cpp src/lua/LuaBackground.cpp src/lua/LuaEngine_Mic.cpp src/lua/LuaEngine_Net.cpp src/lua/LuaEngine_Sound.cpp src/services/Firmware_Functions.cpp src/services/UsbDrive_Functions.cpp
 msgid "SDカードが使えません"
 msgstr "SD card unavailable"
 
@@ -3366,7 +3366,7 @@ msgstr "Replace: find"
 msgid "検索する文字列"
 msgstr "Find"
 
-#: src/apps/texteditor/TextEditorScene_Edit.cpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/gui/widgets/keyboards/KeyboardNum.cpp
+#: src/apps/texteditor/TextEditorScene_Edit.cpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/gui/widgets/keyboards/KeyboardNum.cpp src/lua/LuaEngine_Ext.cpp src/lua/LuaEngine_Widgets.cpp
 msgid "決定"
 msgstr "OK"
 
@@ -3582,7 +3582,7 @@ msgstr "Wrong token. Enter it again in [Settings]"
 msgid "昨日"
 msgstr "Yesterday"
 
-#: src/apps/video/Pvid_Player.cpp
+#: src/apps/video/Pvid_Player.cpp src/lua/LuaEngine_Net.cpp
 msgid "ファイルを開けません"
 msgstr "Cannot open the file"
 
@@ -3650,7 +3650,7 @@ msgstr "  [off]"
 msgid "  [動作中]"
 msgstr "  [running]"
 
-#: src/gui/scenes/BackgroundScene.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/RecorderScene.cpp
+#: src/gui/scenes/BackgroundScene.cpp src/gui/scenes/ClocksScene.cpp src/gui/scenes/RecorderScene.cpp src/lua/LuaDebugScreen.cpp
 msgid "停止"
 msgstr "Stop"
 
@@ -4873,6 +4873,286 @@ msgstr "Cancel"
 #: src/gui/widgets/systems/LockScreen.cpp
 msgid "消す"
 msgstr "Del"
+
+#: src/lua/LuaBackground.cpp
+msgid "スクリプトを開けません"
+msgstr "Cannot open the script"
+
+#: src/lua/LuaBackground.cpp
+msgid "スクリプトが大きすぎます(16KiBまで)"
+msgstr "Script too large (16KiB max)"
+
+#: src/lua/LuaBackground.cpp
+msgid "スクリプトを読むメモリが足りません"
+msgstr "Not enough memory to read the script"
+
+#: src/lua/LuaBackground.cpp
+msgid "スクリプトを最後まで読めません"
+msgstr "Could not read the whole script"
+
+#: src/lua/LuaBackground.cpp
+msgid "止めました"
+msgstr "Stopped"
+
+#: src/lua/LuaBackground.cpp
+msgid "動いています…"
+msgstr "Running…"
+
+#: src/lua/LuaBackground.cpp
+msgid "まだ動いていません"
+msgstr "Not run yet"
+
+#: src/lua/LuaBackground.cpp
+msgid "%lu回動きました"
+msgstr "Ran %lu times"
+
+#: src/lua/LuaBackground.cpp
+msgid "・次は%lu分後"
+msgstr ", next in %lum"
+
+#: src/lua/LuaBackground.cpp
+msgid "・次は%lu秒後"
+msgstr ", next in %lus"
+
+#: src/lua/LuaBackground.cpp
+msgid "アプリを開いているので見送りました"
+msgstr "Skipped: the app is open"
+
+#: src/lua/LuaBackground.cpp
+msgid "メモリが足りないので延ばしました"
+msgstr "Postponed: low memory"
+
+#: src/lua/LuaBackground.cpp
+msgid "Luaを起動できません(メモリ不足)"
+msgstr "Cannot start Lua (out of memory)"
+
+#: src/lua/LuaBackground.cpp
+msgid "時間切れ(通信やタイマーが終わりませんでした)"
+msgstr "Timed out (network or timers did not finish)"
+
+#: src/lua/LuaBackground.cpp
+msgid "アプリが無くなりました"
+msgstr "The app was removed"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "続行"
+msgstr "Cont"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "1行"
+msgstr "Step"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "抜ける"
+msgstr "Out"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: ブレークポイント"
+msgstr "Stopped: breakpoint"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: ステップ"
+msgstr "Stopped: step"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: 一時停止"
+msgstr "Stopped: paused"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: エラー"
+msgstr "Stopped: error"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "停止: pico.breakpoint()"
+msgstr "Stopped: pico.breakpoint()"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "(Luaの場所が分かりません)"
+msgstr "(unknown Lua location)"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "(ソースを読めません)"
+msgstr "(cannot read the source)"
+
+#: src/lua/LuaDebugScreen.cpp
+msgid "(変数なし)"
+msgstr "(no variables)"
+
+#: src/lua/LuaEngine.cpp
+msgid "スクリプトを打ち切りました"
+msgstr "Script aborted"
+
+#: src/lua/LuaEngine.cpp
+msgid "デバッガで停止しました"
+msgstr "Stopped in the debugger"
+
+#: src/lua/LuaEngine.cpp
+msgid "スクリプトの実行が命令数の上限(%u)を超えたため打ち切りました(無限ループの可能性があります)"
+msgstr "Script aborted: exceeded the instruction limit (%u) (possible infinite loop)"
+
+#: src/lua/LuaEngine.cpp
+msgid "エラー(nil)"
+msgstr "Error (nil)"
+
+#: src/lua/LuaEngine.cpp
+msgid "エラー(値の種類: %s)"
+msgstr "Error (value type: %s)"
+
+#: src/lua/LuaEngine.cpp
+msgid "アプリを閉じています"
+msgstr "Closing the app"
+
+#: src/lua/LuaEngine.cpp
+msgid "Luaスクリプトの構文エラー"
+msgstr "Lua syntax error"
+
+#: src/lua/LuaEngine.cpp
+msgid "Luaスクリプトの実行時エラー"
+msgstr "Lua runtime error"
+
+#: src/lua/LuaEngine.cpp
+msgid "loop()の実行時エラー"
+msgstr "Runtime error in loop()"
+
+#: src/lua/LuaEngine.cpp
+msgid "on_key()の実行時エラー"
+msgstr "Runtime error in on_key()"
+
+#: src/lua/LuaEngine.cpp src/lua/LuaEngine_Ext.cpp
+msgid "Luaコールバックでエラーが発生しました"
+msgstr "Error in a Lua callback"
+
+#: src/lua/LuaEngine.cpp
+msgid "タイマーのコールバックでエラーが発生しました"
+msgstr "Error in a timer callback"
+
+#: src/lua/LuaEngine_Ext.cpp
+msgid "on_back()の実行時エラー"
+msgstr "Runtime error in on_back()"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "リクエストヘッダが長すぎる/不正"
+msgstr "Request headers too long or invalid"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "保存先のパスが長すぎる"
+msgstr "Save path too long"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "保存先を開けない"
+msgstr "Cannot open the save location"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "リクエストを開始できない"
+msgstr "Cannot start the request"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "pico.http_requestのコールバックでエラーが発生しました"
+msgstr "Error in a pico.http_request callback"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "保存先へ差し替えられない"
+msgstr "Cannot replace the saved file"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "失敗"
+msgstr "Failed"
+
+#: src/lua/LuaEngine_Http.cpp
+msgid "%s (位置 %d)"
+msgstr "%s (at %d)"
+
+#: src/lua/LuaEngine_Iso.cpp
+msgid "権限がありません"
+msgstr "Permission denied"
+
+#: src/lua/LuaEngine_Iso.cpp
+msgid "置けるのは %d 個までです"
+msgstr "Up to %d can be placed"
+
+#: src/lua/LuaEngine_Iso.cpp
+msgid "世界が広すぎます"
+msgstr "The world is too wide"
+
+#: src/lua/LuaEngine_Iso.cpp
+msgid "弾は %d 個までです"
+msgstr "Up to %d shots"
+
+#: src/lua/LuaEngine_Mic.cpp
+msgid "マイクの権限がありません"
+msgstr "No microphone permission"
+
+#: src/lua/LuaEngine_Mic.cpp
+msgid "このアプリからは書けない場所です"
+msgstr "This app cannot write there"
+
+#: src/lua/LuaEngine_Mic.cpp
+msgid "録音中は周波数を変えられません"
+msgstr "Cannot change the rate while recording"
+
+#: src/lua/LuaEngine_Net.cpp
+msgid "JSONが途中で切れています"
+msgstr "JSON is truncated"
+
+#: src/lua/LuaEngine_Net.cpp
+msgid "このパスは読めません(権限)"
+msgstr "Cannot read this path (permission)"
+
+#: src/lua/LuaEngine_Net.cpp
+msgid "ファイルが大きすぎます(1MiBまで)"
+msgstr "File too large (1MiB max)"
+
+#: src/lua/LuaEngine_Net.cpp
+msgid "XMLが途中で切れています"
+msgstr "XML is truncated"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "ネットワークの権限がありません"
+msgstr "No network permission"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "同時に開けるソケットの数を超えています"
+msgstr "Too many open sockets"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "ホスト名が空か長すぎます"
+msgstr "Host name is empty or too long"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "UDPの待ち受けを始められません(番号が使用中?)"
+msgstr "Cannot listen on UDP (port in use?)"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "opts.protocol に使えない文字があります"
+msgstr "opts.protocol has invalid characters"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "ヘッダが長すぎるか、使えない名前・文字があります"
+msgstr "Headers too long, or invalid names or characters"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "URLが ws:// か wss:// でない、またはメモリが足りません"
+msgstr "URL is not ws:// or wss://, or out of memory"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "URLが mqtt:// か mqtts:// でない、またはメモリが足りません"
+msgstr "URL is not mqtt:// or mqtts://, or out of memory"
+
+#: src/lua/LuaEngine_Socket.cpp
+msgid "pico.socket のコールバックでエラーが発生しました"
+msgstr "Error in a pico.socket callback"
+
+#: src/lua/LuaEngine_Sound.cpp
+msgid "%d行%d列: %s"
+msgstr "Line %d, col %d: %s"
+
+#: src/lua/LuaEngine_Sound.cpp
+msgid "このアプリからは読めない場所です"
+msgstr "This app cannot read there"
+
+#: src/lua/LuaEngine_System.cpp
+msgid "通知の権限がありません"
+msgstr "No notification permission"
 
 #: src/services/Alarm_Functions.cpp
 msgid "アラーム %02d:%02d"

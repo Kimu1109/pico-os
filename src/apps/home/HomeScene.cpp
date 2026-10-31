@@ -231,7 +231,7 @@ void HomeScene::openItemMenu(const AppGrid::LongPress& target){
     }else{
         const AppEntry* entry = AppFunctions::Get(target.index);
         if(!entry) return;
-        title = I18nFunctions::Tr(entry->name.c_str()); //登録名は日本語のまま(launcher.cfg 等の識別子)。見せるときだけ訳す
+        title = AppFunctions::DisplayName(*entry); //登録名は日本語のまま(launcher.cfg 等の識別子)。見せるときだけ訳す
     }
 
     //並びの中の位置と長さ(フォルダの中ではフォルダの中の見えているアプリ)

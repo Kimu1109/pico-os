@@ -65,6 +65,7 @@
 #include "OS_Data.hpp"
 #include "consts.hpp"
 #include <Arduino.h>
+#include "system/I18n_Functions.hpp"
 
 
 using namespace LuaInternal;
@@ -209,7 +210,7 @@ namespace {
             return 1;
         }
         lua_pushnil(L);
-        if (r.line > 0) lua_pushfstring(L, "%d行%d列: %s", r.line, r.col, r.message.c_str());
+        if (r.line > 0) lua_pushfstring(L, TR("%d行%d列: %s"), r.line, r.col, r.message.c_str());
         else lua_pushstring(L, r.message.c_str());
         return 2;
     }
@@ -221,12 +222,12 @@ int LuaEngine::l_music_play(lua_State* L) {
     const char* path = luaL_checkstring(L, 1);
     MmlResult r;
     if (!OSData::SD_usable) {
-        r.message.assign("SDカードが使えません");
+        r.message.assign(TR("SDカードが使えません"));
         return PushMusicResult(L, false, r);
     }
     if (!self->SdPathAllowed(path)) {
         LOG_APP_WARN("pico.music_play: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
-        r.message.assign("このアプリからは読めない場所です");
+        r.message.assign(TR("このアプリからは読めない場所です"));
         return PushMusicResult(L, false, r);
     }
     self->used_music_ = true;
@@ -277,13 +278,13 @@ int LuaEngine::l_wav_play(lua_State* L) {
 
     if (!OSData::SD_usable) {
         lua_pushnil(L);
-        lua_pushstring(L, "SDカードが使えません");
+        lua_pushstring(L, TR("SDカードが使えません"));
         return 2;
     }
     if (!self->SdPathAllowed(path)) {
         LOG_APP_WARN("pico.wav_play: アプリディレクトリ外へのアクセスは許可されていません: %s", path);
         lua_pushnil(L);
-        lua_pushstring(L, "このアプリからは読めない場所です");
+        lua_pushstring(L, TR("このアプリからは読めない場所です"));
         return 2;
     }
     self->used_wav_ = true;

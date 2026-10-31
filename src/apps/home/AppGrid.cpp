@@ -442,7 +442,7 @@ void AppGrid::render() {
             //押下中のタイルは背景を敷いて押し込みを表す
             if (is_pressed) OSData::frame->fillRect(r.x, r.y, r.w, r.h, PICO_BLACK);
             drawIcon(*entry, r.x + (r.w - kIconPx) / 2, r.y + kPadding, fore_color);
-            drawName(I18nFunctions::Tr(entry->name.c_str()), r.x, r.y + kPadding + kIconPx + kLabelGap, r.w, fore_color);
+            drawName(AppFunctions::DisplayName(*entry), r.x, r.y + kPadding + kIconPx + kLabelGap, r.w, fore_color);
         } else {
             //ウィジェット: 角の丸い枠の中を、種類ごとの描き方に任せる。ボタンの外を押している間は枠を太く
             const bool body_pressed = (i == pressed_item_ && pressed_button_ < 0);

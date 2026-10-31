@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lua/LuaPermissions.hpp"
+#include "services/App_Functions.hpp"   // kAppLocalNames
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -24,6 +25,8 @@
 // 【設定ファイル(app.cfg、任意)】 `/lua/apps/<名前>/app.cfg` があれば
 // PICO_Config(key=value形式)として読み、以下のキーを認識する(全て省略可):
 //   name                          … 表示名。指定があればディレクトリ名より優先する
+//   name_en 等(name_<言語コード>) … その言語のときにランチャ等で見せる名前(docs/design/i18n.md「Luaアプリ」)。
+//                                    name は launcher.cfg・pico.launch_app の識別子なので言語で変えない
 //   description / version         … 説明文・バージョン表記。現状はスキャン時に
 //                                    ログへ出すだけで、AppEntryへは保持しない
 //                                    (表示先のUIがまだ無いため。将来アプリ情報画面を
@@ -54,6 +57,8 @@ namespace LuaAppScanner {
     // app.cfg の中身(全部省略可)。アプリストア(apps/store/App_Store)もこれを読む
     struct AppInfo {
         FixedString<PICO_STR_M> name;         // 空ならディレクトリ名を使う
+        // 日本語以外の言語での表示名(name_en 等。[言語 - 1]。AppEntry::local_names と同じ並び)。空なら name のまま
+        FixedString<PICO_STR_S> local_names[kAppLocalNames];
         FixedString<PICO_STR_L> description;
         FixedString<PICO_STR_S> version;
         FixedString<PICO_STR_S> id;           // アプリストアのid(docs/APP_REPO.md)。手で入れたアプリは空

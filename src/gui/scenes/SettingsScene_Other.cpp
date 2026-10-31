@@ -70,7 +70,7 @@ void SettingsScene::openLauncherDialog(){
     for(int i = 0; i < hidden; i++){
         const AppEntry* e = AppFunctions::Get(AppFunctions::HiddenAt(i));
         char buf[PICO_STR_L];
-        snprintf(buf, sizeof(buf), TR("表示: %s"), e ? I18nFunctions::Tr(e->name.c_str()) : "?");
+        snprintf(buf, sizeof(buf), TR("表示: %s"), e ? AppFunctions::DisplayName(*e) : "?");
         dialog->addChoice(buf);
     }
     dialog->addChoice(TR("並びを元に戻す"));

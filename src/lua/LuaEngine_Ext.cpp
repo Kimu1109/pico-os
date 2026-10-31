@@ -56,6 +56,7 @@
 #include "OS_Data.hpp"
 #include "consts.hpp"
 #include <Arduino.h>
+#include "system/I18n_Functions.hpp"
 
 using TextboxT = Textbox<WidgetFactory::kTextboxCapacity>;
 
@@ -217,7 +218,7 @@ bool LuaEngine::BeginDispatch(WidgetId id, EventKind kind) {
 
 void LuaEngine::EndDispatch(int extra_args) {
     if (ProtectedCall(1 + extra_args) != LUA_OK) {
-        ReportError("Luaコールバックでエラーが発生しました");
+        ReportError(TR("Luaコールバックでエラーが発生しました"));
     }
 }
 
@@ -482,7 +483,7 @@ bool LuaEngine::DispatchBack() {
     if (ProtectedCall(0, 1) != LUA_OK) {
         luaL_unref(L, LUA_REGISTRYINDEX, ext_->back_callback_ref);
         ext_->back_callback_ref = LUA_NOREF;
-        ReportError("on_back()の実行時エラー");
+        ReportError(TR("on_back()の実行時エラー"));
         return true;
     }
     // falseを返したら「取らなかった」(既定の戻る動作に任せる)。それ以外(nilも)は取った扱い
@@ -706,7 +707,7 @@ int LuaEngineExt::FinishPicker(lua_State* L, PickerDialog* dialog, const char* a
 int LuaEngineExt::l_show_choice(lua_State* L) {
     const char* title = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TTABLE);
-    const char* cancel_text = luaL_optstring(L, 3, "キャンセル");
+    const char* cancel_text = luaL_optstring(L, 3, TR("キャンセル"));
     PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, title, "", cancel_text);
     if (!d) return luaL_error(L, "pico.show_choice: 生成に失敗しました(メモリ不足の可能性)");
     const int n = (int)std::min<lua_Unsigned>(lua_rawlen(L, 2), 64);
@@ -726,8 +727,8 @@ int LuaEngineExt::l_show_date(lua_State* L) {
     const int y = (int)luaL_checkinteger(L, 2);
     const int m = (int)luaL_checkinteger(L, 3);
     const int day = (int)luaL_checkinteger(L, 4);
-    const char* ok_text = luaL_optstring(L, 5, "決定");
-    const char* cancel_text = luaL_optstring(L, 6, "キャンセル");
+    const char* ok_text = luaL_optstring(L, 5, TR("決定"));
+    const char* cancel_text = luaL_optstring(L, 6, TR("キャンセル"));
     PickerDialog* d = new PickerDialog(PickerDialog::Mode::Date, title, ok_text, cancel_text);
     if (!d) return luaL_error(L, "pico.show_date: 生成に失敗しました(メモリ不足の可能性)");
     d->setDate(y, m, day);
@@ -741,8 +742,8 @@ int LuaEngineExt::l_show_time(lua_State* L) {
     const int h = (int)luaL_checkinteger(L, 2);
     const int m = (int)luaL_checkinteger(L, 3);
     const int s = (int)luaL_optinteger(L, 4, 0);
-    const char* ok_text = luaL_optstring(L, 5, "決定");
-    const char* cancel_text = luaL_optstring(L, 6, "キャンセル");
+    const char* ok_text = luaL_optstring(L, 5, TR("決定"));
+    const char* cancel_text = luaL_optstring(L, 6, TR("キャンセル"));
     PickerDialog* d = new PickerDialog(PickerDialog::Mode::Time, title, ok_text, cancel_text);
     if (!d) return luaL_error(L, "pico.show_time: 生成に失敗しました(メモリ不足の可能性)");
     d->setTime(h, m, s);
@@ -762,8 +763,8 @@ int LuaEngineExt::l_show_number(lua_State* L) {
     } else if (lua_isstring(L, 2)) {
         initial = lua_tostring(L, 2);
     }
-    const char* ok_text = luaL_optstring(L, 3, "決定");
-    const char* cancel_text = luaL_optstring(L, 4, "キャンセル");
+    const char* ok_text = luaL_optstring(L, 3, TR("決定"));
+    const char* cancel_text = luaL_optstring(L, 4, TR("キャンセル"));
     PickerDialog* d = new PickerDialog(PickerDialog::Mode::Number, title, ok_text, cancel_text);
     if (!d) return luaL_error(L, "pico.show_number: 生成に失敗しました(メモリ不足の可能性)");
     d->setNumber(initial);

@@ -14,6 +14,7 @@
 //   pico.draw_tilemap / draw_image_partの反転
 //   pico.iso(2.5Dの箱庭のエンジン。中身は iso_world_test、ここはLuaからの呼び方と権限。経路探索 path/stand も)
 #include "lua/LuaEngine.hpp"
+#include "system/I18n_Functions.hpp"
 #include "services/Power_Functions.hpp"
 #include "hal/Battery_Functions.hpp"
 #include "system/Notification_Functions.hpp"
@@ -3099,6 +3100,62 @@ int main() {
         check(!MicFunctions::IsRecording(), "mic: 閉じた後も書き終える");
         check(MicFunctions::SampleRate() == rate0, "mic: 書き終えたら周波数を戻す");
         check(HostSd::files["/mapp/rec_0002.wav"].size() == 44 + 4800 * 2, "mic: 閉じても保存される(48000Hz × 0.1秒)");
+    }
+
+    // =====================================================================
+    // pico.lang() / pico.tr(): アプリの lang/<言語>.lua の表で訳す(docs/design/i18n.md「Luaアプリ」)
+    // =====================================================================
+    {
+        OSData::SD_usable = true;
+        HostSd::files["/tr/main.lua"] = "";
+        HostSd::files["/tr/lang/en.lua"] =
+            "return {\n  [\"スコア\"] = \"Score\",\n  [\"%d点\"] = \"%d pts\",\n}\n";
+        I18nFunctions::current_lang = I18nFunctions::Lang::Ja;
+        LuaEngine te(64 * 1024, LuaPermissions{}, "/tr");
+        auto str = [&](const char* expr) {
+            std::string code = std::string("R = ") + expr;
+            if (!te.Run(code.c_str(), "tr")) return std::string("(error)");
+            lua_getglobal(te.raw(), "R");
+            std::string out = lua_tostring(te.raw(), -1) ? lua_tostring(te.raw(), -1) : "(nil)";
+            lua_pop(te.raw(), 1);
+            return out;
+        };
+        check(str("pico.lang()") == "ja", "pico.lang: 既定は ja");
+        check(str("pico.tr('スコア')") == "スコア", "pico.tr: 日本語(ja.lua無し)は原文");
+        check(str("pico.tr('%d点', 5)") == "5点", "pico.tr: 引数で string.format する");
+
+        //同じエンジンのまま言語が変わったら表を読み直す(常駐するバックグラウンド)
+        I18nFunctions::current_lang = I18nFunctions::Lang::En;
+        check(str("pico.lang()") == "en", "pico.lang: en");
+        check(str("pico.tr('スコア')") == "Score", "pico.tr: lang/en.lua の訳");
+        check(str("pico.tr('%d点', 5)") == "5 pts", "pico.tr: 訳の書式で format");
+        check(str("pico.tr('表に無い')") == "表に無い", "pico.tr: 表に無い原文はそのまま");
+        check(!te.Run("pico.tr()", "tr"), "pico.tr: 引数が無ければエラー");
+
+        //壊れた・表を返さない・pico に触る訳のファイルは無視して原文(アプリは止めない)
+        const char* bad[] = { "return 1", "return {", "pico.log('x') return {}" };
+        for (const char* src : bad) {
+            HostSd::files["/tr2/main.lua"] = "";
+            HostSd::files["/tr2/lang/en.lua"] = src;
+            LuaEngine be(64 * 1024, LuaPermissions{}, "/tr2");
+            const bool ok = be.Run("R = pico.tr('スコア')", "tr2");
+            lua_getglobal(be.raw(), "R");
+            const bool same = ok && lua_tostring(be.raw(), -1) && strcmp(lua_tostring(be.raw(), -1), "スコア") == 0;
+            lua_pop(be.raw(), 1);
+            check(same, "pico.tr: 壊れた訳のファイルは原文のまま");
+        }
+        //訳のファイルは空の環境で動く(アプリのグローバルを書き換えない)
+        HostSd::files["/tr3/main.lua"] = "";
+        HostSd::files["/tr3/lang/en.lua"] = "X = 1 return { a = 'b' }";
+        {
+            LuaEngine ge(64 * 1024, LuaPermissions{}, "/tr3");
+            check(ge.Run("R = pico.tr('a') .. tostring(X)", "tr3"), "pico.tr: 訳のファイルの実行");
+            lua_getglobal(ge.raw(), "R");
+            check(lua_tostring(ge.raw(), -1) && strcmp(lua_tostring(ge.raw(), -1), "bnil") == 0,
+                  "pico.tr: 訳のファイルはアプリのグローバルに触れない");
+            lua_pop(ge.raw(), 1);
+        }
+        I18nFunctions::current_lang = I18nFunctions::Lang::Ja;
     }
 
     WidgetFunctions::ClearSceneWidgets();

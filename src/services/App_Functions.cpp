@@ -123,6 +123,23 @@ bool AppFunctions::Refresh(int index, const char* name, const LuaPermissions& pe
     return true;
 }
 
+const char* AppFunctions::DisplayName(const AppEntry& entry){
+    const int lang = (int)I18nFunctions::Current();
+    if(lang > 0 && lang - 1 < kAppLocalNames && !entry.local_names[lang - 1].empty()){
+        return entry.local_names[lang - 1].c_str();
+    }
+    return I18nFunctions::Tr(entry.name.c_str());
+}
+
+bool AppFunctions::SetLocalName(int index, I18nFunctions::Lang lang, const char* name){
+    const int li = (int)lang - 1;
+    if(index < 0 || index >= app_count || li < 0 || li >= kAppLocalNames) return false;
+    //表示だけなので切り詰めても登録は通す
+    if(name) apps[index].local_names[li].assign(name);
+    else apps[index].local_names[li].clear();
+    return true;
+}
+
 bool AppFunctions::Unregister(int index){
     if(index < 0 || index >= app_count) return false;
     launch_scene_app = -1;

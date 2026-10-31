@@ -6,6 +6,7 @@
 #include "services/App_Functions.hpp"
 #include "system/Config_Functions.hpp"
 #include "system/Log_Functions.hpp"
+#include "system/I18n_Functions.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "lua/LuaPermissions.hpp"
 #include "storage/SD_IO.hpp"
@@ -71,13 +72,21 @@ namespace {
         // 既に登録されていれば(アプリストアで更新した等)、その場で中身だけ差し替える。
         // 外して入れ直すとランチャの並びの位置が変わるため
         const int existing = AppFunctions::FindByArg(script_path.c_str());
+        bool ok;
         if (existing >= 0) {
-            return AppFunctions::Refresh(existing, display_name, cfg.permissions, icon_path_c);
+            ok = AppFunctions::Refresh(existing, display_name, cfg.permissions, icon_path_c);
+        } else {
+            // 登録失敗(上限到達/名前や引数が異常に長い)はRegister()自身が警告ログを出す
+            ok = AppFunctions::Register(display_name, IconID::AppBox, &MakeLuaAppScene,
+                                        script_path.c_str(), cfg.permissions, icon_path_c);
         }
-
-        // 登録失敗(上限到達/名前や引数が異常に長い)はRegister()自身が警告ログを出す
-        return AppFunctions::Register(display_name, IconID::AppBox, &MakeLuaAppScene,
-                                      script_path.c_str(), cfg.permissions, icon_path_c);
+        if (ok) {
+            const int index = existing >= 0 ? existing : AppFunctions::Count() - 1;
+            for (int i = 0; i < kAppLocalNames; i++) {
+                AppFunctions::SetLocalName(index, (I18nFunctions::Lang)(i + 1), cfg.local_names[i].c_str());
+            }
+        }
+        return ok;
     }
 }
 
@@ -90,6 +99,14 @@ bool LuaAppScanner::ReadAppConfig(const char* config_path, AppInfo& out) {
                 if (!out.name.assign(value)) {
                     LOG_SYS_WARN("LuaAppScanner: %s のnameが長すぎるため切り詰めました",
                                  config_path);
+                }
+            } else if (strncmp(key, "name_", 5) == 0) {
+                //name_en 等。知らない言語は前方互換のため無視する
+                I18nFunctions::Lang lang;
+                if (I18nFunctions::FromCode(key + 5, lang) && lang != I18nFunctions::Lang::Ja) {
+                    if (!out.local_names[(int)lang - 1].assign(value)) {
+                        LOG_SYS_WARN("LuaAppScanner: %s の%sが長すぎるため切り詰めました", config_path, key);
+                    }
                 }
             } else if (strcmp(key, "description") == 0) {
                 out.description.assign(value); // 表示用なので切り詰まっても実害無し

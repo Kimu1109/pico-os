@@ -61,7 +61,10 @@ void RecorderScene::onEnter(){
     auto* back = new Button(x0, y, "戻る");
     back->setOnPressEnd([](){ SceneFunctions::Pop(); });
     WidgetFunctions::Add(back);
+    //段の高さは文字のボタンで測ってから、戻るだけアイコンにする(周波数・増幅のボタンと高さを揃える)
     const int row_h = back->getLocalRect().h;
+    back->setIcon(IconID::ArrowLeft, IconSize::Px16);
+    back->setH(row_h);
 
     auto* title = new Label<PICO_STR_S>(back->getLocalRect().x + back->getLocalRect().w + 8, y + 4, kAppName);
     WidgetFunctions::Add(title);
@@ -134,6 +137,7 @@ void RecorderScene::onEnter(){
         return b;
     };
     this->delete_button = small_button(x0, kDeleteW, "削除");
+    this->delete_button->setIcon(IconID::Trash, IconSize::Px16);
     this->delete_button->setOnPressEnd([this](){ this->deleteSelected(); });
 
     auto* open_button = small_button(x0 + kDeleteW + 4, kOpenW, "再生");

@@ -80,6 +80,7 @@ void NotificationScene::onEnter(){
     WidgetFunctions::Add(title_label);
 
     this->clear_button = new Button(0, y0, "全消去");
+    this->clear_button->setIcon(IconID::Trash, IconSize::Px16);
     this->clear_button->setFontSize(FontFn::Small);
     this->clear_button->setH(20 + Button::kFrameExtra);
     this->clear_button->setX(content.x + content.w - MARGIN - this->clear_button->getLocalRect().w);
@@ -125,9 +126,9 @@ void NotificationScene::onEnter(){
 
     const Rect mode_box = this->mode_button->getLocalRect();
     this->sound_button = new Button(mode_box.x + mode_box.w + MARGIN, bottom_y, "音なし");
+    this->sound_button->setIcon(IconID::VolumeOff, IconSize::Px16);
     this->sound_button->setFontSize(FontFn::Small);
     this->sound_button->setH(20 + Button::kFrameExtra);
-    this->sound_button->setW(this->sound_button->getLocalRect().w + Button::kFrameExtra);
     this->sound_button->setOnPressEnd([this](){
         SetSoundEnabled(!GetSoundEnabled());
         this->refreshSettingButtons();
@@ -286,9 +287,10 @@ void NotificationScene::refreshDetail(){
 }
 
 void NotificationScene::refreshSettingButtons(){
-    //箱の幅は作ったときの文字(長いほう)で固定してあるので、並びはずれない
+    //表示の箱の幅は作ったときの文字(長いほう)で固定してあるので、並びはずれない
     if(this->mode_button) this->mode_button->setText(GetMode() == Mode::On ? "通常" : "控えめ");
-    if(this->sound_button) this->sound_button->setText(GetSoundEnabled() ? "音あり" : "音なし");
+    //音はアイコンで今の状態を見せる(鳴る=スピーカー、鳴らない=斜線つき)
+    if(this->sound_button) this->sound_button->setIcon(GetSoundEnabled() ? IconID::VolumeHigh : IconID::VolumeOff, IconSize::Px16);
 }
 
 void NotificationScene::doAction(){

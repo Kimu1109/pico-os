@@ -424,6 +424,7 @@ void CalendarScene::onEnter(){
     const int y0 = content.y + MARGIN;
 
     this->back_button = new Button(content.x + MARGIN, y0, "戻る");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setFontSize(FontFn::Small);
     this->back_button->setH(20 + Button::kFrameExtra);
     this->back_button->setOnPressEnd([](){

@@ -405,6 +405,7 @@ void NotesScene::onEnter(){
     // 2段目: 今の絞り込みと件数 … [×]
     const int y2 = top + this->back_button_->getLocalRect().h + MARGIN;
     this->clear_button_ = new Button(0, y2, "×");
+    this->clear_button_->setIcon(IconID::X, IconSize::Px16);
     this->clear_button_->setFontSize(FontFn::Small);
     this->clear_button_->setH(btn_h);
     this->clear_button_->setX(content.x + content.w - MARGIN - this->clear_button_->getLocalRect().w);

@@ -35,9 +35,9 @@ void StoreScene::onEnter(){
     const int row_h = this->back_button->getLocalRect().h;
 
     this->refresh_button = new Button(0, y0, "更新");
+    this->refresh_button->setIcon(IconID::Refresh, IconSize::Px16);
     this->refresh_button->setFontSize(FontFn::Small);
     this->refresh_button->setH(20 + Button::kFrameExtra);
-    this->refresh_button->setW(this->refresh_button->getLocalRect().w);
     this->refresh_button->setX(content.x + content.w - MARGIN - this->refresh_button->getLocalRect().w);
     this->refresh_button->setOnPressEnd([this](){
         if(!this->store) return;
@@ -316,7 +316,8 @@ void StoreScene::refreshStatus(){
 void StoreScene::refreshButtons(){
     if(!this->store || !this->install_button) return;
     const bool busy = this->store->busy();
-    this->refresh_button->setText(busy ? "中止" : "更新");
+    //取得中は同じボタンが中止になる
+    this->refresh_button->setIcon(busy ? IconID::X : IconID::Refresh, IconSize::Px16);
     const int i = this->selectedIndex();
     const AppStore::Installed st = this->store->installed(i);
     const char* label = "入れる";

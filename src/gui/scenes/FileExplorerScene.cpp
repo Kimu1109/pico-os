@@ -55,6 +55,7 @@ void FileExplorerScene::onEnter(){
     place(this->paste_button);
 
     this->more_button = MakeToolButton("他", x, top);
+    this->more_button->setIcon(IconID::DotsVertical, IconSize::Px16);
     this->more_button->setOnPressEnd([this](){ this->onMore(); });
     place(this->more_button);
 

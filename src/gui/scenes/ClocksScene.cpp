@@ -483,10 +483,10 @@ void ClocksScene::onEnter(){
         content.w - MARGIN * 2,
         FEATURE_TAB_H
     );
-    this->feature_tab->addTab(TR("時計"));
-    this->feature_tab->addTab(TR("ﾀｲﾏｰ"));
-    this->feature_tab->addTab(TR("ｽﾄｯﾌﾟ"));
-    this->feature_tab->addTab(TR("ｱﾗｰﾑ"));
+    this->feature_tab->addTab(IconID::Clock, TR("時計"));
+    this->feature_tab->addTab(IconID::Hourglass, TR("ﾀｲﾏｰ"));
+    this->feature_tab->addTab(IconID::Stopwatch, TR("ｽﾄｯﾌﾟ"));
+    this->feature_tab->addTab(IconID::Alarm, TR("ｱﾗｰﾑ"));
     this->feature_tab->setSelected((int)this->feature);
     this->feature_tab->setOnChanged([this](int index){
         this->feature = (Feature)index;

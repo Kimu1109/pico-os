@@ -29,8 +29,10 @@ void TabBar::relayoutFit(){
     //文字の実寸+左右の余白。足りなければ均等割り(折り返し)のまま
     this->fontApply();
     int total = 0;
+    const int icon_px = IconRender::IconPixelSize(this->iconSize());
     for(int i = 0; i < this->tab_count; i++){
-        this->fit_w[i] = (int16_t)(OSData::frame->textWidth(this->labels[i].c_str()) + kTextPadding * 2 + 2);
+        const int content_w = this->hasIcon(i) ? icon_px : OSData::frame->textWidth(this->labels[i].c_str());
+        this->fit_w[i] = (int16_t)(content_w + kTextPadding * 2 + 2);
         total += this->fit_w[i];
     }
     this->fontDefault();
@@ -47,13 +49,29 @@ void TabBar::relayoutFit(){
     this->fit_valid = true;
 }
 
+IconSize TabBar::iconSize() const {
+    //上下に2pxずつ余白が取れる大きさ(24pxが入らなければ16px)
+    return (this->l_rect.h >= IconRender::IconPixelSize(IconSize::Px24) + 4) ? IconSize::Px24 : IconSize::Px16;
+}
+
 bool TabBar::addTab(const char* label){
     if(this->tab_count >= kMaxTabs) return false;
 
     this->labels[this->tab_count].assign(label);
+    this->icon_mask = (uint8_t)(this->icon_mask & ~(1u << this->tab_count));
     this->tab_count++;
     this->relayoutFit();
     this->needsRender();
+    return true;
+}
+
+bool TabBar::addTab(IconID icon, const char* label){
+    if(this->tab_count >= kMaxTabs) return false;
+    const int index = this->tab_count;
+    if(!this->addTab(label ? label : "")) return false;
+    this->icons[index] = icon;
+    this->icon_mask = (uint8_t)(this->icon_mask | (1u << index));
+    this->relayoutFit();
     return true;
 }
 
@@ -67,7 +85,14 @@ bool TabBar::setLabel(int index, const char* label){
 
 bool TabBar::removeTab(int index){
     if(index < 0 || index >= this->tab_count) return false;
-    for(int i = index; i + 1 < this->tab_count; i++) this->labels[i] = this->labels[i + 1];
+    for(int i = index; i + 1 < this->tab_count; i++){
+        this->labels[i] = this->labels[i + 1];
+        this->icons[i] = this->icons[i + 1];
+    }
+    //index より後ろの印を1つずつ前へ詰める
+    const uint8_t low = (uint8_t)(this->icon_mask & ((1u << index) - 1));
+    const uint8_t high = (uint8_t)((this->icon_mask >> (index + 1)) << index);
+    this->icon_mask = (uint8_t)(low | high);
     this->labels[this->tab_count - 1].clear();
     this->tab_count--;
     if(this->selected > index) this->selected--;
@@ -79,6 +104,7 @@ bool TabBar::removeTab(int index){
 
 void TabBar::clearTabs(){
     for(int i = 0; i < this->tab_count; i++) this->labels[i].clear();
+    this->icon_mask = 0;
     this->tab_count = 0;
     this->selected = 0;
     this->relayoutFit();
@@ -173,6 +199,14 @@ void TabBar::render(){
         OSData::frame->drawRect(x, g_rect.y, w, g_rect.h, this->border_color);
 
         OSData::frame->setTextColor(is_selected ? this->background_color : this->border_color);
+
+        if(this->hasIcon(i)){
+            const IconSize size = this->iconSize();
+            const int px = IconRender::IconPixelSize(size);
+            IconRender::DrawIcon(this->icons[i], size, x + (w - px) / 2, g_rect.y + (g_rect.h - px) / 2,
+                                 is_selected ? this->background_color : this->border_color);
+            continue;
+        }
 
         const int str_h = OSData::frame->fontHeight();
 

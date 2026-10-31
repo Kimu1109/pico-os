@@ -306,11 +306,11 @@ void SettingsScene::onEnter(){
     // ---- 下部: タブ ----
     const int16_t tab_y = (int16_t)(content.y + content.h - MARGIN - TAB_H);
     this->tab_bar = new TabBar(content.x + MARGIN, tab_y, content.w - MARGIN * 2, TAB_H);
-    this->tab_bar->addTab("Wi-Fi");
-    this->tab_bar->addTab(TR("画面"));
-    this->tab_bar->addTab(TR("音"));
-    this->tab_bar->addTab(TR("時刻"));
-    this->tab_bar->addTab(TR("他"));
+    this->tab_bar->addTab(IconID::WifiSignal4, "Wi-Fi");
+    this->tab_bar->addTab(IconID::Display, TR("画面"));
+    this->tab_bar->addTab(IconID::VolumeHigh, TR("音"));
+    this->tab_bar->addTab(IconID::Clock, TR("時刻"));
+    this->tab_bar->addTab(IconID::Dots, TR("他"));
     this->tab_bar->setSelected((int)this->tab);
     this->tab_bar->setOnChanged([this](int index){
         this->tab = (Tab)index;

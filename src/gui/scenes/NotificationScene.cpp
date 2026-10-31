@@ -103,8 +103,8 @@ void NotificationScene::onEnter(){
     constexpr int kTabH = 22;
     this->tab = new TabBar(content.x + MARGIN, tab_y, content.w - MARGIN * 2, kTabH);
     this->tab->setFontSize(FontFn::Small);
-    this->tab->addTab(TR("履歴"));
-    this->tab->addTab(TR("予約"));
+    this->tab->addTab(IconID::History, TR("履歴"));
+    this->tab->addTab(IconID::CalendarTime, TR("予約"));
     this->tab->setSelected((int)this->current_tab);
     this->tab->setOnChanged([this](int index){
         this->current_tab = (Tab)index;

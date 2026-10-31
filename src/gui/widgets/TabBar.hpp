@@ -3,6 +3,7 @@
 #include "gui/widgets/Widget.hpp"
 #include "gui/widgets/interfaces/IFontImplementation.hpp"
 #include "gui/widgets/interfaces/IBorderColor.hpp"
+#include "gui/icons/icon_render.h"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -13,6 +14,9 @@
 // 「表示用の子がタップを奪う」問題(Widget::hit_transparentの説明を参照)とも無縁。
 //
 // 選択中のタブは黒塗り+白抜き文字で表す(KeyboardNumのタブ行と同じ見た目)。
+//
+// タブは文字の代わりにアイコンでもよい(addTab(IconID, label))。英語など文字が長くなる言語でも幅が変わらないので、
+// 絵で伝わるタブは絵にする(docs/design/i18n.md「タブ」)。アイコンは高さに合わせて24pxか16pxで描く。
 class TabBar : public Widget, public IFontImplementation, public IBorderColor {
     public:
         // 同時に並べられるタブの上限。増やすとlabels[]のぶんだけsizeofが増える
@@ -24,6 +28,12 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
 
         // 「ストップウォッチ」(UTF-8で24B)が収まらないのでPICO_STR_S(24B)では足りない
         FixedString<PICO_STR_M> labels[kMaxTabs];
+        // アイコンのタブ(icon_mask のビット=index)。アイコンのタブもラベルは持つ(getLabel() 用。描かない)
+        IconID icons[kMaxTabs] = {};
+        uint8_t icon_mask = 0;
+        static_assert(kMaxTabs <= 8, "icon_mask のビット数が足りません");
+        bool hasIcon(int index) const { return (this->icon_mask >> index) & 1; }
+        IconSize iconSize() const;
         int tab_count = 0;
         int selected = 0;
 
@@ -56,6 +66,8 @@ class TabBar : public Widget, public IFontImplementation, public IBorderColor {
 
         // タブを末尾へ足す。上限を超えた分は無視してfalseを返す
         bool addTab(const char* label);
+        // アイコンのタブを末尾へ足す。label は描かない(getLabel() で読めるだけ)
+        bool addTab(IconID icon, const char* label = "");
 
         int getTabCount() const { return this->tab_count; }
 

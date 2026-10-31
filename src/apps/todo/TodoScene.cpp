@@ -99,9 +99,9 @@ void TodoScene::onEnter(){
     // ---- 表示の切り替え ----
     const int tab_y = y0 + row_h + MARGIN;
     this->view_tab = new TabBar(content.x + MARGIN, tab_y, content.w - MARGIN * 2, row_h);
-    this->view_tab->addTab(TR("今日"));
-    this->view_tab->addTab(TR("7日間"));
-    this->view_tab->addTab(TR("すべて"));
+    this->view_tab->addTab(IconID::CalendarEvent, TR("今日"));
+    this->view_tab->addTab(IconID::CalendarWeek, TR("7日間"));
+    this->view_tab->addTab(IconID::List, TR("すべて"));
     this->view_tab->setSelected((int)this->view);
     this->view_tab->setOnChanged([this](int index){
         this->view = (TodoistClient::View)index;

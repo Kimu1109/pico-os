@@ -494,11 +494,11 @@ void CalculatorScene::onEnter(){
     this->page_tab = new TabBar(tab_x, content.y + MARGIN, tab_w, this->top_row_h);
     //5つを均等割りにすると「グラフ」だけが2行に折り返されるので、ラベルの長さに合わせる
     this->page_tab->setFitToLabels(true);
-    this->page_tab->addTab(TR("電卓"));
-    this->page_tab->addTab(TR("グラフ"));
-    this->page_tab->addTab(TR("変換"));
-    this->page_tab->addTab(TR("進数"));
-    this->page_tab->addTab(TR("履歴"));
+    this->page_tab->addTab(IconID::Calculator, TR("電卓"));
+    this->page_tab->addTab(IconID::ChartLine, TR("グラフ"));
+    this->page_tab->addTab(IconID::ArrowsExchange, TR("変換"));
+    this->page_tab->addTab(IconID::Binary, TR("進数"));
+    this->page_tab->addTab(IconID::History, TR("履歴"));
     this->page_tab->setSelected((int)this->page);
     this->page_tab->setOnChanged([this](int index){
         this->page = (Page)index;

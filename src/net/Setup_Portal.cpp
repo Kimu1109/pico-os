@@ -19,25 +19,37 @@ namespace {
         return -1;
     }
 
+    // 日本語と英語の文を並べて書き、要求の言語で選ぶ(本体の言語の TR() ではなくスマホの言語)
+    inline const char* Txt(bool ja, const char* jp, const char* en){ return ja ? jp : en; }
+
     // ページの共通の頭(スマホの幅で読めるように viewport を付ける)
-    void PageHead(SetupPortal::Response& o, const char* device_name){
-        o.append("<!DOCTYPE html><html lang=\"ja\"><head><meta charset=\"utf-8\">"
-                 "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-                 "<title>pico-os Wi-Fi設定</title><style>"
+    void PageHead(SetupPortal::Response& o, const char* device_name, bool ja){
+        o.append(Txt(ja, "<!DOCTYPE html><html lang=\"ja\">", "<!DOCTYPE html><html lang=\"en\">"));
+        o.append("<head><meta charset=\"utf-8\">"
+                 "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
+        o.append(Txt(ja, "<title>pico-os Wi-Fi設定</title>", "<title>pico-os Wi-Fi setup</title>"));
+        o.append("<style>"
                  "body{font-family:sans-serif;max-width:28em;margin:1em auto;padding:0 1em}"
                  "input{display:block;width:100%;box-sizing:border-box;font-size:1.1em;margin:.3em 0 1em;padding:.4em}"
                  "button{font-size:1.1em;padding:.5em 1.5em}.msg{padding:.6em;background:#eef}"
                  "</style></head><body><h1>");
+        if(!ja) o.append("Wi-Fi setup for ");
         SetupPortal::AppendEscaped(o, device_name);
-        o.append(" のWi-Fi設定</h1>");
+        if(ja) o.append(" のWi-Fi設定");
+        o.append("</h1>");
     }
 
-    void FormBody(SetupPortal::Response& o){
-        o.append("<form method=\"post\" action=\"/save\">"
-                 "<label>Wi-Fiの名前(SSID)<input name=\"ssid\" maxlength=\"32\" required autocapitalize=\"off\" autocorrect=\"off\"></label>"
-                 "<label>パスワード(無ければ空欄)<input name=\"pass\" type=\"password\" maxlength=\"64\" autocapitalize=\"off\"></label>"
-                 "<button type=\"submit\">本体へ送る</button></form>"
-                 "<p>送ると本体に保存され、本体はこのアクセスポイントを止めてそのWi-Fiへ繋ぎます。</p>");
+    void FormBody(SetupPortal::Response& o, bool ja){
+        o.append("<form method=\"post\" action=\"/save\"><label>");
+        o.append(Txt(ja, "Wi-Fiの名前(SSID)", "Wi-Fi name (SSID)"));
+        o.append("<input name=\"ssid\" maxlength=\"32\" required autocapitalize=\"off\" autocorrect=\"off\"></label><label>");
+        o.append(Txt(ja, "パスワード(無ければ空欄)", "Password (blank if none)"));
+        o.append("<input name=\"pass\" type=\"password\" maxlength=\"64\" autocapitalize=\"off\"></label><button type=\"submit\">");
+        o.append(Txt(ja, "本体へ送る", "Send to device"));
+        o.append("</button></form><p>");
+        o.append(Txt(ja, "送ると本体に保存され、本体はこのアクセスポイントを止めてそのWi-Fiへ繋ぎます。",
+                         "The device saves it, stops this access point and joins that Wi-Fi."));
+        o.append("</p>");
     }
 
     const char* Reason(int status){
@@ -55,6 +67,7 @@ void SetupPortal::Request::reset(){
     content_length_ = 0;
     headers_done_ = false;
     post_ = false;
+    japanese_ = true;
     path_.clear();
     state_ = State::Reading;
     buf_[0] = '\0';
@@ -75,11 +88,16 @@ bool SetupPortal::Request::parseHeaders(){
     if(plen >= PICO_STR_M) plen = PICO_STR_M - 1;       // 長いパスは切ってよい(どのパスでも同じページ)
     path_.assign(p, plen);
 
-    // Content-Length だけ見る
+    // Content-Length と Accept-Language(ページの言語)だけ見る
     content_length_ = 0;
+    japanese_ = true;
     for(const char* line = strstr(buf_, "\r\n"); line && line + 2 < buf_ + body_start_; line = strstr(line + 2, "\r\n")){
         if(StartsWithNoCase(line + 2, "content-length:")){
             content_length_ = (size_t)strtoul(line + 2 + 15, nullptr, 10);
+        }else if(StartsWithNoCase(line + 2, "accept-language:")){
+            const char* v = line + 2 + 16;
+            while(*v == ' ' || *v == '\t') v++;
+            japanese_ = StartsWithNoCase(v, "ja");   //先頭(いちばん好む言語)だけ見る
         }
     }
     return true;
@@ -158,9 +176,11 @@ int SetupPortal::Respond(const Request& req, SaveFn save, const char* device_nam
     saved_ssid.clear();
     body.clear();
 
+    const bool ja = req.japanese();
     if(req.state() == Request::State::TooLarge){
-        PageHead(body, device_name);
-        body.append("<p class=\"msg\">送られた内容が大きすぎます。</p></body></html>");
+        PageHead(body, device_name, ja);
+        body.append(Txt(ja, "<p class=\"msg\">送られた内容が大きすぎます。</p></body></html>",
+                            "<p class=\"msg\">The request is too large.</p></body></html>"));
         return 413;
     }
     if(req.state() != Request::State::Done){
@@ -168,7 +188,7 @@ int SetupPortal::Respond(const Request& req, SaveFn save, const char* device_nam
         return 400;
     }
 
-    PageHead(body, device_name);
+    PageHead(body, device_name, ja);
     if(req.isPost() && strcmp(req.path(), "/save") == 0){
         char ssid[PICO_STR_M] = "";
         char pass[PICO_STR_L] = "";
@@ -178,19 +198,23 @@ int SetupPortal::Respond(const Request& req, SaveFn save, const char* device_nam
         switch(r){
             case SaveResult::Saved:
                 saved_ssid.assign(ssid);
-                body.append("<p class=\"msg\">「");
+                body.append(Txt(ja, "<p class=\"msg\">「", "<p class=\"msg\">Saved \""));
                 AppendEscaped(body, ssid);
-                body.append("」を保存しました。本体はこのWi-Fiへ繋ぎに行きます。"
-                            "このアクセスポイントは止まるので、スマホは元のWi-Fiへ戻してください。</p></body></html>");
+                body.append(Txt(ja, "」を保存しました。本体はこのWi-Fiへ繋ぎに行きます。"
+                                    "このアクセスポイントは止まるので、スマホは元のWi-Fiへ戻してください。</p></body></html>",
+                                    "\". The device will now join this Wi-Fi. "
+                                    "This access point will stop, so switch your phone back to your usual Wi-Fi.</p></body></html>"));
                 break;
             case SaveResult::Full:
-                body.append("<p class=\"msg\">保存できる数がいっぱいです。本体の設定アプリで不要なものを削除してください。</p>");
-                FormBody(body);
+                body.append(Txt(ja, "<p class=\"msg\">保存できる数がいっぱいです。本体の設定アプリで不要なものを削除してください。</p>",
+                                    "<p class=\"msg\">No room to save more. Delete unused networks in the device's Settings app.</p>"));
+                FormBody(body, ja);
                 body.append("</body></html>");
                 break;
             case SaveResult::Invalid:
-                body.append("<p class=\"msg\">SSIDは1〜32バイト、パスワードは64文字までです。</p>");
-                FormBody(body);
+                body.append(Txt(ja, "<p class=\"msg\">SSIDは1〜32バイト、パスワードは64文字までです。</p>",
+                                    "<p class=\"msg\">The SSID must be 1-32 bytes and the password up to 64 characters.</p>"));
+                FormBody(body, ja);
                 body.append("</body></html>");
                 break;
         }
@@ -198,7 +222,7 @@ int SetupPortal::Respond(const Request& req, SaveFn save, const char* device_nam
     }
 
     // それ以外は全部入力のページ(スマホのポータル検出にもこれを返して、ページを開かせる)
-    FormBody(body);
+    FormBody(body, ja);
     body.append("</body></html>");
     return 200;
 }

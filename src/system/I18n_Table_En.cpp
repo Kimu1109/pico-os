@@ -13,6 +13,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0210484eu, "Hungarian forint" }, // ハンガリーフォリント
     { 0x0219bbcfu, "Fetching…" }, // 取っています…
     { 0x0231bd89u, "Yesterday" }, // 昨日
+    { 0x0269fef1u, "broker does not speak MQTT 3.1.1" }, // ブローカがMQTT 3.1.1を話せない
     { 0x02c0e6dfu, "Lock now" }, // 今すぐロック
     { 0x02da6b45u, "Nothing to redo" }, // やり直せる操作がありません
     { 0x02ddaa3au, "Cancel" }, // やめる
@@ -26,6 +27,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0392ca48u, "Cannot read the URL (start with http:// or https://)" }, // URLを読めません(http:// か https:// で始めてください)
     { 0x039cf935u, "Font:L" }, // 文字:大
     { 0x03a058a8u, "Speed" }, // 速さ
+    { 0x03a366aeu, "Unknown escape" }, // 知らないエスケープです
     { 0x03b5a925u, "Set up in the TODO app" }, // TODOアプリで設定してください
     { 0x03e3a2d8u, "No free space in OTP" }, // OTPに空きがありません
     { 0x043ef87fu, "Key exchange failed (invalid public value)" }, // 鍵交換に失敗しました(不正な公開値)
@@ -33,6 +35,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0460ca52u, "Del" }, // 消す
     { 0x046b263du, "Enter the IP address like \"192.168.1.50/24\"" }, // IPアドレスは「192.168.1.50/24」の形で入れてください
     { 0x047c6769u, "No due  " }, // 期限なし  
+    { 0x04ade488u, "cannot send the request" }, // リクエストを送れない
     { 0x04d51a72u, "Next" }, // 次へ
     { 0x050258e4u, "Paste" }, // 貼付
     { 0x05082672u, "square foot" }, // 平方フィート
@@ -70,6 +73,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0a5991dfu, "monme" }, // 匁
     { 0x0a67f230u, "Reinstall" }, // 入れ直す
     { 0x0a86d43fu, "NTP server 2" }, // NTPサーバー2
+    { 0x0afe1f4cu, "received a frame with RSV bits set" }, // 拡張の印(RSV)が立った枠を受けた
     { 0x0b86d5d2u, "NTP server 1" }, // NTPサーバー1
     { 0x0b931eeau, "Tue" }, // 火
     { 0x0bbc8e8du, "Cannot send" }, // 送れません
@@ -78,6 +82,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0c72aee1u, "Fetching rates…" }, // レートを取得中…
     { 0x0cedc37du, "Server returned %d" }, // 配布元が %d を返しました
     { 0x0d07b0dcu, "7 days" }, // 7日間
+    { 0x0d1299c4u, "not enough memory for TLS" }, // TLSの準備に必要なメモリが無い
     { 0x0d40a828u, "Firmware without audio" }, // 音声出力なしのファームです
     { 0x0d54a2a9u, "(cannot read the source)" }, // (ソースを読めません)
     { 0x0da0aabbu, "\033[93mCould not re-save the private key encrypted (still plain)\033[0m\r\n" }, // \033[93m秘密鍵を暗号化して保存し直せませんでした(平文のままです)\033[0m\r\n
@@ -120,6 +125,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x1377c0b1u, "NTP server 2: %s" }, // NTPサーバー2: %s
     { 0x137dd2a8u, "Connecting to %s:%u...\r\n" }, // %s:%u へ接続しています...\r\n
     { 0x13addcefu, "30 min" }, // 30分
+    { 0x13b90a3bu, "cannot read the trusted root certificates" }, // 信頼するルート証明書を読めない
     { 0x13d6e680u, "Delete %s?" }, // %s を削除しますか?
     { 0x13e4d902u, "Not saved: the password is empty" }, // パスワードが空なので保存しませんでした
     { 0x141111e6u, "[Plot] to graph (%s)" }, // [描画]でグラフ (%s)
@@ -128,7 +134,10 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x14511d79u, "Stopped in the debugger" }, // デバッガで停止しました
     { 0x146e2ffdu, "Token is too long" }, // トークンが長すぎます
     { 0x15087cb2u, "Swap" }, // 入替
+    { 0x152a25efu, "received a broken PUBLISH" }, // ブローカから壊れたPUBLISHが届いた
     { 0x152b4d5cu, "Can cut up to 1KiB" }, // 切り取れるのは1KiBまでです
+    { 0x15796e21u, "Closing an element that is not open" }, // 開いていない要素を閉じています
+    { 0x15d975abu, "broker unavailable" }, // ブローカが使えない状態
     { 0x1640ca78u, "Japanese yen" }, // 日本円
     { 0x16de3f1eu, "Found %d" }, // %d件見つかりました
     { 0x16e3c638u, "This app cannot write there" }, // このアプリからは書けない場所です
@@ -147,6 +156,8 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x1a0a847bu, "megapascal" }, // メガパスカル
     { 0x1a363879u, "Could not delete" }, // 削除できませんでした
     { 0x1a782219u, "Unread chat" }, // チャットの未読
+    { 0x1a8673b7u, "Missing ','" }, // ',' がありません
+    { 0x1acbd3dcu, "disconnected during the handshake" }, // 開始の挨拶の途中で切れた
     { 0x1af16218u, "None found" }, // 見つかりませんでした
     { 0x1b02ef42u, "acre" }, // エーカー
     { 0x1b048a70u, "Calendar" }, // カレンダー
@@ -163,6 +174,8 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x1cbd16e8u, "Received an empty packet" }, // 空のパケットが届きました
     { 0x1cdb9877u, "Yes" }, // 対応
     { 0x1d191730u, "Move back" }, // 前へ移動
+    { 0x1d5bc4e0u, "received an unexpected packet" }, // ブローカから想定外のパケットが届いた
+    { 0x1d700f61u, "not authorized" }, // 接続を許されていない(認証)
     { 0x1d7c1e07u, "Verifying what was written" }, // 書いた中身を確かめています
     { 0x1d97262fu, "Success" }, // 成功
     { 0x1dc015d5u, "Thu" }, // 木
@@ -172,12 +185,15 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x1e222f51u, "Choose a ROM" }, // ROMを選んでください
     { 0x1e2ab228u, "Signing key not trusted (check key in store.cfg)" }, // 署名の鍵が信頼されていません(store.cfgのkeyを確かめてください)
     { 0x1e5e95cau, "2 min" }, // 2分
+    { 0x1ead88ffu, "CDATA outside the root element" }, // ルート要素の外にCDATAがあります
     { 0x1ef5f75bu, "Really delete?" }, // 本当に削除しますか?
     { 0x1f00ceebu, "Chat is not set up" }, // チャットが設定されていません
     { 0x1f04b1a3u, "Does not look like an IMAP server" }, // IMAPのサーバではないようです
+    { 0x1f2df3e7u, "Cannot read the comment start" }, // コメントの始まりが読めません
     { 0x1f8d6245u, "Recent files" }, // 最近開いたファイル
     { 0x1fc2073au, "Waiting (%d devices connected)" }, // 待っています(接続している端末: %d台)
     { 0x1fd67942u, " (some failed; see the log)" }, // (失敗あり。ログを見てください)
+    { 0x1fe29312u, "The page has no form" }, // ページにフォームがありません
     { 0x203c0767u, "UAE dirham" }, // UAEディルハム
     { 0x20433713u, "No signed versions" }, // 署名のある版がありません
     { 0x20d10d49u, "No API key. Enter one with [Key]" }, // APIキーがありません。[キー] から入れてください
@@ -193,6 +209,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x2217c111u, "Failed: %s" }, // 失敗: %s
     { 0x22192444u, "Extra data after the package" }, // パッケージの後ろに余分なデータがあります
     { 0x222f049fu, "Mark: %s" }, // しおり: %s
+    { 0x22df9765u, "cannot send CONNECT (too long or disconnected)" }, // CONNECTを送れない(長すぎる/切れた)
     { 0x22fbb7ddu, "Save path is too long" }, // 保存先のパスが長すぎます
     { 0x23018aa5u, "South African rand" }, // 南アフリカランド
     { 0x2334e6e0u, "Received a broken packet" }, // 壊れたパケットが届きました
@@ -203,6 +220,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x23d8f00du, "Up to %d networks can be saved. Delete one you don't need" }, // 保存できるのは%d件までです。不要なものを削除してください
     { 0x2418839au, "Stopwatch" }, // ストップウォッチ
     { 0x2444f75bu, "Undo" }, // 元に戻す
+    { 0x245f7f6cu, "server did not switch to WebSocket" }, // サーバがWebSocketに切り替えない
     { 0x24620418u, "Already a USB drive" }, // すでにUSBドライブになっています
     { 0x2488170cu, "All" }, // 全曲
     { 0x24fe0d6cu, "NTP server 1: %s" }, // NTPサーバー1: %s
@@ -210,9 +228,11 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x2599547cu, "Paste" }, // 貼り付け
     { 0x25b058fcu, "Gmail / other" }, // Gmail・その他
     { 0x2615675eu, "Contents & marks (loading contents)" }, // 目次・しおり(目次は読み込み中)
+    { 0x2636aa74u, "client ID rejected" }, // クライアントIDを断られた
     { 0x2645e023u, "Search contents (blank to clear):" }, // 中身から探す(空で解除):
     { 0x265798c8u, "Wi-Fi is not connected" }, // Wi-Fiに接続していません
     { 0x2685088bu, "No response from the server (timeout)" }, // サーバから応答がありません(時間切れ)
+    { 0x26aae084u, "Cannot read the attribute name" }, // 属性名が読めません
     { 0x26eae00du, "Not enough memory to open the App Store" }, // メモリが足りないため、アプリストアを開けません
     { 0x27324b57u, "Package is truncated" }, // パッケージが途中で切れています
     { 0x274159e9u, "That name already exists" }, // 同じ名前があります
@@ -220,6 +240,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x27e19a9eu, "Cannot open the recording" }, // 録音を開けません
     { 0x28156895u, "Selection cleared" }, // 選択を解除しました
     { 0x285d92b0u, "sho" }, // 升
+    { 0x28a4a2d1u, "body was cut off" }, // 本文が途中で切れた
     { 0x28b90e22u, "not created" }, // 未作成
     { 0x28bdd93eu, "Hide from launcher" }, // ランチャから隠す
     { 0x28fae1c1u, "electronvolt" }, // 電子ボルト
@@ -227,6 +248,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x29321171u, "New PIN (4-8 digits)" }, // 新しいPIN(数字4〜8桁)
     { 0x295e8637u, "Unexpected list format (catalog.tsv)" }, // 一覧(catalog.tsv)の形式が違います
     { 0x29750bcau, "Clock" }, // 時計
+    { 0x29d186beu, "broker reply was not CONNACK" }, // ブローカの返事がCONNACKでない
     { 0x29e32651u, " (a manually added app has this name)" }, //  (手で入れた同名のアプリがあります)
     { 0x2a1cdbfdu, "Cannot read the app info in the package" }, // パッケージのアプリの情報を読めません
     { 0x2a444dc6u, "Tap a song to play" }, // 曲をタップすると再生します
@@ -258,6 +280,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x2de33dd6u, "Cannot get an access token: %s" }, // アクセストークンを取れません: %s
     { 0x2e8448f8u, "Server has no ssh-ed25519 host key" }, // サーバに ssh-ed25519 のホスト鍵がありません
     { 0x2e86e69cu, "Unexpected file list (files.tsv)" }, // ファイル一覧(files.tsv)の形式が違います
+    { 0x2ea78303u, "Cannot send to the portal" }, // ポータルへ送れません
     { 0x2ecad6fdu, "Loading…" }, // 読み込み中…
     { 0x2f481137u, "Unexpected rate format" }, // レートの形式が違います
     { 0x2f535ae3u, "Transcribe: %s" }, // 文字起こし: %s
@@ -279,6 +302,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x32d572bbu, "Not available in the Web version" }, // Web版では受け取れません
     { 0x32de65a3u, "Pressure" }, // 圧力
     { 0x32f94f06u, "Connect to a PC over USB" }, // PCとUSBでつないでください
+    { 0x32fbd6fbu, "Extra characters in the closing tag" }, // 閉じタグの中に余分な文字があります
     { 0x330589afu, "The app was removed" }, // アプリが無くなりました
     { 0x33384ac7u, "Cannot read the signature (catalog.sig)" }, // 署名(catalog.sig)を読めません
     { 0x335fc0ccu, "Tap to choose..." }, // タップして選択...
@@ -316,6 +340,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x398c2549u, "%s and %d more" }, // %s ほか%d件
     { 0x39d06a66u, "Invite code is too long" }, // 参加コードが長すぎます
     { 0x39d8f9e3u, "SSID or password too long (password: 64 chars max)" }, // SSIDかパスワードが長すぎます(パスワードは64文字まで)
+    { 0x39dcbd65u, "cannot send (disconnected)" }, // 送れない(切れた)
     { 0x3a28128eu, "Offline (saved copy)" }, // オフライン表示(保存済み)
     { 0x3a59c669u, "millimeter of mercury" }, // 水銀柱ミリメートル
     { 0x3a851bf7u, "Chat server URL:" }, // チャットサーバURL:
@@ -325,6 +350,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x3afc0aeeu, "Unexpected version list (old firmware or wrong server?)" }, // 版の一覧の形式が違います(本体が古い・配布元が違う?)
     { 0x3b7e0141u, "Failed to read the state" }, // 状態の読み込みに失敗しました
     { 0x3b9a64f1u, "Math" }, // 数学記号
+    { 0x3bc333fcu, "'<' in an attribute value" }, // 属性値に '<' があります
     { 0x3bcabe08u, "Bad list signature (tampered, or updated during download)" }, // 一覧の署名が合いません(改ざん・取得の途中で更新された可能性)
     { 0x3bceaa4fu, "Replaced %d (%s left)" }, // %d件置換(残りは%s)
     { 0x3beca0e8u, "Too many scheduled notices" }, // 通知の予約がいっぱいです
@@ -339,6 +365,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x3d0af8cau, "\nUnsigned files accepted after a prompt" }, // \n署名なしも確認して受け付ける
     { 0x3e083633u, "Cannot replace the saved file" }, // 保存先へ差し替えられない
     { 0x3e11d023u, "Cannot read the server name (e.g. imap.example.com:993)" }, // サーバの名前が読めません(例: imap.example.com:993)
+    { 0x3e9d2d5eu, "Two root elements" }, // ルート要素が2つあります
     { 0x3eb3fd6fu, "%s.local\n(no IP)" }, // %s.local\n(IP無し)
     { 0x3efbd237u, "URL is not ws:// or wss://, or out of memory" }, // URLが ws:// か wss:// でない、またはメモリが足りません
     { 0x3efcfdbfu, "Notices" }, // 通知
@@ -347,6 +374,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x3f771f1eu, "\033[93mThe key has a passphrase and cannot be used (using password)\033[0m\r\n" }, // \033[93m鍵がパスフレーズ付きのため使えません(パスワードで続けます)\033[0m\r\n
     { 0x3faafc41u, "Unknown access point address" }, // アクセスポイントのアドレスが分かりません
     { 0x3fccebd1u, "DNS (up to 2, comma separated; blank for gateway):" }, // DNS(カンマ区切りで2つまで。空欄でゲートウェイ):
+    { 0x3fde1c50u, "Closing tag does not match the opening tag" }, // 閉じタグが開きタグと合いません
     { 0x3fe0b400u, "Writing ROM to flash 0%" }, // ROMを内蔵フラッシュへ書いています 0%
     { 0x40313637u, "Server does not support SSH2" }, // SSH2に対応していないサーバです
     { 0x4069eb01u, "Energy" }, // エネルギー
@@ -386,9 +414,11 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x48482327u, "Now" }, // 今すぐ
     { 0x489e3f02u, "Search term is empty" }, // 検索語が空です
     { 0x497392bau, "Loading the portal page..." }, // ポータルのページを読んでいます...
+    { 0x49d44dc3u, "refused by the server (auth)" }, // サーバに断られた(認証)
     { 0x4a31b8c4u, "millisecond" }, // ミリ秒
     { 0x4a3682c2u, "Deselect" }, // 選択を解除
     { 0x4a8f004eu, "Cannot read this path (permission)" }, // このパスは読めません(権限)
+    { 0x4ad746fdu, "wrong user name or password" }, // ユーザー名かパスワードが違う
     { 0x4ae33f8eu, "Background: none" }, // バックグラウンド: なし
     { 0x4b187cb2u, "Digital" }, // デジタル
     { 0x4b2a99fdu, "yr" }, // 年
@@ -398,6 +428,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x4b7f5579u, "Font:S" }, // 文字:小
     { 0x4b88c8e0u, "USB: enumerated, no port" }, // USB:列挙済/口まだ
     { 0x4b893934u, "State file is broken or from another version" }, // 状態のファイルが壊れているか、別の版のものです
+    { 0x4bb8add8u, "refused by the broker" }, // ブローカに断られた
     { 0x4c5b664du, "Video data is broken" }, // 動画のデータが壊れています
     { 0x4c82a4edu, "No free file number" }, // 空き番号がありません
     { 0x4c8c15c4u, "Euro" }, // ユーロ
@@ -405,8 +436,10 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x4d032b35u, "centimeter" }, // センチメートル
     { 0x4d3c2168u, "Message not found (it may have been deleted)" }, // メールが見つかりません(削除されたかもしれません)
     { 0x4d43a3e1u, "Back to DHCP" }, // DHCPに戻しました
+    { 0x4d6e7131u, "Cannot read after '<!'" }, // '<!' の後ろが読めません
     { 0x4db22689u, "quart (US)" }, // クォート(米)
     { 0x4e064232u, "Restart" }, // 再起動
+    { 0x4e52f4feu, "Number too long" }, // 数値が長すぎます
     { 0x4e553fa3u, "User name is too long" }, // ユーザー名が長すぎます
     { 0x4e5e36bdu, "Invalid expression" }, // 式が正しくありません
     { 0x4e7bb777u, "Record" }, // 録音
@@ -445,6 +478,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x54c64e21u, "Calibrated (error avg %.1fpx / max %.1fpx). Touch the screen and check that the blue dot follows your finger." }, // 補正できました(ずれ 平均%.1fpx / 最大%.1fpx)。画面のどこかを押して、青い点が指の位置に出るか確かめてください。
     { 0x54e8f510u, "Kelvin" }, // ケルビン
     { 0x54f7ca6cu, "Cannot change the rate while recording" }, // 録音中は周波数を変えられません
+    { 0x54fdc6b2u, "received a broken packet" }, // ブローカから壊れたパケットが届いた
     { 0x554e0a4du, " (another app has this name)" }, //  (同名の別のアプリがあります)
     { 0x5578728cu, "Host key changed during rekey" }, // 鍵の交換し直しでホスト鍵が変わりました
     { 0x558d6ad2u, "Screen lock: PIN" }, // 画面ロック: PIN
@@ -461,6 +495,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x57762704u, "Cannot re-read the file list" }, // ファイル一覧を読み直せません
     { 0x577c8ef4u, "Choose a task to complete" }, // 完了にするタスクを選んでください
     { 0x57aa7a55u, "SSID is too long (32 bytes max)" }, // SSIDが長すぎます(32バイトまで)
+    { 0x57b7d8a5u, "Extra data after the value" }, // 値の後に余計なものがあります
     { 0x57ca8d9du, "1 %s = %s %s\nRates of %s" }, // 1 %s = %s %s\n%s のレート
     { 0x57e78110u, "knot" }, // ノット
     { 0x57f1cc97u, "Disconnected (will reconnect)" }, // 未接続(自動で再接続します)
@@ -485,6 +520,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x5ba7d221u, "%s\nAPI key (blank to keep):" }, // %s\nAPIキー(空欄で変更なし):
     { 0x5bac6f0du, "Read" }, // 読む
     { 0x5bb50943u, "Mass" }, // 重さ
+    { 0x5bba1532u, "cannot read the file to send" }, // 送るファイルを読めない
     { 0x5be8bbb4u, "From" }, // 変換元
     { 0x5c3895e2u, "%s\"%s\": %d" }, // %s「%s」%d件
     { 0x5ce2be9du, " (danger)" }, //  (危険)
@@ -500,6 +536,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x5e4f9591u, "Add widget" }, // ウィジェット追加
     { 0x5f0e0c7eu, "Area" }, // 面積
     { 0x5f2ce043u, "Clipboard is empty" }, // クリップボードは空です
+    { 0x5f2e1233u, "server used an extension that was not offered" }, // 申し出ていない拡張をサーバが使おうとした
     { 0x5fae389eu, "Yearly" }, // 毎年
     { 0x6002cb07u, "Indian rupee" }, // インドルピー
     { 0x60112c52u, "Tap to pick a song" }, // タップして曲を選ぶ
@@ -509,14 +546,17 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x608128b1u, "Sat" }, // 土
     { 0x60b6bd2bu, "Exit" }, // 終了
     { 0x610de476u, "Stop waiting" }, // 待ち受けをやめる
+    { 0x6124246fu, "close code is missing" }, // closeの番号が欠けている
     { 0x6128a03fu, "QR: join the device's Wi-Fi" }, // QRで本体のWi-Fiへ
     { 0x613d9c96u, "Nothing more to undo" }, // これ以上元に戻せません
     { 0x61577298u, "Put .ics files in /calendar/" }, // /calendar/ に .ics を置いてください
     { 0x6181e389u, "Czech koruna" }, // チェココルナ
+    { 0x61b94028u, "Mismatched brackets" }, // 括弧の対応が合いません
     { 0x61f5e700u, "%d/%d (%s)" }, // %d月%d日(%s)
     { 0x621e9d91u, "New name:" }, // 新しい名前:
     { 0x62643347u, "Writing" }, // 書き込んでいます
     { 0x6275e17au, "Zoom-" }, // 縮小
+    { 0x62989a1cu, "Text outside the root element" }, // ルート要素の外に文字があります
     { 0x62d195cfu, "Search contents for:" }, // 中身から探す言葉:
     { 0x6321a0dcu, "Waiting for sign-in…" }, // サインインを待っています…
     { 0x635c1e5cu, " (unsaved)" }, //  (未保存)
@@ -533,6 +573,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x650c8807u, "wk" }, // 週
     { 0x650d1890u, "Choose one from the list" }, // 一覧から選んでください
     { 0x655b1978u, "year (365 days)" }, // 年(365日)
+    { 0x658444c9u, "Nested too deeply" }, // 入れ子が深すぎます
     { 0x65b464cbu, "nautical mile" }, // 海里
     { 0x65c3ccc4u, "Due %s (in %d min)" }, // 期限 %s(%d分前)
     { 0x65fa0df0u, "Cache not found" }, // キャッシュが見つかりません
@@ -546,6 +587,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x67d43652u, "Running" }, // 計測中
     { 0x6812f7e2u, "Indonesian rupiah" }, // インドネシアルピア
     { 0x68b82dfcu, "bar" }, // バール
+    { 0x68ca54f3u, "header line too long" }, // ヘッダ行が長すぎる
     { 0x69101fedu, "OK" }, // 問題なし
     { 0x692c12a8u, "Replaced %d" }, // %d件置換しました
     { 0x695abb4fu, "Could not create /notes/" }, // /notes/ を作れませんでした
@@ -564,6 +606,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x6b57be6du, "No matching notes" }, // 当てはまるメモはありません
     { 0x6b6d944cu, "[Update]" }, // [更新]
     { 0x6c22fb68u, "USB: port OK" }, // USB:口OK
+    { 0x6c539896u, "Could not fetch the page: " }, // ページを取れませんでした: 
     { 0x6d14a300u, "Online" }, // 接続中
     { 0x6d4b7f9au, "Endpoint not found (check api / model)" }, // 送り先が見つかりません(api / model を確認)
     { 0x6d4f275cu, "Agenda" }, // 予定
@@ -592,6 +635,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x70d197c2u, "Invite code\n%s\nExpires in 30 min" }, // 参加コード\n%s\n30分で無効
     { 0x70ea3dbeu, "Paused" }, // 一時停止中
     { 0x711e8862u, "Choose ROM" }, // ROMを選ぶ
+    { 0x7174a291u, "cannot send the handshake" }, // 開始の挨拶を送れない
     { 0x71be189au, "Restarting" }, // 再起動します
     { 0x7209ce14u, "No notification permission" }, // 通知の権限がありません
     { 0x72281d91u, "%s (at %d)" }, // %s (位置 %d)
@@ -610,6 +654,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x74756138u, "Wait for the list to finish loading" }, // 一覧の取得が終わってから入れてください
     { 0x74812a4fu, "%d-%02d" }, // %d年%d月
     { 0x74b43ab6u, "Send failed: %s" }, // 送れませんでした: %s
+    { 0x74f61dd2u, "Missing '>' after '/'" }, // '/' の後ろに '>' がありません
     { 0x75058d90u, "Cannot fetch: " }, // 取得できません: 
     { 0x750a5d83u, "Could not open this file" }, // このファイルを開けませんでした
     { 0x753617ddu, "Cannot start sign-in: %s" }, // サインインを始められません: %s
@@ -623,6 +668,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x769b726eu, "Enter PIN" }, // PINを入力
     { 0x76bd4895u, "api in transcribe.cfg is not a URL" }, // transcribe.cfg の api が URL ではありません
     { 0x76cc1f93u, "Find" }, // 検索する文字列
+    { 0x76e25c15u, "Cannot reach the portal" }, // ポータルへ繋げません
     { 0x76e351b0u, "Repeats: unsupported rule, showing the first only\n" }, // 繰り返し: 未対応の規則のため初回だけ表示しています\n
     { 0x770e3369u, "Not an iCalendar response (check the URL)" }, // iCalendarではない応答(URLを確かめてください)
     { 0x7751431au, "min" }, // 分
@@ -656,6 +702,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x7c8486aeu, "App Store" }, // アプリストア
     { 0x7ca306a2u, "Currency" }, // 通貨(為替)
     { 0x7caa0f70u, "An app with the same name is installed (confirm to overwrite)" }, // 同じ名前のアプリが入っています(上書きの確認が要ります)
+    { 0x7cabcc8fu, "no reply from the broker (keepalive)" }, // ブローカの返事が無い(keepalive)
     { 0x7cb067beu, "Cannot name the new note" }, // 新しいメモの名前を作れません
     { 0x7d12ee3eu, "Redo" }, // やり直し
     { 0x7d4fff0eu, "Due %s" }, // 期限 %s
@@ -668,6 +715,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x7e7f8733u, "Cannot put a folder inside itself" }, // フォルダをその中へは置けません
     { 0x7eb596a4u, "Eject on the PC before exiting.\nExit anyway?" }, // PCで「取り出し」をしてから終了してください。\nこのまま終了しますか?
     { 0x7ecfc451u, "Loop" }, // ループ
+    { 0x7f33ce56u, "received a masked frame" }, // マスクされた枠を受けた
     { 0x7f3810a2u, "Back to Settings" }, // 設定へ戻る
     { 0x7f996d36u, "Recording %s" }, // 録音中 %s
     { 0x7fa161efu, "Login" }, // ログイン
@@ -688,6 +736,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x824954f6u, "Alarm" }, // ｱﾗｰﾑ
     { 0x82642529u, "Off" }, // 切る
     { 0x8268b0d6u, "Search for:" }, // 検索語:
+    { 0x8291fd02u, "continuation frame without a start" }, // 始まりの無い継続の枠を受けた
     { 0x829ffe5du, "Edit" }, // 編集
     { 0x82a29195u, "%s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu oth%lu(%02X) err%lu" }, // %s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu 他%lu(%02X) 誤%lu
     { 0x82deb986u, "Analog" }, // アナログ
@@ -739,8 +788,11 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x8aea5860u, "Line %d, col %d: %s" }, // %d行%d列: %s
     { 0x8b006c22u, "No mic signal (check the wiring)" }, // マイクの信号がありません(配線を確認)
     { 0x8b027464u, "Line %d, col %d: " }, // %d行%d列: 
+    { 0x8b1377b7u, "server Accept key does not match" }, // サーバの応答の確認(Accept)が合わない
     { 0x8b23c2dbu, "Ran %lu times" }, // %lu回動きました
     { 0x8b57ffbeu, "Todoist is not set up" }, // Todoistが設定されていません
+    { 0x8b958157u, "Values to send are too long" }, // 送る値が長すぎます
+    { 0x8bef7f3fu, "disconnected" }, // 接続が切れた
     { 0x8c4b130bu, "Choose an app" }, // アプリを選んでください
     { 0x8cc29252u, "Not saved: the app ID is empty" }, // アプリのIDが空なので保存しませんでした
     { 0x8cd1ccf1u, "Could not start: %s" }, // 始められませんでした: %s
@@ -779,9 +831,12 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x924102f5u, "Enter current PIN to remove it" }, // PINを外すには今のPINを入力
     { 0x92521932u, "Prev" }, // 前
     { 0x92833865u, "id or version in app.cfg does not match the list" }, // app.cfg の id か版が一覧と合いません
+    { 0x92ab1ec4u, "\\u is not followed by hex digits" }, // \\u の後が16進数ではありません
     { 0x92bb66dau, "fluid ounce (US)" }, // 液量オンス(米)
+    { 0x92c914b4u, "message too large" }, // メッセージが大きすぎる
     { 0x92dd2a4cu, "Cannot read as WAV" }, // WAVとして読めません
     { 0x92dedde6u, "Jump host could not reach %s:%u (%.*s)" }, // 踏み台から %s:%u へ繋げませんでした(%.*s)
+    { 0x935a6cefu, "unsupported transfer encoding" }, // 未対応の転送符号化
     { 0x93b5681eu, "Older than the current version" }, // 今より古い版です
     { 0x93b580a4u, "Waiting for confirmation" }, // 確認を待っています
     { 0x93c6b2bcu, "ROM header is broken" }, // ROMのヘッダが壊れています
@@ -790,6 +845,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x948893a0u, "\033[93mThe key is not ssh-ed25519 and cannot be used\033[0m\r\n" }, // \033[93m鍵の種類が ssh-ed25519 ではないため使えません\033[0m\r\n
     { 0x94b289f8u, "Whole SD" }, // SD全体
     { 0x94c171d4u, "Invalid opcode" }, // 不正な命令
+    { 0x950c777eu, "Send failed: " }, // 送れませんでした: 
     { 0x954bc8e9u, "Tmrw %s" }, // 明 %s
     { 0x95665b44u, "Add" }, // 追加
     { 0x964478c5u, "Could not read the server response" }, // サーバの応答を読めませんでした
@@ -811,6 +867,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x98b70a6cu, "IP settings saved" }, // IPの設定を保存しました
     { 0x98e7c231u, "Use up to 63 letters, digits and hyphens (no hyphen at either end)" }, // 名前は英数字とハイフンの63文字までです(先頭と末尾にハイフンは使えません)
     { 0x98ecb219u, "Source file not found" }, // 元のファイルが見つかりません
+    { 0x994e1c96u, "no reply from the server (handshake)" }, // サーバの応答が無い(開始の挨拶)
     { 0x99591e6fu, "Enter current PIN" }, // 今のPINを入力
     { 0x99ca3cf3u, "Send failed" }, // 送信に失敗しました
     { 0x9a04b61au, "Staged content is too short" }, // 置き場の中身が短すぎます
@@ -824,6 +881,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x9b9e13c9u, "Author key changed (delete the app, then install again)" }, // 作者の鍵が変わりました(アプリを削除してから置き直してください)
     { 0x9baef0aeu, "jo (tatami)" }, // 畳
     { 0x9bc4f4b2u, "File too large (1MiB max)" }, // ファイルが大きすぎます(1MiBまで)
+    { 0x9c04df93u, "broken chunked encoding" }, // chunked転送が壊れている
     { 0x9c073b7du, "Waiting for an update from the PC\n%s" }, // PCからの更新を待っています\n%s
     { 0x9cdb9be3u, "Cancel" }, // 取消
     { 0x9d0ae165u, "Deleted %s" }, // %s を削除しました
@@ -863,6 +921,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xa22c0934u, "Token (blank to keep):" }, // トークン(空欄で変更なし):
     { 0xa2586e25u, "Save failed" }, // 保存に失敗しました
     { 0xa261b0d3u, "USB setup failed" }, // USBの準備に失敗しました
+    { 0xa2790c50u, "control frame fragmented or too long" }, // 制御の枠が分割されている/長すぎる
     { 0xa28040deu, "Storage" }, // 容量
     { 0xa2cb64ecu, "Starting Microsoft sign-in…" }, // Microsoft のサインインを始めています…
     { 0xa2f850e2u, "Clear history" }, // 履歴を消去
@@ -899,8 +958,11 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xa884d8f1u, "Calc" }, // 電卓
     { 0xa8cac8f1u, "Checked %lum ago (%d rooms)" }, // %lu分前に確認(%d部屋)
     { 0xa8f886ddu, "carat" }, // カラット
+    { 0xa920a53eu, "Attribute value is not quoted" }, // 属性値が引用符で囲まれていません
+    { 0xa96255cdu, "cannot verify the certificate: " }, // 証明書を確認できない: 
     { 0xa9629697u, "Save" }, // 保存
     { 0xa9638688u, "go" }, // 合
+    { 0xa9743eb5u, "server reply is not a WebSocket handshake" }, // サーバの応答がWebSocketの形でない
     { 0xaa1ff9adu, "Pick a version from the Web, choose an update file (.pfw) on the SD, or send one from a PC" }, // Webの版の一覧から選ぶか、更新ファイル(.pfw)をSDから選ぶか、PCから送ってください
     { 0xaa251e4cu, "Headphones" }, // イヤホン
     { 0xaa63e78eu, "DNS (up to 2, comma separated; blank for auto):" }, // DNS(カンマ区切りで2つまで。空欄で自動):
@@ -913,10 +975,14 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xac01fc6du, "Cannot write to the flash" }, // 内蔵フラッシュへ書けません
     { 0xac06a108u, "\033[93mRe-saved the private key encrypted\033[0m\r\n" }, // \033[93m秘密鍵を暗号化して保存し直しました\033[0m\r\n
     { 0xac1a70c4u, "Date: %d/%02d/%02d (%s) %02d:%02d\n" }, // 日時: %d/%02d/%02d(%s) %02d:%02d\n
+    { 0xac3186dbu, "new message started before the last one ended" }, // 前のメッセージが終わる前に次が始まった
     { 0xac321ce6u, "No mail" }, // メールはありません
+    { 0xac44c6feu, "Not a valid number" }, // 数値として読めません
+    { 0xac5d58e8u, "server reply headers too large" }, // サーバの応答ヘッダが大きすぎる
     { 0xac7c36f0u, "Joining…" }, // 参加しています…
     { 0xac97e38du, "Cancel" }, // 取り消す
     { 0xaca3a146u, "Home: %s" }, // ホーム: %s
+    { 0xacc330f6u, "Missing value" }, // 値がありません
     { 0xacce64c1u, "The world is too wide" }, // 世界が広すぎます
     { 0xacd19db3u, "s" }, // 秒
     { 0xacfa12b2u, "The PC build does not rewrite itself (#%lu %s)" }, // PCビルドは本体を書き換えません(#%lu %s)
@@ -945,8 +1011,11 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xb074f564u, "Write" }, // 書き込む
     { 0xb0789c92u, "Stop" }, // 停止
     { 0xb07b94ceu, "(no variables)" }, // (変数なし)
+    { 0xb08e0ccau, "Attribute is missing '='" }, // 属性に = がありません
     { 0xb08f4d06u, "Cannot delete the old file" }, // 古いファイルを消せない
     { 0xb0943fe9u, "Recording is empty" }, // 録音が空です
+    { 0xb0e032f9u, "Cannot build the submit URL" }, // 送り先のURLを作れません
+    { 0xb0f91883u, "Control character in string" }, // 文字列に制御文字があります
     { 0xb0fe1df6u, "Cannot read (tap for details)\n" }, // 読めません(タップで全文)\n
     { 0xb13dc812u, "Could not resolve the name: " }, // 名前を解決できませんでした: 
     { 0xb1418341u, "Runtime error in on_back()" }, // on_back()の実行時エラー
@@ -1013,6 +1082,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xbb464167u, "Joining: %s" }, // 接続しています: %s
     { 0xbbdc1804u, "New folder" }, // 新しいフォルダ
     { 0xbbe7e23cu, "Daily %02u:%02u" }, // 毎日%02u:%02u
+    { 0xbc65ca97u, "Attribute without a value" }, // 値のない属性です
     { 0xbcc90d98u, "Dictionary" }, // 辞書
     { 0xbcfd1236u, "Stopped: error" }, // 停止: エラー
     { 0xbd69b625u, "Error in a pico.socket callback" }, // pico.socket のコールバックでエラーが発生しました
@@ -1046,6 +1116,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xc359393cu, "App installed" }, // アプリを入れました
     { 0xc3890afdu, "not set" }, // 未登録
     { 0xc40d96fau, "No calendars" }, // カレンダーがありません
+    { 0xc423cec0u, "too many redirects" }, // リダイレクトが多すぎる
     { 0xc429bfc5u, "Conv" }, // 変換
     { 0xc4495b36u, "Could not read: " }, // 読めませんでした: 
     { 0xc46dd057u, "Cannot prepare the destination" }, // 書き込み先を用意できない
@@ -1105,6 +1176,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xd0612776u, "milliliter" }, // ミリリットル
     { 0xd0bcd584u, "Re-read content does not match" }, // 置き場から読み直した中身が合いません
     { 0xd0bdacc2u, "Tap to select, tap again to complete" }, // タップで選択、もう一度タップで完了
+    { 0xd0c69898u, "The page has no form (JavaScript-based portals are not supported)" }, // フォームが無いページです(JavaScriptで動くポータルは使えません)
     { 0xd0c87c79u, "Connected to the PC" }, // PCにつながっています
     { 0xd0d1e09fu, "URL is too long" }, // URLが長すぎます
     { 0xd11c6332u, "Cannot install: a different app has this name" }, // 同じ名前の別のアプリが入っているので入れられません
@@ -1113,7 +1185,9 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xd133e30du, "Update file is empty" }, // 更新ファイルが空です
     { 0xd138ae5cu, "Cannot get the message" }, // メールを取れません
     { 0xd1cb6ad1u, "Ready (Space / r to record)" }, // 待機中(Space / r で録音)
+    { 0xd1d9a39bu, "Cannot read the portal URL" }, // ポータルのURLを読めません
     { 0xd205073eu, "Type: %s" }, // 種類: %s
+    { 0xd23d841du, "Missing ':'" }, // ':' がありません
     { 0xd2af9ed8u, "Create" }, // 作る
     { 0xd3143699u, "Could not move" }, // 移動できませんでした
     { 0xd325bb46u, "gradian" }, // グラード
@@ -1136,8 +1210,10 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xd5928a55u, "Error (nil)" }, // エラー(nil)
     { 0xd5964fc2u, "pound" }, // ポンド
     { 0xd5a9d452u, "Due (e.g. tomorrow 3pm; blank for none):" }, // 期限(例: 明日 15時。空欄で無し):
+    { 0xd5c4d115u, "received an unknown frame type" }, // 知らない種類の枠を受けた
     { 0xd5e1682fu, "Lua failed to start (possibly out of memory)" }, // Luaの初期化に失敗しました(メモリ不足の可能性があります)
     { 0xd65470f7u, "Mach (15°C)" }, // マッハ(15°C)
+    { 0xd66af443u, "Unknown value" }, // 知らない値です
     { 0xd70e0e32u, "No account. Add it in [Setup]" }, // メールのアカウントがありません。[設定] から入れてください
     { 0xd7475b09u, " - please delete (danger)" }, // を削除してください(危険)
     { 0xd774dc03u, "Pause" }, // 一時停止
@@ -1151,6 +1227,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xd98e7ce9u, "You have unsaved changes. Discard and open another file?" }, // 保存していない変更があります。破棄して別のファイルを開きますか?
     { 0xd9b9eb45u, "Cut" }, // 切り取り
     { 0xd9bb519fu, "\n\nNote: %s" }, // \n\n注意: %s
+    { 0xd9f51766u, "clock not set (before NTP sync)" }, // 時計が合っていない(NTP同期前)
     { 0xda042796u, "Server does not support %s" }, // サーバが %s に対応していません
     { 0xda3567ebu, "Canadian dollar" }, // カナダドル
     { 0xda5ad380u, "Out" }, // 抜ける
@@ -1178,6 +1255,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xde927183u, "Password (app password for Gmail):" }, // パスワード(Gmailはアプリパスワード):
     { 0xdeec8a66u, "Cannot listen on UDP (port in use?)" }, // UDPの待ち受けを始められません(番号が使用中?)
     { 0xdf992696u, "Stopped: step" }, // 停止: ステップ
+    { 0xdfbbd691u, "no response" }, // 応答がない
     { 0xdfe6a002u, "App (client) ID registered in Microsoft Entra:" }, // アプリ(クライアント)ID(Microsoft Entra に登録したもの):
     { 0xe06a97f4u, "Message" }, // メッセージ
     { 0xe0dacfddu, "feet per second" }, // フィート毎秒
@@ -1203,6 +1281,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xe627caa1u, "cup (US)" }, // カップ(米)
     { 0xe63063c3u, "Device key created. Re-encrypted %d items%s%s" }, // 端末の鍵を作りました。%d項目を暗号化し直しました%s%s
     { 0xe63491bau, "Recording too large" }, // 録音が大きすぎます
+    { 0xe6541da4u, "no reply from the broker (CONNACK)" }, // ブローカの返事が無い(CONNACK)
     { 0xe6a9f40du, "Cannot read app.cfg" }, // app.cfg を読めません
     { 0xe7b3a142u, "Emulator stopped: " }, // エミュが停止しました: 
     { 0xe7c019a3u, "Update file was cut off" }, // 更新ファイルが途中で切れました
@@ -1234,6 +1313,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xebb52480u, "Run" }, // 実行
     { 0xebcef66eu, "Cannot start the request" }, // リクエストを開始できない
     { 0xebf00081u, "Accept the terms of the \"%s\" portal and connect?" }, // 「%s」のポータルの利用規約に同意して接続しますか?
+    { 0xebf066c3u, "no reply from the server (ping)" }, // サーバの応答が無い(pingに答えない)
     { 0xec0469beu, "State is from another ROM" }, // 別のROMの状態です
     { 0xec3203c4u, "Cannot install an older version" }, // 入っている版より古い版は入れられません
     { 0xecc2fd9fu, "Resume" }, // 再開
@@ -1251,6 +1331,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xee0afae7u, "Turkish lira" }, // トルコリラ
     { 0xee0d2105u, "Out of memory" }, // メモリが足りません
     { 0xee9e0c64u, "You have unsaved changes. Discard and go back?" }, // 保存していない変更があります。破棄して戻りますか?
+    { 0xeef69d05u, "write failed" }, // 書き込みに失敗
     { 0xef47ff57u, "Update file is larger than listed" }, // 更新ファイルが一覧の大きさより大きいです
     { 0xefd23e36u, "Gateway (router) IP (blank for none):" }, // ゲートウェイ(ルーター)のIP(空欄で無し):
     { 0xefd63865u, "To: " }, // 宛先: 
@@ -1259,6 +1340,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xf0a53633u, "Key" }, // キー
     { 0xf0d817ebu, "Jump: " }, // 踏み台: 
     { 0xf0e495f5u, "Same as the current version" }, // 今と同じ版です
+    { 0xf0f6765cu, "Cannot read after '<'" }, // '<' の後ろが読めません
     { 0xf134fafdu, "\033[91mWARNING: the host key of %s has changed!\r\nSomeone may be impersonating it. If you expected this,\r\nremove the matching line from %s.\r\nCurrent key: %s\033[0m\r\n" }, // \033[91m警告: %s のホスト鍵が以前と違います!\r\nなりすましの可能性があります。心当たりがあれば\r\n%s から該当する行を消してください。\r\n今の鍵: %s\033[0m\r\n
     { 0xf157f6c3u, "Path is too long" }, // パスが長すぎます
     { 0xf1989d68u, "Taiwan dollar" }, // 台湾ドル
@@ -1267,6 +1349,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xf1b4fdcdu, "Issuing an invite code…" }, // 参加コードを発行しています…
     { 0xf1b6d662u, "\n\nAn app with this name is in /lua/apps/%s. It will be overwritten (files the app wrote are kept)" }, // \n\n/lua/apps/%s に同じ名前のアプリがあります。上書きします(アプリが書いたファイルは残ります)
     { 0xf1bae7aau, "Defaults" }, // 既定に戻す
+    { 0xf1d0c021u, "received an unknown control frame" }, // 知らない制御の枠を受けた
     { 0xf1f684f2u, "Not a firmware update file" }, // ファームの更新ファイルではありません
     { 0xf2209dd9u, "Join" }, // 接続
     { 0xf230e877u, "  [off]" }, //   [切]
@@ -1277,6 +1360,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xf29e6e9eu, "Wi-Fi disconnected" }, // Wi-Fiが切れました
     { 0xf301f499u, "No network permission" }, // ネットワークの権限がありません
     { 0xf30a06acu, "Conversion type" }, // 変換の種類
+    { 0xf32890acu, "Unknown" }, // 不明
     { 0xf3743f81u, "Dark theme" }, // ダークテーマ
     { 0xf37a73f8u, "Reset" }, // リセット
     { 0xf3a85ce4u, "No match. Start with the new PIN" }, // 一致しません。新しいPINから
@@ -1297,6 +1381,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xf706de96u, "Set time with ▲▼" }, // ▲▼で時間を設定
     { 0xf77a3bacu, "Fahrenheit" }, // 華氏
     { 0xf78f2923u, "Replace" }, // 置換
+    { 0xf7d21303u, "cannot connect" }, // 接続できない
     { 0xf7fe86c5u, "Microsoft email address (e.g. you@outlook.com):" }, // Microsoft のメールアドレス(例: you@outlook.jp):
     { 0xf80775cbu, "cubic meter" }, // 立方メートル
     { 0xf82fcd9eu, "1/1 (Mon)" }, // 1月1日(月)
@@ -1328,6 +1413,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xfd09a5b8u, "Fri" }, // 金
     { 0xfd3eae35u, "Stopped: breakpoint" }, // 停止: ブレークポイント
     { 0xfda834dcu, "/sys/chat.cfg not found" }, // /sys/chat.cfg がありません
+    { 0xfdae20a7u, "bad status line" }, // ステータス行が不正
     { 0xfdb81a25u, "Account type" }, // アカウントの種類
     { 0xfdbfe375u, "Mon" }, // 月
     { 0xfde8539eu, "Which folder?" }, // どのフォルダへ
@@ -1335,6 +1421,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xfe505ffdu, "Enter up to 2 DNS servers like \"1.1.1.1,8.8.8.8\"" }, // DNSは「1.1.1.1,8.8.8.8」のように2つまで入れてください
     { 0xfe62bab2u, "%u min left" }, // あと %u 分
     { 0xfebd868bu, "token in chat.cfg has invalid characters" }, // chat.cfg の token に使えない文字があります
+    { 0xff2e078fu, "bad redirect" }, // 転送先が不正
     { 0xff52605cu, "Press Start to count down" }, // 開始を押すとカウントダウン
     { 0xff61d346u, "Permission denied" }, // 権限がありません
     { 0xff87fd58u, "Browser home URL" }, // ブラウザのホームURL
@@ -1342,4 +1429,4 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xffdae38bu, "Fetching %s…" }, // %s を取得中…
     { 0xfff3714fu, "No" }, // いいえ
 };
-const size_t I18nFunctions::kTableEnCount = 1338;
+const size_t I18nFunctions::kTableEnCount = 1425;

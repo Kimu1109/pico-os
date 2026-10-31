@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <new>
+#include "system/I18n_Functions.hpp"
 
 namespace {
     // /sys/tls/ca.pem の上限。ルート1枚のPEMは2KB前後なので十分
@@ -62,7 +63,7 @@ bool HttpTransport::connect(const Url& url, unsigned long timeout_ms){
     if(!url.secure){
         plain_.setTimeout(timeout_ms);
         if(plain_.connect(url.host.c_str(), url.port) != 1){
-            return fail(Error::Connect, "接続できない");
+            return fail(Error::Connect, TR("接続できない"));
         }
         active_ = &plain_;
         return true;
@@ -72,15 +73,15 @@ bool HttpTransport::connect(const Url& url, unsigned long timeout_ms){
     //実機では全ての証明書が「まだ有効でない」として弾かれ、理由が分かりにくい
     const time_t now = time(nullptr);
     if((uint32_t)now < kMinValidEpoch){
-        return fail(Error::ClockNotSet, "時計が合っていない(NTP同期前)");
+        return fail(Error::ClockNotSet, TR("時計が合っていない(NTP同期前)"));
     }
 
     roots_ = new (std::nothrow) X509List();
     tls_ = new (std::nothrow) WiFiClientSecure();
-    if(!roots_ || !tls_) return fail(Error::NoMemory, "TLSの準備に必要なメモリが無い");
+    if(!roots_ || !tls_) return fail(Error::NoMemory, TR("TLSの準備に必要なメモリが無い"));
 
     if(TlsRoots::AppendTo(*roots_) == 0){
-        return fail(Error::Tls, "信頼するルート証明書を読めない");
+        return fail(Error::Tls, TR("信頼するルート証明書を読めない"));
     }
     tls_->setTrustAnchors(roots_);
     tls_->setX509Time(now);
@@ -92,10 +93,10 @@ bool HttpTransport::connect(const Url& url, unsigned long timeout_ms){
         const int code = tls_->getLastSSLError(why, sizeof(why));
         if(code == 0){
             //TLSまで行っていない = TCPで繋がらなかった
-            return fail(Error::Connect, "接続できない");
+            return fail(Error::Connect, TR("接続できない"));
         }
         LOG_SYS_WARN("TLS: %s:%u へ繋げません (%d: %s)", url.host.c_str(), (unsigned)url.port, code, why);
-        FixedString<PICO_STR_LL> text("証明書を確認できない: ");
+        FixedString<PICO_STR_LL> text(TR("証明書を確認できない: "));
         text.append(why);
         return fail(Error::Tls, text.c_str());
     }

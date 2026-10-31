@@ -132,11 +132,11 @@ local function poll()
     polling = true
     next_poll = now + 60000   -- 応答が来るまでは次を出さない(来たら決め直す)
     local save = file_mode and pico.path_join(pico.app_dir(), "player.json") or nil
-    A.call("GET", "/me/player?market=from_token&additional_types=episode", nil, function(ok, status, body, err)
+    A.call("GET", "/me/player?market=from_token&additional_types=episode", nil, function(ok, status, body, err, info)
         polling = false
         now = pico.millis()
         if not ok then
-            if err == "書き込みに失敗" and not file_mode then   -- 16KiBを超えた: 次はSDへ保存して読む
+            if info and info.too_large and not file_mode then   -- 16KiBを超えた: 次はSDへ保存して読む
                 file_mode = true
                 next_poll = now
                 return

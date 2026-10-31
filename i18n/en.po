@@ -3006,7 +3006,7 @@ msgstr "Background"
 msgid "マイク"
 msgstr "Mic"
 
-#: src/apps/store/App_Repo.cpp
+#: src/apps/store/App_Repo.cpp src/net/Http_Get.cpp src/net/Http_Request.cpp src/net/Http_Response.hpp
 msgid "なし"
 msgstr "None"
 
@@ -5154,6 +5154,246 @@ msgstr "This app cannot read there"
 msgid "通知の権限がありません"
 msgstr "No notification permission"
 
+#: src/net/Captive_Portal.cpp
+msgid "ポータルのURLを読めません"
+msgstr "Cannot read the portal URL"
+
+#: src/net/Captive_Portal.cpp
+msgid "ポータルへ繋げません"
+msgstr "Cannot reach the portal"
+
+#: src/net/Captive_Portal.cpp
+msgid "送る値が長すぎます"
+msgstr "Values to send are too long"
+
+#: src/net/Captive_Portal.cpp
+msgid "送り先のURLを作れません"
+msgstr "Cannot build the submit URL"
+
+#: src/net/Captive_Portal.cpp
+msgid "ポータルへ送れません"
+msgstr "Cannot send to the portal"
+
+#: src/net/Captive_Portal.cpp
+msgid "送れませんでした: "
+msgstr "Send failed: "
+
+#: src/net/Captive_Portal.cpp
+msgid "ページを取れませんでした: "
+msgstr "Could not fetch the page: "
+
+#: src/net/Captive_Portal.cpp
+msgid "フォームが無いページです(JavaScriptで動くポータルは使えません)"
+msgstr "The page has no form (JavaScript-based portals are not supported)"
+
+#: src/net/Captive_Portal.cpp
+msgid "ページにフォームがありません"
+msgstr "The page has no form"
+
+#: src/net/Http_Get.cpp src/net/Http_Request.cpp src/net/Http_Transport.cpp
+msgid "接続できない"
+msgstr "cannot connect"
+
+#: src/net/Http_Get.cpp src/net/Http_Request.cpp src/net/Http_Transport.cpp
+msgid "時計が合っていない(NTP同期前)"
+msgstr "clock not set (before NTP sync)"
+
+#: src/net/Http_Get.cpp src/net/Http_Request.cpp
+msgid "リクエストを送れない"
+msgstr "cannot send the request"
+
+#: src/net/Http_Get.cpp src/net/Http_Request.cpp
+msgid "応答がない"
+msgstr "no response"
+
+#: src/net/Http_Get.cpp src/net/Http_Request.cpp
+msgid "リダイレクトが多すぎる"
+msgstr "too many redirects"
+
+#: src/net/Http_Get.cpp src/net/Http_Request.cpp
+msgid "転送先が不正"
+msgstr "bad redirect"
+
+#: src/net/Http_Get.cpp src/net/Http_Request.cpp src/net/Http_Response.hpp
+msgid "不明"
+msgstr "Unknown"
+
+#: src/net/Http_Request.cpp
+msgid "送るファイルを読めない"
+msgstr "cannot read the file to send"
+
+#: src/net/Http_Response.hpp
+msgid "ステータス行が不正"
+msgstr "bad status line"
+
+#: src/net/Http_Response.hpp
+msgid "ヘッダ行が長すぎる"
+msgstr "header line too long"
+
+#: src/net/Http_Response.hpp
+msgid "chunked転送が壊れている"
+msgstr "broken chunked encoding"
+
+#: src/net/Http_Response.hpp
+msgid "未対応の転送符号化"
+msgstr "unsupported transfer encoding"
+
+#: src/net/Http_Response.hpp
+msgid "本文が途中で切れた"
+msgstr "body was cut off"
+
+#: src/net/Http_Response.hpp
+msgid "書き込みに失敗"
+msgstr "write failed"
+
+#: src/net/Http_Transport.cpp
+msgid "TLSの準備に必要なメモリが無い"
+msgstr "not enough memory for TLS"
+
+#: src/net/Http_Transport.cpp
+msgid "信頼するルート証明書を読めない"
+msgstr "cannot read the trusted root certificates"
+
+#: src/net/Http_Transport.cpp
+msgid "証明書を確認できない: "
+msgstr "cannot verify the certificate: "
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカがMQTT 3.1.1を話せない"
+msgstr "broker does not speak MQTT 3.1.1"
+
+#: src/net/Mqtt_Client.cpp
+msgid "クライアントIDを断られた"
+msgstr "client ID rejected"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカが使えない状態"
+msgstr "broker unavailable"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ユーザー名かパスワードが違う"
+msgstr "wrong user name or password"
+
+#: src/net/Mqtt_Client.cpp
+msgid "接続を許されていない(認証)"
+msgstr "not authorized"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカに断られた"
+msgstr "refused by the broker"
+
+#: src/net/Mqtt_Client.cpp src/net/WebSocket_Client.cpp
+msgid "送れない(切れた)"
+msgstr "cannot send (disconnected)"
+
+#: src/net/Mqtt_Client.cpp
+msgid "CONNECTを送れない(長すぎる/切れた)"
+msgstr "cannot send CONNECT (too long or disconnected)"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカの返事がCONNACKでない"
+msgstr "broker reply was not CONNACK"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカから壊れたPUBLISHが届いた"
+msgstr "received a broken PUBLISH"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカから想定外のパケットが届いた"
+msgstr "received an unexpected packet"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカから壊れたパケットが届いた"
+msgstr "received a broken packet"
+
+#: src/net/Mqtt_Client.cpp src/net/WebSocket_Client.cpp
+msgid "接続が切れた"
+msgstr "disconnected"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカの返事が無い(CONNACK)"
+msgstr "no reply from the broker (CONNACK)"
+
+#: src/net/Mqtt_Client.cpp
+msgid "ブローカの返事が無い(keepalive)"
+msgstr "no reply from the broker (keepalive)"
+
+#: src/net/WebSocket_Client.cpp
+msgid "サーバに断られた(認証)"
+msgstr "refused by the server (auth)"
+
+#: src/net/WebSocket_Client.cpp
+msgid "サーバがWebSocketに切り替えない"
+msgstr "server did not switch to WebSocket"
+
+#: src/net/WebSocket_Client.cpp
+msgid "サーバの応答がWebSocketの形でない"
+msgstr "server reply is not a WebSocket handshake"
+
+#: src/net/WebSocket_Client.cpp
+msgid "サーバの応答の確認(Accept)が合わない"
+msgstr "server Accept key does not match"
+
+#: src/net/WebSocket_Client.cpp
+msgid "申し出ていない拡張をサーバが使おうとした"
+msgstr "server used an extension that was not offered"
+
+#: src/net/WebSocket_Client.cpp
+msgid "サーバの応答ヘッダが大きすぎる"
+msgstr "server reply headers too large"
+
+#: src/net/WebSocket_Client.cpp
+msgid "開始の挨拶の途中で切れた"
+msgstr "disconnected during the handshake"
+
+#: src/net/WebSocket_Client.cpp
+msgid "開始の挨拶を送れない"
+msgstr "cannot send the handshake"
+
+#: src/net/WebSocket_Client.cpp
+msgid "サーバの応答が無い(開始の挨拶)"
+msgstr "no reply from the server (handshake)"
+
+#: src/net/WebSocket_Client.cpp
+msgid "サーバの応答が無い(pingに答えない)"
+msgstr "no reply from the server (ping)"
+
+#: src/net/Ws_Frame.cpp
+msgid "拡張の印(RSV)が立った枠を受けた"
+msgstr "received a frame with RSV bits set"
+
+#: src/net/Ws_Frame.cpp
+msgid "マスクされた枠を受けた"
+msgstr "received a masked frame"
+
+#: src/net/Ws_Frame.cpp
+msgid "知らない制御の枠を受けた"
+msgstr "received an unknown control frame"
+
+#: src/net/Ws_Frame.cpp
+msgid "制御の枠が分割されている/長すぎる"
+msgstr "control frame fragmented or too long"
+
+#: src/net/Ws_Frame.cpp
+msgid "始まりの無い継続の枠を受けた"
+msgstr "continuation frame without a start"
+
+#: src/net/Ws_Frame.cpp
+msgid "前のメッセージが終わる前に次が始まった"
+msgstr "new message started before the last one ended"
+
+#: src/net/Ws_Frame.cpp
+msgid "知らない種類の枠を受けた"
+msgstr "received an unknown frame type"
+
+#: src/net/Ws_Frame.cpp
+msgid "メッセージが大きすぎる"
+msgstr "message too large"
+
+#: src/net/Ws_Frame.cpp
+msgid "closeの番号が欠けている"
+msgstr "close code is missing"
+
 #: src/services/Alarm_Functions.cpp
 msgid "アラーム %02d:%02d"
 msgstr "Alarm %02d:%02d"
@@ -5357,3 +5597,111 @@ msgstr "This app has too many scheduled notices"
 #: src/system/Notification_Functions.cpp
 msgid "通知の指定が正しくありません"
 msgstr "Invalid notice"
+
+#: src/util/Json_Reader.cpp src/util/Xml_Reader.cpp
+msgid "入れ子が深すぎます"
+msgstr "Nested too deeply"
+
+#: src/util/Json_Reader.cpp
+msgid "値がありません"
+msgstr "Missing value"
+
+#: src/util/Json_Reader.cpp
+msgid "数値が長すぎます"
+msgstr "Number too long"
+
+#: src/util/Json_Reader.cpp
+msgid "知らない値です"
+msgstr "Unknown value"
+
+#: src/util/Json_Reader.cpp
+msgid "数値として読めません"
+msgstr "Not a valid number"
+
+#: src/util/Json_Reader.cpp
+msgid "':' がありません"
+msgstr "Missing ':'"
+
+#: src/util/Json_Reader.cpp
+msgid "',' がありません"
+msgstr "Missing ','"
+
+#: src/util/Json_Reader.cpp
+msgid "文字列に制御文字があります"
+msgstr "Control character in string"
+
+#: src/util/Json_Reader.cpp
+msgid "知らないエスケープです"
+msgstr "Unknown escape"
+
+#: src/util/Json_Reader.cpp
+msgid "\\u の後が16進数ではありません"
+msgstr "\\u is not followed by hex digits"
+
+#: src/util/Json_Reader.cpp
+msgid "値の後に余計なものがあります"
+msgstr "Extra data after the value"
+
+#: src/util/Json_Reader.cpp
+msgid "括弧の対応が合いません"
+msgstr "Mismatched brackets"
+
+#: src/util/Xml_Reader.cpp
+msgid "開いていない要素を閉じています"
+msgstr "Closing an element that is not open"
+
+#: src/util/Xml_Reader.cpp
+msgid "閉じタグが開きタグと合いません"
+msgstr "Closing tag does not match the opening tag"
+
+#: src/util/Xml_Reader.cpp
+msgid "ルート要素の外に文字があります"
+msgstr "Text outside the root element"
+
+#: src/util/Xml_Reader.cpp
+msgid "ルート要素が2つあります"
+msgstr "Two root elements"
+
+#: src/util/Xml_Reader.cpp
+msgid "'<' の後ろが読めません"
+msgstr "Cannot read after '<'"
+
+#: src/util/Xml_Reader.cpp
+msgid "属性名が読めません"
+msgstr "Cannot read the attribute name"
+
+#: src/util/Xml_Reader.cpp
+msgid "値のない属性です"
+msgstr "Attribute without a value"
+
+#: src/util/Xml_Reader.cpp
+msgid "属性に = がありません"
+msgstr "Attribute is missing '='"
+
+#: src/util/Xml_Reader.cpp
+msgid "属性値が引用符で囲まれていません"
+msgstr "Attribute value is not quoted"
+
+#: src/util/Xml_Reader.cpp
+msgid "属性値に '<' があります"
+msgstr "'<' in an attribute value"
+
+#: src/util/Xml_Reader.cpp
+msgid "'/' の後ろに '>' がありません"
+msgstr "Missing '>' after '/'"
+
+#: src/util/Xml_Reader.cpp
+msgid "閉じタグの中に余分な文字があります"
+msgstr "Extra characters in the closing tag"
+
+#: src/util/Xml_Reader.cpp
+msgid "'<!' の後ろが読めません"
+msgstr "Cannot read after '<!'"
+
+#: src/util/Xml_Reader.cpp
+msgid "コメントの始まりが読めません"
+msgstr "Cannot read the comment start"
+
+#: src/util/Xml_Reader.cpp
+msgid "ルート要素の外にCDATAがあります"
+msgstr "CDATA outside the root element"

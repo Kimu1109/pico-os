@@ -92,8 +92,10 @@ namespace {
     // 応答全体を失敗させる(pico.sd_readと同じく黙って切り詰めない方針)
     struct LuaHttpSink : IHttpSink {
         FixedString<kMaxHttpResponseBytes> body;
+        // 上限を超えて断った(info.too_large。誤りの文は言語で変わるので、アプリはこちらで見分ける)
+        bool too_large = false;
         bool write(const void* data, size_t len) override {
-            if (body.length() + len > kMaxHttpResponseBytes) return false;
+            if (body.length() + len > kMaxHttpResponseBytes) { too_large = true; return false; }
             return body.append((const char*)data, len);
         }
     };
@@ -215,6 +217,7 @@ bool LuaEngine::StartHttp(PendingHttp* r, const char** why) {
     HttpState* st = http_;
 
     st->sink.body.clear();
+    st->sink.too_large = false;
     st->body_buf.clear();
     st->content_type_buf.clear();
     st->save_path.clear();
@@ -606,9 +609,13 @@ void LuaEngine::FinishHttp() {
         }
     }
     // 受け取った本文の大きさ(と保存先・接続を使い回したか)
-    lua_createtable(L, 0, 3);
+    lua_createtable(L, 0, 4);
     lua_pushboolean(L, st->request.reusedConnection());
     lua_setfield(L, -2, "reused");
+    if (!ok && !saved && st->sink.too_large) {
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "too_large");
+    }
     lua_pushinteger(L, saved ? (lua_Integer)saved_bytes : (lua_Integer)st->sink.body.length());
     lua_setfield(L, -2, "size");
     if (!saved_path.empty()) {

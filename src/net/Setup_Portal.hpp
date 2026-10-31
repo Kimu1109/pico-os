@@ -17,6 +17,9 @@
 //   POST /save          … ssid / pass を受け取り、呼び出し側の保存(SaveFn)の結果をページで返す
 //
 // ここは受け取ったバイト列を溜めて読むのと、返すページを作るだけ(ソケットにもWi-Fiにも依存しない)。
+//
+// ページの言語はスマホの Accept-Language で決める(ja で始まれば日本語、ほかの言語は英語、無ければ日本語)。
+// 本体の言語の設定は見ない(スマホを持っている人の言語に合わせる。docs/design/i18n.md「Wi-Fi転送のページ」と同じ考え)。
 // 1つの要求は kMaxRequest バイトまで(超えたら413)。本文は application/x-www-form-urlencoded だけ読む。
 namespace SetupPortal {
 
@@ -32,6 +35,8 @@ namespace SetupPortal {
             bool isPost() const { return post_; }
             const char* path() const { return path_.c_str(); }
             const char* body() const { return buf_ + body_start_; }
+            // Accept-Language が ja で始まる・無い(既定)ならtrue。それ以外の言語なら英語のページにする
+            bool japanese() const { return japanese_; }
         private:
             bool parseHeaders();
             char buf_[kMaxRequest + 1];
@@ -40,6 +45,7 @@ namespace SetupPortal {
             size_t content_length_ = 0;
             bool headers_done_ = false;
             bool post_ = false;
+            bool japanese_ = true;
             FixedString<PICO_STR_M> path_;
             State state_ = State::Reading;
     };

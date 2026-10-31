@@ -531,7 +531,8 @@ function M.close_dialog(id, is_ok, value)
 end
 
 -- 記録したHTTPリクエストへ応答を返す
-function M.respond(index, ok, status, body, err, headers)
+-- extra は info へ足す値(本文が大きすぎて失敗した { too_large = true } 等)
+function M.respond(index, ok, status, body, err, headers, extra)
     local r = M.requests[index]
     assert(r, "mock.respond: そのリクエストは無い")
     -- save_to を付けた要求は、本文を偽のSDへ書いたことにして本文はnilで返す(本物と同じ)
@@ -540,7 +541,9 @@ function M.respond(index, ok, status, body, err, headers)
         M.sd[save] = body or ""
         return r.cb(ok, status, nil, err, headers or {}, { size = body and #body or 0, saved = save })
     end
-    return r.cb(ok, status, body, err, headers or {}, { size = body and #body or 0 })
+    local info = { size = body and #body or 0 }
+    for k, v in pairs(extra or {}) do info[k] = v end
+    return r.cb(ok, status, body, err, headers or {}, info)
 end
 
 return M

@@ -39,7 +39,7 @@ def expect_exit(fn, part, label):
     check(False, label + "(断らなかった)")
 
 
-def fake_bin(serial=4321, git="beef123+", fs=(0x1024F000, 0x103FF000), size=300000, marker=True, env=None):
+def fake_bin(serial=4321, git="beef123+", fs=(0x1025F000, 0x103FF000), size=300000, marker=True, env=None):
     data = bytearray(os.urandom(size // 2) + bytes(size - size // 2))  # 半分は縮む
     struct.pack_into("<IIII", data, ft.FS_WORDS_OFFSET, fs[0], fs[1], 0x103FF000, 0x24F000)
     if marker:
@@ -60,7 +60,7 @@ def main():
     blob = ft.pack(data, seed, log=quiet)
     p = ft.parse(blob)
     check(p["serial"] == 4321 and p["git"] == "beef123+" and p["board"] == "rpipico2w", "版の印を firmware.bin から読む")
-    check(p["fs_start"] == 0x1024F000 and p["fs_end"] == 0x103FF000, "LittleFSの範囲を 0x2FF0 から読む")
+    check(p["fs_start"] == 0x1025F000 and p["fs_end"] == 0x103FF000, "LittleFSの範囲を 0x2FF0 から読む")
     check(p["image_bytes"] == len(data) and gzip.decompress(p["payload"]) == data, "中身は firmware.bin の gzip")
     check(p["flags"] & ft.FLAG_SIGNED and ft.ed25519_verify(pub, ft.SIGN_CONTEXT + p["header"], p["sig"]), "署名を確かめられる")
     check(p["build_time"] == 1792128120, "日時(UTC)")
@@ -71,8 +71,8 @@ def main():
     expect_exit(lambda: ft.pack(fake_bin(marker=False), seed, log=quiet), "版の印", "版の印が無いファームは断る")
     expect_exit(lambda: ft.pack(fake_bin(fs=(0x103FF000, 0x103FF000)), seed, log=quiet), "LittleFS", "LittleFSが無いファームは断る")
     expect_exit(lambda: ft.pack(b"\0" * 100, seed, log=quiet), "小さすぎ", "小さすぎるファイルは断る")
-    big = bytearray(os.urandom(0x1024F000 - 0x10000000 + 10))
-    struct.pack_into("<II", big, ft.FS_WORDS_OFFSET, 0x1024F000, 0x103FF000)
+    big = bytearray(os.urandom(0x1025F000 - 0x10000000 + 10))
+    struct.pack_into("<II", big, ft.FS_WORDS_OFFSET, 0x1025F000, 0x103FF000)
     m = b"PICOOS-BUILD;serial=1;git=a;date=;board=rpipico2w;"
     big[0x5000:0x5000 + len(m)] = m
     expect_exit(lambda: ft.pack(bytes(big), seed, log=quiet), "アプリの領域", "アプリの領域より大きいファームは断る")

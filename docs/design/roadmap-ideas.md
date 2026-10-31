@@ -86,7 +86,7 @@ arduino-pico `fd65f6d`)。有効にするのは `-DPIO_FRAMEWORK_ARDUINO_ENABLE_
 - フラッシュの増分の中身は、BTのファーム6,970BとBT入りのWi-Fiファームの増分7,168B、ペアリングの置き場8KB、残りがBTstackの本体。
 - **BTstackはコンパイル済みの `liblwip-bt.a` に入っている**ので、`btstack_config.h` を変えても効かない。
   クラシックBluetooth・AVRCP・デバッグログは、コアのライブラリを作り直さない限り削れない。
-- A2DPを入れるならLittleFSを1728k→約1664kへ縮める(USBで書き直す)。その後のファームの上限は約2.43MBで、
+- LittleFSは2026-10-31に1728k→1664kへ縮めた済み(ファームが上限を超えたため。A2DPを入れるなら、さらに縮める必要がある)。上限は約2.36MBで、
   更新ファイル(gzip、今の圧縮率67%なら約1.59MB)も収まるが、ほかの機能に残る余裕は約50KBになる。
 
 **安定性の論点**(上流のissue earlephilhower/arduino-pico#1837 と、ライブラリのコードを読んでの判断。実機では未確認)

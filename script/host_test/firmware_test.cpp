@@ -26,7 +26,7 @@ using Bytes = std::vector<uint8_t>;
 // 偽物
 // ---------------------------------------------------------------------------
 struct MemStore : public FwStore {
-    uint32_t fs_start = 0x1024F000u, fs_end = 0x103FF000u;
+    uint32_t fs_start = 0x1025F000u, fs_end = 0x103FF000u;
     uint32_t cap = 1500000;
     bool mount_ok = true;
     bool mounted = false;
@@ -113,7 +113,7 @@ struct Spec {
     uint32_t image_bytes = 0x40000;
     uint32_t isize = 0;           // gzipの末尾に書く大きさ(0ならimage_bytes)
     uint32_t flash_base = FwImage::kFlashBase;
-    uint32_t fs_start = 0x1024F000u, fs_end = 0x103FF000u;
+    uint32_t fs_start = 0x1025F000u, fs_end = 0x103FF000u;
     size_t payload_len = 20000;
     bool gzip_magic = true;
     bool sign = true;             // 署名する(flagsとは別。印だけ立てて署名しない、を作れる)
@@ -227,7 +227,7 @@ int main(int argc, char** argv){
         FwImage::Header h;
         check(FwImage::Parse(file.data(), file.size(), h) == FwImage::Error::None, "python: 見出しを読める");
         check(strcmp(h.board, "rpipico2w") == 0 && h.serial == 4321 && strcmp(h.git, "beef123+") == 0, "python: 基板・版・git");
-        check(h.fs_start == 0x1024F000u && h.fs_end == 0x103FF000u, "python: LittleFSの範囲を firmware.bin から読んでいる");
+        check(h.fs_start == 0x1025F000u && h.fs_end == 0x103FF000u, "python: LittleFSの範囲を firmware.bin から読んでいる");
         check(FwImage::VerifySignature(file.data(), file.data() + 128, key, 1) == FwImage::Sig::Trusted, "python: Ed25519の署名をMonocypherで確かめられる");
 
         Case t(file);
@@ -435,7 +435,7 @@ int main(int argc, char** argv){
     };
     { Spec s; s.board = "rpipico2";            expectFail("別の基板", s, "別の基板"); }
     { Spec s; s.fs_start = 0x10250000u;        expectFail("LittleFSの範囲が違う", s, "USB"); }
-    { Spec s; s.image_bytes = 0x1024F000u - 0x10000000u + 1; expectFail("イメージがLittleFSへはみ出す", s, "大きさ"); }
+    { Spec s; s.image_bytes = 0x1025F000u - 0x10000000u + 1; expectFail("イメージがLittleFSへはみ出す", s, "大きさ"); }
     { Spec s; s.image_bytes = 0x3000;          expectFail("イメージが小さすぎる", s, "大きさ"); }
     { Spec s; s.payload_len = 17;              expectFail("gzipとして短すぎる", s, "大きさ"); }
     { Spec s; s.payload_len = 5000;            expectFail("置き場に入らない", s, "入りません", 4999); }

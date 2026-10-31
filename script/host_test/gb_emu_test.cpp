@@ -477,7 +477,7 @@ class FakeFlash : public FlashArea {
     public:
         explicit FakeFlash(uint32_t sz) : mem(sz, 0xFF) {}
         uint32_t size() const override { return (uint32_t)mem.size(); }
-        uint32_t baseAddress() const override { return 0x1024F000u; } // 実機と同じく先頭は64KBに揃っていない
+        uint32_t baseAddress() const override { return 0x1025F000u; } // 実機と同じく先頭は64KBに揃っていない
         const uint8_t* data() const override { return mem.data(); }
         bool erase(uint32_t off, uint32_t len) override {
             if(off % kSectorBytes || len % kSectorBytes || off + len > mem.size()) { bad++; return false; }
@@ -514,8 +514,8 @@ static void RunFlash(GbRomFlash& job){
 
 static void testRomFlash(){
     OSData::SD_usable = true;
-    FakeFlash flash(1728u * 1024u);
-    eq_int(GbRomFlash::Capacity(&flash), 1724L * 1024, "置けるのは領域-4KB");
+    FakeFlash flash(1664u * 1024u);
+    eq_int(GbRomFlash::Capacity(&flash), 1660L * 1024, "置けるのは領域-4KB");
     eq_int(GbRomFlash::Capacity(nullptr), 0, "領域が無ければ0");
 
     // 1MiBのMBC1。各バンクの頭にバンク番号を書いておく
@@ -610,7 +610,7 @@ static void testRomFlash(){
     {
         GbRomFlash job(&flash);
         check(job.begin("/gb/huge.gb") == GbRomFlash::State::Failed, "2MiBは置けない");
-        check(strstr(job.message(), "1724KB") != nullptr, "置ける大きさを知らせる");
+        check(strstr(job.message(), "1660KB") != nullptr, "置ける大きさを知らせる");
     }
     {
         GbRomFlash job(&flash);

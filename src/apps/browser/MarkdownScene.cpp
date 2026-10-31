@@ -64,17 +64,18 @@ void MarkdownScene::onEnter(){
         WidgetFunctions::Add(b);
     };
 
-    //「<」「>」はHomeSceneのページ送りと同じ流儀(Buttonはアイコンを持てないため、
-    // フォントに確実に含まれるASCIIで済ませている)
     this->back_button = new Button(0, header_y, "<");
+    this->back_button->setIcon(IconID::ArrowLeft, IconSize::Px16);
     this->back_button->setOnPressEnd([this](){ this->goBack(); });
     placeButton(this->back_button, NAV_BUTTON_W);
 
     this->forward_button = new Button(0, header_y, ">");
+    this->forward_button->setIcon(IconID::ArrowRight, IconSize::Px16);
     this->forward_button->setOnPressEnd([this](){ this->goForward(); });
     placeButton(this->forward_button, NAV_BUTTON_W);
 
     this->home_button = new Button(0, header_y, "ホーム");
+    this->home_button->setIcon(IconID::Home, IconSize::Px16);
     this->home_button->setOnPressEnd([this](){ this->goHome(); });
     placeButton(this->home_button, 0);
 
@@ -90,6 +91,7 @@ void MarkdownScene::onEnter(){
 
     //「終了」だけは右端に寄せる(並びの端で、他と用途が違うため)
     this->exit_button = new Button(0, header_y, "終了");
+    this->exit_button->setIcon(IconID::X, IconSize::Px16);
     this->exit_button->setFontSize(FontFn::Small);
     this->exit_button->setAllowTextSpacing(false);
     this->exit_button->setH(BUTTON_H + Button::kFrameExtraTight);

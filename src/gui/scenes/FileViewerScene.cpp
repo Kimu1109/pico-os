@@ -149,6 +149,7 @@ void FileViewerScene::onEnter(){
     int status_right = content.x + content.w - MARGIN;
     if(editable){
         this->edit_button = new Button(0, content.y + MARGIN, "編集");
+        this->edit_button->setIcon(IconID::Pencil, IconSize::Px16);
         this->edit_button->setFontSize(FontFn::Small);
         this->edit_button->setH(20 + Button::kFrameExtra);
         this->edit_button->setX(content.x + content.w - MARGIN - this->edit_button->getLocalRect().w);
@@ -161,6 +162,7 @@ void FileViewerScene::onEnter(){
     //.txt は「読む」で読書アプリ(ページ送り・しおり・続きから。青空文庫の Shift_JIS も読める)
     if(PICO_APP_READER && OSData::SD_usable && HasExtension(p, ".txt")){
         this->read_button = new Button(0, content.y + MARGIN, "読む");
+        this->read_button->setIcon(IconID::Book, IconSize::Px16);
         this->read_button->setFontSize(FontFn::Small);
         this->read_button->setH(20 + Button::kFrameExtra);
         this->read_button->setX(status_right - this->read_button->getLocalRect().w);

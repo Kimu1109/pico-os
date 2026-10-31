@@ -148,6 +148,7 @@ void SettingsScene::refreshBatteryLabel(){
 
 Button* SettingsScene::makeEditButton(int16_t y){
     Button* b = new Button("編集");
+    b->setIcon(IconID::Pencil, IconSize::Px16);
     b->setFontSize(FontFn::Small);
     b->setAllowTextSpacing(false);
     b->setW(EDIT_BTN_W + Button::kFrameExtraTight);
@@ -288,6 +289,7 @@ void SettingsScene::onEnter(){
 
     //右端の「電源」(スリープ/再起動。ステータスバーの長押しと同じメニュー)
     this->power_button = new Button(0, content.y + MARGIN, "電源");
+    this->power_button->setIcon(IconID::Power, IconSize::Px16);
     this->power_button->setFontSize(FontFn::Small);
     this->power_button->setH(20 + Button::kFrameExtra);
     this->power_button->setX((int16_t)(content.x + content.w - MARGIN - this->power_button->getLocalRect().w));

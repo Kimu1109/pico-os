@@ -219,6 +219,7 @@ void FileSearchScene::onEnter(){
     WidgetFunctions::Add(this->back_button);
 
     this->again_button = new Button(0, top, "再検索");
+    this->again_button->setIcon(IconID::Search, IconSize::Px16);
     this->again_button->setFontSize(FontFn::Small);
     this->again_button->setH(20 + Button::kFrameExtra);
     this->again_button->setX(content.x + content.w - MARGIN - this->again_button->getLocalRect().w);

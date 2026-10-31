@@ -93,7 +93,8 @@ static void configureOtaDir()
 }
 
 //表示言語。PICOOS_LANG(ネイティブは --lang、Webは ?lang=)は /sys/user.cfg より優先する(保存はしない)。
-//Webでは指定が無ければブラウザの言語を、user.cfg に language が無いときの既定にする
+//Webでは指定が無ければ、Webのページ(pc/web/*.html)で選んだ言語(localStorage "picoos-lang")、
+//それも無ければブラウザの言語を、user.cfg に language が無いときの既定にする
 //(海外から触る人には英語で見せる。ja 以外の言語は英語)。setup() より前に呼ぶ
 static void configureLanguage()
 {
@@ -102,7 +103,11 @@ static void configureLanguage()
     }
 #if defined(__EMSCRIPTEN__)
     static char browser_lang[16];
-    EM_ASM({ stringToUTF8((navigator.language || ""), $0, $1); }, browser_lang, (int)sizeof(browser_lang));
+    EM_ASM({
+        var v = "";
+        try { v = localStorage.getItem("picoos-lang") || ""; } catch (e) {}
+        stringToUTF8(v || navigator.language || "", $0, $1);
+    }, browser_lang, (int)sizeof(browser_lang));
     if (browser_lang[0]) I18nFunctions::default_code = browser_lang;
 #endif
 }

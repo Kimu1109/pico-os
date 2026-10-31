@@ -18,8 +18,81 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pico-os</title>
-<meta name="description" content="Raspberry Pi Pico 2 W(RP2350)で動く自作のタッチGUI OS。ブラウザでそのまま試せます。">
+<meta name="description" data-i18n-attr="content=meta.desc" content="Raspberry Pi Pico 2 W(RP2350)で動く自作のタッチGUI OS。ブラウザでそのまま試せます。">
 <meta name="color-scheme" content="light dark">
+<script>
+  // ---- 表示言語(日本語/英語)。landing / download / shell / store の4ページで同じ中身。直したら合わせる ----
+  // 決め方: URLの ?lang=ja|en > このブラウザで選んだ言語(localStorage "picoos-lang"。4ページとWeb版のOSで共通) >
+  // ブラウザの言語(ja 以外は英語。Web版のOSの既定と同じ考え方)。?lang= で来たときも覚える(ページを移っても同じ言語)。
+  // 訳す要素には data-i18n="鍵"(中身を差し替える。訳は固定の文字列だけなのでHTMLのまま入れる)、
+  // 属性は data-i18n-attr="属性=鍵;属性=鍵"。日本語はHTMLに書いたものをそのまま使い、訳の表は英語だけ持つ。
+  // JSで作る文は I18n.t("日本語", "English")
+  var I18n = (function () {
+    var KEY = "picoos-lang";
+    function norm(v) { v = String(v || "").toLowerCase(); return v === "ja" || v === "en" ? v : null; }
+    function save(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+    var lang = null;
+    try { lang = norm(new URLSearchParams(location.search).get("lang")); } catch (e) {}
+    if (lang) save(lang);
+    if (!lang) { try { lang = norm(localStorage.getItem(KEY)); } catch (e) {} }
+    if (!lang) lang = /^ja/i.test(navigator.language || "") ? "ja" : "en";
+    document.documentElement.lang = lang;
+    var en = {}, orig = new Map(), hooks = [];
+    function pick(node, slot, key, cur) {
+      var m = orig.get(node);
+      if (!m) { m = {}; orig.set(node, m); }
+      if (!(slot in m)) m[slot] = cur;
+      return lang === "en" && key in en ? en[key] : m[slot];
+    }
+    function apply() {
+      document.documentElement.lang = lang;
+      document.querySelectorAll("[data-i18n]").forEach(function (n) {
+        var v = pick(n, "", n.dataset.i18n, n.innerHTML);
+        if (n.innerHTML !== v) n.innerHTML = v;
+      });
+      document.querySelectorAll("[data-i18n-attr]").forEach(function (n) {
+        n.dataset.i18nAttr.split(";").forEach(function (pair) {
+          var kv = pair.split("=");
+          if (kv.length === 2) n.setAttribute(kv[0], pick(n, "@" + kv[0], kv[1], n.getAttribute(kv[0]) || ""));
+        });
+      });
+      var b = document.getElementById("langBtn");
+      if (b) {
+        b.textContent = lang === "ja" ? "EN" : "JA";
+        b.title = lang === "ja" ? "English" : "日本語";
+        b.setAttribute("aria-label", lang === "ja" ? "Switch to English" : "日本語に切り替える");
+      }
+      hooks.forEach(function (fn) { fn(lang); });
+    }
+    return {
+      get lang() { return lang; },
+      t: function (ja, enText) { return lang === "en" ? enText : ja; },
+      // 訳の表を渡して当てる。言語の切り替えボタン(id="langBtn")があればつなぐ。onToggle を渡すとボタンの動きを差し替える
+      init: function (dict, onToggle) {
+        en = dict || {};
+        var b = document.getElementById("langBtn");
+        if (b) b.addEventListener("click", function () {
+          var next = lang === "ja" ? "en" : "ja";
+          if (onToggle) { save(next); onToggle(next); } else I18n.set(next);
+        });
+        apply();
+      },
+      set: function (v) {
+        v = norm(v);
+        if (!v) return;
+        lang = v;
+        save(v);
+        // URLに ?lang= が残っていると、読み込み直したときに戻ってしまうので消す
+        try {
+          var u = new URL(location.href);
+          if (u.searchParams.has("lang")) { u.searchParams.delete("lang"); history.replaceState(null, "", u); }
+        } catch (e) {}
+        apply();
+      },
+      onChange: function (fn) { hooks.push(fn); }
+    };
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -107,6 +180,7 @@
     background: var(--bg); color: var(--fg); border: 2px solid var(--line); cursor: pointer;
   }
   .theme-btn svg.i { width: 18px; height: 18px; }
+  .lang-btn { width: auto; min-width: 32px; padding: 0 6px; font: 9px "Press Start 2P", monospace; }
   @media (max-width: 720px) {
     .sb-nav a.opt { display: none; }
   }
@@ -361,14 +435,15 @@
       <svg class="i ok opt"><use href="#i-wifi"/></svg>
       <svg class="i opt"><use href="#i-battery-4"/></svg>
     </span>
-    <nav class="sb-nav px" aria-label="ページ内の移動">
+    <nav class="sb-nav px" aria-label="ページ内の移動" data-i18n-attr="aria-label=nav">
       <a class="opt" href="#screens">SCREENS</a>
       <a class="opt" href="#apps">APPS</a>
       <a class="opt" href="#lua">LUA</a>
       <a class="opt" href="https://kimu1109.github.io/pico-os-apps/">STORE</a>
       <a class="opt" href="download/">DOWNLOAD</a>
       <a class="on" href="playground/">PLAY</a>
-      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える">
+      <button class="theme-btn lang-btn" id="langBtn" type="button">EN</button>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える" data-i18n-attr="aria-label=theme.aria;title=theme.title">
         <svg class="i"><use href="#i-sun"/></svg>
       </button>
     </nav>
@@ -381,12 +456,12 @@
       <div>
         <p class="kicker px"><span>RP2350</span><span>240x320</span><span>TOUCH</span><span>LUA 5.4</span></p>
         <h1 class="title">PICO<br>-OS<span class="cur">_</span></h1>
-        <p class="lead">Raspberry Pi Pico 2 W で動く、<span class="nb">自作のタッチGUI OS。</span></p>
-        <p class="lead-sub">240×320のちいさな画面に、ホーム画面と20あまりのアプリ、Luaで書けるアプリ、ゲームボーイまで。
+        <p class="lead" data-i18n="lead">Raspberry Pi Pico 2 W で動く、<span class="nb">自作のタッチGUI OS。</span></p>
+        <p class="lead-sub" data-i18n="lead.sub">240×320のちいさな画面に、ホーム画面と20あまりのアプリ、Luaで書けるアプリ、ゲームボーイまで。
           ウィジェットも合成も描画も、すべてマイコンの上で自前で動いています。
           実機とおなじコードをWebAssemblyにして、ブラウザでもそのまま動かせます。</p>
         <div class="cta">
-          <a class="btn primary" href="playground/">▶ PLAY <small>ブラウザで動かす</small></a>
+          <a class="btn primary" href="playground/">▶ PLAY <small data-i18n="play.small">ブラウザで動かす</small></a>
           <a class="btn" href="download/">DOWNLOAD</a>
           <a class="btn" href="lua-api/">LUA API</a>
           <a class="btn" href="https://kimu1109.github.io/pico-os-apps/">APP STORE</a>
@@ -394,7 +469,7 @@
         </div>
       </div>
       <div class="device">
-        <div class="screen"><img src="shots/home.png" alt="pico-osのホーム画面。アプリのアイコンが2列に並んでいる" width="480" height="640"></div>
+        <div class="screen"><img src="shots/home.png" alt="pico-osのホーム画面。アプリのアイコンが2列に並んでいる" data-i18n-attr="alt=alt.home" width="480" height="640"></div>
         <div class="label px"><span><i class="led"></i>PICO 2 W</span><span>HOME 1/7</span></div>
       </div>
     </div>
@@ -406,32 +481,32 @@
         <div class="win-head">
           <span class="no px">01</span>
           <h2>SCREENS</h2>
-          <span class="jp">画面</span>
+          <span class="jp" data-i18n="h.screens">画面</span>
           <span class="tail px">PC BUILD --SHOT</span>
         </div>
         <div class="win-body">
           <div class="gallery" id="gallery">
-            <figure><div class="screen small"><img src="shots/clock.png" alt="時計の画面" width="240" height="320" loading="lazy"></div>
-              <figcaption><b>CLOCK</b><span>時計・タイマー・アラーム</span></figcaption></figure>
-            <figure><div class="screen small"><img src="shots/calc.png" alt="関数電卓の画面" width="240" height="320" loading="lazy"></div>
-              <figcaption><b>CALC</b><span>関数電卓・グラフ・単位変換</span></figcaption></figure>
-            <figure><div class="screen small"><img src="shots/markdown.png" alt="Markdownブラウザの画面" width="240" height="320" loading="lazy"></div>
-              <figcaption><b>MARKDOWN</b><span>Markdownブラウザ</span></figcaption></figure>
-            <figure><div class="screen small"><img src="shots/tetris.png" alt="Luaで書かれたテトリスの画面" width="240" height="320" loading="lazy"></div>
-              <figcaption><b>TETRIS</b><span>Luaアプリ(pico.game)</span></figcaption></figure>
-            <figure><div class="screen small"><img src="shots/blocks.png" alt="2.5Dのブロックの世界" width="240" height="320" loading="lazy"></div>
-              <figcaption><b>BLOCKS</b><span>2.5Dエンジン pico.iso</span></figcaption></figure>
-            <figure><div class="screen small"><img src="shots/zombie.png" alt="ゾンビTDの画面" width="240" height="320" loading="lazy"></div>
-              <figcaption><b>ZOMBIE TD</b><span>タワーディフェンス</span></figcaption></figure>
-            <figure><div class="screen small"><img src="shots/music.png" alt="ミュージックの画面" width="240" height="320" loading="lazy"></div>
-              <figcaption><b>MUSIC</b><span>チップチューンとWAV</span></figcaption></figure>
-            <figure><div class="screen small"><img src="shots/apps.png" alt="ホーム画面の5ページ目" width="240" height="320" loading="lazy"></div>
-              <figcaption><b>HOME 5/7</b><span>SDに置いたLuaアプリも並ぶ</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/clock.png" alt="時計の画面" data-i18n-attr="alt=alt.clock" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>CLOCK</b><span data-i18n="cap.clock">時計・タイマー・アラーム</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/calc.png" alt="関数電卓の画面" data-i18n-attr="alt=alt.calc" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>CALC</b><span data-i18n="cap.calc">関数電卓・グラフ・単位変換</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/markdown.png" alt="Markdownブラウザの画面" data-i18n-attr="alt=alt.markdown" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>MARKDOWN</b><span data-i18n="cap.markdown">Markdownブラウザ</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/tetris.png" alt="Luaで書かれたテトリスの画面" data-i18n-attr="alt=alt.tetris" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>TETRIS</b><span data-i18n="cap.tetris">Luaアプリ(pico.game)</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/blocks.png" alt="2.5Dのブロックの世界" data-i18n-attr="alt=alt.blocks" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>BLOCKS</b><span data-i18n="cap.blocks">2.5Dエンジン pico.iso</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/zombie.png" alt="ゾンビTDの画面" data-i18n-attr="alt=alt.zombie" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>ZOMBIE TD</b><span data-i18n="cap.zombie">タワーディフェンス</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/music.png" alt="ミュージックの画面" data-i18n-attr="alt=alt.music" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>MUSIC</b><span data-i18n="cap.music">チップチューンとWAV</span></figcaption></figure>
+            <figure><div class="screen small"><img src="shots/apps.png" alt="ホーム画面の5ページ目" data-i18n-attr="alt=alt.apps" width="240" height="320" loading="lazy"></div>
+              <figcaption><b>HOME 5/7</b><span data-i18n="cap.apps">SDに置いたLuaアプリも並ぶ</span></figcaption></figure>
           </div>
           <div class="pager">
-            <button type="button" id="prevBtn" aria-label="前へ">&lt;</button>
+            <button type="button" id="prevBtn" aria-label="前へ" data-i18n-attr="aria-label=prev">&lt;</button>
             <span class="count" id="pageCount">1/8</span>
-            <button type="button" id="nextBtn" aria-label="次へ">&gt;</button>
+            <button type="button" id="nextBtn" aria-label="次へ" data-i18n-attr="aria-label=next">&gt;</button>
           </div>
         </div>
       </div>
@@ -444,31 +519,31 @@
         <div class="win-head">
           <span class="no px">02</span>
           <h2>APPS</h2>
-          <span class="jp">アプリ</span>
+          <span class="jp" data-i18n="h.apps">アプリ</span>
           <span class="tail px">C++ / LUA</span>
         </div>
         <div class="win-body">
           <div class="apps">
-            <div class="app"><svg class="i"><use href="#i-browser"/></svg><span class="name">Markdown</span><span class="desc">HTTP/HTTPSで文書を取って表示</span></div>
-            <div class="app"><svg class="i"><use href="#i-clock"/></svg><span class="name">時計</span><span class="desc">デジタル・アナログ・アラーム</span></div>
-            <div class="app"><svg class="i"><use href="#i-calculator"/></svg><span class="name">電卓</span><span class="desc">関数・グラフ・進数・履歴</span></div>
-            <div class="app"><svg class="i"><use href="#i-folder"/></svg><span class="name">ファイル</span><span class="desc">SDカードの中身を見る・動かす</span></div>
-            <div class="app"><svg class="i"><use href="#i-pencil"/></svg><span class="name">テキスト</span><span class="desc">かな漢字変換つきエディタ</span></div>
-            <div class="app"><svg class="i"><use href="#i-edit"/></svg><span class="name">メモ</span><span class="desc">#タグ・全文検索</span></div>
-            <div class="app"><svg class="i"><use href="#i-language-hiragana"/></svg><span class="name">辞書</span><span class="desc">英和・和英</span></div>
-            <div class="app"><svg class="i"><use href="#i-book"/></svg><span class="name">読書</span><span class="desc">青空文庫をしおりつきで</span></div>
-            <div class="app"><svg class="i"><use href="#i-device-gamepad"/></svg><span class="name">ゲームボーイ</span><span class="desc">音と途中保存つきのエミュ</span></div>
-            <div class="app"><svg class="i"><use href="#i-music"/></svg><span class="name">ミュージック</span><span class="desc">MMLのチップチューン・WAV</span></div>
-            <div class="app"><svg class="i"><use href="#i-movie"/></svg><span class="name">動画</span><span class="desc">独自形式 .pvid の再生</span></div>
-            <div class="app"><svg class="i"><use href="#i-microphone"/></svg><span class="name">録音</span><span class="desc">I2SマイクでWAVに</span></div>
-            <div class="app"><svg class="i"><use href="#i-calendar"/></svg><span class="name">カレンダー</span><span class="desc">iCalendarを読む</span></div>
-            <div class="app"><svg class="i"><use href="#i-messages"/></svg><span class="name">チャット</span><span class="desc">自前のチャットサーバへ</span></div>
-            <div class="app"><svg class="i"><use href="#i-checkbox"/></svg><span class="name">TODO</span><span class="desc">Todoistと同期</span></div>
-            <div class="app"><svg class="i"><use href="#i-mail"/></svg><span class="name">メール</span><span class="desc">IMAPで受信(Outlook.comも)</span></div>
-            <div class="app"><svg class="i"><use href="#i-terminal-2"/></svg><span class="name">SSH</span><span class="desc">マイコンからサーバへ</span></div>
-            <div class="app"><svg class="i"><use href="#i-apps"/></svg><span class="name">ストア</span><span class="desc">作者の署名つきのLuaアプリ配布</span></div>
+            <div class="app"><svg class="i"><use href="#i-browser"/></svg><span class="name" data-i18n="app0">Markdown</span><span class="desc" data-i18n="app0.d">HTTP/HTTPSで文書を取って表示</span></div>
+            <div class="app"><svg class="i"><use href="#i-clock"/></svg><span class="name" data-i18n="app1">時計</span><span class="desc" data-i18n="app1.d">デジタル・アナログ・アラーム</span></div>
+            <div class="app"><svg class="i"><use href="#i-calculator"/></svg><span class="name" data-i18n="app2">電卓</span><span class="desc" data-i18n="app2.d">関数・グラフ・進数・履歴</span></div>
+            <div class="app"><svg class="i"><use href="#i-folder"/></svg><span class="name" data-i18n="app3">ファイル</span><span class="desc" data-i18n="app3.d">SDカードの中身を見る・動かす</span></div>
+            <div class="app"><svg class="i"><use href="#i-pencil"/></svg><span class="name" data-i18n="app4">テキスト</span><span class="desc" data-i18n="app4.d">かな漢字変換つきエディタ</span></div>
+            <div class="app"><svg class="i"><use href="#i-edit"/></svg><span class="name" data-i18n="app5">メモ</span><span class="desc" data-i18n="app5.d">#タグ・全文検索</span></div>
+            <div class="app"><svg class="i"><use href="#i-language-hiragana"/></svg><span class="name" data-i18n="app6">辞書</span><span class="desc" data-i18n="app6.d">英和・和英</span></div>
+            <div class="app"><svg class="i"><use href="#i-book"/></svg><span class="name" data-i18n="app7">読書</span><span class="desc" data-i18n="app7.d">青空文庫をしおりつきで</span></div>
+            <div class="app"><svg class="i"><use href="#i-device-gamepad"/></svg><span class="name" data-i18n="app8">ゲームボーイ</span><span class="desc" data-i18n="app8.d">音と途中保存つきのエミュ</span></div>
+            <div class="app"><svg class="i"><use href="#i-music"/></svg><span class="name" data-i18n="app9">ミュージック</span><span class="desc" data-i18n="app9.d">MMLのチップチューン・WAV</span></div>
+            <div class="app"><svg class="i"><use href="#i-movie"/></svg><span class="name" data-i18n="app10">動画</span><span class="desc" data-i18n="app10.d">独自形式 .pvid の再生</span></div>
+            <div class="app"><svg class="i"><use href="#i-microphone"/></svg><span class="name" data-i18n="app11">録音</span><span class="desc" data-i18n="app11.d">I2SマイクでWAVに</span></div>
+            <div class="app"><svg class="i"><use href="#i-calendar"/></svg><span class="name" data-i18n="app12">カレンダー</span><span class="desc" data-i18n="app12.d">iCalendarを読む</span></div>
+            <div class="app"><svg class="i"><use href="#i-messages"/></svg><span class="name" data-i18n="app13">チャット</span><span class="desc" data-i18n="app13.d">自前のチャットサーバへ</span></div>
+            <div class="app"><svg class="i"><use href="#i-checkbox"/></svg><span class="name" data-i18n="app14">TODO</span><span class="desc" data-i18n="app14.d">Todoistと同期</span></div>
+            <div class="app"><svg class="i"><use href="#i-mail"/></svg><span class="name" data-i18n="app15">メール</span><span class="desc" data-i18n="app15.d">IMAPで受信(Outlook.comも)</span></div>
+            <div class="app"><svg class="i"><use href="#i-terminal-2"/></svg><span class="name" data-i18n="app16">SSH</span><span class="desc" data-i18n="app16.d">マイコンからサーバへ</span></div>
+            <div class="app"><svg class="i"><use href="#i-apps"/></svg><span class="name" data-i18n="app17">ストア</span><span class="desc" data-i18n="app17.d">作者の署名つきのLuaアプリ配布</span></div>
           </div>
-          <p class="apps-note">ほかに、テトリス・マインスイーパー・リバーシ・ブロック崩し・ペイント・天気・ニュース・QRコード・Spotifyリモコンなどの
+          <p class="apps-note" data-i18n="apps.note">ほかに、テトリス・マインスイーパー・リバーシ・ブロック崩し・ペイント・天気・ニュース・QRコード・Spotifyリモコンなどの
             Luaアプリ。ホーム画面はフォルダでまとめられ、使わない内蔵アプリはビルド時に外せます。</p>
         </div>
       </div>
@@ -481,34 +556,34 @@
         <div class="win-head">
           <span class="no px">03</span>
           <h2>INSIDE</h2>
-          <span class="jp">しくみ</span>
+          <span class="jp" data-i18n="h.inside">しくみ</span>
           <span class="tail px">520KB SRAM</span>
         </div>
         <div class="win-body">
           <div class="feats">
             <div class="feat">
               <h3><i class="sw" style="background:var(--c9)"></i>WIDGETS</h3>
-              <p>ウィジェット・シーン・ダイアログ・キーボード3種まで、GUIフレームワークを自前で実装。書き換わった所だけを合成して液晶へ送ります。</p>
+              <p data-i18n="feat.widgets">ウィジェット・シーン・ダイアログ・キーボード3種まで、GUIフレームワークを自前で実装。書き換わった所だけを合成して液晶へ送ります。</p>
             </div>
             <div class="feat">
               <h3><i class="sw" style="background:var(--c12)"></i>NO HEAP STRINGS</h3>
-              <p>文字列はヒープを使わない固定長。部品はオブジェクトプールで使い回し、小さなRAMで断片化を起こさない作りに。</p>
+              <p data-i18n="feat.heap">文字列はヒープを使わない固定長。部品はオブジェクトプールで使い回し、小さなRAMで断片化を起こさない作りに。</p>
             </div>
             <div class="feat">
               <h3><i class="sw" style="background:var(--c10)"></i>DUAL CORE</h3>
-              <p>1コア目が画面と入力、2コア目は音声だけを担当。チップチューン・ゲームボーイの音・マイク録音をI2Sで。イヤホンを差すとスピーカーから自動で切り替わります。</p>
+              <p data-i18n="feat.core">1コア目が画面と入力、2コア目は音声だけを担当。チップチューン・ゲームボーイの音・マイク録音をI2Sで。イヤホンを差すとスピーカーから自動で切り替わります。</p>
             </div>
             <div class="feat">
               <h3><i class="sw" style="background:var(--c14)"></i>JAPANESE</h3>
-              <p>日本語の表示とかな漢字変換を内蔵。オンスクリーンキーボードのほか、CardKB2などの物理キーボードもつながります。</p>
+              <p data-i18n="feat.jp">日本語の表示とかな漢字変換を内蔵。オンスクリーンキーボードのほか、CardKB2などの物理キーボードもつながります。表示は英語にも切り替えられます。</p>
             </div>
             <div class="feat">
               <h3><i class="sw" style="background:var(--c13)"></i>NETWORK</h3>
-              <p>Wi-Fi・HTTPS・SSH・IMAP。Wi-Fiの設定はスマホからも送れ、<code>picoos.local</code> の名前で見つかります。認証情報は端末ごとの鍵で暗号化して保存。ファームウェアの更新もSDやWi-Fiから。</p>
+              <p data-i18n="feat.net">Wi-Fi・HTTPS・SSH・IMAP。Wi-Fiの設定はスマホからも送れ、<code>picoos.local</code> の名前で見つかります。認証情報は端末ごとの鍵で暗号化して保存。ファームウェアの更新もSDやWi-Fiから。</p>
             </div>
             <div class="feat">
               <h3><i class="sw" style="background:var(--c11)"></i>SAME CODE</h3>
-              <p>実機とおなじソースを、PC(SDL)とブラウザ(WebAssembly)でも動かせます。差し替えるのはハードの窓口だけ。画面の大きさや載せる部品もビルド時に選べます。</p>
+              <p data-i18n="feat.same">実機とおなじソースを、PC(SDL)とブラウザ(WebAssembly)でも動かせます。差し替えるのはハードの窓口だけ。画面の大きさや載せる部品もビルド時に選べます。</p>
             </div>
           </div>
         </div>
@@ -522,35 +597,35 @@
         <div class="win-head">
           <span class="no px">04</span>
           <h2>LUA</h2>
-          <span class="jp">Luaでアプリを作る</span>
+          <span class="jp" data-i18n="h.lua">Luaでアプリを作る</span>
           <span class="tail px">PICO.*</span>
         </div>
         <div class="win-body">
           <div class="lua">
             <div>
               <ul>
-                <li>SDカードの <code>/lua/apps/&lt;名前&gt;/main.lua</code> に置くだけで、ホーム画面にアプリが増えます。</li>
-                <li><code>pico.*</code> でウィジェット・描画・タッチ・音・SD・ネットワークを扱えます。</li>
-                <li>ゲーム用の <code>pico.game</code>、2.5Dエンジン <code>pico.iso</code> も。</li>
-                <li>暴走しても止まる実行時間の上限と、アプリごとの権限つき。</li>
-                <li>PCビルドでは保存するたびに読み直すホットリロードと、テストランナーで手早く試せます。</li>
+                <li data-i18n="lua.li0">SDカードの <code>/lua/apps/&lt;名前&gt;/main.lua</code> に置くだけで、ホーム画面にアプリが増えます。</li>
+                <li data-i18n="lua.li1"><code>pico.*</code> でウィジェット・描画・タッチ・音・SD・ネットワークを扱えます。</li>
+                <li data-i18n="lua.li2">ゲーム用の <code>pico.game</code>、2.5Dエンジン <code>pico.iso</code> も。</li>
+                <li data-i18n="lua.li3">暴走しても止まる実行時間の上限と、アプリごとの権限つき。</li>
+                <li data-i18n="lua.li4">PCビルドでは保存するたびに読み直すホットリロードと、テストランナーで手早く試せます。</li>
               </ul>
-              <a class="btn" href="lua-api/">LUA API <small>リファレンスを読む</small></a>
+              <a class="btn" href="lua-api/">LUA API <small data-i18n="lua.btn">リファレンスを読む</small></a>
             </div>
             <div class="term">
-              <div class="term-head"><span>/lua/apps/はじめて/main.lua</span><span class="px">LUA</span></div>
-<pre><span class="cm">-- 画面を開いたときに1回だけ実行される</span>
+              <div class="term-head"><span data-i18n="lua.path">/lua/apps/はじめて/main.lua</span><span class="px">LUA</span></div>
+<pre><span class="cm" data-i18n="lua.cm1">-- 画面を開いたときに1回だけ実行される</span>
 <span class="kw">local</span> label = pico.<span class="fn">create</span>(<span class="st">"Label"</span>)
 pico.<span class="fn">set</span>(label, <span class="st">"text"</span>, <span class="st">"Hello, pico-os!"</span>)
 
 <span class="kw">local</span> back = pico.<span class="fn">create</span>(<span class="st">"Button"</span>)
-pico.<span class="fn">set</span>(back, <span class="st">"text"</span>, <span class="st">"戻る"</span>)
+pico.<span class="fn">set</span>(back, <span class="st">"text"</span>, <span class="st" data-i18n="lua.back">"戻る"</span>)
 pico.<span class="fn">on</span>(back, <span class="st">"press_start"</span>, <span class="kw">function</span>()
     pico.<span class="fn">pop</span>()
 <span class="kw">end</span>)
 
 <span class="kw">function</span> <span class="fn">loop</span>(dt)
-    <span class="cm">-- 毎フレーム。dtはミリ秒</span>
+    <span class="cm" data-i18n="lua.cm2">-- 毎フレーム。dtはミリ秒</span>
 <span class="kw">end</span></pre>
             </div>
           </div>
@@ -565,23 +640,23 @@ pico.<span class="fn">on</span>(back, <span class="st">"press_start"</span>, <sp
         <div class="win-head">
           <span class="no px">05</span>
           <h2>SPEC</h2>
-          <span class="jp">ハードウェア</span>
+          <span class="jp" data-i18n="h.spec">ハードウェア</span>
           <span class="tail px">RPIPICO2W</span>
         </div>
         <div class="win-body">
           <div class="spec-grid">
             <table class="spec">
-              <tr><th>本体</th><td>Raspberry Pi Pico 2 W(RP2350・Wi-Fi)</td></tr>
-              <tr><th>画面</th><td>240×320 TFT 液晶(SPI 75MHz)・バックライトはPWMで調光。320×480など大きさと液晶の種類はビルド時に選べる</td></tr>
-              <tr><th>タッチ</th><td>XPT2046(抵抗膜)</td></tr>
-              <tr><th>ストレージ</th><td>microSDカード(専用のSPI)</td></tr>
-              <tr><th>音声</th><td>MAX98357A(I2Sアンプ)・PCM5102A(イヤホン、任意)・SPH0645(I2Sマイク)。音声・マイク・電池は外したビルドも作れる</td></tr>
-              <tr><th>入力</th><td>Wiiクラシックコントローラー・CardKB2(I2C)・USBシリアル</td></tr>
-              <tr><th>開発</th><td>PlatformIO + Arduino(C++)・LovyanGFX・Lua 5.4.7</td></tr>
+              <tr><th data-i18n="spec.board">本体</th><td data-i18n="spec.board.d">Raspberry Pi Pico 2 W(RP2350・Wi-Fi)</td></tr>
+              <tr><th data-i18n="spec.display">画面</th><td data-i18n="spec.display.d">240×320 TFT 液晶(SPI 75MHz)・バックライトはPWMで調光。320×480など大きさと液晶の種類はビルド時に選べる</td></tr>
+              <tr><th data-i18n="spec.touch">タッチ</th><td data-i18n="spec.touch.d">XPT2046(抵抗膜)</td></tr>
+              <tr><th data-i18n="spec.storage">ストレージ</th><td data-i18n="spec.storage.d">microSDカード(専用のSPI)</td></tr>
+              <tr><th data-i18n="spec.audio">音声</th><td data-i18n="spec.audio.d">MAX98357A(I2Sアンプ)・PCM5102A(イヤホン、任意)・SPH0645(I2Sマイク)。音声・マイク・電池は外したビルドも作れる</td></tr>
+              <tr><th data-i18n="spec.input">入力</th><td data-i18n="spec.input.d">Wiiクラシックコントローラー・CardKB2(I2C)・USBシリアル</td></tr>
+              <tr><th data-i18n="spec.dev">開発</th><td data-i18n="spec.dev.d">PlatformIO + Arduino(C++)・LovyanGFX・Lua 5.4.7</td></tr>
             </table>
             <div class="palette">
               <h3>16 COLORS</h3>
-              <div class="swatches" aria-label="OSのパレット16色">
+              <div class="swatches" aria-label="OSのパレット16色" data-i18n-attr="aria-label=palette.aria">
                 <div style="background:var(--c0)"><span>0</span></div><div style="background:var(--c1)"><span>1</span></div>
                 <div style="background:var(--c2)"><span>2</span></div><div style="background:var(--c3)"><span>3</span></div>
                 <div style="background:var(--c4)"><span>4</span></div><div style="background:var(--c5)"><span>5</span></div>
@@ -591,7 +666,7 @@ pico.<span class="fn">on</span>(back, <span class="st">"press_start"</span>, <sp
                 <div style="background:var(--c12)"><span>12</span></div><div style="background:var(--c13)"><span>13</span></div>
                 <div style="background:var(--c14)"><span>14</span></div><div style="background:var(--c15)"><span>15</span></div>
               </div>
-              <p>画面は16色のパレットで描きます。番号ごと色を差し替えるとダークテーマに。このページも同じパレットで塗っています(右上で切り替え)。</p>
+              <p data-i18n="palette.p">画面は16色のパレットで描きます。番号ごと色を差し替えるとダークテーマに。このページも同じパレットで塗っています(右上で切り替え)。</p>
             </div>
           </div>
         </div>
@@ -604,27 +679,27 @@ pico.<span class="fn">on</span>(back, <span class="st">"press_start"</span>, <sp
       <div class="starts">
         <a class="start" href="playground/">
           <span class="t"><svg class="i"><use href="#i-device-gamepad"/></svg>PLAYGROUND</span>
-          <span class="d">ブラウザでpico-osを動かす。マウスのドラッグがタッチになります。</span>
+          <span class="d" data-i18n="start.play">ブラウザでpico-osを動かす。マウスのドラッグがタッチになります。</span>
           <span class="go">START &gt;</span>
         </a>
         <a class="start" href="download/">
           <span class="t"><svg class="i"><use href="#i-download"/></svg>DOWNLOAD</span>
-          <span class="d">ファームウェア(<code>.uf2</code> / <code>.pfw</code>)を落として、実機に書き込む。</span>
+          <span class="d" data-i18n="start.dl">ファームウェア(<code>.uf2</code> / <code>.pfw</code>)を落として、実機に書き込む。</span>
           <span class="go">GET &gt;</span>
         </a>
         <a class="start" href="lua-api/">
           <span class="t"><svg class="i"><use href="#i-file-code"/></svg>LUA API</span>
-          <span class="d">Luaアプリの作り方と <code>pico.*</code> の一覧。</span>
+          <span class="d" data-i18n="start.lua">Luaアプリの作り方と <code>pico.*</code> の一覧。</span>
           <span class="go">READ &gt;</span>
         </a>
         <a class="start" href="https://kimu1109.github.io/pico-os-apps/">
           <span class="t"><svg class="i"><use href="#i-apps"/></svg>APP STORE</span>
-          <span class="d">Luaアプリを探してダウンロード。SDカードの直下に置けば、次の起動で入ります。</span>
+          <span class="d" data-i18n="start.store">Luaアプリを探してダウンロード。SDカードの直下に置けば、次の起動で入ります。</span>
           <span class="go">GET &gt;</span>
         </a>
         <a class="start" href="https://github.com/Kimu1109/pico-os">
           <span class="t"><svg class="i"><use href="#i-box"/></svg>GITHUB</span>
-          <span class="d">ソースコードと設計記録。</span>
+          <span class="d" data-i18n="start.gh">ソースコードと設計記録。</span>
           <span class="go">OPEN &gt;</span>
         </a>
       </div>
@@ -635,12 +710,112 @@ pico.<span class="fn">on</span>(back, <span class="st">"press_start"</span>, <sp
 <footer>
   <div class="wrap">
     <span>pico-os — a touch GUI OS for Raspberry Pi Pico 2 W</span>
-    <span>アイコン: <a href="https://tabler.io/icons">Tabler Icons</a>(MIT)</span>
-    <span>辞書: <a href="https://www.edrdg.org/edrdg/licence.html">JMdict/EDICT</a>(EDRDG、CC BY-SA 4.0)・<a href="https://github.com/skk-dev/dict">SKK辞書</a>(GPL-2.0以降)。<a href="https://github.com/Kimu1109/pico-os/blob/main/script/dict/LICENSES.md">詳しく</a></span>
+    <span data-i18n="foot.icons">アイコン: <a href="https://tabler.io/icons">Tabler Icons</a>(MIT)</span>
+    <span data-i18n="foot.dict">辞書: <a href="https://www.edrdg.org/edrdg/licence.html">JMdict/EDICT</a>(EDRDG、CC BY-SA 4.0)・<a href="https://github.com/skk-dev/dict">SKK辞書</a>(GPL-2.0以降)。<a href="https://github.com/Kimu1109/pico-os/blob/main/script/dict/LICENSES.md">詳しく</a></span>
   </div>
 </footer>
 
 <script>
+  // 英語の訳(鍵は data-i18n / data-i18n-attr の値。日本語はHTMLにあるもの)
+  I18n.init({
+    "meta.desc": "A homemade touch GUI OS for the Raspberry Pi Pico 2 W (RP2350). Try it right in your browser.",
+    "nav": "On this page",
+    "theme.aria": "Switch between light and dark theme",
+    "theme.title": "Switch theme",
+    "lead": 'A homemade touch GUI OS <span class="nb">for the Raspberry Pi Pico 2 W.</span>',
+    "lead.sub": "A home screen, 20-odd apps, apps you write in Lua, even a Game Boy — all on a tiny 240×320 screen. " +
+      "Widgets, compositing and drawing are written from scratch and run on the microcontroller itself. " +
+      "The very same code is compiled to WebAssembly, so it runs right in your browser too.",
+    "play.small": "Run in your browser",
+    "alt.home": "The pico-os home screen, with app icons in two columns",
+    "h.screens": "Screenshots",
+    "h.apps": "Built-in apps",
+    "h.inside": "Under the hood",
+    "h.lua": "Write apps in Lua",
+    "h.spec": "Hardware",
+    "alt.clock": "The clock screen",
+    "alt.calc": "The scientific calculator",
+    "alt.markdown": "The Markdown browser",
+    "alt.tetris": "Tetris written in Lua",
+    "alt.blocks": "A 2.5D world of blocks",
+    "alt.zombie": "The Zombie TD game",
+    "alt.music": "The music player",
+    "alt.apps": "Page 5 of the home screen",
+    "cap.clock": "Clock, timer and alarms",
+    "cap.calc": "Scientific calc, graphs, unit conversion",
+    "cap.markdown": "Markdown browser",
+    "cap.tetris": "Lua app (pico.game)",
+    "cap.blocks": "2.5D engine pico.iso",
+    "cap.zombie": "Tower defense",
+    "cap.music": "Chiptunes and WAV",
+    "cap.apps": "Lua apps on the SD card show up too",
+    "prev": "Previous",
+    "next": "Next",
+    "app0.d": "Fetches and shows documents over HTTP/HTTPS",
+    "app1": "Clock", "app1.d": "Digital, analog, alarms",
+    "app2": "Calculator", "app2.d": "Functions, graphs, bases, history",
+    "app3": "Files", "app3.d": "Browse and manage the SD card",
+    "app4": "Text", "app4.d": "Editor with Japanese input",
+    "app5": "Notes", "app5.d": "#tags and full-text search",
+    "app6": "Dictionary", "app6.d": "English ⇄ Japanese",
+    "app7": "Reader", "app7.d": "Aozora Bunko, with bookmarks",
+    "app8": "Game Boy", "app8.d": "Emulator with sound and save states",
+    "app9": "Music", "app9.d": "MML chiptunes and WAV",
+    "app10": "Video", "app10.d": "Plays the custom .pvid format",
+    "app11": "Recorder", "app11.d": "I2S mic to WAV",
+    "app12": "Calendar", "app12.d": "Reads iCalendar",
+    "app13": "Chat", "app13.d": "Talks to a self-hosted chat server",
+    "app14.d": "Syncs with Todoist",
+    "app15": "Mail", "app15.d": "IMAP inbox (Outlook.com too)",
+    "app16.d": "From a microcontroller to your server",
+    "app17": "Store", "app17.d": "Author-signed Lua apps",
+    "apps.note": "Plus Lua apps such as Tetris, Minesweeper, Reversi, Breakout, Paint, Weather, News, QR codes and a Spotify remote. " +
+      "The home screen supports folders, and built-in apps you don't need can be left out at build time.",
+    "feat.widgets": "Widgets, scenes, dialogs and three keyboards — the whole GUI framework is written from scratch. " +
+      "Only the parts that changed are composited and sent to the LCD.",
+    "feat.heap": "Strings are fixed-length and never touch the heap. Widgets are recycled from object pools, " +
+      "so the small RAM never fragments.",
+    "feat.core": "Core 1 runs the screen and input; core 2 does nothing but audio. Chiptunes, Game Boy sound and mic recording over I2S. " +
+      "Plug in earphones and the sound moves off the speaker automatically.",
+    "feat.jp": "Japanese text and kana-kanji conversion built in. Besides the on-screen keyboard, physical keyboards such as the CardKB2 work too. " +
+      "The interface can be switched to English.",
+    "feat.net": "Wi-Fi, HTTPS, SSH, IMAP. Send the Wi-Fi settings from your phone, and find the device as <code>picoos.local</code>. " +
+      "Credentials are stored encrypted with a per-device key. Firmware updates come over SD or Wi-Fi, too.",
+    "feat.same": "The same source as the hardware also runs on a PC (SDL) and in the browser (WebAssembly) — only the hardware layer is swapped. " +
+      "Screen size and which parts are fitted can be chosen at build time.",
+    "lua.li0": "Put it at <code>/lua/apps/&lt;name&gt;/main.lua</code> on the SD card and a new app appears on the home screen.",
+    "lua.li1": "<code>pico.*</code> covers widgets, drawing, touch, sound, the SD card and networking.",
+    "lua.li2": "Plus <code>pico.game</code> for games and the 2.5D engine <code>pico.iso</code>.",
+    "lua.li3": "An execution-time limit stops runaway scripts, and every app has its own permissions.",
+    "lua.li4": "On the PC build, hot reload on every save and a test runner make iterating quick.",
+    "lua.btn": "Read the reference",
+    "lua.path": "/lua/apps/hello/main.lua",
+    "lua.cm1": "-- Runs once when the screen opens",
+    "lua.back": '"Back"',
+    "lua.cm2": "-- Every frame. dt is in milliseconds",
+    "spec.board": "Board", "spec.board.d": "Raspberry Pi Pico 2 W (RP2350, Wi-Fi)",
+    "spec.display": "Display",
+    "spec.display.d": "240×320 TFT LCD (SPI 75MHz), PWM-dimmed backlight. Other sizes such as 320×480 and the panel type are chosen at build time",
+    "spec.touch": "Touch", "spec.touch.d": "XPT2046 (resistive)",
+    "spec.storage": "Storage", "spec.storage.d": "microSD card (on its own SPI bus)",
+    "spec.audio": "Audio",
+    "spec.audio.d": "MAX98357A (I2S amp), PCM5102A (earphones, optional), SPH0645 (I2S mic). Builds without audio, mic or battery are possible too",
+    "spec.input": "Input", "spec.input.d": "Wii Classic Controller, CardKB2 (I2C), USB serial",
+    "spec.dev": "Toolchain", "spec.dev.d": "PlatformIO + Arduino (C++), LovyanGFX, Lua 5.4.7",
+    "palette.aria": "The OS's 16-color palette",
+    "palette.p": "The screen is drawn with a 16-color palette. Swap the colors behind each number and you get the dark theme. " +
+      "This page is painted with the same palette (toggle it at the top right).",
+    "start.play": "Run pico-os in your browser. Mouse drags become touches.",
+    "start.dl": "Download the firmware (<code>.uf2</code> / <code>.pfw</code>) and flash it to your board.",
+    "start.lua": "How to build Lua apps, and the full <code>pico.*</code> reference.",
+    "start.store": "Find and download Lua apps. Drop one in the root of the SD card and it installs on the next boot.",
+    "start.gh": "Source code and design notes.",
+    "foot.icons": 'Icons: <a href="https://tabler.io/icons">Tabler Icons</a> (MIT)',
+    "foot.dict": 'Dictionary: <a href="https://www.edrdg.org/edrdg/licence.html">JMdict/EDICT</a> (EDRDG, CC BY-SA 4.0), ' +
+      '<a href="https://github.com/skk-dev/dict">SKK dictionaries</a> (GPL-2.0 or later). ' +
+      '<a href="https://github.com/Kimu1109/pico-os/blob/main/script/dict/LICENSES.md">Details</a>'
+  });
+
   // ステータスバーの時刻(OSと同じ HH:MM)
   (function () {
     var el = document.getElementById("sbTime");

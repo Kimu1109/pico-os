@@ -17,8 +17,81 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pico-os Download</title>
-<meta name="description" content="pico-os のファームウェア(.uf2 / .pfw)をダウンロードできます。">
+<meta name="description" data-i18n-attr="content=meta.desc" content="pico-os のファームウェア(.uf2 / .pfw)をダウンロードできます。">
 <meta name="color-scheme" content="light dark">
+<script>
+  // ---- 表示言語(日本語/英語)。landing / download / shell / store の4ページで同じ中身。直したら合わせる ----
+  // 決め方: URLの ?lang=ja|en > このブラウザで選んだ言語(localStorage "picoos-lang"。4ページとWeb版のOSで共通) >
+  // ブラウザの言語(ja 以外は英語。Web版のOSの既定と同じ考え方)。?lang= で来たときも覚える(ページを移っても同じ言語)。
+  // 訳す要素には data-i18n="鍵"(中身を差し替える。訳は固定の文字列だけなのでHTMLのまま入れる)、
+  // 属性は data-i18n-attr="属性=鍵;属性=鍵"。日本語はHTMLに書いたものをそのまま使い、訳の表は英語だけ持つ。
+  // JSで作る文は I18n.t("日本語", "English")
+  var I18n = (function () {
+    var KEY = "picoos-lang";
+    function norm(v) { v = String(v || "").toLowerCase(); return v === "ja" || v === "en" ? v : null; }
+    function save(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+    var lang = null;
+    try { lang = norm(new URLSearchParams(location.search).get("lang")); } catch (e) {}
+    if (lang) save(lang);
+    if (!lang) { try { lang = norm(localStorage.getItem(KEY)); } catch (e) {} }
+    if (!lang) lang = /^ja/i.test(navigator.language || "") ? "ja" : "en";
+    document.documentElement.lang = lang;
+    var en = {}, orig = new Map(), hooks = [];
+    function pick(node, slot, key, cur) {
+      var m = orig.get(node);
+      if (!m) { m = {}; orig.set(node, m); }
+      if (!(slot in m)) m[slot] = cur;
+      return lang === "en" && key in en ? en[key] : m[slot];
+    }
+    function apply() {
+      document.documentElement.lang = lang;
+      document.querySelectorAll("[data-i18n]").forEach(function (n) {
+        var v = pick(n, "", n.dataset.i18n, n.innerHTML);
+        if (n.innerHTML !== v) n.innerHTML = v;
+      });
+      document.querySelectorAll("[data-i18n-attr]").forEach(function (n) {
+        n.dataset.i18nAttr.split(";").forEach(function (pair) {
+          var kv = pair.split("=");
+          if (kv.length === 2) n.setAttribute(kv[0], pick(n, "@" + kv[0], kv[1], n.getAttribute(kv[0]) || ""));
+        });
+      });
+      var b = document.getElementById("langBtn");
+      if (b) {
+        b.textContent = lang === "ja" ? "EN" : "JA";
+        b.title = lang === "ja" ? "English" : "日本語";
+        b.setAttribute("aria-label", lang === "ja" ? "Switch to English" : "日本語に切り替える");
+      }
+      hooks.forEach(function (fn) { fn(lang); });
+    }
+    return {
+      get lang() { return lang; },
+      t: function (ja, enText) { return lang === "en" ? enText : ja; },
+      // 訳の表を渡して当てる。言語の切り替えボタン(id="langBtn")があればつなぐ。onToggle を渡すとボタンの動きを差し替える
+      init: function (dict, onToggle) {
+        en = dict || {};
+        var b = document.getElementById("langBtn");
+        if (b) b.addEventListener("click", function () {
+          var next = lang === "ja" ? "en" : "ja";
+          if (onToggle) { save(next); onToggle(next); } else I18n.set(next);
+        });
+        apply();
+      },
+      set: function (v) {
+        v = norm(v);
+        if (!v) return;
+        lang = v;
+        save(v);
+        // URLに ?lang= が残っていると、読み込み直したときに戻ってしまうので消す
+        try {
+          var u = new URL(location.href);
+          if (u.searchParams.has("lang")) { u.searchParams.delete("lang"); history.replaceState(null, "", u); }
+        } catch (e) {}
+        apply();
+      },
+      onChange: function (fn) { hooks.push(fn); }
+    };
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -96,6 +169,7 @@
     background: var(--bg); color: var(--fg); border: 2px solid var(--line); cursor: pointer;
   }
   .theme-btn svg.i { width: 18px; height: 18px; }
+  .lang-btn { width: auto; min-width: 32px; padding: 0 6px; font: 9px "Press Start 2P", monospace; }
   @media (max-width: 720px) { .sb-nav a.opt { display: none; } }
   @media (max-width: 420px) {
     .sb-icons .opt { display: none; }
@@ -215,13 +289,14 @@
       <svg class="i ok opt"><use href="#i-wifi"/></svg>
       <svg class="i opt"><use href="#i-battery-4"/></svg>
     </span>
-    <nav class="sb-nav px" aria-label="ページの移動">
+    <nav class="sb-nav px" aria-label="ページの移動" data-i18n-attr="aria-label=nav">
       <a href="../">TOP</a>
       <a class="opt" href="../lua-api/">LUA</a>
       <a class="opt" href="https://kimu1109.github.io/pico-os-apps/">STORE</a>
       <a class="on" href="./">DOWNLOAD</a>
       <a class="opt" href="../playground/">PLAY</a>
-      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える">
+      <button class="theme-btn lang-btn" id="langBtn" type="button">EN</button>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="明るさのテーマを切り替える" title="テーマを切り替える" data-i18n-attr="aria-label=theme.aria;title=theme.title">
         <svg class="i"><use href="#i-sun"/></svg>
       </button>
     </nav>
@@ -233,8 +308,8 @@
     <div class="wrap">
       <p class="kicker px"><span>RPIPICO2W</span><span>.UF2</span><span>.PFW</span></p>
       <h1 class="title">DOWNLOAD<span class="cur">_</span></h1>
-      <p class="lead">pico-os のファームウェアをダウンロード。</p>
-      <p class="lead-sub">初めて書き込むときは <code>.uf2</code>、すでに pico-os が動いている本体を更新するときは <code>.pfw</code> を使います。
+      <p class="lead" data-i18n="lead">pico-os のファームウェアをダウンロード。</p>
+      <p class="lead-sub" data-i18n="lead.sub">初めて書き込むときは <code>.uf2</code>、すでに pico-os が動いている本体を更新するときは <code>.pfw</code> を使います。
         書き込み方は下の「HOW TO」へ。</p>
     </div>
   </section>
@@ -245,12 +320,12 @@
         <div class="win-head">
           <span class="no px">01</span>
           <h2>LATEST</h2>
-          <span class="jp">最新の版</span>
+          <span class="jp" data-i18n="h.latest">最新の版</span>
           <span class="tail px" id="latestTail">RASPBERRY PI PICO 2 W</span>
         </div>
         <div class="win-body">
           <div class="latest" id="latestBox">
-            <div class="empty" id="loading"><p>版の一覧を読んでいます…</p></div>
+            <div class="empty" id="loading"><p data-i18n="loading">版の一覧を読んでいます…</p></div>
           </div>
         </div>
       </div>
@@ -263,7 +338,7 @@
         <div class="win-head">
           <span class="no px">02</span>
           <h2>HOW TO</h2>
-          <span class="jp">書き込み方</span>
+          <span class="jp" data-i18n="h.howto">書き込み方</span>
           <span class="tail px">BOOTSEL / SD / WI-FI</span>
         </div>
         <div class="win-body">
@@ -271,29 +346,29 @@
             <div class="how">
               <h3><i class="sw" style="background:var(--c9)"></i>FIRST TIME .UF2</h3>
               <ol>
-                <li><code>.uf2</code> をダウンロードする。</li>
-                <li>Pico 2 W の <b>BOOTSEL</b> ボタンを押したまま、USBケーブルでPCにつなぐ。</li>
-                <li><code>RP2350</code> という名前のドライブが出てくるので、<code>.uf2</code> をそこへコピーする。</li>
-                <li>コピーが終わると自動で再起動し、pico-os が立ち上がります。</li>
+                <li data-i18n="how.li0"><code>.uf2</code> をダウンロードする。</li>
+                <li data-i18n="how.li1">Pico 2 W の <b>BOOTSEL</b> ボタンを押したまま、USBケーブルでPCにつなぐ。</li>
+                <li data-i18n="how.li2"><code>RP2350</code> という名前のドライブが出てくるので、<code>.uf2</code> をそこへコピーする。</li>
+                <li data-i18n="how.li3">コピーが終わると自動で再起動し、pico-os が立ち上がります。</li>
               </ol>
-              <p>前の版に戻したいときも同じ手順で、前の版の <code>.uf2</code> を置きます。</p>
+              <p data-i18n="how.p0">前の版に戻したいときも同じ手順で、前の版の <code>.uf2</code> を置きます。</p>
             </div>
             <div class="how">
               <h3><i class="sw" style="background:var(--c10)"></i>UPDATE .PFW</h3>
               <ol>
-                <li>本体の「<b>本体の更新</b>」→[<b>Webから</b>]なら、ここからのダウンロードは要りません(Wi-Fiで同じ一覧を取ります)。</li>
-                <li>PCから入れるときは、<code>.pfw</code> をSDカードの <code>/firmware/</code> に置く(USBドライブ機能でも置けます)。</li>
-                <li>「本体の更新」→[<b>SDから選ぶ</b>]で選ぶと、中身を確かめてから書き込み、再起動します。</li>
+                <li data-i18n="how.li4">本体の「<b>本体の更新</b>」→[<b>Webから</b>]なら、ここからのダウンロードは要りません(Wi-Fiで同じ一覧を取ります)。</li>
+                <li data-i18n="how.li5">PCから入れるときは、<code>.pfw</code> をSDカードの <code>/firmware/</code> に置く(USBドライブ機能でも置けます)。</li>
+                <li data-i18n="how.li6">「本体の更新」→[<b>SDから選ぶ</b>]で選ぶと、中身を確かめてから書き込み、再起動します。</li>
               </ol>
-              <p><code>.pfw</code> は署名つき。署名の無い版(「無署名」の印)は、そのままでは本体が受け付けません。</p>
+              <p data-i18n="how.p1"><code>.pfw</code> は署名つき。署名の無い版(「無署名」の印)は、そのままでは本体が受け付けません。</p>
             </div>
             <div class="how">
               <h3><i class="sw" style="background:var(--c14)"></i>STABLE / NIGHTLY</h3>
               <ol>
-                <li><b>安定版</b>は、ナイトリーのうち使えると確かめたものを選んで出した版です。迷ったらこちら。</li>
-                <li><b>ナイトリー</b>は、毎晩その日の最新のソースを自動でビルドしたもの。新しい機能を早く試せますが、動作は確かめていません。</li>
+                <li data-i18n="how.li7"><b>安定版</b>は、ナイトリーのうち使えると確かめたものを選んで出した版です。迷ったらこちら。</li>
+                <li data-i18n="how.li8"><b>ナイトリー</b>は、毎晩その日の最新のソースを自動でビルドしたもの。新しい機能を早く試せますが、動作は確かめていません。</li>
               </ol>
-              <p>ここには新しい安定版5本とナイトリー3本を載せています。それより前の版はGitHubのリリースから。</p>
+              <p data-i18n="how.p2">ここには新しい安定版5本とナイトリー3本を載せています。それより前の版はGitHubのリリースから。</p>
             </div>
           </div>
         </div>
@@ -307,18 +382,18 @@
         <div class="win-head">
           <span class="no px">03</span>
           <h2>ALL VERSIONS</h2>
-          <span class="jp">すべての版</span>
+          <span class="jp" data-i18n="h.all">すべての版</span>
           <span class="tail px" id="allTail"></span>
         </div>
         <div class="win-body">
           <div class="tbl-wrap">
             <table class="vers" id="versTable" hidden>
-              <thead><tr><th>版</th><th>種類</th><th>日時(UTC)</th><th>コミット</th><th>ダウンロード</th></tr></thead>
+              <thead><tr><th data-i18n="th.ver">版</th><th data-i18n="th.kind">種類</th><th data-i18n="th.date">日時(UTC)</th><th data-i18n="th.commit">コミット</th><th data-i18n="th.dl">ダウンロード</th></tr></thead>
               <tbody id="versBody"></tbody>
             </table>
           </div>
-          <p class="more" id="allEmpty">版の一覧を読んでいます…</p>
-          <p class="more">それより前の版・変更点・クラッシュダンプ用の <code>.elf</code> は
+          <p class="more" id="allEmpty" data-i18n="loading">版の一覧を読んでいます…</p>
+          <p class="more" data-i18n="older">それより前の版・変更点・クラッシュダンプ用の <code>.elf</code> は
             <a href="https://github.com/Kimu1109/pico-os/releases">GitHubのリリース</a>にあります。</p>
         </div>
       </div>
@@ -329,12 +404,44 @@
 <footer>
   <div class="wrap">
     <span>pico-os — a touch GUI OS for Raspberry Pi Pico 2 W</span>
-    <span><a href="../">トップへ</a> · <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/FIRMWARE_UPDATE.md">ファームの更新(詳しく)</a></span>
-    <span>アイコン: <a href="https://tabler.io/icons">Tabler Icons</a>(MIT)</span>
+    <span data-i18n="foot.links"><a href="../">トップへ</a> · <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/FIRMWARE_UPDATE.md">ファームの更新(詳しく)</a></span>
+    <span data-i18n="foot.icons">アイコン: <a href="https://tabler.io/icons">Tabler Icons</a>(MIT)</span>
   </div>
 </footer>
 
 <script>
+  // 英語の訳(鍵は data-i18n / data-i18n-attr の値。日本語はHTMLにあるもの)。JSで作る文は I18n.t()
+  I18n.init({
+    "meta.desc": "Download the pico-os firmware (.uf2 / .pfw).",
+    "nav": "Pages",
+    "theme.aria": "Switch between light and dark theme",
+    "theme.title": "Switch theme",
+    "lead": "Download the pico-os firmware.",
+    "lead.sub": "Use the <code>.uf2</code> to flash a board for the first time, and the <code>.pfw</code> to update a board that already runs pico-os. " +
+      "See “HOW TO” below for the steps.",
+    "h.latest": "Latest builds",
+    "h.howto": "How to flash",
+    "h.all": "All builds",
+    "loading": "Loading the list of builds…",
+    "how.li0": "Download the <code>.uf2</code>.",
+    "how.li1": "Hold the <b>BOOTSEL</b> button on the Pico 2 W while you plug it into your PC over USB.",
+    "how.li2": "A drive named <code>RP2350</code> appears. Copy the <code>.uf2</code> onto it.",
+    "how.li3": "When the copy finishes the board reboots by itself and pico-os starts.",
+    "how.p0": "To go back to an older build, do the same with that build’s <code>.uf2</code>.",
+    "how.li4": "On the device, <b>Update</b> → [<b>Web</b>] needs nothing from this page (it fetches the same list over Wi-Fi).",
+    "how.li5": "To install from a PC, put the <code>.pfw</code> in <code>/firmware/</code> on the SD card (the USB drive mode works too).",
+    "how.li6": "Choose it from <b>Update</b> → [<b>SD</b>]. The device checks the file, flashes it and reboots.",
+    "how.p1": "<code>.pfw</code> files are signed. The device won’t accept an unsigned build (marked UNSIGNED) as it is.",
+    "how.li7": "A <b>stable</b> build is a nightly that was checked and found to work, then released. If in doubt, pick this one.",
+    "how.li8": "A <b>nightly</b> is built automatically every night from that day’s latest source. You get new features early, but it hasn’t been tested.",
+    "how.p2": "This page lists the 5 newest stable builds and 3 newest nightlies. Older builds are on GitHub Releases.",
+    "th.ver": "Build", "th.kind": "Channel", "th.date": "Date (UTC)", "th.commit": "Commit", "th.dl": "Download",
+    "older": 'Older builds, changelogs and the <code>.elf</code> files for crash dumps are on ' +
+      '<a href="https://github.com/Kimu1109/pico-os/releases">GitHub Releases</a>.',
+    "foot.links": '<a href="../">Top</a> · <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/FIRMWARE_UPDATE.md">Firmware updates (details, Japanese)</a>',
+    "foot.icons": 'Icons: <a href="https://tabler.io/icons">Tabler Icons</a> (MIT)'
+  });
+
   // ステータスバーの時刻(OSと同じ HH:MM)
   (function () {
     var el = document.getElementById("sbTime");
@@ -387,8 +494,8 @@
 
     function tags(v) {
       var out = [el("span", { "class": "tag " + v.channel + " px", text: v.channel === "stable" ? "STABLE" : "NIGHTLY" })];
-      if (!v.signed) out.push(el("span", { "class": "tag unsigned px", text: "UNSIGNED", title: "署名なし" }));
-      if (v.env !== DEFAULT_ENV) out.push(el("span", { "class": "tag px", text: v.env, title: "構成(ビルドのenv)" }));
+      if (!v.signed) out.push(el("span", { "class": "tag unsigned px", text: "UNSIGNED", title: I18n.t("署名なし", "Not signed") }));
+      if (v.env !== DEFAULT_ENV) out.push(el("span", { "class": "tag px", text: v.env, title: I18n.t("構成(ビルドのenv)", "Configuration (build env)") }));
       return out;
     }
     function relLink(v) {
@@ -402,13 +509,13 @@
       if (uf2) {
         var a = el("a", { "class": "btn primary", href: BASE + uf2, download: uf2 });
         a.innerHTML = ICON_DL + ".UF2 ";
-        a.appendChild(el("small", { text: "初めて書き込む · " + size(v.uf2.bytes) }));
+        a.appendChild(el("small", { text: I18n.t("初めて書き込む", "First flash") + " · " + size(v.uf2.bytes) }));
         dl.appendChild(a);
       }
       if (pfw) {
         var b = el("a", { "class": "btn", href: BASE + pfw, download: pfw });
         b.innerHTML = ICON_DL + ".PFW ";
-        b.appendChild(el("small", { text: "更新ファイル · " + size(v.pfw.bytes) }));
+        b.appendChild(el("small", { text: I18n.t("更新ファイル", "Update file") + " · " + size(v.pfw.bytes) }));
         dl.appendChild(b);
       }
       // 項目の途中では折り返さない(「リリー/ス」にならないように)
@@ -416,11 +523,11 @@
         return el("span", { "class": "nb" }, [document.createTextNode(label + " "), node]);
       }
       var meta = el("p", { "class": "rel-meta" });
-      meta.appendChild(item("ビルド", el("b", { text: v.date + " UTC" })));
+      meta.appendChild(item(I18n.t("ビルド", "Built"), el("b", { text: v.date + " UTC" })));
       meta.appendChild(document.createTextNode(" · "));
-      meta.appendChild(item("コミット", el("a", { href: "https://github.com/Kimu1109/pico-os/commit/" + encodeURIComponent(v.git.replace(/\+$/, "")), text: v.git })));
+      meta.appendChild(item(I18n.t("コミット", "Commit"), el("a", { href: "https://github.com/Kimu1109/pico-os/commit/" + encodeURIComponent(v.git.replace(/\+$/, "")), text: v.git })));
       var rl = relLink(v);
-      if (rl) { meta.appendChild(document.createTextNode(" · ")); meta.appendChild(item("リリース", rl)); }
+      if (rl) { meta.appendChild(document.createTextNode(" · ")); meta.appendChild(item(I18n.t("リリース", "Release"), rl)); }
       return el("div", { "class": "rel" }, [
         el("div", { "class": "rel-head" }, [el("span", { "class": "ver", text: "#" + v.serial })].concat(tags(v))),
         meta, dl,
@@ -436,12 +543,12 @@
       a.innerHTML = ICON_DL + "GITHUB RELEASES";
       e.appendChild(a);
       box.appendChild(e);
-      document.getElementById("allEmpty").textContent = "ここに載せている版はありません。";
+      document.getElementById("allEmpty").textContent = I18n.t("ここに載せている版はありません。", "No builds are listed here.");
     }
 
     function render(data) {
       var vs = (data && data.versions) || [];
-      if (!vs.length) { showEmpty("ここに載せている版はまだありません。GitHubのリリースを見てください。"); return; }
+      if (!vs.length) { showEmpty(I18n.t("ここに載せている版はまだありません。GitHubのリリースを見てください。", "No builds are listed here yet. Please check GitHub Releases.")); return; }
 
       // 最新: 既定の構成の安定版と、それより新しいナイトリー(あれば)
       var mine = vs.filter(function (v) { return v.env === DEFAULT_ENV; });
@@ -454,10 +561,10 @@
       if (stable && nightly && nightly.serial <= stable.serial) nightly = null;
       var box = document.getElementById("latestBox");
       box.textContent = "";
-      if (stable) box.appendChild(card(stable, "おすすめ。迷ったらこちら。"));
+      if (stable) box.appendChild(card(stable, I18n.t("おすすめ。迷ったらこちら。", "Recommended. If in doubt, pick this one.")));
       if (nightly) box.appendChild(card(nightly, stable
-        ? "安定版より新しい毎晩のビルド。動作は確かめていません。"
-        : "まだ安定版がありません。毎晩のビルドで、動作は確かめていません。"));
+        ? I18n.t("安定版より新しい毎晩のビルド。動作は確かめていません。", "A nightly build, newer than the stable one. Not tested.")
+        : I18n.t("まだ安定版がありません。毎晩のビルドで、動作は確かめていません。", "There is no stable build yet. This is a nightly build and hasn’t been tested.")));
 
       // すべての版
       var body = document.getElementById("versBody");
@@ -467,7 +574,7 @@
           var f = v[k[0]] && safe(v[k[0]].file);
           if (f) files.appendChild(el("a", { href: BASE + f, download: f, title: size(v[k[0]].bytes), text: k[1] }));
         });
-        if (v.pfw && v.pfw.sha256) files.appendChild(el("span", { "class": "sha", title: "SHA-256(.pfw): " + v.pfw.sha256, text: v.pfw.sha256.slice(0, 8) }));
+        if (v.pfw && v.pfw.sha256) files.appendChild(el("span", { "class": "sha", title: "SHA-256 (.pfw): " + v.pfw.sha256, text: v.pfw.sha256.slice(0, 8) }));
         var rl = relLink(v);
         body.appendChild(el("tr", {}, [
           el("td", {}, [rl ? el("a", { href: rl.href, text: "#" + v.serial }) : el("span", { text: "#" + v.serial })]),
@@ -482,13 +589,24 @@
       document.getElementById("allTail").textContent = vs.length + " BUILDS";
     }
 
+    // 読み込んだ結果は覚えておき、言語を切り替えたら作り直す
+    var data = null, failed = false;
+    function draw() {
+      document.getElementById("versBody").textContent = "";
+      if (data) render(data);
+      else if (failed) showEmpty(I18n.t("版の一覧を読めませんでした。GitHubのリリースから直接ダウンロードできます。",
+                                        "Couldn’t load the list of builds. You can download them directly from GitHub Releases."));
+    }
+    I18n.onChange(draw);
+
     fetch(BASE + "downloads.json", { cache: "no-cache" })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(function (d) {
         if (!d || d.format !== 1) throw new Error("format");
-        render(d);
+        data = d;
+        draw();
       })
-      .catch(function () { showEmpty("版の一覧を読めませんでした。GitHubのリリースから直接ダウンロードできます。"); });
+      .catch(function () { failed = true; draw(); });
   })();
 </script>
 </body>

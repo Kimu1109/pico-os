@@ -1063,6 +1063,11 @@ PERM_TEXT = {"network": "ネットワーク", "notify": "通知", "sd": "SD全�
 STORE_PAGE = os.path.join(ROOT, "pc", "web", "store.html")
 
 
+def _perm_key(p):
+    """権限の印に付ける訳の鍵(store.html の訳の表に perm.<名前> がある既知の権限だけ)"""
+    return f' data-i18n="perm.{p}"' if p in PERM_TEXT else ""
+
+
 def _size_text(n):
     return f"{n} B" if n < 1024 else f"{n / 1024:.1f} KB" if n < 1024 * 1024 else f"{n / 1048576:.1f} MB"
 
@@ -1070,8 +1075,9 @@ def _size_text(n):
 def render_card(e, icon, pkg, pkg_bytes):
     from html import escape as esc
     perms = [p for p in e["perms"].split(",") if p and p != "-"]
-    badges = "".join(f'<span class="perm">{esc(PERM_TEXT.get(p, p))}</span>' for p in perms) \
-        or '<span class="perm none">権限なし</span>'
+    # data-i18n はページの言語の切り替え(store.html の I18n)が英語の印に差し替えるための鍵
+    badges = "".join(f'<span class="perm"{_perm_key(p)}>{esc(PERM_TEXT.get(p, p))}</span>' for p in perms) \
+        or '<span class="perm none" data-i18n="perm.none">権限なし</span>'
     img = (f'<img class="icon" src="{esc(icon)}" alt="" width="48" height="48" loading="lazy">' if icon
            else '<span class="icon noicon" aria-hidden="true"></span>')
     search = esc(" ".join((e["name"], e["id"], e["description"], e["author"])).lower())

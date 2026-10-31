@@ -87,6 +87,7 @@ picoos lua-test -k スタート -v                      # 名前で絞る / prin
 | `stubs` | 偽物の `pico.*` を足す・差し替える(`{ battery = function() return 50 end }`) |
 | `dir` | アプリのフォルダ(既定はテストファイルの上の `main.lua` のあるフォルダ) |
 | `main` | 最初に読むファイル(既定 `main.lua`。`push_scene` で開くページを試すとき) |
+| `lang` | `pico.lang()` の値(既定 `"ja"`)。`"en"` ならアプリの `lang/en.lua` で `pico.tr` する([多言語対応](../../../api/system/i18n/)) |
 
 `app` でできること:
 

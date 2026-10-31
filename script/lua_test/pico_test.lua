@@ -144,7 +144,8 @@ local function run_chunk(app, path)
     return true
 end
 
--- load_app{ dir=, args=, launch_reason={tag,data}, pad_connected=, stubs={}, setup=false, sd_dir= }
+-- load_app{ dir=, args=, launch_reason={tag,data}, pad_connected=, stubs={}, setup=false, sd_dir=, lang= }
+--   lang: pico.lang() の値(既定 "ja")。"en" ならアプリの lang/en.lua で pico.tr する
 --   dir     … アプリのフォルダ(既定: テストファイルの上の main.lua のあるフォルダ)
 --   sd_dir  … アプリのSD上のパス(pico.app_dir() の値。既定: pc/sdcard/ の下ならそこからの位置、
 --              それ以外は /lua/apps/<フォルダ名>)。SDのそのパスの下を読むと dir の中のファイルが返る
@@ -173,7 +174,7 @@ function M.load_app(opts)
     end
 
     local pico = mock.install({ app_dir = sd_dir, args = opts.args, launch_reason = opts.launch_reason,
-                                pad_connected = opts.pad_connected, sd_root = sd_root })
+                                pad_connected = opts.pad_connected, sd_root = sd_root, lang = opts.lang })
     for k, v in pairs(opts.stubs or {}) do pico[k] = v end
     -- 偽物に無い関数は、nil を呼んだときの分かりにくいエラーの代わりに名前を出して止める
     setmetatable(pico, { __index = function(_, k)

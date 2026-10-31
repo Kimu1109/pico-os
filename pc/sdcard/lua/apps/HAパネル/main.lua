@@ -30,7 +30,7 @@ local function save() pico.store_save(cfg, { encrypt = true }) end
 local ws = nil              -- 接続のid
 local authed = false        -- auth_ok を受けた
 local bad_auth = false      -- トークンが違う(直すまで繋ぎ直さない)
-local conn_text = "未接続"
+local conn_text = pico.tr("未接続")
 local leaving = false
 local retry_ms, retry_timer = 5000, nil
 local next_id, sub_id = 1, nil
@@ -78,7 +78,7 @@ local connect -- 下で決める
 
 local function schedule_retry()
     if leaving or bad_auth or retry_timer then return end
-    conn_text = conn_text .. "(" .. (retry_ms // 1000) .. "秒後に再接続)"
+    conn_text = conn_text .. pico.tr("(%s秒後に再接続)", retry_ms // 1000)
     retry_timer = pico.after(retry_ms, function()
         retry_timer = nil
         connect()
@@ -90,22 +90,22 @@ local function on_message(m)
     if m.type == "auth_required" then
         if cfg.token == "" then
             bad_auth = true
-            conn_text = "トークンが未設定です(「設定」で入れてください)"
+            conn_text = pico.tr("トークンが未設定です(「設定」で入れてください)")
             pico.socket.close(ws)
             return
         end
-        conn_text = "認証しています…"
+        conn_text = pico.tr("認証しています…")
         pico.socket.send(ws, pico.json_encode({ type = "auth", access_token = cfg.token }))
     elseif m.type == "auth_ok" then
         authed = true
         retry_ms = 5000
-        conn_text = "接続中: HA " .. tostring(m.ha_version or "")
+        conn_text = pico.tr("接続中: HA ") .. tostring(m.ha_version or "")
         local ids = {}
         for i, e in ipairs(cfg.entities) do ids[i] = e[2] end
         sub_id = send({ type = "subscribe_entities", entity_ids = ids })
     elseif m.type == "auth_invalid" then
         bad_auth = true
-        conn_text = "トークンが違います: " .. tostring(m.message or "")
+        conn_text = pico.tr("トークンが違います: ") .. tostring(m.message or "")
         pico.socket.close(ws)
     elseif m.type == "event" and m.id == sub_id and type(m.event) == "table" then
         local ev = m.event
@@ -122,7 +122,7 @@ local function on_message(m)
             end
         end
         if type(ev.r) == "table" then        -- 消えた
-            for _, eid in ipairs(ev.r) do apply(eid, "削除") end
+            for _, eid in ipairs(ev.r) do apply(eid, pico.tr("削除")) end
         end
     elseif m.type == "result" then
         for i, id in pairs(pending) do
@@ -130,14 +130,14 @@ local function on_message(m)
         end
         if not m.success then
             local e = type(m.error) == "table" and m.error or {}
-            add_log("失敗: " .. tostring(e.message or e.code or "?"))
+            add_log(pico.tr("失敗: ") .. tostring(e.message or e.code or "?"))
         end
     end
 end
 
 local function on_event(ev, a, b, c)
     if ev == "open" then
-        conn_text = "開きました。認証を待っています…"
+        conn_text = pico.tr("開きました。認証を待っています…")
     elseif ev == "message" then
         local m = pico.json_decode(a)
         if type(m) == "table" then on_message(m) end
@@ -146,7 +146,7 @@ local function on_event(ev, a, b, c)
         pending = {}
         if leaving then return end
         if not bad_auth then
-            conn_text = "切断: " .. (a or ("サーバが閉じました(" .. tostring(b) .. ")"))
+            conn_text = pico.tr("切断: ") .. (a or pico.tr("サーバが閉じました(%s)", tostring(b)))
         end
         schedule_retry()
     end
@@ -155,7 +155,7 @@ end
 
 connect = function()
     if not pico.socket then
-        conn_text = "このファームは pico.socket に対応していません"
+        conn_text = pico.tr("このファームは pico.socket に対応していません")
         redraw()
         return
     end
@@ -165,9 +165,9 @@ connect = function()
     -- 状態の最初の一括(属性つき)は1エンティティ数百B。6つでも余裕を持って16KiB
     ws, err = pico.socket.websocket(cfg.url, on_event, { max_message = 16384 })
     if ws then
-        conn_text = "接続しています…"
+        conn_text = pico.tr("接続しています…")
     else
-        conn_text = "繋げません: " .. tostring(err)
+        conn_text = pico.tr("繋げません: ") .. tostring(err)
         schedule_retry()
     end
     redraw()
@@ -179,7 +179,7 @@ local function toggle(i)
     local domain = e[2]:match("^([%w_]+)%.")
     if not TOGGLE[domain] then return end      -- 表示だけのもの
     if not authed then
-        pico.toast("Home Assistant に繋がっていません")
+        pico.toast(pico.tr("Home Assistant に繋がっていません"))
         return
     end
     local id = send({ type = "call_service", domain = "homeassistant", service = "toggle",
@@ -217,12 +217,12 @@ end
 local function label_of(i)
     local s = ent[i].state
     if pending[i] then return "…" end
-    if s == nil then return "不明" end
+    if s == nil then return pico.tr("不明") end
     if s == "on" then return "ON" end
     if s == "off" then return "OFF" end
-    if s == "open" then return "開" end
-    if s == "closed" then return "閉" end
-    if s == "unavailable" then return "使えない" end
+    if s == "open" then return pico.tr("開") end
+    if s == "closed" then return pico.tr("閉") end
+    if s == "unavailable" then return pico.tr("使えない") end
     return s .. (ent[i].unit and (" " .. ent[i].unit) or "")
 end
 
@@ -246,7 +246,7 @@ local function render()
     end
     if #cfg.entities == 0 then
         pico.draw_text_wrapped(X + 8, TOP + STATUS_H + 8, W - 16,
-                               "エンティティがありません。「設定」の「エンティティ」で足してください", DGREY, 0)
+                               pico.tr("エンティティがありません。「設定」の「エンティティ」で足してください"), DGREY, 0)
     end
 
     local ly = Y + H - LOG_H
@@ -285,32 +285,32 @@ local function apply_settings()
 end
 
 local function settings()
-    local items = { "サーバのURL", "長期アクセストークン", "エンティティ(1行に1つ)" }
-    local dlg = pico.show_choice("設定", items)
+    local items = { pico.tr("サーバのURL"), pico.tr("長期アクセストークン"), pico.tr("エンティティ(1行に1つ)") }
+    local dlg = pico.show_choice(pico.tr("設定"), items)
     pico.on(dlg, "closed", function(_, ok, idx)
         if not ok then return end
         pico.after(50, function()   -- ダイアログからダイアログへは1フレーム空ける
             if idx == 0 then
-                local d = pico.show_input("URL(ws://ホスト:8123/api/websocket)", cfg.url)
+                local d = pico.show_input(pico.tr("URL(ws://ホスト:8123/api/websocket)"), cfg.url)
                 pico.on(d, "closed", function(id, ok2)
                     if not ok2 then return end
                     local v = pico.get(id, "text")
                     if not v:match("^wss?://.+") then
-                        pico.show_message("URLは ws://… か wss://… の形で入れてください", "", "OK")
+                        pico.show_message(pico.tr("URLは ws://… か wss://… の形で入れてください"), "", "OK")
                         return
                     end
                     cfg.url = v
                     apply_settings()
                 end)
             elseif idx == 1 then
-                local d = pico.show_input("長期アクセストークン", cfg.token, false)
+                local d = pico.show_input(pico.tr("長期アクセストークン"), cfg.token, false)
                 pico.on(d, "closed", function(id, ok2)
                     if not ok2 then return end
                     cfg.token = pico.get(id, "text"):gsub("%s", "")
                     apply_settings()
                 end)
             else
-                local d = pico.show_input("entity_id か 名前=entity_id(最大" .. MAX_ENTITIES .. "つ)",
+                local d = pico.show_input(pico.tr("entity_id か 名前=entity_id(最大%sつ)", MAX_ENTITIES),
                                           entities_text(), false)
                 pico.on(d, "closed", function(id, ok2)
                     if not ok2 then return end
@@ -342,9 +342,9 @@ local function button(text, x, w, fn)
 end
 
 local bw = (W - 4) // 3
-button("戻る", X, bw, back)
-button("設定", X + bw + 2, bw, settings)
-button("再接続", X + (bw + 2) * 2, bw, function()
+button(pico.tr("戻る"), X, bw, back)
+button(pico.tr("設定"), X + bw + 2, bw, settings)
+button(pico.tr("再接続"), X + (bw + 2) * 2, bw, function()
     retry_ms = 5000
     if retry_timer then pico.cancel(retry_timer); retry_timer = nil end
     connect()

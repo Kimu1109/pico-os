@@ -28,3 +28,8 @@ test("通知から開かれたら通知のページへ送る", function()
     eq(app.mock.scene.path, "/lua/apps/動作確認/notify.lua")
     eq(app.mock.scene.args, { tag = "notify", data = "alarm" })
 end)
+
+test("英語では lang/en.lua の名前のボタンになる", function()
+    local app = load_app { lang = "en" }
+    eq(app:widget("Basic widgets").x, 8, "pico.tr で訳したボタン")
+end)

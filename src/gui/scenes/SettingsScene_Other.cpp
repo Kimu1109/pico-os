@@ -138,9 +138,9 @@ void SettingsScene::buildOtherTab(const Layout& lay){
         addToTab(Tab::Other, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(2) + 2), label_w, text));
     }
 
-    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)と起動時の自己診断。見出しの下に4行を詰めて並べる
-    // (行の高さ ROW_H のままでは「他」タブに収まらないため kDevRowH)
-    constexpr int kDevRowH = 26;
+    // 開発者向け(/sys/debug.cfg。DevToolsFunctions)と起動時の自己診断。見出しの下に4行を並べる
+    // (チェックボックスだけの行なので ROW_H より少し詰める。入りきらない分はスクロール)
+    constexpr int kDevRowH = 32;
     const int16_t dev_y = (int16_t)(rowY(3) + 2);
     auto* dev_title = makeRowLabel<PICO_STR_M>(left, dev_y, full_w, "開発者向け");
     dev_title->setTextColor(PICO_DARKGREY);

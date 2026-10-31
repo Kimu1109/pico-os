@@ -13,8 +13,8 @@ void ScrollContainer::updateContentBounds() {
         if (r.y + r.h > max_y) max_y = r.y + r.h;
     }
 
-    const int view_w = this->l_rect.w - (vertical_scroll ? SCROLL_L : 0);
-    const int view_h = this->l_rect.h - (horizontal_scroll ? SCROLL_L : 0);
+    const int view_w = this->l_rect.w - (vertical_scroll ? bar_l : 0);
+    const int view_h = this->l_rect.h - (horizontal_scroll ? bar_l : 0);
 
     max_scroll_x = std::max(0, max_x - view_w);
     max_scroll_y = std::max(0, max_y - view_h);
@@ -28,10 +28,10 @@ void ScrollContainer::causeOnPressStart(){
 
     is_scrolling = false;
     body_dragged = false;
-    if(vertical_scroll && sx >= this->l_rect.w - SCROLL_L){
+    if(vertical_scroll && sx >= this->l_rect.w - bar_l){
         is_scrolling = true;
     }
-    if(horizontal_scroll && sy >= this->l_rect.h - SCROLL_L){
+    if(horizontal_scroll && sy >= this->l_rect.h - bar_l){
         is_scrolling = true;
     }
 
@@ -62,7 +62,7 @@ void ScrollContainer::causeOnPressMove(){
         int new_x = s_scroll_x;
         if(is_scrolling){
             // スクロールバーのつまみが指に付いてくるよう、指の移動量を「中身の長さ/表示領域の長さ」倍する
-            const int view_w = this->l_rect.w - (vertical_scroll ? SCROLL_L : 0);
+            const int view_w = this->l_rect.w - (vertical_scroll ? bar_l : 0);
             if(view_w > 0) new_x += (int)((float)(rx - sx) * (view_w + max_scroll_x) / view_w);
         }else{
             new_x -= (rx - sx); // 中身が指に付いてくる
@@ -73,7 +73,7 @@ void ScrollContainer::causeOnPressMove(){
     if(vertical_scroll){
         int new_y = s_scroll_y;
         if(is_scrolling){
-            const int view_h = this->l_rect.h - (horizontal_scroll ? SCROLL_L : 0);
+            const int view_h = this->l_rect.h - (horizontal_scroll ? bar_l : 0);
             if(view_h > 0) new_y += (int)((float)(ry - sy) * (view_h + max_scroll_y) / view_h);
         }else{
             new_y -= (ry - sy);
@@ -113,10 +113,10 @@ void ScrollContainer::render() {
 
     // 垂直スクロールバー
     if(vertical_scroll){
-        const int bar_x = g_rect.x + g_rect.w - SCROLL_L;
+        const int bar_x = g_rect.x + g_rect.w - bar_l;
         const int bar_y = g_rect.y;
-        const int bar_w = SCROLL_L;
-        const int bar_h = g_rect.h - (horizontal_scroll ? SCROLL_L : 0);
+        const int bar_w = bar_l;
+        const int bar_h = g_rect.h - (horizontal_scroll ? bar_l : 0);
 
         // ツマミ(TextViewと同じ細い薄灰の棒。トラック枠は描かない)
         if(max_scroll_y > 0){
@@ -132,9 +132,9 @@ void ScrollContainer::render() {
     // 水平スクロールバー
     if(horizontal_scroll){
         const int bar_x = g_rect.x;
-        const int bar_y = g_rect.y + g_rect.h - SCROLL_L;
-        const int bar_w = g_rect.w - (vertical_scroll ? SCROLL_L : 0);
-        const int bar_h = SCROLL_L;
+        const int bar_y = g_rect.y + g_rect.h - bar_l;
+        const int bar_w = g_rect.w - (vertical_scroll ? bar_l : 0);
+        const int bar_h = bar_l;
 
         // ツマミ(縦と同じ見た目)
         if(max_scroll_x > 0){

@@ -634,6 +634,18 @@ void SettingsScene::buildWifiTab(const Layout& lay){
     this->wifi_login_button->setOnPressEnd([this](){ this->startCaptiveLogin(); });
     addToTab(Tab::Wifi, this->wifi_login_button);
 
+    // 上から [Wi-Fi 状態] / 見出し / 一覧 / 名前とIP(2行) / [検索][追加][接続][IP][削除] の順に積む。
+    // 一覧は見えている高さの残りを使い、狭い画面でも kMinListH は取る(はみ出す分は容器ごとスクロール)
+    constexpr int kMinListH = 92;
+    const int16_t list_y = (int16_t)(rowY(1) + Label<PICO_STR_M>::GetLineHeight(FontFn::Small) + MARGIN);
+    const int info_line_h = Label<PICO_STR_L>::GetLineHeight(FontFn::Small);
+    const int btn_box_h = EDIT_BTN_H + Button::kFrameExtraTight;
+    const int below_list_h = MARGIN * 2 + info_line_h * 2 + MARGIN * 2 + btn_box_h + MARGIN;
+    int list_h = body_bot - list_y - below_list_h;
+    if(list_h < kMinListH) list_h = kMinListH;
+    const int16_t info_y = (int16_t)(list_y + list_h + MARGIN * 2);
+    const int16_t buttons_y = (int16_t)(info_y + info_line_h * 2 + MARGIN * 2);
+
     // 下段のボタン: [検索][追加][接続][IP][削除]
     constexpr int kWifiButtons = 5;
     const int btn_w = (full_w - MARGIN * (kWifiButtons - 1)) / kWifiButtons;
@@ -642,15 +654,12 @@ void SettingsScene::buildWifiTab(const Layout& lay){
         &this->wifi_remove_button
     };
     const char* button_texts[kWifiButtons] = { "検索", "追加", "接続", "IP", "削除" };
-    int16_t buttons_y = 0;
     for(int i = 0; i < kWifiButtons; i++){
         Button* b = new Button(0, 0, button_texts[i]);
         b->setFontSize(FontFn::Small);
         b->setAllowTextSpacing(false);
         b->setW(btn_w + Button::kFrameExtraTight);
         b->setH(EDIT_BTN_H + Button::kFrameExtraTight);
-        const Rect box = b->getLocalRect();
-        buttons_y = (int16_t)(body_bot - box.h);
         b->setX((int16_t)(left + i * (btn_w + MARGIN)));
         b->setY(buttons_y);
         *buttons[i] = b;
@@ -671,8 +680,6 @@ void SettingsScene::buildWifiTab(const Layout& lay){
     this->wifi_name_button->setW(EDIT_BTN_W + Button::kFrameExtraTight);
     this->wifi_name_button->setH(EDIT_BTN_H + Button::kFrameExtraTight);
     const Rect name_box = this->wifi_name_button->getLocalRect();
-    const int info_line_h = Label<PICO_STR_L>::GetLineHeight(FontFn::Small);
-    const int16_t info_y = (int16_t)(buttons_y - MARGIN - info_line_h * 2);
     this->wifi_name_button->setX((int16_t)(left + full_w - name_box.w));
     this->wifi_name_button->setY((int16_t)(info_y + (info_line_h * 2 - name_box.h) / 2));
     this->wifi_name_button->setOnPressEnd([this](){
@@ -698,8 +705,7 @@ void SettingsScene::buildWifiTab(const Layout& lay){
     addToTab(Tab::Wifi, this->wifi_info_label);
     this->refreshWifiInfo();
 
-    const int16_t list_y = (int16_t)(rowY(1) + Label<PICO_STR_M>::GetLineHeight(FontFn::Small) + MARGIN);
-    this->wifi_list = new ScrollList(left, list_y, full_w, (int16_t)(info_y - MARGIN - list_y), WifiProfiles::kMaxProfiles);
+    this->wifi_list = new ScrollList(left, list_y, full_w, (int16_t)list_h, WifiProfiles::kMaxProfiles);
     this->wifi_list->setFontSize(FontFn::Small);
     this->wifi_list->setEnableIcon(true);
     this->wifi_list->setOnSelectItem([this](int index, bool already_selected){

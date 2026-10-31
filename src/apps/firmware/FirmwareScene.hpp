@@ -4,6 +4,7 @@
 #include "gui/widgets/Button.hpp"
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ProgressBar.hpp"
+#include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/WidgetID.hpp"
 #include "services/Firmware_Functions.hpp"
 #include "util/FixedString.hpp"
@@ -42,6 +43,8 @@ class FirmwareScene : public Scene {
     private:
         static constexpr int MARGIN = 6;
 
+        // 題名と下のボタンの間(版・鍵・状態・進み具合)。行を詰めずに置き、入りきらない分はスクロール
+        ScrollContainer* info_scroll = nullptr;
         Label<PICO_STR_L>* version_label = nullptr;
         Label<PICO_STR_LL>* key_label = nullptr;
         Label<PICO_STR_LL>* status_label = nullptr;

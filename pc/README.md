@@ -61,6 +61,9 @@ CIや画面のないマシンでは、Nフレーム回してPPMへ書き出し�
 SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --shot shot.ppm 40
 ```
 
+操作は `--tap X,Y@F[:H]`(Fフレーム目に(X,Y)をHフレーム押す)と `--drag X1,Y1-X2,Y2@F[:H]`
+(Fフレーム目に(X1,Y1)を押し、Hフレームかけて(X2,Y2)まで動かして離す。スクロールの確認用)で進める。
+
 **`dummy`ドライバは使わないこと。** `dummy`は`SDL_RENDERER_ACCELERATED`系のレンダラーを
 一切提供できず、LovyanGFXの`Panel_sdl`がフレームごとにウィンドウを作り直そうとして
 ヒープが際限なく増え続ける(`pc/patches/README.md`参照。取得したLovyanGFXへ

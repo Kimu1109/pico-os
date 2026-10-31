@@ -7,6 +7,7 @@
 #include "gui/widgets/DropdownMenu.hpp"
 #include "gui/widgets/NumberSlider.hpp"
 #include "gui/widgets/ScrollList.hpp"
+#include "gui/widgets/ScrollContainer.hpp"
 #include "gui/widgets/TabBar.hpp"
 #include "hal/Sound_Functions.hpp"
 #include "net/Wifi_Profiles.hpp"
@@ -29,6 +30,8 @@ namespace CaptivePortal { class CaptiveLogin; } // net/Captive_Portal.hpp。同�
 //
 // ウィジェットは全タブぶんをonEnter()で作り、表示中のタブのものだけを見せる
 // (ClocksSceneのapplyVisibility()と同じ考え方。タブごとの持ち物はtab_widgets[]に登録する)。
+// 各タブの中身は縦スクロールの容器(tab_scroll[])の子で、座標は容器の左上が(0,0)。
+// 行の間は詰めずに取り、画面に入りきらない分はスクロールで見せる(240x320でも窮屈にしない)。
 //
 // 電卓/時計と違い「保存」ボタンは持たない。各操作(編集ダイアログの決定/チェックボックスの
 // タップ/ドロップダウンの選択)ごとにその場で書き込む。保存済みのWi-Fiネットワークは
@@ -61,9 +64,15 @@ class SettingsScene : public Scene {
         static constexpr int kMaxTabWidgets = 16;
         Widget* tab_widgets[(int)Tab::Count][kMaxTabWidgets] = {};
         int     tab_widget_count[(int)Tab::Count] = {};
-        // WidgetFunctions::Add()してタブへ登録する
+        // タブの容器へ入れて登録する(ラベルは当たり判定を素通りさせ、上でのドラッグでもスクロールできるようにする)
         void addToTab(Tab t, Widget* w);
         void applyTab();
+
+        // タブごとの縦スクロールの容器(所有はWidgetFunctions。中身は容器が持つ)
+        ScrollContainer* tab_scroll[(int)Tab::Count] = {};
+        // 開いたドロップダウンの一覧が容器の下で切れないよう、開いたらそこまでスクロールする
+        DropdownMenu* shown_open_dropdown = nullptr;
+        void revealOpenDropdown();
 
         Button*   back_button = nullptr;
         Button*   power_button = nullptr;
@@ -244,13 +253,15 @@ class SettingsScene : public Scene {
         int tz_selected_index = -1; // onUpdate()での変化検出用
 
         constexpr static int MARGIN     = 3;
-        constexpr static int ROW_H      = 34;
+        constexpr static int ROW_H      = 40;
+        constexpr static int SCROLL_BAR_W = 6;   // タブの容器のスクロールバーの帯(本体のドラッグでも動くので細く)
         constexpr static int EDIT_BTN_W = 48;
         constexpr static int EDIT_BTN_H = 20;
         constexpr static int TAB_H      = 28;
 
         int top_row_h = 0;
-        int edit_btn_x = 0; // 全ての「編集」ボタンで共通のx(右端揃え)
+        int edit_btn_x = 0; // 全ての「編集」ボタンで共通のx(右端揃え。容器の中の座標)
+        int row_right  = 0; // 行の右端(容器の中の座標。スクロールバーの帯の手前)
 
         // network.cfg/user.cfgを読み直して各キャッシュ値とタイムゾーン一覧を更新する
         void loadValues();
@@ -262,7 +273,8 @@ class SettingsScene : public Scene {
         template <size_t N>
         Label<N>* makeRowLabel(int16_t x, int16_t y, int max_w, const char* text);
 
-        // 本文の行の置き方。onEnter() が決め、各タブの組み立て(build*)が使う
+        // 本文の行の置き方。onEnter() が決め、各タブの組み立て(build*)が使う。
+        // 座標はタブの容器の中のもの(content は容器の中身の領域で x=y=0、body_bot は見えている高さ)
         struct Layout {
             Rect content;
             int16_t body_y = 0, body_bot = 0, left = 0;

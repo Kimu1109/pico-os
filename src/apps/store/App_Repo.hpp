@@ -59,6 +59,7 @@ namespace AppRepo {
         uint8_t author_key[32] = {};         // 作者の公開鍵(files.sig の鍵)
         FixedString<PICO_STR_M> author;      // 表示用の作者名(切り詰めてよい)
         Status status = Status::Normal;
+        uint32_t min_os = 0;                 // 動かすのに要る本体の通し番号(FwVersion::Serial()。0=条件なし。12列目)
     };
 
     struct FileEntry {
@@ -78,6 +79,9 @@ namespace AppRepo {
 
     // 版の比較(数字を"."で区切って左から数として比べる。足りない所は0)。a<b なら負
     int CompareVersion(const char* a, const char* b);
+
+    // 本体(通し番号 os_serial)が古くて e を動かせないか。os_serial が0(PC/Webビルド・手元のビルド)なら条件を見ない
+    bool OsTooOld(const Entry& e, uint32_t os_serial);
 
     // ---- 16進 ----
     bool HexDecode(const char* hex, size_t hex_len, uint8_t* out, size_t out_len);

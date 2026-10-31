@@ -74,6 +74,7 @@ namespace PICO_Path {
         constexpr const char* STORE_CATALOG_PART = "/sys/store/catalog.part";
         constexpr const char* STORE_STATE = "/sys/store/state.cfg";
         constexpr const char* STORE_INSTALLED_DIR = "/sys/store/installed";
+        constexpr const char* STORE_PREV_DIR = "/sys/store/prev";   // 更新の前の版(<id>/files.tsv と <id>/app/)
         constexpr const char* STORE_STAGING = "/sys/store/staging";
         constexpr const char* STORE_STAGING_FILES = "/sys/store/staging/files.tsv";
         constexpr const char* STORE_STAGING_APP = "/sys/store/staging/app";

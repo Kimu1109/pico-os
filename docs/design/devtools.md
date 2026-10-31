@@ -125,6 +125,23 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
   待つのは、エディタの「一時ファイルへ書いて置き換え」の途中で拾わないため。`--shot` のときは見ない。
 - ネイティブ専用(Webはファイルを見張れない)。`src/` には手を入れていない。
 
+**実機のホットリロード(`lua/LuaHotReload`、`/sys/debug.cfg` の `lua-hot-reload = true`)(2026-10-30)**
+- PCの方式(ファイルの更新時刻を見張って `execv`)は実機に無いので、**Wi-Fi転送で届いたことを合図にする**。
+  `FileShareFunctions::file_changed`(受け取った・消した・動かした直後。boot/ が差す)→ `OnFileChanged()` が
+  `/lua/apps/<dir>/` の下の `.lua` と `<dir>/app.cfg` だけを拾い、`kQuietMs`(600ms)ほかに届かなければ開き直す
+  (ブラウザのページは複数のファイルを1つずつ送るので、その途中で開き直さない。別のアプリが混ざったら先のものはすぐ済ませる)。
+- **Wi-Fi転送は画面が開いている間しか動かない**ので、この設定の間だけ、画面を閉じても `Stop()` せずに `SetBackground(true)` で裏へ回す。
+  裏では仕事「Luaのホットリロード」(`BackgroundService`、止めるだけの形)が毎フレーム `FileShareFunctions::Update()` を回し、[停止]で `Stop()`。
+  仕事は画面を初めて裏へ回したときに `BackgroundFunctions::Add()` する(`DevToolsFunctions::Setup()` が `BackgroundFunctions::Setup()` より後なので、起動時には設定が読めていない)。
+  キーは画面を開いたときのまま(もう一度開いても同じキー)。画面ロック中は今まで通り受けない。既定は切れている(待ち受けが裏で続くのは開発の間だけにする)。
+- 開き直し: 今の画面がそのアプリの `LuaScene`(`scriptPath()` がアプリのフォルダの中)なら、下に積んだ同じアプリのページ(`pico.push_scene`)を
+  1フレームに1つずつ `Pop()` してから、登録簿の `main.lua` の項目の `create()` で `Change()`(遷移の要求はフレームに1つなので、要求が済むのを待って次の1歩)。
+  前に `LuaAppScanner::RegisterOrRefresh()` で名前・権限・アイコンを読み直す(新しく送ったアプリは登録簿に入る)。開いていなければ読み直すだけ。
+  Luaの状態だけを作り直さないのはPCの方式と同じ理由。
+- `FileShareScene` は、この設定の間は題を「転送(裏で続く)」にする(「Wi-Fi転送(閉じても続く)」は[直接つなぐ]に重なった)。
+- 検証: `lua_hot_reload_test`(lua-scene。拾うパス・待ち直し・切ってあるとき・`millis()` の一周)。PCビルドで「Wi-Fi転送→閉じる→Luaアプリ→curlで main.lua を送る」と、
+  0.6秒後に同じ深さ(depth=1)で開き直り、新しい中身が出ることを `--tap`/`--shot` で確かめた。**実機では未確認(Todoist参照)**。
+
 **テストランナー(`picoos lua-test`)**
 - `script/lua_test/pico_test.lua` が本体。`script/host_test/lua/pico_mock.lua`(既存の `pico.*` の偽物)の上でアプリを読み、
   テストファイル(`*_test.lua`)の `test(名前, 関数)` を順に動かす。確かめる関数は `ok/eq/ne/near/raises/fail`、

@@ -97,6 +97,7 @@ namespace {
         if(e.status != AppRepo::Status::Normal){
             return e.status == AppRepo::Status::Blocked ? TR("危険と判断されたアプリです") : TR("取り下げられたアプリです");
         }
+        if(const char* err = AppInstall::CheckOs(e)) return err;
 
         //3行目: files.sig(作者の鍵の署名)
         uint8_t pub[32], sig[64];

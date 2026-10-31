@@ -1194,7 +1194,7 @@ msgstr "token is too long"
 msgid "チャットの未読"
 msgstr "Unread chat"
 
-#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp src/lua/LuaBackground.cpp
+#: src/apps/chat/Chat_Watch.cpp src/apps/store/Store_Watch.cpp src/apps/todo/Todo_Watch.cpp src/lua/LuaBackground.cpp
 msgid "切っています"
 msgstr "Off"
 
@@ -1202,7 +1202,7 @@ msgstr "Off"
 msgid "確認しています…"
 msgstr "Checking…"
 
-#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp src/lua/LuaBackground.cpp
+#: src/apps/chat/Chat_Watch.cpp src/apps/store/Store_Watch.cpp src/apps/todo/Todo_Watch.cpp src/lua/LuaBackground.cpp
 msgid "失敗: %s"
 msgstr "Failed: %s"
 
@@ -1218,7 +1218,7 @@ msgstr "Checked %lum ago (%d rooms)"
 msgid "まだ確認していません"
 msgstr "Not checked yet"
 
-#: src/apps/chat/Chat_Watch.cpp src/apps/gb/GameBoyScene.cpp src/apps/gb/Gb_Emu.cpp src/apps/todo/Todo_Watch.cpp src/apps/video/Pvid_Player.cpp src/lua/LuaEngine_Iso.cpp src/lua/LuaEngine_Socket.cpp src/services/Firmware_Functions.cpp
+#: src/apps/chat/Chat_Watch.cpp src/apps/gb/GameBoyScene.cpp src/apps/gb/Gb_Emu.cpp src/apps/store/Store_Watch.cpp src/apps/todo/Todo_Watch.cpp src/apps/video/Pvid_Player.cpp src/lua/LuaEngine_Iso.cpp src/lua/LuaEngine_Socket.cpp src/services/Firmware_Functions.cpp
 msgid "メモリが足りません"
 msgstr "Out of memory"
 
@@ -1226,7 +1226,7 @@ msgstr "Out of memory"
 msgid "要求を始められません"
 msgstr "Cannot start the request"
 
-#: src/apps/chat/Chat_Watch.cpp src/apps/todo/Todo_Watch.cpp
+#: src/apps/chat/Chat_Watch.cpp src/apps/store/Store_Watch.cpp src/apps/todo/Todo_Watch.cpp
 msgid "時間切れ"
 msgstr "Timed out"
 
@@ -2847,6 +2847,26 @@ msgid "シェルを開けませんでした"
 msgstr "Could not open a shell"
 
 #: src/apps/store/App_Install.cpp
+msgid "本体の更新が要ります(#%lu以降。今は#%lu)"
+msgstr "Needs OS build #%lu or later (this is #%lu)"
+
+#: src/apps/store/App_Install.cpp src/gui/scenes/FileExplorerScene.cpp
+msgid "名前が長すぎます"
+msgstr "Name is too long"
+
+#: src/apps/store/App_Install.cpp
+msgid "前の版が残っていません"
+msgstr "No previous version is kept"
+
+#: src/apps/store/App_Install.cpp
+msgid "前の版の一覧を読めません"
+msgstr "Cannot read the previous version's file list"
+
+#: src/apps/store/App_Install.cpp
+msgid "前の版のファイルを戻せません"
+msgstr "Cannot restore the previous version's files"
+
+#: src/apps/store/App_Install.cpp
 msgid "SDカードから読めません"
 msgstr "Cannot read from the SD card"
 
@@ -3011,6 +3031,18 @@ msgid "なし"
 msgstr "None"
 
 #: src/apps/store/App_Store.cpp
+msgid "%d件のアプリを更新しました"
+msgstr "Updated %d apps"
+
+#: src/apps/store/App_Store.cpp
+msgid "%d件を更新、%d件は失敗 (%s)"
+msgstr "Updated %d, %d failed (%s)"
+
+#: src/apps/store/App_Store.cpp
+msgid "%s を %s へ戻しました"
+msgstr "Rolled %s back to %s"
+
+#: src/apps/store/App_Store.cpp
 msgid "信頼する鍵がありません(/sys/store.cfg の key)"
 msgstr "No trusted key (key in /sys/store.cfg)"
 
@@ -3111,6 +3143,14 @@ msgid "Wi-Fiに繋いで [更新] を押してください"
 msgstr "Join Wi-Fi, press [Update]"
 
 #: src/apps/store/StoreScene.cpp
+msgid "すべて更新 (%d件)"
+msgstr "Update all (%d)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (見送り中)"
+msgstr " (skipped)"
+
+#: src/apps/store/StoreScene.cpp
 msgid " (更新)"
 msgstr " (update)"
 
@@ -3121,6 +3161,10 @@ msgstr " (danger)"
 #: src/apps/store/StoreScene.cpp
 msgid "を削除してください(危険)"
 msgstr " - please delete (danger)"
+
+#: src/apps/store/StoreScene.cpp
+msgid " (本体が古い)"
+msgstr " (OS too old)"
 
 #: src/apps/store/StoreScene.cpp
 msgid " (取り下げ)"
@@ -3163,6 +3207,18 @@ msgid " 取り下げられました"
 msgstr " Withdrawn"
 
 #: src/apps/store/StoreScene.cpp
+msgid " 本体#%lu以降が要ります"
+msgstr " Needs OS #%lu or later"
+
+#: src/apps/store/StoreScene.cpp
+msgid " この版は見送り中"
+msgstr " This version is skipped"
+
+#: src/apps/store/StoreScene.cpp
+msgid " 前の版%sに戻せます"
+msgstr " Can roll back to %s"
+
+#: src/apps/store/StoreScene.cpp
 msgid "\n作者: %s  権限: %s\n%s"
 msgstr "\nAuthor: %s  Permissions: %s\n%s"
 
@@ -3175,6 +3231,10 @@ msgid "上書き"
 msgstr "Overwrite"
 
 #: src/apps/store/StoreScene.cpp
+msgid "戻す/削除"
+msgstr "More…"
+
+#: src/apps/store/StoreScene.cpp
 msgid "同じ名前の別のアプリが入っているので入れられません"
 msgstr "Cannot install: a different app has this name"
 
@@ -3183,12 +3243,20 @@ msgid "作者の鍵が変わりました。削除してから入れ直してく�
 msgstr "Author key changed. Delete it, then install again"
 
 #: src/apps/store/StoreScene.cpp
+msgid "本体の更新が要ります(#%lu以降)"
+msgstr "Update the OS first (#%lu or later)"
+
+#: src/apps/store/StoreScene.cpp
 msgid "取り下げられたアプリなので入れられません"
 msgstr "Cannot install a withdrawn app"
 
 #: src/apps/store/StoreScene.cpp
 msgid "%s %s を入れますか?\n作者: %s\n使う権限: %s"
 msgstr "Install %s %s?\nAuthor: %s\nPermissions: %s"
+
+#: src/apps/store/StoreScene.cpp
+msgid "\n※この更新で使う権限が増えます"
+msgstr "\nNote: this update asks for more permissions"
 
 #: src/apps/store/StoreScene.cpp
 msgid "\n\n/lua/apps/%s に同じ名前のアプリがあります。上書きします(アプリが書いたファイルは残ります)"
@@ -3201,6 +3269,38 @@ msgstr "Wait for the list to finish loading"
 #: src/apps/store/StoreScene.cpp
 msgid "%s を削除しますか?\n/lua/apps/%s を丸ごと消します(セーブデータ等も消えます)"
 msgstr "Delete %s?\nThis removes all of /lua/apps/%s (including save data)"
+
+#: src/apps/store/StoreScene.cpp
+msgid "%d件のアプリを更新しますか?\n"
+msgstr "Update %d apps?\n"
+
+#: src/apps/store/StoreScene.cpp
+msgid "\n(権限が増える更新は1つずつ入れてください)"
+msgstr "\n(Install updates that add permissions one by one)"
+
+#: src/apps/store/StoreScene.cpp
+msgid "今は更新できません"
+msgstr "Cannot update now"
+
+#: src/apps/store/StoreScene.cpp
+msgid "%s をどうしますか?"
+msgstr "What to do with %s?"
+
+#: src/apps/store/StoreScene.cpp
+msgid "%s に戻す"
+msgstr "Roll back to %s"
+
+#: src/apps/store/StoreScene.cpp
+msgid "削除する"
+msgstr "Delete"
+
+#: src/apps/store/StoreScene.cpp
+msgid "%s を %s から %s へ戻しますか?\nアプリが書いたファイル(セーブ等)はそのまま残ります。%s は、[更新] を押すまで更新の知らせに出しません"
+msgstr "Roll %s back from %s to %s?\nFiles the app wrote (saves etc.) are kept. %s will not be offered as an update until you press [Update]"
+
+#: src/apps/store/StoreScene.cpp
+msgid "戻す"
+msgstr "Roll back"
 
 #: src/apps/store/StoreScene.cpp
 msgid "配布元のURL:"
@@ -3221,6 +3321,38 @@ msgstr "Not in the launcher yet (appears after a restart)"
 #: src/apps/store/StoreScene.hpp
 msgid "ストア"
 msgstr "Store"
+
+#: src/apps/store/Store_Watch.cpp
+msgid "アプリの更新の確認"
+msgstr "App update check"
+
+#: src/apps/store/Store_Watch.cpp
+msgid "一覧を取っています…"
+msgstr "Fetching the list…"
+
+#: src/apps/store/Store_Watch.cpp
+msgid "%lu分前に確認(更新%d件)"
+msgstr "Checked %lu min ago (%d updates)"
+
+#: src/apps/store/Store_Watch.cpp
+msgid "%lu分前に確認(更新なし)"
+msgstr "Checked %lu min ago (no updates)"
+
+#: src/apps/store/Store_Watch.cpp
+msgid "1日1回、入っているアプリの更新を確かめます"
+msgstr "Checks installed apps for updates once a day"
+
+#: src/apps/store/Store_Watch.cpp
+msgid "アプリの更新があります"
+msgstr "App updates available"
+
+#: src/apps/store/Store_Watch.cpp
+msgid "%s の新しい版があります"
+msgstr "A new version of %s is available"
+
+#: src/apps/store/Store_Watch.cpp
+msgid "%s など%d件のアプリに新しい版があります"
+msgstr "New versions of %s and others (%d apps)"
 
 #: src/apps/texteditor/TextEditorScene.cpp
 msgid "容量の上限(32KiB)を超えます"
@@ -3847,10 +3979,6 @@ msgid "その名前は使えません"
 msgstr "That name is not allowed"
 
 #: src/gui/scenes/FileExplorerScene.cpp
-msgid "名前が長すぎます"
-msgstr "Name is too long"
-
-#: src/gui/scenes/FileExplorerScene.cpp
 msgid "同じ名前があります"
 msgstr "That name already exists"
 
@@ -3885,6 +4013,10 @@ msgstr "Search for:"
 #: src/gui/scenes/FileSearchScene.cpp
 msgid "探す名前:"
 msgstr "Name to find:"
+
+#: src/gui/scenes/FileShareScene.cpp
+msgid "転送(裏で続く)"
+msgstr "Share (stays on)"
 
 #: src/gui/scenes/FileShareScene.cpp src/gui/scenes/WifiSetupScene.cpp
 msgid "始められませんでした: %s"
@@ -5153,6 +5285,22 @@ msgstr "This app cannot read there"
 #: src/lua/LuaEngine_System.cpp
 msgid "通知の権限がありません"
 msgstr "No notification permission"
+
+#: src/lua/LuaHotReload.cpp
+msgid "Luaのホットリロード"
+msgstr "Lua hot reload"
+
+#: src/lua/LuaHotReload.cpp
+msgid "Wi-Fi転送の画面を閉じると待ち受けを続けます"
+msgstr "Keeps listening after you close Wi-Fi Share"
+
+#: src/lua/LuaHotReload.cpp
+msgid "キー %s"
+msgstr "Key %s"
+
+#: src/lua/LuaHotReload.cpp
+msgid " / 最後: %s"
+msgstr " / last: %s"
 
 #: src/net/Captive_Portal.cpp
 msgid "ポータルのURLを読めません"

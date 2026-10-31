@@ -14,10 +14,12 @@
 //
 //   [戻る] アプリストア      [設定][更新]
 //   一覧(入っている=緑、更新あり=青、入れられない=赤)。取り下げたアプリは、入っているときだけ並べる
-//   (危険の印が付いて入っているものは先頭に並べ、状態の行で削除をすすめる)
+//   (危険の印が付いて入っているものは先頭に並べ、状態の行で削除をすすめる)。
+//   まとめて更新できるものがあれば、一覧の先頭に「すべて更新 (N件)」の行を出す
+//   (権限が増える更新・前の版へ戻して見送っている版・本体が古くて入れられないものは入れない)
 //   選んだアプリの欄(名前・版・大きさ / 権限 / 説明)
 //   進み具合のバー + 状態の1行
-//   [入れる/更新] [開く] [削除]
+//   [入れる/更新] [開く] [削除](前の版が残っていれば [戻す/削除]。選ぶダイアログを出す)
 //
 // 通信とインストールは AppStore(apps/store/App_Store)。約27KBあるので、この画面が開いている間だけ new する
 // (シーン本体は数十バイト)。HTTPSの接続(TLSの約40KB)は画面を離れるときに閉じる。
@@ -47,8 +49,9 @@ class StoreScene : public Scene {
         // 確認ダイアログの間に一覧が変わっても別のアプリを触らないよう、idで覚える
         FixedString<PICO_STR_S> confirm_id;
 
-        // 一覧の行 → AppStoreの番号(取り下げたアプリを飛ばすので、そのままの番号ではない)
-        int8_t rows[AppRepo::kMaxEntries] = {};
+        // 一覧の行 → AppStoreの番号(取り下げたアプリを飛ばすので、そのままの番号ではない)。kRowUpdateAll は「すべて更新」の行
+        constexpr static int8_t kRowUpdateAll = -2;
+        int8_t rows[AppRepo::kMaxEntries + 1] = {};
         int row_count = 0;
         // 危険の印が付いて入っているアプリの知らせ(無ければ空)
         FixedString<PICO_STR_LL> blocked_warning;
@@ -73,6 +76,9 @@ class StoreScene : public Scene {
         void startRefresh();
         void confirmInstall();
         void confirmRemove();
+        void confirmUpdateAll();
+        void chooseRollbackOrRemove();
+        void confirmRollback();
         void openSettings();
 
     public:

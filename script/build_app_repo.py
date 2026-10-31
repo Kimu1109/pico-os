@@ -359,6 +359,14 @@ def load_app(app_dir, name, files, where):
         perms.append("microphone")
     a.perms = ",".join(perms) or "-"
     a.status = "-"
+    # 動かすのに要る本体の通し番号(ファームの #123 の 123。設定の「端末の情報」・ファームの更新の画面に出る)
+    min_os = cfg.get("min_os", "").strip()
+    if min_os in ("", "-", "0"):
+        a.min_os = "-"
+    elif min_os.isdigit() and int(min_os) < 2 ** 32:
+        a.min_os = str(int(min_os))
+    else:
+        raise SystemExit(f"{where}: min_os は本体の通し番号(数字)にしてください ({min_os})")
     files = list(files)
     if "main.lua" not in files or "app.cfg" not in files:
         raise SystemExit(f"{name}: main.lua と app.cfg が要ります(gitの管理下ならgit addも)")
@@ -396,7 +404,7 @@ def make_catalog(apps, serial):
             raise SystemExit(f"{a.id}: status は {'/'.join(STATUSES)} のどれかです ({a.status})")
         author = cut_utf8(a.author.replace("\t", " "), MAX_AUTHOR_BYTES) or "-"
         line = (f"{a.id}\t{a.version}\t{a.dir}\t{a.name}\t{a.bytes}\t{h}\t{a.perms}\t{a.description}"
-                f"\t{a.author_key}\t{author}\t{a.status}\n")
+                f"\t{a.author_key}\t{author}\t{a.status}\t{getattr(a, 'min_os', '-')}\n")
         if len(line.encode("utf-8")) > MAX_LINE_BYTES:
             raise SystemExit(f"{a.dir}: カタログの1行が長すぎます(名前・説明を短く)")
         lines.append(line)
@@ -510,7 +518,8 @@ def read_catalog(index_dir):
         entries.append({"id": c[0], "version": c[1], "dir": c[2], "name": c[3], "bytes": int(c[4]), "files_sha256": c[5],
                         "perms": c[6], "description": c[7],
                         "author_key": c[8] if fmt == 2 else None, "author": c[9] if fmt == 2 else "-",
-                        "status": c[10] if fmt == 2 else "-", "line": line})
+                        "status": c[10] if fmt == 2 else "-",
+                        "min_os": c[11] if fmt == 2 and len(c) > 11 and c[11].isdigit() else "-", "line": line})
     return catalog, entries, fmt
 
 
@@ -1081,9 +1090,10 @@ def render_card(e, icon, pkg, pkg_bytes):
     img = (f'<img class="icon" src="{esc(icon)}" alt="" width="48" height="48" loading="lazy">' if icon
            else '<span class="icon noicon" aria-hidden="true"></span>')
     search = esc(" ".join((e["name"], e["id"], e["description"], e["author"])).lower())
+    min_os = f" · 本体 #{esc(e['min_os'])} 以降" if e.get("min_os", "-") != "-" else ""
     return f"""<article class="card" id="{esc(e['id'])}" data-search="{search}">
   <div class="card-head">{img}<div><h3>{esc(e['name'])}</h3>
-    <p class="meta px">v{esc(e['version'])} · {esc(e['author'])}</p></div></div>
+    <p class="meta px">v{esc(e['version'])} · {esc(e['author'])}{min_os}</p></div></div>
   <p class="desc">{esc(e['description']) or '&nbsp;'}</p>
   <p class="perms">{badges}</p>
   <div class="card-foot">

@@ -31,16 +31,34 @@ namespace AppInstall {
         AppRepo::FileEntry file;
     };
 
+    // 本体の通し番号(既定は FwVersion::Serial())。ホストテストの差し替え口
+    inline uint32_t (*os_serial_hook)() = nullptr;
+    uint32_t OsSerial();
+    // e の min_os を今の本体が満たさなければ、利用者へ見せる1行を返す(満たせば nullptr)
+    const char* CheckOs(const AppRepo::Entry& e);
+
     // インストール先(/lua/apps/<dir>)
     bool AppDir(const AppRepo::Entry& e, FixedString<PICO_PATH_LEN>& out);
-    // 入っているかどうか。version には入っている版(入っていなければ空)
-    Installed Check(const AppRepo::Entry& e, FixedString<PICO_STR_S>* version = nullptr);
+    // 入っているかどうか。version には入っている版(入っていなければ空)、perms には入っているものの権限
+    Installed Check(const AppRepo::Entry& e, FixedString<PICO_STR_S>* version = nullptr, uint8_t* perms = nullptr);
 
     // 覚えている作者の鍵(/sys/store/installed/<id>.key)。無ければfalse
     bool ReadPinnedKey(const char* id, uint8_t out[32]);
     bool WritePinnedKey(const char* id, const uint8_t key[32]);
-    // 入れたときのファイルの一覧と作者の鍵を忘れる(削除したとき)
+    // 入れたときのファイルの一覧・作者の鍵・前の版・見送りの印を忘れる(削除したとき)
     void Forget(const char* id);
+
+    // ---- 前の版(docs/APP_REPO.md「前の版へ戻す」) ----
+    // ストアで入れたアプリを更新すると、前の版のファイル(前の版の一覧に載っていたもの)を
+    // /sys/store/prev/<id>/app/ へ移して残す(1つ前の版だけ)。Rollback() で戻せる。
+    // 前の版があればその版を version へ
+    bool PreviousVersion(const char* id, FixedString<PICO_STR_S>& version);
+    // 前の版へ戻す: 今の版のファイル(今の一覧に載っているもの)を消し、前の版のファイルを戻す。
+    // 戻した版を「見送り」(/sys/store/installed/<id>.hold)として覚え、まとめて更新・更新の知らせから外す。
+    // dir … インストール先(/lua/apps/<dir>)。戻した版を restored へ(任意)
+    const char* Rollback(const char* id, const char* dir, Work& w, FixedString<PICO_STR_S>* restored = nullptr);
+    // 見送っている版(前の版へ戻したときの新しいほうの版)。無ければfalse
+    bool HeldVersion(const char* id, FixedString<PICO_STR_S>& version);
 
     // files.tsv(path)の n 番目(0始まり。空行・'#'の行は数えない)の行を w.file へ
     bool ReadFileLine(const char* path, int n, Work& w);

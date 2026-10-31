@@ -22,6 +22,7 @@
 // - サーバの持ち物(要求の見出し・送受の溜め場所、約9KB)は Start() で new し Stop() で返す
 // PCビルドは http://127.0.0.1:8082/ で開ける(PICOOS_SHARE_PORT で変更。母艦の外からは開けない)。Webビルドでは使えない。
 namespace FileShareFunctions {
+    constexpr const char* kAppName = "Wi-Fi転送";  // 登録簿の名前(FileShareScene::kAppName)
     constexpr uint16_t kHttpPort = 80;
     constexpr uint32_t kBudgetMs = 12;          // 1フレームで転送に使う時間
     constexpr uint32_t kIdleTimeoutMs = 10000;  // 何も届かない・送れないまま待つ上限
@@ -70,4 +71,11 @@ namespace FileShareFunctions {
     extern bool (*path_busy)(const char* path);
     // Stop() のとき、何か書き換えていたら呼ぶ。boot/ が差す
     extern void (*sd_changed)();
+    // ファイルを1つ受け取った・消した・動かした直後に呼ぶ(動かしたときは元と先の両方)。boot/ が差す(Luaのホットリロード)
+    extern void (*file_changed)(const char* path);
+
+    // 画面を閉じても待ち受けを続けるか(Luaのホットリロード。lua/LuaHotReload)。続けている間は
+    // 画面の代わりに LuaHotReload の仕事が Update() を呼ぶ。Stop() で偽に戻る
+    void SetBackground(bool on);
+    bool InBackground();
 }

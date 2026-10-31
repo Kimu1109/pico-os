@@ -191,7 +191,9 @@ int main(int argc, char** argv){
         check(s.beginRefresh() && Run(s) && s.catalogSerial() == 200, "update: 新しい一覧");
         const int t = Find(s, "tetris");
         check(s.installed(t) == AppStore::Installed::Update && strcmp(s.installedVersion(t), "2.0.0") == 0, "update: 古い版が入っている");
-        check(s.beginInstall(t) && Run(s), "update: 入れ直せる");
+        check(s.batchUpdatable(t) && s.batchCount() >= 1, "update: まとめて更新に入る");
+        check(s.beginUpdateAll() && s.busy() && Run(s), "update: まとめて更新で入れ直せる");
+        check(!s.batchRunning() && strstr(s.message(), "更新しました") != nullptr, "update: まとめて更新の結果の1行");
         check(!Has("/lua/apps/テトリス/bgm.mml"), "update: 新しい版に無いファイルは消える");
         check(HostSd::files["/lua/apps/テトリス/extra/data.txt"] == "v2 data\n", "update: 増えたファイル(サブディレクトリ)");
         check(HostSd::files["/lua/apps/テトリス/app.cfg"] == ReadHostFile(tet_v2 + "app.cfg"), "update: app.cfgも新しい");
@@ -199,6 +201,20 @@ int main(int argc, char** argv){
         check(s.installed(t) == AppStore::Installed::Same, "update: 同じ版になった");
         check(AppFunctions::Count() == apps_before, "update: 登録は増えない(差し替え)");
         check(HostSd::files["/sys/store/installed/tetris.key"] == pubhex + "\n", "update: 鍵を覚えていなければ覚える");
+        check(s.batchCount() == 0, "update: 入れたあとはまとめて更新に残らない");
+
+        //前の版へ戻す → 見送り → 1つずつの[更新]で入れ直す
+        FixedString<PICO_STR_S> prev;
+        check(s.previousVersion(t, prev) && prev == "2.0.0", "prev: 前の版 2.0.0 が残っている");
+        check(Has("/sys/store/prev/tetris/app/bgm.mml"), "prev: 前の版にだけあったファイルも残っている");
+        check(s.rollback(t) && s.state() == AppStore::State::Done, "prev: 前の版へ戻せる");
+        check(Has("/lua/apps/テトリス/bgm.mml") && !Has("/lua/apps/テトリス/extra/data.txt")
+              && HostSd::files["/lua/apps/テトリス/main.lua"] == ReadHostFile(tet_src + "main.lua"), "prev: 2.0.0 のファイルに戻る");
+        check(HostSd::files["/lua/apps/テトリス/hiscore.txt"] == "12345", "prev: アプリが書いたファイルは残る");
+        check(s.installed(t) == AppStore::Installed::Update && s.held(t) && !s.batchUpdatable(t),
+              "prev: 2.1.0 は見送り(まとめて更新に入れない)");
+        check(s.beginInstall(t) && Run(s) && s.installed(t) == AppStore::Installed::Same && !s.held(t),
+              "prev: 1つずつ入れれば見送りは解ける");
         s.close();
     }
 

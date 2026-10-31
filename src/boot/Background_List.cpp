@@ -3,7 +3,11 @@
 #include "apps/music/Music_Service.hpp"
 #include "apps/chat/Chat_Watch.hpp"
 #include "apps/todo/Todo_Watch.hpp"
+#include "apps/store/Store_Watch.hpp"
 #include "lua/LuaBackground.hpp"
+#include "lua/LuaHotReload.hpp"
+#include "services/FileShare_Functions.hpp"
+#include "Arduino.h"
 #include "lua/LuaAppScanner.hpp"
 #include "gui/scenes/LuaScene.hpp"
 #include "config/App_Config.hpp"
@@ -38,6 +42,19 @@ void BackgroundFunctions::Setup(){
     };
     Add(TodoWatch::Service(), true);
 #endif
+
+    //アプリストアの更新の確認(1日1回。更新があれば通知する。ストアが開いている間は画面に任せる)
+#if PICO_APP_STORE
+    StoreWatch::foreground_query = [](){
+        const Scene* cur = SceneFunctions::Current();
+        return cur && strcmp(cur->getName(), "Store") == 0;
+    };
+    Add(StoreWatch::Service(), true);
+#endif
+
+    //Luaのホットリロード(/sys/debug.cfg の lua-hot-reload のときだけ働く。debug.cfg はこの後で読むので、ここでは見ない)。
+    //仕事そのものは Wi-Fi転送の画面を閉じて裏へ回したときに FileShareScene が足す
+    FileShareFunctions::file_changed = [](const char* path){ LuaHotReload::OnFileChanged(path, millis()); };
 
     //Luaアプリのバックグラウンドスクリプト(app.cfg の background)
     LuaBackground::foreground_script = []() -> const char* {

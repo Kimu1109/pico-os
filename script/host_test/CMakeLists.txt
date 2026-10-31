@@ -218,6 +218,7 @@ host_test(file_share_test GROUP core)
 host_test(app_test GROUP core)
 host_test(home_test GROUP core)
 host_test(app_repo_test GROUP core)
+host_test(app_install_test GROUP core)
 host_exe(app_package_test)
 host_py_test(app_package_tool_test GROUP core USES app_package_test
     ARGS $<TARGET_FILE:app_package_test> ${CMAKE_CURRENT_BINARY_DIR}/app_package_work)
@@ -305,6 +306,7 @@ host_test(alarm_test GROUP widget)
 host_test(notification_test GROUP widget)
 host_test(error_functions_test GROUP widget)
 host_test(widget_arena_test GROUP widget)
+host_test(scene_cycle_test GROUP widget)
 host_test(text_size_test GROUP widget)
 
 # --- lua-base: vendorしたLua本体 ---
@@ -323,6 +325,7 @@ host_test(devtools_test GROUP lua-sandbox)
 # --- lua-scene: LuaScene・アプリの走査・Luaアプリのゲームの規則・2.5Dエンジン ---
 host_test(lua_scene_test GROUP lua-scene)
 host_test(lua_app_scanner_test GROUP lua-scene)
+host_test(lua_hot_reload_test GROUP lua-scene)
 host_exe(lua_script_test)
 host_lua_test(tetris_test GROUP lua-scene)
 host_lua_test(oshite_test GROUP lua-scene)

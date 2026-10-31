@@ -244,5 +244,12 @@ struct SdFat {
         HostSd::files.erase(it);
         return true;
     }
-    bool rmdir(const char*){ return false; }
+    // dirs_enabled のときだけ、中が空(その下のファイルが1つも無い)なら消せたことにする(実機と同じく、中があれば失敗)。
+    // 既定(dirs_enabled=false)は以前のまま常に失敗
+    bool rmdir(const char* path){
+        if(!HostSd::dirs_enabled || !path) return false;
+        const std::string prefix = std::string(path) + "/";
+        for(const auto& kv : HostSd::files) if(kv.first.compare(0, prefix.size(), prefix) == 0) return false;
+        return true;
+    }
 };

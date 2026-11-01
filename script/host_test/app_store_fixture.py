@@ -71,6 +71,8 @@ def main():
         for dst in (src, orig):
             shutil.copytree(os.path.join(SRC, d), os.path.join(dst, d),
                             ignore=shutil.ignore_patterns("store.json*", "settings.cfg", "hiscore.txt"))
+            # 版はここで決める(pc/sdcard の見本のアプリの版が上がっても、元の版=2.0.0 の前提が崩れないように)
+            set_cfg(os.path.join(dst, d, "app.cfg"), "version", "2.0.0")
     var = os.path.join(out, "variants")
     shutil.rmtree(var, ignore_errors=True)
 

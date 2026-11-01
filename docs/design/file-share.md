@@ -2,7 +2,7 @@
 
 > `CLAUDE.md`「設計記録の索引」から引く設計記録。進み具合は `SUMMARY.md`。
 
-## Wi-Fi転送 (`src/net/File_Share` / `src/net/File_Share_Page.cpp` / `src/services/FileShare_Functions` / `FileShareScene`) (2026-10-27)
+## Wi-Fi転送 (`src/net/File_Share` / `src/net/File_Share_Page.html` / `src/services/FileShare_Functions` / `FileShareScene`) (2026-10-27)
 
 ランチャの「Wi-Fi転送」(アイコンは共有)。開いている間だけ、同じLANのPC・スマホのブラウザ(またはcurl)から
 SDのファイルを一覧・ダウンロード・アップロード・削除・名前の変更・フォルダ作成できる。USBドライブと違って線が要らず、スマホからも使える。
@@ -11,9 +11,12 @@ SDのファイルを一覧・ダウンロード・アップロード・削除・
 
 ### 方式
 
-- **HTTP+本体が返す1枚のページ**(HTML+JS、`File_Share_Page.cpp` に生の文字列で約7.4KB)。WebDAVはファイル一覧の問い合わせにXMLで答える必要があり、
+- **HTTP+本体が返す1枚のページ**(HTML+JS、`src/net/File_Share_Page.html`)。WebDAVはファイル一覧の問い合わせにXMLで答える必要があり、
   Windowsの書き込みのロック・macOSの `._*` 等の癖への対応が重いので見送った。FTPは2本目の接続が要り、ブラウザも対応をやめたので使わない。
-  ページはgzipにすれば約3KBに縮むが、生成の道具が要るので第1段は生のまま(フラッシュは今のところ余裕がある)。
+  **ページはgzipでフラッシュに置く**(2026-11-01。生の12.8KB → 5.2KB)。`script/gen_file_share_page.py` が .html を gzip して
+  `File_Share_Page.cpp`(生成物)を作る。CIの `--check` は gzip の出力ではなく戻した中身を .html と比べる(zlibの版で結果が変わっても落ちない)。
+  ページの決まり(innerHTML を使わない・X-Pico-Key を送る)もこのスクリプトが確かめる(以前はホストテストが生の文字列を見ていた)。
+  `Content-Encoding: gzip` で返すので、`Accept-Encoding` に gzip が無い相手(素の curl 等)へは406で断る(今のブラウザは全部 gzip を送る)。
 - **アップロードは `PUT /f/<パス>` で、本文がファイルの中身そのもの**。フォームのファイル送信(multipart)は読むのが面倒なので使わない。
   ブラウザ側は XHR の `send(file)`(進み具合が要るので fetch ではない)、curl は `-T`。`Transfer-Encoding: chunked` は断る(どちらも Content-Length を付ける)。
 - 取り決め(`net/File_Share.hpp` の先頭):

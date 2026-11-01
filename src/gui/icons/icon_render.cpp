@@ -18,29 +18,32 @@ bool DrawIconRaw(const IconAsset& asset,
  
     const uint8_t* p = asset.data;
     const uint8_t* end = asset.data + asset.data_len;
-    const int32_t width = asset.width;
-    const int32_t height = asset.height;
- 
+    // scale>1 のサイズ(64px)は絵を持たず、小さい絵(32px)を整数倍に拡大して描く(generate_icons.py の SCALED_FROM)
+    const int32_t scale = asset.scale > 1 ? asset.scale : 1;
+    const int32_t width = asset.width / scale;   // データ上の大きさ
+    const int32_t height = asset.height / scale;
+
     int32_t px = 0;
     int32_t py = 0;
- 
+
     // データは必ず「off, on, off, on, ...」の順で始まる(生成側で保証済み)。
     bool opaque = false;
- 
+
     // 描画範囲外への書き込みを防ぐ（画面端に配置した場合の安全策）。今のクリップ(FlushDirty()の
     // dirty矩形)との重なりへ狭め、抜けるときに元へ戻す(clearClipRect()すると、この後に描くものが
     // dirty矩形の外へはみ出す。gui/ScopedClip.hpp参照)
-    ScopedClip clip(x, y, width, height);
- 
+    ScopedClip clip(x, y, asset.width, asset.height);
+
     while (p < end && py < height) {
         const uint8_t run_len = *p++;
- 
+
         for (uint8_t i = 0; i < run_len; ++i) {
             if (py >= height) break;  // データ破損時のフェイルセーフ
- 
+
             if (opaque) {
                 // 新しい色を合成しない。既存パレット色をそのまま書き込むだけ。
-                OSData::frame->writePixel(x + px, y + py, fgColor);
+                if (scale == 1) OSData::frame->writePixel(x + px, y + py, fgColor);
+                else OSData::frame->fillRect(x + px * scale, y + py * scale, scale, scale, fgColor);
             }
             // opaque == false は書き込みスキップ(readPixelすら行わない)
  

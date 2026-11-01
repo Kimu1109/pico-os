@@ -45,6 +45,7 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
   PCビルドは`libssl-dev`が要る(`find_package(OpenSSL)`)。**Webビルドは常に繋がらないスタブ**
   (生のソケットが無いので、そもそもTLSも無い)。
 - **信頼するルート**は`script/generate_tls_roots.py`が母艦の`/etc/ssl/certs`から`src/net/Tls_Roots_Data.hpp`へ焼き込む
+  (1枚ずつDERで。PEMの文字のままより約3.5KB小さい。2026-11-01。SDの`/sys/tls/ca.pem`はPEMのまま読む)
   (GTS Root R1/R4=Google、ISRG Root X1/X2=Let's Encrypt、DigiCert Global Root G2/CA、USERTrust RSA=Sectigo、
   Amazon Root CA 1=AWS(api.todoist.com。2026-10-01追加)、Starfield Root G2(accounts.spotify.com。Certainly/Fastlyの中間の上。2026-10-14追加)の9枚)。
   api.spotify.com は DigiCert Global Root G2 の下(足す前から通る)。どちらもTLS 1.2で繋がることを`openssl s_client -tls1_2 -CAfile <焼き込みの9枚>`と

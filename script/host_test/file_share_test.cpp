@@ -71,6 +71,17 @@ static void TestRequestHead(){
     check(r.hasLength() && r.contentLength() == 11, "見出し: Content-Length");
     eqStr(r.range(), "bytes=5-", "見出し: Range");
     check(FeedAll(r, "GET /f/a HTTP/1.1\r\n\r\n", 8) == RequestHead::State::Done && r.range()[0] == '\0', "見出し: Range が無ければ空");
+    check(!r.acceptsGzip(), "見出し: Accept-Encoding が無ければ gzip は渡せない");
+    struct { const char* v; bool ok; } enc[] = {
+        {"gzip, deflate, br", true}, {"br;q=1.0, GZIP;q=0.8", true}, {"deflate, br", false},
+        {"gzip;q=0", false}, {"gzip;q=0.000", false}, {"gzip;q=0.5", true}, {"x-gzip", false}, {"*", false},
+    };
+    for(const auto& e : enc){
+        const std::string req = std::string("GET / HTTP/1.1\r\nAccept-Encoding: ") + e.v + "\r\n\r\n";
+        char label[96];
+        snprintf(label, sizeof(label), "見出し: Accept-Encoding \"%s\"", e.v);
+        check(FeedAll(r, req, 4096) == RequestHead::State::Done && r.acceptsGzip() == e.ok, label);
+    }
 
     check(FeedAll(r, "GET / HTTP/1.1\r\nHost: x\r\n\r\n", 3) == RequestHead::State::Done && r.method() == Method::Get &&
           !r.hasLength() && r.query()[0] == '\0', "見出し: GET(本文なし)");
@@ -252,8 +263,8 @@ static void TestResponse(){
     check(!AppendListLine(list, std::string(40, 'x').c_str(), false, 1) && list == "a.txt\tf\t12\ndir\td\t0\n",
           "AppendListLine: 入りきらなければ何も足さない");
 
-    check(PageHtmlLength() == strlen(kPageHtml) && strstr(kPageHtml, "X-Pico-Key") != nullptr, "ページ: 長さと、キーの見出しを送ること");
-    check(strstr(kPageHtml, "innerHTML") == nullptr, "ページ: SDの名前を innerHTML へ入れない");
+    // ページの中身の決まり(innerHTML を使わない・キーの見出しを送る)は script/gen_file_share_page.py が確かめる
+    check(PageGzLength() > 18 && kPageGz[0] == 0x1f && kPageGz[1] == 0x8b && kPageGz[2] == 8, "ページ: gzip(deflate)で持つ");
 }
 
 int main(){

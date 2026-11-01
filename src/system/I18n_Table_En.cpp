@@ -80,6 +80,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0afe1f4cu, "received a frame with RSV bits set" }, // 拡張の印(RSV)が立った枠を受けた
     { 0x0b86d5d2u, "NTP server 1" }, // NTPサーバー1
     { 0x0b931eeau, "Tue" }, // 火
+    { 0x0b9795abu, "The SD card could not be opened with the saved settings, so the defaults were used" }, // 保存したSDの設定で開けなかったので、既定の設定で起動しました
     { 0x0bbc8e8du, "Cannot send" }, // 送れません
     { 0x0bf09e87u, "Loading" }, // 読み込み中です
     { 0x0c7134a5u, "Overwritten by NTP sync" }, // NTP同期で上書きされます
@@ -296,6 +297,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x2ea78303u, "Cannot send to the portal" }, // ポータルへ送れません
     { 0x2ecad6fdu, "Loading…" }, // 読み込み中…
     { 0x2f481137u, "Unexpected rate format" }, // レートの形式が違います
+    { 0x2f53415du, "Hardware settings" }, // ハードウェアの設定
     { 0x2f535ae3u, "Transcribe: %s" }, // 文字起こし: %s
     { 0x2f57c9fau, "Calendar: " }, // カレンダー: 
     { 0x2f78371du, "File on the server is too large" }, // 配布元のファイルが大きすぎます
@@ -320,6 +322,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x33384ac7u, "Cannot read the signature (catalog.sig)" }, // 署名(catalog.sig)を読めません
     { 0x335fc0ccu, "Tap to choose..." }, // タップして選択...
     { 0x33674c41u, "Transcribe" }, // 文字起こし
+    { 0x3372bcf4u, "The display did not respond with the saved settings, so the defaults were used" }, // 保存した液晶の設定で応答が無かったので、既定の設定で起動しました
     { 0x33961587u, "Invite code:" }, // 参加コード:
     { 0x33a6c26bu, "%s\"%s\": %d+ (first %d)" }, // %s「%s」%d件以上(先頭%d件)
     { 0x33c2eb5bu, "Network error: " }, // 通信に失敗: 
@@ -762,6 +765,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x829ffe5du, "Edit" }, // 編集
     { 0x82a29195u, "%s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu oth%lu(%02X) err%lu" }, // %s ep%02X/%02X\nINQ%lu TUR%lu CAP%lu 他%lu(%02X) 誤%lu
     { 0x82deb986u, "Analog" }, // アナログ
+    { 0x82efc548u, "Saved display/SD settings could not be read, so the defaults were used" }, // 保存した液晶・SDの設定が読めなかったので、既定の設定で起動しました
     { 0x8309ef63u, "Cannot read the sign-in server response (HTTP %d)" }, // サインインのサーバの応答が読めません (HTTP %d)
     { 0x830e9716u, "at %02d:%02d (in %d min)" }, // %02d:%02dから(%d分前)
     { 0x839b18b9u, "Delete %s?\nThis removes all of /lua/apps/%s (including save data)" }, // %s を削除しますか?\n/lua/apps/%s を丸ごと消します(セーブデータ等も消えます)
@@ -1077,6 +1081,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xb5bfe05bu, "Not checked yet" }, // まだ確認していません
     { 0xb5cdb9d7u, "Battery: USB power" }, // 電池 USB給電中
     { 0xb62272a4u, "Failed to load the ROM" }, // ROMの読み込みに失敗しました
+    { 0xb640d39cu, "Saved display and SD settings did not work, so the defaults were used" }, // 保存した液晶とSDの設定が使えなかったので、既定の設定で起動しました
     { 0xb64497f9u, "Base" }, // 進数
     { 0xb64d353au, "Wrong token" }, // トークンが違います
     { 0xb65b25cfu, "Show: %s" }, // 表示: %s
@@ -1467,4 +1472,4 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xffdae38bu, "Fetching %s…" }, // %s を取得中…
     { 0xfff3714fu, "No" }, // いいえ
 };
-const size_t I18nFunctions::kTableEnCount = 1463;
+const size_t I18nFunctions::kTableEnCount = 1468;

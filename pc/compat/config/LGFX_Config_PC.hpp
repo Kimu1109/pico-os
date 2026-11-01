@@ -9,6 +9,7 @@
 #include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
 #include "config/Panel_sdl_SpiWait.hpp"
 #include "consts.hpp"
+#include "config/HwConfig.hpp"
 
 // PCの画面上での拡大率。240x320は実寸だと小さいので既定で2倍にする
 #ifndef PICOOS_PC_SCALE
@@ -36,4 +37,9 @@ public:
 
         setPanel(&_panel_instance);
     }
+
+    // 実機の LGFX と同じ口(config/LGFX_Config.hpp)。PCではピンも速さも無いので初期化するだけ、
+    // 液晶は必ず応答する扱い(フォールバックしない)
+    bool initWith(const HwConfig&) { return init(); }
+    bool probe(void) { return true; }
 };

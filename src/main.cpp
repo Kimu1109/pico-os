@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "hal/SD_Functions.hpp"
+#include "hal/HwConfig_Functions.hpp"
 #include "hal/Touch_Functions.hpp"
 #include "hal/TouchCalib_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"
@@ -78,6 +79,8 @@ bool core1_separate_stack = true;
 void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
 
+    //液晶・タッチ・SDの配線と設定(内蔵フラッシュの末尾4KB。無ければ consts.hpp の既定)。それらの初期化より前に
+    HwConfigFunctions::Load();
     PICO_GFX::Setup();
     PICO_SD::Setup();
 
@@ -155,6 +158,8 @@ void setup() {
     //通知(予約の読み込みとトースト)。予約の送り主を登録簿と突き合わせるのでAppFunctionsより後、
     //トーストを全オーバーレイの一番上に置くのでキーボードより後
     NotificationFunctions::Setup();
+    //保存した液晶・SDの設定が使えず既定で起動したことを知らせる
+    HwConfigFunctions::PostPendingNotice();
 
     //バックグラウンドの仕事(ミュージックの再生・チャットの未読・Luaアプリの定期スクリプト)。
     //Luaアプリの仕事を登録簿から拾うので AppFunctions::Setup() より後
@@ -181,10 +186,12 @@ void setup() {
 #endif
     LuaDebugger::SetErrorReporter(&CrashDumpFunctions::SaveLuaError);
     LuaDebugger::SetActivityHook(&CrashDumpFunctions::SetLua);
-    //シリアルの"dbg ..."(Luaデバッガ)と"hw ..."(実機の確認。docs/HARDWARE_CHECKLIST.md)
+    //シリアルの"dbg ..."(Luaデバッガ)と"hw ..."(実機の確認。docs/HARDWARE_CHECKLIST.md)と
+    //"hwcfg ..."(液晶・SDの配線。画面が映らなくても直せるように debug.cfg に関係なく受け付ける)
     PadFunctions::extra_line_handler = [](const char* line){
-        return LuaDebugger::FeedSerialLine(line) || HwTestFunctions::FeedSerialLine(line);
+        return LuaDebugger::FeedSerialLine(line) || HwTestFunctions::FeedSerialLine(line) || HwConfigFunctions::FeedSerialLine(line);
     };
+    HwConfigFunctions::reboot = &PowerMenuFunctions::RequestReboot;
     DevToolsFunctions::Setup();
     //前回のクラッシュを知らせる(タップでダンプを開く)
     CrashDumpFunctions::PostPendingNotice();

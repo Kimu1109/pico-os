@@ -13,13 +13,17 @@
 #include "OS_Data.hpp"
 #include "hal/TouchFilter.hpp"
 #include "hal/TouchCalib.hpp"
+#include "hal/HwConfig_Functions.hpp"
 #include <math.h>
 #include "system/Log_Functions.hpp"
 
 namespace PICO_Touch
 {
+    // ピンは Setup() で HwConfig(内蔵フラッシュの設定。hal/HwConfig_Functions)から決め直す。
+    // SCK/MOSI/MISOは液晶と共有(lcd.sck 等)、CS/IRQ はタッチのもの(touch.cs / touch.irq)
     inline SPIClassRP2040 touchSPI(spi0, TOUCH_MISO, TOUCH_CS, TOUCH_SCK, TOUCH_MOSI);
     inline XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
+    inline int irq_pin = TOUCH_IRQ;
 
     // 生の値→画面座標の変換はhal/TouchCalib.hpp(既定は昔のmap()と同じ式。
     // 「タッチ補正」アプリで求めた値が入る)
@@ -51,7 +55,15 @@ namespace PICO_Touch
     inline TouchFilter touch_filter;
 
     inline void Setup(){
-        pinMode(TOUCH_IRQ, INPUT_PULLUP);
+        // 液晶の初期化(PICO_GFX::Setup())で既定へ戻していればそれに従う
+        const HwConfig& hw = HwConfigFunctions::active;
+        irq_pin = hw.touch_irq;
+        ts = XPT2046_Touchscreen(hw.touch_cs, hw.touch_irq);
+        touchSPI.setRX(hw.lcd_miso);
+        touchSPI.setSCK(hw.lcd_sck);
+        touchSPI.setTX(hw.lcd_mosi);
+
+        pinMode(irq_pin, INPUT_PULLUP);
 
         touchSPI.begin();
         ts.begin(touchSPI);
@@ -84,7 +96,7 @@ namespace PICO_Touch
 
         //IRQゲート: IRQピンがLOW(タッチ検知)の間だけSPI通信を行う
         bool touched = false;
-        if(digitalRead(TOUCH_IRQ) == LOW){
+        if(digitalRead(irq_pin) == LOW){
             touchSPI.beginTransaction(SPISettings(TOUCH_SPI_HZ, MSBFIRST, SPI_MODE0));
             TS_Point p = ts.getPoint();
             touched = (p.z >= TOUCH_Z_THRESHOLD);

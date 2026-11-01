@@ -5010,6 +5010,26 @@ msgstr "Cancel"
 msgid "消す"
 msgstr "Del"
 
+#: src/hal/HwConfig_Functions.cpp
+msgid "保存した液晶とSDの設定が使えなかったので、既定の設定で起動しました"
+msgstr "Saved display and SD settings did not work, so the defaults were used"
+
+#: src/hal/HwConfig_Functions.cpp
+msgid "保存した液晶の設定で応答が無かったので、既定の設定で起動しました"
+msgstr "The display did not respond with the saved settings, so the defaults were used"
+
+#: src/hal/HwConfig_Functions.cpp
+msgid "保存したSDの設定で開けなかったので、既定の設定で起動しました"
+msgstr "The SD card could not be opened with the saved settings, so the defaults were used"
+
+#: src/hal/HwConfig_Functions.cpp
+msgid "保存した液晶・SDの設定が読めなかったので、既定の設定で起動しました"
+msgstr "Saved display/SD settings could not be read, so the defaults were used"
+
+#: src/hal/HwConfig_Functions.cpp
+msgid "ハードウェアの設定"
+msgstr "Hardware settings"
+
 #: src/lua/LuaBackground.cpp
 msgid "スクリプトを開けません"
 msgstr "Cannot open the script"

@@ -4,6 +4,7 @@
 #include "gui/core/Keyboard_Functions.hpp"
 #include "config/LGFX_Config.hpp"
 #include "OS_Data.hpp"
+#include "hal/HwConfig_Functions.hpp"
 #include <SPI.h>
 #include <cstdio>
 #include <cstdlib>
@@ -19,7 +20,25 @@ namespace {
 }
 
 void PICO_GFX::Setup() {
-    OSData::lcd->init();
+    // 配線と設定は内蔵フラッシュの値(hal/HwConfig_Functions。main.cpp が先に Load() する)。
+    // 保存した値で液晶が応答しなければ、液晶とタッチの部分だけ既定へ戻して試す
+    using HwConfigCodec::Group;
+    LGFX* lcd = OSData::lcd;
+    bool ok = lcd->initWith(HwConfigFunctions::active);
+    if(HwConfigFunctions::CanFallBack(Group::Lcd) && !(ok && lcd->probe())){
+        LOG_SYS_WARN("保存した液晶の設定で応答が無いので、既定の設定で試します");
+        const HwConfig def = HwConfigFunctions::WithDefault(Group::Lcd);
+        if(lcd->initWith(def) && lcd->probe()){
+            HwConfigFunctions::MarkFellBack(Group::Lcd, def);
+            LOG_SYS_WARN("既定の設定で液晶が応答したので、こちらで起動します(hwcfg show で確認)");
+            ok = true;
+        }else{
+            // 読み出しの線(MISO)の無い液晶はどちらでも応答しないので、保存した値(使う人の意図)へ戻す
+            LOG_SYS_WARN("既定の設定でも応答が無いので、保存した設定のまま起動します");
+            ok = lcd->initWith(HwConfigFunctions::active);
+        }
+    }
+    if(!ok) LOG_SYS_FAIL("液晶の初期化に失敗しました");
     OSData::lcd->setBaseColor(TFT_WHITE);
     OSData::lcd->clear(TFT_WHITE);
     OSData::lcd->setFont(&lgfxJapanGothicP_24);

@@ -22,6 +22,9 @@ public:
     SPIClassRP2040(int, int, int, int, int){}
     void begin(bool = false){}
     void end(){}
+    bool setRX(int){ return true; }
+    bool setTX(int){ return true; }
+    bool setSCK(int){ return true; }
     void beginTransaction(SPISettings){}
     void endTransaction(){}
 };

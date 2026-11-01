@@ -17,7 +17,10 @@ namespace {
 
 int TlsRoots::AppendTo(X509List& out){
     int added = 0;
-    if(out.append(TlsRootsData::kPem)) added += TlsRootsData::kCount;
+    //焼き込みの分は1枚ずつDERで持っている(PEMの文字で持つより約3.5KB小さい。Tls_Roots_Data.hpp)
+    for(const auto& c : TlsRootsData::kCerts){
+        if(out.append(c.der, c.len)) added++;
+    }
 
     if(!OSData::SD_usable) return added;
     FsFile f = OSData::SD.open(PICO_Path::FILE::TLS_EXTRA_CA_PEM, O_RDONLY);

@@ -66,10 +66,13 @@ enum class TextAlign {
     Right
 };
 
-template<size_t N>
-class Label : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
+// Labelの処理の本体。テキストの置き場(FixedString<N>)だけを派生のLabel<N>に持たせ、
+// レイアウト・描画・カーソルの処理はここで1つだけ実体化する。
+// 以前はクラス全体がLabel<N>のテンプレートで、Nの種類(約10)ごとに同じ処理が丸ごと
+// フラッシュへ入っていた(合計約37KB)。テキストへは rawText()/placeholderText() 等の
+// 仮想関数を通して触る(呼ばれるのはレイアウトと描画の入口だけなので速さには効かない)。
+class LabelBase : public Widget, public IFontImplementation, public IBorderColor, public ITextColor {
     private:
-        FixedString<N> raw_text;                          // マークアップ込みの元テキスト
         // 解析・折返し後の行データ。
         //
         // 以前は std::vector<std::vector<TextRun>> で行ごとにvectorを持っていたため、
@@ -83,7 +86,6 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         SmallVector<TextRun, 1> placeholder_runs_flat;
         uint16_t placeholder_line_count = 0;
 
-        FixedString<N> placeholder_text;
         int8_t placeholder_color = PICO_LIGHTGREY;
 
         int max_width = 0;                         // 0 = 折り返し無効（\nのみ改行）
@@ -142,8 +144,6 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         // レイアウトが古ければ計算し直す。const getterからも呼ぶためconstにしてある
         void ensureLayout() const;
 
-        // レイアウト結果を無効化する(レイアウトに影響するsetterから呼ぶ)
-        void invalidateLayout();
 
         // ensureLayout()を通さずに、再計算前の(=いま画面に出ている)スクリーン矩形を返す。
         // invalidateLayout()が「消すべき古い領域」をdirty登録するために使う。
@@ -162,6 +162,18 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         void updateCursorBlink();
 
     protected:
+        LabelBase() = default;
+
+        // 元テキストとplaceholderの置き場(Label<N>が持つ)。
+        // renderRun()が描画の間だけ終端を差し替えるので、書き換えられるポインタを返す
+        virtual char* rawBuf() = 0;
+        virtual size_t rawLength() const = 0;
+        virtual char* placeholderBuf() = 0;
+        virtual size_t placeholderLength() const = 0;
+
+        // テキストを差し替えたあとに呼ぶ(dirty登録と再レイアウトの要求)
+        void invalidateLayout();
+
         // カーソル位置テーブルの構築を有効にする。
         // 入力欄として使うことが分かっている場合(Textbox)はコンストラクタで呼んでおくと、
         // 描画中に有効化されてレイアウトがやり直しになるのを避けられる
@@ -171,20 +183,6 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         // カーソルの点滅はrender()が時間を見て切り替える
         bool wantsFrameUpdate() const override { return this->cursor_blink_enabled; }
 
-        // 注意: メンバテンプレート(template<size_t M>)はLabel.cpp側で個別インスタンス化していないため、
-        // クラス本体内でインライン定義しておく(呼び出し側で使われた組み合わせごとに暗黙インスタンス化させる)。
-        // Label.cpp末尾の`template class Label<N>;`はメンバテンプレートまでは実体化しない点に注意。
-        template<size_t M>
-        Label(int x, int y, const FixedString<M>& text) {
-            this->l_rect.x = x;
-            this->l_rect.y = y;
-            this->setText(text);
-            this->needs_redraw = true;
-        }
-        Label(int x, int y, const char* text = "");
-        template<size_t M>
-        Label(const FixedString<M>& text) : Label(0, 0, text) {}
-        Label(const char* text);
 
         void render() override;
         void needsRender() override;
@@ -207,26 +205,6 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         static int GetTextWidth(FontFn::FontSize size, const char* text);
 
         // ---------- setter / getter ----------
-        template<size_t M>
-        void setText(const FixedString<M>& text) {
-            //const char*版と同じ理由で、変化が無ければ再レイアウトしない
-            if(this->raw_text == text) return;
-
-            this->raw_text.assign(text);
-            invalidateLayout();
-        }
-        void setText(const char* text);
-        const FixedString<N>* getText() const { return &this->raw_text; }
-        FixedString<N>* getText() { return &this->raw_text; }
-
-        template<size_t M>
-        void setPlaceholder(const FixedString<M>& text) {
-            this->placeholder_text.assign(text);
-            invalidateLayout();
-        }
-        void setPlaceholder(const char* text);
-        const FixedString<N>* getPlaceholder() const { return &this->placeholder_text; }
-        FixedString<N>* getPlaceholder() { return &this->placeholder_text; }
 
         void setPlaceholderColor(int8_t color);
 
@@ -291,4 +269,53 @@ class Label : public Widget, public IFontImplementation, public IBorderColor, pu
         bool getDisableAutoTextDecoration(){
             return this->disable_auto_text_decoration;
         }
+};
+
+// 元テキストを FixedString<N> で持つラベル。処理は LabelBase にある
+template<size_t N>
+class Label : public LabelBase {
+    private:
+        FixedString<N> raw_text;          // マークアップ込みの元テキスト
+        FixedString<N> placeholder_text;
+
+    protected:
+        char* rawBuf() override { return const_cast<char*>(this->raw_text.c_str()); }
+        size_t rawLength() const override { return this->raw_text.length(); }
+        char* placeholderBuf() override { return const_cast<char*>(this->placeholder_text.c_str()); }
+        size_t placeholderLength() const override { return this->placeholder_text.length(); }
+
+    public:
+        Label(int x, int y, const char* text = "") {
+            this->l_rect.x = x;
+            this->l_rect.y = y;
+            this->setText(text);
+            this->needs_redraw = true;
+        }
+        template<size_t M>
+        Label(int x, int y, const FixedString<M>& text) : Label(x, y, text.c_str()) {}
+        Label(const char* text) : Label(0, 0, text) {}
+        template<size_t M>
+        Label(const FixedString<M>& text) : Label(0, 0, text.c_str()) {}
+
+        void setText(const char* text) {
+            //中身が同じなら何もしない。invalidateLayout()はdirty登録2件と再レイアウトを
+            //無条件で起こすので、毎フレーム同じ文字列を流し込む呼び出し元(時計やタイマーの
+            //状態表示など)があると、変化が無くても画面全体の合成が走り続けてしまう
+            if(this->raw_text == text) return;
+            this->raw_text.assign(text);
+            this->invalidateLayout();
+        }
+        template<size_t M>
+        void setText(const FixedString<M>& text) { this->setText(text.c_str()); }
+        const FixedString<N>* getText() const { return &this->raw_text; }
+        FixedString<N>* getText() { return &this->raw_text; }
+
+        void setPlaceholder(const char* text) {
+            this->placeholder_text.assign(text);
+            this->invalidateLayout();
+        }
+        template<size_t M>
+        void setPlaceholder(const FixedString<M>& text) { this->setPlaceholder(text.c_str()); }
+        const FixedString<N>* getPlaceholder() const { return &this->placeholder_text; }
+        FixedString<N>* getPlaceholder() { return &this->placeholder_text; }
 };

@@ -13,7 +13,7 @@ pico-os のC++ヘッダファイル (include/icons_data.h) を生成する。
     1. tabler_icons/ に必要なSVGファイルを配置する
        (https://tabler.io/icons からダウンロード)
     2. ICONS リストを編集して収録アイコンを追加/削除する
-       (サイズは指定不要。ALL_SIZESで定義した全サイズが自動生成される)
+       (サイズは指定不要。ALL_SIZESで定義した全サイズが使える。SCALED_FROM のサイズは小さい絵の拡大)
     3. python3 tools/generate_icons.py を実行
        -> include/icons_data.h が生成される
     4. platformio.ini の extra_scripts に登録しておくと
@@ -48,7 +48,7 @@ except ImportError:
 
 # ============================================================
 # 収録アイコン定義（ここを編集してアイコンを追加/削除する）
-# サイズは指定しない。ALL_SIZES に列挙した全サイズが自動生成される。
+# サイズは指定しない。ALL_SIZES に列挙した全サイズが使える(SCALED_FROM のサイズは小さい絵を拡大して描く)。
 # ============================================================
 
 @dataclass
@@ -225,6 +225,11 @@ ICONS: list[IconSpec] = [
 # 全アイコン共通で生成するサイズ一覧。個別指定はしない。
 ALL_SIZES: list[int] = [16, 24, 32, 48, 64]
 
+# 絵を持たず、小さいサイズの絵を整数倍に拡大して描くサイズ(サイズ -> 元にするサイズ)。
+# 64pxは使う所が少ない(MsgDialogの大きなアイコンとLua)わりに1枚が大きく、全108個で約21.7KBあったので、
+# 32pxを2倍にして描く(線が少し太く角ばるが、64pxの大きさで見るぶんには目立たない)。2026-11-01
+SCALED_FROM: dict[int, int] = {64: 32}
+
 # 二値化の閾値(0-255)。alpha >= BINARY_THRESHOLD をONピクセルとする。
 # ディザリングは撤去した(Bayer行列とalpha量子化のレンジが同じだったため、
 # 完全不透明でも行列の最大セルで判定漏れが起き、べた塗り領域に周期的な
@@ -368,6 +373,8 @@ def generate_header(icons: list, sizes: list, out_path: Path):
 
     for icon in icons:
         for size in sizes:
+            if size in SCALED_FROM:
+                continue
             print(f"  変換中: {icon.name} @ {size}px  ({icon.svg_path})")
 
             alpha = rasterize_to_alpha(icon.svg_path, size)
@@ -405,6 +412,7 @@ def generate_header(icons: list, sizes: list, out_path: Path):
     lines.append("    size_t data_len;")
     lines.append("    uint8_t width;")
     lines.append("    uint8_t height;")
+    lines.append("    uint8_t scale;  // 1より大きければ data は (width/scale)x(height/scale) の絵で、scale倍に拡大して描く")
     lines.append("};")
     lines.append("")
 
@@ -416,12 +424,15 @@ def generate_header(icons: list, sizes: list, out_path: Path):
         "[static_cast<size_t>(IconID::IconCount)] = {"
     )
     for size in sizes:
-        lines.append(f"    // {size_enum_name(size)}")
+        src = SCALED_FROM.get(size, size)
+        scale = size // src
+        note = f"({src}pxを{scale}倍)" if scale > 1 else ""
+        lines.append(f"    // {size_enum_name(size)}{note}")
         lines.append("    {")
         for icon in icons:
-            var_name = entry_map[(icon.name, size)]
+            var_name = entry_map[(icon.name, src)]
             lines.append(
-                f"        {{ {var_name}, sizeof({var_name}), {size}, {size} }}, "
+                f"        {{ {var_name}, sizeof({var_name}), {size}, {size}, {scale} }}, "
                 f"// {icon.name}"
             )
         lines.append("    },")
@@ -462,7 +473,8 @@ def generate_header(icons: list, sizes: list, out_path: Path):
 
     out_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n生成完了: {out_path}  ({total_bytes} bytes のアイコンデータ, "
-          f"{len(icons)}アイコン x {len(sizes)}サイズ = {len(icons) * len(sizes)}枚)")
+          f"{len(icons)}アイコン x {len(sizes) - len(SCALED_FROM)}サイズ = "
+          f"{len(icons) * (len(sizes) - len(SCALED_FROM))}枚。{sorted(SCALED_FROM)}pxは拡大して描く)")
 
 
 def main():

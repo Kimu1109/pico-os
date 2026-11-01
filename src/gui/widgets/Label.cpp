@@ -9,38 +9,33 @@
 #include "OS_Data.hpp"
 #include "gui/ScopedClip.hpp"
 
-template<size_t N>
-void Label<N>::needsRender() {
+void LabelBase::needsRender() {
     this->needs_redraw = true;
     markdirty(this->getScreenRect());
     markdirty(this->prev_cursor_rect);
 }
 
-template<size_t N>
-void Label<N>::ensureLayout() const {
+void LabelBase::ensureLayout() const {
     if (!this->needs_relayout) return;
     //relayout()はレイアウト結果(可視状態ではない)を更新するだけなので、
     //const getterから呼んでも観測できる振る舞いは変わらない
-    const_cast<Label<N>*>(this)->relayout();
+    const_cast<LabelBase*>(this)->relayout();
 }
 
-template<size_t N>
-Rect Label<N>::staleScreenRect() const {
+Rect LabelBase::staleScreenRect() const {
     const int sx = (parent ? parent->getScreenX() - parent->getScrollOffsetX() : 0) + l_rect.x;
     const int sy = (parent ? parent->getScreenY() - parent->getScrollOffsetY() : 0) + l_rect.y;
     return { (int16_t)sx, (int16_t)sy, l_rect.w, l_rect.h };
 }
 
-template<size_t N>
-void Label<N>::enableCursorTracking() {
+void LabelBase::enableCursorTracking() {
     if (this->cursor_tracking) return;
     this->cursor_tracking = true;
     //テーブルはrelayout()の中でしか作れないので、作り直しを要求する
     this->invalidateLayout();
 }
 
-template<size_t N>
-void Label<N>::invalidateLayout() {
+void LabelBase::invalidateLayout() {
     //ここでdirty登録するのは「消すべき古い領域」なので、再計算前の矩形を使う。
     //needsRender()はgetScreenRect()経由でensureLayout()を呼んでしまい、
     //せっかく遅延させた再計算がその場で走ってしまう
@@ -51,20 +46,17 @@ void Label<N>::invalidateLayout() {
     this->needs_relayout = true;
 }
 
-template<size_t N>
-Rect Label<N>::getLocalRect() const {
+Rect LabelBase::getLocalRect() const {
     this->ensureLayout();
     return l_rect;
 }
 
-template<size_t N>
-int Label<N>::getW() {
+int LabelBase::getW() {
     this->ensureLayout();
     return this->l_rect.w;
 }
 
-template<size_t N>
-int Label<N>::getH() {
+int LabelBase::getH() {
     this->ensureLayout();
     return this->l_rect.h;
 }
@@ -85,8 +77,7 @@ static inline size_t nextUtf8Char(const char* s, size_t n, size_t i, char out[5]
     return i + (size_t)len;
 }
 
-template<size_t N>
-void Label<N>::parseMarkup(const char* src, size_t n, uint16_t base_offset, ParsedRuns& runs) {
+void LabelBase::parseMarkup(const char* src, size_t n, uint16_t base_offset, ParsedRuns& runs) {
     runs.clear();
     TextRun cur;
     if (!src) return;
@@ -146,9 +137,8 @@ void Label<N>::parseMarkup(const char* src, size_t n, uint16_t base_offset, Pars
     flush();
 }
 
-template<size_t N>
 template<typename Runs, typename Offsets>
-void Label<N>::computeLineOffsets(const Runs& src_runs, int src_line_count,
+void LabelBase::computeLineOffsets(const Runs& src_runs, int src_line_count,
                                    int box_width, Offsets& out) {
     //左揃えならオフセットは全て0なので、テーブル自体を作らない。
     //描画側は範囲外を0として扱うので、空のままで支障がない(既定の左揃えで1確保減る)
@@ -235,8 +225,7 @@ class WordWrapper {
         }
 };
 
-template<size_t N>
-void Label<N>::relayout() {
+void LabelBase::relayout() {
     //先に下ろしておく。この関数の末尾のneedsRender()がgetScreenRect()経由で
     //ensureLayout()を呼び返すため、ここを立てたままだと再入する
     this->needs_relayout = false;
@@ -253,8 +242,8 @@ void Label<N>::relayout() {
     // 以前は std::vector<FixedString<N>> へ丸ごとコピーしていた。この要素サイズは
     // テキストの長さではなくテンプレート引数Nに比例するため、7文字のLabel<1KiB>でも
     // 1段落あたり1032B、3段落なら3640Bをrelayout()のたびに確保していた。
-    const char* s = raw_text.c_str();
-    const size_t total = raw_text.length();
+    const char* s = this->rawBuf();
+    const size_t total = this->rawLength();
 
     if (cursor_tracking) {
         CursorSlot head;
@@ -383,18 +372,17 @@ void Label<N>::relayout() {
     this->needsRender();
 }
 
-template<size_t N>
-void Label<N>::relayoutPlaceholder() {
+void LabelBase::relayoutPlaceholder() {
     placeholder_runs_flat.clear();
     placeholder_line_count = 0;
     placeholder_line_offsets.clear();
-    if (placeholder_text.length() == 0) return;
+    if (this->placeholderLength() == 0) return;
 
     uint16_t cur_line = 0;
 
-    const char* ps = placeholder_text.c_str();
+    const char* ps = this->placeholderBuf();
     ParsedRuns runs;
-    parseMarkup(ps, placeholder_text.length(), 0, runs);
+    parseMarkup(ps, this->placeholderLength(), 0, runs);
     WordWrapper wrap;
     int curWidth = 0;
     TextRun piece;
@@ -440,8 +428,7 @@ void Label<N>::relayoutPlaceholder() {
                        this->l_rect.w, this->placeholder_line_offsets);
 }
 
-template<size_t N>
-void Label<N>::renderRun(char* src_buf, const TextRun& run, int x, int y) {
+void LabelBase::renderRun(char* src_buf, const TextRun& run, int x, int y) {
     if (run.srcLength == 0) return;
 
     // runは元テキスト上の範囲参照なので、print()が要求するNUL終端を一時的に作る。
@@ -492,15 +479,13 @@ void Label<N>::renderRun(char* src_buf, const TextRun& run, int x, int y) {
     }
 }
 
-template<size_t N>
-void Label<N>::renderBackground() {
+void LabelBase::renderBackground() {
     if (!this->has_background) return;
     const Rect g_rect = getScreenRect();
     OSData::frame->fillRect(g_rect.x, g_rect.y, g_rect.w, g_rect.h, this->background_color);
 }
 
-template<size_t N>
-void Label<N>::renderBorder() {
+void LabelBase::renderBorder() {
     if (this->border_width <= 0) return;
     const Rect g_rect = getScreenRect();
     for (int i = 0; i < this->border_width; i++) {
@@ -514,8 +499,7 @@ void Label<N>::renderBorder() {
     }
 }
 
-template<size_t N>
-void Label<N>::renderCursor() {
+void LabelBase::renderCursor() {
     if (!this->cursor_visible) {
         this->prev_cursor_rect = {0, 0, 0, 0};
         return;
@@ -537,8 +521,7 @@ void Label<N>::renderCursor() {
     this->prev_cursor_rect = cur_rect;
 }
 
-template<size_t N>
-void Label<N>::updateCursorBlink() {
+void LabelBase::updateCursorBlink() {
     if (!this->cursor_blink_enabled) return;
 
     unsigned long now = millis();
@@ -549,9 +532,7 @@ void Label<N>::updateCursorBlink() {
     }
 }
 
-// コンストラクタ
-template<size_t N>
-int Label<N>::GetTextWidth(FontFn::FontSize size, const char* text) {
+int LabelBase::GetTextWidth(FontFn::FontSize size, const char* text) {
     if (!text) return 0;
     FontFn::SetFontSize(size);
     const int w = OSData::frame->textWidth(text);
@@ -560,20 +541,7 @@ int Label<N>::GetTextWidth(FontFn::FontSize size, const char* text) {
     return w;
 }
 
-// FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
-template<size_t N>
-Label<N>::Label(int x, int y, const char* text) {
-    this->l_rect.x = x;
-    this->l_rect.y = y;
-    this->setText(text);
-    this->needs_redraw = true;
-}
-
-template<size_t N>
-Label<N>::Label(const char* text) : Label(0, 0, text) {}
-
-template<size_t N>
-void Label<N>::render() {
+void LabelBase::render() {
     if (!this->visible) return;
 
     //描画は最新のレイアウトを前提にするので、遅延していればここで解決する
@@ -603,7 +571,7 @@ void Label<N>::render() {
     const Rect g_rect = getScreenRect();
     int cy = g_rect.y;
 
-    bool show_placeholder = this->raw_text.length() == 0 && this->placeholder_text.length() > 0;
+    bool show_placeholder = this->rawLength() == 0 && this->placeholderLength() > 0;
     //本文とplaceholderでは内に持つ数が違う(型が違う)ので、先頭と個数で受ける
     const TextRun* render_runs = show_placeholder ? this->placeholder_runs_flat.data() : this->runs_flat.data();
     const size_t render_run_count = show_placeholder ? this->placeholder_runs_flat.size() : this->runs_flat.size();
@@ -611,8 +579,7 @@ void Label<N>::render() {
     const int* render_offsets = show_placeholder ? this->placeholder_line_offsets.data() : this->line_offsets.data();
     const size_t render_offset_count = show_placeholder ? this->placeholder_line_offsets.size() : this->line_offsets.size();
     //runが参照している元テキスト。renderRun()が終端を一時的に差し替えるので非constで持つ
-    char* render_src = const_cast<char*>(show_placeholder
-        ? this->placeholder_text.c_str() : this->raw_text.c_str());
+    char* render_src = show_placeholder ? this->placeholderBuf() : this->rawBuf();
 
     int8_t saved_text_color = this->text_color;
     if (show_placeholder) this->text_color = this->placeholder_color;
@@ -650,9 +617,7 @@ void Label<N>::render() {
     this->needs_redraw = false;
 }
 
-// FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
-template<size_t N>
-void Label<N>::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const char* text) {
+void LabelBase::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int maxWidth, const char* text) {
     // 使い回しのLabelは持たない(以前はテンプレートの種類ごとに約650Bの静的なLabelを抱えていた)。
     // やっていたのはフォントと文字色の設定だけなので、直接設定する
     FontFn::SetFontSize(size);
@@ -673,8 +638,7 @@ void Label<N>::DrawPlain(FontFn::FontSize size, int8_t color, int x, int y, int 
     FontFn::SetDefault();
 }
 
-template<size_t N>
-int Label<N>::GetLineHeight(FontFn::FontSize size) {
+int LabelBase::GetLineHeight(FontFn::FontSize size) {
     FontFn::SetFontSize(size);
     int h = OSData::frame->fontHeight();
     FontFn::SetDefault();
@@ -682,130 +646,94 @@ int Label<N>::GetLineHeight(FontFn::FontSize size) {
     return h;
 }
 
-// FixedString<M>版はメンバテンプレートのためLabel.hpp内にインライン定義済み。
-template<size_t N>
-void Label<N>::setText(const char* text) {
-    //中身が同じなら何もしない。invalidateLayout()はdirty登録2件と再レイアウトを
-    //無条件で起こすので、毎フレーム同じ文字列を流し込む呼び出し元(時計やタイマーの
-    //状態表示など)があると、変化が無くても画面全体の合成が走り続けてしまう
-    if(this->raw_text == text) return;
 
-    this->raw_text.assign(text);
-    invalidateLayout();
-}
-
-template<size_t N>
-void Label<N>::setPlaceholder(const char* text) {
-    this->placeholder_text.assign(text);
-    invalidateLayout();
-}
-
-template<size_t N>
-void Label<N>::setPlaceholderColor(int8_t color) {
+void LabelBase::setPlaceholderColor(int8_t color) {
     this->placeholder_color = color;
     this->needsRender();
 }
 
-template<size_t N>
-void Label<N>::setMaxWidth(int width) {
+void LabelBase::setMaxWidth(int width) {
     this->max_width = width;
     invalidateLayout();
 }
 
-template<size_t N>
-int Label<N>::getMaxWidth() {
+int LabelBase::getMaxWidth() {
     return this->max_width;
 }
 
-template<size_t N>
-void Label<N>::setMaxHeight(int height) {
+void LabelBase::setMaxHeight(int height) {
     this->max_height = height;
     invalidateLayout();
 }
 
-template<size_t N>
-int Label<N>::getMaxHeight() {
+int LabelBase::getMaxHeight() {
     return this->max_height;
 }
 
-template<size_t N>
-void Label<N>::setDefaultHeight(int height) {
+void LabelBase::setDefaultHeight(int height) {
     this->default_height = height;
     invalidateLayout();
 }
 
-template<size_t N>
-int Label<N>::getDefaultHeight() {
+int LabelBase::getDefaultHeight() {
     return this->default_height;
 }
 
-template<size_t N>
-void Label<N>::setLineSpacing(int spacing) {
+void LabelBase::setLineSpacing(int spacing) {
     this->line_spacing = spacing;
     invalidateLayout();
 }
 
-template<size_t N>
-void Label<N>::setTextAlign(TextAlign align) {
+void LabelBase::setTextAlign(TextAlign align) {
     this->text_align = align;
     invalidateLayout();
 }
 
-template<size_t N>
-TextAlign Label<N>::getTextAlign() {
+TextAlign LabelBase::getTextAlign() {
     return this->text_align;
 }
 
-template<size_t N>
-void Label<N>::setTextColor(int8_t c) {
+void LabelBase::setTextColor(int8_t c) {
     this->text_color = c;
     this->needsRender();
 }
 
-template<size_t N>
-void Label<N>::setBackgroundColor(int8_t palette_color) {
+void LabelBase::setBackgroundColor(int8_t palette_color) {
     this->background_color = palette_color;
     this->has_background = true;
     this->needsRender();
 }
 
-template<size_t N>
-bool Label<N>::hasBackground() {
+bool LabelBase::hasBackground() {
     return this->has_background;
 }
 
-template<size_t N>
-void Label<N>::setNoBackground() {
+void LabelBase::setNoBackground() {
     this->has_background = false;
     this->needsRender();
 }
 
-template<size_t N>
-void Label<N>::setBorderColor(int8_t palette_color) {
+void LabelBase::setBorderColor(int8_t palette_color) {
     this->border_color = palette_color;
     this->needsRender();
 }
 
-template<size_t N>
-void Label<N>::setBorder(int8_t color, int width) {
+void LabelBase::setBorder(int8_t color, int width) {
     this->border_color = color;
     this->border_width = width;
     this->needsRender();
 }
 
-template<size_t N>
-void Label<N>::setBorderWidth(int width) {
+void LabelBase::setBorderWidth(int width) {
     this->border_width = width;
     this->needsRender();
 }
 
-template<size_t N>
-int Label<N>::getBorderWidth() {
+int LabelBase::getBorderWidth() {
     return this->border_width;
 }
 
-template<size_t N>
-void Label<N>::setCursorPos(int index) {
+void LabelBase::setCursorPos(int index) {
     this->enableCursorTracking();
     this->ensureLayout();
     if (cursor_slots.empty()) {
@@ -818,23 +746,19 @@ void Label<N>::setCursorPos(int index) {
     this->needsRender();
 }
 
-template<size_t N>
-int Label<N>::getCursorPos() {
+int LabelBase::getCursorPos() {
     return this->cursor_index;
 }
 
-template<size_t N>
-void Label<N>::setCursorMove(int delta) {
+void LabelBase::setCursorMove(int delta) {
     this->setCursorPos(this->cursor_index + delta);
 }
 
-template<size_t N>
-void Label<N>::setCursorToEnd() {
+void LabelBase::setCursorToEnd() {
     this->setCursorPos(this->getTextLength());
 }
 
-template<size_t N>
-void Label<N>::setCursorToByteOffset(size_t byte_offset) {
+void LabelBase::setCursorToByteOffset(size_t byte_offset) {
     this->enableCursorTracking();
     this->ensureLayout();
     if (cursor_slots.empty()) {
@@ -855,8 +779,7 @@ void Label<N>::setCursorToByteOffset(size_t byte_offset) {
     this->needsRender();
 }
 
-template<size_t N>
-size_t Label<N>::getCursorByteOffset() {
+size_t LabelBase::getCursorByteOffset() {
     this->enableCursorTracking();
     this->ensureLayout();
     if (cursor_slots.empty()) return 0;
@@ -867,20 +790,17 @@ size_t Label<N>::getCursorByteOffset() {
     return (size_t)cursor_slots[idx].src_offset;
 }
 
-template<size_t N>
-void Label<N>::setCursorVisible(bool visible) {
+void LabelBase::setCursorVisible(bool visible) {
     if (visible) this->enableCursorTracking();
     this->cursor_visible = visible;
     this->needsRender();
 }
 
-template<size_t N>
-bool Label<N>::getCursorVisible() {
+bool LabelBase::getCursorVisible() {
     return this->cursor_visible;
 }
 
-template<size_t N>
-void Label<N>::setCursorBlink(bool enabled, unsigned long interval_ms) {
+void LabelBase::setCursorBlink(bool enabled, unsigned long interval_ms) {
     if (enabled) this->enableCursorTracking();
     this->cursor_blink_enabled = enabled;
     this->cursor_blink_interval_ms = interval_ms;
@@ -889,26 +809,22 @@ void Label<N>::setCursorBlink(bool enabled, unsigned long interval_ms) {
     this->needsRender();
 }
 
-template<size_t N>
-bool Label<N>::getCursorBlink() {
+bool LabelBase::getCursorBlink() {
     return this->cursor_blink_enabled;
 }
 
-template<size_t N>
-void Label<N>::setCursorColor(uint16_t c) {
+void LabelBase::setCursorColor(uint16_t c) {
     this->cursor_color = c;
     this->needsRender();
 }
 
-template<size_t N>
-int Label<N>::getTextLength() {
+int LabelBase::getTextLength() {
     this->enableCursorTracking();
     this->ensureLayout();
     return cursor_slots.empty() ? 0 : (int)cursor_slots.size() - 1;
 }
 
-template<size_t N>
-int Label<N>::getCursorScreenX() {
+int LabelBase::getCursorScreenX() {
     this->enableCursorTracking();
     this->ensureLayout();
     if (cursor_slots.empty()) return this->getScreenRect().x;
@@ -920,8 +836,7 @@ int Label<N>::getCursorScreenX() {
     return this->getScreenRect().x + line_offset + slot.x;
 }
 
-template<size_t N>
-int Label<N>::getCursorScreenY() {
+int LabelBase::getCursorScreenY() {
     this->enableCursorTracking();
     this->ensureLayout();
     if (cursor_slots.empty()) return this->getScreenRect().y;
@@ -931,13 +846,3 @@ int Label<N>::getCursorScreenY() {
     return this->getScreenRect().y + cursor_slots[idx].line * (line_height + line_spacing);
 }
 
-template class Label<PICO_STR_S>;
-template class Label<PICO_STR_M>;
-template class Label<PICO_STR_L>;
-template class Label<PICO_STR_LL>;
-template class Label<PICO_PATH_LEN>;
-template class Label<PICO_STR_256B>;
-template class Label<PICO_STR_512B>;
-template class Label<PICO_STR_1KiB>;
-template class Label<PICO_STR_2KiB>;
-template class Label<PICO_STR_4KiB>;

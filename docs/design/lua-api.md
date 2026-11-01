@@ -840,7 +840,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 6. **ユーティリティ**: `app_dir/path_join/time/wifi_status/url_encode/url_decode/base64_encode/base64_decode/settings_get/set/all/memory_info/toast`、`pico.on_back(fn)`/`pico.go_back()`
    (`LuaScene::onKey()` がEscを、`onUpdate()` がコントローラーのHOMEを「戻る」として渡す。登録が無ければ何もしない)。`util/Base64.hpp` を新設。
    `settings_*` はアプリのフォルダの `settings.cfg`(`PICO_Config`)。`toast` は `NotificationFunctions::Post()` の音なし(履歴にも残る。300msの間隔を空ける)。
-7. **OS同梱のLuaモジュール**(ソースは`src/lua/builtin/*.lua`、`script/gen_lua_builtins.py`が`src/lua/LuaBuiltinModules.hpp`(生成物、コミットする)へ埋め込む。直したら生成し直すこと(CIが`--check`で見る)。ソースはフラッシュに置くだけで、`require` されたときだけコンパイルする): `pico.ui`(宣言的なUIの組み立て)・
+7. **OS同梱のLuaモジュール**(ソースは`src/lua/builtin/*.lua`、`script/gen_lua_builtins.py`が`src/lua/LuaBuiltinModules.hpp`(生成物、コミットする)へ埋め込む。直したら生成し直すこと(CIが`--check`で見る)。フラッシュにはコメント・字下げを落として置く(改行は残すので行番号はそのまま。`performance.md`「フラッシュを削る」)。ソースはフラッシュに置くだけで、`require` されたときだけコンパイルする): `pico.ui`(宣言的なUIの組み立て)・
    `pico.async`(`async.run/await/sleep/http/message/input/choice/date/time/number/...` でコルーチン連携)・`pico.tween`。`preloadModules()` が `pico.` で始まる名前を
    アプリのフォルダより先に同梱ソースから読む(実行中のコンパイルを避ける「先読み」の仕組みに乗せた)。**静的な `require("pico.ui")` の書き方だけ**先読みされる。
 8. **暗号化**(`crypto/Secret_Aead.hpp/.cpp`、`LuaEngine_Crypto.cpp`): `pico.encrypt(plain[, password])` / `decrypt` / `is_encrypted` / `hash`(BLAKE2b-256・鍵付き可)/ `random_bytes`、

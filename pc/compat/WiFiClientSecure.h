@@ -20,6 +20,7 @@ public:
     X509List() = default;
     explicit X509List(const char*){}
     bool append(const char*){ return true; }
+    bool append(const uint8_t*, size_t){ return true; }
     size_t getCount() const { return 0; }
 };
 

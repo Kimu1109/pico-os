@@ -5,6 +5,32 @@
 
 ## 最適化の記録
 
+### フラッシュを削る (2026-11-01)
+
+ファームが上限(`board_build.filesystem_size = 1664k` で約2.43MB)まで残り約79KBになったので、ELFを記号ごとに割り振って洗い出した。
+
+- **効き方の前提**: 内蔵フラッシュはファーム本体と、更新ファイル(ファームのgzip)を置くLittleFSで分け合う。1バイト減らすと
+  本体と更新ファイルの両方が減るので、圧縮の効かないもの(フォント・画像)ほど効く。コンパイラは既に `-Os`・gc-sections・例外/RTTI無し。
+  LTOはこのツールチェイン(earlephilhower)がLTO無しで作られていて使えない(`-flto` で「LTO support has not been enabled」)。
+- **大きいもの**(2026-11-01): 日本語フォント 24px 277KB / 16px 161KB、Wi-Fiチップのファーム 225KB(arduino-pico同梱で削れない)、
+  アイコン約60KB、`Label<N>` の重複37KB、同梱Lua 45KB、ログの文字列約29KB、bearssl 44KB。
+- **やったこと**(合計 −68.6KB。2,405,128B → 2,336,544B、更新ファイルのgzipは 1,638,558B → 1,619,475B):
+  - **`Label<N>` の処理を非テンプレートの `LabelBase` へ**(約 −24KB): Nの種類(約10)ごとに `relayout()` 等が丸ごと実体化していた。
+    `Label<N>` はテキストの置き場(`FixedString<N>` 2本)と、それに触る `setText`/`getText` 等だけを持ち、`LabelBase` は
+    `rawBuf()`/`rawLength()`/`placeholderBuf()`/`placeholderLength()` の仮想関数で読む。外から見たAPIは変わらない。
+  - **64pxのアイコンの絵をやめ、32pxを2倍に拡大して描く**(−21.7KB): 64pxはMsgDialogの大きなアイコンとLuaでしか使わない。
+    `script/generate_icons.py` の `SCALED_FROM = {64: 32}`。`IconAsset::scale` が2なら `DrawIconRaw()` が1画素を2x2で塗る。`IconSize::Px64` はそのまま使える。
+  - **同梱Luaをminify**(−11.5KB): `script/gen_lua_builtins.py` がコメント・字下げ・行末の空白を落とす。**改行は1つも消さない**ので行番号は .lua のまま。
+    元と詰めたものの `lua_dump` が(行の情報・ローカル変数名込みで)完全に一致することを確かめた。
+  - **Wi-Fi転送のページをgzipで持つ**(−7.6KB): `file-share.md` の「方式」。
+  - **TLSのルート証明書をPEMからDERへ**(−3.9KB): `browser-net.md` の「HTTPS」。
+- **見送ったもの**: メールのJISの表(17.6KB)をSDへ移す案(SDに表が無いとJISのメールが化けるので、配り方を決めてから)。
+  フォントを24pxだけ常用漢字に絞る案(約 −90KB。足りない字が豆腐になる範囲の確認が要る)と、フォントをファームの外の
+  決まった番地へ置く案(実質 +360KB。フォントがOTAで更新できなくなる)は、利用者の判断待ち。bearsslの使わない暗号方式は
+  arduino-pico の `WiFiClientSecure` が全部の方式で初期化するので外せるか不明。
+- **実機では未確認**(64pxのアイコンの見た目・HTTPS接続・Wi-Fi転送のページ)(Todoist参照)。PCビルドでは、アイコンの見た目・
+  ラベルの装飾・Wi-Fi転送のページ(Chromiumで表示、gzipを戻した中身が .html と一致)を確かめた。
+
 ### OSのCPU・RAMの無駄を削る (2026-10-10)
 
 OS側の洗い出しの結果、次を直した。実機ファームの静的RAMは 140,000B → 113,540B(-26.5KB)。

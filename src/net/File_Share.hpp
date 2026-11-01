@@ -49,6 +49,7 @@ namespace FileShare {
             const char* cookie() const { return cookie_.c_str(); }
             const char* key() const { return key_.c_str(); }      // X-Pico-Key
             const char* range() const { return range_.c_str(); }  // Range(無ければ "")
+            bool acceptsGzip() const { return accepts_gzip_; }    // Accept-Encoding に gzip がある
             bool hasLength() const { return has_length_; }
             uint64_t contentLength() const { return content_length_; }
 
@@ -65,6 +66,7 @@ namespace FileShare {
             FixedString<PICO_STR_M> range_;
             uint64_t content_length_ = 0;
             bool has_length_ = false;
+            bool accepts_gzip_ = false;
             State state_ = State::Reading;
     };
 
@@ -176,8 +178,9 @@ namespace FileShare {
         out.append(tail);
         return true;
     }
-    // ページ本体(net/File_Share_Page.cpp)
-    extern const char kPageHtml[];
-    size_t PageHtmlLength();
+    // ページ本体(net/File_Share_Page.cpp。src/net/File_Share_Page.html を gzip したもの。
+    // script/gen_file_share_page.py が作る)。Content-Encoding: gzip で返す
+    extern const uint8_t kPageGz[];
+    size_t PageGzLength();
 
 }

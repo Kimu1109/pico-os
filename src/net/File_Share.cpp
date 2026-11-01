@@ -33,6 +33,36 @@ namespace {
         out.assign(v, len);
         return true;
     }
+
+    // Accept-Encoding の値(例 "gzip, deflate, br" / "br;q=1.0, gzip;q=0.8")に gzip があるか。
+    // q=0 で断っているものは無いものとして扱う
+    bool AcceptsGzip(const char* v, size_t len){
+        size_t i = 0;
+        while(i < len){
+            while(i < len && (v[i] == ' ' || v[i] == '\t' || v[i] == ',')) i++;
+            const size_t start = i;
+            while(i < len && v[i] != ',' && v[i] != ';' && v[i] != ' ' && v[i] != '\t') i++;
+            const bool is_gzip = EqualsNoCase(v + start, i - start, "gzip");
+            // ;q=… を読む(この項目の終わりまで)
+            bool refused = false;
+            while(i < len && v[i] != ','){
+                if((v[i] == 'q' || v[i] == 'Q') && i + 1 < len && v[i + 1] == '='){
+                    size_t j = i + 2;
+                    bool nonzero = false;
+                    while(j < len && ((v[j] >= '0' && v[j] <= '9') || v[j] == '.')){
+                        if(v[j] >= '1' && v[j] <= '9') nonzero = true;
+                        j++;
+                    }
+                    refused = !nonzero;
+                    i = j;
+                    continue;
+                }
+                i++;
+            }
+            if(is_gzip && !refused) return true;
+        }
+        return false;
+    }
 }
 
 // ---------- 要求の見出し ----------
@@ -49,6 +79,7 @@ void RequestHead::reset(){
     range_.clear();
     content_length_ = 0;
     has_length_ = false;
+    accepts_gzip_ = false;
     state_ = State::Reading;
 }
 
@@ -110,6 +141,8 @@ bool RequestHead::parse(){
                 AssignTrimmed(cookie_, v, vlen); // 長すぎるクッキーは無いものとして扱う(キーが無い=断る)
             }else if(EqualsNoCase(p, nlen, "x-pico-key")){
                 if(!AssignTrimmed(key_, v, vlen)) key_.clear();
+            }else if(EqualsNoCase(p, nlen, "accept-encoding")){
+                accepts_gzip_ = AcceptsGzip(v, vlen);
             }else if(EqualsNoCase(p, nlen, "range")){
                 if(!AssignTrimmed(range_, v, vlen)) range_.clear(); // 長すぎる Range は無いものとして全体を返す
             }else if(EqualsNoCase(p, nlen, "content-length")){
@@ -390,6 +423,7 @@ const char* StatusText(int status){
         case 403: return "Forbidden";
         case 404: return "Not Found";
         case 405: return "Method Not Allowed";
+        case 406: return "Not Acceptable";
         case 408: return "Request Timeout";
         case 409: return "Conflict";
         case 411: return "Length Required";

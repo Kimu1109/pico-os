@@ -525,11 +525,14 @@ namespace {
         if(route == Route::NotFound){ RespondText(404, "見つかりません"); return; }
         if(route == Route::MethodNotAllowed){ RespondText(405, "その方法では使えません"); return; }
         if(route == Route::Page){
-            BeginResponse(200, "text/html; charset=utf-8", (int64_t)FileShare::PageHtmlLength(), nullptr);
+            //ページは gzip のまま持っている(フラッシュの節約。net/File_Share_Page.cpp)。戻せない相手には渡せない
+            if(!s.head.acceptsGzip()){ RespondText(406, "gzip に対応したブラウザで開いてください"); return; }
+            BeginResponse(200, "text/html; charset=utf-8", (int64_t)FileShare::PageGzLength(),
+                          "Content-Encoding: gzip\r\nVary: Accept-Encoding\r\n");
             if(!head_only){
                 s.body = Body::Memory;
-                s.mem = FileShare::kPageHtml;
-                s.mem_len = FileShare::PageHtmlLength();
+                s.mem = (const char*)FileShare::kPageGz;
+                s.mem_len = FileShare::PageGzLength();
                 s.mem_pos = 0;
             }
             return;

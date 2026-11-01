@@ -13,9 +13,12 @@ pico-os は OS の証明書ストアを持たないので、繋ぎたい相手�
 **ROOTS は末尾へ足すこと。** 母艦のストアから消えたルート(配布元が信頼を外した古いルート等)は、
 今の Tls_Roots_Data.hpp に焼き込まれている同じ位置の証明書を引き継ぐ(並びで対応を取るため)。
 
+フラッシュには DER(PEMのbase64を戻したもの)で置く。PEMの文字のままだと3割ほど大きい(2026-11-01にDERへ)。
+
 1枚あたり、接続中だけRAMを約1.5KB使う(BearSSLが信頼の起点へ展開するため)。
 むやみに増やさないこと。
 """
+import base64
 import datetime
 import os
 import re
@@ -54,11 +57,26 @@ def subject_and_expiry(path):
     return subject, expiry
 
 
+def der_to_pem(der):
+    b64 = base64.b64encode(der).decode("ascii")
+    body = "\n".join(b64[i:i + 64] for i in range(0, len(b64), 64))
+    return f"-----BEGIN CERTIFICATE-----\n{body}\n-----END CERTIFICATE-----"
+
+
+def pem_to_der(pem):
+    body = re.search(r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----", pem, re.S).group(1)
+    return base64.b64decode("".join(body.split()))
+
+
 def existing_pems(path):
-    """今の Tls_Roots_Data.hpp に焼き込まれている証明書を、並んでいる順に返す"""
+    """今の Tls_Roots_Data.hpp に焼き込まれている証明書を、並んでいる順にPEMで返す
+    (DERの配列で書いた今の形と、PEMの文字列で書いていた前の形のどちらも読む)"""
     if not os.path.exists(path):
         return []
     text = open(path, encoding="utf-8").read()
+    ders = re.findall(r"static const uint8_t kDer\d+\[\] = \{(.*?)\};", text, re.S)
+    if ders:
+        return [der_to_pem(bytes(int(x, 16) for x in d.replace("\n", " ").split(",") if x.strip())) for d in ders]
     body = "\n".join(re.findall(r'^\s*"(.*)\\n"', text, re.M))
     return re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", body, re.S)
 
@@ -71,10 +89,13 @@ def main():
     lines = [
         "#pragma once",
         "",
+        "#include <cstddef>",
+        "#include <cstdint>",
+        "",
         "// script/generate_tls_roots.py が生成する。手で書き換えないこと。",
         f"// 生成日: {datetime.date.today().isoformat()}",
         "//",
-        "// HTTPSで信頼するルート証明書(PEMを連結したもの)。一覧:",
+        "// HTTPSで信頼するルート証明書(1枚ずつDERで)。一覧:",
     ]
     pems = []
     for i, (name, why) in enumerate(ROOTS):
@@ -101,11 +122,17 @@ def main():
     lines.append("")
     lines.append("namespace TlsRootsData {")
     lines.append("    // RP2350では const のデータはフラッシュに置かれる(RAMを食わない)")
-    lines.append("    static const char kPem[] =")
-    for pem in pems:
-        for pem_line in pem.splitlines():
-            lines.append(f'        "{pem_line}\\n"')
-    lines[-1] = lines[-1] + ";"
+    for i, pem in enumerate(pems):
+        der = pem_to_der(pem)
+        lines.append(f"    static const uint8_t kDer{i}[] = {{")
+        for j in range(0, len(der), 20):
+            lines.append("        " + ", ".join(f"0x{b:02x}" for b in der[j:j + 20]) + ",")
+        lines.append("    };")
+    lines.append("    struct Cert { const uint8_t* der; size_t len; };")
+    lines.append("    static const Cert kCerts[] = {")
+    for i in range(len(pems)):
+        lines.append(f"        {{ kDer{i}, sizeof(kDer{i}) }},")
+    lines.append("    };")
     lines.append(f"    static constexpr int kCount = {len(pems)};")
     lines.append("}")
     lines.append("")

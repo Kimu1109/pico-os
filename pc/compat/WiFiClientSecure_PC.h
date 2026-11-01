@@ -56,6 +56,16 @@ public:
         return added > 0;
     }
 
+    // DERの証明書を1枚足す(実機の X509List::append(der, len) と同じ)
+    bool append(const uint8_t* der, size_t len){
+        if(!der || len == 0) return false;
+        const unsigned char* p = der;
+        X509* x = d2i_X509(nullptr, &p, (long)len);
+        if(!x){ ERR_clear_error(); return false; }
+        certs_.push_back(x);
+        return true;
+    }
+
     size_t getCount() const { return certs_.size(); }
     const std::vector<X509*>& certs() const { return certs_; }
 

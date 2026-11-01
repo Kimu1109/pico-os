@@ -76,9 +76,9 @@ def main():
     # ---- C++ に読ませる変種 ----
     src = os.path.join(work, "src")
     os.makedirs(src)
-    copy_app("テトリス", src)
-    copy_app("リバーシ", src)
-    copy_app("ブロック", src)
+    # 版はここで決める(pc/sdcard の見本のアプリの版が上がっても、テストの版の前後関係が崩れないように)
+    for name, version in (("テトリス", "2.0.0"), ("リバーシ", "2.0.0"), ("ブロック", "1.2.0")):
+        set_cfg(os.path.join(copy_app(name, src), "app.cfg"), "version", version)
     good = make(src, "テトリス")
     write(work, "tetris-2.0.0", good)
     write(work, "reversi-2.0.0", make(src, "リバーシ"))
@@ -151,6 +151,7 @@ def main():
     os.makedirs(apps_dir)
     copy_app("テトリス", apps_dir)
     rev = copy_app("リバーシ", apps_dir)
+    set_cfg(os.path.join(rev, "app.cfg"), "version", "2.0.0")
     set_cfg(os.path.join(rev, "app.cfg"), "description", "<b>太字</b> & \"引用\"")
     set_cfg(os.path.join(rev, "app.cfg"), "name_en", "Reversi <EN>")
     set_cfg(os.path.join(rev, "app.cfg"), "description_en", "Two players & \"quotes\"")

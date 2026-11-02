@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "pico-os-carrier")(type "KiCad")(uri "${KIPRJMOD}/lib/pico-os-carrier.pretty")(options "")(descr "pico-os carrier"))
+)

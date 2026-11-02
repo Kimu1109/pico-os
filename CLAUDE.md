@@ -64,6 +64,7 @@ src/
 lib/         vendor: lua(5.4.7) / monocypher / peanut_gb / qrcodegen / minimp3(各 README-pico-os.md)
 pc/          PC/Webビルド。pc/sdcard/ がSDの中身(lua/apps/<名前>/main.lua が自動登録されるLuaアプリ)
 script/      開発補助(cli-tool/picoos が名前で呼び分ける)。host_test/(ホストテスト)・lua_test/(picoos lua-test)・check_layers.py・generate_icons.py・dict/ 等
+hardware/carrier/  キャリアボード(KiCad 8。README.md に部品の表、tools/check_pins.py で consts.hpp と結線を照合)
 docs/        仕様(PROTOCOL / CHAT_PROTOCOL / APP_REPO / MUSIC_FORMAT / VIDEO_FORMAT / FIRMWARE_UPDATE / ZOMBIE_TD / HARDWARE_CHECKLIST)と design/
 lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャットサーバ
 (別リポジトリ) kimu1109/pico-os-apps がアプリストアの配布元(投稿・公開。lua-apps.md「アプリストアの投稿」)
@@ -198,6 +199,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `performance.md` | 最適化とメモリ計測の記録・解決済みの不具合 |
 | `pc-web.md` | Webビルド(WebAssembly) |
 | `i18n.md` | 表示言語の切り替え(`TR()`・`i18n/en.po`・`script/i18n.py`・言語の選び方) |
+| `carrier-board.md` | キャリアボード(`hardware/carrier/`。モジュールを載せる2層基板の決めたことと寸法の出典) |
 | `roadmap-ideas.md` | ロードマップと未実装の設計アイデア |
 
 ## Claude Codeへの申し送り

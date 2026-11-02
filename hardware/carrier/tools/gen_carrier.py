@@ -36,13 +36,13 @@ def uid(*names):
 # ---------------------------------------------------------------------------
 # 基板の寸法(mm、表から見た座標。左上が原点、yは下向き)
 # ---------------------------------------------------------------------------
-BOARD_W = 56.0
-BOARD_H = 116.0
+BOARD_W = 64.0
+BOARD_H = 128.0
 # 液晶(MSP2807、50x86)の左上の位置。寸法は lcdwiki の MSP2807_Size.pdf から
-LCD_X, LCD_Y = 3.0, 3.0
+LCD_X, LCD_Y = 7.0, 3.0
 # Pico 2 W は下端に横向き(USBが左端、アンテナが右端)。アンテナの下は基板を切り欠く
-PICO_CX, PICO_CY = 26.0, 102.5
-NOTCH = (42.0, 96.0, 109.0)  # (x始まり, y上, y下) から右端まで切り欠く
+PICO_CX, PICO_CY = 38.5, 112.0
+NOTCH = (PICO_CX + 16.0, PICO_CY - 6.5, PICO_CY + 6.5)  # (x始まり, y上, y下) から右端まで切り欠く
 
 # ---------------------------------------------------------------------------
 # 部品の表
@@ -100,7 +100,7 @@ PARTS = [
                ("7", "FLT", "GND"), ("8", "DEMP", "GND"), ("9", "XSMT", "HP_MUTE"), ("10", "FMT", "GND"),
                ("11", "A3V3", None), ("12", "AGND", "GND"), ("13", "ROUT", None), ("14", "AGND", "GND"),
                ("15", "LROUT", None)],
-         side="B", pos=(39.6, 44.0), rot=None, turn=180,
+         side="B", pos=(43.6, 44.0), rot=None, turn=180,
          note="GY-PCM5102(32x17)。ジャックを基板の右の縁に出す。裏のH3L(XSMT)ははんだを盛らない"),
     dict(ref="U6", value="SPH0645LM4H breakout (Adafruit 3421)", symbol="SPH0645_Module", footprint="SPH0645_Module",
          pins=[("1", "3V", "+3V3"), ("2", "GND", "GND"), ("3", "BCLK", "MIC_BCLK"),
@@ -162,6 +162,12 @@ PARTS = [
          pins=[("1", "~", "VSYS"), ("2", "~", "GND")], side="B", pos=(24.5, 82.5), rot=0,
          note="アンプの電源の安定用(電池で鳴らしたときの音割れ対策)"),
 ]
+
+# 基板を56mmから64mmへ広げたとき(配線の通り道を作るため)、液晶とPico以外は右へ4mmずらした
+PARTS_SHIFT_X = 4.0
+for _part in PARTS:
+    if _part["ref"] not in ("U1", "U3"):
+        _part["pos"] = (_part["pos"][0] + PARTS_SHIFT_X, _part["pos"][1])
 
 NETS = sorted({p[2] for part in PARTS for p in part["pins"] if p[2]})
 
@@ -760,7 +766,7 @@ def build_pcb():
     keep.SetDoNotAllowPads(False)
     keep.SetDoNotAllowFootprints(False)
     keep.SetLayerSet(pcbnew.LSET.AllCuMask())
-    keep.Outline().AddOutline(rect_outline(NOTCH[0], 89.5, BOARD_W, BOARD_H))
+    keep.Outline().AddOutline(rect_outline(NOTCH[0], PICO_CY - 13.0, BOARD_W, BOARD_H))
     keep.SetZoneName("antenna keep-out")
     board.Add(keep)
     for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
@@ -776,11 +782,11 @@ def build_pcb():
         z.SetZoneName("GND " + ("F" if layer == pcbnew.F_Cu else "B"))
         board.Add(z)
 
-    silk("pico-os carrier v0.1", 28, 88.6, pcbnew.B_SilkS, 1.0)
-    silk("G V Y W", 45.0, 57.2, pcbnew.B_SilkS, 0.8)
-    silk("JP4 1-2:SCL 2-3:GP7", 40.0, 84.6, pcbnew.B_SilkS, 0.8)
-    silk("USB", 3.0, 114.5, pcbnew.B_SilkS, 0.8)
-    silk("ANT", 49.0, 102.5, pcbnew.B_SilkS, 0.8)
+    silk("pico-os carrier v0.1", 32, 88.6, pcbnew.B_SilkS, 1.0)
+    silk("G V Y W", 49.0, 57.2, pcbnew.B_SilkS, 0.8)
+    silk("JP4 1-2:SCL 2-3:GP7", 44.0, 84.6, pcbnew.B_SilkS, 0.8)
+    silk("USB", PICO_CX - 23.0, PICO_CY + 12.0, pcbnew.B_SilkS, 0.8)
+    silk("ANT", PICO_CX + 21.5, PICO_CY - 11.0, pcbnew.B_SilkS, 0.8)
     path = os.path.join(OUT, PROJECT + ".kicad_pcb")
     pcbnew.SaveBoard(path, board)
     # ベタを埋める(作ったばかりの BOARD では埋められず落ちるので、読み直してから)

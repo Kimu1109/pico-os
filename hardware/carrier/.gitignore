@@ -1,0 +1,8 @@
+# KiCad が開くたびに作る物(画面の状態・自動の控え・ロック)
+*.kicad_prl
+*-backups/
+fp-info-cache
+~*.lck
+*.lck
+# 製造用に書き出した物は、版を決めたときだけ手で足す
+gerber/

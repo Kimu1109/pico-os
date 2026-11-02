@@ -48,6 +48,7 @@ NOTCH = (42.0, 96.0, 109.0)  # (x始まり, y上, y下) から右端まで切り
 # 部品の表
 #   ref, value, symbol(自作は名前だけ / 既製は "Lib:Name"), footprint(自作は名前だけ / 既製は "Lib:Name"),
 #   pins: [(番号, 名前, ネット or None(未接続))], side: "F"/"B", pos: (x, y), rot(度), dnp
+#   turn: 置いた後にさらに回す角度(裏の部品は反転で向きが180度になるので、rot ではなく turn で回す)
 # ---------------------------------------------------------------------------
 PICO_PINS = [
     ("1", "GP0", "I2C_SDA"), ("2", "GP1", "I2C_SCL"), ("3", "GND", "GND"),
@@ -92,12 +93,14 @@ PARTS = [
                ("4", "GAIN", None), ("5", "SD", "AMP_SD"), ("6", "GND", "GND"), ("7", "VIN", "VSYS")],
          side="B", pos=(12.0, 69.0), rot=90,
          note="仮: ピンの並びはAdafruit互換と仮定。写真で確かめる"),
-    dict(ref="U5", value="PCM5102A module", symbol="PCM5102A_Module", footprint="PCM5102A_Module",
-         pins=[("1", "VIN", "PCM_VCC"), ("2", "GND", "GND"), ("3", "LCK", "I2S_LRCLK"),
-               ("4", "DIN", "I2S_DIN"), ("5", "BCK", "I2S_BCLK"), ("6", "SCK", "GND"),
-               ("7", "FLT", "GND"), ("8", "DMP", "GND"), ("9", "XMT", "HP_MUTE"), ("10", "FMT", "GND")],
-         side="B", pos=(39.5, 44.0), rot=0,
-         note="仮: 外形32x17と端子の並びは仮置き。写真で確かめて直す"),
+    dict(ref="U5", value="PCM5102A module (GY-PCM5102)", symbol="PCM5102A_Module", footprint="PCM5102A_Module",
+         pins=[("1", "SCK", "GND"), ("2", "BCK", "I2S_BCLK"), ("3", "DIN", "I2S_DIN"),
+               ("4", "LCK", "I2S_LRCLK"), ("5", "GND", "GND"), ("6", "VIN", "PCM_VCC"),
+               ("7", "FLT", "GND"), ("8", "DEMP", "GND"), ("9", "XSMT", "HP_MUTE"), ("10", "FMT", "GND"),
+               ("11", "A3V3", None), ("12", "AGND", "GND"), ("13", "ROUT", None), ("14", "AGND", "GND"),
+               ("15", "LROUT", None)],
+         side="B", pos=(39.6, 44.0), rot=None, turn=180,
+         note="GY-PCM5102(32x17)。ジャックを基板の右の縁に出す。裏のH3L(XSMT)ははんだを盛らない"),
     dict(ref="U6", value="SPH0645LM4H breakout", symbol="SPH0645_Module", footprint="SPH0645_Module",
          pins=[("1", "3V", "+3V3"), ("2", "GND", "GND"), ("3", "BCLK", "MIC_BCLK"),
                ("4", "DOUT", "MIC_DOUT"), ("5", "LRCL", "MIC_LRCLK"), ("6", "SEL", "GND")],
@@ -404,12 +407,14 @@ def footprints():
     fps["MAX98357A_Module"] = module_fp(
         "MAX98357A_Module", "MAX98357A I2S amp module (Adafruit-like), 18x19mm, 1x7 2.54mm (TENTATIVE)",
         18.0, 19.0, pads, extra, "MAX98357A")
-    # --- PCM5102A(32x17。仮: 短い辺に6ピン、長い辺に4ピン) ---
-    pads = [(str(i + 1), -14.7, -6.35 + i * P) for i in range(6)]
-    pads += [(str(7 + i), -6.0 + i * P, 7.2) for i in range(4)]
-    extra = [fp_text("3.5mm jack", 13.0, 0, "F.Fab", 0.8)]
+    # --- PCM5102A(GY-PCM5102、32x17。部品面=ジャックの面から見て、ジャックが右) ---
+    #  短い辺(左)に SCK/BCK/DIN/LCK/GND/VIN、長い辺(上)に FLT/DEMP/XSMT/FMT/A3V3/AGND/ROUT/AGND/LROUT。
+    #  端子の位置は商品写真から読んだ(左の列は縁から約1.3mm、上の列は左の縁から約7mm)
+    pads = [(str(i + 1), -14.73, -6.35 + i * P) for i in range(6)]
+    pads += [(str(7 + i), -9.0 + i * P, -7.23) for i in range(9)]
+    extra = [fp_rect(8.5, -2.0, 18.0, 8.5, "F.Fab", 0.1), fp_text("3.5mm jack", 13.0, 3.5, "F.Fab", 0.8)]
     fps["PCM5102A_Module"] = module_fp(
-        "PCM5102A_Module", "PCM5102A DAC module 32x17mm (TENTATIVE pinout/outline)",
+        "PCM5102A_Module", "GY-PCM5102 PCM5102A DAC module 32x17mm, 1x6 + 1x9 2.54mm, jack sticks out ~2mm",
         32.0, 17.0, pads, extra, "PCM5102A")
     # --- SPH0645 ブレークアウト(16.7x12.7、長い辺に6ピン)。音の穴は外向きに裏返して付ける ---
     pads = [(str(i + 1), -6.35 + i * P, -5.1) for i in range(6)]
@@ -701,6 +706,9 @@ def build_pcb():
                     break
         elif part.get("rot"):
             fp.SetOrientationDegrees(part["rot"])
+        if part.get("turn"):
+            # 裏の部品は反転した時点で向きが180度になっている。そこからさらに回す
+            fp.SetOrientationDegrees(fp.GetOrientationDegrees() + part["turn"])
         if part["ref"] == "J2":
             fp.Reference().SetPosition(vec(x - 4.5, y))
         pinmap = {n: (nm, net) for (n, nm, net) in part["pins"]}

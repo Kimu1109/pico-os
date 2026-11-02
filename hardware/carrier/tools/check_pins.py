@@ -36,7 +36,7 @@ CHECKS = {
     ("U3", "15"): "SD_CS", ("U3", "16"): "SD_MOSI", ("U3", "17"): "SD_MISO", ("U3", "18"): "SD_SCK",
     ("U4", "1"): "AUDIO_I2S_LRCLK", ("U4", "2"): "AUDIO_I2S_BCLK", ("U4", "3"): "AUDIO_I2S_DATA",
     ("U4", "5"): "AUDIO_SHUTDOWN",
-    ("U5", "3"): "AUDIO_I2S_LRCLK", ("U5", "4"): "AUDIO_I2S_DATA", ("U5", "5"): "AUDIO_I2S_BCLK",
+    ("U5", "2"): "AUDIO_I2S_BCLK", ("U5", "3"): "AUDIO_I2S_DATA", ("U5", "4"): "AUDIO_I2S_LRCLK",
     ("U5", "9"): "AUDIO_HP_MUTE",
     ("J3", "1"): "AUDIO_HP_DETECT", ("JP6", "1"): "AUDIO_DETECT",
     ("U6", "3"): "MIC_I2S_BCLK", ("U6", "4"): "MIC_I2S_DATA", ("U6", "5"): "MIC_I2S_LRCLK",

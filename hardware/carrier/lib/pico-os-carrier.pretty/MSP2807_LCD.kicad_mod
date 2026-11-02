@@ -65,6 +65,6 @@
 	(pad "" np_thru_hole circle (at 47.000 3.000) (size 3.2 3.2) (drill 3.2) (layers "*.Cu" "*.Mask") (uuid "85654eaf-a590-5086-9dcf-fc0e85474c56"))
 	(pad "" np_thru_hole circle (at 3.000 79.080) (size 3.2 3.2) (drill 3.2) (layers "*.Cu" "*.Mask") (uuid "4e0bb7db-66b9-514e-b406-3611998a0253"))
 	(pad "" np_thru_hole circle (at 47.000 79.080) (size 3.2 3.2) (drill 3.2) (layers "*.Cu" "*.Mask") (uuid "70bcc53e-bfa0-59db-a7be-650ad5d3472a"))
-	(fp_text user "VCC" (at 8.490 81.800 0) (layer "F.SilkS") (uuid "b792d0d6-fa67-5be7-ba08-cd24e9957673") (effects (font (size 0.8 0.8) (thickness 0.15))))
-	(fp_text user "SD_CS" (at 21.190 5.200 0) (layer "F.SilkS") (uuid "1d1ff5d0-f5b7-520c-965d-7148a66bf4dc") (effects (font (size 0.8 0.8) (thickness 0.15))))
+	(fp_text user "VCC" (at 8.490 81.600 0) (layer "F.SilkS") (uuid "a86172c3-722d-583d-9dc3-84d90658db6a") (effects (font (size 1.0 1.0) (thickness 0.15))))
+	(fp_text user "SD_CS" (at 21.190 5.400 0) (layer "F.SilkS") (uuid "8e81b03b-137b-5172-8eb1-e2dd6a26667b") (effects (font (size 1.0 1.0) (thickness 0.15))))
 )

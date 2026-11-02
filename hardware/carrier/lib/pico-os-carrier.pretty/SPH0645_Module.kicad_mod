@@ -39,7 +39,7 @@
 		(effects (font (size 1 1) (thickness 0.15)))
 	)
 	(fp_rect (start -6.350 -8.350) (end 6.350 8.350) (stroke (width 0.1) (type solid)) (fill none) (layer "F.Fab") (uuid "0122cc2e-dc09-53a6-84da-b98bdd69b574"))
-	(fp_rect (start -6.350 -8.350) (end 6.350 8.350) (stroke (width 0.12) (type solid)) (fill none) (layer "F.SilkS") (uuid "6bc09463-5acf-58ae-a76a-61739703ddeb"))
+	(fp_rect (start -6.350 -8.350) (end 6.350 8.350) (stroke (width 0.15) (type solid)) (fill none) (layer "F.SilkS") (uuid "6bc09463-5acf-58ae-a76a-61739703ddeb"))
 	(fp_rect (start -6.600 -8.600) (end 6.600 8.600) (stroke (width 0.05) (type solid)) (fill none) (layer "F.CrtYd") (uuid "91993df7-9d6c-54f6-9487-202867c5866b"))
 	(fp_text user "SPH0645" (at 0.000 0.000 0) (layer "F.Fab") (uuid "fef6b1b5-8425-5df3-bfad-b96574c0ef2d") (effects (font (size 0.8 0.8) (thickness 0.15))))
 	(pad "1" thru_hole rect (at -3.950 6.350) (size 1.7 1.7) (drill 1.0) (layers "*.Cu" "*.Mask") (remove_unused_layers no) (uuid "cba0e6ae-5fbb-53ac-80c7-8f428c0b2a00"))

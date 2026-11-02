@@ -116,13 +116,13 @@ PARTS = [
          footprint="Connector_JST:JST_PH_S4B-PH-K_1x04_P2.00mm_Horizontal",
          pins=[("1", "Pin_1", "GND"), ("2", "Pin_2", "GROVE_VCC"), ("3", "Pin_3", "GROVE_Y"),
                ("4", "Pin_4", "GROVE_W")],
-         side="B", pos=(50.0, 62.0), rot=90,
+         side="B", pos=(50.0, 57.5), rot=90, turn=180,
          note="1=黒GND 2=赤VCC 3=黄SDA 4=白SCL(UARTモードでは白=CardKB2のTX)"),
     dict(ref="J2", value="Qwiic (Wii adapter)", symbol="Connector_Generic_MountingPin:Conn_01x04_MountingPin",
          footprint="Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal",
          pins=[("1", "Pin_1", "GND"), ("2", "Pin_2", "+3V3"), ("3", "Pin_3", "I2C_SDA"),
                ("4", "Pin_4", "I2C_SCL"), ("MP", "MountPin", "GND")],
-         side="B", pos=(51.5, 73.5), rot=90, note="Qwiicの並び: GND/3V3/SDA/SCL"),
+         side="B", pos=(51.5, 74.5), rot=90, turn=180, note="Qwiicの並び: GND/3V3/SDA/SCL"),
     dict(ref="J3", value="HP_DET", symbol="Connector_Generic:Conn_01x02",
          footprint="Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
          pins=[("1", "Pin_1", "HP_DET"), ("2", "Pin_2", "GND")],
@@ -343,7 +343,7 @@ def module_fp(name, descr, w, h, pads, extra=(), label=None, silk=True):
     L.append(fp_prop("Description", descr, 0, 0, "F.Fab", True))
     L.append(fp_rect(-w / 2, -h / 2, w / 2, h / 2, "F.Fab", 0.1))
     if silk:
-        L.append(fp_rect(-w / 2, -h / 2, w / 2, h / 2, "F.SilkS", 0.12))
+        L.append(fp_rect(-w / 2, -h / 2, w / 2, h / 2, "F.SilkS", 0.15))
     L.append(fp_rect(-w / 2 - 0.25, -h / 2 - 0.25, w / 2 + 0.25, h / 2 + 0.25, "F.CrtYd", 0.05))
     if label:
         L.append(fp_text(label, 0, 0, "F.Fab", 0.8))
@@ -405,8 +405,8 @@ def footprints():
         L.append(tht_pad(str(15 + i), 21.19 + i * P, 3.0, square=(i == 0)))
     for (x, y) in ((3.0, 3.0), (47.0, 3.0), (3.0, 79.08), (47.0, 79.08)):
         L.append(npth(x, y, 3.2))
-    L.append(fp_text("VCC", 8.49, 81.8, "F.SilkS", 0.8))
-    L.append(fp_text("SD_CS", 21.19, 5.2, "F.SilkS", 0.8))
+    L.append(fp_text("VCC", 8.49, 81.6, "F.SilkS", 1.0))
+    L.append(fp_text("SD_CS", 21.19, 5.4, "F.SilkS", 1.0))
     L.append(")")
     fps["MSP2807_LCD"] = "\n".join(L) + "\n"
     # --- MAX98357A(TVETE、Adafruit 3006 と同じ形。18x19、7ピンが18mmの辺、反対の辺に端子台) ---
@@ -727,7 +727,9 @@ def build_pcb():
             # 裏の部品は反転した時点で向きが180度になっている。そこからさらに回す
             fp.SetOrientationDegrees(fp.GetOrientationDegrees() + part["turn"])
         if part["ref"] == "J2":
-            fp.Reference().SetPosition(vec(x - 4.5, y))
+            fp.Reference().SetPosition(vec(x + 4.0, y + 4.8))
+        if part["ref"] == "J1":
+            fp.Reference().SetPosition(vec(x + 7.5, y + 3.0))
         if part["ref"] == "U5":
             fp.Reference().SetPosition(vec(x, y - 4.0))
         pinmap = {n: (nm, net) for (n, nm, net) in part["pins"]}
@@ -787,10 +789,45 @@ def build_pcb():
         board.Add(z)
 
     silk("pico-os carrier v0.1", 32, 88.6, pcbnew.B_SilkS, 1.0)
-    silk("G V Y W", 49.0, 57.2, pcbnew.B_SilkS, 0.8)
-    silk("JP4 1-2:SCL 2-3:GP7", 44.0, 84.6, pcbnew.B_SilkS, 0.8)
-    silk("USB", PICO_CX - 23.0, PICO_CY + 12.0, pcbnew.B_SilkS, 0.8)
-    silk("ANT", PICO_CX + 21.5, PICO_CY - 11.0, pcbnew.B_SilkS, 0.8)
+    silk("JP4 1-2:SCL 2-3:GP7", 44.0, 84.6, pcbnew.B_SilkS, 1.0)
+    silk("USB", PICO_CX - 23.0, PICO_CY + 12.0, pcbnew.B_SilkS, 1.0)
+    silk("ANT", PICO_CX + 21.5, PICO_CY - 11.0, pcbnew.B_SilkS, 1.0)
+    # Grove(J1)の線の色を端子の横へ(黒GND/赤VCC/黄SDA/白SCL)
+    j1 = board.FindFootprintByReference("J1")
+    for pad in j1.Pads():
+        letter = {"1": "G", "2": "V", "3": "Y", "4": "W"}.get(pad.GetNumber())
+        if letter:
+            silk(letter, pcbnew.ToMM(pad.GetPosition().x) - 2.4, pcbnew.ToMM(pad.GetPosition().y),
+                 pcbnew.B_SilkS, 1.0)
+    # シルクの線は JLCPCB の目安(0.153mm)に合わせて 0.15mm 以上に太らせる(既製の部品の形は 0.12mm)
+    for f in board.GetFootprints():
+        for it in f.GraphicalItems():
+            if it.GetLayer() in (pcbnew.F_SilkS, pcbnew.B_SilkS) and not hasattr(it, "GetTextHeight"):
+                if it.GetWidth() < mm(0.15):
+                    it.SetWidth(mm(0.15))
+    # 液晶を留めるM3のネジ・スペーサーの下(穴の中心から半径3.5mm)には線とビアを通さない
+    import math as _m
+    for f in board.GetFootprints():
+        for pad in f.Pads():
+            if pad.GetAttribute() != pcbnew.PAD_ATTRIB_NPTH:
+                continue
+            hx, hy = pcbnew.ToMM(pad.GetPosition().x), pcbnew.ToMM(pad.GetPosition().y)
+            ko = pcbnew.ZONE(board)
+            ko.SetIsRuleArea(True)
+            ko.SetDoNotAllowTracks(True)
+            ko.SetDoNotAllowVias(True)
+            ko.SetDoNotAllowCopperPour(False)
+            ko.SetDoNotAllowPads(False)
+            ko.SetDoNotAllowFootprints(False)
+            ko.SetLayerSet(pcbnew.LSET.AllCuMask())
+            poly = pcbnew.SHAPE_LINE_CHAIN()
+            for k in range(24):
+                a = 2 * _m.pi * k / 24
+                poly.Append(mm(hx + 3.5 * _m.cos(a)), mm(hy + 3.5 * _m.sin(a)))
+            poly.SetClosed(True)
+            ko.Outline().AddOutline(poly)
+            ko.SetZoneName("screw keep-out")
+            board.Add(ko)
     path = os.path.join(OUT, PROJECT + ".kicad_pcb")
     pcbnew.SaveBoard(path, board)
     # ベタを埋める(作ったばかりの BOARD では埋められず落ちるので、読み直してから)

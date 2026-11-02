@@ -17,6 +17,9 @@ Raspberry Pi Pico 2 W と、今までジャンパワイヤでつないでいた�
 | `sym-lib-table` / `fp-lib-table` | 上の自作ライブラリを `${KIPRJMOD}` から読む |
 | `tools/gen_carrier.py` | 初版を生成したスクリプト(**KiCadで手直しを始めたら回さない**。手直しが消える) |
 | `tools/check_pins.py` | 回路図の結線を `src/consts.hpp` と突き合わせる(回路図を直したら回す) |
+| `tools/route_carrier.py` | 配線(下の「配線」) |
+| `tools/export_jlcpcb.py` | JLCPCB 用のガーバー・ドリルを書き出して zip にする(下の「JLCPCB への発注」) |
+| `fab/` | 発注に使う zip(版ごと) |
 
 ## 基板の形
 
@@ -66,13 +69,33 @@ Raspberry Pi Pico 2 W と、今までジャンパワイヤでつないでいた�
 
 GND は両面のベタと 0.4mm の線の両方でつないだ。線で区切られたベタの島に掛かる GND の端子は、ベタへ全面でつないだ(サーマルの橋が島に掛かる警告を消すため)。
 
+液晶を留める M3 の穴の周り(半径3.5mm)は、スペーサーとネジ頭の下になるので線とビアを通していない(GND のベタだけ)。
+Grove(J1)と Qwiic(J2)の差し口は基板の右の縁を向く。シルクは文字の高さ 1mm 以上・線 0.15mm 以上(JLCPCB の目安)。
+
 手で直すときは KiCad で `pico-os-carrier.kicad_pcb` を開き、直した後に
 
 1. `B` キーでベタを埋め直し、DRC(回路図との照合を入れて)を通す。
 2. `python3 hardware/carrier/tools/check_pins.py` で結線がファームと合っているかを見る。
 
 **手で直し始めたら `gen_carrier.py` / `route_carrier.py` は回さない**(配置と配線が作り直しになる)。
-作り直すときの順は `gen_carrier.py` → `route_carrier.py`(数回やり直して全部つながった回を残す。十数分かかる)。
+作り直すときの順は `gen_carrier.py` → `route_carrier.py`(数回やり直して全部つながった回を残す。十数分かかる)→ `export_jlcpcb.py`。
+
+## JLCPCB への発注
+
+`python3 hardware/carrier/tools/export_jlcpcb.py` で `fab/pico-os-carrier-v<版>-jlcpcb.zip` を作る(ガーバー7枚・PTH/NPTH のドリル・穴の地図)。
+JLCPCB の注文画面で zip を上げ、次のように選ぶ(ほかは既定のまま):
+
+| 項目 | 値 |
+|---|---|
+| Layers | 2 |
+| Dimensions | 64 x 128 mm(zip から自動で読まれる) |
+| PCB Thickness | 1.6 mm |
+| Surface Finish | HASL(鉛フリーでも可) |
+| Outer Copper Weight | 1 oz |
+| Min via hole size/diameter | 0.3mm/(0.4/0.45mm) 以上なら何でもよい(この基板のビアは 0.4/0.8mm) |
+| Remove Order Number | 好みで(番号を入れたくなければ指定する) |
+
+穴を2列の端子の間に置いていないので、どの設定でも追加の費用は掛からない見込み。部品の実装(PCBA)は頼まない前提。
 
 ## 確かめること(実物でしか分からないもの)
 

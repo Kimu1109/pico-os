@@ -34,6 +34,7 @@ EDGE = 0.5            # 縁からの間隔
 W_SIG = 0.4           # 信号の線
 W_PWR = 1.0           # 電源の線
 VIA_D, VIA_DRILL = 0.8, 0.4
+SCREW_R = 3.5         # M3のネジ頭・スペーサーの下は通さない(穴の中心からの半径)
 POWER = {"/GND", "/VSYS", "/VBUS", "/+3V3", "/LCD_VCC", "/PCM_VCC", "/GROVE_VCC"}
 COST_STEP, COST_BEND, COST_VIA = 1.0, 2.0, 12.0
 # 表は横、裏は縦を主に使う(向きに合わない動きは高くする)。2層の基板でよくあるやり方
@@ -176,8 +177,11 @@ class Router:
                 fn = (lambda px, py, a=(x1, y1, x2, y2): dist_point_rect(px, py, *a))
             layers_i = self.pad_layers(p) or (0, 1)
             if p.GetAttribute() == pcbnew.PAD_ATTRIB_NPTH:
+                # 液晶を留めるM3の穴: ネジ頭・スペーサーの下(半径3.5mm)に線とビアを通さない
                 layers_i = (0, 1)
                 code = -1
+                fn = (lambda px, py, cx=cx, cy=cy: max(0.0, math.hypot(px - cx, py - cy) - SCREW_R))
+                x1, y1, x2, y2 = cx - SCREW_R, cy - SCREW_R, cx + SCREW_R, cy + SCREW_R
             add_obstacle(g, layers_i, code, fn, (x1, y1, x2, y2), 0.0)
 
     def terminals(self, p, net):

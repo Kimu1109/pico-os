@@ -390,6 +390,41 @@ def apply(board, router):
         board.Add(v)
 
 
+def fix_starved_thermals():
+    """線で区切られたGNDのベタの島へサーマルの橋が掛かっている端子は、島ごとベタに全面でつなぐ。
+    端子は線でGNDにつながっているので電気的には問題ない(DRCの starved_thermal を消すため)"""
+    import json
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        rpt = os.path.join(tmp, "drc.json")
+        subprocess.run(["kicad-cli", "pcb", "drc", "--format", "json", "-o", rpt, PCB],
+                       check=True, stdout=subprocess.DEVNULL)
+        data = json.load(open(rpt, encoding="utf-8"))
+    targets = []
+    for v in data.get("violations", []):
+        if v.get("type") != "starved_thermal":
+            continue
+        for item in v.get("items", []):
+            pos = item.get("pos", {})
+            if "pad" in item.get("description", "").lower() or "PTH" in item.get("description", ""):
+                targets.append((pos.get("x"), pos.get("y")))
+    if not targets:
+        return False
+    board = pcbnew.LoadBoard(PCB)
+    n = 0
+    for f in board.GetFootprints():
+        for p in f.Pads():
+            px, py = to_mm(p.GetPosition().x), to_mm(p.GetPosition().y)
+            if any(abs(px - x) < 0.01 and abs(py - y) < 0.01 for (x, y) in targets):
+                p.SetZoneConnection(pcbnew.ZONE_CONNECTION_FULL)
+                n += 1
+    pcbnew.ZONE_FILLER(board).Fill(board.Zones())
+    pcbnew.SaveBoard(PCB, board)
+    print(f"島につながる端子 {n} 個をベタへ全面でつないだ")
+    return n > 0
+
+
 def main():
     board = pcbnew.LoadBoard(PCB)
     for t in list(board.GetTracks()):
@@ -423,6 +458,10 @@ def main():
     loaded = pcbnew.LoadBoard(PCB)
     pcbnew.ZONE_FILLER(loaded).Fill(loaded.Zones())
     pcbnew.SaveBoard(PCB, loaded)
+    # 埋め直すと別の端子が島に残ることがあるので、無くなるまで繰り返す
+    for _ in range(6):
+        if not fix_starved_thermals():
+            break
     print(f"線 {len(router.tracks)} 本、ビア {len(router.vias)} 個")
     return 1 if failed else 0
 

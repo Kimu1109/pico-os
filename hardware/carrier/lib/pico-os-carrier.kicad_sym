@@ -194,10 +194,10 @@
 		(in_bom yes)
 		(on_board yes)
 		(property "Reference" "U" (at 0 6.35 0) (effects (font (size 1.27 1.27))))
-		(property "Value" "SPH0645LM4H breakout" (at 0 -6.35 0) (effects (font (size 1.27 1.27))))
+		(property "Value" "SPH0645LM4H breakout (Adafruit 3421)" (at 0 -6.35 0) (effects (font (size 1.27 1.27))))
 		(property "Footprint" "" (at 0 0.00 0) (effects (font (size 1.27 1.27)) (hide yes)))
 		(property "Datasheet" "" (at 0 0.00 0) (effects (font (size 1.27 1.27)) (hide yes)))
-		(property "Description" "SPH0645LM4H breakout" (at 0 0.00 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "SPH0645LM4H breakout (Adafruit 3421)" (at 0 0.00 0) (effects (font (size 1.27 1.27)) (hide yes)))
 		(symbol "SPH0645_Module_0_1" (rectangle (start -7.62 5.08) (end 7.62 -5.08) (stroke (width 0.254) (type default)) (fill (type background))))
 		(symbol "SPH0645_Module_1_1"
 			(pin passive line (at -10.16 2.54 0) (length 2.54) (name "3V" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))

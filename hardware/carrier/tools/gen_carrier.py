@@ -102,11 +102,11 @@ PARTS = [
                ("15", "LROUT", None)],
          side="B", pos=(39.6, 44.0), rot=None, turn=180,
          note="GY-PCM5102(32x17)。ジャックを基板の右の縁に出す。裏のH3L(XSMT)ははんだを盛らない"),
-    dict(ref="U6", value="SPH0645LM4H breakout", symbol="SPH0645_Module", footprint="SPH0645_Module",
+    dict(ref="U6", value="SPH0645LM4H breakout (Adafruit 3421)", symbol="SPH0645_Module", footprint="SPH0645_Module",
          pins=[("1", "3V", "+3V3"), ("2", "GND", "GND"), ("3", "BCLK", "MIC_BCLK"),
                ("4", "DOUT", "MIC_DOUT"), ("5", "LRCL", "MIC_LRCLK"), ("6", "SEL", "GND")],
-         side="B", pos=(47.7, 21.0), rot=90,
-         note="仮: Adafruit 3421 互換。ピンの並びは要確認"),
+         side="B", pos=(47.7, 21.0), rot=None,
+         note="Adafruit 3421。マイクの部品を基板側、音の穴を外へ(裏返して付ける)"),
     dict(ref="U7", value="DS3231 module (ZS-042)", symbol="DS3231_Module", footprint="DS3231_ZS042_Module",
          pins=[("1", "32K", None), ("2", "SQW", None), ("3", "SCL", "I2C_SCL"),
                ("4", "SDA", "I2C_SDA"), ("5", "VCC", "+3V3"), ("6", "GND", "GND")],
@@ -420,12 +420,17 @@ def footprints():
     fps["PCM5102A_Module"] = module_fp(
         "PCM5102A_Module", "GY-PCM5102 PCM5102A DAC module 32x17mm, 1x6 + 1x9 2.54mm, jack sticks out ~2mm",
         32.0, 17.0, pads, extra, "PCM5102A")
-    # --- SPH0645 ブレークアウト(16.7x12.7、長い辺に6ピン)。音の穴は外向きに裏返して付ける ---
-    pads = [(str(i + 1), -6.35 + i * P, -5.1) for i in range(6)]
-    extra = [fp_text("PORT", 0, 1.5, "F.Fab", 0.8)]
+    # --- SPH0645 ブレークアウト(Adafruit 3421、12.7x16.7)。マイクの部品を基板側にして裏返して付けるので、
+    #  外から見えるのは音の穴の面。その面でピンの列を左にすると、上から SEL/LRCL/DOUT/BCLK/GND/3V
+    #  (Adafruit の写真と実物で確認)。ピンは左の縁から約2.4mm、音の穴は中央の少し右
+    pads = [(str(6 - i), -3.95, -6.35 + i * P) for i in range(6)]
+    pads.sort(key=lambda p: int(p[0]))
+    extra = [fp_text("PORT", 1.35, -1.6, "F.Fab", 0.8),
+             f'\t(fp_circle (center 1.35 0) (end 1.85 0) (stroke (width 0.1) (type solid)) (fill none) '
+             f'(layer "F.Fab") (uuid "{uid("mic-port")}"))']
     fps["SPH0645_Module"] = module_fp(
-        "SPH0645_Module", "SPH0645LM4H I2S MEMS mic breakout (Adafruit 3421-like) 16.7x12.7mm (TENTATIVE)",
-        16.7, 12.7, pads, extra, "SPH0645")
+        "SPH0645_Module", "SPH0645LM4H I2S MEMS mic breakout (Adafruit 3421) 12.7x16.7mm, seen from the port side",
+        12.7, 16.7, pads, extra, "SPH0645")
     # --- DS3231 ZS-042(38.2x21.6、短い辺に6ピン)。ピンはチップの面から出るので、電池の面が外を向く。
     #  形は電池の面から見たもの(ピンを左にすると上から GND/VCC/SDA/SCL/SQW/32K)
     pads = [(str(6 - i), -17.6, -6.35 + i * P) for i in range(6)]

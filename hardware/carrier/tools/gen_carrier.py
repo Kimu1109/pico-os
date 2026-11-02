@@ -66,10 +66,11 @@ PICO_PINS = [
     ("36", "3V3", "+3V3"), ("37", "3V3_EN", "3V3_EN"), ("38", "GND", "GND"),
     ("39", "VSYS", "VSYS"), ("40", "VBUS", "VBUS"),
 ]
-# LiPo SHIM は Pico の 1〜7・34〜40 番と同じ位置に穴がある。使うのは電源だけ
-SHIM_USED = {"3": "GND", "36": "+3V3", "37": "3V3_EN", "38": "GND", "39": "VSYS", "40": "VBUS"}
+# LiPo SHIM(PiCoLiPoSHIM)は Pico の 1〜8・33〜40 番と同じ位置に穴がある(片側8つ)。使うのは電源とGNDだけ
+SHIM_USED = {"3": "GND", "8": "GND", "33": "GND", "36": "+3V3", "37": "3V3_EN", "38": "GND",
+             "39": "VSYS", "40": "VBUS"}
 SHIM_PINS = [(n, name, SHIM_USED.get(n)) for (n, name, _) in PICO_PINS
-             if int(n) <= 7 or int(n) >= 34]
+             if int(n) <= 8 or int(n) >= 33]
 
 PARTS = [
     dict(ref="U1", value="Raspberry Pi Pico 2 W", symbol="Pico2W", footprint="RaspberryPi_Pico2W_Socket",
@@ -77,7 +78,7 @@ PARTS = [
          note="ピンソケット(1x20 2本)で抜き差し"),
     dict(ref="U2", value="LiPo SHIM for Pico", symbol="LiPo_SHIM", footprint="Pimoroni_LiPo_SHIM",
          pins=SHIM_PINS, side="B", pos=(12.0, 45.5), rot=0,
-         note="Picoの裏に重ねず、同じピンを基板で結ぶ。使うのは電源の6本だけ"),
+         note="Picoの裏に重ねず、同じピンを基板で結ぶ。使うのは電源とGNDだけ。JSTとボタンの面を外へ"),
     dict(ref="U3", value="MSP2807 (ILI9341 2.8inch)", symbol="MSP2807", footprint="MSP2807_LCD",
          pins=[("1", "VCC", "LCD_VCC"), ("2", "GND", "GND"), ("3", "CS", "TFT_CS"),
                ("4", "RESET", "TFT_RST"), ("5", "DC", "TFT_DC"), ("6", "SDI", "SPI0_MOSI"),
@@ -364,17 +365,18 @@ def footprints():
         "Raspberry Pi Pico 2 W, 1x20 pin sockets x2 (2.54mm, rows 17.78mm apart), 21x51mm",
         21.0, 51.0, pads, extra, "Pico 2 W", silk=False)
     # --- LiPo SHIM(部品面=JSTとボタンの面から見た形)。Picoの裏に重ねたときと同じ穴が鏡映で並ぶ ---
-    #  Picoの上から見て1番が左上なら、SHIMの部品面から見ると1番は右上(仮定。README参照)
+    #  文字の面が Pico の裏と向き合う(Pimoroni の説明)。部品(JST・ボタン)は文字の無い面にある(商品写真で確認)。
+    #  Picoの上から見て1番が左上なので、SHIMの部品面から見ると1番は右上(ボタンの端が上)
     pads = []
-    for i in range(7):
-        pads.append((str(i + 1), 8.89, -7.62 + i * P))
-    for i in range(7):
-        pads.append((str(40 - i), -8.89, -7.62 + i * P))
+    for i in range(8):
+        pads.append((str(i + 1), 8.89, -8.89 + i * P))
+    for i in range(8):
+        pads.append((str(40 - i), -8.89, -8.89 + i * P))
     pads.sort(key=lambda p: int(p[0]))
-    extra = [fp_text("BTN/USB end", 0, -9.3, "F.Fab", 0.8)]
+    extra = [fp_text("BTN", 0, -7.0, "F.SilkS", 1.0), fp_text("JST", 0, 7.0, "F.SilkS", 1.0)]
     fps["Pimoroni_LiPo_SHIM"] = module_fp(
         "Pimoroni_LiPo_SHIM",
-        "Pimoroni LiPo SHIM for Pico, holes = Pico pins 1-7 and 34-40, seen from the parts side, 21x21mm",
+        "Pimoroni LiPo SHIM for Pico (PiCoLiPoSHIM), holes = Pico pins 1-8 and 33-40, seen from the parts side, 21x21mm",
         21.0, 21.0, pads, extra, "LiPo SHIM")
     # --- MSP2807 液晶(表から見た形。原点は液晶の左上の角) ---
     L = fp_header("MSP2807_LCD", "MSP2807 2.8inch ILI9341 SPI LCD 50x86mm, J2 14pin + J4 SD 4pin, M3 holes x4 "
@@ -422,11 +424,13 @@ def footprints():
     fps["SPH0645_Module"] = module_fp(
         "SPH0645_Module", "SPH0645LM4H I2S MEMS mic breakout (Adafruit 3421-like) 16.7x12.7mm (TENTATIVE)",
         16.7, 12.7, pads, extra, "SPH0645")
-    # --- DS3231 ZS-042(38x22、短い辺に6ピン) ---
-    pads = [(str(i + 1), -17.6, -6.35 + i * P) for i in range(6)]
-    extra = [fp_text("CR2032 (back of module)", 2, 0, "F.Fab", 0.8)]
+    # --- DS3231 ZS-042(38.2x21.6、短い辺に6ピン)。ピンはチップの面から出るので、電池の面が外を向く。
+    #  形は電池の面から見たもの(ピンを左にすると上から GND/VCC/SDA/SCL/SQW/32K)
+    pads = [(str(6 - i), -17.6, -6.35 + i * P) for i in range(6)]
+    pads.sort(key=lambda p: int(p[0]))
+    extra = [fp_text("CR2032 side (outward)", 2, 0, "F.Fab", 0.8)]
     fps["DS3231_ZS042_Module"] = module_fp(
-        "DS3231_ZS042_Module", "DS3231 + AT24C32 module (ZS-042) 38x22mm, 1x6 2.54mm (TENTATIVE)",
+        "DS3231_ZS042_Module", "DS3231 + AT24C32 module (ZS-042) 38.2x21.6mm, 1x6 2.54mm, seen from the CR2032 side",
         38.2, 21.6, pads, extra, "DS3231")
     return fps
 

@@ -1721,7 +1721,7 @@
 		(property "Value" "MAX98357A module" (at 337.82 57.15 0) (effects (font (size 1.27 1.27))))
 		(property "Footprint" "pico-os-carrier:MAX98357A_Module" (at 337.82 50.8 0) (effects (font (size 1.27 1.27)) (hide yes)))
 		(property "Datasheet" "~" (at 337.82 50.8 0) (effects (font (size 1.27 1.27)) (hide yes)))
-		(property "Description" "仮: ピンの並びはAdafruit互換と仮定。写真で確かめる" (at 337.82 50.8 0) (effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Adafruit 3006 と同じ並び(商品写真で確認)。端子台にスピーカー" (at 337.82 50.8 0) (effects (font (size 1.27 1.27)) (hide yes)))
 		(pin "1" (uuid "e27dcd33-8c9c-56a6-845a-9a65c5382d49"))
 		(pin "2" (uuid "c451b818-2181-5360-80ab-bc32ea3153d6"))
 		(pin "3" (uuid "c126756e-6ff7-5388-b9e9-2c27693d8a63"))

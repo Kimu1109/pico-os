@@ -93,7 +93,7 @@ PARTS = [
          pins=[("1", "LRC", "I2S_LRCLK"), ("2", "BCLK", "I2S_BCLK"), ("3", "DIN", "I2S_DIN"),
                ("4", "GAIN", None), ("5", "SD", "AMP_SD"), ("6", "GND", "GND"), ("7", "VIN", "VSYS")],
          side="B", pos=(12.0, 69.0), rot=90,
-         note="仮: ピンの並びはAdafruit互換と仮定。写真で確かめる"),
+         note="Adafruit 3006 と同じ並び(商品写真で確認)。端子台にスピーカー"),
     dict(ref="U5", value="PCM5102A module (GY-PCM5102)", symbol="PCM5102A_Module", footprint="PCM5102A_Module",
          pins=[("1", "SCK", "GND"), ("2", "BCK", "I2S_BCLK"), ("3", "DIN", "I2S_DIN"),
                ("4", "LCK", "I2S_LRCLK"), ("5", "GND", "GND"), ("6", "VIN", "PCM_VCC"),
@@ -403,11 +403,13 @@ def footprints():
     L.append(fp_text("SD_CS", 21.19, 5.2, "F.SilkS", 0.8))
     L.append(")")
     fps["MSP2807_LCD"] = "\n".join(L) + "\n"
-    # --- MAX98357A(Adafruit 3006 互換と仮定。18x19、7ピンが一辺、反対の辺に端子台) ---
-    pads = [(str(i + 1), -7.62 + i * P, -8.0) for i in range(7)]
+    # --- MAX98357A(TVETE、Adafruit 3006 と同じ形。18x19、7ピンが18mmの辺、反対の辺に端子台) ---
+    #  部品面から見てピンの列を上にすると、左から VIN/GND/SD/GAIN/DIN/BCLK/LRC(商品写真で確認)
+    pads = [(str(i + 1), 7.62 - i * P, -8.0) for i in range(7)]
+    pads.sort(key=lambda p: int(p[0]))
     extra = [fp_text("SPK terminal", 0, 7.5, "F.Fab", 0.8)]
     fps["MAX98357A_Module"] = module_fp(
-        "MAX98357A_Module", "MAX98357A I2S amp module (Adafruit-like), 18x19mm, 1x7 2.54mm (TENTATIVE)",
+        "MAX98357A_Module", "MAX98357A I2S amp module (Adafruit 3006 compatible), 18x19mm, 1x7 2.54mm",
         18.0, 19.0, pads, extra, "MAX98357A")
     # --- PCM5102A(GY-PCM5102、32x17。部品面=ジャックの面から見て、ジャックが右) ---
     #  短い辺(左)に SCK/BCK/DIN/LCK/GND/VIN、長い辺(上)に FLT/DEMP/XSMT/FMT/A3V3/AGND/ROUT/AGND/LROUT。

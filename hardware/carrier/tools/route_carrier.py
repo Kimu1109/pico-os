@@ -2,7 +2,7 @@
 """キャリアボードの信号を配線する(格子の上の迷路探索。KiCad の Python だけで動く)。
 
 gen_carrier.py が作った基板(配線なし)を読み、全ネットを両面で配線して GND のベタを埋め直す。
-余裕を持たせるため、線は信号 0.4mm・電源 1.0mm、間隔 0.3mm、縁から 0.5mm、ビアは 0.8/0.4mm。
+余裕を持たせるため、線は信号 0.4mm・電源 1.0mm、間隔 0.4mm、縁から 1.0mm、ビアは 0.8/0.4mm。
 
   python3 hardware/carrier/tools/route_carrier.py
 
@@ -29,8 +29,8 @@ sys.path.insert(0, HERE)
 from gen_carrier import BOARD_W, BOARD_H, NOTCH, PICO_CY  # noqa: E402
 
 STEP = 0.5            # 格子の間隔(mm)
-CLEAR = 0.3           # 銅どうしの間隔
-EDGE = 0.5            # 縁からの間隔
+CLEAR = 0.4           # 銅どうしの間隔(余裕を見て。DRCの決まりは0.3)
+EDGE = 1.0            # 縁からの間隔
 W_SIG = 0.4           # 信号の線
 W_PWR = 1.0           # 電源の線
 VIA_D, VIA_DRILL = 0.8, 0.4

@@ -4,6 +4,8 @@
 // Labelの折り返し(relayout)はこの2つの戻り値で分岐するため、0を返すと
 // 「常に1行」になってしまい、確保パターンの計測(mem_probe)が実機とかけ離れてしまう。
 #pragma once
+// スタブである印(gui/core/GlyphIndexFont.hpp が見る)
+#define PICOOS_LGFX_STUB 1
 #include <vector>
 #include <algorithm>
 #define TFT_BLACK 0

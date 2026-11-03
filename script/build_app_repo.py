@@ -1079,13 +1079,13 @@ def cmd_package(args):
 
 # ---- アイコン(.pimg → PNG)。Pillow を使わずに書く(CIのPythonに無くてよいように) ----
 def _pimg_palette():
-    """script/generate_pimg.py の PALETTE を読む(import すると Pillow が要るので、式だけ取り出す)"""
-    import ast
-    src = open(os.path.join(ROOT, "script", "generate_pimg.py"), encoding="utf-8").read()
-    for node in ast.parse(src).body:
-        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "PALETTE" for t in node.targets):
-            return ast.literal_eval(node.value)
-    raise SystemExit("generate_pimg.py に PALETTE がありません")
+    """script/pimg_palette.py の既定のパレット(generate_pimg.py / pimg2png.py と共通。標準ライブラリだけで読める)"""
+    import sys
+    script_dir = os.path.join(ROOT, "script")
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    from pimg_palette import DEFAULT_PALETTE
+    return list(DEFAULT_PALETTE)
 
 
 def pimg_to_png(data, palette):

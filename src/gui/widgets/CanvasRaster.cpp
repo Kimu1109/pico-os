@@ -1,4 +1,5 @@
 #include "gui/widgets/CanvasRaster.hpp"
+#include "gui/core/Font_Functions.hpp"
 #include "OS_Data.hpp"
 #include "gui/core/GFX_Functions.hpp"
 #include "system/Log_Functions.hpp"
@@ -38,7 +39,7 @@ CanvasRaster::CanvasRaster(int16_t x, int16_t y, int16_t w, int16_t h){
     palette_rev = PICO_GFX::paletteRevision;
     sp->setBaseColor(PICO_WHITE);
     sp->clear(PICO_WHITE);
-    sp->setFont(&lgfxJapanGothicP_24);
+    sp->setFont(FontFn::GetNormal());
     sp->setTextColor(PICO_BLACK);
     sp->setTextWrap(false, false);
 }
@@ -187,7 +188,7 @@ void CanvasRaster::resize(int16_t w, int16_t h){
     palette_rev = PICO_GFX::paletteRevision;
     sp->setBaseColor(PICO_WHITE);
     sp->clear(PICO_WHITE);
-    sp->setFont(&lgfxJapanGothicP_24);
+    sp->setFont(FontFn::GetNormal());
     sp->setTextColor(PICO_BLACK);
     sp->setTextWrap(false, false);
 

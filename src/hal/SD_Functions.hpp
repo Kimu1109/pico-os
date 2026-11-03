@@ -28,9 +28,15 @@ namespace PICO_SD
         SPI_SD.begin();
         spi_running = true;
 
+        // DEDICATED_SPI: SPI1 はSD専用なので、SdFat に選択(CS)とトランザクションを持たせたままにする。
+        // SHARED_SPI だと1セクタ読むたびに「複数ブロックの読み始め(CMD18)+止め(CMD12)」を送っていた
+        // (SdFat 2.3 の readSector() は readSectors(…,1) で、SHAREDなら毎回止める)。DEDICATEDなら続きのセクタは
+        // コマンド無しで流れてくる(曲・動画・ROM・ログ・録音のような続けて読み書きする所が速くなる)。
+        // 書き込みも止めずに続ける。止めるのはファイルの close()/sync()/flush()(→ syncDevice())なので、
+        // 閉じた後のデータの安全さは変わらない。docs/design/performance.md「SDをSD専用のSPIとして使う」
         SdSpiConfig config(
             c.sd_cs,
-            SHARED_SPI,
+            DEDICATED_SPI,
             c.sd_hz,
             &SPI_SD);
         return OSData::SD.begin(config);

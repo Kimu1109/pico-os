@@ -1,3 +1,4 @@
+#include "gui/core/Font_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "gui/core/Focus_Functions.hpp"
@@ -41,7 +42,7 @@ void PICO_GFX::Setup() {
     if(!ok) LOG_SYS_FAIL("液晶の初期化に失敗しました");
     OSData::lcd->setBaseColor(TFT_WHITE);
     OSData::lcd->clear(TFT_WHITE);
-    OSData::lcd->setFont(&lgfxJapanGothicP_24);
+    OSData::lcd->setFont(FontFn::GetNormal());
     OSData::lcd->setTextColor(TFT_BLACK);
 
     LGFX_Sprite* frame = new LGFX_Sprite(OSData::lcd);
@@ -52,7 +53,7 @@ void PICO_GFX::Setup() {
     }
     frame->setBaseColor(PICO_WHITE);
     frame->clear(PICO_WHITE);
-    frame->setFont(&lgfxJapanGothicP_24);
+    frame->setFont(FontFn::GetNormal());
     frame->setTextColor(PICO_BLACK);
     frame->setTextWrap(false, false);
     OSData::frame = frame;

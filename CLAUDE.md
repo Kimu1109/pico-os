@@ -32,6 +32,7 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
 - `platformio.ini` の `[env:rpipico2w]`。`extra_scripts` がファームの版を埋め込み、`-t fwpack`/`-t fwpush` を足す。
 - 画面の大きさと液晶の種類はビルド時に選ぶ(`SCREEN_WIDTH/HEIGHT`・`PICO_PANEL_*`、env `rpipico2w_320x480` が例)。**配置は `Scene::contentRect()` からの相対で書き、240/320を直書きしない**(`docs/design/gui.md`「画面の大きさ」)。
 - 液晶・タッチ・SDのピン・速さ・向き等は**内蔵フラッシュの末尾4KB(EEPROMの領域)の値が `consts.hpp` の既定を上書き**する(USBシリアルの `hwcfg`。新しい初期化は `HwConfigFunctions::active` を読む。`devtools.md`)。
+- 条件付きのビルドは `picoos fw build --no-sound --no-app gb` / `picoos pc build …`(`picoos fw options` で一覧。`devtools.md`「開発用のCLI」)。
 - 音声・マイク・電池は `-DPICO_HW_SOUND=0` 等で外せる(`config/Hardware_Config.hpp`、例は env `rpipico2w_minimal`。液晶・タッチ・SDは必須)。
   外すと空の実装(`hal/*_Off.cpp`)が入る。**`hal/Sound_Functions.hpp` 等へ関数を足したら空の実装にも足す。`#if PICO_HW_*` を読むファイルはそのヘッダを自分で include する**(`docs/design/devtools.md`)。
 - **LovyanGFXの版は `lib_deps` の完全固定の1行が唯一の情報源**(`pc/CMakeLists.txt` がこれを読む。範囲指定に戻すとPCビルドのconfigureが止まる)。

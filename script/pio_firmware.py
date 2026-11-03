@@ -11,6 +11,7 @@
 #      pio run -e rpipico2w -t fwpush --upload-port <IP>    … Wi-Fiで本体へ送る(本体で[受け取る]を押しておく)
 #    鍵は環境変数 PICOOS_FW_KEY か ~/.pico-os/firmware.key(無ければ署名なし)。
 import os
+import re
 import subprocess
 
 Import("env")  # noqa: F821  (PlatformIOが用意する)
@@ -42,6 +43,13 @@ def build_info():
 def write_header():
     serial, short, date = build_info()
     pioenv = env.subst("$PIOENV")  # noqa: F821
+    # `picoos fw build` で env に -D を足して作ったときは、構成を「<env>+<名前>」にする
+    # (cli-tool/picoos_build.py。Webからの更新は構成が同じ版しか出さないので、既定の版で上書きされない)
+    variant = os.environ.get("PICOOS_BUILD_VARIANT", "")
+    if variant:
+        if not re.fullmatch(r"[A-Za-z0-9._=+-]{1,64}", variant):
+            raise SystemExit(f"PICOOS_BUILD_VARIANT に使えない文字があります: {variant!r}")
+        pioenv = f"{pioenv}+{variant}"
     text = (
         "// script/pio_firmware.py が書く(手で直さない)\n"
         "#pragma once\n"

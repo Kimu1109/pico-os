@@ -269,6 +269,49 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   実機ファームの両方の env のビルド(外した版に `setup1`/`loop1`・`ChipSynth` が無いこと)。外した版も**実機で起動を確認済み(2026-10-25)**(空きヒープの差の数値は控えていない)。
 - ファームの更新(`.pfw`)は版を区別しないので、載せる機能の違う本体へ送るとその機能が消える/増える(画面の大きさと同じ注意)。
 
+## 開発用のCLI `picoos` でビルドの条件を選ぶ (`cli-tool/picoos` / `cli-tool/picoos_build.py`) (2026-11-03)
+
+利用者の要望: ビルド時に選べる物(画面・液晶・ハードウェア機能・内蔵アプリ・RAMへ置く所)が増え、env を足すか
+`cmake -D…` を並べるのが手間なので、CLIからオプションで付けてビルドできるように。あわせて足りない機能を足す。
+
+- **`picoos fw build` / `picoos pc build` は同じ書き方の条件を取る**: `--screen 320x480` `--panel st7796` `--no-sound` `--no-mic`
+  `--no-battery`(`--no-hw sound,mic`)`--no-app gb,mail` `--only-app notes,calculator` `--no-apps` `--lua-ram` `--no-hot-ram` `-D NAME=値`
+  `--env rpipico2w_minimal`(env の条件を土台に)`--profile 名前`(保存した条件)。重ねる順は profile → env → オプション。
+  選べる名前は**ソースから毎回読む**(`App_Config.hpp` の `#ifndef PICO_APP_*`・`Hardware_Config.hpp` の `PICO_HW_*`・`LGFX_Config.hpp` の
+  `PICO_PANEL_*`・platformio.ini の env)ので、アプリやハードを足してもCLIは直さなくてよい。一覧は `picoos fw options`。
+- **実機**: 条件が platformio.ini のどれかの env と同じなら、その env をそのまま使う(`--no-sound --no-mic --no-battery` は `rpipico2w_minimal`)。
+  違えば rpipico2w(か `--env`)に足りない `-D` を `PLATFORMIO_BUILD_FLAGS` で足し、作る場所を `PLATFORMIO_BUILD_DIR` で
+  `.pio/build-variant/<条件の名前>/` に分ける(条件を行き来するたびに全部作り直しにならない)。
+  - 版に刻む構成(`Fw_Version` の `env=`)は「`rpipico2w+<条件の名前>`」(`PICOOS_BUILD_VARIANT` を `script/pio_firmware.py` が読む)。
+    Webからの更新(`Fw_Index`)は構成が同じ版しか出さないので、条件を変えたファームがナイトリー(既定の構成)で上書きされて機能が消える/増えることがない。
+    条件の名前は土台の env との違いだけ(`no-gb.mail`・`320x480+st7796` 等)、48文字を超えたら「保存した条件の名前か custom」+中身のハッシュ8桁。
+  - env が外している物を戻すことはできない(`--env rpipico2w_minimal` に「音を載せる」は無い。断る)。
+  - **プラットフォームは既定でCIと同じ版**(`--platform ci`): platformio.ini の `platform = raspberrypi`(公式)には rpipico2w が無く、
+    CIは maxgerhardt の固定の版へ `sed` で差し替えている。CLIは platformio.ini を写した `.pio/picoos/platformio.ini` の platform の行だけ差し替えて
+    `pio run -c` で渡す(platformio.ini は書き換えないので、版の git に `+` も付かない)。版は `firmware-build.yml` の `PLATFORM_REPO`/`PLATFORM_REF` が唯一の情報源。
+    `--platform ini` で platformio.ini のまま、手元で platform の行を書き換えてあればそれを尊重する。
+  - 作ったあと: `--upload [--port]`・`--pack`(.pfw)・`--push HOST`(Wi-Fiで送る)・`--monitor`。作るたびに firmware.bin の大きさと上限
+    (4MB − EEPROM 4KB − `board_build.filesystem_size`)を出し、上限を超えたら知らせる(超えると更新ファイルが置けない)。`picoos fw size` で同じ表示だけ。
+  - `-n`(`--dry-run`)で環境変数とコマンドを出すだけ。`picoos fw list` は作ってあるファーム、`picoos fw clean` は `.pio/build-variant/` を消す。
+- **PC**: 条件を付けたときは `-DPICOOS_*` を**全部の値で**渡す(cmake のキャッシュに前の条件が残って、外したつもりが外れない事故を防ぐ)。
+  何も付けなければ、作ってある場所の前回の条件のまま作り直す(`--clean` でも CMakeCache.txt から読んでから消す。既定へ戻すのは `--reset`)。
+  作る場所は `--name`(既定は `--profile`/`--env` の名前、どちらも無ければ `pc/build`)。`pc run`/`shot`/`dev`/`shots` も `--name` で選ぶ。
+  任意の `-D` のために `pc/CMakeLists.txt` へ `PICOOS_EXTRA_DEFINES`(「;」区切り)を足した。液晶の種類・RAMへ置く所はPCに無いので注意だけ出す。
+- **保存した条件**: `picoos profile save 名前 <条件>` / `list` / `show` / `rm`。`.picoos/profiles.json`(手元だけ。.gitignore 済み)。
+  `fw build --save-profile 名前` でも保存できる。`show` は実機の env・足す `-D`・PCでの作り方を出す。
+- **ほかに足したもの**: `picoos check [--fix] [--test]`(CIの「層の決まり」と同じ4つ: check_layers・gen_lua_builtins/gen_file_share_page の --check・i18n --check。
+  --fix は生成物と訳を作り直す)、`picoos doctor`(pio・cmake・SDL2・emsdk・Pillow・ffmpeg・kicad-cli 等がそろっているか)、
+  `picoos test` はグループ名・`-j`・`--list` を run.sh へ渡す(`picoos test core lua-engine`)、`picoos fw keygen/pack/push/verify/sign/index`・
+  `fw monitor`・`i18n`・`layers`・`gen lua-builtins`/`gen file-share-page`・`hw check-pins`・`pc shots`(Webのトップの写真)を配線。
+- **pimg のパレット**(`script/pimg_palette.py`。`pimg2png.py` と `generate_pimg.py` が共通で使う): .pimg は番号しか持たないので、
+  `--palette default|dark|ファイル(.gpl・.json・16進を並べた物)|"000000,1d2b53,…"` と `--set-color 3=ff8800` で番号に当てる色を選べる
+  (16色未満なら残りは既定)。ダークテーマ・`pico.set_palette()` で差し替えるアプリの絵を本体と同じ見え方で確かめるため。
+  pimg2png には `--bg`(透過を塗る)・`--rgb565`(液晶と同じ丸め)・`--info`(番号ごとの画素数)も足した。generate_pimg は `--palette` の色へ減色する。
+  組み込みの2つは `GFX_Functions.hpp` の `DEFAULT_COLORS`/`DARK_COLORS` を書き写したもの(向こうを変えたらこちらも)。
+- 検証: `fw build -n` で env の自動選択・足す `-D`・条件の名前、`fw build --no-app gb --pack` を実際に作り構成が `rpipico2w+no-gb` になること、
+  `pc build --no-sound --no-mic --only-app notes,calculator -D …` を作って起動し、`flags.make` に `-D` が入り、ホーム画面のアプリが減ること。
+  pimg2png の各パレット形式・誤った指定の断り方。CLIのテストはCIに無い(変更したら `-n` で手で確かめる)。
+
 ## 液晶・SDの配線を内蔵フラッシュに置く (`config/HwConfig.hpp` / `system/HwConfig_Codec` / `storage/Eeprom_Area` / `hal/HwConfig_Functions`) (2026-11-01)
 
 利用者の要望: 液晶・SDのピン番号・SPIの速さ・向き・ずれ・色反転をファームに焼かず、内蔵フラッシュに置いて起動時に読みたい。

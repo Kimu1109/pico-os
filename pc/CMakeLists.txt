@@ -188,6 +188,13 @@ foreach(app ${PICOOS_APPS})
     endif()
 endforeach()
 
+# 任意のマクロ(「;」区切り。例 -DPICOOS_EXTRA_DEFINES="PICO_FOO=1;PICO_BAR")。
+# `picoos pc build -D NAME=VAL` が毎回この値を渡す(何も無ければ空にするので、前の値がキャッシュに残らない)
+set(PICOOS_EXTRA_DEFINES "" CACHE STRING "足すマクロ(;区切り)")
+if(PICOOS_EXTRA_DEFINES)
+    target_compile_definitions(picoos_pc PRIVATE ${PICOOS_EXTRA_DEFINES})
+endif()
+
 # pc/compat を src より前に置くことで、実機ライブラリのヘッダを差し替える
 target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"

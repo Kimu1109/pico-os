@@ -5,6 +5,38 @@
 
 ## 最適化の記録
 
+### よく通る所をRAMに置く(`config/Ram_Func.hpp`・`lib/lua/pico/lua_pico_ram.h`) (2026-11-03)
+
+実機のコードはフラッシュからXIPのキャッシュ(16KB)を通して読む。フラッシュの大きなデータを読みながら回る所は、
+データの読みで自分のコードがキャッシュから追い出され、次に通るとまたフラッシュから読む。それを避けるため、選んだ関数だけRAMに置く。
+
+- **仕組み**: `PICO_RAM_FUNC`(`config/Ram_Func.hpp`)は関数を `.time_critical.picoos` の節に入れる。arduino-pico のリンカスクリプト
+  (`memmap_default.ld`)が `.time_critical*` を .data(RAM)へ集める(pico-sdk の `__not_in_flash_func` と同じ)。
+  RAMからフラッシュの関数を呼ぶ所にはリンカが中継(veneer)を足す。PC/Web/ホストテストでは何もしない。
+  `-DPICO_HOT_IN_RAM=0` で全部フラッシュへ戻る。
+  なお `memset` 等はこのツールチェインではフラッシュにある(リンカスクリプトは libc の `mem*` をRAMへ置く書き方だが、名前が合わず効いていない)。
+- **既定でRAMに置くもの**(合計 +1,704B): 字を描く道(上の「日本語フォントの字の探し方と文字の塗り方」)。
+  `GlyphIndexFont::drawChar()`/`updateFontMetric()`、字のデータの読み(`U8g2Decode`)、4bppへ塗る `FillNibbles()`、字を引く `U8g2GlyphIndex::find()`/`findAscii()`/`findUnicode()`。
+  字のデータ(24pxで277KB)をフラッシュから読みながら1文字ごとに通るので、選ぶ理由がはっきりしている。
+  塗る所は字の線(数バイト)ごとにフラッシュの `memset` を呼んでいたので、ただのループにした(コンパイラが `memset` へ戻さないよう
+  その関数だけ `no-tree-loop-distribute-patterns`)。RAMに置いた後に通る道でフラッシュへ出ていくのは `getClipRect()`(1文字1回)だけで、
+  背景を塗る・拡大するときの `writeFillRect()` は元の道。
+- **選べるが既定では置かないもの**: Luaの命令を実行する本体 `luaV_execute`(+10,920B)。Luaのアプリは命令の実行とC++の描画などを
+  行き来するので、10.5KBの本体がキャッシュの大半を占めては追い出される(MicroPython の RP2 版も実行の本体をRAMに置いている)。
+  ただ、実機のヒープの空きは80〜100KBしか無く、ゾンビTD等のLuaのゲームはすでにメモリが足りなくなることがあるので、
+  利用者と相談して**ビルドのフラグ(`-DPICO_LUA_VM_IN_RAM=1`)で選べる形にし、既定は無効**にした(2026-11-03)。
+  Lua本体(`lib/lua/src/`)は書き換えず、`lib/lua/library.json` の `build.flags` で `lib/lua/pico/lua_pico_ram.h` を
+  `-include` し、節の属性つきの宣言を先に読ませている(lvm.h の宣言と lvm.c の定義がその属性を引き継ぐ)。
+- **置かなかったもの**: `FlushDirty()` の行のハッシュ等、RAMの中だけを読む短いループ(キャッシュに乗ったままになるので効かない)。
+  液晶へ送るときの4bpp→RGB565の変換(LovyanGFX の `pixelcopy_t::copy_palette_affine<swap565_t,…>`、244B)は効きそうだが、
+  テンプレートの実体が複数のオブジェクトにあり(COMDAT)、どれをリンカが選ぶか決まらないので、節の付け替えでは確実に置けない。
+- **確かめたこと**: 実機ファームを3通り(既定・`PICO_LUA_VM_IN_RAM=1`・`PICO_HOT_IN_RAM=0`)ビルドし、ELFで関数の番地が
+  RAM(0x2000_0000台)/フラッシュ(0x1000_0000台)の思った方にあること、`drawChar` から呼ぶ先を逆アセンブルで確かめた。
+  静的なRAMは 140,372B(置かない)→ 142,076B(既定)→ 152,996B(Luaも)。PCビルドでは何も変わらない(字の描き比べは全部一致のまま)。
+- **実機では未計測**(Todoist参照)。比べるための版を `platformio.ini` に置いた: `pio run -e rpipico2w_no_ram`(何も置かない)/
+  `rpipico2w`(既定)/`rpipico2w_lua_ram`(Luaも)。文字の多い画面のスクロール・読書のページ送りと、Luaのゲーム(テトリス・ゾンビTD)の
+  フレームの時間(`perf-log`)を比べ、Luaの版はヒープの空き(`[MEM]`)も見る。効いていれば Lua を既定にするか決める。
+
 ### 日本語フォントの字の探し方と文字の塗り方 (2026-11-03)
 
 洗い出し(フォント・合成・SD・clk_peri 等)のうち、コードだけで直せる2件。実機の速さはPCでは測れないので、

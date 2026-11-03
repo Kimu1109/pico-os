@@ -1,4 +1,5 @@
 #include "gui/core/U8g2GlyphIndex.hpp"
+#include "config/Ram_Func.hpp"
 
 // u8g2のフォントの形(LovyanGFX の lgfx_fonts.cpp・u8g2 の u8g2_font.c と同じ読み方):
 //   ヘッダ23B: [17..18] 'A'からの字の位置 / [19..20] 'a'からの字の位置 / [21..22] 0x100以上の部の位置
@@ -6,6 +7,8 @@
 //   0x100以上の部: 先頭に表 [次の区画までの距離2B][この区画の最後の文字コード2B]…(最後の文字コードが0xFFFFで終わり)、
 //                 その後に字 [文字コード2B][この字の大きさ1B][データ…]。文字コード0で終わり
 // (フラッシュはそのまま読める番地にあるので pgm_read_byte は使わない)
+// 引く道(find/findAscii/findUnicode)は実機ではRAMに置く(config/Ram_Func.hpp。字のデータの読みでキャッシュから追い出されないように)。
+// 索引を作る・元の探し方は1回きり/滅多に通らないのでフラッシュのまま
 
 namespace {
     constexpr int kHeaderSize = 23;
@@ -18,7 +21,7 @@ namespace {
     }
 }
 
-const uint8_t* U8g2GlyphIndex::find(uint16_t encoding) {
+PICO_RAM_FUNC const uint8_t* U8g2GlyphIndex::find(uint16_t encoding) {
     const int slot = CacheSlot(encoding);
     const uint32_t cached = cache_pos_[slot];
     if (cached != kEmpty && cache_code_[slot] == encoding) {
@@ -34,7 +37,7 @@ void U8g2GlyphIndex::clearCache() {
     for (int i = 0; i < kCacheSlots; i++) cache_pos_[i] = kEmpty;
 }
 
-const uint8_t* U8g2GlyphIndex::findAscii(uint16_t encoding) const {
+PICO_RAM_FUNC const uint8_t* U8g2GlyphIndex::findAscii(uint16_t encoding) const {
     const uint8_t* font = font_ + kHeaderSize;
     if (encoding >= 'a')      font += Read16(font_ + 19);
     else if (encoding >= 'A') font += Read16(font_ + 17);
@@ -101,7 +104,7 @@ void U8g2GlyphIndex::buildIndex() {
     index_state_ = IndexState::Ready;
 }
 
-const uint8_t* U8g2GlyphIndex::findUnicode(uint16_t encoding) {
+PICO_RAM_FUNC const uint8_t* U8g2GlyphIndex::findUnicode(uint16_t encoding) {
     if (index_state_ == IndexState::NotBuilt) buildIndex();
     if (index_state_ != IndexState::Ready) return findUnicodeLinear(encoding);
 

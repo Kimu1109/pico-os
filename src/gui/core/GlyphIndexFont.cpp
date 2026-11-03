@@ -3,12 +3,14 @@
 #if !defined(PICOOS_LGFX_STUB)
 
 #include <algorithm>
-#include <cstring>
 #include "OS_Data.hpp"
+#include "config/Ram_Func.hpp"
 #include <lgfx/Fonts/IPA/lgfx_font_japan.h>
 
 // updateFontMetric()/drawChar() は LovyanGFX 1.2.28 の lgfx_fonts.cpp(U8g2font)の写し
 // (FreeBSDライセンス、著作権者 lovyan03。THIRD_PARTY_LICENSES.md)。違うのは getGlyph() を glyph() にしたところだけ。
+// 字を描く道(drawChar とその下請け)は実機ではRAMに置く(config/Ram_Func.hpp)。字のデータ(フラッシュ)を読みながら回るので、
+// フラッシュに置くとその読みで自分のコードがXIPのキャッシュから追い出される
 
 namespace {
     // lgfx_fonts.cpp の u8g2_font_decode_t の写し(あちらは .cpp の中にあって外から使えない)
@@ -18,7 +20,7 @@ namespace {
         const uint8_t* decode_ptr;
         uint8_t decode_bit_pos;
 
-        uint_fast8_t get_unsigned_bits(uint_fast8_t cnt) {
+        PICO_RAM_FUNC uint_fast8_t get_unsigned_bits(uint_fast8_t cnt) {
             uint_fast8_t bit_pos = this->decode_bit_pos;
             uint_fast8_t val = (*this->decode_ptr) >> bit_pos;
             auto bit_pos_plus_cnt = bit_pos + cnt;
@@ -30,7 +32,7 @@ namespace {
             return val & ((1U << cnt) - 1);
         }
 
-        int_fast8_t get_signed_bits(uint_fast8_t cnt) {
+        PICO_RAM_FUNC int_fast8_t get_signed_bits(uint_fast8_t cnt) {
             return (int_fast8_t)get_unsigned_bits(cnt) - (1 << (cnt - 1));
         }
     };
@@ -39,15 +41,20 @@ namespace {
     GlyphIndexFont font24(lgfx_font_japan_gothic_p_24);
 
     // 4bppの1行の [x0, x1) を色 nib(0〜15)で塗る。偶数のxが上位4ビット(LovyanGFXの4bppのスプライトと同じ並び)
-    inline void FillNibbles(uint8_t* row, int32_t x0, int32_t x1, uint8_t nib) {
+    // no-tree-loop-distribute-patterns: 下のループをコンパイラが memset の呼び出しへ戻さないように
+    PICO_RAM_FUNC __attribute__((optimize("no-tree-loop-distribute-patterns")))
+    void FillNibbles(uint8_t* row, int32_t x0, int32_t x1, uint8_t nib) {
         if (x0 & 1) {
             uint8_t& b = row[x0 >> 1];
             b = (uint8_t)((b & 0xF0) | nib);
             x0++;
         }
+        // 字の線は数バイトと短いので memset は呼ばない(実機の memset はフラッシュにあり、RAMに置いたこの道から毎回出ていくことになる)
         const int32_t pairs = (x1 - x0) >> 1;
         if (pairs > 0) {
-            memset(row + (x0 >> 1), nib * 0x11, (size_t)pairs);
+            uint8_t* p = row + (x0 >> 1);
+            const uint8_t both = (uint8_t)(nib * 0x11);
+            for (int32_t i = 0; i < pairs; i++) p[i] = both;
             x0 += pairs * 2;
         }
         if (x0 < x1) {
@@ -57,7 +64,7 @@ namespace {
     }
 
     // 画面の合成先(OSData::frame。4bpp・回転なし)へ直接描けるか
-    LGFX_Sprite* DirectTarget(lgfx::v1::LGFXBase* gfx) {
+    PICO_RAM_FUNC LGFX_Sprite* DirectTarget(lgfx::v1::LGFXBase* gfx) {
         LGFX_Sprite* f = OSData::frame;
         if (!f || static_cast<lgfx::v1::LGFXBase*>(f) != gfx) return nullptr;
         if (f->getColorDepth() != lgfx::v1::palette_4bit || f->getRotation() != 0) return nullptr;
@@ -69,7 +76,7 @@ namespace {
 const GlyphIndexFont* GlyphIndexFonts::Small()  { return &font16; }
 const GlyphIndexFont* GlyphIndexFonts::Normal() { return &font24; }
 
-bool GlyphIndexFont::updateFontMetric(lgfx::v1::FontMetrics* metrics, uint16_t uniCode) const {
+PICO_RAM_FUNC bool GlyphIndexFont::updateFontMetric(lgfx::v1::FontMetrics* metrics, uint16_t uniCode) const {
     U8g2Decode decode(glyph(uniCode));
     if (decode.decode_ptr) {
         metrics->width     = decode.get_unsigned_bits(this->bits_per_char_width());
@@ -84,7 +91,7 @@ bool GlyphIndexFont::updateFontMetric(lgfx::v1::FontMetrics* metrics, uint16_t u
     return false;
 }
 
-size_t GlyphIndexFont::drawChar(lgfx::v1::LGFXBase* gfx, int32_t x, int32_t y, uint16_t uniCode,
+PICO_RAM_FUNC size_t GlyphIndexFont::drawChar(lgfx::v1::LGFXBase* gfx, int32_t x, int32_t y, uint16_t uniCode,
                                 const lgfx::v1::TextStyle* style, lgfx::v1::FontMetrics* metrics, int32_t& filled_x) const {
     int32_t sy = 65536 * style->size_y;
     y += (metrics->y_offset * sy) >> 16;

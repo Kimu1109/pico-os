@@ -41,3 +41,11 @@ PlatformIOの自動ソース収集(Library Dependency Finder)は`src/`以下の`
 - Luaから見える違い: 整数は約±21億で回る(`0xffffffff` は `-1`)、小数の有効桁は約7桁、`tostring` は小数を7桁で書く。
   `pico.millis()` は約24.8日、`pico.micros()` は約36分で負へ回るが、引き算も同じく回るので差は正しい。
   エポック秒は2038年1月まで整数に収まる。詳しくは `lua-api-doc/content/reference/limits.md`「数の範囲」。
+
+## 実機でだけ足しているもの(`pico/`、`library.json` の `build`)
+
+`src/` は無改造のまま、`library.json` の `build.flags` で `pico/lua_pico_ram.h` をLuaの全ファイルへ
+`-include` している。中身は `-DPICO_LUA_VM_IN_RAM=1` のときだけ `luaV_execute` に `.time_critical.*` の節を付ける宣言で、
+命令を実行する本体を実機のRAMへ置く(既定は無効。docs/design/performance.md「よく通る所をRAMに置く」)。
+PC/Webのビルドとホストテストは `library.json` を読まないので関係しない。版を上げても `luaV_execute` の引数が
+変わらなければそのまま使える(変わったらコンパイルエラーで分かる)。

@@ -9,7 +9,7 @@ description: ".pimg / BMP / JPEG を読み込んでCanvasへ描く"
 
 | 形式 | 説明 |
 |---|---|
-| `.pimg` | OS独自の16色・RLE圧縮の形式。一番軽く読める。PNGなどからはリポジトリの `script/generate_pimg.py` で作る |
+| `.pimg` | OS独自の16色・RLE圧縮の形式。一番軽く読める。PNGなどからはリポジトリの `script/generate_pimg.py`(`picoos pimg`)で作る。`pico.set_palette()` で色を差し替えるなら `--palette` でその色へ減色でき、`picoos pimg2png a.pimg a.png --palette dark` でダークテーマの見え方を確かめられる |
 | `.bmp` | 無圧縮のBMP(1〜32bpp)。16色へ寄せて読む |
 | `.jpg` | ベースラインのJPEG(プログレッシブは不可)。16色へ寄せ、大きい写真は縮めて読める |
 

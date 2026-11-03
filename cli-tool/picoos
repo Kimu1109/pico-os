@@ -17,6 +17,10 @@ picoos - pico-os の script/ 配下に散らばった開発用スクリプトを
   - アイコン生成・pimg変換は script/.venv (cairosvg/pillow) が要る。
     存在すればそちらのpythonを、無ければ実行中のpython3にフォールバックする。
 
+例外として、ビルドの条件(fw build / pc build / profile)だけは picoos 自身が組み立てる
+(条件の読み書きは隣の picoos_build.py。設計は docs/design/devtools.md「開発用のCLI」)。
+選べる名前は App_Config.hpp 等のソースから毎回読むので、アプリやハードを足しても picoos は直さなくてよい。
+
 使い方の一覧は `picoos --help`、各カテゴリの詳細は
 `picoos <category> --help` を参照。転送系のサブコマンド
 (pimg/ppm2png/dict skk 等)は `--help` も元スクリプトへそのまま渡すので、
@@ -25,12 +29,16 @@ picoos - pico-os の script/ 配下に散らばった開発用スクリプトを
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# ~/.local/bin へのシンボリックリンクから起動しても、隣の picoos_build.py を読めるように実体の場所を足す
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import picoos_build as pb  # noqa: E402
 SCRIPT_DIR = REPO_ROOT / "script"
 HOST_TEST_DIR = SCRIPT_DIR / "host_test"
 LUA_TEST_DIR = SCRIPT_DIR / "lua_test"
@@ -87,6 +95,17 @@ PASSTHROUGH_PY = {
     ("pvid",): "generate_pvid.py",
     ("pad",): "pad_serial.py",
     ("tls-roots",): "generate_tls_roots.py",
+    ("i18n",): "i18n.py",
+    ("layers",): "check_layers.py",
+    ("fw", "keygen"): "firmware_tool.py keygen",
+    ("fw", "pack"): "firmware_tool.py pack",
+    ("fw", "push"): "firmware_tool.py push",
+    ("fw", "verify"): "firmware_tool.py verify",
+    ("fw", "sign"): "firmware_tool.py sign",
+    ("fw", "index"): "build_fw_index.py",
+    ("gen", "lua-builtins"): "gen_lua_builtins.py",
+    ("gen", "file-share-page"): "gen_file_share_page.py",
+    ("hw", "check-pins"): "../hardware/carrier/tools/check_pins.py",
     ("gen", "blocks"): "assets/generate_blocks_sheet.py",
     ("gen", "breakout"): "assets/generate_breakout_blocks.py",
     ("gen", "minesweeper"): "assets/generate_minesweeper_tiles.py",
@@ -109,11 +128,18 @@ def try_dispatch_passthrough(argv):
     for prefix, script in PASSTHROUGH_PY.items():
         n = len(prefix)
         if tuple(argv[:n]) == prefix:
-            return run_py(script, argv[n:])
-    if tuple(argv[:2]) == ("test", "parallel"):
-        return run(["sh", str(HOST_TEST_DIR / "run_parallel.sh"), *argv[2:]], cwd=REPO_ROOT)
+            # "firmware_tool.py keygen" のようにサブコマンドまで決めてあるものは、その語も先に渡す
+            name, *fixed = script.split()
+            return run_py(name, [*fixed, *argv[n:]])
+    if argv[:1] == ["test"]:
+        return cmd_test_raw(argv[1:])
     if tuple(argv[:2]) == ("pc", "run"):
         return cmd_pc_run_raw(argv[2:])
+    if tuple(argv[:2]) == ("fw", "monitor"):
+        pio = find_pio()
+        if pio is None:
+            return 127
+        return run([pio, "device", "monitor", *argv[2:]], cwd=REPO_ROOT)
     return None
 
 
@@ -131,32 +157,101 @@ def cmd_dict_build(args) -> int:
 
 
 _TEST_SCRIPTS = {
-    "unit": "run.sh",   # ASan付きホストテスト23本(stubs/、ネットワーク無し)
-    "net": "run_net.sh",  # HttpGetの結合テスト(本物のソケット)
-    "mem": "run_mem.sh",  # ウィジェットのヒープ確保回数の計測
+    "unit": "run.sh",          # ASan付きホストテスト(stubs/、ネットワーク無し)。グループ名・-j N・--list を渡せる
+    "parallel": "run_parallel.sh",  # unit を並列に
+    "net": "run_net.sh",       # HttpGetの結合テスト(本物のソケット)
+    "mem": "run_mem.sh",       # ウィジェットのヒープ確保回数の計測
 }
 
+_TEST_HELP = """\
+使い方: picoos test [unit|parallel|net|mem] [引数...]
 
-def cmd_test(args) -> int:
-    return run(["sh", str(HOST_TEST_DIR / _TEST_SCRIPTS[args.target])], cwd=REPO_ROOT)
+  picoos test                      ホストテスト一式(ASan。script/host_test/run.sh)
+  picoos test core lua-engine      グループを選ぶ(unit は省略できる。グループ名は --list)
+  picoos test -j 4 core            同時に作る/回す数
+  picoos test --list               グループの一覧
+  picoos test parallel -j 4        run_parallel.sh
+  picoos test net                  HTTP結合テスト(run_net.sh。CIに無いので変更のたびに手で回す)
+  picoos test mem                  ヒープ確保回数の計測(run_mem.sh。同上)
+
+後ろの引数はそのまま各 .sh へ渡す。
+"""
 
 
-def _pc_build_dir(web: bool) -> Path:
-    return PC_DIR / ("build-web" if web else "build")
+def cmd_test_raw(rest) -> int:
+    if rest[:1] in (["-h"], ["--help"]):
+        print(_TEST_HELP, end="")
+        return 0
+    target = "unit"
+    if rest and rest[0] in _TEST_SCRIPTS:
+        target, rest = rest[0], rest[1:]
+    return run(["sh", str(HOST_TEST_DIR / _TEST_SCRIPTS[target]), *rest], cwd=REPO_ROOT)
+
+
+def _pc_build_dir(web: bool, name=None) -> Path:
+    base = "build-web" if web else "build"
+    return PC_DIR / (f"{base}-{name}" if name else base)
+
+
+def _pc_binary(name=None):
+    binary = _pc_build_dir(web=False, name=name) / "picoos_pc"
+    if not binary.exists():
+        hint = f" --name {name}" if name else ""
+        print(f"[picoos] {binary} がありません。先に `picoos pc build{hint}` を実行してください。",
+              file=sys.stderr)
+        return None
+    return binary
 
 
 def cmd_pc_build(args) -> int:
-    build_dir = _pc_build_dir(args.web)
-    if args.clean and build_dir.exists():
-        print(f"[picoos] 既存のビルドディレクトリを削除します: {build_dir}", file=sys.stderr)
-        shutil.rmtree(build_dir)
-
+    try:
+        config = pb.config_from_args(args)
+        if args.save_profile:
+            pb.save_profile(args.save_profile, config)
+            print(f"[picoos] 条件を {args.save_profile} として保存しました", file=sys.stderr)
+    except pb.BuildError as e:
+        print(f"[picoos] {e}", file=sys.stderr)
+        return 2
+    # --name が無ければ、保存した条件の名前か env の名前(rpipico2w_ を除く)で分ける。
+    # 何も付けなければ pc/build
+    if not args.name:
+        if args.profile:
+            args.name = args.profile
+        elif args.env and args.env != pb.DEFAULT_ENV:
+            args.name = args.env[len(pb.DEFAULT_ENV) + 1:] if args.env.startswith(pb.DEFAULT_ENV + "_") else args.env
+    if args.name and not re.fullmatch(r"[A-Za-z0-9._-]+", args.name):
+        print(f"[picoos] --name は英数字と . _ - だけにしてください: {args.name!r}", file=sys.stderr)
+        return 2
+    for note in config.pc_ignored():
+        print(f"[picoos] 注意: PCビルドでは {note} は効きません", file=sys.stderr)
+    if not config.is_default():
+        print("[picoos] ビルドの条件:\n" + _indent(config.describe()), file=sys.stderr)
+    build_dir = _pc_build_dir(args.web, args.name)
     rel_build_dir = build_dir.relative_to(REPO_ROOT)
     if args.web:
         configure_cmd = ["emcmake", "cmake", "-S", "pc", "-B", str(rel_build_dir),
                           "-DCMAKE_BUILD_TYPE=Release"]
     else:
         configure_cmd = ["cmake", "-S", "pc", "-B", str(rel_build_dir)]
+    # 条件を付けたときは全部の値を渡す(キャッシュに前の条件が残らないように。BuildConfig.cmake_args)。
+    # 何も付けなければ、作ってある場所の条件(CMakeCache.txt)のまま作り直す(--clean でも読んでから消す)。
+    # --reset で既定へ戻す
+    cache = build_dir / "CMakeCache.txt"
+    if not pb.has_build_options(args) and not args.reset and cache.exists():
+        print(f"[picoos] 条件は {rel_build_dir} の前回のまま(既定へ戻すときは --reset)", file=sys.stderr)
+        if args.clean:
+            configure_cmd += pb.cached_cmake_args(cache)
+    else:
+        configure_cmd += config.cmake_args()
+    if args.dry_run:
+        if args.clean:
+            print(f"rm -rf {rel_build_dir}")
+        print(" ".join(configure_cmd))
+        print(f"cmake --build {rel_build_dir} -j {args.jobs}")
+        return 0
+    if args.clean and build_dir.exists():
+        print(f"[picoos] 既存のビルドディレクトリを削除します: {build_dir}", file=sys.stderr)
+        shutil.rmtree(build_dir)
 
     rc = run(configure_cmd, cwd=REPO_ROOT)
     if rc != 0:
@@ -170,19 +265,23 @@ def cmd_pc_build(args) -> int:
 
 
 def cmd_pc_run_raw(rest) -> int:
-    binary = _pc_build_dir(web=False) / "picoos_pc"
-    if not binary.exists():
-        print(f"[picoos] {binary} がありません。先に `picoos pc build` を実行してください。",
-              file=sys.stderr)
+    # 先頭の --name NAME(か --name=NAME)だけ picoos が読み、pc/build-NAME の版を動かす
+    name = None
+    if rest[:1] == ["--name"] and len(rest) >= 2:
+        name, rest = rest[1], rest[2:]
+    elif rest and rest[0].startswith("--name="):
+        name, rest = rest[0].split("=", 1)[1], rest[1:]
+    if rest[:1] == ["--"]:
+        rest = rest[1:]
+    binary = _pc_binary(name)
+    if binary is None:
         return 1
     return run([str(binary), *rest], cwd=REPO_ROOT)
 
 
 def cmd_pc_shot(args) -> int:
-    binary = _pc_build_dir(web=False) / "picoos_pc"
-    if not binary.exists():
-        print(f"[picoos] {binary} がありません。先に `picoos pc build` を実行してください。",
-              file=sys.stderr)
+    binary = _pc_binary(args.name)
+    if binary is None:
         return 1
 
     cmd = [str(binary)]
@@ -222,10 +321,8 @@ def _resolve_app_name(app: str) -> str:
 def cmd_pc_dev(args) -> int:
     # Luaアプリのホットリロード。picoos_pc の --hot-reload が、開いたLuaアプリのフォルダの
     # .lua / app.cfg の保存を見張り、変わったら同じ引数で起動し直す(pc/README.md「ホットリロード」)
-    binary = _pc_build_dir(web=False) / "picoos_pc"
-    if not binary.exists():
-        print(f"[picoos] {binary} がありません。先に `picoos pc build` を実行してください。",
-              file=sys.stderr)
+    binary = _pc_binary(args.name)
+    if binary is None:
         return 1
     cmd = [str(binary), "--app", _resolve_app_name(args.app), "--hot-reload"]
     if args.scene:
@@ -312,9 +409,333 @@ def cmd_pc_web_serve(args) -> int:
     return run(["emrun", "--no_browser", "--port", str(args.port), args.dir], cwd=REPO_ROOT)
 
 
+def cmd_pc_shots(args) -> int:
+    # GitHub Pages のトップに載せる画面写真を一通り撮る(script/web_shots.sh。CIの web-pages.yml と同じ)
+    binary = _pc_binary(args.name)
+    if binary is None:
+        return 1
+    return run(["sh", str(SCRIPT_DIR / "web_shots.sh"), str(binary), args.out], cwd=REPO_ROOT)
+
+
+# ---- 実機ビルド(picoos fw ...) ----
+
+def _indent(text: str, prefix: str = "  ") -> str:
+    return "\n".join(prefix + line for line in text.splitlines())
+
+
+def find_pio():
+    """pio / platformio を PATH か ~/.platformio/penv から探す。無ければ案内を出して None。"""
+    for name in ("pio", "platformio"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for candidate in (Path.home() / ".platformio" / "penv" / "bin" / "pio",
+                      Path.home() / ".platformio" / "penv" / "Scripts" / "pio.exe"):
+        if candidate.exists():
+            return str(candidate)
+    print("[picoos] PlatformIO(pio)が見つかりません。`pipx install platformio` 等で入れてください。", file=sys.stderr)
+    return None
+
+
+def _fmt_size(n: int) -> str:
+    return f"{n:,} バイト({n / 1024 / 1024:.2f}MB)"
+
+
+def _report_fw_size(bin_path: Path) -> int:
+    """firmware.bin の大きさと上限(4MB - EEPROM - LittleFS)を出す。上限を超えていれば1。"""
+    if not bin_path.exists():
+        print(f"[picoos] {bin_path} がありません(まだ作っていない)", file=sys.stderr)
+        return 1
+    size = bin_path.stat().st_size
+    limit = pb.firmware_limit()
+    if limit is None:
+        print(f"[picoos] ファーム: {_fmt_size(size)}", file=sys.stderr)
+        return 0
+    left = limit - size
+    pct = 100.0 * size / limit
+    print(f"[picoos] ファーム: {_fmt_size(size)} / 上限 {_fmt_size(limit)}  {pct:.1f}%  残り {left:,} バイト",
+          file=sys.stderr)
+    if left < 0:
+        print("[picoos] 上限を超えています。Wi-Fi/SDからの更新ができません"
+              "(platformio.ini の board_build.filesystem_size の注釈を参照)", file=sys.stderr)
+        return 1
+    if left < 64 * 1024:
+        print("[picoos] 注意: 上限まで64KBを切っています", file=sys.stderr)
+    return 0
+
+
+def _fw_plan_from_args(args):
+    config = pb.config_from_args(args)
+    if getattr(args, "save_profile", None):
+        pb.save_profile(args.save_profile, config)
+        print(f"[picoos] 条件を {args.save_profile} として保存しました", file=sys.stderr)
+    return config, pb.build_fw_plan(config, args.env, hint=getattr(args, "profile", None))
+
+
+def _print_fw_plan(config, plan):
+    print("[picoos] ビルドの条件:\n" + _indent(config.describe()), file=sys.stderr)
+    print(f"[picoos] env: {plan.env}  構成: {plan.build_env_name}", file=sys.stderr)
+    if plan.extra_flags:
+        print(f"[picoos] 足す -D: {' '.join(plan.extra_flags)}", file=sys.stderr)
+    print(f"[picoos] 作る場所: {os.path.relpath(plan.build_dir, REPO_ROOT)}", file=sys.stderr)
+
+
+def cmd_fw_build(args) -> int:
+    try:
+        config, plan = _fw_plan_from_args(args)
+    except pb.BuildError as e:
+        print(f"[picoos] {e}", file=sys.stderr)
+        return 2
+    _print_fw_plan(config, plan)
+
+    env = dict(os.environ)
+    env.update(plan.environ())
+    if os.environ.get("PLATFORMIO_BUILD_FLAGS") and plan.extra_flags:
+        env["PLATFORMIO_BUILD_FLAGS"] = os.environ["PLATFORMIO_BUILD_FLAGS"] + " " + env["PLATFORMIO_BUILD_FLAGS"]
+
+    conf, platform_desc = pb.project_conf(args.platform)
+    print(f"[picoos] プラットフォーム: {platform_desc}", file=sys.stderr)
+    base = ["pio", "run", "-e", plan.env]
+    if conf is not None:
+        base += ["-d", str(REPO_ROOT), "-c", os.path.relpath(conf, REPO_ROOT)]
+    if args.jobs:
+        base += ["-j", str(args.jobs)]
+    if args.verbose:
+        base.append("-v")
+    steps = []
+    if args.clean:
+        steps.append(base + ["-t", "clean"])
+    build = list(base)
+    if args.upload:
+        build += ["-t", "upload"]
+        if args.port:
+            build += ["--upload-port", args.port]
+    steps.append(build)
+    if args.pack:
+        steps.append(base + ["-t", "fwpack"])
+    if args.push:
+        steps.append(base + ["-t", "fwpush", "--upload-port", args.push])
+
+    if args.dry_run:
+        for k, v in plan.environ().items():
+            print(f"{k}={shlex_quote(v)} \\")
+        for st in steps:
+            print(" ".join(shlex_quote(c) for c in st))
+        return 0
+
+    pio = find_pio()
+    if pio is None:
+        return 127
+    for st in steps:
+        rc = run([pio, *st[1:]], cwd=REPO_ROOT, env=env)
+        if rc != 0:
+            return rc
+        if st is build:
+            size_rc = _report_fw_size(plan.bin_path)
+            if size_rc != 0 and (args.pack or args.push):
+                return size_rc
+    if args.pack:
+        print(f"[picoos] 更新ファイル: {os.path.relpath(plan.build_dir / 'firmware.pfw', REPO_ROOT)}", file=sys.stderr)
+    if args.monitor:
+        return run([pio, "device", "monitor", *(["--port", args.port] if args.port else [])], cwd=REPO_ROOT)
+    return 0
+
+
+def shlex_quote(s: str) -> str:
+    import shlex
+    return shlex.quote(str(s))
+
+
+def cmd_fw_size(args) -> int:
+    try:
+        config, plan = _fw_plan_from_args(args)
+    except pb.BuildError as e:
+        print(f"[picoos] {e}", file=sys.stderr)
+        return 2
+    print(f"[picoos] 構成: {plan.build_env_name}  ({os.path.relpath(plan.bin_path, REPO_ROOT)})", file=sys.stderr)
+    return _report_fw_size(plan.bin_path)
+
+
+def cmd_fw_options(args) -> int:
+    pb.print_options()
+    return 0
+
+
+def cmd_fw_list(args) -> int:
+    """作ってある実機のファームを並べる(.pio/build/* と .pio/build-variant/*/*)。"""
+    found = sorted((REPO_ROOT / ".pio" / "build").glob("*/firmware.bin")) + \
+        sorted(pb.VARIANT_BUILD_ROOT.glob("*/*/firmware.bin"))
+    if not found:
+        print("[picoos] 作ってあるファームはありません(picoos fw build)", file=sys.stderr)
+        return 0
+    import datetime
+    for f in found:
+        st = f.stat()
+        when = datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
+        rel = os.path.relpath(f, REPO_ROOT)
+        pfw = " +pfw" if (f.parent / "firmware.pfw").exists() else ""
+        print(f"{when}  {st.st_size:>10,}  {rel}{pfw}")
+    return 0
+
+
+def cmd_fw_clean(args) -> int:
+    targets = [pb.VARIANT_BUILD_ROOT]
+    if args.all:
+        targets.append(REPO_ROOT / ".pio" / "build")
+    for t in targets:
+        if t.exists():
+            print(f"[picoos] 消します: {os.path.relpath(t, REPO_ROOT)}", file=sys.stderr)
+            shutil.rmtree(t)
+    return 0
+
+
+# ---- 保存した条件(picoos profile ...) ----
+
+def cmd_profile_list(args) -> int:
+    try:
+        profiles = pb.list_profiles()
+    except pb.BuildError as e:
+        print(f"[picoos] {e}", file=sys.stderr)
+        return 2
+    if not profiles:
+        print("[picoos] 保存した条件はありません(picoos profile save NAME --no-sound ...)", file=sys.stderr)
+        return 0
+    for name, c in profiles.items():
+        print(f"{name:<20} {'(既定)' if c.is_default() else c.tag()}")
+    return 0
+
+
+def cmd_profile_save(args) -> int:
+    try:
+        config = pb.config_from_args(args)
+        pb.save_profile(args.name, config)
+    except pb.BuildError as e:
+        print(f"[picoos] {e}", file=sys.stderr)
+        return 2
+    print(f"[picoos] {args.name} を保存しました({os.path.relpath(pb.PROFILES_FILE, REPO_ROOT)})", file=sys.stderr)
+    print(_indent(config.describe()))
+    return 0
+
+
+def cmd_profile_show(args) -> int:
+    try:
+        config = pb.load_profile(args.name)
+        plan = pb.build_fw_plan(config, hint=args.name)
+    except pb.BuildError as e:
+        print(f"[picoos] {e}", file=sys.stderr)
+        return 2
+    print(config.describe())
+    print(f"実機       picoos fw build --profile {args.name}  → env {plan.env}  構成 {plan.build_env_name}")
+    if plan.extra_flags:
+        print(f"           足す -D: {' '.join(plan.extra_flags)}")
+    print(f"PC         picoos pc build --profile {args.name}   (pc/build-{args.name} へ。picoos pc run --name {args.name})")
+    for note in config.pc_ignored():
+        print(f"           (PCでは効かない: {note})")
+    return 0
+
+
+def cmd_profile_rm(args) -> int:
+    try:
+        pb.remove_profile(args.name)
+    except pb.BuildError as e:
+        print(f"[picoos] {e}", file=sys.stderr)
+        return 2
+    print(f"[picoos] {args.name} を消しました", file=sys.stderr)
+    return 0
+
+
+# ---- CIと同じ確かめ(picoos check) ----
+
+# (名前, 確かめるコマンド, 直すコマンド or None)。.github/workflows/host-tests.yml の「層の決まり」と同じ並び
+_CHECKS = [
+    ("層の決まり", ["check_layers.py"], None),
+    ("同梱Luaモジュールの生成物", ["gen_lua_builtins.py", "--check"], ["gen_lua_builtins.py"]),
+    ("Wi-Fi転送のページの生成物", ["gen_file_share_page.py", "--check"], ["gen_file_share_page.py"]),
+    ("訳(i18n)", ["i18n.py", "--check"], ["i18n.py", "update"]),
+]
+
+
+def cmd_check(args) -> int:
+    results = []
+    for name, check, fix in _CHECKS:
+        print(f"[picoos] === {name}", file=sys.stderr)
+        rc = run([sys.executable, str(SCRIPT_DIR / check[0]), *check[1:]], cwd=REPO_ROOT)
+        if rc != 0 and args.fix and fix:
+            print("[picoos] --fix: 作り直します", file=sys.stderr)
+            run([sys.executable, str(SCRIPT_DIR / fix[0]), *fix[1:]], cwd=REPO_ROOT)
+            rc = run([sys.executable, str(SCRIPT_DIR / check[0]), *check[1:]], cwd=REPO_ROOT)
+        results.append((name, rc, fix))
+    if args.test:
+        print("[picoos] === ホストテスト", file=sys.stderr)
+        results.append(("ホストテスト", run(["sh", str(HOST_TEST_DIR / "run.sh")], cwd=REPO_ROOT), None))
+    print("", file=sys.stderr)
+    failed = 0
+    for name, rc, fix in results:
+        mark = "OK " if rc == 0 else "NG "
+        hint = "" if rc == 0 or not fix or args.fix else "  (--fix で作り直せる)"
+        print(f"  {mark} {name}{hint}", file=sys.stderr)
+        failed += rc != 0
+    return 1 if failed else 0
+
+
+# ---- 道具がそろっているか(picoos doctor) ----
+
+def _probe_module(python: str, module: str) -> bool:
+    try:
+        return subprocess.run([python, "-c", f"import {module}"], capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+def cmd_doctor(args) -> int:
+    py = venv_python()
+    rows = []
+
+    def tool(label, ok, purpose, detail=""):
+        rows.append((ok, label, purpose, detail))
+
+    tool("python3", sys.version_info >= (3, 8), "このCLI・script/ の全部", sys.version.split()[0])
+    venv = SCRIPT_DIR / ".venv"
+    tool("script/.venv", venv.exists(), "アイコン・pimg の変換(無ければ今の python3 を使う)",
+         "" if venv.exists() else "python3 -m venv script/.venv && script/.venv/bin/pip install -r script/requirements.txt")
+    for mod, purpose in (("PIL", "pimg / pimg2png / gen / icons"), ("cairosvg", "icons"), ("numpy", "pvid")):
+        tool(f"  {mod}", _probe_module(py, mod), purpose)
+    pio = None
+    for name in ("pio", "platformio"):
+        pio = pio or shutil.which(name)
+    if pio is None and (Path.home() / ".platformio" / "penv" / "bin" / "pio").exists():
+        pio = str(Path.home() / ".platformio" / "penv" / "bin" / "pio")
+    tool("pio", pio is not None, "実機ビルド(fw build)", pio or "pipx install platformio")
+    tool("cmake", shutil.which("cmake") is not None, "PCビルド・ホストテスト")
+    tool("c++", (shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")) is not None,
+         "PCビルド・ホストテスト")
+    tool("cc", (os.environ.get("CC") and shutil.which(os.environ["CC"])) or shutil.which("cc") is not None,
+         "lua-test")
+    sdl = False
+    if shutil.which("pkg-config"):
+        sdl = subprocess.run(["pkg-config", "--exists", "sdl2"], capture_output=True).returncode == 0
+    sdl = sdl or shutil.which("sdl2-config") is not None
+    tool("SDL2", sdl, "PCビルド(ネイティブ)", "" if sdl else "apt install libsdl2-dev 等")
+    tool("emcmake", shutil.which("emcmake") is not None, "Webビルド(pc build --web)",
+         "" if shutil.which("emcmake") else "emsdk を入れて emsdk_env.sh を source")
+    tool("ffmpeg", shutil.which("ffmpeg") is not None, "pvid(動画の変換)")
+    tool("kicad-cli", shutil.which("kicad-cli") is not None, "hw check-pins(キャリアボード)")
+    tool("git", shutil.which("git") is not None, "ファームの版の埋め込み")
+
+    for ok, label, purpose, detail in rows:
+        mark = "✓" if ok else "✗"
+        line = f"  {mark} {label:<14} {purpose}"
+        if detail:
+            line += f"  [{detail}]"
+        print(line)
+    missing = [r for r in rows if not r[0]]
+    print(f"\n{len(rows) - len(missing)}/{len(rows)} そろっています(✗ の道具は、その用途を使うときだけ要ります)")
+    return 0
+
+
 # ---- パーサ構築 ----
 #
-# pimg/ppm2png/serve/midi2mml/spotify-auth/app-repo/pvid/pad/tls-roots/gen */test parallel/dict skk/dict index/dict suffix-index/dict filter-tofu/pc run は
+# PASSTHROUGH_PY の全部と test / pc run / fw monitor は
 # try_dispatch_passthrough() が実際の引数解析より先に横取りするため、ここで登録する
 # 対応するサブパーサは「picoos --help」等での一覧表示専用(実引数は持たない)。
 
@@ -339,10 +760,25 @@ def build_parser() -> argparse.ArgumentParser:
   picoos pad --mode text                          PCのキーボードを外部コントローラー/物理キーボードにする
   picoos tls-roots                                焼き込みルート証明書(Tls_Roots_Data.hpp)を再生成
   picoos gen tetris                               アプリ用画像(.pimg)を生成(gen --help で一覧)
+  picoos pimg2png a.pimg a.png --palette dark     .pimgをダークテーマのパレットでPNGへ
   picoos test                                     ホストテスト一式(ASan)を実行
+  picoos test core lua-engine -j 4                グループを選んで実行(picoos test --help)
   picoos test parallel -j 4                       ホストテストを並列実行
   picoos test net                                 HTTP結合テストを実行
+  picoos check [--fix]                            CIの「層の決まり」と同じ確かめ(生成物・訳)
+  picoos doctor                                   要る道具がそろっているか
+  picoos fw options                               ビルド時に選べる物(アプリ・ハード・液晶・env)の一覧
+  picoos fw build                                 実機ファームをビルド(pio run -e rpipico2w)
+  picoos fw build --no-sound --no-app gb,mail     条件を付けて実機ファームをビルド
+  picoos fw build --screen 320x480 --panel st7796 --upload   作って USB で書き込む
+  picoos fw build --profile myboard --pack        保存した条件で作って更新ファイル(.pfw)も作る
+  picoos fw build --push 192.168.1.23             作ってWi-Fiで本体へ送る
+  picoos fw size --no-apps                        作ったファームの大きさと上限
+  picoos fw monitor                               シリアルモニタ(pio device monitor)
+  picoos profile save myboard --no-mic --only-app notes,calculator   条件に名前を付けて保存
   picoos pc build                                 PC(SDL2)版をビルド
+  picoos pc build --no-sound --name nosound       条件を付けて pc/build-nosound へビルド
+  picoos pc run --name nosound                    pc/build-nosound の版を実行
   picoos pc run -- --shot shot.ppm 40             ネイティブ版を実行(引数はそのまま転送)
   picoos pc shot shot.ppm 40 --png shot.png       ヘッドレスで撮ってPNGまで変換
   picoos pc dev pc/sdcard/lua/apps/テトリス         Luaアプリを開き、.luaを保存するたびに起動し直す
@@ -368,6 +804,86 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("pvid", help="動画を.pvidへ変換 (generate_pvid.py、要ffmpeg+numpy、引数は転送)")
     sub.add_parser("pad", help="PCのキーボードを外部コントローラー/物理キーボードにする (pad_serial.py、引数は転送)")
     sub.add_parser("tls-roots", help="焼き込みルート証明書を生成 (generate_tls_roots.py、引数は転送)")
+    sub.add_parser("i18n", help="表示言語の訳 (i18n.py update / --check / missing / lua、引数は転送)")
+    sub.add_parser("layers", help="層の決まりを確かめる (check_layers.py、--graph 等も転送)")
+
+    p = sub.add_parser("check", help="CIの「層の決まり」と同じ確かめを手元で回す(層・生成物・訳)")
+    p.add_argument("--fix", action="store_true", help="生成物・訳が古ければ作り直す(gen_* / i18n.py update)")
+    p.add_argument("--test", action="store_true", help="最後にホストテスト(run.sh)も回す")
+    p.set_defaults(func=cmd_check)
+
+    p = sub.add_parser("doctor", help="要る道具(pio・cmake・SDL2・emsdk・Pillow 等)がそろっているか")
+    p.set_defaults(func=cmd_doctor)
+
+    # ---- 実機ファーム ----
+    fw_parser = sub.add_parser("fw", help="実機ファーム(PlatformIO)のビルド・書き込み・更新ファイル")
+    fw_sub = fw_parser.add_subparsers(dest="fw_command", required=True)
+
+    p = fw_sub.add_parser("build", help="条件を付けてビルドする(書き込み・.pfw・Wi-Fiで送るも)",
+                          formatter_class=argparse.RawDescriptionHelpFormatter,
+                          description="""\
+条件が platformio.ini のどれかの env と同じならその env で、違えば rpipico2w に -D を足して
+.pio/build-variant/<条件の名前>/ へ作る(条件を行き来しても作り直しにならない)。
+版に刻む構成は「rpipico2w+<条件の名前>」になり、Webからの更新は同じ構成の版しか出さない。""")
+    pb.add_build_options(p, fw=True)
+    g = p.add_argument_group("作ったあと")
+    g.add_argument("--upload", action="store_true", help="USBで書き込む(pio run -t upload)")
+    g.add_argument("--port", metavar="PORT", help="--upload / --monitor のシリアルポート")
+    g.add_argument("--monitor", action="store_true", help="最後にシリアルモニタを開く")
+    g.add_argument("--pack", action="store_true", help="SDに置く更新ファイル firmware.pfw も作る(-t fwpack)")
+    g.add_argument("--push", metavar="HOST", help="Wi-Fiで本体へ送る(-t fwpush。本体で[受け取る]を押しておく)")
+    g = p.add_argument_group("その他")
+    g.add_argument("--save-profile", metavar="NAME", help="この条件に名前を付けて保存する(次から --profile NAME)")
+    g.add_argument("--clean", action="store_true", help="先に作った物を消す(-t clean)")
+    g.add_argument("--platform", default="ci", metavar="ci|ini|SPEC",
+                   help="ci=CIと同じ maxgerhardt の固定の版(既定。firmware-build.yml の PLATFORM_REPO/REF)"
+                        " / ini=platformio.ini のまま / それ以外はプラットフォームの指定そのもの")
+    g.add_argument("-j", "--jobs", type=int, default=None, help="同時に作る数(pio run -j)")
+    g.add_argument("-v", "--verbose", action="store_true", help="pio run -v")
+    g.add_argument("-n", "--dry-run", action="store_true", help="実行するコマンドと環境変数を出すだけ")
+    p.set_defaults(func=cmd_fw_build)
+
+    p = fw_sub.add_parser("size", help="作ったファームの大きさと上限(条件の付け方は build と同じ)")
+    pb.add_build_options(p, fw=True)
+    p.set_defaults(func=cmd_fw_size, save_profile=None)
+
+    p = fw_sub.add_parser("options", help="選べる内蔵アプリ・ハードウェア機能・液晶・env・保存した条件の一覧")
+    p.set_defaults(func=cmd_fw_options)
+
+    p = fw_sub.add_parser("list", help="作ってあるファーム(.pio/build・.pio/build-variant)を並べる")
+    p.set_defaults(func=cmd_fw_list)
+
+    p = fw_sub.add_parser("clean", help="条件付きで作った物(.pio/build-variant/)を消す")
+    p.add_argument("--all", action="store_true", help=".pio/build/ も消す")
+    p.set_defaults(func=cmd_fw_clean)
+
+    fw_sub.add_parser("monitor", help="シリアルモニタ (pio device monitor、引数は転送)")
+    fw_sub.add_parser("keygen", help="署名の鍵を作る (firmware_tool.py keygen、引数は転送)")
+    fw_sub.add_parser("pack", help="firmware.bin から .pfw を作る (firmware_tool.py pack、引数は転送)")
+    fw_sub.add_parser("push", help="Wi-Fiで本体へ送る (firmware_tool.py push、引数は転送)")
+    fw_sub.add_parser("verify", help=".pfw を確かめる (firmware_tool.py verify、引数は転送)")
+    fw_sub.add_parser("sign", help=".pfw に署名する (firmware_tool.py sign、引数は転送)")
+    fw_sub.add_parser("index", help="Webからの更新の一覧を作る (build_fw_index.py、引数は転送)")
+
+    # ---- 保存した条件 ----
+    prof_parser = sub.add_parser("profile", help="ビルドの条件に名前を付けて保存する(.picoos/profiles.json)")
+    prof_sub = prof_parser.add_subparsers(dest="profile_command", required=True)
+    p = prof_sub.add_parser("list", help="保存した条件を並べる")
+    p.set_defaults(func=cmd_profile_list)
+    p = prof_sub.add_parser("save", help="条件を保存する(オプションは fw build と同じ)")
+    p.add_argument("name", metavar="NAME")
+    pb.add_build_options(p, fw=True)
+    p.set_defaults(func=cmd_profile_save)
+    p = prof_sub.add_parser("show", help="保存した条件と、実機・PCでの作り方を出す")
+    p.add_argument("name", metavar="NAME")
+    p.set_defaults(func=cmd_profile_show)
+    p = prof_sub.add_parser("rm", help="保存した条件を消す")
+    p.add_argument("name", metavar="NAME")
+    p.set_defaults(func=cmd_profile_rm)
+
+    hw_parser = sub.add_parser("hw", help="キャリアボード(hardware/carrier/)")
+    hw_sub = hw_parser.add_subparsers(dest="hw_command", required=True)
+    hw_sub.add_parser("check-pins", help="回路図の結線と consts.hpp のピンを照合 (check_pins.py、要kicad-cli)")
 
     gen_parser = sub.add_parser("gen", help="アプリ用の画像(.pimg)生成スクリプト群")
     gen_sub = gen_parser.add_subparsers(dest="gen_command", required=True)
@@ -380,6 +896,8 @@ def build_parser() -> argparse.ArgumentParser:
     gen_sub.add_parser("spotify-icon", help="Spotifyリモコンのアイコン (generate_spotify_icon.py、引数は転送)")
     gen_sub.add_parser("tetris", help="テトリスのミノ画像 (generate_tetris_blocks.py、引数は転送)")
     gen_sub.add_parser("zombie-td", help="「ゾンビTD」の絵 (generate_zombie_td_sheet.py、引数は転送)")
+    gen_sub.add_parser("lua-builtins", help="同梱Luaモジュールの .hpp を作る (gen_lua_builtins.py、--check も転送)")
+    gen_sub.add_parser("file-share-page", help="Wi-Fi転送のページの .cpp を作る (gen_file_share_page.py、--check も転送)")
 
     dict_parser = sub.add_parser("dict", help="辞書データ関連 (script/dict/)")
     dict_sub = dict_parser.add_subparsers(dest="dict_command", required=True)
@@ -393,22 +911,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("kinds", nargs="*", choices=["ime", "dict", "suffix"], help="作るもの(省略で全部)")
     p.set_defaults(func=cmd_dict_build)
 
-    p = sub.add_parser("test", help="ホストテストを実行 (script/host_test/run*.sh のラッパー)")
-    p.add_argument("target", nargs="?", choices=list(_TEST_SCRIPTS.keys()), default="unit",
-                    help="unit=ASan本体テスト(既定) / net=HTTP結合テスト / mem=ヒープ確保計測"
-                         " / parallel=unitを並列実行(後ろの引数はrun_parallel.shへ転送)")
-    p.set_defaults(func=cmd_test)
+    sub.add_parser("test", help="ホストテスト (unit/parallel/net/mem。グループ名・-j・--list も転送。picoos test --help)")
 
     pc_parser = sub.add_parser("pc", help="PC/Webビルド (pc/、SDL2ネイティブ or WebAssembly)")
     pc_sub = pc_parser.add_subparsers(dest="pc_command", required=True)
 
-    p = pc_sub.add_parser("build", help="ビルドする(既定はネイティブ、--webでWeb版)")
+    p = pc_sub.add_parser("build", help="ビルドする(既定はネイティブ、--webでWeb版。条件は fw build と同じ書き方)")
     p.add_argument("--web", action="store_true", help="WebAssembly版をビルドする(要emsdk)")
     p.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
     p.add_argument("--clean", action="store_true", help="ビルドディレクトリを削除してから構成し直す")
+    p.add_argument("--name", metavar="NAME",
+                   help="pc/build-NAME へ作る(条件ごとに分けると作り直しにならない。run/shot/dev も --name で選ぶ。"
+                        "既定は --profile / --env の名前、どちらも無ければ pc/build)")
+    p.add_argument("--save-profile", metavar="NAME", help="この条件に名前を付けて保存する")
+    p.add_argument("--reset", action="store_true",
+                   help="条件を付けないとき、作ってある場所の前回の条件ではなく既定(全部載せる)で作る")
+    p.add_argument("-n", "--dry-run", action="store_true", help="実行するコマンドを出すだけ")
+    pb.add_build_options(p, fw=False)
     p.set_defaults(func=cmd_pc_build)
 
-    pc_sub.add_parser("run", help="ネイティブ版(picoos_pc)を実行。引数はそのまま転送")
+    pc_sub.add_parser("run", help="ネイティブ版(picoos_pc)を実行。先頭の --name NAME 以外はそのまま転送")
 
     p = pc_sub.add_parser("shot", help="ヘッドレスでNフレーム回してPPM(+任意でPNG)を書き出す")
     p.add_argument("out_ppm", metavar="OUT.ppm")
@@ -417,11 +939,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help="指定フレームで(X,Y)をタップする。複数回指定可(最大16件)")
     p.add_argument("--png", metavar="OUT.png", help="指定するとPPMをPNGへも変換する")
     p.add_argument("--scale", type=int, default=2, help="--png指定時の拡大率(既定2)")
+    p.add_argument("--name", metavar="NAME", help="pc/build-NAME の版を使う")
     p.set_defaults(func=cmd_pc_shot)
+
+    p = pc_sub.add_parser("shots", help="Webのトップに載せる画面写真を一通り撮る (script/web_shots.sh)")
+    p.add_argument("out", nargs="?", default=str(PC_DIR / "build" / "shots"), metavar="OUT_DIR",
+                   help="出力先(既定 pc/build/shots)")
+    p.add_argument("--name", metavar="NAME", help="pc/build-NAME の版を使う")
+    p.set_defaults(func=cmd_pc_shots)
 
     p = pc_sub.add_parser("dev", help="Luaアプリを開いてホットリロード(.lua/app.cfgの保存で起動し直す)")
     p.add_argument("app", metavar="APP", help="アプリのフォルダ(pc/sdcard/lua/apps/…)かランチャの名前")
     p.add_argument("--scene", help="--scene と同じ(アプリへ最初に開く画面を頼む)")
+    p.add_argument("--name", metavar="NAME", help="pc/build-NAME の版を使う")
     p.add_argument("rest", nargs=argparse.REMAINDER, help="picoos_pc へそのまま渡す引数(-- の後ろ)")
     p.set_defaults(func=cmd_pc_dev)
 

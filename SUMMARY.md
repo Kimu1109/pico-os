@@ -371,6 +371,7 @@
 - [x] Luaアプリのホットリロード(PCビルド。`--hot-reload` / `picoos pc dev`)
 - [x] Luaアプリのホットリロード(実機。Wi-Fi転送。debug.cfg の `lua-hot-reload`)
 - [x] Luaアプリのテストランナー(`picoos lua-test`)
+- [x] 開発用のCLIでビルドの条件を選ぶ(`picoos fw build`/`pc build` のオプション・保存した条件・`check`・`doctor`・pimgのパレット指定)
 - [x] ビルド時にハードウェア機能(音声・マイク・電池)を外す
 - [x] ビルド時に内蔵アプリを外す
 - [x] 液晶・SDの配線と設定を内蔵フラッシュに置く(USBシリアルの `hwcfg`・失敗したら既定へ戻す)

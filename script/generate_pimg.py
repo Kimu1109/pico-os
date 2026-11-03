@@ -26,6 +26,8 @@ generate_pimg.py
     uv run generate_pimg.py input.png output.pimg
     uv run generate_pimg.py input.png output.pimg --transparent
     uv run generate_pimg.py input.png output.pimg --transparent --preview preview.png
+    uv run generate_pimg.py input.png output.pimg --palette my.gpl      # 差し替えたパレットへ減色
+    uv run generate_pimg.py --list-palettes
 """
 
 import argparse
@@ -35,31 +37,15 @@ from pathlib import Path
 
 from PIL import Image
 
+import pimg_palette
+from pimg_palette import DEFAULT_PALETTE
+
 # ------------------------------------------------------------------
-# 固定16色パレット（RGB888）
-# ★★★ 必ずファーム側の実際のパレットテーブル（kPaletteTable等）と
-#      インデックス順序・RGB値を完全一致させること。
-#      ここではプレースホルダとして一般的な16色を仮置きしている。
-#      index 0 は透過用スロットとして予約する運用を想定。
+# 固定16色パレット(RGB888)。中身は pimg_palette.py(pimg2png.py と共通。番号の順はファームの
+# src/gui/core/GFX_Functions.hpp の DEFAULT_COLORS と同じ)。index 0 は透過用スロットとして予約する運用。
+# 別のパレット(pico.set_palette() で差し替えるアプリ等)へ減色したいときは --palette で選ぶ。
 # ------------------------------------------------------------------
-PALETTE = [
-    (0x00, 0x00, 0x00),  # 0: 透過 / 黒
-    (0x00, 0x00, 0x80),  # 1: navy
-    (0x00, 0x80, 0x00),  # 2: dark green
-    (0x00, 0x80, 0x80),  # 3: dark cyan
-    (0x80, 0x00, 0x00),  # 4: maroon
-    (0x80, 0x00, 0x80),  # 5: purple
-    (0x80, 0x80, 0x00),  # 6: olive
-    (0xD3, 0xD3, 0xD3),  # 7: lightgrey
-    (0x80, 0x80, 0x80),  # 8: darkgrey
-    (0x00, 0x00, 0xFF),  # 9: blue
-    (0x00, 0xFF, 0x00),  # 10: green
-    (0x00, 0xFF, 0xFF),  # 11: cyan
-    (0xFF, 0x00, 0x00),  # 12: red
-    (0xFF, 0x00, 0xFF),  # 13: magenta
-    (0xFF, 0xFF, 0x00),  # 14: yellow
-    (0xFF, 0xFF, 0xFF),  # 15: white
-]
+PALETTE = DEFAULT_PALETTE
 
 ALPHA_THRESHOLD = 96  # アイコンパイプラインと同一閾値
 
@@ -164,7 +150,17 @@ def main():
         default=None,
         help="指定した場合、アスペクト比を保ったままこの幅にリサイズする",
     )
+    pimg_palette.add_arguments(parser)
+    # --list-palettes だけのときは入出力を要らなくする
+    if "--list-palettes" in sys.argv[1:]:
+        pimg_palette.print_builtin()
+        return
     args = parser.parse_args()
+    try:
+        palette = pimg_palette.resolve(args.palette, args.set_color)
+    except pimg_palette.PaletteError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if not args.input.exists():
         print(f"error: input file not found: {args.input}", file=sys.stderr)
@@ -181,7 +177,7 @@ def main():
         print("error: image dimensions exceed u16 range", file=sys.stderr)
         sys.exit(1)
 
-    indices, w, h = quantize_image(img, PALETTE, args.transparent)
+    indices, w, h = quantize_image(img, palette, args.transparent)
     body, run_count = rle_encode(indices, w, h)
     write_pimg(args.output, w, h, args.transparent, body)
 
@@ -198,7 +194,7 @@ def main():
         print(f"ratio : {ratio:.2f}x vs raw 4bpp  ({'圧縮できています' if ratio < 1.0 else '非圧縮の方が小さくなる可能性があります'})")
 
     if args.preview:
-        write_preview(indices, w, h, PALETTE, args.preview)
+        write_preview(indices, w, h, palette, args.preview)
         print(f"preview: {args.preview}")
 
 

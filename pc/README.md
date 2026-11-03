@@ -80,6 +80,9 @@ cmake -S pc -B pc/build-320x480 -DPICOOS_SCREEN_W=320 -DPICOOS_SCREEN_H=480 && c
 SDL_VIDEODRIVER=offscreen ./pc/build-320x480/picoos_pc --app 電卓 --shot calc.ppm 200
 ```
 
+`picoos pc build --screen 320x480 --name 320x480` でも同じ(`cli-tool/picoos`。下の「ハードウェア機能を外す」「内蔵アプリを外す」も
+`--no-sound` / `--no-app gb,mail` 等で付けられ、実機の `picoos fw build` と同じ書き方。一覧は `picoos fw options`)。
+
 ### ハードウェア機能を外す
 
 `PICOOS_HW_SOUND` / `PICOOS_HW_MIC` / `PICOOS_HW_BATTERY`(既定はON)をOFFにすると、実機の `-DPICO_HW_*=0` と同じ版になる

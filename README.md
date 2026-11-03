@@ -66,6 +66,16 @@ python3 script/check_layers.py      # include の層の決まりを確かめる
 ```
 
 開発用のスクリプトは `cli-tool/picoos` から名前で呼べる(`sh cli-tool/install.sh` で `~/.local/bin` へリンク、使い方は `picoos --help`)。
+ビルド時に選ぶ条件(画面・液晶・音声/マイク/電池・内蔵アプリ)もオプションで付けられる:
+
+```sh
+picoos fw options                                      # 選べる物の一覧
+picoos fw build --no-sound --no-app gb,mail --upload   # 条件を付けて実機ファームを作り、USBで書き込む
+picoos pc build --screen 320x480 --name big            # PC版も同じ書き方(pc/build-big へ)
+picoos profile save myboard --no-mic --only-app notes  # 条件に名前を付けて保存 → --profile myboard
+picoos check                                           # CIの「層の決まり」と同じ確かめ
+picoos doctor                                          # 要る道具がそろっているか
+```
 
 ## ディレクトリ
 

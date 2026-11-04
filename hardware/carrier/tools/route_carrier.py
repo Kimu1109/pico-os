@@ -2,7 +2,8 @@
 """キャリアボードの信号を配線する(格子の上の迷路探索。KiCad の Python だけで動く)。
 
 gen_carrier.py が作った基板(配線なし)を読み、全ネットを両面で配線して GND のベタを埋め直す。
-余裕を持たせるため、線は信号 0.4mm・電源 1.0mm、間隔 0.4mm、縁から 1.0mm、ビアは 0.8/0.4mm。
+余裕を持たせるため、線は信号 0.5mm・電源 1.0mm、間隔 0.5mm(Qwiic の周りだけ 0.4mm)、縁から 1.5mm、ビアは 0.8/0.4mm。
+空きがあれば、ほかのネットの銅から 1.5mm 以上離れた所を通るように重みを付ける。
 
   python3 hardware/carrier/tools/route_carrier.py
 
@@ -29,9 +30,10 @@ sys.path.insert(0, HERE)
 from gen_carrier import BOARD_W, BOARD_H, NOTCH, PICO_CY  # noqa: E402
 
 STEP = 0.5            # 格子の間隔(mm)
-CLEAR = 0.4           # 銅どうしの間隔(余裕を見て。DRCの決まりは0.3)
-EDGE = 1.0            # 縁からの間隔
-W_SIG = 0.4           # 信号の線
+CLEAR = 0.5           # 銅どうしの間隔(余裕を見て。DRCの決まりは0.4)
+CLEAR_FINE = 0.4      # 1mm間隔の細い端子(Qwiic)の周りだけ。0.5だと端子から線を出せない
+EDGE = 1.5            # 縁からの間隔
+W_SIG = 0.5           # 信号の線
 W_PWR = 1.0           # 電源の線
 VIA_D, VIA_DRILL = 0.8, 0.4
 SCREW_R = 3.5         # M3のネジ頭・スペーサーの下は通さない(穴の中心からの半径)
@@ -42,6 +44,9 @@ COST_WRONG_DIR = 1.5
 # アンテナの横(切り欠きの上下)は通れるが、なるべく避ける
 ANT_AREA = (NOTCH[0] - 1.0, PICO_CY - 13.0, BOARD_W, BOARD_H)
 COST_ANT = 6.0
+# ほかのネットの銅から NEAR_EXTRA 以内を通ると少し高くする(空きがあれば線どうしを離して引く)
+NEAR_EXTRA = 1.5
+COST_NEAR = 2.0
 
 NX = int(round(BOARD_W / STEP)) + 1
 NY = int(round(BOARD_H / STEP)) + 1
@@ -59,7 +64,7 @@ def to_mm(v):
 class Grid:
     def __init__(self):
         # maps[kind][layer] = 1次元の配列。0=空き、>0=そのネットだけ通れる、-1=誰も通れない
-        self.maps = {k: [[0] * (NX * NY) for _ in LAYERS] for k in KINDS}
+        self.maps = {k: [[0] * (NX * NY) for _ in LAYERS] for k in list(KINDS) + ["near"]}
 
     def idx(self, ix, iy):
         return iy * NX + ix
@@ -91,11 +96,14 @@ def dist_point_seg(px, py, ax, ay, bx, by):
     return math.hypot(px - (ax + t * vx), py - (ay + t * vy))
 
 
-def add_obstacle(grid, layers_i, net, dist_fn, bbox, half):
-    """dist_fn(x,y) が (half + CLEAR + 置く物の半分) より近い点を、種類ごとに塞ぐ"""
+def add_obstacle(grid, layers_i, net, dist_fn, bbox, half, clear=CLEAR):
+    """dist_fn(x,y) が (half + clear + 置く物の半分) より近い点を、種類ごとに塞ぐ。
+    "near" の地図は塞がずに「近い」印だけ付ける(探索で少し高くする)"""
     x1, y1, x2, y2 = bbox
-    for kind, h in KINDS.items():
-        r = half + CLEAR + h
+    kinds = dict(KINDS)
+    kinds["near"] = W_SIG / 2 + NEAR_EXTRA
+    for kind, h in kinds.items():
+        r = half + clear + h
         ix1 = max(0, int(math.floor((x1 - r) / STEP)))
         ix2 = min(NX - 1, int(math.ceil((x2 + r) / STEP)))
         iy1 = max(0, int(math.floor((y1 - r) / STEP)))
@@ -182,7 +190,15 @@ class Router:
                 code = -1
                 fn = (lambda px, py, cx=cx, cy=cy: max(0.0, math.hypot(px - cx, py - cy) - SCREW_R))
                 x1, y1, x2, y2 = cx - SCREW_R, cy - SCREW_R, cx + SCREW_R, cy + SCREW_R
-            add_obstacle(g, layers_i, code, fn, (x1, y1, x2, y2), 0.0)
+            fine = min(x2 - x1, y2 - y1) < 0.8 and p.GetAttribute() != pcbnew.PAD_ATTRIB_NPTH
+            add_obstacle(g, layers_i, code, fn, (x1, y1, x2, y2), 0.0, CLEAR_FINE if fine else CLEAR)
+            # 端子の上と近くには、同じネットでもビアを置かない(端子の穴とビアの穴が重なる)
+            rv = VIA_D / 2 + CLEAR
+            for iy in range(max(0, int((y1 - rv) / STEP)), min(NY - 1, int((y2 + rv) / STEP) + 1) + 1):
+                for ix in range(max(0, int((x1 - rv) / STEP)), min(NX - 1, int((x2 + rv) / STEP) + 1) + 1):
+                    if fn(ix * STEP, iy * STEP) < rv:
+                        for li in range(len(LAYERS)):
+                            g.maps["via"][li][g.idx(ix, iy)] = -1
 
     def terminals(self, p, net):
         """端子の銅の中にある格子の点(この点から線を出せばつながる)"""
@@ -254,6 +270,8 @@ class Router:
                 c = COST_STEP + (COST_BEND if d not in (-1, di) else 0.0)
                 if (li == 0) != (dy == 0):
                     c += COST_WRONG_DIR
+                if not g.free("near", li, nx_, ny_, code):
+                    c += COST_NEAR
                 if ax1 <= nx_ * STEP <= ax2 and ay1 <= ny_ * STEP <= ay2:
                     c += COST_ANT
                 ns = (li, nx_, ny_, di)
@@ -385,7 +403,11 @@ def apply(board, router):
         t.SetLayer(LAYERS[li])
         t.SetNet(nets.GetNetItem(net))
         board.Add(t)
+    seen = set()
     for (net, (x, y)) in router.vias:
+        if (net, x, y) in seen:  # 同じ場所に2つ置かない
+            continue
+        seen.add((net, x, y))
         v = pcbnew.PCB_VIA(board)
         v.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
         v.SetWidth(mm(VIA_D))

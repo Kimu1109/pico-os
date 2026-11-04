@@ -36,12 +36,12 @@ def uid(*names):
 # ---------------------------------------------------------------------------
 # 基板の寸法(mm、表から見た座標。左上が原点、yは下向き)
 # ---------------------------------------------------------------------------
-BOARD_W = 80.0
-BOARD_H = 140.0
+BOARD_W = 100.0
+BOARD_H = 160.0
 # 液晶(MSP2807、50x86)の左上の位置。寸法は lcdwiki の MSP2807_Size.pdf から
-LCD_X, LCD_Y = 15.0, 5.0
+LCD_X, LCD_Y = 25.0, 8.0
 # Pico 2 W は下端に横向き(USBが左端、アンテナが右端)。アンテナの下は基板を切り欠く
-PICO_CX, PICO_CY = 45.5, 117.0
+PICO_CX, PICO_CY = 50.5, 135.0
 NOTCH = (PICO_CX + 16.0, PICO_CY - 6.5, PICO_CY + 6.5)  # (x始まり, y上, y下) から右端まで切り欠く
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ PARTS = [
          pins=PICO_PINS, side="B", pos=(PICO_CX, PICO_CY), rot=None,
          note="ピンソケット(1x20 2本)で抜き差し"),
     dict(ref="U2", value="LiPo SHIM for Pico", symbol="LiPo_SHIM", footprint="Pimoroni_LiPo_SHIM",
-         pins=SHIM_PINS, side="B", pos=(16.0, 54.0), rot=0,
+         pins=SHIM_PINS, side="B", pos=(18.0, 66.0), rot=0,
          note="Picoの裏に重ねず、同じピンを基板で結ぶ。使うのは電源とGNDだけ。JSTとボタンの面を外へ"),
     dict(ref="U3", value="MSP2807 (ILI9341 2.8inch)", symbol="MSP2807", footprint="MSP2807_LCD",
          pins=[("1", "VCC", "LCD_VCC"), ("2", "GND", "GND"), ("3", "CS", "TFT_CS"),
@@ -92,7 +92,7 @@ PARTS = [
     dict(ref="U4", value="MAX98357A module", symbol="MAX98357A_Module", footprint="MAX98357A_Module",
          pins=[("1", "LRC", "I2S_LRCLK"), ("2", "BCLK", "I2S_BCLK"), ("3", "DIN", "I2S_DIN"),
                ("4", "GAIN", None), ("5", "SD", "AMP_SD"), ("6", "GND", "GND"), ("7", "VIN", "VSYS")],
-         side="B", pos=(38.0, 76.5), rot=90,
+         side="B", pos=(50.0, 66.0), rot=90,
          note="Adafruit 3006 と同じ並び(商品写真で確認)。端子台にスピーカー"),
     dict(ref="U5", value="PCM5102A module (GY-PCM5102)", symbol="PCM5102A_Module", footprint="PCM5102A_Module",
          pins=[("1", "SCK", "GND"), ("2", "BCK", "I2S_BCLK"), ("3", "DIN", "I2S_DIN"),
@@ -100,66 +100,66 @@ PARTS = [
                ("7", "FLT", "GND"), ("8", "DEMP", "GND"), ("9", "XSMT", "HP_MUTE"), ("10", "FMT", "GND"),
                ("11", "A3V3", None), ("12", "AGND", "GND"), ("13", "ROUT", None), ("14", "AGND", "GND"),
                ("15", "LROUT", None)],
-         side="B", pos=(63.6, 50.0), rot=None, turn=180,
+         side="B", pos=(83.6, 64.0), rot=None, turn=180,
          note="GY-PCM5102(32x17)。ジャックを基板の右の縁に出す。裏のH3L(XSMT)ははんだを盛らない"),
     dict(ref="U6", value="SPH0645LM4H breakout (Adafruit 3421)", symbol="SPH0645_Module", footprint="SPH0645_Module",
          pins=[("1", "3V", "+3V3"), ("2", "GND", "GND"), ("3", "BCLK", "MIC_BCLK"),
                ("4", "DOUT", "MIC_DOUT"), ("5", "LRCL", "MIC_LRCLK"), ("6", "SEL", "GND")],
-         side="B", pos=(66.0, 27.0), rot=None,
+         side="B", pos=(86.0, 30.0), rot=None,
          note="Adafruit 3421。マイクの部品を基板側、音の穴を外へ(裏返して付ける)"),
     dict(ref="U7", value="DS3231 module (ZS-042)", symbol="DS3231_Module", footprint="DS3231_ZS042_Module",
          pins=[("1", "32K", None), ("2", "SQW", None), ("3", "SCL", "I2C_SCL"),
                ("4", "SDA", "I2C_SDA"), ("5", "VCC", "+3V3"), ("6", "GND", "GND")],
-         side="B", pos=(25.0, 27.0), rot=0,
+         side="B", pos=(26.0, 30.0), rot=0,
          note="VCCは3.3V(5Vにするとプルアップで信号線が5Vになる)"),
     dict(ref="J1", value="CardKB2 (Grove/HY2.0)", symbol="Connector_Generic:Conn_01x04",
          footprint="Connector_JST:JST_PH_S4B-PH-K_1x04_P2.00mm_Horizontal",
          pins=[("1", "Pin_1", "GND"), ("2", "Pin_2", "GROVE_VCC"), ("3", "Pin_3", "GROVE_Y"),
                ("4", "Pin_4", "GROVE_W")],
-         side="B", pos=(71.0, 63.0), rot=90, turn=180,
+         side="B", pos=(90.0, 80.0), rot=90, turn=180,
          note="1=黒GND 2=赤VCC 3=黄SDA 4=白SCL(UARTモードでは白=CardKB2のTX)"),
     dict(ref="J2", value="Qwiic (Wii adapter)", symbol="Connector_Generic_MountingPin:Conn_01x04_MountingPin",
          footprint="Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal",
          pins=[("1", "Pin_1", "GND"), ("2", "Pin_2", "+3V3"), ("3", "Pin_3", "I2C_SDA"),
                ("4", "Pin_4", "I2C_SCL"), ("MP", "MountPin", "GND")],
-         side="B", pos=(74.0, 78.0), rot=90, turn=180, note="Qwiicの並び: GND/3V3/SDA/SCL"),
+         side="B", pos=(93.0, 96.0), rot=90, turn=180, note="Qwiicの並び: GND/3V3/SDA/SCL"),
     dict(ref="J3", value="HP_DET", symbol="Connector_Generic:Conn_01x02",
          footprint="Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
          pins=[("1", "Pin_1", "HP_DET"), ("2", "Pin_2", "GND")],
-         side="B", pos=(44.0, 62.0), rot=90,
+         side="B", pos=(75.0, 80.0), rot=90,
          note="イヤホンジャックの差し込み検出(差すとGNDへ落ちる接点)をつなぐ"),
     dict(ref="JP1", value="LCD_VCC 3V3|VSYS", symbol="Jumper:SolderJumper_3_Bridged12",
          footprint="Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm",
          pins=[("1", "A", "+3V3"), ("2", "C", "LCD_VCC"), ("3", "B", "VSYS")],
-         side="B", pos=(52.0, 66.0), rot=0, note="液晶の電源。既定は3.3V"),
+         side="B", pos=(44.0, 80.0), rot=0, note="液晶の電源。既定は3.3V"),
     dict(ref="JP2", value="PCM_VCC 3V3|VSYS", symbol="Jumper:SolderJumper_3_Bridged12",
          footprint="Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm",
          pins=[("1", "A", "+3V3"), ("2", "C", "PCM_VCC"), ("3", "B", "VSYS")],
-         side="B", pos=(52.0, 72.0), rot=0, note="PCM5102Aの電源。既定は3.3V"),
+         side="B", pos=(44.0, 86.0), rot=0, note="PCM5102Aの電源。既定は3.3V"),
     dict(ref="JP3", value="GROVE_VCC 3V3|VSYS", symbol="Jumper:SolderJumper_3_Bridged12",
          footprint="Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm",
          pins=[("1", "A", "+3V3"), ("2", "C", "GROVE_VCC"), ("3", "B", "VSYS")],
-         side="B", pos=(59.0, 66.0), rot=0, note="CardKB2の電源。既定は3.3V"),
+         side="B", pos=(51.0, 80.0), rot=0, note="CardKB2の電源。既定は3.3V"),
     dict(ref="JP4", value="GROVE_W SCL|GP7", symbol="Jumper:SolderJumper_3_Bridged12",
          footprint="Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm",
          pins=[("1", "A", "I2C_SCL"), ("2", "C", "GROVE_W"), ("3", "B", "CARDKB_RX")],
-         side="B", pos=(59.0, 72.0), rot=0, note="白線: I2CモードはSCL(既定)、UARTモードはGP7"),
+         side="B", pos=(51.0, 86.0), rot=0, note="白線: I2CモードはSCL(既定)、UARTモードはGP7"),
     dict(ref="JP5", value="GROVE_Y SDA", symbol="Jumper:SolderJumper_2_Bridged",
          footprint="Jumper:SolderJumper-2_P1.3mm_Bridged_RoundedPad1.0x1.5mm",
          pins=[("1", "A", "I2C_SDA"), ("2", "B", "GROVE_Y")],
-         side="B", pos=(59.0, 78.0), rot=0, note="黄線: UARTモードでは切る(CardKB2のRXがI2Cを拾わないように)"),
+         side="B", pos=(58.0, 86.0), rot=0, note="黄線: UARTモードでは切る(CardKB2のRXがI2Cを拾わないように)"),
     dict(ref="JP6", value="AMP_DET", symbol="Jumper:SolderJumper_2_Bridged",
          footprint="Jumper:SolderJumper-2_P1.3mm_Bridged_RoundedPad1.0x1.5mm",
          pins=[("1", "A", "AMP_DET"), ("2", "B", "GND")],
-         side="B", pos=(52.0, 78.0), rot=0, note="GP5をGNDへ(アンプあり)。アンプを載せないなら切る"),
+         side="B", pos=(58.0, 80.0), rot=0, note="GP5をGNDへ(アンプあり)。アンプを載せないなら切る"),
     dict(ref="R1", value="4.7k", symbol="Device:R", footprint="Resistor_SMD:R_0805_2012Metric",
-         pins=[("1", "~", "+3V3"), ("2", "~", "I2C_SDA")], side="B", pos=(65.0, 66.0), rot=90, dnp=True,
+         pins=[("1", "~", "+3V3"), ("2", "~", "I2C_SDA")], side="B", pos=(64.0, 80.0), rot=90, dnp=True,
          note="I2Cのプルアップ(普段は載せない。モジュール側にある)"),
     dict(ref="R2", value="4.7k", symbol="Device:R", footprint="Resistor_SMD:R_0805_2012Metric",
-         pins=[("1", "~", "+3V3"), ("2", "~", "I2C_SCL")], side="B", pos=(65.0, 72.0), rot=90, dnp=True,
+         pins=[("1", "~", "+3V3"), ("2", "~", "I2C_SCL")], side="B", pos=(64.0, 86.0), rot=90, dnp=True,
          note="I2Cのプルアップ(普段は載せない)"),
     dict(ref="C1", value="100uF 10V", symbol="Device:C_Polarized", footprint="Capacitor_SMD:CP_Elec_6.3x5.4",
-         pins=[("1", "~", "VSYS"), ("2", "~", "GND")], side="B", pos=(14.0, 76.0), rot=0,
+         pins=[("1", "~", "VSYS"), ("2", "~", "GND")], side="B", pos=(34.0, 80.0), rot=0,
          note="アンプの電源の安定用(電池で鳴らしたときの音割れ対策)"),
 ]
 
@@ -578,7 +578,7 @@ def build_schematic(syms):
     sch = [
         "(kicad_sch", "\t(version 20231120)", '\t(generator "eeschema")', '\t(generator_version "8.0")',
         f'\t(uuid "{root}")', '\t(paper "A3")',
-        '\t(title_block (title "pico-os carrier board") (date "2026-11-02") (rev "0.2") '
+        '\t(title_block (title "pico-os carrier board") (date "2026-11-02") (rev "0.3") '
         '(company "pico-os") (comment 1 "Raspberry Pi Pico 2 W + MSP2807 + modules") '
         '(comment 2 "Generated by hardware/carrier/tools/gen_carrier.py"))',
         "\t(lib_symbols",
@@ -617,19 +617,19 @@ def build_tables_and_project():
                     "min_copper_edge_clearance": 0.3, "min_hole_to_hole": 0.25,
                     "min_via_annular_width": 0.13,
                 },
-                "track_widths": [0.0, 0.4, 0.6, 1.0],
+                "track_widths": [0.0, 0.5, 0.8, 1.0],
                 "via_dimensions": [{"diameter": 0.0, "drill": 0.0}, {"diameter": 0.8, "drill": 0.4}],
             },
         },
         "meta": {"filename": PROJECT + ".kicad_pro", "version": 1},
         "net_settings": {
             "classes": [
-                {"name": "Default", "clearance": 0.3, "track_width": 0.4, "via_diameter": 0.8,
+                {"name": "Default", "clearance": 0.4, "track_width": 0.5, "via_diameter": 0.8,
                  "via_drill": 0.4, "microvia_diameter": 0.3, "microvia_drill": 0.1,
                  "diff_pair_gap": 0.25, "diff_pair_width": 0.2, "diff_pair_via_gap": 0.25,
                  "wire_width": 6, "bus_width": 12, "line_style": 0, "pcb_color": "rgba(0, 0, 0, 0.000)",
                  "schematic_color": "rgba(0, 0, 0, 0.000)", "priority": 2147483647},
-                {"name": "Power", "clearance": 0.3, "track_width": 1.0, "via_diameter": 0.8,
+                {"name": "Power", "clearance": 0.4, "track_width": 1.0, "via_diameter": 0.8,
                  "via_drill": 0.4, "microvia_diameter": 0.3, "microvia_drill": 0.1,
                  "diff_pair_gap": 0.25, "diff_pair_width": 0.2, "diff_pair_via_gap": 0.25,
                  "wire_width": 6, "bus_width": 12, "line_style": 0, "pcb_color": "rgba(0, 0, 0, 0.000)",
@@ -772,7 +772,7 @@ def build_pcb():
         z.SetLayer(layer)
         z.SetNet(get_net("GND"))
         z.Outline().AddOutline(rect_outline(0, 0, BOARD_W, BOARD_H))
-        z.SetLocalClearance(mm(0.4))
+        z.SetLocalClearance(mm(0.5))
         z.SetMinThickness(mm(0.25))
         z.SetPadConnection(pcbnew.ZONE_CONNECTION_THERMAL)
         z.SetThermalReliefGap(mm(0.3))
@@ -782,8 +782,8 @@ def build_pcb():
         z.SetIslandRemovalMode(pcbnew.ISLAND_REMOVAL_MODE_ALWAYS)
         board.Add(z)
 
-    silk("pico-os carrier v0.2", 40.0, 99.0, pcbnew.B_SilkS, 1.2)
-    silk("JP4 1-2:SCL 2-3:GP7", 57.0, 62.0, pcbnew.B_SilkS, 1.0)
+    silk("pico-os carrier v0.3", 50.0, 112.0, pcbnew.B_SilkS, 1.5)
+    silk("JP4 1-2:SCL 2-3:GP7", 51.0, 99.0, pcbnew.B_SilkS, 1.0)
     silk("USB", PICO_CX - 23.0, PICO_CY + 12.0, pcbnew.B_SilkS, 1.0)
     silk("ANT", PICO_CX + 21.5, PICO_CY - 11.0, pcbnew.B_SilkS, 1.0)
     # Grove(J1)の線の色を端子の横へ(黒GND/赤VCC/黄SDA/白SCL)

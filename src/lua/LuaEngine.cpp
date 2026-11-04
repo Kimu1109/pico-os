@@ -74,14 +74,37 @@ using namespace LuaInternal;
 
 // ---------------- メモリ予算 ----------------
 
+// ヒープの残りを守る(LuaEngine.hppのkHeapReserveBytes参照)。末尾の未使用の領域が
+// 「確保しても残りを割らない」だけあるうちは何も見ない(sbrk(0)を読むだけで軽い)。
+// 割りそうなときは、空きブロックから取れたのか末尾を伸ばしたのかを確保の前後で比べ、
+// 伸ばして残りを割ったときだけ返して断る
+void* LuaEngine::GuardedMalloc(size_t bytes) {
+    const size_t before = MemFunctions::HeapTopRoom();
+    if (before == MemFunctions::kRoomUnknown || before >= kHeapReserveBytes + bytes) return malloc(bytes);
+    void* np = malloc(bytes);
+    if (!np) return nullptr;
+    const size_t after = MemFunctions::HeapTopRoom();
+    if (after < before && after < kHeapReserveBytes) {
+        free(np);
+        return nullptr;
+    }
+    return np;
+}
+
+void* LuaEngine::PoolAcquire(void*, size_t bytes) { return GuardedMalloc(bytes); }
+void LuaEngine::PoolRelease(void*, void* chunk) { free(chunk); }
+
 void* LuaEngine::Alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
     LuaEngine* self = static_cast<LuaEngine*>(ud);
     const size_t old = ptr ? osize : 0;
+    // ptr がプールの物か(小さい物だけ塊の表を引く。プールに入らなかった小さい物は malloc の物)
+    const bool in_pool = ptr && SmallPool::fits(old) && self->pool_.owns(ptr);
 
     if (nsize == 0) {
         if (ptr) {
             self->used_ -= old;
-            free(ptr);
+            if (in_pool) self->pool_.free(ptr);
+            else free(ptr);
         }
         return nullptr;
     }
@@ -93,22 +116,45 @@ void* LuaEngine::Alloc(void* ud, void* ptr, size_t osize, size_t nsize) {
         return nullptr; // 予算超過。呼び出し元(Lua本体)はLUA_ERRMEMとして扱う
     }
 
-    // ヒープの残りを守る(LuaEngine.hppのkHeapReserveBytes参照)。末尾の未使用の領域が
-    // 「確保しても残りを割らない」だけあるうちは何も見ない(sbrk(0)を読むだけで軽い)。
-    // 割りそうなときは、空きブロックから取れたのか末尾を伸ばしたのかを確保の前後で比べ、
-    // 伸ばして残りを割ったときだけ返して断る。reallocだと断るときに元へ戻せないので、
-    // 増やすときはmalloc+コピーにする(縮めるのはreallocのまま。末尾を伸ばさない)
+    // 小さい物はプールから。同じ区分なら枠のまま大きさだけ変える
+    if (SmallPool::fits(nsize)) {
+        if (in_pool && SmallPool::sameClass(old, nsize)) {
+            self->used_ = self->used_ - old + nsize;
+            return ptr;
+        }
+        if (void* np = self->pool_.alloc(nsize)) {
+            if (ptr) {
+                memcpy(np, ptr, old < nsize ? old : nsize);
+                if (in_pool) self->pool_.free(ptr);
+                else free(ptr);
+            }
+            self->used_ = self->used_ - old + nsize;
+            return np;
+        }
+        // 塊を借りられなかった(上限・ヒープの残り)。下のふつうの malloc へ
+    }
+
+    // プールの物は realloc できないので、malloc+コピー
+    // (増やすときと同じく、ヒープの残りを割るなら断る。Lua本体はごみを集めてもう一度だけ頼み直す)
+    if (in_pool) {
+        void* np = GuardedMalloc(nsize);
+        if (!np) {
+            self->heap_refusals_++;
+            return nullptr;
+        }
+        memcpy(np, ptr, old < nsize ? old : nsize);
+        self->pool_.free(ptr);
+        self->used_ = self->used_ - old + nsize;
+        return np;
+    }
+
+    // 増やすとき、ヒープの残りを割りそうなら malloc+コピーで確かめる
+    // (reallocだと断るときに元へ戻せない。縮めるのはreallocのまま。末尾を伸ばさない)
     if (nsize > old) {
         const size_t before = MemFunctions::HeapTopRoom();
         if (before != MemFunctions::kRoomUnknown && before < kHeapReserveBytes + nsize) {
-            void* np = malloc(nsize);
+            void* np = GuardedMalloc(nsize);
             if (!np) {
-                self->heap_refusals_++;
-                return nullptr;
-            }
-            const size_t after = MemFunctions::HeapTopRoom();
-            if (after < before && after < kHeapReserveBytes) {
-                free(np);
                 self->heap_refusals_++;
                 return nullptr; // Lua本体はごみを集めてもう一度だけ頼み直す(lmem.cのtryagain)
             }
@@ -556,6 +602,7 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
                      budget_bytes, lua_tostring(L, -1));
         lua_close(L);
         L = nullptr;
+        pool_.releaseEmpty();
         return;
     }
 }
@@ -578,6 +625,7 @@ LuaEngine::~LuaEngine() {
         // (閉じる途中でLuaのコードが動いても確保できずにすぐ終わる)
         BeginAbort(TR("アプリを閉じています"));
         lua_close(L);
+        pool_.releaseEmpty();   // 閉じると全部空くので、塊を残らずヒープへ返す
     }
     delete debugger_;
 }

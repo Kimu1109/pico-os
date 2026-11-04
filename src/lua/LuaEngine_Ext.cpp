@@ -1738,7 +1738,7 @@ int LuaEngineExt::l_settings_set(lua_State* L) {
 int LuaEngineExt::l_memory_info(lua_State* L) {
     LuaEngine* self = Self(L);
     const MemFunctions::Snapshot s = MemFunctions::Take(false);
-    lua_createtable(L, 0, 9);
+    lua_createtable(L, 0, 10);
     const size_t room = MemFunctions::HeapTopRoom();
     if (room != MemFunctions::kRoomUnknown) {
         lua_pushinteger(L, (lua_Integer)room);
@@ -1760,6 +1760,9 @@ int LuaEngineExt::l_memory_info(lua_State* L) {
     lua_setfield(L, -2, "heap_used");
     lua_pushinteger(L, (lua_Integer)self->images().bytesUsed());
     lua_setfield(L, -2, "image_bytes");
+    // 小さな確保のプールが借りている塊の合計(lua_used のうち32B以下の物はこの中に詰まっている)
+    lua_pushinteger(L, (lua_Integer)self->poolChunkBytes());
+    lua_setfield(L, -2, "lua_pool");
     return 1;
 }
 

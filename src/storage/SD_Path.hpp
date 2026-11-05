@@ -108,6 +108,11 @@ namespace PICO_Path {
             constexpr const char* SYS_TRANSCRIBE_KEY = "/sys/transcribe_key.cfg";
             // ミュージックアプリの再生のしかた("shuffle = true|false" / "repeat = off|all|one")。MusicScene参照
             constexpr const char* SYS_MUSIC_CFG = "/sys/music.cfg";
+            // ミュージックの「続きから」(プレイリスト・曲・位置)。MusicService参照(docs/design/sound.md「続きから鳴らす」)
+            constexpr const char* SYS_MUSIC_RESUME_CFG = "/sys/music_resume.cfg";
+            // ミュージックの曲の索引(タグ。決まった大きさの記録を並べたもの)。MusicLibrary参照。作り直す間は .tmp
+            constexpr const char* SYS_MUSIC_INDEX = "/sys/music_index.bin";
+            constexpr const char* SYS_MUSIC_INDEX_TMP = "/sys/music_index.tmp";
             // 画面の明るさ("brightness = 0〜100" / "auto-dim = true|false")。DisplayFunctions参照
             constexpr const char* SYS_DISPLAY_CFG = "/sys/display.cfg";
             // タッチ位置の補正("a"〜"f"の6つの小数)。TouchCalibFunctions参照

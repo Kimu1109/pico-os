@@ -26,17 +26,26 @@ namespace MusicService {
     struct Track {
         FixedString<PICO_STR_M> name;   // ファイル名(拡張子込み)
         int8_t folder = -1;             // フォルダの番号(StartPlaylist() に渡した folders の添字)。-1 = /music/ の直下
+        FixedString<PICO_STR_M> title;  // タグの曲名(索引から。無ければ空で、見せるときはファイル名)
     };
 
     enum class Kind : uint8_t { None = 0, Mml = 1, Wav = 2 };
+
+    // StartPlaylist() の playlist: 0以上 = /music/ のフォルダの番号、それ以外は下の種類
+    // (playlist_key は、フォルダなら名前、アーティスト/アルバムならタグの名前(不明なら空))
+    static constexpr int kPlaylistAll = -1;
+    static constexpr int kPlaylistArtist = -5;
+    static constexpr int kPlaylistAlbum = -6;
 
     // ---- 操作 ----
     // tracks/folders を再生の順番として写し、track から鳴らす(-1なら並びの頭から=ミックスなら混ぜた頭)。
     // playlist は画面側の番号(一覧の色付けに使うだけ)、playlist_name は見せる名前。
     // 状態を確保できなければ false
+    // playlist_key は「続きから」で同じ並びを作り直すための名前(nullptr なら playlist_name と同じ)
     bool StartPlaylist(const Track* tracks, int count,
                        const FixedString<PICO_STR_M>* folders, int folder_count,
-                       int playlist, const char* playlist_name, int track);
+                       int playlist, const char* playlist_name, int track,
+                       const char* playlist_key = nullptr);
     // 曲の番号(順番の中の)を、利用者が選んだ曲として鳴らす(読めなければ止まって理由を出し続ける)
     void PlayTrack(int track);
     void Next();
@@ -77,6 +86,7 @@ namespace MusicService {
     const Track* TrackAt(int i);
     int Playlist();                 // StartPlaylist() に渡した playlist(無ければ INT32_MIN)
     const char* PlaylistName();
+    const char* PlaylistKey();      // StartPlaylist() の playlist_key
     bool Shuffle();
     PlayQueue::Repeat Repeat();
     uint64_t FailedMask();          // 順番の中で読めなかった曲
@@ -92,6 +102,21 @@ namespace MusicService {
 
     // 曲の見せる名前(拡張子を落とす)
     void DisplayName(const char* file, FixedString<PICO_PATH_LEN>& out);
+    // 曲の見せる名前(タグの曲名があればそれ、無ければファイル名から拡張子を落としたもの)
+    void TrackTitle(const Track& t, FixedString<PICO_PATH_LEN>& out);
+    // アーティスト/アルバムの見せる名前(タグが無い曲の集まりは「不明なアーティスト」等)
+    void GroupDisplayName(int playlist, const char* key, FixedString<PICO_STR_M>& out);
+
+    // ---- 続きから(電源を切っても前回の曲の続きから。docs/design/sound.md「続きから鳴らす」) ----
+    // 鳴らしている間(約10秒ごと)・一時停止・止める・曲が変わったときに /sys/music_resume.cfg へ、
+    // プレイリストの種類と名前・曲(フォルダ名とファイル名)・位置を書く。最後まで鳴らし終えたら消す。
+    // 順番(再生の順番)が無いとき(起動した後)の TogglePlay() は、これを読んで同じ並びを作り直し、その曲の位置から鳴らす
+    // (WAV/MP3は位置へ飛ぶ。MMLは曲の頭から)。並びはフォルダ/索引から作り直すので、ミックスの並びは混ぜ直しになる
+    bool HasResume();
+    const char* ResumeTitle();
+    uint32_t ResumePositionMs();
+    // 続きから鳴らす。並びを作れなければ(フォルダ・曲が無くなった)false
+    bool Resume();
     bool IsMml(const char* name);
     // WAVの経路(SoundFunctions::WavPlay)で鳴らすファイル(.wav / .mp3)か
     bool IsWavOrMp3(const char* name);

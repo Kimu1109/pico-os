@@ -19,7 +19,9 @@ template<size_t N> class Label;
 //  ライブラリ                         プレイリスト
 //  [戻る] ミュージック        [⌛]     [戻る] 旅の曲 (12)  [⌛][▶全曲]
 //  ♪ すべての曲                       ♪ 01_opening
-//  📁 旅の曲                          ♪ 02_field        ← 鳴っている曲は緑
+//  👤 アーティスト                     ♪ 02_field        ← 鳴っている曲は緑
+//  💿 アルバム                         …
+//  📁 旅の曲
 //  📁 ゲーム                           …
 //  ──────────────────────────────  (下はどちらの画面でも同じ「再生中」の欄 = MusicPlayerPanel)
 //   曲名 / プレイリスト名 · 3/12 / 0:23 ━━●── 3:45 / ⤨ ⏮ ▶ ⏭ 🔁
@@ -35,6 +37,9 @@ template<size_t N> class Label;
 //   止めるのはこの画面か、設定アプリの「バックグラウンド」の一覧(ステータスバーの音符の印が動いている合図)。
 //   この画面は MusicService を読んで見せ、ボタンで操作するだけ
 // - [⌛] = スリープタイマー(オフ・15〜90分・この曲の終わりで。MusicService)。動いている間は残りの分か「曲末」を出す
+// - [アーティスト]/[アルバム] = 索引(MusicLibrary、/sys/music_index.bin)のタグで分けた一覧 → その曲。
+//   索引はこの画面を開いている間に少しずつ作り直す(変わった曲だけタグを読む)。曲名はタグがあればタグの曲名
+// - 順番が無いとき(起動した後)は、欄に前回の曲(MusicService の「続きから」)を出し、再生で続きから鳴らす
 // - 物理キーボード: n=次 p=前 k=再生/一時停止 s=ミックス r=リピート
 class MusicScene : public Scene {
     public:
@@ -51,14 +56,23 @@ class MusicScene : public Scene {
 
     private:
         using Track = MusicService::Track;
-        static constexpr int kAll = -1;     // 「すべての曲」のプレイリスト番号
+        static constexpr int kAll = MusicService::kPlaylistAll;     // 「すべての曲」のプレイリスト番号
+        static constexpr int kArtists = -3;                         // アーティストの一覧
+        static constexpr int kAlbums = -4;                          // アルバムの一覧
+        static constexpr int kArtistTracks = MusicService::kPlaylistArtist;
+        static constexpr int kAlbumTracks = MusicService::kPlaylistAlbum;
+        static constexpr int kLibraryFixedRows = 3;                 // ライブラリの頭の行(すべて・アーティスト・アルバム)
 
         // ---- 一覧 ----
         void scanFolders();
-        // playlist の曲を out へ名前順に集める
-        int scanTracks(int playlist, Track* out);
         void showLibrary();
         void showPlaylist(int playlist);
+        // アーティスト/アルバムの一覧(view = kArtists / kAlbums)
+        void showGroups(int view);
+        // そのアーティスト/アルバムの曲(playlist = MusicService::kPlaylistArtist / kPlaylistAlbum)
+        void showGroupTracks(int playlist, const char* key);
+        // 今の一覧を作り直す(索引が差し替わったとき)
+        void reloadView();
         void onListSelect(int index, bool already_selected);
         void refreshHeader();
         // 一覧の中の「鳴っている曲」を緑にする
@@ -94,6 +108,11 @@ class MusicScene : public Scene {
         Track view_tracks[kMaxTracks];
         int view_count = 0;
         uint32_t seen_revision = 0;
+        // アーティスト/アルバムの名前(一覧のとき)と、曲を見ているアーティスト/アルバムの名前
+        FixedString<PICO_STR_M> groups[kMaxTracks];
+        int group_count = 0;
+        FixedString<PICO_STR_M> view_group;
+        uint32_t seen_index = 0;
 
         constexpr static int MARGIN = 6;
 };

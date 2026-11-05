@@ -266,6 +266,7 @@ host_test(sound_test GROUP media)
 host_test(wav_test GROUP media)
 host_test(mp3_test GROUP media)
 host_test(music_test GROUP media)
+host_test(music_library_test GROUP media)
 host_test(mic_test GROUP media)
 # ハードウェア機能を外した版(PICO_HW_*=0)の空の実装。このテストだけ外した定義で作り、空の実装を自分に入れる
 host_test(hw_off_test GROUP media SOURCES

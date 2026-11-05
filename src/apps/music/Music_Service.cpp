@@ -1,4 +1,5 @@
 #include "apps/music/Music_Service.hpp"
+#include "apps/music/Music_Library.hpp"
 
 #include "system/Background_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
@@ -11,6 +12,7 @@
 #include "system/I18n_Functions.hpp"
 
 #include <climits>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -31,6 +33,7 @@ namespace {
         Track tracks[MusicService::kMaxTracks];
         int playlist = INT_MIN;
         FixedString<PICO_STR_M> playlist_name;
+        FixedString<PICO_STR_M> playlist_key;   // 「続きから」で並びを作り直すための名前(フォルダ名・タグの名前)
         PlayQueue queue;
 
         Kind kind = Kind::None;
@@ -63,6 +66,100 @@ namespace {
     MusicService::SleepMode sleep_mode = MusicService::SleepMode::Off;
     uint32_t sleep_deadline_ms = 0;
     bool sleep_fading = false;
+
+    // ---- 続きから ----
+    constexpr uint32_t kResumeSaveMs = 10000;
+    struct ResumeInfo {
+        bool loaded = false;    // music_resume.cfg を読んだ
+        bool valid = false;
+        int playlist = MusicService::kPlaylistAll;
+        FixedString<PICO_STR_M> key;        // フォルダ名・タグの名前
+        FixedString<PICO_STR_M> folder;     // 曲のフォルダ名(直下なら空)
+        FixedString<PICO_STR_M> file;
+        FixedString<PICO_STR_M> title;
+        uint32_t ms = 0;
+    };
+    ResumeInfo resume;
+    uint32_t resume_saved_at = 0;
+    int resume_saved_track = -1;
+    uint32_t resume_saved_sec = 0xFFFFFFFF;
+
+    const char* PlaylistKindName(int playlist){
+        if(playlist == MusicService::kPlaylistArtist) return "artist";
+        if(playlist == MusicService::kPlaylistAlbum) return "album";
+        if(playlist >= 0) return "folder";
+        return "all";
+    }
+
+    void LoadResume(){
+        if(resume.loaded) return;
+        resume.loaded = true;
+        resume.valid = false;
+        if(!OSData::SD_usable || !OSData::SD.exists(PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG)) return;
+        int kind = INT_MIN;
+        PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG, [&](const char* key, const char* value){
+            if(strcmp(key, "list") == 0){
+                if(strcmp(value, "all") == 0) kind = MusicService::kPlaylistAll;
+                else if(strcmp(value, "folder") == 0) kind = 0;
+                else if(strcmp(value, "artist") == 0) kind = MusicService::kPlaylistArtist;
+                else if(strcmp(value, "album") == 0) kind = MusicService::kPlaylistAlbum;
+            }
+            else if(strcmp(key, "name") == 0){ if(!resume.key.assign(value)) resume.key.clear(); }
+            else if(strcmp(key, "folder") == 0){ if(!resume.folder.assign(value)) resume.folder.clear(); }
+            else if(strcmp(key, "file") == 0){ if(!resume.file.assign(value)) resume.file.clear(); }
+            else if(strcmp(key, "title") == 0){ if(!resume.title.assign(value)) resume.title.clear(); }
+            else if(strcmp(key, "position-ms") == 0) resume.ms = (uint32_t)strtoul(value, nullptr, 10);
+        });
+        resume.playlist = kind;
+        resume.valid = kind != INT_MIN && !resume.file.empty();
+    }
+
+    void ClearResume(){
+        resume.loaded = true;
+        if(!resume.valid) return;
+        resume.valid = false;
+        if(OSData::SD_usable) OSData::SD.remove(PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG);
+    }
+
+    // 今の曲と位置を書く(一時ファイルへ書いてから差し替える。書きかけで電源が切れても前の内容が残る)
+    void SaveResume(uint32_t ms){
+        if(!st || st->queue.count() == 0 || st->queue.current() < 0 || !OSData::SD_usable) return;
+        const Track& t = st->tracks[st->queue.current()];
+        resume.loaded = true;
+        resume.valid = true;
+        resume.playlist = st->playlist;
+        resume.key = st->playlist_key;
+        if(!resume.folder.assign(t.folder >= 0 && t.folder < st->folder_count ? st->folders[(int)t.folder].c_str() : "")) resume.folder.clear();
+        resume.file = t.name;
+        resume.title = t.title;
+        resume.ms = ms;
+        resume_saved_at = millis();
+
+        static constexpr const char* kTmp = "/sys/music_resume.tmp";
+        FsFile f = OSData::SD.open(kTmp, O_WRONLY | O_CREAT | O_TRUNC);
+        if(!f){
+            LOG_APP_WARN("ミュージック: 続きの場所を書けません");
+            return;
+        }
+        char num[16];
+        snprintf(num, sizeof(num), "%lu", (unsigned long)ms);
+        bool ok = PICO_Config::Detail::WriteEntry(f, "list", PlaylistKindName(resume.playlist));
+        ok = ok && PICO_Config::Detail::WriteEntry(f, "name", resume.key.c_str());
+        ok = ok && PICO_Config::Detail::WriteEntry(f, "folder", resume.folder.c_str());
+        ok = ok && PICO_Config::Detail::WriteEntry(f, "file", resume.file.c_str());
+        ok = ok && PICO_Config::Detail::WriteEntry(f, "title", resume.title.c_str());
+        ok = ok && PICO_Config::Detail::WriteEntry(f, "position-ms", num);
+        f.close();
+        if(!ok){ OSData::SD.remove(kTmp); return; }
+        OSData::SD.remove(PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG);
+        OSData::SD.rename(kTmp, PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG);
+    }
+
+    // 今鳴っている位置(WAV/MP3。MMLは曲の頭から鳴らし直すので0)
+    uint32_t CurrentPositionMs(){
+        if(!st || st->interrupted || st->kind != Kind::Wav) return 0;
+        return SoundFunctions::WavPositionMs();
+    }
 
     void ResetSleep(){
         if(sleep_mode == MusicService::SleepMode::Off) return;
@@ -198,6 +295,7 @@ namespace {
         }
         st->serial = SoundFunctions::PlaybackSerial();
         st->interrupted = false;
+        resume_saved_track = -1;    //次の Update() で続きの場所を書く(新しい並びで同じ番号の曲でも)
         return true;
     }
 
@@ -236,6 +334,7 @@ namespace {
             if(track < 0){
                 StopSound();
                 st->finished = true;
+                ClearResume();
                 break;
             }
         }
@@ -247,15 +346,18 @@ namespace {
         //「この曲の終わりで止める」: 曲の終わりで進むときは止める(利用者の「次へ」は進む)
         if(!by_user && sleep_mode == MusicService::SleepMode::TrackEnd){
             LOG_APP_MSG("ミュージック: スリープタイマー(曲の終わり)で止めました");
+            //次に鳴らすのは次の曲(鳴らさずに順番だけ進め、続きの場所もそこにする)
+            if(st->queue.next(false) >= 0) SaveResume(0);
             StopSound();
             revision++;
             return;
         }
         const int next = st->queue.next(by_user);
         if(next < 0){
-            //リピートしない: 最後まで鳴らした。次に再生を押したら頭から
+            //リピートしない: 最後まで鳴らした。次に再生を押したら頭から(続きは無い)
             StopSound();
             st->finished = true;
+            ClearResume();
             revision++;
             return;
         }
@@ -285,7 +387,7 @@ namespace {
                     return;
                 }
                 FixedString<PICO_PATH_LEN> name;
-                MusicService::DisplayName(st->tracks[st->queue.current()].name.c_str(), name);
+                MusicService::TrackTitle(st->tracks[st->queue.current()], name);
                 if(MusicService::Active()){
                     out.appendFormat("%s%d/%d %s", MusicService::Paused() ? TR("一時停止 ") : "",
                                      st->queue.position() + 1, st->queue.count(), name.c_str());
@@ -314,7 +416,8 @@ namespace {
 
 bool MusicService::StartPlaylist(const Track* tracks, int count,
                                  const FixedString<PICO_STR_M>* folders, int folder_count,
-                                 int playlist, const char* playlist_name, int track){
+                                 int playlist, const char* playlist_name, int track,
+                                 const char* playlist_key){
     if(count <= 0) return false;
     if(!EnsureState()) return false;
     if(count > kMaxTracks) count = kMaxTracks;
@@ -325,6 +428,7 @@ bool MusicService::StartPlaylist(const Track* tracks, int count,
     for(int i = 0; i < count; i++) st->tracks[i] = tracks[i];
     st->playlist = playlist;
     st->playlist_name.assign(playlist_name ? playlist_name : "");
+    if(!st->playlist_key.assign(playlist_key ? playlist_key : (playlist_name ? playlist_name : ""))) st->playlist_key.clear();
     st->queue.reset(count);
     st->fail_streak = 0;
     st->failed_mask = 0;
@@ -367,8 +471,14 @@ void MusicService::Prev(){
 }
 
 void MusicService::TogglePlay(){
-    if(!st || st->queue.count() == 0) return;
+    //順番が無ければ(起動した後)、前回の続きから
+    if(!st || st->queue.count() == 0){
+        if(HasResume()) Resume();
+        return;
+    }
     if(SoundActive()){
+        //止める前の位置を書いておく(一時停止のまま電源を切っても、ここから)
+        if(!Paused()) SaveResume(CurrentPositionMs());
         if(st->kind == Kind::Wav) SoundFunctions::WavPause(!SoundFunctions::WavPaused());
         else                      SoundFunctions::MusicPause(!SoundFunctions::MusicPaused());
         revision++;
@@ -384,6 +494,7 @@ void MusicService::TogglePlay(){
 
 void MusicService::Stop(){
     if(!st) return;
+    if(SoundActive()) SaveResume(CurrentPositionMs());
     StopSound();
     revision++;
 }
@@ -426,6 +537,7 @@ void MusicService::Update(){
         const int32_t left = (int32_t)(sleep_deadline_ms - millis());
         if(left <= 0){
             LOG_APP_MSG("ミュージック: スリープタイマーで止めました");
+            SaveResume(CurrentPositionMs());
             StopSound();
             revision++;
             return;
@@ -466,6 +578,20 @@ void MusicService::Update(){
         revision++;
     }
     if(wav && !st->next_planned && SoundFunctions::WavPlaying()) PlanNext();
+    //続きの場所: 曲が変わった・鳴らしている間は約10秒ごと(電源を急に切っても、ずれは10秒まで)
+    {
+        const int cur = st->queue.current();
+        const bool paused = wav ? SoundFunctions::WavPaused() : SoundFunctions::MusicPaused();
+        if(cur != resume_saved_track || (!paused && (uint32_t)(millis() - resume_saved_at) >= kResumeSaveMs)){
+            const uint32_t ms = CurrentPositionMs();
+            if(cur != resume_saved_track || ms / 1000 != resume_saved_sec){
+                SaveResume(ms);
+                resume_saved_sec = ms / 1000;
+            }
+            resume_saved_track = cur;
+            resume_saved_at = millis();
+        }
+    }
     if(!(wav ? SoundFunctions::WavPlaying() : SoundFunctions::MusicPlaying())){
         //続けて積めなかった(読めない・チャンネル数が違う)。今までどおり次を鳴らす
         st->next_planned = false;
@@ -522,6 +648,78 @@ uint32_t MusicService::SleepRemainingMs(){
     return left > 0 ? (uint32_t)left : 0;
 }
 
+// ================================================================ 続きから
+
+bool MusicService::HasResume(){
+    LoadResume();
+    return resume.valid;
+}
+
+const char* MusicService::ResumeTitle(){
+    LoadResume();
+    if(!resume.valid) return "";
+    if(!resume.title.empty()) return resume.title.c_str();
+    static FixedString<PICO_PATH_LEN> name;
+    DisplayName(resume.file.c_str(), name);
+    return name.c_str();
+}
+
+uint32_t MusicService::ResumePositionMs(){
+    LoadResume();
+    return resume.valid ? resume.ms : 0;
+}
+
+bool MusicService::Resume(){
+    LoadResume();
+    if(!resume.valid || !OSData::SD_usable) return false;
+    //並びを作り直す間だけ持つ(約7KB。1コア目のスタックには置けない)
+    struct Work {
+        FixedString<PICO_STR_M> folders[kMaxFolders];
+        Track tracks[kMaxTracks];
+    };
+    Work* w = new (std::nothrow) Work();
+    if(!w){
+        LOG_APP_WARN("ミュージック: 続きから鳴らすためのメモリが足りません");
+        return false;
+    }
+    const int folder_count = MusicLibrary::ScanFolders(w->folders, kMaxFolders);
+    int playlist = resume.playlist;
+    int count = 0;
+    FixedString<PICO_STR_M> name;
+    if(playlist == kPlaylistArtist || playlist == kPlaylistAlbum){
+        const MusicLibrary::Group g = playlist == kPlaylistArtist ? MusicLibrary::Group::Artist : MusicLibrary::Group::Album;
+        count = MusicLibrary::ListGroupTracks(g, resume.key.c_str(), w->folders, folder_count, w->tracks, kMaxTracks);
+        GroupDisplayName(playlist, resume.key.c_str(), name);
+    }else{
+        if(playlist >= 0){
+            playlist = -2;
+            for(int i = 0; i < folder_count; i++) if(strcmp(w->folders[i].c_str(), resume.key.c_str()) == 0) playlist = i;
+        }
+        if(playlist == kPlaylistAll || playlist >= 0){
+            count = MusicLibrary::ScanTracks(w->folders, folder_count, playlist, w->tracks, kMaxTracks);
+            MusicLibrary::FillTitles(w->tracks, count, w->folders, folder_count);
+            name.assign(playlist >= 0 ? w->folders[playlist].c_str() : TR("すべての曲"));
+        }
+    }
+    //同じ曲を探す(無くなっていれば並びの頭から)
+    int track = -1;
+    for(int i = 0; i < count && track < 0; i++){
+        const char* folder = w->tracks[i].folder >= 0 ? w->folders[(int)w->tracks[i].folder].c_str() : "";
+        if(strcmp(w->tracks[i].name.c_str(), resume.file.c_str()) == 0 && strcmp(folder, resume.folder.c_str()) == 0) track = i;
+    }
+    bool ok = false;
+    if(count > 0){
+        const uint32_t ms = track >= 0 ? resume.ms : 0;
+        LOG_APP_MSG("ミュージック: 前回の続きから鳴らします(%s %lums)", resume.file.c_str(), (unsigned long)ms);
+        ok = StartPlaylist(w->tracks, count, w->folders, folder_count, playlist, name.c_str(), track < 0 ? 0 : track, resume.key.c_str());
+        if(ok && ms > 0 && st && st->kind == Kind::Wav) SoundFunctions::WavSeekMs(ms);
+    }else{
+        LOG_APP_WARN("ミュージック: 前回の曲の並びを作れません(%s)", resume.key.c_str());
+    }
+    delete w;
+    return ok;
+}
+
 // ================================================================ 読む
 
 bool MusicService::HasQueue(){ return st && st->queue.count() > 0; }
@@ -541,6 +739,7 @@ const Track* MusicService::TrackAt(int i){
 }
 int MusicService::Playlist(){ return st ? st->playlist : INT_MIN; }
 const char* MusicService::PlaylistName(){ return st ? st->playlist_name.c_str() : ""; }
+const char* MusicService::PlaylistKey(){ return st ? st->playlist_key.c_str() : ""; }
 bool MusicService::Shuffle(){ EnsureSettings(); return shuffle; }
 PlayQueue::Repeat MusicService::Repeat(){ EnsureSettings(); return repeat; }
 uint64_t MusicService::FailedMask(){ return st ? st->failed_mask : 0; }
@@ -554,6 +753,16 @@ const char* MusicService::ErrorTrack(){ return st ? st->error_track.c_str() : ""
 const char* MusicService::ErrorDetail(){ return st ? st->error_detail.c_str() : ""; }
 bool MusicService::Interrupted(){ return st && st->interrupted; }
 uint32_t MusicService::Revision(){ return revision; }
+
+void MusicService::TrackTitle(const Track& t, FixedString<PICO_PATH_LEN>& out){
+    if(!t.title.empty()){ out.assign(t.title.c_str()); return; }
+    DisplayName(t.name.c_str(), out);
+}
+
+void MusicService::GroupDisplayName(int playlist, const char* key, FixedString<PICO_STR_M>& out){
+    if(key && key[0]){ if(!out.assign(key)) out.clear(); return; }
+    out.assign(playlist == kPlaylistAlbum ? TR("不明なアルバム") : TR("不明なアーティスト"));
+}
 
 void MusicService::DisplayName(const char* file, FixedString<PICO_PATH_LEN>& out){
     const char* dot = strrchr(file, '.');
@@ -586,6 +795,10 @@ void MusicService::LoadSettings(){
 }
 
 void MusicService::Test::Reset(){
+    resume = ResumeInfo();
+    resume_saved_at = 0;
+    resume_saved_track = -1;
+    resume_saved_sec = 0xFFFFFFFF;
     sleep_mode = SleepMode::Off;
     sleep_fading = false;
     delete st;

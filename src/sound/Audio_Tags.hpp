@@ -19,6 +19,8 @@
 // - 読めないもの(圧縮・暗号化したフレーム、v2.3 のタグ全体の非同期化)は読まずに ID3v1 へ回す
 // - .flac: VORBIS_COMMENT の TITLE・ARTIST・ALBUM・TRACKNUMBER(キーは大小を区別しない。UTF-8)。頭の ID3v2 は飛ばす。
 //   アルバムアート(PICTURE)等のブロックは中身を読まずに飛ばす
+// - .m4a: iTunes形式(moov → udta → meta → ilst)の ©nam・©ART・©alb・trkn。それぞれの data atom(UTF-8)を読む。
+//   アルバムアート(covr)等は読まない。moov が mdat の後ろ(末尾)にあっても見つける
 // - .wav / .mml はタグを読まない(false。表示はファイル名)
 struct AudioTags {
     FixedString<PICO_STR_L> title;

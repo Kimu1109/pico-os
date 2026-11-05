@@ -17,6 +17,7 @@
 #endif
 #include "sound/Mp3_Decoder.hpp"
 #include "sound/Flac_Decoder.hpp"
+#include "sound/Alac_Decoder.hpp"
 #include "sound/Audio_Format.hpp"
 #include "sound/Wav_Decoder.hpp"
 #include "sound/Wav_Stream.hpp"
@@ -155,11 +156,12 @@ namespace {
 
     // --- WAV(1コア目側) ---
     WavDecoder* wav_decoder = nullptr;      //最初にWAVを鳴らすときに確保し、以降は持ち続ける
-    //.mp3 / .flac の係は同時に1つだけで、大きい方に合わせた1つの領域へ置く(鳴らす間だけ確保し、.wav を鳴らす・止めると返す)。
+    //.mp3 / .flac / .m4a(ALAC)の係は同時に1つだけで、一番大きい係に合わせた1つの領域へ置く(鳴らす間だけ確保し、.wav を鳴らす・止めると返す)。
     //形式が変わっても領域は取り直さない(60KB級の連続した領域を、断片化したヒープで取り直すと失敗しやすいため)
-    enum class PackedKind : uint8_t { None, Mp3, Flac };
-    constexpr size_t kPackedBytes = sizeof(Mp3Decoder) > sizeof(FlacDecoder) ? sizeof(Mp3Decoder) : sizeof(FlacDecoder);
-    static_assert(alignof(Mp3Decoder) <= 8 && alignof(FlacDecoder) <= 8, "malloc の並びで足りること");
+    enum class PackedKind : uint8_t { None, Mp3, Flac, Alac };
+    constexpr size_t Max2(size_t a, size_t b){ return a > b ? a : b; }
+    constexpr size_t kPackedBytes = Max2(Max2(sizeof(Mp3Decoder), sizeof(FlacDecoder)), sizeof(AlacDecoder));
+    static_assert(alignof(Mp3Decoder) <= 8 && alignof(FlacDecoder) <= 8 && alignof(AlacDecoder) <= 8, "malloc の並びで足りること");
     void* packed_mem = nullptr;
     PackedKind packed_kind = PackedKind::None;
     PcmFileDecoder* packed_decoder = nullptr;   //packed_mem に置いた係(packed_kind が None なら nullptr)
@@ -305,10 +307,11 @@ namespace {
     PackedKind PackedKindOf(const char* path){
         if(AudioFormat::IsMp3(path)) return PackedKind::Mp3;
         if(AudioFormat::IsFlac(path)) return PackedKind::Flac;
+        if(AudioFormat::IsM4a(path)) return PackedKind::Alac;
         return PackedKind::None;
     }
 
-    // path を読む係を用意して返す(.mp3 は Mp3Decoder・.flac は FlacDecoder を共用の領域へ、それ以外は WavDecoder)。
+    // path を読む係を用意して返す(.mp3 は Mp3Decoder・.flac は FlacDecoder・.m4a は AlacDecoder を共用の領域へ、それ以外は WavDecoder)。
     // 使わない係は閉じる/返す。確保できなければ nullptr で、error に理由
     PcmFileDecoder* SelectDecoder(const char* path, const char** error){
         const PackedKind want = PackedKindOf(path);
@@ -320,12 +323,17 @@ namespace {
                 if(!packed_mem){
                     packed_mem = malloc(kPackedBytes);
                     if(!packed_mem){
-                        if(error) *error = want == PackedKind::Mp3 ? "MP3を鳴らすためのメモリが足りません" : "FLACを鳴らすためのメモリが足りません";
+                        if(error){
+                            *error = want == PackedKind::Mp3  ? "MP3を鳴らすためのメモリが足りません"
+                                   : want == PackedKind::Flac ? "FLACを鳴らすためのメモリが足りません"
+                                                              : "ALACを鳴らすためのメモリが足りません";
+                        }
                         return nullptr;
                     }
                 }
-                if(want == PackedKind::Mp3) packed_decoder = new (packed_mem) Mp3Decoder();
-                else                        packed_decoder = new (packed_mem) FlacDecoder();
+                if(want == PackedKind::Mp3)       packed_decoder = new (packed_mem) Mp3Decoder();
+                else if(want == PackedKind::Flac) packed_decoder = new (packed_mem) FlacDecoder();
+                else                              packed_decoder = new (packed_mem) AlacDecoder();
                 packed_kind = want;
             }
             if(wav_decoder) wav_decoder->close();
@@ -439,10 +447,20 @@ namespace {
             LOG_SYS_MSG("FLACの展開: %luブロック 平均%luus 最大%luus(1ブロックの音%luusに対し平均%lu%%・最大%lu%%)",
                         (unsigned long)st.blocks, (unsigned long)avg_us, (unsigned long)st.max_us, (unsigned long)block_us,
                         (unsigned long)(st.total_us * 100 / audio_us), (unsigned long)((uint64_t)st.max_us * 100 / (block_us ? block_us : 1)));
+        }else if(packed_kind == PackedKind::Alac){
+            const AlacDecoder* d = static_cast<const AlacDecoder*>(packed_decoder);
+            const AlacDecoder::DecodeStats& st = d->stats();
+            const uint64_t audio_us = d->audioUs();
+            if(st.blocks == 0 || audio_us == 0) return;
+            const uint32_t avg_us = (uint32_t)(st.total_us / st.blocks);
+            const uint32_t block_us = (uint32_t)(audio_us / st.blocks);
+            LOG_SYS_MSG("ALACの展開: %luフレーム 平均%luus 最大%luus(1フレームの音%luusに対し平均%lu%%・最大%lu%%)",
+                        (unsigned long)st.blocks, (unsigned long)avg_us, (unsigned long)st.max_us, (unsigned long)block_us,
+                        (unsigned long)(st.total_us * 100 / audio_us), (unsigned long)((uint64_t)st.max_us * 100 / (block_us ? block_us : 1)));
         }
     }
 
-    // MP3/FLACの係を返す(大きいので鳴らす間だけ持つ。係は1コア目しか触らないので、いつ返してもよい)。
+    // MP3/FLAC/ALACの係を返す(大きいので鳴らす間だけ持つ。係は1コア目しか触らないので、いつ返してもよい)。
     // keep_memory なら領域は残す(別の形式の係を置き直すとき)
     void ReleasePackedDecoder(bool keep_memory){
         if(packed_kind != PackedKind::None){

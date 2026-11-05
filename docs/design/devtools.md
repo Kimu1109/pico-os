@@ -166,7 +166,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 - **シリアルのコマンド`hw ...`**: `/sys/debug.cfg`の`hw-test = true`のときだけ(既定は切れている。わざと落とすコマンドがあるため。設定アプリには出さない)。
   `hw info`/`hw mem`(`MemFunctions::Take()`と`HeapTopRoom()`)/`hw trap`(`__builtin_trap()`=未定義命令)/`hw buswrite`(0xF0000000へ書く)/
   `hw hang`(ウォッチドッグが入っているときだけ止まる)/`hw clock [MHz]`・`hw sleep`(スリープ中のクロック低減を測る。`power-display.md`「スリープ中のクロック低減」)/
-  `hw mp3|flac <パス> [秒]`(MP3・FLACの展開の速さ。`sound.md`「MP3の継ぎ目の無音を削る・展開の速さを測る」「FLACの再生」。2026-11-05)/
+  `hw mp3|flac|m4a <パス> [秒]`(MP3・FLAC・ALACの展開の速さ。`sound.md`「MP3の継ぎ目の無音を削る・展開の速さを測る」「FLACの再生」。2026-11-05)/
   `hw i2c`(I2C0のスキャン。SDA/SCLの電圧=プルアップの有無・応答するアドレス。0x52が見えたら暗号化なし初期化→0xFAのID6バイト(`..A4 20 01 01`=クラシック、`00 00`=ヌンチャク)と状態6バイトも出す。つないだ物が生きているかをWii本体なしで確かめる。2026-10-30。PCは「誰も居ない」を確認、実機では未確認(Todoist参照))。結果は`[HW]`の行。`PadFunctions::extra_line_handler`はLuaデバッガ(`dbg`)→`hw`の順に試す
   (`main.cpp`のラムダ)。`HwTest_Functions.cpp`はmain.cppからしか参照しないのでホストテストはリンクしない。
 - **「実機チェック」**(`pc/sdcard/lua/apps/実機チェック/`、`permission_network=true`): コルーチンで1フレームに1つずつ測る(Lua・renderの中の描画・
@@ -361,7 +361,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   PCビルドの既定の版と `-DPICOOS_MUSIC_BUILD=ON`(ランチャはOSの5つ+ミュージック+ストア+SDのLuaアプリ、ミュージックが開く、ブロックは `pico.iso` が nil で止まる)。
   **実機では未確認(起動と再生)(Todoist参照)**。
 - 次(強化の案): MP3の展開の速さの実測、曲の継ぎ目の無音を削る、ID3タグとSD上の曲の索引、ロック画面の再生操作・スリープタイマー・続きから再生、
-  再生中の消費電流、イコライザー。FLACの再生は2026-11-05に入った(`sound.md`「FLACの再生」。次はALAC)。
+  再生中の消費電流、イコライザー。FLACとALACの再生は2026-11-05に入った(`sound.md`「FLACの再生」「ALACの再生」)。
 
 ## ナイトリービルド (`.github/workflows/nightly.yml`) (2026-10-24)
 

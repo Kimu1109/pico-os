@@ -295,16 +295,100 @@ namespace {
     }
 }
 
+namespace {
+    // MP4の atom の見出し(大きさ4+種類4。大きさが1なら続く8バイトが本当の大きさ)。body=中身の始め、end=atomの終わり(limit で切る)
+    bool AtomAt(FsFile& f, uint32_t pos, uint32_t limit, uint32_t& body, uint32_t& end, char type[4]){
+        uint8_t h[16];
+        if(pos + 8 > limit || !f.seek(pos) || f.read(h, 8) != 8) return false;
+        uint64_t size = BE32(h);
+        memcpy(type, h + 4, 4);
+        uint32_t hdr = 8;
+        if(size == 1){
+            if(pos + 16 > limit || f.read(h + 8, 8) != 8) return false;
+            size = ((uint64_t)BE32(h + 8) << 32) | BE32(h + 12);
+            hdr = 16;
+        }else if(size == 0){
+            size = limit - pos;
+        }
+        if(size < hdr) return false;
+        body = pos + hdr;
+        end = (pos + size > limit) ? limit : (uint32_t)(pos + size);
+        return true;
+    }
+
+    bool FindAtom(FsFile& f, uint32_t from, uint32_t limit, const char* type, uint32_t& body, uint32_t& end){
+        uint32_t pos = from;
+        for(int i = 0; i < 256 && pos + 8 <= limit; i++){
+            uint32_t b, e;
+            char t[4];
+            if(!AtomAt(f, pos, limit, b, e, t)) return false;
+            if(memcmp(t, type, 4) == 0){ body = b; end = e; return true; }
+            if(e <= pos) return false;
+            pos = e;
+        }
+        return false;
+    }
+
+    // iTunes形式のタグ: moov → udta → meta → ilst の ©nam(曲名)・©ART・©alb・trkn(曲番号)。それぞれ中の data atom を読む
+    void ReadM4a(FsFile& f, AudioTags& out){
+        const uint32_t size = (uint32_t)f.fileSize();
+        uint32_t b, e;
+        if(!FindAtom(f, 0, size, "moov", b, e)) return;
+        if(!FindAtom(f, b, e, "udta", b, e)) return;
+        if(!FindAtom(f, b + 0, e, "meta", b, e)) return;
+        if(!FindAtom(f, b + 4, e, "ilst", b, e)) return;      //meta は版/フラグ4バイトの後ろに子が続く
+        const uint32_t ilst_end = e;
+        uint32_t pos = b;
+        for(int i = 0; i < 64 && pos + 8 <= ilst_end; i++){
+            uint32_t ib, ie;
+            char t[4];
+            if(!AtomAt(f, pos, ilst_end, ib, ie, t) || ie <= pos) return;
+            const char* key = nullptr;
+            bool track = false;
+            if(memcmp(t, "\xA9" "nam", 4) == 0)      key = "TITLE=";
+            else if(memcmp(t, "\xA9" "ART", 4) == 0) key = "ARTIST=";
+            else if(memcmp(t, "\xA9" "alb", 4) == 0) key = "ALBUM=";
+            else if(memcmp(t, "trkn", 4) == 0)     track = true;
+            if(key || track){
+                uint32_t db, de;
+                if(FindAtom(f, ib, ie, "data", db, de) && de >= db + 8){
+                    //data: 種類(4)・地域(4)の後ろが中身
+                    uint32_t len = de - db - 8;
+                    if(track){
+                        uint8_t tr[8];
+                        if(len >= 4 && f.seek(db + 8) && f.read(tr, 4) == 4){
+                            const uint16_t n = (uint16_t)((tr[2] << 8) | tr[3]);
+                            if(n) out.track = n;
+                        }
+                    }else{
+                        if(len > kMaxFrameRead) len = kMaxFrameRead;
+                        uint8_t buf[kMaxFrameRead + 8];
+                        const size_t klen = strlen(key);
+                        memcpy(buf, key, klen);
+                        if(f.seek(db + 8) && f.read(buf + klen, len) == (int)len){
+                            AudioTagReader::DecodeVorbisComment(buf, klen + len, out);
+                        }
+                    }
+                }
+            }
+            pos = ie;
+        }
+    }
+}
+
 bool AudioTagReader::Read(const char* path, AudioTags& out){
     out = AudioTags();
     if(!path || !OSData::SD_usable) return false;
     const bool mp3 = AudioFormat::IsMp3(path);
     const bool flac = AudioFormat::IsFlac(path);
-    if(!mp3 && !flac) return false;
+    const bool m4a = AudioFormat::IsM4a(path);
+    if(!mp3 && !flac && !m4a) return false;
     FsFile f = OSData::SD.open(path, O_RDONLY);
     if(!f) return false;
     if(flac){
         ReadFlac(f, out);
+    }else if(m4a){
+        ReadM4a(f, out);
     }else{
         ReadId3v2(f, out);
         if(out.title.empty() || out.artist.empty() || out.album.empty() || out.track == 0) ReadId3v1(f, out);

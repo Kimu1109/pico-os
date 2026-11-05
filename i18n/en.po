@@ -802,7 +802,7 @@ msgstr "Clear history"
 msgid "変換の種類"
 msgstr "Conversion type"
 
-#: src/apps/calculator/CalculatorScene_Convert.cpp src/apps/gb/GameBoyScene.cpp src/apps/home/HomeScene.cpp src/apps/mail/MailScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/UsbDriveScene.cpp src/gui/widgets/dialogs/ColorDialog.hpp src/gui/widgets/dialogs/FileSaveDialog.hpp src/gui/widgets/dialogs/FileSelectDialog.hpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/lua/LuaEngine_Ext.cpp src/lua/LuaEngine_Widgets.cpp src/services/PowerMenu_Functions.cpp
+#: src/apps/calculator/CalculatorScene_Convert.cpp src/apps/gb/GameBoyScene.cpp src/apps/home/HomeScene.cpp src/apps/mail/MailScene.cpp src/apps/music/MusicScene.cpp src/apps/texteditor/TextEditorScene_Edit.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileExplorerScene.cpp src/gui/scenes/RecorderScene.cpp src/gui/scenes/SettingsScene.cpp src/gui/scenes/SettingsScene_Time.cpp src/gui/scenes/UsbDriveScene.cpp src/gui/widgets/dialogs/ColorDialog.hpp src/gui/widgets/dialogs/FileSaveDialog.hpp src/gui/widgets/dialogs/FileSelectDialog.hpp src/gui/widgets/dialogs/InputDialog.hpp src/gui/widgets/dialogs/PickerDialog.cpp src/lua/LuaEngine_Ext.cpp src/lua/LuaEngine_Widgets.cpp src/services/PowerMenu_Functions.cpp
 msgid "キャンセル"
 msgstr "Cancel"
 
@@ -2257,6 +2257,30 @@ msgstr "All"
 #: src/apps/music/MusicScene.cpp
 msgid "すべての曲"
 msgstr "All songs"
+
+#: src/apps/music/MusicScene.cpp
+msgid "%d分"
+msgstr "%dm"
+
+#: src/apps/music/MusicScene.cpp
+msgid "曲末"
+msgstr "End"
+
+#: src/apps/music/MusicScene.cpp
+msgid "スリープタイマー"
+msgstr "Sleep timer"
+
+#: src/apps/music/MusicScene.cpp src/gui/scenes/ClocksScene.cpp
+msgid "オフ"
+msgstr "Off"
+
+#: src/apps/music/MusicScene.cpp
+msgid "%d分後に止める"
+msgstr "Stop after %d min"
+
+#: src/apps/music/MusicScene.cpp
+msgid "この曲の終わりで止める"
+msgstr "Stop after this track"
 
 #: src/apps/music/MusicScene.cpp
 msgid "%s を読めません\n\n%s"
@@ -3871,10 +3895,6 @@ msgid "オン"
 msgstr "On"
 
 #: src/gui/scenes/ClocksScene.cpp
-msgid "オフ"
-msgstr "Off"
-
-#: src/gui/scenes/ClocksScene.cpp
 msgid "デジタル"
 msgstr "Digital"
 
@@ -4993,6 +5013,18 @@ msgstr "Math"
 #: src/gui/widgets/keyboards/KeyboardNum.hpp
 msgid "数字"
 msgstr "Digits"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid "%d/%d(%s)"
+msgstr "%d/%d (%s)"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid " ・%d分で停止"
+msgstr " · stops in %dm"
+
+#: src/gui/widgets/systems/LockScreen.cpp
+msgid " ・曲の終わりで停止"
+msgstr " · after track"
 
 #: src/gui/widgets/systems/LockScreen.cpp
 msgid "%lu秒待ってください"

@@ -172,6 +172,14 @@ class Button :
 
             this->needsRender();
         }
+        // アイコンをやめて文字のボタンへ戻す(箱は文字の大きさへ合わせ直す。setW()/setH()で決めた大きさはそのまま)
+        void clearIcon(){
+            if(!this->has_icon) return;
+            this->markdirty(this->getScreenRect());     //縮むと右側が消え残るので、先に今の大きさで消させる
+            this->has_icon = false;
+            this->applyBox();
+            this->needsRender();
+        }
         bool getHasIcon() { return this->has_icon; }
         IconID getIconId() { return this->icon_id; }
         IconSize getIconSize() { return this->icon_size; }

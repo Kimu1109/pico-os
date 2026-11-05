@@ -50,6 +50,18 @@ namespace MusicService {
     // 状態を返す(止めてから)。もう一度鳴らすには StartPlaylist() から
     void Release();
 
+    // ---- スリープタイマー(docs/design/sound.md「スリープタイマー」) ----
+    // Timer: minutes 分たったら止める(最後の kSleepFadeMs はWAV/MP3の音を小さくしていく)。
+    // TrackEnd: 今の曲が終わったら次へ進まずに止める。
+    // 止まる・Stop()・Release() で Off に戻る。一時停止の間も時間は進む。状態(st)とは別に持つ(確保しない)
+    enum class SleepMode : uint8_t { Off, Timer, TrackEnd };
+    static constexpr uint32_t kSleepFadeMs = 8000;
+    void SetSleepTimer(uint32_t minutes);   // 0 で Off
+    void SetSleepAtTrackEnd();
+    void ClearSleepTimer();
+    SleepMode SleepTimerMode();
+    uint32_t SleepRemainingMs();            // Timer のときだけ(他は0)
+
     // 毎フレーム(BackgroundFunctions 経由)。曲の終わりで次へ
     void Update();
 

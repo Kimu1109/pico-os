@@ -19,6 +19,8 @@ namespace KeyInputFunctions { struct Event; }
 //   KeyInputFunctions::intercept で、コントローラーは PadFunctions::SuppressThisFrame() で後ろの画面へ渡さない。
 //   後ろの画面(SSHの接続・音楽・タイマー等)は動き続ける
 // - アラーム/タイマーが鳴っていれば、ロック画面に「止める」を出す(ロックを解かずに止められる)
+// - ミュージックの曲があれば、ロック画面に曲名と前・再生/一時停止・次を出す(ロックを解かずに操作できる。鳴っていれば
+//   アラームの「止める」を優先)
 // - PINの設定/変更/解除もロック画面を使う(今のPINの確認 → 新しいPIN → もう一度)
 namespace LockFunctions {
 
@@ -84,6 +86,14 @@ namespace LockFunctions {
     // アラーム/タイマーが鳴っているか・止める(main.cppが差す。ロックをそれらへ依存させないため)
     inline bool (*ringing_query)() = nullptr;
     inline void (*ringing_stop)() = nullptr;
+
+    // ロック画面の再生操作(main.cppが差す。ミュージックを載せない版では差さない=出さない)。
+    // media_state: 出すものがあれば true。playing=鳴っている(一時停止中は偽)、revision=曲・状態が変わると増える数、
+    // sleep_min=スリープタイマーの残り分(切り上げ。無ければ0、「曲の終わりで」なら-1)
+    enum class MediaCommand : uint8_t { Prev, PlayPause, Next };
+    inline bool (*media_state)(bool& playing, uint32_t& revision, int& sleep_min) = nullptr;
+    inline const char* (*media_title)() = nullptr;
+    inline void (*media_command)(MediaCommand cmd) = nullptr;
 
     // 打鍵(KeyInputFunctions::intercept)
     bool HandleKey(const KeyInputFunctions::Event& ev);

@@ -3,6 +3,7 @@
 #include "system/KeyInput_Functions.hpp"
 #include "system/Time_Functions.hpp"
 #include "gui/core/GFX_Functions.hpp"
+#include "util/FixedString.hpp"
 #include "OS_Data.hpp"
 
 #include "Arduino.h"
@@ -28,6 +29,13 @@ void LockScreen::keyRect(int key, int& x, int& y, int& w, int& h) const {
         x = kSideMargin; y = kRingY; w = SCREEN_WIDTH - kSideMargin * 2; h = kRingH;
         return;
     }
+    if(key >= kKeyPrev && key <= kKeyNext){
+        //右に寄せて3つ並べる(左は曲名)
+        const int i = key - kKeyPrev;
+        x = SCREEN_WIDTH - kSideMargin - (3 - i) * kMediaBtnW - (2 - i) * kKeyGap;
+        y = kMediaY; w = kMediaBtnW; h = kMediaH;
+        return;
+    }
     const int cw = (SCREEN_WIDTH - kSideMargin * 2 - kKeyGap * (kCols - 1)) / kCols;
     const int col = key % kCols, row = key / kCols;
     x = kSideMargin + col * (cw + kKeyGap);
@@ -41,6 +49,12 @@ int LockScreen::keyAt(int px, int py) const {
         int x, y, w, h;
         this->keyRect(kKeyRing, x, y, w, h);
         if(px >= x && px < x + w && py >= y && py < y + h) return kKeyRing;
+    }else if(this->shown_media){
+        for(int k = kKeyPrev; k <= kKeyNext; k++){
+            int x, y, w, h;
+            this->keyRect(k, x, y, w, h);
+            if(px >= x && px < x + w && py >= y && py < y + h) return k;
+        }
     }
     for(int k = 0; k < 12; k++){
         int x, y, w, h;
@@ -63,6 +77,15 @@ void LockScreen::pressKey(int key){
     if(key < 0) return;
     if(key == kKeyRing){
         if(LockFunctions::ringing_stop) LockFunctions::ringing_stop();
+        this->needsRender();
+        return;
+    }
+    if(key >= kKeyPrev && key <= kKeyNext){
+        if(LockFunctions::media_command){
+            LockFunctions::media_command(key == kKeyPrev ? LockFunctions::MediaCommand::Prev
+                                       : key == kKeyPlay ? LockFunctions::MediaCommand::PlayPause
+                                                         : LockFunctions::MediaCommand::Next);
+        }
         this->needsRender();
         return;
     }
@@ -92,6 +115,10 @@ void LockScreen::onKey(const KeyInputFunctions::Event& ev){
             break;
         case Key::Backspace: if(this->len > 0) this->pressKey(kKeyBack); break;
         case Key::Enter: this->pressKey(kKeyOk); break;
+        //キーボードのメディアキーはロック中でも効く(行を出していなくても、曲が無ければ何もしない)
+        case Key::PlayPause: this->pressKey(kKeyPlay); break;
+        case Key::NextTrack: this->pressKey(kKeyNext); break;
+        case Key::PrevTrack: this->pressKey(kKeyPrev); break;
         case Key::Escape:
             if(!LockFunctions::IsLocked()) LockFunctions::Cancel();
             else this->reset();
@@ -107,6 +134,35 @@ void LockScreen::tick(){
     if(wait != this->shown_wait_sec){ this->shown_wait_sec = wait; this->needsRender(); }
     const bool ringing = LockFunctions::ringing_query && LockFunctions::ringing_query();
     if(ringing != this->shown_ringing){ this->shown_ringing = ringing; this->needsRender(); }
+    bool playing = false;
+    uint32_t rev = 0;
+    int sleep_min = 0;
+    const bool media = !ringing && LockFunctions::media_state && LockFunctions::media_state(playing, rev, sleep_min);
+    if(media != this->shown_media || (media && (playing != this->shown_playing || rev != this->shown_media_rev || sleep_min != this->shown_sleep_min))){
+        this->shown_media = media;
+        this->shown_playing = playing;
+        this->shown_media_rev = rev;
+        this->shown_sleep_min = media ? sleep_min : 0;
+        this->needsRender();
+    }
+}
+
+void LockScreen::drawMediaGlyph(int key, int cx, int cy, int8_t color){
+    LGFX_Sprite* f = OSData::frame;
+    constexpr int s = 6;    //三角の半分の高さ
+    if(key == kKeyPlay){
+        if(this->shown_playing){
+            f->fillRect(cx - 5, cy - s, 4, s * 2 + 1, color);
+            f->fillRect(cx + 2, cy - s, 4, s * 2 + 1, color);
+        }else{
+            f->fillTriangle(cx - 4, cy - s, cx - 4, cy + s, cx + 6, cy, color);
+        }
+        return;
+    }
+    //前: |◀  次: ▶|
+    const int dir = (key == kKeyNext) ? 1 : -1;
+    f->fillTriangle(cx - dir * 5, cy - s, cx - dir * 5, cy + s, cx + dir * 4, cy, color);
+    f->fillRect(dir > 0 ? cx + 4 : cx - 6, cy - s, 2, s * 2 + 1, color);
 }
 
 void LockScreen::causeOnPressStart(){
@@ -150,7 +206,13 @@ void LockScreen::render(){
         char buf[32];
         snprintf(buf, sizeof(buf), "%02d:%02d", t.tm_hour, t.tm_min);
         center(FontFn::Big, PICO_FORECOLOR, 12, buf);
-        snprintf(buf, sizeof(buf), TR("%d月%d日(%s)"), t.tm_mon + 1, t.tm_mday, kWday[t.tm_wday % 7]);
+        //スリープタイマーの残りを並べるときは、1行に収まるよう日付を短く(「11/5(木) ・30分で停止」)
+        const bool sleep_info = this->shown_media && this->shown_sleep_min != 0;
+        int n = snprintf(buf, sizeof(buf), sleep_info ? TR("%d/%d(%s)") : TR("%d月%d日(%s)"), t.tm_mon + 1, t.tm_mday, kWday[t.tm_wday % 7]);
+        if(sleep_info && n > 0 && n < (int)sizeof(buf)){
+            if(this->shown_sleep_min > 0) snprintf(buf + n, sizeof(buf) - n, TR(" ・%d分で停止"), this->shown_sleep_min);
+            else if(this->shown_sleep_min < 0) snprintf(buf + n, sizeof(buf) - n, "%s", TR(" ・曲の終わりで停止"));
+        }
         center(FontFn::Small, PICO_DARKGREY, 46, buf);
     }else{
         center(FontFn::Normal, PICO_FORECOLOR, 22, TR("画面ロック"));
@@ -186,6 +248,33 @@ void LockScreen::render(){
     };
 
     if(this->shown_ringing) key(kKeyRing, TR("アラーム/タイマーを止める"), PICO_RED);
+    else if(this->shown_media){
+        //曲名(収まらなければ縮めて「..」)と、前・再生/一時停止・次
+        int bx, by, bw, bh;
+        this->keyRect(kKeyPrev, bx, by, bw, bh);
+        const int avail = bx - kSideMargin - kKeyGap;
+        FixedString<PICO_STR_M> name;
+        const char* title = LockFunctions::media_title ? LockFunctions::media_title() : "";
+        if(!name.assign(title ? title : "")) name.assign("");
+        int chars = FixedString<PICO_STR_M>::charCount(name.c_str());
+        FixedString<PICO_STR_M> shown;
+        shown.assign(name.c_str());
+        while(chars > 1 && Label<PICO_STR_S>::GetTextWidth(FontFn::Small, shown.c_str()) > avail){
+            chars--;
+            shown.assign(name.c_str(), (size_t)FixedString<PICO_STR_M>::byteOffsetOfChar(name.c_str(), chars));
+            shown.append("..");
+        }
+        const int th = Label<PICO_STR_S>::GetLineHeight(FontFn::Small);
+        Label<PICO_STR_S>::DrawPlain(FontFn::Small, PICO_FORECOLOR, kSideMargin, kMediaY + (kMediaH - th) / 2, avail, shown.c_str());
+        for(int k = kKeyPrev; k <= kKeyNext; k++){
+            int x, y, w, h;
+            this->keyRect(k, x, y, w, h);
+            const bool down = (k == this->pressed_key);
+            if(down) f->fillRect(x, y, w, h, PICO_FORECOLOR);
+            f->drawRect(x, y, w, h, PICO_FORECOLOR);
+            this->drawMediaGlyph(k, x + w / 2, y + h / 2, down ? PICO_BACKGROUND : PICO_FORECOLOR);
+        }
+    }
 
     static const char* const digits[9] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
     for(int k = 0; k < 9; k++) key(k, digits[k], PICO_FORECOLOR);

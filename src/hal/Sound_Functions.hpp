@@ -219,6 +219,9 @@ namespace SoundFunctions {
     // 新しく鳴らす/止めると解除される。止めている間はスリープに入ってよい(PowerFunctions)
     bool WavPause(bool pause);
     bool WavPaused();
+    // 鳴っているWAVの音量(0〜100。WavPlay() の volume と同じ)を変える。次の WavPlay() はその volume に戻る。
+    // ミュージックアプリのスリープタイマーが止める前に小さくしていくのに使う
+    void WavSetVolume(uint8_t volume);
     // 再生位置と全体の長さ(ms)。ループ再生中の位置は 0〜長さ の中を巡る。
     // 位置は2コア目が受け取った分を引いた値(I2Sのバッファ約23msぶん先を指す)
     uint32_t WavPositionMs();

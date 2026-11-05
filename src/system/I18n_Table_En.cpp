@@ -160,6 +160,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x18b687a7u, "Could not fully delete %s" }, // %s を削除しきれませんでした
     { 0x190092f5u, "Key %s" }, // キー %s
     { 0x1996cfa6u, "Wi-Fi is not connected" }, // Wi-Fiにつながっていません
+    { 0x1998cebdu, "Albums" }, // アルバム
     { 0x19a8b633u, "Chinese yuan" }, // 人民元
     { 0x19ad8705u, "Cannot build the request (model / prompt too long?)" }, // 送る内容を作れません(model / prompt が長すぎる?)
     { 0x19dbf6e2u, "Chat" }, // チャット
@@ -179,6 +180,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x1b5df62au, "Chat: %lu unread" }, // チャット: 未読 %lu件
     { 0x1b838896u, "No TODO widget on the home screen" }, // ホーム画面にTODOウィジェットがありません
     { 0x1be31701u, "Cannot write the text to the SD" }, // 文章をSDへ書けません
+    { 0x1be9a473u, "Unknown artist" }, // 不明なアーティスト
     { 0x1c14a1e5u, "The peer closed the connection" }, // 相手が接続を切りました
     { 0x1c20a35du, "Too many lines to open (1000 max)" }, // 行数が多すぎて開けません(1000行まで)
     { 0x1c2847ccu, "Cannot parse the URL (too long or not http(s)://)" }, // URLを解釈できない(長すぎるか http(s):// で始まっていない)
@@ -435,6 +437,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x4835fe9au, "Wide" }, // 横長
     { 0x48482327u, "Now" }, // 今すぐ
     { 0x489e3f02u, "Search term is empty" }, // 検索語が空です
+    { 0x48bd2850u, "Artists" }, // アーティスト
     { 0x497392bau, "Loading the portal page..." }, // ポータルのページを読んでいます...
     { 0x49d44dc3u, "refused by the server (auth)" }, // サーバに断られた(認証)
     { 0x4a31b8c4u, "millisecond" }, // ミリ秒
@@ -497,6 +500,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x53e5ec14u, "Wrong password" }, // パスワードが違います
     { 0x54425ec7u, "Update file does not match the list (server updated during download?)" }, // 更新ファイルの中身が一覧と合いません(取得の途中で配布元が更新された?)
     { 0x54691298u, "Lua debugger" }, // Luaデバッガ
+    { 0x5482e3adu, "Reading song tags…" }, // 曲のタグを読んでいます…
     { 0x54a32c3eu, "US dollar" }, // 米ドル
     { 0x54a7fc42u, "Checked %lu min ago (%d updates)" }, // %lu分前に確認(更新%d件)
     { 0x54c64e21u, "Calibrated (error avg %.1fpx / max %.1fpx). Touch the screen and check that the blue dot follows your finger." }, // 補正できました(ずれ 平均%.1fpx / 最大%.1fpx)。画面のどこかを押して、青い点が指の位置に出るか確かめてください。
@@ -729,6 +733,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x7c71d93cu, "Screen lock: none" }, // 画面ロック: なし
     { 0x7c8486aeu, "App Store" }, // アプリストア
     { 0x7ca306a2u, "Currency" }, // 通貨(為替)
+    { 0x7ca48596u, "Unknown album" }, // 不明なアルバム
     { 0x7caa0f70u, "An app with the same name is installed (confirm to overwrite)" }, // 同じ名前のアプリが入っています(上書きの確認が要ります)
     { 0x7cabcc8fu, "no reply from the broker (keepalive)" }, // ブローカの返事が無い(keepalive)
     { 0x7cb067beu, "Cannot name the new note" }, // 新しいメモの名前を作れません
@@ -1017,6 +1022,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xac3186dbu, "new message started before the last one ended" }, // 前のメッセージが終わる前に次が始まった
     { 0xac321ce6u, "No mail" }, // メールはありません
     { 0xac44c6feu, "Not a valid number" }, // 数値として読めません
+    { 0xac5552c6u, "No songs" }, // 曲がありません
     { 0xac5d58e8u, "server reply headers too large" }, // サーバの応答ヘッダが大きすぎる
     { 0xac7c36f0u, "Joining…" }, // 参加しています…
     { 0xac97e38du, "Cancel" }, // 取り消す
@@ -1104,6 +1110,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xb8a217f1u, "Copy" }, // コピー
     { 0xb8a83481u, "Cannot fetch (server returned %d)" }, // 取得できません(サーバが %d を返しました)
     { 0xb8ba936au, "Postponed: low memory" }, // メモリが足りないので延ばしました
+    { 0xb8c2171cu, "Resume from %lu:%02lu" }, // 前回の続き(%lu:%02lu から)
     { 0xb8c3a75eu, "Some apps could not be installed" }, // 入れられないアプリがあります
     { 0xb8c47be2u, "Select, Copy/Move, then Paste" }, // 選んでコピー/移動→貼付
     { 0xb92b5ba1u, "Select" }, // 範囲選択
@@ -1480,4 +1487,4 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xffdae38bu, "Fetching %s…" }, // %s を取得中…
     { 0xfff3714fu, "No" }, // いいえ
 };
-const size_t I18nFunctions::kTableEnCount = 1476;
+const size_t I18nFunctions::kTableEnCount = 1483;

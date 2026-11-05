@@ -43,6 +43,8 @@
 namespace HostSd {
     // パス -> 内容。テスト側から登録する
     inline std::map<std::string, std::string> files;
+    // パス -> 更新日時(上位16bit = FATの日付、下位 = 時刻)。getModifyDateTime() が返す(無ければ0)
+    inline std::map<std::string, uint32_t> mtimes;
     // trueのときだけ、filesのパスからフォルダがあることにする(open()でフォルダを開け、openNext()で
     // 直下を名前順に列挙できる)。既定はfalse(以前からのテストの「フォルダは無い」前提を変えないため)
     inline bool dirs_enabled = false;
@@ -107,6 +109,14 @@ struct FsFile {
     int available(){ return data_ ? (int)(data_->size() - pos_) : 0; }
     size_t size(){ return data_ ? data_->size() : 0; }
     size_t fileSize(){ return size(); }
+    // 更新日時。テストが HostSd::mtimes に入れた値(無ければ0)
+    bool getModifyDateTime(uint16_t* pdate, uint16_t* ptime){
+        const auto it = HostSd::mtimes.find(path_);
+        const uint32_t v = it == HostSd::mtimes.end() ? 0 : it->second;
+        if(pdate) *pdate = (uint16_t)(v >> 16);
+        if(ptime) *ptime = (uint16_t)(v & 0xFFFF);
+        return !path_.empty();
+    }
     bool seek(uint32_t p){
         if(!data_ || p > data_->size()) return false;
         pos_ = p;

@@ -199,6 +199,7 @@ namespace {
 
             uint32_t stamp(uint8_t, uint8_t) override {
                 uint32_t s = MusicService::Revision() * 7u;
+                s += MusicService::HasResume() ? 5u : 0u;
                 s += MusicService::Active() ? 1u : 0u;
                 s += MusicService::Paused() ? 2u : 0u;
                 s += (uint32_t)MusicService::Current() * 13u;
@@ -219,9 +220,13 @@ namespace {
                 const bool has = MusicService::HasQueue() && MusicService::Current() >= 0;
                 if(has){
                     const MusicService::Track* tr = MusicService::TrackAt(MusicService::Current());
-                    MusicService::DisplayName(tr ? tr->name.c_str() : "", title);
+                    if(tr) MusicService::TrackTitle(*tr, title);
                     snprintf(sub, sizeof(sub), "%s  %d/%d", MusicService::PlaylistName(),
                              MusicService::Position() + 1, MusicService::Count());
+                }else if(MusicService::HasResume()){
+                    //起動した後: 前回の曲(再生で続きから)
+                    title.assign(MusicService::ResumeTitle());
+                    snprintf(sub, sizeof(sub), "%s", TR("前回の続きから"));
                 }else{
                     title.assign(TR("ミュージック"));
                     snprintf(sub, sizeof(sub), TR("タップして曲を選ぶ"));
@@ -231,24 +236,28 @@ namespace {
                 DrawText(FontFn::Small, PICO_DARKGREY, x, y, wmax, sub);
                 y += LineH(FontFn::Small) + (big ? 10 : 2);
 
-                if(!has) return;
+                const bool resume_only = !has && MusicService::HasResume();
+                if(!has && !resume_only) return;
 
-                //進み具合
-                const uint32_t pos = elapsedMs(), total = totalMs();
-                OSData::frame->drawFastHLine(x, y, wmax, PICO_LIGHTGREY);
-                if(total > 0){
-                    const uint32_t p = pos > total ? total : pos;
-                    OSData::frame->fillRect(x, y - 1, (int)((uint64_t)wmax * p / total), 3, PICO_BLACK);
-                }
-                if(big){
-                    char a[12], b[12];
-                    fmtTime(pos, a, sizeof(a));
-                    if(total > 0) fmtTime(total, b, sizeof(b)); else snprintf(b, sizeof(b), "--:--");
-                    DrawText(FontFn::Small, PICO_DARKGREY, x, y + 5, wmax, a);
-                    DrawText(FontFn::Small, PICO_DARKGREY, x + wmax - TextW(FontFn::Small, b), y + 5, wmax, b);
+                //進み具合(続きだけのときは出さない)
+                if(has){
+                    const uint32_t pos = elapsedMs(), total = totalMs();
+                    OSData::frame->drawFastHLine(x, y, wmax, PICO_LIGHTGREY);
+                    if(total > 0){
+                        const uint32_t p = pos > total ? total : pos;
+                        OSData::frame->fillRect(x, y - 1, (int)((uint64_t)wmax * p / total), 3, PICO_BLACK);
+                    }
+                    if(big){
+                        char a[12], b[12];
+                        fmtTime(pos, a, sizeof(a));
+                        if(total > 0) fmtTime(total, b, sizeof(b)); else snprintf(b, sizeof(b), "--:--");
+                        DrawText(FontFn::Small, PICO_DARKGREY, x, y + 5, wmax, a);
+                        DrawText(FontFn::Small, PICO_DARKGREY, x + wmax - TextW(FontFn::Small, b), y + 5, wmax, b);
+                    }
                 }
 
                 for(int b = 0; b < 3; b++){
+                    if(resume_only && b != Play) continue;     //続きだけのときは再生だけ
                     const Rect br = buttonRect(r, h, b);
                     const int bcx = br.x + br.w / 2, bcy = br.y + br.h / 2;
                     const int rad = br.h / 2;
@@ -275,8 +284,10 @@ namespace {
             }
 
             int buttonAt(const Rect& r, uint8_t, uint8_t h, int x, int y) override {
-                if(!MusicService::HasQueue() || MusicService::Current() < 0) return -1;
+                const bool has = MusicService::HasQueue() && MusicService::Current() >= 0;
+                if(!has && !MusicService::HasResume()) return -1;
                 for(int b = 0; b < 3; b++){
+                    if(!has && b != Play) continue;
                     const Rect br = buttonRect(r, h, b);
                     //指で押しやすいよう少し広めに取る
                     if(x >= br.x - 6 && x < br.x + br.w + 6 && y >= br.y - 4 && y < br.y + br.h + 4) return b;

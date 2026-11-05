@@ -185,7 +185,14 @@ void setup() {
 #if PICO_APP_MUSIC
     //ロック画面の再生操作(ミュージックの曲があるとき)
     LockFunctions::media_state = [](bool& playing, uint32_t& revision, int& sleep_min){
-        if(!MusicService::HasQueue() || MusicService::Current() < 0) return false;
+        //順番が無くても、前回の続きがあれば出す(再生で続きから鳴る)
+        if(!MusicService::HasQueue() || MusicService::Current() < 0){
+            if(!MusicService::HasResume()) return false;
+            playing = false;
+            revision = 0;
+            sleep_min = 0;
+            return true;
+        }
         playing = MusicService::Active() && !MusicService::Paused();
         revision = MusicService::Revision();
         const MusicService::SleepMode mode = MusicService::SleepTimerMode();
@@ -196,8 +203,8 @@ void setup() {
     LockFunctions::media_title = [](){
         static FixedString<PICO_PATH_LEN> name;
         const MusicService::Track* t = MusicService::TrackAt(MusicService::Current());
-        if(!t) return "";
-        MusicService::DisplayName(t->name.c_str(), name);
+        if(!t) return MusicService::HasResume() ? MusicService::ResumeTitle() : "";
+        MusicService::TrackTitle(*t, name);
         return name.c_str();
     };
     LockFunctions::media_command = [](LockFunctions::MediaCommand cmd){

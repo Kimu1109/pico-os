@@ -3,6 +3,7 @@
 #include "gui/widgets/Label.hpp"
 #include "gui/widgets/ScrollList.hpp"
 #include "apps/music/ui/MusicPlayerPanel.hpp"
+#include "apps/music/Music_Library.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/core/Scene_Functions.hpp"
@@ -15,6 +16,7 @@
 #include "OS_Data.hpp"
 #include "system/I18n_Functions.hpp"
 
+#include <cstdint>
 #include <cstring>
 
 // ================================================================ 画面
@@ -32,6 +34,8 @@ void MusicScene::onEnter(){
     //プレイリストを見ていればライブラリへ、ライブラリならアプリを閉じる(曲は鳴り続ける)
     this->back_button->setOnPressEnd([this](){
         if(this->view == kLibrary) SceneFunctions::Pop();
+        else if(this->view == kArtistTracks) this->showGroups(kArtists);
+        else if(this->view == kAlbumTracks) this->showGroups(kAlbums);
         else this->showLibrary();
     });
     WidgetFunctions::Add(this->back_button);
@@ -81,22 +85,33 @@ void MusicScene::onEnter(){
 
     MusicService::LoadSettings();
     this->scanFolders();
+    //索引(タグ)を作り直し始める(この画面を開いている間に少しずつ。変わった曲だけタグを読む)
+    MusicLibrary::StartIndexUpdate();
+    this->seen_index = MusicLibrary::IndexRevision();
     //鳴っているプレイリストがあればそれを開く(アプリを閉じて開き直したとき)
+    this->view_group.clear();
     int open = kLibrary;
     if(MusicService::HasQueue()){
         const int pl = MusicService::Playlist();
-        FixedString<PICO_STR_M> name;
-        this->playlistName(pl, name);
-        if((pl == kAll || (pl >= 0 && pl < this->folder_count)) && strcmp(name.c_str(), MusicService::PlaylistName()) == 0) open = pl;
+        if(pl == kArtistTracks || pl == kAlbumTracks){
+            if(!this->view_group.assign(MusicService::PlaylistKey())) this->view_group.clear();
+            open = pl;
+        }else{
+            FixedString<PICO_STR_M> name;
+            this->playlistName(pl, name);
+            if((pl == kAll || (pl >= 0 && pl < this->folder_count)) && strcmp(name.c_str(), MusicService::PlaylistName()) == 0) open = pl;
+        }
     }
     if(open == kLibrary) this->showLibrary();
+    else if(open == kArtistTracks || open == kAlbumTracks) this->showGroupTracks(open, this->view_group.c_str());
     else this->showPlaylist(open);
     this->seen_revision = MusicService::Revision();
     this->refreshPanel();
 }
 
 void MusicScene::onExit(){
-    //曲は止めない(MusicService が鳴らし続ける)
+    //曲は止めない(MusicService が鳴らし続ける)。作りかけの索引はやめる(前の索引は残る。次に開いたらまた作る)
+    MusicLibrary::CancelIndexUpdate();
     this->back_button = nullptr;
     this->play_all_button = nullptr;
     this->sleep_button = nullptr;
@@ -109,6 +124,12 @@ void MusicScene::onUpdate(){
     //曲の終わりで次へ進むのは MusicService(BackgroundFunctions から毎フレーム)。ここは見せるだけ。
     //この画面を開いている間は、鳴っていればスリープさせない(以前と同じ。閉じていれば、曲の切り替わりで眠ってもよい)
     if(MusicService::Active() && !MusicService::Paused()) PowerFunctions::KeepAwake();
+    //索引を少しずつ作る(1フレーム8msまで)。差し替わったら今の一覧を作り直す(曲名・アーティスト)
+    if(MusicLibrary::IndexUpdating()) MusicLibrary::StepIndexUpdate(8);
+    if(MusicLibrary::IndexRevision() != this->seen_index){
+        this->seen_index = MusicLibrary::IndexRevision();
+        this->reloadView();
+    }
     if(MusicService::Revision() != this->seen_revision){
         this->seen_revision = MusicService::Revision();
         this->refreshListColors();
@@ -144,83 +165,13 @@ bool MusicScene::onKey(const KeyInputFunctions::Event& ev){
 // ================================================================ 一覧
 
 void MusicScene::scanFolders(){
-    this->folder_count = 0;
-    if(!OSData::SD_usable) return;
-    FsFile dir = OSData::SD.open(PICO_Path::DIR::MUSIC);
-    if(!dir) return;
-    FsFile file;
-    while(file.openNext(&dir, O_RDONLY)){
-        char name[128];
-        const bool ok = file.getName(name, sizeof(name)) && file.isDirectory() && name[0] != '.';
-        file.close();
-        if(!ok) continue;
-        FixedString<PICO_STR_M> n;
-        if(!n.assign(name)){
-            LOG_APP_WARN("ミュージック: フォルダ名が長すぎるため並べません: %s", name);
-            continue;
-        }
-        if(this->folder_count >= kMaxFolders){
-            LOG_APP_WARN("ミュージック: フォルダが多すぎるため %s を並べません(上限%d)", name, kMaxFolders);
-            continue;
-        }
-        //名前順(SdFatの列挙順は作った順なので並べ替える。高々16件の挿入ソート)
-        int i = this->folder_count++;
-        while(i > 0 && strcmp(this->folders[i - 1].c_str(), n.c_str()) > 0){
-            this->folders[i] = this->folders[i - 1];
-            i--;
-        }
-        this->folders[i] = n;
-    }
-    dir.close();
-}
-
-int MusicScene::scanTracks(int playlist, Track* out){
-    int count = 0;
-    if(!OSData::SD_usable) return 0;
-
-    //「すべての曲」は直下と全部のフォルダ、それ以外はそのフォルダだけ
-    const int first = playlist == kAll ? -1 : playlist;
-    const int last  = playlist == kAll ? this->folder_count - 1 : playlist;
-    for(int f = first; f <= last; f++){
-        FixedString<PICO_PATH_LEN> path;
-        path.assign(PICO_Path::DIR::MUSIC);
-        if(f >= 0) path.append(this->folders[f].c_str());
-        FsFile dir = OSData::SD.open(path.c_str());
-        if(!dir) continue;
-        FsFile file;
-        while(file.openNext(&dir, O_RDONLY)){
-            char name[128];
-            const bool ok = file.getName(name, sizeof(name)) && !file.isDirectory() && (MusicService::IsMml(name) || MusicService::IsWavOrMp3(name));
-            file.close();
-            if(!ok) continue;
-            Track t;
-            t.folder = (int8_t)f;
-            if(!t.name.assign(name)){
-                LOG_APP_WARN("ミュージック: ファイル名が長すぎるため並べません: %s", name);
-                continue;
-            }
-            if(count >= kMaxTracks){
-                LOG_APP_WARN("ミュージック: 曲が多すぎるため %s を並べません(上限%d)", name, kMaxTracks);
-                continue;
-            }
-            //名前順の挿入ソート(同じ名前ならフォルダ順)
-            int i = count++;
-            while(i > 0){
-                const int c = strcmp(out[i - 1].name.c_str(), t.name.c_str());
-                if(c < 0 || (c == 0 && out[i - 1].folder <= t.folder)) break;
-                out[i] = out[i - 1];
-                i--;
-            }
-            out[i] = t;
-        }
-        dir.close();
-    }
-    return count;
+    this->folder_count = MusicLibrary::ScanFolders(this->folders, kMaxFolders);
 }
 
 void MusicScene::playlistName(int playlist, FixedString<PICO_STR_M>& out) const {
     if(playlist == kAll) out.assign(TR("すべての曲"));
     else if(playlist >= 0 && playlist < this->folder_count) out.assign(this->folders[playlist].c_str());
+    else if(playlist == kArtistTracks || playlist == kAlbumTracks) MusicService::GroupDisplayName(playlist, this->view_group.c_str(), out);
     else out.assign(TR("ミュージック"));
 }
 
@@ -233,6 +184,14 @@ void MusicScene::showLibrary(){
         all.icon = IconID::Music;
         all.text.assign(TR("すべての曲"));
         this->list->add(all);
+        ScrollListTools::Item artists;
+        artists.icon = IconID::User;
+        artists.text.assign(TR("アーティスト"));
+        this->list->add(artists);
+        ScrollListTools::Item albums;
+        albums.icon = IconID::Circle;
+        albums.text.assign(TR("アルバム"));
+        this->list->add(albums);
         for(int i = 0; i < this->folder_count; i++){
             ScrollListTools::Item item;
             item.icon = IconID::Folder;
@@ -246,12 +205,13 @@ void MusicScene::showLibrary(){
 
 void MusicScene::showPlaylist(int playlist){
     this->view = playlist;
-    this->view_count = this->scanTracks(playlist, this->view_tracks);
+    this->view_count = MusicLibrary::ScanTracks(this->folders, this->folder_count, playlist, this->view_tracks, kMaxTracks);
+    MusicLibrary::FillTitles(this->view_tracks, this->view_count, this->folders, this->folder_count);
     this->list->clear();
     for(int i = 0; i < this->view_count; i++){
         ScrollListTools::Item item;
         item.icon = IconID::Music;
-        MusicService::DisplayName(this->view_tracks[i].name.c_str(), item.text);
+        MusicService::TrackTitle(this->view_tracks[i], item.text);
         this->list->add(item);
     }
     this->refreshListColors();
@@ -265,8 +225,65 @@ void MusicScene::showPlaylist(int playlist){
     }
 }
 
+void MusicScene::showGroups(int view){
+    this->view = view;
+    this->view_count = 0;
+    const MusicLibrary::Group g = view == kArtists ? MusicLibrary::Group::Artist : MusicLibrary::Group::Album;
+    this->group_count = MusicLibrary::ListGroups(g, this->groups, kMaxTracks);
+    this->list->clear();
+    for(int i = 0; i < this->group_count; i++){
+        ScrollListTools::Item item;
+        item.icon = view == kArtists ? IconID::User : IconID::Circle;
+        FixedString<PICO_STR_M> name;
+        MusicService::GroupDisplayName(view == kArtists ? kArtistTracks : kAlbumTracks, this->groups[i].c_str(), name);
+        item.text.assign(name.c_str());
+        this->list->add(item);
+    }
+    if(this->group_count == 0){
+        //索引がまだ無い・タグの付いた曲が無い(押しても何もしない行)
+        ScrollListTools::Item item;
+        item.icon = IconID::InfoCircle;
+        item.text.assign(MusicLibrary::IndexUpdating() ? TR("曲のタグを読んでいます…") : TR("曲がありません"));
+        this->list->add(item);
+    }
+    this->refreshListColors();
+    this->refreshHeader();
+}
+
+void MusicScene::showGroupTracks(int playlist, const char* key){
+    this->view = playlist;
+    if(!this->view_group.assign(key ? key : "")) this->view_group.clear();
+    const MusicLibrary::Group g = playlist == kArtistTracks ? MusicLibrary::Group::Artist : MusicLibrary::Group::Album;
+    this->view_count = MusicLibrary::ListGroupTracks(g, this->view_group.c_str(), this->folders, this->folder_count, this->view_tracks, kMaxTracks);
+    this->list->clear();
+    for(int i = 0; i < this->view_count; i++){
+        ScrollListTools::Item item;
+        item.icon = IconID::Music;
+        MusicService::TrackTitle(this->view_tracks[i], item.text);
+        this->list->add(item);
+    }
+    this->refreshListColors();
+    this->refreshHeader();
+    if(this->viewIsQueue() && MusicService::Current() >= 0){
+        const int cur = MusicService::Current();
+        this->list->setSelectedIndex(cur);
+        this->list->ensureVisible(cur);
+    }
+}
+
+void MusicScene::reloadView(){
+    const int top = this->list ? this->list->getSelectedIndex() : -1;
+    if(this->view == kLibrary) return;      //ライブラリの行は索引に依らない
+    if(this->view == kArtists || this->view == kAlbums) this->showGroups(this->view);
+    else if(this->view == kArtistTracks || this->view == kAlbumTracks){
+        FixedString<PICO_STR_M> key = this->view_group;
+        this->showGroupTracks(this->view, key.c_str());
+    }else this->showPlaylist(this->view);
+    if(top >= 0 && this->list && !this->viewIsQueue()) this->list->setSelectedIndex(top);
+}
+
 void MusicScene::refreshHeader(){
-    this->play_all_button->setVisible(this->view != kLibrary && this->view_count > 0);
+    this->play_all_button->setVisible(this->view != kLibrary && this->view != kArtists && this->view != kAlbums && this->view_count > 0);
     const int edge = this->play_all_button->getVisible()
         ? this->play_all_button->getLocalRect().x : Scene::contentRect().x + Scene::contentRect().w;
     this->sleep_button->setX(edge - MARGIN - this->sleep_button->getLocalRect().w);
@@ -276,6 +293,9 @@ void MusicScene::refreshHeader(){
     FixedString<PICO_STR_M> name, count;
     if(this->view == kLibrary){
         name.assign(TR("ミュージック"));
+    }else if(this->view == kArtists || this->view == kAlbums){
+        name.assign(this->view == kArtists ? TR("アーティスト") : TR("アルバム"));
+        count.appendFormat(" (%d)", this->group_count);
     }else{
         this->playlistName(this->view, name);
         count.appendFormat(" (%d)", this->view_count);
@@ -295,8 +315,9 @@ void MusicScene::refreshHeader(){
 }
 
 bool MusicScene::viewIsQueue() const {
-    if(this->view == kLibrary || !MusicService::HasQueue()) return false;
+    if(this->view == kLibrary || this->view == kArtists || this->view == kAlbums || !MusicService::HasQueue()) return false;
     if(MusicService::Playlist() != this->view) return false;
+    if(this->view == kArtistTracks || this->view == kAlbumTracks) return strcmp(this->view_group.c_str(), MusicService::PlaylistKey()) == 0;
     FixedString<PICO_STR_M> name;
     this->playlistName(this->view, name);
     return strcmp(name.c_str(), MusicService::PlaylistName()) == 0;
@@ -306,15 +327,29 @@ void MusicScene::refreshListColors(){
     if(!this->list) return;
     const bool playing = MusicService::Active();
     if(this->view == kLibrary){
-        //鳴っているプレイリストを緑に
-        for(int i = 0; i <= this->folder_count; i++){
+        //鳴っているプレイリストを緑に(アーティスト/アルバムの行は、その種類の並びが鳴っていれば)
+        const int qpl = MusicService::HasQueue() ? MusicService::Playlist() : INT32_MIN;
+        for(int i = 0; i < kLibraryFixedRows + this->folder_count; i++){
             ScrollListTools::Item* it = this->list->itemAt(i);
             if(!it) break;
-            const int pl = i == 0 ? kAll : i - 1;
-            FixedString<PICO_STR_M> name;
-            this->playlistName(pl, name);
-            const bool same = MusicService::HasQueue() && MusicService::Playlist() == pl
-                              && strcmp(name.c_str(), MusicService::PlaylistName()) == 0;
+            bool same;
+            if(i == 1) same = qpl == kArtistTracks;
+            else if(i == 2) same = qpl == kAlbumTracks;
+            else{
+                const int pl = i == 0 ? kAll : i - kLibraryFixedRows;
+                FixedString<PICO_STR_M> name;
+                this->playlistName(pl, name);
+                same = qpl == pl && strcmp(name.c_str(), MusicService::PlaylistName()) == 0;
+            }
+            it->color = (playing && same) ? (int8_t)PICO_DARKGREEN : (int8_t)-1;
+        }
+    }else if(this->view == kArtists || this->view == kAlbums){
+        const int want = this->view == kArtists ? kArtistTracks : kAlbumTracks;
+        const bool kind = MusicService::HasQueue() && MusicService::Playlist() == want;
+        for(int i = 0; i < this->group_count; i++){
+            ScrollListTools::Item* it = this->list->itemAt(i);
+            if(!it) break;
+            const bool same = kind && strcmp(this->groups[i].c_str(), MusicService::PlaylistKey()) == 0;
             it->color = (playing && same) ? (int8_t)PICO_DARKGREEN : (int8_t)-1;
         }
     }else{
@@ -340,8 +375,15 @@ void MusicScene::onListSelect(int index, bool already_selected){
     //(↑↓で選ぶたびに曲が変わらないように)
     if(!OSData::isTouchEnd && !already_selected) return;
     if(this->view == kLibrary){
-        if(index < 0 || index > this->folder_count) return;
-        this->showPlaylist(index == 0 ? kAll : index - 1);
+        if(index < 0 || index >= kLibraryFixedRows + this->folder_count) return;
+        if(index == 1) this->showGroups(kArtists);
+        else if(index == 2) this->showGroups(kAlbums);
+        else this->showPlaylist(index == 0 ? kAll : index - kLibraryFixedRows);
+        return;
+    }
+    if(this->view == kArtists || this->view == kAlbums){
+        if(index < 0 || index >= this->group_count) return;     //「読んでいます」の行
+        this->showGroupTracks(this->view == kArtists ? kArtistTracks : kAlbumTracks, this->groups[index].c_str());
         return;
     }
     if(index < 0 || index >= this->view_count) return;
@@ -351,11 +393,13 @@ void MusicScene::onListSelect(int index, bool already_selected){
 // ================================================================ 再生(MusicService へ渡すだけ)
 
 void MusicScene::startPlaylist(int track){
-    if(this->view == kLibrary || this->view_count == 0) return;
+    if(this->view == kLibrary || this->view == kArtists || this->view == kAlbums || this->view_count == 0) return;
     FixedString<PICO_STR_M> name;
     this->playlistName(this->view, name);
+    //「続きから」で同じ並びを作り直すための名前(フォルダ名・タグの名前。「不明」は空)
+    const char* key = (this->view == kArtistTracks || this->view == kAlbumTracks) ? this->view_group.c_str() : name.c_str();
     MusicService::StartPlaylist(this->view_tracks, this->view_count, this->folders, this->folder_count,
-                                this->view, name.c_str(), track);
+                                this->view, name.c_str(), track, key);
     this->refreshListColors();
 }
 
@@ -424,8 +468,13 @@ void MusicScene::onPanelButton(int button){
             //前の順番があれば続きから、無ければ見ているプレイリスト(ライブラリなら全部の曲)を鳴らす
             if(MusicService::HasQueue()){
                 MusicService::TogglePlay();
+            }else if(MusicService::HasResume() && MusicService::Resume()){
+                //前回の続き: その並びを開く
+                const int pl = MusicService::Playlist();
+                if(pl == kArtistTracks || pl == kAlbumTracks) this->showGroupTracks(pl, MusicService::PlaylistKey());
+                else if(pl == kAll || (pl >= 0 && pl < this->folder_count)) this->showPlaylist(pl);
             }else{
-                if(this->view == kLibrary) this->showPlaylist(kAll);
+                if(this->view == kLibrary || this->view == kArtists || this->view == kAlbums) this->showPlaylist(kAll);
                 this->startPlaylist(-1);
             }
             break;
@@ -447,8 +496,8 @@ void MusicScene::refreshPanel(){
     const bool paused = MusicService::Paused();
     this->panel->setPlaying(active, paused);
     this->panel->setModes(MusicService::Shuffle(), (uint8_t)MusicService::Repeat());
-    this->panel->setHasTracks(MusicService::HasQueue() || (this->view != kLibrary && this->view_count > 0)
-                              || (this->view == kLibrary && OSData::SD_usable));
+    this->panel->setHasTracks(MusicService::HasQueue() || MusicService::HasResume() || this->view_count > 0
+                              || ((this->view == kLibrary || this->view == kArtists || this->view == kAlbums) && OSData::SD_usable));
 
     //曲名と下の行
     FixedString<PICO_PATH_LEN> title;
@@ -456,7 +505,7 @@ void MusicScene::refreshPanel(){
     int8_t sub_color = PICO_DARKGREY;
     const int cur = MusicService::Current();
     if(cur >= 0 && MusicService::HasQueue()){
-        MusicService::DisplayName(MusicService::TrackAt(cur)->name.c_str(), title);
+        MusicService::TrackTitle(*MusicService::TrackAt(cur), title);
         const char* pl = MusicService::PlaylistName();
         if(active){
             sub.appendFormat("%s · %d/%d", pl, MusicService::Position() + 1, MusicService::Count());
@@ -472,6 +521,11 @@ void MusicScene::refreshPanel(){
         }
     }else if(!OSData::SD_usable){
         title.assign(TR("SDカードがありません"));
+    }else if(MusicService::HasResume()){
+        //起動した後: 前回の曲(再生で続きから)
+        title.assign(MusicService::ResumeTitle());
+        const uint32_t s = MusicService::ResumePositionMs() / 1000;
+        sub.appendFormat(TR("前回の続き(%lu:%02lu から)"), (unsigned long)(s / 60), (unsigned long)(s % 60));
     }else if(this->view == kLibrary && this->folder_count == 0){
         title.assign(TR("曲が選ばれていません"));
         sub.assign(TR("/music/ に .mml か .wav を置くか、フォルダ(=プレイリスト)を作ってください"));

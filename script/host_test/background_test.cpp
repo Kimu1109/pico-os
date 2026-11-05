@@ -336,7 +336,9 @@ static void TestMusic(){
         MusicService::SetSleepAtTrackEnd();
         const uint32_t adv2 = SoundFunctions::WavAdvanceCount();
         check(StepUntil([](){ return !MusicService::Active(); }), "曲の終わりで止まる");
-        check(MusicService::Current() == 0 && SoundFunctions::WavAdvanceCount() == adv2, "次の曲へは進まない(続けて積まない)");
+        //鳴らさずに順番だけ次の曲へ進める(次に再生を押したら・続きからは次の曲)
+        check(MusicService::Current() == 1 && !MusicService::Active() && SoundFunctions::WavAdvanceCount() == adv2,
+              "次の曲は鳴らさない(続けて積まない)。順番は次の曲へ");
         check(MusicService::SleepTimerMode() == MusicService::SleepMode::Off, "止まればタイマーは切れる");
         //取り消せば次の曲へ進む
         MusicService::PlayTrack(0);
@@ -349,6 +351,47 @@ static void TestMusic(){
         check(MusicService::Current() == 2 && MusicService::Active(), "「次へ」は進む");
         MusicService::Stop();
         MusicService::CycleRepeat(); MusicService::CycleRepeat();   //All → One → Off
+    }
+
+    //続きから: 曲が変わる・一時停止で /sys/music_resume.cfg に書き、起動し直した後の再生でそこから鳴らす
+    {
+        HostSd::dirs_enabled = true;    //並びを作り直すのにフォルダを見る
+        MusicService::Track m[2];
+        m[0].name.assign("m1.mp3"); m[1].name.assign("m2.mp3");
+        m[1].title.assign("二曲目");
+        check(MusicService::StartPlaylist(m, 2, nullptr, 0, MusicService::kPlaylistAll, "すべての曲", 1), "2曲目から鳴らす");
+        check(StepUntil([](){ return SoundFunctions::WavPositionMs() > 150; }), "鳴る");
+        const std::string first = FileText(PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG);
+        check(first.find("file=m2.mp3") != std::string::npos && first.find("list=all") != std::string::npos
+              && first.find("title=二曲目") != std::string::npos, "鳴らし始めたら曲を書く");
+        MusicService::TogglePlay();     //一時停止で位置を書く
+        const std::string paused = FileText(PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG);
+        const size_t at = paused.find("position-ms=");
+        const unsigned long saved = at == std::string::npos ? 0 : strtoul(paused.c_str() + at + 12, nullptr, 10);
+        check(saved >= 100, "一時停止で位置を書く");
+
+        //起動し直した(状態も覚えていた続きも無い)
+        MusicService::Stop();
+        MusicService::Test::Reset();
+        check(!MusicService::HasQueue() && MusicService::HasResume(), "起動し直しても続きがある");
+        check(strcmp(MusicService::ResumeTitle(), "二曲目") == 0 && MusicService::ResumePositionMs() == saved, "曲名と位置");
+        MusicService::TogglePlay();     //順番が無ければ続きから
+        const MusicService::Track* cur = MusicService::TrackAt(MusicService::Current());
+        check(MusicService::Active() && cur && strcmp(cur->name.c_str(), "m2.mp3") == 0, "同じ並びを作り直してその曲から");
+        check(MusicService::Playlist() == MusicService::kPlaylistAll && MusicService::Count() >= 2, "すべての曲の並び");
+        const uint32_t pos = SoundFunctions::WavPositionMs();
+        check(pos + 50 >= saved && pos <= saved + 100, "書いた位置から鳴る");
+
+        //最後まで鳴らし終えたら続きは消える
+        check(StepUntil([](){ return MusicService::Finished(); }), "最後まで鳴らす");
+        check(!MusicService::HasResume() && HostSd::files.count(PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG) == 0, "終われば続きは消える");
+
+        //曲が無くなっていれば並びの頭から
+        HostSd::files[PICO_Path::FILE::CFG::SYS_MUSIC_RESUME_CFG] = "list=folder\nname=gone\nfolder=gone\nfile=x.mp3\nposition-ms=100\n";
+        MusicService::Test::Reset();
+        check(MusicService::HasResume() && !MusicService::Resume(), "フォルダが無くなっていれば鳴らせない");
+        HostSd::dirs_enabled = false;
+        MusicService::Stop();
     }
     BackgroundFunctions::Test::Reset();
 }

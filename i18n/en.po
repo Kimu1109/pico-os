@@ -1626,7 +1626,7 @@ msgstr "Choose ROM"
 msgid "続きから遊びますか"
 msgstr "Continue where you left off?"
 
-#: src/apps/gb/GameBoyScene.cpp
+#: src/apps/gb/GameBoyScene.cpp src/apps/home/Home_Widgets.cpp
 msgid "前回の続きから"
 msgstr "Continue"
 
@@ -2254,9 +2254,25 @@ msgstr "Cannot get an access token (HTTP %d)"
 msgid "全曲"
 msgstr "All"
 
-#: src/apps/music/MusicScene.cpp
+#: src/apps/music/MusicScene.cpp src/apps/music/Music_Service.cpp
 msgid "すべての曲"
 msgstr "All songs"
+
+#: src/apps/music/MusicScene.cpp
+msgid "アーティスト"
+msgstr "Artists"
+
+#: src/apps/music/MusicScene.cpp
+msgid "アルバム"
+msgstr "Albums"
+
+#: src/apps/music/MusicScene.cpp
+msgid "曲のタグを読んでいます…"
+msgstr "Reading song tags…"
+
+#: src/apps/music/MusicScene.cpp
+msgid "曲がありません"
+msgstr "No songs"
 
 #: src/apps/music/MusicScene.cpp
 msgid "%d分"
@@ -2307,6 +2323,10 @@ msgid "%s · 停止中"
 msgstr "%s · Stopped"
 
 #: src/apps/music/MusicScene.cpp
+msgid "前回の続き(%lu:%02lu から)"
+msgstr "Resume from %lu:%02lu"
+
+#: src/apps/music/MusicScene.cpp
 msgid "曲が選ばれていません"
 msgstr "No song selected"
 
@@ -2349,6 +2369,14 @@ msgstr "Stopped: another app used audio"
 #: src/apps/music/Music_Service.cpp
 msgid "停止中 %s"
 msgstr "Stopped %s"
+
+#: src/apps/music/Music_Service.cpp
+msgid "不明なアルバム"
+msgstr "Unknown album"
+
+#: src/apps/music/Music_Service.cpp
+msgid "不明なアーティスト"
+msgstr "Unknown artist"
 
 #: src/apps/music/ui/MusicPlayerPanel.cpp
 msgid "ループ"

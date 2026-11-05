@@ -19,6 +19,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <ctime>
 #include <sys/statvfs.h>
 #include <unistd.h>
 
@@ -135,6 +136,17 @@ public:
     bool isOpen(){ return fp_ != nullptr || dir_ != nullptr; }
     bool isDir(){ return is_dir_; }
     bool isDirectory(){ return is_dir_; } //SdFatには両方の綴りがある
+    // 更新日時(FATの形: 日付 = (年-1980)<<9 | 月<<5 | 日、時刻 = 時<<11 | 分<<5 | 秒/2)。SdFatと同じ
+    bool getModifyDateTime(uint16_t* pdate, uint16_t* ptime){
+        struct stat st;
+        if(path_.empty() || stat(path_.c_str(), &st) != 0) return false;
+        const time_t t = st.st_mtime;
+        struct tm tmv;
+        localtime_r(&t, &tmv);
+        if(pdate) *pdate = (uint16_t)(((tmv.tm_year + 1900 - 1980) << 9) | ((tmv.tm_mon + 1) << 5) | tmv.tm_mday);
+        if(ptime) *ptime = (uint16_t)((tmv.tm_hour << 11) | (tmv.tm_min << 5) | (tmv.tm_sec / 2));
+        return true;
+    }
 
     void close(){
         if(fp_){ fclose(fp_); fp_ = nullptr; }

@@ -118,8 +118,8 @@ namespace MusicService {
     // 続きから鳴らす。並びを作れなければ(フォルダ・曲が無くなった)false
     bool Resume();
     bool IsMml(const char* name);
-    // WAVの経路(SoundFunctions::WavPlay)で鳴らすファイル(.wav / .mp3)か
-    bool IsWavOrMp3(const char* name);
+    // WAVの経路(SoundFunctions::WavPlay)で鳴らすファイル(.wav / .mp3 / .flac)か
+    bool IsPcmFile(const char* name);
 
     // BackgroundFunctions へ登録する口
     BackgroundService* Service();

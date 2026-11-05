@@ -9,6 +9,7 @@
 #include "gui/core/Font_Functions.hpp"
 #include "gui/core/Error_Functions.hpp"
 #include "sound/Mml_Compiler.hpp"
+#include "sound/Audio_Format.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "system/Log_Functions.hpp"
@@ -123,7 +124,7 @@ void FileViewerScene::onEnter(){
 #endif
     this->media = Media::None;
     if(OSData::SD_usable){
-        if(HasExtension(this->path.c_str(), ".wav") || HasExtension(this->path.c_str(), ".mp3")) this->media = Media::Wav;
+        if(AudioFormat::IsPcmFile(this->path.c_str())) this->media = Media::Wav;
         else if(HasExtension(this->path.c_str(), ".mml")) this->media = Media::Mml;
     }
     //WAVは44100Hzで鳴らす。切り替えは鳴っているものを止めるので、鳴らす前に頼んでおく
@@ -260,7 +261,7 @@ void FileViewerScene::onExit(){
 // ================================================================ 音の再生
 
 uint32_t FileViewerScene::preferredSampleRate() const {
-    return (HasExtension(this->path.c_str(), ".wav") || HasExtension(this->path.c_str(), ".mp3")) ? SoundFunctions::kSampleRateHigh : 0;
+    return AudioFormat::IsPcmFile(this->path.c_str()) ? SoundFunctions::kSampleRateHigh : 0;
 }
 
 void FileViewerScene::buildMediaControls(const Rect& content){

@@ -7,6 +7,8 @@
 #include "hal/Network_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
 #include "sound/Mp3_Decoder.hpp"
+#include "sound/Flac_Decoder.hpp"
+#include "sound/Audio_Format.hpp"
 #include "hal/Clock_Functions.hpp"
 #include "hal/I2C_Bus.hpp"
 #include "hal/CardKB_Functions.hpp"
@@ -26,7 +28,7 @@
 
 namespace {
     void PrintHelp(){
-        LOG_SYS_MSG("[HW] コマンド: hw info / hw boot / hw mem / hw clock [MHz] / hw i2c / hw mp3 <パス> [秒] / hw sleep / hw trap / hw buswrite / hw hang");
+        LOG_SYS_MSG("[HW] コマンド: hw info / hw boot / hw mem / hw clock [MHz] / hw i2c / hw mp3|flac <パス> [秒] / hw sleep / hw trap / hw buswrite / hw hang");
     }
 
     const char* I2cName(uint8_t addr){
@@ -170,10 +172,10 @@ namespace {
     }
 
     // スリープ中のクロック低減の様子。MHzを付けると sleep-cpu-mhz を今だけ変える(display.cfgへは書かない)
-    // MP3の展開の速さを測る。鳴らさずに、頭から sec 秒ぶんを今の出力の周波数へ直しながら全力で読む。
-    // 展開(minimp3)だけの時間と、SDの読み込み・周波数の変換を含めた時間を分けて出す。
+    // MP3・FLACの展開の速さを測る(拡張子で選ぶ)。鳴らさずに、頭から sec 秒ぶんを今の出力の周波数へ直しながら全力で読む。
+    // MP3は展開(minimp3)だけの時間、FLACは1ブロックの展開(SDの読み込みを含む)の時間と、SD・周波数の変換を含めた全体の時間を分けて出す。
     // 測る間は loop() が止まる(鳴っている曲は途切れる)。ウォッチドッグは読みながら餌をやる
-    void Mp3Bench(const char* arg){
+    void PcmBench(const char* arg){
         while(*arg == ' ') ++arg;
         char path[128];
         size_t n = strlen(arg);
@@ -192,30 +194,40 @@ namespace {
             }
         }
         if(n == 0 || n >= sizeof(path)){
-            LOG_SYS_WARN("[HW] hw mp3 <パス> [秒(既定10)] 例: hw mp3 /music/song.mp3 30");
+            LOG_SYS_WARN("[HW] hw mp3|flac <パス> [秒(既定10)] 例: hw flac /music/song.flac 30");
             return;
         }
         memcpy(path, arg, n);
         path[n] = '\0';
 
         //係と読み込み先は測る間だけ持つ(静的RAMを増やさない。1コア目のスタックは4KBしか無いので読み込み先も置かない)
+        const bool flac = AudioFormat::IsFlac(path);
         constexpr size_t kBufSamples = 512;
-        void* mem = malloc(sizeof(Mp3Decoder) + kBufSamples * sizeof(int16_t));
+        const size_t dec_bytes = flac ? sizeof(FlacDecoder) : sizeof(Mp3Decoder);
+        void* mem = malloc(dec_bytes + kBufSamples * sizeof(int16_t));
         if(!mem){
-            LOG_SYS_FAIL("[HW] MP3の係のメモリ(%uB)が足りません", (unsigned)(sizeof(Mp3Decoder) + kBufSamples * sizeof(int16_t)));
+            LOG_SYS_FAIL("[HW] 展開の係のメモリ(%uB)が足りません", (unsigned)(dec_bytes + kBufSamples * sizeof(int16_t)));
             return;
         }
-        Mp3Decoder* dec = new (mem) Mp3Decoder();
+        Mp3Decoder* mp3 = flac ? nullptr : new (mem) Mp3Decoder();
+        FlacDecoder* fl = flac ? new (mem) FlacDecoder() : nullptr;
+        PcmFileDecoder* dec = flac ? static_cast<PcmFileDecoder*>(fl) : static_cast<PcmFileDecoder*>(mp3);
         const uint32_t rate = SoundFunctions::SampleRate();
         dec->setStereoOutput(true);
         if(!dec->open(path, rate)){
             LOG_SYS_FAIL("[HW] 開けません: %s(%s)", path, dec->errorText());
         }else{
-            LOG_SYS_MSG("[HW] MP3 %s: %luHz %uch %ukbps 長さ%lums TOC=%d 継ぎ目を削る=%d(遅延%u 詰め物%u) 出力%luHz",
-                        path, (unsigned long)dec->sampleRate(), (unsigned)dec->channels(), (unsigned)dec->bitrateKbps(),
-                        (unsigned long)dec->durationMs(), dec->hasToc() ? 1 : 0, dec->hasGapless() ? 1 : 0,
-                        (unsigned)dec->encoderDelay(), (unsigned)dec->encoderPadding(), (unsigned long)rate);
-            int16_t* buf = reinterpret_cast<int16_t*>(static_cast<uint8_t*>(mem) + sizeof(Mp3Decoder));
+            if(mp3){
+                LOG_SYS_MSG("[HW] MP3 %s: %luHz %uch %ukbps 長さ%lums TOC=%d 継ぎ目を削る=%d(遅延%u 詰め物%u) 出力%luHz",
+                            path, (unsigned long)dec->sampleRate(), (unsigned)dec->channels(), (unsigned)mp3->bitrateKbps(),
+                            (unsigned long)dec->durationMs(), mp3->hasToc() ? 1 : 0, mp3->hasGapless() ? 1 : 0,
+                            (unsigned)mp3->encoderDelay(), (unsigned)mp3->encoderPadding(), (unsigned long)rate);
+            }else{
+                LOG_SYS_MSG("[HW] FLAC %s: %luHz %uch %ubit 長さ%lums SEEKTABLE=%d 出力%luHz",
+                            path, (unsigned long)dec->sampleRate(), (unsigned)dec->channels(), (unsigned)dec->bitsPerSample(),
+                            (unsigned long)dec->durationMs(), fl->hasSeekTable() ? 1 : 0, (unsigned long)rate);
+            }
+            int16_t* buf = reinterpret_cast<int16_t*>(static_cast<uint8_t*>(mem) + dec_bytes);
             const uint32_t want = rate * sec;
             const uint32_t lanes = dec->outChannels();
             uint32_t got = 0;
@@ -228,22 +240,37 @@ namespace {
                 CrashDumpFunctions::Feed();
             }
             const uint32_t wall_us = micros() - t0;
-            const Mp3Decoder::DecodeStats& st = dec->stats();
-            const uint32_t audio_us = dec->frameAudioUs();
             const uint64_t played_us = (uint64_t)got * 1000000u / rate;
-            if(st.frames == 0 || audio_us == 0 || played_us == 0){
+            uint32_t units = 0, avg_us = 0, max_us = 0;
+            uint64_t unit_audio_us = 0;
+            if(mp3){
+                const Mp3Decoder::DecodeStats& st = mp3->stats();
+                units = st.frames;
+                max_us = st.max_us;
+                unit_audio_us = mp3->frameAudioUs();
+                if(units) avg_us = (uint32_t)(st.total_us / units);
+            }else{
+                const FlacDecoder::DecodeStats& st = fl->stats();
+                units = st.blocks;
+                max_us = st.max_us;
+                if(units){
+                    avg_us = (uint32_t)(st.total_us / units);
+                    unit_audio_us = fl->audioUs() / units;      //1ブロックの平均の音の長さ
+                }
+            }
+            if(units == 0 || unit_audio_us == 0 || played_us == 0){
                 LOG_SYS_WARN("[HW] 音が出ませんでした(%luサンプル)", (unsigned long)got);
             }else{
-                const uint32_t avg_us = (uint32_t)(st.total_us / st.frames);
-                LOG_SYS_MSG("[HW] 展開だけ: %luフレーム 平均%luus 最大%luus / 1フレームの音%luus(平均%lu%% 最大%lu%%)",
-                            (unsigned long)st.frames, (unsigned long)avg_us, (unsigned long)st.max_us, (unsigned long)audio_us,
-                            (unsigned long)((uint64_t)avg_us * 100 / audio_us), (unsigned long)((uint64_t)st.max_us * 100 / audio_us));
+                LOG_SYS_MSG("[HW] 展開だけ: %luの単位 平均%luus 最大%luus / 1単位の音%luus(平均%lu%% 最大%lu%%)。単位=%s",
+                            (unsigned long)units, (unsigned long)avg_us, (unsigned long)max_us, (unsigned long)unit_audio_us,
+                            (unsigned long)((uint64_t)avg_us * 100 / unit_audio_us), (unsigned long)((uint64_t)max_us * 100 / unit_audio_us),
+                            mp3 ? "MP3のフレーム" : "FLACのブロック(SDの読み込み込み)");
                 LOG_SYS_MSG("[HW] SD・周波数の変換も含めて: %lums分の音を%lumsで読んだ(1コア目の%lu%%。100%%を超えると途切れる)",
                             (unsigned long)(played_us / 1000), (unsigned long)(wall_us / 1000),
                             (unsigned long)((uint64_t)wall_us * 100 / played_us));
             }
         }
-        dec->~Mp3Decoder();
+        dec->~PcmFileDecoder();
         free(mem);
     }
 
@@ -306,7 +333,8 @@ bool HwTestFunctions::FeedSerialLine(const char* line){
     else if(strcmp(cmd, "mem") == 0) PrintMem();
     else if(strncmp(cmd, "clock", 5) == 0 && (cmd[5] == ' ' || cmd[5] == '\0')) Clock(cmd + 5);
     else if(strcmp(cmd, "i2c") == 0) I2c();
-    else if(strncmp(cmd, "mp3", 3) == 0 && (cmd[3] == ' ' || cmd[3] == '\0')) Mp3Bench(cmd + 3);
+    else if(strncmp(cmd, "mp3", 3) == 0 && (cmd[3] == ' ' || cmd[3] == '\0')) PcmBench(cmd + 3);
+    else if(strncmp(cmd, "flac", 4) == 0 && (cmd[4] == ' ' || cmd[4] == '\0')) PcmBench(cmd + 4);
     else if(strcmp(cmd, "sleep") == 0){
         LOG_SYS_MSG("[HW] スリープへ入ります(タッチ・ボタン・打鍵で起きる)");
         PowerFunctions::SleepNow();

@@ -16,6 +16,8 @@
 #include "sound/Gb_Audio_Link.hpp"
 #endif
 #include "sound/Mp3_Decoder.hpp"
+#include "sound/Flac_Decoder.hpp"
+#include "sound/Audio_Format.hpp"
 #include "sound/Wav_Decoder.hpp"
 #include "sound/Wav_Stream.hpp"
 #if PICO_APP_GB
@@ -153,8 +155,15 @@ namespace {
 
     // --- WAV(1コア目側) ---
     WavDecoder* wav_decoder = nullptr;      //最初にWAVを鳴らすときに確保し、以降は持ち続ける
-    Mp3Decoder* mp3_decoder = nullptr;      //.mp3 を鳴らす間だけ確保する(約31KB。.wav を鳴らす・止めると返す)
-    PcmFileDecoder* pcm_decoder = nullptr;  //今のファイルを読んでいる係(wav_decoder か mp3_decoder)
+    //.mp3 / .flac の係は同時に1つだけで、大きい方に合わせた1つの領域へ置く(鳴らす間だけ確保し、.wav を鳴らす・止めると返す)。
+    //形式が変わっても領域は取り直さない(60KB級の連続した領域を、断片化したヒープで取り直すと失敗しやすいため)
+    enum class PackedKind : uint8_t { None, Mp3, Flac };
+    constexpr size_t kPackedBytes = sizeof(Mp3Decoder) > sizeof(FlacDecoder) ? sizeof(Mp3Decoder) : sizeof(FlacDecoder);
+    static_assert(alignof(Mp3Decoder) <= 8 && alignof(FlacDecoder) <= 8, "malloc の並びで足りること");
+    void* packed_mem = nullptr;
+    PackedKind packed_kind = PackedKind::None;
+    PcmFileDecoder* packed_decoder = nullptr;   //packed_mem に置いた係(packed_kind が None なら nullptr)
+    PcmFileDecoder* pcm_decoder = nullptr;  //今のファイルを読んでいる係(wav_decoder か packed_decoder)
     FixedString<PICO_STR_M> wav_title;
     uint64_t wav_pushed = 0;                // 列へ積んだサンプル数(鳴らし始め/飛んだ位置から数える)
     uint64_t wav_base = 0;                  // 耳に届いている曲の頭が wav_pushed のどこか(続けて積んだ曲へ移ると進む)
@@ -290,28 +299,39 @@ namespace {
         }
     }
 
-    void LogMp3Stats();
-    void ReleaseMp3Decoder();
-    bool IsMp3Path(const char* path);
+    void LogPackedStats();
+    void ReleasePackedDecoder(bool keep_memory);
 
-    // path を読む係を用意して返す(.mp3 は Mp3Decoder を確保、それ以外は WavDecoder)。もう片方は閉じる/返す。
-    // 確保できなければ nullptr で、error に理由
+    PackedKind PackedKindOf(const char* path){
+        if(AudioFormat::IsMp3(path)) return PackedKind::Mp3;
+        if(AudioFormat::IsFlac(path)) return PackedKind::Flac;
+        return PackedKind::None;
+    }
+
+    // path を読む係を用意して返す(.mp3 は Mp3Decoder・.flac は FlacDecoder を共用の領域へ、それ以外は WavDecoder)。
+    // 使わない係は閉じる/返す。確保できなければ nullptr で、error に理由
     PcmFileDecoder* SelectDecoder(const char* path, const char** error){
-        if(IsMp3Path(path)){
-            if(!mp3_decoder){
-                void* mem = malloc(sizeof(Mp3Decoder));
-                if(!mem){
-                    if(error) *error = "MP3を鳴らすためのメモリが足りません";
-                    return nullptr;
-                }
-                mp3_decoder = new (mem) Mp3Decoder();
+        const PackedKind want = PackedKindOf(path);
+        if(want != PackedKind::None){
+            if(packed_kind == want){
+                LogPackedStats();       //前の曲のぶん(open() で数え直す)
             }else{
-                LogMp3Stats();      //前の曲のぶん(open() で数え直す)
+                ReleasePackedDecoder(true);     //別の形式の係は壊す(領域は残して置き直す)
+                if(!packed_mem){
+                    packed_mem = malloc(kPackedBytes);
+                    if(!packed_mem){
+                        if(error) *error = want == PackedKind::Mp3 ? "MP3を鳴らすためのメモリが足りません" : "FLACを鳴らすためのメモリが足りません";
+                        return nullptr;
+                    }
+                }
+                if(want == PackedKind::Mp3) packed_decoder = new (packed_mem) Mp3Decoder();
+                else                        packed_decoder = new (packed_mem) FlacDecoder();
+                packed_kind = want;
             }
             if(wav_decoder) wav_decoder->close();
-            return mp3_decoder;
+            return packed_decoder;
         }
-        ReleaseMp3Decoder();
+        ReleasePackedDecoder(false);
         if(!wav_decoder){
             void* mem = malloc(sizeof(WavDecoder));
             if(!mem){
@@ -396,32 +416,46 @@ namespace {
         }
     }
 
-    bool IsMp3Path(const char* path){
-        const size_t n = strlen(path);
-        return n >= 4 && strcasecmp(path + n - 4, ".mp3") == 0;
+    // 1曲ぶんの展開の速さをログへ出す(止めた・次の曲へ移ったとき。docs/design/sound.md「MP3の再生」「FLACの再生」)。
+    // MP3は展開(minimp3)だけの時間で、SDの読み込みと周波数の変換は含まない。1フレームの音の長さと比べた割合が、1コア目のおおよその負担。
+    // FLACは1ブロックの展開(SDの読み込みを含む。周波数の変換は含まない)の時間を、そのブロックの音の長さと比べる
+    void LogPackedStats(){
+        if(packed_kind == PackedKind::Mp3){
+            const Mp3Decoder* d = static_cast<const Mp3Decoder*>(packed_decoder);
+            const Mp3Decoder::DecodeStats& st = d->stats();
+            const uint32_t audio_us = d->frameAudioUs();
+            if(st.frames == 0 || audio_us == 0) return;
+            const uint32_t avg_us = (uint32_t)(st.total_us / st.frames);
+            LOG_SYS_MSG("MP3の展開: %luフレーム 平均%luus 最大%luus(1フレームの音%luusに対し平均%lu%%・最大%lu%%)",
+                        (unsigned long)st.frames, (unsigned long)avg_us, (unsigned long)st.max_us, (unsigned long)audio_us,
+                        (unsigned long)((uint64_t)avg_us * 100 / audio_us), (unsigned long)((uint64_t)st.max_us * 100 / audio_us));
+        }else if(packed_kind == PackedKind::Flac){
+            const FlacDecoder* d = static_cast<const FlacDecoder*>(packed_decoder);
+            const FlacDecoder::DecodeStats& st = d->stats();
+            const uint64_t audio_us = d->audioUs();
+            if(st.blocks == 0 || audio_us == 0) return;
+            const uint32_t avg_us = (uint32_t)(st.total_us / st.blocks);
+            const uint32_t block_us = (uint32_t)(audio_us / st.blocks);
+            LOG_SYS_MSG("FLACの展開: %luブロック 平均%luus 最大%luus(1ブロックの音%luusに対し平均%lu%%・最大%lu%%)",
+                        (unsigned long)st.blocks, (unsigned long)avg_us, (unsigned long)st.max_us, (unsigned long)block_us,
+                        (unsigned long)(st.total_us * 100 / audio_us), (unsigned long)((uint64_t)st.max_us * 100 / (block_us ? block_us : 1)));
+        }
     }
 
-    // 1曲ぶんのMP3の展開の速さをログへ出す(止めた・次の曲へ移ったとき。docs/design/sound.md「MP3の再生」)。
-    // 展開(minimp3)だけの時間で、SDの読み込みと周波数の変換は含まない。1フレームの音の長さと比べた割合が、1コア目のおおよその負担
-    void LogMp3Stats(){
-        if(!mp3_decoder) return;
-        const Mp3Decoder::DecodeStats& st = mp3_decoder->stats();
-        const uint32_t audio_us = mp3_decoder->frameAudioUs();
-        if(st.frames == 0 || audio_us == 0) return;
-        const uint32_t avg_us = (uint32_t)(st.total_us / st.frames);
-        LOG_SYS_MSG("MP3の展開: %luフレーム 平均%luus 最大%luus(1フレームの音%luusに対し平均%lu%%・最大%lu%%)",
-                    (unsigned long)st.frames, (unsigned long)avg_us, (unsigned long)st.max_us, (unsigned long)audio_us,
-                    (unsigned long)((uint64_t)avg_us * 100 / audio_us), (unsigned long)((uint64_t)st.max_us * 100 / audio_us));
-    }
-
-    // MP3の係を返す(大きいので鳴らす間だけ持つ。係は1コア目しか触らないので、いつ返してもよい)
-    void ReleaseMp3Decoder(){
-        if(!mp3_decoder) return;
-        LogMp3Stats();
-        if(pcm_decoder == mp3_decoder) pcm_decoder = nullptr;
-        mp3_decoder->~Mp3Decoder();
-        free(mp3_decoder);
-        mp3_decoder = nullptr;
+    // MP3/FLACの係を返す(大きいので鳴らす間だけ持つ。係は1コア目しか触らないので、いつ返してもよい)。
+    // keep_memory なら領域は残す(別の形式の係を置き直すとき)
+    void ReleasePackedDecoder(bool keep_memory){
+        if(packed_kind != PackedKind::None){
+            LogPackedStats();
+            if(pcm_decoder == packed_decoder) pcm_decoder = nullptr;
+            packed_decoder->~PcmFileDecoder();
+            packed_decoder = nullptr;
+            packed_kind = PackedKind::None;
+        }
+        if(!keep_memory && packed_mem){
+            free(packed_mem);
+            packed_mem = nullptr;
+        }
     }
 
     // ================================================================
@@ -1062,7 +1096,7 @@ void SoundFunctions::WavStop(){
     wav_switch_pending = false;
     decoder_is_current = true;
     if(wav_decoder) wav_decoder->close();
-    ReleaseMp3Decoder();
+    ReleasePackedDecoder(false);
 }
 
 bool SoundFunctions::WavQueueNext(const char* path){

@@ -1,5 +1,6 @@
 #include "sound/Audio_Tags.hpp"
 #include "apps/mail/Mail_Charset.hpp"
+#include "sound/Audio_Format.hpp"
 #include "OS_Data.hpp"
 
 #include <SdFat.h>
@@ -215,15 +216,99 @@ uint16_t AudioTagReader::ParseTrackNumber(const char* s){
     return (digits == 0 || v > 65535) ? 0 : (uint16_t)v;
 }
 
+void AudioTagReader::DecodeVorbisComment(const uint8_t* p, size_t n, AudioTags& out){
+    //「キー=値」。キーは大小を区別しない。値はUTF-8
+    const uint8_t* eq = static_cast<const uint8_t*>(memchr(p, '=', n));
+    if(!eq) return;
+    const size_t klen = (size_t)(eq - p);
+    const uint8_t* val = eq + 1;
+    const size_t vlen = n - klen - 1;
+    auto is = [&](const char* key){ return strlen(key) == klen && strncasecmp((const char*)p, key, klen) == 0; };
+    FixedString<PICO_STR_L>* dst = nullptr;
+    if(is("TITLE"))        dst = &out.title;
+    else if(is("ARTIST"))  dst = &out.artist;
+    else if(is("ALBUM"))   dst = &out.album;
+    else if(is("TRACKNUMBER")){
+        char num[16];
+        const size_t m = vlen < sizeof(num) - 1 ? vlen : sizeof(num) - 1;
+        memcpy(num, val, m);
+        num[m] = '\0';
+        const uint16_t t = ParseTrackNumber(num);
+        if(t) out.track = t;
+        return;
+    }
+    if(!dst) return;
+    char buf[kMaxFrameRead + 1];
+    size_t len = vlen < kMaxFrameRead ? vlen : kMaxFrameRead;
+    //UTF-8の途中で切れていたら、その文字を落とす
+    while(len > 0 && len < vlen && (val[len] & 0xC0) == 0x80) len--;
+    memcpy(buf, val, len);
+    Finish(buf, len, *dst);
+}
+
+namespace {
+    uint32_t LE32(const uint8_t* p){ return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+
+    // FLAC の VORBIS_COMMENT(メタデータブロックの種類4)。頭の ID3v2 は飛ばす。アルバムアート(PICTURE)などは飛ばして読まない
+    void ReadFlac(FsFile& f, AudioTags& out){
+        uint8_t h[10];
+        uint32_t pos = 0;
+        for(int i = 0; i < 4; i++){
+            if(!f.seek(pos) || f.read(h, 10) != 10) return;
+            if(memcmp(h, "ID3", 3) != 0) break;
+            if((h[6] | h[7] | h[8] | h[9]) & 0x80) return;
+            pos += 10 + Syncsafe(h + 6) + ((h[5] & 0x10) ? 10 : 0);
+        }
+        if(!f.seek(pos) || f.read(h, 4) != 4 || memcmp(h, "fLaC", 4) != 0) return;
+        pos += 4;
+        for(int i = 0; i < 64; i++){
+            if(!f.seek(pos) || f.read(h, 4) != 4) return;
+            const bool last = (h[0] & 0x80) != 0;
+            const uint8_t type = h[0] & 0x7F;
+            const uint32_t len = BE24(h + 1);
+            const uint32_t body = pos + 4;
+            if(type == 4 && len >= 8){
+                uint8_t w[4];
+                uint32_t at = body;
+                if(f.read(w, 4) != 4) return;
+                at += 4 + LE32(w);                      //ベンダー文字列を飛ばす
+                if(at + 4 > body + len || !f.seek(at) || f.read(w, 4) != 4) return;
+                const uint32_t count = LE32(w);
+                at += 4;
+                for(uint32_t c = 0; c < count && c < 256; c++){
+                    if(at + 4 > body + len || !f.seek(at) || f.read(w, 4) != 4) return;
+                    const uint32_t clen = LE32(w);
+                    at += 4;
+                    if(clen > body + len - at) return;
+                    if(clen > 0 && clen <= 2 * kMaxFrameRead){
+                        uint8_t buf[2 * kMaxFrameRead];
+                        if(f.read(buf, clen) != (int)clen) return;
+                        AudioTagReader::DecodeVorbisComment(buf, clen, out);
+                    }
+                    at += clen;
+                }
+                return;
+            }
+            pos = body + len;
+            if(last) return;
+        }
+    }
+}
+
 bool AudioTagReader::Read(const char* path, AudioTags& out){
     out = AudioTags();
     if(!path || !OSData::SD_usable) return false;
-    const size_t n = strlen(path);
-    if(n < 4 || strcasecmp(path + n - 4, ".mp3") != 0) return false;
+    const bool mp3 = AudioFormat::IsMp3(path);
+    const bool flac = AudioFormat::IsFlac(path);
+    if(!mp3 && !flac) return false;
     FsFile f = OSData::SD.open(path, O_RDONLY);
     if(!f) return false;
-    ReadId3v2(f, out);
-    if(out.title.empty() || out.artist.empty() || out.album.empty() || out.track == 0) ReadId3v1(f, out);
+    if(flac){
+        ReadFlac(f, out);
+    }else{
+        ReadId3v2(f, out);
+        if(out.title.empty() || out.artist.empty() || out.album.empty() || out.track == 0) ReadId3v1(f, out);
+    }
     f.close();
     return !out.empty();
 }

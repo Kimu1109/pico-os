@@ -368,7 +368,7 @@ void SettingsScene::revealOpenDropdown(){
     if(!sc) return;
     DropdownMenu* const dropdowns[] = {
         this->rate_dropdown, this->route_dropdown, this->sleep_dropdown,
-        this->text_size_dropdown, this->timezone_dropdown, this->lang_dropdown,
+        this->text_size_dropdown, this->timezone_dropdown,
     };
     DropdownMenu* open = nullptr;
     for(DropdownMenu* d : dropdowns){
@@ -522,17 +522,6 @@ void SettingsScene::updateTextSize(){
     PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_DISPLAY_CFG, "text-size", large ? "large" : "normal");
 }
 
-void SettingsScene::updateLanguage(){
-    if(!this->lang_dropdown) return;
-    const int idx = this->lang_dropdown->getSelectedIndex();
-    if(idx < 0 || idx >= (int)I18nFunctions::Lang::Count || idx == this->lang_selected_index) return;
-    this->lang_selected_index = idx;
-    I18nFunctions::SetLanguage((I18nFunctions::Lang)idx, true);
-    //出ている文字列は作ったときの言語なので、この画面を作り直す(タブはメンバに残るので「他」のまま)。
-    //下に積んだホーム画面は戻ったときに作り直される
-    SceneFunctions::Reload();
-}
-
 void SettingsScene::updateVolume(){
     if(!this->volume_slider) return;
 
@@ -614,7 +603,6 @@ void SettingsScene::onUpdate(){
     this->updateBrightness();
     this->updateSleep();
     this->updateTextSize();
-    this->updateLanguage();
     this->updateSampleRate();
     this->updateRoute();
     this->updateTimezone();
@@ -934,17 +922,4 @@ void SettingsScene::buildLateRows(const Layout& lay){
     this->timezone_dropdown->setSelectedIndex(this->tz_selected_index);
     addToTab(Tab::Time, this->timezone_title);
     addToTab(Tab::Time, this->timezone_dropdown);
-
-    // ---- 表示言語(user.cfgの language)。他タブの1行目 ----
-    // 見出しは今の言語を読めない人にも分かるよう両方の言語で書き、訳さない。項目は各言語の自分の名前
-    this->lang_title = new Label<PICO_STR_M>(left, rowY(0) + 4, "言語/Language");
-    this->lang_title->setFontSize(FontFn::Small);
-    this->lang_dropdown = new DropdownMenu(dropdown_x, rowY(0), kDropdownW);
-    for(int i = 0; i < (int)I18nFunctions::Lang::Count; i++){
-        this->lang_dropdown->add(I18nFunctions::NativeName((I18nFunctions::Lang)i));
-    }
-    this->lang_selected_index = (int)I18nFunctions::Current();
-    this->lang_dropdown->setSelectedIndex(this->lang_selected_index);
-    addToTab(Tab::Other, this->lang_title);
-    addToTab(Tab::Other, this->lang_dropdown);
 }

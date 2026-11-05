@@ -82,9 +82,7 @@ namespace {
         }
         if (ok) {
             const int index = existing >= 0 ? existing : AppFunctions::Count() - 1;
-            for (int i = 0; i < kAppLocalNames; i++) {
-                AppFunctions::SetLocalName(index, (I18nFunctions::Lang)(i + 1), cfg.local_names[i].c_str());
-            }
+            AppFunctions::SetLocalName(index, cfg.local_name.c_str());
         }
         return ok;
     }
@@ -101,10 +99,10 @@ bool LuaAppScanner::ReadAppConfig(const char* config_path, AppInfo& out) {
                                  config_path);
                 }
             } else if (strncmp(key, "name_", 5) == 0) {
-                //name_en 等。知らない言語は前方互換のため無視する
-                I18nFunctions::Lang lang;
-                if (I18nFunctions::FromCode(key + 5, lang) && lang != I18nFunctions::Lang::Ja) {
-                    if (!out.local_names[(int)lang - 1].assign(value)) {
+                //name_en 等。このビルドの言語(日本語の版は name そのもの)のものだけ読み、ほかは無視する
+                if (I18nFunctions::Current() != I18nFunctions::Lang::Ja &&
+                    strcmp(key + 5, I18nFunctions::Code(I18nFunctions::Current())) == 0) {
+                    if (!out.local_name.assign(value)) {
                         LOG_SYS_WARN("LuaAppScanner: %s の%sが長すぎるため切り詰めました", config_path, key);
                     }
                 }

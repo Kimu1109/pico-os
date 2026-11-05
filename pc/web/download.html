@@ -21,8 +21,8 @@
 <meta name="color-scheme" content="light dark">
 <script>
   // ---- 表示言語(日本語/英語)。landing / download / shell / store の4ページで同じ中身。直したら合わせる ----
-  // 決め方: URLの ?lang=ja|en > このブラウザで選んだ言語(localStorage "picoos-lang"。4ページとWeb版のOSで共通) >
-  // ブラウザの言語(ja 以外は英語。Web版のOSの既定と同じ考え方)。?lang= で来たときも覚える(ページを移っても同じ言語)。
+  // 決め方: URLの ?lang=ja|en > このブラウザで選んだ言語(localStorage "picoos-lang"。4ページで共通。Web版のOSは日本語の版で、この言語に従わない) >
+  // ブラウザの言語(ja 以外は英語)。?lang= で来たときも覚える(ページを移っても同じ言語)。
   // 訳す要素には data-i18n="鍵"(中身を差し替える。訳は固定の文字列だけなのでHTMLのまま入れる)、
   // 属性は data-i18n-attr="属性=鍵;属性=鍵"。日本語はHTMLに書いたものをそのまま使い、訳の表は英語だけ持つ。
   // JSで作る文は I18n.t("日本語", "English")

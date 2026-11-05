@@ -13,8 +13,8 @@ include してよい。同じ段の中は互いに include してよい(hal と�
 どうしても上の段へ手を伸ばす必要がある所は EXCEPTIONS に理由付きで書く。
 EXCEPTIONS に書いたのに違反でなくなった行は「古い例外」として報告する(消し忘れ防止)。
 
-ついでに、ビルド時に選ぶハードウェア機能(PICO_HW_* / HardwareConfig::)と内蔵アプリ(PICO_APP_*)を
-読むファイルが config/Hardware_Config.hpp / config/App_Config.hpp を自分で include しているかも見る
+ついでに、ビルド時に選ぶハードウェア機能(PICO_HW_* / HardwareConfig::)・内蔵アプリ(PICO_APP_*)・表示言語(PICO_LANG_*)を
+読むファイルが config/Hardware_Config.hpp / config/App_Config.hpp / config/Lang_Config.hpp を自分で include しているかも見る
 (未定義のマクロは #if で黙って0になり、載せたはずの機能やアプリが消えても気づけないため)。
 
 上の段の機能を下の段から呼びたいときは、下の段に関数ポインタ(差し込み口)を置いて
@@ -103,6 +103,7 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)
 BUILD_CONFIGS = [
     ("config/Hardware_Config.hpp", re.compile(r'\bPICO_HW_[A-Z0-9_]+\b|\bHardwareConfig::')),
     ("config/App_Config.hpp", re.compile(r'\bPICO_APP_[A-Z0-9_]+\b|\bPICO_LUA_ISO\b')),
+    ("config/Lang_Config.hpp", re.compile(r'\bPICO_LANG_(?:JA|EN)\b')),
 ]
 
 
@@ -208,7 +209,7 @@ def main():
         print("直し方は script/check_layers.py の先頭のコメントを参照")
     if missing_cfg:
         ok = False
-        print("ビルド時に選ぶもの(PICO_HW_* / HardwareConfig:: / PICO_APP_*)を読むのに、定義のヘッダを include していないファイル:")
+        print("ビルド時に選ぶもの(PICO_HW_* / HardwareConfig:: / PICO_APP_* / PICO_LANG_*)を読むのに、定義のヘッダを include していないファイル:")
         for f, cfg in missing_cfg:
             print(f"  src/{f}  → {cfg} を include すること")
     stale = set(EXCEPTIONS) - used_exceptions

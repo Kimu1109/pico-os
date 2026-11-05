@@ -11,7 +11,7 @@
 
 .po は gettext の形の一部だけ(msgid / msgstr / "#:" の出どころ)。Poedit 等でも開ける。
 1つの原文は1行の文字列にする(複数行に分けた msgid "" "…" も読めるが、書き戻すときは1行にする)。
-訳を空にした原文は表に入らない(日本語のまま出る)。
+訳を空にした原文は英語の版でも日本語のまま出る。
 
 標準ライブラリだけで動く。
 """
@@ -254,17 +254,20 @@ def render_po(uses, translations):
 # ---------------------------------------------------------------------------
 
 def render_table(table_name, uses, translations):
+    """英語の版の訳の表。英語の版の TR() は原文を参照せず表から引くだけなので(I18n_Functions.hpp)、
+    訳の無い原文も日本語のまま入れる(表に無いと何も出せない)"""
     rows = []
     for msg in uses:
-        tr = translations.get(msg, b"")
-        if tr:
-            rows.append((fnv1a(msg), msg, tr))
+        rows.append((fnv1a(msg), msg, translations.get(msg, b"")))
     rows.sort()
     out = [
         "// 生成物: python3 script/i18n.py update が i18n/ の .po から作る。手で直さない(docs/design/i18n.md)\n",
         '#include "system/I18n_Functions.hpp"\n',
+        '#include "config/Lang_Config.hpp"\n',
         "\n",
-        "// hash の昇順(I18nFunctions::Lookup() が二分探索する)\n",
+        "// 英語の版(PICO_LANG_EN=1。config/Lang_Config.hpp)だけがフラッシュに持つ\n",
+        "#if PICO_LANG_EN\n",
+        "// hash の昇順(I18nFunctions::LookupHash() が二分探索する)。訳の無い原文は日本語のまま入る\n",
         "const I18nFunctions::Entry I18nFunctions::%s[] = {\n" % table_name,
     ]
     for h, msg, tr in rows:
@@ -272,11 +275,16 @@ def render_table(table_name, uses, translations):
         note = c_escape(msg)
         if note.endswith("\\"):
             note += " ."  # 行末の \ は次の行をコメントへ繋いでしまう
-        out.append('    { 0x%08xu, "%s" }, // %s\n' % (h, c_escape(tr), note))
-    if not rows:
-        out.append("    { 0u, nullptr },\n")
+        if tr:
+            out.append('    { 0x%08xu, "%s" }, // %s\n' % (h, c_escape(tr), note))
+        else:
+            out.append('    { 0x%08xu, "%s" }, // 訳なし\n' % (h, c_escape(msg)))
+    # 番兵(数に入れない)。原文が1つも無くても配列が空にならないように
+    out.append("    { 0xffffffffu, nullptr },\n")
     out.append("};\n")
-    out.append("const size_t I18nFunctions::%sCount = %d;\n" % (table_name, len(rows)))
+    out.append("const size_t I18nFunctions::%sCount = sizeof(%s) / sizeof(%s[0]) - 1;\n"
+               % (table_name, table_name, table_name))
+    out.append("#endif\n")
     return "".join(out)
 
 

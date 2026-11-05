@@ -105,30 +105,30 @@ void SettingsScene::buildOtherTab(const Layout& lay){
     // =====================================================================
     // その他
     // =====================================================================
-    // 1行目は表示言語(ドロップダウンは一覧が下の行へ重なるので buildLateRows() で作る)
-    // ランチャで隠したアプリ(並べ替え・隠すのはランチャのタイルの長押し)。2行目
-    this->launcher_button = this->makeEditButton(rowY(1));
+    // ランチャで隠したアプリ(並べ替え・隠すのはランチャのタイルの長押し)。1行目
+    // (表示言語はビルド時に決めるので、ここでは選ばない。docs/design/i18n.md「ビルド時に選ぶ言語」)
+    this->launcher_button = this->makeEditButton(rowY(0));
     this->launcher_button->setOnPressEnd([this](){ this->openLauncherDialog(); });
     addToTab(Tab::Other, this->launcher_button);
-    this->launcher_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(1) + 2), label_w, "");
+    this->launcher_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(0) + 2), label_w, "");
     addToTab(Tab::Other, this->launcher_label);
     this->refreshLauncherLabel();
 
-    // ブラウザのホーム。3行目
-    this->home_edit_button = this->makeEditButton(rowY(2));
+    // ブラウザのホーム。2行目
+    this->home_edit_button = this->makeEditButton(rowY(1));
     this->home_edit_button->setOnPressEnd([this](){
         // 空欄で決定すると同梱サンプル文書に戻る(commitEdit()参照)
         this->openEditDialog(EditField::BrowserHome, TR("ブラウザのホームURL"), this->home_value.c_str());
     });
     addToTab(Tab::Other, this->home_edit_button);
 
-    this->home_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(2) + 2), label_w, "");
+    this->home_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(1) + 2), label_w, "");
     addToTab(Tab::Other, this->home_label);
     this->refreshHomeLabel();
 
-    // バックグラウンドの仕事(BackgroundFunctions)。4行目。一覧の画面で止める/入り切りする
+    // バックグラウンドの仕事(BackgroundFunctions)。3行目。一覧の画面で止める/入り切りする
     {
-        Button* bg_button = this->makeEditButton(rowY(3));
+        Button* bg_button = this->makeEditButton(rowY(2));
         bg_button->setText(TR("一覧"));
         bg_button->setOnPressEnd([](){ SceneFunctions::Push(new BackgroundScene()); });
         addToTab(Tab::Other, bg_button);
@@ -137,13 +137,13 @@ void SettingsScene::buildOtherTab(const Layout& lay){
         char text[64];
         if(active > 0) snprintf(text, sizeof(text), TR("バックグラウンド: %d件"), active);
         else snprintf(text, sizeof(text), TR("バックグラウンド: なし"));
-        addToTab(Tab::Other, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(3) + 2), label_w, text));
+        addToTab(Tab::Other, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(2) + 2), label_w, text));
     }
 
     // 開発者向け(/sys/debug.cfg。DevToolsFunctions)と起動時の自己診断。見出しの下に4行を並べる
     // (チェックボックスだけの行なので ROW_H より少し詰める。入りきらない分はスクロール)
     constexpr int kDevRowH = 32;
-    const int16_t dev_y = (int16_t)(rowY(4) + 2);
+    const int16_t dev_y = (int16_t)(rowY(3) + 2);
     auto* dev_title = makeRowLabel<PICO_STR_M>(left, dev_y, full_w, TR("開発者向け"));
     dev_title->setTextColor(PICO_DARKGREY);
     addToTab(Tab::Other, dev_title);

@@ -92,7 +92,6 @@ void setup() {
     CrashDumpFunctions::InstallHandlers();
     //OTPの端末の鍵。暗号化された設定(wifi.cfg・lock.cfg等)を読むものより前に
     DeviceKeyFunctions::Setup();
-    I18nFunctions::Setup();    //表示言語(user.cfgの language)。文字列を作るどの画面・常駐の部品よりも前に
     DisplayFunctions::Setup(); //display.cfgを読むのでSDより後
     ClockFunctions::Setup();   //起動時のclk_sysを覚える(スリープ中のクロック低減。PowerFunctionsより前)
     PowerFunctions::Setup();   //同上(sleep-timeout・sleep-cpu-mhz)

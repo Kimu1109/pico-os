@@ -15,7 +15,9 @@
 //   フレーム数とシーク表(TOC)を読み、そのフレーム自体は鳴らさない。VBRI(Fraunhofer)はフレーム数だけ
 // - 長さはフレーム数×1フレームのサンプル数。見出しが無ければ最初のフレームのビットレートから数える(CBRの前提。VBRだとずれる)
 // - シークはTOCがあればそれで、無ければバイト位置の比例で飛び、次のフレームの頭から読み直す(ビットの貯金は捨てる)
-// - エンコーダの頭の遅延・終わりの詰め物(LAMEの見出し)は削らない(曲の頭と終わりに数十msの無音が残る)
+// - Xing/Info に続くLAMEの見出し(LAME・ffmpeg等が書く)にエンコーダの遅延と終わりの詰め物があれば、展開した音の頭と終わりから削る
+//   (継ぎ目の無音を無くす。ループの継ぎ目・曲の長さがサンプル単位で元の音と合う)。シークした後のその周は、終わりは削らない
+//   (飛んだ先の位置が推定なので、削りすぎて音を切らないように。頭へ戻る(ループ)と元どおり削る)
 // - 周波数は PcmResampler で out_rate へ直す。途中で周波数・チャンネル数が変わるファイルは最初のフレームの値のまま扱う
 //
 // 大きさは約31KB(minimp3の状態と作業場所・展開したフレーム・読み込みバッファ)。SoundFunctions は .mp3 を鳴らす間だけ確保する
@@ -58,6 +60,20 @@ public:
     uint32_t durationMs() const override;
     uint16_t bitrateKbps() const { return this->bitrate_kbps_; }    // 最初のフレームの値
     bool hasToc() const { return this->has_toc_; }
+    // LAMEの見出しの遅延と詰め物を読めたか(読めたら頭と終わりを削る)。値は見出しに書かれたまま(展開の遅延529は含まない)
+    bool hasGapless() const { return this->has_gapless_; }
+    uint16_t encoderDelay() const { return this->enc_delay_; }
+    uint16_t encoderPadding() const { return this->enc_padding_; }
+
+    // 展開の速さ(1フレームを mp3dec_decode_frame() で展開した時間。SDの読み込み・周波数の変換は含まない)。open() で0へ戻る
+    struct DecodeStats {
+        uint32_t frames = 0;        // 音の出たフレームの数
+        uint64_t total_us = 0;
+        uint32_t max_us = 0;
+    };
+    const DecodeStats& stats() const { return this->stats_; }
+    // 1フレームが表す音の長さ(µs)。展開の時間をこれと比べると、1コア目のどれだけを使うかが分かる
+    uint32_t frameAudioUs() const { return this->rate_ ? (uint32_t)((uint64_t)this->frame_samples_ * 1000000u / this->rate_) : 0; }
 
 private:
     using Frame = PcmResampler::Frame;
@@ -71,6 +87,8 @@ private:
     bool findFrame(uint32_t from, mp3dec_frame_info_t& info, int& samples, uint32_t& frame_at);
     bool parseVbrHeader(const uint8_t* frame, size_t len);
     uint32_t seekOffset(uint32_t ms) const;
+    uint32_t fullDurationMs() const;    // 削る前の長さ(シークの位置の換算に使う)
+    void parseLameTag(const uint8_t* tag, size_t len);
 
     FsFile f_;
     bool open_ = false;
@@ -91,6 +109,16 @@ private:
     uint32_t total_frames_ = 0;     // Xing/Info/VBRI のフレーム数(無ければ0)
     bool has_toc_ = false;
     uint8_t toc_[100];              // Xing の TOC: toc_[i] は i% の時刻の位置(/256 × 長さ)
+
+    // 継ぎ目の無音を削る(LAMEの見出し)。位置は「展開した音」のサンプル(1チャンネル分)で数える
+    bool has_gapless_ = false;
+    uint16_t enc_delay_ = 0;
+    uint16_t enc_padding_ = 0;
+    uint32_t skip_start_ = 0;       // 頭から捨てる数(遅延+展開の遅延529)
+    uint32_t play_end_ = 0;         // ここまでで終わる(全フレーム分−(詰め物−529))
+    uint32_t dec_pos_ = 0;          // 次に出す展開した音の位置
+    bool trim_end_ = true;          // 終わりを削ってよいか(位置が正確=頭から読んでいる)
+    DecodeStats stats_;
 
     char path_[128] = {0};          // reopen()用に覚えておく(長すぎるパスは覚えない=reopenできない)
     uint32_t out_rate_ = 22050;

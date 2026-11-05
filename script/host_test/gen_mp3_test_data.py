@@ -31,6 +31,11 @@ CASES = [
       "-f", "lavfi", "-i", "sine=frequency=1500:sample_rate=22050:duration=1.5",
       "-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1,volume=0.5[a]", "-map", "[a]"],
      ["-c:a", "libmp3lame", "-q:a", "9", "-ac", "1", "-id3v2_version", "0", "-write_id3v1", "0"]),
+    ("kMp3Gapless",
+     "44.1kHz モノラル CBR 64kbps 0.5秒ちょうど(22050サンプル)・441Hzの余弦(振幅0.5。頭も終わりも山で、無音の所が無い)。"
+     "LAMEの見出し(遅延・詰め物)あり。継ぎ目の無音を削った長さと鳴り始め・ループの継ぎ目を見る",
+     ["-f", "lavfi", "-i", "aevalsrc=0.5*cos(2*PI*441*t):s=44100:d=0.5"],
+     ["-c:a", "libmp3lame", "-b:a", "64k", "-ac", "1", "-id3v2_version", "0", "-write_id3v1", "0"]),
 ]
 
 

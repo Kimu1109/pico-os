@@ -81,6 +81,7 @@ static void TestDecoder(){
     HostSd::files["/st.mp3"] = Bytes(kMp3CbrStereo);
     HostSd::files["/tag.mp3"] = Bytes(kMp3TaggedMono);
     HostSd::files["/vbr.mp3"] = Bytes(kMp3Vbr22k);
+    HostSd::files["/gap.mp3"] = Bytes(kMp3Gapless);
 
     check(minimp3_pico_scratch_bytes <= Mp3Decoder::kScratchBytes, "minimp3の作業場所が Mp3Decoder の中に収まる");
     printf("       作業場所 %zuB / 係全体 %zuB\n", minimp3_pico_scratch_bytes, sizeof(Mp3Decoder));
@@ -93,6 +94,7 @@ static void TestDecoder(){
         check(dec.channels() == 2 && dec.sampleRate() == 44100 && dec.outChannels() == 2 && dec.bitsPerSample() == 16, "見出し(2ch・44.1kHz)");
         check(dec.bitrateKbps() == 32, "ビットレート");
         check(dec.hasToc(), "InfoのTOCを読む");
+        check(dec.hasGapless(), "LAMEの見出しの遅延・詰め物を読む");
         printf("       長さ %ums\n", (unsigned)dec.durationMs());
         check(dec.durationMs() >= 1000 && dec.durationMs() <= 1100, "長さはInfoのフレーム数から(約1秒)");
         const auto all = ReadAll(dec);
@@ -136,6 +138,7 @@ static void TestDecoder(){
         Mp3Decoder dec;
         check(dec.open("/tag.mp3", 44100), "ID3v2の後のフレームを見つける");
         check(dec.channels() == 1 && !dec.hasToc(), "1ch・TOC無し");
+        check(!dec.hasGapless(), "Xing/Info が無ければ削らない");
         printf("       長さ %ums\n", (unsigned)dec.durationMs());
         //ID3を長さに数えると1秒を大きく超える
         check(dec.durationMs() >= 1000 && dec.durationMs() <= 1100, "長さはビットレートから(タグを数えない)");
@@ -190,6 +193,56 @@ static void TestDecoder(){
         const auto all = ReadAll(dec, 44100 * 3);
         check(!dec.finished() && all.size() == 44100u * 3, "ループなら終わらない(3秒ぶん読める)");
         check(Rms(all, 44100 * 2 + 4000, 44100 * 2 + 30000) > 1000, "3周目も鳴る");
+    }
+
+    printf("--- 継ぎ目の無音を削る ---\n");
+    {
+        Mp3Decoder dec;
+        check(dec.open("/gap.mp3", 44100), "開ける");
+        printf("       遅延 %u 詰め物 %u 長さ %ums\n", (unsigned)dec.encoderDelay(), (unsigned)dec.encoderPadding(), (unsigned)dec.durationMs());
+        check(dec.hasGapless() && dec.encoderDelay() > 0, "LAMEの見出しを読む");
+        check(dec.durationMs() == 500, "長さは元の音どおり(500ms。フレーム数×1152ではない)");
+        const auto all = ReadAll(dec);
+        printf("       %zuサンプル 頭 %.0f 終わり %.0f\n", all.size(), Rms(all, 0, 20), Rms(all, all.size() - 20, all.size()));
+        check(all.size() == 22050, "数は元の音とサンプル単位で同じ(22050)");
+        check(Rms(all, 0, 20) > 8000, "頭の1サンプル目から鳴る(遅延の無音を捨てた)");
+        check(Rms(all, all.size() - 20, all.size()) > 8000, "終わりの1サンプルまで鳴る(詰め物の無音を捨てた)");
+        //ホストテストの micros() は0を返すスタブなので、時間そのものは実機(hw mp3・停止時のログ)で見る
+        check(dec.stats().frames == 21, "展開したフレームを数える(Infoの後の21フレーム)");
+        check(dec.frameAudioUs() == 26122, "1フレームの音は26.1ms(1152/44100)");
+    }
+    {
+        Mp3Decoder dec;
+        dec.setLoop(true);
+        check(dec.open("/gap.mp3", 44100), "ループで開ける");
+        const auto all = ReadAll(dec, 22050 * 3);
+        //441Hz(1周100サンプル)の50サンプルの窓のRMSは、どこでも約11500。継ぎ目に無音があれば落ちる
+        double worst = 1e9;
+        for(size_t i = 0; i + 50 <= all.size(); i += 10){ const double r = Rms(all, i, i + 50); if(r < worst) worst = r; }
+        printf("       3周 %zuサンプル 一番静かな50サンプル RMS %.0f\n", all.size(), worst);
+        check(all.size() == 22050u * 3, "3周ぶん読める");
+        check(worst > 6000, "ループの継ぎ目に無音が入らない");
+    }
+    {
+        Mp3Decoder dec;
+        check(dec.open("/gap.mp3", 22050), "22050Hzへ下げて開ける");
+        const auto all = ReadAll(dec);
+        printf("       %zuサンプル\n", all.size());
+        check(all.size() >= 11024 && all.size() <= 11026, "数は半分(削った後の長さから)");
+    }
+    {
+        Mp3Decoder dec;
+        check(dec.open("/gap.mp3", 44100), "開ける");
+        check(dec.seekMs(250), "0.25秒へ飛ぶ");
+        const auto rest = ReadAll(dec);
+        printf("       飛んだ後 %zuサンプル\n", rest.size());
+        //飛んだ周は終わりを削らない(位置が推定なので、音を切らないように)。0.5秒のファイルはTOCが粗く(21フレーム)、
+        //飛んだ直後の数フレームはビットの貯金が無く音が出ないので、数は大まかにしか合わない
+        check(dec.finished() && rest.size() >= 4000 && rest.size() <= 13500, "飛んだ先から終わりまで鳴る");
+        check(Rms(rest, rest.size() - 20, rest.size()) < 3000, "飛んだ周は終わりの詰め物(無音)を残す");
+        check(dec.seekMs(0), "頭へ戻る");
+        const auto all = ReadAll(dec);
+        check(all.size() == 22050 && Rms(all, 0, 20) > 8000, "頭へ戻れば元どおり削る");
     }
 
     printf("--- 断り方 ---\n");
@@ -322,6 +375,80 @@ static void TestSoundFunctions(){
         check(WavPause(true) && WavPaused(), "止められる");
         WavStop();
         check(!WavPlaying() && !WavSeekMs(100), "止めたら飛べない");
+    }
+
+    printf("--- 曲と曲の間を空けない ---\n");
+    {
+        HostSd::files["/music/gap.mp3"] = Bytes(kMp3Gapless);
+        HostSd::files["/music/gap2.mp3"] = Bytes(kMp3Gapless);
+        check(!WavQueueNext("/music/gap2.mp3"), "鳴っていなければ予約できない");
+        check(WavPlay("/music/gap.mp3", false, 100), "1曲目を鳴らす");
+        const uint32_t serial = PlaybackSerial();
+        const uint32_t adv = WavAdvanceCount();
+        check(WavQueueNext("/music/gap2.mp3"), "次の曲を予約する");
+        std::vector<int16_t> l;
+        bool switched_early = false;
+        uint32_t pos_after = 0;
+        for(int i = 0; i < 600 && WavAdvanceCount() == adv; i++){
+            Run(now, 1, &l);
+            if(strcmp(WavTitle(), "gap2.mp3") == 0 && WavAdvanceCount() == adv) switched_early = true;
+        }
+        pos_after = WavPositionMs();
+        printf("       移った時点で %zuサンプル鳴らした 位置 %ums 名前 %s\n", l.size(), (unsigned)pos_after, WavTitle());
+        check(WavAdvanceCount() == adv + 1 && !switched_early, "耳に届いたときに次の曲へ移る");
+        check(strcmp(WavTitle(), "gap2.mp3") == 0 && WavDurationMs() == 500, "名前と長さは次の曲");
+        check(pos_after < 100, "位置は次の曲の頭から");
+        check(l.size() >= 22050 - 2048 && l.size() <= 22050 + 2048, "1曲目を鳴らし終えたところで移る(I2Sのバッファの分のずれまで)");
+        check(PlaybackSerial() == serial, "他のアプリに取られた扱いにしない");
+        Run(now, 600, &l);
+        check(!WavPlaying(), "2曲目の終わりで止まる");
+        //鳴り始めから2曲ぶん(44100サンプル)に、無音の所が無い
+        size_t start = 0;
+        while(start < l.size() && abs(l[start]) < 1000) start++;
+        const double mid = Rms(l, start + 5000, start + 15000);
+        double worst = 1e9;
+        for(size_t i = start; i + 50 <= start + 44100 && i + 50 <= l.size(); i += 10){
+            const double r = Rms(l, i, i + 50);
+            if(r < worst) worst = r;
+        }
+        printf("       2曲 中ほどRMS %.0f 一番静かな50サンプル %.0f\n", mid, worst);
+        check(worst > mid * 0.6, "曲と曲の間に無音が入らない");
+        check(Rms(l, start + 44100 + 100, start + 44100 + 2000) < 200, "2曲ぶんで終わる(余分に鳴らさない)");
+    }
+    {
+        check(WavPlay("/music/gap.mp3", false, 100) && WavQueueNext("/music/gap2.mp3"), "予約して");
+        check(WavSeekMs(250), "1曲目の中で飛んでも");
+        const uint32_t adv = WavAdvanceCount();
+        Run(now, 600);
+        check(WavAdvanceCount() == adv + 1, "予約は残り、次の曲へ続けて移る");
+        WavStop();
+        //次の曲を続けて積んだ後(1曲目の終わりぎわ。列は約370ms先読みする)に、1曲目の中で飛ぶ
+        check(WavPlay("/music/gap.mp3", false, 100) && WavQueueNext("/music/gap2.mp3"), "もう一度予約して");
+        const uint32_t adv2 = WavAdvanceCount();
+        for(int i = 0; i < 600 && WavPositionMs() < 420; i++) Run(now, 1);
+        check(!WavClearNext() && WavAdvanceCount() == adv2 && strcmp(WavTitle(), "gap.mp3") == 0, "終わりぎわには次の曲を積み終えている(取り消せない)");
+        check(WavSeekMs(100) && strcmp(WavTitle(), "gap.mp3") == 0, "積んだ後でも1曲目の中で飛べる");
+        const uint32_t p = WavPositionMs();
+        printf("       飛んだ位置 %ums\n", (unsigned)p);
+        check(p >= 50 && p <= 150, "位置は1曲目の中");
+        Run(now, 600);
+        check(WavAdvanceCount() == adv2 + 1 && !WavPlaying(), "1曲目を開き直し、次の曲へは1回だけ続けて移る");
+        check(WavPlay("/music/gap.mp3", false, 100) && WavQueueNext("/music/gap2.mp3") && WavClearNext(), "続けて積む前なら取り消せる");
+        Run(now, 600);
+        check(WavAdvanceCount() == adv2 + 1 && !WavPlaying(), "取り消せば1曲で終わる");
+        check(WavPlay("/music/gap.mp3", true, 100) && !WavQueueNext("/music/gap2.mp3"), "ループ中は予約できない");
+        WavStop();
+    }
+    {
+        const uint32_t adv = WavAdvanceCount();
+        check(WavPlay("/music/st.mp3", false, 100) && WavQueueNext("/music/gap.mp3"), "ステレオの曲の次にモノラルを予約");
+        Run(now, 600);
+        check(WavAdvanceCount() == adv && !WavPlaying(), "チャンネル数が違えば続けず、1曲で終わる");
+        check(WavPlay("/music/gap.mp3", false, 100) && WavQueueNext("/music/bad.mp3"), "読めない曲を予約");
+        Run(now, 600);
+        check(WavAdvanceCount() == adv && !WavPlaying(), "読めなければ続けず、1曲で終わる");
+        check(WavSeekMs(100) && WavPlaying() && strcmp(WavTitle(), "gap.mp3") == 0, "その後も今の曲の中で飛べる");
+        WavStop();
     }
 
     printf("--- 読めないMP3・WAVへの切り替え ---\n");

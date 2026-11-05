@@ -1,9 +1,13 @@
 #include "sound/Mp3_Decoder.hpp"
 #include "OS_Data.hpp"
 
+#include <Arduino.h>
 #include <cstring>
 
 namespace {
+    // MP3の展開(minimp3を含むふつうのデコーダ)は、エンコーダの遅延とは別に529サンプル遅れて音が出る
+    constexpr uint32_t kDecoderDelay = 528 + 1;
+
     uint32_t BE32(const uint8_t* p){ return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3]; }
 
     // ID3v2 の大きさ(7bitずつの4バイト)。タグでなければ0
@@ -40,6 +44,12 @@ void Mp3Decoder::close(){
 
 uint32_t Mp3Decoder::durationMs() const {
     if(this->rate_ == 0) return 0;
+    if(this->has_gapless_) return (uint32_t)((uint64_t)(this->play_end_ - this->skip_start_) * 1000 / this->rate_);
+    return this->fullDurationMs();
+}
+
+uint32_t Mp3Decoder::fullDurationMs() const {
+    if(this->rate_ == 0) return 0;
     if(this->total_frames_ > 0){
         return (uint32_t)((uint64_t)this->total_frames_ * this->frame_samples_ * 1000 / this->rate_);
     }
@@ -56,6 +66,10 @@ bool Mp3Decoder::open(const char* path, uint32_t out_rate){
     this->bitrate_kbps_ = this->frame_samples_ = 0;
     this->data_start_ = this->data_end_ = this->total_frames_ = 0;
     this->has_toc_ = false;
+    this->has_gapless_ = false;
+    this->enc_delay_ = this->enc_padding_ = 0;
+    this->skip_start_ = this->play_end_ = 0;
+    this->stats_ = DecodeStats();
     if(!OSData::SD_usable) return this->fail(Error::NoSd);
     //minimp3の作業場所が足りなければ読めない(実機・PCとも足りる大きさにしてある)
     if(minimp3_pico_scratch_bytes > sizeof(this->scratch_)) return this->fail(Error::OpenFailed);
@@ -120,6 +134,19 @@ bool Mp3Decoder::parseHeader(){
         }
     }
     if(this->data_start_ >= this->data_end_) return this->fail(Error::NoData);
+
+    //LAMEの見出しがあれば、頭と終わりの削る数を決める。フレーム数が無い・合わない値なら削らない
+    if(this->has_gapless_){
+        const uint64_t total = (uint64_t)this->total_frames_ * this->frame_samples_;
+        const uint32_t pad_trim = this->enc_padding_ > kDecoderDelay ? this->enc_padding_ - kDecoderDelay : 0;
+        const uint64_t start = (uint64_t)this->enc_delay_ + kDecoderDelay;
+        if(total == 0 || total > 0xFFFFFFFFu || start + pad_trim >= total){
+            this->has_gapless_ = false;
+        }else{
+            this->skip_start_ = (uint32_t)start;
+            this->play_end_ = (uint32_t)(total - pad_trim);
+        }
+    }
     return true;
 }
 
@@ -160,10 +187,14 @@ bool Mp3Decoder::parseVbrHeader(const uint8_t* frame, size_t len){
             p += 4;
         }
         if(flags & 2) p += 4;       //バイト数(長さは data_start_〜data_end_ で数える)
-        if((flags & 4) && len >= p + 100){
+        if(flags & 4){
+            if(len < p + 100) return true;
             memcpy(this->toc_, frame + p, 100);
             this->has_toc_ = true;
+            p += 100;
         }
+        if(flags & 8) p += 4;       //品質
+        if(len > p) this->parseLameTag(frame + p, len - p);
         return true;
     }
     if(len >= 4 + 32 + 18 && memcmp(frame + 4 + 32, "VBRI", 4) == 0){
@@ -171,6 +202,21 @@ bool Mp3Decoder::parseVbrHeader(const uint8_t* frame, size_t len){
         return true;
     }
     return false;
+}
+
+// Xing/Info の後に続くLAMEの見出し(36バイト)から、エンコーダの遅延と終わりの詰め物を読む。
+// 頭の9バイトはエンコーダの名前と版("LAME3.100" / ffmpegは"Lavc60.31" 等)、21バイト目からの3バイトが 遅延12bit・詰め物12bit
+void Mp3Decoder::parseLameTag(const uint8_t* tag, size_t len){
+    if(len < 24) return;
+    //名前の頭4文字が英数字でなければ見出しではない(古いXingだけのファイルはここに音のデータが続く)
+    for(int i = 0; i < 4; i++){
+        const uint8_t c = tag[i];
+        if(!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) return;
+    }
+    if(this->total_frames_ == 0) return;    //全体の数が分からなければ終わりを決められない
+    this->enc_delay_ = (uint16_t)(((uint16_t)tag[21] << 4) | (tag[22] >> 4));
+    this->enc_padding_ = (uint16_t)(((uint16_t)(tag[22] & 0x0F) << 8) | tag[23]);
+    this->has_gapless_ = true;
 }
 
 // 読み込みバッファを詰め直す(残りを頭へ寄せ、空いた分を音のデータの終わりまで読む)
@@ -202,6 +248,9 @@ void Mp3Decoder::restartAt(uint32_t pos){
     this->file_pos_ = pos;
     this->buf_pos_ = this->buf_len_ = 0;
     this->pcm_count_ = this->pcm_pos_ = 0;
+    //頭から読み直すときだけ位置が正確に分かる(飛んだ先の位置は seekMs() が推定で入れ直す)
+    this->dec_pos_ = 0;
+    this->trim_end_ = pos == this->data_start_;
     mp3dec_init(&this->dec_);
 }
 
@@ -220,7 +269,14 @@ bool Mp3Decoder::decodeNext(){
             continue;
         }
         mp3dec_frame_info_t info;
+        const uint32_t t0 = (uint32_t)micros();
         const int samples = mp3dec_decode_frame(&this->dec_, this->buf_ + this->buf_pos_, (int)avail, this->pcm_, &info);
+        if(samples > 0){
+            const uint32_t us = (uint32_t)micros() - t0;
+            this->stats_.frames++;
+            this->stats_.total_us += us;
+            if(us > this->stats_.max_us) this->stats_.max_us = us;
+        }
         //frame_bytes が0なのは、頭のフレームがバッファに収まりきらないとき(終わりで切れている・大きすぎる)。捨てて先へ
         const size_t used = info.frame_bytes > 0 ? (size_t)info.frame_bytes : avail;
         this->buf_pos_ += used < avail ? used : avail;
@@ -235,9 +291,20 @@ bool Mp3Decoder::decodeNext(){
 }
 
 bool Mp3Decoder::rawSource(Frame& v){
-    if(this->pcm_pos_ >= this->pcm_count_ && !this->decodeNext()) return false;
-    const int16_t* p = this->pcm_ + (size_t)this->pcm_pos_ * this->pcm_ch_;
-    this->pcm_pos_++;
+    const int16_t* p = nullptr;
+    while(true){
+        //削る終わりまで来たら、ループなら頭から(削る頭はまた捨てる)、そうでなければ終わり
+        if(this->has_gapless_ && this->trim_end_ && this->dec_pos_ >= this->play_end_){
+            if(!this->loop_) return false;
+            this->restartAt(this->data_start_);
+        }
+        if(this->pcm_pos_ >= this->pcm_count_ && !this->decodeNext()) return false;
+        p = this->pcm_ + (size_t)this->pcm_pos_ * this->pcm_ch_;
+        this->pcm_pos_++;
+        this->dec_pos_++;
+        //頭の遅延は捨てる(1フレームより長いこともあるので、出るまで回す)
+        if(!this->has_gapless_ || this->dec_pos_ > this->skip_start_) break;
+    }
     if(this->pcm_ch_ == 2){
         if(this->lanes_ == 2){
             v.v[0] = p[0];
@@ -252,7 +319,7 @@ bool Mp3Decoder::rawSource(Frame& v){
 }
 
 uint32_t Mp3Decoder::seekOffset(uint32_t ms) const {
-    const uint32_t dur = this->durationMs();
+    const uint32_t dur = this->fullDurationMs();
     const uint32_t len = this->data_end_ - this->data_start_;
     if(dur == 0 || len == 0) return this->data_start_;
     if(ms >= dur) ms = dur - 1;
@@ -274,7 +341,12 @@ uint32_t Mp3Decoder::seekOffset(uint32_t ms) const {
 
 bool Mp3Decoder::seekMs(uint32_t ms){
     if(!this->open_ && !this->reopen()) return false;
-    this->restartAt(this->seekOffset(ms));
+    //利用者の時刻(削った後)を、ファイルの時刻(削る前。頭の遅延の分だけ後ろ)へ直してから位置を引く。0なら頭そのもの
+    const uint32_t lead_ms = this->has_gapless_ && this->rate_ ? (uint32_t)((uint64_t)this->skip_start_ * 1000 / this->rate_) : 0;
+    const uint32_t off = ms == 0 ? this->data_start_ : this->seekOffset(ms + lead_ms);
+    this->restartAt(off);
+    //頭以外へ飛んだら、位置は時刻からの推定(終わりは削らない。restartAt() 参照)
+    if(off != this->data_start_) this->dec_pos_ = this->skip_start_ + (uint32_t)((uint64_t)ms * this->rate_ / 1000);
     this->rs_.reset();
     this->finished_ = false;
     return true;

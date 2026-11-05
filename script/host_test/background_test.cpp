@@ -26,6 +26,7 @@
 #include "storage/SD_Path.hpp"
 #include "consts.hpp"
 #include "OS_Data.hpp"
+#include "mp3_test_data.hpp"
 
 #include <Arduino.h>
 #include <I2S.h>
@@ -277,6 +278,39 @@ static void TestMusic(){
     check(!MusicService::HasQueue() && !SoundFunctions::MusicPlaying(), "[停止]で止めて状態を返す");
     MusicService::SetShuffle(false);
     MusicService::CycleRepeat(); MusicService::CycleRepeat();    //All → One → Off
+
+    //曲と曲の間を空けない: 次のMP3は SoundFunctions へ予約され、前の曲の列に続けて積まれる
+    {
+        const std::string gap((const char*)kMp3Gapless, sizeof(kMp3Gapless));
+        HostSd::files["/music/m1.mp3"] = gap;
+        HostSd::files["/music/m2.mp3"] = gap;
+        HostSd::files["/music/st.mp3"] = std::string((const char*)kMp3CbrStereo, sizeof(kMp3CbrStereo));
+        MusicService::Track m[3];
+        m[0].name.assign("m1.mp3"); m[1].name.assign("m2.mp3"); m[2].name.assign("st.mp3");
+        const uint32_t adv0 = SoundFunctions::WavAdvanceCount();
+        check(MusicService::StartPlaylist(m, 3, nullptr, 0, 4, "MP3", 0), "MP3の並びを鳴らす");
+        const uint32_t serial = SoundFunctions::PlaybackSerial();
+        check(StepUntil([](){ return MusicService::Current() == 1; }), "2曲目へ進む");
+        check(SoundFunctions::WavAdvanceCount() == adv0 + 1 && SoundFunctions::PlaybackSerial() == serial,
+              "2曲目は1曲目の列に続けて積んだ(鳴らし直していない)");
+        check(MusicService::Active() && strcmp(SoundFunctions::WavTitle(), "m2.mp3") == 0 && MusicService::Position() == 1, "2曲目が鳴っている");
+        //モノラルの次のステレオは続けて積めないので、今までどおり鳴り終わってから鳴らす
+        check(StepUntil([](){ return MusicService::Current() == 2; }), "3曲目へ進む");
+        check(SoundFunctions::WavAdvanceCount() == adv0 + 1 && SoundFunctions::PlaybackSerial() != serial, "チャンネル数が違えば鳴らし直す");
+        check(StepUntil([](){ return MusicService::Finished(); }), "最後で止まる");
+
+        //リピート 1曲: 同じ曲を続けて積むので、繰り返しの間も空かない
+        MusicService::CycleRepeat(); MusicService::CycleRepeat();   //Off → All → One
+        MusicService::PlayTrack(0);
+        const uint32_t adv1 = SoundFunctions::WavAdvanceCount();
+        check(StepUntil([adv1](){ return SoundFunctions::WavAdvanceCount() >= adv1 + 2; }), "1曲リピートも続けて積む");
+        check(MusicService::Current() == 0 && MusicService::Active(), "同じ曲のまま鳴り続ける");
+        //リピートを変えたら予約を決め直す(Off なら最後の曲の次は無い)
+        MusicService::CycleRepeat();    //One → Off
+        MusicService::PlayTrack(2);
+        check(StepUntil([](){ return MusicService::Finished(); }), "リピートしないなら最後の曲で止まる");
+        MusicService::Stop();
+    }
     BackgroundFunctions::Test::Reset();
 }
 

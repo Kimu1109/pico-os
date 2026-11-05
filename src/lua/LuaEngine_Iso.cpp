@@ -80,6 +80,8 @@ struct LuaEngineIso {
         if (last_gc != 0 && now - last_gc < 1000) { skipped++; return; }
         last_gc = now ? now : 1;
         lua_gc(L, LUA_GCCOLLECT, 0);
+        // 集めて空いたプールの塊もヒープへ返す(区分ごとに1つ持っている空の塊も)
+        (*static_cast<LuaEngine**>(lua_getextraspace(L)))->releasePoolEmpty();
         if (last_log == 0 || now - last_log >= 5000) {
             LOG_APP_WARN("pico.iso: メモリが足りないので、Luaのごみを集めてやり直します(集めずに失敗したのは %u 回)", (unsigned)skipped);
             last_log = now ? now : 1;

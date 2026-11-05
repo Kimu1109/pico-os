@@ -113,6 +113,7 @@ uint32_t SoundFunctions::WavDurationMs(){ return 0; }
 bool SoundFunctions::WavSeekMs(uint32_t){ return false; }
 uint32_t SoundFunctions::WavUnderruns(){ return 0; }
 bool SoundFunctions::WavQueueNext(const char*){ return false; }
+void SoundFunctions::WavSetVolume(uint8_t){}
 bool SoundFunctions::WavClearNext(){ return true; }
 uint32_t SoundFunctions::WavAdvanceCount(){ return 0; }
 

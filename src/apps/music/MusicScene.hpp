@@ -17,7 +17,7 @@ template<size_t N> class Label;
 // 直下に置いた曲は「すべての曲」(直下+全フォルダの曲)にだけ並ぶ。
 //
 //  ライブラリ                         プレイリスト
-//  [戻る] ミュージック                [戻る] 旅の曲 (12)      [▶全曲]
+//  [戻る] ミュージック        [⌛]     [戻る] 旅の曲 (12)  [⌛][▶全曲]
 //  ♪ すべての曲                       ♪ 01_opening
 //  📁 旅の曲                          ♪ 02_field        ← 鳴っている曲は緑
 //  📁 ゲーム                           …
@@ -34,6 +34,7 @@ template<size_t N> class Label;
 // - **再生そのものは MusicService(OS常駐)が持つ**ので、アプリを閉じても曲は鳴り続け、終われば次の曲へ進む。
 //   止めるのはこの画面か、設定アプリの「バックグラウンド」の一覧(ステータスバーの音符の印が動いている合図)。
 //   この画面は MusicService を読んで見せ、ボタンで操作するだけ
+// - [⌛] = スリープタイマー(オフ・15〜90分・この曲の終わりで。MusicService)。動いている間は残りの分か「曲末」を出す
 // - 物理キーボード: n=次 p=前 k=再生/一時停止 s=ミックス r=リピート
 class MusicScene : public Scene {
     public:
@@ -67,6 +68,9 @@ class MusicScene : public Scene {
         void startPlaylist(int track);
         void onPanelButton(int button);
         void showErrorDetail();
+        void showSleepPicker();
+        // スリープタイマーのボタンの文字(残りの分)を、変わったときだけ出し直す
+        void refreshSleepButton();
         // 見ているプレイリストが鳴っている順番と同じか(フォルダの並びが変わっていれば別物)
         bool viewIsQueue() const;
 
@@ -75,6 +79,8 @@ class MusicScene : public Scene {
 
         Button* back_button = nullptr;
         Button* play_all_button = nullptr;
+        Button* sleep_button = nullptr;
+        int shown_sleep = -2;       // ボタンに出している値(0=オフ、-1=曲末、それ以外は分)
         Label<PICO_STR_M>* title_label = nullptr;
         ScrollList* list = nullptr;
         MusicPlayerPanel* panel = nullptr;

@@ -149,6 +149,54 @@ int main(){
     s->pressKey(LockScreen::kKeyRing);
     check(stopped == 1 && IsLocked(), "ロックを解かずに止められる");
 
+    // ---- ミュージックの再生操作 ----
+    static bool media = false, playing = true;
+    static uint32_t media_rev = 1;
+    static int sleep_min = 0;
+    static int cmds[3] = {0, 0, 0};
+    media_state = [](bool& p, uint32_t& rev, int& sm){ p = playing; rev = media_rev; sm = sleep_min; return media; };
+    media_title = [](){ return "とても長い曲の名前がここに入ってロック画面の幅には収まらない"; };
+    media_command = [](MediaCommand c){ cmds[(int)c]++; };
+    s->tick();
+    auto find_key = [s](int key){
+        for(int y = 0; y < SCREEN_HEIGHT; y++) for(int x = 0; x < SCREEN_WIDTH; x++) if(s->keyAt(x, y) == key) return true;
+        return false;
+    };
+    check(!find_key(LockScreen::kKeyPlay), "曲が無ければ再生操作を出さない");
+    media = true;
+    s->tick();
+    check(find_key(LockScreen::kKeyPrev) && find_key(LockScreen::kKeyPlay) && find_key(LockScreen::kKeyNext), "曲があれば前・再生・次を出す");
+    {
+        int x, y, w, h;
+        const int keys[] = {LockScreen::kKeyPrev, LockScreen::kKeyPlay, LockScreen::kKeyNext};
+        for(int k : keys){
+            for(y = 0; y < SCREEN_HEIGHT && s->keyAt(SCREEN_WIDTH - 10 - (LockScreen::kKeyNext - k) * 41, y) != k; y++){}
+            OSData::touchX = (int16_t)(SCREEN_WIDTH - 10 - (LockScreen::kKeyNext - k) * 41); OSData::touchY = (int16_t)(y + 5);
+            s->causeOnPressStart(); s->causeOnPressEnd();
+        }
+        (void)x; (void)w; (void)h;
+    }
+    check(cmds[0] == 1 && cmds[1] == 1 && cmds[2] == 1 && IsLocked(), "タップで前・再生/一時停止・次(ロックは解けない)");
+    check(s->keyAt(20, LockScreen::kMediaY + 5) == -1, "曲名の所は押しても何もしない");
+    {
+        KeyInputFunctions::Event ev{};
+        ev.key = KeyInputFunctions::Key::PlayPause;
+        s->onKey(ev);
+        check(cmds[1] == 2, "キーボードのメディアキーも効く");
+    }
+    //文字の付き方が変わるだけで落ちない(描画はスタブ)。スリープタイマーの残り
+    sleep_min = 23; s->tick(); s->render();
+    sleep_min = -1; s->tick(); s->render();
+    //鳴っていれば止めるボタンを優先し、再生操作は出さない
+    ringing = true;
+    s->tick();
+    check(find_key(LockScreen::kKeyRing) && !find_key(LockScreen::kKeyPlay), "アラームが鳴っている間は止めるボタンを優先");
+    s->pressKey(LockScreen::kKeyRing);
+    s->tick();
+    check(find_key(LockScreen::kKeyPlay), "止めたら再生操作に戻る");
+    media = false;
+    s->tick();
+
     // ---- 変える・外す ----
     TypePin(s, "2468");
     BeginChange();

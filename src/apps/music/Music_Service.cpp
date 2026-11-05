@@ -58,6 +58,20 @@ namespace {
     PlayQueue::Repeat repeat = PlayQueue::Repeat::Off;
     bool settings_loaded = false;
     uint32_t revision = 0;
+
+    // スリープタイマー
+    MusicService::SleepMode sleep_mode = MusicService::SleepMode::Off;
+    uint32_t sleep_deadline_ms = 0;
+    bool sleep_fading = false;
+
+    void ResetSleep(){
+        if(sleep_mode == MusicService::SleepMode::Off) return;
+        sleep_mode = MusicService::SleepMode::Off;
+        //小さくしていた途中なら戻す(次の WavPlay() も戻すが、止めずに取り消したときのため)
+        if(sleep_fading) SoundFunctions::WavSetVolume(100);
+        sleep_fading = false;
+        revision++;
+    }
     uint32_t rng_seed = 0x5A17u;
 
     bool EndsWith(const char* name, const char* ext){
@@ -106,6 +120,7 @@ namespace {
         st->kind = Kind::None;
         st->next_planned = false;
         st->next_track = -1;
+        ResetSleep();
     }
 
     // 曲のSD上の場所。長すぎて入らなければ false
@@ -132,6 +147,8 @@ namespace {
         st->next_planned = true;
         st->next_track = -1;
         if(!OSData::SD_usable) return;
+        //「この曲の終わりで止める」なら次は積まない
+        if(sleep_mode == MusicService::SleepMode::TrackEnd) return;
         PlayQueue q = st->queue;
         const int n = q.next(false);
         if(n < 0 || !MusicService::IsWavOrMp3(st->tracks[n].name.c_str())) return;
@@ -227,6 +244,13 @@ namespace {
 
     void Advance(bool by_user){
         if(!st || st->queue.count() == 0) return;
+        //「この曲の終わりで止める」: 曲の終わりで進むときは止める(利用者の「次へ」は進む)
+        if(!by_user && sleep_mode == MusicService::SleepMode::TrackEnd){
+            LOG_APP_MSG("ミュージック: スリープタイマー(曲の終わり)で止めました");
+            StopSound();
+            revision++;
+            return;
+        }
         const int next = st->queue.next(by_user);
         if(next < 0){
             //リピートしない: 最後まで鳴らした。次に再生を押したら頭から
@@ -397,11 +421,28 @@ void MusicService::Release(){
 
 void MusicService::Update(){
     if(!st || st->kind == Kind::None) return;
+    //スリープタイマー: 最後の kSleepFadeMs はWAV/MP3を小さくしていき、時間になったら止める
+    if(sleep_mode == SleepMode::Timer && !st->interrupted && SoundFunctions::PlaybackSerial() == st->serial){
+        const int32_t left = (int32_t)(sleep_deadline_ms - millis());
+        if(left <= 0){
+            LOG_APP_MSG("ミュージック: スリープタイマーで止めました");
+            StopSound();
+            revision++;
+            return;
+        }
+        if(st->kind == Kind::Wav && (uint32_t)left < kSleepFadeMs){
+            sleep_fading = true;
+            SoundFunctions::WavSetVolume((uint8_t)((uint64_t)left * 100 / kSleepFadeMs));
+        }
+    }
     //他のアプリが曲/WAVを鳴らした(周波数の切り替えで止まった)。自分の曲は差し替えられたので進まない
     if(SoundFunctions::PlaybackSerial() != st->serial){
         LOG_APP_MSG("ミュージック: 他のアプリが音を使ったため再生を止めました");
         //自分のWAVが鳴り続けている(他のアプリがMMLを鳴らした)なら、次の曲へは続けない
         if(st->kind == Kind::Wav) SoundFunctions::WavClearNext();
+        //スリープタイマーも取り消す(相手の音の音量には触らない)
+        sleep_fading = false;
+        ResetSleep();
         st->next_planned = false;
         st->next_track = -1;
         st->kind = Kind::None;
@@ -442,6 +483,43 @@ void MusicService::Update(){
         const uint32_t total = SoundFunctions::MusicTotalMs(&loops);
         if(loops && total > 0 && SoundFunctions::MusicElapsedMs() >= total) Advance(false);
     }
+}
+
+void MusicService::SetSleepTimer(uint32_t minutes){
+    if(minutes == 0){ ClearSleepTimer(); return; }
+    if(sleep_fading) SoundFunctions::WavSetVolume(100);
+    sleep_fading = false;
+    sleep_mode = SleepMode::Timer;
+    sleep_deadline_ms = millis() + minutes * 60000u;
+    revision++;
+}
+
+void MusicService::SetSleepAtTrackEnd(){
+    if(sleep_fading) SoundFunctions::WavSetVolume(100);
+    sleep_fading = false;
+    sleep_mode = SleepMode::TrackEnd;
+    //もう次の曲を予約していれば取り消す(続けて積んだ後なら、その次の曲の終わりで止まる)
+    if(st && st->next_planned){
+        if(st->next_track < 0 || SoundFunctions::WavClearNext()){
+            st->next_planned = false;
+            st->next_track = -1;
+        }
+    }
+    revision++;
+}
+
+void MusicService::ClearSleepTimer(){
+    ResetSleep();
+    //「曲の終わりで」を取り消したら、次の曲を決め直す
+    if(st) DropNextPlan();
+}
+
+MusicService::SleepMode MusicService::SleepTimerMode(){ return sleep_mode; }
+
+uint32_t MusicService::SleepRemainingMs(){
+    if(sleep_mode != SleepMode::Timer) return 0;
+    const int32_t left = (int32_t)(sleep_deadline_ms - millis());
+    return left > 0 ? (uint32_t)left : 0;
 }
 
 // ================================================================ 読む
@@ -508,6 +586,8 @@ void MusicService::LoadSettings(){
 }
 
 void MusicService::Test::Reset(){
+    sleep_mode = SleepMode::Off;
+    sleep_fading = false;
     delete st;
     st = nullptr;
     shuffle = false;

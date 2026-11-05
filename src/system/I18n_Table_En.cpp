@@ -45,6 +45,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x05325543u, "Not a .pvid video" }, // .pvidの動画ではありません
     { 0x05351ccau, "Next" }, // 次
     { 0x055dfa42u, "Device key: %s" }, // 端末の鍵: %s
+    { 0x060683abu, "Sleep timer" }, // スリープタイマー
     { 0x0611693cu, "Unreadable audio file" }, // 読めない音のファイルです
     { 0x0648c213u, "Time on %d/%d" }, // %d/%d の時刻
     { 0x068e88f5u, "Could not save the IP settings" }, // IPの設定を保存できませんでした
@@ -104,6 +105,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0ea9e22du, "Developer" }, // 開発者向け
     { 0x0ee398c7u, "What to do with %s?" }, // %s をどうしますか?
     { 0x0f2a8098u, "New versions of %s and others (%d apps)" }, // %s など%d件のアプリに新しい版があります
+    { 0x0f453030u, "Stop after this track" }, // この曲の終わりで止める
     { 0x0fabb517u, "Clock is not set" }, // 時計が合っていません
     { 0x101ca2b4u, "Cannot open the book" }, // 本を開けません
     { 0x1023f6a4u, "  [running]" }, //   [動作中]
@@ -292,6 +294,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x2d0b11a4u, "Nothing runs in the background" }, // バックグラウンドで動くものはありません
     { 0x2dd81fb6u, "(not set)" }, // (未設定)
     { 0x2de33dd6u, "Cannot get an access token: %s" }, // アクセストークンを取れません: %s
+    { 0x2e0b083au, " · stops in %dm" }, //  ・%d分で停止
     { 0x2e8448f8u, "Server has no ssh-ed25519 host key" }, // サーバに ssh-ed25519 のホスト鍵がありません
     { 0x2e86e69cu, "Unexpected file list (files.tsv)" }, // ファイル一覧(files.tsv)の形式が違います
     { 0x2ea78303u, "Cannot send to the portal" }, // ポータルへ送れません
@@ -661,6 +664,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x711e8862u, "Choose ROM" }, // ROMを選ぶ
     { 0x7174a291u, "cannot send the handshake" }, // 開始の挨拶を送れない
     { 0x71be189au, "Restarting" }, // 再起動します
+    { 0x71c04367u, "End" }, // 曲末
     { 0x7209ce14u, "No notification permission" }, // 通知の権限がありません
     { 0x72281d91u, "%s (at %d)" }, // %s (位置 %d)
     { 0x723647c1u, "Unknown error" }, // 不明な誤り
@@ -804,6 +808,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x8946b352u, "Size: wide" }, // 大きさ: 横長
     { 0x8955a234u, "Token saved" }, // トークンを保存しました
     { 0x897c1924u, "Cannot open the ROM" }, // ROMを開けません
+    { 0x898c5dedu, "%dm" }, // %d分
     { 0x89d3cda4u, "Widget" }, // ウィジェット
     { 0x8a0cd64bu, "Roll back" }, // 戻す
     { 0x8a242ca2u, "Put .mml or .wav files in /music/, or make folders (playlists)" }, // /music/ に .mml か .wav を置くか、フォルダ(=プレイリスト)を作ってください
@@ -927,6 +932,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x9e2dc2a3u, "Write to the staging area failed (out of space?)" }, // 置き場への書き込みに失敗しました(空きが足りない?)
     { 0x9e358d2eu, "Recording stopped: %s\n(saved up to %s)" }, // 録音を途中で止めました: %s\n(%s までは保存されています)
     { 0x9e458b44u, "Update" }, // 本体の更新
+    { 0x9e698480u, " · after track" }, //  ・曲の終わりで停止
     { 0x9e755ffcu, "Enter again" }, // もう一度入力
     { 0x9eabeae5u, "10 min" }, // 10分
     { 0x9f3a2f2fu, "Added" }, // 追加しました
@@ -988,6 +994,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xa85c0c13u, "Output" }, // 出力先
     { 0xa884d8f1u, "Calc" }, // 電卓
     { 0xa8cac8f1u, "Checked %lum ago (%d rooms)" }, // %lu分前に確認(%d部屋)
+    { 0xa8f70dbeu, "Stop after %d min" }, // %d分後に止める
     { 0xa8f886ddu, "carat" }, // カラット
     { 0xa920a53eu, "Attribute value is not quoted" }, // 属性値が引用符で囲まれていません
     { 0xa93fc28cu, "Cannot read the previous version's file list" }, // 前の版の一覧を読めません
@@ -1307,6 +1314,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xe1d6787du, "%s@%s %s" }, // %s@%s の%s
     { 0xe206e2e8u, "Checks installed apps for updates once a day" }, // 1日1回、入っているアプリの更新を確かめます
     { 0xe222959bu, "Settings" }, // 設定
+    { 0xe2480a1fu, "%d/%d (%s)" }, // %d/%d(%s)
     { 0xe29dfa50u, "Israeli shekel" }, // イスラエルシェケル
     { 0xe2b55d7eu, "atmosphere" }, // 気圧
     { 0xe324e4adu, "Silent" }, // 音なし
@@ -1472,4 +1480,4 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xffdae38bu, "Fetching %s…" }, // %s を取得中…
     { 0xfff3714fu, "No" }, // いいえ
 };
-const size_t I18nFunctions::kTableEnCount = 1468;
+const size_t I18nFunctions::kTableEnCount = 1476;

@@ -310,6 +310,45 @@ static void TestMusic(){
         MusicService::PlayTrack(2);
         check(StepUntil([](){ return MusicService::Finished(); }), "リピートしないなら最後の曲で止まる");
         MusicService::Stop();
+
+        //スリープタイマー: 時間になったら止める(リピート全曲で鳴り続けている曲でも)
+        MusicService::CycleRepeat();    //Off → All
+        MusicService::PlayTrack(0);
+        MusicService::SetSleepTimer(1);
+        check(MusicService::SleepTimerMode() == MusicService::SleepMode::Timer
+              && MusicService::SleepRemainingMs() > 59000 && MusicService::SleepRemainingMs() <= 60000, "1分のタイマー");
+        g_now += 50000; Step();
+        check(MusicService::Active() && MusicService::SleepRemainingMs() <= 10000, "時間になるまでは鳴り続ける");
+        g_now += 6000; Step();
+        check(MusicService::Active(), "最後の8秒は小さくしながら鳴る");
+        g_now += 5000; Step(2);
+        check(!MusicService::Active() && MusicService::SleepTimerMode() == MusicService::SleepMode::Off, "時間になったら止まり、タイマーは切れる");
+        check(MusicService::HasQueue() && !MusicService::Finished(), "止めただけ(続きから鳴らせる)");
+        //止めれば(Stop)タイマーも切れる
+        MusicService::TogglePlay();
+        MusicService::SetSleepTimer(30);
+        MusicService::Stop();
+        check(MusicService::SleepTimerMode() == MusicService::SleepMode::Off, "止めたらタイマーも切れる");
+
+        //この曲の終わりで止める: 次の曲を予約していても取り消し、1曲目の終わりで止まる
+        MusicService::PlayTrack(0);
+        check(StepUntil([](){ return SoundFunctions::WavPositionMs() > 100; }), "1曲目が鳴る");
+        MusicService::SetSleepAtTrackEnd();
+        const uint32_t adv2 = SoundFunctions::WavAdvanceCount();
+        check(StepUntil([](){ return !MusicService::Active(); }), "曲の終わりで止まる");
+        check(MusicService::Current() == 0 && SoundFunctions::WavAdvanceCount() == adv2, "次の曲へは進まない(続けて積まない)");
+        check(MusicService::SleepTimerMode() == MusicService::SleepMode::Off, "止まればタイマーは切れる");
+        //取り消せば次の曲へ進む
+        MusicService::PlayTrack(0);
+        MusicService::SetSleepAtTrackEnd();
+        MusicService::ClearSleepTimer();
+        check(StepUntil([](){ return MusicService::Current() == 1; }), "取り消せば次の曲へ進む");
+        //利用者の「次へ」は「曲の終わりで」でも進む
+        MusicService::SetSleepAtTrackEnd();
+        MusicService::Next();
+        check(MusicService::Current() == 2 && MusicService::Active(), "「次へ」は進む");
+        MusicService::Stop();
+        MusicService::CycleRepeat(); MusicService::CycleRepeat();   //All → One → Off
     }
     BackgroundFunctions::Test::Reset();
 }

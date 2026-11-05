@@ -4,6 +4,7 @@
 #include "gui/widgets/ScrollList.hpp"
 #include "apps/music/ui/MusicPlayerPanel.hpp"
 #include "gui/widgets/dialogs/MsgDialog.hpp"
+#include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "gui/core/Scene_Functions.hpp"
 #include "gui/core/Widget_Functions.hpp"
 #include "hal/Sound_Functions.hpp"
@@ -44,6 +45,15 @@ void MusicScene::onEnter(){
     //ミックスなら最初の曲も混ぜる
     this->play_all_button->setOnPressEnd([this](){ this->startPlaylist(-1); });
     WidgetFunctions::Add(this->play_all_button);
+
+    //スリープタイマー。位置は refreshHeader() が決める(全曲のボタンの左、無ければ右端)
+    this->sleep_button = new Button(0, y0, "");
+    this->sleep_button->setIcon(IconID::Hourglass, IconSize::Px16);
+    this->sleep_button->setFontSize(FontFn::Small);
+    this->sleep_button->setH(20 + Button::kFrameExtra);
+    this->sleep_button->setOnPressEnd([this](){ this->showSleepPicker(); });
+    WidgetFunctions::Add(this->sleep_button);
+    this->shown_sleep = -2;
 
     this->title_label = new Label<PICO_STR_M>(back.x + back.w + MARGIN, y0, "");
     this->title_label->setFontSize(FontFn::Small);
@@ -89,6 +99,7 @@ void MusicScene::onExit(){
     //曲は止めない(MusicService が鳴らし続ける)
     this->back_button = nullptr;
     this->play_all_button = nullptr;
+    this->sleep_button = nullptr;
     this->title_label = nullptr;
     this->list = nullptr;
     this->panel = nullptr;
@@ -106,6 +117,7 @@ void MusicScene::onUpdate(){
             this->list->ensureVisible(MusicService::Current());
         }
     }
+    this->refreshSleepButton();
     this->refreshPanel();
 }
 
@@ -255,8 +267,10 @@ void MusicScene::showPlaylist(int playlist){
 
 void MusicScene::refreshHeader(){
     this->play_all_button->setVisible(this->view != kLibrary && this->view_count > 0);
-    const int right = this->play_all_button->getVisible()
+    const int edge = this->play_all_button->getVisible()
         ? this->play_all_button->getLocalRect().x : Scene::contentRect().x + Scene::contentRect().w;
+    this->sleep_button->setX(edge - MARGIN - this->sleep_button->getLocalRect().w);
+    const int right = this->sleep_button->getLocalRect().x;
     const int avail = right - this->title_label->getLocalRect().x - MARGIN;
 
     FixedString<PICO_STR_M> name, count;
@@ -343,6 +357,51 @@ void MusicScene::startPlaylist(int track){
     MusicService::StartPlaylist(this->view_tracks, this->view_count, this->folders, this->folder_count,
                                 this->view, name.c_str(), track);
     this->refreshListColors();
+}
+
+void MusicScene::refreshSleepButton(){
+    const MusicService::SleepMode mode = MusicService::SleepTimerMode();
+    const int v = mode == MusicService::SleepMode::TrackEnd ? -1
+                : mode == MusicService::SleepMode::Timer ? (int)((MusicService::SleepRemainingMs() + 59999) / 60000) : 0;
+    if(v == this->shown_sleep) return;
+    this->shown_sleep = v;
+    FixedString<PICO_STR_S> text;
+    if(v > 0) text.appendFormat(TR("%d分"), v);
+    else if(v < 0) text.assign(TR("曲末"));
+    //Buttonはアイコンか文字のどちらかを描くので、動いている間は残りの文字、止まっていれば⌛
+    this->sleep_button->setText(text.c_str());
+    if(v != 0) this->sleep_button->clearIcon();
+    else this->sleep_button->setIcon(IconID::Hourglass, IconSize::Px16);
+    this->sleep_button->setTextColor(v != 0 ? PICO_BLUE : PICO_FORECOLOR);
+    //幅が変わったので並べ直す(題名の縮め方も変わる)
+    this->refreshHeader();
+}
+
+void MusicScene::showSleepPicker(){
+    static constexpr uint8_t kMinutes[] = {15, 30, 45, 60, 90};
+    PickerDialog* d = new PickerDialog(PickerDialog::Mode::Choice, TR("スリープタイマー"), "", TR("キャンセル"));
+    if(!d) return;
+    d->addChoice(TR("オフ"));
+    for(uint8_t m : kMinutes){
+        FixedString<PICO_STR_S> item;
+        item.appendFormat(TR("%d分後に止める"), (int)m);
+        d->addChoice(item.c_str());
+    }
+    d->addChoice(TR("この曲の終わりで止める"));
+    d->layout();
+    WidgetFunctions::AddDialog(d);
+    d->setVisible(true);
+    d->setOnClosed([this, d](bool ok){
+        const int i = d->getSelectedIndex();
+        if(ok && i >= 0){
+            constexpr int n = (int)(sizeof(kMinutes) / sizeof(kMinutes[0]));
+            if(i == 0) MusicService::ClearSleepTimer();
+            else if(i <= n) MusicService::SetSleepTimer(kMinutes[i - 1]);
+            else MusicService::SetSleepAtTrackEnd();
+            this->refreshSleepButton();
+        }
+        WidgetFunctions::DestroyLater(d);
+    });
 }
 
 void MusicScene::showErrorDetail(){

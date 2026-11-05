@@ -1091,6 +1091,11 @@ bool SoundFunctions::WavPause(bool pause){
     return true;
 }
 
+void SoundFunctions::WavSetVolume(uint8_t volume){
+    WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+    if(wav) wav->setVolume(volume);
+}
+
 bool SoundFunctions::WavPaused(){
     WavStream* wav = wav_stream.load(std::memory_order_relaxed);
     return wav && wav->paused() && WavPlaying();

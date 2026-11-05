@@ -14,6 +14,7 @@ namespace KeyInputFunctions { struct Event; }
 //   PINを入力         … LockFunctions::Message()(間違えたら赤)
 //   ● ● ● ○          … 打った桁数(PIN自体は出さない)
 //   [アラームを止める]  … アラーム/タイマーが鳴っているときだけ
+//   曲名  [⏮][▶][⏭]   … 鳴っていなければ、ミュージックの曲があるとき(LockFunctions::media_*。日付の行にスリープタイマーの残り)
 //   [1][2][3]
 //   [4][5][6]
 //   [7][8][9]
@@ -25,9 +26,14 @@ class LockScreen : public Widget {
         static constexpr int kKeyGap = 3;
         static constexpr int kRingY = 107;
         static constexpr int kRingH = 22;
+        // 再生操作の行(PINの点の下・キーの上)
+        static constexpr int kMediaY = 103;
+        static constexpr int kMediaH = 28;
+        static constexpr int kMediaBtnW = 38;
 
-        // キーの番号: 0〜8 = "1"〜"9"、9 = 消す/取消、10 = "0"、11 = OK、12 = 止める、-1 = 無し
+        // キーの番号: 0〜8 = "1"〜"9"、9 = 消す/取消、10 = "0"、11 = OK、12 = 止める、13〜15 = 前/再生・一時停止/次、-1 = 無し
         static constexpr int kKeyBack = 9, kKeyZero = 10, kKeyOk = 11, kKeyRing = 12;
+        static constexpr int kKeyPrev = 13, kKeyPlay = 14, kKeyNext = 15;
 
         LockScreen(){
             this->l_rect = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
@@ -61,7 +67,12 @@ class LockScreen : public Widget {
         int shown_minute = -1;
         unsigned long shown_wait_sec = 0;
         bool shown_ringing = false;
+        bool shown_media = false;       // 再生操作の行を出しているか(鳴っている間は出さない)
+        bool shown_playing = false;
+        uint32_t shown_media_rev = 0;
+        int shown_sleep_min = 0;
 
+        void drawMediaGlyph(int key, int cx, int cy, int8_t color);
         void keyRect(int key, int& x, int& y, int& w, int& h) const;
         void submit();
 };

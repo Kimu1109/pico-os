@@ -48,6 +48,8 @@
 #include "gui/widgets/systems/PerfOverlay.hpp"
 #include "apps/home/HomeScene.hpp"
 #include "apps/home/Home_Widgets.hpp"
+#include "apps/music/Music_Service.hpp"
+#include "config/App_Config.hpp"
 #include "services/DeviceKey_Functions.hpp"
 
 #include "OS_Data.hpp"
@@ -180,6 +182,32 @@ void setup() {
         if(AlarmFunctions::IsRinging()) AlarmFunctions::Dismiss();
         if(TimerFunctions::TimerRinging()) TimerFunctions::TimerReset();
     };
+#if PICO_APP_MUSIC
+    //ロック画面の再生操作(ミュージックの曲があるとき)
+    LockFunctions::media_state = [](bool& playing, uint32_t& revision, int& sleep_min){
+        if(!MusicService::HasQueue() || MusicService::Current() < 0) return false;
+        playing = MusicService::Active() && !MusicService::Paused();
+        revision = MusicService::Revision();
+        const MusicService::SleepMode mode = MusicService::SleepTimerMode();
+        sleep_min = mode == MusicService::SleepMode::TrackEnd ? -1
+                  : mode == MusicService::SleepMode::Timer ? (int)((MusicService::SleepRemainingMs() + 59999) / 60000) : 0;
+        return true;
+    };
+    LockFunctions::media_title = [](){
+        static FixedString<PICO_PATH_LEN> name;
+        const MusicService::Track* t = MusicService::TrackAt(MusicService::Current());
+        if(!t) return "";
+        MusicService::DisplayName(t->name.c_str(), name);
+        return name.c_str();
+    };
+    LockFunctions::media_command = [](LockFunctions::MediaCommand cmd){
+        switch(cmd){
+            case LockFunctions::MediaCommand::Prev:      MusicService::Prev(); break;
+            case LockFunctions::MediaCommand::PlayPause: MusicService::TogglePlay(); break;
+            case LockFunctions::MediaCommand::Next:      MusicService::Next(); break;
+        }
+    };
+#endif
     LockFunctions::Setup();
 #if !defined(__EMSCRIPTEN__)
     LuaDebugger::SetFrontend(&lua_debug_screen);

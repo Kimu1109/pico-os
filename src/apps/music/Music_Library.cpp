@@ -19,7 +19,7 @@ namespace {
 
     uint32_t revision = 0;
 
-    bool IsAudio(const char* name){ return MusicService::IsMml(name) || MusicService::IsWavOrMp3(name); }
+    bool IsAudio(const char* name){ return MusicService::IsMml(name) || MusicService::IsPcmFile(name); }
 
     uint32_t Fnv(const char* a, const char* b){
         uint32_t h = 2166136261u;

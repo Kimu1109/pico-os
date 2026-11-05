@@ -424,7 +424,7 @@ SUMMARY.md #11。**SDの`.mp3`を上の「WAVの再生」と同じ経路で鳴�
   - 出力はWAVと同じく、ステレオのファイルは左右を残し(`setStereoOutput(true)`)、モノラルは両方へ。途中で周波数・チャンネル数が変わるファイルは最初の値のまま扱う。
   - **継ぎ目の無音を削る(2026-11-05)**: 下の「MP3の継ぎ目の無音を削る」。
 - 対応させた所: ミュージックアプリ(`MusicService::IsWavOrMp3()`、一覧・再生・シークバー)、ファイルビューワー(`.mp3`はWAVと同じ再生の欄、44100Hzを頼む)、
-  Wi-Fi転送の`Content-Type`(`audio/mpeg`)、Lua(`pico.wav_play`がそのまま読む。`lua-api-doc/content/api/media/sound.md`「WAV・MP3」)。
+  Wi-Fi転送の`Content-Type`(`audio/mpeg`)、Lua(`pico.wav_play`がそのまま読む。`lua-api-doc/content/api/media/sound.md`「WAV・MP3・FLAC」)。
   ファイルのアイコン(`File_Icon.hpp`)は前から`.mp3`を音のファイルとして扱っていた。
 - 検証: `mp3_test`(run.sh の media。データは`script/host_test/gen_mp3_test_data.py`がffmpeg+LAMEで作った3本:
   44.1kHzステレオCBR+Info・ID3v2/v1付きでXing無しのモノラル・22.05kHz(MPEG-2)VBR+TOC。見出し・長さ・左右・モノラルの平均・周波数の上げ下げ・TOCでの
@@ -491,6 +491,55 @@ SUMMARY.md #11。**SDの`.mp3`を上の「WAVの再生」と同じ経路で鳴�
   `PlaybackSerial()` が変わらない・モノラルの次のステレオは鳴らし直す・1曲リピートも続けて積む・リピートを変えたら決め直す)、ホストテスト全部。
   PCビルド: 4秒のMP3を2つ並べたプレイリストを鳴らし、`SDL_AUDIODRIVER=disk` の出力に約8秒の間、10msの無音の窓が1つも無い。
   **実機では未確認(聞こえ方)(Todoist参照)**。
+
+## FLACの再生 (`src/sound/Flac_Decoder` / `Audio_Format.hpp` / `SoundFunctions::WavPlay`) (2026-11-05)
+
+音楽再生に特化した版(`devtools.md`)の強化。SDの`.flac`(ネイティブFLAC)を、MP3と同じ経路(`WavPlay()` → `PcmFileDecoder` → `WavStream` → 2コア目)で鳴らす。
+見積もりと進め方は利用者との相談(FLACを先に、ALAC(.m4a)は別のPR。MP4の解析が要るため)で決めた。
+
+- **デコーダは自前**(`FlacDecoder`、.cpp が約670行、ライブラリは同梱しない)。FLACは整数演算だけで形式が単純(固定予測・LPC・Rice符号)なので、
+  確保の場所・上限・壊れたファイルの扱いを自分で決められる自前にした(固定長バッファに寄せるこのプロジェクトの流儀)。ライセンスの記載も増えない。
+  ffmpeg(libavcodec)の展開結果とビット単位で一致することをテストで確かめている(下)。
+- **メモリ**: `FlacDecoder` は約42KB(展開したブロック 2ch×4608×4B = 36KB・読み込みバッファ4KB・パス・周波数の変換)。1ブロックずつ展開し、
+  ファイル全体はRAMへ載せない(4KBのバッファへ少しずつ読むビット読み取り)。
+- **MP3と共用の1つの領域**(`SoundFunctions` の `packed_mem`): `Mp3Decoder`(約31KB)と `FlacDecoder` は同時には動かないので、大きい方に合わせた1つの領域へ
+  `.mp3`/`.flac` を鳴らす間だけ `malloc` し、`.wav` を鳴らす・`WavStop()` で返す。**形式が変わるとき(MP3→FLAC・曲と曲の間の続けて積む場合を含む)は係だけ作り直し、
+  領域は取り直さない**(断片化したヒープで40KB級の連続した領域を取り直すと失敗しやすいため)。確保できなければ「FLACを鳴らすためのメモリが足りません」で断る。
+- **対応する範囲**: 1〜2ch・4〜24bit・**48kHz以下**(`kMaxRate`)・ブロック長4608以下(`kMaxBlock`。ffmpegは4608、`flac` のふつうの設定は4096)。
+  超えるファイルは「このFLACは再生できません(…)」で断る(黙って壊れた音は出さない)。3ch以上・32bit・ブロック長の大きい(Subsetを外れた)ファイル・Ogg FLACも断る。
+  **48kHzまでにした理由**: 実機の速さを測っていないため(96kHzのFLACは1サンプルあたりの計算が倍で、さらに周波数の変換が要る)。`hw flac` で測れたら上げる。
+  24bit等は四捨五入して16bitへ丸める(ディザは掛けない)。1chはモノラル、2chは `setStereoOutput(true)` なら左右を残し、そうでなければ平均。
+- **ビットの読み取り**: 64bitの貯めに4バイトずつ足す(`loadMore()`)。Rice符号の商(unary)は `clz` で数える。ファイルの終わりを越えて読むと0のビットを足し、
+  `exhausted_` で打ち切る(壊れたファイルで無限に回らない)。計算の桁あふれは符号なしで行う(UBSanで確認)。LPCの積和は64bit(Cortex-M33は32×32→64の積和が1命令)。
+- **壊れたファイル**: フレームの見出しは**CRC-8で確かめる**。**フレーム全体のCRC-16は確かめない**(CPUを使うわりに、SDの読み誤りはほぼ起きず、
+  壊れたフレームは副フレームの形の検査(予約値・長さの不整合・終わりを越える読み)で大半が弾かれるため)。壊れたフレームは捨て、次の同期語
+  (0xFF 0xF8/0xF9 + 見出しのCRC-8 + STREAMINFOと同じ周波数・チャンネル数・ビット数)まで進んで続ける。探す範囲は最大256KB。
+- **長さ・シーク**: STREAMINFOの総サンプル数で長さを決め、終わりもそれで決める(後ろに付いたID3v1・APE等のデータは鳴らさない)。**サンプル単位で正確**で、
+  MP3のような継ぎ目の無音の処理は要らない(ループも曲と曲の間もそのまま続く)。シークは **SEEKTABLE があればそれで**、
+  **無ければバイト位置の補間と二分探索**(見つけたフレームの見出しの標本番号を見て範囲を絞り、目的のサンプルを含むフレームが見つかるか範囲が8KB以内になったら、そこから展開して目的のサンプルまで捨てる)。
+  総サンプル数が無いファイルは頭から展開して捨てる(遅いが動く)。頭のID3v2は飛ばす。
+- **共通の整理**: 拡張子の判定を `sound/Audio_Format.hpp` に集めた(`IsWav`/`IsMp3`/`IsFlac`/`IsPcmFile`)。`MusicService::IsWavOrMp3()` は `IsPcmFile()` へ改名。
+  対応させた所: ミュージックアプリ(一覧・再生・シークバー・曲と曲の間を空けない=形式をまたいでも続く。MP3↔FLACも同じ列へ積む)、ファイルビューワー(再生の欄・44100Hz)、
+  Wi-Fi転送の`Content-Type`(`audio/flac`)、ファイルのアイコン(`.flac`)、Lua(`pico.wav_play`がそのまま読む。`lua-api-doc/content/api/media/sound.md`)。
+- **タグ**(`AudioTagReader`): FLACの `VORBIS_COMMENT`(TITLE・ARTIST・ALBUM・TRACKNUMBER。キーは大小を区別しない、UTF-8)を読む。アルバムアート(`PICTURE`)等の
+  ブロックは中身を読まずに飛ばす。ミュージックの索引(`Music_Library`)はそのまま使える。
+- **展開の速さ**: `FlacDecoder` が1ブロックの展開(SDの読み込みを含む。周波数の変換は含まない)の時間を `micros()` で数える(`stats()`)。
+  - ふだんの再生: 曲を止める・次の曲へ移る・形式を切り替えると、ログに `FLACの展開: Nブロック 平均…us 最大…us(1ブロックの音…usに対し平均…%・最大…%)`。
+  - `hw flac <パス> [秒]`(`hw mp3` と同じコマンドが拡張子で係を選ぶ。`hw-test = true` のとき)。
+- 検証: `flac_test`(run.sh の media。データは `script/host_test/data/flac/*.flac`、`gen_flac_test_data.py` が ffmpeg で作った9本。正解は ffmpeg 自身の展開結果のハッシュ):
+  - 元の周波数のまま読んで**全サンプルがビット単位で一致**: 16bitステレオ(level 8=LPC・差分の各種、level 0=固定予測)・モノラル(ブロック長200=8bitの長さ指定・1000=16bitの長さ指定)・
+    24bit/48kHz・無音(定数の副フレーム)・全振幅の雑音(生の副フレーム)・チャープ(SEEKTABLEあり/なし)。長さ・総サンプル数・見出しの値。
+  - 出力の形(モノラルは左右の平均・22.05k→44.1k/48kへ上げる・44.1k→22.05kへ下げる)、詰め物・タグ付き・頭のID3v2・後ろの余分なデータ、
+    シーク(SEEKTABLEなし/あり。0・1・100・333・500・777・999ms・終わりを越える値・読みかけから前へ・閉じた後に開き直して飛ぶ、のどれも飛んだ先から元と同じ音)、ループ、
+    断り方(NotFlac・OpenFailed・NoSd・NoData・96kHz/6ch/32bit/ブロック長16384のUnsupported)、途中で切れた・中を壊した・ランダムに壊した60本(ASan/UBSan)。
+  - `SoundFunctions` の配線: `WavPlay` で鳴る(情報・長さ・名前・左右・22.05kHz→44.1kHzで1kHzのまま)・シーク・一時停止・MP3/WAVとの行き来
+    (鳴らしている途中の切り替え)・曲と曲の間を空けない(FLAC→MP3・MP3→FLAC。チャンネル数が違う曲は続けない)・読めなければ理由を返す。
+  - タグ(VORBIS_COMMENT・アルバムアートを挟んだ場合・壊れたコメント・途中で切れた場合)、`MusicService::IsPcmFile`。
+  - PCビルド: ミュージックの「すべての曲」に `arpeggio`(`pc/sdcard/music/arpeggio.flac`)が出て、`SDL_AUDIODRIVER=disk` の出力へ音が出る。
+- 大きさ(実機ファーム `rpipico2w_music`、2026-11-05): フラッシュ 1,946,160B(78.3%)→ 1,953,176B(78.6%)で **+7,016B**、静的RAM 136,208B → 136,216B(+8B)。係の約42KBは静的ではなくヒープ(鳴らす間だけ。MP3と共用の領域は大きい方の約42KBで、MP3だけのときの約31KBより約11KB大きい)。同じ変更で `rpipico2w`(既定)93.2%・`rpipico2w_minimal` 89.8%・`rpipico2w_lite` 78.4% のビルドも通る(既定版は常にFLACを含むので、フラッシュの空きは残り約170KB)
+- **実機では未確認(速さ・途切れないか・MP3との切り替えでメモリが足りるか・聞こえ方)(Todoist参照)**。
+- 次: ALAC(`.m4a`)。MP4のコンテナ(`moov`→`stsd`の`alac`・`stts`/`stsc`/`stsz`/`stco`)の解析が要り、サンプル表は長い曲でRAMへ全部は置けない(SDから都度読む)。
+  `.m4a` はAACも入るのでALACかを見分けて断る。デコーダは自前かApache-2.0の公式版(`THIRD_PARTY_LICENSES.md`へ1行)。ヒープは約60〜70KBの見込み(共用の領域を広げる)。
 
 ## 出力の周波数を選ぶ(22050 / 44100Hz、`SoundFunctions::SetSampleRate()` / PCM5102A) (2026-10-10)
 

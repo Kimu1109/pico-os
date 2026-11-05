@@ -6,6 +6,7 @@
 #include "system/Config_Functions.hpp"
 #include "system/Log_Functions.hpp"
 #include "sound/Mml_Compiler.hpp"
+#include "sound/Audio_Format.hpp"
 #include "storage/SD_Path.hpp"
 #include "OS_Data.hpp"
 #include "Arduino.h"
@@ -248,7 +249,7 @@ namespace {
         if(sleep_mode == MusicService::SleepMode::TrackEnd) return;
         PlayQueue q = st->queue;
         const int n = q.next(false);
-        if(n < 0 || !MusicService::IsWavOrMp3(st->tracks[n].name.c_str())) return;
+        if(n < 0 || !MusicService::IsPcmFile(st->tracks[n].name.c_str())) return;
         FixedString<PICO_PATH_LEN> path;
         if(!TrackPath(n, path)) return;
         if(!SoundFunctions::WavQueueNext(path.c_str())) return;
@@ -270,7 +271,7 @@ namespace {
         if(SoundFunctions::RequestedSampleRate() == 0) SoundFunctions::RequestSampleRate(SoundFunctions::kSampleRateHigh);
 
         //MMLとWAV/MP3は同時には鳴らさない(このアプリで鳴らすのは1曲ずつ)
-        if(MusicService::IsWavOrMp3(t.name.c_str())){
+        if(MusicService::IsPcmFile(t.name.c_str())){
             const char* err = "";
             if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err)){
                 error.assign(err && *err ? err : TR("読めない音のファイルです"));
@@ -769,7 +770,7 @@ void MusicService::DisplayName(const char* file, FixedString<PICO_PATH_LEN>& out
     out.assign(file, dot ? (size_t)(dot - file) : strlen(file));
 }
 bool MusicService::IsMml(const char* name){ return EndsWith(name, ".mml"); }
-bool MusicService::IsWavOrMp3(const char* name){ return EndsWith(name, ".wav") || EndsWith(name, ".mp3"); }
+bool MusicService::IsPcmFile(const char* name){ return AudioFormat::IsPcmFile(name); }
 
 BackgroundService* MusicService::Service(){ return &service; }
 

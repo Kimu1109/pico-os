@@ -17,6 +17,8 @@
 // - **ファイル全体は読まない**。フレームの見出し(10バイト)を順に読み、要る4つの中身(各256バイトまで)だけを読んで、
 //   ほかのフレーム(アルバムアート等)は飛ばす。4つそろえばそこで終える
 // - 読めないもの(圧縮・暗号化したフレーム、v2.3 のタグ全体の非同期化)は読まずに ID3v1 へ回す
+// - .flac: VORBIS_COMMENT の TITLE・ARTIST・ALBUM・TRACKNUMBER(キーは大小を区別しない。UTF-8)。頭の ID3v2 は飛ばす。
+//   アルバムアート(PICTURE)等のブロックは中身を読まずに飛ばす
 // - .wav / .mml はタグを読まない(false。表示はファイル名)
 struct AudioTags {
     FixedString<PICO_STR_L> title;
@@ -36,6 +38,8 @@ namespace AudioTagReader {
     void DecodeText(const uint8_t* p, size_t n, FixedString<PICO_STR_L>& out);
     // 文字コードの印を付けない8bitの文字列(ID3v1・ID3v2の0)。Shift_JIS か ISO-8859-1 かを見分けて UTF-8 へ
     void DecodeLegacy(const uint8_t* p, size_t n, FixedString<PICO_STR_L>& out);
+    // FLAC の VORBIS_COMMENT の1件(「TITLE=…」の形、終端の0は無し)を out へ。知らないキーは捨てる
+    void DecodeVorbisComment(const uint8_t* p, size_t n, AudioTags& out);
     // 「3/12」→ 3。読めなければ 0
     uint16_t ParseTrackNumber(const char* s);
 }

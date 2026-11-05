@@ -72,6 +72,11 @@
 
 using namespace LuaInternal;
 
+// Luaのごみ集めを世代別にするか(既定1)。-DPICO_LUA_GC_GEN=0 でLua 5.4の既定(インクリメンタル)へ戻す(実機で比べる用)
+#if !defined(PICO_LUA_GC_GEN)
+#define PICO_LUA_GC_GEN 1
+#endif
+
 // ---------------- メモリ予算 ----------------
 
 // ヒープの残りを守る(LuaEngine.hppのkHeapReserveBytes参照)。末尾の未使用の領域が
@@ -584,6 +589,14 @@ LuaEngine::LuaEngine(size_t budget_bytes, const LuaPermissions& permissions, con
         return;
     }
     *static_cast<LuaEngine**>(lua_getextraspace(L)) = this;   // pico.* の Self() が読む
+
+#if PICO_LUA_GC_GEN
+    // ごみ集めを世代別にする(Lua 5.4 の既定はインクリメンタル)。docs/design/performance.md「Luaのごみ集めを世代別に」。
+    // インクリメンタルはヒープが前回の2倍(pause=200%)になるまで次の周回を始めないので、短命なごみの多いゲームで
+    // 使用量のピークが高くなる。世代別は約20%増えるごとに若い物だけを集めるので、ピークと1回の止まりが小さくなる
+    // (代わりに集める仕事の合計は増えるが、計測では1フレームあたり無視できる量だった)。係数は既定のまま
+    lua_gc(L, LUA_GCGEN, 0, 0);
+#endif
 
     // バックグラウンドスクリプトには付けない(見ていない画面の裏で止まると、OSごと止まって見えるため)
     if (LuaDebugger::GlobalEnabled() && !background_) debugger_ = new LuaDebugger();

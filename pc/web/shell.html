@@ -25,8 +25,8 @@
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
 <script>
   // ---- 表示言語(日本語/英語)。landing / download / shell / store の4ページで同じ中身。直したら合わせる ----
-  // 決め方: URLの ?lang=ja|en > このブラウザで選んだ言語(localStorage "picoos-lang"。4ページとWeb版のOSで共通) >
-  // ブラウザの言語(ja 以外は英語。Web版のOSの既定と同じ考え方)。?lang= で来たときも覚える(ページを移っても同じ言語)。
+  // 決め方: URLの ?lang=ja|en > このブラウザで選んだ言語(localStorage "picoos-lang"。4ページで共通。Web版のOSは日本語の版で、この言語に従わない) >
+  // ブラウザの言語(ja 以外は英語)。?lang= で来たときも覚える(ページを移っても同じ言語)。
   // 訳す要素には data-i18n="鍵"(中身を差し替える。訳は固定の文字列だけなのでHTMLのまま入れる)、
   // 属性は data-i18n-attr="属性=鍵;属性=鍵"。日本語はHTMLに書いたものをそのまま使い、訳の表は英語だけ持つ。
   // JSで作る文は I18n.t("日本語", "English")
@@ -426,8 +426,9 @@
 
 <script>
   // 英語の訳(鍵は data-i18n / data-i18n-attr の値。日本語はHTMLにあるもの)。JSで作る文は I18n.t()。
-  // 言語を切り替えたら ?lang= を付けて読み込み直す(pico-os本体の表示言語も起動時にしか決まらないため。
-  // ?lang= は本体では /sys/user.cfg より優先され、保存はされない。docs/design/i18n.md「言語の選び方」)
+  // 言語を切り替えたら ?lang= を付けて読み込み直す(JSで作ったボタンの文も作り直すため)。
+  // 切り替わるのはこのページの文だけ。Web版の pico-os は日本語の版で、表示言語はビルド時に決まる
+  // (docs/design/i18n.md「ビルド時に選ぶ言語」。本体は ?lang= を読まない)
   I18n.init({
     "nav": "Other pages",
     "theme.aria": "Switch between light and dark theme",
@@ -503,7 +504,7 @@
 
   // Wi-Fi状態の切り替えはURLのクエリ経由(C++側が起動時にsetenvする)なので、
   // ボタンはクエリを差し替えて再読み込みするだけ
-  // (表示言語の ?lang= は付けたまま残し、今の状態かどうかの比べからは外す)
+  // (ページの表示言語の ?lang= は付けたまま残し、今の状態かどうかの比べからは外す)
   var wifiPresets = [
     { label: I18n.t('疎通で判定(既定)', 'Probe (default)'), query: '' },
     { label: I18n.t('接続', 'Connected'),                 query: '?wifi=connected' },

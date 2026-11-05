@@ -1,26 +1,30 @@
 #pragma once
 
-// ビルド時に選ぶ表示言語(1=載せる・既定、0=載せない)。ハードウェア機能(Hardware_Config.hpp)と同じ形で、
-// platformio.ini の env の build_flags で -DPICO_LANG_EN=0 等を足す(例は env:rpipico2w_ja / env:rpipico2w_en)。
-// PCビルドは cmake -DPICOOS_LANG_EN=OFF 等(pc/CMakeLists.txt)。設計は docs/design/i18n.md「ビルド時に選ぶ言語」。
+// 表示言語はビルド時に1つだけ選ぶ(実行時には切り替えない)。設計は docs/design/i18n.md「ビルド時に選ぶ言語」。
 //
-// - 日本語だけ(PICO_LANG_EN=0): 英語の訳の表(I18n_Table_En.cpp。ファームが約43KB減る)がフラッシュに入らない
-// - 英語だけ(PICO_LANG_JA=0): TR("…") が日本語の原文を参照しなくなり、原文がフラッシュに入らない(ファームが約54KB減る)
-//   (訳の表から引くだけになる。訳の無い原文は script/i18n.py が日本語のまま表に入れる)。
-//   TR_NOOP() の原文はアプリの登録名等の識別子でもあるので残る。フォント・かな漢字変換は言語と関係なく残る
+//   PICO_LANG_EN=0(既定): 日本語の版。TR("…") は原文そのもの(表を引かない)。英語の訳の表はフラッシュに入らない
+//   PICO_LANG_EN=1        : 英語の版。TR("…") は日本語の原文を参照せず訳の表から引く(原文はフラッシュに入らない)。
+//                           訳の無い原文は script/i18n.py が日本語のまま表に入れる
 //
-// どちらも載せたとき(既定)は今までどおり設定で切り替えられる。載せた言語が1つのときは設定の選択肢もそれだけになる。
+// platformio.ini の env の build_flags で -DPICO_LANG_EN=1 を足す(例は env:rpipico2w_en)。
+// PCビルドは cmake -DPICOOS_LANG_EN=ON(pc/CMakeLists.txt)。
+// TR_NOOP() の原文(アプリの登録名等の識別子)・フォント・かな漢字変換は言語と関係なく残る。
 //
+// PICO_LANG_JA はここで決める(外から渡さない)。どちらかが必ず1。
 // この値を `#if` で読むファイルは、必ずこのヘッダを自分で include すること(script/check_layers.py が見張る)。
 
-#ifndef PICO_LANG_JA
-    #define PICO_LANG_JA 1
+#ifdef PICO_LANG_JA
+    #error "PICO_LANG_JA は外から渡さない。英語の版は -DPICO_LANG_EN=1"
 #endif
 
 #ifndef PICO_LANG_EN
-    #define PICO_LANG_EN 1
+    #define PICO_LANG_EN 0
 #endif
 
-static_assert(PICO_LANG_JA == 0 || PICO_LANG_JA == 1, "PICO_LANG_JA は 0 か 1");
 static_assert(PICO_LANG_EN == 0 || PICO_LANG_EN == 1, "PICO_LANG_EN は 0 か 1");
-static_assert(PICO_LANG_JA || PICO_LANG_EN, "表示言語を1つは載せること(PICO_LANG_JA / PICO_LANG_EN)");
+
+#if PICO_LANG_EN
+    #define PICO_LANG_JA 0
+#else
+    #define PICO_LANG_JA 1
+#endif

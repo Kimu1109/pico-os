@@ -99,11 +99,11 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: pio run -e rpipico2w_music
 
-      # 表示言語を1つだけ載せた版(src/config/Lang_Config.hpp)。英語だけの版の TR() は原文を使わないので、
-      # `#if PICO_LANG_*` の囲み忘れ・表の参照の残りはこの2つでしか分からない
-      - name: 日本語だけ・英語だけの版をビルドする
+      # 英語の版(src/config/Lang_Config.hpp)。英語の版の TR() は表から引くだけなので、
+      # `#if PICO_LANG_*` の囲み忘れ・表の参照の誤りはこの版でしか分からない
+      - name: 英語の版をビルドする
         if: github.event_name == 'pull_request' || github.event_name == 'push'
-        run: pio run -e rpipico2w_ja -e rpipico2w_en
+        run: pio run -e rpipico2w_en
 
       # SDに置いて更新する更新ファイル(docs/FIRMWARE_UPDATE.md)。ここでは署名なし
       # (本体は /sys/debug.cfg の fw-allow-unsigned = true のときだけ、確認のうえで受け付ける)。

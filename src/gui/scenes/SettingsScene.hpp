@@ -239,10 +239,6 @@ class SettingsScene : public Scene {
         Checkbox*          perf_overlay_checkbox = nullptr;
         Checkbox*          lua_debugger_checkbox = nullptr;
         Checkbox*          watchdog_checkbox    = nullptr;
-        // 表示言語(user.cfgの language)。選んだらこの画面を作り直す(I18nFunctions)
-        Label<PICO_STR_M>* lang_title           = nullptr;
-        DropdownMenu*      lang_dropdown        = nullptr;
-        int                lang_selected_index  = -1;
 
         // network.cfg / user.cfgから読んだ現在値
         FixedString<PICO_STR_M>  ntp1_value;
@@ -301,7 +297,6 @@ class SettingsScene : public Scene {
         void updateBrightness();
         void updateSleep();
         void updateTextSize();
-        void updateLanguage();
         void updateSampleRate();
         void updateRoute();
         void refreshRouteStatus();

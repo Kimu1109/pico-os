@@ -1,4 +1,5 @@
 #include "services/App_Functions.hpp"
+#include "config/Lang_Config.hpp"
 #include <cstring>
 #include "storage/SD_IO.hpp"
 #include "gui/core/Scene_Functions.hpp"
@@ -124,19 +125,21 @@ bool AppFunctions::Refresh(int index, const char* name, const LuaPermissions& pe
 }
 
 const char* AppFunctions::DisplayName(const AppEntry& entry){
-    const int lang = (int)I18nFunctions::Current();
-    if(lang > 0 && lang - 1 < kAppLocalNames && !entry.local_names[lang - 1].empty()){
-        return entry.local_names[lang - 1].c_str();
-    }
+#if PICO_LANG_EN
+    if(!entry.local_name.empty()) return entry.local_name.c_str();
+#endif
     return I18nFunctions::Tr(entry.name.c_str());
 }
 
-bool AppFunctions::SetLocalName(int index, I18nFunctions::Lang lang, const char* name){
-    const int li = (int)lang - 1;
-    if(index < 0 || index >= app_count || li < 0 || li >= kAppLocalNames) return false;
+bool AppFunctions::SetLocalName(int index, const char* name){
+    if(index < 0 || index >= app_count) return false;
+#if PICO_LANG_EN
     //表示だけなので切り詰めても登録は通す
-    if(name) apps[index].local_names[li].assign(name);
-    else apps[index].local_names[li].clear();
+    if(name) apps[index].local_name.assign(name);
+    else apps[index].local_name.clear();
+#else
+    (void)name;
+#endif
     return true;
 }
 

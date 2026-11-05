@@ -2,9 +2,9 @@
 #include "system/I18n_Functions.hpp"
 #include "config/Lang_Config.hpp"
 
-// 英語を外した版(PICO_LANG_EN=0。config/Lang_Config.hpp)では表ごとフラッシュに入れない
+// 英語の版(PICO_LANG_EN=1。config/Lang_Config.hpp)だけがフラッシュに持つ
 #if PICO_LANG_EN
-// hash の昇順(I18nFunctions::Lookup() が二分探索する)。訳の無い原文は日本語を外した版でだけ原文のまま入る
+// hash の昇順(I18nFunctions::LookupHash() が二分探索する)。訳の無い原文は日本語のまま入る
 const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0073e150u, "Name" }, // 名前
     { 0x0078838cu, "Polish zloty" }, // ポーランドズロチ

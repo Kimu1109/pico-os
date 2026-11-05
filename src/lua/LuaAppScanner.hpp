@@ -1,7 +1,7 @@
 #pragma once
 
 #include "lua/LuaPermissions.hpp"
-#include "services/App_Functions.hpp"   // kAppLocalNames
+#include "services/App_Functions.hpp"
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -57,8 +57,8 @@ namespace LuaAppScanner {
     // app.cfg の中身(全部省略可)。アプリストア(apps/store/App_Store)もこれを読む
     struct AppInfo {
         FixedString<PICO_STR_M> name;         // 空ならディレクトリ名を使う
-        // 日本語以外の言語での表示名(name_en 等。[言語 - 1]。AppEntry::local_names と同じ並び)。空なら name のまま
-        FixedString<PICO_STR_S> local_names[kAppLocalNames];
+        // このビルドの言語での表示名(英語の版なら name_en)。日本語の版・空なら name のまま
+        FixedString<PICO_STR_S> local_name;
         FixedString<PICO_STR_L> description;
         FixedString<PICO_STR_S> version;
         FixedString<PICO_STR_S> id;           // アプリストアのid(docs/APP_REPO.md)。手で入れたアプリは空

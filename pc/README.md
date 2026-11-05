@@ -130,11 +130,12 @@ Luaアプリは `pico.launch_reason()` が `tag == "scene"`(`data` が画面の�
 
 ### 表示言語
 
-`--lang en` で英語のUIで起動する(`/sys/user.cfg` の `language` より優先し、保存はしない)。Webでは `?lang=en`、
-指定が無ければブラウザの言語(`ja` 以外は英語)を user.cfg に language が無いときの既定にする。仕組みは `docs/design/i18n.md`。
+表示言語はビルド時に1つだけ選ぶ(実行時には切り替えない。`--lang` / `?lang=` は無くなった)。英語の版は
+`-DPICOOS_LANG_EN=ON` で別のビルドフォルダに作る。仕組みは `docs/design/i18n.md`「ビルド時に選ぶ言語」。
 
 ```sh
-SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --lang en --app 設定 --shot settings-en.ppm 150
+cmake -S pc -B pc/build-en -DPICOOS_LANG_EN=ON && cmake --build pc/build-en -j
+SDL_VIDEODRIVER=offscreen ./pc/build-en/picoos_pc --app 設定 --shot settings-en.ppm 150
 ```
 
 ### Luaアプリのホットリロード

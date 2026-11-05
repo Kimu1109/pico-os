@@ -3,6 +3,7 @@
 #include "gui/icons/icons_data.h"
 #include "lua/LuaPermissions.hpp"
 #include "system/I18n_Functions.hpp"
+#include "config/Lang_Config.hpp"   // PICO_LANG_EN(英語の版だけ AppEntry::local_name を持つ)
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
@@ -15,8 +16,6 @@ class Scene;
 // といった動的な登録ができなかったため。呼び出し側の文字列は寿命が短くてよい。
 // AppEntry::icon_file の長さ(終端込み)
 constexpr size_t kAppIconFileLen = 32;
-// AppEntry::local_names の数(日本語を除いた言語の数)
-constexpr int kAppLocalNames = (int)I18nFunctions::Lang::Count - 1;
 
 struct AppEntry {
     // 表示名。ランチャは2行で12文字程度しか出せないので、48B(日本語16文字)あれば足りる
@@ -24,10 +23,12 @@ struct AppEntry {
 
     IconID icon = IconID::AppBox;
 
-    // 日本語以外の言語での表示名([言語 - 1]。Luaアプリの app.cfg の name_en 等)。空なら name を
-    // I18nFunctions::Tr() したものを見せる(C++製アプリは i18n/ の訳)。name は launcher.cfg 等の識別子なので訳さない。
-    // 英語の名前は短いので24B(1件あたり言語数×24B を常に占める)
-    FixedString<PICO_STR_S> local_names[kAppLocalNames];
+#if PICO_LANG_EN
+    // 英語の版での表示名(Luaアプリの app.cfg の name_en)。空なら name を I18nFunctions::Tr() したものを見せる
+    // (C++製アプリは i18n/ の訳)。name は launcher.cfg 等の識別子なので訳さない。
+    // 英語の名前は短いので24B。日本語の版は持たない(48件で約1.1KBのRAM)
+    FixedString<PICO_STR_S> local_name;
+#endif
 
     // 生成関数へ渡す引数。Luaアプリならスクリプトのパス、文書ビューアなら
     // 開くファイルのパスといった用途。使わないアプリは空のままでよい。
@@ -142,10 +143,10 @@ namespace AppFunctions {
     // 範囲外なら nullptr
     const AppEntry* Get(int index);
 
-    // 今の言語で見せる名前(ランチャ・長押しのメニュー等)。local_names に無ければ name を訳したもの
+    // このビルドの言語で見せる名前(ランチャ・長押しのメニュー等)。英語の版で local_name があればそれ、無ければ name を訳したもの
     const char* DisplayName(const AppEntry& entry);
-    // 日本語以外の言語の表示名を差し替える(nullptr・空なら消す)。Ja・範囲外はfalse
-    bool SetLocalName(int index, I18nFunctions::Lang lang, const char* name);
+    // 英語の版の表示名を差し替える(nullptr・空なら消す)。日本語の版では何もしない。範囲外はfalse
+    bool SetLocalName(int index, const char* name);
 
     // indexのアプリを起動する。
     // Pushで進むので、アプリ側からPop()すればランチャへ戻れる

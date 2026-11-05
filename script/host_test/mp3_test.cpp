@@ -81,6 +81,7 @@ static void TestDecoder(){
     HostSd::files["/st.mp3"] = Bytes(kMp3CbrStereo);
     HostSd::files["/tag.mp3"] = Bytes(kMp3TaggedMono);
     HostSd::files["/vbr.mp3"] = Bytes(kMp3Vbr22k);
+    HostSd::files["/gap.mp3"] = Bytes(kMp3Gapless);
 
     check(minimp3_pico_scratch_bytes <= Mp3Decoder::kScratchBytes, "minimp3の作業場所が Mp3Decoder の中に収まる");
     printf("       作業場所 %zuB / 係全体 %zuB\n", minimp3_pico_scratch_bytes, sizeof(Mp3Decoder));
@@ -93,6 +94,7 @@ static void TestDecoder(){
         check(dec.channels() == 2 && dec.sampleRate() == 44100 && dec.outChannels() == 2 && dec.bitsPerSample() == 16, "見出し(2ch・44.1kHz)");
         check(dec.bitrateKbps() == 32, "ビットレート");
         check(dec.hasToc(), "InfoのTOCを読む");
+        check(dec.hasGapless(), "LAMEの見出しの遅延・詰め物を読む");
         printf("       長さ %ums\n", (unsigned)dec.durationMs());
         check(dec.durationMs() >= 1000 && dec.durationMs() <= 1100, "長さはInfoのフレーム数から(約1秒)");
         const auto all = ReadAll(dec);
@@ -136,6 +138,7 @@ static void TestDecoder(){
         Mp3Decoder dec;
         check(dec.open("/tag.mp3", 44100), "ID3v2の後のフレームを見つける");
         check(dec.channels() == 1 && !dec.hasToc(), "1ch・TOC無し");
+        check(!dec.hasGapless(), "Xing/Info が無ければ削らない");
         printf("       長さ %ums\n", (unsigned)dec.durationMs());
         //ID3を長さに数えると1秒を大きく超える
         check(dec.durationMs() >= 1000 && dec.durationMs() <= 1100, "長さはビットレートから(タグを数えない)");
@@ -190,6 +193,56 @@ static void TestDecoder(){
         const auto all = ReadAll(dec, 44100 * 3);
         check(!dec.finished() && all.size() == 44100u * 3, "ループなら終わらない(3秒ぶん読める)");
         check(Rms(all, 44100 * 2 + 4000, 44100 * 2 + 30000) > 1000, "3周目も鳴る");
+    }
+
+    printf("--- 継ぎ目の無音を削る ---\n");
+    {
+        Mp3Decoder dec;
+        check(dec.open("/gap.mp3", 44100), "開ける");
+        printf("       遅延 %u 詰め物 %u 長さ %ums\n", (unsigned)dec.encoderDelay(), (unsigned)dec.encoderPadding(), (unsigned)dec.durationMs());
+        check(dec.hasGapless() && dec.encoderDelay() > 0, "LAMEの見出しを読む");
+        check(dec.durationMs() == 500, "長さは元の音どおり(500ms。フレーム数×1152ではない)");
+        const auto all = ReadAll(dec);
+        printf("       %zuサンプル 頭 %.0f 終わり %.0f\n", all.size(), Rms(all, 0, 20), Rms(all, all.size() - 20, all.size()));
+        check(all.size() == 22050, "数は元の音とサンプル単位で同じ(22050)");
+        check(Rms(all, 0, 20) > 8000, "頭の1サンプル目から鳴る(遅延の無音を捨てた)");
+        check(Rms(all, all.size() - 20, all.size()) > 8000, "終わりの1サンプルまで鳴る(詰め物の無音を捨てた)");
+        //ホストテストの micros() は0を返すスタブなので、時間そのものは実機(hw mp3・停止時のログ)で見る
+        check(dec.stats().frames == 21, "展開したフレームを数える(Infoの後の21フレーム)");
+        check(dec.frameAudioUs() == 26122, "1フレームの音は26.1ms(1152/44100)");
+    }
+    {
+        Mp3Decoder dec;
+        dec.setLoop(true);
+        check(dec.open("/gap.mp3", 44100), "ループで開ける");
+        const auto all = ReadAll(dec, 22050 * 3);
+        //441Hz(1周100サンプル)の50サンプルの窓のRMSは、どこでも約11500。継ぎ目に無音があれば落ちる
+        double worst = 1e9;
+        for(size_t i = 0; i + 50 <= all.size(); i += 10){ const double r = Rms(all, i, i + 50); if(r < worst) worst = r; }
+        printf("       3周 %zuサンプル 一番静かな50サンプル RMS %.0f\n", all.size(), worst);
+        check(all.size() == 22050u * 3, "3周ぶん読める");
+        check(worst > 6000, "ループの継ぎ目に無音が入らない");
+    }
+    {
+        Mp3Decoder dec;
+        check(dec.open("/gap.mp3", 22050), "22050Hzへ下げて開ける");
+        const auto all = ReadAll(dec);
+        printf("       %zuサンプル\n", all.size());
+        check(all.size() >= 11024 && all.size() <= 11026, "数は半分(削った後の長さから)");
+    }
+    {
+        Mp3Decoder dec;
+        check(dec.open("/gap.mp3", 44100), "開ける");
+        check(dec.seekMs(250), "0.25秒へ飛ぶ");
+        const auto rest = ReadAll(dec);
+        printf("       飛んだ後 %zuサンプル\n", rest.size());
+        //飛んだ周は終わりを削らない(位置が推定なので、音を切らないように)。0.5秒のファイルはTOCが粗く(21フレーム)、
+        //飛んだ直後の数フレームはビットの貯金が無く音が出ないので、数は大まかにしか合わない
+        check(dec.finished() && rest.size() >= 4000 && rest.size() <= 13500, "飛んだ先から終わりまで鳴る");
+        check(Rms(rest, rest.size() - 20, rest.size()) < 3000, "飛んだ周は終わりの詰め物(無音)を残す");
+        check(dec.seekMs(0), "頭へ戻る");
+        const auto all = ReadAll(dec);
+        check(all.size() == 22050 && Rms(all, 0, 20) > 8000, "頭へ戻れば元どおり削る");
     }
 
     printf("--- 断り方 ---\n");

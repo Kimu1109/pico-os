@@ -307,9 +307,23 @@ namespace {
         return n >= 4 && strcasecmp(path + n - 4, ".mp3") == 0;
     }
 
+    // 1曲ぶんのMP3の展開の速さをログへ出す(止めた・次の曲へ移ったとき。docs/design/sound.md「MP3の再生」)。
+    // 展開(minimp3)だけの時間で、SDの読み込みと周波数の変換は含まない。1フレームの音の長さと比べた割合が、1コア目のおおよその負担
+    void LogMp3Stats(){
+        if(!mp3_decoder) return;
+        const Mp3Decoder::DecodeStats& st = mp3_decoder->stats();
+        const uint32_t audio_us = mp3_decoder->frameAudioUs();
+        if(st.frames == 0 || audio_us == 0) return;
+        const uint32_t avg_us = (uint32_t)(st.total_us / st.frames);
+        LOG_SYS_MSG("MP3の展開: %luフレーム 平均%luus 最大%luus(1フレームの音%luusに対し平均%lu%%・最大%lu%%)",
+                    (unsigned long)st.frames, (unsigned long)avg_us, (unsigned long)st.max_us, (unsigned long)audio_us,
+                    (unsigned long)((uint64_t)avg_us * 100 / audio_us), (unsigned long)((uint64_t)st.max_us * 100 / audio_us));
+    }
+
     // MP3の係を返す(大きいので鳴らす間だけ持つ。係は1コア目しか触らないので、いつ返してもよい)
     void ReleaseMp3Decoder(){
         if(!mp3_decoder) return;
+        LogMp3Stats();
         if(pcm_decoder == mp3_decoder) pcm_decoder = nullptr;
         mp3_decoder->~Mp3Decoder();
         free(mp3_decoder);
@@ -905,6 +919,8 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
                 return false;
             }
             mp3_decoder = new (mem) Mp3Decoder();
+        }else{
+            LogMp3Stats();      //前の曲のぶん(open() で数え直す)
         }
         if(wav_decoder) wav_decoder->close();
         pcm_decoder = mp3_decoder;

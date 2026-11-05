@@ -10,6 +10,9 @@
 // (world.dat とチャンクのファイルはそのディレクトリの直下にしか作らない)。
 
 #include "lua/LuaEngine.hpp"
+#include "config/App_Config.hpp"
+
+#if PICO_LUA_ISO
 
 #include <Arduino.h>
 #include <algorithm>
@@ -1370,3 +1373,11 @@ void LuaEngine::RegisterIsoApi() {
     api_cur_ = &api_pico_;
     lua_setfield(L, -2, "iso");
 }
+
+#else
+
+// 2.5Dエンジンを載せない版(-DPICO_LUA_ISO=0)。pico.iso は作らない(nil)ので、iso/ の中身はリンカが捨てる
+void LuaEngine::DestroyIso() {}
+void LuaEngine::RegisterIsoApi() {}
+
+#endif

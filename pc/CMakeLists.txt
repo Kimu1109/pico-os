@@ -165,13 +165,19 @@ set(PICOOS_SCREEN_H 320 CACHE STRING "画面の高さ(画素)")
 target_compile_definitions(picoos_pc PRIVATE
     SCREEN_WIDTH=${PICOOS_SCREEN_W} SCREEN_HEIGHT=${PICOOS_SCREEN_H})
 
+# 音楽再生に特化した版(platformio.ini の env:rpipico2w_music と同じ旗)。ONにすると、下のマイク・内蔵アプリ・pico.iso の
+# 個別の指定より優先して、ミュージック・ストア以外の内蔵アプリとマイクと pico.iso を外す。
+# 例: cmake -S pc -B pc/build-music -DPICOOS_MUSIC_BUILD=ON
+option(PICOOS_MUSIC_BUILD "音楽再生に特化した版にする" OFF)
+set(PICOOS_MUSIC_BUILD_OFF_APPS BROWSER CALCULATOR CALENDAR CHAT DICT GB MAIL NOTES READER SSH TEXTEDITOR TODO VIDEO)
+
 # 載せるハードウェア機能(src/config/Hardware_Config.hpp の PICO_HW_*)。既定は全部載せる。
 # 例: cmake -S pc -B pc/build-minimal -DPICOOS_HW_SOUND=OFF -DPICOOS_HW_MIC=OFF -DPICOOS_HW_BATTERY=OFF
 option(PICOOS_HW_SOUND   "音声出力を載せる" ON)
 option(PICOOS_HW_MIC     "マイクを載せる" ON)
 option(PICOOS_HW_BATTERY "電池の残量を載せる" ON)
 foreach(hw SOUND MIC BATTERY)
-    if(PICOOS_HW_${hw})
+    if(PICOOS_HW_${hw} AND NOT (PICOOS_MUSIC_BUILD AND hw STREQUAL "MIC"))
         target_compile_definitions(picoos_pc PRIVATE PICO_HW_${hw}=1)
     else()
         target_compile_definitions(picoos_pc PRIVATE PICO_HW_${hw}=0)
@@ -183,10 +189,16 @@ endforeach()
 set(PICOOS_APPS BROWSER CALCULATOR CALENDAR CHAT DICT GB MAIL MUSIC NOTES READER SSH STORE TEXTEDITOR TODO VIDEO)
 foreach(app ${PICOOS_APPS})
     option(PICOOS_APP_${app} "内蔵アプリ ${app} を載せる" ON)
-    if(NOT PICOOS_APP_${app})
+    if(NOT PICOOS_APP_${app} OR (PICOOS_MUSIC_BUILD AND app IN_LIST PICOOS_MUSIC_BUILD_OFF_APPS))
         target_compile_definitions(picoos_pc PRIVATE PICO_APP_${app}=0)
     endif()
 endforeach()
+
+# Luaの2.5Dエンジン(src/config/App_Config.hpp の PICO_LUA_ISO)。OFFにすると pico.iso が nil になる
+option(PICOOS_LUA_ISO "Luaの2.5Dエンジン(pico.iso)を載せる" ON)
+if(NOT PICOOS_LUA_ISO OR PICOOS_MUSIC_BUILD)
+    target_compile_definitions(picoos_pc PRIVATE PICO_LUA_ISO=0)
+endif()
 
 # pc/compat を src より前に置くことで、実機ライブラリのヘッダを差し替える
 target_include_directories(picoos_pc PRIVATE

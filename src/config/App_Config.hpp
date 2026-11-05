@@ -79,6 +79,12 @@
     #define PICO_APP_VIDEO 1
 #endif
 
+// Luaの2.5Dエンジン(pico.iso。src/iso/ と lua/LuaEngine_Iso.cpp、フラッシュ約41KB)。アプリではなくLuaの拡張だが、同じ形で選ぶ。
+// 0 にすると pico.iso が nil になり、使うLuaアプリ(ブロック・ゾンビTD等)は動かない(アプリは `if not pico.iso` で見分けられる)
+#ifndef PICO_LUA_ISO
+    #define PICO_LUA_ISO 1
+#endif
+
 static_assert(PICO_APP_BROWSER == 0 || PICO_APP_BROWSER == 1, "PICO_APP_BROWSER は 0 か 1");
 static_assert(PICO_APP_CALCULATOR == 0 || PICO_APP_CALCULATOR == 1, "PICO_APP_CALCULATOR は 0 か 1");
 static_assert(PICO_APP_CALENDAR == 0 || PICO_APP_CALENDAR == 1, "PICO_APP_CALENDAR は 0 か 1");
@@ -94,4 +100,5 @@ static_assert(PICO_APP_STORE == 0 || PICO_APP_STORE == 1, "PICO_APP_STORE は 0 
 static_assert(PICO_APP_TEXTEDITOR == 0 || PICO_APP_TEXTEDITOR == 1, "PICO_APP_TEXTEDITOR は 0 か 1");
 static_assert(PICO_APP_TODO == 0 || PICO_APP_TODO == 1, "PICO_APP_TODO は 0 か 1");
 static_assert(PICO_APP_VIDEO == 0 || PICO_APP_VIDEO == 1, "PICO_APP_VIDEO は 0 か 1");
+static_assert(PICO_LUA_ISO == 0 || PICO_LUA_ISO == 1, "PICO_LUA_ISO は 0 か 1");
 static_assert(!PICO_APP_MUSIC || PICO_HW_SOUND, "ミュージック(PICO_APP_MUSIC)は音声出力(PICO_HW_SOUND)が要る");

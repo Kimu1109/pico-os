@@ -1,5 +1,6 @@
 #include "hal/Sound_Functions.hpp"
 #include "config/Hardware_Config.hpp"
+#include "config/App_Config.hpp"
 
 // 載せない版(-DPICO_HW_SOUND=0)は Sound_Functions_Off.cpp が代わりに入る
 #if PICO_HW_SOUND
@@ -10,12 +11,16 @@
 #include "storage/SD_Path.hpp"
 #include "sound/Mml_Compiler.hpp"
 #include "sound/Music_Player.hpp"
+#if PICO_APP_GB
 #include "sound/Gb_Apu.hpp"
 #include "sound/Gb_Audio_Link.hpp"
+#endif
 #include "sound/Mp3_Decoder.hpp"
 #include "sound/Wav_Decoder.hpp"
 #include "sound/Wav_Stream.hpp"
+#if PICO_APP_GB
 #include "apps/gb/Gb_Audio_Sink.hpp"
+#endif
 #include "consts.hpp"
 #include "OS_Data.hpp"
 
@@ -51,11 +56,16 @@ namespace {
     std::atomic<bool>     core1_music{false};   // 2コア目→1コア目: 曲が鳴っている
     std::atomic<bool>     music_paused{false};  // 1コア目→2コア目: 曲を一時停止してほしい
     std::atomic<uint32_t> core1_music_ms{0};    // 2コア目→1コア目: 曲を鳴らし始めてからの時間(ms)
+#if PICO_APP_GB
     std::atomic<uint8_t>  core1_gb_active{0};   // 2コア目→1コア目: GBの音源で鳴っているチャンネル
+#endif
 
+#if PICO_APP_GB
     // GBエミュの音源チップへの書き込みの列。最初にROMを起動したときに1コア目が確保して置き、以降は持ち続ける
     // (2コア目は置かれたのを見てから読む。解放しないので、読んでいる途中で消えることは無い)
+    // ゲームボーイを載せない版(-DPICO_APP_GB=0)は、音源チップ(GbApu)ごと持たない
     std::atomic<GbAudioLink*> gb_link{nullptr};
+#endif
     // WAVの列。最初にWAVを鳴らすときに1コア目が確保して置き、以降は持ち続ける(gb_linkと同じ考え方)
     std::atomic<WavStream*> wav_stream{nullptr};
 
@@ -314,7 +324,9 @@ namespace {
     uint32_t core1_rate = kDefaultSampleRate;   // 2コア目が今使っている出力の周波数
     bool restart_output = false;                // 周波数を変えたので、動いているI2Sを止めて開き直す
     ChipSynth::Engine engine(kDefaultSampleRate);
+#if PICO_APP_GB
     GbApu gb_apu(kDefaultSampleRate);
+#endif
     MusicPlayer player(kDefaultSampleRate);
     ChipSynth::ChannelMask borrowed = 0;   // 効果音が借りているチャンネル(曲はここに触らない)
 
@@ -342,12 +354,14 @@ namespace {
         if(rate == core1_rate) return;
         core1_rate = rate;
         engine = ChipSynth::Engine(rate);
-        gb_apu = GbApu(rate);
         player = MusicPlayer(rate);
         borrowed = 0;
         engine.setMasterVolume(eff_volume);
+#if PICO_APP_GB
+        gb_apu = GbApu(rate);
         gb_apu.setMasterVolume(eff_volume);
         if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->setRate(gb_apu, rate);
+#endif
         sample_frac = 0;
         chunk_pos = chunk_len = 0;
         restart_output = true;
@@ -403,8 +417,10 @@ namespace {
     // 何か鳴っている(鳴っていることになっている)か。省電力中に止めてよいかの判断に使う
     bool AnythingSounding(){
         if(engine.activeMask() != 0 || (player.playing() && !player.paused())) return true;
+#if PICO_APP_GB
         GbAudioLink* link = gb_link.load(std::memory_order_acquire);
         if(link && link->active()) return true;
+#endif
         WavStream* wav = wav_stream.load(std::memory_order_acquire);
         return wav && wav->hasData();
     }
@@ -476,7 +492,9 @@ namespace {
         for(uint32_t i = 0; i < kMaxPerCall; i++){
             if(chunk_pos == chunk_len){
                 player.render(engine, chunk, kChunk, true);
+#if PICO_APP_GB
                 if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, chunk, kChunk, true);
+#endif
                 if(WavStream* wav = wav_stream.load(std::memory_order_acquire)) wav->renderAdd(chunk, kChunk, eff_volume, true);
                 chunk_pos = 0;
                 chunk_len = kChunk;
@@ -494,7 +512,9 @@ namespace {
         last_step_ms = now_ms;
         sample_frac = (uint32_t)(acc % 1000);
         player.render(engine, nullptr, (size_t)(acc / 1000));
+#if PICO_APP_GB
         if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, nullptr, (size_t)(acc / 1000));
+#endif
         if(WavStream* wav = wav_stream.load(std::memory_order_acquire)) wav->renderAdd(nullptr, (size_t)(acc / 1000), 0);
     }
 }
@@ -818,6 +838,7 @@ uint32_t SoundFunctions::MusicTotalMs(bool* loops){
 
 // ---- ゲームボーイの音 ----
 
+#if PICO_APP_GB
 namespace {
     class GbSink : public GbAudioSink {
     public:
@@ -856,6 +877,11 @@ uint32_t SoundFunctions::GbDroppedWrites(){
     GbAudioLink* link = gb_link.load(std::memory_order_relaxed);
     return link ? link->dropped() : 0;
 }
+#else
+// ゲームボーイを載せない版。音の窓口が無ければGBエミュは鳴らさずに動く(Sound_Functions_Off.cpp と同じ)
+GbAudioSink* SoundFunctions::GbAudio(){ return nullptr; }
+uint32_t SoundFunctions::GbDroppedWrites(){ return 0; }
+#endif
 
 // ---- WAV ----
 
@@ -1040,7 +1066,9 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     eff_volume = vol;
     if(vol != engine.masterVolume()){
         engine.setMasterVolume(vol);
+#if PICO_APP_GB
         gb_apu.setMasterVolume(vol);
+#endif
     }
 
     //周波数を変えたら、動いているI2Sを止める(すぐ下で新しい周波数・バッファで開き直す)
@@ -1059,10 +1087,12 @@ bool SoundFunctions::Core1StepAt(unsigned long now_ms){
     core1_active.store(engine.activeMask(), std::memory_order_release);
     core1_music_ms.store(player.elapsedMs(), std::memory_order_release);
     core1_music.store(player.playing(), std::memory_order_release);
+#if PICO_APP_GB
     {
         GbAudioLink* link = gb_link.load(std::memory_order_acquire);
         core1_gb_active.store((link && link->active()) ? gb_apu.activeMask() : 0, std::memory_order_release);
     }
+#endif
     core1_processed.store(processed, std::memory_order_release);
     return busy;
 }

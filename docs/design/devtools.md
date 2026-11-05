@@ -331,6 +331,37 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - Luaの `pico.launch_app(name)` は外したアプリを名前で頼むと、登録簿に無いので false が返る(前からある振る舞い)。
 - ファームの更新(`.pfw`)は版を区別しないので、載せるアプリの違う本体へ送るとそのアプリが消える/増える。
 
+## 音楽再生に特化した版 (`env:rpipico2w_music` / `PICO_LUA_ISO` / GBの音源を `PICO_APP_GB` で外す) (2026-11-05)
+
+利用者の要望: 一般的な機能は充実したので、一部の機能に特化した版もビルドできるように。まず音楽再生に特化した版。Luaは残す(ストア・Luaアプリ)。
+
+- **`env:rpipico2w_music`**(PCは `cmake -DPICOOS_MUSIC_BUILD=ON`): 上の「ビルド時に選ぶ内蔵アプリ」でミュージックとストア以外を外し、
+  マイク(`PICO_HW_MIC=0`)と下の2つを外す。OSとして要るもの(設定・ファイル・時計・通知・USBドライブ・Wi-Fi転送・本体の更新)は残る
+  (曲はWi-Fi転送かUSBドライブで送り込む)。CIもPRとmainへのpushでこの版を作る(`firmware-build.yml`)。
+- **`PICO_LUA_ISO`(新設、既定1)**: Luaの2.5Dエンジン(`pico.iso`。`iso/` と `lua/LuaEngine_Iso.cpp`)。0 だと `LuaEngine_Iso.cpp` が
+  `RegisterIsoApi()`/`DestroyIso()` を空にするだけで、`pico.iso` は nil、`iso/` はどこからも呼ばれずリンカが捨てる。
+  使うLuaアプリ(ブロック・ゾンビTD)はアプリの一覧に出たまま、開くと「attempt to index a nil value」で止まる(アプリは `if not pico.iso` で見分けられる)。
+  アプリではないが、Luaの拡張を選ぶ旗として `config/App_Config.hpp` に置いた(`check_layers.py` が include の付け忘れを見張る)。
+- **GBの音源(`GbApu`)を `PICO_APP_GB` で外す**: `hal/Sound_Functions.cpp` は2コア目に `GbApu` を常に持っていた。ゲームボーイを載せない版では
+  音源・`GbAudioLink`・`GbSink` を持たず、`GbAudio()` は nullptr(GBエミュは音の窓口が無ければ鳴らさずに動く。`Sound_Functions_Off.cpp` と同じ)。
+  なお2コア目の計算は元から増えていなかった(GBの音源はROMを起動して列ができたときしか回らない)。減るのはフラッシュ約3KBと静的RAM約0.2KB。
+- **残したもの**: 日本語フォント(24pxが約277KB・16pxが約161KB。24pxは本文の標準フォントで外せない)、Wi-Fiのファーム(約225KB。Wi-Fi転送・ストア・本体の更新)、
+  かな漢字変換(コード約4.6KB、辞書はSD。検索等で日本語を打つ)、チップチューン音源とMML。
+- 大きさ(実機ファーム、2026-11-05):
+
+  | 版 | フラッシュ | 静的RAM |
+  |---|---|---|
+  | `rpipico2w`(既定) | 2,356,768B(94.8%) | 142,076B |
+  | 内蔵アプリ・マイクを外しただけ | 2,015,908B(81.1%) | 136,444B |
+  | `rpipico2w_music`(+GBの音源・`pico.iso`) | 1,966,052B(79.1%) | 136,232B |
+
+  既定の版の大きさは変わらない(`PICO_APP_GB`・`PICO_LUA_ISO` が1なら中身は同じ)。
+- 検証: ホストテスト、`check_layers.py`、実機ファームの `rpipico2w`/`rpipico2w_lite`/`rpipico2w_music` のビルド(`GbApu`・`Iso::` の記号が音楽版から消えたことを `nm` で確認)、
+  PCビルドの既定の版と `-DPICOOS_MUSIC_BUILD=ON`(ランチャはOSの5つ+ミュージック+ストア+SDのLuaアプリ、ミュージックが開く、ブロックは `pico.iso` が nil で止まる)。
+  **実機では未確認(起動と再生)(Todoist参照)**。
+- 次(強化の案): MP3の展開の速さの実測、曲の継ぎ目の無音を削る、ID3タグとSD上の曲の索引、ロック画面の再生操作・スリープタイマー・続きから再生、
+  再生中の消費電流、イコライザー。
+
 ## ナイトリービルド (`.github/workflows/nightly.yml`) (2026-10-24)
 
 利用者の要望: 今のActionsに載せる / 実機ファームのビルドの成果物をそのまま落とせる / 50本ほど残して超えた分は消す。

@@ -102,7 +102,7 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.M)
 # ビルド時に選ぶものの定義ヘッダ → それを読んでいると分かる書き方
 BUILD_CONFIGS = [
     ("config/Hardware_Config.hpp", re.compile(r'\bPICO_HW_[A-Z0-9_]+\b|\bHardwareConfig::')),
-    ("config/App_Config.hpp", re.compile(r'\bPICO_APP_[A-Z0-9_]+\b')),
+    ("config/App_Config.hpp", re.compile(r'\bPICO_APP_[A-Z0-9_]+\b|\bPICO_LUA_ISO\b')),
 ]
 
 

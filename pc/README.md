@@ -98,6 +98,13 @@ OFFにすると、実機の `-DPICO_APP_*=0` と同じ版になる(`src/config/A
 cmake -S pc -B pc/build-lite -DPICOOS_APP_GB=OFF -DPICOOS_APP_MAIL=OFF && cmake --build pc/build-lite -j
 ```
 
+Luaの2.5Dエンジンは `PICOOS_LUA_ISO=OFF` で外れる(`pico.iso` が nil)。`PICOOS_MUSIC_BUILD=ON` は実機の `env:rpipico2w_music` と同じ組み合わせ
+(ミュージック・ストア以外の内蔵アプリ・マイク・`pico.iso` を外す。`docs/design/devtools.md`「音楽再生に特化した版」)。
+
+```sh
+cmake -S pc -B pc/build-music -DPICOOS_MUSIC_BUILD=ON && cmake --build pc/build-music -j
+```
+
 ### 起動時に開くアプリ
 
 `--app 名前` で、起動したらランチャの名前のアプリを開いておける(ホーム画面の上へ開くので、戻ればいつものホーム画面)。

@@ -94,6 +94,11 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: pio run -e rpipico2w_lite
 
+      # 音楽再生に特化した版(GBの音源・pico.iso を外す `#if PICO_APP_GB` / `PICO_LUA_ISO` の囲み忘れは、この組み合わせでしか分からない)
+      - name: 音楽再生に特化した版をビルドする
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: pio run -e rpipico2w_music
+
       # SDに置いて更新する更新ファイル(docs/FIRMWARE_UPDATE.md)。ここでは署名なし
       # (本体は /sys/debug.cfg の fw-allow-unsigned = true のときだけ、確認のうえで受け付ける)。
       # 署名はナイトリー(nightly.yml)がリリースへ載せるときに Secrets の鍵で付ける(PRのビルドには鍵を渡さない)

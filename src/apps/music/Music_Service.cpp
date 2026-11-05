@@ -43,6 +43,13 @@ namespace {
         FixedString<PICO_STR_256B> error_detail;
         bool error_sticky = false;
         uint32_t error_until_ms = 0;
+
+        // 曲と曲の間を空けない: 次の曲を SoundFunctions へ予約しておく(WavQueueNext)。
+        // 順番は写しで先に進めておき、耳に届いた(WavAdvanceCount が増えた)ときに本物へ移す
+        bool next_planned = false;      // 今の曲の次はもう決めた(1曲に1回。ミックスの一巡で混ぜ直しが毎回変わらないように)
+        int next_track = -1;            // 予約した曲(無ければ-1)
+        PlayQueue next_queue;           // 予約した曲へ進めた後の順番
+        uint32_t advance_seen = 0;      // 最後に見た SoundFunctions::WavAdvanceCount()
     };
     State* st = nullptr;
 
@@ -97,17 +104,51 @@ namespace {
             SoundFunctions::WavStop();
         }
         st->kind = Kind::None;
+        st->next_planned = false;
+        st->next_track = -1;
+    }
+
+    // 曲のSD上の場所。長すぎて入らなければ false
+    bool TrackPath(int track, FixedString<PICO_PATH_LEN>& path){
+        const Track& t = st->tracks[track];
+        bool ok = path.assign(PICO_Path::DIR::MUSIC);
+        if(t.folder >= 0 && t.folder < st->folder_count){
+            ok = ok && path.append(st->folders[(int)t.folder].c_str());
+            ok = ok && path.append("/");
+        }
+        return ok && path.append(t.name.c_str());
+    }
+
+    // 次の曲の予約を取り消す(ミックス・リピートを変えた・別の曲を鳴らした)。もう続けて積んだ後なら、その予約のまま進む
+    void DropNextPlan(){
+        if(!st || !st->next_planned) return;
+        if(st->next_track >= 0 && !SoundFunctions::WavClearNext()) return;
+        st->next_planned = false;
+        st->next_track = -1;
+    }
+
+    // 今のWAV/MP3の曲の次を決めて SoundFunctions へ予約する(次もWAV/MP3のときだけ。MMLは今までどおり間を空けて鳴らす)
+    void PlanNext(){
+        st->next_planned = true;
+        st->next_track = -1;
+        if(!OSData::SD_usable) return;
+        PlayQueue q = st->queue;
+        const int n = q.next(false);
+        if(n < 0 || !MusicService::IsWavOrMp3(st->tracks[n].name.c_str())) return;
+        FixedString<PICO_PATH_LEN> path;
+        if(!TrackPath(n, path)) return;
+        if(!SoundFunctions::WavQueueNext(path.c_str())) return;
+        st->next_queue = q;
+        st->next_track = n;
     }
 
     bool TryPlay(int track, FixedString<PICO_STR_256B>& error){
         const Track& t = st->tracks[track];
         FixedString<PICO_PATH_LEN> path;
-        path.assign(PICO_Path::DIR::MUSIC);
-        if(t.folder >= 0 && t.folder < st->folder_count){
-            path.append(st->folders[(int)t.folder].c_str());
-            path.append("/");
+        if(!TrackPath(track, path)){
+            error.assign(TR("読めない音のファイルです"));
+            return false;
         }
-        path.append(t.name.c_str());
 
         //画面が周波数を望んでいない(ホーム画面のウィジェット等から鳴らした)なら、先に44100Hzへ切り替えておく。
         //鳴らした後の次のフレームで main.cpp がバックグラウンドの望み(44100Hz)へ切り替えると、その切り替えで
@@ -123,6 +164,10 @@ namespace {
             }
             SoundFunctions::MusicStop();
             st->kind = Kind::Wav;
+            //WavPlay() が予約を消したので、次はこの曲が鳴り始めてから決める
+            st->next_planned = false;
+            st->next_track = -1;
+            st->advance_seen = SoundFunctions::WavAdvanceCount();
         }else{
             MmlResult r;
             if(!SoundFunctions::MusicPlayFile(path.c_str(), &r)){
@@ -326,6 +371,7 @@ void MusicService::SeekMs(uint32_t ms){
 void MusicService::SetShuffle(bool on){
     EnsureSettings();
     shuffle = on;
+    DropNextPlan();
     if(st) st->queue.setShuffle(on);
     SaveSettings();
     revision++;
@@ -335,6 +381,7 @@ void MusicService::CycleRepeat(){
     EnsureSettings();
     repeat = repeat == PlayQueue::Repeat::Off ? PlayQueue::Repeat::All
            : (repeat == PlayQueue::Repeat::All ? PlayQueue::Repeat::One : PlayQueue::Repeat::Off);
+    DropNextPlan();
     if(st) st->queue.setRepeat(repeat);
     SaveSettings();
     revision++;
@@ -353,13 +400,35 @@ void MusicService::Update(){
     //他のアプリが曲/WAVを鳴らした(周波数の切り替えで止まった)。自分の曲は差し替えられたので進まない
     if(SoundFunctions::PlaybackSerial() != st->serial){
         LOG_APP_MSG("ミュージック: 他のアプリが音を使ったため再生を止めました");
+        //自分のWAVが鳴り続けている(他のアプリがMMLを鳴らした)なら、次の曲へは続けない
+        if(st->kind == Kind::Wav) SoundFunctions::WavClearNext();
+        st->next_planned = false;
+        st->next_track = -1;
         st->kind = Kind::None;
         st->interrupted = true;
         revision++;
         return;
     }
     const bool wav = st->kind == Kind::Wav;
+    //予約した次の曲が耳に届いた(間を空けずに続けて鳴った)。順番を進める
+    if(wav && SoundFunctions::WavAdvanceCount() != st->advance_seen){
+        st->advance_seen = SoundFunctions::WavAdvanceCount();
+        if(st->next_track >= 0){
+            st->queue = st->next_queue;
+            st->failed_mask &= ~((uint64_t)1 << st->next_track);
+            st->fail_streak = 0;
+            st->finished = false;
+            st->error_sticky = false;
+        }
+        st->next_planned = false;
+        st->next_track = -1;
+        revision++;
+    }
+    if(wav && !st->next_planned && SoundFunctions::WavPlaying()) PlanNext();
     if(!(wav ? SoundFunctions::WavPlaying() : SoundFunctions::MusicPlaying())){
+        //続けて積めなかった(読めない・チャンネル数が違う)。今までどおり次を鳴らす
+        st->next_planned = false;
+        st->next_track = -1;
         //SDが使えない(USBドライブでPCへ貸している)間は次の曲を読めないので、そこで止める(全部を「読めない」にしない)
         if(!OSData::SD_usable){
             StopSound();

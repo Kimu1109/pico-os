@@ -112,6 +112,9 @@ uint32_t SoundFunctions::WavPositionMs(){ return 0; }
 uint32_t SoundFunctions::WavDurationMs(){ return 0; }
 bool SoundFunctions::WavSeekMs(uint32_t){ return false; }
 uint32_t SoundFunctions::WavUnderruns(){ return 0; }
+bool SoundFunctions::WavQueueNext(const char*){ return false; }
+bool SoundFunctions::WavClearNext(){ return true; }
+uint32_t SoundFunctions::WavAdvanceCount(){ return 0; }
 
 void SoundFunctions::SetPowerSave(bool){}
 bool SoundFunctions::IsPowerSave(){ return false; }

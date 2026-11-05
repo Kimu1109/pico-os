@@ -377,6 +377,80 @@ static void TestSoundFunctions(){
         check(!WavPlaying() && !WavSeekMs(100), "止めたら飛べない");
     }
 
+    printf("--- 曲と曲の間を空けない ---\n");
+    {
+        HostSd::files["/music/gap.mp3"] = Bytes(kMp3Gapless);
+        HostSd::files["/music/gap2.mp3"] = Bytes(kMp3Gapless);
+        check(!WavQueueNext("/music/gap2.mp3"), "鳴っていなければ予約できない");
+        check(WavPlay("/music/gap.mp3", false, 100), "1曲目を鳴らす");
+        const uint32_t serial = PlaybackSerial();
+        const uint32_t adv = WavAdvanceCount();
+        check(WavQueueNext("/music/gap2.mp3"), "次の曲を予約する");
+        std::vector<int16_t> l;
+        bool switched_early = false;
+        uint32_t pos_after = 0;
+        for(int i = 0; i < 600 && WavAdvanceCount() == adv; i++){
+            Run(now, 1, &l);
+            if(strcmp(WavTitle(), "gap2.mp3") == 0 && WavAdvanceCount() == adv) switched_early = true;
+        }
+        pos_after = WavPositionMs();
+        printf("       移った時点で %zuサンプル鳴らした 位置 %ums 名前 %s\n", l.size(), (unsigned)pos_after, WavTitle());
+        check(WavAdvanceCount() == adv + 1 && !switched_early, "耳に届いたときに次の曲へ移る");
+        check(strcmp(WavTitle(), "gap2.mp3") == 0 && WavDurationMs() == 500, "名前と長さは次の曲");
+        check(pos_after < 100, "位置は次の曲の頭から");
+        check(l.size() >= 22050 - 2048 && l.size() <= 22050 + 2048, "1曲目を鳴らし終えたところで移る(I2Sのバッファの分のずれまで)");
+        check(PlaybackSerial() == serial, "他のアプリに取られた扱いにしない");
+        Run(now, 600, &l);
+        check(!WavPlaying(), "2曲目の終わりで止まる");
+        //鳴り始めから2曲ぶん(44100サンプル)に、無音の所が無い
+        size_t start = 0;
+        while(start < l.size() && abs(l[start]) < 1000) start++;
+        const double mid = Rms(l, start + 5000, start + 15000);
+        double worst = 1e9;
+        for(size_t i = start; i + 50 <= start + 44100 && i + 50 <= l.size(); i += 10){
+            const double r = Rms(l, i, i + 50);
+            if(r < worst) worst = r;
+        }
+        printf("       2曲 中ほどRMS %.0f 一番静かな50サンプル %.0f\n", mid, worst);
+        check(worst > mid * 0.6, "曲と曲の間に無音が入らない");
+        check(Rms(l, start + 44100 + 100, start + 44100 + 2000) < 200, "2曲ぶんで終わる(余分に鳴らさない)");
+    }
+    {
+        check(WavPlay("/music/gap.mp3", false, 100) && WavQueueNext("/music/gap2.mp3"), "予約して");
+        check(WavSeekMs(250), "1曲目の中で飛んでも");
+        const uint32_t adv = WavAdvanceCount();
+        Run(now, 600);
+        check(WavAdvanceCount() == adv + 1, "予約は残り、次の曲へ続けて移る");
+        WavStop();
+        //次の曲を続けて積んだ後(1曲目の終わりぎわ。列は約370ms先読みする)に、1曲目の中で飛ぶ
+        check(WavPlay("/music/gap.mp3", false, 100) && WavQueueNext("/music/gap2.mp3"), "もう一度予約して");
+        const uint32_t adv2 = WavAdvanceCount();
+        for(int i = 0; i < 600 && WavPositionMs() < 420; i++) Run(now, 1);
+        check(!WavClearNext() && WavAdvanceCount() == adv2 && strcmp(WavTitle(), "gap.mp3") == 0, "終わりぎわには次の曲を積み終えている(取り消せない)");
+        check(WavSeekMs(100) && strcmp(WavTitle(), "gap.mp3") == 0, "積んだ後でも1曲目の中で飛べる");
+        const uint32_t p = WavPositionMs();
+        printf("       飛んだ位置 %ums\n", (unsigned)p);
+        check(p >= 50 && p <= 150, "位置は1曲目の中");
+        Run(now, 600);
+        check(WavAdvanceCount() == adv2 + 1 && !WavPlaying(), "1曲目を開き直し、次の曲へは1回だけ続けて移る");
+        check(WavPlay("/music/gap.mp3", false, 100) && WavQueueNext("/music/gap2.mp3") && WavClearNext(), "続けて積む前なら取り消せる");
+        Run(now, 600);
+        check(WavAdvanceCount() == adv2 + 1 && !WavPlaying(), "取り消せば1曲で終わる");
+        check(WavPlay("/music/gap.mp3", true, 100) && !WavQueueNext("/music/gap2.mp3"), "ループ中は予約できない");
+        WavStop();
+    }
+    {
+        const uint32_t adv = WavAdvanceCount();
+        check(WavPlay("/music/st.mp3", false, 100) && WavQueueNext("/music/gap.mp3"), "ステレオの曲の次にモノラルを予約");
+        Run(now, 600);
+        check(WavAdvanceCount() == adv && !WavPlaying(), "チャンネル数が違えば続けず、1曲で終わる");
+        check(WavPlay("/music/gap.mp3", false, 100) && WavQueueNext("/music/bad.mp3"), "読めない曲を予約");
+        Run(now, 600);
+        check(WavAdvanceCount() == adv && !WavPlaying(), "読めなければ続けず、1曲で終わる");
+        check(WavSeekMs(100) && WavPlaying() && strcmp(WavTitle(), "gap.mp3") == 0, "その後も今の曲の中で飛べる");
+        WavStop();
+    }
+
     printf("--- 読めないMP3・WAVへの切り替え ---\n");
     {
         const char* err = nullptr;

@@ -157,7 +157,17 @@ namespace {
     PcmFileDecoder* pcm_decoder = nullptr;  //今のファイルを読んでいる係(wav_decoder か mp3_decoder)
     FixedString<PICO_STR_M> wav_title;
     uint64_t wav_pushed = 0;                // 列へ積んだサンプル数(鳴らし始め/飛んだ位置から数える)
+    uint64_t wav_base = 0;                  // 耳に届いている曲の頭が wav_pushed のどこか(続けて積んだ曲へ移ると進む)
     uint32_t wav_duration_ms = 0;
+    // 曲と曲の間を空けない(WavQueueNext)。docs/design/sound.md「曲と曲の間を空けない」
+    FixedString<PICO_PATH_LEN> wav_path;        // 耳に届いている曲(シークで開き直す)
+    FixedString<PICO_PATH_LEN> wav_next_path;   // 予約された次の曲。続けて積んだ後は、耳に届くまでその曲を指す
+    bool wav_next_set = false;              // 予約があり、まだ続けて積んでいない
+    bool wav_switch_pending = false;        // 次の曲を続けて積んだが、まだ耳に届いていない
+    uint64_t wav_switch_at = 0;             // 次の曲の頭が wav_pushed のどこか
+    uint32_t wav_switch_duration = 0;
+    bool decoder_is_current = true;         // 読み取り係が耳に届いている曲(wav_path)を読んでいる
+    uint32_t wav_advance_count = 0;         // 続けて積んだ曲が耳に届いた回数
     bool wav_loop = false;
     bool wav_loaded = false;                // 鳴らしたWAVが今も有効(WavStop()するまで。読み終えても true)
     uint32_t logged_wav_underruns = 0;
@@ -280,7 +290,88 @@ namespace {
         }
     }
 
-    // WAVを読んで列へ積む(最大 max_samples)。読み終えたら読み取り係を閉じる
+    void LogMp3Stats();
+    void ReleaseMp3Decoder();
+    bool IsMp3Path(const char* path);
+
+    // path を読む係を用意して返す(.mp3 は Mp3Decoder を確保、それ以外は WavDecoder)。もう片方は閉じる/返す。
+    // 確保できなければ nullptr で、error に理由
+    PcmFileDecoder* SelectDecoder(const char* path, const char** error){
+        if(IsMp3Path(path)){
+            if(!mp3_decoder){
+                void* mem = malloc(sizeof(Mp3Decoder));
+                if(!mem){
+                    if(error) *error = "MP3を鳴らすためのメモリが足りません";
+                    return nullptr;
+                }
+                mp3_decoder = new (mem) Mp3Decoder();
+            }else{
+                LogMp3Stats();      //前の曲のぶん(open() で数え直す)
+            }
+            if(wav_decoder) wav_decoder->close();
+            return mp3_decoder;
+        }
+        ReleaseMp3Decoder();
+        if(!wav_decoder){
+            void* mem = malloc(sizeof(WavDecoder));
+            if(!mem){
+                if(error) *error = "WAVを鳴らすためのメモリが足りません";
+                return nullptr;
+            }
+            wav_decoder = new (mem) WavDecoder();
+        }
+        return wav_decoder;
+    }
+
+    // 今の曲を読み終えたので、予約された次の曲を開いて同じ列へ続けて積む。
+    // 読めない・チャンネル数が違う(列の形を変えると先読みを捨てることになる)なら false で、今の曲で終わる
+    // (ミュージックアプリは曲の終わりを見て、今までどおり次の曲を鳴らす=読めない理由もそこで出る)
+    bool ChainNext(WavStream* wav){
+        wav_next_set = false;
+        decoder_is_current = false;
+        const char* err = "";
+        PcmFileDecoder* d = SelectDecoder(wav_next_path.c_str(), &err);
+        if(!d){
+            LOG_SYS_WARN("Sound: 次の曲を続けて鳴らせません(%s)", err);
+            return false;
+        }
+        pcm_decoder = d;
+        d->setStereoOutput(true);
+        if(!d->open(wav_next_path.c_str(), out_rate)){
+            LOG_SYS_WARN("Sound: 次の曲を続けて鳴らせません(%s): %s", d->errorText(), wav_next_path.c_str());
+            return false;
+        }
+        if(d->outChannels() != wav->channels()){
+            LOG_SYS_MSG("Sound: 次の曲はチャンネル数が違うので、間を空けて鳴らします");
+            d->close();
+            return false;
+        }
+        d->setLoop(false);
+        wav_switch_pending = true;
+        wav_switch_at = wav_pushed;
+        wav_switch_duration = d->durationMs();
+        return true;
+    }
+
+    // 続けて積んだ次の曲が耳に届いたら(2コア目が境目を越えたら)、位置・長さ・名前をその曲へ移す
+    void ApplyWavSwitch(){
+        if(!wav_switch_pending) return;
+        WavStream* wav = wav_stream.load(std::memory_order_relaxed);
+        if(!wav) return;
+        const uint64_t buffered = wav->bufferedSamples();
+        const uint64_t played = wav_pushed > buffered ? wav_pushed - buffered : 0;
+        if(played < wav_switch_at) return;
+        wav_switch_pending = false;
+        wav_base = wav_switch_at;
+        wav_duration_ms = wav_switch_duration;
+        wav_path = wav_next_path;
+        const char* slash = strrchr(wav_path.c_str(), '/');
+        wav_title.assign(slash ? slash + 1 : wav_path.c_str());
+        decoder_is_current = true;
+        wav_advance_count++;
+    }
+
+    // WAVを読んで列へ積む(最大 max_samples)。読み終えたら読み取り係を閉じる(次の曲の予約があれば続けて積む)
     void FeedWav(uint32_t max_samples){
         WavStream* wav = wav_stream.load(std::memory_order_relaxed);
         if(!wav || !pcm_decoder || !pcm_decoder->isOpen()) return;
@@ -294,6 +385,9 @@ namespace {
             wav_pushed += wav->push(tmp, n * chs) / chs;
             want -= (uint32_t)n;
             if(pcm_decoder->finished()){
+                //前に続けて積んだ曲がまだ耳に届いていない(列より短い曲)。届くまで次は積まない
+                if(wav_switch_pending) break;
+                if(wav_next_set && !wav_loop && ChainNext(wav)) continue;
                 pcm_decoder->close();
                 wav->setFeeding(false);     //ここから先は鳴らし切るだけ(足りなくても途切れとは数えない)
                 break;
@@ -568,6 +662,7 @@ void SoundFunctions::UpdateAt(unsigned long now_ms){
     //下がり音割れする(実機で確認済み)。BatteryFunctionsの直近のサンプル(60秒間隔)で判定する
     PublishBatteryCap();
 
+    ApplyWavSwitch();
     FeedWav(kWavMaxPerUpdate);
     const uint32_t wu = WavUnderruns();
     if(wu != logged_wav_underruns && now_ms - logged_wav_ms >= 1000){
@@ -911,30 +1006,13 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
         wav = new (mem) WavStream();
         wav_stream.store(wav, std::memory_order_release);
     }
-    if(IsMp3Path(path)){
-        if(!mp3_decoder){
-            void* mem = malloc(sizeof(Mp3Decoder));
-            if(!mem){
-                if(error) *error = "MP3を鳴らすためのメモリが足りません";
-                return false;
-            }
-            mp3_decoder = new (mem) Mp3Decoder();
-        }else{
-            LogMp3Stats();      //前の曲のぶん(open() で数え直す)
-        }
-        if(wav_decoder) wav_decoder->close();
-        pcm_decoder = mp3_decoder;
-    }else{
-        ReleaseMp3Decoder();
-        if(!wav_decoder){
-            void* mem = malloc(sizeof(WavDecoder));
-            if(!mem){
-                if(error) *error = "WAVを鳴らすためのメモリが足りません";
-                return false;
-            }
-            wav_decoder = new (mem) WavDecoder();
-        }
-        pcm_decoder = wav_decoder;
+    wav_next_set = false;
+    wav_switch_pending = false;
+    decoder_is_current = true;
+    {
+        PcmFileDecoder* d = SelectDecoder(path, error);
+        if(!d) return false;
+        pcm_decoder = d;
     }
 
     //見出しを先に別の係で確かめると読み取り係が2つ要るので、読めなかったら今のWAVも止まる
@@ -944,8 +1022,10 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
     wav->setPaused(false);
     wav->flush();
     wav_pushed = 0;
+    wav_base = 0;
     wav_duration_ms = 0;
     wav_loaded = false;
+    if(!wav_path.assign(path)) wav_path.clear();     //長すぎるパスは覚えない(続けて積んだ後のシークで開き直せないだけ)
     wav_loop = loop;
     pcm_decoder->setStereoOutput(true);     //2ch以上のファイルは左右を残す(1chはモノラルのまま)
     if(!pcm_decoder->open(path, out_rate)){
@@ -978,8 +1058,30 @@ void SoundFunctions::WavStop(){
     wav->setPaused(false);
     wav->flush();
     wav_loaded = false;
+    wav_next_set = false;
+    wav_switch_pending = false;
+    decoder_is_current = true;
     if(wav_decoder) wav_decoder->close();
     ReleaseMp3Decoder();
+}
+
+bool SoundFunctions::WavQueueNext(const char* path){
+    if(!path || !*path || !wav_loaded || wav_loop || !WavPlaying()) return false;
+    if(wav_switch_pending) return false;    //もう次の曲を続けて積んだ(耳に届くまで次の予約は受けない)
+    if(!wav_next_path.assign(path)) return false;
+    wav_next_set = true;
+    return true;
+}
+
+bool SoundFunctions::WavClearNext(){
+    if(wav_switch_pending) return false;
+    wav_next_set = false;
+    return true;
+}
+
+uint32_t SoundFunctions::WavAdvanceCount(){
+    ApplyWavSwitch();
+    return wav_advance_count;
 }
 
 bool SoundFunctions::WavPause(bool pause){
@@ -994,13 +1096,16 @@ bool SoundFunctions::WavPaused(){
     return wav && wav->paused() && WavPlaying();
 }
 
-uint32_t SoundFunctions::WavDurationMs(){ return wav_duration_ms; }
+uint32_t SoundFunctions::WavDurationMs(){ ApplyWavSwitch(); return wav_duration_ms; }
 
 uint32_t SoundFunctions::WavPositionMs(){
     WavStream* wav = wav_stream.load(std::memory_order_relaxed);
     if(!wav) return 0;
+    ApplyWavSwitch();
     const uint64_t buffered = wav->bufferedSamples();
-    const uint64_t played = wav_pushed > buffered ? wav_pushed - buffered : 0;
+    const uint64_t pushed = wav_pushed > buffered ? wav_pushed - buffered : 0;
+    //続けて積んだ次の曲がまだ耳に届いていなければ、今の曲の中の位置(wav_base は今の曲の頭)
+    const uint64_t played = pushed > wav_base ? pushed - wav_base : 0;
     uint64_t ms = played * 1000 / out_rate;
     if(wav_duration_ms > 0){
         if(wav_loop) ms %= wav_duration_ms;
@@ -1011,18 +1116,40 @@ uint32_t SoundFunctions::WavPositionMs(){
 
 bool SoundFunctions::WavSeekMs(uint32_t ms){
     WavStream* wav = wav_stream.load(std::memory_order_relaxed);
-    if(!wav || !pcm_decoder || wav_duration_ms == 0) return false;
+    if(!wav || !pcm_decoder) return false;
+    ApplyWavSwitch();
+    if(wav_duration_ms == 0) return false;
     if(ms >= wav_duration_ms) ms = wav_duration_ms - 1;
     if(!wav_loaded) return false;
 
     wav->setFeeding(false);
     wav->flush();
+    //読み取り係が次の曲へ移っていたら(続けて積んだ・積もうとした後)、耳に届いている曲を開き直す。
+    //続けて積めていた次の曲は、もう一度予約し直す(この曲を読み終えたらまた続けて積む)
+    if(!decoder_is_current){
+        const bool requeue = wav_switch_pending;
+        wav_switch_pending = false;
+        if(wav_path.empty()) return false;
+        const char* err = "";
+        PcmFileDecoder* d = SelectDecoder(wav_path.c_str(), &err);
+        if(!d) return false;
+        pcm_decoder = d;
+        d->setStereoOutput(true);
+        if(!d->open(wav_path.c_str(), out_rate) || d->outChannels() != wav->channels()){
+            d->close();
+            return false;
+        }
+        d->setLoop(wav_loop);
+        decoder_is_current = true;
+        if(requeue) wav_next_set = true;
+    }
     if(!pcm_decoder->seekMs(ms)){
         //飛べなければ止める(読み取り係が中途半端な状態で残らないように)
         pcm_decoder->close();
         return false;
     }
     wav_pushed = (uint64_t)ms * out_rate / 1000;
+    wav_base = 0;
     wav->setFeeding(true);
     FeedWav(kWavPrefillSamples);
     return true;
@@ -1034,7 +1161,7 @@ bool SoundFunctions::WavPlaying(){
     return (pcm_decoder && pcm_decoder->isOpen()) || wav->buffered();
 }
 
-const char* SoundFunctions::WavTitle(){ return wav_title.c_str(); }
+const char* SoundFunctions::WavTitle(){ ApplyWavSwitch(); return wav_title.c_str(); }
 
 uint32_t SoundFunctions::WavUnderruns(){
     WavStream* wav = wav_stream.load(std::memory_order_relaxed);

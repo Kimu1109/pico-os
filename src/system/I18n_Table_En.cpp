@@ -1,7 +1,10 @@
 // 生成物: python3 script/i18n.py update が i18n/ の .po から作る。手で直さない(docs/design/i18n.md)
 #include "system/I18n_Functions.hpp"
+#include "config/Lang_Config.hpp"
 
-// hash の昇順(I18nFunctions::Lookup() が二分探索する)
+// 英語を外した版(PICO_LANG_EN=0。config/Lang_Config.hpp)では表ごとフラッシュに入れない
+#if PICO_LANG_EN
+// hash の昇順(I18nFunctions::Lookup() が二分探索する)。訳の無い原文は日本語を外した版でだけ原文のまま入る
 const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x0073e150u, "Name" }, // 名前
     { 0x0078838cu, "Polish zloty" }, // ポーランドズロチ
@@ -1486,5 +1489,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xffaf61beu, "Cannot check for new mail" }, // 新着を確かめられません
     { 0xffdae38bu, "Fetching %s…" }, // %s を取得中…
     { 0xfff3714fu, "No" }, // いいえ
+    { 0xffffffffu, nullptr },
 };
-const size_t I18nFunctions::kTableEnCount = 1483;
+const size_t I18nFunctions::kTableEnCount = sizeof(kTableEn) / sizeof(kTableEn[0]) - 1;
+#endif

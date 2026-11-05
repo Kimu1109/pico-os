@@ -1,40 +1,57 @@
 // 引き当てと言語コードだけ(SDもログも使わない)。TR() を使うどのファイルからもリンクされるので、
 // 設定ファイルを読み書きする Setup()/SetLanguage() は I18n_Setup.cpp に分けてある
 #include "system/I18n_Functions.hpp"
+#include "config/Lang_Config.hpp"
 
 #include <cstring>
 
 namespace {
     const I18nFunctions::Entry* tableOf(I18nFunctions::Lang lang, size_t& count){
         switch(lang){
+#if PICO_LANG_EN
             case I18nFunctions::Lang::En:
                 count = I18nFunctions::kTableEnCount;
                 return I18nFunctions::kTableEn;
+#endif
             default:
                 count = 0;
                 return nullptr;
         }
     }
+
+    // 今の言語の表から hash の訳を探す。無ければ nullptr
+    const char* find(uint32_t hash){
+        size_t count = 0;
+        const I18nFunctions::Entry* table = tableOf(I18nFunctions::current_lang, count);
+        //hash の昇順(生成時に重複が無いことを確かめてある)
+        size_t lo = 0, hi = count;
+        while(lo < hi){
+            const size_t mid = lo + (hi - lo) / 2;
+            const uint32_t h = table[mid].hash;
+            if(h == hash) return table[mid].text;
+            if(h < hash) lo = mid + 1;
+            else         hi = mid;
+        }
+        return nullptr;
+    }
 }
 
 const char* I18nFunctions::Lookup(uint32_t hash, const char* src){
     if(current_lang == Lang::Ja) return src;
-    size_t count = 0;
-    const Entry* table = tableOf(current_lang, count);
-    //hash の昇順(生成時に重複が無いことを確かめてある)
-    size_t lo = 0, hi = count;
-    while(lo < hi){
-        const size_t mid = lo + (hi - lo) / 2;
-        const uint32_t h = table[mid].hash;
-        if(h == hash) return table[mid].text;
-        if(h < hash) lo = mid + 1;
-        else         hi = mid;
-    }
-    return src;
+    const char* t = find(hash);
+    return t ? t : src;
 }
+
+#if !PICO_LANG_JA
+const char* I18nFunctions::LookupHash(uint32_t hash){
+    const char* t = find(hash);
+    return t ? t : "";
+}
+#endif
 
 const char* I18nFunctions::Tr(const char* src){
     if(!src || current_lang == Lang::Ja) return src;
+    //Luaアプリの名前等、表に無いものは渡したまま
     return Lookup(Hash(src), src);
 }
 

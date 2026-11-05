@@ -200,6 +200,19 @@ if(NOT PICOOS_LUA_ISO OR PICOOS_MUSIC_BUILD)
     target_compile_definitions(picoos_pc PRIVATE PICO_LUA_ISO=0)
 endif()
 
+# 載せる表示言語(src/config/Lang_Config.hpp の PICO_LANG_*)。既定は両方。1つは載せること
+# 例: cmake -S pc -B pc/build-en -DPICOOS_LANG_JA=OFF
+option(PICOOS_LANG_JA "日本語を載せる" ON)
+option(PICOOS_LANG_EN "英語を載せる" ON)
+if(NOT PICOOS_LANG_JA AND NOT PICOOS_LANG_EN)
+    message(FATAL_ERROR "PICOOS_LANG_JA と PICOOS_LANG_EN の少なくとも1つは ON にしてください")
+endif()
+foreach(lang JA EN)
+    if(NOT PICOOS_LANG_${lang})
+        target_compile_definitions(picoos_pc PRIVATE PICO_LANG_${lang}=0)
+    endif()
+endforeach()
+
 # pc/compat を src より前に置くことで、実機ライブラリのヘッダを差し替える
 target_include_directories(picoos_pc PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/compat"

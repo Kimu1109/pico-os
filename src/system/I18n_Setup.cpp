@@ -11,10 +11,10 @@ namespace {
 }
 
 void I18nFunctions::Setup(){
-    Lang lang = Lang::Ja;
+    Lang lang = kDefaultLang;
     if(override_code){
         if(!FromCode(override_code, lang)){
-            LOG_SYS_WARN("I18n: 知らない言語です (%s)。日本語にします", override_code);
+            LOG_SYS_WARN("I18n: 知らない言語です (%s)。%s にします", override_code, Code(kDefaultLang));
         }
     }else{
         bool found = false;
@@ -30,12 +30,17 @@ void I18nFunctions::Setup(){
         //知らない言語(ブラウザが fr 等)は日本語ではなく英語で見せる
         if(!found && default_code && !FromCode(default_code, lang)) lang = Lang::En;
     }
+    //このビルドに載せていない言語(英語を外した版で language = en 等)は、載せた言語にする
+    if(!Available(lang)){
+        LOG_SYS_WARN("I18n: %s はこのビルドに入っていません。%s にします", Code(lang), Code(kDefaultLang));
+        lang = kDefaultLang;
+    }
     current_lang = lang;
     LOG_SYS_OK("I18n Setup has succeeded! (%s)", Code(current_lang));
 }
 
 void I18nFunctions::SetLanguage(Lang lang, bool save){
-    if(lang >= Lang::Count) return;
+    if(lang >= Lang::Count || !Available(lang)) return;
     current_lang = lang;
     if(save) PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_USER_CFG, kUserCfgKey, Code(lang));
 }

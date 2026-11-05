@@ -400,4 +400,5 @@
 - [x] Luaアプリの多言語対応(`pico.lang`・`pico.tr`・`lang/<言語>.lua`・app.cfg の `name_en`)とOS側のLuaの画面
 - [x] 同梱のLuaアプリの画面(天気は日本語のまま)
 - [x] アプリの説明の訳(app.cfg の `description_en`)とアプリストアの訳(catalog.tsv の訳の列・本体のストア・Webのページ)
+- [x] ビルド時に言語を選ぶ(載せない言語の文字列をフラッシュから外す。`PICO_LANG_*`)
 - [ ] アプリストア(pico-os-apps)の公式アプリへの反映(作者の鍵で署名し直す)

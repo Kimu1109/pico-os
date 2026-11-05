@@ -19,7 +19,7 @@ inline IconID For(const char* name, bool is_dir){
     if(!dot) return IconID::File;
     static const char* const kImage[]   = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".pimg", nullptr};
     static const char* const kVideo[]   = {".pvid", ".mp4", ".avi", ".mov", nullptr};
-    static const char* const kAudio[]   = {".wav", ".mml", ".mid", ".mp3", ".flac", ".ogg", nullptr};
+    static const char* const kAudio[]   = {".wav", ".mml", ".mid", ".mp3", ".flac", ".m4a", ".ogg", nullptr};
     static const char* const kText[]    = {".txt", ".md", ".markdown", ".log", ".csv", ".tsv", ".cfg", ".ini", ".json", nullptr};
     static const char* const kCode[]    = {".lua", ".c", ".cpp", ".h", ".hpp", ".py", ".js", ".html", nullptr};
     static const char* const kArchive[] = {".zip", ".gz", ".tar", ".7z", nullptr};

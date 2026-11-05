@@ -14,6 +14,8 @@ namespace AudioFormat {
     inline bool IsWav(const char* path){ return HasExtension(path, ".wav"); }
     inline bool IsMp3(const char* path){ return HasExtension(path, ".mp3"); }
     inline bool IsFlac(const char* path){ return HasExtension(path, ".flac"); }
-    // WAVの経路(SoundFunctions::WavPlay)で鳴らすファイル(.wav / .mp3 / .flac)か
-    inline bool IsPcmFile(const char* path){ return IsWav(path) || IsMp3(path) || IsFlac(path); }
+    // .m4a(MP4コンテナ。中身がALACのものだけ鳴らせる。AACは開くときに理由つきで断る)
+    inline bool IsM4a(const char* path){ return HasExtension(path, ".m4a"); }
+    // WAVの経路(SoundFunctions::WavPlay)で鳴らすファイル(.wav / .mp3 / .flac / .m4a)か
+    inline bool IsPcmFile(const char* path){ return IsWav(path) || IsMp3(path) || IsFlac(path) || IsM4a(path); }
 }

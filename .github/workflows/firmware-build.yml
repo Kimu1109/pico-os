@@ -81,6 +81,11 @@ jobs:
       - name: ビルドする
         run: pio run -e rpipico2w
 
+      # フラッシュ/SDに分けた日本語フォント(src/gui/fonts/・pc/sdcard/sys/fonts/)が、今の LovyanGFX と
+      # script/font/base_kanji.txt から作り直したものと同じか(LovyanGFXの版を上げた・残す字を変えたときの作り直し忘れ)
+      - name: 分けた日本語フォントが作り直したものと同じか
+        run: python3 script/font/split_font.py --check --lgfx .pio/libdeps/rpipico2w/LovyanGFX/src/lgfx/Fonts/IPA/lgfx_font_japan.c
+
       # 音声・マイク・電池を外した版(src/config/Hardware_Config.hpp)。空の実装の付け忘れ
       # (Sound_Functions.hpp 等へ足した関数が _Off.cpp に無い)はリンクで初めて分かるので、PRとmainへのpushで作る
       # (ナイトリーから呼ばれたときは作らない。成果物にも載せない)

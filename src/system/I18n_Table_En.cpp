@@ -174,6 +174,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x1a782219u, "Unread chat" }, // チャットの未読
     { 0x1a8673b7u, "Missing ','" }, // ',' がありません
     { 0x1acbd3dcu, "disconnected during the handshake" }, // 開始の挨拶の途中で切れた
+    { 0x1ae9c3c2u, "Installed" }, // あり
     { 0x1af16218u, "None found" }, // 見つかりませんでした
     { 0x1b02ef42u, "acre" }, // エーカー
     { 0x1b048a70u, "Calendar" }, // カレンダー
@@ -206,6 +207,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x1e5e95cau, "2 min" }, // 2分
     { 0x1ead88ffu, "CDATA outside the root element" }, // ルート要素の外にCDATAがあります
     { 0x1eb17d9cu, "A new version of %s is available" }, // %s の新しい版があります
+    { 0x1ec29f37u, "The font does not match this firmware" }, // フォントの中身が本体の決まりと合いません
     { 0x1ef5f75bu, "Really delete?" }, // 本当に削除しますか?
     { 0x1f00ceebu, "Chat is not set up" }, // チャットが設定されていません
     { 0x1f04b1a3u, "Does not look like an IMAP server" }, // IMAPのサーバではないようです
@@ -239,6 +241,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x23ab48a9u, "Transcription API key (blank to keep):" }, // 文字起こしのAPIキー(空欄で変更なし):
     { 0x23d8f00du, "Up to %d networks can be saved. Delete one you don't need" }, // 保存できるのは%d件までです。不要なものを削除してください
     { 0x2418839au, "Stopwatch" }, // ストップウォッチ
+    { 0x2421d184u, "The font is larger than expected" }, // フォントが決まりの大きさより大きいです
     { 0x2444f75bu, "Undo" }, // 元に戻す
     { 0x245f7f6cu, "server did not switch to WebSocket" }, // サーバがWebSocketに切り替えない
     { 0x24620418u, "Already a USB drive" }, // すでにUSBドライブになっています
@@ -267,6 +270,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x28fae1c1u, "electronvolt" }, // 電子ボルト
     { 0x292404cfu, "Runtime error in on_key()" }, // on_key()の実行時エラー
     { 0x29321171u, "New PIN (4-8 digits)" }, // 新しいPIN(数字4〜8桁)
+    { 0x2954e5b2u, "Installed the extra kanji font" }, // 追加の漢字フォントを入れました
     { 0x295e8637u, "Unexpected list format (catalog.tsv)" }, // 一覧(catalog.tsv)の形式が違います
     { 0x29750bcau, "Clock" }, // 時計
     { 0x29d186beu, "broker reply was not CONNACK" }, // ブローカの返事がCONNACKでない
@@ -285,6 +289,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x2b209367u, "Bookmarks are full (remove one first)" }, // しおりがいっぱいです(先に外してください)
     { 0x2b2a2b2bu, "User name (usually your email):" }, // ユーザー名(ふつうはメールアドレス):
     { 0x2b4e272cu, "calorie" }, // カロリー
+    { 0x2b9f9a93u, "Could not save the font" }, // フォントを保存できません
     { 0x2bb910aau, "Cannot open the update file" }, // 更新ファイルを開けません
     { 0x2be4cc79u, "Host key is not ssh-ed25519" }, // ホスト鍵の形式が ssh-ed25519 ではありません
     { 0x2bfc6839u, "Cannot resolve the link" }, // リンクを解決できません
@@ -300,6 +305,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x2dd81fb6u, "(not set)" }, // (未設定)
     { 0x2de33dd6u, "Cannot get an access token: %s" }, // アクセストークンを取れません: %s
     { 0x2e0b083au, " · stops in %dm" }, //  ・%d分で停止
+    { 0x2e520cf3u, "Extra kanji: %lu%%" }, // 追加の漢字: 取得 %lu%%
     { 0x2e8448f8u, "Server has no ssh-ed25519 host key" }, // サーバに ssh-ed25519 のホスト鍵がありません
     { 0x2e86e69cu, "Unexpected file list (files.tsv)" }, // ファイル一覧(files.tsv)の形式が違います
     { 0x2ea78303u, "Cannot send to the portal" }, // ポータルへ送れません
@@ -321,6 +327,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x31a482f8u, "Lua runtime error" }, // Luaスクリプトの実行時エラー
     { 0x31dd5e2bu, "Pick a network to join from the list" }, // 接続するネットワークを一覧から選んでください
     { 0x3231870fu, "Version list is too large" }, // 版の一覧が大きすぎます
+    { 0x32b834a4u, "The font was cut off" }, // フォントが途中で切れています
     { 0x32d3a0a3u, "Disconnected" }, // 切断しました
     { 0x32d572bbu, "Not available in the Web version" }, // Web版では受け取れません
     { 0x32de65a3u, "Pressure" }, // 圧力
@@ -429,6 +436,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x45b77babu, "Video index is broken" }, // 動画の目録が壊れています
     { 0x45bbe57cu, "Checked %lus ago (%d rooms)" }, // %lu秒前に確認(%d部屋)
     { 0x45ed28d7u, "Could not read the whole script" }, // スクリプトを最後まで読めません
+    { 0x45f1d4b4u, "Broken" }, // 壊れている
     { 0x464e0659u, "Headers too long, or invalid names or characters" }, // ヘッダが長すぎるか、使えない名前・文字があります
     { 0x465a4a84u, "foot" }, // フィート
     { 0x46695bf8u, "Not available in the Web version" }, // Web版では使えません
@@ -585,6 +593,8 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x6181e389u, "Czech koruna" }, // チェココルナ
     { 0x61b94028u, "Mismatched brackets" }, // 括弧の対応が合いません
     { 0x61f5e700u, "%d/%d (%s)" }, // %d月%d日(%s)
+    { 0x62066e90u, "Unreadable" }, // 読めない
+    { 0x621aec39u, "Stop" }, // 中止
     { 0x621e9d91u, "New name:" }, // 新しい名前:
     { 0x62643347u, "Writing" }, // 書き込んでいます
     { 0x6275e17au, "Zoom-" }, // 縮小
@@ -598,6 +608,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x640a190cu, "gallon (US)" }, // ガロン(米)
     { 0x6433c46eu, "gibibyte" }, // ギビバイト
     { 0x6456f4e6u, "Update" }, // 更新
+    { 0x646515c7u, "Downloading %dpx glyphs..." }, // %dpxの字をダウンロード中…
     { 0x64b5988au, " This version is skipped" }, //  この版は見送り中
     { 0x64bb5828u, "Move forward" }, // 後ろへ移動
     { 0x64c451adu, "Cannot join: the line would be too long" }, // 1行が長くなりすぎるため繋げられません
@@ -641,6 +652,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x6b6d944cu, "[Update]" }, // [更新]
     { 0x6c22fb68u, "USB: port OK" }, // USB:口OK
     { 0x6c539896u, "Could not fetch the page: " }, // ページを取れませんでした: 
+    { 0x6ccd0ac8u, "Mismatch" }, // 版違い
     { 0x6d14a300u, "Online" }, // 接続中
     { 0x6d4b7f9au, "Endpoint not found (check api / model)" }, // 送り先が見つかりません(api / model を確認)
     { 0x6d4f275cu, "Agenda" }, // 予定
@@ -780,6 +792,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x82efc548u, "Saved display/SD settings could not be read, so the defaults were used" }, // 保存した液晶・SDの設定が読めなかったので、既定の設定で起動しました
     { 0x8309ef63u, "Cannot read the sign-in server response (HTTP %d)" }, // サインインのサーバの応答が読めません (HTTP %d)
     { 0x830e9716u, "at %02d:%02d (in %d min)" }, // %02d:%02dから(%d分前)
+    { 0x8317bd61u, "No SD" }, // SDなし
     { 0x839b18b9u, "Delete %s?\nThis removes all of /lua/apps/%s (including save data)" }, // %s を削除しますか?\n/lua/apps/%s を丸ごと消します(セーブデータ等も消えます)
     { 0x841ae773u, "Cut" }, // 切り取りました
     { 0x845448ecu, "%s/%s, about %s%s free" }, // %s/%s 空き約%s%s
@@ -934,6 +947,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0x9d497cf2u, "(no headings or bookmarks)" }, // (見出し・しおりはありません)
     { 0x9d51aba4u, "Home" }, // ホーム
     { 0x9d714c2cu, "Cannot add the task" }, // タスクを追加できません
+    { 0x9db5af6au, "Stopped downloading the extra kanji font" }, // 追加の漢字フォントの取得を取りやめました
     { 0x9de7acf8u, "No game running" }, // ゲームが動いていません
     { 0x9e024f22u, "Notes" }, // メモ
     { 0x9e25cb8du, "TODO refresh" }, // TODOの取り直し
@@ -1154,6 +1168,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xc02d1799u, "gram" }, // グラム
     { 0xc047bc42u, "in %ldm %lds" }, // あと%ld分%ld秒
     { 0xc0563e26u, "Disconnected" }, // 接続が切れました
+    { 0xc09af6a3u, "Get" }, // 取得
     { 0xc0a92eb7u, "Rename" }, // 名前の変更
     { 0xc0b9a256u, "Enter y%d (x key for the variable)" }, // y%dの式を入力 (x キーで変数)
     { 0xc15bea5bu, "Alarm" }, // アラーム
@@ -1275,6 +1290,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xd7475b09u, " - please delete (danger)" }, // を削除してください(危険)
     { 0xd774dc03u, "Pause" }, // 一時停止
     { 0xd7960761u, "Save state" }, // 途中保存
+    { 0xd7fcf637u, "The extra kanji font is already installed" }, // 追加の漢字フォントは入っています
     { 0xd84b29cfu, "Cannot start the download" }, // 取得を始められません
     { 0xd870230du, "Saved %d/%d (double-tap to join)" }, // 保存済み %d/%d (2回タップで接続)
     { 0xd899c681u, "Unexpected key exchange reply" }, // 想定外の鍵交換の応答が届きました
@@ -1346,6 +1362,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xe7b3a142u, "Emulator stopped: " }, // エミュが停止しました: 
     { 0xe7c019a3u, "Update file was cut off" }, // 更新ファイルが途中で切れました
     { 0xe7dac0dcu, "Completed" }, // 完了にしました
+    { 0xe847595du, "Unchecked" }, // 未確認
     { 0xe87c2a74u, "mail.cfg has no oauth-client-id. Add it in [Setup]" }, // mail.cfg に oauth-client-id がありません。[設定] から入れてください
     { 0xe88c5d90u, "Size limit reached (32KiB)" }, // 容量の上限(32KiB)です
     { 0xe895e084u, "Could not open the file" }, // ファイルを開けませんでした
@@ -1362,6 +1379,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xe9ebf0bfu, "Cannot start the request" }, // 要求を始められません
     { 0xe9f5d906u, "%s · Stopped: another app used audio" }, // %s · 他のアプリが音を使ったため止まりました
     { 0xea385094u, "1. Scan the QR or join the Wi-Fi" }, // 1. QRを読むか、Wi-Fiで接続
+    { 0xea46bd27u, "Extra kanji: %s" }, // 追加の漢字: %s
     { 0xea4a60e9u, "Expression too complex" }, // 式が複雑すぎます
     { 0xeac6e494u, "Files" }, // ファイル
     { 0xeaf23f4cu, " (connecting)" }, //  (接続しています)

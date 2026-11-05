@@ -92,6 +92,23 @@ jobs:
           ! grep -q "__PICOOS_ASSET_REV__" _site/playground/index.html
           ls -laR _site
 
+      # 本体の「設定」→「他」→追加の漢字[取得]が読む、SDの追加の漢字フォント(docs/design/performance.md「漢字の一部をSDへ」)。
+      # 名前は src/gui/fonts/JpFont_Data.hpp の web_name(jpgothic<px>-<印>.pkf)。本体は大きさとSHA-256を自分で持っているので一覧は要らない。
+      # IPAフォントライセンスv1.0 の派生プログラムなので、ライセンスと元へ戻す方法(README.md)も同じ所に置く(第3条1項)
+      - name: 追加の漢字フォントを /fonts/ に置く
+        run: |
+          mkdir -p _site/fonts
+          python3 - <<'PY'
+          import re, shutil
+          h = open("src/gui/fonts/JpFont_Data.hpp", encoding="utf-8").read()
+          pairs = re.findall(r'"/sys/fonts/(jpgothic\d+\.pkf)", "([^"]+)"', h)
+          assert len(pairs) == 2, pairs
+          for src, web in pairs:
+              shutil.copy("pc/sdcard/sys/fonts/" + src, "_site/fonts/" + web)
+          PY
+          cp pc/sdcard/sys/fonts/README.md pc/sdcard/sys/fonts/IPA_Font_License_Agreement_v1.0.txt _site/fonts/
+          ls -la _site/fonts
+
       # トップのページ(pc/web/landing.html)に載せる画面写真。写真はリポジトリに置かず、
       # 公開のたびにネイティブのPCビルドの --shot で今の画面を撮る(script/web_shots.sh)。
       # PRでも撮って、撮れなくなった(起動しない・落ちる等)ことにここで気づけるようにする

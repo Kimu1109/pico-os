@@ -4,13 +4,15 @@
 #include "system/Log_Functions.hpp"
 #include "storage/SD_Path.hpp"
 #include "devtools/font_coverage_check.hpp"
+#include "gui/core/GlyphIndexFont.hpp"
 #include "OS_Data.hpp"
 
 namespace TestFunctions {
     inline void RunAll(){
         LOG_SYS_OK("Test Service: All of Tests begin!");
         if(OSData::SD_usable){
-            checkFontCoverage(OSData::SD, lgfxJapanGothicP_16, PICO_Path::FILE::IME::IME_SKK_BODY, PICO_Path::FILE::TMP_TOFU_TXT);
+            // 画面と同じフォント(フラッシュ+SDの追加フォント。SDに追加フォントが無ければ常用漢字の外は「無い」になる)
+            checkFontCoverage(OSData::SD, *GlyphIndexFonts::Small(), PICO_Path::FILE::IME::IME_SKK_BODY, PICO_Path::FILE::TMP_TOFU_TXT);
         }
         LOG_SYS_OK("Test Service: All of Tests has done!");
     }

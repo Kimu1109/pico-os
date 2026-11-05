@@ -55,7 +55,8 @@ src/
   services/  OSの機能(アプリ登録簿・アラーム・タイマー・電源・ロック・明るさ・スクショ・ファーム更新・USBドライブ・Wi-Fi転送・端末の鍵・スマホからのWi-Fi設定)
   devtools/  プロファイラ・クラッシュダンプ・debug.cfg・自己診断
   boot/      つなぎ(App_List / Background_List / KeyInput_Dispatch / Notification_Sources)
-  gui/core/  GFX(合成と転送)・Font・Widget・Focus・Scene・Keyboard・Error
+  gui/core/  GFX(合成と転送)・Font(常用外の漢字はSDの追加フォントから。ExtGlyphStore)・Widget・Focus・Scene・Keyboard・Error
+  gui/fonts/ 日本語フォントの生成物(常用漢字まで。script/font/split_font.py)
   gui/widgets/  汎用部品と基底。apps/ dialogs/ keyboards/ interfaces/ systems/ は下の「ウィジェットの置き場所」
   gui/scenes/   機能の中身を持たない画面(設定・時計・ファイル・Lua等)
   apps/<機能>/  1フォルダ=1機能(browser calculator calendar chat dict firmware gb home mail music notes reader recorder ssh store texteditor todo video)。
@@ -160,6 +161,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
   **tablerは16pxで細い線が消えることがあるので生成後に目視**し、破綻したら `custom_icons/` へ描き起こす(基準は `script/custom_icons/README.md`)。
 - 「状態の否定」は専用アイコンを作らず、基底アイコンに `IconID::X` を `PICO_RED` で重ねる(SD無し・Wi-Fi圏外)。
 - ライセンスは MIT(`LICENSE`、著作権者 Kimu1109)。**他者のコード・データ・素材を同梱したら `THIRD_PARTY_LICENSES.md` に1行足す**(GPL等の継承型はファームに組み込まずSDのデータに留める)。
+- **画面の文字に使う漢字は常用漢字まで**(`script/font/base_kanji.txt`。外の字はSDの追加フォントにしか無く、SDが無いと □。`script/font/check_ui_chars.py` がCIで見る。`performance.md`「漢字の一部をSDへ」)。
 - **画面に出す日本語の文字列は `TR("…")` で包み、`python3 script/i18n.py update` で `i18n/en.po` へ訳を書く**(静的な表は `TR_NOOP()` + 使う所で `I18nFunctions::Tr()`。アプリの登録名は訳さず見せる所で訳す。`docs/design/i18n.md`)。
 - 物理キーボードを扱う画面は `Scene::onKey()` を実装する。外部コントローラーの入力元は `PadFunctions` に `Source` を足す(`docs/design/input.md`)。
 

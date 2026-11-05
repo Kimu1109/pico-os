@@ -1,4 +1,4 @@
-// 設定アプリ(SettingsScene)の「他」タブ(ランチャ・ブラウザのホーム・バックグラウンド・開発者向け)。画面の組み立ての全体は SettingsScene.cpp の onEnter()
+// 設定アプリ(SettingsScene)の「他」タブ(ランチャ・ブラウザのホーム・バックグラウンド・追加の漢字フォント・開発者向け)。画面の組み立ての全体は SettingsScene.cpp の onEnter()
 #include "gui/scenes/SettingsScene.hpp"
 #include "services/Power_Functions.hpp"
 #include "gui/core/Scene_Functions.hpp"
@@ -27,6 +27,10 @@
 #include "services/App_Functions.hpp"
 #include "gui/widgets/dialogs/PickerDialog.hpp"
 #include "system/I18n_Functions.hpp"
+#include "gui/core/JpFont_Ext.hpp"
+#include "system/Log_Functions.hpp"
+#include "services/FontDownload.hpp"
+#include "system/Config_Functions.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -93,6 +97,93 @@ void SettingsScene::openLauncherDialog(){
 }
 
 // ---------------------------------------------------------------------------
+// 追加の漢字フォント(docs/design/performance.md「漢字の一部をSDへ」)
+// ---------------------------------------------------------------------------
+
+void SettingsScene::refreshFontLabel(){
+    if(!this->font_label) return;
+    char buf[PICO_STR_L];
+    uint32_t key;
+    if(this->font_download && this->font_download->busy()){
+        const uint32_t total = this->font_download->progressTotal();
+        const uint32_t pct = total ? (uint32_t)((uint64_t)this->font_download->progressDone() * 100 / total) : 0;
+        key = 0x80000000u | pct;
+        snprintf(buf, sizeof(buf), TR("追加の漢字: 取得 %lu%%"), (unsigned long)pct);
+    }else{
+        JpFontExt::Ready();
+        const auto s16 = JpFontExt::Store(16).state();
+        const auto s24 = JpFontExt::Store(24).state();
+        key = ((uint32_t)s16 << 8) | (uint32_t)s24;
+        // 2つの状態が違えば、使えない方を出す
+        const auto shown = (s16 != ExtGlyphStore::State::Ready) ? s16 : s24;
+        snprintf(buf, sizeof(buf), TR("追加の漢字: %s"), JpFontExt::StateText(shown));
+    }
+    if(key == this->font_shown) return;
+    this->font_shown = key;
+    this->font_label->setText(buf);
+}
+
+void SettingsScene::startFontDownload(){
+    if(this->font_download && this->font_download->busy()){
+        this->font_download->cancel();
+        this->endFontDownload();
+        this->showMessageLater(TR("追加の漢字フォントの取得を取りやめました"));
+        return;
+    }
+    if(JpFontExt::Ready()){
+        this->showMessageLater(TR("追加の漢字フォントは入っています"));
+        return;
+    }
+    this->endFontDownload();
+    this->font_download = new FontDownload();
+    if(!this->font_download){
+        this->showMessageLater(TR("メモリが足りません"));
+        return;
+    }
+    // 置き場は /sys/firmware.cfg の font-url で変えられる(手元のサーバで試す用。ファームの url と同じ考え方)
+    if(OSData::SD_usable && OSData::SD.exists(PICO_Path::FILE::CFG::SYS_FIRMWARE_CFG)){
+        FontDownload* dl = this->font_download;
+        PICO_Config::ParseFile(PICO_Path::FILE::CFG::SYS_FIRMWARE_CFG, [dl](const char* key, const char* value){
+            if(strcmp(key, "font-url") == 0 && !dl->setBaseUrl(value)){
+                LOG_SYS_WARN("追加の漢字: firmware.cfg の font-url が読めません (%s)", value);
+            }
+        });
+    }
+    if(!this->font_download->begin()){
+        this->showMessageLater(this->font_download->message());
+        this->endFontDownload();
+        return;
+    }
+    if(this->font_button) this->font_button->setText(TR("中止"));
+    this->font_shown = 0xFFFFFFFFu;
+    this->refreshFontLabel();
+}
+
+void SettingsScene::pollFontDownload(){
+    if(!this->font_download){
+        if(this->tab == Tab::Other) this->refreshFontLabel();
+        return;
+    }
+    if(this->font_download->busy()){
+        PowerFunctions::KeepAwake();  // 取得中はスリープさせない
+        this->font_download->update();
+    }
+    if(!this->font_download->busy()){
+        const bool ok = this->font_download->state() == FontDownload::State::Done;
+        this->showMessageLater(this->font_download->message());
+        this->endFontDownload();
+        if(ok) this->font_shown = 0xFFFFFFFFu;
+    }
+    this->refreshFontLabel();
+}
+
+void SettingsScene::endFontDownload(){
+    delete this->font_download;  // デストラクタが取得をやめて接続を閉じる
+    this->font_download = nullptr;
+    if(this->font_button) this->font_button->setText(TR("取得"));
+}
+
+// ---------------------------------------------------------------------------
 // 組み立て
 // ---------------------------------------------------------------------------
 
@@ -140,10 +231,21 @@ void SettingsScene::buildOtherTab(const Layout& lay){
         addToTab(Tab::Other, makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(2) + 2), label_w, text));
     }
 
+    // 追加の漢字フォント(SDの /sys/fonts/)。4行目。[取得]でWebから落として置く(取得中は[中止])
+    this->font_button = this->makeEditButton(rowY(3));
+    this->font_button->setText(TR("取得"));
+    this->font_button->setIcon(IconID::Refresh, IconSize::Px16);
+    this->font_button->setOnPressEnd([this](){ this->startFontDownload(); });
+    addToTab(Tab::Other, this->font_button);
+    this->font_label = makeRowLabel<PICO_STR_L>(left, (int16_t)(rowY(3) + 2), label_w, "");
+    addToTab(Tab::Other, this->font_label);
+    this->font_shown = 0xFFFFFFFFu;
+    this->refreshFontLabel();
+
     // 開発者向け(/sys/debug.cfg。DevToolsFunctions)と起動時の自己診断。見出しの下に4行を並べる
     // (チェックボックスだけの行なので ROW_H より少し詰める。入りきらない分はスクロール)
     constexpr int kDevRowH = 32;
-    const int16_t dev_y = (int16_t)(rowY(3) + 2);
+    const int16_t dev_y = (int16_t)(rowY(4) + 2);
     auto* dev_title = makeRowLabel<PICO_STR_M>(left, dev_y, full_w, TR("開発者向け"));
     dev_title->setTextColor(PICO_DARKGREY);
     addToTab(Tab::Other, dev_title);

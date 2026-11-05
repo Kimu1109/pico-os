@@ -12,6 +12,7 @@ namespace OSData {
     inline LGFX* lcd = nullptr;
     inline LGFX_Sprite* frame = new LGFX_Sprite();
     inline bool SD_usable = false;
+    inline uint32_t SD_mount_gen = 0;
     inline SdFat SD;
     inline Widget* keyboard_jpn = nullptr;
     inline Widget* keyboard_eng = nullptr;

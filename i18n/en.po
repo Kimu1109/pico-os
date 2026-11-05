@@ -14,7 +14,7 @@ msgstr "Screenshot"
 msgid "スクリーンショット失敗"
 msgstr "Screenshot failed"
 
-#: src/apps/browser/Doc_Fetch.cpp src/apps/browser/MarkdownScene.cpp src/apps/chat/Chat_Client.cpp src/apps/chat/Chat_Watch.cpp src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/apps/todo/Todoist_Client.cpp
+#: src/apps/browser/Doc_Fetch.cpp src/apps/browser/MarkdownScene.cpp src/apps/chat/Chat_Client.cpp src/apps/chat/Chat_Watch.cpp src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/apps/todo/Todoist_Client.cpp src/services/FontDownload.cpp
 msgid "URLが長すぎます"
 msgstr "URL is too long"
 
@@ -818,7 +818,7 @@ msgstr "From"
 msgid "変換先"
 msgstr "To"
 
-#: src/apps/calculator/CalculatorScene_Convert.cpp src/apps/mail/Imap_Client.cpp src/apps/store/StoreScene.cpp src/services/Firmware_Functions.cpp
+#: src/apps/calculator/CalculatorScene_Convert.cpp src/apps/mail/Imap_Client.cpp src/apps/store/StoreScene.cpp src/services/Firmware_Functions.cpp src/services/FontDownload.cpp
 msgid "Wi-Fiに繋がっていません"
 msgstr "Wi-Fi is not connected"
 
@@ -1218,7 +1218,7 @@ msgstr "Checked %lum ago (%d rooms)"
 msgid "まだ確認していません"
 msgstr "Not checked yet"
 
-#: src/apps/chat/Chat_Watch.cpp src/apps/gb/GameBoyScene.cpp src/apps/gb/Gb_Emu.cpp src/apps/store/Store_Watch.cpp src/apps/todo/Todo_Watch.cpp src/apps/video/Pvid_Player.cpp src/lua/LuaEngine_Iso.cpp src/lua/LuaEngine_Socket.cpp src/services/Firmware_Functions.cpp
+#: src/apps/chat/Chat_Watch.cpp src/apps/gb/GameBoyScene.cpp src/apps/gb/Gb_Emu.cpp src/apps/store/Store_Watch.cpp src/apps/todo/Todo_Watch.cpp src/apps/video/Pvid_Player.cpp src/gui/scenes/SettingsScene_Other.cpp src/lua/LuaEngine_Iso.cpp src/lua/LuaEngine_Socket.cpp src/services/Firmware_Functions.cpp
 msgid "メモリが足りません"
 msgstr "Out of memory"
 
@@ -1314,7 +1314,7 @@ msgstr "(now)"
 msgid "(古)"
 msgstr "(old)"
 
-#: src/apps/firmware/FirmwareScene.cpp src/apps/firmware/Fw_Download.cpp src/apps/gb/Gb_Emu.cpp src/apps/gb/Gb_Rom_Flash.cpp src/apps/notes/NotesScene.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileViewerScene.cpp src/lua/LuaBackground.cpp src/lua/LuaEngine_Mic.cpp src/lua/LuaEngine_Net.cpp src/lua/LuaEngine_Sound.cpp src/services/Firmware_Functions.cpp src/services/UsbDrive_Functions.cpp
+#: src/apps/firmware/FirmwareScene.cpp src/apps/firmware/Fw_Download.cpp src/apps/gb/Gb_Emu.cpp src/apps/gb/Gb_Rom_Flash.cpp src/apps/notes/NotesScene.cpp src/apps/texteditor/TextEditorScene_File.cpp src/gui/scenes/FileViewerScene.cpp src/lua/LuaBackground.cpp src/lua/LuaEngine_Mic.cpp src/lua/LuaEngine_Net.cpp src/lua/LuaEngine_Sound.cpp src/services/Firmware_Functions.cpp src/services/FontDownload.cpp src/services/UsbDrive_Functions.cpp
 msgid "SDカードが使えません"
 msgstr "SD card unavailable"
 
@@ -1350,7 +1350,7 @@ msgstr "Stop waiting"
 msgid "本体の更新"
 msgstr "Update"
 
-#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/services/Firmware_Functions.cpp
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/services/Firmware_Functions.cpp src/services/FontDownload.cpp
 msgid "取得を始められません"
 msgstr "Cannot start the download"
 
@@ -1358,11 +1358,11 @@ msgstr "Cannot start the download"
 msgid "版の一覧を取得中…"
 msgstr "Fetching versions…"
 
-#: src/apps/firmware/Fw_Download.cpp
+#: src/apps/firmware/Fw_Download.cpp src/services/FontDownload.cpp
 msgid "置き場所のパスが長すぎます"
 msgstr "Destination path is too long"
 
-#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/services/FontDownload.cpp
 msgid "SDカードに書き込めません"
 msgstr "Cannot write to the SD card"
 
@@ -1370,7 +1370,7 @@ msgstr "Cannot write to the SD card"
 msgid "#%lu (%s) をダウンロード中…"
 msgstr "Downloading #%lu (%s)…"
 
-#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/services/FontDownload.cpp
 msgid "取りやめました"
 msgstr "Cancelled"
 
@@ -1382,19 +1382,19 @@ msgstr "Version list is too large"
 msgid "更新ファイルが一覧の大きさより大きいです"
 msgstr "Update file is larger than listed"
 
-#: src/apps/firmware/Fw_Download.cpp
+#: src/apps/firmware/Fw_Download.cpp src/services/FontDownload.cpp
 msgid "SDカードに書き込めません(空きが足りない?)"
 msgstr "Cannot write to the SD card (out of space?)"
 
-#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/services/FontDownload.cpp
 msgid "通信に失敗しました: "
 msgstr "Network error: "
 
-#: src/apps/firmware/Fw_Download.cpp
+#: src/apps/firmware/Fw_Download.cpp src/services/FontDownload.cpp
 msgid "配布元に見つかりません(404)"
 msgstr "Not found on the server (404)"
 
-#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp
+#: src/apps/firmware/Fw_Download.cpp src/apps/store/App_Store.cpp src/services/FontDownload.cpp
 msgid "配布元が %d を返しました"
 msgstr "Server returned %d"
 
@@ -3078,7 +3078,7 @@ msgstr "Background"
 msgid "マイク"
 msgstr "Mic"
 
-#: src/apps/store/App_Repo.cpp src/net/Http_Get.cpp src/net/Http_Request.cpp src/net/Http_Response.hpp
+#: src/apps/store/App_Repo.cpp src/gui/core/JpFont_Ext.cpp src/net/Http_Get.cpp src/net/Http_Request.cpp src/net/Http_Response.hpp
 msgid "なし"
 msgstr "None"
 
@@ -3821,6 +3821,30 @@ msgstr "Video"
 #: src/gui/core/Error_Functions.cpp
 msgid "エラーが発生しました"
 msgstr "An error occurred"
+
+#: src/gui/core/JpFont_Ext.cpp
+msgid "未確認"
+msgstr "Unchecked"
+
+#: src/gui/core/JpFont_Ext.cpp
+msgid "SDなし"
+msgstr "No SD"
+
+#: src/gui/core/JpFont_Ext.cpp
+msgid "壊れている"
+msgstr "Broken"
+
+#: src/gui/core/JpFont_Ext.cpp
+msgid "版違い"
+msgstr "Mismatch"
+
+#: src/gui/core/JpFont_Ext.cpp
+msgid "読めない"
+msgstr "Unreadable"
+
+#: src/gui/core/JpFont_Ext.cpp
+msgid "あり"
+msgstr "Installed"
 
 #: src/gui/scenes/BackgroundScene.cpp
 msgid "  [入]"
@@ -4573,6 +4597,30 @@ msgstr "Reset order"
 #: src/gui/scenes/SettingsScene_Other.cpp
 msgid "ランチャの並びを登録順に戻しました(フォルダも解除)"
 msgstr "Launcher order reset (folders removed)"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "追加の漢字: 取得 %lu%%"
+msgstr "Extra kanji: %lu%%"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "追加の漢字: %s"
+msgstr "Extra kanji: %s"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "追加の漢字フォントの取得を取りやめました"
+msgstr "Stopped downloading the extra kanji font"
+
+#: src/gui/scenes/SettingsScene_Other.cpp src/services/FontDownload.cpp
+msgid "追加の漢字フォントは入っています"
+msgstr "The extra kanji font is already installed"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "中止"
+msgstr "Stop"
+
+#: src/gui/scenes/SettingsScene_Other.cpp
+msgid "取得"
+msgstr "Get"
 
 #: src/gui/scenes/SettingsScene_Other.cpp
 msgid "ブラウザのホームURL"
@@ -5729,6 +5777,30 @@ msgstr "Cannot open the update file"
 #: src/services/Firmware_Functions.cpp
 msgid "待ち受けをやめました"
 msgstr "Stopped listening"
+
+#: src/services/FontDownload.cpp
+msgid "追加の漢字フォントを入れました"
+msgstr "Installed the extra kanji font"
+
+#: src/services/FontDownload.cpp
+msgid "%dpxの字をダウンロード中…"
+msgstr "Downloading %dpx glyphs..."
+
+#: src/services/FontDownload.cpp
+msgid "フォントが決まりの大きさより大きいです"
+msgstr "The font is larger than expected"
+
+#: src/services/FontDownload.cpp
+msgid "フォントが途中で切れています"
+msgstr "The font was cut off"
+
+#: src/services/FontDownload.cpp
+msgid "フォントの中身が本体の決まりと合いません"
+msgstr "The font does not match this firmware"
+
+#: src/services/FontDownload.cpp
+msgid "フォントを保存できません"
+msgstr "Could not save the font"
 
 #: src/services/Lock_Functions.cpp
 msgid "違います。%lu秒待ってください"

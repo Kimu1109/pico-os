@@ -234,6 +234,8 @@ Luaの確保の失敗はエラーで済むが、C++の`new`の失敗はabortで�
   前後で末尾が伸びて残りが20KBを割っていたら返して断る(空きブロックから取れたなら通す)。断るとLua本体はごみを集めて1回だけ頼み直し
   (lmem.cの`tryagain`)、それでも足りなければ「not enough memory」のエラー(再起動はしない)。断った回数は`pico.memory_info().heap_refused`、
   残りは`heap_room`。ゾンビTDの5秒ごとの`[TD]`の行に`refused=`を足した。
+- (2026-11-04)32B以下の確保は小さな確保のプール(`SizeClassPool`、1KBの塊)へ入るようになった。この守りは塊を借りるとき
+  (`LuaEngine::PoolAcquire` → `GuardedMalloc()`)にも効き、借りられなければふつうの`malloc`の道へ回る。`performance.md`「Luaの小さな確保を専用のプールへ」。
 - 検証: `lua_engine_test`(差し替え口で「末尾を伸ばさない確保は通す」「伸ばして割る確保は断りエラーで止まる」「余裕が戻れば続く」)、
   実機ファームのビルド(maxgerhardtのplatform-raspberrypiで`pio run`。`__HeapLimit`が0x20080000に解決される)。**実機での効果は未確認**。
 

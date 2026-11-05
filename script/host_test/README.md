@@ -38,6 +38,7 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   scene_test … シーン遷移(SceneFunctions / WidgetFunctions)とメモリ計測フックの配線
   label_test … Labelのテキストレイアウト結果(幅/高さ/文字数/カーソル座標)の固定
   glyph_index_test … 日本語フォントの字の探し方(索引と控え)が元の探し方と全部の文字コードで一致する
+  size_class_pool_test … 小さな物の確保器(Luaの32B以下の確保の置き場)の重なり・整列・中身・塊の持ち方と返し方
   markdown_test … MarkdownViewのブロック高さとLabelの実高さの整合(重なり検出)
   config_test   … 設定ファイル(key=value)の読み書き
   secret_cipher_test… Wi-Fi SSID/パスワードの暗号化保存(crypto/Secret_Cipher.hpp)。

@@ -12,6 +12,7 @@
 #include "lua/LuaImages.hpp"
 #include "lua/LuaDebugger.hpp"
 #include "util/FixedString.hpp"
+#include "util/SizeClassPool.hpp"
 #include "consts.hpp"
 
 // LuaスクリプトとC++(ウィジェット層)を繋ぐ実行エンジン。1インスタンスが
@@ -396,6 +397,15 @@ class LuaEngine {
 
         size_t usedBytes() const { return used_; }
 
+        // ---- 小さな確保のプール(Alloc()。docs/design/performance.md「Luaの小さな確保を専用のプールへ」) ----
+        // 32B以下(8/16/24/32Bの区分)を1KBの塊へ詰める。Luaの確保の8割超がここに入り、mallocを呼ぶのは塊の貸し借りだけになる。
+        // 塊の上限(192個=192KB)を超えた・塊を借りるとヒープの残り(kHeapReserveBytes)を割るときは、ふつうのmallocへ回す
+        using SmallPool = SizeClassPool<1024, 192, 4>;
+        const SmallPool::Stats& poolStats() const { return pool_.stats(); }
+        size_t poolChunkBytes() const { return pool_.chunkBytesInUse(); }
+        // 空の塊をヒープへ返す(C++側がメモリに困ってLuaのごみを集めた後に呼ぶ)
+        void releasePoolEmpty() { pool_.releaseEmpty(); }
+
         // ---- バックグラウンドスクリプト(LuaBackground から) ----
         bool isBackground() const { return background_; }
         // pico.finish() が呼ばれた(この回の仕事は終わり)
@@ -578,6 +588,8 @@ class LuaEngine {
         size_t used_ = 0;
         // Alloc()がヒープの残り(kHeapReserveBytes)を守るために断った回数(pico.memory_info().heap_refused)
         uint32_t heap_refusals_ = 0;
+        // 小さな確保のプール。L より先に作り(コンストラクタの lua_newstate より前)、L を閉じた後に塊を返す
+        SmallPool pool_{&LuaEngine::PoolAcquire, &LuaEngine::PoolRelease, nullptr};
 
         LuaPermissions permissions_;
         // sd_outside_app_dir==falseの間、pico.sd_*/pico.image_loadを閉じ込める先
@@ -726,6 +738,11 @@ class LuaEngine {
         void callGlobalNoArgs(const char* name);
 
         static void* Alloc(void* ud, void* ptr, size_t osize, size_t nsize);
+        // ヒープの残り(kHeapReserveBytes)を割らないときだけ bytes を malloc する(割るなら nullptr)
+        static void* GuardedMalloc(size_t bytes);
+        // プールが塊を借りる/返す(GuardedMalloc / free)
+        static void* PoolAcquire(void* ctx, size_t bytes);
+        static void PoolRelease(void* ctx, void* chunk);
         static int InitTrampoline(lua_State* L);
 
         // lua_sethook(LUA_MASKCOUNT)から呼ばれる。kHookInstructionInterval命令ごとに

@@ -96,7 +96,7 @@ base64です(`data` は12KiB、`text` は16KiBまで)。`url_safe = true` なら
 
 <div class="sig">pico.memory_info() <span class="ret">-> table</span></div>
 
-`{ lua_used, lua_budget, lua_free, heap_free, heap_used, heap_headroom, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と上限(200KB)、`heap_*` は本体全体のメモリ、`image_bytes` は `image_load` / `image_create` で使っている量です。重いアプリの調整に使います。
+`{ lua_used, lua_budget, lua_free, lua_pool, heap_free, heap_used, heap_headroom, image_bytes }`(バイト)。`lua_*` はこのアプリのLuaが使っている量と上限(200KB)、`lua_pool` は32B以下の小さな値(短い文字列・小さな表など)を詰めておく場所としてヒープから借りている量(1KB単位)、`heap_*` は本体全体のメモリ、`image_bytes` は `image_load` / `image_create` で使っている量です。重いアプリの調整に使います。
 
 ## pico.toast
 

@@ -192,7 +192,7 @@ SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブ
 ## 曲データ (`docs/MUSIC_FORMAT.md` / `src/sound/Mml_Compiler` / `Music_Player` / `MusicScene`) (2026-09-25)
 
 SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML**(pico-os向けの方言。書き方は`docs/MUSIC_FORMAT.md`)。
-他の形式(MIDI=PC側の`script/midi2mml.py`で変換(下記)、VGM/GBS=ゲームボーイの音源チップの再現後)は、どれも同じ「演奏データ」へ
+他の形式(MIDI=PC側の`script/tools/midi2mml.py`で変換(下記)、VGM/GBS=ゲームボーイの音源チップの再現後)は、どれも同じ「演奏データ」へ
 変換してから鳴らす方針で、2コア目は形式を知らない。
 
 - **流れ**: `.mml`(テキスト)→ 1コア目の`MmlCompiler`が「演奏データ」(`Music_Data.hpp`の小さなバイト列。音符1つ4バイト)へ →
@@ -224,7 +224,7 @@ SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML
 - 検証: `music_test`(run.sh。読み取り・誤りの行列・警告・シーケンサーのサンプル単位の位置/テンポ/繰り返し/ループ/借用・置き場の入れ替え)、
   `lua_engine_test`(Lua API)、PCビルドの`--tap`でミュージックアプリの再生・誤りの表示、チップチューンアプリで曲+鍵盤(借用)を確認。
   **実機では未確認**。
-- **MIDIからの変換(`script/midi2mml.py`、2026-09-26)**: PCで動かすPython(標準ライブラリのみ)。本体はMIDIを知らないまま
+- **MIDIからの変換(`script/tools/midi2mml.py`、2026-09-26)**: PCで動かすPython(標準ライブラリのみ)。本体はMIDIを知らないまま
   (「形式を増やすときは変換を1つ足すだけ」の方針どおり)。手順と既定の割り当ては`docs/MUSIC_FORMAT.md`「MIDIからの変換」。
   - 時間は4分音符=48ティックへ直して格子へ揃える。格子は「音の出だしの97%以上が乗る、いちばん粗いもの」を自動で選ぶ
     (楽譜から書き出したMIDIは3連符も16分もずれない。演奏を録ったMIDIは16分音符で妥協し、`--grid`で変えられる)
@@ -267,7 +267,7 @@ SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML
 - **Lua API(`pico.sound_play`等)・コマンドの列(`Sound_Functions`)は元々`SoundFunctions::kChannels`
   を通して動的にチャンネル数を見ていたため、コード変更はほぼ不要だった**(範囲チェックの
   エラーメッセージが`SoundFunctions::kChannels`を埋め込んで表示するだけで自動的に追随する)。
-- **`script/midi2mml.py`にも`--channels N`(既定4、1〜26)を追加**した。既定はこれまでと
+- **`script/tools/midi2mml.py`にも`--channels N`(既定4、1〜26)を追加**した。既定はこれまでと
   全く同じ4チャンネル(`A`〜`D`)への割り当てで、指定すれば`E`以降も使われる
   (4chまでの役割固定: 主旋律`A`/`B`・ベース三角波`C`・打楽器ノイズ`D`は変えず、
   5ch目以降は`pulse75`→`saw`→…を巡回する追加声部として割り当てる)。
@@ -765,7 +765,7 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
   起動すると欄に「前回の続き(0:01 から)」、▶でアーティストの並びの2曲目を1.5秒から鳴らし、その並びを開く。
   **実機では未確認(電池を抜いて差し直した後に続きから鳴るか)(Todoist参照)**。
 
-## 動画(.pvid)(`script/generate_pvid.py` / `docs/VIDEO_FORMAT.md` / `src/apps/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
+## 動画(.pvid)(`script/tools/generate_pvid.py` / `docs/VIDEO_FORMAT.md` / `src/apps/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
 
 MJPEGは本体でJPEGを解く・フルカラーを16色へ落とす処理が重く、画面(`OSData::frame`)が4bppなので利点も活きないため、
 **PCで「動画ごとの16色(0=黒・15=白は固定、残り14色はL\*a\*b\*のk-means)+画面に固定したBayer 8x8のディザ+8x8タイルの差分」へ

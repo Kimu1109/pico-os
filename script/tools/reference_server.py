@@ -9,12 +9,12 @@ pico-os 側の開発相手(PCビルドから叩く先)も兼ねる。
 
 標準ライブラリのみで動く。外部依存なし。
 
-    python3 script/reference_server.py                      # examples/ を配る
-    python3 script/reference_server.py --root ~/docs --port 8080
-    python3 script/reference_server.py --check              # 文書がクライアントの上限に
+    python3 script/tools/reference_server.py                      # examples/ を配る
+    python3 script/tools/reference_server.py --root ~/docs --port 8080
+    python3 script/tools/reference_server.py --check              # 文書がクライアントの上限に
                                                             # 収まっているか検査して終了
-    python3 script/reference_server.py --no-search          # 検索非対応サーバの再現
-    python3 script/reference_server.py --no-discovery       # 素の静的サーバの再現
+    python3 script/tools/reference_server.py --no-search          # 検索非対応サーバの再現
+    python3 script/tools/reference_server.py --no-discovery       # 素の静的サーバの再現
 
 実装しているエンドポイント:
     GET /.well-known/pico-os   サーバ情報(TSV)
@@ -573,7 +573,7 @@ class Server(socketserver.ThreadingTCPServer):
 # ---------------------------------------------------------------- エントリポイント
 
 def main(argv=None):
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     parser = argparse.ArgumentParser(
         description="pico-os ドキュメントサーバ プロトコル v1 の参照実装 (docs/PROTOCOL.md)")

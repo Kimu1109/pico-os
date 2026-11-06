@@ -218,7 +218,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
 - **作り**(`src/apps/mail/`。層は中身が段2、`MailScene`が段5):
   - `Mail_Charset` … 文字コード → UTF-8。UTF-8(壊れた並びは 〓)/ ISO-2022-JP / Shift_JIS(cp932)/ EUC-JP / ISO-8859-1(windows-1252の
     0x80〜0x9Fも)。日本語の3つは **JIS X 0208 の区点 → Unicode の表(`Mail_Jis_Data.hpp`、94×94×2B=約17KB、フラッシュ)** を引く。
-    表は `script/generate_jis_table.py` がPythonの cp932 の写像から作る(13区のNEC特殊文字 ①㈱ 等と、〜=U+FF5E 等のWindowsの字形。
+    表は `script/codegen/generate_jis_table.py` がPythonの cp932 の写像から作る(13区のNEC特殊文字 ①㈱ 等と、〜=U+FF5E 等のWindowsの字形。
     IBM拡張(0xFA〜)とJIS X 0212は 〓)。状態を持つので何回に分けて渡しても同じ結果。ISO-2022-JPは改行でASCIIへ戻す(戻し忘れ対策)
   - `Mail_Mime` … ヘッダーのRFC 2047(B/Q。隣り合う語は文字コードが同じなら繋いでから直す=UTF-8の1文字を2語に分けるメーラー対策)、
     差出人の名前、INTERNALDATE/Dateの日時、`charset=`等の引数(RFC 2231の`filename*=`と分割も)。
@@ -304,7 +304,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
 スマホ/PCのSpotifyで鳴っている再生を Web API で操作する(本体から音は出ない。**操作には Spotify Premium が要る**)。
 - ファイル: `main.lua`(上の段のButtonとCanvas1枚・タップ/キー/コントローラー)/`api.lua`(トークン・`A.call`)/`player.lua`(状態の取得と操作)/
   `view.lua`(Canvasへ描く・タップの場所)/`icon.pimg`(`script/assets/generate_spotify_icon.py`)。
-- **ログイン**: 本体ではOAuthを受けられないので、PCの`script/spotify_auth.py`(`picoos spotify-auth`)が書いた`spotify_auth.json`をアプリのフォルダに置く。
+- **ログイン**: 本体ではOAuthを受けられないので、PCの`script/tools/spotify_auth.py`(`picoos spotify-auth`)が書いた`spotify_auth.json`をアプリのフォルダに置く。
   起動時(か画面の「読み込む」)に`api.lua`が読み、`pico.store_save({auth=}, {encrypt=true})`へ移して平文のファイルを消す。
   アクセストークンは`grant_type=refresh_token`(`pico.form_encode`、client secretなし)で取り直し、返った新しいrefresh tokenを保存し直す。
   401なら1回だけ取り直して送り直す。`invalid_grant`ならログインの案内の画面へ戻る。

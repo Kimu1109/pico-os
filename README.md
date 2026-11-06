@@ -62,7 +62,7 @@ cmake -S pc -B pc/build && cmake --build pc/build -j
 
 ```sh
 sh script/host_test/run.sh          # ホストテスト(CMake + CTest、ASan)
-python3 script/check_layers.py      # include の層の決まりを確かめる
+python3 script/check/check_layers.py      # include の層の決まりを確かめる
 ```
 
 開発用のスクリプトは `cli-tool/picoos` から名前で呼べる(`sh cli-tool/install.sh` で `~/.local/bin` へリンク、使い方は `picoos --help`)。

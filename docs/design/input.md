@@ -3,7 +3,7 @@
 > `CLAUDE.md`から分けた設計記録(2026-10-20)。何がどこにあるかの地図は`CLAUDE.md`、進み具合は`SUMMARY.md`。
 > パスはリポジトリのルートから。「上の「〜」」等の参照先が別のファイルにあるときは、`CLAUDE.md`の「設計記録の索引」で節の名前から探すこと。
 
-## 外部コントローラー (`src/system/Pad_Functions` / `script/pad_serial.py`) (2026-09-25)
+## 外部コントローラー (`src/system/Pad_Functions` / `script/tools/pad_serial.py`) (2026-09-25)
 
 SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I2C0のGP0/GP1、アドレス0x52。抜き差しはACKの有無で分かるので
 検出用のピンが要らない。十字キー/ABXY/L R ZL ZR/START SELECT HOMEが揃い3.3Vで動く)に決めたが、**実物がまだ無い**。
@@ -22,7 +22,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
     1回の`Update()`で読むのは256Bまで(送り付けられてもフレームが止まらない)
   - **キーの割り当てはPC側(`pad_serial.py`)が持つ**。pico-osが受け取るのはボタンの状態だけなので、実物のコントローラーに替えても
     アプリ側は何も変わらない。キーの押下/離しを1件ずつ送る方式にしなかったのは、離した行が1つ落ちるだけで押しっぱなしになるため
-- **`script/pad_serial.py`**: tkinterの小窓でキーの押下/離しを拾い、上の行を送る。
+- **`script/tools/pad_serial.py`**: tkinterの小窓でキーの押下/離しを拾い、上の行を送る。
   - シリアルはpyserialで開く(Windowsは必須)。無ければLinux/macOSだけ`termios`で開く
   - **ポートは同時に1つのプログラムしか開けない**のでシリアルモニタとは併用できない。代わりに**pico-osのログをそのままターミナルへ出す**
   - ポートが消えても(書き込みでの再起動等)1秒ごとに開き直す。フォーカスが外れたら全部離す
@@ -36,7 +36,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
   動作確認は「動作確認」アプリの「コントローラー」(`pc/sdcard/lua/apps/動作確認/pad.lua`)。
   通常の画面をコントローラーで操作するのは下の「ウィジェットのフォーカス」(2026-10-10)。
 - **PCビルド**: `pc/compat/Arduino.h`の`Serial.available()/read()`が**標準入力**を別スレッドで読む(`PICOOS_SERIAL_STDIN=off`で無効)。
-  `python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc`、ヘッドレスなら`echo "pad 0011"`を100msごとに流し込めばよい。
+  `python3 script/tools/pad_serial.py --stdout | ./pc/build/picoos_pc`、ヘッドレスなら`echo "pad 0011"`を100msごとに流し込めばよい。
 - **Webビルド**(2026-09-26): 標準入力が無いので、ページ(`pc/web/shell.html`)の**コントローラー**(Wiiクラシックと同じボタンの並び。
   ポインタごとに覚えるので**複数の指で同時押し**でき、押したまま滑らせると隣のボタンへ移る)と**キーボード**(割り当ては`pad_serial.py`と同じ、
   `KeyboardEvent.code`で引く)が`pad XXXX\n`を作り、`main_pc.cpp`の`picoos_serial_push()`(`EMSCRIPTEN_KEEPALIVE`+`-sEXPORTED_FUNCTIONS`)で
@@ -99,7 +99,7 @@ Wi-Fiと無線チップを共有する / PIO-USBのホスト=CPUクロックを1
 - **列・行の読み取り(`system/KeyInput_Functions.cpp`)は何にも依存しない**ので、Pad/Powerのホストテストはこちらだけを引っ張る。
   配り先(`boot/KeyInput_Dispatch.cpp`)は`SceneFunctions`/`KeyboardFunctions`に依存する(`Notification_Functions`/`_Sources`と同じ分け方)。
 - **入力元**:
-  - 実機: `script/pad_serial.py --mode text`(F1でコントローラー⇔文字入力を切り替え)。tkinterのkeysym/char/stateから行を作る
+  - 実機: `script/tools/pad_serial.py --mode text`(F1でコントローラー⇔文字入力を切り替え)。tkinterのkeysym/char/stateから行を作る
     (Ctrl+CはcharがETXになるのでkeysymを送る。AltのビットはOSで違う: Windows 0x20000 / X11 0x8 / macOS 0x10)
   - PCビルド: ウィンドウでのキー入力を`main_pc.cpp`の`SDL_AddEventWatch`が同じ行にして`PicoPcSerial::PushLine()`で受信口へ入れる
     (文字はSDL_TEXTINPUT、名前のあるキーとCtrl/Alt付きはSDL_KEYDOWN)。**LovyanGFXのSDLパネルは修飾キー無しのr/l/1〜6を画面の回転・拡大に

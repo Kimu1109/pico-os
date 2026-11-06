@@ -3,7 +3,7 @@
 #   sh script/host_test/run.sh [グループ名...]  … これを configure → build → ctest する入口
 #
 # 作り:
-#   - src/ の .cpp を層(script/check_layers.py の段)ごとの静的ライブラリにする
+#   - src/ の .cpp を層(script/check/check_layers.py の段)ごとの静的ライブラリにする
 #     (picoos_base / picoos_system / … / picoos_boot)。どのファイルがどの段かは
 #     check_layers.py --sources が答えるので、ここにファイルの一覧は書かない。
 #   - テストは全部の段のライブラリを1つのリンクの組(RESCAN)でリンクする。
@@ -96,15 +96,15 @@ set(HOST_EXCLUDE
 )
 
 execute_process(
-    COMMAND ${Python3_EXECUTABLE} ${ROOT}/script/check_layers.py --sources
+    COMMAND ${Python3_EXECUTABLE} ${ROOT}/script/check/check_layers.py --sources
     OUTPUT_VARIABLE LAYER_SOURCES
     RESULT_VARIABLE LAYER_RC)
 if(NOT LAYER_RC EQUAL 0)
-    message(FATAL_ERROR "script/check_layers.py --sources が失敗しました")
+    message(FATAL_ERROR "script/check/check_layers.py --sources が失敗しました")
 endif()
 # src/ のファイルが増減したら configure をやり直す
 file(GLOB_RECURSE _all_src CONFIGURE_DEPENDS ${SRC}/*.cpp ${SRC}/*.c)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ROOT}/script/check_layers.py)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ROOT}/script/check/check_layers.py)
 
 set(HOST_LAYERS base system lib ui service app boot)
 foreach(layer ${HOST_LAYERS})

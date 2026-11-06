@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""script/firmware_tool.py(ファームの更新ファイルを作る・送る)のテスト。
+"""script/release/firmware_tool.py(ファームの更新ファイルを作る・送る)のテスト。
 
   python3 firmware_tool_test.py <firmware_testのパス> <作業ディレクトリ>
 
@@ -17,7 +17,7 @@ import sys
 import threading
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, os.path.join(HERE, "..", "release"))
 import firmware_tool as ft  # noqa: E402
 
 failures = 0
@@ -125,7 +125,7 @@ def main():
     out_pfw = os.path.join(work, "signed_later.pfw")
     with open(in_pfw, "wb") as f:
         f.write(unsigned_blob)
-    tool = os.path.join(HERE, "..", "firmware_tool.py")
+    tool = os.path.join(HERE, "..", "release", "firmware_tool.py")
     r = subprocess.run([sys.executable, tool, "sign", in_pfw, "--out", out_pfw, "--key", keyfile,
                         "--expect-keys", keys_hpp], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
     check(r.returncode == 0 and open(out_pfw, "rb").read() == signed_later, "sign: コマンドで署名できる")

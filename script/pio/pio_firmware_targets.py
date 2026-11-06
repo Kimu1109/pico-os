@@ -1,11 +1,11 @@
-# PlatformIO の追加スクリプト(platformio.ini の extra_scripts = post:script/pio_firmware_targets.py)。
-# ファームの更新ファイルを作る・送るターゲット(docs/FIRMWARE_UPDATE.md。説明は script/pio_firmware.py)。
+# PlatformIO の追加スクリプト(platformio.ini の extra_scripts = post:script/pio/pio_firmware_targets.py)。
+# ファームの更新ファイルを作る・送るターゲット(docs/FIRMWARE_UPDATE.md。説明は script/pio/pio_firmware.py)。
 # PROGNAME(firmware)はプラットフォームが決めるので、ビルドの後(post)で足す。
 import os
 
 Import("env")  # noqa: F821  (PlatformIOが用意する)
 
-TOOL = os.path.join(env.subst("$PROJECT_DIR"), "script", "firmware_tool.py")  # noqa: F821
+TOOL = os.path.join(env.subst("$PROJECT_DIR"), "script", "release", "firmware_tool.py")  # noqa: F821
 BIN = env.subst(os.path.join("$BUILD_DIR", "${PROGNAME}.bin"))  # noqa: F821
 PFW = env.subst(os.path.join("$BUILD_DIR", "${PROGNAME}.pfw"))  # noqa: F821
 

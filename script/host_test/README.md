@@ -18,7 +18,7 @@ sh script/host_test/run.sh --list          # グループ名の一覧
 
 ## しくみ(`CMakeLists.txt`)
 
-- `src/` の `.cpp` は層(`script/check_layers.py` の段)ごとの静的ライブラリになる(`picoos_base` 〜 `picoos_boot`)。
+- `src/` の `.cpp` は層(`script/check/check_layers.py` の段)ごとの静的ライブラリになる(`picoos_base` 〜 `picoos_boot`)。
   どのファイルがどの段かは `check_layers.py --sources` が答えるので、ファイルの一覧はどこにも書かない。
   `src/` に `.cpp` を足しても何もしなくてよい(スタブで作れないものだけ `HOST_EXCLUDE` に理由付きで足す)。
 - テストは全部の段を1つのリンクの組(`LINK_GROUP:RESCAN`)でリンクする。静的ライブラリはリンカが
@@ -51,7 +51,7 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   home_test     … ホーム画面のウィジェット(並び・詰め方・home.cfg・ウィジェットのタップ・TODOの控え・予定)
   firmware_test … ファームの更新(apps/firmware/Fw_Image・Fw_Update)。見出しの検査・署名(信頼/なし/知らない鍵/壊れた)・
                   版の確認・置き場への書き込みと読み直し・gzipの末尾の大きさ・途中で切れる/化ける/取り消す。
-                  firmware_tool_test(Python)が script/firmware_tool.py で作ったものも読ませる
+                  firmware_tool_test(Python)が script/release/firmware_tool.py で作ったものも読ませる
   app_repo_test … アプリストアの配布物の読み取り(apps/store/App_Repo、docs/APP_REPO.md)。カタログ/ファイル一覧の行・
                   名前とパスの検査・版の比較・権限・Ed25519の署名(Pythonの署名をMonocypherで確かめる)
   bmp_test      … BMPの読み書き(gui/icons/Bmp_Codec)。1/4/8/16/24/32bpp・上下の並び・窓・OSのパレットへ寄せる/番号のまま/
@@ -106,9 +106,9 @@ sh script/host_test/run.sh --list          # グループ名の一覧
                   信号の有無・列)と MicFunctions(2コア目と1コア目を交互に: 開始/返す・左右の組がずれない・WAVの見出し・
                   取りこぼし・見出しの書き直し・I2Sの失敗・mic.cfg)
   play_queue_test … ミュージックアプリの再生の順番(apps/music/Play_Queue.hpp)。順番通り/ミックス・リピート(しない/全曲/1曲)
-  midi2mml_test … MIDI→MMLの変換(script/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
+  midi2mml_test … MIDI→MMLの変換(script/tools/midi2mml.py、Python)。テストの中で組み立てたMIDIを変換し、
                   出てきたMMLを本物の読み取り(mml_dump.cpp)へ通して音の位置/高さ/長さ/テンポを確かめる
-  pvid_test     … 動画(.pvid)。変換(script/generate_pvid.py、Python+numpy)のタイルの往復・目録・差分の判定と、
+  pvid_test     … 動画(.pvid)。変換(script/tools/generate_pvid.py、Python+numpy)のタイルの往復・目録・差分の判定と、
                   本体の読み取り(apps/video/Pvid_Player、pvid_dump.cpp)が全部のフレーム・シークで同じ絵になること・壊れたファイルで落ちないこと
   key_input_test … 物理キーボードの窓口(KeyInputFunctions)。"key ..."の行の読み取り、padの行との同居、
                   画面のonKey()→開いているキー盤の順に配ること、キー盤の編集(挿入/削除/移動/決定)、数字のキー盤の制限、

@@ -2,7 +2,7 @@
 
 pico-os のアプリストア(ランチャの「ストア」)が、Web からLuaアプリを取ってきて `/lua/apps/` へ入れるための取り決め。
 **静的なファイルだけで成り立つ**ので、GitHub Pages・Raspberry Pi の nginx・`python3 -m http.server` のどれでも同じように配れる。
-配る側の道具は `script/build_app_repo.py`、本体側は `src/apps/store/`(`App_Repo` が読み取り、`App_Store` が通信、`App_Install` がインストール、
+配る側の道具は `script/release/build_app_repo.py`、本体側は `src/apps/store/`(`App_Repo` が読み取り、`App_Store` が通信、`App_Install` がインストール、
 `App_Package` がSDに置いたパッケージから入れる)と `StoreScene`。同じ場所にブラウザで見る一覧のページ(`index.html`)と、
 SDに置けば入るパッケージ(下の「パッケージ(.papp)」)も置く。
 誰でも投稿できるようにする運用(投稿用リポジトリ)は `docs/design/lua-apps.md`「アプリストアの投稿」。
@@ -208,21 +208,21 @@ key = 0123...(公開鍵)
 
 ```sh
 # 鍵を作る(1回だけ)。表示された公開鍵を store.cfg か App_Repo_Keys.hpp へ
-python3 script/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
+python3 script/release/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
 
 # Raspberry Pi 等へ置く: 配布物をまるごと作って rsync
-python3 script/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps --clean
+python3 script/release/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps --clean
 rsync -a --delete /tmp/apps/ pi:/var/www/pico-os/apps/
 
 # Webのページ(index.html)とパッケージ(<id>-<版>.papp)・アイコンのPNGを配布物に足す(秘密鍵は要らない)
-python3 script/build_app_repo.py site --dir /tmp/apps
+python3 script/release/build_app_repo.py site --dir /tmp/apps
 
 # 手元のアプリを1つパッケージにする(ストアを通さずに渡す。作者の鍵で署名する)
-python3 script/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス
+python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス
 
 # 投稿用リポジトリ(kimu1109/pico-os-apps)へ出す: 作者が apps/<id>/ に署名してPRを出す
 # (カタログの署名と GitHub Pages への公開は、そのリポジトリのCIがする。手順はそのリポジトリの README.md)
-python3 script/build_app_repo.py author-sign --key ~/.pico-os/author.key --app ../pico-os-apps/apps/tetris \
+python3 script/release/build_app_repo.py author-sign --key ~/.pico-os/author.key --app ../pico-os-apps/apps/tetris \
     --src pc/sdcard/lua/apps/テトリス
 ```
 

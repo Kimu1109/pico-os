@@ -7,7 +7,7 @@
 # (firmware.uf2 / firmware.elf / firmware.pfw)。リリースの添付なのでzipに包まれず、ログイン無しで落とせる。
 # 一覧: https://github.com/Kimu1109/pico-os/releases (タグは nightly-<通し番号>-<短いハッシュ>)
 #
-# firmware.pfw は載せる前に、Secrets の FIRMWARE_SIGNING_KEY(script/firmware_tool.py keygen の秘密鍵)で署名する
+# firmware.pfw は載せる前に、Secrets の FIRMWARE_SIGNING_KEY(script/release/firmware_tool.py keygen の秘密鍵)で署名する
 # (docs/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。Secrets に無ければ署名なしのまま載せて警告を出す。
 # 鍵が Fw_Keys.hpp に焼き込んだ公開鍵と違えば止める(本体が受け付けない更新ファイルを配らないように)。
 #
@@ -82,7 +82,7 @@ jobs:
       matrix:
         env: [rpipico2w_lite, rpipico2w_music, rpipico2w_en]
     steps:
-      # 版の通し番号(script/pio_firmware.py)を本物と同じにするため、履歴を全部取る
+      # 版の通し番号(script/pio/pio_firmware.py)を本物と同じにするため、履歴を全部取る
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -106,7 +106,7 @@ jobs:
       SERIAL: ${{ needs.build.outputs.serial }}
       SHORT: ${{ needs.build.outputs.short }}
     steps:
-      # 署名の道具(script/firmware_tool.py)と、ビルドしたコミットの焼き込みの鍵(Fw_Keys.hpp)を使う
+      # 署名の道具(script/release/firmware_tool.py)と、ビルドしたコミットの焼き込みの鍵(Fw_Keys.hpp)を使う
       - uses: actions/checkout@v4
 
       - name: 成果物を受け取る
@@ -127,7 +127,7 @@ jobs:
           key="${RUNNER_TEMP}/firmware.key"
           (umask 077; printf '%s\n' "${FIRMWARE_SIGNING_KEY}" > "${key}")
           rc=0
-          python3 script/firmware_tool.py sign firmware/firmware.pfw --key "${key}" \
+          python3 script/release/firmware_tool.py sign firmware/firmware.pfw --key "${key}" \
             --expect-keys src/apps/firmware/Fw_Keys.hpp || rc=$?
           rm -f "${key}"
           [ "${rc}" -eq 0 ] || exit "${rc}"

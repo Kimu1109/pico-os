@@ -241,7 +241,7 @@ int main(){
         check(!AppRepo::ParseSignature((std::string("ed25519 ") + pkhex).c_str(), pk2, sig2), "sig: 署名が無い");
         check(!AppRepo::ParseSignature((text + "x").c_str(), pk2, sig2), "sig: 後ろにゴミ");
 
-        // script/build_app_repo.py(Pythonで書いたEd25519)が作った署名を確かめられること。
+        // script/release/build_app_repo.py(Pythonで書いたEd25519)が作った署名を確かめられること。
         // 下の値は RFC 8032 のテストの鍵(seed 9d61b1…)で、catalog "pico-os-apps\t1\t1\n" を
         // build_app_repo.sign_catalog() で署名したもの
         uint8_t py_pk[32], py_sig[64];

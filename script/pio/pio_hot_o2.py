@@ -1,4 +1,4 @@
-# PlatformIO の追加スクリプト(platformio.ini の extra_scripts = pre:script/pio_hot_o2.py)。
+# PlatformIO の追加スクリプト(platformio.ini の extra_scripts = pre:script/pio/pio_hot_o2.py)。
 #
 # 速さが効く少しのファイルだけを -O2 でコンパイルする(ほかは今まで通り -Os)。
 # docs/design/performance.md「よく通る所だけ -O2 でコンパイルする」。

@@ -68,10 +68,10 @@ end
 
 ```sh
 pip install pyserial                        # Windowsでは必須。Linux/macOSは無くても動く
-python3 script/pad_serial.py --list         # ポートの一覧
-python3 script/pad_serial.py COM3           # 小さなウィンドウが開く。そこでキーを押す
+python3 script/tools/pad_serial.py --list         # ポートの一覧
+python3 script/tools/pad_serial.py COM3           # 小さなウィンドウが開く。そこでキーを押す
 ```
 
 - ポートは同時に1つのプログラムしか開けないので、シリアルモニタとは同時に使えません。代わりに、pico-osのログがこのスクリプトのターミナルへそのまま出ます。
-- PCビルドでは標準入力がシリアルの代わりです: `python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc`
+- PCビルドでは標準入力がシリアルの代わりです: `python3 script/tools/pad_serial.py --stdout | ./pc/build/picoos_pc`
 - Web版では使えません(シリアルも標準入力もありません)。

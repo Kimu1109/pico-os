@@ -1,7 +1,7 @@
-# script/custom_icons
+# script/codegen/custom_icons
 
 `generate_icons.py` が読む**自作アイコン**のSVG置き場。
-tablerのアイコンは `script/tabler_icons/` にある。
+tablerのアイコンは `script/codegen/tabler_icons/` にある。
 
 ## ここへ置く基準
 

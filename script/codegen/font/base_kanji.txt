@@ -1,8 +1,8 @@
-# フラッシュに残す漢字(script/font/split_font.py が読む)。docs/design/performance.md「漢字の一部をSDへ」。
+# フラッシュに残す漢字(script/codegen/font/split_font.py が読む)。docs/design/performance.md「漢字の一部をSDへ」。
 #
 # '#' で始まる行は注釈。それ以外の行の文字は全部「フラッシュに残す字」(空白は無視)。
 # 漢字(U+3400〜U+9FFF・U+F900〜U+FAFF)のうちここに無いものがSDの追加フォントへ行く。かな・記号・英数字は全部フラッシュに残る。
-# **OSの画面の文字(通知・エラー・設定など)はここの字だけで書く**(SDが無くても読めるように。script/font/check_ui_chars.py が確かめる)。
+# **OSの画面の文字(通知・エラー・設定など)はここの字だけで書く**(SDが無くても読めるように。script/codegen/font/check_ui_chars.py が確かめる)。
 #
 # ---- 常用漢字表(2010年11月30日内閣告示、2,136字。表の順) ----
 # 「𠮟」(U+20B9F)は16bitの外でフォントに無いので、下の追加で「叱」を残す。

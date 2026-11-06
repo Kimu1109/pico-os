@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """OSに同梱するLuaモジュール(src/lua/builtin/*.lua)から src/lua/LuaBuiltinModules.hpp を作る。
 
-    python3 script/gen_lua_builtins.py          … 書き出す
-    python3 script/gen_lua_builtins.py --check  … 書き出したものが .lua と食い違えば終了コード1(CIで回す)
+    python3 script/codegen/gen_lua_builtins.py          … 書き出す
+    python3 script/codegen/gen_lua_builtins.py --check  … 書き出したものが .lua と食い違えば終了コード1(CIで回す)
 
 <名前>.lua が require("pico.<名前>") になる。ファイルの頭の「--」で始まる行(最初の空行まで)は
 モジュールの説明として C++ のコメントへ写し、フラッシュに置く文字列には入れない。
@@ -14,7 +14,7 @@
 import os
 import sys
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 SRC_DIR = os.path.join(ROOT, "src", "lua", "builtin")
 OUT = os.path.join(ROOT, "src", "lua", "LuaBuiltinModules.hpp")
 # 並びは .hpp の中の順(Source() が引く順)。足したらここにも足す
@@ -22,8 +22,8 @@ MODULES = ["ui", "async", "tween", "game"]
 DELIM = "LUA"
 
 HEAD = """#pragma once
-// 生成物: script/gen_lua_builtins.py が src/lua/builtin/*.lua から作る。直接書き換えないこと
-// (直したら python3 script/gen_lua_builtins.py。CI の「層の決まり」が --check で食い違いを見る)
+// 生成物: script/codegen/gen_lua_builtins.py が src/lua/builtin/*.lua から作る。直接書き換えないこと
+// (直したら python3 script/codegen/gen_lua_builtins.py。CI の「層の決まり」が --check で食い違いを見る)
 
 #include <cstring>
 
@@ -155,7 +155,7 @@ def main():
         with open(OUT, encoding="utf-8") as f:
             if f.read() != text:
                 print("src/lua/LuaBuiltinModules.hpp が src/lua/builtin/*.lua と食い違っています。"
-                      "python3 script/gen_lua_builtins.py で作り直してください")
+                      "python3 script/codegen/gen_lua_builtins.py で作り直してください")
                 return 1
         print("LuaBuiltinModules.hpp は src/lua/builtin/*.lua と一致しています")
         return 0

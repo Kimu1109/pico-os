@@ -8,10 +8,10 @@ Webから取ると、ここに置かれます)。無くても本体は動き、�
 
 - 元は [IPAexゴシック](https://moji.or.jp/ipafont/)(IPA)。[LovyanGFX](https://github.com/lovyan03/LovyanGFX) が
   u8g2 の形のビットマップ(`src/lgfx/Fonts/IPA/lgfx_font_japan.c` の `lgfx_font_japan_gothic_p_16` / `_24`)にしたものを、
-  pico-os の `script/font/split_font.py` が本体用とこのファイルに分けた(字の絵は1バイトも変えていない)。
+  pico-os の `script/codegen/font/split_font.py` が本体用とこのファイルに分けた(字の絵は1バイトも変えていない)。
 - これらは **IPAフォントライセンスv1.0** の「派生プログラム」で、同じライセンスで配る(`IPA_Font_License_Agreement_v1.0.txt`)。
   派生プログラムなので、元のフォントの名前は使っていない(第3条1項(4))。
-- 作り方(第3条1項(1)(b)にあたるもの): `script/font/split_font.py` と `script/font/base_kanji.txt`
+- 作り方(第3条1項(1)(b)にあたるもの): `script/codegen/font/split_font.py` と `script/codegen/font/base_kanji.txt`
   (https://github.com/Kimu1109/pico-os)。
 
 ## 元のフォントへ戻す方法(第3条1項(2))
@@ -23,4 +23,4 @@ Webから取ると、ここに置かれます)。無くても本体は動き、�
 
 ## ファイルの形
 
-`script/font/split_font.py` の冒頭の「.pkf の形」。見出しの印が本体と合わないファイルは使われない(□になる)。
+`script/codegen/font/split_font.py` の冒頭の「.pkf の形」。見出しの印が本体と合わないファイルは使われない(□になる)。

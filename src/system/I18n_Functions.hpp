@@ -16,8 +16,8 @@
 // - 日本語の版: TR() は原文そのもの(表もハッシュの引き当ても無い)
 // - 英語の版: キーは原文の FNV-1a(32bit。コンパイル時に数える)で、実行時は二分探索1回だけ。
 //   原文のリテラルは参照しないのでフラッシュに入らない。訳の無い原文は表に日本語のまま入る
-// - 訳は i18n/en.po(人が書く)から script/i18n.py が I18n_Table_En.cpp(生成物)を作る。
-//   TR()/TR_NOOP() を足したら `python3 script/i18n.py update`(CIの `--check` が食い違いを見張る)
+// - 訳は i18n/en.po(人が書く)から script/codegen/i18n.py が I18n_Table_En.cpp(生成物)を作る。
+//   TR()/TR_NOOP() を足したら `python3 script/codegen/i18n.py update`(CIの `--check` が食い違いを見張る)
 // - 返す文字列はフラッシュに置いた定数。返したポインタはずっと有効(コピーせず持ってよい)
 namespace I18nFunctions {
     enum class Lang : uint8_t { Ja = 0, En, Count };
@@ -26,7 +26,7 @@ namespace I18nFunctions {
     constexpr Lang kLang = PICO_LANG_EN ? Lang::En : Lang::Ja;
     constexpr Lang Current(){ return kLang; }
 
-    // 原文のハッシュ(FNV-1a 32bit。UTF-8のバイト列のまま)。script/i18n.py と同じ計算
+    // 原文のハッシュ(FNV-1a 32bit。UTF-8のバイト列のまま)。script/codegen/i18n.py と同じ計算
     constexpr uint32_t Hash(const char* s){
         uint32_t h = 2166136261u;
         for(; *s; ++s){
@@ -70,11 +70,11 @@ namespace I18nFunctions {
 #endif
 }
 
-// 画面に出す日本語の文字列を包む。引数は文字列リテラルだけ(script/i18n.py が拾う。日本語の版でもハッシュを数えて確かめる)
+// 画面に出す日本語の文字列を包む。引数は文字列リテラルだけ(script/codegen/i18n.py が拾う。日本語の版でもハッシュを数えて確かめる)
 #if PICO_LANG_EN
 #define TR(s) (::I18nFunctions::LookupNoSrc(::std::integral_constant<uint32_t, ::I18nFunctions::Hash(s)>::value, (s)))
 #else
 #define TR(s) (::I18nFunctions::Src(::std::integral_constant<uint32_t, ::I18nFunctions::Hash(s)>::value, (s)))
 #endif
-// 表に並べておき、使う所で I18nFunctions::Tr() する文字列の印(script/i18n.py が拾うだけで、値は原文のまま)
+// 表に並べておき、使う所で I18nFunctions::Tr() する文字列の印(script/codegen/i18n.py が拾うだけで、値は原文のまま)
 #define TR_NOOP(s) (s)

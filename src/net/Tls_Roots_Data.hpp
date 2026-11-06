@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-// script/generate_tls_roots.py が生成する。手で書き換えないこと。
+// script/codegen/generate_tls_roots.py が生成する。手で書き換えないこと。
 // 生成日: 2026-11-01
 //
 // HTTPSで信頼するルート証明書(1枚ずつDERで)。一覧:

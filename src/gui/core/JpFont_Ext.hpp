@@ -8,7 +8,7 @@
 // SDは SdFat の FsFile を開いたままにして読む。OSData::SD_usable が false の間(SDが無い・USBドライブ中)は読まず、
 // OSData::SD_mount_gen が変わったら(マウントし直した)開き直す。
 // ファイルが無い・合わないときは常用漢字の外の字が □ になるだけで、ほかは動く
-// (**OSの画面の文字は常用漢字までで書く**。script/font/check_ui_chars.py)。
+// (**OSの画面の文字は常用漢字までで書く**。script/codegen/font/check_ui_chars.py)。
 //
 // 控えのRAM: 16px(本文)は128字ぶん × 56B、24px(見出し・部品)は32字ぶん × 114B、ほかに索引が1つ768B。
 namespace JpFontExt {

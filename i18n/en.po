@@ -1,5 +1,5 @@
 # pico-os の表示の訳。原文(msgid)は src/ の TR("…") の日本語そのもの。
-# 訳(msgstr)を書いたら python3 script/i18n.py update で src/system/I18n_Table_*.cpp を作り直す。
+# 訳(msgstr)を書いたら python3 script/codegen/i18n.py update で src/system/I18n_Table_*.cpp を作り直す。
 # 訳を空にした原文は日本語のまま出る。%d 等の書式は原文と同じ並びに保つ(違うと --check が落ちる)。
 # 画面は240px幅が基本なので、訳は原文の幅に近い短い言い方を選ぶ。
 msgid ""

@@ -17,7 +17,7 @@ pico.game のサンプル「ジャンプアクション」(pc/sdcard/lua/apps/�
 使い方:
     python3 script/assets/generate_platformer_sheet.py                   # 既定の場所へ書く
     python3 script/assets/generate_platformer_sheet.py --preview p.ppm   # 確認用のPPMも書く
-      (PPMは python3 script/ppm2png.py p.ppm p.png 4 でPNGにできる)
+      (PPMは python3 script/tools/ppm2png.py p.ppm p.png 4 でPNGにできる)
 """
 
 import argparse

@@ -14,7 +14,7 @@
 // ドライバが SetDevice() で押しているボタンを渡す(Update()より前)。
 //
 // ---- 入力元2: USBシリアル(PCのキーボード) ----
-// 実物のコントローラーが無くても試せるよう、PC側の script/pad_serial.py がキーボードの状態を
+// 実物のコントローラーが無くても試せるよう、PC側の script/tools/pad_serial.py がキーボードの状態を
 // USBシリアル(ログを出しているのと同じ Serial)で送ってくる。1行1件のテキスト:
 //
 //     pad XXXX\n       XXXX = 押しているボタン(Button のOR)の16進数(1〜4桁、大文字小文字どちらでも)
@@ -29,7 +29,7 @@
 // - 1回の Update() で読むのは kMaxBytesPerUpdate バイトまで(送り付けられてもフレームが止まらない)
 //
 // PCビルドでは pc/compat/Arduino.h の Serial が標準入力を読むので、
-// `python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc` で同じ経路を試せる。
+// `python3 script/tools/pad_serial.py --stdout | ./pc/build/picoos_pc` で同じ経路を試せる。
 namespace PadFunctions {
 
     // ボタンのビット。Wiiクラシックコントローラーにあるボタンを一通り持っておく。

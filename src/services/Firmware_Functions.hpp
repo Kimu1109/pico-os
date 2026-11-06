@@ -11,7 +11,7 @@
 // ファームの更新(docs/FIRMWARE_UPDATE.md)のOSへのつなぎ。中身の流れは apps/firmware/Fw_Update。
 //
 //   SDから   … StartFromSd(path)。ファイルアプリで .pfw を開く/「本体の更新」の[SDから選ぶ]
-//   Wi-Fiで  … StartListening()。PCの script/firmware_tool.py push(pio run -t fwpush)がTCPで送ってくる。
+//   Wi-Fiで  … StartListening()。PCの script/release/firmware_tool.py push(pio run -t fwpush)がTCPで送ってくる。
 //               「本体の更新」の画面で[受け取る]を押している間だけ待ち受ける
 //   Webから  … StartWebIndex() → StartWebFile()。GitHub Pages の版の一覧(apps/firmware/Fw_Download)から選んで
 //               SDの /firmware/ へ落とし、落とせたらSDからと同じ流れへ移る。書き込みの準備ができたら落としたファイルは消す

@@ -202,7 +202,7 @@ OSと同じ`key=value`書式(`Config_Functions`)で読み書きできるよう�
 ## 画像(2026-09-21実装)
 
 `pico.image_load/image_size/draw_image/image_free`。ウィジェット(`Image`)を介さず、
-`.pimg`(`script/generate_pimg.py`生成の4bpp+RLE独自形式。詳細は上の「MarkdownView実装詳細」
+`.pimg`(`script/tools/generate_pimg.py`生成の4bpp+RLE独自形式。詳細は上の「MarkdownView実装詳細」
 「文書内の参照(画像)」参照)をLuaスクリプトが直接デコードして持ち、描いて、解放できるようにした。
 
 - **デコードは新規実装せず、既存の`IconRender::LoadPimgToSprite()`/`DrawPimgSprite()`
@@ -272,7 +272,7 @@ OSと同じ`key=value`書式(`Config_Functions`)で読み書きできるよう�
   **取得**は元々`GetCommon()`が全ウィジェット共通で処理しているので、Get側の変更は不要だった)。
 - **`pico.canvas_clear(id)`**: `CanvasRaster::canvasClear()`を橋渡しするだけ。
 - **`pico.canvas_save(id, path)` / `pico.canvas_load(id, path)`**: `CanvasRaster`のスプライトを
-  `.pimg`(4bpp+RLE、`script/generate_pimg.py`と同じ形式。上の「画像」参照)としてSDへ書き出す/
+  `.pimg`(4bpp+RLE、`script/tools/generate_pimg.py`と同じ形式。上の「画像」参照)としてSDへ書き出す/
   読み込む。**`.pimg`は元々デコード専任(C++側にエンコーダが無かった)**だったが、
   実行中に描いた内容をその場で保存する用途はデコードだけでは足りないため、
   `IconRender::EncodePimg()`(`src/gui/icons/icon_render.h/.cpp`)を新設した。
@@ -295,7 +295,7 @@ OSと同じ`key=value`書式(`Config_Functions`)で読み書きできるよう�
   読み書きする」よう拡張した**(以前は`writePixel`/`clear`が完全な無描画no-opで、
   `readPixelValue`自体が無かった)。他のメソッド(`drawRect`等)は従来どおり無描画のまま。
 - ホストテストは`lua_engine_test.cpp`に追加(生成直後100×100・リサイズの往復、
-  SD無しの失敗、保存したバイト列が`script/generate_pimg.py`と同じRLE形式になることの
+  SD無しの失敗、保存したバイト列が`script/tools/generate_pimg.py`と同じRLE形式になることの
   完全一致比較、クリア後に白へ戻ること、保存→クリア→読み込みの往復、保存時と異なる
   サイズの`.pimg`を読み込むとキャンバス自体がリサイズされること、画面サイズ超過の
   width/heightを拒否すること、対象種別/ID検証、`app_dir`配下への閉じ込め)。
@@ -389,7 +389,7 @@ C++側に元からあったが、**`WidgetProperty::Set()`のButtonケースに`
   `text`を読み書きしても実害は無いが、画面には出ない。
 - `pico.set(id,"icon_id",N)`のNは`src/gui/icons/icons_data.h`の`IconID`の並び順
   そのまま(明示値なしの連番)。**この並びへ新しいアイコンを追加する際は必ず
-  末尾(`script/generate_icons.py`の`ICONS`リストの末尾)へ足すこと** —
+  末尾(`script/codegen/generate_icons.py`の`ICONS`リストの末尾)へ足すこと** —
   途中へ挿入すると、既存のLuaスクリプトが数値で指定しているアイコンが黙って
   別物にすり替わる(この制約自体は`generate_icons.py`にコメントで明記した。
   今回`Save`/`StackPop`/`StackPush`/`Brush`/`Eraser`の5種が追加されているが、
@@ -840,7 +840,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 6. **ユーティリティ**: `app_dir/path_join/time/wifi_status/url_encode/url_decode/base64_encode/base64_decode/settings_get/set/all/memory_info/toast`、`pico.on_back(fn)`/`pico.go_back()`
    (`LuaScene::onKey()` がEscを、`onUpdate()` がコントローラーのHOMEを「戻る」として渡す。登録が無ければ何もしない)。`util/Base64.hpp` を新設。
    `settings_*` はアプリのフォルダの `settings.cfg`(`PICO_Config`)。`toast` は `NotificationFunctions::Post()` の音なし(履歴にも残る。300msの間隔を空ける)。
-7. **OS同梱のLuaモジュール**(ソースは`src/lua/builtin/*.lua`、`script/gen_lua_builtins.py`が`src/lua/LuaBuiltinModules.hpp`(生成物、コミットする)へ埋め込む。直したら生成し直すこと(CIが`--check`で見る)。フラッシュにはコメント・字下げを落として置く(改行は残すので行番号はそのまま。`performance.md`「フラッシュを削る」)。ソースはフラッシュに置くだけで、`require` されたときだけコンパイルする): `pico.ui`(宣言的なUIの組み立て)・
+7. **OS同梱のLuaモジュール**(ソースは`src/lua/builtin/*.lua`、`script/codegen/gen_lua_builtins.py`が`src/lua/LuaBuiltinModules.hpp`(生成物、コミットする)へ埋め込む。直したら生成し直すこと(CIが`--check`で見る)。フラッシュにはコメント・字下げを落として置く(改行は残すので行番号はそのまま。`performance.md`「フラッシュを削る」)。ソースはフラッシュに置くだけで、`require` されたときだけコンパイルする): `pico.ui`(宣言的なUIの組み立て)・
    `pico.async`(`async.run/await/sleep/http/message/input/choice/date/time/number/...` でコルーチン連携)・`pico.tween`。`preloadModules()` が `pico.` で始まる名前を
    アプリのフォルダより先に同梱ソースから読む(実行中のコンパイルを避ける「先読み」の仕組みに乗せた)。**静的な `require("pico.ui")` の書き方だけ**先読みされる。
 8. **暗号化**(`crypto/Secret_Aead.hpp/.cpp`、`LuaEngine_Crypto.cpp`): `pico.encrypt(plain[, password])` / `decrypt` / `is_encrypted` / `hash`(BLAKE2b-256・鍵付き可)/ `random_bytes`、
@@ -867,7 +867,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 
 - **値はC++の定義(`consts.hpp`・各enum・`Iso_World.hpp`)を直接引く**ので食い違わない。数値を直接書く書き方もそのまま使える。
 - **関数と同じ遅延**: テーブルへは入れず、`l_api_index` が関数の表に無かった名前を定数の表から引いて初めて写す(約150個の定数でLuaの予算を使わない)。
-- **アイコンは `icons_data.h` の `kIconNames`**(`script/generate_icons.py` が `IconID` と同じ並びで出す。`static_assert` で個数を縛る)を引く。
+- **アイコンは `icons_data.h` の `kIconNames`**(`script/codegen/generate_icons.py` が `IconID` と同じ並びで出す。`static_assert` で個数を縛る)を引く。
   `pico.ICON_<IconIDの名前>` で、並び順が変わっても追従する。アイコンを足すと自動で使える。
 - 定数を足したら `LuaConstants.hpp` の表と、`api/constants.md`・`reference/limits.md` を直す。テストは `lua_engine_test.cpp` の「数値定数」。
 - 実機では未確認(PCビルドとホストテストのみ)。

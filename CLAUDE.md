@@ -41,7 +41,7 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
   ```sh
   cmake -S pc -B pc/build && cmake --build pc/build -j
   SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --tap 61,65@30:5 --shot md.ppm 250   # FRAMEで(X,Y)をHOLDフレーム押して撮る
-  python3 script/ppm2png.py md.ppm md.png 2
+  python3 script/tools/ppm2png.py md.ppm md.png 2
   ```
   `src/` は実機と同一。実機ライブラリだけ `pc/compat/` で差し替える(例外は `board/LGFX_Config.hpp` と `hal/Touch_Functions.hpp` の `#if defined(PICOOS_PC)`)。
   **`src/` へ実機依存を足すときは `pc/compat/` にも代替を足す。** GUIの確認は実機の前にPCビルドで。
@@ -59,7 +59,7 @@ src/
   devtools/  プロファイラ・クラッシュダンプ・debug.cfg・自己診断
   boot/      つなぎ(App_List / Background_List / KeyInput_Dispatch / Notification_Sources)
   gui/core/  GFX(合成と転送)・Font(常用外の漢字はSDの追加フォントから。ExtGlyphStore)・Widget・Focus・Scene・Keyboard・Error
-  gui/fonts/ 日本語フォントの生成物(常用漢字まで。script/font/split_font.py)
+  gui/fonts/ 日本語フォントの生成物(常用漢字まで。script/codegen/font/split_font.py)
   gui/widgets/  汎用部品と基底。apps/ dialogs/ keyboards/ interfaces/ systems/ は下の「ウィジェットの置き場所」
   gui/scenes/   機能の中身を持たない画面(設定・時計・ファイル・Lua等)
   apps/<機能>/  1フォルダ=1機能(browser calculator calendar chat dict firmware gb home mail music notes reader recorder ssh store texteditor todo video)。
@@ -69,7 +69,8 @@ src/
 lib/         vendor: lua(5.4.7) / monocypher / peanut_gb / qrcodegen / minimp3(各 README-pico-os.md)
 buildcfg/    PlatformIOの部品(options.ini)と派生の版(variants.ini / bench.ini)。土台は platformio.ini
 pc/          PC/Webビルド。pc/sdcard/ がSDの中身(lua/apps/<名前>/main.lua が自動登録されるLuaアプリ)
-script/      開発補助(cli-tool/picoos が名前で呼び分ける)。host_test/(ホストテスト)・lua_test/(picoos lua-test)・check_layers.py・generate_icons.py・dict/ 等
+script/      開発補助(cli-tool/picoos が名前で呼び分ける。script/README.md)。pio/(PlatformIOが読む)・codegen/(src/の生成物。アイコン・フォント・i18n)・
+             check/(CIの検査)・release/(配る)・tools/(変換と開発中の道具)・assets/・dict/・host_test/・lua_test/。直下に置かない
 hardware/carrier/  キャリアボード(KiCad 8。README.md に部品の表、tools/check_pins.py で consts.hpp と結線を照合)
 docs/        仕様(PROTOCOL / CHAT_PROTOCOL / APP_REPO / MUSIC_FORMAT / VIDEO_FORMAT / FIRMWARE_UPDATE / ZOMBIE_TD / HARDWARE_CHECKLIST)と design/
 lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャットサーバ
@@ -78,7 +79,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 
 ## コアアーキテクチャ
 
-### 層 (`script/check_layers.py`、CIでも回る)
+### 層 (`script/check/check_layers.py`、CIでも回る)
 
 **ファイルは自分と同じ段か下の段のヘッダだけを `#include` してよい。** 段の割り当てと理由付きの例外はスクリプトの中。
 
@@ -161,12 +162,12 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 
 - **コメント・ログは日本語、識別子は英語。**
 - 定数は「クラス内 `constexpr static`」と「`consts.hpp` の `#define`」が混在。
-- アイコンは `script/generate_icons.py` が `tabler_icons/` と `custom_icons/` から `gui/icons/icons_data.h` を生成。
-  **tablerは16pxで細い線が消えることがあるので生成後に目視**し、破綻したら `custom_icons/` へ描き起こす(基準は `script/custom_icons/README.md`)。
+- アイコンは `script/codegen/generate_icons.py` が `tabler_icons/` と `custom_icons/` から `gui/icons/icons_data.h` を生成。
+  **tablerは16pxで細い線が消えることがあるので生成後に目視**し、破綻したら `custom_icons/` へ描き起こす(基準は `script/codegen/custom_icons/README.md`)。
 - 「状態の否定」は専用アイコンを作らず、基底アイコンに `IconID::X` を `PICO_RED` で重ねる(SD無し・Wi-Fi圏外)。
 - ライセンスは MIT(`LICENSE`、著作権者 Kimu1109)。**他者のコード・データ・素材を同梱したら `THIRD_PARTY_LICENSES.md` に1行足す**(GPL等の継承型はファームに組み込まずSDのデータに留める)。
-- **画面の文字に使う漢字は常用漢字まで**(`script/font/base_kanji.txt`。外の字はSDの追加フォントにしか無く、SDが無いと □。`script/font/check_ui_chars.py` がCIで見る。`performance.md`「漢字の一部をSDへ」)。
-- **画面に出す日本語の文字列は `TR("…")` で包み、`python3 script/i18n.py update` で `i18n/en.po` へ訳を書く**(静的な表は `TR_NOOP()` + 使う所で `I18nFunctions::Tr()`。アプリの登録名は訳さず見せる所で訳す。`docs/design/i18n.md`)。
+- **画面の文字に使う漢字は常用漢字まで**(`script/codegen/font/base_kanji.txt`。外の字はSDの追加フォントにしか無く、SDが無いと □。`script/codegen/font/check_ui_chars.py` がCIで見る。`performance.md`「漢字の一部をSDへ」)。
+- **画面に出す日本語の文字列は `TR("…")` で包み、`python3 script/codegen/i18n.py update` で `i18n/en.po` へ訳を書く**(静的な表は `TR_NOOP()` + 使う所で `I18nFunctions::Tr()`。アプリの登録名は訳さず見せる所で訳す。`docs/design/i18n.md`)。
 - 物理キーボードを扱う画面は `Scene::onKey()` を実装する。外部コントローラーの入力元は `PadFunctions` に `Source` を足す(`docs/design/input.md`)。
 
 ## テストとCI
@@ -205,7 +206,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `devtools.md` | プロファイラ・Luaデバッガ・クラッシュダンプ・サンドボックス・実機確認の道具・ファームの更新・ビルド時に選ぶハードウェア機能・ナイトリービルド |
 | `performance.md` | 最適化とメモリ計測の記録・解決済みの不具合 |
 | `pc-web.md` | Webビルド(WebAssembly) |
-| `i18n.md` | 表示言語の切り替え(`TR()`・`i18n/en.po`・`script/i18n.py`・言語の選び方) |
+| `i18n.md` | 表示言語の切り替え(`TR()`・`i18n/en.po`・`script/codegen/i18n.py`・言語の選び方) |
 | `carrier-board.md` | キャリアボード(`hardware/carrier/`。モジュールを載せる2層基板の決めたことと寸法の出典) |
 | `roadmap-ideas.md` | ロードマップと未実装の設計アイデア |
 

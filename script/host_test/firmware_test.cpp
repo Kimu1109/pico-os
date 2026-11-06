@@ -2,7 +2,7 @@
 // 置き場(内蔵フラッシュのLittleFS)と受け取り元(SD・TCP)はメモリの偽物。
 //
 //   ./firmware_test                     … C++の中で組み立てた更新ファイルで全部の経路
-//   ./firmware_test <x.pfw> <公開鍵.hex> … script/firmware_tool.py が作ったものを読めること(firmware_tool_test.py が呼ぶ)
+//   ./firmware_test <x.pfw> <公開鍵.hex> … script/release/firmware_tool.py が作ったものを読めること(firmware_tool_test.py が呼ぶ)
 #include "apps/firmware/Fw_Image.hpp"
 #include "apps/firmware/Fw_Update.hpp"
 #include "apps/ssh/Ssh_Sha256.hpp"
@@ -103,7 +103,7 @@ struct MemSource : public FwSource {
 };
 
 // ---------------------------------------------------------------------------
-// 更新ファイルを組み立てる(script/firmware_tool.py の make_header と同じ並び)
+// 更新ファイルを組み立てる(script/release/firmware_tool.py の make_header と同じ並び)
 // ---------------------------------------------------------------------------
 struct Spec {
     uint32_t flags = FwImage::kFlagSigned;
@@ -210,7 +210,7 @@ int main(int argc, char** argv){
     KeyPair(kSeed, sk, g_keys[0]);
 
     if(argc == 3){
-        // ---- script/firmware_tool.py が作ったものを読む ----
+        // ---- script/release/firmware_tool.py が作ったものを読む ----
         FILE* f = fopen(argv[1], "rb");
         if(!f){ printf("[FAIL] %s を開けない\n", argv[1]); return 1; }
         Bytes file;

@@ -1,7 +1,7 @@
 #!/bin/sh
 # HttpGet の結合テスト。**実際にソケットで通信する**ので run.sh とは分けてある。
 #
-# script/reference_server.py を一時的に立ち上げ、pc/compat の WiFiClient から
+# script/tools/reference_server.py を一時的に立ち上げ、pc/compat の WiFiClient から
 # 本当に取得できるかを確かめる。SDL2もSDカードも要らない。
 #
 # run.sh との違い:
@@ -18,7 +18,7 @@
 # (上と同じ使い捨ての証明書)の2つ立てて確かめる。サーバ単体の権限まわり(chat_server_test.py)も
 # ここで回す(同じプロセスの中で 127.0.0.1 の空きポートにサーバを立てる)。
 #
-# Spotifyの認証(spotify_auth_test.py)は script/spotify_auth.py を偽物のトークン/APIのサーバ(127.0.0.1)へ向けて動かし、
+# Spotifyの認証(spotify_auth_test.py)は script/tools/spotify_auth.py を偽物のトークン/APIのサーバ(127.0.0.1)へ向けて動かし、
 # ブラウザの代わりに戻り先へ code を返して、PKCE・state の照合・書き出したJSONを確かめる(本物のSpotifyへは行かない)。
 #
 # 録音の文字起こし(transcribe_net_test)は script/host_test/transcribe_fake_server.py(OpenAI互換の
@@ -73,12 +73,12 @@ g++ -std=gnu++17 -g -fsanitize=address,undefined \
     -o "$OUT/net_test" -lssl -lcrypto
 
 echo "参照実装サーバを起動します (port $PORT)"
-python3 "$ROOT/script/reference_server.py" \
+python3 "$ROOT/script/tools/reference_server.py" \
     --root "$ROOT/examples" --port "$PORT" --home /doc.md \
     > "$OUT/server.log" 2>&1 &
 SERVER_PID=$!
 
-python3 "$ROOT/script/reference_server.py" \
+python3 "$ROOT/script/tools/reference_server.py" \
     --root "$ROOT/examples" --port "$BARE_PORT" --no-discovery \
     > "$OUT/server_bare.log" 2>&1 &
 BARE_PID=$!
@@ -332,7 +332,7 @@ echo "===== mail_net_test ====="
     "$MAIL_OAUTH_IMAP_PORT" "$MAIL_OAUTH_PORT"
 kill $MAIL_PIDS 2>/dev/null || true
 
-# ---- Spotifyの最初のトークン(script/spotify_auth.py)。偽物のトークン/APIのサーバを相手に ----
+# ---- Spotifyの最初のトークン(script/tools/spotify_auth.py)。偽物のトークン/APIのサーバを相手に ----
 echo ""
 echo "===== spotify_auth_test ====="
 python3 "$ROOT/script/host_test/spotify_auth_test.py"

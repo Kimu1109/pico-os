@@ -6,21 +6,21 @@
   # 1. 署名の鍵を作る(1回だけ)。秘密鍵はリポジトリに置かない(手元のPCと、ナイトリーが署名に使う
   #    GitHubのSecrets FIRMWARE_SIGNING_KEY にだけ置く。docs/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。
   #    表示された1行を src/apps/firmware/Fw_Keys.hpp へ足し、USBで1回書き込む
-  python3 script/firmware_tool.py keygen
+  python3 script/release/firmware_tool.py keygen
 
   # 2a. SDに置く更新ファイルを作る(pio run の後。pio run -t fwpack でも同じ)
-  python3 script/firmware_tool.py pack --bin .pio/build/rpipico2w/firmware.bin --out firmware.pfw
+  python3 script/release/firmware_tool.py pack --bin .pio/build/rpipico2w/firmware.bin --out firmware.pfw
 
   # 2b. Wi-Fiで本体へ送る(本体で「本体の更新」→[受け取る]を押しておく。pio run -t fwpush --upload-port IP でも同じ)
-  python3 script/firmware_tool.py push --host 192.168.1.23 --bin .pio/build/rpipico2w/firmware.bin
+  python3 script/release/firmware_tool.py push --host 192.168.1.23 --bin .pio/build/rpipico2w/firmware.bin
 
   # 確かめる
-  python3 script/firmware_tool.py verify firmware.pfw [--pubkey 16進64桁]
+  python3 script/release/firmware_tool.py verify firmware.pfw [--pubkey 16進64桁]
 
   # できている更新ファイル(CIが作った署名なしのもの等)に署名する。署名は見出しだけに掛かり、
   # 見出しに中身のSHA-256が入っているので、作り直さずに後から付けられる。
   # --expect-keys を付けると、鍵が Fw_Keys.hpp に焼き込んだ公開鍵のどれとも違うときに断る
-  python3 script/firmware_tool.py sign firmware.pfw [--out signed.pfw] [--expect-keys src/apps/firmware/Fw_Keys.hpp]
+  python3 script/release/firmware_tool.py sign firmware.pfw [--out signed.pfw] [--expect-keys src/apps/firmware/Fw_Keys.hpp]
 
 鍵は --key で指定する。無ければ環境変数 PICOOS_FW_KEY、それも無ければ ~/.pico-os/firmware.key
 (あれば)を使う。鍵が無ければ署名なしで作る(本体は debug.cfg の fw-allow-unsigned = true のときだけ、
@@ -86,7 +86,7 @@ def find_seed(args_key, required=False):
     if os.path.exists(path):
         return load_seed(path)
     if args_key or required:
-        raise SystemExit(f"{path} がありません(python3 script/firmware_tool.py keygen で作れます)")
+        raise SystemExit(f"{path} がありません(python3 script/release/firmware_tool.py keygen で作れます)")
     return None
 
 

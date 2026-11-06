@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""script/spotify_auth.py のテスト。本物のSpotifyへは行かない。
+"""script/tools/spotify_auth.py のテスト。本物のSpotifyへは行かない。
 
 - PKCE(RFC 7636 付録Bの値)と、認可URLの組み立て
 - 偽物のトークン/APIのサーバを 127.0.0.1 に立て、スクリプトを --no-browser で動かし、
@@ -19,8 +19,8 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
-SCRIPT = os.path.join(ROOT, "script", "spotify_auth.py")
-sys.path.insert(0, os.path.join(ROOT, "script"))
+SCRIPT = os.path.join(ROOT, "script", "tools", "spotify_auth.py")
+sys.path.insert(0, os.path.join(ROOT, "script", "tools"))
 import spotify_auth  # noqa: E402
 
 failures = 0

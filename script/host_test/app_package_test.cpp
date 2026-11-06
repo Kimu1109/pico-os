@@ -1,6 +1,6 @@
 // SDに置いたアプリのパッケージ(.papp。apps/store/App_Package)を入れる係のテスト。
 //
-// パッケージは app_package_tool_test.py が script/build_app_repo.py で作り、このテストへディレクトリを渡す
+// パッケージは app_package_tool_test.py が script/release/build_app_repo.py で作り、このテストへディレクトリを渡す
 // (Pythonが書いたものを本物の App_Package が読むので、両方の形が揃っていることも確かめる)。
 // SDは stubs/ のメモリ上のもの(HostSd::dirs_enabled でフォルダの走査も見る)。
 //

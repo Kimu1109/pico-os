@@ -81,7 +81,7 @@ inline long map(long x, long in_min, long in_max, long out_min, long out_max) {
 
 // ---- Serial(書き込みは標準出力へ、読み込みは標準入力から) ----
 // 実機のUSBシリアルの代わり。読み込みは外部コントローラー(PadFunctions)が使う:
-//   python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc
+//   python3 script/tools/pad_serial.py --stdout | ./pc/build/picoos_pc
 // 標準入力は最初に available() を呼んだときから別スレッドで読み、溜めたものを read() で返す
 // (read(0)はブロックするので、ループのスレッドでは読めない)。
 // PICOOS_SERIAL_STDIN=off で読まない。

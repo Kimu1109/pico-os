@@ -24,12 +24,12 @@
   送り続ける(押しっぱなしのボタンを残さないため)。
 
 使い方:
-    python3 script/pad_serial.py COM3            # Windows
-    python3 script/pad_serial.py /dev/ttyACM0    # Linux
-    python3 script/pad_serial.py                 # ポートが1つだけならそれを使う(pyserialが要る)
-    python3 script/pad_serial.py --list          # ポートの一覧
-    python3 script/pad_serial.py --stdout | ./pc/build/picoos_pc    # PCビルドへ
-    python3 script/pad_serial.py --mode text COM3   # 文字入力のモードで始める(F1で切り替え)
+    python3 script/tools/pad_serial.py COM3            # Windows
+    python3 script/tools/pad_serial.py /dev/ttyACM0    # Linux
+    python3 script/tools/pad_serial.py                 # ポートが1つだけならそれを使う(pyserialが要る)
+    python3 script/tools/pad_serial.py --list          # ポートの一覧
+    python3 script/tools/pad_serial.py --stdout | ./pc/build/picoos_pc    # PCビルドへ
+    python3 script/tools/pad_serial.py --mode text COM3   # 文字入力のモードで始める(F1で切り替え)
 
 - シリアルはpyserial(`pip install pyserial`)で開く。無ければLinux/macOSだけは標準ライブラリで開く
 - ポートは同時に1つのプログラムしか開けないので、シリアルモニタとは同時に使えない。

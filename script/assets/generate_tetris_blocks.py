@@ -20,7 +20,7 @@ PNGを描いて generate_pimg.py で変換して差し替えればよい。
 使い方:
     python3 script/assets/generate_tetris_blocks.py                      # 既定の場所へ書く
     python3 script/assets/generate_tetris_blocks.py out.pimg --preview p.ppm   # 確認用のPPMも書く
-      (PPMは python3 script/ppm2png.py p.ppm p.png 8 でPNGにできる)
+      (PPMは python3 script/tools/ppm2png.py p.ppm p.png 8 でPNGにできる)
 """
 
 import argparse

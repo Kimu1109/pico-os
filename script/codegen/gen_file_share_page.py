@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Wi-Fi転送のページ(src/net/File_Share_Page.html)を gzip して src/net/File_Share_Page.cpp を作る。
 
-    python3 script/gen_file_share_page.py          … 書き出す
-    python3 script/gen_file_share_page.py --check  … .cpp の中身を戻したものが .html と食い違えば終了コード1(CIで回す)
+    python3 script/codegen/gen_file_share_page.py          … 書き出す
+    python3 script/codegen/gen_file_share_page.py --check  … .cpp の中身を戻したものが .html と食い違えば終了コード1(CIで回す)
 
 ページは gzip のままフラッシュに置き、`Content-Encoding: gzip` で返す(ブラウザが戻す)。
 生の文字列で持つと約12.8KB、gzip で約5.2KB(2026-11-01)。
@@ -14,12 +14,12 @@ import gzip
 import os
 import sys
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 SRC = os.path.join(ROOT, "src", "net", "File_Share_Page.html")
 OUT = os.path.join(ROOT, "src", "net", "File_Share_Page.cpp")
 
-HEAD = """// 生成物: script/gen_file_share_page.py が src/net/File_Share_Page.html から作る。直接書き換えないこと
-// (直したら python3 script/gen_file_share_page.py。CI の「層の決まり」が --check で食い違いを見る)
+HEAD = """// 生成物: script/codegen/gen_file_share_page.py が src/net/File_Share_Page.html から作る。直接書き換えないこと
+// (直したら python3 script/codegen/gen_file_share_page.py。CI の「層の決まり」が --check で食い違いを見る)
 #include "net/File_Share.hpp"
 
 // Wi-Fi転送のページ(ブラウザで開く1枚)。取り決めは net/File_Share.hpp の先頭。中身は .html の方を見ること。
@@ -75,7 +75,7 @@ def main():
             ok = False
         if not ok:
             print("src/net/File_Share_Page.cpp が src/net/File_Share_Page.html と食い違っています。"
-                  "python3 script/gen_file_share_page.py で作り直してください")
+                  "python3 script/codegen/gen_file_share_page.py で作り直してください")
             return 1
         print("File_Share_Page.cpp は File_Share_Page.html と一致しています")
         return 0

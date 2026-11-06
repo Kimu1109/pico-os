@@ -3,7 +3,7 @@
 #   include から: picoos_read_variant(<env の名前> <出力のリスト>)
 #                 出力は「NAME=VAL」の並び(-D の値が無ければ VAL=1)。土台の env:rpipico2w は空。
 #   単独で:       cmake -DPICOOS_VARIANT=rpipico2w_music -P pc/cmake/PicoVariant.cmake
-#                 1行に1つ NAME=VAL を出す(script/check_variants.py が PlatformIO の解釈と照らし合わせる)。
+#                 1行に1つ NAME=VAL を出す(script/check/check_variants.py が PlatformIO の解釈と照らし合わせる)。
 #
 # 読めるのは buildcfg/ の書き方の決まりの範囲だけ(それ以外は黙って読み違えず FATAL_ERROR で止める):
 #   - 版は `extends = env:rpipico2w` で、build_flags は ${env:rpipico2w.build_flags} ・ ${opt_xxx.flags} ・ -DNAME[=VAL] だけ

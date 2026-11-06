@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """表示言語の訳(i18n)の一覧と生成物を作る。設計は docs/design/i18n.md。
 
-    python3 script/i18n.py update    … src/ の TR("…") / TR_NOOP("…") を拾って i18n/<言語>.po を更新し、
+    python3 script/codegen/i18n.py update    … src/ の TR("…") / TR_NOOP("…") を拾って i18n/<言語>.po を更新し、
                                        src/system/I18n_Table_<言語>.cpp を作り直す
-    python3 script/i18n.py --check   … 上の2つが src/ と食い違っていないか(CI)。書式の食い違い・
+    python3 script/codegen/i18n.py --check   … 上の2つが src/ と食い違っていないか(CI)。書式の食い違い・
                                        ハッシュの衝突もここで落とす。訳の無い数は表示するだけ(落とさない)
-    python3 script/i18n.py missing [言語]  … 訳の無い原文と、それを使うファイルを出す
-    python3 script/i18n.py lua <アプリのフォルダ>...  … Luaアプリの pico.tr("…") を拾って lang/en.lua へ原文を足す
+    python3 script/codegen/i18n.py missing [言語]  … 訳の無い原文と、それを使うファイルを出す
+    python3 script/codegen/i18n.py lua <アプリのフォルダ>...  … Luaアプリの pico.tr("…") を拾って lang/en.lua へ原文を足す
                                        (訳の無い原文は「-- TODO」の行で足す。--check は同梱アプリの lang/ も確かめる)
 
 .po は gettext の形の一部だけ(msgid / msgstr / "#:" の出どころ)。Poedit 等でも開ける。
@@ -19,7 +19,7 @@ import os
 import re
 import sys
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 SRC = os.path.join(ROOT, "src")
 PO_DIR = os.path.join(ROOT, "i18n")
 
@@ -193,7 +193,7 @@ def scan_sources():
 
 PO_HEADER = (
     '# pico-os の表示の訳。原文(msgid)は src/ の TR("…") の日本語そのもの。\n'
-    "# 訳(msgstr)を書いたら python3 script/i18n.py update で src/system/I18n_Table_*.cpp を作り直す。\n"
+    "# 訳(msgstr)を書いたら python3 script/codegen/i18n.py update で src/system/I18n_Table_*.cpp を作り直す。\n"
     "# 訳を空にした原文は日本語のまま出る。%d 等の書式は原文と同じ並びに保つ(違うと --check が落ちる)。\n"
     "# 画面は240px幅が基本なので、訳は原文の幅に近い短い言い方を選ぶ。\n"
     'msgid ""\n'
@@ -261,7 +261,7 @@ def render_table(table_name, uses, translations):
         rows.append((fnv1a(msg), msg, translations.get(msg, b"")))
     rows.sort()
     out = [
-        "// 生成物: python3 script/i18n.py update が i18n/ の .po から作る。手で直さない(docs/design/i18n.md)\n",
+        "// 生成物: python3 script/codegen/i18n.py update が i18n/ の .po から作る。手で直さない(docs/design/i18n.md)\n",
         '#include "system/I18n_Functions.hpp"\n',
         '#include "config/Lang_Config.hpp"\n',
         "\n",
@@ -391,7 +391,7 @@ def read_lua_lang(path):
 
 
 def render_lua_lang(app_name, lang, msgs, entries):
-    out = ["-- %s の%sの表示(pico.tr の原文 → 訳)。原文は python3 script/i18n.py lua で足す\n" % (
+    out = ["-- %s の%sの表示(pico.tr の原文 → 訳)。原文は python3 script/codegen/i18n.py lua で足す\n" % (
         app_name, "英語" if lang == "en" else lang), "return {\n"]
     for msg in msgs:
         tr = entries.get(msg)
@@ -427,7 +427,7 @@ def lua_app(app_dir, lang, write):
 def main_lua(argv):
     dirs = argv[2:]
     if not dirs:
-        print("使い方: python3 script/i18n.py lua <アプリのフォルダ>...")
+        print("使い方: python3 script/codegen/i18n.py lua <アプリのフォルダ>...")
         return 2
     rc = 0
     for d in dirs:
@@ -454,7 +454,7 @@ def check_lua_apps():
             rc = 1
         if missing or stale:
             print("エラー: %s の lang/en.lua が pico.tr と合っていません(訳なし %d)。"
-                  "python3 script/i18n.py lua %s を回して訳を書いてください"
+                  "python3 script/codegen/i18n.py lua %s を回して訳を書いてください"
                   % (name, len(missing), os.path.relpath(d, ROOT)))
             rc = 1
     return rc
@@ -509,11 +509,11 @@ def main(argv):
             cur_po = open(po_path, encoding="utf-8").read() if os.path.exists(po_path) else ""
             cur_table = open(table_abs, encoding="utf-8").read() if os.path.exists(table_abs) else ""
             if cur_po != po_text:
-                print("エラー: %s が src/ の TR() と合っていません。python3 script/i18n.py update を回してください"
+                print("エラー: %s が src/ の TR() と合っていません。python3 script/codegen/i18n.py update を回してください"
                       % os.path.relpath(po_path, ROOT))
                 rc = 1
             if cur_table != table_text:
-                print("エラー: %s が %s と合っていません。python3 script/i18n.py update を回してください"
+                print("エラー: %s が %s と合っていません。python3 script/codegen/i18n.py update を回してください"
                       % (table_path, os.path.relpath(po_path, ROOT)))
                 rc = 1
             print("%s: 原文 %d / 訳なし %d" % (lang, len(uses), len(missing)))

@@ -6,7 +6,7 @@
 #include "monocypher-ed25519.h"
 #include "system/I18n_Functions.hpp"
 
-// 見出しの並び(リトルエンディアン。script/firmware_tool.py と揃える)
+// 見出しの並び(リトルエンディアン。script/release/firmware_tool.py と揃える)
 //   0  magic[8]        "PICO-FW1"
 //   8  u16 header_bytes (=128)
 //  10  u16 format       (=1)

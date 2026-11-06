@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """src/ の層の決まり(下の層から上の層を #include しない)を確かめる。
 
-    python3 script/check_layers.py            … 違反があれば一覧を出して終了コード1
-    python3 script/check_layers.py --graph    … 層ごとの依存(何本の include か)を出す
-    python3 script/check_layers.py --sources  … 「段 パス」を1行ずつ(script/host_test/CMakeLists.txt が使う)
+    python3 script/check/check_layers.py            … 違反があれば一覧を出して終了コード1
+    python3 script/check/check_layers.py --graph    … 層ごとの依存(何本の include か)を出す
+    python3 script/check/check_layers.py --sources  … 「段 パス」を1行ずつ(script/host_test/CMakeLists.txt が使う)
 
 層は下から順に 0〜6。ファイルは「自分と同じ段か、それより下の段」のヘッダだけを
 include してよい。同じ段の中は互いに include してよい(hal と機能のライブラリが
@@ -28,7 +28,7 @@ import os
 import re
 import sys
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 SRC = os.path.join(ROOT, "src")
 
 LAYER_NAMES = ["base", "system", "lib", "ui", "service", "app", "boot"]
@@ -199,7 +199,7 @@ def main():
     ok = True
     if unknown:
         ok = False
-        print("どの段にも入っていないファイル(script/check_layers.py の LAYERS に足すこと):")
+        print("どの段にも入っていないファイル(script/check/check_layers.py の LAYERS に足すこと):")
         for u in sorted(set(unknown)):
             print("  src/" + u)
     if violations:
@@ -207,7 +207,7 @@ def main():
         print("下の段から上の段への #include:")
         for f, line, lf, t, lt in violations:
             print(f"  src/{f}:{line}  [{lf}] → src/{t} [{lt}]")
-        print("直し方は script/check_layers.py の先頭のコメントを参照")
+        print("直し方は script/check/check_layers.py の先頭のコメントを参照")
     if missing_cfg:
         ok = False
         print("ビルド時に選ぶもの(PICO_HW_* / HardwareConfig:: / PICO_APP_* / PICO_LANG_*)を読むのに、定義のヘッダを include していないファイル:")

@@ -7,11 +7,11 @@ pico-os の音源はチャンネルが複数あるが1チャンネル1音なの�
 (docs/MUSIC_FORMAT.md「なぜMMLか」)。何をどこへ割り当てたかは出力の注釈に残す。
 
 使い方:
-    python3 script/midi2mml.py song.mid -o pc/sdcard/music/song.mml
-    python3 script/midi2mml.py song.mid --list             # 声部の一覧(番号は --pick で使う)
-    python3 script/midi2mml.py song.mid --pick A=1,B=3+4,C=2,D=drums
-    python3 script/midi2mml.py song.mid --loop --bars 1-32
-    python3 script/midi2mml.py song.mid --channels 8       # 8チャンネル(A〜H)まで使う
+    python3 script/tools/midi2mml.py song.mid -o pc/sdcard/music/song.mml
+    python3 script/tools/midi2mml.py song.mid --list             # 声部の一覧(番号は --pick で使う)
+    python3 script/tools/midi2mml.py song.mid --pick A=1,B=3+4,C=2,D=drums
+    python3 script/tools/midi2mml.py song.mid --loop --bars 1-32
+    python3 script/tools/midi2mml.py song.mid --channels 8       # 8チャンネル(A〜H)まで使う
 
 変換の流れ:
   1. 音符を読み、時間を MML のティック(4分音符 = 48)へ直して格子へ揃える(--grid。既定は自動)
@@ -908,7 +908,7 @@ def convert(song, args, out_err=None):
     title = args.title or song.first_name or os.path.splitext(os.path.basename(args.input))[0]
     title = title.replace(";", " ").replace("\n", " ").replace("\r", " ").strip() or "untitled"
     out = []
-    out.append("; %s から script/midi2mml.py で変換" % os.path.basename(args.input))
+    out.append("; %s から script/tools/midi2mml.py で変換" % os.path.basename(args.input))
     out.append("; 格子: %s / 拍子: %d/%d / 演奏データ: 約%dバイト(上限%d)"
                % (grid_name(grid), song.time_sig[0], song.time_sig[1], size, MAX_DATA_BYTES))
     for c in CHANNELS:

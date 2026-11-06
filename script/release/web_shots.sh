@@ -1,8 +1,8 @@
 #!/bin/sh
 # GitHub Pages のトップ(pc/web/landing.html)に載せる画面写真を、PCビルドの --shot で撮る。
 #
-#   sh script/web_shots.sh <picoos_pc> <出力先ディレクトリ>
-#   例: sh script/web_shots.sh pc/build/picoos_pc _site/shots
+#   sh script/release/web_shots.sh <picoos_pc> <出力先ディレクトリ>
+#   例: sh script/release/web_shots.sh pc/build/picoos_pc _site/shots
 #
 # .github/workflows/web-pages.yml が公開のたびに呼ぶ(写真はリポジトリに置かず、常に今の画面を撮る)。
 # 手元で見るときは出力先を pc/web/ と同じ階層の shots/ にすれば landing.html から読める。
@@ -14,12 +14,12 @@
 set -eu
 
 if [ $# -ne 2 ]; then
-    echo "使い方: sh script/web_shots.sh <picoos_pc> <出力先ディレクトリ>" >&2
+    echo "使い方: sh script/release/web_shots.sh <picoos_pc> <出力先ディレクトリ>" >&2
     exit 2
 fi
 bin=$1
 out=$2
-root=$(cd "$(dirname "$0")/.." && pwd)
+root=$(cd "$(dirname "$0")/../.." && pwd)
 mkdir -p "$out"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -38,7 +38,7 @@ shot() {
         tail -n 20 "$work/$name.log" >&2
         exit 1
     fi
-    python3 "$root/script/ppm2png.py" "$work/$name.ppm" "$out/$name.png" "$scale"
+    python3 "$root/script/tools/ppm2png.py" "$work/$name.ppm" "$out/$name.png" "$scale"
 }
 
 # ホーム画面を n ページ送る --tap の列(20フレームおき)

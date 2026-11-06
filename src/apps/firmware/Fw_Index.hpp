@@ -7,7 +7,7 @@
 #include "consts.hpp"
 
 // Webに置いたファームの版の一覧(index.tsv、docs/FIRMWARE_UPDATE.md「Webから取る」)を読む係。
-// 作る側は script/build_fw_index.py(CIが GitHub Pages の /firmware/ へ置く)。値を変えるときは両方を揃えること。
+// 作る側は script/release/build_fw_index.py(CIが GitHub Pages の /firmware/ へ置く)。値を変えるときは両方を揃えること。
 //
 //   # pico-os-fw-index 1
 //   <通し番号>\t<git>\t<日時(UTC)>\t<stable|nightly>\t<構成>\t<署名 1|0>\t<バイト数>\t<SHA-256>\t<ファイル名>

@@ -339,7 +339,7 @@ namespace {
 #if defined(__EMSCRIPTEN__)
 
 // ページ(pc/web/shell.html)のコントローラーが、USBシリアルの代わりに1バイトずつ入れる口。
-// 中身は script/pad_serial.py と同じ "pad XXXX\n" の行(PadFunctions がそのまま読む)
+// 中身は script/tools/pad_serial.py と同じ "pad XXXX\n" の行(PadFunctions がそのまま読む)
 extern "C" EMSCRIPTEN_KEEPALIVE void picoos_serial_push(int c) {
     PicoPcSerial::Push(c);
 }

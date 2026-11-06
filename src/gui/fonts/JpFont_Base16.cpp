@@ -1,5 +1,5 @@
-// 生成物。手で直さず script/font/split_font.py で作り直すこと。
-// 日本語フォントのうちフラッシュに残す字(かな・記号・英数字・script/font/base_kanji.txt の漢字)。u8g2 の形。
+// 生成物。手で直さず script/codegen/font/split_font.py で作り直すこと。
+// 日本語フォントのうちフラッシュに残す字(かな・記号・英数字・script/codegen/font/base_kanji.txt の漢字)。u8g2 の形。
 // 元は LovyanGFX の lgfx_font_japan_gothic_p_16(IPAexゴシックを変換したもの)。
 // IPAフォントライセンスv1.0 の派生プログラム(THIRD_PARTY_LICENSES.md、pc/sdcard/sys/fonts/README.md)。
 #include "gui/fonts/JpFont_Data.hpp"

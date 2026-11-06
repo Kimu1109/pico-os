@@ -26,7 +26,7 @@ class FwSource {
 // 描画・SD・ソケット・時計に依存しない(受け取り元と置き場は差し込む)ので、ホストテストで全部の経路を確かめられる。
 // OSへのつなぎ(SD・TCP・電池・再起動・通知)は services/Firmware_Functions。
 //
-// TCPの取り決め(script/firmware_tool.py push と揃える):
+// TCPの取り決め(script/release/firmware_tool.py push と揃える):
 //   PC → 見出し+署名(192バイト)
 //   本体 → "OK" / "WAIT <理由>"(本体で確認中。続けて "OK" か "ERR ...") / "ERR <理由>"
 //   PC → "OK" を受け取ってから中身

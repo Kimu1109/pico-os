@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-check_ui_chars.py — OSの画面の文字が、フラッシュに残した漢字(script/font/base_kanji.txt)だけで書かれているかを見る。
+check_ui_chars.py — OSの画面の文字が、フラッシュに残した漢字(script/codegen/font/base_kanji.txt)だけで書かれているかを見る。
 docs/design/performance.md「漢字の一部をSDへ」。
 
 常用漢字の外の字はSDの追加フォント(/sys/fonts/jpgothic*.pkf)にしか無いので、SDが無い・USBドライブ中・
 エラーの画面で □ になる。通知・エラー・設定などは読めないと困るので、src/ の文字列(C++の "…" と
 同梱Lua src/lua/builtin/*.lua の文字列)に base_kanji.txt の外の漢字があれば失敗にする(コメントは見ない)。
 
-    python3 script/font/check_ui_chars.py
+    python3 script/codegen/font/check_ui_chars.py
 
 使ってしまったら、ひらがな・常用漢字へ言い換えるか、どうしても要る字なら base_kanji.txt の「残す字」へ理由つきで足して
-script/font/split_font.py で作り直す(フラッシュが1字あたり約110B増える)。
+script/codegen/font/split_font.py で作り直す(フラッシュが1字あたり約110B増える)。
 """
 
 import glob
@@ -19,7 +19,7 @@ import os
 import re
 import sys
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from split_font import BASE_LIST, is_kanji, read_base_chars  # noqa: E402
 
@@ -112,7 +112,7 @@ def main():
         print("フラッシュに無い漢字(常用漢字の外)を画面の文字に使っています。SDが無いと □ になります:")
         for path, line, ch, s in bad:
             print(f"  {path}:{line}: 「{ch}」 in \"{s[:60]}\"")
-        print("言い換えるか、script/font/base_kanji.txt へ理由つきで足して split_font.py で作り直すこと")
+        print("言い換えるか、script/codegen/font/base_kanji.txt へ理由つきで足して split_font.py で作り直すこと")
         return 1
     print(f"画面の文字はフラッシュの漢字だけで書かれています({len(files) + len(lua)} ファイル)")
     return 0

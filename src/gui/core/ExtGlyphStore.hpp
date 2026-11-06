@@ -8,7 +8,7 @@
 // 中身はRAMの控え(slots)に写したもの。**次の find() で別の字に上書きされうる**ので、受け取った側はすぐ読み終えること
 // (GlyphIndexFont の drawChar()/updateFontMetric() は1回の呼び出しの中で読み終える)。
 //
-// ファイルの形は script/font/split_font.py の冒頭。見出しの印・字の高さ・大きさが決まりと合わないファイルは使わない(□になる)。
+// ファイルの形は script/codegen/font/split_font.py の冒頭。見出しの印・字の高さ・大きさが決まりと合わないファイルは使わない(□になる)。
 // 読むのは Reader 越し(実機・PCは SdFat の FsFile、ホストテストは作り物)。
 //
 // ---- SDが使えない間 ----
@@ -19,7 +19,7 @@
 // 2コア目からは使わない(描画は1コア目だけ)。new は使わず、控えの置き場は持ち主が渡す(固定長)。
 class ExtGlyphStore {
 public:
-    static constexpr int kMaxIndex = 128;   // script/font/split_font.py の K_MAX_INDEX と同じ
+    static constexpr int kMaxIndex = 128;   // script/codegen/font/split_font.py の K_MAX_INDEX と同じ
     static constexpr int kHeaderSize = 28;
 
     class Reader {

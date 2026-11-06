@@ -110,7 +110,7 @@ jobs:
           ls -la _site/fonts
 
       # トップのページ(pc/web/landing.html)に載せる画面写真。写真はリポジトリに置かず、
-      # 公開のたびにネイティブのPCビルドの --shot で今の画面を撮る(script/web_shots.sh)。
+      # 公開のたびにネイティブのPCビルドの --shot で今の画面を撮る(script/release/web_shots.sh)。
       # PRでも撮って、撮れなくなった(起動しない・落ちる等)ことにここで気づけるようにする
       # libsdl2-dev は依存込みで数十MBあり、apt のミラーが遅いと取得だけで 10 分を超えるので .deb をキャッシュする
       # (libssl-dev はランナーのイメージに最初から入っている)
@@ -123,7 +123,7 @@ jobs:
         run: |
           cmake -S pc -B pc/build -DCMAKE_BUILD_TYPE=Release
           cmake --build pc/build -j"$(nproc)"
-          sh script/web_shots.sh pc/build/picoos_pc _site/shots
+          sh script/release/web_shots.sh pc/build/picoos_pc _site/shots
 
       # Lua APIリファレンス(lua-api-doc/ のHugoサイト)を /lua-api/ に置く。
       # baseURL はサブパス配信用にここで上書きする(hugo.toml は "/" のまま、手元の確認用)。
@@ -142,7 +142,7 @@ jobs:
       # 元はGitHubのリリース(安定版 = プレリリースでないもの、ナイトリー = nightly-*)。リリースの添付は
       # 別のホストへの長いURLの転送になり本体のURLに入らないので、Pagesへ写す(本体はPagesだけを見る)。
       # firmware.uf2 も一緒に写し、ダウンロードのページ(/download/)が downloads.json から並べる。
-      # PRでも作って、道具(script/build_fw_index.py)の壊れにここで気づけるようにする
+      # PRでも作って、道具(script/release/build_fw_index.py)の壊れにここで気づけるようにする
       - name: ファームの版の一覧を作る
         env:
           GH_TOKEN: ${{ github.token }}
@@ -151,7 +151,7 @@ jobs:
           work="${RUNNER_TEMP}/fw"
           mkdir -p "${work}"
           gh release list --limit 200 --json tagName,isPrerelease,isDraft,createdAt > "${work}/releases.json"
-          python3 script/build_fw_index.py select "${work}/releases.json" --stable 5 --nightly 3 > "${work}/picked.tsv"
+          python3 script/release/build_fw_index.py select "${work}/releases.json" --stable 5 --nightly 3 > "${work}/picked.tsv"
           : > "${work}/got.tsv"
           while IFS=$'\t' read -r channel tag; do
             if gh release download "${tag}" --pattern firmware.pfw --pattern firmware.uf2 --dir "${work}/${tag}"; then
@@ -162,7 +162,7 @@ jobs:
               echo "::warning::${tag} から firmware.pfw を落とせません"
             fi
           done < "${work}/picked.tsv"
-          python3 script/build_fw_index.py build "${work}/got.tsv" --out _site/firmware
+          python3 script/release/build_fw_index.py build "${work}/got.tsv" --out _site/firmware
           test -f _site/firmware/index.tsv
           test -f _site/firmware/downloads.json
 

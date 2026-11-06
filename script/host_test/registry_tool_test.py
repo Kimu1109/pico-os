@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""投稿用リポジトリ(kimu1109/pico-os-apps)の道具(script/build_app_repo.py の
+"""投稿用リポジトリ(kimu1109/pico-os-apps)の道具(script/release/build_app_repo.py の
 author-sign / sync-official / registry-check / registry-build)のテスト。
 
   python3 registry_tool_test.py <作業ディレクトリ>
@@ -20,7 +20,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-TOOL = os.path.join(ROOT, "script", "build_app_repo.py")
+TOOL = os.path.join(ROOT, "script", "release", "build_app_repo.py")
 SRC = os.path.join(ROOT, "pc", "sdcard", "lua", "apps")
 WORK = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "registry_work")
 

@@ -27,10 +27,10 @@ pico-os のために書いたファイルは [MIT ライセンス](LICENSE)(Copy
 |---|---|---|---|
 | SKK辞書(SKK-JISYO.M / .ML) | `script/dict/src/` | **GPL-2.0-or-later** | IMEの辞書(`sys/ime/`)はこれの改変物で、同じGPLで配る |
 | 英和・和英辞書(JMdict / EDICT由来) | `script/dict/src/en-ja-and-ja-en.tsv` | **CC BY-SA 4.0** | 辞書(`sys/dict/`)も同じライセンスで配る |
-| Tabler Icons | `script/tabler_icons/` | MIT(Paweł Kuna) | `src/gui/icons/icons_data.h` の一部はこれから生成 |
+| Tabler Icons | `script/codegen/tabler_icons/` | MIT(Paweł Kuna) | `src/gui/icons/icons_data.h` の一部はこれから生成 |
 | dmg-acid2(GBエミュの確認用ROM) | `pc/sdcard/gb/dmg-acid2.gb` | MIT(Copyright (c) 2020 Matt Currie) | 全文は `pc/sdcard/README.md` |
 | 芥川龍之介「蜘蛛の糸」 | `pc/sdcard/books/` | パブリックドメイン(著作権の保護期間が満了) | |
-| 日本語フォント(IPAexゴシックを LovyanGFX が u8g2 にしたもの を分けたもの) | `src/gui/fonts/JpFont_Base*.cpp`(ファームに入る)・`pc/sdcard/sys/fonts/*.pkf`(SDに置く。Webの `/fonts/` からも配る) | **IPAフォントライセンス v1.0** | 派生プログラム。全文は `pc/sdcard/sys/fonts/IPA_Font_License_Agreement_v1.0.txt`、作り方と元へ戻す方法は同じ所の `README.md`(`script/font/split_font.py`)。元の名前は使わない |
+| 日本語フォント(IPAexゴシックを LovyanGFX が u8g2 にしたもの を分けたもの) | `src/gui/fonts/JpFont_Base*.cpp`(ファームに入る)・`pc/sdcard/sys/fonts/*.pkf`(SDに置く。Webの `/fonts/` からも配る) | **IPAフォントライセンス v1.0** | 派生プログラム。全文は `pc/sdcard/sys/fonts/IPA_Font_License_Agreement_v1.0.txt`、作り方と元へ戻す方法は同じ所の `README.md`(`script/codegen/font/split_font.py`)。元の名前は使わない |
 
 辞書の詳しい条件は [`script/dict/LICENSES.md`](script/dict/LICENSES.md)。
 辞書はファームに組み込まず、SDに置いて実行時に読むデータなので、pico-os のコード(MIT)には GPL / CC BY-SA は及ばない。

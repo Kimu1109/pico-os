@@ -2,7 +2,7 @@
 """
 generate_physics_sheet.py
 -------------------------
-pico.game の物理を使うサンプル「おしてのぼれ」(pc/sdcard/lua/apps/おしてのぼれ/)の
+pico.game の物理を使うサンプル「おしてのぼれ」(sdcard/lua/apps/おしてのぼれ/)の
 絵 sheet.pimg と、ランチャのアイコン icon.pimg を作る。標準ライブラリのみ。
 
 16x16pxの絵を横に8枚 x 2段(128x32)。地面・主人公・旗は「ジャンプアクション」の絵
@@ -202,7 +202,7 @@ def build_icon():
 
 
 def main():
-    app = Path(__file__).resolve().parents[2] / "pc" / "sdcard" / "lua" / "apps" / "おしてのぼれ"
+    app = Path(__file__).resolve().parents[2] / "sdcard" / "lua" / "apps" / "おしてのぼれ"
     ap = argparse.ArgumentParser(description="「おしてのぼれ」の絵(sheet.pimg / icon.pimg)を作る")
     ap.add_argument("--sheet", type=Path, default=app / "sheet.pimg")
     ap.add_argument("--icon", type=Path, default=app / "icon.pimg")

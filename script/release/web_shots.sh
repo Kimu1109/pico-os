@@ -10,7 +10,7 @@
 # アプリは --app で名前を指して開き、撮る画面まではアプリが --scene で自動で進む
 # (ホーム画面の並びに依存しない。画面の名前はアプリごと。pc/README.md「起動時に開くアプリ」)。
 # ランチャのページ(apps)だけはホーム画面をタップで送る(ページ送り「>」が等倍で(215,305))。
-# SDの中身(pc/sdcard/)は一時ディレクトリへ写して使う(ブロックのワールド等の書き込みでリポジトリを汚さない)。
+# SDの中身(sdcard/)は一時ディレクトリへ写して使う(ブロックのワールド等の書き込みでリポジトリを汚さない)。
 set -eu
 
 if [ $# -ne 2 ]; then
@@ -30,7 +30,7 @@ export SDL_VIDEODRIVER=offscreen
 shot() {
     name=$1; frames=$2; scale=$3; shift 3
     rm -rf "$work/sd"
-    cp -R "$root/pc/sdcard" "$work/sd"
+    cp -R "$root/sdcard" "$work/sd"
     rc=0
     PICOOS_SD_ROOT="$work/sd" "$bin" "$@" --shot "$work/$name.ppm" "$frames" > "$work/$name.log" 2>&1 || rc=$?
     if [ "$rc" -ne 0 ] || [ ! -f "$work/$name.ppm" ]; then

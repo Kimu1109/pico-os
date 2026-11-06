@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Spotifyリモコン(pc/sdcard/lua/apps/Spotify/)のランチャのアイコン icon.pimg(48x48)を作る。標準ライブラリのみ。
+"""Spotifyリモコン(sdcard/lua/apps/Spotify/)のランチャのアイコン icon.pimg(48x48)を作る。標準ライブラリのみ。
 
 緑の丸に白い再生の三角と、下に小さな音量の棒(リモコンらしさ)。Spotifyのロゴは使わない。
 色はpico-osの16色パレットの番号で直接描く(generate_pimg.py と同じ .pimg 形式)。
@@ -57,7 +57,7 @@ def rle(rows):
 def main():
     root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="Spotifyリモコンのアイコン(icon.pimg、48x48)を作る")
-    ap.add_argument("output", nargs="?", type=Path, default=root / "pc/sdcard/lua/apps/Spotify/icon.pimg")
+    ap.add_argument("output", nargs="?", type=Path, default=root / "sdcard/lua/apps/Spotify/icon.pimg")
     args = ap.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "wb") as f:

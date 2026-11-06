@@ -38,8 +38,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_blocks_sheet as blocks  # noqa: E402  面の形(make_faces)・影の色(half)・近い色(nearest)
 
 ROOT = Path(__file__).resolve().parents[2]
-APP = ROOT / "pc" / "sdcard" / "lua" / "apps" / "ゾンビTD"
-BLOCKS = ROOT / "pc" / "sdcard" / "lua" / "apps" / "ブロック"
+APP = ROOT / "sdcard" / "lua" / "apps" / "ゾンビTD"
+BLOCKS = ROOT / "sdcard" / "lua" / "apps" / "ブロック"
 
 SHEET_H = 40
 

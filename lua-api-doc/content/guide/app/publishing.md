@@ -78,7 +78,7 @@ Wi-Fiが無くても入れられるように、アプリを1つのファイル(`
 
 ```sh
 python3 script/release/build_app_repo.py keygen --key ~/.pico-os/author.key      # 1回だけ
-python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス
+python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app sdcard/lua/apps/テトリス
 # → tetris-2.0.0.papp(app.cfg の id と version から名前を付ける)
 ```
 

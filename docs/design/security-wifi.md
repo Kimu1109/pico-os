@@ -25,7 +25,7 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   SSIDとパスワードで別々のストリームになるので、同じ鍵ストリームを使い回して2つの暗号文を
   XORすると平文同士のXORが漏れる、という典型的な弱点を避けられる。
 - **保存形式は`"enc1:"`接頭辞+16進文字列**。接頭辞が無い値は「まだ暗号化されていない平文」と
-  みなしてそのまま返す(後方互換)。既存の`network.cfg`(`pc/sdcard/sys/network.cfg`のサンプルも
+  みなしてそのまま返す(後方互換)。既存の`network.cfg`(`sdcard/sys/network.cfg`のサンプルも
   含め平文のまま)は変更不要で、次に`SettingsScene`から保存し直したときに暗号化形式へ移行する。
 - **`PICO_Config::kConfigMaxValueLen`を128→160、`kConfigMaxLineLen`を192→256へ拡張した**
   (`Config_Functions.hpp`)。64バイトのWi-Fiパスフレーズ(64桁PSKの16進表記を想定した上限)を
@@ -40,7 +40,7 @@ SD紛失時も安全では」という提案で、そこから以下の設計に
   不足への安全な失敗・上限ちょうどの長さの往復)。PCビルドでも、ホストテストのSdFatスタブ経由で
   `SettingsScene::commitEdit()`と同じ手順(暗号化→`SetValue()`→ファイルの生内容確認→
   `ParseFile()`→復号)を通し、SD上には`enc1:...`の形で保存され、読み込み側で元の文字列に
-  戻ることを確認済み。既存の平文`network.cfg`(`pc/sdcard/sys/network.cfg`)がそのまま読める
+  戻ることを確認済み。既存の平文`network.cfg`(`sdcard/sys/network.cfg`)がそのまま読める
   ことはPCビルドの`--shot`で確認した(設定画面にSSID/パスワードが正しく表示される)。
 
 **チャットのトークン(`/sys/chat.cfg`のtoken)も同日中に同じ方式へ広げた。** 実装直後にユーザーから
@@ -245,7 +245,7 @@ SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/
     超えると`Put()`が`Invalid`、9件目は`Full`(自動で古いものを消さない。利用者に消してもらう)。
   - **移行**: `wifi.cfg`が無いときだけ`network.cfg`の`wifi-ssid`/`wifi-password`を1番として取り込み、`wifi.cfg`を作る。
     以後その2キーは読まない(全部消した後に古いSSIDが復活しないように)。`network.cfg`側のキーは消していない。
-    PCビルドは起動のたびに`pc/sdcard/sys/wifi.cfg`を作るので`.gitignore`に入れてある。
+    PCビルドは起動のたびに`sdcard/sys/wifi.cfg`を作るので`.gitignore`に入れてある。
 - **自動接続(`NetworkFunctions`)**: 起動時は先頭(直近で接続したもの)へ繋ぐ。接続に失敗した
   (`TIMEOUT`/`SSID_NOT_FOUND`/`FAILED`)まま`RETRY_INTERVAL`(30秒)経つたびに、保存済みを**先頭から1つずつ**試す
   (`retryRank`。一巡したら先頭へ戻る。接続できたら/手動で選んだら0へ戻す)。依頼は「直近で接続したWi-Fiへ試みる」で、
@@ -332,5 +332,5 @@ SSID/パスワードを1組しか持てなかった(`network.cfg`の`wifi-ssid`/
   実際に呼ばれ、SSID/パスワードのラベルが更新されること。「再スキャン」
   「閉じる」ボタン、パスワード入力の「キャンセル」(接続を試みずに戻ること)も
   確認済み。**実機での確認は未**(このリモート環境には実機が無い。PC側の
-  `WiFi.scanNetworks()`は`pc/sdcard/sys/network.cfg`の`pc-wifi-scan`が返す
+  `WiFi.scanNetworks()`は`sdcard/sys/network.cfg`の`pc-wifi-scan`が返す
   固定リストなので、実際の電波状況に応じた挙動は実機でしか確かめられない)。

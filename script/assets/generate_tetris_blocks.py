@@ -2,7 +2,7 @@
 """
 generate_tetris_blocks.py
 -------------------------
-テトリス(pc/sdcard/lua/apps/テトリス/)のミノの画像 blocks.pimg を作る。標準ライブラリのみ。
+テトリス(sdcard/lua/apps/テトリス/)のミノの画像 blocks.pimg を作る。標準ライブラリのみ。
 
 12x12pxのタイルを横に10枚並べた1枚の画像(120x12)。pico.game のタイルマップ(盤面)と
 スプライト(落ちているミノ・ゴースト)・pico.draw_image_part()(HOLD/NEXTの絵)で同じ画像を使う
@@ -141,8 +141,8 @@ def main():
     root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="テトリスのミノの画像(blocks.pimg)を作る")
     ap.add_argument("output", nargs="?", type=Path,
-                    default=root / "pc/sdcard/lua/apps/テトリス/blocks.pimg")
-    ap.add_argument("--icon", type=Path, default=root / "pc/sdcard/lua/apps/テトリス/icon.pimg",
+                    default=root / "sdcard/lua/apps/テトリス/blocks.pimg")
+    ap.add_argument("--icon", type=Path, default=root / "sdcard/lua/apps/テトリス/icon.pimg",
                     help="ランチャのアイコン(48x48)の書き出し先")
     ap.add_argument("--preview", type=Path, help="確認用のPPM(P6)も書き出す")
     args = ap.parse_args()

@@ -3,7 +3,7 @@
 > `CLAUDE.md`から分けた設計記録(2026-10-20)。何がどこにあるかの地図は`CLAUDE.md`、進み具合は`SUMMARY.md`。
 > パスはリポジトリのルートから。「上の「〜」」等の参照先が別のファイルにあるときは、`CLAUDE.md`の「設計記録の索引」で節の名前から探すこと。
 
-## ペイント(`pc/sdcard/lua/apps/ペイント/`、2026-09-24実装)
+## ペイント(`sdcard/lua/apps/ペイント/`、2026-09-24実装)
 
 SUMMARY.md #8の「ペイント」。**Luaアプリ**で、描画の中身は全て`CanvasRaster`(C++)に足した
 (Luaにはピクセルを読む口が無く、塗りつぶしをLuaで書くと遅すぎるため)。スクリプトは道具の切り替えと
@@ -53,7 +53,7 @@ SUMMARY.md #8の「ペイント」。**Luaアプリ**で、描画の中身は全
   `lua_engine_test.cpp`で確認。輪郭の図形は`fillCircle`/`fillTriangle`がスタブで無描画なので、見た目は
   PCビルドの`--tap`で確認した。
 
-## テトリス(`pc/sdcard/lua/apps/テトリス/`、2026-09-26実装、2026-10-07に`pico.game`へ移行)
+## テトリス(`sdcard/lua/apps/テトリス/`、2026-09-26実装、2026-10-07に`pico.game`へ移行)
 
 SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下記「ボードゲーム4本のpico.gameへの移行」(盤面=タイルマップ、落ちるミノ=スプライト)。
 
@@ -84,7 +84,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 ## ブロック崩し / マインスイーパーの効果音・コントローラー(2026-09-26、2026-10-07に`pico.game`へ移行)
 
 (盤面・画面の作りは下記「ボードゲーム4本のpico.gameへの移行」。ここは音とコントローラーの決まり)
-- **ブロック崩し**(`pc/sdcard/lua/apps/ブロック崩し/`): 効果音はチャンネル2で**1フレームに1回、優先度の高いものだけ**鳴らす
+- **ブロック崩し**(`sdcard/lua/apps/ブロック崩し/`): 効果音はチャンネル2で**1フレームに1回、優先度の高いものだけ**鳴らす
   (`se(pri, ...)`で候補を覚え、`g:on_update()`の最後で1回`pico.sound_play`。ボールが16個あると命令の列(32件)が溢れるため)。
   壁<パドル/壊せないブロック<ブロック(色で高さが変わる)<アイテム。ミス/ステージクリア/全クリア/ゲームオーバーは
   `pico.music_play_text()`の短いジングル(チャンネル1なので効果音とぶつからない)。
@@ -98,7 +98,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 `pico.draw_tilemap(handle, tw, th, data, cols, x, y)`(`LuaEngine_Ext.cpp`。1バイト1マスの文字列を今のクリップにかかるマスだけ
 `DrawPimgSprite()`で描く。`draw_image_part`と同じ「クリップを狭めて画像全体をずらしてpushSprite」)と、
 `pico.draw_image_part`の8・9番目の引数`flip_x/flip_y`(反転はpushSpriteでできないので1画素ずつ。`draw_image_ex`と同じ書き方)。
-ドキュメントは`lua-api-doc/content/api/game/engine.md`、サンプルは`pc/sdcard/lua/apps/ジャンプアクション/`(絵は`script/assets/generate_platformer_sheet.py`)。
+ドキュメントは`lua-api-doc/content/api/game/engine.md`、サンプルは`sdcard/lua/apps/ジャンプアクション/`(絵は`script/assets/generate_platformer_sheet.py`)。
 
 - **構成**: `game.new{...}`がCanvasを1枚作り、`pico.every(1, ...)`で毎フレーム`g:step()`(`manual=true`なら自分で呼ぶ)。
   1回のdtは0.05秒で頭打ち(遅いフレームで壁をすり抜けないため)。順番: 入力 → ゲーム内タイマー → 状態の`update` → `g:on_update` →
@@ -132,7 +132,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
   oneway・押す/壁/積み重ね・動く足場・速度の分け合い/入れ替わり/質量比・世界の重力)。**実機では未確認**(総当たりの命令数)。
   **上がる足場に乗ったものは`_ride`で運んだ後、足が足場の上面から0.5px以内なら`on_ground`/`_ride`を立て直す**
   (運ぶと重なりが生まれず、1フレームおきに`on_ground`が外れてジャンプが効かなくなった)。
-- **サンプル「おしてのぼれ」(`pc/sdcard/lua/apps/おしてのぼれ/`、2026-10-07)**: 物理を使うパズルアクション3ステージ
+- **サンプル「おしてのぼれ」(`sdcard/lua/apps/おしてのぼれ/`、2026-10-07)**: 物理を使うパズルアクション3ステージ
   (`stages.lua`。1=木箱を押して踏み台・横の足場・すり抜け床、2=重い鉄箱(mass 4)でスイッチを押さえて扉を開ける・ばね、
   3=縦の足場で棚へ上がり、棚の箱を落として2段に積む)。絵は`script/assets/generate_physics_sheet.py`(地面・主人公・旗は
   `generate_platformer_sheet.py`から借りる)。スイッチは押さえている間だけ扉が開き、扉のマスに何かが重なっていれば閉じない。
@@ -212,10 +212,10 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
   `LuaAppScanner::ReadAppConfig()`/`AppInfo`を外へ出した(app.cfgに`id`を足した。走査は`.`で始まるディレクトリを飛ばすようにした)。
   **登録簿の上限は32件のまま**(静的15+SDのLuaアプリ12で27。ストアで5本より多く入れると、超えた分は次の起動のスキャンでも並ばない。
   `launcher_hidden`が32bitなので、広げるならそこも)。
-- **配るアプリ**: `pc/sdcard/lua/apps/*/app.cfg`に`id`があるもの(12本全部に付けた)。gitの管理下ならgitが管理しているファイルだけ。
+- **配るアプリ**: `sdcard/lua/apps/*/app.cfg`に`id`があるもの(12本全部に付けた)。gitの管理下ならgitが管理しているファイルだけ。
   ファイル名はASCIIだけ(`[A-Za-z0-9._-]`、4段・95文字)、ディレクトリ名は日本語可(catalog.tsvの`dir`)。
 - **GitHub Pages**(移す前の配り方。2026-10-26に`store/`と`web-pages.yml`の手順ごと消した。下の「アプリストアの投稿」): 署名した目録(`build_app_repo.py sign --out store`)を`store/`にコミットすると、`web-pages.yml`が`assemble`で
-  `pc/sdcard/lua/apps/`から中身を写して`_site/apps/`へ置く(**秘密鍵はCIに要らない**)。署名の後で中身が変わったアプリは警告して配らない
+  `sdcard/lua/apps/`から中身を写して`_site/apps/`へ置く(**秘密鍵はCIに要らない**)。署名の後で中身が変わったアプリは警告して配らない
   (`--allow-stale`。Webの公開そのものは止めない)。`store/`は利用者の鍵で署名してコミット済み(16本)。
   github.io の証明書が焼き込みのルートで通り、実機でインストールできることを確認済み(2026-10-23)。
 - 検証: `app_repo_test`(run.sh の core。行の読み取り・名前とパスの検査・版・権限・署名)、`app_test`(Refresh/Unregister/FindByArg)、
@@ -384,10 +384,10 @@ script/                build_app_repo.py(pico-os から写す)
 
 ### 移したときの決め事(2026-10-26)
 
-- **公式アプリの開発元は pico-os の`pc/sdcard/lua/apps/`のまま。** ホストテスト(`tetris_test`等)・`picoos lua-test`・PC/Webビルドがそこを読むため。
-  投稿用リポジトリは「配った版」を持つ。更新は`author-sign --src pc/sdcard/lua/apps/<dir>`で`app/`へ写して署名し、PRを出す
+- **公式アプリの開発元は pico-os の`sdcard/lua/apps/`のまま。** ホストテスト(`tetris_test`等)・`picoos lua-test`・PC/Webビルドがそこを読むため。
+  投稿用リポジトリは「配った版」を持つ。更新は`author-sign --src sdcard/lua/apps/<dir>`で`app/`へ写して署名し、PRを出す
   (owners なので、版が上がっていて権限が増えていなければ自動でマージされる。公式アプリも他の作者と同じ道を通る)。
-  **まとめて更新するときは`sync-official`**(2026-10-26): `pc/sdcard/lua/apps/`のうち、投稿用リポジトリに同じ id があり`meta.cfg`の鍵が
+  **まとめて更新するときは`sync-official`**(2026-10-26): `sdcard/lua/apps/`のうち、投稿用リポジトリに同じ id があり`meta.cfg`の鍵が
   `--key`のものだけを見て、版が上がったものを写して署名する。版を上げずに中身が変わったもの・古い版は警告だけ、未公開のアプリは一覧に出すだけ
   (初めての公開は人が meta.cfg を決めるので`author-sign`で)。どのアプリの鍵とも合わなければ止まる(鍵の取り違え)。`--dry-run`あり。
   2本以上を1つのPRにすると「2つ以上のアプリ」で`needs-review`になるので、管理者がマージする(利用者と決めた。1本ずつのPRにはしない)。
@@ -405,7 +405,7 @@ script/                build_app_repo.py(pico-os から写す)
   **GITHUB_TOKEN でのマージは push のワークフローを起こさない**ので、マージの後に`publish.yml`を`workflow_dispatch`で起こす。
 - **`publish.yml`**: カタログ鍵は Environment「catalog」の Secret`CATALOG_KEY`(main だけ)。serial は max(今の時刻, 公開中の一覧+1)。
   変数`CATALOG_PUBKEY`があれば、その鍵で署名できたかを`verify --pubkey`で確かめる。
-- 検証: `registry_tool_test`(core。pc/sdcard の2本から作った投稿用リポジトリで、検査・配布物・自動マージの判定の12通り・
+- 検証: `registry_tool_test`(core。sdcard の2本から作った投稿用リポジトリで、検査・配布物・自動マージの判定の12通り・
   検査で落ちる12通り・serial・別の鍵の author-sign)。投稿用リポジトリの17本は、`registry-check`(lib/luaで作った構文の検査つき)→
   `registry-build`→`verify`→`site`が通り、カタログの行が移す前の`store/`と同じことを確かめた。**ワークフローそのもの(Actions の上で動くか・
   自動マージ・Pages への公開)は、利用者の準備の後でないと動かせず未確認。**
@@ -416,7 +416,7 @@ script/                build_app_repo.py(pico-os から写す)
 - ファームを更新せずにカタログ鍵を失効させること。
 - ダウンロード数・評価・依存関係・本体の版の条件。
 
-## 動作確認アプリ(`pc/sdcard/lua/apps/動作確認/`、2026-10-10)
+## 動作確認アプリ(`sdcard/lua/apps/動作確認/`、2026-10-10)
 
 APIごとに増えていた動作確認用のアプリを1つにまとめた。`main.lua`はメニューで、各ページ(同じフォルダの`*.lua`)を
 `pico.push_scene`で開き、ページの「戻る」(`pico.pop()`)でメニューへ戻る。権限(`app.cfg`。通知のため`permission_notify=true`)は
@@ -432,7 +432,7 @@ APIごとに増えていた動作確認用のアプリを1つにまとめた。`
 | 音 | `sound.lua` + `demo.mml` | 「チップチューン」 |
 | 通知 | `notify.lua` | 「通知テスト」 |
 
-- **消したもの**: `pc/sdcard/lua/hello.lua`/`hello_sub.lua`/`hello_sub2.lua`と`pc/sdcard/img/hello.pimg`(`App_List.cpp`の「Lua Hello」の静的登録ごと。
+- **消したもの**: `sdcard/lua/hello.lua`/`hello_sub.lua`/`hello_sub2.lua`と`sdcard/img/hello.pimg`(`App_List.cpp`の「Lua Hello」の静的登録ごと。
   `push_scene`は「画面とデータ」、`change_scene`/`launch_app`はホストテスト`lua_scene_test`で確かめている)、
   C++の`InputTestScene`(「入力テスト」。中身はLuaの「基本の部品」で足りる)、「スキャン確認」「図形デモ」(SDの走査は他のアプリ全部が実演している)。
   **この節より前の記述(検証手順の`--tap`の座標や「入力テスト」「hello.lua」での確認)は当時の記録**で、今は無い画面を指している。
@@ -442,7 +442,7 @@ APIごとに増えていた動作確認用のアプリを1つにまとめた。`
 - 検証: PCビルドの`--tap`/`--shot`で全ページの表示、「基本の部品」の図形タブ、ページの「戻る」でメニューへ戻ること、
   通知を出して通知センターから開くとメニュー→通知のページ(`tag`/`data`付き)へ進むことを確認。
 
-## QRコード(`pc/sdcard/lua/apps/QRコード/`、2026-10-25)
+## QRコード(`sdcard/lua/apps/QRコード/`、2026-10-25)
 
 よく見せるQR(サイト・SNSのアカウントのURL・連絡先・Wi-Fi・メモ)を保存しておき、一覧から選んで大きく出すアプリ。部品は `QRCodeView`(`gui.md`「QRコード」)。
 
@@ -464,7 +464,7 @@ APIごとに増えていた動作確認用のアプリを1つにまとめた。`
   PCビルドで4種を表示してOpenCVで読み、元の文字(vCard・逃がしたWi-Fi・日本語の複数行)に戻ることと、削除→`enc2:`で保存→開き直して戻ることを確かめた。
   **実機の画面をスマホのカメラで読めることを確認済み(2026-10-25)**。
 
-## MQTTリモコン(`pc/sdcard/lua/apps/MQTTリモコン/`、2026-10-29)
+## MQTTリモコン(`sdcard/lua/apps/MQTTリモコン/`、2026-10-29)
 
 `pico.socket.mqtt` のサンプル(使い方の説明は `lua-api-doc/content/examples/mqtt-remote.md`)。
 MQTTのブローカへ繋ぎ、機器(最大6台)を2列のタイルで点け消しする。
@@ -484,7 +484,7 @@ MQTTのブローカへ繋ぎ、機器(最大6台)を2列のタイルで点け消
 - 実機・本物の Home Assistant では未確認(Todoist参照)。
 - アイコンは `script/assets/generate_mqtt_remote_icon.py`(紺の角丸に電源の印と電波)。
 
-## HAパネル(`pc/sdcard/lua/apps/HAパネル/`、2026-10-29)
+## HAパネル(`sdcard/lua/apps/HAパネル/`、2026-10-29)
 
 `pico.socket.websocket` のサンプル(使い方の説明は `lua-api-doc/content/examples/ha-panel.md`)。
 Home Assistant の WebSocket API へ直接繋ぎ、選んだエンティティ(最大6つ)の状態を即座に映し、タップで点け消しする。
@@ -504,7 +504,7 @@ MQTTリモコンと違い、HA側にMQTTの設定が要らない(長期アクセ
 - 実機・本物の Home Assistant では未確認(Todoist参照)。
 - アイコンは `script/assets/generate_ha_panel_icon.py`(水色の角丸に白い家と電波)。
 
-## UDPツール(`pc/sdcard/lua/apps/UDPツール/`、2026-10-29)
+## UDPツール(`sdcard/lua/apps/UDPツール/`、2026-10-29)
 
 `pico.socket.udp` のサンプル(使い方の説明は `lua-api-doc/content/examples/udp-tool.md`)。
 

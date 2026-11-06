@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MQTTリモコン(pc/sdcard/lua/apps/MQTTリモコン/)のランチャのアイコン icon.pimg(48x48)を作る。標準ライブラリのみ。
+"""MQTTリモコン(sdcard/lua/apps/MQTTリモコン/)のランチャのアイコン icon.pimg(48x48)を作る。標準ライブラリのみ。
 
 紺の角丸の板に、白い電源の印と、右上に電波の弧(遠くの機器を点け消しするリモコンらしさ)。
 色はpico-osの16色パレットの番号で直接描く(generate_pimg.py と同じ .pimg 形式)。
@@ -68,7 +68,7 @@ def rle(rows):
 def main():
     root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="MQTTリモコンのアイコン(icon.pimg、48x48)を作る")
-    ap.add_argument("output", nargs="?", type=Path, default=root / "pc/sdcard/lua/apps/MQTTリモコン/icon.pimg")
+    ap.add_argument("output", nargs="?", type=Path, default=root / "sdcard/lua/apps/MQTTリモコン/icon.pimg")
     args = ap.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "wb") as f:

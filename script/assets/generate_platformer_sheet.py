@@ -2,7 +2,7 @@
 """
 generate_platformer_sheet.py
 ----------------------------
-pico.game のサンプル「ジャンプアクション」(pc/sdcard/lua/apps/ジャンプアクション/)の
+pico.game のサンプル「ジャンプアクション」(sdcard/lua/apps/ジャンプアクション/)の
 絵 sheet.pimg と、ランチャのアイコン icon.pimg を作る。標準ライブラリのみ。
 
 16x16pxの絵を横に8枚 x 2段並べた1枚の画像(128x32)。タイルマップとスプライトで同じ画像を使う
@@ -334,7 +334,7 @@ def write_pimg(path, w, h, rows, transparent):
 
 def main():
     root = Path(__file__).resolve().parents[2]
-    app = root / "pc/sdcard/lua/apps/ジャンプアクション"
+    app = root / "sdcard/lua/apps/ジャンプアクション"
     ap = argparse.ArgumentParser(description="pico.gameのサンプルの絵(sheet.pimg / icon.pimg)を作る")
     ap.add_argument("output", nargs="?", type=Path, default=app / "sheet.pimg")
     ap.add_argument("--icon", type=Path, default=app / "icon.pimg")

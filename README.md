@@ -56,7 +56,7 @@ cmake -S pc -B pc/build && cmake --build pc/build -j
 ./pc/build/picoos_pc
 ```
 
-`pc/sdcard/` がSDカードの中身として使われる。詳しくは [`pc/README.md`](pc/README.md)(WebAssemblyは [`docs/design/pc-web.md`](docs/design/pc-web.md))。
+`sdcard/` がSDカードの中身として使われる。詳しくは [`pc/README.md`](pc/README.md)(WebAssemblyは [`docs/design/pc-web.md`](docs/design/pc-web.md))。
 
 ### テスト
 
@@ -73,7 +73,7 @@ python3 script/check/check_layers.py      # include の層の決まりを確か�
 |---|---|
 | `src/` | OS本体(`system/` `hal/` `services/` `gui/` `apps/` `lua/` ほか) |
 | `lib/` | 同梱ライブラリ(Lua 5.4.7・Monocypher・Peanut-GB・QR Code generator) |
-| `pc/` | PC/Webビルド。`pc/sdcard/` はSDカードの中身の見本 |
+| `pc/` | PC/Webビルド。`sdcard/` はSDカードの中身の見本 |
 | `script/` | アイコン・画像・辞書の生成、ホストテスト、層の検査など |
 | `docs/` | 通信・ファイル形式の仕様と、`docs/design/` の設計記録 |
 | `lua-api-doc/` | Lua APIの利用者向けドキュメント(Hugo) |

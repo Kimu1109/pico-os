@@ -10,7 +10,7 @@ description: "保存するたびにPC版で開き直すホットリロードと�
 
 ```sh
 picoos pc build                                  # はじめに一度(リポジトリの pc/README.md)
-picoos pc dev pc/sdcard/lua/apps/わたしのゲーム    # アプリのフォルダか、ランチャの名前
+picoos pc dev sdcard/lua/apps/わたしのゲーム    # アプリのフォルダか、ランチャの名前
 ```
 
 PC版がそのアプリを開いた状態で起動し、アプリのフォルダの **`.lua` と `app.cfg` を保存するたびに起動し直します**(保存から1秒ほどで新しいコードの画面になります)。下のフォルダ(`ui/menu.lua` など)も見ます。
@@ -67,14 +67,14 @@ end)
 ```
 
 ```sh
-picoos lua-test pc/sdcard/lua/apps/わたしのゲーム   # フォルダの下の *_test.lua を全部
+picoos lua-test sdcard/lua/apps/わたしのゲーム   # フォルダの下の *_test.lua を全部
 picoos lua-test path/to/menu_test.lua              # 1ファイル
-picoos lua-test                                    # pc/sdcard/lua/apps/ の全アプリ
+picoos lua-test                                    # sdcard/lua/apps/ の全アプリ
 picoos lua-test -k スタート -v                      # 名前で絞る / print とトレースバックも出す
 ```
 
 ```
-== pc/sdcard/lua/apps/わたしのゲーム/tests/menu_test.lua
+== sdcard/lua/apps/わたしのゲーム/tests/menu_test.lua
 [ OK ] スタートを押すと得点が出る
 [FAIL] 2回押すと2点
        tests/menu_test.lua:14: eq: 期待 "2" / 実際 "1"

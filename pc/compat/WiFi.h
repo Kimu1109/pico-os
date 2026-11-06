@@ -15,7 +15,7 @@
 // **母艦のWi-Fi設定は絶対に変更しない。** ConnectWiFiAsync()が来ても、実際にSSIDへ
 // 繋ぎに行くことはしない(開発用エミュレータが母艦のネットワークを切り替えるのは事故のもと)。
 //
-// 設定は pc/sdcard/sys/network.cfg に `pc-` 始まりのキーで書く(実機側のパーサは
+// 設定は sdcard/sys/network.cfg に `pc-` 始まりのキーで書く(実機側のパーサは
 // 知らないキーを無視するので、同じファイルを実機と共有しても害はない)。
 //
 //   pc-wifi-state = auto | connected | disconnected | ssid-not-found | failed

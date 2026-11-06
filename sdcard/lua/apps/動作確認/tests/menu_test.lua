@@ -1,5 +1,5 @@
 -- 「動作確認」のメニュー(main.lua)のテスト。picoos lua-test の書き方の見本も兼ねる。
---   cli-tool/picoos lua-test pc/sdcard/lua/apps/動作確認
+--   cli-tool/picoos lua-test sdcard/lua/apps/動作確認
 -- 書き方は lua-api-doc の guide/app/testing.md
 
 test("ページのボタンが8個と戻るボタン", function()

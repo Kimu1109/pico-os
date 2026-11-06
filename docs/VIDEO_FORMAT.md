@@ -6,7 +6,7 @@ pico-os で動画を再生するための形式。**色を落とす処理と差�
 > **現状**: 変換(`script/tools/generate_pvid.py`)と本体の再生(`src/apps/video/Pvid_Player` + 動画アプリ `VideoScene`)まで。
 > 検証は `script/host_test/pvid_test.py`(変換と本体の読み取りの突き合わせ)。**実機では未確認**。
 > 本書と実装が食い違えば、実装を信じて本書を直す。
-> サンプル: `pc/sdcard/video/sample.pvid` + `sample.wav`(ffmpeg の testsrc2 から作った3秒)
+> サンプル: `sdcard/video/sample.pvid` + `sample.wav`(ffmpeg の testsrc2 から作った3秒)
 
 ## なぜこの形か
 

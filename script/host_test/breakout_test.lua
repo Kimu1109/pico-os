@@ -1,7 +1,7 @@
--- 「ブロック崩し」(pc/sdcard/lua/apps/ブロック崩し/)のゲームの規則を、pico.* を差し替えて確かめる。
+-- 「ブロック崩し」(sdcard/lua/apps/ブロック崩し/)のゲームの規則を、pico.* を差し替えて確かめる。
 -- pico.game は本物(src/lua/builtin/game.lua をそのまま読む)で、描画だけ捨てる。
 -- lua_script_test から run.sh が呼ぶ。見た目はPCビルドの --tap / --shot で確かめること。
-local ROOT = ROOT_DIR .. "/pc/sdcard"
+local ROOT = ROOT_DIR .. "/sdcard"
 local APP = "/lua/apps/ブロック崩し/"
 local fails = 0
 local function check(c, msg)

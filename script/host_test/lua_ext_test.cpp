@@ -1593,7 +1593,7 @@ int main() {
         // 面の絵はリポジトリの本物を使う(透けないブロックの判定に使われる)
         std::string root(__FILE__);
         root = root.substr(0, root.rfind("/script/host_test/"));
-        std::ifstream fin(root + "/pc/sdcard/lua/apps/ブロック/faces.pimg", std::ios::binary);
+        std::ifstream fin(root + "/sdcard/lua/apps/ブロック/faces.pimg", std::ios::binary);
         HostSd::files["/app/faces.pimg"] = std::string((std::istreambuf_iterator<char>(fin)), {});
         OSData::SD_usable = true;
         OSData::frame->createSprite(SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -1891,13 +1891,13 @@ int main() {
             std::ifstream f(root + rel, std::ios::binary);
             return std::string((std::istreambuf_iterator<char>(f)), {});
         };
-        HostSd::files["/td/zombies.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/zombies.lua");
-        HostSd::files["/td/combat.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/combat.lua");
-        HostSd::files["/td/soldiers.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/soldiers.lua");
-        HostSd::files["/td/buildings.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/buildings.lua");
-        HostSd::files["/td/sfx.lua"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/sfx.lua");
-        HostSd::files["/td/units.pimg"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/units.pimg");
-        HostSd::files["/td/faces.pimg"] = slurp("/pc/sdcard/lua/apps/ゾンビTD/faces.pimg");
+        HostSd::files["/td/zombies.lua"] = slurp("/sdcard/lua/apps/ゾンビTD/zombies.lua");
+        HostSd::files["/td/combat.lua"] = slurp("/sdcard/lua/apps/ゾンビTD/combat.lua");
+        HostSd::files["/td/soldiers.lua"] = slurp("/sdcard/lua/apps/ゾンビTD/soldiers.lua");
+        HostSd::files["/td/buildings.lua"] = slurp("/sdcard/lua/apps/ゾンビTD/buildings.lua");
+        HostSd::files["/td/sfx.lua"] = slurp("/sdcard/lua/apps/ゾンビTD/sfx.lua");
+        HostSd::files["/td/units.pimg"] = slurp("/sdcard/lua/apps/ゾンビTD/units.pimg");
+        HostSd::files["/td/faces.pimg"] = slurp("/sdcard/lua/apps/ゾンビTD/faces.pimg");
         OSData::SD_usable = true;
         LuaEngine te(180 * 1024, LuaPermissions{}, "/td");
         lua_register(te.raw(), "check", l_check);
@@ -2404,7 +2404,7 @@ int main() {
         static const char* const kFiles[] = {"game.lua", "state.lua", "orders.lua", "ui.lua", "waves.lua", "save.lua", "sfx.lua", "tutorial.lua", "cursor.lua",
             "combat.lua", "zombies.lua", "soldiers.lua", "buildings.lua", "palette.lua", "faces.pimg", "units.pimg"};
         for (const char* f : kFiles) {
-            HostSd::files[std::string("/tdg/") + f] = slurp(std::string("/pc/sdcard/lua/apps/ゾンビTD/") + f);
+            HostSd::files[std::string("/tdg/") + f] = slurp(std::string("/sdcard/lua/apps/ゾンビTD/") + f);
         }
         OSData::SD_usable = true;
         // pico.keep_awake

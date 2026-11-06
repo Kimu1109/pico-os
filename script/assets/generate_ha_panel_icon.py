@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HAパネル(pc/sdcard/lua/apps/HAパネル/)のランチャのアイコン icon.pimg(48x48)を作る。標準ライブラリのみ。
+"""HAパネル(sdcard/lua/apps/HAパネル/)のランチャのアイコン icon.pimg(48x48)を作る。標準ライブラリのみ。
 
 水色の角丸の板に白い家と、戸口の上の電波の弧(家の機器と繋がっている印)。
 色はpico-osの16色パレットの番号で直接描く(generate_pimg.py と同じ .pimg 形式)。
@@ -68,7 +68,7 @@ def rle(rows):
 def main():
     root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="HAパネルのアイコン(icon.pimg、48x48)を作る")
-    ap.add_argument("output", nargs="?", type=Path, default=root / "pc/sdcard/lua/apps/HAパネル/icon.pimg")
+    ap.add_argument("output", nargs="?", type=Path, default=root / "sdcard/lua/apps/HAパネル/icon.pimg")
     args = ap.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "wb") as f:

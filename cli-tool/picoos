@@ -33,7 +33,7 @@ SCRIPT_DIR = REPO_ROOT / "script"
 HOST_TEST_DIR = SCRIPT_DIR / "host_test"
 LUA_TEST_DIR = SCRIPT_DIR / "lua_test"
 PC_DIR = REPO_ROOT / "pc"
-LUA_APPS_DIR = PC_DIR / "sdcard" / "lua" / "apps"
+LUA_APPS_DIR = REPO_ROOT / "sdcard" / "lua" / "apps"
 
 
 def venv_python() -> str:
@@ -202,7 +202,7 @@ def cmd_pc_shot(args) -> int:
 
 
 def _resolve_app_name(app: str) -> str:
-    """--app へ渡す名前。ディレクトリ(pc/sdcard/lua/apps/テトリス 等)なら app.cfg の name、
+    """--app へ渡す名前。ディレクトリ(sdcard/lua/apps/テトリス 等)なら app.cfg の name、
     無ければフォルダ名。ディレクトリでなければランチャの名前としてそのまま使う。"""
     path = Path(app)
     if not path.is_dir():
@@ -264,7 +264,7 @@ def _lua_test_binary() -> Path:
 
 
 def _find_lua_tests(paths):
-    """引数(ファイルかディレクトリ)から *_test.lua を集める。省略時は pc/sdcard/lua/apps/ の全アプリ。"""
+    """引数(ファイルかディレクトリ)から *_test.lua を集める。省略時は sdcard/lua/apps/ の全アプリ。"""
     if not paths:
         paths = [str(LUA_APPS_DIR)]
     files = []
@@ -330,7 +330,7 @@ def build_parser() -> argparse.ArgumentParser:
   picoos serve --root ~/docs --port 8080          Markdownブラウザ用の参照サーバを起動
   picoos midi2mml song.mid -o song.mml            MIDIをpico-os MMLへ変換
   picoos spotify-auth --client-id XXXX            Spotifyのrefresh tokenを取ってSDへ書く
-  picoos app-repo sync-official --key K --src pc/sdcard/lua/apps --registry ../pico-os-apps
+  picoos app-repo sync-official --key K --src sdcard/lua/apps --registry ../pico-os-apps
                                                   公式アプリの更新を投稿用リポジトリへ写して署名(build_app_repo.py)
   picoos pvid in.mp4 out.pvid                     動画を.pvidへ変換
   picoos pad --mode text                          PCのキーボードを外部コントローラー/物理キーボードにする
@@ -342,8 +342,8 @@ def build_parser() -> argparse.ArgumentParser:
   picoos pc build                                 PC(SDL2)版をビルド
   picoos pc run -- --shot shot.ppm 40             ネイティブ版を実行(引数はそのまま転送)
   picoos pc shot shot.ppm 40 --png shot.png       ヘッドレスで撮ってPNGまで変換
-  picoos pc dev pc/sdcard/lua/apps/テトリス         Luaアプリを開き、.luaを保存するたびに起動し直す
-  picoos lua-test pc/sdcard/lua/apps/動作確認       Luaアプリの tests/*_test.lua を pico_mock の上で動かす
+  picoos pc dev sdcard/lua/apps/テトリス         Luaアプリを開き、.luaを保存するたびに起動し直す
+  picoos lua-test sdcard/lua/apps/動作確認       Luaアプリの tests/*_test.lua を pico_mock の上で動かす
 
 転送系のサブコマンドは `picoos <サブコマンド> --help` で元スクリプト自身の
 ヘルプが表示される(picoos側でオプションを再定義していないため)。
@@ -418,7 +418,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_pc_shot)
 
     p = pc_sub.add_parser("dev", help="Luaアプリを開いてホットリロード(.lua/app.cfgの保存で起動し直す)")
-    p.add_argument("app", metavar="APP", help="アプリのフォルダ(pc/sdcard/lua/apps/…)かランチャの名前")
+    p.add_argument("app", metavar="APP", help="アプリのフォルダ(sdcard/lua/apps/…)かランチャの名前")
     p.add_argument("--scene", help="--scene と同じ(アプリへ最初に開く画面を頼む)")
     p.add_argument("rest", nargs=argparse.REMAINDER, help="picoos_pc へそのまま渡す引数(-- の後ろ)")
     p.set_defaults(func=cmd_pc_dev)
@@ -430,7 +430,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("lua-test", help="Luaアプリのテスト(*_test.lua)を pico_mock の上で動かす (script/lua_test/)")
     p.add_argument("paths", nargs="*", metavar="PATH",
-                    help="テストファイルか、*_test.lua を探すディレクトリ(省略で pc/sdcard/lua/apps/ の全部)")
+                    help="テストファイルか、*_test.lua を探すディレクトリ(省略で sdcard/lua/apps/ の全部)")
     p.add_argument("-k", metavar="NAME", help="名前にこの文字列を含むテストだけ動かす")
     p.add_argument("-v", "--verbose", action="store_true", help="アプリの print とエラーのトレースバックも出す")
     p.add_argument("--list", action="store_true", help="見つかったテストファイルを並べるだけ")

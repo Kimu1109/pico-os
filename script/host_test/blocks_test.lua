@@ -1,10 +1,10 @@
--- Luaアプリ「ブロック」(pc/sdcard/lua/apps/ブロック/。Blocks-TI-84 の移植)の画面の流れと操作を確かめる:
+-- Luaアプリ「ブロック」(sdcard/lua/apps/ブロック/。Blocks-TI-84 の移植)の画面の流れと操作を確かめる:
 -- ワールドを作る/開く/前の版から移す → チャンクの読み込み → 遊ぶ → 保存して戻る、置く/壊すの規則、
 -- カーソルの移動と視点、タップ位置からのカーソル、ブロックを選ぶ画面、松明と昼/夜。
 -- ワールドと描画は C++ のエンジン pico.iso(src/iso/Iso_World)が受け持つので、ここでは pico.iso を
 -- 呼ばれ方を記録するだけの偽物(辞書で持つ平らなワールド)に差し替える。エンジンの中身は iso_world_test、
 -- Lua からの呼び方と権限は lua_ext_test。lua_script_test から run.sh が呼ぶ。
-local APP = ROOT_DIR .. "/pc/sdcard/lua/apps/ブロック/"
+local APP = ROOT_DIR .. "/sdcard/lua/apps/ブロック/"
 local fails = 0
 local function check(c, msg)
     print((c and "[ OK ] " or "[FAIL] ") .. msg)

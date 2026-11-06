@@ -1,10 +1,10 @@
--- Luaアプリ「QRコード」(pc/sdcard/lua/apps/QRコード/)を pico_mock.lua の上で動かして確かめる。
+-- Luaアプリ「QRコード」(sdcard/lua/apps/QRコード/)を pico_mock.lua の上で動かして確かめる。
 -- 追加(種類ごとの入力)・途中のキャンセル・編集・削除・前後の送り・QRに入らない長さ・保存の暗号化・
 -- 壊れた保存の読み飛ばし、と、QRにする文字(vCard・Wi-Fiの逃がし)。pico.async は本物を読む。
 -- QRが実際に読めることと見た目は、PCビルドの画面写真で確かめた(docs/design/lua-apps.md「QRコード」)。
 -- lua_script_test(vendorしたLuaでこのファイルを動かすだけの下請け)から run.sh が呼ぶ。
 local mock = dofile(ROOT_DIR .. "/script/host_test/lua/pico_mock.lua")
-local APP = ROOT_DIR .. "/pc/sdcard/lua/apps/QRコード/main.lua"
+local APP = ROOT_DIR .. "/sdcard/lua/apps/QRコード/main.lua"
 local fails = 0
 local function check(c, m) if c then print("[ OK ] " .. m) else print("[FAIL] " .. m) fails = fails + 1 end end
 

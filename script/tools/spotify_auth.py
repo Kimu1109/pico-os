@@ -17,7 +17,7 @@ SpotifyのOAuthには「画面の無い機器向けのフロー(デバイスフ�
 使い方:
     python3 script/tools/spotify_auth.py --client-id XXXXXXXX
         → ブラウザが開くのでログインして許可する。
-          pc/sdcard/lua/apps/Spotify/spotify_auth.json へ書く(PCビルドで試すとき)
+          sdcard/lua/apps/Spotify/spotify_auth.json へ書く(PCビルドで試すとき)
     python3 script/tools/spotify_auth.py --client-id XXXXXXXX --sd /media/$USER/PICOSD
         → 本物のSD(USBドライブで繋いだもの等)の lua/apps/Spotify/ へ書く
     python3 script/tools/spotify_auth.py --client-id XXXXXXXX --app-dir lua/apps/音楽リモコン
@@ -60,7 +60,7 @@ DEFAULT_SCOPES = ("user-read-playback-state user-modify-playback-state "
                   "user-read-currently-playing user-read-private")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DEFAULT_SD = os.path.join(ROOT, "pc", "sdcard")
+DEFAULT_SD = os.path.join(ROOT, "sdcard")
 DEFAULT_APP_DIR = "lua/apps/Spotify"
 FILE_NAME = "spotify_auth.json"
 
@@ -189,7 +189,7 @@ def main(argv=None):
                     help="Spotify DashboardのClient ID(環境変数 SPOTIFY_CLIENT_ID でも可)")
     ap.add_argument("--port", type=int, default=8888, help="戻り先 http://127.0.0.1:<port>/callback の番号(既定8888)")
     ap.add_argument("--scopes", default=DEFAULT_SCOPES, help="要求するスコープ(空白区切り)")
-    ap.add_argument("--sd", default=DEFAULT_SD, help="SDのルート(既定 pc/sdcard)")
+    ap.add_argument("--sd", default=DEFAULT_SD, help="SDのルート(既定 sdcard)")
     ap.add_argument("--app-dir", default=DEFAULT_APP_DIR, help="SDのルートからのアプリのフォルダ(既定 lua/apps/Spotify)")
     ap.add_argument("--out", help="書き出すファイルを直接指定する(--sd/--app-dirより優先)")
     ap.add_argument("--no-browser", action="store_true", help="ブラウザを開かず、URLを表示するだけ")

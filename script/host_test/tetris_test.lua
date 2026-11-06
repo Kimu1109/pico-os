@@ -1,9 +1,9 @@
--- テトリス(pc/sdcard/lua/apps/テトリス/)のゲームの規則を、pico.* を差し替えて確かめる。
+-- テトリス(sdcard/lua/apps/テトリス/)のゲームの規則を、pico.* を差し替えて確かめる。
 -- pico.game は本物(src/lua/builtin/game.lua をそのまま読む)で、描画だけ捨てる。
 -- lua_script_test(vendorしたLuaでこのファイルを動かすだけの下請け)から run.sh が呼ぶ。
 -- 見た目はPCビルドの --tap / --shot で確かめること(ここでは描画は数えるだけ)。
 -- main.lua の末尾へ TEST(ローカル変数を覗く口)を足してから読み込む
-local ROOT = ROOT_DIR .. "/pc/sdcard"
+local ROOT = ROOT_DIR .. "/sdcard"
 local DIR = "/lua/apps/テトリス/"
 local fails = 0
 local function check(c, m) if c then print("[ OK ] " .. m) else print("[FAIL] " .. m) fails = fails + 1 end end

@@ -10,7 +10,7 @@ LovyanGFX の lgfx_font_japan.c(IPAexゴシックを u8g2 形式にしたもの)
   1. フラッシュ用: かな・記号・英数字の全部と、script/codegen/font/base_kanji.txt の漢字だけを持つ u8g2 のフォント
      → src/gui/fonts/JpFont_Base16.cpp / JpFont_Base24.cpp(配列)
   2. SD用: 残りの漢字だけを持つ追加フォント(下の「.pkf の形」)
-     → pc/sdcard/sys/fonts/jpgothic16.pkf / jpgothic24.pkf(PCビルドのSDの中身。Webの配布元へもここから写す)
+     → sdcard/sys/fonts/jpgothic16.pkf / jpgothic24.pkf(PCビルドのSDの中身。Webの配布元へもここから写す)
   3. 両方をつなぐ定数(追加フォントの印・大きさ・SHA-256・配布元の名前)
      → src/gui/fonts/JpFont_Data.hpp
 
@@ -39,7 +39,7 @@ LovyanGFX の lgfx_font_japan.c(IPAexゴシックを u8g2 形式にしたもの)
 
 ライセンス: 元のフォントは IPAフォントライセンスv1.0。分けたもの(フラッシュ用・SD用とも)はその「派生プログラム」で、
 同じライセンスで配る(第3条1項)。ファイル名・フォント名に元の名前(IPA…)を使わないこと(同(4))。
-pc/sdcard/sys/fonts/README.md に元へ戻す方法を書いてある(同(2))。
+sdcard/sys/fonts/README.md に元へ戻す方法を書いてある(同(2))。
 """
 
 import argparse
@@ -55,7 +55,7 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 SIZES = (16, 24)
 SRC_NAME = "lgfx_font_japan_gothic_p_{}"
 OUT_SRC_DIR = os.path.join(ROOT, "src", "gui", "fonts")
-OUT_SD_DIR = os.path.join(ROOT, "pc", "sdcard", "sys", "fonts")
+OUT_SD_DIR = os.path.join(ROOT, "sdcard", "sys", "fonts")
 BASE_LIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "base_kanji.txt")
 
 PKF_VERSION = 1
@@ -297,7 +297,7 @@ def main():
             "// 生成物。手で直さず script/codegen/font/split_font.py で作り直すこと。\n"
             "// 日本語フォントのうちフラッシュに残す字(かな・記号・英数字・script/codegen/font/base_kanji.txt の漢字)。u8g2 の形。\n"
             "// 元は LovyanGFX の lgfx_font_japan_gothic_p_%d(IPAexゴシックを変換したもの)。\n"
-            "// IPAフォントライセンスv1.0 の派生プログラム(THIRD_PARTY_LICENSES.md、pc/sdcard/sys/fonts/README.md)。\n"
+            "// IPAフォントライセンスv1.0 の派生プログラム(THIRD_PARTY_LICENSES.md、sdcard/sys/fonts/README.md)。\n"
             "#include \"gui/fonts/JpFont_Data.hpp\"\n\n" % px
             + c_bytes(arr, flash, f"// {len(keep)}字(元の {len(glyphs)}字のうち。漢字 {sum(1 for c, _ in keep if is_kanji(c))}字)")
         ).encode("utf-8")

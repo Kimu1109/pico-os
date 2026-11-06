@@ -195,7 +195,7 @@ SD上のLuaスクリプトを1本読んで実行する画面。`AppEntry`の`Mak
   - `pico.pop()`: `SceneFunctions::Pop()`を呼ぶだけ
   - `pico.content_rect()`: `Scene::contentRect()`を`x,y,w,h`の4値で返す。
     Luaアプリだけステータスバーの下に潜り込む、といったズレを防ぐ
-- **動作サンプル**: `pc/sdcard/lua/hello.lua`(ボタンでカウンタが増える最小限の画面)を
+- **動作サンプル**: `sdcard/lua/hello.lua`(ボタンでカウンタが増える最小限の画面)を
   `App_List.cpp`に`Register("Lua Hello", IconID::AppBox, &MakeSceneWithArg<LuaScene>, "/lua/hello.lua")`
   として登録済み。PCビルドで`--tap`により実際にタップ→カウンタ更新→戻るまで動作確認済み
   (`pc/build/picoos_pc`)。
@@ -327,7 +327,7 @@ OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なの�
 - **名前の重複チェックはしていない。** 静的登録とスキャンで同名のアプリがあれば
   単純に2タイル並ぶ(後勝ちで上書きはしない)。今のところ登録されるLuaアプリの
   絶対数が少ないため、重複解決の優先度は低いと判断した。
-- 動作サンプル: `pc/sdcard/lua/apps/スキャン確認/main.lua`。`App_List.cpp`には
+- 動作サンプル: `sdcard/lua/apps/スキャン確認/main.lua`。`App_List.cpp`には
   一切手を加えず、PCビルドの`--shot`でランチャに「スキャン確認」タイルが実際に
   現れてタップで起動できることを確認済み。
 - ホストテストは`script/host_test/lua_app_scanner_test.cpp`。**完全な走査結果は
@@ -353,7 +353,7 @@ OSは単一スレッドのポーリングループ(`main.cpp`の`loop()`)なの�
   出すと以降は自動的に呼ばれなくなる**(`LuaEngine`内の`loop_broken_`フラグ。
   毎フレーム同じエラーダイアログが積まれるのを防ぐ安全弁で、setup()側はRun()と
   同じく1回きりなので不要)。ホストテストは`lua_engine_test.cpp`(CallSetup/CallLoop単体)
-  と`lua_scene_test.cpp`(LuaScene経由の結合テスト)。サンプル`pc/sdcard/lua/hello.lua`に
+  と`lua_scene_test.cpp`(LuaScene経由の結合テスト)。サンプル`sdcard/lua/hello.lua`に
   経過秒数を表示するloop()の実例を追加した。
 - ~~コンテナからの明示的な子の取り外し(`pico.remove_child`)は無い~~ → **解消済み
   (2026-09-21)**。詳細は上の「コンテナからの取り外し」参照。この節に挙げていた

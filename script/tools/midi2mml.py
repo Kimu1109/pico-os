@@ -7,7 +7,7 @@ pico-os の音源はチャンネルが複数あるが1チャンネル1音なの�
 (docs/MUSIC_FORMAT.md「なぜMMLか」)。何をどこへ割り当てたかは出力の注釈に残す。
 
 使い方:
-    python3 script/tools/midi2mml.py song.mid -o pc/sdcard/music/song.mml
+    python3 script/tools/midi2mml.py song.mid -o sdcard/music/song.mml
     python3 script/tools/midi2mml.py song.mid --list             # 声部の一覧(番号は --pick で使う)
     python3 script/tools/midi2mml.py song.mid --pick A=1,B=3+4,C=2,D=drums
     python3 script/tools/midi2mml.py song.mid --loop --bars 1-32

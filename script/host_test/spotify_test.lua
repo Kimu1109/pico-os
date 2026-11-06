@@ -1,9 +1,9 @@
--- Spotifyリモコン(pc/sdcard/lua/apps/Spotify/)を pico_mock.lua の上で動かして確かめる。
+-- Spotifyリモコン(sdcard/lua/apps/Spotify/)を pico_mock.lua の上で動かして確かめる。
 -- 通信は mock.respond() で応答を返す(本物のSpotifyへは行かない)。描画は数えるだけなので、
 -- 見た目はPCビルドの --tap / --shot で確かめること。
 -- lua_script_test(vendorしたLuaでこのファイルを動かすだけの下請け)から run.sh が呼ぶ。
 local mock = dofile(ROOT_DIR .. "/script/host_test/lua/pico_mock.lua")
-local APP = ROOT_DIR .. "/pc/sdcard/lua/apps/Spotify/"
+local APP = ROOT_DIR .. "/sdcard/lua/apps/Spotify/"
 local DIR = "/lua/apps/Spotify"
 local fails = 0
 local function check(c, m) if c then print("[ OK ] " .. m) else print("[FAIL] " .. m) fails = fails + 1 end end

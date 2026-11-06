@@ -277,7 +277,7 @@ set_source_files_properties(${LUA_SOURCES} ${MONOCYPHER_SOURCES} PROPERTIES LANG
 
 if(EMSCRIPTEN)
     # ---- Web(WebAssembly)ビルド ----
-    # SDカードは pc/sdcard/ を丸ごとパッケージしてブラウザの仮想FS(MEMFS)へ載せる。
+    # SDカードはリポジトリの sdcard/ を丸ごとパッケージしてブラウザの仮想FS(MEMFS)へ載せる。
     # 実行時に差し替えられないので、ネイティブと違ってパスは固定
     target_compile_definitions(picoos_pc PRIVATE PICOOS_SD_ROOT_DEFAULT="/sdcard")
 
@@ -306,7 +306,7 @@ if(EMSCRIPTEN)
         "-sEXPORTED_RUNTIME_METHODS=stringToUTF8,UTF8ToString"
         # ページのコントローラーがSerialの受信口へ流し込む(main_pc.cpp の picoos_serial_push)
         "-sEXPORTED_FUNCTIONS=_main,_picoos_serial_push"
-        "--preload-file" "${CMAKE_CURRENT_SOURCE_DIR}/sdcard@/sdcard"
+        "--preload-file" "${PICOOS_ROOT}/sdcard@/sdcard"
         "--shell-file" "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
 
     # シェルとSDの中身を変えたらリンクし直す
@@ -314,9 +314,12 @@ if(EMSCRIPTEN)
         "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
 else()
     # ---- ネイティブビルド ----
-    # SDカードとして読むディレクトリ。実行時は PICOOS_SD_ROOT で差し替えられる
+    # SDカードとして読むディレクトリ(リポジトリの sdcard/)。実行時は PICOOS_SD_ROOT で差し替えられる。
+    # PICOOS_RUN_DIR_DEFAULT は SD の外に置く「PCで動かしたときの状態」(OTPを真似るファイル・ファームの更新の置き場)の場所。
+    # SD の隣(リポジトリの根)に作らないよう pc/run/ にまとめる(.gitignore 済み。main_pc.cpp の configureOtpFile)
     target_compile_definitions(picoos_pc PRIVATE
-        PICOOS_SD_ROOT_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/sdcard")
+        PICOOS_SD_ROOT_DEFAULT="${PICOOS_ROOT}/sdcard"
+        PICOOS_RUN_DIR_DEFAULT="${CMAKE_CURRENT_SOURCE_DIR}/run")
 
     target_include_directories(picoos_pc PRIVATE ${SDL2_INCLUDE_DIRS})
     target_link_libraries(picoos_pc PRIVATE ${SDL2_LIBRARIES} OpenSSL::SSL OpenSSL::Crypto pthread)

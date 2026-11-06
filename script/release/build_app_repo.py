@@ -21,14 +21,14 @@
   python3 script/release/build_app_repo.py site --dir _site/apps
 
   # 手元のアプリを1つだけパッケージにする(ストアを通さずに配る。作者の鍵で署名する)
-  python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス --out tetris.papp
+  python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app sdcard/lua/apps/テトリス --out tetris.papp
 
   # 投稿用リポジトリ(kimu1109/pico-os-apps。今のストアの配布元)。作者が手元で apps/<id>/ に署名し、PRを出す。
-  # --src を付けると pico-os の pc/sdcard から app/ へ写してから署名する(公式アプリの更新)
+  # --src を付けると pico-os の sdcard から app/ へ写してから署名する(公式アプリの更新)
   python3 script/release/build_app_repo.py author-sign --key ~/.pico-os/author.key --app apps/tetris \
-      [--src ../pico-os/pc/sdcard/lua/apps/テトリス] [--owner <GitHubのアカウント> --dir テトリス(初めてのとき)]
+      [--src ../pico-os/sdcard/lua/apps/テトリス] [--owner <GitHubのアカウント> --dir テトリス(初めてのとき)]
   # 公式アプリのうち版が上がったものを、まとめて写して署名する(pico-os-apps のディレクトリで。1つのPRにする)
-  python3 script/release/build_app_repo.py sync-official --key ~/.pico-os/app_repo.key --src ../pico-os/pc/sdcard/lua/apps [--dry-run]
+  python3 script/release/build_app_repo.py sync-official --key ~/.pico-os/app_repo.key --src ../pico-os/sdcard/lua/apps [--dry-run]
   # 同じリポジトリのCIが使う: PRの検査と自動マージの判定 / 配布物を作ってカタログ鍵で署名
   python3 -I script/release/build_app_repo.py registry-check --registry pr --base main --user <login> --luac luac5.4 --out result.json
   python3 script/release/build_app_repo.py registry-build --registry . --key catalog.key --out _site --prev-catalog prev.tsv
@@ -37,7 +37,7 @@
 署名は2種類(docs/APP_REPO.md 形式2): catalog.sig はカタログ鍵(--key)、各アプリの files.sig は
 作者の鍵(--author-key。既定は --key と同じ。pico-os の公式アプリは同じ鍵で両方を署名する)。
 
-配るアプリは pc/sdcard/lua/apps/<ディレクトリ>/app.cfg に id = ... があるものだけ
+配るアプリは sdcard/lua/apps/<ディレクトリ>/app.cfg に id = ... があるものだけ
 (--apps-dir で場所を変えられる)。gitの管理下なら、gitが管理しているファイルだけを配る
 (遊んでいる間にできた store.json・セーブデータ等を配らないため)。
 """
@@ -86,7 +86,7 @@ SEG_RE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*$")
 # pico-os では script/release/ に、投稿用リポジトリ(pico-os-apps)の写しでは script/ 直下に置くので、どちらでもリポジトリの根を指すようにする
 _HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(_HERE, "..", "..") if os.path.basename(_HERE) == "release" else os.path.join(_HERE, ".."))
-DEFAULT_APPS_DIR = os.path.join(ROOT, "pc", "sdcard", "lua", "apps")
+DEFAULT_APPS_DIR = os.path.join(ROOT, "sdcard", "lua", "apps")
 
 
 # ---------------------------------------------------------------------------
@@ -753,7 +753,7 @@ def load_registry_app(registry, app_id):
 def load_registry(registry):
     apps_root = os.path.join(registry, "apps")
     names = sorted(os.listdir(apps_root)) if os.path.isdir(apps_root) else []
-    # 並びは今までの目録(pc/sdcard のディレクトリ名の順)と同じにする。ストアの一覧はこの順で出る
+    # 並びは今までの目録(sdcard のディレクトリ名の順)と同じにする。ストアの一覧はこの順で出る
     apps = sorted((load_registry_app(registry, n) for n in names), key=lambda a: a.dir)
     status = read_status(os.path.join(registry, "status.tsv"))
     for a in apps:
@@ -949,7 +949,7 @@ def author_sign(seed, base, src=None, owner=None, dir_name=None):
 
 def cmd_author_sign(args):
     """投稿用リポジトリの apps/<id>/ に files.tsv と files.sig を作る(作者が手元で)。
-    --src を付けると、先に app/ をそのディレクトリの中身で置き換える(pico-os の pc/sdcard から写すとき)"""
+    --src を付けると、先に app/ をそのディレクトリの中身で置き換える(pico-os の sdcard から写すとき)"""
     a = author_sign(load_seed(args.key), os.path.normpath(args.app), args.src, args.owner, args.dir)
     print(f"{os.path.normpath(args.app)}: {a.name} {a.version}({len(a.files)}ファイル、{a.bytes}バイト、権限 {a.perms})に署名しました")
 
@@ -987,13 +987,13 @@ def cmd_sync_official(args):
             warned.append(f"{app_id}: {e}")
             continue
         if new.dir != name:
-            warned.append(f"{app_id}: pc/sdcard のディレクトリ名 ({name}) と meta.cfg の dir ({meta['dir']}) が違います(dir は meta.cfg のまま)")
+            warned.append(f"{app_id}: sdcard のディレクトリ名 ({name}) と meta.cfg の dir ({meta['dir']}) が違います(dir は meta.cfg のまま)")
         if not VERSION_RE.match(old) or version_tuple(new.version) > version_tuple(old):
             if not args.dry_run:
                 author_sign(seed, base, src)
             updated.append(f"{app_id}: {old or '?'} → {new.version}")
         elif version_tuple(new.version) < version_tuple(old):
-            warned.append(f"{app_id}: pc/sdcard の版 ({new.version}) が投稿用リポジトリ ({old}) より古いので写しません")
+            warned.append(f"{app_id}: sdcard の版 ({new.version}) が投稿用リポジトリ ({old}) より古いので写しません")
         else:
             with open(os.path.join(base, "files.tsv"), "rb") as f:
                 if f.read() != new.files_tsv:
@@ -1282,7 +1282,7 @@ def main():
 
     p = sub.add_parser("sync-official", help="pico-os の公式アプリのうち版が上がったものをまとめて写して署名する")
     p.add_argument("--key", required=True, help="作者の鍵(公式アプリの meta.cfg の key と同じもの)")
-    p.add_argument("--src", required=True, help="pico-os の pc/sdcard/lua/apps")
+    p.add_argument("--src", required=True, help="pico-os の sdcard/lua/apps")
     p.add_argument("--registry", default=".", help="投稿用リポジトリのディレクトリ(既定 .)")
     p.add_argument("--dry-run", action="store_true", help="何をするかだけ表示して、書かない")
     p.set_defaults(func=cmd_sync_official)

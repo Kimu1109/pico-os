@@ -2,7 +2,7 @@
 """
 generate_blocks_sheet.py
 ------------------------
-Luaアプリ「ブロック」(pc/sdcard/lua/apps/ブロック/。TheScienceElf氏の Blocks-TI-84 を
+Luaアプリ「ブロック」(sdcard/lua/apps/ブロック/。TheScienceElf氏の Blocks-TI-84 を
 pico-os へ移したもの)の絵を作る。標準ライブラリのみ(PNGも自前で読む)。
 
 元の絵は script/assets/blocks_assets/ にある Blocks-TI-84 の TextureMap.png(16x16のテクスチャを
@@ -42,7 +42,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "script" / "assets" / "blocks_assets"
-APP = ROOT / "pc" / "sdcard" / "lua" / "apps" / "ブロック"
+APP = ROOT / "sdcard" / "lua" / "apps" / "ブロック"
 
 # 既定のパレット(src/gui/core/GFX_Functions.hpp の DEFAULT_COLORS)
 DEFAULT_PALETTE = [

@@ -2,9 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "config/HwConfig.hpp"
+#include "board/HwConfig.hpp"
 
-// HwConfig(config/HwConfig.hpp)の名前つきの読み書き・検査・内蔵フラッシュに置く形への変換。
+// HwConfig(board/HwConfig.hpp)の名前つきの読み書き・検査・内蔵フラッシュに置く形への変換。
 // ハードウェアに触らない(ホストテスト hw_config_test で確かめる)。
 //
 // 内蔵フラッシュに置く形(先頭から):

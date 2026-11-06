@@ -455,20 +455,20 @@ pc/
     WiFi.h                  疎通判定ベースのWiFi + NTP(同期不要)
     SdFat.h                 実ファイルシステムを SdFat/FsFile として見せる
     XPT2046_Touchscreen.h   使わないが includeが通るように置いてある
-    config/LGFX_Config_PC.hpp        SDLパネル設定
-    config/Panel_sdl_SpiWait.hpp     液晶への書き込みに実機のSPI転送時間ぶんの待ちを入れるSDLパネル
+    board/LGFX_Config_PC.hpp        SDLパネル設定
+    board/Panel_sdl_SpiWait.hpp     液晶への書き込みに実機のSPI転送時間ぶんの待ちを入れるSDLパネル
     hal/Touch_Functions_PC.hpp       マウスをタッチとして読む
   sdcard/                   SDカードとして読まれるディレクトリ
 ```
 
-`src/config/LGFX_Config.hpp` と `src/hal/Touch_Functions.hpp` の2つだけは、
+`src/board/LGFX_Config.hpp` と `src/hal/Touch_Functions.hpp` の2つだけは、
 `#if defined(PICOOS_PC)` で `pc/compat/` 側へ切り替える分岐を持っている。
 ハードウェアそのものを触る箇所なので、インクルードパスの差し替えでは吸収できないため。
 
 ### `src/` を書く側の決まり(2026-10-20に CLAUDE.md から移した)
 
-- 2つの分岐(上記)のインクルードは**山かっこで書くこと**(`<config/LGFX_Config_PC.hpp>` / `<hal/Touch_Functions_PC.hpp>`)。
-  `"config/..."` だとインクルード元(`src/`)のディレクトリが優先され、自分自身を読んで多重定義になる。
+- 2つの分岐(上記)のインクルードは**山かっこで書くこと**(`<board/LGFX_Config_PC.hpp>` / `<hal/Touch_Functions_PC.hpp>`)。
+  `"board/..."` だとインクルード元(`src/`)のディレクトリが優先され、自分自身を読んで多重定義になる。
 - `src/` が使う Arduino API と PC での実装(`pc/compat/Arduino.h`。呼び出し側は書き換えていない):
 
   | API | PCでの実装 |

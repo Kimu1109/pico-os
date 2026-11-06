@@ -5,7 +5,7 @@
 // 山かっこincludeにしているのは、"..."だとこのファイルのあるディレクトリが
 // 優先され、pc/compat側の実装が拾われないため。
 #if defined(PICOOS_PC)
-    #include <config/LGFX_Config_PC.hpp>
+    #include <board/LGFX_Config_PC.hpp>
 #else
 
 #include <LovyanGFX.hpp>
@@ -13,7 +13,7 @@
 #include <XPT2046_Touchscreen.h>
 #include <hardware/dma.h>
 #include "consts.hpp"
-#include "config/HwConfig.hpp"
+#include "board/HwConfig.hpp"
 
 // --- 液晶の種類 ---
 // buildcfg/ の版で -DPICO_PANEL_ST7796 等を足すと切り替わる(既定はILI9341。部品は buildcfg/options.ini の opt_screen_*)。
@@ -30,7 +30,7 @@
 #endif
 
 // --- 液晶用 LGFX（SPI0） ---
-// ピン・速さ・向き・ずれ・色反転は起動時に initWith(HwConfig) で決める(config/HwConfig.hpp。既定は consts.hpp、
+// ピン・速さ・向き・ずれ・色反転は起動時に initWith(HwConfig) で決める(board/HwConfig.hpp。既定は consts.hpp、
 // 内蔵フラッシュの値で上書きされる。hal/HwConfig_Functions)。作るだけでは何も触らない。
 class LGFX : public lgfx::LGFX_Device {
   PicoPanel           _panel_instance;

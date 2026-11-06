@@ -43,14 +43,16 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
   SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --tap 61,65@30:5 --shot md.ppm 250   # FRAMEで(X,Y)をHOLDフレーム押して撮る
   python3 script/ppm2png.py md.ppm md.png 2
   ```
-  `src/` は実機と同一。実機ライブラリだけ `pc/compat/` で差し替える(例外は `config/LGFX_Config.hpp` と `hal/Touch_Functions.hpp` の `#if defined(PICOOS_PC)`)。
+  `src/` は実機と同一。実機ライブラリだけ `pc/compat/` で差し替える(例外は `board/LGFX_Config.hpp` と `hal/Touch_Functions.hpp` の `#if defined(PICOOS_PC)`)。
   **`src/` へ実機依存を足すときは `pc/compat/` にも代替を足す。** GUIの確認は実機の前にPCビルドで。
 
 ## ディレクトリ(要点)
 
 ```
 src/
-  main.cpp / OS_Data.hpp(グローバル状態) / consts.hpp / config/
+  main.cpp / OS_Data.hpp(グローバル状態) / consts.hpp
+  config/    ビルド時に -D で選ぶ物の既定値だけ(Hardware/App/Lang_Config・Ram_Func)
+  board/     液晶の組み立て(LGFX_Config。PCは pc/compat/board/)と配線の値の型(HwConfig)
   system/    土台の Xxx_Functions(ログ・設定・時刻・メモリ・入力の列KeyInput/Pad・通知の中身・バックグラウンドの登録簿・クリップボード)
   hal/       ハードの窓口(タッチ・SD・電池・音声・マイク・Wi-Fi・I2C)
   services/  OSの機能(アプリ登録簿・アラーム・タイマー・電源・ロック・明るさ・スクショ・ファーム更新・USBドライブ・Wi-Fi転送・端末の鍵・スマホからのWi-Fi設定)
@@ -82,7 +84,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 
 | 段 | 置き場所 |
 |---|---|
-| 0 base | `consts.hpp` `OS_Data.hpp` `config/` `util/`(+少数の個別ファイル) |
+| 0 base | `consts.hpp` `OS_Data.hpp` `config/` `board/` `util/`(+少数の個別ファイル) |
 | 1 system | `system/` |
 | 2 lib | `hal/` `storage` `net` `crypto` `task` `sound` `iso` `ime`、`apps/<機能>/` 直下 |
 | 3 ui | `gui/`(`core/` `icons/` `widgets/`)、`apps/*/ui/` |

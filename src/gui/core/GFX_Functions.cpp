@@ -3,7 +3,7 @@
 #include "system/Log_Functions.hpp"
 #include "gui/core/Focus_Functions.hpp"
 #include "gui/core/Keyboard_Functions.hpp"
-#include "config/LGFX_Config.hpp"
+#include "board/LGFX_Config.hpp"
 #include "OS_Data.hpp"
 #include "hal/HwConfig_Functions.hpp"
 #include <SPI.h>

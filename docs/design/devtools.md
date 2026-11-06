@@ -257,6 +257,11 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - 残り: 音楽の版の組み合わせは `pc/CMakeLists.txt` の `PICOOS_MUSIC_BUILD_OFF_APPS` にも書いてあり二重のまま。
   版の旗を1つのファイルに置いて PlatformIO(`custom_*` + `pre:` スクリプト)と CMake の両方から読む形にすれば解消できる(未着手)。
 
+- **`src/config/` と `src/board/` を分けた(2026-11-06)**: `config/` にはビルド時に `-D` で選ぶ物の既定値だけ
+  (`Hardware_Config`・`App_Config`・`Lang_Config`・`Ram_Func`)を置き、液晶の組み立て(`LGFX_Config.hpp`。PCは `pc/compat/board/`)と
+  配線の値の型(`HwConfig.hpp`。実行時に内蔵フラッシュの値で上書きされる)を `board/` へ移した。`OS_Data.hpp` が `LGFX_Config.hpp` を、
+  それが `HwConfig.hpp` を読むので、`board/` も層0(base)にした(`check_layers.py`)。
+
 ## ビルド時に選ぶハードウェア機能 (`src/config/Hardware_Config.hpp` の `PICO_HW_*`) (2026-10-25)
 
 利用者の要望: 音声・マイク・電池を載せない機器では、最初からメモリを食うだけなので外せるように。液晶とSDは無いと動かないので選べなくてよい。
@@ -285,7 +290,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   実機ファームの両方の env のビルド(外した版に `setup1`/`loop1`・`ChipSynth` が無いこと)。外した版も**実機で起動を確認済み(2026-10-25)**(空きヒープの差の数値は控えていない)。
 - ファームの更新(`.pfw`)は版を区別しないので、載せる機能の違う本体へ送るとその機能が消える/増える(画面の大きさと同じ注意)。
 
-## 液晶・SDの配線を内蔵フラッシュに置く (`config/HwConfig.hpp` / `system/HwConfig_Codec` / `storage/Eeprom_Area` / `hal/HwConfig_Functions`) (2026-11-01)
+## 液晶・SDの配線を内蔵フラッシュに置く (`board/HwConfig.hpp` / `system/HwConfig_Codec` / `storage/Eeprom_Area` / `hal/HwConfig_Functions`) (2026-11-01)
 
 利用者の要望: 液晶・SDのピン番号・SPIの速さ・向き・ずれ・色反転をファームに焼かず、内蔵フラッシュに置いて起動時に読みたい。
 初期化に失敗したら既定へ戻す。画面が映らなくても直せるようにUSBシリアルからも変えられること。

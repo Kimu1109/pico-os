@@ -20,7 +20,7 @@
 | `spec/VIDEO_FORMAT.md` | 動画(.pvid)の形式 |
 | `guide/FIRMWARE_UPDATE.md` | ファームの更新のしかた(Web / SD / Wi-Fi)と更新ファイルの形 |
 | `guide/HARDWARE_CHECKLIST.md` | 実機での確認・計測の手順と結果。**未完了かどうかは Todoist が正**(`CLAUDE.md`「人にしかできない確認」) |
-| `design/*.md` | 機能ごとの設計記録(一覧は `CLAUDE.md`「設計記録の索引」) |
+| `design/*.md` | 機能ごとの設計記録(一覧は `CLAUDE.md`「設計記録の索引」)。大きくなったものはフォルダに分け、目次を `README.md` に置く(`sound/`・`lua-api/`)。節の名前は `grep -rn '^#.*名前' docs/design/` で引く |
 
 ## docs/ の外にある文書
 

@@ -59,7 +59,7 @@ namespace MusicService {
     // 状態を返す(止めてから)。もう一度鳴らすには StartPlaylist() から
     void Release();
 
-    // ---- スリープタイマー(docs/design/sound.md「スリープタイマー」) ----
+    // ---- スリープタイマー(docs/design/sound/music-app.md「スリープタイマー」) ----
     // Timer: minutes 分たったら止める(最後の kSleepFadeMs はWAV/MP3の音を小さくしていく)。
     // TrackEnd: 今の曲が終わったら次へ進まずに止める。
     // 止まる・Stop()・Release() で Off に戻る。一時停止の間も時間は進む。状態(st)とは別に持つ(確保しない)
@@ -107,7 +107,7 @@ namespace MusicService {
     // アーティスト/アルバムの見せる名前(タグが無い曲の集まりは「不明なアーティスト」等)
     void GroupDisplayName(int playlist, const char* key, FixedString<PICO_STR_M>& out);
 
-    // ---- 続きから(電源を切っても前回の曲の続きから。docs/design/sound.md「続きから鳴らす」) ----
+    // ---- 続きから(電源を切っても前回の曲の続きから。docs/design/sound/music-app.md「続きから鳴らす」) ----
     // 鳴らしている間(約10秒ごと)・一時停止・止める・曲が変わったときに /sys/music_resume.cfg へ、
     // プレイリストの種類と名前・曲(フォルダ名とファイル名)・位置を書く。最後まで鳴らし終えたら消す。
     // 順番(再生の順番)が無いとき(起動した後)の TogglePlay() は、これを読んで同じ並びを作り直し、その曲の位置から鳴らす

@@ -7,7 +7,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// ミュージックの曲を集める(画面にも MusicService の「続きから」にも依存しない)。docs/design/sound.md「曲のタグと索引」。
+// ミュージックの曲を集める(画面にも MusicService の「続きから」にも依存しない)。docs/design/sound/music-app.md「曲のタグと索引」。
 //
 // - フォルダと曲の一覧: /music/ の直下のフォルダ(名前順、16個まで)と、その中の *.mml / *.wav / *.mp3 / *.flac / *.m4a(名前順、64曲まで)。
 //   以前は MusicScene の中にあったもの(「続きから」が画面無しで同じ並びを作れるように、ここへ移した)

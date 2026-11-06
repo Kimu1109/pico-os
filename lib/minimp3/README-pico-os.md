@@ -8,7 +8,7 @@ MP3の再生(`src/sound/Mp3_Decoder.{hpp,cpp}`、`SoundFunctions::WavPlay()` が
 ## なぜこれにしたか
 
 - ヘッダ1本・依存無し・動的確保をしない。デコーダの状態は `mp3dec_t`(約6.7KB)だけで、呼び出し側が持つ
-- CC0なのでファームへ組み込める(AACのFAAD2はGPLで組み込めない。`docs/design/sound.md`「MP3の再生」)
+- CC0なのでファームへ組み込める(AACのFAAD2はGPLで組み込めない。`docs/design/sound/playback.md`「MP3の再生」)
 - 浮動小数で計算する。RP2350(Cortex-M33)は単精度のFPUがあるので、固定小数点の実装(Helix)でなくてよい
 
 ## 手を入れたところ(1か所)

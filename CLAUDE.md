@@ -186,7 +186,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 ## 設計記録の索引 (`docs/design/`)
 
 ここで足りない話は該当ファイルを開く。コードや文書中の「CLAUDE.md「節の名前」」「下記「…」」という参照は、
-`grep -n '^#.*節の名前' docs/design/*.md` で引ける(節の名前は移したときのまま)。
+`grep -rn '^#.*節の名前' docs/design/` で引ける(節の名前は移したときのまま。大きいものはフォルダに分けてある)。
 
 | ファイル | 中身 |
 |---|---|
@@ -200,15 +200,15 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `browser-net.md` | MarkdownView・文書キャッシュ・HTTP/HTTPS・取得〜表示・サーバ情報・検索・マニフェスト・ソケット(TCP/UDP/WebSocket/MQTT) |
 | `apps-online.md` | カレンダー(iCalendar)・チャット・TODO(Todoist)・メール(IMAP)・Spotify・ニュース(XML) |
 | `apps-local.md` | テキストエディタ・メモ(タグ・全文検索・最近開いたファイル)・SSH・ファイルビューワー・読書(青空文庫)・電卓・時計 |
-| `sound.md` | 音声出力・マイク・録音の文字起こし・ステレオ・曲データ(MML)・チップチューン・ゲームボーイの音・WAV・出力周波数・ミュージック・動画(.pvid) |
+| `sound/`(`README.md` が目次) | 音声出力・マイク・録音の文字起こし・ステレオ・曲データ(MML)・チップチューン・ゲームボーイの音・WAV・出力周波数・ミュージック・動画(.pvid) |
 | `gameboy.md` | ゲームボーイ |
 | `lua.md` | Luaバインディングの土台(ライフサイクル・権限・コールバック中継・LuaScene・メモリ・暴走防止・自動登録) |
-| `lua-api.md` | `pico.*` APIの設計記録(描画・SD・画像・キャンバス・ダイアログ・ネットワーク・イベント等) |
+| `lua-api/`(`README.md` が目次) | `pico.*` APIの設計記録(描画・SD・画像・キャンバス・ダイアログ・ネットワーク・イベント等) |
 | `lua-apps.md` | Luaアプリと `pico.game`(ペイント・テトリス等・アプリストア・動作確認アプリ) |
 | `iso.md` | 2.5Dエンジン(`pico.iso`)・ブロック・ゾンビTD |
 | `zombie-td.md` | ゾンビTD(タワーディフェンス)のゲームの設計(流れ・マップ・釣り合い) |
 | `devtools.md` | プロファイラ・Luaデバッガ・クラッシュダンプ・サンドボックス・実機確認の道具・ファームの更新・ビルド時に選ぶハードウェア機能・ナイトリービルド |
-| `performance.md` | 最適化とメモリ計測の記録・解決済みの不具合 |
+| `performance.md` | 最適化とメモリ計測の記録(解決済みの不具合は `performance-resolved.md`) |
 | `pc-web.md` | Webビルド(WebAssembly) |
 | `i18n.md` | 表示言語の切り替え(`TR()`・`i18n/en.po`・`script/codegen/i18n.py`・言語の選び方) |
 | `carrier-board.md` | キャリアボード(`hardware/carrier/`。モジュールを載せる2層基板の決めたことと寸法の出典) |

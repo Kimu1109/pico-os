@@ -9,7 +9,7 @@
 //       ヒープの使用量               … 周の数に比例して増えないこと(kHeapSlackPerCycle 以内)
 //   - シーンの往復は SceneFunctions の Change/Push/Pop を本物で通す(フレームの境目で切り替わる経路)
 //
-// PCビルドで見つかった増加(LovyanGFXのSDLのパネル。performance.md の解決済みの節)はSDLの中なのでここでは捕まらない。
+// PCビルドで見つかった増加(LovyanGFXのSDLのパネル。performance-resolved.md の解決済みの節)はSDLの中なのでここでは捕まらない。
 // このテストが見るのは src/ のシーン・ウィジェットの解放漏れ。
 //
 // シーンを足すときは kScenes に1行足す(ホストのスタブで作れないシーンは CMakeLists.txt の HOST_EXCLUDE を参照)。

@@ -72,6 +72,7 @@ namespace PICO_SD
         }
 
         LOG_SYS_OK("SD Setup has succeeded!");
+        OSData::SD_mount_gen++;
         OSData::SD_usable = true;
         return true;
     }

@@ -3,6 +3,8 @@
 
 // 日本語フォント(lgfxJapanGothicP_16/24)を、字の探し方だけ速くして使う(U8g2GlyphIndex.hpp)。
 // docs/design/performance.md「日本語フォントの字の探し方」。
+// フォントのデータは常用漢字までに絞ったもの(src/gui/fonts/JpFont_Base*.cpp)で、無い漢字はSDの追加フォント
+// (gui/core/JpFont_Ext)から引く(performance.md「漢字の一部をSDへ」)。
 //
 // フォントのデータは LovyanGFX のものをそのまま使い、U8g2font を継承して仮想関数の
 // updateFontMetric()/drawChar() だけを差し替える(LovyanGFX 自体には手を入れない)。
@@ -27,7 +29,8 @@ namespace GlyphIndexFonts {
 
 class GlyphIndexFont : public lgfx::v1::U8g2font {
 public:
-    explicit constexpr GlyphIndexFont(const uint8_t* u8g2_font) : lgfx::v1::U8g2font(u8g2_font), index_(u8g2_font) {}
+    explicit constexpr GlyphIndexFont(const uint8_t* u8g2_font, ExtGlyphStore* ext = nullptr)
+        : lgfx::v1::U8g2font(u8g2_font), index_(u8g2_font, ext) {}
 
     bool updateFontMetric(lgfx::v1::FontMetrics* metrics, uint16_t uniCode) const override;
     size_t drawChar(lgfx::v1::LGFXBase* gfx, int32_t x, int32_t y, uint16_t c,

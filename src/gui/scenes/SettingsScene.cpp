@@ -597,6 +597,7 @@ void SettingsScene::onUpdate(){
 
     this->pollWifiScan();
     this->pollCaptiveLogin();
+    this->pollFontDownload();
     if(this->tab == Tab::Wifi) this->refreshWifi();
 
     this->updateVolume();
@@ -634,6 +635,9 @@ void SettingsScene::onExit(){
         this->wifi_scan_task = nullptr;
     }
     this->endCaptiveLogin();
+    this->endFontDownload();
+    this->font_button = nullptr;  // ウィジェットはこの後シーンの片付けが消す
+    this->font_label = nullptr;
     // ダイアログ層はシーン終了時にフレームワーク側がまとめて片付ける(CalendarScene::detail_dialogと同じ)
     this->wifi_scan_dialog = nullptr;
     this->pending = Pending::None;

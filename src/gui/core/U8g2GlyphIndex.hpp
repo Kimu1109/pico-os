@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 
+class ExtGlyphStore;
+
 // u8g2形式のフォント(LovyanGFXの lgfxJapanGothicP_* 等)で「文字コード → 字のデータの位置」を速く引く。
 // docs/design/performance.md「日本語フォントの字の探し方」。
 //
@@ -18,6 +20,11 @@
 // 字の並びが文字コード順でなかったら(u8g2の作り方からは起きないはず)、索引を使わず元と同じ探し方をする。
 //
 // find() の返す値は getGlyph() と同じ(字の見出しを飛ばした所。無ければnullptr)。
+//
+// 追加のフォント(ExtGlyphStore、SDの .pkf)を渡してあれば、フォントに無かった漢字をそちらへ聞く
+// (docs/design/performance.md「漢字の一部をSDへ」)。そのときの返す値はSDの字を写したRAMの位置で、
+// 次の find() で上書きされうる(すぐ読み終えること)。控えには「SDにある」とだけ覚え、中身は ExtGlyphStore が持つ。
+// 追加のフォントの状態が変わったら(SDを抜いた・置いた)控えを全部捨てる。
 // 2コア目からは使わない(描画は1コア目だけ)。
 class U8g2GlyphIndex {
 public:
@@ -25,7 +32,7 @@ public:
     static constexpr int kCacheSlots = 64;   // 控えの数(1個6B)
 
     // constexpr: グローバルのフォントを定数で初期化する(静的な初期化の順番に依らない)
-    explicit constexpr U8g2GlyphIndex(const uint8_t* font) : font_(font) {}
+    explicit constexpr U8g2GlyphIndex(const uint8_t* font, ExtGlyphStore* ext = nullptr) : font_(font), ext_(ext) {}
 
     const uint8_t* find(uint16_t encoding);
 
@@ -44,6 +51,10 @@ private:
     // 控えの「位置」に入れる印。本物の位置はヘッダ(23B)より後なので0と1は使われない
     static constexpr uint32_t kEmpty = 0;
     static constexpr uint32_t kNotFound = 1;
+    static constexpr uint32_t kInExt = 2;   // 追加のフォント(ext_)にある
+
+    // 追加のフォントを聞いてよい字(漢字)。script/font/split_font.py の is_kanji() と同じ範囲
+    static constexpr bool MayBeInExt(uint16_t e) { return (e >= 0x3400 && e <= 0x9FFF) || (e >= 0xF900 && e <= 0xFAFF); }
 
     const uint8_t* findAscii(uint16_t encoding) const;   // 0〜255(元と同じ探し方)
     const uint8_t* findUnicode(uint16_t encoding);       // 0x100以上
@@ -52,6 +63,8 @@ private:
     void buildIndex();
 
     const uint8_t* font_;
+    ExtGlyphStore* ext_;
+    uint32_t ext_epoch_ = 0;
 
     uint16_t cache_code_[kCacheSlots] = {};
     uint32_t cache_pos_[kCacheSlots] = {};   // font_ からの位置(kEmpty/kNotFound は印)

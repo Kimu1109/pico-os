@@ -27,6 +27,9 @@ namespace OSData {
 
     //SD系統
     inline bool SD_usable = false;
+    // SDをマウントできるたびに増える(PICO_SD::Setup())。開いたままのファイルを持つ係が「マウントし直した」と気づくため
+    // (SDの追加フォント gui/core/JpFont_Ext)。0 = まだ一度もマウントしていない
+    inline uint32_t SD_mount_gen = 0;
     extern SdFat SD;
 
     //キーボード

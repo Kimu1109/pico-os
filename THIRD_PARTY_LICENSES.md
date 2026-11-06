@@ -30,6 +30,7 @@ pico-os のために書いたファイルは [MIT ライセンス](LICENSE)(Copy
 | Tabler Icons | `script/tabler_icons/` | MIT(Paweł Kuna) | `src/gui/icons/icons_data.h` の一部はこれから生成 |
 | dmg-acid2(GBエミュの確認用ROM) | `pc/sdcard/gb/dmg-acid2.gb` | MIT(Copyright (c) 2020 Matt Currie) | 全文は `pc/sdcard/README.md` |
 | 芥川龍之介「蜘蛛の糸」 | `pc/sdcard/books/` | パブリックドメイン(著作権の保護期間が満了) | |
+| 日本語フォント(IPAexゴシックを LovyanGFX が u8g2 にしたもの を分けたもの) | `src/gui/fonts/JpFont_Base*.cpp`(ファームに入る)・`pc/sdcard/sys/fonts/*.pkf`(SDに置く。Webの `/fonts/` からも配る) | **IPAフォントライセンス v1.0** | 派生プログラム。全文は `pc/sdcard/sys/fonts/IPA_Font_License_Agreement_v1.0.txt`、作り方と元へ戻す方法は同じ所の `README.md`(`script/font/split_font.py`)。元の名前は使わない |
 
 辞書の詳しい条件は [`script/dict/LICENSES.md`](script/dict/LICENSES.md)。
 辞書はファームに組み込まず、SDに置いて実行時に読むデータなので、pico-os のコード(MIT)には GPL / CC BY-SA は及ばない。
@@ -42,7 +43,7 @@ pico-os のために書いたファイルは [MIT ライセンス](LICENSE)(Copy
 | もの | 取得元 | ライセンス |
 |---|---|---|
 | LovyanGFX 1.2.28 | `platformio.ini` の `lib_deps` | FreeBSD / BSD / MIT(同梱の `license.txt`) |
-| LovyanGFX の日本語フォント(`lgfxJapanGothicP_*`) | LovyanGFX 同梱 | **IPAフォントライセンス v1.0**(IPAフォントを変換したもの。`src/lgfx/Fonts/IPA/`) |
+| LovyanGFX の日本語フォント(`lgfx_font_japan_gothic_p_*`) | LovyanGFX 同梱 | **IPAフォントライセンス v1.0**(IPAフォントを変換したもの。`src/lgfx/Fonts/IPA/`)。ファームに入るのは上の「データ」の分けたもの |
 | XPT2046_Touchscreen v1.4 | `platformio.ini` の `lib_deps` | MIT(Paul Stoffregen) |
 | Arduino-Pico コア | PlatformIO の `framework = arduino` | LGPL-2.1-or-later |
 | Arduino-Pico に含まれるもの(Pico SDK・TinyUSB・lwIP・BearSSL・LittleFS・SdFat・CYW43 ドライバ等) | 同上 | 各ライブラリのライセンス(多くは BSD / MIT。CYW43 ドライバとWi-Fiチップのファームは独自のライセンス) |

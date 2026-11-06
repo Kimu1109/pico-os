@@ -5,7 +5,8 @@
 #include <algorithm>
 #include "OS_Data.hpp"
 #include "config/Ram_Func.hpp"
-#include <lgfx/Fonts/IPA/lgfx_font_japan.h>
+#include "gui/core/JpFont_Ext.hpp"
+#include "gui/fonts/JpFont_Data.hpp"
 
 // updateFontMetric()/drawChar() は LovyanGFX 1.2.28 の lgfx_fonts.cpp(U8g2font)の写し
 // (FreeBSDライセンス、著作権者 lovyan03。THIRD_PARTY_LICENSES.md)。違うのは getGlyph() を glyph() にしたところだけ。
@@ -37,8 +38,10 @@ namespace {
         }
     };
 
-    GlyphIndexFont font16(lgfx_font_japan_gothic_p_16);
-    GlyphIndexFont font24(lgfx_font_japan_gothic_p_24);
+    // フラッシュには常用漢字までを持つ(src/gui/fonts/JpFont_Base*.cpp)。無い漢字はSDの追加フォントから引く
+    // (JpFont_Ext、docs/design/performance.md「漢字の一部をSDへ」)
+    GlyphIndexFont font16(kJpGothicBase16, &JpFontExt::store16);
+    GlyphIndexFont font24(kJpGothicBase24, &JpFontExt::store24);
 
     // 4bppの1行の [x0, x1) を色 nib(0〜15)で塗る。偶数のxが上位4ビット(LovyanGFXの4bppのスプライトと同じ並び)
     // no-tree-loop-distribute-patterns: 下のループをコンパイラが memset の呼び出しへ戻さないように

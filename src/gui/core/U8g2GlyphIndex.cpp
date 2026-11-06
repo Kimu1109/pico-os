@@ -1,5 +1,6 @@
 #include "gui/core/U8g2GlyphIndex.hpp"
 #include "config/Ram_Func.hpp"
+#include "gui/core/ExtGlyphStore.hpp"
 
 // u8g2のフォントの形(LovyanGFX の lgfx_fonts.cpp・u8g2 の u8g2_font.c と同じ読み方):
 //   ヘッダ23B: [17..18] 'A'からの字の位置 / [19..20] 'a'からの字の位置 / [21..22] 0x100以上の部の位置
@@ -22,13 +23,27 @@ namespace {
 }
 
 PICO_RAM_FUNC const uint8_t* U8g2GlyphIndex::find(uint16_t encoding) {
+    if (ext_) {
+        // SDを抜いた・置いた・開き直したら、「無い」「SDにある」と覚えたものを捨てる
+        const uint32_t epoch = ext_->poll();
+        if (epoch != ext_epoch_) {
+            ext_epoch_ = epoch;
+            clearCache();
+        }
+    }
     const int slot = CacheSlot(encoding);
     const uint32_t cached = cache_pos_[slot];
     if (cached != kEmpty && cache_code_[slot] == encoding) {
+        if (cached == kInExt) return ext_->find(encoding);
         return cached == kNotFound ? nullptr : font_ + cached;
     }
     const uint8_t* g = (encoding <= 255) ? findAscii(encoding) : findUnicode(encoding);
     cache_code_[slot] = encoding;
+    if (!g && ext_ && MayBeInExt(encoding)) {
+        g = ext_->find(encoding);
+        cache_pos_[slot] = g ? kInExt : kNotFound;
+        return g;
+    }
     cache_pos_[slot] = g ? (uint32_t)(g - font_) : kNotFound;
     return g;
 }

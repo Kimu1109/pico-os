@@ -15,7 +15,7 @@
 #include <SdFat.h>
 
 // sd: 初期化済みのSdFatインスタンス
-// font: チェック対象のフォント(例: fonts::lgfxJapanGothicP_16)
+// font: チェック対象のフォント(例: *GlyphIndexFonts::Small()。SDの追加フォントの字も「ある」になる)
 // dictBodyPath: skk_body.tsv のパス(convert_skk_dict.pyの出力)
 // outputPath: 結果を書き出すファイルパス(例: "/dic/missing_chars.txt")
 //

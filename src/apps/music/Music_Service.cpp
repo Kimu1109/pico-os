@@ -83,6 +83,9 @@ namespace {
     ResumeInfo resume;
     uint32_t resume_saved_at = 0;
     int resume_saved_track = -1;
+    // 望む出力の周波数(44100か48000)。WAV/MP3/FLAC/ALACを鳴らすたびに、その曲を変換せずに鳴らせる値へ変える
+    //(SoundFunctions::NativeOutputRate())。ミュージックアプリの画面とバックグラウンドの仕事がこれを返す
+    uint32_t want_rate = SoundFunctions::kSampleRateHigh;
     uint32_t resume_saved_sec = 0xFFFFFFFF;
 
     const char* PlaylistKindName(int playlist){
@@ -265,17 +268,33 @@ namespace {
             return false;
         }
 
-        //画面が周波数を望んでいない(ホーム画面のウィジェット等から鳴らした)なら、先に44100Hzへ切り替えておく。
-        //鳴らした後の次のフレームで main.cpp がバックグラウンドの望み(44100Hz)へ切り替えると、その切り替えで
+        //画面が周波数を望んでいない(ホーム画面のウィジェット等から鳴らした)なら、先に望みの周波数へ切り替えておく。
+        //鳴らした後の次のフレームで main.cpp がバックグラウンドの望み(want_rate)へ切り替えると、その切り替えで
         //今鳴らした曲が止まり「他のアプリに取られた」扱いになってしまうため
-        if(SoundFunctions::RequestedSampleRate() == 0) SoundFunctions::RequestSampleRate(SoundFunctions::kSampleRateHigh);
+        const uint32_t requested = SoundFunctions::RequestedSampleRate();
+        if(requested == 0) SoundFunctions::RequestSampleRate(want_rate);
+        //曲に合わせて周波数を変えてよいのは、今の要求がこの係のもの(ミュージックアプリの画面・バックグラウンド・要求なし)のときだけ。
+        //他の画面が周波数を決めていれば(Luaの pico.sound_set_rate(22050) 等)、その周波数へ変換して鳴らす
+        const bool follow = requested == 0 || requested == want_rate;
 
         //MMLとWAV/MP3は同時には鳴らさない(このアプリで鳴らすのは1曲ずつ)
         if(MusicService::IsPcmFile(t.name.c_str())){
             const char* err = "";
-            if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err)){
+            SoundFunctions::WavInfo info;
+            if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err, &info)){
                 error.assign(err && *err ? err : TR("読めない音のファイルです"));
                 return false;
+            }
+            //48kHz系(48/96kHz)の曲なら48000Hz、44.1kHz系なら44100Hzで鳴らし直す(変換で間引かない)。
+            //曲の周波数は開くまで分からないので、系統が変わったときだけもう一度開く(切り替えは鳴らし始めた音を止める)
+            const uint32_t native = SoundFunctions::NativeOutputRate(info.sample_rate);
+            if(follow && native != SoundFunctions::SampleRate()){
+                want_rate = native;
+                SoundFunctions::RequestSampleRate(native);
+                if(!SoundFunctions::WavPlay(path.c_str(), false, 100, &err)){
+                    error.assign(err && *err ? err : TR("読めない音のファイルです"));
+                    return false;
+                }
             }
             SoundFunctions::MusicStop();
             st->kind = Kind::Wav;
@@ -400,7 +419,7 @@ namespace {
             }
             void stop() override { MusicService::Release(); }
             const char* appName() const override { return TR("ミュージック"); }
-            uint32_t preferredSampleRate() const override { return SoundFunctions::kSampleRateHigh; }
+            uint32_t preferredSampleRate() const override { return want_rate; }
             //曲が終わって次へ進むまでの一瞬も周波数の要求を保つ(さもないと22050Hzへ切り替わって次の曲が止まる)。
             //他のアプリに取られた後も、そのアプリの曲/WAVが鳴っている間は保つ(手放すと周波数の切り替えで
             //取った側の音まで止まる。動画アプリの音が鳴らなくなっていた)。鳴り終われば手放す
@@ -725,6 +744,7 @@ bool MusicService::Resume(){
 
 bool MusicService::HasQueue(){ return st && st->queue.count() > 0; }
 bool MusicService::Active(){ return SoundActive(); }
+uint32_t MusicService::PreferredSampleRate(){ return want_rate; }
 bool MusicService::Paused(){
     if(!SoundActive()) return false;
     return st->kind == Kind::Wav ? SoundFunctions::WavPaused() : SoundFunctions::MusicPaused();
@@ -802,6 +822,7 @@ void MusicService::Test::Reset(){
     resume_saved_sec = 0xFFFFFFFF;
     sleep_mode = SleepMode::Off;
     sleep_fading = false;
+    want_rate = SoundFunctions::kSampleRateHigh;
     delete st;
     st = nullptr;
     shuffle = false;

@@ -32,7 +32,7 @@ const char* AlacDecoder::ErrorText(Error e){
         case Error::OpenFailed:  return "ファイルを開けません";
         case Error::NotAlac:     return "ALACのM4Aファイルではありません";
         case Error::Aac:         return "AACのM4Aは再生できません(ALACのみ)";
-        case Error::Unsupported: return "このALACは再生できません(2ch以下・24bit以下・48kHz以下・フレーム長4096以下のみ)";
+        case Error::Unsupported: return "このALACは再生できません(2ch以下・24bit以下・96kHz以下・フレーム長4096以下のみ)";
         case Error::NoData:      return "音のデータがありません";
     }
     return "";

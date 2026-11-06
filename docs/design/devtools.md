@@ -425,6 +425,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   **実機では未確認(起動と再生)(Todoist参照)**。
 - 次(強化の案): MP3の展開の速さの実測、曲の継ぎ目の無音を削る、ID3タグとSD上の曲の索引、ロック画面の再生操作・スリープタイマー・続きから再生、
   再生中の消費電流、イコライザー。FLACとALACの再生は2026-11-05に入った(`sound/playback.md`「FLACの再生」「ALACの再生」)。
+  88.2/96kHzの曲と48kHzの出力は2026-11-06(`sound/playback.md`「88.2/96kHzの曲」・`sound/output.md`「48kHzの出力」)。
 
 ## ナイトリービルド (`.github/workflows/nightly.yml`) (2026-10-24)
 

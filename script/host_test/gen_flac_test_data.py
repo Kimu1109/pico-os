@@ -36,6 +36,9 @@ CASES = [
      ["-c:a", "flac", "-compression_level", "12", "-frame_size", "1000", "-sample_fmt", "s16"], 16),
     ("kFlacStereo24", "48kHz ステレオ24bit 0.1秒・level 12", music_stereo(48000, 0.1),
      ["-c:a", "flac", "-compression_level", "12", "-sample_fmt", "s32", "-bits_per_raw_sample", "24"], 24),
+    # 96kHz(ハイレゾ)。ffmpegの既定は96kHzでブロック長8192(FlacDecoder::kMaxBlock を超える)なので、`flac` コマンドと同じ4096にする
+    ("kFlacStereo24At96k", "96kHz ステレオ24bit 0.1秒・ブロック長4096・level 8", music_stereo(96000, 0.1),
+     ["-c:a", "flac", "-compression_level", "8", "-frame_size", "4096", "-sample_fmt", "s32", "-bits_per_raw_sample", "24"], 24),
     ("kFlacSilence", "44.1kHz ステレオ16bit 0.2秒の無音(定数の副フレーム)",
      ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "0.2"],
      ["-c:a", "flac", "-sample_fmt", "s16"], 16),

@@ -59,16 +59,27 @@ namespace SoundFunctions {
         Active,         // 鳴らせる(I2Sが動いている)
     };
 
-    // 出力の周波数は2通りから選ぶ(sound.cfg の sample-rate、設定アプリ)。既定は22050Hz(計算が軽い)。
-    // 44100Hzはライン出力のDAC(PCM5102A等)向け。切り替えると鳴っている音は止まる(SetSampleRate())
+    // 出力の周波数は3通りから選ぶ(sound.cfg の sample-rate、設定アプリ)。既定は22050Hz(計算が軽い)。
+    // 44100/48000Hzはライン出力のDAC(PCM5102A等)向け。切り替えると鳴っている音は止まる(SetSampleRate())。
+    // 48000Hzは48kHz系の曲(48/96kHz)を44.1kHzへ変換せずに鳴らすため(ミュージックアプリは曲に合わせて選ぶ。NativeOutputRate())
     constexpr uint32_t      kSampleRateLow     = 22050;
     constexpr uint32_t      kSampleRateHigh    = 44100;
+    constexpr uint32_t      kSampleRate48k     = 48000;
     constexpr uint32_t      kDefaultSampleRate = kSampleRateLow;
+    // 出力の周波数として選べる値か(0は含まない)
+    constexpr bool IsValidSampleRate(uint32_t rate){
+        return rate == kSampleRateLow || rate == kSampleRateHigh || rate == kSampleRate48k;
+    }
+    // 元の周波数 src_rate の曲を、なるべく変換せずに(整数比で)鳴らせる出力の周波数(44100か48000)。
+    // 8000で割り切れて11025で割り切れないもの(8k/16k/24k/32k/48k/96k/192k)は48000、ほか(44.1k/88.2k/22.05k・不明の0等)は44100
+    constexpr uint32_t NativeOutputRate(uint32_t src_rate){
+        return (src_rate != 0 && src_rate % 8000 == 0 && src_rate % 11025 != 0) ? kSampleRate48k : kSampleRateHigh;
+    }
     constexpr int           kChannels          = ChipSynth::kChannels;
     constexpr unsigned long kDetectIntervalMs  = 100;
     constexpr uint8_t       kDetectStableCount = 3;    // 100ms×3回続けて同じなら採用
     // I2Sのバッファ: 1本のワード数(1ワード=左右16bitずつの1サンプル)×8本 ≒ 23ms。周波数に比例させる
-    // (22050Hzで64ワード=2KB、44100Hzで128ワード=4KB)。2コア目が専任で流すので短くてよい
+    // (22050Hzで64ワード=2KB、44100/48000Hzで128ワード=4KB。48000Hzでは約21ms)。2コア目が専任で流すので短くてよい
     constexpr uint16_t      kBufferWordsLow    = 64;
     constexpr uint16_t      kBufferWordsHigh   = 128;
     constexpr uint8_t       kBufferCount       = 8;
@@ -125,7 +136,7 @@ namespace SoundFunctions {
     void SetVolumeFor(Route route, int volume);
     const char* VolumeConfigKey(Route route);
 
-    // 出力の周波数(kSampleRateLow / kSampleRateHigh)。周波数が変わると、鳴っている効果音・曲・WAV・GBの音は止まり、
+    // 出力の周波数(kSampleRateLow / kSampleRateHigh / kSampleRate48k)。周波数が変わると、鳴っている効果音・曲・WAV・GBの音は止まり、
     // 2コア目がI2Sを新しい周波数で開き直す。それ以外の値は false。
     //  - SampleRate():          今の出力の周波数(画面の要求があればそれ、無ければ設定)
     //  - ConfiguredSampleRate(): 利用者の設定(sound.cfgの sample-rate)

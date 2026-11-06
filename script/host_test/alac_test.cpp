@@ -98,6 +98,7 @@ static void TestBitExact(){
         {"kAlacStereo16Order", kAlacStereo16OrderFrames, kAlacStereo16OrderHash, 2, 16, 44100},
         {"kAlacMono",          kAlacMonoFrames,          kAlacMonoHash,          1, 16, 22050},
         {"kAlacStereo24",      kAlacStereo24Frames,      kAlacStereo24Hash,      2, 24, 48000},
+        {"kAlacStereo24At96k", kAlacStereo24At96kFrames, kAlacStereo24At96kHash, 2, 24, 96000},
         {"kAlacSilence",       kAlacSilenceFrames,       kAlacSilenceHash,       2, 16, 44100},
         {"kAlacNoise",         kAlacNoiseFrames,         kAlacNoiseHash,         2, 16, 44100},
         {"kAlacChirp",         kAlacChirpFrames,         kAlacChirpHash,         1, 16, 22050},
@@ -161,6 +162,56 @@ static void TestOutputs(){
         const auto all = ReadAll(dec);
         printf("       %zuフレーム %.1fHz\n", all.size(), Freq(all, 200, all.size() - 200, 44100));
         check(all.size() >= 8815 && all.size() <= 8825 && fabs(Freq(all, 200, all.size() - 200, 44100) - 1000) < 15, "フレーム数は倍・音は1kHzのまま");
+    }
+}
+
+static double RmsLane(const std::vector<int16_t>& v, size_t lanes, size_t lane, size_t from, size_t to){
+    double sum = 0;
+    for(size_t i = from; i < to; i++){ const double x = v[i * lanes + lane]; sum += x * x; }
+    return to > from ? sqrt(sum / (double)(to - from)) : 0;
+}
+
+// 96kHz(ハイレゾ)を44.1k/48kへ下げて鳴らす。数と大きさが元の周波数のまま読んだものと合う(低域通過フィルタが聞こえる帯域を削らない)
+static void TestHiRes(){
+    printf("--- 96kHzを出力の周波数へ下げる ---\n");
+    OSData::SD_usable = true;
+    Put("/hi96.m4a", "kAlacStereo24At96k");
+    std::vector<int16_t> native;
+    {
+        AlacDecoder dec;
+        dec.setStereoOutput(true);
+        dec.open("/hi96.m4a", 96000);
+        native = ReadAll(dec);
+    }
+    const size_t nf = native.size() / 2;
+    const double rms_l = RmsLane(native, 2, 0, nf / 5, nf * 4 / 5), rms_r = RmsLane(native, 2, 1, nf / 5, nf * 4 / 5);
+    const uint32_t outs[] = {44100, 48000, 22050};
+    for(uint32_t out : outs){
+        AlacDecoder dec;
+        dec.setStereoOutput(true);
+        char label[160];
+        snprintf(label, sizeof(label), "96kHzを%uHzへ下げて開ける", (unsigned)out);
+        check(dec.open("/hi96.m4a", out) && dec.outChannels() == 2 && dec.sampleRate() == 96000, label);
+        const auto all = ReadAll(dec);
+        const size_t frames = all.size() / 2;
+        const size_t want = (size_t)((uint64_t)kAlacStereo24At96kFrames * out / 96000);
+        snprintf(label, sizeof(label), "  %uHz: フレーム数 %zu / 期待 %zu", (unsigned)out, frames, want);
+        check(dec.finished() && frames + 3 >= want && frames <= want + 3, label);
+        const double l = RmsLane(all, 2, 0, frames / 5, frames * 4 / 5), r = RmsLane(all, 2, 1, frames / 5, frames * 4 / 5);
+        snprintf(label, sizeof(label), "  %uHz: 大きさは元のまま(左 %.0f/%.0f 右 %.0f/%.0f)", (unsigned)out, l, rms_l, r, rms_r);
+        check(fabs(l - rms_l) < rms_l * 0.03 && fabs(r - rms_r) < rms_r * 0.03, label);
+    }
+    {
+        //シークも元の周波数で数える(50msの位置は元の4800サンプル目)
+        AlacDecoder dec;
+        dec.setStereoOutput(true);
+        check(dec.open("/hi96.m4a", 48000) && dec.durationMs() == 100, "96kHz: 長さ100ms");
+        check(dec.seekMs(50), "96kHz: 50msへ飛べる");
+        const auto rest = ReadAll(dec);
+        const size_t frames = rest.size() / 2;
+        char label[96];
+        snprintf(label, sizeof(label), "96kHz: 飛んだ先から残り %zu フレーム(48kHzで約2400)", frames);
+        check(frames + 40 >= 2400 && frames <= 2400 + 40, label);
     }
 }
 
@@ -234,8 +285,8 @@ static void TestErrors(){
     //moov が mdat の後ろにあるファイルが途中で切れて moov が無い
     HostSd::files["/nomoov.m4a"] = base.substr(0, base.size() - 400);
     check(!dec.open("/nomoov.m4a", 22050), "moov が無ければ開けない");
-    HostSd::files["/hi.m4a"] = PatchCookie(base, -1, -1, -1, 96000);
-    check(!dec.open("/hi.m4a", 22050) && dec.error() == AlacDecoder::Error::Unsupported, "96kHz は Unsupported");
+    HostSd::files["/hi.m4a"] = PatchCookie(base, -1, -1, -1, 192000);
+    check(!dec.open("/hi.m4a", 22050) && dec.error() == AlacDecoder::Error::Unsupported, "192kHz は Unsupported");
     HostSd::files["/6ch.m4a"] = PatchCookie(base, -1, -1, 6, -1);
     check(!dec.open("/6ch.m4a", 22050) && dec.error() == AlacDecoder::Error::Unsupported, "6ch は Unsupported");
     HostSd::files["/32b.m4a"] = PatchCookie(base, -1, 32, -1, -1);
@@ -520,6 +571,7 @@ int main(){
     TestTags();
     TestBitExact();
     TestOutputs();
+    TestHiRes();
     TestSeek();
     TestLoop();
     TestErrors();

@@ -543,7 +543,7 @@ static void TestSoundFunctions(){
         Core1StepAt(now);
     }
 
-    printf("--- 出力の周波数を変える(22050 / 44100) ---\n");
+    printf("--- 出力の周波数を変える(22050 / 44100 / 48000) ---\n");
     {
         // 書かれたサンプルを集める(I2Sが送り切ったことにしながら1msずつ進める)
         auto collect = [&](size_t want){
@@ -567,7 +567,7 @@ static void TestSoundFunctions(){
         const int b0 = Out().begin_count, e0 = Out().end_count;
         Beep(1000, 2000);
         Core1StepAt(now);
-        check(!SetSampleRate(48000) && SampleRate() == kSampleRateLow, "22050/44100以外は断る");
+        check(!SetSampleRate(32000) && !SetSampleRate(96000) && !SetSampleRate(0) && SampleRate() == kSampleRateLow, "22050/44100/48000以外は断る");
         check(SetSampleRate(kSampleRateHigh) && SampleRate() == kSampleRateHigh, "44100Hzへ切り替える");
         Core1StepAt(now);
         check(Out().end_count == e0 + 1 && Out().begin_count == b0 + 1, "I2Sを開き直す");
@@ -589,6 +589,18 @@ static void TestSoundFunctions(){
         collect(kSampleRateHigh / 10);
         check(!IsPlaying(), "100msを過ぎたら終わる(44100Hzで数えている)");
 
+        //48000Hz(48kHz系の曲を変換せずに鳴らす)。バッファは44100Hzと同じ大きさ(約21ms)
+        check(SetSampleRate(kSampleRate48k) && SampleRate() == kSampleRate48k, "48000Hzへ切り替える");
+        Core1StepAt(now);
+        check(Out().running && Out().sample_rate == (long)kSampleRate48k && Out().capacity == (size_t)kBufferWordsHigh * kBufferCount,
+              "48000Hz・大きいバッファで開き直す");
+        Beep(480, 1000);
+        auto k48 = collect(kSampleRate48k);
+        printf("       48000Hz: 0.5秒の周期 %d\n", rising(k48, 0, kSampleRate48k / 2));
+        check(std::abs(rising(k48, 0, kSampleRate48k / 2) - 240) <= 2, "48000Hzで480Hz");
+        StopAll();
+        Core1StepAt(now);
+
         check(SetSampleRate(kSampleRateLow), "22050Hzへ戻す");
         Core1StepAt(now);
         check(Out().sample_rate == (long)kSampleRateLow && Out().capacity == (size_t)kBufferWordsLow * kBufferCount, "22050Hz・小さいバッファで開き直す");
@@ -599,7 +611,8 @@ static void TestSoundFunctions(){
         Core1StepAt(now);
 
         //画面の要求(RequestSampleRate)は設定より優先し、0で取り下げると設定へ戻る
-        check(!RequestSampleRate(48000) && SampleRate() == kSampleRateLow, "要求も22050/44100(か0)以外は断る");
+        check(!RequestSampleRate(32000) && SampleRate() == kSampleRateLow, "要求も22050/44100/48000(か0)以外は断る");
+        check(RequestSampleRate(kSampleRate48k) && SampleRate() == kSampleRate48k, "画面の要求で48000Hzへ");
         check(RequestSampleRate(kSampleRateHigh) && SampleRate() == kSampleRateHigh, "画面の要求で44100Hzへ");
         check(ConfiguredSampleRate() == kSampleRateLow, "設定の値は変わらない");
         Core1StepAt(now);
@@ -623,11 +636,27 @@ static void TestSoundFunctions(){
         HostSd::files["/sys/sound.cfg"] = "volume = 30\nsample-rate = 48000\n";
         SetupAt(now);
         Core1StepAt(now);
+        check(SampleRate() == kSampleRate48k && Out().sample_rate == (long)kSampleRate48k, "sound.cfgのsample-rate = 48000");
+        HostSd::files["/sys/sound.cfg"] = "volume = 30\nsample-rate = 96000\n";
+        SetupAt(now);
+        Core1StepAt(now);
         check(SampleRate() == kSampleRateLow && Out().sample_rate == (long)kSampleRateLow, "読めない値は既定(22050Hz)");
         HostSd::files["/sys/sound.cfg"] = "# テスト\noutput = off\nvolume = 30\n";
         SetupAt(now);
         SetOutput(Output::Auto);
         Core1StepAt(now);
+    }
+
+    printf("--- 曲の周波数に合う出力(NativeOutputRate) ---\n");
+    {
+        static_assert(NativeOutputRate(44100) == kSampleRateHigh && NativeOutputRate(88200) == kSampleRateHigh
+                      && NativeOutputRate(22050) == kSampleRateHigh && NativeOutputRate(11025) == kSampleRateHigh
+                      && NativeOutputRate(176400) == kSampleRateHigh, "44.1kHz系は44100");
+        static_assert(NativeOutputRate(48000) == kSampleRate48k && NativeOutputRate(96000) == kSampleRate48k
+                      && NativeOutputRate(32000) == kSampleRate48k && NativeOutputRate(16000) == kSampleRate48k
+                      && NativeOutputRate(192000) == kSampleRate48k && NativeOutputRate(8000) == kSampleRate48k, "48kHz系は48000");
+        static_assert(NativeOutputRate(0) == kSampleRateHigh && NativeOutputRate(12345) == kSampleRateHigh, "不明は44100");
+        check(true, "44.1kHz系は44100・48kHz系は48000・不明は44100(static_assert)");
     }
 
     printf("--- I2Sを開始できなかったとき ---\n");

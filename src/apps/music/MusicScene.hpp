@@ -51,8 +51,8 @@ class MusicScene : public Scene {
         void onExit() override;
         void onUpdate() override;
         bool onKey(const KeyInputFunctions::Event& ev) override;
-        // 曲(とくにWAV)を聴く画面なので、設定に関わらず44100Hzで鳴らす(44.1kHzのWAVを間引かない)
-        uint32_t preferredSampleRate() const override { return SoundFunctions::kSampleRateHigh; }
+        // 曲を聴く画面なので、設定に関わらず曲に合う周波数(44100か48000Hz)で鳴らす(曲を間引かない)
+        uint32_t preferredSampleRate() const override { return MusicService::PreferredSampleRate(); }
 
     private:
         using Track = MusicService::Track;

@@ -45,7 +45,7 @@ const char* FlacDecoder::ErrorText(Error e){
         case Error::NoSd:        return "SDカードがありません";
         case Error::OpenFailed:  return "ファイルを開けません";
         case Error::NotFlac:     return "FLACファイルではありません";
-        case Error::Unsupported: return "このFLACは再生できません(2ch以下・24bit以下・48kHz以下・ブロック長4608以下のみ)";
+        case Error::Unsupported: return "このFLACは再生できません(2ch以下・24bit以下・96kHz以下・ブロック長4608以下のみ)";
         case Error::NoData:      return "音のデータがありません";
     }
     return "";

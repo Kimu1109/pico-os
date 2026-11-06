@@ -17,7 +17,8 @@ class BackgroundService;
 //   [停止](バックグラウンドの一覧)か Release() で返す。止めただけ(Stop())では返さない(「続きから」のため)
 // - 他のアプリが曲/WAVを鳴らした・出力の周波数が切り替わったら(SoundFunctions::PlaybackSerial() が変わったら)、
 //   自分の曲は差し替えられたので止まった扱いにする(次の曲へは進まない)
-// - 鳴っている間は 44100Hz を望む(画面が何も望まなければ main.cpp がこちらを使う)
+// - 鳴っている間は曲に合う周波数(44.1kHz系の曲は44100Hz、48kHz系(48/96kHz)は48000Hz)を望む
+//   (PreferredSampleRate()。画面が何も望まなければ main.cpp がこちらを使う)
 // - SD・描画には触るが、2コア目からは呼ばないこと
 namespace MusicService {
     static constexpr int kMaxTracks = PlayQueue::kMax;
@@ -77,6 +78,9 @@ namespace MusicService {
     // ---- 読む ----
     bool HasQueue();                // 再生の順番がある
     bool Active();                  // 鳴っている(一時停止を含む)
+    // 望む出力の周波数(44100か48000)。最後に鳴らしたWAV/MP3/FLAC/ALACの曲の系統で決まり、まだ鳴らしていなければ44100。
+    // ミュージックアプリの画面(Scene::preferredSampleRate())とバックグラウンドの仕事が返す
+    uint32_t PreferredSampleRate();
     bool Paused();
     bool Finished();                // 最後まで鳴らし終えた(リピートしない)
     Kind PlayingKind();

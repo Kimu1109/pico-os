@@ -103,7 +103,7 @@ static_assert(SCREEN_WIDTH % 2 == 0, "4bppのframeを1行バイト単位で扱�
 
 // --- 音声入力: I2Sマイク(SPH0645)。出力とは別のI2S(別のPIOのステートマシン)で受ける ---
 // 出力とBCLK/LRCLKを共有しないのは、SPH0645がBCLK 2.048〜4.096MHz・32bitスロットを要るため
-// (出力は16bitスロットの22050/44100Hzで、範囲に入らない)。LRCLKはBCLK+1に固定(arduino-picoの決まり)。
+// (出力は16bitスロットの22050/44100/48000Hzで、範囲に入らない)。LRCLKはBCLK+1に固定(arduino-picoの決まり)。
 // マイクのSELはGND(左チャンネル)、3VとGNDは本体の3V3/GNDへ
 #define MIC_I2S_BCLK    26
 #define MIC_I2S_LRCLK   27  // = MIC_I2S_BCLK + 1(ソフトからは指定しない。配線の控え)

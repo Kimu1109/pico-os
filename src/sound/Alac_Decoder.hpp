@@ -28,7 +28,7 @@ public:
 
     static constexpr size_t kBufferBytes = 4096;
     static constexpr uint32_t kMaxFrame = 4096;         // 1フレームのサンプル数の上限
-    static constexpr uint32_t kMaxRate = 48000;         // これより高い周波数は断る(FLACと同じ。実機の速さを測ってから上げる)
+    static constexpr uint32_t kMaxRate = 96000;         // これより高い周波数は断る(FLACと同じ。FlacDecoder::kMaxRate)
     static constexpr uint32_t kSizeWindow = 128;        // stsz を一度に読む個数
 
     AlacDecoder() = default;

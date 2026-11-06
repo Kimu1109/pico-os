@@ -43,9 +43,11 @@ namespace {
     constexpr const char*   kSleepPresetLabels[] = { TR_NOOP("しない"), TR_NOOP("1分"), TR_NOOP("2分"), TR_NOOP("5分"), TR_NOOP("10分"), TR_NOOP("30分") };
     constexpr int kSleepPresetCount = sizeof(kSleepPresetsSec) / sizeof(kSleepPresetsSec[0]);
 
-    // 音の周波数(sound.cfgの sample-rate)。44.1kHzはライン出力のDAC(PCM5102A等)向けで、2コア目の計算が倍になる
-    constexpr uint32_t    kRatePresets[]      = { SoundFunctions::kSampleRateLow, SoundFunctions::kSampleRateHigh };
-    constexpr const char* kRatePresetLabels[] = { "22kHz", "44.1kHz" };
+    // 音の周波数(sound.cfgの sample-rate)。44.1/48kHzはライン出力のDAC(PCM5102A等)向けで、2コア目の計算が倍になる
+    // (48kHzは48kHz系の曲を変換せずに鳴らす。ミュージックアプリは設定に関わらず曲に合わせて選ぶ)
+    constexpr uint32_t    kRatePresets[]      = { SoundFunctions::kSampleRateLow, SoundFunctions::kSampleRateHigh,
+                                                  SoundFunctions::kSampleRate48k };
+    constexpr const char* kRatePresetLabels[] = { "22kHz", "44.1kHz", "48kHz" };
     constexpr int kRatePresetCount = sizeof(kRatePresets) / sizeof(kRatePresets[0]);
 
     // 出力先(sound.cfgの route)
@@ -875,7 +877,10 @@ void SettingsScene::buildLateRows(const Layout& lay){
         this->rate_title->setFontSize(FontFn::Small);
         this->rate_dropdown = new DropdownMenu(dropdown_x, rowY(1), kDropdownW);
         for(int i = 0; i < kRatePresetCount; i++) this->rate_dropdown->add(kRatePresetLabels[i]);
-        this->rate_selected_index = (SoundFunctions::ConfiguredSampleRate() == kRatePresets[1]) ? 1 : 0;
+        this->rate_selected_index = 0;
+        for(int i = 0; i < kRatePresetCount; i++){
+            if(SoundFunctions::ConfiguredSampleRate() == kRatePresets[i]) this->rate_selected_index = i;
+        }
         this->rate_dropdown->setSelectedIndex(this->rate_selected_index);
         addToTab(Tab::Sound, this->rate_title);
         addToTab(Tab::Sound, this->rate_dropdown);

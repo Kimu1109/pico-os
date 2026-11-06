@@ -395,6 +395,7 @@
   - [x] 版の旗をPCビルドと1つのファイルで共有する(`cmake -DPICOOS_VARIANT=<env>`)
 - [x] script/ を使う人・時で分ける(`pio/` `codegen/` `check/` `release/` `tools/`)
   - [x] 生成物が材料と合っているかの検査をそろえる(`picoos check`。アイコン・JISの表・TLSの一覧も)
+  - [x] 参照の無かった `secondary-icons/` を、アプリのアイコンの元絵として `assets/app_icons/` へ移す
 - [x] 液晶・SDの配線と設定を内蔵フラッシュに置く(USBシリアルの `hwcfg`・失敗したら既定へ戻す)
 - [x] 常用漢字の外の漢字をSDの追加フォントへ移す(設定の「他」からWebで取る。画面の文字は常用漢字までの決まり)
   - [ ] 実機での確認(SDから字を読む速さ・取得)

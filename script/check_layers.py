@@ -39,7 +39,8 @@ LAYERS = {
     "consts.hpp": "base",
     "OS_Data.hpp": "base",
     "OS_Data.cpp": "base",
-    "config": "base",
+    "config": "base",   # ビルド時に -D で選ぶ物の既定値だけ
+    "board": "base",    # 液晶の組み立て(LGFX_Config)と配線の値の型(HwConfig)。OS_Data.hpp が読むので base
     "util": "base",
     # 1 system: UI もハードの具体も知らない OS の土台(ログ・設定・時刻・入力の列・通知の中身…)
     "system": "system",

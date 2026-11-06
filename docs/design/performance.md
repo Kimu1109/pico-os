@@ -343,7 +343,7 @@ OS側の洗い出しの結果、次を直した。実機ファームの静的RAM
   **実機では未計測**(Luaの描画・4bpp→RGB565の変換のCPU時間はPCでは見えない)。
 - **⚠ `TFT_MAX_SPEED`(60MHz)は実際には37.5MHzで動いている**: LovyanGFX(rp2040)は`clk_peri`(150MHz)を2で割った75MHzを
   さらに整数(1+SCR)で割るので、選べるのは75 / 37.5 / 25MHz…だけで、**37.5〜74.99MHzを指定するとすべて37.5MHz**になる
-  (`FreqToClockDiv()`。`pc/compat/config/Panel_sdl_SpiWait.hpp`も同じ計算)。全画面1枚の転送は37.5MHzで約33ms(30fps止まり)、
+  (`FreqToClockDiv()`。`pc/compat/board/Panel_sdl_SpiWait.hpp`も同じ計算)。全画面1枚の転送は37.5MHzで約33ms(30fps止まり)、
   75MHz(`80000000`等、75MHz以上を指定)なら約16ms。タッチのノイズの調査で下げたが、ノイズはクロックに依らなかった
   (上の「タッチ座標のノイズ抑制」)。上げるかは実機の安定性次第。
 

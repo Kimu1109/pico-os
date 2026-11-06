@@ -122,7 +122,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
 
 - **ビルド時に決める**(動いている最中には変えない)。frame・行ハッシュの配列・`contentRect()` 等が `constexpr` のままで済み、
   RAMの見積もりもビルドごとに固定できるため。実機は env(`rpipico2w_320x480` が例)、PCは `cmake -DPICOOS_SCREEN_W/H`(`pc/README.md`)。
-- 液晶の種類は `PICO_PANEL_ST7796` / `ILI9488` / `ST7789`(既定はILI9341。`config/LGFX_Config.hpp`)。`setRotation()` はしていないので、
+- 液晶の種類は `PICO_PANEL_ST7796` / `ILI9488` / `ST7789`(既定はILI9341。`board/LGFX_Config.hpp`)。`setRotation()` はしていないので、
   `SCREEN_WIDTH/HEIGHT` はパネルの縦向きの大きさに合わせる。タッチは XPT2046 のまま(補正の既定は画面の大きさから作る)。
 - 決まり: **幅は偶数・幅も高さも240以上**(`static_assert`)。文字・ボタンの大きさは変わらないので、広い画面は余白が増え、狭い画面は入りきらない。
   配置は `Scene::contentRect()` からの相対で書き、240/320を直書きしない。幅240前提で作った部品(ゲームボーイの画面とパッド)は真ん中に置く。

@@ -53,7 +53,7 @@
 
 #include "consts.hpp"
 #include "OS_Data.hpp"
-#include <config/LGFX_Config_PC.hpp>         // PICOOS_PC_SCALE(画面の拡大率)
+#include <board/LGFX_Config_PC.hpp>         // PICOOS_PC_SCALE(画面の拡大率)
 #include <hal/Touch_Functions_PC.hpp>  // PicoOsTouchScript
 #include <PicoPcClock.h>                     // 設定アプリで合わせた時計のずれ
 #include "devtools/CrashDump_Functions.hpp" // 再起動(電源メニュー)の差し込み口

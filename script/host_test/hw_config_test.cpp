@@ -1,8 +1,8 @@
-// 液晶・SDの配線と設定(config/HwConfig.hpp)を内蔵フラッシュの末尾4KBに置く仕組みのテスト。
+// 液晶・SDの配線と設定(board/HwConfig.hpp)を内蔵フラッシュの末尾4KBに置く仕組みのテスト。
 //
 // system/HwConfig_Codec(値の読み書き・検査・置く形との変換)と、hal/HwConfig_Functions の
 // Load()/Save()/フォールバックの判断/USBシリアルの "hwcfg ..." を、PCの EepromArea(メモリの中)で確かめる。
-#include "config/HwConfig.hpp"
+#include "board/HwConfig.hpp"
 #include "hal/HwConfig_Functions.hpp"
 #include "storage/Eeprom_Area.hpp"
 #include "system/HwConfig_Codec.hpp"

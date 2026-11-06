@@ -1,15 +1,15 @@
 // PCビルド用のLGFX設定。
 //
-// 実機版(src/config/LGFX_Config.hpp)はILI9341+SPIを構成するが、PCでは
+// 実機版(src/board/LGFX_Config.hpp)はILI9341+SPIを構成するが、PCでは
 // LovyanGFXが同梱しているSDLパネル(lgfx::Panel_sdl)を使う。
 // インクルードパスの先頭に pc/compat を置くことで、src/には手を入れずに差し替わる。
 #pragma once
 
 #include <LovyanGFX.hpp>
 #include <lgfx/v1/platforms/sdl/Panel_sdl.hpp>
-#include "config/Panel_sdl_SpiWait.hpp"
+#include "board/Panel_sdl_SpiWait.hpp"
 #include "consts.hpp"
-#include "config/HwConfig.hpp"
+#include "board/HwConfig.hpp"
 
 // PCの画面上での拡大率。240x320は実寸だと小さいので既定で2倍にする
 #ifndef PICOOS_PC_SCALE
@@ -38,7 +38,7 @@ public:
         setPanel(&_panel_instance);
     }
 
-    // 実機の LGFX と同じ口(config/LGFX_Config.hpp)。PCではピンも速さも無いので初期化するだけ、
+    // 実機の LGFX と同じ口(board/LGFX_Config.hpp)。PCではピンも速さも無いので初期化するだけ、
     // 液晶は必ず応答する扱い(フォールバックしない)
     bool initWith(const HwConfig&) { return init(); }
     bool probe(void) { return true; }

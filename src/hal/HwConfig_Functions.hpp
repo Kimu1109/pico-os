@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstddef>
-#include "config/HwConfig.hpp"
+#include "board/HwConfig.hpp"
 #include "system/HwConfig_Codec.hpp"
 
 // 液晶・タッチ・SDの配線と設定を内蔵フラッシュの末尾4KB(storage/Eeprom_Area)から読み、起動時の初期化へ渡す。

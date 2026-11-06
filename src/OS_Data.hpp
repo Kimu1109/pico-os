@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config/LGFX_Config.hpp"
+#include "board/LGFX_Config.hpp"
 #include <LovyanGFX.h>
 #include <SdFat.h>
 

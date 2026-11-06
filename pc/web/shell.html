@@ -5,7 +5,7 @@
   {{{ SCRIPT }}} の行がビルド時に生成JSの読み込みに置き換わる。
   その他の部分は素のHTML/CSS/JSなので、デバッグ用の道具を足したいときはここへ書く。
 
-  画面は pc/compat/config/LGFX_Config_PC.hpp の PICOOS_PC_SCALE 倍で作られるので、
+  画面は pc/compat/board/LGFX_Config_PC.hpp の PICOOS_PC_SCALE 倍で作られるので、
   canvasの実サイズはC++側が決める(ここでは触らない)。
 
   見た目はトップのページ(pc/web/landing.html)と揃える: OSのパレット16色・白地に黒の2px線・角丸なし・

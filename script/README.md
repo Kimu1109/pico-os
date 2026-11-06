@@ -10,7 +10,7 @@
 | `check/` | `check_layers.py`・`check_variants.py`・`check_generated.py`(生成物が材料と合っているか。`picoos check`) | CI と、変更のたびに自分で |
 | `release/` | `firmware_tool.py`・`build_fw_index.py`・`build_app_repo.py`・`web_shots.sh` | 配る(ファームの更新ファイル・Webの版の一覧・アプリストア・Webの画面写真) |
 | `tools/` | `generate_pimg.py`・`pimg2png.py`・`generate_pvid.py`・`midi2mml.py`・`ppm2png.py`・`reference_server.py`・`pad_serial.py`・`spotify_auth.py` | 人(アプリの作者を含む)がデータを変換する・開発中に横で動かす |
-| `assets/` | 同梱のLuaアプリの絵を作るもの | `picoos gen <名前>` |
+| `assets/` | 同梱のLuaアプリの絵を作るもの。`app_icons/` はアイコンの元絵(PNG) | `picoos gen <名前>`・`picoos pimg` |
 | `dict/` | 辞書の材料とSD用のファイルを作るもの | `picoos dict build` |
 | `host_test/` | ホストテスト(`run.sh`・`run_net.sh`・`run_mem.sh`) | CI と、変更のたびに自分で |
 | `lua_test/` | Luaアプリのテスト | `picoos lua-test` |

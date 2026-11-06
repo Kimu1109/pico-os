@@ -3,35 +3,35 @@
 
 使い方:
   # 1. 鍵を作る(1回だけ)。秘密鍵は手元のPCにだけ置く(リポジトリ・サーバに置かない)
-  python3 script/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
+  python3 script/release/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
 
   # 2a. 配布物をまるごと作る(Raspberry Pi 等へそのまま置く)
-  python3 script/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps
+  python3 script/release/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps
 
   # 2b. 署名した目録(catalog.tsv / catalog.sig / <id>/<版>/files.tsv・files.sig)だけを作り、
   #     中身は後で写す(assemble)。秘密鍵の無い場所(CI等)で組み立てたいとき。
   #     (2026-10-26まで pico-os の store/ と Pages がこれで配っていた。今の配布元は投稿用リポジトリ)
-  python3 script/build_app_repo.py sign --key ~/.pico-os/app_repo.key --out index
-  python3 script/build_app_repo.py assemble --index index --out _site/apps
+  python3 script/release/build_app_repo.py sign --key ~/.pico-os/app_repo.key --out index
+  python3 script/release/build_app_repo.py assemble --index index --out _site/apps
 
   # 署名を確かめる
-  python3 script/build_app_repo.py verify --dir /tmp/apps [--pubkey 16進64桁]
+  python3 script/release/build_app_repo.py verify --dir /tmp/apps [--pubkey 16進64桁]
 
   # 3. Webのページ(index.html)と、SDに置けば入るパッケージ(<id>-<版>.papp)を配布物に足す
-  python3 script/build_app_repo.py site --dir _site/apps
+  python3 script/release/build_app_repo.py site --dir _site/apps
 
   # 手元のアプリを1つだけパッケージにする(ストアを通さずに配る。作者の鍵で署名する)
-  python3 script/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス --out tetris.papp
+  python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス --out tetris.papp
 
   # 投稿用リポジトリ(kimu1109/pico-os-apps。今のストアの配布元)。作者が手元で apps/<id>/ に署名し、PRを出す。
   # --src を付けると pico-os の pc/sdcard から app/ へ写してから署名する(公式アプリの更新)
-  python3 script/build_app_repo.py author-sign --key ~/.pico-os/author.key --app apps/tetris \
+  python3 script/release/build_app_repo.py author-sign --key ~/.pico-os/author.key --app apps/tetris \
       [--src ../pico-os/pc/sdcard/lua/apps/テトリス] [--owner <GitHubのアカウント> --dir テトリス(初めてのとき)]
   # 公式アプリのうち版が上がったものを、まとめて写して署名する(pico-os-apps のディレクトリで。1つのPRにする)
-  python3 script/build_app_repo.py sync-official --key ~/.pico-os/app_repo.key --src ../pico-os/pc/sdcard/lua/apps [--dry-run]
+  python3 script/release/build_app_repo.py sync-official --key ~/.pico-os/app_repo.key --src ../pico-os/pc/sdcard/lua/apps [--dry-run]
   # 同じリポジトリのCIが使う: PRの検査と自動マージの判定 / 配布物を作ってカタログ鍵で署名
-  python3 -I script/build_app_repo.py registry-check --registry pr --base main --user <login> --luac luac5.4 --out result.json
-  python3 script/build_app_repo.py registry-build --registry . --key catalog.key --out _site --prev-catalog prev.tsv
+  python3 -I script/release/build_app_repo.py registry-check --registry pr --base main --user <login> --luac luac5.4 --out result.json
+  python3 script/release/build_app_repo.py registry-build --registry . --key catalog.key --out _site --prev-catalog prev.tsv
   # このスクリプトの正本は pico-os。pico-os-apps の script/ はその写し(直したら写し直す)
 
 署名は2種類(docs/APP_REPO.md 形式2): catalog.sig はカタログ鍵(--key)、各アプリの files.sig は
@@ -83,7 +83,9 @@ ID_RE = re.compile(r"^[a-z0-9_-]{1,23}$")
 VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
 SEG_RE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*$")
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+# pico-os では script/release/ に、投稿用リポジトリ(pico-os-apps)の写しでは script/ 直下に置くので、どちらでもリポジトリの根を指すようにする
+_HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(_HERE, "..", "..") if os.path.basename(_HERE) == "release" else os.path.join(_HERE, ".."))
 DEFAULT_APPS_DIR = os.path.join(ROOT, "pc", "sdcard", "lua", "apps")
 
 
@@ -1079,9 +1081,13 @@ def cmd_package(args):
 
 # ---- アイコン(.pimg → PNG)。Pillow を使わずに書く(CIのPythonに無くてよいように) ----
 def _pimg_palette():
-    """script/generate_pimg.py の PALETTE を読む(import すると Pillow が要るので、式だけ取り出す)"""
+    """script/tools/generate_pimg.py の PALETTE を読む(import すると Pillow が要るので、式だけ取り出す)"""
     import ast
-    src = open(os.path.join(ROOT, "script", "generate_pimg.py"), encoding="utf-8").read()
+    # pico-os では script/tools/、投稿用リポジトリ(pico-os-apps)の写しでは script/ 直下にある
+    for cand in (os.path.join(ROOT, "script", "tools", "generate_pimg.py"), os.path.join(ROOT, "script", "generate_pimg.py")):
+        if os.path.exists(cand):
+            break
+    src = open(cand, encoding="utf-8").read()
     for node in ast.parse(src).body:
         if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "PALETTE" for t in node.targets):
             return ast.literal_eval(node.value)

@@ -175,7 +175,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 - 検証: PCビルドで`hw info/mem/help`、`hw trap/buswrite/hang`→次の起動で`/crash/crash_NNNN.txt`と通知、「実機チェック」の「全部」(HTTPSはこの環境では
   出口のゲートウェイで証明書が差し替わるため失敗するのが正しい)、`PICOOS_VERIFY_LCD=1`で食い違い0、ホストテスト全部。**実機では未確認**(実機ビルドもこの環境ではできない)。
 
-## ファームの更新 (`src/apps/firmware/` / `Firmware_Functions` / `FirmwareScene` / `script/firmware_tool.py`) (2026-10-16)
+## ファームの更新 (`src/apps/firmware/` / `Firmware_Functions` / `FirmwareScene` / `script/release/firmware_tool.py`) (2026-10-16)
 
 使い方・形式・TCPの取り決めは`docs/FIRMWARE_UPDATE.md`。利用者と決めた方針(2026-10-16): arduino-pico標準のOTA(PicoOTA+内蔵フラッシュのLittleFS、自動ロールバック無し=壊れたらBOOTSEL)/
 LittleFSは1664KB(2026-10-31に1728KBから縮めた) / 今回の経路はSDとPCからのWi-Fi(Webから取るのは後。下の「Webから取る」で2026-10-29に足した) / 独自の見出し+gzip / **常に署名必須、鍵はファーム専用で焼き込みの鍵だけを信頼**(SDの鍵は読まない。
@@ -191,7 +191,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   電池(給電されていなくて30%未満なら断る)、中身を書き始める前に音を止める(LittleFSの書き込みは`idleOtherCore()`で2コア目を止めるため)、Doneから1.5秒後に`PowerMenuFunctions::RequestReboot()`
   (電源メニューの再起動と同じ後片付け)。`FwUpdate`は更新の間だけ`new`(約4.6KB)。起動時の`Setup()`(通知の後)が控えを読み、今の版と同じなら「更新しました」、違えば「更新できませんでした」を通知して置き場を消す。
   毎回LittleFSをマウントする(初めては自動でフォーマット。置き場は更新専用なので消えて困るものは無い)。
-- **版(`Fw_Version`)**: `script/pio_firmware.py`(pre)が`$BUILD_DIR/pico_build_info/Pico_Build_Info.h`へ通し番号・短いハッシュ(手元の変更で`+`)・HEADのコミットの日時(UTC)を、変わったときだけ書く
+- **版(`Fw_Version`)**: `script/pio/pio_firmware.py`(pre)が`$BUILD_DIR/pico_build_info/Pico_Build_Info.h`へ通し番号・短いハッシュ(手元の変更で`+`)・HEADのコミットの日時(UTC)を、変わったときだけ書く
   (`Fw_Version.cpp`だけが`__has_include`で読むので、毎回の全ビルドにならない)。同じ値を`PICOOS-BUILD;...`の文字列としてファームに置き、`firmware_tool.py`がそれを探して見出しへ写す。
   PC/Web/ホストテストは`#0 (dev)`。**CIの`firmware-build.yml`は`fetch-depth: 0`**(浅いクローンだと通し番号が小さくなる)にし、署名なしの`firmware.pfw`も成果物に入れた。
 - **画面(`FirmwareScene`、ランチャの「本体の更新」。ファイルアプリで`.pfw`を開くと`FileViewerScene`から置き換わる)**: 今の版・鍵の登録の有無・状態・進み具合、[SDから選ぶ][受け取る][戻る/やめる]。
@@ -207,7 +207,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   PCビルドの`--tap`/`--shot`(SDから選ぶ→確認→書く→再起動→通知、`firmware_tool.py push`→本体で確認→DONE→再起動)。
   **実機でSDからもWi-Fiからも更新できることを利用者が確認した(2026-10-16)**。書き込みの時間はWi-Fi・SDとも30秒弱で、更新後の通知もどちらも届いた(2026-10-23)。壊れたファームはBOOTSELで戻す。
 
-### Webから取る (`apps/firmware/Fw_Index` / `Fw_Download` / `script/build_fw_index.py` / `firmware-stable.yml`) (2026-10-29)
+### Webから取る (`apps/firmware/Fw_Index` / `Fw_Download` / `script/release/build_fw_index.py` / `firmware-stable.yml`) (2026-10-29)
 
 使い方・一覧の形式・CIの流れは`docs/FIRMWARE_UPDATE.md`「Webから取る」。利用者と決めた方針(2026-10-29): **署名の鍵はSecretsに置いてCIで署名**(上の「鍵」) /
 一覧に載せるのは新しい安定版5本+ナイトリー3本 / 本体と同じ構成(env)の版だけを出す / 新しい版の通知はしない(「本体の更新」を開いたときだけ取る) / 書き込みの準備ができたら落としたファイルは消す。
@@ -221,7 +221,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - **HTTPを`FwUpdate`へ直接流さず、一度SDの`/firmware/`へ落とす**。確認のダイアログで止まっている間に受信が止まりサーバに切られるのと、電池・署名・置き場の検査と確認を
   `StartFromSd()`のまま使えるため。代わりにSDへの書き込みと読み直しの分だけ長くなる。`.part`へ書き、大きさとSHA-256が一覧と合ったら名前を変える。
   置き場へ写し終えた(`FwUpdate::Done`)ら落としたファイルを消し、失敗・取り消しでは残す([SDから]で選び直せる)。
-- **構成(env)**: `script/pio_firmware.py`が`PIOENV`を`PICOOS_BUILD_ENV`として書き、`FwVersion::Env()`と版の印(`env=`)に入る。`build_fw_index.py`は`.pfw`の中身をgunzipして印を読む
+- **構成(env)**: `script/pio/pio_firmware.py`が`PIOENV`を`PICOOS_BUILD_ENV`として書き、`FwVersion::Env()`と版の印(`env=`)に入る。`build_fw_index.py`は`.pfw`の中身をgunzipして印を読む
   (見出しの形式は変えない)。印に`env=`の無い古いファームは`rpipico2w`(ナイトリーは既定の構成しか配っていない)。PC/Webビルドは`rpipico2w`扱い(`PICOOS_FW_ENV`)。
 - **後から署名**: `firmware_tool.py sign`は見出しの印を立てて署名を付けるだけ(見出しに中身のSHA-256があるので、作り直さずに付けられる)。`--expect-keys Fw_Keys.hpp`で
   鍵が焼き込みの公開鍵のどれとも違えば断る(本体が受け付けないものを配らないように)。ナイトリーはSecretsに鍵が無ければ署名なしで載せて警告、安定版は鍵が無ければ止める。
@@ -261,7 +261,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
     崩れ、`pio project config` に旗が見えなくなるのでやめた。ini を正にして、CMake 側に決まりの範囲だけ読む小さな読み取り器を置いた。
   - 読み取り器が読むのは「`extends = env:rpipico2w`、`build_flags` は `${env:rpipico2w.build_flags}`・`${opt_xxx.flags}`・`-DNAME[=VAL]`、
     部品の `flags` は `-DNAME[=VAL]` だけ、コメントは行頭の `;`」。外れた書き方は黙って読み違えずに止める。
-  - **`script/check_variants.py`** が `pio project config` の解釈と全 env で照らし合わせる(CIの `firmware-build.yml` で回る)。
+  - **`script/check/check_variants.py`** が `pio project config` の解釈と全 env で照らし合わせる(CIの `firmware-build.yml` で回る)。
   - PCで効かない旗(`PICO_PANEL_*`・`PICO_HOT_IN_RAM`・`PICO_LUA_VM_IN_RAM`)もそのまま渡す(SDLのパネル・`Ram_Func.hpp` がPCでは無視する)。
   - 確かめたこと: 既定・`PICOOS_MUSIC_BUILD=ON`・個別の OFF・英語+320x480 で、変更の前後の `-D` が一致。音楽の版をPCでビルドして
     ランチャがOSの機能+ミュージック+ストアになることを撮って確かめた。
@@ -270,6 +270,22 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   (`Hardware_Config`・`App_Config`・`Lang_Config`・`Ram_Func`)を置き、液晶の組み立て(`LGFX_Config.hpp`。PCは `pc/compat/board/`)と
   配線の値の型(`HwConfig.hpp`。実行時に内蔵フラッシュの値で上書きされる)を `board/` へ移した。`OS_Data.hpp` が `LGFX_Config.hpp` を、
   それが `HwConfig.hpp` を読むので、`board/` も層0(base)にした(`check_layers.py`)。
+
+## script/ の置き場所 (`script/README.md`) (2026-11-06)
+
+利用者の要望: ビルドの構成に続いて、直下に22本が横並びだった `script/` も整理したい。
+
+- **誰が・いつ使うかで分けた**: `pio/`(PlatformIO が読む)・`codegen/`(`src/` の生成物を作る。アイコンの材料 `tabler_icons/`・`custom_icons/` と `font/` も)・
+  `check/`(CIの検査)・`release/`(配る)・`tools/`(人が変換する・開発中に横で動かす)。`assets/`・`dict/`・`host_test/`・`lua_test/` は前からまとまっていたので動かさない。
+  一覧は `script/README.md`。新しいスクリプトは直下に置かない。
+- **ファイル名は変えなかった**(`gen_`/`generate_` の不揃いも残した。名前で覚えて使われているため)。`picoos` のサブコマンドも同じまま。
+- 自分の場所から根を求めていた12本は1段深くした。`generate_icons.py` は作業ディレクトリ(`script/`)に頼っていたのを、自分の場所から材料を読むようにした。
+- **`build_app_repo.py` は投稿用リポジトリ(`kimu1109/pico-os-apps`)へ `script/` 直下として写して使う**ので、根とパレット(`generate_pimg.py`)の場所は
+  `release/` にあるときと直下にあるときの両方で引けるようにした(lua-apps.md「アプリストアの投稿」)。
+- 同梱のLuaアプリの `lang/en.lua` の1行目(`i18n.py lua` が書く案内)も新しいパスになった。中身(訳)は同じだが、版を上げずに中身が変わったので、
+  次の `sync-official` では「版を上げずに中身が変わった」の警告が出る(公開には影響しない)。
+- 確かめたこと: ホストテスト全部・`run_net.sh`・PCビルド・`web_shots.sh`・各 `--check`・`picoos icons`(別の作業ディレクトリから。`icons_data.h` が同じ)・
+  `generate_jis_table.py`(出力は1行目のパスだけ変わる)。
 
 ## ビルド時に選ぶハードウェア機能 (`src/config/Hardware_Config.hpp` の `PICO_HW_*`) (2026-10-25)
 
@@ -291,7 +307,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - **音声もマイクも外すと2コア目を起こさない**: `main.cpp` の `setup1`/`loop1` を定義しない(`PICO_HW_CORE1`)。arduino-picoはどちらも無ければ2コア目を起動せず、
   そのスタック(`core1_separate_stack` でヒープから取る8KB)も確保しない。PCビルドは2コア目の代わりのスレッドを止める。
 - **`#if PICO_HW_*` を読むファイルは `config/Hardware_Config.hpp` を自分で include する**(未定義のマクロは `#if` で黙って0になる)。
-  `script/check_layers.py` が `PICO_HW_` / `HardwareConfig::` を含むのに include していないファイルを報告する。画面の組み立ては `if constexpr (HardwareConfig::kSound)`。
+  `script/check/check_layers.py` が `PICO_HW_` / `HardwareConfig::` を含むのに include していないファイルを報告する。画面の組み立ては `if constexpr (HardwareConfig::kSound)`。
 - 大きさ(実機ファーム、2026-10-25): 全部外すと **静的RAM −5.3KB(131,288→125,948B)・フラッシュ −55.8KB(2,220,036→2,164,236B)**。
   ほかに、使い始めに取っていたヒープ(I2Sのバッファ2〜4KB・マイクのDMA 16KB・録音の列32KB・WAVの列等)と2コア目のスタック8KBが要らなくなる。
   既定の版の大きさは変わらない。
@@ -353,7 +369,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   - アプリの `.cpp` 全体を囲む形(ハードウェア機能の本物の実装と同じ)にしなかったのは、アプリどうしが下回りを使い合うため
     (ホームの予定→`Ical`、読書→`Mail_Charset`、ストア/ファーム→`Ssh_Sha256`、メモ→テキストエディタ、ゲームボーイ/ファーム→`MusicService::Stop` 等)。
     囲むと組み合わせごとにリンクが壊れる。入口だけなら、残った使い手が要る分だけ残る(メモを残してテキストを外すと、タイルと「編集」だけが消える)。
-- **`#if PICO_APP_*` を読むファイルは `config/App_Config.hpp` を自分で include する**(`script/check_layers.py` がハードウェア機能と同じく見張る)。
+- **`#if PICO_APP_*` を読むファイルは `config/App_Config.hpp` を自分で include する**(`script/check/check_layers.py` がハードウェア機能と同じく見張る)。
 - 大きさ(実機ファーム、2026-10-25): 選べるものを全部外すと **静的RAM −3.4KB(131,288→127,772B)・フラッシュ −353.5KB(2,220,044→1,857,036B)**。
   既定の版の大きさは変わらない。入口を外しただけでリンカが中身を捨てていることの裏付けにもなっている。
 - 検証: ホストテスト、PCビルドで全部外した版の起動とアプリ数(39→24。ランチャにはOSの6つと動作確認用のLuaアプリだけ)、

@@ -124,7 +124,7 @@ end
 
 ## 曲を鳴らす(pico-os MML)
 
-曲は **MML(テキスト)** で書き、`pico.music_play()` で鳴らします。書き方は [`docs/MUSIC_FORMAT.md`](https://github.com/Kimu1109/pico-os/blob/main/docs/MUSIC_FORMAT.md) を見てください。MIDIファイルは、リポジトリの `script/midi2mml.py`(`python3 script/midi2mml.py song.mid -o song.mml`)でMMLの下書きに変換できます。曲も画面とは別の処理で鳴るので、`loop()` が重くてもテンポは揺れません。
+曲は **MML(テキスト)** で書き、`pico.music_play()` で鳴らします。書き方は [`docs/MUSIC_FORMAT.md`](https://github.com/Kimu1109/pico-os/blob/main/docs/MUSIC_FORMAT.md) を見てください。MIDIファイルは、リポジトリの `script/tools/midi2mml.py`(`python3 script/tools/midi2mml.py song.mid -o song.mml`)でMMLの下書きに変換できます。曲も画面とは別の処理で鳴るので、`loop()` が重くてもテンポは揺れません。
 
 ```
 ; demo.mml

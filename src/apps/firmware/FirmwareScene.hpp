@@ -18,7 +18,7 @@
 //
 //   [Webから]  … Webの版の一覧(GitHub Pages)から選び、SDの /firmware/ へ落としてからSDと同じ流れで書く
 //   [SDから]   … /firmware/ から .pfw を選ぶ
-//   [受け取る] … PCからの更新(script/firmware_tool.py push / pio run -t fwpush)を待ち受ける
+//   [受け取る] … PCからの更新(script/release/firmware_tool.py push / pio run -t fwpush)を待ち受ける
 //
 // 更新の途中・取得中・待ち受け中は別の画面へ移らない(keepForeground)。画面を離れるとやめる
 // (準備ができて再起動を待っているときだけはそのまま)。

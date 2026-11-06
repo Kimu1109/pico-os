@@ -263,7 +263,7 @@ static void TestResponse(){
     check(!AppendListLine(list, std::string(40, 'x').c_str(), false, 1) && list == "a.txt\tf\t12\ndir\td\t0\n",
           "AppendListLine: 入りきらなければ何も足さない");
 
-    // ページの中身の決まり(innerHTML を使わない・キーの見出しを送る)は script/gen_file_share_page.py が確かめる
+    // ページの中身の決まり(innerHTML を使わない・キーの見出しを送る)は script/codegen/gen_file_share_page.py が確かめる
     check(PageGzLength() > 18 && kPageGz[0] == 0x1f && kPageGz[1] == 0x8b && kPageGz[2] == 8, "ページ: gzip(deflate)で持つ");
 }
 

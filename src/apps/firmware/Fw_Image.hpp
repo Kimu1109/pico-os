@@ -12,7 +12,7 @@
 // (フラッシュの先頭の約12KB)がそのまま読める gzip なので、本体では解かない。
 //
 // ソケットもSDも持たない(読み取り・検査・署名の確認だけ)ので、ホストテストで全部の経路を確かめられる。
-// 作る側は script/firmware_tool.py。値を変えるときは両方を揃えること。
+// 作る側は script/release/firmware_tool.py。値を変えるときは両方を揃えること。
 namespace FwImage {
     constexpr size_t kHeaderBytes = 128;
     constexpr size_t kSigBytes    = 64;

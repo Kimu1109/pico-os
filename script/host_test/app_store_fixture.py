@@ -26,7 +26,7 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, os.path.join(HERE, "..", "release"))
 import build_app_repo as b  # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))

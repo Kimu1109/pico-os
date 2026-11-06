@@ -8,7 +8,7 @@ pico-os は OS の証明書ストアを持たないので、繋ぎたい相手�
 証明書は母艦(Debian/Ubuntu)の /etc/ssl/certs から取る。
 ルートを足す/差し替えるときは ROOTS を直して、このスクリプトを流し直すこと:
 
-    python3 script/generate_tls_roots.py
+    python3 script/codegen/generate_tls_roots.py
 
 **ROOTS は末尾へ足すこと。** 母艦のストアから消えたルート(配布元が信頼を外した古いルート等)は、
 今の Tls_Roots_Data.hpp に焼き込まれている同じ位置の証明書を引き継ぐ(並びで対応を取るため)。
@@ -82,7 +82,7 @@ def existing_pems(path):
 
 
 def main():
-    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     out_path = os.path.join(repo, "src", "net", "Tls_Roots_Data.hpp")
     previous = existing_pems(out_path)
 
@@ -92,7 +92,7 @@ def main():
         "#include <cstddef>",
         "#include <cstdint>",
         "",
-        "// script/generate_tls_roots.py が生成する。手で書き換えないこと。",
+        "// script/codegen/generate_tls_roots.py が生成する。手で書き換えないこと。",
         f"// 生成日: {datetime.date.today().isoformat()}",
         "//",
         "// HTTPSで信頼するルート証明書(1枚ずつDERで)。一覧:",

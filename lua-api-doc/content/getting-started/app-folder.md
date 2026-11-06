@@ -59,4 +59,4 @@ permission_network=true
 
 ## 画像(.pimg)を作る
 
-アイコンや絵は、OS独自の `.pimg`(16色・RLE圧縮)が一番軽く読めます。PNGなどからは、リポジトリの `script/generate_pimg.py` で変換します。BMPとJPEGもそのまま読めます([画像](../../guide/graphics/images/))。
+アイコンや絵は、OS独自の `.pimg`(16色・RLE圧縮)が一番軽く読めます。PNGなどからは、リポジトリの `script/tools/generate_pimg.py` で変換します。BMPとJPEGもそのまま読めます([画像](../../guide/graphics/images/))。

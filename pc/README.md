@@ -131,7 +131,7 @@ SDL_VIDEODRIVER=offscreen ./pc/build/picoos_pc --app テトリス --scene play -
 足すときは、C++製アプリは `onEnter()` で `AppFunctions::TakeLaunchScene(名前, out)` を読み、
 Luaアプリは `pico.launch_reason()` が `tag == "scene"`(`data` が画面の名前)を返したら進める。
 **実機では使わない口**なので、どちらも受け取れなかったら(ランチャから開いたら)いつもの画面のまま。
-撮る一覧は `script/web_shots.sh`。
+撮る一覧は `script/release/web_shots.sh`。
 
 ### 表示言語
 
@@ -200,7 +200,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 - `Serial` の出力がページ内のログ欄とブラウザのコンソールの両方に出る。
 - 「画面をPNGで保存」ボタンで今の画面を落とせる(不具合の報告用)。
 - Wi-Fiの状態はボタン(＝URLのクエリ)で差し替える。下記参照。
-- **外部コントローラー**: 画面の下のボタン(複数の指で同時押し可)とキーボード(割り当ては `script/pad_serial.py` と同じ)が、USBシリアルと同じ `pad XXXX` の行を100msごとに pico-os の `Serial` へ流す(`main_pc.cpp` の `picoos_serial_push()` 経由)。「コントローラーをつなぐ」を外すと送るのをやめ、0.5秒で外れた扱いになる。
+- **外部コントローラー**: 画面の下のボタン(複数の指で同時押し可)とキーボード(割り当ては `script/tools/pad_serial.py` と同じ)が、USBシリアルと同じ `pad XXXX` の行を100msごとに pico-os の `Serial` へ流す(`main_pc.cpp` の `picoos_serial_push()` 経由)。「コントローラーをつなぐ」を外すと送るのをやめ、0.5秒で外れた扱いになる。
 - **PCのキーボードで文字入力**: 「PCのキーボード」を「文字入力に使う」にすると、打ったキーを物理キーボードの打鍵(`key M u+XXXX` の行。`src/system/KeyInput_Functions.hpp`)として送る。オンスクリーンキーボードを開いている所・テキストエディタ・SSH にそのまま入る。
 - 見た目や道具立てを足したいときは `pc/web/shell.html` を書き換える。
 
@@ -441,7 +441,7 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 | Wi-Fi | 母艦の疎通を見て接続/切断を返す。設定で任意の状態に固定もできる(下記) |
 | NTP / 時刻 | 同期しない。**必要ない** — PCの時計をそのまま使うので最初から正しい時刻が出る |
 | 音声 | `pc/compat/I2S.h` がSDLの音声出力へ流す。実機の2コア目(`setup1()`/`loop1()`)は、ネイティブでは別スレッド、Webではフレームごとに`loop1()`を1回呼んで代わりにする(`main_pc.cpp`)。アンプ(MAX98357A)の検出ピンは「音声デバイスを開けたら刺さっている」として答える。`/sys/sound.cfg` の `pc-sound-state`(`auto`/`connected`/`disconnected`)か `PICOOS_SOUND_STATE` で固定できる。イヤホンの差し込み検出は `PICOOS_HEADPHONE=inserted` で「差してある」(起動時に決まり、途中で抜き差しはしない。PCではどちらへ向けても同じデバイスから鳴る)。ヘッドレスで音の中身を確かめるなら `SDL_AUDIODRIVER=disk SDL_DISKAUDIOFILE=out.raw`(出力の周波数(既定22050Hz、`sound.cfg`の`sample-rate`)/16bit/ステレオの生データ)。Webはブラウザの自動再生の制限で、最初にクリック等をするまで鳴らない |
-| USBシリアルの受信 | `Serial.available()`/`read()`は**標準入力**を読む(別スレッドで読んで溜める。`pc/compat/Arduino.h`)。外部コントローラー(`PadFunctions`)がこれを使うので、`python3 script/pad_serial.py --stdout \| ./pc/build/picoos_pc` でPCのキーボードがコントローラーになる。ヘッドレスなら `( sleep 1; while :; do echo "pad 0011"; sleep 0.1; done ) \| ./pc/build/picoos_pc ...` のように行を流し込めばよい(`pad XXXX` は押しているボタンの16進数。`src/system/Pad_Functions.hpp`)。`PICOOS_SERIAL_STDIN=off` で読まない。同じ経路で**物理キーボードの打鍵**(`key M CODE` の行。`src/system/KeyInput_Functions.hpp`)も読むので、`echo "key 0 u+61"` で「a」を打てるWebは標準入力の代わりに、ページのコントローラー(`pc/web/shell.html`)が `picoos_serial_push()` で1バイトずつ入れる |
+| USBシリアルの受信 | `Serial.available()`/`read()`は**標準入力**を読む(別スレッドで読んで溜める。`pc/compat/Arduino.h`)。外部コントローラー(`PadFunctions`)がこれを使うので、`python3 script/tools/pad_serial.py --stdout \| ./pc/build/picoos_pc` でPCのキーボードがコントローラーになる。ヘッドレスなら `( sleep 1; while :; do echo "pad 0011"; sleep 0.1; done ) \| ./pc/build/picoos_pc ...` のように行を流し込めばよい(`pad XXXX` は押しているボタンの16進数。`src/system/Pad_Functions.hpp`)。`PICOOS_SERIAL_STDIN=off` で読まない。同じ経路で**物理キーボードの打鍵**(`key M CODE` の行。`src/system/KeyInput_Functions.hpp`)も読むので、`echo "key 0 u+61"` で「a」を打てるWebは標準入力の代わりに、ページのコントローラー(`pc/web/shell.html`)が `picoos_serial_push()` で1バイトずつ入れる |
 | クラッシュダンプ / ウォッチドッグ | 実機の「消えないRAM」の代わりに、シグナル(SEGV/BUS/FPE/ILL/ABRT)のハンドラが記録を `<SDのルート>/sys/crash.pending` へ書いてから落ち、次の起動で `/crash/crash_NNNN.txt` になる(`src/devtools/CrashDump_Functions.cpp`)。`/sys/debug.cfg` の `watchdog = true` ならスレッドが `loop()` の応答を見張り、`watchdog-ms` 戻らなければ記録を書いて終了する。`PICOOS_NO_CRASH_HANDLER=1` でシグナルハンドラを入れない(gdb等で調べるとき)。Webは対象外 |
 | Luaデバッガ | 止まっている間は `loop()` のスレッドが止まり、画面(`LuaDebugScreen`)はSDLのパネルへ直接描く。`--tap` のフレームはタッチを読んだ回数で数えるので、止まっている間も進む(デバッガのボタンを `--tap` で押せる)。`--shot` は `loop()` のフレームなので止まっている間は撮れない。Webはメインスレッドを止められないので止まらずに続ける |
 | GPIO / SPI | 何もしない空実装(`digitalRead()`は既定でHIGH。音声の検出ピンだけ上のとおり) |
@@ -489,5 +489,5 @@ pc/
   `src/` へ新しい実機依存を足したら `pc/compat/` にも代替を足す(Webビルドではスレッド・生ソケット・ブロッキング待ちが使えない)。
 - `TimeFunctions::Update()` は333msごとにしか更新しないので、`--shot` のフレーム数が少ないと初期値の`00:00`が写る(時刻を見るなら200フレーム以上)。
 - `--tap` によるヘッドレス確認で「リンクをタップしても反応しない」「短い文書を開き直すと前の内容が残る」の2件が見つかっている(ホストテストでは出ない類)。
-- ネットワーク越しの確認: 母艦で `python3 script/reference_server.py` を立て、`sys/network.cfg` の `browser-home` へそのURLを書く。
+- ネットワーク越しの確認: 母艦で `python3 script/tools/reference_server.py` を立て、`sys/network.cfg` の `browser-home` へそのURLを書く。
   `PICOOS_SD_ROOT` で一時ディレクトリへ向ければリポジトリの `pc/sdcard/` を汚さない。

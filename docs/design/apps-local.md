@@ -365,7 +365,7 @@
 - **計測はいずれも`millis()`の差分で積む** — `TimeFunctions`は333msごとの更新な上に、
   NTP同期で時刻が飛ぶため計測には使えない。
 - ⚠ ランチャのアイコンが`IconID::AlertTriangle`のまま(時計のアイコンがまだ無い)。
-  足すなら`script/tabler_icons/`へSVGを置いて`script/generate_icons.py`を回す。
+  足すなら`script/codegen/tabler_icons/`へSVGを置いて`script/codegen/generate_icons.py`を回す。
 
 ### 電卓(`CalculatorScene`)
 

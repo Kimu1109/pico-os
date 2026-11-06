@@ -183,7 +183,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
   ブロック崩し=壁/ブロック/パドルの反射・段ごとの速さ・点・アイテム3種・残機・ステージクリア・全20ステージ・全クリア・自動プレイ。
   PCビルドの`--tap`/`--shot`で4本とも動かして見た目を確認した(`PICOOS_VERIFY_LCD=1`で食い違い0)。**実機では未確認**(Luaで毎フレーム回す量・タイルマップの描画の速さ)。
 
-## アプリストア(`src/apps/store/` / `StoreScene` / `docs/APP_REPO.md` / `script/build_app_repo.py`)(2026-10-11)
+## アプリストア(`src/apps/store/` / `StoreScene` / `docs/APP_REPO.md` / `script/release/build_app_repo.py`)(2026-10-11)
 
 ランチャの「ストア」(`StoreScene`、アイコン`IconID::AppStore`)が、Webに置いた配布物からLuaアプリを入れる・更新する・消す。
 **形式は静的なファイルだけ**(catalog.tsv + catalog.sig + `<id>/<版>/files.tsv` + ファイル)なので、GitHub Pages でも
@@ -245,7 +245,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
 - 検証: `app_install_test`(core。前の版が残る・同じ版では替えない・戻す・見送り・さらに更新すると替わる・削除で忘れる・min_os・まとめて更新の選び方・指紋)、
   `app_repo_test`(min_os の列)、`app_store_net_test`(run_net.sh。本物のHTTPで、すべて更新→前の版へ戻す→見送り→1つずつ入れ直す)。
   PCビルドで保存した一覧から「すべて更新 (2件)」の行(権限が増えるリバーシは入らない)と[戻す/削除]の選択を `--shot` で見た。
-  **実機では未確認(通知・1日1回の確認・戻す)(Todoist参照)**。投稿用リポジトリ(kimu1109/pico-os-apps)の `script/build_app_repo.py` は写しなので、写し直すまで min_os の列は出ない。
+  **実機では未確認(通知・1日1回の確認・戻す)(Todoist参照)**。投稿用リポジトリ(kimu1109/pico-os-apps)の `script/release/build_app_repo.py` は写しなので、写し直すまで min_os の列は出ない。
 
 ## アプリストアのWebのページとパッケージ(.papp)(2026-10-25)
 

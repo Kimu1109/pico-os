@@ -6,7 +6,7 @@ description: "app.cfg の id と version、アプリストアへの投稿、署�
 ---
 
 作ったLuaアプリは、SDカードへコピーする代わりに**ランチャの「ストア」から Web 経由で入れる**こともできます。
-配布物を作る道具はリポジトリの `script/build_app_repo.py`、形式の細かい決まりは `docs/APP_REPO.md` です。
+配布物を作る道具はリポジトリの `script/release/build_app_repo.py`、形式の細かい決まりは `docs/APP_REPO.md` です。
 本体のストアの既定の配布元は、投稿用リポジトリ [kimu1109/pico-os-apps](https://github.com/Kimu1109/pico-os-apps) です。
 
 ## アプリ側で用意するもの
@@ -33,10 +33,10 @@ permission_network=false
 
 ```sh
 # 作者の鍵(1回だけ)。秘密鍵は手元のPCの外へ出さない
-python3 script/build_app_repo.py keygen --key ~/.pico-os/author.key
+python3 script/release/build_app_repo.py keygen --key ~/.pico-os/author.key
 
 # pico-os-apps を clone して apps/<id>/app/ にアプリを置き、署名する(初めてのときは --owner と --dir も)
-python3 script/build_app_repo.py author-sign --key ~/.pico-os/author.key --app apps/tetris \
+python3 script/release/build_app_repo.py author-sign --key ~/.pico-os/author.key --app apps/tetris \
     --owner <GitHubのアカウント> --dir テトリス
 ```
 
@@ -48,10 +48,10 @@ python3 script/build_app_repo.py author-sign --key ~/.pico-os/author.key --app a
 
 ```sh
 # 鍵(1回だけ)。秘密鍵は手元のPCの外へ出さない
-python3 script/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
+python3 script/release/build_app_repo.py keygen --key ~/.pico-os/app_repo.key
 
 # 配布物をまるごと作る(Raspberry Pi などの静的なサーバへ置く)
-python3 script/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps --clean
+python3 script/release/build_app_repo.py build --key ~/.pico-os/app_repo.key --out /tmp/apps --clean
 ```
 
 表示された公開鍵を、入れる側の本体のSDの `/sys/store.cfg` に `key = ...` として書いてもらいます。
@@ -77,13 +77,13 @@ Wi-Fiが無くても入れられるように、アプリを1つのファイル(`
 ストアに載せずに自分のアプリを渡したいときは、作者の鍵でパッケージを作ります。
 
 ```sh
-python3 script/build_app_repo.py keygen --key ~/.pico-os/author.key      # 1回だけ
-python3 script/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス
+python3 script/release/build_app_repo.py keygen --key ~/.pico-os/author.key      # 1回だけ
+python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app pc/sdcard/lua/apps/テトリス
 # → tetris-2.0.0.papp(app.cfg の id と version から名前を付ける)
 ```
 
 配布物を自分のサーバに置くときは、`build` の後に `site` を回すと、同じ場所に一覧のページ(`index.html`)とパッケージができます。
 
 ```sh
-python3 script/build_app_repo.py site --dir /tmp/apps
+python3 script/release/build_app_repo.py site --dir /tmp/apps
 ```

@@ -98,7 +98,7 @@
 //   - `pico.canvas_clear(id)`: `CanvasRaster::canvasClear()`(元々あった、
 //     白で塗りつぶすだけのメソッド)を橋渡しするだけ
 //   - `pico.canvas_save(id, path)` / `pico.canvas_load(id, path)`: `CanvasRaster`の
-//     スプライトを`.pimg`(`IconRender`参照。4bpp+RLE、`script/generate_pimg.py`と
+//     スプライトを`.pimg`(`IconRender`参照。4bpp+RLE、`script/tools/generate_pimg.py`と
 //     同じ形式)としてSDへ書き出す/読み込む。エンコーダ(`IconRender::EncodePimg()`)は
 //     このLuaバインディングのために新設した(元々`.pimg`はPython側で作る前提で
 //     C++側はデコード専任だったが、実行中に描いた内容をその場で保存する用途は

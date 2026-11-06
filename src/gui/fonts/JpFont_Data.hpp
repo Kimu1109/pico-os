@@ -1,5 +1,5 @@
 #pragma once
-// 生成物。手で直さず script/font/split_font.py で作り直すこと(docs/design/performance.md「漢字の一部をSDへ」)。
+// 生成物。手で直さず script/codegen/font/split_font.py で作り直すこと(docs/design/performance.md「漢字の一部をSDへ」)。
 // フラッシュに残した日本語フォントと、SDに置く追加フォント(/sys/fonts/jpgothic<px>.pkf)をつなぐ定数。
 #include <cstdint>
 

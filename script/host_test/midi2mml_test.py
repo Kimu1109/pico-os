@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""script/midi2mml.py の検証。テストの中でMIDIを組み立てて変換し、出てきたMMLを
+"""script/tools/midi2mml.py の検証。テストの中でMIDIを組み立てて変換し、出てきたMMLを
 本物の読み取り(MmlCompiler。mml_dump.cpp)へ通して、音の位置・高さ・長さ・テンポを確かめる。
 
     python3 script/host_test/midi2mml_test.py <mml_dumpの実行ファイル>
@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, os.path.join(ROOT, "script"))
+sys.path.insert(0, os.path.join(ROOT, "script", "tools"))
 import midi2mml  # noqa: E402
 
 DUMP = sys.argv[1] if len(sys.argv) > 1 else None

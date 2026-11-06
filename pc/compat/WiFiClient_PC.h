@@ -4,7 +4,7 @@
 // PCビルド / ホストテスト共用のTCPクライアント。
 //
 // pico-osのWi-Fi「状態」(WiFi.h)は母艦の設定を触らない偽物だが、
-// **通信そのものは本物のソケットで行う**。母艦でサーバ(script/reference_server.py)を立てれば、実機へ
+// **通信そのものは本物のソケットで行う**。母艦でサーバ(script/tools/reference_server.py)を立てれば、実機へ
 // 焼かずにプロトコルごと開発・デバッグできる。
 //
 // 実機(arduino-pico)のWiFiClientと同じ呼び出し方に揃えてあるので、src/側は

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""script/build_fw_index.py(Webからのファームの更新の版の一覧を作る)のテスト。
+"""script/release/build_fw_index.py(Webからのファームの更新の版の一覧を作る)のテスト。
 
   python3 fw_index_tool_test.py <fw_index_testのパス> <作業ディレクトリ>
 
@@ -17,7 +17,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, os.path.join(HERE, "..", "release"))
 import build_fw_index as bi  # noqa: E402
 import firmware_tool as ft  # noqa: E402
 from firmware_tool_test import fake_bin  # noqa: E402

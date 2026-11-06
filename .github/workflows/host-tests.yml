@@ -1,4 +1,4 @@
-# ホストテスト(script/host_test/run.sh)と層の決まり(script/check_layers.py)をプルリクエストで回す。
+# ホストテスト(script/host_test/run.sh)と層の決まり(script/check/check_layers.py)をプルリクエストで回す。
 #
 #   実コードをPCのg++ + ASan/UBSanで動かし、解放漏れ・バッファ越え・未定義動作と
 #   各機能の回帰を見る。実機(RP2350)のビルドとは無関係。
@@ -78,21 +78,21 @@ jobs:
           fi
           echo "グループの一覧は揃っています: $(echo $expected)"
 
-  # src/ の層の決まり(下の段から上の段へ #include しない)。決まりは script/check_layers.py の先頭
+  # src/ の層の決まり(下の段から上の段へ #include しない)。決まりは script/check/check_layers.py の先頭
   layers:
     name: 層の決まり
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: script/check_layers.py
-        run: python3 script/check_layers.py
+      - name: script/check/check_layers.py
+        run: python3 script/check/check_layers.py
       - name: 同梱のLuaモジュールの生成物が .lua と一致しているか
-        run: python3 script/gen_lua_builtins.py --check
+        run: python3 script/codegen/gen_lua_builtins.py --check
       - name: Wi-Fi転送のページの生成物(gzip)が .html と一致しているか
-        run: python3 script/gen_file_share_page.py --check
+        run: python3 script/codegen/gen_file_share_page.py --check
       - name: 表示の訳(i18n/*.po と I18n_Table_*.cpp)が src/ の TR() と一致しているか
-        run: python3 script/i18n.py --check
+        run: python3 script/codegen/i18n.py --check
       # 常用漢字の外の字はSDの追加フォントにしか無い(docs/design/performance.md「漢字の一部をSDへ」)
-      - name: 画面の文字がフラッシュの漢字(script/font/base_kanji.txt)だけで書かれているか
-        run: python3 script/font/check_ui_chars.py
+      - name: 画面の文字がフラッシュの漢字(script/codegen/font/base_kanji.txt)だけで書かれているか
+        run: python3 script/codegen/font/check_ui_chars.py

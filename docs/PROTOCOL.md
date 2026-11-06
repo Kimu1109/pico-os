@@ -10,7 +10,7 @@ pico-os の Markdown ブラウザが文書を取得・検索するための、�
 > `apps/browser/Discovery` / `apps/browser/Doc_Search` / `apps/browser/Manifest`)。
 > 本書は実装に先立って全体像を固めるための設計文書であり、クライアントの実装過程で版を上げずに修正されうる。
 >
-> ただしサーバ側は **`script/reference_server.py` に参照実装がある**(標準ライブラリのみ、外部依存なし)。
+> ただしサーバ側は **`script/tools/reference_server.py` に参照実装がある**(標準ライブラリのみ、外部依存なし)。
 > 本書とその実装が食い違う場合は、**実装のほうが検証済み**なので実装を信じて本書を直すこと。
 
 ## この文書の読み方
@@ -180,7 +180,7 @@ GET /v1/manifest
 ## 画像とその他のリソース
 
 - 画像は **`.pimg` 形式のみ**対応する。PNG / JPEG / GIF は表示できない
-  - `.pimg` は pico-os 独自の形式で、16色固定パレットへ量子化したランレングス圧縮。リポジトリの `script/generate_pimg.py` で変換する
+  - `.pimg` は pico-os 独自の形式で、16色固定パレットへ量子化したランレングス圧縮。リポジトリの `script/tools/generate_pimg.py` で変換する
   - **サーバ側で事前に変換して置くこと。** クライアントに変換能力は無い
 - 文書中から参照されるリソースは、文書と同じ規則で GET され、同じ規則でキャッシュされる
 - 相対パスは**その文書の位置を基準**に解決される(一般的なブラウザと同じ)
@@ -229,15 +229,15 @@ pico-os は取得した文書を **SDカードへ保存し、次回以降はそ�
 
 ## 参照実装
 
-`script/reference_server.py` が本仕様を全て実装している。標準ライブラリのみで動くので、追加の導入作業は要らない。
+`script/tools/reference_server.py` が本仕様を全て実装している。標準ライブラリのみで動くので、追加の導入作業は要らない。
 
 ```sh
-python3 script/reference_server.py                      # examples/ を配る
-python3 script/reference_server.py --root ~/docs --port 8080 --home /index.md
+python3 script/tools/reference_server.py                      # examples/ を配る
+python3 script/tools/reference_server.py --root ~/docs --port 8080 --home /index.md
 
-python3 script/reference_server.py --check              # 文書が上限に収まっているか検査
-python3 script/reference_server.py --no-search          # 検索非対応サーバの再現
-python3 script/reference_server.py --no-discovery       # 素の静的サーバの再現
+python3 script/tools/reference_server.py --check              # 文書が上限に収まっているか検査
+python3 script/tools/reference_server.py --no-search          # 検索非対応サーバの再現
+python3 script/tools/reference_server.py --no-discovery       # 素の静的サーバの再現
 ```
 
 `--no-search` / `--no-discovery` は、**クライアントが機能の欠けたサーバに対して正しく縮退するか**を試すためのもの。

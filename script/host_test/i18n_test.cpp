@@ -1,6 +1,6 @@
 // 表示言語(I18nFunctions)のテスト(日本語の版。ホストテストは既定の日本語の版で作る)。
 //
-// ハッシュが script/i18n.py と同じ計算か、TR()/Tr() が原文をそのまま返すか、言語コードを押さえる。
+// ハッシュが script/codegen/i18n.py と同じ計算か、TR()/Tr() が原文をそのまま返すか、言語コードを押さえる。
 // 英語の版(PICO_LANG_EN=1)の引き当ては i18n_en_test。
 #include "system/I18n_Functions.hpp"
 #include "config/Lang_Config.hpp"
@@ -28,7 +28,7 @@ int main(){
     static_assert(PICO_LANG_JA == 1 && PICO_LANG_EN == 0, "ホストテストは日本語の版で作る");
     static_assert(I18nFunctions::Current() == Lang::Ja, "このビルドの言語は日本語");
 
-    // --- ハッシュ(FNV-1a 32bit。script/i18n.py の fnv1a と同じ値) ---
+    // --- ハッシュ(FNV-1a 32bit。script/codegen/i18n.py の fnv1a と同じ値) ---
     check(I18nFunctions::Hash("") == 2166136261u, "空文字のハッシュはFNVの初期値");
     check(I18nFunctions::Hash("a") == 0xe40c292cu, "\"a\" のハッシュ");
     static_assert(I18nFunctions::Hash("設定") != 0, "TR() のためにコンパイル時に数えられる");

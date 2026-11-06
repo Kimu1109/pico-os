@@ -26,7 +26,7 @@ PCビルドとホストテストでは確かめられない項目だけを、**1
   `hw info`(電池・Wi-Fi・音・ウォッチドッグ)/ `hw boot`(起動の理由とダンプの元。再起動の直後のログはシリアルを開き直す前に流れて見えないので、こちらで見る)/ `hw mem`(ヒープ: 空き・連続で取れる最大・断片化・末尾の残り)/
   `hw trap`(未定義命令でHardFault)/ `hw buswrite`(存在しない番地へ書いてHardFault)/ `hw hang`(loop()を止めてウォッチドッグ)。
   打ち方は2通り(どちらも行の終わりに改行が要る。ポートは1つのプログラムしか開けない):
-  - `python3 script/pad_serial.py <ポート>` を動かしている**ターミナル**に `hw info` と打ってEnter(小窓ではなくターミナル側。小窓はキーの押し下げを送るだけ)
+  - `python3 script/tools/pad_serial.py <ポート>` を動かしている**ターミナル**に `hw info` と打ってEnter(小窓ではなくターミナル側。小窓はキーの押し下げを送るだけ)
   - `pad_serial.py` を止めて、シリアルモニタ(`pio device monitor -b 115200`、Arduino IDEは改行コードを「LFのみ」か「CRおよびLF」に)から打つ。
     `pio device monitor` は打った文字が画面に出ない(エコーが無い)が、Enterで送られている
   結果は `[HW]` の行。`hw-test = true` が無いと「切れています」の行だけが出る。**このコマンドはPR #123のファームでしか使えない**(main へ入るまでは

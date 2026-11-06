@@ -3,7 +3,7 @@
 #   手動実行 … Actionsタブの「Run workflow」から、安定版にするナイトリーのタグ(nightly-<通し番号>-<短いハッシュ>)を入れる
 #
 # ナイトリーは KEEP 本を超えると消えるが、安定版(v*)は消さない。本体の「本体の更新」→[Webから]の一覧には
-# 新しい安定版が5本・ナイトリーが3本載る(web-pages.yml・script/build_fw_index.py)。
+# 新しい安定版が5本・ナイトリーが3本載る(web-pages.yml・script/release/build_fw_index.py)。
 # firmware.pfw は Secrets の FIRMWARE_SIGNING_KEY で署名し直してから載せる(ナイトリーを署名なしで作った後に
 # 鍵を登録した場合も、安定版は必ず署名済みになる)。鍵が無い・焼き込みの鍵と違えば止める。
 # 最後に Pages の公開(web-pages.yml)を動かして版の一覧を作り直させる。
@@ -79,7 +79,7 @@ jobs:
           key="${RUNNER_TEMP}/firmware.key"
           (umask 077; printf '%s\n' "${FIRMWARE_SIGNING_KEY}" > "${key}")
           rc=0
-          python3 script/firmware_tool.py sign firmware/firmware.pfw --key "${key}" \
+          python3 script/release/firmware_tool.py sign firmware/firmware.pfw --key "${key}" \
             --expect-keys src/apps/firmware/Fw_Keys.hpp || rc=$?
           rm -f "${key}"
           exit "${rc}"

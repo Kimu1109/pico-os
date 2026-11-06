@@ -2,7 +2,7 @@
 """実機の版(buildcfg/*.ini の env)の旗を、PCビルドの読み取り器(pc/cmake/PicoVariant.cmake)が
 PlatformIO と同じに読めているかを確かめる(docs/design/devtools.md「ビルドの構成の置き場所」)。
 
-    python3 script/check_variants.py      … 食い違いがあれば一覧を出して終了コード1
+    python3 script/check/check_variants.py      … 食い違いがあれば一覧を出して終了コード1
 
 PlatformIO の解釈は `pio project config --json-output` から取り、土台(env:rpipico2w)の build_flags を
 引いた残りを版の旗とする。読み取り器は buildcfg/ の書き方の決まりの範囲しか読まないので、決まりの外の
@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASE = "env:rpipico2w"
 DEFINE = re.compile(r"^-D([A-Za-z_][A-Za-z0-9_]*)(?:=(.*))?$")
 

@@ -3,7 +3,7 @@
   ファームウェアのダウンロードのページ(https://kimu1109.github.io/pico-os/download/)。
   ワークフロー(.github/workflows/web-pages.yml)が _site/download/index.html として置く。
 
-  版の一覧は同じサイトの ../firmware/downloads.json(script/build_fw_index.py の write_downloads() が作る。
+  版の一覧は同じサイトの ../firmware/downloads.json(script/release/build_fw_index.py の write_downloads() が作る。
   元はGitHubのリリースの安定版5本・ナイトリー3本)を読んで並べる。読めないとき(手元で開いた・まだ一度も
   リリースが無い)は、GitHubのリリースの一覧へのリンクだけを出す。
   .uf2 は初めて書き込むとき(BOOTSEL)、.pfw は本体の「本体の更新」から入れるとき(docs/FIRMWARE_UPDATE.md)。
@@ -469,7 +469,7 @@
     });
   })();
 
-  // 版の一覧(../firmware/downloads.json。形は script/build_fw_index.py の write_downloads())
+  // 版の一覧(../firmware/downloads.json。形は script/release/build_fw_index.py の write_downloads())
   (function () {
     var BASE = "../firmware/";
     var RELEASES = "https://github.com/Kimu1109/pico-os/releases";

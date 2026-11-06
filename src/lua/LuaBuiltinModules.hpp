@@ -1,6 +1,6 @@
 #pragma once
-// 生成物: script/gen_lua_builtins.py が src/lua/builtin/*.lua から作る。直接書き換えないこと
-// (直したら python3 script/gen_lua_builtins.py。CI の「層の決まり」が --check で食い違いを見る)
+// 生成物: script/codegen/gen_lua_builtins.py が src/lua/builtin/*.lua から作る。直接書き換えないこと
+// (直したら python3 script/codegen/gen_lua_builtins.py。CI の「層の決まり」が --check で食い違いを見る)
 
 #include <cstring>
 

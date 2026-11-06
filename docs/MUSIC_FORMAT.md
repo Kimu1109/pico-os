@@ -14,7 +14,7 @@ pico-os のチップチューン音源(`src/sound/Chip_Synth`、既定8チャン
 | 形式 | 扱い |
 |---|---|
 | **MML(本書)** | **標準**。音源の要素(チャンネル・波形・音量・減衰・長さ)がそのまま書け、1曲数KBのテキストで人が読み書きできる |
-| MIDI(SMF) | 取り込み用。PC側の変換スクリプト(`script/midi2mml.py`、下の「MIDIからの変換」)でMMLへ直す。既定4音(`--channels`で変えられる)への間引きと音色の割り当ては機械任せだと崩れるので、変換後に人が直せる形を経由する |
+| MIDI(SMF) | 取り込み用。PC側の変換スクリプト(`script/tools/midi2mml.py`、下の「MIDIからの変換」)でMMLへ直す。既定4音(`--channels`で変えられる)への間引きと音色の割り当ては機械任せだと崩れるので、変換後に人が直せる形を経由する |
 | VGM(ゲームボーイ)/ GBS | 検討中。ゲームボーイの音源チップはGBエミュのために再現済み(`src/sound/Gb_Apu`)なので、鳴らすならこれへレジスタの書き込みを流す形になる |
 | MOD/XM、WAV/MP3/FLAC/ALAC | 対象外(サンプルを鳴らす形式で、チップチューンの合成ではない。WAV・MP3・FLAC・ALACは演奏データを通さず別の経路で鳴らす: `docs/design/sound.md`「WAVの再生」「MP3の再生」「FLACの再生」「ALACの再生」) |
 
@@ -185,18 +185,18 @@ pico.music_playing()     -- -> boolean(頼んだ直後から結果の扱い)
 - アプリを閉じたら曲も止める(`pico.sound_*`と同じ)。音量は `sound.cfg` の全体の音量に従う(曲だけの音量は持たない)。
 - `pico.music_play` もSDの権限(`sd_outside_app_dir`)に従う。権限の無いアプリは自分のフォルダの中の曲だけ鳴らせる。
 
-## MIDIからの変換(`script/midi2mml.py`)
+## MIDIからの変換(`script/tools/midi2mml.py`)
 
 PCで動かすPythonのスクリプト(標準ライブラリだけ)。SMFの形式0/1を読んで、この形式のMMLを書く。
 **出てくるのは「それらしく鳴る下書き」**で、既定4音(`--channels`で増やせる)への間引きと
 音色は機械の判断なので、気になるところは人がMMLを直す前提。
 
 ```sh
-python3 script/midi2mml.py song.mid -o pc/sdcard/music/song.mml     # 変換(-o を省けば標準出力)
-python3 script/midi2mml.py song.mid --list                          # 声部の一覧(番号は --pick で使う)
-python3 script/midi2mml.py song.mid --pick A=1,B=3+4,C=2,D=drums    # 割り当てを自分で決める
-python3 script/midi2mml.py song.mid --loop --bars 1-32              # 1〜32小節目だけ、繰り返す
-python3 script/midi2mml.py song.mid --channels 8 -o song.mml        # 8チャンネル(A〜H)まで使う
+python3 script/tools/midi2mml.py song.mid -o pc/sdcard/music/song.mml     # 変換(-o を省けば標準出力)
+python3 script/tools/midi2mml.py song.mid --list                          # 声部の一覧(番号は --pick で使う)
+python3 script/tools/midi2mml.py song.mid --pick A=1,B=3+4,C=2,D=drums    # 割り当てを自分で決める
+python3 script/tools/midi2mml.py song.mid --loop --bars 1-32              # 1〜32小節目だけ、繰り返す
+python3 script/tools/midi2mml.py song.mid --channels 8 -o song.mml        # 8チャンネル(A〜H)まで使う
 ```
 
 - **`--channels N`(既定4、1〜26)**: 割り当て先のチャンネル数。既定の4のままなら以前と全く同じ

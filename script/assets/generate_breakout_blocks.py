@@ -15,7 +15,7 @@ Lua側(main.lua)の TIER_COLOR と合わせてある。
 使い方:
     python3 script/assets/generate_breakout_blocks.py                      # 既定の場所へ書く
     python3 script/assets/generate_breakout_blocks.py --preview p.ppm      # 確認用のPPMも書く
-      (PPMは python3 script/ppm2png.py p.ppm p.png 4 でPNGにできる)
+      (PPMは python3 script/tools/ppm2png.py p.ppm p.png 4 でPNGにできる)
 """
 
 import argparse

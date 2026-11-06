@@ -3,7 +3,7 @@
 
 #include <cstring>
 
-// 見出しの読み方は script/font/split_font.py の「.pkf の形」(数値はリトルエンディアン、字の並びの中だけu8g2と同じビッグエンディアン)。
+// 見出しの読み方は script/codegen/font/split_font.py の「.pkf の形」(数値はリトルエンディアン、字の並びの中だけu8g2と同じビッグエンディアン)。
 // 控えに当たったとき(find の前半)と poll() は毎フレーム通るのでRAMに置く。SDを読む道は滅多に通らないのでフラッシュのまま
 
 namespace {

@@ -13,7 +13,7 @@ SDのファイルを一覧・ダウンロード・アップロード・削除・
 
 - **HTTP+本体が返す1枚のページ**(HTML+JS、`src/net/File_Share_Page.html`)。WebDAVはファイル一覧の問い合わせにXMLで答える必要があり、
   Windowsの書き込みのロック・macOSの `._*` 等の癖への対応が重いので見送った。FTPは2本目の接続が要り、ブラウザも対応をやめたので使わない。
-  **ページはgzipでフラッシュに置く**(2026-11-01。生の12.8KB → 5.2KB)。`script/gen_file_share_page.py` が .html を gzip して
+  **ページはgzipでフラッシュに置く**(2026-11-01。生の12.8KB → 5.2KB)。`script/codegen/gen_file_share_page.py` が .html を gzip して
   `File_Share_Page.cpp`(生成物)を作る。CIの `--check` は gzip の出力ではなく戻した中身を .html と比べる(zlibの版で結果が変わっても落ちない)。
   ページの決まり(innerHTML を使わない・X-Pico-Key を送る)もこのスクリプトが確かめる(以前はホストテストが生の文字列を見ていた)。
   `Content-Encoding: gzip` で返すので、`Accept-Encoding` に gzip が無い相手(素の curl 等)へは406で断る(今のブラウザは全部 gzip を送る)。

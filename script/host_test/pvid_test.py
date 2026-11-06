@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""script/generate_pvid.py の検証(docs/VIDEO_FORMAT.md の .pvid)。
+"""script/tools/generate_pvid.py の検証(docs/VIDEO_FORMAT.md の .pvid)。
 
     python3 script/host_test/pvid_test.py [pvid_dumpの実行ファイル]
 
@@ -24,7 +24,7 @@ except ImportError:
     sys.exit(0)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, os.path.join(ROOT, "script"))
+sys.path.insert(0, os.path.join(ROOT, "script", "tools"))
 import generate_pvid as gp  # noqa: E402
 
 failures = 0

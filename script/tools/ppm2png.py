@@ -7,8 +7,8 @@ picoos_pc の --shot が書き出すPPM(P6)をPNGへ変換する。
 LovyanGFXのSDLパネルはPPMで書き出すが、そのままでは見づらいので画像ビューアや
 ブラウザで開ける形にする。標準ライブラリだけで動く(Pillowを入れなくてよい)。
 
-    python3 script/ppm2png.py shot.ppm shot.png      # 等倍
-    python3 script/ppm2png.py shot.ppm shot.png 2    # 2倍(240x320は小さいので拡大すると見やすい)
+    python3 script/tools/ppm2png.py shot.ppm shot.png      # 等倍
+    python3 script/tools/ppm2png.py shot.ppm shot.png 2    # 2倍(240x320は小さいので拡大すると見やすい)
 """
 import struct, sys, zlib
 

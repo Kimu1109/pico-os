@@ -9,9 +9,7 @@ picoos - pico-os の script/ 配下に散らばった開発用スクリプトを
     「どのスクリプトを」「どの作業ディレクトリで」「どのPythonで」
     実行すべきかを覚えておき、そのまま引数を転送するだけ。
     (元スクリプトが仕様変更されても、picoos側の変更は基本不要)
-  - generate_icons.py だけは "tabler_icons/" 等のscript/相対パスを
-    ハードコードしているため、そのコマンド(icons)だけ作業ディレクトリを
-    script/へ固定する。それ以外は入出力パスを引数で明示する作りなので、
+  - 入出力パスは引数で明示する作り(generate_icons.py は材料を自分の場所から読む)なので、
     呼び出し元(ユーザーの現在のシェル)のcwdをそのまま継承し、他の
     普通のCLIツールと同じ感覚でパスを指定できるようにしてある。
   - アイコン生成・pimg変換は script/.venv (cairosvg/pillow) が要る。
@@ -60,8 +58,7 @@ def run(cmd, cwd=None, env=None) -> int:
 
 def run_py(script_name: str, args, cwd=None) -> int:
     """cwd未指定なら呼び出し元(ユーザーの現在のシェル)のcwdをそのまま継承する。
-    generate_icons.py 以外は「tabler_icons/」のような相対パス前提を持たず、
-    入出力パスは全て引数で明示するので、cwdを固定しない方が他の一般的な
+    どのスクリプトも作業ディレクトリに頼らず、入出力パスは引数で明示するので、cwdを固定しない方が他の一般的な
     CLIツール(cp/pythonスクリプト実行等)と同じ素直な挙動になる。"""
     return run([venv_python(), str(SCRIPT_DIR / script_name), *args], cwd=cwd)
 
@@ -77,16 +74,16 @@ def run_py(script_name: str, args, cwd=None) -> int:
 # 元スクリプトへ渡す。「--help」も含めて元スクリプト自身の解釈にそのまま
 # 委ねられるのはこの方式でこそ実現できる。
 PASSTHROUGH_PY = {
-    ("pimg",): "generate_pimg.py",
-    ("pimg2png",): "pimg2png.py",
-    ("ppm2png",): "ppm2png.py",
-    ("serve",): "reference_server.py",
-    ("midi2mml",): "midi2mml.py",
-    ("spotify-auth",): "spotify_auth.py",
-    ("app-repo",): "build_app_repo.py",
-    ("pvid",): "generate_pvid.py",
-    ("pad",): "pad_serial.py",
-    ("tls-roots",): "generate_tls_roots.py",
+    ("pimg",): "tools/generate_pimg.py",
+    ("pimg2png",): "tools/pimg2png.py",
+    ("ppm2png",): "tools/ppm2png.py",
+    ("serve",): "tools/reference_server.py",
+    ("midi2mml",): "tools/midi2mml.py",
+    ("spotify-auth",): "tools/spotify_auth.py",
+    ("app-repo",): "release/build_app_repo.py",
+    ("pvid",): "tools/generate_pvid.py",
+    ("pad",): "tools/pad_serial.py",
+    ("tls-roots",): "codegen/generate_tls_roots.py",
     ("gen", "blocks"): "assets/generate_blocks_sheet.py",
     ("gen", "breakout"): "assets/generate_breakout_blocks.py",
     ("gen", "minesweeper"): "assets/generate_minesweeper_tiles.py",
@@ -120,9 +117,8 @@ def try_dispatch_passthrough(argv):
 # ---- サブコマンドの実装(argparseで引数を定義しているもの) ----
 
 def cmd_icons(args) -> int:
-    # generate_icons.py だけは "tabler_icons/" 等のscript/相対パスを
-    # ハードコードしているので、ここだけはcwdをscript/へ固定する。
-    return run_py("generate_icons.py", [], cwd=SCRIPT_DIR)
+    # generate_icons.py は材料(tabler_icons/・custom_icons/)を自分の場所から読むので、cwd はどこでもよい
+    return run_py("codegen/generate_icons.py", [])
 
 
 def cmd_dict_build(args) -> int:
@@ -201,7 +197,7 @@ def cmd_pc_shot(args) -> int:
     if rc != 0 or not args.png:
         return rc
 
-    return run_py("ppm2png.py", [args.out_ppm, args.png, str(args.scale)])
+    return run_py("tools/ppm2png.py", [args.out_ppm, args.png, str(args.scale)])
 
 
 def _resolve_app_name(app: str) -> str:

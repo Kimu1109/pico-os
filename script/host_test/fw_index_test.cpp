@@ -1,7 +1,7 @@
 // Webのファームの版の一覧(apps/firmware/Fw_Index、docs/FIRMWARE_UPDATE.md「Webから取る」)の読み方を固定する。
 //
 //   ./fw_index_test                         … C++の中で組み立てた一覧で全部の経路
-//   ./fw_index_test <index.tsv> <構成> [u]  … script/build_fw_index.py が作ったものを読み、残った行を1行ずつ出す
+//   ./fw_index_test <index.tsv> <構成> [u]  … script/release/build_fw_index.py が作ったものを読み、残った行を1行ずつ出す
 //                                             (fw_index_tool_test.py が呼ぶ。u を付けると署名なしも残す)
 #include "apps/firmware/Fw_Index.hpp"
 

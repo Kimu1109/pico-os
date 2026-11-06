@@ -7,7 +7,7 @@ docs/design/performance.md「漢字の一部をSDへ」。
 LovyanGFX の lgfx_font_japan.c(IPAexゴシックを u8g2 形式にしたもの)から、16px と 24px のプロポーショナル
 (lgfx_font_japan_gothic_p_16 / _24)を読み、
 
-  1. フラッシュ用: かな・記号・英数字の全部と、script/font/base_kanji.txt の漢字だけを持つ u8g2 のフォント
+  1. フラッシュ用: かな・記号・英数字の全部と、script/codegen/font/base_kanji.txt の漢字だけを持つ u8g2 のフォント
      → src/gui/fonts/JpFont_Base16.cpp / JpFont_Base24.cpp(配列)
   2. SD用: 残りの漢字だけを持つ追加フォント(下の「.pkf の形」)
      → pc/sdcard/sys/fonts/jpgothic16.pkf / jpgothic24.pkf(PCビルドのSDの中身。Webの配布元へもここから写す)
@@ -17,9 +17,9 @@ LovyanGFX の lgfx_font_japan.c(IPAexゴシックを u8g2 形式にしたもの)
 を書き出す。字のデータ(u8g2 の1字ぶんの記録)は1バイトも変えずに移すだけなので、描いた絵は元と同じ。
 
 使い方:
-    python3 script/font/split_font.py                 # 書き出す(LovyanGFX はPCビルドかPlatformIOの取得先から探す)
-    python3 script/font/split_font.py --check         # 書き出したものが今の入力と合っているかだけ見る(違えば終了コード1)
-    python3 script/font/split_font.py --lgfx <lgfx_font_japan.c>
+    python3 script/codegen/font/split_font.py                 # 書き出す(LovyanGFX はPCビルドかPlatformIOの取得先から探す)
+    python3 script/codegen/font/split_font.py --check         # 書き出したものが今の入力と合っているかだけ見る(違えば終了コード1)
+    python3 script/codegen/font/split_font.py --lgfx <lgfx_font_japan.c>
 
 ---- .pkf の形(数値はリトルエンディアン) ----
    0  "PKF1"
@@ -50,13 +50,13 @@ import struct
 import sys
 import zlib
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 
 SIZES = (16, 24)
 SRC_NAME = "lgfx_font_japan_gothic_p_{}"
 OUT_SRC_DIR = os.path.join(ROOT, "src", "gui", "fonts")
 OUT_SD_DIR = os.path.join(ROOT, "pc", "sdcard", "sys", "fonts")
-BASE_LIST = os.path.join(ROOT, "script", "font", "base_kanji.txt")
+BASE_LIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "base_kanji.txt")
 
 PKF_VERSION = 1
 PKF_HEADER = 28
@@ -294,8 +294,8 @@ def main():
 
         arr = f"kJpGothicBase{px}"
         outputs[os.path.join(OUT_SRC_DIR, f"JpFont_Base{px}.cpp")] = (
-            "// 生成物。手で直さず script/font/split_font.py で作り直すこと。\n"
-            "// 日本語フォントのうちフラッシュに残す字(かな・記号・英数字・script/font/base_kanji.txt の漢字)。u8g2 の形。\n"
+            "// 生成物。手で直さず script/codegen/font/split_font.py で作り直すこと。\n"
+            "// 日本語フォントのうちフラッシュに残す字(かな・記号・英数字・script/codegen/font/base_kanji.txt の漢字)。u8g2 の形。\n"
             "// 元は LovyanGFX の lgfx_font_japan_gothic_p_%d(IPAexゴシックを変換したもの)。\n"
             "// IPAフォントライセンスv1.0 の派生プログラム(THIRD_PARTY_LICENSES.md、pc/sdcard/sys/fonts/README.md)。\n"
             "#include \"gui/fonts/JpFont_Data.hpp\"\n\n" % px
@@ -306,7 +306,7 @@ def main():
 
     h = []
     h.append("#pragma once")
-    h.append("// 生成物。手で直さず script/font/split_font.py で作り直すこと(docs/design/performance.md「漢字の一部をSDへ」)。")
+    h.append("// 生成物。手で直さず script/codegen/font/split_font.py で作り直すこと(docs/design/performance.md「漢字の一部をSDへ」)。")
     h.append("// フラッシュに残した日本語フォントと、SDに置く追加フォント(/sys/fonts/jpgothic<px>.pkf)をつなぐ定数。")
     h.append("#include <cstdint>")
     h.append("")

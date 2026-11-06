@@ -1,4 +1,4 @@
-// 生成物: python3 script/i18n.py update が i18n/ の .po から作る。手で直さない(docs/design/i18n.md)
+// 生成物: python3 script/codegen/i18n.py update が i18n/ の .po から作る。手で直さない(docs/design/i18n.md)
 #include "system/I18n_Functions.hpp"
 #include "config/Lang_Config.hpp"
 

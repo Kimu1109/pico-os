@@ -57,11 +57,12 @@ class IconSpec:
     svg_path: str     # SVGファイルへの相対パス
 
 
-ICON_DIR = Path("tabler_icons")
+HERE = Path(__file__).resolve().parent
+ICON_DIR = HERE / "tabler_icons"
 
 # 自作アイコン置き場。
 # tablerに手頃な絵が無い、または24pxグリッド前提の絵柄が16pxで破綻する場合はここへ置く。
-CUSTOM_DIR = Path("custom_icons")
+CUSTOM_DIR = HERE / "custom_icons"
 
 
 # 【重要】このリストの並び順がそのままC++側の`enum class IconID`の値(0始まり、
@@ -76,7 +77,7 @@ ICONS: list[IconSpec] = [
     # tablerのwifi-0/1/2/wifiは「点のみ/弧1本/弧2本/弧3本」で、16pxだと
     # wifi-0が0ピクセル・wifi-1が6ピクセルにしかならず下2段階が判別できなかった。
     # そもそも弧の本数が3種類しか無いので4段階を作れない。
-    # 16pxグリッドに整合した棒グラフ形式へ差し替えてある(script/custom_icons/README.md)。
+    # 16pxグリッドに整合した棒グラフ形式へ差し替えてある(script/codegen/custom_icons/README.md)。
     # 圏外専用のアイコンは持たない。SDカードと同じく、最弱(signal-bars-1)の上へ
     # IconID::Xを重ねて表現する(Statusbar::render)。
     IconSpec("wifi_signal_1",    str(CUSTOM_DIR / "signal-bars-1.svg")),
@@ -478,7 +479,7 @@ def generate_header(icons: list, sizes: list, out_path: Path):
 
 
 def main():
-    out_path = Path("../src/gui/icons/icons_data.h")
+    out_path = HERE.parents[1] / "src" / "gui" / "icons" / "icons_data.h"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     generate_header(ICONS, ALL_SIZES, out_path)
 

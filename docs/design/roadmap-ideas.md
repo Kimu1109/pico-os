@@ -20,8 +20,8 @@
 | 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`docs/PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`。関数電卓+グラフ電卓、2026-10-03。単位変換・為替・プログラマ電卓、2026-10-22)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`docs/design/apps-local.md`「標準アプリの詳細」参照。 |
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/apps/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/リバーシ/ブロック崩し/スクラッチパッド/ペイント/テトリスはLuaアプリ(`pc/sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照。リバーシ・マインスイーパー・ブロック崩し・テトリスは`pico.game`の上に作り直した=下記「ボードゲーム4本のpico.gameへの移行」)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。**TODO/リマインダーはTodoist連携の`TodoScene`として実装済み**(下記「TODOアプリ」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、`GameBoyScene`としてPCで動作**。256KBまでのROMはRAMへ、1MBまでは内蔵フラッシュへ書いてXIPで読む。音も鳴る(#11)。実機での速さ・GBCは未(下記「ゲームボーイ」参照)。 |
-| 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
-| 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。MIDIはPCの`script/midi2mml.py`で取り込む。GBエミュの音(音源チップの再現)も鳴る。**実機での確認は未**(下記「音声出力」「曲データ」「ゲームボーイの音」参照)。 |
+| 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/tools/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
+| 11 | Chiptune音声再生 | **出力の土台・4チャンネルの音源・2コア目での合成・曲データ(MML)まで**: I2S(MAX98357A)・アンプの抜き差しの検出・未接続のときの扱い・ステータスバーのアイコン・PC/Web版(SDL)・Luaの`pico.sound_*`/`pico.music_*`・動作確認アプリ「チップチューン」・ミュージックアプリ。MIDIはPCの`script/tools/midi2mml.py`で取り込む。GBエミュの音(音源チップの再現)も鳴る。**実機での確認は未**(下記「音声出力」「曲データ」「ゲームボーイの音」参照)。 |
 
 **#7は完了しており、#5(Lua)の前提として十分な実例が揃った。** Lua APIの仕様は「C++で標準アプリを
 書いてみて必要になったもの」から逆算するのが確実で、`MarkdownScene`/`ClocksScene`/`CalculatorScene`/
@@ -36,7 +36,7 @@
   縦書きは `ReaderLayout::LayoutPage()` の行を「列」に読み替え、句読点・括弧・長音を回した字形(フォントに無いので描き分けが要る)で描く。
   ルビを親文字の上(縦書きなら右)に小さく出すには8〜12pxの日本語フォントが要り、フラッシュが数百KB増える。どちらも組み方(State)の形は変えずに足せる。
   青空文庫の zip を本体で解く(`lgfx_miniz` が既に入っている)のも候補。
-- **Markdownブラウザのブラウザ化**: 仕様は `docs/PROTOCOL.md`(HTTP/行指向TSV/SDをキャッシュにする方式)、サーバの参照実装は `script/reference_server.py`。
+- **Markdownブラウザのブラウザ化**: 仕様は `docs/PROTOCOL.md`(HTTP/行指向TSV/SDをキャッシュにする方式)、サーバの参照実装は `script/tools/reference_server.py`。
   **第1段(リンク追従・履歴・ナビゲーションヘッダー)と第2段(キャッシュ層)は実装済み。**
   第1段: `MarkdownScene`が履歴を自前で持ち、`MarkdownView::setOnLinkTap()`から`PICO_IO::resolve()`で相対パスを解決して同じシーンのまま開き直す。
   第2段: `apps/browser/Doc_Cache.hpp`(下記)。

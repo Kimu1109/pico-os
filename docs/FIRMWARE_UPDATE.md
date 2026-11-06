@@ -16,7 +16,7 @@ USBでつながなくても、Webの版の一覧から選ぶか、SDカードに
 (SDの設定ファイルの鍵は読まない。SDへはLuaアプリも書けるため)。
 
 ```sh
-python3 script/firmware_tool.py keygen          # ~/.pico-os/firmware.key を作り、公開鍵の1行を表示する
+python3 script/release/firmware_tool.py keygen          # ~/.pico-os/firmware.key を作り、公開鍵の1行を表示する
 ```
 
 1. 表示された `{ { 0x.., ... } },` の1行で `src/apps/firmware/Fw_Keys.hpp` の `kBuiltin` を置き換える
@@ -57,11 +57,11 @@ url = https://example.com/pico-os/firmware/
 ```
 
 - **ナイトリー**は `firmware.pfw` を Secrets の `FIRMWARE_SIGNING_KEY` で署名してからリリースへ載せる
-  (`script/firmware_tool.py sign`。署名は見出しだけに掛かり、見出しに中身のSHA-256が入っているので、ビルドした後から付けられる)。
+  (`script/release/firmware_tool.py sign`。署名は見出しだけに掛かり、見出しに中身のSHA-256が入っているので、ビルドした後から付けられる)。
   Secretsに鍵が無ければ署名なしのまま載せて警告を出す。鍵が `Fw_Keys.hpp` の公開鍵と違えば止まる
 - **安定版**は Actions の「ファームの安定版を出す」を手動で実行し、安定版にするナイトリーのタグ(`nightly-<通し番号>-<短いハッシュ>`)を入れる。
   同じ添付を署名し直して `v<通し番号>` のリリースを作る(ナイトリーは50本を超えると消えるが、安定版は消さない)
-- どちらも最後に Pages の公開(`web-pages.yml`)を動かす。公開のたびに `script/build_fw_index.py` が
+- どちらも最後に Pages の公開(`web-pages.yml`)を動かす。公開のたびに `script/release/build_fw_index.py` が
   **新しい安定版5本とナイトリー3本**の `firmware.pfw` を落として `/firmware/` へ写し、`index.tsv` を作る。
   同じ版が安定版とナイトリーの両方にあれば安定版の1行にする。読めない・壊れた更新ファイルは飛ばす
 - 同じ公開で `firmware.uf2` も写し(更新ファイルと同じ名前で拡張子だけ `.uf2`)、`downloads.json` を作る。
@@ -87,7 +87,7 @@ url = https://example.com/pico-os/firmware/
 ```sh
 pio run -e rpipico2w -t fwpack       # .pio/build/rpipico2w/firmware.pfw ができる(鍵があれば署名される)
 # または
-python3 script/firmware_tool.py pack --bin .pio/build/rpipico2w/firmware.bin --out firmware.pfw
+python3 script/release/firmware_tool.py pack --bin .pio/build/rpipico2w/firmware.bin --out firmware.pfw
 ```
 
 SDの `/firmware/` に置き(USBドライブ機能でPCから置ける)、「本体の更新」→[SDから選ぶ]、
@@ -101,7 +101,7 @@ SDの `/firmware/` に置き(USBドライブ機能でPCから置ける)、「本
    ```sh
    pio run -e rpipico2w -t fwpush --upload-port 192.168.1.23
    # または
-   python3 script/firmware_tool.py push --host 192.168.1.23 --bin .pio/build/rpipico2w/firmware.bin
+   python3 script/release/firmware_tool.py push --host 192.168.1.23 --bin .pio/build/rpipico2w/firmware.bin
    ```
    IPアドレスの代わりに本体の名前(mDNS。既定 `picoos.local`、設定アプリのWi-Fiタブの[名前]で変えられる)も使える:
    `--upload-port picoos.local`(PCがmDNSを引ける場合。macOS・avahiの入ったLinux・Windows 10以降)
@@ -185,7 +185,7 @@ PC   → "OK" を受け取ってから中身
 
 ## 版
 
-ビルドのたびに `script/pio_firmware.py`(`platformio.ini` の `extra_scripts`)が通し番号・コミット・日時を
+ビルドのたびに `script/pio/pio_firmware.py`(`platformio.ini` の `extra_scripts`)が通し番号・コミット・日時を
 `$BUILD_DIR/pico_build_info/Pico_Build_Info.h` へ書く。版は「本体の更新」の画面・起動時のログ・シリアルの `hw info` で見られる。
 ビルドの構成(env の名前)も書き、`PICOOS-BUILD;...;board=rpipico2w;env=<構成>;` としてファームに置く(Webの一覧が同じ構成の版を選ぶのに使う)。
 通し番号は履歴の数なので、浅いクローン(`git clone --depth`)では小さくなる(CIは `fetch-depth: 0` で全部取る)。

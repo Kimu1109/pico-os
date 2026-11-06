@@ -5,11 +5,11 @@
 
 ## 最適化の記録
 
-### よく通る所だけ -O2 でコンパイルする(`script/pio_hot_o2.py`) (2026-11-05)
+### よく通る所だけ -O2 でコンパイルする(`script/pio/pio_hot_o2.py`) (2026-11-05)
 
 ファームは全部 `-Os` でコンパイルしている(Flash の上限まで約131KB)。速さの効く少しのファイルだけ `-O2` にした。
 
-- **しくみ**: `platformio.ini` の `pre:script/pio_hot_o2.py` がビルドの middleware(`env.AddBuildMiddleware`)を登録し、
+- **しくみ**: `platformio.ini` の `pre:script/pio/pio_hot_o2.py` がビルドの middleware(`env.AddBuildMiddleware`)を登録し、
   `HOT_FILES` に当たるファイルのコンパイルにだけ `-O2` を足す(`-Os` の後ろなので `-O2` が勝つ)。`pre:` で登録するとライブラリの
   ビルド(`lib/lua` 等。`pre:` の後に env を写して作られる)にも引き継がれる。`-DPICO_HOT_O2=0` で全部 `-Os` に戻る(実機で比べる用)。
   PC/Web のビルドには関係しない。
@@ -199,7 +199,7 @@ SdFat 2.3.1(arduino-pico 同梱、`ENABLE_DEDICATED_SPI` は既定で1)の動き
   1フレームに1回へまとめる案だったが、測ると設定のスクロールで `loop()` の約1%(3M/267M)しか無かったのでやめた。
   合成の時間のほとんどは文字を描くこと(上)と背景・部品の塗りつぶしだった。
 
-### 漢字の一部をSDへ(`gui/core/ExtGlyphStore`・`gui/core/JpFont_Ext`・`script/font/`) (2026-11-05)
+### 漢字の一部をSDへ(`gui/core/ExtGlyphStore`・`gui/core/JpFont_Ext`・`script/codegen/font/`) (2026-11-05)
 
 日本語フォント(16px 161KB・24px 277KB)のうち、**常用漢字の外の漢字1,407字をフラッシュからSDへ**移し、要るときだけ読む。
 利用者と決めたこと: 切り方は「常用漢字の外」、SDの字が無いときは □(豆腐)でよく、**OSの画面の文字は常用漢字までで書く**、
@@ -209,8 +209,8 @@ SdFat 2.3.1(arduino-pico 同梱、`ENABLE_DEDICATED_SPI` は既定で1)の動き
   実機のファーム(`rpipico2w`)では 2,323,916B → 2,169,748B(−154KB。取得の処理などのコードを含む)、
   静的なRAMは 142,068B → 155,456B(+13.4KB。ほとんどが下の控え)。SDのファイルは 16px 58,517B・24px 103,621B。字の絵は1バイトも変えていない(元の `U8g2font::getGlyph()` と同じ探し方で、
   0〜0xFFFFの全部の字が残した字は同じ記録・移した字は「無い」になることを確かめた)。
-- **分け方**(`script/font/split_font.py`): LovyanGFX の `lgfx_font_japan_gothic_p_16/24` を読み、かな・記号・英数字の全部と
-  `script/font/base_kanji.txt`(常用漢字2,136字 + 「叱」(常用の「𠮟」は16bitの外でフォントに無い)・画面の文字で使っている「揃」「繋」・電卓の「匁」)
+- **分け方**(`script/codegen/font/split_font.py`): LovyanGFX の `lgfx_font_japan_gothic_p_16/24` を読み、かな・記号・英数字の全部と
+  `script/codegen/font/base_kanji.txt`(常用漢字2,136字 + 「叱」(常用の「𠮟」は16bitの外でフォントに無い)・画面の文字で使っている「揃」「繋」・電卓の「匁」)
   の漢字を u8g2 の形で `src/gui/fonts/JpFont_Base16/24.cpp` へ、残りの漢字(U+3400〜9FFF・U+F900〜FAFF)を
   `pc/sdcard/sys/fonts/jpgothic16/24.pkf` へ書く。形は道具の冒頭(見出し28B・stride字おきの索引128個まで・u8g2と同じ字の記録)。
   両方をつなぐ定数(印・大きさ・SHA-256・配布元の名前)は `JpFont_Data.hpp`。**どれも生成物**で、
@@ -224,13 +224,13 @@ SdFat 2.3.1(arduino-pico 同梱、`ENABLE_DEDICATED_SPI` は既定で1)の動き
 - **SDが使えない間**: `OSData::SD_usable` が false(SDが無い・USBドライブでPCに渡している)の間は読まない。
   `OSData::SD_mount_gen`(`PICO_SD::Setup()` が成功のたびに増やす)が変わったら開き直し、そのたびに `U8g2GlyphIndex` が
   「無い」と覚えた控えを捨てる(SDを戻した・フォントを置いたら字が出る)。読みに失敗したら次にマウントし直すまで使わない。
-- **画面の文字の決まり**: `script/font/check_ui_chars.py`(CIの「層の決まり」)が、`src/` の文字列と同梱Luaの文字列に
+- **画面の文字の決まり**: `script/codegen/font/check_ui_chars.py`(CIの「層の決まり」)が、`src/` の文字列と同梱Luaの文字列に
   `base_kanji.txt` の外の漢字があれば落とす(コメントは見ない)。どうしても要る字は `base_kanji.txt` へ理由つきで足して作り直す(1字約110B)。
 - **配り方**: `web-pages.yml` が GitHub Pages の `/fonts/` へ `jpgothic<px>-<印>.pkf` の名前で写す(ライセンスと README も)。
   本体は設定の「他」→「追加の漢字」の[取得](`services/FontDownload`)で、まだ使えない方だけを取り、`.part` へ書きながらSHA-256を取り、
   `JpFont_Data.hpp` の大きさ・SHA-256と合えば置き換えて開き直す。一覧のファイルは要らない。置き場は `/sys/firmware.cfg` の `font-url` で変えられる。
 - **ライセンス**: 元は IPAexゴシック(IPAフォントライセンスv1.0)。分けたもの(フラッシュ用もSD用も)は「派生プログラム」で、
-  同じライセンスで配る。条件(第3条1項)は、(1)作り方の公開(`script/font/` とこのリポジトリ)、(2)元へ戻す方法(`pc/sdcard/sys/fonts/README.md`)、
+  同じライセンスで配る。条件(第3条1項)は、(1)作り方の公開(`script/codegen/font/` とこのリポジトリ)、(2)元へ戻す方法(`pc/sdcard/sys/fonts/README.md`)、
   (3)同じライセンス(ライセンスの写しを `/fonts/` と `pc/sdcard/sys/fonts/` に置く)、(4)元の名前を使わない(`jpgothic*`)。
   ファームに入れていた LovyanGFX の配列も元々派生プログラムなので、立場は前と同じ。
 - **確かめたこと**: `ext_glyph_store_test`(実物の .pkf の全部の字・控えの取り合い・SDが抜けて戻る・無い/印違い/大きさ違い/壊れ/読みの失敗・
@@ -253,8 +253,8 @@ SdFat 2.3.1(arduino-pico 同梱、`ENABLE_DEDICATED_SPI` は既定で1)の動き
     `Label<N>` はテキストの置き場(`FixedString<N>` 2本)と、それに触る `setText`/`getText` 等だけを持ち、`LabelBase` は
     `rawBuf()`/`rawLength()`/`placeholderBuf()`/`placeholderLength()` の仮想関数で読む。外から見たAPIは変わらない。
   - **64pxのアイコンの絵をやめ、32pxを2倍に拡大して描く**(−21.7KB): 64pxはMsgDialogの大きなアイコンとLuaでしか使わない。
-    `script/generate_icons.py` の `SCALED_FROM = {64: 32}`。`IconAsset::scale` が2なら `DrawIconRaw()` が1画素を2x2で塗る。`IconSize::Px64` はそのまま使える。
-  - **同梱Luaをminify**(−11.5KB): `script/gen_lua_builtins.py` がコメント・字下げ・行末の空白を落とす。**改行は1つも消さない**ので行番号は .lua のまま。
+    `script/codegen/generate_icons.py` の `SCALED_FROM = {64: 32}`。`IconAsset::scale` が2なら `DrawIconRaw()` が1画素を2x2で塗る。`IconSize::Px64` はそのまま使える。
+  - **同梱Luaをminify**(−11.5KB): `script/codegen/gen_lua_builtins.py` がコメント・字下げ・行末の空白を落とす。**改行は1つも消さない**ので行番号は .lua のまま。
     元と詰めたものの `lua_dump` が(行の情報・ローカル変数名込みで)完全に一致することを確かめた。
   - **Wi-Fi転送のページをgzipで持つ**(−7.6KB): `file-share.md` の「方式」。
   - **TLSのルート証明書をPEMからDERへ**(−3.9KB): `browser-net.md` の「HTTPS」。
@@ -400,7 +400,7 @@ host/pathへ初めて`SetEntry()`する)、その時点までに溜まった目�
   は完全に保たれる。
 - 検証は`script/host_test/cache_test.cpp`(既存の全項目に加えて、
   「存在しないエントリの削除は目録に一切触れない(ファイルすら作らない)」
-  「新規追加5件それぞれが正しく引ける」を追加)。PCビルドで`script/reference_server.py`を
+  「新規追加5件それぞれが正しく引ける」を追加)。PCビルドで`script/tools/reference_server.py`を
   相手に実際にMarkdownアプリから文書を開き、`index.tsv`に正しく1行追記されること、
   同じページを再訪問しても(304になり`SetEntry()`が呼ばれないため)目録が
   1バイトも変わらないことを確認した。

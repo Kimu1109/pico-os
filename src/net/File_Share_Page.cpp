@@ -1,5 +1,5 @@
-// 生成物: script/gen_file_share_page.py が src/net/File_Share_Page.html から作る。直接書き換えないこと
-// (直したら python3 script/gen_file_share_page.py。CI の「層の決まり」が --check で食い違いを見る)
+// 生成物: script/codegen/gen_file_share_page.py が src/net/File_Share_Page.html から作る。直接書き換えないこと
+// (直したら python3 script/codegen/gen_file_share_page.py。CI の「層の決まり」が --check で食い違いを見る)
 #include "net/File_Share.hpp"
 
 // Wi-Fi転送のページ(ブラウザで開く1枚)。取り決めは net/File_Share.hpp の先頭。中身は .html の方を見ること。

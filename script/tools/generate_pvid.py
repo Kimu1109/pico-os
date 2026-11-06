@@ -10,10 +10,10 @@ generate_pvid.py
     バッファへ写す」だけで再生できる。
 
 使い方:
-    python3 script/generate_pvid.py encode in.mp4 out.pvid
-    python3 script/generate_pvid.py encode in.mp4 out.pvid --fps 12 --start 10 --duration 30 --preview check.mp4
-    python3 script/generate_pvid.py info out.pvid
-    python3 script/generate_pvid.py preview out.pvid check.mp4
+    python3 script/tools/generate_pvid.py encode in.mp4 out.pvid
+    python3 script/tools/generate_pvid.py encode in.mp4 out.pvid --fps 12 --start 10 --duration 30 --preview check.mp4
+    python3 script/tools/generate_pvid.py info out.pvid
+    python3 script/tools/generate_pvid.py preview out.pvid check.mp4
 
 必要なもの: ffmpeg / ffprobe(PATH の上)、numpy。
 音声は既定で out.pvid と同じ名前の .wav(モノラル・16bit・22050Hz)へ書き出す

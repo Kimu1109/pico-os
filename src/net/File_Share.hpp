@@ -179,7 +179,7 @@ namespace FileShare {
         return true;
     }
     // ページ本体(net/File_Share_Page.cpp。src/net/File_Share_Page.html を gzip したもの。
-    // script/gen_file_share_page.py が作る)。Content-Encoding: gzip で返す
+    // script/codegen/gen_file_share_page.py が作る)。Content-Encoding: gzip で返す
     extern const uint8_t kPageGz[];
     size_t PageGzLength();
 

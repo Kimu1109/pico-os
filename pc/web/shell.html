@@ -394,7 +394,7 @@
       <div class="body">
         <p class="hint" style="margin-top:0" data-i18n="pad.hint0">
           画面の下のボタン(マウス・複数の指で同時押しも可)か、キーボードで操作する。
-          実機では USB シリアルの <code>script/pad_serial.py</code> が担う部分で、同じ
+          実機では USB シリアルの <code>script/tools/pad_serial.py</code> が担う部分で、同じ
           <code>pad XXXX</code> の行を pico-os へ流している(チェックを外すと 0.5 秒で「外れた」扱いになる)。
         </p>
         <p class="hint" data-i18n="pad.hint1">
@@ -447,7 +447,7 @@
       "Available keys: <code>wifi</code> / <code>rssi</code> / <code>ssid</code> / <code>scan</code>.",
     "h.pad": "External controller",
     "pad.hint0": "Use the buttons below the screen (mouse, or several fingers at once) or the keyboard. " +
-      "On real hardware this is the job of <code>script/pad_serial.py</code> over USB serial; the page sends pico-os the same " +
+      "On real hardware this is the job of <code>script/tools/pad_serial.py</code> over USB serial; the page sends pico-os the same " +
       "<code>pad XXXX</code> lines (untick the box and it counts as unplugged after 0.5 s).",
     "pad.hint1": "D-pad = arrow keys / A = <code>X</code> / B = <code>Z</code> / X = <code>S</code> / Y = <code>A</code> / " +
       "L, R, ZL, ZR = <code>Q</code> <code>W</code> <code>E</code> <code>R</code> / " +
@@ -650,7 +650,7 @@
   // ---- 外部コントローラー ----
   // pico-os(PadFunctions)は USB シリアルから "pad XXXX\n"(押しているボタンの16進数)を読む。
   // Webでは Serial の受信口が picoos_serial_push()(main_pc.cpp)なので、そこへ1バイトずつ入れる。
-  // 取り決めは script/pad_serial.py と同じ: 変わったときと、変わらなくても100msごとに送る
+  // 取り決めは script/tools/pad_serial.py と同じ: 変わったときと、変わらなくても100msごとに送る
   // (pico-osは500ms届かないと全部離す)。並びは Pad_Functions.hpp の Button と同じ(変えないこと)
   (function () {
     var NAMES = ['up', 'down', 'left', 'right', 'a', 'b', 'x', 'y',

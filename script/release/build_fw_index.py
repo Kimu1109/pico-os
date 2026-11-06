@@ -4,11 +4,11 @@
 
   # 1. どのリリースを載せるか選ぶ(gh release list --json の出力から。新しい順に安定版N本・ナイトリーN本)
   gh release list --limit 200 --json tagName,isPrerelease,isDraft,createdAt > releases.json
-  python3 script/build_fw_index.py select releases.json --stable 5 --nightly 3 > picked.tsv   # 「種類<TAB>タグ」
+  python3 script/release/build_fw_index.py select releases.json --stable 5 --nightly 3 > picked.tsv   # 「種類<TAB>タグ」
 
   # 2. 選んだリリースの firmware.pfw(と firmware.uf2)を落とし、
   #    「種類<TAB>更新ファイル[<TAB>.uf2(無ければ -)[<TAB>タグ]]」を並べて一覧と置き場を作る
-  python3 script/build_fw_index.py build got.tsv --out _site/firmware
+  python3 script/release/build_fw_index.py build got.tsv --out _site/firmware
 
 置き場には index.tsv と、更新ファイルを pico-os-<通し番号>-<git>.pfw の名前で写したものを置く。
 .uf2 を渡した版は、同じ名前で拡張子だけ .uf2 にしたものも置く(Webのダウンロードのページ用。本体は読まない)。

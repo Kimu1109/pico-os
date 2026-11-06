@@ -53,7 +53,7 @@ private:
     static constexpr uint32_t kNotFound = 1;
     static constexpr uint32_t kInExt = 2;   // 追加のフォント(ext_)にある
 
-    // 追加のフォントを聞いてよい字(漢字)。script/font/split_font.py の is_kanji() と同じ範囲
+    // 追加のフォントを聞いてよい字(漢字)。script/codegen/font/split_font.py の is_kanji() と同じ範囲
     static constexpr bool MayBeInExt(uint16_t e) { return (e >= 0x3400 && e <= 0x9FFF) || (e >= 0xF900 && e <= 0xFAFF); }
 
     const uint8_t* findAscii(uint16_t encoding) const;   // 0〜255(元と同じ探し方)

@@ -1,5 +1,5 @@
 // HttpGet の結合テスト。**実際にソケットで通信する**ので、run.sh(ネットワーク不要の
-// スタブ環境)ではなく run_net.sh から動かす。相手は script/reference_server.py。
+// スタブ環境)ではなく run_net.sh から動かす。相手は script/tools/reference_server.py。
 //
 // 確かめたいのは、単体テスト(http_test)では触れない以下の経路:
 //   - pc/compat の WiFiClient で本当に繋がって受信できること

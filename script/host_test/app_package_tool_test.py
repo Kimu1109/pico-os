@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""アプリのパッケージ(.papp)を作る側(script/build_app_repo.py の package / site)と読む側のテスト。
+"""アプリのパッケージ(.papp)を作る側(script/release/build_app_repo.py の package / site)と読む側のテスト。
 
   python3 app_package_tool_test.py <app_package_testのパス> <作業ディレクトリ>
 
@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, os.path.join(HERE, "..", "release"))
 import build_app_repo as b  # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
@@ -139,7 +139,7 @@ def main():
     with open(key, "w") as f:
         f.write(SEED_A.hex() + "\n")
     out = os.path.join(work, "cli.papp")
-    r = subprocess.run([sys.executable, os.path.join(ROOT, "script", "build_app_repo.py"), "package",
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "script", "release", "build_app_repo.py"), "package",
                         "--key", key, "--app", os.path.join(src, "テトリス"), "--out", out, "--author", "tester"],
                        capture_output=True, text=True)
     check(r.returncode == 0 and os.path.isfile(out), f"package コマンドが書き出す ({r.stderr.strip()})")
@@ -165,7 +165,7 @@ def main():
             dst = os.path.join(site, a.id, a.version, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(os.path.join(a.path, rel), dst)
-    r = subprocess.run([sys.executable, os.path.join(ROOT, "script", "build_app_repo.py"), "site", "--dir", site],
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "script", "release", "build_app_repo.py"), "site", "--dir", site],
                        capture_output=True, text=True)
     check(r.returncode == 0, f"site コマンドが通る ({r.stderr.strip()})")
     html = open(os.path.join(site, "index.html"), encoding="utf-8").read() if r.returncode == 0 else ""

@@ -64,7 +64,7 @@
 //                      種別へ呼ぶとエラーになることを確認する
 //   pico.canvas_clear/canvas_save/canvas_load → CanvasRasterのw/hリサイズ
 //                      (pico.set経由。以前は100x100固定だった)、白紙化、
-//                      `.pimg`としての保存/読み込み(script/generate_pimg.pyと
+//                      `.pimg`としての保存/読み込み(script/tools/generate_pimg.pyと
 //                      同じRLE形式でSDへ書き出されること)、保存時と異なるサイズの
 //                      .pimgを読み込むとキャンバス自体がそのサイズへ合わせ直される
 //                      こと、画面サイズを超えるwidth/heightを名乗るファイルは
@@ -171,7 +171,7 @@ static void check(bool cond, const char* label) {
     if (!cond) failures++;
 }
 
-// テスト用の最小`.pimg`を組み立てる(script/generate_pimg.pyのフォーマット参照)。
+// テスト用の最小`.pimg`を組み立てる(script/tools/generate_pimg.pyのフォーマット参照)。
 // 全ピクセルを単一の色indexで塗りつぶすだけの最小ボディを1ランで表現する
 static std::string MakePimgBytes(uint16_t width, uint16_t height, bool transparent, uint8_t color_index) {
     std::string bytes;
@@ -1448,7 +1448,7 @@ int main(){
         check(HostSd::files.count("/canvas/a.pimg") == 1,
               "pico.canvas_save: SDへ実際にファイルができる");
         check(HostSd::files["/canvas/a.pimg"] == MakePimgBytes(6, 4, false, 9),
-              "pico.canvas_save: 書き出したバイト列がscript/generate_pimg.pyと同じRLE形式になる");
+              "pico.canvas_save: 書き出したバイト列がscript/tools/generate_pimg.pyと同じRLE形式になる");
 
         const bool clear_ok = engine.Run("pico.canvas_clear(canvas_id)", "canvas_clear_test");
         check(clear_ok, "pico.canvas_clear: エラーなく実行できる");

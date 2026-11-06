@@ -1,6 +1,6 @@
 #pragma once
 
-// script/generate_jis_table.py が作る。手で直さないこと。
+// script/codegen/generate_jis_table.py が作る。手で直さないこと。
 // JIS X 0208 の区点 → Unicode(cp932の写像)。添字は (区-1)*94 + (点-1)。0 は対応なし
 
 #include <cstdint>

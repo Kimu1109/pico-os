@@ -11,11 +11,11 @@ UTF-8へ直すための表 src/apps/mail/Mail_Jis_Data.hpp を作る。標準ラ
   - 89〜92区のNEC選定IBM拡張も入る。IBM拡張(Shift_JISの0xFA〜0xFC)は表の外なので 〓 になる
 対応の無い区点は 0 にする(読む側が 〓 に置き換える)。
 
-使い方: python3 script/generate_jis_table.py
+使い方: python3 script/codegen/generate_jis_table.py
 """
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / "src" / "apps" / "mail" / "Mail_Jis_Data.hpp"
+OUT = Path(__file__).resolve().parents[2] / "src" / "apps" / "mail" / "Mail_Jis_Data.hpp"
 
 
 def sjis_bytes(row, cell):
@@ -44,7 +44,7 @@ def main():
     lines = [
         "#pragma once",
         "",
-        "// script/generate_jis_table.py が作る。手で直さないこと。",
+        "// script/codegen/generate_jis_table.py が作る。手で直さないこと。",
         "// JIS X 0208 の区点 → Unicode(cp932の写像)。添字は (区-1)*94 + (点-1)。0 は対応なし",
         "",
         "#include <cstdint>",

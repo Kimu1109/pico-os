@@ -78,7 +78,7 @@ bool DecodePimgWindow(FsFile& f, const PimgHeader& header, LGFX_Sprite& dst,
 
 // sprite(4bpp、readPixelValue()でパレット番号0〜15を読める前提)の中身を
 // 行優先(ラスタスキャン)でRLE符号化し、.pimg形式でfへ書き出す
-// (script/generate_pimg.pyのC++版エンコーダ)。width/heightは呼び出し側が
+// (script/tools/generate_pimg.pyのC++版エンコーダ)。width/heightは呼び出し側が
 // 把握しているサイズ(通常はspriteを作った時のサイズ)をそのまま渡す。
 // 書き込みに失敗した場合(SD容量不足等)はfalseを返す。
 bool EncodePimg(LGFX_Sprite& sprite, uint16_t width, uint16_t height, FsFile& f, bool transparent = false);

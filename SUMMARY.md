@@ -12,13 +12,13 @@
 | 2 | 汎用基盤 | ✅ 完了 | `gui.md` `lua.md` |
 | 3 | スクリーン管理 | 🔨 バックグラウンド実行・ホーム画面のウィジェットは済み。メモリプール(シーンアリーナ)は済み・実機の計測は未 | `os-services.md` `performance.md` |
 | 4 | Wi-Fiの管理強化 | ✅ 完了 | `security-wifi.md` |
-| 5 | Luaアプリ | ✅ 既知の欠けは無い(`pico.game`・アプリストアまで)。実機のRAM/Flashの実測は未 | `lua.md` `lua-api.md` `lua-apps.md` |
+| 5 | Luaアプリ | ✅ 既知の欠けは無い(`pico.game`・アプリストアまで)。実機のRAM/Flashの実測は未 | `lua.md` `lua-api/README.md` `lua-apps.md` |
 | 6 | PC/Web動作対応 | ✅ 完了 | `pc-web.md`・`pc/README.md` |
 | 7 | 標準アプリ開発 | ✅ 完了 | `apps-local.md` `browser-net.md` |
 | 8 | セカンダリアプリ開発 | 🔨 ゾンビTDの本体とPICO SHOOTINGが残り(メールは受信だけ) | `apps-online.md` `apps-local.md` `lua-apps.md` `iso.md` |
 | 9 | GameBoyエミュ | 🔨 PCで動作(音・途中保存・1MBまでのROM)。実機での速さは未確認 | `gameboy.md` |
 | 10 | 外部コントローラー | 🔨 USBシリアル・Web・Wiiクラシック(実物は未確認)。キーボードの本体への直結は未 | `input.md` |
-| 11 | Chiptuneを再生 | 🔨 音源・MML・GBの音・WAV・MP3・FLAC・ALAC・動画・録音・録音の文字起こしまで動作。実機ではスピーカー・PCM5102A・録音を確認済み、イヤホンの自動切り替えとMP3とFLACとALACと文字起こしは未確認 | `sound.md` |
+| 11 | Chiptuneを再生 | 🔨 音源・MML・GBの音・WAV・MP3・FLAC・ALAC・動画・録音・録音の文字起こしまで動作。実機ではスピーカー・PCM5102A・録音を確認済み、イヤホンの自動切り替えとMP3とFLACとALACと文字起こしは未確認 | `sound/README.md` |
 | 12 | 開発者向けの道具 | 🔨 PCで動作。実機ビルド・ファームの更新・機能を外した版の起動は実機で確認済み、HardFaultの照合・ウォッチドッグの余裕は未確認 | `devtools.md` |
 | 13 | 表示言語の切り替え | 🔨 仕組み・英語・OSの外枠・各C++アプリ・Lua API・同梱Luaアプリ(天気は日本語のまま)・Wi-Fi転送・通信の誤りの文・アプリの説明とストアの訳は済み。MMLの誤りの文と公式アプリの配布物への反映は未 | `i18n.md` |
 
@@ -399,6 +399,7 @@
 - [x] サイトのページ(トップ・ダウンロード・ストアの雛形)を `pc/web/` から `site/` へ移す
 - [x] SDの中身を `pc/sdcard/` からリポジトリの根の `sdcard/` へ上げる(PCで動かしたときの状態は `pc/run/`)
 - [x] docs/ を種類で分ける(`spec/` 形式・`guide/` 手順・`design/` 設計記録。`docs/README.md`)
+  - [x] 大きすぎる設計記録を分ける(`sound/`・`lua-api/` をフォルダに、`performance-resolved.md`)
 - [x] 液晶・SDの配線と設定を内蔵フラッシュに置く(USBシリアルの `hwcfg`・失敗したら既定へ戻す)
 - [x] 常用漢字の外の漢字をSDの追加フォントへ移す(設定の「他」からWebで取る。画面の文字は常用漢字までの決まり)
   - [ ] 実機での確認(SDから字を読む速さ・取得)

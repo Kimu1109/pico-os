@@ -299,7 +299,7 @@ Lua等の外部から安全にウィジェットを指すための32bit ID。**�
     重なっていれば頼まない(16色の下書きが見える)。重なっていたものがどくと、その跡のdirty矩形で ImageView が描き直され、また頼む。
     FlushDirty は dirty 矩形にかかるウィジェットを `renderForce()` するので、この「どいたら描き直される」は特別な仕掛け無しで起きる。
   - ドラッグ中は頼まない(1pxごとにSDから解き直さない)。指を離したら頼む。消える・隠れるときは `CancelDirectPaint()`(描いた所を `MarkDirtyBelow` でframeの絵へ戻す)。
-  - **Luaの Canvas からも使う**(`pico.image_load` の `full_color` + `pico.draw_image`。`lua-api.md`「フルカラーの画像(full_color)」)。
+  - **Luaの Canvas からも使う**(`pico.image_load` の `full_color` + `pico.draw_image`。`lua-api/drawing.md`「フルカラーの画像(full_color)」)。
     描く関数は `ImageView::PaintToLcd()` を共有する。
   - 状態はヘッダの inline 変数だけ(`GFX_Functions.cpp` を持たないホストテストでも ImageView をそのまま使えるように)。既にあった
     `EnableFullColorSprite`(16bppのスプライトを持つ版。使っている所は無い)とは別。

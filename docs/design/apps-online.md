@@ -318,7 +318,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   音量は続けて変えても0.4秒後に最後の値だけ送る。403(`PREMIUM_REQUIRED`)/404(端末が無い)は下の欄に理由を出す。
   端末は`GET /me/player/devices`→`pico.show_choice`→`PUT /me/player {device_ids, play=true}`。
 - **ジャケット**: 曲の2番目の画像(横300px)を`save_to`で`art.jpg`へ取り、`pico.image_load(..., {max_w=80, max_h=80})`(1/4で75px)。
-  **2026-10-28から `full_color = true` で読み、液晶へフルカラーで描く**(`lua-api.md`「フルカラーの画像(full_color)」)。
+  **2026-10-28から `full_color = true` で読み、液晶へフルカラーで描く**(`lua-api/drawing.md`「フルカラーの画像(full_color)」)。
   描き直すたびにSDから解き直すので、シーク・音量のつまみを動かしている間は Canvas 全体ではなくその欄だけを `mark_dirty` する(`V.progress_rect`/`V.volume_rect`)。
   **3秒ごとの取り直し・操作で描き直すときも、ジャケットが変わっていなければその欄を外して `mark_dirty` する**(`V.rects_except_art()`。
   右の文字の欄とその下の2枚。辺で接するだけなので1枚にまとめられない)。Canvas 全体を描き直すのは `P.art_dirty`(ジャケットが変わった・

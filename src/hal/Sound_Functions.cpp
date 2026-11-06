@@ -170,7 +170,7 @@ namespace {
     uint64_t wav_pushed = 0;                // 列へ積んだサンプル数(鳴らし始め/飛んだ位置から数える)
     uint64_t wav_base = 0;                  // 耳に届いている曲の頭が wav_pushed のどこか(続けて積んだ曲へ移ると進む)
     uint32_t wav_duration_ms = 0;
-    // 曲と曲の間を空けない(WavQueueNext)。docs/design/sound.md「曲と曲の間を空けない」
+    // 曲と曲の間を空けない(WavQueueNext)。docs/design/sound/playback.md「曲と曲の間を空けない」
     FixedString<PICO_PATH_LEN> wav_path;        // 耳に届いている曲(シークで開き直す)
     FixedString<PICO_PATH_LEN> wav_next_path;   // 予約された次の曲。続けて積んだ後は、耳に届くまでその曲を指す
     bool wav_next_set = false;              // 予約があり、まだ続けて積んでいない
@@ -424,7 +424,7 @@ namespace {
         }
     }
 
-    // 1曲ぶんの展開の速さをログへ出す(止めた・次の曲へ移ったとき。docs/design/sound.md「MP3の再生」「FLACの再生」)。
+    // 1曲ぶんの展開の速さをログへ出す(止めた・次の曲へ移ったとき。docs/design/sound/playback.md「MP3の再生」「FLACの再生」)。
     // MP3は展開(minimp3)だけの時間で、SDの読み込みと周波数の変換は含まない。1フレームの音の長さと比べた割合が、1コア目のおおよその負担。
     // FLACは1ブロックの展開(SDの読み込みを含む。周波数の変換は含まない)の時間を、そのブロックの音の長さと比べる
     void LogPackedStats(){

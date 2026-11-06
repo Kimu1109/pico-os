@@ -7,7 +7,7 @@
 #include "consts.hpp"
 
 // 音のファイルのタグ(曲名・アーティスト・アルバム・曲番号)を読む。ミュージックの索引(apps/music/Music_Library)が使う。
-// docs/design/sound.md「曲のタグと索引」。
+// docs/design/sound/music-app.md「曲のタグと索引」。
 //
 // - .mp3: 頭の ID3v2(v2.2 / v2.3 / v2.4)の TIT2・TPE1・TALB・TRCK(v2.2 は TT2・TP1・TAL・TRK)。
 //   無い項目は終わりの ID3v1(128バイト。v1.1 の曲番号も)で埋める

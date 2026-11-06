@@ -108,7 +108,7 @@ namespace PICO_Path {
             constexpr const char* SYS_TRANSCRIBE_KEY = "/sys/transcribe_key.cfg";
             // ミュージックアプリの再生のしかた("shuffle = true|false" / "repeat = off|all|one")。MusicScene参照
             constexpr const char* SYS_MUSIC_CFG = "/sys/music.cfg";
-            // ミュージックの「続きから」(プレイリスト・曲・位置)。MusicService参照(docs/design/sound.md「続きから鳴らす」)
+            // ミュージックの「続きから」(プレイリスト・曲・位置)。MusicService参照(docs/design/sound/music-app.md「続きから鳴らす」)
             constexpr const char* SYS_MUSIC_RESUME_CFG = "/sys/music_resume.cfg";
             // ミュージックの曲の索引(タグ。決まった大きさの記録を並べたもの)。MusicLibrary参照。作り直す間は .tmp
             constexpr const char* SYS_MUSIC_INDEX = "/sys/music_index.bin";

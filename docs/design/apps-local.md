@@ -510,7 +510,7 @@ SSID/パスワードの「編集」行は無くなった(同じSSIDを「追加�
   変化を検出している(`ClocksScene`の`before_sec`等と同じ「変化検出」の流儀)。
   ※`DropdownMenu`自体は2026-09-21のLua API穴埋めで`setOnChanged()`
   (Lua側`dropdown_changed`イベント)を持つようになったが、`SettingsScene.cpp`はこの
-  ポーリング実装のまま未移行(`docs/design/lua-api.md`「ウィジェット固有イベント」参照)。
+  ポーリング実装のまま未移行(`docs/design/lua-api/ui.md`「ウィジェット固有イベント」参照)。
 - **音量**(`sound.cfg`の`volume`、0〜100)は`NumberSlider`。ドラッグ中は`SoundFunctions::SetVolume()`で
   その場で反映し、**指を離したときに1回だけ**`SetValue()`で保存して確認音(880Hz)を鳴らす
   (ドラッグの1フレームごとにSDへ書かないため。離す前に画面を抜けた場合は`onExit()`で保存)。

@@ -5,7 +5,7 @@
 // パス->内容のフラットなmapで、ディレクトリの実体もopenNext()による走査も無い
 // (openNext()は常にfalseを返す)ため、"/lua/apps/"配下に何個ディレクトリを置いても
 // この環境では1件も見つからない。この制約はdocs/design/browser-net.mdの「文書キャッシュ」(Doc_Cache::Clear())
-// とdocs/design/lua-api.mdの「SDカードアクセス」(pico.sd_list)と同じもので、実際の走査結果はPCビルド(pc/compat/SdFat.hは
+// とdocs/design/lua-api/storage.mdの「SDカードアクセス」(pico.sd_list)と同じもので、実際の走査結果はPCビルド(pc/compat/SdFat.hは
 // 実ファイルシステム)の--shotで確認した(sdcard/lua/apps/ の各アプリ
 // が実際にランチャへ現れ、タップで起動できることを確認済み)。
 //

@@ -16,7 +16,7 @@
 #include "config/HwConfig.hpp"
 
 // --- 液晶の種類 ---
-// platformio.ini の env で -DPICO_PANEL_ST7796 等を足すと切り替わる(既定はILI9341)。
+// buildcfg/ の版で -DPICO_PANEL_ST7796 等を足すと切り替わる(既定はILI9341。部品は buildcfg/options.ini の opt_screen_*)。
 // 画面の大きさ(SCREEN_WIDTH/HEIGHT、consts.hpp)はパネルの縦向きの大きさと合わせること
 // (setRotation()はしていない)。タッチはXPT2046のまま(Touch_Functions.hpp)。
 #if defined(PICO_PANEL_ST7796)

@@ -3,7 +3,7 @@
 #include "config/Hardware_Config.hpp"
 
 // ビルド時に選べる内蔵アプリ(1=載せる・既定、0=載せない)。ハードウェア機能(Hardware_Config.hpp)と同じ形で、
-// platformio.ini の env の build_flags で -DPICO_APP_GB=0 等を足す(例は env:rpipico2w_lite)。
+// buildcfg/ の版の build_flags で -DPICO_APP_GB=0 等を足す(部品は buildcfg/options.ini の opt_apps_* 等、例は env:rpipico2w_lite)。
 // PCビルドは cmake -DPICOOS_APP_GB=OFF 等(pc/CMakeLists.txt)。
 //
 // 載せないアプリは、入口(アプリの一覧・バックグラウンドの仕事・ホーム画面のウィジェット・ファイルからの関連付け)を

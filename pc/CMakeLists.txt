@@ -165,7 +165,7 @@ set(PICOOS_SCREEN_H 320 CACHE STRING "画面の高さ(画素)")
 target_compile_definitions(picoos_pc PRIVATE
     SCREEN_WIDTH=${PICOOS_SCREEN_W} SCREEN_HEIGHT=${PICOOS_SCREEN_H})
 
-# 音楽再生に特化した版(platformio.ini の env:rpipico2w_music と同じ旗)。ONにすると、下のマイク・内蔵アプリ・pico.iso の
+# 音楽再生に特化した版(buildcfg/variants.ini の env:rpipico2w_music と同じ旗。片方を変えたらもう片方も直す)。ONにすると、下のマイク・内蔵アプリ・pico.iso の
 # 個別の指定より優先して、ミュージック・ストア以外の内蔵アプリとマイクと pico.iso を外す。
 # 例: cmake -S pc -B pc/build-music -DPICOOS_MUSIC_BUILD=ON
 option(PICOOS_MUSIC_BUILD "音楽再生に特化した版にする" OFF)

@@ -82,17 +82,22 @@ jobs:
   layers:
     name: 層の決まり
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # apt のミラーが遅いと cairosvg の取得に数分かかることがある(キャッシュに当たれば数秒)
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: script/check/check_layers.py
         run: python3 script/check/check_layers.py
-      - name: 同梱のLuaモジュールの生成物が .lua と一致しているか
-        run: python3 script/codegen/gen_lua_builtins.py --check
-      - name: Wi-Fi転送のページの生成物(gzip)が .html と一致しているか
-        run: python3 script/codegen/gen_file_share_page.py --check
-      - name: 表示の訳(i18n/*.po と I18n_Table_*.cpp)が src/ の TR() と一致しているか
-        run: python3 script/codegen/i18n.py --check
+      # アイコンの検査(generate_icons.py --check)は SVG を描くのに cairosvg が要る。ランナーのシステムの python3 は
+      # pip で入れるのを断る(PEP 668)ので apt の版を使う(noble の 2.7.1 で icons_data.h が同じに作れることを確かめてある)
+      - name: 生成物の検査に要るものを入れる
+        uses: ./.github/actions/apt-cached
+        with:
+          packages: python3-cairosvg python3-pil
+      # 同梱のLuaモジュール・Wi-Fi転送のページ・表示の訳・JISの表・TLSのルート証明書の一覧・アイコンが、材料から作り直したものと合っているか。
+      # フォントの分割は LovyanGFX の本体が要るので firmware-build.yml が別に見る(script/check/check_generated.py --list)
+      - name: 生成物が材料と合っているか
+        run: python3 script/check/check_generated.py --skip fonts
       # 常用漢字の外の字はSDの追加フォントにしか無い(docs/design/performance.md「漢字の一部をSDへ」)
       - name: 画面の文字がフラッシュの漢字(script/codegen/font/base_kanji.txt)だけで書かれているか
         run: python3 script/codegen/font/check_ui_chars.py

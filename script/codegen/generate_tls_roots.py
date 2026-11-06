@@ -9,6 +9,10 @@ pico-os は OS の証明書ストアを持たないので、繋ぎたい相手�
 ルートを足す/差し替えるときは ROOTS を直して、このスクリプトを流し直すこと:
 
     python3 script/codegen/generate_tls_roots.py
+    python3 script/codegen/generate_tls_roots.py --check   # ROOTS とヘッダの一覧・枚数が合っているかだけ見る(CI)
+
+中身は母艦のストアから取り、生成日も入るので、作り直して比べる検査はできない。--check は ROOTS を直して
+作り直し忘れたこと(並び・説明・枚数の食い違い)だけを見る。母艦のストアは読まない。
 
 **ROOTS は末尾へ足すこと。** 母艦のストアから消えたルート(配布元が信頼を外した古いルート等)は、
 今の Tls_Roots_Data.hpp に焼き込まれている同じ位置の証明書を引き継ぐ(並びで対応を取るため)。
@@ -81,9 +85,35 @@ def existing_pems(path):
     return re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", body, re.S)
 
 
+def check(out_path):
+    """ROOTS の説明と並びが、ヘッダの一覧(「//       説明 / 期限 …」の行)と kCount に合っているか"""
+    if not os.path.exists(out_path):
+        print(f"{out_path} がありません")
+        return 1
+    text = open(out_path, encoding="utf-8").read()
+    whys = re.findall(r"^//       (.*) / 期限 .*$", text, re.M)
+    m = re.search(r"kCount = (\d+);", text)
+    count = int(m.group(1)) if m else -1
+    want = [why for _, why in ROOTS]
+    ders = len(re.findall(r"static const uint8_t kDer\d+\[\]", text))
+    if whys != want or count != len(ROOTS) or ders != len(ROOTS):
+        print(f"{os.path.basename(out_path)} が ROOTS と合っていません(ROOTS {len(ROOTS)} 枚 / ヘッダ {count} 枚)。"
+              "python3 script/codegen/generate_tls_roots.py で作り直してください")
+        for i in range(max(len(whys), len(want))):
+            a = want[i] if i < len(want) else "(無し)"
+            b = whys[i] if i < len(whys) else "(無し)"
+            if a != b:
+                print(f"  {i}: ROOTS「{a}」 / ヘッダ「{b}」")
+        return 1
+    print(f"{os.path.basename(out_path)} は ROOTS と一致しています({count} 枚)")
+    return 0
+
+
 def main():
     repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     out_path = os.path.join(repo, "src", "net", "Tls_Roots_Data.hpp")
+    if "--check" in sys.argv[1:]:
+        return check(out_path)
     previous = existing_pems(out_path)
 
     lines = [

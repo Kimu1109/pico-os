@@ -174,6 +174,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 
 - `sh script/host_test/run.sh`(CMake + CTest、ASan、約80本。`run.sh core lua-engine` でグループ指定、`--list`、`-j N`)。
   テストを足すときは `script/host_test/CMakeLists.txt` の一覧に `host_test(<名前> GROUP <グループ>)` を1行。説明と落とし穴は `script/host_test/README.md`。
+- 生成物(アイコン・訳・JISの表・TLSの一覧・同梱Luaモジュール等)が材料と合っているかは `picoos check`(`script/check/check_generated.py`。CIでも回る)。
 - `run_net.sh`(実通信)/ `run_mem.sh`(確保回数)/ PCビルドはCIに無いので、**変更のたびに自分で回す**。
 - PR時のCI: ホストテスト(`host-tests.yml`。**グループを足したらmatrixにも足す**、ずれると `groups-in-sync` が落ちる)・層の決まり・
   実機ファームのビルド(`firmware-build.yml`。派生版は `rpipico2w_minimal` だけ、残りはナイトリー)。他にWebビルドとWebからのファーム更新の一覧の公開(`web-pages.yml`)と、毎晩mainの実機ファームを署名してリリースへ載せるナイトリー(`nightly.yml`、50本まで)・

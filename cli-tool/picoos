@@ -84,6 +84,7 @@ PASSTHROUGH_PY = {
     ("pvid",): "tools/generate_pvid.py",
     ("pad",): "tools/pad_serial.py",
     ("tls-roots",): "codegen/generate_tls_roots.py",
+    ("check",): "check/check_generated.py",
     ("gen", "blocks"): "assets/generate_blocks_sheet.py",
     ("gen", "breakout"): "assets/generate_breakout_blocks.py",
     ("gen", "minesweeper"): "assets/generate_minesweeper_tiles.py",
@@ -364,6 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("pvid", help="動画を.pvidへ変換 (generate_pvid.py、要ffmpeg+numpy、引数は転送)")
     sub.add_parser("pad", help="PCのキーボードを外部コントローラー/物理キーボードにする (pad_serial.py、引数は転送)")
     sub.add_parser("tls-roots", help="焼き込みルート証明書を生成 (generate_tls_roots.py、引数は転送)")
+    sub.add_parser("check", help="生成物(アイコン・訳・JISの表等)が材料と合っているかまとめて見る (check/check_generated.py、引数は転送)")
 
     gen_parser = sub.add_parser("gen", help="アプリ用の画像(.pimg)生成スクリプト群")
     gen_sub = gen_parser.add_subparsers(dest="gen_command", required=True)

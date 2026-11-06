@@ -43,7 +43,7 @@ except ImportError:
     print("必要なパッケージが見つかりません: cairosvg, PIL")
     print("- uv venv : 仮想環境を構築しましたか?")
     print("- uv pip install -r requirements.txt : 依存パッケージをインストールしましたか?")
-    sys.exit(1)
+    sys.exit(2)  # 2 = 依存が無くて確かめられない(script/check/check_generated.py が見分ける)
 
 
 # ============================================================
@@ -376,7 +376,8 @@ def generate_header(icons: list, sizes: list, out_path: Path):
         for size in sizes:
             if size in SCALED_FROM:
                 continue
-            print(f"  変換中: {icon.name} @ {size}px  ({icon.svg_path})")
+            if VERBOSE:
+                print(f"  変換中: {icon.name} @ {size}px  ({icon.svg_path})")
 
             alpha = rasterize_to_alpha(icon.svg_path, size)
             binary = threshold_to_binary(alpha, BINARY_THRESHOLD)
@@ -472,17 +473,36 @@ def generate_header(icons: list, sizes: list, out_path: Path):
     )
     lines.append("")
 
-    out_path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"\n生成完了: {out_path}  ({total_bytes} bytes のアイコンデータ, "
-          f"{len(icons)}アイコン x {len(sizes) - len(SCALED_FROM)}サイズ = "
-          f"{len(icons) * (len(sizes) - len(SCALED_FROM))}枚。{sorted(SCALED_FROM)}pxは拡大して描く)")
+    text = "\n".join(lines)
+    summary = (f"{total_bytes} bytes のアイコンデータ, "
+               f"{len(icons)}アイコン x {len(sizes) - len(SCALED_FROM)}サイズ = "
+               f"{len(icons) * (len(sizes) - len(SCALED_FROM))}枚。{sorted(SCALED_FROM)}pxは拡大して描く")
+    return text, summary
 
 
-def main():
+VERBOSE = True
+
+
+def main(argv=None):
+    """引数なしで書き出す。--check は作り直したものが今のファイルと同じかだけ見る(違えば終了コード1。CIで回す)"""
+    global VERBOSE
+    argv = sys.argv[1:] if argv is None else argv
+    VERBOSE = "--check" not in argv
     out_path = HERE.parents[1] / "src" / "gui" / "icons" / "icons_data.h"
+    text, summary = generate_header(ICONS, ALL_SIZES, out_path)
+    if "--check" in argv:
+        cur = out_path.read_text(encoding="utf-8") if out_path.exists() else ""
+        if cur != text:
+            print(f"{out_path} が材料(ICONS・tabler_icons/・custom_icons/)と合っていません。"
+                  "python3 script/codegen/generate_icons.py で作り直してください")
+            return 1
+        print(f"{out_path.name} は材料と一致しています({summary})")
+        return 0
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    generate_header(ICONS, ALL_SIZES, out_path)
+    out_path.write_text(text, encoding="utf-8")
+    print(f"\n生成完了: {out_path}  ({summary})")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

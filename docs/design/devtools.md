@@ -287,6 +287,24 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - 確かめたこと: ホストテスト全部・`run_net.sh`・PCビルド・`web_shots.sh`・各 `--check`・`picoos icons`(別の作業ディレクトリから。`icons_data.h` が同じ)・
   `generate_jis_table.py`(出力は1行目のパスだけ変わる)。
 
+## 生成物の検査 (`script/check/check_generated.py` / `picoos check`) (2026-11-06)
+
+利用者の要望: script/ の整理の続きで、`src/` へ入れてある生成物が古くないかの検査をそろえる。
+
+- **前は一部だけ**: CIが見ていたのは同梱Luaモジュール・Wi-Fi転送のページ・訳(`--check`)とフォントの分割だけで、
+  アイコン(`icons_data.h`)・JISの表・TLSのルート証明書は材料を変えて作り直し忘れても気づけなかった。
+- **生成器ごとに `--check` を持たせ、`check_generated.py` が順に呼ぶだけ**にした(判定は生成器が持つ)。一覧は `--list`。
+  終了コードは 0=合う・1=合わない・2=依存が無くて確かめられない。2 は既定では失敗扱いで、`--skip <名前>` か `--allow-skip` で飛ばせる。
+  - `generate_icons.py --check`: 作り直して `icons_data.h` と比べる。cairosvg・pillow が要る。CIは apt の `python3-cairosvg`(noble の 2.7.1)を
+    使う(ランナーのシステムの python3 は pip を断る。PEP 668)。pip の最新版と apt の 2.7.1 のどちらで作っても `icons_data.h` は同じだった。
+  - `generate_jis_table.py --check`: 作り直して比べる(Python の cp932 の写像だけなので母艦に依らない)。
+  - `generate_tls_roots.py --check`: **中身は比べられない**(母艦の `/etc/ssl/certs` から取り、生成日も入るため)。`ROOTS` の説明の並びと、
+    ヘッダの一覧・`kCount`・`kDer*` の数が合っているかだけを見る(`ROOTS` を直して作り直し忘れたこと)。
+  - フォントの分割(`split_font.py --check`)は LovyanGFX の本体が要るので、CIの「層の決まり」では `--skip fonts` にし、今までどおり
+    `firmware-build.yml` が PlatformIO の取得先を渡して見る。手元では PCビルドの configure の後なら `check_generated.py` が自分で見つける。
+- CIの「層の決まり」の job で、前の3つの `--check` の手順をこれ1つに置き換えた。
+- 確かめたこと: 全部が今の生成物で通る・JISの表/アイコンを1か所書き換える・`ROOTS` に1行足すとそれぞれ止まる・依存が無いと 2 で飛ばす。
+
 ## ビルド時に選ぶハードウェア機能 (`src/config/Hardware_Config.hpp` の `PICO_HW_*`) (2026-10-25)
 
 利用者の要望: 音声・マイク・電池を載せない機器では、最初からメモリを食うだけなので外せるように。液晶とSDは無いと動かないので選べなくてよい。

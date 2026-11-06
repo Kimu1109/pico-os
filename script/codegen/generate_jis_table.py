@@ -11,8 +11,10 @@ UTF-8へ直すための表 src/apps/mail/Mail_Jis_Data.hpp を作る。標準ラ
   - 89〜92区のNEC選定IBM拡張も入る。IBM拡張(Shift_JISの0xFA〜0xFC)は表の外なので 〓 になる
 対応の無い区点は 0 にする(読む側が 〓 に置き換える)。
 
-使い方: python3 script/codegen/generate_jis_table.py
+使い方: python3 script/codegen/generate_jis_table.py           … 書き出す
+        python3 script/codegen/generate_jis_table.py --check   … 今のファイルと同じかだけ見る(違えば終了コード1。CIで回す)
 """
+import sys
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[2] / "src" / "apps" / "mail" / "Mail_Jis_Data.hpp"
@@ -30,7 +32,7 @@ def sjis_bytes(row, cell):
     return bytes([s1, s2])
 
 
-def main():
+def main(argv):
     table = []
     for row in range(1, 95):
         for cell in range(1, 95):
@@ -58,9 +60,18 @@ def main():
         chunk = table[i:i + 12]
         lines.append("        " + ",".join("0x%04X" % v for v in chunk) + ",")
     lines += ["    };", "}", ""]
-    OUT.write_text("\n".join(lines), encoding="utf-8")
+    text = "\n".join(lines)
+    if "--check" in argv:
+        cur = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
+        if cur != text:
+            print("%s が作り直したものと合っていません。python3 script/codegen/generate_jis_table.py で作り直してください" % OUT)
+            return 1
+        print("%s は作り直したものと一致しています" % OUT.name)
+        return 0
+    OUT.write_text(text, encoding="utf-8")
     print("生成しました: %s (%d 区点、対応あり %d)" % (OUT, len(table), sum(1 for v in table if v)))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))

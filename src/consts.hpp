@@ -38,7 +38,7 @@
 #define PICO_SCROLL_EX  1.30f
 
 // --- スクリーンサイズ ---
-// ビルド時に -DSCREEN_WIDTH=... -DSCREEN_HEIGHT=... で変えられる(platformio.ini の env、
+// ビルド時に -DSCREEN_WIDTH=... -DSCREEN_HEIGHT=... で変えられる(buildcfg/ の版。部品は buildcfg/options.ini の opt_screen_*、
 // PCビルドは cmake -DPICOOS_SCREEN_W/H)。画面の配置は Scene::contentRect() 等からの相対で決めること。
 // 部品の大きさ(文字・ボタン)は変わらないので、幅は240以上・高さは240以上を想定している。
 #ifndef SCREEN_WIDTH

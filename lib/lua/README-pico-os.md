@@ -49,3 +49,17 @@ PlatformIOの自動ソース収集(Library Dependency Finder)は`src/`以下の`
 命令を実行する本体を実機のRAMへ置く(既定は無効。docs/design/performance.md「よく通る所をRAMに置く」)。
 PC/Webのビルドとホストテストは `library.json` を読まないので関係しない。版を上げても `luaV_execute` の引数が
 変わらなければそのまま使える(変わったらコンパイルエラーで分かる)。
+
+## LLONG_MAX を補う旗(実機だけ、`platformio.ini` の `build_flags`)
+
+`src/` は無改造のまま、実機ビルドの `build_flags` で `-DLLONG_MAX=__LONG_LONG_MAX__` / `-DLLONG_MIN=-__LONG_LONG_MAX__-1` /
+`-DULLONG_MAX=__LONG_LONG_MAX__*2ULL+1ULL` を足している。
+
+- 理由: 実機のツールチェイン(arm-none-eabi-gcc 同梱の `limits.h`)は、`LLONG_MAX` 等を
+  `#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L` のときしか定義しない。`__STDC_VERSION__` はCでだけ定義されるので、
+  `.cpp` から include される `lua.h`/`luaconf.h` からは未定義に見え、「long long を使えるか」の判定が失敗して `#error` で止まる。
+  コンパイラが C/C++ を問わず持っている `__LONG_LONG_MAX__` で標準のマクロを補う。PC/Web(gcc/clang)の `limits.h` は C++ でも定義するので関係しない。
+- 括弧を付けていないのは、PlatformIO のビルドコマンドがシェルを通り、`(` `)` を渡すと「sh: Syntax error」で落ちるため。
+  `src/` の中で `LLONG_MIN`/`ULLONG_MAX` を使うのは代入・比較・シフトだけで、優先順位の上で括弧が無くても同じ意味になることを、
+  `src/` の全ファイルをこの定義でコンパイルして確かめてある。
+- 派生の版(`buildcfg/`)は `build_flags` を上書きするので、必ず `${env:rpipico2w.build_flags}` を先頭に書く(書き忘れると上の `#error` で止まる)。

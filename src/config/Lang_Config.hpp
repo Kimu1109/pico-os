@@ -6,7 +6,7 @@
 //   PICO_LANG_EN=1        : 英語の版。TR("…") は日本語の原文を参照せず訳の表から引く(原文はフラッシュに入らない)。
 //                           訳の無い原文は script/i18n.py が日本語のまま表に入れる
 //
-// platformio.ini の env の build_flags で -DPICO_LANG_EN=1 を足す(例は env:rpipico2w_en)。
+// buildcfg/ の版の build_flags で -DPICO_LANG_EN=1 を足す(部品は buildcfg/options.ini の opt_lang_en、例は env:rpipico2w_en)。
 // PCビルドは cmake -DPICOOS_LANG_EN=ON(pc/CMakeLists.txt)。
 // TR_NOOP() の原文(アプリの登録名等の識別子)・フォント・かな漢字変換は言語と関係なく残る。
 //

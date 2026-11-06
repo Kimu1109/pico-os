@@ -242,13 +242,28 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - CIで作った版の git に `+`(手元の変更あり)が付いていた(`firmware-build.yml` がプラットフォームの差し替えで `platformio.ini` を書き換えるため)。書き換えた後に `git update-index --assume-unchanged platformio.ini` して数えないようにした(2026-10-29)。
 
 
+## ビルドの構成の置き場所 (`platformio.ini` / `buildcfg/`) (2026-11-06)
+
+利用者の要望: 画面・部品・アプリ・言語・計測用と、違う軸の env が `platformio.ini` に横並びで分かりにくいので整理したい。
+
+- **3段に分けた**: 土台(`platformio.ini` の `env:rpipico2w`)/ 部品(`buildcfg/options.ini` の `opt_*`。1つの軸の1つの選択だけを持つ、
+  `env:` で始まらないのでビルドされない節)/ 版(`buildcfg/variants.ini`=配る版、`buildcfg/bench.ini`=実機で速さを比べるだけの版)。
+  `platformio.ini` の `[platformio] extra_configs` で読む。版は `${env:rpipico2w.build_flags}` の後に `${opt_xxx.flags}` を並べるだけにする
+  (`build_flags` は `extends` で継いでも足し合わされず上書きされるため、部品は `${…}` で展開する)。
+- **土台は `platformio.ini` から動かさない**: `pc/CMakeLists.txt` が `lib_deps` の LovyanGFX の行を読み、CI(`.github/actions/pio-setup`)が
+  `platform = raspberrypi` の行を書き換えてこのファイルをキャッシュのキーにしているため。`buildcfg/` で `platform`/`lib_deps` を上書きしない。
+- **env の名前は変えなかった**: 名前はファームに埋め込まれ(`Fw_Version.hpp`)、Webの版の一覧が同じ構成の版を選ぶのに使い、CIの matrix・ナイトリーのファイル名にも出る。
+- 確かめたこと: 分ける前後で `pio project config --json-output` の全8 env の値が一致(旗は集合として。`lite` だけ `-D` の並びが変わった)。
+- 残り: 音楽の版の組み合わせは `pc/CMakeLists.txt` の `PICOOS_MUSIC_BUILD_OFF_APPS` にも書いてあり二重のまま。
+  版の旗を1つのファイルに置いて PlatformIO(`custom_*` + `pre:` スクリプト)と CMake の両方から読む形にすれば解消できる(未着手)。
+
 ## ビルド時に選ぶハードウェア機能 (`src/config/Hardware_Config.hpp` の `PICO_HW_*`) (2026-10-25)
 
 利用者の要望: 音声・マイク・電池を載せない機器では、最初からメモリを食うだけなので外せるように。液晶とSDは無いと動かないので選べなくてよい。
 
 - **選べるのは `PICO_HW_SOUND` / `PICO_HW_MIC` / `PICO_HW_BATTERY`(既定は全部1=載せる)**。液晶・タッチ・SDは選べない
   (液晶の種類と画面の大きさは `PICO_PANEL_*` / `SCREEN_WIDTH`、`gui.md`「画面の大きさ」)。
-  実機は env の `build_flags` に `-DPICO_HW_SOUND=0` 等(全部外した例が `env:rpipico2w_minimal`)、PCは `cmake -DPICOOS_HW_SOUND=OFF` 等。
+  実機は env の `build_flags` に `-DPICO_HW_SOUND=0` 等(部品は `buildcfg/options.ini` の `opt_no_*`、全部外した例が `env:rpipico2w_minimal`)、PCは `cmake -DPICOOS_HW_SOUND=OFF` 等。
 - **外した機能は、実装の代わりに空の実装が入る**(`hal/Sound_Functions_Off.cpp`・`hal/Mic_Functions_Off.cpp`・`hal/Battery_Functions.cpp` の `#else`)。
   本物の `.cpp` は全体を `#if PICO_HW_*` で囲む。口(ヘッダ)は同じなので、呼び出し側(Lua・GB・動画・アラーム等、30か所ほど)は分岐しない。
   空の実装は「つながっていない」と答える: 音は `State::Disconnected`・効果音は捨てる・曲/WAVは理由付きで断る・`GbAudio()` は `nullptr`(エミュは音なしで動く)。
@@ -313,7 +328,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - **選べるのは `apps/<機能>/` のアプリ**: `PICO_APP_BROWSER` `CALCULATOR` `CALENDAR` `CHAT` `DICT` `GB` `MAIL` `MUSIC` `NOTES` `READER` `SSH` `STORE` `TEXTEDITOR` `TODO` `VIDEO`
   (既定は1=載せる。`MUSIC` だけ既定が `PICO_HW_SOUND` で、音声出力なしに1を指定すると `static_assert` で止まる)。
   OSとして要るもの(設定・ファイル・時計・通知・USBドライブ・ホーム)と本体の更新(ファームを戻す道)は選べない。
-  実機は env の `build_flags` に `-DPICO_APP_GB=0` 等(全部外した例が `env:rpipico2w_lite`)、PCは `cmake -DPICOOS_APP_GB=OFF` 等。
+  実機は env の `build_flags` に `-DPICO_APP_GB=0` 等(部品は `buildcfg/options.ini` の `opt_apps_minimal` 等、全部外した例が `env:rpipico2w_lite`)、PCは `cmake -DPICOOS_APP_GB=OFF` 等。
 - **外すのは入口だけ。中身は `#if` で囲まず、リンカに捨てさせる**: arduino-picoは `-ffunction-sections` + `--gc-sections` なので、
   どこからも呼ばれない関数・静的な表は残らない。入口は次の4か所で、ここを `#if PICO_APP_*` で囲む。
   - アプリの一覧(`boot/App_List.cpp` の `Register`)

@@ -134,7 +134,7 @@ arduino-pico の包み(`__wrap__malloc_r` が割り込みを止める)+ newlib �
 - **確かめたこと**: 実機ファームを3通り(既定・`PICO_LUA_VM_IN_RAM=1`・`PICO_HOT_IN_RAM=0`)ビルドし、ELFで関数の番地が
   RAM(0x2000_0000台)/フラッシュ(0x1000_0000台)の思った方にあること、`drawChar` から呼ぶ先を逆アセンブルで確かめた。
   静的なRAMは 140,372B(置かない)→ 142,076B(既定)→ 152,996B(Luaも)。PCビルドでは何も変わらない(字の描き比べは全部一致のまま)。
-- **実機では未計測**(Todoist参照)。比べるための版を `platformio.ini` に置いた: `pio run -e rpipico2w_no_ram`(何も置かない)/
+- **実機では未計測**(Todoist参照)。比べるための版を `buildcfg/bench.ini` に置いた: `pio run -e rpipico2w_no_ram`(何も置かない)/
   `rpipico2w`(既定)/`rpipico2w_lua_ram`(Luaも)。文字の多い画面のスクロール・読書のページ送りと、Luaのゲーム(テトリス・ゾンビTD)の
   フレームの時間(`perf-log`)を比べ、Luaの版はヒープの空き(`[MEM]`)も見る。効いていれば Lua を既定にするか決める。
 

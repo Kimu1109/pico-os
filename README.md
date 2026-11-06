@@ -33,7 +33,7 @@ PlatformIO + Arduino の C++ で書かれ、240x320のTFT液晶とタッチパ�
 | I2C | Wiiクラシックコントローラー・CardKB2 |
 
 ピン配置は [`CLAUDE.md`](CLAUDE.md)「ハードウェア構成」を見ること。液晶・タッチ・SDは必須で、音声・マイク・電池などはビルド時に外せる
-(例は `platformio.ini` の `rpipico2w_minimal`)。320x480の液晶向けの設定(`rpipico2w_320x480`)もある。
+(例は `buildcfg/variants.ini` の `rpipico2w_minimal`)。320x480の液晶向けの設定(`rpipico2w_320x480`)もある。
 
 ## ビルド
 

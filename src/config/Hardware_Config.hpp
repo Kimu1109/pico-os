@@ -1,7 +1,7 @@
 #pragma once
 
 // ビルド時に選べるハードウェア機能(1=載せる・既定、0=載せない)。
-// platformio.ini の env の build_flags で -DPICO_HW_SOUND=0 等を足す(例は env:rpipico2w_minimal)。
+// buildcfg/ の版の build_flags で -DPICO_HW_SOUND=0 等を足す(部品は buildcfg/options.ini の opt_no_*、例は env:rpipico2w_minimal)。
 // PCビルドは cmake -DPICOOS_HW_SOUND=OFF 等(pc/CMakeLists.txt)。
 //
 // 載せない機能は、実装(hal/Xxx_Functions.cpp)の代わりに空の実装(hal/Xxx_Functions_Off.cpp)が入る。

@@ -130,8 +130,10 @@ class WebSocketClient {
         // 戻り: 1 = そろった / 0 = まだ / -1 = 失敗(closed_error_ を立てて切った)
         int readHandshake();
         bool checkHandshake(size_t header_len);
-        bool sendFrame(WsFrame::Opcode op, const void* data, size_t len);
-        bool sendClose(uint16_t code, const uint8_t* reason, size_t reason_len);
+        // 送れなければ切る。fail_finishes が真なら 1006「送れない(切れた)」で Closed を用意し、
+        // 偽ならこちらでは決めず、呼び出し側が自分の番号で finish() する(閉じる直前の返事など)
+        bool sendFrame(WsFrame::Opcode op, const void* data, size_t len, bool fail_finishes = true);
+        bool sendClose(uint16_t code, const uint8_t* reason, size_t reason_len, bool fail_finishes = true);
         // 切って、次の poll() で Closed を渡す
         void finish(uint16_t code, const char* error, const uint8_t* reason = nullptr, size_t reason_len = 0);
         void releaseBuffer();

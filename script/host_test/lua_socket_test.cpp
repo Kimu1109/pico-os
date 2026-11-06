@@ -81,15 +81,22 @@ static bool GlobalTrue(LuaEngine& e, const char* name){
     return v;
 }
 
-// 時計を進めつつ、名前の付いたLuaのグローバルが真になるまで回す
-static bool PumpUntil(LuaEngine& e, const char* flag, int rounds = 4000){
-    for(int i = 0; i < rounds; i++){
-        if(GlobalTrue(e, flag)) return true;
-        e.UpdateSockets();
-        PicoHostClock::now += 1;
-        usleep(200);
-    }
-    return GlobalTrue(e, flag);
+// ソケットを1回分回して時計を進める(PumpUntil 等の step)
+static void PumpOnce(LuaEngine& e){
+    e.UpdateSockets();
+    PicoHostClock::now += 1;
+    usleep(200);
+}
+
+// 偽物の相手(別スレッド)が s を記録するまで待つ。こちらが送っただけで返事の無いもの
+// (DISCONNECT・QoS 0 等)は、こちらの都合では相手が読み終えた時を知れないので、すぐには見ない
+static bool WaitSaw(FakeServers::Base& srv, const std::string& s){
+    return FakeServers::WaitUntil([&]{ return srv.saw(s); }, FakeServers::Nap);
+}
+
+// 時計を進めつつ、名前の付いたLuaのグローバルが真になるまで回す(上限は壁時計。FakeServers::WaitUntil)
+static bool PumpUntil(LuaEngine& e, const char* flag){
+    return FakeServers::WaitUntil([&]{ return GlobalTrue(e, flag); }, [&]{ PumpOnce(e); });
 }
 
 int main(int argc, char** argv){
@@ -238,9 +245,7 @@ int main(int argc, char** argv){
         check(ok && PumpUntil(e, "w2_open"), "ws: 2本目を開く");
     }
     {
-        bool saw = false;
-        for(int i = 0; i < 3000 && !saw; i++){ saw = ws.saw("close:1001:"); usleep(500); }
-        check(saw, "ws: アプリを閉じると 1001 で閉じる挨拶を送る");
+        check(WaitSaw(ws, "close:1001:"), "ws: アプリを閉じると 1001 で閉じる挨拶を送る");
     }
 
     // ---- MQTT ----
@@ -284,8 +289,8 @@ int main(int argc, char** argv){
         check(ok, "MQTTの実行");
         check(PumpUntil(e, "published"), "mqtt: 繋いで購読して送る");
         check(PumpUntil(e, "got_msg"), "mqtt: 購読した話題が届く");
-        check(mqtt.saw("connect:luapico:u:p:ka30:clean:will=luapico/status=offline"), "mqtt: CONNECT の中身");
-        check(mqtt.saw("pub:home/light/state:1:retain:on"), "mqtt: retain つきで届く");
+        check(WaitSaw(mqtt, "connect:luapico:u:p:ka30:clean:will=luapico/status=offline"), "mqtt: CONNECT の中身");
+        check(WaitSaw(mqtt, "pub:home/light/state:1:retain:on"), "mqtt: retain つきで届く");
         ok = e.Run(R"LUA(
             check(log[1] == "home/light/state=on:1:false", "mqtt: message(話題・中身・qos・retain)")
             check(pico.socket.state(m) == "open", "mqtt: 繋がっている")
@@ -293,7 +298,7 @@ int main(int argc, char** argv){
         )LUA", "mqtt2");
         check(ok, "MQTTの確認");
         check(PumpUntil(e, "mqtt_closed"), "mqtt: close が来る");
-        check(mqtt.saw("disconnect"), "mqtt: DISCONNECT を送る");
+        check(WaitSaw(mqtt, "disconnect"), "mqtt: DISCONNECT を送る");
 
         // 上限: 4本まで
         ok = e.Run(R"LUA(
@@ -323,8 +328,7 @@ int main(int argc, char** argv){
     {
         // アプリを閉じると(LuaEngineを壊すと)DISCONNECT を送る
         const int before = disc_before;
-        bool saw = false;
-        for(int i = 0; i < 3000 && !saw; i++){ saw = mqtt.count("disconnect") > before; usleep(500); }
+        const bool saw = FakeServers::WaitUntil([&]{ return mqtt.count("disconnect") > before; }, FakeServers::Nap);
         check(saw, "mqtt: アプリを閉じると DISCONNECT");
     }
 
@@ -337,7 +341,7 @@ int main(int argc, char** argv){
             o.client_id.assign("device");
             dev.begin(("mqtt://127.0.0.1:" + std::to_string(mqtt.port)).c_str(), o);
             bool sent = false, done = false;
-            for(int i = 0; i < 4000 && !done; i++){
+            FakeServers::WaitUntil([&]{ return done; }, [&]{
                 MqttClient::Event ev;
                 while(dev.poll(ev)){
                     if(ev.type == MqttClient::EventType::Connected){
@@ -350,7 +354,7 @@ int main(int argc, char** argv){
                 }
                 PicoHostClock::now += 1;
                 usleep(200);
-            }
+            });
             check(sent && done, "remote: 機器の状態を retain で置く");
         }
 
@@ -382,18 +386,14 @@ int main(int argc, char** argv){
         )LUA", "remote1");
         check(ok, "remote: 起動直後の確認");
         e.Run("function remote_ready() ready = TEST.online() and TEST.state(1) ~= nil and TEST.state(2) ~= nil end", "fn");
-        bool ready = false;
-        for(int i = 0; i < 4000 && !ready; i++){
+        const bool ready = FakeServers::WaitUntil([&]{
             e.Run("remote_ready()", "poll");
-            ready = GlobalTrue(e, "ready");
-            e.UpdateSockets();
-            PicoHostClock::now += 1;
-            usleep(200);
-        }
+            return GlobalTrue(e, "ready");
+        }, [&]{ PumpOnce(e); });
         check(ready, "remote: 繋いで、retain の状態が届く");
-        check(mqtt.saw("connect:ptest:u:p:ka60:clean:will=pico/remote/ptest/status=offline"), "remote: CONNECT(認証・遺言)");
-        check(mqtt.saw("sub:t/light/state:1") && mqtt.saw("sub:t/tv/state:1"), "remote: 機器ごとに <話題>/state を購読");
-        check(mqtt.saw("pub:pico/remote/ptest/status:0:retain:online"), "remote: online を retain で置く");
+        check(WaitSaw(mqtt, "connect:ptest:u:p:ka60:clean:will=pico/remote/ptest/status=offline"), "remote: CONNECT(認証・遺言)");
+        check(WaitSaw(mqtt, "sub:t/light/state:1") && WaitSaw(mqtt, "sub:t/tv/state:1"), "remote: 機器ごとに <話題>/state を購読");
+        check(WaitSaw(mqtt, "pub:pico/remote/ptest/status:0:retain:online"), "remote: online を retain で置く");
         ok = e.Run(R"LUA(
             check(TEST.state(1) == "ON", "remote: ON がそのまま")
             check(TEST.state(2) == "OFF", 'remote: {"state":"OFF"} の形も読む')
@@ -405,26 +405,21 @@ int main(int argc, char** argv){
             TEST.toggle(2)
         )LUA", "remote2");
         check(ok, "remote: 点け消しの実行");
-        bool sent = false;
-        for(int i = 0; i < 4000 && !sent; i++){
-            sent = mqtt.saw("pub:t/light/set:1:OFF") && mqtt.saw("pub:t/fan/set:1:ON");
-            e.UpdateSockets();
-            PicoHostClock::now += 1;
-            usleep(200);
-        }
+        const bool sent = FakeServers::WaitUntil([&]{
+            return mqtt.saw("pub:t/light/set:1:OFF") && mqtt.saw("pub:t/fan/set:1:ON");
+        }, [&]{ PumpOnce(e); });
         check(sent, "remote: 今の状態の逆を <話題>/set へ QoS 1 で送る");
         const int disc = mqtt.count("disconnect");
         ok = e.Run("TEST.back()", "remote3");
         check(ok, "remote: 戻るの実行");
         for(int i = 0; i < 50; i++){ e.UpdateSockets(); PicoHostClock::now += 1; usleep(200); }
-        bool closed = false;
-        for(int i = 0; i < 3000 && !closed; i++){ closed = mqtt.count("disconnect") > disc; usleep(500); }
+        const bool closed = FakeServers::WaitUntil([&]{ return mqtt.count("disconnect") > disc; }, FakeServers::Nap);
         check(closed, "remote: 戻ると DISCONNECT");
         if(!closed && getenv("LUA_TEST_VERBOSE")){
             std::lock_guard<std::mutex> lk(mqtt.mu);
             for(const auto& l : mqtt.log) fprintf(stderr, "broker: %s\n", l.c_str());
         }
-        check(mqtt.saw("pub:pico/remote/ptest/status:0:retain:offline"), "remote: 戻る前に offline を置く");
+        check(WaitSaw(mqtt, "pub:pico/remote/ptest/status:0:retain:offline"), "remote: 戻る前に offline を置く");
     }
 
     // ---- サンプルアプリ「HAパネル」(WebSocket) ----
@@ -444,14 +439,10 @@ int main(int argc, char** argv){
         // Luaの式が真になるまで回す
         auto until = [](LuaEngine& e, const char* expr) {
             const std::string code = std::string("until_ok = (") + expr + ") and true or false";
-            for(int i = 0; i < 4000; i++){
+            return FakeServers::WaitUntil([&]{
                 e.Run(code.c_str(), "until");
-                if(GlobalTrue(e, "until_ok")) return true;
-                e.UpdateSockets();
-                PicoHostClock::now += 1;
-                usleep(200);
-            }
-            return false;
+                return GlobalTrue(e, "until_ok");
+            }, [&]{ PumpOnce(e); });
         };
 
         OSData::SD_usable = true;
@@ -467,8 +458,8 @@ int main(int argc, char** argv){
             )LUA", "ha_cfg");
             check(ok && e.Run(src.c_str(), "/hapanel/main.lua"), "ha: main.lua を動かす");
             check(until(e, "TEST.authed() and TEST.ent(1).state ~= nil"), "ha: 認証して、今の状態が届く");
-            check(ha.saw("auth:good"), "ha: トークンを送る");
-            check(ha.saw("sub:[\"light.living_room\",\"switch.fan\",\"sensor.temp\",\"light.missing\"]"),
+            check(WaitSaw(ha, "auth:good"), "ha: トークンを送る");
+            check(WaitSaw(ha, "sub:[\"light.living_room\",\"switch.fan\",\"sensor.temp\",\"light.missing\"]"),
                   "ha: 設定したエンティティだけを subscribe_entities");
             ok = e.Run(R"LUA(
                 check(TEST.conn() == "接続中: HA 2026.10.0", "ha: 接続中の表示に版")
@@ -484,7 +475,7 @@ int main(int argc, char** argv){
             )LUA", "ha1");
             check(ok, "ha: 点け消しの実行");
             check(until(e, "TEST.ent(1).state == 'off' and TEST.pending(1) == nil"), "ha: 変わった分(\"c\")で状態が変わる");
-            check(ha.saw("call:homeassistant.toggle:light.living_room") && !ha.saw("call:homeassistant.toggle:sensor.temp"),
+            check(WaitSaw(ha, "call:homeassistant.toggle:light.living_room") && !ha.saw("call:homeassistant.toggle:sensor.temp"),
                   "ha: homeassistant.toggle を呼ぶ(センサーには呼ばない)");
             check(until(e, "TEST.pending(4) == nil"), "ha: 失敗の result で「…」を消す");
             ok = e.Run(R"LUA(
@@ -498,9 +489,7 @@ int main(int argc, char** argv){
             )LUA", "ha2");
             check(ok, "ha: 戻るの実行");
             for(int i = 0; i < 50; i++){ e.UpdateSockets(); PicoHostClock::now += 1; usleep(200); }
-            bool closed = false;
-            for(int i = 0; i < 3000 && !closed; i++){ closed = ha.saw("close"); usleep(500); }
-            check(closed, "ha: 戻ると close を送る");
+            check(WaitSaw(ha, "close"), "ha: 戻ると close を送る");
         }
         {
             LuaEngine e(256 * 1024, net, "/hapanel2");
@@ -552,25 +541,19 @@ int main(int argc, char** argv){
         check(ok, "udp-tool: 送るの実行");
         auto until = [&e](const char* expr) {
             const std::string code = std::string("until_ok = (") + expr + ") and true or false";
-            for(int i = 0; i < 4000; i++){
+            return FakeServers::WaitUntil([&]{
                 e.Run(code.c_str(), "until");
-                if(GlobalTrue(e, "until_ok")) return true;
-                e.UpdateSockets();
-                PicoHostClock::now += 1;
-                usleep(200);
-            }
-            return false;
+                return GlobalTrue(e, "until_ok");
+            }, [&]{ PumpOnce(e); });
         };
         check(until("TEST.log()[1][1] == '← echo:hello'"), "udp-tool: 宛先からの返事を並べる(送り元は省く)");
-        check(udp.saw("hello"), "udp-tool: 相手に届く");
+        check(WaitSaw(udp, "hello"), "udp-tool: 相手に届く");
 
         ok = e.Run(R"LUA( check(TEST.wake(1), "udp-tool: WoLを送る") )LUA", "udp2");
         check(ok, "udp-tool: WoLの実行");
         std::string magic(6, '\xff');
         for(int i = 0; i < 16; i++) magic += std::string("\x00\x11\x22\x33\x44\x55", 6);
-        bool saw = false;
-        for(int i = 0; i < 3000 && !saw; i++){ saw = udp.saw(magic); usleep(500); }
-        check(saw, "udp-tool: マジックパケット(FF×6 + MAC×16 = 102バイト)");
+        check(WaitSaw(udp, magic), "udp-tool: マジックパケット(FF×6 + MAC×16 = 102バイト)");
         check(until("TEST.log()[1][1]:find('← [107B] 65 63 68 6F 3A FF', 1, true) == 1"), "udp-tool: 読めない返事は16進で並べる");
         // 宛先と違う相手からのもの(宛先を名前で書いた・別の機器)は送り元を付ける
         ok = e.Run(R"LUA( TEST.retarget("localhost:" .. UDP_PORT) TEST.send("x") )LUA", "udp4");

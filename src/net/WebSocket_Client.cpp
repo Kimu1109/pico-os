@@ -229,7 +229,7 @@ int WebSocketClient::readHandshake(){
     return 0;
 }
 
-bool WebSocketClient::sendFrame(WsFrame::Opcode op, const void* data, size_t len){
+bool WebSocketClient::sendFrame(WsFrame::Opcode op, const void* data, size_t len, bool fail_finishes){
     if(state_ != State::Open && !(op == WsFrame::Close && state_ == State::Closing)) return false;
     if((op & 0x08) && len > WsFrame::kMaxControlPayload) return false;
     uint8_t mask[4];
@@ -237,7 +237,7 @@ bool WebSocketClient::sendFrame(WsFrame::Opcode op, const void* data, size_t len
     uint8_t head[WsFrame::kMaxHeaderBytes];
     const size_t hn = WsFrame::EncodeHeader(head, op, true, len, mask);
     if(conn_.write(head, hn) != hn){
-        finish(WsFrame::kCloseAbnormal, TR("送れない(切れた)"));
+        if(fail_finishes) finish(WsFrame::kCloseAbnormal, TR("送れない(切れた)"));
         return false;
     }
     //マスクは送る直前に小分けでかける(呼び出し側の本文は書き換えない)
@@ -250,7 +250,7 @@ bool WebSocketClient::sendFrame(WsFrame::Opcode op, const void* data, size_t len
         memcpy(chunk, src + off, n);
         WsFrame::ApplyMask(chunk, n, mask, off);
         if(conn_.write(chunk, n) != n){
-            finish(WsFrame::kCloseAbnormal, TR("送れない(切れた)"));
+            if(fail_finishes) finish(WsFrame::kCloseAbnormal, TR("送れない(切れた)"));
             return false;
         }
         off += n;
@@ -258,7 +258,7 @@ bool WebSocketClient::sendFrame(WsFrame::Opcode op, const void* data, size_t len
     return true;
 }
 
-bool WebSocketClient::sendClose(uint16_t code, const uint8_t* reason, size_t reason_len){
+bool WebSocketClient::sendClose(uint16_t code, const uint8_t* reason, size_t reason_len, bool fail_finishes){
     uint8_t body[WsFrame::kMaxControlPayload];
     size_t n = 0;
     if(code != 0 && code != WsFrame::kCloseNoStatus && code != WsFrame::kCloseAbnormal){
@@ -268,7 +268,7 @@ bool WebSocketClient::sendClose(uint16_t code, const uint8_t* reason, size_t rea
         if(reason && reason_len) memcpy(body + n, reason, reason_len);
         n += reason_len;
     }
-    return sendFrame(WsFrame::Close, body, n);
+    return sendFrame(WsFrame::Close, body, n, fail_finishes);
 }
 
 void WebSocketClient::close(uint16_t code, const char* reason){
@@ -401,9 +401,10 @@ bool WebSocketClient::pollOpen(Event& ev){
                 case WsFrame::Parser::Result::Close: {
                     const uint16_t code = parser_.closeCode();
                     if(state_ == State::Open){
-                        //相手から閉じた: 同じ番号で返事をしてから切る
+                        //相手から閉じた: 同じ番号で返事をしてから切る。返事は礼儀で、相手が先に切っていて
+                        //送れなくても(返事の途中でRSTが来る等)閉じた番号は最初に受けたcloseのもの(RFC 6455 7.1.5)
                         state_ = State::Closing;
-                        sendClose(code, nullptr, 0);
+                        sendClose(code, nullptr, 0, false);
                     }
                     finish(code, nullptr, parser_.control(), parser_.controlSize());
                     return poll(ev);
@@ -412,7 +413,8 @@ bool WebSocketClient::pollOpen(Event& ev){
                     LOG_SYS_WARN("WebSocket: %s (%s)", parser_.errorText(), url_.host.c_str());
                     if(state_ == State::Open){
                         state_ = State::Closing;
-                        sendClose(parser_.errorCode(), nullptr, 0);
+                        //送れなくても、閉じる理由は読めなかったこと(1009等)の方を渡す
+                        sendClose(parser_.errorCode(), nullptr, 0, false);
                     }
                     finish(parser_.errorCode(), parser_.errorText());
                     return poll(ev);

@@ -351,29 +351,24 @@ struct WsRun {
             Tick();
         }
     }
-    bool waitFor(const std::string& want, int rounds = 3000){
-        for(int i = 0; i < rounds; i++){
-            for(const auto& e : events) if(e == want) return true;
-            pump();
-        }
+    bool has(const std::string& want) const {
         for(const auto& e : events) if(e == want) return true;
         return false;
     }
-    bool waitPrefix(const std::string& prefix, int rounds = 3000){
-        for(int i = 0; i < rounds; i++){
+    // 届くまで pump() を回す(上限は壁時計。FakeServers::WaitUntil)
+    bool waitFor(const std::string& want){
+        return FakeServers::WaitUntil([&]{ return has(want); }, [&]{ pump(); });
+    }
+    bool waitPrefix(const std::string& prefix){
+        return FakeServers::WaitUntil([&]{
             for(const auto& e : events) if(e.compare(0, prefix.size(), prefix) == 0) return true;
-            pump();
-        }
-        return false;
+            return false;
+        }, [&]{ pump(); });
     }
 };
 
-static bool WaitSaw(FakeServers::Base& srv, const std::string& s, int rounds = 3000){
-    for(int i = 0; i < rounds; i++){
-        if(srv.saw(s)) return true;
-        usleep(500);
-    }
-    return srv.saw(s);
+static bool WaitSaw(FakeServers::Base& srv, const std::string& s){
+    return FakeServers::WaitUntil([&]{ return srv.saw(s); }, FakeServers::Nap);
 }
 
 static void TestWebSocket(){
@@ -436,8 +431,7 @@ static void TestWebSocket(){
         r.ws.sendText("huge", 4);
         check(r.waitPrefix("closed:1009::"), "WebSocket: 上限(8KiB)を超えるメッセージは1009で閉じる");
         //1009のcloseは送るが、読み残しを抱えたまま閉じるとTCPがRSTを送るので、サーバが読めるとは限らない
-        bool ended = false;
-        for(int i = 0; i < 3000 && !ended; i++){ ended = srv.count("end") > ends; usleep(500); }
+        const bool ended = FakeServers::WaitUntil([&]{ return srv.count("end") > ends; }, FakeServers::Nap);
         check(ended, "WebSocket: 閉じるとサーバの側も終わる");
     }
     {
@@ -539,13 +533,11 @@ struct MqttRun {
             Tick();
         }
     }
-    bool waitFor(const std::string& want, int rounds = 3000){
-        for(int i = 0; i < rounds; i++){
+    bool waitFor(const std::string& want){
+        return FakeServers::WaitUntil([&]{
             for(const auto& e : events) if(e == want) return true;
-            pump();
-        }
-        for(const auto& e : events) if(e == want) return true;
-        return false;
+            return false;
+        }, [&]{ pump(); });
     }
 };
 
@@ -589,7 +581,7 @@ static void TestMqtt(){
         check(r.waitFor("msg:home/big:1:" + big), "MQTT: 2バイトの残りの長さの往復");
         const std::string toobig(5000, 'T');
         r.c.publish("home/too", toobig.data(), toobig.size(), 0);
-        for(int i = 0; i < 200 && r.c.dropped() == 0; i++) r.pump();
+        FakeServers::WaitUntil([&]{ return r.c.dropped() != 0; }, [&]{ r.pump(); });
         check(r.c.dropped() == 1, "MQTT: 溜め場所(4KiB)より大きいものは読み捨てる");
         check(WaitSaw(srv, "puback:7") && r.c.isConnected(), "MQTT: 読み捨てても繋がったまま");
         check(r.c.subscribe("bad/#/x") == -1 && r.c.publish("a/+", "x", 1) == -1, "MQTT: 形の違う話題は送らない");
@@ -650,7 +642,7 @@ static void TestUdp(){
     char from[UdpSocket::kMaxAddrText];
     uint16_t port = 0;
     int n = -1;
-    for(int i = 0; i < 2000 && n < 0; i++){ n = u.receive(buf, sizeof(buf), from, port); usleep(500); }
+    FakeServers::WaitUntil([&]{ return (n = u.receive(buf, sizeof(buf), from, port)) >= 0; }, FakeServers::Nap);
     check(n == 7 && memcmp(buf, "echo:hi", 7) == 0, "UDP: 返事を受ける");
     check(strcmp(from, "127.0.0.1") == 0 && port == srv.port, "UDP: 送り元のアドレスと番号");
     check(u.receive(buf, sizeof(buf), from, port) == -1, "UDP: 次が無ければ -1");
@@ -658,7 +650,7 @@ static void TestUdp(){
     check(!u.sendTo("127.0.0.1", (uint16_t)srv.port, big.data(), big.size()), "UDP: 1472バイトを超えるものは送らない");
     u.sendTo("127.0.0.1", (uint16_t)srv.port, "0123456789", 10);
     n = -1;
-    for(int i = 0; i < 2000 && n < 0; i++){ n = u.receive(buf, 4, from, port); usleep(500); }
+    FakeServers::WaitUntil([&]{ return (n = u.receive(buf, 4, from, port)) >= 0; }, FakeServers::Nap);
     check(n == 4 && memcmp(buf, "echo", 4) == 0, "UDP: 溜め場所に入らない分は捨てる");
     u.close();
     check(!u.isOpen(), "UDP: 閉じる");

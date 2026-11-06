@@ -1,11 +1,11 @@
 #!/bin/sh
-# GitHub Pages のトップ(pc/web/landing.html)に載せる画面写真を、PCビルドの --shot で撮る。
+# GitHub Pages のトップ(site/landing.html)に載せる画面写真を、PCビルドの --shot で撮る。
 #
 #   sh script/release/web_shots.sh <picoos_pc> <出力先ディレクトリ>
 #   例: sh script/release/web_shots.sh pc/build/picoos_pc _site/shots
 #
 # .github/workflows/web-pages.yml が公開のたびに呼ぶ(写真はリポジトリに置かず、常に今の画面を撮る)。
-# 手元で見るときは出力先を pc/web/ と同じ階層の shots/ にすれば landing.html から読める。
+# 手元で見るときは出力先を site/shots/ にすれば site/landing.html から読める(site/shots/ は .gitignore 済み)。
 #
 # アプリは --app で名前を指して開き、撮る画面まではアプリが --scene で自動で進む
 # (ホーム画面の並びに依存しない。画面の名前はアプリごと。pc/README.md「起動時に開くアプリ」)。

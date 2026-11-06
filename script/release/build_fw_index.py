@@ -12,7 +12,7 @@
 
 置き場には index.tsv と、更新ファイルを pico-os-<通し番号>-<git>.pfw の名前で写したものを置く。
 .uf2 を渡した版は、同じ名前で拡張子だけ .uf2 にしたものも置く(Webのダウンロードのページ用。本体は読まない)。
-Webのダウンロードのページ(pc/web/download.html)が読む downloads.json も書く(形は write_downloads())。
+Webのダウンロードのページ(site/download.html)が読む downloads.json も書く(形は write_downloads())。
 読めない・壊れた更新ファイルは飛ばす(警告だけ出す。古いリリースが1本壊れていても公開を止めない)。
 同じ版(通し番号・git・構成が同じ)が安定版とナイトリーの両方にあれば、安定版として1行にする。
 
@@ -169,7 +169,7 @@ def build(pairs, out_dir):
 
 
 def write_downloads(rows, path):
-    """Webのダウンロードのページ(pc/web/download.html)が読む一覧。本体は読まない(本体は index.tsv)。
+    """Webのダウンロードのページ(site/download.html)が読む一覧。本体は読まない(本体は index.tsv)。
 
       {"format": 1, "versions": [{"serial", "git", "date", "channel", "env", "signed", "tag",
                                   "pfw": {"file", "bytes", "sha256"}, "uf2": {"file", "bytes"} か null}, ...]}

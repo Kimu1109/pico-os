@@ -65,7 +65,7 @@ url = https://example.com/pico-os/firmware/
   **新しい安定版5本とナイトリー3本**の `firmware.pfw` を落として `/firmware/` へ写し、`index.tsv` を作る。
   同じ版が安定版とナイトリーの両方にあれば安定版の1行にする。読めない・壊れた更新ファイルは飛ばす
 - 同じ公開で `firmware.uf2` も写し(更新ファイルと同じ名前で拡張子だけ `.uf2`)、`downloads.json` を作る。
-  これは **Webのダウンロードのページ**(https://kimu1109.github.io/pico-os/download/ 、`pc/web/download.html`)が読むもので、本体は読まない
+  これは **Webのダウンロードのページ**(https://kimu1109.github.io/pico-os/download/ 、`site/download.html`)が読むもので、本体は読まない
 - リリースから直接落とさないのは、リリースの添付が別のホストへの長いURLの転送になり、本体のURL(クエリ192バイト)に入らないため。
   Pagesはアプリストアと同じホスト(`kimu1109.github.io`)
 

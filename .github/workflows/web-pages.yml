@@ -7,7 +7,7 @@
 # 公開先: https://kimu1109.github.io/pico-os/ (トップは入口のページ。Web版本体は /playground/)
 # /firmware/ は本体の「本体の更新」→[Webから]が読む版の一覧と更新ファイル、と書き込み用の .uf2(元はGitHubのリリース。
 # ナイトリー・安定版のワークフローがリリースを変えた後にこのワークフローを動かす)
-# /download/ はファームのダウンロードのページ(pc/web/download.html。/firmware/downloads.json を読む)
+# /download/ はファームのダウンロードのページ(site/download.html。/firmware/downloads.json を読む)
 #
 # **初回だけ、リポジトリの Settings > Pages で Source を「GitHub Actions」にすること。**
 # ワークフローからの自動有効化(configure-pages の enablement)は GITHUB_TOKEN の権限では
@@ -74,10 +74,10 @@ jobs:
       # ビルドディレクトリにはCMakeの中間物も入っているので、配るものだけを集める
       - name: 公開するファイルを集める
         run: |
-          # Web版本体は /playground/ に置く。トップ(/)は入口のページ(pc/web/landing.html)
+          # Web版本体は /playground/ に置く。トップ(/)は入口のページ(site/landing.html)
           mkdir -p _site/playground _site/download
-          cp pc/web/landing.html _site/index.html
-          cp pc/web/download.html _site/download/index.html
+          cp site/landing.html _site/index.html
+          cp site/download.html _site/download/index.html
           # js/wasm/data はリビジョン付きの名前で置く(shell.html の assetRev 参照)。同じ名前のままだと
           # ブラウザが古い index.js と新しい index.data を組み合わせ、SDのファイルの位置がずれて壊れて読める
           rev="${GITHUB_SHA::7}"
@@ -109,7 +109,7 @@ jobs:
           cp pc/sdcard/sys/fonts/README.md pc/sdcard/sys/fonts/IPA_Font_License_Agreement_v1.0.txt _site/fonts/
           ls -la _site/fonts
 
-      # トップのページ(pc/web/landing.html)に載せる画面写真。写真はリポジトリに置かず、
+      # トップのページ(site/landing.html)に載せる画面写真。写真はリポジトリに置かず、
       # 公開のたびにネイティブのPCビルドの --shot で今の画面を撮る(script/release/web_shots.sh)。
       # PRでも撮って、撮れなくなった(起動しない・落ちる等)ことにここで気づけるようにする
       # libsdl2-dev は依存込みで数十MBあり、apt のミラーが遅いと取得だけで 10 分を超えるので .deb をキャッシュする

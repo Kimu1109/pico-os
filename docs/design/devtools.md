@@ -233,7 +233,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   `firmware_tool_test.py`に`sign`と`env=`、`run_net.sh`の`fw_download_net_test`(http.serverで一覧・1.5MBの取得・SHA-256/大きさ/404/取り消し/大きすぎる一覧/繋がらない)、
   PCビルドの`--tap`/`--shot`(`/sys/firmware.cfg`を手元のhttp.serverへ向けて、一覧→選ぶ→落とす→確認→置き場→落としたファイルを消す→再起動→通知、構成違いの表示)、
   `web-pages.yml`の一覧作りの手順を偽の`gh`で。**CIでの署名と本物のPagesの一覧は確認済み(2026-10-29。ナイトリー#665が署名済みで載り、Pagesの`.pfw`は焼き込みの鍵で`verify`が通る。ナイトリーからPagesの公開まで約16分)。実機でも、[Webから]で最新のナイトリーが一覧に出てダウンロード→書き込み→再起動まで通ることを利用者が確認した(2026-10-29)**。
-- **Webのダウンロードのページ(`/download/`、`pc/web/download.html`)** (2026-10-30): 初めて書き込む人がリリースの一覧を探さずに済むよう、
+- **Webのダウンロードのページ(`/download/`、`site/download.html`)** (2026-10-30): 初めて書き込む人がリリースの一覧を探さずに済むよう、
   Pagesのトップと同じ見た目のページから`.uf2`/`.pfw`を落とせるようにした。`web-pages.yml`が`.pfw`と一緒に`firmware.uf2`も落とし、
   `build_fw_index.py build`が同じ名前の`.uf2`(拡張子だけ違う)と`downloads.json`(ページ用。版・種類・タグ・大きさ・SHA-256)を`/firmware/`に置く。
   **`index.tsv`の形式は変えない**(本体は`.uf2`も`downloads.json`も読まない)。同じ版が安定版とナイトリーにあれば安定版の行にナイトリーの`.uf2`を寄せる。

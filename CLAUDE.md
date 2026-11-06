@@ -68,6 +68,7 @@ src/
   iso/ sound/ net/ crypto/ ime/ storage/ task/ util/   機能のライブラリ(util/ は機能を持たない部品だけ)
 lib/         vendor: lua(5.4.7) / monocypher / peanut_gb / qrcodegen / minimp3(各 README-pico-os.md)
 buildcfg/    PlatformIOの部品(options.ini)と派生の版(variants.ini / bench.ini)。土台は platformio.ini
+site/        GitHub Pages のページ(トップ・ダウンロード・ストアの雛形。web-pages.yml が _site/ へ写す。PlaygroundのWeb版は pc/)
 pc/          PC/Webビルド。pc/sdcard/ がSDの中身(lua/apps/<名前>/main.lua が自動登録されるLuaアプリ)
 script/      開発補助(cli-tool/picoos が名前で呼び分ける。script/README.md)。pio/(PlatformIOが読む)・codegen/(src/の生成物。アイコン・フォント・i18n)・
              check/(CIの検査)・release/(配る)・tools/(変換と開発中の道具)・assets/・dict/・host_test/・lua_test/。直下に置かない

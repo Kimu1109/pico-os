@@ -98,11 +98,16 @@ OFFにすると、実機の `-DPICO_APP_*=0` と同じ版になる(`src/config/A
 cmake -S pc -B pc/build-lite -DPICOOS_APP_GB=OFF -DPICOOS_APP_MAIL=OFF && cmake --build pc/build-lite -j
 ```
 
-Luaの2.5Dエンジンは `PICOOS_LUA_ISO=OFF` で外れる(`pico.iso` が nil)。`PICOOS_MUSIC_BUILD=ON` は実機の `env:rpipico2w_music` と同じ組み合わせ
-(ミュージック・ストア以外の内蔵アプリ・マイク・`pico.iso` を外す。`docs/design/devtools.md`「音楽再生に特化した版」)。
+Luaの2.5Dエンジンは `PICOOS_LUA_ISO=OFF` で外れる(`pico.iso` が nil)。
+
+### 実機の版と同じ旗でビルドする
+
+`PICOOS_VARIANT` に実機の env の名前(`buildcfg/variants.ini`・`bench.ini`)を渡すと、`buildcfg/*.ini` を読んで同じ旗でビルドする
+(`pc/cmake/PicoVariant.cmake`。版の旗は上の個別の指定より優先)。前からある `PICOOS_MUSIC_BUILD=ON` は `PICOOS_VARIANT=rpipico2w_music` の別名。
 
 ```sh
-cmake -S pc -B pc/build-music -DPICOOS_MUSIC_BUILD=ON && cmake --build pc/build-music -j
+cmake -S pc -B pc/build-music -DPICOOS_VARIANT=rpipico2w_music && cmake --build pc/build-music -j
+cmake -DPICOOS_VARIANT=rpipico2w_lite -P pc/cmake/PicoVariant.cmake   # 旗だけを見る
 ```
 
 ### 起動時に開くアプリ

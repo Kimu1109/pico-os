@@ -30,7 +30,7 @@ SerenityOS的な設計を参考に、タッチ操作の組み込みGUIフレー�
 ## ビルド
 
 - 土台は `platformio.ini` の `[env:rpipico2w]`(`extra_scripts` がファームの版を埋め込み、`-t fwpack`/`-t fwpush` を足す)。
-  派生の版は `buildcfg/`(部品 `options.ini` の `opt_*` を `variants.ini`=配る版 / `bench.ini`=計測用 で足し合わせる。env の名前は変えない。`devtools.md`「ビルドの構成の置き場所」)。
+  派生の版は `buildcfg/`(部品 `options.ini` の `opt_*` を `variants.ini`=配る版 / `bench.ini`=計測用 で足し合わせる。env の名前は変えない。PCは `cmake -DPICOOS_VARIANT=<env>` で同じ ini を読む。`devtools.md`「ビルドの構成の置き場所」)。
 - 画面の大きさと液晶の種類はビルド時に選ぶ(`SCREEN_WIDTH/HEIGHT`・`PICO_PANEL_*`、env `rpipico2w_320x480` が例)。**配置は `Scene::contentRect()` からの相対で書き、240/320を直書きしない**(`docs/design/gui.md`「画面の大きさ」)。
 - 液晶・タッチ・SDのピン・速さ・向き等は**内蔵フラッシュの末尾4KB(EEPROMの領域)の値が `consts.hpp` の既定を上書き**する(USBシリアルの `hwcfg`。新しい初期化は `HwConfigFunctions::active` を読む。`devtools.md`)。
 - 音声・マイク・電池は `-DPICO_HW_SOUND=0` 等で外せる(`config/Hardware_Config.hpp`、例は env `rpipico2w_minimal`。液晶・タッチ・SDは必須)。

@@ -59,6 +59,10 @@ jobs:
       - name: PlatformIO を用意する
         uses: ./.github/actions/pio-setup
 
+      # buildcfg/ の版の旗を、PCビルドの読み取り器(pc/cmake/PicoVariant.cmake)が PlatformIO と同じに読めているか
+      - name: 版の旗をPCビルドと同じに読めるか
+        run: python3 script/check_variants.py
+
       - name: ビルドする
         run: pio run -e rpipico2w
 

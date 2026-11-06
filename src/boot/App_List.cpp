@@ -101,7 +101,7 @@ void AppFunctions::Setup(){
 #if PICO_APP_GB
     Register(TR_NOOP("ゲームボーイ"), IconID::Game, &MakeScene<GameBoyScene>);
 #endif
-    //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/MUSIC_FORMAT.md)。
+    //曲(pico-os MML)を並べて鳴らす。曲はSDの /music/ に置く(docs/spec/MUSIC_FORMAT.md)。
     //音声出力を載せない版(config/Hardware_Config.hpp)には並べない(PICO_APP_MUSIC の既定が PICO_HW_SOUND。動画・ゲームボーイは音なしで動く)
 #if PICO_APP_MUSIC
     Register(TR_NOOP("ミュージック"), IconID::Music, &MakeScene<MusicScene>);
@@ -119,7 +119,7 @@ void AppFunctions::Setup(){
 #endif
     //通知センター(ステータスバーのタップでも開く。NotificationFunctions参照)
     Register(TR_NOOP("通知"), IconID::Bell, &MakeScene<NotificationScene>);
-    //アプリストア。配布元(docs/APP_REPO.md)からLuaアプリを取ってきて /lua/apps/ へ入れる
+    //アプリストア。配布元(docs/spec/APP_REPO.md)からLuaアプリを取ってきて /lua/apps/ へ入れる
 #if PICO_APP_STORE
     Register(StoreScene::kAppName, IconID::AppStore, &MakeScene<StoreScene>);
 #endif
@@ -127,7 +127,7 @@ void AppFunctions::Setup(){
     Register(UsbDriveScene::kAppName, IconID::SdCard, &MakeScene<UsbDriveScene>);
     //同じLANのブラウザからSDのファイルを読み書きする(開いている間だけ。docs/design/file-share.md)
     Register(FileShareScene::kAppName, IconID::Share, &MakeScene<FileShareScene>);
-    // ファームの更新(SDの .pfw / PCからWi-Fiで。docs/FIRMWARE_UPDATE.md)
+    // ファームの更新(SDの .pfw / PCからWi-Fiで。docs/guide/FIRMWARE_UPDATE.md)
     Register(FirmwareScene::kAppName, IconID::Refresh, &MakeScene<FirmwareScene>);
     // Luaアプリは下のスキャンで登録する(動作確認用のサンプルは /lua/apps/動作確認/)。
     // 権限が要るものは各アプリの app.cfg に書く

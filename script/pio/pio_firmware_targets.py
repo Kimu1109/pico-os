@@ -1,5 +1,5 @@
 # PlatformIO の追加スクリプト(platformio.ini の extra_scripts = post:script/pio/pio_firmware_targets.py)。
-# ファームの更新ファイルを作る・送るターゲット(docs/FIRMWARE_UPDATE.md。説明は script/pio/pio_firmware.py)。
+# ファームの更新ファイルを作る・送るターゲット(docs/guide/FIRMWARE_UPDATE.md。説明は script/pio/pio_firmware.py)。
 # PROGNAME(firmware)はプラットフォームが決めるので、ビルドの後(post)で足す。
 import os
 

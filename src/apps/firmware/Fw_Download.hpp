@@ -8,7 +8,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// Webからファームの更新ファイルを取る係(docs/FIRMWARE_UPDATE.md「Webから取る」)。
+// Webからファームの更新ファイルを取る係(docs/guide/FIRMWARE_UPDATE.md「Webから取る」)。
 //
 //   beginIndex() … <置き場>/index.tsv を取り、今の本体に合う版(構成が同じ・署名の決まり)の一覧にする
 //   beginFile(i) … 一覧の i 番目の .pfw を SD の <dir>/<ファイル名>.part へ書きながら SHA-256 を取り、

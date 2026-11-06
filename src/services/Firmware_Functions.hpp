@@ -8,7 +8,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// ファームの更新(docs/FIRMWARE_UPDATE.md)のOSへのつなぎ。中身の流れは apps/firmware/Fw_Update。
+// ファームの更新(docs/guide/FIRMWARE_UPDATE.md)のOSへのつなぎ。中身の流れは apps/firmware/Fw_Update。
 //
 //   SDから   … StartFromSd(path)。ファイルアプリで .pfw を開く/「本体の更新」の[SDから選ぶ]
 //   Wi-Fiで  … StartListening()。PCの script/release/firmware_tool.py push(pio run -t fwpush)がTCPで送ってくる。
@@ -62,7 +62,7 @@ namespace FirmwareFunctions {
     // 署名を確かめられない更新ファイルも受け付けるか(/sys/debug.cfg の fw-allow-unsigned)
     bool AllowUnsigned();
 
-    // ---- Webから(docs/FIRMWARE_UPDATE.md「Webから取る」) ----
+    // ---- Webから(docs/guide/FIRMWARE_UPDATE.md「Webから取る」) ----
     // 版の一覧を取り始める(置き場は /sys/firmware.cfg の url、無ければ FwDownload::kDefaultUrl)。
     // 一覧には今の本体と同じ構成(CurrentEnv())の版だけ、署名なしは AllowUnsigned() のときだけ残る
     bool StartWebIndex(FixedString<PICO_STR_LL>& err);

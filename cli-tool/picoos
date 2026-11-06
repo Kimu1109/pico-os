@@ -357,7 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("pimg", help="PNG/JPG等を.pimgへ変換 (generate_pimg.py、引数は転送)")
     sub.add_parser("pimg2png", help=".pimgをPNGへ変換(逆変換、目視確認用) (pimg2png.py、引数は転送)")
     sub.add_parser("ppm2png", help="--shot が出すPPMをPNGへ変換 (ppm2png.py、引数は転送)")
-    sub.add_parser("serve", help="docs/PROTOCOL.md参照実装サーバを起動 (reference_server.py、引数は転送)")
+    sub.add_parser("serve", help="docs/spec/PROTOCOL.md参照実装サーバを起動 (reference_server.py、引数は転送)")
     sub.add_parser("midi2mml", help="MIDI(SMF)をpico-os MMLへ変換 (midi2mml.py、引数は転送)")
     sub.add_parser("spotify-auth", help="Spotifyの最初のトークンをPCで取りSDへ書く (spotify_auth.py、引数は転送)")
 

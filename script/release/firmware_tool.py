@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""pico-os のファームの更新ファイル(.pfw、docs/FIRMWARE_UPDATE.md)を作る・確かめる・本体へ送る。
+"""pico-os のファームの更新ファイル(.pfw、docs/guide/FIRMWARE_UPDATE.md)を作る・確かめる・本体へ送る。
 標準ライブラリだけで動く。
 
 使い方:
   # 1. 署名の鍵を作る(1回だけ)。秘密鍵はリポジトリに置かない(手元のPCと、ナイトリーが署名に使う
-  #    GitHubのSecrets FIRMWARE_SIGNING_KEY にだけ置く。docs/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。
+  #    GitHubのSecrets FIRMWARE_SIGNING_KEY にだけ置く。docs/guide/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。
   #    表示された1行を src/apps/firmware/Fw_Keys.hpp へ足し、USBで1回書き込む
   python3 script/release/firmware_tool.py keygen
 

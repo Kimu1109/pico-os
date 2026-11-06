@@ -8,7 +8,7 @@
 # 一覧: https://github.com/Kimu1109/pico-os/releases (タグは nightly-<通し番号>-<短いハッシュ>)
 #
 # firmware.pfw は載せる前に、Secrets の FIRMWARE_SIGNING_KEY(script/release/firmware_tool.py keygen の秘密鍵)で署名する
-# (docs/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。Secrets に無ければ署名なしのまま載せて警告を出す。
+# (docs/guide/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。Secrets に無ければ署名なしのまま載せて警告を出す。
 # 鍵が Fw_Keys.hpp に焼き込んだ公開鍵と違えば止める(本体が受け付けない更新ファイルを配らないように)。
 #
 # 派生版(内蔵アプリを外した版・音楽再生に特化した版・英語の版)のビルドもここで回す(PRでは重いので外した。2026-11-06)。
@@ -120,7 +120,7 @@ jobs:
           FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
         run: |
           if [ -z "${FIRMWARE_SIGNING_KEY}" ]; then
-            echo "::warning::Secrets に FIRMWARE_SIGNING_KEY が無いので、firmware.pfw は署名なしのまま載せます(docs/FIRMWARE_UPDATE.md)"
+            echo "::warning::Secrets に FIRMWARE_SIGNING_KEY が無いので、firmware.pfw は署名なしのまま載せます(docs/guide/FIRMWARE_UPDATE.md)"
             echo "SIGNED=false" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -148,9 +148,9 @@ jobs:
           start=()
           if [ -n "${prev}" ]; then start=(--notes-start-tag "${prev}"); fi
           if [ "${SIGNED}" = "true" ]; then
-            pfw_note="SDの更新ファイル(docs/FIRMWARE_UPDATE.md)。署名済み。本体の「本体の更新」→[Webから]でも選べる"
+            pfw_note="SDの更新ファイル(docs/guide/FIRMWARE_UPDATE.md)。署名済み。本体の「本体の更新」→[Webから]でも選べる"
           else
-            pfw_note="SDの更新ファイル(docs/FIRMWARE_UPDATE.md)。**署名なし**なので \`/sys/debug.cfg\` に \`fw-allow-unsigned = true\` が要る"
+            pfw_note="SDの更新ファイル(docs/guide/FIRMWARE_UPDATE.md)。**署名なし**なので \`/sys/debug.cfg\` に \`fw-allow-unsigned = true\` が要る"
           fi
           cat > notes.md <<EOF
           main の ${SHORT} を ${date} にビルドしたもの(ファームの版 #${SERIAL})。動作は確かめていない。

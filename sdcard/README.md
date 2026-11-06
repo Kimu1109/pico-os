@@ -55,7 +55,7 @@ ffmpeg の `aevalsrc` で合成した音をLAMEで符号化したもので、同
 `music/arpeggio.m4a` はALAC(Apple Lossless)再生の動作サンプル(同じ音の先頭3秒を22.05kHzステレオ16bitのALACの.m4aへ直したもの。72KB)。
 
 `video/sample.pvid` と `video/sample.wav` は動画アプリ(VideoScene)の動作サンプル。ffmpeg の試験用の絵(`testsrc2`)と
-正弦波から `script/tools/generate_pvid.py` で作った3秒の動画で、著作物は含まない(作り方は `docs/VIDEO_FORMAT.md`)。
+正弦波から `script/tools/generate_pvid.py` で作った3秒の動画で、著作物は含まない(作り方は `docs/spec/VIDEO_FORMAT.md`)。
 
 `books/蜘蛛の糸.txt` は読書アプリ(`ReaderLibraryScene`)の動作確認用。青空文庫の芥川龍之介「蜘蛛の糸」
 (<https://www.aozora.gr.jp/cards/000879/card92.html> の「ルビあり」の zip を解いたもの。Shift_JIS・CRLF)を

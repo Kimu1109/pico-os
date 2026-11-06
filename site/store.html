@@ -4,7 +4,7 @@
   script/release/build_app_repo.py site が、配布物(catalog.tsv 等)から次を埋めて <配布物>/index.html として置く:
     アプリのカード(APPS の印のコメント) / 件数(COUNT の印) / 作った日(UPDATED の印)
   カードの中身は render_card()(同じスクリプト)。各カードの DOWNLOAD は <id>-<版>.papp(SDの直下に置けば
-  次の起動で入るパッケージ。docs/APP_REPO.md「パッケージ(.papp)」)。
+  次の起動で入るパッケージ。docs/spec/APP_REPO.md「パッケージ(.papp)」)。
   端末のストア(ランチャの「ストア」)は同じURLの catalog.tsv を読むので、このページと同じものが並ぶ。
 
   見た目はトップ(site/landing.html)と同じ: OSのパレット・2px線・右下に影・DotGothic16 / Press Start 2P。
@@ -284,7 +284,7 @@
   <div class="wrap">
     <span>pico-os App Store · <span data-i18n="updated">更新</span> @@UPDATED@@</span>
     <span data-i18n="foot.links"><a href="https://github.com/Kimu1109/pico-os-apps#readme">アプリを投稿する</a> ·
-      <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/APP_REPO.md">配布の形式</a> ·
+      <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/spec/APP_REPO.md">配布の形式</a> ·
       <a href="https://github.com/Kimu1109/pico-os">GitHub</a></span>
   </div>
 </footer>
@@ -310,7 +310,7 @@
     "empty": "Nothing found",
     "updated": "updated",
     "foot.links": '<a href="https://github.com/Kimu1109/pico-os-apps#readme">Submit an app</a> · ' +
-      '<a href="https://github.com/Kimu1109/pico-os/blob/main/docs/APP_REPO.md">Package format (Japanese)</a> · ' +
+      '<a href="https://github.com/Kimu1109/pico-os/blob/main/docs/spec/APP_REPO.md">Package format (Japanese)</a> · ' +
       '<a href="https://github.com/Kimu1109/pico-os">GitHub</a>',
     "perm.none": "No permissions",
     "perm.network": "Network", "perm.notify": "Notifications", "perm.sd": "Whole SD card",

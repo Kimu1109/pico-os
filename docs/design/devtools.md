@@ -328,7 +328,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - 大きさ(実機ファーム、2026-10-25): 選べるものを全部外すと **静的RAM −3.4KB(131,288→127,772B)・フラッシュ −353.5KB(2,220,044→1,857,036B)**。
   既定の版の大きさは変わらない。入口を外しただけでリンカが中身を捨てていることの裏付けにもなっている。
 - 検証: ホストテスト、PCビルドで全部外した版の起動とアプリ数(39→24。ランチャにはOSの6つと動作確認用のLuaアプリだけ)、
-  実機ファームの `rpipico2w_lite` のビルド(CIでもPRとmainへのpushで作る)。外した版も**実機で起動を確認済み(2026-10-25)**。
+  実機ファームの `rpipico2w_lite` のビルド(CIではナイトリーで作る。2026-11-06にPRから移した)。外した版も**実機で起動を確認済み(2026-10-25)**。
 - Luaの `pico.launch_app(name)` は外したアプリを名前で頼むと、登録簿に無いので false が返る(前からある振る舞い)。
 - ファームの更新(`.pfw`)は版を区別しないので、載せるアプリの違う本体へ送るとそのアプリが消える/増える。
 
@@ -338,7 +338,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 
 - **`env:rpipico2w_music`**(PCは `cmake -DPICOOS_MUSIC_BUILD=ON`): 上の「ビルド時に選ぶ内蔵アプリ」でミュージックとストア以外を外し、
   マイク(`PICO_HW_MIC=0`)と下の2つを外す。OSとして要るもの(設定・ファイル・時計・通知・USBドライブ・Wi-Fi転送・本体の更新)は残る
-  (曲はWi-Fi転送かUSBドライブで送り込む)。CIもPRとmainへのpushでこの版を作る(`firmware-build.yml`)。
+  (曲はWi-Fi転送かUSBドライブで送り込む)。CIはナイトリー(`nightly.yml` の派生版のビルド)でこの版を作る(2026-11-06にPRから移した)。
 - **`PICO_LUA_ISO`(新設、既定1)**: Luaの2.5Dエンジン(`pico.iso`。`iso/` と `lua/LuaEngine_Iso.cpp`)。0 だと `LuaEngine_Iso.cpp` が
   `RegisterIsoApi()`/`DestroyIso()` を空にするだけで、`pico.iso` は nil、`iso/` はどこからも呼ばれずリンカが捨てる。
   使うLuaアプリ(ブロック・ゾンビTD)はアプリの一覧に出たまま、開くと「attempt to index a nil value」で止まる(アプリは `if not pico.iso` で見分けられる)。
@@ -377,3 +377,9 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   最後に`web-pages.yml`を動かしてWebの版の一覧を作り直す。
 - 作った後、`nightly-` のリリースを作った日時の新しい順に並べ、`KEEP`(50)本を超えた分をタグごと消す(`gh release delete --cleanup-tag`)。
 - GitHub上で回ることは利用者が手動実行で確認した(2026-10-29、署名つき)。
+- **派生版のビルドをPRからナイトリーへ移した**(2026-11-06。利用者の要望: PRのチェックが重い)。PRの実機ファームのビルドは13〜20分かかり、
+  その7割が派生版4つ(各2.5〜3.5分、直列)だった。`_Off.cpp` の付け忘れを見る `rpipico2w_minimal` だけPRとmainへのpushに残し、
+  `rpipico2w_lite`/`rpipico2w_music`/`rpipico2w_en` はナイトリーの `variants` ジョブ(matrixで並列)で作る。
+  リリースの公開(`publish`)は派生版を待たない(派生版が落ちても載る。実行は赤くなる)。成果物は載せない。
+  `#if PICO_APP_*`/`PICO_LUA_ISO`/`PICO_LANG_*` の囲み忘れはマージ後の翌朝に分かる形になる。急ぐときは手元で `pio run -e <env>`。
+  PlatformIOの準備(キャッシュ・プラットフォームの差し替えと版の固定)は両方から使うので `.github/actions/pio-setup` へ出した。

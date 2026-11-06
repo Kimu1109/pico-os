@@ -1,13 +1,15 @@
 # 実機ファーム(PlatformIO, env:rpipico2w)をビルドして、実機でしか出ないリンクエラー・
 # 多重定義(arduino-pico / pico-sdk 由来のもの)をPRの段階で見つける。
 #
-#   プルリクエスト / main へのpush … ビルドする(約7分。キャッシュがあれば短い)
+#   プルリクエスト / main へのpush … 既定の版と、ハードウェア機能を外した版をビルドする
 #   手動実行                       … Actionsタブの「Run workflow」から
 #   ほかのワークフローから呼ぶ     … ナイトリービルド(nightly.yml)が同じ成果物をリリースへ載せる
 #
-# platformio.ini の `platform = raspberrypi`(公式)には rpipico2w のボード定義が無いので、
-# ここでだけ maxgerhardt/platform-raspberrypi へ差し替えてビルドする(ファイルは書き換えない)。
-# 版は下の PLATFORM_REF で固定している。上げるときは手元の `pio run` で通してから。
+# 内蔵アプリを外した版・音楽再生に特化した版・英語の版は重い(各2.5〜3.5分)ので、PRでは作らず
+# ナイトリー(nightly.yml の「派生版のビルド」)で作る(2026-11-06)。
+#
+# PlatformIO の準備(キャッシュ・プラットフォームを maxgerhardt の版へ差し替える・その版の固定)は
+# .github/actions/pio-setup にある(ナイトリーの派生版のビルドと共用)。
 name: 実機ファームのビルド
 
 on:
@@ -33,10 +35,6 @@ concurrency:
   group: firmware-build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PLATFORM_REPO: https://github.com/maxgerhardt/platform-raspberrypi.git
-  PLATFORM_REF: 5d4561a05e3b212660ac6fdd3fbfb328d1988aa1
-
 jobs:
   build:
     name: rpipico2w をビルドする
@@ -58,25 +56,8 @@ jobs:
           echo "serial=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
           echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
-      # ツールチェイン・arduino-pico・LovyanGFX 等で数百MBあるので丸ごとキャッシュする。
-      # platformio.ini(lib_depsの版)かこのファイル(プラットフォームの版)が変わると作り直す
-      - name: PlatformIO のキャッシュを戻す
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', '.github/workflows/firmware-build.yml') }}
-
-      - name: PlatformIO を入れる
-        run: pipx install platformio
-
-      - name: プラットフォームを maxgerhardt の版へ差し替える
-        run: |
-          sed -i "s|^platform = raspberrypi\$|platform = ${PLATFORM_REPO}#${PLATFORM_REF}|" platformio.ini
-          grep -n '^platform' platformio.ini
-          # 差し替えに失敗していたら(platformio.ini の書き方が変わったら)ここで気づく
-          grep -q "${PLATFORM_REF}" platformio.ini
-          # 書き換えた platformio.ini を「手元の変更」と数えない(script/pio_firmware.py が版の git に '+' を付けないように)
-          git update-index --assume-unchanged platformio.ini
+      - name: PlatformIO を用意する
+        uses: ./.github/actions/pio-setup
 
       - name: ビルドする
         run: pio run -e rpipico2w
@@ -93,22 +74,8 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: pio run -e rpipico2w_minimal
 
-      # 内蔵アプリを全部外した版(src/config/App_Config.hpp)。`#if PICO_APP_*` の囲み忘れ・囲みすぎ
-      # (使わなくなった関数の警告・外したアプリへの参照)は外した版でしか分からないので、同じ条件で作る
-      - name: 内蔵アプリを外した版をビルドする
-        if: github.event_name == 'pull_request' || github.event_name == 'push'
-        run: pio run -e rpipico2w_lite
-
-      # 音楽再生に特化した版(GBの音源・pico.iso を外す `#if PICO_APP_GB` / `PICO_LUA_ISO` の囲み忘れは、この組み合わせでしか分からない)
-      - name: 音楽再生に特化した版をビルドする
-        if: github.event_name == 'pull_request' || github.event_name == 'push'
-        run: pio run -e rpipico2w_music
-
-      # 英語の版(src/config/Lang_Config.hpp)。英語の版の TR() は表から引くだけなので、
-      # `#if PICO_LANG_*` の囲み忘れ・表の参照の誤りはこの版でしか分からない
-      - name: 英語の版をビルドする
-        if: github.event_name == 'pull_request' || github.event_name == 'push'
-        run: pio run -e rpipico2w_en
+      # 内蔵アプリを外した版(rpipico2w_lite)・音楽再生に特化した版(rpipico2w_music)・英語の版(rpipico2w_en)は
+      # ナイトリー(nightly.yml の「派生版のビルド」)で作る
 
       # SDに置いて更新する更新ファイル(docs/FIRMWARE_UPDATE.md)。ここでは署名なし
       # (本体は /sys/debug.cfg の fw-allow-unsigned = true のときだけ、確認のうえで受け付ける)。

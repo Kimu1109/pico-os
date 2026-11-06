@@ -11,6 +11,9 @@
 # (docs/FIRMWARE_UPDATE.md「最初に1回だけ: 署名の鍵」)。Secrets に無ければ署名なしのまま載せて警告を出す。
 # 鍵が Fw_Keys.hpp に焼き込んだ公開鍵と違えば止める(本体が受け付けない更新ファイルを配らないように)。
 #
+# 派生版(内蔵アプリを外した版・音楽再生に特化した版・英語の版)のビルドもここで回す(PRでは重いので外した。2026-11-06)。
+# 成果物は載せず、リリースの公開とは切り離してある(派生版が落ちてもナイトリーは載る。落ちた実行は赤くなる)。
+#
 # 残すのは新しい順に KEEP 本。超えた分はリリースとタグを古い順に消す。
 # 最後に Pages の公開(web-pages.yml)を動かし、Webからの更新の版の一覧(/firmware/)を作り直させる
 # (GITHUB_TOKEN で作ったリリースでは他のワークフローが動かないため、明示的に動かす)。
@@ -64,6 +67,31 @@ jobs:
     needs: check
     if: needs.check.outputs.build == 'true'
     uses: ./.github/workflows/firmware-build.yml
+
+  # 外した版でしか分からない囲み忘れ(`#if PICO_APP_*` / `PICO_LUA_ISO` / `PICO_LANG_*`)をリンクまで通して見る。
+  # ハードウェア機能を外した版(rpipico2w_minimal)はPRで作る(firmware-build.yml)
+  variants:
+    name: 派生版のビルド(${{ matrix.env }})
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      # 1つが落ちても残りの結果は見たい
+      fail-fast: false
+      matrix:
+        env: [rpipico2w_lite, rpipico2w_music, rpipico2w_en]
+    steps:
+      # 版の通し番号(script/pio_firmware.py)を本物と同じにするため、履歴を全部取る
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: PlatformIO を用意する
+        uses: ./.github/actions/pio-setup
+
+      - name: ビルドする
+        run: pio run -e ${{ matrix.env }}
 
   publish:
     name: リリースへ載せて古いものを消す

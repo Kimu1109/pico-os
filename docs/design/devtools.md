@@ -254,8 +254,17 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
   `platform = raspberrypi` の行を書き換えてこのファイルをキャッシュのキーにしているため。`buildcfg/` で `platform`/`lib_deps` を上書きしない。
 - **env の名前は変えなかった**: 名前はファームに埋め込まれ(`Fw_Version.hpp`)、Webの版の一覧が同じ構成の版を選ぶのに使い、CIの matrix・ナイトリーのファイル名にも出る。
 - 確かめたこと: 分ける前後で `pio project config --json-output` の全8 env の値が一致(旗は集合として。`lite` だけ `-D` の並びが変わった)。
-- 残り: 音楽の版の組み合わせは `pc/CMakeLists.txt` の `PICOOS_MUSIC_BUILD_OFF_APPS` にも書いてあり二重のまま。
-  版の旗を1つのファイルに置いて PlatformIO(`custom_*` + `pre:` スクリプト)と CMake の両方から読む形にすれば解消できる(未着手)。
+- **PCビルドも同じ `buildcfg/` を読む(2026-11-06)**: `cmake -DPICOOS_VARIANT=<env の名前>` で、`pc/cmake/PicoVariant.cmake` が
+  `buildcfg/*.ini` を読んで同じ旗を使う(版の旗は個別の `PICOOS_HW_*` 等より優先)。これで `pc/CMakeLists.txt` にあった音楽の版の
+  アプリの一覧(`PICOOS_MUSIC_BUILD_OFF_APPS`)を消し、`PICOOS_MUSIC_BUILD=ON` は `PICOOS_VARIANT=rpipico2w_music` の別名にした。
+  - 版の旗を別のファイル(`.flags` 等)へ移して PlatformIO 側を `custom_*` + `pre:` スクリプトで読む案もあったが、①で作った部品の形が
+    崩れ、`pio project config` に旗が見えなくなるのでやめた。ini を正にして、CMake 側に決まりの範囲だけ読む小さな読み取り器を置いた。
+  - 読み取り器が読むのは「`extends = env:rpipico2w`、`build_flags` は `${env:rpipico2w.build_flags}`・`${opt_xxx.flags}`・`-DNAME[=VAL]`、
+    部品の `flags` は `-DNAME[=VAL]` だけ、コメントは行頭の `;`」。外れた書き方は黙って読み違えずに止める。
+  - **`script/check_variants.py`** が `pio project config` の解釈と全 env で照らし合わせる(CIの `firmware-build.yml` で回る)。
+  - PCで効かない旗(`PICO_PANEL_*`・`PICO_HOT_IN_RAM`・`PICO_LUA_VM_IN_RAM`)もそのまま渡す(SDLのパネル・`Ram_Func.hpp` がPCでは無視する)。
+  - 確かめたこと: 既定・`PICOOS_MUSIC_BUILD=ON`・個別の OFF・英語+320x480 で、変更の前後の `-D` が一致。音楽の版をPCでビルドして
+    ランチャがOSの機能+ミュージック+ストアになることを撮って確かめた。
 
 ## ビルド時に選ぶハードウェア機能 (`src/config/Hardware_Config.hpp` の `PICO_HW_*`) (2026-10-25)
 
@@ -351,7 +360,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 
 利用者の要望: 一般的な機能は充実したので、一部の機能に特化した版もビルドできるように。まず音楽再生に特化した版。Luaは残す(ストア・Luaアプリ)。
 
-- **`env:rpipico2w_music`**(PCは `cmake -DPICOOS_MUSIC_BUILD=ON`): 上の「ビルド時に選ぶ内蔵アプリ」でミュージックとストア以外を外し、
+- **`env:rpipico2w_music`**(PCは `cmake -DPICOOS_VARIANT=rpipico2w_music`。前の `-DPICOOS_MUSIC_BUILD=ON` も別名として使える): 上の「ビルド時に選ぶ内蔵アプリ」でミュージックとストア以外を外し、
   マイク(`PICO_HW_MIC=0`)と下の2つを外す。OSとして要るもの(設定・ファイル・時計・通知・USBドライブ・Wi-Fi転送・本体の更新)は残る
   (曲はWi-Fi転送かUSBドライブで送り込む)。CIはナイトリー(`nightly.yml` の派生版のビルド)でこの版を作る(2026-11-06にPRから移した)。
 - **`PICO_LUA_ISO`(新設、既定1)**: Luaの2.5Dエンジン(`pico.iso`。`iso/` と `lua/LuaEngine_Iso.cpp`)。0 だと `LuaEngine_Iso.cpp` が

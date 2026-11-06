@@ -158,18 +158,60 @@ add_executable(picoos_pc
 # PICOOS_PC  … pico-os側がPC向けの実装(パネル設定/タッチ取得)へ切り替えるためのフラグ
 target_compile_definitions(picoos_pc PRIVATE LGFX_SDL PICOOS_PC)
 
+# ---- 版(実機の env)----
+# 実機の版を env の名前で選ぶと、buildcfg/*.ini の同じ旗を読んで使う(唯一の情報源は buildcfg/。pc/cmake/PicoVariant.cmake)。
+# 版の旗は、下の個別の指定(PICOOS_SCREEN_W・PICOOS_HW_*・PICOOS_APP_* 等)より優先する。空なら既定の版(rpipico2w)。
+# 例: cmake -S pc -B pc/build-music -DPICOOS_VARIANT=rpipico2w_music
+set(PICOOS_VARIANT "" CACHE STRING "実機の版(buildcfg/ の env の名前。空なら rpipico2w)")
+# 前からある -DPICOOS_MUSIC_BUILD=ON は -DPICOOS_VARIANT=rpipico2w_music の別名
+option(PICOOS_MUSIC_BUILD "音楽再生に特化した版にする(PICOOS_VARIANT=rpipico2w_music と同じ)" OFF)
+set(PICOOS_VARIANT_EFFECTIVE "${PICOOS_VARIANT}")
+if(PICOOS_MUSIC_BUILD)
+    if(NOT PICOOS_VARIANT STREQUAL "" AND NOT PICOOS_VARIANT STREQUAL "rpipico2w_music")
+        message(FATAL_ERROR "PICOOS_MUSIC_BUILD=ON と PICOOS_VARIANT=${PICOOS_VARIANT} は同時に選べません")
+    endif()
+    set(PICOOS_VARIANT_EFFECTIVE "rpipico2w_music")
+endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PicoVariant.cmake")
+picoos_read_variant("${PICOOS_VARIANT_EFFECTIVE}" PICOOS_VARIANT_DEFS)
+set(PICOOS_VARIANT_REST "")
+foreach(def IN LISTS PICOOS_VARIANT_DEFS)
+    string(REGEX MATCH "^([^=]+)=(.*)$" _ "${def}")
+    set(PICOOS_V_${CMAKE_MATCH_1} "${CMAKE_MATCH_2}")
+    list(APPEND PICOOS_VARIANT_REST "${CMAKE_MATCH_1}")
+endforeach()
+if(NOT PICOOS_VARIANT_EFFECTIVE STREQUAL "")
+    list(JOIN PICOOS_VARIANT_DEFS " " _defs_text)
+    message(STATUS "版: ${PICOOS_VARIANT_EFFECTIVE}(${_defs_text})")
+endif()
+
+# 版の旗に NAME があればその値、無ければ個別の指定(ON/OFF を 1/0 にしたもの)を <out> へ入れ、NAME を使い終わりにする
+macro(picoos_pick name fallback out)
+    if(DEFINED PICOOS_V_${name})
+        set(${out} "${PICOOS_V_${name}}")
+        list(REMOVE_ITEM PICOOS_VARIANT_REST "${name}")
+    elseif(${fallback})
+        set(${out} 1)
+    else()
+        set(${out} 0)
+    endif()
+endmacro()
+
 # 画面の大きさ(src/consts.hpp の SCREEN_WIDTH/HEIGHT)。既定は実機と同じ240x320。
-# 例: cmake -S pc -B pc/build-320x480 -DPICOOS_SCREEN_W=320 -DPICOOS_SCREEN_H=480
+# 例: cmake -S pc -B pc/build-320x480 -DPICOOS_SCREEN_W=320 -DPICOOS_SCREEN_H=480(または -DPICOOS_VARIANT=rpipico2w_320x480)
 set(PICOOS_SCREEN_W 240 CACHE STRING "画面の幅(画素)")
 set(PICOOS_SCREEN_H 320 CACHE STRING "画面の高さ(画素)")
-target_compile_definitions(picoos_pc PRIVATE
-    SCREEN_WIDTH=${PICOOS_SCREEN_W} SCREEN_HEIGHT=${PICOOS_SCREEN_H})
-
-# 音楽再生に特化した版(buildcfg/variants.ini の env:rpipico2w_music と同じ旗。片方を変えたらもう片方も直す)。ONにすると、下のマイク・内蔵アプリ・pico.iso の
-# 個別の指定より優先して、ミュージック・ストア以外の内蔵アプリとマイクと pico.iso を外す。
-# 例: cmake -S pc -B pc/build-music -DPICOOS_MUSIC_BUILD=ON
-option(PICOOS_MUSIC_BUILD "音楽再生に特化した版にする" OFF)
-set(PICOOS_MUSIC_BUILD_OFF_APPS BROWSER CALCULATOR CALENDAR CHAT DICT GB MAIL NOTES READER SSH TEXTEDITOR TODO VIDEO)
+set(_screen_w "${PICOOS_SCREEN_W}")
+set(_screen_h "${PICOOS_SCREEN_H}")
+if(DEFINED PICOOS_V_SCREEN_WIDTH)
+    set(_screen_w "${PICOOS_V_SCREEN_WIDTH}")
+    list(REMOVE_ITEM PICOOS_VARIANT_REST SCREEN_WIDTH)
+endif()
+if(DEFINED PICOOS_V_SCREEN_HEIGHT)
+    set(_screen_h "${PICOOS_V_SCREEN_HEIGHT}")
+    list(REMOVE_ITEM PICOOS_VARIANT_REST SCREEN_HEIGHT)
+endif()
+target_compile_definitions(picoos_pc PRIVATE SCREEN_WIDTH=${_screen_w} SCREEN_HEIGHT=${_screen_h})
 
 # 載せるハードウェア機能(src/config/Hardware_Config.hpp の PICO_HW_*)。既定は全部載せる。
 # 例: cmake -S pc -B pc/build-minimal -DPICOOS_HW_SOUND=OFF -DPICOOS_HW_MIC=OFF -DPICOOS_HW_BATTERY=OFF
@@ -177,35 +219,44 @@ option(PICOOS_HW_SOUND   "音声出力を載せる" ON)
 option(PICOOS_HW_MIC     "マイクを載せる" ON)
 option(PICOOS_HW_BATTERY "電池の残量を載せる" ON)
 foreach(hw SOUND MIC BATTERY)
-    if(PICOOS_HW_${hw} AND NOT (PICOOS_MUSIC_BUILD AND hw STREQUAL "MIC"))
-        target_compile_definitions(picoos_pc PRIVATE PICO_HW_${hw}=1)
-    else()
-        target_compile_definitions(picoos_pc PRIVATE PICO_HW_${hw}=0)
-    endif()
+    picoos_pick(PICO_HW_${hw} PICOOS_HW_${hw} _v)
+    target_compile_definitions(picoos_pc PRIVATE PICO_HW_${hw}=${_v})
 endforeach()
 
-# 載せる内蔵アプリ(src/config/App_Config.hpp の PICO_APP_*)。既定は全部載せる(ミュージックは音声出力に従う)。
+# 載せる内蔵アプリ(src/config/App_Config.hpp の PICO_APP_*)。既定は全部載せる(ミュージックは音声出力に従うので、
+# 載せるときは旗を出さずヘッダの既定に任せる)。
 # 例: cmake -S pc -B pc/build-lite -DPICOOS_APP_GB=OFF -DPICOOS_APP_MAIL=OFF
 set(PICOOS_APPS BROWSER CALCULATOR CALENDAR CHAT DICT GB MAIL MUSIC NOTES READER SSH STORE TEXTEDITOR TODO VIDEO)
 foreach(app ${PICOOS_APPS})
     option(PICOOS_APP_${app} "内蔵アプリ ${app} を載せる" ON)
-    if(NOT PICOOS_APP_${app} OR (PICOOS_MUSIC_BUILD AND app IN_LIST PICOOS_MUSIC_BUILD_OFF_APPS))
+    if(DEFINED PICOOS_V_PICO_APP_${app})
+        picoos_pick(PICO_APP_${app} PICOOS_APP_${app} _v)
+        target_compile_definitions(picoos_pc PRIVATE PICO_APP_${app}=${_v})
+    elseif(NOT PICOOS_APP_${app})
         target_compile_definitions(picoos_pc PRIVATE PICO_APP_${app}=0)
     endif()
 endforeach()
 
 # Luaの2.5Dエンジン(src/config/App_Config.hpp の PICO_LUA_ISO)。OFFにすると pico.iso が nil になる
 option(PICOOS_LUA_ISO "Luaの2.5Dエンジン(pico.iso)を載せる" ON)
-if(NOT PICOOS_LUA_ISO OR PICOOS_MUSIC_BUILD)
+picoos_pick(PICO_LUA_ISO PICOOS_LUA_ISO _v)
+if(NOT _v)
     target_compile_definitions(picoos_pc PRIVATE PICO_LUA_ISO=0)
 endif()
 
 # 表示言語(src/config/Lang_Config.hpp の PICO_LANG_EN)。ビルドごとに1つだけ。既定は日本語
-# 例: cmake -S pc -B pc/build-en -DPICOOS_LANG_EN=ON
+# 例: cmake -S pc -B pc/build-en -DPICOOS_LANG_EN=ON(または -DPICOOS_VARIANT=rpipico2w_en)
 option(PICOOS_LANG_EN "英語の版にする(OFFなら日本語)" OFF)
-if(PICOOS_LANG_EN)
+picoos_pick(PICO_LANG_EN PICOOS_LANG_EN _v)
+if(_v)
     target_compile_definitions(picoos_pc PRIVATE PICO_LANG_EN=1)
 endif()
+
+# 版の旗のうち上で扱わなかったもの(液晶の種類・RAMの置き方等)はそのまま渡す。PCでは効かないものもある
+# (PICO_PANEL_* は SDL のパネルを使うので無関係、PICO_HOT_IN_RAM は Ram_Func.hpp がPCでは常に空にする)
+foreach(name IN LISTS PICOOS_VARIANT_REST)
+    target_compile_definitions(picoos_pc PRIVATE ${name}=${PICOOS_V_${name}})
+endforeach()
 
 # pc/compat を src より前に置くことで、実機ライブラリのヘッダを差し替える
 target_include_directories(picoos_pc PRIVATE

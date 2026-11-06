@@ -10,7 +10,7 @@
 // SDの追加の漢字フォント(/sys/fonts/jpgothic16.pkf・jpgothic24.pkf)をWebから取って置く係。
 // docs/design/performance.md「漢字の一部をSDへ」。
 //
-// 配布元は GitHub Pages の /fonts/(.github/workflows/web-pages.yml が pc/sdcard/sys/fonts/ から写す)。
+// 配布元は GitHub Pages の /fonts/(.github/workflows/web-pages.yml が sdcard/sys/fonts/ から写す)。
 // 名前に印が入っている(jpgothic16-<印>.pkf)ので、ファームの版が変わってフォントを作り直しても古いものと混ざらない。
 // 落とすものの大きさとSHA-256はファームに入っている(src/gui/fonts/JpFont_Data.hpp)ので、一覧のファイルは取らない。
 // <置き場>.part へ書きながらSHA-256を取り、大きさ・SHA-256が合ったら名前を変えて、JpFontExt::Reload() する。

@@ -5,7 +5,7 @@
 //   TCP(open → data → 相手が閉じて close) / UDP(sendto → data, 送り元) /
 //   WebSocket(open → message → close の番号と理由) / MQTT(connect → subscribed → message → published → close)
 //   同時に開ける数の上限 / コールバックの中で閉じる / アプリを閉じると挨拶して閉じる / バックグラウンドには無い
-//   サンプルアプリ「MQTTリモコン」(pc/sdcard/lua/apps/MQTTリモコン/main.lua)を本物のまま動かす
+//   サンプルアプリ「MQTTリモコン」(sdcard/lua/apps/MQTTリモコン/main.lua)を本物のまま動かす
 //   (引数はリポジトリのルート。retain の状態が届く・点け消しを送る・遺言と online/offline・戻ると DISCONNECT)
 //   サンプルアプリ「HAパネル」(WebSocket)を偽物の Home Assistant(FakeHaServer)へ繋いで動かす
 //   サンプルアプリ「UDPツール」を UDP の echo へ向けて動かす(送受信・Wake on LAN のマジックパケット)
@@ -354,7 +354,7 @@ int main(int argc, char** argv){
             check(sent && done, "remote: 機器の状態を retain で置く");
         }
 
-        std::ifstream f(root + "/pc/sdcard/lua/apps/MQTTリモコン/main.lua");
+        std::ifstream f(root + "/sdcard/lua/apps/MQTTリモコン/main.lua");
         std::stringstream ss;
         ss << f.rdbuf();
         std::string src = ss.str();
@@ -431,7 +431,7 @@ int main(int argc, char** argv){
     {
         FakeServers::FakeHaServer ha;
         check(ha.start(), "ha: 偽物のHome Assistantを立てる");
-        std::ifstream f(root + "/pc/sdcard/lua/apps/HAパネル/main.lua");
+        std::ifstream f(root + "/sdcard/lua/apps/HAパネル/main.lua");
         std::stringstream ss;
         ss << f.rdbuf();
         std::string src = ss.str();
@@ -520,7 +520,7 @@ int main(int argc, char** argv){
 
     // ---- サンプルアプリ「UDPツール」 ----
     {
-        std::ifstream f(root + "/pc/sdcard/lua/apps/UDPツール/main.lua");
+        std::ifstream f(root + "/sdcard/lua/apps/UDPツール/main.lua");
         std::stringstream ss;
         ss << f.rdbuf();
         std::string src = ss.str();

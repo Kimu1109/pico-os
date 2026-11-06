@@ -2,7 +2,7 @@
 // docs/design/performance.md「漢字の一部をSDへ」。
 //
 // 確かめること:
-//   - 実物の pc/sdcard/sys/fonts/jpgothic16/24.pkf を開け(印・大きさが src/gui/fonts/JpFont_Data.hpp と合う
+//   - 実物の sdcard/sys/fonts/jpgothic16/24.pkf を開け(印・大きさが src/gui/fonts/JpFont_Data.hpp と合う
 //     = 作り直し忘れが無い)、ファイルの全部の字を引けて中身が同じ。ファイルに無い字は nullptr
 //   - 控えの同じ場所を取り合う字を交互に引いても正しい。控えに当たればSDを読まない
 //   - SDが使えない(generation()==0)間は読まず、戻ったら開き直す
@@ -293,8 +293,8 @@ static void TestIndexWithExt(){
 }
 
 int main(){
-    TestRealFile(JpFontData::kExt16, "pc/sdcard/sys/fonts/jpgothic16.pkf");
-    TestRealFile(JpFontData::kExt24, "pc/sdcard/sys/fonts/jpgothic24.pkf");
+    TestRealFile(JpFontData::kExt16, "sdcard/sys/fonts/jpgothic16.pkf");
+    TestRealFile(JpFontData::kExt24, "sdcard/sys/fonts/jpgothic24.pkf");
     TestSmall();
     TestIndexWithExt();
     if(failures){

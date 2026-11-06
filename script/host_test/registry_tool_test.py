@@ -4,7 +4,7 @@ author-sign / sync-official / registry-check / registry-build)のテスト。
 
   python3 registry_tool_test.py <作業ディレクトリ>
 
-- pc/sdcard のアプリ2本から author-sign で投稿用リポジトリの形を作り、検査に通るか・配布物が verify / site に通るか
+- sdcard のアプリ2本から author-sign で投稿用リポジトリの形を作り、検査に通るか・配布物が verify / site に通るか
 - main(base)と PR の中身の組み合わせで、自動でマージしてよいかの判定(owners・版・権限・meta.cfg・status・
   2本以上・アプリの外・新規・削除)
 - 検査で落ちるもの(書き換えた中身・別の鍵の署名・リンク・隠しファイル・id とディレクトリの食い違い・dir の重なり・
@@ -21,7 +21,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 TOOL = os.path.join(ROOT, "script", "release", "build_app_repo.py")
-SRC = os.path.join(ROOT, "pc", "sdcard", "lua", "apps")
+SRC = os.path.join(ROOT, "sdcard", "lua", "apps")
 WORK = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "registry_work")
 
 failures = 0

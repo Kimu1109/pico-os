@@ -155,9 +155,9 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
   `lib.lua` があれば `main.lua` より先(`LuaScene` と同じ)。アプリのグローバル変数はアプリごとの環境の表に入るので、テストの間で混ざらない。
 - 偽物に無い `pico.*` は `pico_mock に無い関数です` で止める(nilを呼んだときの分かりにくいエラーの代わり)。`stubs` で足せる。
 - `pico_mock.lua` に足したもの: `sd_root`(偽のSDの下に本物のディレクトリを読むだけで敷く。関数も可)・`sd_removed`・`launch_reason`。
-  リポジトリの `pc/sdcard/` の下のアプリはSD全体をそこへ当て、それ以外のフォルダは `/lua/apps/<フォルダ名>` だけを当てる。
+  リポジトリの `sdcard/` の下のアプリはSD全体をそこへ当て、それ以外のフォルダは `/lua/apps/<フォルダ名>` だけを当てる。
 - テストは `tests/` と `*_test.lua` に置く決まりにし、`build_app_repo.py` は配る物から除く(端末に要らない)。
-- 見本は `pc/sdcard/lua/apps/動作確認/tests/menu_test.lua`。検証は `pico_test_test`(lua-scene。`script/host_test/lua/test_app` の
+- 見本は `sdcard/lua/apps/動作確認/tests/menu_test.lua`。検証は `pico_test_test`(lua-scene。`script/host_test/lua/test_app` の
   わざと失敗するものを含むテストで、数・失敗の文と行・サンドボックス・SDの下敷き・読み込みの失敗、と見本が通ること)。
 
 ## 実機の確認用の道具 (`src/devtools/HwTest_Functions` / Luaアプリ「実機チェック」) (2026-10-11)
@@ -169,7 +169,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
   `hw mp3|flac|m4a <パス> [秒]`(MP3・FLAC・ALACの展開の速さ。`sound.md`「MP3の継ぎ目の無音を削る・展開の速さを測る」「FLACの再生」。2026-11-05)/
   `hw i2c`(I2C0のスキャン。SDA/SCLの電圧=プルアップの有無・応答するアドレス。0x52が見えたら暗号化なし初期化→0xFAのID6バイト(`..A4 20 01 01`=クラシック、`00 00`=ヌンチャク)と状態6バイトも出す。つないだ物が生きているかをWii本体なしで確かめる。2026-10-30。PCは「誰も居ない」を確認、実機では未確認(Todoist参照))。結果は`[HW]`の行。`PadFunctions::extra_line_handler`はLuaデバッガ(`dbg`)→`hw`の順に試す
   (`main.cpp`のラムダ)。`HwTest_Functions.cpp`はmain.cppからしか参照しないのでホストテストはリンクしない。
-- **「実機チェック」**(`pc/sdcard/lua/apps/実機チェック/`、`permission_network=true`): コルーチンで1フレームに1つずつ測る(Lua・renderの中の描画・
+- **「実機チェック」**(`sdcard/lua/apps/実機チェック/`、`permission_network=true`): コルーチンで1フレームに1つずつ測る(Lua・renderの中の描画・
   全面の描き直し60フレーム・SD・暗号・JSON・HTTPS・メモリ)。結果は画面・`[HWCHK]`のログ・`results.txt`(追記、`.gitignore`済み)。
   1つの測定は命令数の上限(1回200万命令)とLuaの予算に収まる量にしてある(表への追加を1万件にしたらPCでLuaのメモリが足りなかった)。
 - 検証: PCビルドで`hw info/mem/help`、`hw trap/buswrite/hang`→次の起動で`/crash/crash_NNNN.txt`と通知、「実機チェック」の「全部」(HTTPSはこの環境では

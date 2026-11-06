@@ -53,15 +53,15 @@ jobs:
           ./emsdk activate "$EMSDK_VERSION"
 
       # 辞書(script/dict/src/en-ja-and-ja-en.tsv + 索引。索引は script/dict/build.sh が作る)はサイズの都合で
-      # pc/sdcard/ には常設していない(IME辞書と同じ扱い。pc/README.md参照)。
-      # Webビルドは pc/sdcard/ を丸ごと --preload-file で index.data へ焼き込む
+      # sdcard/ には常設していない(IME辞書と同じ扱い。pc/README.md参照)。
+      # Webビルドは sdcard/ を丸ごと --preload-file で index.data へ焼き込む
       # (pc/CMakeLists.txt参照)ので、ビルド前にここへ置いて初めて辞書アプリが
-      # ブラウザ版でも動く。リポジトリ本体の pc/sdcard/ は汚さない
-      - name: 辞書をpc/sdcard/へ配置する
+      # ブラウザ版でも動く。リポジトリ本体の sdcard/ は汚さない
+      - name: 辞書をsdcard/へ配置する
         run: |
           sh script/dict/build.sh dict
-          mkdir -p pc/sdcard/sys/dict
-          cp script/dict/out/sys/dict/en-ja-and-ja-en.tsv script/dict/out/sys/dict/dict_index.tsv script/dict/out/sys/dict/LICENSES.md pc/sdcard/sys/dict/
+          mkdir -p sdcard/sys/dict
+          cp script/dict/out/sys/dict/en-ja-and-ja-en.tsv script/dict/out/sys/dict/dict_index.tsv script/dict/out/sys/dict/LICENSES.md sdcard/sys/dict/
 
       - name: ビルドする
         run: |
@@ -104,9 +104,9 @@ jobs:
           pairs = re.findall(r'"/sys/fonts/(jpgothic\d+\.pkf)", "([^"]+)"', h)
           assert len(pairs) == 2, pairs
           for src, web in pairs:
-              shutil.copy("pc/sdcard/sys/fonts/" + src, "_site/fonts/" + web)
+              shutil.copy("sdcard/sys/fonts/" + src, "_site/fonts/" + web)
           PY
-          cp pc/sdcard/sys/fonts/README.md pc/sdcard/sys/fonts/IPA_Font_License_Agreement_v1.0.txt _site/fonts/
+          cp sdcard/sys/fonts/README.md sdcard/sys/fonts/IPA_Font_License_Agreement_v1.0.txt _site/fonts/
           ls -la _site/fonts
 
       # トップのページ(site/landing.html)に載せる画面写真。写真はリポジトリに置かず、

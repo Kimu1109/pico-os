@@ -4,7 +4,7 @@
 //   - ページの組み方: 全ページをつなぐと本文の文字が欠けも重なりもせず並ぶ・行の幅・行頭禁則・字下げ・地付き・改ページ
 //   - 索引: 次へ/前へで行き来して同じページになる・ページ番号・割合で飛ぶ・間引き(1024ページ超)・目次
 //   - 保存: 続きの位置としおりの読み書き・最近読んだ順・忘れる
-// 本物の青空文庫のファイルはリポジトリの pc/sdcard/books/蜘蛛の糸.txt(Shift_JIS・CRLF)を使う。
+// 本物の青空文庫のファイルはリポジトリの sdcard/books/蜘蛛の糸.txt(Shift_JIS・CRLF)を使う。
 #include "apps/reader/Aozora_Text.hpp"
 #include "apps/reader/Reader_Layout.hpp"
 #include "apps/reader/Reader_Book.hpp"
@@ -129,7 +129,7 @@ static std::string ReadFile(const char* path){
 // ---- 青空文庫の形 ----
 static void testAozoraFile(){
     printf("\n--- 青空文庫のファイル(蜘蛛の糸) ---\n");
-    MemSource src(ReadFile("pc/sdcard/books/蜘蛛の糸.txt"));
+    MemSource src(ReadFile("sdcard/books/蜘蛛の糸.txt"));
     check(src.size() > 5000, "サンプルの本が読める");
     Aozora::Info info;
     Aozora::Analyze(src, info);

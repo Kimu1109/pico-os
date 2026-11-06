@@ -31,7 +31,7 @@ python3 chat_server.py --db /tmp/chat.db serve --port 8080
 ```
 
 `adduser` の最後に出るのが pico-os 用のトークン。PCビルドの pico-os で試すなら
-`pc/sdcard/sys/chat.cfg` に次のように書く(`--port 8080` のサーバへ繋がる):
+`sdcard/sys/chat.cfg` に次のように書く(`--port 8080` のサーバへ繋がる):
 
 ```
 server = http://127.0.0.1:8080

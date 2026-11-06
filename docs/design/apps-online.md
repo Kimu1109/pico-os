@@ -180,7 +180,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
 - **トークン**: `/sys/todoist.cfg`の`token`。画面の[設定]から入れると`PICO_Secret`(用途`"todoist-token"`)で暗号化して保存する。
   **母艦で平文のまま書いて置いてもよく、読んだときに暗号化して書き直す**(SSHの秘密鍵と同じ流儀)。ほかのキー:
   `api`(既定`https://api.todoist.com`。テストで偽物へ向ける)/`reminders = true|false`/`remind-before-min`(既定0)/
-  `today-filter`/`week-filter`。PCビルドで試すときの`pc/sdcard/sys/todoist.cfg`は`.gitignore`済み。
+  `today-filter`/`week-filter`。PCビルドで試すときの`sdcard/sys/todoist.cfg`は`.gitignore`済み。
 - **TLS**: api.todoist.com の証明書は Amazon(`Amazon RSA 2048 M01` ← `Amazon Root CA 1`)、TLS 1.2の`ECDHE-RSA-AES128-GCM`で
   BearSSLで話せる。**焼き込みのルートに Amazon Root CA 1 が無かったので足した**(上の「HTTPS」)。実際の鎖が新しいルートで
   検証でき、足す前のルートでは失敗することを`openssl verify`で確認した。
@@ -244,7 +244,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
 - **設定 `/sys/mail.cfg`**: `auth`(`password` 既定 / `microsoft`)/ `host` / `port`(既定993)/ `tls`(既定true)/ `user` / `password`(`PICO_Secret`、用途`"mail-password"`。
   **平文で置けば読んだときに暗号化して書き直す**)/ `oauth-client-id` / `oauth-tenant` / `oauth-authority`(テスト用)/ `mailbox`(既定INBOX)/ `mark-read`(既定true)。
   画面の[設定]は サーバ(`host` か `host:port`。`imaps://`も読む)→ ユーザー名 → パスワード(同じユーザーなら空欄で今のまま)を
-  1フレームずつ空けて聞く。PCで試すときの`pc/sdcard/sys/mail.cfg`は`.gitignore`済み。
+  1フレームずつ空けて聞く。PCで試すときの`sdcard/sys/mail.cfg`は`.gitignore`済み。
 - **使えるサーバ**: LOGINで入れるもの。**Gmailは2段階認証を有効にしてアプリパスワードを作る**(普段のパスワードは不可)。
   Outlook.com/Hotmail(outlook.jp 等)は下の「Outlook.com」(2026-10-23)。プロバイダのメール(IMAPS対応のもの)・
   iCloud(アプリ用パスワード)・自前のDovecot等は入れる見込み。**焼き込みのルート証明書に無いCAのサーバは `/sys/tls/ca.pem` に足す**。
@@ -299,7 +299,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   `mail_proto_test` に JsonReader の stringBuffer・フォームの値・更新用トークンの保存(行の入れ替えで戻らない・壊れたら読まない)も。PCビルドの`--tap`/`--shot`(偽物を `--seed` で立て `host = 127.0.0.1` / `tls = false`)で
   一覧・4種の本文・既読になって灰色・設定のダイアログを目視した。**実機(BearSSL)と本物のメールサーバ(Gmail等)での確認は未**(Todoist参照)。
 
-## Spotifyリモコン (`pc/sdcard/lua/apps/Spotify/`、Luaアプリ) (2026-10-14)
+## Spotifyリモコン (`sdcard/lua/apps/Spotify/`、Luaアプリ) (2026-10-14)
 
 スマホ/PCのSpotifyで鳴っている再生を Web API で操作する(本体から音は出ない。**操作には Spotify Premium が要る**)。
 - ファイル: `main.lua`(上の段のButtonとCanvas1枚・タップ/キー/コントローラー)/`api.lua`(トークン・`A.call`)/`player.lua`(状態の取得と操作)/
@@ -334,7 +334,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   `http_close`・`save_to`の偽物を足した。PCビルドでは偽物のSpotifyサーバ(使い捨て)を相手に、本物のLuaエンジンで表示・一時停止・次へ・音量・端末の選択を
   `--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)。**本物のSpotifyアカウント・実機で動くことを利用者が確認した(2026-10-14。長いトークンが切れる不具合を直した後)**。
 
-## XMLの読み取りとニュースアプリ (`src/util/Xml_Reader` / `pico.xml_pick` / `pc/sdcard/lua/apps/ニュース/`) (2026-10-14)
+## XMLの読み取りとニュースアプリ (`src/util/Xml_Reader` / `pico.xml_pick` / `sdcard/lua/apps/ニュース/`) (2026-10-14)
 
 SUMMARY.md未掲載。Google ニュースのRSS(APIキー不要)を読むために、`JsonReader`と同じ流儀でXMLの読み取りを足した。
 

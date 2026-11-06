@@ -147,7 +147,7 @@ end
 -- load_app{ dir=, args=, launch_reason={tag,data}, pad_connected=, stubs={}, setup=false, sd_dir=, lang= }
 --   lang: pico.lang() の値(既定 "ja")。"en" ならアプリの lang/en.lua で pico.tr する
 --   dir     … アプリのフォルダ(既定: テストファイルの上の main.lua のあるフォルダ)
---   sd_dir  … アプリのSD上のパス(pico.app_dir() の値。既定: pc/sdcard/ の下ならそこからの位置、
+--   sd_dir  … アプリのSD上のパス(pico.app_dir() の値。既定: sdcard/ の下ならそこからの位置、
 --              それ以外は /lua/apps/<フォルダ名>)。SDのそのパスの下を読むと dir の中のファイルが返る
 --   setup   … false なら setup() を呼ばない(既定は本物と同じく main.lua の後に呼ぶ)
 function M.load_app(opts)
@@ -158,10 +158,10 @@ function M.load_app(opts)
     if not file_exists(dir .. "/main.lua") then error("load_app: " .. dir .. "/main.lua がありません", 2) end
 
     local sd_dir = opts.sd_dir
-    local sdcard = ROOT_DIR .. "/pc/sdcard"
+    local sdcard = ROOT_DIR .. "/sdcard"
     local sd_root
     if not sd_dir and dir:sub(1, #sdcard + 1) == sdcard .. "/" then
-        -- リポジトリの pc/sdcard/ の下のアプリは、SD全体をそこへ当てる(他のアプリのファイルも読める)
+        -- リポジトリの sdcard/ の下のアプリは、SD全体をそこへ当てる(他のアプリのファイルも読める)
         sd_dir = dir:sub(#sdcard + 1)
         sd_root = sdcard
     else

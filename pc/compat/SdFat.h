@@ -1,6 +1,6 @@
 // PCビルド用のSdFat代替。
 //
-// SDカードの代わりにホストのディレクトリ(既定 pc/sdcard/)を使う。
+// SDカードの代わりにホストのディレクトリ(既定 sdcard/)を使う。
 // 実機のSDに置くファイルをそのままそこへ置けば、PCでも同じパスで読める。
 // ルートは PICOOS_SD_ROOT 環境変数で差し替えられる。
 //
@@ -45,7 +45,7 @@ struct SdSpiConfig {
 };
 
 // SDのルートになるホスト側ディレクトリ。
-// 既定はビルド時に pc/sdcard の絶対パスが埋め込まれる(どこから起動しても動くように)。
+// 既定はビルド時に sdcard の絶対パスが埋め込まれる(どこから起動しても動くように)。
 // 実行時は PICOOS_SD_ROOT 環境変数で差し替えられる
 #ifndef PICOOS_SD_ROOT_DEFAULT
     #define PICOOS_SD_ROOT_DEFAULT "sdcard"

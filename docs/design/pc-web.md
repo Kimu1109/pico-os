@@ -12,7 +12,7 @@
   ユーザコードを回す)は使えない。`Panel_sdl::setup()/loop()/close()` が公開されているので、
   `emscripten_set_main_loop()` から「`loop()` 1回 + `Panel_sdl::loop()` 1回」を刻む。
   **実測60fps**(pico-os側のループ負荷は120フレームで数ms)。
-- **SDカード**: `pc/sdcard/` を `--preload-file` で `index.data` へ焼き込み、仮想FS(MEMFS)の
+- **SDカード**: `sdcard/` を `--preload-file` で `index.data` へ焼き込み、仮想FS(MEMFS)の
   `/sdcard` に載せる。POSIXのまま読めるので `compat/SdFat.h` は無改造。
   **中身を変えたら再ビルドが必要**で、書き込みはリロードで消える。
 - **設定**: ブラウザに環境変数が無いので、`main_pc.cpp` が起動時にURLのクエリを `setenv()` する
@@ -105,3 +105,12 @@
 - 入口(`landing.html`)・ダウンロード(`download.html`)・ストアの雛形(`store.html`)は PC/Webビルドとは関係ないので、`pc/web/` からトップの `site/` へ移した。
   `pc/web/` には Playground の外枠(`shell.html`。Emscripten のビルドが使う)だけが残る。
 - ページの中のリンクは公開後のURLが基準なので、置き場所を変えても中身は変わらない。写すのは `web-pages.yml`、雛形を読むのは `build_app_repo.py site`。
+
+## SDの中身の置き場所 (`sdcard/`) (2026-11-06)
+
+- SDの中身は PC専用ではない(同梱Luaアプリの正本でストアの公開元・SD用フォントの書き出し先・ホストテスト・文書の例)ので、`pc/sdcard/` からリポジトリの根の `sdcard/` へ上げた。
+- 前は「SDの隣」に作っていた `otp_emu.bin`・`ota_emu/` は、そのままだとリポジトリの根にできるので、`pc/run/` にまとめた(`main_pc.cpp` の `runDir()`。
+  `PICOOS_SD_ROOT` を指定したときは今までどおりそのSDの隣で、テスト・`web_shots.sh` が一時ディレクトリで分けられる)。Webは仮想FSなので変わらない。
+- 手元に前の `pc/sdcard/` が残っていても(git の管理外の設定・ログ)、うっかりコミットしないよう `.gitignore` で無視したままにした。要る設定は `sdcard/sys/` へ移す。
+- 投稿用リポジトリ(`pico-os-apps`)で公式アプリを写すときの `--src` も `../pico-os/sdcard/lua/apps` になる(lua-apps.md)。
+- 動かしても正本(配る中身)が汚れないよう書き込みを別の層に分ける案は、ホットリロードとSDへの書き込みのテストの前提が変わるので見送った。

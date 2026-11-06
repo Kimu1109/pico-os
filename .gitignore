@@ -9,65 +9,70 @@ __pycache__/
 # 画面の大きさ別のビルド(pc/build-320x480 等。pc/README.md「画面の大きさを変える」)も含む
 pc/build*/
 pc/build-web/
-# 手元で撮ったトップのページの画面写真(script/release/web_shots.sh。公開時はCIが撮る)
-site/shots/
-pc/sdcard/sys/log.txt
-pc/sdcard/sys/log.old.txt
-# Claude Codeのworktree隔離エージェント(isolation: "worktree")が作る一時チェックアウト
-.claude/worktrees/
-pc/sdcard/sys/wifi.cfg
-pc/sdcard/sys/wifi.cfg.tmp
-# TODOアプリのトークン(PCで試すときに置く。秘密なのでコミットしない)
-pc/sdcard/sys/todoist.cfg
-pc/sdcard/sys/todoist.cfg.tmp
-# メールアプリのアカウント(PCで試すときに置く。秘密なのでコミットしない)
-pc/sdcard/sys/mail.cfg
-pc/sdcard/sys/mail_token.cfg
-pc/sdcard/sys/mail_token.cfg.tmp
-pc/sdcard/sys/mail.cfg.tmp
-# 録音の文字起こしの送り先とAPIキー(PCで試すときに置く。秘密なのでコミットしない)
-pc/sdcard/sys/transcribe.cfg
-pc/sdcard/sys/transcribe_key.cfg
-pc/sdcard/sys/transcribe_key.cfg.tmp
-# 開発者向けの道具(/sys/debug.cfg)とクラッシュダンプ。PCビルドで試すと作られる
-pc/sdcard/sys/debug.cfg
-pc/sdcard/sys/notify_rules.tsv
-pc/sdcard/sys/debug.cfg.tmp
-pc/sdcard/sys/home.cfg
-pc/sdcard/sys/home.cfg.tmp
-pc/sdcard/sys/todo_cache.tsv
-pc/sdcard/sys/todo_cache.tsv.tmp
-# 最近開いたファイル(RecentFiles)
-pc/sdcard/sys/recent_files.txt
-pc/sdcard/sys/recent_files.txt.tmp
-pc/sdcard/sys/crash.pending
-pc/sdcard/crash/
-
-# Luaアプリの pico.store_save() が作る保存ファイル(PCビルドで試すと作られる)
-pc/sdcard/lua/apps/*/store.json
-pc/sdcard/lua/apps/*/store.json.tmp
-# ニュースアプリが保存するRSS(save_to。.part は受信中)
-pc/sdcard/lua/apps/*/news.xml
-pc/sdcard/lua/apps/*/news.xml.part
-pc/sdcard/lua/apps/*/settings.cfg
-pc/sdcard/lua/apps/*/results.txt
-# マイクの動作確認(mic.lua)・pico.mic_start() が録るファイルと、録音アプリの置き場
-pc/sdcard/lua/apps/*/rec_*.wav
-pc/sdcard/recordings/
-pc/sdcard/lua/apps/*/bench.tmp
-pc/sdcard/lua/apps/*/spotify_auth.json
-pc/sdcard/lua/apps/Spotify/art.jpg
-pc/sdcard/lua/apps/Spotify/art.jpg.part
-pc/sdcard/lua/apps/Spotify/player.json
-# 「ブロック」のセーブ(PCビルドで試すと作られる)
-pc/sdcard/lua/apps/ブロック/worlds/
-# アプリストア(PCビルドで試すと作られる。store.cfg には試すときの url/key を書く)
-pc/sdcard/sys/store/
-pc/sdcard/sys/store.cfg
-# OTPの端末の鍵(PC/Webビルドが真似るファイル)
+# PCで動かしたときの状態(OTPを真似るファイル・ファームの更新の置き場。pc/main_pc.cpp の runDir())
+pc/run/
+# 2026-11-06 に SD の中身を pc/sdcard/ から sdcard/ へ移した。手元に残った前の場所(Wi-Fi等の設定を含む)を
+# うっかりコミットしないよう無視する。要る設定は sdcard/sys/ へ移すこと
+pc/sdcard/
 pc/otp_emu.bin
 pc/ota_emu/
-pc/sdcard/lua/apps/*/log.csv
+# 手元で撮ったトップのページの画面写真(script/release/web_shots.sh。公開時はCIが撮る)
+site/shots/
+sdcard/sys/log.txt
+sdcard/sys/log.old.txt
+# Claude Codeのworktree隔離エージェント(isolation: "worktree")が作る一時チェックアウト
+.claude/worktrees/
+sdcard/sys/wifi.cfg
+sdcard/sys/wifi.cfg.tmp
+# TODOアプリのトークン(PCで試すときに置く。秘密なのでコミットしない)
+sdcard/sys/todoist.cfg
+sdcard/sys/todoist.cfg.tmp
+# メールアプリのアカウント(PCで試すときに置く。秘密なのでコミットしない)
+sdcard/sys/mail.cfg
+sdcard/sys/mail_token.cfg
+sdcard/sys/mail_token.cfg.tmp
+sdcard/sys/mail.cfg.tmp
+# 録音の文字起こしの送り先とAPIキー(PCで試すときに置く。秘密なのでコミットしない)
+sdcard/sys/transcribe.cfg
+sdcard/sys/transcribe_key.cfg
+sdcard/sys/transcribe_key.cfg.tmp
+# 開発者向けの道具(/sys/debug.cfg)とクラッシュダンプ。PCビルドで試すと作られる
+sdcard/sys/debug.cfg
+sdcard/sys/notify_rules.tsv
+sdcard/sys/debug.cfg.tmp
+sdcard/sys/home.cfg
+sdcard/sys/home.cfg.tmp
+sdcard/sys/todo_cache.tsv
+sdcard/sys/todo_cache.tsv.tmp
+# 最近開いたファイル(RecentFiles)
+sdcard/sys/recent_files.txt
+sdcard/sys/recent_files.txt.tmp
+sdcard/sys/crash.pending
+sdcard/crash/
+
+# Luaアプリの pico.store_save() が作る保存ファイル(PCビルドで試すと作られる)
+sdcard/lua/apps/*/store.json
+sdcard/lua/apps/*/store.json.tmp
+# ニュースアプリが保存するRSS(save_to。.part は受信中)
+sdcard/lua/apps/*/news.xml
+sdcard/lua/apps/*/news.xml.part
+sdcard/lua/apps/*/settings.cfg
+sdcard/lua/apps/*/results.txt
+# マイクの動作確認(mic.lua)・pico.mic_start() が録るファイルと、録音アプリの置き場
+sdcard/lua/apps/*/rec_*.wav
+sdcard/recordings/
+sdcard/lua/apps/*/bench.tmp
+sdcard/lua/apps/*/spotify_auth.json
+sdcard/lua/apps/Spotify/art.jpg
+sdcard/lua/apps/Spotify/art.jpg.part
+sdcard/lua/apps/Spotify/player.json
+# 「ブロック」のセーブ(PCビルドで試すと作られる)
+sdcard/lua/apps/ブロック/worlds/
+# アプリストア(PCビルドで試すと作られる。store.cfg には試すときの url/key を書く)
+sdcard/sys/store/
+sdcard/sys/store.cfg
+# OTPの端末の鍵(PC/Webビルドが真似るファイル)
+sdcard/lua/apps/*/log.csv
 # ホストテストのビルド(script/host_test/run.sh が作る)
 script/host_test/build/
 # 辞書の材料から作ったSD用のファイル(script/dict/build.sh が作る)

@@ -2,7 +2,7 @@
 """
 generate_breakout_blocks.py
 ---------------------------
-ブロック崩し(pc/sdcard/lua/apps/ブロック崩し/)のブロックの絵 tiles.pimg を作る。標準ライブラリのみ。
+ブロック崩し(sdcard/lua/apps/ブロック崩し/)のブロックの絵 tiles.pimg を作る。標準ライブラリのみ。
 
 29x14pxのタイルを横に7枚並べた1枚の画像(203x14)。pico.game のタイルマップとして使い、
 盤面の1マス = タイルマップの1マス。ブロック本体は27x12pxで、右と下の2pxは隙間(背景の白)。
@@ -74,7 +74,7 @@ def main():
     root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="ブロック崩しのブロックの画像(tiles.pimg)を作る")
     ap.add_argument("output", nargs="?", type=Path,
-                    default=root / "pc/sdcard/lua/apps/ブロック崩し/tiles.pimg")
+                    default=root / "sdcard/lua/apps/ブロック崩し/tiles.pimg")
     ap.add_argument("--preview", type=Path, help="確認用のPPM(P6)も書き出す")
     args = ap.parse_args()
 

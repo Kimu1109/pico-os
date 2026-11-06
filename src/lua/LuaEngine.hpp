@@ -110,7 +110,7 @@
 //     `sd_outside_app_dir`権限無しでapp_dir外・ファイル不正)は`pico.sd_*`と
 //     同じく`false`を返すだけでエラーにはしない
 //
-// ペイント(2026-09-24): `pc/sdcard/lua/apps/ペイント/`のために次を足した:
+// ペイント(2026-09-24): `sdcard/lua/apps/ペイント/`のために次を足した:
 //   - `canvas_mode`に4=直線・5=塗りつぶし(バケツ)を追加。四角形/楕円は
 //     `filled`プロパティで塗りつぶし版になり、輪郭は`brush_radius`の太さで描く
 //   - `pico.canvas_undo(id)`: 1段だけの「元に戻す」(もう一度呼ぶとやり直し)。
@@ -230,7 +230,7 @@
 // C++側パターンのLua版)。これが無かった間は、盤面をButtonではなく自前描画
 // にしたいアプリでも「マスの数だけ小さなCanvasを敷き詰めて、それぞれの
 // press_startで判定する」という遠回りが必要だった(オセロアプリ
-// `pc/sdcard/lua/apps/オセロ/main.lua`が実例)。
+// `sdcard/lua/apps/オセロ/main.lua`が実例)。
 //
 // ネットワーク(pico.http_request/http_cancel): 既存の`Http_Get`はMarkdownブラウザの
 // キャッシュ用途(GET専用、200/304以外は本文を捨てて一律失敗扱い)に特化しているため、

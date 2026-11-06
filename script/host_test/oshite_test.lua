@@ -1,9 +1,9 @@
--- 「おしてのぼれ」(pc/sdcard/lua/apps/おしてのぼれ/)の3つのステージが、操作を流し込むと
+-- 「おしてのぼれ」(sdcard/lua/apps/おしてのぼれ/)の3つのステージが、操作を流し込むと
 -- 実際に解けることを確かめる(pico.game の軽い物理: 押し合い・積み重ね・ばね・動く足場・
 -- すり抜け床・スイッチ)。pico.* は描画を捨てる偽物に差し替え、pico.game は本物
 -- (src/lua/builtin/game.lua をそのまま読む)。lua_script_test から run.sh が呼ぶ。
 -- 見た目はPCビルドの --tap / --shot で確かめること。
-local APP = ROOT_DIR .. "/pc/sdcard/lua/apps/おしてのぼれ/"
+local APP = ROOT_DIR .. "/sdcard/lua/apps/おしてのぼれ/"
 local fails = 0
 local function check(c, msg)
     print((c and "[ OK ] " or "[FAIL] ") .. msg)

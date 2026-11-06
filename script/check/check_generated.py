@@ -27,7 +27,7 @@ CHECKS = [
     ("jis_table", "src/apps/mail/Mail_Jis_Data.hpp", ["generate_jis_table.py", "--check"]),
     ("tls_roots", "src/net/Tls_Roots_Data.hpp(ROOTS との並び・枚数だけ)", ["generate_tls_roots.py", "--check"]),
     ("icons", "src/gui/icons/icons_data.h(要 cairosvg・pillow)", ["generate_icons.py", "--check"]),
-    ("fonts", "src/gui/fonts/・pc/sdcard/sys/fonts/(要 LovyanGFX の本体)", None),
+    ("fonts", "src/gui/fonts/・sdcard/sys/fonts/(要 LovyanGFX の本体)", None),
 ]
 
 LGFX_FONT = [

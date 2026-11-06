@@ -1,7 +1,7 @@
--- 「リバーシ」(pc/sdcard/lua/apps/リバーシ/)のゲームの規則を、pico.* を差し替えて確かめる。
+-- 「リバーシ」(sdcard/lua/apps/リバーシ/)のゲームの規則を、pico.* を差し替えて確かめる。
 -- pico.game は本物(src/lua/builtin/game.lua をそのまま読む)で、描画だけ捨てる。
 -- lua_script_test から run.sh が呼ぶ。見た目はPCビルドの --tap / --shot で確かめること。
-local APP = ROOT_DIR .. "/pc/sdcard/lua/apps/リバーシ/"
+local APP = ROOT_DIR .. "/sdcard/lua/apps/リバーシ/"
 local fails = 0
 local function check(c, msg)
     print((c and "[ OK ] " or "[FAIL] ") .. msg)

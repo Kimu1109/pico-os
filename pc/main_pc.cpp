@@ -39,6 +39,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <cstdlib>
 #include <cstring>
 #include <atomic>
@@ -61,7 +62,20 @@
 #include "apps/firmware/Fw_Store.hpp"                // ファームの更新の置き場(PCではディレクトリで真似る)
 #include "services/App_Functions.hpp"                // 起動時に開くアプリ(--app / ?app=)
 
-//OTP(端末の鍵)を真似るファイル。PICOOS_OTP_FILE、無ければSDのルートの隣の otp_emu.bin
+//SDの外に置く「PCで動かしたときの状態」の置き場。PICOOS_SD_ROOT を指定したときはそのSDの隣(テストごとに分かれる)、
+//指定しないときはビルド時の PICOOS_RUN_DIR_DEFAULT(ネイティブは pc/run/)、それも無ければ既定のSDの隣(Webの仮想FS)
+static std::string runDir()
+{
+    if (const char* root = getenv("PICOOS_SD_ROOT")) return std::string(root) + "/..";
+#ifdef PICOOS_RUN_DIR_DEFAULT
+    std::filesystem::create_directories(PICOOS_RUN_DIR_DEFAULT);
+    return PICOOS_RUN_DIR_DEFAULT;
+#else
+    return std::string(PICOOS_SD_ROOT_DEFAULT) + "/..";
+#endif
+}
+
+//OTP(端末の鍵)を真似るファイル。PICOOS_OTP_FILE、無ければ runDir() の otp_emu.bin
 //(SDの中に置くと「SDだけを盗まれても読めない」を試せないので外に置く。Webは仮想FSなので読み直しで消える)
 static void configureOtpFile()
 {
@@ -69,22 +83,20 @@ static void configureOtpFile()
     if (const char* env = getenv("PICOOS_OTP_FILE")) {
         path = env;
     } else {
-        const char* root = getenv("PICOOS_SD_ROOT");
-        path = std::string(root ? root : PICOOS_SD_ROOT_DEFAULT) + "/../otp_emu.bin";
+        path = runDir() + "/otp_emu.bin";
     }
     DeviceKeyFunctions::pc_otp_file = path.c_str();
 }
 
 //ファームの更新の置き場(実機は内蔵フラッシュのLittleFS)を真似るディレクトリ。
-//PICOOS_OTA_DIR、無ければSDのルートの隣の ota_emu/(PCでは本体を書き換えない。流れだけ試せる)
+//PICOOS_OTA_DIR、無ければ runDir() の ota_emu/(PCでは本体を書き換えない。流れだけ試せる)
 static void configureOtaDir()
 {
     static std::string path;
     if (const char* env = getenv("PICOOS_OTA_DIR")) {
         path = env;
     } else {
-        const char* root = getenv("PICOOS_SD_ROOT");
-        path = std::string(root ? root : PICOOS_SD_ROOT_DEFAULT) + "/../ota_emu";
+        path = runDir() + "/ota_emu";
     }
     FwStorePc::dir = path.c_str();
 }

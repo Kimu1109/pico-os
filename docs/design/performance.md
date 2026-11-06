@@ -212,7 +212,7 @@ SdFat 2.3.1(arduino-pico 同梱、`ENABLE_DEDICATED_SPI` は既定で1)の動き
 - **分け方**(`script/codegen/font/split_font.py`): LovyanGFX の `lgfx_font_japan_gothic_p_16/24` を読み、かな・記号・英数字の全部と
   `script/codegen/font/base_kanji.txt`(常用漢字2,136字 + 「叱」(常用の「𠮟」は16bitの外でフォントに無い)・画面の文字で使っている「揃」「繋」・電卓の「匁」)
   の漢字を u8g2 の形で `src/gui/fonts/JpFont_Base16/24.cpp` へ、残りの漢字(U+3400〜9FFF・U+F900〜FAFF)を
-  `pc/sdcard/sys/fonts/jpgothic16/24.pkf` へ書く。形は道具の冒頭(見出し28B・stride字おきの索引128個まで・u8g2と同じ字の記録)。
+  `sdcard/sys/fonts/jpgothic16/24.pkf` へ書く。形は道具の冒頭(見出し28B・stride字おきの索引128個まで・u8g2と同じ字の記録)。
   両方をつなぐ定数(印・大きさ・SHA-256・配布元の名前)は `JpFont_Data.hpp`。**どれも生成物**で、
   `firmware-build.yml` が LovyanGFX から作り直して同じかを見る(`--check`)。印は元のフォントの中身と残す字のCRC32で、
   合わないファイルは使わない(ファームとSDの版ずれで違う字を出さない)。
@@ -230,8 +230,8 @@ SdFat 2.3.1(arduino-pico 同梱、`ENABLE_DEDICATED_SPI` は既定で1)の動き
   本体は設定の「他」→「追加の漢字」の[取得](`services/FontDownload`)で、まだ使えない方だけを取り、`.part` へ書きながらSHA-256を取り、
   `JpFont_Data.hpp` の大きさ・SHA-256と合えば置き換えて開き直す。一覧のファイルは要らない。置き場は `/sys/firmware.cfg` の `font-url` で変えられる。
 - **ライセンス**: 元は IPAexゴシック(IPAフォントライセンスv1.0)。分けたもの(フラッシュ用もSD用も)は「派生プログラム」で、
-  同じライセンスで配る。条件(第3条1項)は、(1)作り方の公開(`script/codegen/font/` とこのリポジトリ)、(2)元へ戻す方法(`pc/sdcard/sys/fonts/README.md`)、
-  (3)同じライセンス(ライセンスの写しを `/fonts/` と `pc/sdcard/sys/fonts/` に置く)、(4)元の名前を使わない(`jpgothic*`)。
+  同じライセンスで配る。条件(第3条1項)は、(1)作り方の公開(`script/codegen/font/` とこのリポジトリ)、(2)元へ戻す方法(`sdcard/sys/fonts/README.md`)、
+  (3)同じライセンス(ライセンスの写しを `/fonts/` と `sdcard/sys/fonts/` に置く)、(4)元の名前を使わない(`jpgothic*`)。
   ファームに入れていた LovyanGFX の配列も元々派生プログラムなので、立場は前と同じ。
 - **確かめたこと**: `ext_glyph_store_test`(実物の .pkf の全部の字・控えの取り合い・SDが抜けて戻る・無い/印違い/大きさ違い/壊れ/読みの失敗・
   `U8g2GlyphIndex` から漢字だけ聞く)。PCビルドで、読書の「蜘蛛の糸」がSDのフォントありで描け・無しで □ になること、

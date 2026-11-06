@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""UDPツール(pc/sdcard/lua/apps/UDPツール/)のランチャのアイコン icon.pimg(48x48)を作る。標準ライブラリのみ。
+"""UDPツール(sdcard/lua/apps/UDPツール/)のランチャのアイコン icon.pimg(48x48)を作る。標準ライブラリのみ。
 
 緑の角丸の板に、右向きの白い矢印(送る)と左向きの黄色い矢印(受ける)。
 色はpico-osの16色パレットの番号で直接描く(generate_pimg.py と同じ .pimg 形式)。
@@ -61,7 +61,7 @@ def rle(rows):
 def main():
     root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="UDPツールのアイコン(icon.pimg、48x48)を作る")
-    ap.add_argument("output", nargs="?", type=Path, default=root / "pc/sdcard/lua/apps/UDPツール/icon.pimg")
+    ap.add_argument("output", nargs="?", type=Path, default=root / "sdcard/lua/apps/UDPツール/icon.pimg")
     args = ap.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "wb") as f:

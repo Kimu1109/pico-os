@@ -53,7 +53,7 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
   `mods={ctrl,alt,shift}`)、**真を返せば取った扱い、偽ならオンスクリーンキーボードの入力へ回る**。エラーになったらダイアログを1回出して以降は呼ばない
   (`loop()`と同じ安全弁。その打鍵は消費した扱い)。`ProtectedCall()`は戻り値を1つ受けるため`nresults`引数を足した。
   配り順は「画面の`onKey()`→開いているキー盤」(「物理キーボード」参照)で、日本語キー盤が読みを入力中のときはキー盤が先。
-- 動作確認は「動作確認」アプリの「直接描画」(`pc/sdcard/lua/apps/動作確認/draw.lua`。図形・太線・画像の拡大/回転/反転・扇形・右寄せ文字・`on_key`・電池を1画面に描く。PCビルドの`--tap`+標準入力の`key`行で確認済み)。
+- 動作確認は「動作確認」アプリの「直接描画」(`sdcard/lua/apps/動作確認/draw.lua`。図形・太線・画像の拡大/回転/反転・扇形・右寄せ文字・`on_key`・電池を1画面に描く。PCビルドの`--tap`+標準入力の`key`行で確認済み)。
 - 検証: `lua_engine_test`(run.sh。dirty矩形・引数エラー・塗りのピクセル(正方形/L字/扇形)・画像の等倍/拡大/反転/回転/原点/透過・
   文字幅・WAV・battery・sd_stat/sd_read_part・on_keyの登録/解除/エラー)。PCビルドは通る。**実機・PCビルドでの見た目は未確認**
   (`fill_polygon`の1画素ごとの`drawFastHLine`、`draw_image_ex`の全画素ループの速さは実機で見ること。クリップが全面だと最大240x320回)。
@@ -117,7 +117,7 @@ dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ
   `FlushDirty()`の呼び出しを模している。確認できるのは「クラッシュしないこと」
   「`render`コールバックが実際に呼ばれること」「`pico.invalidate`/`mark_dirty`が
   期待通りの矩形を`PICO_GFX::MarkDirty()`へ渡すこと」まで(見た目の確認は
-  PCビルドの`--shot`で行った。`pc/sdcard/lua/hello.lua`に`Canvas`で顔アイコンを
+  PCビルドの`--shot`で行った。`sdcard/lua/hello.lua`に`Canvas`で顔アイコンを
   描く実例がある)。
 
 ## 直接描画エリア(2026-09-20実装)
@@ -237,7 +237,7 @@ OSと同じ`key=value`書式(`Config_Functions`)で読み書きできるよう�
 - **`LGFX_Sprite`は`images_`配列の値メンバなので、`pico.image_free()`を呼び忘れて
   スクリプトが終了しても、`LuaEngine`自体の破棄(`LuaScene::onExit()`)で
   デストラクタが確保分を回収する(リークしない)。** `pico.image_free()`はそれを
-  待たず即座に解放したい場合向けの明示API(`pc/sdcard/lua/hello.lua`の「戻る」
+  待たず即座に解放したい場合向けの明示API(`sdcard/lua/hello.lua`の「戻る」
   ボタンでの呼び出しがその実例)。
 - **`draw_image`は他の`pico.draw_*`と同じ「直接描画」の一種**で、`Canvas`
   (`pico.create("Canvas")`)の`render`コールバック内で使うこと(そうしないと
@@ -246,13 +246,13 @@ OSと同じ`key=value`書式(`Config_Functions`)で読み書きできるよう�
 - ホストテストは`lua_engine_test.cpp`に追加(SD無し時のnil、正常系のハンドル発行・
   サイズ取得・描画・dirty矩形、存在しないパス/壊れたヘッダのnil、スロット枯渇、
   解放→再利用→古いハンドルの無効化、二重解放の無害化、合計バイト数上限)。
-  実際の見た目は`pc/sdcard/lua/hello.lua`に画像描画のデモを追加し、PCビルドの
-  `--shot`で`.pimg`(`pc/sdcard/img/hello.pimg`、`examples/img/sample.pimg`と同じ
+  実際の見た目は`sdcard/lua/hello.lua`に画像描画のデモを追加し、PCビルドの
+  `--shot`で`.pimg`(`sdcard/img/hello.pimg`、`examples/img/sample.pimg`と同じ
   48x24の色帯サンプル)が実際に描けることを確認済み。
 
 ## ラスタキャンバスの保存/読み込み(CanvasRasterのリサイズ・`pico.canvas_clear/save/load`、2026-09-23実装)
 
-「スクラッチパッド」(黒/青ペン+消しゴムの手書きメモアプリ。`pc/sdcard/lua/apps/スクラッチパッド/main.lua`)を
+「スクラッチパッド」(黒/青ペン+消しゴムの手書きメモアプリ。`sdcard/lua/apps/スクラッチパッド/main.lua`)を
 作る過程で見つかった2つの穴を埋めた。`CanvasRaster`(`pico.create("CanvasRaster")`)は自分専用の
 `LGFX_Sprite`を持ち続け、`causeOnPressMove()`がタッチのドラッグをそのまま線として焼き込む
 ウィジェットで、手書き入力の土台としては元から使えた。しかし:
@@ -440,9 +440,9 @@ Luaから既存アプリ(C++製含む)へ飛ぶことの両方をカバーした
   launch_appは登録簿のC++製アプリ(テスト用の`OtherAppScene`)へ実際に遷移すること・
   未登録名は`false`を返すことを確認している。
   実際の見た目はPCビルドの`--shot`で確認した:
-  `pc/sdcard/lua/hello.lua`に追加した「サブ画面へ」ボタンから`pc/sdcard/lua/hello_sub.lua`
+  `sdcard/lua/hello.lua`に追加した「サブ画面へ」ボタンから`sdcard/lua/hello_sub.lua`
   (`pico.push_scene()`の飛び先。「電卓を開く」で`pico.launch_app("電卓")`、
-  「置き換えへ」で`pico.change_scene()`)→`pc/sdcard/lua/hello_sub2.lua`
+  「置き換えへ」で`pico.change_scene()`)→`sdcard/lua/hello_sub2.lua`
   (`pico.change_scene()`の飛び先)という3ファイル構成のデモ一式を作り、
   push_scene→launch_app(電卓が実際に開く)、push_scene→change_scene→pop
   (hello_sub.luaを飛び越してhello.luaへ直接戻る)の両方を確認した。
@@ -696,7 +696,7 @@ Luaから使えるようにした:
 
 ## タップ位置の取得(pico.get_touch、2026-09-21実装)
 
-Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際に踏んだ穴を埋めた。
+Luaでオセロアプリ(`sdcard/lua/apps/オセロ/main.lua`)を作った際に踏んだ穴を埋めた。
 `pico.on(id, "press_start", fn)`等の共通4イベントはWidgetIdしか渡さない(「コールバックの
 引数は多くの場合WidgetIdのみ」という既存の設計方針。イベントごとに引数の型・個数を
 変える複雑さを避けるための意図的な判断で、これ自体は変えていない)。そのため「盤面全体を
@@ -735,7 +735,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 ## Lua APIの追加(2026-10-05): require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー
 
 「ウィジェットを使うLuaアプリを書くときに足りない機能」を洗い出した(`pico.*`の不足リスト)うち、実害が出ていた5項目をまとめて入れた。
-ドキュメントは`lua-api-doc/content/api/`(`system/modules.md`/`data/json.md`/`system/timers.md`/`ui/scenes.md`/`data/network.md`)、動作確認は「動作確認」アプリの「画面とデータ」(`pc/sdcard/lua/apps/動作確認/scene.lua`)。
+ドキュメントは`lua-api-doc/content/api/`(`system/modules.md`/`data/json.md`/`system/timers.md`/`ui/scenes.md`/`data/network.md`)、動作確認は「動作確認」アプリの「画面とデータ」(`sdcard/lua/apps/動作確認/scene.lua`)。
 **実機では未確認**(PCのホストテストとPCビルドのみ)。
 
 1. **`require(name)` / `pico.require(name)`**(`LuaEngine::l_require`、`preloadModules`)
@@ -798,7 +798,7 @@ Luaでオセロアプリ(`pc/sdcard/lua/apps/オセロ/main.lua`)を作った際
 
 前節の洗い出しで「見送った」としたものと、洗い出しの○(あると明らかに楽)の項目を入れた。ドキュメントは `lua-api-doc/content/`
 (`api/crypto.md` `api/stdlib.md` を新設、`api/widgets` `dialogs` `drawing` `images` `misc` `scenes` `canvas` と `reference/*` `guide/events.md` を更新)、
-動作確認は「動作確認」アプリの「追加の部品」(`pc/sdcard/lua/apps/動作確認/extra.lua`)。**実機では未確認**(PCのホストテストとPCビルドのみ)。
+動作確認は「動作確認」アプリの「追加の部品」(`sdcard/lua/apps/動作確認/extra.lua`)。**実機では未確認**(PCのホストテストとPCビルドのみ)。
 
 **ソースの置き場**: `LuaEngine.cpp` が4400行を超えたので、追加分は `src/lua/LuaEngine_Ext.cpp`(ウィジェット補助・イベント・ジェスチャー・リスト/タブ・ダイアログ・
 描画の補助・ユーティリティ)と `LuaEngine_Crypto.cpp`(暗号API)に置いた。`LuaEngine` の private へは `friend struct LuaEngineExt` / `LuaEngineCrypto` 経由で触る。

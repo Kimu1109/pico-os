@@ -7,7 +7,7 @@ pico-os のチップチューン音源(`src/sound/Chip_Synth`、既定8チャン
 > **現状**: **実装済み**(読み取り `src/sound/Mml_Compiler`、2コア目のシーケンサー `src/sound/Music_Player`、
 > 窓口 `SoundFunctions::MusicPlay*`、Luaの `pico.music_*`、ミュージックアプリ `MusicScene`)。
 > 挙動は `script/host_test/music_test.cpp` で固定してある。本書と実装が食い違えば、実装を信じて本書を直す。
-> サンプル: `pc/sdcard/music/サンプル/demo.mml`(短いループ)、`pc/sdcard/music/サンプル/sample.mml`(ほとんどの命令を使った見本)
+> サンプル: `sdcard/music/サンプル/demo.mml`(短いループ)、`sdcard/music/サンプル/sample.mml`(ほとんどの命令を使った見本)
 
 ## なぜMMLか(他の形式との関係)
 
@@ -192,7 +192,7 @@ PCで動かすPythonのスクリプト(標準ライブラリだけ)。SMFの形�
 音色は機械の判断なので、気になるところは人がMMLを直す前提。
 
 ```sh
-python3 script/tools/midi2mml.py song.mid -o pc/sdcard/music/song.mml     # 変換(-o を省けば標準出力)
+python3 script/tools/midi2mml.py song.mid -o sdcard/music/song.mml     # 変換(-o を省けば標準出力)
 python3 script/tools/midi2mml.py song.mid --list                          # 声部の一覧(番号は --pick で使う)
 python3 script/tools/midi2mml.py song.mid --pick A=1,B=3+4,C=2,D=drums    # 割り当てを自分で決める
 python3 script/tools/midi2mml.py song.mid --loop --bars 1-32              # 1〜32小節目だけ、繰り返す

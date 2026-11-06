@@ -2,7 +2,7 @@
 """
 generate_minesweeper_tiles.py
 -----------------------------
-マインスイーパー(pc/sdcard/lua/apps/マインスイーパー/)の盤面の絵 tiles20/16/14.pimg を作る。
+マインスイーパー(sdcard/lua/apps/マインスイーパー/)の盤面の絵 tiles20/16/14.pimg を作る。
 標準ライブラリのみ。
 
 難易度ごとにマスの大きさが違う(初級20px・中級16px・上級14px)ので、1つの難易度につき1枚の画像を作る。
@@ -282,7 +282,7 @@ def rle(rows):
 def main():
     root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="マインスイーパーの盤面の画像(tilesNN.pimg)を作る")
-    ap.add_argument("--dir", type=Path, default=root / "pc/sdcard/lua/apps/マインスイーパー",
+    ap.add_argument("--dir", type=Path, default=root / "sdcard/lua/apps/マインスイーパー",
                     help="書き出し先のディレクトリ")
     ap.add_argument("--preview", type=Path, help="確認用のPPM(P6。初級の画像)も書き出す")
     args = ap.parse_args()

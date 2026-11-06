@@ -151,7 +151,7 @@ SDL_VIDEODRIVER=offscreen ./pc/build-en/picoos_pc --app 設定 --shot settings-e
 
 ```sh
 ./pc/build/picoos_pc --app テトリス --hot-reload
-picoos pc dev pc/sdcard/lua/apps/テトリス -- --scene play
+picoos pc dev sdcard/lua/apps/テトリス -- --scene play
 ```
 
 - Luaの状態だけ作り直さずプロセスごと起動し直すのは、画面の積み重ね・タイマー・HTTP・画像を確実に片付けるため。
@@ -192,7 +192,7 @@ emrun --no_browser --port 8080 pc/build-web    # → http://localhost:8080/index
 | `index.html` | ページの外枠。`pc/web/shell.html` から作られる |
 | `index.js` | emscriptenのグルーコード |
 | `index.wasm` | pico-os本体(既定で約1.7MB、`Release`で約1.3MB) |
-| `index.data` | `pc/sdcard/` を固めたもの(仮想FSへ展開される) |
+| `index.data` | `sdcard/` を固めたもの(仮想FSへ展開される) |
 
 ### ページでできること
 
@@ -234,7 +234,7 @@ index.html?wifi=disconnected&rssi=-85
 | 項目 | Webでの扱い |
 |---|---|
 | ループ | `emscripten_set_main_loop()`。ブラウザのメインスレッドは止められないので、`Panel_sdl::main()`(別スレッド)は使わず1フレームずつ刻む |
-| SDカード | `pc/sdcard/` を**ビルド時に**`index.data`へ焼き込む。**中身を変えたら再ビルドが必要**で、アプリ側からの書き込みはメモリ上だけ(リロードで消える) |
+| SDカード | `sdcard/` を**ビルド時に**`index.data`へ焼き込む。**中身を変えたら再ビルドが必要**で、アプリ側からの書き込みはメモリ上だけ(リロードで消える) |
 | 描画 | **SDLのソフトウェアレンダラ(canvas 2D)に固定**(下記)。GPU描画は `?render=gl` で試せる。どちらでも実測60fps |
 | Wi-Fi | 疎通判定は `navigator.onLine`(ソケットが無いため)。固定したいときは `?wifi=...` |
 | **Markdownブラウザのオンライン機能** | **使えない。** ブラウザには生のTCPソケットが無いので、`browser-home` を設定したりツールバーの「更新」「検索」を押してもサーバへ繋がらない。同梱のサンプル(`/tmp/doc.md`)を読む分にはそのまま動く |
@@ -243,7 +243,7 @@ index.html?wifi=disconnected&rssi=-85
 | スレッド | 無し。`Panel_sdl` のデバッガ検出スレッドも起動しないが、動作に影響は無い |
 | 速度 | 実測60fps(メインループ自体の負荷は数ms/120フレーム)。240x320を2倍で出す程度ではGPUを使っても差が出ない |
 
-IMEの辞書(`sys/ime/skk_*.tsv`)を `pc/sdcard/` へ置くと、**そのサイズがそのまま
+IMEの辞書(`sys/ime/skk_*.tsv`)を `sdcard/` へ置くと、**そのサイズがそのまま
 `index.data` に乗る**(初回ロードで全部ダウンロードされる)。Webで配る際は要注意。
 
 ### Webで画面が出ない場合(canvasの大きさ)
@@ -375,12 +375,16 @@ UserAgentをログ欄へ書き出す。
 
 ## SDカード
 
-`pc/sdcard/` を実機のSDカードとして読む。実機のSDに置くファイルを同じ構成で置けば、
+リポジトリの根の `sdcard/` を実機のSDカードとして読む(PC専用ではなく、同梱アプリの正本・ホストテスト・ストアの公開元も兼ねるので
+`pc/` の外に置いてある。2026-11-06 まで `pc/sdcard/`)。実機のSDに置くファイルを同じ構成で置けば、
 同じパスで読める。別の場所を使いたければ環境変数で差し替えられる:
 
 ```sh
 PICOOS_SD_ROOT=/path/to/sd ./pc/build/picoos_pc
 ```
+
+SDの外に置く「PCで動かしたときの状態」(端末の鍵のOTPを真似る `otp_emu.bin`・ファームの更新の置き場 `ota_emu/`)は `pc/run/` に作る
+(.gitignore 済み)。`PICOOS_SD_ROOT` を指定したときは、そのSDの隣に作る(テストごとに分かれるように)。
 
 IMEの辞書(`sys/ime/skk_*.tsv`)はサイズが大きいのでリポジトリには入れていない。
 無くても起動する(変換候補が出ないだけ)。作り方は `script/dict/README.md`。
@@ -396,7 +400,7 @@ IMEの辞書(`sys/ime/skk_*.tsv`)はサイズが大きいのでリポジトリ�
 2. **設定ファイル/環境変数による上書き** — 「切断」「電波が弱い」「SSIDが見つからない」を
    狙って再現できる。UIの各状態を確認したいときはこちら。
 
-設定は `pc/sdcard/sys/network.cfg` に `pc-` 始まりのキーで書く(実機のパーサは知らないキーを
+設定は `sdcard/sys/network.cfg` に `pc-` 始まりのキーで書く(実機のパーサは知らないキーを
 無視するので、同じファイルを実機と共有しても害はない)。
 
 | キー | 意味 |
@@ -437,7 +441,7 @@ PICOOS_WIFI_RSSI=-85 ./pc/build/picoos_pc              # 電波1本の確認
 | 画面 | LovyanGFX の `Panel_sdl`。既定は2倍表示(`PICOOS_PC_SCALE`) |
 | 液晶への転送時間 | **実機のSPI転送にかかる理論上の時間だけ待つ**(`Panel_sdl_SpiWait`)。SPIは75MHz相当(`TFT_MAX_SPEED`=80MHzを要求しても、RP2350のclk_peri 150MHzを2分周した75MHzが上限)、1ピクセル16bitで、**画面1枚で16.4ms**。4bpp→RGB565の変換にかかるCPU時間は含まないので、実機はこれより少し遅い。`PICOOS_SPI_WAIT=off` で無効にできる |
 | タッチ | SDLのマウス。座標はSDL側でパネル座標へ戻されるので拡大率の影響を受けない |
-| SDカード | `pc/sdcard/` を実ファイルシステムとして読む |
+| SDカード | `sdcard/` を実ファイルシステムとして読む |
 | Wi-Fi | 母艦の疎通を見て接続/切断を返す。設定で任意の状態に固定もできる(下記) |
 | NTP / 時刻 | 同期しない。**必要ない** — PCの時計をそのまま使うので最初から正しい時刻が出る |
 | 音声 | `pc/compat/I2S.h` がSDLの音声出力へ流す。実機の2コア目(`setup1()`/`loop1()`)は、ネイティブでは別スレッド、Webではフレームごとに`loop1()`を1回呼んで代わりにする(`main_pc.cpp`)。アンプ(MAX98357A)の検出ピンは「音声デバイスを開けたら刺さっている」として答える。`/sys/sound.cfg` の `pc-sound-state`(`auto`/`connected`/`disconnected`)か `PICOOS_SOUND_STATE` で固定できる。イヤホンの差し込み検出は `PICOOS_HEADPHONE=inserted` で「差してある」(起動時に決まり、途中で抜き差しはしない。PCではどちらへ向けても同じデバイスから鳴る)。ヘッドレスで音の中身を確かめるなら `SDL_AUDIODRIVER=disk SDL_DISKAUDIOFILE=out.raw`(出力の周波数(既定22050Hz、`sound.cfg`の`sample-rate`)/16bit/ステレオの生データ)。Webはブラウザの自動再生の制限で、最初にクリック等をするまで鳴らない |
@@ -463,7 +467,9 @@ pc/
     board/LGFX_Config_PC.hpp        SDLパネル設定
     board/Panel_sdl_SpiWait.hpp     液晶への書き込みに実機のSPI転送時間ぶんの待ちを入れるSDLパネル
     hal/Touch_Functions_PC.hpp       マウスをタッチとして読む
-  sdcard/                   SDカードとして読まれるディレクトリ
+  cmake/PicoVariant.cmake   実機の版(buildcfg/)の旗を読む
+  run/                      PCで動かしたときの状態(otp_emu.bin・ota_emu/。git の外)
+../sdcard/                  SDカードとして読まれるディレクトリ(リポジトリの根)
 ```
 
 `src/board/LGFX_Config.hpp` と `src/hal/Touch_Functions.hpp` の2つだけは、
@@ -490,4 +496,4 @@ pc/
 - `TimeFunctions::Update()` は333msごとにしか更新しないので、`--shot` のフレーム数が少ないと初期値の`00:00`が写る(時刻を見るなら200フレーム以上)。
 - `--tap` によるヘッドレス確認で「リンクをタップしても反応しない」「短い文書を開き直すと前の内容が残る」の2件が見つかっている(ホストテストでは出ない類)。
 - ネットワーク越しの確認: 母艦で `python3 script/tools/reference_server.py` を立て、`sys/network.cfg` の `browser-home` へそのURLを書く。
-  `PICOOS_SD_ROOT` で一時ディレクトリへ向ければリポジトリの `pc/sdcard/` を汚さない。
+  `PICOOS_SD_ROOT` で一時ディレクトリへ向ければリポジトリの `sdcard/` を汚さない。

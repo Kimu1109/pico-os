@@ -33,7 +33,7 @@ SUMMARY.md #10。**方式は市販のWiiクラシックコントローラー**(I
 - **使っている所**: `GameBoyScene`(画面の`GameBoyPad`とORで重ねる。対応は`apps/gb/Gb_PadMap.hpp`、BはYでも押せる。HOMEで戻る)、
   Lua(`pico.pad_connected/pad_down/pad_pressed/pad_released`、ボタンは小文字の名前。知らない名前はエラー)、
   ステータスバー(つながっている間だけゲームパッドのアイコン。無いのが普通なのでバツは付けない)、
-  動作確認は「動作確認」アプリの「コントローラー」(`pc/sdcard/lua/apps/動作確認/pad.lua`)。
+  動作確認は「動作確認」アプリの「コントローラー」(`sdcard/lua/apps/動作確認/pad.lua`)。
   通常の画面をコントローラーで操作するのは下の「ウィジェットのフォーカス」(2026-10-10)。
 - **PCビルド**: `pc/compat/Arduino.h`の`Serial.available()/read()`が**標準入力**を別スレッドで読む(`PICOOS_SERIAL_STDIN=off`で無効)。
   `python3 script/tools/pad_serial.py --stdout | ./pc/build/picoos_pc`、ヘッドレスなら`echo "pad 0011"`を100msごとに流し込めばよい。

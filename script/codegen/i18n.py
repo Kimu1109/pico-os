@@ -328,7 +328,7 @@ def check_entries(lang, uses, translations):
 # Luaアプリ(pico.tr と lang/<言語>.lua。docs/design/i18n.md「Luaアプリ」)
 # ---------------------------------------------------------------------------
 
-LUA_APPS = os.path.join(ROOT, "pc", "sdcard", "lua", "apps")
+LUA_APPS = os.path.join(ROOT, "sdcard", "lua", "apps")
 _LUA_TR = re.compile(r"""pico\.tr\(\s*("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')""")
 _LUA_ENTRY = re.compile(r'^\s*\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"\s*,?\s*$')
 _LUA_TODO = re.compile(r'^\s*--\s*TODO\s')

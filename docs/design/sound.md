@@ -60,7 +60,7 @@ SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャ�
 - Lua: `pico.sound_play(ch 1〜kChannels, freq, ms, {wave=, volume=, envelope=})`/`sound_stop([ch])`/`sound_playing([ch])`/`note_freq(音名|番号)`/
   `beep(freq, ms)`/`sound_available()`。**チャンネルはLuaでは1始まり**。音を使った`LuaEngine`は壊れるとき(=アプリを閉じるとき)に`StopAll()`する
   (長さ0の音が鳴り止まなくなるため)。
-- 動作確認は「動作確認」アプリの「音」(`pc/sdcard/lua/apps/動作確認/sound.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
+- 動作確認は「動作確認」アプリの「音」(`sdcard/lua/apps/動作確認/sound.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
   波形/減衰の切り替え、デモ曲(同じフォルダの`demo.mml`を`pico.music_play`で鳴らす。鍵盤の音は効果音として曲のチャンネル1を借りる)。
 - 曲(MML)は下の「曲データ」。
 
@@ -220,7 +220,7 @@ SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML
   失敗は`nil, "3行12列: 理由"`。曲を使った`LuaEngine`は壊れるとき`MusicStop()`する。
 - **ミュージックアプリ(`MusicScene`)**: 下の「ミュージックアプリ(プレイリスト・リピート・ミックス)」(2026-10-10に作り直した)。
   アイコンはtablerの`music`(`IconID::Music`、81番。末尾へ追加)。
-- サンプル: `pc/sdcard/music/サンプル/demo.mml`(チップチューンアプリのデモ曲)、`サンプル/sample.mml`(1番/2番かっこ・3連・タイ・途中のテンポ変更・マクロ)。
+- サンプル: `sdcard/music/サンプル/demo.mml`(チップチューンアプリのデモ曲)、`サンプル/sample.mml`(1番/2番かっこ・3連・タイ・途中のテンポ変更・マクロ)。
 - 検証: `music_test`(run.sh。読み取り・誤りの行列・警告・シーケンサーのサンプル単位の位置/テンポ/繰り返し/ループ/借用・置き場の入れ替え)、
   `lua_engine_test`(Lua API)、PCビルドの`--tap`でミュージックアプリの再生・誤りの表示、チップチューンアプリで曲+鍵盤(借用)を確認。
   **実機では未確認**。
@@ -382,7 +382,7 @@ SDの`.wav`をそのまま鳴らす。曲(MML)・効果音・GBの音と**足し
   シークバーはWAVだけ(下の「ミュージックアプリ」)。
   検証: `wav_test`/`music_test`(一時停止・位置・シーク・曲長・新しく鳴らすと解ける)、PCビルドの`--tap`(`SDL_AUDIODRIVER=disk`は実時間で消費されるので、
   進行を見るには1000フレーム以上回す。バーのタップでの飛び先・一時停止中の時間の固定・MMLの「ループ」表示を確認)。**実機では未確認**。
-  サンプルは`pc/sdcard/music/chime.wav`(8bit・11025Hz・約1秒。周波数の変換の経路も通る)。
+  サンプルは`sdcard/music/chime.wav`(8bit・11025Hz・約1秒。周波数の変換の経路も通る)。
 - 検証: `wav_test`(run.sh。形式ごとの変換・平均・周波数の変換・チャンクの読み飛ばし・ループ・断り方、SoundFunctionsの配線: 音量・止める/切り替えで
   先読みを捨てる・途切れの数え方・アンプが無い間も時間どおりに進む)、`lua_engine_test`(Lua API)、`power_test`(WAV中はスリープしない)、
   PCビルドで`SDL_AUDIODRIVER=disk`の出力を見てミュージックアプリからchime.wavが約1秒途切れずに鳴ることを確認。
@@ -429,7 +429,7 @@ SUMMARY.md #11。**SDの`.mp3`を上の「WAVの再生」と同じ経路で鳴�
 - 検証: `mp3_test`(run.sh の media。データは`script/host_test/gen_mp3_test_data.py`がffmpeg+LAMEで作った3本:
   44.1kHzステレオCBR+Info・ID3v2/v1付きでXing無しのモノラル・22.05kHz(MPEG-2)VBR+TOC。見出し・長さ・左右・モノラルの平均・周波数の上げ下げ・TOCでの
   シーク・閉じた後のシーク・ループ・断り方・切れたファイル・書き換えたファイル、SoundFunctions経由の再生・位置・一時停止・WAVとの切り替え)。
-  `wav_test`(周波数の変換を分けた後も同じ値)。PCビルド: ミュージックアプリの「すべての曲」に`arpeggio`(`pc/sdcard/music/arpeggio.mp3`)が出て、
+  `wav_test`(周波数の変換を分けた後も同じ値)。PCビルド: ミュージックアプリの「すべての曲」に`arpeggio`(`sdcard/music/arpeggio.mp3`)が出て、
   タップで再生・時間とシークバーが進み、`SDL_AUDIODRIVER=disk`の出力が左523/660/783Hz・右263/330/393Hz(作った音のとおり、左右も入れ替わらない)。
   実機ファームのビルド(`rpipico2w`)は通る。**実機では未確認(展開の速さ・途切れないか)(Todoist参照)**。
 
@@ -535,7 +535,7 @@ SUMMARY.md #11。**SDの`.mp3`を上の「WAVの再生」と同じ経路で鳴�
   - `SoundFunctions` の配線: `WavPlay` で鳴る(情報・長さ・名前・左右・22.05kHz→44.1kHzで1kHzのまま)・シーク・一時停止・MP3/WAVとの行き来
     (鳴らしている途中の切り替え)・曲と曲の間を空けない(FLAC→MP3・MP3→FLAC。チャンネル数が違う曲は続けない)・読めなければ理由を返す。
   - タグ(VORBIS_COMMENT・アルバムアートを挟んだ場合・壊れたコメント・途中で切れた場合)、`MusicService::IsPcmFile`。
-  - PCビルド: ミュージックの「すべての曲」に `arpeggio`(`pc/sdcard/music/arpeggio.flac`)が出て、`SDL_AUDIODRIVER=disk` の出力へ音が出る。
+  - PCビルド: ミュージックの「すべての曲」に `arpeggio`(`sdcard/music/arpeggio.flac`)が出て、`SDL_AUDIODRIVER=disk` の出力へ音が出る。
 - 大きさ(実機ファーム `rpipico2w_music`、2026-11-05): フラッシュ 1,946,160B(78.3%)→ 1,953,176B(78.6%)で **+7,016B**、静的RAM 136,208B → 136,216B(+8B)。係の約42KBは静的ではなくヒープ(鳴らす間だけ。MP3と共用の領域は、このときは大きい方の約42KB。ALACを足した後は「ALACの再生」のとおり約46KB)。同じ変更で `rpipico2w`(既定)93.2%・`rpipico2w_minimal` 89.8%・`rpipico2w_lite` 78.4% のビルドも通る(既定版は常にFLACを含むので、フラッシュの空きは残り約170KB)
 - **実機では未確認(速さ・途切れないか・MP3との切り替えでメモリが足りるか・聞こえ方)(Todoist参照)**。
 - 次: ALAC(`.m4a`)は下の「ALACの再生」で入れた(2026-11-05)。
@@ -576,7 +576,7 @@ FLAC(上)に続けて、SDの `.m4a`(MP4コンテナの Apple Lossless)を同じ
   - 出力の形(モノラルは左右の平均・22.05k→44.1kへ上げる・44.1k→22.05kへ下げる)、シーク(1チャンク/複数のチャンク。0〜終わりを越える値・読みかけから前へ・閉じた後に開き直して飛ぶ、のどれも飛んだ先から元と同じ音)、ループ、
     断り方(NotAlac・OpenFailed・NoSd・moovが無い・AAC・96kHz/6ch/32bit/フレーム長8192のUnsupported)、フレームの中を壊した(長さは変わらず、後ろのフレームは元の音のまま)・ランダムに壊した60本・表を壊した60本(ASan/UBSan)。
   - `SoundFunctions` の配線: `WavPlay` で鳴る・シーク・一時停止・MP3/FLAC/WAVとの行き来・曲と曲の間(ALAC→FLAC・MP3→ALAC。チャンネル数が違う曲は続けない)・AAC/壊れたファイルは理由を返す。タグ・`MusicService::IsPcmFile`。
-  - PCビルド: ミュージックの「すべての曲」に `arpeggio`(`pc/sdcard/music/arpeggio.m4a`)が出て、`SDL_AUDIODRIVER=disk` の出力へ音が出る。
+  - PCビルド: ミュージックの「すべての曲」に `arpeggio`(`sdcard/music/arpeggio.m4a`)が出て、`SDL_AUDIODRIVER=disk` の出力へ音が出る。
 - **検証できていないこと**: ffmpeg のエンコーダは予測を2段(`mode`≠0)にせず、要素も1つなので、**2段の予測の経路(`mode[c] != 0`)はテストデータが無い**(ffmpeg の `alac.c` と同じ手順で書いてある)。
   iTunes・Apple Music が書いたファイルでも確かめたい(Todoist参照)。
 - 大きさ(実機ファーム `rpipico2w_music`、2026-11-05): フラッシュ 1,953,176B(78.6%)→ 1,960,960B(78.9%)で **+7,784B**、静的RAM 136,216B のまま(変わらず)。係の約46KBは静的ではなくヒープ(鳴らす間だけ)。`rpipico2w`(既定)は 2,316,140B → 2,323,916B(93.5%)・`rpipico2w_minimal` 90.1%・`rpipico2w_lite` 78.7% で、どれもビルドが通る

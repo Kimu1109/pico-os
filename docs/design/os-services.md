@@ -64,7 +64,7 @@ SUMMARY.md未掲載。アプリを開いていなくても、時間・時刻・�
 - Lua: `pico.notify{title=, body=, tag=, data=, sound=, delay_ms|at|daily|every_ms|when(+below)}` → id(すぐ出したら0)/ `nil, 理由`(権限無し・上限)、
   `pico.notify_cancel([id|tag])` → 件数、`pico.notify_list()`、`pico.launch_reason()`。**権限`LuaPermissions::notify`(app.cfgの`permission_notify`)が要る**
   (アプリを閉じた後にも画面と音へ出るため既定では許さない)。引数の誤りは権限より先に`luaL_error`。ドキュメントは`lua-api-doc/content/api/system/notify.md`。
-- 動作確認は「動作確認」アプリの「通知」のページ(`pc/sdcard/lua/apps/動作確認/notify.lua`、`permission_notify=true`)。
+- 動作確認は「動作確認」アプリの「通知」のページ(`sdcard/lua/apps/動作確認/notify.lua`、`permission_notify=true`)。
 - RAMは静的に約9KB(予約16件×約380B + 履歴8件×約360B)。
 - 検証: `notification_test`(run.sh。種類ごとの発火・置き換え/上限・履歴の輪・控えめ・保存と読み込み・送り主の掃除・起動理由)、`lua_engine_test`(Lua API)、
   PCビルドの`--tap`/`--shot`(アプリで10秒後を予約→閉じてランチャでトースト→タップでアプリが`launch_reason`付きで開く、ステータスバーから通知センター、

@@ -2,7 +2,7 @@
 """
 generate_reversi_tiles.py
 -------------------------
-リバーシ(pc/sdcard/lua/apps/リバーシ/)の盤面の絵 tiles.pimg を作る。標準ライブラリのみ。
+リバーシ(sdcard/lua/apps/リバーシ/)の盤面の絵 tiles.pimg を作る。標準ライブラリのみ。
 
 24x24pxのタイルを横に4枚並べた1枚の画像(96x24)。pico.game のタイルマップとして使い、
 盤面の1マス = タイルマップの1マスで、石の有無・色は「タイルの値」そのもの。
@@ -88,7 +88,7 @@ def main():
     root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="リバーシの盤面の画像(tiles.pimg)を作る")
     ap.add_argument("output", nargs="?", type=Path,
-                    default=root / "pc/sdcard/lua/apps/リバーシ/tiles.pimg")
+                    default=root / "sdcard/lua/apps/リバーシ/tiles.pimg")
     ap.add_argument("--preview", type=Path, help="確認用のPPM(P6)も書き出す")
     args = ap.parse_args()
 

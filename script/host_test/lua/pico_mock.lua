@@ -1,4 +1,4 @@
--- pico.* のLua製の偽物。Luaアプリ(pc/sdcard/lua/apps/*/main.lua)のゲームの規則やUIの組み立てを、
+-- pico.* のLua製の偽物。Luaアプリ(sdcard/lua/apps/*/main.lua)のゲームの規則やUIの組み立てを、
 -- 実機やPCビルドを動かさずに、普通のLua(lua_script_test)で確かめるための道具。
 --
 --   local mock = dofile(ROOT_DIR .. "/script/host_test/lua/pico_mock.lua")

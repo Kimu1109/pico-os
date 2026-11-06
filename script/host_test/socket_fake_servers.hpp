@@ -13,11 +13,13 @@
 //
 // どれも1本ずつ接続を受ける(同時の接続は順番待ち)。stop() で止める。
 // 受けた中身は log へ文字列で残す(テストが後で確かめる)。
+// 相手のスレッドを待つときは WaitUntil()(壁時計で区切る)を使う。
 
 #include "net/Ws_Frame.hpp"
 
 #include <arpa/inet.h>
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <mutex>
 #include <netinet/in.h>
@@ -29,6 +31,25 @@
 #include <vector>
 
 namespace FakeServers {
+
+    // 相手のスレッドを待つ上限(壁時計)。ASan付きで120本を並べて回しても届くだけの余裕を取る
+    constexpr long kWaitMs = 5000;
+
+    // done() が真になるまで step()(pump() 1回分・usleep 等)を繰り返す。壁時計で timeout_ms 経ったら諦める。
+    // 「step() をN回」で区切ると、機械が混んだときに相手のスレッドが答える前に回数を使い切って落ちる
+    // (偽の時計 millis() は step() の側が進めるので、ここでは本物の時計だけを見る)
+    template <class Done, class Step>
+    inline bool WaitUntil(Done&& done, Step&& step, long timeout_ms = kWaitMs){
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+        while(std::chrono::steady_clock::now() < until){
+            if(done()) return true;
+            step();
+        }
+        return done();
+    }
+
+    // 相手のスレッドの記録だけを待つときの step()
+    inline void Nap(){ usleep(500); }
 
     inline bool WaitReadable(int fd, const std::atomic<bool>& stop){
         while(!stop){

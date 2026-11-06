@@ -1,0 +1,35 @@
+# 実機ファームをビルドする前の準備(firmware-build.yml / nightly.yml から使う)。
+#
+#   PlatformIO のキャッシュを戻し、PlatformIO を入れ、platformio.ini の `platform = raspberrypi`(公式)を
+#   maxgerhardt/platform-raspberrypi へ差し替える(公式には rpipico2w のボード定義が無いため。手元のファイルは書き換えない)。
+#   版は下の PLATFORM_REF で固定している。上げるときは手元の `pio run` で通してから。
+#   呼ぶ前に actions/checkout を済ませておくこと。
+name: pio-setup
+description: PlatformIO を入れて rpipico2w をビルドできるようにする
+runs:
+  using: composite
+  steps:
+    # ツールチェイン・arduino-pico・LovyanGFX 等で数百MBあるので丸ごとキャッシュする。
+    # platformio.ini(lib_depsの版)かこのファイル(プラットフォームの版)が変わると作り直す
+    - name: PlatformIO のキャッシュを戻す
+      uses: actions/cache@v4
+      with:
+        path: ~/.platformio
+        key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', '.github/actions/pio-setup/action.yml') }}
+
+    - name: PlatformIO を入れる
+      shell: bash
+      run: pipx install platformio
+
+    - name: プラットフォームを maxgerhardt の版へ差し替える
+      shell: bash
+      env:
+        PLATFORM_REPO: https://github.com/maxgerhardt/platform-raspberrypi.git
+        PLATFORM_REF: 5d4561a05e3b212660ac6fdd3fbfb328d1988aa1
+      run: |
+        sed -i "s|^platform = raspberrypi\$|platform = ${PLATFORM_REPO}#${PLATFORM_REF}|" platformio.ini
+        grep -n '^platform' platformio.ini
+        # 差し替えに失敗していたら(platformio.ini の書き方が変わったら)ここで気づく
+        grep -q "${PLATFORM_REF}" platformio.ini
+        # 書き換えた platformio.ini を「手元の変更」と数えない(script/pio_firmware.py が版の git に '+' を付けないように)
+        git update-index --assume-unchanged platformio.ini

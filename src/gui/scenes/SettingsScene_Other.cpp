@@ -6,7 +6,6 @@
 #include "system/Config_Functions.hpp"
 #include "hal/Network_Functions.hpp"
 #include "system/Time_Functions.hpp"
-#include "hal/Sound_Functions.hpp"
 #include "services/Display_Functions.hpp"
 #include "services/Lock_Functions.hpp"
 #include "services/DeviceKey_Functions.hpp"
@@ -47,10 +46,6 @@ namespace {
     constexpr const char*   kSleepPresetLabels[] = { TR_NOOP("しない"), TR_NOOP("1分"), TR_NOOP("2分"), TR_NOOP("5分"), TR_NOOP("10分"), TR_NOOP("30分") };
     constexpr int kSleepPresetCount = sizeof(kSleepPresetsSec) / sizeof(kSleepPresetsSec[0]);
 
-    // 音の周波数(sound.cfgの sample-rate)。44.1kHzはライン出力のDAC(PCM5102A等)向けで、2コア目の計算が倍になる
-    constexpr uint32_t    kRatePresets[]      = { SoundFunctions::kSampleRateLow, SoundFunctions::kSampleRateHigh };
-    constexpr const char* kRatePresetLabels[] = { "22kHz", "44.1kHz" };
-    constexpr int kRatePresetCount = sizeof(kRatePresets) / sizeof(kRatePresets[0]);
 }
 
 // ---------------------------------------------------------------------------

@@ -84,14 +84,15 @@ int LuaEngine::l_sound_rate(lua_State* L) {
 }
 
 int LuaEngine::l_sound_set_rate(lua_State* L) {
-    // pico.sound_set_rate(44100) / (22050) / (nil)。このアプリが開いている間だけ効く(閉じる・別の画面へ移ると設定へ戻る)。
+    // pico.sound_set_rate(44100) / (48000) / (22050) / (nil)。このアプリが開いている間だけ効く(閉じる・別の画面へ移ると設定へ戻る)。
     // 変わるとそのとき鳴っている音は止まるので、音を鳴らす前(setup()等)に呼ぶ
     uint32_t rate = 0;
     if(!lua_isnoneornil(L, 1)){
         const lua_Integer v = luaL_checkinteger(L, 1);
-        if(v != 0 && v != (lua_Integer)SoundFunctions::kSampleRateLow && v != (lua_Integer)SoundFunctions::kSampleRateHigh){
-            return luaL_error(L, "pico.sound_set_rate: %d か %d か nil です",
-                              (int)SoundFunctions::kSampleRateLow, (int)SoundFunctions::kSampleRateHigh);
+        if(v != 0 && (v < 0 || v > 0x7FFFFFFF || !SoundFunctions::IsValidSampleRate((uint32_t)v))){
+            return luaL_error(L, "pico.sound_set_rate: %d / %d / %d か nil です",
+                              (int)SoundFunctions::kSampleRateLow, (int)SoundFunctions::kSampleRateHigh,
+                              (int)SoundFunctions::kSampleRate48k);
         }
         rate = (uint32_t)v;
     }

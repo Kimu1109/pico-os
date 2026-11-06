@@ -13,7 +13,8 @@
 // - **自前の実装(ライブラリは同梱しない)**。整数演算だけで、ファイル全体をRAMへ載せない。
 //   4KBの読み込みバッファから少しずつ読み、1ブロック(最大 kMaxBlock サンプル)ずつ展開する
 // - 対応: 1〜2ch・4〜24bit・kMaxRate Hz 以下・ブロック長 kMaxBlock 以下(CDの音は4096が多く、ffmpegは4608。
-//   44.1k/48kのSubsetはどれも4608以下)。これを超えるファイルは Unsupported で断る(黙って壊れた音を出さない)。
+//   44.1k/48kのSubsetはどれも4608以下。`flac` コマンドは88.2k/96kでも4096だが、ffmpegは96kで8192にするので断る)。
+//   これを超えるファイルは Unsupported で断る(黙って壊れた音を出さない)。88.2k/96kは出力の周波数へ下げて鳴らす
 //   24bit等は16bitへ丸める(四捨五入。ディザは掛けない)
 // - 頭のID3v2は飛ばす。後ろの余分なデータ(ID3v1・APE等)は、STREAMINFOの総サンプル数で終わりを決めるので読まない
 // - フレームの見出しはCRC-8で確かめる。**フレーム全体のCRC-16は確かめない**(CPUを使うわりに、SDの読み誤りは
@@ -30,7 +31,9 @@ public:
 
     static constexpr size_t kBufferBytes = 4096;
     static constexpr uint32_t kMaxBlock = 4608;         // 1ブロックのサンプル数の上限
-    static constexpr uint32_t kMaxRate = 48000;         // これより高い周波数は断る(実機の速さを測ってから上げる)
+    // これより高い周波数は断る。96kHzは44.1k/48kの約2倍の計算(展開・周波数の変換)とSDの読み込み(24bitで毎秒約0.4MB)で済むが、
+    // 192kHzはさらに倍でSD(SPI 10MHz)の余裕が無いので入れない(docs/design/sound/playback.md「88.2/96kHzの曲」)
+    static constexpr uint32_t kMaxRate = 96000;
     static constexpr uint32_t kMaxResync = 262144;      // 壊れた所から次の同期語を探す最大のバイト数
 
     FlacDecoder() = default;

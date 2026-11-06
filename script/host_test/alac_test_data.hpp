@@ -22,6 +22,10 @@ static const unsigned long long kAlacMonoHash = 0x64A6E9E417FB5B7DULL;
 static const unsigned kAlacStereo24Frames = 9600;
 static const unsigned long long kAlacStereo24Hash = 0xBD9FDDFA1361F785ULL;
 
+// kAlacStereo24At96k.m4a: 96kHz ステレオ24bit 0.1秒(ハイレゾ)(31210バイト)
+static const unsigned kAlacStereo24At96kFrames = 9600;
+static const unsigned long long kAlacStereo24At96kHash = 0xF8DFC8F85BC5BA4DULL;
+
 // kAlacSilence.m4a: 44.1kHz ステレオ16bit 0.2秒の無音(847バイト)
 static const unsigned kAlacSilenceFrames = 8820;
 static const unsigned long long kAlacSilenceHash = 0x03972ECB9416BB45ULL;

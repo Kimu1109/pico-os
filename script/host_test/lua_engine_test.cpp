@@ -1059,7 +1059,8 @@ int main(){
             //出力の周波数(切り替えると鳴っている音は止まる)
             check(snd.Run(R"LUA(
                 check(pico.sound_rate() == 22050, "pico.sound_rate: 既定は22050")
-                check(not pcall(pico.sound_set_rate, 48000), "pico.sound_set_rate: 22050/44100/nil以外はエラー")
+                check(not pcall(pico.sound_set_rate, 32000), "pico.sound_set_rate: 22050/44100/48000/nil以外はエラー")
+                check(pico.sound_set_rate(48000) == true and pico.sound_rate() == 48000, "pico.sound_set_rate: 48000へ")
                 check(pico.sound_set_rate(44100) == true and pico.sound_rate() == 44100, "pico.sound_set_rate: 44100へ")
             )LUA", "sound_rate_test"), "pico.sound_set_rate: 実行できる");
             check(snd.RequestedSampleRate() == SoundFunctions::kSampleRateHigh, "pico.sound_set_rate: 画面へ返す要求を覚える");

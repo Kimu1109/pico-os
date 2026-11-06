@@ -178,6 +178,7 @@ namespace {
     uint64_t wav_switch_at = 0;             // 次の曲の頭が wav_pushed のどこか
     uint32_t wav_switch_duration = 0;
     bool decoder_is_current = true;         // 読み取り係が耳に届いている曲(wav_path)を読んでいる
+    uint32_t decoder_src_rate = 0;          // 読み取り係が今読んでいる曲の元の周波数(続けて積むかを決める)
     uint32_t wav_advance_count = 0;         // 続けて積んだ曲が耳に届いた回数
     bool wav_loop = false;
     bool wav_loaded = false;                // 鳴らしたWAVが今も有効(WavStop()するまで。読み終えても true)
@@ -222,11 +223,12 @@ namespace {
                         else LOG_SYS_WARN("sound.cfg: battery-cap は true/false です: %s", value);
                     }else if(strcmp(key, "sample-rate") == 0){
                         int v = 0;
-                        if(PICO_Config::ConfigValue::AsInt(value, v) && (v == (int)kSampleRateLow || v == (int)kSampleRateHigh)){
+                        if(PICO_Config::ConfigValue::AsInt(value, v) && v > 0 && IsValidSampleRate((uint32_t)v)){
                             cfg_rate = (uint32_t)v;
                         }else{
-                            LOG_SYS_WARN("sound.cfg: sample-rate は %lu か %lu です: %s",
-                                         (unsigned long)kSampleRateLow, (unsigned long)kSampleRateHigh, value);
+                            LOG_SYS_WARN("sound.cfg: sample-rate は %lu / %lu / %lu です: %s",
+                                         (unsigned long)kSampleRateLow, (unsigned long)kSampleRateHigh,
+                                         (unsigned long)kSampleRate48k, value);
                         }
                     }
                 }
@@ -374,6 +376,15 @@ namespace {
             d->close();
             return false;
         }
+        //今の曲を元の周波数のまま(変換せずに)鳴らしていて、次の曲は別の系統(44.1kHz系と48kHz系)なら続けて積まない。
+        //積むと次の曲は周波数の変換を通ってしまう。間を空ければ、ミュージックアプリが次の曲に合う周波数へ切り替えてから鳴らす
+        const uint32_t next_native = SoundFunctions::NativeOutputRate(d->sampleRate());
+        if(out_rate == SoundFunctions::NativeOutputRate(decoder_src_rate) && next_native != out_rate){
+            LOG_SYS_MSG("Sound: 次の曲は周波数の系統が違う(%luHz)ので、間を空けて鳴らします", (unsigned long)d->sampleRate());
+            d->close();
+            return false;
+        }
+        decoder_src_rate = d->sampleRate();
         d->setLoop(false);
         wav_switch_pending = true;
         wav_switch_at = wav_pushed;
@@ -804,8 +815,6 @@ uint32_t SoundFunctions::ConfiguredSampleRate(){ return configured_rate; }
 uint32_t SoundFunctions::RequestedSampleRate(){ return requested_rate; }
 
 namespace {
-    bool ValidRate(uint32_t rate){ return rate == kSampleRateLow || rate == kSampleRateHigh; }
-
     // 要求か設定から決まる周波数へ合わせる。列が満杯で積めなければ false(次に呼ばれたときにやり直す)
     bool ApplyEffectiveRate(){
         const uint32_t rate = requested_rate ? requested_rate : configured_rate;
@@ -823,13 +832,13 @@ namespace {
 }
 
 bool SoundFunctions::SetSampleRate(uint32_t rate){
-    if(!ValidRate(rate)) return false;
+    if(!IsValidSampleRate(rate)) return false;
     configured_rate = rate;
     return ApplyEffectiveRate();
 }
 
 bool SoundFunctions::RequestSampleRate(uint32_t rate){
-    if(rate != 0 && !ValidRate(rate)) return false;
+    if(rate != 0 && !IsValidSampleRate(rate)) return false;
     if(rate == requested_rate && out_rate == (rate ? rate : configured_rate)) return true;
     requested_rate = rate;
     return ApplyEffectiveRate();
@@ -1086,6 +1095,7 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
     }
     wav->setStereo(pcm_decoder->outChannels() == 2);
     pcm_decoder->setLoop(loop);
+    decoder_src_rate = pcm_decoder->sampleRate();
     if(info){
         info->channels = pcm_decoder->channels();
         info->bits = pcm_decoder->bitsPerSample();
@@ -1198,6 +1208,7 @@ bool SoundFunctions::WavSeekMs(uint32_t ms){
         }
         d->setLoop(wav_loop);
         decoder_is_current = true;
+        decoder_src_rate = d->sampleRate();
         if(requeue) wav_next_set = true;
     }
     if(!pcm_decoder->seekMs(ms)){

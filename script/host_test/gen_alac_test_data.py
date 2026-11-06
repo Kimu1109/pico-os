@@ -38,6 +38,8 @@ CASES = [
      ["-c:a", "alac", "-sample_fmt", "s16p"], 16),
     ("kAlacStereo24", "48kHz ステレオ24bit 0.2秒(下位8bitを別に持つ)", music_stereo(48000, 0.2),
      ["-c:a", "alac", "-sample_fmt", "s32p", "-bits_per_raw_sample", "24"], 24),
+    ("kAlacStereo24At96k", "96kHz ステレオ24bit 0.1秒(ハイレゾ)", music_stereo(96000, 0.1),
+     ["-c:a", "alac", "-sample_fmt", "s32p", "-bits_per_raw_sample", "24"], 24),
     ("kAlacSilence", "44.1kHz ステレオ16bit 0.2秒の無音",
      ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "0.2"],
      ["-c:a", "alac", "-sample_fmt", "s16p"], 16),

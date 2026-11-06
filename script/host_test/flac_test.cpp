@@ -100,6 +100,7 @@ static void TestBitExact(){
         {"kFlacMono200",       kFlacMono200Frames,       kFlacMono200Hash,       1, 16, 22050},
         {"kFlacMono1000",      kFlacMono1000Frames,      kFlacMono1000Hash,      1, 16, 22050},
         {"kFlacStereo24",      kFlacStereo24Frames,      kFlacStereo24Hash,      2, 24, 48000},
+        {"kFlacStereo24At96k", kFlacStereo24At96kFrames, kFlacStereo24At96kHash, 2, 24, 96000},
         {"kFlacSilence",       kFlacSilenceFrames,       kFlacSilenceHash,       2, 16, 44100},
         {"kFlacNoise",         kFlacNoiseFrames,         kFlacNoiseHash,         2, 16, 44100},
         {"kFlacChirp",         kFlacChirpFrames,         kFlacChirpHash,         1, 16, 22050},
@@ -173,6 +174,56 @@ static void TestOutputs(){
         const auto all = ReadAll(dec);
         const size_t frames = all.size() / 2;
         check(frames >= 14390 && frames <= 14410, "フレーム数は48/44.1倍");
+    }
+}
+
+static double RmsLane(const std::vector<int16_t>& v, size_t lanes, size_t lane, size_t from, size_t to){
+    double sum = 0;
+    for(size_t i = from; i < to; i++){ const double x = v[i * lanes + lane]; sum += x * x; }
+    return to > from ? sqrt(sum / (double)(to - from)) : 0;
+}
+
+// 96kHz(ハイレゾ)を44.1k/48kへ下げて鳴らす。数と大きさが元の周波数のまま読んだものと合う(低域通過フィルタが聞こえる帯域を削らない)
+static void TestHiRes(){
+    printf("--- 96kHzを出力の周波数へ下げる ---\n");
+    OSData::SD_usable = true;
+    Put("/hi96.flac", "kFlacStereo24At96k");
+    std::vector<int16_t> native;
+    {
+        FlacDecoder dec;
+        dec.setStereoOutput(true);
+        dec.open("/hi96.flac", 96000);
+        native = ReadAll(dec);
+    }
+    const size_t nf = native.size() / 2;
+    const double rms_l = RmsLane(native, 2, 0, nf / 5, nf * 4 / 5), rms_r = RmsLane(native, 2, 1, nf / 5, nf * 4 / 5);
+    const uint32_t outs[] = {44100, 48000, 22050};
+    for(uint32_t out : outs){
+        FlacDecoder dec;
+        dec.setStereoOutput(true);
+        char label[160];
+        snprintf(label, sizeof(label), "96kHzを%uHzへ下げて開ける", (unsigned)out);
+        check(dec.open("/hi96.flac", out) && dec.outChannels() == 2 && dec.sampleRate() == 96000, label);
+        const auto all = ReadAll(dec);
+        const size_t frames = all.size() / 2;
+        const size_t want = (size_t)((uint64_t)kFlacStereo24At96kFrames * out / 96000);
+        snprintf(label, sizeof(label), "  %uHz: フレーム数 %zu / 期待 %zu", (unsigned)out, frames, want);
+        check(dec.finished() && frames + 3 >= want && frames <= want + 3, label);
+        const double l = RmsLane(all, 2, 0, frames / 5, frames * 4 / 5), r = RmsLane(all, 2, 1, frames / 5, frames * 4 / 5);
+        snprintf(label, sizeof(label), "  %uHz: 大きさは元のまま(左 %.0f/%.0f 右 %.0f/%.0f)", (unsigned)out, l, rms_l, r, rms_r);
+        check(fabs(l - rms_l) < rms_l * 0.03 && fabs(r - rms_r) < rms_r * 0.03, label);
+    }
+    {
+        //シークも元の周波数で数える(50msの位置は元の4800サンプル目)
+        FlacDecoder dec;
+        dec.setStereoOutput(true);
+        check(dec.open("/hi96.flac", 48000) && dec.durationMs() == 100, "96kHz: 長さ100ms");
+        check(dec.seekMs(50), "96kHz: 50msへ飛べる");
+        const auto rest = ReadAll(dec);
+        const size_t frames = rest.size() / 2;
+        char label[96];
+        snprintf(label, sizeof(label), "96kHz: 飛んだ先から残り %zu フレーム(48kHzで約2400)", frames);
+        check(frames + 40 >= 2400 && frames <= 2400 + 40, label);
     }
 }
 
@@ -273,8 +324,8 @@ static void TestErrors(){
     check(!dec.open("/empty.flac", 22050) && dec.error() == FlacDecoder::Error::NotFlac, "空はNotFlac");
     check(!dec.open("/nothing.flac", 22050) && dec.error() == FlacDecoder::Error::OpenFailed, "無いファイルはOpenFailed");
     {
-        HostSd::files["/hi.flac"] = Patch(base, 96000, 2, 16);
-        check(!dec.open("/hi.flac", 22050) && dec.error() == FlacDecoder::Error::Unsupported, "96kHzはUnsupported");
+        HostSd::files["/hi.flac"] = Patch(base, 192000, 2, 16);
+        check(!dec.open("/hi.flac", 22050) && dec.error() == FlacDecoder::Error::Unsupported, "192kHzはUnsupported");
         HostSd::files["/6ch.flac"] = Patch(base, 44100, 6, 16);
         check(!dec.open("/6ch.flac", 22050) && dec.error() == FlacDecoder::Error::Unsupported, "6chはUnsupported");
         HostSd::files["/32b.flac"] = Patch(base, 44100, 2, 32);
@@ -581,6 +632,97 @@ static void TestSoundFunctions(){
         for(int i = 0; i < 600 && WavPlaying(); i++) Run(now, 1);
         check(!WavPlaying() && strcmp(WavTitle(), "st.flac") == 0, "続けず1曲で終わる(ミュージックが改めて鳴らす)");
     }
+
+    printf("--- 96kHzの曲と出力の周波数の系統(44.1kHz系/48kHz系) ---\n");
+    {
+        Put("/music/hi96.flac", "kFlacStereo24At96k");
+        //44100Hzで44.1kHzの曲を鳴らしている(変換なし)ときは、48kHz系の曲を続けて積まない(間を空けて切り替える)
+        check(SampleRate() == kSampleRateHigh && WavPlay("/music/st.flac", false, 100) && WavQueueNext("/music/hi96.flac"),
+              "44.1kHzの曲の次に96kHzの曲を予約");
+        for(int i = 0; i < 600 && WavPlaying(); i++) Run(now, 1);
+        check(!WavPlaying() && strcmp(WavTitle(), "st.flac") == 0, "系統が違えば続けず1曲で終わる");
+        WavInfo info;
+        check(WavPlay("/music/hi96.flac", false, 100, nullptr, &info) && info.sample_rate == 96000 && info.bits == 24,
+              "96kHz/24bitの曲を(44100Hzへ下げて)鳴らせる");
+        Run(now, 600);
+        //48000Hzなら48kHz系の曲同士は続けて積む。1曲目は先読み(kWavPrefillSamples)より長い48kHzステレオ0.5秒のWAV
+        //(先読みの間に読み終える短い曲は、予約より先に読み取り係を閉じるので続けて積まない。もとからの決まり)
+        {
+            std::string wav = "RIFF____WAVEfmt ";
+            auto put16 = [&](uint32_t v){ wav += (char)(v & 0xFF); wav += (char)(v >> 8); };
+            auto put32 = [&](uint32_t v){ put16(v & 0xFFFF); put16(v >> 16); };
+            put32(16); put16(1); put16(2); put32(48000); put32(192000); put16(4); put16(16);
+            wav += "data"; put32(24000 * 4);
+            for(int i = 0; i < 24000; i++){ put16(5000); put16(5000); }
+            HostSd::files["/music/k48.wav"] = wav;
+        }
+        check(RequestSampleRate(kSampleRate48k), "48000Hzを頼む");
+        Run(now, 3);
+        check(Out().sample_rate == (long)kSampleRate48k, "48000Hzで開き直す");
+        const uint32_t adv = WavAdvanceCount();
+        check(WavPlay("/music/k48.wav", false, 100) && WavQueueNext("/music/hi96.flac"), "48kHzの曲の次に96kHzの曲を予約");
+        std::vector<int16_t> l;
+        for(int i = 0; i < 800 && WavAdvanceCount() == adv; i++) Run(now, 1, &l);
+        check(WavAdvanceCount() == adv + 1 && strcmp(WavTitle(), "hi96.flac") == 0, "同じ系統なら続けて移る");
+        size_t same = 0;
+        for(int16_t v : l) if(v == 2500) same++;
+        printf("       1曲目 %zu/%zuサンプルがそのまま(48kHzで24000)\n", same, l.size());
+        check(same >= 24000 - 2048 && l.size() <= 24000 + 2048, "1曲目は変換せずに鳴り終えたところで移る");
+        Run(now, 600);
+        check(!WavPlaying(), "2曲目の終わりで止まる");
+        //22050Hz(どちらの系統も変換する)なら、系統をまたいでも続けて積む
+        check(RequestSampleRate(kSampleRateLow), "22050Hzを頼む");
+        Run(now, 3);
+        const uint32_t adv2 = WavAdvanceCount();
+        check(WavPlay("/music/k48.wav", false, 100) && WavQueueNext("/music/st.flac"), "22050Hzで48kHzの次に44.1kHzを予約");
+        for(int i = 0; i < 800 && WavAdvanceCount() == adv2; i++) Run(now, 1);
+        check(WavAdvanceCount() == adv2 + 1 && strcmp(WavTitle(), "st.flac") == 0, "どちらも変換するなら続けて移る");
+        Run(now, 600);
+        RequestSampleRate(0);
+        Run(now, 3);
+    }
+
+    printf("--- ミュージックは曲に合わせて44100/48000Hzを選ぶ ---\n");
+    {
+        //画面(MusicScene)と同じく、毎フレーム MusicService の望みを要求として渡す
+        auto frame = [&](int n){
+            for(int i = 0; i < n; i++){
+                RequestSampleRate(MusicService::PreferredSampleRate());
+                MusicService::Update();
+                Run(now, 1);
+            }
+        };
+        MusicService::Test::Reset();
+        check(MusicService::PreferredSampleRate() == kSampleRateHigh, "鳴らす前は44100Hzを望む");
+        MusicService::Track t[3];
+        t[0].name.assign("st.flac"); t[1].name.assign("hi96.flac"); t[2].name.assign("st.mp3");
+        RequestSampleRate(MusicService::PreferredSampleRate());
+        check(MusicService::StartPlaylist(t, 3, nullptr, 0, -1, "すべての曲", 0), "44.1kHz→96kHz→44.1kHzの並びを鳴らす");
+        frame(2);
+        check(MusicService::Current() == 0 && SampleRate() == kSampleRateHigh, "1曲目(44.1kHz)は44100Hz");
+        bool ok = false;
+        for(int i = 0; i < 1500 && !ok; i++){ frame(1); ok = MusicService::Current() == 1; }
+        frame(3);
+        check(ok && MusicService::Active() && !MusicService::Interrupted(), "2曲目へ進み、止まった扱いにならない");
+        check(SampleRate() == kSampleRate48k && MusicService::PreferredSampleRate() == kSampleRate48k
+              && strcmp(WavTitle(), "hi96.flac") == 0 && WavPlaying(), "2曲目(96kHz)は48000Hzへ切り替えて鳴らす");
+        ok = false;
+        for(int i = 0; i < 1500 && !ok; i++){ frame(1); ok = MusicService::Current() == 2; }
+        frame(3);
+        check(ok && MusicService::Active() && SampleRate() == kSampleRateHigh && strcmp(WavTitle(), "st.mp3") == 0,
+              "3曲目(44.1kHzのMP3)は44100Hzへ戻す");
+        //他の画面が周波数を決めていれば(22050Hz)、それに従って変換して鳴らす
+        MusicService::Stop();
+        frame(2);
+        RequestSampleRate(kSampleRateLow);
+        MusicService::PlayTrack(1);
+        for(int i = 0; i < 3; i++){ MusicService::Update(); Run(now, 1); }
+        check(MusicService::Active() && SampleRate() == kSampleRateLow && MusicService::PreferredSampleRate() == kSampleRateHigh,
+              "他の画面が22050Hzを望んでいれば切り替えない");
+        MusicService::Test::Reset();
+        RequestSampleRate(0);
+        Run(now, 3);
+    }
 }
 
 int main(){
@@ -588,6 +730,7 @@ int main(){
     TestTags();
     TestBitExact();
     TestOutputs();
+    TestHiRes();
     TestContainer();
     TestSeek();
     TestLoop();

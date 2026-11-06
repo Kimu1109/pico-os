@@ -64,8 +64,8 @@ const char* SoundFunctions::VolumeConfigKey(Route r){ return r == Route::Headpho
 
 uint32_t SoundFunctions::SampleRate(){ return kDefaultSampleRate; }
 uint32_t SoundFunctions::ConfiguredSampleRate(){ return kDefaultSampleRate; }
-bool SoundFunctions::SetSampleRate(uint32_t rate){ return rate == kSampleRateLow || rate == kSampleRateHigh; }
-bool SoundFunctions::RequestSampleRate(uint32_t rate){ return rate == 0 || rate == kSampleRateLow || rate == kSampleRateHigh; }
+bool SoundFunctions::SetSampleRate(uint32_t rate){ return IsValidSampleRate(rate); }
+bool SoundFunctions::RequestSampleRate(uint32_t rate){ return rate == 0 || IsValidSampleRate(rate); }
 uint32_t SoundFunctions::RequestedSampleRate(){ return 0; }
 
 bool SoundFunctions::GetBatteryCap(){ return false; }

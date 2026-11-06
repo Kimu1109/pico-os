@@ -183,11 +183,11 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
   ブロック崩し=壁/ブロック/パドルの反射・段ごとの速さ・点・アイテム3種・残機・ステージクリア・全20ステージ・全クリア・自動プレイ。
   PCビルドの`--tap`/`--shot`で4本とも動かして見た目を確認した(`PICOOS_VERIFY_LCD=1`で食い違い0)。**実機では未確認**(Luaで毎フレーム回す量・タイルマップの描画の速さ)。
 
-## アプリストア(`src/apps/store/` / `StoreScene` / `docs/APP_REPO.md` / `script/release/build_app_repo.py`)(2026-10-11)
+## アプリストア(`src/apps/store/` / `StoreScene` / `docs/spec/APP_REPO.md` / `script/release/build_app_repo.py`)(2026-10-11)
 
 ランチャの「ストア」(`StoreScene`、アイコン`IconID::AppStore`)が、Webに置いた配布物からLuaアプリを入れる・更新する・消す。
 **形式は静的なファイルだけ**(catalog.tsv + catalog.sig + `<id>/<版>/files.tsv` + ファイル)なので、GitHub Pages でも
-Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURLは`https://kimu1109.github.io/pico-os-apps/`(`/sys/store.cfg`の`url`。
+Raspberry Pi の nginx でも同じ。仕様は`docs/spec/APP_REPO.md`。既定のURLは`https://kimu1109.github.io/pico-os-apps/`(`/sys/store.cfg`の`url`。
 2026-10-26に投稿用リポジトリへ移した。下の「アプリストアの投稿」。それより前は`https://kimu1109.github.io/pico-os/apps/`)。
 
 - **守り方**: カタログ(catalog.tsv)にカタログ鍵でEd25519の署名(`"pico-os-apps-v2\0"`+SHA-256(catalog))、
@@ -226,7 +226,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
 
 ## アプリストアの更新: 本体の版の条件・前の版へ戻す・すべて更新・更新の確認(2026-10-30)
 
-取り決めは `docs/APP_REPO.md`「本体が確かめること」の2.〜6.。利用者と決めたこと: **裏では入れ替えない**(確認と通知まで。入れ替えは利用者がストアを開いて)、
+取り決めは `docs/spec/APP_REPO.md`「本体が確かめること」の2.〜6.。利用者と決めたこと: **裏では入れ替えない**(確認と通知まで。入れ替えは利用者がストアを開いて)、
 版の管理は「前の版へ戻す」と「本体の版の条件(min_os)」。
 
 - **min_os**: catalog.tsv の12列目(`.papp` の2行目も同じ行なので同じく効く)。値は本体の通し番号(`FwVersion::Serial()`。版の文字列でなく番号にしたのは、
@@ -250,7 +250,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
 ## アプリストアのWebのページとパッケージ(.papp)(2026-10-25)
 
 ブラウザでアプリを見てダウンロードでき、落としたファイルを**そのままSDの直下に置けば次の起動で入る**ようにした。
-形式は`docs/APP_REPO.md`「パッケージ(.papp)」。
+形式は`docs/spec/APP_REPO.md`「パッケージ(.papp)」。
 
 - **ページ**: `https://kimu1109.github.io/pico-os-apps/`(本体のストアの既定のURLと同じ場所の`index.html`。2026-10-26までは`/pico-os/apps/`)。
   `build_app_repo.py site`が配布物(`catalog.tsv`等)から静的なHTMLを作る(雛形は`site/store.html`、見た目はトップの`landing.html`と同じ)。
@@ -285,7 +285,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
 ## アプリストアの投稿(2026-10-24に設計、2026-10-26に投稿用リポジトリへ移した)
 
 他人がアプリを投稿・更新できるようにする。**投稿は GitHub のプルリクエストで受け付け、検査と公開は GitHub Actions に任せる。**
-配布物は今と同じ静的なファイルのまま(形式は`docs/APP_REPO.md`の形式2)。
+配布物は今と同じ静的なファイルのまま(形式は`docs/spec/APP_REPO.md`の形式2)。
 
 ### 選んだ形と理由
 
@@ -333,7 +333,7 @@ script/                build_app_repo.py(pico-os から写す)
 ### 検査(check.yml)
 
 - files.tsv をファイルから作り直して同じになるか、files.sig が `meta.cfg` の鍵で合うか、app.cfg の `id`・`version`、
-  `docs/APP_REPO.md` の制限値(パス・大きさ・数・必須ファイル)、`.lua` 全部を `luac -p`(lib/lua と同じ 5.4.7)で構文だけ確かめる。
+  `docs/spec/APP_REPO.md` の制限値(パス・大きさ・数・必須ファイル)、`.lua` 全部を `luac -p`(lib/lua と同じ 5.4.7)で構文だけ確かめる。
 - **PRの中身は実行しない。** 検査の道具は base(main)から取り、PRの中身は別のディレクトリにデータとして取るだけにする(`python3 -I`)。
   PRがワークフローや検査の道具を書き換えても、自分の判定を甘くできないようにするため。
 - 判定する役(読み取りの権限だけ・Secretなし)と、マージする役(書き込みの権限)をジョブで分ける。マージする役は判定の結果を読むだけで、

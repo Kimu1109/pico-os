@@ -6,7 +6,7 @@
 #include "gui/widgets/ScrollList.hpp"
 #include "system/I18n_Functions.hpp"
 
-// 検索結果を出すダイアログ(docs/PROTOCOL.md「3. 検索」)。
+// 検索結果を出すダイアログ(docs/spec/PROTOCOL.md「3. 検索」)。
 //
 // **通信は一切しない。** 何件目から何件取るかも含めて判断するのは MarkdownScene で、
 // ここは「状態の1行 + 結果の一覧 + 3つのボタン」を出すだけの入れ物にしてある。
@@ -132,7 +132,7 @@ class SearchDialog : public Widget {
             this->list->add(item);
         }
 
-        // 「次へ」は続きがありそうなときだけ出す(docs/PROTOCOL.mdは総件数を返さない)
+        // 「次へ」は続きがありそうなときだけ出す(docs/spec/PROTOCOL.mdは総件数を返さない)
         void setHasNext(bool value){
             this->next_button->setVisible(value);
             this->needsRender();

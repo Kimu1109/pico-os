@@ -6,7 +6,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// Webに置いたファームの版の一覧(index.tsv、docs/FIRMWARE_UPDATE.md「Webから取る」)を読む係。
+// Webに置いたファームの版の一覧(index.tsv、docs/guide/FIRMWARE_UPDATE.md「Webから取る」)を読む係。
 // 作る側は script/release/build_fw_index.py(CIが GitHub Pages の /firmware/ へ置く)。値を変えるときは両方を揃えること。
 //
 //   # pico-os-fw-index 1

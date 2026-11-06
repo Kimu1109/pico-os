@@ -7,7 +7,7 @@
 #include "util/FixedString.hpp"
 #include "consts.hpp"
 
-// 取ってきたアプリを /lua/apps/<dir>/ へ入れる係(docs/APP_REPO.md「本体が確かめること」)。
+// 取ってきたアプリを /lua/apps/<dir>/ へ入れる係(docs/spec/APP_REPO.md「本体が確かめること」)。
 // 通信で取る AppStore と、SDに置いたパッケージ(.papp)から入れる AppPackage が同じ手順を使う:
 //   /sys/store/staging/files.tsv と /sys/store/staging/app/ へ全部置く → CheckFilesList() →
 //   (各ファイルのSHA-256を確かめる) → CheckStagedConfig() → Commit()
@@ -48,7 +48,7 @@ namespace AppInstall {
     // 入れたときのファイルの一覧・作者の鍵・前の版・見送りの印を忘れる(削除したとき)
     void Forget(const char* id);
 
-    // ---- 前の版(docs/APP_REPO.md「前の版へ戻す」) ----
+    // ---- 前の版(docs/spec/APP_REPO.md「前の版へ戻す」) ----
     // ストアで入れたアプリを更新すると、前の版のファイル(前の版の一覧に載っていたもの)を
     // /sys/store/prev/<id>/app/ へ移して残す(1つ前の版だけ)。Rollback() で戻せる。
     // 前の版があればその版を version へ

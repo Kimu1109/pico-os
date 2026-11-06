@@ -74,7 +74,7 @@ pc/          PC/Webビルド(動かしたときの状態は pc/run/)
 script/      開発補助(cli-tool/picoos が名前で呼び分ける。script/README.md)。pio/(PlatformIOが読む)・codegen/(src/の生成物。アイコン・フォント・i18n)・
              check/(CIの検査)・release/(配る)・tools/(変換と開発中の道具)・assets/・dict/・host_test/・lua_test/。直下に置かない
 hardware/carrier/  キャリアボード(KiCad 8。README.md に部品の表、tools/check_pins.py で consts.hpp と結線を照合)
-docs/        仕様(PROTOCOL / CHAT_PROTOCOL / APP_REPO / MUSIC_FORMAT / VIDEO_FORMAT / FIRMWARE_UPDATE / ZOMBIE_TD / HARDWARE_CHECKLIST)と design/
+docs/        spec/(外とやり取りする形式: PROTOCOL / CHAT_PROTOCOL / APP_REPO / MUSIC_FORMAT / VIDEO_FORMAT)・guide/(手順: FIRMWARE_UPDATE / HARDWARE_CHECKLIST)・design/(設計記録)。docs/README.md
 lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャットサーバ
 (別リポジトリ) kimu1109/pico-os-apps がアプリストアの配布元(投稿・公開。lua-apps.md「アプリストアの投稿」)
 ```
@@ -206,6 +206,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 | `lua-api.md` | `pico.*` APIの設計記録(描画・SD・画像・キャンバス・ダイアログ・ネットワーク・イベント等) |
 | `lua-apps.md` | Luaアプリと `pico.game`(ペイント・テトリス等・アプリストア・動作確認アプリ) |
 | `iso.md` | 2.5Dエンジン(`pico.iso`)・ブロック・ゾンビTD |
+| `zombie-td.md` | ゾンビTD(タワーディフェンス)のゲームの設計(流れ・マップ・釣り合い) |
 | `devtools.md` | プロファイラ・Luaデバッガ・クラッシュダンプ・サンドボックス・実機確認の道具・ファームの更新・ビルド時に選ぶハードウェア機能・ナイトリービルド |
 | `performance.md` | 最適化とメモリ計測の記録・解決済みの不具合 |
 | `pc-web.md` | Webビルド(WebAssembly) |
@@ -218,7 +219,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 ### 人にしかできない確認はTodoistで管理する(2026-10-19に利用者と決めた運用)
 
 実機・実物のハードを人が操作しないと確かめられない確認が生じたら、**確認を取らずに** Todoist の MCP(`mcp__Todoist__*`)で登録する。
-**未完了かどうかの唯一の情報源はTodoist**。`docs/HARDWARE_CHECKLIST.md` は手順・見方・結果の記録用(進捗の印は付けない)。
+**未完了かどうかの唯一の情報源はTodoist**。`docs/guide/HARDWARE_CHECKLIST.md` は手順・見方・結果の記録用(進捗の印は付けない)。
 コネクタが無ければ、チェックリストへ手順を足し、報告で項目名を挙げる。
 
 - **対象**: 実機ビルド、I2S/PWM/OTP/USB、Wii・CardKB2・マイクの実物、実機の速さ・メモリ・消費電流、本物のサーバ/証明書への接続。
@@ -234,4 +235,5 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 ### 文書の書き方
 
 - **新しい機能の設計記録は `docs/design/` の該当ファイルへ**(合うものが無ければ足して上の索引へ1行)。このファイルには地図と決まりだけ。
+  外とやり取りする形式は `docs/spec/`、人が手を動かす手順は `docs/guide/`(`docs/README.md`)。
 - **`SUMMARY.md` は項目名だけの一覧(説明は `docs/design/` へ)。新しい大項目を足したら冒頭の「全体の進捗」表にも1行。**

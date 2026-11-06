@@ -162,7 +162,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 
 ## 実機の確認用の道具 (`src/devtools/HwTest_Functions` / Luaアプリ「実機チェック」) (2026-10-11)
 
-`docs/HARDWARE_CHECKLIST.md`(実機で確かめる・測る項目の一覧)を回すための道具。
+`docs/guide/HARDWARE_CHECKLIST.md`(実機で確かめる・測る項目の一覧)を回すための道具。
 - **シリアルのコマンド`hw ...`**: `/sys/debug.cfg`の`hw-test = true`のときだけ(既定は切れている。わざと落とすコマンドがあるため。設定アプリには出さない)。
   `hw info`/`hw mem`(`MemFunctions::Take()`と`HeapTopRoom()`)/`hw trap`(`__builtin_trap()`=未定義命令)/`hw buswrite`(0xF0000000へ書く)/
   `hw hang`(ウォッチドッグが入っているときだけ止まる)/`hw clock [MHz]`・`hw sleep`(スリープ中のクロック低減を測る。`power-display.md`「スリープ中のクロック低減」)/
@@ -177,7 +177,7 @@ crash.pending/壊れた記録/通知/Luaのエラー・debug.cfg)。PCビルド:
 
 ## ファームの更新 (`src/apps/firmware/` / `Firmware_Functions` / `FirmwareScene` / `script/release/firmware_tool.py`) (2026-10-16)
 
-使い方・形式・TCPの取り決めは`docs/FIRMWARE_UPDATE.md`。利用者と決めた方針(2026-10-16): arduino-pico標準のOTA(PicoOTA+内蔵フラッシュのLittleFS、自動ロールバック無し=壊れたらBOOTSEL)/
+使い方・形式・TCPの取り決めは`docs/guide/FIRMWARE_UPDATE.md`。利用者と決めた方針(2026-10-16): arduino-pico標準のOTA(PicoOTA+内蔵フラッシュのLittleFS、自動ロールバック無し=壊れたらBOOTSEL)/
 LittleFSは1664KB(2026-10-31に1728KBから縮めた) / 今回の経路はSDとPCからのWi-Fi(Webから取るのは後。下の「Webから取る」で2026-10-29に足した) / 独自の見出し+gzip / **常に署名必須、鍵はファーム専用で焼き込みの鍵だけを信頼**(SDの鍵は読まない。
 SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-unsigned`(それでも毎回本体で確認)/ 古い版は確認のうえで許す / 更新後に通知し置き場を片付ける。
 
@@ -209,7 +209,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 
 ### Webから取る (`apps/firmware/Fw_Index` / `Fw_Download` / `script/release/build_fw_index.py` / `firmware-stable.yml`) (2026-10-29)
 
-使い方・一覧の形式・CIの流れは`docs/FIRMWARE_UPDATE.md`「Webから取る」。利用者と決めた方針(2026-10-29): **署名の鍵はSecretsに置いてCIで署名**(上の「鍵」) /
+使い方・一覧の形式・CIの流れは`docs/guide/FIRMWARE_UPDATE.md`「Webから取る」。利用者と決めた方針(2026-10-29): **署名の鍵はSecretsに置いてCIで署名**(上の「鍵」) /
 一覧に載せるのは新しい安定版5本+ナイトリー3本 / 本体と同じ構成(env)の版だけを出す / 新しい版の通知はしない(「本体の更新」を開いたときだけ取る) / 書き込みの準備ができたら落としたファイルは消す。
 
 - **置き場はGitHub Pages(`https://kimu1109.github.io/pico-os/firmware/`)**。元はリリースだが、リリースの添付は`release-assets.githubusercontent.com`への302で、

@@ -6,7 +6,7 @@ namespace PICO_Path {
         constexpr const char* SYS_IME = "/sys/ime/";
         constexpr const char* SYS_DICT = "/sys/dict/";
         // Markdownブラウザがサーバから取った文書を貯める場所。
-        // 配下は /cache/<ホスト>/<サーバ上のパス> でミラーする(docs/PROTOCOL.md)
+        // 配下は /cache/<ホスト>/<サーバ上のパス> でミラーする(docs/spec/PROTOCOL.md)
         constexpr const char* CACHE = "/cache/";
         // ランチャへ自動登録されるLuaアプリの置き場所(LuaAppScanner参照)。
         // 直下の「サブディレクトリ1つ = アプリ1つ」で、<名前>/main.lua が
@@ -23,13 +23,13 @@ namespace PICO_Path {
         // Game Boyエミュの途中保存(ステートセーブ)の置き場所。"<ROMの名前>.st0"(自動)/".st1"(手動)。
         // ROMの隣に置くとROMの選択に並んで紛らわしいので分けた(同じ名前の別ROMは見出しの照合で断る)
         constexpr const char* GB_STATES = "/gb/states/";
-        // 曲(pico-os MML、docs/MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下と1段下のフォルダ(=プレイリスト)の *.mml / *.wav を並べる
+        // 曲(pico-os MML、docs/spec/MUSIC_FORMAT.md)の置き場所。ミュージックアプリ(MusicScene)が直下と1段下のフォルダ(=プレイリスト)の *.mml / *.wav を並べる
         constexpr const char* MUSIC = "/music/";
-        // 動画(.pvid、docs/VIDEO_FORMAT.md)の置き場所。動画アプリ(VideoScene)のファイル選択の最初の場所。音は同じ名前の .wav
+        // 動画(.pvid、docs/spec/VIDEO_FORMAT.md)の置き場所。動画アプリ(VideoScene)のファイル選択の最初の場所。音は同じ名前の .wav
         constexpr const char* VIDEO = "/video/";
         // 録音(マイク、RecorderScene)の置き場所。"rec_0001.wav" から順に番号を振る
         constexpr const char* RECORDINGS = "/recordings/";
-        // ファームの更新ファイル(.pfw、docs/FIRMWARE_UPDATE.md)を置く場所。「本体の更新」のファイル選択の最初の場所
+        // ファームの更新ファイル(.pfw、docs/guide/FIRMWARE_UPDATE.md)を置く場所。「本体の更新」のファイル選択の最初の場所
         constexpr const char* FIRMWARE = "/firmware/";
         // 読書アプリ(ReaderLibraryScene)の本棚に並べる本(*.txt、青空文庫のテキスト等)と、「開く」の最初の場所
         constexpr const char* BOOKS = "/books/";
@@ -67,7 +67,7 @@ namespace PICO_Path {
         // 最近開いたファイル(1行1パス、新しい順。RecentFiles参照)
         constexpr const char* SYS_RECENT_FILES = "/sys/recent_files.txt";
 
-        // アプリストア(apps/store/App_Store、docs/APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
+        // アプリストア(apps/store/App_Store、docs/spec/APP_REPO.md)。確かめたカタログ・最後に見た版の番号・
         // インストールしたアプリのファイル一覧(installed/<id>.tsv)・取得中の置き場(staging/)
         constexpr const char* STORE_DIR = "/sys/store";
         constexpr const char* STORE_CATALOG = "/sys/store/catalog.tsv";

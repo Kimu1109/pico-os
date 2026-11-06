@@ -9,20 +9,20 @@
 **文書内の参照(画像)は`doc_path`基準で解決する**(`resolveRef()`)。`load(path)`が`doc_path`を覚え、`layoutBlocks()`(画像ヘッダを読んで**ブロックの高さ**を決める)と`bindImageSlot()`(**表示用のパス**)の**2箇所**で使う。片方だけ直すと「高さは合うが表示されない」類のずれ方をするので必ず両方を通すこと。キャッシュがサーバのパスをミラーしているため、この1つの規則でローカルもリモートも足りる(View側にネットワークの知識は不要)。
 
 ## 文書キャッシュ (`src/apps/browser/Doc_Cache.hpp`)
-サーバから取った文書をSDへ書き、次回以降はSDから読むための層(`docs/PROTOCOL.md`)。
+サーバから取った文書をSDへ書き、次回以降はSDから読むための層(`docs/spec/PROTOCOL.md`)。
 **MarkdownViewは「SD上のファイルを開く」ことしか知らないままでよく、ネットワークとの境界がファイルシステムで切れる**のが狙い。
 
 - 配置は `/cache/<正規化したホスト>/<サーバ上のパス>`。ハッシュ名にせずミラーするのは**FileExplorerでそのまま中身を覗ける**ようにするため。
 - **ホスト名は`SanitizeHost()`で正規化してから使う**。FATでは`:`が使えず(ポート番号!)大小も区別しないため、小文字化して`: * ? < > | " \ /`と制御文字を`_`へ潰す。
 - **`Writer`が本体**: 一時ファイル(`.part`)へ書き、`commit()`で初めて本来の名前へ差し替える。`commit()`せずに破棄されるとデストラクタが一時ファイルごと消す。**通信が途中で切れた半端なファイルを「正常なキャッシュ」として残さない**ためで、これがこのモジュールの存在理由。
-- `kMaxEntryBytes=64KiB`で頭打ち。相手のサーバが何を返してきてもSDを埋め尽くさないようにする(`docs/PROTOCOL.md`の「巨大なレスポンス」対策)。
+- `kMaxEntryBytes=64KiB`で頭打ち。相手のサーバが何を返してきてもSDを埋め尽くさないようにする(`docs/spec/PROTOCOL.md`の「巨大なレスポンス」対策)。
 - 目録は `/cache/index.tsv`(行指向TSV、1行1文書): `host / path / validator / fetched_epoch / size`。書き換えは**元を読みながら一時ファイルへ書き写して最後に差し替える**ので、目録全体をRAMへ載せない(`Config_Functions::SetValue()`と同じ手順)。
 - `fetched_epoch`は**参考値**。NTP同期前の時計は当てにならないので、鮮度の判断は`validator`(ETag)で行う。
 - **追い出し(LRU等)は実装しない。** 1文書8KiBに対しSDはGB単位あり、1000件貯めても8MB程度なので枠を管理する対価に見合わない。全消去の`Clear()`だけ用意してある。
 - **`Clear()`だけはホストテストで検証できていない**。ディレクトリの再帰削除に`isDir()`/`openNext()`が要るが、`script/host_test/stubs/SdFat.h`はパス→内容のフラットな`map`でディレクトリの実体が無いため。PCビルド(`pc/compat/SdFat.h`は実ファイルシステム)側で確かめること。
 
 ## HTTPクライアント (`util/Url.hpp` / `net/Http_Response` / `net/Http_Get`)
-`docs/PROTOCOL.md` のHTTPを喋る側(http/https。HTTPSは下の「HTTPS」参照)。3つに割ってあるのは**テストできる形にするため**。
+`docs/spec/PROTOCOL.md` のHTTPを喋る側(http/https。HTTPSは下の「HTTPS」参照)。3つに割ってあるのは**テストできる形にするため**。
 
 - **`Url`**: `http://host:port/path?query` を分解して持つ型。`"http://"` を各所で`strncmp`しないための入れ物で、**schemeをここに閉じ込めてある**(実際にHTTPS対応で触ったのは接続処理=`net/Http_Transport`だけで済んだ)。`path`は`PICO_STR_LL`(Googleカレンダーの非公開URLのパスが96Bを超えるため)。パスとクエリを分けて持つのは、相対解決(`PICO_IO::resolve`を再利用)がクエリ内の`/`まで畳んでしまわないようにするため。
 - **`HttpResponse`**: **ソケットを持たない**増分パーサ。受信したバイト列を`feed()`へ渡すだけなので、ネットワーク無しに全経路をホストテストできる(`http_test.cpp`は1バイトずつ食わせた場合も同じ結果になることまで見ている)。見るヘッダは`Content-Length`/`ETag`/`Last-Modified`/`Location`/`Transfer-Encoding`だけ。**chunkedは解いて本文だけをシンクへ渡す**(2026-09-23。以前は検出したらエラーにしていたが、HTTPSで繋ぐ一般のサーバは動的な応答をchunkedで返す)。chunked以外の転送符号化(gzip等)はエラー。**読まないヘッダは長すぎても読み飛ばす**(Googleは`Set-Cookie`/CSPで`kMaxLineLen=256`を平気で超える)。中身を使うヘッダ(Location等)とステータス行だけは切れていたら失敗にする。本文の行き先は`IHttpSink`で差し替える。
@@ -73,16 +73,16 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
 - `MarkdownView`へ渡すのは常にSD上のパスなので、**View側はネットワークの存在を知らない**
 
 ## サーバ情報 (`src/apps/browser/Discovery.hpp`)
-`GET /.well-known/pico-os` の中身(`ServerInfo`)。`docs/PROTOCOL.md`「サーバ情報」参照。
+`GET /.well-known/pico-os` の中身(`ServerInfo`)。`docs/spec/PROTOCOL.md`「サーバ情報」参照。
 
 - **discoveryを特別扱いしない。** 置き場所が決め打ちなだけで、取得も保存も`Doc_Fetch`/`Doc_Cache`をそのまま通す。おかげで**条件付きGET(304)も、圏外のときに前回の内容を使うことも、何も書かずに手に入る**。
-- **知らないキーは無視する**(`docs/PROTOCOL.md`の前方互換ルール)。サーバが将来キーを足しても古いpico-osが壊れない。`discovery_test.cpp`で固定してある。
+- **知らないキーは無視する**(`docs/spec/PROTOCOL.md`の前方互換ルール)。サーバが将来キーを足しても古いpico-osが壊れない。`discovery_test.cpp`で固定してある。
 - **`search`の行が無い = 検索非対応**。`hasSearch()`で判定し、対応していないサーバでは検索UIを無効にする。
 - **404は正常な結果**。「素の静的ファイルサーバと分かった」という確定した答えなので、`checked`を立ててページごとに問い合わせ直さない。
 - `MarkdownScene`は**ホストが変わったときだけ**問い合わせる。`home`が申告されていればヘッダの「ホーム」ボタンの行き先になる(無ければ`network.cfg`の`browser-home`)。
 
 ## 検索 (`src/apps/browser/Doc_Search.hpp`)
-`GET <discoveryのsearch>?q=...&limit=10&offset=N` の応答(1行1件のTSV)を読む。`docs/PROTOCOL.md`「3. 検索」参照。
+`GET <discoveryのsearch>?q=...&limit=10&offset=N` の応答(1行1件のTSV)を読む。`docs/spec/PROTOCOL.md`「3. 検索」参照。
 
 - **検索だけは`Doc_Cache`を通さない。** キャッシュ上の置き場所は**URLのパスだけで決まりクエリを見ない**ため、
   通すと検索語違いの応答が同じファイルへ重なり、条件付きGETで別の検索語の304まで起きる。
@@ -102,7 +102,7 @@ UI側は`apps/browser/ui/SearchDialog`(状態1行 + `ScrollList` + 再検索/次
 (`ScrollList`の流儀。1回目は選択)。
 
 ## マニフェスト (`src/apps/browser/Manifest.hpp`)
-`GET <discoveryのmanifest>` の中身(1行 `path<TAB>version`、**pathの昇順**)。`docs/PROTOCOL.md`「4. マニフェスト」参照。
+`GET <discoveryのmanifest>` の中身(1行 `path<TAB>version`、**pathの昇順**)。`docs/spec/PROTOCOL.md`「4. マニフェスト」参照。
 
 - **狙いは「開くたびの条件付きGETを省く」こと。** 手元の検証子とマニフェストのversionが一致すれば、
   その文書は**サーバへ何も聞かずに開ける**(304の往復すら要らない)。

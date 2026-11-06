@@ -6,7 +6,7 @@
   版の一覧は同じサイトの ../firmware/downloads.json(script/release/build_fw_index.py の write_downloads() が作る。
   元はGitHubのリリースの安定版5本・ナイトリー3本)を読んで並べる。読めないとき(手元で開いた・まだ一度も
   リリースが無い)は、GitHubのリリースの一覧へのリンクだけを出す。
-  .uf2 は初めて書き込むとき(BOOTSEL)、.pfw は本体の「本体の更新」から入れるとき(docs/FIRMWARE_UPDATE.md)。
+  .uf2 は初めて書き込むとき(BOOTSEL)、.pfw は本体の「本体の更新」から入れるとき(docs/guide/FIRMWARE_UPDATE.md)。
 
   見た目はトップ(site/landing.html)と同じ: OSのパレット・2px線・右下に影・DotGothic16 / Press Start 2P・
   ステータスバー・テーマの切り替え(localStorage の鍵 picoos-theme も共通)。トップのCSSを変えたらこちらも合わせる。
@@ -404,7 +404,7 @@
 <footer>
   <div class="wrap">
     <span>pico-os — a touch GUI OS for Raspberry Pi Pico 2 W</span>
-    <span data-i18n="foot.links"><a href="../">トップへ</a> · <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/FIRMWARE_UPDATE.md">ファームの更新(詳しく)</a></span>
+    <span data-i18n="foot.links"><a href="../">トップへ</a> · <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/guide/FIRMWARE_UPDATE.md">ファームの更新(詳しく)</a></span>
     <span data-i18n="foot.icons">アイコン: <a href="https://tabler.io/icons">Tabler Icons</a>(MIT)</span>
   </div>
 </footer>
@@ -438,7 +438,7 @@
     "th.ver": "Build", "th.kind": "Channel", "th.date": "Date (UTC)", "th.commit": "Commit", "th.dl": "Download",
     "older": 'Older builds, changelogs and the <code>.elf</code> files for crash dumps are on ' +
       '<a href="https://github.com/Kimu1109/pico-os/releases">GitHub Releases</a>.',
-    "foot.links": '<a href="../">Top</a> · <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/FIRMWARE_UPDATE.md">Firmware updates (details, Japanese)</a>',
+    "foot.links": '<a href="../">Top</a> · <a href="https://github.com/Kimu1109/pico-os/blob/main/docs/guide/FIRMWARE_UPDATE.md">Firmware updates (details, Japanese)</a>',
     "foot.icons": 'Icons: <a href="https://tabler.io/icons">Tabler Icons</a> (MIT)'
   });
 

@@ -81,7 +81,7 @@ jobs:
       # 内蔵アプリを外した版(rpipico2w_lite)・音楽再生に特化した版(rpipico2w_music)・英語の版(rpipico2w_en)は
       # ナイトリー(nightly.yml の「派生版のビルド」)で作る
 
-      # SDに置いて更新する更新ファイル(docs/FIRMWARE_UPDATE.md)。ここでは署名なし
+      # SDに置いて更新する更新ファイル(docs/guide/FIRMWARE_UPDATE.md)。ここでは署名なし
       # (本体は /sys/debug.cfg の fw-allow-unsigned = true のときだけ、確認のうえで受け付ける)。
       # 署名はナイトリー(nightly.yml)がリリースへ載せるときに Secrets の鍵で付ける(PRのビルドには鍵を渡さない)
       - name: 更新ファイル(署名なし)を作る

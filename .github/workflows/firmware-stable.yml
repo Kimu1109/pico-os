@@ -73,7 +73,7 @@ jobs:
           FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
         run: |
           if [ -z "${FIRMWARE_SIGNING_KEY}" ]; then
-            echo "::error::Secrets に FIRMWARE_SIGNING_KEY がありません(安定版は署名済みでしか出さない。docs/FIRMWARE_UPDATE.md)"
+            echo "::error::Secrets に FIRMWARE_SIGNING_KEY がありません(安定版は署名済みでしか出さない。docs/guide/FIRMWARE_UPDATE.md)"
             exit 1
           fi
           key="${RUNNER_TEMP}/firmware.key"
@@ -95,7 +95,7 @@ jobs:
           ナイトリー ${TAG} を ${date} に安定版にしたもの(ファームの版 #${SERIAL})。
 
           - \`firmware.uf2\` … BOOTSELを押しながらUSBでつなぎ、出てきたドライブへ置く
-          - \`firmware.pfw\` … SDの更新ファイル(docs/FIRMWARE_UPDATE.md)。署名済み。本体の「本体の更新」→[Webから]でも選べる
+          - \`firmware.pfw\` … SDの更新ファイル(docs/guide/FIRMWARE_UPDATE.md)。署名済み。本体の「本体の更新」→[Webから]でも選べる
           - \`firmware.elf\` … クラッシュダンプの番地を引くとき用
           EOF
           gh release create "v${SERIAL}" firmware/* \

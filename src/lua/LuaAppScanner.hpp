@@ -61,7 +61,7 @@ namespace LuaAppScanner {
         FixedString<PICO_STR_S> local_name;
         FixedString<PICO_STR_L> description;
         FixedString<PICO_STR_S> version;
-        FixedString<PICO_STR_S> id;           // アプリストアのid(docs/APP_REPO.md)。手で入れたアプリは空
+        FixedString<PICO_STR_S> id;           // アプリストアのid(docs/spec/APP_REPO.md)。手で入れたアプリは空
         FixedString<PICO_STR_M> icon;         // アプリディレクトリ内の相対パス(.pimg)
         FixedString<PICO_STR_M> background;   // バックグラウンドスクリプト(相対パス)。空なら無し
         uint32_t background_interval_sec = 0; // 0 = 既定

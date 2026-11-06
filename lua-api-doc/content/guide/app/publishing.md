@@ -6,7 +6,7 @@ description: "app.cfg の id と version、アプリストアへの投稿、署�
 ---
 
 作ったLuaアプリは、SDカードへコピーする代わりに**ランチャの「ストア」から Web 経由で入れる**こともできます。
-配布物を作る道具はリポジトリの `script/release/build_app_repo.py`、形式の細かい決まりは `docs/APP_REPO.md` です。
+配布物を作る道具はリポジトリの `script/release/build_app_repo.py`、形式の細かい決まりは `docs/spec/APP_REPO.md` です。
 本体のストアの既定の配布元は、投稿用リポジトリ [kimu1109/pico-os-apps](https://github.com/Kimu1109/pico-os-apps) です。
 
 ## アプリ側で用意するもの

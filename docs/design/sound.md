@@ -189,9 +189,9 @@ SUMMARY.md #11「マイクで録音」。I2Sマイク **SPH0645**(Adafruitのブ
   モノラルのWAVはステレオ出力の左右へ同じ値を足す。
 - 検証: `gb_apu_test` `sound_test` `music_test`(`TestPan`) `lua_engine_test`。実機のPCM5102Aで鳴ること(2026-10-19)・2コア目の負荷で途切れないこと(2026-10-22)は確認済み。ステレオの定位の聞こえ方は記録が無い。
 
-## 曲データ (`docs/MUSIC_FORMAT.md` / `src/sound/Mml_Compiler` / `Music_Player` / `MusicScene`) (2026-09-25)
+## 曲データ (`docs/spec/MUSIC_FORMAT.md` / `src/sound/Mml_Compiler` / `Music_Player` / `MusicScene`) (2026-09-25)
 
-SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML**(pico-os向けの方言。書き方は`docs/MUSIC_FORMAT.md`)。
+SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML**(pico-os向けの方言。書き方は`docs/spec/MUSIC_FORMAT.md`)。
 他の形式(MIDI=PC側の`script/tools/midi2mml.py`で変換(下記)、VGM/GBS=ゲームボーイの音源チップの再現後)は、どれも同じ「演奏データ」へ
 変換してから鳴らす方針で、2コア目は形式を知らない。
 
@@ -225,7 +225,7 @@ SUMMARY.md #11「標準ファイル形式を探す/考える」。**標準はMML
   `lua_engine_test`(Lua API)、PCビルドの`--tap`でミュージックアプリの再生・誤りの表示、チップチューンアプリで曲+鍵盤(借用)を確認。
   **実機では未確認**。
 - **MIDIからの変換(`script/tools/midi2mml.py`、2026-09-26)**: PCで動かすPython(標準ライブラリのみ)。本体はMIDIを知らないまま
-  (「形式を増やすときは変換を1つ足すだけ」の方針どおり)。手順と既定の割り当ては`docs/MUSIC_FORMAT.md`「MIDIからの変換」。
+  (「形式を増やすときは変換を1つ足すだけ」の方針どおり)。手順と既定の割り当ては`docs/spec/MUSIC_FORMAT.md`「MIDIからの変換」。
   - 時間は4分音符=48ティックへ直して格子へ揃える。格子は「音の出だしの97%以上が乗る、いちばん粗いもの」を自動で選ぶ
     (楽譜から書き出したMIDIは3連符も16分もずれない。演奏を録ったMIDIは16分音符で妥協し、`--grid`で変えられる)
   - 和音はパート(トラック×チャンネル)ごとに「同時に1音の線」へ分けてから選ぶ。和音のまま1チャンネルへ畳むと、
@@ -765,7 +765,7 @@ SUMMARY.md #11の「ミュージックアプリ」を作り直したもの。
   起動すると欄に「前回の続き(0:01 から)」、▶でアーティストの並びの2曲目を1.5秒から鳴らし、その並びを開く。
   **実機では未確認(電池を抜いて差し直した後に続きから鳴るか)(Todoist参照)**。
 
-## 動画(.pvid)(`script/tools/generate_pvid.py` / `docs/VIDEO_FORMAT.md` / `src/apps/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
+## 動画(.pvid)(`script/tools/generate_pvid.py` / `docs/spec/VIDEO_FORMAT.md` / `src/apps/video/Pvid_Player` / `VideoScene` / `widgets/apps/VideoView`)(2026-10-12)
 
 MJPEGは本体でJPEGを解く・フルカラーを16色へ落とす処理が重く、画面(`OSData::frame`)が4bppなので利点も活きないため、
 **PCで「動画ごとの16色(0=黒・15=白は固定、残り14色はL\*a\*b\*のk-means)+画面に固定したBayer 8x8のディザ+8x8タイルの差分」へ
@@ -778,7 +778,7 @@ MJPEGは本体でJPEGを解く・フルカラーを16色へ落とす処理が重
   フレームは512バイトずつ読みながら解く)→`VideoView`(`GameBoyView`と同じく合成の中で4bppのバッファへ`memcpy`、変わったタイルの行の帯だけdirty)。
   **再生中はパレットの16色全部を動画のものにする**(`PICO_GFX::COLORS`を直接。`SetPaletteColor()`は0/15を変えられないため。ダークテーマでも動画の黒白のまま)。
   閉じる/画面を離れると`ResetPalette()`。時計は同じ名前の`.wav`の`WavPositionMs()`(無い/先に終わったら`millis()`)、1回に4枚まで解き、8枚より遅れたら`seekTo()`で飛ぶ。
-  詳細は`docs/VIDEO_FORMAT.md`「本体での再生」。アイコンはtablerの`IconID::FileVideo`(自作の`video.svg`は2026-10-24に外した)。動画の置き場は`/video/`(`PICO_Path::DIR::VIDEO`)。
+  詳細は`docs/spec/VIDEO_FORMAT.md`「本体での再生」。アイコンはtablerの`IconID::FileVideo`(自作の`video.svg`は2026-10-24に外した)。動画の置き場は`/video/`(`PICO_Path::DIR::VIDEO`)。
 - 目安: testsrc2の240x128・15fpsで1フレーム平均約2.8KB・約42KB/秒。実機での再生の速さ(SDの読み込み・解く時間・液晶への転送)は問題なし(2026-10-23、数値は控えていない)。**実写・アニメでの値は未確認**。
 - 検証: `pvid_test`(run.sh の media。変換のタイルの往復・目録・差分の判定・色選び・壊れたファイル・ffmpegがあればlavfiの動画から変換、
   **`pvid_dump`(本物の`PvidPlayer`をASan付きで)と全部のフレーム・前後へのシークの絵が一致すること、ランダムに壊した300個のファイルで落ちないこと**)、

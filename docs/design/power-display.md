@@ -123,7 +123,7 @@ KeepAwakeを呼んでいる画面: ゲームボーイ・SSH・チャット(常�
   - 2コア目はログに触れないので、切り替わったことは1コア目の`PowerFunctions::Update()`が見て`Power: CPUクロック 50MHz`とログへ出す。
     起きると次の2コア目の周回(最大20ms)で戻る。その間は遅いだけで動く。
 - **測り方**: `hw clock`(今のclk_sys・clk_peri・下限・スリープ中の行き先)/`hw clock 50`(`sleep-cpu-mhz`を今だけ変える。0で下げない)/
-  `hw sleep`(今すぐスリープ)。`hw clock 0`→`hw sleep`と`hw clock 50`→`hw sleep`で電流計の値を比べる(`docs/HARDWARE_CHECKLIST.md`の3章)。
+  `hw sleep`(今すぐスリープ)。`hw clock 0`→`hw sleep`と`hw clock 50`→`hw sleep`で電流計の値を比べる(`docs/guide/HARDWARE_CHECKLIST.md`の3章)。
 - **やっていないこと**: dormant(水晶まで止めてGPIOで起きる)は、タイマー・USB・Wi-Fiの接続が全部止まり、起きた後の作り直しが要るので見送り
   (タッチのIRQ=GP9で起こすことはできる。Wi-Fiを切っている時だけの「深い休止」として、クロック低減の効き目を測った後に検討)。
   電圧を下げる(`vreg_set_voltage()`)も、クロック低減の効き目を測ってから。

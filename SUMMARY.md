@@ -125,7 +125,7 @@
   - [x] コンテナからの子の取り外し(pico.remove_child)
   - [x] リストへの項目追加(pico.list_add/list_clear/pico.tab_add)
   - [x] 2Dゲームの簡易エンジン(pico.game)
-- [x] アプリストア(Webから入れる。署名した配布物・更新・削除。docs/APP_REPO.md)
+- [x] アプリストア(Webから入れる。署名した配布物・更新・削除。docs/spec/APP_REPO.md)
   - [ ] 実機・GitHub Pagesでの確認
   - [ ] 投稿・検索(投稿用リポジトリ kimu1109/pico-os-apps+PR+Actions。lua-apps.md「アプリストアの投稿」)
     - [x] 形式2(作者の署名・鍵の固定・取り下げ・古い版を断る)
@@ -244,7 +244,7 @@
 - [x] 2.5Dマインクラフト風(ブロック。Blocks-TI-84の移植)
   - [x] 光源(松明)と昼/夜
   - [x] 人や物(エンティティ)を置く
-- [ ] ゾンビのタワーディフェンス(仕様: docs/ZOMBIE_TD.md)
+- [ ] ゾンビのタワーディフェンス(仕様: docs/design/zombie-td.md)
   - [x] エンジン側の道具(流れの場・通り抜けられるブロック・押し合い・弾・視線・HPバー)
   - [ ] ゲーム本体
     - [x] マップの生成(種・ベースと出現位置・道の確認)とカメラ
@@ -331,7 +331,7 @@
 - [x] GB対応
 - [x] 標準ファイル形式を探す/考える
   - [x] 形式を選ぶ(MML)
-  - [x] 仕様を固める(docs/MUSIC_FORMAT.md)
+  - [x] 仕様を固める(docs/spec/MUSIC_FORMAT.md)
   - [x] 読み取りと2コア目のシーケンサー
   - [x] ミュージックアプリ
   - [x] MIDIからの変換
@@ -383,7 +383,7 @@
 - [x] Luaデバッガ(ブレークポイント・ステップ実行・変数・スタックトレース)
 - [x] クラッシュダンプの保存(HardFault・ウォッチドッグ・Luaのエラー)
 - [x] Luaサンドボックスの強化
-- [x] ファームの更新(SDの更新ファイル / PCからWi-Fiで。docs/FIRMWARE_UPDATE.md)
+- [x] ファームの更新(SDの更新ファイル / PCからWi-Fiで。docs/guide/FIRMWARE_UPDATE.md)
 - [x] ナイトリービルド(毎晩mainをビルドしてGitHubのリリースへ。50本まで)
 - [x] Luaアプリのホットリロード(PCビルド。`--hot-reload` / `picoos pc dev`)
 - [x] Luaアプリのホットリロード(実機。Wi-Fi転送。debug.cfg の `lua-hot-reload`)
@@ -398,6 +398,7 @@
   - [x] 参照の無かった `secondary-icons/` を、アプリのアイコンの元絵として `assets/app_icons/` へ移す
 - [x] サイトのページ(トップ・ダウンロード・ストアの雛形)を `pc/web/` から `site/` へ移す
 - [x] SDの中身を `pc/sdcard/` からリポジトリの根の `sdcard/` へ上げる(PCで動かしたときの状態は `pc/run/`)
+- [x] docs/ を種類で分ける(`spec/` 形式・`guide/` 手順・`design/` 設計記録。`docs/README.md`)
 - [x] 液晶・SDの配線と設定を内蔵フラッシュに置く(USBシリアルの `hwcfg`・失敗したら既定へ戻す)
 - [x] 常用漢字の外の漢字をSDの追加フォントへ移す(設定の「他」からWebで取る。画面の文字は常用漢字までの決まり)
   - [ ] 実機での確認(SDから字を読む速さ・取得)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pico-os のアプリストアの配布物(docs/APP_REPO.md)を作る。標準ライブラリだけで動く。
+"""pico-os のアプリストアの配布物(docs/spec/APP_REPO.md)を作る。標準ライブラリだけで動く。
 
 使い方:
   # 1. 鍵を作る(1回だけ)。秘密鍵は手元のPCにだけ置く(リポジトリ・サーバに置かない)
@@ -34,7 +34,7 @@
   python3 script/release/build_app_repo.py registry-build --registry . --key catalog.key --out _site --prev-catalog prev.tsv
   # このスクリプトの正本は pico-os。pico-os-apps の script/ はその写し(直したら写し直す)
 
-署名は2種類(docs/APP_REPO.md 形式2): catalog.sig はカタログ鍵(--key)、各アプリの files.sig は
+署名は2種類(docs/spec/APP_REPO.md 形式2): catalog.sig はカタログ鍵(--key)、各アプリの files.sig は
 作者の鍵(--author-key。既定は --key と同じ。pico-os の公式アプリは同じ鍵で両方を署名する)。
 
 配るアプリは sdcard/lua/apps/<ディレクトリ>/app.cfg に id = ... があるものだけ
@@ -885,7 +885,7 @@ def cmd_registry_check(args):
 
 
 def cmd_registry_build(args):
-    """投稿用リポジトリから配布物(docs/APP_REPO.md)を作り、カタログ鍵で署名する。files.sig は作者のものをそのまま使う"""
+    """投稿用リポジトリから配布物(docs/spec/APP_REPO.md)を作り、カタログ鍵で署名する。files.sig は作者のものをそのまま使う"""
     seed = load_seed(args.key)
     apps = load_registry(args.registry)
     serial = args.serial
@@ -1016,7 +1016,7 @@ def cmd_sync_official(args):
 
 
 # ---------------------------------------------------------------------------
-# パッケージ(.papp。docs/APP_REPO.md「パッケージ(.papp)」)
+# パッケージ(.papp。docs/spec/APP_REPO.md「パッケージ(.papp)」)
 # ---------------------------------------------------------------------------
 PACKAGE_MAGIC = "pico-os-app"
 PACKAGE_FORMAT = 1

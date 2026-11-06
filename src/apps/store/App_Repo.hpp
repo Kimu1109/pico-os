@@ -7,11 +7,11 @@
 #include "system/I18n_Functions.hpp"
 #include "consts.hpp"
 
-// アプリストアの配布元(docs/APP_REPO.md)の中身を読む係。
+// アプリストアの配布元(docs/spec/APP_REPO.md)の中身を読む係。
 // ソケットもSDも持たない(行の解釈・名前の検査・署名の確認・版の比較だけ)ので、
 // ホストテストで全部の経路を確かめられる。通信とインストールは apps/store/App_Store。
 namespace AppRepo {
-    // ---- 上限(docs/APP_REPO.md「制限値」と揃えること) ----
+    // ---- 上限(docs/spec/APP_REPO.md「制限値」と揃えること) ----
     constexpr int    kMaxEntries      = 40;           // カタログから読むアプリの数
     constexpr size_t kMaxCatalogBytes = 32 * 1024;
     constexpr size_t kMaxLineBytes    = 640;           // catalog.tsv / files.tsv の1行
@@ -103,7 +103,7 @@ namespace AppRepo {
     // 1行目 "pico-os-apps<TAB>2<TAB><serial>"
     bool ParseCatalogHeader(char* line, uint32_t& serial);
     // 2行目以降の1件。空行・'#'で始まる行は false(skip=true)。
-    // 13列目からの "name_<言語>=…" / "description_<言語>=…"(任意。docs/APP_REPO.md「訳」)のうち lang のものがあれば、
+    // 13列目からの "name_<言語>=…" / "description_<言語>=…"(任意。docs/spec/APP_REPO.md「訳」)のうち lang のものがあれば、
     // name / description をその訳で置き換える(表示にしか使わないので、1件に1言語分だけ持つ)。知らない列は無視する
     bool ParseCatalogLine(char* line, Entry& out, bool& skip, I18nFunctions::Lang lang);
     // 今の言語(I18nFunctions::Current())で読む

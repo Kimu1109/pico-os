@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ファームの版の一覧(Webからの更新。docs/FIRMWARE_UPDATE.md「Webから取る」)を作る。
+"""ファームの版の一覧(Webからの更新。docs/guide/FIRMWARE_UPDATE.md「Webから取る」)を作る。
 標準ライブラリだけで動く。CI(.github/workflows/web-pages.yml)が GitHub Pages の /firmware/ を作るのに使う。
 
   # 1. どのリリースを載せるか選ぶ(gh release list --json の出力から。新しい順に安定版N本・ナイトリーN本)

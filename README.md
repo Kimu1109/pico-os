@@ -45,7 +45,7 @@ pio run -e rpipico2w -t upload      # USBで書き込み
 pio run -e rpipico2w -t fwpush --upload-port picoos.local   # Wi-Fi経由で更新
 ```
 
-ファームの更新の流れは [`docs/FIRMWARE_UPDATE.md`](docs/FIRMWARE_UPDATE.md)。
+ファームの更新の流れは [`docs/guide/FIRMWARE_UPDATE.md`](docs/guide/FIRMWARE_UPDATE.md)。
 
 ### PC / Web
 
@@ -92,7 +92,7 @@ Claude Code 向けの決まりはリポジトリの中に置いてある:
 - [`.claude/settings.json`](.claude/settings.json) / [`.claude/hooks/session-start.sh`](.claude/hooks/session-start.sh) — Claude Code on the web のセッション開始時に、PlatformIO・SDL2などを入れて実機ビルドとPCビルドをすぐ回せる状態にするフック
 - [`docs/design/`](docs/design/) — 機能ごとの設計の背景と経緯。Claude Code はここを引いて作業する
 
-実機を人が触らないと確かめられない項目は [`docs/HARDWARE_CHECKLIST.md`](docs/HARDWARE_CHECKLIST.md) に手順を残している。
+実機を人が触らないと確かめられない項目は [`docs/guide/HARDWARE_CHECKLIST.md`](docs/guide/HARDWARE_CHECKLIST.md) に手順を残している。
 
 ## ライセンス
 

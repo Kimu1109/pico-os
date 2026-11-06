@@ -6,7 +6,7 @@
 #    日時 = HEADのコミットの日時(UTC)、構成 = env の名前(PIOENV。Webの版の一覧が同じ構成のものを選ぶのに使う)。
 #    中身が変わったときだけ書き直すので、変更が無ければビルドは「最新」のまま。
 #    gitが無い/リポジトリでない場合は 0 / "nogit"。
-# 2. ファームの更新ファイルを作る・送るターゲット(docs/FIRMWARE_UPDATE.md):
+# 2. ファームの更新ファイルを作る・送るターゲット(docs/guide/FIRMWARE_UPDATE.md):
 #      pio run -e rpipico2w -t fwpack                       … .pio/build/rpipico2w/firmware.pfw を作る
 #      pio run -e rpipico2w -t fwpush --upload-port <IP>    … Wi-Fiで本体へ送る(本体で[受け取る]を押しておく)
 #    鍵は環境変数 PICOOS_FW_KEY か ~/.pico-os/firmware.key(無ければ署名なし)。

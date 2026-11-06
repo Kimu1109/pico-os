@@ -138,7 +138,7 @@ jobs:
             --minify
           test -f _site/lua-api/index.html
 
-      # Webからのファームの更新(docs/FIRMWARE_UPDATE.md「Webから取る」)の版の一覧を /firmware/ に置く。
+      # Webからのファームの更新(docs/guide/FIRMWARE_UPDATE.md「Webから取る」)の版の一覧を /firmware/ に置く。
       # 元はGitHubのリリース(安定版 = プレリリースでないもの、ナイトリー = nightly-*)。リリースの添付は
       # 別のホストへの長いURLの転送になり本体のURLに入らないので、Pagesへ写す(本体はPagesだけを見る)。
       # firmware.uf2 も一緒に写し、ダウンロードのページ(/download/)が downloads.json から並べる。

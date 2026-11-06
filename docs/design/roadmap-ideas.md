@@ -17,7 +17,7 @@
 | 4 | Wi-Fi管理強化 | **実装済み**。非ブロッキング接続・スキャン・NTP同期・電波強度アイコンに加え、`SUCCESS`中は`HEALTH_CHECK_INTERVAL=5000ms`ごとに`WiFi.status()`を確認し、切断を検知したら`ConnectWiFiAsync()`を呼び直す(`currentPassword`を再接続用に保持)。`SettingsScene`から周辺スキャン→選択→パスワード入力→接続まで一般的な「Wi-Fi設定」と同じ操作でできる(下記「Wi-Fiの新規接続」参照)。**複数のネットワークの保存・ON/OFF・未接続時の自動再接続(直近で接続したものから)も実装済み**(「保存済みのWi-Fiネットワーク」参照)。 |
 | 5 | Luaアプリ/API | **2Dゲームの簡易エンジン`pico.game`(2026-10-06)あり**。**`LuaEngine`+`LuaScene`が動き、ランチャから実際にLuaアプリを起動できる(2026-09-19着手)**。ウィジェット操作(生成/破棄/プロパティ/共通コールバック+ウィジェット固有コールバック)・直接描画(Canvas)・SDカードアクセス・画像(.pimg)・シーン制御(push_scene/change_scene/launch_app)・ダイアログ・ネットワーク(HTTPリクエスト)・時刻取得・実行時間の安全網(`lua_sethook`による暴走防止)・SDを走査したLuaアプリの自動登録(`LuaAppScanner`)・**権限管理(network/sd_outside_app_dirの粗いフラグ、2026-09-21追加)**・`pico.remove_child`/`pico.list_add`/`pico.list_clear`/`pico.tab_add`等の細部の穴埋め(2026-09-21)まで実装済み。**既知の欠けは無い**。詳細は下記「Luaバインディング」「Lua着手前の受け皿の状態」を参照。 |
 | 6 | PC/Web動作対応 | **実装済み**(`pc/`)。上記「PC / Web実行環境」参照。 |
-| 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`docs/PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`。関数電卓+グラフ電卓、2026-10-03。単位変換・為替・プログラマ電卓、2026-10-22)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`docs/design/apps-local.md`「標準アプリの詳細」参照。 |
+| 7 | 標準アプリ開発 | **実装済み**。Markdownブラウザ(`docs/spec/PROTOCOL.md` v1を一通り)・時計(`ClocksScene`)・電卓(`CalculatorScene`。関数電卓+グラフ電卓、2026-10-03。単位変換・為替・プログラマ電卓、2026-10-22)・ファイルエクスプローラー(`FileExplorerScene`)・辞書(`DictScene`)・設定(`SettingsScene`)の6本。詳細は`docs/design/apps-local.md`「標準アプリの詳細」参照。 |
 | 8 | セカンダリアプリ開発 | **C++ネイティブでの本格実装は未着手**(テトリス風・シューティング・リマインダー等)。**チャットは自前のサーバ(`server/chat/`)+ Webクライアント + `ChatScene`として実装済み**(下記「チャット」参照)。**カレンダーは`.ics`の読み取り(`src/apps/calendar/Ical`)・月表示の画面(`CalendarScene`)・HTTPSでの取得(`Calendar_Sync`)まで入った**(下記「iCalendarの読み取り」「CalendarScene 実装詳細」「HTTPS」参照)。**マインスイーパー/リバーシ/ブロック崩し/スクラッチパッド/ペイント/テトリスはLuaアプリ(`sdcard/lua/apps/`、SDスキャンで自動登録)として実装済み**(ペイントは下記「ペイント」参照。リバーシ・マインスイーパー・ブロック崩し・テトリスは`pico.game`の上に作り直した=下記「ボードゲーム4本のpico.gameへの移行」)。**SSHクライアント(`SshScene`)もC++で実装済み**(下記「SSHクライアント」参照)。**TODO/リマインダーはTodoist連携の`TodoScene`として実装済み**(下記「TODOアプリ」参照)。スクラッチパッド(黒/青ペン+消しゴムの手書きメモ)を作る過程で、`CanvasRaster`のリサイズと`pico.canvas_clear/save/load`をLua APIへ追加した(下記「ラスタキャンバスの保存/読み込み」参照)。 |
 | 9 | GBエミュ | **Peanut-GBを採用し、`GameBoyScene`としてPCで動作**。256KBまでのROMはRAMへ、1MBまでは内蔵フラッシュへ書いてXIPで読む。音も鳴る(#11)。実機での速さ・GBCは未(下記「ゲームボーイ」参照)。 |
 | 10 | 外部コントローラー | **入力の窓口(`PadFunctions`)とUSBシリアル経由のPCキーボード入力(`script/tools/pad_serial.py`。Webビルドはページのボタン/キーボード)、GBエミュ・Lua・ステータスバーへの組み込みまで**。方式はWiiクラシックコントローラー(I2C)に決めたが実物・ドライバは未(上記「外部コントローラー」参照)。 |
@@ -36,7 +36,7 @@
   縦書きは `ReaderLayout::LayoutPage()` の行を「列」に読み替え、句読点・括弧・長音を回した字形(フォントに無いので描き分けが要る)で描く。
   ルビを親文字の上(縦書きなら右)に小さく出すには8〜12pxの日本語フォントが要り、フラッシュが数百KB増える。どちらも組み方(State)の形は変えずに足せる。
   青空文庫の zip を本体で解く(`lgfx_miniz` が既に入っている)のも候補。
-- **Markdownブラウザのブラウザ化**: 仕様は `docs/PROTOCOL.md`(HTTP/行指向TSV/SDをキャッシュにする方式)、サーバの参照実装は `script/tools/reference_server.py`。
+- **Markdownブラウザのブラウザ化**: 仕様は `docs/spec/PROTOCOL.md`(HTTP/行指向TSV/SDをキャッシュにする方式)、サーバの参照実装は `script/tools/reference_server.py`。
   **第1段(リンク追従・履歴・ナビゲーションヘッダー)と第2段(キャッシュ層)は実装済み。**
   第1段: `MarkdownScene`が履歴を自前で持ち、`MarkdownView::setOnLinkTap()`から`PICO_IO::resolve()`で相対パスを解決して同じシーンのまま開き直す。
   第2段: `apps/browser/Doc_Cache.hpp`(下記)。
@@ -46,7 +46,7 @@
   第7段(検索・リロード): `apps/browser/Doc_Search` + `dialogs/SearchDialog`(下記「検索」)。
   第8段(マニフェスト): `apps/browser/Manifest`(下記「マニフェスト」)。
   第5段(画像の解決と先読み)・第6段(discovery)も実装済み。
-  **`docs/PROTOCOL.md`のv1はこれで一通り実装できている。**
+  **`docs/spec/PROTOCOL.md`のv1はこれで一通り実装できている。**
   - **リンクごとに`SceneFunctions::Push`してはいけない**。スタック上限が`kMaxSceneDepth=4`しかなく4回で詰む。履歴はシーンが持つ(`kMaxHistory=8`、パス+スクロール位置)。
   - `MarkdownScene`の履歴に載るのは**「場所」でSDパスとURLのどちらもあり得る**。見分けは`UrlTools::Parse()`が通るかどうかの**1箇所だけ**で、`"http://"`の判定を各所へ撒いていない。
   - **`MarkdownScene`のオブジェクトは数KBある**(`DocFetch`約3KB + `DocSearch`2.9KB + 履歴1.6KB等。`Url::path`を192Bへ広げたぶん少し増えた)。

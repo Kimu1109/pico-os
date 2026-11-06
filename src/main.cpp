@@ -220,7 +220,7 @@ void setup() {
 #endif
     LuaDebugger::SetErrorReporter(&CrashDumpFunctions::SaveLuaError);
     LuaDebugger::SetActivityHook(&CrashDumpFunctions::SetLua);
-    //シリアルの"dbg ..."(Luaデバッガ)と"hw ..."(実機の確認。docs/HARDWARE_CHECKLIST.md)と
+    //シリアルの"dbg ..."(Luaデバッガ)と"hw ..."(実機の確認。docs/guide/HARDWARE_CHECKLIST.md)と
     //"hwcfg ..."(液晶・SDの配線。画面が映らなくても直せるように debug.cfg に関係なく受け付ける)
     PadFunctions::extra_line_handler = [](const char* line){
         return LuaDebugger::FeedSerialLine(line) || HwTestFunctions::FeedSerialLine(line) || HwConfigFunctions::FeedSerialLine(line);

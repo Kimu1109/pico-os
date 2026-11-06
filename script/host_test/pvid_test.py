@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""script/tools/generate_pvid.py の検証(docs/VIDEO_FORMAT.md の .pvid)。
+"""script/tools/generate_pvid.py の検証(docs/spec/VIDEO_FORMAT.md の .pvid)。
 
     python3 script/host_test/pvid_test.py [pvid_dumpの実行ファイル]
 

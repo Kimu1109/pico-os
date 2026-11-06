@@ -64,8 +64,8 @@
   落ちる依存(生ソケット/スレッド/ブロッキング待ち)があるため。
 - **公開**: `.github/workflows/web-pages.yml` が `main` へのpushで
   https://kimu1109.github.io/pico-os/playground/ へ自動デプロイする(プルリクではビルド確認のみ)。
-  トップ `/` は入口のページ(`pc/web/landing.html`。Playground・Lua APIリファレンス・GitHubへのリンク)で、
-  Web版本体は `/playground/` へ移した(2026-10-22)。ファームのダウンロードのページ `/download/`(`pc/web/download.html`、
+  トップ `/` は入口のページ(`site/landing.html`。Playground・Lua APIリファレンス・GitHubへのリンク)で、
+  Web版本体は `/playground/` へ移した(2026-10-22)。ファームのダウンロードのページ `/download/`(`site/download.html`、
   見た目はトップと同じ。中身は `docs/design/devtools.md`「Webから取る」)を足した(2026-10-30)。
   Lua APIリファレンス(`lua-api-doc/`)は、本文・和文の見出し・コードをドットの字から読みやすいフォント(Noto Sans JP・等幅のシステムフォント)へ替えた
   (2026-10-30、利用者の希望。英字の見出しなどの Press Start 2P はそのまま)。
@@ -99,3 +99,9 @@
   (`guide/{ui,graphics,data,app}/`・`api/{ui,graphics,game,data,media,system}/`)にし、サイドバーは小分けを `<details>` で畳んで
   今のページを含むものだけ開く(`layouts/partials/sidebar.html`)。移したページは front matter の `aliases` で旧URLから飛ばす。
   定数(`reference/constants.md`)はアイコンを番号ではなく名前だけで載せる(`pico.ICON_<名前>` で引けば番号の変化に追従するため)。
+
+## サイトのページの置き場所 (`site/`) (2026-11-06)
+
+- 入口(`landing.html`)・ダウンロード(`download.html`)・ストアの雛形(`store.html`)は PC/Webビルドとは関係ないので、`pc/web/` からトップの `site/` へ移した。
+  `pc/web/` には Playground の外枠(`shell.html`。Emscripten のビルドが使う)だけが残る。
+- ページの中のリンクは公開後のURLが基準なので、置き場所を変えても中身は変わらない。写すのは `web-pages.yml`、雛形を読むのは `build_app_repo.py site`。

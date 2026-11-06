@@ -253,7 +253,7 @@ Raspberry Pi の nginx でも同じ。仕様は`docs/APP_REPO.md`。既定のURL
 形式は`docs/APP_REPO.md`「パッケージ(.papp)」。
 
 - **ページ**: `https://kimu1109.github.io/pico-os-apps/`(本体のストアの既定のURLと同じ場所の`index.html`。2026-10-26までは`/pico-os/apps/`)。
-  `build_app_repo.py site`が配布物(`catalog.tsv`等)から静的なHTMLを作る(雛形は`pc/web/store.html`、見た目はトップの`landing.html`と同じ)。
+  `build_app_repo.py site`が配布物(`catalog.tsv`等)から静的なHTMLを作る(雛形は`site/store.html`、見た目はトップの`landing.html`と同じ)。
   カードはアイコン・名前・版・作者・説明・権限・DOWNLOAD(パッケージの大きさ)。`status`が`-`でないもの・配っていない(署名の後で中身が変わった)ものは載せない。
   アイコンは`.pimg`をPythonの標準ライブラリだけでPNGにする(CIにPillowが無くてよいように。パレットは`generate_pimg.py`の`PALETTE`を`ast`で読む)。
   JavaScriptは絞り込みとテーマだけ(無くても見られる)。`web-pages.yml`の`assemble`→`verify`の後に`site`を回す。トップから`APP STORE`で入れる。
@@ -392,7 +392,7 @@ script/                build_app_repo.py(pico-os から写す)
   (初めての公開は人が meta.cfg を決めるので`author-sign`で)。どのアプリの鍵とも合わなければ止まる(鍵の取り違え)。`--dry-run`あり。
   2本以上を1つのPRにすると「2つ以上のアプリ」で`needs-review`になるので、管理者がマージする(利用者と決めた。1本ずつのPRにはしない)。
   `--src`はgitが管理しているファイルだけを写す。投稿用リポジトリの`app/`は全部のファイルを配る(`tests/`・`*_test.lua`を除く。隠しファイルとリンクは断る)。
-- **道具の正本は pico-os。** `build_app_repo.py`・`generate_pimg.py`(.pimg→PNGのパレット)・`pc/web/store.html` を投稿用リポジトリの`script/`・`web/`へ写す。
+- **道具の正本は pico-os。** `build_app_repo.py`・`generate_pimg.py`(.pimg→PNGのパレット)・`site/store.html` を投稿用リポジトリの`script/`・`web/`へ写す。
   形式の値はファームの`App_Repo.hpp`と揃える必要があり、それを確かめるテストが pico-os にあるため。直したら写し直す。
   `store.html`は別のサイトに置くので、トップ・PLAY・LUA API へのリンクを絶対URLにした(`site --template`で雛形を選べる)。
 - **`registry-check`**: `meta.cfg`(owners・key・dir・author)・`files.tsv`が`app/`の中身と同じか・`files.sig`が`meta.cfg`の鍵で合うか・

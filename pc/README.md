@@ -354,7 +354,7 @@ UserAgentをログ欄へ書き出す。
 
 | きっかけ | すること |
 |---|---|
-| `main` へpush | Webビルド → **https://kimu1109.github.io/pico-os/playground/ へ公開**(トップ `/` は入口のページ `pc/web/landing.html`) |
+| `main` へpush | Webビルド → **https://kimu1109.github.io/pico-os/playground/ へ公開**(トップ `/` は入口のページ `site/landing.html`) |
 | プルリクエスト | ビルドが通るかだけ確認(公開はしない) |
 | 手動 | Actionsタブの「Run workflow」 |
 

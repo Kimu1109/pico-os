@@ -1125,7 +1125,7 @@ def pimg_to_png(data, palette):
 # ---- Webのページ ----
 PERM_TEXT = {"network": "ネットワーク", "notify": "通知", "sd": "SD全体", "background": "バックグラウンド",
              "microphone": "マイク"}
-STORE_PAGE = os.path.join(ROOT, "pc", "web", "store.html")
+STORE_PAGE = os.path.join(ROOT, "site", "store.html")
 
 
 def _perm_key(p):
@@ -1262,7 +1262,7 @@ def main():
     p = sub.add_parser("site", help="配布物にWebのページとパッケージ(.papp)を足す")
     p.add_argument("--dir", required=True, help="assemble / build の出力")
     p.add_argument("--pubkey")
-    p.add_argument("--template", help="ページの雛形(既定 pc/web/store.html)")
+    p.add_argument("--template", help="ページの雛形(既定 site/store.html)")
     p.set_defaults(func=cmd_site)
 
     p = sub.add_parser("package", help="手元のアプリを1つパッケージ(.papp)にする")

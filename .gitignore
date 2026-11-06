@@ -9,6 +9,8 @@ __pycache__/
 # 画面の大きさ別のビルド(pc/build-320x480 等。pc/README.md「画面の大きさを変える」)も含む
 pc/build*/
 pc/build-web/
+# 手元で撮ったトップのページの画面写真(script/release/web_shots.sh。公開時はCIが撮る)
+site/shots/
 pc/sdcard/sys/log.txt
 pc/sdcard/sys/log.old.txt
 # Claude Codeのworktree隔離エージェント(isolation: "worktree")が作る一時チェックアウト

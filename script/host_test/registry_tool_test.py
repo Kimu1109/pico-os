@@ -126,7 +126,7 @@ def main():
     head = open(os.path.join(dist, "catalog.tsv"), encoding="utf-8").readline().split("\t")
     check(rc == 0 and head[2].strip() == "4000000001", "serial は前に公開したものより1大きくなる")
     rc, text = run("registry-build", "--registry", base, "--key", cat, "--out", dist)
-    rc, text = run("site", "--dir", dist, "--template", os.path.join(ROOT, "pc", "web", "store.html"))
+    rc, text = run("site", "--dir", dist, "--template", os.path.join(ROOT, "site", "store.html"))
     check(rc == 0 and os.path.isfile(os.path.join(dist, "index.html")), "site --template でページを作れる")
 
     # ---- 自動マージの判定 ----

@@ -1,7 +1,7 @@
 /*
   pico-os Lua API リファレンスの見た目。
 
-  トップのページ(pc/web/landing.html)と Playground(pc/web/shell.html)に揃える:
+  トップのページ(site/landing.html)と Playground(pc/web/shell.html)に揃える:
   OSのパレット16色(src/gui/core/GFX_Functions.hpp の DEFAULT_COLORS / DARK_COLORS)・白地に黒の2px線・角丸なし・
   右下に影のある部品・選んでいるものは白黒反転・上端にステータスバー。
   フォントは英字の見出しなど強調に Press Start 2P(ドットの字。日本語の字を持たない)。本文・和文の見出し・コードは読みやすさを優先して

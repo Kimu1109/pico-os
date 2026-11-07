@@ -52,7 +52,7 @@ static void Put(const char* path, const char* name){ HostSd::files[path] = Load(
 // 終わりまで読む(lanes が2なら左右交互)。limit フレームで打ち切る
 static std::vector<int16_t> ReadAll(FlacDecoder& dec, size_t limit = 2000000){
     std::vector<int16_t> all;
-    int16_t buf[512];
+    PcmSample buf[512];   //24bitの版(flac24_test)では32bitの入れ物(16bitの桁)
     const size_t lanes = dec.outChannels();
     size_t frames = 0;
     while(!dec.finished() && frames < limit){
@@ -285,7 +285,7 @@ static void TestSeek(){
         }
         //途中まで読んだ後に前へ・後ろへ
         dec.seekMs(800);
-        int16_t tmp[300];
+        PcmSample tmp[300];
         dec.read(tmp, 300);
         dec.seekMs(200);
         const auto back = ReadAll(dec);

@@ -49,7 +49,7 @@ public:
 
     // 最大 max フレーム(outChannels() が2なら左右交互なので out は max*2 個)を書き、書いたフレーム数を返す。
     // 終わりまで来たら finished() が true になる
-    size_t read(int16_t* out, size_t max) override;
+    size_t read(PcmSample* out, size_t max) override;
     bool finished() const override { return this->finished_; }
 
     Error error() const { return this->error_; }

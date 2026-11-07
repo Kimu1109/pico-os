@@ -21,10 +21,12 @@ static const unsigned long long kFlacMono1000Hash = 0x64A6E9E417FB5B7DULL;
 // kFlacStereo24.flac: 48kHz ステレオ24bit 0.1秒・level 12(9715バイト)
 static const unsigned kFlacStereo24Frames = 4800;
 static const unsigned long long kFlacStereo24Hash = 0xC789445AC8ED8C75ULL;
+static const unsigned long long kFlacStereo24Hash24 = 0xC2A240A1125C5235ULL;   // 24bitのまま
 
 // kFlacStereo24At96k.flac: 96kHz ステレオ24bit 0.1秒・ブロック長4096・level 8(20069バイト)
 static const unsigned kFlacStereo24At96kFrames = 9600;
 static const unsigned long long kFlacStereo24At96kHash = 0xF8DFC8F85BC5BA4DULL;
+static const unsigned long long kFlacStereo24At96kHash24 = 0xC35D4529EE06496DULL;   // 24bitのまま
 
 // kFlacSilence.flac: 44.1kHz ステレオ16bit 0.2秒の無音(定数の副フレーム)(72バイト)
 static const unsigned kFlacSilenceFrames = 8820;

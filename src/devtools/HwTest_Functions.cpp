@@ -206,9 +206,9 @@ namespace {
         const bool alac = AudioFormat::IsM4a(path);
         constexpr size_t kBufSamples = 512;
         const size_t dec_bytes = flac ? sizeof(FlacDecoder) : (alac ? sizeof(AlacDecoder) : sizeof(Mp3Decoder));
-        void* mem = malloc(dec_bytes + kBufSamples * sizeof(int16_t));
+        void* mem = malloc(dec_bytes + kBufSamples * sizeof(PcmSample));
         if(!mem){
-            LOG_SYS_FAIL("[HW] 展開の係のメモリ(%uB)が足りません", (unsigned)(dec_bytes + kBufSamples * sizeof(int16_t)));
+            LOG_SYS_FAIL("[HW] 展開の係のメモリ(%uB)が足りません", (unsigned)(dec_bytes + kBufSamples * sizeof(PcmSample)));
             return;
         }
         Mp3Decoder* mp3 = (flac || alac) ? nullptr : new (mem) Mp3Decoder();
@@ -217,6 +217,7 @@ namespace {
         PcmFileDecoder* dec = mp3 ? static_cast<PcmFileDecoder*>(mp3) : (fl ? static_cast<PcmFileDecoder*>(fl) : static_cast<PcmFileDecoder*>(al));
         const uint32_t rate = SoundFunctions::SampleRate();
         dec->setStereoOutput(true);
+        dec->setWideOutput(SoundFunctions::BitDepth() == SoundFunctions::kBitDepth24);   //ふだんの再生と同じ桁で測る
         if(!dec->open(path, rate)){
             LOG_SYS_FAIL("[HW] 開けません: %s(%s)", path, dec->errorText());
         }else{
@@ -234,7 +235,7 @@ namespace {
                             path, (unsigned long)dec->sampleRate(), (unsigned)dec->channels(), (unsigned)dec->bitsPerSample(),
                             (unsigned long)dec->durationMs(), (unsigned long)al->frameCount(), (unsigned long)rate);
             }
-            int16_t* buf = reinterpret_cast<int16_t*>(static_cast<uint8_t*>(mem) + dec_bytes);
+            PcmSample* buf = reinterpret_cast<PcmSample*>(static_cast<uint8_t*>(mem) + dec_bytes);
             const uint32_t want = rate * sec;
             const uint32_t lanes = dec->outChannels();
             uint32_t got = 0;

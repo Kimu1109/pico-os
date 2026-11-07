@@ -4551,6 +4551,10 @@ msgid "電池では最大20%(スピーカー)"
 msgstr "Max 20%, speaker, on battery"
 
 #: src/gui/scenes/SettingsScene.cpp
+msgid "ビット深度"
+msgstr "Bit depth"
+
+#: src/gui/scenes/SettingsScene.cpp
 msgid "出力先"
 msgstr "Output"
 

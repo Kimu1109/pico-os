@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "config/Hardware_Config.hpp"
 #include "sound/Chip_Synth.hpp"
 
 struct MmlResult;
@@ -78,6 +79,16 @@ namespace SoundFunctions {
     constexpr int           kChannels          = ChipSynth::kChannels;
     constexpr unsigned long kDetectIntervalMs  = 100;
     constexpr uint8_t       kDetectStableCount = 3;    // 100ms×3回続けて同じなら採用
+    // 出力のビット深度(sound.cfg の bit-depth、設定アプリの「ビット深度」)。既定は16bit。
+    // 24bitは PICO_HW_SOUND_24BIT=1 の版(音楽再生に特化した版)だけが選べる。I2Sは32bitスロットで、値は上位24bit。
+    // WAV/MP3/FLAC/ALACは24bitの桁のまま混ぜて送る(24bitの曲の下位ビットと、音量を下げたときの細かさが残る)。
+    // 効果音・曲(MML)・GBの音は16bitで作って8bit上へずらす。切り替えると鳴っている音は止まる(SetBitDepth())
+    constexpr uint8_t       kBitDepth16        = 16;
+    constexpr uint8_t       kBitDepth24        = 24;
+    // 選べるビット深度か(この版で)
+    constexpr bool IsBitDepthSupported(uint8_t bits){
+        return bits == kBitDepth16 || (bits == kBitDepth24 && HardwareConfig::kSound24);
+    }
     // I2Sのバッファ: 1本のワード数(1ワード=左右16bitずつの1サンプル)×8本 ≒ 23ms。周波数に比例させる
     // (22050Hzで64ワード=2KB、44100/48000Hzで128ワード=4KB。48000Hzでは約21ms)。2コア目が専任で流すので短くてよい
     constexpr uint16_t      kBufferWordsLow    = 64;
@@ -150,6 +161,11 @@ namespace SoundFunctions {
     bool RequestSampleRate(uint32_t rate);
     // 今の要求(0=無し)。main.cpp が毎フレーム渡した値
     uint32_t RequestedSampleRate();
+
+    // 出力のビット深度(16か24)。SetBitDepth() は今だけ(sound.cfgへは書かない)。この版で選べない値は false。
+    // 変わると、鳴っている効果音・曲・WAV・GBの音は止まり、2コア目がI2Sを新しいスロットの幅で開き直す
+    uint8_t BitDepth();
+    bool SetBitDepth(uint8_t bits);
 
     // 電池駆動中にkBatteryVolumeCapPercentで頭打ちするか(sound.cfgの battery-cap)。今だけ。
     // スピーカー(MAX98357A)の音割れ対策なので、イヤホンへ鳴らしている間は掛けない

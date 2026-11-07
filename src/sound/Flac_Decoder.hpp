@@ -15,7 +15,7 @@
 // - 対応: 1〜2ch・4〜24bit・kMaxRate Hz 以下・ブロック長 kMaxBlock 以下(CDの音は4096が多く、ffmpegは4608。
 //   44.1k/48kのSubsetはどれも4608以下。`flac` コマンドは88.2k/96kでも4096だが、ffmpegは96kで8192にするので断る)。
 //   これを超えるファイルは Unsupported で断る(黙って壊れた音を出さない)。88.2k/96kは出力の周波数へ下げて鳴らす
-//   24bit等は16bitへ丸める(四捨五入。ディザは掛けない)
+//   24bit等は16bitへ丸める(四捨五入。ディザは掛けない)。24bitの版で setWideOutput(true) なら24bitの桁のまま出す
 // - 頭のID3v2は飛ばす。後ろの余分なデータ(ID3v1・APE等)は、STREAMINFOの総サンプル数で終わりを決めるので読まない
 // - フレームの見出しはCRC-8で確かめる。**フレーム全体のCRC-16は確かめない**(CPUを使うわりに、SDの読み誤りは
 //   ほぼ起きず、壊れたフレームは副フレームの形の検査で大半が弾かれるため)。壊れたフレームは捨て、次の同期語まで進んで続ける
@@ -53,7 +53,7 @@ public:
     void setStereoOutput(bool stereo) override { this->stereo_out_ = stereo; }
     uint8_t outChannels() const override { return this->lanes_; }
 
-    size_t read(int16_t* out, size_t max) override;
+    size_t read(PcmSample* out, size_t max) override;
     bool finished() const override { return this->finished_; }
 
     Error error() const { return this->error_; }

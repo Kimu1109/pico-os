@@ -66,6 +66,8 @@ uint32_t SoundFunctions::SampleRate(){ return kDefaultSampleRate; }
 uint32_t SoundFunctions::ConfiguredSampleRate(){ return kDefaultSampleRate; }
 bool SoundFunctions::SetSampleRate(uint32_t rate){ return IsValidSampleRate(rate); }
 bool SoundFunctions::RequestSampleRate(uint32_t rate){ return rate == 0 || IsValidSampleRate(rate); }
+uint8_t SoundFunctions::BitDepth(){ return kBitDepth16; }
+bool SoundFunctions::SetBitDepth(uint8_t bits){ return bits == kBitDepth16; }
 uint32_t SoundFunctions::RequestedSampleRate(){ return 0; }
 
 bool SoundFunctions::GetBatteryCap(){ return false; }

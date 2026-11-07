@@ -312,6 +312,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - **選べるのは `PICO_HW_SOUND` / `PICO_HW_MIC` / `PICO_HW_BATTERY`(既定は全部1=載せる)**。液晶・タッチ・SDは選べない
   (液晶の種類と画面の大きさは `PICO_PANEL_*` / `SCREEN_WIDTH`、`gui.md`「画面の大きさ」)。
   実機は env の `build_flags` に `-DPICO_HW_SOUND=0` 等(部品は `buildcfg/options.ini` の `opt_no_*`、全部外した例が `env:rpipico2w_minimal`)、PCは `cmake -DPICOOS_HW_SOUND=OFF` 等。
+- **`PICO_HW_SOUND_24BIT`(2026-11-07、既定0)**: 外すのではなく足す旗。1で24bitの音声出力を載せる(音楽版だけ。`sound/output.md`「24bitの出力」)。
 - **外した機能は、実装の代わりに空の実装が入る**(`hal/Sound_Functions_Off.cpp`・`hal/Mic_Functions_Off.cpp`・`hal/Battery_Functions.cpp` の `#else`)。
   本物の `.cpp` は全体を `#if PICO_HW_*` で囲む。口(ヘッダ)は同じなので、呼び出し側(Lua・GB・動画・アラーム等、30か所ほど)は分岐しない。
   空の実装は「つながっていない」と答える: 音は `State::Disconnected`・効果音は捨てる・曲/WAVは理由付きで断る・`GbAudio()` は `nullptr`(エミュは音なしで動く)。
@@ -426,6 +427,7 @@ SDへはLuaアプリも書けるため)/ 開発用に`debug.cfg`の`fw-allow-uns
 - 次(強化の案): MP3の展開の速さの実測、曲の継ぎ目の無音を削る、ID3タグとSD上の曲の索引、ロック画面の再生操作・スリープタイマー・続きから再生、
   再生中の消費電流、イコライザー。FLACとALACの再生は2026-11-05に入った(`sound/playback.md`「FLACの再生」「ALACの再生」)。
   88.2/96kHzの曲と48kHzの出力は2026-11-06(`sound/playback.md`「88.2/96kHzの曲」・`sound/output.md`「48kHzの出力」)。
+  24bitの出力は2026-11-07(この版だけ `PICO_HW_SOUND_24BIT=1`。設定で16/24bitを切り替える。`sound/output.md`「24bitの出力」)。
 
 ## ナイトリービルド (`.github/workflows/nightly.yml`) (2026-10-24)
 

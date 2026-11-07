@@ -48,6 +48,10 @@ namespace {
     constexpr uint32_t    kRatePresets[]      = { SoundFunctions::kSampleRateLow, SoundFunctions::kSampleRateHigh,
                                                   SoundFunctions::kSampleRate48k };
     constexpr const char* kRatePresetLabels[] = { "22kHz", "44.1kHz", "48kHz" };
+    // 出力のビット深度(sound.cfgの bit-depth)。24bitはライン出力のDAC(PCM5102A)向け
+    constexpr uint8_t     kBitsPresets[]      = { SoundFunctions::kBitDepth16, SoundFunctions::kBitDepth24 };
+    constexpr const char* kBitsPresetLabels[] = { "16bit", "24bit" };
+    constexpr int kBitsPresetCount = sizeof(kBitsPresets) / sizeof(kBitsPresets[0]);
     constexpr int kRatePresetCount = sizeof(kRatePresets) / sizeof(kRatePresets[0]);
 
     // 出力先(sound.cfgの route)
@@ -369,7 +373,7 @@ void SettingsScene::revealOpenDropdown(){
     ScrollContainer* sc = this->tab_scroll[(int)this->tab];
     if(!sc) return;
     DropdownMenu* const dropdowns[] = {
-        this->rate_dropdown, this->route_dropdown, this->sleep_dropdown,
+        this->rate_dropdown, this->route_dropdown, this->bits_dropdown, this->sleep_dropdown,
         this->text_size_dropdown, this->timezone_dropdown,
     };
     DropdownMenu* open = nullptr;
@@ -468,6 +472,19 @@ void SettingsScene::updateSampleRate(){
     char buf[12];
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)kRatePresets[idx]);
     PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "sample-rate", buf);
+    SoundFunctions::Beep(880, 120);
+}
+
+void SettingsScene::updateBitDepth(){
+    if(!this->bits_dropdown) return;
+    const int idx = this->bits_dropdown->getSelectedIndex();
+    if(idx < 0 || idx >= kBitsPresetCount || idx == this->bits_selected_index) return;
+    this->bits_selected_index = idx;
+    //切り替えると鳴っている音は止まる。確認音で新しい深さの音を聞かせる
+    SoundFunctions::SetBitDepth(kBitsPresets[idx]);
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%u", (unsigned)kBitsPresets[idx]);
+    PICO_Config::SetValue(PICO_Path::FILE::CFG::SYS_SOUND_CFG, "bit-depth", buf);
     SoundFunctions::Beep(880, 120);
 }
 
@@ -607,6 +624,7 @@ void SettingsScene::onUpdate(){
     this->updateSleep();
     this->updateTextSize();
     this->updateSampleRate();
+    this->updateBitDepth();
     this->updateRoute();
     this->updateTimezone();
     this->revealOpenDropdown();
@@ -681,6 +699,8 @@ void SettingsScene::onExit(){
     this->text_size_dropdown   = nullptr;
     this->rate_title           = nullptr;
     this->rate_dropdown        = nullptr;
+    this->bits_title           = nullptr;
+    this->bits_dropdown        = nullptr;
     this->battery_cap_checkbox = nullptr;
     this->route_title          = nullptr;
     this->route_dropdown       = nullptr;
@@ -851,12 +871,29 @@ void SettingsScene::buildLateRows(const Layout& lay){
             addToTab(Tab::Sound, cap_note);
         }
 
+        //電池の行は下に説明が付くので、出力先とその下はその分(半行)下げる
+        const int16_t below_battery = HardwareConfig::kBattery ? (int16_t)(ROW_H / 2) : 0;
+
+        // ---- 出力のビット深度(sound.cfgの bit-depth)。音タブの出力先の下(24bitの出力を載せた版だけ) ----
+        // 一覧は下へ開くので、上の行のドロップダウン(出力先・音質)より先にAdd()する
+        if constexpr (HardwareConfig::kSound24){
+            const int16_t bits_y = (int16_t)(rowY(5) + below_battery);
+            this->bits_title = new Label<PICO_STR_S>(left, bits_y + 4, TR("ビット深度"));
+            this->bits_title->setFontSize(FontFn::Small);
+            this->bits_dropdown = new DropdownMenu(dropdown_x, bits_y, kDropdownW);
+            for(int i = 0; i < kBitsPresetCount; i++) this->bits_dropdown->add(kBitsPresetLabels[i]);
+            this->bits_selected_index = 0;
+            for(int i = 0; i < kBitsPresetCount; i++) if(SoundFunctions::BitDepth() == kBitsPresets[i]) this->bits_selected_index = i;
+            this->bits_dropdown->setSelectedIndex(this->bits_selected_index);
+            addToTab(Tab::Sound, this->bits_title);
+            addToTab(Tab::Sound, this->bits_dropdown);
+        }
+
         // ---- 出力先(sound.cfgの route)。音タブの4行目(+下に今どちらから鳴るか) ----
         // 一覧は下へ開くので、上の行の音質のドロップダウンより先にAdd()する(音質の一覧がこの行へ重なる)。
         // 「スピーカー」が入るよう他より広くする(開いて下が切れるときはrevealOpenDropdown()がスクロールする)
         constexpr int16_t kRouteDropdownW = 140;
-        //電池の行は下に説明が付くので、出力先はその分(半行)下げる
-        const int16_t route_y = (int16_t)(rowY(3) + (HardwareConfig::kBattery ? ROW_H / 2 : 0));
+        const int16_t route_y = (int16_t)(rowY(3) + below_battery);
         this->route_title = new Label<PICO_STR_S>(left, route_y + 4, TR("出力先"));
         this->route_title->setFontSize(FontFn::Small);
         this->route_dropdown = new DropdownMenu((int16_t)(content.x + content.w - MARGIN - kRouteDropdownW), route_y, kRouteDropdownW);

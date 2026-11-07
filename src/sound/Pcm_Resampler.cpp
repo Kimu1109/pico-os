@@ -1,4 +1,5 @@
 #include "sound/Pcm_Resampler.hpp"
+#include "config/Hardware_Config.hpp"
 
 #include <cmath>
 
@@ -59,9 +60,18 @@ void PcmResampler::pushHistory(const Frame& x){
     if(++this->hist_pos_ >= n) this->hist_pos_ = 0;
 }
 
-int16_t PcmResampler::filterOut(int lane) const {
+PcmSample PcmResampler::filterOut(int lane) const {
     //hist_[hist_pos_] が一番古く、そこから n 個が古い順に並んでいる。左右対称なので両端から足し合わせる
     const Frame* p = this->hist_ + this->hist_pos_;
+#if PICO_HW_SOUND_24BIT
+    //24bitの桁(±2^23)×Q15は32bitを超えるので64bitで足す。16bitの桁の値も同じ式で、範囲の外へ出た分だけ24bitで頭打ち
+    //(16bitの桁で鳴らすときの頭打ちは、列から取り出して足すときに掛かる)
+    int64_t acc = (int64_t)this->taps_[0] * p[this->half_].v[lane];
+    for(uint16_t k = 1; k <= this->half_; k++){
+        acc += (int64_t)this->taps_[k] * ((int64_t)p[this->half_ - k].v[lane] + p[this->half_ + k].v[lane]);
+    }
+    return PcmWide::Clamp24((acc + 16384) >> 15);
+#else
     int32_t acc = (int32_t)this->taps_[0] * p[this->half_].v[lane];
     for(uint16_t k = 1; k <= this->half_; k++){
         acc += (int32_t)this->taps_[k] * ((int32_t)p[this->half_ - k].v[lane] + p[this->half_ + k].v[lane]);
@@ -70,6 +80,7 @@ int16_t PcmResampler::filterOut(int lane) const {
     if(acc > 32767) acc = 32767;
     if(acc < -32768) acc = -32768;
     return (int16_t)acc;
+#endif
 }
 
 // 元のサンプルを1つ(フィルタを掛けるならその後の値を)取り出す
@@ -103,7 +114,7 @@ bool PcmResampler::nextSource(Frame& v){
     return true;
 }
 
-size_t PcmResampler::read(int16_t* out, size_t max){
+size_t PcmResampler::read(PcmSample* out, size_t max){
     if(this->finished_) return 0;
 
     if(!this->primed_){
@@ -131,10 +142,15 @@ size_t PcmResampler::read(int16_t* out, size_t max){
                 this->s1_ = this->s0_;
             }
         }
-        //差は最大65535、frac>>1 は最大32767 なので積は int32 に収まる
+        //16bitの桁: 差は最大65535、frac>>1 は最大32767 なので積は int32 に収まる。24bitの桁は64bitで掛ける
         for(int l = 0; l < lanes; l++){
+#if PICO_HW_SOUND_24BIT
+            const int64_t d = (int64_t)this->s1_.v[l] - this->s0_.v[l];
+            out[n * lanes + l] = (PcmSample)(this->s0_.v[l] + ((d * (int64_t)(this->frac_ >> 1)) >> 15));
+#else
             const int32_t d = (int32_t)this->s1_.v[l] - this->s0_.v[l];
             out[n * lanes + l] = (int16_t)(this->s0_.v[l] + ((d * (int32_t)(this->frac_ >> 1)) >> 15));
+#endif
         }
         n++;
         this->frac_ += this->step_;

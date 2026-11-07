@@ -144,11 +144,28 @@ local function run_chunk(app, path)
     return true
 end
 
+-- アプリのSDでのフォルダ名。pico-os-apps の apps/<id>/app/ は、隣の meta.cfg の dir(ストアが入れる先)
+local function sd_name(dir)
+    local base = dir:match("([^/]+)$") or "app"
+    if base == "app" then
+        local f = io.open(dir:gsub("/app$", "") .. "/meta.cfg", "r")
+        if f then
+            for line in f:lines() do
+                local v = line:match("^%s*dir%s*=%s*(.-)%s*$")
+                if v and v ~= "" then f:close() return v end
+            end
+            f:close()
+        end
+    end
+    return base
+end
+
 -- load_app{ dir=, args=, launch_reason={tag,data}, pad_connected=, stubs={}, setup=false, sd_dir=, lang= }
 --   lang: pico.lang() の値(既定 "ja")。"en" ならアプリの lang/en.lua で pico.tr する
 --   dir     … アプリのフォルダ(既定: テストファイルの上の main.lua のあるフォルダ)
 --   sd_dir  … アプリのSD上のパス(pico.app_dir() の値。既定: sdcard/ の下ならそこからの位置、
---              それ以外は /lua/apps/<フォルダ名>)。SDのそのパスの下を読むと dir の中のファイルが返る
+--              pico-os-apps の apps/<id>/app なら /lua/apps/<meta.cfg の dir>、それ以外は /lua/apps/<フォルダ名>)。
+--              SDのそのパスの下を読むと dir の中のファイルが返る
 --   setup   … false なら setup() を呼ばない(既定は本物と同じく main.lua の後に呼ぶ)
 function M.load_app(opts)
     opts = opts or {}
@@ -165,7 +182,7 @@ function M.load_app(opts)
         sd_dir = dir:sub(#sdcard + 1)
         sd_root = sdcard
     else
-        sd_dir = sd_dir or ("/lua/apps/" .. (dir:match("([^/]+)$") or "app"))
+        sd_dir = sd_dir or ("/lua/apps/" .. sd_name(dir))
         sd_dir = sd_dir:gsub("/+$", "")
         local prefix = sd_dir .. "/"
         sd_root = function(p)

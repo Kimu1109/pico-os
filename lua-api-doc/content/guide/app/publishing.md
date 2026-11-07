@@ -78,8 +78,8 @@ Wi-Fiが無くても入れられるように、アプリを1つのファイル(`
 
 ```sh
 python3 script/release/build_app_repo.py keygen --key ~/.pico-os/author.key      # 1回だけ
-python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app sdcard/lua/apps/テトリス
-# → tetris-2.0.0.papp(app.cfg の id と version から名前を付ける)
+python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app sdcard/lua/apps/わたしのゲーム
+# → <id>-<version>.papp(app.cfg の id と version から名前を付ける)
 ```
 
 配布物を自分のサーバに置くときは、`build` の後に `site` を回すと、同じ場所に一覧のページ(`index.html`)とパッケージができます。

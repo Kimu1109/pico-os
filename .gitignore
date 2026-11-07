@@ -50,29 +50,14 @@ sdcard/sys/recent_files.txt.tmp
 sdcard/sys/crash.pending
 sdcard/crash/
 
-# Luaアプリの pico.store_save() が作る保存ファイル(PCビルドで試すと作られる)
-sdcard/lua/apps/*/store.json
-sdcard/lua/apps/*/store.json.tmp
-# ニュースアプリが保存するRSS(save_to。.part は受信中)
-sdcard/lua/apps/*/news.xml
-sdcard/lua/apps/*/news.xml.part
-sdcard/lua/apps/*/settings.cfg
-sdcard/lua/apps/*/results.txt
-# マイクの動作確認(mic.lua)・pico.mic_start() が録るファイルと、録音アプリの置き場
-sdcard/lua/apps/*/rec_*.wav
+# 標準のLuaアプリ(正本は kimu1109/pico-os-apps)。PC/Webビルド用に build_app_repo.py fetch がストアから取って置く。
+# 遊んで作られるセーブ等もこの下に入る(docs/design/lua-apps.md「標準Luaアプリの置き場所」)
+sdcard/lua/apps/
+# 録音アプリの置き場
 sdcard/recordings/
-sdcard/lua/apps/*/bench.tmp
-sdcard/lua/apps/*/spotify_auth.json
-sdcard/lua/apps/Spotify/art.jpg
-sdcard/lua/apps/Spotify/art.jpg.part
-sdcard/lua/apps/Spotify/player.json
-# 「ブロック」のセーブ(PCビルドで試すと作られる)
-sdcard/lua/apps/ブロック/worlds/
 # アプリストア(PCビルドで試すと作られる。store.cfg には試すときの url/key を書く)
 sdcard/sys/store/
 sdcard/sys/store.cfg
-# OTPの端末の鍵(PC/Webビルドが真似るファイル)
-sdcard/lua/apps/*/log.csv
 # ホストテストのビルド(script/host_test/run.sh が作る)
 script/host_test/build/
 # 辞書の材料から作ったSD用のファイル(script/dict/build.sh が作る)

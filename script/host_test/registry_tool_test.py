@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """投稿用リポジトリ(kimu1109/pico-os-apps)の道具(script/release/build_app_repo.py の
-author-sign / sync-official / registry-check / registry-build)のテスト。
+author-sign / sign-changed / registry-check / registry-build)のテスト。
 
   python3 registry_tool_test.py <作業ディレクトリ>
 
-- sdcard のアプリ2本から author-sign で投稿用リポジトリの形を作り、検査に通るか・配布物が verify / site に通るか
+- 見本のアプリ2本(data/store_apps)から author-sign で投稿用リポジトリの形を作り、検査に通るか・配布物が verify / site に通るか
 - main(base)と PR の中身の組み合わせで、自動でマージしてよいかの判定(owners・版・権限・meta.cfg・status・
   2本以上・アプリの外・新規・削除)
 - 検査で落ちるもの(書き換えた中身・別の鍵の署名・リンク・隠しファイル・id とディレクトリの食い違い・dir の重なり・
   status.tsv の知らない id・Luaの構文)
 - serial が前に公開したものより大きくなるか、author-sign が meta.cfg と違う鍵を断るか
-- sync-official が版の上がった公式アプリだけを写して署名するか(他の作者のアプリ・未公開・版の上げ忘れ・古い版・違う鍵)
+- sign-changed がこの鍵のアプリのうち直したものだけに署名し直すか(他の作者のアプリ・版の上げ忘れ・--dry-run・違う鍵)
 """
 import json
 import os
@@ -21,7 +21,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 TOOL = os.path.join(ROOT, "script", "release", "build_app_repo.py")
-SRC = os.path.join(ROOT, "sdcard", "lua", "apps")
+SRC = os.path.join(HERE, "data", "store_apps")  # 見本のアプリ(data/store_apps/README.md)
 WORK = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "registry_work")
 
 failures = 0
@@ -128,6 +128,46 @@ def main():
     rc, text = run("registry-build", "--registry", base, "--key", cat, "--out", dist)
     rc, text = run("site", "--dir", dist, "--template", os.path.join(ROOT, "site", "store.html"))
     check(rc == 0 and os.path.isfile(os.path.join(dist, "index.html")), "site --template でページを作れる")
+
+    # ---- fetch(ストアから取って PC/Webビルドの SD へ置く)。配布物を file:// で読む ----
+    cat_pub = run("pubkey", "--key", cat)[1].split("公開鍵: ")[1].split()[0]
+    url = "file://" + dist + "/"
+    sd = os.path.join(WORK, "sd")
+
+    def fetch(*extra, pub=cat_pub):
+        return run("fetch", "--url", url, "--pubkey", pub, "--sd", sd, *extra)
+
+    rc, text = fetch()
+    tet_ver = lines[1].split("\t")[1]
+    tet_dir = os.path.join(sd, "lua", "apps", "テトリス")
+    check(rc == 0 and "取った 2件" in text, "fetch: 署名を確かめて2件を取る")
+    check(open(os.path.join(tet_dir, "main.lua"), "rb").read()
+          == open(os.path.join(dist, "tetris", tet_ver, "main.lua"), "rb").read(), "fetch: 中身は配布物と同じ")
+    inst = os.path.join(sd, "sys", "store", "installed")
+    check(open(os.path.join(inst, "tetris.tsv"), "rb").read()
+          == open(os.path.join(dist, "tetris", tet_ver, "files.tsv"), "rb").read(), "fetch: 本体と同じくファイルの一覧を残す")
+    check(open(os.path.join(inst, "reversi.key")).read().strip() == lines[2].split("\t")[8], "fetch: 作者の鍵を覚える")
+    open(os.path.join(tet_dir, "hiscore.txt"), "w").write("1\n")
+    rc, text = fetch()
+    check(rc == 0 and "取った 0件 / 変わりなし 2件" in text, "fetch: 2回目は変わったものだけ取る")
+    os.remove(os.path.join(tet_dir, "bgm.mml"))
+    rc, text = fetch("--only", "tetris")
+    check(rc == 0 and "取った 1件" in text and os.path.isfile(os.path.join(tet_dir, "bgm.mml")), "fetch: 欠けたファイルは取り直す")
+    check(os.path.isfile(os.path.join(tet_dir, "hiscore.txt")), "fetch: アプリが書いたファイルは残る")
+    rc, text = fetch(pub=b"\x01".hex() * 32)
+    check(rc != 0 and "信頼する鍵ではありません" in text, "fetch: 信頼していない鍵の一覧は断る")
+    tampered = os.path.join(WORK, "tampered_dist")
+    shutil.copytree(dist, tampered)
+    with open(os.path.join(tampered, "reversi", lines[2].split("\t")[1], "main.lua"), "a") as f:
+        f.write("-- 書き換え\n")
+    rc, text = run("fetch", "--url", "file://" + tampered + "/", "--pubkey", cat_pub, "--sd", os.path.join(WORK, "sd2"))
+    check(rc != 0 and "中身が files.tsv と合いません" in text, "fetch: 書き換えた中身は断る")
+    with open(os.path.join(base, "apps", "tetris", "app", "dev.lua"), "w") as f:
+        f.write("return 1\n")
+    rc, text = run("fetch", "--registry", base, "--sd", sd)
+    check(rc == 0 and "2件を写しました" in text and os.path.isfile(os.path.join(tet_dir, "dev.lua"))
+          and not os.path.exists(os.path.join(inst, "tetris.tsv")), "fetch --registry: 手元の中身を写し、ストアから入れた印を外す")
+    os.remove(os.path.join(base, "apps", "tetris", "app", "dev.lua"))
 
     # ---- 自動マージの判定 ----
     pr = fork(base, "pr")
@@ -264,45 +304,37 @@ def main():
     run("author-sign", "--key", ka, "--app", os.path.join(pr, "apps", "tetris"))
     must_fail(pr, "Luaの構文の誤りは落ちる", "lib2.lua", luac=luac)
 
-    # ---- sync-official(公式アプリのうち版が上がったものをまとめて写す) ----
-    src = os.path.join(WORK, "src")
-    if os.path.exists(src):
-        shutil.rmtree(src)
-    for d in ("テトリス", "リバーシ", "マインスイーパー"):
-        shutil.copytree(os.path.join(SRC, d), os.path.join(src, d),
-                        ignore=shutil.ignore_patterns("store.json*", "settings.cfg", "hiscore.txt"))
-
-    def sync(reg, key, *extra):
-        return run("sync-official", "--key", key, "--src", src, "--registry", reg, *extra)
+    # ---- sign-changed(この鍵のアプリのうち app/ を直したものにまとめて署名し直す) ----
+    def resign(reg, key, *extra):
+        return run("sign-changed", "--key", key, "--registry", reg, *extra)
 
     pr = fork(base, "pr")
-    rc, text = sync(pr, ka)
-    check(rc == 0 and "0件" in text and "変わりなし: 1件" in text, "版が同じで中身も同じなら何もしない")
-    check("reversi" in text and "鍵がこの鍵と違う" in text, "meta.cfg の鍵が違うアプリ(他の作者)には触れない")
-    check("minesweeper" in text and "まだ公開していない" in text, "投稿用リポジトリに無いアプリは写さず一覧に出す")
+    rc, text = resign(pr, ka)
+    check(rc == 0 and "署名しました: 0件" in text and "変わりなし: 1件" in text and "他の作者のアプリ: 1件" in text,
+          "中身が署名のままなら何もしない(他の作者のアプリは数えるだけ)")
     rc, res, _ = judge(pr, base)
     check(res["ok"] and res["changed"] == [], "何もしなければ投稿用リポジトリは変わらない")
 
-    set_cfg(os.path.join(src, "テトリス", "app.cfg"), "version", "9.0.0")
-    rc, text = sync(pr, ka, "--dry-run")
-    rc2, res, _ = judge(pr, base)
-    check(rc == 0 and "tetris" in text and "9.0.0" in text and res["changed"] == [], "--dry-run は何をするかだけ出して書かない")
-    rc, text = sync(pr, ka)
-    rc2, res, _ = judge(pr, base, "alice")
-    check(rc == 0 and "9.0.0" in text and res["ok"] and res["automerge"], "版を上げたアプリを写して署名し、検査と自動マージの判定に通る")
-    check(read_cfg_version(os.path.join(pr, "apps", "reversi", "app", "app.cfg")) ==
-          read_cfg_version(os.path.join(base, "apps", "reversi", "app", "app.cfg")), "他のアプリは変わらない")
-
-    with open(os.path.join(src, "テトリス", "main.lua"), "a") as f:
+    tet_app = os.path.join(pr, "apps", "tetris", "app")
+    with open(os.path.join(tet_app, "main.lua"), "a") as f:
         f.write("-- 版を上げ忘れた変更\n")
-    rc, text = sync(pr, ka)
-    check(rc == 0 and "版 (9.0.0) が同じ" in text, "版を上げずに中身を変えたものは警告して写さない")
-    set_cfg(os.path.join(src, "テトリス", "app.cfg"), "version", "1.0.0")
-    rc, text = sync(pr, ka)
-    check(rc == 0 and "より古い" in text, "投稿用リポジトリより古い版は警告して写さない")
+    rc, text = resign(pr, ka)
+    check(rc != 0 and "前の署名と同じ" in text, "版を上げずに中身を変えたものは署名しないで止まる")
+    set_cfg(os.path.join(tet_app, "app.cfg"), "version", "9.0.0")
+    rc, text = resign(pr, ka, "--dry-run")
+    rc2, res, _ = judge(pr, base, "alice")
+    check(rc == 0 and "tetris 9.0.0" in text and not res["ok"], "--dry-run は何をするかだけ出して書かない")
+    rc, text = resign(pr, ka)
+    rc2, res, _ = judge(pr, base, "alice")
+    check(rc == 0 and "tetris 9.0.0" in text and res["ok"] and res["automerge"],
+          "版を上げたアプリに署名し、検査と自動マージの判定に通る")
+    check(read_cfg_version(os.path.join(pr, "apps", "reversi", "app", "app.cfg")) ==
+          read_cfg_version(os.path.join(base, "apps", "reversi", "app", "app.cfg")), "他の作者のアプリは変わらない")
+    rc, text = resign(pr, ka)
+    check(rc == 0 and "署名しました: 0件" in text, "署名し直したあとは変わりなし")
 
     kc = key_file("c.key", 0x44)
-    rc, text = sync(pr, kc)
+    rc, text = resign(pr, kc)
     check(rc != 0 and "1つもありません" in text, "どのアプリの鍵とも合わない鍵は止まる")
 
     print("失敗 %d 件" % failures)

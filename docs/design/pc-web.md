@@ -113,4 +113,6 @@
   `PICOOS_SD_ROOT` を指定したときは今までどおりそのSDの隣で、テスト・`web_shots.sh` が一時ディレクトリで分けられる)。Webは仮想FSなので変わらない。
 - 手元に前の `pc/sdcard/` が残っていても(git の管理外の設定・ログ)、うっかりコミットしないよう `.gitignore` で無視したままにした。要る設定は `sdcard/sys/` へ移す。
 - 投稿用リポジトリ(`pico-os-apps`)で公式アプリを写すときの `--src` も `../pico-os/sdcard/lua/apps` になる(lua-apps.md)。
+- **2026-11-07 に標準のLuaアプリは `sdcard/` から外した**(正本は pico-os-apps。lua-apps.md「標準Luaアプリの置き場所」)。
+  PC/Webビルドは `build_app_repo.py fetch` で公開中のストアから取って `sdcard/lua/apps/` へ置く(.gitignore)。Webは `web-pages.yml` がビルドの前に取る。
 - 動かしても正本(配る中身)が汚れないよう書き込みを別の層に分ける案は、ホットリロードとSDへの書き込みのテストの前提が変わるので見送った。

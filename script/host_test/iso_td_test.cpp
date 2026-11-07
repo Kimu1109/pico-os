@@ -8,7 +8,7 @@
 //   HPバーと印: 壁の裏にいても一番上に描かれる・描き直す範囲に入る
 //   世界全体を読み込んだままにする(setKeepAll)
 //   ARENA の地形: ベースと出現位置が平ら・丸石と砂利・木が無い・多くの種で出現位置からベースへ道がある・種で決まる
-// 面の絵はリポジトリの sdcard/lua/apps/ブロック/faces.pimg を使う(第1引数にリポジトリのルート)。
+// 面の絵は script/host_test/data/iso/faces.pimg(標準のLuaアプリ「ブロック」の faces.pimg の写し。data/iso/README.md)を使う(第1引数にリポジトリのルート)。
 #include "iso/Iso_World.hpp"
 #include "iso/Iso_Path.hpp"
 #include "iso/Iso_Flow.hpp"
@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     const std::string root = argc > 1 ? argv[1] : ".";
     {
-        std::ifstream f(root + "/sdcard/lua/apps/ブロック/faces.pimg", std::ios::binary);
+        std::ifstream f(root + "/script/host_test/data/iso/faces.pimg", std::ios::binary);
         const std::string s((std::istreambuf_iterator<char>(f)), {});
         if (s.size() < 5) { printf("[FAIL] faces.pimg を読めません\n"); return 1; }
         SW = (uint8_t)s[0] | ((uint8_t)s[1] << 8);

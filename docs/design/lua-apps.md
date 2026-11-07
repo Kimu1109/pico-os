@@ -3,7 +3,7 @@
 > `CLAUDE.md`から分けた設計記録(2026-10-20)。何がどこにあるかの地図は`CLAUDE.md`、進み具合は`SUMMARY.md`。
 > パスはリポジトリのルートから。「上の「〜」」等の参照先が別のファイルにあるときは、`CLAUDE.md`の「設計記録の索引」で節の名前から探すこと。
 
-## ペイント(`sdcard/lua/apps/ペイント/`、2026-09-24実装)
+## ペイント(`pico-os-apps/apps/paint/app/`、2026-09-24実装)
 
 SUMMARY.md #8の「ペイント」。**Luaアプリ**で、描画の中身は全て`CanvasRaster`(C++)に足した
 (Luaにはピクセルを読む口が無く、塗りつぶしをLuaで書くと遅すぎるため)。スクリプトは道具の切り替えと
@@ -53,7 +53,7 @@ SUMMARY.md #8の「ペイント」。**Luaアプリ**で、描画の中身は全
   `lua_engine_test.cpp`で確認。輪郭の図形は`fillCircle`/`fillTriangle`がスタブで無描画なので、見た目は
   PCビルドの`--tap`で確認した。
 
-## テトリス(`sdcard/lua/apps/テトリス/`、2026-09-26実装、2026-10-07に`pico.game`へ移行)
+## テトリス(`pico-os-apps/apps/tetris/app/`、2026-09-26実装、2026-10-07に`pico.game`へ移行)
 
 SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下記「ボードゲーム4本のpico.gameへの移行」(盤面=タイルマップ、落ちるミノ=スプライト)。
 
@@ -61,7 +61,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
   LuaSceneが本体より先に実行しグローバル変数`LIB`で渡る。`main.lua`の16KiB制限は`pico.game`移行でゆとりができた)/
   `blocks.pimg` / `bgm.mml` / `hiscore.txt`(書き出し)/ `app.cfg` / `icon.pimg`。
 - **ミノの絵は画像**: 12x12のタイルを横に10枚(I O T S Z J L ゴースト 消えるラインの白 空きマスの黒)並べた`blocks.pimg`(120x12)。
-  盤面のタイルマップ・スプライト・HOLD/NEXTの`pico.draw_image_part()`の全部で同じ画像を使う。`script/assets/generate_tetris_blocks.py`がパレット番号で
+  盤面のタイルマップ・スプライト・HOLD/NEXTの`pico.draw_image_part()`の全部で同じ画像を使う。`pico-os-apps/script/assets/generate_tetris_blocks.py`がパレット番号で
   直接描く(PIL不要)。パレットに橙が無いのでLは灰。
 - 規則: SRSの回転と壁蹴り(左回転は「1つ前の向きからの右回転」の候補の符号反転で引く)、7種1巡、NEXT3つ、HOLD(1個につき1回)、ゴースト、
   接地から500msで固定(動かすと猶予が戻る、15回まで)、左右の長押しは170ms後に50msごと、ソフトドロップ30ms/段(+1点)、ハードドロップ(+2点/段)、
@@ -84,7 +84,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 ## ブロック崩し / マインスイーパーの効果音・コントローラー(2026-09-26、2026-10-07に`pico.game`へ移行)
 
 (盤面・画面の作りは下記「ボードゲーム4本のpico.gameへの移行」。ここは音とコントローラーの決まり)
-- **ブロック崩し**(`sdcard/lua/apps/ブロック崩し/`): 効果音はチャンネル2で**1フレームに1回、優先度の高いものだけ**鳴らす
+- **ブロック崩し**(`pico-os-apps/apps/breakout/app/`): 効果音はチャンネル2で**1フレームに1回、優先度の高いものだけ**鳴らす
   (`se(pri, ...)`で候補を覚え、`g:on_update()`の最後で1回`pico.sound_play`。ボールが16個あると命令の列(32件)が溢れるため)。
   壁<パドル/壊せないブロック<ブロック(色で高さが変わる)<アイテム。ミス/ステージクリア/全クリア/ゲームオーバーは
   `pico.music_play_text()`の短いジングル(チャンネル1なので効果音とぶつからない)。
@@ -98,7 +98,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 `pico.draw_tilemap(handle, tw, th, data, cols, x, y)`(`LuaEngine_Ext.cpp`。1バイト1マスの文字列を今のクリップにかかるマスだけ
 `DrawPimgSprite()`で描く。`draw_image_part`と同じ「クリップを狭めて画像全体をずらしてpushSprite」)と、
 `pico.draw_image_part`の8・9番目の引数`flip_x/flip_y`(反転はpushSpriteでできないので1画素ずつ。`draw_image_ex`と同じ書き方)。
-ドキュメントは`lua-api-doc/content/api/game/engine.md`、サンプルは`sdcard/lua/apps/ジャンプアクション/`(絵は`script/assets/generate_platformer_sheet.py`)。
+ドキュメントは`lua-api-doc/content/api/game/engine.md`、サンプルは`pico-os-apps/apps/jump-action/app/`(絵は`pico-os-apps/script/assets/generate_platformer_sheet.py`)。
 
 - **構成**: `game.new{...}`がCanvasを1枚作り、`pico.every(1, ...)`で毎フレーム`g:step()`(`manual=true`なら自分で呼ぶ)。
   1回のdtは0.05秒で頭打ち(遅いフレームで壁をすり抜けないため)。順番: 入力 → ゲーム内タイマー → 状態の`update` → `g:on_update` →
@@ -132,9 +132,9 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
   oneway・押す/壁/積み重ね・動く足場・速度の分け合い/入れ替わり/質量比・世界の重力)。**実機では未確認**(総当たりの命令数)。
   **上がる足場に乗ったものは`_ride`で運んだ後、足が足場の上面から0.5px以内なら`on_ground`/`_ride`を立て直す**
   (運ぶと重なりが生まれず、1フレームおきに`on_ground`が外れてジャンプが効かなくなった)。
-- **サンプル「おしてのぼれ」(`sdcard/lua/apps/おしてのぼれ/`、2026-10-07)**: 物理を使うパズルアクション3ステージ
+- **サンプル「おしてのぼれ」(`pico-os-apps/apps/oshite/app/`、2026-10-07)**: 物理を使うパズルアクション3ステージ
   (`stages.lua`。1=木箱を押して踏み台・横の足場・すり抜け床、2=重い鉄箱(mass 4)でスイッチを押さえて扉を開ける・ばね、
-  3=縦の足場で棚へ上がり、棚の箱を落として2段に積む)。絵は`script/assets/generate_physics_sheet.py`(地面・主人公・旗は
+  3=縦の足場で棚へ上がり、棚の箱を落として2段に積む)。絵は`pico-os-apps/script/assets/generate_physics_sheet.py`(地面・主人公・旗は
   `generate_platformer_sheet.py`から借りる)。スイッチは押さえている間だけ扉が開き、扉のマスに何かが重なっていれば閉じない。
   ばねは`g:solid(t, "spring", fn)`で`ny==-1`のとき打ち上げる(Aを離して低く跳ぶ処理は自分のジャンプのときだけ。
   ばねの勢いまで切っていた)。押す速さは箱の`friction`で決まる(木箱400で約55px/秒、鉄箱150で約30px/秒)。
@@ -165,7 +165,7 @@ SUMMARY.md #8の「テトリス風」。**本体はLuaアプリ**。作りは下
 - **ダイアログをやめて`g:state`の枠にした**: リバーシ(パス・結果)とブロック崩し(ステージクリア・ゲームオーバー・全クリア)は`pico.show_message`だった。
   今は盤面の真ん中へ`draw`で枠を出し、タップ/A/STARTで進む(パスは1.8秒でも進む)。コントローラーでも同じ操作になり、`closed`の自前処理(`pico.destroy`して自分でfnを呼ぶ)が要らなくなった。
 - **マインスイーパーの難易度**は`TabBar`から、最初の`menu`の状態(大きな3ボタン)と、上の「難度」ボタンで`menu`へ戻る形に変えた。選び直すたびに`g:clear()`してタイルマップを作り直す
-  (マスの大きさが違うため。画像は難易度ごとに1枚。`digits/flag/mine.pimg`は`script/assets/generate_minesweeper_tiles.py`に文字で埋め込んで消した)。
+  (マスの大きさが違うため。画像は難易度ごとに1枚。`digits/flag/mine.pimg`は`pico-os-apps/script/assets/generate_minesweeper_tiles.py`に文字で埋め込んで消した)。
   上級が300px(コンテンツ領域)にちょうど収まるよう、見出しの高さは58px。
 - **ブロック崩しのボール**の位置と速さは自前(`cx` `cy` `dx` `dy`。**`vx`/`vy`にするとエンジンが勝手に1回で動かす**)。1フレームを6px以下に刻んで壁・ブロック・パドルへ当てる
   (エンジンの1回の移動だとブロックをすり抜ける)。ブロックとの当たりは外接矩形がかかるマスだけ`map:get(c, r)`で引く(以前は全ブロックを回していた)。
@@ -384,14 +384,12 @@ script/                build_app_repo.py(pico-os から写す)
 
 ### 移したときの決め事(2026-10-26)
 
-- **公式アプリの開発元は pico-os の`sdcard/lua/apps/`のまま。** ホストテスト(`tetris_test`等)・`picoos lua-test`・PC/Webビルドがそこを読むため。
-  投稿用リポジトリは「配った版」を持つ。更新は`author-sign --src sdcard/lua/apps/<dir>`で`app/`へ写して署名し、PRを出す
-  (owners なので、版が上がっていて権限が増えていなければ自動でマージされる。公式アプリも他の作者と同じ道を通る)。
-  **まとめて更新するときは`sync-official`**(2026-10-26): `sdcard/lua/apps/`のうち、投稿用リポジトリに同じ id があり`meta.cfg`の鍵が
-  `--key`のものだけを見て、版が上がったものを写して署名する。版を上げずに中身が変わったもの・古い版は警告だけ、未公開のアプリは一覧に出すだけ
-  (初めての公開は人が meta.cfg を決めるので`author-sign`で)。どのアプリの鍵とも合わなければ止まる(鍵の取り違え)。`--dry-run`あり。
-  2本以上を1つのPRにすると「2つ以上のアプリ」で`needs-review`になるので、管理者がマージする(利用者と決めた。1本ずつのPRにはしない)。
-  `--src`はgitが管理しているファイルだけを写す。投稿用リポジトリの`app/`は全部のファイルを配る(`tests/`・`*_test.lua`を除く。隠しファイルとリンクは断る)。
+- ~~**公式アプリの開発元は pico-os の`sdcard/lua/apps/`のまま。**~~ **2026-11-07 にやめた**(下の「標準Luaアプリの置き場所」。
+  正本は投稿用リポジトリの`apps/<id>/app/`になり、`sync-official`は`sign-changed`に置き換えた)。
+  当時の決め事: ホストテスト・`picoos lua-test`・PC/Webビルドが pico-os の`sdcard/lua/apps/`を読むので、そこを開発元にし、
+  投稿用リポジトリは「配った版」を持つ。更新は`author-sign --src`か`sync-official`(版が上がったものだけ写して署名)で写していた。
+  2本以上を1つのPRにすると「2つ以上のアプリ」で`needs-review`になるので、管理者がマージする(利用者と決めた。1本ずつのPRにはしない。今も同じ)。
+  投稿用リポジトリの`app/`は全部のファイルを配る(`tests/`・`*_test.lua`を除く。隠しファイルとリンクは断る)。
 - **道具の正本は pico-os。** `build_app_repo.py`・`generate_pimg.py`(.pimg→PNGのパレット)・`site/store.html` を投稿用リポジトリの`script/`・`web/`へ写す。
   形式の値はファームの`App_Repo.hpp`と揃える必要があり、それを確かめるテストが pico-os にあるため。直したら写し直す。
   `store.html`は別のサイトに置くので、トップ・PLAY・LUA API へのリンクを絶対URLにした(`site --template`で雛形を選べる)。
@@ -416,7 +414,45 @@ script/                build_app_repo.py(pico-os から写す)
 - ファームを更新せずにカタログ鍵を失効させること。
 - ダウンロード数・評価・依存関係・本体の版の条件。
 
-## 動作確認アプリ(`sdcard/lua/apps/動作確認/`、2026-10-10)
+## 標準Luaアプリの置き場所(pico-os-apps へ統一、2026-11-07)
+
+標準のLuaアプリ(テトリス・ペイント・ゾンビTD・動作確認 等の20本)の**正本は投稿用リポジトリ [`kimu1109/pico-os-apps`](https://github.com/Kimu1109/pico-os-apps) の
+`apps/<id>/app/`だけ**にした。pico-os には置かない(`sdcard/lua/apps/`は .gitignore)。設計記録で`pico-os-apps/…`と書くのは、そのリポジトリの中のパス。
+
+- **なぜ**: 前は pico-os の`sdcard/lua/apps/`(開発元)と pico-os-apps の`app/`(配った版)の2か所に同じアプリがあり、
+  版を上げずに pico-os 側だけ直したもの(訳のファイルの1行目・ゾンビTD・動作確認)が16本ずれていた(利用者の要望で統一)。
+- **PC/Webビルド**: `build_app_repo.py fetch` が公開中のストア(`https://kimu1109.github.io/pico-os-apps/`)から取って`sdcard/lua/apps/<dir>/`へ置く。
+  本体のストアと同じ順で確かめる: catalog.sig(信頼するのは`App_Repo_Keys.hpp`の`kBuiltin`。`--pubkey`で替えられる)→ files.tsv の SHA-256 →
+  files.sig(作者の鍵)→ 各ファイルの大きさと SHA-256。`status`が`-`でないものは入れない。
+  入れたものは本体と同じく`/sys/store/installed/<id>.tsv`・`.key`に残すので、PCビルドの「ストア」でも「入っている」と見え、新しい版が出れば更新できる。
+  2回目からは一覧と中身が同じものを取らない。前の一覧にあって新しい一覧に無いファイルは消し、アプリが書いたファイル(セーブ等)は残す。
+  - Webビルド: `web-pages.yml`がビルドの前に`fetch`して`index.data`へ焼き込む(辞書と同じ扱い)。ブラウザの中のストアは HTTPS を持たないので取れない(実行時に取る形は選ばなかった。利用者と決めた)。
+  - アプリを直しながらPCビルドで見るときは`fetch --registry ../pico-os-apps [--only <id>]`(手元の`app/`をそのまま写す。署名は見ない。
+    ストアから入れた印は外す)。`picoos app-repo fetch …`でも同じ。
+  - 選ばなかった形: CMake の configure の中で取る(ネットが無いと configure が止まる。取るのは明示の1手にした)・git submodule(pico-os の更新のたびに指す先を上げる手間が増える)。
+- **アプリのテスト**: アプリと一緒に pico-os-apps の`tests/host/`へ移した(`tetris_test.lua`等8本の Lua と、`lua_ext_test`から切り出した
+  `zombie_td_test.cpp`・`lua_socket_test`から切り出した`socket_apps_test.cpp`)。中身は pico-os の土台(`pico_mock.lua`・`pico.game`・`LuaEngine`・
+  `socket_fake_servers.hpp`)を使うので、**pico-os のホストテストの`lua-apps`グループ**が作って回す(`script/host_test/CMakeLists.txt`。
+  `PICOOS_APPS_DIR`か隣の`../pico-os-apps`。テストの名前は`apps_<名前>`)。`.lua`には`lua_script_test`が`ROOT_DIR`(pico-os)と`APPS_DIR`(pico-os-apps)を渡す。
+  - 回す所は2つ: pico-os の`host-tests.yml`(lua-apps のジョブだけ pico-os-apps の main を取る。pico-os を変えて標準アプリが壊れないか)と、
+    pico-os-apps の`test.yml`(pico-os の main を取る。アプリを変えて壊れないか。`picoos lua-test`の`tests/`と`i18n.py lua-check`も)。
+  - pico-os に残したもの: pico.* そのもののテスト。`iso_world_test`等が読む面の絵は`script/host_test/data/iso/faces.pimg`(ブロックの絵の写し)、
+    ストアの道具とインストールのテスト(`app_store_fixture.py`・`app_package_tool_test.py`・`registry_tool_test.py`)の材料は
+    `script/host_test/data/store_apps/`の小さな見本(本物と同じ id・ディレクトリ名・ファイルの並び。中身は動かない)。
+- **絵を作る道具**(前の`script/assets/`・`picoos gen`)と、アイコンの元絵は pico-os-apps の`script/assets/`へ移した。
+- **訳**: `i18n.py --check`は Luaアプリを見なくなった(`sdcard/lua/apps/`はストアから取った写し)。`i18n.py lua-check <アプリのフォルダ>...`を足し、
+  pico-os-apps のCIが`apps/*/app`で回す。`lang/<言語>.lua`の1行目のアプリの名前は、`apps/<id>/app/`なら`meta.cfg`の`dir`。
+- **公式アプリの更新(利用者)**: pico-os-apps で`app/`を直して`app.cfg`の`version`を上げ、`build_app_repo.py sign-changed --key ~/.pico-os/app_repo.key`
+  (この鍵の`meta.cfg`のアプリのうち、`files.tsv`と中身が違うものに署名し直す。中身が変わったのに前の署名と同じ版のものは署名せずに止まる。
+  前の署名が今の版のままで通るかで見分ける)→ PR。`sync-official`(pico-os の`sdcard`から写す)は消した。
+- **移したときの中身**: pico-os の`sdcard/lua/apps/`(gitが管理していたファイル。`tests/`も)で`app/`を置き換え、中身が変わった16本は版の最後の桁を1つ上げた
+  (天気だけ同じ)。まだ公開していなかった MQTTリモコン・HAパネル・UDPツールは`meta.cfg`(owners = kimu1109、鍵は公式アプリと同じ`cdae7ba2…`)を足した。
+  **署名は利用者の手元の作者の鍵でしかできないので、移したPRは`sign-changed`を回すまで検査に通らない**(新しい3本は人が見てマージ)。
+- 検証: ホストテストの core・lua-scene・lua-ext・lua-apps(pico-os-apps に移したテストが全部通る)、`registry_tool_test`(fetch: 署名を確かめて取る・
+  一覧を残す・2回目は取らない・欠けたファイルを取り直す・セーブを残す・信頼していない鍵・書き換えた中身・`--registry`。sign-changed: 変わりなし・
+  版の上げ忘れ・`--dry-run`・署名し直すと自動マージの判定に通る・違う鍵)、公開中のストアからの`fetch`(17本)とPCビルドの`--shot`。
+
+## 動作確認アプリ(`pico-os-apps/apps/api-test/app/`、2026-10-10)
 
 APIごとに増えていた動作確認用のアプリを1つにまとめた。`main.lua`はメニューで、各ページ(同じフォルダの`*.lua`)を
 `pico.push_scene`で開き、ページの「戻る」(`pico.pop()`)でメニューへ戻る。権限(`app.cfg`。通知のため`permission_notify=true`)は
@@ -442,7 +478,7 @@ APIごとに増えていた動作確認用のアプリを1つにまとめた。`
 - 検証: PCビルドの`--tap`/`--shot`で全ページの表示、「基本の部品」の図形タブ、ページの「戻る」でメニューへ戻ること、
   通知を出して通知センターから開くとメニュー→通知のページ(`tag`/`data`付き)へ進むことを確認。
 
-## QRコード(`sdcard/lua/apps/QRコード/`、2026-10-25)
+## QRコード(`pico-os-apps/apps/qrcode/app/`、2026-10-25)
 
 よく見せるQR(サイト・SNSのアカウントのURL・連絡先・Wi-Fi・メモ)を保存しておき、一覧から選んで大きく出すアプリ。部品は `QRCodeView`(`gui.md`「QRコード」)。
 
@@ -464,7 +500,7 @@ APIごとに増えていた動作確認用のアプリを1つにまとめた。`
   PCビルドで4種を表示してOpenCVで読み、元の文字(vCard・逃がしたWi-Fi・日本語の複数行)に戻ることと、削除→`enc2:`で保存→開き直して戻ることを確かめた。
   **実機の画面をスマホのカメラで読めることを確認済み(2026-10-25)**。
 
-## MQTTリモコン(`sdcard/lua/apps/MQTTリモコン/`、2026-10-29)
+## MQTTリモコン(`pico-os-apps/apps/mqtt-remote/app/`、2026-10-29)
 
 `pico.socket.mqtt` のサンプル(使い方の説明は `lua-api-doc/content/examples/mqtt-remote.md`)。
 MQTTのブローカへ繋ぎ、機器(最大6台)を2列のタイルで点け消しする。
@@ -482,9 +518,9 @@ MQTTのブローカへ繋ぎ、機器(最大6台)を2列のタイルで点け消
   タップ→状態が返って色が変わるところまで見た。この確認で、**読み残しを抱えたまま閉じるとRSTでDISCONNECTが捨てられる**
   不具合が見つかり、`MqttClient::disconnect()` で先に読み捨てるようにした。
 - 実機・本物の Home Assistant では未確認(Todoist参照)。
-- アイコンは `script/assets/generate_mqtt_remote_icon.py`(紺の角丸に電源の印と電波)。
+- アイコンは `pico-os-apps/script/assets/generate_mqtt_remote_icon.py`(紺の角丸に電源の印と電波)。
 
-## HAパネル(`sdcard/lua/apps/HAパネル/`、2026-10-29)
+## HAパネル(`pico-os-apps/apps/ha-panel/app/`、2026-10-29)
 
 `pico.socket.websocket` のサンプル(使い方の説明は `lua-api-doc/content/examples/ha-panel.md`)。
 Home Assistant の WebSocket API へ直接繋ぎ、選んだエンティティ(最大6つ)の状態を即座に映し、タップで点け消しする。
@@ -502,9 +538,9 @@ MQTTリモコンと違い、HA側にMQTTの設定が要らない(長期アクセ
   認証・頼んだエンティティだけの購読・状態と単位の表示・toggle と変化の反映・失敗の result・戻ると close・
   違うトークンで繋ぎ直さないことを確かめる。PCビルドでは使い捨ての偽物で6つ並べ、タップで切り替わるところまで見た。
 - 実機・本物の Home Assistant では未確認(Todoist参照)。
-- アイコンは `script/assets/generate_ha_panel_icon.py`(水色の角丸に白い家と電波)。
+- アイコンは `pico-os-apps/script/assets/generate_ha_panel_icon.py`(水色の角丸に白い家と電波)。
 
-## UDPツール(`sdcard/lua/apps/UDPツール/`、2026-10-29)
+## UDPツール(`pico-os-apps/apps/udp-tool/app/`、2026-10-29)
 
 `pico.socket.udp` のサンプル(使い方の説明は `lua-api-doc/content/examples/udp-tool.md`)。
 
@@ -518,4 +554,4 @@ MQTTリモコンと違い、HA側にMQTTの設定が要らない(長期アクセ
 - 設定は `store.json`(秘密が無いので暗号化しない)。
 - **検証**: `lua_socket_test` が `main.lua` をそのまま UDP の echo へ向け、送る・返事を並べる・16進・宛先と違う送り元・
   マジックパケットのバイト列を確かめる。PCビルドでは小さな echo を相手に記録の並びを見た。
-- 実機では未確認(Todoist参照)。アイコンは `script/assets/generate_udp_tool_icon.py`(緑の角丸に送る/受けるの矢印)。
+- 実機では未確認(Todoist参照)。アイコンは `pico-os-apps/script/assets/generate_udp_tool_icon.py`(緑の角丸に送る/受けるの矢印)。

@@ -3,6 +3,9 @@
 PCビルドがSDカードとして読むディレクトリ。実機のSDに置くファイルを
 そのまま同じ構成で置けば、PCでも同じパスで読める。
 
+標準のLuaアプリ(`lua/apps/`)はリポジトリに含めていない(正本は kimu1109/pico-os-apps)。
+`python3 script/release/build_app_repo.py fetch` でアプリストアから取って置く(`pc/README.md`「SDカード」)。
+
 IMEの辞書(`sys/ime/skk_body.tsv` / `sys/ime/skk_index.tsv`)は大きいためリポジトリには
 含めていない。日本語入力をPCで試す場合は、実機のSDから同じ場所へコピーするか、
 `script/dict/convert_skk_dict.py` で生成すること。無くても起動はする(変換候補が出ないだけ)。

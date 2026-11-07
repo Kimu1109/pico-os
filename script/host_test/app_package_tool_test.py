@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "release"))
 import build_app_repo as b  # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-SRC = os.path.join(ROOT, "sdcard", "lua", "apps")
+SRC = os.path.join(HERE, "data", "store_apps")  # 見本のアプリ(data/store_apps/README.md)
 SEED_A = bytes(range(1, 33))
 SEED_B = bytes(range(101, 133))
 
@@ -76,7 +76,7 @@ def main():
     # ---- C++ に読ませる変種 ----
     src = os.path.join(work, "src")
     os.makedirs(src)
-    # 版はここで決める(sdcard の見本のアプリの版が上がっても、テストの版の前後関係が崩れないように)
+    # 版はここで決める(見本のアプリ(data/store_apps)の版が上がっても、テストの版の前後関係が崩れないように)
     for name, version in (("テトリス", "2.0.0"), ("リバーシ", "2.0.0"), ("ブロック", "1.2.0")):
         set_cfg(os.path.join(copy_app(name, src), "app.cfg"), "version", version)
     good = make(src, "テトリス")

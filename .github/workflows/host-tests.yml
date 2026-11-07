@@ -36,7 +36,7 @@ jobs:
       matrix:
         # run.sh --list(= CMakeLists.txt の HOST_TEST_GROUPS)と同じ並び。
         # グループを足したらここにも足すこと(下の確認ジョブが見張る)
-        group: [core, apps, media, input, calc, widget, lua-base, lua-engine, lua-ext, lua-sandbox, lua-scene, ssh]
+        group: [core, apps, media, input, calc, widget, lua-base, lua-engine, lua-ext, lua-sandbox, lua-scene, lua-apps, ssh]
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +57,19 @@ jobs:
             python3 -c 'import numpy' && command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null
           fi
 
+      # 標準のLuaアプリの正本とそのテストは kimu1109/pico-os-apps(docs/design/lua-apps.md「標準Luaアプリの置き場所」)。
+      # pico-os を変えて標準アプリが壊れないかを、その main の tests/host/ で見る(アプリ側の変更は向こうのCIが見る)
+      - name: pico-os-apps を取る(lua-apps だけ)
+        if: matrix.group == 'lua-apps'
+        uses: actions/checkout@v4
+        with:
+          repository: Kimu1109/pico-os-apps
+          path: pico-os-apps
+          persist-credentials: false
+
       - name: ホストテストを回す(${{ matrix.group }})
+        env:
+          PICOOS_APPS_DIR: ${{ matrix.group == 'lua-apps' && format('{0}/pico-os-apps', github.workspace) || '' }}
         run: sh script/host_test/run.sh ${{ matrix.group }}
 
   # run.sh に足したグループが matrix から漏れていないかを見る

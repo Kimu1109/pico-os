@@ -92,7 +92,7 @@ Escキーやコントローラーの HOME でも戻れます(横取りしたい�
 
 ## PCで試す
 
-リポジトリのPC版(`pc/`)でもアプリを動かせます。リポジトリの `sdcard/` がSDカードの代わりなので、`sdcard/lua/apps/<アプリ名>/main.lua` に置いてPC版を起動します(ビルドの仕方はリポジトリの `pc/README.md`)。ブラウザで動く [Playground](../../playground/) では、OSに入っているサンプルアプリを試せます。保存するたびに開き直すホットリロードと自動テストは [PCでの開発](../guide/app/testing/) にあります。
+リポジトリのPC版(`pc/`)でもアプリを動かせます。リポジトリの `sdcard/` がSDカードの代わりなので、`sdcard/lua/apps/<アプリ名>/main.lua` に置いてPC版を起動します(ビルドの仕方はリポジトリの `pc/README.md`)。OSに入っているサンプルアプリ(標準のLuaアプリ)はリポジトリには入っていないので、`python3 script/release/build_app_repo.py fetch` でアプリストアから取ってきます。ブラウザで動く [Playground](../../playground/) では、サンプルアプリをそのまま試せます。保存するたびに開き直すホットリロードと自動テストは [PCでの開発](../guide/app/testing/) にあります。
 
 ## 次に読むもの
 

@@ -1,6 +1,6 @@
 -- pico_test.lua(picoos lua-test のテストランナー)自身のテスト。lua_script_test から run.sh が呼ぶ。
 -- script/host_test/lua/test_app(小さなアプリ)のテストを動かし、成功/失敗の数と出力を確かめる。
--- 併せて sdcard/lua/apps/*/tests/ の見本のテストが通ることも見る(壊れた見本を残さないため)。
+-- (標準のLuaアプリの見本のテスト(動作確認の tests/menu_test.lua)は、kimu1109/pico-os-apps のCIが picoos lua-test で回す)
 local T = dofile(ROOT_DIR .. "/script/lua_test/pico_test.lua")
 local fails = 0
 local function check(c, m) if c then print("[ OK ] " .. m) else print("[FAIL] " .. m) fails = fails + 1 end end
@@ -34,13 +34,6 @@ if f then
     check(failed == 1 and table.concat(lines, "\n"):find("(読み込み)", 1, true), "読み込みの失敗を数える")
     os.remove(bad)
 end
-
--- 見本のテスト
-lines = {}
-pass, failed = T.run_files({ ROOT_DIR .. "/sdcard/lua/apps/動作確認/tests/menu_test.lua" },
-                           { out = function(s) lines[#lines + 1] = s end })
-print(table.concat(lines, "\n"))
-check(pass == 5 and failed == 0, "見本(動作確認)のテストが通る")
 
 if fails > 0 then os.exit(1) end
 print("pico_test_test: OK")

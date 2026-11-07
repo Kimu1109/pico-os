@@ -19,7 +19,7 @@ pico-os のために書いたファイルは [MIT ライセンス](LICENSE)(Copy
 | miniz(ホストテスト用の写し) | `script/host_test/stubs/lgfx/utility/lgfx_miniz.c` | パブリックドメイン(Unlicense) | Rich Geldreich | ファイル冒頭と末尾 |
 | LovyanGFX の `pgmspace.h`(ホストテスト用の写し。pngle が読む) | `script/host_test/stubs/lgfx/utility/pgmspace.h` | BSD | lovyan03 | ファイル冒頭(LovyanGFX の `license.txt`) |
 | LovyanGFX の `U8g2font::drawChar()`/`updateFontMetric()`(字の探し方を差し替えるための写し) | `src/gui/core/GlyphIndexFont.cpp` | FreeBSD | lovyan03 | LovyanGFX の `license.txt` |
-| Blocks-TI-84(Luaアプリ「ブロック」の移植元と絵) | `sdcard/lua/apps/ブロック/`・`script/assets/blocks_assets/` | MIT | The Science Elf | `script/assets/blocks_assets/LICENSE-Blocks-TI-84.txt` |
+| Blocks-TI-84(Luaアプリ「ブロック」の移植元と絵。アプリと元の絵は kimu1109/pico-os-apps に移した。ここに残るのはテストの面の絵) | `script/host_test/data/iso/faces.pimg` | MIT | The Science Elf | `script/host_test/data/iso/LICENSE-Blocks-TI-84.txt` |
 
 ### データ
 

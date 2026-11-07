@@ -7,7 +7,8 @@
                                        ハッシュの衝突もここで落とす。訳の無い数は表示するだけ(落とさない)
     python3 script/codegen/i18n.py missing [言語]  … 訳の無い原文と、それを使うファイルを出す
     python3 script/codegen/i18n.py lua <アプリのフォルダ>...  … Luaアプリの pico.tr("…") を拾って lang/en.lua へ原文を足す
-                                       (訳の無い原文は「-- TODO」の行で足す。--check は同梱アプリの lang/ も確かめる)
+    python3 script/codegen/i18n.py lua-check <アプリのフォルダ>...  … lang/en.lua が pico.tr と合っているか(標準のLuaアプリは kimu1109/pico-os-apps のCIが回す)
+                                       (訳の無い原文は「-- TODO」の行で足す)
 
 .po は gettext の形の一部だけ(msgid / msgstr / "#:" の出どころ)。Poedit 等でも開ける。
 1つの原文は1行の文字列にする(複数行に分けた msgid "" "…" も読めるが、書き戻すときは1行にする)。
@@ -328,7 +329,6 @@ def check_entries(lang, uses, translations):
 # Luaアプリ(pico.tr と lang/<言語>.lua。docs/design/i18n.md「Luaアプリ」)
 # ---------------------------------------------------------------------------
 
-LUA_APPS = os.path.join(ROOT, "sdcard", "lua", "apps")
 _LUA_TR = re.compile(r"""pico\.tr\(\s*("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')""")
 _LUA_ENTRY = re.compile(r'^\s*\["((?:[^"\\]|\\.)*)"\]\s*=\s*"((?:[^"\\]|\\.)*)"\s*,?\s*$')
 _LUA_TODO = re.compile(r'^\s*--\s*TODO\s')
@@ -403,6 +403,18 @@ def render_lua_lang(app_name, lang, msgs, entries):
     return "".join(out)
 
 
+def lua_app_name(app_dir):
+    """lang/<言語>.lua の1行目に書くアプリの名前。pico-os-apps の apps/<id>/app/ なら meta.cfg の dir(SDでのフォルダ名)"""
+    app_dir = os.path.normpath(app_dir)
+    meta = os.path.join(os.path.dirname(app_dir), "meta.cfg")
+    if os.path.basename(app_dir) == "app" and os.path.isfile(meta):
+        for line in open(meta, encoding="utf-8"):
+            k, sep, v = line.partition("=")
+            if sep and k.strip() == "dir" and v.strip():
+                return v.strip()
+    return os.path.basename(app_dir)
+
+
 def lua_app(app_dir, lang, write):
     """1つのアプリの lang/<言語>.lua を作り直す(write=False なら食い違いと誤りを返すだけ)"""
     msgs = scan_lua_app(app_dir)
@@ -413,7 +425,7 @@ def lua_app(app_dir, lang, write):
         tr = entries.get(msg)
         if tr and format_specs(tr) != format_specs(msg):
             errors.append("%s: 書式が原文と違います: %r → %r" % (os.path.relpath(path, ROOT), msg.decode(), tr.decode()))
-    text = render_lua_lang(os.path.basename(os.path.normpath(app_dir)), lang, msgs, entries)
+    text = render_lua_lang(lua_app_name(app_dir), lang, msgs, entries)
     missing = [m for m in msgs if not entries.get(m)]
     if write and msgs and not errors:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -435,17 +447,16 @@ def main_lua(argv):
         for e in errors:
             print("エラー: " + e)
             rc = 1
-        print("%s: 原文 %d / 訳なし %d" % (os.path.relpath(d, ROOT), len(msgs), len(missing)))
+        print("%s: 原文 %d / 訳なし %d" % (os.path.relpath(d), len(msgs), len(missing)))
     return rc
 
 
-def check_lua_apps():
-    """同梱アプリのうち lang/ を持つものが pico.tr と合っているか(訳し漏れ・書式の食い違い)"""
+def check_lua_apps(dirs):
+    """Luaアプリのうち lang/ を持つものが pico.tr と合っているか(訳し漏れ・書式の食い違い)。
+    標準のLuaアプリは kimu1109/pico-os-apps にあるので、そのCIが lua-check apps/*/app で回す"""
     rc = 0
-    if not os.path.isdir(LUA_APPS):
-        return 0
-    for name in sorted(os.listdir(LUA_APPS)):
-        d = os.path.join(LUA_APPS, name)
+    for d in dirs:
+        name = os.path.relpath(d)
         if not os.path.isdir(os.path.join(d, "lang")):
             continue
         msgs, missing, errors, stale = lua_app(d, "en", False)
@@ -455,8 +466,9 @@ def check_lua_apps():
         if missing or stale:
             print("エラー: %s の lang/en.lua が pico.tr と合っていません(訳なし %d)。"
                   "python3 script/codegen/i18n.py lua %s を回して訳を書いてください"
-                  % (name, len(missing), os.path.relpath(d, ROOT)))
+                  % (name, len(missing), name))
             rc = 1
+    print("Luaアプリ %d 本を見ました" % len(dirs))
     return rc
 
 
@@ -464,6 +476,8 @@ def main(argv):
     cmd = argv[1] if len(argv) > 1 else "--help"
     if cmd == "lua":
         return main_lua(argv)
+    if cmd == "lua-check":
+        return check_lua_apps(argv[2:])
     if cmd not in ("update", "--check", "missing"):
         print(__doc__)
         return 0 if cmd in ("-h", "--help") else 2
@@ -517,8 +531,6 @@ def main(argv):
                       % (table_path, os.path.relpath(po_path, ROOT)))
                 rc = 1
             print("%s: 原文 %d / 訳なし %d" % (lang, len(uses), len(missing)))
-    if cmd == "--check" and check_lua_apps() != 0:
-        rc = 1
     return rc
 
 

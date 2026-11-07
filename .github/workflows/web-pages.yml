@@ -63,6 +63,12 @@ jobs:
           mkdir -p sdcard/sys/dict
           cp script/dict/out/sys/dict/en-ja-and-ja-en.tsv script/dict/out/sys/dict/dict_index.tsv script/dict/out/sys/dict/LICENSES.md sdcard/sys/dict/
 
+      # 標準のLuaアプリの正本は kimu1109/pico-os-apps(このリポジトリには置かない)。公開中のストアから取り、
+      # 本体のストアと同じく catalog.sig(ファームの App_Repo_Keys.hpp の鍵)・files.sig(作者の鍵)・SHA-256 を確かめて
+      # sdcard/lua/apps/ へ置く(docs/design/lua-apps.md「標準Luaアプリの置き場所」)。上の辞書と同じく index.data へ焼き込まれる
+      - name: 標準のLuaアプリをストアから取る
+        run: python3 script/release/build_app_repo.py fetch
+
       - name: ビルドする
         run: |
           . ~/emsdk/emsdk_env.sh

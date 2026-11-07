@@ -31,7 +31,7 @@ PCビルドとホストテストでは確かめられない項目だけを、**1
     `pio device monitor` は打った文字が画面に出ない(エコーが無い)が、Enterで送られている
   結果は `[HW]` の行。`hw-test = true` が無いと「切れています」の行だけが出る。**このコマンドはPR #123のファームでしか使えない**(main へ入るまでは
   `claude/hardware-checklist` のブランチで書き込むこと)。
-- **Luaアプリ「実機チェック」**(`sdcard/lua/apps/実機チェック/`): 「全部」でLuaの計算・描画(renderの中)・全面の描き直しのフレーム時間・
+- **Luaアプリ「実機チェック」**(`pico-os-apps/apps/hw-check/app/`): 「全部」でLuaの計算・描画(renderの中)・全面の描き直しのフレーム時間・
   SD・暗号(Argon2id)・JSON・HTTPS・メモリを順に測り、画面・ログ(`[HWCHK]`)・アプリのフォルダの `results.txt`(追記)へ出す。
   HTTPSの行き先は同じフォルダの `settings.cfg` の `tls_url`(既定 `https://www.google.com/generate_204`)。
 

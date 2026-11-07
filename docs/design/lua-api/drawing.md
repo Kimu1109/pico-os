@@ -138,7 +138,7 @@ dirtyになった瞬間(シーン遷移時の全画面dirty化を含め、ほぼ
 
 ## ラスタキャンバスの保存/読み込み(CanvasRasterのリサイズ・`pico.canvas_clear/save/load`、2026-09-23実装)
 
-「スクラッチパッド」(黒/青ペン+消しゴムの手書きメモアプリ。`sdcard/lua/apps/スクラッチパッド/main.lua`)を
+「スクラッチパッド」(黒/青ペン+消しゴムの手書きメモアプリ。`pico-os-apps/apps/scratchpad/app/main.lua`)を
 作る過程で見つかった2つの穴を埋めた。`CanvasRaster`(`pico.create("CanvasRaster")`)は自分専用の
 `LGFX_Sprite`を持ち続け、`causeOnPressMove()`がタッチのドラッグをそのまま線として焼き込む
 ウィジェットで、手書き入力の土台としては元から使えた。しかし:

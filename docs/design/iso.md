@@ -3,17 +3,17 @@
 > `CLAUDE.md`から分けた設計記録(2026-10-20)。何がどこにあるかの地図は`CLAUDE.md`、進み具合は`SUMMARY.md`。
 > パスはリポジトリのルートから。「上の「〜」」等の参照先が別のファイルにあるときは、`CLAUDE.md`の「設計記録の索引」で節の名前から探すこと。
 
-## ブロック(2.5Dマインクラフト風、`sdcard/lua/apps/ブロック/` + C++のエンジン `src/iso/`、2026-10-07)
+## ブロック(2.5Dマインクラフト風、`pico-os-apps/apps/blocks/app/` + C++のエンジン `src/iso/`、2026-10-07)
 
 [TheScienceElf/Blocks-TI-84](https://github.com/TheScienceElf/Blocks-TI-84)(TI-84 CE用、MIT)をLuaアプリへ移したもの。
 元は 48x16x48 の世界だが、**チャンク読み込みで 1024x16x1024 にした**(下記)。25種類のブロック(水・松明を含む)・太陽の影・松明の光と昼/夜(下記「松明の光」)・半透明の水・自然/平ら/デモの3種の生成・5つのセーブ枠・
 カーソルを9方向+上下に動かして置く/壊す(数字キーの配置も同じ)。元の絵(`TextureMap.png`/`player.png`)とライセンスは
-`script/assets/blocks_assets/`。
+`pico-os-apps/script/assets/blocks_assets/`。
 
 **2.5Dのエンジン(ワールド・生成・保存・描画・影・引き当て)は C++ にある(2026-10-07に Lua の `view.lua`/`world.lua`/`demo.lua`/`migrate.lua` から移した)**:
 `src/iso/Iso_World.hpp/.cpp`(エンジン本体。LovyanGFXを知らず、描き先は関数ポインタの `Sink`)・`src/iso/Iso_Blit.hpp`(面の絵の写し方)・
 `src/lua/LuaEngine_Iso.cpp`(Luaの `pico.iso.*`。ドキュメントは `lua-api-doc/content/api/game/iso.md`)。アプリに残るのは
-`main.lua`(`require("game")` だけ)/ `game.lua`(画面の流れ・操作)/ `palette.lua`・`faces.pimg`・`icon.pimg`(`script/assets/generate_blocks_sheet.py` が作る)。
+`main.lua`(`require("game")` だけ)/ `game.lua`(画面の流れ・操作)/ `palette.lua`・`faces.pimg`・`icon.pimg`(`pico-os-apps/script/assets/generate_blocks_sheet.py` が作る)。
 
 - **移した理由と結果**: Luaでは描画の処理だけでPCで約1.4ms/画面(絵を写す呼び出しを除く)、Luaのメモリがゲーム中に約171〜180KB/200KB
   (モジュールの関数だけで約150KB・チャンクの文字列で最大約38KB)で余裕が無かった。C++では描画の処理が約0.026ms(約55倍)、
@@ -150,7 +150,7 @@
   - 描く順: ブロック → 人や物(影・絵・手前のブロックの描き直し)→ 弾 → HPバーと印 → カーソル。
   - 検証: `iso_td_test`(run.sh。流れの場の値段/向き/隙間/pass/届かない/少しずつ/**乱数の地形20個でFindPathと同じ値段**/斜め、視線、近く、押し合い、弾、HPバーと印、全体の読み込み)、
     `lua_ext_test`(Lua APIを一通り)。**実機では未確認**(人や物96個・流れの場の作り直しの時間)。ゲーム本体は下の「ゾンビTD」。
-- **ゾンビTD(`sdcard/lua/apps/ゾンビTD/`、2026-10-08〜09、`docs/design/zombie-td.md`の「作る順番」の2〜7)**: 作る順番は全部済み
+- **ゾンビTD(`pico-os-apps/apps/zombie-td/app/`、2026-10-08〜09、`docs/design/zombie-td.md`の「作る順番」の2〜7)**: 作る順番は全部済み
   (マップ・ゾンビ・兵士・建物・ウェーブ・保存・絵・効果音・説明)とコントローラー/キーボードの操作。未: 実機での速さとメモリの確認。
   - **地形は`Iso::ARENA`(`kind`=4、`Iso_Gen.cpp`の`arenaLayout`/`arenaHeight`)**: 8マスごとの格子の高さ4〜9を補間し、水面5より下は水(底は砂)、木は無し。
     ベースは z の小さい端の真ん中(`W/2, 4`)で 7x7 を平らな丸石に、出現位置は反対の端(`z = W-3`)に3つで 3x3 を平らな砂利に(半径8/4まで元の高さへなだらかにつなぐ)。
@@ -270,7 +270,7 @@
       (`soldiers.lua`の`SIEGE_EXTRA`。他は前どおり3マス)。`lua_ext_test`に、反撃しない兵士へ投げ続ける場面と、追う/追わないの確認を足した
       (直す前は「諦める」が落ちることを確かめた)。自動プレイでは兵士だけ・混ぜるのどちらも止まらなくなった。
       塔を置けない範囲(ベースから3マス)のすぐ外で投げる遠距離ゾンビは、塔だけだと届かずベースを削り続ける(兵士か近くの塔で対処する。そのまま)。
-  - 絵は`script/assets/generate_zombie_td_sheet.py`(`units.pimg`=ゾンビ3種x2コマ・ベース・兵士3種x2コマ(x=124〜)・足場・弓塔・剣塔(x=196〜)、`icon.pimg`、
+  - 絵は`pico-os-apps/script/assets/generate_zombie_td_sheet.py`(`units.pimg`=ゾンビ3種x2コマ・ベース・兵士3種x2コマ(x=124〜)・足場・弓塔・剣塔(x=196〜)、`icon.pimg`、
     柵を差し替えた`faces.pimg`。`palette.lua`は「ブロック」から写す)。兵士と塔の絵はレベルで変わらない(作る順番の7で)。
   - 検証: `iso_td_test`(ARENA: 平らな所・丸石と砂利・木が無い・24個の種で道がある・種で決まる)、`lua_ext_test`(`iso.arena`/`entity_pos`/`pico.micros`と、
     **本物の`zombies.lua`を本物のエンジンの上で120秒ぶん動かす**: 40匹の上限と順番待ち・近接と石がベースに当たる・地面に立つ・重ならない・倒すと次が出る)、

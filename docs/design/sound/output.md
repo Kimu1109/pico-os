@@ -60,7 +60,7 @@ SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャ�
 - Lua: `pico.sound_play(ch 1〜kChannels, freq, ms, {wave=, volume=, envelope=})`/`sound_stop([ch])`/`sound_playing([ch])`/`note_freq(音名|番号)`/
   `beep(freq, ms)`/`sound_available()`。**チャンネルはLuaでは1始まり**。音を使った`LuaEngine`は壊れるとき(=アプリを閉じるとき)に`StopAll()`する
   (長さ0の音が鳴り止まなくなるため)。
-- 動作確認は「動作確認」アプリの「音」(`sdcard/lua/apps/動作確認/sound.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
+- 動作確認は「動作確認」アプリの「音」(`pico-os-apps/apps/api-test/app/sound.lua`): 1オクターブの鍵盤(Canvas 1枚 + `pico.get_touch()`)、
   波形/減衰の切り替え、デモ曲(同じフォルダの`demo.mml`を`pico.music_play`で鳴らす。鍵盤の音は効果音として曲のチャンネル1を借りる)。
 - 曲(MML)は下の「曲データ」。
 

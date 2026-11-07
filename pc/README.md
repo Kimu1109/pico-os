@@ -234,7 +234,7 @@ index.html?wifi=disconnected&rssi=-85
 | 項目 | Webでの扱い |
 |---|---|
 | ループ | `emscripten_set_main_loop()`。ブラウザのメインスレッドは止められないので、`Panel_sdl::main()`(別スレッド)は使わず1フレームずつ刻む |
-| SDカード | `sdcard/` を**ビルド時に**`index.data`へ焼き込む。**中身を変えたら再ビルドが必要**で、アプリ側からの書き込みはメモリ上だけ(リロードで消える) |
+| SDカード | `sdcard/`(標準のLuaアプリは先に `build_app_repo.py fetch` で置く)を**ビルド時に**`index.data`へ焼き込む。**中身を変えたら再ビルドが必要**で、アプリ側からの書き込みはメモリ上だけ(リロードで消える) |
 | 描画 | **SDLのソフトウェアレンダラ(canvas 2D)に固定**(下記)。GPU描画は `?render=gl` で試せる。どちらでも実測60fps |
 | Wi-Fi | 疎通判定は `navigator.onLine`(ソケットが無いため)。固定したいときは `?wifi=...` |
 | **Markdownブラウザのオンライン機能** | **使えない。** ブラウザには生のTCPソケットが無いので、`browser-home` を設定したりツールバーの「更新」「検索」を押してもサーバへ繋がらない。同梱のサンプル(`/tmp/doc.md`)を読む分にはそのまま動く |
@@ -375,7 +375,7 @@ UserAgentをログ欄へ書き出す。
 
 ## SDカード
 
-リポジトリの根の `sdcard/` を実機のSDカードとして読む(PC専用ではなく、同梱アプリの正本・ホストテスト・ストアの公開元も兼ねるので
+リポジトリの根の `sdcard/` を実機のSDカードとして読む(PC専用ではなく、SD用フォントの書き出し先・ホストテスト・文書の例も兼ねるので
 `pc/` の外に置いてある。2026-11-06 まで `pc/sdcard/`)。実機のSDに置くファイルを同じ構成で置けば、
 同じパスで読める。別の場所を使いたければ環境変数で差し替えられる:
 
@@ -385,6 +385,17 @@ PICOOS_SD_ROOT=/path/to/sd ./pc/build/picoos_pc
 
 SDの外に置く「PCで動かしたときの状態」(端末の鍵のOTPを真似る `otp_emu.bin`・ファームの更新の置き場 `ota_emu/`)は `pc/run/` に作る
 (.gitignore 済み)。`PICOOS_SD_ROOT` を指定したときは、そのSDの隣に作る(テストごとに分かれるように)。
+
+**標準のLuaアプリ(テトリス・ペイント等)はリポジトリに入れていない**(正本は [kimu1109/pico-os-apps](https://github.com/Kimu1109/pico-os-apps)。
+`docs/design/lua-apps.md`「標準Luaアプリの置き場所」)。ストアから取って `sdcard/lua/apps/` へ置く(.gitignore 済み):
+
+```sh
+python3 script/release/build_app_repo.py fetch                             # 公開中のストアから(署名を確かめる。2回目からは変わったものだけ)
+python3 script/release/build_app_repo.py fetch --registry ../pico-os-apps  # 手元の pico-os-apps から写す(アプリを直しながら見るとき。署名は見ない)
+```
+
+取らなくても起動する(ランチャにLuaアプリが並ばないだけ)。本体と同じく `sys/store/installed/` に入れた印を残すので、
+PCビルドの「ストア」でも入っているものとして見える。Webビルドは CI(`web-pages.yml`)がビルドの前に取って `index.data` へ焼き込む。
 
 IMEの辞書(`sys/ime/skk_*.tsv`)はサイズが大きいのでリポジトリには入れていない。
 無くても起動する(変換候補が出ないだけ)。作り方は `script/dict/README.md`。

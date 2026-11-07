@@ -69,14 +69,14 @@ src/
 lib/         vendor: lua(5.4.7) / monocypher / peanut_gb / qrcodegen / minimp3(各 README-pico-os.md)
 buildcfg/    PlatformIOの部品(options.ini)と派生の版(variants.ini / bench.ini)。土台は platformio.ini
 site/        GitHub Pages のページ(トップ・ダウンロード・ストアの雛形。web-pages.yml が _site/ へ写す。PlaygroundのWeb版は pc/)
-sdcard/      SDカードの中身(PC/Webビルドが読む・同梱Luaアプリの正本=ストアの公開元。lua/apps/<名前>/main.lua が自動登録される)
+sdcard/      SDカードの中身(PC/Webビルドが読む。lua/apps/<名前>/main.lua が自動登録される。標準Luaアプリは置かず build_app_repo.py fetch でストアから取る)
 pc/          PC/Webビルド(動かしたときの状態は pc/run/)
 script/      開発補助(cli-tool/picoos が名前で呼び分ける。script/README.md)。pio/(PlatformIOが読む)・codegen/(src/の生成物。アイコン・フォント・i18n)・
              check/(CIの検査)・release/(配る)・tools/(変換と開発中の道具)・assets/・dict/・host_test/・lua_test/。直下に置かない
 hardware/carrier/  キャリアボード(KiCad 8。README.md に部品の表、tools/check_pins.py で consts.hpp と結線を照合)
 docs/        spec/(外とやり取りする形式: PROTOCOL / CHAT_PROTOCOL / APP_REPO / MUSIC_FORMAT / VIDEO_FORMAT)・guide/(手順: FIRMWARE_UPDATE / HARDWARE_CHECKLIST)・design/(設計記録)。docs/README.md
 lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャットサーバ
-(別リポジトリ) kimu1109/pico-os-apps がアプリストアの配布元(投稿・公開。lua-apps.md「アプリストアの投稿」)
+(別リポジトリ) kimu1109/pico-os-apps が標準Luaアプリの正本・テスト・絵の道具とアプリストアの配布元(lua-apps.md「標準Luaアプリの置き場所」「アプリストアの投稿」)
 ```
 
 ## コアアーキテクチャ
@@ -177,6 +177,7 @@ lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャッ�
 - `sh script/host_test/run.sh`(CMake + CTest、ASan、約80本。`run.sh core lua-engine` でグループ指定、`--list`、`-j N`)。
   テストを足すときは `script/host_test/CMakeLists.txt` の一覧に `host_test(<名前> GROUP <グループ>)` を1行。説明と落とし穴は `script/host_test/README.md`。
 - 生成物(アイコン・訳・JISの表・TLSの一覧・同梱Luaモジュール等)が材料と合っているかは `picoos check`(`script/check/check_generated.py`。CIでも回る)。
+- 標準Luaアプリのテストは pico-os-apps の `tests/host/`(`lua-apps` グループ。隣に clone すれば `run.sh lua-apps` で回る)。
 - `run_net.sh`(実通信)/ `run_mem.sh`(確保回数)/ PCビルドはCIに無いので、**変更のたびに自分で回す**。
 - PR時のCI: ホストテスト(`host-tests.yml`。**グループを足したらmatrixにも足す**、ずれると `groups-in-sync` が落ちる)・層の決まり・
   実機ファームのビルド(`firmware-build.yml`。派生版は `rpipico2w_minimal` だけ、残りはナイトリー)。他にWebビルドとWebからのファーム更新の一覧の公開(`web-pages.yml`)と、毎晩mainの実機ファームを署名してリリースへ載せるナイトリー(`nightly.yml`、50本まで)・

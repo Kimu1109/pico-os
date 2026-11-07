@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "release"))
 import build_app_repo as b  # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
-SRC = os.path.join(ROOT, "sdcard", "lua", "apps")
+SRC = os.path.join(HERE, "data", "store_apps")  # 見本のアプリ(data/store_apps/README.md)
 
 
 def set_cfg(path, key, value):
@@ -71,7 +71,7 @@ def main():
         for dst in (src, orig):
             shutil.copytree(os.path.join(SRC, d), os.path.join(dst, d),
                             ignore=shutil.ignore_patterns("store.json*", "settings.cfg", "hiscore.txt"))
-            # 版はここで決める(sdcard の見本のアプリの版が上がっても、元の版=2.0.0 の前提が崩れないように)
+            # 版はここで決める(見本のアプリ(data/store_apps)の版が上がっても、元の版=2.0.0 の前提が崩れないように)
             set_cfg(os.path.join(dst, d, "app.cfg"), "version", "2.0.0")
     var = os.path.join(out, "variants")
     shutil.rmtree(var, ignore_errors=True)

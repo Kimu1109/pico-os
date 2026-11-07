@@ -53,7 +53,7 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
   `mods={ctrl,alt,shift}`)、**真を返せば取った扱い、偽ならオンスクリーンキーボードの入力へ回る**。エラーになったらダイアログを1回出して以降は呼ばない
   (`loop()`と同じ安全弁。その打鍵は消費した扱い)。`ProtectedCall()`は戻り値を1つ受けるため`nresults`引数を足した。
   配り順は「画面の`onKey()`→開いているキー盤」(「物理キーボード」参照)で、日本語キー盤が読みを入力中のときはキー盤が先。
-- 動作確認は「動作確認」アプリの「直接描画」(`sdcard/lua/apps/動作確認/draw.lua`。図形・太線・画像の拡大/回転/反転・扇形・右寄せ文字・`on_key`・電池を1画面に描く。PCビルドの`--tap`+標準入力の`key`行で確認済み)。
+- 動作確認は「動作確認」アプリの「直接描画」(`pico-os-apps/apps/api-test/app/draw.lua`。図形・太線・画像の拡大/回転/反転・扇形・右寄せ文字・`on_key`・電池を1画面に描く。PCビルドの`--tap`+標準入力の`key`行で確認済み)。
 - 検証: `lua_engine_test`(run.sh。dirty矩形・引数エラー・塗りのピクセル(正方形/L字/扇形)・画像の等倍/拡大/反転/回転/原点/透過・
   文字幅・WAV・battery・sd_stat/sd_read_part・on_keyの登録/解除/エラー)。PCビルドは通る。**実機・PCビルドでの見た目は未確認**
   (`fill_polygon`の1画素ごとの`drawFastHLine`、`draw_image_ex`の全画素ループの速さは実機で見ること。クリップが全面だと最大240x320回)。
@@ -61,7 +61,7 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
 ## Lua APIの追加(2026-10-05): require・タッチ座標・画面の受け渡し・HTTP/JSON・タイマー
 
 「ウィジェットを使うLuaアプリを書くときに足りない機能」を洗い出した(`pico.*`の不足リスト)うち、実害が出ていた5項目をまとめて入れた。
-ドキュメントは`lua-api-doc/content/api/`(`system/modules.md`/`data/json.md`/`system/timers.md`/`ui/scenes.md`/`data/network.md`)、動作確認は「動作確認」アプリの「画面とデータ」(`sdcard/lua/apps/動作確認/scene.lua`)。
+ドキュメントは`lua-api-doc/content/api/`(`system/modules.md`/`data/json.md`/`system/timers.md`/`ui/scenes.md`/`data/network.md`)、動作確認は「動作確認」アプリの「画面とデータ」(`pico-os-apps/apps/api-test/app/scene.lua`)。
 **実機では未確認**(PCのホストテストとPCビルドのみ)。
 
 1. **`require(name)` / `pico.require(name)`**(`LuaEngine::l_require`、`preloadModules`)
@@ -124,7 +124,7 @@ Love2Dにあってpico-osのLua APIに無かったもののうち、C++側にほ
 
 前節の洗い出しで「見送った」としたものと、洗い出しの○(あると明らかに楽)の項目を入れた。ドキュメントは `lua-api-doc/content/`
 (`api/crypto.md` `api/stdlib.md` を新設、`api/widgets` `dialogs` `drawing` `images` `misc` `scenes` `canvas` と `reference/*` `guide/events.md` を更新)、
-動作確認は「動作確認」アプリの「追加の部品」(`sdcard/lua/apps/動作確認/extra.lua`)。**実機では未確認**(PCのホストテストとPCビルドのみ)。
+動作確認は「動作確認」アプリの「追加の部品」(`pico-os-apps/apps/api-test/app/extra.lua`)。**実機では未確認**(PCのホストテストとPCビルドのみ)。
 
 **ソースの置き場**: `LuaEngine.cpp` が4400行を超えたので、追加分は `src/lua/LuaEngine_Ext.cpp`(ウィジェット補助・イベント・ジェスチャー・リスト/タブ・ダイアログ・
 描画の補助・ユーティリティ)と `LuaEngine_Crypto.cpp`(暗号API)に置いた。`LuaEngine` の private へは `friend struct LuaEngineExt` / `LuaEngineCrypto` 経由で触る。

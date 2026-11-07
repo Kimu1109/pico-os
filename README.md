@@ -53,6 +53,7 @@ pio run -e rpipico2w -t fwpush --upload-port picoos.local   # Wi-Fi経由で更�
 
 ```sh
 cmake -S pc -B pc/build && cmake --build pc/build -j
+python3 script/release/build_app_repo.py fetch   # 標準のLuaアプリをアプリストアから取って sdcard/ へ(任意)
 ./pc/build/picoos_pc
 ```
 
@@ -79,7 +80,7 @@ python3 script/check/check_layers.py      # include の層の決まりを確か�
 | `lua-api-doc/` | Lua APIの利用者向けドキュメント(Hugo) |
 | `server/chat/` | チャットアプリ用の自前サーバ |
 
-Luaアプリの配布元(アプリストア)は別リポジトリ [kimu1109/pico-os-apps](https://github.com/kimu1109/pico-os-apps)。
+標準のLuaアプリ(テトリス・ペイント等)の正本とLuaアプリの配布元(アプリストア)は別リポジトリ [kimu1109/pico-os-apps](https://github.com/kimu1109/pico-os-apps)。
 
 ## Claude Code との開発
 

@@ -14,7 +14,7 @@
 //     描き直す範囲・影を落とさない・保存して開き直しても同じ
 //   経路探索(Iso_Path): 平らな所・段差の上限・頭の上・避けるブロック・ブロックと段差の値段・斜め(角をすり抜けない)・
 //     edge・partial/上限/出発点と目的地の誤り・乱数の地形で素朴なダイクストラと同じ値段
-// 面の絵はリポジトリの sdcard/lua/apps/ブロック/faces.pimg を使う(第1引数にリポジトリのルート)。
+// 面の絵は script/host_test/data/iso/faces.pimg(標準のLuaアプリ「ブロック」の faces.pimg の写し。data/iso/README.md)を使う(第1引数にリポジトリのルート)。
 #include "iso/Iso_World.hpp"
 #include "iso/Iso_Blit.hpp"
 #include "iso/Iso_Path.hpp"
@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     const std::string root = argc > 1 ? argv[1] : ".";
     {
-        std::ifstream f(root + "/sdcard/lua/apps/ブロック/faces.pimg", std::ios::binary);
+        std::ifstream f(root + "/script/host_test/data/iso/faces.pimg", std::ios::binary);
         const std::string s((std::istreambuf_iterator<char>(f)), {});
         if (s.size() < 5) { printf("[FAIL] faces.pimg を読めません\n"); return 1; }
         SW = (uint8_t)s[0] | ((uint8_t)s[1] << 8);

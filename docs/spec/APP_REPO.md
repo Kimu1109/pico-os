@@ -218,16 +218,20 @@ rsync -a --delete /tmp/apps/ pi:/var/www/pico-os/apps/
 python3 script/release/build_app_repo.py site --dir /tmp/apps
 
 # 手元のアプリを1つパッケージにする(ストアを通さずに渡す。作者の鍵で署名する)
-python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app sdcard/lua/apps/テトリス
+python3 script/release/build_app_repo.py package --key ~/.pico-os/author.key --app sdcard/lua/apps/わたしのゲーム
 
 # 投稿用リポジトリ(kimu1109/pico-os-apps)へ出す: 作者が apps/<id>/ に署名してPRを出す
 # (カタログの署名と GitHub Pages への公開は、そのリポジトリのCIがする。手順はそのリポジトリの README.md)
-python3 script/release/build_app_repo.py author-sign --key ~/.pico-os/author.key --app ../pico-os-apps/apps/tetris \
-    --src sdcard/lua/apps/テトリス
+python3 script/release/build_app_repo.py author-sign --key ~/.pico-os/author.key --app ../pico-os-apps/apps/tetris
+# 標準のLuaアプリ(正本は投稿用リポジトリの apps/<id>/app/)のうち、直したものにまとめて署名し直す
+python3 script/release/build_app_repo.py sign-changed --key ~/.pico-os/app_repo.key --registry ../pico-os-apps
+
+# 公開中の配布物から取って PC/Webビルドの sdcard/lua/apps/ へ置く(本体のストアと同じことを確かめる)
+python3 script/release/build_app_repo.py fetch [--url https://kimu1109.github.io/pico-os-apps/] [--pubkey 16進64桁]
 ```
 
 - `--key` がカタログ鍵、`--author-key` が作者の鍵(既定は `--key` と同じ)、`--author` が表示する作者名(既定 `kimu1109`)。
-- 配るのは `sdcard/lua/apps/*/app.cfg` に `id` があるアプリだけ。gitの管理下ならgitが管理しているファイルだけを配る(遊んでいる間にできたセーブ等を配らない)。
+- `build`・`sign` が配るのは `--apps-dir`(既定 `sdcard/lua/apps`)の `*/app.cfg` に `id` があるアプリだけ。gitの管理下ならgitが管理しているファイルだけを配る(遊んでいる間にできたセーブ等を配らない)。
 - `sign` + `assemble` は、目録の署名と中身の組み立てを別の場所でするとき用(`assemble` は署名の後で中身が変わったアプリを止める。`--allow-stale` なら警告して配らない)。
   2026-10-26 まで pico-os の `store/` と Pages がこれで `/pico-os/apps/` に配っていたが、投稿用リポジトリへ移したので消した。
 - `assemble`・`verify` は形式1の目録も通す(警告を出す)。形式2のファームは形式1を読まないので、`sign` をやり直すこと。

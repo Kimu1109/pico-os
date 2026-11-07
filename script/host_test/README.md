@@ -193,23 +193,9 @@ sh script/host_test/run.sh --list          # グループ名の一覧
   pico_mock_test… script/host_test/lua/pico_mock.lua(Luaアプリのゲームの規則やUIを、実機/PCビルド無しで
                 普通のLuaだけで確かめるための、pico.*の偽物)自身のテスト。ウィジェット・イベント・タイマー・
                 ダイアログ・HTTP・SD・保存・画面遷移を記録して返せる
-  qrcode_app_test… Luaアプリ「QRコード」(pico_mock.luaの上で。pico.asyncは本物)。種類ごとの追加・途中のキャンセル・
-                QRにする文字(vCard・Wi-Fiの逃がし・nopass)・長すぎは保存しない・前後の送り・編集・削除・
-                保存の暗号化の指定・壊れた保存の読み飛ばし・50件まで
   pico_test_test… script/lua_test/pico_test.lua(picoos lua-test のテストランナー)自身のテスト。
                 script/host_test/lua/test_app の tests/ を動かして成功/失敗の数と失敗の文・サンドボックス・
-                SDの下敷きを見る。sdcard/lua/apps/*/tests/ の見本が通ることも見る
-  tetris_test… Luaアプリ「テトリス」(sdcard/lua/apps/テトリス/)のゲームの規則。
-                pico.*をLuaの偽物に差し替え、lua_script_test(vendorしたLuaで.luaを
-                動かすだけの下請け)で tetris_test.lua を実行する。ライン消し・壁蹴り・
-                HOLD・長押しの連続移動・ゲームオーバーとハイスコア保存・タッチの操作ボタン
-  oshite_test… Luaアプリ「おしてのぼれ」(pico.gameの軽い物理を使うパズルアクション)の
-                3ステージを、操作を流し込んで実際に解けることを確かめる(pico.gameは本物)。
-  reversi_test / minesweeper_test / breakout_test… Luaアプリ「リバーシ」「マインスイーパー」「ブロック崩し」
-                (どれもpico.gameで作ってある)のゲームの規則。tetris_testと同じく、pico.gameは本物で
-                pico.*だけ描画を捨てる偽物に差し替え、タップや十字キーを流し込んで確かめる
-                (打つ・裏返す・パス・終局 / 最初の1手は安全・連鎖・旗・難易度 / 反射・ブロック・
-                アイテム・ステージクリア・全20ステージ・自動プレイ)
+                SDの下敷きを見る(標準アプリの tests/ の見本は pico-os-apps のCIが回す)
   iso_world_test… 2.5Dの箱庭のエンジン(src/iso/Iso_World・Iso_Blit。Luaアプリ「ブロック」の pico.iso)。
                 地形の生成がLua版と同じ(ハッシュで比べる)・チャンクの読み込みと手放し・保存と読み込みの往復・
                 前の版からの移し替え・描画(見えない面・影・水・Lua版と同じ並び)・隠れたブロックを省いても
@@ -217,8 +203,13 @@ sh script/host_test/run.sh --list          # グループ名の一覧
                 頼まれた矩形だけ描き直しても全体と同じ)
   iso_td_test… 2.5Dの箱庭のタワーディフェンス向けの道具: 流れの場(Iso_Flow。経路探索と同じ値段・pass・
                 少しずつ作る)・視線・近くの人や物・押し合い・弾・HPバーと印・世界全体を読み込んだままにする・ARENA の地形(平らな所・道があるか)
-  blocks_test… Luaアプリ「ブロック」の画面の流れと操作(pico.iso は偽物)。作る/開く/移す→読み込む→遊ぶ→
-                保存して戻る・置く/壊すの規則・カーソルと視点・タップ・ブロックを選ぶ画面
+  lua-apps グループ(2026-11-07)… 標準のLuaアプリのテスト。アプリの正本と一緒に kimu1109/pico-os-apps の
+                tests/host/ に置く(テトリス・リバーシ・マインスイーパー・ブロック崩し・おしてのぼれ・ブロック・
+                Spotify・QRコードの *_test.lua と、ゾンビTD を本物の pico.iso で動かす zombie_td_test.cpp・
+                MQTTリモコン/HAパネル/UDPツールを偽物の相手へ繋ぐ socket_apps_test.cpp)。隣(../pico-os-apps)に
+                clone するか PICOOS_APPS_DIR=… を付けると入る(無ければ空。名指しで回すと「テストが無い」で落ちる)。
+                .lua は lua_script_test が ROOT_DIR(pico-os)と APPS_DIR(pico-os-apps)を渡して動かし、
+                .cpp はここで作って <pico-os> <pico-os-apps> を引数に動かす(socket_fake_servers.hpp 等はここの物)
   vt_terminal_test… SSHアプリの端末エミュレータ(src/apps/ssh/Vt_Terminal)。折り返し・カーソル移動・
                 消去・色(256色/RGB→16色)・全角(2セル)・スクロールバック・範囲スクロール・
                 代替画面・問い合わせ(6n等)への返事・大きさの変更

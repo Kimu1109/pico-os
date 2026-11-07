@@ -7,6 +7,9 @@
 #   -j N … 同時にビルド/実行する数(既定: CPU数)
 # ビルドの結果は script/host_test/build/(HOST_TEST_BUILD で変えられる)に残り、2回目からは差分だけ作る。
 #
+# 標準のLuaアプリのテスト(lua-apps グループ)は pico-os-apps の tests/host/ にある。隣(../pico-os-apps)に clone するか、
+# PICOOS_APPS_DIR=<pico-os-apps のルート> を付ける。どちらも無ければそのグループは空で、何も回さずに終わる。
+#
 # 確保回数やピーク使用量の計測は run_mem.sh、本物のソケットを使う結合テストは run_net.sh の担当。
 set -e
 
@@ -53,7 +56,7 @@ GEN=""
 if [ ! -f "$BUILD/CMakeCache.txt" ] && command -v ninja >/dev/null 2>&1; then
     GEN="-G Ninja"
 fi
-run_step cmake -S "$DIR" -B "$BUILD" $GEN -DCMAKE_BUILD_TYPE=Debug
+run_step cmake -S "$DIR" -B "$BUILD" $GEN -DCMAKE_BUILD_TYPE=Debug "-DPICOOS_APPS_DIR=${PICOOS_APPS_DIR:-}"
 
 TARGETS=""
 LABELS=""
@@ -67,8 +70,11 @@ else
     run_step cmake --build "$BUILD" -j "$JOBS"
 fi
 
+# lua-apps を名指ししたのにテストが無い(pico-os-apps が見つからない)ときは落とす(CIで回ったつもりにならないように)
+NO_TESTS=""
+case " $SELECTED " in *" lua-apps "*) NO_TESTS="--no-tests=error" ;; esac
 if [ -n "$LABELS" ]; then
-    ctest --test-dir "$BUILD" -j "$JOBS" --output-on-failure -L "^($LABELS)\$"
+    ctest $NO_TESTS --test-dir "$BUILD" -j "$JOBS" --output-on-failure -L "^($LABELS)\$"
 else
     ctest --test-dir "$BUILD" -j "$JOBS" --output-on-failure
 fi

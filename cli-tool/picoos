@@ -85,15 +85,6 @@ PASSTHROUGH_PY = {
     ("pad",): "tools/pad_serial.py",
     ("tls-roots",): "codegen/generate_tls_roots.py",
     ("check",): "check/check_generated.py",
-    ("gen", "blocks"): "assets/generate_blocks_sheet.py",
-    ("gen", "breakout"): "assets/generate_breakout_blocks.py",
-    ("gen", "minesweeper"): "assets/generate_minesweeper_tiles.py",
-    ("gen", "physics"): "assets/generate_physics_sheet.py",
-    ("gen", "platformer"): "assets/generate_platformer_sheet.py",
-    ("gen", "reversi"): "assets/generate_reversi_tiles.py",
-    ("gen", "spotify-icon"): "assets/generate_spotify_icon.py",
-    ("gen", "tetris"): "assets/generate_tetris_blocks.py",
-    ("gen", "zombie-td"): "assets/generate_zombie_td_sheet.py",
     ("dict", "skk"): "dict/convert_skk_dict.py",
     ("dict", "index"): "dict/build_dict_index.py",
     ("dict", "suffix-index"): "dict/build_dict_suffix_index.py",
@@ -202,7 +193,7 @@ def cmd_pc_shot(args) -> int:
 
 
 def _resolve_app_name(app: str) -> str:
-    """--app へ渡す名前。ディレクトリ(sdcard/lua/apps/テトリス 等)なら app.cfg の name、
+    """--app へ渡す名前。ディレクトリ(sdcard/lua/apps/テトリス 等。標準アプリは picoos app-repo fetch で置く)なら app.cfg の name、
     無ければフォルダ名。ディレクトリでなければランチャの名前としてそのまま使う。"""
     path = Path(app)
     if not path.is_dir():
@@ -311,7 +302,7 @@ def cmd_pc_web_serve(args) -> int:
 
 # ---- パーサ構築 ----
 #
-# pimg/ppm2png/serve/midi2mml/spotify-auth/app-repo/pvid/pad/tls-roots/gen */test parallel/dict skk/dict index/dict suffix-index/dict filter-tofu/pc run は
+# pimg/ppm2png/serve/midi2mml/spotify-auth/app-repo/pvid/pad/tls-roots/test parallel/dict skk/dict index/dict suffix-index/dict filter-tofu/pc run は
 # try_dispatch_passthrough() が実際の引数解析より先に横取りするため、ここで登録する
 # 対応するサブパーサは「picoos --help」等での一覧表示専用(実引数は持たない)。
 
@@ -330,12 +321,11 @@ def build_parser() -> argparse.ArgumentParser:
   picoos serve --root ~/docs --port 8080          Markdownブラウザ用の参照サーバを起動
   picoos midi2mml song.mid -o song.mml            MIDIをpico-os MMLへ変換
   picoos spotify-auth --client-id XXXX            Spotifyのrefresh tokenを取ってSDへ書く
-  picoos app-repo sync-official --key K --src sdcard/lua/apps --registry ../pico-os-apps
-                                                  公式アプリの更新を投稿用リポジトリへ写して署名(build_app_repo.py)
+  picoos app-repo fetch                           標準のLuaアプリをストアから取って sdcard/lua/apps/ へ(PC/Webビルド)
+  picoos app-repo fetch --registry ../pico-os-apps  手元の pico-os-apps から写す(アプリを直しながら見る)
   picoos pvid in.mp4 out.pvid                     動画を.pvidへ変換
   picoos pad --mode text                          PCのキーボードを外部コントローラー/物理キーボードにする
   picoos tls-roots                                焼き込みルート証明書(Tls_Roots_Data.hpp)を再生成
-  picoos gen tetris                               アプリ用画像(.pimg)を生成(gen --help で一覧)
   picoos test                                     ホストテスト一式(ASan)を実行
   picoos test parallel -j 4                       ホストテストを並列実行
   picoos test net                                 HTTP結合テストを実行
@@ -343,7 +333,7 @@ def build_parser() -> argparse.ArgumentParser:
   picoos pc run -- --shot shot.ppm 40             ネイティブ版を実行(引数はそのまま転送)
   picoos pc shot shot.ppm 40 --png shot.png       ヘッドレスで撮ってPNGまで変換
   picoos pc dev sdcard/lua/apps/テトリス         Luaアプリを開き、.luaを保存するたびに起動し直す
-  picoos lua-test sdcard/lua/apps/動作確認       Luaアプリの tests/*_test.lua を pico_mock の上で動かす
+  picoos lua-test ../pico-os-apps/apps/api-test/app  Luaアプリの tests/*_test.lua を pico_mock の上で動かす
 
 転送系のサブコマンドは `picoos <サブコマンド> --help` で元スクリプト自身の
 ヘルプが表示される(picoos側でオプションを再定義していないため)。
@@ -366,18 +356,6 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("pad", help="PCのキーボードを外部コントローラー/物理キーボードにする (pad_serial.py、引数は転送)")
     sub.add_parser("tls-roots", help="焼き込みルート証明書を生成 (generate_tls_roots.py、引数は転送)")
     sub.add_parser("check", help="生成物(アイコン・訳・JISの表等)が材料と合っているかまとめて見る (check/check_generated.py、引数は転送)")
-
-    gen_parser = sub.add_parser("gen", help="アプリ用の画像(.pimg)生成スクリプト群")
-    gen_sub = gen_parser.add_subparsers(dest="gen_command", required=True)
-    gen_sub.add_parser("blocks", help="「ブロック」の絵 (generate_blocks_sheet.py、引数は転送)")
-    gen_sub.add_parser("breakout", help="ブロック崩しのタイル (generate_breakout_blocks.py、引数は転送)")
-    gen_sub.add_parser("minesweeper", help="マインスイーパーのタイル (generate_minesweeper_tiles.py、引数は転送)")
-    gen_sub.add_parser("physics", help="「おしてのぼれ」の絵 (generate_physics_sheet.py、引数は転送)")
-    gen_sub.add_parser("platformer", help="ジャンプアクションの絵 (generate_platformer_sheet.py、引数は転送)")
-    gen_sub.add_parser("reversi", help="リバーシのタイル (generate_reversi_tiles.py、引数は転送)")
-    gen_sub.add_parser("spotify-icon", help="Spotifyリモコンのアイコン (generate_spotify_icon.py、引数は転送)")
-    gen_sub.add_parser("tetris", help="テトリスのミノ画像 (generate_tetris_blocks.py、引数は転送)")
-    gen_sub.add_parser("zombie-td", help="「ゾンビTD」の絵 (generate_zombie_td_sheet.py、引数は転送)")
 
     dict_parser = sub.add_parser("dict", help="辞書データ関連 (script/dict/)")
     dict_sub = dict_parser.add_subparsers(dest="dict_command", required=True)
@@ -430,7 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("lua-test", help="Luaアプリのテスト(*_test.lua)を pico_mock の上で動かす (script/lua_test/)")
     p.add_argument("paths", nargs="*", metavar="PATH",
-                    help="テストファイルか、*_test.lua を探すディレクトリ(省略で sdcard/lua/apps/ の全部)")
+                    help="テストファイルか、*_test.lua を探すディレクトリ(省略で sdcard/lua/apps/ の全部。標準アプリのテストは pico-os-apps の apps/*/app)")
     p.add_argument("-k", metavar="NAME", help="名前にこの文字列を含むテストだけ動かす")
     p.add_argument("-v", "--verbose", action="store_true", help="アプリの print とエラーのトレースバックも出す")
     p.add_argument("--list", action="store_true", help="見つかったテストファイルを並べるだけ")

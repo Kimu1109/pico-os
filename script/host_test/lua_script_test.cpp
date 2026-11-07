@@ -1,6 +1,6 @@
 // Luaで書いたテスト(script/host_test/*.lua)を、vendorしたLua(lib/lua)で動かすだけの下請け。
-//   lua_script_test <テスト.lua> <リポジトリのルート>
-// ルートはLua側へ ROOT_DIR として渡す。テストはos.exit(0/1)で結果を返す
+//   lua_script_test <テスト.lua> <リポジトリのルート> [pico-os-apps のルート]
+// ルートはLua側へ ROOT_DIR として、pico-os-apps のルート(標準のLuaアプリのテスト。lua-apps グループ)は APPS_DIR として渡す。テストはos.exit(0/1)で結果を返す
 // (実行時エラーもここで1にする)
 #include "lua.hpp"
 
@@ -15,6 +15,10 @@ int main(int argc, char** argv){
     luaL_openlibs(L);
     lua_pushstring(L, argv[2]);
     lua_setglobal(L, "ROOT_DIR");
+    if(argc > 3){
+        lua_pushstring(L, argv[3]);
+        lua_setglobal(L, "APPS_DIR");
+    }
     int rc = 0;
     if(luaL_dofile(L, argv[1]) != LUA_OK){
         fprintf(stderr, "[FAIL] %s\n", lua_tostring(L, -1));

@@ -132,6 +132,9 @@
     - [x] 投稿用リポジトリの道具(author-sign・registry-check・registry-build)
     - [x] 管理者の準備(Pages・カタログ鍵・ルールセット)と、Actions の上での動作の確認
     - [x] pico-os の古い目録(store/)と Pages の /apps/ を消す
+  - [ ] 標準Luaアプリの正本を pico-os-apps へ統一(PC/Webビルドはストアから取る。lua-apps.md「標準Luaアプリの置き場所」)
+    - [x] pico-os から外す・`fetch`・テストを pico-os-apps へ・`sign-changed`
+    - [ ] pico-os-apps で作者の鍵で署名し直してマージ(利用者)
     - [ ] 一覧のページ分けと検索、ランチャの登録簿の32件
     - [x] 投稿用リポジトリを作って公式アプリを移す(17本・check.yml・publish.yml・既定のURL)
   - [x] Webのページ(ダウンロード)と、SDの直下に置いたパッケージ(.papp)を起動時に入れる

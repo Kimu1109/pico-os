@@ -299,11 +299,11 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   `mail_proto_test` に JsonReader の stringBuffer・フォームの値・更新用トークンの保存(行の入れ替えで戻らない・壊れたら読まない)も。PCビルドの`--tap`/`--shot`(偽物を `--seed` で立て `host = 127.0.0.1` / `tls = false`)で
   一覧・4種の本文・既読になって灰色・設定のダイアログを目視した。**実機(BearSSL)と本物のメールサーバ(Gmail等)での確認は未**(Todoist参照)。
 
-## Spotifyリモコン (`sdcard/lua/apps/Spotify/`、Luaアプリ) (2026-10-14)
+## Spotifyリモコン (`pico-os-apps/apps/spotify-remote/app/`、Luaアプリ) (2026-10-14)
 
 スマホ/PCのSpotifyで鳴っている再生を Web API で操作する(本体から音は出ない。**操作には Spotify Premium が要る**)。
 - ファイル: `main.lua`(上の段のButtonとCanvas1枚・タップ/キー/コントローラー)/`api.lua`(トークン・`A.call`)/`player.lua`(状態の取得と操作)/
-  `view.lua`(Canvasへ描く・タップの場所)/`icon.pimg`(`script/assets/generate_spotify_icon.py`)。
+  `view.lua`(Canvasへ描く・タップの場所)/`icon.pimg`(`pico-os-apps/script/assets/generate_spotify_icon.py`)。
 - **ログイン**: 本体ではOAuthを受けられないので、PCの`script/tools/spotify_auth.py`(`picoos spotify-auth`)が書いた`spotify_auth.json`をアプリのフォルダに置く。
   起動時(か画面の「読み込む」)に`api.lua`が読み、`pico.store_save({auth=}, {encrypt=true})`へ移して平文のファイルを消す。
   アクセストークンは`grant_type=refresh_token`(`pico.form_encode`、client secretなし)で取り直し、返った新しいrefresh tokenを保存し直す。
@@ -334,7 +334,7 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   `http_close`・`save_to`の偽物を足した。PCビルドでは偽物のSpotifyサーバ(使い捨て)を相手に、本物のLuaエンジンで表示・一時停止・次へ・音量・端末の選択を
   `--tap`/`--shot`(`PICOOS_VERIFY_LCD=1`で食い違い0)。**本物のSpotifyアカウント・実機で動くことを利用者が確認した(2026-10-14。長いトークンが切れる不具合を直した後)**。
 
-## XMLの読み取りとニュースアプリ (`src/util/Xml_Reader` / `pico.xml_pick` / `sdcard/lua/apps/ニュース/`) (2026-10-14)
+## XMLの読み取りとニュースアプリ (`src/util/Xml_Reader` / `pico.xml_pick` / `pico-os-apps/apps/google-news/app/`) (2026-10-14)
 
 SUMMARY.md未掲載。Google ニュースのRSS(APIキー不要)を読むために、`JsonReader`と同じ流儀でXMLの読み取りを足した。
 

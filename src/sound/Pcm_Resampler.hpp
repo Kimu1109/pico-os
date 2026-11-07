@@ -2,7 +2,9 @@
 #include <cstddef>
 #include <cstdint>
 
-// 16bitのサンプル列(1ch か左右交互の2ch)を out_rate Hz へ直す係(1コア目専用。WavDecoder・Mp3Decoder が持つ)。
+#include "sound/Pcm_Sample.hpp"
+
+// サンプル列(PcmSample。既定の版は16bit、24bitの版は32bitの入れ物に16bitか24bitの桁)(1ch か左右交互の2ch)を out_rate Hz へ直す係(1コア目専用。WavDecoder・Mp3Decoder が持つ)。
 // 元のサンプルは source(ctx, frame) で1つずつ受け取る(読み切ったら false を返す)。
 //
 // - 線形補間(16.16の固定小数点)。**下げるとき(44.1kHz→22050Hz、48kHz→44.1kHz等)は先に低域通過フィルタ**
@@ -11,7 +13,7 @@
 // - 同じ周波数なら入れたのと同じ数だけ出す(最後の1サンプルも出してから終える)
 class PcmResampler {
 public:
-    struct Frame { int16_t v[2] = {0, 0}; };    // 左右(1chでは v[0] だけが意味を持つ)
+    struct Frame { PcmSample v[2] = {0, 0}; };  // 左右(1chでは v[0] だけが意味を持つ)
     using Source = bool (*)(void* ctx, Frame& out);
 
     // 低域通過フィルタのタップ数の上限(奇数。2*kMaxHalfTaps+1)。比が大きい(96kHz等)と頭打ちになり、少し甘くなる
@@ -25,14 +27,14 @@ public:
 
     // 最大 max フレーム(lanes が2なら out は max*2 個)を書き、書いたフレーム数を返す。
     // 読み元が終わり、残りも出し切ったら finished() が true になる
-    size_t read(int16_t* out, size_t max);
+    size_t read(PcmSample* out, size_t max);
     bool finished() const { return this->finished_; }
 
 private:
     bool nextSource(Frame& v);
     void designFilter(uint32_t in_rate, uint32_t out_rate);
     void pushHistory(const Frame& x);
-    int16_t filterOut(int lane) const;
+    PcmSample filterOut(int lane) const;
     bool pull(Frame& v){ return this->source_ && this->source_(this->ctx_, v); }
 
     Source source_ = nullptr;

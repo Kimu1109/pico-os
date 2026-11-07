@@ -172,6 +172,55 @@ SUMMARY.md #11。**出力の土台 + チップチューン音源(既定8チャ�
   22050Hzなら系統をまたいでも続けて移る・ミュージックで44.1kHz→96kHz→44.1kHz(MP3)の並びを鳴らすと44100→48000→44100Hzと切り替わり止まった扱いにならない・
   他の画面が22050Hzを望んでいれば切り替えない)。
 
+## 24bitの出力 (`PICO_HW_SOUND_24BIT` / `SoundFunctions::SetBitDepth()` / `PcmSample`) (2026-11-07)
+
+利用者の要望: ハイレゾの見積もり(`sound/playback.md`「88.2/96kHzの曲」の前置き)の段階3(出力を88.2/96kHzにする)は飛ばし、段階4(24bit)を先に。
+**24bitは切り替えられるように、通常のビルドでは16bit固定**に。
+
+- **ビルド時の旗 `PICO_HW_SOUND_24BIT`**(`config/Hardware_Config.hpp`、既定0。部品は `buildcfg/options.ini` の `opt_sound_24bit`)。
+  **音楽再生に特化した版(`env:rpipico2w_music`)だけ1**。0の版は今までと同じ16bitの経路だけが入る(標本の型は `int16_t` のまま。
+  `SetBitDepth(24)` は false、設定アプリに行は出ない、`sound.cfg` の `bit-depth = 24` はログを出して16bitで鳴らす)。
+- **実行時の切り替え**: `sound.cfg` の `bit-depth = 16|24`(既定16)、設定アプリの音タブ「ビット深度」(16bit / 24bit。出力先の下。
+  1の版だけ)。C++は `SoundFunctions::BitDepth()` / `SetBitDepth(bits)` / `IsBitDepthSupported(bits)`。既定を16bitにしたのは、実機で確かめていないため。
+  切り替えは周波数の切り替えと同じ流れ: 1コア目がWAV・曲・効果音を止め(列の中の値の桁が変わるので先読みは捨てる)、`playback_serial` を進め
+  (ミュージックは止まった扱い)、コマンドの列へ `SetBits` を積む。2コア目は `ApplyBits()` でI2Sを止めて新しいスロットの幅で開き直す。
+- **経路**(1の版):
+  - 標本の型 `PcmSample`(`sound/Pcm_Sample.hpp`)が `int32_t` になる。読み取り係(`PcmFileDecoder::setWideOutput(true)`)が**24bitの桁(±8388607)**で出す:
+    FLAC/ALAC は24bitまでの下位ビットを残し(`PcmWide::FromBits()`。16bitの桁へは今までどおり四捨五入)、WAVは24/32bitの上位24bitと浮動小数点を24bitで、
+    16bit以下とMP3(minimp3は16bitで出す)は8bit上へずらす。16bitで鳴らすときも32bitの入れ物に16bitの桁で入れる(同じ列・同じ係で両方を扱う)。
+  - 周波数の変換(`PcmResampler`)は24bitの桁×Q15が32bitを超えるので、1の版だけ64bitで足す(フィルタと補間)。
+  - 先読みの列(`WavStream`)は1サンプル4バイトで **12288サンプル=48KB**(0の版は16384サンプル=32KB)。ステレオ44.1kHzで約139ms
+    (0の版は約190ms)。**1コア目がこれより長く止まると途切れる**ので、24bitで鳴らすかに関わらず1の版は少し途切れやすい。
+    その代わり大きさは16KB増に抑えた(16384サンプルのままだと64KBで、FLAC等の係の約46KBと合わせてヒープの空きを超えかねない)。
+    `renderAddWide()` が24bitの桁のまま音量(64bitで掛ける)を掛けて足す。
+  - 2コア目(`PumpWide()`): 効果音・曲(MML)・GBの音は今までどおり16bitで作り、8bit上へずらして `chunk_wide` へ写し、WAVを24bitの桁で足して
+    ±8388607で頭打ちする。I2Sは `setBitsPerSample(32)` の32bitスロットで、**値は上位24bit**(`v << 8`。arduino-pico の `write24()` と同じ並び)。
+    1ワードが片方のチャンネルなので、左右の2ワードが空いているとき(`availableForWrite() >= 8`)だけ書く(片方だけ書けて左右がずれないように)。
+    バッファは同じ長さ(約23ms)にするためワード数を倍(44.1/48kHzで256ワード×8本=8KB)。MAX98357A・PCM5102Aとも32bitスロットを受け付ける
+    (BCLKは48kHzで3.072MHz)。
+  - 1コア目のWAVの読み込みの一時置き場は、スタック(4KB)を増やさないよう512バイトのまま(24bitでは128サンプル)。
+- **効くところ**: PCM5102A(ライン出力)で、24bitのFLAC/ALAC/WAVの下位8bitが出力まで残る。また音量は数値で掛けているので、16bitの曲でも
+  音量を下げたときの細かさが残る(16bitの経路は音量25%で約2bit落ちる)。MAX98357A(スピーカー)では聞いて分かる差は無い見込み。
+- **PC/Web**(`pc/compat/I2S.h`): `setBitsPerSample(32)` なら `AUDIO_S32SYS` で開き、1ワードを片方のチャンネルとして流す。`availableForWrite()` を足した。
+  ホストテストの代替(`stubs/I2S.h`)にも `availableForWrite()`。
+- 大きさ(実機ファーム、2026-11-07。前 → 後):
+
+  | 版 | フラッシュ | 静的RAM | 実行中のヒープ |
+  |---|---|---|---|
+  | `rpipico2w`(0の版) | 2,170,300 → 2,171,212B(+912B) | 155,460 → 155,468B(+8B) | 変わらない |
+  | `rpipico2w_music`(1の版) | 1,807,376 → 1,809,304B(+1,928B) | 149,616 → 150,128B(+512B。`chunk_wide`) | 先読みの列 +16KB、24bitで鳴らす間はI2Sのバッファ +4KB |
+
+  0の版の +912B は、どの版にも入る切り替えの口(`SetBitDepth()`・`bit-depth` の読み込み・設定の `updateBitDepth()`・コマンド)。
+  経路(32bitの標本・64bitの変換・`PumpWide()`)は入らない。
+- 検証: ホストテスト。`sound24_test`(1の版の定義で音の経路のファイルを自分に入れる): 24bitのFLAC/ALAC(48kHz・96kHz)を24bitの桁で読むと
+  ffmpegの24bitの展開結果とビット単位で一致(`gen_*_test_data.py` が `〜Hash24` を書く)・16bitの桁なら今までの16bitの結果と一致・
+  16bitのFLACとMP3は8bit上へずらしただけ・24bitのWAVの下位8bit・96kHz→48kHzで大きさが合い下位ビットが残る、
+  SoundFunctions: 既定は16bit・16/24以外は断る・切り替えで鳴っていたWAVが止まる・32bitスロット/倍のワード数で開き直す・
+  24bitのWAVの値(下位8bitを含む)が音量を掛けてそのまま出る・効果音も鳴る・`bit-depth` の読み込み・16bitへ戻す。
+  `flac24_test`(`flac_test.cpp` を1の版で作ったもの。16bitで鳴らすときは今までどおり)。既定の版のホストテストは全部そのまま通る。
+  PCビルド(`-DPICOOS_VARIANT=rpipico2w_music`): 設定の音タブに「ビット深度」が出て、24bitを選ぶと「出力を24bitにします」。
+  **実機では未確認(24bitで鳴るか・途切れないか)(Todoist参照)**。
+
 ## イヤホンとスピーカーの切り替え(`SoundFunctions::Route` / PCM5102A + 差し込み検出) (2026-10-24)
 
 SUMMARY.md #11。**スピーカー(MAX98357A)とイヤホン(PCM5102A)を両方つなぎ、イヤホンを差すと自動でイヤホンへ移る**。

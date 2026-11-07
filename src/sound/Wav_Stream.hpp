@@ -3,12 +3,17 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "config/Hardware_Config.hpp"
+#include "sound/Pcm_Sample.hpp"
+
 // WAVの再生で、1コア目(SDから読んで直したサンプル)から2コア目(音源の出力へ足す)へ渡す列。
 //
 // - 1対1(積むのは1コア目、取り出すのは2コア目)なので atomic の head/tail だけで足りる(ロック無し)
 // - 中身は16bit(出力の周波数)で、モノラル(1フレーム=1サンプル)かステレオ(左右交互、1フレーム=2サンプル)。
-//   head/tail/kRingSamples はサンプル(int16)の数で数える。kRingSamples(16384 = 32KB)ぶん先読みできる:
+//   head/tail/kRingSamples はサンプル(PcmSample)の数で数える。kRingSamples(16384 = 32KB)ぶん先読みできる:
 //   モノラルで44100Hzなら約370ms、ステレオなら約190ms(22050Hzはその倍)。
+//   24bitの版(PICO_HW_SOUND_24BIT)は1サンプル4バイトで 12288(48KB。ステレオ44100Hzで約139ms)。
+//   中の値の桁(16bitか24bit)は積む側が決め、取り出す側は renderAdd(16bitの桁)か renderAddWide(24bitの桁)で合わせる
 //   形は setStereo() で決め、それは flush() を兼ねる(古い形のサンプルが残らないように)
 //   2のべき乗ではないので、head/tail は 0〜kWrap-1 を巡る数で持つ(32bitの数を桁あふれさせると添字が飛ぶため)
 //   **1コア目がこれより長く止まると(TLSのハンドシェイク等)音が途切れる**(途切れた回数は underruns())
@@ -17,7 +22,11 @@
 // - 音量(0〜100)は2コア目が足すときに掛ける(全体の音量とは別。両方掛かる)
 class WavStream {
 public:
+#if PICO_HW_SOUND_24BIT
+    static constexpr uint32_t kRingSamples = 12288;
+#else
     static constexpr uint32_t kRingSamples = 16384;
+#endif
     // head/tail の巡る範囲。kRingSamples の倍数で 2^31 に近いもの(捨てる位置 flush_to_ は古いまま残るので、
     // 範囲が狭いと tail が一巡したときに「まだ先にある」と取り違える。2^31 なら44100Hzで約13時間)
     static constexpr uint32_t kWrap = kRingSamples * (0x80000000u / kRingSamples);
@@ -25,7 +34,7 @@ public:
     // ===== 1コア目 =====
     uint32_t freeSpace() const;                     // 今積めるサンプル数
     uint32_t freeFrames() const { return this->freeSpace() / this->channels(); }
-    size_t push(const int16_t* src, size_t n);      // サンプルを積む(ステレオは偶数個)。積めた数を返す
+    size_t push(const PcmSample* src, size_t n);    // サンプルを積む(ステレオは偶数個)。積めた数を返す
     // モノラル/ステレオを決める(鳴らし始めに、積む前に呼ぶ)。積んだものは捨てる
     void setStereo(bool stereo);
     uint8_t channels() const { return this->chs_.load(std::memory_order_relaxed); }
@@ -46,10 +55,18 @@ public:
     // stereo は out の形(左右交互か)。モノラルのWAVはステレオの out の左右へ同じ値を足し、
     // ステレオのWAVはモノラルの out へは左右の平均を足す
     void renderAdd(int16_t* out, size_t n, uint8_t master, bool stereo = false);
+#if PICO_HW_SOUND_24BIT
+    // 24bitの桁で積んだ列を、24bitの桁の out(左右交互・ステレオだけ)へ足す。頭打ちは ±8388607。
+    // out が nullptr なら捨てるだけ(renderAdd と同じ)
+    void renderAddWide(int32_t* out, size_t n, uint8_t master);
+#endif
     bool hasData();                                 // 鳴らすものがあるか(省電力の判断用)
 
 private:
     void applyFlush();          // 2コア目: 捨てる要求を当てる
+    // 2コア目: 取り出せるフレーム数(一時停止中は0)と、取り出した後の後始末(tailを進め、途切れを数える)
+    size_t takeable(size_t n, uint32_t& t);
+    void taken(uint32_t t, size_t k, size_t n, bool has_out);
     // 1コア目から見た tail(捨てた分を含めて進めたもの)。2コア目が捨てる位置を追い越していたら、
     // 捨てる位置を tail へ寄せ直す(古いまま残すと、tail が巡る範囲の半分を進んだときに「先にある」と取り違える)
     uint32_t effectiveTail() const;
@@ -58,7 +75,7 @@ private:
     // f が t より先か(巡る範囲の半分までを「先」とみなす。2コア目が止まっていると、捨てる位置は列の長さより先へ進みうる)
     static bool Ahead(uint32_t f, uint32_t t){ const uint32_t d = Dist(f, t); return d > 0 && d < kWrap / 2; }
 
-    int16_t ring_[kRingSamples];
+    PcmSample ring_[kRingSamples];
     std::atomic<uint32_t> head_{0};         // 積んだ数(1コア目だけが書く)
     std::atomic<uint32_t> tail_{0};         // 取り出した数(2コア目だけが書く)
     mutable std::atomic<uint32_t> flush_to_{0};     // 1コア目: ここまで捨ててほしい

@@ -47,6 +47,8 @@ public:
         return n * 4;
     }
     bool getOverflow(){ const bool f = overflow; overflow = false; return f; }
+    // 出力: 書けるバイト数(実機と同じく4バイト=1ワード単位)
+    int availableForWrite(){ return (running && !is_input && queued.size() < capacity) ? (int)((capacity - queued.size()) * 4) : 0; }
     size_t write(int32_t v, bool){
         if(!running || queued.size() >= capacity) return 0;
         queued.push_back((uint32_t)v);

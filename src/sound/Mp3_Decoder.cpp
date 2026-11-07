@@ -305,15 +305,17 @@ bool Mp3Decoder::rawSource(Frame& v){
         //頭の遅延は捨てる(1フレームより長いこともあるので、出るまで回す)
         if(!this->has_gapless_ || this->dec_pos_ > this->skip_start_) break;
     }
+    //minimp3 は16bitで出す。24bitの桁(setWideOutput)なら8bit上へずらすだけ(下位ビットは0。音量を下げたときの細かさが残る)
+    const int sh = this->wide_ ? 8 : 0;
     if(this->pcm_ch_ == 2){
         if(this->lanes_ == 2){
-            v.v[0] = p[0];
-            v.v[1] = p[1];
+            v.v[0] = (PcmSample)((int32_t)p[0] * (1 << sh));
+            v.v[1] = (PcmSample)((int32_t)p[1] * (1 << sh));
         }else{
-            v.v[0] = v.v[1] = (int16_t)(((int32_t)p[0] + p[1]) / 2);
+            v.v[0] = v.v[1] = (PcmSample)(((int32_t)p[0] + p[1]) * (1 << sh) / 2);
         }
     }else{
-        v.v[0] = v.v[1] = p[0];
+        v.v[0] = v.v[1] = (PcmSample)((int32_t)p[0] * (1 << sh));
     }
     return true;
 }
@@ -352,7 +354,7 @@ bool Mp3Decoder::seekMs(uint32_t ms){
     return true;
 }
 
-size_t Mp3Decoder::read(int16_t* out, size_t max){
+size_t Mp3Decoder::read(PcmSample* out, size_t max){
     if(!this->open_ || this->finished_) return 0;
     const size_t n = this->rs_.read(out, max);
     if(this->rs_.finished()) this->finished_ = true;

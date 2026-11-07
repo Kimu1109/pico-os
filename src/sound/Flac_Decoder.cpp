@@ -36,7 +36,6 @@ namespace {
     inline int32_t Mul(int32_t a, int32_t k){ return (int32_t)((uint32_t)a * (uint32_t)k); }
     inline int32_t Neg(int32_t a){ return (int32_t)(0u - (uint32_t)a); }
 
-    inline int16_t Clamp16(int32_t v){ return v > 32767 ? 32767 : (v < -32768 ? -32768 : (int16_t)v); }
 }
 
 const char* FlacDecoder::ErrorText(Error e){
@@ -557,32 +556,21 @@ void FlacDecoder::startAt(uint32_t pos, uint64_t sample){
 bool FlacDecoder::rawSource(Frame& v){
     if(this->block_pos_ >= this->block_len_ && !this->advance()) return false;
     const uint32_t i = this->block_pos_++;
-    int32_t l = this->ch_[0][i];
-    int32_t r = this->channels_ == 2 ? this->ch_[1][i] : l;
-    const int bps = this->bps_;
-    if(bps > 16){
-        const int sh = bps - 16;
-        const int32_t half = 1 << (sh - 1);
-        l = Add(l, half) >> sh;
-        r = Add(r, half) >> sh;
-    }else if(bps < 16){
-        l = (int32_t)((uint32_t)l << (16 - bps));
-        r = (int32_t)((uint32_t)r << (16 - bps));
-    }
-    l = Clamp16(l);
-    r = Clamp16(r);
+    //16bitの桁へは四捨五入(ディザは掛けない)。24bitの桁(setWideOutput)なら24bitまでの下位ビットを残す
+    const int32_t l = PcmWide::FromBits(this->ch_[0][i], this->bps_, this->wide_);
+    const int32_t r = this->channels_ == 2 ? PcmWide::FromBits(this->ch_[1][i], this->bps_, this->wide_) : l;
     if(this->lanes_ == 2){
-        v.v[0] = (int16_t)l;
-        v.v[1] = (int16_t)r;
+        v.v[0] = (PcmSample)l;
+        v.v[1] = (PcmSample)r;
     }else if(this->channels_ == 2){
-        v.v[0] = v.v[1] = (int16_t)((l + r) / 2);
+        v.v[0] = v.v[1] = (PcmSample)((l + r) / 2);
     }else{
-        v.v[0] = v.v[1] = (int16_t)l;
+        v.v[0] = v.v[1] = (PcmSample)l;
     }
     return true;
 }
 
-size_t FlacDecoder::read(int16_t* out, size_t max){
+size_t FlacDecoder::read(PcmSample* out, size_t max){
     if(!this->open_ || this->finished_) return 0;
     const size_t n = this->rs_.read(out, max);
     if(this->rs_.finished()) this->finished_ = true;

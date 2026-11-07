@@ -1505,6 +1505,7 @@ const I18nFunctions::Entry I18nFunctions::kTableEn[] = {
     { 0xff61d346u, "Permission denied" }, // 権限がありません
     { 0xff87fd58u, "Browser home URL" }, // ブラウザのホームURL
     { 0xffaf61beu, "Cannot check for new mail" }, // 新着を確かめられません
+    { 0xffcb15ceu, "Bit depth" }, // ビット深度
     { 0xffdae38bu, "Fetching %s…" }, // %s を取得中…
     { 0xfff3714fu, "No" }, // いいえ
     { 0xffffffffu, nullptr },

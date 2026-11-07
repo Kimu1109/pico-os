@@ -278,6 +278,15 @@ host_test(mic_test GROUP media)
 host_test(hw_off_test GROUP media SOURCES
     ${SRC}/hal/Sound_Functions_Off.cpp ${SRC}/hal/Mic_Functions_Off.cpp ${SRC}/hal/Battery_Functions.cpp)
 target_compile_definitions(hw_off_test PRIVATE PICO_HW_SOUND=0 PICO_HW_MIC=0 PICO_HW_BATTERY=0)
+# 24bitの音声出力を載せた版(PICO_HW_SOUND_24BIT=1。音楽再生に特化した版)。音の経路のファイルをその定義で自分に入れる。
+# flac24_test は flac_test.cpp をそのまま24bitの版で作ったもの(16bitで鳴らすときに今までどおり動くか)
+set(SOUND24_SOURCES
+    ${SRC}/hal/Sound_Functions.cpp ${SRC}/sound/Wav_Stream.cpp ${SRC}/sound/Pcm_Resampler.cpp
+    ${SRC}/sound/Wav_Decoder.cpp ${SRC}/sound/Mp3_Decoder.cpp ${SRC}/sound/Flac_Decoder.cpp ${SRC}/sound/Alac_Decoder.cpp)
+host_test(sound24_test GROUP media SOURCES ${SOUND24_SOURCES})
+target_compile_definitions(sound24_test PRIVATE PICO_HW_SOUND_24BIT=1)
+host_test(flac24_test GROUP media SOURCES ${SOUND24_SOURCES})
+target_compile_definitions(flac24_test PRIVATE PICO_HW_SOUND_24BIT=1)
 host_test(play_queue_test GROUP media)
 host_exe(mml_dump)
 host_py_test(midi2mml_test GROUP media USES mml_dump ARGS $<TARGET_FILE:mml_dump>)

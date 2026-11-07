@@ -187,6 +187,10 @@ class SettingsScene : public Scene {
         Label<PICO_STR_S>* rate_title           = nullptr;
         DropdownMenu*      rate_dropdown        = nullptr;
         int                rate_selected_index  = -1;
+        // 出力のビット深度(sound.cfgの bit-depth)。24bitの出力を載せた版だけ
+        Label<PICO_STR_S>* bits_title           = nullptr;
+        DropdownMenu*      bits_dropdown        = nullptr;
+        int                bits_selected_index  = -1;
         Checkbox*          battery_cap_checkbox = nullptr;
         // 出力先(sound.cfgの route)と、今どちらから鳴るかの表示。項目の並びはSettingsScene.cppのkRouteModes
         Label<PICO_STR_S>* route_title          = nullptr;
@@ -308,6 +312,7 @@ class SettingsScene : public Scene {
         void updateSleep();
         void updateTextSize();
         void updateSampleRate();
+        void updateBitDepth();
         void updateRoute();
         void refreshRouteStatus();
         void updateTimezone();

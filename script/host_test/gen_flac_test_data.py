@@ -53,6 +53,19 @@ SEEK_CASE = ("kFlacChirp", "22.05kHz モノラル16bit 1秒・周波数が上が
              ["-c:a", "flac", "-compression_level", "5", "-frame_size", "1152", "-sample_fmt", "s16"], 16)
 
 
+class Samples(list):
+    """16bitに丸めた展開結果。24bitの曲は wide に24bitのまま(24bitの出力の確かめ用)"""
+    wide = None
+
+
+def fnv64_wide(samples):
+    """24bitの値(32bitの符号付きとして)のFNV-1a 64ビット"""
+    h = 0xCBF29CE484222325
+    for s in samples:
+        h = ((h ^ (s & 0xFFFFFFFF)) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
 def fnv64(samples):
     h = 0xCBF29CE484222325
     for s in samples:
@@ -77,7 +90,8 @@ def encode(in_args, out_args, bits):
         samples = list(struct.unpack("<%dh" % (len(pcm) // 2), pcm))
     else:
         s32 = struct.unpack("<%di" % (len(pcm) // 4), pcm)
-        samples = []
+        samples = Samples()
+        samples.wide = [v >> 8 for v in s32]
         for v in s32:
             x24 = v >> 8
             y = (x24 + 128) >> 8
@@ -176,6 +190,8 @@ def dump(lines, name, desc, data, samples, extra=None):
     if samples is not None:
         lines.append(f"static const unsigned {name}Frames = {len(samples) // (2 if 'Stereo' in name or name in ('kFlacSilence', 'kFlacNoise') else 1)};")
         lines.append(f"static const unsigned long long {name}Hash = 0x{fnv64(samples):016X}ULL;")
+        if getattr(samples, "wide", None) is not None:
+            lines.append(f"static const unsigned long long {name}Hash24 = 0x{fnv64_wide(samples.wide):016X}ULL;   // 24bitのまま")
     lines.append("")
 
 

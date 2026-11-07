@@ -73,14 +73,14 @@ namespace {
     std::atomic<WavStream*> wav_stream{nullptr};
 
     // --- コマンドの列(1コア目が積み、2コア目が取り出す。1対1なのでロック無しで足りる) ---
-    enum class CmdType : uint8_t { Play, Stop, StopAll, MusicPlay, MusicStop, SetRate };
+    enum class CmdType : uint8_t { Play, Stop, StopAll, MusicPlay, MusicStop, SetRate, SetBits };
     struct Command {
         CmdType type;
         uint8_t ch;
         ChipSynth::Note note;
         const uint8_t* music = nullptr;     // MusicPlay: 演奏データ(置き場の片方)
         uint16_t music_size = 0;
-        uint32_t rate = 0;                  // SetRate: 新しい出力の周波数
+        uint32_t rate = 0;                  // SetRate: 新しい出力の周波数 / SetBits: 新しいビット深度
     };
     Command queue[kCommandQueueSize];
     std::atomic<uint32_t> q_head{0};    // 積んだ数(1コア目だけが書く)
@@ -109,6 +109,7 @@ namespace {
     uint32_t out_rate = kDefaultSampleRate;     // 1コア目から見た出力の周波数(WAVの読み取り・時間の換算に使う)
     uint32_t configured_rate = kDefaultSampleRate;  // 利用者の設定(sound.cfg の sample-rate)
     uint32_t requested_rate = 0;                // 画面の要求(0=無し)。設定より優先する
+    uint8_t out_bits = kBitDepth16;             // 1コア目から見た出力のビット深度(読み取り係の桁を決める)
     bool battery_cap = true;            // sound.cfgのbattery-cap。MAX98357A向けの電池駆動中の頭打ちを掛けるか
     bool connected = false;             // 今の鳴らす先がつながっている(採用済みの状態から決めたもの)
 
@@ -191,10 +192,12 @@ namespace {
     }
 
     uint32_t cfg_rate = kDefaultSampleRate;     // LoadConfig()の読みかけ(ParseFile()へは捕まえない関数を渡すため)
+    uint8_t cfg_bits = kBitDepth16;
 
     void LoadConfig(){
         battery_cap = true;
         cfg_rate = kDefaultSampleRate;
+        cfg_bits = kBitDepth16;
         route_mode = RouteMode::Auto;
         volumes[(int)Route::Headphone] = kDefaultHeadphoneVolume;
         //無いのが普通(既定値で動く)。ParseFile()は開けないとFAILを出すので先に確かめる
@@ -230,11 +233,21 @@ namespace {
                                          (unsigned long)kSampleRateLow, (unsigned long)kSampleRateHigh,
                                          (unsigned long)kSampleRate48k, value);
                         }
+                    }else if(strcmp(key, "bit-depth") == 0){
+                        //24bitはそれを載せた版だけ(載せていない版では16bitのまま。設定を消さずに残す)
+                        int v = 0;
+                        if(PICO_Config::ConfigValue::AsInt(value, v) && (v == 16 || v == 24)){
+                            if(IsBitDepthSupported((uint8_t)v)) cfg_bits = (uint8_t)v;
+                            else LOG_SYS_MSG("sound.cfg: この版は24bitの出力を載せていないので16bitで鳴らします");
+                        }else{
+                            LOG_SYS_WARN("sound.cfg: bit-depth は 16 か 24 です: %s", value);
+                        }
                     }
                 }
             );
         }
         SetSampleRate(cfg_rate);
+        SetBitDepth(cfg_bits);
     }
 
     void PublishWant(){
@@ -367,6 +380,7 @@ namespace {
         }
         pcm_decoder = d;
         d->setStereoOutput(true);
+        d->setWideOutput(out_bits == kBitDepth24);
         if(!d->open(wav_next_path.c_str(), out_rate)){
             LOG_SYS_WARN("Sound: 次の曲を続けて鳴らせません(%s): %s", d->errorText(), wav_next_path.c_str());
             return false;
@@ -414,12 +428,14 @@ namespace {
     void FeedWav(uint32_t max_samples){
         WavStream* wav = wav_stream.load(std::memory_order_relaxed);
         if(!wav || !pcm_decoder || !pcm_decoder->isOpen()) return;
-        int16_t tmp[256];
+        //1コア目のスタックは4KBしか無いので512バイトに収める(24bitの版は128サンプル)
+        PcmSample tmp[512 / sizeof(PcmSample)];
+        constexpr size_t kTmp = sizeof(tmp) / sizeof(tmp[0]);
         const uint32_t chs = wav->channels();      //1フレームのサンプル数(ステレオは左右で2)
         uint32_t want = wav->freeFrames();         //フレームで数える
         if(want > max_samples) want = max_samples;
         while(want > 0){
-            const size_t max_frames = 256 / chs;
+            const size_t max_frames = kTmp / chs;
             const size_t n = pcm_decoder->read(tmp, want < max_frames ? want : max_frames);
             wav_pushed += wav->push(tmp, n * chs) / chs;
             want -= (uint32_t)n;
@@ -494,6 +510,7 @@ namespace {
     I2S i2s(OUTPUT);
     uint32_t core1_rate = kDefaultSampleRate;   // 2コア目が今使っている出力の周波数
     bool restart_output = false;                // 周波数を変えたので、動いているI2Sを止めて開き直す
+    uint8_t core1_bits = kBitDepth16;           // 2コア目が今使っている出力のビット深度
     ChipSynth::Engine engine(kDefaultSampleRate);
 #if PICO_APP_GB
     GbApu gb_apu(kDefaultSampleRate);
@@ -511,6 +528,9 @@ namespace {
     // I2Sへ書く前の一時置き場
     constexpr size_t kChunk = 64;
     int16_t chunk[kChunk * 2];                  // 左右交互(L,R,L,R…)
+#if PICO_HW_SOUND_24BIT
+    int32_t chunk_wide[kChunk * 2];             // 24bitで鳴らすとき: 24bitの桁で混ぜたもの(左右交互)
+#endif
     size_t chunk_pos = 0;
     size_t chunk_len = 0;
 
@@ -518,7 +538,19 @@ namespace {
     unsigned long last_step_ms = 0;
     uint32_t sample_frac = 0;           // ms×サンプル周波数 の1000未満の端数
 
-    uint16_t BufferWords(){ return core1_rate >= kSampleRateHigh ? kBufferWordsHigh : kBufferWordsLow; }
+    // 32bitスロット(24bit)では1サンプルが左右2ワードになるので、同じ長さ(約23ms)にするためワード数を倍にする
+    uint16_t BufferWords(){
+        const uint16_t w = core1_rate >= kSampleRateHigh ? kBufferWordsHigh : kBufferWordsLow;
+        return core1_bits == kBitDepth24 ? (uint16_t)(w * 2) : w;
+    }
+
+    // 出力のビット深度を変える。I2Sは次のApplyRunState()で開き直す(音源は作り直さない。鳴っていた音は1コア目が止めてある)
+    void ApplyBits(uint8_t bits){
+        if(bits == core1_bits || !IsBitDepthSupported(bits)) return;
+        core1_bits = bits;
+        chunk_pos = chunk_len = 0;
+        restart_output = true;
+    }
 
     // 出力の周波数を変える。音源は作り直す(鳴っていた音は全部止まる)。I2Sは次のApplyRunState()で開き直す
     void ApplyRate(uint32_t rate){
@@ -556,7 +588,8 @@ namespace {
     void StartOutput(unsigned long now_ms){
         i2s.setBCLK(AUDIO_I2S_BCLK);    // LRCLKは自動でBCLK+1
         i2s.setDATA(AUDIO_I2S_DATA);
-        i2s.setBitsPerSample(16);
+        //24bitは32bitスロット(値は上位24bit。MAX98357A・PCM5102Aとも受け付ける)
+        i2s.setBitsPerSample(core1_bits == kBitDepth24 ? 32 : 16);
         i2s.setBuffers(kBufferCount, BufferWords());
         //スリープ中にクロックを下げていたら、I2Sの分周を計算する前に戻す
         ClockFunctions::EnsureFull();
@@ -648,6 +681,9 @@ namespace {
                 case CmdType::SetRate:
                     ApplyRate(cmd.rate);
                     break;
+                case CmdType::SetBits:
+                    ApplyBits((uint8_t)cmd.rate);
+                    break;
             }
             processed++;
             any = true;
@@ -655,8 +691,38 @@ namespace {
         return any;
     }
 
+#if PICO_HW_SOUND_24BIT
+    // 24bitで鳴らすとき: 効果音・曲・GBの音を16bitで作って8bit上へずらし、WAVを24bitの桁のまま足して、
+    // 32bitスロットへ上位24bitで書く(左右で2ワード。片方だけ書けて左右がずれないよう、2ワード空いているときだけ書く)
+    bool PumpWide(){
+        bool wrote = false;
+        const uint32_t kMaxPerCall = (uint32_t)BufferWords() * kBufferCount / 2;
+        for(uint32_t i = 0; i < kMaxPerCall; i++){
+            if(chunk_pos == chunk_len){
+                player.render(engine, chunk, kChunk, true);
+#if PICO_APP_GB
+                if(GbAudioLink* link = gb_link.load(std::memory_order_acquire)) link->render(gb_apu, chunk, kChunk, true);
+#endif
+                for(size_t k = 0; k < kChunk * 2; k++) chunk_wide[k] = (int32_t)chunk[k] * 256;
+                if(WavStream* wav = wav_stream.load(std::memory_order_acquire)) wav->renderAddWide(chunk_wide, kChunk, eff_volume);
+                chunk_pos = 0;
+                chunk_len = kChunk;
+            }
+            if(i2s.availableForWrite() < 8) break;  //満杯(左右の2ワードぶん空いていない)
+            i2s.write((int32_t)((uint32_t)chunk_wide[chunk_pos * 2] << 8), false);
+            i2s.write((int32_t)((uint32_t)chunk_wide[chunk_pos * 2 + 1] << 8), false);
+            chunk_pos++;
+            wrote = true;
+        }
+        return wrote;
+    }
+#endif
+
     // バッファの空いている分だけ作って書き込む。1サンプルでも書けたらtrue
     bool Pump(){
+#if PICO_HW_SOUND_24BIT
+        if(core1_bits == kBitDepth24) return PumpWide();
+#endif
         bool wrote = false;
         //1回に書くのはバッファ全体まで(溜まっていれば数サンプルで抜ける)
         const uint32_t kMaxPerCall = (uint32_t)BufferWords() * kBufferCount;
@@ -829,6 +895,22 @@ namespace {
         LOG_SYS_MSG("Sound: 出力の周波数を%luHzにします", (unsigned long)rate);
         return true;
     }
+}
+
+uint8_t SoundFunctions::BitDepth(){ return out_bits; }
+
+bool SoundFunctions::SetBitDepth(uint8_t bits){
+    if(!IsBitDepthSupported(bits)) return false;
+    if(bits == out_bits) return true;
+    //列の中の値の桁が変わるので、鳴っているものを止めて捨ててから切り替える(周波数の切り替えと同じ)
+    WavStop();
+    MusicStop();
+    StopAll();
+    playback_serial++;
+    if(!Push(Command{CmdType::SetBits, 0, {}, nullptr, 0, bits})) return false;
+    out_bits = bits;
+    LOG_SYS_MSG("Sound: 出力を%ubitにします", (unsigned)bits);
+    return true;
 }
 
 bool SoundFunctions::SetSampleRate(uint32_t rate){
@@ -1089,6 +1171,7 @@ bool SoundFunctions::WavPlay(const char* path, bool loop, uint8_t volume, const 
     if(!wav_path.assign(path)) wav_path.clear();     //長すぎるパスは覚えない(続けて積んだ後のシークで開き直せないだけ)
     wav_loop = loop;
     pcm_decoder->setStereoOutput(true);     //2ch以上のファイルは左右を残す(1chはモノラルのまま)
+    pcm_decoder->setWideOutput(out_bits == kBitDepth24);    //24bitで鳴らすなら24bitの桁で積む
     if(!pcm_decoder->open(path, out_rate)){
         if(error) *error = pcm_decoder->errorText();
         return false;
@@ -1202,6 +1285,7 @@ bool SoundFunctions::WavSeekMs(uint32_t ms){
         if(!d) return false;
         pcm_decoder = d;
         d->setStereoOutput(true);
+        d->setWideOutput(out_bits == kBitDepth24);
         if(!d->open(wav_path.c_str(), out_rate) || d->outChannels() != wav->channels()){
             d->close();
             return false;

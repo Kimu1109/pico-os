@@ -1,7 +1,8 @@
 // arduino-picoのI2Sライブラリの代替(PC/Webビルド用)。SDLの音声出力へ流す。
 //
 // src/hal/Sound_Functions.cpp が使う分(setBCLK/setDATA/setBitsPerSample/setBuffers/
-// begin/end/write(int32_t, bool))だけを持つ。1ワード = 上位16bitが左、下位16bitが右。
+// begin/end/write(int32_t, bool)/availableForWrite)だけを持つ。16bitでは1ワード = 上位16bitが左、下位16bitが右。
+// 32bit(24bitの出力。PICO_HW_SOUND_24BIT)では1ワードが片方のチャンネル(左,右,左,右…)で、値は上位24bit。
 //
 // アンプの検出(AUDIO_DETECTのピン)もここで引き受ける: PicoPcGpio::read_hook を差し込み、
 // 「アンプが刺さっている」= 音声デバイスが開ける、として LOW を返す。
@@ -172,7 +173,12 @@ public:
     bool setBCLK(int){ return true; }
     bool setDATA(int){ return true; }
     bool setDIN(int){ return true; }
-    bool setBitsPerSample(int bps){ return input_ ? bps == 32 : bps == 16; }
+    bool setBitsPerSample(int bps){
+        if(input_) return bps == 32;
+        if(bps != 16 && bps != 32) return false;
+        bps_ = bps;
+        return true;
+    }
     bool setBuffers(size_t buffers, size_t words, int32_t = 0){
         capacity_ = buffers * words;
 #if defined(__EMSCRIPTEN__)
@@ -195,6 +201,7 @@ public:
         tail_.store(0);
 
         SDL_AudioSpec want = PicoPcAudio::DesiredSpec((int)rate);
+        if(bps_ == 32) want.format = AUDIO_S32SYS;
         want.callback = &I2S::Callback;
         want.userdata = this;
         SDL_AudioSpec have{};
@@ -243,6 +250,15 @@ public:
         ring_[h] = (uint32_t)val;
         head_.store(next, std::memory_order_release);
         return 4;
+    }
+
+    // 書けるバイト数
+    int availableForWrite(){
+        if(dev_ == 0 || ring_.empty()) return 0;
+        const size_t h = head_.load(std::memory_order_relaxed);
+        const size_t t = tail_.load(std::memory_order_acquire);
+        const size_t used = (h + ring_.size() - t) % ring_.size();
+        return (int)((ring_.size() - 1 - used) * 4);
     }
 
     // ===== 入力 =====
@@ -376,6 +392,20 @@ private:
 
     static void Callback(void* userdata, Uint8* stream, int len){
         I2S* self = static_cast<I2S*>(userdata);
+        if(self->bps_ == 32){
+            //32bit: 1ワードが片方のチャンネル。足りなければ無音
+            int32_t* out32 = reinterpret_cast<int32_t*>(stream);
+            const int n = len / (int)sizeof(int32_t);
+            size_t t = self->tail_.load(std::memory_order_relaxed);
+            const size_t h = self->head_.load(std::memory_order_acquire);
+            for(int i = 0; i < n; i++){
+                if(t == h){ out32[i] = 0; continue; }
+                out32[i] = (int32_t)self->ring_[t];
+                t = (t + 1) % self->ring_.size();
+            }
+            self->tail_.store(t, std::memory_order_release);
+            return;
+        }
         int16_t* out = reinterpret_cast<int16_t*>(stream);
         const int frames = len / (int)(sizeof(int16_t) * 2);
         size_t t = self->tail_.load(std::memory_order_relaxed);
@@ -396,6 +426,7 @@ private:
     }
 
     bool input_ = false;
+    int bps_ = 16;      // 出力のスロットの幅(16か32)
     // 入力
     bool in_running_ = false;
     uint32_t in_rate_ = 48000;

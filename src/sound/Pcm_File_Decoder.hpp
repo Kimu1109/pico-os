@@ -2,7 +2,11 @@
 #include <cstddef>
 #include <cstdint>
 
-// SDの音のファイルを読み、音源と同じ「16bit・out_rate Hz」のサンプル列へ直す係の共通の口(1コア目専用)。
+#include "config/Hardware_Config.hpp"
+#include "sound/Pcm_Sample.hpp"
+
+// SDの音のファイルを読み、「out_rate Hz」のサンプル列(PcmSample)へ直す係の共通の口(1コア目専用)。
+// 桁は16bit(既定)。24bitの版では setWideOutput(true) で24bitの桁にできる(sound/Pcm_Sample.hpp)。
 // WavDecoder(.wav)と Mp3Decoder(.mp3)が持つ。SoundFunctions の WAV の経路はどちらもこの口だけで扱う
 class PcmFileDecoder {
 public:
@@ -23,14 +27,22 @@ public:
 
     // 最大 max フレーム(outChannels() が2なら左右交互なので out は max*2 個)を書き、書いたフレーム数を返す。
     // 終わりまで来たら finished() が true になる
-    virtual size_t read(int16_t* out, size_t max) = 0;
+    virtual size_t read(PcmSample* out, size_t max) = 0;
     virtual bool finished() const = 0;
 
     virtual const char* errorText() const = 0;
+
+    // 24bitの桁(±8388607)で出す(open()の前に決める)。24bitの版(PICO_HW_SOUND_24BIT)だけが true にできる。
+    // 16bitより深いファイル(24bitのFLAC/ALAC/WAV)は下位ビットを残し、16bitのファイルは8bit上へずらす
+    void setWideOutput(bool wide){ this->wide_ = wide && PICO_HW_SOUND_24BIT; }
+    bool wideOutput() const { return this->wide_; }
 
     // 見出しの中身(open()が成功した後)
     virtual uint16_t channels() const = 0;
     virtual uint16_t bitsPerSample() const = 0;
     virtual uint32_t sampleRate() const = 0;
     virtual uint32_t durationMs() const = 0;
+
+protected:
+    bool wide_ = false;
 };

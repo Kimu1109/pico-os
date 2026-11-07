@@ -174,7 +174,15 @@ void WavDecoder::decodeFrame(const uint8_t* p, Frame& out) const {
             if(!(f == f)) f = 0;                //NaN
             if(f > 1.0f) f = 1.0f;
             if(f < -1.0f) f = -1.0f;
-            v = (int32_t)(f * 32767.0f);
+            v = (int32_t)(f * (this->wide_ ? 8388607.0f : 32767.0f));
+        }else if(this->wide_){
+            //24bitの桁: 24bit・32bitは上位24bit、16bit以下は上へずらす
+            switch(bytes){
+                case 1:  v = ((int32_t)p[0] - 128) * 65536; break;
+                case 2:  v = (int32_t)(int16_t)U16(p) * 256; break;
+                case 3:  v = (int32_t)((uint32_t)p[0] << 8 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 24) >> 8; break;
+                default: v = (int32_t)((uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24) >> 8; break;
+            }
         }else{
             switch(bytes){
                 case 1:  v = ((int32_t)p[0] - 128) * 256; break;                 //8bitだけ符号なし
@@ -187,8 +195,9 @@ void WavDecoder::decodeFrame(const uint8_t* p, Frame& out) const {
         sum[lane] += v;
         count[lane]++;
     }
-    out.v[0] = (int16_t)(sum[0] / count[0]);
-    out.v[1] = this->lanes_ == 2 ? (int16_t)(sum[1] / count[1]) : out.v[0];
+    //24bitの桁で8chを足しても 8×2^23 = 2^26 なので int32 に収まる
+    out.v[0] = (PcmSample)(sum[0] / count[0]);
+    out.v[1] = this->lanes_ == 2 ? (PcmSample)(sum[1] / count[1]) : out.v[0];
 }
 
 bool WavDecoder::rawSource(Frame& v){
@@ -206,7 +215,7 @@ bool WavDecoder::rawSource(Frame& v){
     return true;
 }
 
-size_t WavDecoder::read(int16_t* out, size_t max){
+size_t WavDecoder::read(PcmSample* out, size_t max){
     if(!this->open_ || this->finished_) return 0;
     const size_t n = this->rs_.read(out, max);
     if(this->rs_.finished()) this->finished_ = true;

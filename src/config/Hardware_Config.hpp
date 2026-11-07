@@ -32,7 +32,18 @@
     #define PICO_HW_BATTERY 1
 #endif
 
+// 24bitの音声出力(既定0=16bitだけ)。1 にすると、音の経路(読み取り係・周波数の変換・先読みの列・2コア目のミックス)を
+// 32bitの標本で持ち、I2Sを32bitスロットで送れるようにする。24bitで鳴らすかは実行時に選ぶ(sound.cfg の bit-depth、
+// 設定アプリの「ビット深度」。既定は16bit)。ライン出力のDAC(PCM5102A)で、24bitの曲の下位ビットと、
+// 音量を下げたときの細かさを残すため。先読みの列が約16KB大きくなる(docs/design/sound/output.md「24bitの出力」)。
+// 音楽再生に特化した版(env:rpipico2w_music)だけ 1。PCは cmake -DPICOOS_VARIANT=rpipico2w_music
+#ifndef PICO_HW_SOUND_24BIT
+    #define PICO_HW_SOUND_24BIT 0
+#endif
+
 static_assert(PICO_HW_SOUND == 0 || PICO_HW_SOUND == 1, "PICO_HW_SOUND は 0 か 1");
+static_assert(PICO_HW_SOUND_24BIT == 0 || PICO_HW_SOUND_24BIT == 1, "PICO_HW_SOUND_24BIT は 0 か 1");
+static_assert(PICO_HW_SOUND || !PICO_HW_SOUND_24BIT, "PICO_HW_SOUND_24BIT は音声出力(PICO_HW_SOUND)を載せる版だけ");
 static_assert(PICO_HW_MIC == 0 || PICO_HW_MIC == 1, "PICO_HW_MIC は 0 か 1");
 static_assert(PICO_HW_BATTERY == 0 || PICO_HW_BATTERY == 1, "PICO_HW_BATTERY は 0 か 1");
 
@@ -44,4 +55,5 @@ namespace HardwareConfig {
     constexpr bool kSound   = PICO_HW_SOUND != 0;
     constexpr bool kMic     = PICO_HW_MIC != 0;
     constexpr bool kBattery = PICO_HW_BATTERY != 0;
+    constexpr bool kSound24 = PICO_HW_SOUND_24BIT != 0;
 }

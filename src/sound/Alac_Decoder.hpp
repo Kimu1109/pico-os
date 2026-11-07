@@ -48,7 +48,7 @@ public:
     void setStereoOutput(bool stereo) override { this->stereo_out_ = stereo; }
     uint8_t outChannels() const override { return this->lanes_; }
 
-    size_t read(int16_t* out, size_t max) override;
+    size_t read(PcmSample* out, size_t max) override;
     bool finished() const override { return this->finished_; }
 
     Error error() const { return this->error_; }

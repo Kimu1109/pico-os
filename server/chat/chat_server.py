@@ -24,6 +24,10 @@ pico-os のチャットアプリ(ChatScene)とWebクライアントの相手を�
         --tls-cert /etc/pico-chat/tls/fullchain.pem --tls-key /etc/pico-chat/tls/privkey.pem \\
         --http-port 80 --acme-root /var/lib/pico-chat/acme
 
+    # 手元(127.0.0.1)で立て、Apache の後ろから https://example.com/chat/ として公開する
+    python3 chat_server.py --db chat.db serve --host 127.0.0.1 --port 8080 \\
+        --base-path /chat --trust-proxy
+
 設計の要点:
     - 応答は **1行1件のTSV**(pico-os側にJSONパーサが無いため。docs/spec/PROTOCOL.md と同じ考え方)
     - **常に Content-Length を付け、HTTP/1.1 の keep-alive に対応する**。pico-os はTLSの
@@ -31,6 +35,10 @@ pico-os のチャットアプリ(ChatScene)とWebクライアントの相手を�
     - 証明書は **ファイルが更新されたら次の接続から自動で読み直す**(certbot の更新後に
       サーバを再起動しなくてよい)
     - トークン・セッションは **ハッシュだけを保存する**。DBが漏れてもそのまま使えない
+    - **ベースパス**(--base-path /chat)の下に置ける。要求のパスの頭にベースパスが付いていれば外して扱い、
+      付いていなければ(Apache が外して渡したとき)そのまま扱う。Cookie の Path はベースパスに合わせる
+    - --trust-proxy のときだけ、送り元の IP を X-Forwarded-For の一番右から、https かどうかを
+      X-Forwarded-Proto から取る(前に立つ Apache 等が付ける。直接晒すときは付けないこと)
 """
 
 import argparse
@@ -83,6 +91,18 @@ MIN_PASSWORD_LEN = 8
 LOGIN_RE = re.compile(r"^[A-Za-z0-9_-]{1,%d}$" % MAX_LOGIN_LEN)
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+
+
+def normalize_base_path(s):
+    """ベースパスを「/chat」の形(頭に /、末尾に / なし。ルートは空文字)へ揃える。不正なら ValueError。"""
+    s = (s or "").strip().strip("/")
+    if not s:
+        return ""
+    parts = s.split("/")
+    for part in parts:
+        if part in (".", "..") or not re.fullmatch(r"[A-Za-z0-9._~-]+", part):
+            raise ValueError("ベースパスに使えない文字があります: %r" % s)
+    return "/" + "/".join(parts)
 
 
 def log(msg):
@@ -718,9 +738,31 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
     join_throttle: LoginThrottle = None
     invite_ttl = INVITE_TTL_SEC
     secure_cookie = False
+    base_path = ""          # 「/chat」の形。ルートに置くなら空
+    trust_proxy = False     # X-Forwarded-For / X-Forwarded-Proto を信じる(前に Apache 等がいるとき)
 
     def log_message(self, fmt, *args):
-        log("%s %s" % (self.client_address[0], fmt % args))
+        log("%s %s" % (self.client_ip(), fmt % args))
+
+    def client_ip(self):
+        """送り元のIP(ログインの総当たり対策に使う)。プロキシの後ろなら X-Forwarded-For の一番右。"""
+        if self.trust_proxy:
+            # Apache は来た要求の X-Forwarded-For の後ろへ、自分が見た相手を足して渡す。
+            # 左側は相手が自由に書けるので、信じてよいのは一番右だけ
+            fwd = self.headers.get("X-Forwarded-For", "") if hasattr(self, "headers") else ""
+            last = fwd.split(",")[-1].strip()
+            if last:
+                return last
+        return self.client_address[0]
+
+    def is_secure(self):
+        """利用者から見て https で届いたか(Cookie の Secure を付けるか)。"""
+        if self.secure_cookie:
+            return True
+        return self.trust_proxy and self.headers.get("X-Forwarded-Proto", "").strip().lower() == "https"
+
+    def cookie_path(self):
+        return self.base_path + "/"
 
     # ---- 送信 ----
     def send_body(self, status, body, ctype="text/plain; charset=utf-8", headers=None):
@@ -814,6 +856,15 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
             url = urllib.parse.urlsplit(self.path)
             path = url.path
             query = urllib.parse.parse_qs(url.query)
+
+            # ベースパスを外す。「/chat」だけで来たら「/chat/」へ回す(相対のURLが狂わないように)。
+            # 頭に付いていなければ、前のプロキシが外して渡したものとしてそのまま扱う
+            if self.base_path:
+                if path == self.base_path:
+                    loc = self.base_path + "/" + ("?" + url.query if url.query else "")
+                    return self.send_body(301, b"", headers=[("Location", loc)])
+                if path.startswith(self.base_path + "/"):
+                    path = path[len(self.base_path):]
 
             if method == "GET" and path in ("/", "/index.html"):
                 return self.serve_web()
@@ -910,7 +961,7 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
 
     # ---- API ----
     def api_login(self):
-        ip = self.client_address[0]
+        ip = self.client_ip()
         if self.throttle.blocked(ip):
             raise HttpError(429, "失敗が多すぎます。しばらく待ってください")
         form = urllib.parse.parse_qs(self.read_text_body())
@@ -922,8 +973,9 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
             raise HttpError(401, "ログイン名かパスワードが違います")
         self.throttle.clear(ip)
         sid = self.store.new_session(user["id"])
-        cookie = "pc_session=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d" % (sid, SESSION_DAYS * 86400)
-        if self.secure_cookie:
+        cookie = "pc_session=%s; Path=%s; HttpOnly; SameSite=Strict; Max-Age=%d" % (
+            sid, self.cookie_path(), SESSION_DAYS * 86400)
+        if self.is_secure():
             cookie += "; Secure"
         self.send_body(200, tsv_line(user["login"], user["display"]), headers=[("Set-Cookie", cookie)])
 
@@ -932,7 +984,7 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
         if sid:
             self.store.drop_session(sid)
         self.read_body()
-        self.send_body(200, "ok\n", headers=[("Set-Cookie", "pc_session=; Path=/; Max-Age=0")])
+        self.send_body(200, "ok\n", headers=[("Set-Cookie", "pc_session=; Path=%s; Max-Age=0" % self.cookie_path())])
 
     def is_server_admin(self, user):
         return bool(user["is_admin"])
@@ -1042,7 +1094,7 @@ class ChatHandler(http.server.BaseHTTPRequestHandler):
 
     def api_join_code(self):
         user = self.current_user(for_write=True)
-        ip = self.client_address[0]
+        ip = self.client_ip()
         keys = ("ip:" + ip, "user:%d" % user["id"])
         if any(self.join_throttle.blocked(k) for k in keys):
             raise HttpError(429, "失敗が多すぎます。しばらく待ってください")
@@ -1427,6 +1479,11 @@ def cmd_serve(args, store):
     ChatHandler.join_throttle = LoginThrottle(JOIN_WINDOW_SEC, JOIN_MAX_FAILS)
     ChatHandler.invite_ttl = args.invite_ttl
     ChatHandler.timeout = args.idle_timeout
+    ChatHandler.trust_proxy = args.trust_proxy
+    try:
+        ChatHandler.base_path = normalize_base_path(args.base_path)
+    except ValueError as e:
+        sys.exit(str(e))
 
     use_tls = bool(args.tls_cert or args.tls_key)
     if use_tls and not (args.tls_cert and args.tls_key):
@@ -1459,7 +1516,9 @@ def cmd_serve(args, store):
             log("サーバ管理者がいません。「admin <名前>」で決めると Web から管理できます")
         main = make_server(args.host, port, ChatHandler, tls)
         threading.Thread(target=main.serve_forever, daemon=True).start()
-        log("チャットサーバを起動しました (%s://%s:%d, DB=%s)" % ("https" if tls else "http", args.host, port, args.db))
+        log("チャットサーバを起動しました (%s://%s:%d%s/, DB=%s%s)" % (
+            "https" if tls else "http", args.host, port, ChatHandler.base_path, args.db,
+            ", プロキシの後ろ" if args.trust_proxy else ""))
 
         while True:
             time.sleep(3600)
@@ -1637,6 +1696,11 @@ def main():
                    help="keep-aliveの接続を何秒で切るか(既定%d)" % IDLE_TIMEOUT_SEC)
     s.add_argument("--invite-ttl", type=int, default=INVITE_TTL_SEC,
                    help="参加コードが使える秒数(既定%d=30分。テスト用に縮められる)" % INVITE_TTL_SEC)
+    s.add_argument("--base-path", default=os.environ.get("PICO_CHAT_BASE_PATH", ""),
+                   help="公開するパス(例: /chat → https://example.com/chat/)。既定はルート")
+    s.add_argument("--trust-proxy", action="store_true",
+                   help="前に立つ Apache 等の X-Forwarded-For / X-Forwarded-Proto を信じる"
+                        "(--host 127.0.0.1 と一緒に使う)")
 
     a = sub.add_parser("adduser", help="ユーザーを作る")
     a.add_argument("login")

@@ -16,6 +16,9 @@ run_net.sh から呼ぶ(サーバを同じプロセスの中で 127.0.0.1 の空
     参加していない部屋でも管理の操作(メンバーを見る・追い出す・オーナーを決める・消す)はできるが、
     プライベートチャットの発言は参加しない限り読めない。管理者でない人は /api/v1/admin/ を一切使えない
   - v1 のDB(rooms.name が UNIQUE、参加者の表が無い)を開くと、部屋を残したまま v3 へ移る
+  - ベースパス(Apache の後ろで /chat/ に置く): 頭の /chat を外して扱い、外されて来ても通る。
+    /chat は /chat/ へ回す。Cookie の Path はベースパス。--trust-proxy のときだけ
+    X-Forwarded-For の一番右を送り元とみなし、X-Forwarded-Proto: https で Secure を付ける
 
 使い方: python3 chat_server_test.py
 """
@@ -87,8 +90,10 @@ def add_user(store, login, display, admin=False):
     return store.add_user(login, display, "password1", admin)
 
 
-def start_server(db_path, invite_ttl=cs.INVITE_TTL_SEC):
+def start_server(db_path, invite_ttl=cs.INVITE_TTL_SEC, base_path="", trust_proxy=False):
     store = cs.Store(db_path)
+    cs.ChatHandler.base_path = base_path
+    cs.ChatHandler.trust_proxy = trust_proxy
     cs.ChatHandler.store = store
     cs.ChatHandler.throttle = cs.LoginThrottle()
     cs.ChatHandler.join_throttle = cs.LoginThrottle(cs.JOIN_WINDOW_SEC, cs.JOIN_MAX_FAILS)
@@ -380,8 +385,76 @@ def test_migration(tmp):
     eq(db.execute("SELECT COUNT(*) FROM rooms").fetchone()[0], 3, "開き直しても部屋は変わらない")
 
 
+def raw(port, method, path, body=None, headers=None):
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    conn.request(method, path, body=body.encode("utf-8") if body is not None else None, headers=headers or {})
+    res = conn.getresponse()
+    text = res.read().decode("utf-8")
+    conn.close()
+    return res, text
+
+
+def test_base_path(tmp):
+    print("\n---- ベースパスとプロキシの後ろ ----")
+    eq(cs.normalize_base_path("chat/"), "/chat", "ベースパスは /chat の形へ揃える")
+    eq(cs.normalize_base_path("/"), "", "/ だけならルート")
+    eq(cs.normalize_base_path("/a/b"), "/a/b", "2段も置ける")
+    for bad in ("/../x", "/a b", "/a?b"):
+        try:
+            cs.normalize_base_path(bad)
+            check(False, "使えないベースパスは断る: %r" % bad)
+        except ValueError:
+            check(True, "使えないベースパスは断る: %r" % bad)
+
+    store, srv, port = start_server(os.path.join(tmp, "base.db"), base_path="/chat", trust_proxy=True)
+    alice = Client(port, add_user(store, "alice", "ありす"))
+    status, _ = alice.req("POST", "/chat/api/v1/rooms", "雑談")
+    eq(status, 201, "ベースパス付きでAPIを使える")
+    eq(len(alice.rows("GET", "/api/v1/rooms")[1]), 1, "外されて来ても(Apache が外したとき)通る")
+    eq(alice.req("GET", "/chat/.well-known/pico-chat")[0], 200, "サーバ情報もベースパスの下")
+    res, _ = raw(port, "GET", "/chat?x=1")
+    eq((res.status, res.getheader("Location")), (301, "/chat/?x=1"), "/chat は /chat/ へ回す")
+    res, body = raw(port, "GET", "/chat/")
+    eq(res.status, 200, "/chat/ で Web の画面が出る")
+    check("const BASE = location.pathname" in body, "Web の画面は置かれたパスの下を叩く")
+    eq(raw(port, "GET", "/other/api/v1/me")[0].status, 404, "ベースパスの外は 404")
+
+    # ログイン: Cookie の Path と Secure
+    form = "login=alice&password=password1"
+    hdr = {"Content-Type": "application/x-www-form-urlencoded"}
+    res, _ = raw(port, "POST", "/chat/api/v1/login", form, hdr)
+    cookie = res.getheader("Set-Cookie")
+    check("Path=/chat/;" in cookie and "Secure" not in cookie, "Cookie の Path はベースパス、http なら Secure なし")
+    res, _ = raw(port, "POST", "/chat/api/v1/login", form, dict(hdr, **{"X-Forwarded-Proto": "https"}))
+    check("Secure" in res.getheader("Set-Cookie"), "X-Forwarded-Proto: https なら Secure を付ける")
+    sid = res.getheader("Set-Cookie").split(";")[0]
+    res, body = raw(port, "GET", "/chat/api/v1/me", headers={"Cookie": sid})
+    eq((res.status, body.split("\t")[0]), (200, "alice"), "Cookie でログインできる")
+    res, _ = raw(port, "POST", "/chat/api/v1/logout", "", {"Cookie": sid, "X-Pico-Chat": "1"})
+    check("Path=/chat/;" in res.getheader("Set-Cookie"), "ログアウトの Cookie も同じ Path で消す")
+
+    # 総当たり対策は X-Forwarded-For の一番右(Apache が見た相手)で数える
+    bad = "login=alice&password=wrong"
+    for _ in range(cs.LOGIN_MAX_FAILS):
+        raw(port, "POST", "/chat/api/v1/login", bad, dict(hdr, **{"X-Forwarded-For": "1.1.1.1, 10.0.0.5"}))
+    eq(raw(port, "POST", "/chat/api/v1/login", form, dict(hdr, **{"X-Forwarded-For": "9.9.9.9, 10.0.0.5"}))[0].status,
+       429, "左側を変えても一番右が同じなら断る")
+    eq(raw(port, "POST", "/chat/api/v1/login", form, dict(hdr, **{"X-Forwarded-For": "10.0.0.6"}))[0].status,
+       200, "一番右が違えば別の相手")
+    srv.shutdown()
+
+    # --trust-proxy なしでは、X-Forwarded-* を見ない
+    store, srv, port = start_server(os.path.join(tmp, "base2.db"))
+    add_user(store, "alice", "ありす")
+    res, _ = raw(port, "POST", "/api/v1/login", form, dict(hdr, **{"X-Forwarded-Proto": "https"}))
+    cookie = res.getheader("Set-Cookie")
+    check("Path=/;" in cookie and "Secure" not in cookie, "--trust-proxy なしでは X-Forwarded-Proto を見ない")
+    srv.shutdown()
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
+        test_base_path(tmp)
         test_rooms_and_invites(tmp)
         test_roles(tmp)
         test_server_admin(tmp)

@@ -29,6 +29,9 @@ JSON を使わず1行1件の TSV、応答は常に長さ付き、上限はサー
 - **必須**: `Connection: keep-alive` の要求には、応答後も接続を開けておく。無通信の接続は閉じてよい
   (参照実装は120秒。pico-os は切られていたら繋ぎ直す)
 - 文字コードは UTF-8 固定
+- **サーバはベースパスの下に置いてよい**(例: `https://example.com/chat`。Apache 等のリバースプロキシの後ろ)。
+  クライアントは設定の `server`(末尾の `/` は落とす)の後ろへ本書のパス(`/api/v1/...`・`/.well-known/pico-chat`)を足す。
+  Web の Cookie の `Path` はベースパスになる。参照実装は `serve --base-path /chat`(`server/chat/README.md`「Apache の後ろに置いて外から使う」)
 
 ## 認証
 

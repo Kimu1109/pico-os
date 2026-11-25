@@ -1,7 +1,11 @@
 # pico-chat — pico-os 用の自前チャットサーバ
 
 pico-os のチャットアプリと、ブラウザ(スマホ・PC)から使う、友達数人向けの小さなチャットサーバ。
-Raspberry Pi で動かして、Let's Encrypt の証明書で HTTPS 化して外から使う想定。
+Raspberry Pi で動かして外から使う想定。公開の仕方は2通り:
+
+- **Apache の後ろに置く**(下の「Apache の後ろに置いて外から使う」): サーバは手元(127.0.0.1)だけで待ち、
+  Apache が `https://example.com/chat/` のように**ベースパスを変えて**外へ公開する。既に Apache で他のサイトを出しているならこちら
+- **サーバ単体で HTTPS**(下の「Raspberry Pi に置いて外から使う(HTTPS)」): 80/443番をサーバ自身が持ち、Let's Encrypt の証明書も自分で読む
 
 - **Python 3 の標準ライブラリだけ**で動く(`pip install` 不要)。発言は SQLite の1ファイルに保存する
 - 部屋は2種類: **オープンチャット**(誰でも検索して参加できる)と **プライベートチャット**(検索に出ず、
@@ -17,7 +21,9 @@ Raspberry Pi で動かして、Let's Encrypt の証明書で HTTPS 化して外�
 |---|---|
 | `chat_server.py` | サーバ本体と管理コマンド(ユーザー/部屋の追加など) |
 | `web/index.html` | Web クライアント(1ファイル) |
-| `pico-chat.service` | systemd のユニット |
+| `pico-chat.service` | systemd のユニット(サーバ単体で HTTPS) |
+| `pico-chat-local.service` | systemd のユニット(Apache の後ろ。127.0.0.1:8080、`--base-path /chat`) |
+| `apache-pico-chat.conf` | Apache 2.4 の設定の例(`/chat/` の下をサーバへ転送する) |
 | `certbot-deploy-hook.sh` | 証明書を取った/更新したときに、サーバが読める場所へ写すスクリプト |
 
 ## まず手元で試す(平文HTTP)
@@ -37,6 +43,64 @@ python3 chat_server.py --db /tmp/chat.db serve --port 8080
 server = http://127.0.0.1:8080
 token = (adduserで出た43文字)
 ```
+
+## Apache の後ろに置いて外から使う
+
+```
+スマホ・pico-os ──https──> Apache(443番、証明書) ──http──> chat_server.py(127.0.0.1:8080)
+                 https://example.com/chat/            /chat/ の下だけ転送
+```
+
+TLS・証明書・80/443番は Apache が持つので、サーバの側に証明書の仕掛けは要らない。
+**ドメイン名とポート開放(443番、certbot の確認に80番も)は下の「0. 用意するもの」と同じ。**
+
+### 1. サーバを手元で起動する
+
+```sh
+sudo useradd --system --home /var/lib/pico-chat --shell /usr/sbin/nologin pico-chat
+sudo install -d -o root -g root -m 755 /opt/pico-chat /opt/pico-chat/web
+sudo install -m 644 chat_server.py /opt/pico-chat/
+sudo install -m 644 web/index.html /opt/pico-chat/web/
+sudo install -d -o pico-chat -g pico-chat -m 750 /var/lib/pico-chat
+
+sudo cp pico-chat-local.service /etc/systemd/system/pico-chat.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now pico-chat
+journalctl -u pico-chat -f      # 「チャットサーバを起動しました (http://127.0.0.1:8080/chat/ ... プロキシの後ろ)」
+```
+
+- `--host 127.0.0.1` なので、サーバへは同じ機械の Apache からしか届かない
+- `--base-path /chat` で、`/chat/` の下に置かれているものとして動く(Cookie の Path も `/chat/` になり、
+  同じドメインの他のサイトへ Cookie が漏れない)。Apache がパスの頭を外して渡しても動く
+- `--trust-proxy` で、ログインの総当たり対策に使う送り元の IP を `X-Forwarded-For` の一番右(Apache が見た相手)から、
+  https で来たかを `X-Forwarded-Proto` から取る。**サーバを直接外へ晒すときは付けないこと**(誰でも IP を偽れる)
+- 別のパスにするなら `--base-path /talk` のように変え、Apache の設定の `/chat` も同じに直す。`/` に置くなら `--base-path` を外す
+
+### 2. Apache で公開する
+
+```sh
+sudo a2enmod proxy proxy_http headers
+```
+
+`apache-pico-chat.conf` の「ここから」〜「ここまで」を、既にある https の `<VirtualHost *:443>` の中へ貼り、
+
+```sh
+sudo apachectl configtest && sudo systemctl reload apache2
+```
+
+- まだ https の VirtualHost が無ければ、`sudo apt install certbot python3-certbot-apache` →
+  `sudo certbot --apache -d xxxx.duckdns.org` で証明書を取ると作られる(更新も自動)
+- 設定の要点: `/chat` → `/chat/` へ転送、`ProxyPass` は**パスを外さずに**渡す、`timeout` は Web のロングポーリング(最大30秒)より長く、
+  `X-Forwarded-Proto` は必ず Apache が上書き(相手の送ったものを通さない)、**圧縮しない**(`no-gzip`)
+- **`KeepAliveTimeout` は15秒くらいに延ばす**(既定の5秒だと pico-os の3秒ごとの問い合わせの間に切れやすく、
+  繋ぎ直すたびに TLS のハンドシェイクで1〜2秒画面が止まる)
+- 確認: `curl https://xxxx.duckdns.org/chat/.well-known/pico-chat` で `version` の行が返ればよい
+
+### 3. ユーザーを作って pico-os をつなぐ
+
+ユーザーと部屋の作り方は下の「4. ユーザーと部屋を作る」と同じ。友達には `https://xxxx.duckdns.org/chat/` を伝える。
+Web の「pico-os の設定」で出る `server =` には**ベースパスまで入る**(`server = https://xxxx.duckdns.org/chat`)。
+そのまま `/sys/chat.cfg` に置けばよい(pico-os は `server` の後ろへ `/api/v1/...` を足す)。
 
 ## Raspberry Pi に置いて外から使う(HTTPS)
 

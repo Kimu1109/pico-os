@@ -1,0 +1,41 @@
+# pico-os チャットサーバの systemd ユニット(Apache の後ろに置く版)。
+# 置き場所と手順は server/chat/README.md「Apache の後ろに置いて外から使う」を参照。
+#
+#   sudo cp pico-chat-local.service /etc/systemd/system/pico-chat.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pico-chat
+#
+# サーバ自身は 127.0.0.1:8080 の平文HTTPだけで待ち、外からは届かない。
+# TLS・証明書・80/443番は Apache が受け持ち、/chat/ の下をここへ転送する(apache-pico-chat.conf)。
+# 公開するパスを変えるなら --base-path と Apache の設定の両方を直す。
+
+[Unit]
+Description=pico-os chat server (behind Apache)
+After=network.target
+
+[Service]
+Type=simple
+User=pico-chat
+Group=pico-chat
+ExecStart=/usr/bin/python3 /opt/pico-chat/chat_server.py \
+    --db /var/lib/pico-chat/chat.db serve \
+    --host 127.0.0.1 --port 8080 \
+    --base-path /chat --trust-proxy
+Restart=on-failure
+RestartSec=5
+
+# 特権のポートは使わないので、追加の権限は何も持たせない
+CapabilityBoundingSet=
+NoNewPrivileges=true
+
+# 書けるのはDBの置き場所だけ
+ProtectSystem=strict
+ReadWritePaths=/var/lib/pico-chat
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

@@ -101,6 +101,12 @@ Pico側にJSONパーサ・WebSocket(即時受信したい場合)が要る。自�
   - 認証は、pico-osは`Authorization: Bearer <トークン>`、WebはCookie + 書き込みに`X-Pico-Chat`ヘッダ必須。
     トークン/セッションはハッシュだけを保存。トークンはWebの「pico-os の設定」で発行し直せる
   - 未読の数は人ごと・部屋ごとにサーバが覚える(発言を取った分が既読になる。Picoとで共通)
+  - **Apacheの後ろにも置ける(2026-11-25)**: `serve --host 127.0.0.1 --port 8080 --base-path /chat --trust-proxy`で手元だけで待ち、
+    Apacheが`https://.../chat/`をパスを外さずに転送する(`apache-pico-chat.conf`・`pico-chat-local.service`)。
+    頭の`/chat`は外して扱い、外されて来ても通す。`/chat`は`/chat/`へ301。Cookieの`Path`はベースパス。
+    `--trust-proxy`のときだけ送り元を`X-Forwarded-For`の**一番右**(左は相手が書ける)、Secureの要否を`X-Forwarded-Proto`から取る。
+    Web画面はAPIを`location.pathname`の親の下で叩き、「pico-os の設定」の`server =`にもベースパスを含める。pico-os側は元から`server`のパスの後ろへ足すので変更なし。
+    Apache 2.4で`/chat/`経由のWeb操作・Bearer・ロングポーリング・`Content-Length`付きの応答をこのコンテナで確認済み
 - **Webクライアント**: `server/chat/web/index.html`(1ファイル、同じサーバが配る)。ロングポーリング(`wait=25`)で即時受信
 - **pico-os側**: `ChatScene`(部屋の一覧 ⇔ 部屋の中を1シーンで切り替え、`applyMode()`)。設定は`/sys/chat.cfg`
   (`server = ...` / `token = ...` / 任意で`poll-ms`)

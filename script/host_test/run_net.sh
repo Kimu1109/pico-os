@@ -2,7 +2,8 @@
 # HttpGet の結合テスト。**実際にソケットで通信する**ので run.sh とは分けてある。
 #
 # script/tools/reference_server.py を一時的に立ち上げ、pc/compat の WiFiClient から
-# 本当に取得できるかを確かめる。SDL2もSDカードも要らない。
+# 本当に取得できるかを確かめる。SDL2もSDカードも要らない。ベースパスの下に置いたときの
+# 参照実装の振る舞い(reference_server_test.py)もここで回す。
 #
 # run.sh との違い:
 #   run.sh     … stubs/ を使い、ネットワークもSDも無い状態で純粋なロジックを見る
@@ -53,6 +54,7 @@ TLS_PORT=$((PORT + 2))
 # discoveryを持たないサーバ(素の静的ファイルサーバ)の再現用。
 # クライアントが正しく縮退するかを見るために立てる
 BARE_PORT=$((PORT + 1))
+DOCS_BASE_PORT=$((PORT + 23))  # ベースパス(/docs)の下のサーバ
 
 # SDは stubs/ のメモリ上のもの(何が書かれたかをそのまま検査できる)、
 # TCPクライアントは stubs/WiFi.h 経由で pc/compat の本物のソケット実装を使う
@@ -83,6 +85,12 @@ python3 "$ROOT/script/tools/reference_server.py" \
     > "$OUT/server_bare.log" 2>&1 &
 BARE_PID=$!
 
+# ベースパス(/docs)の下に置いたサーバ(Apache の後ろの再現)
+python3 "$ROOT/script/tools/reference_server.py" \
+    --root "$ROOT/examples" --port "$DOCS_BASE_PORT" --base-path /docs --home /doc.md \
+    > "$OUT/server_base.log" 2>&1 &
+DOCS_BASE_PID=$!
+
 # サーバの起動を待つ(最大5秒)
 i=0
 while [ $i -lt 50 ]; do
@@ -99,7 +107,7 @@ MAIL_PIDS=""
 SSHD_PID=""
 STORE_PID=""
 cleanup(){
-    kill "$SERVER_PID" "$BARE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $TR_PIDS $MAIL_PIDS $SSHD_PID $STORE_PID 2>/dev/null || true
+    kill "$SERVER_PID" "$BARE_PID" "$DOCS_BASE_PID" $TLS_PID $CHAT_PIDS $TODO_PIDS $TR_PIDS $MAIL_PIDS $SSHD_PID $STORE_PID 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     wait "$BARE_PID" 2>/dev/null || true
     [ -n "$TLS_PID" ] && wait "$TLS_PID" 2>/dev/null || true
@@ -108,7 +116,12 @@ trap cleanup EXIT
 
 echo ""
 echo "===== net_test ====="
-"$OUT/net_test" "$PORT" "$BARE_PORT"
+"$OUT/net_test" "$PORT" "$BARE_PORT" "$DOCS_BASE_PORT"
+
+# ---- 参照実装をベースパス(/docs)の下に置いたとき(Apache の後ろ。server/docs/README.md) ----
+echo ""
+echo "===== reference_server_test ====="
+python3 "$ROOT/script/host_test/reference_server_test.py"
 
 # ---- HTTPS: カレンダーの取得(CalendarSync) ----
 g++ -std=gnu++17 -g -fsanitize=address,undefined \

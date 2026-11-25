@@ -50,6 +50,11 @@ pico-os の Markdown ブラウザが文書を取得・検索するための、�
 - **推奨**: `Content-Length` を常に送る。クライアントは進捗表示と上限判定に使える
 - クライアントは **Cookie を送らず、保持もしない**。認証を前提にしたサーバは対象外
 - クライアントは **リダイレクト(301 / 302 / 307 / 308)を最大3回まで追う**。それを超えるとエラー扱いになる
+- **サーバはベースパスの下に置いてよい**(例: `https://example.com/docs/`。Apache 等のリバースプロキシの後ろ)。その場合:
+  - サーバ情報はベースパスの下ではなく **ホストの頭の `/.well-known/pico-os`** に置く(クライアントはホストごとにここを見る。1ホストに1つ)
+  - サーバが返すパス(`home`・`search`・`manifest`、検索結果とマニフェストの `path`)は**ベースパスを含めたサーバ絶対パス**にする
+  - 文書の中のリンクは相対パスで書く(`/` 始まりはホストの頭から解決される)
+  - 参照実装は `--base-path /docs`。設定の例は `server/docs/`(`server/docs/README.md`)
 
 ## 共通のデータ形式 — TSV
 
@@ -238,6 +243,10 @@ python3 script/tools/reference_server.py --root ~/docs --port 8080 --home /index
 python3 script/tools/reference_server.py --check              # 文書が上限に収まっているか検査
 python3 script/tools/reference_server.py --no-search          # 検索非対応サーバの再現
 python3 script/tools/reference_server.py --no-discovery       # 素の静的サーバの再現
+
+# Apache の後ろで https://example.com/docs/ に置く(server/docs/README.md)
+python3 script/tools/reference_server.py --root ~/docs --host 127.0.0.1 --port 8090 \
+    --base-path /docs --home /index.md --trust-proxy
 ```
 
 `--no-search` / `--no-discovery` は、**クライアントが機能の欠けたサーバに対して正しく縮退するか**を試すためのもの。

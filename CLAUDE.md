@@ -75,7 +75,7 @@ script/      開発補助(cli-tool/picoos が名前で呼び分ける。script/R
              check/(CIの検査)・release/(配る)・tools/(変換と開発中の道具)・assets/・dict/・host_test/・lua_test/。直下に置かない
 hardware/carrier/  キャリアボード(KiCad 8。README.md に部品の表、tools/check_pins.py で consts.hpp と結線を照合)
 docs/        spec/(外とやり取りする形式: PROTOCOL / CHAT_PROTOCOL / APP_REPO / MUSIC_FORMAT / VIDEO_FORMAT)・guide/(手順: FIRMWARE_UPDATE / HARDWARE_CHECKLIST)・design/(設計記録)。docs/README.md
-lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャットサーバ
+lua-api-doc/ Lua APIの利用者向けの説明。server/chat/ 自前チャットサーバ。server/docs/ ドキュメントサーバをApacheの後ろに置く設定
 (別リポジトリ) kimu1109/pico-os-apps が標準Luaアプリの正本・テスト・絵の道具とアプリストアの配布元(lua-apps.md「標準Luaアプリの置き場所」「アプリストアの投稿」)
 ```
 

@@ -1,0 +1,38 @@
+# pico-os ドキュメントサーバ(Markdown ブラウザの相手)の systemd ユニット(Apache の後ろに置く版)。
+# 置き場所と手順は server/docs/README.md を参照。
+#
+#   sudo cp pico-docs.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pico-docs
+#
+# サーバ自身は 127.0.0.1:8090 の平文HTTPだけで待ち、外からは届かない。
+# TLS・証明書・80/443番は Apache が受け持ち、/docs/ の下と /.well-known/pico-os をここへ転送する
+# (apache-pico-docs.conf)。公開するパスを変えるなら --base-path と Apache の設定の両方を直す。
+# --home は文書ルートの中のパス(ベースパスは付けない。サーバが付けて返す)。
+
+[Unit]
+Description=pico-os document server (behind Apache)
+After=network.target
+
+[Service]
+Type=simple
+User=pico-docs
+Group=pico-docs
+ExecStart=/usr/bin/python3 /opt/pico-docs/reference_server.py \
+    --root /srv/pico-docs --host 127.0.0.1 --port 8090 \
+    --base-path /docs --home /index.md --name "pico-os docs" --trust-proxy
+Restart=on-failure
+RestartSec=5
+
+# 文書は読むだけ。書ける場所は持たせない
+CapabilityBoundingSet=
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

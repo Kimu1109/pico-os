@@ -80,6 +80,13 @@ Markdownブラウザ・Lua・カレンダーの3つとも、これで`https://`�
 - **`search`の行が無い = 検索非対応**。`hasSearch()`で判定し、対応していないサーバでは検索UIを無効にする。
 - **404は正常な結果**。「素の静的ファイルサーバと分かった」という確定した答えなので、`checked`を立ててページごとに問い合わせ直さない。
 - `MarkdownScene`は**ホストが変わったときだけ**問い合わせる。`home`が申告されていればヘッダの「ホーム」ボタンの行き先になる(無ければ`network.cfg`の`browser-home`)。
+- **Apacheの後ろでベースパスの下に置ける(2026-11-25)**: 参照実装に`--base-path /docs`(と`--trust-proxy`)を足し、`server/docs/`に
+  systemdのユニットとApacheの設定の例を置いた(チャットサーバと同じ形。`server/docs/README.md`)。**クライアントは変えていない。**
+  discoveryはホストの頭(`/.well-known/pico-os`)に決め打ちなので、Apacheでそこもサーバへ転送し(1ホストにドキュメントサーバは1つ)、
+  サーバは`home`・`search`・`manifest`・検索結果とマニフェストの`path`・`/`の転送先を全部ベースパス付きで返す。
+  要求の頭のベースパスは外して扱い、外されて来ても通す。文書中のリンクは相対で書く(`/`始まりはホストの頭から引かれる)。
+  ディレクトリのURL(`/docs/`)は元から`Doc_Fetch`が開かないので、文書のURLを入れて[ホーム]で`home`へ行く。
+  `run_net.sh`の`net_test`(実物の`Doc_Fetch`/`Discovery`/`Manifest`/`DocSearch`)と`reference_server_test.py`で確かめ、Apache 2.4経由もこのコンテナで確認済み
 
 ## 検索 (`src/apps/browser/Doc_Search.hpp`)
 `GET <discoveryのsearch>?q=...&limit=10&offset=N` の応答(1行1件のTSV)を読む。`docs/spec/PROTOCOL.md`「3. 検索」参照。

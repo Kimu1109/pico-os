@@ -13,7 +13,7 @@
 
 | 文書 | 中身 |
 |---|---|
-| `spec/PROTOCOL.md` | ドキュメントサーバのプロトコル(Markdownブラウザが文書を取る取り決め。参照実装は `script/tools/reference_server.py`) |
+| `spec/PROTOCOL.md` | ドキュメントサーバのプロトコル(Markdownブラウザが文書を取る取り決め。参照実装は `script/tools/reference_server.py`、Apacheの後ろに置く設定は `server/docs/`) |
 | `spec/CHAT_PROTOCOL.md` | チャットのプロトコル(本体と `server/chat/`) |
 | `spec/APP_REPO.md` | アプリストアの配布物の形式(本体と `kimu1109/pico-os-apps`・`script/release/build_app_repo.py`) |
 | `spec/MUSIC_FORMAT.md` | 曲データ(pico-os MML)の形式 |

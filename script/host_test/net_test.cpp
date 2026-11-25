@@ -66,6 +66,8 @@ int main(int argc, char** argv){
     const uint16_t port = (argc > 1) ? (uint16_t)atoi(argv[1]) : 8080;
     //discoveryを持たないサーバ(素の静的ファイルサーバ)の再現用
     const uint16_t bare_port = (argc > 2) ? (uint16_t)atoi(argv[2]) : (uint16_t)(port + 1);
+    //ベースパス(/docs)の下に置いたサーバ(Apache の後ろの再現。server/docs/README.md)。0なら飛ばす
+    const uint16_t base_port = (argc > 3) ? (uint16_t)atoi(argv[3]) : 0;
 
     char base[128];
     snprintf(base, sizeof(base), "http://%s:%u", host, (unsigned)port);
@@ -578,6 +580,75 @@ int main(int argc, char** argv){
         for(int i = 0; i < 20000 && docFetch.state() == DocFetch::State::Fetching; i++) docFetch.update();
         check(docFetch.state() == DocFetch::State::Ready,
               "discovery非対応でも文書は普通に読める");
+    }
+
+    // ---- ベースパス(/docs)の下のサーバ ----
+    // Apache の後ろで https://example.com/docs/ に置いた形。クライアントは何も変えず、
+    // ホストの頭の /.well-known/pico-os と、サーバが返すベースパス付きのパスをそのまま使うだけで動くこと
+    if(base_port){
+        printf("\n---- ベースパス(/docs)の下のサーバ ----\n");
+        HostSd::files.clear();
+
+        char urlText[192];
+        snprintf(urlText, sizeof(urlText), "http://%s:%u%s", host, (unsigned)base_port, Discovery::kPath);
+        Url url;
+        UrlTools::Parse(url, urlText);
+
+        DocFetch fetch;
+        fetch.begin(url);
+        for(int i = 0; i < 20000 && fetch.state() == DocFetch::State::Fetching; i++) fetch.update();
+        check(fetch.state() == DocFetch::State::Ready, "ホストの頭の discovery を取れる");
+        ServerInfo info;
+        Discovery::ParseFile(fetch.path().c_str(), info);
+        eq_str(info.home.c_str(), "/docs/doc.md", "home はベースパス付き");
+        eq_str(info.search.c_str(), "/docs/v1/search", "search はベースパス付き");
+        eq_str(info.manifest.c_str(), "/docs/v1/manifest", "manifest はベースパス付き");
+
+        //ディレクトリを指すURL(/docs/)はクライアントが開かない(Doc_Fetch.cpp。ルートの / と同じ)ので、
+        //[ホーム]と同じく、home をいま居るURLから解決して開く(MarkdownScene::homeTarget())
+        Url docUrl;
+        check(UrlTools::Resolve(docUrl, url, info.home.c_str()), "home を解決できる");
+        eq_str(docUrl.path.c_str(), "/docs/doc.md", "解決した home のパス");
+
+        //マニフェスト: 文書のURLのパス(/docs/doc.md)で引けて、通信せずにキャッシュを開ける
+        Url manifestUrl = url;
+        manifestUrl.path.assign(info.manifest.c_str());
+        DocFetch manifestFetch;
+        manifestFetch.begin(manifestUrl);
+        for(int i = 0; i < 20000 && manifestFetch.state() == DocFetch::State::Fetching; i++) manifestFetch.update();
+        check(manifestFetch.state() == DocFetch::State::Ready, "マニフェストを取れる");
+        FixedString<PICO_PATH_LEN> manifestPath;
+        manifestPath.assign(manifestFetch.path());
+        FixedString<PICO_STR_M> listed;
+        check(Manifest::VersionOf(manifestPath.c_str(), docUrl.path.c_str(), listed),
+              "マニフェストを文書のパス(ベースパス付き)で引ける");
+
+        DocFetch docFetch;
+        docFetch.begin(docUrl);
+        for(int i = 0; i < 20000 && docFetch.state() == DocFetch::State::Fetching; i++) docFetch.update();
+        check(docFetch.state() == DocFetch::State::Ready, "home の文書を取れる");
+        check(HostSd::files[docFetch.path().c_str()].find("pico-os") != std::string::npos, "home の中身が読める");
+        docFetch.setManifest(manifestPath.c_str());
+        docFetch.begin(docUrl);
+        check(docFetch.source() == DocFetch::Source::Manifest, "2回目はマニフェストで通信せず開ける");
+
+        //検索: 結果のパスをそのまま開ける
+        Url server;
+        snprintf(urlText, sizeof(urlText), "http://%s:%u", host, (unsigned)base_port);
+        UrlTools::Parse(server, urlText);
+        DocSearch search;
+        check(search.begin(server, info.search.c_str(), "画像"), "検索を始められる");
+        for(int i = 0; i < 20000 && search.state() == DocSearch::State::Fetching; i++) search.update();
+        eq_int(search.count(), 1, "検索で1件見つかる");
+        if(search.count() > 0){
+            eq_str(search.hit(0).path.c_str(), "/docs/doc.md", "検索結果のパスはベースパス付き");
+            Url hitUrl = server;
+            hitUrl.path.assign(search.hit(0).path.c_str());
+            DocFetch hitFetch;
+            hitFetch.begin(hitUrl, true);
+            for(int i = 0; i < 20000 && hitFetch.state() == DocFetch::State::Fetching; i++) hitFetch.update();
+            check(hitFetch.state() == DocFetch::State::Ready, "検索結果のパスをそのまま開ける");
+        }
     }
 
     printf("\n%s (failures=%d)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

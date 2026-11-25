@@ -16,6 +16,11 @@ pico-os 側の開発相手(PCビルドから叩く先)も兼ねる。
     python3 script/tools/reference_server.py --no-search          # 検索非対応サーバの再現
     python3 script/tools/reference_server.py --no-discovery       # 素の静的サーバの再現
 
+    # 手元(127.0.0.1)で立て、Apache の後ろから https://example.com/docs/ として公開する
+    # (手順は server/docs/README.md)
+    python3 script/tools/reference_server.py --root ~/docs --host 127.0.0.1 --port 8090 \
+        --base-path /docs --home /index.md --trust-proxy
+
 実装しているエンドポイント:
     GET /.well-known/pico-os   サーバ情報(TSV)
     GET /<path>                文書・画像などの配信(条件付きGET対応)
@@ -28,6 +33,9 @@ pico-os 側の開発相手(PCビルドから叩く先)も兼ねる。
     - TSVの各フィールドからタブ・CR・LFを除去する(エスケープの仕組みが無いため)
     - manifest は path の昇順(UTF-8バイト列の辞書順)で返す
     - 検索結果の version 列は ETag と同じ値にする
+    - --base-path のときは、返すパス(home・search・manifest・検索結果・マニフェストの path・
+      / の転送先)を全部ベースパス付きにする(クライアントはそのまま GET するため)。
+      要求のパスの頭にベースパスが付いていれば外し、付いていなければ(Apache が外したとき)そのまま扱う
 """
 
 import argparse
@@ -54,6 +62,19 @@ LIMIT_PATH_BYTES = 255
 LIMIT_SEARCH_RESULTS = 50  # サーバ側の上限。クライアントは20以下しか要求しない
 
 DOC_SUFFIXES = (".md", ".markdown")
+DISCOVERY_PATH = "/.well-known/pico-os"
+
+
+def normalize_base_path(s):
+    """ベースパスを「/docs」の形(頭に /、末尾に / なし。ルートは空文字)へ揃える。不正なら ValueError。"""
+    s = (s or "").strip().strip("/")
+    if not s:
+        return ""
+    parts = s.split("/")
+    for part in parts:
+        if part in (".", "..") or not re.fullmatch(r"[A-Za-z0-9._~-]+", part):
+            raise ValueError("ベースパスに使えない文字があります: %r" % s)
+    return "/" + "/".join(parts)
 
 
 # ---------------------------------------------------------------- ユーティリティ
@@ -416,10 +437,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+    def _public(self, path):
+        """文書ルートの中のパス("/a.md")を、クライアントから見えるパス("/docs/a.md")にする。"""
+        return self.server.opts.base_path + path
+
     def _route(self):
         path, query = self._parse_request_target()
 
-        if path == "/.well-known/pico-os":
+        # ベースパスを外す。「/docs」だけで来たら「/docs/」へ回す(文書中の相対リンクが狂わないように)。
+        # 頭に付いていなければ、前のプロキシが外して渡したものとしてそのまま扱う
+        base = self.server.opts.base_path
+        if base:
+            if path == base:
+                return self._send(301, b"", extra_headers={"Location": base + "/"})
+            if path.startswith(base + "/"):
+                path = path[len(base):]
+
+        if path == DISCOVERY_PATH:
             return self.handle_discovery()
         if self.server.opts.search_path and path == self.server.opts.search_path:
             return self.handle_search(query)
@@ -444,11 +478,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if opts.name:
             lines.append(tsv_line("name", opts.name))
         if opts.home:
-            lines.append(tsv_line("home", opts.home))
+            lines.append(tsv_line("home", self._public(opts.home)))
         if opts.search_path:
-            lines.append(tsv_line("search", opts.search_path))
+            lines.append(tsv_line("search", self._public(opts.search_path)))
         if opts.manifest_path:
-            lines.append(tsv_line("manifest", opts.manifest_path))
+            lines.append(tsv_line("manifest", self._public(opts.manifest_path)))
 
         body = "".join(lines).encode("utf-8")
         etag = compute_etag(body)
@@ -460,7 +494,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         home = self.server.opts.home
         if home:
             # リダイレクトの追従もここで試せるようにしておく
-            return self._send(302, b"", extra_headers={"Location": home})
+            return self._send(302, b"", extra_headers={"Location": self._public(home)})
         self._send_error_text(404, "home が設定されていません")
 
     def handle_search(self, query):
@@ -475,7 +509,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         hits = self.server.index.search(q, limit, offset)
         # 一致0件は404ではなく200+空本文(プロトコルで規定)
         body = "".join(
-            tsv_line(doc.url_path, doc.title, doc.etag,
+            tsv_line(self._public(doc.url_path), doc.title, doc.etag,
                      make_snippet(doc.body, fold(q)))
             for doc in hits
         )
@@ -486,7 +520,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # パスの昇順(UTF-8バイト列の辞書順)。クライアントは自分の目録と
         # 先頭から突き合わせるため、順序が崩れると比較できない
         ordered = sorted(docs.values(), key=lambda d: d.url_path.encode("utf-8"))
-        body = "".join(tsv_line(doc.url_path, doc.etag) for doc in ordered).encode("utf-8")
+        # ベースパスは全部に同じものが付くので、付けても順序は崩れない
+        body = "".join(tsv_line(self._public(doc.url_path), doc.etag) for doc in ordered).encode("utf-8")
 
         etag = compute_etag(body)
         if self._not_modified(etag, 0):
@@ -556,8 +591,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return None
         return real
 
+    def client_ip(self):
+        """送り元のIP(ログ用)。--trust-proxy のときは X-Forwarded-For の一番右(Apache が見た相手)。"""
+        if self.server.opts.trust_proxy and hasattr(self, "headers"):
+            last = (self.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
+            if last:
+                return last
+        return self.client_address[0]
+
     def log_message(self, fmt, *args):
-        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+        sys.stderr.write("%s - %s\n" % (self.client_ip(), fmt % args))
 
 
 class Server(socketserver.ThreadingTCPServer):
@@ -590,6 +633,10 @@ def main(argv=None):
                         help="検索を提供しない(検索非対応サーバの再現)")
     parser.add_argument("--no-manifest", action="store_true",
                         help="マニフェストを提供しない")
+    parser.add_argument("--base-path", default="",
+                        help="公開するパス(例: /docs → https://example.com/docs/)。既定はルート")
+    parser.add_argument("--trust-proxy", action="store_true",
+                        help="前に立つ Apache 等の X-Forwarded-For をログの送り元に使う")
     parser.add_argument("--check", action="store_true",
                         help="文書がクライアントの上限に収まっているか検査して終了する")
     opts = parser.parse_args(argv)
@@ -603,6 +650,14 @@ def main(argv=None):
     if opts.check:
         return check_documents(index)
 
+    try:
+        opts.base_path = normalize_base_path(opts.base_path)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    if opts.home and not opts.home.startswith("/"):
+        opts.home = "/" + opts.home
+
     opts.discovery = not opts.no_discovery
     opts.search_path = None if opts.no_search else "/v1/search"
     opts.manifest_path = None if opts.no_manifest else "/v1/manifest"
@@ -613,12 +668,16 @@ def main(argv=None):
 
     print("pico-os reference server (protocol v%d)" % PROTOCOL_VERSION)
     print("  文書ルート : %s (%d件)" % (index.root, len(docs)))
-    print("  待ち受け   : http://%s:%d/" % (opts.host, opts.port))
-    print("  discovery  : %s" % ("/.well-known/pico-os" if opts.discovery else "無効(404)"))
-    print("  検索       : %s" % (opts.search_path or "非対応"))
-    print("  マニフェスト: %s" % (opts.manifest_path or "非対応"))
+    base = opts.base_path
+    print("  待ち受け   : http://%s:%d%s/" % (opts.host, opts.port, base))
+    print("  discovery  : %s" % (DISCOVERY_PATH + ("(%s%s でも可)" % (base, DISCOVERY_PATH) if base else "")
+                                 if opts.discovery else "無効(404)"))
+    print("  検索       : %s" % (base + opts.search_path if opts.search_path else "非対応"))
+    print("  マニフェスト: %s" % (base + opts.manifest_path if opts.manifest_path else "非対応"))
     if opts.home:
-        print("  ホーム     : %s" % opts.home)
+        print("  ホーム     : %s" % (base + opts.home))
+    if opts.trust_proxy:
+        print("  プロキシ   : X-Forwarded-For を信じる")
     if oversized:
         print("  警告       : %d件が%dBの上限を超えています(--check で詳細)"
               % (len(oversized), LIMIT_DOC_BYTES))
